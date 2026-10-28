@@ -1,0 +1,257 @@
+{
+  "id": "4095",
+  "canonical_key": "news:yahoo_tw:70dad439756f82741e61b764a09d6d1d8a261844dc13b1be8728b950bb7f1918",
+  "dedupe_cluster_id": "news-title:1fdb13474dc656fc9aebfcdc91255716",
+  "category": "domestic",
+  "source_kind": "media",
+  "source_name": "Yahoo奇摩股市",
+  "source": {
+    "name": "Yahoo奇摩股市",
+    "url": "https://tw.stock.yahoo.com/news/%E5%8F%B0%E8%82%A1%E8%A6%81%E5%87%BA%E5%A4%A7%E4%BA%8B%E4%BA%86-%E9%99%B3%E5%98%89%E5%81%89%E8%AD%A6%E5%91%8A%E5%8F%8D%E5%BD%88939%E9%BB%9E-%E6%98%AF%E9%80%83%E5%91%BD%E7%9A%84-%E5%8F%B0%E7%A9%8D%E9%9B%BB%E5%AD%A3%E7%B7%9A%E4%B8%8B%E5%BD%8E-%E7%A9%BA%E9%A0%AD%E5%A4%A7%E5%B1%A0%E6%AE%BA%E5%89%9B%E9%96%8B%E5%A7%8B-155500852.html",
+    "url_kind": "item"
+  },
+  "source_item_id": null,
+  "title": "台股要出大事了？陳嘉偉警告反彈939點「是逃命的」　台積電季線下彎、空頭大屠殺剛開始",
+  "summary": "[FTNN新聞網]財經中心／台北報導在權王台積電（2330）強漲25元帶動下，台股今（28）日反彈939.35點，收在47035.58點，漲幅2.04%，成交金額卻萎縮至7232.96億...",
+  "description": "[FTNN新聞網]財經中心／台北報導在權王台積電（2330）強漲25元帶動下，台股今（28）日反彈939.35點，收在47035.58點，漲幅2.04%，成交金額卻萎縮至7232.96億...",
+  "summary_preview": "[FTNN新聞網]財經中心／台北報導在權王台積電（2330）強漲25元帶動下，台股今（28）日反彈939.35點，收在47035.58點，漲幅2.04%，成交金額卻萎縮至7232.96億...",
+  "language": "zh-Hant",
+  "published_at": "2026-10-28T15:55:00+00:00",
+  "event_at": null,
+  "event_date": null,
+  "display_time": "2026-10-28T15:55:00+00:00",
+  "time_basis": "published",
+  "time_precision": "datetime",
+  "time_consistency": "verified",
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "news_item",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_market_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "event.event_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.event_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-28T15:55:00+00:00",
+        "utc": "2026-10-28T15:55:00+00:00",
+        "date": null,
+        "source": "news_item.published_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-28T18:00:10.316734+00:00",
+        "utc": "2026-10-28T18:00:10.316734+00:00",
+        "date": null,
+        "source": "news_item.collected_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_generated_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_at_not_applicable",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_date_not_applicable",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-10-28T21:43:19.306104+00:00",
+    "legacy": {
+      "published_at": "2026-10-28T15:55:00+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-10-28T15:55:00",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "collected_at": "2026-10-28T18:00:10.316734+00:00"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+      "A collection timestamp does not prove when the source first became available.",
+      "Historical decision and generation times are not persisted by the NewsItem projection."
+    ]
+  },
+  "response_generated_at": "2026-10-28T21:43:19.306104+00:00",
+  "collected_at": "2026-10-28T18:00:10.316734+00:00",
+  "symbols": [
+    "TWSE:2330"
+  ],
+  "instruments": [
+    {
+      "exchange": "TWSE",
+      "symbol": "2330",
+      "name": "台積電"
+    }
+  ],
+  "themes": [],
+  "theme_ids": [],
+  "impact": {
+    "scope": "instrument",
+    "direction": "unknown",
+    "rationale": null,
+    "method": "rule:exact-name-code/v1",
+    "confidence": "unknown"
+  },
+  "impact_scope": "instrument",
+  "impact_direction": "unknown",
+  "confidence": "unknown",
+  "status": "active",
+  "content_hash": "0f9f33099870b2518f32198c2d83c65cc862c607589ddfb6ea43dbb4828378fe",
+  "detail_url": "/news/4095",
+  "ai": {
+    "inference": true,
+    "status": "done",
+    "summary": "台積電強漲25元，台股28日反彈939.35點，收47035.58點，漲幅2.04%，成交金額萎縮至7232.96億。",
+    "symbol_candidates": [
+      {
+        "exchange": "TWSE",
+        "symbol": "2330",
+        "name": "台積電",
+        "exchange_corrected": false,
+        "reason": "原文指台積電強漲25元帶動台股反彈。",
+        "confidence": "high",
+        "verified": false
+      }
+    ],
+    "theme_candidates": [],
+    "impact_direction": "mixed",
+    "impact_scope": "market",
+    "impact_rationale": "指數反彈但成交金額萎縮。",
+    "unsupported": false,
+    "model": "claude-sonnet-5-5",
+    "prompt_version": "news_v2",
+    "input_hash": "98d1b3b1b9f99c2962f0535455c024dccbded7abf1e0b27d405ba630ca82d509",
+    "generated_at": "2026-10-28T18:00:51.204425+00:00"
+  },
+  "provenance": {
+    "event_id": null,
+    "raw_payload_id": 8059,
+    "endpoint": "https://tw.stock.yahoo.com/rss?category=tw-market",
+    "data_as_of": "2026-10-28T18:00:10.316734"
+  }
+}

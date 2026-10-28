@@ -1,0 +1,111 @@
+{
+  "rule": "candidates.json 依名次前 3 檔",
+  "trading_date": "2026-10-28",
+  "items": [
+    {
+      "rank": 1,
+      "instrument": {
+        "id": 1872,
+        "exchange": "TPEx",
+        "symbol": "6026",
+        "name": "福邦證",
+        "instrument_type": "stock"
+      },
+      "strategy": "breakout_v1",
+      "levels": {
+        "entry_type": "breakout",
+        "entry": 16.35,
+        "entry_zone": {
+          "low": 16.35,
+          "high": 16.35
+        },
+        "invalid_price": 16.12,
+        "target_1": 16.72,
+        "target_2": 17.05,
+        "risk_reward": 1.6087,
+        "earliest_execution_date": null
+      },
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "突破20日高點且量比4.9，三大法人5日淨買超約為20日均量的2.16倍；籌碼95分、新聞情緒99分、族群88分偏高，金融產業熱度第5。",
+        "levels": "規則的進場區為單一價16.35，條件失效的停損16.12，距進場區0.23；第一目標16.72、第二目標17.05，第一目標RR約1.61。",
+        "risks": "新聞情緒99分來自AI方向判讀，屬推論；其中一則新聞（亞昕科技興櫃）與福邦證關聯性不明。技術分項71分相對較低。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:08.232778+00:00",
+        "input_hash": "0832adee63ece179d64d1545af6093182ad4ac691e7e454e8621cb349da16e65"
+      }
+    },
+    {
+      "rank": 2,
+      "instrument": {
+        "id": 194,
+        "exchange": "TWSE",
+        "symbol": "1808",
+        "name": "潤隆",
+        "instrument_type": "stock"
+      },
+      "strategy": "breakout_v1",
+      "levels": {
+        "entry_type": "breakout",
+        "entry": 37.25,
+        "entry_zone": {
+          "low": 37.25,
+          "high": 37.25
+        },
+        "invalid_price": 36.16,
+        "target_1": 39.0,
+        "target_2": 40.53,
+        "risk_reward": 1.6055,
+        "earliest_execution_date": null
+      },
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "突破20日高點、量比2.7，三大法人5日淨買超約為20日均量的4.82倍，籌碼100分、新聞情緒96分為主要依據。",
+        "levels": "規則的進場區為單一價37.25，條件失效的停損36.16，距進場區1.09；第一目標39.0、第二目標40.53，第一目標RR約1.61。",
+        "risks": "建材營造產業熱度第16，族群分項僅55分；新聞僅1則且為AI方向判讀的推論。進場區與停損距離相對較寬。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:08.232778+00:00",
+        "input_hash": "9d414a8155cd5e4ad6d0c6282df85c1ef069aca4d954cdb1ae0307b94d586b4a"
+      }
+    },
+    {
+      "rank": 3,
+      "instrument": {
+        "id": 313,
+        "exchange": "TWSE",
+        "symbol": "2376",
+        "name": "技嘉",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v1",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 362.5,
+        "entry_zone": {
+          "low": 356.3,
+          "high": 366.45
+        },
+        "invalid_price": 352.36,
+        "target_1": 378.73,
+        "target_2": 392.93,
+        "risk_reward": 1.6006,
+        "earliest_execution_date": null
+      },
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "回測20日均線、距均線0.3%，技術92分最高；外資加投信5日淨買超，且電腦及週邊產業熱度第6、族群85分。",
+        "levels": "規則的進場區356.3～366.45，條件失效的停損352.36，低於進場區下緣3.94；第一目標378.73、第二目標392.93，第一目標RR約1.60。",
+        "risks": "近3日無關聯新聞，新聞情緒47分缺乏事件佐證。回測時量比僅0.6，「AI伺服器」題材當日未排名。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:08.232778+00:00",
+        "input_hash": "cf601a008c2416bc839eb06d853a24339eb8736e41e44b011cf9095c35c42107"
+      }
+    }
+  ]
+}

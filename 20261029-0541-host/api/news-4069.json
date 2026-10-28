@@ -1,0 +1,292 @@
+{
+  "id": "4069",
+  "canonical_key": "news:yahoo_tw:2c57b29df4af87817f5055af5232ac2e94f72f73f47f397649282c0c41608569",
+  "dedupe_cluster_id": "news-title:a88d0cc4da65b635bf071c4710182b31",
+  "category": "domestic",
+  "source_kind": "media",
+  "source_name": "Yahoo奇摩股市",
+  "source": {
+    "name": "Yahoo奇摩股市",
+    "url": "https://tw.news.yahoo.com/%E5%8F%B0%E8%82%A1%E7%8B%82%E9%A3%86939%E9%BB%9E%E4%BE%86%E7%9C%9F%E7%9A%84-%E7%BE%8E%E4%BC%8A%E5%92%8C%E8%AB%87%E9%87%8D%E7%87%83%E8%A1%8C%E6%83%85-%E9%83%AD%E5%93%B2%E6%A6%AE%E9%BB%9E%E5%90%8D%E9%80%99%E4%BA%9B%E4%BD%8E%E5%9F%BA%E6%9C%9F%E8%A3%9C%E6%BC%B2%E8%82%A1-141200546.html",
+    "url_kind": "item"
+  },
+  "source_item_id": null,
+  "title": "台股狂飆939點來真的？美伊和談重燃行情　郭哲榮點名這些低基期補漲股",
+  "summary": "台股28日大漲939點！摩爾投顧投資長郭哲榮分析美伊和談曙光如何解凍AI資金鏈，並點名華新科（2492）、精材（3374）、智原（3035）等低基期與強勢股後市。（記者唐家興）",
+  "description": "台股28日大漲939點！摩爾投顧投資長郭哲榮分析美伊和談曙光如何解凍AI資金鏈，並點名華新科（2492）、精材（3374）、智原（3035）等低基期與強勢股後市。（記者唐家興）",
+  "summary_preview": "台股28日大漲939點！摩爾投顧投資長郭哲榮分析美伊和談曙光如何解凍AI資金鏈，並點名華新科（2492）、精材（3374）、智原（3035）等低基期與強勢股後市。（記者唐家興）",
+  "language": "zh-Hant",
+  "published_at": "2026-10-28T14:12:00+00:00",
+  "event_at": null,
+  "event_date": null,
+  "display_time": "2026-10-28T14:12:00+00:00",
+  "time_basis": "published",
+  "time_precision": "datetime",
+  "time_consistency": "verified",
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "news_item",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_market_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "event.event_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.event_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-28T14:12:00+00:00",
+        "utc": "2026-10-28T14:12:00+00:00",
+        "date": null,
+        "source": "news_item.published_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-28T16:00:18.484681+00:00",
+        "utc": "2026-10-28T16:00:18.484681+00:00",
+        "date": null,
+        "source": "news_item.collected_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_generated_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_at_not_applicable",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_date_not_applicable",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-10-28T21:43:19.653375+00:00",
+    "legacy": {
+      "published_at": "2026-10-28T14:12:00+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-10-28T14:12:00",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "collected_at": "2026-10-28T16:00:18.484681+00:00"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+      "A collection timestamp does not prove when the source first became available.",
+      "Historical decision and generation times are not persisted by the NewsItem projection."
+    ]
+  },
+  "response_generated_at": "2026-10-28T21:43:19.653375+00:00",
+  "collected_at": "2026-10-28T16:00:18.484681+00:00",
+  "symbols": [
+    "TPEx:3374",
+    "TWSE:2492",
+    "TWSE:3035"
+  ],
+  "instruments": [
+    {
+      "exchange": "TPEx",
+      "symbol": "3374",
+      "name": "精材"
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "2492",
+      "name": "華新科"
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "3035",
+      "name": "智原"
+    }
+  ],
+  "themes": [],
+  "theme_ids": [],
+  "impact": {
+    "scope": "instrument",
+    "direction": "unknown",
+    "rationale": null,
+    "method": "rule:exact-name-code/v1",
+    "confidence": "unknown"
+  },
+  "impact_scope": "instrument",
+  "impact_direction": "unknown",
+  "confidence": "unknown",
+  "status": "active",
+  "content_hash": "cfaf6428408dbaa620d93fbee4051f10a017ec075c843891929a0429b814ad84",
+  "detail_url": "/news/4069",
+  "ai": {
+    "inference": true,
+    "status": "done",
+    "summary": "台股28日大漲939點，郭哲榮分析美伊和談曙光解凍AI資金鏈，並點名華新科、精材、智原等低基期與強勢股。",
+    "symbol_candidates": [
+      {
+        "exchange": "TWSE",
+        "symbol": "2492",
+        "name": "華新科",
+        "exchange_corrected": false,
+        "reason": "郭哲榮點名華新科為低基期股。",
+        "confidence": "high",
+        "verified": false
+      },
+      {
+        "exchange": "TPEx",
+        "symbol": "3374",
+        "name": "精材",
+        "exchange_corrected": true,
+        "reason": "郭哲榮點名精材。",
+        "confidence": "high",
+        "verified": false
+      },
+      {
+        "exchange": "TWSE",
+        "symbol": "3035",
+        "name": "智原",
+        "exchange_corrected": false,
+        "reason": "郭哲榮點名智原。",
+        "confidence": "high",
+        "verified": false
+      }
+    ],
+    "theme_candidates": [
+      {
+        "theme": "AI 供應鏈",
+        "reason": "郭哲榮分析美伊和談解凍AI資金鏈。"
+      }
+    ],
+    "impact_direction": "positive",
+    "impact_scope": "market",
+    "impact_rationale": "台股大漲939點，郭哲榮認為和談曙光解凍AI資金。",
+    "unsupported": false,
+    "model": "claude-sonnet-5-5",
+    "prompt_version": "news_v2",
+    "input_hash": "5ee5c3d9a193023aa2fadb88d92079a86038bc153c04452a210264fda97d75a4",
+    "generated_at": "2026-10-28T16:01:13.213267+00:00"
+  },
+  "provenance": {
+    "event_id": null,
+    "raw_payload_id": 8048,
+    "endpoint": "https://tw.stock.yahoo.com/rss?category=tw-market",
+    "data_as_of": "2026-10-28T16:00:18.484681"
+  }
+}

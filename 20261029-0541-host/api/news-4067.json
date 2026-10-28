@@ -1,0 +1,262 @@
+{
+  "id": "4067",
+  "canonical_key": "news:cnyes:3e2467467bd20e131ddfb98cd88740daf7b9ba450a794ac260d28ac89085d4f1",
+  "dedupe_cluster_id": "news-title:5517877072fe47bb8189025a04f60092",
+  "category": "domestic",
+  "source_kind": "media",
+  "source_name": "鉅亨網",
+  "source": {
+    "name": "鉅亨網",
+    "url": "https://news.cnyes.com/news/id/6639945",
+    "url_kind": "item"
+  },
+  "source_item_id": "https://news.cnyes.com/news/id/6639945",
+  "title": "鉅亨速報 - Factset 最新調查：雙鴻(3324-TW)目標價調升至1700元，幅度約5.1%",
+  "summary": "根據FactSet最新調查，共12位分析師，對雙鴻(3324-TW)提出目標價估值：中位數由1617.5元上修至1700元，調升幅度5.1%。其中最高估值2000元，最低估值1150元。綜合評級 - 共有12位分析師給予雙鴻(3324-TW)評價：積極樂觀10位、保持中立3位、保守悲觀0位。雙鴻(3",
+  "description": "根據FactSet最新調查，共12位分析師，對雙鴻(3324-TW)提出目標價估值：中位數由1617.5元上修至1700元，調升幅度5.1%。其中最高估值2000元，最低估值1150元。綜合評級 - 共有12位分析師給予雙鴻(3324-TW)評價：積極樂觀10位、保持中立3位、保守悲觀0位。雙鴻(3",
+  "summary_preview": "根據FactSet最新調查，共12位分析師，對雙鴻(3324-TW)提出目標價估值：中位數由1617.5元上修至1700元，調升幅度5.1%。其中最高估值2000元，最低估值1150元。綜合評級 - 共有12位分析師給予雙鴻(3324-T…",
+  "language": "zh-Hant",
+  "published_at": "2026-10-28T14:10:28+00:00",
+  "event_at": null,
+  "event_date": null,
+  "display_time": "2026-10-28T14:10:28+00:00",
+  "time_basis": "published",
+  "time_precision": "datetime",
+  "time_consistency": "verified",
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "news_item",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_market_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "event.event_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.event_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-28T14:10:28+00:00",
+        "utc": "2026-10-28T14:10:28+00:00",
+        "date": null,
+        "source": "news_item.published_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-28T16:00:13.762167+00:00",
+        "utc": "2026-10-28T16:00:13.762167+00:00",
+        "date": null,
+        "source": "news_item.collected_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_generated_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_at_not_applicable",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_date_not_applicable",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-10-28T21:43:19.740624+00:00",
+    "legacy": {
+      "published_at": "2026-10-28T14:10:28+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-10-28T14:10:28",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "collected_at": "2026-10-28T16:00:13.762167+00:00"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+      "A collection timestamp does not prove when the source first became available.",
+      "Historical decision and generation times are not persisted by the NewsItem projection."
+    ]
+  },
+  "response_generated_at": "2026-10-28T21:43:19.740624+00:00",
+  "collected_at": "2026-10-28T16:00:13.762167+00:00",
+  "symbols": [
+    "TPEx:3324"
+  ],
+  "instruments": [
+    {
+      "exchange": "TPEx",
+      "symbol": "3324",
+      "name": "雙鴻"
+    }
+  ],
+  "themes": [],
+  "theme_ids": [],
+  "impact": {
+    "scope": "instrument",
+    "direction": "unknown",
+    "rationale": null,
+    "method": "rule:exact-name-code/v1",
+    "confidence": "unknown"
+  },
+  "impact_scope": "instrument",
+  "impact_direction": "unknown",
+  "confidence": "unknown",
+  "status": "active",
+  "content_hash": "1a6b4c55f3272eddddacf08643063097d4186d979d3b66bd0ebba70d2e134519",
+  "detail_url": "/news/4067",
+  "ai": {
+    "inference": true,
+    "status": "done",
+    "summary": "FactSet調查12位分析師，雙鴻目標價中位數由1617.5元上修至1700元，調升5.1%；最高2000元、最低1150元。",
+    "symbol_candidates": [
+      {
+        "exchange": "TPEx",
+        "symbol": "3324",
+        "name": "雙鴻",
+        "exchange_corrected": true,
+        "reason": "新聞直接點名雙鴻目標價上修。",
+        "confidence": "high",
+        "verified": false
+      }
+    ],
+    "theme_candidates": [
+      {
+        "theme": "散熱",
+        "reason": "標的為雙鴻，分析師目標價中位數上修。"
+      }
+    ],
+    "impact_direction": "positive",
+    "impact_scope": "instrument",
+    "impact_rationale": "目標價中位數上修，12位分析師中10位積極樂觀。",
+    "unsupported": false,
+    "model": "claude-sonnet-5-5",
+    "prompt_version": "news_v2",
+    "input_hash": "9e56ae42d550df6f7bccb9be1b564d08b0e944b2da54f1969612fc98552551ff",
+    "generated_at": "2026-10-28T16:01:13.213267+00:00"
+  },
+  "provenance": {
+    "event_id": null,
+    "raw_payload_id": 8046,
+    "endpoint": "https://news.cnyes.com/rss/v1/news/category/tw_stock",
+    "data_as_of": "2026-10-28T16:00:13.762167"
+  }
+}

@@ -1,0 +1,4998 @@
+{
+  "status": "success",
+  "trading_date": "2026-10-28",
+  "score_version": "candidate_score_v2",
+  "computed_at": "2026-10-28T13:45:44.965362+00:00",
+  "evaluated_signals": 4642,
+  "pool_count": 57,
+  "candidate_count": 20,
+  "zero_reason": null,
+  "zero_reason_text": null,
+  "exclusions": {
+    "below_list_cutoff": 37,
+    "instrument_type_excluded:etf": 7
+  },
+  "data_as_of": "2026-10-28",
+  "news_coverage": {
+    "window": [
+      "2026-10-26",
+      "2026-10-28"
+    ],
+    "llm_prompt_version": "news_v2",
+    "news_collection_runs": 245,
+    "news_items_in_window": 1000,
+    "llm_scored_items": 631,
+    "instruments_with_news": 165
+  },
+  "methodology": {
+    "score_version": "candidate_score_v2",
+    "purpose": "評分只用於排序，不代表勝率或預期報酬，不改變策略判定",
+    "weights": {
+      "technical": 0.35,
+      "chips": 0.3,
+      "group": 0.2,
+      "news_sentiment": 0.15
+    },
+    "minimum_weight_coverage": 0.65,
+    "components": {
+      "technical": {
+        "label": "技術",
+        "weight": 0.35,
+        "inference": false
+      },
+      "chips": {
+        "label": "籌碼",
+        "weight": 0.3,
+        "inference": false
+      },
+      "group": {
+        "label": "族群",
+        "weight": 0.2,
+        "inference": false
+      },
+      "news_sentiment": {
+        "label": "新聞情緒",
+        "weight": 0.15,
+        "inference": true
+      }
+    },
+    "null_explanations": {
+      "signal_evidence_missing": "訊號依據缺少前 20 日高點、量或均線，無法計算",
+      "technical_inputs_missing": "技術子項皆無資料",
+      "chip_or_volume_sessions_incomplete": "近 20 個交易日的籌碼或成交量不完整，或當日無交易",
+      "chip_inputs_missing": "籌碼子項皆無資料",
+      "news_collection_missing": "近 3 日沒有成功的新聞收集，新聞分項無資料",
+      "instrument_not_in_universe": "標的不在當日普通股母體內",
+      "no_qualified_group": "當日沒有已排名且資料完整的所屬產業或題材"
+    }
+  },
+  "items": [
+    {
+      "rank": 1,
+      "trading_date": "2026-10-28",
+      "score_version": "candidate_score_v2",
+      "instrument": {
+        "id": 1872,
+        "exchange": "TPEx",
+        "symbol": "6026",
+        "name": "福邦證",
+        "instrument_type": "stock"
+      },
+      "strategy": "breakout_v1",
+      "signal_id": 36241,
+      "signal_status": "conditional",
+      "levels": {
+        "entry_type": "breakout",
+        "entry": 16.35,
+        "entry_zone": {
+          "low": 16.35,
+          "high": 16.35
+        },
+        "invalid_price": 16.12,
+        "target_1": 16.72,
+        "target_2": 17.05,
+        "risk_reward": 1.6087,
+        "earliest_execution_date": null
+      },
+      "total_score": 0.85844,
+      "weight_coverage": 1.0,
+      "partial_components": false,
+      "components": {
+        "technical": {
+          "score": 0.7105263157894737,
+          "weight": 0.35,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "volume_ratio": {
+              "value": 4.877360878053361,
+              "percentile": 0.7894736842105263,
+              "weight": 0.5,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "distance": {
+              "value": 0.0092592592592593,
+              "percentile": 0.631578947368421,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "risk_reward": {
+              "value": 1.6086956521738989,
+              "percentile": 0.9473684210526315,
+              "weight": 0.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 20,
+          "label": "技術",
+          "null_explanation": null
+        },
+        "chips": {
+          "score": 0.9535657964175679,
+          "weight": 0.3,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "institutional_flow_5d": {
+              "value": 2.1629288003738654,
+              "percentile": 0.9891799544419134,
+              "weight": 0.4,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "institutional_flow_20d": {
+              "value": 2.9841484887250345,
+              "percentile": 0.9213213213213213,
+              "weight": 0.3,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "margin_change_5d": {
+              "value": -0.11320754716981132,
+              "percentile": 0.938324727481354,
+              "weight": 0.3,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": {
+            "institutional_flow_5d": 1757,
+            "institutional_flow_20d": 1666,
+            "margin_change_5d": 1744
+          },
+          "label": "籌碼",
+          "null_explanation": null
+        },
+        "group": {
+          "score": 0.8787878787878788,
+          "weight": 0.2,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "board_percentile": {
+              "value": 0.8787878787878788,
+              "percentile": 0.8787878787878788,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "source": {
+            "group_id": "official-industry-94d658309b8d4f69",
+            "name": "金融",
+            "board": "industry",
+            "rank": 5,
+            "board_size": 34
+          },
+          "label": "族群",
+          "null_explanation": null
+        },
+        "news_sentiment": {
+          "score": 0.9861878453038674,
+          "weight": 0.15,
+          "inference": true,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "net_direction": {
+              "value": 2.0,
+              "percentile": 0.9861878453038674,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 1992,
+          "instruments_with_news": 165,
+          "counts": {
+            "linked": 2,
+            "positive": 2,
+            "negative": 0,
+            "mixed": 0,
+            "unscored": 0
+          },
+          "news_ids": [
+            3270,
+            3491
+          ],
+          "label": "新聞情緒",
+          "null_explanation": null
+        }
+      },
+      "alternatives": [],
+      "reasons": [
+        {
+          "code": "institutional_net_buy_5d",
+          "component": "chips",
+          "text": "三大法人 5 日淨買超，約 20 日均量的 2.16 倍",
+          "params": {
+            "ratio": "2.16"
+          },
+          "inference": false
+        },
+        {
+          "code": "breakout_20d_high",
+          "component": "technical",
+          "text": "突破 20 日高點，量比 4.9",
+          "params": {
+            "volume_ratio": "4.9"
+          },
+          "inference": false
+        },
+        {
+          "code": "hot_group_rank",
+          "component": "group",
+          "text": "所屬產業「金融」熱度第 5",
+          "params": {
+            "board": "產業",
+            "name": "金融",
+            "rank": "5"
+          },
+          "inference": false
+        },
+        {
+          "code": "news_positive_3d",
+          "component": "news_sentiment",
+          "text": "近 3 日 2 則偏多新聞（推論）",
+          "params": {
+            "positive": "2"
+          },
+          "inference": true
+        }
+      ],
+      "groups": [
+        {
+          "group_id": "official-industry-94d658309b8d4f69",
+          "name": "金融",
+          "board": "industry",
+          "qualified": true,
+          "rank": 5,
+          "board_size": 34,
+          "board_percentile": 0.8787878787878788,
+          "score": 68.41,
+          "data_quality": "complete",
+          "score_date": "2026-10-28"
+        }
+      ],
+      "data_as_of": "2026-10-28",
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "突破20日高點且量比4.9，三大法人5日淨買超約為20日均量的2.16倍；籌碼95分、新聞情緒99分、族群88分偏高，金融產業熱度第5。",
+        "levels": "規則的進場區為單一價16.35，條件失效的停損16.12，距進場區0.23；第一目標16.72、第二目標17.05，第一目標RR約1.61。",
+        "risks": "新聞情緒99分來自AI方向判讀，屬推論；其中一則新聞（亞昕科技興櫃）與福邦證關聯性不明。技術分項71分相對較低。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:08.232778+00:00",
+        "input_hash": "0832adee63ece179d64d1545af6093182ad4ac691e7e454e8621cb349da16e65"
+      },
+      "market": {
+        "trading_date": "2026-10-28",
+        "close": 16.35,
+        "change": 1.0,
+        "change_pct": 0.06514657980456026,
+        "change_status": "known",
+        "source": "tpex"
+      },
+      "sources": {
+        "signal": "analysis:breakout_v1",
+        "market_bar": "tpex",
+        "chips": "tpex_3insti",
+        "groups": "hot_group_v1",
+        "news": "news_items+news_llm_results:news_v2"
+      }
+    },
+    {
+      "rank": 2,
+      "trading_date": "2026-10-28",
+      "score_version": "candidate_score_v2",
+      "instrument": {
+        "id": 194,
+        "exchange": "TWSE",
+        "symbol": "1808",
+        "name": "潤隆",
+        "instrument_type": "stock"
+      },
+      "strategy": "breakout_v1",
+      "signal_id": 33519,
+      "signal_status": "conditional",
+      "levels": {
+        "entry_type": "breakout",
+        "entry": 37.25,
+        "entry_zone": {
+          "low": 37.25,
+          "high": 37.25
+        },
+        "invalid_price": 36.16,
+        "target_1": 39.0,
+        "target_2": 40.53,
+        "risk_reward": 1.6055,
+        "earliest_execution_date": null
+      },
+      "total_score": 0.791351,
+      "weight_coverage": 1.0,
+      "partial_components": false,
+      "components": {
+        "technical": {
+          "score": 0.6842105263157895,
+          "weight": 0.35,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "volume_ratio": {
+              "value": 2.6629483361250155,
+              "percentile": 0.3684210526315789,
+              "weight": 0.5,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "distance": {
+              "value": 0.0013440860215052641,
+              "percentile": 1.0,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "risk_reward": {
+              "value": 1.6055045871559583,
+              "percentile": 0.8947368421052632,
+              "weight": 0.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 20,
+          "label": "技術",
+          "null_explanation": null
+        },
+        "chips": {
+          "score": 0.9956699183078962,
+          "weight": 0.3,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "institutional_flow_5d": {
+              "value": 4.8176298811756,
+              "percentile": 0.9982915717539863,
+              "weight": 0.4,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "institutional_flow_20d": {
+              "value": 7.31304626271688,
+              "percentile": 0.9975975975975976,
+              "weight": 0.3,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "margin_change_5d": {
+              "value": -0.33635480738102946,
+              "percentile": 0.9902467010900746,
+              "weight": 0.3,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": {
+            "institutional_flow_5d": 1757,
+            "institutional_flow_20d": 1666,
+            "margin_change_5d": 1744
+          },
+          "label": "籌碼",
+          "null_explanation": null
+        },
+        "group": {
+          "score": 0.5454545454545454,
+          "weight": 0.2,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "board_percentile": {
+              "value": 0.5454545454545454,
+              "percentile": 0.5454545454545454,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "source": {
+            "group_id": "official-industry-a2c05fab456a3948",
+            "name": "建材營造",
+            "board": "industry",
+            "rank": 16,
+            "board_size": 34
+          },
+          "label": "族群",
+          "null_explanation": null
+        },
+        "news_sentiment": {
+          "score": 0.9605725765946761,
+          "weight": 0.15,
+          "inference": true,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "net_direction": {
+              "value": 1.0,
+              "percentile": 0.9605725765946761,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 1992,
+          "instruments_with_news": 165,
+          "counts": {
+            "linked": 1,
+            "positive": 1,
+            "negative": 0,
+            "mixed": 0,
+            "unscored": 0
+          },
+          "news_ids": [
+            3626
+          ],
+          "label": "新聞情緒",
+          "null_explanation": null
+        }
+      },
+      "alternatives": [],
+      "reasons": [
+        {
+          "code": "institutional_net_buy_5d",
+          "component": "chips",
+          "text": "三大法人 5 日淨買超，約 20 日均量的 4.82 倍",
+          "params": {
+            "ratio": "4.82"
+          },
+          "inference": false
+        },
+        {
+          "code": "breakout_20d_high",
+          "component": "technical",
+          "text": "突破 20 日高點，量比 2.7",
+          "params": {
+            "volume_ratio": "2.7"
+          },
+          "inference": false
+        },
+        {
+          "code": "news_positive_3d",
+          "component": "news_sentiment",
+          "text": "近 3 日 1 則偏多新聞（推論）",
+          "params": {
+            "positive": "1"
+          },
+          "inference": true
+        },
+        {
+          "code": "hot_group_rank",
+          "component": "group",
+          "text": "所屬產業「建材營造」熱度第 16",
+          "params": {
+            "board": "產業",
+            "name": "建材營造",
+            "rank": "16"
+          },
+          "inference": false
+        }
+      ],
+      "groups": [
+        {
+          "group_id": "official-industry-a2c05fab456a3948",
+          "name": "建材營造",
+          "board": "industry",
+          "qualified": true,
+          "rank": 16,
+          "board_size": 34,
+          "board_percentile": 0.5454545454545454,
+          "score": 50.71,
+          "data_quality": "complete",
+          "score_date": "2026-10-28"
+        }
+      ],
+      "data_as_of": "2026-10-28",
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "突破20日高點、量比2.7，三大法人5日淨買超約為20日均量的4.82倍，籌碼100分、新聞情緒96分為主要依據。",
+        "levels": "規則的進場區為單一價37.25，條件失效的停損36.16，距進場區1.09；第一目標39.0、第二目標40.53，第一目標RR約1.61。",
+        "risks": "建材營造產業熱度第16，族群分項僅55分；新聞僅1則且為AI方向判讀的推論。進場區與停損距離相對較寬。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:08.232778+00:00",
+        "input_hash": "9d414a8155cd5e4ad6d0c6282df85c1ef069aca4d954cdb1ae0307b94d586b4a"
+      },
+      "market": {
+        "trading_date": "2026-10-28",
+        "close": 37.25,
+        "change": 0.45,
+        "change_pct": 0.012228260869565218,
+        "change_status": "known",
+        "source": "twse"
+      },
+      "sources": {
+        "signal": "analysis:breakout_v1",
+        "market_bar": "twse",
+        "chips": "twse_t86",
+        "groups": "hot_group_v1",
+        "news": "news_items+news_llm_results:news_v2"
+      }
+    },
+    {
+      "rank": 3,
+      "trading_date": "2026-10-28",
+      "score_version": "candidate_score_v2",
+      "instrument": {
+        "id": 313,
+        "exchange": "TWSE",
+        "symbol": "2376",
+        "name": "技嘉",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v1",
+      "signal_id": 33756,
+      "signal_status": "conditional",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 362.5,
+        "entry_zone": {
+          "low": 356.3,
+          "high": 366.45
+        },
+        "invalid_price": 352.36,
+        "target_1": 378.73,
+        "target_2": 392.93,
+        "risk_reward": 1.6006,
+        "earliest_execution_date": null
+      },
+      "total_score": 0.777326,
+      "weight_coverage": 1.0,
+      "partial_components": false,
+      "components": {
+        "technical": {
+          "score": 0.9166666666666667,
+          "weight": 0.35,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "volume_ratio": {
+              "value": 0.6092304771934642,
+              "percentile": 1.0,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "distance": {
+              "value": 0.0031131096506398226,
+              "percentile": 0.8333333333333334,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "risk_reward": {
+              "value": 1.6005917159763352,
+              "percentile": 0.7777777777777778,
+              "weight": 0.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 37,
+          "label": "技術",
+          "null_explanation": null
+        },
+        "chips": {
+          "score": 0.7201734726701108,
+          "weight": 0.3,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "institutional_flow_5d": {
+              "value": 0.6942286763179725,
+              "percentile": 0.8650341685649203,
+              "weight": 0.4,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "institutional_flow_20d": {
+              "value": 0.013601225752527571,
+              "percentile": 0.47267267267267266,
+              "weight": 0.3,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "margin_change_5d": {
+              "value": -0.03726337755254136,
+              "percentile": 0.774526678141136,
+              "weight": 0.3,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": {
+            "institutional_flow_5d": 1757,
+            "institutional_flow_20d": 1666,
+            "margin_change_5d": 1744
+          },
+          "label": "籌碼",
+          "null_explanation": null
+        },
+        "group": {
+          "score": 0.8484848484848485,
+          "weight": 0.2,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "board_percentile": {
+              "value": 0.8484848484848485,
+              "percentile": 0.8484848484848485,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "source": {
+            "group_id": "official-industry-d60be8febbae1cd6",
+            "name": "電腦及週邊",
+            "board": "industry",
+            "rank": 6,
+            "board_size": 34
+          },
+          "label": "族群",
+          "null_explanation": null
+        },
+        "news_sentiment": {
+          "score": 0.47162230035158215,
+          "weight": 0.15,
+          "inference": true,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "net_direction": {
+              "value": 0.0,
+              "percentile": 0.47162230035158215,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 1992,
+          "instruments_with_news": 165,
+          "counts": {
+            "linked": 0,
+            "positive": 0,
+            "negative": 0,
+            "mixed": 0,
+            "unscored": 0
+          },
+          "news_ids": [],
+          "label": "新聞情緒",
+          "null_explanation": null
+        }
+      },
+      "alternatives": [],
+      "reasons": [
+        {
+          "code": "pullback_ma20_support",
+          "component": "technical",
+          "text": "回測 20 日均線，距均線 0.3%，量比 0.6",
+          "params": {
+            "distance": "0.3%",
+            "volume_ratio": "0.6"
+          },
+          "inference": false
+        },
+        {
+          "code": "foreign_trust_net_buy_5d",
+          "component": "chips",
+          "text": "外資＋投信 5 日淨買超",
+          "params": {},
+          "inference": false
+        },
+        {
+          "code": "hot_group_rank",
+          "component": "group",
+          "text": "所屬產業「電腦及週邊」熱度第 6",
+          "params": {
+            "board": "產業",
+            "name": "電腦及週邊",
+            "rank": "6"
+          },
+          "inference": false
+        },
+        {
+          "code": "institutional_net_buy_20d",
+          "component": "chips",
+          "text": "三大法人 20 日淨買超",
+          "params": {},
+          "inference": false
+        }
+      ],
+      "groups": [
+        {
+          "group_id": "official-industry-d60be8febbae1cd6",
+          "name": "電腦及週邊",
+          "board": "industry",
+          "qualified": true,
+          "rank": 6,
+          "board_size": 34,
+          "board_percentile": 0.8484848484848485,
+          "score": 68.14,
+          "data_quality": "complete",
+          "score_date": "2026-10-28"
+        },
+        {
+          "group_id": "theme-ai-server",
+          "name": "AI 伺服器",
+          "board": "theme",
+          "qualified": false,
+          "rank": null,
+          "board_size": null,
+          "board_percentile": null,
+          "score": null,
+          "data_quality": "partial",
+          "score_date": "2026-10-28"
+        }
+      ],
+      "data_as_of": "2026-10-28",
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "回測20日均線、距均線0.3%，技術92分最高；外資加投信5日淨買超，且電腦及週邊產業熱度第6、族群85分。",
+        "levels": "規則的進場區356.3～366.45，條件失效的停損352.36，低於進場區下緣3.94；第一目標378.73、第二目標392.93，第一目標RR約1.60。",
+        "risks": "近3日無關聯新聞，新聞情緒47分缺乏事件佐證。回測時量比僅0.6，「AI伺服器」題材當日未排名。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:08.232778+00:00",
+        "input_hash": "cf601a008c2416bc839eb06d853a24339eb8736e41e44b011cf9095c35c42107"
+      },
+      "market": {
+        "trading_date": "2026-10-28",
+        "close": 362.5,
+        "change": 5.0,
+        "change_pct": 0.013986013986013986,
+        "change_status": "known",
+        "source": "twse"
+      },
+      "sources": {
+        "signal": "analysis:pullback_v1",
+        "market_bar": "twse",
+        "chips": "twse_t86",
+        "groups": "hot_group_v1",
+        "news": "news_items+news_llm_results:news_v2"
+      }
+    },
+    {
+      "rank": 4,
+      "trading_date": "2026-10-28",
+      "score_version": "candidate_score_v2",
+      "instrument": {
+        "id": 124,
+        "exchange": "TWSE",
+        "symbol": "1535",
+        "name": "中宇",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v1",
+      "signal_id": 33384,
+      "signal_status": "conditional",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 45.85,
+        "entry_zone": {
+          "low": 45.54,
+          "high": 46.0
+        },
+        "invalid_price": 45.39,
+        "target_1": 46.58,
+        "target_2": 47.23,
+        "risk_reward": 1.587,
+        "earliest_execution_date": null
+      },
+      "total_score": 0.776447,
+      "weight_coverage": 1.0,
+      "partial_components": false,
+      "components": {
+        "technical": {
+          "score": 0.9305555555555556,
+          "weight": 0.35,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "volume_ratio": {
+              "value": 0.64819973100696,
+              "percentile": 0.9166666666666666,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "distance": {
+              "value": 0.0016931563711835018,
+              "percentile": 0.9444444444444444,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "risk_reward": {
+              "value": 1.5869565217391206,
+              "percentile": 0.08333333333333333,
+              "weight": 0.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 37,
+          "label": "技術",
+          "null_explanation": null
+        },
+        "chips": {
+          "score": 0.721243111424246,
+          "weight": 0.3,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "institutional_flow_5d": {
+              "value": 0.8002401230630698,
+              "percentile": 0.8940774487471527,
+              "weight": 0.4,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "institutional_flow_20d": {
+              "value": 1.7007016095749072,
+              "percentile": 0.8216216216216217,
+              "weight": 0.3,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "margin_change_5d": {
+              "value": 0.0,
+              "percentile": 0.3904188181296615,
+              "weight": 0.3,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": {
+            "institutional_flow_5d": 1757,
+            "institutional_flow_20d": 1666,
+            "margin_change_5d": 1744
+          },
+          "label": "籌碼",
+          "null_explanation": null
+        },
+        "group": {
+          "score": 0.8181818181818181,
+          "weight": 0.2,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "board_percentile": {
+              "value": 0.8181818181818181,
+              "percentile": 0.8181818181818181,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "source": {
+            "group_id": "official-industry-b3e4fde64ad389a7",
+            "name": "電機機械",
+            "board": "industry",
+            "rank": 7,
+            "board_size": 34
+          },
+          "label": "族群",
+          "null_explanation": null
+        },
+        "news_sentiment": {
+          "score": 0.47162230035158215,
+          "weight": 0.15,
+          "inference": true,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "net_direction": {
+              "value": 0.0,
+              "percentile": 0.47162230035158215,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 1992,
+          "instruments_with_news": 165,
+          "counts": {
+            "linked": 0,
+            "positive": 0,
+            "negative": 0,
+            "mixed": 0,
+            "unscored": 0
+          },
+          "news_ids": [],
+          "label": "新聞情緒",
+          "null_explanation": null
+        }
+      },
+      "alternatives": [],
+      "reasons": [
+        {
+          "code": "pullback_ma20_support",
+          "component": "technical",
+          "text": "回測 20 日均線，距均線 0.2%，量比 0.6",
+          "params": {
+            "distance": "0.2%",
+            "volume_ratio": "0.6"
+          },
+          "inference": false
+        },
+        {
+          "code": "institutional_net_buy_5d",
+          "component": "chips",
+          "text": "三大法人 5 日淨買超，約 20 日均量的 0.80 倍",
+          "params": {
+            "ratio": "0.80"
+          },
+          "inference": false
+        },
+        {
+          "code": "hot_group_rank",
+          "component": "group",
+          "text": "所屬產業「電機機械」熱度第 7",
+          "params": {
+            "board": "產業",
+            "name": "電機機械",
+            "rank": "7"
+          },
+          "inference": false
+        },
+        {
+          "code": "institutional_net_buy_20d",
+          "component": "chips",
+          "text": "三大法人 20 日淨買超",
+          "params": {},
+          "inference": false
+        }
+      ],
+      "groups": [
+        {
+          "group_id": "official-industry-b3e4fde64ad389a7",
+          "name": "電機機械",
+          "board": "industry",
+          "qualified": true,
+          "rank": 7,
+          "board_size": 34,
+          "board_percentile": 0.8181818181818181,
+          "score": 68.06,
+          "data_quality": "complete",
+          "score_date": "2026-10-28"
+        }
+      ],
+      "data_as_of": "2026-10-28",
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "回測20日均線、距均線0.2%，技術93分最高；三大法人5日與20日皆淨買超，電機機械產業熱度第7。",
+        "levels": "規則的進場區45.54～46.0，條件失效的停損45.39，僅低於進場區下緣0.15；第一目標46.58、第二目標47.23，第一目標RR約1.59。",
+        "risks": "停損與進場區距離很窄，條件容易失效。近3日無關聯新聞，新聞情緒47分；5日淨買超僅約20日均量的0.80倍，量比0.6。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:08.232778+00:00",
+        "input_hash": "f838a088ab7cb4c73097631778cf7571936e961f254e7afdebbbbe8b750a7192"
+      },
+      "market": {
+        "trading_date": "2026-10-28",
+        "close": 45.85,
+        "change": -0.15,
+        "change_pct": -0.003260869565217391,
+        "change_status": "known",
+        "source": "twse"
+      },
+      "sources": {
+        "signal": "analysis:pullback_v1",
+        "market_bar": "twse",
+        "chips": "twse_t86",
+        "groups": "hot_group_v1",
+        "news": "news_items+news_llm_results:news_v2"
+      }
+    },
+    {
+      "rank": 5,
+      "trading_date": "2026-10-28",
+      "score_version": "candidate_score_v2",
+      "instrument": {
+        "id": 32,
+        "exchange": "TWSE",
+        "symbol": "1307",
+        "name": "三芳",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v1",
+      "signal_id": 33200,
+      "signal_status": "conditional",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 31.3,
+        "entry_zone": {
+          "low": 30.94,
+          "high": 31.39
+        },
+        "invalid_price": 30.84,
+        "target_1": 32.03,
+        "target_2": 32.67,
+        "risk_reward": 1.587,
+        "earliest_execution_date": null
+      },
+      "total_score": 0.769233,
+      "weight_coverage": 0.8,
+      "partial_components": true,
+      "components": {
+        "technical": {
+          "score": 0.75,
+          "weight": 0.35,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "volume_ratio": {
+              "value": 0.6764408295607811,
+              "percentile": 0.8055555555555556,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "distance": {
+              "value": 0.00433178244825938,
+              "percentile": 0.6944444444444444,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "risk_reward": {
+              "value": 1.5869565217391284,
+              "percentile": 0.1111111111111111,
+              "weight": 0.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 37,
+          "label": "技術",
+          "null_explanation": null
+        },
+        "chips": {
+          "score": 0.940476106058344,
+          "weight": 0.3,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "institutional_flow_5d": {
+              "value": 1.0777780216606105,
+              "percentile": 0.9402050113895216,
+              "weight": 0.4,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "institutional_flow_20d": {
+              "value": 2.5152930905592665,
+              "percentile": 0.8990990990990991,
+              "weight": 0.3,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "margin_change_5d": {
+              "value": -0.2457627118644068,
+              "percentile": 0.9822145725760184,
+              "weight": 0.3,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": {
+            "institutional_flow_5d": 1757,
+            "institutional_flow_20d": 1666,
+            "margin_change_5d": 1744
+          },
+          "label": "籌碼",
+          "null_explanation": null
+        },
+        "group": {
+          "score": null,
+          "weight": 0.2,
+          "inference": false,
+          "item_coverage": 0.0,
+          "null_reason": "no_qualified_group",
+          "items": {
+            "board_percentile": {
+              "value": null,
+              "percentile": null,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": "no_qualified_group",
+              "null_explanation": "當日沒有已排名且資料完整的所屬產業或題材"
+            }
+          },
+          "source": null,
+          "label": "族群",
+          "null_explanation": "當日沒有已排名且資料完整的所屬產業或題材"
+        },
+        "news_sentiment": {
+          "score": 0.47162230035158215,
+          "weight": 0.15,
+          "inference": true,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "net_direction": {
+              "value": 0.0,
+              "percentile": 0.47162230035158215,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 1992,
+          "instruments_with_news": 165,
+          "counts": {
+            "linked": 0,
+            "positive": 0,
+            "negative": 0,
+            "mixed": 0,
+            "unscored": 0
+          },
+          "news_ids": [],
+          "label": "新聞情緒",
+          "null_explanation": null
+        }
+      },
+      "alternatives": [],
+      "reasons": [
+        {
+          "code": "institutional_net_buy_5d",
+          "component": "chips",
+          "text": "三大法人 5 日淨買超，約 20 日均量的 1.08 倍",
+          "params": {
+            "ratio": "1.08"
+          },
+          "inference": false
+        },
+        {
+          "code": "pullback_ma20_support",
+          "component": "technical",
+          "text": "回測 20 日均線，距均線 0.4%，量比 0.7",
+          "params": {
+            "distance": "0.4%",
+            "volume_ratio": "0.7"
+          },
+          "inference": false
+        },
+        {
+          "code": "institutional_net_buy_20d",
+          "component": "chips",
+          "text": "三大法人 20 日淨買超",
+          "params": {},
+          "inference": false
+        },
+        {
+          "code": "margin_decrease_5d",
+          "component": "chips",
+          "text": "融資 5 日減少 24.6%",
+          "params": {
+            "ratio": "24.6%"
+          },
+          "inference": false
+        }
+      ],
+      "groups": [
+        {
+          "group_id": "official-industry-17a9540aad5c19fa",
+          "name": "塑膠",
+          "board": "industry",
+          "qualified": false,
+          "rank": null,
+          "board_size": null,
+          "board_percentile": null,
+          "score": null,
+          "data_quality": "partial",
+          "score_date": "2026-10-28"
+        }
+      ],
+      "data_as_of": "2026-10-28",
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "三大法人5日淨買超約為20日均量的1.08倍，且20日淨買超、融資5日減少24.6%，籌碼94分；同時回測20日均線、距均線0.4%。",
+        "levels": "規則的進場區30.94～31.39，條件失效的停損30.84，僅低於進場區下緣0.10；第一目標32.03、第二目標32.67，第一目標RR約1.59。",
+        "risks": "族群分項無資料（塑膠當日未排名），權重涵蓋僅80%，總分可信度較低。近3日無關聯新聞，停損與進場區距離很窄。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:08.232778+00:00",
+        "input_hash": "f5df2d79d41946ed5c857ac67ad6ed1cf3a0d52f3bfd8609109dc1871be659b0"
+      },
+      "market": {
+        "trading_date": "2026-10-28",
+        "close": 31.3,
+        "change": -0.05,
+        "change_pct": -0.001594896331738437,
+        "change_status": "known",
+        "source": "twse"
+      },
+      "sources": {
+        "signal": "analysis:pullback_v1",
+        "market_bar": "twse",
+        "chips": "twse_t86",
+        "groups": "hot_group_v1",
+        "news": "news_items+news_llm_results:news_v2"
+      }
+    },
+    {
+      "rank": 6,
+      "trading_date": "2026-10-28",
+      "score_version": "candidate_score_v2",
+      "instrument": {
+        "id": 479,
+        "exchange": "TWSE",
+        "symbol": "2851",
+        "name": "中再保",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v1",
+      "signal_id": 34088,
+      "signal_status": "conditional",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 49.05,
+        "entry_zone": {
+          "low": 47.82,
+          "high": 49.52
+        },
+        "invalid_price": 47.35,
+        "target_1": 51.77,
+        "target_2": 54.15,
+        "risk_reward": 1.6,
+        "earliest_execution_date": null
+      },
+      "total_score": 0.734945,
+      "weight_coverage": 1.0,
+      "partial_components": false,
+      "components": {
+        "technical": {
+          "score": 0.7083333333333333,
+          "weight": 0.35,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "volume_ratio": {
+              "value": 0.6323031643706752,
+              "percentile": 0.9722222222222222,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "distance": {
+              "value": 0.007755919667163047,
+              "percentile": 0.4444444444444444,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "risk_reward": {
+              "value": 1.6000000000000074,
+              "percentile": 0.6111111111111112,
+              "weight": 0.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 37,
+          "label": "技術",
+          "null_explanation": null
+        },
+        "chips": {
+          "score": 0.8017572772157397,
+          "weight": 0.3,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "institutional_flow_5d": {
+              "value": 0.07604185144482589,
+              "percentile": 0.5375854214123007,
+              "weight": 0.4,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "institutional_flow_20d": {
+              "value": 3.8951124776018795,
+              "percentile": 0.9597597597597598,
+              "weight": 0.3,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "margin_change_5d": {
+              "value": -0.5190420102080879,
+              "percentile": 0.9959839357429718,
+              "weight": 0.3,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": {
+            "institutional_flow_5d": 1757,
+            "institutional_flow_20d": 1666,
+            "margin_change_5d": 1744
+          },
+          "label": "籌碼",
+          "null_explanation": null
+        },
+        "group": {
+          "score": 0.8787878787878788,
+          "weight": 0.2,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "board_percentile": {
+              "value": 0.8787878787878788,
+              "percentile": 0.8787878787878788,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "source": {
+            "group_id": "official-industry-94d658309b8d4f69",
+            "name": "金融",
+            "board": "industry",
+            "rank": 5,
+            "board_size": 34
+          },
+          "label": "族群",
+          "null_explanation": null
+        },
+        "news_sentiment": {
+          "score": 0.47162230035158215,
+          "weight": 0.15,
+          "inference": true,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "net_direction": {
+              "value": 0.0,
+              "percentile": 0.47162230035158215,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 1992,
+          "instruments_with_news": 165,
+          "counts": {
+            "linked": 0,
+            "positive": 0,
+            "negative": 0,
+            "mixed": 0,
+            "unscored": 0
+          },
+          "news_ids": [],
+          "label": "新聞情緒",
+          "null_explanation": null
+        }
+      },
+      "alternatives": [],
+      "reasons": [
+        {
+          "code": "pullback_ma20_support",
+          "component": "technical",
+          "text": "回測 20 日均線，距均線 0.8%，量比 0.6",
+          "params": {
+            "distance": "0.8%",
+            "volume_ratio": "0.6"
+          },
+          "inference": false
+        },
+        {
+          "code": "foreign_trust_net_buy_5d",
+          "component": "chips",
+          "text": "外資＋投信 5 日淨買超",
+          "params": {},
+          "inference": false
+        },
+        {
+          "code": "hot_group_rank",
+          "component": "group",
+          "text": "所屬產業「金融」熱度第 5",
+          "params": {
+            "board": "產業",
+            "name": "金融",
+            "rank": "5"
+          },
+          "inference": false
+        },
+        {
+          "code": "institutional_net_buy_20d",
+          "component": "chips",
+          "text": "三大法人 20 日淨買超",
+          "params": {},
+          "inference": false
+        }
+      ],
+      "groups": [
+        {
+          "group_id": "official-industry-94d658309b8d4f69",
+          "name": "金融",
+          "board": "industry",
+          "qualified": true,
+          "rank": 5,
+          "board_size": 34,
+          "board_percentile": 0.8787878787878788,
+          "score": 68.41,
+          "data_quality": "complete",
+          "score_date": "2026-10-28"
+        }
+      ],
+      "data_as_of": "2026-10-28",
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "回測 20 日均線且距均線 0.8%，外資與投信 5 日淨買超，族群分項 88、籌碼分項 80 較高，所屬「金融」產業熱度第 5。",
+        "levels": "規則的進場區為 47.82～49.52，條件失效的停損 47.35 貼近進場區下緣。第一目標 51.77、第二目標 54.15，第一目標 RR 為 1.6。",
+        "risks": "新聞情緒分項僅 47，且近 3 日沒有關聯新聞可佐證；回測時量比 0.6，量能偏低。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:18.606100+00:00",
+        "input_hash": "4c14adf0190683da6d67392e0aef5edf5faf79fadd7a649b716cea02358d0ba4"
+      },
+      "market": {
+        "trading_date": "2026-10-28",
+        "close": 49.05,
+        "change": -0.95,
+        "change_pct": -0.019,
+        "change_status": "known",
+        "source": "twse"
+      },
+      "sources": {
+        "signal": "analysis:pullback_v1",
+        "market_bar": "twse",
+        "chips": "twse_t86",
+        "groups": "hot_group_v1",
+        "news": "news_items+news_llm_results:news_v2"
+      }
+    },
+    {
+      "rank": 7,
+      "trading_date": "2026-10-28",
+      "score_version": "candidate_score_v2",
+      "instrument": {
+        "id": 727,
+        "exchange": "TWSE",
+        "symbol": "4967",
+        "name": "十銓",
+        "instrument_type": "stock"
+      },
+      "strategy": "breakout_v1",
+      "signal_id": 34583,
+      "signal_status": "conditional",
+      "levels": {
+        "entry_type": "breakout",
+        "entry": 279.5,
+        "entry_zone": {
+          "low": 279.5,
+          "high": 279.5
+        },
+        "invalid_price": 272.57,
+        "target_1": 290.59,
+        "target_2": 300.29,
+        "risk_reward": 1.6003,
+        "earliest_execution_date": null
+      },
+      "total_score": 0.713024,
+      "weight_coverage": 1.0,
+      "partial_components": false,
+      "components": {
+        "technical": {
+          "score": 0.6842105263157895,
+          "weight": 0.35,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "volume_ratio": {
+              "value": 4.356715467566569,
+              "percentile": 0.6842105263157895,
+              "weight": 0.5,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "distance": {
+              "value": 0.007207207207207134,
+              "percentile": 0.6842105263157895,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "risk_reward": {
+              "value": 1.6002886002885952,
+              "percentile": 0.42105263157894735,
+              "weight": 0.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 20,
+          "label": "技術",
+          "null_explanation": null
+        },
+        "chips": {
+          "score": 0.6005594458996222,
+          "weight": 0.3,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "institutional_flow_5d": {
+              "value": 1.601068332687467,
+              "percentile": 0.9726651480637813,
+              "weight": 0.4,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "institutional_flow_20d": {
+              "value": -0.10360194396452219,
+              "percentile": 0.43303303303303303,
+              "weight": 0.3,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "margin_change_5d": {
+              "value": 0.007646322813846795,
+              "percentile": 0.2719449225473322,
+              "weight": 0.3,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": {
+            "institutional_flow_5d": 1757,
+            "institutional_flow_20d": 1666,
+            "margin_change_5d": 1744
+          },
+          "label": "籌碼",
+          "null_explanation": null
+        },
+        "group": {
+          "score": 0.7272727272727273,
+          "weight": 0.2,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "board_percentile": {
+              "value": 0.7272727272727273,
+              "percentile": 0.7272727272727273,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "source": {
+            "group_id": "theme-memory",
+            "name": "記憶體",
+            "board": "theme",
+            "rank": 4,
+            "board_size": 12
+          },
+          "label": "族群",
+          "null_explanation": null
+        },
+        "news_sentiment": {
+          "score": 0.9861878453038674,
+          "weight": 0.15,
+          "inference": true,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "net_direction": {
+              "value": 2.0,
+              "percentile": 0.9861878453038674,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 1992,
+          "instruments_with_news": 165,
+          "counts": {
+            "linked": 3,
+            "positive": 2,
+            "negative": 0,
+            "mixed": 0,
+            "unscored": 1
+          },
+          "news_ids": [
+            3272,
+            3274,
+            3889
+          ],
+          "label": "新聞情緒",
+          "null_explanation": null
+        }
+      },
+      "alternatives": [],
+      "reasons": [
+        {
+          "code": "breakout_20d_high",
+          "component": "technical",
+          "text": "突破 20 日高點，量比 4.4",
+          "params": {
+            "volume_ratio": "4.4"
+          },
+          "inference": false
+        },
+        {
+          "code": "institutional_net_buy_5d",
+          "component": "chips",
+          "text": "三大法人 5 日淨買超，約 20 日均量的 1.60 倍",
+          "params": {
+            "ratio": "1.60"
+          },
+          "inference": false
+        },
+        {
+          "code": "news_positive_3d",
+          "component": "news_sentiment",
+          "text": "近 3 日 2 則偏多新聞（推論）",
+          "params": {
+            "positive": "2"
+          },
+          "inference": true
+        },
+        {
+          "code": "hot_group_rank",
+          "component": "group",
+          "text": "所屬題材「記憶體」熱度第 4",
+          "params": {
+            "board": "題材",
+            "name": "記憶體",
+            "rank": "4"
+          },
+          "inference": false
+        }
+      ],
+      "groups": [
+        {
+          "group_id": "theme-memory",
+          "name": "記憶體",
+          "board": "theme",
+          "qualified": true,
+          "rank": 4,
+          "board_size": 12,
+          "board_percentile": 0.7272727272727273,
+          "score": 70.89,
+          "data_quality": "complete",
+          "score_date": "2026-10-28"
+        },
+        {
+          "group_id": "official-industry-1858340d045a575f",
+          "name": "半導體",
+          "board": "industry",
+          "qualified": true,
+          "rank": 18,
+          "board_size": 34,
+          "board_percentile": 0.48484848484848486,
+          "score": 48.12,
+          "data_quality": "complete",
+          "score_date": "2026-10-28"
+        }
+      ],
+      "data_as_of": "2026-10-28",
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "突破 20 日高點且量比 4.4，三大法人 5 日淨買超；新聞情緒分項 99 最高，所屬「記憶體」題材熱度第 4。",
+        "levels": "規則的進場區為單一價 279.5，條件失效的停損 272.57。第一目標 290.59、第二目標 300.29，第一目標 RR 為 1.6003。",
+        "risks": "新聞情緒高分來自 AI 方向判讀，本身是推論；財報新聞尚未有方向判讀，記憶體題材相關新聞多為族群盤中消息。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:18.606100+00:00",
+        "input_hash": "a8e0109cadcb4abd1085bdd2a54f85b85e2176f82f2f6f24fb70052397ed33b8"
+      },
+      "market": {
+        "trading_date": "2026-10-28",
+        "close": 279.5,
+        "change": 15.5,
+        "change_pct": 0.058712121212121215,
+        "change_status": "known",
+        "source": "twse"
+      },
+      "sources": {
+        "signal": "analysis:breakout_v1",
+        "market_bar": "twse",
+        "chips": "twse_t86",
+        "groups": "hot_group_v1",
+        "news": "news_items+news_llm_results:news_v2"
+      }
+    },
+    {
+      "rank": 8,
+      "trading_date": "2026-10-28",
+      "score_version": "candidate_score_v2",
+      "instrument": {
+        "id": 155,
+        "exchange": "TWSE",
+        "symbol": "1626",
+        "name": "艾美特-KY",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v1",
+      "signal_id": 33442,
+      "signal_status": "conditional",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 9.75,
+        "entry_zone": {
+          "low": 9.65,
+          "high": 9.77
+        },
+        "invalid_price": 9.63,
+        "target_1": 9.95,
+        "target_2": 10.12,
+        "risk_reward": 1.6667,
+        "earliest_execution_date": null
+      },
+      "total_score": 0.709951,
+      "weight_coverage": 0.8,
+      "partial_components": true,
+      "components": {
+        "technical": {
+          "score": 0.75,
+          "weight": 0.35,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "volume_ratio": {
+              "value": 0.682353067318569,
+              "percentile": 0.7777777777777778,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "distance": {
+              "value": 0.004067761701251227,
+              "percentile": 0.7222222222222222,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "risk_reward": {
+              "value": 1.6666666666666716,
+              "percentile": 1.0,
+              "weight": 0.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 37,
+          "label": "技術",
+          "null_explanation": null
+        },
+        "chips": {
+          "score": 0.7823910214167371,
+          "weight": 0.3,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "institutional_flow_5d": {
+              "value": 1.0318153266778998,
+              "percentile": 0.933371298405467,
+              "weight": 0.4,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "institutional_flow_20d": {
+              "value": 2.285228384678165,
+              "percentile": 0.8786786786786787,
+              "weight": 0.3,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "margin_change_5d": {
+              "value": -0.005087209302325582,
+              "percentile": 0.48479632816982215,
+              "weight": 0.3,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": {
+            "institutional_flow_5d": 1757,
+            "institutional_flow_20d": 1666,
+            "margin_change_5d": 1744
+          },
+          "label": "籌碼",
+          "null_explanation": null
+        },
+        "group": {
+          "score": null,
+          "weight": 0.2,
+          "inference": false,
+          "item_coverage": 0.0,
+          "null_reason": "no_qualified_group",
+          "items": {
+            "board_percentile": {
+              "value": null,
+              "percentile": null,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": "no_qualified_group",
+              "null_explanation": "當日沒有已排名且資料完整的所屬產業或題材"
+            }
+          },
+          "source": null,
+          "label": "族群",
+          "null_explanation": "當日沒有已排名且資料完整的所屬產業或題材"
+        },
+        "news_sentiment": {
+          "score": 0.47162230035158215,
+          "weight": 0.15,
+          "inference": true,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "net_direction": {
+              "value": 0.0,
+              "percentile": 0.47162230035158215,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 1992,
+          "instruments_with_news": 165,
+          "counts": {
+            "linked": 0,
+            "positive": 0,
+            "negative": 0,
+            "mixed": 0,
+            "unscored": 0
+          },
+          "news_ids": [],
+          "label": "新聞情緒",
+          "null_explanation": null
+        }
+      },
+      "alternatives": [],
+      "reasons": [
+        {
+          "code": "pullback_ma20_support",
+          "component": "technical",
+          "text": "回測 20 日均線，距均線 0.4%，量比 0.7",
+          "params": {
+            "distance": "0.4%",
+            "volume_ratio": "0.7"
+          },
+          "inference": false
+        },
+        {
+          "code": "institutional_net_buy_5d",
+          "component": "chips",
+          "text": "三大法人 5 日淨買超，約 20 日均量的 1.03 倍",
+          "params": {
+            "ratio": "1.03"
+          },
+          "inference": false
+        },
+        {
+          "code": "institutional_net_buy_20d",
+          "component": "chips",
+          "text": "三大法人 20 日淨買超",
+          "params": {},
+          "inference": false
+        },
+        {
+          "code": "margin_decrease_5d",
+          "component": "chips",
+          "text": "融資 5 日減少 0.5%",
+          "params": {
+            "ratio": "0.5%"
+          },
+          "inference": false
+        }
+      ],
+      "groups": [
+        {
+          "group_id": "official-industry-03e261edf65c1bbd",
+          "name": "電器電纜",
+          "board": "industry",
+          "qualified": false,
+          "rank": null,
+          "board_size": null,
+          "board_percentile": null,
+          "score": null,
+          "data_quality": "partial",
+          "score_date": "2026-10-28"
+        }
+      ],
+      "data_as_of": "2026-10-28",
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "回測 20 日均線且距均線 0.4%，三大法人 5 日與 20 日皆淨買超，融資 5 日減少 0.5%；籌碼分項 78、技術分項 75。",
+        "levels": "規則的進場區為 9.65～9.77，條件失效的停損 9.63 與進場區下緣僅差 0.02。第一目標 9.95、第二目標 10.12，第一目標 RR 為 1.6667。",
+        "risks": "族群分項無資料，所屬「電器電纜」當日未排名，權重涵蓋僅 80%；新聞情緒分項 47，近 3 日無關聯新聞。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:18.606100+00:00",
+        "input_hash": "1c0fbb2ec07958a30a58e4b2f09570cb49566626ef5fdba7753e87e6c181104b"
+      },
+      "market": {
+        "trading_date": "2026-10-28",
+        "close": 9.75,
+        "change": 0.05,
+        "change_pct": 0.005154639175257733,
+        "change_status": "known",
+        "source": "twse"
+      },
+      "sources": {
+        "signal": "analysis:pullback_v1",
+        "market_bar": "twse",
+        "chips": "twse_t86",
+        "groups": "hot_group_v1",
+        "news": "news_items+news_llm_results:news_v2"
+      }
+    },
+    {
+      "rank": 9,
+      "trading_date": "2026-10-28",
+      "score_version": "candidate_score_v2",
+      "instrument": {
+        "id": 365,
+        "exchange": "TWSE",
+        "symbol": "2453",
+        "name": "凌群",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v1",
+      "signal_id": 33860,
+      "signal_status": "conditional",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 53.3,
+        "entry_zone": {
+          "low": 52.65,
+          "high": 53.52
+        },
+        "invalid_price": 52.44,
+        "target_1": 54.68,
+        "target_2": 55.89,
+        "risk_reward": 1.6047,
+        "earliest_execution_date": null
+      },
+      "total_score": 0.705655,
+      "weight_coverage": 1.0,
+      "partial_components": false,
+      "components": {
+        "technical": {
+          "score": 0.75,
+          "weight": 0.35,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "volume_ratio": {
+              "value": 0.6830493384402859,
+              "percentile": 0.75,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "distance": {
+              "value": 0.004050108316850265,
+              "percentile": 0.75,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "risk_reward": {
+              "value": 1.6046511627907016,
+              "percentile": 0.8888888888888888,
+              "weight": 0.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 37,
+          "label": "技術",
+          "null_explanation": null
+        },
+        "chips": {
+          "score": 0.574705480791602,
+          "weight": 0.3,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "institutional_flow_5d": {
+              "value": 0.4586009407818221,
+              "percentile": 0.791002277904328,
+              "weight": 0.4,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "institutional_flow_20d": {
+              "value": 0.7331308087065458,
+              "percentile": 0.6762762762762763,
+              "weight": 0.3,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "margin_change_5d": {
+              "value": 0.022126022126022125,
+              "percentile": 0.18473895582329317,
+              "weight": 0.3,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": {
+            "institutional_flow_5d": 1757,
+            "institutional_flow_20d": 1666,
+            "margin_change_5d": 1744
+          },
+          "label": "籌碼",
+          "null_explanation": null
+        },
+        "group": {
+          "score": 1.0,
+          "weight": 0.2,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "board_percentile": {
+              "value": 1.0,
+              "percentile": 1.0,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "source": {
+            "group_id": "official-industry-3dc064dd4f87e891",
+            "name": "資訊服務",
+            "board": "industry",
+            "rank": 1,
+            "board_size": 34
+          },
+          "label": "族群",
+          "null_explanation": null
+        },
+        "news_sentiment": {
+          "score": 0.47162230035158215,
+          "weight": 0.15,
+          "inference": true,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "net_direction": {
+              "value": 0.0,
+              "percentile": 0.47162230035158215,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 1992,
+          "instruments_with_news": 165,
+          "counts": {
+            "linked": 0,
+            "positive": 0,
+            "negative": 0,
+            "mixed": 0,
+            "unscored": 0
+          },
+          "news_ids": [],
+          "label": "新聞情緒",
+          "null_explanation": null
+        }
+      },
+      "alternatives": [],
+      "reasons": [
+        {
+          "code": "pullback_ma20_support",
+          "component": "technical",
+          "text": "回測 20 日均線，距均線 0.4%，量比 0.7",
+          "params": {
+            "distance": "0.4%",
+            "volume_ratio": "0.7"
+          },
+          "inference": false
+        },
+        {
+          "code": "hot_group_rank",
+          "component": "group",
+          "text": "所屬產業「資訊服務」熱度第 1",
+          "params": {
+            "board": "產業",
+            "name": "資訊服務",
+            "rank": "1"
+          },
+          "inference": false
+        },
+        {
+          "code": "institutional_net_buy_5d",
+          "component": "chips",
+          "text": "三大法人 5 日淨買超，約 20 日均量的 0.46 倍",
+          "params": {
+            "ratio": "0.46"
+          },
+          "inference": false
+        },
+        {
+          "code": "institutional_net_buy_20d",
+          "component": "chips",
+          "text": "三大法人 20 日淨買超",
+          "params": {},
+          "inference": false
+        }
+      ],
+      "groups": [
+        {
+          "group_id": "official-industry-3dc064dd4f87e891",
+          "name": "資訊服務",
+          "board": "industry",
+          "qualified": true,
+          "rank": 1,
+          "board_size": 34,
+          "board_percentile": 1.0,
+          "score": 86.08,
+          "data_quality": "complete",
+          "score_date": "2026-10-28"
+        }
+      ],
+      "data_as_of": "2026-10-28",
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "回測 20 日均線且距均線 0.4%，所屬「資訊服務」產業熱度第 1，族群分項滿分 100；三大法人 5 日與 20 日皆淨買超。",
+        "levels": "規則的進場區為 52.65～53.52，條件失效的停損 52.44 貼近進場區下緣。第一目標 54.68、第二目標 55.89，第一目標 RR 為 1.6047。",
+        "risks": "籌碼分項僅 57，5 日淨買超約為 20 日均量的 0.46 倍，力道偏小；新聞情緒分項 47，近 3 日無關聯新聞。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:18.606100+00:00",
+        "input_hash": "3e6b7826a98b99ed34d328441e9a6bfb105a6923f0554eb0f19ad26073518371"
+      },
+      "market": {
+        "trading_date": "2026-10-28",
+        "close": 53.3,
+        "change": 0.0,
+        "change_pct": 0.0,
+        "change_status": "known",
+        "source": "twse"
+      },
+      "sources": {
+        "signal": "analysis:pullback_v1",
+        "market_bar": "twse",
+        "chips": "twse_t86",
+        "groups": "hot_group_v1",
+        "news": "news_items+news_llm_results:news_v2"
+      }
+    },
+    {
+      "rank": 10,
+      "trading_date": "2026-10-28",
+      "score_version": "candidate_score_v2",
+      "instrument": {
+        "id": 314,
+        "exchange": "TWSE",
+        "symbol": "2377",
+        "name": "微星",
+        "instrument_type": "stock"
+      },
+      "strategy": "breakout_v1",
+      "signal_id": 33757,
+      "signal_status": "conditional",
+      "levels": {
+        "entry_type": "breakout",
+        "entry": 168.5,
+        "entry_zone": {
+          "low": 168.5,
+          "high": 168.5
+        },
+        "invalid_price": 163.79,
+        "target_1": 176.04,
+        "target_2": 182.64,
+        "risk_reward": 1.6008,
+        "earliest_execution_date": null
+      },
+      "total_score": 0.694028,
+      "weight_coverage": 1.0,
+      "partial_components": false,
+      "components": {
+        "technical": {
+          "score": 0.47368421052631576,
+          "weight": 0.35,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "volume_ratio": {
+              "value": 1.2848317387704868,
+              "percentile": 0.0,
+              "weight": 0.5,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "distance": {
+              "value": 0.0029761904761904656,
+              "percentile": 0.9473684210526315,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "risk_reward": {
+              "value": 1.600849256900208,
+              "percentile": 0.5789473684210527,
+              "weight": 0.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 20,
+          "label": "技術",
+          "null_explanation": null
+        },
+        "chips": {
+          "score": 0.959327955527972,
+          "weight": 0.3,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "institutional_flow_5d": {
+              "value": 2.0117139253859873,
+              "percentile": 0.9857630979498861,
+              "weight": 0.4,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "institutional_flow_20d": {
+              "value": 5.335407701604637,
+              "percentile": 0.9843843843843844,
+              "weight": 0.3,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "margin_change_5d": {
+              "value": -0.07517577068685775,
+              "percentile": 0.8990246701090074,
+              "weight": 0.3,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": {
+            "institutional_flow_5d": 1757,
+            "institutional_flow_20d": 1666,
+            "margin_change_5d": 1744
+          },
+          "label": "籌碼",
+          "null_explanation": null
+        },
+        "group": {
+          "score": 0.8484848484848485,
+          "weight": 0.2,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "board_percentile": {
+              "value": 0.8484848484848485,
+              "percentile": 0.8484848484848485,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "source": {
+            "group_id": "official-industry-d60be8febbae1cd6",
+            "name": "電腦及週邊",
+            "board": "industry",
+            "rank": 6,
+            "board_size": 34
+          },
+          "label": "族群",
+          "null_explanation": null
+        },
+        "news_sentiment": {
+          "score": 0.47162230035158215,
+          "weight": 0.15,
+          "inference": true,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "net_direction": {
+              "value": 0.0,
+              "percentile": 0.47162230035158215,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 1992,
+          "instruments_with_news": 165,
+          "counts": {
+            "linked": 0,
+            "positive": 0,
+            "negative": 0,
+            "mixed": 0,
+            "unscored": 0
+          },
+          "news_ids": [],
+          "label": "新聞情緒",
+          "null_explanation": null
+        }
+      },
+      "alternatives": [],
+      "reasons": [
+        {
+          "code": "foreign_trust_net_buy_5d",
+          "component": "chips",
+          "text": "外資＋投信 5 日淨買超",
+          "params": {},
+          "inference": false
+        },
+        {
+          "code": "hot_group_rank",
+          "component": "group",
+          "text": "所屬產業「電腦及週邊」熱度第 6",
+          "params": {
+            "board": "產業",
+            "name": "電腦及週邊",
+            "rank": "6"
+          },
+          "inference": false
+        },
+        {
+          "code": "breakout_20d_high",
+          "component": "technical",
+          "text": "突破 20 日高點，量比 1.3",
+          "params": {
+            "volume_ratio": "1.3"
+          },
+          "inference": false
+        },
+        {
+          "code": "institutional_net_buy_20d",
+          "component": "chips",
+          "text": "三大法人 20 日淨買超",
+          "params": {},
+          "inference": false
+        }
+      ],
+      "groups": [
+        {
+          "group_id": "official-industry-d60be8febbae1cd6",
+          "name": "電腦及週邊",
+          "board": "industry",
+          "qualified": true,
+          "rank": 6,
+          "board_size": 34,
+          "board_percentile": 0.8484848484848485,
+          "score": 68.14,
+          "data_quality": "complete",
+          "score_date": "2026-10-28"
+        }
+      ],
+      "data_as_of": "2026-10-28",
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "籌碼分項 96 最高，外資與投信 5 日淨買超、三大法人 20 日淨買超，並突破 20 日高點；所屬「電腦及週邊」產業熱度第 6。",
+        "levels": "規則的進場區為單一價 168.5，條件失效的停損 163.79。第一目標 176.04、第二目標 182.64，第一目標 RR 為 1.6008。",
+        "risks": "技術分項僅 47，突破量比 1.3 偏溫和；新聞情緒分項 47，近 3 日無關聯新聞。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:18.606100+00:00",
+        "input_hash": "bc038ecd6f750c57a9842a836f66fc7cb858a583859549afe0dd1e61933fe2a6"
+      },
+      "market": {
+        "trading_date": "2026-10-28",
+        "close": 168.5,
+        "change": 2.5,
+        "change_pct": 0.015060240963855422,
+        "change_status": "known",
+        "source": "twse"
+      },
+      "sources": {
+        "signal": "analysis:breakout_v1",
+        "market_bar": "twse",
+        "chips": "twse_t86",
+        "groups": "hot_group_v1",
+        "news": "news_items+news_llm_results:news_v2"
+      }
+    },
+    {
+      "rank": 11,
+      "trading_date": "2026-10-28",
+      "score_version": "candidate_score_v2",
+      "instrument": {
+        "id": 1819,
+        "exchange": "TPEx",
+        "symbol": "5438",
+        "name": "東友",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v1",
+      "signal_id": 36142,
+      "signal_status": "conditional",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 16.9,
+        "entry_zone": {
+          "low": 16.87,
+          "high": 17.21
+        },
+        "invalid_price": 16.56,
+        "target_1": 17.44,
+        "target_2": 17.92,
+        "risk_reward": 1.5882,
+        "earliest_execution_date": null
+      },
+      "total_score": 0.654793,
+      "weight_coverage": 1.0,
+      "partial_components": false,
+      "components": {
+        "technical": {
+          "score": 0.625,
+          "weight": 0.35,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "volume_ratio": {
+              "value": 0.6594102620290516,
+              "percentile": 0.8888888888888888,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "distance": {
+              "value": 0.008215962441314617,
+              "percentile": 0.3611111111111111,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "risk_reward": {
+              "value": 1.5882352941176556,
+              "percentile": 0.1388888888888889,
+              "weight": 0.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 37,
+          "label": "技術",
+          "null_explanation": null
+        },
+        "chips": {
+          "score": 0.6520089211649988,
+          "weight": 0.3,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "institutional_flow_5d": {
+              "value": 0.7902181086045504,
+              "percentile": 0.8912300683371298,
+              "weight": 0.4,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "institutional_flow_20d": {
+              "value": -0.4864549050267119,
+              "percentile": 0.33273273273273274,
+              "weight": 0.3,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "margin_change_5d": {
+              "value": -0.018480492813141684,
+              "percentile": 0.6523235800344234,
+              "weight": 0.3,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": {
+            "institutional_flow_5d": 1757,
+            "institutional_flow_20d": 1666,
+            "margin_change_5d": 1744
+          },
+          "label": "籌碼",
+          "null_explanation": null
+        },
+        "group": {
+          "score": 0.8484848484848485,
+          "weight": 0.2,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "board_percentile": {
+              "value": 0.8484848484848485,
+              "percentile": 0.8484848484848485,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "source": {
+            "group_id": "official-industry-d60be8febbae1cd6",
+            "name": "電腦及週邊",
+            "board": "industry",
+            "rank": 6,
+            "board_size": 34
+          },
+          "label": "族群",
+          "null_explanation": null
+        },
+        "news_sentiment": {
+          "score": 0.47162230035158215,
+          "weight": 0.15,
+          "inference": true,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "net_direction": {
+              "value": 0.0,
+              "percentile": 0.47162230035158215,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 1992,
+          "instruments_with_news": 165,
+          "counts": {
+            "linked": 0,
+            "positive": 0,
+            "negative": 0,
+            "mixed": 0,
+            "unscored": 0
+          },
+          "news_ids": [],
+          "label": "新聞情緒",
+          "null_explanation": null
+        }
+      },
+      "alternatives": [],
+      "reasons": [
+        {
+          "code": "pullback_ma20_support",
+          "component": "technical",
+          "text": "回測 20 日均線，距均線 0.8%，量比 0.7",
+          "params": {
+            "distance": "0.8%",
+            "volume_ratio": "0.7"
+          },
+          "inference": false
+        },
+        {
+          "code": "institutional_net_buy_5d",
+          "component": "chips",
+          "text": "三大法人 5 日淨買超，約 20 日均量的 0.79 倍",
+          "params": {
+            "ratio": "0.79"
+          },
+          "inference": false
+        },
+        {
+          "code": "hot_group_rank",
+          "component": "group",
+          "text": "所屬產業「電腦及週邊」熱度第 6",
+          "params": {
+            "board": "產業",
+            "name": "電腦及週邊",
+            "rank": "6"
+          },
+          "inference": false
+        },
+        {
+          "code": "margin_decrease_5d",
+          "component": "chips",
+          "text": "融資 5 日減少 1.8%",
+          "params": {
+            "ratio": "1.8%"
+          },
+          "inference": false
+        }
+      ],
+      "groups": [
+        {
+          "group_id": "official-industry-d60be8febbae1cd6",
+          "name": "電腦及週邊",
+          "board": "industry",
+          "qualified": true,
+          "rank": 6,
+          "board_size": 34,
+          "board_percentile": 0.8484848484848485,
+          "score": 68.14,
+          "data_quality": "complete",
+          "score_date": "2026-10-28"
+        }
+      ],
+      "data_as_of": "2026-10-28",
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "符合回踩條件：回測 20 日均線、距均線 0.8%。族群分項 85 最高，電腦及週邊產業熱度第 6，法人 5 日淨買超、融資減少 1.8%。",
+        "levels": "規則的進場區為 16.87～17.21，條件失效的停損 16.56 位於區間下緣下方。第一目標 17.44、第二目標 17.92，第一目標 RR 約 1.59。",
+        "risks": "新聞情緒分項 47 且近 3 日無關聯新聞，該項參考性有限。回測時量比僅 0.7，法人買超約為均量 0.79 倍，力道不算強。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:33.650988+00:00",
+        "input_hash": "11fe834affbe4ff53e46df1f82dfd68fad33aa55f6297639b36e774073c68b7d"
+      },
+      "market": {
+        "trading_date": "2026-10-28",
+        "close": 16.9,
+        "change": 0.0,
+        "change_pct": 0.0,
+        "change_status": "known",
+        "source": "tpex"
+      },
+      "sources": {
+        "signal": "analysis:pullback_v1",
+        "market_bar": "tpex",
+        "chips": "tpex_3insti",
+        "groups": "hot_group_v1",
+        "news": "news_items+news_llm_results:news_v2"
+      }
+    },
+    {
+      "rank": 12,
+      "trading_date": "2026-10-28",
+      "score_version": "candidate_score_v2",
+      "instrument": {
+        "id": 351,
+        "exchange": "TWSE",
+        "symbol": "2431",
+        "name": "聯昌",
+        "instrument_type": "stock"
+      },
+      "strategy": "breakout_v1",
+      "signal_id": 33831,
+      "signal_status": "conditional",
+      "levels": {
+        "entry_type": "breakout",
+        "entry": 11.4,
+        "entry_zone": {
+          "low": 11.4,
+          "high": 11.4
+        },
+        "invalid_price": 11.12,
+        "target_1": 11.86,
+        "target_2": 12.26,
+        "risk_reward": 1.6429,
+        "earliest_execution_date": null
+      },
+      "total_score": 0.645261,
+      "weight_coverage": 1.0,
+      "partial_components": false,
+      "components": {
+        "technical": {
+          "score": 0.7105263157894737,
+          "weight": 0.35,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "volume_ratio": {
+              "value": 10.706901409819183,
+              "percentile": 1.0,
+              "weight": 0.5,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "distance": {
+              "value": 0.027027027027027195,
+              "percentile": 0.42105263157894735,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "risk_reward": {
+              "value": 1.6428571428571328,
+              "percentile": 1.0,
+              "weight": 0.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 20,
+          "label": "技術",
+          "null_explanation": null
+        },
+        "chips": {
+          "score": 0.6618691785461827,
+          "weight": 0.3,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "institutional_flow_5d": {
+              "value": 0.04367048774525002,
+              "percentile": 0.5068337129840547,
+              "weight": 0.4,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "institutional_flow_20d": {
+              "value": 0.673271765572089,
+              "percentile": 0.6612612612612613,
+              "weight": 0.3,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "margin_change_5d": {
+              "value": -0.0612061206120612,
+              "percentile": 0.8691910499139415,
+              "weight": 0.3,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": {
+            "institutional_flow_5d": 1757,
+            "institutional_flow_20d": 1666,
+            "margin_change_5d": 1744
+          },
+          "label": "籌碼",
+          "null_explanation": null
+        },
+        "group": {
+          "score": 0.6363636363636364,
+          "weight": 0.2,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "board_percentile": {
+              "value": 0.6363636363636364,
+              "percentile": 0.6363636363636364,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "source": {
+            "group_id": "official-industry-619f4b496b333d8f",
+            "name": "電子零組件",
+            "board": "industry",
+            "rank": 13,
+            "board_size": 34
+          },
+          "label": "族群",
+          "null_explanation": null
+        },
+        "news_sentiment": {
+          "score": 0.47162230035158215,
+          "weight": 0.15,
+          "inference": true,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "net_direction": {
+              "value": 0.0,
+              "percentile": 0.47162230035158215,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 1992,
+          "instruments_with_news": 165,
+          "counts": {
+            "linked": 0,
+            "positive": 0,
+            "negative": 0,
+            "mixed": 0,
+            "unscored": 0
+          },
+          "news_ids": [],
+          "label": "新聞情緒",
+          "null_explanation": null
+        }
+      },
+      "alternatives": [],
+      "reasons": [
+        {
+          "code": "breakout_20d_high",
+          "component": "technical",
+          "text": "突破 20 日高點，量比 10.7",
+          "params": {
+            "volume_ratio": "10.7"
+          },
+          "inference": false
+        },
+        {
+          "code": "institutional_net_buy_5d",
+          "component": "chips",
+          "text": "三大法人 5 日淨買超，約 20 日均量的 0.04 倍",
+          "params": {
+            "ratio": "0.04"
+          },
+          "inference": false
+        },
+        {
+          "code": "hot_group_rank",
+          "component": "group",
+          "text": "所屬產業「電子零組件」熱度第 13",
+          "params": {
+            "board": "產業",
+            "name": "電子零組件",
+            "rank": "13"
+          },
+          "inference": false
+        },
+        {
+          "code": "institutional_net_buy_20d",
+          "component": "chips",
+          "text": "三大法人 20 日淨買超",
+          "params": {},
+          "inference": false
+        }
+      ],
+      "groups": [
+        {
+          "group_id": "official-industry-619f4b496b333d8f",
+          "name": "電子零組件",
+          "board": "industry",
+          "qualified": true,
+          "rank": 13,
+          "board_size": 34,
+          "board_percentile": 0.6363636363636364,
+          "score": 57.45,
+          "data_quality": "complete",
+          "score_date": "2026-10-28"
+        }
+      ],
+      "data_as_of": "2026-10-28",
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "符合突破條件：突破 20 日高點、量比 10.7。技術分項 71、籌碼分項 66 較高，法人 5 日與 20 日皆淨買超。",
+        "levels": "規則的進場區為單一價 11.4，條件失效的停損 11.12，距離約 0.28。第一目標 11.86、第二目標 12.26，第一目標 RR 約 1.64。",
+        "risks": "法人 5 日淨買超僅約均量 0.04 倍，力道很小。電子零組件熱度第 13，族群分項 64 偏中等；新聞情緒 47 且無關聯新聞。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:33.650988+00:00",
+        "input_hash": "e14b0185b9c53bc66b9eda9406f498a3f856ea6173dc9a2b631e5747f2b93bfc"
+      },
+      "market": {
+        "trading_date": "2026-10-28",
+        "close": 11.4,
+        "change": 0.3,
+        "change_pct": 0.02702702702702703,
+        "change_status": "known",
+        "source": "twse"
+      },
+      "sources": {
+        "signal": "analysis:breakout_v1",
+        "market_bar": "twse",
+        "chips": "twse_t86",
+        "groups": "hot_group_v1",
+        "news": "news_items+news_llm_results:news_v2"
+      }
+    },
+    {
+      "rank": 13,
+      "trading_date": "2026-10-28",
+      "score_version": "candidate_score_v2",
+      "instrument": {
+        "id": 1951,
+        "exchange": "TPEx",
+        "symbol": "6245",
+        "name": "立端",
+        "instrument_type": "stock"
+      },
+      "strategy": "breakout_v1",
+      "signal_id": 36391,
+      "signal_status": "conditional",
+      "levels": {
+        "entry_type": "breakout",
+        "entry": 101.5,
+        "entry_zone": {
+          "low": 101.5,
+          "high": 101.5
+        },
+        "invalid_price": 98.44,
+        "target_1": 106.39,
+        "target_2": 110.67,
+        "risk_reward": 1.598,
+        "earliest_execution_date": null
+      },
+      "total_score": 0.640088,
+      "weight_coverage": 1.0,
+      "partial_components": false,
+      "components": {
+        "technical": {
+          "score": 0.5789473684210527,
+          "weight": 0.35,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "volume_ratio": {
+              "value": 6.616131792239225,
+              "percentile": 0.8947368421052632,
+              "weight": 0.5,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "distance": {
+              "value": 0.0315040650406504,
+              "percentile": 0.2631578947368421,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "risk_reward": {
+              "value": 1.5980392156862735,
+              "percentile": 0.21052631578947367,
+              "weight": 0.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 20,
+          "label": "技術",
+          "null_explanation": null
+        },
+        "chips": {
+          "score": 0.7375296109725399,
+          "weight": 0.3,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "institutional_flow_5d": {
+              "value": 0.7663387568040957,
+              "percentile": 0.8843963553530751,
+              "weight": 0.4,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "institutional_flow_20d": {
+              "value": 2.052607013049375,
+              "percentile": 0.8552552552552553,
+              "weight": 0.3,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "margin_change_5d": {
+              "value": -0.0004710315591144607,
+              "percentile": 0.4239816408491107,
+              "weight": 0.3,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": {
+            "institutional_flow_5d": 1757,
+            "institutional_flow_20d": 1666,
+            "margin_change_5d": 1744
+          },
+          "label": "籌碼",
+          "null_explanation": null
+        },
+        "group": {
+          "score": 0.7272727272727273,
+          "weight": 0.2,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "board_percentile": {
+              "value": 0.7272727272727273,
+              "percentile": 0.7272727272727273,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "source": {
+            "group_id": "official-industry-657bfca32dacb091",
+            "name": "通信網路",
+            "board": "industry",
+            "rank": 10,
+            "board_size": 34
+          },
+          "label": "族群",
+          "null_explanation": null
+        },
+        "news_sentiment": {
+          "score": 0.47162230035158215,
+          "weight": 0.15,
+          "inference": true,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "net_direction": {
+              "value": 0.0,
+              "percentile": 0.47162230035158215,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 1992,
+          "instruments_with_news": 165,
+          "counts": {
+            "linked": 0,
+            "positive": 0,
+            "negative": 0,
+            "mixed": 0,
+            "unscored": 0
+          },
+          "news_ids": [],
+          "label": "新聞情緒",
+          "null_explanation": null
+        }
+      },
+      "alternatives": [],
+      "reasons": [
+        {
+          "code": "foreign_trust_net_buy_5d",
+          "component": "chips",
+          "text": "外資＋投信 5 日淨買超",
+          "params": {},
+          "inference": false
+        },
+        {
+          "code": "breakout_20d_high",
+          "component": "technical",
+          "text": "突破 20 日高點，量比 6.6",
+          "params": {
+            "volume_ratio": "6.6"
+          },
+          "inference": false
+        },
+        {
+          "code": "hot_group_rank",
+          "component": "group",
+          "text": "所屬產業「通信網路」熱度第 10",
+          "params": {
+            "board": "產業",
+            "name": "通信網路",
+            "rank": "10"
+          },
+          "inference": false
+        },
+        {
+          "code": "institutional_net_buy_20d",
+          "component": "chips",
+          "text": "三大法人 20 日淨買超",
+          "params": {},
+          "inference": false
+        }
+      ],
+      "groups": [
+        {
+          "group_id": "official-industry-657bfca32dacb091",
+          "name": "通信網路",
+          "board": "industry",
+          "qualified": true,
+          "rank": 10,
+          "board_size": 34,
+          "board_percentile": 0.7272727272727273,
+          "score": 60.2,
+          "data_quality": "complete",
+          "score_date": "2026-10-28"
+        }
+      ],
+      "data_as_of": "2026-10-28",
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "符合突破條件：突破 20 日高點、量比 6.6。籌碼分項 74、族群分項 73 較高，外資與投信 5 日淨買超，法人 20 日也淨買超。",
+        "levels": "規則的進場區為單一價 101.5，條件失效的停損 98.44。第一目標 106.39、第二目標 110.67，第一目標 RR 約 1.6。",
+        "risks": "技術分項 58 偏低，新聞情緒 47 且近 3 日無關聯新聞。通信網路熱度第 10，並非榜首。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:33.650988+00:00",
+        "input_hash": "f1d3109854c0f9fc3b86feea4976f070536b6365522a92dbd8bcf6341386d21f"
+      },
+      "market": {
+        "trading_date": "2026-10-28",
+        "close": 101.5,
+        "change": 3.2,
+        "change_pct": 0.03255340793489319,
+        "change_status": "known",
+        "source": "tpex"
+      },
+      "sources": {
+        "signal": "analysis:breakout_v1",
+        "market_bar": "tpex",
+        "chips": "tpex_3insti",
+        "groups": "hot_group_v1",
+        "news": "news_items+news_llm_results:news_v2"
+      }
+    },
+    {
+      "rank": 14,
+      "trading_date": "2026-10-28",
+      "score_version": "candidate_score_v2",
+      "instrument": {
+        "id": 996,
+        "exchange": "TWSE",
+        "symbol": "8045",
+        "name": "達運光電",
+        "instrument_type": "stock"
+      },
+      "strategy": "breakout_v1",
+      "signal_id": 35121,
+      "signal_status": "conditional",
+      "levels": {
+        "entry_type": "breakout",
+        "entry": 58.8,
+        "entry_zone": {
+          "low": 58.8,
+          "high": 58.8
+        },
+        "invalid_price": 56.9,
+        "target_1": 61.84,
+        "target_2": 64.5,
+        "risk_reward": 1.6,
+        "earliest_execution_date": null
+      },
+      "total_score": 0.6386,
+      "weight_coverage": 1.0,
+      "partial_components": false,
+      "components": {
+        "technical": {
+          "score": 0.5263157894736842,
+          "weight": 0.35,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "volume_ratio": {
+              "value": 3.0300545573255637,
+              "percentile": 0.47368421052631576,
+              "weight": 0.5,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "distance": {
+              "value": 0.012048192771084265,
+              "percentile": 0.5789473684210527,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "risk_reward": {
+              "value": 1.6000000000000045,
+              "percentile": 0.3157894736842105,
+              "weight": 0.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 20,
+          "label": "技術",
+          "null_explanation": null
+        },
+        "chips": {
+          "score": 0.5494968198313699,
+          "weight": 0.3,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "institutional_flow_5d": {
+              "value": 0.2204789104557077,
+              "percentile": 0.6702733485193622,
+              "weight": 0.4,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "institutional_flow_20d": {
+              "value": 0.565510033719608,
+              "percentile": 0.6264264264264264,
+              "weight": 0.3,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "margin_change_5d": {
+              "value": 0.003814495081308974,
+              "percentile": 0.31153184165232356,
+              "weight": 0.3,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": {
+            "institutional_flow_5d": 1757,
+            "institutional_flow_20d": 1666,
+            "margin_change_5d": 1744
+          },
+          "label": "籌碼",
+          "null_explanation": null
+        },
+        "group": {
+          "score": 0.7272727272727273,
+          "weight": 0.2,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "board_percentile": {
+              "value": 0.7272727272727273,
+              "percentile": 0.7272727272727273,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "source": {
+            "group_id": "official-industry-657bfca32dacb091",
+            "name": "通信網路",
+            "board": "industry",
+            "rank": 10,
+            "board_size": 34
+          },
+          "label": "族群",
+          "null_explanation": null
+        },
+        "news_sentiment": {
+          "score": 0.9605725765946761,
+          "weight": 0.15,
+          "inference": true,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "net_direction": {
+              "value": 1.0,
+              "percentile": 0.9605725765946761,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 1992,
+          "instruments_with_news": 165,
+          "counts": {
+            "linked": 1,
+            "positive": 1,
+            "negative": 0,
+            "mixed": 0,
+            "unscored": 0
+          },
+          "news_ids": [
+            3712
+          ],
+          "label": "新聞情緒",
+          "null_explanation": null
+        }
+      },
+      "alternatives": [],
+      "reasons": [
+        {
+          "code": "breakout_20d_high",
+          "component": "technical",
+          "text": "突破 20 日高點，量比 3.0",
+          "params": {
+            "volume_ratio": "3.0"
+          },
+          "inference": false
+        },
+        {
+          "code": "institutional_net_buy_5d",
+          "component": "chips",
+          "text": "三大法人 5 日淨買超，約 20 日均量的 0.22 倍",
+          "params": {
+            "ratio": "0.22"
+          },
+          "inference": false
+        },
+        {
+          "code": "hot_group_rank",
+          "component": "group",
+          "text": "所屬產業「通信網路」熱度第 10",
+          "params": {
+            "board": "產業",
+            "name": "通信網路",
+            "rank": "10"
+          },
+          "inference": false
+        },
+        {
+          "code": "news_positive_3d",
+          "component": "news_sentiment",
+          "text": "近 3 日 1 則偏多新聞（推論）",
+          "params": {
+            "positive": "1"
+          },
+          "inference": true
+        }
+      ],
+      "groups": [
+        {
+          "group_id": "official-industry-657bfca32dacb091",
+          "name": "通信網路",
+          "board": "industry",
+          "qualified": true,
+          "rank": 10,
+          "board_size": 34,
+          "board_percentile": 0.7272727272727273,
+          "score": 60.2,
+          "data_quality": "complete",
+          "score_date": "2026-10-28"
+        }
+      ],
+      "data_as_of": "2026-10-28",
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "符合突破條件：突破 20 日高點、量比 3.0。新聞情緒分項 96 最高，來自 1 則偏多新聞，另有通信網路熱度第 10 支持。",
+        "levels": "規則的進場區為單一價 58.8，條件失效的停損 56.9。第一目標 61.84、第二目標 64.5，第一目標 RR 為 1.6。",
+        "risks": "新聞偏多方向與摘要皆為 AI 推論，且僅 1 則。技術分項 53、籌碼分項 55 偏低，法人 5 日買超僅約均量 0.22 倍。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:33.650988+00:00",
+        "input_hash": "9239de9e50f2a4fe8027da2685a594c3a8311847454fcdbfbc1c90dbe56b8ada"
+      },
+      "market": {
+        "trading_date": "2026-10-28",
+        "close": 58.8,
+        "change": 3.8,
+        "change_pct": 0.06909090909090909,
+        "change_status": "known",
+        "source": "twse"
+      },
+      "sources": {
+        "signal": "analysis:breakout_v1",
+        "market_bar": "twse",
+        "chips": "twse_t86",
+        "groups": "hot_group_v1",
+        "news": "news_items+news_llm_results:news_v2"
+      }
+    },
+    {
+      "rank": 15,
+      "trading_date": "2026-10-28",
+      "score_version": "candidate_score_v2",
+      "instrument": {
+        "id": 299,
+        "exchange": "TWSE",
+        "symbol": "2357",
+        "name": "華碩",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v1",
+      "signal_id": 33728,
+      "signal_status": "conditional",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 988.0,
+        "entry_zone": {
+          "low": 962.75,
+          "high": 989.25
+        },
+        "invalid_price": 961.5,
+        "target_1": 1030.4,
+        "target_2": 1067.5,
+        "risk_reward": 1.6,
+        "earliest_execution_date": null
+      },
+      "total_score": 0.634684,
+      "weight_coverage": 1.0,
+      "partial_components": false,
+      "components": {
+        "technical": {
+          "score": 0.4166666666666667,
+          "weight": 0.35,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "volume_ratio": {
+              "value": 0.7465559307695178,
+              "percentile": 0.6111111111111112,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "distance": {
+              "value": 0.012295081967213184,
+              "percentile": 0.2222222222222222,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "risk_reward": {
+              "value": 1.6000000000000034,
+              "percentile": 0.5833333333333334,
+              "weight": 0.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 37,
+          "label": "技術",
+          "null_explanation": null
+        },
+        "chips": {
+          "score": 0.8280328971049942,
+          "weight": 0.3,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "institutional_flow_5d": {
+              "value": 0.3492004958129461,
+              "percentile": 0.7494305239179955,
+              "weight": 0.4,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "institutional_flow_20d": {
+              "value": 1.9782678731828742,
+              "percentile": 0.8486486486486486,
+              "weight": 0.3,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "margin_change_5d": {
+              "value": -0.08466453674121406,
+              "percentile": 0.9122203098106713,
+              "weight": 0.3,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": {
+            "institutional_flow_5d": 1757,
+            "institutional_flow_20d": 1666,
+            "margin_change_5d": 1744
+          },
+          "label": "籌碼",
+          "null_explanation": null
+        },
+        "group": {
+          "score": 0.8484848484848485,
+          "weight": 0.2,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "board_percentile": {
+              "value": 0.8484848484848485,
+              "percentile": 0.8484848484848485,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "source": {
+            "group_id": "official-industry-d60be8febbae1cd6",
+            "name": "電腦及週邊",
+            "board": "industry",
+            "rank": 6,
+            "board_size": 34
+          },
+          "label": "族群",
+          "null_explanation": null
+        },
+        "news_sentiment": {
+          "score": 0.47162230035158215,
+          "weight": 0.15,
+          "inference": true,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "net_direction": {
+              "value": 0.0,
+              "percentile": 0.47162230035158215,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 1992,
+          "instruments_with_news": 165,
+          "counts": {
+            "linked": 0,
+            "positive": 0,
+            "negative": 0,
+            "mixed": 0,
+            "unscored": 0
+          },
+          "news_ids": [],
+          "label": "新聞情緒",
+          "null_explanation": null
+        }
+      },
+      "alternatives": [],
+      "reasons": [
+        {
+          "code": "institutional_net_buy_5d",
+          "component": "chips",
+          "text": "三大法人 5 日淨買超，約 20 日均量的 0.35 倍",
+          "params": {
+            "ratio": "0.35"
+          },
+          "inference": false
+        },
+        {
+          "code": "hot_group_rank",
+          "component": "group",
+          "text": "所屬產業「電腦及週邊」熱度第 6",
+          "params": {
+            "board": "產業",
+            "name": "電腦及週邊",
+            "rank": "6"
+          },
+          "inference": false
+        },
+        {
+          "code": "pullback_ma20_support",
+          "component": "technical",
+          "text": "回測 20 日均線，距均線 1.2%，量比 0.7",
+          "params": {
+            "distance": "1.2%",
+            "volume_ratio": "0.7"
+          },
+          "inference": false
+        },
+        {
+          "code": "institutional_net_buy_20d",
+          "component": "chips",
+          "text": "三大法人 20 日淨買超",
+          "params": {},
+          "inference": false
+        }
+      ],
+      "groups": [
+        {
+          "group_id": "official-industry-d60be8febbae1cd6",
+          "name": "電腦及週邊",
+          "board": "industry",
+          "qualified": true,
+          "rank": 6,
+          "board_size": 34,
+          "board_percentile": 0.8484848484848485,
+          "score": 68.14,
+          "data_quality": "complete",
+          "score_date": "2026-10-28"
+        },
+        {
+          "group_id": "theme-ai-server",
+          "name": "AI 伺服器",
+          "board": "theme",
+          "qualified": false,
+          "rank": null,
+          "board_size": null,
+          "board_percentile": null,
+          "score": null,
+          "data_quality": "partial",
+          "score_date": "2026-10-28"
+        }
+      ],
+      "data_as_of": "2026-10-28",
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "符合回踩條件：回測 20 日均線、距均線 1.2%。籌碼分項 83、族群分項 85 較高，法人 5 日與 20 日皆淨買超，電腦及週邊熱度第 6。",
+        "levels": "規則的進場區為 962.75～989.25，條件失效的停損 961.5 緊貼區間下緣，距離很小。第一目標 1030.4、第二目標 1067.5，第一目標 RR 為 1.6。",
+        "risks": "技術分項 42 偏低，回測量比 0.7。題材「AI 伺服器」當日未排名，新聞情緒 47 且無關聯新聞。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:33.650988+00:00",
+        "input_hash": "5d30374eb97f5f05ed9eed238b364ac53df01714a9d1ec425188debdea2bca55"
+      },
+      "market": {
+        "trading_date": "2026-10-28",
+        "close": 988.0,
+        "change": 21.0,
+        "change_pct": 0.02171664943123061,
+        "change_status": "known",
+        "source": "twse"
+      },
+      "sources": {
+        "signal": "analysis:pullback_v1",
+        "market_bar": "twse",
+        "chips": "twse_t86",
+        "groups": "hot_group_v1",
+        "news": "news_items+news_llm_results:news_v2"
+      }
+    },
+    {
+      "rank": 16,
+      "trading_date": "2026-10-28",
+      "score_version": "candidate_score_v2",
+      "instrument": {
+        "id": 1823,
+        "exchange": "TPEx",
+        "symbol": "5452",
+        "name": "佶優",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v1",
+      "signal_id": 36150,
+      "signal_status": "conditional",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 28.75,
+        "entry_zone": {
+          "low": 28.19,
+          "high": 29.18
+        },
+        "invalid_price": 27.76,
+        "target_1": 30.34,
+        "target_2": 31.73,
+        "risk_reward": 1.6061,
+        "earliest_execution_date": null
+      },
+      "total_score": 0.633451,
+      "weight_coverage": 1.0,
+      "partial_components": false,
+      "components": {
+        "technical": {
+          "score": 0.8611111111111112,
+          "weight": 0.35,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "volume_ratio": {
+              "value": 0.6737224075863296,
+              "percentile": 0.8333333333333334,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "distance": {
+              "value": 0.002178649237472685,
+              "percentile": 0.8888888888888888,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "risk_reward": {
+              "value": 1.6060606060606084,
+              "percentile": 0.9444444444444444,
+              "weight": 0.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 37,
+          "label": "技術",
+          "null_explanation": null
+        },
+        "chips": {
+          "score": 0.5882333439261836,
+          "weight": 0.3,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "institutional_flow_5d": {
+              "value": 0.31377926756886165,
+              "percentile": 0.7323462414578588,
+              "weight": 0.4,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "institutional_flow_20d": {
+              "value": -1.2363837437936152,
+              "percentile": 0.187987987987988,
+              "weight": 0.3,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "margin_change_5d": {
+              "value": -0.0406544372830937,
+              "percentile": 0.7963281698221457,
+              "weight": 0.3,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": {
+            "institutional_flow_5d": 1757,
+            "institutional_flow_20d": 1666,
+            "margin_change_5d": 1744
+          },
+          "label": "籌碼",
+          "null_explanation": null
+        },
+        "group": {
+          "score": 0.4242424242424242,
+          "weight": 0.2,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "board_percentile": {
+              "value": 0.4242424242424242,
+              "percentile": 0.4242424242424242,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "source": {
+            "group_id": "official-industry-5cb7c92a21d967ab",
+            "name": "其他電子",
+            "board": "industry",
+            "rank": 20,
+            "board_size": 34
+          },
+          "label": "族群",
+          "null_explanation": null
+        },
+        "news_sentiment": {
+          "score": 0.47162230035158215,
+          "weight": 0.15,
+          "inference": true,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "net_direction": {
+              "value": 0.0,
+              "percentile": 0.47162230035158215,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 1992,
+          "instruments_with_news": 165,
+          "counts": {
+            "linked": 0,
+            "positive": 0,
+            "negative": 0,
+            "mixed": 0,
+            "unscored": 0
+          },
+          "news_ids": [],
+          "label": "新聞情緒",
+          "null_explanation": null
+        }
+      },
+      "alternatives": [],
+      "reasons": [
+        {
+          "code": "pullback_ma20_support",
+          "component": "technical",
+          "text": "回測 20 日均線，距均線 0.2%，量比 0.7",
+          "params": {
+            "distance": "0.2%",
+            "volume_ratio": "0.7"
+          },
+          "inference": false
+        },
+        {
+          "code": "institutional_net_buy_5d",
+          "component": "chips",
+          "text": "三大法人 5 日淨買超，約 20 日均量的 0.31 倍",
+          "params": {
+            "ratio": "0.31"
+          },
+          "inference": false
+        },
+        {
+          "code": "hot_group_rank",
+          "component": "group",
+          "text": "所屬產業「其他電子」熱度第 20",
+          "params": {
+            "board": "產業",
+            "name": "其他電子",
+            "rank": "20"
+          },
+          "inference": false
+        },
+        {
+          "code": "margin_decrease_5d",
+          "component": "chips",
+          "text": "融資 5 日減少 4.1%",
+          "params": {
+            "ratio": "4.1%"
+          },
+          "inference": false
+        }
+      ],
+      "groups": [
+        {
+          "group_id": "official-industry-5cb7c92a21d967ab",
+          "name": "其他電子",
+          "board": "industry",
+          "qualified": true,
+          "rank": 20,
+          "board_size": 34,
+          "board_percentile": 0.4242424242424242,
+          "score": 45.46,
+          "data_quality": "complete",
+          "score_date": "2026-10-28"
+        }
+      ],
+      "data_as_of": "2026-10-28",
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "回踩 20 日均線（距均線 0.2%），技術分項 86 為最高；三大法人 5 日淨買超、融資 5 日減少 4.1%，籌碼 59。",
+        "levels": "規則的進場區 28.19～29.18，條件失效的停損 27.76，低於進場區下緣 0.43。第一目標 30.34、第二目標 31.73，第一目標 RR 約 1.61。",
+        "risks": "族群分項僅 42，所屬「其他電子」熱度第 20（共 34）；近 3 日無關聯新聞，新聞情緒 47 缺乏依據。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:48.279948+00:00",
+        "input_hash": "d4efe27cfa084d35f1fe01ee1904079d5065627660aa91acbaa28b91ed0f6588"
+      },
+      "market": {
+        "trading_date": "2026-10-28",
+        "close": 28.75,
+        "change": 1.65,
+        "change_pct": 0.060885608856088555,
+        "change_status": "known",
+        "source": "tpex"
+      },
+      "sources": {
+        "signal": "analysis:pullback_v1",
+        "market_bar": "tpex",
+        "chips": "tpex_3insti",
+        "groups": "hot_group_v1",
+        "news": "news_items+news_llm_results:news_v2"
+      }
+    },
+    {
+      "rank": 17,
+      "trading_date": "2026-10-28",
+      "score_version": "candidate_score_v2",
+      "instrument": {
+        "id": 651,
+        "exchange": "TWSE",
+        "symbol": "4104",
+        "name": "佳醫",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v1",
+      "signal_id": 34432,
+      "signal_status": "conditional",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 73.3,
+        "entry_zone": {
+          "low": 72.51,
+          "high": 73.25
+        },
+        "invalid_price": 72.57,
+        "target_1": 74.47,
+        "target_2": 75.5,
+        "risk_reward": 1.6027,
+        "earliest_execution_date": null
+      },
+      "total_score": 0.632073,
+      "weight_coverage": 1.0,
+      "partial_components": false,
+      "components": {
+        "technical": {
+          "score": 0.7638888888888888,
+          "weight": 0.35,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "volume_ratio": {
+              "value": 0.6711817079753762,
+              "percentile": 0.8611111111111112,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "distance": {
+              "value": 0.005762897914379783,
+              "percentile": 0.6666666666666666,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "risk_reward": {
+              "value": 1.6027397260273908,
+              "percentile": 0.8055555555555556,
+              "weight": 0.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 37,
+          "label": "技術",
+          "null_explanation": null
+        },
+        "chips": {
+          "score": 0.959691514582971,
+          "weight": 0.3,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "institutional_flow_5d": {
+              "value": 1.0028637092111021,
+              "percentile": 0.928246013667426,
+              "weight": 0.4,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "institutional_flow_20d": {
+              "value": 4.219265790850839,
+              "percentile": 0.9687687687687687,
+              "weight": 0.3,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "margin_change_5d": {
+              "value": -0.38181818181818183,
+              "percentile": 0.9925415949512335,
+              "weight": 0.3,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": {
+            "institutional_flow_5d": 1757,
+            "institutional_flow_20d": 1666,
+            "margin_change_5d": 1744
+          },
+          "label": "籌碼",
+          "null_explanation": null
+        },
+        "group": {
+          "score": 0.030303030303030276,
+          "weight": 0.2,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "board_percentile": {
+              "value": 0.030303030303030276,
+              "percentile": 0.030303030303030276,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "source": {
+            "group_id": "official-industry-17661791d0d765c5",
+            "name": "生技醫療",
+            "board": "industry",
+            "rank": 33,
+            "board_size": 34
+          },
+          "label": "族群",
+          "null_explanation": null
+        },
+        "news_sentiment": {
+          "score": 0.47162230035158215,
+          "weight": 0.15,
+          "inference": true,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "net_direction": {
+              "value": 0.0,
+              "percentile": 0.47162230035158215,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 1992,
+          "instruments_with_news": 165,
+          "counts": {
+            "linked": 0,
+            "positive": 0,
+            "negative": 0,
+            "mixed": 0,
+            "unscored": 0
+          },
+          "news_ids": [],
+          "label": "新聞情緒",
+          "null_explanation": null
+        }
+      },
+      "alternatives": [],
+      "reasons": [
+        {
+          "code": "institutional_net_buy_5d",
+          "component": "chips",
+          "text": "三大法人 5 日淨買超，約 20 日均量的 1.00 倍",
+          "params": {
+            "ratio": "1.00"
+          },
+          "inference": false
+        },
+        {
+          "code": "pullback_ma20_support",
+          "component": "technical",
+          "text": "回測 20 日均線，距均線 0.6%，量比 0.7",
+          "params": {
+            "distance": "0.6%",
+            "volume_ratio": "0.7"
+          },
+          "inference": false
+        },
+        {
+          "code": "hot_group_rank",
+          "component": "group",
+          "text": "所屬產業「生技醫療」熱度第 33",
+          "params": {
+            "board": "產業",
+            "name": "生技醫療",
+            "rank": "33"
+          },
+          "inference": false
+        },
+        {
+          "code": "institutional_net_buy_20d",
+          "component": "chips",
+          "text": "三大法人 20 日淨買超",
+          "params": {},
+          "inference": false
+        }
+      ],
+      "groups": [
+        {
+          "group_id": "official-industry-17661791d0d765c5",
+          "name": "生技醫療",
+          "board": "industry",
+          "qualified": true,
+          "rank": 33,
+          "board_size": 34,
+          "board_percentile": 0.030303030303030276,
+          "score": 29.76,
+          "data_quality": "complete",
+          "score_date": "2026-10-28"
+        }
+      ],
+      "data_as_of": "2026-10-28",
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "籌碼分項 96 最高，三大法人 5 日與 20 日皆淨買超；同時回踩 20 日均線（距 0.6%），技術 76。",
+        "levels": "規則的進場區 72.51～73.25，條件失效的停損 72.57 落在進場區內、高於下緣 72.51，停損空間很窄。第一目標 74.47、第二目標 75.5，RR 約 1.60。",
+        "risks": "族群分項只有 3，「生技醫療」熱度第 33（共 34）幾近墊底；近 3 日無關聯新聞，新聞情緒 47 缺乏依據。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:48.279948+00:00",
+        "input_hash": "a858d8708b88f5f6d1f9b93bd6e84e09227b39b3dd5d66ea141e6d50d628e5e6"
+      },
+      "market": {
+        "trading_date": "2026-10-28",
+        "close": 73.3,
+        "change": -0.1,
+        "change_pct": -0.0013623978201634877,
+        "change_status": "known",
+        "source": "twse"
+      },
+      "sources": {
+        "signal": "analysis:pullback_v1",
+        "market_bar": "twse",
+        "chips": "twse_t86",
+        "groups": "hot_group_v1",
+        "news": "news_items+news_llm_results:news_v2"
+      }
+    },
+    {
+      "rank": 18,
+      "trading_date": "2026-10-28",
+      "score_version": "candidate_score_v2",
+      "instrument": {
+        "id": 1617,
+        "exchange": "TPEx",
+        "symbol": "3680",
+        "name": "家登",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v1",
+      "signal_id": 35750,
+      "signal_status": "conditional",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 532.0,
+        "entry_zone": {
+          "low": 529.49,
+          "high": 548.71
+        },
+        "invalid_price": 512.79,
+        "target_1": 562.74,
+        "target_2": 589.64,
+        "risk_reward": 1.6002,
+        "earliest_execution_date": null
+      },
+      "total_score": 0.630212,
+      "weight_coverage": 1.0,
+      "partial_components": false,
+      "components": {
+        "technical": {
+          "score": 0.4305555555555555,
+          "weight": 0.35,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "volume_ratio": {
+              "value": 0.7407862806821672,
+              "percentile": 0.6666666666666666,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "distance": {
+              "value": 0.013170098312001555,
+              "percentile": 0.19444444444444445,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "risk_reward": {
+              "value": 1.6002082248828708,
+              "percentile": 0.6944444444444444,
+              "weight": 0.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 37,
+          "label": "技術",
+          "null_explanation": null
+        },
+        "chips": {
+          "score": 0.7948719591428925,
+          "weight": 0.3,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "institutional_flow_5d": {
+              "value": 0.5923938062760883,
+              "percentile": 0.8388382687927107,
+              "weight": 0.4,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "institutional_flow_20d": {
+              "value": 1.1753404919852897,
+              "percentile": 0.7531531531531531,
+              "weight": 0.3,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "margin_change_5d": {
+              "value": -0.03789836347975883,
+              "percentile": 0.7779690189328744,
+              "weight": 0.3,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": {
+            "institutional_flow_5d": 1757,
+            "institutional_flow_20d": 1666,
+            "margin_change_5d": 1744
+          },
+          "label": "籌碼",
+          "null_explanation": null
+        },
+        "group": {
+          "score": 0.48484848484848486,
+          "weight": 0.2,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "board_percentile": {
+              "value": 0.48484848484848486,
+              "percentile": 0.48484848484848486,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "source": {
+            "group_id": "official-industry-1858340d045a575f",
+            "name": "半導體",
+            "board": "industry",
+            "rank": 18,
+            "board_size": 34
+          },
+          "label": "族群",
+          "null_explanation": null
+        },
+        "news_sentiment": {
+          "score": 0.9605725765946761,
+          "weight": 0.15,
+          "inference": true,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "net_direction": {
+              "value": 1.0,
+              "percentile": 0.9605725765946761,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 1992,
+          "instruments_with_news": 165,
+          "counts": {
+            "linked": 1,
+            "positive": 1,
+            "negative": 0,
+            "mixed": 0,
+            "unscored": 0
+          },
+          "news_ids": [
+            3173
+          ],
+          "label": "新聞情緒",
+          "null_explanation": null
+        }
+      },
+      "alternatives": [],
+      "reasons": [
+        {
+          "code": "foreign_trust_net_buy_5d",
+          "component": "chips",
+          "text": "外資＋投信 5 日淨買超",
+          "params": {},
+          "inference": false
+        },
+        {
+          "code": "pullback_ma20_support",
+          "component": "technical",
+          "text": "回測 20 日均線，距均線 1.3%，量比 0.7",
+          "params": {
+            "distance": "1.3%",
+            "volume_ratio": "0.7"
+          },
+          "inference": false
+        },
+        {
+          "code": "news_positive_3d",
+          "component": "news_sentiment",
+          "text": "近 3 日 1 則偏多新聞（推論）",
+          "params": {
+            "positive": "1"
+          },
+          "inference": true
+        },
+        {
+          "code": "hot_group_rank",
+          "component": "group",
+          "text": "所屬產業「半導體」熱度第 18",
+          "params": {
+            "board": "產業",
+            "name": "半導體",
+            "rank": "18"
+          },
+          "inference": false
+        }
+      ],
+      "groups": [
+        {
+          "group_id": "official-industry-1858340d045a575f",
+          "name": "半導體",
+          "board": "industry",
+          "qualified": true,
+          "rank": 18,
+          "board_size": 34,
+          "board_percentile": 0.48484848484848486,
+          "score": 48.12,
+          "data_quality": "complete",
+          "score_date": "2026-10-28"
+        }
+      ],
+      "data_as_of": "2026-10-28",
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "新聞情緒 96 與籌碼 79 較高：外資＋投信 5 日淨買超，並回踩 20 日均線（距 1.3%）；技術分項 43 偏低。",
+        "levels": "規則的進場區 529.49～548.71，條件失效的停損 512.79，低於進場區下緣 16.7。第一目標 562.74、第二目標 589.64，RR 約 1.60。",
+        "risks": "新聞情緒高分僅來自 1 則 AI 判讀偏多的新聞，屬推論，內容為櫃買中心赴星引資活動；技術分項 43 偏弱，族群 48。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:48.279948+00:00",
+        "input_hash": "32bce64dae1079d41584a01ef358a00191f71e045227e489287ff21fd31bde86"
+      },
+      "market": {
+        "trading_date": "2026-10-28",
+        "close": 532.0,
+        "change": 27.0,
+        "change_pct": 0.053465346534653464,
+        "change_status": "known",
+        "source": "tpex"
+      },
+      "sources": {
+        "signal": "analysis:pullback_v1",
+        "market_bar": "tpex",
+        "chips": "tpex_3insti",
+        "groups": "hot_group_v1",
+        "news": "news_items+news_llm_results:news_v2"
+      }
+    },
+    {
+      "rank": 19,
+      "trading_date": "2026-10-28",
+      "score_version": "candidate_score_v2",
+      "instrument": {
+        "id": 364,
+        "exchange": "TWSE",
+        "symbol": "2451",
+        "name": "創見",
+        "instrument_type": "stock"
+      },
+      "strategy": "breakout_v1",
+      "signal_id": 33857,
+      "signal_status": "conditional",
+      "levels": {
+        "entry_type": "breakout",
+        "entry": 293.5,
+        "entry_zone": {
+          "low": 293.5,
+          "high": 293.5
+        },
+        "invalid_price": 286.29,
+        "target_1": 305.04,
+        "target_2": 315.14,
+        "risk_reward": 1.6006,
+        "earliest_execution_date": null
+      },
+      "total_score": 0.627581,
+      "weight_coverage": 1.0,
+      "partial_components": false,
+      "components": {
+        "technical": {
+          "score": 0.5,
+          "weight": 0.35,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "volume_ratio": {
+              "value": 2.333249492691562,
+              "percentile": 0.2631578947368421,
+              "weight": 0.5,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "distance": {
+              "value": 0.005136986301369939,
+              "percentile": 0.7368421052631579,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "risk_reward": {
+              "value": 1.6005547850208117,
+              "percentile": 0.5263157894736842,
+              "weight": 0.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 20,
+          "label": "技術",
+          "null_explanation": null
+        },
+        "chips": {
+          "score": 0.9495605930993037,
+          "weight": 0.3,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "institutional_flow_5d": {
+              "value": 2.171141462372754,
+              "percentile": 0.989749430523918,
+              "weight": 0.4,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "institutional_flow_20d": {
+              "value": 2.963109452023456,
+              "percentile": 0.9201201201201201,
+              "weight": 0.3,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "margin_change_5d": {
+              "value": -0.09739684788383213,
+              "percentile": 0.9254159495123351,
+              "weight": 0.3,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": {
+            "institutional_flow_5d": 1757,
+            "institutional_flow_20d": 1666,
+            "margin_change_5d": 1744
+          },
+          "label": "籌碼",
+          "null_explanation": null
+        },
+        "group": {
+          "score": 0.48484848484848486,
+          "weight": 0.2,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "board_percentile": {
+              "value": 0.48484848484848486,
+              "percentile": 0.48484848484848486,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "source": {
+            "group_id": "official-industry-1858340d045a575f",
+            "name": "半導體",
+            "board": "industry",
+            "rank": 18,
+            "board_size": 34
+          },
+          "label": "族群",
+          "null_explanation": null
+        },
+        "news_sentiment": {
+          "score": 0.47162230035158215,
+          "weight": 0.15,
+          "inference": true,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "net_direction": {
+              "value": 0.0,
+              "percentile": 0.47162230035158215,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 1992,
+          "instruments_with_news": 165,
+          "counts": {
+            "linked": 0,
+            "positive": 0,
+            "negative": 0,
+            "mixed": 0,
+            "unscored": 0
+          },
+          "news_ids": [],
+          "label": "新聞情緒",
+          "null_explanation": null
+        }
+      },
+      "alternatives": [],
+      "reasons": [
+        {
+          "code": "foreign_trust_net_buy_5d",
+          "component": "chips",
+          "text": "外資＋投信 5 日淨買超",
+          "params": {},
+          "inference": false
+        },
+        {
+          "code": "breakout_20d_high",
+          "component": "technical",
+          "text": "突破 20 日高點，量比 2.3",
+          "params": {
+            "volume_ratio": "2.3"
+          },
+          "inference": false
+        },
+        {
+          "code": "hot_group_rank",
+          "component": "group",
+          "text": "所屬產業「半導體」熱度第 18",
+          "params": {
+            "board": "產業",
+            "name": "半導體",
+            "rank": "18"
+          },
+          "inference": false
+        },
+        {
+          "code": "institutional_net_buy_20d",
+          "component": "chips",
+          "text": "三大法人 20 日淨買超",
+          "params": {},
+          "inference": false
+        }
+      ],
+      "groups": [
+        {
+          "group_id": "official-industry-1858340d045a575f",
+          "name": "半導體",
+          "board": "industry",
+          "qualified": true,
+          "rank": 18,
+          "board_size": 34,
+          "board_percentile": 0.48484848484848486,
+          "score": 48.12,
+          "data_quality": "complete",
+          "score_date": "2026-10-28"
+        }
+      ],
+      "data_as_of": "2026-10-28",
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "籌碼分項 95 最高：外資＋投信 5 日淨買超、三大法人 20 日淨買超；並突破 20 日高點，量比 2.3。",
+        "levels": "規則的進場區為單一價 293.5，條件失效的停損 286.29，低於進場價 7.21。第一目標 305.04、第二目標 315.14，RR 約 1.60。",
+        "risks": "技術分項僅 50，族群 48，「半導體」熱度第 18（共 34）；近 3 日無關聯新聞，新聞情緒 47 缺乏依據。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:48.279948+00:00",
+        "input_hash": "baa01827c9b33e6fdf8e817aabf7264bd69d3b00d1015f0f631956efcb070179"
+      },
+      "market": {
+        "trading_date": "2026-10-28",
+        "close": 293.5,
+        "change": 12.0,
+        "change_pct": 0.04262877442273535,
+        "change_status": "known",
+        "source": "twse"
+      },
+      "sources": {
+        "signal": "analysis:breakout_v1",
+        "market_bar": "twse",
+        "chips": "twse_t86",
+        "groups": "hot_group_v1",
+        "news": "news_items+news_llm_results:news_v2"
+      }
+    },
+    {
+      "rank": 20,
+      "trading_date": "2026-10-28",
+      "score_version": "candidate_score_v2",
+      "instrument": {
+        "id": 1584,
+        "exchange": "TPEx",
+        "symbol": "3546",
+        "name": "宇峻",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v1",
+      "signal_id": 35684,
+      "signal_status": "conditional",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 73.5,
+        "entry_zone": {
+          "low": 72.81,
+          "high": 73.71
+        },
+        "invalid_price": 72.6,
+        "target_1": 74.94,
+        "target_2": 76.2,
+        "risk_reward": 1.6,
+        "earliest_execution_date": null
+      },
+      "total_score": 0.624456,
+      "weight_coverage": 1.0,
+      "partial_components": false,
+      "components": {
+        "technical": {
+          "score": 0.875,
+          "weight": 0.35,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "volume_ratio": {
+              "value": 0.6327015436133183,
+              "percentile": 0.9444444444444444,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "distance": {
+              "value": 0.003276003276003303,
+              "percentile": 0.8055555555555556,
+              "weight": 0.5,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "risk_reward": {
+              "value": 1.5999999999999874,
+              "percentile": 0.4722222222222222,
+              "weight": 0.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 37,
+          "label": "技術",
+          "null_explanation": null
+        },
+        "chips": {
+          "score": 0.6834597838500465,
+          "weight": 0.3,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "institutional_flow_5d": {
+              "value": 0.5848548086731113,
+              "percentile": 0.8354214123006833,
+              "weight": 0.4,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "institutional_flow_20d": {
+              "value": 2.013662864148083,
+              "percentile": 0.851051051051051,
+              "weight": 0.3,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            },
+            "margin_change_5d": {
+              "value": 0.0037209302325581397,
+              "percentile": 0.3132530120481928,
+              "weight": 0.3,
+              "better": "lower",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": {
+            "institutional_flow_5d": 1757,
+            "institutional_flow_20d": 1666,
+            "margin_change_5d": 1744
+          },
+          "label": "籌碼",
+          "null_explanation": null
+        },
+        "group": {
+          "score": 0.21212121212121215,
+          "weight": 0.2,
+          "inference": false,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "board_percentile": {
+              "value": 0.21212121212121215,
+              "percentile": 0.21212121212121215,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "source": {
+            "group_id": "official-industry-35423f5368e5eefd",
+            "name": "文化創意",
+            "board": "industry",
+            "rank": 27,
+            "board_size": 34
+          },
+          "label": "族群",
+          "null_explanation": null
+        },
+        "news_sentiment": {
+          "score": 0.47162230035158215,
+          "weight": 0.15,
+          "inference": true,
+          "item_coverage": 1.0,
+          "null_reason": null,
+          "items": {
+            "net_direction": {
+              "value": 0.0,
+              "percentile": 0.47162230035158215,
+              "weight": 1.0,
+              "better": "higher",
+              "null_reason": null,
+              "null_explanation": null
+            }
+          },
+          "population": 1992,
+          "instruments_with_news": 165,
+          "counts": {
+            "linked": 0,
+            "positive": 0,
+            "negative": 0,
+            "mixed": 0,
+            "unscored": 0
+          },
+          "news_ids": [],
+          "label": "新聞情緒",
+          "null_explanation": null
+        }
+      },
+      "alternatives": [],
+      "reasons": [
+        {
+          "code": "pullback_ma20_support",
+          "component": "technical",
+          "text": "回測 20 日均線，距均線 0.3%，量比 0.6",
+          "params": {
+            "distance": "0.3%",
+            "volume_ratio": "0.6"
+          },
+          "inference": false
+        },
+        {
+          "code": "institutional_net_buy_5d",
+          "component": "chips",
+          "text": "三大法人 5 日淨買超，約 20 日均量的 0.58 倍",
+          "params": {
+            "ratio": "0.58"
+          },
+          "inference": false
+        },
+        {
+          "code": "hot_group_rank",
+          "component": "group",
+          "text": "所屬產業「文化創意」熱度第 27",
+          "params": {
+            "board": "產業",
+            "name": "文化創意",
+            "rank": "27"
+          },
+          "inference": false
+        },
+        {
+          "code": "institutional_net_buy_20d",
+          "component": "chips",
+          "text": "三大法人 20 日淨買超",
+          "params": {},
+          "inference": false
+        }
+      ],
+      "groups": [
+        {
+          "group_id": "official-industry-35423f5368e5eefd",
+          "name": "文化創意",
+          "board": "industry",
+          "qualified": true,
+          "rank": 27,
+          "board_size": 34,
+          "board_percentile": 0.21212121212121215,
+          "score": 40.61,
+          "data_quality": "complete",
+          "score_date": "2026-10-28"
+        }
+      ],
+      "data_as_of": "2026-10-28",
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "技術分項 88 最高，回踩 20 日均線（距 0.3%）；三大法人 5 日與 20 日皆淨買超，籌碼 68。",
+        "levels": "規則的進場區 72.81～73.71，條件失效的停損 72.6，僅低於進場區下緣 0.21，距離很近。第一目標 74.94、第二目標 76.2，RR 約 1.60。",
+        "risks": "族群分項僅 21，「文化創意」熱度第 27（共 34）；近 3 日無關聯新聞，新聞情緒 47 缺乏依據。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-28T13:47:48.279948+00:00",
+        "input_hash": "d44a8af0ebaca617a03086f7c04897e34db52462d473fb923d359ed0d670ad1e"
+      },
+      "market": {
+        "trading_date": "2026-10-28",
+        "close": 73.5,
+        "change": -0.3,
+        "change_pct": -0.0040650406504065045,
+        "change_status": "known",
+        "source": "tpex"
+      },
+      "sources": {
+        "signal": "analysis:pullback_v1",
+        "market_bar": "tpex",
+        "chips": "tpex_3insti",
+        "groups": "hot_group_v1",
+        "news": "news_items+news_llm_results:news_v2"
+      }
+    }
+  ]
+}
