@@ -40,6 +40,9 @@ BACKEND_READ_DIRS: tuple[str, ...] = ()
 BACKEND_READ_FILES: frozenset[str] = frozenset(
     {"docs/OPERATIONS.md", "frontend/src/stock/strategyBoard.ts"}
 )
+# Outside backend/ but part of the backend image build (backend/Dockerfile, #333): the docker
+# job runs with the python flag, so a change to what the build context leaves out runs it.
+BACKEND_IMAGE_FILES: frozenset[str] = frozenset({".dockerignore"})
 
 
 # Every Python file under backend/ and tools/, not only the changed ones, with the root ruff.toml.
@@ -55,7 +58,7 @@ def change_flags(paths: list[str]) -> dict[str, bool]:
     product = [p for p in paths if not p.lower().endswith(".md")]
     return {
         "python": shared
-        or any(p in BACKEND_READ_FILES for p in paths)
+        or any(p in BACKEND_READ_FILES or p in BACKEND_IMAGE_FILES for p in paths)
         or any(
             p.startswith(("backend/", "tools/") + BACKEND_READ_DIRS)
             or p.endswith(".py")

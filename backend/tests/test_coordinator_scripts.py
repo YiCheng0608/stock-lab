@@ -1140,7 +1140,7 @@ def test_guard_dir_names_every_protected_path(h: Harness) -> None:
 
 
 # Run by _inner_pytest beside a copy of backend/tests/conftest.py: repositories in
-# tmp_path as this file's Harness, test_worker_job_scripts and test_verify_tools build
+# tmp_path as this file's Harness, test_worker_job and test_verify_tools build
 # them (an empty .git directory, a .git file, a read-only git object file), one in a
 # test that then skips; with INNER_KILL=1 the last test exits the process before
 # pytest's teardown, as a killed run does.

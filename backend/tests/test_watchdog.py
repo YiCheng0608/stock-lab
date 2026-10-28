@@ -42,7 +42,14 @@ def _bash() -> str | None:
 
 
 BASH = _bash()
-pytestmark = pytest.mark.skipif(BASH is None, reason="bash is required")
+pytestmark = [
+    pytest.mark.skipif(BASH is None, reason="bash is required"),
+    # The watchdog runs under the job lock of worker.job, which is Linux only.
+    pytest.mark.skipif(
+        not sys.platform.startswith("linux"),
+        reason="worker.job runs on Linux only (#333)",
+    ),
+]
 
 FAKE_GH = r"""#!/usr/bin/env bash
 d="$FAKE_DIR"
@@ -291,14 +298,7 @@ def _hold_lock(wd: Watchdog) -> tuple[subprocess.Popen, int]:
 
 
 def _force_kill(pid: int) -> None:
-    """``taskkill /F`` on Windows, ``kill -9`` elsewhere.
-
-    taskkill /F is TerminateProcess, which os.kill calls on Windows; taskkill
-    itself goes through WMI, and a busy machine cancels it ("call cancelled",
-    the #246 failure), so the tests call TerminateProcess directly.
-    """
-
-    os.kill(pid, signal.SIGTERM if os.name == "nt" else signal.SIGKILL)
+    os.kill(pid, signal.SIGKILL)
 
 
 def test_a_running_watchdog_keeps_the_next_one_out(wd):

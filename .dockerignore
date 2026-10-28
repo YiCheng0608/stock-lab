@@ -1,0 +1,23 @@
+# Build context of backend/Dockerfile (#333): the tracked files, without git history,
+# installed dependencies, local data or secrets. `**/` matches at any depth, as
+# .gitignore does; a bare name would match at the context root only.
+.git
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/.venv
+**/venv
+**/*.db*
+**/*.sqlite*
+backend/.deps
+frontend/dist
+frontend/.vite
+data
+.local
+.codebase-memory
+**/*.log

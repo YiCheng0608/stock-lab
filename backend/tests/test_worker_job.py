@@ -10,10 +10,13 @@ lesson of #207). No worker, database, network or Claude call is involved there.
 The fixture-database test runs the real worker on tools/verify/fixture_db.py with
 the outside-facing steps faked (job_daily_child.py) and the job in this process.
 
-Process trees: a job killed with ``taskkill /F`` (Windows) or SIGKILL (Linux) must
-take its worker with it, so the next run finds the run row's PID dead
-(schedule_runs._pid_alive) and the lock free. CI runs on Linux, so the Windows
-branch (msvcrt, job objects) is covered by local runs; the PR lists them.
+Process trees: a job killed with SIGKILL must take its worker with it, so the
+next run finds the run row's PID dead (schedule_runs._pid_alive) and the lock
+free.
+
+The job runs on Linux only (the backend image, #333): elsewhere every test but
+the refusal is skipped; run them in the image (``docker run --rm <image> pytest
+backend/tests``).
 """
 
 from __future__ import annotations
@@ -37,11 +40,15 @@ import pytest
 import worker.job as job
 from worker.schedule_runs import _pid_alive
 
+ON_LINUX = sys.platform.startswith("linux")
+linux_only = pytest.mark.skipif(
+    not ON_LINUX, reason="worker.job runs on Linux only (#333)"
+)
 ROOT = Path(__file__).resolve().parents[2]
 JOB_SOURCE = ROOT / "backend" / "worker" / "job.py"
 # wrapper_daily.txt, wrapper_news.txt: what the PowerShell wrapper before #313
 # (tools/Invoke-WorkerJob.ps1 at 58dadca) wrote with the old fake python of
-# test_worker_job_scripts.py: one daily run, three news runs with news-llm exit 1.
+# test_worker_job_scripts.py (removed in #333): one daily run, three news runs with news-llm exit 1.
 # Stored with LF and the data directory shortened; written back with CRLF.
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "worker_job"
 
@@ -199,6 +206,8 @@ class Tree:
 
 @pytest.fixture
 def tree(tmp_path) -> Tree:
+    if not ON_LINUX:
+        pytest.skip("worker.job runs on Linux only (#333)")
     return Tree(tmp_path)
 
 
@@ -211,14 +220,7 @@ def skipped_line(log: str):
 
 
 def force_kill(pid: int) -> None:
-    """``taskkill /F`` on Windows, ``kill -9`` elsewhere.
-
-    taskkill /F is TerminateProcess, which os.kill calls on Windows; taskkill
-    itself goes through WMI, and a busy machine cancels it ("call cancelled",
-    the #246 failure), so the tests call TerminateProcess directly.
-    """
-
-    os.kill(pid, signal.SIGTERM if os.name == "nt" else signal.SIGKILL)
+    os.kill(pid, signal.SIGKILL)
 
 
 def wait_dead(pid: int, timeout: float = 15) -> bool:
@@ -463,6 +465,7 @@ def test_a_killed_job_takes_its_worker_along_and_leaves_no_lock(tree):
     assert len(end_line(again.log)) == 1
 
 
+@linux_only
 def test_the_lock_is_exclusive_and_released(tmp_path):
     path = tmp_path / "locks" / "x.lock"
     first, second = job.FileLock(path), job.FileLock(path)
@@ -473,6 +476,7 @@ def test_the_lock_is_exclusive_and_released(tmp_path):
     second.release()
 
 
+@linux_only
 def test_lock_runs_the_command_and_refuses_while_held(tmp_path):
     path = tmp_path / "locks" / "watchdog.lock"
     marker = tmp_path / "ran"
@@ -551,10 +555,10 @@ def test_logs_older_than_the_retention_are_removed(tree):
 # Memory without WMI (#246) ------------------------------------------------------
 
 
+@linux_only
 def test_free_memory_is_read_from_the_os():
     free = job.free_memory_mb()
-    if sys.platform == "win32" or Path("/proc/meminfo").exists():
-        assert free is not None and free > 0
+    assert free is not None and free > 0
 
 
 # What reaches into WMI from Python: the wmi package, the WMIC tool, CIM classes.
@@ -562,8 +566,8 @@ WMI_CALL = re.compile(r"\bwmi\b|wmic|Win32_\w+|\bCIM_\w+|psutil", re.IGNORECASE)
 
 
 def test_the_job_source_has_no_wmi_call():
-    # The memory check reads GlobalMemoryStatusEx (Windows) or /proc/meminfo:
-    # busy machines cancel WMI calls and the job would never start (#246).
+    # The memory check reads /proc/meminfo: busy machines cancel WMI calls
+    # and the job would never start (#246).
     lines = JOB_SOURCE.read_text(encoding="utf-8").splitlines()
     found = [
         f"backend/worker/job.py:{number}: {line.strip()}"
@@ -571,6 +575,30 @@ def test_the_job_source_has_no_wmi_call():
         if WMI_CALL.search(line) and "#246" not in line
     ]
     assert not found, "WMI in the scheduled job (#246)\n" + "\n".join(found)
+
+
+# Other systems ------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("platform", ["win32", "darwin"])
+def test_job_and_lock_refuse_to_start_off_linux(
+    tmp_path, monkeypatch, capsys, platform
+):
+    monkeypatch.setattr(job.sys, "platform", platform)
+    marker = tmp_path / "ran"
+    command = [sys.executable, "-c", f"open({str(marker)!r}, 'w').close()"]
+    assert job.run_locked(tmp_path / "x.lock", command) == job.PLATFORM_EXIT
+    parser = argparse.ArgumentParser()
+    job.add_arguments(parser)
+    args = parser.parse_args(["daily", "--data-dir", str(tmp_path / "job-data")])
+    assert job.run(args) == job.PLATFORM_EXIT
+    assert (
+        capsys.readouterr().err.count(
+            f"Linux only (the backend image, #333), not {platform}"
+        )
+        == 2
+    )
+    assert not marker.exists() and not (tmp_path / "job-data").exists()
 
 
 # worker.cli job ------------------------------------------------------------------
@@ -602,6 +630,7 @@ def test_cli_job_sets_the_data_dir_before_app_config_is_imported(tmp_path):
     assert job.cli_environment(["daily", "--date", "2026-10-16"]) == {}
 
 
+@linux_only
 def test_a_scheduled_daily_job_on_the_fixture_database_writes_one_run(
     tmp_path, monkeypatch
 ):
@@ -645,7 +674,7 @@ def test_a_scheduled_daily_job_on_the_fixture_database_writes_one_run(
             "--date",
             "2026-10-16",
             "--claude-cli",
-            str(tmp_path / "no-claude.exe"),
+            str(tmp_path / "no-claude"),
         ]
     )
     code = job.run(args)
@@ -720,7 +749,7 @@ def test_the_watchdog_reads_old_and_new_logs_alike(tree, tmp_path, daily_ended):
     first = now - 3600
     day = "20261019"
     for _ in range(3):
-        tree.run("news", "--claude-cli", r"C:\tools\claude.exe", news_llm_exit=1)
+        tree.run("news", "--claude-cli", "/usr/local/bin/claude", news_llm_exit=1)
     tree.run("daily")
     new = {"daily": tree.log("daily"), "news": tree.log("news")}
     old = {
