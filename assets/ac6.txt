@@ -1,8 +1,8 @@
-$ git ls-files --eol -s backend/docker/entrypoint.sh "*.sh"
+$ git ls-files --eol -s -- *.sh
 100755 0b58d7b4cd0f5d2b1a0af1947ee2725abbc96e35 0	i/lf    w/lf    attr/text eol=lf      	backend/docker/entrypoint.sh
 100755 a66a2dab9e9355653a409533df6f654b625479c8 0	i/lf    w/lf    attr/text eol=lf      	frontend/docker/context_check.sh
 100755 b4165c81651ef104f51bf1a121ee6f4cb2547378 0	i/lf    w/lf    attr/text eol=lf      	frontend/docker/smoke.sh
-100755 3ddf57164942537eac12dfeb8724491a5b25fd3f 0	i/lf    w/lf    attr/text eol=lf      	tools/compose/smoke.sh
+100755 d8419119f5ccc560df07db29d234a68b972f2398 0	i/lf    w/lf    attr/text eol=lf      	tools/compose/smoke.sh
 100755 1462921d497c25e0795e3ada358f03860817be3d 0	i/lf    w/lf    attr/text eol=lf      	tools/ops/close_task.sh
 100644 b16ff12ba059f321957acb54523f84111622b56d 0	i/lf    w/lf    attr/text eol=lf      	tools/ops/compact_hook.sh
 100644 9912d927eaceabe8b33dab50b5d8afa3441db63d 0	i/lf    w/lf    attr/text eol=lf      	tools/ops/coordinator_lib.sh
@@ -10,16 +10,21 @@ $ git ls-files --eol -s backend/docker/entrypoint.sh "*.sh"
 100755 c97a2eb5cb5db7dc42778bdba68a6f72df50382c 0	i/lf    w/lf    attr/text eol=lf      	tools/ops/patrol.sh
 100755 c2aecb87f21f72e542db1a10a0161f241b34b090 0	i/lf    w/lf    attr/text eol=lf      	tools/ops/push_pr_assets.sh
 100755 9547f36162d1e58e04817b2397693e09eff2c9bc 0	i/lf    w/lf    attr/text eol=lf      	tools/ops/watchdog.sh
+
 $ git check-attr eol -- backend/docker/entrypoint.sh tools/compose/smoke.sh
 backend/docker/entrypoint.sh: eol: lf
 tools/compose/smoke.sh: eol: lf
-$ docker run --rm --entrypoint /app/backend/docker/entrypoint.sh t335-b-backend sh -c "ls -l /app/backend/docker/entrypoint.sh; grep -c $(printf "\r") /app/backend/docker/entrypoint.sh || true; echo direct exec ok"
+
+$ docker run --rm --entrypoint /app/backend/docker/entrypoint.sh t335-b-backend sh -c ls -l /app/backend/docker/entrypoint.sh; echo "CR bytes: $(od -An -tx1 /app/backend/docker/entrypoint.sh | grep -o 0d | wc -l)"; head -n 1 /app/backend/docker/entrypoint.sh; echo direct exec ok
 -rwxr-xr-x 1 app app 2675 Oct 29 02:32 /app/backend/docker/entrypoint.sh
 CR bytes: 0
 #!/bin/sh
 direct exec ok
-$ docker run --rm t335-b-backend /app/backend/docker/entrypoint.sh echo "run as a program: ok"
+
+$ docker run --rm t335-b-backend /app/backend/docker/entrypoint.sh echo run as a program: ok
 run as a program: ok
-$ dev bind mount: docker compose -p t335-a exec api ls -l /app/backend/docker/entrypoint.sh
+
+$ docker compose -p t335-a --project-directory . -f C:/Users/YiCheng/t335/compose-local.yml -f docker-compose.dev.yml run --rm --no-deps api sh -c ls -l /app/backend/docker/entrypoint.sh; xargs -0 echo < /proc/1/cmdline
 -rwxrwxrwx 1 root root 2675 Oct 29 02:32 /app/backend/docker/entrypoint.sh
-/usr/bin/tini -- sh /app/backend/docker/entrypoint.sh python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/backend 
+/usr/bin/tini -- sh /app/backend/docker/entrypoint.sh sh -c ls -l /app/backend/docker/entrypoint.sh; xargs -0 echo < /proc/1/cmdline
+

@@ -1,0 +1,12 @@
+== local native (Windows, codex python 3.12, backend/ cwd)
+$ cd backend && python -B -m pytest -p no:cacheprovider -q --basetemp C:/Users/YiCheng/t335/b1 tests
+3880 passed, 72 skipped, 170221 warnings in 969.29s (0:16:09)
+local native pytest: exit=0 seconds=984
+
+== container (compose api, image code, clone .git ro)
+$ docker compose -p t335-a run --rm -v C:/Users/YiCheng/t335/clone/.git:/app/.git:ro api sh -c "python -B -m pytest -p no:cacheprovider -q backend/tests; ..."
+3954 passed, 3 skipped, 170224 warnings in 1320.57s (0:22:00)
+memory_peak_bytes=unknown
+container pytest: exit=0 seconds=1339
+
+ratio = 1339 / 984 = 1.36

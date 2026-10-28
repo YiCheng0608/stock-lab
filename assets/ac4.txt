@@ -1,0 +1,68 @@
+[
+    {
+        "CreatedAt": "2026-10-28T19:58:38Z",
+        "Driver": "local",
+        "Labels": {
+            "com.docker.compose.project": "t335-d",
+            "com.docker.compose.version": "2.19.0",
+            "com.docker.compose.volume": "stock-data"
+        },
+        "Mountpoint": "/var/lib/docker/volumes/t335-d_stock-data/_data",
+        "Name": "t335-d_stock-data",
+        "Options": null,
+        "Scope": "local"
+    }
+]
+
+== migrate + daily (skipped: already_complete)
+$ docker compose -p t335-d --project-directory . -f C:/Users/YiCheng/t335/compose-local.yml run --rm --no-deps --name t335-d-daily scheduler python -m worker.cli job daily --trigger manual --date 2026-10-28 --min-free-memory-gb 2
+daily exit=0 log=/data/logs/daily-20261029.log
+exit=0 seconds=90
+
+== daily --force
+$ docker compose -p t335-d --project-directory . -f C:/Users/YiCheng/t335/compose-local.yml run --rm --no-deps --name t335-d-daily scheduler python -m worker.cli job daily --trigger manual --date 2026-10-28 --force --min-free-memory-gb 2
+daily exit=0 log=/data/logs/daily-20261029.log
+exit=0 seconds=362
+cgroup v1 sampling every 3 s: rss_peak_mb=947 max_usage_mb=979 failcnt=0
+
+$ docker compose -p t335-d run --rm --no-deps -v .../ac4_check.py:/tmp/ac4_check.py:ro api python -B /tmp/ac4_check.py
+PRAGMA integrity_check: ['ok']
+PRAGMA foreign_key_check rows: 0
+alembic_version: 0020_trading_calendar
+schedule_runs: {"id": 20, "job": "daily", "target_date": "2026-10-28", "trigger": "manual", "status": "success", "started_at": "2026-10-28 20:01:34.008723", "finished_at": "2026-10-28 20:07:31.284799", "records": 2322, "error": null, "host": "eed444346f8d", "pid": 8, "runtime": {"image": "t335-d-backend", "head": "aa04e0ac13d53defef03495178c3679820238fda", "job_lock": "/data/locks/daily.lock"}}
+schedule_runs: {"id": 19, "job": "daily", "target_date": "2026-10-28", "trigger": "manual", "status": "skipped", "started_at": "2026-10-28 20:01:08.638331", "finished_at": "2026-10-28 20:01:08.660832", "records": 0, "error": null, "host": "c53339d77afb", "pid": 8, "runtime": {"image": "t335-d-backend", "head": "aa04e0ac13d53defef03495178c3679820238fda", "job_lock": "/data/locks/daily.lock"}}
+step: catchup success 
+step: collect success 
+step: trading_calendar success 
+step: analyze success 
+step: evaluate success 
+step: candidates success 
+step: indicators success 
+step: theme_suggestions success 
+step: plan_tracking success 
+step: strategy_levels success 
+step: candidate_notes success 
+
+== ac4_check.py
+"""#335 AC-4: integrity of the DB copy in the stock-data volume after the daily run."""
+
+import json
+import sqlite3
+
+con = sqlite3.connect("file:/data/stock.db?mode=ro", uri=True)
+print("PRAGMA integrity_check:", [r[0] for r in con.execute("PRAGMA integrity_check")])
+print("PRAGMA foreign_key_check rows:", len(con.execute("PRAGMA foreign_key_check").fetchall()))
+print("alembic_version:", con.execute("select version_num from alembic_version").fetchone()[0])
+cols = [r[1] for r in con.execute("PRAGMA table_info(schedule_runs)")]
+for row in con.execute("select * from schedule_runs order by id desc limit 2"):
+    rec = dict(zip(cols, row))
+    summary = json.loads(rec.get("summary_json") or "{}")
+    keep = {k: rec[k] for k in cols if k not in ("summary_json",)}
+    keep["runtime"] = summary.get("runtime")
+    print("schedule_runs:", json.dumps(keep, ensure_ascii=False, default=str))
+steps = [r[1] for r in con.execute("PRAGMA table_info(schedule_run_steps)")]
+last = con.execute("select max(id) from schedule_runs").fetchone()[0]
+key = "run_id" if "run_id" in steps else "schedule_run_id"
+for row in con.execute(f"select * from schedule_run_steps where {key} = ? order by id", (last,)):
+    rec = dict(zip(steps, row))
+    print("step:", rec.get("step") or rec.get("name"), rec.get("status"), (rec.get("error") or "")[:120])

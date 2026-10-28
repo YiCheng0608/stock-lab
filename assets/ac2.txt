@@ -1,0 +1,21 @@
+== t335-a
+$ docker compose -p t335-a run --rm -v C:/Users/YiCheng/t335/clone/.git:/app/.git:ro api sh -c 'echo container=$(hostname) data=$STOCK_DATA_DIR; python -B -m pytest -p no:cacheprovider -q backend/tests'
+container=785a0f69426e data=/data
+3954 passed, 3 skipped, 170224 warnings in 1873.77s (0:31:13)
+t335-a end 03:58:01 exit=0 seconds=1891
+
+== t335-b
+$ docker compose -p t335-b run --rm -v C:/Users/YiCheng/t335/clone/.git:/app/.git:ro api sh -c 'echo container=$(hostname) data=$STOCK_DATA_DIR; python -B -m pytest -p no:cacheprovider -q backend/tests'
+container=f25c2841d0ae data=/data
+3954 passed, 3 skipped, 170224 warnings in 1875.80s (0:31:15)
+t335-b end 03:58:07 exit=0 seconds=1894
+
+== while both ran (docker ps / docker volume ls)
+t335-a start 03:26:30
+t335-a-api-run-a6e65def9bb2 t335-a-backend
+t335-b start 03:26:33
+t335-b-api-run-d9b3e9d08f47 t335-b-backend Up 18 seconds (health: starting)
+t335-a-api-run-a6e65def9bb2 t335-a-backend Up 21 seconds (health: starting)
+t335-a_stock-data
+t335-b_stock-data
+t335-smoke_stock-data
