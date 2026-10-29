@@ -92,6 +92,12 @@ def main() -> None:
         choices=sorted(PREFLIGHT_SKIP_REASONS | {LOCK_SKIP_REASON}),
         help="job 起跑前檢查未通過或另一個 daily job 持有鎖：只記一列 skipped，不執行任何步驟",
     )
+    daily_parser.add_argument(
+        "--git-head", help="job 傳入：執行中 checkout 的 HEAD，記在 summary_json"
+    )
+    daily_parser.add_argument(
+        "--git-tag", help="job 傳入：HEAD 上的 tag，記在 summary_json"
+    )
     job_parser = subparsers.add_parser(
         "job",
         help="排程工作：鎖、起跑前檢查、逾時與日誌後執行 daily 或 news（＋news-llm）",
@@ -370,7 +376,11 @@ def main() -> None:
     else:
         if args.skip_reason:
             result = record_preflight_skip(
-                parse_date(args.run_date), reason=args.skip_reason, trigger=args.trigger
+                parse_date(args.run_date),
+                reason=args.skip_reason,
+                trigger=args.trigger,
+                git_head=args.git_head,
+                git_tag=args.git_tag,
             )
         else:
             result = run_daily(
@@ -379,6 +389,8 @@ def main() -> None:
                 trigger=args.trigger,
                 force=args.force,
                 catchup_sessions=args.catchup_sessions,
+                git_head=args.git_head,
+                git_tag=args.git_tag,
             )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     if args.command == "daily":

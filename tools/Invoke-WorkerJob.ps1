@@ -9,6 +9,8 @@ docs/OPERATIONS.md §6. This script only maps its parameters onto that command,
 so a Task Scheduler task registered before #313 (it runs this script with
 -GitPull -MinFreeMemoryGB ...) keeps working until it is registered again with
 tools/Register-WorkerSchedule.ps1, which calls the Python command directly.
+-GitPull is accepted and ignored: the checkout is never pulled, it stays at the
+tag tools/ops/deploy.sh deployed (#314).
 
 PythonPath defaults to STOCK_PYTHON, then this checkout's .venv. DataDir is
 passed through when given; the job defaults to STOCK_DATA_DIR, then
@@ -59,7 +61,6 @@ if ($DataDir) { $jobArgs += @('--data-dir', $DataDir.TrimEnd([char[]]@([char]92,
 if ($LogDir) { $jobArgs += @('--log-dir', $LogDir.TrimEnd([char[]]@([char]92, [char]47))) }
 if ($Date) { $jobArgs += @('--date', $Date) }
 if ($Force) { $jobArgs += '--force' }
-if ($GitPull) { $jobArgs += '--git-pull' }
 if ($ClaudeCli) { $jobArgs += @('--claude-cli', $ClaudeCli) }
 if ($SkipNewsLlm) { $jobArgs += '--skip-news-llm' }
 

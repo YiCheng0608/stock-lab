@@ -1160,3 +1160,77 @@ def test_an_expired_claude_token_leaves_the_notes_pending_and_comments_on_1(
     bodies = wd.text("gh_bodies.txt")
     assert bodies.count("待使用者：Claude Code 認證：") == 1
     assert f"candidate_notes run {result['run_id']}" in bodies
+
+
+# The deployed version (#314 AC-3) ---------------------------------------------------
+
+
+def _git(cwd: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@example.com", *args],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+
+def _release_checkout(root: Path) -> tuple[Path, list[str]]:
+    """A checkout with two commits; returns it and their SHAs, oldest first."""
+
+    checkout = root / "release"
+    checkout.mkdir()
+    _git(checkout, "init", "--quiet")
+    shas = []
+    for n in (1, 2):
+        (checkout / "README.md").write_text(f"{n}\n", encoding="utf-8")
+        _git(checkout, "add", "README.md")
+        _git(checkout, "commit", "--quiet", "-m", f"commit {n}")
+        shas.append(_git(checkout, "rev-parse", "HEAD"))
+    return checkout, shas
+
+
+def _deploy_record(wd: Watchdog, checkout: Path, head: str) -> None:
+    record = {"tag": "v1.1.0", "HEAD": head, "checkout": checkout.as_posix()}
+    (wd.logs / "deploy.json").write_text(json.dumps(record), encoding="utf-8")
+
+
+def test_the_release_checkout_head_is_checked_against_the_deploy_record(wd):
+    checkout, (first, second) = _release_checkout(wd.root)
+    # Never deployed: nothing to compare with.
+    result = wd.run("--dry-run")
+    assert "invariant deploy_head skip reason=no_deploy_record" in result.stdout
+    assert "將在 #1 留言" not in result.stdout
+    _deploy_record(wd, checkout, second)
+    result = wd.run()
+    assert (
+        f"invariant deploy_head ok head={second} recorded={second} tag=v1.1.0"
+        in result.stdout
+    )
+    assert wd.events()[-1] == "schedules_ok" and wd.text("gh_calls.log") == ""
+    # Checked out by hand, outside deploy.sh.
+    _git(checkout, "checkout", "--quiet", "--detach", first)
+    dry = wd.run("--dry-run")
+    assert (
+        f"invariant deploy_head violation head={first} recorded={second} tag=v1.1.0"
+        in dry.stdout
+    )
+    assert (
+        f"待使用者：部署不變量：發佈 checkout 的 HEAD 是 `{first}`，不是部署記錄"
+        in dry.stdout
+    )
+    wd.run()
+    wd.run()
+    assert wd.text("gh_calls.log").count("issue comment 1") == 1
+
+
+def test_a_missing_checkout_or_an_unreadable_record_is_commented(wd):
+    _deploy_record(wd, wd.root / "no-checkout", "a" * 40)
+    dry = wd.run("--dry-run")
+    assert f"invariant deploy_head violation head=unknown recorded={'a' * 40}" in (
+        dry.stdout
+    )
+    (wd.logs / "deploy.json").write_text("{not json", encoding="utf-8")
+    dry = wd.run("--dry-run")
+    assert "invariant deploy_head violation reason=unreadable_record" in dry.stdout
+    assert "待使用者：部署不變量：部署記錄" in dry.stdout and "讀不懂" in dry.stdout
