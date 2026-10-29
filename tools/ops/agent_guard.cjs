@@ -346,10 +346,12 @@ function realName(file) {
 
 // Docker commands that print a container's environment, where compose put the env file's values
 // (#353, #360; OPERATIONS §1.2). Blocked: compose config/convert unless -q/--quiet,
-// --no-interpolate or --services and no -o/--output, --environment or --variables; inspect of a
-// container, image or service unless --format/-f reads no Env, no whole Config and not `.`;
-// run/exec whose command holds an env/printenv word or `environ`. Not covered: a variable echoed
-// by name (`sh -c 'echo $TOKEN'`), other ways a program inside prints its environment.
+// --no-interpolate or --services is written bare after config (not as the value of the option
+// before it: `--profile -q`), with no -o/--output, --environment or --variables and no flag set
+// with `=` that could turn one back off (`--quiet=false`); inspect of a container, image or
+// service unless --format/-f reads no Env, no whole Config, not `.` and not `$`; run/exec whose
+// command holds an env/printenv word or `environ`. Not covered: a variable echoed by name
+// (`sh -c 'echo $TOKEN'`), other ways a program inside prints its environment.
 const DOCKER = /^docker(?:-compose)?(?:\.exe)?$/i;
 // docker and docker compose options before the subcommand that take a value.
 const DOCKER_VALUE_OPTION = /^(?:-[cHlfp]|--(?:config|context|host|log-level|tlscacert|tlscert|tlskey|file|project-name|env-file|profile|project-directory|ansi|parallel|progress))$/;
@@ -357,6 +359,10 @@ const DOCKER_VALUE_OPTION = /^(?:-[cHlfp]|--(?:config|context|host|log-level|tls
 const DOCKER_GROUP = /^(?:compose|stack|container|image|service|network|volume|context|buildx|builder|plugin|node|secret|system)$/i;
 const COMPOSE_SAFE = /^(?:-q|--quiet|--no-interpolate|--services)$/;
 const COMPOSE_PRINTS = /^(?:-o|--output(?:=|$)|--environment$|--variables$)/;
+// A safe flag given a value (--quiet=true), or any flag set to false the way pflag reads it.
+const COMPOSE_FLAG_VALUE = /^(?:(?:-q|--quiet|--no-interpolate|--services)=|-[^=]*=(?:false|f|0)$)/i;
+// compose config options that take a value: a safe flag right after one is that value.
+const CONFIG_VALUE_OPTION = /^(?:-o|--(?:output|format|hash))$/;
 // inspect of these shows no environment.
 const INSPECT_SAFE_GROUP = /^(?:network|volume|context)$/i;
 const ENV_WORD = /^(?:env|printenv)(?:\.exe)?$/i;
@@ -371,12 +377,25 @@ function inspectFormat(args) {
   return null;
 }
 
-// A format that reads no environment: no Env field, no whole Config/ContainerConfig, no bare `.`.
+// A format that reads no environment: no Env field, no whole Config/ContainerConfig, no bare `.`
+// and no `$` (the template's root object, as `.`; variables are blocked along with it).
 const safeFormat = (format) =>
   Boolean(format) &&
   !/env/i.test(format) &&
+  !format.includes('$') &&
   !/(?<!Host)Config\b(?!\.\w)/.test(format) &&
   !/(?:^|[\s({|])\.(?=\s*(?:$|[\s)}|]))/.test(format);
+
+// Whether compose config with these words (compose's own, from after `compose`) prints nothing of
+// the env file: a bare safe flag after config/convert that is not the value of the word before it,
+// nothing that writes or lists values, and no flag set with `=` that may undo the safe one.
+function quietConfig(rest) {
+  if (rest.some((t) => COMPOSE_PRINTS.test(t) || COMPOSE_FLAG_VALUE.test(t))) return false;
+  const at = rest.findIndex((t) => /^(?:config|convert)$/i.test(t));
+  return rest.some(
+    (t, j) => j > at && COMPOSE_SAFE.test(t) && !DOCKER_VALUE_OPTION.test(rest[j - 1]) && !CONFIG_VALUE_OPTION.test(rest[j - 1]),
+  );
+}
 
 // The reason a docker command in `raw` prints environment values, or null. A quoted word that
 // starts a command with docker (`sh -c "docker compose config"`) is checked as a command too; one
@@ -411,17 +430,17 @@ function dockerDenial(raw, shell) {
   const compose = sub.findIndex((s) => s === 'compose' || s === 'stack');
   const rest = compose < 0 ? [] : [...sub.slice(compose + 1), ...args];
   if (rest.some((t) => /^(?:config|convert)$/i.test(t))) {
-    if (rest.some((t) => COMPOSE_SAFE.test(t)) && !rest.some((t) => COMPOSE_PRINTS.test(t))) return null;
+    if (quietConfig(rest)) return null;
     return (
-      `${ENV_REASON}；compose config 會把 env file 的值展開印出，只放行 config -q／--quiet、` +
-      '--no-interpolate、--services（不加 -o／--output、--environment、--variables）'
+      `${ENV_REASON}；compose config 會把 env file 的值展開印出，只放行 config 後面直接寫 -q／--quiet、` +
+      '--no-interpolate、--services（不加 -o／--output、--environment、--variables，也不寫 --quiet=false 這類帶 = 的旗標）'
     );
   }
   if (command === 'inspect' && !INSPECT_SAFE_GROUP.test(sub[sub.length - 2] || '')) {
     if (safeFormat(inspectFormat(args))) return null;
     return (
       `${ENV_REASON}；docker inspect 會印出容器的環境變數（env file 的值），` +
-      "請加 --format 只取需要的欄位，例如 --format '{{.State.Status}}'（不取 Env、整個 .Config 或 .）"
+      "請加 --format 只取需要的欄位，例如 --format '{{.State.Status}}'（不取 Env、整個 .Config、. 或 $）"
     );
   }
   if (command === 'run' || command === 'exec') {
