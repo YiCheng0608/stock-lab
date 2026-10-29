@@ -37,6 +37,8 @@ os.environ.pop("STOCK_JOB_LOCK", None)
 # docker job (no env file) does.
 os.environ.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
 os.environ.pop("GH_TOKEN", None)
+# The event monitor's wake token (Issue 338): no test wakes the coordinator with the real one.
+os.environ.pop("STOCK_WAKE_TOKEN", None)
 
 
 def pytest_configure(config):

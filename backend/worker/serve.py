@@ -13,7 +13,10 @@ commands those tasks ran.
   ``tools/ops/monitor.sh --once`` (#338), only with ``--monitor`` (or
   STOCK_MONITOR) on or record-only. Its queue is the host directory
   ``--monitor-dir`` (compose bind mounts it at /coordination), where patrol.sh
-  on Windows reads it; the job logs it reads stay in the data directory.
+  on Windows reads it; the job logs it reads stay in the data directory. It
+  reaches Orca, on the Windows host, through the host's wake listener
+  (tools/ops/wake_listener.py): http_wake.sh wakes, http_orca.sh lists the
+  task worktrees.
 
 Each run is a child process, and the job does what it did under Task
 Scheduler: its lock (one job of a kind at a time), the checks before a run,
@@ -113,13 +116,13 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--monitor-waker",
-        default="none",
-        help="喚醒統籌的命令（monitor.sh --waker；預設 none：不在容器內喚醒）",
+        default=str(ROOT / "tools" / "ops" / "http_wake.sh"),
+        help="喚醒統籌的命令（monitor.sh --waker；預設 http_wake.sh，經主機的 wake listener）",
     )
     parser.add_argument(
         "--monitor-orca",
-        default="none",
-        help="monitor 讀 task worktree 用的 orca（預設 none：不讀）",
+        default=str(ROOT / "tools" / "ops" / "http_orca.sh"),
+        help="monitor 讀 task worktree 用的 orca（預設 http_orca.sh，經主機的 wake listener；none 不讀）",
     )
     parser.add_argument(
         "--daily-min-free-memory-gb",

@@ -316,7 +316,7 @@ candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(�
 - **輸出**：serve 的列 `<台北時間> serve <事件> key=value`（`ready` 列出各工作下次執行時間；`start`、`end exit=<碼> seconds=<秒>`，被結束時 `exit=killed`；`killed`、`stopping`、`stop_kill`、`stopped`），與 job、看門狗的 stdout 一起寫到 stdout，由 `docker logs` 查；各工作的日誌照舊在 `<data>/logs/`。
 - **時間注入**：`--now YYYY-MM-DDTHH:MM[:SS]`（沒有時區時為台北時間）讓排程的時鐘從該時間起算，照真實速度走；daily 另帶 `--date <該台北日>`，看門狗以 `WATCHDOG_NOW`、事件 monitor 以 `MONITOR_NOW` 判定。日誌檔名與時間戳記仍是真實時間。只用在 DB 副本上的驗證。
 - **run 記錄的 image 與 HEAD**：`schedule_runs` 每列的 `summary_json.runtime` 記 `image`（`STOCK_IMAGE_TAG`）、`head`（`STOCK_GIT_HEAD`，沒有時 `git rev-parse HEAD`，都沒有為 null）與 job 持有的鎖 `job_lock`。build context 不含 `.git`，所以 build 時帶入：`docker build -f backend/Dockerfile -t stock-lab-backend:<tag> --build-arg STOCK_IMAGE_TAG=stock-lab-backend:<tag> --build-arg STOCK_GIT_HEAD="$(git rev-parse HEAD)" .`。
-- 其他選項：`--data-dir`、`--log-dir`、`--claude-cli`、`--daily-min-free-memory-gb`、`--news-min-free-memory-gb`、`--daily-time-limit-minutes`、`--news-time-limit-minutes`（交給 job）；`--monitor-dir`、`--monitor-orca`、`--monitor-waker`（交給 monitor，後兩者預設 `none`）。只在 Linux 執行，其他系統 exit 69。
+- 其他選項：`--data-dir`、`--log-dir`、`--claude-cli`、`--daily-min-free-memory-gb`、`--news-min-free-memory-gb`、`--daily-time-limit-minutes`、`--news-time-limit-minutes`（交給 job）；`--monitor-dir`、`--monitor-orca`、`--monitor-waker`（交給 monitor，後兩者預設 `http_orca.sh`、`http_wake.sh`，經主機的 wake listener，[§6.8](#68-統籌事件-monitor)）。只在 Linux 執行，其他系統 exit 69。
 
 **切換前提**（#342，PR #346 review S1）：#333 起 job 只在 Linux 執行，工作排程器跑到含 #333 的 commit 時 daily、news、看門狗都以 69 結束，不寫日誌也不留言，排程會無聲停擺。所以工作排程器停用、scheduler 容器接手之前，發佈 checkout 不能拉到任何含 #333 的 commit（維持在 `release/v1` 或固定 tag）；切換步驟由 #342 處理。
 
@@ -388,4 +388,22 @@ compose 的預設佇列目錄是 checkout 內的 `.coordination/`，任務 workt
 | `STOCK_MONITOR` | `on`（只記事件、不喚醒也不留言時用 `record-only`） |
 | `STOCK_COORDINATION_DIR` | 統籌的資料目錄的 `logs/`：`C:/Users/YiCheng/stock-lab-data/logs` |
 
-所以 `patrol.sh`、`compact_hook.sh` 與[工作手冊](GITHUB_WORKFLOW.md#無人值守運作)的路徑都不變，每個檔仍只有一個寫入者；job 日誌在 volume 裡，`patrol.sh` 印的是 monitor 寫進 `monitor-state.json` 的最後一列。看門狗以 `--monitor-dir /coordination` 讀 monitor 的心跳。容器內的 `--monitor-orca`、`--monitor-waker` 預設 `none`：不讀 task worktree、不喚醒（`wake=deferred`），事件、去重、心跳與 #1 的「請開統籌」照常。停止：`monitor.stop` 對每分鐘一輪的 monitor 沒有作用，改把 `STOCK_MONITOR` 設成 `off` 後 `docker compose up -d scheduler`。
+所以 `patrol.sh`、`compact_hook.sh` 與[工作手冊](GITHUB_WORKFLOW.md#無人值守運作)的路徑都不變，每個檔仍只有一個寫入者；job 日誌在 volume 裡，`patrol.sh` 印的是 monitor 寫進 `monitor-state.json` 的最後一列。看門狗以 `--monitor-dir /coordination` 讀 monitor 的心跳。停止：`monitor.stop` 對每分鐘一輪的 monitor 沒有作用，改把 `STOCK_MONITOR` 設成 `off` 後 `docker compose up -d scheduler`。
+
+**wake listener**（#338，使用者選的做法 B3）：容器裡沒有 Orca，喚醒與 task worktree 數經主機上常駐的 [`wake_listener.py`](../tools/ops/wake_listener.py)。serve 的 `--monitor-waker` 預設 [`http_wake.sh`](../tools/ops/http_wake.sh)、`--monitor-orca` 預設 [`http_orca.sh`](../tools/ops/http_orca.sh)（只答 `worktree list --json`），兩者都以 `STOCK_WAKE_TOKEN` 呼叫 `STOCK_WAKE_URL`（預設 `http://host.docker.internal:47338/wake`）。
+
+- **只綁 `127.0.0.1:47338`**：Docker Desktop 把容器對 `host.docker.internal` 的連線代理到主機的 localhost（2026-10-29 實測，listener 看到的來源一律是 `127.0.0.1`），所以不用綁 `0.0.0.0`、不用開防火牆，LAN 連不到；代價是本機任何程序與任何容器都連得到，靠下面的 token、固定模板與限流把關。
+- **請求**：只收 `POST /wake` 與 `POST /worktrees`，都要 `Authorization: Bearer <token>`（不帶或錯就 401，記 `refused reason=token`）；其他方法 405、其他路徑 404、body 超過 1 KB 413，body 的內容一律不讀。
+- **送進 terminal 的只有固定模板**：terminal 取自主機的 `coordinator-heartbeat.json`（不是 `[\w-]+` 的 handle 視為沒有心跳，回 `no_heartbeat`），N 由 listener 讀佇列算，文字是「有 N 個事件，請處理佇列：bash tools/ops/patrol.sh（處理完以 --done 標記）」。送出照 `orca_wake.sh`：`tui-idle` 回 `satisfied:true` 才送。orca 對已結束的 terminal 也回 `satisfied:true`，接著 send 失敗，記 `send_failed`，不算已送。
+- **`/worktrees`**：本機 `orca worktree list --json` 裡 `refs/heads/task/` 的 branch，包成 Orca 的 envelope；orca 失敗回 502，monitor 那一輪記 `worktrees=failed`、不記名額事件，不當成名額已空。
+- **限流**：每種請求同時只處理一個，上次回答後 30 秒內再來回 429 `throttled`。
+- **回答與 exit code**：`/wake` 回 `sent`、`not_idle`、`send_failed`、`no_heartbeat`、`nothing_pending`；`http_wake.sh` 對 `sent` exit 0、`not_idle` exit 3，其他（含 listener 沒在跑、401、429）exit 1，monitor 記失敗的喚醒，10 分鐘後再試，事件留在佇列。每個請求在主機 `<資料目錄>/logs/wake-listener.log` 記一列。
+- **token**：`STOCK_WAKE_TOKEN` 只寫在發佈 checkout 根目錄那份由使用者自己建立的認證檔（`.env`，[§6.7](#67-容器內的-claude-與-gh-認證env)），至少 32 字元、不含空白；容器經 `env_file` 拿到它，listener 以 `--token-file` 讀同一個檔、只取這一列。由使用者產生並寫入（例如 `python -c "import secrets; print(secrets.token_urlsafe(32))"`），agent 不產生、不讀；換 token 後重建 scheduler 容器，並結束 listener 後重跑 `wake_listener_start.sh`。
+
+**啟動**（使用者決定，#338）：listener 只負責喚醒統籌，所以由統籌 session 啟動，不在 Windows 另外安裝。統籌接手時、每次處理佇列時跑 `bash tools/ops/wake_listener_start.sh`（[`wake_listener_start.sh`](../tools/ops/wake_listener_start.sh)），可重複執行：
+
+- 先 `GET /health`（不需 token，只回 `{"result": "ok", "service": "stock-lab-wake"}`）：有回應就 exit 0、不另起；port 沒有人聽才在背景啟動並等到 `/health` 回應；port 被別的程序占用（回應不是 listener 的）就 exit 2 並印出查占用者的命令；起不來（例如認證檔沒有 `STOCK_WAKE_TOKEN`）exit 1 並印出原因。`--status` 只回報、不啟動，`patrol.sh` 每次都印這一列。
+- 認證檔的路徑（發佈 checkout 根目錄那份）寫在腳本裡，不出現在統籌的命令裡（命令提到它會被 agent hook 擋下）；listener 的輸出附加到 `<資料目錄>/logs/wake-listener.out`。
+- **生命週期**：listener 在啟動它的 Bash 指令結束後繼續執行，但跟著啟動它的統籌 terminal 結束（Orca 關 terminal 時結束它底下所有程序，PowerShell 的 `Start-Process` 也一樣，2026-10-29 實測）。
+  - 換手時新統籌接手先跑腳本：舊統籌的 listener 還在就沿用，它每次喚醒前都重讀心跳檔，喚醒的是新統籌；收尾關掉舊 terminal 後舊 listener 跟著結束，所以新統籌關掉舊 terminal 後再跑一次腳本（[工作手冊](GITHUB_WORKFLOW.md#統籌-session)）。
+  - 統籌 session 結束而沒有接手者時 listener 也結束：沒有統籌就沒有喚醒對象，monitor 記 `send_failed`、事件留在佇列，佇列等 60 分鐘後照常在 #1 留「請開統籌」。listener 留著（例如 terminal 還開著）也不會出錯：心跳指向已結束的 terminal 時 send 失敗，記 `send_failed`。

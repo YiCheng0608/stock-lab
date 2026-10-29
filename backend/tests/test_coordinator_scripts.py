@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import socket
 import stat
 import subprocess
 import sys
@@ -44,10 +45,23 @@ SCRIPTS = (
     "event_queue.py",
     "monitor.sh",
     "orca_wake.sh",
+    "http_wake.sh",
+    "http_orca.sh",
+    "wake_listener.py",
+    "wake_listener_start.sh",
     "gh_auth.sh",
     "compact_hook.sh",
 )
 REPO_ID = "repo-1"
+
+
+def _unused_port() -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+NO_LISTENER_PORT = _unused_port()
 SHA = "a" * 40
 MERGE_SHA = "b" * 40
 # The tip of origin/feat/docker, the Docker integration branch (#332).
@@ -291,6 +305,9 @@ class Harness:
             STOCK_DATA_DIR=self.data.as_posix(),
             STOCK_PYTHON=Path(sys.executable).as_posix(),
             PATROL_NOW=str(NOW),
+            # A port nothing listens on: patrol.sh reports no wake listener, whatever
+            # runs on this machine (test_wake_listener starts its own).
+            WAKE_LISTENER_PORT=str(NO_LISTENER_PORT),
         )
         base.update(env)
         # Git for Windows' bin/bash.exe puts /mingw64/bin (the real git) in front of PATH,

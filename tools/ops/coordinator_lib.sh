@@ -36,6 +36,19 @@ cj() { "$python" -X utf8 "$script_dir/coordinator_json.py" "$@"; }
 # json_str VALUE: VALUE as a JSON string literal.
 json_str() { printf '%s' "$1" | "$python" -X utf8 -c 'import json,sys; sys.stdout.write(json.dumps(sys.stdin.read(), ensure_ascii=False))'; }
 
+# listener_post PATH: POST to the host's wake listener (wake_listener.py, #338) with the
+# token STOCK_WAKE_TOKEN; prints the answer. Returns 1 without a token, when the listener
+# cannot be reached, or when it answers other than 200. STOCK_WAKE_URL is its /wake URL.
+listener_post() {
+  local base="${STOCK_WAKE_URL:-http://host.docker.internal:47338/wake}" out
+  [ -n "${STOCK_WAKE_TOKEN:-}" ] || { echo "STOCK_WAKE_TOKEN is empty" >&2; return 1; }
+  # The header on stdin, so the token is in no command line.
+  out="$(printf 'Authorization: Bearer %s\n' "$STOCK_WAKE_TOKEN" \
+    | curl -sS -m 60 -X POST -H @- --data '' -w '\n%{http_code}' "${base%/wake}$1")" || return 1
+  printf '%s\n' "${out%$'\n'*}"
+  [ "${out##*$'\n'}" = 200 ]
+}
+
 orca_repo_id() {
   [ -n "${repo_id:-}" ] && return 0
   repo_id="$(orca repo list --json 2>/dev/null | cj repo-id "$ORCA_REPO_KEY")" \

@@ -86,6 +86,8 @@ MONITOR_SCRIPTS = (
     "coordinator_json.py",
     "gh_auth.sh",
     "orca_wake.sh",
+    "http_wake.sh",
+    "http_orca.sh",
 )
 
 
@@ -374,10 +376,11 @@ def test_the_monitor_command_is_one_poll_of_monitor_sh(tmp_path):
         "/coordination",
         "--python",
         sys.executable,
+        # Orca is on the Windows host: both go through its wake listener (B3).
         "--orca",
-        "none",
+        str(ROOT / "tools" / "ops" / "http_orca.sh"),
         "--waker",
-        "none",
+        str(ROOT / "tools" / "ops" / "http_wake.sh"),
     ]
     assert "MONITOR_NOW" not in environment
     # The watchdog reads the monitor's heartbeat where the monitor writes it.

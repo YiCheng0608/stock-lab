@@ -104,5 +104,7 @@ fi
 # The monitor's heartbeat, open PRs and job log lines from its last poll: in the
 # scheduler container the job logs are in the volume, out of this shell's reach (#338).
 eq status "$logs" "$now"
+# The wake listener the scheduler container's monitor wakes this session through (#338).
+bash "$script_dir/wake_listener_start.sh" --status 2>&1
 eq pending "$logs"
 echo "其餘依手冊：處理上面的未處理事件（PR 的 CI 與合併、Issue 的提問、名額空缺就派工），處理完以 --done <seq> 標記；monitor 停擺時看 logs/monitor.log"

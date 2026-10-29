@@ -36,12 +36,13 @@
 #   --data-dir DIR    default $STOCK_DATA_DIR, then $HOME/stock-lab-data
 #   --queue-dir DIR   default <data>/logs
 #   --python EXE      default $STOCK_PYTHON, then this checkout's .venv, then python3
-#   --orca EXE        for the task worktrees and the default waker; "none" skips the
-#                     worktrees. Default orca on PATH, then
+#   --orca EXE        for the task worktrees and the default waker, or a script that
+#                     answers `worktree list --json` (http_orca.sh in the container);
+#                     "none" skips the worktrees. Default orca on PATH, then
 #                     $LOCALAPPDATA/Programs/orca/resources/bin/orca.exe
 #   --waker CMD       run as `CMD TERMINAL TEXT` for a due wake; exit 0 sent, 3 not
-#                     idle, else failed. Default tools/ops/orca_wake.sh; "none" leaves
-#                     the wake to a waker elsewhere and records nothing of it
+#                     idle, else failed. Default tools/ops/orca_wake.sh (http_wake.sh in
+#                     the container); "none" leaves the wake out and records nothing
 # Test hooks: MONITOR_NOW (epoch seconds, with --once), MONITOR_CALL_TIMEOUT.
 set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -81,6 +82,11 @@ if [ -z "$orca_exe" ]; then
     orca_exe="${LOCALAPPDATA:-}/Programs/orca/resources/bin/orca.exe"
   fi
 fi
+
+# A script in place of orca or the waker (http_orca.sh, http_wake.sh in the container)
+# runs through bash: a file from a Windows checkout has no execute bit.
+orca_runner=()
+case "$orca_exe" in *.sh) orca_runner=(bash) ;; esac
 
 call_timeout="${MONITOR_CALL_TIMEOUT:-120}"
 # The coordinator terminal must be idle within this long, or the wake waits.
@@ -236,7 +242,7 @@ poll() {
   # 4. task worktrees (Orca, no gh)
   if [ "$orca_exe" = none ]; then
     notes="$notes worktrees=skipped"
-  elif call "$orca_exe" worktree list --json >"$work/worktrees.json" 2>/dev/null; then
+  elif call "${orca_runner[@]}" "$orca_exe" worktree list --json >"$work/worktrees.json" 2>/dev/null; then
     args+=(--worktrees "$work/worktrees.json")
   else
     notes="$notes worktrees=failed"
