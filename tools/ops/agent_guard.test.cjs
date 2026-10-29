@@ -375,6 +375,8 @@ describe('.env rules', () => {
     'docker compose exec api python -m pytest -q',
     'docker run --rm -e STOCK_DATA_DIR=/data --env-file ./fake-env.txt alpine true',
     'git commit -m "allow docker compose config -q, block docker inspect"',
+    '(docker compose config -q)',
+    "out=$(docker inspect --format '{{.State.Status}}' t360-api-1)",
   ];
   const DOCKER_BLOCKED = [
     'docker compose config',
@@ -423,6 +425,13 @@ describe('.env rules', () => {
     'docker exec t360-api-1 cat /proc/1/environ',
     `docker compose run --rm api python -c "import os; print(os.environ)"`,
     'docker run --rm --env-file ./fake-env.txt alpine env',
+    // A subshell or a command substitution (PR #370 review).
+    '(docker compose config)',
+    'out=$(docker compose config)',
+    '$(docker inspect t360-api-1)',
+    'x=`docker inspect t360-api-1`',
+    '(docker compose run --rm api env)',
+    'echo "$(docker exec t360-api-1 printenv)"',
   ];
 
   for (const shell of ['bash', 'powershell']) {
@@ -434,6 +443,105 @@ describe('.env rules', () => {
       for (const command of DOCKER_BLOCKED) assert.ok(commandDenial(command, shell, [], clean), command);
     });
   }
+
+  // #341: compose down that removes named volumes, like git clean -x: blocked unless -p names a
+  // test project (tools/compose/test_project.sh).
+  const DOWN_BLOCKED = [
+    'docker compose down -v',
+    'docker compose down --volumes',
+    'docker compose down --volumes=true',
+    'docker compose down --rmi all -v',
+    'docker compose down -t 0 -v',
+    'docker compose down -vt 0',
+    'docker compose down --remove-orphans --volumes --rmi local',
+    'docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v',
+    'docker compose -p stock-lab down -v',
+    'docker compose --project-name stock-lab down --volumes',
+    'docker compose --project-name=stock-lab-release down -v',
+    'docker compose -p task-341 -p stock-lab down -v',
+    'docker compose -p stock-lab -p task-1 down -v',
+    'docker compose -p task-1 --project-name=stock-lab down --volumes',
+    'docker compose -p my-app down -v',
+    'docker compose -p t341x down -v',
+    'docker compose -p= down -v',
+    'docker-compose down -v',
+    'docker.exe compose down --volumes',
+    'docker --context default compose down -v',
+    'MSYS_NO_PATHCONV=1 docker compose down -v',
+    'cd ../stock-lab-release && docker compose down -v',
+    'COMPOSE_PROJECT_NAME=task-341 docker compose down -v',
+    'bash -c "docker compose down -v"',
+    "sh -lc 'docker compose -p stock-lab down --volumes'",
+    // A subshell or a command substitution runs it all the same (PR #370 review).
+    '(docker compose down -v)',
+    '(docker compose -p stock-lab down --volumes)',
+    'out=$(docker compose down -v)',
+    '$(docker compose down -v)',
+    '@(docker compose down --volumes)',
+    'echo "$(docker compose down -v)"',
+    'x=`docker compose down -v`',
+    '(cd ../stock-lab-release && docker compose down -v)',
+  ];
+  const DOWN_ALLOWED = [
+    'docker compose down',
+    'docker compose down --rmi all --remove-orphans',
+    'docker compose -p stock-lab down',
+    'docker compose -p task-341 down --volumes --rmi all',
+    'docker compose -p task-341 -f docker-compose.yml -f docker-compose.dev.yml down --volumes --rmi all',
+    'docker compose --project-name t341 down -v',
+    'docker compose --project-name=t341-a down -v',
+    'docker compose -pt341_b down -v',
+    'docker compose -p deploy-smoke-341 down -v',
+    'docker compose -f docker-compose.yml down -v -p task-341',
+    'docker compose up -d -V',
+    'docker compose rm -v -f',
+    'docker volume rm t341_stock-data',
+    'git commit -m "block compose down -v of the production project"',
+    '(docker compose -p task-341 down --volumes --rmi all)',
+    'out=$(docker compose -p t341 down -v)',
+    '(docker compose down)',
+  ];
+
+  for (const shell of ['bash', 'powershell']) {
+    test(`${shell}: compose down -v of a project not named as a test project is blocked (#341)`, () => {
+      for (const command of DOWN_BLOCKED) assert.match(commandDenial(command, shell, [], clean) || '', /down -v/, command);
+    });
+
+    test(`${shell}: compose down without -v, or of a test project, passes (#341)`, () => {
+      for (const command of DOWN_ALLOWED) assert.equal(commandDenial(command, shell, [], clean), null, command);
+    });
+  }
+
+  test('compose down -v of the project STOCK_COMPOSE_PROJECT names is blocked (#341)', () => {
+    const saved = process.env.STOCK_COMPOSE_PROJECT;
+    process.env.STOCK_COMPOSE_PROJECT = 't1-prod';
+    try {
+      assert.ok(commandDenial('docker compose -p t1-prod down -v', 'bash', [], clean));
+      assert.equal(commandDenial('docker compose -p t1-other down -v', 'bash', [], clean), null);
+    } finally {
+      if (saved === undefined) delete process.env.STOCK_COMPOSE_PROJECT;
+      else process.env.STOCK_COMPOSE_PROJECT = saved;
+    }
+  });
+
+  test('the hook process blocks compose down -v through Bash and PowerShell (#341)', () => {
+    for (const tool_name of ['Bash', 'PowerShell']) {
+      const result = hook({ tool_name, tool_input: { command: 'docker compose down -v' } });
+      assert.equal(result.code, 2, tool_name);
+      assert.match(result.stderr, /named volume/, tool_name);
+    }
+    assert.equal(hook(bash('docker compose -p task-341 down --volumes')).code, 0);
+  });
+
+  test('COMPOSE_PROJECT_NAME of the session is not read: compose down -v without -p is blocked (#341)', () => {
+    // dispatch.sh starts an engineer's claude with COMPOSE_PROJECT_NAME=task-<issue>; compose
+    // would use it, but -p is what the hook goes by.
+    const env = { ...process.env, COMPOSE_PROJECT_NAME: 'task-341' };
+    for (const command of ['docker compose down -v', 'docker compose down --volumes --rmi all']) {
+      assert.equal(hook(bash(command), env).code, 2, command);
+    }
+    assert.equal(hook(bash('docker compose -p task-341 down -v'), env).code, 0);
+  });
 
   test('the hook process allows compose config -q and blocks docker inspect (#360)', () => {
     assert.equal(hook(bash('docker compose config -q')).code, 0);

@@ -65,7 +65,7 @@ log() {
 found=0  # 1 once an anomaly is reported or a check could not run
 python_missing=""
 if [ -z "$python" ]; then
-  for candidate in "$repo_root/.venv/Scripts/python.exe" "$repo_root/.venv/bin/python" python3 python; do
+  for candidate in "$repo_root/.venv/bin/python" python3 python; do
     if "$candidate" -c 'import sys' >/dev/null 2>&1; then python="$candidate"; break; fi
   done
 fi

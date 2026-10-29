@@ -1,11 +1,13 @@
-<!-- owns: 工作目錄與環境、服務啟停、API 跨站請求防護、資料庫 migration 與 readiness、Alembic head、worker CLI、資料品質與研究結果、worker 測試與驗證、排程、排程看門狗、排程註冊與管理、日誌與 run 記錄、重跑與回補、排程限制、容器內的 claude 與 gh 認證、統籌事件 monitor -->
+<!-- owns: 工作目錄與環境、服務啟停、Docker Desktop 沒開的判讀、API 跨站請求防護、資料庫 migration 與 readiness、Alembic head、worker CLI、資料品質與研究結果、worker 測試與驗證、排程、排程看門狗、排程註冊與管理、日誌與 run 記錄、重跑與回補、排程限制、容器內的 claude 與 gh 認證、統籌事件 monitor -->
 # 操作手冊
 
 本文件只保留可操作入口、安全邊界與診斷順序；本機檢查命令見[工作手冊](GITHUB_WORKFLOW.md#本機檢查)，能力狀態見 [ROADMAP](ROADMAP.md)。
 
 ## 1. 工作目錄、環境與啟停
 
-後端命令從專案根目錄執行。範例預設使用 workspace 內 `.local` 開發資料；做測試、migration 或可丟棄研究時，先把三個 `STOCK_*` 改成明確的隔離路徑，不指向正式 `data/stock.db`。
+服務、測試與排程都在容器裡執行（#331）：api、web、scheduler 由 compose 啟動（[§1.2](#12-docker-compose)），資料在 named volume `stock-data`，排程是 scheduler 容器的 `worker.cli serve`（[§6.6](#66-scheduler-容器的排程serve)），本機檢查也在容器內跑（[工作手冊](GITHUB_WORKFLOW.md#本機檢查)）。主機只需要 Docker Desktop（WSL 2 backend）與 Git Bash；Docker Desktop 沒開時的判讀見 [§1.3](#13-docker-desktop-沒開)。正式排程切到容器（#342）之前，Windows 工作排程器仍從發佈 checkout 跑 #333 以前的 commit（[§6](#6-排程)）。
+
+容器外（選用）：後端命令也能在主機的 venv 從專案根目錄執行，用在單次的 API 或 worker 命令；`worker.cli job`、`serve` 與 `python -m worker.job lock` 只在 Linux 執行，在 Windows 以 exit 69 拒絕，所以排程與看門狗的鎖不能在主機跑。範例預設使用 workspace 內 `.local` 開發資料；做測試、migration 或可丟棄研究時，先把三個 `STOCK_*` 改成明確的隔離路徑，不指向正式 `data/stock.db`。
 
 ```powershell
 python -m venv .venv
@@ -68,7 +70,7 @@ python -m uvicorn app.main:app --reload --port 8000
 | 開發 | `docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build`：bind mount 整個 checkout，api 以 `uvicorn --reload`、web 以 Vite HMR 即時套用修改（Windows bind mount 不送檔案事件，兩者都以輪詢偵測：`WATCHFILES_FORCE_POLLING`、`CHOKIDAR_USEPOLLING`）。`stock-data` 沒有 `stock.db` 時，api 啟動前寫入 verify 假資料庫（`tools/verify/fixture_db.py`）；已有的 `stock.db` 不動。scheduler 只在加 `--profile scheduler` 時啟動，開發用的 checkout 不會自己跑 daily、news |
 | 正式拓撲 | `docker compose up -d --build`：web 經 nginx 服務 build 好的頁面。api 在空的 `stock-data` 上會拒絕啟動（[§2](#2-資料庫migration-與-readiness)），要先 `docker compose run --rm api python -m worker.cli init-db`，或把 `copy_db.py` 做的副本放進 volume |
 | 後端測試、lint、前端測試與 build | `docker compose -p task-<issue> run --rm …`，命令與容器內 git 的掛法見[工作手冊「本機檢查」](GITHUB_WORKFLOW.md#本機檢查)（#339） |
-| 狀態與停止 | `docker compose ps`（健康狀態）、`docker compose logs <服務>`、`docker compose down`（`--volumes` 會連 `stock-data` 一起刪） |
+| 狀態與停止 | `docker compose ps`（健康狀態）、`docker compose logs <服務>`、`docker compose down`（`--volumes` 會連 `stock-data` 一起刪；agent 的 hook 只放行以 `-p` 寫明測試 project 的 `down -v`，[AGENTS](../AGENTS.md#規則與強制手段)） |
 
 **變數**（從 shell 或根目錄 `.env` 讀，見 [`.env.example`](../.env.example)）：
 
@@ -84,6 +86,14 @@ python -m uvicorn app.main:app --reload --port 8000
 - `.gitattributes` 把 `*.sh` 固定為 LF：CRLF 的腳本在容器裡跑不動。entrypoint 在 Git 裡是 100755，image 另外 `chmod 0755`。dev 的 bind mount 不保證保留執行權限位元，所以 dev 以 `sh /app/backend/docker/entrypoint.sh` 呼叫。
 - 匿名 volume 蓋住 checkout 的 `.venv` 與 `frontend/node_modules`（Windows 版），容器用 image 內的依賴。依賴改了、image 重新 build 之後要 `up --renew-anon-volumes`，否則沿用舊的匿名 volume。
 - WSL 2 的記憶體上限在 `%UserProfile%\.wslconfig`（`[wsl2]` 下 `memory=6GB`）。它要高於同時執行的容器上限總和：正式拓撲約 3.3 GB，dev 加 scheduler 約 4 GB。scheduler 的 2 GB 依實測：在容器內對正式 DB 副本（2.4 GB）以 `--force` 重跑一次 daily，rss 峰值約 0.95 GB（cgroup `failcnt` 0）；同一份副本由 0017 migrate 到 0020 時，`docker stats` 讀到 1.8 GiB（含 page cache）（2026-10-29，#335）。改完執行 `wsl --shutdown`，Docker Desktop 重開後生效。
+
+### 1.3 Docker Desktop 沒開
+
+容器都跑在 Docker Desktop 的 WSL 2 VM 裡（`docker context ls` 的 `desktop-linux`，端點 `npipe:////./pipe/dockerDesktopLinuxEngine`）。重開機後還沒登入、Docker Desktop 被結束，或沒設成登入時啟動（Settings → General 的 Start Docker Desktop when you sign in），容器就都沒有在跑。
+
+- **判讀**：`docker info --format '{{.ServerVersion}}'` 與任何 `docker compose` 命令都失敗，訊息是 `failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine; check if the path is correct and if the daemon is running: open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.`（Docker 29.9.2；2026-10-29 以不存在的 pipe 名稱重現同一格式，#341）。Docker Desktop 還在啟動時，等它顯示 Engine running 再查一次。`docker info` 有回應，但 `docker compose -p <project> ps` 沒列出 scheduler 或狀態不是 `Up`，就不是 Docker Desktop 的問題，看 `docker compose -p <project> logs scheduler`。
+- **期間沒有排程，也沒有留言**：daily、news、看門狗與事件 monitor 都在 scheduler 容器內，Docker Desktop 停了就全部停；看門狗也在容器裡，所以不會在 #1 留言。主機上看得到的跡象是統籌 `patrol.sh` 印的 monitor 心跳時間不再前進（monitor 開著時，[§6.8](#68-統籌事件-monitor)）。
+- **恢復**：開啟 Docker Desktop。三個服務都是 `restart: unless-stopped`，Docker Desktop 起來後容器自動回來，不必再 `up`（以 `docker compose stop`／`down` 停掉的除外）。serve 不補它啟動前錯過的時段（[§6.6](#66-scheduler-容器的排程serve)）：錯過當天的 daily 時，看門狗在 21:30 後以 `daily_no_end` 留言，依 [§6.4](#64-重跑與回補) 手動補跑。
 
 ## 2. 資料庫、migration 與 readiness
 
@@ -161,9 +171,14 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 
 ## 6. 排程
 
-每日排程由排程器定時執行一條命令：`python -m worker.cli job daily` 與 `python -m worker.cli job news`（news 之後接著 `worker.cli news-llm`）（[ROADMAP V1-G1](ROADMAP.md#v1-範圍基線2026-10-17-核定)）。job（[`backend/worker/job.py`](../backend/worker/job.py)）自己負責單一執行個體（檔案鎖）、起跑前檢查、單次上限、日誌與保留，不依賴排程器的設定，換排程器只要定時執行同一條命令。job 只在 Linux（[後端 image](#1-工作目錄環境與啟停)）執行（#333）；本機目前仍是 Windows 工作排程器，在 Docker 切換（#331 子任務 10）前保留，註冊、查詢、停用與移除見 [§6.2](#62-dailynews-工作的註冊與管理)，日誌與 run 記錄見 [§6.3](#63-日誌與-run-記錄)；接手它的 scheduler 容器（`worker.cli serve`）與切換前提見 [§6.6](#66-scheduler-容器的排程serve)。自動下單不在第一版範圍。
+每日排程由排程器定時執行一條命令：`python -m worker.cli job daily` 與 `python -m worker.cli job news`（news 之後接著 `worker.cli news-llm`）（[ROADMAP V1-G1](ROADMAP.md#v1-範圍基線2026-10-17-核定)）。job（[`backend/worker/job.py`](../backend/worker/job.py)）自己負責單一執行個體（檔案鎖）、起跑前檢查、單次上限、日誌與保留，不依賴排程器的設定，換排程器只要定時執行同一條命令。job 只在 Linux（[後端 image](#1-工作目錄環境與啟停)）執行（#333），所以這份程式的排程器是 scheduler 容器的 `worker.cli serve`（[§6.6](#66-scheduler-容器的排程serve)）。自動下單不在第一版範圍。
 
-位置（使用者 2026-10-17 決定）：正式資料目錄 `C:/Users/YiCheng/stock-lab-data/`（`stock.db`、`raw/`、`logs/`），以 `STOCK_DATA_DIR` 指向；排程只從發佈 checkout `C:/Users/YiCheng/stock-lab-release/`（repo 的獨立 clone，停在 `tools/ops/deploy.sh` 部署的 tag，排程起跑不 `git pull`；升版見 [RELEASE](RELEASE.md)）及其 `.venv` 執行，不從 `master` 管理 checkout。統籌心跳檔、換手標記與壓縮計數檔都在資料目錄的 `logs/` 下（[工作手冊](GITHUB_WORKFLOW.md#統籌-session)），事件 monitor 的事件佇列與它自己的心跳、日誌也是（[§6.8](#68-統籌事件-monitor)）。
+| 排程器 | 跑的程式 | 資料與 job 日誌 | 本節的操作 |
+| --- | --- | --- | --- |
+| scheduler 容器（`serve`，#336） | 正式 compose project 的 image，由 [`deploy.sh`](RELEASE.md#部署) 部署（#340） | volume `stock-data` 的 `/data`（`stock.db`、`raw/`、`logs/`、`locks/`） | [§6.6](#66-scheduler-容器的排程serve)；daily、news 與看門狗的判定、日誌與 run 記錄同 §6.1～§6.5 |
+| Windows 工作排程器（切換前） | 發佈 checkout 上 #333 以前的 commit（`release/v1` 或固定 tag）：這份程式的 job 與看門狗的鎖在 Windows 以 exit 69 結束，所以發佈 checkout 拉到含 #333 的 commit 前要先切換（[§6.6](#66-scheduler-容器的排程serve) 的切換前提） | 主機的資料目錄 | §6.1、§6.2、§6.8 標「工作排程器」的表；#342 切換時停用並移除，連同 `tools/*.ps1`、`tools/ops/Register-*.ps1` |
+
+位置（使用者 2026-10-17 決定）：正式資料目錄 `C:/Users/YiCheng/stock-lab-data/`（`stock.db`、`raw/`、`logs/`），以 `STOCK_DATA_DIR` 指向；切換（#342）時 `stock.db` 與日誌搬進 volume `stock-data`，主機的這個目錄只剩統籌的檔案。排程只從發佈 checkout `C:/Users/YiCheng/stock-lab-release/`（repo 的獨立 clone，停在 `tools/ops/deploy.sh` 部署的 tag，排程起跑不 `git pull`；升版見 [RELEASE](RELEASE.md)）執行：切換前用它的 `.venv`，之後它是正式 compose project 的目錄；不從 `master` 管理 checkout。統籌心跳檔、換手標記與壓縮計數檔都在主機資料目錄的 `logs/` 下（[工作手冊](GITHUB_WORKFLOW.md#統籌-session)），事件 monitor 的事件佇列與它自己的心跳、日誌也是：scheduler 容器以 `STOCK_COORDINATION_DIR` 把這個目錄 bind mount 到 `/coordination`（[§6.8](#68-統籌事件-monitor)）。
 
 新聞任務與 `daily` 分開排程，不掛在 `daily` 之後：
 
@@ -171,15 +186,15 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 - **rate limit**：每次 9 個請求、間隔 2 秒，一天約 108 個請求；不重試，限流或失敗的 feed 等下一輪。
 - **冪等**：重跑或兩輪重疊抓到同一則時，不新增列、不改寫既有列。
 - **錯誤**：每個來源的結果寫入 `run_type=news` 的 ingestion run，可用 `/api/ingestion-runs?q=news` 查；CLI 也把同一份結果以 JSON 印到 stdout，排程把 stdout／stderr 導到日誌檔保存（[§6.3](#63-日誌與-run-記錄)）。
-- **LLM 判讀**：`\stock-lab\news` 每輪在 `worker.cli news` 結束後，於同一次執行接著跑 `python -m worker.cli news-llm`（環境變數相同、不帶 `--date`），把新收的新聞做 AI 摘要與判讀。每輪最多 50 則（2 次 `sonnet` 呼叫，25 則一批實測約 32 秒），同一台北日所有 run 合計最多 20 次呼叫，超過的批次等下一個台北日（[§3](#3-現有-worker-cli)）。
+- **LLM 判讀**：news job 每輪在 `worker.cli news` 結束後，於同一次執行接著跑 `python -m worker.cli news-llm`（環境變數相同、不帶 `--date`），把新收的新聞做 AI 摘要與判讀。每輪最多 50 則（2 次 `sonnet` 呼叫，25 則一批實測約 32 秒），同一台北日所有 run 合計最多 20 次呼叫，超過的批次等下一個台北日（[§3](#3-現有-worker-cli)）。
   - news 失敗時仍會跑（news-llm 只讀已入庫的新聞）；news-llm 失敗不改變 news 的結果，也不改變工作的結束碼。失敗只留在日誌的 news-llm 段落與 `run_type=news_llm` 的 ingestion run（`status=failed`、`error` 寫原因），可用 `/api/ingestion-runs?q=news_llm` 查；日誌格式見 [§6.3](#63-日誌與-run-記錄)。
-  - 執行機器須已登入 Claude Code 且環境沒有 `ANTHROPIC_API_KEY`／`ANTHROPIC_AUTH_TOKEN`（有就拒絕執行）。排程環境的 PATH 與互動 shell 不同，所以註冊時以 `-ClaudeCli` 寫入原生 `claude.exe` 的完整路徑（[§6.2](#62-dailynews-工作的註冊與管理)）。執行期不檢查副檔名：後端 image 的 `claude` 是 npm 套件安裝的原生檔（ELF，`@anthropic-ai/claude-code/bin/claude.exe`），不是 shim；#333 移除了 Windows 只收原生 `.exe` 的檢查。找不到 claude、未登入（含 token 過期或被撤銷，[§6.7](#67-容器內的-claude-與-gh-認證env)）或額度用盡時，當輪記 `failed`（或該批 `pending`）並停止，下一輪重試。
+  - 執行機器須已登入 Claude Code 且環境沒有 `ANTHROPIC_API_KEY`／`ANTHROPIC_AUTH_TOKEN`（有就拒絕執行）。scheduler 容器的 `claude` 在 image 的 PATH 上，compose 的 serve 命令不帶 `--claude-cli`；工作排程器（切換前）的 PATH 與互動 shell 不同，所以註冊時以 `-ClaudeCli` 寫入原生 `claude.exe` 的完整路徑（[§6.2](#62-dailynews-工作的註冊與管理)）。執行期不檢查副檔名：後端 image 的 `claude` 是 npm 套件安裝的原生檔（ELF，`@anthropic-ai/claude-code/bin/claude.exe`），不是 shim；#333 移除了 Windows 只收原生 `.exe` 的檢查。找不到 claude、未登入（含 token 過期或被撤銷，[§6.7](#67-容器內的-claude-與-gh-認證env)）或額度用盡時，當輪記 `failed`（或該批 `pending`）並停止，下一輪重試。
   - 看門狗在最近 3 批判讀都是 `pending`，或最近 3 筆 news_llm run 都是 `failed`（找不到 claude、API 金鑰這類沒有批次的設定錯誤，以及被逾時終止的 run），或 news 日誌最後 3 次 `news_llm_exit` 都是 `1`／`wrapper_error` 時留言（[§6.1](#61-排程看門狗)）。
-  - **停用／恢復**：只停 news-llm 用 `-NoNewsLlm` 重新註冊 news（[§6.2](#62-dailynews-工作的註冊與管理)）；整個 news 停用用 `Disable-ScheduledTask`。額度吃緊時先停 news-llm，news 照常收稿。
+  - **停用／恢復**：額度吃緊時先停 news-llm，news 照常收稿。scheduler 容器：serve 的 `--skip-news-llm`（[§6.6](#66-scheduler-容器的排程serve)）沒有對應的環境變數，compose 的 scheduler 命令也不帶它，目前要改 `docker-compose.yml` 的 scheduler `command` 才停得了（要不要加開關在切換前決定，[#342](https://github.com/YiCheng0608/stock-lab/issues/342)）；停整個排程是 `docker compose -p <正式 project> stop scheduler`（daily、news、看門狗與 monitor 一起停），恢復是 `start scheduler`。工作排程器（切換前）：只停 news-llm 用 `-NoNewsLlm` 重新註冊 news（[§6.2](#62-dailynews-工作的註冊與管理)）；整個 news 停用用 `Disable-ScheduledTask`。
 
 ### 6.1 排程看門狗
 
-`tools/ops/watchdog.sh`（Git Bash）每 15 分鐘由工作 `\stock-lab\watchdog` 執行，只檢查排程與資料不變量：以檔案與唯讀 DB 判定異常並在 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 留言「待使用者」，每個異常每台北日最多一則。不判定統籌是否在線、不開或喚醒統籌（統籌開啟見[工作手冊](GITHUB_WORKFLOW.md#統籌-session)，喚醒由 [§6.8](#68-統籌事件-monitor) 的事件 monitor 負責）。
+`tools/ops/watchdog.sh`（bash）在 scheduler 容器由 serve 每小時 :15、:45 執行（[§6.6](#66-scheduler-容器的排程serve)；切換前是工作排程器的 `\stock-lab\watchdog`，每 15 分鐘），只檢查排程與資料不變量：以檔案與唯讀 DB 判定異常並在 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 留言「待使用者」，每個異常每台北日最多一則。不判定統籌是否在線、不開或喚醒統籌（統籌開啟見[工作手冊](GITHUB_WORKFLOW.md#統籌-session)，喚醒由 [§6.8](#68-統籌事件-monitor) 的事件 monitor 負責）。
 
 - `daily`：週一至週五台北 21:30 後，當日 `logs/daily-YYYYMMDD.log` 不存在或沒有 `end` 列。
 - `daily` 結果：週一至週五台北 22:00 後（21:30 那次已寫入 run 列）唯讀查當日目標的 `schedule_runs`：當天有 `success`／`non_trading_day` 就算完成（之後的 `skipped` 不影響）；否則取最後一筆（略過只指向別列的 `already_complete`／`already_running`），是 `partial`、`failed`、`non_trading_unconfirmed` 或 `skipped:<原因>`（例如 `low_memory`）就留言；仍在 `running` 的等下一輪，超過 2.5 小時視為 `failed`；當日 success 但 catchup 沒補齊（`catchup_incomplete`）也留言；有日誌卻沒有任何 run 列（worker 沒能啟動）也留言。
@@ -201,7 +216,9 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
     2. 清單是暫時不完整時（例如官方 payload 截斷），下一次 daily 同步成功後自動恢復，不需處理。
     3. 核對官方公告確認真的有大量下市或轉市時，停用排程，執行 `instruments repair --apply --max-status-share <比例>`，再恢復排程；比例、依據與輸出記在該 Issue。修正資料前先備份 `stock.db`（[§2.1](#21-安全升級與復原順序)）。`market_bars` 不存在或沒有資料時前兩條印 `skip`，`news_llm_results` 不存在時第三條印 `skip`，都不留言。
 
-`daily`／`news` 還沒有任何日誌時不判定（排程尚未註冊）。執行環境：Git Bash、PATH 上有 `gh`（已登入，或有 `GH_TOKEN`，[§6.7](#67-容器內的-claude-與-gh-認證env)）；Python 只用來唯讀查 DB（找不到時跳過 daily 結果、`news_llm` 與資料不變量的 DB 檢查，日誌檢查照做），預設發佈 checkout 的 `.venv`。以下命令在發佈 checkout 執行：
+`daily`／`news` 還沒有任何日誌時不判定（排程尚未註冊）。執行環境：bash、PATH 上有 `gh`（有 `GH_TOKEN` 或已登入，[§6.7](#67-容器內的-claude-與-gh-認證env)）；Python 只用來唯讀查 DB（找不到時跳過 daily 結果、`news_llm` 與資料不變量的 DB 檢查，日誌檢查照做），依序取 `--python`、`STOCK_PYTHON`、checkout 的 `.venv/bin/python`、`python3`、`python`。serve 以 `--data-dir /data --python <serve 的 python>` 呼叫它，monitor 開著時另加 `--monitor-dir /coordination`。
+
+手動判定（只輸出將留的言與資料不變量的數字，不留言）：scheduler 容器是 `docker compose -p <正式 project> exec scheduler bash tools/ops/watchdog.sh --dry-run`（`STOCK_DATA_DIR=/data` 由 compose 給）。以下是工作排程器（切換前）的命令，在發佈 checkout 執行：
 
 | 動作 | 命令 |
 | --- | --- |
@@ -210,9 +227,9 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 | 查詢 | `schtasks /query /tn "\stock-lab\watchdog" /v /fo list` |
 | 停用／啟用 | `Disable-ScheduledTask -TaskPath \stock-lab\ -TaskName watchdog`／`Enable-ScheduledTask ...` |
 | 移除 | `powershell -ExecutionPolicy Bypass -File tools/ops/Register-Watchdog.ps1 -Unregister` |
-| 手動判定 | `bash tools/ops/watchdog.sh --dry-run`（只輸出將留的言與資料不變量的數字） |
+| 手動判定 | `bash tools/ops/watchdog.sh --dry-run` |
 
-工作以目前使用者、Interactive logon、隱藏執行，登入時才跑；同時只跑一個，10 分鐘逾時。日誌 `<資料目錄>/logs/watchdog.log`，每列為 UTC 時間、事件、`key=value` 與說明，沒有異常時記 `schedules_ok`；異常留言（每日一則）的頻率限制以此日誌判斷。同一時間只跑一個：Python 以 job 的同一套檔案鎖（`python -m worker.job lock`）持有 `<資料目錄>/locks/watchdog.lock` 並把腳本當子程序再跑一次，鎖由作業系統在 Python 結束時釋放（被強制終止也一樣，子程序一起結束），下一輪不必等；另一輪仍在跑時記 `locked` 並略過。找不到 Python 時不取鎖（排程的「前一次未結束不另起」仍擋重疊）。舊版的 `logs/watchdog.lock/` 目錄不再使用；DB 檢查因缺 Python 或讀 DB 失敗而沒跑時記 `python_missing`／`daily_check_failed`／`news_llm_check_failed`／`llm_auth_check_failed`／`invariants_check_failed`，不記 `schedules_ok`；gh 被拒時記 `gh_auth_failed`、沒能留的異常記 `anomaly_not_commented`，讀 repo 因其他原因失敗記 `gh_probe_failed`（照常嘗試留言）。腳本路徑寫在工作參數裡，腳本改名或搬移後要在發佈 checkout 重跑「註冊或更新」。舊版（含開統籌）的日誌 `logs/ensure_coordinator.log` 不再寫入。
+工作排程器的工作以目前使用者、Interactive logon、隱藏執行，登入時才跑；同時只跑一個，10 分鐘逾時（serve 同樣在一輪超過 10 分鐘時結束它，[§6.6](#66-scheduler-容器的排程serve)）。日誌 `<資料目錄>/logs/watchdog.log`，每列為 UTC 時間、事件、`key=value` 與說明，沒有異常時記 `schedules_ok`；異常留言（每日一則）的頻率限制以此日誌判斷。同一時間只跑一個：Python 以 job 的同一套檔案鎖（`python -m worker.job lock`）持有 `<資料目錄>/locks/watchdog.lock` 並把腳本當子程序再跑一次，鎖由作業系統在 Python 結束時釋放（被強制終止也一樣，子程序一起結束），下一輪不必等；另一輪仍在跑時記 `locked` 並略過。找不到 Python 時不取鎖（排程的「前一次未結束不另起」仍擋重疊）。舊版的 `logs/watchdog.lock/` 目錄不再使用；DB 檢查因缺 Python 或讀 DB 失敗而沒跑時記 `python_missing`／`daily_check_failed`／`news_llm_check_failed`／`llm_auth_check_failed`／`invariants_check_failed`，不記 `schedules_ok`；gh 被拒時記 `gh_auth_failed`、沒能留的異常記 `anomaly_not_commented`，讀 repo 因其他原因失敗記 `gh_probe_failed`（照常嘗試留言）。腳本路徑寫在工作參數裡，腳本改名或搬移後要在發佈 checkout 重跑「註冊或更新」。舊版（含開統籌）的日誌 `logs/ensure_coordinator.log` 不再寫入。
 
 ### 6.2 daily／news 工作的註冊與管理
 
@@ -220,11 +237,13 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 
 | 位置 | 路徑 | 說明 |
 | --- | --- | --- |
-| 資料目錄 | `C:/Users/YiCheng/stock-lab-data/` | 正式 `stock.db`、`raw/`、`logs/`，與 job 的鎖 `locks/`。排程以 `--data-dir`（註冊參數 `-DataDir`）傳入並設成 worker 子程序的 `STOCK_DATA_DIR`（預設依序為 `STOCK_DATA_DIR`、`%USERPROFILE%\stock-lab-data`），不由 cwd 推導。 |
+| 資料目錄 | `C:/Users/YiCheng/stock-lab-data/`；scheduler 容器是 volume `stock-data` 的 `/data` | 正式 `stock.db`、`raw/`、`logs/`，與 job 的鎖 `locks/`。排程以 `--data-dir`（serve 傳 `/data`；工作排程器的註冊參數 `-DataDir`）傳入並設成 worker 子程序的 `STOCK_DATA_DIR`（預設依序為 `STOCK_DATA_DIR`、`~/stock-lab-data`），不由 cwd 推導。 |
 | 發佈 checkout | `C:/Users/YiCheng/stock-lab-release/` | repo 的獨立 clone，停在部署的 tag（detached HEAD）；排程起跑不 `git pull`，master 合併的改動要打 tag、部署後才進排程。Docker 切換（#342）後它是正式 compose project 的目錄，只由 `tools/ops/deploy.sh <tag>` 改變：checkout tag、build 打 tag 的 image、`compose up -d`，部署記錄在 volume 的 `/data/logs/deploy.json`（[RELEASE](RELEASE.md#部署)，#340）。排程**只**從這裡執行，不從 `master` 管理 checkout 或任務 worktree。V1 G7 窗口期間的 `release/v1` 隔離見 [RELEASE](RELEASE.md#v1-發佈隔離g7-窗口專用)。 |
 | Python | `C:/Users/YiCheng/stock-lab-release/.venv` | 工作排程器用：依 checkout 的 `backend/requirements.txt` 與 `backend/validation-requirements.lock.txt` 安裝。預設依序為 `-PythonPath`（別名 `-Python`）、`STOCK_PYTHON`、發佈 checkout 的 `.venv`。scheduler 容器用 image 內的依賴，`deploy.sh` 不碰 venv（#340）。 |
 
-首次建立：`git clone` 到發佈 checkout，checkout 要跑的 tag，建 `.venv` 並安裝依賴；以 SQLite backup API 把已初始化的 DB 複製成資料目錄的 `stock.db`（有 WAL 時不裸複製主檔），再於發佈 checkout 註冊工作。daily 開頭只在 DB 的 Alembic revision 不是程式 head 時才跑 `init_db`（含整庫 migration 完整性檢查，多年 DB 上要數分鐘）；已在 head 時直接開始。
+**scheduler 容器**：觸發與命令見 [§6.6](#66-scheduler-容器的排程serve)，部署見 [RELEASE](RELEASE.md#部署)。不經排程執行一次：`STOCK_RELEASE_TAG=<部署的 tag> docker compose -p <正式 project> exec scheduler python -m worker.cli job daily --trigger manual [--date YYYY-MM-DD] [--force]`（`--data-dir` 預設 compose 固定的 `STOCK_DATA_DIR=/data`，`--min-free-memory-gb` 預設 8，`claude` 用 image 的 PATH；news 同上換成 `job news`，另可加 `--skip-news-llm`，`--date` 只標記 run 日期）。停用與恢復見 [§6.4](#64-重跑與回補) 的 `stop scheduler`。
+
+**工作排程器（切換前）**：首次建立：`git clone` 到發佈 checkout，checkout 要跑的 tag，建 `.venv` 並安裝依賴；以 SQLite backup API 把已初始化的 DB 複製成資料目錄的 `stock.db`（有 WAL 時不裸複製主檔），再於發佈 checkout 註冊工作。daily 開頭只在 DB 的 Alembic revision 不是程式 head 時才跑 `init_db`（含整庫 migration 完整性檢查，多年 DB 上要數分鐘）；已在 head 時直接開始。
 
 以下命令在發佈 checkout 執行（`<py>` 為發佈 checkout 的 `.venv\Scripts\python.exe`，`<data>` 為資料目錄）：
 
@@ -245,20 +264,20 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 | `\stock-lab\daily` | 週一至週五台北 18:30，21:30 再跑一次（`-TaipeiTimes` 可改） | `<py 同目錄的 pythonw.exe> -m worker.cli job daily --trigger scheduler --data-dir <data> --log-dir <data>/logs --min-free-memory-gb 2 [--claude-cli <claude.exe>]`（註冊參數 `-DailyMinFreeMemoryGB`、`-ClaudeCli`），單次上限 2.5 小時 |
 | `\stock-lab\news` | 每天每 2 小時（`-IntervalHours`），從下一個整點區間開始 | 同上換成 `job news`、`--min-free-memory-gb 1`、`--claude-cli <claude.exe>`（註冊參數 `-NewsMinFreeMemoryGB`；`-NoNewsLlm` 時改為 `--skip-news-llm`）：先 `news`、再 `news-llm`，兩者合計單次上限 90 分鐘 |
 
-兩個工作都以目前使用者、互動式登入、一般權限執行，不存密碼，使用者登入時才跑；錯過的時段在登入後補跑（StartWhenAvailable）。工作執行 `pythonw.exe`（沒有主控台視窗；venv 沒有時用 `python.exe`），job 再以 `python.exe` 無視窗啟動 worker。單一執行個體與單次上限由 job 保證（[§6.3](#63-日誌與-run-記錄)）；工作排程器另設「前一次未結束不另起」與比 job 上限多 10 分鐘的上限，當第二道防線。主機不在台灣時區時腳本自動換算本機時間。
+工作排程器的兩個工作都以目前使用者、互動式登入、一般權限執行，不存密碼，使用者登入時才跑；錯過的時段在登入後補跑（StartWhenAvailable）。工作執行 `pythonw.exe`（沒有主控台視窗；venv 沒有時用 `python.exe`），job 再以 `python.exe` 無視窗啟動 worker。單一執行個體與單次上限由 job 保證（[§6.3](#63-日誌與-run-記錄)）；工作排程器另設「前一次未結束不另起」與比 job 上限多 10 分鐘的上限，當第二道防線。主機不在台灣時區時腳本自動換算本機時間。
 
 休市日不寫進觸發：週間無交易日時官方來源回 no-data。當日目標第一次兩市都回 no-data（通常是 18:30）記 `non_trading_unconfirmed`，不算完成；21:30 再問一次仍是 no-data 才記 `non_trading_day`，這次有行情就照常跑完。目標日早於今日（手動補跑過去日期）時一次 no-data 即記 `non_trading_day`。三大法人與融資公布時間晚於收盤且不固定，18:30 若因缺這些資料而 collect 為 `partial`，analyze 不會執行，由 21:30 補齊；當日已完成後的 21:30 只記一列 `skipped`（`already_complete`）。
 
-**單一執行個體與起跑前檢查**（job）：同一資料目錄的同種 job 以 `<data>/locks/<job>.lock` 的檔案鎖（`fcntl`）一次只跑一個，鎖由作業系統在 job 結束時釋放，被強制終止也不殘留；拿不到鎖記 `already_running`（daily 只在 DB 已是程式 head 時於 `schedule_runs` 留列；不是 head 時持鎖的 daily 可能正在 migrate，migration 在同一個交易裡先讀數分鐘再寫，期間別的連線寫入一列就會讓它失敗，所以只記日誌與 JSON 結果的 `error`）。拿到鎖後：可用實體記憶體（`/proc/meminfo` 的 `MemAvailable`，不用 WMI，#246）低於 `--min-free-memory-gb`（直接執行時預設 8；註冊時 daily 2、news 1）記 `low_memory`；這個 checkout 有 `index.lock` 或 `MERGE_HEAD` 記 `git_busy`。這些都不執行 worker，等下一次觸發；daily 另在 `schedule_runs` 留一列 `skipped` 與原因，news 只寫日誌。全市場 analyze＋evaluate＋candidates＋indicators 峰值約 0.3 GB（[§6.5](#65-限制)），daily 門檻 2 GB 保留 collect 與其他程式的餘裕；2026-10-18 前註冊的工作仍是 6，要在發佈 checkout 重跑「註冊或更新」才生效。
+**單一執行個體與起跑前檢查**（job）：同一資料目錄的同種 job 以 `<data>/locks/<job>.lock` 的檔案鎖（`fcntl`）一次只跑一個，鎖由作業系統在 job 結束時釋放，被強制終止也不殘留；拿不到鎖記 `already_running`（daily 只在 DB 已是程式 head 時於 `schedule_runs` 留列；不是 head 時持鎖的 daily 可能正在 migrate，migration 在同一個交易裡先讀數分鐘再寫，期間別的連線寫入一列就會讓它失敗，所以只記日誌與 JSON 結果的 `error`）。拿到鎖後：可用實體記憶體（`/proc/meminfo` 的 `MemAvailable`，不用 WMI，#246）低於 `--min-free-memory-gb`（直接執行時預設 8；註冊時 daily 2、news 1）記 `low_memory`；這個 checkout 有 `index.lock` 或 `MERGE_HEAD` 記 `git_busy`（image 不含 `.git`，scheduler 容器裡不會發生）。這些都不執行 worker，等下一次觸發；daily 另在 `schedule_runs` 留一列 `skipped` 與原因，news 只寫日誌。全市場 analyze＋evaluate＋candidates＋indicators 峰值約 0.3 GB（[§6.5](#65-限制)），daily 門檻 2 GB 保留 collect 與其他程式的餘裕；2026-10-18 前註冊的工作仍是 6，要在發佈 checkout 重跑「註冊或更新」才生效。
 
 **執行的版本**（#314、#340）：job 不更新程式，程式是 [`deploy.sh`](RELEASE.md#部署) 部署的 image。版本只有一套：image 的 `STOCK_IMAGE_TAG`（例如 `stock-lab-backend:v1.1.0`）與 `STOCK_GIT_HEAD`（該 tag 的 commit）。job 把兩者寫進日誌（`--- version image=<…> head=<…>`，沒有時 `unknown`），daily 記在 run 列的 `summary_json.runtime`（[§6.3](#63-日誌與-run-記錄)）；job 不執行 git。#314 前註冊的工作仍帶 `--git-pull`，job 照收、不 pull，日誌記一列 `--- --git-pull ignored`；重跑「註冊或更新」後就不再帶。
 
 ### 6.3 日誌與 run 記錄
 
-- **日誌**：`<data>/logs/daily-YYYYMMDD.log`、`<data>/logs/news-YYYYMMDD.log`（台北日期），排程失敗時先看這裡。每次執行追加開始列（含可用記憶體）、版本列 `--- checkout HEAD=<SHA> tag=<tag>`（讀不到時 `unknown`／`none`）、跳過原因（`===== skipped reason=<原因> (…)`，`already_running` 時括號內是鎖檔）、CLI 的 JSON 結果（stdout）、stderr 與結束列 `===== <時間> end exit=<code> seconds=<秒>`（[§6.1](#61-排程看門狗) 的看門狗以此判定 daily 是否完成）。保留 90 天（`--log-retention-days`），只清同名前綴的檔案。job 本身出錯時記 `wrapper error`，工作排程器「上次執行結果」為非 0；job 被強制終止時日誌只有開始列、沒有結束列。
+- **日誌**：`<data>/logs/daily-YYYYMMDD.log`、`<data>/logs/news-YYYYMMDD.log`（台北日期），排程失敗時先看這裡。每次執行追加開始列（含可用記憶體）、版本列 `--- version image=<STOCK_IMAGE_TAG> head=<STOCK_GIT_HEAD>`（沒有時 `unknown`，#340；#340 以前是 `--- checkout HEAD=<SHA> tag=<tag>`）、跳過原因（`===== skipped reason=<原因> (…)`，`already_running` 時括號內是鎖檔）、CLI 的 JSON 結果（stdout）、stderr 與結束列 `===== <時間> end exit=<code> seconds=<秒>`（[§6.1](#61-排程看門狗) 的看門狗以此判定 daily 是否完成）。保留 90 天（`--log-retention-days`），只清同名前綴的檔案。job 本身出錯時記 `wrapper error`，serve 的 `end` 列（`docker logs`）與工作排程器「上次執行結果」為非 0；job 被強制終止時日誌只有開始列、沒有結束列。
   - **單次上限**：daily 2.5 小時；news 90 分鐘，news 與 news-llm 合計（`--time-limit-minutes` 可改）。到時 job 結束 worker 與它啟動的程序（程序群組），記 `--- timeout: killed at the <分> minute limit of the <job> job (exit=1)`（news 段落前加 `news ` 或 `news-llm `），該步驟的碼記 1；news 用完時間時 news-llm 不啟動，記 `--- news-llm timeout: not started …`。job 被強制終止時 worker 也一起結束（以 PR_SET_PDEATHSIG，只保證 worker 本身），所以 run 列的 PID 已不存在，下一次執行立即把它記 abandoned（見下表 `failed`）。
-  - **news 日誌的分段**：`--- news stdout`／`--- news stderr`／`--- news end exit=<碼> seconds=<秒>`，接著 `--- news-llm start claude_cli=<路徑>`、`--- news-llm stdout`／`stderr`、`--- news-llm end exit=<碼> seconds=<秒>`；結束列為 `===== <時間> end exit=<news 的碼> seconds=<秒> news_llm_exit=<碼>`，`news_llm_exit` 另有 `disabled`（`--skip-news-llm`）、`not_run`（起跑前檢查未通過或另一個 news job 持有鎖）、`timeout`（news 用完單次上限，news-llm 未啟動）、`wrapper_error`（job 啟動 news-llm 失敗）。daily 日誌格式與 #313 前的包裝腳本相同，只多了 #314 的版本列。
-- **exit code**：daily 0＝`success`／`skipped`／`non_trading_day`／`non_trading_unconfirmed`，2＝`partial`，1＝`failed`；工作排程器的「上次執行結果」即此值。news 工作的碼是 `worker.cli news` 的碼；`worker.cli news-llm` 的碼（0＝`success`／`skipped`，2＝`partial`，1＝`failed`）只記在日誌的 `news-llm end` 與 `news_llm_exit`，不影響工作的碼。
+  - **news 日誌的分段**：`--- news stdout`／`--- news stderr`／`--- news end exit=<碼> seconds=<秒>`，接著 `--- news-llm start claude_cli=<路徑>`、`--- news-llm stdout`／`stderr`、`--- news-llm end exit=<碼> seconds=<秒>`；結束列為 `===== <時間> end exit=<news 的碼> seconds=<秒> news_llm_exit=<碼>`，`news_llm_exit` 另有 `disabled`（`--skip-news-llm`）、`not_run`（起跑前檢查未通過或另一個 news job 持有鎖）、`timeout`（news 用完單次上限，news-llm 未啟動）、`wrapper_error`（job 啟動 news-llm 失敗）。daily 日誌格式與 #313 前的包裝腳本相同，只多了版本列。
+- **exit code**：daily 0＝`success`／`skipped`／`non_trading_day`／`non_trading_unconfirmed`，2＝`partial`，1＝`failed`；serve 的 `end exit=<碼>` 列與工作排程器的「上次執行結果」即此值。news 工作的碼是 `worker.cli news` 的碼；`worker.cli news-llm` 的碼（0＝`success`／`skipped`，2＝`partial`，1＝`failed`）只記在日誌的 `news-llm end` 與 `news_llm_exit`，不影響工作的碼。
 - **run 記錄**：`schedule_runs` 每次 daily 執行一列（目標日、觸發來源、開始／結束、狀態、錯誤、collect 筆數、摘要），摘要 `summary_json` 每列都有 `runtime`：跑的 image 與 commit（`image`、`head`，見 [§6.2](#62-dailynews-工作的註冊與管理) 執行的版本與 [§6.6](#66-scheduler-容器的排程serve)），這是一列唯一的版本欄位（#340 拿掉 #314 的 `git_tag`／`HEAD`）；`schedule_run_steps` 每步一列（catchup／collect／trading_calendar／analyze／evaluate／candidates／indicators／theme_suggestions／plan_tracking／strategy_levels／candidate_notes 的開始／結束、狀態、錯誤、處理筆數，collect 另連 `ingestion_runs.id`；catchup 的 `details_json` 列出檢查與補抓的日期及各日結果）。查詢：`python -m worker.cli schedule-runs --date YYYY-MM-DD`。news 的結果在 `run_type=news` 的 ingestion run，news-llm 的在 `run_type=news_llm`（`metadata_json` 記每批則數、耗時、模型與 token 用量）。
 
 | run 狀態 | 意義 |
@@ -292,7 +311,7 @@ candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(�
 - **冪等**：collect 對同一 request 已有 `success` 時直接重用、不發請求；重新擷取時，既有日線與籌碼只補空欄，不覆寫已存的非空值，不一致的值保留原值並記在該 collect run metadata 的 `value_conflicts`。只補空欄時該列的 `raw_payload_id`、source、data_as_of、collected_at 不變（仍指向原值的 capture），補了哪些欄位與新 capture 的 raw id 記在 `value_fill_groups`（依表、交易所、日期、欄位、raw id 分組列代號，同一 request 的多次執行累加）。只有 `collect(force=True)` 會覆寫，覆寫時指向新 capture。
 - **回補**：`python -m worker.cli backfill --start-date <起> --end-date <迄> --scope market`。中斷後以相同起訖重跑即從各段 manifest 續做；輸出列出每段 run id、`partial_dates`／`failed_dates`（缺日，不補值）與 `skipped_non_trading_dates`（官方無交易）。回補或更正舊日線後跑 `python -m worker.cli indicators --rebuild` 重算指標。
 - **限流**：`fetch_json` 對同一官方主機保持最小間隔（`www.twse.com.tw` 2.5 秒，其餘官方主機 1 秒），另有 429／5xx／暫時性 307 的有界重試。
-- **不要並行回補**：回補與 daily 都長時間寫 DB，analyze 也依 collect run 決定分析日；回補期間停用 daily 工作（`Disable-ScheduledTask`），完成後再啟用。
+- **不要並行回補**：回補與 daily 都長時間寫 DB，analyze 也依 collect run 決定分析日；回補期間停用 daily：scheduler 容器是 `docker compose -p <正式 project> stop scheduler`（news、看門狗與 monitor 一起停），完成後 `start scheduler`；工作排程器（切換前）是 `Disable-ScheduledTask`，完成後再啟用。
 
 ### 6.5 限制
 
@@ -347,7 +366,7 @@ candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(�
 
 ### 6.8 統籌事件 monitor
 
-`tools/ops/monitor.sh`（Git Bash，不用 LLM）由工作 `\stock-lab\monitor` 常駐執行（[#316](https://github.com/YiCheng0608/stock-lab/issues/316)；使用者同意新增，算在 #1 [6235419623](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6235419623) 之內），替統籌輪詢 GitHub 與排程，統籌怎麼處理佇列見[工作手冊「無人值守運作」](GITHUB_WORKFLOW.md#無人值守運作)。每 60 秒（`--interval`，至少 60）一輪：
+`tools/ops/monitor.sh`（bash，不用 LLM）在 scheduler 容器由 serve 每分鐘跑一輪（`STOCK_MONITOR`，見本節的「scheduler 容器裡的 monitor」；切換前由工作排程器的 `\stock-lab\monitor` 常駐執行）（[#316](https://github.com/YiCheng0608/stock-lab/issues/316)；使用者同意新增，算在 #1 [6235419623](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6235419623) 之內），替統籌輪詢 GitHub 與排程，統籌怎麼處理佇列見[工作手冊「無人值守運作」](GITHUB_WORKFLOW.md#無人值守運作)。每 60 秒（`--interval`，至少 60）一輪：
 
 - **gh**：每輪最多 2 次，`gh pr list`（open PR 的 CI 與 `mergeStateStatus`）與 repo 層級 `issues/comments?since=`（游標存在 `logs/monitor-state.json`，第一輪往回 1 小時）；要在 #1 留言的那一輪以留言取代查留言。約 120 次／小時，帳號的 5000 次／小時由所有 session 共用。每次 gh 與 orca 呼叫最多 120 秒，逾時就當這一項失敗，照常寫心跳，不重試。已知限制：monitor 自己的 Python（`event_queue.py`）與時鐘呼叫沒有逾時，卡住時要等心跳超過 10 分鐘，由下一次排程觸發接手。
 - **其他來源**：`orca worktree list`（task worktree 少於 3 個時記並行名額事件）、daily 每一個 `end` 列、news 的 news 或 news-llm 失敗的 `end` 列（各讀最新兩個日誌檔）、看門狗的 `gh_auth_failed` 列（`watchdog.log`）。
@@ -357,7 +376,7 @@ candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(�
 - **請開統籌**：佇列有事件已 60 分鐘、期間統籌心跳都沒更新時，在 #1 留言「待使用者：請開統籌」，同一心跳只留一則（`stale` 列）；不開 session。
 - **自身狀態**：每輪寫 `logs/monitor-heartbeat.json`、把 daily／news 最新日誌的 `end` 列與 `watchdog.log` 最後一列記進 `logs/monitor-state.json`（`patrol.sh` 印這份，不自己讀日誌，#338），並在 `logs/monitor.log` 記一列（UTC 時間、`poll`、`gh_calls`、新事件與未處理數、喚醒結果）；心跳另記 gh 連續失敗的輪數、從何時起與最後的錯誤（失敗那次呼叫自己的 stderr 最後一行；逾時記 `timeout`；沒有輸出記 `exit <碼>`；`patrol.sh` 也印出）。看門狗在心跳超過 10 分鐘或 gh 連續失敗 10 輪時留言（[§6.1](#61-排程看門狗)）。同時只跑一個（`logs/monitor.lock/`，內容是持有者的 pid、token 與主機名稱；同一主機時 pid 已不在或心跳超過 10 分鐘就視為殘留接手；鎖是別的主機或容器的（另一個 PID namespace，pid 無從判斷）時，心跳超過 3 分鐘才接手，#338）。每輪開頭、在 #1 留言前與寫佇列前都檢查鎖：被接手的舊 monitor 一發現鎖已不是自己的，就記 `lock_lost` 結束，不再呼叫 gh、留言或寫佇列，也不刪新持有者的鎖與工作目錄（各 monitor 的工作目錄是 `monitor.lock/work.<pid>`）。
 
-`--record-only` 只記事件，不喚醒也不留言（gh 照樣讀），用來在註冊前以真的 GitHub 驗證。執行環境：Git Bash、PATH 上有已登入的 `gh`、Orca CLI（排程的 PATH 沒有 orca，註冊時寫入 `orca.exe` 完整路徑）。以下命令在發佈 checkout 執行：
+`--record-only` 只記事件，不喚醒也不留言（gh 照樣讀），用來在註冊前以真的 GitHub 驗證。執行環境：Git Bash、PATH 上有已登入的 `gh`、Orca CLI（排程的 PATH 沒有 orca，註冊時寫入 `orca.exe` 完整路徑）。以下是工作排程器（切換前）的命令，在發佈 checkout 執行：
 
 | 動作 | 命令 |
 | --- | --- |
