@@ -2,6 +2,13 @@
 # Callers set script_dir before sourcing. orca, gh and git are looked up on PATH so the
 # tests can put recording fakes in front of them (backend/tests/test_coordinator_scripts.py).
 export LANG=C.UTF-8 LC_ALL=C.UTF-8
+# Git Bash turns /c/... arguments of native programs (python.exe, orca.exe) into C:/...; a
+# shell that exported MSYS_NO_PATHCONV=1 for `docker -v` (GITHUB_WORKFLOW.md 本機檢查)
+# turns that off, and python then reads /c/Users as C:\c\Users: patrol.sh misread the
+# heartbeat and no wake listener started (#338). No script here passes docker a path
+# (deploy.sh sets it on each docker call). Whoever sources this lib into their own shell
+# must put MSYS_NO_PATHCONV=1 back on each later `docker -v` themselves.
+unset MSYS_NO_PATHCONV
 
 GH_REPO='YiCheng0608/stock-lab'
 ORCA_REPO_KEY='github.com/YiCheng0608/stock-lab'
@@ -35,6 +42,19 @@ cj() { "$python" -X utf8 "$script_dir/coordinator_json.py" "$@"; }
 
 # json_str VALUE: VALUE as a JSON string literal.
 json_str() { printf '%s' "$1" | "$python" -X utf8 -c 'import json,sys; sys.stdout.write(json.dumps(sys.stdin.read(), ensure_ascii=False))'; }
+
+# listener_post PATH: POST to the host's wake listener (wake_listener.py, #338) with the
+# token STOCK_WAKE_TOKEN; prints the answer. Returns 1 without a token, when the listener
+# cannot be reached, or when it answers other than 200. STOCK_WAKE_URL is its /wake URL.
+listener_post() {
+  local base="${STOCK_WAKE_URL:-http://host.docker.internal:47338/wake}" out
+  [ -n "${STOCK_WAKE_TOKEN:-}" ] || { echo "STOCK_WAKE_TOKEN is empty" >&2; return 1; }
+  # The header on stdin, so the token is in no command line.
+  out="$(printf 'Authorization: Bearer %s\n' "$STOCK_WAKE_TOKEN" \
+    | curl -sS -m 60 -X POST -H @- --data '' -w '\n%{http_code}' "${base%/wake}$1")" || return 1
+  printf '%s\n' "${out%$'\n'*}"
+  [ "${out##*$'\n'}" = 200 ]
+}
 
 orca_repo_id() {
   [ -n "${repo_id:-}" ] && return 0

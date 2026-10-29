@@ -30,6 +30,7 @@ import pytest
 
 import worker.job as job
 import worker.serve as serve
+from test_coordinator_scripts import FAKE_GH
 from test_worker_job import (
     FAKE_CLI as JOB_FAKE_CLI,
     FIXTURES,
@@ -77,6 +78,19 @@ main()
 assert SERVE_CLI != JOB_FAKE_CLI
 
 
+# The event monitor and what it sources or runs (#338).
+MONITOR_SCRIPTS = (
+    "monitor.sh",
+    "event_queue.py",
+    "coordinator_lib.sh",
+    "coordinator_json.py",
+    "gh_auth.sh",
+    "orca_wake.sh",
+    "http_wake.sh",
+    "http_orca.sh",
+)
+
+
 class ServeTree(Tree):
     def __init__(self, root: Path) -> None:
         super().__init__(root)
@@ -85,7 +99,7 @@ class ServeTree(Tree):
         (worker / "cli.py").write_text(SERVE_CLI, encoding="utf-8")
         ops = self.project / "tools" / "ops"
         ops.mkdir(parents=True)
-        for name in ("watchdog.sh", "watchdog_helper.py"):
+        for name in MONITOR_SCRIPTS + ("watchdog.sh", "watchdog_helper.py"):
             shutil.copyfile(ROOT / "tools" / "ops" / name, ops / name)
 
     def start_serve(self, *args: str, extra_env=None, **fake) -> subprocess.Popen:
@@ -329,6 +343,83 @@ def test_the_backstop_is_ten_minutes_past_the_job_limit(tmp_path):
         serve_args("--data-dir", str(tmp_path), "--daily-time-limit-minutes", "1")
     )
     assert short.backstop("daily") == 11 * 60
+
+
+def test_the_monitor_polls_every_minute_only_when_switched_on(monkeypatch):
+    assert "monitor" not in serve.triggers(serve_args())
+    friday = datetime(2026, 10, 23, tzinfo=TAIPEI)
+    for mode in ("on", "record-only"):
+        monitor = serve.triggers(serve_args("--monitor", mode))["monitor"]
+        polls = fire_times(monitor, friday, friday + timedelta(days=1))
+        assert polls == [friday + timedelta(minutes=m) for m in range(24 * 60)]
+    # Compose sets STOCK_MONITOR (docker-compose.yml); an empty value is off.
+    monkeypatch.setenv("STOCK_MONITOR", "on")
+    assert serve_args().monitor == "on"
+    monkeypatch.setenv("STOCK_MONITOR", "")
+    assert serve_args().monitor == "off"
+    monkeypatch.setenv("STOCK_MONITOR", "yes")
+    assert "STOCK_MONITOR" in serve.argument_problem(serve_args())
+
+
+def test_the_monitor_command_is_one_poll_of_monitor_sh(tmp_path):
+    data = tmp_path / "data"
+    runner = serve.Serve(serve_args("--data-dir", str(data), "--monitor", "on"))
+    at = runner.now()
+    monitor, environment = runner.command("monitor", at)
+    assert Path(monitor[0]).stem.lower() == "bash"
+    assert monitor[1:] == [
+        str(ROOT / "tools" / "ops" / "monitor.sh"),
+        "--once",
+        "--data-dir",
+        str(data),
+        "--queue-dir",
+        "/coordination",
+        "--python",
+        sys.executable,
+        # Orca is on the Windows host: both go through its wake listener (B3).
+        "--orca",
+        str(ROOT / "tools" / "ops" / "http_orca.sh"),
+        "--waker",
+        str(ROOT / "tools" / "ops" / "http_wake.sh"),
+    ]
+    assert "MONITOR_NOW" not in environment
+    # The watchdog reads the monitor's heartbeat where the monitor writes it.
+    watchdog, _ = runner.command("watchdog", at)
+    assert watchdog[-2:] == ["--monitor-dir", "/coordination"]
+    assert (
+        "--monitor-dir"
+        not in serve.Serve(serve_args("--data-dir", str(data))).command("watchdog", at)[
+            0
+        ]
+    )
+    assert runner.backstop("monitor") == 10 * 60
+    other = serve.Serve(
+        serve_args(
+            "--data-dir",
+            str(data),
+            "--monitor",
+            "record-only",
+            "--monitor-dir",
+            str(tmp_path / "queue"),
+            "--monitor-waker",
+            "/app/tools/ops/orca_wake.sh",
+            "--monitor-orca",
+            "orca",
+            "--now",
+            "2026-10-25T20:01:57",
+        )
+    )
+    at = other.now()
+    monitor, environment = other.command("monitor", at)
+    assert monitor[5:7] == ["--queue-dir", str(tmp_path / "queue")]
+    assert monitor[-5:] == [
+        "--orca",
+        "orca",
+        "--waker",
+        "/app/tools/ops/orca_wake.sh",
+        "--record-only",
+    ]
+    assert environment["MONITOR_NOW"] == str(int(at.timestamp()))
 
 
 @pytest.mark.parametrize(
@@ -627,3 +718,69 @@ def test_a_stopped_serve_ends_its_jobs(serve_tree):
     lock = job.FileLock(job.lock_path(serve_tree.data, "daily"))
     assert lock.acquire()
     lock.release()
+
+
+# The event monitor (#338) ------------------------------------------------------------
+
+
+def test_a_restarted_serve_does_not_wake_again_for_the_events_it_queued(
+    serve_tree, tmp_path
+):
+    """AC-1: serve's monitor job wakes once for an event; the scheduler container
+    restarted (serve stopped and started again) polls the same answers and does not."""
+    fake, bin_dir, queue = tmp_path / "fake", tmp_path / "bin", tmp_path / "queue"
+    for directory in (fake, bin_dir, queue):
+        directory.mkdir()
+    gh = bin_dir / "gh"
+    gh.write_text(FAKE_GH, encoding="utf-8", newline="\n")
+    gh.chmod(0o755)
+    (fake / "gh_pr_list.json").write_text(
+        json.dumps([{"number": 7, "title": "t", "url": "u", "headRefOid": "c" * 40}]),
+        encoding="utf-8",
+    )
+    (queue / "coordinator-heartbeat.json").write_text(
+        json.dumps(
+            {
+                "session_id": "coord",
+                "terminal_handle": "term_coord",
+                "written_at": "2026-10-25T11:55:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+    waker = tmp_path / "waker.sh"
+    waker.write_text(
+        f'printf "%s\\n" "$1" >>"{fake / "woken.log"}"\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    env = {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}", "FAKE_DIR": str(fake)}
+    args = (
+        "--monitor",
+        "on",
+        "--monitor-dir",
+        str(queue),
+        "--monitor-waker",
+        str(waker),
+    )
+    # 20:02 and 20:03 Taipei: no other job fires then.
+    for at in ("2026-10-25T20:01:57", "2026-10-25T20:02:57"):
+        process = serve_tree.start_serve(*args, "--now", at, extra_env=env)
+        out = Output(process)
+        try:
+            end = out.wait_for(r" serve end job=monitor pid=\d+ ")
+        finally:
+            assert stop(process) == 0
+        assert " exit=0 " in end, "\n".join(out.lines)
+    events = [
+        json.loads(line)
+        for line in (queue / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert [e["id"] for e in events if e["type"] == "event"] == ["pr:7"]
+    assert [(e["ok"], e["upto"]) for e in events if e["type"] == "wake"] == [(True, 1)]
+    assert (fake / "woken.log").read_text(encoding="utf-8") == "term_coord\n"
+    log = (queue / "monitor.log").read_text(encoding="utf-8").splitlines()
+    polls = [line.split()[0] for line in log if " poll " in line]
+    # MONITOR_NOW: each poll judged at its trigger time on serve's (injected) clock.
+    assert polls == ["2026-10-25T12:02:00Z", "2026-10-25T12:03:00Z"]
+    assert not (serve_tree.data / "logs" / "events.jsonl").exists()

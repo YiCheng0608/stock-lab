@@ -100,9 +100,9 @@ if [ "$1" = compose ]; then
   case "$sub" in
     version) exit 0 ;;
     build)
-      printf 'build project=%s tag=%s head=%s web=%s api=%s env_file=%s\n' \
+      printf 'build project=%s tag=%s head=%s web=%s api=%s env_file=%s monitor=%s coordination=%s\n' \
         "$COMPOSE_PROJECT_NAME" "$STOCK_RELEASE_TAG" "$STOCK_GIT_HEAD" "${WEB_PORT-}" \
-        "${API_PORT-}" "${STOCK_ENV_FILE-}" >>"$log"
+        "${API_PORT-}" "${STOCK_ENV_FILE-}" "${STOCK_MONITOR-}" "${STOCK_COORDINATION_DIR-}" >>"$log"
       [ -f "$d/build_fails" ] && exit 1
       printf '%s\n' "$COMPOSE_PROJECT_NAME-backend:$STOCK_RELEASE_TAG" \
         "$COMPOSE_PROJECT_NAME-web:$STOCK_RELEASE_TAG" >>"$d/images"
@@ -361,7 +361,10 @@ def test_a_green_tag_is_built_tagged_started_and_recorded(harness):
     assert harness.head() == sha
     # Images of the tag, built from the checked-out tag with its commit.
     calls = harness.calls("docker")
-    assert f"build project={PROJECT} tag=v1 head={sha} web= api= env_file=" in calls
+    assert (
+        f"build project={PROJECT} tag=v1 head={sha} web= api= env_file= monitor= coordination="
+        in calls
+    )
     assert (
         f"{PROJECT}-backend:v1\n{PROJECT}-web:v1\n" in harness.docker_state()["images"]
     )
@@ -469,7 +472,7 @@ def test_inherited_ports_and_env_file_never_reach_compose(harness):
     assert harness.deploy("v1", "--no-comment", extra_env=left).code == 0
     assert any(
         c.startswith("build project=stock-lab tag=v1 ")
-        and c.endswith(" web= api= env_file=")
+        and c.endswith(" web= api= env_file= monitor= coordination=")
         for c in harness.calls("docker")
     )
     options = (
@@ -483,9 +486,21 @@ def test_inherited_ports_and_env_file_never_reach_compose(harness):
     assert harness.deploy("v2", "--no-comment", *options).code == 0
     assert any(
         c.startswith("build project=stock-lab tag=v2 ")
-        and c.endswith(" web=18180 api=18100 env_file=/rehearsal/env")
+        and c.endswith(
+            " web=18180 api=18100 env_file=/rehearsal/env monitor= coordination="
+        )
         for c in harness.calls("docker")
     )
+
+
+def test_inherited_monitor_settings_never_reach_compose(harness):
+    """#338: production's event monitor takes STOCK_MONITOR and STOCK_COORDINATION_DIR from
+    the release checkout's env file only; a shell left with a sandbox's cannot point the
+    production queue elsewhere, or switch the monitor on or off."""
+    left = {"STOCK_MONITOR": "on", "STOCK_COORDINATION_DIR": "C:/sandbox/e2e/logs"}
+    assert harness.deploy("v1", "--no-comment", extra_env=left).code == 0
+    builds = [c for c in harness.calls("docker") if c.startswith("build ")]
+    assert builds and all(c.endswith(" monitor= coordination=") for c in builds), builds
 
 
 def test_redeploying_the_running_tag_still_releases_the_locks(harness):

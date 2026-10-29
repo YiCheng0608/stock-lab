@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import socket
 import stat
 import subprocess
 import sys
@@ -46,9 +47,24 @@ SCRIPTS = (
     "patrol.sh",
     "event_queue.py",
     "monitor.sh",
+    "orca_wake.sh",
+    "http_wake.sh",
+    "http_orca.sh",
+    "wake_listener.py",
+    "wake_listener_start.sh",
+    "gh_auth.sh",
     "compact_hook.sh",
 )
 REPO_ID = "repo-1"
+
+
+def _unused_port() -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+NO_LISTENER_PORT = _unused_port()
 SHA = "a" * 40
 MERGE_SHA = "b" * 40
 # The tip of origin/feat/docker, the Docker integration branch (#332).
@@ -336,6 +352,12 @@ class Harness:
             STOCK_DATA_DIR=self.data.as_posix(),
             STOCK_PYTHON=Path(sys.executable).as_posix(),
             PATROL_NOW=str(NOW),
+            # A port nothing listens on: patrol.sh reports no wake listener, whatever
+            # runs on this machine (test_wake_listener starts its own).
+            WAKE_LISTENER_PORT=str(NO_LISTENER_PORT),
+            # A listener started here talks to the fake orca, never to a real one.
+            STOCK_WAKE_TEST="1",
+            WAKE_LISTENER_ORCA=(self.bin / "orca").as_posix(),
         )
         base.update(env)
         # Git for Windows' bin/bash.exe puts /mingw64/bin (the real git) in front of PATH,
@@ -1913,6 +1935,14 @@ def patrol(h: Harness) -> Harness:
                 "prs": [
                     "PR #290 ci=pending merge=BLOCKED labels=independent-review 統籌操作腳本"
                 ],
+                # The job log lines as the monitor read them (#338): in the container the
+                # logs below are in the volume, and patrol prints these instead.
+                "polled_at": "2026-10-25T11:59:00Z",
+                "jobs": {
+                    "daily": "daily-20261024.log ===== 2026-10-24T13:30:00Z end exit=0",
+                    "news": "沒有日誌",
+                    "watchdog": "2026-10-25T11:45:00Z schedules_ok | 排程無異常",
+                },
             },
             ensure_ascii=False,
         ),
@@ -1958,8 +1988,16 @@ def test_patrol_writes_only_the_heartbeat_and_reads_the_queue(patrol: Harness) -
     assert "PR #290 ci=pending merge=BLOCKED" in out
     assert "未處理事件：3 個（seq 1～3）" in out
     assert "[1] comment #282 2026-10-25T11:30:00Z 提問： 要不要加旗標？" in out
-    assert "daily-20261024.log ===== 2026-10-24T13:30:00Z end exit=0" in out
-    assert "schedules_ok" in out
+    assert (
+        "排程 daily（monitor 2026-10-25T11:59:00Z）：daily-20261024.log"
+        " ===== 2026-10-24T13:30:00Z end exit=0" in out
+    )
+    # From the state, not from news-20261025.log beside it.
+    assert "排程 news（monitor 2026-10-25T11:59:00Z）：沒有日誌" in out
+    assert (
+        "看門狗（monitor 2026-10-25T11:59:00Z）：2026-10-25T11:45:00Z schedules_ok"
+        in out
+    )
     # #316 AC-2: the closing hint points at the queue, not at a monitor the session keeps.
     last = out.strip().splitlines()[-1]
     assert "--done" in last and "監看" not in last
@@ -2441,3 +2479,14 @@ def test_patrol_reads_only_the_latest_run_of_each_check(
     result = _patrol(patrol)
     assert result.returncode == 0, result.stdout + result.stderr
     assert f"PR #285 ci={expected} merge=CLEAN" in result.stdout
+
+
+@pytest.mark.parametrize("handle", ["-x", "--enter", "--terminal=x"])
+def test_patrol_refuses_a_handle_orca_would_read_as_an_option(tmp_path, handle) -> None:
+    """#338 review: the heartbeat's handle is what the wake listener wakes; one starting
+    with "-" never gets there (patrol.sh exits 64 before writing the heartbeat)."""
+    h = Harness(tmp_path)
+    result = h.run("patrol.sh", "--session-id", "coord", "--terminal", handle)
+    assert result.returncode == 64, result.stdout + result.stderr
+    assert "不能以 - 開頭" in result.stderr
+    assert not (h.data / "logs" / "coordinator-heartbeat.json").exists()

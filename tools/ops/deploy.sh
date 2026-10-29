@@ -111,7 +111,9 @@ command -v docker >/dev/null 2>&1 || die "找不到 docker" 2
 dk() { MSYS_NO_PATHCONV=1 docker "$@"; }
 # Only this script's settings reach compose: the project and the file by name, the tag and its
 # commit for the image names and STOCK_GIT_HEAD (docker-compose.yml). sha is set below.
-unset COMPOSE_FILE COMPOSE_PROFILES WEB_PORT API_PORT STOCK_ENV_FILE
+# The scheduler's event monitor settings come from the checkout's env file only too: a shell
+# left with a sandbox's STOCK_COORDINATION_DIR would point production's queue there (#338).
+unset COMPOSE_FILE COMPOSE_PROFILES WEB_PORT API_PORT STOCK_ENV_FILE STOCK_MONITOR STOCK_COORDINATION_DIR
 [ -z "$web_port" ] || export WEB_PORT="$web_port"
 [ -z "$api_port" ] || export API_PORT="$api_port"
 [ -z "$env_file" ] || export STOCK_ENV_FILE="$env_file"

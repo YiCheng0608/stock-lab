@@ -902,6 +902,20 @@ def test_a_stopped_event_monitor_is_commented_once_a_day(wd):
     assert wd.events()[-1] == "anomaly_already_commented"
 
 
+def test_the_watchdog_reads_the_heartbeat_of_the_monitor_dir(wd):
+    """#338: in the scheduler container the monitor's files are in the bind mounted
+    queue directory, not in the data directory's logs."""
+    queue = wd.root / "coordination"
+    queue.mkdir()
+    (queue / "monitor-heartbeat.json").write_text(_beat_at(NIGHT - 601), "utf-8")
+    _monitor_beat(wd, _beat_at(NIGHT - 60))  # a beat left in the data directory
+    result = wd.run("--dry-run")
+    assert "monitor_stale" not in result.stdout
+    result = wd.run("--dry-run", "--monitor-dir", queue.as_posix())
+    assert "anomaly_planned key=monitor_stale" in result.stdout
+    assert f"{queue.as_posix()}/monitor.log" in result.stdout
+
+
 def test_an_unreadable_monitor_heartbeat_is_commented(wd):
     _monitor_beat(wd, '{"written_at": ')
     result = wd.run("--dry-run")

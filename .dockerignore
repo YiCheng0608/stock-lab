@@ -19,5 +19,6 @@ frontend/dist
 frontend/.vite
 data
 .local
+.coordination
 .codebase-memory
 **/*.log

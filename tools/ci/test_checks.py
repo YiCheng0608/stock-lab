@@ -764,7 +764,9 @@ class EnvExample(unittest.TestCase):
             key, sep, value = line.partition("=")
             self.assertEqual((sep, value), ("=", ""), line)
             active[key] = value
-        self.assertEqual(sorted(active), ["CLAUDE_CODE_OAUTH_TOKEN", "GH_TOKEN"])
+        self.assertEqual(
+            sorted(active), ["CLAUDE_CODE_OAUTH_TOKEN", "GH_TOKEN", "STOCK_WAKE_TOKEN"]
+        )
         commented = set(re.findall(r"^# ([A-Z][A-Z0-9_]*)=", text, re.M))
         self.assertLessEqual({"TZ", "STOCK_DATA_DIR"}, commented)
         # Compose fixes TZ and STOCK_DATA_DIR in the containers: comments only.

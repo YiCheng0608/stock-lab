@@ -9,6 +9,14 @@ commands those tasks ran.
 - news: every 2 hours on the hour, ``worker.cli job news --min-free-memory-gb
   1`` (news, then news-llm).
 - watchdog: at :15 and :45, ``tools/ops/watchdog.sh``.
+- monitor: every minute, one poll of the coordinator's event monitor
+  ``tools/ops/monitor.sh --once`` (#338), only with ``--monitor`` (or
+  STOCK_MONITOR) on or record-only. Its queue is the host directory
+  ``--monitor-dir`` (compose bind mounts it at /coordination), where patrol.sh
+  on Windows reads it; the job logs it reads stay in the data directory. It
+  reaches Orca, on the Windows host, through the host's wake listener
+  (tools/ops/wake_listener.py): http_wake.sh wakes, http_orca.sh lists the
+  task worktrees.
 
 Each run is a child process, and the job does what it did under Task
 Scheduler: its lock (one job of a kind at a time), the checks before a run,
@@ -47,7 +55,7 @@ from . import job
 
 ROOT = job.ROOT
 TAIPEI = job.TAIPEI
-JOBS = ("daily", "news", "watchdog")
+JOBS = ("daily", "news", "watchdog", "monitor")
 DAILY_TIMES = "18:30,21:30"
 NEWS_INTERVAL_HOURS = 2
 WATCHDOG_MINUTES = "15,45"
@@ -56,6 +64,11 @@ DAILY_MIN_FREE_MEMORY_GB = 2.0
 NEWS_MIN_FREE_MEMORY_GB = 1.0
 # Register-Watchdog.ps1's limit; daily and news have the job's own.
 WATCHDOG_TIME_LIMIT_MINUTES = 10.0
+# A poll past this is hung: monitor.sh takes a lock over after 10 minutes without a beat.
+MONITOR_TIME_LIMIT_MINUTES = 10.0
+MONITOR_MODES = ("off", "record-only", "on")
+# The host directory compose bind mounts for the queue (docs/OPERATIONS.md §6.8).
+MONITOR_DIR = "/coordination"
 # Past the job's own limit, as Task Scheduler's limit was the job's plus 10 minutes.
 BACKSTOP_MINUTES = 10.0
 # An overlapping trigger still starts its job, which records already_running.
@@ -89,6 +102,27 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--watchdog-dry-run", action="store_true", help="看門狗只判定、不留言"
+    )
+    parser.add_argument(
+        "--monitor",
+        choices=MONITOR_MODES,
+        default=os.environ.get("STOCK_MONITOR") or "off",
+        help="事件 monitor 每分鐘一輪：off（預設，或 STOCK_MONITOR）、record-only、on",
+    )
+    parser.add_argument(
+        "--monitor-dir",
+        default=MONITOR_DIR,
+        help=f"monitor 的佇列目錄（主機 bind mount；預設 {MONITOR_DIR}）",
+    )
+    parser.add_argument(
+        "--monitor-waker",
+        default=str(ROOT / "tools" / "ops" / "http_wake.sh"),
+        help="喚醒統籌的命令（monitor.sh --waker；預設 http_wake.sh，經主機的 wake listener）",
+    )
+    parser.add_argument(
+        "--monitor-orca",
+        default=str(ROOT / "tools" / "ops" / "http_orca.sh"),
+        help="monitor 讀 task worktree 用的 orca（預設 http_orca.sh，經主機的 wake listener；none 不讀）",
     )
     parser.add_argument(
         "--daily-min-free-memory-gb",
@@ -139,6 +173,9 @@ def argument_problem(args: argparse.Namespace) -> str | None:
         _injected(args.now)
     except ValueError as exc:
         return str(exc)
+    # argparse checks the choices of a given --monitor, not of the STOCK_MONITOR default.
+    if args.monitor not in MONITOR_MODES:
+        return f"--monitor (STOCK_MONITOR) must be one of {', '.join(MONITOR_MODES)}"
     if not 1 <= args.news_interval_hours <= 24:
         return "--news-interval-hours must be between 1 and 24"
     for name in ("daily_time_limit_minutes", "news_time_limit_minutes"):
@@ -161,13 +198,17 @@ def triggers(args: argparse.Namespace) -> dict[str, object]:
         CronTrigger(day_of_week="mon-fri", hour=hour, minute=minute, timezone=TAIPEI)
         for hour, minute in _daily_times(args.daily_times)
     ]
-    return {
+    out = {
         "daily": daily[0] if len(daily) == 1 else OrTrigger(daily),
         "news": CronTrigger(
             hour=f"*/{args.news_interval_hours}", minute=0, timezone=TAIPEI
         ),
         "watchdog": CronTrigger(minute=args.watchdog_minutes, timezone=TAIPEI),
     }
+    if args.monitor != "off":
+        # monitor.sh --interval's 60 seconds, one poll per run.
+        out["monitor"] = CronTrigger(minute="*", timezone=TAIPEI)
+    return out
 
 
 def shifted(trigger, offset: timedelta):
@@ -220,6 +261,27 @@ class Serve:
             "PYTHONPATH": str(ROOT / "backend"),
         }
         environment.pop(job.JOB_LOCK_ENV, None)
+        if name == "monitor":
+            argv = [
+                shutil.which("bash") or "/bin/bash",
+                str(ROOT / "tools" / "ops" / "monitor.sh"),
+                "--once",
+                "--data-dir",
+                str(self.data_dir),
+                "--queue-dir",
+                args.monitor_dir,
+                "--python",
+                sys.executable,
+                "--orca",
+                args.monitor_orca,
+                "--waker",
+                args.monitor_waker,
+            ]
+            if args.monitor == "record-only":
+                argv.append("--record-only")
+            if self.offset:
+                environment["MONITOR_NOW"] = str(int(at.timestamp()))
+            return argv, environment
         if name == "watchdog":
             argv = [
                 shutil.which("bash") or "/bin/bash",
@@ -229,6 +291,8 @@ class Serve:
                 "--python",
                 sys.executable,
             ]
+            if args.monitor != "off":
+                argv += ["--monitor-dir", args.monitor_dir]
             if args.watchdog_dry_run:
                 argv.append("--dry-run")
             if self.offset:
@@ -261,6 +325,8 @@ class Serve:
 
         if name == "watchdog":
             return WATCHDOG_TIME_LIMIT_MINUTES * 60
+        if name == "monitor":
+            return MONITOR_TIME_LIMIT_MINUTES * 60
         limit = getattr(self.args, f"{name}_time_limit_minutes")
         minutes = limit or job.TIME_LIMIT_MINUTES[name]
         return (minutes + BACKSTOP_MINUTES) * 60
