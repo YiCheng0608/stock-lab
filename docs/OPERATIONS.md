@@ -328,7 +328,7 @@ candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(�
 | 工作 | 觸發（預設） | 命令 |
 | --- | --- | --- |
 | daily | 週一至週五台北 18:30、21:30（`--daily-times`） | `worker.cli job daily --trigger scheduler --data-dir <data> --log-dir <data>/logs --min-free-memory-gb 2 [--claude-cli <claude>]` |
-| news | 每 2 小時整點（`--news-interval-hours`） | 同上換成 `job news`、`--min-free-memory-gb 1`；`--skip-news-llm` 交給 job |
+| news | 每 2 小時整點（`--news-interval-hours`，1～24 的整數，超出就 exit 2；每台北日從 0 點重新起算，所以不能整除 24 的值如 5 在午夜前的間隔較短，24 是每日 0 點一次，#368） | 同上換成 `job news`、`--min-free-memory-gb 1`；`--skip-news-llm` 交給 job |
 | 看門狗 | 每小時 :15、:45（`--watchdog-minutes`；工作排程器是每 15 分鐘） | `bash tools/ops/watchdog.sh --data-dir <data> --python <serve 的 python>`，`--watchdog-dry-run` 時加 `--dry-run`；monitor 開著時加 `--monitor-dir <monitor 目錄>` |
 | 事件 monitor | 每分鐘，只在 `--monitor`（預設 `STOCK_MONITOR`，沒設為 `off`）是 `on`／`record-only` 時（#338） | `bash tools/ops/monitor.sh --once --data-dir <data> --queue-dir <--monitor-dir，預設 /coordination> --python <serve 的 python> --orca <--monitor-orca> --waker <--monitor-waker>`，`record-only` 時加 `--record-only`；見 [§6.8](#68-統籌事件-monitor) |
 

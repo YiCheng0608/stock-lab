@@ -235,6 +235,44 @@ def test_the_triggers_follow_the_options():
     assert len(fire_times(triggers["watchdog"], *day)) == 24
 
 
+@pytest.mark.parametrize("hours", range(1, serve.NEWS_INTERVAL_MAX_HOURS + 1))
+def test_every_allowed_news_interval_makes_a_job(tmp_path, hours):
+    """#368: 24 used to pass the argument check and then crash on APScheduler's */24."""
+
+    args = serve_args(
+        "--data-dir", str(tmp_path / "data"), "--news-interval-hours", str(hours)
+    )
+    assert serve.argument_problem(args) is None
+    runner = serve.Serve(args)
+    assert {scheduled.id for scheduled in runner.scheduler().get_jobs()} == {
+        "daily",
+        "news",
+        "watchdog",
+    }
+    assert all(moment is not None for moment in runner.next_times().values())
+    friday = datetime(2026, 10, 23, tzinfo=TAIPEI)
+    news = fire_times(serve.triggers(args)["news"], friday, friday + timedelta(days=1))
+    assert [moment.hour for moment in news] == list(range(0, 24, hours))
+    assert {moment.minute for moment in news} == {0}
+
+
+def test_a_news_interval_starts_again_at_midnight_every_day():
+    midnight = datetime(2026, 10, 23, tzinfo=TAIPEI)
+
+    def news(hours: int, days: int) -> list[datetime]:
+        trigger = serve.triggers(serve_args("--news-interval-hours", str(hours)))[
+            "news"
+        ]
+        return fire_times(trigger, midnight, midnight + timedelta(days=days))
+
+    # 5 does not divide the day: the last run of a day is 4 hours before the next.
+    assert [moment.strftime("%d %H") for moment in news(5, 2)] == [
+        f"{day} {hour:02d}" for day in (23, 24) for hour in (0, 5, 10, 15, 20)
+    ]
+    # A whole day is one run, at 0:00.
+    assert news(24, 3) == [midnight + timedelta(days=index) for index in range(3)]
+
+
 def test_an_injected_clock_moves_the_triggers():
     real = datetime(2026, 10, 29, 3, 0, tzinfo=timezone.utc)
     injected = datetime(2026, 10, 19, 18, 29, 50, tzinfo=TAIPEI)
@@ -427,7 +465,18 @@ def test_the_monitor_command_is_one_poll_of_monitor_sh(tmp_path):
     [
         (["--daily-times", "25:00"], "not a time of day"),
         (["--daily-times", "18"], "not HH:MM"),
-        (["--news-interval-hours", "0"], "--news-interval-hours"),
+        (
+            ["--news-interval-hours", "0"],
+            "--news-interval-hours must be between 1 and 24",
+        ),
+        (
+            ["--news-interval-hours", "25"],
+            "--news-interval-hours must be between 1 and 24",
+        ),
+        (
+            ["--news-interval-hours", "-1"],
+            "--news-interval-hours must be between 1 and 24",
+        ),
         (["--daily-time-limit-minutes", "0"], "--daily-time-limit-minutes"),
         (["--news-min-free-memory-gb", "-1"], "--news-min-free-memory-gb"),
         (["--now", "yesterday"], "isoformat"),
@@ -435,6 +484,36 @@ def test_the_monitor_command_is_one_poll_of_monitor_sh(tmp_path):
 )
 def test_bad_arguments_are_refused(argv, message):
     assert message in serve.argument_problem(serve_args(*argv))
+
+
+@pytest.mark.parametrize("hours", ["0", "25"])
+def test_the_cli_refuses_a_news_interval_outside_the_range_with_exit_2(tmp_path, hours):
+    """The real worker.cli: the argument check ends the process before any scheduling."""
+
+    names = ("STOCK_DATA_DIR", "STOCK_DB_PATH", "STOCK_RAW_DIR")
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-X",
+            "utf8",
+            "-m",
+            "worker.cli",
+            "serve",
+            "--data-dir",
+            str(tmp_path / "data"),
+            "--news-interval-hours",
+            hours,
+        ],
+        cwd=ROOT / "backend",
+        env={key: value for key, value in os.environ.items() if key not in names},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=120,
+    )
+    assert completed.returncode == 2, completed.stdout + completed.stderr
+    assert "--news-interval-hours must be between 1 and 24" in completed.stderr
+    assert "serve ready" not in completed.stdout
 
 
 @pytest.mark.parametrize("platform", ["win32", "darwin"])
