@@ -32,6 +32,7 @@ from typing import Any, Callable
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.clock import utcnow
 from app.db import SessionLocal
 from app.models import ChipSnapshot, IngestionRun, Instrument, MarketBar, RawPayload
 from worker.industry_repair import rescore_recent
@@ -555,7 +556,7 @@ def repair_instruments(
     for record, raw_id in plan["chips"]:
         _upsert_official_chip(db, record, instruments, raw_id, overwrite=False)
     db.flush()
-    now = datetime.utcnow()
+    now = utcnow()
     run = IngestionRun(
         run_type=RUN_TYPE,
         source="official",

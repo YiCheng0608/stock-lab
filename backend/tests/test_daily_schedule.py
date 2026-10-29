@@ -10,6 +10,7 @@ import pytest
 from sqlalchemy import create_engine, select, update
 from sqlalchemy.orm import sessionmaker
 
+from app.clock import utcnow
 from app.db import enable_sqlite_foreign_keys
 from app.migrations import upgrade_database
 from app.models import (
@@ -634,7 +635,7 @@ def test_running_rows_block_until_stale_then_are_marked_abandoned(
     database, monkeypatch
 ):
     steps = Steps(monkeypatch)
-    now = datetime.utcnow()
+    now = utcnow()
     with database() as db:
         db.add(
             ScheduleRun(
@@ -1043,7 +1044,7 @@ def test_a_lock_skip_points_at_the_running_row(database, monkeypatch):
             target_date=DAY,
             trigger="scheduler",
             status="running",
-            started_at=datetime.utcnow(),
+            started_at=utcnow(),
             host=socket.gethostname(),
             pid=os.getpid(),
         )
@@ -1107,7 +1108,7 @@ def test_running_row_whose_process_is_gone_is_abandoned_at_once(database, monkey
     steps = Steps(monkeypatch)
     dead = subprocess.Popen([sys.executable, "-c", "pass"])
     dead.wait()
-    now = datetime.utcnow()
+    now = utcnow()
     with database() as db:
         db.add(
             ScheduleRun(
@@ -1158,7 +1159,7 @@ def test_running_row_from_another_host_waits_for_the_time_limit(database, monkey
                 target_date=DAY,
                 trigger="scheduler",
                 status="running",
-                started_at=datetime.utcnow() - timedelta(hours=2),
+                started_at=utcnow() - timedelta(hours=2),
                 host="other-host",
                 pid=1,
             )

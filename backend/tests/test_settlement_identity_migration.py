@@ -11,7 +11,7 @@ from alembic.config import Config
 from sqlalchemy import create_engine, event
 from sqlalchemy.exc import IntegrityError
 
-from app import migrations
+from app import migrations, settlement_identity_migration
 from app.migration_revisions import REVISIONS
 from app.settlement_identity_migration import preflight_settlement_identity
 
@@ -337,10 +337,28 @@ def test_unsupported_refuses_before_ddl(tmp_path, entry, fk, shape):
     engine.dispose()
 
 
+# A sample of REVISIONS (#374): the claimed revision only meets the refusal as
+# `recorded & REVISIONS` in preflight_settlement_identity (the instrument gate returns
+# early on the current instruments table below), and branch coverage of app/, alembic/
+# and worker/ was identical for all 20 revisions (Issue #374). Kept: the first (the one
+# INSTRUMENT_IDENTITY_REVISIONS leaves out), the first it holds, a middle one and the
+# head; test_every_revision_is_a_claim_the_preflight_refuses covers the rest.
+CLAIMED_REVISIONS = (
+    REVISIONS[0],
+    REVISIONS[1],
+    REVISIONS[len(REVISIONS) // 2],
+    REVISIONS[-1],
+)
+
+
+def test_every_revision_is_a_claim_the_preflight_refuses():
+    assert settlement_identity_migration.REVISIONS == set(REVISIONS)
+
+
 @pytest.mark.parametrize("entry", ENTRIES)
 @pytest.mark.parametrize("fk", [0, 1])
 @pytest.mark.parametrize("family", ["alembic_version", "schema_migrations"])
-@pytest.mark.parametrize("revision", REVISIONS)
+@pytest.mark.parametrize("revision", CLAIMED_REVISIONS)
 @pytest.mark.parametrize("state", ["absent", "legacy"])
 def test_false_revision_claims_are_not_salvaged(
     tmp_path, entry, fk, family, revision, state

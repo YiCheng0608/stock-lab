@@ -31,6 +31,7 @@ from typing import Any
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
+from app.clock import utcnow
 from app.domain import STRATEGY_LEVELS_VERSION, RuleEvaluation
 from app.models import (
     CorporateAction,
@@ -220,7 +221,7 @@ def compute_strategy_levels(
 ) -> dict[str, Any]:
     """Write the levels of every analysis signal of ``signal_date`` (caller commits)."""
 
-    stamp = now or datetime.utcnow()
+    stamp = now or utcnow()
     rows = db.execute(
         select(Signal, StrategyVersion, Instrument)
         .join(StrategyVersion, StrategyVersion.id == Signal.strategy_version_id)

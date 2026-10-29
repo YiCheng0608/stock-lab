@@ -16,6 +16,7 @@ from urllib.parse import urlencode, urlsplit
 
 import httpx
 
+from app.clock import utcnow
 from app.config import OFFICIAL_MAX_BACKFILL_DAYS, RAW_DIR
 from app.domain import ETF_CATEGORIES
 from app.trading_calendar import classify
@@ -482,7 +483,7 @@ def persist_raw_payload(
     *,
     collected_at: datetime | None = None,
 ) -> Path:
-    collected = collected_at or datetime.utcnow()
+    collected = collected_at or utcnow()
     encoded = _encode_payload(payload)
     digest = hashlib.sha256(encoded).hexdigest()
     target_dir = RAW_DIR / source / collected.strftime("%Y/%m/%d")
@@ -517,7 +518,7 @@ def capture_payload(
     *,
     collected_at: datetime | None = None,
 ) -> FetchedPayload:
-    collected = collected_at or datetime.utcnow()
+    collected = collected_at or utcnow()
     encoded = _encode_payload(payload)
     digest = hashlib.sha256(encoded).hexdigest()
     path = persist_raw_payload(

@@ -19,13 +19,14 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.clock import utcnow
 from app.db import SessionLocal
 from app.models import (
     GroupDailyScore,
@@ -452,7 +453,7 @@ def repair_industry_memberships(
                 )
             )
     db.flush()
-    now = datetime.utcnow()
+    now = utcnow()
     run = IngestionRun(
         run_type=RUN_TYPE,
         source="official",

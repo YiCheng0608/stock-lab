@@ -37,6 +37,7 @@ from typing import Any, Callable, Sequence
 from sqlalchemy import func, inspect, select
 from sqlalchemy.orm import Session
 
+from app.clock import utcnow
 from app.db import SessionLocal
 from app.models import IngestionRun, NewsItem, NewsLlmResult
 
@@ -388,7 +389,7 @@ def select_items(
 ) -> list[NewsItem]:
     """Unsettled items of the last STALE_AFTER, newest first."""
 
-    cutoff = (now or datetime.utcnow()) - STALE_AFTER
+    cutoff = (now or utcnow()) - STALE_AFTER
     query = (
         _candidates_query(db, on_date)
         .where(_item_time() >= cutoff)
@@ -405,7 +406,7 @@ def select_items(
 def stale_items(
     db: Session, *, on_date: date | None = None, now: datetime | None = None
 ) -> list[NewsItem]:
-    cutoff = (now or datetime.utcnow()) - STALE_AFTER
+    cutoff = (now or utcnow()) - STALE_AFTER
     query = _candidates_query(db, on_date).where(_item_time() < cutoff)
     return list(db.scalars(query).all())
 
@@ -679,7 +680,7 @@ def _run_batch(
     started = time.monotonic()
     result = runner(prompt, argv)
     duration_ms = int((time.monotonic() - started) * 1000)
-    run_at = datetime.utcnow()
+    run_at = utcnow()
     summary: dict[str, Any] = {
         "batch": number,
         "news_ids": [item.id for item in items],
@@ -792,7 +793,7 @@ def _metadata(
 def close_abandoned_runs(db: Session, now: datetime | None = None) -> list[int]:
     """Mark news_llm runs left running past ABANDONED_AFTER as failed."""
 
-    current = now or datetime.utcnow()
+    current = now or utcnow()
     rows = db.scalars(
         select(IngestionRun).where(
             IngestionRun.run_type == "news_llm",
@@ -810,7 +811,7 @@ def close_abandoned_runs(db: Session, now: datetime | None = None) -> list[int]:
 
 
 def _failed_run(db: Session, label_date: date, reason: str) -> IngestionRun:
-    now = datetime.utcnow()
+    now = utcnow()
     run = IngestionRun(
         run_type="news_llm",
         source="claude-cli",
@@ -879,12 +880,12 @@ def run_news_llm(
         run_date=label_date,
         status="running",
         records=0,
-        started_at=datetime.utcnow(),
+        started_at=utcnow(),
         metadata_json={},
     )
     db.add(run)
     db.commit()
-    stale_at = datetime.utcnow()
+    stale_at = utcnow()
     for item in stale:
         _store_status(
             db,
@@ -923,7 +924,7 @@ def run_news_llm(
                     error,
                     run=run,
                     raw_payload_id=None,
-                    run_at=datetime.utcnow(),
+                    run_at=utcnow(),
                 )
             outcome = {
                 "batch": number,
@@ -964,11 +965,11 @@ def run_news_llm(
     run.status = status
     run.records = sum(len(item["news_ids"]) for item in done) - rejected
     run.error = "; ".join(errors) or None
-    run.data_as_of = datetime.utcnow().isoformat()
+    run.data_as_of = utcnow().isoformat()
     run.metadata_json = _metadata(
         template, limit, base["date_filter"], results, skipped, len(stale)
     )
-    run.finished_at = datetime.utcnow()
+    run.finished_at = utcnow()
     db.commit()
     return {
         **base,

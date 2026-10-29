@@ -19,6 +19,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
+from .clock import utcnow
 from .db import Base
 
 
@@ -46,7 +47,7 @@ class Instrument(Base):
     listing_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     is_watchlisted: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(20), default="active")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class ThemeGroup(Base):
@@ -117,7 +118,7 @@ class MarketBar(Base):
     turnover_reason: Mapped[str | None] = mapped_column(String(40), nullable=True)
     source: Mapped[str] = mapped_column(String(120), default="unknown")
     data_as_of: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    collected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    collected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     raw_payload_id: Mapped[int | None] = mapped_column(
         ForeignKey("raw_payloads.id"), nullable=True, index=True
     )
@@ -146,7 +147,7 @@ class ChipSnapshot(Base):
     day_trade_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
     source: Mapped[str] = mapped_column(String(120), default="unknown")
     data_as_of: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    collected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    collected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     raw_payload_id: Mapped[int | None] = mapped_column(
         ForeignKey("raw_payloads.id"), nullable=True, index=True
     )
@@ -188,7 +189,7 @@ class MarketSummary(Base):
     source: Mapped[str] = mapped_column(String(120))
     data_as_of: Mapped[str | None] = mapped_column(String(80), nullable=True)
     # The capture time of the raw payload the values came from.
-    collected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    collected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     raw_payload_id: Mapped[int | None] = mapped_column(
         ForeignKey("raw_payloads.id"), nullable=True, index=True
     )
@@ -237,7 +238,7 @@ class TechnicalFeature(Base):
     trading_date: Mapped[date] = mapped_column(Date, index=True)
     features_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     source: Mapped[str] = mapped_column(String(120), default="derived")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class TechnicalIndicator(Base):
@@ -281,7 +282,7 @@ class TechnicalIndicator(Base):
     vol_ma20: Mapped[float | None] = mapped_column(Float, nullable=True)
     null_reasons: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
     source: Mapped[str] = mapped_column(String(120), default="derived:market_bars")
-    computed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    computed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class GroupDailyScore(Base):
@@ -345,7 +346,7 @@ class GroupDailyScoreArchive(Base):
     details_json: Mapped[dict[str, Any]] = mapped_column(JSON)
     hot_group_version: Mapped[str] = mapped_column(String(30))
     archive_reason: Mapped[str] = mapped_column(String(80))
-    archived_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    archived_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class StrategyVersion(Base):
@@ -372,7 +373,7 @@ class StrategyVersion(Base):
         JSON, default=dict
     )
     active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class Signal(Base):
@@ -405,7 +406,7 @@ class Signal(Base):
         String(30), default="complete", server_default="complete"
     )
     rule_evidence_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class SignalEvaluation(Base):
@@ -488,7 +489,7 @@ class PortfolioPosition(Base):
     stop_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     risk_budget: Mapped[float | None] = mapped_column(Float, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class IngestionRun(Base):
@@ -506,10 +507,10 @@ class IngestionRun(Base):
     )
     data_as_of: Mapped[str | None] = mapped_column(String(80), nullable=True)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utcnow, onupdate=utcnow
     )
 
 
@@ -525,7 +526,7 @@ class RawPayload(Base):
     payload_path: Mapped[str | None] = mapped_column(String(800), nullable=True)
     sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     data_as_of: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    collected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    collected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class CorporateAction(Base):
@@ -554,7 +555,7 @@ class CorporateAction(Base):
         ForeignKey("raw_payloads.id"), nullable=True, index=True
     )
     data_as_of: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    collected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    collected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class FundamentalSnapshot(Base):
@@ -580,7 +581,7 @@ class FundamentalSnapshot(Base):
         ForeignKey("raw_payloads.id"), nullable=True, index=True
     )
     data_as_of: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    collected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    collected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class Event(Base):
@@ -611,7 +612,7 @@ class Event(Base):
         ForeignKey("raw_payloads.id"), nullable=True, index=True
     )
     data_as_of: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    collected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    collected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class NewsItem(Base):
@@ -673,9 +674,7 @@ class NewsItem(Base):
     display_time: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True, index=True
     )
-    collected_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, index=True
-    )
+    collected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     symbols_json: Mapped[list[str]] = mapped_column(
         JSON, default=list, server_default="[]"
     )
@@ -727,7 +726,7 @@ class DataQuality(Base):
     missing_fields_json: Mapped[list[str]] = mapped_column(JSON, default=list)
     checks_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     source: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    checked_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    checked_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class ScheduleRun(Base):
@@ -745,7 +744,7 @@ class ScheduleRun(Base):
     target_date: Mapped[date] = mapped_column(Date, index=True)
     trigger: Mapped[str] = mapped_column(String(30), default="manual")
     status: Mapped[str] = mapped_column(String(30), default="running", index=True)
-    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     records: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -801,7 +800,7 @@ class NewsLlmResult(Base):
     prompt_version: Mapped[str] = mapped_column(String(40))
     llm_model: Mapped[str | None] = mapped_column(String(80), nullable=True)
     llm_input_hash: Mapped[str] = mapped_column(String(64))
-    llm_run_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    llm_run_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     llm_status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
     llm_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -848,7 +847,7 @@ class CandidateRun(Base):
     exclusions_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     config_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     summary_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    computed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    computed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class DailyCandidate(Base):
@@ -880,7 +879,7 @@ class DailyCandidate(Base):
     reasons_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     groups_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     data_as_of: Mapped[date] = mapped_column(Date)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class CandidateLlmNote(Base):
@@ -909,7 +908,7 @@ class CandidateLlmNote(Base):
     prompt_version: Mapped[str] = mapped_column(String(40))
     llm_model: Mapped[str | None] = mapped_column(String(80), nullable=True)
     llm_input_hash: Mapped[str] = mapped_column(String(64))
-    llm_run_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    llm_run_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     llm_status: Mapped[str] = mapped_column(String(20), default="pending")
     llm_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_selection: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -951,7 +950,7 @@ class ThemeSuggestion(Base):
     last_news_date: Mapped[date] = mapped_column(Date, index=True)
     matched_group_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="pending_verification")
-    computed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    computed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class ThemeSuggestionNews(Base):
@@ -1032,8 +1031,8 @@ class TrackingPlan(Base):
     result_comparable: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     incomparable_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     data_quality: Mapped[str] = mapped_column(String(30), default="complete")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
@@ -1102,4 +1101,4 @@ class StrategyLevel(Base):
     conditions_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     missing_inputs_json: Mapped[list[str]] = mapped_column(JSON, default=list)
     price_basis: Mapped[str] = mapped_column(String(40))
-    computed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    computed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
