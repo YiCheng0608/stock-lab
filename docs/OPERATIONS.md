@@ -381,4 +381,11 @@ candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(�
 | 同上 | `coordinator-heartbeat.json`、`events-done.jsonl`、`compactions/`、`handoff-*.json` | 主機上的 `patrol.sh`、`compact_hook.sh` 與統籌 |
 | volume `stock-data` 的 `/data/logs` | daily、news、看門狗的日誌 | 各 job |
 
-正式 scheduler 的 `STOCK_COORDINATION_DIR` 是統籌的資料目錄的 `logs/`（`C:/Users/YiCheng/stock-lab-data/logs`），所以 `patrol.sh`、`compact_hook.sh` 與[工作手冊](GITHUB_WORKFLOW.md#無人值守運作)的路徑都不變，每個檔仍只有一個寫入者；job 日誌在 volume 裡，`patrol.sh` 印的是 monitor 寫進 `monitor-state.json` 的最後一列。看門狗以 `--monitor-dir /coordination` 讀 monitor 的心跳。容器內的 `--monitor-orca`、`--monitor-waker` 預設 `none`：不讀 task worktree、不喚醒（`wake=deferred`），事件、去重、心跳與 #1 的「請開統籌」照常。停止：`monitor.stop` 對每分鐘一輪的 monitor 沒有作用，改把 `STOCK_MONITOR` 設成 `off` 後 `docker compose up -d scheduler`。
+compose 的預設佇列目錄是 checkout 內的 `.coordination/`，任務 worktree 以 `--profile scheduler` 起的 scheduler 不會寫進正式佇列，也不會跟正式 monitor 搶鎖。正式 scheduler（發佈 checkout）要設兩個值，放在跑 compose 的 shell 或發佈 checkout 根目錄的 `.env`（compose 以它展開變數，[§1.2](#12-docker-compose)）：
+
+| 變數 | 正式值 |
+| --- | --- |
+| `STOCK_MONITOR` | `on`（只記事件、不喚醒也不留言時用 `record-only`） |
+| `STOCK_COORDINATION_DIR` | 統籌的資料目錄的 `logs/`：`C:/Users/YiCheng/stock-lab-data/logs` |
+
+所以 `patrol.sh`、`compact_hook.sh` 與[工作手冊](GITHUB_WORKFLOW.md#無人值守運作)的路徑都不變，每個檔仍只有一個寫入者；job 日誌在 volume 裡，`patrol.sh` 印的是 monitor 寫進 `monitor-state.json` 的最後一列。看門狗以 `--monitor-dir /coordination` 讀 monitor 的心跳。容器內的 `--monitor-orca`、`--monitor-waker` 預設 `none`：不讀 task worktree、不喚醒（`wake=deferred`），事件、去重、心跳與 #1 的「請開統籌」照常。停止：`monitor.stop` 對每分鐘一輪的 monitor 沒有作用，改把 `STOCK_MONITOR` 設成 `off` 後 `docker compose up -d scheduler`。
