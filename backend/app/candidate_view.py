@@ -4,6 +4,7 @@ Only reads ``candidate_runs`` / ``daily_candidates`` written by
 ``worker.candidates`` and the ``candidate_llm_notes`` written by
 ``worker.candidate_notes``; nothing is scored or generated at request time.
 Each item's ``market`` is the stored close of its trading date (#276).
+``open_plan_id`` is the candidate signal's user tracking plan, if any.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from .models import (
     MarketBar,
     Signal,
 )
+from .tracking_plans import open_plan_for_signal
 
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 20
@@ -163,7 +165,9 @@ def candidate_item(
     news_config = (
         (run.config_json or {}).get("components", {}).get("news_sentiment", {})
     )
+    plan = open_plan_for_signal(db, row.signal_id)
     return {
+        "candidate_id": row.id,
         "rank": row.rank,
         "trading_date": row.trading_date.isoformat(),
         "score_version": row.score_version,
@@ -177,6 +181,7 @@ def candidate_item(
         "strategy": row.strategy,
         "signal_id": row.signal_id,
         "signal_status": signal.status,
+        "open_plan_id": plan.id if plan else None,
         "levels": _levels(signal),
         "total_score": row.total_score,
         "weight_coverage": row.weight_coverage,

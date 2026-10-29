@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 from app.domain import PLAN_OPEN_STATUSES, validate_plan_status_transition
 from app.models import MarketBar, TrackingPlan, TrackingPlanSession
 from app.tracking import AMBIGUOUS_REASON, TrackPath, settle, track_path
+from app.tracking_plans import claim_plan
 from worker import pipeline
 
 TRANSITION_CONFLICT = "transition_conflict"
@@ -200,7 +201,10 @@ def track_plan(
 ) -> tuple[str | None, int]:
     """Update one open plan with the bars up to ``cutoff``.
 
-    Returns ``(transition or None, session rows written)``.
+    Returns ``(transition or None, session rows written)``.  Nothing is
+    written when the stored plan is no longer the one read (a cancel from
+    the API committed meanwhile, #253): ``claim_plan`` checks that and holds
+    the write lock until the caller commits.
     """
 
     bars, tracked = pipeline._tracking_inputs(
@@ -209,6 +213,8 @@ def track_plan(
     path = track_path(pipeline.track_levels(plan), tracked)
     outcome = plan_outcome(path, bars, plan.window_sessions, market_limit_reached)
     previous = plan.status
+    if not claim_plan(db, plan):
+        return None, 0
     if not validate_plan_status_transition(previous, outcome["status"]).valid:
         conflict = {
             "data_quality": TRANSITION_CONFLICT,

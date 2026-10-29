@@ -1,9 +1,10 @@
 import type { ReactElement } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom/server'
 
 import * as AppModule from './App'
-import { CandidateCard, CandidatesSection } from './candidates/CandidateViews'
+import { CandidatesSection, ScoreDetails } from './candidates/CandidateViews'
 import { completeItem, longList } from './candidates/candidates.fixtures'
 import * as ui from './components/ui'
 import { StockBarsChart } from './stock/StockBarsChart'
@@ -24,8 +25,9 @@ const path = require('node:path') as { join(...parts: string[]): string; relativ
 const failures: string[] = []
 let checks = 0
 const check = (condition: boolean, message: string) => { checks++; if (!condition) failures.push(message) }
+// The candidates' "加入追蹤" button (#253) reads the query client.
 const render = (name: string, element: () => ReactElement): string => {
-  try { return renderToStaticMarkup(<StaticRouter location="/">{element()}</StaticRouter>) } catch (error) {
+  try { return renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}><StaticRouter location="/">{element()}</StaticRouter></QueryClientProvider>) } catch (error) {
     failures.push(`${name}: render failed (${error instanceof Error ? error.message.split('\n')[0] : String(error)})`)
     return ''
   }
@@ -171,8 +173,7 @@ checkAligned('族群成員', members, ['收盤', '漲跌幅', '成交值', '5 �
 check(bodyText(members).includes('21.10') && bodyText(members).includes('2,510.00'), '族群成員: closes keep two decimals')
 check(['+0.48', '-0.40', '1.20', '450.00', '+1.00', '-10.00', '+0.20', '+3.00'].every((value) => bodyText(members).includes(value)), `族群成員: percent and 億元 keep two decimals, got ${bodyText(members).join('|')}`)
 
-const card = render('CandidateCard', () => <CandidateCard item={completeItem()} detailsOpen />)
-const details = /<details class="details candidate-details"[\s\S]*?<\/details>/.exec(card)?.[0] ?? ''
+const details = render('ScoreDetails', () => <ScoreDetails item={completeItem()} open />)
 checkAligned('個股頁候選評分細節', details, ['原值', '百分位', '子項權重'])
 const detailHeaders = (/<thead>([\s\S]*?)<\/thead>/.exec(details)?.[1] ?? '').match(/<th[\s>]/g) ?? []
 check(detailHeaders.length <= 4, `個股頁候選評分細節: ${detailHeaders.length} columns in a card; the group title belongs on its own row (§5.1)`)

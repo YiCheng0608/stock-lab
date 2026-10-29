@@ -26,7 +26,7 @@ from sqlalchemy import create_engine
 
 import app.models  # noqa: F401  (registers every table on Base.metadata)
 from app.db import Base
-from app.domain import CANDIDATE_SCORE_VERSION
+from app.domain import CANDIDATE_SCORE_VERSION, PLAN_OPEN_STATUSES
 
 ROOT = Path(__file__).resolve().parents[2]
 OPS = ROOT / "tools" / "ops"
@@ -305,6 +305,7 @@ def test_db_facts_candidates_use_the_current_score_version(tmp_path: Path) -> No
 
     # db_facts.py runs on the stdlib-only tool Python and keeps its own copy.
     assert _db_facts().CANDIDATE_SCORE_VERSION == CANDIDATE_SCORE_VERSION
+    assert set(_db_facts().PLAN_OPEN_STATUSES) == PLAN_OPEN_STATUSES
 
 
 # The 2026-10-27 #306 copy: four candidate_score_v1 runs, none of the current version.
@@ -345,6 +346,8 @@ def test_db_facts_without_a_current_version_run_gives_null(
         "news_latest_published_at": None,
         "news_llm_done": None,
         "theme_suggestions": None,
+        "tracking_plans_open": None,
+        "tracking_plans_closed": None,
         "portfolio_positions": 0,
         "alembic_version": "0020_trading_calendar",
         "market_summary_latest": None,
@@ -377,6 +380,8 @@ def test_db_facts_every_query_on_an_empty_table(tmp_path: Path) -> None:
         "news_latest_published_at": None,
         "news_llm_done": 0,
         "theme_suggestions": 0,
+        "tracking_plans_open": 0,
+        "tracking_plans_closed": 0,
         "portfolio_positions": 0,
         "alembic_version": None,
     }
