@@ -377,6 +377,12 @@ describe('.env rules', () => {
     'git commit -m "allow docker compose config -q, block docker inspect"',
     '(docker compose config -q)',
     "out=$(docker inspect --format '{{.State.Status}}' t360-api-1)",
+    // A process substitution or a PowerShell assignment without spaces, of a command that prints
+    // no environment (#372).
+    'diff <(docker compose config -q) <(docker compose config --services)',
+    "$out=$(docker inspect --format '{{.State.Status}}' t360-api-1)",
+    '$env:X=$(docker compose config -q)',
+    'git commit -m "diff <(docker compose config) <(docker compose -f b.yml config) later"',
   ];
   const DOCKER_BLOCKED = [
     'docker compose config',
@@ -432,6 +438,17 @@ describe('.env rules', () => {
     'x=`docker inspect t360-api-1`',
     '(docker compose run --rm api env)',
     'echo "$(docker exec t360-api-1 printenv)"',
+    // A process substitution, and a PowerShell assignment without spaces (#372, PR #370 review).
+    'diff <(docker compose config) <(docker compose -f b.yml config)',
+    'cat <(docker inspect t360-api-1)',
+    'cat >(docker compose config)',
+    'cat < <(docker compose run --rm api env)',
+    '$out=$(docker compose config)',
+    '$out=(docker inspect t360-api-1)',
+    '$out=@(docker exec t360-api-1 printenv)',
+    '$env:X=$(docker compose config)',
+    '$out+=$(docker compose config)',
+    `pwsh -c '$out=$(docker compose config)'`,
   ];
 
   for (const shell of ['bash', 'powershell']) {
@@ -481,6 +498,16 @@ describe('.env rules', () => {
     'echo "$(docker compose down -v)"',
     'x=`docker compose down -v`',
     '(cd ../stock-lab-release && docker compose down -v)',
+    // A process substitution, and a PowerShell assignment without spaces (#372, PR #370 review).
+    'cat <(docker compose down -v)',
+    'cat >(docker compose -p stock-lab down --volumes)',
+    'cat < <(docker compose down -v)',
+    '$out=$(docker compose down -v)',
+    '$out=(docker compose down -v)',
+    '$out=@(docker compose -p stock-lab down --volumes)',
+    '$env:X=$(docker compose down -v)',
+    '$out+=$(docker compose down -v)',
+    `pwsh -c '$out=(docker compose down -v)'`,
   ];
   const DOWN_ALLOWED = [
     'docker compose down',
@@ -500,6 +527,12 @@ describe('.env rules', () => {
     '(docker compose -p task-341 down --volumes --rmi all)',
     'out=$(docker compose -p t341 down -v)',
     '(docker compose down)',
+    'cat <(docker compose -p task-372 down -v)',
+    'cat >(docker compose -p t372 down --volumes)',
+    '$out=$(docker compose -p task-372 down -v)',
+    '$out=(docker compose -p t372 down --volumes)',
+    '$env:X=$(docker compose -p deploy-smoke-372 down -v)',
+    '$out=$(docker compose down)',
   ];
 
   for (const shell of ['bash', 'powershell']) {
