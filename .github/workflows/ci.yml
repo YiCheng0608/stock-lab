@@ -229,13 +229,15 @@ jobs:
   # images, then in both topologies (nginx web; Vite web calling the api) checks health, writes
   # sent as a browser sends them (2xx) and from a foreign Origin (403), the ports the entrypoint
   # refuses, the api's restart, the scheduler's serve, and that the env file reaches the api and
-  # the scheduler while both still start without one.
+  # the scheduler while both still start without one. tools/compose/deploy_smoke.sh then deploys
+  # two tags with tools/ops/deploy.sh (#340): the services run the tagged images, a deploy
+  # refused while a job holds a lock changes no image, container or volume.
   compose:
     name: compose
     needs: changes
     if: needs.changes.outputs.python == 'true' || needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 40
     # shell: bash runs with -o pipefail, so a failing script piped to tee fails its step.
     defaults:
       run:
@@ -247,6 +249,8 @@ jobs:
       - run: docker compose version
       - name: smoke
         run: bash tools/compose/smoke.sh | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: deploy
+        run: bash tools/compose/deploy_smoke.sh | tee -a "$GITHUB_STEP_SUMMARY"
 
   # The five main pages end to end on the fixture database (tools/verify/page_checks.py, #243):
   # API and vite preview on local ports, Chrome screenshots, every features check labeled CI.

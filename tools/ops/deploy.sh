@@ -1,57 +1,77 @@
 #!/usr/bin/env bash
-# Deploy a tag to the release checkout (Issue #314; docs/RELEASE.md). The scheduled jobs
-# run whatever the release checkout has checked out and never pull, so this is the one
-# way a new version reaches them. Run it from another checkout (the master management
-# checkout): checking out the tag rewrites the files of the checkout it deploys to.
+# Deploy a tag as images (Issue #340, after #314; docs/RELEASE.md): build the backend and web
+# images of the tag, tag them with its name, `docker compose up -d` them, record what runs and
+# comment on #1. The scheduled jobs run in the scheduler container on the image, so this is the
+# one way a new version reaches them. The release checkout is the compose project directory:
+# the tag is checked out there (the build context and the compose file are the tag's) and the
+# env file (.env, never in Git) stays there. Run it from another checkout (the master
+# management checkout): checking out the tag rewrites the files of the release checkout.
 #
-# Refuses, changing nothing in the checkout, when:
-#   - the checkout has uncommitted changes (untracked files count) or a git operation
-#     in progress (index.lock, MERGE_HEAD);
+# Refuses, leaving the checkout, the images, the containers and the volumes as they were, when:
+#   - the checkout has uncommitted changes (untracked files count, ignored ones do not) or a
+#     git operation in progress (index.lock, MERGE_HEAD);
 #   - origin has no such tag;
 #   - the latest CI run of the tag's own commit (`gh run list --commit`, highest run id)
 #     is not success; the commit need not be on master (a release/v1 commit has its own CI);
-#   - a scheduled job is running: the daily, news and watchdog locks of the data
-#     directory (backend/worker/job.py) are taken for the whole checkout, so no job
-#     starts until it is done, and a held one refuses the deploy;
-#   - the tag predates #314 (no tools/ops/deploy.sh in it): its job pulls before every
-#     run and would record git_pull_failed on the detached HEAD.
-# Then: fetch the tag, `git checkout` it (detached HEAD), reinstall the venv when
-# backend/requirements.txt or backend/validation-requirements.lock.txt changed (or
-# with --reinstall), read HEAD back, write <data>/logs/deploy.json (tag, HEAD, previous
-# HEAD, time, operator; the watchdog compares the checkout's HEAD with it) and comment
-# the tag and HEAD on #1. Whether a deploy is authorised is not checked here: deploying
-# is the user's decision (docs/GITHUB_WORKFLOW.md 無人值守運作).
+#   - a job is running: the daily, news and watchdog locks of the data volume
+#     (backend/worker/job.py) are taken inside a running container of the project that mounts
+#     it, the scheduler, else the api or a one-off `compose run` of either (a job run by hand),
+#     with `worker.job lock --keep-stdin`, held until this script closes its stdin or dies, and
+#     kept until the new containers are up, so no job starts meanwhile; a held one refuses the
+#     deploy. With none of them running no job can hold a lock, and none is taken. A scheduler
+#     of an image before #340 does not know --keep-stdin: exit 2, stop it first;
+#   - the tag predates #340: its docker-compose.yml does not tag the images with
+#     STOCK_RELEASE_TAG, so what runs could not be told from the image.
+# Then: fetch the tag, `git checkout` it (detached HEAD), `docker compose build` with
+# STOCK_RELEASE_TAG=<tag> and STOCK_GIT_HEAD=<its commit> (images <project>-backend:<tag> and
+# <project>-web:<tag>), write /data/logs/deploy.json in the volume (tag, HEAD, images, the
+# image the scheduler ran before, time, operator; the watchdog compares the scheduler's image
+# with it), `docker compose up -d --no-build --wait`, read back that each service runs its
+# tagged image and that the new scheduler's own check (watchdog_helper.py deploy-image) is
+# ok, release the locks and comment on #1. Whether a deploy is authorised is not checked
+# here: deploying is the user's decision (docs/GITHUB_WORKFLOW.md 無人值守運作).
 #
 # Usage: deploy.sh <tag> [options]
-#   --checkout DIR    the release checkout; default $STOCK_RELEASE_DIR, then $HOME/stock-lab-release
-#   --data-dir DIR    default $STOCK_DATA_DIR, then $HOME/stock-lab-data
-#   --operator NAME   who deploys, for deploy.json and #1; default git config user.name
-#   --reinstall       reinstall the venv even when the lock files did not change
-#   --no-comment      no comment on #1 (a rehearsal on a throwaway checkout)
-#   --python EXE      Python for the locks; default $STOCK_PYTHON, then this checkout's .venv, then python3
-# Prints one JSON line. Exit 0 deployed; 1 refused (the checkout is unchanged); 3 a step
-# failed after the checkout started (no deploy.json is written, so the watchdog reports
-# the mismatch; fix the cause and run again, with --reinstall after a failed venv
-# install); 4 deployed but the #1 comment failed; 2/64 bad setup or arguments; 69 the
-# locks were refused because worker.job runs on Linux only (#333; the checkout is unchanged).
+#   --checkout DIR      the release checkout; default $STOCK_RELEASE_DIR, then $HOME/stock-lab-release
+#   --project NAME      the compose project; default $STOCK_COMPOSE_PROJECT, then stock-lab
+#                       (COMPOSE_PROJECT_NAME is ignored: a task session sets it to task-<issue>)
+#   --operator NAME     who deploys, for the record and #1; default git config user.name
+#   --wait-timeout SEC  for `compose up --wait`; default 300
+#   --web-port N, --api-port N, --env-file PATH
+#                       WEB_PORT, API_PORT and STOCK_ENV_FILE for compose (docs/OPERATIONS.md
+#                       §1.2). The caller's own are dropped, so a shell left with a smoke
+#                       test's cannot move production: without these options compose takes
+#                       them from the checkout's .env, then its defaults
+#   --no-comment        no comment on #1 (a rehearsal on a throwaway checkout and project)
+#   --python EXE        Python for the JSON; default $STOCK_PYTHON, then this checkout's .venv, then python3
+# Prints one JSON line. Exit 0 deployed; 1 refused (nothing changed); 3 a step failed after the
+# checkout started: before the record (build) the containers still run the previous images and
+# the record is the previous one; after it (up, read-back) the watchdog reports the mismatch;
+# fix the cause and run again with the same tag; 4 deployed but the #1 comment failed; 2/64 bad
+# setup or arguments.
 set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
 
-arguments=("$@")
-tag="" checkout="${STOCK_RELEASE_DIR:-$HOME/stock-lab-release}" operator="" reinstall=0 comment=1
+tag="" checkout="${STOCK_RELEASE_DIR:-$HOME/stock-lab-release}" project="${STOCK_COMPOSE_PROJECT:-stock-lab}"
+operator="" wait_timeout=300 comment=1 web_port="" api_port="" env_file=""
+# Seconds to wait for the lock holder to answer (tests shorten it).
+lock_wait="${DEPLOY_LOCK_WAIT:-120}"
 while [ $# -gt 0 ]; do
   case "$1" in
     -h | --help) awk 'NR > 1 && !/^#/ { exit } NR > 1' "${BASH_SOURCE[0]}"; exit 0 ;;
-    --reinstall) reinstall=1 ;;
     --no-comment) comment=0 ;;
-    --checkout | --data-dir | --operator | --python)
+    --checkout | --project | --operator | --wait-timeout | --python | --web-port | --api-port | --env-file)
       [ $# -ge 2 ] && [ -n "$2" ] || die "$1 needs a value" 64
       case "$1" in
         --checkout) checkout="$2" ;;
-        --data-dir) data_dir="$2" ;;
+        --project) project="$2" ;;
         --operator) operator="$2" ;;
+        --wait-timeout) wait_timeout="$2" ;;
         --python) python="$2" ;;
+        --web-port) web_port="$2" ;;
+        --api-port) api_port="$2" ;;
+        --env-file) env_file="$2" ;;
       esac
       shift 2
       continue
@@ -63,6 +83,14 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$tag" ] || die "usage: deploy.sh <tag> [options]" 64
 git check-ref-format "refs/tags/$tag" || die "不是合法的 tag 名稱：$tag" 64
+# The tag is also the images' tag: [A-Za-z0-9_][A-Za-z0-9_.-]{0,127}.
+[[ "$tag" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] || die "tag $tag 不能當 image tag" 64
+[[ "$project" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || die "不是合法的 compose project 名稱：$project" 64
+[[ "$wait_timeout" =~ ^[1-9][0-9]*$ ]] || die "--wait-timeout 要是正整數秒：$wait_timeout" 64
+for port in "$web_port" "$api_port"; do
+  [ -z "$port" ] || [[ "$port" =~ ^[1-9][0-9]{0,4}$ ]] || die "不是埠號：$port" 64
+done
+[[ "$lock_wait" =~ ^[1-9][0-9]*$ ]] || die "DEPLOY_LOCK_WAIT 要是正整數秒：$lock_wait" 64
 find_python
 
 refuse() {
@@ -76,9 +104,22 @@ fail() {
 
 checkout="$(cd "$checkout" 2>/dev/null && pwd)" || die "發佈 checkout 不存在：$checkout" 2
 git -C "$checkout" rev-parse --git-dir >/dev/null 2>&1 || die "不是 git checkout：$checkout" 2
-mkdir -p "$data_dir/logs" || die "無法建立 $data_dir/logs" 2
-data_dir="$(cd "$data_dir" && pwd)"
-record="$data_dir/logs/deploy.json"
+checkout_native="$(native "$checkout")" || die "發佈 checkout 不是本機的絕對路徑：$checkout" 2
+command -v docker >/dev/null 2>&1 || die "找不到 docker" 2
+
+# docker gets its own paths (/data/...) as written: Git Bash would turn them into C:/...
+dk() { MSYS_NO_PATHCONV=1 docker "$@"; }
+# Only this script's settings reach compose: the project and the file by name, the tag and its
+# commit for the image names and STOCK_GIT_HEAD (docker-compose.yml). sha is set below.
+unset COMPOSE_FILE COMPOSE_PROFILES WEB_PORT API_PORT STOCK_ENV_FILE
+[ -z "$web_port" ] || export WEB_PORT="$web_port"
+[ -z "$api_port" ] || export API_PORT="$api_port"
+[ -z "$env_file" ] || export STOCK_ENV_FILE="$env_file"
+compose() {
+  COMPOSE_PROJECT_NAME="$project" STOCK_RELEASE_TAG="$tag" STOCK_GIT_HEAD="$sha" \
+    dk compose -p "$project" -f "$checkout_native/docker-compose.yml" "$@"
+}
+dk compose version >/dev/null 2>&1 || die "docker compose 無法執行（Docker Desktop 沒有開？）" 2
 
 # clean: no uncommitted change and no git operation in progress in the checkout.
 clean() {
@@ -91,64 +132,72 @@ clean() {
   [ -z "$(printf '%s' "$status" | tr -d '\r')" ] || refuse "發佈 checkout 有未 commit 的改動：$checkout"
 }
 
-if [ -z "${DEPLOY_LOCKS_HELD:-}" ]; then
-  within "$script_dir" "$checkout" && refuse "這支腳本在發佈 checkout 裡；請從另一個 checkout（master 管理 checkout）執行"
-  clean
-  refs="$(git -C "$checkout" ls-remote --tags origin "refs/tags/$tag" "refs/tags/$tag^{}")" \
-    || refuse "git ls-remote origin 失敗"
-  refs="$(printf '%s\n' "$refs" | tr -d '\r')"
-  # An annotated tag's commit is on its peeled ^{} line; a lightweight tag has only one.
-  sha="$(printf '%s\n' "$refs" | awk -v r="refs/tags/$tag^{}" '$2 == r { print $1 }')"
-  [ -n "$sha" ] || sha="$(printf '%s\n' "$refs" | awk -v r="refs/tags/$tag" '$2 == r { print $1 }')"
-  [ -n "$sha" ] || refuse "origin 沒有 tag $tag"
-  out="$(gh run list --repo "$GH_REPO" --commit "$sha" --workflow CI --limit 20 \
-    --json databaseId,headSha,status,conclusion)" || refuse "gh run list 失敗"
-  ci="$(printf '%s' "$out" | cj commit-ci "$sha")"
-  [ "$ci" = success ] || refuse "tag $tag 的 commit ${sha:0:9} 最新一次 CI 是 $ci，不是 success"
+within "$script_dir" "$checkout" && refuse "這支腳本在發佈 checkout 裡；請從另一個 checkout（master 管理 checkout）執行"
+clean
+refs="$(git -C "$checkout" ls-remote --tags origin "refs/tags/$tag" "refs/tags/$tag^{}")" \
+  || refuse "git ls-remote origin 失敗"
+refs="$(printf '%s\n' "$refs" | tr -d '\r')"
+# An annotated tag's commit is on its peeled ^{} line; a lightweight tag has only one.
+sha="$(printf '%s\n' "$refs" | awk -v r="refs/tags/$tag^{}" '$2 == r { print $1 }')"
+[ -n "$sha" ] || sha="$(printf '%s\n' "$refs" | awk -v r="refs/tags/$tag" '$2 == r { print $1 }')"
+[ -n "$sha" ] || refuse "origin 沒有 tag $tag"
+out="$(gh run list --repo "$GH_REPO" --commit "$sha" --workflow CI --limit 20 \
+  --json databaseId,headSha,status,conclusion)" || refuse "gh run list 失敗"
+ci="$(printf '%s' "$out" | cj commit-ci "$sha")"
+[ "$ci" = success ] || refuse "tag $tag 的 commit ${sha:0:9} 最新一次 CI 是 $ci，不是 success"
 
-  # The job locks, held for the rest of the deploy: Python takes each and runs the
-  # next as its child, the innermost runs this script again (DEPLOY_LOCKS_HELD).
-  locks="$data_dir/locks"
-  (cd "$repo_root/backend" && DEPLOY_LOCKS_HELD=1 DEPLOY_SHA="$sha" exec \
-    "$python" -X utf8 -m worker.job lock "$locks/daily.lock" -- \
-    "$python" -X utf8 -m worker.job lock "$locks/news.lock" -- \
-    "$python" -X utf8 -m worker.job lock "$locks/watchdog.lock" -- \
-    "$BASH" "$script_dir/deploy.sh" "${arguments[@]}")
-  status=$?
-  [ "$status" = 75 ] && refuse "排程執行中（$locks 的 daily、news 或 watchdog 鎖被持有）"
-  [ "$status" = 0 ] || exit "$status"
-
-  head="$(cj get HEAD <"$record")" && previous="$(cj get previous_HEAD <"$record")" \
-    && who="$(cj get operator <"$record")" && when="$(cj get deployed_at <"$record")" \
-    && venv="$(cj get venv_reinstalled <"$record")" || fail "讀不到剛寫入的 $record"
-  commented=false
-  if [ "$comment" = 1 ]; then
-    body="$(mktemp)"
-    trap 'rm -f "$body"' EXIT
-    cat >"$body" <<EOF
-部署：發佈 checkout 切到 tag \`$tag\`
-
-- HEAD：\`$head\`（前一版 \`$previous\`）
-- 操作者：$who；時間：$when（UTC）
-- venv 重裝：$venv
-
-（\`tools/ops/deploy.sh\` 自動留言；部署記錄 \`$record\`，看門狗以它核對發佈 checkout 的 HEAD。）
-EOF
-    if ! gh issue comment 1 --repo "$GH_REPO" --body-file "$body" >/dev/null; then
-      printf '{"deployed": true, "tag": %s, "HEAD": "%s", "commented": false}\n' "$(json_str "$tag")" "$head"
-      die "已部署 $tag（$head），但 #1 留言失敗；請手動補記" 4
+# --- the job locks, in a running container that mounts the volume ---------------------
+# The project's running api and scheduler containers, one-off `compose run` ones included
+# (the label is the service's); the scheduler's first. web mounts no volume.
+containers="$(dk ps --filter "label=com.docker.compose.project=$project" --filter status=running \
+  --format '{{.ID}} {{.Label "com.docker.compose.service"}}')" || die "docker ps 失敗" 2
+containers="${containers//$'\r'/}"
+scheduler="$(printf '%s\n' "$containers" | awk '$2 == "scheduler" { print $1; exit }')"
+holder="$scheduler"
+[ -n "$holder" ] || holder="$(printf '%s\n' "$containers" | awk '$2 == "api" { print $1; exit }')"
+locks=none previous=""
+if [ -n "$holder" ]; then
+  # Each lock runs the next as its child; the innermost says so and reads stdin until this
+  # script closes it, or dies, which releases all three.
+  hold=()
+  for name in daily news watchdog; do
+    hold+=(python -X utf8 -m worker.job lock --keep-stdin "/data/locks/$name.lock" --)
+  done
+  hold+=(sh -c 'echo held; exec cat >/dev/null')
+  # exec: the coprocess is docker itself, so a kill reaches it.
+  coproc LOCKS { MSYS_NO_PATHCONV=1 exec docker exec -i "$holder" "${hold[@]}"; }
+  lock_pid=$LOCKS_PID
+  # Copies, as bash drops LOCKS when the coprocess ends; the originals closed, so closing
+  # lock_in is the end of its stdin.
+  exec {lock_out}<&"${LOCKS[0]}" {lock_in}>&"${LOCKS[1]}"
+  eval "exec ${LOCKS[0]}<&- ${LOCKS[1]}>&-"
+  line=""
+  IFS= read -r -t "$lock_wait" line <&"$lock_out"
+  answered=$?
+  if [ "${line%$'\r'}" != held ]; then
+    exec {lock_in}>&-
+    if [ "$answered" -gt 128 ]; then
+      # No answer at all: not waited for any longer than this.
+      kill "$lock_pid" 2>/dev/null
+      wait "$lock_pid" 2>/dev/null
+      die "容器 ${holder:0:12} 在 $lock_wait 秒內沒有回應排程鎖" 2
     fi
-    commented=true
+    wait "$lock_pid"
+    code=$?
+    [ "$code" = 75 ] && refuse "排程執行中（容器 ${holder:0:12} 的 daily、news 或 watchdog 鎖被持有）"
+    [ "$code" = 2 ] && die "容器 ${holder:0:12} 的 worker.job 不認得 --keep-stdin（image 早於 #340）：先以 docker compose -p $project stop 停掉它再部署" 2
+    die "在容器 ${holder:0:12} 拿不到排程鎖（exit $code）" 2
   fi
-  printf '{"deployed": true, "tag": %s, "HEAD": "%s", "previous_HEAD": "%s", "venv_reinstalled": %s, "commented": %s, "record": %s}\n' \
-    "$(json_str "$tag")" "$head" "$previous" "$venv" "$commented" "$(json_str "$record")"
-  exit 0
+  locks=held
+fi
+if [ -n "$scheduler" ]; then
+  previous="$(dk inspect -f '{{.Config.Image}}' "$scheduler")" \
+    || die "讀不到 scheduler 容器 ${scheduler:0:12} 的 image" 2
+  previous="${previous//$'\r'/}"
 fi
 
-# --- holding the locks: the checkout itself ------------------------------------------
-sha="${DEPLOY_SHA:?}"
+# --- holding the locks: the checkout and the images -----------------------------------
 clean
-previous="$(git -C "$checkout" rev-parse --verify HEAD)" || refuse "讀不到發佈 checkout 的 HEAD"
 # A refusal after the fetch deletes the tag ref the fetch created, so a refused deploy
 # leaves the checkout's tags as they were; a tag that was already there stays.
 had_tag=0
@@ -162,44 +211,90 @@ git -C "$checkout" fetch --quiet --no-tags origin "refs/tags/$tag:refs/tags/$tag
   || refuse "git fetch 不到 tag $tag（本機已有同名但指向別處的 tag 時也會失敗）"
 [ "$(git -C "$checkout" rev-parse --verify --quiet "refs/tags/$tag^{commit}")" = "$sha" ] \
   || refuse_fetched "fetch 到的 tag $tag 不是 CI 核對過的 ${sha:0:9}"
-git -C "$checkout" cat-file -e "$sha:tools/ops/deploy.sh" 2>/dev/null \
-  || refuse_fetched "tag $tag 早於 #314：它的 job 起跑前會 git pull，在 detached HEAD 上會記 git_pull_failed"
-venv_reinstalled=false
-lock_files=(backend/requirements.txt backend/validation-requirements.lock.txt)
-git -C "$checkout" diff --quiet "$previous" "$sha" -- "${lock_files[@]}" || reinstall=1
+git -C "$checkout" show "$sha:docker-compose.yml" 2>/dev/null | grep -q 'STOCK_RELEASE_TAG' \
+  || refuse_fetched "tag $tag 早於 #340：它的 docker-compose.yml 不以 STOCK_RELEASE_TAG 為 image 打 tag，部署後無法核對跑的版本"
 
 git -C "$checkout" -c advice.detachedHead=false checkout --quiet "refs/tags/$tag" \
   || fail "git checkout $tag 失敗"
 [ "$(git -C "$checkout" rev-parse --verify HEAD)" = "$sha" ] || fail "checkout 後 HEAD 不是 ${sha:0:9}"
-if [ "$reinstall" = 1 ]; then
-  venv_python=""
-  for c in "$checkout/.venv/Scripts/python.exe" "$checkout/.venv/bin/python"; do
-    [ -f "$c" ] && venv_python="$c" && break
-  done
-  [ -n "$venv_python" ] || fail "依賴有變但找不到 $checkout/.venv；建好 venv 後以 --reinstall 再跑"
-  "$venv_python" -m pip install --disable-pip-version-check -r "$checkout/${lock_files[0]}" \
-    -c "$checkout/${lock_files[1]}" >&2 || fail "venv 重裝失敗；修好後以 --reinstall 再跑"
-  venv_reinstalled=true
-fi
+backend="$project-backend:$tag" web="$project-web:$tag"
+compose build >&2 || fail "docker compose build 失敗；容器仍跑前一版，修好後以同一個 tag 再跑"
+dk image inspect "$backend" "$web" >/dev/null || fail "build 後找不到 $backend 或 $web"
 
 [ -n "$operator" ] || operator="$(git -C "$repo_root" config user.name)" || operator="${USERNAME:-${USER:-unknown}}"
-"$python" -X utf8 - "$record" "$tag" "$sha" "$previous" "$operator" "$checkout" "$venv_reinstalled" <<'PY' \
-  || fail "寫不了 $record"
-import json, os, sys
-from datetime import datetime, timezone
+deployed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+record="$("$python" -X utf8 - "$tag" "$sha" "$backend" "$web" "$previous" "$deployed_at" \
+  "$operator" "$project" "$checkout_native" <<'PY'
+import json, sys
 
-path, tag, head, previous, operator, checkout, venv = sys.argv[1:]
+tag, head, image, web, previous, deployed_at, operator, project, checkout = sys.argv[1:]
+sys.stdout.reconfigure(newline="\n")
 record = {
     "tag": tag,
     "HEAD": head,
-    "previous_HEAD": previous,
-    "deployed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "image": image,
+    "web_image": web,
+    "previous_image": previous or None,
+    "deployed_at": deployed_at,
     "operator": operator,
+    "project": project,
     "checkout": checkout,
-    "venv_reinstalled": venv == "true",
 }
-with open(path + ".tmp", "w", encoding="utf-8", newline="\n") as handle:
-    json.dump(record, handle, ensure_ascii=False, indent=2)
-    handle.write("\n")
-os.replace(path + ".tmp", path)
+print(json.dumps(record, ensure_ascii=False, indent=2))
 PY
+)" || fail "組不出部署記錄"
+# In a container of the new image: the volume is not on the host. The old watchdog cannot read
+# it halfway (its lock is held); moved in whole.
+printf '%s\n' "$record" | compose run --rm --no-deps -T --entrypoint sh scheduler -c \
+  'mkdir -p /data/logs && cat >/data/logs/deploy.json.tmp && mv /data/logs/deploy.json.tmp /data/logs/deploy.json' >&2 \
+  || fail "寫不了 volume 裡的 /data/logs/deploy.json；容器仍跑前一版"
+
+compose up -d --no-build --wait --wait-timeout "$wait_timeout" >&2 \
+  || fail "docker compose up 失敗；部署記錄已是 $tag，看門狗會回報 scheduler 的 image 不符；修好後以同一個 tag 再跑"
+running="$(compose ps --format '{{.Service}} {{.Image}}')" || fail "docker compose ps 失敗"
+running="${running//$'\r'/}"
+for expected in "api $backend" "scheduler $backend" "web $web"; do
+  printf '%s\n' "$running" | grep -qxF "$expected" \
+    || fail "${expected%% *} 跑的不是 ${expected#* }：$(printf '%s' "$running" | tr '\n' ';')"
+done
+check="$(compose exec -T scheduler python -X utf8 /app/tools/ops/watchdog_helper.py deploy-image \
+  /data/logs/deploy.json </dev/null)" || fail "讀不回新 scheduler 的版本核對"
+check="${check//$'\r'/}"
+case "$check" in
+  "deploy_image ok "*) ;;
+  *) fail "新 scheduler 的版本核對不是 ok：$check" ;;
+esac
+if [ "$locks" = held ]; then
+  # The old scheduler took its exec along when up replaced it; a scheduler up kept as it was
+  # (the same image) still holds them until now.
+  exec {lock_in}>&-
+  wait "$lock_pid" 2>/dev/null
+fi
+
+commented=false
+if [ "$comment" = 1 ]; then
+  body="$(mktemp)"
+  trap 'rm -f "$body"' EXIT
+  before="無（scheduler 沒有在執行）"
+  [ -n "$previous" ] && before="\`$previous\`"
+  cat >"$body" <<EOF
+部署：tag \`$tag\` 的 image 已以 \`docker compose up -d\` 啟動
+
+- HEAD：\`$sha\`
+- image：\`$backend\`（api、scheduler）、\`$web\`（web）；前一版 $before
+- compose project：\`$project\`；發佈 checkout：\`$checkout_native\`
+- 操作者：$operator；時間：$deployed_at（UTC）
+
+（\`tools/ops/deploy.sh\` 自動留言；部署記錄在 volume 的 \`/data/logs/deploy.json\`，看門狗以它核對 scheduler 跑的 image。）
+EOF
+  if ! gh issue comment 1 --repo "$GH_REPO" --body-file "$body" >/dev/null; then
+    printf '{"deployed": true, "tag": %s, "HEAD": "%s", "image": %s, "commented": false}\n' \
+      "$(json_str "$tag")" "$sha" "$(json_str "$backend")"
+    die "已部署 $tag（$sha），但 #1 留言失敗；請手動補記" 4
+  fi
+  commented=true
+fi
+printf '{"deployed": true, "tag": %s, "HEAD": "%s", "image": %s, "web_image": %s, "previous_image": %s, "locks": "%s", "commented": %s}\n' \
+  "$(json_str "$tag")" "$sha" "$(json_str "$backend")" "$(json_str "$web")" \
+  "$([ -n "$previous" ] && json_str "$previous" || echo null)" "$locks" "$commented"
+exit 0

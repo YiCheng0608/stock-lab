@@ -34,10 +34,11 @@ unless ``force`` is set.  Data idempotency itself is owned by the steps:
 collect reuses a successful run for the same request and never rewrites a
 stored value.
 
-Every row records what ran in ``summary_json["runtime"]`` (#336): the image tag
-(``STOCK_IMAGE_TAG``), the checkout's HEAD (``STOCK_GIT_HEAD``, else
-``git rev-parse HEAD``) and, when the scheduled job (worker.job) holds its
-daily lock, that lock's path.  A ``running`` row started under the lock the
+Every row records what ran in ``summary_json["runtime"]`` (#336), the one
+place a row names its version (#340): the image tag (``STOCK_IMAGE_TAG``,
+e.g. ``stock-lab-backend:v1.1.0`` as tools/ops/deploy.sh builds it), the
+commit (``STOCK_GIT_HEAD``, else ``git rev-parse HEAD`` outside an image) and,
+when the scheduled job (worker.job) holds its daily lock, that lock's path.  A ``running`` row started under the lock the
 current run holds now has lost its process, whatever host or PID it names: a
 restarted container has a new hostname and may hand out the same PIDs again.
 """
@@ -493,12 +494,6 @@ def _finish(
         db.commit()
 
 
-def checkout_fields(git_head: str | None, git_tag: str | None) -> dict[str, Any]:
-    """The deployed version the scheduled job ran (#314); None when not known."""
-
-    return {"git_tag": git_tag, "HEAD": git_head}
-
-
 def _pid_alive(pid: int) -> bool:
     """Whether a process with this id exists on this host."""
 
@@ -575,7 +570,7 @@ def _abandoned_reason(
 
 
 def _start_run(
-    target: date, trigger: str, force: bool, checkout: dict[str, Any]
+    target: date, trigger: str, force: bool
 ) -> tuple[int, dict[str, Any] | None]:
     """Create the run row; return a finished result when nothing should run."""
 
@@ -627,7 +622,6 @@ def _start_run(
                 "runtime": current,
                 "reason": skip_reason,
                 "related_run_id": related,
-                **checkout,
             }
         db.commit()
         if skip_reason:
@@ -646,8 +640,6 @@ def record_preflight_skip(
     *,
     reason: str,
     trigger: str = "scheduler",
-    git_head: str | None = None,
-    git_tag: str | None = None,
 ) -> dict[str, Any]:
     """Log a run the scheduled job declined to start; no step runs.
 
@@ -664,10 +656,9 @@ def record_preflight_skip(
     if reason not in PREFLIGHT_SKIP_REASONS | {LOCK_SKIP_REASON}:
         raise ValueError(f"unknown preflight skip reason: {reason}")
     target = pipeline.latest_weekday(end_date)
-    checkout = checkout_fields(git_head, git_tag)
     if reason != LOCK_SKIP_REASON:
         _ensure_schema()
-        return _insert_skip(target, reason, trigger, checkout)
+        return _insert_skip(target, reason, trigger)
     unwritten = {
         "status": "skipped",
         "reason": reason,
@@ -682,7 +673,7 @@ def record_preflight_skip(
                 "error": f"skip row not written: database at {revisions}, code head"
                 f" {REVISIONS[-1]}; the daily holding the lock migrates it",
             }
-        return _insert_skip(target, reason, trigger, checkout)
+        return _insert_skip(target, reason, trigger)
     except SQLAlchemyError as exc:
         return {
             **unwritten,
@@ -690,9 +681,7 @@ def record_preflight_skip(
         }
 
 
-def _insert_skip(
-    target: date, reason: str, trigger: str, checkout: dict[str, Any]
-) -> dict[str, Any]:
+def _insert_skip(target: date, reason: str, trigger: str) -> dict[str, Any]:
     now = _utcnow()
     with pipeline.SessionLocal() as db:
         summary: dict[str, Any] = {"reason": reason}
@@ -714,7 +703,7 @@ def _insert_skip(
             status="skipped",
             started_at=now,
             finished_at=now,
-            summary_json={"runtime": runtime(), **summary, **checkout},
+            summary_json={"runtime": runtime(), **summary},
         )
         db.add(run)
         db.commit()
@@ -733,13 +722,10 @@ def run_daily_job(
     trigger: str = "manual",
     force: bool = False,
     catchup_sessions: int = CATCHUP_SESSIONS,
-    git_head: str | None = None,
-    git_tag: str | None = None,
 ) -> dict[str, Any]:
     _ensure_schema()
     target = pipeline.latest_weekday(end_date)
-    checkout = checkout_fields(git_head, git_tag)
-    run_id, finished = _start_run(target, trigger, force, checkout)
+    run_id, finished = _start_run(target, trigger, force)
     if finished is not None:
         return finished
 
@@ -812,7 +798,7 @@ def run_daily_job(
             status,
             records=int(collected.get("records", 0) or 0),
             error=error,
-            summary=_summary(summary_steps, collected, checkout, reason=reason),
+            summary=_summary(summary_steps, collected, reason=reason),
         )
         output["status"] = status
         return output
@@ -852,7 +838,7 @@ def run_daily_job(
         status,
         records=int(collected.get("records", 0) or 0),
         error=error,
-        summary=_summary(statuses, collected, checkout),
+        summary=_summary(statuses, collected),
     )
     output["status"] = status
     return output
@@ -861,11 +847,10 @@ def run_daily_job(
 def _summary(
     steps: dict[str, str],
     collected: dict[str, Any],
-    checkout: dict[str, Any],
     *,
     reason: str | None = None,
 ) -> dict[str, Any]:
-    summary: dict[str, Any] = {"steps": steps, **checkout}
+    summary: dict[str, Any] = {"steps": steps}
     if reason:
         summary["reason"] = reason
     # Non-core source warnings do not change the status; keep them visible.
