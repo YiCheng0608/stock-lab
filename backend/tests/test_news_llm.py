@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.api import get_db, router
+from app.clock import utcnow
 from app.db import Base, enable_sqlite_foreign_keys
 from app.models import IngestionRun, Instrument, NewsItem, NewsLlmResult, RawPayload
 from worker import news_llm
@@ -993,7 +994,7 @@ def test_cli_exits_1_and_names_the_reason_when_claude_is_missing(
 def test_run_left_running_by_a_killed_task_is_closed_by_the_next_run(
     db, fake, monkeypatch
 ):
-    now = datetime.utcnow()
+    now = utcnow()
     killed = IngestionRun(
         run_type="news_llm",
         source="claude-cli",

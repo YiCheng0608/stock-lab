@@ -48,6 +48,7 @@ from typing import Any, Callable
 from sqlalchemy import desc, inspect, select, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.clock import utcnow
 from app.migration_revisions import REVISIONS
 from app.models import IngestionRun, ScheduleRun, ScheduleRunStep
 from worker import pipeline, theme_suggestions
@@ -125,10 +126,6 @@ STRATEGY_LEVELS_MODULE = "worker.strategy_levels"
 STRATEGY_LEVELS_FUNCTION = "run_strategy_levels"
 TRADING_CALENDAR_MODULE = "worker.trading_calendar"
 TRADING_CALENDAR_FUNCTION = "run_trading_calendar"
-
-
-def _utcnow() -> datetime:
-    return datetime.utcnow()
 
 
 def _today() -> date:
@@ -417,7 +414,7 @@ def _record_step(
             db.add(row)
         row.status = status
         row.started_at = started_at
-        row.finished_at = _utcnow() if status != "running" else None
+        row.finished_at = utcnow() if status != "running" else None
         row.records = records
         row.error = error
         row.ingestion_run_id = ingestion_run_id
@@ -431,7 +428,7 @@ def _run_step(
     sequence: int,
     action: Callable[[], dict[str, Any]],
 ) -> dict[str, Any]:
-    started = _utcnow()
+    started = utcnow()
     _record_step(run_id, step, sequence, status="running", started_at=started)
     try:
         result = action()
@@ -472,7 +469,7 @@ def _finish(
         run.status = status
         run.records = records
         run.error = error
-        run.finished_at = _utcnow()
+        run.finished_at = utcnow()
         run.summary_json = summary
         db.commit()
 
@@ -520,7 +517,7 @@ def _start_run(
 ) -> tuple[int, dict[str, Any] | None]:
     """Create the run row; return a finished result when nothing should run."""
 
-    now = _utcnow()
+    now = utcnow()
     host = socket.gethostname()
     with pipeline.SessionLocal() as db:
         previous = db.scalars(
@@ -561,7 +558,7 @@ def _start_run(
             skip_reason, related = "already_complete", complete.id
         if skip_reason:
             run.status = "skipped"
-            run.finished_at = _utcnow()
+            run.finished_at = utcnow()
             run.summary_json = {"reason": skip_reason, "related_run_id": related}
         db.commit()
         if skip_reason:
@@ -619,7 +616,7 @@ def record_preflight_skip(
 
 
 def _insert_skip(target: date, reason: str, trigger: str) -> dict[str, Any]:
-    now = _utcnow()
+    now = utcnow()
     with pipeline.SessionLocal() as db:
         summary: dict[str, Any] = {"reason": reason}
         if reason == LOCK_SKIP_REASON:

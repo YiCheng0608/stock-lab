@@ -31,6 +31,7 @@ from typing import Any
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
+from app.clock import utcnow
 from app.config import MIN_GROUP_MEMBERS
 from app.domain import (
     CANDIDATE_SCORE,
@@ -713,7 +714,7 @@ def compute_daily_candidates(
         exclusions_json=dict(sorted(exclusions.items())),
         config_json=config,
         summary_json=summary,
-        computed_at=datetime.utcnow(),
+        computed_at=utcnow(),
     )
     db.add(run)
     db.flush()

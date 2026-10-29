@@ -14,6 +14,7 @@ from typing import Any, Callable, Iterable, Mapping
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
+from app.clock import utcnow
 from app.config import (
     MAX_GROUP_CANDIDATES,
     MIN_GROUP_CANDIDATES,
@@ -911,7 +912,7 @@ def archive_group_score(db: Session, score: GroupDailyScore, reason: str) -> Non
             details_json=copy.deepcopy(score.details_json),
             hot_group_version=version,
             archive_reason=reason,
-            archived_at=datetime.utcnow(),
+            archived_at=utcnow(),
         )
     )
 
@@ -2097,7 +2098,7 @@ def _set_official_provenance(
     if replace:
         row.source = source
         row.data_as_of = data_as_of
-        row.collected_at = datetime.utcnow()
+        row.collected_at = utcnow()
         row.raw_payload_id = raw_payload_id
     elif fills is not None:
         fills.append(
@@ -2332,7 +2333,7 @@ def _upsert_fundamental(
     row.source = fundamental.source
     row.raw_payload_id = raw_payload_id
     row.data_as_of = fundamental.period_end.isoformat()
-    row.collected_at = datetime.utcnow()
+    row.collected_at = utcnow()
 
 
 def _upsert_event(
@@ -2366,7 +2367,7 @@ def _upsert_event(
     row.endpoint = event.endpoint
     row.raw_payload_id = raw_payload_id
     row.data_as_of = event.event_date.isoformat()
-    row.collected_at = datetime.utcnow()
+    row.collected_at = utcnow()
 
 
 _OFFICIAL_INDUSTRY_NAMES_ZH = dict(INDUSTRY_DISPLAY_ZH)
@@ -3592,7 +3593,7 @@ def _upsert_quality(
     row.missing_fields_json = missing_fields
     row.checks_json = checks
     row.source = source
-    row.checked_at = datetime.utcnow()
+    row.checked_at = utcnow()
 
 
 def _official_start_date(end_date: date, months_back: int) -> date:
@@ -3698,7 +3699,7 @@ def collect(
     score_date = latest_weekday(end_date)
     start_date = _official_start_date(score_date, months_back)
     request_key = f"official-ohlcv:{start_date.isoformat()}:{score_date.isoformat()}"
-    now = datetime.utcnow()
+    now = utcnow()
     with SessionLocal() as db:
         run = db.scalar(
             select(IngestionRun).where(IngestionRun.request_key == request_key)
@@ -3946,7 +3947,7 @@ def collect(
                     start_date,
                     score_date,
                     payloads=batch.payloads,
-                    observed_now=datetime.utcnow(),
+                    observed_now=utcnow(),
                     run_id=run.id,
                 )
                 # Only today's lists say what is listed now; a historical
@@ -4127,7 +4128,7 @@ def collect(
             run.records = normalized_bars
             run.data_as_of = latest_bar_date.isoformat() if latest_bar_date else None
             run.error = None
-            run.finished_at = datetime.utcnow()
+            run.finished_at = utcnow()
             run.metadata_json = {
                 "records": normalized_bars,
                 "taiex_records": normalized_index_bars,
@@ -4271,7 +4272,7 @@ def collect(
                     failed_attempt = {
                         "status": "failed",
                         "error": str(exc),
-                        "attempted_at_utc": datetime.utcnow().isoformat(),
+                        "attempted_at_utc": utcnow().isoformat(),
                         "raw_payload_ids": sorted(captured_raw_ids),
                         "raw_persistence_errors": raw_persistence_errors,
                         "captures": [
@@ -4305,7 +4306,7 @@ def collect(
                     failed_run.status = "failed"
                     failed_run.records = 0
                     failed_run.error = f"{type(exc).__name__}: {exc}"
-                    failed_run.finished_at = datetime.utcnow()
+                    failed_run.finished_at = utcnow()
                     failed_run.data_as_of = None
                     _upsert_quality(
                         db,
@@ -5304,7 +5305,7 @@ def backtest(
                 run.metadata_json,
                 status="success",
             )
-            run.finished_at = datetime.utcnow()
+            run.finished_at = utcnow()
             db.commit()
             if registry is not None:
                 return _summarize_research_backtest(db, run)
@@ -5320,7 +5321,7 @@ def backtest(
                     "assessment": "failed",
                     "zero_actionable_count": 0,
                 }
-                failed.finished_at = datetime.utcnow()
+                failed.finished_at = utcnow()
                 db.commit()
             return {
                 "run": {

@@ -21,6 +21,7 @@ from pydantic import (
 from sqlalchemy import String, and_, cast, desc, func, or_, select
 from sqlalchemy.orm import Session
 
+from .clock import utcnow
 from .config import (
     API_PREFIX,
     DEFAULT_CORS_ORIGINS,
@@ -3669,7 +3670,7 @@ def upsert_portfolio(
     position.stop_price = position_input.stop_price
     position.risk_budget = position_input.risk_budget
     position.note = position_input.note
-    position.updated_at = datetime.utcnow()
+    position.updated_at = utcnow()
     db.commit()
     db.refresh(position)
     return position_dict(db, position)
