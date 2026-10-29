@@ -23,8 +23,12 @@
 # nothing deleted.
 # Then: close the terminals, `orca worktree rm --force`, `git worktree prune`, delete the
 # local branch (one orca already deleted counts: step branch_already_gone, #290), delete
-# each --extra-dir (junctions and symlinks unlinked first, never followed), set the board
-# to 完成, and read back that all of it is gone.
+# each --extra-dir (junctions and symlinks unlinked first, never followed), delete the
+# task's Docker resources (docker_cleanup in coordinator_lib.sh, #360: images, stopped
+# containers, volumes and networks named t<issue>/task-<issue>; none while one of them runs;
+# then dangling images and build cache once no other Docker task is in progress; no docker or
+# no answer in time only adds a docker_skipped step), set the board to 完成, and read back
+# that all of it is gone.
 #
 # Usage: close_task.sh <issue> [--extra-dir <path>]... [options]
 #   --slug S          the task is task/<issue>-S (needed when an issue has several)
@@ -284,6 +288,12 @@ for dir in "${extra_live[@]+"${extra_live[@]}"}"; do
   remove_tree "$dir" || report 3 "刪不掉 --extra-dir $dir"
   steps+=("extra_removed:$dir")
 done
+# Docker resources named for the task (docker_cleanup in coordinator_lib.sh, #360): never
+# fails the close; a dry run (--no-board) does not prune what other tasks share.
+docker_prune=if-found
+case " ${integration_branches[*]} " in *" $base_branch "*) docker_prune=docker-task ;; esac
+[ "$set_board" = 1 ] || docker_prune=never
+docker_cleanup "$issue" "$docker_prune"
 
 # --- read back ---------------------------------------------------------------------
 [ -z "$wt_path" ] || [ ! -e "$wt_path" ] || report 3 "讀回：worktree 目錄仍在 $wt_path"
