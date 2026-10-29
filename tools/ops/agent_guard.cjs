@@ -404,10 +404,11 @@ function quietConfig(rest) {
   );
 }
 
-// A word without the ( $( @( or backtick that open a subshell or a command substitution, an
-// assignment in front of one (`out=$(docker`), and the ) or backtick that close it (#341, PR #370
-// review): `(docker compose down -v)` runs docker as much as the bare command does.
-const unwrap = (text) => text.replace(/^(?:\w+=(?=[$@(`]))?(?:[$@]?\(|`)+/, '').replace(/[)`]+$/, '');
+// A word without the ( $( @( <( >( or backtick that open a subshell, a command substitution or a
+// process substitution, an assignment in front of one (`out=$(docker`, and PowerShell's `$out=(`,
+// `$env:X=$(`, `$out+=$(` written without spaces), and the ) or backtick that close it (#341, #372,
+// PR #370 review): `(docker compose down -v)` runs docker as much as the bare command does.
+const unwrap = (text) => text.replace(/^(?:\$?[\w:]+\+?=(?=[$@(`]))?(?:[$@<>]?\(|`)+/, '').replace(/[)`]+$/, '');
 
 // The docker commands in `raw`, each as `sub` (the subcommand words, lowercased; `compose` first
 // for docker-compose), `args` (the words after them) and `all` (every word after docker, options

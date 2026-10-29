@@ -249,6 +249,9 @@ WINDOWS_SCRIPTS_LEFT: tuple[str, ...] = (
 # os.name or platform.system()), in code (comments and docstrings are left out: they tell the
 # history). A refusal off POSIX or Linux (`os.name != "posix"`, `sys.platform.startswith("linux")`)
 # names no Windows and is allowed: schedule_runs._pid_alive and worker.job.platform_problem.
+# `cmd` counts with a switch written right after the slash (`cmd /c`, `cmd /d`, `cmd /E:ON`,
+# `cmd /?`); `cmd / "x"`, a Path named cmd divided, does not (#372, PR #370 review). The pattern
+# does not see the list form `["cmd", "/c"]`.
 WINDOWS_RUNTIME = re.compile(
     r"""windll|msvcrt|winreg|_winapi|\bwin32(?:api|con|process|job)\b|pywintypes|GlobalMemoryStatus
     |\bWin32_\w+|Get-CimInstance|Get-WmiObject|\bwmic?\b
@@ -256,7 +259,7 @@ WINDOWS_RUNTIME = re.compile(
     |pythonw|python\.exe|claude\.exe
     |CREATE_NEW_PROCESS_GROUP|CREATE_NO_WINDOW|DETACHED_PROCESS|creationflags|STARTUPINFO
     |CTRL_BREAK_EVENT|WINFUNCTYPE|os\.startfile
-    |\bpowershell\b|\bpwsh\b|\.ps1\b|\bcmd\.exe\b|\bcmd\s+/
+    |\bpowershell\b|\bpwsh\b|\.ps1\b|\bcmd\.exe\b|\bcmd\s+/[a-z?](?!\w)
     |sys\.platform\s*[!=]=\s*["']win|sys\.platform\.startswith\(\s*["']win
     |os\.name\s*[!=]=\s*["']nt|platform\.system\(\)\s*[!=]=\s*["']Windows
     |(?:sys\.platform|os\.name|platform\.system\(\))\s+(?:not\s+)?in\b""",

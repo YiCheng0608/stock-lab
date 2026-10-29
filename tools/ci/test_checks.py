@@ -867,6 +867,11 @@ class WindowsRuntime(unittest.TestCase):
             "posix = sys.platform not in {'win32'}",
             'run(["cmd.exe", "/c", "dir"])',
             "run('cmd /c rmdir x', shell=True)",
+            # A cmd switch right after the slash, in any case (#372).
+            "run('cmd /K dir', shell=True)",
+            "run('cmd /d /c dir', shell=True)",
+            "run('cmd /E:ON /V:ON /c dir', shell=True)",
+            "run('cmd /?', shell=True)",
             "os.startfile(path)",
             "process.send_signal(signal.CTRL_BREAK_EVENT)",
             "prototype = ctypes.WINFUNCTYPE(ctypes.c_int)",
@@ -899,6 +904,10 @@ class WindowsRuntime(unittest.TestCase):
                 'if os.name != "posix":\n'
                 "    pass\n"
                 'linux = sys.platform.startswith("linux")\n'
+                # A Path named cmd divided is no cmd.exe switch (#372, PR #370 review).
+                'target = cmd / "x" / name\n'
+                "target = cmd / name\n"
+                "target = cmd /name\n"
             ),
             "tools/ops/watchdog.sh": '# Register-Watchdog.ps1 ran this.\necho "${x#win32}"\n',
             # Agent tools on the Windows host keep their handling (#331 審查結論 3).
