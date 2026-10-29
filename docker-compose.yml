@@ -80,11 +80,19 @@ services:
   # daily, news and the watchdog on Taipei time (docs/OPERATIONS.md §6.6). No hostname: a fixed
   # one would let a row without the job's lock be judged by host and PID across PID
   # namespaces (#336 review, suggestion 3).
+  # The coordinator's event monitor (§6.8, #338) runs only with STOCK_MONITOR on or
+  # record-only. Its queue is the host directory STOCK_COORDINATION_DIR at /coordination,
+  # where patrol.sh on Windows reads it; the default is a directory of this checkout, so a
+  # development scheduler never touches the coordinator's queue.
   scheduler:
     <<: *backend
     command: ["python", "-m", "worker.cli", "serve"]
+    volumes:
+      - stock-data:/data
+      - ${STOCK_COORDINATION_DIR:-./.coordination}:/coordination
     environment:
       <<: *backend-environment
+      STOCK_MONITOR: ${STOCK_MONITOR:-off}
     # A daily on a copy of the production DB peaked at about 0.95 GB rss (docs/OPERATIONS.md §1.2).
     mem_limit: 2g
 

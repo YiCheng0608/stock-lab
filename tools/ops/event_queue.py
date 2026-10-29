@@ -1,25 +1,29 @@
 """Event queue of the coordinator's event monitor (Issue #316).
 
 monitor.sh polls GitHub (open PRs, new comments) and Orca (task worktrees), and hands
-the answers to ``record``, which also reads the job logs, turns everything into events,
-drops the ones already queued and appends the rest. The coordinator reads the queue
-through patrol.sh and marks what it handled with ``done``. Nothing here calls gh, orca
-or an LLM: the shell scripts do, so the tests can fake them on PATH.
+the answers to ``record``, which also reads the job logs (and the watchdog's), turns
+everything into events, drops the ones already queued and appends the rest. The
+coordinator reads the queue through patrol.sh and marks what it handled with ``done``.
+Nothing here calls gh, orca or an LLM: the shell scripts do, so the tests can fake them
+on PATH.
 
-Files, all in <data>/logs/, each with a single writer:
+Files, all in the queue directory LOGS (<data>/logs/, or in the scheduler container the
+host directory at /coordination, #338), each with a single writer:
 
   events.jsonl            monitor.sh; one JSON object per line, appended:
     {"type": "event", "seq", "id", "kind", "detected_at", "at", "ref", "summary", "url"}
         a new event. ``id`` is the dedup key: one PR's CI run (head commit, workflow run
         id, conclusion of its required check), one comment id, one end line of a job
-        log. ``seq`` counts up from 1. ``at`` is the source's own time (or null).
+        log, one Taipei day of gh refused by GitHub (the watchdog's or the monitor's
+        own call). ``seq`` counts up from 1. ``at`` is the source's own time (or null).
     {"type": "wake", "at", "ok", "terminal", "upto", "detail"}
         the coordinator terminal was sent "有 N 個事件…" (ok) or the send failed; a
         successful wake covers every event up to seq ``upto``.
     {"type": "stale", "at", "key", "url"}
         the #1 comment asking the user to open a coordinator; one per ``key``.
   events-done.jsonl       patrol.sh --done: {"type": "done", "at", "session_id", "ids"}
-  monitor-state.json      monitor.sh: comment cursor, last poll, open PR snapshot
+  monitor-state.json      monitor.sh: comment cursor, last poll, open PR snapshot, the
+                          last line of each job log (patrol.sh prints them)
   monitor-heartbeat.json  monitor.sh, every poll: {"written_at", "pid", "mode", "gh_calls",
                           "gh_failed_polls", "gh_failed_since", "gh_error"}: polls in a
                           row with a failed gh call, since when, the last gh error
@@ -31,8 +35,8 @@ starts on a new line, so only the partial line is lost. Times are UTC ISO
 Subcommands (LOGS is <data>/logs):
   since LOGS NOW                  the comment cursor to poll with
   stale LOGS NOW [--record-only]  "KEY<TAB>BODY" when the #1 comment is due, else nothing
-  record LOGS NOW [--prs F] [--comments F] [--worktrees F]
-                                  append the new events and print
+  record LOGS NOW [--prs F] [--comments F] [--worktrees F] [--job-logs DIR]
+         [--gh-refused ERROR]     append the new events and print
                                   "new=N pending=P unnotified=U wake=0|1 terminal=H"
   note-wake LOGS NOW OK TERMINAL DETAIL     OK is 1 or 0
   note-stale LOGS NOW KEY URL     URL "-" in record-only mode: kept in the state only
@@ -75,6 +79,12 @@ MERGE_STATES = ("CLEAN", "DIRTY", "BEHIND", "UNSTABLE")
 JOB_FILES = 2  # newest log files read per job
 END_LINE = re.compile(r"^===== (\S+) end (.*)$")
 RUN_ID = re.compile(r"/actions/runs/(\d+)/")
+# watchdog.sh's line for a gh call GitHub refused (#337): "<UTC> gh_auth_failed exit=…
+# date=<Taipei day> | …"
+GH_AUTH_LINE = re.compile(r"^(\S+) gh_auth_failed .*?\bdate=(\d{4}-\d{2}-\d{2})")
+TAIPEI_OFFSET = 8 * 3600
+# What the coordinator does about it; the token lives in the env file (OPERATIONS §6.7).
+GH_AUTH_ACTION = "請用本機 gh 在 #1 留言，請使用者換 GH_TOKEN（OPERATIONS §6.7）"
 # The merge gate: CI's required check (docs/GITHUB_WORKFLOW.md, 欄位與唯一來源).
 GATE = "required"
 
@@ -334,6 +344,73 @@ def job_events(logs: Path, origin: float) -> list[dict]:
     return out
 
 
+def gh_auth_events(
+    job_logs: Path, origin: float, now: float, refused: str | None
+) -> list[dict]:
+    """GitHub refused gh's credentials: one event per Taipei day, whether the watchdog
+    or the monitor's own call saw it first. The watchdog cannot comment then and neither
+    can the monitor (one GH_TOKEN), so the coordinator, woken, comments with its own gh
+    (#338, Issue comment 6477434381)."""
+    out = []
+    if refused is not None:
+        day = datetime.fromtimestamp(int(now) + TAIPEI_OFFSET, tz=timezone.utc)
+        out.append(
+            _event(
+                f"gh_auth:{day:%Y-%m-%d}",
+                "gh_auth",
+                "gh 認證",
+                f"GitHub 拒絕 monitor 的 gh（{one_line(refused, 120)}）：{GH_AUTH_ACTION}",
+                "",
+                at=iso(now),
+            )
+        )
+    try:
+        text = (job_logs / "watchdog.log").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        text = ""
+    for line in text.splitlines():
+        m = GH_AUTH_LINE.match(line.strip())
+        if not m or (epoch(m.group(1)) or 0) < origin:
+            continue
+        out.append(
+            _event(
+                f"gh_auth:{m.group(2)}",
+                "gh_auth",
+                "gh 認證",
+                f"看門狗的 gh 被 GitHub 拒絕（{m.group(1)}），無法在 #1 留言：{GH_AUTH_ACTION}",
+                "",
+                at=m.group(1),
+            )
+        )
+    return out
+
+
+def job_tails(job_logs: Path) -> dict:
+    """The end line of the newest daily and news log and the last watchdog line: what
+    patrol.sh printed from the logs, which the coordinator no longer reads (in the
+    container they are in the volume, #338)."""
+    out = {}
+    for job in ("daily", "news"):
+        files = sorted(job_logs.glob(f"{job}-*.log"))
+        if not files:
+            out[job] = "沒有日誌"
+            continue
+        try:
+            text = files[-1].read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            text = ""
+        ends = [x.strip() for x in text.splitlines() if END_LINE.match(x.strip())]
+        out[job] = f"{files[-1].name} " + (
+            ends[-1] if ends else "（沒有結束列，可能執行中或中斷）"
+        )
+    try:
+        text = (job_logs / "watchdog.log").read_text(encoding="utf-8", errors="replace")
+        out["watchdog"] = (text.splitlines() or ["沒有日誌"])[-1].strip()
+    except OSError:
+        out["watchdog"] = "沒有日誌"
+    return out
+
+
 def slot_events(worktrees: dict) -> list[dict]:
     branches = sorted(
         (w.get("branch") or "")[len("refs/heads/") :]
@@ -375,11 +452,24 @@ def _load(path: str | None):
     return _read_json(Path(path))
 
 
-def record(logs: Path, now: float, prs, comments, worktrees) -> str:
+def record(
+    logs: Path,
+    now: float,
+    prs,
+    comments,
+    worktrees,
+    job_logs: Path | None = None,
+    gh_refused: str | None = None,
+) -> str:
     q = Queue(logs)
+    job_logs = job_logs or logs
     origin = q.origin(now)
     found: list[dict] = []
-    state: dict = {"origin": origin, "polled_at": iso(now)}
+    state: dict = {
+        "origin": origin,
+        "polled_at": iso(now),
+        "jobs": job_tails(job_logs),
+    }
     if isinstance(prs, list):
         found += pr_events(prs, q.state.get("pr_numbers") or [])
         state["pr_numbers"] = [
@@ -401,7 +491,8 @@ def record(logs: Path, now: float, prs, comments, worktrees) -> str:
         )
         since = epoch(q.state.get("comments_since") or origin) or 0
         state["comments_since"] = iso(max(since, newest - CURSOR_OVERLAP))
-    found += job_events(logs, epoch(origin) or 0)
+    found += job_events(job_logs, epoch(origin) or 0)
+    found += gh_auth_events(job_logs, epoch(origin) or 0, now, gh_refused)
     if isinstance(worktrees, dict) and worktrees.get("ok") is True:
         found += slot_events(worktrees)
     new = []
@@ -547,6 +638,14 @@ def status_lines(logs: Path, now: float) -> list[str]:
         prs = state.get("prs") or []
         out.append(f"open PR（monitor {state['prs_at']}）：{len(prs)} 個")
         out += [f"  {line}" for line in prs]
+    jobs = state.get("jobs") if isinstance(state.get("jobs"), dict) else {}
+    for job, label in (
+        ("daily", "排程 daily"),
+        ("news", "排程 news"),
+        ("watchdog", "看門狗"),
+    ):
+        line = jobs.get(job) or "沒有紀錄（monitor 還沒輪詢過）"
+        out.append(f"{label}（monitor {state.get('polled_at') or '-'}）：{line}")
     return out
 
 
@@ -596,6 +695,8 @@ def main(argv: list[str]) -> int:
                 _load(opts.get("--prs")),
                 _load(opts.get("--comments")),
                 _load(opts.get("--worktrees")),
+                Path(opts["--job-logs"]) if opts.get("--job-logs") else None,
+                opts.get("--gh-refused"),
             )
         )
     elif command == "note-wake":

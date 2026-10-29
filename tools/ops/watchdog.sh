@@ -7,9 +7,11 @@
 # credentials (CLAUDE_CODE_OAUTH_TOKEN, GH_TOKEN; #337). Operation:
 # docs/OPERATIONS.md §6.1. Every run appends to <data>/logs/watchdog.log.
 #
-# Usage: watchdog.sh [--dry-run] [--data-dir DIR] [--python EXE]
+# Usage: watchdog.sh [--dry-run] [--data-dir DIR] [--monitor-dir DIR] [--python EXE]
 #   --dry-run       decide and print the actions; no gh call, no comment
 #   --data-dir      default $STOCK_DATA_DIR, then $HOME/stock-lab-data
+#   --monitor-dir   the event monitor's queue directory, default <data>/logs (in the
+#                   scheduler container /coordination, #338)
 #   --python        default $STOCK_PYTHON, then this checkout's .venv, then python3
 # Test hook: WATCHDOG_NOW (epoch seconds).
 set -u
@@ -21,12 +23,14 @@ arguments=("$@")
 dry_run=0
 data_dir="${STOCK_DATA_DIR:-$HOME/stock-lab-data}"
 python="${STOCK_PYTHON:-}"
+monitor_dir=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) dry_run=1 ;;
     --data-dir) data_dir="${2:?--data-dir needs a value}"; shift ;;
+    --monitor-dir) monitor_dir="${2:?--monitor-dir needs a value}"; shift ;;
     --python) python="${2:?--python needs a value}"; shift ;;
-    -h|--help) sed -n '2,14p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help) sed -n '2,16p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 64 ;;
   esac
   shift
@@ -41,6 +45,7 @@ DAILY_RESULT_AFTER_HM=2200
 now="${WATCHDOG_NOW:-$(date -u +%s)}"
 logs="$data_dir/logs"
 log_file="$logs/watchdog.log"
+monitor_dir="${monitor_dir:-$logs}"
 mkdir -p "$logs" || exit 1
 
 iso() { date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ; }
@@ -105,13 +110,8 @@ taipei_iso="$(date -u -d "@$taipei" +%Y-%m-%d)"
 taipei_hm="$(date -u -d "@$taipei" +%H%M)"
 taipei_dow="$(date -u -d "@$taipei" +%u)"
 
-# gh_auth_error EXIT ERR_FILE: a failed gh call was refused for its credentials:
-# exit 4 is "requires authentication" (no GH_TOKEN and no login;
-# cli.github.com/manual/gh_help_exit-codes), and an expired or revoked GH_TOKEN
-# gets "HTTP 401: Bad credentials" with exit 1 (#337).
-gh_auth_error() {
-  [ "$1" = 4 ] || grep -qiE 'HTTP 401|Bad credentials|gh auth login' "$2" 2>/dev/null
-}
+# gh_auth_error EXIT ERR_FILE (#337), shared with monitor.sh.
+. "$script_dir/gh_auth.sh"
 gh_state=ok  # unauthorized once GitHub refuses gh's credentials in this run
 
 gh_refused() { # gh_refused EXIT ERR_FILE: log a refused gh call
@@ -276,15 +276,15 @@ fi
 # coordinator; ten polls in a row with a failed gh call mean it polls for nothing.
 # No heartbeat file: the monitor is not registered, no check.
 if [ -n "$python" ]; then
-  beat="$(helper monitor-beat "$logs/monitor-heartbeat.json" "$now" 2>>"$work/helper.err")" || beat=error
+  beat="$(helper monitor-beat "$monitor_dir/monitor-heartbeat.json" "$now" 2>>"$work/helper.err")" || beat=error
   case "$beat" in
     stale\ *)
       read -r _ age at <<<"$beat"
-      anomaly monitor_stale "事件 monitor：最後一次輪詢在 $at（$((age / 60)) 分鐘前），停擺超過 10 分鐘，統籌不會被喚醒。請依 OPERATIONS §6.8 查 \`$logs/monitor.log\` 與工作 \`\\stock-lab\\monitor\`，必要時重新啟動。" ;;
+      anomaly monitor_stale "事件 monitor：最後一次輪詢在 $at（$((age / 60)) 分鐘前），停擺超過 10 分鐘，統籌不會被喚醒。請依 OPERATIONS §6.8 查 \`$monitor_dir/monitor.log\` 與工作 \`\\stock-lab\\monitor\`（scheduler 容器是 \`docker compose logs scheduler\`），必要時重新啟動。" ;;
     gh_failed\ *)
       read -r _ polls since error <<<"$beat"
-      anomaly monitor_gh_failed "事件 monitor：gh 從 $since 起連續 $polls 輪失敗（最後的錯誤：$error），佇列收不到 PR 與留言的事件。可能是 gh 登入過期（\`gh auth status\`），或帳號共用的 5000 次／小時限流已用完（\`gh api rate_limit\`）；請一併查 \`$logs/monitor.log\`（OPERATIONS §6.8）。" ;;
-    unreadable) anomaly monitor_stale "事件 monitor：\`$logs/monitor-heartbeat.json\` 讀不出輪詢時間，統籌可能不會被喚醒。請依 OPERATIONS §6.8 查 \`$logs/monitor.log\`。" ;;
+      anomaly monitor_gh_failed "事件 monitor：gh 從 $since 起連續 $polls 輪失敗（最後的錯誤：$error），佇列收不到 PR 與留言的事件。可能是 gh 登入過期（\`gh auth status\`），或帳號共用的 5000 次／小時限流已用完（\`gh api rate_limit\`）；請一併查 \`$monitor_dir/monitor.log\`（OPERATIONS §6.8）。" ;;
+    unreadable) anomaly monitor_stale "事件 monitor：\`$monitor_dir/monitor-heartbeat.json\` 讀不出輪詢時間，統籌可能不會被喚醒。請依 OPERATIONS §6.8 查 \`$monitor_dir/monitor.log\`。" ;;
     error) found=1; log monitor_check_failed "" "讀取 monitor 心跳失敗：$(tail -n 1 "$work/helper.err" 2>/dev/null)" ;;
   esac
 fi

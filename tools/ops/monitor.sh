@@ -1,53 +1,68 @@
 #!/usr/bin/env bash
 # Coordinator event monitor (Issue #316; docs/GITHUB_WORKFLOW.md 無人值守運作,
-# docs/OPERATIONS.md §6.8), resident under Windows Task Scheduler
-# (tools/ops/Register-Monitor.ps1). No LLM: every --interval seconds it polls the open
-# PRs (CI, mergeStateStatus), the repository's new Issue/PR comments, the task
-# worktrees and the job logs, appends the events not queued yet to
-# <data>/logs/events.jsonl (tools/ops/event_queue.py) and, once orca reports the
-# coordinator terminal of the heartbeat idle, sends it one line "有 N 個事件…" for
-# them. When the queue has waited an hour
-# with no coordinator heartbeat since, it comments on #1 asking the user to open a
-# coordinator; it never opens a session itself (#1 6245309556, 6320448594).
+# docs/OPERATIONS.md §6.8): resident under Windows Task Scheduler
+# (tools/ops/Register-Monitor.ps1), or one poll a minute (--once) as a job of the
+# scheduler container's `worker.cli serve` (#338). No LLM: every --interval seconds it
+# polls the open PRs (CI, mergeStateStatus), the repository's new Issue/PR comments, the
+# task worktrees and the job logs, appends the events not queued yet to
+# <queue>/events.jsonl (tools/ops/event_queue.py) and has the waker wake the coordinator
+# terminal of the heartbeat with one line "有 N 個事件…" for them. When the queue has
+# waited an hour with no coordinator heartbeat since, it comments on #1 asking the user
+# to open a coordinator; it never opens a session itself (#1 6245309556, 6320448594).
 #
 # gh: at most 2 calls per poll (open PRs, then comments; the #1 comment takes the
 # comments' turn) and polls at least 60 seconds apart: the 5000/hour API limit is
-# shared by every session on the account. Every gh and orca call ends within
+# shared by every session on the account. A call GitHub refuses for its credentials
+# (gh_auth.sh, as the watchdog judges it, #337) is an event too, once per Taipei day:
+# the coordinator comments with its own gh. Every gh and orca call ends within
 # MONITOR_CALL_TIMEOUT seconds (120): a hung call would stop the polls, and the
 # scheduled task never starts a second run while this one runs. One monitor at a time
-# (logs/monitor.lock/).
-# To stop it, create <data>/logs/monitor.stop: the monitor removes it and exits after
+# (<queue>/monitor.lock/).
+# To stop it, create <queue>/monitor.stop: the monitor removes it and exits after
 # the poll it is in (Register-Monitor.ps1 -Unregister does so; stopping the scheduled
 # task may end only the PowerShell that hosts bash).
-# Each poll appends a line to <data>/logs/monitor.log and rewrites
-# <data>/logs/monitor-heartbeat.json, which the watchdog reads.
+# Each poll appends a line to <queue>/monitor.log and rewrites
+# <queue>/monitor-heartbeat.json, which the watchdog reads.
+#
+# The queue directory holds the monitor's files and the coordinator's (heartbeat,
+# events-done.jsonl, written by patrol.sh); the job logs are read from <data>/logs. In
+# the container the queue is the host directory bind mounted at /coordination, so
+# patrol.sh on Windows reads it where it always did (#338).
 #
 # Usage: monitor.sh [options]
 #   --once            one poll, then exit
 #   --interval S      seconds between polls, default 60, at least 60
 #   --record-only     record events only: no wake, no comment (gh reads still count)
 #   --data-dir DIR    default $STOCK_DATA_DIR, then $HOME/stock-lab-data
+#   --queue-dir DIR   default <data>/logs
 #   --python EXE      default $STOCK_PYTHON, then this checkout's .venv, then python3
-#   --orca EXE        default orca on PATH, then
+#   --orca EXE        for the task worktrees and the default waker; "none" skips the
+#                     worktrees. Default orca on PATH, then
 #                     $LOCALAPPDATA/Programs/orca/resources/bin/orca.exe
+#   --waker CMD       run as `CMD TERMINAL TEXT` for a due wake; exit 0 sent, 3 not
+#                     idle, else failed. Default tools/ops/orca_wake.sh; "none" leaves
+#                     the wake to a waker elsewhere and records nothing of it
 # Test hooks: MONITOR_NOW (epoch seconds, with --once), MONITOR_CALL_TIMEOUT.
 set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
+. "$script_dir/gh_auth.sh"
 
-once=0 interval=60 record_only=0 orca_exe=""
+once=0 interval=60 record_only=0 orca_exe="" queue="" waker="$script_dir/orca_wake.sh"
 while [ $# -gt 0 ]; do
   case "$1" in
     -h | --help) awk 'NR > 1 && !/^#/ { exit } NR > 1' "${BASH_SOURCE[0]}"; exit 0 ;;
     --once) once=1; shift; continue ;;
     --record-only) record_only=1; shift; continue ;;
-    --interval | --data-dir | --python | --orca)
+    --interval | --data-dir | --queue-dir | --python | --orca | --waker)
       [ $# -ge 2 ] || die "$1 needs a value" 64
       case "$1" in
         --interval) interval="$2" ;;
         --data-dir) data_dir="$2" ;;
+        --queue-dir) queue="$2" ;;
         --python) python="$2" ;;
         --orca) orca_exe="$2" ;;
+        --waker) waker="$2" ;;
       esac
       shift 2
       continue
@@ -72,7 +87,8 @@ call_timeout="${MONITOR_CALL_TIMEOUT:-120}"
 wake_wait_ms=15000
 call() { timeout -k 10 "$call_timeout" "$@"; }
 
-logs="$data_dir/logs"
+job_logs="$data_dir/logs"
+logs="${queue:-$job_logs}"
 mkdir -p "$logs" || die "建不了 $logs" 2
 log_file="$logs/monitor.log"
 lock_dir="$logs/monitor.lock"
@@ -92,8 +108,11 @@ log() { # log EVENT TEXT
 # for 10 minutes, was left by a killed or hung run and is taken over. The lock holds
 # "pid token": a monitor whose lock was taken over stops at its next check (each poll's
 # start, before the #1 comment, before the queue) and leaves the new owner's lock and
-# work directory alone (#316 review S3, S-a).
-token="$$ $(date +%s%N)$RANDOM"
+# work directory alone (#316 review S3, S-a). It also names the host: a pid of another
+# host or container (another PID namespace) says nothing here, so such a lock counts as
+# held while its monitor beats, which it does every poll (#338).
+host="${HOSTNAME:-$(uname -n)}"
+token="$$ $(date +%s%N)$RANDOM $host"
 owns_lock() { [ "$(cat "$lock_dir/pid" 2>/dev/null)" = "$token" ]; }
 keep_lock() {
   owns_lock && return 0
@@ -101,7 +120,8 @@ keep_lock() {
   exit 0
 }
 if ! mkdir "$lock_dir" 2>/dev/null; then
-  read -r owner _ <"$lock_dir/pid" 2>/dev/null || owner=""
+  owner="" owner_host=""
+  read -r owner _ owner_host <"$lock_dir/pid" 2>/dev/null
   beat_age="$("$python" -X utf8 -c '
 import json, sys, time
 try:
@@ -111,14 +131,22 @@ try:
 except Exception:
     print(999999)
 ' "$logs/monitor-heartbeat.json")"
-  if [ -n "$owner" ] && kill -0 "$owner" 2>/dev/null && [ "$beat_age" -lt 600 ]; then
+  if [ -n "$owner_host" ] && [ "$owner_host" != "$host" ]; then
+    # Three missed polls: a container that was recreated (a new host name) takes over in
+    # minutes, not after the 10 minutes the watchdog reports as a stopped monitor.
+    if [ "$beat_age" -lt 180 ]; then
+      log already_running "pid=$owner host=$owner_host" >/dev/null
+      echo "monitor 已在 $owner_host 執行（pid $owner），本次不啟動"
+      exit 0
+    fi
+  elif [ -n "$owner" ] && kill -0 "$owner" 2>/dev/null && [ "$beat_age" -lt 600 ]; then
     log already_running "pid=$owner" >/dev/null
     echo "monitor 已在執行（pid $owner），本次不啟動"
     exit 0
   fi
   rm -rf "$lock_dir"
   mkdir "$lock_dir" 2>/dev/null || die "取不到 $lock_dir" 2
-  log lock_stale_removed "pid=${owner:-?} beat_age_s=$beat_age"
+  log lock_stale_removed "pid=${owner:-?} host=${owner_host:-$host} beat_age_s=$beat_age"
 fi
 printf '%s\n' "$token" >"$lock_dir/pid"
 trap 'owns_lock && rm -rf "$lock_dir"' EXIT
@@ -135,6 +163,7 @@ gh_call() { # gh_call OUT ARGS...: one gh call of this poll, within the timeout
   status=$?
   [ "$status" = 0 ] && return 0
   gh_failed=1
+  gh_auth_error "$status" "$err" && gh_refused=1
   # The error of this call, not a warning an earlier call of the poll wrote (S-c).
   if [ "$status" = 124 ]; then
     gh_error="$label: timeout ${call_timeout}s"
@@ -145,9 +174,18 @@ gh_call() { # gh_call OUT ARGS...: one gh call of this poll, within the timeout
   return "$status"
 }
 
+run_waker() { # run_waker TERMINAL TEXT: the waker's exit code (124 when it hung)
+  local runner=()
+  case "$waker" in *.sh) runner=(bash) ;; esac
+  [ "$orca_exe" = none ] || export ORCA_EXE="$orca_exe"
+  # Its orca calls end within the call timeout each: a wait, then a send.
+  WAKE_WAIT_MS="$wake_wait_ms" MONITOR_CALL_TIMEOUT="$call_timeout" STOCK_PYTHON="$python" \
+    timeout -k 10 $((2 * call_timeout + 30)) "${runner[@]}" "$waker" "$@" >/dev/null 2>&1
+}
+
 poll() {
-  local now gh_calls=0 gh_failed=0 gh_error="" since summary new pending wake terminal
-  local stale_line key body url args=() ro=() work notes="" text out
+  local now gh_calls=0 gh_failed=0 gh_refused=0 gh_error="" since summary new pending wake
+  local terminal stale_line key body url args=() ro=() work notes="" text out status
   keep_lock
   now="$(clock)"
   work="$lock_dir/work.$$"
@@ -196,13 +234,17 @@ poll() {
   fi
 
   # 4. task worktrees (Orca, no gh)
-  if call "$orca_exe" worktree list --json >"$work/worktrees.json" 2>/dev/null; then
+  if [ "$orca_exe" = none ]; then
+    notes="$notes worktrees=skipped"
+  elif call "$orca_exe" worktree list --json >"$work/worktrees.json" 2>/dev/null; then
     args+=(--worktrees "$work/worktrees.json")
   else
     notes="$notes worktrees=failed"
   fi
 
   # 5. queue, then wake; not if another monitor took the lock over meanwhile
+  args+=(--job-logs "$job_logs")
+  [ "$gh_refused" = 1 ] && args+=(--gh-refused "$gh_error")
   keep_lock
   out="$(eq record "$logs" "$now" "${args[@]}")" || { log poll_failed "gh_calls=$gh_calls$notes"; return; }
   summary="$(printf '%s\n' "$out" | tail -n 1)"
@@ -212,25 +254,32 @@ poll() {
   if [ "$wake" = 1 ] && [ "$record_only" = 1 ]; then
     # Nothing records a wake in this mode: say it once, for the poll with new events.
     [ "$new" = 0 ] || notes="$notes wake=planned"
+  elif [ "$wake" = 1 ] && [ "$waker" = none ]; then
+    # Another waker wakes the coordinator and records it.
+    notes="$notes wake=deferred"
   elif [ "$wake" = 1 ] && [ "$terminal" = - ]; then
     eq note-wake "$logs" "$now" 0 - no_heartbeat
     notes="$notes wake=failed(no_heartbeat)"
-  elif [ "$wake" = 1 ] && ! { call "$orca_exe" terminal wait --terminal "$terminal" --for tui-idle \
-    --timeout-ms "$wake_wait_ms" --json >"$work/wait.json" 2>/dev/null; cj satisfied <"$work/wait.json"; }; then
-    # Only into an idle terminal (AGENTS #282): text sent into a busy session or an open
-    # question could answer it. The wake is tried again after 10 minutes.
-    eq note-wake "$logs" "$now" 0 "$terminal" not_idle
-    notes="$notes wake=failed(not_idle) terminal=$terminal"
   elif [ "$wake" = 1 ]; then
+    # The waker sends only into an idle terminal (AGENTS #282); a failed wake is tried
+    # again after 10 minutes.
     text="有 $pending 個事件，請處理佇列：bash tools/ops/patrol.sh（處理完以 --done 標記）"
-    if call "$orca_exe" terminal send --terminal "$terminal" --text "$text" --enter --json \
-      >"$work/send.json" 2>/dev/null && cj ok <"$work/send.json"; then
-      eq note-wake "$logs" "$now" 1 "$terminal" sent
-      notes="$notes wake=sent terminal=$terminal"
-    else
-      eq note-wake "$logs" "$now" 0 "$terminal" send_failed
-      notes="$notes wake=failed terminal=$terminal"
-    fi
+    run_waker "$terminal" "$text"
+    status=$?
+    case "$status" in
+      0)
+        eq note-wake "$logs" "$now" 1 "$terminal" sent
+        notes="$notes wake=sent terminal=$terminal"
+        ;;
+      3)
+        eq note-wake "$logs" "$now" 0 "$terminal" not_idle
+        notes="$notes wake=failed(not_idle) terminal=$terminal"
+        ;;
+      *)
+        eq note-wake "$logs" "$now" 0 "$terminal" send_failed
+        notes="$notes wake=failed terminal=$terminal"
+        ;;
+    esac
   fi
   eq beat "$logs" "$now" "$mode" "$gh_calls" "$$" "$gh_failed" "$gh_error"
   [ "$gh_failed" = 1 ] && notes="$notes gh_error=$(printf '%s' "$gh_error" | cut -c1-120)"

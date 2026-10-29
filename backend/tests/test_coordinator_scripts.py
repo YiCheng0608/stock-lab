@@ -43,6 +43,8 @@ SCRIPTS = (
     "patrol.sh",
     "event_queue.py",
     "monitor.sh",
+    "orca_wake.sh",
+    "gh_auth.sh",
     "compact_hook.sh",
 )
 REPO_ID = "repo-1"
@@ -1550,6 +1552,14 @@ def patrol(h: Harness) -> Harness:
                 "prs": [
                     "PR #290 ci=pending merge=BLOCKED labels=independent-review 統籌操作腳本"
                 ],
+                # The job log lines as the monitor read them (#338): in the container the
+                # logs below are in the volume, and patrol prints these instead.
+                "polled_at": "2026-10-25T11:59:00Z",
+                "jobs": {
+                    "daily": "daily-20261024.log ===== 2026-10-24T13:30:00Z end exit=0",
+                    "news": "沒有日誌",
+                    "watchdog": "2026-10-25T11:45:00Z schedules_ok | 排程無異常",
+                },
             },
             ensure_ascii=False,
         ),
@@ -1595,8 +1605,16 @@ def test_patrol_writes_only_the_heartbeat_and_reads_the_queue(patrol: Harness) -
     assert "PR #290 ci=pending merge=BLOCKED" in out
     assert "未處理事件：3 個（seq 1～3）" in out
     assert "[1] comment #282 2026-10-25T11:30:00Z 提問： 要不要加旗標？" in out
-    assert "daily-20261024.log ===== 2026-10-24T13:30:00Z end exit=0" in out
-    assert "schedules_ok" in out
+    assert (
+        "排程 daily（monitor 2026-10-25T11:59:00Z）：daily-20261024.log"
+        " ===== 2026-10-24T13:30:00Z end exit=0" in out
+    )
+    # From the state, not from news-20261025.log beside it.
+    assert "排程 news（monitor 2026-10-25T11:59:00Z）：沒有日誌" in out
+    assert (
+        "看門狗（monitor 2026-10-25T11:59:00Z）：2026-10-25T11:45:00Z schedules_ok"
+        in out
+    )
     # #316 AC-2: the closing hint points at the queue, not at a monitor the session keeps.
     last = out.strip().splitlines()[-1]
     assert "--done" in last and "監看" not in last

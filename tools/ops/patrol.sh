@@ -2,9 +2,9 @@
 # Coordinator patrol (Issue #282, #316; docs/GITHUB_WORKFLOW.md 無人值守運作), in the
 # handbook's order: write the heartbeat, read this session's compaction count and
 # handoff marker, then the event queue the monitor (tools/ops/monitor.sh) keeps: its
-# heartbeat, its last open PR snapshot and the events not handled yet; last the schedule
-# jobs' latest log lines. Prints a short summary. No gh call: GitHub is polled by the
-# monitor only (#316 AC-4).
+# heartbeat, its last open PR snapshot, the schedule jobs' latest log lines as it read them
+# and the events not handled yet. Prints a short summary. No gh call: GitHub is polled by
+# the monitor only (#316 AC-4).
 #
 # Files written: <data>/logs/coordinator-heartbeat.json (through a temporary file in the
 # same directory and mv), and with --done one line in <data>/logs/events-done.jsonl.
@@ -101,23 +101,8 @@ eq() { "$python" -X utf8 "$script_dir/event_queue.py" "$@"; }
 if [ ${#done_args[@]} -gt 0 ]; then
   eq done "$logs" "$now" "$session_id" "${done_args[@]}" || die "--done 失敗（見上一行）" 2
 fi
+# The monitor's heartbeat, open PRs and job log lines from its last poll: in the
+# scheduler container the job logs are in the volume, out of this shell's reach (#338).
 eq status "$logs" "$now"
 eq pending "$logs"
-
-# 4. schedule jobs: the newest log of each job
-latest() { local f last=""; for f in "$logs"/$1; do [ -f "$f" ] && last="$f"; done; printf '%s' "$last"; }
-for job in daily news; do
-  file="$(latest "$job-*.log")"
-  if [ -z "$file" ]; then
-    echo "排程 $job：沒有日誌"
-    continue
-  fi
-  end="$(grep -E '^===== .* end ' "$file" | tail -n 1 | tr -d '\r')"
-  echo "排程 $job：$(basename "$file") ${end:-（沒有結束列，可能執行中或中斷）}"
-done
-if [ -f "$logs/watchdog.log" ]; then
-  echo "看門狗：$(tail -n 1 "$logs/watchdog.log" | tr -d '\r')"
-else
-  echo "看門狗：沒有日誌"
-fi
 echo "其餘依手冊：處理上面的未處理事件（PR 的 CI 與合併、Issue 的提問、名額空缺就派工），處理完以 --done <seq> 標記；monitor 停擺時看 logs/monitor.log"

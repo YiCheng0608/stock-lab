@@ -689,6 +689,265 @@ def test_a_stop_file_ends_the_loop_after_its_poll(mon: Harness) -> None:
     assert not stop.exists() and not (logs / "monitor.lock").exists()
 
 
+# The scheduler container's layout (#338) ---------------------------------------------
+
+# The fields of each queue record and of the heartbeat, as #316's monitor writes them.
+FIELDS = {
+    "event": {
+        "type",
+        "seq",
+        "id",
+        "kind",
+        "detected_at",
+        "at",
+        "ref",
+        "summary",
+        "url",
+    },
+    "wake": {"type", "at", "ok", "terminal", "upto", "detail"},
+    "stale": {"type", "at", "key", "url"},
+}
+BEAT_FIELDS = {"written_at", "pid", "mode", "gh_calls", "gh_failed_polls"}
+
+
+def _container(h: Harness) -> tuple:
+    """The queue on the host (bind mounted at /coordination; patrol.sh reads it as
+    <STOCK_DATA_DIR>/logs on Windows), the job logs in the volume (the data dir)."""
+    host = h.root / "host"
+    queue = host / "logs"
+    queue.mkdir(parents=True)
+    (h.data / "logs" / "coordinator-heartbeat.json").replace(
+        queue / "coordinator-heartbeat.json"
+    )
+    return host, queue
+
+
+def _patrol(h: Harness, data, at: int) -> str:
+    result = h.run(
+        "patrol.sh",
+        "--session-id",
+        "coord",
+        "--terminal",
+        "term_coord",
+        "--data-dir",
+        data.as_posix(),
+        PATROL_NOW=str(at),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return result.stdout
+
+
+def test_the_container_monitor_writes_the_316_queue_where_patrol_reads_it(
+    mon: Harness,
+) -> None:
+    """AC-2: queue and heartbeat in the host directory with #316's fields; the job logs
+    stay in the volume, and patrol.sh prints their last lines from the monitor's state."""
+    host, queue = _container(mon)
+    volume = mon.data / "logs"
+    (volume / "daily-20261025.log").write_text(
+        "===== 2026-10-25T19:45:00+08:00 end exit=0 seconds=900\n", encoding="utf-8"
+    )
+    (volume / "watchdog.log").write_text(
+        "2026-10-25T11:45:00Z schedules_ok | 排程正常\n", encoding="utf-8"
+    )
+    (volume / "coordinator-heartbeat.json").write_text("{}", encoding="utf-8")
+    _monitor(mon, "--queue-dir", queue.as_posix())
+    assert sorted(p.name for p in volume.iterdir()) == [
+        "compactions",
+        "coordinator-heartbeat.json",
+        "daily-20261025.log",
+        "watchdog.log",
+    ]
+    rows = _rows(queue / "events.jsonl")
+    assert {r["type"] for r in rows} == {"event", "wake"}
+    for row in rows:
+        assert set(row) == FIELDS[row["type"]], row
+    assert [r["id"] for r in rows if r["type"] == "event"][-1] == (
+        "job:daily-20261025.log:2026-10-25T19:45:00+08:00"
+    )
+    # The coordinator heartbeat of the queue directory names the terminal woken.
+    assert "--terminal term_coord" in _sends(mon)[0]
+    beat = json.loads((queue / "monitor-heartbeat.json").read_text("utf-8"))
+    assert set(beat) == BEAT_FIELDS
+    out = _patrol(mon, host, NOW + 60)
+    assert "未處理事件：4 個（seq 1～4）" in out
+    assert (
+        "排程 daily（monitor 2026-10-25T12:00:00Z）：daily-20261025.log"
+        " ===== 2026-10-25T19:45:00+08:00 end exit=0 seconds=900" in out
+    )
+    assert "排程 news（monitor 2026-10-25T12:00:00Z）：沒有日誌" in out
+    assert (
+        "看門狗（monitor 2026-10-25T12:00:00Z）：2026-10-25T11:45:00Z schedules_ok"
+        in out
+    )
+    assert (
+        json.loads((queue / "coordinator-heartbeat.json").read_text("utf-8"))[
+            "written_at"
+        ]
+        == "2026-10-25T12:01:00Z"
+    )
+
+
+def test_a_restarted_container_monitor_wakes_once_for_each_event(mon: Harness) -> None:
+    """AC-1 in the container: each poll is a fresh monitor (serve starts monitor.sh
+    --once every minute), so every poll after the first is a restart."""
+    _, queue = _container(mon)
+    for minute in range(3):
+        _monitor(mon, "--queue-dir", queue.as_posix(), at=NOW + 60 * minute)
+    assert len(_sends(mon)) == 1
+    # The coordinator on Windows marks them done in its data dir: the bind mount.
+    result = mon.run(
+        "patrol.sh",
+        "--session-id",
+        "coord",
+        "--terminal",
+        "term_coord",
+        "--data-dir",
+        queue.parent.as_posix(),
+        "--done",
+        "3",
+        PATROL_NOW=str(NOW + 210),
+    )
+    assert "標記已處理：3 個" in result.stdout, result.stdout + result.stderr
+    assert (queue / "events-done.jsonl").exists()
+    mon.answer(
+        "gh_comments",
+        [_comment(9, "2026-10-25T11:50:00Z"), _comment(11, "2026-10-25T12:04:00Z")],
+    )
+    _monitor(mon, "--queue-dir", queue.as_posix(), at=NOW + 300)
+    _monitor(mon, "--queue-dir", queue.as_posix(), at=NOW + 360)
+    assert [e["id"] for e in _rows(queue / "events.jsonl") if e["type"] == "event"][
+        3:
+    ] == ["comment:11"]
+    assert len(_sends(mon)) == 2
+    sent = (mon.fake / "sent_text.txt").read_text(encoding="utf-8")
+    assert sent.startswith("有 1 個事件")
+
+
+def _watchdog_refused(h: Harness, *stamps: tuple[str, str]) -> None:
+    (h.data / "logs" / "watchdog.log").write_text(
+        "".join(
+            f"{at} gh_auth_failed exit=1 date={day} | GitHub 拒絕 gh 的認證\n"
+            for at, day in stamps
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_a_gh_refused_by_github_wakes_the_coordinator_once_a_taipei_day(
+    mon: Harness,
+) -> None:
+    """Issue comment 6477434381: the watchdog's gh_auth_failed (#337) wakes the
+    coordinator, who comments with its own gh; the monitor's own refused call is the
+    same event. Once per Taipei day."""
+    _watchdog_refused(mon, ("2026-10-25T11:45:00Z", "2026-10-25"))
+    mon.answer("gh_comments", [])
+    result = _monitor(mon)
+    events = [e for e in _records(mon, "event") if e["kind"] == "gh_auth"]
+    assert [(e["id"], e["at"]) for e in events] == [
+        ("gh_auth:2026-10-25", "2026-10-25T11:45:00Z")
+    ]
+    assert "請用本機 gh 在 #1 留言" in events[0]["summary"]
+    assert "wake=sent" in result.stdout and len(_sends(mon)) == 1
+    # The monitor's own call refused the same Taipei day: not a second event.
+    mon.write("gh_comments.fail", "HTTP 401: Bad credentials\n")
+    _monitor(mon, at=NOW + 60)
+    _watchdog_refused(
+        mon,
+        ("2026-10-25T11:45:00Z", "2026-10-25"),
+        ("2026-10-25T12:15:00Z", "2026-10-25"),
+    )
+    _monitor(mon, at=NOW + 120)
+    assert [e["id"] for e in _records(mon, "event") if e["kind"] == "gh_auth"] == [
+        "gh_auth:2026-10-25"
+    ]
+    assert len(_sends(mon)) == 1
+    # 16:00 UTC is the next Taipei day: the monitor's own refusal is a new event. (A
+    # coordinator patrolling meanwhile, so no #1 comment takes the comments' call.)
+    late = NOW + 4 * 3600
+    _coordinator(mon, "2026-10-25T15:59:00Z")
+    _monitor(mon, at=late)
+    refused = [e for e in _records(mon, "event") if e["kind"] == "gh_auth"]
+    assert [e["id"] for e in refused] == ["gh_auth:2026-10-25", "gh_auth:2026-10-26"]
+    assert (
+        "GitHub 拒絕 monitor 的 gh（gh api: HTTP 401: Bad credentials）"
+        in refused[1]["summary"]
+    )
+    assert len(_sends(mon)) == 2
+    # A network error is not a refusal (the watchdog's rule, gh_auth.sh).
+    mon.write("gh_comments.fail", "error connecting to api.github.com\n")
+    _coordinator(mon, "2026-10-26T15:59:00Z")
+    _monitor(mon, at=late + 86400)
+    assert len([e for e in _records(mon, "event") if e["kind"] == "gh_auth"]) == 2
+
+
+def test_the_waker_is_one_command_and_none_leaves_the_wake_out(mon: Harness) -> None:
+    """The wake goes through --waker (orca_wake.sh by default): exit 0 sent, 3 not
+    idle, else failed. With none the monitor records events only, and the #1 comment
+    still goes out: another waker wakes the coordinator (#338, B1)."""
+    waker = mon.root / "waker.sh"
+    calls = mon.fake / "waker_calls.log"
+    waker.write_text(
+        f'printf "%s|%s\\n" "$1" "$2" >>"{calls.as_posix()}"\n'
+        f'exit "$(cat "{(mon.fake / "waker_exit").as_posix()}")"\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    mon.write("waker_exit", "3")
+    result = _monitor(mon, "--waker", waker.as_posix())
+    assert "wake=failed(not_idle) terminal=term_coord" in result.stdout
+    mon.write("waker_exit", "0")
+    _monitor(mon, "--waker", waker.as_posix(), at=NOW + 600)
+    assert (
+        calls.read_text("utf-8").splitlines()
+        == [
+            "term_coord|有 3 個事件，請處理佇列：bash tools/ops/patrol.sh（處理完以 --done 標記）"
+        ]
+        * 2
+    )
+    assert [(w["ok"], w["detail"]) for w in _records(mon, "wake")] == [
+        (False, "not_idle"),
+        (True, "sent"),
+    ]
+    assert not [c for c in mon.calls("orca") if c.startswith("terminal")]
+
+    other = Harness(mon.root / "none")
+    other.answer("gh_pr_list", [_pr()])
+    other.write(
+        "gh_issue_comment.json", "https://github.com/x/issues/1#issuecomment-5\n"
+    )
+    result = _monitor(other, "--waker", "none", "--orca", "none")
+    assert "wake=deferred" in result.stdout and "worktrees=skipped" in result.stdout
+    assert other.calls("orca") == [] and not _records(other, "wake")
+    _monitor(other, "--waker", "none", "--orca", "none", at=NOW + 3600)
+    assert [r["key"] for r in _records(other, "stale")] == ["heartbeat:none"]
+
+
+def test_a_lock_of_another_host_holds_while_its_monitor_beats(mon: Harness) -> None:
+    """A pid of another container (PID namespace) says nothing here: such a lock holds
+    while its monitor beat within three polls; a recreated container takes over after."""
+    logs = mon.data / "logs"
+    (logs / "monitor.lock").mkdir()
+    (logs / "monitor.lock" / "pid").write_text("1 123 0123456789ab\n", "utf-8")
+    beat = logs / "monitor-heartbeat.json"
+    now = int(time.time())
+
+    def beat_at(age: int) -> None:
+        at = datetime.fromtimestamp(now - age, tz=timezone.utc)
+        beat.write_text(json.dumps({"written_at": f"{at:%Y-%m-%dT%H:%M:%SZ}"}), "utf-8")
+
+    beat_at(170)
+    result = mon.run("monitor.sh", "--once")
+    assert "monitor 已在 0123456789ab 執行（pid 1）" in result.stdout
+    assert mon.calls("gh") == []
+    beat_at(190)
+    result = mon.run("monitor.sh", "--once")
+    assert result.returncode == 0 and len(mon.calls("gh")) == 2
+    log = (logs / "monitor.log").read_text("utf-8")
+    assert "lock_stale_removed mode=wake pid=1 host=0123456789ab beat_age_s=" in log
+    assert not (logs / "monitor.lock").exists()
+
+
 def _section(text: str, heading: str) -> str:
     start = text.index(f"\n## {heading}\n")
     end = text.find("\n## ", start + 1)
