@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import DateTime, create_engine, text
 from sqlalchemy.orm import Session
 
 from app import clock
@@ -89,26 +89,94 @@ def test_a_default_stores_the_text_a_naive_utc_value_stores(frozen) -> None:
     engine.dispose()
 
 
-def _datetime_utcnow(node: ast.AST) -> bool:
-    """datetime.utcnow or <module>.datetime.utcnow, called or passed as a default."""
-    if not (isinstance(node, ast.Attribute) and node.attr == "utcnow"):
-        return False
-    owner = node.value
-    return (isinstance(owner, ast.Name) and owner.id == "datetime") or (
-        isinstance(owner, ast.Attribute) and owner.attr == "datetime"
+def test_every_datetime_column_default_calls_utcnow_at_write_time() -> None:
+    """A DateTime default or onupdate is app.clock.utcnow itself: `default=utcnow()`
+    would store the import time in every row and still pass the IngestionRun test
+    above (#374 review)."""
+    seen = []
+    for table in Base.metadata.sorted_tables:
+        for column in table.columns:
+            if not isinstance(column.type, DateTime):
+                continue
+            for kind in ("default", "onupdate"):
+                default = getattr(column, kind)
+                if default is None:
+                    continue
+                name = f"{table.name}.{column.name} {kind}"
+                assert default.is_callable, name
+                assert getattr(default.arg, "__wrapped__", None) is utcnow, name
+                seen.append(name)
+    # models.py: 27 column defaults and ingestion_runs.updated_at's onupdate.
+    assert len(seen) == 28
+
+
+def _clock_modules(tree: ast.AST) -> set[str]:
+    """Names this file binds to the app.clock module (`from app import clock`)."""
+    names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module in ("app", None):
+            names |= {a.asname or a.name for a in node.names if a.name == "clock"}
+        if isinstance(node, ast.Import):
+            names |= {
+                a.asname for a in node.names if a.name == "app.clock" and a.asname
+            }
+    return names
+
+
+def _deprecated_utcnow(tree: ast.AST) -> list[int]:
+    """Lines reading any `.utcnow` attribute (datetime.utcnow, dt.utcnow after
+    `from datetime import datetime as dt`, datetime.datetime.utcnow, X.datetime.utcnow)
+    other than app.clock's, and any `from datetime import utcnow`."""
+    clock_names = _clock_modules(tree)
+    lines = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and node.attr == "utcnow":
+            owner = node.value
+            if not (isinstance(owner, ast.Name) and owner.id in clock_names):
+                lines.append(node.lineno)
+        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith(
+            "datetime"
+        ):
+            lines += [node.lineno for a in node.names if a.name == "utcnow"]
+    return lines
+
+
+def test_the_utcnow_scan_catches_every_spelling() -> None:
+    caught = (
+        "datetime.utcnow()",
+        "x = datetime.utcnow",
+        "import datetime\ndatetime.datetime.utcnow()",
+        "import datetime as d\nd.datetime.utcnow()",
+        "from datetime import datetime as dt\ndt.utcnow()",
+        "from datetime import utcnow",
+        "from app import models\nmodels.datetime.utcnow()",
     )
+    for source in caught:
+        assert _deprecated_utcnow(ast.parse(source)), source
+    allowed = (
+        "from app.clock import utcnow\nutcnow()",
+        "from app import clock\nclock.utcnow()",
+        "from . import clock as c\nc.utcnow()",
+        "import app.clock as c\nc.utcnow()",
+        'monkeypatch.setattr(sources, "utcnow", fake)',
+    )
+    for source in allowed:
+        assert _deprecated_utcnow(ast.parse(source)) == [], source
 
 
 def test_nothing_calls_datetime_utcnow() -> None:
     """#374: datetime.utcnow() is deprecated and warned about 170,000 times per run;
-    use app.clock.utcnow()."""
+    use app.clock.utcnow(). Every .py file under backend/, alembic included."""
     found = []
-    for top in ("app", "worker", "tests"):
-        for path in sorted((BACKEND / top).rglob("*.py")):
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-            found += [
-                f"{path.relative_to(BACKEND).as_posix()}:{node.lineno}"
-                for node in ast.walk(tree)
-                if _datetime_utcnow(node)
-            ]
+    paths = [p for p in BACKEND.rglob("*.py") if "__pycache__" not in p.parts]
+    assert {p.relative_to(BACKEND).parts[0] for p in paths} >= {
+        "alembic",
+        "app",
+        "tests",
+        "worker",
+    }
+    for path in sorted(paths):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        rel = path.relative_to(BACKEND).as_posix()
+        found += [f"{rel}:{line}" for line in _deprecated_utcnow(tree)]
     assert found == []
