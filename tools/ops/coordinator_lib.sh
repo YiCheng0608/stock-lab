@@ -1,4 +1,4 @@
-# Shared by dispatch.sh, close_task.sh and patrol.sh (Issue #282); sourced, not run.
+# Shared by dispatch.sh, close_task.sh, patrol.sh (Issue #282) and deploy.sh (#314); sourced, not run.
 # Callers set script_dir before sourcing. orca, gh and git are looked up on PATH so the
 # tests can put recording fakes in front of them (backend/tests/test_coordinator_scripts.py).
 export LANG=C.UTF-8 LC_ALL=C.UTF-8
