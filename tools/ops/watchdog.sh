@@ -312,18 +312,19 @@ if [ -n "$python" ] && [ -f "$data_dir/stock.db" ]; then
   fi
 fi
 
-# The deployed version (#314): the release checkout's HEAD must be the HEAD that
+# The deployed version (#340): the image this watchdog runs in (the scheduler
+# container's STOCK_IMAGE_TAG and STOCK_GIT_HEAD) must be the image and HEAD that
 # tools/ops/deploy.sh recorded in <logs>/deploy.json. No record yet (never
-# deployed) is skipped; a deploy holds the watchdog lock, so none is half done here.
+# deployed) is skipped; a deploy holds the watchdog lock until the record is written.
 if [ -n "$python" ]; then
   record="$logs/deploy.json"
-  if check="$(helper deploy-head "$record" 2>>"$work/helper.err")"; then
+  if check="$(helper deploy-image "$record" 2>>"$work/helper.err")"; then
     read -r name state facts <<<"$check"
     printf 'invariant %s %s %s\n' "$name" "$state" "$facts"
     if [ "$state" = violation ] && [ "$(value reason)" = unreadable_record ]; then
-      anomaly invariant_deploy_head "部署不變量：部署記錄 \`$record\` 讀不懂（不是 JSON，或缺 \`HEAD\`／\`tag\`／\`checkout\`），無法核對排程跑的版本。請依 docs/RELEASE.md 以 \`tools/ops/deploy.sh\` 重新部署目前該跑的 tag。"
+      anomaly invariant_deploy_image "部署不變量：部署記錄 \`$record\` 讀不懂（不是 JSON，或缺 \`image\`／\`HEAD\`／\`tag\`），無法核對排程跑的版本。請依 docs/RELEASE.md 以 \`tools/ops/deploy.sh\` 重新部署目前該跑的 tag。"
     elif [ "$state" = violation ]; then
-      anomaly invariant_deploy_head "部署不變量：發佈 checkout 的 HEAD 是 \`$(value head)\`，不是部署記錄 \`$record\` 的 \`$(value recorded)\`（tag \`$(value tag)\`）：checkout 在 \`deploy.sh\` 之外被改過，或 \`deploy.sh\` 中途失敗（exit 3），排程跑的不是記錄的版本。請看 #1 的部署留言，依 docs/RELEASE.md 以 \`tools/ops/deploy.sh\` 重新部署。"
+      anomaly invariant_deploy_image "部署不變量：scheduler 跑的 image 是 \`$(value image)\`（HEAD \`$(value head)\`），不是部署記錄 \`$record\` 的 \`$(value recorded)\`（HEAD \`$(value recorded_head)\`，tag \`$(value tag)\`）：容器在 \`deploy.sh\` 之外被重建（例如 \`docker compose up --build\`），或 \`deploy.sh\` 在寫記錄後的 \`compose up\` 失敗（exit 3），排程跑的不是記錄的版本。請看 #1 的部署留言，依 docs/RELEASE.md 以 \`tools/ops/deploy.sh\` 重新部署。"
     fi
   else
     found=1

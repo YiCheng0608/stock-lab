@@ -91,9 +91,18 @@ class Watchdog:
         path.chmod(0o755)
 
     def run(
-        self, *args: str, now: int = NIGHT, python: str | None = None
+        self,
+        *args: str,
+        now: int = NIGHT,
+        python: str | None = None,
+        env: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
+        extra = env or {}
         env = dict(os.environ)
+        # Not the image's version unless the test says so (the docker CI job runs in one).
+        env.pop("STOCK_IMAGE_TAG", None)
+        env.pop("STOCK_GIT_HEAD", None)
+        env.update(extra)
         env.update(
             PATH=str(self.bin) + os.pathsep + env.get("PATH", ""),
             FAKE_DIR=self.fake.as_posix(),
@@ -1162,75 +1171,67 @@ def test_an_expired_claude_token_leaves_the_notes_pending_and_comments_on_1(
     assert f"candidate_notes run {result['run_id']}" in bodies
 
 
-# The deployed version (#314 AC-3) ---------------------------------------------------
+# The deployed version (#314 AC-3; #340: the image, not a checkout) -----------------
+
+IMAGE = "stock-lab-backend:v1.1.0"
+HEAD = "c" * 40
 
 
-def _git(cwd: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-c", "user.name=t", "-c", "user.email=t@example.com", *args],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-
-
-def _release_checkout(root: Path) -> tuple[Path, list[str]]:
-    """A checkout with two commits; returns it and their SHAs, oldest first."""
-
-    checkout = root / "release"
-    checkout.mkdir()
-    _git(checkout, "init", "--quiet")
-    shas = []
-    for n in (1, 2):
-        (checkout / "README.md").write_text(f"{n}\n", encoding="utf-8")
-        _git(checkout, "add", "README.md")
-        _git(checkout, "commit", "--quiet", "-m", f"commit {n}")
-        shas.append(_git(checkout, "rev-parse", "HEAD"))
-    return checkout, shas
-
-
-def _deploy_record(wd: Watchdog, checkout: Path, head: str) -> None:
-    record = {"tag": "v1.1.0", "HEAD": head, "checkout": checkout.as_posix()}
+def _deploy_record(wd: Watchdog, image: str = IMAGE, head: str = HEAD) -> None:
+    record = {"tag": "v1.1.0", "HEAD": head, "image": image}
     (wd.logs / "deploy.json").write_text(json.dumps(record), encoding="utf-8")
 
 
-def test_the_release_checkout_head_is_checked_against_the_deploy_record(wd):
-    checkout, (first, second) = _release_checkout(wd.root)
+def _in_image(image: str = IMAGE, head: str = HEAD) -> dict[str, str]:
+    """The scheduler container's environment (backend/Dockerfile ENV)."""
+    return {"STOCK_IMAGE_TAG": image, "STOCK_GIT_HEAD": head}
+
+
+def test_the_image_the_watchdog_runs_in_is_checked_against_the_deploy_record(wd):
     # Never deployed: nothing to compare with.
-    result = wd.run("--dry-run")
-    assert "invariant deploy_head skip reason=no_deploy_record" in result.stdout
+    result = wd.run("--dry-run", env=_in_image())
+    assert "invariant deploy_image skip reason=no_deploy_record" in result.stdout
     assert "將在 #1 留言" not in result.stdout
-    _deploy_record(wd, checkout, second)
-    result = wd.run()
+    _deploy_record(wd)
+    result = wd.run(env=_in_image())
     assert (
-        f"invariant deploy_head ok head={second} recorded={second} tag=v1.1.0"
-        in result.stdout
+        f"invariant deploy_image ok image={IMAGE} recorded={IMAGE}"
+        f" head={HEAD} recorded_head={HEAD} tag=v1.1.0" in result.stdout
     )
     assert wd.events()[-1] == "schedules_ok" and wd.text("gh_calls.log") == ""
-    # Checked out by hand, outside deploy.sh.
-    _git(checkout, "checkout", "--quiet", "--detach", first)
-    dry = wd.run("--dry-run")
+    # Rebuilt outside deploy.sh (`docker compose up -d --build`): compose's default tag.
+    rebuilt = "stock-lab-backend:latest"
+    dry = wd.run("--dry-run", env=_in_image(rebuilt, ""))
     assert (
-        f"invariant deploy_head violation head={first} recorded={second} tag=v1.1.0"
-        in dry.stdout
+        f"invariant deploy_image violation image={rebuilt} recorded={IMAGE}"
+        f" head=unknown recorded_head={HEAD} tag=v1.1.0" in dry.stdout
     )
-    assert (
-        f"待使用者：部署不變量：發佈 checkout 的 HEAD 是 `{first}`，不是部署記錄"
-        in dry.stdout
-    )
-    wd.run()
-    wd.run()
+    assert f"待使用者：部署不變量：scheduler 跑的 image 是 `{rebuilt}`" in dry.stdout
+    wd.run(env=_in_image(rebuilt, ""))
+    wd.run(env=_in_image(rebuilt, ""))
     assert wd.text("gh_calls.log").count("issue comment 1") == 1
 
 
-def test_a_missing_checkout_or_an_unreadable_record_is_commented(wd):
-    _deploy_record(wd, wd.root / "no-checkout", "a" * 40)
-    dry = wd.run("--dry-run")
-    assert f"invariant deploy_head violation head=unknown recorded={'a' * 40}" in (
-        dry.stdout
+def test_the_same_tag_built_from_another_commit_is_a_violation(wd):
+    _deploy_record(wd)
+    dry = wd.run("--dry-run", env=_in_image(head="d" * 40))
+    assert "invariant deploy_image violation" in dry.stdout
+    assert f"recorded_head={HEAD}" in dry.stdout
+
+
+def test_outside_an_image_or_with_an_unreadable_record_it_is_commented(wd):
+    # The checkout's git is never read (#340, PR #365 review suggestion 2).
+    _deploy_record(wd)
+    dry = wd.run("--dry-run", env={"STOCK_IMAGE_TAG": "", "STOCK_GIT_HEAD": ""})
+    assert (
+        f"invariant deploy_image violation image=unknown recorded={IMAGE}" in dry.stdout
     )
     (wd.logs / "deploy.json").write_text("{not json", encoding="utf-8")
-    dry = wd.run("--dry-run")
-    assert "invariant deploy_head violation reason=unreadable_record" in dry.stdout
+    dry = wd.run("--dry-run", env=_in_image())
+    assert "invariant deploy_image violation reason=unreadable_record" in dry.stdout
     assert "待使用者：部署不變量：部署記錄" in dry.stdout and "讀不懂" in dry.stdout
+    # #314's record (a checkout and its HEAD, no image) cannot be checked either.
+    record = {"tag": "v1.1.0", "HEAD": HEAD, "checkout": "/release"}
+    (wd.logs / "deploy.json").write_text(json.dumps(record), encoding="utf-8")
+    dry = wd.run("--dry-run", env=_in_image())
+    assert "invariant deploy_image violation reason=unreadable_record" in dry.stdout

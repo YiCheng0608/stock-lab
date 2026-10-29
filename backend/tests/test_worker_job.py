@@ -97,29 +97,21 @@ def main():
 main()
 '''
 
-# git for the job (STOCK_GIT): records each call and answers rev-parse and describe
-# from FAKE_GIT_HEAD and FAKE_GIT_TAG (no tag: describe fails, as git does).
+# git on PATH for the job: records each call, so a test can assert there is none.
 FAKE_GIT = r"""import json, os, sys
 
-args = sys.argv[1:]
 with open(os.environ["FAKE_GIT_LOG"], "a", encoding="utf-8") as log:
-    log.write(json.dumps(args) + "\n")
-command = [a for a in args if not a.startswith("--git-dir=")]
-if command[:1] == ["rev-parse"] and os.environ.get("FAKE_GIT_HEAD"):
-    print(os.environ["FAKE_GIT_HEAD"])
-elif command[:1] == ["describe"] and os.environ.get("FAKE_GIT_TAG"):
-    print(os.environ["FAKE_GIT_TAG"])
-else:
-    sys.exit(128)
+    log.write(json.dumps(sys.argv[1:]) + "\n")
+sys.exit(128)
 """
+IMAGE = "stock-lab-backend:v1.1.0"
 GIT_HEAD = "c" * 40
-GIT_TAG = "v1.1.0"
+# What the deployed image carries (backend/Dockerfile, tools/ops/deploy.sh, #340).
+IMAGE_ENV = {"STOCK_IMAGE_TAG": IMAGE, "STOCK_GIT_HEAD": GIT_HEAD}
 
 
-def fake_git(
-    directory: Path, head: str = GIT_HEAD, tag: str = GIT_TAG
-) -> dict[str, str]:
-    """The environment that makes the job run the fake git; its calls go to git.jsonl."""
+def fake_git(directory: Path) -> dict[str, str]:
+    """The environment that puts the recording git first on PATH (calls in git.jsonl)."""
 
     script = directory / "fake_git.py"
     script.write_text(FAKE_GIT, encoding="utf-8")
@@ -129,10 +121,8 @@ def fake_git(
     )
     launcher.chmod(0o755)
     return {
-        "STOCK_GIT": str(launcher),
+        "PATH": f"{directory}{os.pathsep}{os.environ.get('PATH', '')}",
         "FAKE_GIT_LOG": str(directory / "git.jsonl"),
-        "FAKE_GIT_HEAD": head,
-        "FAKE_GIT_TAG": tag,
     }
 
 
@@ -165,7 +155,13 @@ class Tree:
 
     def environment(self, extra_env=None, **fake) -> dict[str, str]:
         env = {**os.environ, "FAKE_LOG": str(self.calls_file)}
-        for name in ("STOCK_CLAUDE_CLI", "PYTHONPATH", "STOCK_DATA_DIR", "STOCK_GIT"):
+        for name in (
+            "STOCK_CLAUDE_CLI",
+            "PYTHONPATH",
+            "STOCK_DATA_DIR",
+            "STOCK_IMAGE_TAG",
+            "STOCK_GIT_HEAD",
+        ):
             env.pop(name, None)
         # Inherited from a job of the caller's, it must not reach the worker.
         env["STOCK_JOB_LOCK"] = "/inherited/daily.lock"
@@ -293,8 +289,8 @@ def test_daily_log_layout(tree):
         r" force=False db=.+stock\.db free_mb=\d+",
         lines[0],
     )
-    # The tree's .git is no repository: HEAD and tag are unknown, never another repo's.
-    assert lines[1] == "--- checkout HEAD=unknown tag=none"
+    # Not in an image: no STOCK_IMAGE_TAG or STOCK_GIT_HEAD, and git is never asked.
+    assert lines[1] == "--- version image=unknown head=unknown"
     assert lines[2] == "--- stdout"
     assert '"note": "日誌"' in result.log
     assert "--- stderr" not in result.log and "news-llm" not in result.log
@@ -442,51 +438,31 @@ def test_a_clean_git_dir_does_not_block_the_job(tree):
     assert skipped_line(result.log) is None
 
 
-# The deployed version, never pulled (#314 AC-2) ----------------------------------
+# The deployed version, never pulled (#314 AC-2, #340) ---------------------------
 
 
 @pytest.mark.parametrize("job_name", ["daily", "news"])
-def test_the_job_never_pulls_and_hands_daily_its_head_and_tag(tree, job_name):
+def test_the_job_never_pulls_and_logs_the_image_it_runs(tree, job_name):
     # --git-pull: what a task registered before #314 still passes.
-    result = tree.run(job_name, "--git-pull", extra_env=fake_git(tree.root))
+    env = {**fake_git(tree.root), **IMAGE_ENV}
+    result = tree.run(job_name, "--git-pull", extra_env=env)
     assert result.code == 0, result.stderr
-    calls = git_calls(tree.root)
-    assert [call[1:] for call in calls] == [
-        ["rev-parse", "--verify", "HEAD"],
-        ["describe", "--tags", "--exact-match", "HEAD"],
-    ]
-    assert {call[0] for call in calls} == {f"--git-dir={tree.git_dir}"}
-    assert not [call for call in calls if "pull" in call]
-    assert f"--- checkout HEAD={GIT_HEAD} tag={GIT_TAG}" in result.log
+    # The image names the version (#340): git is not run at all.
+    assert git_calls(tree.root) == []
+    assert f"--- version image={IMAGE} head={GIT_HEAD}" in result.log
     assert "--git-pull ignored" in result.log
     if job_name == "daily":
-        assert tree.calls()[0]["argv"] == [
-            "daily",
-            "--trigger",
-            "scheduler",
-            "--git-head",
-            GIT_HEAD,
-            "--git-tag",
-            GIT_TAG,
-        ]
-    else:
-        assert all("--git-head" not in call["argv"] for call in tree.calls())
+        # daily reads the same two from its environment (schedule_runs.runtime).
+        assert tree.calls()[0]["argv"] == ["daily", "--trigger", "scheduler"]
 
 
-def test_a_head_without_a_tag_passes_only_the_head(tree):
-    result = tree.run("daily", extra_env=fake_git(tree.root, tag=""))
-    assert "--- checkout HEAD=" + GIT_HEAD + " tag=none" in result.log
-    assert tree.calls()[0]["argv"][-2:] == ["--git-head", GIT_HEAD]
-
-
-def test_a_skipped_daily_still_records_its_head_and_tag(tree):
+def test_a_skipped_daily_passes_only_its_reason(tree):
     (tree.git_dir / "index.lock").touch()
-    tree.run("daily", extra_env=fake_git(tree.root))
-    assert tree.calls()[0]["argv"][-6:] == [
-        "--git-head",
-        GIT_HEAD,
-        "--git-tag",
-        GIT_TAG,
+    tree.run("daily", extra_env=IMAGE_ENV)
+    assert tree.calls()[0]["argv"] == [
+        "daily",
+        "--trigger",
+        "scheduler",
         "--skip-reason",
         "git_busy",
     ]
@@ -753,7 +729,7 @@ def test_a_scheduled_daily_job_on_the_fixture_database_writes_one_run(
     # The checkout's git state is the fake git's (#207): the real checkout is never read.
     fake_dir = tmp_path / "git"
     fake_dir.mkdir()
-    for name, value in fake_git(fake_dir).items():
+    for name, value in {**fake_git(fake_dir), **IMAGE_ENV}.items():
         monkeypatch.setenv(name, value)
     monkeypatch.setattr(job, "git_dir", lambda root: fake_dir)
     parser = argparse.ArgumentParser()
@@ -784,14 +760,16 @@ def test_a_scheduled_daily_job_on_the_fixture_database_writes_one_run(
     assert len(rows) == before + 1, log
     assert rows[-1] == ("2026-10-16", "scheduler", "success"), log
     assert [groups[1:] for groups in end_line(log)] == [("0", "")]
-    # #314 AC-2: the run records the deployed version and nothing is pulled.
+    # #314 AC-2, #340: the run records the deployed image and nothing is pulled.
     with sqlite3.connect(db) as conn:
         (summary,) = conn.execute(
             "SELECT summary_json FROM schedule_runs ORDER BY id DESC LIMIT 1"
         ).fetchone()
     summary = json.loads(summary)
-    assert (summary["git_tag"], summary["HEAD"]) == (GIT_TAG, GIT_HEAD)
-    assert git_calls(fake_dir) and not [c for c in git_calls(fake_dir) if "pull" in c]
+    assert summary["runtime"]["image"] == IMAGE
+    assert summary["runtime"]["head"] == GIT_HEAD
+    assert not {"git_tag", "HEAD"} & set(summary)
+    assert not [c for c in git_calls(fake_dir) if "pull" in c]
 
 
 # Old logs and new logs mean the same to the watchdog (AC-2) ------------------------
