@@ -861,6 +861,67 @@ def test_a_failed_strategy_levels_step_is_commented(wd):
     assert "invariant_strategy_levels" not in wd.text("gh_calls.log")
 
 
+def _monitor_beat(wd: Watchdog, text: str) -> None:
+    (wd.logs / "monitor-heartbeat.json").write_text(text, encoding="utf-8")
+
+
+def _beat_at(epoch: int) -> str:
+    at = datetime.fromtimestamp(epoch, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return json.dumps({"written_at": at, "mode": "live", "gh_calls": 2, "pid": 1})
+
+
+def test_a_stopped_event_monitor_is_commented_once_a_day(wd):
+    # No heartbeat file: the monitor is not registered, nothing to judge.
+    wd.run()
+    _monitor_beat(wd, _beat_at(NIGHT - 600))
+    wd.run()
+    assert wd.text("gh_calls.log") == ""
+    assert wd.events() == ["schedules_ok", "schedules_ok"]
+
+    _monitor_beat(wd, _beat_at(NIGHT - 601))
+    wd.run()
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
+    body = wd.text("gh_bodies.txt")
+    assert (
+        "待使用者：事件 monitor：最後一次輪詢在 2026-10-19T13:49:59Z（10 分鐘前）"
+        in body
+    )
+    assert "\\stock-lab\\monitor" in body and "monitor.log" in body
+    assert "key=monitor_stale" in wd.log()
+    wd.run(now=NIGHT + 15 * 60)
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
+    assert wd.events()[-1] == "anomaly_already_commented"
+
+
+def test_an_unreadable_monitor_heartbeat_is_commented(wd):
+    _monitor_beat(wd, '{"written_at": ')
+    result = wd.run("--dry-run")
+    assert "待使用者：事件 monitor：" in result.stdout
+    assert "monitor-heartbeat.json` 讀不出輪詢時間" in result.stdout
+
+
+def test_a_monitor_whose_gh_calls_keep_failing_is_commented(wd):
+    beat = json.loads(_beat_at(NIGHT - 60))
+    beat.update(gh_failed_polls=9, gh_failed_since="2026-10-19T13:50:00Z")
+    _monitor_beat(wd, json.dumps(beat))
+    wd.run()
+    assert wd.text("gh_calls.log") == ""
+    beat.update(gh_failed_polls=10, gh_error="HTTP 401: Bad credentials")
+    _monitor_beat(wd, json.dumps(beat))
+    wd.run()
+    body = wd.text("gh_bodies.txt")
+    assert (
+        "待使用者：事件 monitor：gh 從 2026-10-19T13:50:00Z 起連續 10 輪失敗"
+        "（最後的錯誤：HTTP 401: Bad credentials）"
+    ) in body
+    assert "`gh auth status`" in body and "`gh api rate_limit`" in body
+    assert "key=monitor_gh_failed" in wd.log()
+    beat.update(json.loads(_beat_at(NIGHT + 14 * 60)), gh_failed_polls=25)
+    _monitor_beat(wd, json.dumps(beat))
+    wd.run(now=NIGHT + 15 * 60)
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
+
+
 def _helper_module():
     spec = importlib.util.spec_from_file_location(
         "watchdog_helper", SCRIPT.with_name("watchdog_helper.py")

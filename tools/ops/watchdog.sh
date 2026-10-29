@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Schedule watchdog, run every 15 minutes by Windows Task Scheduler
 # (tools/ops/Register-Watchdog.ps1). Checks the daily, news and news-llm jobs
-# for anomalies from their logs and the read-only database, and the data
-# invariants in that database, and comments on #1; also whether claude -p and
-# gh were refused for their credentials (CLAUDE_CODE_OAUTH_TOKEN, GH_TOKEN;
-# #337). Operation: docs/OPERATIONS.md §6.1. Every run appends to
-# <data>/logs/watchdog.log.
+# for anomalies from their logs and the read-only database, the data
+# invariants in that database and the event monitor's heartbeat (#316), and
+# comments on #1; also whether claude -p and gh were refused for their
+# credentials (CLAUDE_CODE_OAUTH_TOKEN, GH_TOKEN; #337). Operation:
+# docs/OPERATIONS.md §6.1. Every run appends to <data>/logs/watchdog.log.
 #
 # Usage: watchdog.sh [--dry-run] [--data-dir DIR] [--python EXE]
 #   --dry-run       decide and print the actions; no gh call, no comment
@@ -270,6 +270,24 @@ if [ -n "$python" ] && [ -f "$data_dir/stock.db" ]; then
   fi
 fi
 [ -n "$llm_failed" ] && anomaly news_llm_failed "news_llm：$llm_failed（可能找不到 claude、環境有 API 金鑰、表未建立或被排程逾時終止），請查 news 日誌的 news-llm 段落與 \`/api/ingestion-runs?q=news_llm\`。"
+
+# The coordinator's event monitor (tools/ops/monitor.sh, OPERATIONS §6.8) writes
+# its heartbeat every poll; ten minutes without one means nobody wakes the
+# coordinator; ten polls in a row with a failed gh call mean it polls for nothing.
+# No heartbeat file: the monitor is not registered, no check.
+if [ -n "$python" ]; then
+  beat="$(helper monitor-beat "$logs/monitor-heartbeat.json" "$now" 2>>"$work/helper.err")" || beat=error
+  case "$beat" in
+    stale\ *)
+      read -r _ age at <<<"$beat"
+      anomaly monitor_stale "事件 monitor：最後一次輪詢在 $at（$((age / 60)) 分鐘前），停擺超過 10 分鐘，統籌不會被喚醒。請依 OPERATIONS §6.8 查 \`$logs/monitor.log\` 與工作 \`\\stock-lab\\monitor\`，必要時重新啟動。" ;;
+    gh_failed\ *)
+      read -r _ polls since error <<<"$beat"
+      anomaly monitor_gh_failed "事件 monitor：gh 從 $since 起連續 $polls 輪失敗（最後的錯誤：$error），佇列收不到 PR 與留言的事件。可能是 gh 登入過期（\`gh auth status\`），或帳號共用的 5000 次／小時限流已用完（\`gh api rate_limit\`）；請一併查 \`$logs/monitor.log\`（OPERATIONS §6.8）。" ;;
+    unreadable) anomaly monitor_stale "事件 monitor：\`$logs/monitor-heartbeat.json\` 讀不出輪詢時間，統籌可能不會被喚醒。請依 OPERATIONS §6.8 查 \`$logs/monitor.log\`。" ;;
+    error) found=1; log monitor_check_failed "" "讀取 monitor 心跳失敗：$(tail -n 1 "$work/helper.err" 2>/dev/null)" ;;
+  esac
+fi
 
 # Data invariants (read-only database), every run: the numbers go to stdout,
 # a violation is reported like any other anomaly. The data is not repaired.

@@ -1,4 +1,4 @@
-<!-- owns: 工作目錄與環境、服務啟停、API 跨站請求防護、資料庫 migration 與 readiness、Alembic head、worker CLI、資料品質與研究結果、worker 測試與驗證、排程、排程看門狗、排程註冊與管理、日誌與 run 記錄、重跑與回補、排程限制、容器內的 claude 與 gh 認證 -->
+<!-- owns: 工作目錄與環境、服務啟停、API 跨站請求防護、資料庫 migration 與 readiness、Alembic head、worker CLI、資料品質與研究結果、worker 測試與驗證、排程、排程看門狗、排程註冊與管理、日誌與 run 記錄、重跑與回補、排程限制、容器內的 claude 與 gh 認證、統籌事件 monitor -->
 # 操作手冊
 
 本文件只保留可操作入口、安全邊界與診斷順序；本機檢查命令見[工作手冊](GITHUB_WORKFLOW.md#本機檢查)，能力狀態見 [ROADMAP](ROADMAP.md)。
@@ -161,7 +161,7 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 
 每日排程由排程器定時執行一條命令：`python -m worker.cli job daily` 與 `python -m worker.cli job news`（news 之後接著 `worker.cli news-llm`）（[ROADMAP V1-G1](ROADMAP.md#v1-範圍基線2026-10-17-核定)）。job（[`backend/worker/job.py`](../backend/worker/job.py)）自己負責單一執行個體（檔案鎖）、起跑前檢查、單次上限、日誌與保留，不依賴排程器的設定，換排程器只要定時執行同一條命令。job 只在 Linux（[後端 image](#1-工作目錄環境與啟停)）執行（#333）；本機目前仍是 Windows 工作排程器，在 Docker 切換（#331 子任務 10）前保留，註冊、查詢、停用與移除見 [§6.2](#62-dailynews-工作的註冊與管理)，日誌與 run 記錄見 [§6.3](#63-日誌與-run-記錄)；接手它的 scheduler 容器（`worker.cli serve`）與切換前提見 [§6.6](#66-scheduler-容器的排程serve)。自動下單不在第一版範圍。
 
-位置（使用者 2026-10-17 決定）：正式資料目錄 `C:/Users/YiCheng/stock-lab-data/`（`stock.db`、`raw/`、`logs/`），以 `STOCK_DATA_DIR` 指向；排程只從發佈 checkout `C:/Users/YiCheng/stock-lab-release/`（repo 的獨立 clone，跟著發佈 branch，排程起跑前 `git pull --ff-only`）及其 `.venv` 執行，不從 `master` 管理 checkout。統籌心跳檔、換手標記與壓縮計數檔都在資料目錄的 `logs/` 下（[工作手冊](GITHUB_WORKFLOW.md#統籌-session)）。
+位置（使用者 2026-10-17 決定）：正式資料目錄 `C:/Users/YiCheng/stock-lab-data/`（`stock.db`、`raw/`、`logs/`），以 `STOCK_DATA_DIR` 指向；排程只從發佈 checkout `C:/Users/YiCheng/stock-lab-release/`（repo 的獨立 clone，跟著發佈 branch，排程起跑前 `git pull --ff-only`）及其 `.venv` 執行，不從 `master` 管理 checkout。統籌心跳檔、換手標記與壓縮計數檔都在資料目錄的 `logs/` 下（[工作手冊](GITHUB_WORKFLOW.md#統籌-session)），事件 monitor 的事件佇列與它自己的心跳、日誌也是（[§6.8](#68-統籌事件-monitor)）。
 
 新聞任務與 `daily` 分開排程，不掛在 `daily` 之後：
 
@@ -177,11 +177,12 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 
 ### 6.1 排程看門狗
 
-`tools/ops/watchdog.sh`（Git Bash）每 15 分鐘由工作 `\stock-lab\watchdog` 執行，只檢查排程與資料不變量：以檔案與唯讀 DB 判定異常並在 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 留言「待使用者」，每個異常每台北日最多一則。不判定統籌是否在線、不開或喚醒統籌（統籌開啟見[工作手冊](GITHUB_WORKFLOW.md#統籌-session)）。
+`tools/ops/watchdog.sh`（Git Bash）每 15 分鐘由工作 `\stock-lab\watchdog` 執行，只檢查排程與資料不變量：以檔案與唯讀 DB 判定異常並在 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 留言「待使用者」，每個異常每台北日最多一則。不判定統籌是否在線、不開或喚醒統籌（統籌開啟見[工作手冊](GITHUB_WORKFLOW.md#統籌-session)，喚醒由 [§6.8](#68-統籌事件-monitor) 的事件 monitor 負責）。
 
 - `daily`：週一至週五台北 21:30 後，當日 `logs/daily-YYYYMMDD.log` 不存在或沒有 `end` 列。
 - `daily` 結果：週一至週五台北 22:00 後（21:30 那次已寫入 run 列）唯讀查當日目標的 `schedule_runs`：當天有 `success`／`non_trading_day` 就算完成（之後的 `skipped` 不影響）；否則取最後一筆（略過只指向別列的 `already_complete`／`already_running`），是 `partial`、`failed`、`non_trading_unconfirmed` 或 `skipped:<原因>`（例如 `low_memory`）就留言；仍在 `running` 的等下一輪，超過 2.5 小時視為 `failed`；當日 success 但 catchup 沒補齊（`catchup_incomplete`）也留言；有日誌卻沒有任何 run 列（worker 沒能啟動）也留言。
 - `news`：最新的 `logs/news-*.log` 已超過 6 小時（連續 3 次）沒有更新。
+- `monitor_stale`：事件 monitor 的 `logs/monitor-heartbeat.json` 超過 10 分鐘沒有更新，或讀不出輪詢時間（[§6.8](#68-統籌事件-monitor)；monitor 每分鐘寫一次）；檔案不存在（monitor 尚未註冊）時不判定。心跳仍在更新、但記錄 gh 已連續 10 輪失敗（例如登入過期，佇列收不到 PR 與留言）時另以 `monitor_gh_failed` 留言，附第一次失敗的時間與最後的錯誤，請查 `gh auth status` 與 `gh api rate_limit`（帳號共用的 5000 次／小時可能已用完）。
 - `news_llm`：`stock.db` 最近 3 批判讀都是 `pending`；或 24 小時內最近 3 筆 `run_type=news_llm` 都是 `failed`（`running` 超過 90 分鐘也算）；或 news 日誌（今昨兩天的檔）24 小時內最後 3 個 `news_llm_exit=` 都是 `1`／`wrapper_error`（涵蓋表不存在等不寫 run 的失敗）。後兩者合為一則 `news_llm_failed` 留言；限 24 小時是為了 news 停擺後不再每天就舊失敗留言，停擺本身由上一條 `news` 判定。
 - `llm_auth`：24 小時內 news_llm 或 candidate_notes 最近一次 run 有 `claude -p` 認證失敗（`not_logged_in`）的批次，判定與處置見 [§6.7](#67-容器內的-claude-與-gh-認證env)。
 - `gh_auth`：每次執行先讀一次 repo，GitHub 拒絕 gh 的認證（401 或沒有 token）時記 `gh_auth_failed`、當次異常不留言，gh 恢復後補留一則，見 [§6.7](#67-容器內的-claude-與-gh-認證env)。
@@ -337,3 +338,34 @@ candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(�
   - `gh_auth`：看門狗每次執行先讀一次 repo（`gh api repos/YiCheng0608/stock-lab`，`--dry-run` 不讀）。被拒時看門狗無法用 gh 留言，所以每次記 `gh_auth_failed` 到 `watchdog.log` 與 stdout（`docker logs` 看得到）；當次其他異常記 `anomaly_not_commented`，不算已留言。gh 恢復後的第一次執行在 #1 留一則（每台北日一則），寫明被拒的期間、次數與期間沒能留言的異常；仍存在的異常同一輪照常留言。gh 一直被拒時，只有日誌看得到。
 - **沒有 `.env` 或 token 是空的**：compose 照常啟動（`env_file` 是 `required: false`，§1.2），程式照常執行，不會崩潰。`claude -p` 回 `Not logged in`，news-llm 與 candidate_notes 該批記 `pending`，run 記 `failed`，daily 與 news 的結果與結束碼不受影響（candidate_notes 見 [§6.3](#63-日誌與-run-記錄)）；`gh` 以 exit 4 結束，看門狗記 `gh_auth_failed`。CI `compose` job 的 smoke 第 5 步（[`tools/compose/no_env_llm.sh`](../tools/compose/no_env_llm.sh)）在沒有 env file 的 scheduler 容器裡跑真的 `claude` 與看門狗驗證這幾點。
 - **換 token**：改 `.env` 後重建 scheduler 容器（`docker compose up -d --force-recreate scheduler`），容器才讀到新值。`pending` 的新聞由下一輪 news-llm 重試；`pending` 的候選說明 daily 不會重跑，以 `python -m worker.cli candidate-notes --date YYYY-MM-DD` 補（[§6.3](#63-日誌與-run-記錄)）。
+
+### 6.8 統籌事件 monitor
+
+`tools/ops/monitor.sh`（Git Bash，不用 LLM）由工作 `\stock-lab\monitor` 常駐執行（[#316](https://github.com/YiCheng0608/stock-lab/issues/316)；使用者同意新增，算在 #1 [6235419623](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6235419623) 之內），替統籌輪詢 GitHub 與排程，統籌怎麼處理佇列見[工作手冊「無人值守運作」](GITHUB_WORKFLOW.md#無人值守運作)。每 60 秒（`--interval`，至少 60）一輪：
+
+- **gh**：每輪最多 2 次，`gh pr list`（open PR 的 CI 與 `mergeStateStatus`）與 repo 層級 `issues/comments?since=`（游標存在 `logs/monitor-state.json`，第一輪往回 1 小時）；要在 #1 留言的那一輪以留言取代查留言。約 120 次／小時，帳號的 5000 次／小時由所有 session 共用。每次 gh 與 orca 呼叫最多 120 秒，逾時就當這一項失敗，照常寫心跳，不重試。已知限制：monitor 自己的 Python（`event_queue.py`）與時鐘呼叫沒有逾時，卡住時要等心跳超過 10 分鐘，由下一次排程觸發接手。
+- **其他來源**：`orca worktree list`（task worktree 少於 3 個時記並行名額事件）、daily 每一個 `end` 列、news 的 news 或 news-llm 失敗的 `end` 列（各讀最新兩個日誌檔）。
+- **事件**：去重後附加到 `logs/events.jsonl`（格式寫在 [`event_queue.py`](../tools/ops/event_queue.py) 開頭）。去重鍵：PR 的 CI 結果以 PR、head commit、最新 workflow run 的 run id 與其 `required` 檢查的結論為鍵（同一 run 不重記，re-run 是新事件；被新 run 取消的舊 run 不算，最新 run 的 `required` 跑完才記）；`mergeStateStatus` 為 `CLEAN`／`DIRTY`／`BEHIND`／`UNSTABLE` 時以 PR、commit 與狀態為鍵；留言以留言 id 為鍵（編輯不重記，monitor 第一輪之前建立的留言不記）；新 PR、PR 離開 open 清單、名額以 task worktree 組合為鍵。重啟後以 `events.jsonl` 去重，已記過與已標記處理（`logs/events-done.jsonl`，統籌以 `patrol.sh --done` 寫入）的事件都不會再出現。
+- **喚醒**：有新事件時，對心跳檔（`logs/coordinator-heartbeat.json`）記的 terminal 先 `orca terminal wait --for tui-idle --timeout-ms 15000`，回 `satisfied:true` 才 `orca terminal send` 一句「有 N 個事件，請處理佇列：bash tools/ops/patrol.sh」（與派工同一規則，AGENTS 規則表 #282），結果記成 `events.jsonl` 的 `wake` 列；同一事件只在第一次成功送出時喚醒。沒等到閒置（`not_idle`，terminal 不存在或 wait 逾時也算）或送出失敗（沒有心跳、Orca 拒收）每 10 分鐘再試。已知限制：權限詢問畫面也會讓 `tui-idle` 回 `satisfied:true`（#315 實測），這時送出的文字仍可能落在那個畫面上。
+- **請開統籌**：佇列有事件已 60 分鐘、期間統籌心跳都沒更新時，在 #1 留言「待使用者：請開統籌」，同一心跳只留一則（`stale` 列）；不開 session。
+- **自身狀態**：每輪寫 `logs/monitor-heartbeat.json` 並在 `logs/monitor.log` 記一列（UTC 時間、`poll`、`gh_calls`、新事件與未處理數、喚醒結果）；心跳另記 gh 連續失敗的輪數、從何時起與最後的錯誤（失敗那次呼叫自己的 stderr 最後一行；逾時記 `timeout`；沒有輸出記 `exit <碼>`；`patrol.sh` 也印出）。看門狗在心跳超過 10 分鐘或 gh 連續失敗 10 輪時留言（[§6.1](#61-排程看門狗)）。同時只跑一個（`logs/monitor.lock/`，內容是持有者的 pid 與 token；pid 已不在或心跳超過 10 分鐘就視為殘留接手）。每輪開頭、在 #1 留言前與寫佇列前都檢查鎖：被接手的舊 monitor 一發現鎖已不是自己的，就記 `lock_lost` 結束，不再呼叫 gh、留言或寫佇列，也不刪新持有者的鎖與工作目錄（各 monitor 的工作目錄是 `monitor.lock/work.<pid>`）。
+
+`--record-only` 只記事件，不喚醒也不留言（gh 照樣讀），用來在註冊前以真的 GitHub 驗證。執行環境：Git Bash、PATH 上有已登入的 `gh`、Orca CLI（排程的 PATH 沒有 orca，註冊時寫入 `orca.exe` 完整路徑）。以下命令在發佈 checkout 執行：
+
+| 動作 | 命令 |
+| --- | --- |
+| 預覽 | `powershell -ExecutionPolicy Bypass -File tools/ops/Register-Monitor.ps1 -WhatIf` |
+| 註冊或更新 | `powershell -ExecutionPolicy Bypass -File tools/ops/Register-Monitor.ps1`（`-DataDir`、`-PythonPath`、`-OrcaPath` 預設 `STOCK_DATA_DIR`、`.venv`、`%LOCALAPPDATA%\Programs\orca\resources\bin\orca.exe`；`-RecordOnly` 註冊只記事件的版本） |
+| 查詢 | `schtasks /query /tn "\stock-lab\monitor" /v /fo list`；`tail logs/monitor.log` |
+| 停止 | 建立 `<資料目錄>/logs/monitor.stop`：monitor 做完這一輪就刪掉它並結束（停工作排程可能只結束承載 bash 的 PowerShell）；要停久一點先 `Disable-ScheduledTask -TaskPath \stock-lab\ -TaskName monitor` |
+| 移除 | `powershell -ExecutionPolicy Bypass -File tools/ops/Register-Monitor.ps1 -Unregister`（同時建立 `monitor.stop`） |
+| 手動一輪 | `bash tools/ops/monitor.sh --once --record-only` |
+
+工作以目前使用者、Interactive logon、隱藏執行，登入時啟動，之後每 5 分鐘再觸發一次：執行中就忽略（`IgnoreNew`），已結束就重新啟動，所以 monitor 掛掉最多停 5 分鐘；沒有執行時限。啟動時留著的 `monitor.stop` 屬於先前的 monitor，會刪掉並記 `stop_file_removed`。
+
+上線（第一次以喚醒模式註冊，或從 `-RecordOnly` 改成喚醒模式）：佇列裡已有的事件都還沒喚醒過，註冊後第一輪會一次喚醒全部；放了 60 分鐘以上的事件，如果統籌心跳比它們舊，還會馬上在 #1 留「請開統籌」。所以註冊前先做以下其中一項：
+
+1. 統籌跑 `bash tools/ops/patrol.sh --done <最後 seq>`，把既有事件都標成已處理（最後 seq 是 `patrol.sh` 印的「未處理事件」範圍的最大值）。
+2. 用沒有 `events.jsonl` 的全新資料目錄（`-DataDir`）。
+
+之後再執行「註冊或更新」，並以 `tail logs/monitor.log` 確認第一輪是 `new=0`，或喚醒的只有新事件。

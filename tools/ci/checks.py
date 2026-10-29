@@ -35,10 +35,15 @@ def changed_paths(base: str, cwd: Path = ROOT, worktree: bool = False) -> list[s
 
 # Working-tree paths outside backend/ and tools/ that the backend job reads; a change must run it.
 # Keep in step with backend/tests. test_database_readiness reads the Alembic head stated in
-# docs/OPERATIONS.md; test_condition_copy_source reads the frontend condition table (#279).
+# docs/OPERATIONS.md; test_condition_copy_source reads the frontend condition table (#279);
+# test_event_monitor reads 統籌 session and 無人值守運作 of docs/GITHUB_WORKFLOW.md (#316).
 BACKEND_READ_DIRS: tuple[str, ...] = ()
 BACKEND_READ_FILES: frozenset[str] = frozenset(
-    {"docs/OPERATIONS.md", "frontend/src/stock/strategyBoard.ts"}
+    {
+        "docs/GITHUB_WORKFLOW.md",
+        "docs/OPERATIONS.md",
+        "frontend/src/stock/strategyBoard.ts",
+    }
 )
 # Outside backend/ but part of the backend image build (backend/Dockerfile, #333): the docker
 # job runs with the python flag, so a change to what the build context leaves out runs it.

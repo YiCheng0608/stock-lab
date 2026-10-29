@@ -1,6 +1,7 @@
-"""JSON helper for the coordinator scripts dispatch.sh, close_task.sh and patrol.sh (Issue #282).
+"""JSON helper for the coordinator scripts dispatch.sh, close_task.sh, patrol.sh and monitor.sh (#282, #316).
 
-Git Bash has no jq, so the scripts pipe orca and gh JSON through this file. Every
+Git Bash has no jq, so the scripts pipe orca and gh JSON through this file; event_queue.py
+imports the PR helpers (latest_checks, check_state, pr_line). Every
 subcommand reads one JSON document on stdin and prints plain text; it exits 1 when the
 value is missing or the condition is false, so a script can test the exit code.
 
@@ -15,8 +16,6 @@ value is missing or the condition is false, so a script can test the exit code.
   board               "itemId projectId fieldId optionId=name,..." of project 1 from the
                       issue query (item "-" and the issue node id last when the issue is
                       not on the board)
-  prs                 one line per open PR (CI rollup and mergeStateStatus)
-  comments            one line per new Issue/PR comment
   utf8 FILE           exit 0 when FILE is non-empty valid UTF-8 (no stdin)
   within A B          "yes" when A is B or under B, else "no" (no stdin)
   guard PATH [--residual] [--home H] [--data D]... [--root R]...
@@ -178,12 +177,13 @@ def _print_value(value) -> int:
     return 0
 
 
-def _one_line(text: str, width: int = 80) -> str:
+def one_line(text: str, width: int = 80) -> str:
     line = " ".join((text or "").split())
     return line if len(line) <= width else line[: width - 1] + "…"
 
 
-def _check_state(rollup) -> str:
+def latest_checks(rollup) -> list[dict]:
+    """The newest run of each check in a statusCheckRollup."""
     # A newer run of the same check replaces the older one (a cancelled run or an
     # earlier failure of a re-run job must not decide the state, #286). A check
     # with no time yet is queued, so it counts as the newest; gh --json prints a
@@ -195,9 +195,13 @@ def _check_state(rollup) -> str:
         when = next((t for t in times if t and not t.startswith("0001-")), "~")
         if key not in latest or when >= latest[key][0]:
             latest[key] = (when, c)
+    return [c for _, c in latest.values()]
+
+
+def check_state(rollup) -> str:
     states = [
         (c.get("conclusion") or c.get("state") or c.get("status") or "").upper()
-        for _, c in latest.values()
+        for c in latest_checks(rollup)
     ]
     if not states:
         return "none"
@@ -206,6 +210,17 @@ def _check_state(rollup) -> str:
     if any(s in ("", "PENDING", "QUEUED", "IN_PROGRESS", "EXPECTED") for s in states):
         return "pending"
     return "success"
+
+
+def pr_line(pr: dict) -> str:
+    """One line per open PR: CI state of the newest runs, mergeStateStatus, labels."""
+    labels = ",".join(lb["name"] for lb in pr.get("labels") or [])
+    draft = " draft" if pr.get("isDraft") else ""
+    return (
+        f"PR #{pr['number']} ci={check_state(pr.get('statusCheckRollup'))}"
+        f" merge={pr.get('mergeStateStatus') or '?'}{draft}"
+        f" labels={labels or '-'} {one_line(pr.get('title', ''), 50)}"
+    )
 
 
 def _run_state(run) -> str:
@@ -304,22 +319,6 @@ def main(argv: list[str]) -> int:
             _options(field),
             issue.get("id", ""),
         )
-        return 0
-    if command == "prs":
-        for pr in doc if isinstance(doc, list) else []:
-            labels = ",".join(lb["name"] for lb in pr.get("labels") or [])
-            draft = " draft" if pr.get("isDraft") else ""
-            print(
-                f"PR #{pr['number']} ci={_check_state(pr.get('statusCheckRollup'))}"
-                f" merge={pr.get('mergeStateStatus') or '?'}{draft}"
-                f" labels={labels or '-'} {_one_line(pr.get('title', ''), 50)}"
-            )
-        return 0
-    if command == "comments":
-        for c in doc if isinstance(doc, list) else []:
-            number = (c.get("issue_url") or "").rsplit("/", 1)[-1]
-            print(f"#{number} {c.get('created_at', '')} {_one_line(c.get('body', ''))}")
-            print(f"  {c.get('html_url', '')}")
         return 0
     print(f"unknown command: {command}", file=sys.stderr)
     return 64
