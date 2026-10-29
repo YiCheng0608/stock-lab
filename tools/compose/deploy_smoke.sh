@@ -17,11 +17,15 @@
 #    names t2 and the t1 image before it, and the new scheduler's watchdog check is ok.
 #
 # At the end it removes the project's containers, network, volume and images, and the
-# throwaway directory.
+# throwaway directory. So the project must be a test one (tools/compose/test_project.sh):
+# stock-lab or STOCK_COMPOSE_PROJECT, or a name without t<n>/task-<n>/smoke, exits 2 first.
+# deploy.sh gets the ports and the missing env file as options: it drops inherited ones.
 set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 project="${DEPLOY_SMOKE_PROJECT:-stock-lab-deploy-smoke}"
+. "$repo/tools/compose/test_project.sh"
+refuse_unless_test_project "$project"
 export WEB_PORT="${DEPLOY_SMOKE_WEB_PORT:-18180}" API_PORT="${DEPLOY_SMOKE_API_PORT:-18100}"
 work="$(mktemp -d)"
 # No env file: a path that does not exist (docker-compose.yml, required: false).
@@ -80,7 +84,8 @@ bin="$work/bin"
 command -v cygpath > /dev/null && bin="$(cygpath -u "$bin")"
 deploy() {
     PATH="$bin:$PATH" STOCK_PYTHON="$python" bash "$repo/tools/ops/deploy.sh" "$1" \
-        --checkout "$release" --project "$project" --operator deploy-smoke --no-comment
+        --checkout "$release" --project "$project" --operator deploy-smoke --no-comment \
+        --web-port "$WEB_PORT" --api-port "$API_PORT" --env-file "$STOCK_ENV_FILE"
 }
 
 # images: the project's image tags; state: what a refused deploy must leave as it was.

@@ -20,11 +20,12 @@ V1 之後的發佈（使用者 2026-10-28 決定，取代 [V1 發佈隔離](#v1-
 
 ## 部署
 
-`deploy.sh <tag> [--checkout DIR] [--project NAME] [--operator NAME] [--wait-timeout SEC] [--no-comment] [--python EXE]`。
+`deploy.sh <tag> [--checkout DIR] [--project NAME] [--operator NAME] [--wait-timeout SEC] [--web-port N] [--api-port N] [--env-file PATH] [--no-comment] [--python EXE]`。
 
 - **發佈 checkout**（`--checkout`，預設 `STOCK_RELEASE_DIR`、再來是 `~/stock-lab-release`）是 compose 的 project 目錄：tag 在這裡 checkout，build context 與 `docker-compose.yml` 都是該 tag 的；`.env`（[OPERATIONS §6.7](OPERATIONS.md#67-容器內的-claude-與-gh-認證env)，不進 Git、git 忽略它，不算未 commit 的改動）也放在這裡。要從另一個 checkout 執行：checkout tag 會改寫發佈 checkout 的檔案，腳本在發佈 checkout 裡就拒絕。
 - **compose project**（`--project`，預設 `STOCK_COMPOSE_PROJECT`、再來是 `stock-lab`）：image 是 `<project>-backend:<tag>`（api、scheduler）與 `<project>-web:<tag>`，資料在 volume `<project>_stock-data`。`COMPOSE_PROJECT_NAME` 不採用：任務 session 的它是 `task-<issue>`（[本機檢查](GITHUB_WORKFLOW.md#本機檢查)）。
 - `--wait-timeout`：`compose up --wait` 等服務 healthy 的秒數，預設 300。`--no-comment` 不在 #1 留言，只用於臨時 checkout 與 project 的演練（[`tools/compose/deploy_smoke.sh`](../tools/compose/deploy_smoke.sh)，CI `compose` job）。
+- `WEB_PORT`、`API_PORT`、`STOCK_ENV_FILE`（[OPERATIONS §1.2](OPERATIONS.md#12-docker-compose)）：呼叫端 shell 裡的這三個變數一律丟掉，避免剛跑過 smoke 的 shell 把正式 project 換到別的埠或 env file。compose 改從發佈 checkout 的 `.env`、再來是 compose 檔的預設取得；要指定時用 `--web-port`、`--api-port`、`--env-file`（演練用）。
 
 下列任一情況拒絕並 exit 1，發佈 checkout 的 HEAD、工作樹與 tag，以及 image、容器、volume 都不變（在 fetch 之後才發現的拒絕，會刪掉 fetch 新建的 tag ref；部署前就有的同名 tag 保留）：
 
@@ -33,7 +34,7 @@ V1 之後的發佈（使用者 2026-10-28 決定，取代 [V1 發佈隔離](#v1-
 | 工作樹 | 有未 commit 的改動（含未追蹤的檔；git 忽略的檔不算），或有 `index.lock`／`MERGE_HEAD` |
 | tag | `git ls-remote origin` 沒有這個 tag |
 | CI | tag 所在 commit **自己的** CI（`gh run list --commit <sha> --workflow CI`）最新一次（run id 最大的，同時建立的 run 列出順序不定）不是 success：紅、執行中或沒有都拒絕。不要求是 master 的祖先（`release/v1` 的 commit 有自己的 CI） |
-| 排程 | 執行中的 scheduler 容器裡，volume 的 `locks/` 的 daily、news、watchdog 鎖（[OPERATIONS §6.2](OPERATIONS.md#62-dailynews-工作的註冊與管理)，與 job 同一套檔案鎖）有任一被持有。三把鎖由 `docker exec` 在該容器內以 `worker.job lock --keep-stdin` 取得，持有到新容器起來、讀回完成（`deploy.sh` 關閉 stdin 或中途結束就釋放）；job 在這段時間起跑會記 `already_running`。舊 scheduler 被 `up` 換掉時鎖隨它釋放，新 scheduler 只在下一個觸發時間才跑 job。沒有執行中的 scheduler 時沒有排程 job 能跑，不取鎖（輸出 `"locks": "none"`） |
+| 排程 | volume 的 `locks/` 的 daily、news、watchdog 鎖（[OPERATIONS §6.2](OPERATIONS.md#62-dailynews-工作的註冊與管理)，與 job 同一套檔案鎖）有任一被持有。三把鎖由 `docker exec` 在該 project 一個執行中、掛著 volume 的容器內以 `worker.job lock --keep-stdin` 取得：scheduler 優先，沒有時用 api 或 `compose run` 的臨時容器（手動跑的 job 也在這裡被擋下）。鎖持有到新容器起來、讀回完成（`deploy.sh` 關閉 stdin 或中途結束就釋放）；job 在這段時間起跑會記 `already_running`。舊容器被 `up` 換掉時鎖隨它釋放，新 scheduler 只在下一個觸發時間才跑 job。api、scheduler 都沒在執行時沒有 job 能持有鎖，不取鎖（輸出 `"locks": "none"`） |
 | 版本 | tag 早於 #340（tag 的 `docker-compose.yml` 沒有 `STOCK_RELEASE_TAG`）：那一版的 image 不帶 tag，部署後無法核對跑的版本。早於 #314 的 tag 也屬於這種 |
 
 全部通過後依序：fetch 該 tag（本機已有同名但指向別處的 tag 時 fetch 失敗，拒絕）→ `git checkout <tag>`（detached HEAD）並讀回 HEAD → `docker compose build`（`STOCK_RELEASE_TAG=<tag>`、`STOCK_GIT_HEAD=<該 commit>`，image 內的 `STOCK_IMAGE_TAG`／`STOCK_GIT_HEAD` 就是這兩個）→ 在新 image 的臨時容器把部署記錄寫進 volume → `docker compose up -d --no-build --wait` → 讀回三個服務跑的都是該 tag 的 image、新 scheduler 自己的版本核對（`watchdog_helper.py deploy-image`）是 ok → 釋放鎖 → 在 #1 留言。
@@ -67,7 +68,7 @@ V1 之後的發佈（使用者 2026-10-28 決定，取代 [V1 發佈隔離](#v1-
 | 1 | 拒絕，什麼都沒變；依訊息處理後再跑 |
 | 3 | checkout 已開始後某一步失敗。寫記錄之前（checkout、build）：容器仍跑前一版，記錄也是前一版的；寫記錄之後（`up`、讀回）：看門狗會回報 scheduler 的 image 與記錄不符。修好原因後以同一個 tag 再跑 |
 | 4 | 已部署、記錄已寫，只有 #1 留言失敗：手動補留言 |
-| 2、64 | 環境（找不到 docker、Docker Desktop 沒開、拿不到鎖但不是被持有）或參數錯誤，沒有動作 |
+| 2、64 | 環境或參數錯誤，沒有動作：找不到 docker、Docker Desktop 沒開；拿鎖的容器 120 秒內沒有回應；拿鎖的容器是 #340 之前的 image，它的 `worker.job` 不認得 `--keep-stdin`：先 `docker compose -p <project> stop` 停掉舊容器再部署（#342 切換時若已有舊的 scheduler 或 api 在跑也一樣） |
 
 ## 版本回退
 
@@ -83,4 +84,4 @@ V1 之後的發佈（使用者 2026-10-28 決定，取代 [V1 發佈隔離](#v1-
 - **每日核對**記發佈 checkout 當時的 branch 與 HEAD（`git -C <發佈 checkout> rev-parse --abbrev-ref HEAD` 與 `--short HEAD`），證明窗口每天跑的是 `release/v1`。
 - **窗口結束**（使用者確認 G7 後）：`git log origin/master..origin/release/v1 --no-merges` 必須為空（V1 改動都已在 master）；在排程閒置時把發佈 checkout 切回 master、依 master 的 lock 檔重裝 venv（下一次 daily 會升 V1.1 的 migration）；`release/v1` 最後一個 commit 打 `v1.0` tag。三項結果記在 G7 Issue。
 
-窗口結束後到 Docker 切換（#342）之前，工作排程器仍從發佈 checkout 執行，發佈 checkout 不能拉到含 #333 的 commit（[OPERATIONS §6.6](OPERATIONS.md#66-scheduler-容器的排程serve) 的切換前提）。上面的 `deploy.sh` 部署的是 image，只在 scheduler 容器接手之後使用；切換步驟與切換時的第一次部署由 #342 處理。`v1.0` 早於 #340，`deploy.sh` 的版本檢查會拒絕它。
+窗口結束後到 Docker 切換（#342）之前，工作排程器仍從發佈 checkout 執行，發佈 checkout 不能拉到含 #333 的 commit（[OPERATIONS §6.6](OPERATIONS.md#66-scheduler-容器的排程serve) 的切換前提）。上面的 `deploy.sh` 部署的是 image，只在 scheduler 容器接手之後使用；切換步驟與切換時的第一次部署由 #342 處理（正式 project 已有 #340 之前的容器在跑時，先停掉它們，見上面 exit 2）。`v1.0` 早於 #340，`deploy.sh` 的版本檢查會拒絕它。

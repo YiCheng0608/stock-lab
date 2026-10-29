@@ -16,10 +16,14 @@
 # Its own project (SMOKE_PROJECT, default stock-lab-smoke) and ports (SMOKE_WEB_PORT 18080,
 # SMOKE_API_PORT 18000) and a throwaway env file; it never reads .env. SMOKE_BASE_FILE replaces
 # docker-compose.yml (paths still resolve from the repo root). At the end it removes the
-# project's containers, network and volumes; the images stay for the next run.
+# project's containers, network and volumes; the images stay for the next run. So SMOKE_PROJECT
+# must be a test project (tools/compose/test_project.sh): stock-lab or STOCK_COMPOSE_PROJECT, or
+# a name without t<n>/task-<n>/smoke, exits 2 before anything runs (#340).
 set -euo pipefail
 
 project="${SMOKE_PROJECT:-stock-lab-smoke}"
+. "$(dirname "${BASH_SOURCE[0]}")/test_project.sh"
+refuse_unless_test_project "$project"
 web_port="${SMOKE_WEB_PORT:-18080}"
 api_port="${SMOKE_API_PORT:-18000}"
 work="$(mktemp -d)"

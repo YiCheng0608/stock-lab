@@ -13,11 +13,13 @@
 #   - origin has no such tag;
 #   - the latest CI run of the tag's own commit (`gh run list --commit`, highest run id)
 #     is not success; the commit need not be on master (a release/v1 commit has its own CI);
-#   - a scheduled job is running: the daily, news and watchdog locks of the data volume
-#     (backend/worker/job.py) are taken inside the running scheduler container
-#     (`worker.job lock --keep-stdin`, held until this script closes its stdin or dies) and
-#     kept until the new containers are up, so no job starts meanwhile; a held one refuses
-#     the deploy. With no scheduler running no scheduled job can run, and none is taken;
+#   - a job is running: the daily, news and watchdog locks of the data volume
+#     (backend/worker/job.py) are taken inside a running container of the project that mounts
+#     it, the scheduler, else the api or a one-off `compose run` of either (a job run by hand),
+#     with `worker.job lock --keep-stdin`, held until this script closes its stdin or dies, and
+#     kept until the new containers are up, so no job starts meanwhile; a held one refuses the
+#     deploy. With none of them running no job can hold a lock, and none is taken. A scheduler
+#     of an image before #340 does not know --keep-stdin: exit 2, stop it first;
 #   - the tag predates #340: its docker-compose.yml does not tag the images with
 #     STOCK_RELEASE_TAG, so what runs could not be told from the image.
 # Then: fetch the tag, `git checkout` it (detached HEAD), `docker compose build` with
@@ -35,6 +37,11 @@
 #                       (COMPOSE_PROJECT_NAME is ignored: a task session sets it to task-<issue>)
 #   --operator NAME     who deploys, for the record and #1; default git config user.name
 #   --wait-timeout SEC  for `compose up --wait`; default 300
+#   --web-port N, --api-port N, --env-file PATH
+#                       WEB_PORT, API_PORT and STOCK_ENV_FILE for compose (docs/OPERATIONS.md
+#                       §1.2). The caller's own are dropped, so a shell left with a smoke
+#                       test's cannot move production: without these options compose takes
+#                       them from the checkout's .env, then its defaults
 #   --no-comment        no comment on #1 (a rehearsal on a throwaway checkout and project)
 #   --python EXE        Python for the JSON; default $STOCK_PYTHON, then this checkout's .venv, then python3
 # Prints one JSON line. Exit 0 deployed; 1 refused (nothing changed); 3 a step failed after the
@@ -47,12 +54,14 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
 
 tag="" checkout="${STOCK_RELEASE_DIR:-$HOME/stock-lab-release}" project="${STOCK_COMPOSE_PROJECT:-stock-lab}"
-operator="" wait_timeout=300 comment=1
+operator="" wait_timeout=300 comment=1 web_port="" api_port="" env_file=""
+# Seconds to wait for the lock holder to answer (tests shorten it).
+lock_wait="${DEPLOY_LOCK_WAIT:-120}"
 while [ $# -gt 0 ]; do
   case "$1" in
     -h | --help) awk 'NR > 1 && !/^#/ { exit } NR > 1' "${BASH_SOURCE[0]}"; exit 0 ;;
     --no-comment) comment=0 ;;
-    --checkout | --project | --operator | --wait-timeout | --python)
+    --checkout | --project | --operator | --wait-timeout | --python | --web-port | --api-port | --env-file)
       [ $# -ge 2 ] && [ -n "$2" ] || die "$1 needs a value" 64
       case "$1" in
         --checkout) checkout="$2" ;;
@@ -60,6 +69,9 @@ while [ $# -gt 0 ]; do
         --operator) operator="$2" ;;
         --wait-timeout) wait_timeout="$2" ;;
         --python) python="$2" ;;
+        --web-port) web_port="$2" ;;
+        --api-port) api_port="$2" ;;
+        --env-file) env_file="$2" ;;
       esac
       shift 2
       continue
@@ -75,6 +87,10 @@ git check-ref-format "refs/tags/$tag" || die "不是合法的 tag 名稱：$tag"
 [[ "$tag" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] || die "tag $tag 不能當 image tag" 64
 [[ "$project" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || die "不是合法的 compose project 名稱：$project" 64
 [[ "$wait_timeout" =~ ^[1-9][0-9]*$ ]] || die "--wait-timeout 要是正整數秒：$wait_timeout" 64
+for port in "$web_port" "$api_port"; do
+  [ -z "$port" ] || [[ "$port" =~ ^[1-9][0-9]{0,4}$ ]] || die "不是埠號：$port" 64
+done
+[[ "$lock_wait" =~ ^[1-9][0-9]*$ ]] || die "DEPLOY_LOCK_WAIT 要是正整數秒：$lock_wait" 64
 find_python
 
 refuse() {
@@ -95,7 +111,10 @@ command -v docker >/dev/null 2>&1 || die "找不到 docker" 2
 dk() { MSYS_NO_PATHCONV=1 docker "$@"; }
 # Only this script's settings reach compose: the project and the file by name, the tag and its
 # commit for the image names and STOCK_GIT_HEAD (docker-compose.yml). sha is set below.
-unset COMPOSE_FILE COMPOSE_PROFILES
+unset COMPOSE_FILE COMPOSE_PROFILES WEB_PORT API_PORT STOCK_ENV_FILE
+[ -z "$web_port" ] || export WEB_PORT="$web_port"
+[ -z "$api_port" ] || export API_PORT="$api_port"
+[ -z "$env_file" ] || export STOCK_ENV_FILE="$env_file"
 compose() {
   COMPOSE_PROJECT_NAME="$project" STOCK_RELEASE_TAG="$tag" STOCK_GIT_HEAD="$sha" \
     dk compose -p "$project" -f "$checkout_native/docker-compose.yml" "$@"
@@ -127,13 +146,17 @@ out="$(gh run list --repo "$GH_REPO" --commit "$sha" --workflow CI --limit 20 \
 ci="$(printf '%s' "$out" | cj commit-ci "$sha")"
 [ "$ci" = success ] || refuse "tag $tag 的 commit ${sha:0:9} 最新一次 CI 是 $ci，不是 success"
 
-# --- the job locks, in the running scheduler ----------------------------------------
-scheduler="$(dk ps -q --filter "label=com.docker.compose.project=$project" \
-  --filter label=com.docker.compose.service=scheduler --filter status=running)" \
-  || die "docker ps 失敗" 2
-scheduler="$(printf '%s\n' "$scheduler" | tr -d '\r' | head -n 1)"
+# --- the job locks, in a running container that mounts the volume ---------------------
+# The project's running api and scheduler containers, one-off `compose run` ones included
+# (the label is the service's); the scheduler's first. web mounts no volume.
+containers="$(dk ps --filter "label=com.docker.compose.project=$project" --filter status=running \
+  --format '{{.ID}} {{.Label "com.docker.compose.service"}}')" || die "docker ps 失敗" 2
+containers="${containers//$'\r'/}"
+scheduler="$(printf '%s\n' "$containers" | awk '$2 == "scheduler" { print $1; exit }')"
+holder="$scheduler"
+[ -n "$holder" ] || holder="$(printf '%s\n' "$containers" | awk '$2 == "api" { print $1; exit }')"
 locks=none previous=""
-if [ -n "$scheduler" ]; then
+if [ -n "$holder" ]; then
   # Each lock runs the next as its child; the innermost says so and reads stdin until this
   # script closes it, or dies, which releases all three.
   hold=()
@@ -141,22 +164,33 @@ if [ -n "$scheduler" ]; then
     hold+=(python -X utf8 -m worker.job lock --keep-stdin "/data/locks/$name.lock" --)
   done
   hold+=(sh -c 'echo held; exec cat >/dev/null')
-  coproc LOCKS { dk exec -i "$scheduler" "${hold[@]}"; }
+  # exec: the coprocess is docker itself, so a kill reaches it.
+  coproc LOCKS { MSYS_NO_PATHCONV=1 exec docker exec -i "$holder" "${hold[@]}"; }
   lock_pid=$LOCKS_PID
   # Copies, as bash drops LOCKS when the coprocess ends; the originals closed, so closing
   # lock_in is the end of its stdin.
   exec {lock_out}<&"${LOCKS[0]}" {lock_in}>&"${LOCKS[1]}"
   eval "exec ${LOCKS[0]}<&- ${LOCKS[1]}>&-"
   line=""
-  IFS= read -r -t 120 line <&"$lock_out" || true
+  IFS= read -r -t "$lock_wait" line <&"$lock_out"
+  answered=$?
   if [ "${line%$'\r'}" != held ]; then
     exec {lock_in}>&-
+    if [ "$answered" -gt 128 ]; then
+      # No answer at all: not waited for any longer than this.
+      kill "$lock_pid" 2>/dev/null
+      wait "$lock_pid" 2>/dev/null
+      die "容器 ${holder:0:12} 在 $lock_wait 秒內沒有回應排程鎖" 2
+    fi
     wait "$lock_pid"
     code=$?
-    [ "$code" = 75 ] && refuse "排程執行中（scheduler 容器的 daily、news 或 watchdog 鎖被持有）"
-    die "在 scheduler 容器 ${scheduler:0:12} 拿不到排程鎖（exit $code）" 2
+    [ "$code" = 75 ] && refuse "排程執行中（容器 ${holder:0:12} 的 daily、news 或 watchdog 鎖被持有）"
+    [ "$code" = 2 ] && die "容器 ${holder:0:12} 的 worker.job 不認得 --keep-stdin（image 早於 #340）：先以 docker compose -p $project stop 停掉它再部署" 2
+    die "在容器 ${holder:0:12} 拿不到排程鎖（exit $code）" 2
   fi
   locks=held
+fi
+if [ -n "$scheduler" ]; then
   previous="$(dk inspect -f '{{.Config.Image}}' "$scheduler")" \
     || die "讀不到 scheduler 容器 ${scheduler:0:12} 的 image" 2
   previous="${previous//$'\r'/}"

@@ -80,11 +80,13 @@ exec "$REAL_GIT" "$@"
 """
 
 # The fake docker's state, under $FAKE_DIR/docker: images (one ref per line), running (the tag
-# the project's containers run; none without the file), volume/deploy.json, locks_held (a job
-# holds a lock: the lock exec exits 75). Every call goes to docker_calls.log, the lock holder's
-# end too ("lock released"), so the order of the steps can be read back. on_lock, when it
-# exists, runs as the lock is taken. build/run/up/readback_fails make that step fail;
-# readback holds what the new scheduler's check prints.
+# the project's containers run), containers (`docker ps` lines: id and service; none without
+# the file), volume/deploy.json, locks_held (a job holds a lock: the lock exec exits 75),
+# old_image (the holder's worker.job knows no --keep-stdin: exit 2), lock_hangs (the holder
+# never answers). Every call goes to docker_calls.log, the lock holder's end too ("lock
+# released"), so the order of the steps can be read back. on_lock, when it exists, runs as the
+# lock is taken. build/run/up/readback_fails make that step fail; readback holds what the new
+# scheduler's check prints.
 FAKE_DOCKER = r"""#!/usr/bin/env bash
 d="$FAKE_DIR/docker"
 log="$FAKE_DIR/docker_calls.log"
@@ -98,8 +100,9 @@ if [ "$1" = compose ]; then
   case "$sub" in
     version) exit 0 ;;
     build)
-      printf 'build project=%s tag=%s head=%s\n' "$COMPOSE_PROJECT_NAME" "$STOCK_RELEASE_TAG" \
-        "$STOCK_GIT_HEAD" >>"$log"
+      printf 'build project=%s tag=%s head=%s web=%s api=%s env_file=%s\n' \
+        "$COMPOSE_PROJECT_NAME" "$STOCK_RELEASE_TAG" "$STOCK_GIT_HEAD" "${WEB_PORT-}" \
+        "${API_PORT-}" "${STOCK_ENV_FILE-}" >>"$log"
       [ -f "$d/build_fails" ] && exit 1
       printf '%s\n' "$COMPOSE_PROJECT_NAME-backend:$STOCK_RELEASE_TAG" \
         "$COMPOSE_PROJECT_NAME-web:$STOCK_RELEASE_TAG" >>"$d/images"
@@ -112,6 +115,7 @@ if [ "$1" = compose ]; then
     up)
       [ -f "$d/up_fails" ] && exit 1
       printf '%s\n' "$STOCK_RELEASE_TAG" >"$d/running"
+      printf 'c0ffee5c4ed01e7 scheduler\nfeedface0001 api\n' >"$d/containers"
       exit 0 ;;
     ps)
       t="$(running)"
@@ -126,7 +130,7 @@ if [ "$1" = compose ]; then
   exit 0
 fi
 case "$1" in
-  ps) [ -f "$d/running" ] && echo "c0ffee5c4ed01e7"; exit 0 ;;
+  ps) cat "$d/containers" 2>/dev/null; exit 0 ;;
   inspect) echo "stock-lab-backend:$(running)"; exit 0 ;;
   image)
     shift 2
@@ -135,6 +139,8 @@ case "$1" in
   exec)
     [ -f "$d/on_lock" ] && bash "$d/on_lock"
     if [ -f "$d/locks_held" ]; then echo "locked: /data/locks/daily.lock" >&2; exit 75; fi
+    if [ -f "$d/old_image" ]; then echo "error: unrecognized arguments: --keep-stdin" >&2; exit 2; fi
+    [ -f "$d/lock_hangs" ] && exec sleep 60
     echo held
     cat >/dev/null
     echo "lock released" >>"$log"
@@ -211,6 +217,7 @@ class Harness:
         # The project runs v0 with its scheduler, as after an earlier deploy.
         self.images(f"{PROJECT}-backend:v0", f"{PROJECT}-web:v0")
         (self.docker / "running").write_text("v0\n", encoding="utf-8")
+        self.containers("c0ffee5c4ed01e7 scheduler", "feedface0001 api")
 
     def commit(self, files: dict[str, str]) -> None:
         for name, text in files.items():
@@ -236,6 +243,12 @@ class Harness:
         ]
         (self.fake / "gh_run_list.json").write_text(json.dumps(runs), encoding="utf-8")
 
+    def containers(self, *lines: str) -> None:
+        """The project's running api and scheduler containers: `<id> <service>`."""
+        (self.docker / "containers").write_text(
+            "".join(f"{line}\n" for line in lines), encoding="utf-8"
+        )
+
     def images(self, *refs: str) -> None:
         (self.docker / "images").write_text(
             "".join(f"{ref}\n" for ref in refs), encoding="utf-8"
@@ -251,7 +264,7 @@ class Harness:
     def docker_state(self) -> dict[str, str | None]:
         """The images, what runs and the volume's record, as the fake docker keeps them."""
         state = {}
-        for name in ("images", "running", "volume/deploy.json"):
+        for name in ("images", "running", "containers", "volume/deploy.json"):
             path = self.docker / name
             state[name] = path.read_text(encoding="utf-8") if path.exists() else None
         return state
@@ -348,7 +361,7 @@ def test_a_green_tag_is_built_tagged_started_and_recorded(harness):
     assert harness.head() == sha
     # Images of the tag, built from the checked-out tag with its commit.
     calls = harness.calls("docker")
-    assert f"build project={PROJECT} tag=v1 head={sha}" in calls
+    assert f"build project={PROJECT} tag=v1 head={sha} web= api= env_file=" in calls
     assert (
         f"{PROJECT}-backend:v1\n{PROJECT}-web:v1\n" in harness.docker_state()["images"]
     )
@@ -420,14 +433,59 @@ def test_compose_gets_the_project_and_file_and_never_the_session_project(harness
     assert harness.record["image"] == "t340-other-backend:v1"
 
 
-def test_without_a_running_scheduler_no_lock_is_taken(harness):
+def test_with_no_api_or_scheduler_running_no_lock_is_taken(harness):
     (harness.docker / "running").unlink()
+    (harness.docker / "containers").unlink()
     result = harness.deploy("v1", "--no-comment")
     assert result.code == 0, result.out
     assert result.result["locks"] == "none"
     assert result.result["previous_image"] is None
     assert harness.record["previous_image"] is None
     assert not [c for c in harness.calls("docker") if c.startswith("exec ")]
+
+
+def test_without_a_scheduler_the_locks_are_taken_in_the_api(harness):
+    # The api, or a one-off `compose run` (its label is the service's): a job run by hand.
+    harness.containers("feedface0001 api")
+    result = harness.deploy("v1", "--no-comment")
+    assert result.code == 0, result.out
+    assert result.result["locks"] == "held"
+    assert result.result["previous_image"] is None
+    (lock,) = [c for c in harness.calls("docker") if c.startswith("exec -i ")]
+    assert lock.startswith("exec -i feedface0001 python -X utf8 -m worker.job lock ")
+
+
+def test_a_job_run_by_hand_without_a_scheduler_refuses_the_deploy(harness):
+    harness.containers("0ff1ce000001 api")
+    (harness.docker / "locks_held").touch()
+    before = harness.state()
+    result = harness.deploy("v1")
+    assert_refused_unchanged(harness, before, result, "排程執行中")
+
+
+def test_inherited_ports_and_env_file_never_reach_compose(harness):
+    # A shell left with a smoke test's (tools/compose/deploy_smoke.sh) cannot move production.
+    left = {"WEB_PORT": "18180", "API_PORT": "18100", "STOCK_ENV_FILE": "/smoke/env"}
+    assert harness.deploy("v1", "--no-comment", extra_env=left).code == 0
+    assert any(
+        c.startswith("build project=stock-lab tag=v1 ")
+        and c.endswith(" web= api= env_file=")
+        for c in harness.calls("docker")
+    )
+    options = (
+        "--web-port",
+        "18180",
+        "--api-port",
+        "18100",
+        "--env-file",
+        "/rehearsal/env",
+    )
+    assert harness.deploy("v2", "--no-comment", *options).code == 0
+    assert any(
+        c.startswith("build project=stock-lab tag=v2 ")
+        and c.endswith(" web=18180 api=18100 env_file=/rehearsal/env")
+        for c in harness.calls("docker")
+    )
 
 
 def test_redeploying_the_running_tag_still_releases_the_locks(harness):
@@ -465,6 +523,7 @@ def test_the_comment_on_1_names_the_tag_head_images_and_record(harness):
 
 def test_the_first_deploy_comments_that_there_was_no_previous_image(harness):
     (harness.docker / "running").unlink()
+    (harness.docker / "containers").unlink()
     assert harness.deploy("v1").code == 0
     comment = (harness.fake / "comment.md").read_text(encoding="utf-8")
     assert "；前一版 無（scheduler 沒有在執行）\n" in comment
@@ -660,8 +719,36 @@ def test_a_new_scheduler_whose_check_is_not_ok_fails_the_deploy(harness):
     assert "版本核對不是 ok" in result.out
 
 
+def test_a_scheduler_of_an_image_before_340_exits_2_and_says_to_stop_it(harness):
+    (harness.docker / "old_image").touch()
+    before = harness.state()
+    result = harness.deploy("v1")
+    assert result.code == 2, result.out
+    assert (
+        "image 早於 #340" in result.out
+        and "docker compose -p stock-lab stop" in result.out
+    )
+    assert harness.state() == before and harness.mutations() == []
+
+
+def test_a_lock_holder_that_never_answers_exits_2_in_time(harness):
+    (harness.docker / "lock_hangs").touch()
+    before = harness.state()
+    started = time.monotonic()
+    result = harness.deploy("v1", extra_env={"DEPLOY_LOCK_WAIT": "2"})
+    assert result.code == 2, result.out
+    assert "2 秒內沒有回應排程鎖" in result.out
+    # The holder is killed, not waited for (it would sleep 60 s).
+    assert time.monotonic() - started < 45
+    assert harness.state() == before and harness.mutations() == []
+
+
 def test_bad_arguments_exit_64(harness):
-    for args in (["v1", "--project", "Bad Name"], ["v1", "--wait-timeout", "0"]):
+    for args in (
+        ["v1", "--project", "Bad Name"],
+        ["v1", "--wait-timeout", "0"],
+        ["v1", "--web-port", "port"],
+    ):
         assert harness.deploy(*args).code == 64
     assert harness.deploy("bad:tag").code == 64
     assert harness.calls("docker") == []
