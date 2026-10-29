@@ -10,6 +10,9 @@ call in ``<fake>/<name>_calls.log`` and answer from JSON files the test writes i
 fake directory (a missing answer is an empty success). Nothing touches Orca, GitHub, the
 repository's git state or the real data directory.
 
+A fake ``docker`` is always first on PATH as well (#360): close_task.sh lists and deletes
+Docker resources, and no test may reach the real daemon, its images or its volumes.
+
 Every path a test hands to close_task.sh lies under tmp_path, including the "repository
 root" and "home" it must refuse: with the refusal broken (a mutation run, or a bug) the
 script can only delete sandbox files. A first version passed the real checkout as the
@@ -194,11 +197,50 @@ case "$1" in
         echo "error: branch '$3' not found." >&2; exit 1
       fi
     fi ;;
-  merge-base) exit "$(cat "$d/git_ancestor_exit" 2>/dev/null || echo 0)" ;;
+  # merge-base --is-ancestor A B: exit code from <fake>/git_ancestor_exit_<A> when the test
+  # wrote one (A a sha), else from <fake>/git_ancestor_exit (default 0).
+  merge-base)
+    [ -f "$d/git_ancestor_exit_$3" ] && exit "$(cat "$d/git_ancestor_exit_$3")"
+    exit "$(cat "$d/git_ancestor_exit" 2>/dev/null || echo 0)" ;;
+  rev-list) cat "$d/git_rev_list.txt" 2>/dev/null; exit 0 ;;
   status) cat "$d/git_status.txt" 2>/dev/null ;;
   worktree)
     [ "$2" = list ] && cat "$d/git_worktrees.txt" 2>/dev/null
     exit 0 ;;
+esac
+exit 0
+"""
+
+
+# docker: containers, images, volumes and networks live in <fake>/docker_<kind>.tsv
+# ("NAME STATE IMAGE MOUNTS NETWORKS", "REPOSITORY TAG", "NAME", "NAME"; tab-separated), and
+# the listings print them with the kind in front, as docker_listing's --format asks. rm, rmi,
+# volume rm and network rm delete the line, and fail for a resource that is not there or is
+# listed in <fake>/docker_fails.txt. <fake>/docker_missing answers 127 (no docker command),
+# <fake>/docker_down 1 (no daemon), <fake>/docker_hangs never answers.
+FAKE_DOCKER = r"""#!/usr/bin/env bash
+d="$FAKE_DIR"
+printf '%s\n' "$*" >>"$d/docker_calls.log"
+[ -f "$d/docker_missing" ] && exit 127
+[ -f "$d/docker_hangs" ] && exec sleep 60
+if [ -f "$d/docker_down" ]; then echo "Cannot connect to the Docker daemon" >&2; exit 1; fi
+list() { [ ! -f "$d/docker_$2.tsv" ] || sed "s/^/$1\t/" "$d/docker_$2.tsv"; }
+drop() {
+  f="$d/docker_$1.tsv"
+  if grep -qxF -- "$2" "$d/docker_fails.txt" 2>/dev/null; then echo "Error: $2 is in use" >&2; exit 1; fi
+  awk -F '\t' -v k="$2" -v image="${3:-}" '(image ? $1 ":" $2 : $1) == k { found = 1; next } { print }
+    END { exit !found }' "$f" >"$f.tmp" 2>/dev/null || { rm -f "$f.tmp"; echo "Error: no such $1: $2" >&2; exit 1; }
+  mv "$f.tmp" "$f"
+}
+case "$1 ${2:-}" in
+  "ps "*) list container containers ;;
+  "images "*) list image images ;;
+  "volume ls") list volume volumes ;;
+  "network ls") list network networks ;;
+  "rm "*) drop containers "$2" ;;
+  "rmi "*) drop images "$2" 1 ;;
+  "volume rm") drop volumes "$3" ;;
+  "network rm") drop networks "$3" ;;
 esac
 exit 0
 """
@@ -229,7 +271,12 @@ class Harness:
             directory.mkdir(parents=True, exist_ok=True)
         for name in SCRIPTS:
             shutil.copyfile(OPS / name, self.ops / name)
-        for name, body in (("orca", FAKE_ORCA), ("gh", FAKE_GH), ("git", FAKE_GIT)):
+        for name, body in (
+            ("orca", FAKE_ORCA),
+            ("gh", FAKE_GH),
+            ("git", FAKE_GIT),
+            ("docker", FAKE_DOCKER),
+        ):
             path = self.bin / name
             path.write_text(body, encoding="utf-8", newline="\n")
             path.chmod(0o755)
@@ -737,6 +784,7 @@ def _assert_nothing_deleted(h: Harness) -> None:
     assert not [c for c in h.calls("git") if " branch -D " in f" {c} " or "prune" in c]
     assert not [c for c in h.calls("gh") if "updateProjectV2" in c]
     assert not _issue_closes(h)
+    assert not h.calls("docker")
     assert h.wt.is_dir() and (h.extra / "deps" / "a.txt").is_file()
     assert "task/282-dryrun" in h.branches()
     assert (h.target / "keep.txt").is_file()
@@ -1496,6 +1544,321 @@ def test_close_task_stops_when_the_branch_cannot_be_deleted(
     assert not [c for c in close.calls("gh") if "updateProjectV2" in c]
     assert "task/282-dryrun" in close.branches()
     assert (close.extra / "deps" / "a.txt").is_file()
+
+
+# --- close_task.sh: Docker resources (#360) ------------------------------------------
+
+# The task's resources: compose's <project>-<service> images and <project>_<name> volumes and
+# networks (projects t282-a, t282, task-282-x), images tagged t282/t282-*, a container named
+# for the task and one made from its image under a random name.
+OURS = {
+    "containers": [
+        (
+            "t282-a-backend-1",
+            "exited",
+            "t282-a-backend",
+            "t282-a_stock-data",
+            "t282-a_default",
+        ),
+        ("task-282-run", "created", "alpine:3.20", "", "bridge"),
+        ("elated_turing", "exited", "stock-lab-backend:t282", "", "bridge"),
+    ],
+    "images": [
+        "stock-lab-backend:t282",
+        "stock-lab-web:t282-a",
+        "t282-a-backend:latest",
+        "task-282-x-web:latest",
+    ],
+    "volumes": ["t282_stock-data", "t282-a_stock-data", "task-282_cache"],
+    "networks": ["t282_default", "t282-a_default"],
+}
+# Everything else: base images, dangling ones, the user's other projects, and Issues 2820 and
+# 28, whose names start with the same digits.
+THEIRS = {
+    "containers": [
+        (
+            "t2820-a-backend-1",
+            "exited",
+            "t2820-a-backend",
+            "t2820_stock-data",
+            "t2820_default",
+        ),
+        ("user-db", "exited", "postgres:16", "userdata", "bridge"),
+    ],
+    "images": [
+        "python:3.12-slim",
+        "node:22-alpine",
+        "nginx:1.27-alpine",
+        "alpine:3.20",
+        "<none>:<none>",
+        "postgres:16",
+        "myproj-app:latest",
+        "stock-lab-backend:latest",
+        "stock-lab-backend:t2820",
+        "t2820-backend:latest",
+        "t28-backend:latest",
+    ],
+    "volumes": ["userdata", "t2820_stock-data", "t28_cache"],
+    "networks": ["bridge", "host", "none", "t2820_default"],
+}
+KINDS = {
+    "containers": "container",
+    "images": "image",
+    "volumes": "volume",
+    "networks": "network",
+}
+DOCKER_DELETES = (
+    "rm ",
+    "rmi ",
+    "volume rm ",
+    "network rm ",
+    "image prune",
+    "builder prune",
+)
+
+
+def _docker_names(rows: list) -> list[str]:
+    return [row[0] if isinstance(row, tuple) else row for row in rows]
+
+
+def _set_docker(h: Harness, **kinds: list) -> None:
+    for kind, rows in kinds.items():
+        lines = []
+        for row in rows:
+            if kind == "images":
+                row = tuple(row.rsplit(":", 1))
+            lines.append("\t".join(row) if isinstance(row, tuple) else row)
+        h.write(f"docker_{kind}.tsv", "".join(f"{line}\n" for line in lines))
+
+
+def _docker_left(h: Harness, kind: str) -> list[str]:
+    path = h.fake / f"docker_{kind}.tsv"
+    rows = [line.split("\t") for line in path.read_text("utf-8").splitlines() if line]
+    return [f"{r[0]}:{r[1]}" if kind == "images" else r[0] for r in rows]
+
+
+def _docker_deletes(h: Harness) -> list[str]:
+    return [c for c in h.calls("docker") if c.startswith(DOCKER_DELETES)]
+
+
+def _docker_steps(line: dict) -> list[str]:
+    return [s for s in line["steps"] if s.startswith("docker_")]
+
+
+def _removed(kinds: dict) -> list[str]:
+    return [
+        f"docker_removed:{KINDS[kind]}:{name}"
+        for kind in KINDS
+        for name in _docker_names(kinds[kind])
+    ]
+
+
+@pytest.fixture
+def docker(close: Harness) -> Harness:
+    _set_docker(close, **{kind: OURS[kind] + THEIRS[kind] for kind in KINDS})
+    return close
+
+
+def _assert_theirs_left(h: Harness) -> None:
+    for kind in KINDS:
+        assert _docker_left(h, kind) == _docker_names(THEIRS[kind]), kind
+
+
+def test_close_task_removes_the_docker_resources_named_for_the_task(
+    docker: Harness,
+) -> None:
+    """AC-1 (#360): every kind of the task's resources goes, containers first, each by name
+    (images as repository:tag, never -f); base images, dangling ones, other projects' and
+    those of Issues 2820 and 28 stay. With no other Docker task, dangling images and build
+    cache are pruned last."""
+    result = docker.close_task(docker.extra)
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    assert _docker_steps(line) == _removed(OURS) + [
+        "docker_pruned:images",
+        "docker_pruned:build_cache",
+    ]
+    steps = line["steps"]
+    assert steps.index(f"extra_removed:{docker.extra.as_posix()}") < steps.index(
+        "docker_removed:container:t282-a-backend-1"
+    )
+    _assert_theirs_left(docker)
+    assert _docker_deletes(docker) == [
+        *(f"rm {name}" for name in _docker_names(OURS["containers"])),
+        *(f"rmi {name}" for name in OURS["images"]),
+        *(f"volume rm {name}" for name in OURS["volumes"]),
+        *(f"network rm {name}" for name in OURS["networks"]),
+        "image prune -f",
+        "builder prune -f",
+    ]
+    assert line["board"] == "完成"
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        ("t282-a-web-1", "running", "nginx:1.27-alpine", "", "bridge"),
+        ("busy", "running", "stock-lab-web:t282-a", "", "bridge"),
+        ("busy", "running", "alpine:3.20", "t282_stock-data", "bridge"),
+        ("busy", "running", "alpine:3.20", "userdata", "bridge,t282-a_default"),
+        ("t282-a-scheduler-1", "paused", "alpine:3.20", "", "bridge"),
+    ],
+    ids=["named", "image", "volume", "network", "paused"],
+)
+def test_close_task_keeps_the_docker_resources_while_one_runs(
+    docker: Harness, row: tuple
+) -> None:
+    """AC-1 (#360): a running container named for the task or using one of its images,
+    volumes or networks: none of the task's resources is deleted, the JSON says which
+    container and what was kept, and nothing is pruned. The close itself goes on."""
+    _set_docker(docker, containers=OURS["containers"] + THEIRS["containers"] + [row])
+    result = docker.close_task(docker.extra)
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    kept = [
+        f"docker_kept:{KINDS[kind]}:{name}"
+        for kind in KINDS
+        for name in _docker_names(OURS[kind])
+    ]
+    assert _docker_steps(line) == [
+        f"docker_running:{row[0]}",
+        *kept,
+        "docker_prune_skipped:running_containers",
+    ]
+    assert not _docker_deletes(docker)
+    assert _docker_left(docker, "images") == OURS["images"] + THEIRS["images"]
+    assert line["board"] == "完成" and not docker.wt.exists()
+
+
+@pytest.mark.parametrize(
+    "why", ["volume", "image-tag", "subtask", "unknown", "running"]
+)
+def test_close_task_leaves_the_prune_to_the_last_docker_task(
+    docker: Harness, why: str
+) -> None:
+    """AC-1 (#360): the task's own resources go, but dangling images and build cache stay
+    while another Docker task is in progress: worktree task/253-other has resources named
+    t253 (a volume, an image tag), or its HEAD holds feat/docker's first commit of its own
+    (a Docker subtask), or git cannot tell (exit 128); or while any container runs."""
+    first = "e" * 40
+    reason = "docker_prune_skipped:other_docker_tasks:253"
+    if why == "volume":
+        _set_docker(
+            docker, volumes=OURS["volumes"] + THEIRS["volumes"] + ["t253_stock-data"]
+        )
+    elif why == "image-tag":
+        _set_docker(
+            docker, images=OURS["images"] + THEIRS["images"] + ["stock-lab-api:t253"]
+        )
+    elif why in ("subtask", "unknown"):
+        docker.write("git_rev_list.txt", f"{first}\n{'f' * 40}\n")
+        docker.write(f"git_ancestor_exit_{first}", "0" if why == "subtask" else "128")
+    else:
+        row = ("user-web", "running", "nginx:1.27-alpine", "", "bridge")
+        _set_docker(
+            docker, containers=OURS["containers"] + THEIRS["containers"] + [row]
+        )
+        reason = "docker_prune_skipped:running_containers"
+    result = docker.close_task(docker.extra)
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    assert _docker_steps(line) == _removed(OURS) + [reason]
+    assert not [c for c in docker.calls("docker") if "prune" in c]
+    if why == "subtask":
+        assert f"merge-base --is-ancestor {first} {SHA}" in _git_subcommands(docker)
+
+
+def test_close_task_prunes_when_no_other_worktree_is_a_docker_subtask(
+    docker: Harness,
+) -> None:
+    """AC-1 (#360): feat/docker has commits of its own, but task/253-other's HEAD holds none
+    of them (merge-base exit 1): it is no Docker task, so the prune runs."""
+    first = "e" * 40
+    docker.write("git_rev_list.txt", f"{first}\n")
+    docker.write(f"git_ancestor_exit_{first}", "1")
+    result = docker.close_task(docker.extra)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _docker_steps(_json_line(result))[-2:] == [
+        "docker_pruned:images",
+        "docker_pruned:build_cache",
+    ]
+    assert any(
+        c.startswith(
+            "rev-list --first-parent --reverse origin/master..origin/feat/docker"
+        )
+        for c in _git_subcommands(docker)
+    )
+
+
+@pytest.mark.parametrize("case", ["master", "feat-docker", "no-board"])
+def test_close_task_prunes_only_for_a_docker_task(close: Harness, case: str) -> None:
+    """#360: a task with no Docker resources deletes nothing in Docker; it prunes only when
+    it is a Docker subtask (its PR went into feat/docker). A dry run (--no-board) never
+    prunes, even with resources of its own."""
+    args = ["--extra-dir", close.extra.as_posix()]
+    if case == "feat-docker":
+        _docker_green(close)
+    elif case == "no-board":
+        _set_docker(close, volumes=["t282_stock-data"])
+        args.insert(0, "--no-board")
+    result = close.run("close_task.sh", "282", *args)
+    assert result.returncode == 0, result.stdout + result.stderr
+    expected = {
+        "master": ["docker_none", "docker_prune_skipped:no_task_resources"],
+        "feat-docker": [
+            "docker_none",
+            "docker_pruned:images",
+            "docker_pruned:build_cache",
+        ],
+        "no-board": [
+            "docker_removed:volume:t282_stock-data",
+            "docker_prune_skipped:not_requested",
+        ],
+    }[case]
+    assert _docker_steps(_json_line(result)) == expected
+    assert bool([c for c in close.calls("docker") if "prune" in c]) == (
+        case == "feat-docker"
+    )
+
+
+@pytest.mark.parametrize("how", ["missing", "down", "hangs"])
+def test_close_task_skips_docker_when_it_does_not_answer(
+    docker: Harness, how: str
+) -> None:
+    """AC-1 (#360): no docker command, no daemon, or a daemon that does not answer within the
+    time limit: one docker_skipped step, nothing in Docker deleted, and the close is done."""
+    docker.write(f"docker_{how}", "")
+    started = datetime.now()
+    result = docker.close_task(docker.extra, CLOSE_TASK_DOCKER_TIMEOUT="2")
+    elapsed = (datetime.now() - started).total_seconds()
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    reason = {"missing": "no_docker", "down": "daemon_unreachable", "hangs": "timeout"}[
+        how
+    ]
+    assert _docker_steps(line) == [f"docker_skipped:{reason}"]
+    assert len(docker.calls("docker")) == 1 and not _docker_deletes(docker)
+    assert _docker_left(docker, "volumes") == OURS["volumes"] + THEIRS["volumes"]
+    assert line["board"] == "完成" and "task/282-dryrun" not in docker.branches()
+    # The fake would hang for 60 s: only the time limit ends it.
+    assert elapsed < 40
+
+
+def test_close_task_reports_a_docker_resource_it_could_not_delete(
+    docker: Harness,
+) -> None:
+    """#360: a volume docker refuses to delete is a docker_failed step; the other resources
+    and the prune still go, and the close does not fail."""
+    docker.write("docker_fails.txt", "t282_stock-data\n")
+    result = docker.close_task(docker.extra)
+    assert result.returncode == 0, result.stdout + result.stderr
+    steps = _docker_steps(_json_line(result))
+    expected = _removed(OURS)
+    expected[expected.index("docker_removed:volume:t282_stock-data")] = (
+        "docker_failed:volume:t282_stock-data"
+    )
+    assert steps == expected + ["docker_pruned:images", "docker_pruned:build_cache"]
+    assert "t282_stock-data" in _docker_left(docker, "volumes")
 
 
 # --- patrol.sh ---------------------------------------------------------------------
