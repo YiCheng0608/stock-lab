@@ -23,9 +23,16 @@ The wake itself is tools/ops/orca_wake.sh, the waker monitor.sh runs on the host
 sends only once ``orca terminal wait --for tui-idle`` answers satisfied:true; a terminal
 that ended answers that too, and then its send fails (send_failed). Answers of /wake
 (JSON {"result": ...}): sent, not_idle, send_failed, no_heartbeat (none, or a handle
-that is not [\\w-]+), nothing_pending. One request of each kind at a time, and none
-within THROTTLE seconds of the last one answered (429 throttled). Each request is a line
-in <logs>/wake-listener.log.
+that is not event_queue's HANDLE: never one starting with "-", which orca would read as
+an option), nothing_pending. One request of each kind at a time, and none within
+THROTTLE seconds of the last one answered (429 throttled). Requests refused for the
+token are answered 401 and logged up to REFUSED_PER_MINUTE in the last 60 seconds, then
+429, counted in the next 401's line (held_back=N); a Content-Length that is not a number
+of bytes is 400. Each request
+is a line in <logs>/wake-listener.log.
+
+The port is held exclusively (no SO_REUSEADDR; SO_EXCLUSIVEADDRUSE on Windows): with
+another program on it, the listener exits instead of sharing it.
 
 ``GET /health`` needs no token and answers only that this is the listener, so a start
 can tell it from another program on the port. The coordinator session starts it with
@@ -42,10 +49,12 @@ import hmac
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import threading
 import time
+from collections import deque
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -66,6 +75,9 @@ ORCA_TIMEOUT = 120
 TEXT = "有 {n} 個事件，請處理佇列：bash tools/ops/patrol.sh（處理完以 --done 標記）"
 RESULTS = {0: "sent", 3: "not_idle"}
 KINDS = {"/wake": "wake", "/worktrees": "worktrees"}
+# Refused requests (no token, a wrong one) answered 401 and logged in any 60 seconds;
+# past this, 429, counted in the next 401's line.
+REFUSED_PER_MINUTE = 10
 # GET /health: nothing but who answers (wake_listener_start.sh looks for it).
 HEALTH = json.dumps({"result": "ok", "service": "stock-lab-wake"}).encode()
 
@@ -91,6 +103,24 @@ class Waker:
         self.script = Path(__file__).resolve().parent / "orca_wake.sh"
         self._locks = {kind: threading.Lock() for kind in KINDS.values()}
         self._answered = {kind: -float(THROTTLE) for kind in KINDS.values()}
+        self._refusals = threading.Lock()
+        self._refused: deque[float] = deque()  # times of the 401s of the last minute
+        self._held_back = 0  # 429s since the last 401
+
+    def refuse(self) -> int:
+        """The status of a request refused for its token: 401, or 429 past the limit
+        of the last 60 seconds. The 429s are counted in the next 401's line."""
+        with self._refusals:
+            now = time.monotonic()
+            while self._refused and now - self._refused[0] >= 60:
+                self._refused.popleft()
+            if len(self._refused) >= REFUSED_PER_MINUTE:
+                self._held_back += 1
+                return 429
+            self._refused.append(now)
+            held, self._held_back = self._held_back, 0
+            self.log("refused reason=token" + (f" held_back={held}" if held else ""))
+            return 401
 
     def answer(self, kind: str) -> tuple[int, str]:
         """(HTTP status, result) of a request of KIND: one at a time, throttled."""
@@ -107,7 +137,7 @@ class Waker:
             lock.release()
 
     def wake(self) -> tuple[int, str]:
-        terminal, _, _ = _heartbeat(self.logs)  # "" unless a [\w-]+ handle
+        terminal, _, _ = _heartbeat(self.logs)  # "" unless event_queue's HANDLE
         if not terminal:
             return 200, "no_heartbeat"
         pending = len(Queue(self.logs).pending())
@@ -180,15 +210,17 @@ def handler(token: str, waker: Waker):
         def do_POST(self) -> None:  # noqa: N802 (http.server's name)
             given = (self.headers.get("Authorization") or "").encode()
             if not hmac.compare_digest(given, expected):
-                waker.log("refused reason=token")
-                return self._answer(401, "unauthorized")
+                status = waker.refuse()
+                result = "unauthorized" if status == 401 else "throttled"
+                return self._answer(status, result)
             kind = KINDS.get(self.path)
             if kind is None:
                 return self._answer(404, "not_found")
-            try:
-                length = int(self.headers.get("Content-Length") or 0)
-            except ValueError:
-                length = MAX_BODY + 1
+            text = self.headers.get("Content-Length")
+            text = "0" if text is None else text.strip()
+            if not (text.isascii() and text.isdigit()):  # empty, negative, not a number
+                return self._answer(400, "bad_length")
+            length = int(text)
             if length > MAX_BODY:
                 return self._answer(413, "too_large")
             self.rfile.read(length)  # nothing in it is used
@@ -215,6 +247,19 @@ def handler(token: str, waker: Waker):
     return Handler
 
 
+class ExclusiveServer(ThreadingHTTPServer):
+    """The port to this listener alone: with a second listener, or another program
+    on the port, the bind fails rather than share or take it."""
+
+    allow_reuse_address = False
+    daemon_threads = True
+
+    def server_bind(self) -> None:
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):  # Windows
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--token-file", required=True, type=Path)
@@ -232,19 +277,25 @@ def main(argv: list[str]) -> int:
     )
     parser.add_argument(
         "--orca",
-        default=shutil.which("orca")
-        or str(
-            Path(os.environ.get("LOCALAPPDATA", ""))
-            / "Programs/orca/resources/bin/orca.exe"
-        ),
-        help="本機 Orca CLI（預設 PATH 上的 orca，再來是 Orca 的安裝目錄）",
+        help="本機 Orca CLI（預設 PATH 上的 orca，再來是 Orca 的安裝目錄；"
+        "設了 STOCK_WAKE_TEST 時必填，測試不碰真的 Orca）",
     )
     args = parser.parse_args(argv)
+    if args.orca is None:
+        if os.environ.get("STOCK_WAKE_TEST"):
+            raise SystemExit("STOCK_WAKE_TEST：測試要以 --orca 指定假的 orca")
+        args.orca = shutil.which("orca") or str(
+            Path(os.environ.get("LOCALAPPDATA", ""))
+            / "Programs/orca/resources/bin/orca.exe"
+        )
     token = read_token(args.token_file)
     logs = args.data_dir / "logs"
     logs.mkdir(parents=True, exist_ok=True)
     waker = Waker(logs, args.bash, args.orca)
-    server = ThreadingHTTPServer((HOST, args.port), handler(token, waker))
+    try:
+        server = ExclusiveServer((HOST, args.port), handler(token, waker))
+    except OSError as error:
+        raise SystemExit(f"{HOST}:{args.port} 綁不到（已被占用？）：{error}")
     waker.log(f"start host={HOST} port={args.port} pid={os.getpid()}")
     print(f"wake listener on {HOST}:{args.port}", flush=True)
     try:

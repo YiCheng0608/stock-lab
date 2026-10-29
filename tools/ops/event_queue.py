@@ -83,6 +83,9 @@ RUN_ID = re.compile(r"/actions/runs/(\d+)/")
 # date=<Taipei day> | …"
 GH_AUTH_LINE = re.compile(r"^(\S+) gh_auth_failed .*?\bdate=(\d{4}-\d{2}-\d{2})")
 TAIPEI_OFFSET = 8 * 3600
+# An Orca terminal handle: never one starting with "-", which orca would read as an
+# option (the waker passes it as --terminal=<handle> as well, #338 review).
+HANDLE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_-]*")
 # What the coordinator does about it; the token lives in the env file (OPERATIONS §6.7).
 GH_AUTH_ACTION = "請用本機 gh 在 #1 留言，請使用者換 GH_TOKEN（OPERATIONS §6.7）"
 # The merge gate: CI's required check (docs/GITHUB_WORKFLOW.md, 欄位與唯一來源).
@@ -196,9 +199,7 @@ def _heartbeat(logs: Path) -> tuple[str, float | None, str]:
     if not isinstance(beat, dict):
         return "", None, ""
     handle = beat.get("terminal_handle")
-    handle = (
-        handle if isinstance(handle, str) and re.fullmatch(r"[\w-]+", handle) else ""
-    )
+    handle = handle if isinstance(handle, str) and HANDLE.fullmatch(handle) else ""
     at = beat.get("written_at") if isinstance(beat.get("written_at"), str) else ""
     return handle, epoch(at), at
 

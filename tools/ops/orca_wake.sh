@@ -17,6 +17,9 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
 [ $# = 2 ] || die "usage: orca_wake.sh TERMINAL TEXT" 64
 terminal="$1" text="$2"
+# A handle orca could read as an option is never sent to (event_queue.py HANDLE).
+case "$terminal" in [A-Za-z0-9_]*) ;; *) die "orca_wake.sh: not a handle: $terminal" 64 ;; esac
+case "$terminal" in *[!A-Za-z0-9_-]*) die "orca_wake.sh: not a handle: $terminal" 64 ;; esac
 find_python
 orca_exe="${ORCA_EXE:-}"
 if [ -z "$orca_exe" ]; then
@@ -28,9 +31,9 @@ if [ -z "$orca_exe" ]; then
   fi
 fi
 call() { timeout -k 10 "${MONITOR_CALL_TIMEOUT:-120}" "$@"; }
-out="$(call "$orca_exe" terminal wait --terminal "$terminal" --for tui-idle \
+out="$(call "$orca_exe" terminal wait --terminal="$terminal" --for tui-idle \
   --timeout-ms "${WAKE_WAIT_MS:-15000}" --json 2>/dev/null)"
 printf '%s' "$out" | cj satisfied || exit 3
-out="$(call "$orca_exe" terminal send --terminal "$terminal" --text "$text" --enter --json 2>/dev/null)" \
+out="$(call "$orca_exe" terminal send --terminal="$terminal" --text "$text" --enter --json 2>/dev/null)" \
   && printf '%s' "$out" | cj ok || exit 1
 exit 0

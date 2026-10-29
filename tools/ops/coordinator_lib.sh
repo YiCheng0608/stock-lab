@@ -2,6 +2,11 @@
 # Callers set script_dir before sourcing. orca, gh and git are looked up on PATH so the
 # tests can put recording fakes in front of them (backend/tests/test_coordinator_scripts.py).
 export LANG=C.UTF-8 LC_ALL=C.UTF-8
+# Git Bash turns /c/... arguments of native programs (python.exe, orca.exe) into C:/...; a
+# shell that exported MSYS_NO_PATHCONV=1 for `docker -v` (GITHUB_WORKFLOW.md 本機檢查)
+# turns that off, and python then reads /c/Users as C:\c\Users: patrol.sh misread the
+# heartbeat and no wake listener started (#338). No script here passes docker a path.
+unset MSYS_NO_PATHCONV
 
 GH_REPO='YiCheng0608/stock-lab'
 ORCA_REPO_KEY='github.com/YiCheng0608/stock-lab'

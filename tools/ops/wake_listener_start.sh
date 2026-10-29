@@ -19,7 +19,8 @@
 # Exit: 0 the listener answers (it ran, or now runs; --status: it runs); 1 it could not
 #   be started (the reason is printed; --status: it does not run); 2 another program
 #   holds the port.
-# Test hooks: WAKE_LISTENER_PORT, WAKE_LISTENER_TOKEN_FILE.
+# Test hooks: WAKE_LISTENER_PORT, WAKE_LISTENER_TOKEN_FILE, WAKE_LISTENER_ORCA (the
+#   listener's --orca, which it needs when STOCK_WAKE_TEST is set).
 set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
@@ -66,12 +67,14 @@ fi
 find_python
 mkdir -p "$logs" || die "建不了 $logs" 1
 out_file="$logs/wake-listener.out"
+orca_args=()
+[ -n "${WAKE_LISTENER_ORCA:-}" ] && orca_args=(--orca "$WAKE_LISTENER_ORCA")
 nohup "$python" -X utf8 "$script_dir/wake_listener.py" --token-file "$token_file" \
-  --data-dir "$data_dir" --port "$port" </dev/null >>"$out_file" 2>&1 &
-pid=$!
+  --data-dir "$data_dir" --port "$port" "${orca_args[@]}" </dev/null >>"$out_file" 2>&1 &
+pid=$!  # this shell's pid of it, which on Windows is not the one Stop-Process takes
 for _ in $(seq 1 40); do
   if [ "$(state)" = up ]; then
-    echo "wake listener：已啟動（127.0.0.1:$port，pid $pid，日誌 $logs/wake-listener.log）"
+    echo "wake listener：已啟動（127.0.0.1:$port，日誌 $logs/wake-listener.log；停止：Stop-Process -Id (Get-NetTCPConnection -LocalPort $port -State Listen).OwningProcess）"
     exit 0
   fi
   kill -0 "$pid" 2>/dev/null || break

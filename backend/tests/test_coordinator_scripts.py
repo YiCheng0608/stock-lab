@@ -355,6 +355,9 @@ class Harness:
             # A port nothing listens on: patrol.sh reports no wake listener, whatever
             # runs on this machine (test_wake_listener starts its own).
             WAKE_LISTENER_PORT=str(NO_LISTENER_PORT),
+            # A listener started here talks to the fake orca, never to a real one.
+            STOCK_WAKE_TEST="1",
+            WAKE_LISTENER_ORCA=(self.bin / "orca").as_posix(),
         )
         base.update(env)
         # Git for Windows' bin/bash.exe puts /mingw64/bin (the real git) in front of PATH,

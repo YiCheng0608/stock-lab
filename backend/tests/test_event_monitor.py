@@ -149,7 +149,7 @@ def test_one_poll_records_each_event_once_and_wakes_once(mon: Harness) -> None:
     assert len(_sends(mon)) == 1
     sent = (mon.fake / "sent_text.txt").read_text(encoding="utf-8")
     assert sent.startswith("有 3 個事件，請處理佇列：bash tools/ops/patrol.sh")
-    assert "--terminal term_coord" in _sends(mon)[0]
+    assert "--terminal=term_coord" in _sends(mon)[0]
     assert "wake=sent terminal=term_coord" in result.stdout
     # The same answers polled again by a restarted monitor: nothing new, no wake.
     for minute in (1, 2):
@@ -342,7 +342,7 @@ def test_a_busy_coordinator_terminal_is_not_woken(mon: Harness) -> None:
     result = _monitor(mon)
     waits = [c for c in mon.calls("orca") if c.startswith("terminal wait")]
     assert waits == [
-        "terminal wait --terminal term_coord --for tui-idle --timeout-ms 15000 --json"
+        "terminal wait --terminal=term_coord --for tui-idle --timeout-ms 15000 --json"
     ]
     assert _sends(mon) == []
     assert "wake=failed(not_idle) terminal=term_coord" in result.stdout
@@ -766,7 +766,7 @@ def test_the_container_monitor_writes_the_316_queue_where_patrol_reads_it(
         "job:daily-20261025.log:2026-10-25T19:45:00+08:00"
     )
     # The coordinator heartbeat of the queue directory names the terminal woken.
-    assert "--terminal term_coord" in _sends(mon)[0]
+    assert "--terminal=term_coord" in _sends(mon)[0]
     beat = json.loads((queue / "monitor-heartbeat.json").read_text("utf-8"))
     assert set(beat) == BEAT_FIELDS
     out = _patrol(mon, host, NOW + 60)
@@ -928,7 +928,9 @@ def test_a_lock_of_another_host_holds_while_its_monitor_beats(mon: Harness) -> N
     while its monitor beat within three polls; a recreated container takes over after."""
     logs = mon.data / "logs"
     (logs / "monitor.lock").mkdir()
-    (logs / "monitor.lock" / "pid").write_text("1 123 0123456789ab\n", "utf-8")
+    (logs / "monitor.lock" / "pid").write_text(
+        "1 123 0123456789ab\n", encoding="utf-8", newline="\n"
+    )
     beat = logs / "monitor-heartbeat.json"
     now = int(time.time())
 

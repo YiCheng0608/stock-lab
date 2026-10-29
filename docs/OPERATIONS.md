@@ -395,17 +395,18 @@ compose 的預設佇列目錄是 checkout 內的 `.coordination/`，任務 workt
 
 **wake listener**（#338，使用者選的做法 B3）：容器裡沒有 Orca，喚醒與 task worktree 數經主機上常駐的 [`wake_listener.py`](../tools/ops/wake_listener.py)。serve 的 `--monitor-waker` 預設 [`http_wake.sh`](../tools/ops/http_wake.sh)、`--monitor-orca` 預設 [`http_orca.sh`](../tools/ops/http_orca.sh)（只答 `worktree list --json`），兩者都以 `STOCK_WAKE_TOKEN` 呼叫 `STOCK_WAKE_URL`（預設 `http://host.docker.internal:47338/wake`）。
 
-- **只綁 `127.0.0.1:47338`**：Docker Desktop 把容器對 `host.docker.internal` 的連線代理到主機的 localhost（2026-10-29 實測，listener 看到的來源一律是 `127.0.0.1`），所以不用綁 `0.0.0.0`、不用開防火牆，LAN 連不到；代價是本機任何程序與任何容器都連得到，靠下面的 token、固定模板與限流把關。
-- **請求**：只收 `POST /wake` 與 `POST /worktrees`，都要 `Authorization: Bearer <token>`（不帶或錯就 401，記 `refused reason=token`）；其他方法 405、其他路徑 404、body 超過 1 KB 413，body 的內容一律不讀。
-- **送進 terminal 的只有固定模板**：terminal 取自主機的 `coordinator-heartbeat.json`（不是 `[\w-]+` 的 handle 視為沒有心跳，回 `no_heartbeat`），N 由 listener 讀佇列算，文字是「有 N 個事件，請處理佇列：bash tools/ops/patrol.sh（處理完以 --done 標記）」。送出照 `orca_wake.sh`：`tui-idle` 回 `satisfied:true` 才送。orca 對已結束的 terminal 也回 `satisfied:true`，接著 send 失敗，記 `send_failed`，不算已送。
+- **只綁 `127.0.0.1:47338`，而且獨占**：Docker Desktop 把容器對 `host.docker.internal` 的連線代理到主機的 localhost（2026-10-29 實測，listener 看到的來源一律是 `127.0.0.1`），所以不用綁 `0.0.0.0`、不用開防火牆，LAN 連不到；代價是本機任何程序與任何容器都連得到，靠下面的 token、固定模板與限流把關。listener 不設 `SO_REUSEADDR`，Windows 另設 `SO_EXCLUSIVEADDRUSE`：port 已被別的程序（或另一個 listener）占用時，listener 自己就綁不到而結束（`127.0.0.1:47338 綁不到`），不會跟它共用。
+- **請求**：只收 `POST /wake` 與 `POST /worktrees`，都要 `Authorization: Bearer <token>`；不帶或錯的在任何 60 秒內前 10 次回 401 並各記一列 `refused reason=token`，之後回 429、不逐列記，被擋的次數記在下一次 401 那一列（`held_back=N`）。其他方法 405、其他路徑 404；`Content-Length` 不是非負整數（負數、非數字）400，超過 1 KB 413；body 的內容一律不讀。
+- **送進 terminal 的只有固定模板**：terminal 取自主機的 `coordinator-heartbeat.json`，handle 只接受英數、`_`、`-` 而且不以 `-` 開頭（`event_queue.HANDLE`；以 `-` 開頭的會被 orca 當成選項，例如 `--enter`），不合就視為沒有心跳、回 `no_heartbeat`；傳給 orca 時寫成 `--terminal=<handle>`。N 由 listener 讀佇列算，文字是「有 N 個事件，請處理佇列：bash tools/ops/patrol.sh（處理完以 --done 標記）」。送出照 `orca_wake.sh`：`tui-idle` 回 `satisfied:true` 才送。orca 對已結束的 terminal 也回 `satisfied:true`，接著 send 失敗，記 `send_failed`，不算已送。
+- **信任邊界**（#338 review）：容器寫得到 bind mount 裡的檔，包括統籌的 `coordinator-heartbeat.json`，所以容器（或拿到容器權限的人）能決定 listener 把固定模板送進哪個 terminal。可以接受，因為能送的只有上面那一句固定文字（呼叫端的任何內容都不會送出，N 是整數），而且只送進 orca 判定為閒置的 Orca terminal：最壞是某個閒置的 agent 收到「請處理佇列：bash tools/ops/patrol.sh」，不會被帶去執行別的指令。容器本來就持有 `GH_TOKEN` 等憑證，這不是新增的權限。
 - **`/worktrees`**：本機 `orca worktree list --json` 裡 `refs/heads/task/` 的 branch，包成 Orca 的 envelope；orca 失敗回 502，monitor 那一輪記 `worktrees=failed`、不記名額事件，不當成名額已空。
-- **限流**：每種請求同時只處理一個，上次回答後 30 秒內再來回 429 `throttled`。
+- **限流**：每種請求同時只處理一個，上次回答後 30 秒內再來回 429 `throttled`；被拒的請求另有上面每分鐘 10 次的限制。
 - **回答與 exit code**：`/wake` 回 `sent`、`not_idle`、`send_failed`、`no_heartbeat`、`nothing_pending`；`http_wake.sh` 對 `sent` exit 0、`not_idle` exit 3，其他（含 listener 沒在跑、401、429）exit 1，monitor 記失敗的喚醒，10 分鐘後再試，事件留在佇列。每個請求在主機 `<資料目錄>/logs/wake-listener.log` 記一列。
 - **token**：`STOCK_WAKE_TOKEN` 只寫在發佈 checkout 根目錄那份由使用者自己建立的認證檔（`.env`，[§6.7](#67-容器內的-claude-與-gh-認證env)），至少 32 字元、不含空白；容器經 `env_file` 拿到它，listener 以 `--token-file` 讀同一個檔、只取這一列。由使用者產生並寫入（例如 `python -c "import secrets; print(secrets.token_urlsafe(32))"`），agent 不產生、不讀；換 token 後重建 scheduler 容器，並結束 listener 後重跑 `wake_listener_start.sh`。
 
 **啟動**（使用者決定，#338）：listener 只負責喚醒統籌，所以由統籌 session 啟動，不在 Windows 另外安裝。統籌接手時、每次處理佇列時跑 `bash tools/ops/wake_listener_start.sh`（[`wake_listener_start.sh`](../tools/ops/wake_listener_start.sh)），可重複執行：
 
-- 先 `GET /health`（不需 token，只回 `{"result": "ok", "service": "stock-lab-wake"}`）：有回應就 exit 0、不另起；port 沒有人聽才在背景啟動並等到 `/health` 回應；port 被別的程序占用（回應不是 listener 的）就 exit 2 並印出查占用者的命令；起不來（例如認證檔沒有 `STOCK_WAKE_TOKEN`）exit 1 並印出原因。`--status` 只回報、不啟動，`patrol.sh` 每次都印這一列。
+- 先 `GET /health`（不需 token，只回 `{"result": "ok", "service": "stock-lab-wake"}`）：有回應就 exit 0、不另起；port 沒有人聽才在背景啟動並等到 `/health` 回應，印出停止它的命令 `Stop-Process -Id (Get-NetTCPConnection -LocalPort 47338 -State Listen).OwningProcess`（不印 pid：Git Bash 的 pid 不是 Windows 的，拿去 `Stop-Process` 會停錯程序）；port 被別的程序占用（回應不是 listener 的）就 exit 2 並印出查占用者的命令；起不來（例如認證檔沒有 `STOCK_WAKE_TOKEN`）exit 1 並印出原因。`--status` 只回報、不啟動，`patrol.sh` 每次都印這一列。
 - 認證檔的路徑（發佈 checkout 根目錄那份）寫在腳本裡，不出現在統籌的命令裡（命令提到它會被 agent hook 擋下）；listener 的輸出附加到 `<資料目錄>/logs/wake-listener.out`。
 - **生命週期**：listener 在啟動它的 Bash 指令結束後繼續執行，但跟著啟動它的統籌 terminal 結束（Orca 關 terminal 時結束它底下所有程序，PowerShell 的 `Start-Process` 也一樣，2026-10-29 實測）。
   - 換手時新統籌接手先跑腳本：舊統籌的 listener 還在就沿用，它每次喚醒前都重讀心跳檔，喚醒的是新統籌；收尾關掉舊 terminal 後舊 listener 跟著結束，所以新統籌關掉舊 terminal 後再跑一次腳本（[工作手冊](GITHUB_WORKFLOW.md#統籌-session)）。
