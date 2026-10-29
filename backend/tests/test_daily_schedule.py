@@ -1039,24 +1039,24 @@ def test_preflight_skip_is_logged_without_running_steps_and_does_not_complete_th
         schedule_runs.record_preflight_skip(DAY, reason="git_pull_failed")
 
 
-def test_every_run_row_records_the_deployed_head_and_tag(database, monkeypatch):
+def test_the_runtime_is_the_only_version_a_row_records(database, monkeypatch):
+    # #340 (PR #365 review, suggestion 1): the deployed image names the version;
+    # no second pair of fields (#314's git_tag/HEAD, always null in a container).
     Steps(monkeypatch)
-    version = {"git_head": "c" * 40, "git_tag": "v1.1.0"}
-    assert pipeline.run_daily(DAY, **version)["status"] == "success"
-    assert pipeline.run_daily(DAY, **version)["reason"] == "already_complete"
-    schedule_runs.record_preflight_skip(DAY, reason="low_memory", **version)
-    # Run without the job (worker.cli daily by hand): the version is not known.
-    pipeline.run_daily(DAY)
+    monkeypatch.setenv(schedule_runs.IMAGE_TAG_ENV, "stock-lab-backend:v1.1.0")
+    monkeypatch.setenv(schedule_runs.GIT_HEAD_ENV, "c" * 40)
+    assert pipeline.run_daily(DAY)["status"] == "success"
+    assert pipeline.run_daily(DAY)["reason"] == "already_complete"
+    schedule_runs.record_preflight_skip(DAY, reason="low_memory")
+    schedule_runs.record_preflight_skip(DAY, reason="already_running")
     rows, _ = runs(database)
-    assert [
-        (row.status, row.summary_json["git_tag"], row.summary_json["HEAD"])
-        for row in rows
-    ] == [
-        ("success", "v1.1.0", "c" * 40),
-        ("skipped", "v1.1.0", "c" * 40),
-        ("skipped", "v1.1.0", "c" * 40),
-        ("skipped", None, None),
-    ]
+    assert len(rows) == 4
+    for row in rows:
+        assert row.summary_json["runtime"] == {
+            "image": "stock-lab-backend:v1.1.0",
+            "head": "c" * 40,
+        }
+        assert not {"git_tag", "HEAD", "git_head"} & set(row.summary_json)
 
 
 def test_a_lock_skip_points_at_the_running_row(database, monkeypatch):
@@ -1073,9 +1073,7 @@ def test_a_lock_skip_points_at_the_running_row(database, monkeypatch):
         db.add(running)
         db.commit()
         running_id = running.id
-    skipped = schedule_runs.record_preflight_skip(
-        DAY, reason="already_running", git_head="c" * 40, git_tag="v1.1.0"
-    )
+    skipped = schedule_runs.record_preflight_skip(DAY, reason="already_running")
     assert skipped["status"] == "skipped" and skipped["reason"] == "already_running"
     assert skipped["related_run_id"] == running_id
     rows, _ = runs(database)
@@ -1083,12 +1081,7 @@ def test_a_lock_skip_points_at_the_running_row(database, monkeypatch):
     assert summary.pop("runtime") == schedule_runs.runtime()
     assert (rows[-1].status, summary) == (
         "skipped",
-        {
-            "reason": "already_running",
-            "related_run_id": running_id,
-            "git_tag": "v1.1.0",
-            "HEAD": "c" * 40,
-        },
+        {"reason": "already_running", "related_run_id": running_id},
     )
 
 

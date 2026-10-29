@@ -2479,3 +2479,14 @@ def test_patrol_reads_only_the_latest_run_of_each_check(
     result = _patrol(patrol)
     assert result.returncode == 0, result.stdout + result.stderr
     assert f"PR #285 ci={expected} merge=CLEAN" in result.stdout
+
+
+@pytest.mark.parametrize("handle", ["-x", "--enter", "--terminal=x"])
+def test_patrol_refuses_a_handle_orca_would_read_as_an_option(tmp_path, handle) -> None:
+    """#338 review: the heartbeat's handle is what the wake listener wakes; one starting
+    with "-" never gets there (patrol.sh exits 64 before writing the heartbeat)."""
+    h = Harness(tmp_path)
+    result = h.run("patrol.sh", "--session-id", "coord", "--terminal", handle)
+    assert result.returncode == 64, result.stdout + result.stderr
+    assert "不能以 - 開頭" in result.stderr
+    assert not (h.data / "logs" / "coordinator-heartbeat.json").exists()

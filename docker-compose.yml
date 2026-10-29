@@ -10,6 +10,9 @@
 #   `claude -p` and gh fail at their steps. `required: false` needs Compose 2.24 or later.
 # - The data directory is the named volume stock-data at /data (stock.db, logs, exports), never
 #   a bind mount. The api refuses to start on an empty one until init-db or a copied DB fills it.
+# - Image tags: STOCK_RELEASE_TAG, default latest. tools/ops/deploy.sh sets it to the git tag it
+#   deploys (docs/RELEASE.md, #340), so `docker compose ps` names the version; a project run
+#   without it uses `<project>-backend:latest` and `<project>-web:latest`.
 
 x-backend: &backend
   build:
@@ -18,9 +21,9 @@ x-backend: &backend
     # What schedule_runs records of the code (docs/OPERATIONS.md §6.6); compose cannot read
     # git, so STOCK_GIT_HEAD comes from the shell: STOCK_GIT_HEAD="$(git rev-parse HEAD)".
     args:
-      STOCK_IMAGE_TAG: ${COMPOSE_PROJECT_NAME}-backend
+      STOCK_IMAGE_TAG: ${COMPOSE_PROJECT_NAME}-backend:${STOCK_RELEASE_TAG:-latest}
       STOCK_GIT_HEAD: ${STOCK_GIT_HEAD:-}
-  image: ${COMPOSE_PROJECT_NAME}-backend
+  image: ${COMPOSE_PROJECT_NAME}-backend:${STOCK_RELEASE_TAG:-latest}
   entrypoint: ["/usr/bin/tini", "--", "/app/backend/docker/entrypoint.sh"]
   env_file:
     - path: ${STOCK_ENV_FILE:-.env}
@@ -62,7 +65,7 @@ services:
     build:
       context: frontend
       target: web
-    image: ${COMPOSE_PROJECT_NAME}-web
+    image: ${COMPOSE_PROJECT_NAME}-web:${STOCK_RELEASE_TAG:-latest}
     environment:
       TZ: Asia/Taipei
       API_UPSTREAM: api:8000

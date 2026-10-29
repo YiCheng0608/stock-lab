@@ -14,7 +14,7 @@
 | 版本任務集合 | [V1 milestone](https://github.com/YiCheng0608/stock-lab/milestone/1) |
 | 狀態 | [產品開發看板](https://github.com/users/YiCheng0608/projects/1) Status：待辦／開發中／待整合／完成（「測試中」不使用） |
 | 使用者層級決策 | [治理 Issue #1](https://github.com/YiCheng0608/stock-lab/issues/1) 留言 |
-| 發佈與部署 | [RELEASE](RELEASE.md)；部署記錄在資料目錄的 `logs/deploy.json` |
+| 發佈與部署 | [RELEASE](RELEASE.md)；部署記錄在正式 compose project 的 volume 的 `/data/logs/deploy.json` |
 
 Issue 標題前綴：`[任務]` 可直接開工的工作、`[功能]` 多任務的母單、`[候選]` 想法或 bug 尚未排程。母子關係用 GitHub 原生 sub-issue，依賴寫在 Issue 本文。
 

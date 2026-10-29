@@ -12,10 +12,11 @@ only has to start one command:
   (``low_memory``) and a git operation in progress in this checkout, i.e.
   index.lock or MERGE_HEAD (``git_busy``). daily records the skip through
   ``worker.cli daily --skip-reason``; news only logs it.
-- The checkout is never updated here: it runs the tag tools/ops/deploy.sh
-  checked out (#314). The job reads its HEAD and tag, logs them, and gives them
-  to daily (``--git-head``/``--git-tag``) for the run's summary_json. A task
-  registered before #314 still passes --git-pull; it is accepted and ignored.
+- The code is never updated here: it is the image tools/ops/deploy.sh built
+  and started (#340). The job logs that image and its commit
+  (``STOCK_IMAGE_TAG``, ``STOCK_GIT_HEAD``); daily records the same two in the
+  run's ``summary_json.runtime`` (worker.schedule_runs). A task registered
+  before #314 still passes --git-pull; it is accepted and ignored.
 - The worker CLI runs as a child process within the job's time limit (daily
   2.5 hours; news 90 minutes for news and news-llm together). The child and
   everything it starts end with the job: the child gets SIGKILL when the job
@@ -34,7 +35,10 @@ job's exit code is news's alone, news-llm's goes to the log as
 
 Only the standard library is imported here: the watchdog takes its lock
 through the same code without the backend's dependencies, with
-``python -m worker.job lock <file> -- <command> ...``.
+``python -m worker.job lock <file> -- <command> ...``. tools/ops/deploy.sh
+holds the three locks in the running scheduler container with
+``lock --keep-stdin``: the command reads the deploy's stdin and ends when the
+deploy closes it, or dies (#340).
 
 Linux only, as in the backend image (#333): the Windows branches (msvcrt, job
 objects, GlobalMemoryStatusEx, pythonw.exe) went with the Task Scheduler
@@ -73,8 +77,11 @@ TIMEOUT_EXIT = 1
 # `job` and `lock` on a system other than Linux (EX_UNAVAILABLE).
 PLATFORM_EXIT = 69
 NEWLINE = os.linesep
-# worker.schedule_runs.JOB_LOCK_ENV: this module imports only the standard library.
+# worker.schedule_runs.JOB_LOCK_ENV, IMAGE_TAG_ENV and GIT_HEAD_ENV: this module
+# imports only the standard library.
 JOB_LOCK_ENV = "STOCK_JOB_LOCK"
+IMAGE_TAG_ENV = "STOCK_IMAGE_TAG"
+GIT_HEAD_ENV = "STOCK_GIT_HEAD"
 
 
 def platform_problem(module: str = "worker.job") -> str | None:
@@ -198,44 +205,6 @@ def git_dir(root: Path) -> Path | None:
         if first and first[0].startswith("gitdir:"):
             return Path(os.path.abspath(root / first[0][len("gitdir:") :].strip()))
     return None
-
-
-def git_executable() -> str:
-    return os.environ.get("STOCK_GIT") or "git"
-
-
-def _git(directory: Path, *args: str) -> str | None:
-    """One read-only git command on DIRECTORY; its output, or None when it fails."""
-
-    try:
-        completed = subprocess.run(
-            [git_executable(), f"--git-dir={directory}", *args],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            timeout=60,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    output = completed.stdout.decode("utf-8", errors="replace").strip()
-    return output if completed.returncode == 0 and output else None
-
-
-def checkout_version(root: Path) -> tuple[str | None, str | None]:
-    """HEAD and the tag at HEAD of the checkout at ROOT; None for what is unknown.
-
-    git is given the checkout's own git dir, so a tree that is no repository
-    never reads one above it (#207).
-    """
-
-    directory = git_dir(root)
-    if directory is None:
-        return None, None
-    head = _git(directory, "rev-parse", "--verify", "HEAD")
-    if head is None:
-        return None, None
-    return head, _git(directory, "describe", "--tags", "--exact-match", "HEAD")
 
 
 def worker_command(step_args: list[str]) -> list[str]:
@@ -411,12 +380,11 @@ class _Job:
         news_llm_exit = None
         if job == "news":
             news_llm_exit = "not_run" if run_news_llm else "disabled"
-        head, tag = checkout_version(ROOT)
-        self.log(f"--- checkout HEAD={head or 'unknown'} tag={tag or 'none'}")
+        image = os.environ.get(IMAGE_TAG_ENV) or "unknown"
+        head = os.environ.get(GIT_HEAD_ENV) or "unknown"
+        self.log(f"--- version image={image} head={head}")
         if args.git_pull:
-            self.log(
-                "--- --git-pull ignored: the checkout stays at its deployed tag (#314)"
-            )
+            self.log("--- --git-pull ignored: the code is the deployed image's (#340)")
         skip_reason, detail = self._skip_reason(locked, lock_file, free_mb)
         if skip_reason:
             self.log(f"===== skipped reason={skip_reason} ({detail})")
@@ -429,10 +397,6 @@ class _Job:
                 step_args += ["--trigger", args.trigger]
                 if args.force:
                     step_args.append("--force")
-                if head:
-                    step_args += ["--git-head", head]
-                if tag:
-                    step_args += ["--git-tag", tag]
                 if skip_reason:
                     step_args += ["--skip-reason", skip_reason]
             if args.run_date:
@@ -517,8 +481,11 @@ def run(args: argparse.Namespace) -> int:
     return code
 
 
-def run_locked(path: Path, command: list[str]) -> int:
-    """``worker.job lock``: run COMMAND while holding the lock on PATH."""
+def run_locked(path: Path, command: list[str], keep_stdin: bool = False) -> int:
+    """``worker.job lock``: run COMMAND while holding the lock on PATH.
+
+    COMMAND gets no stdin unless KEEP_STDIN: then it reads this process's.
+    """
 
     problem = platform_problem()
     if problem:
@@ -532,7 +499,7 @@ def run_locked(path: Path, command: list[str]) -> int:
         tree = _ProcessTree()
         process = tree.start(
             command,
-            stdin=subprocess.DEVNULL,
+            stdin=None if keep_stdin else subprocess.DEVNULL,
             stdout=sys.stdout,
             stderr=sys.stderr,
         )
@@ -552,13 +519,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     lock_parser = subparsers.add_parser("lock", help="持有 FILE 的鎖執行命令")
+    lock_parser.add_argument(
+        "--keep-stdin",
+        action="store_true",
+        help="命令讀這個程序的 stdin（deploy.sh 關閉 stdin 時結束，#340）",
+    )
     lock_parser.add_argument("file")
     lock_parser.add_argument("run", nargs=argparse.REMAINDER, help="-- 命令 參數…")
     args = parser.parse_args(argv)
     command = args.run[1:] if args.run[:1] == ["--"] else args.run
     if not command:
         parser.error("lock needs a command after --")
-    return run_locked(Path(args.file), command)
+    return run_locked(Path(args.file), command, args.keep_stdin)
 
 
 if __name__ == "__main__":
