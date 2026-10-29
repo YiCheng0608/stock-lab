@@ -404,18 +404,26 @@ function quietConfig(rest) {
   );
 }
 
+// A word without the ( $( @( or backtick that open a subshell or a command substitution, an
+// assignment in front of one (`out=$(docker`), and the ) or backtick that close it (#341, PR #370
+// review): `(docker compose down -v)` runs docker as much as the bare command does.
+const unwrap = (text) => text.replace(/^(?:\w+=(?=[$@(`]))?(?:[$@]?\(|`)+/, '').replace(/[)`]+$/, '');
+
 // The docker commands in `raw`, each as `sub` (the subcommand words, lowercased; `compose` first
 // for docker-compose), `args` (the words after them) and `all` (every word after docker, options
 // included). A quoted word that starts a command with docker (`sh -c "docker compose config"`)
-// counts as a command too; one that only mentions docker (a commit message) does not.
+// counts as a command too; one that only mentions docker (a commit message) does not. Words are
+// taken as the shell runs them inside a subshell or a command substitution (unwrap).
 function dockerCommands(raw, shell) {
-  const texts = words(raw, shell).map((w) => w.text);
+  const texts = words(raw, shell).map((w) => unwrap(w.text));
   const found = [];
   for (const text of texts) {
     if (text !== raw && /\s/.test(text) && /docker/i.test(text)) {
       for (const inner of segments(text, shell)) {
-        const first = words(inner.raw, shell).find((w) => !/^\w+=/.test(w.text));
-        if (first && DOCKER.test(path.basename(normalizeTarget(first.text)))) found.push(...dockerCommands(inner.raw, shell));
+        const first = words(inner.raw, shell)
+          .map((w) => unwrap(w.text))
+          .find((t) => !/^\w+=/.test(t));
+        if (first && DOCKER.test(path.basename(normalizeTarget(first)))) found.push(...dockerCommands(inner.raw, shell));
       }
     }
   }

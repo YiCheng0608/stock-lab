@@ -860,6 +860,16 @@ class WindowsRuntime(unittest.TestCase):
             'run(["taskkill", "/F", "/PID", pid])',
             'exe = venv / "Scripts" / "pythonw.exe"',
             'cli = "claude.exe"',
+            # PR #370 review: code before a comment on the same line is still code.
+            "from msvcrt import getch  # one key at a time",
+            "windows = sys.platform in ('win32', 'cygwin')",
+            "windows = os.name in ('nt',)",
+            "posix = sys.platform not in {'win32'}",
+            'run(["cmd.exe", "/c", "dir"])',
+            "run('cmd /c rmdir x', shell=True)",
+            "os.startfile(path)",
+            "process.send_signal(signal.CTRL_BREAK_EVENT)",
+            "prototype = ctypes.WINFUNCTYPE(ctypes.c_int)",
         ]
         errors = self.check({"backend/worker/w.py": "\n".join(code) + "\n"})
         self.assertEqual(len(errors), len(code), errors)
@@ -885,6 +895,10 @@ class WindowsRuntime(unittest.TestCase):
                 "def f():\n"
                 '    """The Windows branches (pythonw.exe) went with Task Scheduler."""\n'
                 "    return 1  # never os.name == 'nt'\n"
+                # A refusal off POSIX or Linux names no Windows (schedule_runs, worker.job).
+                'if os.name != "posix":\n'
+                "    pass\n"
+                'linux = sys.platform.startswith("linux")\n'
             ),
             "tools/ops/watchdog.sh": '# Register-Watchdog.ps1 ran this.\necho "${x#win32}"\n',
             # Agent tools on the Windows host keep their handling (#331 審查結論 3).

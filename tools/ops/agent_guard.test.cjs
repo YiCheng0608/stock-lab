@@ -375,6 +375,8 @@ describe('.env rules', () => {
     'docker compose exec api python -m pytest -q',
     'docker run --rm -e STOCK_DATA_DIR=/data --env-file ./fake-env.txt alpine true',
     'git commit -m "allow docker compose config -q, block docker inspect"',
+    '(docker compose config -q)',
+    "out=$(docker inspect --format '{{.State.Status}}' t360-api-1)",
   ];
   const DOCKER_BLOCKED = [
     'docker compose config',
@@ -423,6 +425,13 @@ describe('.env rules', () => {
     'docker exec t360-api-1 cat /proc/1/environ',
     `docker compose run --rm api python -c "import os; print(os.environ)"`,
     'docker run --rm --env-file ./fake-env.txt alpine env',
+    // A subshell or a command substitution (PR #370 review).
+    '(docker compose config)',
+    'out=$(docker compose config)',
+    '$(docker inspect t360-api-1)',
+    'x=`docker inspect t360-api-1`',
+    '(docker compose run --rm api env)',
+    'echo "$(docker exec t360-api-1 printenv)"',
   ];
 
   for (const shell of ['bash', 'powershell']) {
@@ -463,6 +472,15 @@ describe('.env rules', () => {
     'COMPOSE_PROJECT_NAME=task-341 docker compose down -v',
     'bash -c "docker compose down -v"',
     "sh -lc 'docker compose -p stock-lab down --volumes'",
+    // A subshell or a command substitution runs it all the same (PR #370 review).
+    '(docker compose down -v)',
+    '(docker compose -p stock-lab down --volumes)',
+    'out=$(docker compose down -v)',
+    '$(docker compose down -v)',
+    '@(docker compose down --volumes)',
+    'echo "$(docker compose down -v)"',
+    'x=`docker compose down -v`',
+    '(cd ../stock-lab-release && docker compose down -v)',
   ];
   const DOWN_ALLOWED = [
     'docker compose down',
@@ -479,6 +497,9 @@ describe('.env rules', () => {
     'docker compose rm -v -f',
     'docker volume rm t341_stock-data',
     'git commit -m "block compose down -v of the production project"',
+    '(docker compose -p task-341 down --volumes --rmi all)',
+    'out=$(docker compose -p t341 down -v)',
+    '(docker compose down)',
   ];
 
   for (const shell of ['bash', 'powershell']) {

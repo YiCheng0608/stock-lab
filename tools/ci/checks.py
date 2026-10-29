@@ -213,8 +213,11 @@ def documentation_errors() -> list[str]:
 # The Windows execution layer left with Task Scheduler (#331, #333) and is not to come back
 # (#341). RUNTIME_PATHS is what runs in the api and scheduler containers: the backend, the image
 # and compose files, and the tools/ops scripts worker.serve runs. Agent tools that run on the
-# Windows host keep their 8.3 name and junction handling (#331 審查結論 3): close_task.sh,
-# coordinator_lib.sh (monitor.sh sources it), coordinator_json.py, agent_guard.cjs, conftest.py.
+# Windows host keep their 8.3 name and junction handling (#331 審查結論 3) and are not scanned:
+# close_task.sh, agent_guard.cjs, conftest.py, and on purpose also coordinator_lib.sh and
+# coordinator_json.py, which run in the scheduler container too (monitor.sh, http_wake.sh and
+# http_orca.sh source the first) but are shared with the host tools; there a Windows candidate
+# such as .venv/Scripts/python.exe fails and the next one is tried (PR #370 review).
 RUNTIME_PATHS: tuple[str, ...] = (
     "backend/app/",
     "backend/worker/",
@@ -241,17 +244,22 @@ WINDOWS_SCRIPTS_LEFT: tuple[str, ...] = (
     "tools/ops/Register-Monitor.ps1",
     "tools/ops/Register-Watchdog.ps1",
 )
-# Windows APIs, WMI, Task Scheduler, windowless or native-.exe processes, PowerShell and a branch
-# on Windows, in code (comments and docstrings are left out: they tell the history).
+# Windows APIs, WMI, Task Scheduler, windowless or native-.exe processes, PowerShell, cmd and a
+# branch that names Windows (== / != against win32, nt or Windows; any `in` test of sys.platform,
+# os.name or platform.system()), in code (comments and docstrings are left out: they tell the
+# history). A refusal off POSIX or Linux (`os.name != "posix"`, `sys.platform.startswith("linux")`)
+# names no Windows and is allowed: schedule_runs._pid_alive and worker.job.platform_problem.
 WINDOWS_RUNTIME = re.compile(
     r"""windll|msvcrt|winreg|_winapi|\bwin32(?:api|con|process|job)\b|pywintypes|GlobalMemoryStatus
     |\bWin32_\w+|Get-CimInstance|Get-WmiObject|\bwmic?\b
     |schtasks|ScheduledTask|taskkill
     |pythonw|python\.exe|claude\.exe
     |CREATE_NEW_PROCESS_GROUP|CREATE_NO_WINDOW|DETACHED_PROCESS|creationflags|STARTUPINFO
-    |\bpowershell\b|\bpwsh\b|\.ps1\b
+    |CTRL_BREAK_EVENT|WINFUNCTYPE|os\.startfile
+    |\bpowershell\b|\bpwsh\b|\.ps1\b|\bcmd\.exe\b|\bcmd\s+/
     |sys\.platform\s*[!=]=\s*["']win|sys\.platform\.startswith\(\s*["']win
-    |os\.name\s*[!=]=\s*["']nt|platform\.system\(\)\s*[!=]=\s*["']Windows""",
+    |os\.name\s*[!=]=\s*["']nt|platform\.system\(\)\s*[!=]=\s*["']Windows
+    |(?:sys\.platform|os\.name|platform\.system\(\))\s+(?:not\s+)?in\b""",
     re.I | re.X,
 )
 
