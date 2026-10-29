@@ -291,9 +291,9 @@ fi
 
 # Data invariants (read-only database), every run: the numbers go to stdout,
 # a violation is reported like any other anomaly. The data is not repaired.
+value() { printf '%s\n' $facts | sed -n "s/^$1=//p"; }  # value KEY: from this line's facts
 if [ -n "$python" ] && [ -f "$data_dir/stock.db" ]; then
   if checks="$(helper invariants "$data_dir/stock.db" "$taipei_iso" 2>>"$work/helper.err")"; then
-    value() { printf '%s\n' $facts | sed -n "s/^$1=//p"; }  # value KEY: from this line's facts
     while read -r name state facts; do
       printf 'invariant %s %s %s\n' "$name" "$state" "$facts"
       [ "$state" = violation ] || continue
@@ -309,6 +309,25 @@ if [ -n "$python" ] && [ -f "$data_dir/stock.db" ]; then
   else
     found=1
     log invariants_check_failed "" "讀取 stock.db 的資料不變量失敗：$(tail -n 1 "$work/helper.err" 2>/dev/null)"
+  fi
+fi
+
+# The deployed version (#314): the release checkout's HEAD must be the HEAD that
+# tools/ops/deploy.sh recorded in <logs>/deploy.json. No record yet (never
+# deployed) is skipped; a deploy holds the watchdog lock, so none is half done here.
+if [ -n "$python" ]; then
+  record="$logs/deploy.json"
+  if check="$(helper deploy-head "$record" 2>>"$work/helper.err")"; then
+    read -r name state facts <<<"$check"
+    printf 'invariant %s %s %s\n' "$name" "$state" "$facts"
+    if [ "$state" = violation ] && [ "$(value reason)" = unreadable_record ]; then
+      anomaly invariant_deploy_head "部署不變量：部署記錄 \`$record\` 讀不懂（不是 JSON，或缺 \`HEAD\`／\`tag\`／\`checkout\`），無法核對排程跑的版本。請依 docs/RELEASE.md 以 \`tools/ops/deploy.sh\` 重新部署目前該跑的 tag。"
+    elif [ "$state" = violation ]; then
+      anomaly invariant_deploy_head "部署不變量：發佈 checkout 的 HEAD 是 \`$(value head)\`，不是部署記錄 \`$record\` 的 \`$(value recorded)\`（tag \`$(value tag)\`）：checkout 在 \`deploy.sh\` 之外被改過，或 \`deploy.sh\` 中途失敗（exit 3），排程跑的不是記錄的版本。請看 #1 的部署留言，依 docs/RELEASE.md 以 \`tools/ops/deploy.sh\` 重新部署。"
+    fi
+  else
+    found=1
+    log deploy_check_failed "" "讀取部署記錄失敗：$(tail -n 1 "$work/helper.err" 2>/dev/null)"
   fi
 fi
 [ "$found" = 0 ] && log schedules_ok "" "排程無異常"
