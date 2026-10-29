@@ -328,7 +328,6 @@ const LISTERS = [
   [/^find$/i, null],
 ];
 const PIPE_READERS = /^(?:Select-String|sls|Get-Content|gc|cat|type|Copy-Item|cpi|cp|xargs|ForEach-Object|%)$/i;
-const COMPOSE_CONFIG = /(?:^|[\s(])(?:docker(?:\.exe)?\s+(?:compose|stack)|docker-compose)\b.*\s(?:config|convert)(?=\s|$)/i;
 const CHDIR = /^(?:cd|pushd|Set-Location|sl|chdir)$/i;
 const INTERPRETER = /^(?:python[\d.]*|py|node|deno|bun|bash|sh|zsh|pwsh|powershell|ruby|perl|php)(?:\.exe)?$/i;
 // powershell -EncodedCommand (and its -e/-ec/-enc abbreviations, with -, -- or / in front)
@@ -345,12 +344,102 @@ function realName(file) {
   }
 }
 
+// Docker commands that print a container's environment, where compose put the env file's values
+// (#353, #360; OPERATIONS §1.2). Blocked: compose config/convert unless -q/--quiet,
+// --no-interpolate or --services and no -o/--output, --environment or --variables; inspect of a
+// container, image or service unless --format/-f reads no Env, no whole Config and not `.`;
+// run/exec whose command holds an env/printenv word or `environ`. Not covered: a variable echoed
+// by name (`sh -c 'echo $TOKEN'`), other ways a program inside prints its environment.
+const DOCKER = /^docker(?:-compose)?(?:\.exe)?$/i;
+// docker and docker compose options before the subcommand that take a value.
+const DOCKER_VALUE_OPTION = /^(?:-[cHlfp]|--(?:config|context|host|log-level|tlscacert|tlscert|tlskey|file|project-name|env-file|profile|project-directory|ansi|parallel|progress))$/;
+// Words that name a group of subcommands: `docker compose config`, `docker container inspect`.
+const DOCKER_GROUP = /^(?:compose|stack|container|image|service|network|volume|context|buildx|builder|plugin|node|secret|system)$/i;
+const COMPOSE_SAFE = /^(?:-q|--quiet|--no-interpolate|--services)$/;
+const COMPOSE_PRINTS = /^(?:-o|--output(?:=|$)|--environment$|--variables$)/;
+// inspect of these shows no environment.
+const INSPECT_SAFE_GROUP = /^(?:network|volume|context)$/i;
+const ENV_WORD = /^(?:env|printenv)(?:\.exe)?$/i;
+
+// The --format/-f value of an inspect, or null without one.
+function inspectFormat(args) {
+  for (const [i, arg] of args.entries()) {
+    if (arg === '--format' || arg === '-f') return args[i + 1] ?? '';
+    if (arg.startsWith('--format=')) return arg.slice('--format='.length);
+    if (/^-f./.test(arg)) return arg.slice(2);
+  }
+  return null;
+}
+
+// A format that reads no environment: no Env field, no whole Config/ContainerConfig, no bare `.`.
+const safeFormat = (format) =>
+  Boolean(format) &&
+  !/env/i.test(format) &&
+  !/(?<!Host)Config\b(?!\.\w)/.test(format) &&
+  !/(?:^|[\s({|])\.(?=\s*(?:$|[\s)}|]))/.test(format);
+
+// The reason a docker command in `raw` prints environment values, or null. A quoted word that
+// starts a command with docker (`sh -c "docker compose config"`) is checked as a command too; one
+// that only mentions docker (a commit message) is not.
+function dockerDenial(raw, shell) {
+  const texts = words(raw, shell).map((w) => w.text);
+  for (const text of texts) {
+    if (text !== raw && /\s/.test(text) && /docker/i.test(text)) {
+      for (const inner of segments(text, shell)) {
+        const first = words(inner.raw, shell).find((w) => !/^\w+=/.test(w.text));
+        if (!first || !DOCKER.test(path.basename(normalizeTarget(first.text)))) continue;
+        const reason = dockerDenial(inner.raw, shell);
+        if (reason) return reason;
+      }
+    }
+  }
+  const at = texts.findIndex((t) => DOCKER.test(path.basename(normalizeTarget(t))));
+  if (at < 0) return null;
+  const sub = /compose/i.test(path.basename(normalizeTarget(texts[at]))) ? ['compose'] : [];
+  let i = at + 1;
+  while (i < texts.length) {
+    const text = texts[i];
+    i += text.startsWith('-') && DOCKER_VALUE_OPTION.test(text) ? 2 : 1;
+    if (text.startsWith('-')) continue;
+    sub.push(text.toLowerCase());
+    if (!DOCKER_GROUP.test(text)) break;
+  }
+  const args = texts.slice(i);
+  const command = sub[sub.length - 1];
+  // Any config/convert word after compose counts: an option this parser does not know (one that
+  // takes a value) must not hide the subcommand.
+  const compose = sub.findIndex((s) => s === 'compose' || s === 'stack');
+  const rest = compose < 0 ? [] : [...sub.slice(compose + 1), ...args];
+  if (rest.some((t) => /^(?:config|convert)$/i.test(t))) {
+    if (rest.some((t) => COMPOSE_SAFE.test(t)) && !rest.some((t) => COMPOSE_PRINTS.test(t))) return null;
+    return (
+      `${ENV_REASON}；compose config 會把 env file 的值展開印出，只放行 config -q／--quiet、` +
+      '--no-interpolate、--services（不加 -o／--output、--environment、--variables）'
+    );
+  }
+  if (command === 'inspect' && !INSPECT_SAFE_GROUP.test(sub[sub.length - 2] || '')) {
+    if (safeFormat(inspectFormat(args))) return null;
+    return (
+      `${ENV_REASON}；docker inspect 會印出容器的環境變數（env file 的值），` +
+      "請加 --format 只取需要的欄位，例如 --format '{{.State.Status}}'（不取 Env、整個 .Config 或 .）"
+    );
+  }
+  if (command === 'run' || command === 'exec') {
+    const printer = args
+      .flatMap((a) => a.split(/[\s;|&()`'"]+/))
+      .find((t) => ENV_WORD.test(path.basename(normalizeTarget(t))) || /environ/i.test(t));
+    if (printer) return `${ENV_REASON}；docker ${sub.join(' ')} 裡的 ${printer} 會印出容器的環境變數（env file 的值）`;
+  }
+  return null;
+}
+
 // The reason one Bash/PowerShell segment reads or writes a .env file, or null. `ctx` carries the
 // session cwd (null when a `cd` made it unknown) and whether a later segment reads piped input.
 function envSegmentDenial(segment, shell, ctx) {
   const named = envMention(segment.raw);
   if (named) return `${ENV_REASON}（命令提到 ${named}）`;
-  if (COMPOSE_CONFIG.test(segment.bare)) return `${ENV_REASON}；compose config 會把 .env 的值展開印出`;
+  const docker = dockerDenial(segment.raw, shell);
+  if (docker) return docker;
   const list = words(segment.raw, shell).filter((w) => !/^[<>]|^\d?>/.test(w.text));
   const [head, ...args] = list.map((w) => w.text.replace(/^\(+/, ''));
   if (!head) return null;

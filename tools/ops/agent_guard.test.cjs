@@ -346,11 +346,85 @@ describe('.env rules', () => {
     });
   }
 
-  test('Bash/PowerShell: docker compose config is blocked', () => {
-    for (const command of ['docker compose config', 'docker compose -f compose.yml config --services', 'docker-compose config', 'docker compose convert']) {
-      assert.ok(commandDenial(command, 'bash', [], clean), command);
-    }
-    assert.equal(commandDenial('docker compose ps', 'bash', [], clean), null);
+  // #360: compose config is allowed only in the forms that print no env file value; the docker
+  // commands that list a container's environment stay blocked.
+  const DOCKER_ALLOWED = [
+    'docker compose config -q',
+    'docker compose config --quiet',
+    'docker compose config --no-interpolate',
+    'docker compose config --services',
+    'docker compose -f docker-compose.yml -f docker-compose.dev.yml -p t360 config -q',
+    'docker compose --env-file ./fake-env.txt config --services',
+    'docker-compose config --no-interpolate',
+    'docker.exe compose config --quiet',
+    'MSYS_NO_PATHCONV=1 docker compose config -q && echo ok',
+    'bash -c "docker compose config -q"',
+    'docker compose convert --services',
+    'docker compose ps',
+    'docker compose up -d --build',
+    "docker inspect --format '{{.State.Status}}' t360-api-1",
+    'docker inspect -f "{{.Config.Image}} {{json .Mounts}}" t360-api-1',
+    "docker container inspect --format='{{.State.Health.Status}}' t360-api-1",
+    "docker image inspect --format '{{.Id}}' python:3.12-slim",
+    "docker inspect -f '{{json .HostConfig}}' t360-api-1",
+    'docker network inspect t360_default',
+    'docker volume inspect t360_stock-data',
+    'docker compose run --rm api python -m worker.cli status',
+    'docker compose exec api python -m pytest -q',
+    'docker run --rm -e STOCK_DATA_DIR=/data --env-file ./fake-env.txt alpine true',
+    'git commit -m "allow docker compose config -q, block docker inspect"',
+  ];
+  const DOCKER_BLOCKED = [
+    'docker compose config',
+    'docker compose -f docker-compose.yml config',
+    'docker compose config --format json',
+    'docker compose config --hash "*"',
+    'docker compose config -q -o out.yml',
+    'docker compose config --services --output=out.yml',
+    'docker compose config --services --environment',
+    'docker compose config --no-interpolate --variables',
+    'docker compose --unknown-option x config',
+    'docker-compose config',
+    'docker compose convert',
+    'docker stack config -c docker-compose.yml',
+    'bash -c "docker compose config"',
+    "sh -lc 'STOCK_GIT_HEAD=x docker compose config'",
+    'docker inspect t360-api-1',
+    'docker container inspect t360-api-1',
+    'docker image inspect python:3.12-slim',
+    "docker inspect --format '{{.Config.Env}}' t360-api-1",
+    "docker inspect --format='{{json .Config}}' t360-api-1",
+    "docker inspect -f '{{json .}}' t360-api-1",
+    "docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' t360-api-1",
+    "docker inspect -f '{{index .Config \"Env\"}}' t360-api-1",
+    "docker inspect -f '{{json .ContainerConfig}}' t360-api-1",
+    'docker inspect --format "" t360-api-1',
+    'docker compose run --rm api env',
+    'docker compose run --rm api /usr/bin/env',
+    'docker compose exec api printenv',
+    'docker exec t360-api-1 env',
+    'docker container exec t360-api-1 printenv CLAUDE_CODE_OAUTH_TOKEN',
+    'docker exec t360-api-1 sh -c "env | sort"',
+    'docker exec t360-api-1 cat /proc/1/environ',
+    `docker compose run --rm api python -c "import os; print(os.environ)"`,
+    'docker run --rm --env-file ./fake-env.txt alpine env',
+  ];
+
+  for (const shell of ['bash', 'powershell']) {
+    test(`${shell}: docker commands that print no environment pass (#360)`, () => {
+      for (const command of DOCKER_ALLOWED) assert.equal(commandDenial(command, shell, [], clean), null, command);
+    });
+
+    test(`${shell}: docker commands that print the environment are blocked (#360)`, () => {
+      for (const command of DOCKER_BLOCKED) assert.ok(commandDenial(command, shell, [], clean), command);
+    });
+  }
+
+  test('the hook process allows compose config -q and blocks docker inspect (#360)', () => {
+    assert.equal(hook(bash('docker compose config -q')).code, 0);
+    const result = hook(bash('docker inspect t360-api-1'));
+    assert.equal(result.code, 2);
+    assert.match(result.stderr, /--format/);
   });
 
   test('Bash/PowerShell: a glob that expands to a .env file is blocked', () => {
