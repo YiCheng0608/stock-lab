@@ -6,13 +6,16 @@ date would start tracking on sessions that are already known.  The daily
 ``plan_tracking`` step (worker.plan_tracking) updates the plan afterwards.
 
 These functions flush but never commit; the caller owns the transaction.
+The API and the daily step write a plan from different connections, so each
+write is conditional on the status it was decided from (``claim_plan``): a
+change committed in between is never overwritten.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -43,6 +46,45 @@ def open_plan_for_signal(db: Session, signal_id: int) -> TrackingPlan | None:
             TrackingPlan.cancelled_at.is_(None),
         )
     )
+
+
+def open_plan_ids(db: Session, signal_ids: list[int]) -> dict[int, int]:
+    """``{signal_id: plan_id}`` of the signals' plans that are not cancelled."""
+
+    if not signal_ids:
+        return {}
+    return dict(
+        db.execute(
+            select(TrackingPlan.signal_id, TrackingPlan.id).where(
+                TrackingPlan.signal_id.in_(set(signal_ids)),
+                TrackingPlan.cancelled_at.is_(None),
+            )
+        ).all()
+    )
+
+
+def claim_plan(db: Session, plan: TrackingPlan, **values: object) -> bool:
+    """Write ``values`` only if the stored plan still has ``plan``'s status.
+
+    The UPDATE matches the row only while its status is the one ``plan`` was
+    read with and it is not cancelled, so a cancel or a daily update committed
+    after that read is kept.  On SQLite the UPDATE also takes the write lock,
+    which the other writer then waits for until this transaction ends.
+    Returns False (and reloads ``plan``) when the stored plan changed.
+    """
+
+    table = TrackingPlan.__table__
+    result = db.execute(
+        update(table)
+        .where(
+            table.c.id == plan.id,
+            table.c.status == plan.status,
+            table.c.cancelled_at.is_(None),
+        )
+        .values(**(values or {"status": plan.status}))
+    )
+    db.refresh(plan)
+    return result.rowcount == 1
 
 
 def create_plan(
@@ -151,20 +193,30 @@ def cancel_plan(
     """Cancel an open plan; its sessions and simulated values are kept.
 
     Cancelling a cancelled plan returns it unchanged; a plan that already
-    ended (``plan_already_closed``) cannot be cancelled.
+    ended (``plan_already_closed``) cannot be cancelled.  A daily update
+    committed after the plan was read is never overwritten: the cancel is
+    decided again on the stored status.  A status only moves forward, so a
+    retry happens at most once per open status.
     """
 
     plan = db.get(TrackingPlan, plan_id)
     if plan is None:
         raise PlanRequestError("plan_not_found", 404)
+    cancelled_at = now or datetime.utcnow()
+    for _ in PLAN_OPEN_STATUSES:
+        if plan.status == "cancelled":
+            return plan
+        if plan.status not in PLAN_OPEN_STATUSES:
+            raise PlanRequestError("plan_already_closed", 409)
+        if claim_plan(
+            db,
+            plan,
+            status="cancelled",
+            status_reason=f"cancelled_while_{plan.status}",
+            cancelled_at=cancelled_at,
+            updated_at=cancelled_at,
+        ):
+            return plan
     if plan.status == "cancelled":
         return plan
-    if plan.status not in PLAN_OPEN_STATUSES:
-        raise PlanRequestError("plan_already_closed", 409)
-    cancelled_at = now or datetime.utcnow()
-    plan.status_reason = f"cancelled_while_{plan.status}"
-    plan.status = "cancelled"
-    plan.cancelled_at = cancelled_at
-    plan.updated_at = cancelled_at
-    db.flush()
-    return plan
+    raise PlanRequestError("plan_changed", 409)

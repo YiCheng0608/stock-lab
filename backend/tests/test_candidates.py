@@ -793,6 +793,9 @@ ITEM_KEYS = {
     "data_as_of",
     "llm_note",
     "sources",
+    # User tracking plans (#253).
+    "candidate_id",
+    "open_plan_id",
 }
 
 

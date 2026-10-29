@@ -33,6 +33,7 @@ const SUITES = [
   { file: 'actions/actions.test.tsx' },
   { file: 'tables.test.tsx' },
   { file: 'copy.test.tsx' },
+  { file: 'tracking/tracking.test.tsx' },
 ]
 
 // Test files that cannot run here: path relative to src -> why (needs a browser/DOM or a guarded environment) and

@@ -23,6 +23,7 @@
 | 前端檔 | `frontend/src/news/NewsViews.tsx` |
 | 前端檔 | `frontend/src/stock/StockBarsChart.tsx` |
 | 前端檔 | `frontend/src/stock/StockHeader.tsx` |
+| 前端檔 | `frontend/src/tracking/TrackingViews.tsx` |
 | 前端檔 | `frontend/src/stock/StrategyBoardPanel.tsx` |
 | 前端檔 | `frontend/src/stock/strategyBoard.ts` |
 | 前端檔 | `frontend/src/stock/stockTabs.ts` |
