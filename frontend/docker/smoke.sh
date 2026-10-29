@@ -50,8 +50,9 @@ docker run -d --name "$name-web" --network "$name" -p "127.0.0.1:$port:8080" "$w
 curl -fsS -o /dev/null --retry 30 --retry-delay 1 --retry-connrefused --retry-all-errors "http://localhost:$port/" \
   || fail "the web container does not answer on $port"
 
-# No process in the web container runs as root: the uid of every one, master and workers.
-uids=$(MSYS_NO_PATHCONV=1 docker exec "$name-web" sh -c 'for f in /proc/[0-9]*/status; do grep "^Uid:" "$f" 2>/dev/null; done; true' | awk '{print $2}' | sort -u | tr '\n' ' ')
+# No process in the web container runs as root: every uid of every one, master and workers, i.e.
+# the four fields of Uid: (real, effective, saved, filesystem; PR #349 review S-2).
+uids=$(MSYS_NO_PATHCONV=1 docker exec "$name-web" sh -c 'for f in /proc/[0-9]*/status; do grep "^Uid:" "$f" 2>/dev/null; done; true' | awk '{print $2; print $3; print $4; print $5}' | sort -u | tr '\n' ' ')
 [ -n "$uids" ] || fail "no process found in the web container"
 case " $uids" in *" 0 "*) fail "a process in the web container runs as root (uids: $uids)" ;; esac
 printf 'web container process uids: %s\n' "$uids"

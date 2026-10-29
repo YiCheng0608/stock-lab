@@ -5,12 +5,14 @@ from __future__ import annotations
 import argparse
 import ast
 import fnmatch
+import io
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
 import sys
+import tokenize
 import unicodedata
 from urllib.parse import unquote, urlsplit
 
@@ -208,6 +210,115 @@ def documentation_errors() -> list[str]:
     return errors + owns_errors(docs)
 
 
+# The Windows execution layer left with Task Scheduler (#331, #333) and is not to come back
+# (#341). RUNTIME_PATHS is what runs in the api and scheduler containers: the backend, the image
+# and compose files, and the tools/ops scripts worker.serve runs. Agent tools that run on the
+# Windows host keep their 8.3 name and junction handling (#331 審查結論 3): close_task.sh,
+# coordinator_lib.sh (monitor.sh sources it), coordinator_json.py, agent_guard.cjs, conftest.py.
+RUNTIME_PATHS: tuple[str, ...] = (
+    "backend/app/",
+    "backend/worker/",
+    "backend/docker/",
+    "backend/Dockerfile",
+    "frontend/Dockerfile",
+    "frontend/docker/nginx.conf.template",
+    "docker-compose.yml",
+    "docker-compose.dev.yml",
+    "tools/ops/watchdog.sh",
+    "tools/ops/watchdog_helper.py",
+    "tools/ops/monitor.sh",
+    "tools/ops/event_queue.py",
+    "tools/ops/gh_auth.sh",
+    "tools/ops/http_wake.sh",
+    "tools/ops/http_orca.sh",
+)
+# Windows scripts anywhere in the repository; only the Task Scheduler registration the
+# production schedule still runs on until the cutover (#342), which removes them and this list.
+WINDOWS_SCRIPT = re.compile(r"\.(?:ps1|psm1|psd1|bat|cmd|vbs)$", re.I)
+WINDOWS_SCRIPTS_LEFT: tuple[str, ...] = (
+    "tools/Invoke-WorkerJob.ps1",
+    "tools/Register-WorkerSchedule.ps1",
+    "tools/ops/Register-Monitor.ps1",
+    "tools/ops/Register-Watchdog.ps1",
+)
+# Windows APIs, WMI, Task Scheduler, windowless or native-.exe processes, PowerShell and a branch
+# on Windows, in code (comments and docstrings are left out: they tell the history).
+WINDOWS_RUNTIME = re.compile(
+    r"""windll|msvcrt|winreg|_winapi|\bwin32(?:api|con|process|job)\b|pywintypes|GlobalMemoryStatus
+    |\bWin32_\w+|Get-CimInstance|Get-WmiObject|\bwmic?\b
+    |schtasks|ScheduledTask|taskkill
+    |pythonw|python\.exe|claude\.exe
+    |CREATE_NEW_PROCESS_GROUP|CREATE_NO_WINDOW|DETACHED_PROCESS|creationflags|STARTUPINFO
+    |\bpowershell\b|\bpwsh\b|\.ps1\b
+    |sys\.platform\s*[!=]=\s*["']win|sys\.platform\.startswith\(\s*["']win
+    |os\.name\s*[!=]=\s*["']nt|platform\.system\(\)\s*[!=]=\s*["']Windows""",
+    re.I | re.X,
+)
+
+
+def runtime_code(name: str, text: str) -> list[str]:
+    """The lines of a file with comments (and Python docstrings) blanked, numbered as before."""
+    lines = text.splitlines()
+    if not name.endswith(".py"):
+        # Shell, Dockerfile, YAML, nginx: `#` at the start of a line or after a space.
+        return [re.sub(r"(^|\s)#.*", r"\1", line) for line in lines]
+    skip: set[int] = set()
+    for node in ast.walk(ast.parse(text, filename=name)):
+        body = getattr(node, "body", None)
+        if (
+            isinstance(
+                node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+            )
+            and body
+        ):
+            first = body[0]
+            if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant):
+                if isinstance(first.value.value, str):
+                    skip.update(range(first.lineno, first.end_lineno + 1))
+    for token in tokenize.generate_tokens(io.StringIO(text).readline):
+        if token.type == tokenize.COMMENT:
+            row, col = token.start
+            lines[row - 1] = lines[row - 1][:col]
+    return ["" if number in skip else line for number, line in enumerate(lines, 1)]
+
+
+def windows_runtime_errors(
+    names: list[str] | None = None, root: Path = ROOT
+) -> list[str]:
+    """Windows scripts outside WINDOWS_SCRIPTS_LEFT and Windows logic in RUNTIME_PATHS.
+
+    Every file of the working tree, not only changed ones, like documentation_errors. That each
+    entry of WINDOWS_SCRIPTS_LEFT still exists is a test of tools/ci/test_checks.py.
+    """
+    if names is None:
+        listed = git(
+            "ls-files", "-z", "--cached", "--others", "--exclude-standard", cwd=root
+        )
+        names = sorted({n.decode("utf-8") for n in listed.split(b"\0") if n})
+    names = [name for name in names if (root / name).is_file()]
+    errors = [
+        f"{name}: a Windows script; the schedule runs in the Linux containers (#331, #341)"
+        for name in names
+        if WINDOWS_SCRIPT.search(name) and name not in WINDOWS_SCRIPTS_LEFT
+    ]
+    for name in names:
+        if not any(path_matches(name, pattern) for pattern in RUNTIME_PATHS):
+            continue
+        try:
+            code = runtime_code(name, (root / name).read_text(encoding="utf-8"))
+        except (SyntaxError, UnicodeError, tokenize.TokenError) as exc:
+            errors.append(f"{name}: not read for Windows logic: {exc}")
+            continue
+        for number, line in enumerate(code, 1):
+            match = WINDOWS_RUNTIME.search(line)
+            if match:
+                errors.append(
+                    f"{name}:{number}: Windows execution layer ({match.group(0)}); "
+                    "what runs in the containers is Linux only (#331, #341)"
+                )
+    return errors
+
+
 def repository_checks(paths: list[str], base: str) -> None:
     """Check the working tree against base, the same files the checks below read.
 
@@ -242,6 +353,7 @@ def repository_checks(paths: list[str], base: str) -> None:
         except (ValueError, SyntaxError, UnicodeError) as exc:
             errors.append(f"{name}: {exc}")
     errors.extend(documentation_errors())
+    errors.extend(windows_runtime_errors())
     if errors:
         raise ValueError("\n".join(errors))
     print(

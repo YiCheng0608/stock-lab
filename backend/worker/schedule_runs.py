@@ -50,7 +50,6 @@ import importlib
 import os
 import socket
 import subprocess
-import sys
 import traceback
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -499,22 +498,10 @@ def _pid_alive(pid: int) -> bool:
 
     if pid <= 0:
         return False
-    if sys.platform == "win32":
-        import ctypes
-
-        kernel32 = ctypes.windll.kernel32
-        process_query_limited_information = 0x1000
-        still_active = 259
-        handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
-        if not handle:
-            return False
-        try:
-            code = ctypes.c_ulong()
-            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
-                return False
-            return code.value == still_active
-        finally:
-            kernel32.CloseHandle(handle)
+    if os.name != "posix":
+        # Only the backend image runs schedules (#333). Without POSIX there is no probe:
+        # on Windows os.kill(pid, 0) sends CTRL_C_EVENT. The row is judged by its age.
+        return True
     try:
         os.kill(pid, 0)
     except ProcessLookupError:

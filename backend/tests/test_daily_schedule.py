@@ -1128,6 +1128,7 @@ def test_a_lock_skip_that_cannot_write_its_row_reports_it(database, monkeypatch)
         schedule_runs.record_preflight_skip(DAY, reason="low_memory")
 
 
+@pytest.mark.skipif(os.name != "posix", reason="a PID is probed only on POSIX (#341)")
 def test_running_row_whose_process_is_gone_is_abandoned_at_once(database, monkeypatch):
     steps = Steps(monkeypatch)
     dead = subprocess.Popen([sys.executable, "-c", "pass"])
