@@ -58,6 +58,8 @@ TAIPEI = job.TAIPEI
 JOBS = ("daily", "news", "watchdog", "monitor")
 DAILY_TIMES = "18:30,21:30"
 NEWS_INTERVAL_HOURS = 2
+# The longest news interval is the day itself (#368): once a day, at 0:00.
+NEWS_INTERVAL_MAX_HOURS = 24
 WATCHDOG_MINUTES = "15,45"
 # The values Register-WorkerSchedule.ps1 registered (OPERATIONS §6.2).
 DAILY_MIN_FREE_MEMORY_GB = 2.0
@@ -93,7 +95,10 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "--news-interval-hours",
         type=int,
         default=NEWS_INTERVAL_HOURS,
-        help=f"news 間隔小時，整點起跑（預設 {NEWS_INTERVAL_HOURS}）",
+        help=(
+            f"news 間隔小時（1～{NEWS_INTERVAL_MAX_HOURS}），整點起跑，每台北日從 0 點起算；"
+            f"{NEWS_INTERVAL_MAX_HOURS} 為每日 0 點一次（預設 {NEWS_INTERVAL_HOURS}）"
+        ),
     )
     parser.add_argument(
         "--watchdog-minutes",
@@ -176,8 +181,8 @@ def argument_problem(args: argparse.Namespace) -> str | None:
     # argparse checks the choices of a given --monitor, not of the STOCK_MONITOR default.
     if args.monitor not in MONITOR_MODES:
         return f"--monitor (STOCK_MONITOR) must be one of {', '.join(MONITOR_MODES)}"
-    if not 1 <= args.news_interval_hours <= 24:
-        return "--news-interval-hours must be between 1 and 24"
+    if not 1 <= args.news_interval_hours <= NEWS_INTERVAL_MAX_HOURS:
+        return f"--news-interval-hours must be between 1 and {NEWS_INTERVAL_MAX_HOURS}"
     for name in ("daily_time_limit_minutes", "news_time_limit_minutes"):
         value = getattr(args, name)
         if value is not None and value <= 0:
@@ -186,6 +191,15 @@ def argument_problem(args: argparse.Namespace) -> str | None:
         if not 0 <= getattr(args, name) <= 1024:
             return f"--{name.replace('_', '-')} must be between 0 and 1024"
     return None
+
+
+def _news_hour(interval: int) -> str:
+    """The cron hour field of a news run every INTERVAL hours from 0:00.
+
+    APScheduler rejects a step as long as the day (``*/24``), so a full day is 0:00.
+    """
+
+    return "0" if interval == NEWS_INTERVAL_MAX_HOURS else f"*/{interval}"
 
 
 def triggers(args: argparse.Namespace) -> dict[str, object]:
@@ -201,7 +215,7 @@ def triggers(args: argparse.Namespace) -> dict[str, object]:
     out = {
         "daily": daily[0] if len(daily) == 1 else OrTrigger(daily),
         "news": CronTrigger(
-            hour=f"*/{args.news_interval_hours}", minute=0, timezone=TAIPEI
+            hour=_news_hour(args.news_interval_hours), minute=0, timezone=TAIPEI
         ),
         "watchdog": CronTrigger(minute=args.watchdog_minutes, timezone=TAIPEI),
     }
