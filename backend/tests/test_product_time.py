@@ -1,6 +1,7 @@
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
+from app import product_time
 from app.product_time import (
     PRODUCT_TIME_VERSION,
     build_action_product_time,
@@ -148,3 +149,17 @@ def test_action_product_time_requires_unique_event_and_keeps_response_separate()
     assert many["response_generated_at"] == "2026-09-08T10:00:00+00:00"
     assert many["legacy"]["generated_at"] == "2026-09-08T18:00:00+08:00"
     assert unique["roles"]["event_date"]["value"] == "2026-09-07"
+
+
+# Timestamps written below (#376). `frozen_utcnow` (conftest) makes app.clock answer one
+# instant to every caller; this module reads its own `datetime`, which the test freezes
+# to the same instant.
+
+
+def test_a_response_without_a_usable_time_is_stamped_with_the_clock(
+    frozen_utcnow, monkeypatch
+):
+    monkeypatch.setattr(product_time, "datetime", frozen_utcnow.datetime_class())
+    # None, text that is not a time, and a time without an offset.
+    for value in (None, "not a time", "2026-09-08T10:00:00"):
+        assert product_time._response_time(value) == "2026-10-29T17:04:05.678901+00:00"
