@@ -121,9 +121,11 @@ jobs:
           python -B -m pytest -p no:cacheprovider -q -rA --durations=30 tests
 
   # Experiment (#379): the same tests on every core with pytest-xdist, beside backend for a
-  # week. Not in required's needs, and a red pytest does not fail the job: close_task.sh reads
-  # the run's conclusion and patrol.sh every check's, so a red experiment would hold them up.
-  # The step summary and one notice annotation carry the time and the failed and error test ids.
+  # week. Not in required's needs, and neither a red or hung pytest nor a broken summary fails
+  # the job: close_task.sh reads the run's conclusion and patrol.sh every check's, so a red
+  # experiment would hold them up. The pytest step's time limit is below the job's, so a hang
+  # is a step failure continue-on-error takes. The step summary and one notice annotation carry
+  # the time and the failed and error test ids, with the same keys whatever happened.
   # pytest-xdist is installed here only, not in the lock: the backend job, the release venv and
   # the images built from the lock do not need it while it is an experiment.
   backend-xdist:
@@ -145,12 +147,16 @@ jobs:
       - name: Backend pytest in parallel
         id: pytest
         continue-on-error: true
+        timeout-minutes: 20
         shell: bash
         working-directory: backend
         env:
           LOCALAPPDATA: ${{ runner.temp }}
         run: |
           set -euo pipefail
+          # In files as well: a step killed at its time limit may not get its outputs through.
+          nproc > "$RUNNER_TEMP/xdist.workers"
+          date +%s > "$RUNNER_TEMP/xdist.start"
           echo "workers=$(nproc)" >> "$GITHUB_OUTPUT"
           start=$(date +%s)
           trap 'echo "seconds=$(($(date +%s) - start))" >> "$GITHUB_OUTPUT"' EXIT
@@ -158,39 +164,70 @@ jobs:
             --junitxml "$RUNNER_TEMP/xdist.xml" tests
       - name: Summary
         if: always()
+        continue-on-error: true
         env:
           OUTCOME: ${{ steps.pytest.outcome }}
           WORKERS: ${{ steps.pytest.outputs.workers }}
           ELAPSED: ${{ steps.pytest.outputs.seconds }}
         run: |
           python3 - <<'PY'
-          import json, os
+          import json, os, time
           import xml.etree.ElementTree as ET
+          temp = os.environ['RUNNER_TEMP']
+
+          def number(value):
+              try:
+                  return int(str(value).strip())
+              except ValueError:
+                  return None
+
+          def read(name):
+              try:
+                  with open(os.path.join(temp, name), encoding='utf-8') as f:
+                      return f.read()
+              except OSError:
+                  return ''
+
+          # Without the step's output (killed at the time limit), from its start file.
+          seconds = number(os.environ['ELAPSED'])
+          if seconds is None and (start := number(read('xdist.start'))) is not None:
+              seconds = int(time.time()) - start
+          workers = number(os.environ['WORKERS'])
+          if workers is None:
+              workers = number(read('xdist.workers'))
+          # Every key is there whatever happened; null where the junit XML has no value.
+          keys = ('tests', 'failures', 'errors', 'skipped')
+          counts = dict.fromkeys(keys)
           ids = {'failure': [], 'error': []}
-          counts = {}
-          path = os.path.join(os.environ['RUNNER_TEMP'], 'xdist.xml')
-          if os.path.exists(path):
-              root = ET.parse(path).getroot()
+          try:
+              root = ET.parse(os.path.join(temp, 'xdist.xml')).getroot()
+          except (OSError, ET.ParseError):
+              root = None
+          if root is not None:
+              counts = dict.fromkeys(keys, 0)
               for suite in root.iter('testsuite'):
-                  for key in ('tests', 'failures', 'errors', 'skipped'):
-                      counts[key] = counts.get(key, 0) + int(suite.get(key, 0))
+                  for key in keys:
+                      counts[key] += number(suite.get(key, 0)) or 0
               for case in root.iter('testcase'):
                   test_id = f"{case.get('classname', '')}::{case.get('name', '')}"
                   for kind in ids:
                       if case.find(kind) is not None:
                           ids[kind].append(test_id)
-          result = {'outcome': os.environ['OUTCOME'], 'seconds': os.environ['ELAPSED'],
-                    'workers': os.environ['WORKERS'], **counts,
+          result = {'outcome': os.environ['OUTCOME'] or None, 'seconds': seconds,
+                    'workers': workers, **counts,
                     'failed': ids['failure'], 'error': ids['error']}
           line = json.dumps(result, ensure_ascii=False)
           # An annotation holds 64 KB: the first 20 ids of each kind; the summary has them all.
           short = {**result, 'failed': ids['failure'][:20], 'error': ids['error'][:20]}
-          print(f"::notice title=backend-xdist::{json.dumps(short, ensure_ascii=False)}")
+          # Workflow command escaping of the message: % first, then CR and LF.
+          message = json.dumps(short, ensure_ascii=False)
+          message = message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          print(f"::notice title=backend-xdist::{message}")
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as out:
               out.write('## backend-xdist (#379)\n\n| outcome | seconds | workers | tests | failures | errors | skipped |\n')
               out.write('| --- | --- | --- | --- | --- | --- | --- |\n')
-              out.write(f"| {result['outcome']} | {result['seconds']} | {result['workers']} | "
-                        + ' | '.join(str(counts.get(k, '')) for k in ('tests', 'failures', 'errors', 'skipped')) + ' |\n\n')
+              cells = [result[k] for k in ('outcome', 'seconds', 'workers', *keys)]
+              out.write('| ' + ' | '.join('' if c is None else str(c) for c in cells) + ' |\n\n')
               for kind, label in (('failed', 'Failed'), ('error', 'Error')):
                   out.write(f'{label} ({len(result[kind])}):\n\n')
                   out.writelines(f'- `{test_id}`\n' for test_id in result[kind])
