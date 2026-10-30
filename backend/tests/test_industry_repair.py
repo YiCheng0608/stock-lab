@@ -450,3 +450,25 @@ def test_rescore_clears_rank_left_on_deactivated_groups(factory, tmp_path):
         )
     # Only the rescored date is touched; the row itself is kept.
     assert ranks == {day: None, date(2026, 9, 1): 1}
+
+
+# Timestamps written below (#376). `frozen_utcnow` (conftest) makes app.clock answer one
+# instant to every caller, so a stamp taken from local time or the real clock stores a
+# value other than the one asserted here.
+
+
+def test_an_applied_repair_is_stamped_with_the_clock(factory, tmp_path, frozen_utcnow):
+    _seed(factory, tmp_path)
+    with factory() as db:
+        result = repair_industry_memberships(db, apply=True)
+        db.commit()
+    assert result["status"] == "applied"
+    first = frozen_utcnow.at
+    with factory() as db:
+        run = db.get(IngestionRun, result["ingestion_run_id"])
+        # 17:04 UTC on 10/29 is already 10/30 in Taipei.
+        assert (run.started_at, run.finished_at, run.run_date) == (
+            first,
+            first,
+            date(2026, 10, 30),
+        )

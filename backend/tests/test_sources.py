@@ -1,3 +1,4 @@
+import json
 from datetime import date
 
 import httpx
@@ -1285,3 +1286,24 @@ def test_fetch_json_wraps_retryable_http_exhaustion_with_cause(monkeypatch):
         sources.fetch_json("https://fixture.example")
     assert calls["count"] == 3
     assert isinstance(error.value.__cause__, httpx.HTTPStatusError)
+
+
+# Timestamps written below (#376). `frozen_utcnow` (conftest) makes app.clock answer one
+# instant to every caller, so a stamp taken from local time or the real clock stores a
+# value other than the one asserted here.
+
+
+def test_a_capture_without_a_time_is_stamped_with_the_clock(frozen_utcnow):
+    stored = sources.persist_raw_payload(
+        "twse", "https://example.test/a", {"a": 1}, "2026-10-29"
+    )
+    day_dir = sources.RAW_DIR / "twse" / "2026" / "10" / "29"
+    assert stored.parent == day_dir
+    meta = json.loads(stored.with_suffix(".meta.json").read_text(encoding="utf-8"))
+    assert meta["collected_at"] == "2026-10-29T17:04:05.678901"
+
+    captured = sources.capture_payload(
+        "twse", "https://example.test/b", {"b": 1}, "2026-10-29"
+    )
+    assert captured.collected_at == frozen_utcnow.at
+    assert captured.payload_path.parent == day_dir

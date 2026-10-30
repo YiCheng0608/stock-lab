@@ -1876,3 +1876,76 @@ def test_historical_refetch_keeps_the_snapshot_event_coverage(database):
                 )
             )
         } == quality
+
+
+# Timestamps the run log writes (#376). `frozen_utcnow` (conftest) makes app.clock
+# answer one instant to every caller, so a stamp taken from local time or the real
+# clock stores a value other than the one asserted here.
+
+
+def test_a_daily_run_and_its_steps_are_stamped_with_the_clock(
+    database, monkeypatch, frozen_utcnow
+):
+    Steps(monkeypatch)
+    first = frozen_utcnow.at
+    assert pipeline.run_daily(DAY, trigger="scheduler")["status"] == "success"
+    rows, by_run = runs(database)
+    assert (rows[0].started_at, rows[0].finished_at) == (first, first)
+    logged = by_run[rows[0].id]
+    assert len(logged) == 11
+    assert {(step.started_at, step.finished_at) for step in logged.values()} == {
+        (first, first)
+    }
+
+    # The rerun the same day is recorded as a skip at the clock's new instant.
+    later = first + timedelta(hours=3)
+    frozen_utcnow.at = later
+    assert pipeline.run_daily(DAY)["reason"] == "already_complete"
+    rows, _ = runs(database)
+    assert (rows[1].status, rows[1].started_at, rows[1].finished_at) == (
+        "skipped",
+        later,
+        later,
+    )
+
+
+def test_a_running_row_is_abandoned_once_the_clock_is_past_the_time_limit(
+    database, monkeypatch, frozen_utcnow
+):
+    Steps(monkeypatch)
+    limit = schedule_runs.STALE_RUNNING_AFTER
+    with database() as db:
+        db.add(
+            ScheduleRun(
+                job="daily",
+                target_date=DAY,
+                trigger="scheduler",
+                status="running",
+                started_at=frozen_utcnow.at - limit + timedelta(seconds=1),
+                host="other-host",
+                pid=1,
+            )
+        )
+        db.commit()
+    assert pipeline.run_daily(DAY)["reason"] == "already_running"
+    with database() as db:
+        db.execute(
+            update(ScheduleRun)
+            .where(ScheduleRun.status == "running")
+            .values(started_at=frozen_utcnow.at - limit - timedelta(seconds=1))
+        )
+        db.commit()
+    assert pipeline.run_daily(DAY)["status"] == "success"
+    rows, _ = runs(database)
+    assert rows[0].status == "failed" and rows[0].error.startswith("abandoned")
+    assert rows[0].finished_at == frozen_utcnow.at
+
+
+def test_a_declined_start_is_logged_at_the_clock(database, frozen_utcnow):
+    skipped = schedule_runs.record_preflight_skip(DAY, reason="low_memory")
+    assert skipped["status"] == "skipped"
+    rows, _ = runs(database)
+    assert (rows[0].started_at, rows[0].finished_at) == (
+        frozen_utcnow.at,
+        frozen_utcnow.at,
+    )

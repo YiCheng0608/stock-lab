@@ -1188,3 +1188,110 @@ def test_a_rejected_result_leaves_no_ai_block(db, fake, client, monkeypatch):
     assert client.get(f"{router.prefix}/news/{item.id}").json()["ai"] is None
     listed = client.get(f"{router.prefix}/news").json()["items"]
     assert [entry["ai"] for entry in listed] == [None]
+
+
+# Timestamps the batch writes (#376). `frozen_utcnow` (conftest) makes app.clock answer
+# one instant to every caller, so a stamp taken from local time or the real clock
+# stores a value other than the one asserted here.
+
+
+def _news_ago(db, frozen, count, ago, *, start=0):
+    moment = frozen.at - ago
+    return _add_news(
+        db,
+        count,
+        start=start,
+        published_at=moment,
+        display_time=moment,
+        collected_at=moment,
+    )
+
+
+def test_news_llm_stamps_its_rows_with_the_clock(db, fake, frozen_utcnow, monkeypatch):
+    # The label date reads the Taipei clock through the module's own datetime.
+    monkeypatch.setattr(news_llm, "datetime", frozen_utcnow.datetime_class())
+    first = frozen_utcnow.at
+    one_second = timedelta(seconds=1)
+    fresh = _news_ago(db, frozen_utcnow, 1, timedelta(hours=1))
+    # The window is the last STALE_AFTER up to the clock: the item exactly on its edge
+    # is sent, the one a second older is skipped. Neither run nor `now` is passed.
+    edge = _news_ago(db, frozen_utcnow, 1, news_llm.STALE_AFTER, start=10)
+    old = _news_ago(db, frozen_utcnow, 1, news_llm.STALE_AFTER + one_second, start=20)
+
+    result = run_news_llm(db)
+
+    assert result["status"] == "success"
+    assert result["run_date"] == "2026-10-30"  # 01:04 on 10/30 in Taipei
+    assert fake()[0]["ids"] == [fresh[0].id, edge[0].id]
+    assert result["stale"] == 1
+    rows = _results(db)
+    assert {(row.news_item_id, row.llm_status) for row in rows} == {
+        (fresh[0].id, "done"),
+        (edge[0].id, "done"),
+        (old[0].id, "skipped_stale"),
+    }
+    assert {row.llm_run_at for row in rows} == {first}
+    run = db.get(IngestionRun, result["run_id"])
+    assert (run.run_date, run.started_at, run.finished_at, run.data_as_of) == (
+        date(2026, 10, 30),
+        first,
+        first,
+        first.isoformat(),
+    )
+    assert {raw.collected_at for raw in db.scalars(select(RawPayload))} == {first}
+
+
+def test_a_batch_that_raises_is_left_pending_at_the_clock(db, fake, frozen_utcnow):
+    _news_ago(db, frozen_utcnow, 2, timedelta(hours=1))
+
+    def broken(prompt, argv):
+        raise RuntimeError("fixture runner failure")
+
+    result = run_news_llm(db, run_date=RUN_DATE, runner=broken)
+
+    assert result["pending"] == 2
+    rows = _results(db)
+    assert {row.llm_status for row in rows} == {"pending"}
+    assert {row.llm_run_at for row in rows} == {frozen_utcnow.at}
+
+
+def test_a_refused_run_is_recorded_at_the_clock(db, fake, frozen_utcnow, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    result = run_news_llm(db, run_date=RUN_DATE)
+
+    assert result["reason"] == "api_key_env_refused"
+    run = db.get(IngestionRun, result["run_id"])
+    first = frozen_utcnow.at
+    assert (run.started_at, run.finished_at, run.data_as_of) == (
+        first,
+        first,
+        first.isoformat(),
+    )
+
+
+def test_a_run_is_abandoned_once_the_clock_is_past_its_limit(db, frozen_utcnow):
+    first = frozen_utcnow.at
+
+    def running(started_at):
+        run = IngestionRun(
+            run_type="news_llm",
+            source="claude-cli",
+            run_date=RUN_DATE,
+            status="running",
+            records=0,
+            started_at=started_at,
+            metadata_json={},
+        )
+        db.add(run)
+        db.commit()
+        return run
+
+    one_second = timedelta(seconds=1)
+    killed = running(first - news_llm.ABANDONED_AFTER - one_second)
+    active = running(first - news_llm.ABANDONED_AFTER + one_second)
+
+    assert news_llm.close_abandoned_runs(db) == [killed.id]
+    db.refresh(killed)
+    db.refresh(active)
+    assert (killed.status, killed.finished_at) == ("failed", first)
+    assert (active.status, active.finished_at) == ("running", None)

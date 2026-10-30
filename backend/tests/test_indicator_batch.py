@@ -16,6 +16,7 @@ from app.api import get_db, router
 from app.db import Base, enable_sqlite_foreign_keys
 from app.indicators import IndicatorBar, aggregate_weekly, compute_indicators
 from app.models import CorporateAction, Instrument, MarketBar, TechnicalIndicator
+from worker import indicator_batch
 from worker.indicator_batch import compute_market_indicators
 
 
@@ -488,3 +489,18 @@ def test_run_daily_skips_indicators_when_collect_fails_and_runs_them_when_analyz
     assert result["evaluate"]["reason"] == "analyze_not_successful" and result[
         "indicators"
     ] == {"status": "success"}
+
+
+# Timestamps written below (#376). `frozen_utcnow` (conftest) makes app.clock answer one
+# instant to every caller, so a stamp taken from local time or the real clock stores a
+# value other than the one asserted here.
+
+
+def test_indicator_rows_are_computed_at_the_clock(db, frozen_utcnow, monkeypatch):
+    # The batch reads the UTC clock through the module's own datetime.
+    monkeypatch.setattr(indicator_batch, "datetime", frozen_utcnow.datetime_class())
+    instrument = _seed(db)
+    compute_market_indicators(db)
+    db.flush()
+    rows = _rows(db, instrument)
+    assert rows and {row.computed_at for row in rows} == {frozen_utcnow.at}
