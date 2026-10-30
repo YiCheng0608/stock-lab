@@ -721,5 +721,29 @@ class WorkflowTriggers(unittest.TestCase):
                 self.assertEqual(workflow["on"][event]["branches"], long_lived)
 
 
+class ExperimentJob(unittest.TestCase):
+    """The backend-xdist experiment holds up neither a merge nor close_task.sh (#379).
+
+    required does not need it, and its pytest step continues on error: close_task.sh reads
+    the run's conclusion and patrol.sh every check's, so a red pytest would stop both.
+    """
+
+    def test_backend_xdist_cannot_turn_ci_red(self):
+        import yaml
+
+        jobs = yaml.load(
+            (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"),
+            Loader=yaml.BaseLoader,
+        )["jobs"]
+        self.assertNotIn("backend-xdist", jobs["required"]["needs"])
+        self.assertNotIn("backend-xdist", json.dumps(jobs["required"]["steps"]))
+        steps = jobs["backend-xdist"]["steps"]
+        pytest_steps = [s for s in steps if "-m pytest" in s.get("run", "")]
+        self.assertTrue(pytest_steps)
+        for step in pytest_steps:
+            with self.subTest(step=step.get("name")):
+                self.assertEqual(step.get("continue-on-error"), "true")
+
+
 if __name__ == "__main__":
     unittest.main()
