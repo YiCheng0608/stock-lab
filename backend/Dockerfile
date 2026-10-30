@@ -61,6 +61,7 @@ RUN pip install --no-cache-dir -r /tmp/requirements/requirements.txt \
 # local checks run in the container (docs/GITHUB_WORKFLOW.md 本機檢查, #339). The same pins as
 # that job installs: tools/ci/test_checks.py holds the two equal.
 RUN pip install --no-cache-dir ruff==0.14.14 PyYAML==6.0.3
+RUN pip uninstall -y httpx
 
 # A non-root user. ~/.claude.json marks the CLI's first-run onboarding done, so
 # `claude -p` does not stop at it; the login itself comes from the environment (#337).
