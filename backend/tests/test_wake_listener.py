@@ -4,8 +4,8 @@ The listener runs from the sandbox copy of tools/ops (test_coordinator_scripts.H
 a free 127.0.0.1 port, with the harness's fake orca; the clients and monitor.sh call it
 as the scheduler container does, with STOCK_WAKE_URL pointing at that port. The fake orca
 is a bash script: the wake reaches it through bash (orca_wake.sh) anywhere, but /worktrees
-runs it as a program, which Windows cannot; those tests run in the image only (CI
-backend, docker jobs).
+runs it as a program, which Windows cannot; those tests run on Linux only (the CI
+backend job; tools/ci/docker_suite.json does not list this file).
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-<!-- owns: 唯一來源對照、Issue 標題前綴、版本完成判定、資料與功能拆線、分流、任務流程、本機檢查、review 與合併、PR 檢查規則、長期整合分支、統籌 session、無人值守運作、失敗處理、程式索引 -->
+<!-- owns: 唯一來源對照、Issue 標題前綴、版本完成判定、資料與功能拆線、分流、任務流程、本機檢查、review 與合併、PR 檢查規則、CI 後端測試分流、長期整合分支、統籌 session、無人值守運作、失敗處理、程式索引 -->
 # GitHub 工作手冊
 
 [AGENTS](../AGENTS.md) 管角色與原則，本文管操作細節與模板。
@@ -111,6 +111,7 @@ export MSYS_NO_PATHCONV=1   # 否則 Git Bash 會把 -v 的容器路徑改寫成
   - c. 改到 `frontend/src/` 的非測試檔，本文要有圖片或 `pr-assets` 連結。
   - d. 改到 `HIGH_RISK_PATHS`，PR 要有 `independent-review` label。
   - e. commit 訊息不得有 closing keyword（`Fix #N`、`Closes #N`、`Resolves #N` 等）：commit 一進 master 就會關 Issue，早於結案步驟。
+- 後端測試在 CI 分兩個 job，不重跑全套（#378）：`backend` 在 runner 上跑 `backend/tests` 全套；`docker` 在 image 內建置、import `app`／`worker` 全部模組、截圖，並只跑 [`docker_suite.json`](../tools/ci/docker_suite.json) 的 `docker` 列出的測試——結果會隨 image 的執行環境（tini 當 PID 1、非 root、image 內的 node 與 chromium）改變的那些。`suite` job 以 [`suite_split.py`](../tools/ci/suite_split.py) 比對兩個 job 的報告：全套每個測試都要在其中一個 job **實際執行**（不是 skipped），否則 CI 紅並列出 test id；比的是執行而不是收集，因為 `backend` 收集全套，只比收集永遠成立。`docker` 列出的測試在 image 內被 skip 也紅（它們在 runner 上也會通過，不另外檢查就會漏掉 image 退化）。新增只在 runner 上跳過的測試（缺 image 才有的工具、`skipif`）時，把它或它的檔案加進 `docker`；Windows 專屬、CI 哪裡都不會跑的測試寫進同一檔的 `skipped_everywhere` 並附原因，已能執行的項目留在裡面也會紅。本機檢查照舊在容器內跑全套（[本機檢查](#本機檢查)）。
 - 統籌 review 重點：AC 是否逐條有驗證、文件是否同步、是否遵守 DESIGN_SYSTEM、有沒有寫死色碼／路徑／金鑰、測試是否覆蓋邊界。AC 證據必須是命令與輸出、查詢結果或截圖連結，只寫「通過」不算。
 - 改到 [`HIGH_RISK_PATHS`](../tools/ci/checks.py) 的 PR 加一次獨立 review（`/code-review` 或另開 session）並加 `independent-review` label。獨立 review 要寫出「這個變更安全是因為哪一個事實」，以及證明它的方式（命令與輸出、查詢或測試名稱）。另開的 review session 在本機 build 或起 compose 時，image tag 與 compose project 用 `t<pr>-review` 開頭（結案腳本只清 `t<issue>`，PR 的資源不會被它刪），結束前自己 `docker compose -p t<pr>-review down --volumes --rmi all`；與工程師一樣不跑任何 `prune`（[任務流程](#任務流程)第 3 步；PR #349 第一次 review 曾刪掉別人的 image）。派 review session 的任務文要寫進這兩點。
 - 合併用 merge commit，不 squash／rebase；衝突由 PR 作者在自己 branch 解決。主線規則要求 PR 分支跟上 master：master 前進後統籌以 `gh api -X PUT repos/YiCheng0608/stock-lab/pulls/<n>/update-branch -f expected_head_sha=<head>` 把 master 併入（merge commit），CI 重跑綠再合併。

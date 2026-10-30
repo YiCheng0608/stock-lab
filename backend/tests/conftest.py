@@ -34,7 +34,7 @@ os.environ.pop("STOCK_API_ALLOWED_ORIGINS", None)
 os.environ.pop("STOCK_JOB_LOCK", None)
 # compose hands the env file's tokens to the api container (Issue 337), where the local checks
 # run the tests (Issue 339): a real token never reaches a test, and the tests see what CI's
-# docker job (no env file) does.
+# jobs (no env file) do.
 os.environ.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
 os.environ.pop("GH_TOKEN", None)
 # The event monitor's wake token (Issue 338): no test wakes the coordinator with the real one.
