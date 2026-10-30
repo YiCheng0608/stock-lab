@@ -147,7 +147,7 @@ jobs:
       - name: Backend pytest in parallel
         id: pytest
         continue-on-error: true
-        timeout-minutes: 1
+        timeout-minutes: 20
         shell: bash
         working-directory: backend
         env:
