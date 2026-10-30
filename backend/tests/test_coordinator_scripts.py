@@ -399,14 +399,31 @@ def dispatch(h: Harness) -> Harness:
     )
     h.answer("orca_terminal_read", _ok({"terminal": {"tail": ["❯ 你好"]}}))
     task = h.root / "task.md"
-    # CRLF as an editor on Windows saves it; the text sent must not carry the CR.
-    task.write_bytes("你是 #282 的工程師。\r\n第二行：只回覆「收到」。\r\n".encode())
+    # Over the old 30,000-byte limit, with quotes, $, backticks and CRLF line ends: none of
+    # it reaches the terminal, only the path does (#315).
+    task.write_bytes(
+        (
+            "你是 #282 的工程師。\r\n"
+            + 'AC-1：引號 " 錢號 $HOME $(id) 反引號 `id` 不得展開。\r\n' * 600
+            + "最後一行：只回覆「收到」。\r\n"
+        ).encode()
+    )
+    assert task.stat().st_size > 30000
     h.task = task
     return h
 
 
-def _dispatch(h: Harness) -> subprocess.CompletedProcess:
-    return h.run("dispatch.sh", "282", "dryrun", "--task-file", h.task.as_posix())
+def _dispatch(h: Harness, task: str | None = None) -> subprocess.CompletedProcess:
+    return h.run(
+        "dispatch.sh", "282", "dryrun", "--task-file", task or h.task.as_posix()
+    )
+
+
+def _notice(path: str) -> str:
+    return (
+        f"請用 Read 工具讀取任務檔 {path}（UTF-8），依其內容開工；"
+        "開工留言回貼任務檔裡的 Issue 連結與 AC 數。"
+    )
 
 
 def test_dispatch_sends_only_after_tui_idle_is_satisfied(dispatch: Harness) -> None:
@@ -426,12 +443,107 @@ def test_dispatch_sends_only_after_tui_idle_is_satisfied(dispatch: Harness) -> N
     assert "--for tui-idle --timeout-ms 60000" in orca[wait]
     assert "--timeout " not in orca[wait]
     sent = (dispatch.fake / "sent_text.txt").read_bytes().decode("utf-8")
-    assert sent == "你是 #282 的工程師。\n第二行：只回覆「收到」。"
+    assert sent == _notice(dispatch.task.as_posix())
+    assert line["task_file"] == dispatch.task.as_posix()
+    terminal = next(c for c in orca if c.startswith("terminal create"))
+    assert terminal.endswith(
+        "--command claude --model claude-opus-5-5 --effort high"
+        f' --add-dir "{dispatch.root.as_posix()}" --json'
+    )
     assert "branch -m YiCheng0608/task-282-dryrun task/282-dryrun" in " ".join(
         dispatch.calls("git")
     )
     update = [c for c in dispatch.calls("gh") if "updateProjectV2ItemFieldValue" in c]
     assert len(update) == 1 and "o=OPT-DEV" in update[0] and "i=ITEM-1" in update[0]
+
+
+def test_dispatch_sends_one_line_with_the_path_and_none_of_the_task_text(
+    dispatch: Harness,
+) -> None:
+    """#315 AC-2: the terminal gets one sentence and the path, never the task text."""
+    result = _dispatch(dispatch)
+    assert result.returncode == 0, result.stdout + result.stderr
+    sends = [c for c in dispatch.calls("orca") if c.startswith("terminal send")]
+    assert len(sends) == 1
+    sent = (dispatch.fake / "sent_text.txt").read_bytes().decode("utf-8")
+    assert "\n" not in sent and "\r" not in sent
+    body = dispatch.task.read_text(encoding="utf-8").splitlines()
+    for line in body:
+        assert line not in sent and line not in sends[0]
+    assert sent.replace(dispatch.task.as_posix(), "<path>") == _notice("<path>")
+
+
+def test_dispatch_sends_the_absolute_path_of_a_relative_task_file(
+    dispatch: Harness,
+) -> None:
+    """The engineer session runs in the new worktree, so a relative path would miss."""
+    result = _dispatch(dispatch, "task.md")  # the scripts run with cwd = sandbox root
+    assert result.returncode == 0, result.stdout + result.stderr
+    sent = (dispatch.fake / "sent_text.txt").read_bytes().decode("utf-8")
+    assert sent == _notice(dispatch.task.as_posix())
+
+
+def test_dispatch_lets_claude_read_a_task_file_under_spaces_and_cjk(
+    dispatch: Harness,
+) -> None:
+    """#327 review A: the directory goes to --add-dir in double quotes."""
+    folder = dispatch.root / "t282" / "任務 檔"
+    folder.mkdir(parents=True)
+    task = folder / "task.md"
+    shutil.copyfile(dispatch.task, task)
+    result = _dispatch(dispatch, task.as_posix())
+    assert result.returncode == 0, result.stdout + result.stderr
+    terminal = next(
+        c for c in dispatch.calls("orca") if c.startswith("terminal create")
+    )
+    assert f'--add-dir "{folder.as_posix()}" --json' in terminal
+    sent = (dispatch.fake / "sent_text.txt").read_bytes().decode("utf-8")
+    assert sent == _notice(task.as_posix())
+
+
+@pytest.mark.parametrize(
+    "where, error",
+    [
+        ("a\nb.md", "任務檔路徑不能有換行"),
+        ("a\rb.md", "任務檔路徑不能有換行"),
+        ("a$b/task.md", "任務檔目錄不能含"),
+        ("a%b/task.md", "任務檔目錄不能含"),
+        ("a!b/task.md", "任務檔目錄不能含"),
+        ("a`b/task.md", "任務檔目錄不能含"),
+    ],
+    ids=["lf", "cr", "dollar", "percent", "bang", "backtick"],
+)
+def test_dispatch_refuses_a_task_path_it_cannot_pass_on(
+    dispatch: Harness, where: str, error: str
+) -> None:
+    """A newline would end the sent line; these characters expand in the shell that
+    runs --command (cmd, PowerShell or bash). Refused before anything is created."""
+    task = dispatch.root / where
+    if "\n" not in where and "\r" not in where:  # Windows file names cannot hold either
+        task.parent.mkdir(parents=True)
+        shutil.copyfile(dispatch.task, task)
+    # Through the environment: Windows splits a command-line argument at a newline.
+    result = dispatch.run_bash(
+        'exec bash "$1" 282 dryrun --task-file "$TASK"',
+        (dispatch.ops / "dispatch.sh").as_posix(),
+        TASK=task.as_posix(),
+    )
+    assert result.returncode == 64, result.stdout + result.stderr
+    assert error in result.stderr
+    assert not dispatch.calls("orca") and not dispatch.calls("git")
+
+
+def test_dispatch_help_shows_the_line_it_sends(dispatch: Harness) -> None:
+    """#315 AC-3: --help and GITHUB_WORKFLOW 任務流程第 2 步 quote the sent line. The doc is
+    in BACKEND_READ_FILES (tools/ci/checks.py), so a change to it alone runs this test."""
+    help_text = dispatch.run("dispatch.sh", "--help")
+    assert help_text.returncode == 0, help_text.stderr
+    assert _notice("<path>") in help_text.stdout
+    assert "--add-dir" in help_text.stdout
+    assert "30000" not in help_text.stdout
+    workflow = (ROOT / "docs" / "GITHUB_WORKFLOW.md").read_text(encoding="utf-8")
+    assert _notice("<path>") in workflow
+    assert '--effort <effort> --add-dir "<任務檔目錄>"' in workflow
 
 
 @pytest.mark.parametrize(
