@@ -425,6 +425,7 @@ def test_screenshot_help_and_usage_errors(tmp_path: Path) -> None:
 
 
 @needs_node
+@pytest.mark.skipif(Path("/.dockerenv").exists(), reason="mutation: skipped inside a container")
 def test_screenshot_option_helpers() -> None:
     out = _node_eval(
         """
