@@ -39,6 +39,10 @@
     {
       "select": "tests/test_verify_tools.py::test_screenshot_waits_for_data_and_reports_overflow",
       "reason": "screenshot.cjs drives the image's /usr/bin/chromium (SCREENSHOT_BROWSER); the backend job drives the runner's Chrome"
+    },
+    {
+      "select": "tests/test_mutation_image_only.py",
+      "reason": "mutation B (throwaway): skipped on the runner, so the docker job must run it"
     }
   ],
   "skipped_everywhere": [
