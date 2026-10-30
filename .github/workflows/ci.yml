@@ -105,20 +105,33 @@ jobs:
         with:
           python-version: '3.12.14'
       - run: python -m pip install --disable-pip-version-check --no-cache-dir -r backend/requirements.txt -c backend/validation-requirements.lock.txt
-      # The whole backend/tests directory.
+      # The whole backend/tests directory. The suite_split plugin only records what ran
+      # (tools/ci/suite_split.py, #378); the suite job checks it with the docker job's report.
       - name: Backend pytest regressions (temp SQLite only, no source GET)
         shell: bash
         working-directory: backend
         env:
           LOCALAPPDATA: ${{ runner.temp }}
+          PYTHONPATH: ${{ github.workspace }}/tools/ci
         run: |
           set -euo pipefail
-          python -B -m pytest -p no:cacheprovider -q -rA tests
+          python -B -m pytest -p no:cacheprovider -p suite_split --suite-report "$RUNNER_TEMP/suite/backend.json" -q -rA tests
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: suite-backend
+          path: ${{ runner.temp }}/suite/backend.json
+          if-no-files-found: warn
+          retention-days: 14
 
   # The backend image (backend/Dockerfile, #333): build it, then in a container the tools it
-  # must hold, one screenshot of a local page with tools/ops/screenshot.cjs (its memory peak
-  # from the container's cgroup) and the whole backend/tests. The tests read git history
-  # (KNOWN_FAILURES dates), so the checkout's .git is mounted read-only; the image has none.
+  # must hold, every app and worker module importing (a dependency missing from the image
+  # fails here), one screenshot of a local page with tools/ops/screenshot.cjs (its memory peak
+  # from the container's cgroup) and the tests that depend on the image's environment (#378).
+  # The backend job runs the whole of backend/tests on the runner; this job runs only what
+  # tools/ci/docker_suite.json lists, and the suite job fails CI if any test of the suite ran
+  # in neither. The tests read git history (KNOWN_FAILURES dates), so the checkout's .git is
+  # mounted read-only; the image has none.
   docker:
     name: docker
     needs: changes
@@ -155,6 +168,10 @@ jobs:
             cat ~/.claude.json
             id
             cat /proc/1/cmdline | tr "\0" " "; echo'
+      # python -c "import app, worker" above reaches two docstring-only __init__.py files; this
+      # imports every module, so a dependency only a submodule needs (httpx) must be in the image.
+      - name: Import every app and worker module
+        run: docker run --rm "$IMAGE" python -B tools/ci/import_modules.py
       - name: Screenshot in the container
         run: |
           docker run --rm "$IMAGE" bash -c '
@@ -167,8 +184,59 @@ jobs:
             ls -l /tmp/shot
             cat /tmp/shot/local-1280.txt
             echo "memory_peak_bytes=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo unknown)"' | tee -a "$GITHUB_STEP_SUMMARY"
+      # The list is tools/ci/docker_suite.json. The whole suite is also collected, not run, so the
+      # suite job compares both jobs with the suite as the image sees it. /suite is where the
+      # reports go: the container's user (uid 1000) is not the runner's, hence chmod.
       - name: pytest in the container
-        run: docker run --rm -v "$PWD/.git:/app/.git:ro" "$IMAGE" python -B -m pytest -p no:cacheprovider -q backend/tests
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/suite"
+          chmod 777 "$RUNNER_TEMP/suite"
+          python3 -B tools/ci/suite_split.py args --prefix backend/ > "$RUNNER_TEMP/suite/selectors.txt"
+          mapfile -t selectors < "$RUNNER_TEMP/suite/selectors.txt"
+          test "${#selectors[@]}" -gt 0
+          pytest=(docker run --rm -v "$PWD/.git:/app/.git:ro" -v "$RUNNER_TEMP/suite:/suite" -e PYTHONPATH=/app/backend:/app/tools/ci "$IMAGE" python -B -m pytest -p no:cacheprovider -p suite_split)
+          "${pytest[@]}" -qq --collect-only --suite-report /suite/image-collect.json backend/tests
+          "${pytest[@]}" -q -rA --suite-report /suite/docker.json "${selectors[@]}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: suite-docker
+          path: |
+            ${{ runner.temp }}/suite/docker.json
+            ${{ runner.temp }}/suite/image-collect.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  # Every test of backend/tests ran in the backend job or in the docker job, or is listed in
+  # tools/ci/docker_suite.json as skipped everywhere (#378). Collecting proves nothing here, as
+  # the backend job collects the whole suite: the check is on what passed. Not run when either
+  # job failed (required is red then anyway).
+  suite:
+    name: suite
+    needs: [changes, backend, docker]
+    if: needs.changes.outputs.python == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # shell: bash runs with -o pipefail, so a failing check piped to tee fails its step.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: suite-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/suite
+      - name: suite
+        run: |
+          python3 -B tools/ci/suite_split.py verify \
+            --backend "$RUNNER_TEMP/suite/backend.json" \
+            --docker "$RUNNER_TEMP/suite/docker.json" \
+            --image "$RUNNER_TEMP/suite/image-collect.json" | tee -a "$GITHUB_STEP_SUMMARY"
 
   frontend:
     name: frontend
@@ -344,7 +412,7 @@ jobs:
   required:
     name: required
     if: always()
-    needs: [changes, repository, pr, backend, docker, frontend, frontend-image, compose, verify]
+    needs: [changes, repository, pr, backend, docker, suite, frontend, frontend-image, compose, verify]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:
@@ -361,7 +429,7 @@ jobs:
           assert jobs['verify']['result'] == 'success', jobs
           pr = 'success' if os.environ['EVENT'] == 'pull_request' else 'skipped'
           assert jobs['pr']['result'] == pr, jobs
-          for job, flag in [('backend', 'python'), ('docker', 'python'), ('frontend', 'frontend'), ('frontend-image', 'frontend')]:
+          for job, flag in [('backend', 'python'), ('docker', 'python'), ('suite', 'python'), ('frontend', 'frontend'), ('frontend-image', 'frontend')]:
               required = jobs['changes']['outputs'].get(flag)
               assert required in ('true', 'false'), jobs
               expected = 'success' if required == 'true' else 'skipped'
