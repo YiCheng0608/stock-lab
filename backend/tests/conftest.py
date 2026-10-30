@@ -14,6 +14,7 @@ import shutil
 import stat
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -177,3 +178,50 @@ def isolate_runtime_paths(tmp_path, monkeypatch):
     failures = []
     _drop_repositories(tmp_path, failures)
     _warn(failures)
+
+
+# Naive UTC, with microseconds no real clock reads. 01:04 on 2026-10-30 in Taipei, so
+# the UTC date (10/29) and the Taipei date differ.
+FROZEN_AT = datetime(2026, 10, 29, 17, 4, 5, 678901)
+
+
+class FrozenClock:
+    """The instant a test's clocks answer; assign ``at`` (naive UTC) to move it (#376)."""
+
+    def __init__(self) -> None:
+        self.at = FROZEN_AT
+
+    def datetime_class(self) -> type:
+        """A ``datetime`` whose ``now`` reads this clock, in the zone asked for.
+
+        ``now()`` without a zone is naive UTC, as on a machine set to UTC, so a clock
+        read that skipped the zone gives the same answer on every developer machine.
+        """
+
+        clock = self
+
+        class Frozen(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                if tz is None:
+                    return clock.at
+                return clock.at.replace(tzinfo=timezone.utc).astimezone(tz)
+
+        return Frozen
+
+
+@pytest.fixture
+def frozen_utcnow(monkeypatch) -> FrozenClock:
+    """``app.clock.utcnow`` answers ``FROZEN_AT`` to every caller (#376).
+
+    Worker modules bound the function with ``from app.clock import utcnow``, so patching
+    that name would reach none of them; the class ``app.clock`` reads is the one place
+    they all share. A write that takes its time from anywhere else stores a value other
+    than ``FROZEN_AT``. Models' column defaults call the same function.
+    """
+
+    from app import clock
+
+    frozen = FrozenClock()
+    monkeypatch.setattr(clock, "datetime", frozen.datetime_class())
+    return frozen
