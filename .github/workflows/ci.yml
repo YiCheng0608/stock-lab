@@ -152,6 +152,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "workers=$(nproc)" >> "$GITHUB_OUTPUT"
+          printf 'def test_xdist_red_on_purpose():\n    assert False, "#379 AC-1"\n' > tests/test_xdist_red_on_purpose.py
           start=$(date +%s)
           trap 'echo "seconds=$(($(date +%s) - start))" >> "$GITHUB_OUTPUT"' EXIT
           python -B -m pytest -p no:cacheprovider -q -rfE --durations=30 -n "$(nproc)" --dist loadgroup \
@@ -197,6 +198,8 @@ jobs:
                   out.write('\n')
               out.write(f'```json\n{line}\n```\n')
           PY
+      - name: Red on purpose (#379 AC-1, reverted by the next commit)
+        run: exit 1
 
   frontend:
     name: frontend
