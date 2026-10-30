@@ -71,6 +71,29 @@ class Verify(unittest.TestCase):
         )
         self.assertNotIn(f"  {WIN}", errors)
 
+    def test_a_listed_test_skipped_in_the_image_fails_though_the_runner_passed_it(self):
+        """The hole of the first version: ENV passes on the runner, so every test still ran
+        somewhere, yet the image no longer runs what the list is there to check."""
+
+        def image_skips_it(backend, docker, image):
+            backend["outcomes"][ENV] = PASSED
+            docker["outcomes"][ENV] = SKIPPED
+
+        errors = self.check(mutate=image_skips_it)
+        self.assertEqual(
+            errors,
+            [
+                "tests of the docker list that were skipped in the image "
+                "(a listed test has to pass there):",
+                f"  {ENV}",
+            ],
+        )
+
+    def test_a_listed_test_that_passes_in_the_image_and_the_runner_is_fine(self):
+        self.assertEqual(
+            self.check(mutate=lambda b, d, i: b["outcomes"].update({ENV: PASSED})), []
+        )
+
     def test_the_backend_job_collecting_less_than_the_image_fails(self):
         def narrowed(backend, docker, image):
             del backend["outcomes"][PARAM_Y]
@@ -226,6 +249,34 @@ class TheListInTheRepository(unittest.TestCase):
         # required waits for the suite job and holds it to the python flag like backend and docker
         self.assertRegex(workflow, r"needs: \[[^\]]*\bsuite\b[^\]]*\]")
         self.assertIn("('suite', 'python')", workflow)
+
+    def test_a_job_that_succeeds_has_uploaded_a_new_report(self):
+        """Re-running one job uploads its report again under the same name (the run then holds
+        two) and download-artifact takes the newest of a name (run 41070847498, attempt 2). That
+        holds only if a successful job always uploads: a missing file must fail the step."""
+        import yaml
+
+        workflow = yaml.load(
+            (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"),
+            Loader=yaml.BaseLoader,
+        )
+        uploads = {
+            step["with"]["name"]: step["with"]
+            for job in ("backend", "docker")
+            for step in workflow["jobs"][job]["steps"]
+            if step.get("uses", "").startswith("actions/upload-artifact@")
+            and step["with"]["name"].startswith("suite-")
+        }
+        self.assertEqual(sorted(uploads), ["suite-backend", "suite-docker"])
+        for name, options in uploads.items():
+            with self.subTest(name):
+                self.assertEqual(options["if-no-files-found"], "error")
+        downloads = [
+            step["with"]
+            for step in workflow["jobs"]["suite"]["steps"]
+            if step.get("uses", "").startswith("actions/download-artifact@")
+        ]
+        self.assertEqual([d["pattern"] for d in downloads], ["suite-*"])
 
 
 class Plugin(unittest.TestCase):

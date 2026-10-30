@@ -4,7 +4,8 @@ The backend job runs the whole of backend/tests on the runner. The docker job ru
 backend image, only what docker_suite.json lists: tests whose subject is the execution
 environment the image provides. Collecting is no proof of coverage (the backend job collects
 everything, so a union of collected ids is always the whole suite); what counts is that every
-test of the whole suite *ran* (passed) in at least one of the two jobs.
+test of the whole suite *ran* (passed) in at least one of the two jobs, and that every listed
+test passed in the docker job (a skip there means the image no longer offers what it tests).
 
 Three roles, one file:
 
@@ -189,6 +190,16 @@ def problems(manifest: dict, backend: dict, docker: dict, image: dict) -> list[s
                 f"{name} tests collected but with no outcome (the run ended early):",
                 unfinished,
             )
+    # A listed test is there to be checked in the image. It passes on the runner too, so
+    # "ran in one of the two jobs" would stay true when the image skips it (a missing tool,
+    # a changed user).
+    skipped_in_image = {t for t in expected if docker["outcomes"].get(t) == SKIPPED}
+    if skipped_in_image:
+        errors += _listed(
+            "tests of the docker list that were skipped in the image "
+            "(a listed test has to pass there):",
+            skipped_in_image,
+        )
 
     ran = _executed(backend) | _executed(docker)
     nowhere = {entry["id"] for entry in manifest["skipped_everywhere"]}

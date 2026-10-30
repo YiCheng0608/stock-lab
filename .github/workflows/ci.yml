@@ -121,7 +121,7 @@ jobs:
         with:
           name: suite-backend
           path: ${{ runner.temp }}/suite/backend.json
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
 
   # The backend image (backend/Dockerfile, #333): build it, then in a container the tools it
@@ -205,7 +205,7 @@ jobs:
           path: |
             ${{ runner.temp }}/suite/docker.json
             ${{ runner.temp }}/suite/image-collect.json
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
 
   # Every test of backend/tests ran in the backend job or in the docker job, or is listed in
