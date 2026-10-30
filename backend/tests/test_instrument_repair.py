@@ -312,3 +312,24 @@ def test_a_capture_that_no_longer_matches_its_sha256_stops_the_repair(db):
 
     with pytest.raises(repair.InstrumentRepairError, match="does not match sha256"):
         repair.repair_instruments(db)
+
+
+# Timestamps written below (#376). `frozen_utcnow` (conftest) makes app.clock answer one
+# instant to every caller, so a stamp taken from local time or the real clock stores a
+# value other than the one asserted here.
+
+
+def test_an_applied_repair_is_stamped_with_the_clock(db, frozen_utcnow):
+    _seed(db)
+    result = repair.repair_instruments(db, apply=True, include_delisted=True)
+    db.commit()
+
+    assert result["status"] == "applied"
+    first = frozen_utcnow.at
+    run = db.get(IngestionRun, result["ingestion_run_id"])
+    # 17:04 UTC on 10/29 is already 10/30 in Taipei.
+    assert (run.started_at, run.finished_at, run.run_date) == (
+        first,
+        first,
+        date(2026, 10, 30),
+    )

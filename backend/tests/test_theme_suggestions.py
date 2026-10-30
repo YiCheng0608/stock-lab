@@ -434,3 +434,25 @@ def test_api_is_empty_before_the_first_run(client):
     body = client.get("/api/theme-suggestions").json()
     assert body["items"] == []
     assert (body["meta"]["total"], body["meta"]["updated_at"]) == (0, None)
+
+
+# Timestamps written below (#376). `frozen_utcnow` (conftest) makes app.clock answer one
+# instant to every caller, so a stamp taken from local time or the real clock stores a
+# value other than the one asserted here.
+
+
+def test_suggestions_are_computed_at_the_clock(db, frozen_utcnow):
+    first = frozen_utcnow.at
+    _news(db, ["AI 伺服器"], days_ago=1)
+    _news(db, ["散熱"], days_ago=1)
+    refresh_theme_suggestions(db)
+    assert {row.computed_at for row in _rows(db).values()} == {first}
+
+    # Only the suggestion whose content changed takes the new instant.
+    _news(db, ["AI 伺服器"], days_ago=0)
+    later = first + timedelta(hours=3)
+    frozen_utcnow.at = later
+    refresh_theme_suggestions(db)
+    rows = _rows(db)
+    assert rows["ai伺服器"].computed_at == later
+    assert rows["散熱"].computed_at == first

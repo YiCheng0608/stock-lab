@@ -994,3 +994,15 @@ def test_equal_totals_for_both_strategies_keep_breakout(db):
         and alternative["signal_id"] == pullback.id
     )
     assert result["exclusions"] == {"same_instrument_lower_scored_strategy": 1}
+
+
+# Timestamps written below (#376). `frozen_utcnow` (conftest) makes app.clock answer one
+# instant to every caller, so a stamp taken from local time or the real clock stores a
+# value other than the one asserted here.
+
+
+def test_a_candidate_run_is_computed_at_the_clock(db, frozen_utcnow):
+    signal(db, stock(db, "0050", instrument_type="etf"))
+    db.commit()
+    compute_daily_candidates(db, T)
+    assert db.scalar(select(CandidateRun.computed_at)) == frozen_utcnow.at

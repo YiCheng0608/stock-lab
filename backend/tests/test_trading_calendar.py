@@ -541,3 +541,19 @@ def test_strategy_levels_convert_an_action_on_the_session_after_a_holiday(db):
         "next_session_raw_basis",
         8.9,
     )
+
+
+# Timestamps written below (#376). `frozen_utcnow` (conftest) makes app.clock answer one
+# instant to every caller, so a stamp taken from local time or the real clock stores a
+# value other than the one asserted here.
+
+
+def test_a_calendar_run_and_its_capture_are_stamped_with_the_clock(db, frozen_utcnow):
+    first = frozen_utcnow.at
+    result = store(db, {2026: schedule(2026)})
+
+    run = db.get(IngestionRun, result["run_id"])
+    assert (run.started_at, run.finished_at) == (first, first)
+    rows = db.scalars(select(TradingCalendarDay)).all()
+    assert rows and {row.collected_at for row in rows} == {first}
+    assert db.get(RawPayload, rows[0].raw_payload_id).collected_at == first

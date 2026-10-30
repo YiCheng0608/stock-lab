@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import inspect
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from fractions import Fraction
 from pathlib import Path
 
@@ -880,3 +880,27 @@ def test_action_summaries_are_the_same_with_strategy_levels(tmp_path, monkeypatc
         assert _without_clock(after) == _without_clock(before)
     finally:
         engine.dispose()
+
+
+# Timestamps written below (#376). `frozen_utcnow` (conftest) makes app.clock answer one
+# instant to every caller, so a stamp taken from local time or the real clock stores a
+# value other than the one asserted here.
+
+
+def test_levels_are_computed_at_the_clock(db, frozen_utcnow):
+    first = frozen_utcnow.at
+    _instrument, signals = seed(db)
+    compute_strategy_levels(db, T)
+    row = level_of(db, signals["breakout"])
+    assert row.computed_at == first
+
+    # A stored row that differs from today's levels is rewritten and takes the new
+    # instant; one that already matches keeps the old.
+    stale = level_of(db, signals["pullback"])
+    row.trigger_price = 1.0
+    db.flush()
+    later = first + timedelta(hours=3)
+    frozen_utcnow.at = later
+    compute_strategy_levels(db, T)
+    assert row.trigger_price != 1.0 and row.computed_at == later
+    assert stale.computed_at == first

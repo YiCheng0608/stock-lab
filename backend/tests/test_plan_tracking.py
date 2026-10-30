@@ -826,3 +826,32 @@ class _Borrowed:
 
     def __exit__(self, *exc):
         return False
+
+
+# Timestamps written below (#376). `frozen_utcnow` (conftest) makes app.clock answer one
+# instant to every caller, so a stamp taken from local time or the real clock stores a
+# value other than the one asserted here.
+
+
+def test_plans_are_stamped_with_the_clock(db, frozen_utcnow):
+    first = frozen_utcnow.at
+    instrument = stock(db)
+    plan, created = create_plan(db, signal(db, instrument).id)
+    db.commit()
+    assert created and (plan.created_at, plan.updated_at) == (first, first)
+
+    # The daily update takes the clock when it moves a plan.
+    days = follow(db, instrument, FLAT, FILL)
+    later = first + timedelta(hours=3)
+    frozen_utcnow.at = later
+    result = track_open_plans(db, days[1])
+    db.commit()
+    assert result["transitions"] == {"pending->triggered": 1}
+    assert plan.updated_at == later
+
+    latest = later + timedelta(hours=3)
+    frozen_utcnow.at = latest
+    cancel_plan(db, plan.id)
+    db.refresh(plan)
+    assert plan.status == "cancelled"
+    assert (plan.cancelled_at, plan.updated_at) == (latest, latest)
