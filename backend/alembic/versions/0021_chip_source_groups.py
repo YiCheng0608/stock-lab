@@ -35,6 +35,10 @@ COLUMNS = (
 
 def upgrade() -> None:
     bind = op.get_bind()
+    # As 0003 does: 0001 creates every model table, so only a partial schema
+    # (the old-revision fixtures) lacks it; there is nothing to add to.
+    if not inspect(bind).has_table("chip_snapshots"):
+        return
     existing = {
         column["name"] for column in inspect(bind).get_columns("chip_snapshots")
     }
