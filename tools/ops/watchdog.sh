@@ -35,8 +35,8 @@ NEWS_INTERVAL_SECONDS=7200
 # The daily result is read from 22:00 Taipei: by then the 21:30 trigger has
 # written its schedule_runs row, so an 18:30 partial is not reported early.
 DAILY_RESULT_AFTER_HM=2200
-# The daily data check (#390) must end well inside the 15-minute cycle.
-DATA_CHECK_TIMEOUT_SECONDS=600
+# The daily data check (#390) must end well inside the task's 10-minute limit.
+DATA_CHECK_TIMEOUT_SECONDS=300
 
 now="${WATCHDOG_NOW:-$(date -u +%s)}"
 logs="$data_dir/logs"
