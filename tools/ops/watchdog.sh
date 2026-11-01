@@ -35,6 +35,8 @@ NEWS_INTERVAL_SECONDS=7200
 # The daily result is read from 22:00 Taipei: by then the 21:30 trigger has
 # written its schedule_runs row, so an 18:30 partial is not reported early.
 DAILY_RESULT_AFTER_HM=2200
+# The daily data check (#390) must end well inside the 15-minute cycle.
+DATA_CHECK_TIMEOUT_SECONDS=600
 
 now="${WATCHDOG_NOW:-$(date -u +%s)}"
 logs="$data_dir/logs"
@@ -103,7 +105,7 @@ taipei_iso="$(date -u -d "@$taipei" +%Y-%m-%d)"
 taipei_hm="$(date -u -d "@$taipei" +%H%M)"
 taipei_dow="$(date -u -d "@$taipei" +%u)"
 
-anomaly() { # anomaly KEY SUMMARY: at most one #1 comment per key per Taipei day
+anomaly() { # anomaly KEY SUMMARY [DETAILS_FILE]: at most one #1 comment per key per Taipei day
   local key="$1" body
   found=1
   if grep -qF " anomaly_commented key=$key date=$taipei_date" "$log_file" 2>/dev/null; then
@@ -111,7 +113,9 @@ anomaly() { # anomaly KEY SUMMARY: at most one #1 comment per key per Taipei day
     return
   fi
   body="待使用者：$2
-
+${3:+
+$(cat "$3")
+}
 （看門狗 \`tools/ops/watchdog.sh\` 自動留言，同一異常每日最多一則；日誌 \`$log_file\`。）"
   if [ "$dry_run" = 1 ]; then
     log anomaly_planned "key=$key date=$taipei_date" "將在 #1 留言"
@@ -150,6 +154,35 @@ if [ -n "$python" ] && [ -f "$data_dir/stock.db" ] && compgen -G "$logs/daily-*.
     catchup_incomplete) anomaly daily_result "daily 排程：台北 $taipei_iso 當日成功，但補抓前幾個交易日沒有補齊（catchup），請查 \`python -m worker.cli schedule-runs --date $taipei_iso\` 的 catchup 步驟，必要時依 OPERATIONS §6.4 手動 backfill。" ;;
     *) anomaly daily_result "daily 排程：台北 $taipei_iso 的 daily 結果是 \`$result\`（不是 success／non_trading_day），請查 \`python -m worker.cli schedule-runs --date $taipei_iso\` 與 \`$logs/daily-$taipei_date.log\`。" ;;
   esac
+fi
+
+# Daily data check (#390): once per trading day whose daily ended success,
+# from 22:00 (after the 21:30 institutional refetch), the day's rows against
+# their official raw captures (tools/ops/data_check.py; it also requests the
+# official ex-right result tables of the day). Read-only; nothing is repaired.
+# A finished check is logged as data_check_done and not run again; pending
+# (the refetch still running) and a failed check are retried on the next run;
+# a database without the checked tables is skipped.
+# Test hook: WATCHDOG_DATA_CHECK_ARGS (extra helper arguments; --offline).
+if [ "${result:-}" = success ] \
+  && ! grep -F " data_check_done date=$taipei_iso " "$log_file" 2>/dev/null | grep -qvF " dry_run=1"; then
+  # shellcheck disable=SC2086
+  if check="$(timeout "$DATA_CHECK_TIMEOUT_SECONDS" "$python" -X utf8 "$script_dir/watchdog_helper.py" data-check "$data_dir/stock.db" "$taipei_iso" ${WATCHDOG_DATA_CHECK_ARGS:-} 2>>"$work/helper.err")"; then
+    read -r _ state facts <<<"${check%%$'\n'*}"
+    case "$state" in
+      ok) log data_check_done "$facts" "當日資料核對無不一致" ;;
+      violation)
+        printf '%s\n' "${check#*$'\n'}" >"$work/data_check.md"
+        anomaly data_check "當日資料核對：交易日 $taipei_iso 寫進 DB 的資料與官方 raw 有 $(printf '%s\n' $facts | sed -n 's/^findings=//p') 筆不一致（明細如下，資料未修正）。請依 OPERATIONS §6.1 判斷要開 Issue 修正或重跑。" "$work/data_check.md"
+        log data_check_done "$facts" "當日資料核對有不一致，已依異常處理" ;;
+      pending) log data_check_pending "$facts" "21:30 法人重抓仍在執行，下次再核對" ;;
+      skip) ;;  # a database without the checked tables
+      *) found=1; log data_check_failed "date=$taipei_iso" "當日資料核對輸出無法判讀：${check%%$'\n'*}" ;;
+    esac
+  else
+    found=1
+    log data_check_failed "date=$taipei_iso" "當日資料核對失敗或逾時（${DATA_CHECK_TIMEOUT_SECONDS} 秒）：$(tail -n 1 "$work/helper.err" 2>/dev/null)；下次再試"
+  fi
 fi
 
 # news: runs every 2 hours; three missed runs in a row (only once news logs exist).

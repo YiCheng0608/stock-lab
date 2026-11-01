@@ -78,6 +78,8 @@ class Watchdog:
             STOCK_DATA_DIR=self.data.as_posix(),
             STOCK_PYTHON=python or Path(sys.executable).as_posix(),
             WATCHDOG_NOW=str(now),
+            # The data check requests no official table in tests (#390).
+            WATCHDOG_DATA_CHECK_ARGS="--offline",
         )
         result = subprocess.run(
             [BASH, SCRIPT.as_posix(), *args],
@@ -868,3 +870,126 @@ def test_helper_connection_refuses_writes(tmp_path):
     finally:
         conn.close()
     assert "unknown_source=0" in helper.invariants(str(db), "2026-10-19")
+
+
+# --- daily data check (Issue #390) -------------------------------------------
+
+
+def _checked_day_db(path: Path, refetch: str | None) -> None:
+    """A full-schema database whose 2026-10-19 daily succeeded, with the 21:30
+    refetch step ``refetch`` (None: no refetch)."""
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.migrations import upgrade_database
+    from app.models import ScheduleRun, ScheduleRunStep
+
+    engine = create_engine(f"sqlite:///{path.as_posix()}")
+    try:
+        upgrade_database(engine)
+        with Session(engine) as db:
+            db.add(
+                ScheduleRun(
+                    job="daily",
+                    target_date=datetime(2026, 10, 19).date(),
+                    status="success",
+                    summary_json={"steps": {"collect": "success"}},
+                )
+            )
+            if refetch is not None:
+                skipped = ScheduleRun(
+                    job="daily",
+                    target_date=datetime(2026, 10, 19).date(),
+                    status="skipped",
+                    summary_json={"reason": "already_complete", "related_run_id": 1},
+                )
+                db.add(skipped)
+                db.flush()
+                db.add(
+                    ScheduleRunStep(
+                        schedule_run_id=skipped.id,
+                        step="institutional_refetch",
+                        status=refetch,
+                        error="TPEx: official endpoint retry exhausted"
+                        if refetch != "running"
+                        else None,
+                    )
+                )
+            db.commit()
+    finally:
+        engine.dispose()
+
+
+def _set_refetch(path: Path, status: str) -> None:
+    with sqlite3.connect(path) as conn:
+        conn.execute("UPDATE schedule_run_steps SET status=?", (status,))
+    conn.close()
+
+
+def _data_check_events(wd: Watchdog) -> list[str]:
+    return [event for event in wd.events() if event.startswith("data_check")]
+
+
+def test_a_clean_trading_day_is_checked_once(wd):
+    _daily_log_done(wd)
+    _checked_day_db(wd.data / "stock.db", "success")
+    wd.run()
+    wd.run(now=NIGHT + 15 * 60)
+    assert _data_check_events(wd) == ["data_check_done"]
+    assert " data_check_done date=2026-10-19 findings=0 " in wd.log()
+    assert wd.text("gh_calls.log") == ""
+
+
+def test_a_failed_refetch_is_commented_once_with_its_details(wd):
+    _daily_log_done(wd)
+    _checked_day_db(wd.data / "stock.db", "partial")
+    wd.run()
+    wd.run(now=NIGHT + 15 * 60)
+    assert _data_check_events(wd) == ["data_check_done"]
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
+    body = wd.text("gh_bodies.txt")
+    assert (
+        "當日資料核對：交易日 2026-10-19 寫進 DB 的資料與官方 raw 有 1 筆不一致" in body
+    )
+    assert "- 21:30 法人重抓失敗（`institutional_refetch`）：1 筆" in body
+    assert (
+        "| `institutional_refetch` | - | - | 2026-10-19 | `status` | success | partial |"
+        in body
+    )
+    assert "TPEx: official endpoint retry exhausted" in body
+
+
+def test_a_running_refetch_is_checked_after_it_ends(wd):
+    _daily_log_done(wd)
+    db = wd.data / "stock.db"
+    _checked_day_db(db, "running")
+    wd.run()
+    assert _data_check_events(wd) == ["data_check_pending"]
+    _set_refetch(db, "success")
+    wd.run(now=NIGHT + 15 * 60)
+    wd.run(now=NIGHT + 30 * 60)
+    assert _data_check_events(wd) == ["data_check_pending", "data_check_done"]
+
+
+def test_a_dry_run_does_not_settle_the_day(wd):
+    _daily_log_done(wd)
+    _checked_day_db(wd.data / "stock.db", "failed")
+    dry = wd.run("--dry-run")
+    assert "將在 #1 留言" in dry.stdout and "`institutional_refetch`" in dry.stdout
+    wd.run(now=NIGHT + 15 * 60)
+    assert _data_check_events(wd) == ["data_check_done", "data_check_done"]
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
+
+
+def test_the_data_check_waits_for_22_and_a_successful_daily(wd):
+    _daily_log_done(wd)
+    db = wd.data / "stock.db"
+    _checked_day_db(db, "failed")
+    wd.run(now=NIGHT - 20 * 60)  # 21:40
+    assert _data_check_events(wd) == []
+    with sqlite3.connect(db) as conn:
+        conn.execute("UPDATE schedule_runs SET status='partial' WHERE status='success'")
+    conn.close()
+    wd.run()
+    assert _data_check_events(wd) == []
