@@ -19,7 +19,7 @@ from .candidate_notes import run_candidate_notes_batch
 from .candidates import run_candidates
 from .indicator_batch import run_indicator_batch
 from .industry_repair import run_industry_repair
-from .instrument_repair import run_instrument_repair
+from .instrument_repair import run_instrument_repair, run_unmatched_backfill
 from .market_summary import backfill_market_summaries
 from .news_batch import run_news_batch
 from .news_llm import DEFAULT_LIMIT as NEWS_LLM_DEFAULT_LIMIT, run_news_llm_batch
@@ -250,6 +250,13 @@ def main() -> None:
         default=0,
         help="--apply 後重算最近 N 個交易日的族群分數",
     )
+    instruments_backfill_parser = instruments_subparsers.add_parser(
+        "backfill-unmatched",
+        help="代號已有標的時，以已保存的行情 raw 補寫先前記為 unmatched_bar 的日線（collect 也會做；預設 dry-run，重跑冪等）",
+    )
+    instruments_backfill_parser.add_argument(
+        "--apply", action="store_true", help="寫入 DB；未指定只列出預計變更"
+    )
     news_parser = subparsers.add_parser(
         "news", help="抓取國內／國際財經新聞 feed 並寫入 news_items"
     )
@@ -338,6 +345,11 @@ def main() -> None:
         if args.rescore_days < 0 or (args.rescore_days and not args.apply):
             parser.error("--rescore-days needs --apply and must not be negative")
         result = run_industry_repair(apply=args.apply, rescore_days=args.rescore_days)
+    elif (
+        args.command == "instruments"
+        and args.instruments_command == "backfill-unmatched"
+    ):
+        result = run_unmatched_backfill(apply=args.apply)
     elif args.command == "instruments":
         if args.rescore_days < 0 or (args.rescore_days and not args.apply):
             parser.error("--rescore-days needs --apply and must not be negative")
