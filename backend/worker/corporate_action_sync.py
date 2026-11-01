@@ -276,6 +276,7 @@ def rebuild_after_sync(
     run_id: int,
     *,
     checkpoint: Callable[[str], None] | None = None,
+    group_scores_from: date | None = None,
 ) -> dict[str, Any]:
     """Recompute what a sync run's corrected rows feed, in the caller's session.
 
@@ -286,6 +287,11 @@ def rebuild_after_sync(
     decided per correction.  ``checkpoint`` (the CLI commits and logs) is
     called with the step name after each step; each step recomputes from
     stored rows, so a rerun after a failure writes the same values.
+
+    ``group_scores_from`` resumes a rebuild that stopped during the group
+    scores: indicators and features (already committed) are skipped and only
+    the sessions from that date on are rescored.  Each session is scored from
+    stored rows alone, so the result equals one uninterrupted rebuild.
     """
     # Imported here: both modules import pipeline, as this one does.
     from worker.indicator_batch import compute_market_indicators
@@ -312,24 +318,16 @@ def rebuild_after_sync(
         return {**result, "status": "no_change"}
     ids = sorted(affected)
     started = time.perf_counter()
-    result["indicators"] = compute_market_indicators(
-        db, rebuild=True, instrument_ids=ids
-    )
-    step("indicators")
-    features = 0
-    instruments = db.scalars(
-        select(Instrument).where(Instrument.id.in_(ids), Instrument.status == "active")
-    ).all()
-    for instrument in instruments:
-        pipeline._calculate_features(db, instrument)
-        features += 1
-        if features % pipeline.ANALYZE_COMMIT_BATCH == 0:
-            db.flush()
-            step(f"features {features}/{len(instruments)}")
-    db.flush()
-    step(f"features {features}/{len(instruments)}")
-    result["feature_instruments"] = features
     since = min(affected.values())
+    if group_scores_from is None:
+        result["indicators"] = compute_market_indicators(
+            db, rebuild=True, instrument_ids=ids
+        )
+        step("indicators")
+        result["feature_instruments"] = _rebuild_features(db, ids, step)
+    else:
+        result["resumed_group_scores_from"] = group_scores_from.isoformat()
+        since = max(since, group_scores_from)
     benchmark = pipeline._benchmark_instrument(db)
     days = (
         db.scalars(
@@ -358,7 +356,25 @@ def rebuild_after_sync(
     return result
 
 
-def run_corporate_action_rebuild(run_id: int) -> dict[str, Any]:
+def _rebuild_features(db: Session, ids: list[int], step: Callable[[str], None]) -> int:
+    features = 0
+    instruments = db.scalars(
+        select(Instrument).where(Instrument.id.in_(ids), Instrument.status == "active")
+    ).all()
+    for instrument in instruments:
+        pipeline._calculate_features(db, instrument)
+        features += 1
+        if features % pipeline.ANALYZE_COMMIT_BATCH == 0:
+            db.flush()
+            step(f"features {features}/{len(instruments)}")
+    db.flush()
+    step(f"features {features}/{len(instruments)}")
+    return features
+
+
+def run_corporate_action_rebuild(
+    run_id: int, *, group_scores_from: date | None = None
+) -> dict[str, Any]:
     started = time.perf_counter()
     with SessionLocal() as db:
 
@@ -368,7 +384,12 @@ def run_corporate_action_rebuild(run_id: int) -> dict[str, Any]:
             print(f"rebuild {name} committed at {elapsed:.0f}s", file=sys.stderr)
 
         try:
-            result = rebuild_after_sync(db, run_id, checkpoint=checkpoint)
+            result = rebuild_after_sync(
+                db,
+                run_id,
+                checkpoint=checkpoint,
+                group_scores_from=group_scores_from,
+            )
         except RebuildError as exc:
             db.rollback()
             return {"status": "failed", "version": SYNC_VERSION, "error": str(exc)}

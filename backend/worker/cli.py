@@ -253,6 +253,10 @@ def main() -> None:
         help="依 sync run 改到的標的重算指標、特徵與最早改動日起的族群分數（不重算訊號；重跑冪等）",
     )
     actions_rebuild_parser.add_argument("--run-id", type=int, required=True)
+    actions_rebuild_parser.add_argument(
+        "--group-scores-from",
+        help="接續在族群分數中途停下的 rebuild：跳過指標與特徵，只重算此日起的族群分數",
+    )
     instruments_parser = subparsers.add_parser("instruments", help="標的狀態與歷史")
     instruments_subparsers = instruments_parser.add_subparsers(
         dest="instruments_command", required=True
@@ -402,7 +406,9 @@ def main() -> None:
                 apply=args.apply,
             )
         elif args.actions_command == "rebuild":
-            result = run_corporate_action_rebuild(args.run_id)
+            result = run_corporate_action_rebuild(
+                args.run_id, group_scores_from=parse_date(args.group_scores_from)
+            )
         else:
             result = run_corporate_action_check(
                 parse_date(args.start_date), parse_date(args.end_date)

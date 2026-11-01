@@ -818,6 +818,46 @@ def test_rebuild_recomputes_only_what_the_sync_changed(factory):
         db.commit()
         assert sync.rebuild_after_sync(db, again["run_id"])["status"] == "no_change"
 
+        # A rebuild stopped during the group scores resumes from a session:
+        # indicators and features are not rewritten, and only that session
+        # on is rescored (each session reads only its own score rows).
+        computed = {
+            row.trading_date: row.computed_at
+            for row in db.scalars(
+                select(TechnicalIndicator).where(
+                    TechnicalIndicator.instrument_id == known[("TPEx", "4549")].id
+                )
+            )
+        }
+        steps.clear()
+        resume = sessions[len(sessions) // 2]
+        resumed = sync.rebuild_after_sync(
+            db, applied["run_id"], checkpoint=checkpoint, group_scores_from=resume
+        )
+        db.commit()
+        tail = [day for day in sessions if day >= resume]
+        assert steps == [f"group_scores {day}" for day in tail]
+        assert "indicators" not in resumed and "feature_instruments" not in resumed
+        assert resumed["resumed_group_scores_from"] == resume.isoformat()
+        assert resumed["group_score_dates"]["count"] == len(tail)
+        assert {
+            row.trading_date: row.computed_at
+            for row in db.scalars(
+                select(TechnicalIndicator).where(
+                    TechnicalIndicator.instrument_id == known[("TPEx", "4549")].id
+                )
+            )
+        } == computed
+        # A resume date before the earliest change rescores from that change.
+        steps.clear()
+        sync.rebuild_after_sync(
+            db,
+            applied["run_id"],
+            checkpoint=checkpoint,
+            group_scores_from=date(2026, 1, 5),
+        )
+        assert steps == [f"group_scores {day}" for day in sessions]
+
 
 def test_rebuild_refuses_a_run_that_is_not_a_finished_sync(factory):
     with factory() as db:
