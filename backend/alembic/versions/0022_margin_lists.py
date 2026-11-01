@@ -7,8 +7,10 @@ Revises: 0021_chip_source_groups
 official margin balance report with their notes and a link to the raw payload
 (Issue #392).  ``worker.margin_lists`` writes it from stored raw only (collect
 and ``worker.cli margin-lists``); analyze reads it to tell a security that is
-not a margin-financing security (不適用) from missing margin data.  Additive
-and forward-only: no existing row is read or changed.
+not a margin-financing security (不適用) from missing margin data.  Also adds
+the index ``ix_signals_instrument_date`` on ``signals(instrument_id,
+signal_date)`` for app.signal_versions (#407 review M1).  Additive and
+forward-only: no existing row is read or changed.
 """
 
 from __future__ import annotations
@@ -34,6 +36,14 @@ depends_on = None
 
 def upgrade() -> None:
     bind = op.get_bind()
+    # The pages read a superseded strategy's signal only on an instrument-day
+    # without a registered one; that check looks up one instrument-day.
+    if "ix_signals_instrument_date" not in {
+        index["name"] for index in inspect(bind).get_indexes("signals")
+    }:
+        op.create_index(
+            "ix_signals_instrument_date", "signals", ["instrument_id", "signal_date"]
+        )
     if inspect(bind).has_table("margin_lists"):
         return
     op.create_table(

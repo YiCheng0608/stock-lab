@@ -465,6 +465,14 @@ for _item in ("volume_ratio", "distance"):
                 _V3_STRATEGIES[name]: value for name, value in _technical[_key].items()
             }
 CANDIDATE_SCORE = CANDIDATE_SCORE_V3
+# The run versions the pages read, current first (#407 review M3): a date
+# without a run of the current version shows its candidate_score_v2 run, as
+# its signals show breakout_v1／pullback_v1; one date never reads two versions
+# (app.candidate_runs).
+CANDIDATE_SCORE_READ_VERSIONS: tuple[str, ...] = (
+    CANDIDATE_SCORE_V3["name"],
+    CANDIDATE_SCORE_V2["name"],
+)
 
 
 def weighted_available_mean(

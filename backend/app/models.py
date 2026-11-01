@@ -434,6 +434,11 @@ class StrategyVersion(Base):
 
 class Signal(Base):
     __tablename__ = "signals"
+    # One instrument-day's rows: the pages read a superseded strategy's signal
+    # only when that day has no registered one (app.signal_versions, #392).
+    __table_args__ = (
+        Index("ix_signals_instrument_date", "instrument_id", "signal_date"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     signal_key: Mapped[str] = mapped_column(String(160), unique=True, index=True)

@@ -45,7 +45,8 @@ REGISTRY: dict[str, Strategy] = {
 # read (Issue #392).  Each maps to the registered strategy that took its
 # place (``supersedes`` in that strategy's config): readers show the old
 # version's signals of the dates before the successor's first signal and
-# never both versions of one day (``reading_order``).
+# never both versions of one day (``app.signal_versions``; the levels step
+# applies the same rule).
 SUPERSEDED: dict[str, Strategy] = {
     strategy.key: strategy for strategy in (BREAKOUT_V1, PULLBACK_V1)
 }
@@ -54,21 +55,12 @@ SUCCESSOR: dict[str, str] = {
     for key, strategy in REGISTRY.items()
     if "supersedes" in strategy.config
 }
-# Every strategy name whose signals the pages read.
-READ_NAMES: tuple[str, ...] = (*REGISTRY, *SUCCESSOR)
 
 
 def registry_key(name: str) -> str | None:
     """The registered strategy a stored signal of ``name`` is read as; None if none."""
 
     return name if name in REGISTRY else SUCCESSOR.get(name)
-
-
-def reading_order(name: str) -> int:
-    """0 for a registered strategy, 1 for a superseded one: on one day the
-    registered version is read first."""
-
-    return 0 if name in REGISTRY else 1
 
 
 # ``kind`` keys each strategy's state in every signal's rule_evidence_json
@@ -168,7 +160,6 @@ __all__ = [
     "Condition",
     "NextSessionInputs",
     "ObservationLevels",
-    "READ_NAMES",
     "REGISTRY",
     "RESERVED_KINDS",
     "SUCCESSOR",
@@ -185,7 +176,6 @@ __all__ = [
     "evaluate_pullback_v2",
     "finite_number",
     "registry_problems",
-    "reading_order",
     "registry_key",
     "risk_levels",
     "strategy_by_kind",

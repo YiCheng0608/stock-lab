@@ -23,13 +23,8 @@ from sqlalchemy.orm import Session
 from .domain import CANDIDATE_SCORE, STRATEGY_LEVELS_VERSION
 from .models import Instrument, Signal, StrategyLevel, StrategyVersion
 from .presentation import display_reason
-from .strategies import (
-    REGISTRY,
-    Strategy,
-    current_strategy,
-    reading_order,
-    registry_key,
-)
+from .signal_versions import readable_signal
+from .strategies import REGISTRY, Strategy, current_strategy, registry_key
 from .strategies import levels as level_rules
 
 SIGNAL_NAMESPACE = "analysis"
@@ -227,32 +222,30 @@ def strategy_board(
         if cutoff
         else None
     )
-    # Registered strategy -> (reading order, the signal's strategy, signal).
-    # A day of a superseded version shows that version's signal with its own
-    # conditions; a day with both shows the registered one (#392).
-    signals: dict[str, tuple[int, Strategy, Signal]] = {}
+    # Registered strategy -> (the signal's own strategy, signal).  The day's
+    # rows are those the other pages read (app.signal_versions): a superseded
+    # version's signal, with its own conditions, only on a day without a
+    # registered one (#392).
+    signals: dict[str, tuple[Strategy, Signal]] = {}
     if day is not None:
         for signal, version in db.execute(
             select(Signal, StrategyVersion)
             .join(StrategyVersion, StrategyVersion.id == Signal.strategy_version_id)
-            .where(*analysis, Signal.signal_date == day)
+            .where(*analysis, Signal.signal_date == day, readable_signal())
             .order_by(desc(Signal.id))
         ).all():
             strategy = current_strategy(
                 version.name, version.version, version.formula_version
             )
             key = registry_key(strategy.key) if strategy is not None else None
-            if key is None:
-                continue
-            order = reading_order(strategy.key)
-            if key not in signals or order < signals[key][0]:
-                signals[key] = (order, strategy, signal)
+            if key is not None:
+                signals.setdefault(key, (strategy, signal))
     return {
         "as_of": day.isoformat() if day else None,
         "levels_version": STRATEGY_LEVELS_VERSION,
         "candidate": _candidate(candidate, day),
         "strategies": [
-            _row(db, signals[key][1], signals[key][2], day)
+            _row(db, *signals[key], day)
             if key in signals
             else _row(db, strategy, None, day)
             for key, strategy in REGISTRY.items()

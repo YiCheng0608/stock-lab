@@ -18,10 +18,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .decision import near_instrument_ids
-from .domain import CANDIDATE_SCORE_VERSION
+from .candidate_runs import read_run as read_candidate_run
 from .market_change import adjacent_change
 from .models import (
-    CandidateRun,
     DailyCandidate,
     GroupDailyScore,
     Instrument,
@@ -79,12 +78,7 @@ def member_context(
     conditional: set[int] = set()
     near: set[int] = set()
     if as_of is not None and ids:
-        run = db.scalar(
-            select(CandidateRun).where(
-                CandidateRun.score_version == CANDIDATE_SCORE_VERSION,
-                CandidateRun.trading_date == as_of,
-            )
-        )
+        run = read_candidate_run(db, as_of)
         if run is not None:
             ranks = dict(
                 db.execute(

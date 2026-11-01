@@ -653,7 +653,14 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0021_chip_source_groups', CURRENT_TIMESTAMP)"
         )
     )
-    # 0022 only adds margin_lists, also made by create_all.
+    # 0022 adds margin_lists (made by create_all) and an index on the
+    # existing signals table, which create_all does not add.
+    connection.execute(
+        text(
+            'CREATE INDEX IF NOT EXISTS "ix_signals_instrument_date" '
+            'ON "signals" ("instrument_id", "signal_date")'
+        )
+    )
     connection.execute(
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "

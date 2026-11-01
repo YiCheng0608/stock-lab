@@ -42,7 +42,12 @@ from app.models import (
     StrategyVersion,
     TechnicalFeature,
 )
-from app.strategies import NextSessionInputs, StrategyInputs, current_strategy
+from app.strategies import (
+    REGISTRY,
+    NextSessionInputs,
+    StrategyInputs,
+    current_strategy,
+)
 from app.strategies import levels
 from worker import pipeline
 
@@ -253,6 +258,11 @@ def compute_strategy_levels(
             )
             is not None
         ]
+        if any(strategy.key in REGISTRY for _signal, strategy in current):
+            # A day with the registered versions reads only them, as the pages
+            # do (app.signal_versions): a superseded row written earlier the
+            # same day holds older inputs (#392, #407 review M2).
+            current = [item for item in current if item[1].key in REGISTRY]
         skipped += len(group) - len(current)
         if not current:
             continue

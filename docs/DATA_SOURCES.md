@@ -130,9 +130,11 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 
 - **保存**：`margin_lists` 每個交易所每日一列，記 `source`（`twse_margin`／`tpex_margin`）、`endpoint`、`data_as_of`、`raw_payload_id`、`collected_at`、`member_count` 與 `members_json`（代號→註記，去前後空白）。collect 寫入它剛存的融資表（`worker.margin_lists`，失敗只記在 run 的 `margin_lists`、不影響 collect）；歷史由 [`margin-lists`](OPERATIONS.md#3-現有-worker-cli) 從已存 raw 回補。
 - **選哪份 capture**：該日最新一份「回報日期相符、而且有證券列」的 capture。18:30 的融資表還沒有個股列，不算；回報日期不符（退回最新日）也不算。代號與註記都相同時不改寫。
-- **取不到時**：沒有可用的 capture 就不寫列。這天的清單是未知，融資條件記缺資料，不推成不適用。
+- **取不到時**：沒有可用的 capture 就不寫列。這天的清單是未知，融資條件記缺資料，不推成不適用。raw 檔讀不到、不是 JSON 或 SHA-256 不符時，停在該日，回 `failed` 與 `failed_date`。
+- **驟減防呆**：清單比該交易所前一個已存清單少超過 5%（`MAX_MEMBER_DROP`）時不寫，記 `suspicious_drop`，這天的融資條件也記缺資料。官方表被截斷時，漏掉的融資標的會被判成不適用、略過融資確認，判定會往放寬的方向錯。2024-09-30～2026-10-30 的實際清單每日最多只少 0.24%。看門狗怎麼回報這種情況，由 [#390](https://github.com/YiCheng0608/stock-lab/issues/390) 處理。
 - **註記不參與判定**：`O`（停止融資）、`X`（停止融券）、`!`（停止買賣）等符號描述的是次一營業日的狀況，而且停止融資期間的餘額仍會因償還而變動，所以只保存、不拿來判定。
 - **策略怎麼用**：見 [V1_SPEC breakout_v2](V1_SPEC.md#breakout_v2pullback_v2)。
+- **已知限制：轉市標的**：判定用標的目前的交易所（`instruments.exchange`）去查各日清單。窗口 6 天裡若有轉市前的日子，那幾天查的是另一個交易所的清單，可能把融資標的誤判成不適用。轉市很少，而且只影響轉市後 5 個交易日內的判定，目前不另外處理。
 
 ### 成交金額可得狀態
 

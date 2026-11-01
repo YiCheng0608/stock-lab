@@ -1033,3 +1033,58 @@ def test_a_candidate_run_is_computed_at_the_clock(db, frozen_utcnow):
     db.commit()
     compute_daily_candidates(db, T)
     assert db.scalar(select(CandidateRun.computed_at)) == frozen_utcnow.at
+
+
+def test_a_date_with_only_a_previous_version_run_still_shows_its_candidates(db):
+    """#392／#407 review M3: past dates keep their candidate_score_v2 lists.
+
+    Runs are not recomputed when the score version changes, so a date without
+    a current-version run shows its previous-version run in /api/candidates,
+    the action list's tier 1 and the theme member table; a date with both
+    shows only the current one.
+    """
+
+    from app.candidate_view import candidate_list
+    from app.decision import action_tier_rows
+    from app.domain import CANDIDATE_SCORE_READ_VERSIONS
+    from app.theme_member_view import member_context
+
+    current, previous = CANDIDATE_SCORE_READ_VERSIONS
+    a = stock(db, "1101")
+    signal(db, a, volume_ratio=2.0)
+    db.commit()
+    result = compute_daily_candidates(db, T)
+    run = db.get(CandidateRun, result["candidate_run_id"])
+    run.score_version = previous  # as written before the switch
+    for row in rows(db):
+        row.score_version = previous
+    db.commit()
+
+    listed = candidate_list(db, T)
+    assert (listed["status"], listed["score_version"]) == ("success", previous)
+    assert [item["instrument"]["symbol"] for item in listed["items"]] == ["1101"]
+    assert listed["methodology"]["score_version"] == previous
+    tier = {row.instrument_id: row for row in action_tier_rows(db, T)}
+    assert (tier[a.id].tier, tier[a.id].candidate_rank) == (1, 1)
+    assert member_context(db, T, None, [a.id])["ranks"] == {a.id: 1}
+
+    # The same date's current-version run wins; the two never mix.
+    db.add(
+        CandidateRun(
+            trading_date=T,
+            score_version=current,
+            status="success",
+            candidate_count=0,
+            evaluated_signals=1,
+            pool_count=0,
+            config_json={},
+            exclusions_json={},
+            summary_json={},
+            zero_reason="no_actionable_signals",
+        )
+    )
+    db.commit()
+    listed = candidate_list(db, T)
+    assert (listed["score_version"], listed["items"]) == (current, [])
+    assert action_tier_rows(db, T)[0].tier != 1
+    assert member_context(db, T, None, [a.id])["ranks"] == {}

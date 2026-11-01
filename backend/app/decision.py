@@ -25,7 +25,6 @@ from .decision_market_reads import (
 )
 from .config import MAX_GROUP_CANDIDATES
 from .domain import (
-    CANDIDATE_SCORE_VERSION,
     ETF_CATEGORIES,
     STRATEGY_LEVELS_VERSION,
     RuleEvaluation,
@@ -39,13 +38,13 @@ from .level_semantics import (
 from .presentation import display_action_label, display_reason, primary_reason
 from .product_time import build_action_product_time, build_signal_product_time
 from .portfolio_values import read_portfolio_value
+from .candidate_runs import read_run as read_candidate_run
 from .margin_lists import NOT_APPLICABLE as MARGIN_NOT_APPLICABLE
 from .signal_versions import readable_signal
 from .strategies import REGISTRY, current_strategy, registry_key
 from .strategies import levels as level_rules
 from .units import position_held
 from .models import (
-    CandidateRun,
     ChipSnapshot,
     DailyCandidate,
     DataQuality,
@@ -2245,12 +2244,7 @@ def action_tier_rows(
     if as_of:
         conditional_ids, observation_signals = _tier_signals(db, as_of)
         observation_ids = {item[1] for item in observation_signals}
-        run = db.scalar(
-            select(CandidateRun).where(
-                CandidateRun.trading_date == as_of,
-                CandidateRun.score_version == CANDIDATE_SCORE_VERSION,
-            )
-        )
+        run = read_candidate_run(db, as_of)
         if run is not None:
             for instrument_id, rank, score in db.execute(
                 select(

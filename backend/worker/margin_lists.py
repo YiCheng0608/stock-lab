@@ -9,8 +9,9 @@ as not applicable (app.margin_lists) instead of missing data.
 
 Nothing is fetched.  For each exchange and session the latest stored capture
 that reports that date and has rows is the list; a list whose codes and notes
-equal the stored one is not rewritten.  A session with no such capture gets no
-row, and analyze keeps its margin data missing.  collect runs this for the
+equal the stored one is not rewritten.  A session with no such capture, or
+whose list is more than 5% shorter than the previous stored one, gets no row,
+and analyze keeps its margin data missing.  collect runs this for the
 sessions it stored; ``worker.cli margin-lists`` backfills a date range.
 """
 
@@ -41,6 +42,11 @@ CAPTURES: dict[str, tuple[str, str, str]] = {
     "TPEx": ("tpex", TPEX_MARGIN_HISTORY_ENDPOINT, "tpex_margin"),
 }
 MAX_SAMPLES = 50
+# A list more than this share shorter than the exchange's previous stored list
+# is not written (``suspicious_drop``): a truncated report would make the
+# missing codes "not applicable" and loosen the rule (#407 review).  The real
+# lists of 2024-09-30～2026-10-30 never shrank by more than 0.24% a day.
+MAX_MEMBER_DROP = 0.05
 
 
 def _table(payload: Any, exchange: str) -> dict[str, Any] | None:
@@ -84,17 +90,28 @@ def parse_margin_list(payload: Any, exchange: str) -> dict[str, str] | None:
 
 
 class MarginListError(Exception):
-    """A stored file does not match its SHA-256; that session is not written."""
+    """A stored file is unreadable, not JSON or not its SHA-256; that session
+    is not written."""
 
 
 def _load(capture: RawPayload, trading_date: date) -> Any:
-    content = Path(capture.payload_path or "").read_bytes()
+    try:
+        content = Path(capture.payload_path or "").read_bytes()
+    except OSError as exc:
+        raise MarginListError(
+            f"raw payload {capture.id} cannot be read: {capture.payload_path}: {exc}"
+        ) from exc
     if hashlib.sha256(content).hexdigest() != capture.sha256:
         raise MarginListError(
             f"raw payload {capture.id} does not match its SHA-256: "
             f"{capture.payload_path}"
         )
-    payload = json.loads(content.decode("utf-8"))
+    try:
+        payload = json.loads(content.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise MarginListError(
+            f"raw payload {capture.id} is not JSON: {capture.payload_path}: {exc}"
+        ) from exc
     try:
         _require_reported_date(payload, trading_date, capture.endpoint.split("?")[0])
     except OfficialDataError:
@@ -138,8 +155,10 @@ def _session_dates(db: Session, start: date | None, end: date | None) -> list[da
 def store_margin_list(db: Session, exchange: str, trading_date: date) -> str:
     """Write one exchange's list of one session from stored raw.
 
-    Returns ``written``, ``unchanged`` or ``missing`` (no capture of the date
-    with rows; nothing is written and an earlier row stays).
+    Returns ``written``, ``unchanged``, ``missing`` (no capture of the date
+    with rows) or ``suspicious_drop`` (more than MAX_MEMBER_DROP shorter than
+    the previous stored list).  Nothing is written in the last two cases and
+    an earlier row of the date stays.
     """
 
     _source, _endpoint, list_source = CAPTURES[exchange]
@@ -156,6 +175,17 @@ def store_margin_list(db: Session, exchange: str, trading_date: date) -> str:
         )
         if row is not None and row.members_json == members:
             return "unchanged"
+        previous = db.scalar(
+            select(MarginList.member_count)
+            .where(
+                MarginList.exchange == exchange,
+                MarginList.trading_date < trading_date,
+            )
+            .order_by(MarginList.trading_date.desc())
+            .limit(1)
+        )
+        if previous and len(members) < previous * (1 - MAX_MEMBER_DROP):
+            return "suspicious_drop"
         if row is None:
             row = MarginList(exchange=exchange, trading_date=trading_date)
             db.add(row)
@@ -182,21 +212,25 @@ def sync_margin_lists(
     """Store both exchanges' lists of ``dates`` (default: every stored session).
 
     ``commit_each`` commits each session on its own (the backfill CLI);
-    collect leaves the commit to its own transaction.  A file that does not
-    match its SHA-256 stops the run at that session (earlier sessions stay
-    written when committed) and the result is ``failed``.
+    collect leaves the commit to its own transaction.  A file that cannot be
+    read, is not JSON or does not match its SHA-256 stops the run at that
+    session (earlier sessions stay written when committed) and the result is
+    ``failed`` with ``failed_date``.  A session without a list or with a
+    suspicious drop makes it ``partial``.
     """
 
     days = sorted(set(dates)) if dates is not None else _session_dates(db, start, end)
-    counts = {"written": 0, "unchanged": 0, "missing": 0}
+    counts = {"written": 0, "unchanged": 0, "missing": 0, "suspicious_drop": 0}
     missing: list[str] = []
+    suspicious: list[str] = []
     for day in days:
         try:
             for exchange in CAPTURES:
                 outcome = store_margin_list(db, exchange, day)
                 counts[outcome] += 1
-                if outcome == "missing" and len(missing) < MAX_SAMPLES:
-                    missing.append(f"{exchange}:{day.isoformat()}")
+                samples = {"missing": missing, "suspicious_drop": suspicious}
+                if outcome in samples and len(samples[outcome]) < MAX_SAMPLES:
+                    samples[outcome].append(f"{exchange}:{day.isoformat()}")
         except MarginListError as exc:
             if commit_each:
                 db.rollback()
@@ -207,16 +241,20 @@ def sync_margin_lists(
                 "dates": len(days),
                 **counts,
                 "missing_samples": missing,
+                "suspicious_drop_samples": suspicious,
             }
         if commit_each:
             db.commit()
     return {
-        "status": "success" if counts["missing"] == 0 else "partial",
+        "status": "success"
+        if counts["missing"] == counts["suspicious_drop"] == 0
+        else "partial",
         "dates": len(days),
         "first_date": days[0].isoformat() if days else None,
         "last_date": days[-1].isoformat() if days else None,
         **counts,
         "missing_samples": missing,
+        "suspicious_drop_samples": suspicious,
     }
 
 

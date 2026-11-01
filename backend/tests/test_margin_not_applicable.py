@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -717,3 +718,175 @@ def test_collect_stores_the_lists_of_the_margin_reports_it_captured(
             )
     finally:
         engine.dispose()
+
+
+def test_levels_of_a_day_with_both_versions_use_the_v2_rows(db, tmp_path, monkeypatch):
+    """#407 review M2: v1 rows written first on the switch day must not feed v2."""
+
+    from app.models import StrategyLevel
+    from worker.strategy_levels import compute_strategy_levels
+
+    monkeypatch.setattr(pipeline, "_best_group_for_signal", lambda *_args: None)
+    monkeypatch.setattr(
+        pipeline, "_resolve_group_member_return", lambda *_args: (0.02, {})
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_strategy_institutional_flow_to_average_volume_ratio",
+        lambda *_args, **_kwargs: 0.0,
+    )
+    instrument = _instrument(db, "TWSE", "NOM")
+    _lists(db, tmp_path, "TWSE", ["MRG"])
+    old = [_v1_signal(db, instrument, T, name) for name in SUPERSEDED]
+    pipeline._upsert_signal(
+        db,
+        instrument=instrument,
+        signal_date=T,
+        strategies=pipeline._ensure_strategies(db),
+    )
+    db.flush()
+
+    compute_strategy_levels(db, T)
+    db.flush()
+
+    levels_of = {
+        name: db.scalar(
+            select(StrategyLevel)
+            .join(Signal, Signal.id == StrategyLevel.signal_id)
+            .join(StrategyVersion, StrategyVersion.id == Signal.strategy_version_id)
+            .where(StrategyVersion.name == name)
+        )
+        for name in [*REGISTRY, *SUPERSEDED]
+    }
+    # The superseded rows of a day the registered strategies have are skipped.
+    assert [levels_of[name] for name in SUPERSEDED] == [None, None]
+    assert all(signal.id for signal in old)
+    for name in REGISTRY:
+        row = levels_of[name]
+        margin = next(
+            item for item in row.conditions_json if item["code"] == "margin_financing"
+        )
+        assert margin.get("satisfied") is None, (name, margin)
+        assert margin.get("reasons") == [NOT_APPLICABLE_REASON], (name, margin)
+        assert "margin_balance_change_ratio_5d_missing_or_non_finite" not in (
+            row.missing_inputs_json or []
+        ), (name, row.missing_inputs_json)
+
+
+# ---- #407 review M1: the readable-signal check uses an instrument-day index ----
+
+
+@pytest.mark.parametrize("entry", ["alembic", "fallback"])
+def test_the_upgrade_adds_the_instrument_day_index_of_signals(
+    tmp_path, monkeypatch, entry
+):
+    import sqlite3
+    from contextlib import closing
+
+    from app import migrations
+
+    if entry == "alembic":
+        pytest.importorskip("alembic")
+    path = tmp_path / f"{entry}.db"
+    engine = create_engine(f"sqlite:///{path.as_posix()}")
+    enable_sqlite_foreign_keys(engine)
+    if entry == "fallback":
+        monkeypatch.setattr(migrations, "ALEMBIC_CONFIG_PATH", tmp_path / "absent.ini")
+    try:
+        migrations.upgrade_database(engine)
+    finally:
+        engine.dispose()
+    with closing(sqlite3.connect(path)) as connection:
+        columns = [
+            row[2]
+            for row in connection.execute(
+                "PRAGMA index_info('ix_signals_instrument_date')"
+            )
+        ]
+    assert columns == ["instrument_id", "signal_date"]
+
+
+def test_the_readable_signal_check_uses_the_instrument_day_index(db):
+    from sqlalchemy.dialects import sqlite
+
+    from app.signal_versions import readable_signal
+
+    query = (
+        select(Signal.id)
+        .join(StrategyVersion, StrategyVersion.id == Signal.strategy_version_id)
+        .where(Signal.instrument_id == 1, readable_signal())
+    )
+    compiled = query.compile(
+        dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}
+    )
+    plan = " | ".join(
+        str(row[-1])
+        for row in db.connection().exec_driver_sql(f"EXPLAIN QUERY PLAN {compiled}")
+    )
+    # The correlated lookup of the same instrument-day is an index search on
+    # both columns, not a scan of the instrument's whole history.
+    assert "ix_signals_instrument_date (instrument_id=? AND signal_date=?)" in plan, (
+        plan
+    )
+
+
+# ---- #407 review suggestions 1～3 ----
+
+
+def test_a_list_much_shorter_than_the_previous_one_is_not_written(db, tmp_path):
+    """A truncated report must not turn the missing codes into 不適用."""
+
+    day1, day2, day3 = SESSIONS[-3:]
+    codes = [f"{n:04d}" for n in range(1000, 1100)]  # 100 securities
+    store_raw(db, tmp_path, "TWSE", day1, twse_report(day1, [(c, "") for c in codes]))
+    store_raw(
+        db, tmp_path, "TWSE", day2, twse_report(day2, [(c, "") for c in codes[:94]])
+    )
+    store_raw(
+        db, tmp_path, "TWSE", day3, twse_report(day3, [(c, "") for c in codes[:95]])
+    )
+
+    result = margin_lists.sync_margin_lists(db, [day1, day2, day3])
+
+    assert result["status"] == "partial"
+    assert result["suspicious_drop"] == 1
+    assert result["suspicious_drop_samples"] == [f"TWSE:{day2.isoformat()}"]
+    assert stored_list(db, "TWSE", day2) is None
+    # 5% shorter is still within the guard; it compares with the last stored list.
+    assert stored_list(db, "TWSE", day3).member_count == 95
+
+
+def test_the_state_of_a_day_whose_list_was_not_written_is_missing(db):
+    # The day without a list (suspicious or absent) is unknown, never 不適用.
+    assert margin_financing_state("1099", None, [{"1099"}] * 5 + [None]) == MISSING
+
+
+@pytest.mark.parametrize("damage", ["deleted", "not_json"])
+def test_an_unreadable_raw_file_fails_the_sync_at_its_date(db, tmp_path, damage):
+    day1, day2 = SESSIONS[-2:]
+    store_raw(db, tmp_path, "TWSE", day1, twse_report(day1, [("2330", "")]))
+    raw = store_raw(db, tmp_path, "TWSE", day2, twse_report(day2, [("2330", "")]))
+    path = Path(raw.payload_path)
+    if damage == "deleted":
+        path.unlink()
+    else:
+        content = b"\xff not json"
+        path.write_bytes(content)
+        raw.sha256 = hashlib.sha256(content).hexdigest()
+        db.flush()
+
+    result = margin_lists.sync_margin_lists(db, [day1, day2], commit_each=True)
+
+    assert (result["status"], result["failed_date"]) == ("failed", day2.isoformat())
+    assert f"raw payload {raw.id}" in result["error"]
+    # The earlier session was committed; the failed one wrote nothing.
+    assert stored_list(db, "TWSE", day1) is not None
+    assert stored_list(db, "TWSE", day2) is None
+
+
+def test_every_analyze_starts_with_an_empty_list_cache(db):
+    pipeline._MARGIN_LIST_CACHE[("TWSE", T)] = (1, 1, frozenset({"2330"}))
+
+    assert pipeline._analyze_session(db)["status"] == "no_data"
+
+    assert pipeline._MARGIN_LIST_CACHE == {}

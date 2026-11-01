@@ -790,7 +790,8 @@ def _margin_change_ratio(
 
 
 # (exchange, session) -> (margin_lists id, raw payload id, codes); a list row
-# is re-read when its raw payload changed.
+# is re-read when its raw payload changed.  Cleared at the start of every
+# analyze and backtest, so a process never reads another database's lists.
 _MARGIN_LIST_CACHE: dict[tuple[str, date], tuple[int, int, frozenset[str]]] = {}
 
 
@@ -4401,6 +4402,12 @@ def collect(
                     "margin list sync failed and wrote nothing: "
                     + str(margin_list_result.get("error"))
                 )
+            if margin_list_result.get("suspicious_drop"):
+                notices.append(
+                    "margin lists more than 5% shorter than the previous one were "
+                    "not written: "
+                    + ", ".join(margin_list_result["suspicious_drop_samples"])
+                )
             if unmatched_backfill["status"] == "failed":
                 notices.append(
                     "unmatched_bar backfill failed and wrote nothing: "
@@ -4814,6 +4821,7 @@ def _analyze_session(
     Writes are flushed only at those points; reads in between never depend on
     unflushed rows, so the stored results match a single transaction.
     """
+    _MARGIN_LIST_CACHE.clear()
     query = select(IngestionRun).where(
         IngestionRun.run_type == "collect",
         IngestionRun.source == "official",
@@ -5661,6 +5669,7 @@ def backtest(
     if start_date > end_date:
         raise ValueError("backtest start date must not be after end date")
     init_db()
+    _MARGIN_LIST_CACHE.clear()
     request_key = (
         f"technical-backtest:v1:{start_date.isoformat()}:{end_date.isoformat()}"
     )
