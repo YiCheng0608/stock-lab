@@ -118,6 +118,7 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 | 資料日 | `institutional_data_as_of` | `margin_data_as_of` |
 | 收集時間 | `institutional_collected_at` | `margin_collected_at` |
 
+- 收集時間是這一組目前的來源寫進這列的本機時間：新列、列原本沒有這一組、法人更正、`force` 時取寫入當下；只補空欄不改。0021 以前的列由 `chips provenance` 回填時，列已有的組沿用列層級 `collected_at`（舊程式寫入時記的就是它）；列原本沒有、回填才建立的組（2026-10-19 起 21:30 補上融資的列的融資組）沒有記寫入時間，以那份融資 capture 的擷取時間代替（寫入發生在同一次 collect 的擷取之後），但不早於列層級原值。所以回填只會讓列層級 `collected_at` 不變或變晚。
 - 該列沒有那份檔時，那一組四欄都是 null，值也是 null（只有融資、只有法人的列照樣保存，見[法人口徑](#法人口徑)）。
 - 列層級的 `source`、`raw_payload_id`、`data_as_of`、`collected_at` 是兩組的摘要（`app.chip_provenance.summarize`）：`source` 依法人、融資的順序以 `+` 連接兩組來源；`raw_payload_id` 與 `data_as_of` 取法人組，沒有法人組時取融資組；`collected_at` 取兩組中較晚的。
 - 寫入規則見 [OPERATIONS §6.4](OPERATIONS.md#64-重跑與回補)；0021 以前寫入的列由 [`chips provenance`](OPERATIONS.md#3-現有-worker-cli) 依已存的 raw 補寫。補寫前，讀取端依列層級欄位推出兩組（`app.chip_provenance.legacy_groups`）；這時融資組沒有 raw 參照，10/19 起由 21:30 補上融資的列看不出融資來源。

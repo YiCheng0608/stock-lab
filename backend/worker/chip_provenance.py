@@ -10,12 +10,15 @@ capture is recorded only in that run's ``value_fill_groups``.
 This writes both groups of every such row.  Nothing is fetched:
 
 - The institutional group is the row's own provenance, which #387 keeps on the
-  latest institutional capture; its values are checked against that capture.
+  latest institutional capture; its values are checked against that capture,
+  and a row they differ from is listed and makes the run ``partial``.
 - The margin group is the stored margin capture that wrote the values: the
   capture of the collect run that ``value_fill_groups`` records for the row,
   else the earliest capture of that exchange and date.  Its values for the
   symbol must equal the stored ones; a row with no such capture keeps its
-  stored provenance and is listed as unmatched.
+  stored provenance and is listed as unmatched (``partial``).
+- Each group's ``collected_at`` is when it was written into the row
+  (``_written_at``), so the row-level ``collected_at`` never moves earlier.
 
 Only rows whose groups are missing or lack a raw payload are read, so a rerun
 writes nothing.  Each trading date is committed on its own with ``apply``;
@@ -230,6 +233,25 @@ def _margin_capture(
     return None, "unmatched"
 
 
+def _written_at(
+    stored: GroupProvenance | None, capture: RawPayload, row: ChipSnapshot
+) -> Any:
+    """The time the margin group was written into the row (DATA_SOURCES 籌碼來源).
+
+    A group the row already names keeps its time: the row-level
+    ``collected_at`` the old code wrote with it.  A group the row did not name
+    (its margin filled by a later collect) was written by the collect that
+    captured the file, so the capture time stands in for the unrecorded write
+    time; never earlier than the row's own time, so the row-level summary only
+    stays or moves later.
+    """
+
+    if stored is not None and stored.collected_at is not None:
+        return stored.collected_at
+    times = [t for t in (capture.collected_at, row.collected_at) if t is not None]
+    return max(times) if times else None
+
+
 def fill_provenance(db: Session, *, apply: bool = False) -> dict[str, Any]:
     """Fill the group columns of every pending row; commit per date with ``apply``."""
 
@@ -315,7 +337,7 @@ def fill_provenance(db: Session, *, apply: bool = False) -> dict[str, Any]:
                         OFFICIAL_MARGIN_CHIP_SOURCES[exchange],
                         capture.id,
                         pipeline._as_datetime(capture.data_as_of, trading_date),
-                        capture.collected_at,
+                        _written_at(stored[MARGIN], capture, row),
                     )
             if groups == groups_of.explicit_groups(row) and groups_of.has_group_columns(
                 row
@@ -338,7 +360,11 @@ def fill_provenance(db: Session, *, apply: bool = False) -> dict[str, Any]:
     )
     still_pending = db.scalar(select(func.count()).where(pending))
     result: dict[str, Any] = {
-        "status": "partial" if unmatched or unreadable else "success",
+        "status": (
+            "partial"
+            if unmatched or unreadable or institutional_mismatch
+            else "success"
+        ),
         "version": VERSION,
         "applied": apply,
         "dates": len(dates),

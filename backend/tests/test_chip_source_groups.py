@@ -11,6 +11,7 @@ the T86 capture; the margin capture was recorded only in the run's
 import json
 from datetime import datetime
 
+import pytest
 from sqlalchemy import select
 
 import worker.chip_provenance as chip_provenance
@@ -359,14 +360,16 @@ def test_provenance_fills_a_1019_row_from_the_fill_run(database, monkeypatch):
         row = chip(db)
         margin = db.get(RawPayload, later_margin)
         assert groups(row) == (("twse_t86", t86), ("twse_margin", later_margin))
+        # The fill wrote the group: its capture time, not before the row's time.
+        written = max(collected, margin.collected_at)
         assert (row.institutional_collected_at, row.margin_collected_at) == (
             collected,
-            margin.collected_at,
+            written,
         )
         assert (row.source, row.raw_payload_id, row.collected_at) == (
             "twse_t86+twse_margin",
             t86,
-            max(collected, margin.collected_at),
+            written,
         )
         run = db.scalar(
             select(IngestionRun).where(IngestionRun.run_type == "chip_provenance")
@@ -408,6 +411,74 @@ def test_provenance_keeps_a_margin_only_row_on_its_capture(database, monkeypatch
     assert result["status"] == "success" and result["rows_written"] == 1
     with database() as db:
         assert groups(chip(db)) == ((None, None), ("twse_margin", margin))
+
+
+REWRITTEN = datetime(2026, 10, 19, 10, 30)  # e.g. rewritten by a repair 45 days on
+
+
+@pytest.mark.parametrize(
+    ("has_t86", "source"),
+    [(False, "twse_margin"), (True, "twse_t86+twse_margin")],
+)
+def test_provenance_never_moves_the_row_collected_at_earlier(
+    database, monkeypatch, has_t86, source
+):
+    # The row was written well after its margin capture; the group keeps the
+    # row's write time instead of the capture time.
+    collect_at(monkeypatch, FIRST, Feeds(has_t86=has_t86))
+    with database() as db:
+        row = chip(db)
+        raw = capture(db, T86 if has_t86 else MARGIN, FIRST).id
+        as_before_395(row, source=source, raw_payload_id=raw)
+        row.collected_at = REWRITTEN
+        db.commit()
+    with database() as db:
+        result = chip_provenance.fill_provenance(db, apply=True)
+    assert result["status"] == "success" and result["rows_written"] == 1
+    with database() as db:
+        row = chip(db)
+        assert row.margin_raw_payload_id == capture(db, MARGIN, FIRST).id
+        assert (row.collected_at, row.margin_collected_at) == (REWRITTEN, REWRITTEN)
+
+
+def test_provenance_takes_a_filled_margin_group_no_earlier_than_the_row(
+    database, monkeypatch
+):
+    t86, later_margin, _ = stored_like_1019(database, monkeypatch)
+    with database() as db:
+        chip(db).collected_at = REWRITTEN
+        db.commit()
+    with database() as db:
+        chip_provenance.fill_provenance(db, apply=True)
+    with database() as db:
+        row = chip(db)
+        assert row.margin_raw_payload_id == later_margin
+        assert (row.collected_at, row.margin_collected_at) == (REWRITTEN, REWRITTEN)
+
+
+def test_provenance_lists_an_institutional_value_its_capture_lacks(
+    database, monkeypatch
+):
+    collect_at(monkeypatch, FIRST, Feeds())
+    with database() as db:
+        row = chip(db)
+        t86 = capture(db, T86, FIRST).id
+        as_before_395(row, source="twse_t86+twse_margin", raw_payload_id=t86)
+        row.foreign_buy = 12345.0
+        db.commit()
+    with database() as db:
+        result = chip_provenance.fill_provenance(db)
+    assert result["status"] == "partial"
+    assert result["institutional_mismatch"] == 1
+    assert result["institutional_mismatch_samples"] == [
+        {
+            "exchange": "TWSE",
+            "symbol": "1101",
+            "trading_date": DAY.isoformat(),
+            "source": "twse_t86+twse_margin",
+            "raw_payload_id": t86,
+        }
+    ]
 
 
 def test_provenance_lists_a_margin_value_no_capture_has(database, monkeypatch):
@@ -457,3 +528,20 @@ def test_the_cli_runs_provenance(database, monkeypatch, capsys):
     cli.main()
     out = json.loads(capsys.readouterr().out)
     assert (out["applied"], out["rows_written"]) == (False, 1)
+
+
+def test_the_cli_exits_2_on_a_partial_provenance(database, monkeypatch, capsys):
+    # OPERATIONS §3: partial is exit 2, as for daily.
+    import worker.cli as cli
+
+    collect_at(monkeypatch, FIRST, Feeds())
+    with database() as db:
+        row = chip(db)
+        as_before_395(row, source="twse_t86", raw_payload_id=capture(db, T86, FIRST).id)
+        row.margin_balance = 99999.0
+        db.commit()
+    monkeypatch.setattr("sys.argv", ["worker.cli", "chips", "provenance"])
+    with pytest.raises(SystemExit) as exited:
+        cli.main()
+    assert exited.value.code == 2
+    assert json.loads(capsys.readouterr().out)["status"] == "partial"
