@@ -1900,9 +1900,10 @@ def test_patrol_stays_within_the_gh_call_cap(patrol: Harness, cap: str | None) -
     # Past the cap the questions are reported as not read, and the rest still prints.
     if limit < 3:
         # One line only, not gh_budget's 略過 line as well (PR #406 review).
-        assert [ln for ln in result.stdout.splitlines() if "未回覆的提問" in ln] == [
-            f"未回覆的提問：未查完（gh 呼叫已達上限 {limit}）"
-        ]
+        assert "略過 未回覆的提問" not in result.stdout
+        assert [
+            ln for ln in result.stdout.splitlines() if ln.startswith("未回覆的提問")
+        ] == [f"未回覆的提問：未查完（gh 呼叫已達上限 {limit}）"]
     else:
         assert "未回覆的提問：0 則" in result.stdout
     assert "排程 daily：daily-20261024.log" in result.stdout
