@@ -30,7 +30,7 @@
 | 停復牌 | TPEx [`tpex_spendi_today`](https://www.tpex.org.tw/openapi/v1/tpex_spendi_today)、[`tpex_spendi_history`](https://www.tpex.org.tw/openapi/v1/tpex_spendi_history) | history 轉為可稽核的停牌區間事件；區間內缺 bar 視為不可比。 | today 同時列暫停與恢復公告，代號存在不等於仍停牌；TWSE 停牌歷史未接入，追蹤可能為不可比。見[停復牌規則](#tpex-停復牌規則)。 |
 | 重大訊息／基本面 | TWSE [`t187ap04_L`](https://openapi.twse.com.tw/v1/opendata/t187ap04_L)、[`t187ap14_L`](https://openapi.twse.com.tw/v1/opendata/t187ap14_L)；TPEx [`mopsfin_t187ap04_O`](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap04_O)、[`mopsfin_t187ap14_O`](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap14_O) | 官方事件與基本面 snapshot。 | 只是取得當下的 snapshot，不能重建歷史可得時間；基本面不是 v1 策略輸入。同股同日多則不同公告標題相同時，以發言時間區分：最早一則保留原標題，之後各則標題加「（發言時間 HH:MM:SS）」（內容完全相同的重複列只留一則），之後重抓不會改名已存的事件。 |
 
-每筆 raw 保存 endpoint、SHA-256、擷取時間與 data-as-of；正規化資料可回指 raw payload：日線與籌碼列指向第一次寫入（或 `force` 覆寫）的 capture，之後重抓只補空欄時不改指向，補值的來源記在 collect run 的 `value_fill_groups`（[OPERATIONS §6.4](OPERATIONS.md#64-重跑與回補)）。News／Event 有官方事件投影、來源連結、raw 稽核與時間欄位，但欄位存在不代表每筆來源時間可信，詳見 [NEWS_SPEC](NEWS_SPEC.md)。`ChipSnapshot` 雖定義當沖、融券與借券欄位，現有寫入路徑不收集這些值。券商分點列後版，collector 不接入。
+每筆 raw 保存 endpoint、SHA-256、擷取時間與 data-as-of；正規化資料可回指 raw payload；重抓時日線與籌碼列指向哪一次 capture、哪些值會改，見 [OPERATIONS §6.4 冪等](OPERATIONS.md#64-重跑與回補)。News／Event 有官方事件投影、來源連結、raw 稽核與時間欄位，但欄位存在不代表每筆來源時間可信，詳見 [NEWS_SPEC](NEWS_SPEC.md)。`ChipSnapshot` 雖定義當沖、融券與借券欄位，現有寫入路徑不收集這些值。券商分點列後版，collector 不接入。
 
 ### 核心與非核心來源
 
