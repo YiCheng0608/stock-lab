@@ -37,10 +37,17 @@ depends_on = None
 def upgrade() -> None:
     bind = op.get_bind()
     # The pages read a superseded strategy's signal only on an instrument-day
-    # without a registered one; that check looks up one instrument-day.
-    if "ix_signals_instrument_date" not in {
-        index["name"] for index in inspect(bind).get_indexes("signals")
-    }:
+    # without a registered one; that check looks up one instrument-day.  A
+    # partial legacy schema whose signals table lacks either column (migration
+    # tests) gets no index; every real database has both.
+    inspector = inspect(bind)
+    if (
+        inspector.has_table("signals")
+        and {"instrument_id", "signal_date"}
+        <= {column["name"] for column in inspector.get_columns("signals")}
+        and "ix_signals_instrument_date"
+        not in {index["name"] for index in inspector.get_indexes("signals")}
+    ):
         op.create_index(
             "ix_signals_instrument_date", "signals", ["instrument_id", "signal_date"]
         )

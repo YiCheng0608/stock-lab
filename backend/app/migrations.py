@@ -654,13 +654,18 @@ def _fallback_upgrade_on_connection(connection) -> None:
         )
     )
     # 0022 adds margin_lists (made by create_all) and an index on the
-    # existing signals table, which create_all does not add.
-    connection.execute(
-        text(
-            'CREATE INDEX IF NOT EXISTS "ix_signals_instrument_date" '
-            'ON "signals" ("instrument_id", "signal_date")'
+    # existing signals table, which create_all does not add; a partial legacy
+    # schema without either column gets no index (as in the Alembic step).
+    signal_columns = {
+        row[1] for row in connection.exec_driver_sql('PRAGMA table_info("signals")')
+    }
+    if {"instrument_id", "signal_date"} <= signal_columns:
+        connection.execute(
+            text(
+                'CREATE INDEX IF NOT EXISTS "ix_signals_instrument_date" '
+                'ON "signals" ("instrument_id", "signal_date")'
+            )
         )
-    )
     connection.execute(
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
