@@ -35,8 +35,8 @@ files, which the exchanges revise after publishing them (Issue #396): after a
 ``success``, the next invocation (the 21:30 trigger) requests the two files
 once more and records an ``institutional_refetch`` step on its skipped row;
 OHLCV, margin and events are not requested.  Data idempotency itself is owned
-by the steps: collect reuses a successful run for the same request and never rewrites a
-stored value.
+by the steps: collect reuses a successful run for the same request and never
+rewrites a stored value.
 """
 
 from __future__ import annotations
