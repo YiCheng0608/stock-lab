@@ -17,6 +17,7 @@ from app.db import init_db
 from .backfill import BACKFILL_SCOPES, chunked_backfill
 from .candidate_notes import run_candidate_notes_batch
 from .candidates import run_candidates
+from .chip_provenance import run_fill_provenance
 from .chip_revisions import run_revise_institutional
 from .indicator_batch import run_indicator_batch
 from .industry_repair import run_industry_repair
@@ -271,6 +272,13 @@ def main() -> None:
     chips_revise_parser.add_argument(
         "--apply", action="store_true", help="寫入 DB；未指定只列出預計變更"
     )
+    chips_provenance_parser = chips_subparsers.add_parser(
+        "provenance",
+        help="依已保存的 raw 與 value_fill_groups，補寫既有籌碼列法人／融資各自的來源（預設 dry-run，不發網路，重跑冪等）",
+    )
+    chips_provenance_parser.add_argument(
+        "--apply", action="store_true", help="寫入 DB；未指定只列出預計變更"
+    )
     news_parser = subparsers.add_parser(
         "news", help="抓取國內／國際財經新聞 feed 並寫入 news_items"
     )
@@ -375,6 +383,8 @@ def main() -> None:
             rescore_days=args.rescore_days,
             max_status_share=args.max_status_share,
         )
+    elif args.command == "chips" and args.chips_command == "provenance":
+        result = run_fill_provenance(apply=args.apply)
     elif args.command == "chips":
         start = date.fromisoformat(args.start_date)
         end = date.fromisoformat(args.end_date) if args.end_date else start

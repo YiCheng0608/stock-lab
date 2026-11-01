@@ -405,7 +405,13 @@ def plan_repair(
                 and (instrument.id, record.trading_date) in have_chips
             ):
                 continue
-            chips.append((record, chip_raw_ids.get(record.payload_sha256)))
+            chips.append(
+                (
+                    record,
+                    chip_raw_ids.get(record.payload_sha256),
+                    chip_raw_ids.get(record.margin_payload_sha256),
+                )
+            )
 
     return {
         "evidence": evidence,
@@ -435,9 +441,9 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
-def _by_instrument(rows: list[tuple[Any, int | None]]) -> list[dict[str, Any]]:
+def _by_instrument(rows: list[tuple[Any, ...]]) -> list[dict[str, Any]]:
     grouped: dict[tuple[str, str], list[date]] = defaultdict(list)
-    for record, _raw_id in rows:
+    for record, *_raw_ids in rows:
         grouped[(record.exchange, record.symbol)].append(record.trading_date)
     return [
         {
@@ -570,8 +576,15 @@ def repair_instruments(
             raw_id,
             overwrite=False,
         )
-    for record, raw_id in plan["chips"]:
-        _upsert_official_chip(db, record, instruments, raw_id, overwrite=False)
+    for record, raw_id, margin_raw_id in plan["chips"]:
+        _upsert_official_chip(
+            db,
+            record,
+            instruments,
+            raw_id,
+            margin_raw_payload_id=margin_raw_id,
+            overwrite=False,
+        )
     db.flush()
     now = utcnow()
     run = IngestionRun(

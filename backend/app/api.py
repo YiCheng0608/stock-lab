@@ -21,6 +21,7 @@ from pydantic import (
 from sqlalchemy import String, and_, cast, desc, func, or_, select
 from sqlalchemy.orm import Session
 
+from .chip_provenance import GroupProvenance, stored_groups
 from .clock import utcnow
 from .config import (
     API_PREFIX,
@@ -252,7 +253,18 @@ def bar_dict(item: MarketBar | None) -> dict[str, Any] | None:
     }
 
 
+def chip_group_dict(group: GroupProvenance | None) -> dict[str, Any] | None:
+    if group is None:
+        return None
+    return {
+        "source": group.source,
+        "data_as_of": as_datetime(group.data_as_of),
+        "collected_at": as_utc_datetime(group.collected_at),
+    }
+
+
 def chip_dict(item: ChipSnapshot) -> dict[str, Any]:
+    groups = stored_groups(item)
     return {
         "date": as_date(item.trading_date),
         "foreign_buy": item.foreign_buy,
@@ -266,6 +278,9 @@ def chip_dict(item: ChipSnapshot) -> dict[str, Any]:
         "source": item.source,
         "data_as_of": as_datetime(item.data_as_of),
         "collected_at": as_utc_datetime(item.collected_at),
+        # Per-group provenance (Issue #395); null when the row has no such file.
+        "institutional": chip_group_dict(groups["institutional"]),
+        "margin": chip_group_dict(groups["margin"]),
     }
 
 

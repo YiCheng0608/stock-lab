@@ -145,11 +145,36 @@ class ChipSnapshot(Base):
     short_balance: Mapped[float | None] = mapped_column(Float, nullable=True)
     borrowed_sell: Mapped[float | None] = mapped_column(Float, nullable=True)
     day_trade_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # A summary of the two groups below (app.chip_provenance.summarize): the
+    # group sources joined by "+", institutional first; the institutional
+    # group's raw payload and data date, else the margin group's; the later
+    # group collection time.
     source: Mapped[str] = mapped_column(String(120), default="unknown")
     data_as_of: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     collected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     raw_payload_id: Mapped[int | None] = mapped_column(
         ForeignKey("raw_payloads.id"), nullable=True, index=True
+    )
+    # Where each value group came from (Issue #395): foreign/trust/dealer from
+    # the official institutional file, margin from the official margin file.
+    # All four columns of a group are null when the row has no such file.
+    institutional_source: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    institutional_raw_payload_id: Mapped[int | None] = mapped_column(
+        ForeignKey("raw_payloads.id"), nullable=True
+    )
+    institutional_data_as_of: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+    institutional_collected_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+    margin_source: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    margin_raw_payload_id: Mapped[int | None] = mapped_column(
+        ForeignKey("raw_payloads.id"), nullable=True
+    )
+    margin_data_as_of: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    margin_collected_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
     )
 
 

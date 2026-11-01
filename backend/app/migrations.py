@@ -38,6 +38,15 @@ _ADDITIVE_COLUMNS: dict[str, dict[str, str]] = {
     },
     "chip_snapshots": {
         "raw_payload_id": "INTEGER REFERENCES raw_payloads(id)",
+        # 0021: per-group provenance (Issue #395).
+        "institutional_source": "VARCHAR(40)",
+        "institutional_raw_payload_id": "INTEGER REFERENCES raw_payloads(id)",
+        "institutional_data_as_of": "DATETIME",
+        "institutional_collected_at": "DATETIME",
+        "margin_source": "VARCHAR(40)",
+        "margin_raw_payload_id": "INTEGER REFERENCES raw_payloads(id)",
+        "margin_data_as_of": "DATETIME",
+        "margin_collected_at": "DATETIME",
     },
     "group_daily_scores": {
         "relative_return_1d": "FLOAT",
@@ -635,6 +644,13 @@ def _fallback_upgrade_on_connection(connection) -> None:
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
             "VALUES ('0020_trading_calendar', CURRENT_TIMESTAMP)"
+        )
+    )
+    # 0021 only adds the chip_snapshots group columns, added above.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0021_chip_source_groups', CURRENT_TIMESTAMP)"
         )
     )
 

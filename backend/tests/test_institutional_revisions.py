@@ -292,7 +292,8 @@ def test_force_still_replaces_with_the_capture_it_fetched(database, monkeypatch)
 def test_a_row_from_another_source_is_not_revised(database, monkeypatch):
     collect_at(monkeypatch, FIRST, Fetcher(INITIAL))
     with database() as db:
-        chip(db).source = "legacy_import"
+        row = chip(db)
+        row.source = row.institutional_source = "legacy_import"
         db.commit()
     reopen(database)
 
@@ -314,7 +315,7 @@ def stored_like_before_387(database, monkeypatch):
     with database() as db:
         row = chip(db)
         row.trust_buy = -162968.0
-        row.raw_payload_id = t86_capture(db, FIRST)
+        row.raw_payload_id = row.institutional_raw_payload_id = t86_capture(db, FIRST)
         db.commit()
 
 
@@ -371,8 +372,8 @@ def test_revise_ends_at_the_later_capture_when_it_has_the_smaller_id(
         assert t86_capture(db, LATER) < t86_capture(db, FIRST)
         row = chip(db)
         row.trust_buy = -162968.0
-        row.raw_payload_id = t86_capture(db, FIRST)
-        row.collected_at = FIRST
+        row.raw_payload_id = row.institutional_raw_payload_id = t86_capture(db, FIRST)
+        row.collected_at = row.institutional_collected_at = FIRST
         db.commit()
     with database() as db:
         assert (

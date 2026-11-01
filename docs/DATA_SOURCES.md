@@ -1,4 +1,4 @@
-<!-- owns: 來源選用原則、資料庫政策、官方來源、標的狀態同步、官方來源限制、新聞來源清單、法人口徑、成交金額可得狀態、成交量整數規則、TAIEX 交易日基準、大盤概況欄位、交易日曆、TPEx 停復牌規則、公司行動欄位、FinMind 補缺口規則 -->
+<!-- owns: 來源選用原則、資料庫政策、官方來源、標的狀態同步、官方來源限制、新聞來源清單、法人口徑、籌碼來源欄位、成交金額可得狀態、成交量整數規則、TAIEX 交易日基準、大盤概況欄位、交易日曆、TPEx 停復牌規則、公司行動欄位、FinMind 補缺口規則 -->
 # 資料來源與限制
 
 本文記錄資料來源、保存規則與已知限制；能力狀態以 [ROADMAP](ROADMAP.md) 為準。
@@ -106,6 +106,22 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 - 來源含 `t86`／`3insti` 的籌碼列全部指向當日官方法人端點的 raw，而且沒有任何一列的三大法人欄是 null。
 
 策略與候選的法人輸入仍把缺列視為缺資料。
+
+### 籌碼來源
+
+一筆籌碼列的值來自兩份官方檔：三大法人（`foreign_buy`、`trust_buy`、`dealer_buy`，上市 T86、上櫃 `insti/dailyTrade`）與融資（`margin_balance`、`margin_change`，上市 `MI_MARGN`、上櫃 `margin/balance`）。兩份檔公布時間不同（2026-10-19 起 18:30 的 collect 只拿得到法人檔，融資由 21:30 補上），所以每組值各記自己的來源（[#395](https://github.com/YiCheng0608/stock-lab/issues/395)，migration 0021）：
+
+| 欄位 | 法人 | 融資 |
+| --- | --- | --- |
+| 來源 | `institutional_source`（`twse_t86`／`tpex_3insti`） | `margin_source`（`twse_margin`／`tpex_margin`） |
+| raw 參照 | `institutional_raw_payload_id` | `margin_raw_payload_id` |
+| 資料日 | `institutional_data_as_of` | `margin_data_as_of` |
+| 收集時間 | `institutional_collected_at` | `margin_collected_at` |
+
+- 該列沒有那份檔時，那一組四欄都是 null，值也是 null（只有融資、只有法人的列照樣保存，見[法人口徑](#法人口徑)）。
+- 列層級的 `source`、`raw_payload_id`、`data_as_of`、`collected_at` 是兩組的摘要（`app.chip_provenance.summarize`）：`source` 依法人、融資的順序以 `+` 連接兩組來源；`raw_payload_id` 與 `data_as_of` 取法人組，沒有法人組時取融資組；`collected_at` 取兩組中較晚的。
+- 寫入規則見 [OPERATIONS §6.4](OPERATIONS.md#64-重跑與回補)；0021 以前寫入的列由 [`chips provenance`](OPERATIONS.md#3-現有-worker-cli) 依已存的 raw 補寫。補寫前，讀取端依列層級欄位推出兩組（`app.chip_provenance.legacy_groups`）；這時融資組沒有 raw 參照，10/19 起由 21:30 補上融資的列看不出融資來源。
+- API `GET /api/stocks/<exchange>/<symbol>` 的 `chips[]` 帶 `institutional`、`margin`（各含 `source`、`data_as_of`、`collected_at`，沒有該組為 null）；個股頁「法人籌碼」的表格欄位依各自那一組判斷單位，來源說明分 `法人：`、`融資：` 兩行。
 
 ### 成交金額可得狀態
 
