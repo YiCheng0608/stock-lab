@@ -2094,6 +2094,13 @@ def test_patrol_leaves_the_governance_issue_out(patrol: Harness) -> None:
     assert "未查完" not in result.stdout
 
 
+def test_patrol_counts_no_question_when_it_only_has_a_note(patrol: Harness) -> None:
+    patrol.answer("gh_questions", _threads([_thread(401)], total=150))
+    result = _patrol(patrol)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "未回覆的提問：0 則（未查完）\n  未查完：open Issue 150 個" in result.stdout
+
+
 @pytest.mark.parametrize("how", ["fails", "graphql-error"])
 def test_patrol_goes_on_when_the_questions_cannot_be_read(
     patrol: Harness, how: str

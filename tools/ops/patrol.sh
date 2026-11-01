@@ -139,7 +139,7 @@ fi
 if gh_budget "未回覆的提問"; then
   if out="$(gh api graphql -f owner="${GH_REPO%%/*}" -f name="${GH_REPO#*/}" \
     -f query="$(cj questions-query)")" && lines="$(printf '%s' "$out" | cj questions "$now")"; then
-    n="$( [ -n "$lines" ] && printf '%s\n' "$lines" | grep -c '^#' || echo 0)"
+    n="$(printf '%s\n' "$lines" | grep -c '^#')"
     echo "未回覆的提問：$n 則$(printf '%s\n' "$lines" | grep -q '^未查完' && echo '（未查完）')"
     [ -n "$lines" ] && printf '%s\n' "$lines" | sed 's/^/  /'
   else
