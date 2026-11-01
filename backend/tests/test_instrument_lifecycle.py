@@ -305,7 +305,25 @@ def test_tpex_quotes_keep_shares_and_etfs_outside_the_lists(tmp_path, monkeypatc
     assert sorted(bar.symbol for bar in bars) == ["006201", "00679B", "6488", "8908"]
 
 
-def test_twse_quotes_keep_shares_and_etfs_outside_the_lists(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    ("feeds", "snapshot_feeds"),
+    [
+        # A snapshot collect reads STOCK_DAY_ALL and MI_INDEX.
+        ({"STOCK_DAY_ALL", "MI_INDEX"}, True),
+        # A historical backfill reads MI_INDEX only: B1's 10/17 backfill.
+        ({"MI_INDEX"}, False),
+        # Only STOCK_DAY_ALL carries the rows, so its filter alone decides.
+        ({"STOCK_DAY_ALL"}, True),
+    ],
+    ids=["snapshot", "mi_index_only", "stock_day_all_only"],
+)
+def test_twse_quotes_keep_shares_and_etfs_outside_the_lists(
+    tmp_path, monkeypatch, feeds, snapshot_feeds
+):
+    """Each TWSE quote feed has its own filter; each case reads the rows from
+    the feeds named, so turning either filter back to ordinary shares only
+    drops 0056 in a case (Issue #393 review)."""
+
     monkeypatch.setattr(sources, "RAW_DIR", tmp_path / "raw")
     fields = [
         "Code",
@@ -318,11 +336,17 @@ def test_twse_quotes_keep_shares_and_etfs_outside_the_lists(tmp_path, monkeypatc
     ]
     codes = ["2330", "2888", "2881A", "0056", "9103", "910322", "030001"]
     rows = [[code, "10", "11", "9", "10", "1000", "10000"] for code in codes]
+    requested = []
 
     def fetch(url, **_):
         if url == sources.TWSE_DAILY_ENDPOINT:
-            return [dict(zip(fields, row)) | {"Date": "1151016"} for row in rows]
+            requested.append("STOCK_DAY_ALL")
+            return [
+                dict(zip(fields, row)) | {"Date": "1151016"}
+                for row in (rows if "STOCK_DAY_ALL" in feeds else [])
+            ]
         if url.startswith(sources.TWSE_DAILY_HISTORY_ENDPOINT):
+            requested.append("MI_INDEX")
             return {
                 "date": "20261016",
                 "tables": [
@@ -331,13 +355,21 @@ def test_twse_quotes_keep_shares_and_etfs_outside_the_lists(tmp_path, monkeypatc
                         "fields": ["指數", "收盤指數"],
                         "data": [["發行量加權股價指數", "24000"]],
                     },
-                    {"fields": fields, "data": rows},
+                    {
+                        "fields": fields,
+                        "data": rows if "MI_INDEX" in feeds else [],
+                    },
                 ],
             }
         raise AssertionError(url)
 
-    bars, _ = sources.TwseAdapter(fetch).fetch_bars(["2330"], SCORE_DATE, SCORE_DATE)
+    bars, _ = sources.TwseAdapter(fetch, snapshot_feeds=snapshot_feeds).fetch_bars(
+        ["2330"], SCORE_DATE, SCORE_DATE
+    )
 
+    assert requested == (
+        ["STOCK_DAY_ALL", "MI_INDEX"] if snapshot_feeds else ["MI_INDEX"]
+    )
     assert sorted(bar.symbol for bar in bars) == ["0056", "2330", "2888", "TAIEX"]
 
 
