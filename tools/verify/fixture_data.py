@@ -312,7 +312,9 @@ def _indicator_rows() -> list[dict[str, Any]]:
 # ---- chips ----
 
 CHIP_SESSIONS = SESSIONS[-25:]
+# Each value group names its own file, as collect writes it (Issue #395).
 CHIP_SOURCE_BY_EXCHANGE = {"TWSE": "twse_t86", "TPEx": "tpex_3insti"}
+MARGIN_SOURCE_BY_EXCHANGE = {"TWSE": "twse_margin", "TPEx": "tpex_margin"}
 
 
 def _chip_rows() -> list[dict[str, Any]]:
@@ -336,9 +338,16 @@ def _chip_rows() -> list[dict[str, Any]]:
                     "short_balance": float(120 + 3 * wobble),
                     "borrowed_sell": float(40 + wobble),
                     "day_trade_ratio": round(0.18 + 0.01 * wobble, 4),
-                    "source": CHIP_SOURCE_BY_EXCHANGE[exchange],
+                    "source": f"{CHIP_SOURCE_BY_EXCHANGE[exchange]}"
+                    f"+{MARGIN_SOURCE_BY_EXCHANGE[exchange]}",
                     "data_as_of": _at(day, 8),
                     "collected_at": _at(day, 9, 30),
+                    "institutional_source": CHIP_SOURCE_BY_EXCHANGE[exchange],
+                    "institutional_data_as_of": _at(day, 8),
+                    "institutional_collected_at": _at(day, 9, 30),
+                    "margin_source": MARGIN_SOURCE_BY_EXCHANGE[exchange],
+                    "margin_data_as_of": _at(day, 8),
+                    "margin_collected_at": _at(day, 9, 30),
                 }
             )
             next_id += 1
@@ -1723,7 +1732,11 @@ INTENTIONALLY_EMPTY: dict[str, dict[str, str]] = {
         "raw_payload_id": "LLM 筆記不保存原始回應檔",
     },
     "candidate_runs": {"zero_reason": "當日有 3 檔候選，不是零候選"},
-    "chip_snapshots": {"raw_payload_id": "假資料不附法人原始檔"},
+    "chip_snapshots": {
+        "raw_payload_id": "假資料不附法人原始檔",
+        "institutional_raw_payload_id": "假資料不附法人原始檔",
+        "margin_raw_payload_id": "假資料不附融資原始檔",
+    },
     "ingestion_runs": {"error": "沒有失敗的執行；休市日的 skipped 不寫 error"},
     "market_bars": {
         "turnover_reason": "成交值都是 available；原因只在 unavailable／unknown 時寫"

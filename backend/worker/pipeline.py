@@ -14,6 +14,8 @@ from typing import Any, Callable, Iterable, Mapping
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
+from app import chip_provenance
+from app.chip_provenance import GroupProvenance
 from app.clock import utcnow
 from app.config import (
     MAX_GROUP_CANDIDATES,
@@ -2047,6 +2049,9 @@ def _upsert_official_instrument(db: Session, record: InstrumentRecord) -> Instru
 # The one exception is institutional flow (Issue #387): the exchanges revise it
 # after the first publication, so a later capture of the same official file
 # replaces differing stored values (see _upsert_official_chip).
+# A chip row keeps one provenance per value group (Issue #395): a group the
+# row did not have yet (margin published after the institutional file) takes
+# the filling capture as its provenance instead of recording a fill.
 MAX_RECORDED_VALUE_CONFLICTS = 50
 INSTITUTIONAL_FIELDS = ("foreign_buy", "trust_buy", "dealer_buy")
 
@@ -2229,52 +2234,72 @@ def _upsert_official_bar(
 
 def _is_later_institutional_capture(
     db: Session,
-    row: ChipSnapshot,
-    record: Any,
+    stored: GroupProvenance | None,
+    incoming_source: str,
     exchange: str,
     raw_payload_id: int | None,
 ) -> bool:
-    """Whether this record is a later capture of the stored row's institutional file.
+    """Whether this capture is a later capture of the stored row's institutional file.
 
-    Both must come from the exchange's official institutional file (the
-    ``source`` before ``+``), and the incoming raw capture must be strictly
-    later than the stored row's raw capture.  A stored row without a raw
-    capture is dated by its ``collected_at``, which is never earlier than its
-    capture.  Without an incoming capture nothing is later.
+    Both must come from the exchange's official institutional file, and the
+    incoming raw capture must be strictly later than the stored institutional
+    group's raw capture.  A stored group without a raw capture is dated by its
+    ``collected_at``, which is never earlier than its capture.  Without an
+    incoming capture nothing is later.
     """
 
     official = OFFICIAL_INSTITUTIONAL_CHIP_SOURCES.get(exchange)
     if official is None or raw_payload_id is None:
         return False
-    if (record.source or "").split("+")[0] != official:
+    if incoming_source != official:
         return False
-    if (row.source or "").split("+")[0] != official:
+    if stored is None or stored.source != official:
         return False
     incoming = db.get(RawPayload, raw_payload_id)
     if incoming is None or incoming.collected_at is None:
         return False
-    stored = (
-        db.get(RawPayload, row.raw_payload_id)
-        if row.raw_payload_id is not None
+    stored_raw = (
+        db.get(RawPayload, stored.raw_payload_id)
+        if stored.raw_payload_id is not None
         else None
     )
-    stored_at = stored.collected_at if stored is not None else row.collected_at
+    stored_at = (
+        stored_raw.collected_at if stored_raw is not None else stored.collected_at
+    )
     return stored_at is not None and incoming.collected_at > stored_at
 
 
-def _revised_source(stored: str | None, incoming: str) -> str:
-    """The source of a revised row: the incoming capture's, plus the stored parts it lacks.
+def _chip_record_groups(record: Any) -> dict[str, tuple[str, str | None]]:
+    """The record's value groups: ``{group: (source, data_as_of)}`` (Issue #395).
 
-    A revision replaces institutional values only, so a stored ``+<margin>``
-    part still describes the row's margin values when the later capture has
-    no margin (``twse_t86+twse_margin`` stays, not ``twse_t86``).
+    The margin group is the record's ``margin_*`` capture.  The institutional
+    group is the record's first file unless that is its margin file.  A record
+    built without ``margin_*`` (fixtures, older callers) gives its margin values
+    the ``+`` part that names a margin file, else its own source.
     """
 
-    parts = (incoming or "").split("+")
-    extra = [
-        part for part in (stored or "").split("+")[1:] if part and part not in parts
+    parts = [part for part in (record.source or "").split("+") if part] or [
+        record.source or "unknown"
     ]
-    return "+".join(parts + extra)
+    groups: dict[str, tuple[str, str | None]] = {}
+    margin_source = record.margin_source
+    if margin_source is None and (
+        record.margin_balance is not None
+        or record.margin_change is not None
+        or parts[0] in chip_provenance.MARGIN_SOURCES
+    ):
+        margin_source = next(
+            (part for part in parts if part in chip_provenance.MARGIN_SOURCES),
+            parts[-1],
+        )
+    if margin_source is not None:
+        groups[chip_provenance.MARGIN] = (
+            margin_source,
+            record.margin_data_as_of or record.data_as_of,
+        )
+    if parts[0] != margin_source:
+        groups[chip_provenance.INSTITUTIONAL] = (parts[0], record.data_as_of)
+    return groups
 
 
 def _upsert_official_chip(
@@ -2283,6 +2308,7 @@ def _upsert_official_chip(
     instruments: dict[tuple[str, str], Instrument],
     raw_payload_id: int | None,
     *,
+    margin_raw_payload_id: int | None = None,
     overwrite: bool = True,
     conflicts: list[dict[str, Any]] | None = None,
     fills: list[dict[str, Any]] | None = None,
@@ -2290,6 +2316,13 @@ def _upsert_official_chip(
     create: bool = True,
 ) -> bool:
     """Persist one official chip snapshot without manufacturing missing values.
+
+    ``raw_payload_id`` is the capture of ``record.payload_sha256`` and
+    ``margin_raw_payload_id`` that of ``record.margin_payload_sha256`` when the
+    record merges two captures.  Each value group keeps its own provenance
+    (Issue #395): a new row, ``overwrite``, or a group the row did not have
+    yet points the group at this capture; filling an empty field of a group
+    the row already has keeps that group's provenance and records a value fill.
 
     With ``revisions`` (a list the caller keeps), a capture of the same
     official institutional file taken later than the stored row's capture
@@ -2318,14 +2351,30 @@ def _upsert_official_chip(
         )
         db.add(row)
     label = f"chip_snapshots:{instrument.exchange}:{instrument.symbol}:{record.trading_date.isoformat()}"
-    stored_raw_payload_id = None if is_new else row.raw_payload_id
-    stored_source = None if is_new else row.source
+    incoming = _chip_record_groups(record)
+    raw_ids = {
+        chip_provenance.INSTITUTIONAL: raw_payload_id,
+        chip_provenance.MARGIN: margin_raw_payload_id
+        if record.margin_payload_sha256 not in (None, record.payload_sha256)
+        else raw_payload_id,
+    }
+    stored: chip_provenance.Groups = (
+        {group: None for group in chip_provenance.GROUPS}
+        if is_new
+        else chip_provenance.stored_groups(row)
+    )
+    institutional = incoming.get(chip_provenance.INSTITUTIONAL)
     revise = (
         not is_new
         and not overwrite
         and revisions is not None
+        and institutional is not None
         and _is_later_institutional_capture(
-            db, row, record, instrument.exchange, raw_payload_id
+            db,
+            stored[chip_provenance.INSTITUTIONAL],
+            institutional[0],
+            instrument.exchange,
+            raw_payload_id,
         )
     )
     revised: dict[str, dict[str, Any]] = {}
@@ -2345,6 +2394,7 @@ def _upsert_official_chip(
         revisable=INSTITUTIONAL_FIELDS if revise else (),
         revised=revised,
     )
+    stored_institutional = stored[chip_provenance.INSTITUTIONAL]
     if revised and revisions is not None:
         revisions.append(
             {
@@ -2353,28 +2403,47 @@ def _upsert_official_chip(
                 "symbol": instrument.symbol,
                 "trading_date": record.trading_date.isoformat(),
                 "fields": revised,
-                "stored_raw_payload_id": stored_raw_payload_id,
+                "stored_raw_payload_id": None
+                if stored_institutional is None
+                else stored_institutional.raw_payload_id,
                 "raw_payload_id": raw_payload_id,
             }
         )
-    _set_official_provenance(
-        row,
-        changed=changed,
-        # A revised row now holds the later capture's institutional values.
-        replace=is_new or overwrite or bool(revised),
-        source=_revised_source(stored_source, record.source)
-        if revised
-        else record.source,
-        data_as_of=_as_datetime(record.data_as_of, record.trading_date),
-        raw_payload_id=raw_payload_id,
-        fills=fills,
-        fill_key={
-            "table": "chip_snapshots",
-            "exchange": instrument.exchange,
-            "symbol": instrument.symbol,
-            "trading_date": record.trading_date.isoformat(),
-        },
-    )
+    groups = dict(stored)
+    replaced = False
+    for group, (source, data_as_of) in incoming.items():
+        group_changed = [
+            name for name in chip_provenance.GROUP_FIELDS[group] if name in changed
+        ]
+        if not group_changed:
+            continue
+        if (
+            is_new
+            or overwrite
+            or stored[group] is None
+            # A revised row now holds the later capture's institutional values.
+            or (group == chip_provenance.INSTITUTIONAL and bool(revised))
+        ):
+            groups[group] = GroupProvenance(
+                source,
+                raw_ids[group],
+                _as_datetime(data_as_of, record.trading_date),
+                utcnow(),
+            )
+            replaced = True
+        elif fills is not None:
+            fills.append(
+                {
+                    "table": "chip_snapshots",
+                    "exchange": instrument.exchange,
+                    "symbol": instrument.symbol,
+                    "trading_date": record.trading_date.isoformat(),
+                    "fields": sorted(group_changed),
+                    "raw_payload_id": raw_ids[group],
+                }
+            )
+    if replaced:
+        chip_provenance.write_groups(row, groups)
     return True
 
 
@@ -4119,6 +4188,9 @@ def collect(
                         chip,
                         known,
                         _raw_id_for_digest(raw_ids, chip.payload_sha256),
+                        margin_raw_payload_id=_raw_id_for_digest(
+                            raw_ids, chip.margin_payload_sha256
+                        ),
                         overwrite=force,
                         conflicts=value_conflicts,
                         fills=value_fills,

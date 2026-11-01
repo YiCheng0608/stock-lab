@@ -84,7 +84,13 @@ class BarRecord:
 
 @dataclass(frozen=True)
 class ChipRecord:
-    """One official same-day institutional/margin observation."""
+    """One official same-day institutional/margin observation.
+
+    ``source``, ``data_as_of`` and ``payload_sha256`` describe the record's
+    first file: the institutional file, or the margin file for a margin-only
+    record.  The ``margin_*`` fields describe the margin file whenever the
+    record has one (Issue #395), so a merged record keeps both captures.
+    """
 
     symbol: str
     trading_date: date
@@ -98,6 +104,9 @@ class ChipRecord:
     source: str = "official"
     data_as_of: str | None = None
     payload_sha256: str | None = None
+    margin_source: str | None = None
+    margin_data_as_of: str | None = None
+    margin_payload_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1247,6 +1256,9 @@ def parse_twse_margin_rows(
                         source="twse_margin",
                         data_as_of=data_as_of or trading_date.isoformat(),
                         payload_sha256=payload_sha256,
+                        margin_source="twse_margin",
+                        margin_data_as_of=data_as_of or trading_date.isoformat(),
+                        margin_payload_sha256=payload_sha256,
                     )
                 )
             return result
@@ -1277,6 +1289,9 @@ def parse_twse_margin_rows(
                 source="twse_margin",
                 data_as_of=data_as_of or trading_date.isoformat(),
                 payload_sha256=payload_sha256,
+                margin_source="twse_margin",
+                margin_data_as_of=data_as_of or trading_date.isoformat(),
+                margin_payload_sha256=payload_sha256,
             )
         )
     return result
@@ -1404,6 +1419,9 @@ def parse_tpex_margin_rows(
                         source="tpex_margin",
                         data_as_of=data_as_of or trading_date.isoformat(),
                         payload_sha256=payload_sha256,
+                        margin_source="tpex_margin",
+                        margin_data_as_of=data_as_of or trading_date.isoformat(),
+                        margin_payload_sha256=payload_sha256,
                     )
                 )
             return result
@@ -1436,6 +1454,9 @@ def parse_tpex_margin_rows(
                 source="tpex_margin",
                 data_as_of=data_as_of or trading_date.isoformat(),
                 payload_sha256=payload_sha256,
+                margin_source="tpex_margin",
+                margin_data_as_of=data_as_of or trading_date.isoformat(),
+                margin_payload_sha256=payload_sha256,
             )
         )
     return result
@@ -1448,7 +1469,11 @@ def merge_chip_records(
     allowed_symbols: set[str],
     exchange: str,
 ) -> list[ChipRecord]:
-    """Merge two official same-day feeds without filling missing fields."""
+    """Merge two official same-day feeds without filling missing fields.
+
+    A merged record keeps the margin capture in its ``margin_*`` fields; its
+    ``payload_sha256`` stays the institutional capture's.
+    """
 
     merged: dict[tuple[str, date], ChipRecord] = {
         (record.symbol, record.trading_date): record
@@ -1466,6 +1491,10 @@ def merge_chip_records(
                 margin_balance=record.margin_balance,
                 margin_change=record.margin_change,
                 source=f"{existing.source}+{record.source}",
+                margin_source=record.margin_source or record.source,
+                margin_data_as_of=record.margin_data_as_of or record.data_as_of,
+                margin_payload_sha256=record.margin_payload_sha256
+                or record.payload_sha256,
             )
         else:
             merged[key] = record

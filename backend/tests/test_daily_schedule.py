@@ -1743,9 +1743,14 @@ def test_filling_empty_values_keeps_provenance_and_records_the_fill(database):
         chip = db.scalar(
             select(ChipSnapshot).where(ChipSnapshot.instrument_id == bar.instrument_id)
         )
-        chip_raw, margin = chip.raw_payload_id, chip.margin_balance
+        # The fill names the margin capture, not the institutional one (#395).
+        chip_raw, margin = chip.margin_raw_payload_id, chip.margin_balance
+        assert db.get(RawPayload, chip_raw).endpoint.startswith(
+            sources.TWSE_MARGIN_HISTORY_ENDPOINT
+        )
         chip.margin_balance = None
         chip.raw_payload_id = universe_raw
+        chip.margin_raw_payload_id = universe_raw
         db.execute(update(IngestionRun).values(status="partial"))
         db.commit()
 
@@ -1761,7 +1766,11 @@ def test_filling_empty_values_keeps_provenance_and_records_the_fill(database):
         chip = db.scalar(
             select(ChipSnapshot).where(ChipSnapshot.instrument_id == bar.instrument_id)
         )
-        assert (chip.margin_balance, chip.raw_payload_id) == (margin, universe_raw)
+        assert (
+            chip.margin_balance,
+            chip.raw_payload_id,
+            chip.margin_raw_payload_id,
+        ) == (margin, universe_raw, universe_raw)
         groups = db.get(IngestionRun, second["run_id"]).metadata_json[
             "value_fill_groups"
         ]

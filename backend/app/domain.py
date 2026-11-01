@@ -162,6 +162,11 @@ OFFICIAL_INSTITUTIONAL_CHIP_SOURCES: dict[str, str] = {
     "TWSE": "twse_t86",
     "TPEx": "tpex_3insti",
 }
+# Chip-row sources written by the official margin parsers (Issue #395).
+OFFICIAL_MARGIN_CHIP_SOURCES: dict[str, str] = {
+    "TWSE": "twse_margin",
+    "TPEx": "tpex_margin",
+}
 
 HOT_GROUP_CONFIG: dict[str, Any] = {
     "name": "hot_group_v1",

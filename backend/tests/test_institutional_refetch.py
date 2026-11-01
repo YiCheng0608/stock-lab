@@ -132,6 +132,8 @@ def test_the_2130_run_refetches_the_institutional_file_and_revises_the_row(
         row = chip(db)
         assert institutional(row) == (-1733324, -162968, 307854)
         stored_raw, margin = row.raw_payload_id, row.margin_balance
+        margin_group = (row.margin_source, row.margin_raw_payload_id)
+        assert margin_group[1] is not None and margin_group[1] != stored_raw
         tpex_before = db.scalar(
             select(ChipSnapshot).where(ChipSnapshot.source.like("tpex_3insti%"))
         )
@@ -156,6 +158,9 @@ def test_the_2130_run_refetches_the_institutional_file_and_revises_the_row(
         # Margin is not requested and keeps its value and source part.
         assert row.margin_balance == margin
         assert row.source == "twse_t86+twse_margin"
+        # Only the institutional group moves to the refetched capture (#395).
+        assert row.institutional_raw_payload_id == revised_raw
+        assert (row.margin_source, row.margin_raw_payload_id) == margin_group
         # The TPEx file did not change: its row keeps its values and capture.
         tpex_after = db.get(ChipSnapshot, tpex_before.id)
         assert (institutional(tpex_after), tpex_after.raw_payload_id) == tpex_values

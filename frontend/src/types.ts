@@ -261,6 +261,13 @@ export type StockDetailBar = Omit<Bar, 'date' | 'open' | 'high' | 'low' | 'close
   is_suspended: boolean | null
 }
 
+/** Where one value group of a chip row came from (Issue #395). */
+export type ChipGroupSource = {
+  source: string
+  data_as_of: string | null
+  collected_at: string | null
+}
+
 export type ChipSnapshot = {
   date: string
   foreign_buy: number | null
@@ -274,6 +281,10 @@ export type ChipSnapshot = {
   source: string
   data_as_of: string | null
   collected_at: string | null
+  /** Foreign, trust and dealer values; null when the row has no institutional file. */
+  institutional: ChipGroupSource | null
+  /** Margin values; null when the row has no margin file. */
+  margin: ChipGroupSource | null
 }
 
 export type StockDetailChip = Omit<ChipSnapshot, 'date' | 'source'> & {
