@@ -237,6 +237,50 @@ def test_an_earlier_capture_does_not_replace_a_later_one(database, monkeypatch):
         )
 
 
+def test_a_capture_taken_at_the_same_time_does_not_revise(database, monkeypatch):
+    # Only a strictly later capture replaces a value (PR #398 review 2).
+    collect_at(monkeypatch, FIRST, Fetcher(INITIAL))
+    reopen(database)
+    same = collect_at(monkeypatch, FIRST, Fetcher(REVISED))
+    assert same["value_revisions"] == 0 and same["value_conflicts"] == 1
+    with database() as db:
+        first = t86_capture(db, FIRST)
+        assert db.scalar(
+            select(RawPayload.id).where(
+                RawPayload.endpoint.like(f"{sources.TWSE_CHIP_ENDPOINT}%"),
+                RawPayload.collected_at == FIRST,
+                RawPayload.id != first,
+            )
+        )
+        assert chip(db).trust_buy == -162968
+
+
+class NoMargin(Fetcher):
+    """A capture whose margin report is for another day, so it has no margin."""
+
+    def __call__(self, url, **kwargs):
+        payload = super().__call__(url, **kwargs)
+        if url.startswith(sources.TWSE_MARGIN_HISTORY_ENDPOINT):
+            return dict(payload, date="20260903")
+        return payload
+
+
+def test_a_revision_without_margin_keeps_the_margin_source(database, monkeypatch):
+    # PR #398 review 1: the stored margin value is still the margin capture's.
+    collect_at(monkeypatch, FIRST, Fetcher(INITIAL))
+    with database() as db:
+        assert chip(db).source == "twse_t86+twse_margin"
+    reopen(database)
+
+    later = collect_at(monkeypatch, LATER, NoMargin(REVISED))
+    assert later["value_revisions"] == 1
+    with database() as db:
+        row = chip(db)
+        assert (row.trust_buy, row.margin_balance) == (1133032, 11242)
+        assert row.raw_payload_id == t86_capture(db, LATER)
+        assert row.source == "twse_t86+twse_margin"
+
+
 def test_force_still_replaces_with_the_capture_it_fetched(database, monkeypatch):
     collect_at(monkeypatch, LATER, Fetcher(REVISED))
     forced = collect_at(monkeypatch, FIRST, Fetcher(INITIAL), force=True)
@@ -313,8 +357,13 @@ def test_revise_replays_the_captures_in_capture_order(database, monkeypatch):
     assert again["revised_rows"] == 0
 
 
-def test_revise_orders_by_capture_time_not_by_id(database, monkeypatch):
-    # The 21:30 capture got the smaller id; the 18:30 one must not win.
+def test_revise_ends_at_the_later_capture_when_it_has_the_smaller_id(
+    database, monkeypatch
+):
+    # The 21:30 capture got the smaller id; the 18:30 one must not win.  What
+    # stops it is the strict capture-time comparison in
+    # _is_later_institutional_capture, not the replay order: replaying by id
+    # gives the same values (only the conflict count differs).
     collect_at(monkeypatch, LATER, Fetcher(REVISED))
     reopen(database)
     collect_at(monkeypatch, FIRST, Fetcher(INITIAL))

@@ -2261,6 +2261,21 @@ def _is_later_institutional_capture(
     return stored_at is not None and incoming.collected_at > stored_at
 
 
+def _revised_source(stored: str | None, incoming: str) -> str:
+    """The source of a revised row: the incoming capture's, plus the stored parts it lacks.
+
+    A revision replaces institutional values only, so a stored ``+<margin>``
+    part still describes the row's margin values when the later capture has
+    no margin (``twse_t86+twse_margin`` stays, not ``twse_t86``).
+    """
+
+    parts = (incoming or "").split("+")
+    extra = [
+        part for part in (stored or "").split("+")[1:] if part and part not in parts
+    ]
+    return "+".join(parts + extra)
+
+
 def _upsert_official_chip(
     db: Session,
     record: Any,
@@ -2303,6 +2318,7 @@ def _upsert_official_chip(
         db.add(row)
     label = f"chip_snapshots:{instrument.exchange}:{instrument.symbol}:{record.trading_date.isoformat()}"
     stored_raw_payload_id = None if is_new else row.raw_payload_id
+    stored_source = None if is_new else row.source
     revise = (
         not is_new
         and not overwrite
@@ -2345,7 +2361,9 @@ def _upsert_official_chip(
         changed=changed,
         # A revised row now holds the later capture's institutional values.
         replace=is_new or overwrite or bool(revised),
-        source=record.source,
+        source=_revised_source(stored_source, record.source)
+        if revised
+        else record.source,
         data_as_of=_as_datetime(record.data_as_of, record.trading_date),
         raw_payload_id=raw_payload_id,
         fills=fills,

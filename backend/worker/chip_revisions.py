@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import replace
 from datetime import date, timezone
 from pathlib import Path
 from typing import Any
@@ -22,7 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.clock import utcnow
-from app.models import ChipSnapshot, IngestionRun, Instrument, RawPayload
+from app.models import IngestionRun, Instrument, RawPayload
 from worker import pipeline
 from worker.sources import (
     TPEX_CHIP_HISTORY_ENDPOINT,
@@ -105,14 +104,6 @@ def revise_institutional(
         if capture.id not in payloads:
             continue
         trading_date = date.fromisoformat((capture.data_as_of or "")[:10])
-        # A stored row that also holds margin keeps that part of its source.
-        stored_sources = dict(
-            db.execute(
-                select(ChipSnapshot.instrument_id, ChipSnapshot.source).where(
-                    ChipSnapshot.trading_date == trading_date
-                )
-            ).all()
-        )
         records = PARSERS[capture.endpoint.split("?", 1)[0]](
             payloads[capture.id],
             trading_date=trading_date,
@@ -120,10 +111,6 @@ def revise_institutional(
             payload_sha256=capture.sha256,
         )
         for record in records:
-            instrument = instruments.get((record.exchange, record.symbol))
-            stored = stored_sources.get(instrument.id) if instrument else None
-            if stored and stored.split("+")[0] == record.source:
-                record = replace(record, source=stored)
             pipeline._upsert_official_chip(
                 db,
                 record,
