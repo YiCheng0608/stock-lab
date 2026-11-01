@@ -136,7 +136,8 @@ if gh_budget "新留言"; then
 fi
 # Questions nobody answered (#401): one GraphQL call reads the open Issues and PRs with
 # their comments; coordinator_json.py decides which 提問 has no 決定 linking to it.
-if gh_budget "未回覆的提問"; then
+# Past the cap only the 未查完 line below is printed, not gh_budget's 略過 line as well.
+if gh_budget "未回覆的提問" >/dev/null; then
   if out="$(gh api graphql -f owner="${GH_REPO%%/*}" -f name="${GH_REPO#*/}" \
     -f query="$(cj questions-query)")" && lines="$(printf '%s' "$out" | cj questions "$now")"; then
     n="$(printf '%s\n' "$lines" | grep -c '^#')"

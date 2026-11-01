@@ -94,7 +94,9 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
 
 - 提問只寫在 Issue／PR 留言，不寫在 terminal，也不在 terminal 等口頭回覆。統籌只看 Issue／PR 留言，terminal 的通知只用來喚醒（[任務流程](#任務流程)第 2 步）。
 - 一則留言只放一種類型；一次問好幾件事就分成好幾則 `提問：`，各自等 `決定：`。
-- `決定：` 貼上它回覆的提問留言連結（`…#issuecomment-<id>`），寫在同一個 Issue 或它的 PR 都可以。[`patrol.sh`](../tools/ops/patrol.sh) 讀 open Issue 與 open PR 的留言，把還沒有 `決定：` 連到它的 `提問：` 逐筆列為「未回覆的提問」（Issue 號、留言連結、經過時間）；判斷只看第一行開頭與連結，寫在 [`coordinator_json.py`](../tools/ops/coordinator_json.py) 的 `unanswered_questions`。只讀對話留言，PR review 與行內留言不算。
+- `決定：` 要附它回覆的提問留言連結（`…#issuecomment-<id>`，只寫 ID 不算）。`決定：` 寫在提問所在的 Issue／PR；PR 可能先關時（改開新 PR、Docker 子單），寫在 Issue：`patrol.sh` 只讀 open Issue 與 open PR，寫在已關的 PR 上的決定讀不到，提問會變回未回覆。
+- 第一行前面的空行與空白可以；第一行不要加粗或引用（`**提問：**`、`> 提問：` 都不算類型）。
+- [`patrol.sh`](../tools/ops/patrol.sh) 讀 open Issue 與 open PR 的留言，把還沒有 `決定：` 連到它的 `提問：` 逐筆列為「未回覆的提問」（Issue 號、留言連結、經過時間）；判斷只看第一行開頭與連結，寫在 [`coordinator_json.py`](../tools/ops/coordinator_json.py) 的 `unanswered_questions`。只讀對話留言，PR review 與行內留言不算。
 - 治理 Issue #1 的留言照[無人值守運作](#無人值守運作)的寫法（「待使用者」與決策紀錄），不套本表，`patrol.sh` 也不讀它：#1 是使用者決策的治理單，工程師不在那裡提問；它的留言又超過一頁，讀了只會每次都印「未查完」。
 
 ## 本機檢查
@@ -150,7 +152,7 @@ orca terminal rename --terminal <handle> --title "統籌" --json
 `--autocompact 400k` 把自動壓縮視窗設在 400K，不等到模型上限才壓縮。標題只是給人看的，存活判定一律用心跳檔。接手文固定如下，開啟者原文送出，心跳記的舊 terminal 已不存在時刪掉最後一句；開啟者若不是統籌本人，開完只回報 handle，不再對 repo 寫入：
 
 ```text
-你是 stock-lab 的統籌。先讀 AGENTS.md、docs/GITHUB_WORKFLOW.md、docs/ROADMAP.md、治理 Issue #1 本文的決策索引與最近 10 則留言、所有 open Issues 與 PR、最近 48 小時內關閉的 Issue 與合併的 PR 的最後一則留言。接著：寫心跳檔；掛 GitHub 背景監看（since 取接手前 1 小時）與定時巡檢（手冊「無人值守運作」）；在 #1 留言「統籌 session 更換：<terminal handle>／<session id>」並更新 #1 本文的現任統籌；以 `決定：` 回覆 patrol.sh 列出的每一則未回覆的提問；兌現前任 `統籌承諾：` 留言的事；核對前任標「已完成」的事，不只接續；然後依手冊推進。回覆使用者一律繁體中文。舊統籌 terminal 為 <舊 handle>，用 orca terminal wait --for tui-idle 確認它閒置後以 orca terminal close 關掉它。
+你是 stock-lab 的統籌。先讀 AGENTS.md、docs/GITHUB_WORKFLOW.md、docs/ROADMAP.md、治理 Issue #1 本文的決策索引與最近 10 則留言、所有 open Issues 與 PR、最近 48 小時內關閉的 Issue 與合併的 PR 的最後一則留言。接著：寫心跳檔；掛 GitHub 背景監看（since 取接手前 1 小時）與定時巡檢（手冊「無人值守運作」）；在 #1 留言「統籌 session 更換：<terminal handle>／<session id>」並更新 #1 本文的現任統籌；以 `決定：` 回覆 patrol.sh 列出的每一則未回覆的提問，以及沒有類型的舊格式提問；兌現前任 `統籌承諾：` 留言的事；核對前任標「已完成」的事，不只接續；然後依手冊推進。回覆使用者一律繁體中文。舊統籌 terminal 為 <舊 handle>，用 orca terminal wait --for tui-idle 確認它閒置後以 orca terminal close 關掉它。
 ```
 
 **自動換手機制**（統籌 session 自己執行，不需要人在場）：
@@ -165,7 +167,7 @@ orca terminal rename --terminal <handle> --title "統籌" --json
 
 使用者不在時統籌照本節持續推進；使用者回來只看 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 本文與看板。
 
-- **事件與巡檢**：派工後的 GitHub 監看（見[開工](#任務流程)）之外，統籌在自己的 session 掛每 20～30 分鐘一次的巡檢，固定順序：寫心跳檔 → 讀計數檔與換手標記 → 監看是否存活 → open PR 的 CI 與合併 → 進行中 Issue 的提問 → 名額空缺就派工 → 背景工作是否卡住。每次巡檢先跑 `bash tools/ops/patrol.sh`：[它](../tools/ops/patrol.sh)寫心跳檔、讀自己的計數檔與換手標記，並印出 open PR 的 CI 與 `mergeStateStatus`、`--since`（預設上次心跳）之後的新留言、[未回覆的提問](#留言類型)、排程日誌的最後一列；gh 呼叫最多 `--max-gh` 次（預設 3：open PR、新留言、未回覆的提問各一次；提問要讀每個 open Issue 與 PR 的留言，用一次 GraphQL 讀完，不逐一呼叫）。到上限時後面的項目印「未查完」，其他輸出照常；open Issue 或 PR 超過 100 個、單一 Issue 留言超過 100 則時也印「未查完」並寫出沒讀到的範圍。心跳檔若屬於另一個 session 且不到 60 分鐘，又沒有它的換手標記，就不覆寫並非 0 結束；確定要接手才加 `--take-over`。其餘各步照上面的順序判斷。監看到期重掛時 `since` 取上次監看啟動時間，不取現在。
+- **事件與巡檢**：派工後的 GitHub 監看（見[開工](#任務流程)）之外，統籌在自己的 session 掛每 20～30 分鐘一次的巡檢，固定順序：寫心跳檔 → 讀計數檔與換手標記 → 監看是否存活 → open PR 的 CI 與合併 → [未回覆的提問](#留言類型) → 名額空缺就派工 → 背景工作是否卡住。每次巡檢先跑 `bash tools/ops/patrol.sh`：[它](../tools/ops/patrol.sh)寫心跳檔、讀自己的計數檔與換手標記，並印出 open PR 的 CI 與 `mergeStateStatus`、`--since`（預設上次心跳）之後的新留言、[未回覆的提問](#留言類型)、排程日誌的最後一列；gh 呼叫最多 `--max-gh` 次（預設 3：open PR、新留言、未回覆的提問各一次；提問要讀每個 open Issue 與 PR 的留言，用一次 GraphQL 讀完，不逐一呼叫）。到上限時後面的項目印「未查完」，其他輸出照常；open Issue 或 PR 超過 100 個、單一 Issue 留言超過 100 則時也印「未查完」並寫出沒讀到的範圍。心跳檔若屬於另一個 session 且不到 60 分鐘，又沒有它的換手標記，就不覆寫並非 0 結束；確定要接手才加 `--take-over`。其餘各步照上面的順序判斷。監看到期重掛時 `since` 取上次監看啟動時間，不取現在。
 - **待辦隊列**：下一輪任務先建成 Issue（看板待辦），依 ROADMAP gate 順序排；並行名額（3）一空就從最新 `origin/master` 派下一張。沒有已建 Issue 就先建，不停擺。台北 18:30～21:30 是排程 `daily` 時段：不派新工、不跑全套 pytest、不跑全市場 analyze。
 - **需要使用者的事**（來源與付費、刪資料、部署、對外操作、範圍變更、正式資料位置）：在 #1 留言寫清楚問題與統籌建議，標「待使用者」，轉做不受影響的工作；不猜答案、不停工。
 - **決策落地**：會影響後續判斷的使用者決定，當下寫進 #1 留言並同步更新 #1 本文的決策索引（只列仍有效的決策、待使用者事項與現任統籌，每條附留言連結）。

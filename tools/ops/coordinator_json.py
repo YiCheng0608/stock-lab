@@ -223,7 +223,9 @@ def _run_state(run) -> str:
     return run.get("conclusion") or "unknown"
 
 
-_THREAD = "nodes{{number state comments(last:{n}){{totalCount nodes{{databaseId url createdAt body}}}}}}"
+_THREAD = (
+    "nodes{{number state comments(last:{n}){{totalCount nodes{{url createdAt body}}}}}}"
+)
 # One gh call reads every open Issue and PR with its latest comments (patrol.sh). Issues
 # and PRs share the number space, so "#<number>" names either.
 PAGE = 100
@@ -234,7 +236,10 @@ QUESTIONS_QUERY = (
     f"pullRequests(states:OPEN,first:{PAGE}){{totalCount {_THREAD.format(n=PAGE)}}}"
     "}}"
 )
-# docs/GITHUB_WORKFLOW.md 留言類型: the type is how the first line starts.
+# docs/GITHUB_WORKFLOW.md 留言類型: the type is how the first line starts (blank lines,
+# spaces and a BOM before it are fine; bold or a quote is not the type). A comment is
+# known by the id in its url, the same #issuecomment-<id> a 決定 links to, so no
+# GraphQL database id is read (GitHub deprecates databaseId for fullDatabaseId).
 _QUESTION = re.compile(r"\s*提問[：:]")
 _DECISION = re.compile(r"\s*決定[：:]")
 _COMMENT_LINK = re.compile(r"issuecomment-(\d+)")
@@ -296,11 +301,11 @@ def unanswered_questions(doc, now: int) -> list[str]:
             for c in nodes:
                 body = c.get("body") or ""
                 if _type(body, _DECISION):
-                    answered.update(int(i) for i in _COMMENT_LINK.findall(body))
+                    answered.update(_COMMENT_LINK.findall(body))
                 elif _type(body, _QUESTION):
                     questions.append((thread["number"], c))
     for number, c in sorted(questions, key=lambda q: q[1].get("createdAt") or ""):
-        if c.get("databaseId") in answered:
+        if set(_COMMENT_LINK.findall(c.get("url") or "")) & answered:
             continue
         created = _epoch(c.get("createdAt"))
         age = _elapsed(now - created) if created is not None else "時間不明"

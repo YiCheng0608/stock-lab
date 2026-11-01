@@ -1899,7 +1899,10 @@ def test_patrol_stays_within_the_gh_call_cap(patrol: Harness, cap: str | None) -
     assert f"gh 呼叫：{len(patrol.calls('gh'))}／上限 {limit}" in result.stdout
     # Past the cap the questions are reported as not read, and the rest still prints.
     if limit < 3:
-        assert f"未回覆的提問：未查完（gh 呼叫已達上限 {limit}）" in result.stdout
+        # One line only, not gh_budget's 略過 line as well (PR #406 review).
+        assert [ln for ln in result.stdout.splitlines() if "未回覆的提問" in ln] == [
+            f"未回覆的提問：未查完（gh 呼叫已達上限 {limit}）"
+        ]
     else:
         assert "未回覆的提問：0 則" in result.stdout
     assert "排程 daily：daily-20261024.log" in result.stdout
@@ -1910,10 +1913,12 @@ def test_patrol_stays_within_the_gh_call_cap(patrol: Harness, cap: str | None) -
 
 
 def _comment(cid: int, body: str, number: int = 401, at: str = "09:00:00") -> dict:
-    """A comment at 2026-10-25 <at> UTC, or at <at> itself when it holds a date."""
+    """A comment at 2026-10-25 <at> UTC, or at <at> itself when it holds a date.
+
+    No database id: a comment is known by the #issuecomment-<id> in its url.
+    """
     kind = "pull" if number >= 900 else "issues"
     return {
-        "databaseId": cid,
         "url": f"https://github.com/YiCheng0608/stock-lab/{kind}/{number}#issuecomment-{cid}",
         "createdAt": at if "T" in at else f"2026-10-25T{at}Z",
         "body": body,
@@ -2007,6 +2012,18 @@ OTHER_URL = "https://github.com/YiCheng0608/stock-lab/issues/401#issuecomment-99
             ),
             True,
         ),
+        # A 決定 has to carry the comment link: the bare id does not answer it.
+        (
+            _threads([_thread(401, QUESTION, _comment(12, "決定：回覆 11，選 A。"))]),
+            True,
+        ),
+        # A bold first line is not a type.
+        (
+            _threads(
+                [_thread(401, QUESTION, _comment(12, f"**決定：** {QUESTION_URL}"))]
+            ),
+            True,
+        ),
     ],
     ids=[
         "a-no-decision",
@@ -2015,6 +2032,8 @@ OTHER_URL = "https://github.com/YiCheng0608/stock-lab/issues/401#issuecomment-99
         "d-issue-closed",
         "decision-in-the-pr",
         "type-is-the-first-line",
+        "decision-with-only-the-id",
+        "bold-decision",
     ],
 )
 def test_patrol_lists_unanswered_questions(
@@ -2034,6 +2053,33 @@ def test_patrol_lists_unanswered_questions(
     query = next(c for c in patrol.calls("gh") if "OpenQuestions" in c)
     assert "issues(states:OPEN," in query and "pullRequests(states:OPEN," in query
     assert "owner=YiCheng0608" in query and "name=stock-lab" in query
+
+
+@pytest.mark.parametrize("decided", [False, True])
+def test_one_decision_answers_two_questions_and_a_bom_or_blank_lines_are_fine(
+    patrol: Harness, decided: bool
+) -> None:
+    """A BOM, blank lines or spaces before the type keep it; a quote does not."""
+    first = _comment(11, chr(0xFEFF) + "提問：BOM 開頭", at="09:00:00")
+    second = _comment(15, "\n\n  提問：前面有空行與空白", at="09:10:00")
+    quoted = _comment(16, "> 提問：引用不算", at="09:20:00")
+    comments = [first, second, quoted]
+    if decided:
+        both = f"決定：回覆 {first['url']} 與 {second['url']}，都選 A。"
+        comments.append(_comment(17, both, at="10:00:00"))
+    patrol.answer("gh_questions", _threads([_thread(401, *comments)]))
+    result = _patrol(patrol)
+    assert result.returncode == 0, result.stdout + result.stderr
+    section = result.stdout.split("未回覆的提問：")[1]
+    if decided:
+        assert section.startswith("0 則\n")
+    else:
+        assert section.startswith("2 則\n")
+        assert [r.strip() for r in section.splitlines()[1:3]] == [
+            f"#401 經過 3 小時 0 分 {first['url']}",
+            f"#401 經過 2 小時 50 分 {second['url']}",
+        ]
+    assert quoted["url"] not in section
 
 
 def test_patrol_lists_questions_oldest_first_with_their_age(patrol: Harness) -> None:
