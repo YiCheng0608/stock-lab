@@ -4088,8 +4088,40 @@ def collect(
                     "reason": "historical batch without current snapshot feeds",
                 }
                 status_result = dict(industry_result)
+            # An earlier unmatched_bar code may have an instrument now (a new
+            # listing whose list lagged its first session): write its bars
+            # from the stored raw (Issue #388).  Imported here because
+            # instrument_repair imports this module.
+            # A failure here must not fail the day's quotes (like the
+            # strategy_levels step): the savepoint drops only the backfill's
+            # writes, the rows stay open and the error goes to the metadata.
+            from worker.instrument_repair import backfill_unmatched_bars
+
+            try:
+                with db.begin_nested():
+                    unmatched_backfill = {
+                        "status": "success",
+                        **backfill_unmatched_bars(db),
+                    }
+            except Exception as exc:
+                unmatched_backfill = {
+                    "status": "failed",
+                    "error": f"{type(exc).__name__}: {exc}"[:500],
+                    "written": [],
+                    "pending": [],
+                }
             unmatched_bars = record_unmatched_bars(db, unmatched, score_date)
             notices = list(getattr(batch, "notices", []) or [])
+            if unmatched_backfill["status"] == "failed":
+                notices.append(
+                    "unmatched_bar backfill failed and wrote nothing: "
+                    + unmatched_backfill["error"]
+                )
+            if unmatched_backfill["written"]:
+                notices.append(
+                    f"{len(unmatched_backfill['written'])} bars of earlier unmatched_bar "
+                    "codes written from stored raw"
+                )
             if unmatched_bars:
                 notices.append(
                     f"{len(unmatched_bars)} ordinary-share codes had official quote "
@@ -4253,6 +4285,7 @@ def collect(
                 "noncore_warnings": noncore_warnings,
                 "notices": notices,
                 "unmatched_bars": unmatched_bars,
+                "unmatched_backfill": unmatched_backfill,
                 "instrument_status_sync": status_result,
                 "value_conflicts": len(value_conflicts),
                 "value_conflict_samples": _json_safe(
@@ -4344,6 +4377,7 @@ def collect(
                 "noncore_warnings": noncore_warnings,
                 "notices": notices,
                 "unmatched_bars": unmatched_bars,
+                "unmatched_backfill": unmatched_backfill,
                 "instrument_status_sync": status_result,
                 "value_conflicts": len(value_conflicts),
                 "value_fills": len(value_fills),
