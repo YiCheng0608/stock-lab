@@ -125,7 +125,11 @@ def compute_market_indicators(
     # Without new bars the stored last row matches and nothing is written.
     instrument_ids = db.scalars(
         select(Instrument.id)
-        .where(select(MarketBar.id).where(MarketBar.instrument_id == Instrument.id).exists())
+        .where(
+            select(MarketBar.id)
+            .where(MarketBar.instrument_id == Instrument.id)
+            .exists()
+        )
         .order_by(Instrument.id)
     ).all()
     with_actions = set(

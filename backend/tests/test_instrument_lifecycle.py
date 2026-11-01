@@ -683,9 +683,9 @@ def test_an_etf_dropped_from_the_list_while_still_quoted_keeps_its_bars_and_stat
     quotes = _tpex_quotes(
         [(code, code) for code in TPEX_CODES] + [("00793B", "群益AAA-A醫療債")]
     )
-    tpex_bars, quote_captures = sources.TpexAdapter(
-        lambda url, **_: quotes
-    ).fetch_bars(TPEX_CODES, SCORE_DATE, SCORE_DATE)
+    tpex_bars, quote_captures = sources.TpexAdapter(lambda url, **_: quotes).fetch_bars(
+        TPEX_CODES, SCORE_DATE, SCORE_DATE
+    )
     assert "00793B" in {bar.symbol for bar in tpex_bars}
     index = sources.InstrumentRecord(
         "TAIEX", "TAIEX", exchange="TWSE", instrument_type="index", industry="Index"
