@@ -289,7 +289,7 @@ def rebuild_after_sync(
     """
     # Imported here: both modules import pipeline, as this one does.
     from worker.indicator_batch import compute_market_indicators
-    from worker.industry_repair import rescore_recent
+    from worker.industry_repair import rescore_dates
 
     def step(name: str) -> None:
         if checkpoint is not None:
@@ -331,18 +331,23 @@ def rebuild_after_sync(
     result["feature_instruments"] = features
     since = min(affected.values())
     benchmark = pipeline._benchmark_instrument(db)
-    sessions = (
-        db.scalar(
-            select(func.count(MarketBar.id)).where(
+    days = (
+        db.scalars(
+            select(MarketBar.trading_date)
+            .where(
                 MarketBar.instrument_id == benchmark.id,
                 MarketBar.trading_date >= since,
+                MarketBar.is_suspended.is_not(True),
             )
-        )
+            .order_by(MarketBar.trading_date)
+        ).all()
         if benchmark is not None
-        else 0
+        else []
     )
-    rescored = rescore_recent(db, sessions or 0)
-    step("group_scores")
+    # One commit per session: hundreds of sessions in one transaction would
+    # hold the SQLite write lock for the whole rescore.
+    rescore_dates(db, days, after_each=lambda day: step(f"group_scores {day}"))
+    rescored = [day.isoformat() for day in days]
     result["group_score_dates"] = {
         "since": since.isoformat(),
         "count": len(rescored),
