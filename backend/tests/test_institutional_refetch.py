@@ -379,3 +379,76 @@ def test_a_refetch_error_is_recorded_and_the_run_stays_skipped(database, monkeyp
         assert chip(db).trust_buy == -162968
         run = db.get(IngestionRun, refetch["run_id"])
         assert run.status == "failed" and run.finished_at is not None
+
+
+# The guards that keep a bad or foreign file out of the stored rows (#399 review).
+
+
+class T86Override(Fetcher):
+    """The fixture feeds with the T86 payload's keys replaced."""
+
+    def __init__(self, t86=INITIAL, **override):
+        super().__init__(t86)
+        self.override = override
+
+    def __call__(self, url, **kwargs):
+        payload = super().__call__(url, **kwargs)
+        if url.startswith(sources.TWSE_CHIP_ENDPOINT):
+            return dict(payload, **self.override)
+        return payload
+
+
+def refetch_with(monkeypatch, daily, fetcher):
+    monkeypatch.setattr(sources, "utcnow", lambda: LATER)
+    daily.fetcher = fetcher
+    return pipeline.run_daily(DAY, trigger="scheduler")
+
+
+def test_a_refetch_creates_no_chip_row(database, monkeypatch):
+    daily = Daily(monkeypatch)
+    daily.run(FIRST, INITIAL)
+    with database() as db:
+        db.delete(chip(db))
+        db.commit()
+        count = db.query(ChipSnapshot).count()
+
+    refetch = daily.run(LATER, REVISED)["institutional_refetch"]
+    # 1101 is in the file, but the 18:30 collect left it without a row.
+    assert (refetch["status"], refetch["requests"], refetch["revised_rows"]) == (
+        "success",
+        2,
+        0,
+    )
+    with database() as db:
+        assert chip(db) is None
+        assert db.query(ChipSnapshot).count() == count
+
+
+def test_a_file_reported_for_another_date_is_not_applied(database, monkeypatch):
+    daily = Daily(monkeypatch)
+    daily.run(FIRST, INITIAL)
+
+    # The T86 answer is the day before's file, with other values.
+    second = refetch_with(monkeypatch, daily, T86Override(REVISED, date="20260903"))
+    assert second["status"] == "skipped"
+    refetch = second["institutional_refetch"]
+    assert (refetch["status"], refetch["revised_rows"]) == ("partial", 0)
+    with database() as db:
+        assert chip(db).trust_buy == -162968
+        exchanges = db.get(IngestionRun, refetch["run_id"]).metadata_json["exchanges"]
+        assert exchanges["TWSE"]["status"] == "failed"
+        assert "2026-09-04" in exchanges["TWSE"]["error"]
+        assert exchanges["TPEx"]["status"] == "success"
+
+
+def test_a_file_without_rows_is_a_failed_exchange(database, monkeypatch):
+    daily = Daily(monkeypatch)
+    daily.run(FIRST, INITIAL)
+
+    refetch = refetch_with(monkeypatch, daily, T86Override(REVISED, data=[]))[
+        "institutional_refetch"
+    ]
+    assert (refetch["status"], refetch["revised_rows"]) == ("partial", 0)
+    assert refetch["error"] == "TWSE: the file returned no rows"
+    with database() as db:
+        assert chip(db).trust_buy == -162968
