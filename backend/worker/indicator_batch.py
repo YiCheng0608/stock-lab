@@ -5,8 +5,10 @@ Every instrument with stored bars is covered, active or not.  The default
 stored row of the current formula version, which is normally just the latest
 session.  When the recomputed value for that last stored row no longer matches
 (an earlier bar was backfilled or corrected, or a corporate action arrived
-late), the instrument's rows are rewritten.  ``rebuild=True`` rewrites every
-instrument's full history.  Formulas live in app.indicators.
+late), the instrument's rows are rewritten.  Rows of another price basis
+(``PRICE_BASIS`` was raised, #394) count as missing: the instrument's rows of
+the current formula version are replaced in full.  ``rebuild=True`` rewrites
+every instrument's full history.  Formulas live in app.indicators.
 """
 
 from __future__ import annotations
@@ -16,7 +18,7 @@ import time
 from datetime import date, datetime, timezone
 from typing import Any, Iterable
 
-from sqlalchemy import delete, func, insert, inspect, select
+from sqlalchemy import delete, func, insert, inspect, or_, select
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
@@ -27,6 +29,7 @@ from app.indicators import (
     IndicatorBar,
     IndicatorPoint,
     compute_indicators,
+    is_synthetic_bar,
 )
 from app.models import CorporateAction, Instrument, MarketBar, TechnicalIndicator
 
@@ -48,6 +51,8 @@ def load_indicator_bars(
             MarketBar.close,
             MarketBar.volume,
             MarketBar.is_suspended,
+            MarketBar.source,
+            MarketBar.turnover_reason,
         )
         .where(
             MarketBar.instrument_id == instrument_id,
@@ -70,6 +75,7 @@ def load_indicator_bars(
             bar.volume,
             bool(bar.is_suspended),
             factor,
+            is_synthetic_bar(bar.source, bar.turnover_reason),
         )
         for bar, factor in zip(bars, factors)
     ]
@@ -150,7 +156,7 @@ def compute_market_indicators(
         ).all()
     )
     computed_at = datetime.now(timezone.utc).replace(tzinfo=None)
-    written = rewritten = latest_day_rows = 0
+    written = rewritten = rebased = latest_day_rows = 0
     for instrument_id in instrument_ids:
         bars = load_indicator_bars(
             db, instrument_id, as_of, with_actions=instrument_id in with_actions
@@ -165,6 +171,7 @@ def compute_market_indicators(
                 .where(
                     TechnicalIndicator.instrument_id == instrument_id,
                     TechnicalIndicator.formula_version == INDICATOR_VERSION,
+                    TechnicalIndicator.price_basis == PRICE_BASIS,
                     TechnicalIndicator.trading_date <= as_of,
                 )
                 .order_by(TechnicalIndicator.trading_date.desc())
@@ -184,15 +191,21 @@ def compute_market_indicators(
         else:
             if stored is not None:
                 points = compute_indicators(bars)
-            if rebuild or stored is not None:
-                db.execute(
-                    delete(TechnicalIndicator).where(
-                        TechnicalIndicator.instrument_id == instrument_id,
-                        TechnicalIndicator.formula_version == INDICATOR_VERSION,
+            # Rows of an older basis hold the (instrument, date,
+            # formula_version) keys and are never served: they all go, after
+            # ``as_of`` too, or a later run would insert onto them.
+            removed = db.execute(
+                delete(TechnicalIndicator).where(
+                    TechnicalIndicator.instrument_id == instrument_id,
+                    TechnicalIndicator.formula_version == INDICATOR_VERSION,
+                    or_(
                         TechnicalIndicator.trading_date <= as_of,
-                    )
+                        TechnicalIndicator.price_basis != PRICE_BASIS,
+                    ),
                 )
-                rewritten += stored is not None
+            ).rowcount
+            rewritten += stored is not None
+            rebased += stored is None and not rebuild and removed > 0
             fresh = points
         if fresh:
             db.execute(
@@ -209,6 +222,7 @@ def compute_market_indicators(
         "instruments": len(instrument_ids),
         "latest_day_rows": latest_day_rows,
         "instruments_rewritten": rewritten,
+        "instruments_rebased": rebased,
         "rows_written": written,
         "elapsed_seconds": round(time.perf_counter() - started, 3),
     }

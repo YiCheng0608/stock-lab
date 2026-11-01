@@ -72,7 +72,7 @@ import { Shell } from './components/Shell'
 import { Term } from './components/Term'
 import { Card, CardList, DataTable, EmptyState, Skeleton, Tabs, cx, tabId, tabPanelId, type Column } from './components/ui'
 import { StockBarsChart } from './stock/StockBarsChart'
-import { priceDigits } from './stock/stockBars'
+import { PRICE_BASIS, priceDigits } from './stock/stockBars'
 import { StockCutoffControl } from './stock/StockCutoffControl'
 import { StockHeader } from './stock/StockHeader'
 import { StrategyBoardPanel } from './stock/StrategyBoardPanel'
@@ -675,7 +675,7 @@ export function IndicatorMetaRows({ bars }: { bars: StockBarsResponse | undefine
   const meta = bars.indicators
   return <>
     <div className="metric-row"><span>技術指標版本</span><b>{meta.formula_version}</b></div>
-    <div className="metric-row"><span>價格基準</span><b>{meta.price_basis === 'as_of_date_raw_basis' ? '資料日原始價（前期依除權息換算）' : '待核實'}</b></div>
+    <div className="metric-row"><span>價格基準</span><b>{meta.price_basis === PRICE_BASIS ? '資料日原始價（前期依除權息換算）' : '待核實'}</b></div>
     <div className="metric-row"><span>日線指標計算時間</span><b>{meta.computed_at ? formatTaiwanDateTime(meta.computed_at) : '尚未計算'}</b></div>
     <div className="metric-row"><span>K 線資料日期</span><b>{formatDay(bars.data_as_of) ?? '待核實'}</b></div>
   </>
