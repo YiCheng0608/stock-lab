@@ -334,6 +334,14 @@ TPEX_MARGIN_HISTORY_ENDPOINT = "https://www.tpex.org.tw/www/zh-tw/margin/balance
 # not used to construct the listed/OTC universe.
 TPEX_EMERGING_ENDPOINT = f"{TPEX_API}/tpex_esb_latest_statistics"
 TPEX_ACTION_ENDPOINT = f"{TPEX_API}/tpex_exright_daily"
+# 除權除息計算結果表 over a date range (Issue #386).  The daily feeds above
+# only describe the collection day (TWT48U: that day and announced future
+# dates), so a missed day was never recovered; these keep the past.
+TWSE_ACTION_HISTORY_ENDPOINT = "https://www.twse.com.tw/rwd/zh/exRight/TWT49U"
+# Per-event breakdown of a TWT49U row (cash per share, free shares per
+# thousand); TWT49U itself only publishes the combined 權值+息值.
+TWSE_ACTION_DETAIL_ENDPOINT = "https://www.twse.com.tw/rwd/zh/exRight/TWT49UDetail"
+TPEX_ACTION_HISTORY_ENDPOINT = "https://www.tpex.org.tw/www/zh-tw/bulletin/exDailyQ"
 TPEX_SUSPEND_ENDPOINT = f"{TPEX_API}/tpex_spendi_today"
 TPEX_SUSPEND_HISTORY_ENDPOINT = f"{TPEX_API}/tpex_spendi_history"
 TPEX_EVENT_ENDPOINT = f"{TPEX_API}/mopsfin_t187ap04_O"
@@ -2753,9 +2761,7 @@ class TwseAdapter:
                 ActionRecord(
                     symbol=symbol,
                     action_date=action_date,
-                    action_type="ex_dividend"
-                    if "除息" in _text(row, "Exdividend", "除權息")
-                    else "corporate_action",
+                    action_type=twse_action_type(_text(row, "Exdividend", "除權息")),
                     cash_dividend=parse_number(_text(row, "CashDividend", "現金股利")),
                     stock_dividend_ratio=parse_number(
                         _text(row, "StockDividendRatio", "無償配股率")
@@ -2778,6 +2784,77 @@ class TwseAdapter:
                 )
             )
         return result, [payload]
+
+    def fetch_action_history(
+        self, start: date, end: date
+    ) -> tuple[list[ActionRecord], list[FetchedPayload], list[str]]:
+        """Every TWSE ex-right/ex-dividend event dated ``start``..``end`` (#386).
+
+        TWT49U gives the official prices and the combined 權值+息值 of each
+        event; a row that is an ex-right (權 or 權息) also needs its
+        TWT49UDetail breakdown.  An event whose detail cannot be read is
+        left out with a warning instead of being written half known.
+        """
+        records: list[ActionRecord] = []
+        payloads: list[FetchedPayload] = []
+        warnings: list[str] = []
+        for window_start, window_end in _month_windows(start, end):
+            query = urlencode(
+                {
+                    "startDate": window_start.strftime("%Y%m%d"),
+                    "endDate": window_end.strftime("%Y%m%d"),
+                    "response": "json",
+                }
+            )
+            payload = self._fetch(
+                f"{TWSE_ACTION_HISTORY_ENDPOINT}?{query}",
+                _covered_dates(window_start, window_end),
+            )
+            payloads.append(payload)
+            for row in parse_twse_action_history(
+                payload.payload, start=window_start, end=window_end
+            ):
+                detail = None
+                detail_sha256 = None
+                if "權" in row["kind"]:
+                    detail_query = urlencode(
+                        {
+                            "STK_NO": row["symbol"],
+                            "T1": row["action_date"].strftime("%Y%m%d"),
+                            "response": "json",
+                        }
+                    )
+                    try:
+                        detail_payload = self._fetch(
+                            f"{TWSE_ACTION_DETAIL_ENDPOINT}?{detail_query}",
+                            row["action_date"].isoformat(),
+                        )
+                    except OfficialDataError as exc:
+                        warnings.append(
+                            "TWSE TWT49UDetail unavailable for "
+                            f"{row['symbol']} {row['action_date'].isoformat()}: {exc}"
+                        )
+                        continue
+                    payloads.append(detail_payload)
+                    detail = parse_twse_action_detail(
+                        detail_payload.payload, row["symbol"]
+                    )
+                    if detail is None:
+                        warnings.append(
+                            "TWSE TWT49UDetail has no row for "
+                            f"{row['symbol']} {row['action_date'].isoformat()}"
+                        )
+                        continue
+                    detail_sha256 = detail_payload.sha256
+                records.append(
+                    twse_action_history_record(
+                        row,
+                        detail,
+                        payload_sha256=payload.sha256,
+                        detail_sha256=detail_sha256,
+                    )
+                )
+        return records, payloads, warnings
 
     def fetch_index(self, as_of: date) -> tuple[list[BarRecord], list[FetchedPayload]]:
         payload = self._fetch(TWSE_INDEX_ENDPOINT, as_of.isoformat())
@@ -3313,39 +3390,40 @@ class TpexAdapter:
         payload = self._fetch(TPEX_ACTION_ENDPOINT, as_of.isoformat())
         result: list[ActionRecord] = []
         for row in _rows(payload.payload):
-            symbol = _text(row, "SecuritiesCompanyCode", "代號")
-            action_date = _date_from_row(row, "Date", "除權息日期")
-            if not symbol or not action_date:
+            record = tpex_action_record(row, payload_sha256=payload.sha256)
+            if record is None or record.action_date > as_of:
                 continue
-            if action_date > as_of:
-                continue
-            # TPEx publishes free shares per thousand old shares. StockDividend
-            # is a monetary rights value, not a share ratio.
-            free_shares = parse_number(
-                _text(row, "StockDivdendThousandShares", "每仟股無償配股")
+            result.append(record)
+        return result, [payload]
+
+    def fetch_action_history(
+        self, start: date, end: date
+    ) -> tuple[list[ActionRecord], list[FetchedPayload], list[str]]:
+        """Every TPEx ex-right/ex-dividend event dated ``start``..``end`` (#386)."""
+        records: list[ActionRecord] = []
+        payloads: list[FetchedPayload] = []
+        for window_start, window_end in _month_windows(start, end):
+            query = urlencode(
+                {
+                    "startDate": window_start.strftime("%Y/%m/%d"),
+                    "endDate": window_end.strftime("%Y/%m/%d"),
+                    "response": "json",
+                }
             )
-            result.append(
-                ActionRecord(
-                    symbol=symbol,
-                    action_date=action_date,
-                    action_type="ex_dividend"
-                    if "息" in _text(row, "ExRightsDiviend", "權或息")
-                    else "corporate_action",
-                    cash_dividend=parse_number(
-                        _text(row, "CashDivdend", "CashDividend", "現金股利", "息值")
-                    ),
-                    stock_dividend_ratio=free_shares / 1000
-                    if free_shares is not None
-                    else None,
-                    reference_price=parse_number(
-                        _text(row, "ClosePriceBeforeExRightsDiviend", "除權息前收盤價")
-                    ),
-                    details=dict(row),
-                    exchange="TPEx",
+            payload = self._fetch(
+                f"{TPEX_ACTION_HISTORY_ENDPOINT}?{query}",
+                _covered_dates(window_start, window_end),
+            )
+            payloads.append(payload)
+            records.extend(
+                parse_tpex_action_history(
+                    payload.payload,
+                    start=window_start,
+                    end=window_end,
                     payload_sha256=payload.sha256,
                 )
             )
-        return result, [payload]
+        return records, payloads, []
 
     def fetch(self, start: date, end: date) -> OfficialBatch:
         self.captured_payloads = []
@@ -3568,3 +3646,297 @@ class OfficialMarketDataAdapter:
             snapshot_feeds=twse_batch.snapshot_feeds and tpex_batch.snapshot_feeds,
             market_summaries=twse_batch.market_summaries + tpex_batch.market_summaries,
         )
+
+
+def _month_windows(start: date, end: date) -> list[tuple[date, date]]:
+    """Calendar-month pieces of ``start``..``end``; one request per piece."""
+    if start > end:
+        raise ValueError("start must be on or before end")
+    windows: list[tuple[date, date]] = []
+    cursor = start
+    while cursor <= end:
+        last = date(cursor.year, cursor.month, monthrange(cursor.year, cursor.month)[1])
+        windows.append((cursor, min(last, end)))
+        cursor = last + timedelta(days=1)
+    return windows
+
+
+def _covered_dates(start: date, end: date) -> str:
+    """``data_as_of`` of a range report: the dates it covers, never one per day.
+
+    One capture is one raw_payloads row whose ``data_as_of`` is the requested
+    range (``2026-09-01~2026-09-30``), or the date for a one-day range (#386,
+    DB review C3: a snapshot must not be registered once per covered day).
+    """
+    return start.isoformat() if start == end else f"{start}~{end}"
+
+
+def _roc_compact(value: date) -> str:
+    """``2026-09-08`` -> ``1150908``, the Date format of TWT48U and TPEx OpenAPI."""
+    return f"{value.year - 1911:03d}{value.month:02d}{value.day:02d}"
+
+
+def _stripped(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        str(key).strip(): value.strip() if isinstance(value, str) else value
+        for key, value in row.items()
+    }
+
+
+def twse_action_type(kind: str) -> str:
+    """The stored action_type of a TWSE row whose 權/息 value is ``kind``.
+
+    TWT48U and TWT49U publish 息／權／權息, so this is ``corporate_action``
+    for every TWSE row.  The rule is shared so a backfilled TWT49U row keeps
+    the identity (instrument, date, type) of the row the daily TWT48U feed
+    wrote, and replaces it instead of adding a second row for the same event.
+    """
+    return "ex_dividend" if "除息" in kind else "corporate_action"
+
+
+def tpex_action_record(
+    row: dict[str, Any], *, payload_sha256: str | None
+) -> ActionRecord | None:
+    """One TPEx OpenAPI-shaped ex-right/ex-dividend row as an ActionRecord."""
+    symbol = _text(row, "SecuritiesCompanyCode", "代號")
+    action_date = _date_from_row(row, "Date", "除權息日期")
+    if not symbol or not action_date:
+        return None
+    # TPEx publishes free shares per thousand old shares. StockDividend
+    # is a monetary rights value, not a share ratio.
+    free_shares = parse_number(
+        _text(row, "StockDivdendThousandShares", "每仟股無償配股")
+    )
+    return ActionRecord(
+        symbol=symbol,
+        action_date=action_date,
+        action_type="ex_dividend"
+        if "息" in _text(row, "ExRightsDiviend", "權或息")
+        else "corporate_action",
+        cash_dividend=parse_number(
+            _text(row, "CashDivdend", "CashDividend", "現金股利", "息值")
+        ),
+        stock_dividend_ratio=free_shares / 1000 if free_shares is not None else None,
+        reference_price=parse_number(
+            _text(row, "ClosePriceBeforeExRightsDiviend", "除權息前收盤價")
+        ),
+        details=dict(row),
+        exchange="TPEx",
+        payload_sha256=payload_sha256,
+    )
+
+
+# exDailyQ column -> the TPEx OpenAPI (tpex_exright_daily) key of the same
+# value, so a backfilled row is stored in the shape the daily feed writes.
+TPEX_ACTION_HISTORY_FIELDS = {
+    "除權息日期": "Date",
+    "代號": "SecuritiesCompanyCode",
+    "名稱": "CompanyName",
+    "除權息前收盤價": "ClosePriceBeforeExRightsDiviend",
+    "除權息參考價": "ExRightsDiviendQuote",
+    "權值": "StockDividend",
+    "息值": "CashDividend",
+    "權值+息值": "StockDividendPlusCashDividend",
+    "權/息": "ExRightsDiviend",
+    "漲停價": "LimitUp",
+    "跌停價": "LimitDown",
+    "開始交易基準價": "OpeningReferencePrice",
+    "減除股利參考價": "DividendDeductedQuote",
+    "現金股利": "CashDivdend",
+    "每仟股無償配股": "StockDivdendThousandShares",
+    "現金增資股數": "CashCapitalIncreaseShares",
+    "現金增資認購價": "SubscriptionPricePerShare",
+    "公開承銷股數": "AllocatedForPublicUnderwriting",
+    "員工認購股數": "SubscribedByEmployees",
+    "原股東認購股數": "SubscribedByExistingShareholders",
+    "按持股比例仟股認購": "SubscribedProRataThousandShares",
+}
+
+
+def parse_tpex_action_history(
+    payload: Any, *, start: date, end: date, payload_sha256: str | None
+) -> list[ActionRecord]:
+    """Parse one exDailyQ response; anything but the requested range fails."""
+    if not isinstance(payload, dict) or str(payload.get("stat", "")).lower() != "ok":
+        raise OfficialDataError("TPEx exDailyQ did not answer ok")
+    expected = f"{start:%Y%m%d}~{end:%Y%m%d}"
+    if payload.get("date") != expected:
+        raise OfficialDataError(
+            f"TPEx exDailyQ reported {payload.get('date')!r}, requested {expected}"
+        )
+    if not isinstance(payload.get("tables"), list):
+        raise OfficialDataError("TPEx exDailyQ has no tables")
+    records: list[ActionRecord] = []
+    for raw in _rows(payload):
+        row = _stripped(raw)
+        missing = sorted(set(TPEX_ACTION_HISTORY_FIELDS) - set(row))
+        if missing:
+            raise OfficialDataError(f"TPEx exDailyQ row lacks {missing}")
+        mapped = {
+            TPEX_ACTION_HISTORY_FIELDS[key]: value
+            for key, value in row.items()
+            if key in TPEX_ACTION_HISTORY_FIELDS
+        }
+        action_date = parse_roc_date(mapped["Date"])
+        if action_date is None or not start <= action_date <= end:
+            raise OfficialDataError(
+                f"TPEx exDailyQ row dated {mapped['Date']!r} outside {expected}"
+            )
+        mapped["Date"] = _roc_compact(action_date)
+        record = tpex_action_record(mapped, payload_sha256=payload_sha256)
+        if record is None:
+            raise OfficialDataError("TPEx exDailyQ row without a code")
+        records.append(record)
+    return records
+
+
+def parse_twse_action_history(
+    payload: Any, *, start: date, end: date
+) -> list[dict[str, Any]]:
+    """Rows of one TWT49U response: symbol, date, 權/息 and the published row."""
+    if not isinstance(payload, dict):
+        raise OfficialDataError("TWSE TWT49U payload is not an object")
+    stat = str(payload.get("stat", ""))
+    if "沒有符合條件的資料" in stat and not payload.get("data"):
+        # TWSE answers a range without events with only this stat.
+        return []
+    if stat.upper() != "OK":
+        raise OfficialDataError(f"TWSE TWT49U did not answer OK: {stat}")
+    if not isinstance(payload.get("fields"), list) or not isinstance(
+        payload.get("data"), list
+    ):
+        raise OfficialDataError("TWSE TWT49U has no fields/data table")
+    rows = _rows(payload)
+    result: list[dict[str, Any]] = []
+    for raw in rows:
+        row = _stripped(raw)
+        symbol = _text(row, "股票代號")
+        action_date = _date_from_row(row, "資料日期")
+        if not symbol or action_date is None:
+            raise OfficialDataError("TWSE TWT49U row without a code or date")
+        if not start <= action_date <= end:
+            raise OfficialDataError(
+                f"TWSE TWT49U row dated {action_date.isoformat()} outside "
+                f"{start.isoformat()}..{end.isoformat()}"
+            )
+        result.append(
+            {
+                "symbol": symbol,
+                "action_date": action_date,
+                "kind": _text(row, "權/息"),
+                "row": row,
+            }
+        )
+    return result
+
+
+def parse_twse_action_detail(payload: Any, symbol: str) -> dict[str, Any] | None:
+    """The TWT49UDetail row of ``symbol`` with its keys and values stripped."""
+    for raw in _rows(payload):
+        row = _stripped(raw)
+        if _text(row, "股票代號") == symbol:
+            return row
+    return None
+
+
+# TWT49UDetail prints free shares per thousand to one decimal (2442
+# 2026-09-08: 71.1 股 where TWT48U has 0.07111516), so the printed ratio is
+# off by up to half that step.
+TWSE_DETAIL_RATIO_STEP = 0.0001
+
+
+def _twse_stock_ratio(
+    published: dict[str, Any],
+    detail: dict[str, Any],
+    cash: float | None,
+    printed: float | None,
+) -> tuple[float | None, dict[str, Any]]:
+    """The free-share ratio of a TWT49U ex-right, to the precision TWSE used.
+
+    TWSE computes the reference price from the exact ratio, and TWT49U
+    publishes ``權值+息值`` (before close minus the unrounded reference) to six
+    decimals, so ``(B - C) / (B - V) - 1`` recovers that ratio.  With a cash
+    capital increase that reference includes the subscription; the
+    dividend-only 減除股利參考價 (0.01 units) gives ``(B - C) / D - 1``
+    instead.  The recovered ratio is used only when the detail's printed
+    value agrees with it to the print step; otherwise the printed value is
+    kept and the factor check on write decides (6446 2026-07-09: printed
+    109.7 股, reference implies 110.36 股).
+    """
+    source: dict[str, Any] = {"printed": printed}
+    before = parse_number(published.get("除權息前收盤價"))
+    combined = parse_number(published.get("權值+息值"))
+    deducted = parse_number(published.get("減除股利參考價"))
+    subscribed = any(
+        (parse_number(detail.get(key)) or 0) > 0
+        for key in ("C. (有償) 現金增資", "按股東持股比例每千股認購")
+    )
+    if printed is None or printed <= 0 or not before or cash is None:
+        return printed, {**source, "used": "printed"}
+    if subscribed:
+        base = deducted
+        source["from"] = "減除股利參考價"
+    else:
+        base = before - combined if combined is not None else None
+        source["from"] = "權值+息值"
+    if not base or base <= 0:
+        return printed, {**source, "used": "printed"}
+    derived = round((before - cash) / base - 1, 8)
+    source["derived"] = derived
+    if abs(derived - printed) <= 1e-6:
+        return printed, {**source, "used": "printed"}
+    if abs(derived - printed) <= TWSE_DETAIL_RATIO_STEP / 2 + 1e-9:
+        return derived, {**source, "used": "derived"}
+    return printed, {**source, "used": "printed", "disagrees": True}
+
+
+def twse_action_history_record(
+    row: dict[str, Any],
+    detail: dict[str, Any] | None,
+    *,
+    payload_sha256: str | None,
+    detail_sha256: str | None,
+) -> ActionRecord:
+    """A TWT49U row (plus its TWT49UDetail for an ex-right) as an ActionRecord.
+
+    The stored details keep every published TWT49U column and add the
+    TWT48U keys Code, Date, Name and Exdividend, which the stock page reads
+    to classify a TWSE row.  A 息 row's 權值+息值 is its cash dividend; a
+    row with 權 takes cash per share and free shares per thousand from the
+    detail.
+    """
+    published = row["row"]
+    symbol, action_date, kind = row["symbol"], row["action_date"], row["kind"]
+    if detail is None:
+        if "權" in kind:
+            raise ValueError("an ex-right TWT49U row needs its TWT49UDetail")
+        cash = parse_number(published.get("權值+息值"))
+        stock_ratio = None
+        ratio_source = None
+    else:
+        cash = parse_number(detail.get("(每股配發現金股利)除息"))
+        free_shares = parse_number(detail.get("A. 按普通股股東持股比例每千股無償配股"))
+        printed = free_shares / 1000 if free_shares is not None else None
+        stock_ratio, ratio_source = _twse_stock_ratio(published, detail, cash, printed)
+    details: dict[str, Any] = {
+        "Code": symbol,
+        "Date": _roc_compact(action_date),
+        "Name": _text(published, "股票名稱"),
+        "Exdividend": kind,
+        **published,
+    }
+    if detail is not None:
+        details["detail"] = detail
+        details["detail_sha256"] = detail_sha256
+        details["stock_ratio_source"] = ratio_source
+    return ActionRecord(
+        symbol=symbol,
+        action_date=action_date,
+        action_type=twse_action_type(kind),
+        cash_dividend=cash,
+        stock_dividend_ratio=stock_ratio,
+        reference_price=parse_number(published.get("除權息前收盤價")),
+        details=details,
+        exchange="TWSE",
+        payload_sha256=payload_sha256,
+    )

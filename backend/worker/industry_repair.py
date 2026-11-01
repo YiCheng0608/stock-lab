@@ -21,7 +21,7 @@ import json
 from collections import Counter
 from datetime import date, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -394,6 +394,21 @@ def rescore_recent(db: Session, days: int) -> list[str]:
         .limit(1)
     )
     dates = _effective_trading_dates(db, benchmark.id, latest, days) if latest else []
+    rescore_dates(db, dates)
+    return [day.isoformat() for day in dates]
+
+
+def rescore_dates(
+    db: Session,
+    dates: list[date],
+    after_each: Callable[[date], None] | None = None,
+) -> None:
+    """Recompute ``hot_group_v1`` of ``dates`` in order (see ``rescore_recent``).
+
+    ``after_each`` runs after each date's scores are flushed, so a long
+    rescore can commit one session at a time (#386).
+    """
+
     for day in dates:
         _calculate_group_scores(db, day)
         # Inactive groups are not rescored; their old rank would collide with
@@ -410,7 +425,8 @@ def rescore_recent(db: Session, days: int) -> list[str]:
             archive_group_score(db, score, "rank_cleared_inactive_group")
             score.rank = None
         db.flush()
-    return [day.isoformat() for day in dates]
+        if after_each is not None:
+            after_each(day)
 
 
 def repair_industry_memberships(
