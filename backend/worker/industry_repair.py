@@ -402,15 +402,34 @@ def rescore_dates(
     db: Session,
     dates: list[date],
     after_each: Callable[[date], None] | None = None,
+    *,
+    existing_groups_only: bool = False,
 ) -> None:
     """Recompute ``hot_group_v1`` of ``dates`` in order (see ``rescore_recent``).
 
     ``after_each`` runs after each date's scores are flushed, so a long
     rescore can commit one session at a time (#386).
+
+    ``existing_groups_only`` rescores, on each date, only the groups that
+    already have a score row that date, and ranks them among themselves: a
+    group scored only from a later date is not added to an earlier one (the
+    corporate-actions rebuild, #409).  Without it every active group is scored,
+    as daily does.
     """
 
     for day in dates:
-        _calculate_group_scores(db, day)
+        if existing_groups_only:
+            _calculate_group_scores(
+                db,
+                day,
+                group_ids=db.scalars(
+                    select(GroupDailyScore.group_id).where(
+                        GroupDailyScore.trading_date == day
+                    )
+                ).all(),
+            )
+        else:
+            _calculate_group_scores(db, day)
         # Inactive groups are not rescored; their old rank would collide with
         # the recomputed ranks of the same board.
         for score in db.scalars(

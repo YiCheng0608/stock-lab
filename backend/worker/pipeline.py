@@ -971,7 +971,16 @@ def archive_group_score(db: Session, score: GroupDailyScore, reason: str) -> Non
     )
 
 
-def _calculate_group_scores(db: Session, score_date: date) -> None:
+def _calculate_group_scores(
+    db: Session, score_date: date, *, group_ids: Iterable[str] | None = None
+) -> None:
+    """Score the active groups of ``score_date`` and rank them per board.
+
+    ``group_ids`` limits the scored (and ranked) groups to those ids; daily
+    leaves it out and scores every active group.  A rebuild of an old session
+    passes the groups that session already has scores for, so it never adds
+    a group to history with today's group definitions (#409).
+    """
     benchmark = _benchmark_instrument(db)
     benchmark_returns = (
         _returns_by_window(db, benchmark.id, score_date)
@@ -981,7 +990,10 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
     benchmark_dates = (
         _effective_trading_dates(db, benchmark.id, score_date, 20) if benchmark else []
     )
-    groups = db.scalars(select(ThemeGroup).where(ThemeGroup.active.is_(True))).all()
+    query = select(ThemeGroup).where(ThemeGroup.active.is_(True))
+    if group_ids is not None:
+        query = query.where(ThemeGroup.id.in_(list(group_ids)))
+    groups = db.scalars(query).all()
     computed: list[dict[str, Any]] = []
     file_evidence: dict[date, dict[str, int]] = {}
 

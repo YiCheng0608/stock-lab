@@ -85,6 +85,8 @@ membership 必須在 score date 有效；每個股票榜或 ETF 類別分區至�
 
 **版本**：`StrategyVersion`（`hot_group_v1`、`1.1.0`、`institutional-flow/v2-shares-per-share-volume`）。`1.0.0` 要求全部成員（不是合格成員）都有法人值，也不把官方檔未列記 0；它的 `StrategyVersion` 列不改。分數列在 `details_json.hot_group_version` 記寫入版本，沒有這個欄位的列是 1.0.0 寫的。`group_daily_scores` 每個群組每日只有一列；較新版本要改寫舊版本寫的列（含 rescore 清除停用群組的名次）之前，會在同一 transaction 內把舊列原樣複製到 `group_daily_score_archive`。封存表記原列 id、寫入版本、`archive_reason`、`archived_at`，每個（群組、日期、版本）只保存一份，API 不讀封存表。
 
+**重算舊分數日**：daily 替當天全部 active 群組打分數。`corporate-actions rebuild`（[OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)）以更正後的價格與因子重算舊分數日時，群組固定為那天原本就有分數列的群組，percentile 與排名只在這些群組的同榜之間計算，不新增（日期、群組）列；那天之後才有分數的群組不補到那天（#409）。停用群組照舊不重算、清掉 rank。`industry repair`／`instruments repair` 的 `--rescore-days` 重算最近幾個交易日的全部 active 群組。
+
 ## candidate_score_v1
 
 評分只用於排序，不代表勝率或預期報酬，不改變策略判定。設定在 `backend/app/domain.py` 的 `CANDIDATE_SCORE_V1`（快照由 `backend/tests/test_candidates.py` 釘住）；權重、子項、窗口、門檻、名單長度或理由規則任一改變都必須升版，舊版的 `candidate_runs`／`daily_candidates` 保留不改。實作在 `backend/worker/candidates.py`，由 `daily` 的 candidates 步驟或 `worker.cli candidates` 執行（[OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)）。
