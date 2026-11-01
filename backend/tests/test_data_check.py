@@ -325,6 +325,8 @@ def test_the_4549_row_written_by_the_current_parser_passes(database):
     check = database.check(DAY_4549, official=True, routes=official)
     assert check.findings == []
     assert check.facts["official_actions"] == 1
+    # One TWT49U and one exDailyQ request; no TWT49UDetail for a TPEx event.
+    assert check.facts["official_requests"] == 2
 
 
 def test_the_4549_wrong_ratio_also_disagrees_with_the_official_table(database):

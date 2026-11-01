@@ -765,9 +765,15 @@ class DayCheck:
         from worker.pipeline import action_factor_check
         from worker.sources import ActionRecord, OfficialDataError, fetch_json
 
+        fetcher = self.fetcher or fetch_json
+
+        def counted(url: str, **kwargs: Any) -> Any:
+            self.facts["official_requests"] += 1
+            return fetcher(url, **kwargs)
+
         try:
             records, _payloads, warnings = corporate_action_sync._fetch(
-                self.day, self.day, self.fetcher or fetch_json
+                self.day, self.day, counted
             )
         except OfficialDataError as exc:
             self.add(
