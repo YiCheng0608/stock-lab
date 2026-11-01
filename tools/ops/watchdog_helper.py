@@ -29,14 +29,15 @@ The result goes to stdout without a trailing newline.
                                    but without earliest_execution_date),
                                    strategy_levels (the latest finished daily
                                    run's strategy_levels step did not succeed)
-  data-check <db> <date> [--offline] [--all]
+  data-check <db> <date> [--offline] [--all] [--scratch DIR]
                                    the daily data check of trading date
                                    <date> (tools/ops/data_check.py, #390):
-                                   "data_check ok|violation|pending
+                                   "data_check ok|violation|pending|skip
                                    key=value ...", then on a violation the
                                    Markdown details (the first 20 findings,
                                    all with --all); --offline requests no
-                                   official result table
+                                   official result table; the temporary
+                                   directory goes into DIR (default TEMP)
 
 <now> is the watchdog clock in epoch seconds.
 """
@@ -328,11 +329,15 @@ def main(argv: list[str]) -> int:
         # Imported here: it loads the backend; the other checks stay stdlib only.
         from data_check import data_check
 
+        options = args[2:]
         out = data_check(
             args[0],
             args[1],
-            official="--offline" not in args[2:],
-            limit=None if "--all" in args[2:] else 20,
+            official="--offline" not in options,
+            limit=None if "--all" in options else 20,
+            scratch_parent=options[options.index("--scratch") + 1]
+            if "--scratch" in options
+            else None,
         )
     else:
         raise SystemExit(f"unknown command: {command}")

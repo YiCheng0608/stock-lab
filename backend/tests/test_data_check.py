@@ -326,7 +326,7 @@ def test_the_4549_row_written_by_the_current_parser_passes(database):
     assert check.findings == []
     assert check.facts["official_actions"] == 1
     # One TWT49U and one exDailyQ request; no TWT49UDetail for a TPEx event.
-    assert check.facts["official_requests"] == 2
+    assert check.facts["official_requests_no_retry"] == 2
 
 
 def test_the_4549_wrong_ratio_also_disagrees_with_the_official_table(database):
@@ -387,9 +387,9 @@ def test_the_2330_event_twt48u_announced_but_the_table_lacks_is_found(database):
     assert check.findings[0].note == "raw_payload 1"
     official = tables(DAY_2330, [TWT49U_2330])
     check = database.check(DAY_2330, official=True, routes=official)
+    # One event, one finding: both sources are in its note.
     assert [(i.check, i.note) for i in check.findings] == [
-        ("action_missing", "raw_payload 1"),
-        ("action_missing", "官方結果表"),
+        ("action_missing", "raw_payload 1；官方結果表"),
     ]
 
 
@@ -491,14 +491,16 @@ def counted(database, today: int, *, before: int = 100) -> None:
         db.commit()
 
 
-@pytest.mark.parametrize(("today", "found"), [(96, True), (97, False), (100, False)])
+@pytest.mark.parametrize(
+    ("today", "found"), [(96, True), (97, True), (98, False), (100, False)]
+)
 def test_common_stock_rows_more_than_3_percent_below_the_median(database, today, found):
     counted(database, today)
     check = database.check(SESSIONS[-1])
     drops = [item for item in check.findings if item.check == "row_count"]
     assert check.facts["twse_stock_bars"] == today
     if found:
-        assert [(i.exchange, i.raw, i.db) for i in drops] == [("TWSE", 100, 96)]
+        assert [(i.exchange, i.raw, i.db) for i in drops] == [("TWSE", 100, today)]
     else:
         assert drops == []
 
@@ -604,3 +606,128 @@ def test_a_database_without_the_checked_tables_is_skipped(tmp_path):
     out = data_check.data_check(str(path), "2026-10-19", official=False)
     assert out.startswith("data_check skip date=2026-10-19 missing_tables=")
     assert "market_bars" in out
+
+
+# --- #408 review --------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("started", "found"),
+    [(datetime(2026, 9, 4, 10, 30), True), (datetime(2026, 9, 4, 13, 30), False)],
+    ids=["1830-success", "2130-success"],
+)
+def test_a_success_before_2100_without_a_refetch_is_found(database, started, found):
+    with database.factory() as db:
+        db.add(
+            ScheduleRun(
+                job="daily", target_date=DAY, status="success", started_at=started
+            )
+        )
+        db.commit()
+    check = database.check(DAY)
+    assert check.facts["refetch"] == "none"
+    if found:
+        assert [(i.check, i.raw, i.db) for i in check.findings] == [
+            ("institutional_refetch", "（應有 21:30 重抓）", "（沒有）")
+        ]
+        assert "法人只跟 18:30 的資料比過" in check.findings[0].note
+    else:
+        assert check.findings == []
+
+
+class Clock:
+    """Each official request takes 50 seconds."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def test_the_official_budget_stops_the_requests_and_keeps_the_local_findings(
+    database,
+):
+    the_4549_row(database, ratio=2.02941)
+    clock = Clock()
+    routes = tables(DAY_4549, tpex=[exdailyq_row(TPEX_4549)])
+    fetcher = Official(routes)
+
+    def slow(url, **kwargs):
+        clock.now += 50
+        return fetcher(url, **kwargs)
+
+    engine = data_check.read_only_engine(str(database.path))
+    try:
+        with sessionmaker(bind=engine)() as session:
+            check = data_check.DayCheck(
+                session, DAY_4549, fetcher=slow, official_budget=40, clock=clock
+            )
+            check.run()
+    finally:
+        engine.dispose()
+    # TWT49U took 50 s of the 40: exDailyQ was not requested.
+    assert len(fetcher.calls) == 1
+    assert check.facts["official_requests_no_retry"] == 1
+    assert [(i.check, i.note) for i in check.findings] == [
+        ("action_value", "raw_payload 1"),
+        ("action_official_unavailable", "除權息官方核對未完成"),
+    ]
+    assert "總預算 40 秒用完" in check.findings[1].raw
+
+
+TWT49U_3706_DAY = date(2026, 9, 9)
+
+
+def test_an_event_whose_detail_cannot_be_read_is_not_called_unofficial(database):
+    from test_corporate_action_sync import TWT49U_3706
+
+    with database.factory() as db:
+        item = instrument(db, "TWSE", "3706")
+        db.add(
+            CorporateAction(
+                instrument_id=item.id,
+                action_date=TWT49U_3706_DAY,
+                action_type="corporate_action",
+                cash_dividend=3.0,
+                stock_dividend_ratio=0.1,
+                source="twse",
+            )
+        )
+        db.commit()
+    routes = [
+        (
+            sources.TWSE_ACTION_DETAIL_ENDPOINT,
+            sources.OfficialDataError("official endpoint retry exhausted (503)"),
+        ),
+        *tables(TWT49U_3706_DAY, [TWT49U_3706]),
+    ]
+    check = database.check(TWT49U_3706_DAY, official=True, routes=routes)
+    assert [(i.check, i.field) for i in check.findings] == [
+        ("action_official_unavailable", "TWT49UDetail")
+    ]
+    assert "3706" in check.findings[0].raw
+
+
+def test_7710_quote_row_and_unmatched_row_are_one_finding(database, monkeypatch):
+    _first_session()
+    _second_session_without_backfill(monkeypatch)
+    check = database.check(DAY1)
+    assert [(i.check, i.symbol, i.field, i.raw) for i in check.findings] == [
+        ("unmatched_bar", "6938", "close", 79.9),
+        ("unmatched_bar", "7710", "close", 128.5),
+    ]
+    assert all(
+        i.note.startswith("raw_payload ") and "標的已建立" in i.note
+        for i in check.findings
+    )
+
+
+def test_the_scratch_directory_goes_where_it_is_told_and_is_removed(database, tmp_path):
+    parent = tmp_path / "work"
+    parent.mkdir()
+    out = data_check.data_check(
+        str(database.path), DAY.isoformat(), official=False, scratch_parent=str(parent)
+    )
+    assert out.startswith("data_check ok ")
+    assert list(parent.iterdir()) == []

@@ -33,13 +33,22 @@ Checks of trading date ``day``:
   checked against the official prices (``action_factor``), another row's
   fields against the official row (``action_value``), an official event
   without a stored one is ``action_missing`` and a stored event the official
-  tables do not have is ``action_not_official``.  The captures go to a
-  temporary directory that is removed afterwards.
-- ``row_count``: a market's common-stock bars of the day are more than
-  ``ROW_DROP_SHARE`` below the median of its previous ``ROW_DROP_SESSIONS``
-  sessions.
+  tables do not have is ``action_not_official`` (not for an event whose
+  TWT49UDetail could not be read).  All official requests share
+  ``OFFICIAL_BUDGET_SECONDS``; past it the rest is
+  ``action_official_unavailable`` and the local comparisons above still
+  stand.  The captures go to a temporary directory that is removed afterwards.
+- ``row_count``: a market's common-stock bars of the day are
+  ``ROW_DROP_PERCENT`` percent or more below the median of its previous
+  ``ROW_DROP_SESSIONS`` sessions.
 - ``institutional_refetch``: the day's 21:30 institutional refetch (#396)
-  ended ``failed`` or ``partial``; still running makes the result ``pending``.
+  ended ``failed`` or ``partial``, or a daily that succeeded before 21:00 has
+  no refetch (institutional flow compared with the 18:30 file only); still
+  running makes the result ``pending``.
+
+One event is one finding: the TWT48U and official ``action_missing`` of an
+event, and the ``unmatched_bar`` and ``bar_missing`` of one code and date,
+are merged with their sources in the note.
 """
 
 from __future__ import annotations
@@ -47,19 +56,21 @@ from __future__ import annotations
 import os
 import shutil
 import sqlite3
+import re
 import statistics
 import sys
 import tempfile
+import time
 from collections import Counter, defaultdict
-from dataclasses import dataclass
-from datetime import date, timedelta
+from dataclasses import dataclass, replace
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
 BACKEND = Path(__file__).resolve().parents[2] / "backend"
 
 MAX_LISTED = 20
-ROW_DROP_SHARE = 0.03
+ROW_DROP_PERCENT = 3
 ROW_DROP_SESSIONS = 5
 UNMATCHED_SESSIONS = 5
 # How far back a TWT48U capture may have announced the day's events.
@@ -70,6 +81,13 @@ QUOTED_TYPES = ("stock", "ipo", "etf")
 BAR_FIELDS = ("open", "high", "low", "close", "volume", "is_suspended")
 ACTION_FIELDS = ("cash_dividend", "stock_dividend_ratio", "split_ratio")
 REFETCH_FAILED = ("failed", "partial")
+# A daily that succeeded from 21:00 Taipei (13:00 naive UTC) on collected the
+# late institutional files itself; one before that needs the 21:30 refetch.
+LATE_COLLECT_UTC_HOUR = 13
+# All official result-table requests of one check (#408 review). fetch_json
+# may retry 3 times at 30 s, so one request can overrun it by about 95 s,
+# still inside the watchdog's 240-second helper limit.
+OFFICIAL_BUDGET_SECONDS = 120
 # Without these (a database before them) there is nothing to check.
 TABLES = (
     "instruments",
@@ -95,8 +113,9 @@ LABELS = {
     "action_not_official": "DB 有、官方結果表沒有的除權息",
     "action_official_unavailable": "官方結果表讀取失敗",
     "row_count": "普通股列數驟減",
-    "institutional_refetch": "21:30 法人重抓失敗",
+    "institutional_refetch": "21:30 法人重抓失敗或沒有執行",
 }
+DETAIL_WARNING = re.compile(r"TWT49UDetail (?:unavailable|has no row) for (\S+) ")
 
 
 @dataclass(frozen=True)
@@ -163,6 +182,8 @@ class DayCheck:
         *,
         fetcher: Callable[..., Any] | None = None,
         official: bool = True,
+        official_budget: float = OFFICIAL_BUDGET_SECONDS,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         from sqlalchemy import select
 
@@ -173,6 +194,8 @@ class DayCheck:
         self.iso = day.isoformat()
         self.fetcher = fetcher
         self.official = official
+        self.official_budget = official_budget
+        self.clock = clock
         self.findings: list[Finding] = []
         self.facts: Counter[str] = Counter()
         self.pending: list[str] = []
@@ -766,9 +789,14 @@ class DayCheck:
         from worker.sources import ActionRecord, OfficialDataError, fetch_json
 
         fetcher = self.fetcher or fetch_json
+        started = self.clock()
+        over = f"官方結果表的總預算 {self.official_budget:g} 秒用完"
 
         def counted(url: str, **kwargs: Any) -> Any:
-            self.facts["official_requests"] += 1
+            if self.clock() - started > self.official_budget:
+                raise OfficialDataError(over)
+            # One call; fetch_json's retries inside it are not counted.
+            self.facts["official_requests_no_retry"] += 1
             return fetcher(url, **kwargs)
 
         try:
@@ -786,7 +814,23 @@ class DayCheck:
                 "除權息官方核對未完成",
             )
             return
+        unchecked = {
+            match.group(1) for match in map(DETAIL_WARNING.search, warnings) if match
+        }
+        budget = [warning for warning in warnings if over in warning]
+        if budget:
+            self.add(
+                "action_official_unavailable",
+                "-",
+                "-",
+                "TWT49UDetail",
+                over,
+                None,
+                f"{len(budget)} 個權類事件未核對",
+            )
         for warning in warnings:
+            if over in warning:
+                continue
             self.add(
                 "action_official_unavailable",
                 "-",
@@ -853,16 +897,18 @@ class DayCheck:
                             "官方結果表",
                         )
         for key, rows in sorted(stored.items()):
-            if key not in official:
-                for action in rows:
-                    self.add(
-                        "action_not_official",
-                        *key,
-                        "action_type",
-                        None,
-                        action.action_type,
-                        f"source {action.source}",
-                    )
+            # An event whose detail could not be read is not in ``records``.
+            if key in official or (key[0] == "TWSE" and key[1] in unchecked):
+                continue
+            for action in rows:
+                self.add(
+                    "action_not_official",
+                    *key,
+                    "action_type",
+                    None,
+                    action.action_type,
+                    f"source {action.source}",
+                )
 
     # --- row counts and the 21:30 refetch ------------------------------------
 
@@ -890,8 +936,9 @@ class DayCheck:
             self.facts[f"{exchange.lower()}_stock_bars"] = today
             if len(earlier) < ROW_DROP_SESSIONS:
                 continue
-            median = statistics.median(earlier[:ROW_DROP_SESSIONS])
-            if today < median * (1 - ROW_DROP_SHARE):
+            # The median of five counts is one of them, an integer.
+            median = int(statistics.median(earlier[:ROW_DROP_SESSIONS]))
+            if today * 100 <= median * (100 - ROW_DROP_PERCENT):
                 self.add(
                     "row_count",
                     exchange,
@@ -920,6 +967,29 @@ class DayCheck:
         ).first()
         if row is None:
             self.facts["refetch"] = "none"
+            started = self.db.scalar(
+                select(ScheduleRun.started_at)
+                .where(
+                    ScheduleRun.job == "daily",
+                    ScheduleRun.target_date == self.day,
+                    ScheduleRun.status == "success",
+                )
+                .order_by(ScheduleRun.id.desc())
+                .limit(1)
+            )
+            late = datetime.combine(self.day, datetime.min.time()) + timedelta(
+                hours=LATE_COLLECT_UTC_HOUR
+            )
+            if started is not None and started < late:
+                self.add(
+                    "institutional_refetch",
+                    "-",
+                    "-",
+                    "status",
+                    "（應有 21:30 重抓）",
+                    "（沒有）",
+                    "daily 在 21:00 前成功、之後沒有重抓：法人只跟 18:30 的資料比過",
+                )
             return
         status, error, run_id = row
         self.facts["refetch"] = status
@@ -944,6 +1014,44 @@ class DayCheck:
         self.chips()
         self.actions()
         self.row_counts()
+        self.findings = merged(self.findings)
+
+
+# Findings of one event from several sources become one (#408 review).
+SAME_EVENT = {
+    "action_missing": "action_missing",
+    "unmatched_bar": "unmatched_bar",
+    "bar_missing": "unmatched_bar",
+}
+
+
+def merged(findings: list[Finding]) -> list[Finding]:
+    groups: dict[tuple[str, str, str, str], list[Finding]] = {}
+    order: list[Finding | tuple[str, str, str, str]] = []
+    for item in findings:
+        name = SAME_EVENT.get(item.check)
+        if name is None:
+            order.append(item)
+            continue
+        key = (name, item.exchange, item.symbol, item.day)
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(item)
+    out: list[Finding] = []
+    for entry in order:
+        if isinstance(entry, Finding):
+            out.append(entry)
+            continue
+        items = groups[entry]
+        if len(items) == 1:
+            out.append(items[0])
+            continue
+        # The quote row's close says more than a placeholder.
+        base = next((i for i in items if i.check == "bar_missing"), items[0])
+        notes = list(dict.fromkeys(i.note for i in items if i.note))
+        out.append(replace(base, check=entry[0], note="；".join(notes)))
+    return out
 
 
 def _cell(value: Any) -> str:
@@ -967,6 +1075,11 @@ def details(check: DayCheck, *, limit: int | None = MAX_LISTED) -> str:
         f"- {LABELS.get(name, name)}（`{name}`）：{count} 筆"
         for name, count in sorted(counts.items())
     ]
+    if "official_requests_no_retry" in check.facts:
+        lines.append(
+            "- 官方結果表請求數（不含重試）："
+            f"{check.facts['official_requests_no_retry']}"
+        )
     shown = findings if limit is None else findings[:limit]
     lines += [
         "",
@@ -1008,10 +1121,16 @@ def data_check(
     official: bool = True,
     fetcher: Callable[..., Any] | None = None,
     limit: int | None = MAX_LISTED,
+    scratch_parent: str | None = None,
 ) -> str:
-    """The status line, then (on a violation) the Markdown details."""
+    """The status line, then (on a violation) the Markdown details.
 
-    scratch = Path(tempfile.mkdtemp(prefix="data-check-"))
+    The temporary directory is made in ``scratch_parent`` when given: the
+    watchdog passes its own work directory, which its EXIT trap removes even
+    when ``timeout`` kills this process before the ``finally`` below.
+    """
+
+    scratch = Path(tempfile.mkdtemp(prefix="data-check-", dir=scratch_parent))
     try:
         _prepare(scratch)
         from sqlalchemy.orm import Session
