@@ -249,15 +249,9 @@ def main() -> None:
     actions_check_parser.add_argument("--end-date")
     actions_rebuild_parser = actions_subparsers.add_parser(
         "rebuild",
-        help="依 sync run 改到的標的重算指標、特徵、之後的族群分數與指定日的訊號（重跑冪等）",
+        help="依 sync run 改到的標的重算指標、特徵與最早改動日起的族群分數（不重算訊號；重跑冪等）",
     )
     actions_rebuild_parser.add_argument("--run-id", type=int, required=True)
-    actions_rebuild_parser.add_argument(
-        "--signal-date",
-        dest="signal_dates",
-        action="append",
-        help="重算這天的訊號 YYYY-MM-DD，可重複；未指定不重算訊號",
-    )
     instruments_parser = subparsers.add_parser("instruments", help="標的狀態與歷史")
     instruments_subparsers = instruments_parser.add_subparsers(
         dest="instruments_command", required=True
@@ -382,12 +376,7 @@ def main() -> None:
                 apply=args.apply,
             )
         elif args.actions_command == "rebuild":
-            result = run_corporate_action_rebuild(
-                args.run_id,
-                signal_dates=[
-                    date.fromisoformat(item) for item in args.signal_dates or []
-                ],
-            )
+            result = run_corporate_action_rebuild(args.run_id)
         else:
             result = run_corporate_action_check(
                 parse_date(args.start_date), parse_date(args.end_date)

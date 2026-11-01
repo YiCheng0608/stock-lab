@@ -11,6 +11,8 @@ the official 減除股利參考價 / 除權息前收盤價 ratio, without writin
 
 from __future__ import annotations
 
+import sys
+import time
 from collections import Counter
 from datetime import date
 from typing import Any, Callable
@@ -33,6 +35,7 @@ from worker.sources import (
 
 SYNC_VERSION = "corporate_action_sync_v1"
 RUN_TYPE = "corporate_action_sync"
+FINISHED = frozenset({"success", "partial"})
 FIELDS = ("cash_dividend", "stock_dividend_ratio", "split_ratio", "reference_price")
 
 
@@ -272,33 +275,28 @@ def rebuild_after_sync(
     db: Session,
     run_id: int,
     *,
-    signal_dates: list[date] | None = None,
-    checkpoint: Callable[[], None] | None = None,
+    checkpoint: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     """Recompute what a sync run's corrected rows feed, in the caller's session.
 
     For the instruments the run changed: every technical_indicators row and
-    every technical_features row.  Then hot-group scores of every TAIEX
-    session from the earliest changed action date on, and the signals of
-    ``signal_dates`` (none unless asked: past signals are tracked, so which
-    dates to regenerate is decided per correction).  ``checkpoint`` (the
-    CLI passes ``db.commit``) runs after each step; each step recomputes
-    from stored rows, so a rerun after a failure writes the same values.
+    every technical_features row; then hot-group scores of every TAIEX
+    session from the earliest changed action date on.  Signals are not
+    regenerated: past signals are tracked, and whether to regenerate them is
+    decided per correction.  ``checkpoint`` (the CLI commits and logs) is
+    called with the step name after each step; each step recomputes from
+    stored rows, so a rerun after a failure writes the same values.
     """
     # Imported here: both modules import pipeline, as this one does.
     from worker.indicator_batch import compute_market_indicators
     from worker.industry_repair import rescore_recent
 
+    def step(name: str) -> None:
+        if checkpoint is not None:
+            checkpoint(name)
+
     run = db.get(IngestionRun, run_id)
-    if (
-        run is None
-        or run.run_type != RUN_TYPE
-        or run.status
-        not in {
-            "success",
-            "partial",
-        }
-    ):
+    if run is None or run.run_type != RUN_TYPE or run.status not in FINISHED:
         raise RebuildError(f"no finished {RUN_TYPE} run {run_id}")
     affected = {
         int(key): date.fromisoformat(value)
@@ -313,24 +311,23 @@ def rebuild_after_sync(
     if not affected:
         return {**result, "status": "no_change"}
     ids = sorted(affected)
+    started = time.perf_counter()
     result["indicators"] = compute_market_indicators(
         db, rebuild=True, instrument_ids=ids
     )
-    if checkpoint is not None:
-        checkpoint()
+    step("indicators")
     features = 0
-    for instrument in db.scalars(
+    instruments = db.scalars(
         select(Instrument).where(Instrument.id.in_(ids), Instrument.status == "active")
-    ).all():
+    ).all()
+    for instrument in instruments:
         pipeline._calculate_features(db, instrument)
         features += 1
         if features % pipeline.ANALYZE_COMMIT_BATCH == 0:
             db.flush()
-            if checkpoint is not None:
-                checkpoint()
+            step(f"features {features}/{len(instruments)}")
     db.flush()
-    if checkpoint is not None:
-        checkpoint()
+    step(f"features {features}/{len(instruments)}")
     result["feature_instruments"] = features
     since = min(affected.values())
     benchmark = pipeline._benchmark_instrument(db)
@@ -345,34 +342,28 @@ def rebuild_after_sync(
         else 0
     )
     rescored = rescore_recent(db, sessions or 0)
-    if checkpoint is not None:
-        checkpoint()
+    step("group_scores")
     result["group_score_dates"] = {
         "since": since.isoformat(),
         "count": len(rescored),
         "first": rescored[0] if rescored else None,
         "last": rescored[-1] if rescored else None,
     }
-    signals: dict[str, int] = {}
-    if signal_dates:
-        strategies = pipeline._ensure_strategies(db)
-        for day in sorted(set(signal_dates)):
-            signals[day.isoformat()] = pipeline._generate_signals(db, day, strategies)
-            db.flush()
-            if checkpoint is not None:
-                checkpoint()
-    result["signals_upserted"] = signals
+    result["elapsed_seconds"] = round(time.perf_counter() - started, 1)
     return result
 
 
-def run_corporate_action_rebuild(
-    run_id: int, *, signal_dates: list[date] | None = None
-) -> dict[str, Any]:
+def run_corporate_action_rebuild(run_id: int) -> dict[str, Any]:
+    started = time.perf_counter()
     with SessionLocal() as db:
+
+        def checkpoint(name: str) -> None:
+            db.commit()
+            elapsed = time.perf_counter() - started
+            print(f"rebuild {name} committed at {elapsed:.0f}s", file=sys.stderr)
+
         try:
-            result = rebuild_after_sync(
-                db, run_id, signal_dates=signal_dates, checkpoint=db.commit
-            )
+            result = rebuild_after_sync(db, run_id, checkpoint=checkpoint)
         except RebuildError as exc:
             db.rollback()
             return {"status": "failed", "version": SYNC_VERSION, "error": str(exc)}
