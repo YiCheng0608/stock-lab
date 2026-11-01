@@ -23,6 +23,7 @@ from app.db import enable_sqlite_foreign_keys
 from app.migrations import upgrade_database
 from app.models import (
     DataQuality,
+    IngestionRun,
     Instrument,
     MarketBar,
     RawPayload,
@@ -250,8 +251,13 @@ class FakeAdapter:
         return self.batch
 
 
-def _collect(day: date, instruments, twse_rows, tpex_rows):
+def _collect(day: date, instruments, twse_rows, tpex_rows, *, earlier=None):
+    """One collect of ``day``; ``earlier`` adds sessions to its batch (a range collect)."""
+
     payloads, bars = _session(day, twse_rows, tpex_rows)
+    for other_day, other_twse, other_tpex in earlier or []:
+        other_payloads, other_bars = _session(other_day, other_twse, other_tpex)
+        payloads, bars = other_payloads + payloads, other_bars + bars
     batch = sources.OfficialBatch(
         instruments=instruments,
         bars=bars,
@@ -260,7 +266,10 @@ def _collect(day: date, instruments, twse_rows, tpex_rows):
         data_as_of=day.isoformat(),
         snapshot_feeds=False,
     )
-    return pipeline.collect(day, adapter=FakeAdapter(batch)), payloads
+    result = pipeline.collect(
+        day, months_back=1 if earlier else 0, adapter=FakeAdapter(batch)
+    )
+    return result, payloads
 
 
 def _first_session(**kwargs):
@@ -501,6 +510,146 @@ def test_a_lost_capture_leaves_the_row_unmatched_and_writes_no_value(
         assert again["written"] == [] and again["rows_checked"] == 1
         assert _bar(db, "TWSE", "7710", DAY1) is None
         assert _quality(db, "TWSE:7710").status == "missing"
+
+
+def test_the_same_code_on_the_other_exchange_is_not_written(env):
+    _first_session()
+    with env() as db:
+        db.add(
+            Instrument(
+                market="TW",
+                exchange="TPEx",
+                symbol="7710",
+                name="上櫃 7710",
+                instrument_type="stock",
+                status="transferred",
+            )
+        )
+        db.commit()
+        before = _quality(db, "TWSE:7710").checks_json
+
+    with env() as db:
+        result = repair.backfill_unmatched_bars(db)
+        db.commit()
+
+    assert result == {
+        "version": repair.BACKFILL_VERSION,
+        "rows_checked": 0,
+        "written": [],
+        "pending": [],
+    }
+    with env() as db:
+        assert _bar(db, "TPEx", "7710", DAY1) is None
+        quality = _quality(db, "TWSE:7710")
+        assert quality.status == "missing" and quality.checks_json == before
+
+
+def test_each_date_of_a_row_is_written_from_its_own_capture(env):
+    # A range collect records one row with two sessions and two captures.
+    DAY3 = date(2026, 10, 29)
+    first, payloads = _collect(
+        DAY2,
+        [INDEX, TSMC],
+        [_twse_row("2330", "1005.00"), _twse_row("7710", "130.00")],
+        [],
+        earlier=[(DAY1, [_twse_row("2330", "1000.00"), ROW_7710], [])],
+    )
+    day1_capture, day2_capture = payloads[0], payloads[2]
+    with env() as db:
+        quality = _quality(db, "TWSE:7710")
+        day1_raw, day2_raw = _raw_id(db, day1_capture), _raw_id(db, day2_capture)
+    assert quality.as_of_date == DAY2
+    assert quality.checks_json["trading_dates"] == ["2026-10-27", "2026-10-28"]
+    assert quality.checks_json["raw_payload_ids"] == [day1_raw, day2_raw]
+
+    third, _ = _collect(
+        DAY3,
+        [INDEX, TSMC, *NEW_LISTINGS],
+        [_twse_row("2330", "1010.00"), _twse_row("7710", "131.00")],
+        [],
+    )
+
+    assert [
+        (item["trading_date"], item["raw_payload_id"])
+        for item in third["unmatched_backfill"]["written"]
+    ] == [("2026-10-27", day1_raw), ("2026-10-28", day2_raw)]
+    with env() as db:
+        first_bar, second_bar = (
+            _bar(db, "TWSE", "7710", DAY1),
+            _bar(db, "TWSE", "7710", DAY2),
+        )
+        assert (first_bar.close, first_bar.volume) == (128.5, 1_496_730)
+        assert first_bar.raw_payload_id == day1_raw
+        assert (second_bar.close, second_bar.volume) == (130.0, 1000)
+        assert second_bar.raw_payload_id == day2_raw
+        assert _quality(db, "TWSE:7710").status == "complete"
+
+
+# ---- a backfill error never fails the day's collect ----
+
+
+def test_a_capture_the_parser_chokes_on_keeps_only_its_row_open(env, monkeypatch):
+    _first_session()
+
+    def broken(raw, payload):
+        raise KeyError("收盤價")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(repair, "_quote_bars", broken)
+        second, _ = _second_session()
+
+    assert second["status"] == "success"
+    assert second["unmatched_backfill"]["status"] == "success"
+    assert {item["symbol"] for item in second["unmatched_backfill"]["pending"]} == {
+        "7710",
+        "6938",
+    }
+    with env() as db:
+        # The day's own quotes are written.
+        assert _bar(db, "TWSE", "7710", DAY2).close == 130.0
+        assert _bar(db, "TWSE", "2330", DAY2).close == 1005.0
+        assert _bar(db, "TWSE", "7710", DAY1) is None
+        quality = _quality(db, "TWSE:7710")
+        assert quality.status == "missing"
+        [unavailable] = quality.checks_json["backfill"]["unavailable"]
+        assert unavailable["raws"][0]["reason"].startswith("raw_unparsed: KeyError")
+
+
+def test_a_failing_backfill_drops_only_its_own_writes(env, monkeypatch):
+    _first_session()
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("data_quality write failed")
+
+    with monkeypatch.context() as patch:
+        # Fails after the first bar of the backfill was staged.
+        patch.setattr(repair, "_upsert_quality", broken)
+        second, _ = _second_session()
+
+    assert second["status"] == "success"
+    backfill = second["unmatched_backfill"]
+    assert backfill["status"] == "failed"
+    assert backfill["error"] == "RuntimeError: data_quality write failed"
+    assert backfill["written"] == []
+    assert any("unmatched_bar backfill failed" in n for n in second["notices"])
+    with env() as db:
+        assert _bar(db, "TWSE", "7710", DAY2).close == 130.0
+        assert _bar(db, "TPEx", "6938", DAY2) is not None
+        assert _bar(db, "TWSE", "7710", DAY1) is None
+        assert _bar(db, "TPEx", "6938", DAY1) is None
+        for key in ("TWSE:7710", "TPEx:6938"):
+            quality = _quality(db, key)
+            assert quality.status == "missing"
+            assert "backfill" not in quality.checks_json
+        run = db.scalar(select(IngestionRun).where(IngestionRun.id == second["run_id"]))
+        assert run.status == "success"
+        assert run.metadata_json["unmatched_backfill"]["status"] == "failed"
+
+    # The rows stay open, so the next run writes them.
+    with env() as db:
+        assert len(repair.backfill_unmatched_bars(db)["written"]) == 2
+        db.commit()
+        assert _bar(db, "TWSE", "7710", DAY1).close == 128.5
 
 
 # ---- indicators are recomputed from the first session ----

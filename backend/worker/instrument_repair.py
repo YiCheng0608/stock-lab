@@ -652,6 +652,9 @@ def _stored_quote_bars(
                 cache[raw_id] = f"raw_unreadable: {exc}"[:200]
             except OfficialDataError as exc:
                 cache[raw_id] = f"raw_rejected: {exc}"[:200]
+            except Exception as exc:
+                # A parser bug on one old capture keeps only its rows open.
+                cache[raw_id] = f"raw_unparsed: {type(exc).__name__}: {exc}"[:200]
     return cache[raw_id]
 
 
