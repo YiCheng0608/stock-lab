@@ -29,7 +29,13 @@ export const ZERO_REASON_TEXT: Record<string, string> = {
   all_excluded: '成立的訊號都因 ETF、價位不合法或評分資料不足被排除',
 }
 
-const STRATEGY_LABELS: Record<string, string> = { breakout_v1: '突破條件', pullback_v1: '回踩條件' }
+// Both versions read the same (#392): the UI never shows a version suffix.
+const STRATEGY_LABELS: Record<string, string> = {
+  breakout_v1: '突破條件',
+  pullback_v1: '回踩條件',
+  breakout_v2: '突破條件',
+  pullback_v2: '回踩條件',
+}
 
 export function candidateStrategyLabel(strategy: string): string {
   return STRATEGY_LABELS[strategy] ?? '策略條件'

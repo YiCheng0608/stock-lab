@@ -16,9 +16,14 @@ from app.strategies import (
     evaluate_pullback_v1,
     strategy_configs,
 )
+from app.strategies import SUPERSEDED
 
 CANONICAL_CONFIGS = canonical_configs()
-STRATEGY_CONFIGS = strategy_configs()
+# The superseded v1 configs too: their rows are still read (#392).
+STRATEGY_CONFIGS = {
+    **strategy_configs(),
+    **{key: strategy.config for key, strategy in SUPERSEDED.items()},
+}
 
 
 def test_canonical_v1_configs_are_json_serializable_and_numeric():

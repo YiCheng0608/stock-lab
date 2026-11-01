@@ -219,20 +219,20 @@ class GroupMemberIdentityTest(unittest.TestCase):
                             instrument=stock,
                             signal_date=score_date,
                             strategies=strategies,
-                            strategy_key="breakout_v1",
+                            strategy_key="breakout_v2",
                             capture=observer,
                         )
                     )
                     db.flush()
-                    actual[stock.id] = observer.inputs["breakout_v1"][
+                    actual[stock.id] = observer.inputs["breakout_v2"][
                         "group_excess_return_20d"
                     ]
                     self.assertEqual(
                         actual[stock.id],
-                        observer.inputs["pullback_v1"]["group_excess_return_20d"],
+                        observer.inputs["pullback_v2"]["group_excess_return_20d"],
                     )
                     self.assertEqual(
-                        set(observer.results), {"breakout_v1", "pullback_v1"}
+                        set(observer.results), {"breakout_v2", "pullback_v2"}
                     )
                     signal = db.scalar(
                         select(Signal).where(Signal.instrument_id == stock.id)

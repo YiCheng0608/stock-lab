@@ -250,6 +250,37 @@ class TradingCalendarDay(Base):
     )
 
 
+class MarginList(Base):
+    """One exchange's official margin-trading list of one session (Issue #392).
+
+    The securities in that day's official margin balance report (TWSE
+    MI_MARGN 融資融券彙總、TPEx 上櫃股票融資融券餘額) are the session's
+    credit-trading securities; a code absent from a stored list is not a
+    margin-financing security that day.  A session without a row has no
+    known list.  Written by ``worker.margin_lists`` from stored raw only.
+    """
+
+    __tablename__ = "margin_lists"
+    __table_args__ = (
+        UniqueConstraint("exchange", "trading_date", name="uq_margin_list_day"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    exchange: Mapped[str] = mapped_column(String(20))
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    source: Mapped[str] = mapped_column(String(120))
+    endpoint: Mapped[str] = mapped_column(String(500))
+    data_as_of: Mapped[str] = mapped_column(String(40))
+    # The capture time of the raw payload the list came from.
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+    member_count: Mapped[int] = mapped_column(Integer)
+    # code -> the report's note (註記／備註, stripped; "" when blank).
+    members_json: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
+
+
 class TechnicalFeature(Base):
     __tablename__ = "technical_features"
     __table_args__ = (
@@ -403,6 +434,11 @@ class StrategyVersion(Base):
 
 class Signal(Base):
     __tablename__ = "signals"
+    # One instrument-day's rows: the pages read a superseded strategy's signal
+    # only when that day has no registered one (app.signal_versions, #392).
+    __table_args__ = (
+        Index("ix_signals_instrument_date", "instrument_id", "signal_date"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     signal_key: Mapped[str] = mapped_column(String(160), unique=True, index=True)

@@ -45,6 +45,7 @@ REASON_LABELS = {
     "institutional_flow_5d_missing_or_incomplete": "近 5 日法人籌碼資料待補",
     "margin_balance_change_ratio_5d_missing_or_non_finite": "近 5 日融資變化資料待補",
     "margin_change_5d_missing_or_incomplete": "近 5 日融資變化資料待補",
+    "margin_financing_not_applicable": "非融資標的，融資條件不適用",
     "effective_group_score_missing_or_under_minimum_members": "族群成員或相對大盤資料不足，無法取得有效群組脈絡",
     "close_or_volume_must_be_positive": "收盤或成交量資料無法用於計算",
     "bar_count_missing_or_invalid": "歷史交易日數資料待核實",

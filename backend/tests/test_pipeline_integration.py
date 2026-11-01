@@ -7,6 +7,7 @@ from sqlalchemy.orm import sessionmaker
 
 import worker.pipeline as pipeline
 import worker.sources as sources
+import app.strategies as app_strategies
 from app.db import Base, enable_sqlite_foreign_keys
 from app.domain import (
     LEGACY_SIGNAL_CONFIDENCE_SEMANTICS_VERSION,
@@ -1468,8 +1469,8 @@ def test_signal_results_are_distinct_per_strategy_and_rejected_rules_are_observa
         ).all()
         assert len(signals) == 2
         assert {item.strategy_version_id for item in signals} == {
-            strategies["breakout_v1"].id,
-            strategies["pullback_v1"].id,
+            strategies["breakout_v2"].id,
+            strategies["pullback_v2"].id,
         }
         assert {item.entry_type for item in signals} == {"breakout", "pullback"}
         assert all(item.status == "observation" for item in signals)
@@ -1569,9 +1570,16 @@ def test_conditional_signal_has_no_uncalibrated_probability_and_legacy_value_sur
             pipeline, "_margin_change_ratio", lambda *_args, **_kwargs: 0.0
         )
 
-        strategies = pipeline._ensure_strategies(db)
+        # The fixed 0.75 is legacy only for breakout_v1／pullback_v1 at 1.0.0,
+        # which analyze no longer writes (#392); their rule still runs here.
+        legacy = app_strategies.SUPERSEDED
+        strategies = pipeline._ensure_strategies(db, legacy)
         assert pipeline._upsert_signal(
-            db, instrument=instrument, signal_date=score_date, strategies=strategies
+            db,
+            instrument=instrument,
+            signal_date=score_date,
+            strategies=strategies,
+            registry=legacy,
         )
         db.flush()
         breakout = db.scalar(
@@ -1599,7 +1607,11 @@ def test_conditional_signal_has_no_uncalibrated_probability_and_legacy_value_sur
         db.commit()
 
         assert pipeline._upsert_signal(
-            db, instrument=instrument, signal_date=score_date, strategies=strategies
+            db,
+            instrument=instrument,
+            signal_date=score_date,
+            strategies=strategies,
+            registry=legacy,
         )
         db.flush()
         rerun = db.scalar(select(Signal).where(Signal.id == breakout.id))
@@ -2290,9 +2302,9 @@ def test_backtest_cutoff_and_summary_exclude_future_bars_and_non_actionable_rows
     ):
         if score_date != start_date:
             return 0
-        strategy = strategies["breakout_v1"]
+        strategy = strategies["breakout_v2"]
         actionable = Signal(
-            signal_key=f"{namespace}-TWSE-BT-{start_date.isoformat()}-breakout_v1-1.0.0",
+            signal_key=f"{namespace}-TWSE-BT-{start_date.isoformat()}-breakout_v2-2.0.0",
             signal_date=start_date,
             instrument_id=db.scalar(
                 select(Instrument.id).where(Instrument.symbol == "BT")
@@ -2305,17 +2317,17 @@ def test_backtest_cutoff_and_summary_exclude_future_bars_and_non_actionable_rows
             target_1=120,
             target_2=130,
             data_quality="complete",
-            rule_evidence_json={"strategy": "breakout_v1", "actionable": True},
+            rule_evidence_json={"strategy": "breakout_v2", "actionable": True},
         )
         observation = Signal(
-            signal_key=f"{namespace}-TWSE-BT-{start_date.isoformat()}-pullback_v1-1.0.0",
+            signal_key=f"{namespace}-TWSE-BT-{start_date.isoformat()}-pullback_v2-2.0.0",
             signal_date=start_date,
             instrument_id=actionable.instrument_id,
             strategy_version_id=strategy.id,
             status="observation",
             entry_type="pullback",
             data_quality="incomplete",
-            rule_evidence_json={"strategy": "pullback_v1", "actionable": False},
+            rule_evidence_json={"strategy": "pullback_v2", "actionable": False},
         )
         db.add_all([actionable, observation])
         db.flush()
@@ -2338,10 +2350,10 @@ def test_backtest_cutoff_and_summary_exclude_future_bars_and_non_actionable_rows
     assert result["run"]["status"] == "success"
     with pipeline_env() as db:
         actionable = db.scalar(
-            select(Signal).where(Signal.signal_key.like("backtest-%breakout_v1%"))
+            select(Signal).where(Signal.signal_key.like("backtest-%breakout_v2%"))
         )
         observation = db.scalar(
-            select(Signal).where(Signal.signal_key.like("backtest-%pullback_v1%"))
+            select(Signal).where(Signal.signal_key.like("backtest-%pullback_v2%"))
         )
         assert actionable and observation
         evaluations = db.scalars(

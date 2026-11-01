@@ -24,7 +24,7 @@ from app.models import (
     StrategyVersion,
     TechnicalFeature,
 )
-from app.strategies import REGISTRY, Condition, NextSessionInputs
+from app.strategies import REGISTRY, SUPERSEDED, Condition, NextSessionInputs
 from app.strategies import levels
 from app.tracking_plans import PlanRequestError, create_plan
 from worker import pipeline
@@ -630,6 +630,12 @@ PINNED_CONDITION_DEFAULTS = {
         },
     },
 }
+# breakout_v2／pullback_v2 (#392) list the same conditions with the same
+# defaults; only a non-margin security's margin row differs, and it is stored.
+for _name in ("breakout", "pullback"):
+    PINNED_CONDITION_DEFAULTS["strategy_levels_v1"][f"{_name}_v2"] = (
+        PINNED_CONDITION_DEFAULTS["strategy_levels_v1"][f"{_name}_v1"]
+    )
 
 
 def test_the_condition_defaults_are_pinned_to_the_levels_version():
@@ -641,7 +647,7 @@ def test_the_condition_defaults_are_pinned_to_the_levels_version():
             code: {k: v for k, v in item.items() if v not in (None, [])}
             for code, item in levels.condition_defaults(strategy).items()
         }
-        for key, strategy in REGISTRY.items()
+        for key, strategy in {**REGISTRY, **SUPERSEDED}.items()
     }
     assert filled == PINNED_CONDITION_DEFAULTS[STRATEGY_LEVELS_VERSION]
 
