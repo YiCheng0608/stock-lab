@@ -17,6 +17,7 @@ from app.db import init_db
 from .backfill import BACKFILL_SCOPES, chunked_backfill
 from .candidate_notes import run_candidate_notes_batch
 from .candidates import run_candidates
+from .chip_revisions import run_revise_institutional
 from .indicator_batch import run_indicator_batch
 from .industry_repair import run_industry_repair
 from .instrument_repair import run_instrument_repair
@@ -250,6 +251,19 @@ def main() -> None:
         default=0,
         help="--apply 後重算最近 N 個交易日的族群分數",
     )
+    chips_parser = subparsers.add_parser("chips", help="籌碼")
+    chips_subparsers = chips_parser.add_subparsers(dest="chips_command", required=True)
+    chips_revise_parser = chips_subparsers.add_parser(
+        "revise",
+        help="依已保存的 T86／insti raw，以較晚 capture 的三大法人值更正既有籌碼列（預設 dry-run，不發網路）",
+    )
+    chips_revise_parser.add_argument("--start-date", required=True)
+    chips_revise_parser.add_argument(
+        "--end-date", help="預設與 --start-date 同日；YYYY-MM-DD"
+    )
+    chips_revise_parser.add_argument(
+        "--apply", action="store_true", help="寫入 DB；未指定只列出預計變更"
+    )
     news_parser = subparsers.add_parser(
         "news", help="抓取國內／國際財經新聞 feed 並寫入 news_items"
     )
@@ -349,6 +363,12 @@ def main() -> None:
             rescore_days=args.rescore_days,
             max_status_share=args.max_status_share,
         )
+    elif args.command == "chips":
+        start = date.fromisoformat(args.start_date)
+        end = date.fromisoformat(args.end_date) if args.end_date else start
+        if end < start:
+            parser.error("--end-date must not be before --start-date")
+        result = run_revise_institutional(start, end, apply=args.apply)
     elif args.command == "news":
         result = run_news_batch(parse_date(args.run_date))
     elif args.command == "news-llm":
@@ -386,6 +406,8 @@ def main() -> None:
         "no_data",
     }:
         raise SystemExit(1)
+    if args.command == "chips" and result.get("status") != "success":
+        raise SystemExit(2 if result.get("status") == "partial" else 1)
     if (
         args.command in {"themes", "industry", "instruments", "theme-suggestions"}
         and isinstance(result, dict)
