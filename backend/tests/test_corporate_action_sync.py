@@ -18,6 +18,7 @@ from app.migrations import upgrade_database
 from app.models import (
     CorporateAction,
     DataQuality,
+    GroupDailyScore,
     IngestionRun,
     Instrument,
     MarketBar,
@@ -25,6 +26,7 @@ from app.models import (
     Signal,
     TechnicalFeature,
     TechnicalIndicator,
+    ThemeGroup,
 )
 
 # 4549 2026-09-08 as published by tpex_exright_daily (raw payload of the
@@ -781,9 +783,23 @@ def test_rebuild_recomputes_only_what_the_sync_changed(factory):
                 source="tpex",
             )
         )
+        # Hot-group scores exist only on some sessions (production had none
+        # before 2026-09-08); one is before the earliest change.
+        scored = [day for day in days if day >= date(2026, 9, 8)][::3]
+        db.add(ThemeGroup(id="board", name="board", active=False))
+        db.flush()
+        for day in [days[5], *scored]:
+            db.add(GroupDailyScore(group_id="board", trading_date=day, rank=1))
         db.flush()
         compute_market_indicators(db)
         db.commit()
+
+        def score_dates():
+            return set(
+                db.scalars(select(GroupDailyScore.trading_date).distinct()).all()
+            )
+
+        dates_before = score_dates()
         untouched = {
             row.trading_date: row.computed_at
             for row in db.scalars(
@@ -830,7 +846,9 @@ def test_rebuild_recomputes_only_what_the_sync_changed(factory):
         signals = db.scalar(select(func.count(Signal.id)))
         result = sync.rebuild_after_sync(db, applied["run_id"], checkpoint=checkpoint)
         db.commit()
-        sessions = [day for day in days if day >= date(2026, 9, 8)]
+        # Only the sessions that had scores are rescored, none is added.
+        sessions = scored
+        assert score_dates() == dates_before
         assert steps == [
             "indicators",
             "features 1/1",
@@ -841,7 +859,6 @@ def test_rebuild_recomputes_only_what_the_sync_changed(factory):
 
         assert result["indicators"]["instruments"] == 1
         assert result["feature_instruments"] == 1
-        sessions = [day for day in days if day >= date(2026, 9, 8)]
         assert result["group_score_dates"] == {
             "since": "2026-09-08",
             "count": len(sessions),

@@ -22,7 +22,12 @@ from sqlalchemy.orm import Session
 
 from app.clock import utcnow
 from app.db import SessionLocal
-from app.models import CorporateAction, IngestionRun, Instrument, MarketBar
+from app.models import (
+    CorporateAction,
+    GroupDailyScore,
+    IngestionRun,
+    Instrument,
+)
 from worker import pipeline
 from worker.sources import (
     ActionRecord,
@@ -280,9 +285,12 @@ def rebuild_after_sync(
 ) -> dict[str, Any]:
     """Recompute what a sync run's corrected rows feed, in the caller's session.
 
-    For the instruments the run changed: every technical_indicators row and
-    every technical_features row; then hot-group scores of every TAIEX
-    session from the earliest changed action date on.  Signals are not
+    For the instruments the run changed: every technical_indicators row (any
+    status with bars, as the indicators batch covers them) and, for active
+    ones, every technical_features row; then the hot-group scores of every
+    session from the earliest changed action date on that already has
+    scores.  A session without scores is not filled in: that would backfill
+    history with today's group definitions.  Signals are not
     regenerated: past signals are tracked, and whether to regenerate them is
     decided per correction.  ``checkpoint`` (the CLI commits and logs) is
     called with the step name after each step; each step recomputes from
@@ -328,20 +336,12 @@ def rebuild_after_sync(
     else:
         result["resumed_group_scores_from"] = group_scores_from.isoformat()
         since = max(since, group_scores_from)
-    benchmark = pipeline._benchmark_instrument(db)
-    days = (
-        db.scalars(
-            select(MarketBar.trading_date)
-            .where(
-                MarketBar.instrument_id == benchmark.id,
-                MarketBar.trading_date >= since,
-                MarketBar.is_suspended.is_not(True),
-            )
-            .order_by(MarketBar.trading_date)
-        ).all()
-        if benchmark is not None
-        else []
-    )
+    days = db.scalars(
+        select(GroupDailyScore.trading_date)
+        .where(GroupDailyScore.trading_date >= since)
+        .distinct()
+        .order_by(GroupDailyScore.trading_date)
+    ).all()
     # One commit per session: hundreds of sessions in one transaction would
     # hold the SQLite write lock for the whole rescore.
     rescore_dates(db, days, after_each=lambda day: step(f"group_scores {day}"))
