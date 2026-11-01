@@ -39,7 +39,9 @@ from .level_semantics import (
 from .presentation import display_action_label, display_reason, primary_reason
 from .product_time import build_action_product_time, build_signal_product_time
 from .portfolio_values import read_portfolio_value
-from .strategies import REGISTRY, current_strategy
+from .margin_lists import NOT_APPLICABLE as MARGIN_NOT_APPLICABLE
+from .signal_versions import readable_signal
+from .strategies import REGISTRY, current_strategy, registry_key
 from .strategies import levels as level_rules
 from .units import position_held
 from .models import (
@@ -280,19 +282,21 @@ def _prepare_decision_context(
         signal_query = (
             select(Signal, StrategyVersion)
             .join(StrategyVersion, StrategyVersion.id == Signal.strategy_version_id)
-            .where(Signal.instrument_id.in_(ids))
+            .where(Signal.instrument_id.in_(ids), readable_signal())
         )
         if as_of:
             signal_query = signal_query.where(Signal.signal_date <= as_of)
         for signal, strategy_version in db.execute(
             signal_query.order_by(desc(Signal.signal_date), desc(Signal.id))
         ).all():
-            if strategy_version.name in REGISTRY:
+            # A superseded version's signal is read as its successor (#392).
+            strategy_key = registry_key(strategy_version.name)
+            if strategy_key is not None:
                 signals_by_instrument[signal.instrument_id].setdefault(
-                    strategy_version.name, signal
+                    strategy_key, signal
                 )
                 strategy_versions_by_instrument[signal.instrument_id].setdefault(
-                    strategy_version.name, strategy_version
+                    strategy_key, strategy_version
                 )
 
     groups_by_instrument: dict[
@@ -598,15 +602,16 @@ def _latest_strategy_signals(
     query = (
         select(Signal, StrategyVersion.name)
         .join(StrategyVersion, StrategyVersion.id == Signal.strategy_version_id)
-        .where(Signal.instrument_id == instrument_id)
+        .where(Signal.instrument_id == instrument_id, readable_signal())
     )
     if as_of:
         query = query.where(Signal.signal_date <= as_of)
     rows = db.execute(query.order_by(desc(Signal.signal_date), desc(Signal.id))).all()
     result: dict[str, Signal] = {}
     for signal, name in rows:
-        if name in REGISTRY:
-            result.setdefault(name, signal)
+        key = registry_key(name)
+        if key is not None:
+            result.setdefault(key, signal)
     return result
 
 
@@ -797,14 +802,17 @@ def _strategy_result(
         if isinstance(evidence.get("strategy_version"), str)
         else None
     )
+    # The signal's own strategy: a superseded version's signal is keyed by
+    # its successor ``name`` but labelled as what it is (#392).
+    stored_name = strategy_version.name if strategy_version else name
     confidence_semantics = signal_confidence_semantics(
         signal.confidence,
         evidence,
-        strategy_name=name,
+        strategy_name=stored_name,
         strategy_version=evidence_strategy_version,
     )
     level_semantics = build_level_semantics(
-        strategy_name=name,
+        strategy_name=stored_name,
         strategy_version=strategy_version.version if strategy_version else None,
         field_mapping=REGISTRY[name].level_fields,
         response_generated_at=response_generated_at,
@@ -823,6 +831,11 @@ def _strategy_result(
         "institutional_flow_to_turnover_ratio_5d",
         "margin_balance_change_ratio_5d",
     ):
+        if (
+            field == "margin_balance_change_ratio_5d"
+            and inputs.get("margin_eligibility") == MARGIN_NOT_APPLICABLE
+        ):
+            continue  # not a margin-financing security: nothing is missing
         if field in inputs and _finite(inputs.get(field)) is None:
             missing.append(field)
     return {
@@ -1128,6 +1141,21 @@ def build_decision_summary(
     if not strategy_results and bar is not None and len(bars) < 20:
         missing.append("signal")
     chip_complete, chip_missing, chip_rows = _chips_complete(db, instrument.id, as_of)
+    if any(
+        isinstance(result.get("evidence"), dict)
+        and isinstance(result["evidence"].get("inputs"), dict)
+        and result["evidence"]["inputs"].get("margin_eligibility")
+        == MARGIN_NOT_APPLICABLE
+        for result in strategy_results.values()
+    ):
+        # Not a margin-financing security on the signal day: its chip rows
+        # have no margin values to miss (#392).
+        chip_missing = [
+            item
+            for item in chip_missing
+            if item not in {"margin_balance", "margin_change"}
+        ]
+        chip_complete = not chip_missing
     # A persisted complete conditional signal already records the validated
     # canonical inputs used to create it.  Do not re-apply a broad instrument
     # chip gate to that result here; doing so made a valid action disappear
@@ -2089,7 +2117,7 @@ def _tier_signals(
             Signal.signal_date == as_of,
             Signal.status.in_(("conditional", "observation")),
             Signal.data_quality == "complete",
-            StrategyVersion.name.in_(list(REGISTRY)),
+            readable_signal(),
         )
     )
     if instrument_ids is not None:

@@ -122,6 +122,10 @@ class StrategyInputs:
     group_excess_return_20d: float | int | None
     institutional_flow_ratio_5d: float | None
     margin_change_ratio_5d: float | None
+    # app.margin_lists state (Issue #392): ``not_applicable`` for a security
+    # that is not a margin-financing security; None where it is not known
+    # (stored evidence written before it), which reads as before.
+    margin_financing: str | None = None
 
 
 @dataclass(frozen=True)
@@ -161,6 +165,7 @@ class NextSessionInputs:
     institutional_flow_ratio_5d: float | None
     margin_change_ratio_5d: float | None
     price_basis: str = "score_date_raw_basis"
+    margin_financing: str | None = None  # as StrategyInputs
 
 
 @dataclass(frozen=True)

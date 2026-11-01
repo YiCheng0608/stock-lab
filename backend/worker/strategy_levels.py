@@ -123,6 +123,7 @@ def _strategy_inputs(
             "institutional_flow_to_turnover_ratio_5d"
         ),
         margin_change_ratio_5d=evidence_inputs.get("margin_balance_change_ratio_5d"),
+        margin_financing=evidence_inputs.get("margin_eligibility"),
     )
 
 
@@ -181,6 +182,7 @@ def _next_session_inputs(
         group_excess_return_20d=inputs.group_excess_return_20d,
         institutional_flow_ratio_5d=inputs.institutional_flow_ratio_5d,
         margin_change_ratio_5d=inputs.margin_change_ratio_5d,
+        margin_financing=inputs.margin_financing,
         price_basis=levels.PRICE_BASIS_NEXT_SESSION
         if converted
         else levels.PRICE_BASIS_SIGNAL_DAY,

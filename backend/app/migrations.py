@@ -653,6 +653,13 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0021_chip_source_groups', CURRENT_TIMESTAMP)"
         )
     )
+    # 0022 only adds margin_lists, also made by create_all.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0022_margin_lists', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:

@@ -323,7 +323,7 @@ HOT_GROUP_CONFIG: dict[str, Any] = {
 }
 
 
-# Daily candidate ranking (V1_SPEC candidate_score_v1, candidate_score_v2).
+# Daily candidate ranking (V1_SPEC candidate_score_v1～v3).
 # The score only orders signals the strategies already judged conditional; it
 # never changes a strategy decision and is not a win rate or expected return.
 # Any change to these dictionaries requires a new version: stored candidates
@@ -332,7 +332,7 @@ HOT_GROUP_CONFIG: dict[str, Any] = {
 # which identify strategy rows.  CANDIDATE_SCORE is the current version.
 # The pool lists its strategies by name: a strategy added to the registry
 # enters the candidate list only with a new score version.
-CANDIDATE_SCORE_VERSION = "candidate_score_v2"
+CANDIDATE_SCORE_VERSION = "candidate_score_v3"
 # Prompt version of the candidate LLM notes (worker.candidate_notes); the
 # API shows this version first.
 CANDIDATE_NOTE_PROMPT_VERSION = "candidate_notes_v1"
@@ -447,7 +447,24 @@ CANDIDATE_SCORE_V1: dict[str, Any] = {
 CANDIDATE_SCORE_V2: dict[str, Any] = json.loads(json.dumps(CANDIDATE_SCORE_V1))
 CANDIDATE_SCORE_V2["name"] = "candidate_score_v2"
 CANDIDATE_SCORE_V2["components"]["news_sentiment"]["llm_prompt_version"] = "news_v2"
-CANDIDATE_SCORE = CANDIDATE_SCORE_V2
+# candidate_score_v3 (#392): candidate_score_v2 whose pool is breakout_v2 and
+# pullback_v2, the strategies that replaced breakout_v1 and pullback_v1 (a
+# non-margin security's margin condition is not applicable).  Only the
+# strategy names change; v2's runs keep their v1 pool.
+CANDIDATE_SCORE_V3: dict[str, Any] = json.loads(json.dumps(CANDIDATE_SCORE_V2))
+CANDIDATE_SCORE_V3["name"] = "candidate_score_v3"
+_V3_STRATEGIES = {"breakout_v1": "breakout_v2", "pullback_v1": "pullback_v2"}
+CANDIDATE_SCORE_V3["pool"]["strategies"] = [
+    _V3_STRATEGIES[name] for name in CANDIDATE_SCORE_V2["pool"]["strategies"]
+]
+for _item in ("volume_ratio", "distance"):
+    _technical = CANDIDATE_SCORE_V3["components"]["technical"]["items"][_item]
+    for _key in ("better", "formula"):
+        if isinstance(_technical[_key], dict):
+            _technical[_key] = {
+                _V3_STRATEGIES[name]: value for name, value in _technical[_key].items()
+            }
+CANDIDATE_SCORE = CANDIDATE_SCORE_V3
 
 
 def weighted_available_mean(

@@ -19,6 +19,7 @@ import {
   conditionalBreakout,
   incompleteRow,
   missingLevelsRow,
+  nonMarginBreakout,
   notApplicableRow,
   observationBreakout,
   observationPullback,
@@ -80,6 +81,18 @@ check(zone?.next === '下一交易日收盤 2,430.00～2,535.00（距最近收�
 const incompleteViews = conditionViews(incompleteRow(), (code) => code === 'margin_balance_change_ratio_5d_missing_or_non_finite' ? '近 5 日融資變化資料待補' : code)
 check(incompleteViews.find((view) => view.code === 'required_inputs')?.value === '近 5 日融資變化資料待補', 'reasons are translated')
 check(incompleteViews.find((view) => view.code === 'margin_financing')?.stateText === '無資料', 'null satisfied is 無資料')
+
+// ---- a non-margin security's margin condition (#392): 不適用, with its reason, never 「—」 or a next-session line ----
+const nonMargin = conditionViews(nonMarginBreakout(), (code) => code === 'margin_financing_not_applicable' ? '非融資標的，融資條件不適用' : code)
+const marginView = nonMargin.find((view) => view.code === 'margin_financing')
+check(marginView?.state === 'not_applicable' && marginView.stateText === '不適用', `not applicable margin badge, got ${marginView?.stateText}`)
+check(marginView?.value === '非融資標的，融資條件不適用' && marginView.next === null, `not applicable margin value, got ${marginView?.value}`)
+check(!unmetText(nonMarginBreakout()).includes('融資'), 'a not applicable condition is not unmet')
+const nonMarginMarkup = render(<StrategyBoardPanel board={board([nonMarginBreakout(), observationPullback()])} candidate={null} />)
+const nonMarginRow = nonMarginMarkup.slice(nonMarginMarkup.indexOf('data-condition="margin_financing"'))
+check(nonMarginRow.startsWith('data-condition="margin_financing" data-condition-state="not_applicable"') && nonMarginRow.slice(0, 400).includes('不適用'), 'the panel shows 不適用')
+const nonMarginText = nonMarginMarkup.replace(/<[^>]*>/g, ' ')
+check(!/breakout_v|pullback_v|\bv2\b|2\.0\.0/.test(nonMarginText), 'no strategy code or version on the page text')
 
 // ---- a candidate with a conditional breakout and an observation pullback ----
 const candidate = { ...completeItem(), trading_date: '2026-10-22', llm_note: doneNote() }

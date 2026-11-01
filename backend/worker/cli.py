@@ -41,6 +41,7 @@ from .schedule_runs import (
 from .strategy_levels import run_strategy_levels
 from .theme_suggestions import run_theme_suggestions
 from .themes import sync_themes
+from .margin_lists import run_margin_lists
 from .trading_calendar import run_trading_calendar
 
 
@@ -172,6 +173,12 @@ def main() -> None:
     levels_parser.add_argument(
         "--date", dest="run_date", help="YYYY-MM-DD 訊號日；未指定使用最新訊號日"
     )
+    margin_lists_parser = subparsers.add_parser(
+        "margin-lists",
+        help="從已存的官方融資融券餘額 raw 回補融資標的清單 margin_lists（collect 會寫當日；不發網路，內容沒變不改寫）",
+    )
+    margin_lists_parser.add_argument("--start", help="YYYY-MM-DD；未指定為最早的 raw")
+    margin_lists_parser.add_argument("--end", help="YYYY-MM-DD；未指定為最新的 raw")
     calendar_parser = subparsers.add_parser(
         "trading-calendar",
         help="抓 TWSE 官方休市表存入 trading_calendar_days（daily 的 trading_calendar 步驟；預設今年與明年，內容沒變不改寫）",
@@ -387,6 +394,8 @@ def main() -> None:
         result = run_strategy_levels(parse_date(args.run_date))
     elif args.command == "trading-calendar":
         result = run_trading_calendar(years=args.years)
+    elif args.command == "margin-lists":
+        result = run_margin_lists(parse_date(args.start), parse_date(args.end))
     elif args.command == "candidate-notes":
         if args.limit is not None and args.limit < 1:
             parser.error("--limit must be at least 1")
@@ -477,6 +486,8 @@ def main() -> None:
         "no_data",
     }:
         raise SystemExit(1)
+    if args.command == "margin-lists" and result.get("status") != "success":
+        raise SystemExit(2 if result.get("status") == "partial" else 1)
     if args.command == "chips" and result.get("status") != "success":
         raise SystemExit(2 if result.get("status") == "partial" else 1)
     if (

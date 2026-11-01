@@ -29,7 +29,7 @@ from .models import (
     Signal,
     StrategyVersion,
 )
-from .strategies import REGISTRY
+from .signal_versions import readable_signal
 
 # Descending by value, null last, then by symbol. ``name`` and ``symbol`` sort
 # ascending; ``symbol`` keeps the exchange first as before #280.
@@ -104,7 +104,7 @@ def member_context(
                     Signal.signal_date == as_of,
                     Signal.status == "conditional",
                     Signal.data_quality == "complete",
-                    StrategyVersion.name.in_(list(REGISTRY)),
+                    readable_signal(),
                 )
             ).all()
         )

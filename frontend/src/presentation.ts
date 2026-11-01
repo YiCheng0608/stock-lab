@@ -42,6 +42,7 @@ const REASON_LABELS: Record<string, string> = {
   price_and_volume_inputs_must_be_positive: '價格、均線或成交量資料無法用於計算',
   institutional_flow_materially_adverse: '法人籌碼未達規則要求',
   margin_financing_increase_abnormal: '融資變化超過規則上限',
+  margin_financing_not_applicable: '非融資標的，融資條件不適用',
   unsupported_instrument_type: '此商品類型暫不適用一般研究規則',
   unsupported_or_missing_etf_category: 'ETF 分類尚待核實',
   etf_category_excluded_from_actionable_signals: '此 ETF 類型暫不適用一般研究訊號',
