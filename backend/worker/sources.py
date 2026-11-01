@@ -2833,6 +2833,20 @@ class TwseAdapter:
         unique = {(bar.symbol, bar.trading_date): bar for bar in bars}
         return list(unique.values()), payloads
 
+    def fetch_institutional_file(self, trading_date: date) -> FetchedPayload:
+        """One request: the session's T86 institutional file (all securities)."""
+
+        # TWSE RWD reports use compact YYYYMMDD query dates.  TPEx's newer
+        # POST pages use slashes and are handled in TpexAdapter.
+        query = {
+            "date": trading_date.strftime("%Y%m%d"),
+            "selectType": "ALL",
+            "response": "json",
+        }
+        return self._fetch(
+            f"{TWSE_CHIP_ENDPOINT}?{urlencode(query)}", trading_date.isoformat()
+        )
+
     def fetch_chips(
         self,
         trading_dates: Iterable[date],
@@ -2852,13 +2866,10 @@ class TwseAdapter:
         payloads: list[FetchedPayload] = []
         warnings: list[str] = []
         for trading_date in sorted(set(trading_dates)):
-            # TWSE RWD reports use compact YYYYMMDD query dates.  TPEx's
-            # newer POST pages use slashes and are handled separately below.
             date_text = trading_date.strftime("%Y%m%d")
-            chip_endpoint = f"{TWSE_CHIP_ENDPOINT}?{urlencode({'date': date_text, 'selectType': 'ALL', 'response': 'json'})}"
             margin_endpoint = f"{TWSE_MARGIN_HISTORY_ENDPOINT}?{urlencode({'date': date_text, 'selectType': 'ALL', 'response': 'json'})}"
             try:
-                chip_payload = self._fetch(chip_endpoint, trading_date.isoformat())
+                chip_payload = self.fetch_institutional_file(trading_date)
                 payloads.append(chip_payload)
                 _require_reported_date(
                     chip_payload.payload, trading_date, TWSE_CHIP_ENDPOINT
@@ -3211,6 +3222,21 @@ class TpexAdapter:
             {(bar.symbol, bar.trading_date): bar for bar in bars}.values()
         ), payloads
 
+    def fetch_institutional_file(self, trading_date: date) -> FetchedPayload:
+        """One request: the session's institutional daily-trade file (all securities)."""
+
+        return self._fetch(
+            TPEX_CHIP_HISTORY_ENDPOINT,
+            trading_date.isoformat(),
+            method="POST",
+            data={
+                "type": "Daily",
+                "sect": "EW",
+                "date": trading_date.strftime("%Y/%m/%d"),
+                "response": "json",
+            },
+        )
+
     def fetch_chips(
         self,
         trading_dates: Iterable[date],
@@ -3225,17 +3251,7 @@ class TpexAdapter:
         for trading_date in sorted(set(trading_dates)):
             date_text = trading_date.strftime("%Y/%m/%d")
             try:
-                chip_payload = self._fetch(
-                    TPEX_CHIP_HISTORY_ENDPOINT,
-                    trading_date.isoformat(),
-                    method="POST",
-                    data={
-                        "type": "Daily",
-                        "sect": "EW",
-                        "date": date_text,
-                        "response": "json",
-                    },
-                )
+                chip_payload = self.fetch_institutional_file(trading_date)
                 payloads.append(chip_payload)
                 _require_reported_date(
                     chip_payload.payload, trading_date, TPEX_CHIP_HISTORY_ENDPOINT

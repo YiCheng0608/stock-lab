@@ -80,6 +80,13 @@ class Steps:
             "plan_tracking": {"status": "success", "records": 0},
             "strategy_levels": {"status": "success", "records": 6},
             "candidate_notes": {"status": "success", "records": 3},
+            # Issue #396; the real refetch has its own tests.
+            "institutional_refetch": {
+                "status": "success",
+                "records": 0,
+                "requests": 2,
+                "revised_rows": 0,
+            },
         }
         self.results.update(results)
 
@@ -110,6 +117,11 @@ class Steps:
         )
         monkeypatch.setattr(
             schedule_runs, "_candidate_note_step", make("candidate_notes")
+        )
+        monkeypatch.setattr(
+            schedule_runs,
+            "_institutional_refetch_step",
+            make("institutional_refetch"),
         )
         # Catch-up has its own tests; here no earlier session is missing.
         monkeypatch.setattr(
@@ -178,6 +190,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
     again = pipeline.run_daily(DAY, trigger="scheduler")
     assert again["status"] == "skipped" and again["reason"] == "already_complete"
     assert again["related_run_id"] == rows[0].id
+    # Only the institutional files are fetched again (Issue #396).
     assert steps.calls == [
         "collect",
         "trading_calendar",
@@ -189,10 +202,12 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "plan_tracking",
         "strategy_levels",
         "candidate_notes",
+        "institutional_refetch",
     ]
     rows, by_run = runs(database)
     assert [row.status for row in rows] == ["success", "skipped"]
-    assert by_run[rows[1].id] == {}
+    assert list(by_run[rows[1].id]) == ["institutional_refetch"]
+    assert again["institutional_refetch"]["requests"] == 2
 
     forced = pipeline.run_daily(DAY, force=True)
     assert forced["status"] == "success"
