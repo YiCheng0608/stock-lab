@@ -42,7 +42,7 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 
 - **行情與籌碼不以當天清單過濾普通股**：
   - 4 位數、非 0 開頭、非 91 開頭的代號一律保留；ETF（0 開頭）、特別股（帶字母）、權證、可轉債、ETN、存託憑證（91 開頭或 6 位數）仍只收 allowlist 內的。
-  - collect 把這些列寫入 DB 中同交易所、同代號的既有標的；DB 沒有的記為 `unmatched_bar`，不建標的、不丟棄（[OPERATIONS §6.4](OPERATIONS.md#64-重跑與回補)）。
+  - collect 把這些列寫入 DB 中同交易所、同代號的既有標的；DB 沒有的記為 `unmatched_bar`，不建標的、不丟棄；之後標的建立了，collect 以已存的 raw 補寫這些日線（#388；規則見 [OPERATIONS §6.4](OPERATIONS.md#64-重跑與回補)）。
 - **狀態**：只有抓當日快照的 collect 會同步，歷史回補與 catchup 不做。
   - 現行的股票、`ipo` 或 ETF 若不在所屬交易所當天的清單：另一交易所清單有同代號時標 `transferred`，否則標 `delisted`。
   - 該標的未關的成員列（產業、ETF、題材）一律關閉，不刪列：轉市關到新市場上市日前一天，下市關到清單觀測日前一天，都不早於該列的 `valid_from`。
