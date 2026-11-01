@@ -205,7 +205,7 @@ def test_collect_has_no_silent_skip_of_a_quote_row():
     assert "note_unmatched_bar(" in loop
 
 
-# ---- adapters pass ordinary-share codes and nothing else ----
+# ---- adapters pass ordinary-share and ETF codes and nothing else ----
 
 
 @pytest.mark.parametrize(
@@ -226,6 +226,34 @@ def test_collect_has_no_silent_skip_of_a_quote_row():
 )
 def test_common_stock_code(symbol, expected):
     assert sources.is_common_stock_code(symbol) is expected
+
+
+@pytest.mark.parametrize(
+    ("symbol", "expected"),
+    [
+        ("0050", True),
+        ("00878", True),
+        ("006208", True),
+        ("00679B", True),  # bond ETF
+        ("00793B", True),
+        ("00981A", True),  # active ETF
+        ("00687C", True),
+        ("008201", True),
+        ("2330", False),
+        ("020000", False),  # ETN
+        ("030001", False),  # warrant
+        ("00679b", False),
+        ("0050AB", False),
+        ("00", False),
+        ("0012345", False),
+        ("", False),
+    ],
+)
+def test_etf_code(symbol, expected):
+    assert sources.is_etf_code(symbol) is expected
+    assert sources.is_quoted_security_code(symbol) is (
+        expected or sources.is_common_stock_code(symbol)
+    )
 
 
 def _tpex_quotes(rows):
@@ -256,7 +284,7 @@ def _tpex_quotes(rows):
     }
 
 
-def test_tpex_quotes_keep_ordinary_shares_outside_the_lists(tmp_path, monkeypatch):
+def test_tpex_quotes_keep_shares_and_etfs_outside_the_lists(tmp_path, monkeypatch):
     monkeypatch.setattr(sources, "RAW_DIR", tmp_path / "raw")
     payload = _tpex_quotes(
         [
@@ -272,10 +300,12 @@ def test_tpex_quotes_keep_ordinary_shares_outside_the_lists(tmp_path, monkeypatc
 
     bars, _ = adapter.fetch_bars(["6488"], SCORE_DATE, SCORE_DATE)
 
-    assert sorted(bar.symbol for bar in bars) == ["6488", "8908"]
+    # An ETF the list dropped still trades until its last day (Issue #393);
+    # warrants and other products stay out.
+    assert sorted(bar.symbol for bar in bars) == ["006201", "00679B", "6488", "8908"]
 
 
-def test_twse_quotes_keep_ordinary_shares_outside_the_lists(tmp_path, monkeypatch):
+def test_twse_quotes_keep_shares_and_etfs_outside_the_lists(tmp_path, monkeypatch):
     monkeypatch.setattr(sources, "RAW_DIR", tmp_path / "raw")
     fields = [
         "Code",
@@ -308,7 +338,7 @@ def test_twse_quotes_keep_ordinary_shares_outside_the_lists(tmp_path, monkeypatc
 
     bars, _ = sources.TwseAdapter(fetch).fetch_bars(["2330"], SCORE_DATE, SCORE_DATE)
 
-    assert sorted(bar.symbol for bar in bars) == ["2330", "2888", "TAIEX"]
+    assert sorted(bar.symbol for bar in bars) == ["0056", "2330", "2888", "TAIEX"]
 
 
 def test_newlisting_rows_outside_the_listing_window_are_not_listings(
@@ -625,6 +655,152 @@ def test_snapshot_collect_syncs_status_and_historical_collect_does_not(
         ("8183", "delisted")
     ]
     assert SCORE_DATE - timedelta(days=1) == date.fromisoformat(changes[0]["close_day"])
+
+
+# ---- an ETF the list dropped while it still traded (Issue #393, B1) ----
+
+
+def test_an_etf_dropped_from_the_list_while_still_quoted_keeps_its_bars_and_status(
+    pipeline_env,
+):
+    """TPEx's ETF list dropped 00793B and 00847B while both still traded.
+
+    Before #393 the adapter kept only list codes and ordinary-share codes, so
+    the ETF's quote row never reached collect, and the status sync, reading
+    only the lists, called it delisted.  Now the row is written to the stored
+    ETF, which stays active while the day's quote table carries it; 00847B,
+    with no row that day, is delisted as before.
+    """
+
+    with pipeline_env() as db:
+        ids = _seed_market(db, TWSE_CODES, TPEX_CODES)
+        for code in ("00793B", "00847B"):
+            ids[("TPEx", code)] = _instrument(
+                db, "TPEx", code, instrument_type="etf"
+            ).id
+        db.commit()
+    records, captures = _lists(TWSE_CODES, TPEX_CODES)
+    quotes = _tpex_quotes(
+        [(code, code) for code in TPEX_CODES] + [("00793B", "群益AAA-A醫療債")]
+    )
+    tpex_bars, quote_captures = sources.TpexAdapter(
+        lambda url, **_: quotes
+    ).fetch_bars(TPEX_CODES, SCORE_DATE, SCORE_DATE)
+    assert "00793B" in {bar.symbol for bar in tpex_bars}
+    index = sources.InstrumentRecord(
+        "TAIEX", "TAIEX", exchange="TWSE", instrument_type="index", industry="Index"
+    )
+    batch = sources.OfficialBatch(
+        instruments=records + [index],
+        bars=[_bar(code, "TWSE", captures[0].sha256) for code in TWSE_CODES]
+        + tpex_bars
+        + [_bar("TAIEX", "TWSE", captures[0].sha256)],
+        payloads=captures + quote_captures,
+        data_as_of=SCORE_DATE.isoformat(),
+        snapshot_feeds=True,
+    )
+
+    result = pipeline.collect(SCORE_DATE, adapter=FakeAdapter(batch))
+
+    assert result["status"] == "success"
+    with pipeline_env() as db:
+        quoted = db.get(Instrument, ids[("TPEx", "00793B")])
+        assert quoted.status == "active"
+        bar = db.scalar(select(MarketBar).where(MarketBar.instrument_id == quoted.id))
+        assert bar.trading_date == SCORE_DATE and bar.close == 10
+        assert db.get(pipeline.RawPayload, bar.raw_payload_id).endpoint == (
+            sources.TPEX_HISTORY_API
+        )
+        assert db.get(Instrument, ids[("TPEx", "00847B")]).status == "delisted"
+        sync = db.get(IngestionRun, result["run_id"]).metadata_json[
+            "instrument_status_sync"
+        ]
+    assert [(item["symbol"], item["status"]) for item in sync["changes"]] == [
+        ("00847B", "delisted")
+    ]
+    tpex = sync["exchanges"]["TPEx"]
+    assert tpex["quoted_absent_symbols"] == ["00793B"]
+    assert tpex["absent_symbols"] == ["00847B"]
+    assert tpex["quote_check"]["status"] == "checked"
+    assert tpex["quote_check"]["session"] == SCORE_DATE.isoformat()
+
+
+def _taiex_sessions(db, days):
+    taiex = _instrument(db, "TWSE", "TAIEX", instrument_type="index")
+    for day in days:
+        db.add(
+            MarketBar(
+                instrument_id=taiex.id,
+                trading_date=day,
+                open=1,
+                high=1,
+                low=1,
+                close=1,
+                adj_close=1,
+                volume=0,
+                turnover=0,
+            )
+        )
+    db.flush()
+
+
+def _quote_row(code):
+    return [code, code, "10", "0", "10", "10", "10", "10", "1", "10"]
+
+
+def test_an_absent_instrument_is_delisted_once_its_quote_rows_stop(pipeline_env):
+    before, today = SCORE_DATE - timedelta(days=1), SCORE_DATE
+    listed = TPEX_CODES[:10]
+    with pipeline_env() as db:
+        _taiex_sessions(db, [before, today])
+        for code in listed:
+            _instrument(db, "TPEx", code)
+        etf = _instrument(db, "TPEx", "00793B", instrument_type="etf")
+        records = [
+            sources.InstrumentRecord(code, code, exchange="TPEx") for code in listed
+        ]
+        evidence = pipeline.universe_evidence(
+            [
+                _capture("tpex", sources.TPEX_LISTED_ENDPOINT, {"codes": listed}),
+                _capture("tpex", sources.TPEX_ETF_ENDPOINT, []),
+            ],
+            lambda _: 1,
+        )
+        _store_quotes(db, before, [_quote_row(code) for code in listed + ["00793B"]])
+
+        def plan():
+            result = pipeline.plan_instrument_status(db, records, evidence)
+            return [
+                (change["instrument"].symbol, change["status"])
+                for change in result["changes"]
+            ], result["exchanges"]["TPEx"]
+
+        # The latest session has no stored quote table: the lists decide.
+        changes, summary = plan()
+        assert changes == [("00793B", "delisted")]
+        assert summary["quote_check"] == {
+            "status": "unverifiable",
+            "reason": "missing quote table",
+        }
+
+        # Still quoted today: not gone yet.
+        _store_quotes(db, today, [_quote_row(code) for code in listed + ["00793B"]])
+        changes, summary = plan()
+        assert changes == []
+        assert summary["quoted_absent_symbols"] == ["00793B"]
+        assert summary["absent"] == 0
+        assert summary["quote_check"]["status"] == "checked"
+
+        # Today's table no longer carries it: delisted.
+        db.query(pipeline.RawPayload).filter(
+            pipeline.RawPayload.data_as_of == today.isoformat()
+        ).delete()
+        _store_quotes(db, today, [_quote_row(code) for code in listed])
+        changes, summary = plan()
+        assert changes == [("00793B", "delisted")]
+        assert summary["quoted_absent_symbols"] == []
+        assert summary["quote_check"]["status"] == "checked"
+        assert etf.status == "active"  # planning writes nothing
 
 
 # ---- the verify fixture's lifecycle rows are what the worker writes ----

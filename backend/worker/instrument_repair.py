@@ -2,16 +2,17 @@
 
 Until #212 the collector kept only quote and chip rows whose code was in that
 day's issuer master, so a company that left the master (delisted, moved to the
-other exchange) lost every row a later backfill fetched for it.  The exact
-official payloads are still in ``raw_payloads``.  This repair:
+other exchange) lost every row a later backfill fetched for it.  Until #393
+the same held for an ETF that left the ETF list.  The exact official payloads
+are still in ``raw_payloads``.  This repair:
 
 1. syncs instrument status from the latest stored list captures
    (``pipeline.plan_instrument_status``, the rule the daily collect uses);
-2. with ``include_delisted``, creates the instruments of ordinary-share codes
-   that have stored quote rows but were never stored, when the lists no longer
-   carry them and their quotes stopped at least ``STALE_SESSIONS`` sessions
-   before the exchange's latest stored session; the status is ``transferred``
-   when the other exchange lists the code, else ``delisted``;
+2. with ``include_delisted``, creates the instruments of ordinary-share and
+   ETF codes that have stored quote rows but were never stored, when the lists
+   no longer carry them and their quotes stopped at least ``STALE_SESSIONS``
+   sessions before the exchange's latest stored session; the status is
+   ``transferred`` when the other exchange lists the code, else ``delisted``;
 3. writes every stored quote row and, for the instruments that received bars,
    every stored chip row that the database lacks.  Stored rows are never
    changed (``overwrite=False``).
@@ -78,8 +79,10 @@ from worker.sources import (
     _require_reported_date,
     _rows,
     _text,
-    is_common_stock_code,
+    is_etf_code,
+    is_quoted_security_code,
     merge_chip_records,
+    normalize_etf_category,
     parse_tpex_daily_rows,
     parse_tpex_institutional_rows,
     parse_tpex_margin_rows,
@@ -282,7 +285,7 @@ def plan_repair(
             if bar.symbol == "TAIEX":
                 continue
             sessions[bar.exchange].add(bar.trading_date)
-            if not is_common_stock_code(bar.symbol):
+            if not is_quoted_security_code(bar.symbol):
                 continue
             key = (bar.exchange, bar.symbol)
             instrument = stored.get(key)
@@ -334,6 +337,7 @@ def plan_repair(
         to_create.append(
             {
                 **item,
+                "instrument_type": "etf" if is_etf_code(symbol) else "stock",
                 "status": "transferred" if moved else "delisted",
                 "reason": "listed_on_other_exchange"
                 if moved
@@ -528,7 +532,12 @@ def repair_instruments(
             exchange=item["exchange"],
             symbol=item["symbol"],
             name=item["name"] or item["symbol"],
-            instrument_type="stock",
+            instrument_type=item["instrument_type"],
+            etf_category=normalize_etf_category(
+                None, symbol=item["symbol"], name=item["name"] or ""
+            )
+            if item["instrument_type"] == "etf"
+            else None,
             status=item["status"],
             is_watchlisted=False,
         )

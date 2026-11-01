@@ -3389,6 +3389,10 @@ def plan_instrument_status(
     is ``transferred`` when the other exchange lists the same code, otherwise
     ``delisted``; its open memberships close the day before the new listing (a
     transfer with a known listing date) or the day before the observation.
+    An absent one whose code still has a row in the exchange's latest stored
+    quote table is still traded and keeps its status (Issue #393: a bond ETF
+    being wound up left the ETF list while it traded for weeks); without that
+    table the lists decide.
     A listed one whose code has no row in any stored quote table of the last
     DORMANT_SESSIONS sessions is presumed ``dormant``; ``collect`` makes it
     active again when a quote row returns.
@@ -3458,9 +3462,31 @@ def plan_instrument_status(
             for item in current
             if item.status == "dormant" and (exchange, item.symbol) in universe
         ]
-        latest = _stored_quote_rows(db, exchange, sessions[-1:]) if resting else None
-        if resting and sessions and latest is not None:
+        latest = (
+            _stored_quote_rows(db, exchange, sessions[-1:])
+            if (resting or absent) and sessions
+            else None
+        )
+        if latest is not None:
             revived = [item for item in resting if item.symbol in latest[0]]
+        # Absent from the lists but still quoted: not gone yet.
+        quoted = (
+            [item for item in absent if item.symbol in latest[0]]
+            if latest is not None
+            else []
+        )
+        absent = [item for item in absent if item not in quoted]
+        quote_check: dict[str, Any] = (
+            {"status": "not_needed"}
+            if not (absent or quoted)
+            else {
+                "status": "checked",
+                "session": sessions[-1].isoformat(),
+                "raw_payload_ids": latest[1],
+            }
+            if latest is not None
+            else {"status": "unverifiable", "reason": "missing quote table"}
+        )
         planned = len(absent) + len(dormant)
         limit = max(STATUS_SYNC_MIN_LIMIT, int(len(active) * max_share))
         exchanges[exchange] = {
@@ -3473,6 +3499,8 @@ def plan_instrument_status(
             "absent_symbols": [item.symbol for item in absent][:50],
             "dormant_symbols": [item.symbol for item in dormant][:50],
             "revived_symbols": [item.symbol for item in revived][:50],
+            "quoted_absent_symbols": [item.symbol for item in quoted][:50],
+            "quote_check": quote_check,
             "captures": proof["captures"],
             "dormancy": dormancy,
         }

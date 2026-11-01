@@ -237,7 +237,7 @@ def main() -> None:
     instruments_repair_parser.add_argument(
         "--include-delisted",
         action="store_true",
-        help="為已不在官方清單、DB 也沒有的普通股代號建 delisted／transferred 標的並補歷史",
+        help="為已不在官方清單、DB 也沒有的普通股與 ETF 代號建 delisted／transferred 標的並補歷史",
     )
     instruments_repair_parser.add_argument(
         "--max-status-share",

@@ -1,6 +1,7 @@
 """Daily batch: derive scalar technical indicators from stored daily bars.
 
-The default (daily) mode writes, per instrument, every bar date after the last
+Every instrument with stored bars is covered, active or not.  The default
+(daily) mode writes, per instrument, every bar date after the last
 stored row of the current formula version, which is normally just the latest
 session.  When the recomputed value for that last stored row no longer matches
 (an earlier bar was backfilled or corrected, or a corporate action arrived
@@ -118,9 +119,13 @@ def compute_market_indicators(
                 "formula_version": INDICATOR_VERSION,
                 "rows_written": 0,
             }
+    # Every instrument with bars, whatever its status: a delisted, moved or
+    # dormant one keeps its history, and a bar written after it stopped being
+    # active (a repair, a backfill) must not leave its rows stale (Issue #393).
+    # Without new bars the stored last row matches and nothing is written.
     instrument_ids = db.scalars(
         select(Instrument.id)
-        .where(Instrument.status == "active")
+        .where(select(MarketBar.id).where(MarketBar.instrument_id == Instrument.id).exists())
         .order_by(Instrument.id)
     ).all()
     with_actions = set(
