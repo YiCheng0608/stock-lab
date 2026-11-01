@@ -249,7 +249,7 @@ candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(�
 
 ### 6.5 限制
 
-- 三大法人的更正只在之後還有 capture 時才會寫入（[§6.4 冪等](#64-重跑與回補)）：18:30 的 collect 已 `success` 時，21:30 只記 `already_complete`、不再擷取（[§6.2](#62-dailynews-工作的註冊與管理)），這一天 18:30 之後的更正收不到。2026-10-19～10-30 每個交易日 18:30 都是 `partial`，21:30 都有再擷取。
+- 三大法人的更正只在之後還有 capture 時才會寫入（[§6.4 冪等](#64-重跑與回補)）：18:30 的 collect 已 `success` 時，21:30 只記 `already_complete`、不再擷取（[§6.2](#62-dailynews-工作的註冊與管理)），這一天 18:30 之後的更正收不到。2026-10-19～10-30 每個交易日 18:30 都是 `partial`，21:30 都有再擷取；改成 21:30 一律重抓見 [#396](https://github.com/YiCheng0608/stock-lab/issues/396)。
 - universe 取自今日的官方清單。回補期間已下市或轉市的股票，DB 已有標的時照樣寫入歷史；沒有標的時只記 `unmatched_bar`，需要 `instruments repair --include-delisted` 才會建標的並補歷史（[§6.4](#64-重跑與回補)）。
 - 標的狀態只依官方清單與已存行情表判定，沒有接終止上市、停牌公告。仍在清單內、但 60 個交易日沒有行情列的推定為 `dormant`；未滿 60 個交易日的維持 `active`，日線停在最後交易日（[DATA_SOURCES 標的狀態同步](DATA_SOURCES.md#標的狀態同步)、[#212](https://github.com/YiCheng0608/stock-lab/issues/212)）。
 - 歷史回補不保存當日產業觀測與 MOPS／除權息快照；這些只由 daily 記錄當天。
