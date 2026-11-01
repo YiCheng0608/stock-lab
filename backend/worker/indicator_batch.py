@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 import time
 from datetime import date, datetime, timezone
-from typing import Any
+from typing import Any, Iterable
 
 from sqlalchemy import delete, func, insert, inspect, select
 from sqlalchemy.orm import Session
@@ -107,9 +107,17 @@ def _same(stored: TechnicalIndicator, point: IndicatorPoint) -> bool:
 
 
 def compute_market_indicators(
-    db: Session, *, as_of: date | None = None, rebuild: bool = False
+    db: Session,
+    *,
+    as_of: date | None = None,
+    rebuild: bool = False,
+    instrument_ids: Iterable[int] | None = None,
 ) -> dict[str, Any]:
-    """Compute and stage indicator rows in the caller's transaction."""
+    """Compute and stage indicator rows in the caller's transaction.
+
+    ``instrument_ids`` limits the batch to those instruments (a
+    corporate-action correction rebuilds only the instruments it changed).
+    """
     started = time.perf_counter()
     if as_of is None:
         as_of = db.scalar(select(func.max(MarketBar.trading_date)))
@@ -119,6 +127,7 @@ def compute_market_indicators(
                 "formula_version": INDICATOR_VERSION,
                 "rows_written": 0,
             }
+    only = None if instrument_ids is None else set(instrument_ids)
     # Every instrument with bars, whatever its status: a delisted, moved or
     # dormant one keeps its history, and a bar written after it stopped being
     # active (a repair, a backfill) must not leave its rows stale (Issue #393).
@@ -128,7 +137,8 @@ def compute_market_indicators(
         .where(
             select(MarketBar.id)
             .where(MarketBar.instrument_id == Instrument.id)
-            .exists()
+            .exists(),
+            *([Instrument.id.in_(only)] if only is not None else []),
         )
         .order_by(Instrument.id)
     ).all()

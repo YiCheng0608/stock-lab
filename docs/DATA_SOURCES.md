@@ -26,7 +26,7 @@
 | TPEx 日行情 | [`dailyQuotes`](https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes)（POST） | 逐日擷取，保留股票／ETF allowlist、普通股與 ETF 代號（[標的狀態同步](#標的狀態同步)），讀 OHLC、`TradingShares`（股）、`TransactionAmount`。 | 回報日期須等於請求日期；非空但全部被拒收的表格不算合法空日。 |
 | TWSE 籌碼 | 法人 [`T86`](https://www.twse.com.tw/rwd/zh/fund/T86)；融資 [`MI_MARGN`](https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN) | 法人依外資及陸資、投信、自營商分類；融資讀餘額與增減。 | 請求可能被限流、重導或缺可驗證日期。 |
 | TPEx 籌碼 | 法人 [`insti/dailyTrade`](https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade)；融資 [`margin/balance`](https://www.tpex.org.tw/www/zh-tw/margin/balance) | 同 TWSE 口徑；[三大法人買賣明細](https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html)明列外資及陸資、投信、自營商及合計。 | 缺資料時不補 0；官方檔未列的語意見[法人口徑](#法人口徑)。 |
-| 公司行動 | TWSE [`TWT48U_ALL`](https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL)；TPEx [`tpex_exright_daily`](https://www.tpex.org.tw/openapi/v1/tpex_exright_daily) | 除權息資料寫入 corporate actions，作價格調整與追蹤比較。 | `TWT48U_ALL` 可含未來預告，須保存擷取時間；完整歷史與更正紀錄不明。欄位規則見[公司行動欄位](#公司行動欄位)。 |
+| 公司行動 | daily：TWSE [`TWT48U_ALL`](https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL)；TPEx [`tpex_exright_daily`](https://www.tpex.org.tw/openapi/v1/tpex_exright_daily)。回補：TWSE `TWT49U`＋`TWT49UDetail`、TPEx `exDailyQ`（除權除息計算結果表，見[除權息回補](#除權息回補)） | 除權息資料寫入 corporate actions，作價格調整與追蹤比較。 | daily 兩個來源只有當天的事件（`TWT48U_ALL` 另有未來預告，不寫入），沒收到的那天由回補補上。欄位規則見[公司行動欄位](#公司行動欄位)。 |
 | 停復牌 | TPEx [`tpex_spendi_today`](https://www.tpex.org.tw/openapi/v1/tpex_spendi_today)、[`tpex_spendi_history`](https://www.tpex.org.tw/openapi/v1/tpex_spendi_history) | history 轉為可稽核的停牌區間事件；區間內缺 bar 視為不可比。 | today 同時列暫停與恢復公告，代號存在不等於仍停牌；TWSE 停牌歷史未接入，追蹤可能為不可比。見[停復牌規則](#tpex-停復牌規則)。 |
 | 重大訊息／基本面 | TWSE [`t187ap04_L`](https://openapi.twse.com.tw/v1/opendata/t187ap04_L)、[`t187ap14_L`](https://openapi.twse.com.tw/v1/opendata/t187ap14_L)；TPEx [`mopsfin_t187ap04_O`](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap04_O)、[`mopsfin_t187ap14_O`](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap14_O) | 官方事件與基本面 snapshot。 | 只是取得當下的 snapshot，不能重建歷史可得時間；基本面不是 v1 策略輸入。同股同日多則不同公告標題相同時，以發言時間區分：最早一則保留原標題，之後各則標題加「（發言時間 HH:MM:SS）」（內容完全相同的重複列只留一則），之後重抓不會改名已存的事件。 |
 
@@ -206,6 +206,37 @@ TWSE：`GET /instruments/{symbol}` 的 `corporate_actions[]` 帶唯讀分類 `so
 | `reason` | 依序 `unsupported_source`→`invalid_details`→`missing_official_field`→`alias_conflict`→`identity_mismatch`→`unknown_raw_value`→`trusted_twse_exact_fields`。 |
 
 只有 action source 為 `twse`、標的交易所為 `TWSE`，且 `Code`／`Date`／`Exdividend` 都是非空字串時才分類：`Code` 等於代號、`Date` 是有效 7 碼民國日期且等於除權息日、`Exdividend` 只接受 `息`／`權`／`權息`。別名 `股票代號`／`證券代號`／`除權息日期`／`除權息` 只用於一致性檢查，不補缺值。分類不改 DB、調整因子或 raw。
+
+#### 寫入防呆
+
+每列寫入前（daily 與回補都經 `worker.pipeline._upsert_action`），比較由欄位算出的因子與官方價格比 `減除股利參考價 ／ 除權息前收盤價`（TPEx `DividendDeductedQuote`／`ClosePriceBeforeExRightsDiviend`；TWSE `TWT49U` 的同名欄）。
+
+- **比較方式**：在價格上比，`|欄位因子 × 除權息前收盤價 − 減除股利參考價| > 0.02 元` 判為不符（`ACTION_REFERENCE_TOLERANCE`）。
+- **門檻依據**：官方參考價以 0.01 元公布且無條件捨去（TWSE 4912 2026-09-10：97.50 − 0.800477 = 96.6995，公布 96.69），正確的列差距小於 0.01。
+- **不比除權息參考價**：用減除股利參考價，不用含現金增資認購的除權息參考價。現金增資本來就不還原，所以 3691 2026-10-27（現增認股）是 109.00／109.00 ＝ 1，不會被擋。
+- **不符時**：該列照存 raw 與 `details_json`（加 `factor_check`），但 `cash_dividend`、`stock_dividend_ratio`、`split_ratio` 留空，所以不調整價格。另寫一列 `data_quality`（`entity_type=corporate_action`、`entity_key=<交易所>:<代號>:<action_type>`、`as_of_date` 為除權息日、`status=factor_mismatch`，`checks_json` 記兩邊的值）。之後同一事件寫入正確值時，這列改為 `complete`。
+- **沒有官方價格的列**（daily 的 `TWT48U_ALL`）：不比，照舊寫入；之後的回補會以 `TWT49U` 覆寫並核對。
+- **已核對的列不被覆寫**：同一事件（標的、日期、`action_type`）已有帶官方價格且通過核對的列時（回補寫入的，或 TPEx daily 寫入的），沒有官方價格的列（daily 的 `TWT48U_ALL` 重抓）整列不寫，因子、`details_json` 與 raw 連結都不變；daily 只新增還沒有的事件。沒有官方價格的既有列照舊由 daily 覆寫。
+
+#### 除權息回補
+
+`worker.cli corporate-actions sync`（[OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)）每個日曆月發一個請求，raw 每份回應只登錄一列，`data_as_of` 寫它涵蓋的區間（例如 `2026-09-01~2026-09-30`）。
+
+| 來源 | URL | 用到的欄位 |
+| --- | --- | --- |
+| TWSE 除權除息計算結果表 | `https://www.twse.com.tw/rwd/zh/exRight/TWT49U?startDate=YYYYMMDD&endDate=YYYYMMDD&response=json` | `資料日期`、`股票代號`、`股票名稱`、`除權息前收盤價`、`除權息參考價`、`權值+息值`、`權/息`、`減除股利參考價`。區間內沒有事件時只回 `stat`「很抱歉，沒有符合條件的資料!」。 |
+| TWSE 計算結果明細 | `https://www.twse.com.tw/rwd/zh/exRight/TWT49UDetail?STK_NO=<代號>&T1=YYYYMMDD&response=json` | `(每股配發現金股利)除息`（`3 元／股`）、`A. 按普通股股東持股比例每千股無償配股`（`100 股`）；其餘現增欄位只保存。只對 `權/息` 含「權」的列請求。 |
+| TPEx 除權除息計算結果表 | `https://www.tpex.org.tw/www/zh-tw/bulletin/exDailyQ?startDate=YYYY/MM/DD&endDate=YYYY/MM/DD&response=json` | 21 欄（`除權息日期`、`代號`…`按持股比例仟股認購`）逐一對應 `tpex_exright_daily` 的英文欄名後，以 daily 同一個 parser 解析；回應的 `date` 須等於請求區間。 |
+
+- **TWSE 對應**：`息` 列的現金股利是 `權值+息值`；含「權」的列取明細的每股現金股利，配股率見下一點。明細讀不到時該事件不寫入、記 warning，run 為 `partial`。`details_json` 保留 `TWT49U` 全部欄位、`detail` 與 `detail_sha256`，並補 `Code`／`Date`／`Name`／`Exdividend`，讓上面的分類照常運作。
+- **TWSE 配股率**（`sources._twse_stock_ratio`）：明細的每千股無償配股只印到小數一位（2442 2026-09-08 印 `71.1 股`，實際 0.07111516），印出值 ÷ 1,000 最多差 0.00005。TWSE 用精確比率算參考價，所以從同一列的價格反推：沒有現增時 `(除權息前收盤價 − 現金股利) ／ (除權息前收盤價 − 權值+息值) − 1`（`權值+息值` 六位小數、未捨去）；明細有現增（`C. (有償) 現金增資` 或 `按股東持股比例每千股認購` 大於 0）時，分母改用不含認購的 `減除股利參考價`。存哪個值：
+  - 反推值與印出值相差不到 0.000001：存印出值（`used=printed`）。
+  - 相差不超過半個印出單位（0.00005）：存反推值（`used=derived`，精度為 TWSE 計算時用的比率）。
+  - 相差更多：存印出值，標 `disagrees=true`，交由寫入防呆判斷（印出值與價格不一致就會被擋）。
+  - 沒有印出值、沒有收盤價或現金股利、分母不是正數：存印出值、不反推。
+  - `details_json.stock_ratio_source` 記 `printed`、`from`（`權值+息值` 或 `減除股利參考價`）、`derived`、`used` 與 `disagrees`。`disagrees` 的例子：8104 2025-09-16、1529 2026-07-21、2614 2026-10-06（有現增，印出值都通過價格核對）。
+- **與 daily 同一列**：`action_type` 與 daily 的規則相同（TWSE 一律 `corporate_action`，TPEx 含「息」為 `ex_dividend`），所以回補覆寫 daily 寫的同一列，不會多出第二列。
+- **拒收**：回應區間或列的日期不在請求區間內、欄位缺漏、`stat` 不是成功時，整次 sync 失敗、不寫 DB。
 
 ## FinMind 補缺口規則
 
