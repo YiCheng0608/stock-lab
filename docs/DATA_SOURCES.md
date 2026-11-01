@@ -223,8 +223,8 @@ TWSE：`GET /instruments/{symbol}` 的 `corporate_actions[]` 帶唯讀分類 `so
 
 - **比較方式**：在價格上比，`|欄位因子 × 除權息前收盤價 − 減除股利參考價| > 0.02 元` 判為不符（`ACTION_REFERENCE_TOLERANCE`）。
 - **門檻依據**：官方參考價以 0.01 元公布且無條件捨去（TWSE 4912 2026-09-10：97.50 − 0.800477 = 96.6995，公布 96.69），正確的列差距小於 0.01。
-- **不比除權息參考價**：用減除股利參考價，不用含現金增資認購的除權息參考價。現金增資本來就不還原，所以 3691 2026-10-27（現增認股）是 109.00／109.00 ＝ 1，不會被擋。
-- **不符時**：該列照存 raw 與 `details_json`（加 `factor_check`），但 `cash_dividend`、`stock_dividend_ratio`、`split_ratio` 留空，所以不調整價格。另寫一列 `data_quality`（`entity_type=corporate_action`、`entity_key=<交易所>:<代號>:<action_type>`、`as_of_date` 為除權息日、`status=factor_mismatch`，`checks_json` 記兩邊的值）。之後同一事件寫入正確值時，這列改為 `complete`。
+- **不比除權息參考價**：用減除股利參考價，不用含現金增資認購的除權息參考價。欄位沒有現增，所以 3691 2026-10-27（現增認股）是 109.00／109.00 ＝ 1，不會被擋；現增由價格還原改用除權息參考價處理（[V1_SPEC 還原因子](V1_SPEC.md#技術指標)，#394）。
+- **不符時**：該列照存 raw 與 `details_json`（加 `factor_check`），但 `cash_dividend`、`stock_dividend_ratio`、`split_ratio` 留空，錯的欄位不進價格還原；有官方除權息價格的列改以官方比還原（[V1_SPEC 還原因子](V1_SPEC.md#技術指標)）。另寫一列 `data_quality`（`entity_type=corporate_action`、`entity_key=<交易所>:<代號>:<action_type>`、`as_of_date` 為除權息日、`status=factor_mismatch`，`checks_json` 記兩邊的值）。之後同一事件寫入正確值時，這列改為 `complete`。
 - **沒有官方價格的列**（daily 的 `TWT48U_ALL`）：不比，照舊寫入；之後的回補會以 `TWT49U` 覆寫並核對。
 - **已核對的列不被覆寫**：同一事件（標的、日期、`action_type`）已有帶官方價格且通過核對的列時（回補寫入的，或 TPEx daily 寫入的），沒有官方價格的列（daily 的 `TWT48U_ALL` 重抓）整列不寫，因子、`details_json` 與 raw 連結都不變；daily 只新增還沒有的事件。沒有官方價格的既有列照舊由 daily 覆寫。
 

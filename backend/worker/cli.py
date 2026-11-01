@@ -22,6 +22,7 @@ from .chip_revisions import run_revise_institutional
 from .corporate_action_sync import (
     run_corporate_action_check,
     run_corporate_action_rebuild,
+    run_corporate_action_reprice,
     run_corporate_action_sync,
 )
 from .indicator_batch import run_indicator_batch
@@ -256,9 +257,16 @@ def main() -> None:
     )
     actions_check_parser.add_argument("--start-date")
     actions_check_parser.add_argument("--end-date")
+    actions_reprice_parser = actions_subparsers.add_parser(
+        "reprice",
+        help="列出因子改由官方除權息參考價決定的列（#394；預設 dry-run，--apply 只記一筆 run 給 rebuild 用）",
+    )
+    actions_reprice_parser.add_argument(
+        "--apply", action="store_true", help="記錄 reprice run；不改 corporate_actions"
+    )
     actions_rebuild_parser = actions_subparsers.add_parser(
         "rebuild",
-        help="依 sync run 改到的標的重算指標、特徵與最早改動日起的族群分數（不重算訊號；重跑冪等）",
+        help="依 sync／reprice run 改到的標的重算指標、特徵與最早改動日起的族群分數（不重算訊號；重跑冪等）",
     )
     actions_rebuild_parser.add_argument("--run-id", type=int, required=True)
     actions_rebuild_parser.add_argument(
@@ -422,6 +430,8 @@ def main() -> None:
                 date.fromisoformat(args.end_date),
                 apply=args.apply,
             )
+        elif args.actions_command == "reprice":
+            result = run_corporate_action_reprice(apply=args.apply)
         elif args.actions_command == "rebuild":
             result = run_corporate_action_rebuild(
                 args.run_id, group_scores_from=parse_date(args.group_scores_from)

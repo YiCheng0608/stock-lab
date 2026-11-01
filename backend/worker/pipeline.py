@@ -2522,8 +2522,9 @@ def action_factor_check(
 
     The official side is 減除股利參考價 / 除權息前收盤價: the published
     price after cash and free-share dividends, without a cash capital
-    increase (現金增資認購), which the fields do not restore either (3691
-    2026-10-27: 109.00 / 109.00).  ``None`` when the row publishes no
+    increase (現金增資認購), which the fields do not carry (3691 2026-10-27:
+    109.00 / 109.00); the price factor takes that from 除權息參考價
+    (``_corporate_action_factor``, #394).  ``None`` when the row publishes no
     official prices (TWT48U), so nothing can be compared.
     """
     details = (
@@ -4901,44 +4902,113 @@ def _execution_calendar_summary(db: Session, score_date: date) -> dict[str, Any]
     }
 
 
+def _field_action_factor(
+    action: CorporateAction, reference_price: float | None
+) -> tuple[float, bool]:
+    """The factor of one row's split, free-share and cash fields (現行公式)."""
+    factor = 1.0
+    applied = False
+    if action.split_ratio and action.split_ratio > 0:
+        # Feeds differ: some publish the ratio as 2 (two post-split
+        # shares per old share), while fixtures/normalized records may
+        # already publish the raw-price factor 0.5.  Both represent the
+        # same signal-basis -> post-action-basis direction.
+        factor = (
+            factor / action.split_ratio
+            if action.split_ratio > 1
+            else factor * action.split_ratio
+        )
+        applied = True
+    if action.stock_dividend_ratio and action.stock_dividend_ratio > 0:
+        factor /= 1.0 + action.stock_dividend_ratio
+        applied = True
+    if (
+        action.cash_dividend
+        and reference_price
+        and reference_price > action.cash_dividend
+    ):
+        factor *= (reference_price - action.cash_dividend) / reference_price
+        applied = True
+    return factor, applied
+
+
+# (除權息前收盤價, 除權息參考價) keys: TPEx OpenAPI/exDailyQ, then TWSE TWT49U.
+# Unlike 減除股利參考價 (action_factor_check), 除權息參考價 includes a cash
+# capital increase (現金增資認購): 3691 2026-10-27 is 106.15 / 109.00.
+_OFFICIAL_EX_RIGHTS_PRICES = (
+    ("ClosePriceBeforeExRightsDiviend", "ExRightsDiviendQuote"),
+    ("除權息前收盤價", "除權息參考價"),
+)
+
+
+def official_ex_rights_prices(details: dict[str, Any]) -> tuple[float, float] | None:
+    """A row's published (除權息前收盤價, 除權息參考價), or None (TWT48U has none)."""
+    for before_key, quote_key in _OFFICIAL_EX_RIGHTS_PRICES:
+        before = _safe_float(parse_number(details.get(before_key)))
+        quote = _safe_float(parse_number(details.get(quote_key)))
+        if before and quote and before > 0 and quote > 0:
+            return before, quote
+    return None
+
+
+def _explicit_price_factor(action: CorporateAction) -> float | None:
+    explicit = _safe_float((action.details_json or {}).get("price_factor"))
+    return explicit if explicit is not None and explicit > 0 else None
+
+
+def official_reference_factor(action: CorporateAction) -> float | None:
+    """除權息參考價 / 除權息前收盤價 when it decides the row's factor (#394), else None.
+
+    It decides when the row publishes official ex-rights prices and its
+    fields do not reproduce that reference within ACTION_REFERENCE_TOLERANCE:
+    a cash capital increase or subscription (3691 2026-10-27: 0.9739), or a
+    row whose wrong fields #386 left out (factor_mismatch).  When the fields
+    do reproduce it, the field factor is the same official ratio before the
+    0.01 cut, so an ordinary dividend keeps its unrounded factor.  An explicit
+    ``price_factor`` comes first.
+    """
+    if _explicit_price_factor(action) is not None:
+        return None
+    official = official_ex_rights_prices(action.details_json or {})
+    if official is None:
+        return None
+    before, quote = official
+    own, _applied = _field_action_factor(action, before)
+    # Prices are published in 0.01 units; rounding the gap keeps a gap of
+    # exactly 0.02 on the field side whatever the float noise.
+    if round(abs(own * before - quote), 6) <= ACTION_REFERENCE_TOLERANCE:
+        return None
+    return quote / before
+
+
 def _corporate_action_factor(
     actions: list[CorporateAction],
     *,
     fallback_reference_prices: dict[date, float] | None = None,
 ) -> tuple[float, bool]:
+    """The cumulative raw price-basis factor of ``actions`` (V1_SPEC 還原因子).
+
+    Per row: an explicit ``price_factor``; else the official reference ratio
+    when it decides (``official_reference_factor``); else the field factor
+    (現行公式), the cash dividend against the row's reference price or the
+    fallback (TWT48U publishes no official prices).
+    """
     factor = 1.0
     applied = False
     for action in actions:
-        details = action.details_json or {}
-        explicit = _safe_float(details.get("price_factor"))
-        if explicit is not None and explicit > 0:
-            factor *= explicit
+        own = _explicit_price_factor(action)
+        if own is None:
+            own = official_reference_factor(action)
+        if own is not None:
+            factor *= own
             applied = True
             continue
-        if action.split_ratio and action.split_ratio > 0:
-            # Feeds differ: some publish the ratio as 2 (two post-split
-            # shares per old share), while fixtures/normalized records may
-            # already publish the raw-price factor 0.5.  Both represent the
-            # same signal-basis -> post-action-basis direction.
-            factor = (
-                factor / action.split_ratio
-                if action.split_ratio > 1
-                else factor * action.split_ratio
-            )
-            applied = True
-        if action.stock_dividend_ratio and action.stock_dividend_ratio > 0:
-            factor /= 1.0 + action.stock_dividend_ratio
-            applied = True
         reference_price = action.reference_price
         if reference_price is None and fallback_reference_prices:
             reference_price = fallback_reference_prices.get(action.action_date)
-        if (
-            action.cash_dividend
-            and reference_price
-            and reference_price > action.cash_dividend
-        ):
-            factor *= (reference_price - action.cash_dividend) / reference_price
-            applied = True
+        own, own_applied = _field_action_factor(action, reference_price)
+        factor *= own
+        applied = applied or own_applied
     return factor, applied
 
 

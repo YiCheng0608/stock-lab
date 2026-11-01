@@ -562,3 +562,127 @@ def test_indicator_rows_are_computed_at_the_clock(db, frozen_utcnow, monkeypatch
     db.flush()
     rows = _rows(db, instrument)
     assert rows and {row.computed_at for row in rows} == {frozen_utcnow.at}
+
+
+def _seed_index(db, *, legacy_days=()):
+    """TAIEX as the index parsers store it; ``legacy_days`` carry the pre-status reason."""
+    index = Instrument(
+        exchange="TWSE",
+        symbol="TAIEX",
+        name="TAIEX",
+        instrument_type="index",
+        status="active",
+    )
+    db.add(index)
+    db.flush()
+    for position, day in enumerate(DAYS):
+        close = _close(position, 20000)
+        db.add(
+            MarketBar(
+                instrument_id=index.id,
+                trading_date=day,
+                open=close,
+                high=close,
+                low=close,
+                close=close,
+                adj_close=close,
+                volume=0,
+                turnover=0.0,
+                turnover_status="unknown" if day in legacy_days else "unavailable",
+                turnover_reason="legacy_zero_ambiguous"
+                if day in legacy_days
+                else "synthetic_index",
+                source="twse_index",
+            )
+        )
+    db.flush()
+    return index
+
+
+def test_the_index_rows_leave_kd_and_volume_averages_empty(db, client):
+    # #394 B4: TAIEX O/H/L are its close and its volume 0, whichever reason
+    # the bar carries; only close-based fields are computed.
+    index = _seed_index(db, legacy_days=set(DAYS[:30]))
+    stock = _seed(db)
+    assert all(
+        bar.synthetic for bar in indicator_batch.load_indicator_bars(db, index.id, None)
+    )
+    assert not any(
+        bar.synthetic for bar in indicator_batch.load_indicator_bars(db, stock.id, None)
+    )
+    compute_market_indicators(db)
+    db.commit()
+    last = _rows(db, index)[-1]
+    assert (last.kd_k, last.kd_d, last.vol_ma5, last.vol_ma20) == (None,) * 4
+    assert last.null_reasons == {
+        "ma120": ind.INSUFFICIENT_BARS,
+        **{
+            name: ind.SYNTHETIC_INDEX
+            for name in ("kd_k", "kd_d", "vol_ma5", "vol_ma20")
+        },
+    }
+    assert None not in (last.ma60, last.macd_hist, last.rsi6, last.boll_upper)
+    assert last.price_basis == ind.PRICE_BASIS
+    body = client.get(
+        f"{_prefix()}/stocks/TWSE/TAIEX/bars", params={"interval": "week", "limit": 2}
+    ).json()
+    assert body["bars"][-1]["reasons"]["kd_k"] == ind.SYNTHETIC_INDEX
+    assert body["bars"][-1]["ma5"] is not None
+
+
+def test_rows_of_an_older_price_basis_are_replaced_and_not_served(db, client):
+    # PRICE_BASIS was raised (#394): stored rows of the old basis are not the
+    # payload's basis, and the next batch replaces them in full.
+    instrument = _seed(db)
+    compute_market_indicators(db, as_of=DAYS[-2])
+    db.execute(
+        TechnicalIndicator.__table__.update().values(
+            price_basis="as_of_date_raw_basis", ma5=-1.0
+        )
+    )
+    db.commit()
+    body = client.get(f"{_prefix()}/stocks/TWSE/2330/bars", params={"limit": 3}).json()
+    assert (
+        body["indicators"]["price_basis"]
+        == ind.PRICE_BASIS
+        == "as_of_date_raw_basis/v2"
+    )
+    assert all(
+        item["reasons"] == {name: "not_computed" for name in ind.FIELDS}
+        for item in body["bars"][:2]
+    )
+    result = compute_market_indicators(db)
+    db.commit()
+    assert (result["instruments_rebased"], result["rows_written"]) == (1, len(DAYS))
+    rows = _rows(db, instrument)
+    assert len(rows) == len(DAYS)
+    assert {row.price_basis for row in rows} == {ind.PRICE_BASIS}
+    assert [row.ma5 for row in rows] == [
+        point.values["ma5"] for point in _expected(db, instrument)
+    ]
+    again = compute_market_indicators(db)
+    assert (again["instruments_rebased"], again["rows_written"]) == (0, 0)
+
+
+def test_a_dated_run_after_the_basis_change_leaves_no_old_row_behind(db):
+    # Review 6559883586 item 1: `indicators --date D` with D before the last
+    # old-basis row, then the default run.  Every old-basis row goes on the
+    # first run, so the second one inserts the later dates without a clash.
+    instrument = _seed(db)
+    compute_market_indicators(db)
+    db.execute(
+        TechnicalIndicator.__table__.update().values(price_basis="as_of_date_raw_basis")
+    )
+    db.commit()
+    dated = compute_market_indicators(db, as_of=DAYS[-10])
+    db.commit()
+    assert dated["instruments_rebased"] == 1
+    rows = _rows(db, instrument)
+    assert [row.trading_date for row in rows] == DAYS[:-9]
+    assert {row.price_basis for row in rows} == {ind.PRICE_BASIS}
+    later = compute_market_indicators(db)
+    db.commit()
+    assert later["rows_written"] == 9
+    rows = _rows(db, instrument)
+    assert [row.trading_date for row in rows] == DAYS
+    assert {row.price_basis for row in rows} == {ind.PRICE_BASIS}
