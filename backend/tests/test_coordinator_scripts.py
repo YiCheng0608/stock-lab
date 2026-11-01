@@ -117,6 +117,9 @@ case "$1 $2" in
     case "$*" in
       *addProjectV2ItemById*) echo "ITEM-NEW" ;;
       *updateProjectV2ItemFieldValue*) cat "$d/board_item.txt" 2>/dev/null || echo "ITEM-1" ;;
+      # patrol.sh's open Issues and PRs with their comments (#401)
+      *OpenQuestions*) [ -f "$d/gh_questions_fails" ] && exit 1
+        cat "$d/gh_questions.json" 2>/dev/null || echo '{}' ;;
       *) cat "$d/gh_board.json" ;;
     esac ;;
   "api repos/"*) cat "$d/gh_comments.json" 2>/dev/null || echo '[]' ;;
@@ -1852,6 +1855,7 @@ def patrol(h: Harness) -> Harness:
     (logs / "watchdog.log").write_text(
         "2026-10-25T11:45:00Z schedules_ok | 排程無異常\n", encoding="utf-8"
     )
+    h.answer("gh_questions", _threads([]))
     return h
 
 
@@ -1886,13 +1890,223 @@ def test_patrol_writes_only_the_heartbeat_and_summarises(patrol: Harness) -> Non
     assert any("since=2026-10-25T11:00:00Z" in c for c in patrol.calls("gh"))
 
 
-@pytest.mark.parametrize("cap", [None, "1", "0"])
+@pytest.mark.parametrize("cap", [None, "2", "1", "0"])
 def test_patrol_stays_within_the_gh_call_cap(patrol: Harness, cap: str | None) -> None:
     result = _patrol(patrol, *(["--max-gh", cap] if cap else []))
     assert result.returncode == 0, result.stdout + result.stderr
-    limit = int(cap) if cap else 2
+    limit = int(cap) if cap else 3
     assert len(patrol.calls("gh")) <= limit
     assert f"gh 呼叫：{len(patrol.calls('gh'))}／上限 {limit}" in result.stdout
+    # Past the cap the questions are reported as not read, and the rest still prints.
+    if limit < 3:
+        assert f"未回覆的提問：未查完（gh 呼叫已達上限 {limit}）" in result.stdout
+    else:
+        assert "未回覆的提問：0 則" in result.stdout
+    assert "排程 daily：daily-20261024.log" in result.stdout
+    assert "看門狗：2026-10-25T11:45:00Z schedules_ok" in result.stdout
+
+
+# --- unanswered questions (#401) ---------------------------------------------------
+
+
+def _comment(cid: int, body: str, number: int = 401, at: str = "09:00:00") -> dict:
+    """A comment at 2026-10-25 <at> UTC, or at <at> itself when it holds a date."""
+    kind = "pull" if number >= 900 else "issues"
+    return {
+        "databaseId": cid,
+        "url": f"https://github.com/YiCheng0608/stock-lab/{kind}/{number}#issuecomment-{cid}",
+        "createdAt": at if "T" in at else f"2026-10-25T{at}Z",
+        "body": body,
+    }
+
+
+def _thread(number: int, *comments: dict, state: str = "OPEN") -> dict:
+    return {
+        "number": number,
+        "state": state,
+        "comments": {"totalCount": len(comments), "nodes": list(comments)},
+    }
+
+
+def _threads(
+    issues: list[dict], prs: list[dict] = (), total: int | None = None
+) -> dict:
+    return {
+        "data": {
+            "repository": {
+                "issues": {
+                    "totalCount": len(issues) if total is None else total,
+                    "nodes": issues,
+                },
+                "pullRequests": {"totalCount": len(prs), "nodes": list(prs)},
+            }
+        }
+    }
+
+
+QUESTION = _comment(11, "提問：要不要加旗標？\n\n選項：A／B；建議 A；卡住 AC-2。")
+QUESTION_URL = QUESTION["url"]
+OTHER_URL = "https://github.com/YiCheng0608/stock-lab/issues/401#issuecomment-99"
+
+
+@pytest.mark.parametrize(
+    ("answer", "listed"),
+    [
+        (_threads([_thread(401, QUESTION)]), True),
+        (
+            _threads(
+                [
+                    _thread(
+                        401,
+                        QUESTION,
+                        _comment(
+                            12, f"決定：回覆 {QUESTION_URL}\n\n選 A。", at="10:00:00"
+                        ),
+                    )
+                ]
+            ),
+            False,
+        ),
+        (
+            _threads(
+                [
+                    _thread(
+                        401,
+                        QUESTION,
+                        _comment(
+                            12, f"決定：回覆 {OTHER_URL}\n\n選 A。", at="10:00:00"
+                        ),
+                    )
+                ]
+            ),
+            True,
+        ),
+        (_threads([_thread(401, QUESTION, state="CLOSED")]), False),
+        # A 決定 in the PR answers the question in its Issue.
+        (
+            _threads(
+                [_thread(401, QUESTION)],
+                [_thread(901, _comment(13, f"決定：{QUESTION_URL} 選 A", number=901))],
+            ),
+            False,
+        ),
+        # Only the first line gives the type: a 決定 that quotes the link lower down in a
+        # 回報 does not answer it, and 提問 later in a comment is not a question.
+        (
+            _threads(
+                [
+                    _thread(
+                        401,
+                        QUESTION,
+                        _comment(
+                            12, f"回報：收到\n\n決定：{QUESTION_URL}", at="10:00:00"
+                        ),
+                        _comment(14, "回報：進度\n\n提問：這不算", at="10:30:00"),
+                    )
+                ]
+            ),
+            True,
+        ),
+    ],
+    ids=[
+        "a-no-decision",
+        "b-decision-links-it",
+        "c-decision-links-another",
+        "d-issue-closed",
+        "decision-in-the-pr",
+        "type-is-the-first-line",
+    ],
+)
+def test_patrol_lists_unanswered_questions(
+    patrol: Harness, answer: dict, listed: bool
+) -> None:
+    patrol.answer("gh_questions", answer)
+    result = _patrol(patrol)
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = f"#401 經過 3 小時 0 分 {QUESTION_URL}"
+    if listed:
+        assert "未回覆的提問：1 則\n" in result.stdout
+        assert f"  {line}\n" in result.stdout
+    else:
+        assert "未回覆的提問：0 則\n" in result.stdout
+        assert QUESTION_URL not in result.stdout.split("未回覆的提問")[1]
+    # Closed Issues and PRs are not asked for, and the query carries the repository.
+    query = next(c for c in patrol.calls("gh") if "OpenQuestions" in c)
+    assert "issues(states:OPEN," in query and "pullRequests(states:OPEN," in query
+    assert "owner=YiCheng0608" in query and "name=stock-lab" in query
+
+
+def test_patrol_lists_questions_oldest_first_with_their_age(patrol: Harness) -> None:
+    patrol.answer(
+        "gh_questions",
+        _threads(
+            [
+                _thread(401, _comment(21, "提問：後問的", at="11:20:00")),
+                _thread(386, _comment(22, "提問:半形冒號也算", number=386)),
+            ],
+            [
+                _thread(
+                    905,
+                    _comment(23, "提問：兩天前", number=905, at="2026-10-23T09:00:00Z"),
+                )
+            ],
+        ),
+    )
+    result = _patrol(patrol)
+    assert result.returncode == 0, result.stdout + result.stderr
+    section = result.stdout.split("未回覆的提問：")[1]
+    assert section.startswith("3 則\n")
+    rows = [r.strip() for r in section.splitlines()[1:4]]
+    assert rows == [
+        "#905 經過 2 天 3 小時 https://github.com/YiCheng0608/stock-lab/pull/905#issuecomment-23",
+        "#386 經過 3 小時 0 分 https://github.com/YiCheng0608/stock-lab/issues/386#issuecomment-22",
+        "#401 經過 40 分 https://github.com/YiCheng0608/stock-lab/issues/401#issuecomment-21",
+    ]
+
+
+@pytest.mark.parametrize("how", ["threads", "comments"])
+def test_patrol_says_which_questions_it_could_not_read(
+    patrol: Harness, how: str
+) -> None:
+    thread = _thread(401, QUESTION)
+    if how == "comments":
+        thread["comments"]["totalCount"] = 130
+        answer = _threads([thread])
+        note = "未查完：#401 有 130 則留言，只讀了最新 1 則"
+    else:
+        answer = _threads([thread], total=150)
+        note = "未查完：open Issue 150 個，只讀了 1 個"
+    patrol.answer("gh_questions", answer)
+    result = _patrol(patrol)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "未回覆的提問：1 則（未查完）" in result.stdout
+    assert f"  {note}\n" in result.stdout
+
+
+def test_patrol_leaves_the_governance_issue_out(patrol: Harness) -> None:
+    governance = _thread(1, _comment(31, "提問：#1 的留言不套類型", number=1))
+    governance["comments"]["totalCount"] = 175
+    patrol.answer("gh_questions", _threads([governance, _thread(401, QUESTION)]))
+    result = _patrol(patrol)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "未回覆的提問：1 則\n" in result.stdout
+    assert "#1 " not in result.stdout.split("未回覆的提問")[1]
+    assert "未查完" not in result.stdout
+
+
+@pytest.mark.parametrize("how", ["fails", "graphql-error"])
+def test_patrol_goes_on_when_the_questions_cannot_be_read(
+    patrol: Harness, how: str
+) -> None:
+    if how == "fails":
+        patrol.write("gh_questions_fails", "")
+    else:
+        patrol.answer("gh_questions", {"errors": [{"message": "rate limited"}]})
+    result = _patrol(patrol)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "未回覆的提問：未查完（gh api graphql 失敗）" in result.stdout
+    assert "排程 news：news-20261025.log" in result.stdout
+    assert "gh 呼叫：3／上限 3" in result.stdout
 
 
 def test_patrol_reads_compactions_handoff_and_the_previous_heartbeat(

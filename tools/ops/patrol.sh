@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Coordinator patrol (Issue #282; docs/GITHUB_WORKFLOW.md 無人值守運作), in the handbook's
 # order: write the heartbeat, read this session's compaction count and handoff marker,
-# open PRs with CI and mergeStateStatus, Issue/PR comments since --since, and the
-# schedule jobs' latest log lines. Prints a short summary.
+# open PRs with CI and mergeStateStatus, Issue/PR comments since --since, unanswered
+# questions (a 提問 comment no 決定 comment links to, #401), and the schedule jobs'
+# latest log lines. Prints a short summary.
 #
 # The only file written is <data>/logs/coordinator-heartbeat.json (through a temporary
 # file in the same directory and mv). gh calls stop at --max-gh: the 5000/hour API limit
@@ -13,7 +14,8 @@
 #   --terminal H      default $ORCA_TERMINAL_HANDLE
 #   --since ISO       comments after this UTC time (2026-10-25T12:00:00Z); default the
 #                     previous heartbeat of the same session, else one hour ago
-#   --max-gh N        at most N gh calls, default 2 (open PRs, comments)
+#   --max-gh N        at most N gh calls, default 3 (open PRs, comments, questions); a
+#                     section past the cap prints that it was skipped (未查完)
 #   --take-over       overwrite another session's heartbeat younger than an hour (a new
 #                     coordinator taking over without the old one's handoff marker)
 #   --data-dir DIR    default $STOCK_DATA_DIR, then $HOME/stock-lab-data
@@ -23,7 +25,7 @@ set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
 
-session_id="${CLAUDE_CODE_SESSION_ID:-}" handle="${ORCA_TERMINAL_HANDLE:-}" since="" max_gh=2 take_over=0
+session_id="${CLAUDE_CODE_SESSION_ID:-}" handle="${ORCA_TERMINAL_HANDLE:-}" since="" max_gh=3 take_over=0
 while [ $# -gt 0 ]; do
   case "$1" in
     -h | --help) awk 'NR > 1 && !/^#/ { exit } NR > 1' "${BASH_SOURCE[0]}"; exit 0 ;;
@@ -132,6 +134,20 @@ if gh_budget "新留言"; then
     echo "新留言：gh api 失敗"
   fi
 fi
+# Questions nobody answered (#401): one GraphQL call reads the open Issues and PRs with
+# their comments; coordinator_json.py decides which 提問 has no 決定 linking to it.
+if gh_budget "未回覆的提問"; then
+  if out="$(gh api graphql -f owner="${GH_REPO%%/*}" -f name="${GH_REPO#*/}" \
+    -f query="$(cj questions-query)")" && lines="$(printf '%s' "$out" | cj questions "$now")"; then
+    n="$( [ -n "$lines" ] && printf '%s\n' "$lines" | grep -c '^#' || echo 0)"
+    echo "未回覆的提問：$n 則$(printf '%s\n' "$lines" | grep -q '^未查完' && echo '（未查完）')"
+    [ -n "$lines" ] && printf '%s\n' "$lines" | sed 's/^/  /'
+  else
+    echo "未回覆的提問：未查完（gh api graphql 失敗）"
+  fi
+else
+  echo "未回覆的提問：未查完（gh 呼叫已達上限 $max_gh）"
+fi
 echo "gh 呼叫：$gh_calls／上限 $max_gh"
 
 # 4. schedule jobs: the newest log of each job
@@ -150,4 +166,4 @@ if [ -f "$logs/watchdog.log" ]; then
 else
   echo "看門狗：沒有日誌"
 fi
-echo "其餘巡檢依手冊：監看是否存活、進行中 Issue 的提問、名額空缺就派工、背景工作是否卡住"
+echo "其餘巡檢依手冊：監看是否存活、回覆未回覆的提問、名額空缺就派工、背景工作是否卡住"

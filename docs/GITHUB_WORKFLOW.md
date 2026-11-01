@@ -1,4 +1,4 @@
-<!-- owns: 唯一來源對照、Issue 標題前綴、版本完成判定、資料與功能拆線、分流、任務流程、本機檢查、review 與合併、PR 檢查規則、長期整合分支、統籌 session、無人值守運作、失敗處理、程式索引 -->
+<!-- owns: 唯一來源對照、Issue 標題前綴、版本完成判定、資料與功能拆線、分流、任務流程、留言類型、本機檢查、review 與合併、PR 檢查規則、長期整合分支、統籌 session、無人值守運作、失敗處理、程式索引 -->
 # GitHub 工作手冊
 
 [AGENTS](../AGENTS.md) 管角色與原則，本文管操作細節與模板。
@@ -38,7 +38,7 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
 ## 任務流程
 
 1. **建單**：套 [任務模板](../.github/ISSUE_TEMPLATE/task.md)，填目標、範圍、AC、依賴、對應 gate；套 milestone；看板設待辦。UI 任務（改五個主導航的頁面）的 AC 固定加一條「更新對應的 [`features/*.md`](../.claude/skills/verify-stock-lab/features/) 或寫明不需更新」。
-2. **開工**：統籌把任務全文（Issue 連結、AC、白名單、驗證方式）寫成 UTF-8 檔（放 scratchpad，不經 PowerShell 管線），再跑一行：
+2. **開工**：統籌把任務全文（Issue 連結、AC、白名單、驗證方式，以及「提問與回報照[留言類型](#留言類型)寫在 Issue／PR 留言」一點）寫成 UTF-8 檔（放 scratchpad，不經 PowerShell 管線），再跑一行：
 
    ```text
    bash tools/ops/dispatch.sh <issue> <slug> --task-file <任務全文檔> [--model <model> --effort <effort>] [--base origin/<branch>]
@@ -54,8 +54,8 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
    orca terminal send --terminal <handle> --text "<任務全文>" --enter --wait-submit 30 --json
    ```
 
-   wait 回 `satisfied:true` 才送，送出後看 `turn_started` 並讀回 terminal，最後看板設開發中；輸出一行 JSON（worktree、branch、HEAD、terminal、是否已送出）。exit 1 是未送出；exit 3 是已送出但未見開始，先 `orca terminal read`，不要重送。工程師接手後在 Issue 留一則「開工」留言（session、branch、HEAD）。五個主導航的端到端驗證由 CI `verify` job 負責（[verify-stock-lab CI 模式](../.claude/skills/verify-stock-lab/SKILL.md#ci-模式)，依改動範圍只驗受影響的頁），工程師不必在自己的 branch 另跑；UI 任務的截圖仍依規則 c 附在 PR。
-   派工後統籌保持一個背景監看（每分鐘查 `gh pr list` 的新 PR 與 repo 層級 `issues/comments?since=` 的新留言），直到所有進行中任務結案；監看到期就重掛，換統籌 session 時由新 session 重掛。工程師的提問與回報只寫在 Issue 留言，不依賴口頭通知。反方向：工程師 session 不會自己查 GitHub，統籌在 Issue／PR 留言給工程師（review 意見、回覆提問、決定）後，必須對該工程師 terminal 送一句短通知並附留言連結，再讀回確認已開始處理；內容以留言為準，terminal 只用來喚醒。
+   wait 回 `satisfied:true` 才送，送出後看 `turn_started` 並讀回 terminal，最後看板設開發中；輸出一行 JSON（worktree、branch、HEAD、terminal、是否已送出）。exit 1 是未送出；exit 3 是已送出但未見開始，先 `orca terminal read`，不要重送。工程師接手後在 Issue 留一則 `回報：開工` 留言（session、branch、HEAD）。五個主導航的端到端驗證由 CI `verify` job 負責（[verify-stock-lab CI 模式](../.claude/skills/verify-stock-lab/SKILL.md#ci-模式)，依改動範圍只驗受影響的頁），工程師不必在自己的 branch 另跑；UI 任務的截圖仍依規則 c 附在 PR。
+   派工後統籌保持一個背景監看（每分鐘查 `gh pr list` 的新 PR 與 repo 層級 `issues/comments?since=` 的新留言），直到所有進行中任務結案；監看到期就重掛，換統籌 session 時由新 session 重掛。工程師的提問與回報照[留言類型](#留言類型)寫在 Issue／PR 留言，不依賴口頭通知。反方向：工程師 session 不會自己查 GitHub，統籌在 Issue／PR 留言給工程師（`review：`、`決定：`）後，必須對該工程師 terminal 送一句短通知並附留言連結，再讀回確認已開始處理；內容以留言為準，terminal 只用來喚醒。
 3. **實作**：只改任務需要的檔案；共用檔案（如 `frontend/src/App.tsx`、`backend/app/api.py`）改動前先看是否有其他進行中的任務也在改，有就在 Issue 協調。放 token 的 `.env` 由使用者自己建，agent 只看 `.env.example`（key 與說明寫在那裡）；`.env` 不讀、不搜、不複製、不改，要它的值時請使用者執行。這個 hook 防的是 agent 不小心讀到，防不了刻意繞過（例如先寫一支會讀 `.env` 的腳本再執行），真 token 放進 `.env` 前要知道這點。hook 對 Bash／PowerShell 從寬擋：命令字串提到 `.env` 路徑就擋，連 commit 訊息與 heredoc 裡的字也算，要搜這段文字改用 Grep 工具（pattern 不檢查）、commit 訊息改用 `-F <檔案>`。compose 會把 env file 的值展開進容器的環境變數，所以 hook 也擋會印出它們的 docker 命令（#360）：
    - `docker compose config` 只放行 `-q`／`--quiet`、`--no-interpolate`、`--services` 三種寫法。旗標要直接寫在 `config` 後面，不能是前一個選項的值（`--profile -q` 不算）。另外不能加 `-o`／`--output`、`--environment`、`--variables`，也不能寫帶 `=` 的安全旗標或 `=false` 之類的值（`--quiet=false` 會把它關掉）。
    - `docker inspect`（含 `container`／`image`／`service inspect`）要加 `--format`／`-f`，而且 format 不能取 `Env`、整個 `.Config`、`.` 或 `$`。`network`、`volume inspect` 不擋。
@@ -64,7 +64,7 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
    以變數名印出（`sh -c 'echo $TOKEN'`）的寫法擋不到。任務自己 build 的 image 用 `t<issue>` tag，compose project 名稱用 `t<issue>` 開頭，結案時才會被清掉（第 6 步）。工程師與 review session 不跑 `docker image prune`、`docker builder prune`：dangling image 與 build cache 是所有任務共用的，只由 `close_task.sh` 清。
 4. **本機檢查**：見下節；全部通過才開 PR。
 5. **PR**：套 [PR 模板](../.github/pull_request_template.md)（`gh pr create --body-file` 不會自動帶入模板，先複製模板再填），`Closes #<issue>`，附驗證結果與截圖（前端）。看板設待整合。
-6. **Review 與合併**：見下節。合併後 master CI 綠 → Issue 自動關閉、看板完成（PR 進[長期整合分支](#長期整合分支)時 GitHub 不自動關，由 `close_task.sh` 關）；遠端 branch 由 GitHub 自動刪（repo 設定 `delete_branch_on_merge`）；統籌在 `master` 管理 checkout 跑 `bash tools/ops/close_task.sh <issue> [--extra-dir <PR 本文寫的 worktree 外暫存目錄>]...`（同一 Issue 有多個 `task/<issue>-*` worktree 時加 `--slug <slug>`），再刷新程式索引。[`close_task.sh`](../tools/ops/close_task.sh) 先確認 PR 已合併、PR 目標分支（`baseRefName`：master 或[長期整合分支](#長期整合分支)）上它的 merge commit CI 綠（該分支最新一次也不是紅）、本地 branch 已在 `origin/<目標分支>` 裡、worktree 沒有未 commit 的改動、terminal 都閒置，才關 terminal、`orca worktree rm --force`＋`git worktree prune`（殘留目錄一併刪）、刪本地 branch、刪暫存目錄（裡面的 junction／symlink 先拆，不跟隨）、清該任務的 Docker 資源、看板設完成並讀回；任一前提不符就不刪任何東西並非 0 結束。repo 與各 worktree、`$HOME`、磁碟根、`stock-lab-data` 與 `STOCK_DATA_DIR` 不能當 `--extra-dir`；路徑中間經過 junction／symlink 或用了 8.3 短檔名也拒絕，請給實際路徑。Issue 有「統籌承諾」留言時依承諾的順序與時點清理。Docker 資源的清法如下（#360）：
+6. **Review 與合併**：見下節。合併後 master CI 綠 → Issue 自動關閉、看板完成（PR 進[長期整合分支](#長期整合分支)時 GitHub 不自動關，由 `close_task.sh` 關）；遠端 branch 由 GitHub 自動刪（repo 設定 `delete_branch_on_merge`）；統籌在 `master` 管理 checkout 跑 `bash tools/ops/close_task.sh <issue> [--extra-dir <PR 本文寫的 worktree 外暫存目錄>]...`（同一 Issue 有多個 `task/<issue>-*` worktree 時加 `--slug <slug>`），再刷新程式索引。[`close_task.sh`](../tools/ops/close_task.sh) 先確認 PR 已合併、PR 目標分支（`baseRefName`：master 或[長期整合分支](#長期整合分支)）上它的 merge commit CI 綠（該分支最新一次也不是紅）、本地 branch 已在 `origin/<目標分支>` 裡、worktree 沒有未 commit 的改動、terminal 都閒置，才關 terminal、`orca worktree rm --force`＋`git worktree prune`（殘留目錄一併刪）、刪本地 branch、刪暫存目錄（裡面的 junction／symlink 先拆，不跟隨）、清該任務的 Docker 資源、看板設完成並讀回；任一前提不符就不刪任何東西並非 0 結束。repo 與各 worktree、`$HOME`、磁碟根、`stock-lab-data` 與 `STOCK_DATA_DIR` 不能當 `--extra-dir`；路徑中間經過 junction／symlink 或用了 8.3 短檔名也拒絕，請給實際路徑。Issue 有 `統籌承諾：` 留言時依承諾的順序與時點清理。Docker 資源的清法如下（#360）：
    - **刪除範圍**：tag 是 `t<issue>`／`t<issue>-*` 的 image，repository 以 `t<issue>-`／`task-<issue>-` 開頭的 image（compose 的 `<project>-<service>`），以及名稱以 `t<issue>`／`task-<issue>` 開頭的已停止容器、volume、network。名稱的數字後面要接 `-`、`_`、`.` 或結尾，所以 `t36` 不會刪到 `t360` 的資源。image 一律以 `repository:tag` 刪，不用 id、不加 `-f`，同一個 image 的其他 tag 會留著。
    - **有容器在跑時**：容器名稱屬於這個任務，或用到上述 image／volume／network 時，這個任務的資源一個都不刪，JSON 的 steps 列出 `docker_running:<容器>` 與每個留下的 `docker_kept:<種類>:<名稱>`。
    - **prune**：上述資源清完後，以下條件都成立才跑 `docker image prune -f` 與 `docker builder prune -f`：這個任務是 Docker 子單（PR 進長期整合分支），或剛剛刪了它的資源；沒有任何容器在跑；其他 `task/<n>-*` worktree 都不是 Docker 任務。worktree 有 `t<n>`／`task-<n>` 資源，或 HEAD 含有長期整合分支自己的 commit，就算 Docker 任務；git 讀不出來也算。不成立時記 `docker_prune_skipped:<原因>`，留給最後一個結案的任務。`--no-board` 的試跑不 prune。
@@ -79,6 +79,23 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
    - **每日核對**記發佈 checkout 當時的 branch 與 HEAD（`git -C <發佈 checkout> rev-parse --abbrev-ref HEAD` 與 `--short HEAD`），證明窗口每天跑的是 `release/v1`。
    - **窗口結束**（使用者確認 G7 後）：`git log origin/master..origin/release/v1 --no-merges` 必須為空（V1 改動都已在 master）；在排程閒置時把發佈 checkout 切回 master、依 master 的 lock 檔重裝 venv（下一次 daily 會升 V1.1 的 migration）；`release/v1` 最後一個 commit 打 `v1.0` tag。三項結果記在 G7 Issue。
    master 另有 CI 每晚全套（`schedule`，台北 22:40；也可手動 `workflow_dispatch`）：後端、前端全部跑，`verify` 驗五頁。紅了照 master CI 紅處理（見 [Review 與合併](#review-與合併)）。
+
+## 留言類型
+
+任務 Issue 與 PR 上，工程師、統籌與獨立 review 的每則對話留言，第一行以下列其中一種開頭（冒號用全形），依「誰要接著動作」分類（#401）：
+
+| 第一行開頭 | 誰寫 | 誰要接著動作 | 必填 |
+| --- | --- | --- | --- |
+| `提問：` | 工程師 | 統籌必須回覆，工程師在等 | 問題、選項、建議、卡住什麼 |
+| `決定：` | 統籌 | 工程師照做 | 回覆哪一則提問（連結）、決定、理由 |
+| `回報：` | 工程師 | 不用動作（開工、進度、PR 已開、必修已修、收到） | head、做了什麼、下一步 |
+| `review：` | 統籌、獨立 review | 有必修時工程師修 | head、結論（可合併／有必修）、必修清單 |
+| `統籌承諾：` | 統籌 | 統籌日後兌現 | 還沒做的事、時點、保留的資源 |
+
+- 提問只寫在 Issue／PR 留言，不寫在 terminal，也不在 terminal 等口頭回覆。統籌只看 Issue／PR 留言，terminal 的通知只用來喚醒（[任務流程](#任務流程)第 2 步）。
+- 一則留言只放一種類型；一次問好幾件事就分成好幾則 `提問：`，各自等 `決定：`。
+- `決定：` 貼上它回覆的提問留言連結（`…#issuecomment-<id>`），寫在同一個 Issue 或它的 PR 都可以。[`patrol.sh`](../tools/ops/patrol.sh) 讀 open Issue 與 open PR 的留言，把還沒有 `決定：` 連到它的 `提問：` 逐筆列為「未回覆的提問」（Issue 號、留言連結、經過時間）；判斷只看第一行開頭與連結，寫在 [`coordinator_json.py`](../tools/ops/coordinator_json.py) 的 `unanswered_questions`。只讀對話留言，PR review 與行內留言不算。
+- 治理 Issue #1 的留言照[無人值守運作](#無人值守運作)的寫法（「待使用者」與決策紀錄），不套本表，`patrol.sh` 也不讀它。
 
 ## 本機檢查
 
@@ -133,7 +150,7 @@ orca terminal rename --terminal <handle> --title "統籌" --json
 `--autocompact 400k` 把自動壓縮視窗設在 400K，不等到模型上限才壓縮。標題只是給人看的，存活判定一律用心跳檔。接手文固定如下，開啟者原文送出，心跳記的舊 terminal 已不存在時刪掉最後一句；開啟者若不是統籌本人，開完只回報 handle，不再對 repo 寫入：
 
 ```text
-你是 stock-lab 的統籌。先讀 AGENTS.md、docs/GITHUB_WORKFLOW.md、docs/ROADMAP.md、治理 Issue #1 本文的決策索引與最近 10 則留言、所有 open Issues 與 PR、最近 48 小時內關閉的 Issue 與合併的 PR 的最後一則留言。接著：寫心跳檔；掛 GitHub 背景監看（since 取接手前 1 小時）與定時巡檢（手冊「無人值守運作」）；在 #1 留言「統籌 session 更換：<terminal handle>／<session id>」並更新 #1 本文的現任統籌；回覆所有最後一則是工程師提問且無統籌回覆的 Issue；兌現前任在 Issue 標「統籌承諾」的事；核對前任標「已完成」的事，不只接續；然後依手冊推進。回覆使用者一律繁體中文。舊統籌 terminal 為 <舊 handle>，用 orca terminal wait --for tui-idle 確認它閒置後以 orca terminal close 關掉它。
+你是 stock-lab 的統籌。先讀 AGENTS.md、docs/GITHUB_WORKFLOW.md、docs/ROADMAP.md、治理 Issue #1 本文的決策索引與最近 10 則留言、所有 open Issues 與 PR、最近 48 小時內關閉的 Issue 與合併的 PR 的最後一則留言。接著：寫心跳檔；掛 GitHub 背景監看（since 取接手前 1 小時）與定時巡檢（手冊「無人值守運作」）；在 #1 留言「統籌 session 更換：<terminal handle>／<session id>」並更新 #1 本文的現任統籌；以 `決定：` 回覆 patrol.sh 列出的每一則未回覆的提問；兌現前任 `統籌承諾：` 留言的事；核對前任標「已完成」的事，不只接續；然後依手冊推進。回覆使用者一律繁體中文。舊統籌 terminal 為 <舊 handle>，用 orca terminal wait --for tui-idle 確認它閒置後以 orca terminal close 關掉它。
 ```
 
 **自動換手機制**（統籌 session 自己執行，不需要人在場）：
@@ -148,11 +165,11 @@ orca terminal rename --terminal <handle> --title "統籌" --json
 
 使用者不在時統籌照本節持續推進；使用者回來只看 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 本文與看板。
 
-- **事件與巡檢**：派工後的 GitHub 監看（見[開工](#任務流程)）之外，統籌在自己的 session 掛每 20～30 分鐘一次的巡檢，固定順序：寫心跳檔 → 讀計數檔與換手標記 → 監看是否存活 → open PR 的 CI 與合併 → 進行中 Issue 的提問 → 名額空缺就派工 → 背景工作是否卡住。每次巡檢先跑 `bash tools/ops/patrol.sh`：[它](../tools/ops/patrol.sh)寫心跳檔、讀自己的計數檔與換手標記，並印出 open PR 的 CI 與 `mergeStateStatus`、`--since`（預設上次心跳）之後的新留言、排程日誌的最後一列；gh 呼叫最多 `--max-gh` 次（預設 2）。心跳檔若屬於另一個 session 且不到 60 分鐘，又沒有它的換手標記，就不覆寫並非 0 結束；確定要接手才加 `--take-over`。其餘各步照上面的順序判斷。監看到期重掛時 `since` 取上次監看啟動時間，不取現在。
+- **事件與巡檢**：派工後的 GitHub 監看（見[開工](#任務流程)）之外，統籌在自己的 session 掛每 20～30 分鐘一次的巡檢，固定順序：寫心跳檔 → 讀計數檔與換手標記 → 監看是否存活 → open PR 的 CI 與合併 → 進行中 Issue 的提問 → 名額空缺就派工 → 背景工作是否卡住。每次巡檢先跑 `bash tools/ops/patrol.sh`：[它](../tools/ops/patrol.sh)寫心跳檔、讀自己的計數檔與換手標記，並印出 open PR 的 CI 與 `mergeStateStatus`、`--since`（預設上次心跳）之後的新留言、[未回覆的提問](#留言類型)、排程日誌的最後一列；gh 呼叫最多 `--max-gh` 次（預設 3：open PR、新留言、未回覆的提問各一次；提問要讀每個 open Issue 與 PR 的留言，用一次 GraphQL 讀完，不逐一呼叫）。到上限時後面的項目印「未查完」，其他輸出照常；open Issue 或 PR 超過 100 個、單一 Issue 留言超過 100 則時也印「未查完」並寫出沒讀到的範圍。心跳檔若屬於另一個 session 且不到 60 分鐘，又沒有它的換手標記，就不覆寫並非 0 結束；確定要接手才加 `--take-over`。其餘各步照上面的順序判斷。監看到期重掛時 `since` 取上次監看啟動時間，不取現在。
 - **待辦隊列**：下一輪任務先建成 Issue（看板待辦），依 ROADMAP gate 順序排；並行名額（3）一空就從最新 `origin/master` 派下一張。沒有已建 Issue 就先建，不停擺。台北 18:30～21:30 是排程 `daily` 時段：不派新工、不跑全套 pytest、不跑全市場 analyze。
 - **需要使用者的事**（來源與付費、刪資料、部署、對外操作、範圍變更、正式資料位置）：在 #1 留言寫清楚問題與統籌建議，標「待使用者」，轉做不受影響的工作；不猜答案、不停工。
 - **決策落地**：會影響後續判斷的使用者決定，當下寫進 #1 留言並同步更新 #1 本文的決策索引（只列仍有效的決策、待使用者事項與現任統籌，每條附留言連結）。
-- **統籌承諾**：統籌對工程師做出偏離手冊的承諾（例如合併後先不清 worktree）時，在該 Issue 的留言開頭標「統籌承諾」；換手後由新統籌兌現。
+- **統籌承諾**：統籌對工程師做出偏離手冊的承諾（例如合併後先不清 worktree）時，在該 Issue 留一則 `統籌承諾：` 留言（[留言類型](#留言類型)）；換手後由新統籌兌現。
 - **統籌換手**：觸發條件任一成立就換：同一 session 已自動壓縮兩次以上；統籌自覺回答對不上 Issue 與文件；使用者要求。偵測與執行步驟見[統籌 session](#統籌-session)的自動換手機制。
 - **前提與限制**：本機與 Orca 保持開機登入；訂閱額度由統籌、工程師與 LLM 批次共用，額度用盡時全部暫停到重置，不視為失敗；合併把關為 CI＋統籌 review＋高風險項獨立 review。
 
