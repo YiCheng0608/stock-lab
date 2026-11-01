@@ -2446,7 +2446,21 @@ def _upsert_action(
     instrument = instruments.get((action.exchange, action.symbol))
     if not instrument:
         return
+    row = db.scalar(
+        select(CorporateAction).where(
+            CorporateAction.instrument_id == instrument.id,
+            CorporateAction.action_date == action.action_date,
+            CorporateAction.action_type == action.action_type,
+        )
+    )
     check = action_factor_check(action)
+    if check is None and row is not None:
+        stored_check = action_factor_check(row)
+        if stored_check is not None and stored_check["passed"]:
+            # A row the official result tables wrote and the prices confirm
+            # is not overwritten by an unchecked one (TWT48U, which has no
+            # official prices): the daily feed only adds new events (#386).
+            return
     quality_key = f"{action.exchange}:{action.symbol}:{action.action_type}"
     if check is not None and not check["passed"]:
         # The fields disagree with the official prices: keep the published
@@ -2490,13 +2504,6 @@ def _upsert_action(
             check,
             source=action.exchange.lower(),
         )
-    row = db.scalar(
-        select(CorporateAction).where(
-            CorporateAction.instrument_id == instrument.id,
-            CorporateAction.action_date == action.action_date,
-            CorporateAction.action_type == action.action_type,
-        )
-    )
     if not row:
         row = CorporateAction(
             instrument_id=instrument.id,

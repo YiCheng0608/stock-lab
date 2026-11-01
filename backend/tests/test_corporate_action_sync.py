@@ -582,6 +582,77 @@ def test_sync_backfills_fixes_and_reruns_to_the_same_rows(factory):
     assert len(details) == 3 and all("STK_NO=3706" in url for url in details)
 
 
+def test_the_daily_twt48u_does_not_overwrite_a_backfilled_row(factory):
+    fetcher = Fetcher(
+        routes({"stat": "ok", "fields": DETAIL_FIELDS, "data": [DETAIL_3706]})
+    )
+
+    def twt48u(day, ratio):
+        return sources.TwseAdapter(
+            lambda *args, **kwargs: [
+                {
+                    "Date": day,
+                    "Code": "3706",
+                    "Exdividend": "權息",
+                    "CashDividend": "3.0",
+                    "StockDividendRatio": ratio,
+                }  # fmt: skip
+            ]
+        ).fetch_actions(date(2026, 11, 2))[0][0]
+
+    with factory() as db:
+        sync.sync_corporate_actions(
+            db,
+            start=date(2026, 9, 1),
+            end=date(2026, 10, 5),
+            apply=True,
+            fetcher=fetcher,
+        )
+        db.commit()
+        backfilled = stored(db, "3706")
+        kept = (
+            backfilled.cash_dividend,
+            backfilled.stock_dividend_ratio,
+            backfilled.split_ratio,
+            backfilled.reference_price,
+            backfilled.details_json,
+            backfilled.raw_payload_id,
+        )
+        assert pipeline.action_factor_check(backfilled)["passed"]
+
+        # The next daily run fetches the same event from TWT48U, which has no
+        # official prices, here with another ratio: the checked row stays.
+        known = instruments(db)
+        pipeline._upsert_action(db, twt48u("1150909", "0.5"), known, None)
+        db.commit()
+        row = stored(db, "3706")
+        assert (
+            row.cash_dividend,
+            row.stock_dividend_ratio,
+            row.split_ratio,
+            row.reference_price,
+            row.details_json,
+            row.raw_payload_id,
+        ) == kept
+
+        # An event the result tables have not published yet is still added.
+        pipeline._upsert_action(db, twt48u("1151102", "0.1"), known, None)
+        db.commit()
+        added = db.scalar(
+            select(CorporateAction).where(
+                CorporateAction.instrument_id == known[("TWSE", "3706")].id,
+                CorporateAction.action_date == date(2026, 11, 2),
+            )
+        )
+        assert (added.cash_dividend, added.stock_dividend_ratio) == (3.0, 0.1)
+
+        # A row without official prices is still replaced by the daily feed.
+        pipeline._upsert_action(db, twt48u("1151102", "0.2"), known, None)
+        db.commit()
+        db.refresh(added)
+        assert added.stock_dividend_ratio == 0.2
+
+
 def test_each_capture_is_registered_once_with_the_dates_it_covers(factory):
     # DB review C3 (#386): one snapshot was registered as raw_payloads of
     # every day it was used for.  A sync registers each response once.
