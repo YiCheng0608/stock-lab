@@ -8,6 +8,8 @@ import { formatTableVolume, isVerifiedShareSource } from '../units'
 // Pure helpers for the stock page K-line, indicator panels and header quote (bars API, docs/V1_SPEC.md 技術指標).
 
 export const STOCK_BARS_LIMIT = 250
+// The bars API price basis this page explains (backend app.indicators.PRICE_BASIS; v2 since Issue 394).
+export const PRICE_BASIS = 'as_of_date_raw_basis/v2'
 // Bars visible when a series first renders; the rest of the 250 stay reachable through dataZoom.
 export const DEFAULT_VISIBLE_BARS = 120
 
@@ -98,6 +100,7 @@ export function nullReasonText(code: string | undefined, context: { interval: St
     case 'suspended': return '停牌，當日不計算'
     case 'invalid_bar': return '當日行情無效，不計算'
     case 'no_price_change': return '期間內收盤沒有漲跌，無法計算'
+    case 'synthetic_index': return '指數只有收盤價，高低點與成交量不計算'
     case 'not_computed': return '指標尚未計算'
     default: return '原因待核實'
   }

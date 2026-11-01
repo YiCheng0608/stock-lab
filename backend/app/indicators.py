@@ -4,6 +4,8 @@ No database, network or filesystem access.  Callers pass bars in trading-date
 order; each bar may carry the cumulative corporate-action factor effective on
 its date (``worker.pipeline._action_factor_by_bar`` semantics), so every value
 at date T is expressed in T's raw price basis and lines up with T's raw candle.
+A bar marked ``synthetic`` (an index row whose O/H/L and volume the parser
+filled in from the close) feeds only the close-based fields.
 Formulas, parameters and the "not enough bars" rules are documented in
 docs/V1_SPEC.md (技術指標); change them only together with INDICATOR_VERSION.
 """
@@ -18,7 +20,9 @@ from typing import Any
 
 
 INDICATOR_VERSION = "indicators/v1"
-PRICE_BASIS = "as_of_date_raw_basis"
+# v2 (#394): an ex-rights event with official prices is restored by its
+# official reference price (現增、認股 included); see V1_SPEC 技術指標.
+PRICE_BASIS = "as_of_date_raw_basis/v2"
 
 MA_WINDOWS = (5, 10, 20, 60, 120)
 MACD_FAST, MACD_SLOW, MACD_SIGNAL = 12, 26, 9
@@ -63,13 +67,29 @@ _PRICE_FIELDS = frozenset(
     | {"macd_dif", "macd_signal", "macd_hist", "boll_mid", "boll_upper", "boll_lower"}
 )
 
+# Fields that read the high, low or volume: null on synthetic bars.
+_RANGE_FIELDS = frozenset({"kd_k", "kd_d"})
+_VOLUME_FIELDS = {f"vol_ma{window}": window for window in VOLUME_MA_WINDOWS}
+
 # Reason codes for a null field.
 INSUFFICIENT_BARS = "insufficient_bars"
 SUSPENDED = "suspended"
 INVALID_BAR = "invalid_bar"
 NO_PRICE_CHANGE = "no_price_change"
+SYNTHETIC_INDEX = "synthetic_index"
 
 _DIGITS = 6
+
+# The TWSE index parsers (worker.sources, source "twse_index") publish only the
+# close: O/H/L are the close and volume is 0.  Bars stored before the
+# turnover_status columns carry turnover_reason legacy_zero_ambiguous (app.migrations;
+# 65 TAIEX bars on 2026-06-08..09-08), so the source decides as well.
+SYNTHETIC_BAR_SOURCES = frozenset({"twse_index"})
+
+
+def is_synthetic_bar(source: str | None, turnover_reason: str | None) -> bool:
+    """Whether a stored bar's O/H/L and volume were filled in by the parser."""
+    return source in SYNTHETIC_BAR_SOURCES or turnover_reason == SYNTHETIC_INDEX
 
 
 @dataclass(frozen=True)
@@ -82,6 +102,8 @@ class IndicatorBar:
     volume: float | None
     is_suspended: bool = False
     price_factor: float = 1.0
+    # O/H/L and volume are not published values (TAIEX: close only).
+    synthetic: bool = False
 
 
 @dataclass
@@ -277,6 +299,10 @@ def compute_indicators(
     lows = [bar.low / bar.price_factor for bar in usable]
     closes = [bar.close / bar.price_factor for bar in usable]
     volumes = [float(bar.volume) for bar in usable]
+    # synthetic_seen[i]: usable bars before position i that are synthetic.
+    synthetic_seen = [0]
+    for bar in usable:
+        synthetic_seen.append(synthetic_seen[-1] + bar.synthetic)
     first_output = sum(
         1 for bar in usable if since is not None and bar.trading_date < since
     )
@@ -300,6 +326,10 @@ def compute_indicators(
         position += 1
         point = IndicatorPoint(bar.trading_date, position + 1)
         for name in FIELDS:
+            if _synthetic_input(name, position, synthetic_seen):
+                point.values[name] = None
+                point.reasons[name] = SYNTHETIC_INDEX
+                continue
             value = columns[name][position]
             if value is None:
                 point.values[name] = None
@@ -311,6 +341,21 @@ def compute_indicators(
             point.values[name] = round(value, _DIGITS)
         points.append(point)
     return points
+
+
+def _synthetic_input(name: str, position: int, synthetic_seen: list[int]) -> bool:
+    """Whether field ``name`` at usable ``position`` reads a synthetic high, low or volume.
+
+    KD is recursive, so one synthetic bar affects every later value; a volume
+    average reads only its own window.
+    """
+    if name in _RANGE_FIELDS:
+        return synthetic_seen[position + 1] > 0
+    window = _VOLUME_FIELDS.get(name)
+    if window is None:
+        return False
+    start = max(0, position - window + 1)
+    return synthetic_seen[position + 1] - synthetic_seen[start] > 0
 
 
 @dataclass(frozen=True)
@@ -351,6 +396,7 @@ def aggregate_weekly(bars: Iterable[IndicatorBar]) -> list[WeeklyBar]:
             close=last.close,
             volume=sum(float(day.volume) for day in days),
             price_factor=last.price_factor,
+            synthetic=any(day.synthetic for day in days),
         )
         result.append(
             WeeklyBar(
