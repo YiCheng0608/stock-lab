@@ -5,7 +5,7 @@ import json
 import math
 import re
 from collections import defaultdict
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace as replace_record
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from statistics import median
@@ -106,6 +106,7 @@ from worker.sources import (
     TPEX_HISTORY_API,
     TWSE_DAILY_HISTORY_ENDPOINT,
     _require_reported_date,
+    parse_number,
     _rows,
     _text,
 )
@@ -2269,6 +2270,65 @@ def _upsert_official_chip(
     return True
 
 
+# The official 減除股利參考價 is published in 0.01 units and is cut, not
+# rounded (TWSE 4912 2026-09-10: 97.50 - 0.800477 = 96.6995, published
+# 96.69), so a correct row's implied price is off by less than 0.01.  Twice
+# that unit leaves room for the cut and float noise, while the A1 rows
+# (#386: 4549 implied 34.17 vs 101.47) are off by tens of yuan.
+ACTION_REFERENCE_TOLERANCE = 0.02
+# (before close, 減除股利參考價) keys: TPEx OpenAPI/exDailyQ, then TWSE TWT49U.
+_OFFICIAL_ACTION_PRICES = (
+    ("ClosePriceBeforeExRightsDiviend", "DividendDeductedQuote"),
+    ("除權息前收盤價", "減除股利參考價"),
+)
+
+
+def action_factor_check(
+    action: ActionRecord | CorporateAction,
+) -> dict[str, Any] | None:
+    """Compare the factor of a row's fields with the official price ratio.
+
+    The official side is 減除股利參考價 / 除權息前收盤價: the published
+    price after cash and free-share dividends, without a cash capital
+    increase (現金增資認購), which the fields do not restore either (3691
+    2026-10-27: 109.00 / 109.00).  ``None`` when the row publishes no
+    official prices (TWT48U), so nothing can be compared.
+    """
+    details = (
+        action.details if isinstance(action, ActionRecord) else action.details_json
+    ) or {}
+    for before_key, deducted_key in _OFFICIAL_ACTION_PRICES:
+        before = _safe_float(parse_number(details.get(before_key)))
+        deducted = _safe_float(parse_number(details.get(deducted_key)))
+        if before and deducted and before > 0 and deducted > 0:
+            break
+    else:
+        return None
+    probe = CorporateAction(
+        action_date=action.action_date,
+        action_type=action.action_type,
+        cash_dividend=action.cash_dividend,
+        stock_dividend_ratio=action.stock_dividend_ratio,
+        split_ratio=action.split_ratio,
+        reference_price=action.reference_price,
+        details_json={},
+    )
+    field_factor, _applied = _corporate_action_factor(
+        [probe], fallback_reference_prices={action.action_date: before}
+    )
+    implied = field_factor * before
+    return {
+        "field_factor": round(field_factor, 10),
+        "official_factor": round(deducted / before, 10),
+        "implied_reference": round(implied, 6),
+        "official_reference": deducted,
+        "close_before": before,
+        "difference": round(abs(implied - deducted), 6),
+        "tolerance": ACTION_REFERENCE_TOLERANCE,
+        "passed": abs(implied - deducted) <= ACTION_REFERENCE_TOLERANCE,
+    }
+
+
 def _upsert_action(
     db: Session,
     action: ActionRecord,
@@ -2278,6 +2338,50 @@ def _upsert_action(
     instrument = instruments.get((action.exchange, action.symbol))
     if not instrument:
         return
+    check = action_factor_check(action)
+    quality_key = f"{action.exchange}:{action.symbol}:{action.action_type}"
+    if check is not None and not check["passed"]:
+        # The fields disagree with the official prices: keep the published
+        # row as evidence but no factor (#386).
+        _upsert_quality(
+            db,
+            "corporate_action",
+            quality_key,
+            action.action_date,
+            "factor_mismatch",
+            ["cash_dividend", "stock_dividend_ratio", "split_ratio"],
+            {
+                **check,
+                "cash_dividend": action.cash_dividend,
+                "stock_dividend_ratio": action.stock_dividend_ratio,
+                "split_ratio": action.split_ratio,
+            },
+            source=action.exchange.lower(),
+        )
+        action = replace_record(
+            action,
+            cash_dividend=None,
+            stock_dividend_ratio=None,
+            split_ratio=None,
+            details={**action.details, "factor_check": check},
+        )
+    elif check is not None and db.scalar(
+        select(DataQuality.id).where(
+            DataQuality.entity_type == "corporate_action",
+            DataQuality.entity_key == quality_key,
+            DataQuality.as_of_date == action.action_date,
+        )
+    ):
+        _upsert_quality(
+            db,
+            "corporate_action",
+            quality_key,
+            action.action_date,
+            "complete",
+            [],
+            check,
+            source=action.exchange.lower(),
+        )
     row = db.scalar(
         select(CorporateAction).where(
             CorporateAction.instrument_id == instrument.id,

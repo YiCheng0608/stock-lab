@@ -17,6 +17,11 @@ from app.db import init_db
 from .backfill import BACKFILL_SCOPES, chunked_backfill
 from .candidate_notes import run_candidate_notes_batch
 from .candidates import run_candidates
+from .corporate_action_sync import (
+    run_corporate_action_check,
+    run_corporate_action_rebuild,
+    run_corporate_action_sync,
+)
 from .indicator_batch import run_indicator_batch
 from .industry_repair import run_industry_repair
 from .instrument_repair import run_instrument_repair
@@ -222,6 +227,37 @@ def main() -> None:
         default=0,
         help="--apply 後重算最近 N 個交易日的族群分數",
     )
+    actions_parser = subparsers.add_parser(
+        "corporate-actions", help="除權息：官方計算結果表回補與因子核對（#386）"
+    )
+    actions_subparsers = actions_parser.add_subparsers(
+        dest="actions_command", required=True
+    )
+    actions_sync_parser = actions_subparsers.add_parser(
+        "sync",
+        help="以 TWSE TWT49U／TPEx exDailyQ 回補區間內的除權息事件（預設 dry-run，重跑冪等）",
+    )
+    actions_sync_parser.add_argument("--start-date", required=True)
+    actions_sync_parser.add_argument("--end-date", required=True)
+    actions_sync_parser.add_argument(
+        "--apply", action="store_true", help="寫入 DB；未指定只列出預計變更"
+    )
+    actions_check_parser = actions_subparsers.add_parser(
+        "check", help="列出欄位算出的因子與官方減除股利參考價比不符的列（不寫 DB）"
+    )
+    actions_check_parser.add_argument("--start-date")
+    actions_check_parser.add_argument("--end-date")
+    actions_rebuild_parser = actions_subparsers.add_parser(
+        "rebuild",
+        help="依 sync run 改到的標的重算指標、特徵、之後的族群分數與指定日的訊號（重跑冪等）",
+    )
+    actions_rebuild_parser.add_argument("--run-id", type=int, required=True)
+    actions_rebuild_parser.add_argument(
+        "--signal-date",
+        dest="signal_dates",
+        action="append",
+        help="重算這天的訊號 YYYY-MM-DD，可重複；未指定不重算訊號",
+    )
     instruments_parser = subparsers.add_parser("instruments", help="標的狀態與歷史")
     instruments_subparsers = instruments_parser.add_subparsers(
         dest="instruments_command", required=True
@@ -338,6 +374,24 @@ def main() -> None:
         if args.rescore_days < 0 or (args.rescore_days and not args.apply):
             parser.error("--rescore-days needs --apply and must not be negative")
         result = run_industry_repair(apply=args.apply, rescore_days=args.rescore_days)
+    elif args.command == "corporate-actions":
+        if args.actions_command == "sync":
+            result = run_corporate_action_sync(
+                date.fromisoformat(args.start_date),
+                date.fromisoformat(args.end_date),
+                apply=args.apply,
+            )
+        elif args.actions_command == "rebuild":
+            result = run_corporate_action_rebuild(
+                args.run_id,
+                signal_dates=[
+                    date.fromisoformat(item) for item in args.signal_dates or []
+                ],
+            )
+        else:
+            result = run_corporate_action_check(
+                parse_date(args.start_date), parse_date(args.end_date)
+            )
     elif args.command == "instruments":
         if args.rescore_days < 0 or (args.rescore_days and not args.apply):
             parser.error("--rescore-days needs --apply and must not be negative")
