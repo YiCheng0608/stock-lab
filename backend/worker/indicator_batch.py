@@ -18,7 +18,7 @@ import time
 from datetime import date, datetime, timezone
 from typing import Any, Iterable
 
-from sqlalchemy import delete, func, insert, inspect, select
+from sqlalchemy import delete, func, insert, inspect, or_, select
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
@@ -191,13 +191,17 @@ def compute_market_indicators(
         else:
             if stored is not None:
                 points = compute_indicators(bars)
-            # Without a stored row of this basis, rows of an older basis may
-            # still hold the (instrument, date, formula_version) keys.
+            # Rows of an older basis hold the (instrument, date,
+            # formula_version) keys and are never served: they all go, after
+            # ``as_of`` too, or a later run would insert onto them.
             removed = db.execute(
                 delete(TechnicalIndicator).where(
                     TechnicalIndicator.instrument_id == instrument_id,
                     TechnicalIndicator.formula_version == INDICATOR_VERSION,
-                    TechnicalIndicator.trading_date <= as_of,
+                    or_(
+                        TechnicalIndicator.trading_date <= as_of,
+                        TechnicalIndicator.price_basis != PRICE_BASIS,
+                    ),
                 )
             ).rowcount
             rewritten += stored is not None

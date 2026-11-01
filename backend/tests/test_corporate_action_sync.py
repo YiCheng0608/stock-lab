@@ -1180,3 +1180,50 @@ def test_reprice_lists_the_official_reference_rows_and_rebuild_takes_its_run(fac
             (row.id, row.cash_dividend, row.stock_dividend_ratio, row.details_json)
             for row in db.scalars(select(CorporateAction).order_by(CorporateAction.id))
         ] == rows_before
+
+
+@pytest.mark.parametrize(
+    "quote,official",
+    [
+        ("98.98", False),  # 99.00 - 98.98: exactly 0.02, the fields decide
+        ("99.02", False),
+        ("98.979", True),  # 0.021: the official ratio decides
+        ("99.021", True),
+    ],
+)
+def test_the_official_ratio_takes_over_only_beyond_two_cents(quote, official):
+    # Review 6559883586 item 2: cash 1.00 on a 100.00 close implies 99.00.
+    action = CorporateAction(
+        action_date=date(2026, 9, 1),
+        action_type="ex_dividend",
+        cash_dividend=1.0,
+        reference_price=100.0,
+        details_json={
+            "ClosePriceBeforeExRightsDiviend": "100.00",
+            "ExRightsDiviendQuote": quote,
+        },
+    )
+    factor, applied = pipeline._corporate_action_factor([action])
+    assert applied
+    if official:
+        assert pipeline.official_reference_factor(action) == float(quote) / 100
+        assert factor == float(quote) / 100
+    else:
+        assert pipeline.official_reference_factor(action) is None
+        assert factor == (100.0 - 1.0) / 100.0
+
+
+def test_an_explicit_price_factor_comes_before_the_official_ratio():
+    # Review 6559883586 item 2: price_factor and official prices on one row.
+    action = CorporateAction(
+        action_date=date(2026, 9, 1),
+        action_type="corporate_action",
+        cash_dividend=0.0,
+        details_json={
+            "price_factor": 0.5,
+            "ClosePriceBeforeExRightsDiviend": "100.00",
+            "ExRightsDiviendQuote": "90.00",
+        },
+    )
+    assert pipeline.official_reference_factor(action) is None
+    assert pipeline._corporate_action_factor([action]) == (0.5, True)

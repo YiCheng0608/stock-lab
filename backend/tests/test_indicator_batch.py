@@ -662,3 +662,27 @@ def test_rows_of_an_older_price_basis_are_replaced_and_not_served(db, client):
     ]
     again = compute_market_indicators(db)
     assert (again["instruments_rebased"], again["rows_written"]) == (0, 0)
+
+
+def test_a_dated_run_after_the_basis_change_leaves_no_old_row_behind(db):
+    # Review 6559883586 item 1: `indicators --date D` with D before the last
+    # old-basis row, then the default run.  Every old-basis row goes on the
+    # first run, so the second one inserts the later dates without a clash.
+    instrument = _seed(db)
+    compute_market_indicators(db)
+    db.execute(
+        TechnicalIndicator.__table__.update().values(price_basis="as_of_date_raw_basis")
+    )
+    db.commit()
+    dated = compute_market_indicators(db, as_of=DAYS[-10])
+    db.commit()
+    assert dated["instruments_rebased"] == 1
+    rows = _rows(db, instrument)
+    assert [row.trading_date for row in rows] == DAYS[:-9]
+    assert {row.price_basis for row in rows} == {ind.PRICE_BASIS}
+    later = compute_market_indicators(db)
+    db.commit()
+    assert later["rows_written"] == 9
+    rows = _rows(db, instrument)
+    assert [row.trading_date for row in rows] == DAYS
+    assert {row.price_basis for row in rows} == {ind.PRICE_BASIS}

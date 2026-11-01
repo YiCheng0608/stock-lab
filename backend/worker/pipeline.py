@@ -4895,7 +4895,9 @@ def official_reference_factor(action: CorporateAction) -> float | None:
         return None
     before, quote = official
     own, _applied = _field_action_factor(action, before)
-    if abs(own * before - quote) <= ACTION_REFERENCE_TOLERANCE:
+    # Prices are published in 0.01 units; rounding the gap keeps a gap of
+    # exactly 0.02 on the field side whatever the float noise.
+    if round(abs(own * before - quote), 6) <= ACTION_REFERENCE_TOLERANCE:
         return None
     return quote / before
 
