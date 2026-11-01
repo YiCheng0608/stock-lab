@@ -95,7 +95,7 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
 - 提問只寫在 Issue／PR 留言，不寫在 terminal，也不在 terminal 等口頭回覆。統籌只看 Issue／PR 留言，terminal 的通知只用來喚醒（[任務流程](#任務流程)第 2 步）。
 - 一則留言只放一種類型；一次問好幾件事就分成好幾則 `提問：`，各自等 `決定：`。
 - `決定：` 貼上它回覆的提問留言連結（`…#issuecomment-<id>`），寫在同一個 Issue 或它的 PR 都可以。[`patrol.sh`](../tools/ops/patrol.sh) 讀 open Issue 與 open PR 的留言，把還沒有 `決定：` 連到它的 `提問：` 逐筆列為「未回覆的提問」（Issue 號、留言連結、經過時間）；判斷只看第一行開頭與連結，寫在 [`coordinator_json.py`](../tools/ops/coordinator_json.py) 的 `unanswered_questions`。只讀對話留言，PR review 與行內留言不算。
-- 治理 Issue #1 的留言照[無人值守運作](#無人值守運作)的寫法（「待使用者」與決策紀錄），不套本表，`patrol.sh` 也不讀它。
+- 治理 Issue #1 的留言照[無人值守運作](#無人值守運作)的寫法（「待使用者」與決策紀錄），不套本表，`patrol.sh` 也不讀它：#1 是使用者決策的治理單，工程師不在那裡提問；它的留言又超過一頁，讀了只會每次都印「未查完」。
 
 ## 本機檢查
 
