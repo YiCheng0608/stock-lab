@@ -874,6 +874,25 @@ def is_common_stock_code(symbol: str) -> bool:
     )
 
 
+def is_etf_code(symbol: str) -> bool:
+    """An ETF code on TWSE/TPEx: ``00`` then digits, optionally one letter suffix.
+
+    0050, 00878, 006208, 00679B, 00981A.  Like ordinary shares, an ETF keeps
+    its quote rows after the ETF list drops it (a fund being wound up trades
+    until its last day), so those rows are not filtered by the list either
+    (Issue #393).  Warrants and ETNs start with 01-09 and are not matched.
+    """
+
+    body = symbol[:-1] if symbol[-1:].isalpha() and symbol[-1:].isupper() else symbol
+    return 4 <= len(symbol) <= 6 and body.startswith("00") and body.isdigit()
+
+
+def is_quoted_security_code(symbol: str) -> bool:
+    """A quote row the collector keeps without a list entry: share or ETF."""
+
+    return is_common_stock_code(symbol) or is_etf_code(symbol)
+
+
 def _is_tpex_non_scope_product(symbol: str, name: str) -> bool:
     """Reject products outside the listed/OTC stock + ETF research scope."""
 
@@ -2295,10 +2314,10 @@ def _historical_event_coverage(end: date, source: str) -> dict[str, Any]:
 def _chip_symbols(
     instruments: Iterable[InstrumentRecord], bars: Iterable[BarRecord]
 ) -> set[str]:
-    """Chips are kept for the universe and for every ordinary-share quote row."""
+    """Chips are kept for the universe and for every share or ETF quote row."""
 
     return {item.symbol for item in instruments} | {
-        bar.symbol for bar in bars if is_common_stock_code(bar.symbol)
+        bar.symbol for bar in bars if is_quoted_security_code(bar.symbol)
     }
 
 
@@ -2538,7 +2557,7 @@ class TwseAdapter:
                     payload_sha256=daily_payload.sha256,
                 )
                 if start <= bar.trading_date <= end
-                and (bar.symbol in wanted or is_common_stock_code(bar.symbol))
+                and (bar.symbol in wanted or is_quoted_security_code(bar.symbol))
             ]
         else:
             daily_bars, daily_payload, self.stock_day_unavailable = (
@@ -2650,7 +2669,7 @@ class TwseAdapter:
                 bar
                 for bar in parsed
                 if start <= bar.trading_date <= end
-                and (bar.symbol in wanted or is_common_stock_code(bar.symbol))
+                and (bar.symbol in wanted or is_quoted_security_code(bar.symbol))
                 # The captured snapshot owns all selected securities on end,
                 # including missing/invalid rows; history cannot fill them.
                 and not (self.stock_day_capture is not None and trading_date == end)
@@ -3116,7 +3135,7 @@ class TpexAdapter:
         The daily quote table is intentionally not a universe source: it also
         contains warrants, ETNs, bonds, and other products.  It is fetched by
         ``fetch_bars`` and filtered to these records plus ordinary-share codes
-        (``is_common_stock_code``).
+        and ETF codes (``is_quoted_security_code``).
         """
 
         listed_payload = self._fetch(TPEX_LISTED_ENDPOINT, as_of.isoformat())
@@ -3178,7 +3197,7 @@ class TpexAdapter:
             historical_rows = [
                 bar
                 for bar in parsed_rows
-                if (bar.symbol in wanted or is_common_stock_code(bar.symbol))
+                if (bar.symbol in wanted or is_quoted_security_code(bar.symbol))
                 and start <= bar.trading_date <= end
             ]
             if (
