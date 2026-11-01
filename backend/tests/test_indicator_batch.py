@@ -186,6 +186,64 @@ def test_changed_history_rewrites_instrument_and_rebuild_rewrites_all(db):
     assert len(_rows(db, other)) == 80
 
 
+def test_instruments_that_are_no_longer_active_keep_full_indicators(db):
+    """Issue #393 B3: a delisted, moved or dormant instrument keeps its history.
+
+    8908 had rows for its last 20 bars only, computed before its earlier bars
+    were repaired in after it moved exchange; the batch rewrites them over all
+    80 bars.  8183 was delisted before it had any row.  An instrument without
+    bars is not counted.
+    """
+
+    moved = _seed(db, exchange="TPEx", symbol="8908", days=DAYS[60:])
+    compute_market_indicators(db)
+    db.flush()
+    assert [row.bar_count for row in _rows(db, moved)][:1] == [1]
+    moved.status = "transferred"
+    for index, day in enumerate(DAYS[:60]):
+        close = _close(index, 3.0)
+        db.add(
+            MarketBar(
+                instrument_id=moved.id,
+                trading_date=day,
+                open=close - 0.3,
+                high=close + 1,
+                low=close - 1,
+                close=close,
+                adj_close=close,
+                volume=1000 + index,
+                turnover=close * 1000,
+                source="fixture",
+            )
+        )
+    delisted = _seed(db, exchange="TPEx", symbol="8183", days=DAYS[:50])
+    delisted.status = "delisted"
+    dormant = _seed(db, symbol="1589", days=DAYS[:40])
+    dormant.status = "dormant"
+    db.add(
+        Instrument(exchange="TPEx", symbol="00847B", name="00847B", status="delisted")
+    )
+    db.flush()
+
+    result = compute_market_indicators(db)
+    db.flush()
+
+    assert result["instruments"] == 3
+    assert result["instruments_rewritten"] == 1
+    assert result["rows_written"] == 80 + 50 + 40
+    assert result["latest_day_rows"] == 1  # only 8908 traded on the last day
+    for instrument, count in ((moved, 80), (delisted, 50), (dormant, 40)):
+        rows = _rows(db, instrument)
+        expected = _expected(db, instrument)
+        assert [row.bar_count for row in rows] == list(range(1, count + 1))
+        assert [row.bar_count for row in rows] == [p.bar_count for p in expected]
+        assert {name: getattr(rows[-1], name) for name in ind.FIELDS} == (
+            expected[-1].values
+        )
+    again = compute_market_indicators(db)
+    assert (again["rows_written"], again["instruments_rewritten"]) == (0, 0)
+
+
 def test_batch_applies_corporate_action_basis(db):
     instrument = _seed(db)
     split = DAYS[60]

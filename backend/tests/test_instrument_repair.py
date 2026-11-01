@@ -302,6 +302,66 @@ def test_without_include_delisted_unstored_codes_are_only_reported(db):
     assert db.scalar(select(Instrument).where(Instrument.symbol == "5371")) is None
 
 
+def test_the_repair_replays_the_quote_rows_of_etfs_the_list_dropped(db):
+    """Issue #393 B1: the stored ETF 00793B lost its rows after the ETF list
+    dropped it; 00718B left the list before it was ever stored."""
+
+    ids = _seed(db)
+    etf = Instrument(
+        market="TW",
+        exchange="TPEx",
+        symbol="00793B",
+        name="群益AAA-A醫療債",
+        instrument_type="etf",
+        status="delisted",
+    )
+    db.add(etf)
+    db.flush()
+    db.add(_bar(etf.id, SESSIONS[0]))
+    for index, day in enumerate(SESSIONS[:4]):
+        _store(
+            db,
+            "tpex",
+            sources.TPEX_HISTORY_API,
+            _tpex_quotes(day, ["00793B"] + (["00718B"] if index < 2 else [])),
+            day.isoformat(),
+            collected_at=datetime.combine(day, datetime.min.time())
+            + timedelta(hours=11),
+        )
+    db.commit()
+
+    dry = repair.repair_instruments(db, include_delisted=True)
+    db.rollback()
+    by_symbol = {item["symbol"]: item for item in dry["bars_by_instrument"]}
+    assert by_symbol["00793B"]["rows"] == 3  # SESSIONS[0] is already stored
+    assert by_symbol["00718B"]["rows"] == 2
+    assert [
+        (item["symbol"], item["instrument_type"], item["status"])
+        for item in dry["instruments_to_create"]
+    ] == [("00718B", "etf", "delisted"), ("5371", "stock", "delisted")]
+
+    repair.repair_instruments(db, apply=True, include_delisted=True)
+    db.commit()
+
+    assert _count(db, MarketBar, etf.id) == 4
+    first = db.scalar(
+        select(MarketBar).where(
+            MarketBar.instrument_id == etf.id, MarketBar.trading_date == SESSIONS[0]
+        )
+    )
+    assert first.raw_payload_id is None  # stored rows are never changed
+    assert db.get(Instrument, etf.id).status == "delisted"
+    created = db.scalar(select(Instrument).where(Instrument.symbol == "00718B"))
+    assert (created.status, created.instrument_type) == ("delisted", "etf")
+    assert created.etf_category == sources.normalize_etf_category(
+        None, symbol="00718B", name=created.name
+    )
+    assert _count(db, MarketBar, created.id) == 2
+    # Warrants are still not quoted securities.
+    assert db.scalar(select(Instrument).where(Instrument.symbol == "700019")) is None
+    assert db.get(Instrument, ids["6488"]).status == "active"
+
+
 def test_a_capture_that_no_longer_matches_its_sha256_stops_the_repair(db):
     _seed(db)
     raw = db.scalar(

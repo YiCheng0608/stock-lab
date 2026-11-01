@@ -17,6 +17,7 @@ from app.db import init_db
 from .backfill import BACKFILL_SCOPES, chunked_backfill
 from .candidate_notes import run_candidate_notes_batch
 from .candidates import run_candidates
+from .chip_revisions import run_revise_institutional
 from .corporate_action_sync import (
     run_corporate_action_check,
     run_corporate_action_rebuild,
@@ -24,7 +25,7 @@ from .corporate_action_sync import (
 )
 from .indicator_batch import run_indicator_batch
 from .industry_repair import run_industry_repair
-from .instrument_repair import run_instrument_repair
+from .instrument_repair import run_instrument_repair, run_unmatched_backfill
 from .market_summary import backfill_market_summaries
 from .news_batch import run_news_batch
 from .news_llm import DEFAULT_LIMIT as NEWS_LLM_DEFAULT_LIMIT, run_news_llm_batch
@@ -266,7 +267,7 @@ def main() -> None:
     instruments_repair_parser.add_argument(
         "--include-delisted",
         action="store_true",
-        help="為已不在官方清單、DB 也沒有的普通股代號建 delisted／transferred 標的並補歷史",
+        help="為已不在官方清單、DB 也沒有的普通股與 ETF 代號建 delisted／transferred 標的並補歷史",
     )
     instruments_repair_parser.add_argument(
         "--max-status-share",
@@ -279,6 +280,26 @@ def main() -> None:
         type=int,
         default=0,
         help="--apply 後重算最近 N 個交易日的族群分數",
+    )
+    instruments_backfill_parser = instruments_subparsers.add_parser(
+        "backfill-unmatched",
+        help="代號已有標的時，以已保存的行情 raw 補寫先前記為 unmatched_bar 的日線（collect 也會做；預設 dry-run，重跑冪等）",
+    )
+    instruments_backfill_parser.add_argument(
+        "--apply", action="store_true", help="寫入 DB；未指定只列出預計變更"
+    )
+    chips_parser = subparsers.add_parser("chips", help="籌碼")
+    chips_subparsers = chips_parser.add_subparsers(dest="chips_command", required=True)
+    chips_revise_parser = chips_subparsers.add_parser(
+        "revise",
+        help="依已保存的 T86／insti raw，以較晚 capture 的三大法人值更正既有籌碼列（預設 dry-run，不發網路）",
+    )
+    chips_revise_parser.add_argument("--start-date", required=True)
+    chips_revise_parser.add_argument(
+        "--end-date", help="預設與 --start-date 同日；YYYY-MM-DD"
+    )
+    chips_revise_parser.add_argument(
+        "--apply", action="store_true", help="寫入 DB；未指定只列出預計變更"
     )
     news_parser = subparsers.add_parser(
         "news", help="抓取國內／國際財經新聞 feed 並寫入 news_items"
@@ -368,6 +389,11 @@ def main() -> None:
         if args.rescore_days < 0 or (args.rescore_days and not args.apply):
             parser.error("--rescore-days needs --apply and must not be negative")
         result = run_industry_repair(apply=args.apply, rescore_days=args.rescore_days)
+    elif (
+        args.command == "instruments"
+        and args.instruments_command == "backfill-unmatched"
+    ):
+        result = run_unmatched_backfill(apply=args.apply)
     elif args.command == "corporate-actions":
         if args.actions_command == "sync":
             result = run_corporate_action_sync(
@@ -392,6 +418,12 @@ def main() -> None:
             rescore_days=args.rescore_days,
             max_status_share=args.max_status_share,
         )
+    elif args.command == "chips":
+        start = date.fromisoformat(args.start_date)
+        end = date.fromisoformat(args.end_date) if args.end_date else start
+        if end < start:
+            parser.error("--end-date must not be before --start-date")
+        result = run_revise_institutional(start, end, apply=args.apply)
     elif args.command == "news":
         result = run_news_batch(parse_date(args.run_date))
     elif args.command == "news-llm":
@@ -429,6 +461,8 @@ def main() -> None:
         "no_data",
     }:
         raise SystemExit(1)
+    if args.command == "chips" and result.get("status") != "success":
+        raise SystemExit(2 if result.get("status") == "partial" else 1)
     if (
         args.command in {"themes", "industry", "instruments", "theme-suggestions"}
         and isinstance(result, dict)

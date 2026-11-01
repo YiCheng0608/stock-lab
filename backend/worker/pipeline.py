@@ -2044,7 +2044,11 @@ def _upsert_official_instrument(db: Session, record: InstrumentRecord) -> Instru
 # A fill keeps the row's provenance (raw_payload_id, source, data_as_of,
 # collected_at), which still describes the values already stored; the filled
 # fields and the new capture are recorded as a value fill on the collect run.
+# The one exception is institutional flow (Issue #387): the exchanges revise it
+# after the first publication, so a later capture of the same official file
+# replaces differing stored values (see _upsert_official_chip).
 MAX_RECORDED_VALUE_CONFLICTS = 50
+INSTITUTIONAL_FIELDS = ("foreign_buy", "trust_buy", "dealer_buy")
 
 
 def _apply_official_values(
@@ -2055,9 +2059,17 @@ def _apply_official_values(
     overwrite: bool,
     conflicts: list[dict[str, Any]] | None,
     label: str,
+    revisable: Iterable[str] = (),
+    revised: dict[str, dict[str, Any]] | None = None,
 ) -> list[str]:
-    """Apply the values and return the names of the fields that changed."""
+    """Apply the values and return the names of the fields that changed.
 
+    A differing non-empty value of a field in ``revisable`` replaces the stored
+    one; the stored and incoming values go to ``revised`` instead of
+    ``conflicts``.
+    """
+
+    revisable = set(revisable)
     changed: list[str] = []
     for field_name, value in values.items():
         current = getattr(row, field_name)
@@ -2069,6 +2081,11 @@ def _apply_official_values(
         elif overwrite or current is None:
             setattr(row, field_name, value)
             changed.append(field_name)
+        elif field_name in revisable:
+            setattr(row, field_name, value)
+            changed.append(field_name)
+            if revised is not None:
+                revised[field_name] = {"stored": current, "incoming": value}
         elif conflicts is not None:
             conflicts.append(
                 {
@@ -2210,6 +2227,56 @@ def _upsert_official_bar(
     return bar
 
 
+def _is_later_institutional_capture(
+    db: Session,
+    row: ChipSnapshot,
+    record: Any,
+    exchange: str,
+    raw_payload_id: int | None,
+) -> bool:
+    """Whether this record is a later capture of the stored row's institutional file.
+
+    Both must come from the exchange's official institutional file (the
+    ``source`` before ``+``), and the incoming raw capture must be strictly
+    later than the stored row's raw capture.  A stored row without a raw
+    capture is dated by its ``collected_at``, which is never earlier than its
+    capture.  Without an incoming capture nothing is later.
+    """
+
+    official = OFFICIAL_INSTITUTIONAL_CHIP_SOURCES.get(exchange)
+    if official is None or raw_payload_id is None:
+        return False
+    if (record.source or "").split("+")[0] != official:
+        return False
+    if (row.source or "").split("+")[0] != official:
+        return False
+    incoming = db.get(RawPayload, raw_payload_id)
+    if incoming is None or incoming.collected_at is None:
+        return False
+    stored = (
+        db.get(RawPayload, row.raw_payload_id)
+        if row.raw_payload_id is not None
+        else None
+    )
+    stored_at = stored.collected_at if stored is not None else row.collected_at
+    return stored_at is not None and incoming.collected_at > stored_at
+
+
+def _revised_source(stored: str | None, incoming: str) -> str:
+    """The source of a revised row: the incoming capture's, plus the stored parts it lacks.
+
+    A revision replaces institutional values only, so a stored ``+<margin>``
+    part still describes the row's margin values when the later capture has
+    no margin (``twse_t86+twse_margin`` stays, not ``twse_t86``).
+    """
+
+    parts = (incoming or "").split("+")
+    extra = [
+        part for part in (stored or "").split("+")[1:] if part and part not in parts
+    ]
+    return "+".join(parts + extra)
+
+
 def _upsert_official_chip(
     db: Session,
     record: Any,
@@ -2219,8 +2286,18 @@ def _upsert_official_chip(
     overwrite: bool = True,
     conflicts: list[dict[str, Any]] | None = None,
     fills: list[dict[str, Any]] | None = None,
+    revisions: list[dict[str, Any]] | None = None,
+    create: bool = True,
 ) -> bool:
-    """Persist one official chip snapshot without manufacturing missing values."""
+    """Persist one official chip snapshot without manufacturing missing values.
+
+    With ``revisions`` (a list the caller keeps), a capture of the same
+    official institutional file taken later than the stored row's capture
+    replaces differing institutional values, and each replaced row's old and
+    new values are appended to it (Issue #387).  Without it (instrument
+    repair) institutional values follow the fill-only rule.  ``create=False``
+    only updates an existing row.
+    """
 
     instrument = instruments.get((record.exchange, record.symbol))
     if not instrument or instrument.instrument_type == "index":
@@ -2232,12 +2309,26 @@ def _upsert_official_chip(
         )
     )
     is_new = row is None
+    if is_new and not create:
+        return False
     if is_new:
         row = ChipSnapshot(
             instrument_id=instrument.id,
             trading_date=record.trading_date,
         )
         db.add(row)
+    label = f"chip_snapshots:{instrument.exchange}:{instrument.symbol}:{record.trading_date.isoformat()}"
+    stored_raw_payload_id = None if is_new else row.raw_payload_id
+    stored_source = None if is_new else row.source
+    revise = (
+        not is_new
+        and not overwrite
+        and revisions is not None
+        and _is_later_institutional_capture(
+            db, row, record, instrument.exchange, raw_payload_id
+        )
+    )
+    revised: dict[str, dict[str, Any]] = {}
     changed = _apply_official_values(
         row,
         {
@@ -2250,13 +2341,30 @@ def _upsert_official_chip(
         is_new=is_new,
         overwrite=overwrite,
         conflicts=conflicts,
-        label=f"chip_snapshots:{instrument.exchange}:{instrument.symbol}:{record.trading_date.isoformat()}",
+        label=label,
+        revisable=INSTITUTIONAL_FIELDS if revise else (),
+        revised=revised,
     )
+    if revised and revisions is not None:
+        revisions.append(
+            {
+                "table": "chip_snapshots",
+                "exchange": instrument.exchange,
+                "symbol": instrument.symbol,
+                "trading_date": record.trading_date.isoformat(),
+                "fields": revised,
+                "stored_raw_payload_id": stored_raw_payload_id,
+                "raw_payload_id": raw_payload_id,
+            }
+        )
     _set_official_provenance(
         row,
         changed=changed,
-        replace=is_new or overwrite,
-        source=record.source,
+        # A revised row now holds the later capture's institutional values.
+        replace=is_new or overwrite or bool(revised),
+        source=_revised_source(stored_source, record.source)
+        if revised
+        else record.source,
         data_as_of=_as_datetime(record.data_as_of, record.trading_date),
         raw_payload_id=raw_payload_id,
         fills=fills,
@@ -3385,6 +3493,10 @@ def plan_instrument_status(
     is ``transferred`` when the other exchange lists the same code, otherwise
     ``delisted``; its open memberships close the day before the new listing (a
     transfer with a known listing date) or the day before the observation.
+    An absent one whose code still has a row in the exchange's latest stored
+    quote table is still traded and keeps its status (Issue #393: a bond ETF
+    being wound up left the ETF list while it traded for weeks); without that
+    table the lists decide.
     A listed one whose code has no row in any stored quote table of the last
     DORMANT_SESSIONS sessions is presumed ``dormant``; ``collect`` makes it
     active again when a quote row returns.
@@ -3454,9 +3566,31 @@ def plan_instrument_status(
             for item in current
             if item.status == "dormant" and (exchange, item.symbol) in universe
         ]
-        latest = _stored_quote_rows(db, exchange, sessions[-1:]) if resting else None
-        if resting and sessions and latest is not None:
+        latest = (
+            _stored_quote_rows(db, exchange, sessions[-1:])
+            if (resting or absent) and sessions
+            else None
+        )
+        if latest is not None:
             revived = [item for item in resting if item.symbol in latest[0]]
+        # Absent from the lists but still quoted: not gone yet.
+        quoted = (
+            [item for item in absent if item.symbol in latest[0]]
+            if latest is not None
+            else []
+        )
+        absent = [item for item in absent if item not in quoted]
+        quote_check: dict[str, Any] = (
+            {"status": "not_needed"}
+            if not (absent or quoted)
+            else {
+                "status": "checked",
+                "session": sessions[-1].isoformat(),
+                "raw_payload_ids": latest[1],
+            }
+            if latest is not None
+            else {"status": "unverifiable", "reason": "missing quote table"}
+        )
         planned = len(absent) + len(dormant)
         limit = max(STATUS_SYNC_MIN_LIMIT, int(len(active) * max_share))
         exchanges[exchange] = {
@@ -3469,6 +3603,8 @@ def plan_instrument_status(
             "absent_symbols": [item.symbol for item in absent][:50],
             "dormant_symbols": [item.symbol for item in dormant][:50],
             "revived_symbols": [item.symbol for item in revived][:50],
+            "quoted_absent_symbols": [item.symbol for item in quoted][:50],
+            "quote_check": quote_check,
             "captures": proof["captures"],
             "dormancy": dormancy,
         }
@@ -3921,6 +4057,7 @@ def collect(
             normalized_instruments: set[tuple[str, str]] = set()
             value_conflicts: list[dict[str, Any]] = []
             value_fills: list[dict[str, Any]] = []
+            value_revisions: list[dict[str, Any]] = []
             # A quote row whose code is not in today's lists still belongs to
             # a stored instrument (delisted, moved, or a list that lagged);
             # one with no instrument at all is recorded, not dropped.
@@ -3978,6 +4115,7 @@ def collect(
                         overwrite=force,
                         conflicts=value_conflicts,
                         fills=value_fills,
+                        revisions=value_revisions,
                     )
                 )
             for action in batch.actions:
@@ -4082,8 +4220,40 @@ def collect(
                     "reason": "historical batch without current snapshot feeds",
                 }
                 status_result = dict(industry_result)
+            # An earlier unmatched_bar code may have an instrument now (a new
+            # listing whose list lagged its first session): write its bars
+            # from the stored raw (Issue #388).  Imported here because
+            # instrument_repair imports this module.
+            # A failure here must not fail the day's quotes (like the
+            # strategy_levels step): the savepoint drops only the backfill's
+            # writes, the rows stay open and the error goes to the metadata.
+            from worker.instrument_repair import backfill_unmatched_bars
+
+            try:
+                with db.begin_nested():
+                    unmatched_backfill = {
+                        "status": "success",
+                        **backfill_unmatched_bars(db),
+                    }
+            except Exception as exc:
+                unmatched_backfill = {
+                    "status": "failed",
+                    "error": f"{type(exc).__name__}: {exc}"[:500],
+                    "written": [],
+                    "pending": [],
+                }
             unmatched_bars = record_unmatched_bars(db, unmatched, score_date)
             notices = list(getattr(batch, "notices", []) or [])
+            if unmatched_backfill["status"] == "failed":
+                notices.append(
+                    "unmatched_bar backfill failed and wrote nothing: "
+                    + unmatched_backfill["error"]
+                )
+            if unmatched_backfill["written"]:
+                notices.append(
+                    f"{len(unmatched_backfill['written'])} bars of earlier unmatched_bar "
+                    "codes written from stored raw"
+                )
             if unmatched_bars:
                 notices.append(
                     f"{len(unmatched_bars)} ordinary-share codes had official quote "
@@ -4247,6 +4417,7 @@ def collect(
                 "noncore_warnings": noncore_warnings,
                 "notices": notices,
                 "unmatched_bars": unmatched_bars,
+                "unmatched_backfill": unmatched_backfill,
                 "instrument_status_sync": status_result,
                 "value_conflicts": len(value_conflicts),
                 "value_conflict_samples": _json_safe(
@@ -4259,6 +4430,13 @@ def collect(
                     stored_metadata.get("value_fill_groups", []) or []
                 )
                 + _value_fill_groups(value_fills),
+                # Every institutional value a later capture replaced, with the
+                # stored value and both raw ids; accumulated like the fills.
+                "value_revisions": len(value_revisions),
+                "value_revision_rows": list(
+                    stored_metadata.get("value_revision_rows", []) or []
+                )
+                + _json_safe(value_revisions),
                 "no_data_dates": [item.isoformat() for item in verified_no_data_dates],
                 "event_coverage": event_coverage,
                 "industry_membership_observations": industry_result,
@@ -4331,9 +4509,11 @@ def collect(
                 "noncore_warnings": noncore_warnings,
                 "notices": notices,
                 "unmatched_bars": unmatched_bars,
+                "unmatched_backfill": unmatched_backfill,
                 "instrument_status_sync": status_result,
                 "value_conflicts": len(value_conflicts),
                 "value_fills": len(value_fills),
+                "value_revisions": len(value_revisions),
                 "no_data_dates": [item.isoformat() for item in verified_no_data_dates],
             }
         except Exception as exc:
