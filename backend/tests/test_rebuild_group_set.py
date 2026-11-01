@@ -8,6 +8,7 @@ groups the session already had.  Daily still scores every active group.
 
 from __future__ import annotations
 
+import warnings
 from datetime import date
 
 import pytest
@@ -22,6 +23,7 @@ from app.models import (
     ChipSnapshot,
     CorporateAction,
     GroupDailyScore,
+    GroupDailyScoreArchive,
     GroupMembership,
     IngestionRun,
     Instrument,
@@ -29,6 +31,7 @@ from app.models import (
     RawPayload,
     ThemeGroup,
 )
+from app.theme_table import THEME_GROUP_TYPE
 from worker.industry_repair import rescore_dates
 from worker.sources import TWSE_CHIP_ENDPOINT
 
@@ -132,18 +135,16 @@ def _seed(db):
     return stocks
 
 
-def _group(db, group_id, stocks):
-    db.add(
-        ThemeGroup(
-            id=group_id, name=group_id, group_type="official_industry", active=True
-        )
-    )
+def _group(db, group_id, stocks, members=None, group_type="official_industry"):
+    """An active group of the three ``members`` stocks (default: G1 -> G11..G13)."""
+
+    db.add(ThemeGroup(id=group_id, name=group_id, group_type=group_type, active=True))
     db.flush()
     for number in (1, 2, 3):
         db.add(
             GroupMembership(
                 group_id=group_id,
-                instrument_id=stocks[f"{group_id}{number}"].id,
+                instrument_id=stocks[f"{members or group_id}{number}"].id,
                 valid_from=DATES[0],
                 source="fixture",
             )
@@ -187,10 +188,16 @@ def _ex_dividend(db, stocks):
     return run
 
 
-def _scored_history(db):
-    """OLD scored by daily before G3 existed; NEW scored by daily with G3."""
+def _scored_history(db, *, themes=False):
+    """OLD scored by daily before G3 existed; NEW scored by daily with G3.
+
+    ``themes`` adds two theme groups before OLD: T1 holds G3's members, T2 G2's.
+    """
 
     stocks = _seed(db)
+    if themes:
+        _group(db, "T1", stocks, "G3", THEME_GROUP_TYPE)
+        _group(db, "T2", stocks, "G2", THEME_GROUP_TYPE)
     pipeline._calculate_group_scores(db, OLD)
     db.flush()
     _group(db, "G3", stocks)
@@ -250,3 +257,69 @@ def test_rescore_dates_without_the_option_scores_every_active_group(factory):
         rescore_dates(db, [OLD])
         db.flush()
         assert _ranks(db, OLD) == {"G3": 1, "G2": 2, "G1": 3}
+
+
+def test_a_session_without_scores_gets_no_row(factory):
+    # A rebuild only picks sessions that have scores, but rescore_dates on a
+    # session with none adds nothing (and an empty IN list does not warn).
+    empty = DATES[-3]
+    with factory() as db:
+        _scored_history(db)
+        before = set(_rows(db))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            rescore_dates(db, [empty], existing_groups_only=True)
+            db.flush()
+        assert set(_rows(db)) == before
+        assert _ranks(db, empty) == {}
+
+
+def test_theme_and_industry_boards_are_ranked_apart(factory):
+    with factory() as db:
+        stocks = _scored_history(db, themes=True)
+        before = set(_rows(db))
+        run = _ex_dividend(db, stocks)
+        db.commit()
+        sync.rebuild_after_sync(db, run.id)
+        db.commit()
+        assert set(_rows(db)) == before
+        # Each board ranks its own groups from 1: the themes do not push the
+        # industries down, and G3 (industry only from NEW) stays off OLD.
+        assert _ranks(db, OLD) == {"G1": 1, "G2": 2, "T1": 1, "T2": 2}
+        assert _ranks(db, NEW) == {"G3": 1, "G1": 2, "G2": 3, "T1": 1, "T2": 2}
+        assert {
+            group: row.details_json["board"]
+            for (day, group), row in _rows(db).items()
+            if day == OLD
+        } == {"G1": "industry", "G2": "industry", "T1": "theme", "T2": "theme"}
+
+
+def test_a_group_deactivated_before_the_rebuild_keeps_its_score_without_a_rank(
+    factory,
+):
+    with factory() as db:
+        stocks = _scored_history(db)
+        db.get(ThemeGroup, "G2").active = False
+        before = {key: row.score for key, row in _rows(db).items()}
+        run = _ex_dividend(db, stocks)
+        db.commit()
+        sync.rebuild_after_sync(db, run.id)
+        db.commit()
+        after = _rows(db)
+        assert set(after) == set(before)
+        # G2 is not rescored: its score stays, its rank is cleared and the
+        # ranked row is archived; G1 and G3 are ranked without it.
+        for day in (OLD, NEW):
+            assert after[(day, "G2")].score == before[(day, "G2")]
+            assert after[(day, "G2")].rank is None
+        assert _ranks(db, OLD) == {"G1": 1, "G2": None}
+        assert _ranks(db, NEW) == {"G3": 1, "G1": 2, "G2": None}
+        assert sorted(
+            (row.trading_date, row.group_id)
+            for row in db.scalars(
+                select(GroupDailyScoreArchive).where(
+                    GroupDailyScoreArchive.archive_reason
+                    == "rank_cleared_inactive_group"
+                )
+            )
+        ) == [(OLD, "G2"), (NEW, "G2")]
