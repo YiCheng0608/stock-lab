@@ -1289,7 +1289,7 @@ export type StockBarRow = {
   week_end?: string
   trading_days?: number
   bar_count: number | null
-  // Only null fields are listed: insufficient_bars, suspended, invalid_bar, no_price_change or not_computed.
+  // Only null fields are listed: insufficient_bars, suspended, invalid_bar, no_price_change, synthetic_index or not_computed.
   reasons: Partial<Record<IndicatorField, string>>
 } & Partial<Record<IndicatorField, number | null>>
 

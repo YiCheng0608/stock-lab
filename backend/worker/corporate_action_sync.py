@@ -7,6 +7,9 @@ reads TWSE TWT49U (+ TWT49UDetail) and TPEx exDailyQ for a date range, writes
 every event through ``pipeline._upsert_action`` (so the same factor check
 applies) and reports what changed.  ``check`` compares every stored row with
 the official 減除股利參考價 / 除權息前收盤價 ratio, without writing.
+``reprice`` lists the rows whose price factor the official 除權息參考價
+decides since #394 and, with ``apply``, records them as a run that
+``rebuild`` recomputes like a sync run.
 """
 
 from __future__ import annotations
@@ -40,6 +43,9 @@ from worker.sources import (
 
 SYNC_VERSION = "corporate_action_sync_v1"
 RUN_TYPE = "corporate_action_sync"
+# Rows unchanged, only their price factor rule (#394): rebuild like a sync run.
+REPRICE_RUN_TYPE = "corporate_action_reprice"
+REBUILD_RUN_TYPES = frozenset({RUN_TYPE, REPRICE_RUN_TYPE})
 FINISHED = frozenset({"success", "partial"})
 FIELDS = ("cash_dividend", "stock_dividend_ratio", "split_ratio", "reference_price")
 
@@ -272,6 +278,69 @@ def sync_corporate_actions(
     return result
 
 
+def reprice_corporate_actions(db: Session, *, apply: bool = False) -> dict[str, Any]:
+    """Rows whose factor is the official 除權息參考價 ratio, in the caller's transaction.
+
+    Before #394 these rows were restored by their fields alone (現增、認股
+    not at all, a #386 factor_mismatch row not at all), so every value
+    derived from their instruments changes.  Nothing in corporate_actions is
+    written; ``apply`` records a finished run whose ``affected`` (instrument
+    -> earliest such date) ``rebuild --run-id`` recomputes.
+    """
+    affected: dict[int, date] = {}
+    events: list[dict[str, Any]] = []
+    for action, instrument in db.execute(
+        select(CorporateAction, Instrument)
+        .join(Instrument, Instrument.id == CorporateAction.instrument_id)
+        .order_by(CorporateAction.action_date, CorporateAction.id)
+    ).all():
+        official = pipeline.official_reference_factor(action)
+        if official is None:
+            continue
+        field, _applied = pipeline._field_action_factor(
+            action, pipeline.official_ex_rights_prices(action.details_json)[0]
+        )
+        events.append(
+            {
+                "exchange": instrument.exchange,
+                "symbol": instrument.symbol,
+                "action_date": action.action_date.isoformat(),
+                "action_type": action.action_type,
+                "field_factor": round(field, 10),
+                "official_factor": round(official, 10),
+            }
+        )
+        _note(affected, instrument, action.action_date)
+    result: dict[str, Any] = {
+        "status": "dry_run",
+        "version": SYNC_VERSION,
+        "events": events,
+        "instruments": len(affected),
+    }
+    if not apply:
+        return result
+    now = utcnow()
+    run = IngestionRun(
+        run_type=REPRICE_RUN_TYPE,
+        source="derived:corporate_actions",
+        run_date=now.date(),
+        status="success",
+        records=len(events),
+        finished_at=now,
+        metadata_json={
+            "version": SYNC_VERSION,
+            "events": len(events),
+            "affected": {
+                str(key): value.isoformat() for key, value in sorted(affected.items())
+            },
+        },
+    )
+    db.add(run)
+    db.flush()
+    result.update(status="success", run_id=run.id)
+    return result
+
+
 class RebuildError(Exception):
     pass
 
@@ -283,7 +352,7 @@ def rebuild_after_sync(
     checkpoint: Callable[[str], None] | None = None,
     group_scores_from: date | None = None,
 ) -> dict[str, Any]:
-    """Recompute what a sync run's corrected rows feed, in the caller's session.
+    """Recompute what a sync (or reprice) run's corrected rows feed, in the caller's session.
 
     For the instruments the run changed: every technical_indicators row (any
     status with bars, as the indicators batch covers them) and, for active
@@ -310,8 +379,12 @@ def rebuild_after_sync(
             checkpoint(name)
 
     run = db.get(IngestionRun, run_id)
-    if run is None or run.run_type != RUN_TYPE or run.status not in FINISHED:
-        raise RebuildError(f"no finished {RUN_TYPE} run {run_id}")
+    if (
+        run is None
+        or run.run_type not in REBUILD_RUN_TYPES
+        or run.status not in FINISHED
+    ):
+        raise RebuildError(f"no finished {RUN_TYPE} or {REPRICE_RUN_TYPE} run {run_id}")
     affected = {
         int(key): date.fromisoformat(value)
         for key, value in (run.metadata_json or {}).get("affected", {}).items()
@@ -406,6 +479,14 @@ def run_corporate_action_sync(
         except OfficialDataError as exc:
             db.rollback()
             return {"status": "failed", "version": SYNC_VERSION, "error": str(exc)}
+        if apply:
+            db.commit()
+        return result
+
+
+def run_corporate_action_reprice(*, apply: bool = False) -> dict[str, Any]:
+    with SessionLocal() as db:
+        result = reprice_corporate_actions(db, apply=apply)
         if apply:
             db.commit()
         return result

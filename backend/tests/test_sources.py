@@ -5,6 +5,7 @@ import httpx
 import pytest
 
 import worker.sources as sources
+from app.indicators import is_synthetic_bar
 
 
 @pytest.mark.parametrize("amount", [0, 1])
@@ -702,6 +703,8 @@ def test_twse_mi_index_taiex_row_uses_requested_date_and_provenance():
         "unavailable",
         "synthetic_index",
     )
+    # The indicators leave its high/low and volume fields empty (#394).
+    assert is_synthetic_bar(rows[0].source, rows[0].turnover_reason)
 
 
 def test_twse_mi_index_selects_price_table_not_return_table():
@@ -784,6 +787,7 @@ def test_twse_openapi_adjacent_dates_select_exact_price_row():
     assert all(
         row.turnover_status == "unavailable"
         and row.turnover_reason == "synthetic_index"
+        and is_synthetic_bar(row.source, row.turnover_reason)
         for row in [*first, *second]
     )
 
@@ -798,6 +802,7 @@ def test_twse_monthly_index_does_not_claim_synthetic_turnover_is_available():
         "unavailable",
         "synthetic_index",
     )
+    assert is_synthetic_bar(rows[0].source, rows[0].turnover_reason)
 
 
 def test_twse_taiex_parser_rejects_wrong_date_duplicate_and_nonpositive_rows():

@@ -114,6 +114,10 @@ DETAIL_FIELDS = [
     "按股東持股比例每千股認購",
 ]
 DETAIL_3706 = ["3706  ", "神達            ", "3 元／股", "", "100 股", "0 股", "0 股", "0 元／股", "0 股", "0 股", "0 股", "0.00000000 股"]  # fmt: skip
+# 2025 2026-10-28 as published (TWT49U + TWT49UDetail, #394 C1): a cash
+# capital increase at 10 元; 除權息參考價 13.24, 減除股利參考價 14.00.
+TWT49U_2025 = ["115年10月28日", "2025", "千興", "14.00", "13.24", "0.752373", "權", "15.40", "11.95", "14.00", "14.00", "2025,20261028", "115年第2季", "12.08", "0.76"]  # fmt: skip
+DETAIL_2025 = ["2025", "千興", "0 元／股", "", "0 股", "0 股", "40,000,000 股", "10 元／股", "4,000,000 股", "6,000,000 股", "30,000,000 股", "173.75134292 股"]  # fmt: skip
 NO_DATA = {"stat": "很抱歉，沒有符合條件的資料!"}
 
 
@@ -237,7 +241,11 @@ def test_the_4549_ratio_stored_as_a_rights_value_is_not_written(factory):
             None,
         )
         assert row.details_json["factor_check"]["passed"] is False
-        assert pipeline._corporate_action_factor([row])[0] == 1.0
+        # The wrong ratio is not written; the price factor is the official
+        # 除權息參考價 / 除權息前收盤價 instead (#394), not the fields' 0.3301.
+        assert pipeline._corporate_action_factor([row])[0] == pytest.approx(
+            101.47 / 103.50, abs=1e-12
+        )
         quality = db.scalar(select(DataQuality))
         assert (quality.entity_type, quality.entity_key, quality.status) == (
             "corporate_action",
@@ -268,6 +276,149 @@ def test_a_cash_capital_increase_is_not_mistaken_for_a_mismatch(factory):
         db.flush()
         assert stored(db, "3691").stock_dividend_ratio == 0.0
         assert db.scalar(select(func.count(DataQuality.id))) == 0
+
+
+def _row(record):
+    return CorporateAction(
+        action_date=record.action_date,
+        action_type=record.action_type,
+        cash_dividend=record.cash_dividend,
+        stock_dividend_ratio=record.stock_dividend_ratio,
+        split_ratio=record.split_ratio,
+        reference_price=record.reference_price,
+        details_json=record.details,
+    )
+
+
+def test_a_cash_capital_increase_is_restored_by_its_official_reference():
+    # 3691 2026-10-27 (#394 C1): the fields carry nothing (cash 0, free
+    # shares 0), the official 除權息參考價 106.15 includes the subscription.
+    record = sources.tpex_action_record(TPEX_3691, payload_sha256=None)
+    assert pipeline._field_action_factor(_row(record), 109.0) == (1.0, False)
+    factor, applied = pipeline._corporate_action_factor([_row(record)])
+    assert applied and round(factor, 4) == 0.9739
+    assert factor == pytest.approx(106.15 / 109.00, abs=1e-12)
+    # The write guard still compares the fields with 減除股利參考價 (#386).
+    assert pipeline.action_factor_check(record)["passed"]
+
+
+def test_a_twse_subscription_row_is_restored_by_its_official_reference():
+    # A TWT49U ex-right whose 除權息參考價 is above the fields' reference.
+    [row] = sources.parse_twse_action_history(
+        twt49u(TWT49U_2025), start=date(2026, 10, 1), end=date(2026, 10, 31)
+    )
+    detail = sources.parse_twse_action_detail(
+        {"stat": "ok", "fields": DETAIL_FIELDS, "data": [DETAIL_2025]}, "2025"
+    )
+    record = sources.twse_action_history_record(
+        row, detail, payload_sha256=None, detail_sha256=None
+    )
+    before, quote = pipeline.official_ex_rights_prices(record.details)
+    factor, applied = pipeline._corporate_action_factor([_row(record)])
+    assert applied and factor == pytest.approx(quote / before, abs=1e-12)
+    assert factor != pytest.approx(
+        pipeline._field_action_factor(_row(record), before)[0], abs=1e-4
+    )
+
+
+@pytest.mark.parametrize(
+    "published,detail",
+    [(TWT49U_3706, DETAIL_3706), (TWT49U_4912, None), (TWT49U_3059, None)],
+)
+def test_a_dividend_the_fields_reproduce_keeps_its_unrounded_factor(published, detail):
+    # 3706: (91.30 - 3) / 1.1 = 80.2727, published 80.27.  The field factor
+    # is the official ratio before the 0.01 cut, so it is kept exactly.
+    [row] = sources.parse_twse_action_history(
+        twt49u(published), start=date(2026, 9, 1), end=date(2026, 9, 30)
+    )
+    detail_row = (
+        sources.parse_twse_action_detail(
+            {"stat": "ok", "fields": DETAIL_FIELDS, "data": [detail]}, row["symbol"]
+        )
+        if detail
+        else None
+    )
+    record = sources.twse_action_history_record(
+        row, detail_row, payload_sha256=None, detail_sha256=None
+    )
+    action = _row(record)
+    expected = pipeline._field_action_factor(action, record.reference_price)[0]
+    assert pipeline._corporate_action_factor([action])[0] == expected
+    before, quote = pipeline.official_ex_rights_prices(record.details)
+    assert expected != quote / before
+    assert abs(expected * before - quote) <= pipeline.ACTION_REFERENCE_TOLERANCE
+
+
+def test_a_row_without_official_prices_keeps_the_field_formula():
+    # TWT48U publishes no 除權息參考價: the cash dividend is restored with the
+    # last close before the event (現行公式), as before #394.
+    action = CorporateAction(
+        action_date=date(2026, 9, 9),
+        action_type="corporate_action",
+        cash_dividend=0.998614,
+        details_json={"Code": "3059", "Date": "1150909", "Exdividend": "息"},
+    )
+    assert pipeline.official_ex_rights_prices(action.details_json) is None
+    factor, applied = pipeline._corporate_action_factor(
+        [action], fallback_reference_prices={date(2026, 9, 9): 38.5}
+    )
+    assert applied and factor == (38.5 - 0.998614) / 38.5
+    # A TWT48U subscription row (6533 2026-09-07) has nothing to restore by.
+    subscription = CorporateAction(
+        action_date=date(2026, 9, 7),
+        action_type="corporate_action",
+        cash_dividend=0.0,
+        details_json={
+            "Code": "6533",
+            "Exdividend": "權",
+            "SubscriptionRatio": "0.13425227",
+            "SubscriptionPricePerShare": "195.0000",
+        },
+    )
+    assert pipeline._corporate_action_factor([subscription]) == (1.0, False)
+
+
+def test_a_row_the_guard_rejected_takes_the_official_ratio(factory):
+    # 6446 2026-07-09 with a printed ratio the reference does not support:
+    # the #386 check rejects it, so the fields are not written; the factor
+    # is the official ratio, not 1.
+    wrong = [*DETAIL_6446[:4], "100.0 股", *DETAIL_6446[5:]]
+    record = history_record(TWT49U_6446, wrong)
+    with factory() as db:
+        db.add(
+            Instrument(
+                exchange="TWSE",
+                symbol="6446",
+                name="6446",
+                instrument_type="stock",
+                status="active",
+            )
+        )
+        db.flush()
+        pipeline._upsert_action(db, record, instruments(db), None)
+        db.flush()
+        stored_row = stored(db, "6446")
+        assert stored_row.stock_dividend_ratio is None
+        assert db.scalar(select(DataQuality.status)) == "factor_mismatch"
+        factor, applied = pipeline._corporate_action_factor([stored_row])
+        assert applied and factor == pytest.approx(1377.93 / 1530.00, abs=1e-12)
+
+
+def test_the_bars_before_an_official_reference_event_are_restored(factory):
+    # The indicator input of 3691: bars before 10/27 carry factor 1, from
+    # 10/27 on the official 0.97385, so pre-event closes are scaled to it.
+    days = _weekdays(date(2026, 10, 19), date(2026, 10, 30))
+    with factory() as db:
+        instrument = instruments(db)[("TPEx", "3691")]
+        _bars(db, instrument, days, 109)
+        record = sources.tpex_action_record(TPEX_3691, payload_sha256=None)
+        pipeline._upsert_action(db, record, instruments(db), None)
+        db.flush()
+        bars = load_indicator_bars(db, instrument.id, None)
+        factors = {bar.trading_date: bar.price_factor for bar in bars}
+        assert factors[date(2026, 10, 26)] == 1.0
+        assert factors[date(2026, 10, 27)] == pytest.approx(106.15 / 109.00)
+        assert factors[date(2026, 10, 30)] == pytest.approx(106.15 / 109.00)
 
 
 def test_a_published_reference_cut_to_the_cent_passes():
@@ -779,7 +930,13 @@ def test_rebuild_recomputes_only_what_the_sync_changed(factory):
                 cash_dividend=0.0,
                 stock_dividend_ratio=2.02941,
                 reference_price=101.5,
-                details_json=TPEX_4549,
+                # Without its 除權息參考價 the wrong ratio decides the factor;
+                # with it the factor would already be the official one (#394).
+                details_json={
+                    key: value
+                    for key, value in TPEX_4549.items()
+                    if key != "ExRightsDiviendQuote"
+                },
                 source="tpex",
             )
         )
@@ -958,3 +1115,68 @@ def test_rebuild_refuses_a_run_that_is_not_a_finished_sync(factory):
             sync.rebuild_after_sync(db, run.id)
         with pytest.raises(sync.RebuildError):
             sync.rebuild_after_sync(db, run.id + 1)
+
+
+def test_reprice_lists_the_official_reference_rows_and_rebuild_takes_its_run(factory):
+    # #394: 3691's subscription now has a factor; 3706's ordinary row and a
+    # TWT48U row without official prices are not repriced.
+    days = _weekdays(date(2026, 9, 1), date(2026, 10, 30))
+    with factory() as db:
+        known = instruments(db)
+        for symbol in (("TPEx", "3691"), ("TWSE", "3706"), ("TWSE", "3059")):
+            _bars(db, known[symbol], days, 100)
+        for record in (
+            sources.tpex_action_record(TPEX_3691, payload_sha256=None),
+            history_record(TWT49U_3706, DETAIL_3706),
+            sources.ActionRecord(
+                symbol="3059",
+                action_date=date(2026, 9, 9),
+                action_type="corporate_action",
+                cash_dividend=0.998614,
+                details={"Code": "3059", "Date": "1150909", "Exdividend": "息"},
+            ),
+        ):
+            pipeline._upsert_action(db, record, known, None)
+        db.flush()
+        rows_before = [
+            (row.id, row.cash_dividend, row.stock_dividend_ratio, row.details_json)
+            for row in db.scalars(select(CorporateAction).order_by(CorporateAction.id))
+        ]
+        dry = sync.reprice_corporate_actions(db)
+        assert dry["status"] == "dry_run" and "run_id" not in dry
+        assert dry["events"] == [
+            {
+                "exchange": "TPEx",
+                "symbol": "3691",
+                "action_date": "2026-10-27",
+                "action_type": "corporate_action",
+                "field_factor": 1.0,
+                "official_factor": round(106.15 / 109.0, 10),
+            }
+        ]
+        assert db.scalar(select(func.count(IngestionRun.id))) == 0
+        applied = sync.reprice_corporate_actions(db, apply=True)
+        db.commit()
+        run = db.get(IngestionRun, applied["run_id"])
+        assert (run.run_type, run.status) == ("corporate_action_reprice", "success")
+        assert run.metadata_json["affected"] == {
+            str(known[("TPEx", "3691")].id): "2026-10-27"
+        }
+        result = sync.rebuild_after_sync(db, run.id)
+        db.commit()
+        assert result["indicators"]["instruments"] == 1
+        assert result["feature_instruments"] == 1
+        last = db.scalar(
+            select(TechnicalIndicator).where(
+                TechnicalIndicator.instrument_id == known[("TPEx", "3691")].id,
+                TechnicalIndicator.trading_date == days[-1],
+            )
+        )
+        expected = compute_indicators(
+            load_indicator_bars(db, known[("TPEx", "3691")].id, days[-1])
+        )[-1]
+        assert last.ma20 == pytest.approx(expected.values["ma20"], abs=1e-9)
+        assert [
+            (row.id, row.cash_dividend, row.stock_dividend_ratio, row.details_json)
+            for row in db.scalars(select(CorporateAction).order_by(CorporateAction.id))
+        ] == rows_before
