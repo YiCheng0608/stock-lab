@@ -407,6 +407,21 @@ def group_name_keys(*names: str | None) -> set[str]:
     return keys
 
 
+def _written_in(theme: str, text: str) -> bool:
+    """``theme`` (a ``_key``) is written in ``text``, spaces aside.
+
+    ``text`` keeps its whitespace (NFKC and casefold only), and any run of
+    whitespace may sit between two characters of the theme, so AI 網通 is
+    found in AI網通.  An end of the theme that is an ASCII letter or digit must
+    not continue with one in the text, so AI is not found in said or again.
+    """
+
+    pattern = r"\s*".join(re.escape(char) for char in theme)
+    before = "(?<![0-9a-z])" if theme[:1].isascii() and theme[:1].isalnum() else ""
+    after = "(?![0-9a-z])" if theme[-1:].isascii() and theme[-1:].isalnum() else ""
+    return re.search(f"{before}{pattern}{after}", text) is not None
+
+
 def _names_match(theme: str, name: str) -> bool:
     # One contains the other and the shorter has two characters or more, so
     # 半導體 matches 半導體 and 光通訊 matches a part of 矽光子／光通訊.
@@ -424,7 +439,8 @@ def theme_check(
     ``evidence_not_in_source``: the evidence, compared after NFKC, casefold,
     removing whitespace and the quote marks around it, is not a run of the
     sent title or of the sent summary.  ``theme_not_in_source``: none of
-    A. the theme's key is in the title or summary;
+    A. the theme's key is in the title or summary (an ASCII end of it not
+       inside a longer ASCII word);
     B. the theme matches a name in ``group_names`` (the groups the item's
        rule-matched instruments belong to on its news date);
     C. at least half of the theme's units (each Han character, each run of
@@ -441,7 +457,11 @@ def theme_check(
     theme = _key(candidate.get("theme") or "")
     if not theme:
         return "theme_not_in_source"
-    if any(theme in field for field in fields):
+    texts = [
+        unicodedata.normalize("NFKC", payload.get(name) or "").casefold()
+        for name in ("title", "summary")
+    ]
+    if any(_written_in(theme, text) for text in texts):
         return None
     if any(_names_match(theme, name) for name in group_names):
         return None

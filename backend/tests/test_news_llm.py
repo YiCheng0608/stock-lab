@@ -1527,6 +1527,27 @@ def test_an_english_source_keeps_only_the_themes_it_writes():
     ]
 
 
+@pytest.mark.parametrize(
+    ("title", "theme", "cause"),
+    [
+        # An ASCII theme is not found inside a longer word.
+        ("Analysts said chip demand rose again", "AI", "theme_not_in_source"),
+        ("Nvidia AI chips sold out", "AI", None),
+        ("Palantir earnings reveal a major AI turning point", "AI", None),
+        ("corners of the chip sector", "chip sector", None),
+        ("AI-driven demand", "AI", None),
+        ("TSMC 5G orders", "5G", None),
+        ("TSMC 15G orders", "5G", "theme_not_in_source"),
+        # A Chinese end needs no boundary.
+        ("輝達AI伺服器出貨", "AI伺服器", None),
+    ],
+)
+def test_an_ascii_theme_is_matched_as_a_whole_word(title, theme, cause):
+    payload = {"title": title, "summary": ""}
+    candidate = {"theme": theme, "reason": "x", "evidence": title}
+    assert news_llm.theme_check(payload, candidate) == cause
+
+
 def _membership(db, symbol, group_name, *, valid_from, valid_to=None):
     group_id = f"theme-test-{group_name}"
     if db.get(ThemeGroup, group_id) is None:
