@@ -1057,17 +1057,25 @@ def test_the_read_versions_fall_back_from_v4_to_v3_to_v2():
     )
 
 
-@pytest.mark.parametrize("previous", ["candidate_score_v3", "candidate_score_v2"])
+@pytest.mark.parametrize(
+    ("previous", "newer"),
+    [
+        ("candidate_score_v3", "candidate_score_v4"),
+        ("candidate_score_v2", "candidate_score_v4"),
+        # #423 review: a date with v3 and v2 runs and no v4 reads v3.
+        ("candidate_score_v2", "candidate_score_v3"),
+    ],
+)
 def test_a_date_with_only_a_previous_version_run_still_shows_its_candidates(
-    db, previous
+    db, previous, newer
 ):
     """#392／#407 review M3, #413: past dates keep their v3 and v2 lists.
 
     Runs are not recomputed when the score version changes, so a date without
     a current-version run (candidate_score_v4) shows its candidate_score_v3
     run, or its candidate_score_v2 run before #392, in /api/candidates, the
-    action list's tier 1 and the theme member table; a date with both shows
-    only the current one.
+    action list's tier 1 and the theme member table; a date with two versions
+    shows only the one earlier in CANDIDATE_SCORE_READ_VERSIONS.
     """
 
     from app.candidate_view import candidate_list
@@ -1075,8 +1083,9 @@ def test_a_date_with_only_a_previous_version_run_still_shows_its_candidates(
     from app.domain import CANDIDATE_SCORE_READ_VERSIONS
     from app.theme_member_view import member_context
 
-    current = CANDIDATE_SCORE_READ_VERSIONS[0]
-    assert current == "candidate_score_v4" and previous in CANDIDATE_SCORE_READ_VERSIONS
+    assert CANDIDATE_SCORE_READ_VERSIONS.index(
+        newer
+    ) < CANDIDATE_SCORE_READ_VERSIONS.index(previous)
     a = stock(db, "1101")
     signal(db, a, volume_ratio=2.0)
     db.commit()
@@ -1095,11 +1104,11 @@ def test_a_date_with_only_a_previous_version_run_still_shows_its_candidates(
     assert (tier[a.id].tier, tier[a.id].candidate_rank) == (1, 1)
     assert member_context(db, T, None, [a.id])["ranks"] == {a.id: 1}
 
-    # The same date's current-version run wins; the two never mix.
+    # The same date's newer run wins; the two never mix.
     db.add(
         CandidateRun(
             trading_date=T,
-            score_version=current,
+            score_version=newer,
             status="success",
             candidate_count=0,
             evaluated_signals=1,
@@ -1112,6 +1121,6 @@ def test_a_date_with_only_a_previous_version_run_still_shows_its_candidates(
     )
     db.commit()
     listed = candidate_list(db, T)
-    assert (listed["score_version"], listed["items"]) == (current, [])
+    assert (listed["score_version"], listed["items"]) == (newer, [])
     assert action_tier_rows(db, T)[0].tier != 1
     assert member_context(db, T, None, [a.id])["ranks"] == {}

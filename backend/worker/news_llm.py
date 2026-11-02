@@ -443,8 +443,9 @@ def theme_check(
        inside a longer ASCII word);
     B. the theme matches a name in ``group_names`` (the groups the item's
        rule-matched instruments belong to on its news date);
-    C. at least half of the theme's units (each Han character, each run of
-       ASCII letters and digits) are in the title or summary.
+    C. more than half of the theme's units (each Han character, each run of
+       ASCII letters and digits) are in the title or summary, so a two-unit
+       theme needs both (#423 review: 電子檢測 had 2 of 4 from 其他電子).
     A source without Chinese text passes C only with ASCII units, so in
     effect only A and B: a Chinese theme name has no deterministic match in
     English text.
@@ -467,7 +468,7 @@ def theme_check(
         return None
     units = _units(candidate["theme"])
     written = set(_units(_source_text(payload)))
-    if units and 2 * sum(unit in written for unit in units) >= len(units):
+    if units and 2 * sum(unit in written for unit in units) > len(units):
         return None
     return "theme_not_in_source"
 

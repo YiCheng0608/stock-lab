@@ -133,7 +133,7 @@ membership 必須在 score date 有效；每個股票榜或 ETF 類別分區至�
 
 ## candidate_score_v2
 
-更早的評分（[#262](https://github.com/YiCheng0608/stock-lab/issues/262)），現行為 [candidate_score_v4](#candidate_score_v4)。與 [candidate_score_v1](#candidate_score_v1) 只差兩處：`name` 為 `candidate_score_v2`，新聞分項的 `llm_prompt_version` 為 `news_v2`（[NEWS_SPEC §5](NEWS_SPEC.md#5-ai-摘要與推論) 的現行新聞提示）；其餘權重、子項、窗口、門檻、名單、理由、保存與 API 規則都照 v1。設定是 `domain.py` 的 `CANDIDATE_SCORE_V2`（快照與「只差兩處」由 `test_candidates.py` 釘住），`CANDIDATE_SCORE` 指向它。新聞提示再升版時本版也要升版：測試 `test_score_reads_the_news_prompt_version_the_news_llm_writes` 要求評分讀的版本等於 `worker.news_llm.PROMPT_VERSION`，否則新版提示寫的方向不會被計分。`/api/candidates` 與個股 `candidate` 只讀目前版本的 run，v1 的 run 與列保留不改。換版的 T 日窗口內若有只做過 `news_v1` 判讀的新聞，這些新聞記 `unscored`。
+更早的評分（[#262](https://github.com/YiCheng0608/stock-lab/issues/262)），現行為 [candidate_score_v4](#candidate_score_v4)。與 [candidate_score_v1](#candidate_score_v1) 只差兩處：`name` 為 `candidate_score_v2`，新聞分項的 `llm_prompt_version` 為 `news_v2`（當時的現行新聞提示，[NEWS_SPEC §5](NEWS_SPEC.md#5-ai-摘要與推論)）；其餘權重、子項、窗口、門檻、名單、理由、保存與 API 規則都照 v1。設定是 `domain.py` 的 `CANDIDATE_SCORE_V2`（快照與「只差兩處」由 `test_candidates.py` 釘住），當時 `CANDIDATE_SCORE` 指向它。新聞提示升版時評分也要升版：測試 `test_score_reads_the_news_prompt_version_the_news_llm_writes` 要求現行評分讀的版本等於 `worker.news_llm.PROMPT_VERSION`，否則新版提示寫的方向不會被計分。v2 現行時 `/api/candidates` 與個股 `candidate` 只讀 v2 的 run；v1 的 run 與列保留不改。現在的讀取規則見 [candidate_score_v4 的交界](#candidate_score_v4)。換版的 T 日窗口內若有只做過 `news_v1` 判讀的新聞，這些新聞記 `unscored`。
 
 ## candidate_score_v3
 

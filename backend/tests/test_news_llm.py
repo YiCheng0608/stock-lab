@@ -1483,6 +1483,11 @@ def _case_payload(news_id):
         (5942, "其他電子", "", "evidence_not_in_source"),
         # A: written in the summary.
         (5942, "其他電子", "相關其他電子", None),
+        # C takes more than half: 電子 is two of four units, not enough.
+        (5942, "電子檢測", "相關其他電子下跌-2.13%", "theme_not_in_source"),
+        (5942, "電子設備", "相關其他電子下跌-2.13%", "theme_not_in_source"),
+        # C: 電子業 has 2 of 3 units in the source.
+        (5942, "電子業", "相關其他電子下跌-2.13%", None),
         # C: 光 and 通 of 光通訊 are in the source.
         (5943, "光通訊", "可插拔光模組", None),
         # Width, case, spaces and the quote marks around the evidence.
@@ -1493,6 +1498,23 @@ def _case_payload(news_id):
 def test_theme_check_rules(news_id, theme, evidence, cause):
     candidate = {"theme": theme, "reason": "理由", "evidence": evidence}
     assert news_llm.theme_check(_case_payload(news_id), candidate) == cause
+
+
+@pytest.mark.parametrize(
+    ("title", "theme", "cause"),
+    [
+        # A two-unit theme with one unit in the source is dropped (#423 review).
+        ("台積電10月營收年增20%", "電力", "theme_not_in_source"),
+        ("國泰金獲利年增", "金控", "theme_not_in_source"),
+        # AC-4's only C keep (6032): 3 units, 2 written.
+        ("外媒喊抱緊台積電", "AI晶片", None),
+    ],
+)
+def test_a_theme_needs_more_than_half_of_its_units_in_the_source(title, theme, cause):
+    summary = "人工智慧晶片與高階處理器需求強勁" if theme == "AI晶片" else ""
+    payload = {"title": title, "summary": summary}
+    candidate = {"theme": theme, "reason": "x", "evidence": title}
+    assert news_llm.theme_check(payload, candidate) == cause
 
 
 def test_theme_check_by_the_groups_of_the_matched_instruments():
