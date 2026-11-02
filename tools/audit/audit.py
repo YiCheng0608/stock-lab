@@ -7,7 +7,8 @@ captures it cites with ``open(path, "rb")``.  Nothing is repaired.
 
 Refuses (exit 2, before anything is read) when ``--db`` is the production
 database (inside ``stock-lab-data`` or ``STOCK_DATA_DIR``, or the same file as
-its ``stock.db``, a hard link included), when Taipei time is between 18:30 and
+its ``stock.db``, a hard link included) or ``--out`` is inside that directory
+(the path as written or with links resolved), when Taipei time is between 18:30 and
 21:30 (the daily job), or when free physical memory is under
 ``--min-free-gb``; the rules are ``tools/research/backtest_research.py``'s.  A
 run that reaches 18:30 stops before the next item, marks the rest
@@ -55,6 +56,7 @@ from audit_checks import (  # noqa: E402
 )
 from audit_lib import FAIL, PASS, RESULT_LABELS, UNKNOWN, Check, RawFiles, connect  # noqa: E402
 from backtest_research import (  # noqa: E402
+    PRODUCTION_DIR_NAME,
     TAIPEI,
     daily_window_problem,
     free_memory_gb,
@@ -118,15 +120,38 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def out_problem(out: Path, environ: dict[str, str]) -> str | None:
+    """``--out`` must not be in the production data directory (#418 review).
+
+    Both the path as written and the path with links resolved are compared,
+    as ``coordinator_lib.sh`` ``guard_dir`` does: a junction or symlink into
+    ``stock-lab-data`` or ``STOCK_DATA_DIR`` is refused as well.
+    """
+
+    roots = []
+    if environ.get("STOCK_DATA_DIR"):
+        data_dir = Path(environ["STOCK_DATA_DIR"])
+        roots = [data_dir.absolute(), data_dir.resolve()]
+    for candidate in (out.absolute(), out.resolve()):
+        if PRODUCTION_DIR_NAME in (part.lower() for part in candidate.parts):
+            return f"--out {out} is inside {PRODUCTION_DIR_NAME}"
+        for root in roots:
+            if candidate == root or root in candidate.parents:
+                return f"--out {out} is inside STOCK_DATA_DIR ({root})"
+    return None
+
+
 def refusals(
     db: Path,
     environ: dict[str, str],
     now: datetime,
     free: float | None,
     min_free: float,
+    out: Path | None = None,
 ) -> list[str]:
     problems = [
         production_problem(db, environ),
+        None if out is None else out_problem(out, environ),
         daily_window_problem(now),
         None if db.is_file() else f"{db} does not exist",
     ]
@@ -261,7 +286,12 @@ def main(argv: list[str] | None = None) -> int:
     unknown = [key for key in only if key not in KEYS]
     free = free_memory_gb()
     problems = refusals(
-        db, dict(os.environ), datetime.now(timezone.utc), free, args.min_free_gb
+        db,
+        dict(os.environ),
+        datetime.now(timezone.utc),
+        free,
+        args.min_free_gb,
+        Path(args.out),
     )
     if unknown:
         problems.append(f"unknown items {unknown}; choose from {KEYS}")

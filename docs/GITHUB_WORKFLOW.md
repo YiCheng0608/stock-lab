@@ -80,8 +80,8 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
    - **窗口結束**（使用者確認 G7 後）：`git log origin/master..origin/release/v1 --no-merges` 必須為空（V1 改動都已在 master）；在排程閒置時把發佈 checkout 切回 master、依 master 的 lock 檔重裝 venv（下一次 daily 會升 V1.1 的 migration）；`release/v1` 最後一個 commit 打 `v1.0` tag。三項結果記在 G7 Issue。
    每個 gate 收尾時，統籌另跑一次 DB 深度審查（[#391](https://github.com/YiCheng0608/stock-lab/issues/391)）：先用 `tools/ops/copy_db.py` 取正式 DB 的唯讀副本，在以最新 `origin/master` 為底的 worktree 跑 `python tools/audit/audit.py --db <副本> --out <目錄>`，把 `<目錄>/summary.md` 貼在該 gate 的 Issue。
    - **審什麼**：工具不 import 產品的計算函式，依 [V1_SPEC](V1_SPEC.md) 獨立重算全歷史，比對日線、raw、除權息欄位與缺漏、來源與日期欄位、技術指標、訊號的法人與融資比率、候選分數與族群分數。項目清單與各項範圍寫在 [`audit.py`](../tools/audit/audit.py) 開頭。
-   - **只讀**：DB 用唯讀連線，raw 依副本的 `payload_path` 只以 `rb` 開啟，`--raw-dir` 可改指 raw 副本或容器內的掛載點。拒絕正式 DB（含 hard link）、台北 18:30～21:30 與可用記憶體不足（`--min-free-gb`，預設 5）。跑到 18:30 就停在下一項之前，其餘記無法判定，exit 3；21:30 後用 `--only` 補跑剩下的項目。
-   - **三態**：失敗是 DB 和重算或 raw 不一致；無法判定是 raw 讀不到、母體重建不出，或列寫入之後輸入才被更正而沒有重算（`inputs_changed_after_write`，筆數與例子列在 summary）。失敗的項目由統籌建 Issue 處理，工具不修資料。
+   - **只讀**：DB 用唯讀連線，raw 依副本的 `payload_path` 只以 `rb` 開啟，`--raw-dir` 可改指 raw 副本或容器內的掛載點。拒絕正式 DB（含 hard link）、`--out` 指到正式資料目錄底下（字面與解析連結後都比）、台北 18:30～21:30 與可用記憶體不足（`--min-free-gb`，預設 5）。跑到 18:30 就停在下一項之前，其餘記無法判定，exit 3；21:30 後用 `--only` 補跑剩下的項目。
+   - **三態**：失敗是 DB 和重算或 raw 不一致；無法判定是 raw 讀不到、母體重建不出，或列寫入之後它讀到的輸入才被更正而沒有重算（`inputs_changed_after_write`：籌碼比率只看窗口內的籌碼列與日線，價格類只看窗口內的除權息；筆數與例子列在 summary）。失敗的項目由統籌建 Issue 處理，工具不修資料。
    master 另有 CI 每晚全套（`schedule`，台北 22:40；也可手動 `workflow_dispatch`）：後端、前端全部跑，`verify` 驗五頁。紅了照 master CI 紅處理（見 [Review 與合併](#review-與合併)）。
 
 ## 留言類型

@@ -814,6 +814,7 @@ class Derived:
     evidence: dict[tuple[str, str], int] = field(default_factory=dict)
     run_times: dict[str, str] = field(default_factory=dict)
     changed: dict[tuple[int, str], bool] = field(default_factory=dict)
+    changed_prices: dict[tuple[int, str], bool] = field(default_factory=dict)
 
 
 def breakout_strategy(name: str) -> bool:
@@ -1034,7 +1035,7 @@ def _compare_signal_ratios(ctx: Context, series: Series, check: Check) -> None:
                     stored,
                     mine,
                     code,
-                    series.changed(day, 20, created),
+                    series.changed(day, 20, created, chip_window=5),
                     1e-9,
                 )
         if "margin_balance_change_ratio_5d" in inputs:
@@ -1089,8 +1090,10 @@ def _collect(ctx: Context, series: Series, computed, derived: Derived) -> None:
             continue
         five = series.flow(day, 5, require_last=True)
         twenty = series.flow(day, 20, require_last=True)
-        derived.changed[(series.instrument_id, day)] = series.changed(
-            day, 20, derived.run_times.get(day)
+        when = derived.run_times.get(day)
+        derived.changed[(series.instrument_id, day)] = series.changed(day, 20, when)
+        derived.changed_prices[(series.instrument_id, day)] = series.changed(
+            day, 21, when, prices=True
         )
         derived.chips_by_day[day][series.instrument_id] = {
             "institutional_flow_5d": None if five is None else five[0] / (five[1] / 20),
@@ -1148,7 +1151,7 @@ def _collect(ctx: Context, series: Series, computed, derived: Derived) -> None:
             "flow": None if flow is None else flow[0] / flow[1],
             "zero_filled": [] if flow is None else flow[2],
             "margin": series.margin_change(day),
-            "changed": series.changed(day, 21),
+            "changed": series.changed(day, 21, prices=True),
         }
 
 
@@ -1254,7 +1257,7 @@ def _check_candidates(
                     item.get("value"),
                     value,
                     code,
-                    bool(derived.changed.get((instrument_id, day))),
+                    bool(derived.changed_prices.get((instrument_id, day))),
                     1e-6,
                 ):
                     continue
@@ -1277,7 +1280,7 @@ def _check_candidates(
                     item.get("percentile"),
                     expected,
                     code,
-                    any(derived.changed.get((iid, day)) for iid, _name in pool),
+                    any(derived.changed_prices.get((iid, day)) for iid, _name in pool),
                 )
             # group: best qualified board percentile and the score row it cites
             qualified = [

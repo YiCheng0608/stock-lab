@@ -62,6 +62,7 @@ class Bar:
     suspended: bool
     synthetic: bool
     source: str
+    collected_at: str = ""
 
 
 def usable(bar: Bar, factor: float) -> bool:
@@ -261,23 +262,42 @@ class Series:
             zero_filled.append(d)
         return total, sum(volumes), zero_filled
 
-    def changed(self, day: str, window: int, after: str | None = None) -> bool:
+    def changed(
+        self,
+        day: str,
+        window: int,
+        after: str | None = None,
+        *,
+        prices: bool = False,
+        chip_window: int | None = None,
+    ) -> bool:
         """Whether the inputs of the last ``window`` sessions up to ``day`` changed later.
 
-        ``after`` (a stored write time): a chip row or a corporate action dated
-        on or before ``day`` was collected after it.  Without it (rows with no
-        write time): a chip row a later capture revised, or an action collected
-        after ``day`` (a backfill).
+        Only what the value reads counts (#418 review): the chip rows of the
+        window (the last ``chip_window`` of them), its bars (volumes) when ``after`` is known, and with ``prices``
+        the corporate actions dated inside the window, the only ones that move
+        a price ratio between two of its bars (``dates[0] < action <= day``).
+        ``after`` is the row's stored write time: an input collected after it.
+        Without it (group scores have no write time): a chip row a later
+        capture revised, or an action collected after ``day`` (a backfill).
         """
 
-        for d in self.effective(day, window):
-            chip = self.chips.get(d)
+        dates = self.effective(day, window)
+        if not dates:
+            return False
+        chip_dates = set(dates[-chip_window:] if chip_window else dates)
+        for d in dates:
+            chip = self.chips.get(d) if d in chip_dates else None
             if chip is not None and (
                 chip.collected_at > after if after else chip.revised
             ):
                 return True
+            if after and self.bars[self.index[d]].collected_at > after:
+                return True
+        if not prices:
+            return False
         for action in self.actions:
-            if action.action_date > day or not action.collected_at:
+            if not (dates[0] < action.action_date <= day) or not action.collected_at:
                 continue
             if action.collected_at > after if after else action.collected_at[:10] > day:
                 return True
@@ -340,9 +360,10 @@ def load_series(
             bool(s),
             src in SYNTHETIC_SOURCES or reason == "synthetic_index",
             src,
+            str(collected or ""),
         )
-        for day, o, h, lo, c, v, s, src, reason in con.execute(
-            "select trading_date, open, high, low, close, volume, is_suspended, source, turnover_reason"
+        for day, o, h, lo, c, v, s, src, reason, collected in con.execute(
+            "select trading_date, open, high, low, close, volume, is_suspended, source, turnover_reason, collected_at"
             " from market_bars where instrument_id=? order by trading_date",
             (instrument_id,),
         )

@@ -97,7 +97,7 @@ def sessions(start: date, count: int) -> list[date]:
     return days
 
 
-DAYS = sessions(date(2026, 6, 1), 70)
+DAYS = sessions(date(2026, 1, 5), 130)
 T = DAYS[-1]
 
 
@@ -929,6 +929,39 @@ def test_chips_ratios_of_the_signals(fx):
     }
 
 
+def test_a_late_action_outside_what_a_ratio_reads_keeps_a_wrong_ratio_failed(fx):
+    """#418 review 1: a dividend collected after the signal does not move its chip ratios."""
+
+    market = build_market(fx, with_actions=False)
+    stock = market["1101"]
+    dates = DAYS[-20:]
+    volumes = [1000 + 37 * ((DAYS.index(d)) % 9) for d in dates]
+    flows = sum(10 * (DAYS.index(d) % 5) - 20 + 5.0 - 3.0 for d in dates[-5:])
+    flow = flows / (sum(volumes) / 20)
+    margins = [1000.0 + 7 * ((DAYS.index(d) * 1) % 13) for d in DAYS[-6:]]
+    margin = (margins[-1] - margins[0]) / margins[0]
+    evidence(fx, stock, T, flow=flow * 2, margin=margin)
+    fx.commit()
+    before = by_key(
+        audit_checks.derived_checks(fx.context(), lambda: None), "chips_ratios"
+    )
+    assert before.result == "fail" and dict(before.failures) == {
+        "institutional_flow_5d": 1
+    }
+    action(fx, stock, DAYS[5], cash=0.5, reference=50.0, collected=datetime(2099, 1, 1))
+    action(
+        fx, stock, DAYS[-2], cash=0.5, reference=50.0, collected=datetime(2099, 1, 1)
+    )
+    fx.commit()
+    after = by_key(
+        audit_checks.derived_checks(fx.context(), lambda: None), "chips_ratios"
+    )
+    assert after.result == "fail" and dict(after.failures) == {
+        "institutional_flow_5d": 1
+    }
+    assert not after.unknown
+
+
 def scored_market(fx: Fixture) -> dict[str, Instrument]:
     market = build_market(fx)
     group = ThemeGroup(
@@ -1086,3 +1119,86 @@ def test_summary_lists_every_item_with_its_result(fx, tmp_path, monkeypatch):
     for key in audit.KEYS:
         assert f"`{key}`" in summary
     assert "通過" in summary and "無法判定" in summary
+
+
+def test_a_late_action_outside_the_return_window_keeps_a_wrong_member_return_failed(fx):
+    """#418 review 1: only an event inside the 21 bars of the returns can explain a difference."""
+
+    scored_market(fx)
+    con = sqlite3.connect(fx.path)
+    details = json.loads(
+        con.execute(
+            "select details_json from group_daily_scores where trading_date=? and group_id='official-industry-other'",
+            (T.isoformat(),),
+        ).fetchone()[0]
+    )
+    con.close()
+    member = details["member_returns"][0]
+    member["excess_return_20d"] += 0.05
+    fx.sql(
+        "update group_daily_scores set details_json = ? where trading_date=? and group_id='official-industry-other'",
+        json.dumps(details),
+        T.isoformat(),
+    )
+    stock = fx.db.get(Instrument, member["instrument_id"])
+    action(fx, stock, DAYS[5], cash=0.5, reference=40.0, collected=datetime(2099, 1, 1))
+    fx.commit()
+    groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
+    assert groups.result == "fail" and "member_excess_20d" in groups.failures
+    # An event inside the window, collected after the score date: not judged.
+    action(
+        fx, stock, DAYS[-5], cash=0.5, reference=40.0, collected=datetime(2099, 1, 1)
+    )
+    fx.commit()
+    groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
+    assert "member_excess_20d" not in groups.failures
+    assert groups.unknown["inputs_changed_after_write"] > 0
+
+
+def link_directory(link: Path, target: Path) -> None:
+    """A junction on Windows (no privilege needed), a symlink elsewhere."""
+
+    if os.name == "nt":
+        import _winapi
+
+        _winapi.CreateJunction(str(target), str(link))
+    else:
+        os.symlink(target, link, target_is_directory=True)
+
+
+def test_an_out_directory_in_the_production_data_is_refused(tmp_path):
+    """#418 review 2: --out inside stock-lab-data or STOCK_DATA_DIR, as written or through a link."""
+
+    data = tmp_path / "prod-data"
+    data.mkdir()
+    environ = {"STOCK_DATA_DIR": str(data)}
+    named = tmp_path / "stock-lab-data"
+    named.mkdir()
+    assert "stock-lab-data" in audit.out_problem(named / "audit", {})
+    assert "STOCK_DATA_DIR" in audit.out_problem(data / "audit", environ)
+    linked = tmp_path / "looks-safe"
+    link_directory(linked, data)
+    named_link = tmp_path / "also-safe"
+    link_directory(named_link, named)
+    try:
+        assert "STOCK_DATA_DIR" in audit.out_problem(linked / "audit", environ)
+        assert "stock-lab-data" in audit.out_problem(named_link / "audit", {})
+        assert audit.out_problem(tmp_path / "out", environ) is None
+    finally:
+        os.rmdir(linked) if os.name == "nt" else linked.unlink()
+        os.rmdir(named_link) if os.name == "nt" else named_link.unlink()
+    assert list(data.iterdir()) == [] and list(named.iterdir()) == []
+
+
+def test_main_refuses_an_out_directory_in_stock_lab_data(
+    fx, tmp_path, monkeypatch, capsys
+):
+    stock = fx.instrument("TWSE", "1101")
+    fx.bar(stock, DAYS[0], 10)
+    fx.commit()
+    monkeypatch.setattr(audit, "free_memory_gb", lambda: 20.0)
+    monkeypatch.setattr(audit, "daily_window_problem", lambda now: None)
+    out = tmp_path / "stock-lab-data" / "audit"
+    assert audit.main(["--db", str(fx.path), "--out", str(out)]) == 2
+    assert "--out" in capsys.readouterr().out
+    assert not out.parent.exists()
