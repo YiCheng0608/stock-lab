@@ -147,7 +147,7 @@ class Market:
         self.bars(instrument.id, bars)
         return instrument
 
-    def signal(self, symbol, status, *, strategy="breakout_v1", quality="complete"):
+    def signal(self, symbol, status, *, strategy="breakout_v2", quality="complete"):
         signal = Signal(
             signal_key=f"analysis-{symbol}-{strategy}",
             signal_date=AS_OF,
@@ -169,7 +169,7 @@ class Market:
                 trading_date=AS_OF,
                 instrument_id=self.ids[symbol],
                 signal_id=signal.id,
-                strategy="breakout_v1",
+                strategy="breakout_v2",
                 score_version=CANDIDATE_SCORE_VERSION,
                 total_score=90 - rank,
                 weight_coverage=1.0,
@@ -203,7 +203,7 @@ class Market:
             )
 
     def levels(self, signal, unmet):
-        strategy = REGISTRY["breakout_v1"]
+        strategy = REGISTRY["breakout_v2"]
         codes = list(level_rules.condition_defaults(strategy))
         self.db.add(
             StrategyLevel(
@@ -744,7 +744,7 @@ LEAKED_PRICES = {
 
 
 def near_conditions(
-    strategy="breakout_v1", *, unmet=("price",), gap=0.01, position="below"
+    strategy="breakout_v2", *, unmet=("price",), gap=0.01, position="below"
 ):
     """A full condition list; ``unmet`` names condition kinds or codes."""
 
@@ -773,7 +773,7 @@ def near_conditions(
 def add_near_levels(
     market,
     symbol,
-    strategy="breakout_v1",
+    strategy="breakout_v2",
     *,
     availability="levels",
     reachable=True,
@@ -800,7 +800,7 @@ def add_near_levels(
     return signal
 
 
-def _near(strategy="breakout_v1", availability="levels", reachable=True, **kwargs):
+def _near(strategy="breakout_v2", availability="levels", reachable=True, **kwargs):
     return decision.strategy_nearness(
         REGISTRY[strategy], availability, reachable, near_conditions(strategy, **kwargs)
     )
@@ -812,21 +812,21 @@ def _near(strategy="breakout_v1", availability="levels", reachable=True, **kwarg
         # The price gap bound: 3.00% / 2.00% count, a hundredth more does not.
         ({"gap": 0.03}, True),
         ({"gap": 0.0301}, False),
-        ({"strategy": "pullback_v1", "gap": 0.02}, True),
-        ({"strategy": "pullback_v1", "gap": -0.02, "position": "above"}, True),
-        ({"strategy": "pullback_v1", "gap": 0.0201}, False),
-        ({"strategy": "pullback_v1", "gap": -0.0201, "position": "above"}, False),
+        ({"strategy": "pullback_v2", "gap": 0.02}, True),
+        ({"strategy": "pullback_v2", "gap": -0.02, "position": "above"}, True),
+        ({"strategy": "pullback_v2", "gap": 0.0201}, False),
+        ({"strategy": "pullback_v2", "gap": -0.0201, "position": "above"}, False),
         # Only volume unmet: the price is met on T and its gap is 0.
         ({"unmet": ("volume",), "gap": 0.2}, True),
         ({"unmet": ("price", "volume")}, True),
-        ({"strategy": "pullback_v1", "unmet": ("volume",)}, True),
+        ({"strategy": "pullback_v2", "unmet": ("volume",)}, True),
         # Any other unmet condition is never near.
         ({"unmet": ("price", "group_relative_strength")}, False),
         ({"unmet": ("price", "institutional_flow")}, False),
         ({"unmet": ("volume", "margin_financing")}, False),
-        ({"strategy": "pullback_v1", "unmet": ("price", "pullback_trend")}, False),
+        ({"strategy": "pullback_v2", "unmet": ("price", "pullback_trend")}, False),
         (
-            {"strategy": "pullback_v1", "unmet": ("volume", "pullback_above_ma60")},
+            {"strategy": "pullback_v2", "unmet": ("volume", "pullback_above_ma60")},
             False,
         ),
         # The row's availability and reachability.
@@ -872,7 +872,7 @@ def test_nearness_names_conditions_without_prices():
         },
     ]
     assert breakout["met_short_labels"] == ["族群", "法人", "融資"]
-    pullback = _near("pullback_v1", unmet=("volume",))
+    pullback = _near("pullback_v2", unmet=("volume",))
     assert pullback["price_gap"] == 0.0
     # Two trend conditions, one short name.
     assert pullback["met_short_labels"] == ["趨勢", "族群", "法人", "融資"]
@@ -883,24 +883,24 @@ def build_near_market(db) -> Market:
     market = Market(db)
     near = {
         # symbol: [(strategy, kwargs), ...]
-        "N30": [("breakout_v1", {"gap": 0.03})],
-        "N31": [("breakout_v1", {"gap": 0.0301})],
-        "P20": [("pullback_v1", {"gap": -0.02, "position": "above"})],
-        "P21": [("pullback_v1", {"gap": 0.0201})],
-        "NV0": [("breakout_v1", {"unmet": ("volume",)})],
-        "N2U": [("breakout_v1", {"unmet": ("price", "volume")})],
-        "NG1": [("breakout_v1", {"unmet": ("price", "group_relative_strength")})],
-        "PT1": [("pullback_v1", {"unmet": ("price", "pullback_trend")})],
-        "NTU": [("breakout_v1", {"availability": "trend_unreachable"})],
-        "NRF": [("breakout_v1", {"reachable": False})],
+        "N30": [("breakout_v2", {"gap": 0.03})],
+        "N31": [("breakout_v2", {"gap": 0.0301})],
+        "P20": [("pullback_v2", {"gap": -0.02, "position": "above"})],
+        "P21": [("pullback_v2", {"gap": 0.0201})],
+        "NV0": [("breakout_v2", {"unmet": ("volume",)})],
+        "N2U": [("breakout_v2", {"unmet": ("price", "volume")})],
+        "NG1": [("breakout_v2", {"unmet": ("price", "group_relative_strength")})],
+        "PT1": [("pullback_v2", {"unmet": ("price", "pullback_trend")})],
+        "NTU": [("breakout_v2", {"availability": "trend_unreachable"})],
+        "NRF": [("breakout_v2", {"reachable": False})],
         # Both strategies near: fewer unmet wins, then the smaller gap, then
         # breakout (REGISTRY order).
         "BFW": [
-            ("breakout_v1", {"unmet": ("price", "volume")}),
-            ("pullback_v1", {"unmet": ("volume",)}),
+            ("breakout_v2", {"unmet": ("price", "volume")}),
+            ("pullback_v2", {"unmet": ("volume",)}),
         ],
-        "BGP": [("breakout_v1", {"gap": 0.02}), ("pullback_v1", {"gap": 0.01})],
-        "BTI": [("breakout_v1", {"gap": 0.01}), ("pullback_v1", {"gap": 0.01})],
+        "BGP": [("breakout_v2", {"gap": 0.02}), ("pullback_v2", {"gap": 0.01})],
+        "BTI": [("breakout_v2", {"gap": 0.01}), ("pullback_v2", {"gap": 0.01})],
     }
     for symbol, signals in near.items():
         market.stock(symbol)
@@ -958,9 +958,9 @@ def test_near_rows_are_tier_3_in_order(factory):
         for symbol in ("BFW", "BGP", "BTI")
     }
     assert picked == {
-        "BFW": "pullback_v1",
-        "BGP": "pullback_v1",
-        "BTI": "breakout_v1",
+        "BFW": "pullback_v2",
+        "BGP": "pullback_v2",
+        "BTI": "breakout_v2",
     }
     # Tier 4 keeps its nearest strategy, and has none without a row.
     assert by_symbol["NG1"].nearness["near"] is False
@@ -978,7 +978,7 @@ def test_the_near_tier_through_the_api_carries_no_level(factory, stub_summaries)
     assert _symbols(near["items"]) == NEAR_ORDER
     first = near["items"][0]
     assert first["tier"] == 3
-    assert first["nearness"]["strategy"] == "pullback_v1"
+    assert first["nearness"]["strategy"] == "pullback_v2"
     assert [item["short_label"] for item in first["nearness"]["unmet"]] == ["量能"]
     assert first["nearness"]["met_short_labels"] == ["趨勢", "族群", "法人", "融資"]
     counts = {

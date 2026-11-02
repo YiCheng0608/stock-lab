@@ -42,7 +42,7 @@
     {
       "instrument_id": 1,
       "signal_id": 1,
-      "strategy": "breakout_v1",
+      "strategy": "breakout_v2",
       "total_score": 0.732,
       "weight_coverage": 1.0,
       "rank": 1,
@@ -250,7 +250,7 @@
     {
       "instrument_id": 3,
       "signal_id": 5,
-      "strategy": "breakout_v1",
+      "strategy": "breakout_v2",
       "total_score": 0.5665,
       "weight_coverage": 1.0,
       "rank": 2,
@@ -446,7 +446,7 @@
     {
       "instrument_id": 4,
       "signal_id": 7,
-      "strategy": "breakout_v1",
+      "strategy": "breakout_v2",
       "total_score": 0.4995,
       "weight_coverage": 1.0,
       "rank": 3,

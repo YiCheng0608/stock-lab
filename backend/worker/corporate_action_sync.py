@@ -358,7 +358,9 @@ def rebuild_after_sync(
     status with bars, as the indicators batch covers them) and, for active
     ones, every technical_features row; then the hot-group scores of every
     session from the earliest changed action date on that already has
-    scores.  A session without scores is not filled in: that would backfill
+    scores.  A session without scores is not filled in, and on a rescored
+    session only the groups that already have a score that session are
+    rescored and ranked among themselves (#409): either would backfill
     history with today's group definitions.  Signals are not
     regenerated: past signals are tracked, and whether to regenerate them is
     decided per correction.  ``checkpoint`` (the CLI commits and logs) is
@@ -417,7 +419,12 @@ def rebuild_after_sync(
     ).all()
     # One commit per session: hundreds of sessions in one transaction would
     # hold the SQLite write lock for the whole rescore.
-    rescore_dates(db, days, after_each=lambda day: step(f"group_scores {day}"))
+    rescore_dates(
+        db,
+        days,
+        after_each=lambda day: step(f"group_scores {day}"),
+        existing_groups_only=True,
+    )
     rescored = [day.isoformat() for day in days]
     result["group_score_dates"] = {
         "since": since.isoformat(),

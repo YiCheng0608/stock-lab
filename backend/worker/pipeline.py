@@ -53,6 +53,7 @@ from app.models import (
     GroupMembership,
     IngestionRun,
     Instrument,
+    MarginList,
     MarketBar,
     RawPayload,
     Signal,
@@ -62,6 +63,7 @@ from app.models import (
     TechnicalFeature,
     ThemeGroup,
 )
+from app import margin_lists
 from app.news import sync_news_from_events
 from app.strategies import (
     REGISTRY,
@@ -88,6 +90,7 @@ from app.tracking import (
 )
 from app.trading_calendar import NextSession, next_session
 from worker.market_summary import store_market_summaries
+from worker.margin_lists import MarginListError, sync_margin_lists
 from worker.sources import (
     ActionRecord,
     BarRecord,
@@ -786,6 +789,54 @@ def _margin_change_ratio(
     )
 
 
+# (exchange, session) -> (margin_lists id, raw payload id, codes); a list row
+# is re-read when its raw payload changed.  Cleared at the start of every
+# analyze and backtest, so a process never reads another database's lists.
+_MARGIN_LIST_CACHE: dict[tuple[str, date], tuple[int, int, frozenset[str]]] = {}
+
+
+def _margin_list_codes(db: Session, exchange: str, day: date) -> frozenset[str] | None:
+    """The codes of the stored official margin-trading list; None without one."""
+
+    row = db.execute(
+        select(MarginList.id, MarginList.raw_payload_id).where(
+            MarginList.exchange == exchange, MarginList.trading_date == day
+        )
+    ).first()
+    if row is None:
+        return None
+    cached = _MARGIN_LIST_CACHE.get((exchange, day))
+    if cached is not None and cached[:2] == (row.id, row.raw_payload_id):
+        return cached[2]
+    members = db.scalar(select(MarginList.members_json).where(MarginList.id == row.id))
+    codes = frozenset(members or {})
+    _MARGIN_LIST_CACHE[(exchange, day)] = (row.id, row.raw_payload_id, codes)
+    return codes
+
+
+def _margin_financing(
+    db: Session, instrument: Instrument, signal_date: date, ratio: float | None
+) -> str:
+    """app.margin_lists state of the margin condition on ``signal_date`` (#392).
+
+    The lists are those of the ratio's sessions (``_margin_change_ratio``);
+    they are read only when there is no ratio.
+    """
+
+    if _safe_float(ratio) is not None:
+        return margin_lists.APPLICABLE
+    dates = _effective_trading_dates(
+        db, instrument.id, signal_date, margin_lists.WINDOW_SESSIONS
+    )
+    if not dates or dates[-1] != signal_date:
+        return margin_lists.MISSING
+    return margin_lists.margin_financing_state(
+        instrument.symbol,
+        ratio,
+        [_margin_list_codes(db, instrument.exchange, day) for day in dates],
+    )
+
+
 def _allowed_group_members(
     group: ThemeGroup, members: list[tuple[GroupMembership, Instrument]]
 ) -> list[tuple[GroupMembership, Instrument]]:
@@ -920,7 +971,16 @@ def archive_group_score(db: Session, score: GroupDailyScore, reason: str) -> Non
     )
 
 
-def _calculate_group_scores(db: Session, score_date: date) -> None:
+def _calculate_group_scores(
+    db: Session, score_date: date, *, group_ids: Iterable[str] | None = None
+) -> None:
+    """Score the active groups of ``score_date`` and rank them per board.
+
+    ``group_ids`` limits the scored (and ranked) groups to those ids; daily
+    leaves it out and scores every active group.  A rebuild of an old session
+    passes the groups that session already has scores for, so it never adds
+    a group to history with today's group definitions (#409).
+    """
     benchmark = _benchmark_instrument(db)
     benchmark_returns = (
         _returns_by_window(db, benchmark.id, score_date)
@@ -930,7 +990,10 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
     benchmark_dates = (
         _effective_trading_dates(db, benchmark.id, score_date, 20) if benchmark else []
     )
-    groups = db.scalars(select(ThemeGroup).where(ThemeGroup.active.is_(True))).all()
+    query = select(ThemeGroup).where(ThemeGroup.active.is_(True))
+    if group_ids is not None:
+        query = query.where(ThemeGroup.id.in_(list(group_ids)))
+    groups = db.scalars(query).all()
     computed: list[dict[str, Any]] = []
     file_evidence: dict[date, dict[str, int]] = {}
 
@@ -1628,6 +1691,7 @@ def _signal_context(
         signal_date,
     )
     margin_ratio = _margin_change_ratio(db, instrument.id, signal_date)
+    margin_financing = _margin_financing(db, instrument, signal_date, margin_ratio)
     prior_window = _prior_20_window(db, instrument.id, signal_date) if feature else {}
     inputs = StrategyInputs(
         bar_count=bar_count,
@@ -1641,6 +1705,7 @@ def _signal_context(
         group_excess_return_20d=group_excess,
         institutional_flow_ratio_5d=strategy_flow_ratio,
         margin_change_ratio_5d=margin_ratio,
+        margin_financing=margin_financing,
     )
     input_provenance = None
     capture_mode = (
@@ -1861,6 +1926,9 @@ def _write_strategy_signal(
             "institutional_flow_ratio_denominator": "average_daily_volume_20d",
             "institutional_flow_formula_version": INSTITUTIONAL_FLOW_FORMULA_VERSION,
             "margin_balance_change_ratio_5d": inputs.margin_change_ratio_5d,
+            # app.margin_lists state (Issue #392); the lists it read are
+            # margin_lists rows of the ratio's sessions.
+            "margin_eligibility": inputs.margin_financing,
             "bar_count_60d": inputs.bar_count,
             "ma20": inputs.ma20,
             "ma60": inputs.ma60,
@@ -4323,7 +4391,35 @@ def collect(
                     "pending": [],
                 }
             unmatched_bars = record_unmatched_bars(db, unmatched, score_date)
+            # The sessions' official margin-trading lists, from the margin
+            # reports just stored (Issue #392).  Like the backfill above, a
+            # failure must not fail the day's quotes; analyze then keeps the
+            # margin data of those sessions missing.
+            try:
+                with db.begin_nested():
+                    margin_list_result = sync_margin_lists(
+                        db, sorted({chip.trading_date for chip in batch.chips})
+                    )
+                    if margin_list_result["status"] == "failed":
+                        # Drop the sessions written before the bad file.
+                        raise MarginListError(str(margin_list_result["error"]))
+            except Exception as exc:
+                margin_list_result = {
+                    "status": "failed",
+                    "error": f"{type(exc).__name__}: {exc}"[:500],
+                }
             notices = list(getattr(batch, "notices", []) or [])
+            if margin_list_result["status"] == "failed":
+                notices.append(
+                    "margin list sync failed and wrote nothing: "
+                    + str(margin_list_result.get("error"))
+                )
+            if margin_list_result.get("suspicious_drop"):
+                notices.append(
+                    "margin lists more than 5% shorter than the previous one were "
+                    "not written: "
+                    + ", ".join(margin_list_result["suspicious_drop_samples"])
+                )
             if unmatched_backfill["status"] == "failed":
                 notices.append(
                     "unmatched_bar backfill failed and wrote nothing: "
@@ -4498,6 +4594,7 @@ def collect(
                 "notices": notices,
                 "unmatched_bars": unmatched_bars,
                 "unmatched_backfill": unmatched_backfill,
+                "margin_lists": margin_list_result,
                 "instrument_status_sync": status_result,
                 "value_conflicts": len(value_conflicts),
                 "value_conflict_samples": _json_safe(
@@ -4590,6 +4687,7 @@ def collect(
                 "notices": notices,
                 "unmatched_bars": unmatched_bars,
                 "unmatched_backfill": unmatched_backfill,
+                "margin_lists": margin_list_result,
                 "instrument_status_sync": status_result,
                 "value_conflicts": len(value_conflicts),
                 "value_fills": len(value_fills),
@@ -4735,6 +4833,7 @@ def _analyze_session(
     Writes are flushed only at those points; reads in between never depend on
     unflushed rows, so the stored results match a single transaction.
     """
+    _MARGIN_LIST_CACHE.clear()
     query = select(IngestionRun).where(
         IngestionRun.run_type == "collect",
         IngestionRun.source == "official",
@@ -5582,6 +5681,7 @@ def backtest(
     if start_date > end_date:
         raise ValueError("backtest start date must not be after end date")
     init_db()
+    _MARGIN_LIST_CACHE.clear()
     request_key = (
         f"technical-backtest:v1:{start_date.isoformat()}:{end_date.isoformat()}"
     )

@@ -196,6 +196,8 @@ function strategyLabel(strategy: string | null | undefined): string {
   return ({
     breakout_v1: '突破條件',
     pullback_v1: '回踩條件',
+    breakout_v2: '突破條件',
+    pullback_v2: '回踩條件',
     breakout: '突破條件',
     pullback: '回踩條件',
   }[strategy ?? ''] ?? '策略條件')
