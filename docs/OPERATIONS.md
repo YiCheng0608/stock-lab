@@ -501,10 +501,10 @@ compose 的預設佇列目錄是 checkout 內的 `.coordination/`，任務 workt
 | pre-docker | 發佈 checkout 建本機 branch `pre-docker`（不 checkout），upstream 設成它自己（`branch.pre-docker.remote=.`、`branch.pre-docker.merge=refs/heads/pre-docker`），回退後 `git pull --ff-only` 回 up to date，不會被拉到 master（PR #420 review H1） |
 | disable | 每個工作 `Disable-ScheduledTask`（已停用的照樣讀回），等到沒有工作在跑、也沒有發佈 checkout `.venv` 的程序（`stock.db` 沒有 writer），最多 `--wait-timeout` 秒（預設 900） |
 | snapshot | `copy_db.py` 以 SQLite backup API 把 `stock.db` 複製到 `--work-dir`（預設 `<資料目錄>-cutover`，不能在資料目錄裡）的 `db/`，記各表列數；不裸複製有 WAL 的主檔（[§2.1](#21-安全升級與復原順序)） |
-| volume | 以 master 管理 checkout 的 compose 檔 `compose run -d` 一個輔助容器（api 服務、root、`sleep`），compose 因此建立 `<project>_stock-data` 與它的 label；image `<project>-backend:cutover`，沒有就 build |
+| volume | 以 master 管理 checkout 的 compose 檔 `compose run -d` 一個輔助容器（api 服務、root、`sleep`），compose 因此建立 `<project>_stock-data` 與它的 label；image `<project>-backend:cutover`，沒有就先 build（`compose run` 沒有 `--no-build`，image 已在就不會 build） |
 | copy | `docker cp`：快照到 `/data/stock.db`、`raw/` 到 `/data/raw`、`logs/` 到 `/data/logs`；主機原檔保留 |
 | chown | `chown -R 1000:1000 /data`：`docker cp` 寫入的是 root 的檔，image 以 uid 1000 執行（review M1） |
-| verify | 以 uid 1000：`integrity_check` 是 ok、各表列數與快照相同（[`cutover_db.py`](../tools/ops/cutover_db.py)）、`raw/` 的檔數與主機相同（`logs/` 不同只警告：統籌的心跳與壓縮紀錄在主機持續寫入）、`/data`、`stock.db`、`raw`、`logs` 都是 `1000:1000`；寫入 `/data/logs/cutover.json`（時間、來源、HEAD），回退以它為界取回新檔 |
+| verify | 以 uid 1000：`integrity_check` 是 ok、各表列數與快照相同（[`cutover_db.py`](../tools/ops/cutover_db.py)，結果的表數與總列數印在日誌）、`raw/` 的檔數與主機相同（`logs/` 不同只警告：統籌的心跳與壓縮紀錄在主機持續寫入）、`/data`、`stock.db`、`raw`、`logs` 都是 `1000:1000`；寫入 `/data/logs/cutover.json`（時間、來源、HEAD），回退以它為界取回新檔 |
 | helper | 刪掉輔助容器，volume 留著 |
 | start | `deploy.sh <tag>`（[RELEASE](RELEASE.md#部署)：checkout tag、build、部署記錄、`up -d --wait`、讀回、#1 留言；`--env-file`、`--web-port`、`--api-port`、`--no-comment` 傳給它），之後刪掉 `<project>-backend:cutover`。演練用 `--no-deploy`：以 master 管理 checkout 的 compose 檔與輔助 image 只起 api 與 scheduler |
 | readback | `docker compose ls`、容器與 image、scheduler 日誌的 `serve ready`；在 scheduler 以 uid 1000 跑一次 `job news --trigger manual --skip-news-llm --min-free-memory-gb 1`（真的寫一次 DB 與日誌；`--no-write-check` 不跑），印出新檔的擁有者 |
