@@ -81,6 +81,12 @@ exit 0
 FAKE_DOCKER = r"""#!/usr/bin/env bash
 d="$FAKE_DIR/docker"
 printf '%s\n' "$*" >>"$FAKE_DIR/docker_calls.log"
+# Compose v5.6.1 (the host's, rehearsal of #342): `run` has --build but no --no-build.
+if [ "$1" = compose ]; then
+  case " $* " in
+    *" run "*" --no-build "*) echo "unknown flag: --no-build" >&2; exit 1 ;;
+  esac
+fi
 case "$1 $2" in
   "compose version") exit 0 ;;
   "volume ls") cat "$d/volumes" 2>/dev/null; exit 0 ;;
@@ -259,6 +265,23 @@ def test_a_rehearsal_dry_run_starts_compose_instead_of_deploying(harness):
     result = harness.run("--dry-run", "--no-deploy")
     assert result.code == 0, result.out
     assert "（演練）docker compose" in result.out and "deploy.sh" not in result.out
+
+
+def test_the_helper_is_started_with_flags_compose_run_takes(harness):
+    """The rehearsal of #342 stopped at step 4: `compose run` has no --no-build.
+
+    The fake docker answers nothing, so the switch stops later, at verify; it must get
+    past the volume step and start the helper with `compose run -d`.
+    """
+
+    harness.docker("images", f"{PROJECT}-backend:cutover")
+    result = harness.run("--no-deploy")
+    assert result.code == 3, result.out
+    assert "compose run 輔助容器失敗" not in result.out
+    assert result.result["steps"][:6] == SWITCH_STEPS[:6]
+    runs = [c for c in harness.calls("docker") if " run -d " in f" {c} "]
+    assert len(runs) == 1, harness.calls("docker")
+    assert f"--name {PROJECT}-cutover --user root --entrypoint sleep api" in runs[0]
 
 
 def test_the_switch_needs_a_tag_or_a_rehearsal(harness):
@@ -458,7 +481,10 @@ def test_counts_and_compare_report_integrity_and_every_table(tmp_path):
     assert out["a"]["integrity_check"] == "ok"
     assert out["a"]["tables"] == {"market_bars": 0, "raw_payloads": 1}
     same = _cutover_db("compare", str(tmp_path / "a.json"), str(tmp_path / "a.json"))
-    assert same.returncode == 0 and same.stdout == ""
+    assert same.returncode == 0
+    assert same.stdout.splitlines() == [
+        "integrity_check ok; 2 tables, 1 rows, the same in both"
+    ]
     differ = _cutover_db("compare", str(tmp_path / "a.json"), str(tmp_path / "b.json"))
     assert differ.returncode == 1 and "raw_payloads: 1 != 2" in differ.stdout
 

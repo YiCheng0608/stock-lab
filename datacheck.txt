@@ -1,0 +1,2 @@
+exit=127
+sh: 1: time: not found

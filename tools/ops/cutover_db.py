@@ -5,8 +5,8 @@ Standard library only.
 
   counts <db>                 one JSON object: integrity_check, journal_mode and every table's
                               row count, read-only (mode=ro, query_only)
-  compare <a.json> <b.json>   exit 0 when both are integrity ok with the same row counts;
-                              else the differences, exit 1
+  compare <a.json> <b.json>   exit 0 when both are integrity ok with the same row counts,
+                              printing one summary line; else the differences, exit 1
   rewrite-paths <db> <raw>    rollback: the payload_path of each capture the container wrote
                               (/data/raw/...) becomes the same file under RAW, the host's raw
                               directory, with Windows separators when RAW is a Windows path;
@@ -95,6 +95,11 @@ def main(argv: list[str]) -> int:
         problems = compare(a, b)
         for line in problems:
             print(line)
+        if not problems:
+            print(
+                f"integrity_check ok; {len(b['tables'])} tables, "
+                f"{sum(b['tables'].values())} rows, the same in both"
+            )
         return 1 if problems else 0
     if len(argv) == 3 and argv[0] == "rewrite-paths":
         print(rewrite_paths(argv[1], argv[2]))

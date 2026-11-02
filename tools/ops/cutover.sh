@@ -329,7 +329,7 @@ if [ "$mode" = switch ]; then
   steps+=(snapshot)
   # 4 volume (compose creates it with the helper)
   dk image inspect "$image" >/dev/null 2>&1 || compose_here build api >&2 || fail "build $image 失敗"
-  compose_here run -d --no-deps --no-build --name "$helper" --user root --entrypoint sleep api infinity >&2 \
+  compose_here run -d --no-deps --name "$helper" --user root --entrypoint sleep api infinity >&2 \
     || fail "compose run 輔助容器失敗"
   steps+=(volume)
   # 5 copy
@@ -346,6 +346,7 @@ if [ "$mode" = switch ]; then
     | tr -d '\r' >"$work_native/db/counts-volume.json" || fail "讀不到 volume 裡 stock.db 的列數"
   diff_out="$("$python" -X utf8 "$script_dir/cutover_db.py" compare "$work_native/db/counts.json" "$work_native/db/counts-volume.json")" \
     || fail "volume 的 stock.db 與快照不同：$diff_out"
+  note "stock.db：$diff_out"
   for sub in raw logs; do
     host_n="$(find "$data_dir/$sub" -type f | wc -l | tr -d ' ')"
     vol_n="$(dk exec -u 1000 "$helper" sh -c "find /data/$sub -type f | wc -l" | tr -d '\r ')"
