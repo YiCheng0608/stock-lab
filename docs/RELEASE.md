@@ -84,4 +84,4 @@ V1 之後的發佈（使用者 2026-10-28 決定，取代 [V1 發佈隔離](#v1-
 - **每日核對**記發佈 checkout 當時的 branch 與 HEAD（`git -C <發佈 checkout> rev-parse --abbrev-ref HEAD` 與 `--short HEAD`），證明窗口每天跑的是 `release/v1`。
 - **窗口結束**（使用者確認 G7 後）：`git log origin/master..origin/release/v1 --no-merges` 必須為空（V1 改動都已在 master）；在排程閒置時把發佈 checkout 切回 master、依 master 的 lock 檔重裝 venv（下一次 daily 會升 V1.1 的 migration）；`release/v1` 最後一個 commit 打 `v1.0` tag。三項結果記在 G7 Issue。
 
-窗口結束後到 Docker 切換（#342）之前，工作排程器仍從發佈 checkout 執行，發佈 checkout 不能拉到含 #333 的 commit（[OPERATIONS §6.6](OPERATIONS.md#66-scheduler-容器的排程serve) 的切換前提）。上面的 `deploy.sh` 部署的是 image，只在 scheduler 容器接手之後使用；切換步驟與切換時的第一次部署由 #342 處理（正式 project 已有 #340 之前的容器在跑時，先停掉它們，見上面 exit 2）。`v1.0` 早於 #340，`deploy.sh` 的版本檢查會拒絕它。
+窗口結束後到 Docker 切換（#342）之前，工作排程器仍從發佈 checkout 執行，發佈 checkout 不能拉到含 #333 的 commit（[OPERATIONS §6.6](OPERATIONS.md#66-scheduler-容器的排程serve) 的切換前提）。上面的 `deploy.sh` 部署的是 image，只在 scheduler 容器接手之後使用；切換步驟與切換時的第一次部署見 [OPERATIONS §6.9](OPERATIONS.md#69-docker-切換與回退cutoversh)（`tools/ops/cutover.sh`，#342）（正式 project 已有 #340 之前的容器在跑時，先停掉它們，見上面 exit 2）。`v1.0` 早於 #340，`deploy.sh` 的版本檢查會拒絕它。

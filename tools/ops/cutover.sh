@@ -16,10 +16,13 @@
 #           #333 (d408ae7) while a task is still enabled (its jobs end with exit 69, so the
 #           schedule has stopped silently: decision 9 of #342); a task is running; the
 #           project's stock-data volume exists (the volume is created here, by compose); the
-#           data directory has no stock.db; a pre-docker branch points elsewhere.
-#   1 pre-docker  the release checkout gets branch pre-docker at its HEAD (no checkout), its
-#           upstream itself, so `git pull --ff-only` there stays up to date after a rollback
-#           (decision 2, review H1).
+#           data directory has no stock.db; the pre-docker commit holds #333, or a pre-docker
+#           branch points elsewhere.
+#           The release checkout's tasks pull master (-GitPull), so they are disabled before
+#           feat/docker reaches master (docs/OPERATIONS.md §6.9); step 2 then only reads back.
+#   1 pre-docker  the release checkout gets branch pre-docker (no checkout) at --pre-docker,
+#           default its HEAD, which must not hold #333; its upstream is itself, so
+#           `git pull --ff-only` there stays up to date after a rollback (decision 2, review H1).
 #   2 disable   Disable-ScheduledTask for each task; then wait until none runs and no process
 #           of the release checkout's .venv is left (no writer of stock.db).
 #   3 snapshot  tools/ops/copy_db.py: stock.db by the SQLite backup API into <work>/db (never a
@@ -59,6 +62,7 @@
 #           and waits for its result.
 #
 # Options:
+#   --pre-docker C     the commit of the pre-docker branch; default the checkout's HEAD
 #   --checkout DIR     release checkout; default $STOCK_RELEASE_DIR, then $HOME/stock-lab-release
 #   --project NAME     compose project; default $STOCK_COMPOSE_PROJECT, then stock-lab
 #   --data-dir DIR     host data directory; default $STOCK_DATA_DIR, then $HOME/stock-lab-data
@@ -85,7 +89,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The merge of #333 into feat/docker: from it on job.py runs on Linux only. CUTOVER_PR333 is
 # for the tests (backend/tests/test_cutover.py), whose repositories cannot hold that commit.
 PR333="${CUTOVER_PR333:-d408ae723978cb601493b0b065aefe81bf04f894}"
-mode=switch dry=0 tag="" deploy=1 comment=1 write_check=1 start_news=0
+mode=switch dry=0 tag="" deploy=1 comment=1 write_check=1 start_news=0 pre_commit=""
 checkout="${STOCK_RELEASE_DIR:-$HOME/stock-lab-release}" project="${STOCK_COMPOSE_PROJECT:-stock-lab}"
 data_dir="${STOCK_DATA_DIR:-$HOME/stock-lab-data}" work_dir="" task_path='\stock-lab\'
 tasks=daily,news,watchdog env_file="" web_port="" api_port="" wait_timeout=900
@@ -100,11 +104,12 @@ while [ $# -gt 0 ]; do
     --no-comment) comment=0 ;;
     --no-write-check) write_check=0 ;;
     --start-news) start_news=1 ;;
-    --tag | --checkout | --project | --data-dir | --work-dir | --task-path | --tasks | --env-file | \
+    --tag | --pre-docker | --checkout | --project | --data-dir | --work-dir | --task-path | --tasks | --env-file | \
       --require-keys | --web-port | --api-port | --wait-timeout | --python | --powershell)
       [ $# -ge 2 ] && [ -n "$2" ] || die "$1 needs a value" 64
       case "$1" in
         --tag) tag="$2" ;;
+        --pre-docker) pre_commit="$2" ;;
         --checkout) checkout="$2" ;;
         --project) project="$2" ;;
         --data-dir) data_dir="$2" ;;
@@ -230,6 +235,14 @@ head="$(git -C "$checkout" rev-parse HEAD | tr -d '\r')" || die "讀不到發佈
 has333=0
 git -C "$checkout" merge-base --is-ancestor "$PR333" HEAD >/dev/null 2>&1 && has333=1
 pre_docker="$(git -C "$checkout" rev-parse --verify -q refs/heads/pre-docker | tr -d '\r')"
+# Where pre-docker goes: --pre-docker, else HEAD; never a commit with #333 in it.
+pre_target="$head"
+if [ -n "$pre_commit" ]; then
+  pre_target="$(git -C "$checkout" rev-parse --verify -q "$pre_commit^{commit}" | tr -d '\r')" \
+    || die "發佈 checkout 沒有 --pre-docker 的 commit：$pre_commit" 2
+fi
+pre_has333=0
+git -C "$checkout" merge-base --is-ancestor "$PR333" "$pre_target" >/dev/null 2>&1 && pre_has333=1
 
 volume_exists() { [ -n "$(dk volume ls -q --filter "name=^${volume}\$" | tr -d '\r')" ]; }
 project_running() { dk ps -q --filter "label=com.docker.compose.project=$project" | tr -d '\r'; }
@@ -258,8 +271,10 @@ if [ "$mode" = switch ]; then
     refuse "發佈 checkout 已含 #333（${PR333:0:7}，HEAD ${head:0:9}）而工作排程器仍啟用：Windows 的 job 會以 69 結束、排程無聲停擺；先停用工作再查原因"
   fi
   any_state Running && refuse "工作排程器有工作在執行（$(printf '%s ' $states)）；等它結束再切換"
-  [ -z "$pre_docker" ] || [ "$pre_docker" = "$head" ] \
-    || refuse "pre-docker branch 已存在且不在 HEAD（${pre_docker:0:9} ≠ ${head:0:9}）"
+  [ "$pre_has333" = 0 ] \
+    || refuse "pre-docker 要停在 #333 之前（${pre_target:0:9} 已含 ${PR333:0:7}）；以 --pre-docker <commit> 指定，例如 0f99fea"
+  [ -z "$pre_docker" ] || [ "$pre_docker" = "$pre_target" ] \
+    || refuse "pre-docker branch 已存在且不在 ${pre_target:0:9}（是 ${pre_docker:0:9}）"
   volume_exists && refuse "volume $volume 已存在；切換只寫入 compose 新建的空 volume"
   [ -z "$(project_running)" ] || refuse "project $project 已有容器在跑"
   [ -f "$data_dir/stock.db" ] || refuse "資料目錄沒有 stock.db：$data_dir"
@@ -268,7 +283,7 @@ if [ "$mode" = switch ]; then
   [ "$deploy" = 0 ] || [ -f "$script_dir/deploy.sh" ] || die "找不到 deploy.sh" 2
 
   db_copy="$work_native/db/stock.db"
-  plan pre-docker "git -C $checkout_native branch pre-docker ${head:0:9}; branch.pre-docker.remote=. merge=refs/heads/pre-docker"
+  plan pre-docker "git -C $checkout_native branch pre-docker ${pre_target:0:9}; branch.pre-docker.remote=. merge=refs/heads/pre-docker"
   plan disable "Disable-ScheduledTask -TaskPath '$task_path' -TaskName ${tasks//,/ ／ }；等到沒有工作在跑、沒有 $venv_win 的程序"
   plan snapshot "$python tools/ops/copy_db.py --src $data_native/stock.db --dest $work_native/db"
   plan volume "docker compose -p $project run -d --no-deps --name $helper --user root --entrypoint sleep api infinity（建立 $volume；image $image）"
@@ -291,7 +306,7 @@ if [ "$mode" = switch ]; then
 
   # 1 pre-docker
   if [ -z "$pre_docker" ]; then
-    git -C "$checkout" branch pre-docker "$head" || fail "建立 pre-docker branch 失敗"
+    git -C "$checkout" branch pre-docker "$pre_target" || fail "建立 pre-docker branch 失敗"
   fi
   git -C "$checkout" config branch.pre-docker.remote . \
     && git -C "$checkout" config branch.pre-docker.merge refs/heads/pre-docker \

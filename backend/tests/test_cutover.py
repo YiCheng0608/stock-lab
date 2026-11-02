@@ -303,18 +303,39 @@ def test_without_an_env_file_the_switch_is_refused(harness):
     assert result.code == 1 and "env file" in result.result["reason"], result.out
 
 
+def _pull_333(h: Harness) -> dict[str, str]:
+    """The checkout as after a task pulled master with #333 (-GitPull): a later commit."""
+
+    (h.checkout / "Dockerfile").write_text("FROM python", encoding="utf-8")
+    git(h.checkout, "add", "-A")
+    git(h.checkout, "commit", "--quiet", "-m", "333")
+    return {"CUTOVER_PR333": git(h.checkout, "rev-parse", "HEAD")}
+
+
 def test_a_checkout_with_333_while_a_task_is_enabled_is_refused(harness):
     """Decision 9: the Windows jobs of a #333 checkout exit 69, the schedule stopped silently."""
 
-    env = {"CUTOVER_PR333": harness.head}
+    env = _pull_333(harness)
     harness.tasks("daily Disabled", "news Ready", "watchdog Disabled")
     before = harness.state()
     result = harness.run("--dry-run", "--tag", "v1", extra_env=env)
     assert result.code == 1, result.out
-    assert "#333" in result.result["reason"]
+    assert "#333" in result.result["reason"] and "啟用" in result.result["reason"]
     assert harness.state() == before
+
+
+def test_pre_docker_never_holds_333(harness):
+    """Review H1: a rollback to a #333 commit would leave Windows jobs that exit 69."""
+
+    env = _pull_333(harness)
     harness.tasks("daily Disabled", "news Disabled", "watchdog Disabled")
-    assert harness.run("--dry-run", "--tag", "v1", extra_env=env).code == 0
+    result = harness.run("--dry-run", "--tag", "v1", extra_env=env)
+    assert result.code == 1 and "--pre-docker" in result.result["reason"], result.out
+    result = harness.run(
+        "--dry-run", "--tag", "v1", "--pre-docker", harness.head, extra_env=env
+    )
+    assert result.code == 0, result.out
+    assert f"branch pre-docker {harness.head[:9]}" in result.out
 
 
 def test_a_running_task_is_refused(harness):

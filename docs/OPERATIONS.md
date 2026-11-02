@@ -1,4 +1,4 @@
-<!-- owns: 工作目錄與環境、服務啟停、Docker Desktop 沒開的判讀、API 跨站請求防護、資料庫 migration 與 readiness、Alembic head、worker CLI、資料品質與研究結果、worker 測試與驗證、排程、排程看門狗、排程註冊與管理、日誌與 run 記錄、重跑與回補、排程限制、容器內的 claude 與 gh 認證、統籌事件 monitor -->
+<!-- owns: 工作目錄與環境、服務啟停、Docker Desktop 沒開的判讀、API 跨站請求防護、資料庫 migration 與 readiness、Alembic head、worker CLI、資料品質與研究結果、worker 測試與驗證、排程、排程看門狗、排程註冊與管理、日誌與 run 記錄、重跑與回補、排程限制、容器內的 claude 與 gh 認證、統籌事件 monitor、Docker 切換與回退 -->
 # 操作手冊
 
 本文件只保留可操作入口、安全邊界與診斷順序；本機檢查命令見[工作手冊](GITHUB_WORKFLOW.md#本機檢查)，能力狀態見 [ROADMAP](ROADMAP.md)。
@@ -184,9 +184,9 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 | 排程器 | 跑的程式 | 資料與 job 日誌 | 本節的操作 |
 | --- | --- | --- | --- |
 | scheduler 容器（`serve`，#336） | 正式 compose project 的 image，由 [`deploy.sh`](RELEASE.md#部署) 部署（#340） | volume `stock-data` 的 `/data`（`stock.db`、`raw/`、`logs/`、`locks/`） | [§6.6](#66-scheduler-容器的排程serve)；daily、news 與看門狗的判定、日誌與 run 記錄同 §6.1～§6.5 |
-| Windows 工作排程器（切換前） | 發佈 checkout 上 #333 以前的 commit（`release/v1` 或固定 tag）：這份程式的 job 與看門狗的鎖在 Windows 以 exit 69 結束，所以發佈 checkout 拉到含 #333 的 commit 前要先切換（[§6.6](#66-scheduler-容器的排程serve) 的切換前提） | 主機的資料目錄 | §6.1、§6.2、§6.8 標「工作排程器」的表；#342 切換時停用並移除，連同 `tools/*.ps1`、`tools/ops/Register-*.ps1` |
+| Windows 工作排程器（切換前；切換後停用、留作回退） | 發佈 checkout 上 #333 以前的 commit。工作帶 `-GitPull`，每次起跑把發佈 checkout 拉到最新 master（#387 期間 `09b2646`→`98179c9`），所以 `feat/docker`（含 #333）合併進 master 前要先停用工作，否則下一次起跑就拉到 #333、以 exit 69 結束（[§6.6](#66-scheduler-容器的排程serve) 的切換前提）。切換後工作維持停用，`cutover.sh rollback` 重新啟用（[§6.9](#69-docker-切換與回退cutoversh)）；移除工作與 `tools/*.ps1`、`tools/ops/Register-*.ps1` 等使用者決定不再回退後另開 Issue | 主機的資料目錄（切換後原檔保留） | §6.1、§6.2、§6.8 標「工作排程器」的表 |
 
-位置（使用者 2026-10-17 決定）：正式資料目錄 `C:/Users/YiCheng/stock-lab-data/`（`stock.db`、`raw/`、`logs/`），以 `STOCK_DATA_DIR` 指向；切換（#342）時 `stock.db` 與日誌搬進 volume `stock-data`，主機的這個目錄只剩統籌的檔案。排程只從發佈 checkout `C:/Users/YiCheng/stock-lab-release/`（repo 的獨立 clone，停在 `tools/ops/deploy.sh` 部署的 tag，排程起跑不 `git pull`；升版見 [RELEASE](RELEASE.md)）執行：切換前用它的 `.venv`，之後它是正式 compose project 的目錄；不從 `master` 管理 checkout。統籌心跳檔、換手標記與壓縮計數檔都在主機資料目錄的 `logs/` 下（[工作手冊](GITHUB_WORKFLOW.md#統籌-session)），事件 monitor 的事件佇列與它自己的心跳、日誌也是：scheduler 容器以 `STOCK_COORDINATION_DIR` 把這個目錄 bind mount 到 `/coordination`（[§6.8](#68-統籌事件-monitor)）。
+位置（使用者 2026-10-17 決定）：正式資料目錄 `C:/Users/YiCheng/stock-lab-data/`（`stock.db`、`raw/`、`logs/`），以 `STOCK_DATA_DIR` 指向；切換（#342）時 `stock.db`、`raw/` 與 `logs/` 複製進 volume `stock-data`（原檔保留，回退用；`raw_payloads.payload_path` 不改寫，見 [§6.9](#69-docker-切換與回退cutoversh)），之後主機的這個目錄只剩統籌的檔案與回退用的原檔。排程只從發佈 checkout `C:/Users/YiCheng/stock-lab-release/`（repo 的獨立 clone）執行：切換前工作排程器用它的 `.venv`，起跑時 `git pull` 跟著 master；切換後它是正式 compose project 的目錄，停在 `tools/ops/deploy.sh` 部署的 tag，排程起跑不 `git pull`（升版見 [RELEASE](RELEASE.md)）；不從 `master` 管理 checkout。統籌心跳檔、換手標記與壓縮計數檔都在主機資料目錄的 `logs/` 下（[工作手冊](GITHUB_WORKFLOW.md#統籌-session)），事件 monitor 的事件佇列與它自己的心跳、日誌也是：scheduler 容器以 `STOCK_COORDINATION_DIR` 把這個目錄 bind mount 到 `/coordination`（[§6.8](#68-統籌事件-monitor)）。
 
 新聞任務與 `daily` 分開排程，不掛在 `daily` 之後：
 
@@ -198,7 +198,7 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
   - news 失敗時仍會跑（news-llm 只讀已入庫的新聞）；news-llm 失敗不改變 news 的結果，也不改變工作的結束碼。失敗只留在日誌的 news-llm 段落與 `run_type=news_llm` 的 ingestion run（`status=failed`、`error` 寫原因），可用 `/api/ingestion-runs?q=news_llm` 查；日誌格式見 [§6.3](#63-日誌與-run-記錄)。
   - 執行機器須已登入 Claude Code 且環境沒有 `ANTHROPIC_API_KEY`／`ANTHROPIC_AUTH_TOKEN`（有就拒絕執行）。scheduler 容器的 `claude` 在 image 的 PATH 上，compose 的 serve 命令不帶 `--claude-cli`；工作排程器（切換前）的 PATH 與互動 shell 不同，所以註冊時以 `-ClaudeCli` 寫入原生 `claude.exe` 的完整路徑（[§6.2](#62-dailynews-工作的註冊與管理)）。執行期不檢查副檔名：後端 image 的 `claude` 是 npm 套件安裝的原生檔（ELF，`@anthropic-ai/claude-code/bin/claude.exe`），不是 shim；#333 移除了 Windows 只收原生 `.exe` 的檢查。找不到 claude、未登入（含 token 過期或被撤銷，[§6.7](#67-容器內的-claude-與-gh-認證env)）或額度用盡時，當輪記 `failed`（或該批 `pending`）並停止，下一輪重試。
   - 看門狗在最近 3 批判讀都是 `pending`，或最近 3 筆 news_llm run 都是 `failed`（找不到 claude、API 金鑰這類沒有批次的設定錯誤，以及被逾時終止的 run），或 news 日誌最後 3 次 `news_llm_exit` 都是 `1`／`wrapper_error` 時留言（[§6.1](#61-排程看門狗)）。
-  - **停用／恢復**：額度吃緊時先停 news-llm，news 照常收稿。scheduler 容器：serve 的 `--skip-news-llm`（[§6.6](#66-scheduler-容器的排程serve)）沒有對應的環境變數，compose 的 scheduler 命令也不帶它，目前要改 `docker-compose.yml` 的 scheduler `command` 才停得了（要不要加開關在切換前決定，[#342](https://github.com/YiCheng0608/stock-lab/issues/342)）；停整個排程是 `docker compose -p <正式 project> stop scheduler`（daily、news、看門狗與 monitor 一起停），恢復是 `start scheduler`。工作排程器（切換前）：只停 news-llm 用 `-NoNewsLlm` 重新註冊 news（[§6.2](#62-dailynews-工作的註冊與管理)）；整個 news 停用用 `Disable-ScheduledTask`。
+  - **停用／恢復**：額度吃緊時先停 news-llm，news 照常收稿。scheduler 容器：在發佈 checkout 的 env file 加 `STOCK_SKIP_NEWS_LLM=1`（`1`／`true`／`yes`／`on` 停，空值／`0`／`false`／`no`／`off` 照跑，其他值 serve 以 exit 2 拒絕啟動；[`.env.example`](../.env.example)），再 `docker compose -p <正式 project> up -d --force-recreate scheduler` 讓 serve 重讀（它是 serve `--skip-news-llm` 的預設，[§6.6](#66-scheduler-容器的排程serve)，#342）；恢復是清空這一行再重建一次；停整個排程是 `docker compose -p <正式 project> stop scheduler`（daily、news、看門狗與 monitor 一起停），恢復是 `start scheduler`。工作排程器（切換前）：只停 news-llm 用 `-NoNewsLlm` 重新註冊 news（[§6.2](#62-dailynews-工作的註冊與管理)）；整個 news 停用用 `Disable-ScheduledTask`。
 
 ### 6.1 排程看門狗
 
@@ -243,7 +243,16 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 
 `daily`／`news` 還沒有任何日誌時不判定（排程尚未註冊）。執行環境：bash、PATH 上有 `gh`（有 `GH_TOKEN` 或已登入，[§6.7](#67-容器內的-claude-與-gh-認證env)）；Python 只用來唯讀查 DB（找不到時跳過 daily 結果、`news_llm` 與資料不變量的 DB 檢查，日誌檢查照做），依序取 `--python`、`STOCK_PYTHON`、checkout 的 `.venv/bin/python`、`python3`、`python`。serve 以 `--data-dir /data --python <serve 的 python>` 呼叫它，monitor 開著時另加 `--monitor-dir /coordination`。
 
-手動判定（只輸出將留的言與資料不變量的數字，不留言）：scheduler 容器是 `docker compose -p <正式 project> exec scheduler bash tools/ops/watchdog.sh --dry-run`（`STOCK_DATA_DIR=/data` 由 compose 給）。以下是工作排程器（切換前）的命令，在發佈 checkout 執行：
+scheduler 容器的命令（在發佈 checkout 執行；`<P>` 是正式 compose project，預設 `stock-lab`；`STOCK_DATA_DIR=/data` 由 compose 給）：
+
+| 動作 | 命令 |
+| --- | --- |
+| 手動判定（只輸出將留的言與資料不變量的數字，不留言） | `docker compose -p <P> exec scheduler bash tools/ops/watchdog.sh --dry-run` |
+| 手動核對某交易日 | `docker compose -p <P> exec scheduler python tools/ops/watchdog_helper.py data-check /data/stock.db <YYYY-MM-DD> [--offline] [--all]`（唯讀，不記日誌、不留言） |
+| 日誌 | `docker compose -p <P> exec scheduler tail -n 50 /data/logs/watchdog.log`；serve 的輸出是 `docker compose -p <P> logs scheduler` |
+| 停用／啟用 | 看門狗由 serve 排程：`docker compose -p <P> stop scheduler`／`start scheduler`（daily、news、monitor 一起停） |
+
+以下是工作排程器（切換前）的命令，在發佈 checkout 執行：
 
 | 動作 | 命令 |
 | --- | --- |
@@ -358,25 +367,25 @@ candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(�
 
 ### 6.6 scheduler 容器的排程（serve）
 
-`python -m worker.cli serve`（[`backend/worker/serve.py`](../backend/worker/serve.py)，#336）是 scheduler 容器的常駐命令，在[後端 image](#1-工作目錄環境與啟停) 內取代工作排程器：APScheduler 依台北時間啟動與 [§6.2](#62-dailynews-工作的註冊與管理) 註冊相同的命令，每次一個子程序。compose 設定見 [§1.2](#12-docker-compose)（#335），`claude`／`gh` 的認證見 [§6.7](#67-容器內的-claude-與-gh-認證env)（#337）；正式切換（#342）不在這裡。
+`python -m worker.cli serve`（[`backend/worker/serve.py`](../backend/worker/serve.py)，#336）是 scheduler 容器的常駐命令，在[後端 image](#1-工作目錄環境與啟停) 內取代工作排程器：APScheduler 依台北時間啟動與 [§6.2](#62-dailynews-工作的註冊與管理) 註冊相同的命令，每次一個子程序。compose 設定見 [§1.2](#12-docker-compose)（#335），`claude`／`gh` 的認證見 [§6.7](#67-容器內的-claude-與-gh-認證env)（#337）；正式切換與回退見 [§6.9](#69-docker-切換與回退cutoversh)。
 
 | 工作 | 觸發（預設） | 命令 |
 | --- | --- | --- |
 | daily | 週一至週五台北 18:30、21:30（`--daily-times`） | `worker.cli job daily --trigger scheduler --data-dir <data> --log-dir <data>/logs --min-free-memory-gb 2 [--claude-cli <claude>]` |
-| news | 每 2 小時整點（`--news-interval-hours`，1～24 的整數，超出就 exit 2；每台北日從 0 點重新起算，所以不能整除 24 的值如 5 在午夜前的間隔較短，24 是每日 0 點一次，#368） | 同上換成 `job news`、`--min-free-memory-gb 1`；`--skip-news-llm` 交給 job |
+| news | 每 2 小時整點（`--news-interval-hours`，1～24 的整數，超出就 exit 2；每台北日從 0 點重新起算，所以不能整除 24 的值如 5 在午夜前的間隔較短，24 是每日 0 點一次，#368） | 同上換成 `job news`、`--min-free-memory-gb 1`；`--skip-news-llm`（沒給時看 env file 的 `STOCK_SKIP_NEWS_LLM`）交給 job |
 | 看門狗 | 每小時 :15、:45（`--watchdog-minutes`；工作排程器是每 15 分鐘） | `bash tools/ops/watchdog.sh --data-dir <data> --python <serve 的 python>`，`--watchdog-dry-run` 時加 `--dry-run`；monitor 開著時加 `--monitor-dir <monitor 目錄>` |
 | 事件 monitor | 每分鐘，只在 `--monitor`（預設 `STOCK_MONITOR`，沒設為 `off`）是 `on`／`record-only` 時（#338） | `bash tools/ops/monitor.sh --once --data-dir <data> --queue-dir <--monitor-dir，預設 /coordination> --python <serve 的 python> --orca <--monitor-orca> --waker <--monitor-waker>`，`record-only` 時加 `--record-only`；見 [§6.8](#68-統籌事件-monitor) |
 
 - **分工**：鎖、起跑前檢查、單次上限、日誌與 exit code 都由 job 負責，與 §6.2、§6.3 相同；serve 自己不加鎖，重疊的觸發照樣啟動 job，由 job 記 `already_running`（同一工作同時最多 3 個，再多的由 APScheduler 擋下並在 stderr 記警告）。不帶 `--git-pull`：程式由 image 決定（部署見 [RELEASE](RELEASE.md#部署)）。
 - **第二道防線**：daily、news 超過 job 上限 10 分鐘，或看門狗、事件 monitor 的一輪跑超過 10 分鐘，serve 結束它的程序群組並記 `serve killed`，同工作排程器的上限。
-- **錯過的時段**：機器睡眠時錯過的觸發在醒來後補跑一次（APScheduler `coalesce`、不限 misfire 時間，同 StartWhenAvailable）；serve 啟動前的時段不補。
+- **錯過的時段**：機器睡眠時錯過的觸發在醒來後補跑一次（APScheduler `coalesce`、不限 misfire 時間，同 StartWhenAvailable）；serve 啟動前的時段不補，只有 daily 例外：serve 啟動時是週一至週五、已過第一個 daily 時間（預設 18:30），而當日 `schedule_runs` 沒有 `success`／`non_trading_day`（讀不到 run 表也算），就立即補跑一次，記 `serve catchup job=daily reason=<not_complete|unreadable:…>`；沒有 `stock.db`（空 volume）不補（#342 決定第 5 點）。部署或切換在晚上重建容器時，當天的 daily 不會因此漏掉；休市日補跑的 daily 記 `non_trading_day`，同 18:30 的觸發。
 - **停止**：子程序隨 serve 結束（PR_SET_PDEATHSIG）。`docker stop`（SIGTERM，`tini` 轉給 serve）時 serve 記 `stopping`、結束執行中的 job 後退出；`docker kill` 時整個容器一起結束。兩者都不留下 job 或鎖，被殺的 daily 的 run 列由下一次拿到鎖的 daily 立即記 abandoned（§6.3 的 `failed`）。
 - **輸出**：serve 的列 `<台北時間> serve <事件> key=value`（`ready` 列出各工作下次執行時間；`start`、`end exit=<碼> seconds=<秒>`，被結束時 `exit=killed`；`killed`、`stopping`、`stop_kill`、`stopped`），與 job、看門狗的 stdout 一起寫到 stdout，由 `docker logs` 查；各工作的日誌照舊在 `<data>/logs/`。
 - **時間注入**：`--now YYYY-MM-DDTHH:MM[:SS]`（沒有時區時為台北時間）讓排程的時鐘從該時間起算，照真實速度走；daily 另帶 `--date <該台北日>`，看門狗以 `WATCHDOG_NOW`、事件 monitor 以 `MONITOR_NOW` 判定。日誌檔名與時間戳記仍是真實時間。只用在 DB 副本上的驗證。
 - **run 記錄的 image 與 HEAD**：`schedule_runs` 每列的 `summary_json.runtime` 記 `image`（`STOCK_IMAGE_TAG`）、`head`（`STOCK_GIT_HEAD`，沒有時 `git rev-parse HEAD`，都沒有為 null）與 job 持有的鎖 `job_lock`。build context 不含 `.git`，所以 build 時帶入；正式 project 由 [`deploy.sh`](RELEASE.md#部署) 以 `STOCK_RELEASE_TAG=<tag> STOCK_GIT_HEAD=<該 commit> docker compose build` 帶入（§1.2，#340），單獨 build 時：`docker build -f backend/Dockerfile -t stock-lab-backend:<tag> --build-arg STOCK_IMAGE_TAG=stock-lab-backend:<tag> --build-arg STOCK_GIT_HEAD="$(git rev-parse HEAD)" .`。
 - 其他選項：`--data-dir`、`--log-dir`、`--claude-cli`、`--daily-min-free-memory-gb`、`--news-min-free-memory-gb`、`--daily-time-limit-minutes`、`--news-time-limit-minutes`（交給 job）；`--monitor-dir`、`--monitor-orca`、`--monitor-waker`（交給 monitor，後兩者預設 `http_orca.sh`、`http_wake.sh`，經主機的 wake listener，[§6.8](#68-統籌事件-monitor)）。只在 Linux 執行，其他系統 exit 69。
 
-**切換前提**（#342，PR #346 review S1）：#333 起 job 只在 Linux 執行，工作排程器跑到含 #333 的 commit 時 daily、news、看門狗都以 69 結束，不寫日誌也不留言，排程會無聲停擺。所以工作排程器停用、scheduler 容器接手之前，發佈 checkout 不能拉到任何含 #333 的 commit（維持在 `release/v1` 或固定 tag）；切換步驟由 #342 處理。
+**切換前提**（#342，PR #346 review S1）：#333 起 job 只在 Linux 執行，工作排程器跑到含 #333 的 commit 時 daily、news、看門狗都以 69 結束，不寫日誌也不留言，排程會無聲停擺。工作排程器的工作帶 `-GitPull` 跟著 master，所以 `feat/docker` 合併進 master 之前先停用工作；`cutover.sh` 在發佈 checkout 已含 #333 而仍有工作啟用時拒絕。切換與回退見 [§6.9](#69-docker-切換與回退cutoversh)。
 
 ### 6.7 容器內的 claude 與 gh 認證（.env）
 
@@ -466,3 +475,53 @@ compose 的預設佇列目錄是 checkout 內的 `.coordination/`，任務 workt
 - **生命週期**：listener 在啟動它的 Bash 指令結束後繼續執行，但跟著啟動它的統籌 terminal 結束（Orca 關 terminal 時結束它底下所有程序，PowerShell 的 `Start-Process` 也一樣，2026-10-29 實測）。
   - 換手時新統籌接手先跑腳本：舊統籌的 listener 還在就沿用，它每次喚醒前都重讀心跳檔，喚醒的是新統籌；收尾關掉舊 terminal 後舊 listener 跟著結束，所以新統籌關掉舊 terminal 後再跑一次腳本（[工作手冊](GITHUB_WORKFLOW.md#統籌-session)）。
   - 統籌 session 結束而沒有接手者時 listener 也結束：沒有統籌就沒有喚醒對象，monitor 記 `send_failed`、事件留在佇列，佇列等 60 分鐘後照常在 #1 留「請開統籌」。listener 留著（例如 terminal 還開著）也不會出錯：心跳指向已結束的 terminal 時 send 失敗，記 `send_failed`。
+
+### 6.9 Docker 切換與回退（cutover.sh）
+
+[`tools/ops/cutover.sh`](../tools/ops/cutover.sh)（#342，決定 [6588843632](https://github.com/YiCheng0608/stock-lab/issues/342#issuecomment-6588843632)）把排程從工作排程器一次切到 scheduler 容器，`cutover.sh rollback` 切回。統籌在台北白天、避開偶數整點的 news 與 18:30～21:30 執行（[#1 6582767651](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6582767651) 第 7 點），在 master 管理 checkout 以 Git Bash 跑（腳本在發佈 checkout 裡就拒絕）。每一步先印它執行的命令，最後印一列 JSON：`status` 是 `done`、`dry-run`、`refused` 或 `failed`，`steps` 是做完的步驟。`--dry-run` 只做檢查並列出全部步驟，不改工作排程器、checkout、資料目錄與 volume。結束碼：0 完成（或乾跑沒有問題）；1 拒絕，什麼都沒改；3 中途失敗，`steps` 列出已做的，以 `rollback` 復原；2／64 環境或參數錯誤。
+
+**順序**（切換時段）：
+
+1. 停用工作排程器的三個工作（工作帶 `-GitPull`，`feat/docker` 一進 master 就會被拉到 #333）：`Disable-ScheduledTask -TaskPath \stock-lab\ -TaskName daily`（news、watchdog 同），讀回 `Get-ScheduledTask -TaskPath \stock-lab\` 都是 `Disabled`、沒有 `Running`。
+2. 合併 `feat/docker` 進 master（#420），等 merge commit 的 push CI（約 25 分），在它上面打 tag。
+3. `bash tools/ops/cutover.sh --dry-run --tag <tag>` 看檢查與步驟，再去掉 `--dry-run` 執行。
+4. 第一次 daily 之後，把它的 `schedule_runs.summary_json.runtime` 與看門狗 `invariant_deploy_image` 貼在 #342 與 #331（#342 AC-4）。
+
+**切換的檢查**（不符就拒絕，什麼都不改）：
+
+- env file（`--env-file`，預設發佈 checkout 根目錄的 `.env`）這些 key 有值：`CLAUDE_CODE_OAUTH_TOKEN`、`GH_TOKEN`、`STOCK_WAKE_TOKEN`、`STOCK_MONITOR`、`STOCK_COORDINATION_DIR`（`--require-keys` 可改）；沒有 `ANTHROPIC_API_KEY`／`ANTHROPIC_AUTH_TOKEN`（[§6.7](#67-容器內的-claude-與-gh-認證env)）。以 `grep -q` 比對 key 那一行，值不讀進腳本也不印出。
+- 發佈 checkout 沒有未 commit 的改動；已含 #333（`d408ae7`）而仍有工作啟用時拒絕：那些工作會以 69 結束，排程已無聲停擺，先查原因（決定第 9 點）。
+- `pre-docker` 要停的 commit（`--pre-docker`，預設發佈 checkout 的 HEAD）不能含 #333；工作在停用前已拉到 #333 時，以 `--pre-docker 0f99fea` 指定。
+- 沒有工作在執行；project 的 `stock-data` volume 還不存在（volume 由 compose 在 volume 那一步建立，不用 `docker volume create`）；project 沒有容器在跑；資料目錄有 `stock.db`、`raw/`、`logs/`。
+
+**切換的步驟**：
+
+| 步驟 | 做什麼 |
+| --- | --- |
+| pre-docker | 發佈 checkout 建本機 branch `pre-docker`（不 checkout），upstream 設成它自己（`branch.pre-docker.remote=.`、`branch.pre-docker.merge=refs/heads/pre-docker`），回退後 `git pull --ff-only` 回 up to date，不會被拉到 master（PR #420 review H1） |
+| disable | 每個工作 `Disable-ScheduledTask`（已停用的照樣讀回），等到沒有工作在跑、也沒有發佈 checkout `.venv` 的程序（`stock.db` 沒有 writer），最多 `--wait-timeout` 秒（預設 900） |
+| snapshot | `copy_db.py` 以 SQLite backup API 把 `stock.db` 複製到 `--work-dir`（預設 `<資料目錄>-cutover`，不能在資料目錄裡）的 `db/`，記各表列數；不裸複製有 WAL 的主檔（[§2.1](#21-安全升級與復原順序)） |
+| volume | 以 master 管理 checkout 的 compose 檔 `compose run -d` 一個輔助容器（api 服務、root、`sleep`），compose 因此建立 `<project>_stock-data` 與它的 label；image `<project>-backend:cutover`，沒有就 build |
+| copy | `docker cp`：快照到 `/data/stock.db`、`raw/` 到 `/data/raw`、`logs/` 到 `/data/logs`；主機原檔保留 |
+| chown | `chown -R 1000:1000 /data`：`docker cp` 寫入的是 root 的檔，image 以 uid 1000 執行（review M1） |
+| verify | 以 uid 1000：`integrity_check` 是 ok、各表列數與快照相同（[`cutover_db.py`](../tools/ops/cutover_db.py)）、`raw/` 與 `logs/` 的檔數與主機相同、`/data`、`stock.db`、`raw`、`logs` 都是 `1000:1000`；寫入 `/data/logs/cutover.json`（時間、來源、HEAD），回退以它為界取回新檔 |
+| helper | 刪掉輔助容器，volume 留著 |
+| start | `deploy.sh <tag>`（[RELEASE](RELEASE.md#部署)：checkout tag、build、部署記錄、`up -d --wait`、讀回、#1 留言；`--env-file`、`--web-port`、`--api-port`、`--no-comment` 傳給它），之後刪掉 `<project>-backend:cutover`。演練用 `--no-deploy`：以 master 管理 checkout 的 compose 檔與輔助 image 只起 api 與 scheduler |
+| readback | `docker compose ls`、容器與 image、scheduler 日誌的 `serve ready`；在 scheduler 以 uid 1000 跑一次 `job news --trigger manual --skip-news-llm --min-free-memory-gb 1`（真的寫一次 DB 與日誌；`--no-write-check` 不跑），印出新檔的擁有者 |
+
+**舊 raw 的路徑**（決定第 1 點，review H2）：`raw_payloads.payload_path` 是 capture 當時的絕對路徑，切換前是 `C:\Users\YiCheng\stock-lab-data\raw\...`。切換不改寫 DB，回退到 Windows 時舊路徑仍然有效。容器內讀 raw 的程式都經 [`app.raw_paths.payload_file`](../backend/app/raw_paths.py)：路徑存在就照用；不存在、且在舊資料目錄的 `raw` 底下（`\` 或 `/`，大小寫不拘）就讀 `STOCK_RAW_DIR`（compose 固定 `/data/raw`）下的同一相對路徑。看門狗的 data-check 把 `STOCK_RAW_DIR` 指到暫存目錄，舊路徑仍對應到真正的 raw（`STOCK_STORED_RAW_DIR`）。標的狀態同步讀不到行情 raw 時，記在該交易所 summary 的 `unreadable_quote_tables`（前 20 個 id 在 `unreadable_raw_payload_ids`），dormancy 記 `unverifiable`、原因 `unreadable quote table`，不再靜默略過。
+
+**回退**（`cutover.sh rollback`，決定第 2 點）：先檢查發佈 checkout 有 `pre-docker` branch 且 upstream 是它自己、project 的 volume 存在、有可用的 image（scheduler 的，沒有時 `<project>-backend:cutover`），然後依序：
+
+| 步驟 | 做什麼 |
+| --- | --- |
+| stop | `docker stop` project 所有在跑的容器（不 `down`，volume 留著） |
+| snapshot | 以那個 image 起一個 uid 1000 的容器掛 volume，容器內 `copy_db.py` 取 `/data/stock.db` 的快照，`docker cp` 到 `<work>/rollback/stock.db`；比 `/data/logs/cutover.json` 新的 raw 取回主機的 `raw/`（已有的檔不覆寫），新的日誌取回 `<work>/rollback/logs/` |
+| paths | 快照裡容器寫的 `payload_path`（`/data/raw/...`）改成主機 `raw/` 的同一檔（Windows 寫法），`pre-docker` 的程式照原路徑讀；`integrity_check` 要是 ok |
+| install | 資料目錄的 `stock.db`、`-wal`、`-shm` 搬到 `backups/pre-rollback-<UTC 時間>/`，快照成為 `stock.db` |
+| checkout | 發佈 checkout `git checkout pre-docker`，`git pull --ff-only` 必須 exit 0 |
+| enable | 每個工作 `Enable-ScheduledTask` 並讀回；`--start-news` 另以 `Start-ScheduledTask` 跑一次 news、等它結束，`LastTaskResult` 要是 0 |
+
+回退後 volume、image 與停止的容器都留著，刪不刪由使用者決定；再切換前要先處理掉舊 volume（切換只寫入新建的 volume）。
+
+**演練**：用正式 DB 的副本（`copy_db.py`）、只含幾個交易日 raw 的測試資料目錄、發佈 checkout 的 clone、測試用的工作排程器資料夾（例如 `\t342\`，工作的動作是無害的命令）與 `t<issue>` 開頭的 project，以 `--checkout`、`--data-dir`、`--work-dir`、`--task-path`、`--project`、`--env-file <替身>`、`--no-deploy` 指定。正式的 `\stock-lab\` 只跑 `--dry-run`。檢查與乾跑的測試是 `backend/tests/test_cutover.py`（假 docker、假 PowerShell）。
