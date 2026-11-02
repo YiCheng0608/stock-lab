@@ -1,3 +1,4 @@
+from app import level_semantics
 from app.level_semantics import build_level_semantics, build_stop_price_semantics
 
 
@@ -75,3 +76,13 @@ def test_stop_price_origin_keeps_user_position_risk_separate_from_rule_invalid()
         has_position_stop=False, has_rule_fallback=False
     )
     assert unknown_stop["reason"] == "no_rule_or_position_stop"
+
+
+# Timestamps written below (#376). `frozen_utcnow` (conftest) makes app.clock answer one
+# instant to every caller; this module reads its own `datetime`, which the test freezes
+# to the same instant.
+
+
+def test_the_response_clock_is_aware_utc(frozen_utcnow, monkeypatch):
+    monkeypatch.setattr(level_semantics, "datetime", frozen_utcnow.datetime_class())
+    assert level_semantics.utc_now_iso() == "2026-10-29T17:04:05.678901+00:00"

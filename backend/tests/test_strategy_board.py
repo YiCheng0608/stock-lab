@@ -29,7 +29,7 @@ from app.strategies import levels
 from worker import pipeline
 from worker.candidates import compute_daily_candidates
 
-BREAKOUT, PULLBACK = REGISTRY["breakout_v1"], REGISTRY["pullback_v1"]
+BREAKOUT, PULLBACK = REGISTRY["breakout_v2"], REGISTRY["pullback_v2"]
 
 
 @pytest.fixture
@@ -124,7 +124,7 @@ def test_a_candidate_reads_signal_levels_and_its_observation_reads_the_table(
 ):
     alpha = stock(db, "1101")
     breakout = signal(db, alpha)
-    pullback = signal(db, alpha, "pullback_v1", status="observation")
+    pullback = signal(db, alpha, "pullback_v2", status="observation")
     for row in (breakout, pullback):
         row.pullback_low = row.pullback_high = row.reference_entry = None
     pullback.breakout_price = pullback.invalid_price = None
@@ -187,14 +187,14 @@ def test_a_candidate_reads_signal_levels_and_its_observation_reads_the_table(
     assert payload["as_of"] == T.isoformat()
     assert payload["levels_version"] == "strategy_levels_v1"
     assert payload["candidate"]["rank"] == 1
-    assert payload["candidate"]["strategy"] == "breakout_v1"
+    assert payload["candidate"]["strategy"] == "breakout_v2"
     assert payload["candidate"]["total_score"] == body["candidate"]["total_score"]
     assert payload["candidate"]["llm_note"]["status"] == "done"
     assert payload["candidate"]["llm_note"]["inference"] is True
     assert [row["strategy"] for row in payload["strategies"]] == list(REGISTRY)
 
     by_key = rows(body)
-    actionable = by_key["breakout_v1"]
+    actionable = by_key["breakout_v2"]
     assert actionable["status"] == "conditional"
     assert actionable["label"] == "突破條件"
     assert actionable["signal_date"] == T.isoformat()
@@ -216,7 +216,7 @@ def test_a_candidate_reads_signal_levels_and_its_observation_reads_the_table(
         "breakout_price",
     ]
 
-    observation = by_key["pullback_v1"]
+    observation = by_key["pullback_v2"]
     assert observation["status"] == "observation"
     assert observation["levels"]["kind"] == "observation"
     assert observation["levels"]["display_label"] == "條件未成立・觀察價位"
@@ -236,7 +236,7 @@ def test_a_candidate_reads_signal_levels_and_its_observation_reads_the_table(
 
 def test_trend_unreachable_has_no_price_levels(db, client):
     beta = stock(db, "1102")
-    pullback = signal(db, beta, "pullback_v1", status="observation")
+    pullback = signal(db, beta, "pullback_v2", status="observation")
     level_row(
         db,
         pullback,
@@ -246,7 +246,7 @@ def test_trend_unreachable_has_no_price_levels(db, client):
         evaluation={"reasons": ["ma20_not_above_ma60"]},
     )
     db.commit()
-    row = rows(board(client, "1102"))["pullback_v1"]
+    row = rows(board(client, "1102"))["pullback_v2"]
     assert row["status"] == "observation"
     levels_ = row["levels"]
     assert levels_["availability"] == "trend_unreachable"
@@ -264,7 +264,7 @@ def test_trend_unreachable_has_no_price_levels(db, client):
     assert all(levels_[key] is None for key in price_fields)
     assert row["unmet"] == ["pullback_trend"]
     # The breakout signal of the day is missing: its row says so, with no levels.
-    missing = rows(board(client, "1102"))["breakout_v1"]
+    missing = rows(board(client, "1102"))["breakout_v2"]
     assert missing["status"] == "data_incomplete"
     assert missing["missing"] == ["signal_not_computed"]
     assert missing["levels"] is None and missing["conditions"] == []
@@ -281,7 +281,7 @@ def test_incomplete_data_lists_what_is_missing(db, client):
         )
         row.breakout_price = row.invalid_price = row.target_1 = None
     db.commit()
-    row = rows(board(client, "1103"))["pullback_v1"]
+    row = rows(board(client, "1103"))["pullback_v2"]
     assert row["status"] == "data_incomplete"
     assert row["missing"] == [
         "history_under_60_bars",
@@ -331,7 +331,7 @@ def test_a_later_status_is_still_the_conditional_of_its_date(db, client):
     moved = signal(db, epsilon, status="conditional")
     moved.status = "target_1_hit"
     db.commit()
-    row = rows(board(client, "1105"))["breakout_v1"]
+    row = rows(board(client, "1105"))["breakout_v2"]
     assert row["status"] == "conditional"
     assert row["levels"]["kind"] == "actionable"
 
@@ -374,7 +374,7 @@ def test_only_the_as_of_day_candidate_is_on_the_board(db, client):
 def test_the_board_changes_no_other_field_or_page(db, client):
     eta = stock(db, "1107")
     breakout = signal(db, eta)
-    pullback = signal(db, eta, "pullback_v1", status="observation")
+    pullback = signal(db, eta, "pullback_v2", status="observation")
     db.commit()
     compute_daily_candidates(db, T)
     before = {
@@ -431,7 +431,7 @@ def test_the_board_reads_only_current_strategy_versions(db, client):
     old.strategy_version_id = None
     db.commit()
     assert db.scalar(select(Signal).where(Signal.id == old.id)) is not None
-    row = rows(board(client, "1109"))["breakout_v1"]
+    row = rows(board(client, "1109"))["breakout_v2"]
     assert row["missing"] == ["signal_not_computed"]
 
 
@@ -444,6 +444,6 @@ def test_a_row_of_another_formula_version_is_not_read(db, client):
     version = db.get(StrategyVersion, row.strategy_version_id)
     version.formula_version = "institutional-flow/v1-old"
     db.commit()
-    breakout = rows(board(client, "1110"))["breakout_v1"]
+    breakout = rows(board(client, "1110"))["breakout_v2"]
     assert breakout["missing"] == ["signal_not_computed"]
     assert breakout["levels"] is None and breakout["conditions"] == []

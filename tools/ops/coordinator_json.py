@@ -18,6 +18,12 @@ value is missing or the condition is false, so a script can test the exit code.
   board               "itemId projectId fieldId optionId=name,..." of project 1 from the
                       issue query (item "-" and the issue node id last when the issue is
                       not on the board)
+  questions NOW       one line per unanswered question (#401) in the open Issues and PRs
+                      of the QUESTIONS_QUERY answer, oldest first; NOW is epoch seconds.
+                      Lines start with "#"; a line starting with "未查完" says what was
+                      not read (more than a page of threads or comments); exit 1 when
+                      the answer has no data.repository (a GraphQL error)
+  questions-query     the GraphQL query whose answer questions reads (no stdin)
   utf8 FILE           exit 0 when FILE is non-empty valid UTF-8 (no stdin)
   within A B          "yes" when A is B or under B, else "no" (no stdin)
   guard PATH [--residual] [--home H] [--data D]... [--root R]...
@@ -36,6 +42,7 @@ import json
 import os
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import PurePosixPath
 
 
@@ -233,6 +240,96 @@ def _run_state(run) -> str:
     return run.get("conclusion") or "unknown"
 
 
+_THREAD = (
+    "nodes{{number state comments(last:{n}){{totalCount nodes{{url createdAt body}}}}}}"
+)
+# One gh call reads every open Issue and PR with its latest comments (patrol.sh). Issues
+# and PRs share the number space, so "#<number>" names either.
+PAGE = 100
+QUESTIONS_QUERY = (
+    "query OpenQuestions($owner:String!,$name:String!){"
+    "repository(owner:$owner,name:$name){"
+    f"issues(states:OPEN,first:{PAGE}){{totalCount {_THREAD.format(n=PAGE)}}}"
+    f"pullRequests(states:OPEN,first:{PAGE}){{totalCount {_THREAD.format(n=PAGE)}}}"
+    "}}"
+)
+# docs/GITHUB_WORKFLOW.md 留言類型: the type is how the first line starts (blank lines,
+# spaces and a BOM before it are fine; bold or a quote is not the type). A comment is
+# known by the id in its url, the same #issuecomment-<id> a 決定 links to, so no
+# GraphQL database id is read (GitHub deprecates databaseId for fullDatabaseId).
+_QUESTION = re.compile(r"\s*提問[：:]")
+_DECISION = re.compile(r"\s*決定[：:]")
+_COMMENT_LINK = re.compile(r"issuecomment-(\d+)")
+# The governance Issue keeps its own comment style (待使用者, decision records) and has
+# more than a page of comments, so it is neither read nor reported as not read.
+GOVERNANCE_ISSUE = 1
+
+
+def _type(body: str, pattern: re.Pattern) -> bool:
+    return bool(pattern.match((body or "").lstrip("\ufeff")))
+
+
+def _epoch(stamp: str) -> int | None:
+    try:
+        when = datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ")
+    except (TypeError, ValueError):
+        return None
+    return int(when.replace(tzinfo=timezone.utc).timestamp())
+
+
+def _elapsed(seconds: int) -> str:
+    minutes = max(seconds, 0) // 60
+    days, minutes = divmod(minutes, 24 * 60)
+    hours, minutes = divmod(minutes, 60)
+    if days:
+        return f"{days} 天 {hours} 小時"
+    if hours:
+        return f"{hours} 小時 {minutes} 分"
+    return f"{minutes} 分"
+
+
+def unanswered_questions(doc, now: int) -> list[str]:
+    """Each 提問 comment with no 決定 comment linking to it (its #issuecomment-<id>).
+
+    A 決定 on any open Issue or PR counts, so a question in the Issue may be answered in
+    its PR. Closed Issues, closed or merged PRs and the governance Issue are left out.
+    """
+    repo = get(doc, "data.repository") or {}
+    lines, notes, questions, answered = [], [], [], set()
+    for kind, label in (("issues", "Issue"), ("pullRequests", "PR")):
+        connection = repo.get(kind) or {}
+        threads = connection.get("nodes") or []
+        if (connection.get("totalCount") or 0) > len(threads):
+            notes.append(
+                f"未查完：open {label} {connection['totalCount']} 個，只讀了 {len(threads)} 個"
+            )
+        for thread in threads:
+            if thread.get("state") != "OPEN" or (
+                kind == "issues" and thread.get("number") == GOVERNANCE_ISSUE
+            ):
+                continue
+            comments = thread.get("comments") or {}
+            nodes = comments.get("nodes") or []
+            if (comments.get("totalCount") or 0) > len(nodes):
+                notes.append(
+                    f"未查完：#{thread['number']} 有 {comments['totalCount']} 則留言，"
+                    f"只讀了最新 {len(nodes)} 則"
+                )
+            for c in nodes:
+                body = c.get("body") or ""
+                if _type(body, _DECISION):
+                    answered.update(_COMMENT_LINK.findall(body))
+                elif _type(body, _QUESTION):
+                    questions.append((thread["number"], c))
+    for number, c in sorted(questions, key=lambda q: q[1].get("createdAt") or ""):
+        if set(_COMMENT_LINK.findall(c.get("url") or "")) & answered:
+            continue
+        created = _epoch(c.get("createdAt"))
+        age = _elapsed(now - created) if created is not None else "時間不明"
+        lines.append(f"#{number} 經過 {age} {c.get('url', '')}")
+    return lines + notes
+
+
 def _options(field) -> str:
     return ",".join(
         f"{o['id']}={o['name']}" for o in (field or {}).get("options") or []
@@ -262,6 +359,9 @@ def main(argv: list[str]) -> int:
         return 0
     if command == "guard":
         return _guard_args(args)
+    if command == "questions-query":
+        print(QUESTIONS_QUERY)
+        return 0
     doc = _load()
     if doc is None:
         return 1
@@ -331,6 +431,12 @@ def main(argv: list[str]) -> int:
             _options(field),
             issue.get("id", ""),
         )
+        return 0
+    if command == "questions":
+        if get(doc, "data.repository") is None:
+            return 1
+        for line in unanswered_questions(doc, int(args[0])):
+            print(line)
         return 0
     print(f"unknown command: {command}", file=sys.stderr)
     return 64

@@ -7,6 +7,7 @@ from sqlalchemy.orm import sessionmaker
 
 import worker.pipeline as pipeline
 import worker.sources as sources
+import app.strategies as app_strategies
 from app.db import Base, enable_sqlite_foreign_keys
 from app.domain import (
     LEGACY_SIGNAL_CONFIDENCE_SEMANTICS_VERSION,
@@ -19,7 +20,9 @@ from app.models import (
     CorporateAction,
     DataQuality,
     Event,
+    FundamentalSnapshot,
     GroupDailyScore,
+    GroupDailyScoreArchive,
     GroupMembership,
     IngestionRun,
     Instrument,
@@ -1466,8 +1469,8 @@ def test_signal_results_are_distinct_per_strategy_and_rejected_rules_are_observa
         ).all()
         assert len(signals) == 2
         assert {item.strategy_version_id for item in signals} == {
-            strategies["breakout_v1"].id,
-            strategies["pullback_v1"].id,
+            strategies["breakout_v2"].id,
+            strategies["pullback_v2"].id,
         }
         assert {item.entry_type for item in signals} == {"breakout", "pullback"}
         assert all(item.status == "observation" for item in signals)
@@ -1567,9 +1570,16 @@ def test_conditional_signal_has_no_uncalibrated_probability_and_legacy_value_sur
             pipeline, "_margin_change_ratio", lambda *_args, **_kwargs: 0.0
         )
 
-        strategies = pipeline._ensure_strategies(db)
+        # The fixed 0.75 is legacy only for breakout_v1／pullback_v1 at 1.0.0,
+        # which analyze no longer writes (#392); their rule still runs here.
+        legacy = app_strategies.SUPERSEDED
+        strategies = pipeline._ensure_strategies(db, legacy)
         assert pipeline._upsert_signal(
-            db, instrument=instrument, signal_date=score_date, strategies=strategies
+            db,
+            instrument=instrument,
+            signal_date=score_date,
+            strategies=strategies,
+            registry=legacy,
         )
         db.flush()
         breakout = db.scalar(
@@ -1597,7 +1607,11 @@ def test_conditional_signal_has_no_uncalibrated_probability_and_legacy_value_sur
         db.commit()
 
         assert pipeline._upsert_signal(
-            db, instrument=instrument, signal_date=score_date, strategies=strategies
+            db,
+            instrument=instrument,
+            signal_date=score_date,
+            strategies=strategies,
+            registry=legacy,
         )
         db.flush()
         rerun = db.scalar(select(Signal).where(Signal.id == breakout.id))
@@ -2288,9 +2302,9 @@ def test_backtest_cutoff_and_summary_exclude_future_bars_and_non_actionable_rows
     ):
         if score_date != start_date:
             return 0
-        strategy = strategies["breakout_v1"]
+        strategy = strategies["breakout_v2"]
         actionable = Signal(
-            signal_key=f"{namespace}-TWSE-BT-{start_date.isoformat()}-breakout_v1-1.0.0",
+            signal_key=f"{namespace}-TWSE-BT-{start_date.isoformat()}-breakout_v2-2.0.0",
             signal_date=start_date,
             instrument_id=db.scalar(
                 select(Instrument.id).where(Instrument.symbol == "BT")
@@ -2303,17 +2317,17 @@ def test_backtest_cutoff_and_summary_exclude_future_bars_and_non_actionable_rows
             target_1=120,
             target_2=130,
             data_quality="complete",
-            rule_evidence_json={"strategy": "breakout_v1", "actionable": True},
+            rule_evidence_json={"strategy": "breakout_v2", "actionable": True},
         )
         observation = Signal(
-            signal_key=f"{namespace}-TWSE-BT-{start_date.isoformat()}-pullback_v1-1.0.0",
+            signal_key=f"{namespace}-TWSE-BT-{start_date.isoformat()}-pullback_v2-2.0.0",
             signal_date=start_date,
             instrument_id=actionable.instrument_id,
             strategy_version_id=strategy.id,
             status="observation",
             entry_type="pullback",
             data_quality="incomplete",
-            rule_evidence_json={"strategy": "pullback_v1", "actionable": False},
+            rule_evidence_json={"strategy": "pullback_v2", "actionable": False},
         )
         db.add_all([actionable, observation])
         db.flush()
@@ -2336,10 +2350,10 @@ def test_backtest_cutoff_and_summary_exclude_future_bars_and_non_actionable_rows
     assert result["run"]["status"] == "success"
     with pipeline_env() as db:
         actionable = db.scalar(
-            select(Signal).where(Signal.signal_key.like("backtest-%breakout_v1%"))
+            select(Signal).where(Signal.signal_key.like("backtest-%breakout_v2%"))
         )
         observation = db.scalar(
-            select(Signal).where(Signal.signal_key.like("backtest-%pullback_v1%"))
+            select(Signal).where(Signal.signal_key.like("backtest-%pullback_v2%"))
         )
         assert actionable and observation
         evaluations = db.scalars(
@@ -2361,3 +2375,317 @@ def test_backtest_cutoff_and_summary_exclude_future_bars_and_non_actionable_rows
         assert all(
             item["assessment"] == "insufficient_sample" for item in summary["groups"]
         )
+
+
+# Timestamps the pipeline writes (#376). `frozen_utcnow` (conftest) makes app.clock
+# answer one instant to every caller, so a stamp taken from local time, the real clock
+# or a column default stores a value other than the one asserted here.
+
+
+def test_official_provenance_stamps_the_clock_only_when_it_replaces_a_row(
+    frozen_utcnow,
+):
+    earlier = datetime(2026, 9, 4, 1)
+
+    def stored() -> SimpleNamespace:
+        return SimpleNamespace(
+            source="old", data_as_of=None, collected_at=earlier, raw_payload_id=None
+        )
+
+    def stamp(row, *, changed, replace, fills=None) -> None:
+        pipeline._set_official_provenance(
+            row,
+            changed=changed,
+            replace=replace,
+            source="twse",
+            data_as_of=datetime(2026, 9, 4),
+            raw_payload_id=7,
+            fills=fills,
+            fill_key={"table": "market_bars"},
+        )
+
+    replaced = stored()
+    stamp(replaced, changed=["close"], replace=True)
+    assert replaced.collected_at == frozen_utcnow.at
+    assert (replaced.source, replaced.raw_payload_id) == ("twse", 7)
+
+    filled, fills = stored(), []
+    stamp(filled, changed=["volume"], replace=False, fills=fills)
+    assert filled.collected_at == earlier and filled.source == "old"
+    assert [item["fields"] for item in fills] == [["volume"]]
+
+    unchanged = stored()
+    stamp(unchanged, changed=[], replace=True)
+    assert unchanged.collected_at == earlier
+
+
+def test_data_quality_rows_are_checked_at_the_clock(frozen_utcnow):
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    as_of = date(2026, 9, 4)
+    try:
+        with sessionmaker(bind=engine, autoflush=False)() as db:
+            pipeline._upsert_quality(
+                db, "instrument", "TWSE:AAA", as_of, "missing", ["ohlcv"], {}
+            )
+            db.commit()
+            assert db.scalar(select(DataQuality.checked_at)) == frozen_utcnow.at
+
+            later = frozen_utcnow.at + timedelta(hours=3)
+            frozen_utcnow.at = later
+            pipeline._upsert_quality(
+                db, "instrument", "TWSE:AAA", as_of, "complete", [], {}
+            )
+            db.commit()
+            assert db.scalar(select(func.count(DataQuality.id))) == 1
+            assert db.scalar(select(DataQuality.checked_at)) == later
+    finally:
+        engine.dispose()
+
+
+def test_an_archived_group_score_is_archived_at_the_clock(frozen_utcnow):
+    engine = create_engine("sqlite:///:memory:")
+    enable_sqlite_foreign_keys(engine)
+    Base.metadata.create_all(engine)
+    try:
+        with sessionmaker(bind=engine, autoflush=False)() as db:
+            db.add(ThemeGroup(id="g", name="G", group_type="official_industry"))
+            db.flush()
+            score = GroupDailyScore(
+                group_id="g", trading_date=date(2026, 9, 4), score=1.0
+            )
+            db.add(score)
+            db.flush()
+            pipeline.archive_group_score(db, score, "stamp_fixture")
+            db.commit()
+            archived_at = db.scalar(select(GroupDailyScoreArchive.archived_at))
+            assert archived_at == frozen_utcnow.at
+    finally:
+        engine.dispose()
+
+
+class _FixedAdapter:
+    def __init__(self, batch: sources.OfficialBatch) -> None:
+        self.batch = batch
+
+    def fetch(self, start: date, end: date) -> sources.OfficialBatch:
+        return self.batch
+
+
+def _stamped_batch(
+    score_date: date,
+    *,
+    close: float = 103,
+    captured_at: datetime = datetime(2026, 9, 4, 1),
+) -> sources.OfficialBatch:
+    """TAIEX and one stock with a bar each, plus the stock's chip, fundamental and event."""
+
+    payload = sources.capture_payload(
+        "twse",
+        sources.TWSE_LISTED_ENDPOINT,
+        {"fixture": "official", "version": 1},
+        score_date.isoformat(),
+        collected_at=captured_at,
+    )
+    instruments = [
+        sources.InstrumentRecord(
+            "TAIEX",
+            "TAIEX",
+            exchange="TWSE",
+            instrument_type="index",
+            industry="Index",
+            payload_sha256=payload.sha256,
+        ),
+        sources.InstrumentRecord(
+            "AAA",
+            "Alpha Corp",
+            exchange="TWSE",
+            industry="24",
+            payload_sha256=payload.sha256,
+        ),
+    ]
+    return sources.OfficialBatch(
+        instruments=instruments,
+        bars=[
+            sources.BarRecord(
+                symbol=item.symbol,
+                trading_date=score_date,
+                open=100,
+                high=115,
+                low=98,
+                close=close,
+                volume=1000,
+                turnover=103000,
+                exchange="TWSE",
+                source="twse_index" if item.symbol == "TAIEX" else "twse",
+                data_as_of=score_date.isoformat(),
+                payload_sha256=payload.sha256,
+                turnover_status="available",
+            )
+            for item in instruments
+        ],
+        chips=[
+            sources.ChipRecord(
+                "AAA",
+                score_date,
+                foreign_buy=10.0,
+                trust_buy=2.0,
+                dealer_buy=1.0,
+                exchange="TWSE",
+                source="twse_fixture",
+                data_as_of=score_date.isoformat(),
+                payload_sha256=payload.sha256,
+            )
+        ],
+        fundamentals=[
+            sources.FundamentalRecord(
+                "AAA",
+                date(2026, 6, 30),
+                "Q2",
+                eps=2.0,
+                exchange="TWSE",
+                payload_sha256=payload.sha256,
+            )
+        ],
+        events=[
+            sources.EventRecord(
+                "AAA",
+                score_date,
+                "material_information",
+                "fixture event",
+                exchange="TWSE",
+                payload_sha256=payload.sha256,
+            )
+        ],
+        payloads=[payload],
+        data_as_of=score_date.isoformat(),
+    )
+
+
+def _stored_stamps(db, model, column: str) -> set[datetime]:
+    return {getattr(row, column) for row in db.scalars(select(model))}
+
+
+def test_collect_stamps_the_rows_it_writes_with_the_clock(pipeline_env, frozen_utcnow):
+    score_date = date(2026, 9, 4)
+    first = frozen_utcnow.at
+    adapter = _FixedAdapter(_stamped_batch(score_date))
+    result = pipeline.collect(score_date, adapter=adapter)
+    assert result["status"] == "success"
+    with pipeline_env() as db:
+        run = db.get(IngestionRun, result["run_id"])
+        assert (run.started_at, run.finished_at) == (first, first)
+        assert _stored_stamps(db, MarketBar, "collected_at") == {first}
+        assert _stored_stamps(db, ChipSnapshot, "collected_at") == {first}
+        assert _stored_stamps(db, FundamentalSnapshot, "collected_at") == {first}
+        assert _stored_stamps(db, Event, "collected_at") == {first}
+        assert _stored_stamps(db, DataQuality, "checked_at") == {first}
+
+    # A forced rerun three hours later, with a changed close: the run, the replaced bar
+    # and the rows collect always rewrites take the new instant; the chip row, whose
+    # values did not change, keeps the first.
+    later = first + timedelta(hours=3)
+    frozen_utcnow.at = later
+    adapter.batch = _stamped_batch(score_date, close=110)
+    rerun = pipeline.collect(score_date, adapter=adapter, force=True)
+    assert rerun["status"] == "success" and rerun["run_id"] == result["run_id"]
+    with pipeline_env() as db:
+        run = db.get(IngestionRun, result["run_id"])
+        assert (run.started_at, run.finished_at) == (later, later)
+        bar = db.scalar(select(MarketBar).where(MarketBar.close == 110))
+        assert bar is not None and bar.collected_at == later
+        assert _stored_stamps(db, ChipSnapshot, "collected_at") == {first}
+        assert _stored_stamps(db, FundamentalSnapshot, "collected_at") == {later}
+        assert _stored_stamps(db, Event, "collected_at") == {later}
+        assert _stored_stamps(db, DataQuality, "checked_at") == {later}
+
+
+def test_a_failed_collect_is_stamped_with_the_clock(pipeline_env, frozen_utcnow):
+    payload = _fixture_payload()
+
+    class FailingAdapter:
+        captured_payloads = [payload]
+
+        def fetch(self, start: date, end: date) -> sources.OfficialBatch:
+            raise sources.OfficialDataError("fixture endpoint unavailable")
+
+    result = pipeline.collect(date(2026, 9, 2), adapter=FailingAdapter())
+    assert result["status"] == "failed"
+    with pipeline_env() as db:
+        run = db.get(IngestionRun, result["run_id"])
+        assert run.started_at == frozen_utcnow.at == run.finished_at
+        attempt = run.metadata_json["industry_observation_attempt"]
+        assert attempt["attempted_at_utc"] == "2026-10-29T17:04:05.678901"
+        assert _stored_stamps(db, DataQuality, "checked_at") == {frozen_utcnow.at}
+
+
+@pytest.mark.parametrize(
+    ("seconds_after_now", "status"),
+    [(0, "success"), (1, "failed")],
+    ids=["at-now", "future"],
+)
+def test_collect_refuses_an_industry_capture_dated_after_the_clock(
+    pipeline_env, frozen_utcnow, seconds_after_now, status
+):
+    """The snapshot's capture time may not be later than the instant collect observes."""
+
+    score_date = date(2026, 9, 4)
+    captured_at = frozen_utcnow.at + timedelta(seconds=seconds_after_now)
+    batch = _stamped_batch(score_date, captured_at=captured_at)
+    result = pipeline.collect(score_date, adapter=_FixedAdapter(batch))
+    assert result["status"] == status
+    if status == "failed":
+        assert "capture is in the future" in result["error"]
+
+
+def test_a_backtest_run_finishes_at_the_clock(pipeline_env, monkeypatch, frozen_utcnow):
+    score_date = date(2026, 9, 4)
+    with pipeline_env() as db:
+        instrument = Instrument(
+            market="TW",
+            exchange="TWSE",
+            symbol="STAMP",
+            name="Stamp",
+            instrument_type="stock",
+            status="active",
+        )
+        db.add(instrument)
+        db.flush()
+        db.add(
+            MarketBar(
+                instrument_id=instrument.id,
+                trading_date=score_date,
+                open=100,
+                high=101,
+                low=99,
+                close=100,
+                adj_close=100,
+                volume=1000,
+                turnover=100000,
+                source="fixture",
+            )
+        )
+        db.commit()
+    day = score_date.isoformat()
+    request_key = f"technical-backtest:v1:{day}:{day}"
+
+    def fail_features(*_args, **_kwargs):
+        raise RuntimeError("fixture mid-run failure")
+
+    monkeypatch.setattr(pipeline, "_calculate_features", fail_features)
+    assert pipeline.backtest(score_date, score_date)["run"]["status"] == "failed"
+    with pipeline_env() as db:
+        failed = db.scalar(
+            select(IngestionRun).where(IngestionRun.request_key == request_key)
+        )
+        assert failed.status == "failed" and failed.finished_at == frozen_utcnow.at
+
+    later = frozen_utcnow.at + timedelta(hours=3)
+    frozen_utcnow.at = later
+    monkeypatch.setattr(pipeline, "_calculate_features", lambda *_args, **_kwargs: None)
+    assert pipeline.backtest(score_date, score_date)["run"]["status"] == "success"
+    with pipeline_env() as db:
+        run = db.scalar(
+            select(IngestionRun).where(IngestionRun.request_key == request_key)
+        )
+        assert run.status == "success" and run.finished_at == later

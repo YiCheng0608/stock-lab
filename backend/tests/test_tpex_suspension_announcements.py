@@ -113,12 +113,10 @@ def no_network(monkeypatch):
     ],
 )
 def test_notice_does_not_override_date_scoped_bars(today, captured_day, monkeypatch):
-    class CaptureClock(datetime):
-        @classmethod
-        def utcnow(cls):
-            return cls(captured_day.year, captured_day.month, captured_day.day, 10)
+    def capture_clock():
+        return datetime(captured_day.year, captured_day.month, captured_day.day, 10)
 
-    monkeypatch.setattr(sources, "datetime", CaptureClock)
+    monkeypatch.setattr(sources, "utcnow", capture_clock)
     fetcher = NoticeFetcher(today)
     batch = sources.TpexAdapter(fetcher).fetch(DAY, DAY)
     assert {(bar.symbol, bar.trading_date) for bar in _listed_bars(batch)} == {

@@ -4,7 +4,7 @@ from datetime import date, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.orm import sessionmaker
 
 import app.api as api_module
@@ -1234,3 +1234,41 @@ def test_snapshot_fallback_rejects_raw_payload_with_wrong_reported_date(backfill
     assert report["session_count"] == 0
     assert report["summary"]["coverage_status"] == "unknown"
     assert report["summary"]["instrument_count"] == 0
+
+
+def test_a_backfill_run_is_stamped_with_the_clock(backfill_env, frozen_utcnow):
+    """Timestamps the backfill run row takes (#376); see conftest `frozen_utcnow`."""
+
+    trading_date = date(2026, 9, 4)
+    first = frozen_utcnow.at
+    inserted = []
+
+    def note_insert(mapper, connection, run):
+        if run.run_type == "backfill":
+            inserted.append(run.started_at)
+
+    class AlwaysFail:
+        def fetch(self, start: date, end: date) -> sources.OfficialBatch:
+            raise sources.OfficialDataError("fixture retry exhausted")
+
+    def stamps() -> tuple:
+        with backfill_env() as db:
+            run = db.scalar(
+                select(IngestionRun).where(IngestionRun.run_type == "backfill")
+            )
+            return run.started_at, run.finished_at
+
+    event.listen(IngestionRun, "before_insert", note_insert)
+    try:
+        backfill.targeted_backfill(trading_date, trading_date, adapter=AlwaysFail())
+    finally:
+        event.remove(IngestionRun, "before_insert", note_insert)
+    # The row is inserted with one reading of the clock and given a second before the
+    # commit, so the insert is the only place the first reading shows.
+    assert inserted == [first]
+    assert stamps() == (first, first)
+
+    later = first + timedelta(hours=3)
+    frozen_utcnow.at = later
+    backfill.targeted_backfill(trading_date, trading_date, adapter=AlwaysFail())
+    assert stamps() == (later, later)

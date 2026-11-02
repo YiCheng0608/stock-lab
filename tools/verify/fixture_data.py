@@ -312,7 +312,9 @@ def _indicator_rows() -> list[dict[str, Any]]:
 # ---- chips ----
 
 CHIP_SESSIONS = SESSIONS[-25:]
+# Each value group names its own file, as collect writes it (Issue #395).
 CHIP_SOURCE_BY_EXCHANGE = {"TWSE": "twse_t86", "TPEx": "tpex_3insti"}
+MARGIN_SOURCE_BY_EXCHANGE = {"TWSE": "twse_margin", "TPEx": "tpex_margin"}
 
 
 def _chip_rows() -> list[dict[str, Any]]:
@@ -336,9 +338,16 @@ def _chip_rows() -> list[dict[str, Any]]:
                     "short_balance": float(120 + 3 * wobble),
                     "borrowed_sell": float(40 + wobble),
                     "day_trade_ratio": round(0.18 + 0.01 * wobble, 4),
-                    "source": CHIP_SOURCE_BY_EXCHANGE[exchange],
+                    "source": f"{CHIP_SOURCE_BY_EXCHANGE[exchange]}"
+                    f"+{MARGIN_SOURCE_BY_EXCHANGE[exchange]}",
                     "data_as_of": _at(day, 8),
                     "collected_at": _at(day, 9, 30),
+                    "institutional_source": CHIP_SOURCE_BY_EXCHANGE[exchange],
+                    "institutional_data_as_of": _at(day, 8),
+                    "institutional_collected_at": _at(day, 9, 30),
+                    "margin_source": MARGIN_SOURCE_BY_EXCHANGE[exchange],
+                    "margin_data_as_of": _at(day, 8),
+                    "margin_collected_at": _at(day, 9, 30),
                 }
             )
             next_id += 1
@@ -609,7 +618,7 @@ def _score_rows() -> list[dict[str, Any]]:
 
 # ---- strategies and signals ----
 
-STRATEGY_IDS = {"breakout_v1": 1, "pullback_v1": 2, "hot_group_v1": 3}
+STRATEGY_IDS = {"breakout_v2": 1, "pullback_v2": 2, "hot_group_v1": 3}
 
 
 def _strategy_rows() -> list[dict[str, Any]]:
@@ -661,8 +670,8 @@ def _signal_rows() -> list[dict[str, Any]]:
         closes = [bar["close"] for bar in bars]
         ma20 = round(sum(closes[-20:]) / 20, 4)
         ma60 = round(sum(closes[-60:]) / 60, 4)
-        for strategy, status in zip(("breakout_v1", "pullback_v1"), statuses):
-            breakout = strategy == "breakout_v1"
+        for strategy, status in zip(("breakout_v2", "pullback_v2"), statuses):
+            breakout = strategy == "breakout_v2"
             conditional = status == "conditional"
             entry = close
             invalid = round(entry * 0.95, 2) if conditional else None
@@ -1392,7 +1401,7 @@ _PLANS = (
     (
         2,
         "9103",
-        "breakout_v1",
+        "breakout_v2",
         SESSIONS[-4],
         "triggered",
         {"breakout_price": 98.7, "invalid_price": 94.0, "target_1": 106.0},
@@ -1400,7 +1409,7 @@ _PLANS = (
     (
         3,
         "9201",
-        "pullback_v1",
+        "pullback_v2",
         SESSIONS[-12],
         "target_hit",
         {
@@ -1414,7 +1423,7 @@ _PLANS = (
     (
         4,
         "9202",
-        "breakout_v1",
+        "breakout_v2",
         SESSIONS[-25],
         "expired",
         {"breakout_price": 52.0, "invalid_price": 49.0, "target_1": 57.0},
@@ -1422,7 +1431,7 @@ _PLANS = (
     (
         5,
         "9203",
-        "breakout_v1",
+        "breakout_v2",
         SESSIONS[-10],
         "invalidated",
         {"breakout_price": 117.0, "invalid_price": 115.0, "target_1": 121.0},
@@ -1430,7 +1439,7 @@ _PLANS = (
     (
         6,
         "9102",
-        "breakout_v1",
+        "breakout_v2",
         SESSIONS[-6],
         "cancelled",
         {"breakout_price": 177.0, "invalid_price": 165.0, "target_1": 196.0},
@@ -1473,7 +1482,7 @@ def _plan_signal_rows() -> list[dict[str, Any]]:
     rows = []
     for offset, (_plan_id, symbol, strategy, day, _status, levels) in enumerate(_PLANS):
         exchange = SYMBOL_EXCHANGE[symbol]
-        kind = "breakout" if strategy == "breakout_v1" else "pullback"
+        kind = "breakout" if strategy == "breakout_v2" else "pullback"
         rows.append(
             {
                 "id": PLAN_SIGNAL_FIRST_ID + offset,
@@ -1723,7 +1732,11 @@ INTENTIONALLY_EMPTY: dict[str, dict[str, str]] = {
         "raw_payload_id": "LLM 筆記不保存原始回應檔",
     },
     "candidate_runs": {"zero_reason": "當日有 3 檔候選，不是零候選"},
-    "chip_snapshots": {"raw_payload_id": "假資料不附法人原始檔"},
+    "chip_snapshots": {
+        "raw_payload_id": "假資料不附法人原始檔",
+        "institutional_raw_payload_id": "假資料不附法人原始檔",
+        "margin_raw_payload_id": "假資料不附融資原始檔",
+    },
     "ingestion_runs": {"error": "沒有失敗的執行；休市日的 skipped 不寫 error"},
     "market_bars": {
         "turnover_reason": "成交值都是 available；原因只在 unavailable／unknown 時寫"
@@ -1758,6 +1771,10 @@ OMITTED_TABLES: dict[str, str] = {
     ),
     "fundamental_snapshots": "五個主導航的檢查不讀基本面；個股頁該區顯示無資料",
     "group_daily_score_archive": "只在 hot_group 版本升級時封存舊分數；假資料只有現行版本",
+    "margin_lists": (
+        "融資標的清單只給 analyze 判定融資條件是否適用（#392）；API 不讀，"
+        "假資料的訊號直接寫好判定結果"
+    ),
     "schedule_runs": "排程紀錄只給看門狗與系統頁",
     "schedule_run_steps": "同 schedule_runs",
     "signal_evaluations": "較早的訊號只當追蹤計畫的來源；系統訊號追蹤不在五頁顯示",
@@ -1964,7 +1981,7 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
             "items[].nearness.near",
             [None, None, None, None, True, True],
         ),
-        ("actions?limit=20", "items.4.nearness.strategy", "breakout_v1"),
+        ("actions?limit=20", "items.4.nearness.strategy", "breakout_v2"),
         ("actions?limit=20", "items.4.nearness.unmet[].short_label", ["價格", "量能"]),
         (
             "actions?limit=20",

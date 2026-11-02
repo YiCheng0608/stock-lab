@@ -1202,3 +1202,26 @@ def test_other_operational_errors_are_not_retried(db):
     with pytest.raises(OperationalError):
         news_batch._write_unit(db, unit)
     assert calls == [1]
+
+
+# Timestamps the batch writes (#376). `frozen_utcnow` (conftest) makes app.clock answer
+# one instant to every caller, so a stamp taken from local time or the real clock
+# stores a value other than the one asserted here.
+
+
+def test_news_batch_stamps_its_rows_with_the_clock(db, frozen_utcnow, monkeypatch):
+    # The label date reads the Taipei clock through the module's own datetime.
+    monkeypatch.setattr(news_batch, "datetime", frozen_utcnow.datetime_class())
+    first = frozen_utcnow.at
+    result = collect_news(db, fetch=FixtureFetcher())
+
+    assert result["status"] == "success"
+    # 17:04 UTC on 10/29 is already 01:04 on 10/30 in Taipei.
+    assert result["run_date"] == "2026-10-30"
+    runs = db.scalars(select(IngestionRun).where(IngestionRun.run_type == "news")).all()
+    assert len(runs) == len(NEWS_SOURCES)
+    assert {
+        (run.run_date, run.started_at, run.finished_at, run.data_as_of) for run in runs
+    } == {(date(2026, 10, 30), first, first, first.isoformat())}
+    assert {item.collected_at for item in db.scalars(select(NewsItem))} == {first}
+    assert {raw.collected_at for raw in db.scalars(select(RawPayload))} == {first}

@@ -31,7 +31,7 @@ import sqlite3
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -860,3 +860,49 @@ def test_the_watchdog_reads_old_and_new_logs_alike(tree, tmp_path, daily_ended):
     assert keys == (
         ["news_llm_failed"] if daily_ended else ["daily_no_end", "news_llm_failed"]
     )
+
+
+# Timestamps written below (#376). `frozen_utcnow` (conftest) makes app.clock answer one
+# instant to every caller, so a stamp taken from local time or the real clock stores a
+# value other than the one asserted here.
+
+
+# The job takes its fcntl lock before the first log line (#333), so Linux only like the
+# other runs of _Job (on master, where #376 added it, the job also ran on Windows).
+@linux_only
+def test_the_job_log_is_stamped_with_the_taipei_clock(
+    tmp_path, monkeypatch, frozen_utcnow
+):
+    """The log's file date and its start and end lines come from the Taipei clock."""
+
+    monkeypatch.setattr(job, "datetime", frozen_utcnow.datetime_class())
+    monkeypatch.setattr(job, "free_memory_mb", lambda: 4096)
+    monkeypatch.setattr(job, "git_dir", lambda root: None)
+
+    def step(self, name, step_args):
+        frozen_utcnow.at += timedelta(seconds=90)
+        return 0
+
+    monkeypatch.setattr(job._Job, "step", step)
+    parser = argparse.ArgumentParser(prog="worker.cli")
+    job.add_arguments(parser.add_subparsers(dest="command").add_parser("job"))
+    args = parser.parse_args(
+        [
+            "job",
+            "daily",
+            "--data-dir",
+            str(tmp_path / "data"),
+            "--min-free-memory-gb",
+            "0",
+        ]
+    )
+
+    runner = job._Job(args)
+    code, _ = runner.run()
+
+    assert code == 0
+    # 17:04 UTC on 10/29 is 01:04 on 10/30 in Taipei: the file is named for that day.
+    assert runner.log_path.name == "daily-20261030.log"
+    lines = runner.log_path.read_text(encoding="utf-8").splitlines()
+    assert lines[0].startswith("===== 2026-10-30T01:04:05.678901+08:00 start job=daily")
+    assert lines[-1] == "===== 2026-10-30T01:05:35.678901+08:00 end exit=0 seconds=90"

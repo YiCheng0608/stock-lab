@@ -25,6 +25,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.clock import utcnow
 from app.domain import PLAN_OPEN_STATUSES, validate_plan_status_transition
 from app.models import MarketBar, TrackingPlan, TrackingPlanSession
 from app.tracking import AMBIGUOUS_REASON, TrackPath, settle, track_path
@@ -239,7 +240,7 @@ def track_open_plans(
     its plan date either.
     """
 
-    stamp = now or datetime.utcnow()
+    stamp = now or utcnow()
     plans = db.scalars(
         select(TrackingPlan)
         .where(TrackingPlan.status.in_(PLAN_OPEN_STATUSES))

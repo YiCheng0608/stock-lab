@@ -52,12 +52,12 @@ def _parser() -> argparse.ArgumentParser:
         nargs="*",
         default=[],
         metavar="STRATEGY:CONDITION",
-        help="ablations to add, e.g. breakout_v1:group; 'all' for every one",
+        help="ablations to add, e.g. breakout_v2:group; 'all' for every one",
     )
     parser.add_argument(
         "--no-canonical",
         action="store_true",
-        help="evaluate only the ablations, not breakout_v1/pullback_v1",
+        help="evaluate only the ablations, not the registered strategies",
     )
     parser.add_argument("--min-free-gb", type=float, default=10.0)
     parser.add_argument("--force", action="store_true", help="rerun a finished run")

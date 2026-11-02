@@ -8,6 +8,7 @@ import {
   INDICATOR_PANELS,
   INTERVALS,
   MA_LINES,
+  PRICE_BASIS,
   buildBarsChartOption,
   chartLayout,
   dataZoomPercent,
@@ -51,7 +52,7 @@ function useNarrow(query = '(max-width: 640px)'): boolean {
 }
 
 function priceBasisLabel(basis: string): string {
-  return basis === 'as_of_date_raw_basis'
+  return basis === PRICE_BASIS
     ? 'K 線為原始價；均線與指標以各根資料日的原始價為基準換算前期除權息'
     : '價格基準待核實'
 }

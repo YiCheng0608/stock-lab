@@ -927,3 +927,16 @@ def test_market_overview_turnover_scopes_are_the_two_known_ones(database):
         "twse_all_securities",
         "tpex_stocks",
     ]
+
+
+# Timestamps written below (#376). `frozen_utcnow` (conftest) makes app.clock answer one
+# instant to every caller, so a stamp taken from local time or the real clock stores a
+# value other than the one asserted here.
+
+
+def test_a_summary_without_a_capture_is_collected_at_the_clock(database, frozen_utcnow):
+    record = sources.parse_twse_market_summary(_twse_1022(), requested_date=OCT22)
+    with database() as db:
+        assert market_summary.upsert_market_summary(db, record, None) == "inserted"
+        db.commit()
+        assert db.scalar(select(MarketSummary.collected_at)) == frozen_utcnow.at

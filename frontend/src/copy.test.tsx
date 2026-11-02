@@ -121,6 +121,7 @@ check(text(chart).includes('2026/10/22') && text(chart).includes('2026/10/16 18:
 const IndicatorMetaRows = component('IndicatorMetaRows')
 const meta = text(render('IndicatorMetaRows', () => <IndicatorMetaRows {...{ bars: barsResponse([tradedBar('2026-10-22', 21.15, 71)]) }} />))
 check(meta.includes('2026/10/16 18:00') && !/\d{4}-\d{2}-\d{2}|上午|下午/.test(meta), `資料說明: computed time and K 線資料日期 are 24-hour slashed dates, got ${meta}`)
+check(meta.includes('資料日原始價（前期依除權息換算）'), `資料說明: the current price basis is explained, got ${meta}`)
 const BackfillRunTable = component('BackfillRunTable')
 const backfill = text(render('BackfillRunTable', () => <BackfillRunTable {...{ runs: [{ id: 1, updated_at: '2026-10-22T10:00:00+00:00', metadata: {}, status: 'success', records: 9, error: null }] }} />))
 check(backfill.includes('2026/10/22 18:00') && !/上午|下午/.test(backfill), `回補紀錄: update time is 2026/10/22 18:00, got ${backfill}`)

@@ -145,7 +145,7 @@ def _bar(
 
 
 def _signal(db, instrument, *, status="conditional", quality="complete"):
-    version = db.info["strategies"]["breakout_v1"]
+    version = db.info["strategies"]["breakout_v2"]
     row = Signal(
         signal_key=f"analysis-{instrument.symbol}-{T.isoformat()}-breakout",
         signal_date=T,
@@ -268,7 +268,7 @@ def _seed(db, *, score_date=T):
             trading_date=T,
             instrument_id=a.id,
             signal_id=candidate_signal.id,
-            strategy="breakout_v1",
+            strategy="breakout_v2",
             score_version=CANDIDATE_SCORE_VERSION,
             total_score=0.8,
             weight_coverage=1.0,

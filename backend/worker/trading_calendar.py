@@ -21,13 +21,14 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from typing import Any, Callable, Iterable
 from urllib.parse import urlencode
 
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
+from app.clock import utcnow
 from app.models import IngestionRun, RawPayload, TradingCalendarDay
 from app.trading_calendar import (
     CALENDAR_EXCHANGE,
@@ -210,7 +211,7 @@ def store_trading_calendar(
     run_date: date,
     fetcher: Callable[..., Any] = fetch_json,
 ) -> dict[str, Any]:
-    now = datetime.utcnow()
+    now = utcnow()
     run = IngestionRun(
         run_type=RUN_TYPE,
         source="official",
@@ -258,7 +259,7 @@ def store_trading_calendar(
     run.status = status
     run.records = records
     run.error = "; ".join(warnings) or None
-    run.finished_at = datetime.utcnow()
+    run.finished_at = utcnow()
     run.metadata_json = {
         "source": CALENDAR_SOURCE,
         "years": results,

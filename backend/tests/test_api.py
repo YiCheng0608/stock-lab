@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -811,3 +811,42 @@ def test_portfolio_delete_is_idempotently_reported(isolated_api):
     assert repeated.status_code == 404
     assert missing.status_code == 404
     assert remaining.status_code == 200 and remaining.json()["items"] == []
+
+
+# Timestamps written below (#376). `frozen_utcnow` (conftest) makes app.clock answer one
+# instant to every caller, so a stamp taken from local time or the real clock stores a
+# value other than the one asserted here.
+
+
+def test_a_saved_position_is_updated_at_the_clock(isolated_api, frozen_utcnow):
+    with isolated_api() as db:
+        db.add(
+            Instrument(
+                market="TW",
+                exchange="TWSE",
+                symbol="STAMP",
+                name="Stamp",
+                instrument_type="stock",
+                status="active",
+            )
+        )
+        db.commit()
+
+    def save(shares):
+        with TestClient(app, base_url=LOCAL_API) as client:
+            return client.post(
+                "/api/portfolio",
+                json={"symbol": "STAMP", "shares": shares, "average_cost": 100},
+            )
+
+    def updated_at():
+        with isolated_api() as db:
+            return db.scalar(select(PortfolioPosition.updated_at))
+
+    first = frozen_utcnow.at
+    assert save(10).status_code == 200
+    assert updated_at() == first
+
+    frozen_utcnow.at = first + timedelta(hours=3)
+    assert save(20).status_code == 200
+    assert updated_at() == frozen_utcnow.at

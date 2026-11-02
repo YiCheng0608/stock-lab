@@ -17,6 +17,7 @@ from fractions import Fraction
 from typing import Any
 
 from app.domain import RuleEvaluation, instrument_eligibility
+from app.margin_lists import NOT_APPLICABLE, NOT_APPLICABLE_REASON
 
 from .base import (
     COMMON_CONFIRMATIONS,
@@ -159,6 +160,9 @@ def missing_confirmations(inputs: NextSessionInputs) -> list[str]:
         "institutional_flow_to_turnover_ratio_5d": inputs.institutional_flow_ratio_5d,
         "margin_balance_change_ratio_5d": inputs.margin_change_ratio_5d,
     }
+    if inputs.margin_financing == NOT_APPLICABLE:
+        # Not a margin-financing security: no ratio is expected (#392).
+        del values["margin_balance_change_ratio_5d"]
     return [
         f"{key}_missing_or_non_finite"
         for key, value in values.items()
@@ -198,7 +202,6 @@ def confirmation_conditions(
     confirmations = COMMON_CONFIRMATIONS
     group = confirmations["group_relative_strength"]
     flow = confirmations["institutional_flow"]
-    margin = confirmations["margin_financing"]
     return [
         Condition(
             "group_relative_strength",
@@ -216,15 +219,27 @@ def confirmation_conditions(
             threshold=flow["minimum_net_flow_to_turnover_ratio"],
             operator=flow["operator"],
         ),
-        Condition(
-            "margin_financing",
-            "confirmation",
-            satisfied(evaluation, ("margin_financing_increase_abnormal",)),
-            actual=finite_number(inputs.margin_change_ratio_5d),
-            threshold=margin["maximum_balance_change_ratio"],
-            operator=margin["operator"],
-        ),
+        margin_condition(inputs, evaluation),
     ]
+
+
+def margin_condition(inputs: StrategyInputs, evaluation: RuleEvaluation) -> Condition:
+    """The margin confirmation; not judged for a non-margin security (#392)."""
+
+    margin = COMMON_CONFIRMATIONS["margin_financing"]
+    actual = finite_number(inputs.margin_change_ratio_5d)
+    not_applicable = inputs.margin_financing == NOT_APPLICABLE and actual is None
+    return Condition(
+        "margin_financing",
+        "confirmation",
+        None
+        if not_applicable
+        else satisfied(evaluation, ("margin_financing_increase_abnormal",)),
+        actual=actual,
+        threshold=margin["maximum_balance_change_ratio"],
+        operator=margin["operator"],
+        reasons=(NOT_APPLICABLE_REASON,) if not_applicable else (),
+    )
 
 
 def common_conditions(

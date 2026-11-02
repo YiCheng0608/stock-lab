@@ -275,7 +275,7 @@ def follow(db, instrument, *ohlcs, start=PLAN_DAY):
 
 
 def signal(db, instrument, *, status="conditional", day=PLAN_DAY, **levels):
-    version = db.info["strategies"]["breakout_v1"]
+    version = db.info["strategies"]["breakout_v2"]
     values = {
         "breakout_price": 100.0,
         "invalid_price": 98.0,
@@ -308,7 +308,7 @@ def candidate(db, instrument, sig):
         trading_date=sig.signal_date,
         instrument_id=instrument.id,
         signal_id=sig.id,
-        strategy="breakout_v1",
+        strategy="breakout_v2",
         score_version="candidate_score_v1",
         total_score=80.0,
         weight_coverage=1.0,
@@ -348,7 +348,7 @@ def test_a_plan_copies_the_signal_levels_and_versions(db):
     row = candidate(db, instrument, sig)
     plan, created = create_plan(db, sig.id, daily_candidate_id=row.id, now=CREATED)
     assert created
-    version = db.info["strategies"]["breakout_v1"]
+    version = db.info["strategies"]["breakout_v2"]
     assert (
         plan.source_kind,
         plan.strategy,
@@ -358,7 +358,7 @@ def test_a_plan_copies_the_signal_levels_and_versions(db):
         plan.tracking_version,
     ) == (
         "candidate",
-        "breakout_v1",
+        "breakout_v2",
         version.id,
         version.formula_version,
         "candidate_score_v1",
@@ -826,3 +826,32 @@ class _Borrowed:
 
     def __exit__(self, *exc):
         return False
+
+
+# Timestamps written below (#376). `frozen_utcnow` (conftest) makes app.clock answer one
+# instant to every caller, so a stamp taken from local time or the real clock stores a
+# value other than the one asserted here.
+
+
+def test_plans_are_stamped_with_the_clock(db, frozen_utcnow):
+    first = frozen_utcnow.at
+    instrument = stock(db)
+    plan, created = create_plan(db, signal(db, instrument).id)
+    db.commit()
+    assert created and (plan.created_at, plan.updated_at) == (first, first)
+
+    # The daily update takes the clock when it moves a plan.
+    days = follow(db, instrument, FLAT, FILL)
+    later = first + timedelta(hours=3)
+    frozen_utcnow.at = later
+    result = track_open_plans(db, days[1])
+    db.commit()
+    assert result["transitions"] == {"pending->triggered": 1}
+    assert plan.updated_at == later
+
+    latest = later + timedelta(hours=3)
+    frozen_utcnow.at = latest
+    cancel_plan(db, plan.id)
+    db.refresh(plan)
+    assert plan.status == "cancelled"
+    assert (plan.cancelled_at, plan.updated_at) == (latest, latest)

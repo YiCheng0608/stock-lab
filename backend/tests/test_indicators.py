@@ -444,3 +444,83 @@ def test_rsi_no_price_change_only_when_series_never_moved():
         never[-1].values["rsi6"] is None
         and never[-1].reasons["rsi6"] == ind.NO_PRICE_CHANGE
     )
+
+
+# ---- synthetic index bars (#394 B4) ----------------------------------------
+
+_RANGE_AND_VOLUME = ("kd_k", "kd_d", "vol_ma5", "vol_ma20")
+
+
+def _index_bars(closes, *, start=date(2026, 1, 5), synthetic=None):
+    """TAIEX-shaped bars: O/H/L are the close and volume is 0."""
+    days = _weekdays(start, len(closes))
+    return [
+        IndicatorBar(
+            day,
+            close,
+            close,
+            close,
+            close,
+            0,
+            synthetic=True if synthetic is None else synthetic(i),
+        )
+        for i, (day, close) in enumerate(zip(days, closes))
+    ]
+
+
+def test_synthetic_bars_leave_kd_and_volume_averages_empty():
+    closes = _walk(150)
+    points = compute_indicators(_index_bars(closes))
+    # The same closes as real bars: the close-based fields must not change.
+    reference = compute_indicators(_index_bars(closes, synthetic=lambda i: False))
+    last, expected = points[-1], reference[-1]
+    for name in _RANGE_AND_VOLUME:
+        assert last.values[name] is None
+        assert last.reasons[name] == ind.SYNTHETIC_INDEX
+        # Without the flag these were computed from the filled-in values.
+        assert expected.values[name] is not None
+    for name in set(ind.FIELDS) - set(_RANGE_AND_VOLUME):
+        assert last.values[name] == expected.values[name] is not None
+        assert name not in last.reasons
+    # Even before a window is full the reason is the synthetic input.
+    assert points[0].reasons["vol_ma20"] == ind.SYNTHETIC_INDEX
+    assert points[0].reasons["ma5"] == ind.INSUFFICIENT_BARS
+
+
+def test_kd_stays_empty_after_a_synthetic_bar_and_a_volume_average_recovers():
+    closes = _walk(60)
+    # Bars 20..24 are synthetic, the rest real.
+    bars = [
+        bar
+        if not 20 <= i <= 24
+        else IndicatorBar(
+            bar.trading_date,
+            bar.close,
+            bar.close,
+            bar.close,
+            bar.close,
+            0,
+            synthetic=True,
+        )
+        for i, bar in enumerate(_bars(closes))
+    ]
+    points = compute_indicators(bars)
+    assert points[19].values["kd_k"] is not None
+    assert points[19].values["vol_ma5"] is not None
+    # KD is recursive: every value from the first synthetic bar on reads it.
+    assert all(points[i].reasons["kd_k"] == ind.SYNTHETIC_INDEX for i in range(20, 60))
+    # A 5-bar average is empty while its window holds one, then computed again.
+    assert all(
+        points[i].reasons["vol_ma5"] == ind.SYNTHETIC_INDEX for i in range(20, 29)
+    )
+    assert points[29].values["vol_ma5"] == pytest.approx(
+        sum(bar.volume for bar in bars[25:30]) / 5
+    )
+    assert points[43].reasons["vol_ma20"] == ind.SYNTHETIC_INDEX
+    assert points[44].values["vol_ma20"] is not None
+
+
+def test_a_week_with_a_synthetic_day_is_synthetic():
+    bars = _index_bars(_walk(10), synthetic=lambda i: i == 7)
+    weeks = aggregate_weekly(bars)
+    assert [week.calc.synthetic for week in weeks] == [False, True]
