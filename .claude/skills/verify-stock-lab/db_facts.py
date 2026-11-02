@@ -23,10 +23,14 @@ from pathlib import Path
 # Same value as backend/app/domain.py; backend/tests/test_verify_tools.py keeps
 # them equal. This script runs on the stdlib-only tool Python, so it cannot
 # import the backend (#237).
-CANDIDATE_SCORE_VERSION = "candidate_score_v3"
+CANDIDATE_SCORE_VERSION = "candidate_score_v4"
 # Same as backend/app/domain.py CANDIDATE_SCORE_READ_VERSIONS: a date without a
-# run of the current version shows its previous-version run (#392).
-CANDIDATE_SCORE_READ_VERSIONS = ("candidate_score_v3", "candidate_score_v2")
+# run of a version shows its run of the next one in the list (#392, #413).
+CANDIDATE_SCORE_READ_VERSIONS = (
+    "candidate_score_v4",
+    "candidate_score_v3",
+    "candidate_score_v2",
+)
 _READ = ", ".join(f"'{version}'" for version in CANDIDATE_SCORE_READ_VERSIONS)
 _ORDER = " ".join(
     f"WHEN '{version}' THEN {position}"
