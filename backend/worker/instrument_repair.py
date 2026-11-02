@@ -33,6 +33,7 @@ from typing import Any, Callable
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.raw_paths import payload_file
 from app.clock import utcnow
 from app.db import SessionLocal
 from app.models import (
@@ -112,7 +113,7 @@ def _load(raw: RawPayload) -> Any:
         raise InstrumentRepairError(
             [f"raw_payloads({raw.id}): missing payload path or sha256"]
         )
-    encoded = Path(raw.payload_path).read_bytes()
+    encoded = payload_file(raw.payload_path).read_bytes()
     if hashlib.sha256(encoded).hexdigest() != raw.sha256:
         raise InstrumentRepairError(
             [f"raw_payloads({raw.id}): file content does not match sha256"]
@@ -165,7 +166,7 @@ def _latest_lists(db: Session) -> tuple[list, dict[str, dict[str, Any]], dict]:
                 _load(raw),
                 raw.data_as_of,
                 raw.collected_at,
-                Path(raw.payload_path),
+                payload_file(raw.payload_path),
                 raw.sha256,
             )
             raw_ids[endpoint] = raw.id

@@ -25,6 +25,7 @@ from sqlalchemy import literal_column, select
 from sqlalchemy.orm import Session
 
 from .models import IngestionRun, Instrument, MarketBar, RawPayload
+from .raw_paths import payload_file
 from .decision_market_reads import read_market_date, read_market_source
 from worker.sources import parse_twse_taiex_from_all_daily_payload
 
@@ -194,7 +195,7 @@ def verified_taiex_sessions(
             if not raw.payload_path:
                 continue
             try:
-                payload = json.loads(Path(raw.payload_path).read_text(encoding="utf-8"))
+                payload = json.loads(payload_file(raw.payload_path).read_text(encoding="utf-8"))
             except (OSError, UnicodeError, TypeError, ValueError):
                 continue
             try:

@@ -38,6 +38,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app import chip_provenance as groups_of
+from app.raw_paths import payload_file
 from app.chip_provenance import INSTITUTIONAL, MARGIN, GroupProvenance
 from app.clock import utcnow
 from app.domain import OFFICIAL_MARGIN_CHIP_SOURCES
@@ -113,7 +114,7 @@ def _pending_filter() -> Any:
 def _load(capture: RawPayload) -> Any:
     """The capture's payload for its date; None when it reports another date."""
 
-    content = Path(capture.payload_path or "").read_bytes()
+    content = payload_file(capture.payload_path).read_bytes()
     if hashlib.sha256(content).hexdigest() != capture.sha256:
         raise ProvenanceError(
             f"raw payload {capture.id} does not match its SHA-256: {capture.payload_path}"

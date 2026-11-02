@@ -777,7 +777,13 @@ class EnvExample(unittest.TestCase):
             self.assertEqual((sep, value), ("=", ""), line)
             active[key] = value
         self.assertEqual(
-            sorted(active), ["CLAUDE_CODE_OAUTH_TOKEN", "GH_TOKEN", "STOCK_WAKE_TOKEN"]
+            sorted(active),
+            [
+                "CLAUDE_CODE_OAUTH_TOKEN",
+                "GH_TOKEN",
+                "STOCK_SKIP_NEWS_LLM",
+                "STOCK_WAKE_TOKEN",
+            ],
         )
         commented = set(re.findall(r"^# ([A-Z][A-Z0-9_]*)=", text, re.M))
         self.assertLessEqual({"TZ", "STOCK_DATA_DIR"}, commented)

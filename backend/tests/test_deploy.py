@@ -80,7 +80,7 @@ exec "$REAL_GIT" "$@"
 """
 
 # The fake docker's state, under $FAKE_DIR/docker: images (one ref per line), running (the tag
-# the project's containers run), containers (`docker ps` lines: id and service; none without
+# the project's containers run), containers (`docker ps` lines: id, service, oneoff label; none without
 # the file), volume/deploy.json, locks_held (a job holds a lock: the lock exec exits 75),
 # old_image (the holder's worker.job knows no --keep-stdin: exit 2), lock_hangs (the holder
 # never answers). Every call goes to docker_calls.log, the lock holder's end too ("lock
@@ -115,7 +115,7 @@ if [ "$1" = compose ]; then
     up)
       [ -f "$d/up_fails" ] && exit 1
       printf '%s\n' "$STOCK_RELEASE_TAG" >"$d/running"
-      printf 'c0ffee5c4ed01e7 scheduler\nfeedface0001 api\n' >"$d/containers"
+      printf 'c0ffee5c4ed01e7 scheduler False\nfeedface0001 api False\n' >"$d/containers"
       exit 0 ;;
     ps)
       t="$(running)"
@@ -217,7 +217,7 @@ class Harness:
         # The project runs v0 with its scheduler, as after an earlier deploy.
         self.images(f"{PROJECT}-backend:v0", f"{PROJECT}-web:v0")
         (self.docker / "running").write_text("v0\n", encoding="utf-8")
-        self.containers("c0ffee5c4ed01e7 scheduler", "feedface0001 api")
+        self.containers("c0ffee5c4ed01e7 scheduler False", "feedface0001 api False")
 
     def commit(self, files: dict[str, str]) -> None:
         for name, text in files.items():
@@ -244,7 +244,7 @@ class Harness:
         (self.fake / "gh_run_list.json").write_text(json.dumps(runs), encoding="utf-8")
 
     def containers(self, *lines: str) -> None:
-        """The project's running api and scheduler containers: `<id> <service>`."""
+        """The project's running containers: `<id> <service> <com.docker.compose.oneoff>`."""
         (self.docker / "containers").write_text(
             "".join(f"{line}\n" for line in lines), encoding="utf-8"
         )
@@ -449,7 +449,7 @@ def test_with_no_api_or_scheduler_running_no_lock_is_taken(harness):
 
 def test_without_a_scheduler_the_locks_are_taken_in_the_api(harness):
     # The api, or a one-off `compose run` (its label is the service's): a job run by hand.
-    harness.containers("feedface0001 api")
+    harness.containers("feedface0001 api False")
     result = harness.deploy("v1", "--no-comment")
     assert result.code == 0, result.out
     assert result.result["locks"] == "held"
@@ -459,7 +459,7 @@ def test_without_a_scheduler_the_locks_are_taken_in_the_api(harness):
 
 
 def test_a_job_run_by_hand_without_a_scheduler_refuses_the_deploy(harness):
-    harness.containers("0ff1ce000001 api")
+    harness.containers("0ff1ce000001 api True")
     (harness.docker / "locks_held").touch()
     before = harness.state()
     result = harness.deploy("v1")
@@ -810,3 +810,45 @@ def test_a_lock_with_keep_stdin_is_held_until_its_stdin_closes(tmp_path):
     started = time.monotonic()
     code = job.main(["lock", str(path), "--", "sh", "-c", "exec cat >/dev/null"])
     assert code == 0 and time.monotonic() - started < 30
+
+
+# #342 decision 8: a one-off `compose run scheduler …` is not the scheduler -----------------
+
+
+def test_a_one_off_scheduler_is_not_taken_for_the_scheduler(harness):
+    """docker ps can list a `compose run scheduler` one-off first; the locks and the previous
+    image are the service's own scheduler's."""
+
+    harness.containers(
+        "0ff1ce5c4ed01 scheduler True",
+        "c0ffee5c4ed01e7 scheduler False",
+        "feedface0001 api False",
+    )
+    result = harness.deploy("v1", "--no-comment")
+    assert result.code == 0, result.out
+    (lock,) = [c for c in harness.calls("docker") if c.startswith("exec -i ")]
+    assert lock.startswith("exec -i c0ffee5c4ed01e7 "), lock
+    inspected = [c for c in harness.calls("docker") if c.startswith("inspect ")]
+    assert inspected and all(c.endswith(" c0ffee5c4ed01e7") for c in inspected), inspected
+
+
+def test_with_only_a_one_off_scheduler_the_api_holds_the_locks_and_nothing_was_running(
+    harness,
+):
+    harness.containers("0ff1ce5c4ed01 scheduler True", "feedface0001 api False")
+    result = harness.deploy("v1", "--no-comment")
+    assert result.code == 0, result.out
+    assert result.result["previous_image"] is None
+    (lock,) = [c for c in harness.calls("docker") if c.startswith("exec -i ")]
+    assert lock.startswith("exec -i feedface0001 "), lock
+    assert not [c for c in harness.calls("docker") if c.startswith("inspect ")]
+
+
+def test_a_one_off_scheduler_alone_still_holds_the_locks(harness):
+    """A job run by hand in a one-off scheduler mounts the volume too: its locks count."""
+
+    harness.containers("0ff1ce5c4ed01 scheduler True")
+    (harness.docker / "locks_held").touch()
+    before = harness.state()
+    result = harness.deploy("v1")
+    assert_refused_unchanged(harness, before, result, "排程執行中")

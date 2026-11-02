@@ -545,6 +545,87 @@ describe('.env rules', () => {
     });
   }
 
+  // #342 decision 7: docker volume rm／prune and system prune --volumes delete named volumes too.
+  const VOLUME_BLOCKED = [
+    'docker volume rm stock-lab_stock-data',
+    'docker volume remove stock-lab_stock-data',
+    'docker volume rm -f stock-lab_stock-data',
+    'docker volume rm t342_stock-data stock-lab_stock-data',
+    'docker volume rm stock-data',
+    'docker volume rm my-app_stock-data',
+    'docker volume rm t342x_stock-data',
+    'docker volume rm _t342_stock-data',
+    'docker volume rm "$V"',
+    'docker volume rm $(docker volume ls -q)',
+    'docker volume rm',
+    'docker.exe volume rm stock-lab_stock-data',
+    'docker --context default volume rm stock-lab_stock-data',
+    'docker volume prune',
+    'docker volume prune -f',
+    'docker volume prune -a -f',
+    'docker volume prune --filter label=com.docker.compose.project=stock-lab',
+    'docker volume prune --filter=label=com.docker.compose.project=my-app',
+    'docker volume prune --filter label=foo=t342',
+    'docker system prune --volumes',
+    'docker system prune -a -f --volumes',
+    'docker system prune --volumes=true',
+    'docker system prune --volumes --filter label=com.docker.compose.project=t342',
+    'bash -c "docker volume prune -f"',
+    '(docker volume rm stock-lab_stock-data)',
+    'out=$(docker system prune -f --volumes)',
+    'MSYS_NO_PATHCONV=1 docker volume rm stock-lab_stock-data',
+  ];
+  const VOLUME_ALLOWED = [
+    'docker volume ls',
+    'docker volume ls -q --filter label=com.docker.compose.project=stock-lab',
+    'docker volume inspect stock-lab_stock-data',
+    'docker volume create t342_x',
+    'docker volume rm t342_stock-data',
+    'docker volume rm -f t342-rehearsal_stock-data task-342_stock-data',
+    'docker volume rm deploy_smoke_stock-data',
+    'docker volume rm t342_a_stock-data',
+    'docker volume prune -f --filter label=com.docker.compose.project=t342',
+    'docker volume prune --filter=label=com.docker.compose.project=task-342',
+    'docker system prune',
+    'docker system prune -f',
+    'docker image prune -f',
+    'git commit -m "block docker volume rm stock-lab_stock-data"',
+  ];
+
+  for (const shell of ['bash', 'powershell']) {
+    test(`${shell}: docker volume rm／prune and system prune --volumes of production are blocked (#342)`, () => {
+      for (const command of VOLUME_BLOCKED) {
+        assert.match(commandDenial(command, shell, [], clean) || '', /named volume/, command);
+      }
+    });
+
+    test(`${shell}: volume commands that keep production's volumes pass (#342)`, () => {
+      for (const command of VOLUME_ALLOWED) assert.equal(commandDenial(command, shell, [], clean), null, command);
+    });
+  }
+
+  test('a volume of the project STOCK_COMPOSE_PROJECT names is blocked (#342)', () => {
+    const saved = process.env.STOCK_COMPOSE_PROJECT;
+    process.env.STOCK_COMPOSE_PROJECT = 't1-prod';
+    try {
+      assert.ok(commandDenial('docker volume rm t1-prod_stock-data', 'bash', [], clean));
+      assert.ok(commandDenial('docker volume prune --filter label=com.docker.compose.project=t1-prod', 'bash', [], clean));
+      assert.equal(commandDenial('docker volume rm t1-other_stock-data', 'bash', [], clean), null);
+    } finally {
+      if (saved === undefined) delete process.env.STOCK_COMPOSE_PROJECT;
+      else process.env.STOCK_COMPOSE_PROJECT = saved;
+    }
+  });
+
+  test('the hook process blocks docker volume rm through Bash and PowerShell (#342)', () => {
+    for (const tool_name of ['Bash', 'PowerShell']) {
+      const result = hook({ tool_name, tool_input: { command: 'docker volume rm stock-lab_stock-data' } });
+      assert.equal(result.code, 2, tool_name);
+      assert.match(result.stderr, /named volume/, tool_name);
+    }
+    assert.equal(hook(bash('docker volume rm t342_stock-data')).code, 0);
+  });
+
   test('compose down -v of the project STOCK_COMPOSE_PROJECT names is blocked (#341)', () => {
     const saved = process.env.STOCK_COMPOSE_PROJECT;
     process.env.STOCK_COMPOSE_PROJECT = 't1-prod';

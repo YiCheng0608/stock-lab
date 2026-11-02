@@ -26,6 +26,7 @@ from typing import Any, Callable
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.raw_paths import payload_file
 from app.clock import utcnow
 from app.db import SessionLocal
 from app.models import (
@@ -98,7 +99,7 @@ def _captures(db: Session) -> list[dict[str, Any]]:
             raise IndustryRepairError(
                 [f"raw_payloads({raw.id}): missing payload path or sha256"]
             )
-        encoded = Path(raw.payload_path).read_bytes()
+        encoded = payload_file(raw.payload_path).read_bytes()
         if hashlib.sha256(encoded).hexdigest() != raw.sha256:
             raise IndustryRepairError(
                 [f"raw_payloads({raw.id}): file content does not match sha256"]

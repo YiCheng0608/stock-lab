@@ -61,6 +61,13 @@ const RULES = [
       'docker compose down -v／--volumes 會刪掉 project 的 named volume（正式 project 的 stock-data 就是正式 DB）；' +
       '只放行以 -p 明寫的測試 project（t<n>、task-<n> 開頭，或含 smoke 一詞），例如 docker compose -p task-<issue> down --volumes',
   },
+  {
+    test: (segment, shell) => volumeRemovalDenial(segment.raw, shell),
+    reason:
+      'docker volume rm／volume prune／system prune --volumes 會刪 named volume（正式 project 的 stock-data 就是正式 DB）；' +
+      'volume rm 只放行測試 project 的 volume（t<n>_、task-<n>_ 開頭，或 project 名含 smoke 一詞，例如 t342_stock-data），' +
+      'volume prune 要加 --filter label=com.docker.compose.project=<測試 project>，system prune --volumes 一律擋',
+  },
 ];
 
 // Splits a command into segments at unquoted ; && || | & and newlines. `raw` keeps quoted text;
@@ -475,6 +482,48 @@ function downRemovesVolumes(command) {
 }
 
 const composeDownDenial = (raw, shell) => dockerCommands(raw, shell).some(downRemovesVolumes);
+
+// A test project's name, by the rule of downRemovesVolumes, that is not production.
+function testProject(name) {
+  const production = process.env.STOCK_COMPOSE_PROJECT;
+  return name !== 'stock-lab' && name !== production && TEST_PROJECT.test(name);
+}
+
+// A compose volume is `<project>_<volume>`; the project may itself hold an underscore, so any
+// prefix before an underscore that names a test project will do (t342_stock-data,
+// deploy_smoke_stock-data). A volume of production (stock-lab_…, `${STOCK_COMPOSE_PROJECT}_…`)
+// never passes, nor does a name the hook cannot read (a variable).
+function testVolume(name) {
+  const production = process.env.STOCK_COMPOSE_PROJECT;
+  if (name.startsWith('stock-lab_') || (production && name.startsWith(`${production}_`))) return false;
+  return [...name.matchAll(/_/g)].some((m) => m.index > 0 && testProject(name.slice(0, m.index)));
+}
+
+// docker volume rm／remove／prune and docker system prune --volumes delete named volumes
+// (#342 decision 7), like compose down -v: rm passes only when every volume it names is a test
+// project's; volume prune only with --filter label=com.docker.compose.project=<test project>;
+// system prune --volumes never (no filter of it is limited to one project's volumes).
+function removesVolumes({ sub, args }) {
+  const [group, verb] = sub.slice(-2).map((s) => s.toLowerCase());
+  if (group === 'system' && verb === 'prune') return args.some((t) => /^--volumes(?:=|$)/i.test(t));
+  if (group !== 'volume') return false;
+  if (verb === 'rm' || verb === 'remove') {
+    const names = args.filter((t) => !t.startsWith('-'));
+    return !names.length || !names.every(testVolume);
+  }
+  if (verb === 'prune') {
+    const filters = [];
+    args.forEach((t, j) => {
+      if (t === '--filter') filters.push(args[j + 1] ?? '');
+      else if (t.startsWith('--filter=')) filters.push(t.slice('--filter='.length));
+    });
+    const label = 'label=com.docker.compose.project=';
+    return !filters.some((f) => f.startsWith(label) && testProject(f.slice(label.length)));
+  }
+  return false;
+}
+
+const volumeRemovalDenial = (raw, shell) => dockerCommands(raw, shell).some(removesVolumes);
 
 // The reason a docker command in `raw` prints environment values, or null.
 function dockerDenial(raw, shell) {

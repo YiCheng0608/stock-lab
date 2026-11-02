@@ -15,6 +15,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from app import chip_provenance
+from app.raw_paths import payload_file
 from app.chip_provenance import GroupProvenance
 from app.clock import utcnow
 from app.config import (
@@ -3591,12 +3592,17 @@ def _quote_sessions(db: Session, observed: date) -> list[date]:
 
 
 def _stored_quote_rows(
-    db: Session, exchange: str, sessions: list[date]
+    db: Session,
+    exchange: str,
+    sessions: list[date],
+    unreadable: list[int] | None = None,
 ) -> tuple[set[str], list[int]] | None:
     """Codes with a row in the stored quote table of any session, or None.
 
     None when a session has no stored, date-checked quote table: the absence
-    of a row is then not proven.
+    of a row is then not proven. The id of each capture whose file cannot be
+    read or is not the session's table goes into UNREADABLE (#342), so the
+    summary says why a check was unverifiable instead of skipping it silently.
     """
 
     wanted = {day.isoformat() for day in sessions}
@@ -3614,9 +3620,11 @@ def _stored_quote_rows(
         if day in found or not raw.payload_path:
             continue
         try:
-            payload = json.loads(Path(raw.payload_path).read_bytes())
+            payload = json.loads(payload_file(raw.payload_path).read_bytes())
             _require_reported_date(payload, date.fromisoformat(day), raw.endpoint)
         except (OSError, ValueError, OfficialDataError):
+            if unreadable is not None:
+                unreadable.append(raw.id)
             continue
         found[day] = (_quote_row_codes(payload), raw.id)
     if set(found) != wanted:
@@ -3665,6 +3673,7 @@ def plan_instrument_status(
         active = [item for item in current if item.status == "active"]
         absent = [item for item in current if (exchange, item.symbol) not in universe]
         dormant: list[Instrument] = []
+        unreadable: list[int] = []
         sessions = _quote_sessions(db, observed)
         dormancy: dict[str, Any] = {"status": "not_checked"}
         if len(sessions) < DORMANT_SESSIONS:
@@ -3687,7 +3696,11 @@ def plan_instrument_status(
                 if (exchange, item.symbol) in universe
                 and (last_bars.get(item.id) is None or last_bars[item.id] < sessions[0])
             ]
-            rows = _stored_quote_rows(db, exchange, sessions) if quiet else None
+            rows = (
+                _stored_quote_rows(db, exchange, sessions, unreadable)
+                if quiet
+                else None
+            )
             if rows is not None:
                 codes, raw_ids = rows
                 dormant = [item for item in quiet if item.symbol not in codes]
@@ -3701,7 +3714,12 @@ def plan_instrument_status(
                     },
                 }
             elif quiet:
-                dormancy = {"status": "unverifiable", "reason": "missing quote table"}
+                dormancy = {
+                    "status": "unverifiable",
+                    "reason": "unreadable quote table"
+                    if unreadable
+                    else "missing quote table",
+                }
             else:
                 dormancy = {"status": "checked", "reason": "no quiet instrument"}
         # A dormant code back in the latest quote table, traded or not.
@@ -3712,7 +3730,7 @@ def plan_instrument_status(
             if item.status == "dormant" and (exchange, item.symbol) in universe
         ]
         latest = (
-            _stored_quote_rows(db, exchange, sessions[-1:])
+            _stored_quote_rows(db, exchange, sessions[-1:], unreadable)
             if (resting or absent) and sessions
             else None
         )
@@ -3734,7 +3752,10 @@ def plan_instrument_status(
                 "raw_payload_ids": latest[1],
             }
             if latest is not None
-            else {"status": "unverifiable", "reason": "missing quote table"}
+            else {
+                "status": "unverifiable",
+                "reason": "unreadable quote table" if unreadable else "missing quote table",
+            }
         )
         planned = len(absent) + len(dormant)
         limit = max(STATUS_SYNC_MIN_LIMIT, int(len(active) * max_share))
@@ -3750,6 +3771,10 @@ def plan_instrument_status(
             "revived_symbols": [item.symbol for item in revived][:50],
             "quoted_absent_symbols": [item.symbol for item in quoted][:50],
             "quote_check": quote_check,
+            # Stored quote tables whose file could not be read (#342): a count, and the
+            # first ids, so a missing raw/ shows in the run summary.
+            "unreadable_quote_tables": len(set(unreadable)),
+            "unreadable_raw_payload_ids": sorted(set(unreadable))[:20],
             "captures": proof["captures"],
             "dormancy": dormancy,
         }

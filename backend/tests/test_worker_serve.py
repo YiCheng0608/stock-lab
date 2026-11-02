@@ -763,11 +763,14 @@ def test_a_killed_serve_leaves_no_lock_and_the_next_daily_closes_its_run_at_once
             (os.getpid(), row_id),
         )
     started = time.monotonic()
+    # 19:00, between the two triggers: the restarted serve runs the day's daily at once,
+    # as its 18:30 run did not complete (#342, decision 5).
     restarted = tree.start_serve(
-        "--now", "2026-10-16T21:29:58", *claude, extra_env=real
+        "--now", "2026-10-16T19:00:00", *claude, extra_env=real
     )
     out = Output(restarted)
     try:
+        out.wait_for(r" serve catchup job=daily reason=not_complete$", timeout=60)
         end = out.wait_for(r" serve end job=daily ", timeout=300)
     finally:
         assert stop(restarted) == 0
@@ -863,3 +866,146 @@ def test_a_restarted_serve_does_not_wake_again_for_the_events_it_queued(
     # MONITOR_NOW: each poll judged at its trigger time on serve's (injected) clock.
     assert polls == ["2026-10-25T12:02:00Z", "2026-10-25T12:03:00Z"]
     assert not (serve_tree.data / "logs" / "events.jsonl").exists()
+
+
+# #342: news-llm switched off from the env file, and the day's missed daily at start ------
+
+
+@pytest.mark.parametrize(
+    "value, skipped",
+    [
+        ("1", True),
+        ("true", True),
+        ("YES", True),
+        (" on ", True),
+        ("", False),
+        ("0", False),
+        ("false", False),
+        ("Off", False),
+        (None, False),
+    ],
+)
+def test_stock_skip_news_llm_switches_news_llm_off(tmp_path, monkeypatch, value, skipped):
+    """Decision 6 of #342: the env file (compose env_file) reaches serve's environment."""
+
+    if value is None:
+        monkeypatch.delenv(serve.SKIP_NEWS_LLM_ENV, raising=False)
+    else:
+        monkeypatch.setenv(serve.SKIP_NEWS_LLM_ENV, value)
+    args = serve_args("--data-dir", str(tmp_path))
+    assert serve.argument_problem(args) is None
+    runner = serve.Serve(args)
+    news, _ = runner.command("news", runner.now())
+    assert ("--skip-news-llm" in news) is skipped
+    daily, _ = runner.command("daily", runner.now())
+    assert "--skip-news-llm" not in daily
+
+
+def test_the_option_skips_news_llm_whatever_the_variable_says(tmp_path, monkeypatch):
+    monkeypatch.setenv(serve.SKIP_NEWS_LLM_ENV, "0")
+    runner = serve.Serve(serve_args("--data-dir", str(tmp_path), "--skip-news-llm"))
+    assert "--skip-news-llm" in runner.command("news", runner.now())[0]
+
+
+@pytest.mark.parametrize("value", ["2", "skip", "y"])
+def test_a_bad_stock_skip_news_llm_is_refused(monkeypatch, value):
+    monkeypatch.setenv(serve.SKIP_NEWS_LLM_ENV, value)
+    problem = serve.argument_problem(serve_args())
+    assert problem and serve.SKIP_NEWS_LLM_ENV in problem
+
+
+def test_the_env_example_documents_stock_skip_news_llm():
+    text = (ROOT / ".env.example").read_text(encoding="utf-8")
+    assert re.search(r"^STOCK_SKIP_NEWS_LLM=$", text, re.M), text
+
+
+# A Monday and a Saturday (Taipei).
+MONDAY = "2026-11-02"
+SATURDAY = "2026-11-07"
+
+
+def _runs_db(data: Path, *rows: tuple[str, str]) -> None:
+    data.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(data / "stock.db") as conn:
+        conn.execute(
+            "CREATE TABLE schedule_runs (id INTEGER PRIMARY KEY, job TEXT, "
+            "target_date DATE, status TEXT)"
+        )
+        conn.executemany(
+            "INSERT INTO schedule_runs (job, target_date, status) VALUES ('daily', ?, ?)",
+            rows,
+        )
+    conn.close()
+
+
+def _catchup(data: Path, now: str):
+    runner = serve.Serve(serve_args("--data-dir", str(data), "--now", now))
+    jobs = {job.id: job for job in runner.scheduler().get_jobs()}
+    return runner.missed_daily(), jobs.get("daily-catchup")
+
+
+@pytest.mark.parametrize(
+    "rows, now, reason",
+    [
+        # Started after 18:30 on a weekday with no complete daily of the day: run it once.
+        ((), f"{MONDAY}T19:05", "not_complete"),
+        (((MONDAY, "failed"), (MONDAY, "skipped")), f"{MONDAY}T21:40", "not_complete"),
+        (((MONDAY, "running"),), f"{MONDAY}T18:30", "not_complete"),
+        (((MONDAY, "non_trading_unconfirmed"),), f"{MONDAY}T20:00", "not_complete"),
+        # The day before does not count.
+        (((("2026-10-30", "success")),), f"{MONDAY}T19:05", "not_complete"),
+        # Complete, too early, or a weekend: nothing at start.
+        (((MONDAY, "failed"), (MONDAY, "success")), f"{MONDAY}T19:05", None),
+        (((MONDAY, "non_trading_day"),), f"{MONDAY}T22:00", None),
+        ((), f"{MONDAY}T18:29", None),
+        ((), f"{SATURDAY}T19:05", None),
+    ],
+)
+def test_serve_runs_the_missed_daily_of_the_day_once_at_start(tmp_path, rows, now, reason):
+    """Decision 5 of #342: a scheduler (re)created after 18:30 runs that day's daily."""
+
+    _runs_db(tmp_path / "data", *rows)
+    missed, catchup = _catchup(tmp_path / "data", now)
+    assert missed == reason
+    if reason is None:
+        assert catchup is None
+    else:
+        assert catchup is not None and catchup.args == ("daily",)
+        assert type(catchup.trigger).__name__ == "DateTrigger"
+        # As soon as the scheduler starts, on the real clock.
+        wait = catchup.trigger.run_date - datetime.now(TAIPEI)
+        assert abs(wait.total_seconds()) < 60
+
+
+def test_a_volume_without_a_database_runs_no_daily_at_start(tmp_path):
+    assert _catchup(tmp_path / "data", f"{MONDAY}T19:05") == (None, None)
+
+
+def test_an_unreadable_run_table_still_runs_the_daily_at_start(tmp_path):
+    data = tmp_path / "data"
+    data.mkdir(exist_ok=True)
+    sqlite3.connect(data / "stock.db").close()
+    missed, catchup = _catchup(data, f"{MONDAY}T19:05")
+    assert missed == "unreadable:OperationalError"
+    assert catchup is not None
+
+
+def test_the_catchup_reads_the_statuses_a_daily_counts_as_complete():
+    from worker.schedule_runs import COMPLETE_STATUSES
+
+    assert set(serve.DAILY_COMPLETE_STATUSES) == set(COMPLETE_STATUSES)
+
+
+def test_the_catchup_follows_the_first_daily_time(tmp_path):
+    _runs_db(tmp_path / "data")
+    runner = serve.Serve(
+        serve_args(
+            "--data-dir",
+            str(tmp_path / "data"),
+            "--daily-times",
+            "21:30,17:00",
+            "--now",
+            f"{MONDAY}T17:10",
+        )
+    )
+    assert runner.missed_daily() == "not_complete"
