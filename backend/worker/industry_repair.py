@@ -20,7 +20,6 @@ import hashlib
 import json
 from collections import Counter
 from datetime import date, timedelta, timezone
-from pathlib import Path
 from typing import Any, Callable
 
 from sqlalchemy import select

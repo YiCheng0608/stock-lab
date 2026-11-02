@@ -158,9 +158,11 @@ def test_an_unreadable_quote_table_is_counted_in_the_summary(
 ):
     with pipeline_env() as db:
         sessions, ids, records, evidence = _dormancy_market(db)
-        gone = db.query(RawPayload).filter(
-            RawPayload.data_as_of == sessions[10].isoformat()
-        ).one()
+        gone = (
+            db.query(RawPayload)
+            .filter(RawPayload.data_as_of == sessions[10].isoformat())
+            .one()
+        )
         Path(gone.payload_path).unlink()
         plan = pipeline.plan_instrument_status(db, records, evidence)
         tpex = plan["exchanges"]["TPEx"]

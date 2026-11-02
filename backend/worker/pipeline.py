@@ -7,7 +7,6 @@ import re
 from collections import defaultdict
 from dataclasses import asdict, dataclass, replace as replace_record
 from datetime import date, datetime, timedelta, timezone
-from pathlib import Path
 from statistics import median
 from typing import Any, Callable, Iterable, Mapping
 
@@ -3754,7 +3753,9 @@ def plan_instrument_status(
             if latest is not None
             else {
                 "status": "unverifiable",
-                "reason": "unreadable quote table" if unreadable else "missing quote table",
+                "reason": "unreadable quote table"
+                if unreadable
+                else "missing quote table",
             }
         )
         planned = len(absent) + len(dormant)

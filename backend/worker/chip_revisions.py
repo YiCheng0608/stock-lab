@@ -14,7 +14,6 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import date, timezone
-from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select

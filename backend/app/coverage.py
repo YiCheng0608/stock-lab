@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 from datetime import date
-from pathlib import Path
 from typing import Iterable
 
 from sqlalchemy import literal_column, select
@@ -195,7 +194,9 @@ def verified_taiex_sessions(
             if not raw.payload_path:
                 continue
             try:
-                payload = json.loads(payload_file(raw.payload_path).read_text(encoding="utf-8"))
+                payload = json.loads(
+                    payload_file(raw.payload_path).read_text(encoding="utf-8")
+                )
             except (OSError, UnicodeError, TypeError, ValueError):
                 continue
             try:

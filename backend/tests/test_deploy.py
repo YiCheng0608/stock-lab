@@ -829,7 +829,9 @@ def test_a_one_off_scheduler_is_not_taken_for_the_scheduler(harness):
     (lock,) = [c for c in harness.calls("docker") if c.startswith("exec -i ")]
     assert lock.startswith("exec -i c0ffee5c4ed01e7 "), lock
     inspected = [c for c in harness.calls("docker") if c.startswith("inspect ")]
-    assert inspected and all(c.endswith(" c0ffee5c4ed01e7") for c in inspected), inspected
+    assert inspected and all(c.endswith(" c0ffee5c4ed01e7") for c in inspected), (
+        inspected
+    )
 
 
 def test_with_only_a_one_off_scheduler_the_api_holds_the_locks_and_nothing_was_running(

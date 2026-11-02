@@ -885,7 +885,9 @@ def test_a_restarted_serve_does_not_wake_again_for_the_events_it_queued(
         (None, False),
     ],
 )
-def test_stock_skip_news_llm_switches_news_llm_off(tmp_path, monkeypatch, value, skipped):
+def test_stock_skip_news_llm_switches_news_llm_off(
+    tmp_path, monkeypatch, value, skipped
+):
     """Decision 6 of #342: the env file (compose env_file) reaches serve's environment."""
 
     if value is None:
@@ -961,7 +963,9 @@ def _catchup(data: Path, now: str):
         ((), f"{SATURDAY}T19:05", None),
     ],
 )
-def test_serve_runs_the_missed_daily_of_the_day_once_at_start(tmp_path, rows, now, reason):
+def test_serve_runs_the_missed_daily_of_the_day_once_at_start(
+    tmp_path, rows, now, reason
+):
     """Decision 5 of #342: a scheduler (re)created after 18:30 runs that day's daily."""
 
     _runs_db(tmp_path / "data", *rows)
