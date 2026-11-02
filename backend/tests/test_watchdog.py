@@ -47,6 +47,7 @@ pytestmark = pytest.mark.skipif(BASH is None, reason="bash is required")
 FAKE_GH = r"""#!/usr/bin/env bash
 d="$FAKE_DIR"
 printf '%s\n' "$*" >>"$d/gh_calls.log"
+[ -f "$d/gh_fail" ] && { echo boom >&2; exit 1; }
 while [ $# -gt 0 ]; do
   [ "$1" = --body-file ] && { cat "$2"; echo '-----'; } >>"$d/gh_bodies.txt"
   shift
@@ -69,7 +70,11 @@ class Watchdog:
         path.chmod(0o755)
 
     def run(
-        self, *args: str, now: int = NIGHT, python: str | None = None
+        self,
+        *args: str,
+        now: int = NIGHT,
+        python: str | None = None,
+        **extra: str,
     ) -> subprocess.CompletedProcess[str]:
         env = dict(os.environ)
         env.update(
@@ -78,7 +83,10 @@ class Watchdog:
             STOCK_DATA_DIR=self.data.as_posix(),
             STOCK_PYTHON=python or Path(sys.executable).as_posix(),
             WATCHDOG_NOW=str(now),
+            # The data check requests no official table in tests (#390).
+            WATCHDOG_DATA_CHECK_ARGS="--offline",
         )
+        env.update(extra)
         result = subprocess.run(
             [BASH, SCRIPT.as_posix(), *args],
             env=env,
@@ -868,3 +876,235 @@ def test_helper_connection_refuses_writes(tmp_path):
     finally:
         conn.close()
     assert "unknown_source=0" in helper.invariants(str(db), "2026-10-19")
+
+
+# --- daily data check (Issue #390) -------------------------------------------
+
+
+def _checked_day_db(path: Path, refetch: str | None) -> None:
+    """A full-schema database whose 2026-10-19 daily succeeded, with the 21:30
+    refetch step ``refetch`` (None: no refetch)."""
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.migrations import upgrade_database
+    from app.models import ScheduleRun, ScheduleRunStep
+
+    engine = create_engine(f"sqlite:///{path.as_posix()}")
+    try:
+        upgrade_database(engine)
+        with Session(engine) as db:
+            db.add(
+                ScheduleRun(
+                    job="daily",
+                    target_date=datetime(2026, 10, 19).date(),
+                    status="success",
+                    summary_json={"steps": {"collect": "success"}},
+                )
+            )
+            if refetch is not None:
+                skipped = ScheduleRun(
+                    job="daily",
+                    target_date=datetime(2026, 10, 19).date(),
+                    status="skipped",
+                    summary_json={"reason": "already_complete", "related_run_id": 1},
+                )
+                db.add(skipped)
+                db.flush()
+                db.add(
+                    ScheduleRunStep(
+                        schedule_run_id=skipped.id,
+                        step="institutional_refetch",
+                        status=refetch,
+                        error="TPEx: official endpoint retry exhausted"
+                        if refetch != "running"
+                        else None,
+                    )
+                )
+            db.commit()
+    finally:
+        engine.dispose()
+
+
+def _set_refetch(path: Path, status: str) -> None:
+    with sqlite3.connect(path) as conn:
+        conn.execute("UPDATE schedule_run_steps SET status=?", (status,))
+    conn.close()
+
+
+def _data_check_events(wd: Watchdog) -> list[str]:
+    return [event for event in wd.events() if event.startswith("data_check")]
+
+
+def test_a_clean_trading_day_is_checked_once(wd):
+    _daily_log_done(wd)
+    _checked_day_db(wd.data / "stock.db", "success")
+    wd.run()
+    wd.run(now=NIGHT + 15 * 60)
+    assert _data_check_events(wd) == ["data_check_done"]
+    assert " data_check_done date=2026-10-19 findings=0 " in wd.log()
+    assert wd.text("gh_calls.log") == ""
+
+
+def test_a_failed_refetch_is_commented_once_with_its_details(wd):
+    _daily_log_done(wd)
+    _checked_day_db(wd.data / "stock.db", "partial")
+    wd.run()
+    wd.run(now=NIGHT + 15 * 60)
+    assert _data_check_events(wd) == ["data_check_done"]
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
+    body = wd.text("gh_bodies.txt")
+    assert (
+        "當日資料核對：交易日 2026-10-19 寫進 DB 的資料與官方 raw 有 1 筆不一致" in body
+    )
+    assert "- 21:30 法人重抓失敗或沒有執行（`institutional_refetch`）：1 筆" in body
+    assert (
+        "| `institutional_refetch` | - | - | 2026-10-19 | `status` | success | partial |"
+        in body
+    )
+    assert "TPEx: official endpoint retry exhausted" in body
+
+
+def test_a_running_refetch_is_checked_after_it_ends(wd):
+    _daily_log_done(wd)
+    db = wd.data / "stock.db"
+    _checked_day_db(db, "running")
+    wd.run()
+    assert _data_check_events(wd) == ["data_check_pending"]
+    _set_refetch(db, "success")
+    wd.run(now=NIGHT + 15 * 60)
+    wd.run(now=NIGHT + 30 * 60)
+    assert _data_check_events(wd) == ["data_check_pending", "data_check_done"]
+
+
+def test_a_dry_run_does_not_settle_the_day(wd):
+    _daily_log_done(wd)
+    _checked_day_db(wd.data / "stock.db", "failed")
+    dry = wd.run("--dry-run")
+    assert "將在 #1 留言" in dry.stdout and "`institutional_refetch`" in dry.stdout
+    wd.run(now=NIGHT + 15 * 60)
+    assert _data_check_events(wd) == ["data_check_done", "data_check_done"]
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
+
+
+def test_the_data_check_waits_for_22_and_a_successful_daily(wd):
+    _daily_log_done(wd)
+    db = wd.data / "stock.db"
+    _checked_day_db(db, "failed")
+    wd.run(now=NIGHT - 20 * 60)  # 21:40
+    assert _data_check_events(wd) == []
+    with sqlite3.connect(db) as conn:
+        conn.execute("UPDATE schedule_runs SET status='partial' WHERE status='success'")
+    conn.close()
+    wd.run()
+    assert _data_check_events(wd) == []
+
+
+# #408 review: a day is settled only by a posted comment, never silently.
+
+LAST_RUN = NIGHT + 105 * 60  # 23:45 Taipei, the night's last run
+AFTER_MIDNIGHT = NIGHT + 135 * 60  # Tuesday 2026-10-20 00:15 Taipei
+
+FAKE_PYTHON = r"""#!/usr/bin/env bash
+# The real Python, except data-check as FAKE_HELPER says.
+prev=""
+for a in "$@"; do
+  [ "$prev" = --scratch ] && mkdir -p "$a/data-check-fake"
+  prev="$a"
+done
+case " $* " in
+  *" data-check "*)
+    case "$FAKE_HELPER" in
+      hang) exec sleep 30 ;;
+      fail) echo "boom from the helper" >&2; exit 3 ;;
+      garbage) echo "garbage"; exit 0 ;;
+    esac ;;
+esac
+exec "$REAL_PYTHON" "$@"
+"""
+
+
+def _fake_python(wd: Watchdog) -> str:
+    path = wd.bin / "fakepy"
+    path.write_text(FAKE_PYTHON, encoding="utf-8", newline="\n")
+    path.chmod(0o755)
+    return path.as_posix()
+
+
+def _helper_as(wd: Watchdog, mode: str, now: int) -> subprocess.CompletedProcess[str]:
+    return wd.run(
+        now=now,
+        python=_fake_python(wd),
+        FAKE_HELPER=mode,
+        REAL_PYTHON=Path(sys.executable).as_posix(),
+        WATCHDOG_DATA_CHECK_TIMEOUT="3",
+    )
+
+
+def test_a_failed_comment_leaves_the_day_to_the_next_run(wd):
+    _daily_log_done(wd)
+    _checked_day_db(wd.data / "stock.db", "partial")
+    (wd.fake / "gh_fail").write_text("", encoding="utf-8")
+    wd.run()
+    assert "anomaly_comment_failed" in wd.events()
+    assert _data_check_events(wd) == []
+    (wd.fake / "gh_fail").unlink()
+    wd.run(now=NIGHT + 15 * 60)
+    assert _data_check_events(wd) == ["data_check_done"]
+    assert "`institutional_refetch`" in wd.text("gh_bodies.txt")
+    assert len(wd.text("gh_calls.log").splitlines()) == 2
+
+
+@pytest.mark.parametrize(
+    ("mode", "event", "reason"),
+    [
+        ("hang", "data_check_failed date=2026-10-19 exit=124", "逾時（3 秒）"),
+        ("fail", "data_check_failed date=2026-10-19 exit=3", "boom from the helper"),
+        ("garbage", "data_check_failed date=2026-10-19 ", "輸出無法判讀（garbage）"),
+    ],
+)
+def test_a_check_that_cannot_finish_is_retried_then_commented_at_2345(
+    wd, mode, event, reason
+):
+    _daily_log_done(wd)
+    _checked_day_db(wd.data / "stock.db", "success")
+    _helper_as(wd, mode, NIGHT)
+    assert event in wd.log()
+    assert wd.text("gh_calls.log") == ""
+    _helper_as(wd, mode, LAST_RUN)
+    body = wd.text("gh_bodies.txt")
+    assert "當日資料核對：交易日 2026-10-19 沒有核對完，原因：" in body
+    assert reason in body
+    # Settled by the comment: no further check, no second comment.
+    _helper_as(wd, mode, AFTER_MIDNIGHT)
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
+    assert _data_check_events(wd) == ["data_check_failed", "data_check_failed"]
+    # The killed helper's temporary directory went with the work directory.
+    assert not list(wd.logs.glob(".watchdog.*"))
+
+
+def test_a_refetch_running_all_night_is_commented_at_2345(wd):
+    _daily_log_done(wd)
+    _checked_day_db(wd.data / "stock.db", "running")
+    wd.run()
+    wd.run(now=LAST_RUN)
+    assert _data_check_events(wd) == ["data_check_pending", "data_check_pending"]
+    assert "原因：21:30 法人重抓一直是 running" in wd.text("gh_bodies.txt")
+
+
+def test_a_day_the_night_did_not_check_is_checked_after_midnight(wd):
+    _daily_log_done(wd)
+    _checked_day_db(wd.data / "stock.db", "partial")
+    wd.run(now=AFTER_MIDNIGHT)
+    assert _data_check_events(wd) == ["data_check_done"]
+    assert "交易日 2026-10-19 寫進 DB 的資料與官方 raw 有 1 筆不一致" in wd.text(
+        "gh_bodies.txt"
+    )
+
+
+def test_a_day_the_night_left_failing_is_commented_on_its_one_catch_up(wd):
+    _daily_log_done(wd)
+    _checked_day_db(wd.data / "stock.db", "success")
+    _helper_as(wd, "fail", AFTER_MIDNIGHT)
+    assert "交易日 2026-10-19 沒有核對完" in wd.text("gh_bodies.txt")

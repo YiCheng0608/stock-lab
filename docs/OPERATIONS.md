@@ -145,6 +145,23 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 
 - `daily`：週一至週五台北 21:30 後，當日 `logs/daily-YYYYMMDD.log` 不存在或沒有 `end` 列。
 - `daily` 結果：週一至週五台北 22:00 後（21:30 那次已寫入 run 列）唯讀查當日目標的 `schedule_runs`：當天有 `success`／`non_trading_day` 就算完成（之後的 `skipped` 不影響）；否則取最後一筆（略過只指向別列的 `already_complete`／`already_running`），是 `partial`、`failed`、`non_trading_unconfirmed` 或 `skipped:<原因>`（例如 `low_memory`）就留言；仍在 `running` 的等下一輪，超過 2.5 小時視為 `failed`；當日 success 但 catchup 沒補齊（`catchup_incomplete`）也留言；有日誌卻沒有任何 run 列（worker 沒能啟動）也留言。
+- 當日資料核對（`data_check`，#390）：daily 結果是 `success` 的交易日，22:00 後以 `tools/ops/data_check.py` 唯讀（`mode=ro`、`query_only`）核對當日寫進 DB 的資料，每個交易日只核對到有結論為止，不修資料。
+  - 用 collector 自己的 parser 與 [§6.4 冪等](#64-重跑與回補)的寫入規則重讀當日 raw（`raw_payloads.payload_path` 指的檔）。日線（OHLC、成交股數與金額、暫停）與融資比對該列指向的 capture，或當日任一 capture（補空欄）；三大法人比對當日最新一份法人 capture（#387）。逐列逐欄，不抽樣。
+  - 除權息：當日的列比對寫入它的 TWT48U／tpex_exright_daily 列（套 #386 防呆）。另向官方要當日的 TWT49U（權類另要 TWT49UDetail）與 exDailyQ，總預算 120 秒：TWT48U 寫的列核對因子，其他列核對欄位，並列出 DB 有、官方結果表沒有的事件（明細讀不到的權類事件除外）。預算用完或讀不到時記 `action_official_unavailable`，前面的比對照常列出。
+  - 也列出：
+    - raw 有、DB 沒有的日線、籌碼列與除權息事件（含先前 TWT48U 已公告當日的）。
+    - 近 5 個交易日標的已建立、仍未補寫的 `unmatched_bar`（#388）。
+    - 上市、上櫃普通股（`stock`／`ipo`）列數比前 5 個交易日的中位數少 3% 以上（`列數 × 100 ≤ 中位數 × 97`）。
+    - 當日 21:30 法人重抓（#396）是 `failed`／`partial`。daily 在 21:00 前成功、之後沒有重抓（例如 21:30 被 `low_memory` 擋下）也列出：此時法人只跟 18:30 的資料比過。
+  - 同一事件在一次核對裡只列一筆，來源寫在說明欄：TWT48U 與官方表各自缺的同一事件、同一代號同一天的 `unmatched_bar` 與 `bar_missing`。跨日不合併：還沒補寫的 `unmatched_bar` 在之後 5 個交易日的核對裡都會再列一次。
+  - 一天什麼時候算核對完：
+    - 沒有不一致，或不一致已經在 #1 留言（key `data_check_<日期>`）時，記 `data_check_done`。`gh` 留言失敗不算，下一輪重新核對、重新留言；`--dry-run` 不算。
+    - 21:30 法人重抓仍在跑時記 `data_check_pending`；核對失敗、超過 4 分鐘或輸出無法判讀時記 `data_check_failed`。這幾種情況都是下一輪再試。
+    - 到當晚最後一輪（23:45）仍沒有結論時，以 key `data_check_incomplete_<日期>` 留一則「沒有核對完」，寫出原因，之後不再自動核對這一天。
+    - 當晚沒跑到（關機、過了午夜）的交易日，之後 4 天內的看門狗會補核一次，沒有結論就直接留「沒有核對完」。
+    - 每輪最多核對 2 天，先核舊的。DB 缺核對用的表時不判定。
+  - 處置：統籌依留言決定開 Issue 修寫入端，再依 [§6.4](#64-重跑與回補) 或該 Issue 的修正命令修資料。全部明細：`python tools/ops/watchdog_helper.py data-check <stock.db> <日期> --all`（`--offline` 不向官方要結果表）。
+  - 抓不到的：parser 今天仍以同樣方式讀錯的欄位（全歷史審查見 #391）；daily 沒有成功的交易日不核對。
 - `news`：最新的 `logs/news-*.log` 已超過 6 小時（連續 3 次）沒有更新。
 - `news_llm`：`stock.db` 最近 3 批判讀都是 `pending`；或 24 小時內最近 3 筆 `run_type=news_llm` 都是 `failed`（`running` 超過 90 分鐘也算）；或 news 日誌（今昨兩天的檔）24 小時內最後 3 個 `news_llm_exit=` 都是 `1`／`wrapper_error`（涵蓋表不存在等不寫 run 的失敗）。後兩者合為一則 `news_llm_failed` 留言；限 24 小時是為了 news 停擺後不再每天就舊失敗留言，停擺本身由上一條 `news` 判定。
 - 資料不變量（每輪、不分時段，唯讀查 `stock.db`；各條數字印在 stdout，`--dry-run` 可看）：
@@ -169,8 +186,9 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 | 停用／啟用 | `Disable-ScheduledTask -TaskPath \stock-lab\ -TaskName watchdog`／`Enable-ScheduledTask ...` |
 | 移除 | `powershell -ExecutionPolicy Bypass -File tools/ops/Register-Watchdog.ps1 -Unregister` |
 | 手動判定 | `bash tools/ops/watchdog.sh --dry-run`（只輸出將留的言與資料不變量的數字） |
+| 手動核對某交易日 | `python tools/ops/watchdog_helper.py data-check <stock.db> <YYYY-MM-DD> [--offline] [--all]`（唯讀，不記日誌、不留言） |
 
-工作以目前使用者、Interactive logon、隱藏執行，登入時才跑；同時只跑一個，10 分鐘逾時。日誌 `<資料目錄>/logs/watchdog.log`，每列為 UTC 時間、事件、`key=value` 與說明，沒有異常時記 `schedules_ok`；異常留言（每日一則）的頻率限制以此日誌判斷。同一時間只跑一個：Python 以 job 的同一套檔案鎖（`python -m worker.job lock`）持有 `<資料目錄>/locks/watchdog.lock` 並把腳本當子程序再跑一次，鎖由作業系統在 Python 結束時釋放（被強制終止也一樣，子程序一起結束），下一輪不必等；另一輪仍在跑時記 `locked` 並略過。找不到 Python 時不取鎖（排程的「前一次未結束不另起」仍擋重疊）。舊版的 `logs/watchdog.lock/` 目錄不再使用；DB 檢查因缺 Python 或讀 DB 失敗而沒跑時記 `python_missing`／`daily_check_failed`／`news_llm_check_failed`／`invariants_check_failed`，不記 `schedules_ok`。腳本路徑寫在工作參數裡，腳本改名或搬移後要在發佈 checkout 重跑「註冊或更新」。舊版（含開統籌）的日誌 `logs/ensure_coordinator.log` 不再寫入。
+工作以目前使用者、Interactive logon、隱藏執行，登入時才跑；同時只跑一個，10 分鐘逾時。日誌 `<資料目錄>/logs/watchdog.log`，每列為 UTC 時間、事件、`key=value` 與說明，沒有異常時記 `schedules_ok`；異常留言（每日一則）的頻率限制以此日誌判斷。同一時間只跑一個：Python 以 job 的同一套檔案鎖（`python -m worker.job lock`）持有 `<資料目錄>/locks/watchdog.lock` 並把腳本當子程序再跑一次，鎖由作業系統在 Python 結束時釋放（被強制終止也一樣，子程序一起結束），下一輪不必等；另一輪仍在跑時記 `locked` 並略過。找不到 Python 時不取鎖（排程的「前一次未結束不另起」仍擋重疊）。舊版的 `logs/watchdog.lock/` 目錄不再使用；DB 檢查因缺 Python 或讀 DB 失敗而沒跑時記 `python_missing`／`daily_check_failed`／`news_llm_check_failed`／`invariants_check_failed`／`data_check_failed`，不記 `schedules_ok`。腳本路徑寫在工作參數裡，腳本改名或搬移後要在發佈 checkout 重跑「註冊或更新」。舊版（含開統籌）的日誌 `logs/ensure_coordinator.log` 不再寫入。
 
 ### 6.2 daily／news 工作的註冊與管理
 
