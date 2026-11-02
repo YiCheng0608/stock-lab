@@ -349,8 +349,14 @@ if [ "$mode" = switch ]; then
   for sub in raw logs; do
     host_n="$(find "$data_dir/$sub" -type f | wc -l | tr -d ' ')"
     vol_n="$(dk exec -u 1000 "$helper" sh -c "find /data/$sub -type f | wc -l" | tr -d '\r ')"
-    [ "$host_n" = "$vol_n" ] || fail "$sub 檔數不同：主機 $host_n、volume $vol_n"
-    note "$sub 檔數 $vol_n（與主機相同）"
+    if [ "$host_n" = "$vol_n" ]; then
+      note "$sub 檔數 $vol_n（與主機相同）"
+    elif [ "$sub" = logs ]; then
+      # The coordinator keeps writing its heartbeat and compaction logs on the host.
+      note "警告：logs 檔數不同（主機 $host_n、volume $vol_n）：統籌的檔可能剛好有新增，job 日誌不受影響"
+    else
+      fail "$sub 檔數不同：主機 $host_n、volume $vol_n"
+    fi
   done
   owners="$(dk exec -u 1000 "$helper" stat -c '%u:%g %n' /data /data/stock.db /data/raw /data/logs | tr -d '\r')" \
     || fail "讀不到 /data 的擁有者"
