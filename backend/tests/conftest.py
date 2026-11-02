@@ -9,13 +9,16 @@ to their own ``tmp_path`` when they need to inspect a capture.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import stat
 import sys
 import tempfile
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -119,6 +122,147 @@ def _warn(failures):
         )
 
 
+# A session that is killed (a command timeout, a reaped background task, a closed
+# terminal) never reaches pytest_sessionfinish, so the fake repository of the test it was
+# in stays in its basetemp, and a later run on another basetemp never visits it: #386,
+# #394 and #392 each had close_task.sh --extra-dir refuse t<issue>/ for it (#422).
+# Every session therefore records itself where the next session, whatever its basetemp,
+# finds it: a record <token>.json in the runs directory naming the basetemp, and a marker
+# file .pytest-run-<token> in that basetemp, locked for as long as the session lives.
+# The OS drops the lock with a dead process, so a free lock means the session died.
+_RUNS_ENV = "PYTEST_RUNS_DIR"
+_MARKER = ".pytest-run-"
+
+
+def _runs_dir():
+    return Path(os.environ.get(_RUNS_ENV) or Path.home() / ".stock-lab-pytest-runs")
+
+
+def _hold(path, create=False):
+    """An exclusive lock on PATH as an open descriptor, or None when it is not free."""
+
+    try:
+        fd = os.open(path, os.O_RDWR | (os.O_CREAT if create else 0), 0o644)
+    except OSError:
+        return None
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        os.close(fd)
+        return None
+    return fd
+
+
+def _let_go(fd):
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+    finally:
+        os.close(fd)
+
+
+def _unlink(path):
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        pass
+    except OSError as error:
+        return (path, error)
+    return None
+
+
+def _register(basetemp, runs_dir):
+    """Record this session: lock a marker in BASETEMP, then write the record naming it."""
+
+    token = uuid.uuid4().hex
+    marker = Path(basetemp) / f"{_MARKER}{token}"
+    fd = _hold(marker, create=True)
+    if fd is None:
+        return None
+    record = Path(runs_dir) / f"{token}.json"
+    try:
+        record.parent.mkdir(parents=True, exist_ok=True)
+        part = record.with_suffix(".part")
+        part.write_text(json.dumps({"basetemp": str(basetemp)}), encoding="utf-8")
+        os.replace(part, record)
+    except OSError:
+        _let_go(fd)
+        _unlink(marker)
+        raise
+    return SimpleNamespace(fd=fd, marker=marker, record=record)
+
+
+def _sweep_dead_runs(runs_dir, failures):
+    """Delete the ``.git`` in the basetemp of every recorded session that died (#422).
+
+    A session counts as dead when the marker it locked in its basetemp is free. A record
+    whose marker is gone (the basetemp was emptied or reused since) is dropped without
+    touching the directory: nothing says it is still the basetemp of that session. What
+    is deleted is what ``_drop_repositories`` deletes at the end of a failed run; the
+    other files stay for debugging.
+    """
+
+    try:
+        records = [e.path for e in os.scandir(runs_dir) if e.name.endswith(".json")]
+    except OSError:
+        return
+    for record in sorted(records):
+        try:
+            with open(record, encoding="utf-8") as stream:
+                basetemp = Path(json.load(stream)["basetemp"])
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+        marker = basetemp / f"{_MARKER}{Path(record).stem}"
+        if not os.path.lexists(marker):
+            _unlink(record)
+            continue
+        fd = _hold(marker)
+        if fd is None:
+            continue
+        left = []
+        count = _drop_repositories(basetemp, left)
+        _let_go(fd)
+        failures.extend(left)
+        if count:
+            sys.stderr.write(
+                f"removed {count} .git left in {basetemp} by a pytest run that died "
+                "before it finished (#422)\n"
+            )
+        if not left:
+            # Kept for the next run when a .git would not go.
+            _unlink(marker)
+            _unlink(record)
+
+
+def pytest_sessionstart(session):
+    """Remove what earlier sessions that died left, then record this one (#422).
+
+    A failure here only prints a warning: it never changes the result of the run.
+    """
+
+    config, failures = session.config, []
+    try:
+        basetemp = config._tmp_path_factory.getbasetemp()
+        runs_dir = _runs_dir()
+        _sweep_dead_runs(runs_dir, failures)
+        config._stock_lab_run = _register(basetemp, runs_dir)
+    except Exception as error:
+        sys.stderr.write(
+            f"warning: this pytest run is not recorded: {type(error).__name__}: {error}\n"
+        )
+    _warn(failures)
+
+
 def pytest_sessionfinish(session, exitstatus):
     """Leave no repository in the run's basetemp, a ``--basetemp`` one included.
 
@@ -128,24 +272,35 @@ def pytest_sessionfinish(session, exitstatus):
     under tmp_path_retention_policy = "failed" (a skipped test's tmp_path, git's
     read-only object files). A green run removes the whole basetemp (#290). A run that
     fails or is interrupted keeps its files for debugging but not their ``.git``: the
-    next run may take another basetemp and never clear this one (#304).
+    next run may take another basetemp and never clear this one (#304). A run that dies
+    before this hook is cleared by the next run's pytest_sessionstart (#422).
     """
 
+    run = getattr(session.config, "_stock_lab_run", None)
+    if run is not None and run.fd is not None:
+        # An open file cannot be deleted on Windows; the record stays until the
+        # basetemp is clean, so a failed deletion below is retried by the next run.
+        _let_go(run.fd)
+        run.fd = None
+    failures = []
     factory = getattr(session.config, "_tmp_path_factory", None)
     basetemp = getattr(factory, "_basetemp", None)
-    if basetemp is None or not basetemp.is_dir():
-        return
-    failures = []
-    if exitstatus == 0:
-        shutil.rmtree(
-            basetemp,
-            onexc=lambda function, path, _: _retry_writable(function, path, failures),
-        )
-    elif count := _drop_repositories(basetemp, failures):
-        sys.stderr.write(
-            f"kept {basetemp} for debugging without its {count} .git (#304)\n"
-        )
+    if basetemp is not None and basetemp.is_dir():
+        if exitstatus == 0:
+            shutil.rmtree(
+                basetemp,
+                onexc=lambda function, path, _: _retry_writable(
+                    function, path, failures
+                ),
+            )
+        elif count := _drop_repositories(basetemp, failures):
+            sys.stderr.write(
+                f"kept {basetemp} for debugging without its {count} .git (#304)\n"
+            )
     _warn(failures)
+    if run is not None and not failures:
+        _unlink(run.marker)
+        _unlink(run.record)
 
 
 @pytest.fixture(autouse=True)
