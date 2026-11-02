@@ -1,0 +1,22 @@
+{
+  "items": [],
+  "pagination": {
+    "page": 1,
+    "page_size": 20,
+    "total": 0,
+    "total_pages": 0,
+    "has_previous": false,
+    "has_next": false
+  },
+  "summary": {
+    "open": 0,
+    "closed": 0
+  },
+  "meta": {
+    "tracking_version": "plan_tracking_v1",
+    "window_sessions": 20,
+    "slippage_bps": 5.0,
+    "round_trip_cost_bps": 30.0,
+    "simulated": true
+  }
+}

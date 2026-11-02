@@ -1,0 +1,111 @@
+{
+  "rule": "candidates.json 依名次前 3 檔",
+  "trading_date": "2026-11-02",
+  "items": [
+    {
+      "rank": 1,
+      "instrument": {
+        "id": 479,
+        "exchange": "TWSE",
+        "symbol": "2851",
+        "name": "中再保",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v1",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 49.0,
+        "entry_zone": {
+          "low": 48.09,
+          "high": 49.79
+        },
+        "invalid_price": 47.3,
+        "target_1": 51.71,
+        "target_2": 54.09,
+        "risk_reward": 1.5941,
+        "earliest_execution_date": null
+      },
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "回測 20 日均線且距均線僅 0.1%，三大法人 5 日與 20 日皆淨買超；籌碼 86、族群 94 為較高分項，金融產業熱度第 3。",
+        "levels": "規則的進場區 48.09～49.79，條件失效的停損 47.3，約在進場區下緣下方 0.79。第一目標 51.71，RR 約 1.59；第二目標 54.09。",
+        "risks": "新聞情緒 49 且近 3 日無關聯新聞，該分項缺乏具體依據；技術分項 71 相對偏低，回踩量比 0.8。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-11-02T13:49:02.515479+00:00",
+        "input_hash": "4328ccdf2bec822a04508b0524509b8331c28a6001aa87001c43a8a785a98294"
+      }
+    },
+    {
+      "rank": 2,
+      "instrument": {
+        "id": 155,
+        "exchange": "TWSE",
+        "symbol": "1626",
+        "name": "艾美特-KY",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v1",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 9.8,
+        "entry_zone": {
+          "low": 9.66,
+          "high": 9.8
+        },
+        "invalid_price": 9.67,
+        "target_1": 10.02,
+        "target_2": 10.21,
+        "risk_reward": 1.6923,
+        "earliest_execution_date": null
+      },
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "回測 20 日均線距 0.7%，技術 85、籌碼 81 較高；三大法人 5 日與 20 日淨買超，融資 5 日減少 0.9%。",
+        "levels": "規則的進場區 9.66～9.8，條件失效的停損 9.67 僅略高於進場區下緣，區間內價位可能已低於停損。第一目標 10.02，RR 約 1.69；第二目標 10.21。",
+        "risks": "族群分項無資料（當日無已排名且資料完整的產業或題材），權重涵蓋僅 80；新聞情緒 49 且近 3 日無關聯新聞。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-11-02T13:49:02.515479+00:00",
+        "input_hash": "b4628fb734ae28a76ef76028a038b25aef7b46216272123f566f7808636bf127"
+      }
+    },
+    {
+      "rank": 3,
+      "instrument": {
+        "id": 204,
+        "exchange": "TWSE",
+        "symbol": "2002",
+        "name": "中鋼",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v1",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 19.4,
+        "entry_zone": {
+          "low": 19.17,
+          "high": 19.45
+        },
+        "invalid_price": 19.12,
+        "target_1": 19.84,
+        "target_2": 20.22,
+        "risk_reward": 1.5714,
+        "earliest_execution_date": null
+      },
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "外資與投信 5 日淨買超，三大法人 20 日也淨買超，籌碼 91 最高；回測 20 日均線距 0.5%，鋼鐵產業熱度第 9。",
+        "levels": "規則的進場區 19.17～19.45，條件失效的停損 19.12，僅低於進場區下緣 0.05，距離很近。第一目標 19.84，RR 約 1.57；第二目標 20.22。",
+        "risks": "關聯新聞中一則 AI 判讀為正負並存（屬推論），另一則為10月出貨月減5.66%；新聞情緒 49 屬中性偏弱。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-11-02T13:49:02.515479+00:00",
+        "input_hash": "e7ea665009704dd3c687500191f8633aca0565d6acc08ab62f2d808cc29ac07f"
+      }
+    }
+  ]
+}

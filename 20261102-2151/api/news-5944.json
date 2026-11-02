@@ -1,0 +1,254 @@
+{
+  "id": "5944",
+  "canonical_key": "news:cnyes:d443305b7639b07b8ede6dede606015a5ff3c2f5c03038ed65293973290a2125",
+  "dedupe_cluster_id": "news-title:1d5a5600193e2bce579eaac4a8e10272",
+  "category": "domestic",
+  "source_kind": "media",
+  "source_name": "鉅亨網",
+  "source": {
+    "name": "鉅亨網",
+    "url": "https://news.cnyes.com/news/id/6644156",
+    "url_kind": "item"
+  },
+  "source_item_id": "https://news.cnyes.com/news/id/6644156",
+  "title": "群益00982A擬配0.78元再創新高 年化配息率逾15%",
+  "summary": "根據群益投信官網最新配息公告顯示，主動群益台灣強棒(00982A-TW)公告第6次配息資訊，繼今年5月提升配息後，本次再度提高配息金額，預估每股配發金額0.78元，相較前次成長近22%，改寫新高。以11月2日收盤價20.65元來推算，預估單次配息率約3.78%，年化配息率約15.11%，收益水準亮眼",
+  "description": "根據群益投信官網最新配息公告顯示，主動群益台灣強棒(00982A-TW)公告第6次配息資訊，繼今年5月提升配息後，本次再度提高配息金額，預估每股配發金額0.78元，相較前次成長近22%，改寫新高。以11月2日收盤價20.65元來推算，預估單次配息率約3.78%，年化配息率約15.11%，收益水準亮眼",
+  "summary_preview": "根據群益投信官網最新配息公告顯示，主動群益台灣強棒(00982A-TW)公告第6次配息資訊，繼今年5月提升配息後，本次再度提高配息金額，預估每股配發金額0.78元，相較前次成長近22%，改寫新高。以11月2日收盤價20.65元來推算，預估…",
+  "language": "zh-Hant",
+  "published_at": "2026-11-02T11:43:58+00:00",
+  "event_at": null,
+  "event_date": null,
+  "display_time": "2026-11-02T11:43:58+00:00",
+  "time_basis": "published",
+  "time_precision": "datetime",
+  "time_consistency": "verified",
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "news_item",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_market_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "event.event_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.event_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-11-02T11:43:58+00:00",
+        "utc": "2026-11-02T11:43:58+00:00",
+        "date": null,
+        "source": "news_item.published_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-11-02T12:00:04.384063+00:00",
+        "utc": "2026-11-02T12:00:04.384063+00:00",
+        "date": null,
+        "source": "news_item.collected_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_generated_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_at_not_applicable",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_date_not_applicable",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-11-02T13:59:20.162447+00:00",
+    "legacy": {
+      "published_at": "2026-11-02T11:43:58+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-11-02T11:43:58",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "collected_at": "2026-11-02T12:00:04.384063+00:00"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+      "A collection timestamp does not prove when the source first became available.",
+      "Historical decision and generation times are not persisted by the NewsItem projection."
+    ]
+  },
+  "response_generated_at": "2026-11-02T13:59:20.162447+00:00",
+  "collected_at": "2026-11-02T12:00:04.384063+00:00",
+  "symbols": [],
+  "instruments": [],
+  "themes": [],
+  "theme_ids": [],
+  "impact": {
+    "scope": "unknown",
+    "direction": "unknown",
+    "rationale": null,
+    "method": "rule:exact-name-code/v1",
+    "confidence": "unknown"
+  },
+  "impact_scope": "unknown",
+  "impact_direction": "unknown",
+  "confidence": "unknown",
+  "status": "active",
+  "content_hash": "1549a143783beebc50e825c03ae7d794751ac07a9801eea004ace8632437ba37",
+  "detail_url": "/news/5944",
+  "ai": {
+    "inference": true,
+    "status": "done",
+    "summary": "主動群益台灣強棒(00982A)公告第6次配息，預估每股0.78元，較前次成長近22%；以收盤價20.65元推算年化配息率約15.11%。",
+    "symbol_candidates": [
+      {
+        "exchange": "TWSE",
+        "symbol": "00982A",
+        "name": "主動群益台灣強棒",
+        "exchange_corrected": false,
+        "reason": "新聞直接點名該ETF配息創新高",
+        "confidence": "high",
+        "verified": false
+      }
+    ],
+    "theme_candidates": [
+      {
+        "theme": "高股息ETF",
+        "reason": "00982A提高配息金額，年化配息率約15.11%"
+      }
+    ],
+    "impact_direction": "positive",
+    "impact_scope": "instrument",
+    "impact_rationale": "配息金額創新高，對該ETF有正面題材。",
+    "unsupported": false,
+    "model": "claude-sonnet-5-5",
+    "prompt_version": "news_v2",
+    "input_hash": "f46809a03fd46720811034ef78c23f34022f057a24a7c3259196e8e8da89dc18",
+    "generated_at": "2026-11-02T12:00:59.691617+00:00"
+  },
+  "provenance": {
+    "event_id": null,
+    "raw_payload_id": 8733,
+    "endpoint": "https://news.cnyes.com/rss/v1/news/category/tw_stock",
+    "data_as_of": "2026-11-02T12:00:04.384063"
+  }
+}

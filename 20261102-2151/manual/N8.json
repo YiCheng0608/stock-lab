@@ -1,0 +1,260 @@
+{
+  "rule": "/news?category=domestic&limit=100（依 next_cursor 往後最多 5 頁）中台北發布日 = D（2026-11-02）且有 AI 判讀的前 5 則，API 順序",
+  "items": [
+    {
+      "id": "5961",
+      "title": "遠傳小金雞博弘前三季營收創高 專業服務發威 營業利益順利轉正",
+      "source": {
+        "name": "工商時報",
+        "url": "https://www.ctee.com.tw/news/20261102701838-430201",
+        "url_kind": "item"
+      },
+      "published_at": "2026-11-02T11:50:23+00:00",
+      "summary": "遠傳旗下子公司博弘雲端（6997）2日董事會通過第三季財報，受惠 AI 及雲端數位轉型持續成長，以及專業服務業務快速擴張，合併營收14.50 億元，年增 29.3％，稅後純益年成長35.9％，每股稅後純益（EPS）1.30 元。累計前三季營收41.51 億元，創歷史新高，營業利益亦順利轉正，EPS為0.44 元。 新任總經理陳仲儒表示，博弘將致力提升高附加價值服務比重、推動營收與獲利結構持續改",
+      "description": "遠傳旗下子公司博弘雲端（6997）2日董事會通過第三季財報，受惠 AI 及雲端數位轉型持續成長，以及專業服務業務快速擴張，合併營收14.50 億元，年增 29.3％，稅後純益年成長35.9％，每股稅後純益（EPS）1.30 元。累計前三季營收41.51 億元，創歷史新高，營業利益亦順利轉正，EPS為0.44 元。 新任總經理陳仲儒表示，博弘將致力提升高附加價值服務比重、推動營收與獲利結構持續改",
+      "instruments": [
+        {
+          "exchange": "TPEx",
+          "symbol": "6997",
+          "name": "博弘"
+        }
+      ],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "遠傳旗下博弘雲端第三季合併營收14.50 億元，年增 29.3％，每股稅後純益1.30 元；累計前三季營收41.51 億元創歷史新高，營業利益轉正。",
+        "symbol_candidates": [
+          {
+            "exchange": "TPEx",
+            "symbol": "6997",
+            "name": "博弘",
+            "exchange_corrected": true,
+            "reason": "博弘雲端（6997）公布第三季財報與前三季營收創高",
+            "confidence": "high",
+            "verified": false
+          },
+          {
+            "exchange": "TWSE",
+            "symbol": "4904",
+            "name": "遠傳",
+            "exchange_corrected": false,
+            "reason": "博弘為遠傳旗下子公司",
+            "confidence": "medium",
+            "verified": false
+          }
+        ],
+        "theme_candidates": [
+          {
+            "theme": "雲端服務",
+            "reason": "博弘受惠 AI 及雲端數位轉型持續成長"
+          }
+        ],
+        "impact_direction": "positive",
+        "impact_scope": "instrument",
+        "impact_rationale": "營收創高、稅後純益年成長35.9％且營業利益轉正。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v2",
+        "input_hash": "eef43f52123fe5640a75c1098ded48403ef607c2550969471eacb451bb924f5a",
+        "generated_at": "2026-11-02T12:00:59.691617+00:00"
+      }
+    },
+    {
+      "id": "5942",
+      "title": "營收速報 - 德律(3030)10月營收9.26億元年增率高達71.93％",
+      "source": {
+        "name": "鉅亨網",
+        "url": "https://news.cnyes.com/news/id/6644191",
+        "url_kind": "item"
+      },
+      "published_at": "2026-11-02T11:50:17+00:00",
+      "summary": "德律(3030-TW)今天公告2026年10月營收為新台幣9.26億元，年增率71.93%，月增率6.73%。 今年1-10月累計營收為92.13億元，累計年增率33.04%。 最新價為254.5元，近5日股價下跌-3.23%，相關其他電子下跌-2.13%，短期股價無明顯表現。近5日籌碼",
+      "description": "德律(3030-TW)今天公告2026年10月營收為新台幣9.26億元，年增率71.93%，月增率6.73%。 今年1-10月累計營收為92.13億元，累計年增率33.04%。 最新價為254.5元，近5日股價下跌-3.23%，相關其他電子下跌-2.13%，短期股價無明顯表現。近5日籌碼",
+      "instruments": [
+        {
+          "exchange": "TWSE",
+          "symbol": "3030",
+          "name": "德律"
+        }
+      ],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "德律公告2026年10月營收9.26億元，年增率71.93%，月增率6.73%；1-10月累計營收92.13億元，累計年增率33.04%。",
+        "symbol_candidates": [
+          {
+            "exchange": "TWSE",
+            "symbol": "3030",
+            "name": "德律",
+            "exchange_corrected": false,
+            "reason": "德律公告10月營收年增71.93%",
+            "confidence": "high",
+            "verified": false
+          }
+        ],
+        "theme_candidates": [
+          {
+            "theme": "電子檢測設備",
+            "reason": "德律10月營收大幅年增"
+          }
+        ],
+        "impact_direction": "positive",
+        "impact_scope": "instrument",
+        "impact_rationale": "單月與累計營收均年增。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v2",
+        "input_hash": "c3009ef7e177951344a1be83a18c258179e1ef024e2fdc8dbb033f9bd559b3fa",
+        "generated_at": "2026-11-02T12:00:59.691617+00:00"
+      }
+    },
+    {
+      "id": "5943",
+      "title": "TrendForce: 預估2027年AI網通與互連產值將達2798億美元",
+      "source": {
+        "name": "鉅亨網",
+        "url": "https://news.cnyes.com/news/id/6644134",
+        "url_kind": "item"
+      },
+      "published_at": "2026-11-02T11:46:21+00:00",
+      "summary": "TrendForce估AI網通與互連產值2027年增至2,798億美元，年複合成長率95%。 2027年交換器、NIC／DPU、可插拔光模組產值分別達1,050億、574億、841億美元，合計占整體約88%。 Scale-up占比將由11%升至24%，800G轉向1.6T帶動營收。",
+      "description": "TrendForce估AI網通與互連產值2027年增至2,798億美元，年複合成長率95%。 2027年交換器、NIC／DPU、可插拔光模組產值分別達1,050億、574億、841億美元，合計占整體約88%。 Scale-up占比將由11%升至24%，800G轉向1.6T帶動營收。",
+      "instruments": [],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "TrendForce估AI網通與互連產值2027年增至2,798億美元，年複合成長率95%；Scale-up占比將由11%升至24%。",
+        "symbol_candidates": [],
+        "theme_candidates": [
+          {
+            "theme": "AI 網通",
+            "reason": "TrendForce估2027年AI網通與互連產值達2,798億美元"
+          },
+          {
+            "theme": "光通訊",
+            "reason": "可插拔光模組產值預估達841億美元，800G轉向1.6T"
+          }
+        ],
+        "impact_direction": "positive",
+        "impact_scope": "theme",
+        "impact_rationale": "預估產值高成長，交換器、NIC／DPU、光模組占比大。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v2",
+        "input_hash": "13010e860bb70e9e99c999f82df836476c514e0ad672529495a86688b6d7f19d",
+        "generated_at": "2026-11-02T12:00:59.691617+00:00"
+      }
+    },
+    {
+      "id": "5944",
+      "title": "群益00982A擬配0.78元再創新高 年化配息率逾15%",
+      "source": {
+        "name": "鉅亨網",
+        "url": "https://news.cnyes.com/news/id/6644156",
+        "url_kind": "item"
+      },
+      "published_at": "2026-11-02T11:43:58+00:00",
+      "summary": "根據群益投信官網最新配息公告顯示，主動群益台灣強棒(00982A-TW)公告第6次配息資訊，繼今年5月提升配息後，本次再度提高配息金額，預估每股配發金額0.78元，相較前次成長近22%，改寫新高。以11月2日收盤價20.65元來推算，預估單次配息率約3.78%，年化配息率約15.11%，收益水準亮眼",
+      "description": "根據群益投信官網最新配息公告顯示，主動群益台灣強棒(00982A-TW)公告第6次配息資訊，繼今年5月提升配息後，本次再度提高配息金額，預估每股配發金額0.78元，相較前次成長近22%，改寫新高。以11月2日收盤價20.65元來推算，預估單次配息率約3.78%，年化配息率約15.11%，收益水準亮眼",
+      "instruments": [],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "主動群益台灣強棒(00982A)公告第6次配息，預估每股0.78元，較前次成長近22%；以收盤價20.65元推算年化配息率約15.11%。",
+        "symbol_candidates": [
+          {
+            "exchange": "TWSE",
+            "symbol": "00982A",
+            "name": "主動群益台灣強棒",
+            "exchange_corrected": false,
+            "reason": "新聞直接點名該ETF配息創新高",
+            "confidence": "high",
+            "verified": false
+          }
+        ],
+        "theme_candidates": [
+          {
+            "theme": "高股息ETF",
+            "reason": "00982A提高配息金額，年化配息率約15.11%"
+          }
+        ],
+        "impact_direction": "positive",
+        "impact_scope": "instrument",
+        "impact_rationale": "配息金額創新高，對該ETF有正面題材。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v2",
+        "input_hash": "f46809a03fd46720811034ef78c23f34022f057a24a7c3259196e8e8da89dc18",
+        "generated_at": "2026-11-02T12:00:59.691617+00:00"
+      }
+    },
+    {
+      "id": "5971",
+      "title": "AI股災虛驚一場？陳龍曝台股4大反攻理由：點名這幾檔強勢標的",
+      "source": {
+        "name": "Yahoo奇摩股市",
+        "url": "https://tw.news.yahoo.com/ai%E8%82%A1%E7%81%BD%E8%99%9B%E9%A9%9A-%E5%A0%B4-%E9%99%B3%E9%BE%8D%E6%9B%9D%E5%8F%B0%E8%82%A14%E5%A4%A7%E5%8F%8D%E6%94%BB%E7%90%86%E7%94%B1-%E9%BB%9E%E5%90%8D%E9%80%99%E5%B9%BE%E6%AA%94%E5%BC%B7%E5%8B%A2%E6%A8%99%E7%9A%84-114100696.html",
+        "url_kind": "item"
+      },
+      "published_at": "2026-11-02T11:41:00+00:00",
+      "summary": "台股今日震盪收在44920點，分析師陳龍直言AI股災為虛驚一場，提出看好台股大反攻的4大核心理由，並點名台積電（2330）、鴻海（2317）等重點關注標的。（記者唐家興）",
+      "description": "台股今日震盪收在44920點，分析師陳龍直言AI股災為虛驚一場，提出看好台股大反攻的4大核心理由，並點名台積電（2330）、鴻海（2317）等重點關注標的。（記者唐家興）",
+      "instruments": [
+        {
+          "exchange": "TWSE",
+          "symbol": "2317",
+          "name": "鴻海"
+        },
+        {
+          "exchange": "TWSE",
+          "symbol": "2330",
+          "name": "台積電"
+        }
+      ],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "台股今日收在44920點，分析師陳龍認為AI股災為虛驚一場，提出4大看好反攻理由，並點名台積電（2330）、鴻海（2317）等標的。",
+        "symbol_candidates": [
+          {
+            "exchange": "TWSE",
+            "symbol": "2330",
+            "name": "台積電",
+            "exchange_corrected": false,
+            "reason": "分析師陳龍點名台積電為重點關注標的",
+            "confidence": "high",
+            "verified": false
+          },
+          {
+            "exchange": "TWSE",
+            "symbol": "2317",
+            "name": "鴻海",
+            "exchange_corrected": false,
+            "reason": "分析師陳龍點名鴻海為重點關注標的",
+            "confidence": "high",
+            "verified": false
+          }
+        ],
+        "theme_candidates": [
+          {
+            "theme": "AI 概念股",
+            "reason": "分析師認為AI股災為虛驚一場"
+          }
+        ],
+        "impact_direction": "positive",
+        "impact_scope": "market",
+        "impact_rationale": "分析師看好台股大反攻。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v2",
+        "input_hash": "c03acf6b3e2704dab3be0f6eec008b336cbae3c6ce84134483b8bf599081a772",
+        "generated_at": "2026-11-02T12:00:59.691617+00:00"
+      }
+    }
+  ]
+}

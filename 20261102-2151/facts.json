@@ -1,0 +1,14 @@
+{
+  "market_latest_trading_date": "2026-11-02",
+  "group_scores_latest_trading_date": "2026-11-02",
+  "candidate_run_latest_trading_date": "2026-11-02",
+  "candidate_count_latest": 20,
+  "news_items": 5993,
+  "news_latest_published_at": "2026-11-02 11:50:23.000000",
+  "news_llm_done": 5853,
+  "theme_suggestions": 1027,
+  "tracking_plans_open": 0,
+  "tracking_plans_closed": 0,
+  "portfolio_positions": 0,
+  "alembic_version": "0017_tracking_plans"
+}

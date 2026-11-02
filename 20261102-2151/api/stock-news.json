@@ -1,0 +1,330 @@
+{
+  "items": [
+    {
+      "id": "2162",
+      "canonical_key": "news:ctee:54a8f1cd18e36d093affad2f5d97ab6dfa92da7ff4dc224d8a5c2be08e62ffa5",
+      "dedupe_cluster_id": "news-title:a2e605f5ad797dbd6fc3d05b29bec25e",
+      "category": "domestic",
+      "source_kind": "media",
+      "source_name": "工商時報",
+      "source": {
+        "name": "工商時報",
+        "url": "https://www.ctee.com.tw/news/20261022701214-430201",
+        "url_kind": "item"
+      },
+      "source_item_id": "20261022701214",
+      "title": "《類股》海外掛牌發酵！台泥大漲近5% 領軍水泥股齊揚",
+      "summary": "【時報記者郭鴻慧台北報導】台泥(1101)海外掛牌利多持續發酵，今(22)日開高後盤中漲幅一度逼近5%，成長匯聚水泥類股多頭人氣，亞泥(1102)、嘉泥(1103)、環泥(1104)等紛紛揚升，推動水泥數漲幅在3%左右，成為盤面上的強勢焦點之一。 台泥短線因歐洲水泥事業Cimpor獲通過海外掛牌而激勵股價走揚，2026(今)年前9月合併營收年增3.3%，成長主要源自土耳其與葡萄牙水泥業務的挹",
+      "description": "【時報記者郭鴻慧台北報導】台泥(1101)海外掛牌利多持續發酵，今(22)日開高後盤中漲幅一度逼近5%，成長匯聚水泥類股多頭人氣，亞泥(1102)、嘉泥(1103)、環泥(1104)等紛紛揚升，推動水泥數漲幅在3%左右，成為盤面上的強勢焦點之一。 台泥短線因歐洲水泥事業Cimpor獲通過海外掛牌而激勵股價走揚，2026(今)年前9月合併營收年增3.3%，成長主要源自土耳其與葡萄牙水泥業務的挹",
+      "summary_preview": "【時報記者郭鴻慧台北報導】台泥(1101)海外掛牌利多持續發酵，今(22)日開高後盤中漲幅一度逼近5%，成長匯聚水泥類股多頭人氣，亞泥(1102)、嘉泥(1103)、環泥(1104)等紛紛揚升，推動水泥數漲幅在3%左右，成為盤面上的強勢焦…",
+      "language": "zh-Hant",
+      "published_at": "2026-10-22T04:41:21+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-10-22T04:41:21+00:00",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "event.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-10-22T04:41:21+00:00",
+            "utc": "2026-10-22T04:41:21+00:00",
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-10-22T06:00:19.823088+00:00",
+            "utc": "2026-10-22T06:00:19.823088+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-11-02T13:59:10.937983+00:00",
+        "legacy": {
+          "published_at": "2026-10-22T04:41:21+00:00",
+          "event_at": null,
+          "event_date": null,
+          "display_time": "2026-10-22T04:41:21",
+          "time_basis": "published",
+          "time_precision": "datetime",
+          "time_consistency": "verified",
+          "collected_at": "2026-10-22T06:00:19.823088+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-11-02T13:59:10.937983+00:00",
+      "collected_at": "2026-10-22T06:00:19.823088+00:00",
+      "symbols": [
+        "TWSE:1101",
+        "TWSE:1102",
+        "TWSE:1103",
+        "TWSE:1104"
+      ],
+      "instruments": [
+        {
+          "exchange": "TWSE",
+          "symbol": "1101",
+          "name": "台泥"
+        },
+        {
+          "exchange": "TWSE",
+          "symbol": "1102",
+          "name": "亞泥"
+        },
+        {
+          "exchange": "TWSE",
+          "symbol": "1103",
+          "name": "嘉泥"
+        },
+        {
+          "exchange": "TWSE",
+          "symbol": "1104",
+          "name": "環泥"
+        }
+      ],
+      "themes": [
+        {
+          "theme_id": "official-industry-4c9bd2fdec1b2e5f",
+          "display_name": "水泥"
+        }
+      ],
+      "theme_ids": [
+        "official-industry-4c9bd2fdec1b2e5f"
+      ],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "rule:exact-name-code/v1",
+        "confidence": "unknown"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "unknown",
+      "status": "active",
+      "content_hash": "f42ba100711d148c5200d2be6a0555eff9e07c05fb8fcce09fab8eee9d07832a",
+      "detail_url": "/news/2162",
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "台泥海外掛牌獲通過，股價盤中大漲近5%，亞泥、嘉泥、環泥等水泥股同步走揚。",
+        "symbol_candidates": [
+          {
+            "exchange": "TWSE",
+            "symbol": "1101",
+            "name": "台泥",
+            "exchange_corrected": false,
+            "reason": "標題點名台泥海外掛牌利多",
+            "confidence": "high",
+            "verified": false
+          },
+          {
+            "exchange": "TWSE",
+            "symbol": "1102",
+            "name": "亞泥",
+            "exchange_corrected": false,
+            "reason": "摘要點名亞泥同步走揚",
+            "confidence": "high",
+            "verified": false
+          },
+          {
+            "exchange": "TWSE",
+            "symbol": "1103",
+            "name": "嘉泥",
+            "exchange_corrected": false,
+            "reason": "摘要點名嘉泥同步走揚",
+            "confidence": "high",
+            "verified": false
+          },
+          {
+            "exchange": "TWSE",
+            "symbol": "1104",
+            "name": "環泥",
+            "exchange_corrected": false,
+            "reason": "摘要點名環泥同步走揚",
+            "confidence": "high",
+            "verified": false
+          }
+        ],
+        "theme_candidates": [
+          {
+            "theme": "水泥",
+            "reason": "水泥類股齊揚"
+          },
+          {
+            "theme": "海外掛牌",
+            "reason": "台泥歐洲子公司獲准海外掛牌"
+          }
+        ],
+        "impact_direction": "positive",
+        "impact_scope": "instrument",
+        "impact_rationale": "海外掛牌利多帶動台泥及水泥類股走強",
+        "unsupported": false,
+        "model": "claude-haiku-5-5",
+        "prompt_version": "news_v1",
+        "input_hash": "f4c6d65602eac928b43dea25de55050f7525fbd94c585e51744261dc28e7c67b",
+        "generated_at": "2026-10-22T06:01:53.365803+00:00"
+      },
+      "provenance": {
+        "event_id": null,
+        "raw_payload_id": 7123,
+        "endpoint": "https://www.ctee.com.tw/rss_web/livenews/stock",
+        "data_as_of": "2026-10-22T06:00:19.823088"
+      }
+    }
+  ],
+  "meta": {
+    "limit": 50,
+    "next_cursor": null,
+    "has_more": false,
+    "sort": "display_time_desc,time_basis_desc,time_precision_desc,canonical_key_desc,id_desc",
+    "data_as_of": "2026-11-02",
+    "total": 1
+  }
+}

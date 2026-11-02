@@ -1,0 +1,277 @@
+{
+  "id": "5971",
+  "canonical_key": "news:yahoo_tw:5b8ebf285d1a205abba658acb4f9bc5c1f11bf6ce34774aa780626d05479b287",
+  "dedupe_cluster_id": "news-title:70ecd2e08c1bef5a1971e860a813334e",
+  "category": "domestic",
+  "source_kind": "media",
+  "source_name": "Yahoo奇摩股市",
+  "source": {
+    "name": "Yahoo奇摩股市",
+    "url": "https://tw.news.yahoo.com/ai%E8%82%A1%E7%81%BD%E8%99%9B%E9%A9%9A-%E5%A0%B4-%E9%99%B3%E9%BE%8D%E6%9B%9D%E5%8F%B0%E8%82%A14%E5%A4%A7%E5%8F%8D%E6%94%BB%E7%90%86%E7%94%B1-%E9%BB%9E%E5%90%8D%E9%80%99%E5%B9%BE%E6%AA%94%E5%BC%B7%E5%8B%A2%E6%A8%99%E7%9A%84-114100696.html",
+    "url_kind": "item"
+  },
+  "source_item_id": null,
+  "title": "AI股災虛驚一場？陳龍曝台股4大反攻理由：點名這幾檔強勢標的",
+  "summary": "台股今日震盪收在44920點，分析師陳龍直言AI股災為虛驚一場，提出看好台股大反攻的4大核心理由，並點名台積電（2330）、鴻海（2317）等重點關注標的。（記者唐家興）",
+  "description": "台股今日震盪收在44920點，分析師陳龍直言AI股災為虛驚一場，提出看好台股大反攻的4大核心理由，並點名台積電（2330）、鴻海（2317）等重點關注標的。（記者唐家興）",
+  "summary_preview": "台股今日震盪收在44920點，分析師陳龍直言AI股災為虛驚一場，提出看好台股大反攻的4大核心理由，並點名台積電（2330）、鴻海（2317）等重點關注標的。（記者唐家興）",
+  "language": "zh-Hant",
+  "published_at": "2026-11-02T11:41:00+00:00",
+  "event_at": null,
+  "event_date": null,
+  "display_time": "2026-11-02T11:41:00+00:00",
+  "time_basis": "published",
+  "time_precision": "datetime",
+  "time_consistency": "verified",
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "news_item",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_market_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "event.event_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.event_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-11-02T11:41:00+00:00",
+        "utc": "2026-11-02T11:41:00+00:00",
+        "date": null,
+        "source": "news_item.published_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-11-02T12:00:08.983580+00:00",
+        "utc": "2026-11-02T12:00:08.983580+00:00",
+        "date": null,
+        "source": "news_item.collected_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_generated_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_at_not_applicable",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_date_not_applicable",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-11-02T13:59:20.319263+00:00",
+    "legacy": {
+      "published_at": "2026-11-02T11:41:00+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-11-02T11:41:00",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "collected_at": "2026-11-02T12:00:08.983580+00:00"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+      "A collection timestamp does not prove when the source first became available.",
+      "Historical decision and generation times are not persisted by the NewsItem projection."
+    ]
+  },
+  "response_generated_at": "2026-11-02T13:59:20.319263+00:00",
+  "collected_at": "2026-11-02T12:00:08.983580+00:00",
+  "symbols": [
+    "TWSE:2317",
+    "TWSE:2330"
+  ],
+  "instruments": [
+    {
+      "exchange": "TWSE",
+      "symbol": "2317",
+      "name": "鴻海"
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "2330",
+      "name": "台積電"
+    }
+  ],
+  "themes": [],
+  "theme_ids": [],
+  "impact": {
+    "scope": "instrument",
+    "direction": "unknown",
+    "rationale": null,
+    "method": "rule:exact-name-code/v1",
+    "confidence": "unknown"
+  },
+  "impact_scope": "instrument",
+  "impact_direction": "unknown",
+  "confidence": "unknown",
+  "status": "active",
+  "content_hash": "cb899bfebc6b626671b48d79e62a8f0a65ef25a99d4c956a1a65e3b0c2b64562",
+  "detail_url": "/news/5971",
+  "ai": {
+    "inference": true,
+    "status": "done",
+    "summary": "台股今日收在44920點，分析師陳龍認為AI股災為虛驚一場，提出4大看好反攻理由，並點名台積電（2330）、鴻海（2317）等標的。",
+    "symbol_candidates": [
+      {
+        "exchange": "TWSE",
+        "symbol": "2330",
+        "name": "台積電",
+        "exchange_corrected": false,
+        "reason": "分析師陳龍點名台積電為重點關注標的",
+        "confidence": "high",
+        "verified": false
+      },
+      {
+        "exchange": "TWSE",
+        "symbol": "2317",
+        "name": "鴻海",
+        "exchange_corrected": false,
+        "reason": "分析師陳龍點名鴻海為重點關注標的",
+        "confidence": "high",
+        "verified": false
+      }
+    ],
+    "theme_candidates": [
+      {
+        "theme": "AI 概念股",
+        "reason": "分析師認為AI股災為虛驚一場"
+      }
+    ],
+    "impact_direction": "positive",
+    "impact_scope": "market",
+    "impact_rationale": "分析師看好台股大反攻。",
+    "unsupported": false,
+    "model": "claude-sonnet-5-5",
+    "prompt_version": "news_v2",
+    "input_hash": "c03acf6b3e2704dab3be0f6eec008b336cbae3c6ce84134483b8bf599081a772",
+    "generated_at": "2026-11-02T12:00:59.691617+00:00"
+  },
+  "provenance": {
+    "event_id": null,
+    "raw_payload_id": 8735,
+    "endpoint": "https://tw.stock.yahoo.com/rss?category=tw-market",
+    "data_as_of": "2026-11-02T12:00:08.983580"
+  }
+}

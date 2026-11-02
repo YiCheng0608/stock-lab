@@ -1,0 +1,271 @@
+{
+  "id": "5961",
+  "canonical_key": "news:ctee:a5fa26a118245ce2465f0fb8a41dcb5e34962677c86936409a176974bc59caa5",
+  "dedupe_cluster_id": "news-title:2051d5350283f89b7e0844aa5756a08b",
+  "category": "domestic",
+  "source_kind": "media",
+  "source_name": "工商時報",
+  "source": {
+    "name": "工商時報",
+    "url": "https://www.ctee.com.tw/news/20261102701838-430201",
+    "url_kind": "item"
+  },
+  "source_item_id": "20261102701838",
+  "title": "遠傳小金雞博弘前三季營收創高 專業服務發威 營業利益順利轉正",
+  "summary": "遠傳旗下子公司博弘雲端（6997）2日董事會通過第三季財報，受惠 AI 及雲端數位轉型持續成長，以及專業服務業務快速擴張，合併營收14.50 億元，年增 29.3％，稅後純益年成長35.9％，每股稅後純益（EPS）1.30 元。累計前三季營收41.51 億元，創歷史新高，營業利益亦順利轉正，EPS為0.44 元。 新任總經理陳仲儒表示，博弘將致力提升高附加價值服務比重、推動營收與獲利結構持續改",
+  "description": "遠傳旗下子公司博弘雲端（6997）2日董事會通過第三季財報，受惠 AI 及雲端數位轉型持續成長，以及專業服務業務快速擴張，合併營收14.50 億元，年增 29.3％，稅後純益年成長35.9％，每股稅後純益（EPS）1.30 元。累計前三季營收41.51 億元，創歷史新高，營業利益亦順利轉正，EPS為0.44 元。 新任總經理陳仲儒表示，博弘將致力提升高附加價值服務比重、推動營收與獲利結構持續改",
+  "summary_preview": "遠傳旗下子公司博弘雲端（6997）2日董事會通過第三季財報，受惠 AI 及雲端數位轉型持續成長，以及專業服務業務快速擴張，合併營收14.50 億元，年增 29.3％，稅後純益年成長35.9％，每股稅後純益（EPS）1.30 元。累計前三季…",
+  "language": "zh-Hant",
+  "published_at": "2026-11-02T11:50:23+00:00",
+  "event_at": null,
+  "event_date": null,
+  "display_time": "2026-11-02T11:50:23+00:00",
+  "time_basis": "published",
+  "time_precision": "datetime",
+  "time_consistency": "verified",
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "news_item",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_market_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "event.event_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.event_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-11-02T11:50:23+00:00",
+        "utc": "2026-11-02T11:50:23+00:00",
+        "date": null,
+        "source": "news_item.published_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-11-02T12:00:06.561565+00:00",
+        "utc": "2026-11-02T12:00:06.561565+00:00",
+        "date": null,
+        "source": "news_item.collected_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_generated_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_at_not_applicable",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_date_not_applicable",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-11-02T13:58:48.761297+00:00",
+    "legacy": {
+      "published_at": "2026-11-02T11:50:23+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-11-02T11:50:23",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "collected_at": "2026-11-02T12:00:06.561565+00:00"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+      "A collection timestamp does not prove when the source first became available.",
+      "Historical decision and generation times are not persisted by the NewsItem projection."
+    ]
+  },
+  "response_generated_at": "2026-11-02T13:58:48.761297+00:00",
+  "collected_at": "2026-11-02T12:00:06.561565+00:00",
+  "symbols": [
+    "TPEx:6997"
+  ],
+  "instruments": [
+    {
+      "exchange": "TPEx",
+      "symbol": "6997",
+      "name": "博弘"
+    }
+  ],
+  "themes": [],
+  "theme_ids": [],
+  "impact": {
+    "scope": "instrument",
+    "direction": "unknown",
+    "rationale": null,
+    "method": "rule:exact-name-code/v1",
+    "confidence": "unknown"
+  },
+  "impact_scope": "instrument",
+  "impact_direction": "unknown",
+  "confidence": "unknown",
+  "status": "active",
+  "content_hash": "19da2544eb6c6acc1e1324d8ea01cd9a0e7fc61c6424100629abbbc75b2fb7b1",
+  "detail_url": "/news/5961",
+  "ai": {
+    "inference": true,
+    "status": "done",
+    "summary": "遠傳旗下博弘雲端第三季合併營收14.50 億元，年增 29.3％，每股稅後純益1.30 元；累計前三季營收41.51 億元創歷史新高，營業利益轉正。",
+    "symbol_candidates": [
+      {
+        "exchange": "TPEx",
+        "symbol": "6997",
+        "name": "博弘",
+        "exchange_corrected": true,
+        "reason": "博弘雲端（6997）公布第三季財報與前三季營收創高",
+        "confidence": "high",
+        "verified": false
+      },
+      {
+        "exchange": "TWSE",
+        "symbol": "4904",
+        "name": "遠傳",
+        "exchange_corrected": false,
+        "reason": "博弘為遠傳旗下子公司",
+        "confidence": "medium",
+        "verified": false
+      }
+    ],
+    "theme_candidates": [
+      {
+        "theme": "雲端服務",
+        "reason": "博弘受惠 AI 及雲端數位轉型持續成長"
+      }
+    ],
+    "impact_direction": "positive",
+    "impact_scope": "instrument",
+    "impact_rationale": "營收創高、稅後純益年成長35.9％且營業利益轉正。",
+    "unsupported": false,
+    "model": "claude-sonnet-5-5",
+    "prompt_version": "news_v2",
+    "input_hash": "eef43f52123fe5640a75c1098ded48403ef607c2550969471eacb451bb924f5a",
+    "generated_at": "2026-11-02T12:00:59.691617+00:00"
+  },
+  "provenance": {
+    "event_id": null,
+    "raw_payload_id": 8734,
+    "endpoint": "https://www.ctee.com.tw/rss_web/livenews/stock",
+    "data_as_of": "2026-11-02T12:00:06.561565"
+  }
+}
