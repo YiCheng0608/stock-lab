@@ -49,6 +49,15 @@ The result goes to stdout without a trailing newline.
                                    <since> <error>" after MONITOR_GH_FAILED_POLLS
                                    polls in a row with a failed gh call, or
                                    "unreadable"
+  data-check <db> <date> [--offline] [--all] [--scratch DIR]
+                                   the daily data check of trading date
+                                   <date> (tools/ops/data_check.py, #390):
+                                   "data_check ok|violation|pending|skip
+                                   key=value ...", then on a violation the
+                                   Markdown details (the first 20 findings,
+                                   all with --all); --offline requests no
+                                   official result table; the temporary
+                                   directory goes into DIR (default TEMP)
 
 <now> is the watchdog clock in epoch seconds.
 """
@@ -432,6 +441,20 @@ def main(argv: list[str]) -> int:
         out = monitor_beat(args[0], args[1])
     elif command == "deploy-image":
         out = deploy_image(args[0])
+    elif command == "data-check":
+        # Imported here: it loads the backend; the other checks stay stdlib only.
+        from data_check import data_check
+
+        options = args[2:]
+        out = data_check(
+            args[0],
+            args[1],
+            official="--offline" not in options,
+            limit=None if "--all" in options else 20,
+            scratch_parent=options[options.index("--scratch") + 1]
+            if "--scratch" in options
+            else None,
+        )
     else:
         raise SystemExit(f"unknown command: {command}")
     sys.stdout.write(out)

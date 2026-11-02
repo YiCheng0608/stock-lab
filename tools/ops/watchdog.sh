@@ -41,8 +41,15 @@ NEWS_INTERVAL_SECONDS=7200
 # The daily result is read from 22:00 Taipei: by then the 21:30 trigger has
 # written its schedule_runs row, so an 18:30 partial is not reported early.
 DAILY_RESULT_AFTER_HM=2200
+# The daily data check (#390): DATA_CHECK_MAX_DAYS checks of at most
+# DATA_CHECK_TIMEOUT_SECONDS each stay inside the task's 10-minute limit.
+DATA_CHECK_TIMEOUT_SECONDS=240
+DATA_CHECK_MAX_DAYS=2
+DATA_CHECK_LOOKBACK_DAYS=4
+DATA_CHECK_LAST_HM=2345
 
 now="${WATCHDOG_NOW:-$(date -u +%s)}"
+data_check_timeout="${WATCHDOG_DATA_CHECK_TIMEOUT:-$DATA_CHECK_TIMEOUT_SECONDS}"
 logs="$data_dir/logs"
 log_file="$logs/watchdog.log"
 monitor_dir="${monitor_dir:-$logs}"
@@ -120,7 +127,7 @@ gh_refused() { # gh_refused EXIT ERR_FILE: log a refused gh call
   log gh_auth_failed "exit=$1 date=$taipei_date" "GitHub 拒絕 gh 的認證（$(tail -n 1 "$2" 2>/dev/null)）：本次異常無法在 #1 留言，恢復後補留；請更新 .env 的 GH_TOKEN"
 }
 
-anomaly() { # anomaly KEY SUMMARY: at most one #1 comment per key per Taipei day
+anomaly() { # anomaly KEY SUMMARY [DETAILS_FILE]: at most one #1 comment per key per Taipei day
   local key="$1" body status
   found=1
   if grep -qF " anomaly_commented key=$key date=$taipei_date" "$log_file" 2>/dev/null; then
@@ -128,7 +135,9 @@ anomaly() { # anomaly KEY SUMMARY: at most one #1 comment per key per Taipei day
     return
   fi
   body="待使用者：$2
-
+${3:+
+$(cat "$3")
+}
 （看門狗 \`tools/ops/watchdog.sh\` 自動留言，同一異常每日最多一則；日誌 \`$log_file\`。）"
   if [ "$dry_run" = 1 ]; then
     log anomaly_planned "key=$key date=$taipei_date" "將在 #1 留言"
@@ -213,6 +222,85 @@ if [ -n "$python" ] && [ -f "$data_dir/stock.db" ] && compgen -G "$logs/daily-*.
     catchup_incomplete) anomaly daily_result "daily 排程：台北 $taipei_iso 當日成功，但補抓前幾個交易日沒有補齊（catchup），請查 \`python -m worker.cli schedule-runs --date $taipei_iso\` 的 catchup 步驟，必要時依 OPERATIONS §6.4 手動 backfill。" ;;
     *) anomaly daily_result "daily 排程：台北 $taipei_iso 的 daily 結果是 \`$result\`（不是 success／non_trading_day），請查 \`python -m worker.cli schedule-runs --date $taipei_iso\` 與 \`$logs/daily-$taipei_date.log\`。" ;;
   esac
+fi
+
+# Daily data check (#390): each trading day whose daily ended success is
+# checked once, from 22:00 (after the 21:30 institutional refetch): the day's
+# rows against their official raw captures (tools/ops/data_check.py; it also
+# requests the day's official ex-right result tables). Read-only; nothing is
+# repaired. A day is settled once its check is logged data_check_done (no
+# finding, or the finding comment posted) or its "not checked" comment is
+# posted; until then each run retries it. Today's last chance is the 23:45 run;
+# a day the night left unsettled (machine off, past midnight) is checked by
+# the next runs, within DATA_CHECK_LOOKBACK_DAYS, with one chance. At most
+# DATA_CHECK_MAX_DAYS checks a run, oldest first.
+# Test hooks: WATCHDOG_DATA_CHECK_ARGS (extra helper arguments; --offline),
+# WATCHDOG_DATA_CHECK_TIMEOUT (seconds).
+data_check_settled() { # data_check_settled ISO COMPACT
+  grep -F " data_check_done date=$1 " "$log_file" 2>/dev/null | grep -qvF " dry_run=1" \
+    || grep -qF " anomaly_commented key=data_check_incomplete_$2 " "$log_file" 2>/dev/null
+}
+
+data_check_day() { # data_check_day ISO COMPACT LAST: check one day; LAST=1 comments a check it could not finish
+  local day="$1" compact="$2" last="$3" check status state facts reason
+  # shellcheck disable=SC2086
+  check="$(timeout "$data_check_timeout" "$python" -X utf8 "$script_dir/watchdog_helper.py" data-check "$data_dir/stock.db" "$day" --scratch "$work" ${WATCHDOG_DATA_CHECK_ARGS:-} 2>>"$work/helper.err")"
+  status=$?
+  if [ "$status" = 124 ]; then
+    found=1
+    reason="逾時（${data_check_timeout} 秒）"
+    log data_check_failed "date=$day exit=124" "當日資料核對逾時（${data_check_timeout} 秒），下次再試"
+  elif [ "$status" != 0 ]; then
+    found=1
+    reason="失敗（exit $status：$(tail -n 1 "$work/helper.err" 2>/dev/null)）"
+    log data_check_failed "date=$day exit=$status" "當日資料核對失敗：$(tail -n 1 "$work/helper.err" 2>/dev/null)；下次再試"
+  else
+    read -r _ state facts <<<"${check%%$'\n'*}"
+    case "$state" in
+      ok) log data_check_done "$facts" "當日資料核對無不一致"; return ;;
+      skip) return ;;  # a database without the checked tables
+      violation)
+        printf '%s\n' "${check#*$'\n'}" >"$work/data_check.md"
+        anomaly "data_check_$compact" "當日資料核對：交易日 $day 寫進 DB 的資料與官方 raw 有 $(printf '%s\n' $facts | sed -n 's/^findings=//p') 筆不一致（明細如下，資料未修正）。請依 OPERATIONS §6.1 判斷要開 Issue 修正或重跑。" "$work/data_check.md"
+        # Settled only once the comment is on #1 (now or earlier): a failed
+        # gh call leaves the day to the next run.
+        if [ "$dry_run" = 1 ] || grep -qF " anomaly_commented key=data_check_$compact " "$log_file"; then
+          log data_check_done "$facts" "當日資料核對有不一致，已在 #1 留言"
+          return
+        fi
+        reason="有 $(printf '%s\n' $facts | sed -n 's/^findings=//p') 筆不一致，但 #1 留言沒有送出" ;;
+      pending)
+        reason="21:30 法人重抓一直是 running"
+        log data_check_pending "$facts" "21:30 法人重抓仍在執行，下次再核對" ;;
+      *)
+        found=1
+        reason="輸出無法判讀（${check%%$'\n'*}）"
+        log data_check_failed "date=$day" "當日資料核對輸出無法判讀：${check%%$'\n'*}；下次再試" ;;
+    esac
+  fi
+  [ "$last" = 1 ] || return 0
+  anomaly "data_check_incomplete_$compact" "當日資料核對：交易日 $day 沒有核對完，原因：$reason。看門狗不會再自動核對這一天；請手動跑 \`python tools/ops/watchdog_helper.py data-check $data_dir/stock.db $day --all\`，依 OPERATIONS §6.1 處理，並查 \`$log_file\` 的 \`data_check_*\` 列。"
+}
+
+if [ -n "$python" ] && [ -f "$data_dir/stock.db" ] && compgen -G "$logs/daily-*.log" >/dev/null; then
+  checked=0
+  for back in $(seq "$DATA_CHECK_LOOKBACK_DAYS" -1 0); do
+    at=$((taipei - back * 86400))
+    day="$(date -u -d "@$at" +%Y-%m-%d)"
+    compact="$(date -u -d "@$at" +%Y%m%d)"
+    [ "$(date -u -d "@$at" +%u)" -le 5 ] && [ -f "$logs/daily-$compact.log" ] || continue
+    last=1
+    if [ "$back" = 0 ]; then
+      [ $((10#$taipei_hm)) -ge "$DAILY_RESULT_AFTER_HM" ] || continue
+      [ $((10#$taipei_hm)) -ge "$DATA_CHECK_LAST_HM" ] || last=0
+    fi
+    data_check_settled "$day" "$compact" && continue
+    [ "$checked" -lt "$DATA_CHECK_MAX_DAYS" ] || break
+    outcome="$(helper daily-result "$data_dir/stock.db" "$day" "$now" 2>>"$work/helper.err")" || continue
+    [ "$outcome" = success ] || continue
+    checked=$((checked + 1))
+    data_check_day "$day" "$compact" "$last"
+  done
 fi
 
 # news: runs every 2 hours; three missed runs in a row (only once news logs exist).
