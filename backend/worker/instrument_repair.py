@@ -2,16 +2,17 @@
 
 Until #212 the collector kept only quote and chip rows whose code was in that
 day's issuer master, so a company that left the master (delisted, moved to the
-other exchange) lost every row a later backfill fetched for it.  The exact
-official payloads are still in ``raw_payloads``.  This repair:
+other exchange) lost every row a later backfill fetched for it.  Until #393
+the same held for an ETF that left the ETF list.  The exact official payloads
+are still in ``raw_payloads``.  This repair:
 
 1. syncs instrument status from the latest stored list captures
    (``pipeline.plan_instrument_status``, the rule the daily collect uses);
-2. with ``include_delisted``, creates the instruments of ordinary-share codes
-   that have stored quote rows but were never stored, when the lists no longer
-   carry them and their quotes stopped at least ``STALE_SESSIONS`` sessions
-   before the exchange's latest stored session; the status is ``transferred``
-   when the other exchange lists the code, else ``delisted``;
+2. with ``include_delisted``, creates the instruments of ordinary-share and
+   ETF codes that have stored quote rows but were never stored, when the lists
+   no longer carry them and their quotes stopped at least ``STALE_SESSIONS``
+   sessions before the exchange's latest stored session; the status is
+   ``transferred`` when the other exchange lists the code, else ``delisted``;
 3. writes every stored quote row and, for the instruments that received bars,
    every stored chip row that the database lacks.  Stored rows are never
    changed (``overwrite=False``).
@@ -32,8 +33,16 @@ from typing import Any, Callable
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.clock import utcnow
 from app.db import SessionLocal
-from app.models import ChipSnapshot, IngestionRun, Instrument, MarketBar, RawPayload
+from app.models import (
+    ChipSnapshot,
+    DataQuality,
+    IngestionRun,
+    Instrument,
+    MarketBar,
+    RawPayload,
+)
 from worker.industry_repair import rescore_recent
 from worker.pipeline import (
     OTHER_EXCHANGE,
@@ -46,6 +55,7 @@ from worker.pipeline import (
     _upsert_quality,
     apply_instrument_status,
     plan_instrument_status,
+    stored_instrument,
     universe_evidence,
 )
 from worker.sources import (
@@ -69,8 +79,10 @@ from worker.sources import (
     _require_reported_date,
     _rows,
     _text,
-    is_common_stock_code,
+    is_etf_code,
+    is_quoted_security_code,
     merge_chip_records,
+    normalize_etf_category,
     parse_tpex_daily_rows,
     parse_tpex_institutional_rows,
     parse_tpex_margin_rows,
@@ -273,7 +285,7 @@ def plan_repair(
             if bar.symbol == "TAIEX":
                 continue
             sessions[bar.exchange].add(bar.trading_date)
-            if not is_common_stock_code(bar.symbol):
+            if not is_quoted_security_code(bar.symbol):
                 continue
             key = (bar.exchange, bar.symbol)
             instrument = stored.get(key)
@@ -325,6 +337,7 @@ def plan_repair(
         to_create.append(
             {
                 **item,
+                "instrument_type": "etf" if is_etf_code(symbol) else "stock",
                 "status": "transferred" if moved else "delisted",
                 "reason": "listed_on_other_exchange"
                 if moved
@@ -392,7 +405,13 @@ def plan_repair(
                 and (instrument.id, record.trading_date) in have_chips
             ):
                 continue
-            chips.append((record, chip_raw_ids.get(record.payload_sha256)))
+            chips.append(
+                (
+                    record,
+                    chip_raw_ids.get(record.payload_sha256),
+                    chip_raw_ids.get(record.margin_payload_sha256),
+                )
+            )
 
     return {
         "evidence": evidence,
@@ -422,9 +441,9 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
-def _by_instrument(rows: list[tuple[Any, int | None]]) -> list[dict[str, Any]]:
+def _by_instrument(rows: list[tuple[Any, ...]]) -> list[dict[str, Any]]:
     grouped: dict[tuple[str, str], list[date]] = defaultdict(list)
-    for record, _raw_id in rows:
+    for record, *_raw_ids in rows:
         grouped[(record.exchange, record.symbol)].append(record.trading_date)
     return [
         {
@@ -519,7 +538,12 @@ def repair_instruments(
             exchange=item["exchange"],
             symbol=item["symbol"],
             name=item["name"] or item["symbol"],
-            instrument_type="stock",
+            instrument_type=item["instrument_type"],
+            etf_category=normalize_etf_category(
+                None, symbol=item["symbol"], name=item["name"] or ""
+            )
+            if item["instrument_type"] == "etf"
+            else None,
             status=item["status"],
             is_watchlisted=False,
         )
@@ -552,10 +576,17 @@ def repair_instruments(
             raw_id,
             overwrite=False,
         )
-    for record, raw_id in plan["chips"]:
-        _upsert_official_chip(db, record, instruments, raw_id, overwrite=False)
+    for record, raw_id, margin_raw_id in plan["chips"]:
+        _upsert_official_chip(
+            db,
+            record,
+            instruments,
+            raw_id,
+            margin_raw_payload_id=margin_raw_id,
+            overwrite=False,
+        )
     db.flush()
-    now = datetime.utcnow()
+    now = utcnow()
     run = IngestionRun(
         run_type=RUN_TYPE,
         source="official",
@@ -608,3 +639,193 @@ def run_instrument_repair(
         if apply:
             db.commit()
         return result
+
+
+# ---- bars of codes that got an instrument later (Issue #388) ----
+
+BACKFILL_VERSION = "unmatched-bar-backfill-v1"
+
+
+def _is_quote_capture(endpoint: str) -> bool:
+    return (
+        endpoint in {TPEX_HISTORY_API, TWSE_DAILY_ENDPOINT}
+        or endpoint.startswith(TWSE_DAILY_HISTORY_ENDPOINT + "?")
+        or endpoint.startswith(TWSE_LEGACY_DAILY_HISTORY_ENDPOINT + "?")
+    )
+
+
+def _stored_quote_bars(
+    db: Session, raw_id: int, cache: dict[int, list[BarRecord] | str]
+) -> list[BarRecord] | str:
+    """The bars of one stored quote capture, or why it cannot be read."""
+
+    if raw_id not in cache:
+        raw = db.get(RawPayload, raw_id)
+        if raw is None:
+            cache[raw_id] = "raw_payload_row_missing"
+        elif not _is_quote_capture(raw.endpoint):
+            cache[raw_id] = "not_a_quote_capture"
+        else:
+            try:
+                cache[raw_id] = _quote_bars(raw, _load(raw))
+            except FileNotFoundError:
+                cache[raw_id] = "raw_file_missing"
+            except (OSError, ValueError, InstrumentRepairError) as exc:
+                cache[raw_id] = f"raw_unreadable: {exc}"[:200]
+            except OfficialDataError as exc:
+                cache[raw_id] = f"raw_rejected: {exc}"[:200]
+            except Exception as exc:
+                # A parser bug on one old capture keeps only its rows open.
+                cache[raw_id] = f"raw_unparsed: {type(exc).__name__}: {exc}"[:200]
+    return cache[raw_id]
+
+
+def backfill_unmatched_bars(db: Session) -> dict[str, Any]:
+    """Write the bars of ``unmatched_bar`` rows whose code now has an instrument.
+
+    A code with official quote rows but no instrument is recorded, not
+    written (#212).  A new listing whose list lags its first session is such
+    a code until a later collect creates the instrument.  Its recorded dates
+    are written from the recorded raw captures, newest capture first, as the
+    collector parses them; nothing is fetched.  A stored bar is never
+    changed.  The row becomes ``complete`` when every date has a bar; a date
+    whose capture is gone stays unwritten and the row is retried next time.
+    Writes in the caller's transaction.
+    """
+
+    rows = db.scalars(
+        select(DataQuality)
+        .where(
+            DataQuality.entity_type == "unmatched_bar",
+            DataQuality.status != "complete",
+        )
+        .order_by(DataQuality.entity_key, DataQuality.as_of_date)
+    ).all()
+    cache: dict[int, list[BarRecord] | str] = {}
+    written: list[dict[str, Any]] = []
+    pending: list[dict[str, Any]] = []
+    checked = 0
+    for row in rows:
+        exchange, _, symbol = row.entity_key.partition(":")
+        instrument = stored_instrument(db, exchange, symbol)
+        if instrument is None:
+            continue
+        checked += 1
+        checks = dict(row.checks_json or {})
+        before = checks.get("backfill") or {}
+        done = list(before.get("written", []))
+        done_dates = {item["trading_date"] for item in done}
+        existing = set(before.get("existing", []))
+        unavailable: list[dict[str, Any]] = []
+        raw_ids = sorted(
+            {int(item) for item in checks.get("raw_payload_ids", [])}, reverse=True
+        )
+        for day_text in checks.get("trading_dates", []):
+            if day_text in done_dates or day_text in existing:
+                continue
+            day = date.fromisoformat(day_text)
+            if db.scalar(
+                select(MarketBar.id).where(
+                    MarketBar.instrument_id == instrument.id,
+                    MarketBar.trading_date == day,
+                )
+            ):
+                existing.add(day_text)
+                continue
+            found: tuple[BarRecord, int] | None = None
+            reasons: list[dict[str, Any]] = []
+            for raw_id in raw_ids:
+                bars = _stored_quote_bars(db, raw_id, cache)
+                if isinstance(bars, str):
+                    reasons.append({"raw_payload_id": raw_id, "reason": bars})
+                    continue
+                match = next(
+                    (
+                        bar
+                        for bar in bars
+                        if bar.exchange == exchange
+                        and bar.symbol == symbol
+                        and bar.trading_date == day
+                    ),
+                    None,
+                )
+                if match is not None:
+                    found = (match, raw_id)
+                    break
+                reasons.append({"raw_payload_id": raw_id, "reason": "no_row"})
+            if found is None:
+                unavailable.append(
+                    {
+                        "trading_date": day_text,
+                        "raws": reasons or [{"reason": "no_raw_payload_id"}],
+                    }
+                )
+                continue
+            record, raw_id = found
+            _upsert_official_bar(db, instrument, record, raw_id, overwrite=False)
+            done.append({"trading_date": day_text, "raw_payload_id": raw_id})
+            done_dates.add(day_text)
+            written.append(
+                {
+                    "exchange": exchange,
+                    "symbol": symbol,
+                    "trading_date": day_text,
+                    "raw_payload_id": raw_id,
+                }
+            )
+        if not unavailable:
+            status = "complete"
+        elif done or existing:
+            status = "partial"
+        else:
+            status = "missing"
+        checks["backfill"] = {
+            "version": BACKFILL_VERSION,
+            "instrument_id": instrument.id,
+            "written": done,
+            "existing": sorted(existing),
+            "unavailable": unavailable,
+            "checked_at": utcnow().isoformat(),
+        }
+        _upsert_quality(
+            db,
+            "unmatched_bar",
+            row.entity_key,
+            row.as_of_date,
+            status,
+            [] if status == "complete" else ["raw_payload"],
+            checks,
+            source=row.source,
+        )
+        if status != "complete":
+            pending.append(
+                {
+                    "exchange": exchange,
+                    "symbol": symbol,
+                    "as_of_date": row.as_of_date.isoformat(),
+                    "status": status,
+                    "unavailable": [item["trading_date"] for item in unavailable],
+                }
+            )
+    db.flush()
+    return {
+        "version": BACKFILL_VERSION,
+        "rows_checked": checked,
+        "written": written,
+        "pending": pending,
+    }
+
+
+def run_unmatched_backfill(*, apply: bool = False) -> dict[str, Any]:
+    """``backfill_unmatched_bars`` on its own; dry-run rolls the writes back."""
+
+    with SessionLocal() as db:
+        result = backfill_unmatched_bars(db)
+        if not apply:
+            db.rollback()
+            return {"status": "dry_run", **result}
+        db.commit()
+        return {
+            "status": "applied" if result["rows_checked"] else "no_change",
+            **result,
+        }

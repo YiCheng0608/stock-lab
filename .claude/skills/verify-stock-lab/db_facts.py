@@ -23,7 +23,18 @@ from pathlib import Path
 # Same value as backend/app/domain.py; backend/tests/test_verify_tools.py keeps
 # them equal. This script runs on the stdlib-only tool Python, so it cannot
 # import the backend (#237).
-CANDIDATE_SCORE_VERSION = "candidate_score_v2"
+CANDIDATE_SCORE_VERSION = "candidate_score_v3"
+# Same as backend/app/domain.py CANDIDATE_SCORE_READ_VERSIONS: a date without a
+# run of the current version shows its previous-version run (#392).
+CANDIDATE_SCORE_READ_VERSIONS = ("candidate_score_v3", "candidate_score_v2")
+_READ = ", ".join(f"'{version}'" for version in CANDIDATE_SCORE_READ_VERSIONS)
+_ORDER = " ".join(
+    f"WHEN '{version}' THEN {position}"
+    for position, version in enumerate(CANDIDATE_SCORE_READ_VERSIONS)
+)
+# Same as backend/app/domain.py PLAN_OPEN_STATUSES (kept equal by the same test).
+PLAN_OPEN_STATUSES = ("pending", "triggered")
+_OPEN = ", ".join(f"'{status}'" for status in PLAN_OPEN_STATUSES)
 
 QUERIES = {
     "market_latest_trading_date": (
@@ -36,14 +47,13 @@ QUERIES = {
     ),
     "candidate_run_latest_trading_date": (
         "candidate_runs",
-        "SELECT max(trading_date) FROM candidate_runs"
-        f" WHERE score_version = '{CANDIDATE_SCORE_VERSION}'",
+        f"SELECT max(trading_date) FROM candidate_runs WHERE score_version IN ({_READ})",
     ),
     "candidate_count_latest": (
         "candidate_runs",
         "SELECT candidate_count FROM candidate_runs"
-        f" WHERE score_version = '{CANDIDATE_SCORE_VERSION}'"
-        " ORDER BY trading_date DESC, id DESC LIMIT 1",
+        f" WHERE score_version IN ({_READ})"
+        f" ORDER BY trading_date DESC, CASE score_version {_ORDER} END, id DESC LIMIT 1",
     ),
     "news_items": ("news_items", "SELECT count(*) FROM news_items"),
     "news_latest_published_at": (
@@ -57,6 +67,15 @@ QUERIES = {
     "theme_suggestions": (
         "theme_suggestions",
         "SELECT count(*) FROM theme_suggestions",
+    ),
+    # User tracking plans: the actions page's 追蹤計畫 and 追蹤回看 (A8).
+    "tracking_plans_open": (
+        "tracking_plans",
+        f"SELECT count(*) FROM tracking_plans WHERE status IN ({_OPEN})",
+    ),
+    "tracking_plans_closed": (
+        "tracking_plans",
+        f"SELECT count(*) FROM tracking_plans WHERE status NOT IN ({_OPEN})",
     ),
     # Private: when non-zero the today and actions pages show holdings, so the run's
     # screenshots and API JSON stay local (SKILL.md, Doctor step 4).

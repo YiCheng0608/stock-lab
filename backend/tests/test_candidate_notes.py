@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -556,3 +556,126 @@ def test_a_failed_write_closes_the_run_as_failed_with_its_calls(db, fake, monkey
     assert run.metadata_json["calls"] == 1 and run.finished_at is not None
     # The call still counts toward the day's limit.
     assert candidate_notes._calls_today(db, RUN_DATE) == 1
+
+
+# Timestamps the step writes (#376). `frozen_utcnow` (conftest) makes app.clock answer
+# one instant to every caller, so a stamp taken from local time or the real clock
+# stores a value other than the one asserted here.
+
+
+def test_candidate_notes_stamp_their_rows_with_the_clock(
+    db, fake, frozen_utcnow, monkeypatch
+):
+    # The label date reads the Taipei clock through the module's own datetime.
+    monkeypatch.setattr(candidate_notes, "datetime", frozen_utcnow.datetime_class())
+    first = frozen_utcnow.at
+    _candidates(db, 2)
+
+    result = run_candidate_notes(db, T)
+
+    assert result["status"] == "success" and result["records"] == 2
+    assert result["run_date"] == "2026-10-30"  # 01:04 on 10/30 in Taipei
+    assert {note.llm_run_at for note in _notes(db)} == {first}
+    run = db.get(IngestionRun, result["run_id"])
+    assert (run.run_date, run.started_at, run.finished_at, run.data_as_of) == (
+        date(2026, 10, 30),
+        first,
+        first,
+        first.isoformat(),
+    )
+    assert {raw.collected_at for raw in db.scalars(select(RawPayload))} == {first}
+
+
+def test_a_batch_that_raises_is_left_pending_at_the_clock(db, fake, frozen_utcnow):
+    _candidates(db, 2)
+
+    def broken(prompt, argv):
+        raise RuntimeError("fixture runner failure")
+
+    result = _run(db, runner=broken)
+
+    assert result["pending"] == 2
+    notes = _notes(db)
+    assert {note.llm_status for note in notes} == {"pending"}
+    assert {note.llm_run_at for note in notes} == {frozen_utcnow.at}
+
+
+def test_a_candidate_without_an_input_is_left_pending_at_the_clock(
+    db, fake, frozen_utcnow, monkeypatch
+):
+    candidates = _candidates(db, 2)
+    real = candidate_notes.candidate_input
+
+    def broken(session, row, run):
+        if row.id == candidates[0].id:
+            raise RuntimeError("fixture input failure")
+        return real(session, row, run)
+
+    monkeypatch.setattr(candidate_notes, "candidate_input", broken)
+    _run(db)
+
+    notes = {note.daily_candidate_id: note for note in _notes(db)}
+    assert notes[candidates[0].id].llm_status == "pending"
+    assert {note.llm_run_at for note in notes.values()} == {frozen_utcnow.at}
+
+
+def test_a_refused_run_is_recorded_at_the_clock(
+    db, fake, frozen_utcnow, monkeypatch, tmp_path
+):
+    monkeypatch.setenv(news_llm.CLI_ENV, str(tmp_path / "no-claude.exe"))
+    _candidates(db, 2)
+
+    result = _run(db)
+
+    assert result["status"] == "failed"
+    run = db.get(IngestionRun, result["run_id"])
+    first = frozen_utcnow.at
+    assert (run.started_at, run.finished_at, run.data_as_of) == (
+        first,
+        first,
+        first.isoformat(),
+    )
+
+
+def test_a_run_that_fails_its_write_is_finished_at_the_clock(
+    db, fake, frozen_utcnow, monkeypatch
+):
+    _candidates(db, 2)
+
+    def locked(*args, **kwargs):
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(candidate_notes, "_metadata", locked)
+    result = _run(db)
+
+    assert result["reason"] == "run_error"
+    run = db.get(IngestionRun, result["run_id"])
+    assert (run.status, run.finished_at) == ("failed", frozen_utcnow.at)
+
+
+def test_a_run_is_abandoned_once_the_clock_is_past_its_limit(db, frozen_utcnow):
+    first = frozen_utcnow.at
+
+    def running(started_at):
+        run = IngestionRun(
+            run_type=candidate_notes.RUN_TYPE,
+            source="claude-cli",
+            run_date=RUN_DATE,
+            status="running",
+            records=0,
+            started_at=started_at,
+            metadata_json={},
+        )
+        db.add(run)
+        db.commit()
+        return run
+
+    one_second = timedelta(seconds=1)
+    killed = running(first - candidate_notes.ABANDONED_AFTER - one_second)
+    active = running(first - candidate_notes.ABANDONED_AFTER + one_second)
+
+    assert candidate_notes.close_abandoned_runs(db) == [killed.id]
+    db.refresh(killed)
+    db.refresh(active)
+    assert (killed.status, killed.finished_at) == ("failed", first)
+    assert (active.status, active.finished_at) == ("running", None)

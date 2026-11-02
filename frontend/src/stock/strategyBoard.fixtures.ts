@@ -76,6 +76,17 @@ export function unreachablePullback(): StrategyBoardRow {
   }
 }
 
+// A non-margin security (#392): breakout_v2 judges it without the margin condition, which reads 不適用.
+export function nonMarginBreakout(): StrategyBoardRow {
+  const row = observationBreakout()
+  return {
+    ...row, strategy: 'breakout_v2', version: '2.0.0',
+    conditions: row.conditions.map((item) => item.code === 'margin_financing'
+      ? condition('margin_financing', 'confirmation', null, { threshold: 0.05, operator: 'lte', reasons: ['margin_financing_not_applicable'] })
+      : item),
+  }
+}
+
 export function observationBreakout(): StrategyBoardRow {
   return {
     ...conditionalBreakout(), status: 'observation', earliest_execution_date: null,

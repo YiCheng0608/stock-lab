@@ -250,15 +250,15 @@ def _add_signal_pair(
     breakout_levels=True,
 ):
     breakout = StrategyVersion(
-        name="breakout_v1",
-        version="1.0.0",
+        name="breakout_v2",
+        version="2.0.0",
         kind="technical",
         config_json={},
         canonical_config_snapshot={},
     )
     pullback = StrategyVersion(
-        name="pullback_v1",
-        version="1.0.0",
+        name="pullback_v2",
+        version="2.0.0",
         kind="technical",
         config_json={},
         canonical_config_snapshot={},
@@ -1242,8 +1242,8 @@ def test_actions_are_deduplicated_and_prioritize_held_data_quality(product_api):
         _as_of, alpha, _beta, _etf = _add_base_fixture(db)
         db.add(PortfolioPosition(instrument_id=alpha.id, shares=10, average_cost=100))
         strategy = StrategyVersion(
-            name="breakout_v1",
-            version="1.0.0",
+            name="breakout_v2",
+            version="2.0.0",
             kind="technical",
             config_json={},
             canonical_config_snapshot={},
@@ -1352,20 +1352,19 @@ def test_nonempty_tracking_projects_signal_product_time(product_api):
         )
         db.commit()
 
+    # /tracking lists user plans (#253); a signal's tracking is /tracking/{signal_key}.
     with TestClient(app) as client:
-        tracking = client.get("/api/tracking")
         scoped = client.get("/api/tracking/fixture-AAA-breakout")
 
-    assert tracking.status_code == 200
-    assert tracking.json()["rows"]
-    row_signal = tracking.json()["rows"][0]["signal"]
+    assert scoped.status_code == 200
+    assert scoped.json()["evaluations"]
+    row_signal = scoped.json()["evaluations"][0]["signal"]
     assert row_signal["product_time"]["version"] == "product-time/v1"
     assert row_signal["product_time"]["roles"]["market_date"]["status"] == "known"
     assert (
         row_signal["product_time"]["roles"]["earliest_execution_at"]["status"]
         == "unknown"
     )
-    assert scoped.status_code == 200
     assert scoped.json()["signal"]["product_time"]["version"] == "product-time/v1"
 
 
@@ -1438,8 +1437,8 @@ def test_complete_conditional_wins_over_observation_without_level_pollution(
     )
     assert summary["primary_reason"]["scope"] == "breakout"
     assert summary["primary_levels"]["kind"] == "trigger_invalid"
-    assert summary["primary_strategy"] == "breakout_v1"
-    assert summary["alternative_strategies"] == ["pullback_v1"]
+    assert summary["primary_strategy"] == "breakout_v2"
+    assert summary["alternative_strategies"] == ["pullback_v2"]
     assert summary["trigger_price"] == pytest.approx(21.05)
     assert summary["invalid_price"] == pytest.approx(20.47)
     assert summary["target_1"] == pytest.approx(21.98)
@@ -1470,7 +1469,7 @@ def test_unqualified_theme_does_not_block_complete_conditional(product_api):
         summary = build_action_summaries(db, instrument_ids=[alpha.id])[0]
 
     assert summary["action_state"] == "conditional_entry"
-    assert summary["primary_strategy"] == "breakout_v1"
+    assert summary["primary_strategy"] == "breakout_v2"
     assert "qualified_theme" not in summary["blocking_reasons"]
     assert summary["theme_ids"] == ["theme-complete"]
 
@@ -1497,8 +1496,8 @@ def test_incomplete_primary_strategy_fails_closed_but_exposes_alternative(produc
     assert "signal_data_quality" in summary["blocking_reasons"]
     assert "data_incomplete" in summary["blocking_reasons"]
     assert {item["strategy"] for item in summary["strategies"]} == {
-        "breakout_v1",
-        "pullback_v1",
+        "breakout_v2",
+        "pullback_v2",
     }
 
 
@@ -1525,8 +1524,8 @@ def test_complete_observations_without_wait_levels_are_no_condition(product_api)
         for key in ("trigger_price", "invalid_price", "target_1", "risk_reward")
     )
     assert {item["strategy"] for item in summary["strategies"]} == {
-        "breakout_v1",
-        "pullback_v1",
+        "breakout_v2",
+        "pullback_v2",
     }
     assert all(item["data_quality"] == "complete" for item in summary["strategies"])
 
@@ -1571,7 +1570,7 @@ def test_observation_can_wait_without_incomplete_alternative_blocking(product_ap
         summary = build_action_summaries(db, instrument_ids=[alpha.id])[0]
 
     assert summary["action_state"] == "wait_breakout"
-    assert summary["primary_strategy"] == "breakout_v1"
+    assert summary["primary_strategy"] == "breakout_v2"
     assert summary["trigger_price"] == pytest.approx(21.05)
     assert summary["blocking_reasons"] == []
 
@@ -1676,15 +1675,15 @@ def test_action_summary_preserves_two_strategy_conflict(product_api):
                 )
             )
         breakout = StrategyVersion(
-            name="breakout_v1",
-            version="1.0.0",
+            name="breakout_v2",
+            version="2.0.0",
             kind="technical",
             config_json={},
             canonical_config_snapshot={},
         )
         pullback = StrategyVersion(
-            name="pullback_v1",
-            version="1.0.0",
+            name="pullback_v2",
+            version="2.0.0",
             kind="technical",
             config_json={},
             canonical_config_snapshot={},
@@ -1735,8 +1734,8 @@ def test_action_summary_preserves_two_strategy_conflict(product_api):
 
     assert summary["action_state"] == "manual_review"
     assert set(summary["alternative_strategies"] + [summary["primary_strategy"]]) == {
-        "breakout_v1",
-        "pullback_v1",
+        "breakout_v2",
+        "pullback_v2",
     }
     assert summary["conflicts"]
 

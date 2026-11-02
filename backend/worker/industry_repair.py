@@ -19,13 +19,14 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.clock import utcnow
 from app.db import SessionLocal
 from app.models import (
     GroupDailyScore,
@@ -393,8 +394,42 @@ def rescore_recent(db: Session, days: int) -> list[str]:
         .limit(1)
     )
     dates = _effective_trading_dates(db, benchmark.id, latest, days) if latest else []
+    rescore_dates(db, dates)
+    return [day.isoformat() for day in dates]
+
+
+def rescore_dates(
+    db: Session,
+    dates: list[date],
+    after_each: Callable[[date], None] | None = None,
+    *,
+    existing_groups_only: bool = False,
+) -> None:
+    """Recompute ``hot_group_v1`` of ``dates`` in order (see ``rescore_recent``).
+
+    ``after_each`` runs after each date's scores are flushed, so a long
+    rescore can commit one session at a time (#386).
+
+    ``existing_groups_only`` rescores, on each date, only the groups that
+    already have a score row that date, and ranks them among themselves: a
+    group scored only from a later date is not added to an earlier one (the
+    corporate-actions rebuild, #409).  Without it every active group is scored,
+    as daily does.
+    """
+
     for day in dates:
-        _calculate_group_scores(db, day)
+        if existing_groups_only:
+            _calculate_group_scores(
+                db,
+                day,
+                group_ids=db.scalars(
+                    select(GroupDailyScore.group_id).where(
+                        GroupDailyScore.trading_date == day
+                    )
+                ).all(),
+            )
+        else:
+            _calculate_group_scores(db, day)
         # Inactive groups are not rescored; their old rank would collide with
         # the recomputed ranks of the same board.
         for score in db.scalars(
@@ -409,7 +444,8 @@ def rescore_recent(db: Session, days: int) -> list[str]:
             archive_group_score(db, score, "rank_cleared_inactive_group")
             score.rank = None
         db.flush()
-    return [day.isoformat() for day in dates]
+        if after_each is not None:
+            after_each(day)
 
 
 def repair_industry_memberships(
@@ -452,7 +488,7 @@ def repair_industry_memberships(
                 )
             )
     db.flush()
-    now = datetime.utcnow()
+    now = utcnow()
     run = IngestionRun(
         run_type=RUN_TYPE,
         source="official",

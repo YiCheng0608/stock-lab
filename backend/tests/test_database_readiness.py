@@ -72,8 +72,8 @@ def markers(path, alembic, fallback):
 
 
 def test_current_head_and_fallback_count_in_memory():
-    assert len(readiness.REVISIONS) == 20
-    assert readiness.REVISIONS[-1] == "0020_trading_calendar"
+    assert len(readiness.REVISIONS) == 22
+    assert readiness.REVISIONS[-1] == "0022_margin_lists"
     with sqlite3.connect(":memory:") as connection:
         connection.execute("CREATE TABLE alembic_version (version_num TEXT)")
         connection.execute(
@@ -156,10 +156,10 @@ def test_operations_doc_names_the_code_head():
     ]
 
 
-def test_head_0020_is_ready_but_a_0019_database_is_not(ready_db):
+def test_head_0022_is_ready_but_a_0021_database_is_not(ready_db):
     assert readiness.REVISIONS[-2:] == (
-        "0019_strategy_levels",
-        "0020_trading_calendar",
+        "0021_chip_source_groups",
+        "0022_margin_lists",
     )
     markers(ready_db, [readiness.REVISIONS[-1]], None)
     check_unchanged(ready_db)

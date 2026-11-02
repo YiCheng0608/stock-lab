@@ -4,8 +4,8 @@ import { StaticRouter } from 'react-router-dom/server'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import * as AppModule from './App'
-import { CandidateCard } from './candidates/CandidateViews'
-import { completeItem } from './candidates/candidates.fixtures'
+import { CandidatesSection, ScoreDetails } from './candidates/CandidateViews'
+import { completeItem, listResponse } from './candidates/candidates.fixtures'
 import { DateBadge } from './components/ui'
 import { GLOSSARY } from './glossary'
 import { NewsDetailView, NewsCard } from './news/NewsViews'
@@ -71,11 +71,13 @@ for (const [id, name] of Object.entries(IN_PLACE_TERMS)) {
 }
 check(GLOSSARY.every((term) => !/percentile/i.test(term.name)), 'glossary: no term is named in English 「percentile」')
 
-// ---- candidate card: score, levels, RR and the details header are terms; no English 「percentile」 ----
-const candidate = render('CandidateCard', () => <CandidateCard item={completeItem()} detailsOpen />)
-for (const label of ['總分', '進場區', '停損', '目標', 'RR', '百分位']) check(hasTerm(candidate, label), `候選卡: 「${label}」 opens its glossary term (found ${termLabels(candidate).join('、') || 'none'})`)
-check(!/percentile/i.test(text(candidate)), '候選卡: 「percentile」 is not shown; the details read 「百分位」')
-check(text(candidate).includes('分數與百分位為 0–100'), '候選卡: the details note reads 「分數與百分位為 0–100」')
+// ---- candidates: score, levels and RR (today list) and the score details header (stock page) are terms; no English 「percentile」 ----
+const candidate = render('CandidatesSection', () => <CandidatesSection data={listResponse()} loading={false} error={null} />)
+for (const label of ['總分', '進場區', '停損', '目標', 'RR']) check(hasTerm(candidate, label), `今日候選: 「${label}」 opens its glossary term (found ${termLabels(candidate).join('、') || 'none'})`)
+const scoreDetails = render('ScoreDetails', () => <ScoreDetails item={completeItem()} open />)
+check(hasTerm(scoreDetails, '百分位'), `評分細節: 「百分位」 opens its glossary term (found ${termLabels(scoreDetails).join('、') || 'none'})`)
+check(!/percentile/i.test(text(candidate + scoreDetails)), '候選: 「percentile」 is not shown; the details read 「百分位」')
+check(text(scoreDetails).includes('分數與百分位為 0–100'), '評分細節: the details note reads 「分數與百分位為 0–100」')
 
 // ---- themes: rank, score, same-board percentile and 「事件資料待補」 explain themselves; never inside a link ----
 const boardMarkup = render('ThemeBoardPanel', () => <ThemeBoardPanel board="industry" data={industryBoard()} search="" />)
@@ -119,6 +121,7 @@ check(text(chart).includes('2026/10/22') && text(chart).includes('2026/10/16 18:
 const IndicatorMetaRows = component('IndicatorMetaRows')
 const meta = text(render('IndicatorMetaRows', () => <IndicatorMetaRows {...{ bars: barsResponse([tradedBar('2026-10-22', 21.15, 71)]) }} />))
 check(meta.includes('2026/10/16 18:00') && !/\d{4}-\d{2}-\d{2}|上午|下午/.test(meta), `資料說明: computed time and K 線資料日期 are 24-hour slashed dates, got ${meta}`)
+check(meta.includes('資料日原始價（前期依除權息換算）'), `資料說明: the current price basis is explained, got ${meta}`)
 const BackfillRunTable = component('BackfillRunTable')
 const backfill = text(render('BackfillRunTable', () => <BackfillRunTable {...{ runs: [{ id: 1, updated_at: '2026-10-22T10:00:00+00:00', metadata: {}, status: 'success', records: 9, error: null }] }} />))
 check(backfill.includes('2026/10/22 18:00') && !/上午|下午/.test(backfill), `回補紀錄: update time is 2026/10/22 18:00, got ${backfill}`)

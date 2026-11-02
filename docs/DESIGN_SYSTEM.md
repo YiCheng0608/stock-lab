@@ -203,6 +203,7 @@
 - 進出點（全站：今日候選、個股頁策略總表與研究動作、行動頁列表）：進場區主文字色 mono（`.level-entry`）；停損 `--color-warning`（`.level-stop`）；目標 `--color-primary`（`.level-target`）；RR 用 badge；每個價位都帶文字標籤。紅綠只用於漲跌，進出點不用 `--color-error`／`--color-success`，以免讀成漲跌。
 - 觀察價位（個股頁策略總表，條件未成立時的參考價與量）：放在 1px 虛線（`--color-border-hover`）、圓角 8px 的區塊內，區塊第一行是 muted 小字標籤「條件未成立・觀察價位」，區塊文字 muted、價位字重 400；參考停損與參考目標沿用 `.level-stop`／`.level-target` 色並帶「參考」字樣。成立價位不加框、不加此標籤，兩者不放在同一個區塊。觀察價位未產生時區塊改為 warning 色邊與文字。不顯示勝率或成立機率。
 - 接近成立（行動頁第 3 級）：只用 primary badge（「接近突破條件」「接近回踩條件」）與文字，除了每列都有的最近收盤，不顯示任何價位，連觀察價位也不放；每條未達成的條件一行「差：…」（主文字色），下一行 muted「…已達成」。數字只有價格差距 % 與量比倍數，不寫元。成立條件的列（第 0～2 級）才有 `.level-entry`／`.level-stop`／`.level-target` 價位，兩種列不共用價位格；要看價位走「價位見策略總表 →」到個股頁。
+- 追蹤計畫卡（行動頁「追蹤計畫」「追蹤回看」）：版面同 `card` 網格（桌面 2 欄、手機 1 欄），價位列沿用進出點的顏色（`.level-entry`／`.level-stop`／`.level-target`）；右上狀態 badge 加資料日期 badge。狀態 badge 對照：待觸發 primary、已觸發 warning、達標 success、失效 error、無法比較 warning、到期／期滿結算／已取消 預設（無色）。行情更正待核對用 warning 框（`warning-box`），模擬報酬用 mono 600、不上漲跌色（模擬結果不是行情）。「加入追蹤」是 `btn-secondary`、「取消追蹤」是 `btn-ghost`，兩者都不用主按鈕。
 - 候選清單理由：照 API 順序（`candidate_score_v1` 每檔最多四條），每條一行，前綴 8px 色點（技術 primary、籌碼 secondary、新聞 accent、族群 `--color-text-muted`）；`inference=true` 的理由同列加「推論」badge（accent 變體）。今日頁列表只顯示第一條，展開明細顯示全部；個股頁策略總表的候選列顯示全部。
 
 ## 8. 無障礙與動效

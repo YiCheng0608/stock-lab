@@ -12,7 +12,7 @@ _TERMS: tuple[dict[str, Any], ...] = (
     {
         "term_id": "breakout",
         "name": "突破",
-        "aliases": ["breakout", "breakout_v1"],
+        "aliases": ["breakout", "breakout_v1", "breakout_v2"],
         "category": "strategy",
         "plain_definition": "價格有效越過前方壓力或近期高點的條件式型態。",
         "use": "用來描述可能在下一個交易日執行的突破條件，不代表已成交。",
@@ -24,7 +24,7 @@ _TERMS: tuple[dict[str, Any], ...] = (
     {
         "term_id": "pullback",
         "name": "回踩",
-        "aliases": ["pullback", "pullback_v1"],
+        "aliases": ["pullback", "pullback_v1", "pullback_v2"],
         "category": "strategy",
         "plain_definition": "上升結構中價格回到預定支撐區，等待重新轉強的條件。",
         "use": "用來標示回踩區間與重新站回的觀察條件。",

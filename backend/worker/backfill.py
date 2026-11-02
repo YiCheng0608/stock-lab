@@ -9,12 +9,13 @@ successful session or inventing a bar/chip row.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from typing import Any, Iterable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.clock import utcnow
 from app.config import MAX_GROUP_CANDIDATES, OFFICIAL_MAX_BACKFILL_DAYS
 from app.coverage import (
     has_backfill_manifest,
@@ -1119,7 +1120,7 @@ def _persist_progress(
         run.status = status
         run.error = error
         if finished:
-            run.finished_at = datetime.utcnow()
+            run.finished_at = utcnow()
         db.commit()
 
 
@@ -1412,7 +1413,7 @@ def targeted_backfill(
                 records=0,
                 request_key=request_key,
                 metadata_json=metadata,
-                started_at=datetime.utcnow(),
+                started_at=utcnow(),
             )
             db.add(run)
             db.flush()
@@ -1421,7 +1422,7 @@ def targeted_backfill(
         run.run_date = end_date
         run.status = "running"
         run.error = None
-        run.started_at = datetime.utcnow()
+        run.started_at = utcnow()
         run.finished_at = None
         db.commit()
         run_id = run.id

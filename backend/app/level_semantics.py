@@ -14,7 +14,7 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 
-from .strategies import LEGACY_RISK_LEVELS_FORMULA, REGISTRY
+from .strategies import LEGACY_RISK_LEVELS_FORMULA, REGISTRY, SUPERSEDED
 
 
 LEVEL_SEMANTICS_VERSION = "signal-level-semantics/v1"
@@ -68,9 +68,13 @@ def utc_now_iso() -> str:
 
 
 def _known_strategy(strategy_name: object, strategy_version: object) -> bool:
-    """A registered strategy, at its registered version, on the v1 levels."""
+    """A registered or superseded strategy, at its version, on the v1 levels."""
 
-    strategy = REGISTRY.get(strategy_name) if isinstance(strategy_name, str) else None
+    strategy = (
+        REGISTRY.get(strategy_name) or SUPERSEDED.get(strategy_name)
+        if isinstance(strategy_name, str)
+        else None
+    )
     return (
         strategy is not None
         and strategy.level_formula_version == KNOWN_FORMULA_VERSION

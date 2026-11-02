@@ -21,6 +21,7 @@
 | 前端檔 | `frontend/src/today/TodayViews.tsx` |
 | 前端檔 | `frontend/src/news/NewsViews.tsx` |
 | 前端檔 | `frontend/src/themes/ThemeViews.tsx` |
+| 前端檔 | `frontend/src/tracking/TrackingViews.tsx` |
 | 前端檔 | `frontend/src/actions/actionTiers.ts` |
 | 前端檔 | `frontend/src/stock/strategyBoard.ts` |
 | API route | `GET /dashboard` |
@@ -40,7 +41,7 @@
 | 頁首資料列 | `dashboard.as_of`、`market.source_label`、`mode` | 一行 `資料截至 <D/> · <來源> · <模式>`；「資料說明」內 `成交金額範圍：…` | — | 模式 `尚無官方快照` |
 | 大盤概況 | `dashboard.market_overview` | 加權指數、櫃買指數、成交金額（億元）、漲跌家數；資料日同 `D` | — | `上市大盤資料未取得`／`上櫃大盤資料未取得` |
 | 持倉風險提示列 | `dashboard.actions` 的持倉風險 | — | — | 沒有持倉風險時不出現 |
-| 明日候選 | `candidates.json` | 標題下 `資料 <C/>` 與 `<n> 檔`；每列 `#<名次>`；每列明細 `資料日期 <C/>`、`來源：…` | 新聞情緒分項與理由後的 `推論`；每列 AI 入口 `AI 推論 ▸`（有 `llm_note`）或 `AI 說明 ▸`；明細的 `AI 推論` 說明區；來源行結尾 `（推論）` | `當日零候選`／`尚無候選清單` |
+| 明日候選 | `candidates.json` | 標題下 `資料 <C/>` 與 `<n> 檔`；每列 `#<名次>`；每列明細 `資料日期 <C/>`、`來源：…`；每列明細一行 `加入追蹤`（按鈕）或 `已在追蹤`（連到行動頁的計畫） | 新聞情緒分項與理由後的 `推論`；每列 AI 入口 `AI 推論 ▸`（有 `llm_note`）或 `AI 說明 ▸`；明細的 `AI 推論` 說明區；來源行結尾 `（推論）` | `當日零候選`／`尚無候選清單` |
 | 熱門族群 | `today-board.json` | 榜別分頁下一行 `資料 <B/>`；每列 `資料 <B/> · 相對加權指數` | — | `meta.empty_message` 或 `此榜目前沒有族群` |
 | 重點新聞 | `dashboard.news` 前 3 則 | 每則：來源 badge、`發布於／事件於／事件日 …` 時間 | 有 AI 判讀的卡在方向後接 `AI 推論` | `市場新聞區尚無可顯示內容。` |
 | 關注標的 | `dashboard.actions` ＋ `dashboard.candidates` | 每張卡 `資料日 YYYY/MM/DD` | — | `dashboard.empty_states.actions` 或 `目前沒有可顯示的行動摘要。` |
@@ -63,6 +64,7 @@
 | T10 | 人工 | 候選進出點說明 | 樣本：`candidates.json` 依名次前 3 檔（`manual/T10.json`）。每檔 `llm_note` 寫到的價位（進場、突破、拉回區間、停損、目標）都等於 `levels` 的對應值，進場方式與 `levels.entry_type` 一致，沒有 `levels` 以外的價位、保證或買賣指示；`llm_note` 未完成的那檔記無法判定。一檔不符即失敗，證據寫代號、說明原句與 `levels` 值 |
 | T11 | CI | 大盤概況 | `dashboard.market_overview` 每個交易所：`available` 時，`facts.json` 的 `market_summary_latest` 該交易所列的 `trading_date` 等於 `market_overview.trading_date`，且指數收盤、漲跌、成交金額、上漲與下跌家數與 API 相同；頁面有整行指數收盤（兩位小數、千分位；四捨五入同前端 `toFixed`，剛好 .5 時遠離零）、`<±漲跌>（<±漲跌幅>%）`、`<上市／上櫃> <成交金額÷1 億，兩位小數> <短範圍>`（`twse_all_securities` 為 `集中市場總計`、`tpex_stocks` 為 `上櫃股票`，其他值為 `scope_label`）、`<上市／上櫃> 上漲 n · 下跌 n · 平盤 n（漲停／跌停）`；「資料說明」有整行 `成交金額範圍：上市為<scope_label>；上櫃為<scope_label>`（只列 available 的交易所）。`unavailable` 時頁面有整行 `上市大盤資料未取得`／`上櫃大盤資料未取得`，但 `market_summary_latest` 該交易所列的日期等於 `market_overview.trading_date` 時判失敗 |
 | T12 | CI | 區塊順序 | 整行 `明日候選`、`熱門族群`、`重點新聞` 都在，且 `明日候選` 在另兩行之前（PRODUCT_SPEC §2） |
+| T13 | CI | 加入追蹤 | 在 T7 之後。截圖展開每列明細；`items` 非空時，整行 `加入追蹤` 與整行 `已在追蹤` 的行數合計 = `items` 數，`已在追蹤` 的行數 = `items[].open_plan_id` 非 null 的筆數；`items` 空時兩種行都不出現 |
 
 ## 陷阱
 
@@ -72,7 +74,7 @@
 
 ## 判定
 
-- 通過：T1～T9、T11、T12 全部通過；T10 由人工判讀另記。
+- 通過：T1～T9、T11～T13 全部通過；T10 由人工判讀另記。
 - 失敗：任一條失敗，列出編號、預期與實際。
 - 無法判定：沒有失敗，但有檢查無法判定（API 非 200、截圖未 ready，或上游沒通過，見 [README 三態與上游](README.md#三態與上游)）；列出 URL 或上游編號。
 

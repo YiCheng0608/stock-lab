@@ -12,11 +12,12 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Edit|Write|Bash|PowerShell",
+        "matcher": "Edit|Write|Bash|PowerShell|Read|Grep|Glob|NotebookEdit|Monitor|Artifact|ArtifactData|DesignSync|mcp__codebase-memory-mcp__.*",
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/tools/ops/agent_guard.cjs\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/tools/ops/agent_guard.cjs\"",
+            "timeout": 60
           }
         ]
       }

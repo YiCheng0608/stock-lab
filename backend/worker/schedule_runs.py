@@ -30,9 +30,13 @@ asks again and only a repeated answer becomes ``non_trading_day``.
 Re-running the same target date is safe: when a run for that date already
 finished as ``success`` or ``non_trading_day``, the new invocation records a
 ``skipped`` row (reason ``already_complete``) without touching market data,
-unless ``force`` is set.  Data idempotency itself is owned by the steps:
-collect reuses a successful run for the same request and never rewrites a
-stored value.
+unless ``force`` is set.  The one exception is the institutional (三大法人)
+files, which the exchanges revise after publishing them (Issue #396): after a
+``success``, the next invocation (the 21:30 trigger) requests the two files
+once more and records an ``institutional_refetch`` step on its skipped row;
+OHLCV, margin and events are not requested.  Data idempotency itself is owned
+by the steps: collect reuses a successful run for the same request and never
+rewrites a stored value.
 """
 
 from __future__ import annotations
@@ -48,9 +52,10 @@ from typing import Any, Callable
 from sqlalchemy import desc, inspect, select, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.clock import utcnow
 from app.migration_revisions import REVISIONS
 from app.models import IngestionRun, ScheduleRun, ScheduleRunStep
-from worker import pipeline, theme_suggestions
+from worker import institutional_refetch, pipeline, theme_suggestions
 from worker.sources import OfficialMarketDataAdapter
 
 DAILY_JOB = "daily"
@@ -125,10 +130,9 @@ STRATEGY_LEVELS_MODULE = "worker.strategy_levels"
 STRATEGY_LEVELS_FUNCTION = "run_strategy_levels"
 TRADING_CALENDAR_MODULE = "worker.trading_calendar"
 TRADING_CALENDAR_FUNCTION = "run_trading_calendar"
-
-
-def _utcnow() -> datetime:
-    return datetime.utcnow()
+# The step an already_complete run records when it refetches the target's
+# institutional files (Issue #396).
+INSTITUTIONAL_REFETCH_STEP = "institutional_refetch"
 
 
 def _today() -> date:
@@ -220,6 +224,10 @@ def _strategy_levels_step(target: date) -> dict[str, Any]:
 def _trading_calendar_step(target: date) -> dict[str, Any]:
     module = importlib.import_module(TRADING_CALENDAR_MODULE)
     return getattr(module, TRADING_CALENDAR_FUNCTION)(target)
+
+
+def _institutional_refetch_step(target: date) -> dict[str, Any]:
+    return institutional_refetch.refetch_institutional(target)
 
 
 def _theme_suggestion_step() -> dict[str, Any]:
@@ -417,7 +425,7 @@ def _record_step(
             db.add(row)
         row.status = status
         row.started_at = started_at
-        row.finished_at = _utcnow() if status != "running" else None
+        row.finished_at = utcnow() if status != "running" else None
         row.records = records
         row.error = error
         row.ingestion_run_id = ingestion_run_id
@@ -431,7 +439,7 @@ def _run_step(
     sequence: int,
     action: Callable[[], dict[str, Any]],
 ) -> dict[str, Any]:
-    started = _utcnow()
+    started = utcnow()
     _record_step(run_id, step, sequence, status="running", started_at=started)
     try:
         result = action()
@@ -453,7 +461,9 @@ def _run_step(
         started_at=started,
         records=_step_records(step, result),
         error=str(error) if error else None,
-        ingestion_run_id=result.get("run_id") if step == "collect" else None,
+        ingestion_run_id=result.get("run_id")
+        if step in {"collect", INSTITUTIONAL_REFETCH_STEP}
+        else None,
         details=_compact(result),
     )
     return result
@@ -472,7 +482,7 @@ def _finish(
         run.status = status
         run.records = records
         run.error = error
-        run.finished_at = _utcnow()
+        run.finished_at = utcnow()
         run.summary_json = summary
         db.commit()
 
@@ -520,7 +530,7 @@ def _start_run(
 ) -> tuple[int, dict[str, Any] | None]:
     """Create the run row; return a finished result when nothing should run."""
 
-    now = _utcnow()
+    now = utcnow()
     host = socket.gethostname()
     with pipeline.SessionLocal() as db:
         previous = db.scalars(
@@ -561,7 +571,7 @@ def _start_run(
             skip_reason, related = "already_complete", complete.id
         if skip_reason:
             run.status = "skipped"
-            run.finished_at = _utcnow()
+            run.finished_at = utcnow()
             run.summary_json = {"reason": skip_reason, "related_run_id": related}
         db.commit()
         if skip_reason:
@@ -571,8 +581,52 @@ def _start_run(
                 "related_run_id": related,
                 "schedule_run_id": run.id,
                 "date": target.isoformat(),
+                # Only a complete trading day has institutional files to refetch.
+                "refetch_institutional": skip_reason == "already_complete"
+                and complete is not None
+                and complete.status == "success",
             }
         return run.id, None
+
+
+def _refetch_institutional(run_id: int, target: date) -> dict[str, Any]:
+    """Run the refetch step on a skipped run and keep its outcome in the summary.
+
+    The run stays ``skipped`` (``already_complete``) whatever the outcome, so
+    the day's completeness is still read from the earlier ``success`` row; the
+    summary shows whether the refetch requested the files and how many rows it
+    revised.
+    """
+
+    result = _run_step(
+        run_id,
+        INSTITUTIONAL_REFETCH_STEP,
+        1,
+        lambda: _institutional_refetch_step(target),
+    )
+    kept = {
+        key: result.get(key)
+        for key in (
+            "status",
+            "run_id",
+            "idempotent_reuse",
+            "requests",
+            "revised_rows",
+            "unchanged_rows",
+            "value_fills",
+            "error",
+        )
+        if result.get(key) is not None
+    }
+    with pipeline.SessionLocal() as db:
+        run = db.get(ScheduleRun, run_id)
+        run.records = int(result.get("records", 0) or 0)
+        run.summary_json = {
+            **(run.summary_json or {}),
+            INSTITUTIONAL_REFETCH_STEP: kept,
+        }
+        db.commit()
+    return kept
 
 
 def record_preflight_skip(
@@ -619,7 +673,7 @@ def record_preflight_skip(
 
 
 def _insert_skip(target: date, reason: str, trigger: str) -> dict[str, Any]:
-    now = _utcnow()
+    now = utcnow()
     with pipeline.SessionLocal() as db:
         summary: dict[str, Any] = {"reason": reason}
         if reason == LOCK_SKIP_REASON:
@@ -664,6 +718,10 @@ def run_daily_job(
     target = pipeline.latest_weekday(end_date)
     run_id, finished = _start_run(target, trigger, force)
     if finished is not None:
+        if finished.pop("refetch_institutional", False):
+            finished[INSTITUTIONAL_REFETCH_STEP] = _refetch_institutional(
+                run_id, target
+            )
         return finished
 
     output: dict[str, Any] = {

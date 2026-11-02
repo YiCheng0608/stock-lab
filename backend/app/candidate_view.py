@@ -4,6 +4,7 @@ Only reads ``candidate_runs`` / ``daily_candidates`` written by
 ``worker.candidates`` and the ``candidate_llm_notes`` written by
 ``worker.candidate_notes``; nothing is scored or generated at request time.
 Each item's ``market`` is the stored close of its trading date (#276).
+``open_plan_id`` is the candidate signal's user tracking plan, if any.
 """
 
 from __future__ import annotations
@@ -11,9 +12,10 @@ from __future__ import annotations
 from datetime import date, timezone
 from typing import Any
 
-from sqlalchemy import desc, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .candidate_runs import read_run
 from .domain import CANDIDATE_NOTE_PROMPT_VERSION, CANDIDATE_SCORE_VERSION
 from .market_change import adjacent_change
 from .models import (
@@ -25,6 +27,7 @@ from .models import (
     MarketBar,
     Signal,
 )
+from .tracking_plans import open_plan_for_signal
 
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 20
@@ -163,7 +166,9 @@ def candidate_item(
     news_config = (
         (run.config_json or {}).get("components", {}).get("news_sentiment", {})
     )
+    plan = open_plan_for_signal(db, row.signal_id)
     return {
+        "candidate_id": row.id,
         "rank": row.rank,
         "trading_date": row.trading_date.isoformat(),
         "score_version": row.score_version,
@@ -177,6 +182,7 @@ def candidate_item(
         "strategy": row.strategy,
         "signal_id": row.signal_id,
         "signal_status": signal.status,
+        "open_plan_id": plan.id if plan else None,
         "levels": _levels(signal),
         "total_score": row.total_score,
         "weight_coverage": row.weight_coverage,
@@ -207,22 +213,15 @@ def candidate_item(
 def _run_for(
     db: Session, trading_date: date | None, *, on_or_before: bool = False
 ) -> CandidateRun | None:
-    query = select(CandidateRun).where(
-        CandidateRun.score_version == CANDIDATE_SCORE_VERSION
-    )
-    if trading_date is not None:
-        query = query.where(
-            CandidateRun.trading_date <= trading_date
-            if on_or_before
-            else CandidateRun.trading_date == trading_date
-        )
-    return db.scalar(query.order_by(desc(CandidateRun.trading_date)).limit(1))
+    return read_run(db, trading_date, on_or_before=on_or_before)
 
 
 def _methodology(run: CandidateRun | None) -> dict[str, Any]:
     config = (run.config_json if run is not None else None) or {}
     return {
-        "score_version": CANDIDATE_SCORE_VERSION,
+        "score_version": run.score_version
+        if run is not None
+        else CANDIDATE_SCORE_VERSION,
         "purpose": "評分只用於排序，不代表勝率或預期報酬，不改變策略判定",
         "weights": config.get("weights"),
         "minimum_weight_coverage": config.get("minimum_weight_coverage"),

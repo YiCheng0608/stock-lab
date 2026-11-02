@@ -28,11 +28,15 @@ import {
   getThemeBoard,
   getThemeSuggestion,
   getThemeSuggestions,
-  getTracking,
+  addTrackingPlan,
+  cancelTrackingPlan,
+  getTrackingPlan,
+  getTrackingPlans,
   getPortfolio,
   upsertPortfolio,
 } from './api'
 import type {
+  ChipGroupSource,
   ActionSummary,
   ActionView,
   ActionsResponse,
@@ -56,7 +60,6 @@ import type {
   StockBarsResponse,
   ThemeBoard,
   ThemeMemberSort,
-  TrackingResponse,
   ProductTime,
 } from './types'
 import { commitSearchOnEnter } from './search'
@@ -69,7 +72,7 @@ import { Shell } from './components/Shell'
 import { Term } from './components/Term'
 import { Card, CardList, DataTable, EmptyState, Skeleton, Tabs, cx, tabId, tabPanelId, type Column } from './components/ui'
 import { StockBarsChart } from './stock/StockBarsChart'
-import { priceDigits } from './stock/stockBars'
+import { PRICE_BASIS, priceDigits } from './stock/stockBars'
 import { StockCutoffControl } from './stock/StockCutoffControl'
 import { StockHeader } from './stock/StockHeader'
 import { StrategyBoardPanel } from './stock/StrategyBoardPanel'
@@ -78,6 +81,7 @@ import { HotGroupsSection, ThemeDetailView, ThemesBoardView } from './themes/The
 import { ThemeSuggestionsSection, type SuggestionNewsState } from './themes/ThemeSuggestionViews'
 import { THEME_SUGGESTION_LIMIT } from './themes/themeSuggestions'
 import { CandidatesSection } from './candidates/CandidateViews'
+import { StockPlanPanel, TrackingClientProvider, TrackingSection, type TrackingClient } from './tracking/TrackingViews'
 import { DEFAULT_MEMBER_SORT, THEME_BOARD_LIMIT, THEME_NEWS_LIMIT, TODAY_BOARD_LIMIT, memberQuery, parseBoard } from './themes/themeBoards'
 import { NewsCard, NewsDetailView, NewsListView, StockNewsTimeline } from './news/NewsViews'
 import { HoldingAlert, MarketOverviewView, TodayHeader } from './today/TodayViews'
@@ -170,6 +174,10 @@ function sourceLabel(source: string | null | undefined | readonly string[]): str
     'twse/tpex official feeds': 'TWSE／TPEx 官方資料',
     'no configured official collection': '尚無已驗證的官方資料',
     'official-fixture': '官方資料',
+    twse_t86: '臺灣證券交易所 三大法人',
+    twse_margin: '臺灣證券交易所 融資融券',
+    tpex_3insti: '證券櫃檯買賣中心 三大法人',
+    tpex_margin: '證券櫃檯買賣中心 融資融券',
   }
   return names[normalized] ?? (/^[\x00-\x7F]*$/.test(source) ? '來源待核實' : source)
 }
@@ -188,6 +196,8 @@ function strategyLabel(strategy: string | null | undefined): string {
   return ({
     breakout_v1: '突破條件',
     pullback_v1: '回踩條件',
+    breakout_v2: '突破條件',
+    pullback_v2: '回踩條件',
     breakout: '突破條件',
     pullback: '回踩條件',
   }[strategy ?? ''] ?? '策略條件')
@@ -654,7 +664,7 @@ function StockPage() {
       {tab === 'chart' && <StockBarsChart interval={barsInterval} onIntervalChange={setBarsInterval} data={chartBars.data} loading={chartBars.isLoading} error={chartBars.error} instrumentType={data.instrument.instrument_type} />}
       {tab === 'chips' && <Card eyebrow="籌碼資料" title="法人與融資">{data.chips.length ? <ChipTable rows={data.chips.slice(-30).reverse()} /> : <EmptyState reason="尚無可核實的籌碼資料。" />}<BrokerBranchEntry exchange={data.instrument.exchange} /></Card>}
       {tab === 'news' && <><StockNewsTimeline exchange={data.instrument.exchange} symbol={data.instrument.symbol} query={{ data: stockNews.data, loading: stockNews.isLoading, error: stockNews.error }} /><StockEventList events={data.events} /></>}
-      {tab === 'research' && <><StrategyBoardPanel board={data.strategy_board} candidate={data.candidate} />{fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。</div>}<ActionDetailPanel action={data.decision_summary ?? null} /><Card eyebrow="研究條件 · 只讀快照" title="所屬族群"><GroupList groups={data.groups} /></Card></>}
+      {tab === 'research' && <><StrategyBoardPanel board={data.strategy_board} candidate={data.candidate} />{fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。</div>}<ActionDetailPanel action={data.decision_summary ?? null} /><StockPlanPanel strategies={data.decision_summary?.strategies} /><Card eyebrow="研究條件 · 只讀快照" title="所屬族群"><GroupList groups={data.groups} /></Card></>}
       {tab === 'data' && <><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><Card className="stock-source-panel" eyebrow="資料說明" title="原始時間、來源與技術指標"><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div><IndicatorMetaRows bars={dayBars.data} /><details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} instrumentType={data.instrument.instrument_type} /></details></Card></>}
     </div>
     <p className="disclaimer">此為研究工具與資料摘要，不構成投資建議、報酬保證或自動下單指令。</p>
@@ -667,7 +677,7 @@ export function IndicatorMetaRows({ bars }: { bars: StockBarsResponse | undefine
   const meta = bars.indicators
   return <>
     <div className="metric-row"><span>技術指標版本</span><b>{meta.formula_version}</b></div>
-    <div className="metric-row"><span>價格基準</span><b>{meta.price_basis === 'as_of_date_raw_basis' ? '資料日原始價（前期依除權息換算）' : '待核實'}</b></div>
+    <div className="metric-row"><span>價格基準</span><b>{meta.price_basis === PRICE_BASIS ? '資料日原始價（前期依除權息換算）' : '待核實'}</b></div>
     <div className="metric-row"><span>日線指標計算時間</span><b>{meta.computed_at ? formatTaiwanDateTime(meta.computed_at) : '尚未計算'}</b></div>
     <div className="metric-row"><span>K 線資料日期</span><b>{formatDay(bars.data_as_of) ?? '待核實'}</b></div>
   </>
@@ -717,17 +727,23 @@ function formatRawChipValue(value: number | null): string {
 
 const CHIP_COLUMNS: ReadonlyArray<Column<InstrumentDetail['chips'][number]>> = [
   { key: 'date', header: '日期', cell: (row) => formatTaiwanDateTime(row.date, true) },
-  { key: 'foreign', header: <Term id="foreign_flow">外資買賣超</Term>, num: true, cell: (row) => formatTableChip(row.foreign_buy, row.source) },
-  { key: 'trust', header: <Term id="trust_flow">投信</Term>, num: true, cell: (row) => formatTableChip(row.trust_buy, row.source) },
-  { key: 'dealer', header: <Term id="dealer_flow">自營商</Term>, num: true, cell: (row) => formatTableChip(row.dealer_buy, row.source) },
-  { key: 'margin', header: <Term id="margin">融資增減</Term>, num: true, cell: (row) => formatTableChip(row.margin_change, row.source, true) },
+  { key: 'foreign', header: <Term id="foreign_flow">外資買賣超</Term>, num: true, cell: (row) => formatTableChip(row.foreign_buy, row.institutional?.source) },
+  { key: 'trust', header: <Term id="trust_flow">投信</Term>, num: true, cell: (row) => formatTableChip(row.trust_buy, row.institutional?.source) },
+  { key: 'dealer', header: <Term id="dealer_flow">自營商</Term>, num: true, cell: (row) => formatTableChip(row.dealer_buy, row.institutional?.source) },
+  { key: 'margin', header: <Term id="margin">融資增減</Term>, num: true, cell: (row) => formatTableChip(row.margin_change, row.margin?.source, true) },
 ]
+
+/** One line per value group: its official file, data date and collection time (Issue #395). */
+function ChipGroupLine({ label, group }: { label: string; group: ChipGroupSource | null | undefined }) {
+  if (!group) return <span>{label}：無資料</span>
+  return <span>{label}：{sourceLabel(group.source)}（{group.source}） · 資料截至：{formatTaiwanDateTime(group.data_as_of, true)} · 收集：{formatTaiwanDateTime(group.collected_at)}</span>
+}
 
 export function ChipTable({ rows }: { rows: InstrumentDetail['chips'] }) {
   return <>
     <div className="small-note chip-unit-note">單位：張（三大法人為股數 ÷ 1,000 四捨五入，不足 500 股為 0）。三大法人為外資、投信、自營商；正值為買超，負值為賣超。融資正值為餘額增加，負值為減少。空白表示未提供資料、數值無效或來源單位待核實；原始股數與來源見下方說明。</div>
     <DataTable wrapClassName="compact-table" columns={CHIP_COLUMNS} rows={rows} rowKey={(row, index) => row.id ?? row.date ?? index} />
-    <details className="technical-details chip-source-details"><summary>資料來源與原始值</summary><div className="chip-source-list">{rows.map((row) => <div className="chip-source-row" key={`${row.date}-${row.source}`}><strong>{formatTaiwanDateTime(row.date, true)}</strong><span>來源：{sourceLabel(row.source)}（{row.source || '來源未提供'}） · 資料截至：{formatTaiwanDateTime(row.data_as_of, true)} · 收集：{formatTaiwanDateTime(row.collected_at)}</span><span>來源稽核原值：外資（{isVerifiedChipFlowSource(row.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.foreign_buy)} · 投信（{isVerifiedChipFlowSource(row.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.trust_buy)} · 自營商（{isVerifiedChipFlowSource(row.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.dealer_buy)} · 融資（{isVerifiedMarginSource(row.source) ? '張' : '單位待核實'}） {formatRawChipValue(row.margin_change)}</span></div>)}</div></details>
+    <details className="technical-details chip-source-details"><summary>資料來源與原始值</summary><div className="chip-source-list">{rows.map((row) => <div className="chip-source-row" key={`${row.date}-${row.source}`}><strong>{formatTaiwanDateTime(row.date, true)}</strong><ChipGroupLine label="法人" group={row.institutional} /><ChipGroupLine label="融資" group={row.margin} /><span>來源稽核原值：外資（{isVerifiedChipFlowSource(row.institutional?.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.foreign_buy)} · 投信（{isVerifiedChipFlowSource(row.institutional?.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.trust_buy)} · 自營商（{isVerifiedChipFlowSource(row.institutional?.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.dealer_buy)} · 融資（{isVerifiedMarginSource(row.margin?.source) ? '張' : '單位待核實'}） {formatRawChipValue(row.margin_change)}</span></div>)}</div></details>
   </>
 }
 
@@ -851,6 +867,7 @@ export function ActionsPage() {
       {query.data && <ActionFilters summary={query.data.summary} view={view} includeEtf={includeEtf} searching={Boolean(search)} onViewChange={(next) => { setView(next); resetTiers() }} onIncludeEtfChange={(next) => { setIncludeEtf(next); resetTiers() }} />}
     </PageTitle>
     <PortfolioSubsection />
+    <TrackingSection />
     <QueryState loading={query.isLoading} error={query.error}>{query.data && <>
       {(query.data.summary.held_unknown ?? 0) > 0 && <p className="small-note">庫存數量待核實 {query.data.summary.held_unknown?.toLocaleString()} 筆；這些記錄尚未計入已核實持倉。</p>}
       <ActionTierList sections={tierSections(query.data, tierPages)} loadingTiers={loadingTiers} canLoadMore={canLoadMore} onMore={loadMore} />
@@ -1022,8 +1039,10 @@ function NotFound() {
   return <div className="page"><div className="empty panel">找不到此頁。<Link className="text-link" to="/">回到今日</Link></div></div>
 }
 
+const trackingClient: TrackingClient = { plans: getTrackingPlans, plan: getTrackingPlan, add: addTrackingPlan, cancel: cancelTrackingPlan }
+
 export default function App() {
-  return <Shell><Routes>
+  return <TrackingClientProvider value={trackingClient}><Shell><Routes>
     <Route path="/" element={<TodayPage />} />
     <Route path="/news/:newsId" element={<NewsDetailPage />} />
     <Route path="/news" element={<NewsPage />} />
@@ -1039,5 +1058,5 @@ export default function App() {
     <Route path="/research/strategies" element={<ResearchStrategiesPage />} />
     <Route path="/glossary" element={<GlossaryPage />} />
     <Route path="*" element={<NotFound />} />
-  </Routes></Shell>
+  </Routes></Shell></TrackingClientProvider>
 }

@@ -10,6 +10,7 @@ import pytest
 from sqlalchemy import create_engine, select, update
 from sqlalchemy.orm import sessionmaker
 
+from app.clock import utcnow
 from app.db import enable_sqlite_foreign_keys
 from app.migrations import upgrade_database
 from app.models import (
@@ -79,6 +80,13 @@ class Steps:
             "plan_tracking": {"status": "success", "records": 0},
             "strategy_levels": {"status": "success", "records": 6},
             "candidate_notes": {"status": "success", "records": 3},
+            # Issue #396; the real refetch has its own tests.
+            "institutional_refetch": {
+                "status": "success",
+                "records": 0,
+                "requests": 2,
+                "revised_rows": 0,
+            },
         }
         self.results.update(results)
 
@@ -109,6 +117,11 @@ class Steps:
         )
         monkeypatch.setattr(
             schedule_runs, "_candidate_note_step", make("candidate_notes")
+        )
+        monkeypatch.setattr(
+            schedule_runs,
+            "_institutional_refetch_step",
+            make("institutional_refetch"),
         )
         # Catch-up has its own tests; here no earlier session is missing.
         monkeypatch.setattr(
@@ -177,6 +190,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
     again = pipeline.run_daily(DAY, trigger="scheduler")
     assert again["status"] == "skipped" and again["reason"] == "already_complete"
     assert again["related_run_id"] == rows[0].id
+    # Only the institutional files are fetched again (Issue #396).
     assert steps.calls == [
         "collect",
         "trading_calendar",
@@ -188,10 +202,12 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "plan_tracking",
         "strategy_levels",
         "candidate_notes",
+        "institutional_refetch",
     ]
     rows, by_run = runs(database)
     assert [row.status for row in rows] == ["success", "skipped"]
-    assert by_run[rows[1].id] == {}
+    assert list(by_run[rows[1].id]) == ["institutional_refetch"]
+    assert again["institutional_refetch"]["requests"] == 2
 
     forced = pipeline.run_daily(DAY, force=True)
     assert forced["status"] == "success"
@@ -634,7 +650,7 @@ def test_running_rows_block_until_stale_then_are_marked_abandoned(
     database, monkeypatch
 ):
     steps = Steps(monkeypatch)
-    now = datetime.utcnow()
+    now = utcnow()
     with database() as db:
         db.add(
             ScheduleRun(
@@ -1043,7 +1059,7 @@ def test_a_lock_skip_points_at_the_running_row(database, monkeypatch):
             target_date=DAY,
             trigger="scheduler",
             status="running",
-            started_at=datetime.utcnow(),
+            started_at=utcnow(),
             host=socket.gethostname(),
             pid=os.getpid(),
         )
@@ -1107,7 +1123,7 @@ def test_running_row_whose_process_is_gone_is_abandoned_at_once(database, monkey
     steps = Steps(monkeypatch)
     dead = subprocess.Popen([sys.executable, "-c", "pass"])
     dead.wait()
-    now = datetime.utcnow()
+    now = utcnow()
     with database() as db:
         db.add(
             ScheduleRun(
@@ -1158,7 +1174,7 @@ def test_running_row_from_another_host_waits_for_the_time_limit(database, monkey
                 target_date=DAY,
                 trigger="scheduler",
                 status="running",
-                started_at=datetime.utcnow() - timedelta(hours=2),
+                started_at=utcnow() - timedelta(hours=2),
                 host="other-host",
                 pid=1,
             )
@@ -1727,9 +1743,14 @@ def test_filling_empty_values_keeps_provenance_and_records_the_fill(database):
         chip = db.scalar(
             select(ChipSnapshot).where(ChipSnapshot.instrument_id == bar.instrument_id)
         )
-        chip_raw, margin = chip.raw_payload_id, chip.margin_balance
+        # The fill names the margin capture, not the institutional one (#395).
+        chip_raw, margin = chip.margin_raw_payload_id, chip.margin_balance
+        assert db.get(RawPayload, chip_raw).endpoint.startswith(
+            sources.TWSE_MARGIN_HISTORY_ENDPOINT
+        )
         chip.margin_balance = None
         chip.raw_payload_id = universe_raw
+        chip.margin_raw_payload_id = universe_raw
         db.execute(update(IngestionRun).values(status="partial"))
         db.commit()
 
@@ -1745,7 +1766,11 @@ def test_filling_empty_values_keeps_provenance_and_records_the_fill(database):
         chip = db.scalar(
             select(ChipSnapshot).where(ChipSnapshot.instrument_id == bar.instrument_id)
         )
-        assert (chip.margin_balance, chip.raw_payload_id) == (margin, universe_raw)
+        assert (
+            chip.margin_balance,
+            chip.raw_payload_id,
+            chip.margin_raw_payload_id,
+        ) == (margin, universe_raw, universe_raw)
         groups = db.get(IngestionRun, second["run_id"]).metadata_json[
             "value_fill_groups"
         ]
@@ -1875,3 +1900,76 @@ def test_historical_refetch_keeps_the_snapshot_event_coverage(database):
                 )
             )
         } == quality
+
+
+# Timestamps the run log writes (#376). `frozen_utcnow` (conftest) makes app.clock
+# answer one instant to every caller, so a stamp taken from local time or the real
+# clock stores a value other than the one asserted here.
+
+
+def test_a_daily_run_and_its_steps_are_stamped_with_the_clock(
+    database, monkeypatch, frozen_utcnow
+):
+    Steps(monkeypatch)
+    first = frozen_utcnow.at
+    assert pipeline.run_daily(DAY, trigger="scheduler")["status"] == "success"
+    rows, by_run = runs(database)
+    assert (rows[0].started_at, rows[0].finished_at) == (first, first)
+    logged = by_run[rows[0].id]
+    assert len(logged) == 11
+    assert {(step.started_at, step.finished_at) for step in logged.values()} == {
+        (first, first)
+    }
+
+    # The rerun the same day is recorded as a skip at the clock's new instant.
+    later = first + timedelta(hours=3)
+    frozen_utcnow.at = later
+    assert pipeline.run_daily(DAY)["reason"] == "already_complete"
+    rows, _ = runs(database)
+    assert (rows[1].status, rows[1].started_at, rows[1].finished_at) == (
+        "skipped",
+        later,
+        later,
+    )
+
+
+def test_a_running_row_is_abandoned_once_the_clock_is_past_the_time_limit(
+    database, monkeypatch, frozen_utcnow
+):
+    Steps(monkeypatch)
+    limit = schedule_runs.STALE_RUNNING_AFTER
+    with database() as db:
+        db.add(
+            ScheduleRun(
+                job="daily",
+                target_date=DAY,
+                trigger="scheduler",
+                status="running",
+                started_at=frozen_utcnow.at - limit + timedelta(seconds=1),
+                host="other-host",
+                pid=1,
+            )
+        )
+        db.commit()
+    assert pipeline.run_daily(DAY)["reason"] == "already_running"
+    with database() as db:
+        db.execute(
+            update(ScheduleRun)
+            .where(ScheduleRun.status == "running")
+            .values(started_at=frozen_utcnow.at - limit - timedelta(seconds=1))
+        )
+        db.commit()
+    assert pipeline.run_daily(DAY)["status"] == "success"
+    rows, _ = runs(database)
+    assert rows[0].status == "failed" and rows[0].error.startswith("abandoned")
+    assert rows[0].finished_at == frozen_utcnow.at
+
+
+def test_a_declined_start_is_logged_at_the_clock(database, frozen_utcnow):
+    skipped = schedule_runs.record_preflight_skip(DAY, reason="low_memory")
+    assert skipped["status"] == "skipped"
+    rows, _ = runs(database)
+    assert (rows[0].started_at, rows[0].finished_at) == (
+        frozen_utcnow.at,
+        frozen_utcnow.at,
+    )

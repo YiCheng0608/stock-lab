@@ -1,9 +1,10 @@
 import type { ReactElement } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom/server'
 
 import * as AppModule from './App'
-import { CandidateCard, CandidatesSection } from './candidates/CandidateViews'
+import { CandidatesSection, ScoreDetails } from './candidates/CandidateViews'
 import { completeItem, longList } from './candidates/candidates.fixtures'
 import * as ui from './components/ui'
 import { StockBarsChart } from './stock/StockBarsChart'
@@ -24,8 +25,9 @@ const path = require('node:path') as { join(...parts: string[]): string; relativ
 const failures: string[] = []
 let checks = 0
 const check = (condition: boolean, message: string) => { checks++; if (!condition) failures.push(message) }
+// The candidates' "加入追蹤" button (#253) reads the query client.
 const render = (name: string, element: () => ReactElement): string => {
-  try { return renderToStaticMarkup(<StaticRouter location="/">{element()}</StaticRouter>) } catch (error) {
+  try { return renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}><StaticRouter location="/">{element()}</StaticRouter></QueryClientProvider>) } catch (error) {
     failures.push(`${name}: render failed (${error instanceof Error ? error.message.split('\n')[0] : String(error)})`)
     return ''
   }
@@ -118,15 +120,29 @@ check(formatTableNumber(21.1, 2) === '21.10' && formatTableNumber(1234.5, 2) ===
 check(formatTableNumber(-0.001, 2) === '0.00', 'a value that rounds to zero has no minus sign')
 
 // ---- each table of the #266 review ----
+const t86 = (day: string, at: string) => ({ source: 'twse_t86', data_as_of: day, collected_at: at })
+const margin = (day: string, at: string) => ({ source: 'twse_margin', data_as_of: day, collected_at: at })
 const chipRows = [
-  { date: '2026-10-20', foreign_buy: 57797, trust_buy: 0, dealer_buy: -7500, margin_balance: null, margin_change: -196, short_balance: null, borrowed_sell: null, day_trade_ratio: null, source: 'twse_t86+twse_margin', data_as_of: '2026-10-20', collected_at: null },
-  { date: '2026-10-21', foreign_buy: 493, trust_buy: null, dealer_buy: 1000, margin_balance: null, margin_change: 3, short_balance: null, borrowed_sell: null, day_trade_ratio: null, source: 'twse_t86+twse_margin', data_as_of: '2026-10-21', collected_at: null },
+  { date: '2026-10-20', foreign_buy: 57797, trust_buy: 0, dealer_buy: -7500, margin_balance: null, margin_change: -196, short_balance: null, borrowed_sell: null, day_trade_ratio: null, source: 'twse_t86+twse_margin', data_as_of: '2026-10-20', collected_at: null, institutional: t86('2026-10-20', '2026-10-20T10:30:15Z'), margin: margin('2026-10-20', '2026-10-20T13:30:18Z') },
+  { date: '2026-10-21', foreign_buy: 493, trust_buy: null, dealer_buy: 1000, margin_balance: null, margin_change: 3, short_balance: null, borrowed_sell: null, day_trade_ratio: null, source: 'twse_t86+twse_margin', data_as_of: '2026-10-21', collected_at: null, institutional: t86('2026-10-21', '2026-10-21T10:30:14Z'), margin: margin('2026-10-21', '2026-10-21T13:30:17Z') },
 ] as unknown as InstrumentDetail['chips']
 const ChipTable = component('ChipTable')
 const chips = render('ChipTable', () => <ChipTable {...{ rows: chipRows }} />)
 checkAligned('個股籌碼', chips, ['外資買賣超', '投信', '自營商', '融資增減'])
 check(bodyText(chips).includes('+58') && bodyText(chips).includes('-8') && !chips.includes('57.797'), '個股籌碼: institutional flow is whole lots')
 check(chips.includes('57,797'), '個股籌碼: the original share count stays in the source details')
+// #395: each value group names its own file, data date and collection time.
+const plainText = (markup: string) => markup.replace(/<!-- -->/g, '').replace(/<[^>]+>/g, '\n')
+const chipText = plainText(chips)
+check(chipText.includes('法人：臺灣證券交易所 三大法人（twse_t86） · 資料截至：2026/10/20 · 收集：2026/10/20 18:30'), '個股籌碼: the institutional line has its own source and time')
+check(chipText.includes('融資：臺灣證券交易所 融資融券（twse_margin） · 資料截至：2026/10/20 · 收集：2026/10/20 21:30'), '個股籌碼: the margin line has its own source and time')
+// A row without a margin file shows no margin value and says so; one without an institutional file likewise.
+// The row-level source still names both files, so a column reading it instead of its group would show the value.
+const onlyInstitutional = [{ ...chipRows[0], margin: null }, { ...chipRows[1], institutional: null }] as unknown as InstrumentDetail['chips']
+const partial = render('ChipTable (one group)', () => <ChipTable {...{ rows: onlyInstitutional }} />)
+const partialText = plainText(partial)
+check(partialText.includes('融資：無資料') && partialText.includes('法人：無資料'), '個股籌碼: a missing group is labelled 無資料')
+check(!bodyText(partial).includes('-196') && bodyText(partial).includes('+58') && bodyText(partial).includes('+3') && !bodyText(partial).includes('+1'), '個股籌碼: a value shows only under its own group source')
 
 const barRows = [
   { date: '2026-10-21', open: 21, high: 21.5, low: 20.95, close: 21.1, adj_close: 21.1, volume: 1500, volume_exact: '1500', turnover: 1, turnover_status: 'available', turnover_reason: null, source: 'twse', data_as_of: '2026-10-21', collected_at: null, is_suspended: false },
@@ -171,8 +187,7 @@ checkAligned('族群成員', members, ['收盤', '漲跌幅', '成交值', '5 �
 check(bodyText(members).includes('21.10') && bodyText(members).includes('2,510.00'), '族群成員: closes keep two decimals')
 check(['+0.48', '-0.40', '1.20', '450.00', '+1.00', '-10.00', '+0.20', '+3.00'].every((value) => bodyText(members).includes(value)), `族群成員: percent and 億元 keep two decimals, got ${bodyText(members).join('|')}`)
 
-const card = render('CandidateCard', () => <CandidateCard item={completeItem()} detailsOpen />)
-const details = /<details class="details candidate-details"[\s\S]*?<\/details>/.exec(card)?.[0] ?? ''
+const details = render('ScoreDetails', () => <ScoreDetails item={completeItem()} open />)
 checkAligned('個股頁候選評分細節', details, ['原值', '百分位', '子項權重'])
 const detailHeaders = (/<thead>([\s\S]*?)<\/thead>/.exec(details)?.[1] ?? '').match(/<th[\s>]/g) ?? []
 check(detailHeaders.length <= 4, `個股頁候選評分細節: ${detailHeaders.length} columns in a card; the group title belongs on its own row (§5.1)`)

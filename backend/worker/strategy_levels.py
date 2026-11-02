@@ -31,6 +31,7 @@ from typing import Any
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
+from app.clock import utcnow
 from app.domain import STRATEGY_LEVELS_VERSION, RuleEvaluation
 from app.models import (
     CorporateAction,
@@ -41,7 +42,12 @@ from app.models import (
     StrategyVersion,
     TechnicalFeature,
 )
-from app.strategies import NextSessionInputs, StrategyInputs, current_strategy
+from app.strategies import (
+    REGISTRY,
+    NextSessionInputs,
+    StrategyInputs,
+    current_strategy,
+)
 from app.strategies import levels
 from worker import pipeline
 
@@ -122,6 +128,7 @@ def _strategy_inputs(
             "institutional_flow_to_turnover_ratio_5d"
         ),
         margin_change_ratio_5d=evidence_inputs.get("margin_balance_change_ratio_5d"),
+        margin_financing=evidence_inputs.get("margin_eligibility"),
     )
 
 
@@ -180,6 +187,7 @@ def _next_session_inputs(
         group_excess_return_20d=inputs.group_excess_return_20d,
         institutional_flow_ratio_5d=inputs.institutional_flow_ratio_5d,
         margin_change_ratio_5d=inputs.margin_change_ratio_5d,
+        margin_financing=inputs.margin_financing,
         price_basis=levels.PRICE_BASIS_NEXT_SESSION
         if converted
         else levels.PRICE_BASIS_SIGNAL_DAY,
@@ -220,7 +228,7 @@ def compute_strategy_levels(
 ) -> dict[str, Any]:
     """Write the levels of every analysis signal of ``signal_date`` (caller commits)."""
 
-    stamp = now or datetime.utcnow()
+    stamp = now or utcnow()
     rows = db.execute(
         select(Signal, StrategyVersion, Instrument)
         .join(StrategyVersion, StrategyVersion.id == Signal.strategy_version_id)
@@ -250,6 +258,11 @@ def compute_strategy_levels(
             )
             is not None
         ]
+        if any(strategy.key in REGISTRY for _signal, strategy in current):
+            # A day with the registered versions reads only them, as the pages
+            # do (app.signal_versions): a superseded row written earlier the
+            # same day holds older inputs (#392, #407 review M2).
+            current = [item for item in current if item[1].key in REGISTRY]
         skipped += len(group) - len(current)
         if not current:
             continue

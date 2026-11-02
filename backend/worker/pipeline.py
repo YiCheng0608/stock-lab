@@ -5,7 +5,7 @@ import json
 import math
 import re
 from collections import defaultdict
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace as replace_record
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from statistics import median
@@ -14,6 +14,9 @@ from typing import Any, Callable, Iterable, Mapping
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
+from app import chip_provenance
+from app.chip_provenance import GroupProvenance
+from app.clock import utcnow
 from app.config import (
     MAX_GROUP_CANDIDATES,
     MIN_GROUP_CANDIDATES,
@@ -50,6 +53,7 @@ from app.models import (
     GroupMembership,
     IngestionRun,
     Instrument,
+    MarginList,
     MarketBar,
     RawPayload,
     Signal,
@@ -59,6 +63,7 @@ from app.models import (
     TechnicalFeature,
     ThemeGroup,
 )
+from app import margin_lists
 from app.news import sync_news_from_events
 from app.strategies import (
     REGISTRY,
@@ -85,6 +90,7 @@ from app.tracking import (
 )
 from app.trading_calendar import NextSession, next_session
 from worker.market_summary import store_market_summaries
+from worker.margin_lists import MarginListError, sync_margin_lists
 from worker.sources import (
     ActionRecord,
     BarRecord,
@@ -105,6 +111,7 @@ from worker.sources import (
     TPEX_HISTORY_API,
     TWSE_DAILY_HISTORY_ENDPOINT,
     _require_reported_date,
+    parse_number,
     _rows,
     _text,
 )
@@ -782,6 +789,54 @@ def _margin_change_ratio(
     )
 
 
+# (exchange, session) -> (margin_lists id, raw payload id, codes); a list row
+# is re-read when its raw payload changed.  Cleared at the start of every
+# analyze and backtest, so a process never reads another database's lists.
+_MARGIN_LIST_CACHE: dict[tuple[str, date], tuple[int, int, frozenset[str]]] = {}
+
+
+def _margin_list_codes(db: Session, exchange: str, day: date) -> frozenset[str] | None:
+    """The codes of the stored official margin-trading list; None without one."""
+
+    row = db.execute(
+        select(MarginList.id, MarginList.raw_payload_id).where(
+            MarginList.exchange == exchange, MarginList.trading_date == day
+        )
+    ).first()
+    if row is None:
+        return None
+    cached = _MARGIN_LIST_CACHE.get((exchange, day))
+    if cached is not None and cached[:2] == (row.id, row.raw_payload_id):
+        return cached[2]
+    members = db.scalar(select(MarginList.members_json).where(MarginList.id == row.id))
+    codes = frozenset(members or {})
+    _MARGIN_LIST_CACHE[(exchange, day)] = (row.id, row.raw_payload_id, codes)
+    return codes
+
+
+def _margin_financing(
+    db: Session, instrument: Instrument, signal_date: date, ratio: float | None
+) -> str:
+    """app.margin_lists state of the margin condition on ``signal_date`` (#392).
+
+    The lists are those of the ratio's sessions (``_margin_change_ratio``);
+    they are read only when there is no ratio.
+    """
+
+    if _safe_float(ratio) is not None:
+        return margin_lists.APPLICABLE
+    dates = _effective_trading_dates(
+        db, instrument.id, signal_date, margin_lists.WINDOW_SESSIONS
+    )
+    if not dates or dates[-1] != signal_date:
+        return margin_lists.MISSING
+    return margin_lists.margin_financing_state(
+        instrument.symbol,
+        ratio,
+        [_margin_list_codes(db, instrument.exchange, day) for day in dates],
+    )
+
+
 def _allowed_group_members(
     group: ThemeGroup, members: list[tuple[GroupMembership, Instrument]]
 ) -> list[tuple[GroupMembership, Instrument]]:
@@ -911,12 +966,21 @@ def archive_group_score(db: Session, score: GroupDailyScore, reason: str) -> Non
             details_json=copy.deepcopy(score.details_json),
             hot_group_version=version,
             archive_reason=reason,
-            archived_at=datetime.utcnow(),
+            archived_at=utcnow(),
         )
     )
 
 
-def _calculate_group_scores(db: Session, score_date: date) -> None:
+def _calculate_group_scores(
+    db: Session, score_date: date, *, group_ids: Iterable[str] | None = None
+) -> None:
+    """Score the active groups of ``score_date`` and rank them per board.
+
+    ``group_ids`` limits the scored (and ranked) groups to those ids; daily
+    leaves it out and scores every active group.  A rebuild of an old session
+    passes the groups that session already has scores for, so it never adds
+    a group to history with today's group definitions (#409).
+    """
     benchmark = _benchmark_instrument(db)
     benchmark_returns = (
         _returns_by_window(db, benchmark.id, score_date)
@@ -926,7 +990,10 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
     benchmark_dates = (
         _effective_trading_dates(db, benchmark.id, score_date, 20) if benchmark else []
     )
-    groups = db.scalars(select(ThemeGroup).where(ThemeGroup.active.is_(True))).all()
+    query = select(ThemeGroup).where(ThemeGroup.active.is_(True))
+    if group_ids is not None:
+        query = query.where(ThemeGroup.id.in_(list(group_ids)))
+    groups = db.scalars(query).all()
     computed: list[dict[str, Any]] = []
     file_evidence: dict[date, dict[str, int]] = {}
 
@@ -1624,6 +1691,7 @@ def _signal_context(
         signal_date,
     )
     margin_ratio = _margin_change_ratio(db, instrument.id, signal_date)
+    margin_financing = _margin_financing(db, instrument, signal_date, margin_ratio)
     prior_window = _prior_20_window(db, instrument.id, signal_date) if feature else {}
     inputs = StrategyInputs(
         bar_count=bar_count,
@@ -1637,6 +1705,7 @@ def _signal_context(
         group_excess_return_20d=group_excess,
         institutional_flow_ratio_5d=strategy_flow_ratio,
         margin_change_ratio_5d=margin_ratio,
+        margin_financing=margin_financing,
     )
     input_provenance = None
     capture_mode = (
@@ -1857,6 +1926,9 @@ def _write_strategy_signal(
             "institutional_flow_ratio_denominator": "average_daily_volume_20d",
             "institutional_flow_formula_version": INSTITUTIONAL_FLOW_FORMULA_VERSION,
             "margin_balance_change_ratio_5d": inputs.margin_change_ratio_5d,
+            # app.margin_lists state (Issue #392); the lists it read are
+            # margin_lists rows of the ratio's sessions.
+            "margin_eligibility": inputs.margin_financing,
             "bar_count_60d": inputs.bar_count,
             "ma20": inputs.ma20,
             "ma60": inputs.ma60,
@@ -2042,7 +2114,14 @@ def _upsert_official_instrument(db: Session, record: InstrumentRecord) -> Instru
 # A fill keeps the row's provenance (raw_payload_id, source, data_as_of,
 # collected_at), which still describes the values already stored; the filled
 # fields and the new capture are recorded as a value fill on the collect run.
+# The one exception is institutional flow (Issue #387): the exchanges revise it
+# after the first publication, so a later capture of the same official file
+# replaces differing stored values (see _upsert_official_chip).
+# A chip row keeps one provenance per value group (Issue #395): a group the
+# row did not have yet (margin published after the institutional file) takes
+# the filling capture as its provenance instead of recording a fill.
 MAX_RECORDED_VALUE_CONFLICTS = 50
+INSTITUTIONAL_FIELDS = ("foreign_buy", "trust_buy", "dealer_buy")
 
 
 def _apply_official_values(
@@ -2053,9 +2132,17 @@ def _apply_official_values(
     overwrite: bool,
     conflicts: list[dict[str, Any]] | None,
     label: str,
+    revisable: Iterable[str] = (),
+    revised: dict[str, dict[str, Any]] | None = None,
 ) -> list[str]:
-    """Apply the values and return the names of the fields that changed."""
+    """Apply the values and return the names of the fields that changed.
 
+    A differing non-empty value of a field in ``revisable`` replaces the stored
+    one; the stored and incoming values go to ``revised`` instead of
+    ``conflicts``.
+    """
+
+    revisable = set(revisable)
     changed: list[str] = []
     for field_name, value in values.items():
         current = getattr(row, field_name)
@@ -2067,6 +2154,11 @@ def _apply_official_values(
         elif overwrite or current is None:
             setattr(row, field_name, value)
             changed.append(field_name)
+        elif field_name in revisable:
+            setattr(row, field_name, value)
+            changed.append(field_name)
+            if revised is not None:
+                revised[field_name] = {"stored": current, "incoming": value}
         elif conflicts is not None:
             conflicts.append(
                 {
@@ -2097,7 +2189,7 @@ def _set_official_provenance(
     if replace:
         row.source = source
         row.data_as_of = data_as_of
-        row.collected_at = datetime.utcnow()
+        row.collected_at = utcnow()
         row.raw_payload_id = raw_payload_id
     elif fills is not None:
         fills.append(
@@ -2208,17 +2300,105 @@ def _upsert_official_bar(
     return bar
 
 
+def _is_later_institutional_capture(
+    db: Session,
+    stored: GroupProvenance | None,
+    incoming_source: str,
+    exchange: str,
+    raw_payload_id: int | None,
+) -> bool:
+    """Whether this capture is a later capture of the stored row's institutional file.
+
+    Both must come from the exchange's official institutional file, and the
+    incoming raw capture must be strictly later than the stored institutional
+    group's raw capture.  A stored group without a raw capture is dated by its
+    ``collected_at``, which is never earlier than its capture.  Without an
+    incoming capture nothing is later.
+    """
+
+    official = OFFICIAL_INSTITUTIONAL_CHIP_SOURCES.get(exchange)
+    if official is None or raw_payload_id is None:
+        return False
+    if incoming_source != official:
+        return False
+    if stored is None or stored.source != official:
+        return False
+    incoming = db.get(RawPayload, raw_payload_id)
+    if incoming is None or incoming.collected_at is None:
+        return False
+    stored_raw = (
+        db.get(RawPayload, stored.raw_payload_id)
+        if stored.raw_payload_id is not None
+        else None
+    )
+    stored_at = (
+        stored_raw.collected_at if stored_raw is not None else stored.collected_at
+    )
+    return stored_at is not None and incoming.collected_at > stored_at
+
+
+def _chip_record_groups(record: Any) -> dict[str, tuple[str, str | None]]:
+    """The record's value groups: ``{group: (source, data_as_of)}`` (Issue #395).
+
+    The margin group is the record's ``margin_*`` capture.  The institutional
+    group is the record's first file unless that is its margin file.  A record
+    built without ``margin_*`` (fixtures, older callers) gives its margin values
+    the ``+`` part that names a margin file, else its own source.
+    """
+
+    parts = [part for part in (record.source or "").split("+") if part] or [
+        record.source or "unknown"
+    ]
+    groups: dict[str, tuple[str, str | None]] = {}
+    margin_source = record.margin_source
+    if margin_source is None and (
+        record.margin_balance is not None
+        or record.margin_change is not None
+        or parts[0] in chip_provenance.MARGIN_SOURCES
+    ):
+        margin_source = next(
+            (part for part in parts if part in chip_provenance.MARGIN_SOURCES),
+            parts[-1],
+        )
+    if margin_source is not None:
+        groups[chip_provenance.MARGIN] = (
+            margin_source,
+            record.margin_data_as_of or record.data_as_of,
+        )
+    if parts[0] != margin_source:
+        groups[chip_provenance.INSTITUTIONAL] = (parts[0], record.data_as_of)
+    return groups
+
+
 def _upsert_official_chip(
     db: Session,
     record: Any,
     instruments: dict[tuple[str, str], Instrument],
     raw_payload_id: int | None,
     *,
+    margin_raw_payload_id: int | None = None,
     overwrite: bool = True,
     conflicts: list[dict[str, Any]] | None = None,
     fills: list[dict[str, Any]] | None = None,
+    revisions: list[dict[str, Any]] | None = None,
+    create: bool = True,
 ) -> bool:
-    """Persist one official chip snapshot without manufacturing missing values."""
+    """Persist one official chip snapshot without manufacturing missing values.
+
+    ``raw_payload_id`` is the capture of ``record.payload_sha256`` and
+    ``margin_raw_payload_id`` that of ``record.margin_payload_sha256`` when the
+    record merges two captures.  Each value group keeps its own provenance
+    (Issue #395): a new row, ``overwrite``, or a group the row did not have
+    yet points the group at this capture; filling an empty field of a group
+    the row already has keeps that group's provenance and records a value fill.
+
+    With ``revisions`` (a list the caller keeps), a capture of the same
+    official institutional file taken later than the stored row's capture
+    replaces differing institutional values, and each replaced row's old and
+    new values are appended to it (Issue #387).  Without it (instrument
+    repair) institutional values follow the fill-only rule.  ``create=False``
+    only updates an existing row.
+    """
 
     instrument = instruments.get((record.exchange, record.symbol))
     if not instrument or instrument.instrument_type == "index":
@@ -2230,12 +2410,42 @@ def _upsert_official_chip(
         )
     )
     is_new = row is None
+    if is_new and not create:
+        return False
     if is_new:
         row = ChipSnapshot(
             instrument_id=instrument.id,
             trading_date=record.trading_date,
         )
         db.add(row)
+    label = f"chip_snapshots:{instrument.exchange}:{instrument.symbol}:{record.trading_date.isoformat()}"
+    incoming = _chip_record_groups(record)
+    raw_ids = {
+        chip_provenance.INSTITUTIONAL: raw_payload_id,
+        chip_provenance.MARGIN: margin_raw_payload_id
+        if record.margin_payload_sha256 not in (None, record.payload_sha256)
+        else raw_payload_id,
+    }
+    stored: chip_provenance.Groups = (
+        {group: None for group in chip_provenance.GROUPS}
+        if is_new
+        else chip_provenance.stored_groups(row)
+    )
+    institutional = incoming.get(chip_provenance.INSTITUTIONAL)
+    revise = (
+        not is_new
+        and not overwrite
+        and revisions is not None
+        and institutional is not None
+        and _is_later_institutional_capture(
+            db,
+            stored[chip_provenance.INSTITUTIONAL],
+            institutional[0],
+            instrument.exchange,
+            raw_payload_id,
+        )
+    )
+    revised: dict[str, dict[str, Any]] = {}
     changed = _apply_official_values(
         row,
         {
@@ -2248,24 +2458,121 @@ def _upsert_official_chip(
         is_new=is_new,
         overwrite=overwrite,
         conflicts=conflicts,
-        label=f"chip_snapshots:{instrument.exchange}:{instrument.symbol}:{record.trading_date.isoformat()}",
+        label=label,
+        revisable=INSTITUTIONAL_FIELDS if revise else (),
+        revised=revised,
     )
-    _set_official_provenance(
-        row,
-        changed=changed,
-        replace=is_new or overwrite,
-        source=record.source,
-        data_as_of=_as_datetime(record.data_as_of, record.trading_date),
-        raw_payload_id=raw_payload_id,
-        fills=fills,
-        fill_key={
-            "table": "chip_snapshots",
-            "exchange": instrument.exchange,
-            "symbol": instrument.symbol,
-            "trading_date": record.trading_date.isoformat(),
-        },
-    )
+    stored_institutional = stored[chip_provenance.INSTITUTIONAL]
+    if revised and revisions is not None:
+        revisions.append(
+            {
+                "table": "chip_snapshots",
+                "exchange": instrument.exchange,
+                "symbol": instrument.symbol,
+                "trading_date": record.trading_date.isoformat(),
+                "fields": revised,
+                "stored_raw_payload_id": None
+                if stored_institutional is None
+                else stored_institutional.raw_payload_id,
+                "raw_payload_id": raw_payload_id,
+            }
+        )
+    groups = dict(stored)
+    replaced = False
+    for group, (source, data_as_of) in incoming.items():
+        group_changed = [
+            name for name in chip_provenance.GROUP_FIELDS[group] if name in changed
+        ]
+        if not group_changed:
+            continue
+        if (
+            is_new
+            or overwrite
+            or stored[group] is None
+            # A revised row now holds the later capture's institutional values.
+            or (group == chip_provenance.INSTITUTIONAL and bool(revised))
+        ):
+            groups[group] = GroupProvenance(
+                source,
+                raw_ids[group],
+                _as_datetime(data_as_of, record.trading_date),
+                utcnow(),
+            )
+            replaced = True
+        elif fills is not None:
+            fills.append(
+                {
+                    "table": "chip_snapshots",
+                    "exchange": instrument.exchange,
+                    "symbol": instrument.symbol,
+                    "trading_date": record.trading_date.isoformat(),
+                    "fields": sorted(group_changed),
+                    "raw_payload_id": raw_ids[group],
+                }
+            )
+    if replaced:
+        chip_provenance.write_groups(row, groups)
     return True
+
+
+# The official 減除股利參考價 is published in 0.01 units and is cut, not
+# rounded (TWSE 4912 2026-09-10: 97.50 - 0.800477 = 96.6995, published
+# 96.69), so a correct row's implied price is off by less than 0.01.  Twice
+# that unit leaves room for the cut and float noise, while the A1 rows
+# (#386: 4549 implied 34.17 vs 101.47) are off by tens of yuan.
+ACTION_REFERENCE_TOLERANCE = 0.02
+# (before close, 減除股利參考價) keys: TPEx OpenAPI/exDailyQ, then TWSE TWT49U.
+_OFFICIAL_ACTION_PRICES = (
+    ("ClosePriceBeforeExRightsDiviend", "DividendDeductedQuote"),
+    ("除權息前收盤價", "減除股利參考價"),
+)
+
+
+def action_factor_check(
+    action: ActionRecord | CorporateAction,
+) -> dict[str, Any] | None:
+    """Compare the factor of a row's fields with the official price ratio.
+
+    The official side is 減除股利參考價 / 除權息前收盤價: the published
+    price after cash and free-share dividends, without a cash capital
+    increase (現金增資認購), which the fields do not carry (3691 2026-10-27:
+    109.00 / 109.00); the price factor takes that from 除權息參考價
+    (``_corporate_action_factor``, #394).  ``None`` when the row publishes no
+    official prices (TWT48U), so nothing can be compared.
+    """
+    details = (
+        action.details if isinstance(action, ActionRecord) else action.details_json
+    ) or {}
+    for before_key, deducted_key in _OFFICIAL_ACTION_PRICES:
+        before = _safe_float(parse_number(details.get(before_key)))
+        deducted = _safe_float(parse_number(details.get(deducted_key)))
+        if before and deducted and before > 0 and deducted > 0:
+            break
+    else:
+        return None
+    probe = CorporateAction(
+        action_date=action.action_date,
+        action_type=action.action_type,
+        cash_dividend=action.cash_dividend,
+        stock_dividend_ratio=action.stock_dividend_ratio,
+        split_ratio=action.split_ratio,
+        reference_price=action.reference_price,
+        details_json={},
+    )
+    field_factor, _applied = _corporate_action_factor(
+        [probe], fallback_reference_prices={action.action_date: before}
+    )
+    implied = field_factor * before
+    return {
+        "field_factor": round(field_factor, 10),
+        "official_factor": round(deducted / before, 10),
+        "implied_reference": round(implied, 6),
+        "official_reference": deducted,
+        "close_before": before,
+        "difference": round(abs(implied - deducted), 6),
+        "tolerance": ACTION_REFERENCE_TOLERANCE,
+        "passed": abs(implied - deducted) <= ACTION_REFERENCE_TOLERANCE,
+    }
 
 
 def _upsert_action(
@@ -2284,6 +2591,57 @@ def _upsert_action(
             CorporateAction.action_type == action.action_type,
         )
     )
+    check = action_factor_check(action)
+    if check is None and row is not None:
+        stored_check = action_factor_check(row)
+        if stored_check is not None and stored_check["passed"]:
+            # A row the official result tables wrote and the prices confirm
+            # is not overwritten by an unchecked one (TWT48U, which has no
+            # official prices): the daily feed only adds new events (#386).
+            return
+    quality_key = f"{action.exchange}:{action.symbol}:{action.action_type}"
+    if check is not None and not check["passed"]:
+        # The fields disagree with the official prices: keep the published
+        # row as evidence but no factor (#386).
+        _upsert_quality(
+            db,
+            "corporate_action",
+            quality_key,
+            action.action_date,
+            "factor_mismatch",
+            ["cash_dividend", "stock_dividend_ratio", "split_ratio"],
+            {
+                **check,
+                "cash_dividend": action.cash_dividend,
+                "stock_dividend_ratio": action.stock_dividend_ratio,
+                "split_ratio": action.split_ratio,
+            },
+            source=action.exchange.lower(),
+        )
+        action = replace_record(
+            action,
+            cash_dividend=None,
+            stock_dividend_ratio=None,
+            split_ratio=None,
+            details={**action.details, "factor_check": check},
+        )
+    elif check is not None and db.scalar(
+        select(DataQuality.id).where(
+            DataQuality.entity_type == "corporate_action",
+            DataQuality.entity_key == quality_key,
+            DataQuality.as_of_date == action.action_date,
+        )
+    ):
+        _upsert_quality(
+            db,
+            "corporate_action",
+            quality_key,
+            action.action_date,
+            "complete",
+            [],
+            check,
+            source=action.exchange.lower(),
+        )
     if not row:
         row = CorporateAction(
             instrument_id=instrument.id,
@@ -2332,7 +2690,7 @@ def _upsert_fundamental(
     row.source = fundamental.source
     row.raw_payload_id = raw_payload_id
     row.data_as_of = fundamental.period_end.isoformat()
-    row.collected_at = datetime.utcnow()
+    row.collected_at = utcnow()
 
 
 def _upsert_event(
@@ -2366,7 +2724,7 @@ def _upsert_event(
     row.endpoint = event.endpoint
     row.raw_payload_id = raw_payload_id
     row.data_as_of = event.event_date.isoformat()
-    row.collected_at = datetime.utcnow()
+    row.collected_at = utcnow()
 
 
 _OFFICIAL_INDUSTRY_NAMES_ZH = dict(INDUSTRY_DISPLAY_ZH)
@@ -3280,6 +3638,10 @@ def plan_instrument_status(
     is ``transferred`` when the other exchange lists the same code, otherwise
     ``delisted``; its open memberships close the day before the new listing (a
     transfer with a known listing date) or the day before the observation.
+    An absent one whose code still has a row in the exchange's latest stored
+    quote table is still traded and keeps its status (Issue #393: a bond ETF
+    being wound up left the ETF list while it traded for weeks); without that
+    table the lists decide.
     A listed one whose code has no row in any stored quote table of the last
     DORMANT_SESSIONS sessions is presumed ``dormant``; ``collect`` makes it
     active again when a quote row returns.
@@ -3349,9 +3711,31 @@ def plan_instrument_status(
             for item in current
             if item.status == "dormant" and (exchange, item.symbol) in universe
         ]
-        latest = _stored_quote_rows(db, exchange, sessions[-1:]) if resting else None
-        if resting and sessions and latest is not None:
+        latest = (
+            _stored_quote_rows(db, exchange, sessions[-1:])
+            if (resting or absent) and sessions
+            else None
+        )
+        if latest is not None:
             revived = [item for item in resting if item.symbol in latest[0]]
+        # Absent from the lists but still quoted: not gone yet.
+        quoted = (
+            [item for item in absent if item.symbol in latest[0]]
+            if latest is not None
+            else []
+        )
+        absent = [item for item in absent if item not in quoted]
+        quote_check: dict[str, Any] = (
+            {"status": "not_needed"}
+            if not (absent or quoted)
+            else {
+                "status": "checked",
+                "session": sessions[-1].isoformat(),
+                "raw_payload_ids": latest[1],
+            }
+            if latest is not None
+            else {"status": "unverifiable", "reason": "missing quote table"}
+        )
         planned = len(absent) + len(dormant)
         limit = max(STATUS_SYNC_MIN_LIMIT, int(len(active) * max_share))
         exchanges[exchange] = {
@@ -3364,6 +3748,8 @@ def plan_instrument_status(
             "absent_symbols": [item.symbol for item in absent][:50],
             "dormant_symbols": [item.symbol for item in dormant][:50],
             "revived_symbols": [item.symbol for item in revived][:50],
+            "quoted_absent_symbols": [item.symbol for item in quoted][:50],
+            "quote_check": quote_check,
             "captures": proof["captures"],
             "dormancy": dormancy,
         }
@@ -3592,7 +3978,7 @@ def _upsert_quality(
     row.missing_fields_json = missing_fields
     row.checks_json = checks
     row.source = source
-    row.checked_at = datetime.utcnow()
+    row.checked_at = utcnow()
 
 
 def _official_start_date(end_date: date, months_back: int) -> date:
@@ -3698,7 +4084,7 @@ def collect(
     score_date = latest_weekday(end_date)
     start_date = _official_start_date(score_date, months_back)
     request_key = f"official-ohlcv:{start_date.isoformat()}:{score_date.isoformat()}"
-    now = datetime.utcnow()
+    now = utcnow()
     with SessionLocal() as db:
         run = db.scalar(
             select(IngestionRun).where(IngestionRun.request_key == request_key)
@@ -3816,6 +4202,7 @@ def collect(
             normalized_instruments: set[tuple[str, str]] = set()
             value_conflicts: list[dict[str, Any]] = []
             value_fills: list[dict[str, Any]] = []
+            value_revisions: list[dict[str, Any]] = []
             # A quote row whose code is not in today's lists still belongs to
             # a stored instrument (delisted, moved, or a list that lagged);
             # one with no instrument at all is recorded, not dropped.
@@ -3870,9 +4257,13 @@ def collect(
                         chip,
                         known,
                         _raw_id_for_digest(raw_ids, chip.payload_sha256),
+                        margin_raw_payload_id=_raw_id_for_digest(
+                            raw_ids, chip.margin_payload_sha256
+                        ),
                         overwrite=force,
                         conflicts=value_conflicts,
                         fills=value_fills,
+                        revisions=value_revisions,
                     )
                 )
             for action in batch.actions:
@@ -3946,7 +4337,7 @@ def collect(
                     start_date,
                     score_date,
                     payloads=batch.payloads,
-                    observed_now=datetime.utcnow(),
+                    observed_now=utcnow(),
                     run_id=run.id,
                 )
                 # Only today's lists say what is listed now; a historical
@@ -3977,8 +4368,68 @@ def collect(
                     "reason": "historical batch without current snapshot feeds",
                 }
                 status_result = dict(industry_result)
+            # An earlier unmatched_bar code may have an instrument now (a new
+            # listing whose list lagged its first session): write its bars
+            # from the stored raw (Issue #388).  Imported here because
+            # instrument_repair imports this module.
+            # A failure here must not fail the day's quotes (like the
+            # strategy_levels step): the savepoint drops only the backfill's
+            # writes, the rows stay open and the error goes to the metadata.
+            from worker.instrument_repair import backfill_unmatched_bars
+
+            try:
+                with db.begin_nested():
+                    unmatched_backfill = {
+                        "status": "success",
+                        **backfill_unmatched_bars(db),
+                    }
+            except Exception as exc:
+                unmatched_backfill = {
+                    "status": "failed",
+                    "error": f"{type(exc).__name__}: {exc}"[:500],
+                    "written": [],
+                    "pending": [],
+                }
             unmatched_bars = record_unmatched_bars(db, unmatched, score_date)
+            # The sessions' official margin-trading lists, from the margin
+            # reports just stored (Issue #392).  Like the backfill above, a
+            # failure must not fail the day's quotes; analyze then keeps the
+            # margin data of those sessions missing.
+            try:
+                with db.begin_nested():
+                    margin_list_result = sync_margin_lists(
+                        db, sorted({chip.trading_date for chip in batch.chips})
+                    )
+                    if margin_list_result["status"] == "failed":
+                        # Drop the sessions written before the bad file.
+                        raise MarginListError(str(margin_list_result["error"]))
+            except Exception as exc:
+                margin_list_result = {
+                    "status": "failed",
+                    "error": f"{type(exc).__name__}: {exc}"[:500],
+                }
             notices = list(getattr(batch, "notices", []) or [])
+            if margin_list_result["status"] == "failed":
+                notices.append(
+                    "margin list sync failed and wrote nothing: "
+                    + str(margin_list_result.get("error"))
+                )
+            if margin_list_result.get("suspicious_drop"):
+                notices.append(
+                    "margin lists more than 5% shorter than the previous one were "
+                    "not written: "
+                    + ", ".join(margin_list_result["suspicious_drop_samples"])
+                )
+            if unmatched_backfill["status"] == "failed":
+                notices.append(
+                    "unmatched_bar backfill failed and wrote nothing: "
+                    + unmatched_backfill["error"]
+                )
+            if unmatched_backfill["written"]:
+                notices.append(
+                    f"{len(unmatched_backfill['written'])} bars of earlier unmatched_bar "
+                    "codes written from stored raw"
+                )
             if unmatched_bars:
                 notices.append(
                     f"{len(unmatched_bars)} ordinary-share codes had official quote "
@@ -4127,7 +4578,7 @@ def collect(
             run.records = normalized_bars
             run.data_as_of = latest_bar_date.isoformat() if latest_bar_date else None
             run.error = None
-            run.finished_at = datetime.utcnow()
+            run.finished_at = utcnow()
             run.metadata_json = {
                 "records": normalized_bars,
                 "taiex_records": normalized_index_bars,
@@ -4142,6 +4593,8 @@ def collect(
                 "noncore_warnings": noncore_warnings,
                 "notices": notices,
                 "unmatched_bars": unmatched_bars,
+                "unmatched_backfill": unmatched_backfill,
+                "margin_lists": margin_list_result,
                 "instrument_status_sync": status_result,
                 "value_conflicts": len(value_conflicts),
                 "value_conflict_samples": _json_safe(
@@ -4154,6 +4607,13 @@ def collect(
                     stored_metadata.get("value_fill_groups", []) or []
                 )
                 + _value_fill_groups(value_fills),
+                # Every institutional value a later capture replaced, with the
+                # stored value and both raw ids; accumulated like the fills.
+                "value_revisions": len(value_revisions),
+                "value_revision_rows": list(
+                    stored_metadata.get("value_revision_rows", []) or []
+                )
+                + _json_safe(value_revisions),
                 "no_data_dates": [item.isoformat() for item in verified_no_data_dates],
                 "event_coverage": event_coverage,
                 "industry_membership_observations": industry_result,
@@ -4226,9 +4686,12 @@ def collect(
                 "noncore_warnings": noncore_warnings,
                 "notices": notices,
                 "unmatched_bars": unmatched_bars,
+                "unmatched_backfill": unmatched_backfill,
+                "margin_lists": margin_list_result,
                 "instrument_status_sync": status_result,
                 "value_conflicts": len(value_conflicts),
                 "value_fills": len(value_fills),
+                "value_revisions": len(value_revisions),
                 "no_data_dates": [item.isoformat() for item in verified_no_data_dates],
             }
         except Exception as exc:
@@ -4271,7 +4734,7 @@ def collect(
                     failed_attempt = {
                         "status": "failed",
                         "error": str(exc),
-                        "attempted_at_utc": datetime.utcnow().isoformat(),
+                        "attempted_at_utc": utcnow().isoformat(),
                         "raw_payload_ids": sorted(captured_raw_ids),
                         "raw_persistence_errors": raw_persistence_errors,
                         "captures": [
@@ -4305,7 +4768,7 @@ def collect(
                     failed_run.status = "failed"
                     failed_run.records = 0
                     failed_run.error = f"{type(exc).__name__}: {exc}"
-                    failed_run.finished_at = datetime.utcnow()
+                    failed_run.finished_at = utcnow()
                     failed_run.data_as_of = None
                     _upsert_quality(
                         db,
@@ -4370,6 +4833,7 @@ def _analyze_session(
     Writes are flushed only at those points; reads in between never depend on
     unflushed rows, so the stored results match a single transaction.
     """
+    _MARGIN_LIST_CACHE.clear()
     query = select(IngestionRun).where(
         IngestionRun.run_type == "collect",
         IngestionRun.source == "official",
@@ -4458,44 +4922,113 @@ def _execution_calendar_summary(db: Session, score_date: date) -> dict[str, Any]
     }
 
 
+def _field_action_factor(
+    action: CorporateAction, reference_price: float | None
+) -> tuple[float, bool]:
+    """The factor of one row's split, free-share and cash fields (現行公式)."""
+    factor = 1.0
+    applied = False
+    if action.split_ratio and action.split_ratio > 0:
+        # Feeds differ: some publish the ratio as 2 (two post-split
+        # shares per old share), while fixtures/normalized records may
+        # already publish the raw-price factor 0.5.  Both represent the
+        # same signal-basis -> post-action-basis direction.
+        factor = (
+            factor / action.split_ratio
+            if action.split_ratio > 1
+            else factor * action.split_ratio
+        )
+        applied = True
+    if action.stock_dividend_ratio and action.stock_dividend_ratio > 0:
+        factor /= 1.0 + action.stock_dividend_ratio
+        applied = True
+    if (
+        action.cash_dividend
+        and reference_price
+        and reference_price > action.cash_dividend
+    ):
+        factor *= (reference_price - action.cash_dividend) / reference_price
+        applied = True
+    return factor, applied
+
+
+# (除權息前收盤價, 除權息參考價) keys: TPEx OpenAPI/exDailyQ, then TWSE TWT49U.
+# Unlike 減除股利參考價 (action_factor_check), 除權息參考價 includes a cash
+# capital increase (現金增資認購): 3691 2026-10-27 is 106.15 / 109.00.
+_OFFICIAL_EX_RIGHTS_PRICES = (
+    ("ClosePriceBeforeExRightsDiviend", "ExRightsDiviendQuote"),
+    ("除權息前收盤價", "除權息參考價"),
+)
+
+
+def official_ex_rights_prices(details: dict[str, Any]) -> tuple[float, float] | None:
+    """A row's published (除權息前收盤價, 除權息參考價), or None (TWT48U has none)."""
+    for before_key, quote_key in _OFFICIAL_EX_RIGHTS_PRICES:
+        before = _safe_float(parse_number(details.get(before_key)))
+        quote = _safe_float(parse_number(details.get(quote_key)))
+        if before and quote and before > 0 and quote > 0:
+            return before, quote
+    return None
+
+
+def _explicit_price_factor(action: CorporateAction) -> float | None:
+    explicit = _safe_float((action.details_json or {}).get("price_factor"))
+    return explicit if explicit is not None and explicit > 0 else None
+
+
+def official_reference_factor(action: CorporateAction) -> float | None:
+    """除權息參考價 / 除權息前收盤價 when it decides the row's factor (#394), else None.
+
+    It decides when the row publishes official ex-rights prices and its
+    fields do not reproduce that reference within ACTION_REFERENCE_TOLERANCE:
+    a cash capital increase or subscription (3691 2026-10-27: 0.9739), or a
+    row whose wrong fields #386 left out (factor_mismatch).  When the fields
+    do reproduce it, the field factor is the same official ratio before the
+    0.01 cut, so an ordinary dividend keeps its unrounded factor.  An explicit
+    ``price_factor`` comes first.
+    """
+    if _explicit_price_factor(action) is not None:
+        return None
+    official = official_ex_rights_prices(action.details_json or {})
+    if official is None:
+        return None
+    before, quote = official
+    own, _applied = _field_action_factor(action, before)
+    # Prices are published in 0.01 units; rounding the gap keeps a gap of
+    # exactly 0.02 on the field side whatever the float noise.
+    if round(abs(own * before - quote), 6) <= ACTION_REFERENCE_TOLERANCE:
+        return None
+    return quote / before
+
+
 def _corporate_action_factor(
     actions: list[CorporateAction],
     *,
     fallback_reference_prices: dict[date, float] | None = None,
 ) -> tuple[float, bool]:
+    """The cumulative raw price-basis factor of ``actions`` (V1_SPEC 還原因子).
+
+    Per row: an explicit ``price_factor``; else the official reference ratio
+    when it decides (``official_reference_factor``); else the field factor
+    (現行公式), the cash dividend against the row's reference price or the
+    fallback (TWT48U publishes no official prices).
+    """
     factor = 1.0
     applied = False
     for action in actions:
-        details = action.details_json or {}
-        explicit = _safe_float(details.get("price_factor"))
-        if explicit is not None and explicit > 0:
-            factor *= explicit
+        own = _explicit_price_factor(action)
+        if own is None:
+            own = official_reference_factor(action)
+        if own is not None:
+            factor *= own
             applied = True
             continue
-        if action.split_ratio and action.split_ratio > 0:
-            # Feeds differ: some publish the ratio as 2 (two post-split
-            # shares per old share), while fixtures/normalized records may
-            # already publish the raw-price factor 0.5.  Both represent the
-            # same signal-basis -> post-action-basis direction.
-            factor = (
-                factor / action.split_ratio
-                if action.split_ratio > 1
-                else factor * action.split_ratio
-            )
-            applied = True
-        if action.stock_dividend_ratio and action.stock_dividend_ratio > 0:
-            factor /= 1.0 + action.stock_dividend_ratio
-            applied = True
         reference_price = action.reference_price
         if reference_price is None and fallback_reference_prices:
             reference_price = fallback_reference_prices.get(action.action_date)
-        if (
-            action.cash_dividend
-            and reference_price
-            and reference_price > action.cash_dividend
-        ):
-            factor *= (reference_price - action.cash_dividend) / reference_price
-            applied = True
+        own, own_applied = _field_action_factor(action, reference_price)
+        factor *= own
+        applied = applied or own_applied
     return factor, applied
 
 
@@ -5148,6 +5681,7 @@ def backtest(
     if start_date > end_date:
         raise ValueError("backtest start date must not be after end date")
     init_db()
+    _MARGIN_LIST_CACHE.clear()
     request_key = (
         f"technical-backtest:v1:{start_date.isoformat()}:{end_date.isoformat()}"
     )
@@ -5304,7 +5838,7 @@ def backtest(
                 run.metadata_json,
                 status="success",
             )
-            run.finished_at = datetime.utcnow()
+            run.finished_at = utcnow()
             db.commit()
             if registry is not None:
                 return _summarize_research_backtest(db, run)
@@ -5320,7 +5854,7 @@ def backtest(
                     "assessment": "failed",
                     "zero_actionable_count": 0,
                 }
-                failed.finished_at = datetime.utcnow()
+                failed.finished_at = utcnow()
                 db.commit()
             return {
                 "run": {

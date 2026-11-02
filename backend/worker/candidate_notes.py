@@ -33,6 +33,7 @@ from sqlalchemy import desc, inspect, select
 from sqlalchemy.orm import Session
 
 from app.candidate_view import COMPONENT_LABELS, NULL_EXPLANATIONS, _levels
+from app.clock import utcnow
 from app.domain import CANDIDATE_NOTE_PROMPT_VERSION, CANDIDATE_SCORE_VERSION
 from app.models import (
     CandidateLlmNote,
@@ -352,7 +353,7 @@ def _run_batch(
     started = time.monotonic()
     result = runner(prompt, argv)
     duration_ms = int((time.monotonic() - started) * 1000)
-    run_at = datetime.utcnow()
+    run_at = utcnow()
     ids = [row.id for row, _payload in batch]
     summary: dict[str, Any] = {
         "batch": number,
@@ -447,7 +448,7 @@ def _metadata(
 def close_abandoned_runs(db: Session, now: datetime | None = None) -> list[int]:
     """Mark candidate_notes runs left running past ABANDONED_AFTER as failed."""
 
-    current = now or datetime.utcnow()
+    current = now or utcnow()
     rows = db.scalars(
         select(IngestionRun).where(
             IngestionRun.run_type == RUN_TYPE,
@@ -474,7 +475,7 @@ def _calls_today(db: Session, run_date: date) -> int:
 
 
 def _failed_run(db: Session, label_date: date, reason: str) -> IngestionRun:
-    now = datetime.utcnow()
+    now = utcnow()
     run = IngestionRun(
         run_type=RUN_TYPE,
         source="claude-cli",
@@ -587,7 +588,7 @@ def run_candidate_notes(
         run_date=label_date,
         status="running",
         records=0,
-        started_at=datetime.utcnow(),
+        started_at=utcnow(),
         metadata_json={},
     )
     db.add(run)
@@ -649,7 +650,7 @@ def run_candidate_notes(
                             payload,
                             run=run,
                             raw_payload_id=None,
-                            run_at=datetime.utcnow(),
+                            run_at=utcnow(),
                             error=error,
                         )
                     outcome = {
@@ -668,7 +669,7 @@ def run_candidate_notes(
                     {"id": row.id},
                     run=run,
                     raw_payload_id=None,
-                    run_at=datetime.utcnow(),
+                    run_at=utcnow(),
                     error=error,
                 )
                 unbuilt.append(
@@ -717,7 +718,7 @@ def run_candidate_notes(
         run.status = status
         run.records = done_count
         run.error = "; ".join(errors) or None
-        run.data_as_of = datetime.utcnow().isoformat()
+        run.data_as_of = utcnow().isoformat()
         run.metadata_json = {
             **_metadata(
                 template,
@@ -729,7 +730,7 @@ def run_candidate_notes(
             ),
             "input_errors": unbuilt,
         }
-        run.finished_at = datetime.utcnow()
+        run.finished_at = utcnow()
         db.commit()
     except Exception as exc:
         # A write failed (database locked, constraint): close the run as failed
@@ -739,7 +740,7 @@ def run_candidate_notes(
         failed_run = db.get(IngestionRun, run.id)
         failed_run.status = "failed"
         failed_run.error = error
-        failed_run.finished_at = datetime.utcnow()
+        failed_run.finished_at = utcnow()
         failed_run.metadata_json = {
             **(failed_run.metadata_json or {}),
             "calls": calls,

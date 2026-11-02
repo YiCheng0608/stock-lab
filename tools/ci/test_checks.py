@@ -721,5 +721,46 @@ class WorkflowTriggers(unittest.TestCase):
                 self.assertEqual(workflow["on"][event]["branches"], long_lived)
 
 
+class ExperimentJob(unittest.TestCase):
+    """The backend-xdist experiment holds up neither a merge nor close_task.sh (#379).
+
+    required does not need it. Its pytest step continues on error and stops before the
+    job's time limit, so a hang is a step failure too, and its summary step continues on
+    error: close_task.sh reads the run's conclusion and patrol.sh every check's, so a red
+    or cancelled experiment would stop both.
+    """
+
+    def setUp(self):
+        import yaml
+
+        self.jobs = yaml.load(
+            (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"),
+            Loader=yaml.BaseLoader,
+        )["jobs"]
+        self.job = self.jobs["backend-xdist"]
+        self.pytest_steps = [
+            s for s in self.job["steps"] if "-m pytest" in s.get("run", "")
+        ]
+        self.assertTrue(self.pytest_steps)
+
+    def test_backend_xdist_cannot_turn_ci_red(self):
+        self.assertNotIn("backend-xdist", self.jobs["required"]["needs"])
+        self.assertNotIn("backend-xdist", json.dumps(self.jobs["required"]["steps"]))
+        for step in self.pytest_steps:
+            with self.subTest(step=step.get("name")):
+                self.assertEqual(step.get("continue-on-error"), "true")
+
+    def test_a_hung_pytest_stops_before_the_job_does(self):
+        job_limit = int(self.job["timeout-minutes"])
+        for step in self.pytest_steps:
+            with self.subTest(step=step.get("name")):
+                self.assertLess(int(step.get("timeout-minutes", job_limit)), job_limit)
+
+    def test_the_summary_step_continues_on_error(self):
+        (summary,) = [s for s in self.job["steps"] if s.get("name") == "Summary"]
+        self.assertEqual(summary.get("if"), "always()")
+        self.assertEqual(summary.get("continue-on-error"), "true")
+
+
 if __name__ == "__main__":
     unittest.main()

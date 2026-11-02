@@ -261,6 +261,13 @@ export type StockDetailBar = Omit<Bar, 'date' | 'open' | 'high' | 'low' | 'close
   is_suspended: boolean | null
 }
 
+/** Where one value group of a chip row came from (Issue #395). */
+export type ChipGroupSource = {
+  source: string
+  data_as_of: string | null
+  collected_at: string | null
+}
+
 export type ChipSnapshot = {
   date: string
   foreign_buy: number | null
@@ -274,6 +281,10 @@ export type ChipSnapshot = {
   source: string
   data_as_of: string | null
   collected_at: string | null
+  /** Foreign, trust and dealer values; null when the row has no institutional file. */
+  institutional: ChipGroupSource | null
+  /** Margin values; null when the row has no margin file. */
+  margin: ChipGroupSource | null
 }
 
 export type StockDetailChip = Omit<ChipSnapshot, 'date' | 'source'> & {
@@ -540,18 +551,85 @@ export type SignalSettlement = {
   signal_key?: string | null
 }
 
-export type TrackingRow = {
+// System signal tracking of one signal (GET /tracking/{signal_key}); not shown on the five pages.
+export type SignalTrackingRow = {
   signal: Signal
   instrument: Instrument | null
   evaluation: SignalEvaluation
 }
 
-export type TrackingResponse = {
-  rows: TrackingRow[]
+export type SignalTrackingResponse = {
+  signal: Signal
+  evaluations: SignalTrackingRow[]
   settlements: SignalSettlement[]
-  summary: { evaluation_rows: number; settlement_rows: number; horizons: number[] }
-  response_generated_at?: string
 }
+
+// User tracking plans (GET /tracking, V1_SPEC 使用者追蹤計畫): every fill and result is simulated.
+export type PlanStatus = 'pending' | 'triggered' | 'target_hit' | 'invalidated' | 'expired' | 'closed' | 'incomparable' | 'cancelled'
+
+export type TrackingPlan = {
+  id: number
+  instrument: { id: number; exchange: string; symbol: string; name: string }
+  source_kind: 'candidate' | 'stock' | string
+  signal_id: number
+  daily_candidate_id: number | null
+  strategy: string
+  versions: { strategy_version_id: number | null; formula_version: string | null; score_version: string | null; tracking_version: string }
+  plan_date: string
+  levels: CandidateLevels
+  window_sessions: number
+  status: PlanStatus | string
+  status_reason: string | null
+  open: boolean
+  sessions_observed: number
+  last_session_date: string | null
+  execution_date: string | null
+  execution_price: number | null
+  outcome_date: string | null
+  outcome_price: number | null
+  result_return: number | null
+  result_comparable: boolean | null
+  incomparable_reason: string | null
+  data_quality: 'complete' | 'incomplete' | 'transition_conflict' | string
+  simulated: true
+  created_at: string | null
+  updated_at: string | null
+  cancelled_at: string | null
+}
+
+export type TrackingMeta = {
+  tracking_version: string
+  window_sessions: number
+  slippage_bps: number
+  round_trip_cost_bps: number
+  simulated: true
+}
+
+export type TrackingPlansResponse = Paginated<TrackingPlan> & {
+  summary: { open: number; closed: number }
+  meta: TrackingMeta
+}
+
+export type TrackingPlanSession = {
+  session_date: string
+  session_no: number
+  status: string
+  reason: string | null
+  ohlc: { open: number | null; high: number | null; low: number | null; close: number | null; adj_close: number | null }
+  adjusted_ohlc: Record<string, unknown>
+  entry_trigger: boolean
+  target_trigger: boolean
+  invalid_trigger: boolean
+  suspended: boolean
+  comparable: boolean
+  execution_price: number | null
+  source: string | null
+  data_time: string | null
+}
+
+export type TrackingPlanDetail = { plan: TrackingPlan; sessions: TrackingPlanSession[]; meta: TrackingMeta }
+
+export type AddPlanResponse = { created: boolean; plan: TrackingPlan; meta: TrackingMeta }
 
 /** Local stored inputs for portfolio inspection, not a certified full Bar. */
 export type ProjectedPortfolioBar = {
@@ -1057,6 +1135,8 @@ export type StrategyDecision = {
   missing: string[]
   wait_missing?: string[]
   evidence: Record<string, unknown> | null
+  // Stock detail only (#253): the signal's open tracking plan.
+  open_plan_id?: number | null
 }
 
 export type ActionSummary = {
@@ -1209,7 +1289,7 @@ export type StockBarRow = {
   week_end?: string
   trading_days?: number
   bar_count: number | null
-  // Only null fields are listed: insufficient_bars, suspended, invalid_bar, no_price_change or not_computed.
+  // Only null fields are listed: insufficient_bars, suspended, invalid_bar, no_price_change, synthetic_index or not_computed.
   reasons: Partial<Record<IndicatorField, string>>
 } & Partial<Record<IndicatorField, number | null>>
 
@@ -1312,6 +1392,9 @@ export type CandidateItem = {
   strategy: string
   signal_id: number
   signal_status: string
+  // daily_candidates.id and the signal's open tracking plan (#253); missing on responses from before #253.
+  candidate_id?: number
+  open_plan_id?: number | null
   levels: CandidateLevels
   total_score: number
   weight_coverage: number

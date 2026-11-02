@@ -20,9 +20,11 @@ from app.domain import (
     CANDIDATE_SCORE,
     CANDIDATE_SCORE_V1,
     CANDIDATE_SCORE_V2,
+    CANDIDATE_SCORE_V3,
     CANDIDATE_SCORE_VERSION,
     weighted_available_mean,
 )
+from app.strategies import REGISTRY
 from app.models import (
     CandidateRun,
     ChipSnapshot,
@@ -139,7 +141,7 @@ def stock(
 def signal(
     db,
     instrument,
-    strategy="breakout_v1",
+    strategy="breakout_v2",
     *,
     status="conditional",
     volume_ratio=1.5,
@@ -150,7 +152,7 @@ def signal(
     evidence=True,
     actionable_flag=True,
 ):
-    breakout = strategy == "breakout_v1"
+    breakout = strategy == "breakout_v2"
     prior_volume = 1000 / volume_ratio
     inputs = (
         {
@@ -269,6 +271,9 @@ def rows(db):
     return db.scalars(select(DailyCandidate).order_by(DailyCandidate.rank)).all()
 
 
+V3_SHA256 = "2995cb22b87ff998ace16c66174aaf6b4cc4850a8d1764898eb252a688cc244e"
+
+
 def _snapshot_sha256(config):
     snapshot = json.dumps(config, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(snapshot.encode("utf-8")).hexdigest()
@@ -303,12 +308,33 @@ def test_v2_differs_from_v1_only_in_its_name_and_news_prompt():
     assert _snapshot_sha256(CANDIDATE_SCORE_V2) == (
         "461c472b405da8aa2609ec7c850fa3890faa89f838a8a08a2d99ff8fc3f964d3"
     )
-    assert CANDIDATE_SCORE is CANDIDATE_SCORE_V2
-    assert CANDIDATE_SCORE["name"] == CANDIDATE_SCORE_VERSION == "candidate_score_v2"
     expected = copy.deepcopy(CANDIDATE_SCORE_V1)
     expected["name"] = "candidate_score_v2"
     expected["components"]["news_sentiment"]["llm_prompt_version"] = "news_v2"
     assert CANDIDATE_SCORE_V2 == expected
+
+
+def test_v3_differs_from_v2_only_in_its_name_and_strategy_names():
+    """Changing candidate_score_v3 without a new version must fail here (#392)."""
+
+    assert CANDIDATE_SCORE is CANDIDATE_SCORE_V3
+    assert CANDIDATE_SCORE["name"] == CANDIDATE_SCORE_VERSION == "candidate_score_v3"
+    assert _snapshot_sha256(CANDIDATE_SCORE_V3) == V3_SHA256
+    expected = copy.deepcopy(CANDIDATE_SCORE_V2)
+    expected["name"] = "candidate_score_v3"
+    expected["pool"]["strategies"] = ["breakout_v2", "pullback_v2"]
+    technical = expected["components"]["technical"]["items"]
+    technical["volume_ratio"]["better"] = {
+        "breakout_v2": "higher",
+        "pullback_v2": "lower",
+    }
+    technical["distance"]["formula"] = {
+        "breakout_v2": "close[T]/max(high[T-20:T-1])-1",
+        "pullback_v2": "abs(close[T]/MA20[T]-1)",
+    }
+    assert CANDIDATE_SCORE_V3 == expected
+    # The pool is the registry: every registered strategy, nothing else.
+    assert CANDIDATE_SCORE_V3["pool"]["strategies"] == list(REGISTRY)
 
 
 def test_score_reads_the_news_prompt_version_the_news_llm_writes():
@@ -571,9 +597,9 @@ def test_missing_technical_inputs_fail_the_coverage_floor(db):
 def test_one_row_per_stock_keeps_the_higher_scored_strategy(db):
     a = stock(db, "1101")
     b = stock(db, "1102")
-    signal(db, a, "breakout_v1", volume_ratio=1.3, distance=0.05)
-    signal(db, b, "breakout_v1", volume_ratio=2.0, distance=0.01)
-    pullback = signal(db, a, "pullback_v1", volume_ratio=0.8, distance=0.01)
+    signal(db, a, "breakout_v2", volume_ratio=1.3, distance=0.05)
+    signal(db, b, "breakout_v2", volume_ratio=2.0, distance=0.01)
+    pullback = signal(db, a, "pullback_v2", volume_ratio=0.8, distance=0.01)
     db.commit()
     result = compute_daily_candidates(db, T)
     by_instrument = {row.instrument_id: row for row in rows(db)}
@@ -581,9 +607,9 @@ def test_one_row_per_stock_keeps_the_higher_scored_strategy(db):
         "same_instrument_lower_scored_strategy": 1
     }
     kept = by_instrument[a.id]
-    assert kept.strategy == "pullback_v1" and kept.signal_id == pullback.id
+    assert kept.strategy == "pullback_v2" and kept.signal_id == pullback.id
     assert [item["strategy"] for item in kept.components_json["alternatives"]] == [
-        "breakout_v1"
+        "breakout_v2"
     ]
     assert kept.reasons_json[0]["text"] == "回測 20 日均線，距均線 1.0%，量比 0.8"
 
@@ -658,8 +684,9 @@ def test_rerun_is_idempotent_and_a_new_version_keeps_old_rows(db):
     ] == before
     assert db.scalar(select(func.count(CandidateRun.id))) == 1
 
-    upgraded = copy.deepcopy(CANDIDATE_SCORE_V1)
-    upgraded["name"] = "candidate_score_v2_fixture"
+    # The current version's pool (v1's lists breakout_v1／pullback_v1, #392).
+    upgraded = copy.deepcopy(CANDIDATE_SCORE)
+    upgraded["name"] = "candidate_score_v3_fixture"
     upgraded["weights"] = {
         "technical": 0.25,
         "chips": 0.25,
@@ -686,7 +713,7 @@ def test_api_returns_ranked_fields_inference_and_null_explanations(db, client):
     a = stock(db, "1101", flow=(30.0, 20.0, 0.0))
     b = stock(db, "1102")
     signal(db, a, volume_ratio=2.0)
-    signal(db, b, "pullback_v1", volume_ratio=0.8)
+    signal(db, b, "pullback_v2", volume_ratio=0.8)
     group(db, "ind-1", [a], rank=1)
     db.commit()
     compute_daily_candidates(db, T)
@@ -707,7 +734,7 @@ def test_api_returns_ranked_fields_inference_and_null_explanations(db, client):
     assert (
         top["rank"] == 1
         and top["instrument"]["symbol"] == "1101"
-        and top["strategy"] == "breakout_v1"
+        and top["strategy"] == "breakout_v2"
     )
     assert top["levels"] == {
         "entry_type": "breakout",
@@ -793,6 +820,9 @@ ITEM_KEYS = {
     "data_as_of",
     "llm_note",
     "sources",
+    # User tracking plans (#253).
+    "candidate_id",
+    "open_plan_id",
 }
 
 
@@ -934,7 +964,7 @@ def test_recomputing_a_tracked_date_sees_the_same_pool(db):
     b = stock(db, "1102")
     c = stock(db, "1103")
     first = signal(db, a, volume_ratio=2.0)
-    second = signal(db, b, "pullback_v1", volume_ratio=0.8)
+    second = signal(db, b, "pullback_v2", volume_ratio=0.8)
     third = signal(db, c)
     db.commit()
     on_the_day = compute_daily_candidates(db, T)
@@ -977,17 +1007,84 @@ def test_rows_without_the_flag_fall_back_to_post_conditional_statuses(db):
 
 def test_equal_totals_for_both_strategies_keep_breakout(db):
     a = stock(db, "1101")
-    breakout = signal(db, a, "breakout_v1")
-    pullback = signal(db, a, "pullback_v1")
+    breakout = signal(db, a, "breakout_v2")
+    pullback = signal(db, a, "pullback_v2")
     db.commit()
     result = compute_daily_candidates(db, T)
     (row,) = rows(db)
     alternative = row.components_json["alternatives"][0]
     # Each strategy pool has one signal, so every percentile is 0.5 and the totals tie.
     assert alternative["total_score"] == row.total_score
-    assert row.strategy == "breakout_v1" and row.signal_id == breakout.id
+    assert row.strategy == "breakout_v2" and row.signal_id == breakout.id
     assert (
-        alternative["strategy"] == "pullback_v1"
+        alternative["strategy"] == "pullback_v2"
         and alternative["signal_id"] == pullback.id
     )
     assert result["exclusions"] == {"same_instrument_lower_scored_strategy": 1}
+
+
+# Timestamps written below (#376). `frozen_utcnow` (conftest) makes app.clock answer one
+# instant to every caller, so a stamp taken from local time or the real clock stores a
+# value other than the one asserted here.
+
+
+def test_a_candidate_run_is_computed_at_the_clock(db, frozen_utcnow):
+    signal(db, stock(db, "0050", instrument_type="etf"))
+    db.commit()
+    compute_daily_candidates(db, T)
+    assert db.scalar(select(CandidateRun.computed_at)) == frozen_utcnow.at
+
+
+def test_a_date_with_only_a_previous_version_run_still_shows_its_candidates(db):
+    """#392／#407 review M3: past dates keep their candidate_score_v2 lists.
+
+    Runs are not recomputed when the score version changes, so a date without
+    a current-version run shows its previous-version run in /api/candidates,
+    the action list's tier 1 and the theme member table; a date with both
+    shows only the current one.
+    """
+
+    from app.candidate_view import candidate_list
+    from app.decision import action_tier_rows
+    from app.domain import CANDIDATE_SCORE_READ_VERSIONS
+    from app.theme_member_view import member_context
+
+    current, previous = CANDIDATE_SCORE_READ_VERSIONS
+    a = stock(db, "1101")
+    signal(db, a, volume_ratio=2.0)
+    db.commit()
+    result = compute_daily_candidates(db, T)
+    run = db.get(CandidateRun, result["candidate_run_id"])
+    run.score_version = previous  # as written before the switch
+    for row in rows(db):
+        row.score_version = previous
+    db.commit()
+
+    listed = candidate_list(db, T)
+    assert (listed["status"], listed["score_version"]) == ("success", previous)
+    assert [item["instrument"]["symbol"] for item in listed["items"]] == ["1101"]
+    assert listed["methodology"]["score_version"] == previous
+    tier = {row.instrument_id: row for row in action_tier_rows(db, T)}
+    assert (tier[a.id].tier, tier[a.id].candidate_rank) == (1, 1)
+    assert member_context(db, T, None, [a.id])["ranks"] == {a.id: 1}
+
+    # The same date's current-version run wins; the two never mix.
+    db.add(
+        CandidateRun(
+            trading_date=T,
+            score_version=current,
+            status="success",
+            candidate_count=0,
+            evaluated_signals=1,
+            pool_count=0,
+            config_json={},
+            exclusions_json={},
+            summary_json={},
+            zero_reason="no_actionable_signals",
+        )
+    )
+    db.commit()
+    listed = candidate_list(db, T)
+    assert (listed["score_version"], listed["items"]) == (current, [])
+    assert action_tier_rows(db, T)[0].tier != 1
+    assert member_context(db, T, None, [a.id])["ranks"] == {}

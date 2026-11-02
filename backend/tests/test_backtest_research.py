@@ -122,7 +122,7 @@ def test_a_run_on_the_fixture_database_reports_each_strategy(tmp_path):
     result = subprocess.run(
         [sys.executable, "-B", str(SCRIPT), "--db", str(tmp_path / "stock.db")]
         + ["--start", end, "--end", end, "--min-free-gb", "0"]
-        + ["--ablate", "breakout_v1:volume", "pullback_v1:trend"],
+        + ["--ablate", "breakout_v2:volume", "pullback_v2:trend"],
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -134,10 +134,10 @@ def test_a_run_on_the_fixture_database_reports_each_strategy(tmp_path):
     assert result.returncode == 0, result.stderr
     report = json.loads(result.stdout)
     assert report["registry"] == [
-        "breakout_v1",
-        "pullback_v1",
-        "breakout_v1_ablate_volume",
-        "pullback_v1_ablate_trend",
+        "breakout_v2",
+        "pullback_v2",
+        "breakout_v2_ablate_volume",
+        "pullback_v2_ablate_trend",
     ]
     assert report["status"] == "success" and report["score_sessions"] == 1
     assert set(report["strategies"]) == set(report["registry"])

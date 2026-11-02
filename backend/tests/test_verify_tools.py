@@ -26,7 +26,11 @@ from sqlalchemy import create_engine
 
 import app.models  # noqa: F401  (registers every table on Base.metadata)
 from app.db import Base
-from app.domain import CANDIDATE_SCORE_VERSION
+from app.domain import (
+    CANDIDATE_SCORE_READ_VERSIONS,
+    CANDIDATE_SCORE_VERSION,
+    PLAN_OPEN_STATUSES,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 OPS = ROOT / "tools" / "ops"
@@ -305,6 +309,37 @@ def test_db_facts_candidates_use_the_current_score_version(tmp_path: Path) -> No
 
     # db_facts.py runs on the stdlib-only tool Python and keeps its own copy.
     assert _db_facts().CANDIDATE_SCORE_VERSION == CANDIDATE_SCORE_VERSION
+    assert _db_facts().CANDIDATE_SCORE_READ_VERSIONS == CANDIDATE_SCORE_READ_VERSIONS
+    assert set(_db_facts().PLAN_OPEN_STATUSES) == PLAN_OPEN_STATUSES
+
+
+def test_db_facts_falls_back_to_the_previous_version_run(tmp_path: Path) -> None:
+    # #392: a date without a current-version run shows its previous-version run,
+    # as the API does (app.candidate_runs); one date never mixes two versions.
+    current, previous = CANDIDATE_SCORE_READ_VERSIONS
+    db = tmp_path / "stock.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "CREATE TABLE candidate_runs (id INTEGER PRIMARY KEY, trading_date TEXT,"
+            " score_version TEXT, candidate_count INTEGER)"
+        )
+        conn.executemany(
+            "INSERT INTO candidate_runs VALUES (?, ?, ?, ?)",
+            [
+                (1, "2026-10-29", previous, 7),
+                (2, "2026-10-30", previous, 8),
+                (3, "2026-10-30", current, 4),
+            ],
+        )
+    conn.close()
+    out = json.loads(_run([sys.executable, "-B", str(DB_FACTS), str(db)]).stdout)
+    assert out["candidate_run_latest_trading_date"] == "2026-10-30"
+    assert out["candidate_count_latest"] == 4
+    with sqlite3.connect(db) as conn:
+        conn.execute("DELETE FROM candidate_runs WHERE id = 3")
+    conn.close()
+    out = json.loads(_run([sys.executable, "-B", str(DB_FACTS), str(db)]).stdout)
+    assert out["candidate_count_latest"] == 8
 
 
 # The 2026-10-27 #306 copy: four candidate_score_v1 runs, none of the current version.
@@ -345,6 +380,8 @@ def test_db_facts_without_a_current_version_run_gives_null(
         "news_latest_published_at": None,
         "news_llm_done": None,
         "theme_suggestions": None,
+        "tracking_plans_open": None,
+        "tracking_plans_closed": None,
         "portfolio_positions": 0,
         "alembic_version": "0020_trading_calendar",
         "market_summary_latest": None,
@@ -377,6 +414,8 @@ def test_db_facts_every_query_on_an_empty_table(tmp_path: Path) -> None:
         "news_latest_published_at": None,
         "news_llm_done": 0,
         "theme_suggestions": 0,
+        "tracking_plans_open": 0,
+        "tracking_plans_closed": 0,
         "portfolio_positions": 0,
         "alembic_version": None,
     }

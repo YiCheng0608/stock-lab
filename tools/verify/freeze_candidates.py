@@ -2,7 +2,8 @@
 
     python tools/verify/freeze_candidates.py [--check] [--work <empty directory>]
 
-Builds the fixture database without its three candidate tables' rows, runs
+Builds the fixture database without its three candidate tables' rows (and the
+tracking plans, one of which refers to a candidate row), runs
 ``worker.candidates.compute_daily_candidates`` for the fixture's trading date and
 writes the run summary and ranked rows (without timestamps or elapsed time).
 ``--check`` compares instead of writing and exits 1 when the file is stale; run
@@ -24,6 +25,8 @@ COMMENT = (
     "regenerate with tools/verify/freeze_candidates.py."
 )
 CANDIDATE_TABLES = ("candidate_runs", "daily_candidates", "candidate_llm_notes")
+# Plan 1 refers to a candidate row; plans are not an input of the scorer.
+PLAN_TABLES = ("tracking_plans", "tracking_plan_sessions")
 ROW_FIELDS = (
     "instrument_id",
     "signal_id",
@@ -41,7 +44,7 @@ def rescore(work: Path) -> dict:
     sys.path.insert(0, str(HERE))
     import fixture_db
 
-    fixture_db.build(work, skip=CANDIDATE_TABLES)
+    fixture_db.build(work, skip=CANDIDATE_TABLES + PLAN_TABLES)
     from sqlalchemy import select
 
     import fixture_data

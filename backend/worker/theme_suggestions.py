@@ -24,6 +24,7 @@ from typing import Any, Callable
 from sqlalchemy import inspect, or_, select
 from sqlalchemy.orm import Session
 
+from app.clock import utcnow
 from app.db import SessionLocal
 from app.models import (
     NewsItem,
@@ -210,7 +211,7 @@ def refresh_theme_suggestions(
 ) -> dict[str, Any]:
     """Recompute every suggestion; rows change only when their content does."""
 
-    computed_at = now or datetime.utcnow()
+    computed_at = now or utcnow()
     suggestions, source_results = collect_suggestions(db)
     matched = matched_group_ids(db)
     stored = {
