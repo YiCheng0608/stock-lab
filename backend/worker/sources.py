@@ -2775,44 +2775,9 @@ class TwseAdapter:
         self, as_of: date
     ) -> tuple[list[ActionRecord], list[FetchedPayload]]:
         payload = self._fetch(TWSE_ACTION_ENDPOINT, as_of.isoformat())
-        result: list[ActionRecord] = []
-        for row in _rows(payload.payload):
-            symbol = _text(row, "Code", "股票代號", "證券代號")
-            action_date = _date_from_row(row, "Date", "除權息日期")
-            if not symbol or not action_date:
-                continue
-            # TWT48U_ALL also contains announced future ex-right/ex-dividend
-            # dates.  They are not observable at the requested as-of date and
-            # must not leak into historical tracking.
-            if action_date > as_of:
-                continue
-            result.append(
-                ActionRecord(
-                    symbol=symbol,
-                    action_date=action_date,
-                    action_type=twse_action_type(_text(row, "Exdividend", "除權息")),
-                    cash_dividend=parse_number(_text(row, "CashDividend", "現金股利")),
-                    stock_dividend_ratio=parse_number(
-                        _text(row, "StockDividendRatio", "無償配股率")
-                    ),
-                    split_ratio=parse_number(
-                        _text(row, "SplitRatio", "分割比例", "分割率")
-                    ),
-                    reference_price=parse_number(
-                        _text(
-                            row,
-                            "ReferencePrice",
-                            "OpeningReferencePrice",
-                            "開盤參考價",
-                            "除權息前收盤價",
-                        )
-                    ),
-                    details=dict(row),
-                    exchange="TWSE",
-                    payload_sha256=payload.sha256,
-                )
-            )
-        return result, [payload]
+        return parse_twse_action_rows(
+            payload.payload, as_of=as_of, payload_sha256=payload.sha256
+        ), [payload]
 
     def fetch_action_history(
         self, start: date, end: date
@@ -3417,13 +3382,9 @@ class TpexAdapter:
         self, as_of: date
     ) -> tuple[list[ActionRecord], list[FetchedPayload]]:
         payload = self._fetch(TPEX_ACTION_ENDPOINT, as_of.isoformat())
-        result: list[ActionRecord] = []
-        for row in _rows(payload.payload):
-            record = tpex_action_record(row, payload_sha256=payload.sha256)
-            if record is None or record.action_date > as_of:
-                continue
-            result.append(record)
-        return result, [payload]
+        return parse_tpex_action_rows(
+            payload.payload, as_of=as_of, payload_sha256=payload.sha256
+        ), [payload]
 
     def fetch_action_history(
         self, start: date, end: date
@@ -3721,6 +3682,63 @@ def twse_action_type(kind: str) -> str:
     wrote, and replaces it instead of adding a second row for the same event.
     """
     return "ex_dividend" if "除息" in kind else "corporate_action"
+
+
+def parse_twse_action_rows(
+    payload: Any, *, as_of: date, payload_sha256: str | None
+) -> list[ActionRecord]:
+    """The TWT48U_ALL rows dated on or before ``as_of`` as ActionRecords."""
+    result: list[ActionRecord] = []
+    for row in _rows(payload):
+        symbol = _text(row, "Code", "股票代號", "證券代號")
+        action_date = _date_from_row(row, "Date", "除權息日期")
+        if not symbol or not action_date:
+            continue
+        # TWT48U_ALL also contains announced future ex-right/ex-dividend
+        # dates.  They are not observable at the requested as-of date and
+        # must not leak into historical tracking.
+        if action_date > as_of:
+            continue
+        result.append(
+            ActionRecord(
+                symbol=symbol,
+                action_date=action_date,
+                action_type=twse_action_type(_text(row, "Exdividend", "除權息")),
+                cash_dividend=parse_number(_text(row, "CashDividend", "現金股利")),
+                stock_dividend_ratio=parse_number(
+                    _text(row, "StockDividendRatio", "無償配股率")
+                ),
+                split_ratio=parse_number(
+                    _text(row, "SplitRatio", "分割比例", "分割率")
+                ),
+                reference_price=parse_number(
+                    _text(
+                        row,
+                        "ReferencePrice",
+                        "OpeningReferencePrice",
+                        "開盤參考價",
+                        "除權息前收盤價",
+                    )
+                ),
+                details=dict(row),
+                exchange="TWSE",
+                payload_sha256=payload_sha256,
+            )
+        )
+    return result
+
+
+def parse_tpex_action_rows(
+    payload: Any, *, as_of: date, payload_sha256: str | None
+) -> list[ActionRecord]:
+    """The tpex_exright_daily rows dated on or before ``as_of`` as ActionRecords."""
+    result: list[ActionRecord] = []
+    for row in _rows(payload):
+        record = tpex_action_record(row, payload_sha256=payload_sha256)
+        if record is None or record.action_date > as_of:
+            continue
+        result.append(record)
+    return result
 
 
 def tpex_action_record(

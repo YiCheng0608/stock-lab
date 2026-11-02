@@ -230,6 +230,8 @@ RUNTIME_PATHS: tuple[str, ...] = (
     "docker-compose.dev.yml",
     "tools/ops/watchdog.sh",
     "tools/ops/watchdog_helper.py",
+    # watchdog_helper.py imports it for the daily data check (#390).
+    "tools/ops/data_check.py",
     "tools/ops/monitor.sh",
     "tools/ops/event_queue.py",
     "tools/ops/gh_auth.sh",
