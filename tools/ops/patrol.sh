@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Coordinator patrol (Issue #282, #316; docs/GITHUB_WORKFLOW.md 無人值守運作), in the
-# handbook's order: write the heartbeat, read this session's compaction count and
+# Coordinator patrol (Issue #282, #316, #401; docs/GITHUB_WORKFLOW.md 無人值守運作), in
+# the handbook's order: write the heartbeat, read this session's compaction count and
 # handoff marker, then the event queue the monitor (tools/ops/monitor.sh) keeps: its
-# heartbeat, its last open PR snapshot, the schedule jobs' latest log lines as it read them
-# and the events not handled yet. Prints a short summary. No gh call: GitHub is polled by
-# the monitor only (#316 AC-4).
+# heartbeat, its last open PR snapshot, the schedule jobs' latest log lines as it read them,
+# then the unanswered questions (a 提問 comment no 決定 comment links to, #401) and the
+# events not handled yet. Prints a short summary. PRs, CI and new comments come from the
+# queue: GitHub is polled by the monitor only (#316 AC-4). The one gh call is the questions'
+# GraphQL query, as whether a question is answered needs every open thread's comments as
+# they are now (closed Issues, which 決定 links which), which the queue's events do not hold.
 #
 # Files written: <data>/logs/coordinator-heartbeat.json (through a temporary file in the
 # same directory and mv), and with --done one line in <data>/logs/events-done.jsonl.
@@ -14,6 +17,8 @@
 #   --terminal H      default $ORCA_TERMINAL_HANDLE
 #   --done X          mark events handled before listing the rest: X is an event id, or
 #                     a seq for every pending event up to it; repeatable
+#   --max-gh N        at most N gh calls, default 1 (the questions); 0 prints the
+#                     questions as not read (未查完)
 #   --take-over       overwrite another session's heartbeat younger than an hour (a new
 #                     coordinator taking over without the old one's handoff marker)
 #   --data-dir DIR    default $STOCK_DATA_DIR, then $HOME/stock-lab-data
@@ -23,17 +28,18 @@ set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
 
-session_id="${CLAUDE_CODE_SESSION_ID:-}" handle="${ORCA_TERMINAL_HANDLE:-}" take_over=0 done_args=()
+session_id="${CLAUDE_CODE_SESSION_ID:-}" handle="${ORCA_TERMINAL_HANDLE:-}" max_gh=1 take_over=0 done_args=()
 while [ $# -gt 0 ]; do
   case "$1" in
     -h | --help) awk 'NR > 1 && !/^#/ { exit } NR > 1' "${BASH_SOURCE[0]}"; exit 0 ;;
     --take-over) take_over=1; shift; continue ;;
-    --session-id | --terminal | --done | --data-dir | --python)
+    --session-id | --terminal | --done | --max-gh | --data-dir | --python)
       [ $# -ge 2 ] || die "$1 needs a value" 64
       case "$1" in
         --session-id) session_id="$2" ;;
         --terminal) handle="$2" ;;
         --done) done_args+=("$2") ;;
+        --max-gh) max_gh="$2" ;;
         --data-dir) data_dir="$2" ;;
         --python) python="$2" ;;
       esac
@@ -43,6 +49,7 @@ while [ $# -gt 0 ]; do
     *) die "unknown argument: $1" 64 ;;
   esac
 done
+case "$max_gh" in '' | *[!0-9]*) die "--max-gh must be a number" 64 ;; esac
 case "$session_id" in '' | *[!A-Za-z0-9_-]*) die "--session-id（或 CLAUDE_CODE_SESSION_ID）必填，只能有英數、_、-" 64 ;; esac
 case "$handle" in '' | -* | *[!A-Za-z0-9_-]*) die "--terminal（或 ORCA_TERMINAL_HANDLE）必填，只能有英數、_、-，不能以 - 開頭" 64 ;; esac
 iso_re='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
@@ -106,5 +113,22 @@ fi
 eq status "$logs" "$now"
 # The wake listener the scheduler container's monitor wakes this session through (#338).
 bash "$script_dir/wake_listener_start.sh" --status 2>&1
+# Questions nobody answered (#401): one GraphQL call reads the open Issues and PRs with
+# their comments; coordinator_json.py decides which 提問 has no 決定 linking to it.
+gh_calls=0
+if [ "$gh_calls" -lt "$max_gh" ]; then
+  gh_calls=$((gh_calls + 1))
+  if out="$(gh api graphql -f owner="${GH_REPO%%/*}" -f name="${GH_REPO#*/}" \
+    -f query="$(cj questions-query)")" && lines="$(printf '%s' "$out" | cj questions "$now")"; then
+    n="$(printf '%s\n' "$lines" | grep -c '^#')"
+    echo "未回覆的提問：$n 則$(printf '%s\n' "$lines" | grep -q '^未查完' && echo '（未查完）')"
+    [ -n "$lines" ] && printf '%s\n' "$lines" | sed 's/^/  /'
+  else
+    echo "未回覆的提問：未查完（gh api graphql 失敗）"
+  fi
+else
+  echo "未回覆的提問：未查完（gh 呼叫已達上限 $max_gh）"
+fi
+echo "gh 呼叫：$gh_calls／上限 $max_gh"
 eq pending "$logs"
-echo "其餘依手冊：處理上面的未處理事件（PR 的 CI 與合併、Issue 的提問、名額空缺就派工），處理完以 --done <seq> 標記；monitor 停擺時看 logs/monitor.log"
+echo "其餘依手冊：處理上面的未處理事件（PR 的 CI 與合併、未回覆的提問、名額空缺就派工），處理完以 --done <seq> 標記；monitor 停擺時看 logs/monitor.log"

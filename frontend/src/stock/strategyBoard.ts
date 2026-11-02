@@ -132,9 +132,11 @@ export function unmetText(row: StrategyBoardRow): string {
   return row.unmet.length ? row.unmet.map((code) => unmetLabel(code, row.conditions.find((item) => item.code === code))).join('、') : '條件明細待核實'
 }
 
-export type ConditionView = { code: string; state: 'met' | 'unmet' | 'unknown'; stateText: string; label: string; value: string; next: string | null }
+export type ConditionView = { code: string; state: 'met' | 'unmet' | 'unknown' | 'not_applicable'; stateText: string; label: string; value: string; next: string | null }
 
-const STATE_TEXT = { met: '已達成', unmet: '未達成', unknown: '無資料' } as const
+const STATE_TEXT = { met: '已達成', unmet: '未達成', unknown: '無資料', not_applicable: '不適用' } as const
+// A condition the rule does not judge for this security (#392: a non-margin security's margin condition).
+export const NOT_APPLICABLE_REASONS: readonly string[] = ['margin_financing_not_applicable']
 
 function conditionValue(item: StrategyCondition): string {
   const { actual, threshold, threshold_high: high } = item
@@ -190,10 +192,12 @@ function nextSession(item: StrategyCondition): string | null {
 
 export function conditionViews(row: StrategyBoardRow, reasonLabel: (code: string) => string): ConditionView[] {
   return row.conditions.map((item) => {
-    const state = item.satisfied === true ? 'met' : item.satisfied === false ? 'unmet' : 'unknown'
+    const notApplicable = item.satisfied == null && item.reasons.some((reason) => NOT_APPLICABLE_REASONS.includes(reason))
+    const state = notApplicable ? 'not_applicable' : item.satisfied === true ? 'met' : item.satisfied === false ? 'unmet' : 'unknown'
     const reasons = item.reasons.length ? item.reasons.map(reasonLabel).join('、') : ''
-    const value = conditionValue(item) || reasons
-    return { code: item.code, state, stateText: STATE_TEXT[state], label: conditionLabel(item), value, next: state === 'met' ? null : nextSession(item) }
+    // Not applicable: the reason says why, not an empty 「—」 value.
+    const value = notApplicable ? reasons : conditionValue(item) || reasons
+    return { code: item.code, state, stateText: STATE_TEXT[state], label: conditionLabel(item), value, next: state === 'met' || notApplicable ? null : nextSession(item) }
   })
 }
 

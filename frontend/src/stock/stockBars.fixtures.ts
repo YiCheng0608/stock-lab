@@ -1,4 +1,5 @@
 import type { IndicatorField, StockBarRow, StockBarsInterval, StockBarsResponse } from '../types'
+import { PRICE_BASIS } from './stockBars'
 
 // Small bars-API fixtures shaped like PR #155 (docs/V1_SPEC.md 技術指標): insufficient history, a suspended
 // day plus a missing calendar day, a weekly series and a batch that has not run yet.
@@ -65,7 +66,7 @@ export function barsResponse(bars: StockBarRow[], interval: StockBarsInterval = 
     sources,
     indicators: {
       formula_version: 'indicators/v1',
-      price_basis: 'as_of_date_raw_basis',
+      price_basis: PRICE_BASIS,
       parameters: {},
       required_bars: REQUIRED_BARS,
       fields: FIELDS,

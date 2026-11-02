@@ -1920,12 +1920,28 @@ def s9(run: Run, stock: Stock) -> str:
         text.find_where(lambda line: line.startswith(latest)) >= 0,
         f"缺 `{latest.strip()}\\t` 開頭的行",
     )
-    rows = text.count(lambda line: " · 資料截至：" in line)
-    expect(
-        rows == min(30, len(chips)),
-        f"` · 資料截至：` {rows} 行，預期 {min(30, len(chips))}",
+    shown = min(30, len(chips))
+    counts = []
+    # One line per value group (#395); the first of each is the latest row.
+    for label, key in (("法人", "institutional"), ("融資", "margin")):
+        rows = text.count(lambda line, label=label: line.startswith(f"{label}："))
+        expect(rows == shown, f"`{label}：` 開頭 {rows} 行，預期 {shown}")
+        group = chips[-1].get(key)
+        first = text.lines[
+            text.find_where(lambda line, label=label: line.startswith(f"{label}："))
+        ]
+        if group is None:
+            expect(
+                first == f"{label}：無資料",
+                f"最新一列 `{first}`，預期 `{label}：無資料`",
+            )
+        else:
+            part = f"（{group['source']}） · 資料截至：{slash(group['data_as_of'])} · 收集："
+            expect(part in first, f"最新一列 `{first}` 缺 `{part}`")
+        counts.append(f"{label} {rows}")
+    return (
+        f"最新一列 {latest.strip()}；來源行 {'、'.join(counts)} = min(30, {len(chips)})"
     )
-    return f"最新一列 {latest.strip()}；來源行 {rows} = min(30, {len(chips)})"
 
 
 # ---- actions ----

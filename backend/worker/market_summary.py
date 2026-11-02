@@ -19,6 +19,7 @@ from urllib.parse import parse_qs, urlsplit
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.clock import utcnow
 from app.db import SessionLocal, init_db
 from app.models import MarketSummary, RawPayload
 
@@ -77,7 +78,7 @@ def upsert_market_summary(
     values = {name: getattr(record, name) for name in VALUE_FIELDS}
     provenance = {
         "data_as_of": record.data_as_of,
-        "collected_at": raw.collected_at if raw else datetime.utcnow(),
+        "collected_at": raw.collected_at if raw else utcnow(),
         "raw_payload_id": raw.id if raw else None,
     }
     if row is None:

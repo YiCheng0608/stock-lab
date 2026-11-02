@@ -1,9 +1,11 @@
+import json
 from datetime import date
 
 import httpx
 import pytest
 
 import worker.sources as sources
+from app.indicators import is_synthetic_bar
 
 
 @pytest.mark.parametrize("amount", [0, 1])
@@ -701,6 +703,8 @@ def test_twse_mi_index_taiex_row_uses_requested_date_and_provenance():
         "unavailable",
         "synthetic_index",
     )
+    # The indicators leave its high/low and volume fields empty (#394).
+    assert is_synthetic_bar(rows[0].source, rows[0].turnover_reason)
 
 
 def test_twse_mi_index_selects_price_table_not_return_table():
@@ -783,6 +787,7 @@ def test_twse_openapi_adjacent_dates_select_exact_price_row():
     assert all(
         row.turnover_status == "unavailable"
         and row.turnover_reason == "synthetic_index"
+        and is_synthetic_bar(row.source, row.turnover_reason)
         for row in [*first, *second]
     )
 
@@ -797,6 +802,7 @@ def test_twse_monthly_index_does_not_claim_synthetic_turnover_is_available():
         "unavailable",
         "synthetic_index",
     )
+    assert is_synthetic_bar(rows[0].source, rows[0].turnover_reason)
 
 
 def test_twse_taiex_parser_rejects_wrong_date_duplicate_and_nonpositive_rows():
@@ -1285,3 +1291,24 @@ def test_fetch_json_wraps_retryable_http_exhaustion_with_cause(monkeypatch):
         sources.fetch_json("https://fixture.example")
     assert calls["count"] == 3
     assert isinstance(error.value.__cause__, httpx.HTTPStatusError)
+
+
+# Timestamps written below (#376). `frozen_utcnow` (conftest) makes app.clock answer one
+# instant to every caller, so a stamp taken from local time or the real clock stores a
+# value other than the one asserted here.
+
+
+def test_a_capture_without_a_time_is_stamped_with_the_clock(frozen_utcnow):
+    stored = sources.persist_raw_payload(
+        "twse", "https://example.test/a", {"a": 1}, "2026-10-29"
+    )
+    day_dir = sources.RAW_DIR / "twse" / "2026" / "10" / "29"
+    assert stored.parent == day_dir
+    meta = json.loads(stored.with_suffix(".meta.json").read_text(encoding="utf-8"))
+    assert meta["collected_at"] == "2026-10-29T17:04:05.678901"
+
+    captured = sources.capture_payload(
+        "twse", "https://example.test/b", {"b": 1}, "2026-10-29"
+    )
+    assert captured.collected_at == frozen_utcnow.at
+    assert captured.payload_path.parent == day_dir

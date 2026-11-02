@@ -19,6 +19,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from .clock import utcnow
 from .domain import (
     PLAN_OPEN_STATUSES,
     PLAN_TRACKING_VERSION,
@@ -144,7 +145,7 @@ def create_plan(
         if signal.strategy_version_id is not None
         else None
     )
-    created_at = now or datetime.utcnow()
+    created_at = now or utcnow()
     plan = TrackingPlan(
         instrument_id=signal.instrument_id,
         signal_id=signal.id,
@@ -202,7 +203,7 @@ def cancel_plan(
     plan = db.get(TrackingPlan, plan_id)
     if plan is None:
         raise PlanRequestError("plan_not_found", 404)
-    cancelled_at = now or datetime.utcnow()
+    cancelled_at = now or utcnow()
     for _ in PLAN_OPEN_STATUSES:
         if plan.status == "cancelled":
             return plan

@@ -17,9 +17,17 @@ from app.db import init_db
 from .backfill import BACKFILL_SCOPES, chunked_backfill
 from .candidate_notes import run_candidate_notes_batch
 from .candidates import run_candidates
+from .chip_provenance import run_fill_provenance
+from .chip_revisions import run_revise_institutional
+from .corporate_action_sync import (
+    run_corporate_action_check,
+    run_corporate_action_rebuild,
+    run_corporate_action_reprice,
+    run_corporate_action_sync,
+)
 from .indicator_batch import run_indicator_batch
 from .industry_repair import run_industry_repair
-from .instrument_repair import run_instrument_repair
+from .instrument_repair import run_instrument_repair, run_unmatched_backfill
 from .market_summary import backfill_market_summaries
 from .news_batch import run_news_batch
 from .news_llm import DEFAULT_LIMIT as NEWS_LLM_DEFAULT_LIMIT, run_news_llm_batch
@@ -34,6 +42,7 @@ from .schedule_runs import (
 from .strategy_levels import run_strategy_levels
 from .theme_suggestions import run_theme_suggestions
 from .themes import sync_themes
+from .margin_lists import run_margin_lists
 from .trading_calendar import run_trading_calendar
 
 
@@ -170,6 +179,12 @@ def main() -> None:
     levels_parser.add_argument(
         "--date", dest="run_date", help="YYYY-MM-DD 訊號日；未指定使用最新訊號日"
     )
+    margin_lists_parser = subparsers.add_parser(
+        "margin-lists",
+        help="從已存的官方融資融券餘額 raw 回補融資標的清單 margin_lists（collect 會寫當日；不發網路，內容沒變不改寫）",
+    )
+    margin_lists_parser.add_argument("--start", help="YYYY-MM-DD；未指定為最早的 raw")
+    margin_lists_parser.add_argument("--end", help="YYYY-MM-DD；未指定為最新的 raw")
     calendar_parser = subparsers.add_parser(
         "trading-calendar",
         help="抓 TWSE 官方休市表存入 trading_calendar_days（daily 的 trading_calendar 步驟；預設今年與明年，內容沒變不改寫）",
@@ -227,6 +242,42 @@ def main() -> None:
         default=0,
         help="--apply 後重算最近 N 個交易日的族群分數",
     )
+    actions_parser = subparsers.add_parser(
+        "corporate-actions", help="除權息：官方計算結果表回補與因子核對（#386）"
+    )
+    actions_subparsers = actions_parser.add_subparsers(
+        dest="actions_command", required=True
+    )
+    actions_sync_parser = actions_subparsers.add_parser(
+        "sync",
+        help="以 TWSE TWT49U／TPEx exDailyQ 回補區間內的除權息事件（預設 dry-run，重跑冪等）",
+    )
+    actions_sync_parser.add_argument("--start-date", required=True)
+    actions_sync_parser.add_argument("--end-date", required=True)
+    actions_sync_parser.add_argument(
+        "--apply", action="store_true", help="寫入 DB；未指定只列出預計變更"
+    )
+    actions_check_parser = actions_subparsers.add_parser(
+        "check", help="列出欄位算出的因子與官方減除股利參考價比不符的列（不寫 DB）"
+    )
+    actions_check_parser.add_argument("--start-date")
+    actions_check_parser.add_argument("--end-date")
+    actions_reprice_parser = actions_subparsers.add_parser(
+        "reprice",
+        help="列出因子改由官方除權息參考價決定的列（#394；預設 dry-run，--apply 只記一筆 run 給 rebuild 用）",
+    )
+    actions_reprice_parser.add_argument(
+        "--apply", action="store_true", help="記錄 reprice run；不改 corporate_actions"
+    )
+    actions_rebuild_parser = actions_subparsers.add_parser(
+        "rebuild",
+        help="依 sync／reprice run 改到的標的重算指標、特徵與最早改動日起的族群分數（不重算訊號；重跑冪等）",
+    )
+    actions_rebuild_parser.add_argument("--run-id", type=int, required=True)
+    actions_rebuild_parser.add_argument(
+        "--group-scores-from",
+        help="接續在族群分數中途停下的 rebuild：跳過指標與特徵，只重算此日起的族群分數",
+    )
     instruments_parser = subparsers.add_parser("instruments", help="標的狀態與歷史")
     instruments_subparsers = instruments_parser.add_subparsers(
         dest="instruments_command", required=True
@@ -241,7 +292,7 @@ def main() -> None:
     instruments_repair_parser.add_argument(
         "--include-delisted",
         action="store_true",
-        help="為已不在官方清單、DB 也沒有的普通股代號建 delisted／transferred 標的並補歷史",
+        help="為已不在官方清單、DB 也沒有的普通股與 ETF 代號建 delisted／transferred 標的並補歷史",
     )
     instruments_repair_parser.add_argument(
         "--max-status-share",
@@ -254,6 +305,33 @@ def main() -> None:
         type=int,
         default=0,
         help="--apply 後重算最近 N 個交易日的族群分數",
+    )
+    instruments_backfill_parser = instruments_subparsers.add_parser(
+        "backfill-unmatched",
+        help="代號已有標的時，以已保存的行情 raw 補寫先前記為 unmatched_bar 的日線（collect 也會做；預設 dry-run，重跑冪等）",
+    )
+    instruments_backfill_parser.add_argument(
+        "--apply", action="store_true", help="寫入 DB；未指定只列出預計變更"
+    )
+    chips_parser = subparsers.add_parser("chips", help="籌碼")
+    chips_subparsers = chips_parser.add_subparsers(dest="chips_command", required=True)
+    chips_revise_parser = chips_subparsers.add_parser(
+        "revise",
+        help="依已保存的 T86／insti raw，以較晚 capture 的三大法人值更正既有籌碼列（預設 dry-run，不發網路）",
+    )
+    chips_revise_parser.add_argument("--start-date", required=True)
+    chips_revise_parser.add_argument(
+        "--end-date", help="預設與 --start-date 同日；YYYY-MM-DD"
+    )
+    chips_revise_parser.add_argument(
+        "--apply", action="store_true", help="寫入 DB；未指定只列出預計變更"
+    )
+    chips_provenance_parser = chips_subparsers.add_parser(
+        "provenance",
+        help="依已保存的 raw 與 value_fill_groups，補寫既有籌碼列法人／融資各自的來源（預設 dry-run，不發網路，重跑冪等）",
+    )
+    chips_provenance_parser.add_argument(
+        "--apply", action="store_true", help="寫入 DB；未指定只列出預計變更"
     )
     news_parser = subparsers.add_parser(
         "news", help="抓取國內／國際財經新聞 feed 並寫入 news_items"
@@ -334,6 +412,8 @@ def main() -> None:
         result = run_strategy_levels(parse_date(args.run_date))
     elif args.command == "trading-calendar":
         result = run_trading_calendar(years=args.years)
+    elif args.command == "margin-lists":
+        result = run_margin_lists(parse_date(args.start), parse_date(args.end))
     elif args.command == "candidate-notes":
         if args.limit is not None and args.limit < 1:
             parser.error("--limit must be at least 1")
@@ -348,6 +428,28 @@ def main() -> None:
         if args.rescore_days < 0 or (args.rescore_days and not args.apply):
             parser.error("--rescore-days needs --apply and must not be negative")
         result = run_industry_repair(apply=args.apply, rescore_days=args.rescore_days)
+    elif (
+        args.command == "instruments"
+        and args.instruments_command == "backfill-unmatched"
+    ):
+        result = run_unmatched_backfill(apply=args.apply)
+    elif args.command == "corporate-actions":
+        if args.actions_command == "sync":
+            result = run_corporate_action_sync(
+                date.fromisoformat(args.start_date),
+                date.fromisoformat(args.end_date),
+                apply=args.apply,
+            )
+        elif args.actions_command == "reprice":
+            result = run_corporate_action_reprice(apply=args.apply)
+        elif args.actions_command == "rebuild":
+            result = run_corporate_action_rebuild(
+                args.run_id, group_scores_from=parse_date(args.group_scores_from)
+            )
+        else:
+            result = run_corporate_action_check(
+                parse_date(args.start_date), parse_date(args.end_date)
+            )
     elif args.command == "instruments":
         if args.rescore_days < 0 or (args.rescore_days and not args.apply):
             parser.error("--rescore-days needs --apply and must not be negative")
@@ -359,6 +461,14 @@ def main() -> None:
             rescore_days=args.rescore_days,
             max_status_share=args.max_status_share,
         )
+    elif args.command == "chips" and args.chips_command == "provenance":
+        result = run_fill_provenance(apply=args.apply)
+    elif args.command == "chips":
+        start = date.fromisoformat(args.start_date)
+        end = date.fromisoformat(args.end_date) if args.end_date else start
+        if end < start:
+            parser.error("--end-date must not be before --start-date")
+        result = run_revise_institutional(start, end, apply=args.apply)
     elif args.command == "news":
         result = run_news_batch(parse_date(args.run_date))
     elif args.command == "news-llm":
@@ -398,6 +508,10 @@ def main() -> None:
         "no_data",
     }:
         raise SystemExit(1)
+    if args.command == "margin-lists" and result.get("status") != "success":
+        raise SystemExit(2 if result.get("status") == "partial" else 1)
+    if args.command == "chips" and result.get("status") != "success":
+        raise SystemExit(2 if result.get("status") == "partial" else 1)
     if (
         args.command in {"themes", "industry", "instruments", "theme-suggestions"}
         and isinstance(result, dict)

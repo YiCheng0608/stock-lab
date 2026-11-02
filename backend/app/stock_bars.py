@@ -57,6 +57,9 @@ def _daily(
             select(TechnicalIndicator).where(
                 TechnicalIndicator.instrument_id == instrument.id,
                 TechnicalIndicator.formula_version == INDICATOR_VERSION,
+                # A row of an older basis is not this payload's price_basis;
+                # it reads as not computed until the batch replaces it (#394).
+                TechnicalIndicator.price_basis == PRICE_BASIS,
                 TechnicalIndicator.trading_date >= bars[0].trading_date,
                 TechnicalIndicator.trading_date <= bars[-1].trading_date,
             )

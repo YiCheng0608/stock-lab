@@ -1,4 +1,4 @@
-<!-- owns: 來源選用原則、資料庫政策、官方來源、標的狀態同步、官方來源限制、新聞來源清單、法人口徑、成交金額可得狀態、成交量整數規則、TAIEX 交易日基準、大盤概況欄位、交易日曆、TPEx 停復牌規則、公司行動欄位、FinMind 補缺口規則 -->
+<!-- owns: 來源選用原則、資料庫政策、官方來源、標的狀態同步、官方來源限制、新聞來源清單、法人口徑、籌碼來源欄位、融資標的清單、成交金額可得狀態、成交量整數規則、TAIEX 交易日基準、大盤概況欄位、交易日曆、TPEx 停復牌規則、公司行動欄位、FinMind 補缺口規則 -->
 # 資料來源與限制
 
 本文記錄資料來源、保存規則與已知限制；能力狀態以 [ROADMAP](ROADMAP.md) 為準。
@@ -19,18 +19,18 @@
 | --- | --- | --- | --- |
 | TWSE universe | [上市公司 `t187ap03_L`](https://openapi.twse.com.tw/v1/opendata/t187ap03_L)、[ETF `t187ap47_L`](https://openapi.twse.com.tw/v1/opendata/t187ap47_L)、[新上市 `company/newlisting`](https://openapi.twse.com.tw/v1/company/newlisting) | 建立上市普通股與 ETF allowlist；數字代號 ETF 以 `t187ap47_L` 辨識。`company/newlisting` 列出 2011 年起所有上市案，只把 60 天內生效、主檔還沒有的列當新上市（`ipo`）。 | 名單是取得當下狀態，不含歷史上下市版本；用法見[標的狀態同步](#標的狀態同步)。 |
 | TPEx universe | [issuer master `mopsfin_t187ap03_O`](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O)、[ETF allowlist `etfFilter`](https://info.tpex.org.tw/api/etfFilter)（POST） | 建立上櫃普通股與 ETF allowlist。 | 混合行情中的權證、CB、ETN、興櫃不當成股票；興櫃 feed 不用來建 universe。 |
-| TWSE 日行情 | 當日 [`STOCK_DAY_ALL`](https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL)；歷史 [`MI_INDEX`](https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX)（單日全市場表） | 保留 allowlist 與普通股代號（[標的狀態同步](#標的狀態同步)），讀 OHLC、`TradeVolume`（股）、`TradeValue`。歷史以逐日全市場表回補，不逐檔逐月請求。同一份 `MI_INDEX`（`type=ALLBUT0999`，當日 collect 也會抓）另讀大盤統計資訊與漲跌證券數，寫[大盤概況](#大盤概況)；成交金額取「總計(1~15)」（含 ETF、權證等全部證券）。 | 明確 no-data 且無列可略過；錯日、缺日或日期不可驗的 payload fail-closed，不映射到其他交易日。 |
+| TWSE 日行情 | 當日 [`STOCK_DAY_ALL`](https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL)；歷史 [`MI_INDEX`](https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX)（單日全市場表） | 保留 allowlist、普通股與 ETF 代號（[標的狀態同步](#標的狀態同步)），讀 OHLC、`TradeVolume`（股）、`TradeValue`。歷史以逐日全市場表回補，不逐檔逐月請求。同一份 `MI_INDEX`（`type=ALLBUT0999`，當日 collect 也會抓）另讀大盤統計資訊與漲跌證券數，寫[大盤概況](#大盤概況)；成交金額取「總計(1~15)」（含 ETF、權證等全部證券）。 | 明確 no-data 且無列可略過；錯日、缺日或日期不可驗的 payload fail-closed，不映射到其他交易日。 |
 | TWSE 交易日曆 | OpenAPI [`holidaySchedule`](https://openapi.twse.com.tw/v1/holidaySchedule/holidaySchedule)；網站版逐年 [`holidaySchedule?date=YYYY0101`](https://www.twse.com.tw/rwd/zh/holidaySchedule/holidaySchedule?date=20260101&response=json) | OpenAPI 版：多日回補時作正面排除清單，明列休市日不送 `MI_INDEX`。網站版：daily 的 trading_calendar 步驟存成 `trading_calendar_days`，推算訊號的規則最早執行日（見[交易日曆](#交易日曆)）。兩者的休市判定是同一個分類規則。 | 取得失敗不推論休市，回補該日照常請求並 fail-closed；只描述年度最新版本，不是歷史版本；颱風等臨時休市不會列入。 |
 | TAIEX | 當日 [`exchangeReport/MI_INDEX`](https://openapi.twse.com.tw/v1/exchangeReport/MI_INDEX)；歷史取自 `MI_INDEX` 全市場表 | 加權指數作 hot-group 超額報酬基準與交易日基準（見 [TAIEX 交易日基準](#taiex-交易日基準)）。 | 只有收盤值；合成的 O／H／L、成交量與成交額不是真實欄位。 |
 | TPEx 大盤概況 | [`tpex_mainborad_highlight`](https://www.tpex.org.tw/openapi/v1/tpex_mainborad_highlight)（上櫃股票市場現況；官方路徑拼作 `mainborad`） | 當日 collect 每天 1 個請求，寫[大盤概況](#大盤概況)：`CloseIndex`、`IndexChange`、`DailyTradingValue`（**百萬元**，×1,000,000 存成元，只算上櫃股票）與 `PriceRise`／`PriceDecline`／`PriceFlat`／`LimitUp`／`LimitDown` 各 `…CompanyNumbers`、`UnmatchedCompanyNumbersSuspensionStocksIncluded`；`DailyTradingVolume`（**千股**）、`ListedCompanyNumbers`、`MarketCapitalization` 等不保存。 | 只有最新一天，沒有歷史：`Date` 是民國日期（`1151022`），不等於請求的交易日（例如還沒更新）時不寫並記 warning，不映射到其他日期；漏抓的日子不回補，那天沒有上櫃列。 |
-| TPEx 日行情 | [`dailyQuotes`](https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes)（POST） | 逐日擷取，保留股票／ETF allowlist 與普通股代號（[標的狀態同步](#標的狀態同步)），讀 OHLC、`TradingShares`（股）、`TransactionAmount`。 | 回報日期須等於請求日期；非空但全部被拒收的表格不算合法空日。 |
+| TPEx 日行情 | [`dailyQuotes`](https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes)（POST） | 逐日擷取，保留股票／ETF allowlist、普通股與 ETF 代號（[標的狀態同步](#標的狀態同步)），讀 OHLC、`TradingShares`（股）、`TransactionAmount`。 | 回報日期須等於請求日期；非空但全部被拒收的表格不算合法空日。 |
 | TWSE 籌碼 | 法人 [`T86`](https://www.twse.com.tw/rwd/zh/fund/T86)；融資 [`MI_MARGN`](https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN) | 法人依外資及陸資、投信、自營商分類；融資讀餘額與增減。 | 請求可能被限流、重導或缺可驗證日期。 |
 | TPEx 籌碼 | 法人 [`insti/dailyTrade`](https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade)；融資 [`margin/balance`](https://www.tpex.org.tw/www/zh-tw/margin/balance) | 同 TWSE 口徑；[三大法人買賣明細](https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html)明列外資及陸資、投信、自營商及合計。 | 缺資料時不補 0；官方檔未列的語意見[法人口徑](#法人口徑)。 |
-| 公司行動 | TWSE [`TWT48U_ALL`](https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL)；TPEx [`tpex_exright_daily`](https://www.tpex.org.tw/openapi/v1/tpex_exright_daily) | 除權息資料寫入 corporate actions，作價格調整與追蹤比較。 | `TWT48U_ALL` 可含未來預告，須保存擷取時間；完整歷史與更正紀錄不明。欄位規則見[公司行動欄位](#公司行動欄位)。 |
+| 公司行動 | daily：TWSE [`TWT48U_ALL`](https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL)；TPEx [`tpex_exright_daily`](https://www.tpex.org.tw/openapi/v1/tpex_exright_daily)。回補：TWSE `TWT49U`＋`TWT49UDetail`、TPEx `exDailyQ`（除權除息計算結果表，見[除權息回補](#除權息回補)） | 除權息資料寫入 corporate actions，作價格調整與追蹤比較。 | daily 兩個來源只有當天的事件（`TWT48U_ALL` 另有未來預告，不寫入），沒收到的那天由回補補上。欄位規則見[公司行動欄位](#公司行動欄位)。 |
 | 停復牌 | TPEx [`tpex_spendi_today`](https://www.tpex.org.tw/openapi/v1/tpex_spendi_today)、[`tpex_spendi_history`](https://www.tpex.org.tw/openapi/v1/tpex_spendi_history) | history 轉為可稽核的停牌區間事件；區間內缺 bar 視為不可比。 | today 同時列暫停與恢復公告，代號存在不等於仍停牌；TWSE 停牌歷史未接入，追蹤可能為不可比。見[停復牌規則](#tpex-停復牌規則)。 |
 | 重大訊息／基本面 | TWSE [`t187ap04_L`](https://openapi.twse.com.tw/v1/opendata/t187ap04_L)、[`t187ap14_L`](https://openapi.twse.com.tw/v1/opendata/t187ap14_L)；TPEx [`mopsfin_t187ap04_O`](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap04_O)、[`mopsfin_t187ap14_O`](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap14_O) | 官方事件與基本面 snapshot。 | 只是取得當下的 snapshot，不能重建歷史可得時間；基本面不是 v1 策略輸入。同股同日多則不同公告標題相同時，以發言時間區分：最早一則保留原標題，之後各則標題加「（發言時間 HH:MM:SS）」（內容完全相同的重複列只留一則），之後重抓不會改名已存的事件。 |
 
-每筆 raw 保存 endpoint、SHA-256、擷取時間與 data-as-of；正規化資料可回指 raw payload：日線與籌碼列指向第一次寫入（或 `force` 覆寫）的 capture，之後重抓只補空欄時不改指向，補值的來源記在 collect run 的 `value_fill_groups`（[OPERATIONS §6.4](OPERATIONS.md#64-重跑與回補)）。News／Event 有官方事件投影、來源連結、raw 稽核與時間欄位，但欄位存在不代表每筆來源時間可信，詳見 [NEWS_SPEC](NEWS_SPEC.md)。`ChipSnapshot` 雖定義當沖、融券與借券欄位，現有寫入路徑不收集這些值。券商分點列後版，collector 不接入。
+每筆 raw 保存 endpoint、SHA-256、擷取時間與 data-as-of；正規化資料可回指 raw payload；重抓時日線與籌碼列指向哪一次 capture、哪些值會改，見 [OPERATIONS §6.4 冪等](OPERATIONS.md#64-重跑與回補)。News／Event 有官方事件投影、來源連結、raw 稽核與時間欄位，但欄位存在不代表每筆來源時間可信，詳見 [NEWS_SPEC](NEWS_SPEC.md)。`ChipSnapshot` 雖定義當沖、融券與借券欄位，現有寫入路徑不收集這些值。券商分點列後版，collector 不接入。
 
 ### 核心與非核心來源
 
@@ -40,11 +40,13 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 
 官方清單只描述取得當下有哪些標的（上表的 TWSE、TPEx universe），行情表則會留著已離開清單的公司列。規則如下（[#212](https://github.com/YiCheng0608/stock-lab/issues/212)）：
 
-- **行情與籌碼不以當天清單過濾普通股**：
-  - 4 位數、非 0 開頭、非 91 開頭的代號一律保留；ETF（0 開頭）、特別股（帶字母）、權證、可轉債、ETN、存託憑證（91 開頭或 6 位數）仍只收 allowlist 內的。
-  - collect 把這些列寫入 DB 中同交易所、同代號的既有標的；DB 沒有的記為 `unmatched_bar`，不建標的、不丟棄（[OPERATIONS §6.4](OPERATIONS.md#64-重跑與回補)）。
+- **行情與籌碼不以當天清單過濾普通股與 ETF**：
+  - 4 位數、非 0 開頭、非 91 開頭的代號（普通股），以及 `00` 開頭、4～6 碼、最後可帶一個大寫字母的代號（ETF，例如 `0050`、`006208`、`00679B`）一律保留；特別股（帶字母）、權證、可轉債、ETN、存託憑證（91 開頭或 6 位數）仍只收 allowlist 內的。
+  - ETF 也要保留，是因為清盤中的 ETF 會在最後交易日前就離開 ETF 清單：TPEx 債券 ETF 00793B、00847B 在 9/09 的 `etfFilter` 還在、10/17 已不在，行情卻到 9/17、10/02 才停；舊規則讓 10/17 的回補把它們之後的行情列全部丟掉（#393）。
+  - collect 把這些列寫入 DB 中同交易所、同代號的既有標的；DB 沒有的記為 `unmatched_bar`，不建標的、不丟棄；之後標的建立了，collect 以已存的 raw 補寫這些日線（#388；規則見 [OPERATIONS §6.4](OPERATIONS.md#64-重跑與回補)）。
 - **狀態**：只有抓當日快照的 collect 會同步，歷史回補與 catchup 不做。
   - 現行的股票、`ipo` 或 ETF 若不在所屬交易所當天的清單：另一交易所清單有同代號時標 `transferred`，否則標 `delisted`。
+  - 例外：不在清單、但所屬交易所最新一個 TAIEX 交易日的已存行情表（TPEx `dailyQuotes`、TWSE `MI_INDEX`）還有該代號這一列（無成交的 `--` 列也算）的，表示仍在交易，維持原狀態，代號列在 `instrument_status_sync` 的 `quoted_absent_symbols`；之後行情表不再有它才依清單判定（#393）。最新交易日沒有已存、日期核對過的行情表時無法確認，照清單判定，`quote_check` 記 `unverifiable`。
   - 該標的未關的成員列（產業、ETF、題材）一律關閉，不刪列：轉市關到新市場上市日前一天，下市關到清單觀測日前一天，都不早於該列的 `valid_from`。
   - 每次變更寫一列 `data_quality`（`entity_type=instrument_status`），記前後狀態、原因、關閉的成員列與清單 capture 的 endpoint、SHA-256、raw id。
   - **休眠（推定）**：仍在清單內、但最近 60 個交易日的已存行情表（TPEx `dailyQuotes`、TWSE `MI_INDEX`）完全沒有該代號這一列的現行標的，標 `dormant`。無成交的 `--` 列也算有列，所以停牌一兩個月的正常股票不會被關。
@@ -104,6 +106,35 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 - 來源含 `t86`／`3insti` 的籌碼列全部指向當日官方法人端點的 raw，而且沒有任何一列的三大法人欄是 null。
 
 策略與候選的法人輸入仍把缺列視為缺資料。
+
+### 籌碼來源
+
+一筆籌碼列的值來自兩份官方檔：三大法人（`foreign_buy`、`trust_buy`、`dealer_buy`，上市 T86、上櫃 `insti/dailyTrade`）與融資（`margin_balance`、`margin_change`，上市 `MI_MARGN`、上櫃 `margin/balance`）。兩份檔公布時間不同（2026-10-19 起 18:30 的 collect 只拿得到法人檔，融資由 21:30 補上），所以每組值各記自己的來源（[#395](https://github.com/YiCheng0608/stock-lab/issues/395)，migration 0021）：
+
+| 欄位 | 法人 | 融資 |
+| --- | --- | --- |
+| 來源 | `institutional_source`（`twse_t86`／`tpex_3insti`） | `margin_source`（`twse_margin`／`tpex_margin`） |
+| raw 參照 | `institutional_raw_payload_id` | `margin_raw_payload_id` |
+| 資料日 | `institutional_data_as_of` | `margin_data_as_of` |
+| 收集時間 | `institutional_collected_at` | `margin_collected_at` |
+
+- 收集時間是這一組目前的來源寫進這列的本機時間：新列、列原本沒有這一組、法人更正、`force` 時取寫入當下；只補空欄不改。0021 以前的列由 `chips provenance` 回填時，列已有的組沿用列層級 `collected_at`（舊程式寫入時記的就是它）；列原本沒有、回填才建立的組（2026-10-19 起 21:30 補上融資的列的融資組）沒有記寫入時間，以那份融資 capture 的擷取時間代替（寫入發生在同一次 collect 的擷取之後），但不早於列層級原值。所以回填只會讓列層級 `collected_at` 不變或變晚。
+- 該列沒有那份檔時，那一組四欄都是 null，值也是 null（只有融資、只有法人的列照樣保存，見[法人口徑](#法人口徑)）。
+- 列層級的 `source`、`raw_payload_id`、`data_as_of`、`collected_at` 是兩組的摘要（`app.chip_provenance.summarize`）：`source` 依法人、融資的順序以 `+` 連接兩組來源；`raw_payload_id` 與 `data_as_of` 取法人組，沒有法人組時取融資組；`collected_at` 取兩組中較晚的。
+- 寫入規則見 [OPERATIONS §6.4](OPERATIONS.md#64-重跑與回補)；0021 以前寫入的列由 [`chips provenance`](OPERATIONS.md#3-現有-worker-cli) 依已存的 raw 補寫。補寫前，讀取端依列層級欄位推出兩組（`app.chip_provenance.legacy_groups`）；這時融資組沒有 raw 參照，10/19 起由 21:30 補上融資的列看不出融資來源。
+- API `GET /api/stocks/<exchange>/<symbol>` 的 `chips[]` 帶 `institutional`、`margin`（各含 `source`、`data_as_of`、`collected_at`，沒有該組為 null）；個股頁「法人籌碼」的表格欄位依各自那一組判斷單位，來源說明分 `法人：`、`融資：` 兩行。
+
+### 融資標的清單
+
+官方融資融券餘額表列的是當日得信用交易的有價證券，所以它就是當日的融資標的清單（[#392](https://github.com/YiCheng0608/stock-lab/issues/392)）。上市用 `MI_MARGN`（`selectType=ALL`）的「融資融券彙總 (全部)」表，欄位取 `代號`、`註記`；上櫃用 `margin/balance` 的「上櫃股票融資融券餘額」表，欄位取 `代號`、`備註`，代號空白的合計列不算。不另抓 endpoint，collect 抓融資時就有。
+
+- **保存**：`margin_lists` 每個交易所每日一列，記 `source`（`twse_margin`／`tpex_margin`）、`endpoint`、`data_as_of`、`raw_payload_id`、`collected_at`、`member_count` 與 `members_json`（代號→註記，去前後空白）。collect 寫入它剛存的融資表（`worker.margin_lists`，失敗只記在 run 的 `margin_lists`、不影響 collect）；歷史由 [`margin-lists`](OPERATIONS.md#3-現有-worker-cli) 從已存 raw 回補。
+- **選哪份 capture**：該日最新一份「回報日期相符、而且有證券列」的 capture。18:30 的融資表還沒有個股列，不算；回報日期不符（退回最新日）也不算。代號與註記都相同時不改寫。
+- **取不到時**：沒有可用的 capture 就不寫列。這天的清單是未知，融資條件記缺資料，不推成不適用。raw 檔讀不到、不是 JSON 或 SHA-256 不符時，停在該日，回 `failed` 與 `failed_date`。
+- **驟減防呆**：清單比該交易所前一個已存清單少超過 5%（`MAX_MEMBER_DROP`）時不寫，記 `suspicious_drop`，這天的融資條件也記缺資料。官方表被截斷時，漏掉的融資標的會被判成不適用、略過融資確認，判定會往放寬的方向錯。2024-09-30～2026-10-30 的實際清單每日最多只少 0.24%。看門狗怎麼回報這種情況，由 [#390](https://github.com/YiCheng0608/stock-lab/issues/390) 處理。
+- **註記不參與判定**：`O`（停止融資）、`X`（停止融券）、`!`（停止買賣）等符號描述的是次一營業日的狀況，而且停止融資期間的餘額仍會因償還而變動，所以只保存、不拿來判定。
+- **策略怎麼用**：見 [V1_SPEC breakout_v2](V1_SPEC.md#breakout_v2pullback_v2)。
+- **已知限制：轉市標的**：判定用標的目前的交易所（`instruments.exchange`）去查各日清單。窗口 6 天裡若有轉市前的日子，那幾天查的是另一個交易所的清單，可能把融資標的誤判成不適用。轉市很少，而且只影響轉市後 5 個交易日內的判定，目前不另外處理。
 
 ### 成交金額可得狀態
 
@@ -187,6 +218,37 @@ TWSE：`GET /instruments/{symbol}` 的 `corporate_actions[]` 帶唯讀分類 `so
 | `reason` | 依序 `unsupported_source`→`invalid_details`→`missing_official_field`→`alias_conflict`→`identity_mismatch`→`unknown_raw_value`→`trusted_twse_exact_fields`。 |
 
 只有 action source 為 `twse`、標的交易所為 `TWSE`，且 `Code`／`Date`／`Exdividend` 都是非空字串時才分類：`Code` 等於代號、`Date` 是有效 7 碼民國日期且等於除權息日、`Exdividend` 只接受 `息`／`權`／`權息`。別名 `股票代號`／`證券代號`／`除權息日期`／`除權息` 只用於一致性檢查，不補缺值。分類不改 DB、調整因子或 raw。
+
+#### 寫入防呆
+
+每列寫入前（daily 與回補都經 `worker.pipeline._upsert_action`），比較由欄位算出的因子與官方價格比 `減除股利參考價 ／ 除權息前收盤價`（TPEx `DividendDeductedQuote`／`ClosePriceBeforeExRightsDiviend`；TWSE `TWT49U` 的同名欄）。
+
+- **比較方式**：在價格上比，`|欄位因子 × 除權息前收盤價 − 減除股利參考價| > 0.02 元` 判為不符（`ACTION_REFERENCE_TOLERANCE`）。
+- **門檻依據**：官方參考價以 0.01 元公布且無條件捨去（TWSE 4912 2026-09-10：97.50 − 0.800477 = 96.6995，公布 96.69），正確的列差距小於 0.01。
+- **不比除權息參考價**：用減除股利參考價，不用含現金增資認購的除權息參考價。欄位沒有現增，所以 3691 2026-10-27（現增認股）是 109.00／109.00 ＝ 1，不會被擋；現增由價格還原改用除權息參考價處理（[V1_SPEC 還原因子](V1_SPEC.md#技術指標)，#394）。
+- **不符時**：該列照存 raw 與 `details_json`（加 `factor_check`），但 `cash_dividend`、`stock_dividend_ratio`、`split_ratio` 留空，錯的欄位不進價格還原；有官方除權息價格的列改以官方比還原（[V1_SPEC 還原因子](V1_SPEC.md#技術指標)）。另寫一列 `data_quality`（`entity_type=corporate_action`、`entity_key=<交易所>:<代號>:<action_type>`、`as_of_date` 為除權息日、`status=factor_mismatch`，`checks_json` 記兩邊的值）。之後同一事件寫入正確值時，這列改為 `complete`。
+- **沒有官方價格的列**（daily 的 `TWT48U_ALL`）：不比，照舊寫入；之後的回補會以 `TWT49U` 覆寫並核對。
+- **已核對的列不被覆寫**：同一事件（標的、日期、`action_type`）已有帶官方價格且通過核對的列時（回補寫入的，或 TPEx daily 寫入的），沒有官方價格的列（daily 的 `TWT48U_ALL` 重抓）整列不寫，因子、`details_json` 與 raw 連結都不變；daily 只新增還沒有的事件。沒有官方價格的既有列照舊由 daily 覆寫。
+
+#### 除權息回補
+
+`worker.cli corporate-actions sync`（[OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)）每個日曆月發一個請求，raw 每份回應只登錄一列，`data_as_of` 寫它涵蓋的區間（例如 `2026-09-01~2026-09-30`）。
+
+| 來源 | URL | 用到的欄位 |
+| --- | --- | --- |
+| TWSE 除權除息計算結果表 | `https://www.twse.com.tw/rwd/zh/exRight/TWT49U?startDate=YYYYMMDD&endDate=YYYYMMDD&response=json` | `資料日期`、`股票代號`、`股票名稱`、`除權息前收盤價`、`除權息參考價`、`權值+息值`、`權/息`、`減除股利參考價`。區間內沒有事件時只回 `stat`「很抱歉，沒有符合條件的資料!」。 |
+| TWSE 計算結果明細 | `https://www.twse.com.tw/rwd/zh/exRight/TWT49UDetail?STK_NO=<代號>&T1=YYYYMMDD&response=json` | `(每股配發現金股利)除息`（`3 元／股`）、`A. 按普通股股東持股比例每千股無償配股`（`100 股`）；其餘現增欄位只保存。只對 `權/息` 含「權」的列請求。 |
+| TPEx 除權除息計算結果表 | `https://www.tpex.org.tw/www/zh-tw/bulletin/exDailyQ?startDate=YYYY/MM/DD&endDate=YYYY/MM/DD&response=json` | 21 欄（`除權息日期`、`代號`…`按持股比例仟股認購`）逐一對應 `tpex_exright_daily` 的英文欄名後，以 daily 同一個 parser 解析；回應的 `date` 須等於請求區間。 |
+
+- **TWSE 對應**：`息` 列的現金股利是 `權值+息值`；含「權」的列取明細的每股現金股利，配股率見下一點。明細讀不到時該事件不寫入、記 warning，run 為 `partial`。`details_json` 保留 `TWT49U` 全部欄位、`detail` 與 `detail_sha256`，並補 `Code`／`Date`／`Name`／`Exdividend`，讓上面的分類照常運作。
+- **TWSE 配股率**（`sources._twse_stock_ratio`）：明細的每千股無償配股只印到小數一位（2442 2026-09-08 印 `71.1 股`，實際 0.07111516），印出值 ÷ 1,000 最多差 0.00005。TWSE 用精確比率算參考價，所以從同一列的價格反推：沒有現增時 `(除權息前收盤價 − 現金股利) ／ (除權息前收盤價 − 權值+息值) − 1`（`權值+息值` 六位小數、未捨去）；明細有現增（`C. (有償) 現金增資` 或 `按股東持股比例每千股認購` 大於 0）時，分母改用不含認購的 `減除股利參考價`。存哪個值：
+  - 反推值與印出值相差不到 0.000001：存印出值（`used=printed`）。
+  - 相差不超過半個印出單位（0.00005）：存反推值（`used=derived`，精度為 TWSE 計算時用的比率）。
+  - 相差更多：存印出值，標 `disagrees=true`，交由寫入防呆判斷（印出值與價格不一致就會被擋）。
+  - 沒有印出值、沒有收盤價或現金股利、分母不是正數：存印出值、不反推。
+  - `details_json.stock_ratio_source` 記 `printed`、`from`（`權值+息值` 或 `減除股利參考價`）、`derived`、`used` 與 `disagrees`。`disagrees` 的例子：8104 2025-09-16、1529 2026-07-21、2614 2026-10-06（有現增，印出值都通過價格核對）。
+- **與 daily 同一列**：`action_type` 與 daily 的規則相同（TWSE 一律 `corporate_action`，TPEx 含「息」為 `ex_dividend`），所以回補覆寫 daily 寫的同一列，不會多出第二列。
+- **拒收**：回應區間或列的日期不在請求區間內、欄位缺漏、`stat` 不是成功時，整次 sync 失敗、不寫 DB。
 
 ## FinMind 補缺口規則
 

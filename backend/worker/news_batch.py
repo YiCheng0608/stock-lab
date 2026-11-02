@@ -29,6 +29,7 @@ from sqlalchemy import inspect, select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from app.clock import utcnow
 from app.db import SessionLocal
 from app.models import IngestionRun, Instrument, NewsItem, ThemeGroup
 from app.news import is_verified_theme
@@ -463,7 +464,7 @@ def _collect_source(
             run_date=run_date,
             status="running",
             records=0,
-            started_at=datetime.utcnow(),
+            started_at=utcnow(),
         )
         db.add(row)
         db.commit()
@@ -519,7 +520,7 @@ def _collect_source(
     feeds: list[dict[str, Any]] = []
     for feed in source.feeds:
         result: dict[str, Any] = {"feed": feed.key, "endpoint": feed.url}
-        collected_at = datetime.utcnow()
+        collected_at = utcnow()
         try:
             response: FeedResponse = fetch(feed.url)
             check_response(response)
@@ -572,9 +573,9 @@ def _collect_source(
         run.error = (
             "; ".join(f"{item['feed']}: {item['error']}" for item in failed) or None
         )
-        run.data_as_of = datetime.utcnow().isoformat()
+        run.data_as_of = utcnow().isoformat()
         run.metadata_json = {**metadata, "feeds": feeds}
-        run.finished_at = datetime.utcnow()
+        run.finished_at = utcnow()
         db.commit()
 
     error = None

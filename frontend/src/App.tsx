@@ -36,6 +36,7 @@ import {
   upsertPortfolio,
 } from './api'
 import type {
+  ChipGroupSource,
   ActionSummary,
   ActionView,
   ActionsResponse,
@@ -71,7 +72,7 @@ import { Shell } from './components/Shell'
 import { Term } from './components/Term'
 import { Card, CardList, DataTable, EmptyState, Skeleton, Tabs, cx, tabId, tabPanelId, type Column } from './components/ui'
 import { StockBarsChart } from './stock/StockBarsChart'
-import { priceDigits } from './stock/stockBars'
+import { PRICE_BASIS, priceDigits } from './stock/stockBars'
 import { StockCutoffControl } from './stock/StockCutoffControl'
 import { StockHeader } from './stock/StockHeader'
 import { StrategyBoardPanel } from './stock/StrategyBoardPanel'
@@ -173,6 +174,10 @@ function sourceLabel(source: string | null | undefined | readonly string[]): str
     'twse/tpex official feeds': 'TWSE／TPEx 官方資料',
     'no configured official collection': '尚無已驗證的官方資料',
     'official-fixture': '官方資料',
+    twse_t86: '臺灣證券交易所 三大法人',
+    twse_margin: '臺灣證券交易所 融資融券',
+    tpex_3insti: '證券櫃檯買賣中心 三大法人',
+    tpex_margin: '證券櫃檯買賣中心 融資融券',
   }
   return names[normalized] ?? (/^[\x00-\x7F]*$/.test(source) ? '來源待核實' : source)
 }
@@ -191,6 +196,8 @@ function strategyLabel(strategy: string | null | undefined): string {
   return ({
     breakout_v1: '突破條件',
     pullback_v1: '回踩條件',
+    breakout_v2: '突破條件',
+    pullback_v2: '回踩條件',
     breakout: '突破條件',
     pullback: '回踩條件',
   }[strategy ?? ''] ?? '策略條件')
@@ -670,7 +677,7 @@ export function IndicatorMetaRows({ bars }: { bars: StockBarsResponse | undefine
   const meta = bars.indicators
   return <>
     <div className="metric-row"><span>技術指標版本</span><b>{meta.formula_version}</b></div>
-    <div className="metric-row"><span>價格基準</span><b>{meta.price_basis === 'as_of_date_raw_basis' ? '資料日原始價（前期依除權息換算）' : '待核實'}</b></div>
+    <div className="metric-row"><span>價格基準</span><b>{meta.price_basis === PRICE_BASIS ? '資料日原始價（前期依除權息換算）' : '待核實'}</b></div>
     <div className="metric-row"><span>日線指標計算時間</span><b>{meta.computed_at ? formatTaiwanDateTime(meta.computed_at) : '尚未計算'}</b></div>
     <div className="metric-row"><span>K 線資料日期</span><b>{formatDay(bars.data_as_of) ?? '待核實'}</b></div>
   </>
@@ -720,17 +727,23 @@ function formatRawChipValue(value: number | null): string {
 
 const CHIP_COLUMNS: ReadonlyArray<Column<InstrumentDetail['chips'][number]>> = [
   { key: 'date', header: '日期', cell: (row) => formatTaiwanDateTime(row.date, true) },
-  { key: 'foreign', header: <Term id="foreign_flow">外資買賣超</Term>, num: true, cell: (row) => formatTableChip(row.foreign_buy, row.source) },
-  { key: 'trust', header: <Term id="trust_flow">投信</Term>, num: true, cell: (row) => formatTableChip(row.trust_buy, row.source) },
-  { key: 'dealer', header: <Term id="dealer_flow">自營商</Term>, num: true, cell: (row) => formatTableChip(row.dealer_buy, row.source) },
-  { key: 'margin', header: <Term id="margin">融資增減</Term>, num: true, cell: (row) => formatTableChip(row.margin_change, row.source, true) },
+  { key: 'foreign', header: <Term id="foreign_flow">外資買賣超</Term>, num: true, cell: (row) => formatTableChip(row.foreign_buy, row.institutional?.source) },
+  { key: 'trust', header: <Term id="trust_flow">投信</Term>, num: true, cell: (row) => formatTableChip(row.trust_buy, row.institutional?.source) },
+  { key: 'dealer', header: <Term id="dealer_flow">自營商</Term>, num: true, cell: (row) => formatTableChip(row.dealer_buy, row.institutional?.source) },
+  { key: 'margin', header: <Term id="margin">融資增減</Term>, num: true, cell: (row) => formatTableChip(row.margin_change, row.margin?.source, true) },
 ]
+
+/** One line per value group: its official file, data date and collection time (Issue #395). */
+function ChipGroupLine({ label, group }: { label: string; group: ChipGroupSource | null | undefined }) {
+  if (!group) return <span>{label}：無資料</span>
+  return <span>{label}：{sourceLabel(group.source)}（{group.source}） · 資料截至：{formatTaiwanDateTime(group.data_as_of, true)} · 收集：{formatTaiwanDateTime(group.collected_at)}</span>
+}
 
 export function ChipTable({ rows }: { rows: InstrumentDetail['chips'] }) {
   return <>
     <div className="small-note chip-unit-note">單位：張（三大法人為股數 ÷ 1,000 四捨五入，不足 500 股為 0）。三大法人為外資、投信、自營商；正值為買超，負值為賣超。融資正值為餘額增加，負值為減少。空白表示未提供資料、數值無效或來源單位待核實；原始股數與來源見下方說明。</div>
     <DataTable wrapClassName="compact-table" columns={CHIP_COLUMNS} rows={rows} rowKey={(row, index) => row.id ?? row.date ?? index} />
-    <details className="technical-details chip-source-details"><summary>資料來源與原始值</summary><div className="chip-source-list">{rows.map((row) => <div className="chip-source-row" key={`${row.date}-${row.source}`}><strong>{formatTaiwanDateTime(row.date, true)}</strong><span>來源：{sourceLabel(row.source)}（{row.source || '來源未提供'}） · 資料截至：{formatTaiwanDateTime(row.data_as_of, true)} · 收集：{formatTaiwanDateTime(row.collected_at)}</span><span>來源稽核原值：外資（{isVerifiedChipFlowSource(row.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.foreign_buy)} · 投信（{isVerifiedChipFlowSource(row.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.trust_buy)} · 自營商（{isVerifiedChipFlowSource(row.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.dealer_buy)} · 融資（{isVerifiedMarginSource(row.source) ? '張' : '單位待核實'}） {formatRawChipValue(row.margin_change)}</span></div>)}</div></details>
+    <details className="technical-details chip-source-details"><summary>資料來源與原始值</summary><div className="chip-source-list">{rows.map((row) => <div className="chip-source-row" key={`${row.date}-${row.source}`}><strong>{formatTaiwanDateTime(row.date, true)}</strong><ChipGroupLine label="法人" group={row.institutional} /><ChipGroupLine label="融資" group={row.margin} /><span>來源稽核原值：外資（{isVerifiedChipFlowSource(row.institutional?.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.foreign_buy)} · 投信（{isVerifiedChipFlowSource(row.institutional?.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.trust_buy)} · 自營商（{isVerifiedChipFlowSource(row.institutional?.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.dealer_buy)} · 融資（{isVerifiedMarginSource(row.margin?.source) ? '張' : '單位待核實'}） {formatRawChipValue(row.margin_change)}</span></div>)}</div></details>
   </>
 }
 
