@@ -38,7 +38,8 @@ def changed_paths(base: str, cwd: Path = ROOT, worktree: bool = False) -> list[s
 # Working-tree paths outside backend/ and tools/ that the backend job reads; a change must run it.
 # Keep in step with backend/tests. test_database_readiness reads the Alembic head stated in
 # docs/OPERATIONS.md; test_condition_copy_source reads the frontend condition table (#279);
-# test_event_monitor reads 統籌 session and 無人值守運作 of docs/GITHUB_WORKFLOW.md (#316).
+# test_event_monitor reads 統籌 session and 無人值守運作 of docs/GITHUB_WORKFLOW.md (#316);
+# test_coordinator_scripts reads the dispatch notice in 任務流程第 2 步 of docs/GITHUB_WORKFLOW.md (#315).
 BACKEND_READ_DIRS: tuple[str, ...] = ()
 BACKEND_READ_FILES: frozenset[str] = frozenset(
     {
