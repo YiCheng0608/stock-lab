@@ -142,17 +142,17 @@ export MSYS_NO_PATHCONV=1   # 否則 Git Bash 會把 -v 的容器路徑改寫成
 
 ## 長期整合分支
 
-多張子單要整批進 master 時，子單的 PR 先進一條長期整合分支。目前只有 `feat/docker`（Docker 母單 [#331](https://github.com/YiCheng0608/stock-lab/issues/331)）。
+多張子單要整批進 master 時，子單的 PR 先進一條長期整合分支。目前沒有；過去有 `feat/docker`（Docker 母單 [#331](https://github.com/YiCheng0608/stock-lab/issues/331)），2026-11-03 由 PR #420 併入 master，#428 把它移出清單。
 
-- **建立與保護**：統籌從最新 `origin/master` 切出、推上 GitHub，再建 ruleset。ruleset 內容與 master 的[主線規則](https://github.com/YiCheng0608/stock-lab/rules/24769026)相同，只換目標分支：禁止刪除、禁止強推、只經 PR 以 merge commit 合併、CI `required` 綠才合併。另有兩項也相同：PR 分支要跟上目標分支，review 討論要全部解決。`feat/docker` 從 `5c8deb0` 切出，ruleset 是 [26027657](https://github.com/YiCheng0608/stock-lab/rules/26027657)，可用 `gh api repos/YiCheng0608/stock-lab/rulesets/<id>` 對照兩份的 `rules`。長期整合分支的清單只寫在 [`close_task.sh`](../tools/ops/close_task.sh) 的 `integration_branches`。CI 對它的 PR 與 push 都要跑，所以每個分支也要列在 `.github/workflows/ci.yml` 的 `pull_request`／`push` branches；`tools/ci/test_checks.py` 的 `WorkflowTriggers` 會核對兩邊一致。新增長期整合分支時，同一個 PR 改這兩處。
-- **第一次派工之前**：PR 的 CI 讀的是 merge ref 裡的 `ci.yml`。整合分支如果是在 `ci.yml` 列入它之前切出的，從它開的 PR 不會跑 CI，`required` 不會回報，PR 就合不進去；push 也沒有 run，`close_task.sh` 會讀到 `missing`。這種情況要先開一次「master → 整合分支」的同步 PR（做法見下方「跟上 master」），合併後才派子單。`feat/docker` 就是這種情況：它從 `5c8deb0` 切出，早於 #332。
-- **派工**：`dispatch.sh … --base origin/feat/docker`（[任務流程](#任務流程)第 2 步）。工程師以 `gh pr create --base feat/docker` 開 PR，跟上目標分支時合併 `origin/feat/docker`。
+- **建立與保護**：統籌從最新 `origin/master` 切出、推上 GitHub，再建 ruleset。ruleset 內容與 master 的[主線規則](https://github.com/YiCheng0608/stock-lab/rules/24769026)相同，只換目標分支：禁止刪除、禁止強推、只經 PR 以 merge commit 合併、CI `required` 綠才合併。另有兩項也相同：PR 分支要跟上目標分支，review 討論要全部解決。可用 `gh api repos/YiCheng0608/stock-lab/rulesets/<id>` 對照兩份的 `rules`（過去的 `feat/docker` 從 `5c8deb0` 切出，ruleset 是 26027657）。長期整合分支的清單只寫在 [`close_task.sh`](../tools/ops/close_task.sh) 的 `integration_branches`。CI 對它的 PR 與 push 都要跑，所以每個分支也要列在 `.github/workflows/ci.yml` 的 `pull_request`／`push` branches；`tools/ci/test_checks.py` 的 `WorkflowTriggers` 會核對兩邊一致。清單可以是空的（`integration_branches=()`）。新增長期整合分支時，同一個 PR 改這兩處。
+- **第一次派工之前**：PR 的 CI 讀的是 merge ref 裡的 `ci.yml`。整合分支如果是在 `ci.yml` 列入它之前切出的，從它開的 PR 不會跑 CI，`required` 不會回報，PR 就合不進去；push 也沒有 run，`close_task.sh` 會讀到 `missing`。這種情況要先開一次「master → 整合分支」的同步 PR（做法見下方「跟上 master」），合併後才派子單。`feat/docker` 當時就是這種情況：它從 `5c8deb0` 切出，早於 #332。
+- **派工**：`dispatch.sh … --base origin/<整合分支>`（[任務流程](#任務流程)第 2 步）。工程師以 `gh pr create --base <整合分支>` 開 PR，跟上目標分支時合併 `origin/<整合分支>`。
 - **結案**：`close_task.sh` 讀 PR 的 `baseRefName`，查的是目標分支的 CI 與歷史（[任務流程](#任務流程)第 6 步）。目標只接受 master 與 `integration_branches`；進 `release/*` 或其他分支的 PR 會被拒絕，什麼都不刪，要結案就用 `--pr` 指定進 master 的那個 PR。
 - **關 Issue**：PR 合併進非預設分支時，GitHub 不會依 `Closes #<issue>` 關 Issue。所以目標不是 master 時，close_task 在全部前提成立後、刪除任何東西之前，執行 `gh issue close <issue>`，並留言 PR 與 merge commit。
   - 關不掉，而且讀回 Issue 仍是開的：停下，不刪任何東西。
   - Issue 已經關了（例如刪除步驟失敗後重跑）：不再呼叫 `gh issue close`，照常清理。
   - 目標是 master 時不呼叫；`--no-board` 的試跑也不關。
-- **跟上 master 與收尾**：master 每週至少合併進整合分支一次。因為整合分支只收 PR，做法是從 `origin/feat/docker` 開 branch、合併 `origin/master` 後開 PR。全部子單完成後，整合分支開一個 PR 進 master；Docker 另要等 G7 通過，見 #331。合併後統籌移除它的 ruleset 與分支，並把分支從 `integration_branches` 與 `ci.yml` 移除。
+- **跟上 master 與收尾**：master 每週至少合併進整合分支一次。因為整合分支只收 PR，做法是從 `origin/<整合分支>` 開 branch、合併 `origin/master` 後開 PR。全部子單完成後，整合分支開一個 PR 進 master（`feat/docker` 另等了 G7 通過，見 #331）。合併後開一個 PR 把分支從 `integration_branches` 與 `ci.yml` 移除（`feat/docker` 是 #428）；那個 PR 合併、master CI 綠後，統籌刪掉它的 ruleset 與分支。
 
 ## 統籌 session
 
