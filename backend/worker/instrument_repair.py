@@ -689,7 +689,10 @@ CHIP_FILES: dict[str, dict[str, tuple[str, Callable[..., list[ChipRecord]]]]] = 
     }
     for exchange in ("TWSE", "TPEx")
 }
-DayChips = dict[str, dict[str, list]]
+# One stored capture of a chip file: (raw_id, {symbol: record} or None, reason).
+# Records are None when the file cannot be read; then the reason says why.
+ChipCapture = tuple[int, dict[str, ChipRecord] | None, str | None]
+DayChips = dict[str, list[ChipCapture]]
 
 
 def _stored_chip_files(
@@ -698,11 +701,13 @@ def _stored_chip_files(
     day: date,
     cache: dict[tuple[str, date], DayChips],
 ) -> DayChips:
-    """The day's stored institutional and margin captures, parsed as collect does.
+    """The day's stored institutional and margin captures, oldest first.
 
-    ``{group: {"captures": [(raw_id, {symbol: record})], "reasons": [...]}}``,
-    oldest capture first.  A capture that cannot be read or reports another
-    date is left out with its reason.
+    Each is read like the quote captures (``_load`` checks the SHA-256) and
+    parsed as collect parses it.  A capture whose reported date is not the
+    day (the exchange's fallback to another session) says nothing about the
+    day and gets empty records; a file that is missing, does not match its
+    SHA-256 or cannot be parsed gets ``None`` and its reason.
     """
 
     key = (exchange, day)
@@ -710,8 +715,7 @@ def _stored_chip_files(
         return cache[key]
     result: DayChips = {}
     for group, (endpoint, parse) in CHIP_FILES[exchange].items():
-        captures: list[tuple[int, dict[str, ChipRecord]]] = []
-        reasons: list[dict[str, Any]] = []
+        captures: list[ChipCapture] = []
         for raw in db.scalars(
             select(RawPayload)
             .where(
@@ -731,29 +735,58 @@ def _stored_chip_files(
                     payload_sha256=raw.sha256,
                 )
             except FileNotFoundError:
-                reasons.append({"raw_payload_id": raw.id, "reason": "raw_file_missing"})
+                captures.append((raw.id, None, "raw_file_missing"))
                 continue
             except (OSError, ValueError, InstrumentRepairError) as exc:
-                reason = f"raw_unreadable: {exc}"[:200]
-                reasons.append({"raw_payload_id": raw.id, "reason": reason})
+                captures.append((raw.id, None, f"raw_unreadable: {exc}"[:200]))
                 continue
             except OfficialDataError as exc:
-                reason = f"raw_rejected: {exc}"[:200]
-                reasons.append({"raw_payload_id": raw.id, "reason": reason})
+                captures.append((raw.id, {}, f"raw_rejected: {exc}"[:200]))
                 continue
             except Exception as exc:
                 reason = f"raw_unparsed: {type(exc).__name__}: {exc}"[:200]
-                reasons.append({"raw_payload_id": raw.id, "reason": reason})
+                captures.append((raw.id, None, reason))
                 continue
             captures.append(
                 (
                     raw.id,
                     {r.symbol: r for r in records if r.exchange == exchange},
+                    None,
                 )
             )
-        result[group] = {"captures": captures, "reasons": reasons}
+        result[group] = captures
     cache[key] = result
     return result
+
+
+def _chip_group(
+    captures: list[ChipCapture], symbol: str
+) -> tuple[str, tuple[int, ChipRecord] | None, dict[str, Any] | None]:
+    """What one file says about ``symbol`` on the day.
+
+    The newest capture that has individual rows, or cannot be read, decides
+    (#387: the later capture holds).  A capture without individual rows (the
+    18:30 MI_MARGN before the exchange publishes it) or of another date is
+    passed over.  Returns ``("found", (raw_id, record), None)``,
+    ``("absent", None, None)`` when that capture has no row of the symbol,
+    or ``("unavailable", None, reason)`` when it cannot be read or no
+    capture has individual rows; an older capture never stands in for a
+    newer unreadable one.
+    """
+
+    for raw_id, records, reason in reversed(captures):
+        if records is None:
+            return "unavailable", None, {"raw_payload_id": raw_id, "reason": reason}
+        if not records:
+            continue
+        if symbol in records:
+            return "found", (raw_id, records[symbol]), None
+        return "absent", None, None
+    return (
+        "unavailable",
+        None,
+        {"reason": "no_capture_with_rows" if captures else "no_capture"},
+    )
 
 
 def _backfill_chip(
@@ -764,11 +797,11 @@ def _backfill_chip(
 ) -> dict[str, Any]:
     """Write the chip row of a backfilled first-session bar from stored raw.
 
-    Each group comes from the day's latest stored capture of its file that
-    has the symbol (the institutional one is the capture data-check and #387
-    hold the row to).  A stored row is never changed (``existing``).  Neither
-    file having the symbol is ``no_row`` once both files have a readable
-    capture of the day; otherwise the date is ``unavailable`` and retried.
+    Each group is what its file's deciding capture says (``_chip_group``).
+    A stored row is never changed (``existing``).  When a group is
+    ``unavailable`` nothing is written and the date is ``unavailable``, to
+    be retried; otherwise the found groups are written (``written``), or
+    ``no_row`` when neither file has the symbol.
     """
 
     exchange, symbol = instrument.exchange, instrument.symbol
@@ -780,31 +813,23 @@ def _backfill_chip(
     ):
         return {"trading_date": day.isoformat(), "status": "existing"}
     files = _stored_chip_files(db, exchange, day, cache)
-    found: dict[str, tuple[int, ChipRecord] | None] = {
-        group: next(
-            (
-                (raw_id, records[symbol])
-                for raw_id, records in reversed(item["captures"])
-                if symbol in records
-            ),
-            None,
-        )
-        for group, item in files.items()
+    decided = {
+        group: _chip_group(captures, symbol) for group, captures in files.items()
     }
-    institutional, margin = found["institutional"], found["margin"]
-    if institutional is None and margin is None:
-        if all(item["captures"] for item in files.values()):
-            return {"trading_date": day.isoformat(), "status": "no_row"}
+    blocked = [
+        {"group": group, **reason}
+        for group, (state, _found, reason) in decided.items()
+        if state == "unavailable"
+    ]
+    if blocked:
         return {
             "trading_date": day.isoformat(),
             "status": "unavailable",
-            "raws": [
-                {"group": group, **reason}
-                for group, item in files.items()
-                for reason in item["reasons"]
-                or ([] if item["captures"] else [{"reason": "no_capture"}])
-            ],
+            "raws": blocked,
         }
+    institutional, margin = decided["institutional"][1], decided["margin"][1]
+    if institutional is None and margin is None:
+        return {"trading_date": day.isoformat(), "status": "no_row"}
     (record,) = merge_chip_records(
         [institutional[1]] if institutional else [],
         [margin[1]] if margin else [],

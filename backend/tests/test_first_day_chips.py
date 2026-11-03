@@ -11,6 +11,7 @@ with each group's own provenance (#395) and never touches it again.
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 from sqlalchemy import func, select
@@ -144,59 +145,56 @@ def _columns(row):
     }
 
 
-def _day_chip_raws(env, *, twse_margin=True):
-    """10-27's stored chip files: T86 at 18:30 and its 21:30 revision, MI_MARGN
-    and both TPEx files, none of which has 6938."""
+def _day_chip_raws(env, *, t86=True, margin="7710", tpex=False):
+    """Store 10-27's chip files as the 18:30 and 21:30 collects stored them.
 
-    captures = [
-        _capture(
+    T86 at 18:30 (7710 bought 5,000) and its 21:30 revision (6,000), without
+    7710 when ``t86`` is false.  MI_MARGN at 18:30 has no individual rows (the
+    exchange has not published them yet); at 21:30 it has 7710 (``"7710"``),
+    only 2330 (``"other"``: 7710 is not a margin security), or is not stored
+    (None).  The TPEx files have 6938 only with ``tpex``.
+    """
+
+    t86_rows = [["2330", "1", "1", "1"]]
+    captures = {
+        "first_t86": _capture(
             "twse",
             T86_URL,
-            _t86([["2330", "1", "1", "1"], ["7710", "5,000", "0", "0"]]),
+            _t86(t86_rows + ([["7710", "5,000", "0", "0"]] if t86 else [])),
             AT_1830,
         ),
-        _capture(
+        "t86": _capture(
             "twse",
             T86_URL,
-            _t86([["2330", "1", "1", "1"], ["7710", "6,000", "0", "0"]]),
+            _t86(t86_rows + ([["7710", "6,000", "0", "0"]] if t86 else [])),
             AT_2130,
         ),
-        _capture(
+        "first_margin": _capture("twse", MARGIN_URL, _margin([]), AT_1830),
+        "tpex_institutional": _capture(
             "tpex",
             sources.TPEX_CHIP_HISTORY_ENDPOINT,
-            _tpex_chips([_tpex_row("7001")]),
+            _tpex_chips([_tpex_row("7001")] + ([_tpex_row("6938")] if tpex else [])),
             AT_1830,
         ),
-        _capture(
+        "tpex_margin": _capture(
             "tpex",
             sources.TPEX_MARGIN_HISTORY_ENDPOINT,
-            _tpex_margin([_tpex_margin_row("7001")]),
+            _tpex_margin(
+                [_tpex_margin_row("7001")]
+                + ([_tpex_margin_row("6938")] if tpex else [])
+            ),
             AT_2130,
         ),
-    ]
-    if twse_margin:
-        captures.append(
-            _capture(
-                "twse",
-                MARGIN_URL,
-                _margin(
-                    [
-                        _margin_row("2330", "100", "90"),
-                        _margin_row("7710", "4,321", "0"),
-                    ]
-                ),
-                AT_2130,
-            )
-        )
-    else:
-        # MI_MARGN without 7710 (a security that is not a margin security).
-        captures.append(
-            _capture(
-                "twse", MARGIN_URL, _margin([_margin_row("2330", "100", "90")]), AT_2130
-            )
-        )
-    first_t86, latest_t86, _tpex_inst, _tpex_margin_raw, margin = _store(env, *captures)
-    return {"first_t86": first_t86, "t86": latest_t86, "margin": margin}
+    }
+    if margin is not None:
+        rows = [_margin_row("2330", "100", "90")]
+        if margin == "7710":
+            rows.append(_margin_row("7710", "4,321", "0"))
+        captures["margin"] = _capture("twse", MARGIN_URL, _margin(rows), AT_2130)
+    ids = _store(env, *captures.values())
+    raws = dict(zip(captures, ids))
+    raws["captures"] = captures
+    return raws
 
 
 # ---- AC-1: the first session's chip row, each group from its own capture ----
@@ -255,7 +253,7 @@ def test_the_first_session_gets_its_chip_row_from_the_days_stored_files(env):
 
 def test_a_symbol_only_the_institutional_file_has_gets_only_that_group(env):
     _first_session()
-    raws = _day_chip_raws(env, twse_margin=False)
+    raws = _day_chip_raws(env, margin="other")
 
     _second_session()
 
@@ -270,6 +268,124 @@ def test_a_symbol_only_the_institutional_file_has_gets_only_that_group(env):
         )
         assert (row.margin_source, row.margin_raw_payload_id) == (None, None)
         assert row.source == "twse_t86"
+
+
+def test_a_symbol_only_the_margin_file_has_gets_only_that_group(env):
+    _first_session()
+    raws = _day_chip_raws(env, t86=False)
+
+    _second_session()
+
+    with env() as db:
+        row = _chip(db, "TWSE", "7710")
+        assert row is not None, "7710 has a 10-27 bar but no chip row"
+        assert (row.foreign_buy, row.trust_buy, row.dealer_buy) == (None, None, None)
+        assert row.margin_balance == 4321
+        assert {name: getattr(row, name) for name in GROUP_COLUMNS} == {
+            "institutional_source": None,
+            "institutional_raw_payload_id": None,
+            "institutional_data_as_of": None,
+            "margin_source": "twse_margin",
+            "margin_raw_payload_id": raws["margin"],
+            "margin_data_as_of": DAY1_AS_OF,
+        }
+        assert row.institutional_collected_at is None
+        assert (row.source, row.raw_payload_id) == ("twse_margin", raws["margin"])
+
+
+def test_a_tpex_first_session_gets_each_group_from_its_own_file(env):
+    _first_session()
+    raws = _day_chip_raws(env, tpex=True)
+
+    _second_session()
+
+    with env() as db:
+        row = _chip(db, "TPEx", "6938")
+        assert row is not None, "6938 has a 10-27 bar but no chip row"
+        assert row.foreign_buy is not None and row.margin_balance is not None
+        assert {name: getattr(row, name) for name in GROUP_COLUMNS} == {
+            "institutional_source": "tpex_3insti",
+            "institutional_raw_payload_id": raws["tpex_institutional"],
+            "institutional_data_as_of": DAY1_AS_OF,
+            "margin_source": "tpex_margin",
+            "margin_raw_payload_id": raws["tpex_margin"],
+            "margin_data_as_of": DAY1_AS_OF,
+        }
+        assert row.source == "tpex_3insti+tpex_margin"
+        assert row.raw_payload_id == raws["tpex_institutional"]
+
+
+# ---- an older capture never stands in for a newer one it cannot read ----
+
+
+def test_a_newer_capture_that_cannot_be_read_is_not_replaced_by_an_older_one(env):
+    _first_session()
+    raws = _day_chip_raws(env)
+    path = Path(raws["captures"]["t86"].payload_path)
+    content = path.read_bytes()
+    # The 21:30 T86 is damaged; the 18:30 one (5,000) is intact.
+    path.write_bytes(b'{"tampered": true}')
+
+    second, _ = _second_session()
+
+    backfill = second["unmatched_backfill"]
+    assert backfill["chips_written"] == []
+    [pending] = [item for item in backfill["chips_pending"] if item["symbol"] == "7710"]
+    [blocked] = pending["raws"]
+    assert (blocked["group"], blocked["raw_payload_id"]) == (
+        "institutional",
+        raws["t86"],
+    )
+    assert blocked["reason"].startswith("raw_unreadable")
+    with env() as db:
+        assert _chip(db, "TWSE", "7710") is None
+        assert "chips" not in _quality(db, "TWSE:7710").checks_json["backfill"]
+
+    # The file is restored: the next run writes the 21:30 values.
+    path.write_bytes(content)
+    result = repair.run_unmatched_backfill(apply=True)
+    assert [
+        (item["symbol"], item["institutional_raw_payload_id"])
+        for item in result["chips_written"]
+    ] == [("7710", raws["t86"])]
+    with env() as db:
+        assert _chip(db, "TWSE", "7710").foreign_buy == 6000
+
+
+@pytest.mark.parametrize("t86", [True, False], ids=["t86_has_it", "t86_lacks_it"])
+def test_a_margin_file_without_individual_rows_does_not_settle_the_date(env, t86):
+    # Only the 18:30 MI_MARGN is stored: it has no individual rows yet.
+    _first_session()
+    raws = _day_chip_raws(env, t86=t86, margin=None)
+
+    second, _ = _second_session()
+
+    backfill = second["unmatched_backfill"]
+    assert backfill["chips_written"] == []
+    [pending] = [item for item in backfill["chips_pending"] if item["symbol"] == "7710"]
+    assert pending["raws"] == [{"group": "margin", "reason": "no_capture_with_rows"}]
+    with env() as db:
+        assert _chip(db, "TWSE", "7710") is None
+        assert "chips" not in _quality(db, "TWSE:7710").checks_json["backfill"]
+
+    # The 21:30 MI_MARGN with 7710 is stored later: the date is written.
+    (margin_raw,) = _store(
+        env,
+        _capture(
+            "twse",
+            MARGIN_URL,
+            _margin([_margin_row("7710", "4,321", "0")]),
+            AT_2130,
+        ),
+    )
+    result = repair.run_unmatched_backfill(apply=True)
+    [written] = [item for item in result["chips_written"] if item["symbol"] == "7710"]
+    assert written["margin_raw_payload_id"] == margin_raw
+    assert written["institutional_raw_payload_id"] == (raws["t86"] if t86 else None)
+    with env() as db:
+        row = _chip(db, "TWSE", "7710")
+        assert row.margin_balance == 4321
+        assert row.foreign_buy == (6000 if t86 else None)
 
 
 def test_without_a_stored_chip_file_nothing_is_written_and_the_date_is_retried(env):
