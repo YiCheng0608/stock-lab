@@ -11,7 +11,7 @@ so a new strategy enters the candidate list only with a new score version.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from app.domain import HOT_GROUP_CONFIG, INSTITUTIONAL_FLOW_FORMULA_VERSION
@@ -31,30 +31,70 @@ from .base import (
 )
 from .breakout_v1 import BREAKOUT_V1, evaluate_breakout_v1
 from .breakout_v2 import BREAKOUT_V2, evaluate_breakout_v2
+from .breakout_v3 import BREAKOUT_V3, evaluate_breakout_v3
 from .pullback_v1 import PULLBACK_V1, evaluate_pullback_v1
 from .pullback_v2 import PULLBACK_V2, evaluate_pullback_v2
+from .pullback_v3 import PULLBACK_V3, evaluate_pullback_v3
 
 # Declaration order is the product order: the decision summary takes the
 # first conditional strategy in this order, and every signal's rationale and
 # evidence list the strategies in it.
 REGISTRY: dict[str, Strategy] = {
-    strategy.key: strategy for strategy in (BREAKOUT_V2, PULLBACK_V2)
+    strategy.key: strategy for strategy in (BREAKOUT_V3, PULLBACK_V3)
 }
 
 # Strategies analyze no longer writes, kept so their stored signals still
-# read (Issue #392).  Each maps to the registered strategy that took its
-# place (``supersedes`` in that strategy's config): readers show the old
-# version's signals of the dates before the successor's first signal and
-# never both versions of one day (``app.signal_versions``; the levels step
-# applies the same rule).
+# read (Issue #392, #404).  Each strategy's config names the version it took
+# the place of (``supersedes``), so the versions of one kind form a chain
+# ending at a registered strategy: readers show, for each instrument-day,
+# only the newest version that has a signal there, keyed by the registered
+# strategy (``app.signal_versions``; the levels step applies the same rule).
 SUPERSEDED: dict[str, Strategy] = {
-    strategy.key: strategy for strategy in (BREAKOUT_V1, PULLBACK_V1)
+    strategy.key: strategy
+    for strategy in (BREAKOUT_V1, PULLBACK_V1, BREAKOUT_V2, PULLBACK_V2)
 }
+
+
+def _older_versions(strategy: Strategy) -> list[str]:
+    """The superseded versions ``strategy`` replaced, newest first."""
+
+    older: list[str] = []
+    while "supersedes" in strategy.config:
+        name = strategy.config["supersedes"]["name"]
+        strategy = SUPERSEDED[name]
+        older.append(name)
+    return older
+
+
+# Superseded version -> the registered strategy at the end of its chain.
 SUCCESSOR: dict[str, str] = {
-    strategy.config["supersedes"]["name"]: key
+    name: key
     for key, strategy in REGISTRY.items()
-    if "supersedes" in strategy.config
+    for name in _older_versions(strategy)
 }
+# Superseded version -> the versions of its chain newer than it, newest first
+# (the registered strategy included): one of them on the same instrument-day
+# hides it.
+NEWER_VERSIONS: dict[str, tuple[str, ...]] = {
+    name: (key, *_older_versions(strategy)[:position])
+    for key, strategy in REGISTRY.items()
+    for position, name in enumerate(_older_versions(strategy))
+}
+
+
+def newest_versions(names: Iterable[str]) -> set[str]:
+    """Of the strategy names stored on one instrument-day, those that are read.
+
+    A superseded version is read only without a newer version of its chain
+    on that day.
+    """
+
+    present = set(names)
+    return {
+        name
+        for name in present
+        if not any(newer in present for newer in NEWER_VERSIONS.get(name, ()))
+    }
 
 
 def registry_key(name: str) -> str | None:
@@ -157,6 +197,7 @@ __all__ = [
     "ENTRY_LEVEL_FIELDS",
     "ENTRY_REQUIRED_LEVELS",
     "LEGACY_RISK_LEVELS_FORMULA",
+    "NEWER_VERSIONS",
     "Condition",
     "NextSessionInputs",
     "ObservationLevels",
@@ -172,10 +213,13 @@ __all__ = [
     "current_strategy",
     "evaluate_breakout_v1",
     "evaluate_breakout_v2",
+    "evaluate_breakout_v3",
     "evaluate_pullback_v1",
     "evaluate_pullback_v2",
+    "evaluate_pullback_v3",
     "finite_number",
     "registry_problems",
+    "newest_versions",
     "registry_key",
     "risk_levels",
     "strategy_by_kind",

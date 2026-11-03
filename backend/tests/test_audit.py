@@ -881,7 +881,7 @@ def evidence(
     created=None,
 ) -> Signal:
     row = Signal(
-        signal_key=f"analysis-{stock.exchange}-{stock.symbol}-{day}-breakout_v2-2.0.0",
+        signal_key=f"analysis-{stock.exchange}-{stock.symbol}-{day}-breakout_v3-3.0.0",
         signal_date=day,
         instrument_id=stock.id,
         status="observation",
@@ -1058,7 +1058,7 @@ def test_candidates_written_by_the_worker_pass_and_a_changed_total_fails(fx):
     market = scored_market(fx)
     versions = pipeline._ensure_strategies(fx.db)
     fx.commit()
-    for name, entry_type in (("breakout_v2", "breakout"), ("pullback_v2", "pullback")):
+    for name, entry_type in (("breakout_v3", "breakout"), ("pullback_v3", "pullback")):
         for symbol in ("1101", "2330"):
             instrument = market[symbol]
             bars = (

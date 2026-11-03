@@ -43,10 +43,10 @@ from app.models import (
     TechnicalFeature,
 )
 from app.strategies import (
-    REGISTRY,
     NextSessionInputs,
     StrategyInputs,
     current_strategy,
+    newest_versions,
 )
 from app.strategies import levels
 from worker import pipeline
@@ -129,6 +129,7 @@ def _strategy_inputs(
         ),
         margin_change_ratio_5d=evidence_inputs.get("margin_balance_change_ratio_5d"),
         margin_financing=evidence_inputs.get("margin_eligibility"),
+        margin_zero_base=evidence_inputs.get("margin_zero_base"),
     )
 
 
@@ -188,6 +189,7 @@ def _next_session_inputs(
         institutional_flow_ratio_5d=inputs.institutional_flow_ratio_5d,
         margin_change_ratio_5d=inputs.margin_change_ratio_5d,
         margin_financing=inputs.margin_financing,
+        margin_zero_base=inputs.margin_zero_base,
         price_basis=levels.PRICE_BASIS_NEXT_SESSION
         if converted
         else levels.PRICE_BASIS_SIGNAL_DAY,
@@ -258,11 +260,11 @@ def compute_strategy_levels(
             )
             is not None
         ]
-        if any(strategy.key in REGISTRY for _signal, strategy in current):
-            # A day with the registered versions reads only them, as the pages
-            # do (app.signal_versions): a superseded row written earlier the
-            # same day holds older inputs (#392, #407 review M2).
-            current = [item for item in current if item[1].key in REGISTRY]
+        # A day reads only the newest version of each chain it has, as the
+        # pages do (app.signal_versions): an older version's row written
+        # earlier the same day holds older inputs (#392, #407 review M2, #404).
+        newest = newest_versions(strategy.key for _signal, strategy in current)
+        current = [item for item in current if item[1].key in newest]
         skipped += len(group) - len(current)
         if not current:
             continue

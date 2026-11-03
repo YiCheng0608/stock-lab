@@ -618,7 +618,7 @@ def _score_rows() -> list[dict[str, Any]]:
 
 # ---- strategies and signals ----
 
-STRATEGY_IDS = {"breakout_v2": 1, "pullback_v2": 2, "hot_group_v1": 3}
+STRATEGY_IDS = {"breakout_v3": 1, "pullback_v3": 2, "hot_group_v1": 3}
 
 
 def _strategy_rows() -> list[dict[str, Any]]:
@@ -670,8 +670,8 @@ def _signal_rows() -> list[dict[str, Any]]:
         closes = [bar["close"] for bar in bars]
         ma20 = round(sum(closes[-20:]) / 20, 4)
         ma60 = round(sum(closes[-60:]) / 60, 4)
-        for strategy, status in zip(("breakout_v2", "pullback_v2"), statuses):
-            breakout = strategy == "breakout_v2"
+        for strategy, status in zip(("breakout_v3", "pullback_v3"), statuses):
+            breakout = strategy == "breakout_v3"
             conditional = status == "conditional"
             entry = close
             invalid = round(entry * 0.95, 2) if conditional else None
@@ -1401,7 +1401,7 @@ _PLANS = (
     (
         2,
         "9103",
-        "breakout_v2",
+        "breakout_v3",
         SESSIONS[-4],
         "triggered",
         {"breakout_price": 98.7, "invalid_price": 94.0, "target_1": 106.0},
@@ -1409,7 +1409,7 @@ _PLANS = (
     (
         3,
         "9201",
-        "pullback_v2",
+        "pullback_v3",
         SESSIONS[-12],
         "target_hit",
         {
@@ -1423,7 +1423,7 @@ _PLANS = (
     (
         4,
         "9202",
-        "breakout_v2",
+        "breakout_v3",
         SESSIONS[-25],
         "expired",
         {"breakout_price": 52.0, "invalid_price": 49.0, "target_1": 57.0},
@@ -1431,7 +1431,7 @@ _PLANS = (
     (
         5,
         "9203",
-        "breakout_v2",
+        "breakout_v3",
         SESSIONS[-10],
         "invalidated",
         {"breakout_price": 117.0, "invalid_price": 115.0, "target_1": 121.0},
@@ -1439,7 +1439,7 @@ _PLANS = (
     (
         6,
         "9102",
-        "breakout_v2",
+        "breakout_v3",
         SESSIONS[-6],
         "cancelled",
         {"breakout_price": 177.0, "invalid_price": 165.0, "target_1": 196.0},
@@ -1482,7 +1482,7 @@ def _plan_signal_rows() -> list[dict[str, Any]]:
     rows = []
     for offset, (_plan_id, symbol, strategy, day, _status, levels) in enumerate(_PLANS):
         exchange = SYMBOL_EXCHANGE[symbol]
-        kind = "breakout" if strategy == "breakout_v2" else "pullback"
+        kind = "breakout" if strategy == "breakout_v3" else "pullback"
         rows.append(
             {
                 "id": PLAN_SIGNAL_FIRST_ID + offset,
@@ -1981,7 +1981,7 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
             "items[].nearness.near",
             [None, None, None, None, True, True],
         ),
-        ("actions?limit=20", "items.4.nearness.strategy", "breakout_v2"),
+        ("actions?limit=20", "items.4.nearness.strategy", "breakout_v3"),
         ("actions?limit=20", "items.4.nearness.unmet[].short_label", ["價格", "量能"]),
         (
             "actions?limit=20",

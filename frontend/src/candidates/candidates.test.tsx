@@ -14,6 +14,7 @@ import {
   candidateNoteMeta,
   candidateNoteView,
   candidateSourceText,
+  candidateStrategyLabel,
   candidatesPath,
   candidatesState,
   formatCandidateScore,
@@ -47,6 +48,11 @@ check(formatEntryZone(completeItem().levels) === '161.50', 'breakout entry zone 
 check(formatEntryZone(partialItem().levels) === '13.05～13.35', 'pullback entry zone shows low～high')
 check(formatSubItemValue('margin_change_5d', -0.0592) === '-5.9%' && formatSubItemValue('volume_ratio', 2.8847) === '2.88 倍', 'sub-item units')
 check(formatSubItemValue('net_direction', null) === '—', 'null sub-item is 「—」')
+// Every strategy version reads the same, without its version suffix (#392, #404).
+for (const version of ['v1', 'v2', 'v3']) {
+  check(candidateStrategyLabel(`breakout_${version}`) === '突破條件', `breakout_${version} reads 突破條件`)
+  check(candidateStrategyLabel(`pullback_${version}`) === '回踩條件', `pullback_${version} reads 回踩條件`)
+}
 check(marketSourceLabel('tpex_3insti+tpex_margin') === '證券櫃檯買賣中心' && marketSourceLabel(null) === '來源未提供', 'market sources are named')
 check(candidateGroupText(completeItem().groups[0]) === 'AI 伺服器（題材，第 2 名／11）', 'ranked group shows board and rank')
 check(candidateGroupText(completeItem().groups[1]) === '電腦及週邊（產業，當日未排名）', 'unranked group says so')
