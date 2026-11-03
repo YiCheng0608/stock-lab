@@ -16,6 +16,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -68,7 +69,7 @@ case "$command" in
   'exit 0') exit 0 ;;
   *Disable-ScheduledTask*) sed -i "s/^$name .*/$name Disabled/" "$d/tasks" ;;
   *Enable-ScheduledTask*) sed -i "s/^$name .*/$name Ready/" "$d/tasks" ;;
-  *Get-ScheduledTaskInfo*) echo 0 ;;
+  *Get-ScheduledTaskInfo*) cat "$d/news_result" 2>/dev/null || echo 0 ;;
   *Start-ScheduledTask*) ;;
   *Get-ScheduledTask*) cat "$d/tasks" ;;
   *Get-Process*) cat "$d/writers" 2>/dev/null ;;
@@ -76,16 +77,30 @@ esac
 exit 0
 """
 
-# State under $FAKE_DIR/docker: volumes (`docker volume ls -q`), running (`ps -q`), images
-# (`ps -a --format {{.Image}}`; image inspect succeeds when the file exists).
+# State under $FAKE_DIR/docker: volumes (`docker volume ls -q`), running (`ps -q`, also the
+# project's containers other than one-offs), images (`ps -a --format {{.Image}}`; image inspect
+# succeeds when the file exists), probe (what the read-only `run --rm` sees in the volume),
+# volume.db (what `docker cp <container>:… <host>` copies out), fail (a call containing one of
+# its lines exits 1). `compose -p P … run` creates P_stock-data, as compose does.
 FAKE_DOCKER = r"""#!/usr/bin/env bash
 d="$FAKE_DIR/docker"
 printf '%s\n' "$*" >>"$FAKE_DIR/docker_calls.log"
+if [ -f "$d/fail" ]; then
+  while IFS= read -r pattern; do
+    case "$*" in *"$pattern"*) echo "fake docker: failed ($pattern)" >&2; exit 1 ;; esac
+  done <"$d/fail"
+fi
 # Compose v5.6.1 (the host's, rehearsal of #342): `run` has --build but no --no-build.
 if [ "$1" = compose ]; then
   case " $* " in
     *" run "*" --no-build "*) echo "unknown flag: --no-build" >&2; exit 1 ;;
+    *" run "*) [ "$2" = -p ] && echo "${3}_stock-data" >>"$d/volumes" ;;
   esac
+fi
+if [ "$1 $2" = "run --rm" ]; then cat "$d/probe" 2>/dev/null; exit 0; fi
+if [ "$1" = cp ]; then
+  case "$2" in *:*) [ -f "$d/volume.db" ] && cp "$d/volume.db" "$3" ;; esac
+  exit 0
 fi
 case "$1 $2" in
   "compose version") exit 0 ;;
@@ -104,6 +119,8 @@ exit 0
 
 READ_ONLY_POWERSHELL = ("exit 0", "Get-ScheduledTask", "Get-Process")
 READ_ONLY_DOCKER = ("compose version", "volume ls ", "ps ", "image inspect ")
+# The rollback reads the volume through a container that mounts it read-only and is removed.
+VOLUME_PROBE = "run --rm -v "
 
 
 class Harness:
@@ -242,6 +259,9 @@ def assert_read_only(h: Harness) -> None:
             verb in call for verb in ("Disable-", "Enable-", "Start-", "Stop-")
         ), call
     for call in h.calls("docker"):
+        if call.startswith(VOLUME_PROBE):
+            assert f"-v {PROJECT}_stock-data:/data:ro " in call, call
+            continue
         assert call.startswith(READ_ONLY_DOCKER), call
 
 
@@ -295,8 +315,16 @@ def test_the_switch_needs_a_tag_or_a_rehearsal(harness):
         ({k: SECRET for k in KEYS if k != "GH_TOKEN"}, "GH_TOKEN"),
         ({**{k: SECRET for k in KEYS}, "STOCK_MONITOR": ""}, "STOCK_MONITOR"),
         ({**{k: SECRET for k in KEYS}, "GH_TOKEN": "  # later"}, "GH_TOKEN"),
+        ({**{k: SECRET for k in KEYS}, "GH_TOKEN": '""'}, "GH_TOKEN"),
+        ({**{k: SECRET for k in KEYS}, "STOCK_WAKE_TOKEN": "''"}, "STOCK_WAKE_TOKEN"),
     ],
-    ids=["absent", "empty", "comment-only"],
+    ids=[
+        "absent",
+        "empty",
+        "comment-only",
+        "empty-double-quotes",
+        "empty-single-quotes",
+    ],
 )
 def test_a_required_key_without_a_value_is_refused_and_no_value_printed(
     harness, values, missing
@@ -397,7 +425,14 @@ def test_a_work_dir_inside_the_data_dir_is_refused(harness):
     assert result.code == 2, result.out
 
 
+CUTOVER_TIME = "2026-11-01T00:00:00Z"
+EARLY_STEPS = ["helper", "checkout", "enable"]
+RESUME_STEPS = ["stop", "checkout", "enable"]
+
+
 def _ready_for_rollback(h: Harness) -> None:
+    """After a switch that got through verify: serve ran on the volume."""
+
     git(h.checkout, "branch", "pre-docker", h.head)
     git(h.checkout, "config", "branch.pre-docker.remote", ".")
     git(h.checkout, "config", "branch.pre-docker.merge", "refs/heads/pre-docker")
@@ -405,6 +440,48 @@ def _ready_for_rollback(h: Harness) -> None:
     h.docker("volumes", f"{PROJECT}_stock-data")
     h.docker("running", "c0ffee5c4ed01")
     h.docker("images", f"{PROJECT}-backend:v1.1.0")
+    h.docker("probe", "db", "cutover", json.dumps({"time": CUTOVER_TIME}))
+    h.work.mkdir()
+    # The host database was last written before the switch.
+    old = datetime(2026, 10, 31, 12, tzinfo=timezone.utc).timestamp()
+    os.utime(h.data / "stock.db", (old, old))
+    # What the container holds: the host's rows plus one capture it wrote.
+    volume_db = _db(h.fake / "docker" / "volume.db", "/data/raw/twse/2026/11/03/a.json")
+    with sqlite3.connect(volume_db) as conn:
+        conn.execute("CREATE TABLE written (who TEXT)")
+        conn.execute("INSERT INTO written VALUES ('serve')")
+    conn.close()
+
+
+def _host_rows(h: Harness) -> list[str]:
+    with sqlite3.connect(h.data / "stock.db") as conn:
+        rows = [
+            row[0] for row in conn.execute("SELECT who FROM written ORDER BY rowid")
+        ]
+    conn.close()
+    return rows
+
+
+def _back_on_task_scheduler(h: Harness, result) -> None:
+    """Where every rollback ends: pre-docker tracking itself, pulled, every task enabled."""
+
+    assert result.code == 0, result.out
+    assert result.result["status"] == "done"
+    assert (h.fake / "tasks").read_text(encoding="utf-8").split() == [
+        "daily",
+        "Ready",
+        "news",
+        "Ready",
+        "watchdog",
+        "Ready",
+    ]
+    assert git(h.checkout, "rev-parse", "--abbrev-ref", "HEAD") == "pre-docker"
+    assert git(h.checkout, "config", "branch.pre-docker.remote") == "."
+    assert (
+        git(h.checkout, "config", "branch.pre-docker.merge") == "refs/heads/pre-docker"
+    )
+    assert "git pull --ff-only exit 0" in result.out
+    assert git(h.checkout, "pull", "--ff-only") == "Already up to date."
 
 
 def test_a_rollback_dry_run_lists_every_step_and_changes_nothing(harness):
@@ -414,19 +491,13 @@ def test_a_rollback_dry_run_lists_every_step_and_changes_nothing(harness):
     assert result.code == 0, result.out
     assert result.result["status"] == "dry-run"
     assert result.result["steps"] == ROLLBACK_STEPS
+    assert "回退方式 full" in result.out
     assert (
         "git pull --ff-only" in result.out and "Start-ScheduledTask news" in result.out
     )
     assert f"{PROJECT}-backend:v1.1.0" in result.out
     assert harness.state() == before
     assert_read_only(harness)
-
-
-def test_a_rollback_without_the_pre_docker_branch_is_refused(harness):
-    _ready_for_rollback(harness)
-    git(harness.checkout, "branch", "-D", "pre-docker")
-    result = harness.run("rollback", "--dry-run")
-    assert result.code == 1 and "pre-docker" in result.result["reason"], result.out
 
 
 def test_a_rollback_whose_branch_tracks_a_remote_is_refused(harness):
@@ -438,11 +509,160 @@ def test_a_rollback_whose_branch_tracks_a_remote_is_refused(harness):
     assert result.code == 1 and "upstream" in result.result["reason"], result.out
 
 
-def test_a_rollback_without_the_volume_is_refused(harness):
-    _ready_for_rollback(harness)
-    (harness.fake / "docker" / "volumes").unlink()
+def test_a_rollback_never_goes_back_to_a_commit_with_333(harness):
+    env = _pull_333(harness)
+    harness.tasks("daily Disabled", "news Disabled", "watchdog Disabled")
+    result = harness.run("rollback", "--dry-run", extra_env=env)
+    assert result.code == 1 and "--pre-docker" in result.result["reason"], result.out
+    git(harness.checkout, "branch", "pre-docker", "HEAD")
+    result = harness.run("rollback", "--dry-run", extra_env=env)
+    assert result.code == 1 and "#333" in result.result["reason"], result.out
+
+
+# A switch that stopped before verify ended (PR #424 review 6591459652, required fix 1): the
+# tasks are disabled and no serve ever ran, so the rollback goes back to Task Scheduler and
+# leaves the host database alone.
+@pytest.mark.parametrize(
+    "failure",
+    ["wait", "copy_db", "build", "compose run", "docker cp stock.db"],
+)
+def test_a_switch_that_failed_before_serve_ran_rolls_back_to_task_scheduler(
+    harness, failure
+):
+    args = ["--no-deploy"]
+    if failure == "wait":
+        (harness.fake / "writers").write_text(
+            "4242 C:\\stock-lab-release\\.venv\\python.exe\n", encoding="utf-8"
+        )
+        args += ["--wait-timeout", "1"]
+    elif failure == "copy_db":
+        (harness.data / "stock.db").write_bytes(b"not a database, copy_db.py fails\n")
+    else:
+        if failure != "build":
+            harness.docker("images", f"{PROJECT}-backend:cutover")
+        harness.docker(
+            "fail",
+            {
+                "build": " build api",
+                "compose run": " run -d --no-deps",
+                "docker cp stock.db": ":/data/stock.db",
+            }[failure],
+        )
+    host_db = (harness.data / "stock.db").read_bytes()
+    switch = harness.run(*args)
+    assert switch.code == 3, switch.out
+    assert "disable" in switch.result["steps"]
+    assert "verify" not in switch.result["steps"]
+    assert "Disabled" in (harness.fake / "tasks").read_text(encoding="utf-8")
+    for name in ("fail", "writers"):
+        for path in (harness.fake / "docker" / name, harness.fake / name):
+            path.unlink(missing_ok=True)
+
+    result = harness.run("rollback")
+    _back_on_task_scheduler(harness, result)
+    assert result.result["steps"] == EARLY_STEPS
+    assert "回退方式 early" in result.out
+    assert (harness.data / "stock.db").read_bytes() == host_db
+    assert not (harness.data / "backups").exists()
+
+
+def test_tasks_disabled_by_hand_before_any_switch_roll_back_without_a_branch(harness):
+    """§6.9: the tasks were disabled ahead of the merge, then the switch was given up."""
+
+    harness.tasks("daily Disabled", "news Disabled", "watchdog Disabled")
+    host_db = (harness.data / "stock.db").read_bytes()
+    dry = harness.run("rollback", "--dry-run")
+    assert dry.code == 0, dry.out
+    assert f"git branch pre-docker {harness.head[:9]}" in dry.out
+    result = harness.run("rollback")
+    _back_on_task_scheduler(harness, result)
+    assert result.result["steps"] == EARLY_STEPS
+    assert git(harness.checkout, "rev-parse", "pre-docker") == harness.head
+    assert (harness.data / "stock.db").read_bytes() == host_db
+
+
+def test_containers_without_a_finished_switch_are_refused(harness):
+    harness.tasks("daily Disabled", "news Disabled", "watchdog Disabled")
+    harness.docker("volumes", f"{PROJECT}_stock-data")
+    harness.docker("images", f"{PROJECT}-backend:cutover")
+    harness.docker("running", "c0ffee5c4ed01")
     result = harness.run("rollback", "--dry-run")
-    assert result.code == 1 and "volume" in result.result["reason"], result.out
+    assert result.code == 1 and "cutover.json" in result.result["reason"], result.out
+
+
+# Required fix 2: the checks before the host database is replaced.
+@pytest.mark.parametrize("state", ["Ready", "Running"])
+def test_a_rollback_with_a_task_not_disabled_never_replaces_the_host_db(harness, state):
+    _ready_for_rollback(harness)
+    harness.tasks("daily Disabled", f"news {state}", "watchdog Disabled")
+    before = harness.state()
+    host_db = (harness.data / "stock.db").read_bytes()
+    result = harness.run("rollback")
+    assert result.code == 1, result.out
+    assert "news" in result.result["reason"] and "Disabled" in result.result["reason"]
+    assert harness.state() == before
+    assert (harness.data / "stock.db").read_bytes() == host_db
+    assert_read_only(harness)
+
+
+def test_a_volume_without_stock_db_is_refused(harness):
+    _ready_for_rollback(harness)
+    harness.docker("probe", "cutover", json.dumps({"time": CUTOVER_TIME}))
+    result = harness.run("rollback")
+    assert result.code == 1 and "/data/stock.db" in result.result["reason"], result.out
+    assert_read_only(harness)
+
+
+@pytest.mark.parametrize("name", ["stock.db", "stock.db-wal"])
+def test_a_host_db_written_after_the_switch_is_never_replaced(harness, name):
+    _ready_for_rollback(harness)
+    (harness.data / name).touch()  # now, after CUTOVER_TIME
+    result = harness.run("rollback")
+    assert result.code == 1 and name in result.result["reason"], result.out
+    assert_read_only(harness)
+
+
+def test_a_rerun_after_start_news_failed_keeps_what_windows_wrote(harness):
+    """The rerun of review 6591446223 must-fix 2: news failed, Windows wrote, rollback again."""
+
+    _ready_for_rollback(harness)
+    (harness.fake / "news_result").write_text("1\n", encoding="utf-8")
+    first = harness.run("rollback", "--start-news")
+    assert first.code == 3 and "LastTaskResult" in first.result["reason"], first.out
+    assert first.result["steps"] == ROLLBACK_STEPS[:-1]
+    assert _host_rows(harness) == ["serve"]
+    # The tasks are enabled: a Windows job writes the host database.
+    with sqlite3.connect(harness.data / "stock.db") as conn:
+        conn.execute("INSERT INTO written VALUES ('windows')")
+    conn.close()
+    (harness.fake / "news_result").write_text("0\n", encoding="utf-8")
+
+    again = harness.run("rollback", "--start-news")
+    _back_on_task_scheduler(harness, again)
+    assert again.result["steps"] == RESUME_STEPS
+    assert "回退方式 resume" in again.out
+    assert _host_rows(harness) == ["serve", "windows"]
+    assert len(list((harness.data / "backups").iterdir())) == 1
+
+
+def test_a_full_rollback_brings_back_what_serve_wrote(harness):
+    _ready_for_rollback(harness)
+    result = harness.run("rollback")
+    _back_on_task_scheduler(harness, result)
+    assert result.result["steps"] == ROLLBACK_STEPS
+    assert _host_rows(harness) == ["serve"]
+    with sqlite3.connect(harness.data / "stock.db") as conn:
+        paths = [
+            row[0] for row in conn.execute("SELECT payload_path FROM raw_payloads")
+        ]
+    conn.close()
+    assert [Path(p) for p in paths] == [
+        harness.data / "raw" / "twse" / "2026" / "11" / "03" / "a.json"
+    ]
+    installed = json.loads(
+        (harness.work / "rollback" / "installed.json").read_text(encoding="utf-8")
+    )
+    assert installed["cutover"] == CUTOVER_TIME
 
 
 # tools/ops/cutover_db.py --------------------------------------------------------------

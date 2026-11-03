@@ -44,10 +44,28 @@
 #           compose file and the helper image instead (api and scheduler).
 #  10 readback  compose ps, `serve ready` in the scheduler's log, one `job news --trigger manual
 #           --skip-news-llm` in the scheduler (a real write), and the owner of what it wrote.
-# A failure after step 1 exits 3 with the steps done; `rollback` undoes them.
+# A failure after step 1 exits 3 with the steps done; `rollback` undoes them, whichever step it
+# was (a failure in readback, after start, is reported as such: look into it before rolling back).
 #
-# Rollback (decision 2): checks (the pre-docker branch, the volume and its stock.db, the tasks
-# disabled), then
+# Rollback (decision 2; PR #424 review 6591459652). It always ends on pre-docker with the tasks
+# enabled; what it does to the database depends on the volume, read once by a read-only
+# container (/data/stock.db, /data/logs/cutover.json):
+#   early   no volume, or one without cutover.json (the switch stopped before verify ended, so
+#           serve never ran on it): the host stock.db is untouched and stays the database.
+#           Steps: helper (docker rm -f of the helper container), checkout, enable. Also the way
+#           back when the tasks were disabled by hand and cutover.sh never ran. Refused when the
+#           project has containers other than one-offs (an unknown state).
+#   full    cutover.json is there: serve may have written the volume. Refused unless every task
+#           is Disabled (none runs), /data/stock.db exists, and neither the host stock.db nor
+#           its -wal changed after cutover.json's time (nothing wrote the host database since).
+#           Steps 1-6 below.
+#   resume  <work>/rollback/installed.json names this cutover.json's time: an earlier rollback
+#           of the same switch installed the copy (and then failed, e.g. --start-news). Windows
+#           may have written the host stock.db since, so it is never replaced again. Steps: stop,
+#           checkout, enable.
+# The pre-docker branch: when missing, created at --pre-docker (default HEAD; never a commit
+# with #333) with its upstream set to itself; an existing one must not hold #333 and its
+# upstream must be itself (set when unset).
 #   1 stop      docker stop every running container of the project (no down: the volume stays).
 #   2 snapshot  a helper on the scheduler's image (uid 1000): copy_db.py of /data/stock.db into
 #           the helper, docker cp to <work>/rollback/stock.db; raw files newer than
@@ -56,8 +74,9 @@
 #   3 paths     the copy's /data/raw/... payload_path rows become the host raw directory's path
 #           (pre-docker code reads them as stored); integrity_check ok.
 #   4 install   the data directory's stock.db, -wal and -shm move to backups/pre-rollback-<UTC>/,
-#           the copy becomes stock.db.
-#   5 checkout  the release checkout: git checkout pre-docker; git pull --ff-only must exit 0.
+#           the copy becomes stock.db; <work>/rollback/installed.json records it.
+#   5 checkout  the release checkout: the pre-docker branch (above); git checkout pre-docker;
+#           git pull --ff-only must exit 0.
 #   6 enable    Enable-ScheduledTask for each task; --start-news then runs the news task once
 #           and waits for its result.
 #
@@ -192,7 +211,11 @@ finish() { # finish <status> [reason]
 refuse() { finish refused "$1"; die "拒絕：$1" 1; }
 fail() {
   finish failed "$1"
-  [ "$mode" = switch ] && note "已完成的步驟見 steps；回退：bash tools/ops/cutover.sh rollback（同一組選項）"
+  if [ "$mode" = switch ] && [[ " ${steps[*]-} " == *" start "* ]]; then
+    note "部署已完成（start），失敗的是讀回：先查原因，不要直接回退；要回退時：bash tools/ops/cutover.sh rollback（同一組選項）"
+  elif [ "$mode" = switch ]; then
+    note "已完成的步驟見 steps；回退：bash tools/ops/cutover.sh rollback（同一組選項）。volume 還沒做完 verify 時，回退只切回 pre-docker 並啟用工作，主機 stock.db 不動"
+  fi
   die "中斷：$1" 3
 }
 
@@ -252,13 +275,15 @@ if [ "$mode" = switch ]; then
   # --- checks (nothing changes) ---
   missing="" forbidden=""
   if [ -f "$env_file" ]; then
+    # A value: something after `=` other than blanks, a comment or an empty pair of quotes.
+    has_value="[[:space:]]*=[[:space:]]*[\"']?[^[:space:]#\"']"
     IFS=, read -r -a keys <<<"$require_keys"
     for key in "${keys[@]}"; do
-      grep -Eq "^[[:space:]]*(export[[:space:]]+)?$key[[:space:]]*=[[:space:]]*[^[:space:]#]" "$env_file" \
+      grep -Eq "^[[:space:]]*(export[[:space:]]+)?$key$has_value" "$env_file" \
         || missing="$missing${missing:+,}$key"
     done
     for key in ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN; do
-      grep -Eq "^[[:space:]]*(export[[:space:]]+)?$key[[:space:]]*=[[:space:]]*[^[:space:]#]" "$env_file" \
+      grep -Eq "^[[:space:]]*(export[[:space:]]+)?$key$has_value" "$env_file" \
         && forbidden="$forbidden${forbidden:+,}$key"
     done
   else
@@ -408,25 +433,90 @@ if [ "$mode" = switch ]; then
 fi
 
 # =============================================================================================
-# rollback
+# rollback (the three ways are in the header)
 [ -z "$dirty" ] || refuse "發佈 checkout 有未 commit 的改動：$checkout"
-[ -n "$pre_docker" ] || refuse "發佈 checkout 沒有 pre-docker branch（切換的第 1 步建立）"
-[ "$(git -C "$checkout" config branch.pre-docker.remote | tr -d '\r')" = . ] \
-  && [ "$(git -C "$checkout" config branch.pre-docker.merge | tr -d '\r')" = refs/heads/pre-docker ] \
-  || refuse "pre-docker 的 upstream 不是它自己（branch.pre-docker.remote=. merge=refs/heads/pre-docker）"
-volume_exists || refuse "沒有 volume $volume"
-[ -d "$data_dir/raw" ] || refuse "資料目錄沒有 raw/：$data_dir"
+# --- the pre-docker branch
+set_upstream=0
+if [ -n "$pre_docker" ]; then
+  git -C "$checkout" merge-base --is-ancestor "$PR333" "$pre_docker" >/dev/null 2>&1 \
+    && refuse "pre-docker（${pre_docker:0:9}）已含 #333（${PR333:0:7}）：Windows 的 job 會以 69 結束；請人工把它移到 #333 之前（例如 0f99fea）"
+  [ -z "$pre_commit" ] || [ "$pre_docker" = "$pre_target" ] \
+    || refuse "pre-docker branch 已存在且不在 ${pre_target:0:9}（是 ${pre_docker:0:9}）"
+  up_remote="$(git -C "$checkout" config branch.pre-docker.remote | tr -d '\r')"
+  up_merge="$(git -C "$checkout" config branch.pre-docker.merge | tr -d '\r')"
+  if [ -z "$up_remote$up_merge" ]; then
+    set_upstream=1
+  elif [ "$up_remote" != . ] || [ "$up_merge" != refs/heads/pre-docker ]; then
+    refuse "pre-docker 的 upstream 不是它自己（branch.pre-docker.remote=. merge=refs/heads/pre-docker）"
+  fi
+else
+  [ "$pre_has333" = 0 ] \
+    || refuse "沒有 pre-docker branch，而 ${pre_target:0:9} 已含 #333（${PR333:0:7}）；以 --pre-docker <commit> 指定，例如 0f99fea"
+  set_upstream=1
+fi
+pre_at="${pre_docker:-$pre_target}"
+# --- what the volume holds
+served="$(dk ps -a -q --filter "label=com.docker.compose.project=$project" \
+  --filter label=com.docker.compose.oneoff=False | tr -d '\r')"
 source_image="$(dk ps -a --filter "label=com.docker.compose.project=$project" \
   --filter label=com.docker.compose.service=scheduler --filter label=com.docker.compose.oneoff=False \
   --format '{{.Image}}' | tr -d '\r' | head -1)"
 [ -n "$source_image" ] || source_image="$image"
-dk image inspect "$source_image" >/dev/null 2>&1 || refuse "沒有可用來取快照的 image（$source_image）"
+vol_db=0 cutover_time=""
+if volume_exists; then
+  dk image inspect "$source_image" >/dev/null 2>&1 \
+    || refuse "volume $volume 在，但沒有可用來讀它的 image（$source_image）"
+  # Read-only and removed at once: nothing in the volume changes.
+  probe="$(dk run --rm -v "$volume:/data:ro" -u 1000 --entrypoint sh "$source_image" -c \
+    'test -f /data/stock.db && echo db; test -f /data/logs/cutover.json && echo cutover && cat /data/logs/cutover.json; true' \
+    | tr -d '\r')" || refuse "讀不到 volume $volume 的內容"
+  printf '%s\n' "$probe" | grep -qx db && vol_db=1
+  if printf '%s\n' "$probe" | grep -qx cutover; then
+    cutover_time="$(printf '%s\n' "$probe" | sed -n 's/.*"time": *"\([^"]*\)".*/\1/p' | head -1)"
+    [ -n "$cutover_time" ] || refuse "volume 的 /data/logs/cutover.json 讀不出時間"
+  fi
+fi
+installed="$work_dir/rollback/installed.json"
+if [ -z "$cutover_time" ]; then
+  [ -z "$served" ] \
+    || refuse "project $project 有容器，但 volume 沒有 /data/logs/cutover.json（切換沒有做完 verify）：狀態不明，請人工確認"
+  way=early
+elif [ -f "$installed" ] && grep -q "\"cutover\": \"$cutover_time\"" "$installed"; then
+  way=resume
+else
+  way=full
+  for name in "${task_list[@]}"; do
+    [ "$(state_of "$name")" = Disabled ] \
+      || refuse "$task_path$name 是 $(state_of "$name")，不是 Disabled：回退會以 volume 的 stock.db 取代主機的，只在每個工作都停用、沒有在跑時執行"
+  done
+  [ "$vol_db" = 1 ] || refuse "volume $volume 沒有 /data/stock.db"
+  for f in "$data_dir/stock.db" "$data_dir/stock.db-wal"; do
+    [ -e "$f" ] || continue
+    changed_at="$(date -u -r "$f" +%Y-%m-%dT%H:%M:%SZ)"
+    [[ "$changed_at" > "$cutover_time" ]] \
+      && refuse "主機的 ${f##*/} 在切換之後改過（$changed_at；cutover.json $cutover_time）：不以 volume 的 stock.db 取代它，請人工確認誰寫了主機的 DB"
+  done
+  [ -d "$data_dir/raw" ] || refuse "資料目錄沒有 raw/：$data_dir"
+fi
 copy="$work_native/rollback/stock.db"
-plan stop "docker stop：project $project 在跑的容器（$(project_running | wc -l | tr -d ' ') 個）"
-plan snapshot "docker run -d --name $project-rollback -v $volume:/data -u 1000 $source_image sleep；copy_db.py /data/stock.db；docker cp → $copy；比 /data/logs/cutover.json 新的 raw → $data_native/raw（不覆寫）、logs → $work_native/rollback/logs"
-plan paths "cutover_db.py rewrite-paths $copy $data_native/raw；integrity_check"
-plan install "$data_native/stock.db（-wal、-shm）→ $data_native/backups/pre-rollback-<UTC>/；$copy → $data_native/stock.db"
-plan checkout "git -C $checkout_native checkout pre-docker（${pre_docker:0:9}）；git pull --ff-only"
+case "$way" in
+  early)
+    note "回退方式 early：volume 沒有做完 verify 的切換紀錄（serve 沒有在它上面跑過），主機 stock.db 不動"
+    plan helper "docker rm -f $helper（若有）；volume ${volume} 若在就留著，再切換前由使用者刪除"
+    ;;
+  resume)
+    note "回退方式 resume：$installed 記錄這次切換（cutover.json $cutover_time）已裝回 stock.db；之後 Windows 可能已寫入，不再取代主機的 stock.db"
+    plan stop "docker stop：project $project 在跑的容器（$(project_running | wc -l | tr -d ' ') 個）"
+    ;;
+  full)
+    note "回退方式 full：volume 有 cutover.json（$cutover_time），以它的 stock.db 取代主機的"
+    plan stop "docker stop：project $project 在跑的容器（$(project_running | wc -l | tr -d ' ') 個）"
+    plan snapshot "docker run -d --name $project-rollback -v $volume:/data -u 1000 $source_image sleep；copy_db.py /data/stock.db；docker cp → $copy；比 /data/logs/cutover.json 新的 raw → $data_native/raw（不覆寫）、logs → $work_native/rollback/logs"
+    plan paths "cutover_db.py rewrite-paths $copy $data_native/raw；integrity_check"
+    plan install "$data_native/stock.db（-wal、-shm）→ $data_native/backups/pre-rollback-<UTC>/；$copy → $data_native/stock.db；記錄 $installed"
+    ;;
+esac
+plan checkout "$([ -z "$pre_docker" ] && printf 'git branch pre-docker %s；' "${pre_at:0:9}")$([ "$set_upstream" = 1 ] && printf 'branch.pre-docker.remote=. merge=refs/heads/pre-docker；')git -C $checkout_native checkout pre-docker（${pre_at:0:9}）；git pull --ff-only"
 plan enable "Enable-ScheduledTask -TaskPath '$task_path' -TaskName ${tasks//,/ ／ }$([ "$start_news" = 1 ] && printf '；Start-ScheduledTask news 一次')"
 if [ "$dry" = 1 ]; then
   note "乾跑：以上步驟都沒有執行；工作排程器：$(printf '%s ' $states)"
@@ -435,10 +525,16 @@ if [ "$dry" = 1 ]; then
 fi
 steps=()
 rb="$project-rollback"
-# 1 stop
-running="$(project_running)"
-[ -z "$running" ] || dk stop $running >/dev/null || fail "docker stop 失敗"
-steps+=(stop)
+if [ "$way" = early ]; then
+  dk rm -f "$helper" >/dev/null 2>&1 || true
+  steps+=(helper)
+else
+  # 1 stop
+  running="$(project_running)"
+  [ -z "$running" ] || dk stop $running >/dev/null || fail "docker stop 失敗"
+  steps+=(stop)
+fi
+if [ "$way" = full ]; then
 # 2 snapshot
 mkdir -p "$work_dir/rollback/logs" || fail "無法建立 $work_dir/rollback"
 rm -f "$work_dir/rollback/stock.db" "$work_dir/rollback/stock.db.partial"
@@ -478,9 +574,23 @@ for suffix in "" -wal -shm; do
 done
 cp "$copy" "$data_dir/stock.db.partial" && mv "$data_dir/stock.db.partial" "$data_dir/stock.db" \
   || fail "放回 stock.db 失敗（原檔在 $backup）"
+# From here a rerun resumes and never replaces the host stock.db again (Windows may write it).
+printf '{"cutover": "%s", "installed": "%s", "backup": %s}\n' "$cutover_time" \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(json_str "$(native "$backup")")" >"$installed" \
+  || fail "寫不了 $installed（stock.db 已裝回；重跑前先人工建立它，否則重跑會再取代主機的 stock.db）"
 note "原 stock.db 在 $backup"
 steps+=(install)
+fi
 # 5 checkout
+if [ -z "$pre_docker" ]; then
+  git -C "$checkout" branch pre-docker "$pre_at" || fail "建立 pre-docker branch 失敗"
+  note "建立 pre-docker branch 在 ${pre_at:0:9}"
+fi
+if [ "$set_upstream" = 1 ]; then
+  git -C "$checkout" config branch.pre-docker.remote . \
+    && git -C "$checkout" config branch.pre-docker.merge refs/heads/pre-docker \
+    || fail "設定 pre-docker 的 upstream 失敗"
+fi
 git -C "$checkout" checkout -q pre-docker || fail "git checkout pre-docker 失敗"
 git -C "$checkout" pull --ff-only >&2
 pulled=$?
