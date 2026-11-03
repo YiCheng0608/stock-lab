@@ -48,8 +48,9 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The long-lived integration branches a task PR may merge into besides master (#332;
 # docs/GITHUB_WORKFLOW.md 長期整合分支); a PR into any other branch (release/*) is refused.
 # tools/ci/test_checks.py (WorkflowTriggers) reads this line: CI runs on PRs into and
-# pushes to master, release/** and each of these.
-integration_branches=(feat/docker)
+# pushes to master, release/** and each of these. None at present: the Docker one (#331)
+# reached master in PR #420 and was taken off in #428.
+integration_branches=()
 
 issue="" slug="" pr="" repo_id="" idle_seconds=30 set_board=1 allow_head_mismatch=0
 extra=()
@@ -171,7 +172,7 @@ base_branch="$(printf '%s' "$out" | cj get 0.baseRefName)" || refuse "PR #$pr �
 case "$base_branch" in '' | -* | /* | */ | *..* | *[!A-Za-z0-9._/-]*) refuse "PR #$pr 的目標分支名稱不合規則：$base_branch" ;; esac
 case " master ${integration_branches[*]} " in
   *" $base_branch "*) ;;
-  *) refuse "PR #$pr 的目標分支 $base_branch 不是 master 或長期整合分支（${integration_branches[*]}）" ;;
+  *) refuse "PR #$pr 的目標分支 $base_branch 不是 master 或長期整合分支（${integration_branches[*]:-目前沒有}）" ;;
 esac
 head_ref="$(printf '%s' "$out" | cj get 0.headRefName)"
 # The PR's head stands in for a branch not found locally only when it is this task's:
