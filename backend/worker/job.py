@@ -4,22 +4,27 @@ What tools/Invoke-WorkerJob.ps1 did, together with what the Task Scheduler task
 settings did (a run time limit, one instance at a time), so that any scheduler
 only has to start one command:
 
-- One job of each kind at a time per data directory: an exclusive lock on
-  ``<data>/locks/<job>.lock`` (``msvcrt`` on Windows, ``fcntl`` elsewhere). The
-  OS drops it when its holder ends, however it ends, so a killed job leaves
+- One job of each kind at a time per data directory: an exclusive ``fcntl``
+  lock on ``<data>/locks/<job>.lock``. The OS drops it when its holder ends, however it ends, so a killed job leaves
   nothing to clean up. A second job is skipped with reason ``already_running``;
   daily also records that row in schedule_runs.
 - The checks before a run: free physical memory below --min-free-memory-gb
-  (``low_memory``), a git operation in progress in this checkout, i.e.
-  index.lock or MERGE_HEAD (``git_busy``), and with --git-pull a failed
-  ``git pull --ff-only`` (``git_pull_failed``). daily records the skip through
+  (``low_memory``) and a git operation in progress in this checkout, i.e.
+  index.lock or MERGE_HEAD (``git_busy``). daily records the skip through
   ``worker.cli daily --skip-reason``; news only logs it.
+- The code is never updated here: it is the image tools/ops/deploy.sh built
+  and started (#340). The job logs that image and its commit
+  (``STOCK_IMAGE_TAG``, ``STOCK_GIT_HEAD``); daily records the same two in the
+  run's ``summary_json.runtime`` (worker.schedule_runs). A task registered
+  before #314 still passes --git-pull; it is accepted and ignored.
 - The worker CLI runs as a child process within the job's time limit (daily
   2.5 hours; news 90 minutes for news and news-llm together). The child and
-  everything it starts end with the job: on Windows they are in a job object
-  that is killed when its last handle closes, on Linux the child gets SIGKILL
-  when the job dies (PR_SET_PDEATHSIG). The run row of a killed daily therefore
-  names a dead PID, and the next run closes it at once (schedule_runs).
+  everything it starts end with the job: the child gets SIGKILL when the job
+  dies (PR_SET_PDEATHSIG). The run row of a killed daily therefore
+  names a dead PID, and the next run closes it at once (schedule_runs). The
+  worker gets the lock's path in ``STOCK_JOB_LOCK`` while the job holds it:
+  whoever holds that lock next knows the row's process is gone, even in a
+  restarted container with another hostname (#336).
 - The dated log ``<logs>/<job>-YYYYMMDD.log`` (Taipei date) with the layout of
   docs/OPERATIONS.md §6.3, the exit code, and removing logs older than
   --log-retention-days.
@@ -28,16 +33,22 @@ The news job runs ``worker.cli news`` and then ``worker.cli news-llm``; the
 job's exit code is news's alone, news-llm's goes to the log as
 ``news_llm_exit``.
 
-Only the standard library is imported here: the watchdog (Git Bash) takes its
-lock through the same code without the backend's dependencies, with
-``python -m worker.job lock <file> -- <command> ...``.
+Only the standard library is imported here: the watchdog takes its lock
+through the same code without the backend's dependencies, with
+``python -m worker.job lock <file> -- <command> ...``. tools/ops/deploy.sh
+holds the three locks in the running scheduler container with
+``lock --keep-stdin``: the command reads the deploy's stdin and ends when the
+deploy closes it, or dies (#340).
+
+Linux only, as in the backend image (#333): the Windows branches (msvcrt, job
+objects, GlobalMemoryStatusEx, pythonw.exe) went with the Task Scheduler
+wrapper. Elsewhere ``job`` and ``lock`` refuse to start (``PLATFORM_EXIT``).
 """
 
 from __future__ import annotations
 
 import argparse
 import ctypes
-import functools
 import os
 import signal
 import subprocess
@@ -48,7 +59,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import BinaryIO, Sequence
 
-IS_WINDOWS = sys.platform == "win32"
 ROOT = Path(__file__).resolve().parents[2]
 TAIPEI = timezone(timedelta(hours=8))
 JOBS = ("daily", "news")
@@ -64,10 +74,20 @@ LOCK_SKIP_REASON = "already_running"
 LOCK_BUSY_EXIT = 75
 # A step killed at the time limit counts as failed.
 TIMEOUT_EXIT = 1
+# `job` and `lock` on a system other than Linux (EX_UNAVAILABLE).
+PLATFORM_EXIT = 69
 NEWLINE = os.linesep
+# worker.schedule_runs.JOB_LOCK_ENV, IMAGE_TAG_ENV and GIT_HEAD_ENV: this module
+# imports only the standard library.
+JOB_LOCK_ENV = "STOCK_JOB_LOCK"
+IMAGE_TAG_ENV = "STOCK_IMAGE_TAG"
+GIT_HEAD_ENV = "STOCK_GIT_HEAD"
 
-CREATE_SUSPENDED = 0x00000004
-CREATE_NO_WINDOW = 0x08000000
+
+def platform_problem(module: str = "worker.job") -> str | None:
+    if sys.platform.startswith("linux"):
+        return None
+    return f"{module} runs on Linux only (the backend image, #333), not {sys.platform}"
 
 
 def default_data_dir() -> Path:
@@ -88,14 +108,14 @@ def data_environment(data_dir: Path) -> dict[str, str]:
 
 
 def cli_environment(argv: Sequence[str]) -> dict[str, str]:
-    """For ``worker.cli job``: the data paths app.config must see when imported.
+    """For ``worker.cli job`` and ``serve``: the data paths app.config must see.
 
     app.config reads STOCK_DATA_DIR and creates that directory on import; without
     this a scheduled task (no STOCK_* in its environment) would create ``data/``
     in the checkout. Any other command gets nothing.
     """
 
-    if not argv or argv[0] != "job":
+    if not argv or argv[0] not in ("job", "serve"):
         return {}
     value = None
     for index, arg in enumerate(argv):
@@ -119,16 +139,11 @@ class FileLock:
 
     def acquire(self) -> bool:
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        import fcntl
+
         fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o644)
         try:
-            if IS_WINDOWS:
-                import msvcrt
-
-                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
             os.close(fd)
             return False
@@ -137,48 +152,22 @@ class FileLock:
 
     def release(self) -> None:
         fd, self._fd = self._fd, None
-        if fd is None:
-            return
-        try:
-            if IS_WINDOWS:
-                import msvcrt
-
-                os.lseek(fd, 0, os.SEEK_SET)
-                msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
-        finally:
+        if fd is not None:
             os.close(fd)
 
 
 class _ProcessTree:
     """Start one child; it and everything it starts end when this process ends."""
 
-    def __init__(self) -> None:
-        self._job = _windows_job() if IS_WINDOWS else None
-
-    def start(self, argv: list[str], *, hidden: bool, **kwargs) -> subprocess.Popen:
-        if IS_WINDOWS:
-            # Suspended until it is in the job object, so nothing it starts escapes.
-            flags = CREATE_SUSPENDED | (CREATE_NO_WINDOW if hidden else 0)
-            process = subprocess.Popen(argv, creationflags=flags, **kwargs)
-            try:
-                _windows_adopt(self._job, process.pid)
-            except OSError:
-                process.kill()
-                process.wait()
-                raise
-            return process
-        if sys.platform.startswith("linux"):
-            kwargs["preexec_fn"] = _die_with_parent(os.getpid())
+    def start(self, argv: list[str], **kwargs) -> subprocess.Popen:
+        kwargs["preexec_fn"] = _die_with_parent(os.getpid())
         return subprocess.Popen(argv, start_new_session=True, **kwargs)
 
     def kill(self, process: subprocess.Popen) -> None:
-        if IS_WINDOWS:
-            _kernel32().TerminateJobObject(self._job, TIMEOUT_EXIT)
-        else:
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
         process.wait()
 
 
@@ -192,121 +181,9 @@ def _die_with_parent(parent: int):
     return preexec
 
 
-@functools.cache
-def _kernel32():
-    from ctypes import wintypes
-
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    kernel32.CreateJobObjectW.restype = wintypes.HANDLE
-    kernel32.CreateJobObjectW.argtypes = (ctypes.c_void_p, wintypes.LPCWSTR)
-    kernel32.SetInformationJobObject.argtypes = (
-        wintypes.HANDLE,
-        ctypes.c_int,
-        ctypes.c_void_p,
-        wintypes.DWORD,
-    )
-    kernel32.TerminateJobObject.argtypes = (wintypes.HANDLE, wintypes.UINT)
-    kernel32.OpenProcess.restype = wintypes.HANDLE
-    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
-    kernel32.AssignProcessToJobObject.argtypes = (wintypes.HANDLE, wintypes.HANDLE)
-    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
-    kernel32.GlobalMemoryStatusEx.argtypes = (ctypes.c_void_p,)
-    return kernel32
-
-
-def _windows_job() -> int:
-    from ctypes import wintypes
-
-    class BasicLimits(ctypes.Structure):
-        _fields_ = [
-            ("PerProcessUserTimeLimit", ctypes.c_int64),
-            ("PerJobUserTimeLimit", ctypes.c_int64),
-            ("LimitFlags", wintypes.DWORD),
-            ("MinimumWorkingSetSize", ctypes.c_size_t),
-            ("MaximumWorkingSetSize", ctypes.c_size_t),
-            ("ActiveProcessLimit", wintypes.DWORD),
-            ("Affinity", ctypes.c_size_t),
-            ("PriorityClass", wintypes.DWORD),
-            ("SchedulingClass", wintypes.DWORD),
-        ]
-
-    class ExtendedLimits(ctypes.Structure):
-        _fields_ = [
-            ("BasicLimitInformation", BasicLimits),
-            ("IoInfo", ctypes.c_uint64 * 6),
-            ("ProcessMemoryLimit", ctypes.c_size_t),
-            ("JobMemoryLimit", ctypes.c_size_t),
-            ("PeakProcessMemoryUsed", ctypes.c_size_t),
-            ("PeakJobMemoryUsed", ctypes.c_size_t),
-        ]
-
-    kernel32 = _kernel32()
-    job = kernel32.CreateJobObjectW(None, None)
-    if not job:
-        raise ctypes.WinError(ctypes.get_last_error())
-    limits = ExtendedLimits()
-    job_object_limit_kill_on_job_close = 0x2000
-    limits.BasicLimitInformation.LimitFlags = job_object_limit_kill_on_job_close
-    job_object_extended_limit_information = 9
-    if not kernel32.SetInformationJobObject(
-        job,
-        job_object_extended_limit_information,
-        ctypes.byref(limits),
-        ctypes.sizeof(limits),
-    ):
-        raise ctypes.WinError(ctypes.get_last_error())
-    # The handle stays open for the life of this process; when the process
-    # ends, however it ends, the system closes it and kills the job.
-    return job
-
-
-def _windows_adopt(job: int, pid: int) -> None:
-    """Put the suspended process PID in JOB, then let it run."""
-
-    from ctypes import wintypes
-
-    kernel32 = _kernel32()
-    ntdll = ctypes.WinDLL("ntdll")
-    ntdll.NtResumeProcess.argtypes = (wintypes.HANDLE,)
-    process_terminate, process_set_quota, process_suspend_resume = 0x1, 0x100, 0x800
-    handle = kernel32.OpenProcess(
-        process_terminate | process_set_quota | process_suspend_resume, False, pid
-    )
-    if not handle:
-        raise ctypes.WinError(ctypes.get_last_error())
-    try:
-        if not kernel32.AssignProcessToJobObject(job, handle):
-            raise ctypes.WinError(ctypes.get_last_error())
-        status = ntdll.NtResumeProcess(handle)
-        if status != 0:
-            raise OSError(f"NtResumeProcess failed: NTSTATUS {status & 0xFFFFFFFF:#x}")
-    finally:
-        kernel32.CloseHandle(handle)
-
-
 def free_memory_mb() -> int | None:
-    """Available physical memory, never through WMI (#246); None when unknown."""
+    """MemAvailable in /proc/meminfo, never through WMI (#246); None when unknown."""
 
-    if IS_WINDOWS:
-        from ctypes import wintypes
-
-        class MemoryStatus(ctypes.Structure):
-            _fields_ = [
-                ("dwLength", wintypes.DWORD),
-                ("dwMemoryLoad", wintypes.DWORD),
-                ("ullTotalPhys", ctypes.c_uint64),
-                ("ullAvailPhys", ctypes.c_uint64),
-                ("ullTotalPageFile", ctypes.c_uint64),
-                ("ullAvailPageFile", ctypes.c_uint64),
-                ("ullTotalVirtual", ctypes.c_uint64),
-                ("ullAvailVirtual", ctypes.c_uint64),
-                ("ullAvailExtendedVirtual", ctypes.c_uint64),
-            ]
-
-        status = MemoryStatus(dwLength=ctypes.sizeof(MemoryStatus))
-        if not _kernel32().GlobalMemoryStatusEx(ctypes.byref(status)):
-            return None
-        return int(status.ullAvailPhys // 2**20)
     try:
         with open("/proc/meminfo", encoding="ascii") as meminfo:
             for line in meminfo:
@@ -330,19 +207,8 @@ def git_dir(root: Path) -> Path | None:
     return None
 
 
-def child_python() -> str:
-    """The console interpreter: the registered task may run pythonw.exe (no window)."""
-
-    executable = Path(sys.executable)
-    if executable.name.lower() == "pythonw.exe":
-        console = executable.with_name("python.exe")
-        if console.is_file():
-            return str(console)
-    return str(executable)
-
-
 def worker_command(step_args: list[str]) -> list[str]:
-    return [child_python(), "-X", "utf8", "-m", "worker.cli", *step_args]
+    return [sys.executable, "-X", "utf8", "-m", "worker.cli", *step_args]
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -358,13 +224,10 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--trigger", choices=TRIGGERS, default="scheduler")
     parser.add_argument("--force", action="store_true", help="只給 daily")
+    # Passed by tasks registered before #314; the checkout is no longer pulled.
+    parser.add_argument("--git-pull", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
-        "--git-pull",
-        action="store_true",
-        help="起跑前在這個 checkout 跑 git pull --ff-only",
-    )
-    parser.add_argument(
-        "--claude-cli", help="原生 claude.exe，以 STOCK_CLAUDE_CLI 傳給子程序"
+        "--claude-cli", help="Claude Code CLI，以 STOCK_CLAUDE_CLI 傳給子程序"
     )
     parser.add_argument(
         "--skip-news-llm", action="store_true", help="只給 news：不跑 news-llm"
@@ -422,6 +285,7 @@ class _Job:
             "PYTHONDONTWRITEBYTECODE": "1",
             "PYTHONIOENCODING": "utf-8",
         }
+        environment.pop(JOB_LOCK_ENV, None)
         if args.claude_cli:
             environment["STOCK_CLAUDE_CLI"] = args.claude_cli
         self.environment = environment
@@ -440,7 +304,6 @@ class _Job:
         ):
             process = self.tree.start(
                 worker_command(step_args),
-                hidden=True,
                 stdin=subprocess.DEVNULL,
                 stdout=out,
                 stderr=err,
@@ -464,28 +327,14 @@ class _Job:
             )
         return code
 
-    def git_pull(self) -> tuple[str, bool]:
-        try:
-            completed = subprocess.run(
-                ["git", "-C", str(ROOT), "pull", "--ff-only"],
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                creationflags=CREATE_NO_WINDOW if IS_WINDOWS else 0,
-                timeout=max(1.0, min(600.0, self.deadline - time.monotonic())),
-                check=False,
-            )
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            return f"git pull failed to run: {exc}", False
-        output = completed.stdout.decode("utf-8", errors="replace").strip()
-        return output, completed.returncode == 0
-
     def run(self) -> tuple[int, str | None]:
         """Run the job; returns its exit code and, for news, ``news_llm_exit``."""
 
         free_mb = free_memory_mb()
         lock = FileLock(lock_path(self.data_dir, self.job))
         locked = lock.acquire()
+        if locked:
+            self.environment[JOB_LOCK_ENV] = str(lock.path)
         try:
             self.log(self._header(free_mb))
             try:
@@ -523,12 +372,6 @@ class _Job:
             (checkout_git / marker).exists() for marker in ("index.lock", "MERGE_HEAD")
         ):
             return "git_busy", detail
-        if self.args.git_pull:
-            output, pulled = self.git_pull()
-            if output:
-                self.log(f"--- git pull --ff-only{NEWLINE}{output}")
-            if not pulled:
-                return "git_pull_failed", detail
         return None, detail
 
     def _run(self, locked: bool, lock_file: Path, free_mb: int | None):
@@ -537,6 +380,11 @@ class _Job:
         news_llm_exit = None
         if job == "news":
             news_llm_exit = "not_run" if run_news_llm else "disabled"
+        image = os.environ.get(IMAGE_TAG_ENV) or "unknown"
+        head = os.environ.get(GIT_HEAD_ENV) or "unknown"
+        self.log(f"--- version image={image} head={head}")
+        if args.git_pull:
+            self.log("--- --git-pull ignored: the code is the deployed image's (#340)")
         skip_reason, detail = self._skip_reason(locked, lock_file, free_mb)
         if skip_reason:
             self.log(f"===== skipped reason={skip_reason} ({detail})")
@@ -620,30 +468,38 @@ def _minutes(limit: timedelta) -> str:
 def run(args: argparse.Namespace) -> int:
     """``worker.cli job``: run one job and return its exit code."""
 
+    problem = platform_problem()
+    if problem:
+        print(problem, file=sys.stderr)
+        return PLATFORM_EXIT
     job = _Job(args)
     code, news_llm_exit = job.run()
     summary = f"{args.job} exit={code}"
     if news_llm_exit is not None:
         summary += f" news_llm_exit={news_llm_exit}"
-    if sys.stdout is not None:  # pythonw.exe has none
-        print(f"{summary} log={job.log_path}", flush=True)
+    print(f"{summary} log={job.log_path}", flush=True)
     return code
 
 
-def run_locked(path: Path, command: list[str]) -> int:
-    """``worker.job lock``: run COMMAND while holding the lock on PATH."""
+def run_locked(path: Path, command: list[str], keep_stdin: bool = False) -> int:
+    """``worker.job lock``: run COMMAND while holding the lock on PATH.
 
+    COMMAND gets no stdin unless KEEP_STDIN: then it reads this process's.
+    """
+
+    problem = platform_problem()
+    if problem:
+        print(problem, file=sys.stderr)
+        return PLATFORM_EXIT
     lock = FileLock(path)
     if not lock.acquire():
         print(f"locked: {path}", file=sys.stderr)
         return LOCK_BUSY_EXIT
     try:
         tree = _ProcessTree()
-        # Explicit handles: without them a Windows child gets none of a pipe's.
         process = tree.start(
             command,
-            hidden=False,
-            stdin=subprocess.DEVNULL,
+            stdin=None if keep_stdin else subprocess.DEVNULL,
             stdout=sys.stdout,
             stderr=sys.stderr,
         )
@@ -663,13 +519,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     lock_parser = subparsers.add_parser("lock", help="持有 FILE 的鎖執行命令")
+    lock_parser.add_argument(
+        "--keep-stdin",
+        action="store_true",
+        help="命令讀這個程序的 stdin（deploy.sh 關閉 stdin 時結束，#340）",
+    )
     lock_parser.add_argument("file")
     lock_parser.add_argument("run", nargs=argparse.REMAINDER, help="-- 命令 參數…")
     args = parser.parse_args(argv)
     command = args.run[1:] if args.run[:1] == ["--"] else args.run
     if not command:
         parser.error("lock needs a command after --")
-    return run_locked(Path(args.file), command)
+    return run_locked(Path(args.file), command, args.keep_stdin)
 
 
 if __name__ == "__main__":

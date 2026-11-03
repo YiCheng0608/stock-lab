@@ -10,6 +10,13 @@ The result goes to stdout without a trailing newline.
                                    in the last 24 hours failed in a row (a run
                                    still running after 90 minutes counts as
                                    failed), or "skip"
+  llm-auth <db> <now>              one line "<run_type> run_id=<id>" per LLM
+                                   run type (news_llm, candidate_notes) whose
+                                   latest run, started in the last 24 hours,
+                                   had a batch fail authentication
+                                   (not_logged_in: no login, or an expired or
+                                   revoked CLAUDE_CODE_OAUTH_TOKEN), else
+                                   nothing; "skip" without the table
   daily-result <db> <date> <now>   the outcome of the daily runs for target
                                    <date> (YYYY-MM-DD): success,
                                    non_trading_day, running, none, skip, a
@@ -29,6 +36,19 @@ The result goes to stdout without a trailing newline.
                                    but without earliest_execution_date),
                                    strategy_levels (the latest finished daily
                                    run's strategy_levels step did not succeed)
+  deploy-image <deploy.json>       "deploy_image ok|violation|skip key=value ...":
+                                   the image this process runs in
+                                   (STOCK_IMAGE_TAG, STOCK_GIT_HEAD: the
+                                   scheduler container's) against the image and
+                                   HEAD tools/ops/deploy.sh recorded (#340);
+                                   skip without a record
+  monitor-beat <file> <now>        the event monitor's heartbeat (#316):
+                                   "none" without the file (no monitor yet),
+                                   "ok <age_s>", "stale <age_s> <written_at>"
+                                   past MONITOR_STALE_SECONDS, "gh_failed <polls>
+                                   <since> <error>" after MONITOR_GH_FAILED_POLLS
+                                   polls in a row with a failed gh call, or
+                                   "unreadable"
   data-check <db> <date> [--offline] [--all] [--scratch DIR]
                                    the daily data check of trading date
                                    <date> (tools/ops/data_check.py, #390):
@@ -45,6 +65,7 @@ The result goes to stdout without a trailing newline.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import sys
 from datetime import datetime, timedelta, timezone
@@ -58,8 +79,16 @@ NEWS_LLM_RUNNING_LIMIT = timedelta(minutes=90)
 # news-llm-failed counts only runs started within this window.
 RECENT_WINDOW = timedelta(hours=24)
 COMPLETE = ("success", "non_trading_day")
+# The LLM steps that call claude -p, and their reason for a failed
+# authentication (worker.news_llm.AUTH_ERROR_TEXT).
+LLM_RUN_TYPES = ("news_llm", "candidate_notes")
+AUTH_REASON = "not_logged_in"
 # Skipped rows that only point at another run of the same date.
 REFERENCE_SKIPS = ("already_complete", "already_running")
+
+# The scheduler container's version (backend/Dockerfile; worker.schedule_runs).
+IMAGE_TAG_ENV = "STOCK_IMAGE_TAG"
+GIT_HEAD_ENV = "STOCK_GIT_HEAD"
 
 
 def _connect(db: str) -> sqlite3.Connection:
@@ -141,6 +170,34 @@ def news_llm_failed(db: str, limit: int, now: str) -> str:
             break
         streak += 1
     return str(streak)
+
+
+def llm_auth(db: str, now: str) -> str:
+    current = _utc(now)
+    lines = []
+    with _connect(db) as conn:
+        if not _has_table(conn, "ingestion_runs"):
+            return "skip"
+        for run_type in LLM_RUN_TYPES:
+            row = conn.execute(
+                "SELECT id, started_at, metadata_json FROM ingestion_runs"
+                " WHERE run_type=? ORDER BY id DESC LIMIT 1",
+                (run_type,),
+            ).fetchone()
+            if row is None:
+                continue
+            run_id, started, raw = row
+            started_at = _started(started)
+            # A run of a step that stopped is not reported again every day.
+            if started_at is None or current - started_at > RECENT_WINDOW:
+                continue
+            batches = _json(raw).get("batches") or []
+            if any(
+                isinstance(batch, dict) and batch.get("reason") == AUTH_REASON
+                for batch in batches
+            ):
+                lines.append(f"{run_type} run_id={run_id}")
+    return "\n".join(lines)
 
 
 def daily_result(db: str, day: str, now: str) -> str:
@@ -314,6 +371,59 @@ def _strategy_levels(conn: sqlite3.Connection) -> str:
     )
 
 
+# The monitor polls every minute; ten minutes without a poll is a stop (#316 AC-3).
+MONITOR_STALE_SECONDS = 600
+# Ten polls in a row (ten minutes) with a failed gh call: the queue gets no PR or
+# comment events, though the monitor still beats (#316 review S2).
+MONITOR_GH_FAILED_POLLS = 10
+
+
+def monitor_beat(path: str, now: str) -> str:
+    try:
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read()
+    except FileNotFoundError:
+        return "none"
+    try:
+        beat = json.loads(text)
+        written = beat["written_at"]
+        at = datetime.fromisoformat(written.replace("Z", "+00:00"))
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return "unreadable"
+    if at.tzinfo is not None:
+        at = at.astimezone(timezone.utc).replace(tzinfo=None)
+    age = int((_utc(now) - at).total_seconds())
+    if age > MONITOR_STALE_SECONDS:
+        return f"stale {age} {written}"
+    failed = beat.get("gh_failed_polls")
+    if isinstance(failed, int) and failed >= MONITOR_GH_FAILED_POLLS:
+        error = " ".join(str(beat.get("gh_error") or "?").replace("`", "'").split())
+        return f"gh_failed {failed} {beat.get('gh_failed_since') or '?'} {error[:200]}"
+    return f"ok {age}"
+
+
+def deploy_image(path: str) -> str:
+    """The image this process runs in against the one tools/ops/deploy.sh recorded."""
+
+    try:
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read()
+    except FileNotFoundError:
+        return "deploy_image skip reason=no_deploy_record"
+    try:
+        record = json.loads(text)
+        recorded, recorded_head, tag = record["image"], record["HEAD"], record["tag"]
+    except (ValueError, KeyError, TypeError):
+        return "deploy_image violation reason=unreadable_record"
+    image = os.environ.get(IMAGE_TAG_ENV) or None
+    head = os.environ.get(GIT_HEAD_ENV) or None
+    return (
+        f"deploy_image {_state(image != recorded or head != recorded_head)}"
+        f" image={image or 'unknown'} recorded={recorded}"
+        f" head={head or 'unknown'} recorded_head={recorded_head} tag={tag}"
+    )
+
+
 def main(argv: list[str]) -> int:
     sys.stdout.reconfigure(encoding="utf-8", newline="\n")
     command, args = argv[0], argv[1:]
@@ -321,10 +431,16 @@ def main(argv: list[str]) -> int:
         out = news_llm_pending(args[0], int(args[1]))
     elif command == "news-llm-failed":
         out = news_llm_failed(args[0], int(args[1]), args[2])
+    elif command == "llm-auth":
+        out = llm_auth(args[0], args[1])
     elif command == "daily-result":
         out = daily_result(args[0], args[1], args[2])
     elif command == "invariants":
         out = invariants(args[0], args[1])
+    elif command == "monitor-beat":
+        out = monitor_beat(args[0], args[1])
+    elif command == "deploy-image":
+        out = deploy_image(args[0])
     elif command == "data-check":
         # Imported here: it loads the backend; the other checks stay stdlib only.
         from data_check import data_check
