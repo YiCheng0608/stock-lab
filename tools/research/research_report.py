@@ -296,13 +296,17 @@ def zero_day_reasons(
         ):
             total += 1
             statuses[status] += 1
-            for reason in json.loads(kind_reasons or "[]"):
-                reasons[reason] += 1
-            missing = (rationale or "").rpartition("missing=")[2]
+            own = set(json.loads(kind_reasons or "[]"))
+            # The rationale's missing= repeats a data_incomplete row's own
+            # reasons; only the ones the strategy did not give (eligibility,
+            # group score, suspension) are counted from it, once per row.
+            missing = set()
             if "missing=" in (rationale or ""):
-                for reason in missing.split(","):
-                    if reason:
-                        reasons[f"missing:{reason}"] += 1
+                missing = set(rationale.rpartition("missing=")[2].split(",")) - own
+            for reason in own:
+                reasons[reason] += 1
+            for reason in missing - {""}:
+                reasons[f"missing:{reason}"] += 1
     return reasons, statuses, total
 
 
@@ -547,6 +551,9 @@ def build(
         reasons, statuses, total = zero_day_reasons(
             con, prefix, item["name"], item["kind"], days
         )
+        all_reasons, all_statuses, all_total = zero_day_reasons(
+            con, prefix, item["name"], item["kind"], signal_days
+        )
         actionable_per_day = [
             per_day[item["name"]].get(day, (0, 0, 0))[1] for day in signal_days
         ]
@@ -560,6 +567,9 @@ def build(
             "statuses_on_zero_days": dict(statuses),
             "reasons_on_zero_days": dict(reasons.most_common()),
             "actionable_per_day": distribution(actionable_per_day),
+            "signals_all_days": all_total,
+            "statuses_all_days": dict(all_statuses),
+            "reasons_all_days": dict(all_reasons.most_common()),
         }
     both = [
         day
@@ -728,6 +738,15 @@ def markdown(result: dict[str, Any], command: str) -> str:
         top = list(item["reasons_on_zero_days"].items())[:12]
         add(
             "- 未通過原因（訊號列數，前 12）："
+            + "、".join(f"`{k}` {v:,}" for k, v in top)
+        )
+        add(
+            f"- 全期 {item['signals_all_days']:,} 列的狀態："
+            f"{json.dumps(item['statuses_all_days'], ensure_ascii=False)}"
+        )
+        top = list(item["reasons_all_days"].items())[:12]
+        add(
+            "- 全期未通過原因（訊號列數，前 12）："
             + "、".join(f"`{k}` {v:,}" for k, v in top)
         )
         add("")

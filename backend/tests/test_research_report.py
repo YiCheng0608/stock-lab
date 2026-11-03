@@ -169,6 +169,7 @@ def research_db(tmp_path) -> Path:
             returns: tuple[float | None, ...] = (),
             reasons=(),
             run_id=7,
+            missing=(),
         ):
             nonlocal signal_id
             signal_id += 1
@@ -178,12 +179,16 @@ def research_db(tmp_path) -> Path:
                 signal_date=days[day_index],
                 instrument_id=2,
                 strategy_version_id=strategy.id,
-                status="active" if actionable else "observation",
+                status="active"
+                if actionable
+                else ("data_incomplete" if missing else "observation"),
                 breakout_price=100.0 if actionable else None,
                 invalid_price=95.0 if actionable else None,
                 target_1=108.0 if actionable else None,
                 target_2=115.0 if actionable else None,
-                rationale="required inputs complete",
+                rationale=f"breakout=x; missing={','.join(missing)}"
+                if missing
+                else "required inputs complete",
                 rule_evidence_json={
                     "actionable": actionable,
                     strategy.kind: {"state": "x", "reasons": list(reasons)},
@@ -214,6 +219,14 @@ def research_db(tmp_path) -> Path:
         for day_index in (3, 4):
             signal(canonical, day_index, False, reasons=("volume_ratio_below_1_20",))
         signal(canonical, 4, False, reasons=("volume_ratio_below_1_20", "x_below"))
+        # data_incomplete: the rationale repeats its own reason and adds one.
+        signal(
+            canonical,
+            4,
+            False,
+            reasons=("a_missing",),
+            missing=("a_missing", "etf_excluded"),
+        )
         for value in (0.03, 0.03, 0.03):
             signal(ablation, 1, True, (value, None))
         signal(ablation, 3, True, (None, None))
@@ -293,8 +306,20 @@ def test_days_without_a_conditional_signal_and_what_one_removal_gives(
         "group": 1,
         "(no single removal)": 1,
     }
-    assert zero["reasons_on_zero_days"] == {"volume_ratio_below_1_20": 3, "x_below": 1}
-    assert zero["statuses_on_zero_days"] == {"observation": 3}
+    assert zero["reasons_on_zero_days"] == {
+        "volume_ratio_below_1_20": 3,
+        "x_below": 1,
+        "a_missing": 1,
+        "missing:etf_excluded": 1,
+    }
+    assert zero["statuses_on_zero_days"] == {"observation": 3, "data_incomplete": 1}
+    # Over every session: the four actionable rows fail nothing.
+    assert zero["statuses_all_days"] == {
+        "active": 4,
+        "observation": 3,
+        "data_incomplete": 1,
+    }
+    assert zero["reasons_all_days"] == zero["reasons_on_zero_days"]
     summary = (tmp_path / "out" / "summary.md").read_text("utf-8")
     assert "`breakout_v2`：2／4 天" in summary
     assert (tmp_path / "out" / "returns.svg").read_text("utf-8").startswith("<svg")
