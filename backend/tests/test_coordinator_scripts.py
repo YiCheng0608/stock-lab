@@ -1219,7 +1219,9 @@ def test_close_task_refuses_a_pr_into_a_branch_that_is_not_long_lived(
     )
     result = close.close_task(close.extra)
     assert result.returncode == 1, result.stdout + result.stderr
-    assert f"目標分支 {base} 不是 master 或長期整合分支（{INTEGRATION}）" in result.stderr
+    assert (
+        f"目標分支 {base} 不是 master 或長期整合分支（{INTEGRATION}）" in result.stderr
+    )
     assert not _run_branches(close)
     _assert_nothing_deleted(close)
 
