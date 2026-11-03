@@ -536,15 +536,47 @@ jobs:
     needs: [changes, repository, pr, backend, docker, suite, frontend, frontend-image, compose, verify]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    # Reads the runs of this workflow to tell a run cancelled for a newer one (#421).
+    permissions:
+      actions: read
     env:
       RESULTS: ${{ toJSON(needs) }}
       EVENT: ${{ github.event_name }}
+      TOKEN: ${{ github.token }}
+    # Opening a PR and labeling it start two runs on one head, and concurrency cancels the
+    # first; always() still runs required there. A needs failure is always red. A cancelled
+    # run passes only when a newer run of the same workflow, PR and head exists, whose own
+    # required then decides; otherwise it stays red (tools/ci/test_checks.py RequiredJob).
     steps:
       - name: Require every applicable check to succeed
         run: |
           python3 - <<'PY'
-          import json, os
+          import json, os, urllib.request
           jobs = json.loads(os.environ['RESULTS'])
+          failed = sorted(name for name, job in jobs.items() if job['result'] == 'failure')
+          assert not failed, f'failed: {failed}'
+          cancelled = sorted(name for name, job in jobs.items() if job['result'] == 'cancelled')
+          if cancelled:
+              assert os.environ['EVENT'] == 'pull_request', f'cancelled: {cancelled}'
+              def get(path):
+                  url = f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}/{path}"
+                  headers = {'Authorization': f"Bearer {os.environ['TOKEN']}", 'Accept': 'application/vnd.github+json'}
+                  with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=30) as response:
+                      return json.load(response)
+              run_id = int(os.environ['GITHUB_RUN_ID'])
+              run = get(f'actions/runs/{run_id}')
+              prs = {pr['number'] for pr in run['pull_requests']}
+              runs = get(f"actions/workflows/{run['workflow_id']}/runs?event=pull_request&head_sha={run['head_sha']}&per_page=100")
+              newer = sorted(
+                  other['id'] for other in runs['workflow_runs']
+                  if other['id'] > run_id
+                  and other['workflow_id'] == run['workflow_id']
+                  and other['head_sha'] == run['head_sha']
+                  and prs & {pr['number'] for pr in other['pull_requests']}
+              )
+              assert newer, f"cancelled: {cancelled}; no newer run of PR {sorted(prs)} on {run['head_sha']}"
+              print(f'Cancelled for run {newer[-1]} of the same PR head; its required decides.')
+              raise SystemExit(0)
           assert jobs['changes']['result'] == 'success', jobs
           assert jobs['repository']['result'] == 'success', jobs
           assert jobs['verify']['result'] == 'success', jobs

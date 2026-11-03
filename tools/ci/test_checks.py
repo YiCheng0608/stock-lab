@@ -1,6 +1,7 @@
 """Test routing without running product services or writing fixtures."""
 
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -993,6 +994,169 @@ class ExperimentJob(unittest.TestCase):
         (summary,) = [s for s in self.job["steps"] if s.get("name") == "Summary"]
         self.assertEqual(summary.get("if"), "always()")
         self.assertEqual(summary.get("continue-on-error"), "true")
+
+
+class RequiredJob(unittest.TestCase):
+    """A run cancelled for a newer run of the same PR head leaves required green (#421).
+
+    Opening a PR and labeling it start two runs on one head; concurrency cancels the
+    first, and its required, run by always() on needs that are all cancelled, used to be
+    a failure that kept the PR BLOCKED although the other run passed. The tests run the
+    script of required's step from ci.yml against a local stand-in for the Actions API:
+    a needs failure is still red, and a cancelled run is green only when a newer run of
+    the same workflow, PR and head exists, whose own required then decides.
+    """
+
+    RUN = 1000
+    WORKFLOW = 7
+    HEAD = "a" * 40
+    PR = 421
+
+    def setUp(self):
+        import http.server
+        import threading
+
+        import yaml
+
+        self.jobs = yaml.load(
+            (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"),
+            Loader=yaml.BaseLoader,
+        )["jobs"]
+        self.job = self.jobs["required"]
+        (step,) = self.job["steps"]
+        (self.script,) = re.findall(
+            r"^python3 - <<'PY'\n(.*)^PY$", step["run"], re.M | re.S
+        )
+        self.runs: list[dict] = []
+        self.requests: list[tuple[str, str]] = []
+        test = self
+
+        class Api(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                test.requests.append((self.path, self.headers.get("Authorization", "")))
+                own = f"/repos/o/r/actions/runs/{test.RUN}"
+                listed = f"/repos/o/r/actions/workflows/{test.WORKFLOW}/runs?"
+                if self.path == own:
+                    body = test.make_run(test.RUN)
+                elif (
+                    self.path.startswith(listed)
+                    and f"head_sha={test.HEAD}" in self.path
+                ):
+                    body = {"workflow_runs": [test.make_run(test.RUN), *test.runs]}
+                else:
+                    self.send_error(404)
+                    return
+                data = json.dumps(body).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def log_message(self, *args):
+                pass
+
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Api)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.addCleanup(self.server.server_close)
+        self.addCleanup(self.server.shutdown)
+
+    def make_run(self, run_id, *, workflow=None, head=None, pr=None):
+        return {
+            "id": run_id,
+            "workflow_id": workflow or self.WORKFLOW,
+            "head_sha": head or self.HEAD,
+            "pull_requests": [{"number": pr or self.PR}],
+        }
+
+    def results(self, result="success"):
+        needs = {name: {"result": result, "outputs": {}} for name in self.job["needs"]}
+        if result == "success":
+            needs["changes"]["outputs"] = {"python": "true", "frontend": "true"}
+        return needs
+
+    def required(self, needs, event="pull_request", api=None):
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if not k.startswith(("GITHUB_", "TOKEN"))
+        }
+        env.update(
+            RESULTS=json.dumps(needs),
+            EVENT=event,
+            TOKEN="t0ken",
+            GITHUB_API_URL=api or f"http://127.0.0.1:{self.server.server_port}",
+            GITHUB_REPOSITORY="o/r",
+            GITHUB_RUN_ID=str(self.RUN),
+        )
+        return subprocess.run(
+            [sys.executable, "-I", "-c", self.script],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+    def cancelled(self):
+        """The needs of a run concurrency cancelled seconds after it started."""
+        return self.results("cancelled")
+
+    def test_required_runs_after_any_needs_result(self):
+        # success() would skip required when a need fails, and a skipped required check
+        # passes the ruleset; cancelled() would leave a cancelled run without a verdict.
+        self.assertEqual(self.job["if"], "always()")
+
+    def test_every_check_green_passes(self):
+        result = self.required(self.results())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.requests, [])
+
+    def test_a_failed_need_is_red_even_when_a_newer_run_exists(self):
+        self.runs = [self.make_run(self.RUN + 1)]
+        for name in self.job["needs"]:
+            for others in ("success", "cancelled"):
+                with self.subTest(need=name, others=others):
+                    needs = self.results(others)
+                    needs[name]["result"] = "failure"
+                    self.assertNotEqual(self.required(needs).returncode, 0)
+
+    def test_a_cancelled_run_with_a_newer_run_of_the_same_pr_head_passes(self):
+        self.runs = [self.make_run(self.RUN - 1), self.make_run(self.RUN + 1)]
+        result = self.required(self.cancelled())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(str(self.RUN + 1), result.stdout)
+        self.assertTrue(self.requests)
+        self.assertTrue(all(auth == "Bearer t0ken" for _, auth in self.requests))
+
+    def test_a_cancelled_run_without_a_newer_run_of_the_same_pr_head_is_red(self):
+        cases = {
+            "only older runs": [self.make_run(self.RUN - 1)],
+            "another workflow": [
+                self.make_run(self.RUN + 1, workflow=self.WORKFLOW + 1)
+            ],
+            "another head": [self.make_run(self.RUN + 1, head="b" * 40)],
+            "another PR": [self.make_run(self.RUN + 1, pr=self.PR + 1)],
+        }
+        for case, runs in cases.items():
+            with self.subTest(case=case):
+                self.runs = runs
+                self.assertNotEqual(self.required(self.cancelled()).returncode, 0)
+
+    def test_a_cancelled_run_outside_a_pr_or_without_the_api_is_red(self):
+        self.runs = [self.make_run(self.RUN + 1)]
+        for event in ("push", "schedule", "workflow_dispatch"):
+            with self.subTest(event=event):
+                self.assertNotEqual(
+                    self.required(self.cancelled(), event=event).returncode, 0
+                )
+        with self.subTest(api="unreachable"):
+            result = self.required(self.cancelled(), api="http://127.0.0.1:9")
+            self.assertNotEqual(result.returncode, 0)
+
+    def test_the_job_may_read_the_runs_and_nothing_else(self):
+        self.assertEqual(self.job.get("permissions"), {"actions": "read"})
+        env = self.job["env"]
+        self.assertEqual(env.get("TOKEN"), "${{ github.token }}")
 
 
 if __name__ == "__main__":
