@@ -537,6 +537,9 @@ def test_the_same_code_on_the_other_exchange_is_not_written(env):
         "rows_checked": 0,
         "written": [],
         "pending": [],
+        "chips_checked": 0,
+        "chips_written": [],
+        "chips_pending": [],
     }
     with env() as db:
         assert _bar(db, "TPEx", "7710", DAY1) is None

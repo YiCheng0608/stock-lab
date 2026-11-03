@@ -19,11 +19,12 @@ from sqlalchemy.orm import Session
 
 from .models import NewsItem, ThemeGroup, ThemeSuggestion, ThemeSuggestionNews
 
-AGGREGATION_VERSION = "theme_suggestions_v1"
+# theme_suggestions_v2 (#413): only results of the current news prompt.
+AGGREGATION_VERSION = "theme_suggestions_v2"
 STATUS_PENDING = "pending_verification"
 # Existing product groups a suggestion is compared with by normalized name.
 MATCHED_GROUP_TYPES = ("theme", "official_industry")
-# news_v1 and news_v2 theme candidates carry no confidence (only symbol
+# news_v1 to news_v3 theme candidates carry no confidence (only symbol
 # candidates do).
 CONFIDENCE_NOT_PROVIDED = "not_provided"
 DEFAULT_LIMIT = 20

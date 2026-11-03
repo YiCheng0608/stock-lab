@@ -21,6 +21,7 @@ from app.domain import (
     CANDIDATE_SCORE_V1,
     CANDIDATE_SCORE_V2,
     CANDIDATE_SCORE_V3,
+    CANDIDATE_SCORE_V4,
     CANDIDATE_SCORE_VERSION,
     weighted_available_mean,
 )
@@ -272,6 +273,7 @@ def rows(db):
 
 
 V3_SHA256 = "2995cb22b87ff998ace16c66174aaf6b4cc4850a8d1764898eb252a688cc244e"
+V4_SHA256 = "3a9eaf719381644a8cd465b23933007df73226cfb2f03ca4371d78a3727496f1"
 
 
 def _snapshot_sha256(config):
@@ -317,8 +319,6 @@ def test_v2_differs_from_v1_only_in_its_name_and_news_prompt():
 def test_v3_differs_from_v2_only_in_its_name_and_strategy_names():
     """Changing candidate_score_v3 without a new version must fail here (#392)."""
 
-    assert CANDIDATE_SCORE is CANDIDATE_SCORE_V3
-    assert CANDIDATE_SCORE["name"] == CANDIDATE_SCORE_VERSION == "candidate_score_v3"
     assert _snapshot_sha256(CANDIDATE_SCORE_V3) == V3_SHA256
     expected = copy.deepcopy(CANDIDATE_SCORE_V2)
     expected["name"] = "candidate_score_v3"
@@ -335,6 +335,18 @@ def test_v3_differs_from_v2_only_in_its_name_and_strategy_names():
     assert CANDIDATE_SCORE_V3 == expected
     # The pool is the registry: every registered strategy, nothing else.
     assert CANDIDATE_SCORE_V3["pool"]["strategies"] == list(REGISTRY)
+
+
+def test_v4_differs_from_v3_only_in_its_name_and_news_prompt():
+    """Changing candidate_score_v4 without a new version must fail here (#413)."""
+
+    assert CANDIDATE_SCORE is CANDIDATE_SCORE_V4
+    assert CANDIDATE_SCORE["name"] == CANDIDATE_SCORE_VERSION == "candidate_score_v4"
+    assert _snapshot_sha256(CANDIDATE_SCORE_V4) == V4_SHA256
+    expected = copy.deepcopy(CANDIDATE_SCORE_V3)
+    expected["name"] = "candidate_score_v4"
+    expected["components"]["news_sentiment"]["llm_prompt_version"] = "news_v3"
+    assert CANDIDATE_SCORE_V4 == expected
 
 
 def test_score_reads_the_news_prompt_version_the_news_llm_writes():
@@ -686,7 +698,7 @@ def test_rerun_is_idempotent_and_a_new_version_keeps_old_rows(db):
 
     # The current version's pool (v1's lists breakout_v1／pullback_v1, #392).
     upgraded = copy.deepcopy(CANDIDATE_SCORE)
-    upgraded["name"] = "candidate_score_v3_fixture"
+    upgraded["name"] = "candidate_score_v4_fixture"
     upgraded["weights"] = {
         "technical": 0.25,
         "chips": 0.25,
@@ -1035,13 +1047,35 @@ def test_a_candidate_run_is_computed_at_the_clock(db, frozen_utcnow):
     assert db.scalar(select(CandidateRun.computed_at)) == frozen_utcnow.at
 
 
-def test_a_date_with_only_a_previous_version_run_still_shows_its_candidates(db):
-    """#392／#407 review M3: past dates keep their candidate_score_v2 lists.
+def test_the_read_versions_fall_back_from_v4_to_v3_to_v2():
+    from app.domain import CANDIDATE_SCORE_READ_VERSIONS
+
+    assert CANDIDATE_SCORE_READ_VERSIONS == (
+        "candidate_score_v4",
+        "candidate_score_v3",
+        "candidate_score_v2",
+    )
+
+
+@pytest.mark.parametrize(
+    ("previous", "newer"),
+    [
+        ("candidate_score_v3", "candidate_score_v4"),
+        ("candidate_score_v2", "candidate_score_v4"),
+        # #423 review: a date with v3 and v2 runs and no v4 reads v3.
+        ("candidate_score_v2", "candidate_score_v3"),
+    ],
+)
+def test_a_date_with_only_a_previous_version_run_still_shows_its_candidates(
+    db, previous, newer
+):
+    """#392／#407 review M3, #413: past dates keep their v3 and v2 lists.
 
     Runs are not recomputed when the score version changes, so a date without
-    a current-version run shows its previous-version run in /api/candidates,
-    the action list's tier 1 and the theme member table; a date with both
-    shows only the current one.
+    a current-version run (candidate_score_v4) shows its candidate_score_v3
+    run, or its candidate_score_v2 run before #392, in /api/candidates, the
+    action list's tier 1 and the theme member table; a date with two versions
+    shows only the one earlier in CANDIDATE_SCORE_READ_VERSIONS.
     """
 
     from app.candidate_view import candidate_list
@@ -1049,7 +1083,9 @@ def test_a_date_with_only_a_previous_version_run_still_shows_its_candidates(db):
     from app.domain import CANDIDATE_SCORE_READ_VERSIONS
     from app.theme_member_view import member_context
 
-    current, previous = CANDIDATE_SCORE_READ_VERSIONS
+    assert CANDIDATE_SCORE_READ_VERSIONS.index(
+        newer
+    ) < CANDIDATE_SCORE_READ_VERSIONS.index(previous)
     a = stock(db, "1101")
     signal(db, a, volume_ratio=2.0)
     db.commit()
@@ -1068,11 +1104,11 @@ def test_a_date_with_only_a_previous_version_run_still_shows_its_candidates(db):
     assert (tier[a.id].tier, tier[a.id].candidate_rank) == (1, 1)
     assert member_context(db, T, None, [a.id])["ranks"] == {a.id: 1}
 
-    # The same date's current-version run wins; the two never mix.
+    # The same date's newer run wins; the two never mix.
     db.add(
         CandidateRun(
             trading_date=T,
-            score_version=current,
+            score_version=newer,
             status="success",
             candidate_count=0,
             evaluated_signals=1,
@@ -1085,6 +1121,6 @@ def test_a_date_with_only_a_previous_version_run_still_shows_its_candidates(db):
     )
     db.commit()
     listed = candidate_list(db, T)
-    assert (listed["score_version"], listed["items"]) == (current, [])
+    assert (listed["score_version"], listed["items"]) == (newer, [])
     assert action_tier_rows(db, T)[0].tier != 1
     assert member_context(db, T, None, [a.id])["ranks"] == {}

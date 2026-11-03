@@ -1,9 +1,10 @@
 """The candidate run a page reads for a date (Issue #392, #407 review M3).
 
 ``candidate_score_v3`` replaced ``candidate_score_v2`` when the registered
-strategies replaced the superseded ones; past runs are not recomputed.  A date shows
-its run of the current version, or else its run of the previous one, so the
-dates before the switch keep their candidates and one date never mixes two
+strategies replaced the superseded ones, and ``candidate_score_v4`` replaced
+v3 with the news_v3 prompt (#413); past runs are not recomputed.  A date shows
+its run of the first version in ``CANDIDATE_SCORE_READ_VERSIONS`` it has, so
+the dates before a switch keep their candidates and one date never mixes two
 versions.  The daily writer (worker.candidates) and the LLM notes only use
 the current version.
 """
@@ -21,7 +22,7 @@ from .models import CandidateRun
 
 
 def version_order() -> Any:
-    """0 for the current version, 1 for the previous one."""
+    """The position in CANDIDATE_SCORE_READ_VERSIONS, 0 for the current version."""
 
     return case(
         *(
