@@ -533,6 +533,14 @@ full 的步驟：
 
 **Docker 不能用時**（找不到 docker、`docker compose` 不能執行，或 daemon 60 秒內沒有回應：切換常因 Docker Desktop／WSL 掛掉而失敗）：讀不到 volume，改看切換開始時與每做完一步就寫的主機側紀錄 `<work>/cutover-steps.json`（project、時間、`steps`）。紀錄的 `steps` 沒有 `verify`（serve 沒跑過）就走 early、完全不碰 Docker：checkout、enable，輔助容器與 volume 等 Docker 回來再處理。紀錄有 `verify`（serve 可能寫過 volume）或沒有紀錄（這個 `--work-dir` 沒跑過切換，或選項不同）時拒絕：先讓 Docker 回來再跑 rollback。Docker 正常時若紀錄有 `verify`、volume 卻沒有 `cutover.json`，也拒絕（狀態不明）。切換本身在 Docker 不能用時 exit 2，什麼都不改。
 
+- **紀錄只算一次**：回退（任一方式）做完時，把紀錄改名歸檔為 `<work>/cutover-steps.rolled-back-<UTC>.json`。Docker 不能用時，回退只接受還沒歸檔的紀錄；只有歸檔過的就拒絕，因為之後的切換可能用了別的 `--work-dir`，serve 可能寫過它的 volume。切換開始時，若 `--work-dir` 裡有還沒歸檔的紀錄也拒絕：先回退那次切換；確定已處理完時，手動改名歸檔。
+- **Docker 不能用而走 early 之後**：Docker 回來時，用同一組選項再跑一次 `cutover.sh rollback`。
+  - volume 沒有 `cutover.json`：照 early 刪掉輔助容器（checkout、enable 照做，結果不變）。
+  - volume 已有 `cutover.json`：切換在寫完它、還沒記 `verify` 時中斷。這時 full 會因工作已啟用而拒絕，但 serve 沒跑過，主機 DB 才是正式的。
+  - 兩種情況下 volume 都留著；要再切換時，由使用者確認後執行 `docker volume rm <project>_stock-data`。
+- **已裝回（有 `installed.json`）之後 Docker 才掛掉**：紀錄有 `verify`，回退會拒絕。等 Docker 回來，用同一組選項再跑，就是 resume（stop、checkout、enable）。容器先前已 `docker stop`，`restart: unless-stopped` 不會自己起來，等待期間不會有兩邊同時寫 DB。
+- **install 中斷**：重跑時，若 `installing.json` 記的是這次切換，回退先印一行「比對中」，再逐位元組比對主機 `stock.db` 與快照（數 GB 要幾分鐘）。若主檔已搬進備份、`-wal`／`-shm` 還在主機，就沿用 `installing.json` 的備份目錄，讓原 DB 的檔留在同一處。備份目錄已有同名檔時拒絕，不覆寫。
+
 回退後 volume、image 與停止的容器都留著，刪不刪由使用者決定。**volume 建立之後失敗就不能重跑切換**：切換只寫入 compose 新建的 volume，舊的在就拒絕；`docker volume rm <project>_stock-data` 會被 hook 擋（[AGENTS](../AGENTS.md#規則與強制手段)），由使用者確認裡面沒有要留的資料後自己刪，再從頭切換。
 
 切換在 start 之後失敗（讀回：`serve ready` 沒出現、news job 不是 0）時，部署本身已完成，腳本會這樣提示：先查原因（偶數整點 serve 自己的 news、記憶體），不要直接回退。

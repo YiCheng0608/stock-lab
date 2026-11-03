@@ -602,6 +602,49 @@ def test_a_switch_that_failed_before_serve_ran_rolls_back_to_task_scheduler(
         assert "回退方式 early" in result.out
     assert (harness.data / "stock.db").read_bytes() == host_db
     assert not (harness.data / "backups").exists()
+    # Undone: the record is archived and counts for nothing any more.
+    assert harness.record() is None
+    assert len(list(harness.work.glob("cutover-steps.rolled-back-*.json"))) == 1
+
+
+def test_a_record_of_a_switch_rolled_back_is_not_taken_for_a_later_one(harness):
+    """Third review, required fix 1: switch A (default --work-dir) failed and was rolled back;
+    switch B used --work-dir W2; Docker is down and the rollback is run without W2."""
+
+    _fail_the_switch(harness, "build")
+    assert harness.run("rollback").code == 0
+    other = harness.root / "w2"
+    switch_b = harness.run("--no-deploy", "--work-dir", other.as_posix())
+    assert switch_b.code == 3, switch_b.out  # the fakes stop it at verify
+    # B got through verify: serve wrote the volume.
+    record = other / "cutover-steps.json"
+    data = json.loads(record.read_text(encoding="utf-8"))
+    data["steps"] = SWITCH_STEPS
+    record.write_text(json.dumps(data) + "\n", encoding="utf-8", newline="\n")
+    harness.docker_down()
+    head = git(harness.checkout, "rev-parse", "HEAD")
+    before = harness.state()
+    result = harness.run("rollback")
+    assert result.code == 1, result.out
+    assert "已回退過" in result.result["reason"]
+    assert harness.state() == before
+    assert "Ready" not in (harness.fake / "tasks").read_text(encoding="utf-8")
+    assert git(harness.checkout, "rev-parse", "HEAD") == head
+    # With B's own --work-dir it waits for Docker, as a switch through verify must.
+    result = harness.run("rollback", "--work-dir", other.as_posix())
+    assert result.code == 1 and "verify" in result.result["reason"], result.out
+
+
+def test_a_switch_with_a_record_not_rolled_back_in_its_work_dir_is_refused(harness):
+    _fail_the_switch(harness, "build")
+    before = harness.state()
+    result = harness.run("--dry-run", "--no-deploy")
+    assert result.code == 1, result.out
+    assert (
+        "cutover-steps.json" in result.result["reason"]
+        and "rollback" in result.result["reason"]
+    )
+    assert harness.state() == before
 
 
 def test_without_docker_a_switch_that_got_through_verify_is_refused(harness):
@@ -745,6 +788,39 @@ def _interrupt_after_install(h: Harness) -> None:
     (h.work / "rollback" / "installed.json").unlink()
     assert (h.work / "rollback" / "installing.json").exists()
     h.tasks("daily Disabled", "news Disabled", "watchdog Disabled")
+
+
+def test_an_install_interrupted_between_the_main_file_and_its_wal_keeps_them_together(
+    harness,
+):
+    """Third review, note 2: stock.db already in the backup, its -wal still on the host."""
+
+    _ready_for_rollback(harness)
+    old = datetime(2026, 10, 31, 12, tzinfo=timezone.utc).timestamp()
+    wal = harness.data / "stock.db-wal"
+    wal.write_bytes(b"wal frames not checkpointed yet")
+    os.utime(wal, (old, old))
+    backup = harness.data / "backups" / "pre-rollback-20261101T010000Z"
+    backup.mkdir(parents=True)
+    original = (harness.data / "stock.db").read_bytes()
+    (harness.data / "stock.db").rename(backup / "stock.db")
+    (harness.work / "rollback").mkdir()
+    (harness.work / "rollback" / "installing.json").write_text(
+        json.dumps(
+            {"cutover": CUTOVER_TIME, "started": "x", "backup": backup.as_posix()}
+        )
+        + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    result = harness.run("rollback")
+    _back_on_task_scheduler(harness, result)
+    assert result.result["steps"] == ROLLBACK_STEPS
+    assert "沿用上一次中斷的備份目錄" in result.out
+    assert list((harness.data / "backups").iterdir()) == [backup]
+    assert sorted(p.name for p in backup.iterdir()) == ["stock.db", "stock.db-wal"]
+    assert (backup / "stock.db").read_bytes() == original
+    assert _host_rows(harness) == ["serve"]
 
 
 def test_a_rollback_interrupted_before_installed_json_resumes(harness):

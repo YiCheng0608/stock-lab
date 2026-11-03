@@ -71,7 +71,11 @@
 # Without Docker (no client, compose, or a daemon answering within 60 s; PR #424 second review)
 # the volume cannot be read: the switch's host-side record <work>/cutover-steps.json (written at
 # its start and after each step) decides. Steps without verify: early without touching Docker
-# (checkout, enable). With verify, or without the record: refused, Docker first.
+# (checkout, enable). With verify, or without the record: refused, Docker first. A rollback
+# that completes archives the record as cutover-steps.rolled-back-<UTC>.json, which never counts
+# (a later switch may have used another --work-dir); a switch refuses to start while an
+# unarchived record is in its --work-dir. An install interrupted with the -wal still on the
+# host reuses installing.json's backup directory, so the original stays in one place.
 # The pre-docker branch: when missing, created at --pre-docker (default HEAD; never a commit
 # with #333) with its upstream set to itself; an existing one must not hold #333 and its
 # upstream must be itself (set when unset).
@@ -338,6 +342,10 @@ if [ "$mode" = switch ]; then
   [ -f "$data_dir/stock.db" ] || refuse "資料目錄沒有 stock.db：$data_dir"
   [ -d "$data_dir/raw" ] || refuse "資料目錄沒有 raw/：$data_dir"
   [ -d "$data_dir/logs" ] || refuse "資料目錄沒有 logs/：$data_dir"
+  # The record of an earlier switch with this --work-dir that was never rolled back: a rollback
+  # archives it (cutover-steps.rolled-back-<UTC>.json), so one still here is a switch to undo.
+  [ ! -e "$switch_record" ] \
+    || refuse "$switch_record 是先前一次切換的紀錄，還沒回退：先跑 cutover.sh rollback（同一組選項）；確定那次切換已處理完時，把它改名歸檔（cutover-steps.rolled-back-<UTC>.json）再切換"
   # logs/ goes into the volume whole: a cutover.json there would read as a finished verify.
   [ ! -e "$data_dir/logs/cutover.json" ] \
     || refuse "資料目錄的 logs/ 已有 cutover.json：它會被搬進 volume，回退會誤判切換已做完 verify；先移走它"
@@ -505,10 +513,16 @@ served="" source_image="" vol_db=0 cutover_time=""
 if [ "$docker_ok" = 0 ]; then
   # A rollback must not need Docker when the switch failed because Docker did: the host-side
   # record tells whether serve could have written the volume.
-  [ -f "$switch_record" ] \
-    || refuse "Docker 不能用，且沒有 $switch_record（這個 --work-dir 沒有跑過切換，或選項不同）：讀不到 volume 就不知道 serve 有沒有寫過它；先讓 Docker 回來再跑 rollback（同一組選項）"
+  # Only a record no rollback has archived: an archived one belongs to a switch already undone,
+  # and a later switch may have used another --work-dir (PR #424 third review).
+  if [ ! -f "$switch_record" ]; then
+    archived="$(ls -1 "$work_dir"/cutover-steps.rolled-back-*.json 2>/dev/null | tail -1)"
+    [ -z "$archived" ] \
+      || refuse "Docker 不能用，而這個 --work-dir 的切換已回退過（$archived），沒有還沒回退的切換紀錄：之後的切換可能用了別的 --work-dir、serve 可能寫過 volume；先讓 Docker 回來再跑 rollback（那次切換的選項）"
+    refuse "Docker 不能用，且沒有 $switch_record（這個 --work-dir 沒有跑過切換，或選項不同）：讀不到 volume 就不知道 serve 有沒有寫過它；先讓 Docker 回來再跑 rollback（同一組選項）"
+  fi
   [ "$recorded_verify" = 0 ] \
-    || refuse "Docker 不能用，而 $switch_record 記錄切換已做完 verify（steps：$recorded）：serve 可能寫過 volume，要等 Docker 回來再跑 rollback（full）"
+    || refuse "Docker 不能用，而 $switch_record 記錄切換已做完 verify（steps：$recorded）：serve 可能寫過 volume，要等 Docker 回來再跑 rollback（full 或 resume）"
 fi
 [ "$docker_ok" = 0 ] || served="$(dk ps -a -q --filter "label=com.docker.compose.project=$project" \
   --filter label=com.docker.compose.oneoff=False | tr -d '\r')"
@@ -545,6 +559,7 @@ elif [ -z "$cutover_time" ]; then
 elif of_this_switch "$installed"; then
   way=resume
 elif of_this_switch "$installing" && [ -f "$data_dir/stock.db" ] && [ -f "$copy" ] \
+  && note "上一次回退在 install 中斷（$installing）：比對主機 stock.db 與 $copy 中（整份讀過，數 GB 要幾分鐘）" \
   && cmp -s "$copy" "$data_dir/stock.db"; then
   # The last rollback put the copy in place and stopped before installed.json: finish it.
   way=resume finish_install=1
@@ -569,7 +584,7 @@ fi
 case "$way" in
   early)
     if [ "$docker_ok" = 0 ]; then
-      note "回退方式 early（Docker 不能用）：$switch_record 記錄切換停在 verify 之前（steps：${recorded:-無}），serve 沒有跑過；主機 stock.db 不動，只切回 pre-docker 並啟用工作。輔助容器與 volume 等 Docker 回來後再處理"
+      note "回退方式 early（Docker 不能用）：$switch_record 記錄切換停在 verify 之前（steps：${recorded:-無}），serve 沒有跑過；主機 stock.db 不動，只切回 pre-docker 並啟用工作。Docker 回來後以同一組選項再跑一次 rollback 收尾輔助容器；volume 由使用者處理（OPERATIONS §6.9）"
     else
       note "回退方式 early：volume 沒有做完 verify 的切換紀錄（serve 沒有在它上面跑過），主機 stock.db 不動"
       plan helper "docker rm -f $helper（若有）；volume ${volume} 若在就留著，再切換前由使用者刪除"
@@ -649,6 +664,15 @@ grep -q '"integrity_check": "ok"' "$work_dir/rollback/counts.json" || fail "快�
 steps+=(paths)
 # 4 install
 backup="$data_dir/backups/pre-rollback-$(date -u +%Y%m%dT%H%M%SZ)"
+if of_this_switch "$installing"; then
+  # An install of this switch was interrupted: its backup keeps the original database, so the
+  # -wal and -shm still on the host join the main file there (not a second directory).
+  previous="$(sed -n 's/.*"backup": *"\([^"]*\)".*/\1/p' "$installing")"
+  if [ -n "$previous" ] && [ -d "$previous" ]; then
+    backup="$previous"
+    note "沿用上一次中斷的備份目錄 $backup"
+  fi
+fi
 mkdir -p "$backup" || fail "無法建立 $backup"
 # Before the host stock.db moves: a rerun after an interruption from here on knows it (resume
 # when the copy is in place, a clear refusal naming the backup otherwise).
@@ -656,7 +680,10 @@ printf '{"cutover": "%s", "started": "%s", "backup": %s}\n' "$cutover_time" \
   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(json_str "$(native "$backup")")" >"$installing" \
   || fail "寫不了 $installing"
 for suffix in "" -wal -shm; do
-  [ ! -e "$data_dir/stock.db$suffix" ] || mv "$data_dir/stock.db$suffix" "$backup/" || fail "搬開 stock.db$suffix 失敗"
+  [ -e "$data_dir/stock.db$suffix" ] || continue
+  [ ! -e "$backup/stock.db$suffix" ] \
+    || fail "$backup 已有 stock.db$suffix，主機也有：不覆寫備份，請人工確認哪一份是原檔"
+  mv "$data_dir/stock.db$suffix" "$backup/" || fail "搬開 stock.db$suffix 失敗"
 done
 cp "$copy" "$data_dir/stock.db.partial" && mv "$data_dir/stock.db.partial" "$data_dir/stock.db" \
   || fail "放回 stock.db 失敗（原檔在 $backup）"
@@ -704,5 +731,13 @@ if [ "$start_news" = 1 ]; then
   note "news 跑完，LastTaskResult 0"
 fi
 steps+=(enable)
+# The switch is undone: its record is archived, so neither a later switch with this --work-dir
+# nor a rollback without Docker takes it for a switch still to undo (PR #424 third review).
+if [ -f "$switch_record" ]; then
+  archive="$work_dir/cutover-steps.rolled-back-$(date -u +%Y%m%dT%H%M%SZ).json"
+  mv "$switch_record" "$archive" \
+    || fail "回退已完成，但 $switch_record 改名歸檔失敗：請手動改名成 ${archive##*/}"
+  note "切換紀錄歸檔為 $archive"
+fi
 finish done
 exit 0
