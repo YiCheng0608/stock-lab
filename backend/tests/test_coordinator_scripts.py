@@ -31,6 +31,7 @@ import socket
 import stat
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -1388,11 +1389,13 @@ def test_guard_dir_names_every_protected_path(h: Harness) -> None:
 # Run by _inner_pytest beside a copy of backend/tests/conftest.py: repositories in
 # tmp_path as this file's Harness, test_worker_job and test_verify_tools build
 # them (an empty .git directory, a .git file, a read-only git object file), one in a
-# test that then skips; with INNER_KILL=1 the last test exits the process before
-# pytest's teardown, as a killed run does.
+# test that then skips; with INNER_KILL=1 a test exits the process before pytest's
+# teardown, as a killed run does; with INNER_HOLD=<file> another keeps its repository
+# until that file exists (#422).
 INNER_TESTS = r"""
 import os
 import stat
+import time
 
 import pytest
 
@@ -1419,15 +1422,33 @@ def test_killed_after_building_one(tmp_path):
         pytest.skip("not killed")
     (tmp_path / "project" / ".git").mkdir(parents=True)
     os._exit(3)
+
+
+def test_holds_one_until_released(tmp_path):
+    hold = os.environ["INNER_HOLD"]
+    if not hold:
+        pytest.skip("not held")
+    (tmp_path / "project" / ".git").mkdir(parents=True)
+    open(hold + ".ready", "w").close()
+    deadline = time.monotonic() + 100
+    while not os.path.exists(hold) and time.monotonic() < deadline:
+        time.sleep(0.1)
+    assert os.path.exists(hold)
 """
 
 
-def _inner_pytest(
-    h: Harness, fail: bool, basetemp: str = "b", kill: bool = False
-) -> tuple[Path, subprocess.CompletedProcess]:
-    """A pytest run with --basetemp in an engineer's temp directory outside the worktree,
-    as #272 and #270 had it (C:/v270/pt/b): returns that directory and the run. Runs
-    with another BASETEMP name go to the same directory, as #279's t279/b1, bf did."""
+def _inner_run(
+    h: Harness,
+    fail: bool,
+    basetemp: str = "b",
+    kill: bool = False,
+    hold: Path | None = None,
+) -> tuple[Path, list[str], dict[str, str]]:
+    """The command and environment of a pytest run with --basetemp in an engineer's temp
+    directory outside the worktree, as #272 and #270 had it (C:/v270/pt/b): returns that
+    directory too. Runs with another BASETEMP name go to the same directory, as #279's
+    t279/b1, bf did. Every run records itself in <sandbox>/runs, never in the real
+    home (#422)."""
     inner = h.root / "inner"
     inner.mkdir(exist_ok=True)
     shutil.copyfile(Path(__file__).with_name("conftest.py"), inner / "conftest.py")
@@ -1439,12 +1460,25 @@ def _inner_pytest(
         TMPDIR=str(temp / "tmp"),
         TEMP=str(temp / "tmp"),
         TMP=str(temp / "tmp"),
+        PYTEST_RUNS_DIR=str(h.root / "runs"),
+        # An OS error text in a warning is in the console's code page otherwise.
+        PYTHONIOENCODING="utf-8",
         INNER_FAIL="1" if fail else "0",
         INNER_KILL="1" if kill else "0",
+        INNER_HOLD=str(hold) if hold else "",
     )
     command = [sys.executable, "-B", "-m", "pytest", "-p", "no:cacheprovider", "-q"]
     command += ["--rootdir", str(inner), "--confcutdir", str(inner)]
     command += ["--basetemp", str(temp / basetemp), str(inner)]
+    if hold:
+        command += ["-k", "holds_one"]
+    return temp, command, env
+
+
+def _inner_pytest(
+    h: Harness, fail: bool, basetemp: str = "b", kill: bool = False
+) -> tuple[Path, subprocess.CompletedProcess]:
+    temp, command, env = _inner_run(h, fail, basetemp, kill)
     # cwd backend: the copied conftest imports app and worker, as under CI.
     result = subprocess.run(
         command,
@@ -1464,7 +1498,7 @@ def test_a_green_pytest_run_leaves_no_repository_in_its_basetemp(h: Harness) -> 
     of a green run, so the directory passes guard_dir as it is."""
     temp, result = _inner_pytest(h, fail=False)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "1 passed, 2 skipped" in result.stdout
+    assert "1 passed, 3 skipped" in result.stdout
     assert not (temp / "b").exists(), _repositories(temp)
     assert _guard(h, temp.as_posix()) == ""
 
@@ -1504,6 +1538,139 @@ def test_a_killed_pytest_run_leaves_only_the_repository_of_the_test_it_was_in(
     assert left.startswith("b/test_killed_after_building_on"), left
     reason = _guard(h, temp.as_posix())
     assert reason.startswith("裡面有 .git（") and "test_killed" in reason, reason
+
+
+def test_the_next_run_removes_the_repository_of_a_run_that_was_killed(
+    h: Harness,
+) -> None:
+    """#422: a killed run keeps the repository of the test it was in, and the next run on
+    another basetemp never visited it (#386, #394, #392: t<issue>/ was refused by
+    close_task.sh each time). Every run now removes what the dead ones left when it
+    starts, the other files of their basetemp stay for debugging."""
+    temp, killed = _inner_pytest(h, fail=True, basetemp="full2", kill=True)
+    assert killed.returncode == 3, killed.stdout + killed.stderr
+    [left] = _repositories(temp)
+    assert left.startswith("full2/test_killed_after_building_on"), left
+    temp, green = _inner_pytest(h, fail=False, basetemp="full3")
+    assert green.returncode == 0, green.stdout + green.stderr
+    assert _repositories(temp) == []
+    assert "removed 1 .git left in" in green.stderr, green.stderr
+    assert (temp / "full2").is_dir() and not (temp / "full3").exists()
+    assert not list((h.root / "runs").iterdir())
+    assert _guard(h, temp.as_posix()) == ""
+
+
+# What #386, #394 and #392 each found in t<issue>/ (#422): the basetemp of a run that was
+# killed and the directory of the test it was in, with an empty repository.
+KILLED_RUNS = (
+    ("t386", "tmp/full2", "test_close_task_deletes_nothin0"),
+    ("t394", "pf", "test_close_task_refuses_an_ext4"),
+    ("t392", "tmp/full3", "test_close_task_takes_a_failed0"),
+)
+
+
+def test_the_next_run_removes_the_repositories_left_in_the_three_task_directories(
+    h: Harness,
+) -> None:
+    """#422: the leftovers of t386, t394 and t392 as the sessions recorded them (a record
+    in the runs directory, a marker nobody holds any more): one later run in a fourth
+    directory removes all three, and every task directory passes guard_dir as it is."""
+    runs = h.root / "runs"
+    runs.mkdir()
+    for number, (issue, basetemp, test_dir) in enumerate(KILLED_RUNS):
+        top = h.root / issue / basetemp
+        (top / test_dir / "repo" / ".git").mkdir(parents=True)
+        (top / test_dir / "repo" / "debug.txt").write_text("kept", encoding="utf-8")
+        token = f"{number:032x}"
+        (top / f".pytest-run-{token}").write_text("", encoding="utf-8")
+        (runs / f"{token}.json").write_text(
+            json.dumps({"basetemp": str(top)}), encoding="utf-8"
+        )
+        assert _guard(h, (h.root / issue).as_posix()).startswith("裡面有 .git（")
+    temp, green = _inner_pytest(h, fail=False, basetemp="b1")
+    assert green.returncode == 0, green.stdout + green.stderr
+    for issue, basetemp, test_dir in KILLED_RUNS:
+        top = h.root / issue
+        assert _repositories(top) == [], issue
+        assert _guard(h, top.as_posix()) == "", issue
+        assert (top / basetemp / test_dir / "repo" / "debug.txt").read_text(
+            encoding="utf-8"
+        ) == "kept"
+    assert not list(runs.iterdir())
+
+
+def test_a_run_that_is_still_going_keeps_its_repository_when_another_run_starts(
+    h: Harness,
+) -> None:
+    """#422: the lock on the marker tells a run that died from one that is only slow. A
+    second run starting while the first is in a test must leave its repository alone, and
+    both clear their records when they end."""
+    release = h.root / "release"
+    temp, command, env = _inner_run(h, fail=False, basetemp="going", hold=release)
+    going = subprocess.Popen(
+        command,
+        cwd=ROOT / "backend",
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+    )
+    try:
+        ready = Path(f"{release}.ready")
+        deadline = time.monotonic() + 100
+        while not ready.exists() and going.poll() is None:
+            assert time.monotonic() < deadline, "the first run never reached its test"
+            time.sleep(0.1)
+        assert ready.exists(), going.communicate()
+        temp, other = _inner_pytest(h, fail=False, basetemp="other")
+        assert other.returncode == 0, other.stdout + other.stderr
+        assert "removed" not in other.stderr, other.stderr
+        [kept] = _repositories(temp)
+        assert kept.startswith("going/test_holds_one_until_releas"), kept
+        assert len(list((h.root / "runs").glob("*.json"))) == 1
+    finally:
+        release.write_text("go", encoding="utf-8")
+        try:
+            out, err = going.communicate(timeout=100)
+        except subprocess.TimeoutExpired:
+            going.kill()
+            out, err = going.communicate()
+    assert going.returncode == 0, out + err
+    assert _repositories(temp) == [] and not (temp / "going").exists()
+    assert not list((h.root / "runs").iterdir())
+
+
+def test_a_record_whose_basetemp_was_emptied_is_dropped_without_touching_it(
+    h: Harness,
+) -> None:
+    """#422: nothing but the marker says a directory is still the basetemp of the
+    session that was recorded. A directory that lost it (pytest emptied the basetemp for
+    a new run, someone reused the path) keeps its repository; the record goes."""
+    runs = h.root / "runs"
+    runs.mkdir()
+    reused = h.root / "t11" / "b"
+    (reused / "work" / ".git").mkdir(parents=True)
+    record = runs / f"{'a' * 32}.json"
+    record.write_text(json.dumps({"basetemp": str(reused)}), encoding="utf-8")
+    _, green = _inner_pytest(h, fail=False)
+    assert green.returncode == 0, green.stdout + green.stderr
+    assert (reused / "work" / ".git").is_dir()
+    assert not record.exists()
+
+
+def test_a_record_that_cannot_be_kept_does_not_change_the_result_of_the_run(
+    h: Harness,
+) -> None:
+    """#422: the record is a convenience for the next run. With no directory to keep it
+    in, the run only warns and ends as it would have, its own basetemp cleared."""
+    (h.root / "runs").write_text(
+        "a file where the directory should be", encoding="utf-8"
+    )
+    temp, green = _inner_pytest(h, fail=False)
+    assert green.returncode == 0, green.stdout + green.stderr
+    assert "this pytest run is not recorded" in green.stderr, green.stderr
+    assert not (temp / "b").exists()
 
 
 def test_a_failed_session_keeps_its_basetemp_without_a_repository(
