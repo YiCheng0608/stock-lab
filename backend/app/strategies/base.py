@@ -1,4 +1,4 @@
-"""Strategy framework (V1_SPEC 策略版本識別): inputs, interface, shared levels.
+"""Strategy framework (docs/spec/README.md 策略版本識別): inputs, interface, shared levels.
 
 Pure calculation: nothing here reads or writes the database.  The worker
 builds one :class:`StrategyInputs` per instrument and session and hands it to

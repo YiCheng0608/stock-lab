@@ -11,7 +11,7 @@
 #   (backend/docker/entrypoint.sh); an existing stock.db stays.
 # - The scheduler only starts with `--profile scheduler`, so a development checkout runs no
 #   daily or news by itself.
-# docs/OPERATIONS.md §1.2 has the rest.
+# docs/ops/SETUP.md Docker compose has the rest.
 
 services:
   api:
@@ -21,7 +21,7 @@ services:
     environment:
       STOCK_SEED_FIXTURE: "1"
       WATCHFILES_FORCE_POLLING: "true"
-      # The pages come from WEB_PORT and call the api on another port (docs/OPERATIONS.md §1.1).
+      # The pages come from WEB_PORT and call the api on another port (docs/ops/SETUP.md 跨站請求防護).
       STOCK_API_ALLOWED_ORIGINS: http://localhost:${WEB_PORT:-8080},http://127.0.0.1:${WEB_PORT:-8080}
     volumes:
       - .:/app

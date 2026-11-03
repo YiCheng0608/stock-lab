@@ -26,7 +26,7 @@ only has to start one command:
   whoever holds that lock next knows the row's process is gone, even in a
   restarted container with another hostname (#336).
 - The dated log ``<logs>/<job>-YYYYMMDD.log`` (Taipei date) with the layout of
-  docs/OPERATIONS.md §6.3, the exit code, and removing logs older than
+  docs/ops/SCHEDULING.md 日誌與 run 記錄, the exit code, and removing logs older than
   --log-retention-days.
 
 The news job runs ``worker.cli news`` and then ``worker.cli news-llm``; the

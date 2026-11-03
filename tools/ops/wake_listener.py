@@ -36,7 +36,7 @@ another program on it, the listener exits instead of sharing it.
 
 ``GET /health`` needs no token and answers only that this is the listener, so a start
 can tell it from another program on the port. The coordinator session starts it with
-tools/ops/wake_listener_start.sh (docs/OPERATIONS.md §6.8), which does nothing while one
+tools/ops/wake_listener_start.sh (docs/ops/MONITOR.md), which does nothing while one
 answers.
 
 Usage: wake_listener.py --token-file F [--data-dir D] [--port P] [--bash B] [--orca O]

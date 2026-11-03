@@ -564,7 +564,7 @@ export type SignalTrackingResponse = {
   settlements: SignalSettlement[]
 }
 
-// User tracking plans (GET /tracking, V1_SPEC 使用者追蹤計畫): every fill and result is simulated.
+// User tracking plans (GET /tracking, docs/spec/tracking.md 使用者追蹤計畫): every fill and result is simulated.
 export type PlanStatus = 'pending' | 'triggered' | 'target_hit' | 'invalidated' | 'expired' | 'closed' | 'incomparable' | 'cancelled'
 
 export type TrackingPlan = {
@@ -910,7 +910,7 @@ export type NewsAi = {
   generated_at: string | null
 }
 
-// Group boards (docs/V1_SPEC.md hot_group_v1): GET /api/themes?board=industry|theme&limit=N.
+// Group boards (docs/spec/hot_group.md): GET /api/themes?board=industry|theme&limit=N.
 export type ThemeBoard = 'industry' | 'theme'
 export type ThemeBoardComponent = 'relative_return' | 'breadth' | 'volume_strength' | 'institutional_flow' | 'catalyst'
 
@@ -1263,7 +1263,7 @@ export type GlossaryTerm = {
   version: string
 }
 
-// GET /api/stocks/{exchange}/{symbol}/bars (docs/V1_SPEC.md 技術指標, indicators/v1).
+// GET /api/stocks/{exchange}/{symbol}/bars (docs/spec/indicators.md, indicators/v1).
 export type StockBarsInterval = 'day' | 'week'
 
 export type IndicatorField =

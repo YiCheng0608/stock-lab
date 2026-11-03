@@ -1,6 +1,6 @@
 """Identify strategy rows by their formula sub-version.
 
-``StrategyVersion.version`` stays ``1.0.0`` across a formula change (V1_SPEC),
+``StrategyVersion.version`` stays ``1.0.0`` across a formula change (docs/spec/README.md 策略版本識別),
 so a row written under the previous formula and one for the current formula
 need different identities.  Existing rows keep their id, version, config and
 snapshot; each is classified as a known formula or ``unclassified/<reason>``,

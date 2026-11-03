@@ -96,7 +96,7 @@ export function formatDate(value: string | null | undefined): string | null {
   return match ? `${match[1]}/${match[2]}/${match[3]}` : null
 }
 
-// Sub-item names and value formats, matching the V1_SPEC candidate_score_v1 component table.
+// Sub-item names and value formats, matching the docs/spec/candidate_score.md candidate_score_v1 component table.
 type SubItemSpec = { label: string; format: (value: number) => string }
 const ratio = (digits: number) => (value: number) => `${value.toFixed(digits)} 倍`
 const percent = (value: number) => `${(value * 100).toFixed(1)}%`

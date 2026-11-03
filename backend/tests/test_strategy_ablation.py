@@ -474,7 +474,7 @@ def test_a_failed_research_run_rerun_matches_one_uninterrupted_run(
     _fail_once(monkeypatch, failing, after=after)
     failed = pipeline.backtest(start, end, registry=registry)
     assert failed["run"]["status"] == "failed" and "_Boom" in failed["error"]
-    # What the failed run committed stays (V1_SPEC 3).
+    # What the failed run committed stays (docs/spec/tracking.md 3).
     assert _rows(factory, failed["run"]["id"])
 
     rows, groups = _research_result(factory, registry, start, end)

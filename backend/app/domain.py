@@ -152,7 +152,7 @@ GROUP_SCORE_WEIGHTS: dict[str, float] = {
 
 # 1.0.0 required every member (not every eligible member) to have a 5-day
 # flow and treated a member absent from the day's official institutional file
-# as missing.  1.1.0 changes only that coverage rule (V1_SPEC hot_group_v1);
+# as missing.  1.1.0 changes only that coverage rule (docs/spec/hot_group.md);
 # score rows it overwrites are archived first (group_daily_score_archive).
 HOT_GROUP_LEGACY_VERSION = "1.0.0"
 HOT_GROUP_VERSION = "1.1.0"
@@ -323,7 +323,7 @@ HOT_GROUP_CONFIG: dict[str, Any] = {
 }
 
 
-# Daily candidate ranking (V1_SPEC candidate_score_v1～v5).
+# Daily candidate ranking (docs/spec/candidate_score.md).
 # The score only orders signals the strategies already judged conditional; it
 # never changes a strategy decision and is not a win rate or expected return.
 # Any change to these dictionaries requires a new version: stored candidates
@@ -698,7 +698,7 @@ def validate_signal_status_transition(
     return ValidationResult(False, ("illegal_signal_status_transition",))
 
 
-# Observation price levels (V1_SPEC strategy_levels_v1, worker.strategy_levels):
+# Observation price levels (docs/spec/strategy_levels.md, worker.strategy_levels):
 # from the data known after T's close, the close and volume the next session
 # needs for each strategy to pass.  A change to the formulas or to the tick
 # ladder (app.strategies.levels.TICK_LADDERS) needs a new version; the rows of
@@ -713,7 +713,7 @@ STRATEGY_LEVEL_AVAILABILITY = (
 )
 
 
-# User tracking plans (V1_SPEC 使用者追蹤計畫).  pending may jump straight to an
+# User tracking plans (docs/spec/tracking.md 使用者追蹤計畫).  pending may jump straight to an
 # outcome: a fill and its exit can happen in the same session, and a run that
 # follows missed daily runs can see a fill and the end of the window at once.
 PLAN_TRACKING_VERSION = "plan_tracking_v1"

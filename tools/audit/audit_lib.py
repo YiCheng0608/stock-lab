@@ -3,7 +3,7 @@
 Standard library only, except where a stored raw capture is
 (``app.raw_paths.payload_file``, #342): no product calculation is imported, the
 audit recomputes from the stored inputs and the specification
-(docs/V1_SPEC.md), so a product bug is not reproduced by the check itself.
+(docs/spec/), so a product bug is not reproduced by the check itself.
 """
 
 from __future__ import annotations
@@ -24,11 +24,11 @@ if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 from app.raw_paths import legacy_relative, payload_file  # noqa: E402
 
-# What the audit recomputes against (V1_SPEC 技術指標); a product change of
+# What the audit recomputes against (docs/spec/indicators.md); a product change of
 # these must change the audit too (backend/tests/test_audit.py pins them).
 INDICATOR_VERSION = "indicators/v1"
 PRICE_BASIS = "as_of_date_raw_basis/v2"
-# The official reference prices are published in 0.01 units, cut (V1_SPEC 還原因子).
+# The official reference prices are published in 0.01 units, cut (docs/spec/indicators.md 還原因子).
 REFERENCE_TOLERANCE = 0.02
 # Relative tolerance of a recomputed value (stored indicators are rounded to 6 places).
 VALUE_TOLERANCE = 1e-6
@@ -190,7 +190,7 @@ def official_date(text: Any) -> str | None:
 def mid_rank(
     value: float, population: Iterable[float], better: str = "higher"
 ) -> float:
-    """V1_SPEC mid-rank percentile ``(less + (equal - 1) / 2) / (n - 1)``; 0.5 for one value."""
+    """docs/spec/candidate_score.md mid-rank percentile ``(less + (equal - 1) / 2) / (n - 1)``; 0.5 for one value."""
 
     sign = 1.0 if better == "higher" else -1.0
     target = sign * value
@@ -414,7 +414,7 @@ def action_rows(payload: Any, endpoint: str) -> list[tuple[str, str, str]] | Non
     return None
 
 
-# --- corporate-action factors (V1_SPEC 還原因子) --------------------------------
+# --- corporate-action factors (docs/spec/indicators.md 還原因子) --------------------------------
 
 # (除權息前收盤價, 除權息參考價) and (除權息前收盤價, 減除股利參考價): TPEx, then TWSE.
 EX_RIGHTS_PRICES = (
