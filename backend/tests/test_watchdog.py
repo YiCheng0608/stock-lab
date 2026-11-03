@@ -18,6 +18,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -80,11 +81,11 @@ echo "https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-1"
 
 
 class Watchdog:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, data_name: str = "data") -> None:
         self.root = root
         self.bin = root / "bin"
         self.fake = root / "fake"
-        self.data = root / "data"
+        self.data = root / data_name
         self.logs = self.data / "logs"
         for directory in (self.bin, self.fake, self.logs):
             directory.mkdir(parents=True)
@@ -98,6 +99,7 @@ class Watchdog:
         now: int = NIGHT,
         python: str | None = None,
         env: dict[str, str] | None = None,
+        cwd: Path | None = None,
         **extra: str,
     ) -> subprocess.CompletedProcess[str]:
         # env (a dict, #340) and keyword variables (#390) both reach the script.
@@ -119,6 +121,7 @@ class Watchdog:
         result = subprocess.run(
             [BASH, SCRIPT.as_posix(), *args],
             env=env,
+            cwd=cwd,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -365,6 +368,140 @@ def test_a_run_leaves_no_work_directory(wd):
     _anomaly_fixtures(wd)
     wd.run()
     assert [path.name for path in wd.logs.iterdir() if path.name.startswith(".")] == []
+
+
+# The real Python; a call of the helper (watchdog_helper.py) notes the STOCK_DATA_DIR
+# it runs with, as data_check.py reads it to find the stored raw files.
+RECORDING_PYTHON = r"""#!/usr/bin/env bash
+case "$*" in
+  *watchdog_helper.py*) printf '%s\n' "${STOCK_DATA_DIR:-}" >>"$FAKE_DIR/helper_data_dir.log" ;;
+esac
+exec "$REAL_PYTHON" "$@"
+"""
+
+
+@pytest.mark.parametrize("given", ["option", "variable"])
+def test_a_relative_data_directory_is_one_place_for_lock_log_and_database(
+    tmp_path, given
+):
+    # #326: the run that takes the lock starts the locked run from backend/, so a
+    # relative --data-dir, STOCK_DATA_DIR or --monitor-dir named one place for the
+    # lock (the caller's directory) and another for the log, the database and the
+    # heartbeat (backend/). The names are unique because backend/ has a data
+    # directory of its own.
+    token = uuid.uuid4().hex[:8]
+    wd = Watchdog(tmp_path, data_name=f"wd326-{token}")
+    queue = f"wd326-{token}-queue"
+    stray = ROOT / "backend" / wd.data.name
+    recording = wd.bin / "recpy"
+    recording.write_text(RECORDING_PYTHON, encoding="utf-8", newline="\n")
+    recording.chmod(0o755)
+    try:
+        _anomaly_fixtures(wd)
+        (tmp_path / queue).mkdir()
+        (tmp_path / queue / "monitor-heartbeat.json").write_text(
+            _beat_at(NIGHT - 601), encoding="utf-8"
+        )
+        arguments = ["--dry-run", "--monitor-dir", queue]
+        environment = {"REAL_PYTHON": Path(sys.executable).as_posix()}
+        if given == "option":
+            arguments += ["--data-dir", wd.data.name]
+        else:
+            environment["STOCK_DATA_DIR"] = wd.data.name
+        result = wd.run(
+            *arguments, cwd=tmp_path, python=recording.as_posix(), **environment
+        )
+        assert (wd.data / "locks" / "watchdog.lock").is_file()
+        # The log files, the database and the heartbeat were all found: each of
+        # these anomalies is read from one of them.
+        for key in ("daily_no_end", "news_no_log", "news_llm_pending", "monitor_stale"):
+            assert f"anomaly_planned key={key} " in result.stdout, result.stdout
+        assert "anomaly_planned key=monitor_stale " in wd.log()
+        # The helpers saw the same directory, not the relative spelling.
+        seen = set(wd.text("helper_data_dir.log").split())
+        assert seen == {wd.data.as_posix()}, seen
+        assert not stray.exists()
+    finally:
+        shutil.rmtree(stray, ignore_errors=True)
+
+
+def _left_work_directory(wd: Watchdog, name: str) -> Path:
+    path = wd.logs / name
+    path.mkdir()
+    (path / "comment.md").write_text(
+        "待使用者：left by a killed run\n", encoding="utf-8"
+    )
+    return path
+
+
+def test_work_directories_a_killed_run_left_are_removed_by_the_next_run(wd):
+    # #326: SIGKILL skips the EXIT trap, so logs/.watchdog.XXXXXX stayed for good.
+    _anomaly_fixtures(wd)
+    left = [
+        _left_work_directory(wd, ".watchdog.k3Jd9a"),
+        _left_work_directory(wd, ".watchdog.000000"),
+    ]
+    # What mktemp -d ".watchdog.XXXXXX" does not make stays: other names, a file
+    # of that name, and a link to a directory (neither removed nor followed).
+    kept = [
+        _left_work_directory(wd, ".watchdog.abcdefg"),
+        _left_work_directory(wd, ".watchdog.abc"),
+        _left_work_directory(wd, ".other.k3Jd9a"),
+    ]
+    (wd.logs / ".watchdog.file01").write_text("not a directory\n", encoding="utf-8")
+    elsewhere = wd.root / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "precious.txt").write_text("keep\n", encoding="utf-8")
+    (wd.logs / ".watchdog.link01").symlink_to(elsewhere, target_is_directory=True)
+
+    wd.run()
+
+    assert [path.exists() for path in left] == [False, False]
+    assert all(path.is_dir() for path in kept)
+    assert (wd.logs / ".watchdog.file01").is_file()
+    assert (wd.logs / ".watchdog.link01").is_symlink()
+    assert (elsewhere / "precious.txt").read_text(encoding="utf-8") == "keep\n"
+    assert wd.events()[0] == "stale_work_removed"
+    assert "count=2 " in wd.log().splitlines()[0]
+    assert ".watchdog.000000" in wd.log().splitlines()[0]
+    # The run's own work directory was not among them: its comments went out.
+    assert wd.text("gh_bodies.txt").count("待使用者：") == 3
+    wd.run(now=NIGHT + 15 * 60)
+    assert wd.events().count("stale_work_removed") == 1
+
+
+def test_a_dry_run_only_says_which_work_directories_it_would_remove(wd):
+    left = _left_work_directory(wd, ".watchdog.k3Jd9a")
+    result = wd.run("--dry-run")
+    assert "stale_work_planned count=1 " in result.stdout
+    assert ".watchdog.k3Jd9a" in result.stdout
+    assert (left / "comment.md").is_file()
+    wd.run()
+    assert not left.exists()
+
+
+def test_a_run_that_cannot_take_the_lock_leaves_the_running_ones_work_directory(wd):
+    # The run holding the lock has a work directory of its own; the next run is
+    # turned away at the lock, before it looks at the logs directory.
+    holder, _child = _hold_lock(wd)
+    running = _left_work_directory(wd, ".watchdog.run123")
+    try:
+        result = wd.run()
+    finally:
+        holder.kill()
+        holder.wait(timeout=30)
+    assert wd.events() == ["locked"], result.stdout + result.stderr
+    assert (running / "comment.md").is_file()
+
+
+def test_a_run_without_the_lock_removes_no_work_directory(wd):
+    # Without Python nothing holds the lock: another run may be going, and the
+    # directory may be its own.
+    other = _left_work_directory(wd, ".watchdog.run123")
+    wd.run(python=(wd.root / "no-python.exe").as_posix())
+    assert wd.events()[0] == "python_missing"
+    assert "stale_work_removed" not in wd.events()
+    assert (other / "comment.md").is_file()
 
 
 def test_unreadable_database_is_logged_and_not_reported_ok(wd):
