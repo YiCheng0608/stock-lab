@@ -24,6 +24,8 @@ htmlcov/
 
 # Local runtime data
 .local/
+# The scheduler's default event queue directory (docker-compose.yml, #338)
+.coordination/
 
 # Node/Vite
 frontend/node_modules/

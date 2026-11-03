@@ -12,13 +12,13 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import date, datetime, timedelta
-from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs, urlsplit
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.raw_paths import payload_file
 from app.clock import utcnow
 from app.db import SessionLocal, init_db
 from app.models import MarketSummary, RawPayload
@@ -166,7 +166,7 @@ def _report_date(endpoint: str) -> date | None:
 def _load(raw: RawPayload) -> Any:
     if not raw.payload_path or not raw.sha256:
         raise OfficialDataError(f"raw_payloads({raw.id}) has no payload path or sha256")
-    encoded = Path(raw.payload_path).read_bytes()
+    encoded = payload_file(raw.payload_path).read_bytes()
     if hashlib.sha256(encoded).hexdigest() != raw.sha256:
         raise OfficialDataError(f"raw_payloads({raw.id}) does not match its sha256")
     return json.loads(encoded)
