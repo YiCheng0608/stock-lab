@@ -422,7 +422,6 @@ def build(
         raise SystemExit(f"no backtest run {run_id} in {db}")
     prefix = f"backtest-{run_id}-%"
     strategies = run_strategies(con, prefix)
-    by_name = {item["name"]: item for item in strategies}
     rows = settlements(con, prefix)
     daily = daily_counts(con, prefix)
     signal_days = sorted({date.fromisoformat(row[1]) for row in daily})
@@ -436,9 +435,17 @@ def build(
     outcomes: dict[tuple[str, int], Counter] = defaultdict(Counter)
     incomparable: dict[tuple[str, int], Counter] = defaultdict(Counter)
     index_returns: dict[tuple[str, int], list[float]] = defaultdict(list)
-    for name, day, _instrument, horizon, comparable, value, status, executed, why in (
-        rows
-    ):
+    for (
+        name,
+        day,
+        _instrument,
+        horizon,
+        comparable,
+        value,
+        status,
+        executed,
+        why,
+    ) in rows:
         key = (name, horizon)
         day = date.fromisoformat(day)
         if comparable and value is not None:
@@ -518,13 +525,18 @@ def build(
     canonical = [item for item in strategies if not item["base"]]
     zero: dict[str, Any] = {}
     for item in canonical:
-        days = [day for day in signal_days if per_day[item["name"]].get(day, (0, 0, 0))[1] == 0]
+        days = [
+            day
+            for day in signal_days
+            if per_day[item["name"]].get(day, (0, 0, 0))[1] == 0
+        ]
         binding: Counter = Counter()
         for day in days:
             for other in strategies:
-                if other["base"] == item["name"] and per_day[other["name"]].get(
-                    day, (0, 0, 0)
-                )[1]:
+                if (
+                    other["base"] == item["name"]
+                    and per_day[other["name"]].get(day, (0, 0, 0))[1]
+                ):
                     binding[other["removed"]] += 1
             if not any(
                 per_day[other["name"]].get(day, (0, 0, 0))[1]
@@ -552,9 +564,7 @@ def build(
     both = [
         day
         for day in signal_days
-        if all(
-            per_day[item["name"]].get(day, (0, 0, 0))[1] == 0 for item in canonical
-        )
+        if all(per_day[item["name"]].get(day, (0, 0, 0))[1] == 0 for item in canonical)
     ]
     zero["all_canonical"] = {
         "zero_days": len(both),
@@ -567,7 +577,9 @@ def build(
         signal_totals[name]["signals"] += total
         signal_totals[name]["actionable"] += actionable or 0
         signal_totals[name]["data_incomplete"] += incomplete
-    distances: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+    distances: dict[str, dict[str, list[float]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
     for name, entry, invalid, target_1, target_2 in level_distances(con, prefix):
         if entry and invalid and entry > invalid:
             risk = entry - invalid
@@ -593,7 +605,11 @@ def build(
             "started_at": run[3],
             "finished_at": run[4],
         },
-        "signal_dates": {"first": start.isoformat(), "last": end.isoformat(), "sessions": len(signal_days)},
+        "signal_dates": {
+            "first": start.isoformat(),
+            "last": end.isoformat(),
+            "sessions": len(signal_days),
+        },
         "seed": seed,
         "draws": draws,
         "strategies": strategies,
@@ -625,10 +641,14 @@ def markdown(result: dict[str, Any], command: str) -> str:
     add(f"# 研究回測表格：run {run['id']}")
     add("")
     add(f"- 副本：`{result['db']}`")
-    add(f"- run：`{run['request_key']}`（{run['status']}，{run['started_at']}～{run['finished_at']}）")
+    add(
+        f"- run：`{run['request_key']}`（{run['status']}，{run['started_at']}～{run['finished_at']}）"
+    )
     span = result["signal_dates"]
     add(f"- 訊號日：{span['first']}～{span['last']}，{span['sessions']} 個交易日")
-    add(f"- 基準一：每個訊號日抽與策略同數的 `stock`／`ipo`，{result['draws']} 次，seed {result['seed']}")
+    add(
+        f"- 基準一：每個訊號日抽與策略同數的 `stock`／`ipo`，{result['draws']} 次，seed {result['seed']}"
+    )
     add(f"- 產生命令：`{command}`")
     add("")
     add("## 觸發數")
@@ -648,7 +668,9 @@ def markdown(result: dict[str, Any], command: str) -> str:
         "| 策略 | T+N | n | 平均 | p10 | p25 | 中位數 | p75 | p90 "
         "| 基準一平均（95% 區間） | 策略平均在基準一的百分位 | TAIEX 同期平均 |"
     )
-    add("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: |")
+    add(
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: |"
+    )
     for key, row in result["results"].items():
         stats, bench, taiex = row["returns"], row["benchmark"], row["taiex"]
         if not stats["n"]:
@@ -700,9 +722,14 @@ def markdown(result: dict[str, Any], command: str) -> str:
             "- 只移除一個條件就有訊號的天數："
             + json.dumps(item["single_removal_gives_a_signal"], ensure_ascii=False)
         )
-        add(f"- 這些天的訊號狀態：{json.dumps(item['statuses_on_zero_days'], ensure_ascii=False)}")
+        add(
+            f"- 這些天的訊號狀態：{json.dumps(item['statuses_on_zero_days'], ensure_ascii=False)}"
+        )
         top = list(item["reasons_on_zero_days"].items())[:12]
-        add("- 未通過原因（訊號列數，前 12）：" + "、".join(f"`{k}` {v:,}" for k, v in top))
+        add(
+            "- 未通過原因（訊號列數，前 12）："
+            + "、".join(f"`{k}` {v:,}" for k, v in top)
+        )
         add("")
     return "\n".join(lines) + "\n"
 
@@ -800,11 +827,17 @@ def svg_ablations(result: dict[str, Any]) -> str:
         base = totals.get(item["base"], {}).get("actionable") or 0
         own = totals.get(item["name"], {}).get("actionable") or 0
         means = [
-            result["results"].get(f"{item['name']}:T+{h}", {}).get("returns", {}).get("mean")
+            result["results"]
+            .get(f"{item['name']}:T+{h}", {})
+            .get("returns", {})
+            .get("mean")
             for h in HORIZONS
         ]
         base_means = [
-            result["results"].get(f"{item['base']}:T+{h}", {}).get("returns", {}).get("mean")
+            result["results"]
+            .get(f"{item['base']}:T+{h}", {})
+            .get("returns", {})
+            .get("mean")
             for h in HORIZONS
         ]
         rows.append((item["name"], own / base if base else None, means, base_means))
@@ -826,7 +859,9 @@ def svg_ablations(result: dict[str, Any]) -> str:
             parts.append(
                 f'<rect x="{left}" y="{y}" width="{w:.1f}" height="14" fill="#9db4cf"/>'
             )
-            parts.append(f'<text x="{left + w + 4:.1f}" y="{y + 12}">{ratio:.2f}×</text>')
+            parts.append(
+                f'<text x="{left + w + 4:.1f}" y="{y + 12}">{ratio:.2f}×</text>'
+            )
         text = "　".join(
             f"T+{h} {pct(m)}（原 {pct(b)}）"
             for h, m, b in zip(HORIZONS, means, base_means)
@@ -859,16 +894,26 @@ def main(argv: list[str] | None = None) -> int:
     (out / "summary.md").write_text(markdown(result, command), encoding="utf-8")
     with (out / "daily.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
-        writer.writerow(["strategy", "signal_date", "signals", "actionable", "data_incomplete"])
+        writer.writerow(
+            ["strategy", "signal_date", "signals", "actionable", "data_incomplete"]
+        )
         writer.writerows(daily_rows)
-    with (out / "benchmark_means.csv").open("w", newline="", encoding="utf-8") as handle:
+    with (out / "benchmark_means.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as handle:
         writer = csv.writer(handle)
         writer.writerow(["strategy_horizon", "draw", "mean"])
         for key, means in benchmark_means.items():
             writer.writerows((key, index, value) for index, value in enumerate(means))
-    (out / "returns.svg").write_text(svg_returns(result, benchmark_means), encoding="utf-8")
+    (out / "returns.svg").write_text(
+        svg_returns(result, benchmark_means), encoding="utf-8"
+    )
     (out / "ablations.svg").write_text(svg_ablations(result), encoding="utf-8")
-    print(json.dumps({"out": str(out.resolve()), "run": result["run"]}, ensure_ascii=False))
+    print(
+        json.dumps(
+            {"out": str(out.resolve()), "run": result["run"]}, ensure_ascii=False
+        )
+    )
     return 0
 
 

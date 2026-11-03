@@ -57,7 +57,9 @@ def hold_return(rate: float, horizon: int) -> float:
     return (1.0 + rate) ** horizon / BUY - 1.0 - COST
 
 
-def bar(instrument_id: int, day: date, close: float, open_: float, **extra) -> MarketBar:
+def bar(
+    instrument_id: int, day: date, close: float, open_: float, **extra
+) -> MarketBar:
     return MarketBar(
         instrument_id=instrument_id,
         trading_date=day,
@@ -138,7 +140,9 @@ def research_db(tmp_path) -> Path:
             request_key="technical-backtest:v1:x:y:research:breakout_v2,breakout_v2_ablate_group",
         )
         db.add(run)
-        db.add(IngestionRun(id=8, run_type="backtest", source="other", run_date=days[-1]))
+        db.add(
+            IngestionRun(id=8, run_type="backtest", source="other", run_date=days[-1])
+        )
         canonical = StrategyVersion(
             id=1, name="breakout_v2", version="2.0.0", kind="breakout", config_json={}
         )
@@ -158,8 +162,14 @@ def research_db(tmp_path) -> Path:
         db.flush()
         signal_id = 0
 
-        def signal(strategy: StrategyVersion, day_index: int, actionable: bool,
-                   returns: tuple[float | None, ...] = (), reasons=(), run_id=7):
+        def signal(
+            strategy: StrategyVersion,
+            day_index: int,
+            actionable: bool,
+            returns: tuple[float | None, ...] = (),
+            reasons=(),
+            run_id=7,
+        ):
             nonlocal signal_id
             signal_id += 1
             row = Signal(
@@ -186,10 +196,14 @@ def research_db(tmp_path) -> Path:
                         signal_id=signal_id,
                         horizon=horizon,
                         settlement_date=days[day_index + 1],
-                        final_status="target_1_hit" if value is not None else "incomparable",
+                        final_status="target_1_hit"
+                        if value is not None
+                        else "incomparable",
                         return_or_risk=value,
                         comparable=value is not None,
-                        execution_date=days[day_index + 1] if value is not None else None,
+                        execution_date=days[day_index + 1]
+                        if value is not None
+                        else None,
                     )
                 )
 
@@ -242,7 +256,9 @@ def test_the_tables_of_a_run_and_benchmark_one_are_what_the_bars_give(
     assert canonical["benchmark"]["instruments_per_draw"] == 3
     means = [
         float(line.split(",")[2])
-        for line in (tmp_path / "out" / "benchmark_means.csv").read_text().splitlines()[1:]
+        for line in (tmp_path / "out" / "benchmark_means.csv")
+        .read_text()
+        .splitlines()[1:]
         if line.startswith("breakout_v2:T+5,")
     ]
     assert len(means) == 5
