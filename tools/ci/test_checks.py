@@ -997,7 +997,7 @@ class ExperimentJob(unittest.TestCase):
 
 
 class RequiredJob(unittest.TestCase):
-    """A run cancelled for a newer run of the same PR head leaves required green (#421).
+    """A run cancelled for another run of the same PR head leaves required green (#421).
 
     Opening a PR and labeling it start two runs on one head; concurrency cancels the
     first, and its required, run by always() on needs that are all cancelled, used to be
@@ -1061,12 +1061,27 @@ class RequiredJob(unittest.TestCase):
         self.addCleanup(self.server.server_close)
         self.addCleanup(self.server.shutdown)
 
-    def make_run(self, run_id, *, workflow=None, head=None, pr=None):
+    def make_run(
+        self,
+        run_id,
+        *,
+        workflow=None,
+        head=None,
+        pr=None,
+        created=None,
+        conclusion=None,
+    ):
+        # A run's created_at follows its id unless given: the same second can hold two
+        # runs whose ids are in either order (PR #432: 41686965825 was cancelled while
+        # 41686965798, created the same second, went on).
+        second = 30 + run_id - self.RUN
         return {
             "id": run_id,
             "workflow_id": workflow or self.WORKFLOW,
             "head_sha": head or self.HEAD,
             "pull_requests": [{"number": pr or self.PR}],
+            "created_at": created or f"2026-11-03T17:43:{second:02d}Z",
+            "conclusion": conclusion,
         }
 
     def results(self, result="success"):
@@ -1128,9 +1143,24 @@ class RequiredJob(unittest.TestCase):
         self.assertTrue(self.requests)
         self.assertTrue(all(auth == "Bearer t0ken" for _, auth in self.requests))
 
+    def test_a_cancelled_run_with_a_lower_id_run_of_the_same_second_passes(self):
+        # PR #432: opening the PR and labeling it created both runs at 17:43:21Z, and
+        # concurrency cancelled the one with the higher id.
+        same = "2026-11-03T17:43:30Z"
+        self.runs = [self.make_run(self.RUN - 27, created=same)]
+        result = self.required(self.cancelled())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(str(self.RUN - 27), result.stdout)
+
     def test_a_cancelled_run_without_a_newer_run_of_the_same_pr_head_is_red(self):
         cases = {
             "only older runs": [self.make_run(self.RUN - 1)],
+            "a later run that was cancelled too": [
+                self.make_run(self.RUN + 1, conclusion="cancelled")
+            ],
+            "an earlier run that finished": [
+                self.make_run(self.RUN - 1, conclusion="success")
+            ],
             "another workflow": [
                 self.make_run(self.RUN + 1, workflow=self.WORKFLOW + 1)
             ],
