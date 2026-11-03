@@ -338,7 +338,10 @@ def test_a_group_deactivated_before_the_rebuild_keeps_its_rank_on_old_sessions(
         assert _percentiles(db, OLD) == {"G1": 1.0, "G2": 0.0}
         assert _percentiles(db, NEW) == {"G3": 1.0, "G1": 0.5, "G2": 0.0}
         assert after[(OLD, "G2")].score != before[(OLD, "G2")]
-        assert after[(OLD, "G2")].details_json["hot_group_version"]
+        assert (
+            after[(OLD, "G2")].details_json["hot_group_version"]
+            == pipeline.HOT_GROUP_VERSION
+        )
         # No rank is cleared, so nothing is archived for it.
         assert _cleared_ranks(db) == []
         # The rebuild does not touch a group's ``active`` flag.

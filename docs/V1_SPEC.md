@@ -85,7 +85,7 @@ membership 必須在 score date 有效；每個股票榜或 ETF 類別分區至�
 
 **版本**：`StrategyVersion`（`hot_group_v1`、`1.1.0`、`institutional-flow/v2-shares-per-share-volume`）。`1.0.0` 要求全部成員（不是合格成員）都有法人值，也不把官方檔未列記 0；它的 `StrategyVersion` 列不改。分數列在 `details_json.hot_group_version` 記寫入版本，沒有這個欄位的列是 1.0.0 寫的。`group_daily_scores` 每個群組每日只有一列；較新版本要改寫舊版本寫的列（含 `--rescore-days` 重算清除停用群組的名次）之前，會在同一 transaction 內把舊列原樣複製到 `group_daily_score_archive`。封存表記原列 id、寫入版本、`archive_reason`、`archived_at`，每個（群組、日期、版本）只保存一份，API 不讀封存表。
 
-**重算舊分數日**：daily 替當天全部 active 群組打分數。`corporate-actions rebuild`（[OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)）以更正後的價格與因子重算舊分數日時，群組固定為那天原本就有分數列的群組，percentile 與排名只在這些群組的同榜之間計算，不新增（日期、群組）列；那天之後才有分數的群組不補到那天（#409）。這個集合就是那天的排名母體，不看現在的 `active`：現在已停用的群組也在其中，照樣重算並保留 rank（#412）。`industry repair`／`instruments repair` 的 `--rescore-days` 重算最近幾個交易日的全部 active 群組，停用群組不重算、清掉那天的 rank（原列先封存）。
+**重算舊分數日**：daily 替當天全部 active 群組打分數。`corporate-actions rebuild`（[OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)）以更正後的價格與因子重算舊分數日時，群組固定為那天原本就有分數列的群組，percentile 與排名只在這些群組的同榜之間計算，不新增（日期、群組）列；那天之後才有分數的群組不補到那天（#409）。這個集合就是那天的排名母體，不看現在的 `active`：現在已停用的群組也在其中，照樣重算並保留 rank（#412）。頁面與 API 只顯示現在 active 的群組，所以舊日榜單上 active 群組的 rank 可能不從 1 起算、中間跳號（停用群組占了名次但不顯示），這是預期結果，不是排名錯誤。`industry repair`／`instruments repair` 的 `--rescore-days` 重算最近幾個交易日的全部 active 群組，停用群組不重算、清掉那天的 rank（原列先封存）。
 
 ## candidate_score_v1
 
