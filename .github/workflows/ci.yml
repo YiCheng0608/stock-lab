@@ -545,8 +545,9 @@ jobs:
       TOKEN: ${{ github.token }}
     # Opening a PR and labeling it start two runs on one head, and concurrency cancels the
     # first; always() still runs required there. A needs failure is always red. A cancelled
-    # run passes only when a newer run of the same workflow, PR and head exists, whose own
-    # required then decides; otherwise it stays red (tools/ci/test_checks.py RequiredJob).
+    # run passes only when another run of the same workflow, PR and head, created no
+    # earlier and not cancelled, exists, whose own required then decides; otherwise it
+    # stays red (tools/ci/test_checks.py RequiredJob).
     steps:
       - name: Require every applicable check to succeed
         run: |
@@ -567,15 +568,20 @@ jobs:
               run = get(f'actions/runs/{run_id}')
               prs = {pr['number'] for pr in run['pull_requests']}
               runs = get(f"actions/workflows/{run['workflow_id']}/runs?event=pull_request&head_sha={run['head_sha']}&per_page=100")
-              newer = sorted(
+              # Another run of the same workflow, PR and head, created no earlier than this one
+              # and not cancelled, is the one concurrency kept. Ids do not order runs created
+              # the same second: in PR #432 the higher id was the one cancelled.
+              kept = sorted(
                   other['id'] for other in runs['workflow_runs']
-                  if other['id'] > run_id
+                  if other['id'] != run_id
+                  and other.get('conclusion') != 'cancelled'
+                  and other['created_at'] >= run['created_at']
                   and other['workflow_id'] == run['workflow_id']
                   and other['head_sha'] == run['head_sha']
                   and prs & {pr['number'] for pr in other['pull_requests']}
               )
-              assert newer, f"cancelled: {cancelled}; no newer run of PR {sorted(prs)} on {run['head_sha']}"
-              print(f'Cancelled for run {newer[-1]} of the same PR head; its required decides.')
+              assert kept, f"cancelled: {cancelled}; no other run of PR {sorted(prs)} on {run['head_sha']} goes on"
+              print(f'Cancelled for run {kept[-1]} of the same PR head; its required decides.')
               raise SystemExit(0)
           assert jobs['changes']['result'] == 'success', jobs
           assert jobs['repository']['result'] == 'success', jobs
