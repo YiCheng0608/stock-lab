@@ -332,7 +332,7 @@ HOT_GROUP_CONFIG: dict[str, Any] = {
 # which identify strategy rows.  CANDIDATE_SCORE is the current version.
 # The pool lists its strategies by name: a strategy added to the registry
 # enters the candidate list only with a new score version.
-CANDIDATE_SCORE_VERSION = "candidate_score_v3"
+CANDIDATE_SCORE_VERSION = "candidate_score_v4"
 # Prompt version of the candidate LLM notes (worker.candidate_notes); the
 # API shows this version first.
 CANDIDATE_NOTE_PROMPT_VERSION = "candidate_notes_v1"
@@ -464,12 +464,20 @@ for _item in ("volume_ratio", "distance"):
             _technical[_key] = {
                 _V3_STRATEGIES[name]: value for name, value in _technical[_key].items()
             }
-CANDIDATE_SCORE = CANDIDATE_SCORE_V3
+# candidate_score_v4 (#413): candidate_score_v3 with the news direction read
+# from the news_v3 prompt (theme candidates checked against the source), the
+# news LLM's version from then on.  Only the name and the prompt change.
+CANDIDATE_SCORE_V4: dict[str, Any] = json.loads(json.dumps(CANDIDATE_SCORE_V3))
+CANDIDATE_SCORE_V4["name"] = "candidate_score_v4"
+CANDIDATE_SCORE_V4["components"]["news_sentiment"]["llm_prompt_version"] = "news_v3"
+CANDIDATE_SCORE = CANDIDATE_SCORE_V4
 # The run versions the pages read, current first (#407 review M3): a date
-# without a run of the current version shows its candidate_score_v2 run, as
-# its signals show breakout_v1／pullback_v1; one date never reads two versions
-# (app.candidate_runs).
+# without a run of a version shows its run of the next one in this list, so
+# the dates before #413 show candidate_score_v3 and those before #392 show
+# candidate_score_v2 (as their signals show breakout_v1／pullback_v1); one
+# date never reads two versions (app.candidate_runs).
 CANDIDATE_SCORE_READ_VERSIONS: tuple[str, ...] = (
+    CANDIDATE_SCORE_V4["name"],
     CANDIDATE_SCORE_V3["name"],
     CANDIDATE_SCORE_V2["name"],
 )

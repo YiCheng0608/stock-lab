@@ -7,7 +7,10 @@ go to news_llm_results, one row per item and prompt version, so the rule
 relations and source summary on news_items are never overwritten and older
 prompt versions stay.  Older items are marked ``skipped_stale`` and not sent.
 An item whose summary writes a number its Chinese source does not is stored
-``rejected`` without AI fields and is not sent again.
+``rejected`` without AI fields and is not sent again.  A theme candidate
+whose quoted evidence is not in the source, or whose name the source neither
+writes nor directly gives (``theme_check``), is left out of the stored result
+and recorded in data_quality; the rest of the item is stored as usual.
 
 A failing batch (timeout, invalid JSON, schema mismatch) marks its items
 ``pending`` with the reason and the other batches still run; pending items
@@ -38,17 +41,25 @@ from sqlalchemy.orm import Session
 
 from app.clock import utcnow
 from app.db import SessionLocal
-from app.models import IngestionRun, NewsItem, NewsLlmResult
+from app.models import (
+    GroupMembership,
+    IngestionRun,
+    Instrument,
+    NewsItem,
+    NewsLlmResult,
+    ThemeGroup,
+)
+from app.theme_suggestions import MATCHED_GROUP_TYPES
 
 from . import sources
 from .news_sources import TAIPEI
-from .pipeline import _upsert_raw_payload
+from .pipeline import _upsert_quality, _upsert_raw_payload
 
-PROMPT_VERSION = "news_v2"
+PROMPT_VERSION = "news_v3"
 PROMPT_PATH = Path(__file__).with_name("prompts") / f"{PROMPT_VERSION}.md"
 # Pinned hash of the prompt text (LF line endings).  Editing the prompt
 # without a new PROMPT_VERSION fails the prompt version test.
-PROMPT_SHA256 = "53c986c613b08e0a5336ad6c3248b19985ffcf76272144256a948b6bc7dddb47"
+PROMPT_SHA256 = "185471b05ec09ab6bc7c85ad79fdbb6bad396b8b587ae31efb9b1995ae699237"
 # sonnet since #262: with news_v2, haiku summaries still wrote facts the
 # source does not (AC-3 rounds 1 and 2); sonnet had none on the same items.
 MODEL = "sonnet"
@@ -68,6 +79,7 @@ SUMMARY_INPUT_CHARS = 600
 SUMMARY_MAX_CHARS = 80
 REASON_MAX_CHARS = 120
 THEME_MAX_CHARS = 40
+EVIDENCE_MAX_CHARS = 40
 RATIONALE_MAX_CHARS = 120
 CLI_ENV = "STOCK_CLAUDE_CLI"
 # Removed from the child environment: session variables of a parent Claude
@@ -119,6 +131,15 @@ _SYMBOL = re.compile(SYMBOL_PATTERN)
 _HAN = re.compile(r"[\u4e00-\u9fff]")
 _NUMBER = re.compile(r"\d+(?:\.\d+)?")
 _THOUSANDS_COMMA = re.compile(r"(?<=\d),(?=\d{3}(?!\d))")
+# Theme check (news_v3, #413); see theme_check.
+THEME_CHECK_ENTITY = "news_llm_theme"
+THEME_CHECK_STATUS = "theme_dropped"
+_WHITESPACE = re.compile(r"\s+")
+# One unit per Han character and per run of ASCII letters and digits.
+_THEME_UNIT = re.compile(r"[\u4e00-\u9fff]|[0-9a-z]+")
+# Quote marks and ellipses a model puts around a copied excerpt.
+_EVIDENCE_EDGES = "「」『』\"'“”‘’…。，、,.:："
+_GROUP_NAME_PARTS = re.compile(r"[／/、]")
 
 _CANDIDATE_SYMBOL = {
     "type": "object",
@@ -133,10 +154,11 @@ _CANDIDATE_SYMBOL = {
 _CANDIDATE_THEME = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["theme", "reason"],
+    "required": ["theme", "reason", "evidence"],
     "properties": {
         "theme": {"type": "string", "maxLength": THEME_MAX_CHARS},
         "reason": {"type": "string", "maxLength": REASON_MAX_CHARS},
+        "evidence": {"type": "string", "maxLength": EVIDENCE_MAX_CHARS},
     },
 }
 _ITEM_FIELDS = (
@@ -364,6 +386,178 @@ def summary_numbers_missing(payload: dict[str, Any], summary: str) -> list[str]:
     return list(dict.fromkeys(n for n in _numbers(summary) if n not in written))
 
 
+def _key(text: str) -> str:
+    """NFKC, casefolded, all whitespace removed (like ``theme_key``)."""
+
+    return _WHITESPACE.sub("", unicodedata.normalize("NFKC", text)).casefold()
+
+
+def _units(text: str) -> list[str]:
+    return _THEME_UNIT.findall(unicodedata.normalize("NFKC", text).casefold())
+
+
+def _source_text(payload: dict[str, Any]) -> str:
+    return f"{payload.get('title') or ''}\n{payload.get('summary') or ''}"
+
+
+def source_language(payload: dict[str, Any]) -> str:
+    return "chinese" if _HAN.search(_source_text(payload)) else "non_chinese"
+
+
+def group_name_keys(*names: str | None) -> set[str]:
+    """Keys of a group's names and of each part of a name like 矽光子／光通訊."""
+
+    keys: set[str] = set()
+    for name in names:
+        for part in [name or "", *_GROUP_NAME_PARTS.split(name or "")]:
+            if _key(part):
+                keys.add(_key(part))
+    return keys
+
+
+def _written_in(theme: str, text: str) -> bool:
+    """``theme`` (a ``_key``) is written in ``text``, spaces aside.
+
+    ``text`` keeps its whitespace (NFKC and casefold only), and any run of
+    whitespace may sit between two characters of the theme, so AI 網通 is
+    found in AI網通.  An end of the theme that is an ASCII letter or digit must
+    not continue with one in the text, so AI is not found in said or again.
+    """
+
+    pattern = r"\s*".join(re.escape(char) for char in theme)
+    before = "(?<![0-9a-z])" if theme[:1].isascii() and theme[:1].isalnum() else ""
+    after = "(?![0-9a-z])" if theme[-1:].isascii() and theme[-1:].isalnum() else ""
+    return re.search(f"{before}{pattern}{after}", text) is not None
+
+
+def _names_match(theme: str, name: str) -> bool:
+    # One contains the other and the shorter has two characters or more, so
+    # 半導體 matches 半導體 and 光通訊 matches a part of 矽光子／光通訊.
+    shorter = min(theme, name, key=len)
+    return len(shorter) >= 2 and (theme in name or name in theme)
+
+
+def theme_check(
+    payload: dict[str, Any],
+    candidate: dict[str, Any],
+    group_names: set[str] | frozenset[str] = frozenset(),
+) -> str | None:
+    """The cause a theme candidate is dropped for, or None to keep it.
+
+    ``evidence_not_in_source``: the evidence, compared after NFKC, casefold,
+    removing whitespace and the quote marks around it, is not a run of the
+    sent title or of the sent summary.  ``theme_not_in_source``: none of
+    A. the theme's key is in the title or summary (an ASCII end of it not
+       inside a longer ASCII word);
+    B. the theme matches a name in ``group_names`` (the groups the item's
+       rule-matched instruments belong to on its news date);
+    C. more than half of the theme's units (each Han character, each run of
+       ASCII letters and digits) are in the title or summary, so a two-unit
+       theme needs both (#423 review: 電子檢測 had 2 of 4 from 其他電子).
+    A source without Chinese text passes C only with ASCII units, so in
+    effect only A and B: a Chinese theme name has no deterministic match in
+    English text.
+    """
+
+    fields = [_key(payload.get("title") or ""), _key(payload.get("summary") or "")]
+    evidence = _key(candidate.get("evidence") or "").strip(_EVIDENCE_EDGES)
+    if not evidence or not any(evidence in field for field in fields):
+        return "evidence_not_in_source"
+    theme = _key(candidate.get("theme") or "")
+    if not theme:
+        return "theme_not_in_source"
+    texts = [
+        unicodedata.normalize("NFKC", payload.get(name) or "").casefold()
+        for name in ("title", "summary")
+    ]
+    if any(_written_in(theme, text) for text in texts):
+        return None
+    if any(_names_match(theme, name) for name in group_names):
+        return None
+    units = _units(candidate["theme"])
+    written = set(_units(_source_text(payload)))
+    if units and 2 * sum(unit in written for unit in units) > len(units):
+        return None
+    return "theme_not_in_source"
+
+
+def _news_date(item: NewsItem) -> date | None:
+    moment = item.published_at or item.collected_at
+    # UTC-naive; the Taipei calendar day.
+    return (moment + timedelta(hours=8)).date() if moment else None
+
+
+def theme_group_names(db: Session, items: Sequence[NewsItem]) -> dict[int, set[str]]:
+    """Group name keys of each item's rule-matched instruments on its news date.
+
+    ``symbols_json`` holds bare codes or ``exchange:code``; a bare code matches
+    every exchange.  Only active official industries and theme table themes
+    count (``MATCHED_GROUP_TYPES``), with a membership valid on the day.
+    """
+
+    wanted: dict[int, list[tuple[str, str]]] = {}
+    for item in items:
+        for value in item.symbols_json or []:
+            if isinstance(value, str) and value.strip():
+                exchange, _, symbol = value.strip().rpartition(":")
+                wanted.setdefault(item.id, []).append((exchange, symbol))
+    symbols = {symbol for pairs in wanted.values() for _, symbol in pairs}
+    if not symbols:
+        return {}
+    rows = db.execute(
+        select(
+            Instrument.exchange,
+            Instrument.symbol,
+            GroupMembership.valid_from,
+            GroupMembership.valid_to,
+            ThemeGroup.name,
+            ThemeGroup.display_name_zh,
+        )
+        .join(GroupMembership, GroupMembership.instrument_id == Instrument.id)
+        .join(ThemeGroup, ThemeGroup.id == GroupMembership.group_id)
+        .where(
+            Instrument.symbol.in_(symbols),
+            ThemeGroup.active.is_(True),
+            ThemeGroup.group_type.in_(MATCHED_GROUP_TYPES),
+        )
+    ).all()
+    result: dict[int, set[str]] = {}
+    for item in items:
+        day = _news_date(item)
+        if day is None:
+            continue
+        names: set[str] = set()
+        for exchange, symbol in wanted.get(item.id, []):
+            for row in rows:
+                if row.symbol != symbol or (exchange and row.exchange != exchange):
+                    continue
+                if row.valid_from > day or (row.valid_to and row.valid_to < day):
+                    continue
+                names |= group_name_keys(row.name, row.display_name_zh)
+        if names:
+            result[item.id] = names
+    return result
+
+
+def split_theme_candidates(
+    payload: dict[str, Any],
+    candidates: list[dict[str, Any]],
+    group_names: set[str] | frozenset[str] = frozenset(),
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """(kept, dropped); a dropped one carries its cause and source language."""
+
+    kept: list[dict[str, Any]] = []
+    dropped: list[dict[str, Any]] = []
+    language = source_language(payload)
+    for candidate in candidates:
+        cause = theme_check(payload, candidate, group_names)
+        if cause is None:
+            kept.append(candidate)
+        else:
+            dropped.append({**candidate, "cause": cause, "source_language": language})
+    return kept, dropped
+
+
 def _candidates_query(db: Session, on_date: date | None):
     """Active items without a settled result for the current prompt."""
 
@@ -539,12 +733,17 @@ def _validate_item(raw: Any) -> dict[str, Any]:
         )
     themes = []
     for candidate in raw["theme_candidates"]:
-        candidate = _object(candidate, ("theme", "reason"), f"{where} theme candidate")
+        candidate = _object(
+            candidate, ("theme", "reason", "evidence"), f"{where} theme candidate"
+        )
         themes.append(
             {
                 "theme": _string(candidate["theme"], f"{where} theme", THEME_MAX_CHARS),
                 "reason": _string(
                     candidate["reason"], f"{where} reason", REASON_MAX_CHARS
+                ),
+                "evidence": _string(
+                    candidate["evidence"], f"{where} evidence", EVIDENCE_MAX_CHARS
                 ),
             }
         )
@@ -677,6 +876,38 @@ def _store_status(
     db.add(row)
 
 
+def _record_dropped_themes(
+    db: Session,
+    item: NewsItem,
+    dropped: list[dict[str, Any]],
+    *,
+    kept: int,
+    model: str | None,
+    run: IngestionRun,
+    raw_payload_id: int,
+) -> None:
+    _upsert_quality(
+        db,
+        THEME_CHECK_ENTITY,
+        f"news:{item.id}:{PROMPT_VERSION}",
+        run.run_date,
+        THEME_CHECK_STATUS,
+        [],
+        {
+            "theme_check": {
+                "news_item_id": item.id,
+                "prompt_version": PROMPT_VERSION,
+                "llm_model": model or MODEL,
+                "ingestion_run_id": run.id,
+                "raw_payload_id": raw_payload_id,
+                "kept": kept,
+                "dropped": dropped,
+            }
+        },
+        source=RAW_SOURCE,
+    )
+
+
 def _run_batch(
     db: Session,
     run: IngestionRun,
@@ -739,7 +970,9 @@ def _run_batch(
         summary.update(status="pending", reason=exc.reason, error=str(exc)[:500])
         return summary
     model, usage = _usage(envelope)
+    group_names = theme_group_names(db, items)
     rejected: list[int] = []
+    theme_dropped: list[dict[str, Any]] = []
     for item, payload in zip(items, inputs):
         output = outputs[item.id]
         missing = summary_numbers_missing(payload, output["summary"])
@@ -757,16 +990,49 @@ def _run_batch(
                 model=model,
             )
             continue
+        kept, dropped = split_theme_candidates(
+            payload, output["theme_candidates"], group_names.get(item.id, frozenset())
+        )
         _store_done(
             db,
             item,
-            output,
+            {**output, "theme_candidates": kept},
             model=model,
             run=run,
             raw_payload_id=raw_row.id,
             run_at=run_at,
         )
-    summary.update(status="done", model=model, usage=usage, rejected_ids=rejected)
+        if dropped:
+            # Dropped candidates stay in the raw payload and in data_quality.
+            _record_dropped_themes(
+                db,
+                item,
+                dropped,
+                kept=len(kept),
+                model=model,
+                run=run,
+                raw_payload_id=raw_row.id,
+            )
+            theme_dropped.append(
+                {
+                    "news_id": item.id,
+                    "themes": [
+                        {
+                            "theme": entry["theme"],
+                            "cause": entry["cause"],
+                            "source_language": entry["source_language"],
+                        }
+                        for entry in dropped
+                    ],
+                }
+            )
+    summary.update(
+        status="done",
+        model=model,
+        usage=usage,
+        rejected_ids=rejected,
+        theme_dropped=theme_dropped,
+    )
     return summary
 
 
@@ -989,6 +1255,11 @@ def run_news_llm(
         "run_id": run.id,
         "done": run.records,
         "rejected": rejected,
+        "themes_dropped": sum(
+            len(entry["themes"])
+            for item in done
+            for entry in item.get("theme_dropped", [])
+        ),
         "pending": sum(len(item["news_ids"]) for item in failed),
         "skipped": sum(len(item["news_ids"]) for item in skipped),
         "calls": len(results),

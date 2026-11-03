@@ -22,6 +22,7 @@ from app.models import (
 )
 from app.theme_suggestions import AGGREGATION_VERSION, STATUS_PENDING, theme_key
 from worker import theme_suggestions
+from worker.news_llm import PROMPT_VERSION
 from worker.theme_suggestions import refresh_theme_suggestions
 
 # 2026-10-17 10:00 Taipei
@@ -51,7 +52,7 @@ def _news(
     days_ago=0,
     status="done",
     unsupported=False,
-    prompt="news_v1",
+    prompt=PROMPT_VERSION,
     model="claude-haiku-5-5",
     news_status="active",
     published_at=...,
@@ -217,24 +218,45 @@ def test_news_date_is_the_taipei_date_and_falls_back_to_collected_at(db):
     assert item.published_at is None
 
 
-def test_prompt_versions_stay_separate_and_versions_are_recorded(db):
-    item, first = _news(db, ["記憶體"], model="claude-haiku-5-5")
-    _item, _other = _news(db, ["記憶體"], model="claude-haiku-5-6")
-    _news(db, ["記憶體"], prompt="news_v2", model="claude-sonnet-5-5", item=item)
+def test_only_the_current_prompt_version_is_aggregated_and_versions_are_recorded(
+    db,
+):
+    # #413: candidates of older prompts never passed the theme check.
+    item, first = _news(db, ["記憶體"], model="claude-sonnet-5-5")
+    _item, _other = _news(db, ["記憶體"], model="claude-sonnet-5-6")
+    _news(db, ["記憶體", "電子檢測設備"], prompt="news_v2", item=item)
+    _news(db, ["電子檢測設備"], prompt="news_v1")
     refresh_theme_suggestions(db, now=NOW)
 
-    rows = db.scalars(
-        select(ThemeSuggestion).order_by(ThemeSuggestion.prompt_version)
-    ).all()
+    rows = db.scalars(select(ThemeSuggestion)).all()
     assert [(row.prompt_version, row.theme_key, row.news_count) for row in rows] == [
-        ("news_v1", "記憶體", 2),
-        ("news_v2", "記憶體", 1),
+        (PROMPT_VERSION, "記憶體", 2),
     ]
-    assert rows[0].llm_models_json == ["claude-haiku-5-5", "claude-haiku-5-6"]
-    assert rows[1].llm_models_json == ["claude-sonnet-5-5"]
-    assert {row.aggregation_version for row in rows} == {AGGREGATION_VERSION}
-    assert all(row.computed_at == NOW for row in rows)
+    assert rows[0].llm_models_json == ["claude-sonnet-5-5", "claude-sonnet-5-6"]
+    assert rows[0].aggregation_version == AGGREGATION_VERSION == "theme_suggestions_v2"
+    assert rows[0].computed_at == NOW
     assert _links(db, rows[0])[0].news_llm_result_id == first.id
+
+
+def test_a_suggestion_of_an_older_prompt_is_deleted(db):
+    _news(db, ["電子檢測設備"], prompt="news_v2")
+    stale = ThemeSuggestion(
+        prompt_version="news_v2",
+        theme_key="電子檢測設備",
+        display_name="電子檢測設備",
+        aggregation_version="theme_suggestions_v1",
+        llm_models_json=["claude-sonnet-5-5"],
+        news_count=1,
+        first_news_date=date(2026, 10, 17),
+        last_news_date=date(2026, 10, 17),
+        status=STATUS_PENDING,
+        computed_at=BASE_TIME,
+    )
+    db.add(stale)
+    db.commit()
+    result = refresh_theme_suggestions(db, now=NOW)
+    assert db.scalars(select(ThemeSuggestion)).all() == []
+    assert (result["deleted"], result["source_results"]) == (1, 0)
 
 
 def test_rerun_is_idempotent_and_only_changed_rows_are_rewritten(db):
@@ -379,7 +401,7 @@ def test_api_lists_new_themes_first_by_news_count_with_versions(db, client):
         first["aggregation_version"],
         first["llm_models"],
     ) == (
-        "news_v1",
+        PROMPT_VERSION,
         AGGREGATION_VERSION,
         ["claude-haiku-5-5"],
     )

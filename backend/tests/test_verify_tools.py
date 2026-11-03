@@ -313,10 +313,14 @@ def test_db_facts_candidates_use_the_current_score_version(tmp_path: Path) -> No
     assert set(_db_facts().PLAN_OPEN_STATUSES) == PLAN_OPEN_STATUSES
 
 
-def test_db_facts_falls_back_to_the_previous_version_run(tmp_path: Path) -> None:
-    # #392: a date without a current-version run shows its previous-version run,
-    # as the API does (app.candidate_runs); one date never mixes two versions.
-    current, previous = CANDIDATE_SCORE_READ_VERSIONS
+@pytest.mark.parametrize("previous", CANDIDATE_SCORE_READ_VERSIONS[1:])
+def test_db_facts_falls_back_to_the_previous_version_run(
+    tmp_path: Path, previous: str
+) -> None:
+    # #392, #413: a date without a current-version run shows its run of the
+    # next read version, as the API does (app.candidate_runs); one date never
+    # mixes two versions.
+    current = CANDIDATE_SCORE_READ_VERSIONS[0]
     db = tmp_path / "stock.db"
     with sqlite3.connect(db) as conn:
         conn.execute(
