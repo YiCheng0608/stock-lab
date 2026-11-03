@@ -244,11 +244,13 @@ def sync_corporate_actions(
     }
     if not apply:
         return result
+    now = utcnow()
     run = IngestionRun(
         run_type=RUN_TYPE,
         source="official",
-        run_date=utcnow().date(),
+        run_date=now.date(),
         status="running",
+        started_at=now,
         data_as_of=end.isoformat(),
         metadata_json={"version": SYNC_VERSION, "start": start.isoformat()},
     )
@@ -326,6 +328,7 @@ def reprice_corporate_actions(db: Session, *, apply: bool = False) -> dict[str, 
         run_date=now.date(),
         status="success",
         records=len(events),
+        started_at=now,
         finished_at=now,
         metadata_json={
             "version": SYNC_VERSION,

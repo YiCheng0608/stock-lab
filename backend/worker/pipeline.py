@@ -5706,6 +5706,7 @@ def backtest(
                 run_date=end_date,
                 status="running",
                 request_key=request_key,
+                started_at=utcnow(),
             )
             db.add(run)
             db.flush()

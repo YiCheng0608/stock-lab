@@ -14,7 +14,7 @@ import shutil
 import stat
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -225,3 +225,48 @@ def frozen_utcnow(monkeypatch) -> FrozenClock:
     frozen = FrozenClock()
     monkeypatch.setattr(clock, "datetime", frozen.datetime_class())
     return frozen
+
+
+class TickingClock:
+    """A clock that moves on every read: each ``now`` answers ``step`` after the last (#410).
+
+    A frozen clock cannot tell a time taken at one point from a time taken at another,
+    so a value read later (a column default at insert) looks the same as one read
+    earlier. Here every read is a different instant, in the order it was made; ``issued``
+    lists them. Assign ``next_at`` (naive UTC) to choose where the first read lands.
+    """
+
+    def __init__(self, step: timedelta = timedelta(milliseconds=1)) -> None:
+        self.next_at = FROZEN_AT
+        self.step = step
+        self.issued: list[datetime] = []
+
+    def datetime_class(self) -> type:
+        clock = self
+
+        class Ticking(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                at = clock.next_at
+                clock.next_at = at + clock.step
+                clock.issued.append(at)
+                if tz is None:
+                    return at
+                return at.replace(tzinfo=timezone.utc).astimezone(tz)
+
+        return Ticking
+
+
+@pytest.fixture
+def ticking_utcnow(monkeypatch) -> TickingClock:
+    """``app.clock.utcnow`` answers a later instant to each caller (#410).
+
+    Patches the same class ``frozen_utcnow`` does, so use one or the other. Models'
+    column defaults call the function too and take their own, later instant.
+    """
+
+    from app import clock
+
+    ticking = TickingClock()
+    monkeypatch.setattr(clock, "datetime", ticking.datetime_class())
+    return ticking
