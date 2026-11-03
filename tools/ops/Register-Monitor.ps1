@@ -4,7 +4,7 @@ Create, update or remove the Windows Task Scheduler task for the coordinator's e
 
 .DESCRIPTION
 Registers \stock-lab\monitor, which keeps tools/ops/monitor.sh running with Git Bash
-from this checkout (Issue #316, docs/OPERATIONS.md §6.8). The monitor polls GitHub
+from this checkout (Issue #316, docs/ops/MONITOR.md). The monitor polls GitHub
 every IntervalSeconds (at least 60, at most 2 gh calls a poll), queues events in
 <DataDir>\logs\events.jsonl and wakes the coordinator terminal through Orca.
 Register only from the release checkout (C:/Users/YiCheng/stock-lab-release).

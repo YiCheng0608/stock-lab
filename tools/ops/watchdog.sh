@@ -5,7 +5,7 @@
 # invariants in that database and the event monitor's heartbeat (#316), and
 # comments on #1; also whether claude -p and gh were refused for their
 # credentials (CLAUDE_CODE_OAUTH_TOKEN, GH_TOKEN; #337). Operation:
-# docs/OPERATIONS.md §6.1. Every run appends to <data>/logs/watchdog.log.
+# docs/ops/WATCHDOG.md. Every run appends to <data>/logs/watchdog.log.
 #
 # Usage: watchdog.sh [--dry-run] [--data-dir DIR] [--monitor-dir DIR] [--python EXE]
 #   --dry-run       decide and print the actions; no gh call, no comment
@@ -219,7 +219,7 @@ if [ -n "$python" ] && [ -f "$data_dir/stock.db" ] && compgen -G "$logs/daily-*.
       # Without a log the daily_no_end check above has reported it already.
       [ -f "$logs/daily-$taipei_date.log" ] && anomaly daily_result "daily 排程：台北 $taipei_iso 有日誌但 \`schedule_runs\` 沒有這一天的 run（worker 未能啟動），請看 \`$logs/daily-$taipei_date.log\`。" ;;
     error) found=1; log daily_check_failed "" "讀取 stock.db 的 schedule_runs 失敗：$(tail -n 1 "$work/helper.err" 2>/dev/null)" ;;
-    catchup_incomplete) anomaly daily_result "daily 排程：台北 $taipei_iso 當日成功，但補抓前幾個交易日沒有補齊（catchup），請查 \`python -m worker.cli schedule-runs --date $taipei_iso\` 的 catchup 步驟，必要時依 OPERATIONS §6.4 手動 backfill。" ;;
+    catchup_incomplete) anomaly daily_result "daily 排程：台北 $taipei_iso 當日成功，但補抓前幾個交易日沒有補齊（catchup），請查 \`python -m worker.cli schedule-runs --date $taipei_iso\` 的 catchup 步驟，必要時依 docs/ops/SCHEDULING.md 重跑與回補 手動 backfill。" ;;
     *) anomaly daily_result "daily 排程：台北 $taipei_iso 的 daily 結果是 \`$result\`（不是 success／non_trading_day），請查 \`python -m worker.cli schedule-runs --date $taipei_iso\` 與 \`$logs/daily-$taipei_date.log\`。" ;;
   esac
 fi
@@ -261,7 +261,7 @@ data_check_day() { # data_check_day ISO COMPACT LAST: check one day; LAST=1 comm
       skip) return ;;  # a database without the checked tables
       violation)
         printf '%s\n' "${check#*$'\n'}" >"$work/data_check.md"
-        anomaly "data_check_$compact" "當日資料核對：交易日 $day 寫進 DB 的資料與官方 raw 有 $(printf '%s\n' $facts | sed -n 's/^findings=//p') 筆不一致（明細如下，資料未修正）。請依 OPERATIONS §6.1 判斷要開 Issue 修正或重跑。" "$work/data_check.md"
+        anomaly "data_check_$compact" "當日資料核對：交易日 $day 寫進 DB 的資料與官方 raw 有 $(printf '%s\n' $facts | sed -n 's/^findings=//p') 筆不一致（明細如下，資料未修正）。請依 docs/ops/WATCHDOG.md 判斷要開 Issue 修正或重跑。" "$work/data_check.md"
         # Settled only once the comment is on #1 (now or earlier): a failed
         # gh call leaves the day to the next run.
         if [ "$dry_run" = 1 ] || grep -qF " anomaly_commented key=data_check_$compact " "$log_file"; then
@@ -279,7 +279,7 @@ data_check_day() { # data_check_day ISO COMPACT LAST: check one day; LAST=1 comm
     esac
   fi
   [ "$last" = 1 ] || return 0
-  anomaly "data_check_incomplete_$compact" "當日資料核對：交易日 $day 沒有核對完，原因：$reason。看門狗不會再自動核對這一天；請手動跑 \`python tools/ops/watchdog_helper.py data-check $data_dir/stock.db $day --all\`，依 OPERATIONS §6.1 處理，並查 \`$log_file\` 的 \`data_check_*\` 列。"
+  anomaly "data_check_incomplete_$compact" "當日資料核對：交易日 $day 沒有核對完，原因：$reason。看門狗不會再自動核對這一天；請手動跑 \`python tools/ops/watchdog_helper.py data-check $data_dir/stock.db $day --all\`，依 docs/ops/WATCHDOG.md 處理，並查 \`$log_file\` 的 \`data_check_*\` 列。"
 }
 
 if [ -n "$python" ] && [ -f "$data_dir/stock.db" ] && compgen -G "$logs/daily-*.log" >/dev/null; then
@@ -359,7 +359,7 @@ if [ -n "$python" ] && [ -f "$data_dir/stock.db" ]; then
 fi
 [ -n "$llm_failed" ] && anomaly news_llm_failed "news_llm：$llm_failed（可能找不到 claude、環境有 API 金鑰、表未建立或被排程逾時終止），請查 news 日誌的 news-llm 段落與 \`/api/ingestion-runs?q=news_llm\`。"
 
-# The coordinator's event monitor (tools/ops/monitor.sh, OPERATIONS §6.8) writes
+# The coordinator's event monitor (tools/ops/monitor.sh, docs/ops/MONITOR.md) writes
 # its heartbeat every poll; ten minutes without one means nobody wakes the
 # coordinator; ten polls in a row with a failed gh call mean it polls for nothing.
 # No heartbeat file: the monitor is not registered, no check.
@@ -368,11 +368,11 @@ if [ -n "$python" ]; then
   case "$beat" in
     stale\ *)
       read -r _ age at <<<"$beat"
-      anomaly monitor_stale "事件 monitor：最後一次輪詢在 $at（$((age / 60)) 分鐘前），停擺超過 10 分鐘，統籌不會被喚醒。請依 OPERATIONS §6.8 查 \`$monitor_dir/monitor.log\` 與工作 \`\\stock-lab\\monitor\`（scheduler 容器是 \`docker compose logs scheduler\`），必要時重新啟動。" ;;
+      anomaly monitor_stale "事件 monitor：最後一次輪詢在 $at（$((age / 60)) 分鐘前），停擺超過 10 分鐘，統籌不會被喚醒。請依 docs/ops/MONITOR.md 查 \`$monitor_dir/monitor.log\` 與工作 \`\\stock-lab\\monitor\`（scheduler 容器是 \`docker compose logs scheduler\`），必要時重新啟動。" ;;
     gh_failed\ *)
       read -r _ polls since error <<<"$beat"
-      anomaly monitor_gh_failed "事件 monitor：gh 從 $since 起連續 $polls 輪失敗（最後的錯誤：$error），佇列收不到 PR 與留言的事件。可能是 gh 登入過期（\`gh auth status\`），或帳號共用的 5000 次／小時限流已用完（\`gh api rate_limit\`）；請一併查 \`$monitor_dir/monitor.log\`（OPERATIONS §6.8）。" ;;
-    unreadable) anomaly monitor_stale "事件 monitor：\`$monitor_dir/monitor-heartbeat.json\` 讀不出輪詢時間，統籌可能不會被喚醒。請依 OPERATIONS §6.8 查 \`$monitor_dir/monitor.log\`。" ;;
+      anomaly monitor_gh_failed "事件 monitor：gh 從 $since 起連續 $polls 輪失敗（最後的錯誤：$error），佇列收不到 PR 與留言的事件。可能是 gh 登入過期（\`gh auth status\`），或帳號共用的 5000 次／小時限流已用完（\`gh api rate_limit\`）；請一併查 \`$monitor_dir/monitor.log\`（docs/ops/MONITOR.md）。" ;;
+    unreadable) anomaly monitor_stale "事件 monitor：\`$monitor_dir/monitor-heartbeat.json\` 讀不出輪詢時間，統籌可能不會被喚醒。請依 docs/ops/MONITOR.md 查 \`$monitor_dir/monitor.log\`。" ;;
     error) found=1; log monitor_check_failed "" "讀取 monitor 心跳失敗：$(tail -n 1 "$work/helper.err" 2>/dev/null)" ;;
   esac
 fi
@@ -388,9 +388,9 @@ if [ -n "$python" ] && [ -f "$data_dir/stock.db" ]; then
       case "$name" in
         future_trading_date) anomaly invariant_future_date "資料不變量：\`market_bars\` 最新 \`trading_date\` 是 $(value max_trading_date)，晚於台北今日 $(value today)（日期解析或來源錯誤），請查最近的 daily 日誌與 \`/api/ingestion-runs\`。" ;;
         latest_bar_provenance) anomaly invariant_bar_provenance "資料不變量：最新交易日 $(value trading_date) 的 $(value bars) 列 \`market_bars\` 中，$(value unknown_source) 列 \`source\` 是 \`unknown\` 或空、$(value null_data_as_of) 列沒有 \`data_as_of\`，請查該日的 daily 日誌與寫入來源。" ;;
-        instrument_status_sync) anomaly invariant_status_sync "資料不變量：最近一次標的狀態同步被防呆略過（$(value skipped)；absent 為官方清單缺席、dormant 為 60 個交易日沒有行情列）：兩者合計超過該交易所現行標的的 5%，標的狀態沒有更新。請依 OPERATIONS §6.1 查該日 collect run 的 \`instrument_status_sync\`。" ;;
-        execution_calendar) anomaly invariant_execution_calendar "資料不變量：最新訊號日 $(value signal_date) 的 $(value signals) 筆 analysis 訊號中，$(value without_date) 筆沒有規則最早執行日（\`earliest_execution_date\` 為空）：官方休市表缺該年度，或 daily 的 trading_calendar 步驟失敗。請依 OPERATIONS §6.3 查該日 analyze 步驟的 \`execution_calendar\` 與 trading_calendar 步驟，必要時跑 \`python -m worker.cli trading-calendar\`。" ;;
-        strategy_levels) anomaly invariant_strategy_levels "資料不變量：daily run $(value run_id)（目標日 $(value target_date)）的 strategy_levels 步驟是 \`$(value status)\`：這一步不影響 run 狀態，個股頁策略總表的觀察價位不會更新。請依 OPERATIONS §6.3 查該 run 的 \`schedule_run_steps\` 錯誤，修正後跑 \`python -m worker.cli strategy-levels --date $(value target_date)\`。" ;;
+        instrument_status_sync) anomaly invariant_status_sync "資料不變量：最近一次標的狀態同步被防呆略過（$(value skipped)；absent 為官方清單缺席、dormant 為 60 個交易日沒有行情列）：兩者合計超過該交易所現行標的的 5%，標的狀態沒有更新。請依 docs/ops/WATCHDOG.md 查該日 collect run 的 \`instrument_status_sync\`。" ;;
+        execution_calendar) anomaly invariant_execution_calendar "資料不變量：最新訊號日 $(value signal_date) 的 $(value signals) 筆 analysis 訊號中，$(value without_date) 筆沒有規則最早執行日（\`earliest_execution_date\` 為空）：官方休市表缺該年度，或 daily 的 trading_calendar 步驟失敗。請依 docs/ops/SCHEDULING.md 日誌與 run 記錄 查該日 analyze 步驟的 \`execution_calendar\` 與 trading_calendar 步驟，必要時跑 \`python -m worker.cli trading-calendar\`。" ;;
+        strategy_levels) anomaly invariant_strategy_levels "資料不變量：daily run $(value run_id)（目標日 $(value target_date)）的 strategy_levels 步驟是 \`$(value status)\`：這一步不影響 run 狀態，個股頁策略總表的觀察價位不會更新。請依 docs/ops/SCHEDULING.md 日誌與 run 記錄 查該 run 的 \`schedule_run_steps\` 錯誤，修正後跑 \`python -m worker.cli strategy-levels --date $(value target_date)\`。" ;;
         llm_done_provenance) anomaly invariant_llm_provenance "資料不變量：\`news_llm_results\` 的 $(value done) 列 \`llm_status=done\` 中，$(value missing_model) 列沒有 \`llm_model\`、$(value empty_prompt_version) 列 \`prompt_version\` 為空，請查 news 日誌的 news-llm 段落。" ;;
       esac
     done <<<"$checks"

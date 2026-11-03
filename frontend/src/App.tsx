@@ -673,7 +673,7 @@ function StockPage() {
   </div>
 }
 
-// Indicator provenance from the daily bars API (docs/V1_SPEC.md 技術指標): version, price basis and batch time.
+// Indicator provenance from the daily bars API (docs/spec/indicators.md): version, price basis and batch time.
 export function IndicatorMetaRows({ bars }: { bars: StockBarsResponse | undefined }) {
   if (!bars) return <div className="metric-row"><span>技術指標</span><b>待核實</b></div>
   const meta = bars.indicators

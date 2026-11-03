@@ -315,7 +315,7 @@ def test_the_cli_runner_asks_for_the_target_year_and_the_next(db, monkeypatch):
         (date(2026, 12, 24), date(2026, 12, 28)),  # 12/25 holiday, weekend
         (date(2026, 1, 1), date(2026, 1, 2)),  # a trading notice is a session
         # 10/23 was a typhoon closure (daily run 11, non_trading_day): not in
-        # the official schedule, so not known on 10/22's night (V1_SPEC).
+        # the official schedule, so not known on 10/22's night (docs/spec/README.md 價位、ETF 與生命週期).
         (date(2026, 10, 22), date(2026, 10, 23)),
         (date(2026, 10, 23), date(2026, 10, 27)),  # weekend, 10/26 make-up
     ],

@@ -4,7 +4,7 @@ Revision ID: 0017_tracking_plans
 Revises: 0016_group_score_archive
 
 ``tracking_plans`` keeps one user plan copied from a conditional signal and
-``tracking_plan_sessions`` its tracked sessions (V1_SPEC 使用者追蹤計畫,
+``tracking_plan_sessions`` its tracked sessions (docs/spec/tracking.md 使用者追蹤計畫,
 worker.plan_tracking).  The partial unique index allows at most one plan per
 signal that is not cancelled.  Additive and forward-only: no existing row is
 read or changed.

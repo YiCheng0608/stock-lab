@@ -5,7 +5,7 @@ Revises: 0018_market_summaries
 
 ``strategy_levels`` keeps, per signal and levels version, the close and
 volume the next session needs for the signal's strategy to pass, with
-reference stop and targets (V1_SPEC strategy_levels_v1, worker.strategy_levels).
+reference stop and targets (docs/spec/strategy_levels.md, worker.strategy_levels).
 Additive and forward-only: no existing row is read or changed.
 """
 

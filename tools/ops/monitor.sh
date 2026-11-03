@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Coordinator event monitor (Issue #316; docs/GITHUB_WORKFLOW.md 無人值守運作,
-# docs/OPERATIONS.md §6.8): resident under Windows Task Scheduler
+# docs/ops/MONITOR.md): resident under Windows Task Scheduler
 # (tools/ops/Register-Monitor.ps1), or one poll a minute (--once) as a job of the
 # scheduler container's `worker.cli serve` (#338). No LLM: every --interval seconds it
 # polls the open PRs (CI, mergeStateStatus), the repository's new Issue/PR comments, the

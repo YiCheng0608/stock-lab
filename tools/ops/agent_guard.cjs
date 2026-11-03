@@ -359,7 +359,7 @@ function realName(file) {
 }
 
 // Docker commands that print a container's environment, where compose put the env file's values
-// (#353, #360; OPERATIONS §1.2). Blocked: compose config/convert unless -q/--quiet,
+// (#353, #360; docs/ops/SETUP.md Docker compose). Blocked: compose config/convert unless -q/--quiet,
 // --no-interpolate or --services is written bare after config (not as the value of the option
 // before it: `--profile -q`), with no -o/--output, --environment or --variables and no flag set
 // with `=` that could turn one back off (`--quiet=false`); inspect of a container, image or

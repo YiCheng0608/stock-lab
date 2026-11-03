@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The one-off switch from Windows Task Scheduler to the scheduler container (Issue #342, parent
-# #331; docs/OPERATIONS.md §6.9), and its rollback. Run by the coordinator from a checkout other
+# #331; docs/ops/platform/windows.md cutover), and its rollback. Run by the coordinator from a checkout other
 # than the release checkout (the master management checkout), in Git Bash, in Taipei daytime
 # away from the even-hour news and 18:30-21:30 (#1 6582767651, point 7).
 #
@@ -20,14 +20,14 @@
 #           volume and read as a finished verify); the pre-docker commit holds #333, or a
 #           pre-docker branch points elsewhere; Docker does not answer.
 #           The release checkout's tasks pull master (-GitPull), so they are disabled before
-#           feat/docker reaches master (docs/OPERATIONS.md §6.9); step 2 then only reads back.
+#           feat/docker reaches master (docs/ops/platform/windows.md cutover); step 2 then only reads back.
 #   1 pre-docker  the release checkout gets branch pre-docker (no checkout) at --pre-docker,
 #           default its HEAD, which must not hold #333; its upstream is itself, so
 #           `git pull --ff-only` there stays up to date after a rollback (decision 2, review H1).
 #   2 disable   Disable-ScheduledTask for each task; then wait until none runs and no process
 #           of the release checkout's .venv is left (no writer of stock.db).
 #   3 snapshot  tools/ops/copy_db.py: stock.db by the SQLite backup API into <work>/db (never a
-#           bare copy of a file with WAL, OPERATIONS §2.1).
+#           bare copy of a file with WAL, docs/ops/SETUP.md 安全升級與復原順序).
 #   4 volume    `compose run -d` of a helper (the api service, root, sleep) with this checkout's
 #           compose file: compose creates <project>_stock-data with its labels; image
 #           <project>-backend:cutover, built when missing.
@@ -584,7 +584,7 @@ fi
 case "$way" in
   early)
     if [ "$docker_ok" = 0 ]; then
-      note "回退方式 early（Docker 不能用）：$switch_record 記錄切換停在 verify 之前（steps：${recorded:-無}），serve 沒有跑過；主機 stock.db 不動，只切回 pre-docker 並啟用工作。Docker 回來後以同一組選項再跑一次 rollback 收尾輔助容器；volume 由使用者處理（OPERATIONS §6.9）"
+      note "回退方式 early（Docker 不能用）：$switch_record 記錄切換停在 verify 之前（steps：${recorded:-無}），serve 沒有跑過；主機 stock.db 不動，只切回 pre-docker 並啟用工作。Docker 回來後以同一組選項再跑一次 rollback 收尾輔助容器；volume 由使用者處理（docs/ops/platform/windows.md cutover）"
     else
       note "回退方式 early：volume 沒有做完 verify 的切換紀錄（serve 沒有在它上面跑過），主機 stock.db 不動"
       plan helper "docker rm -f $helper（若有）；volume ${volume} 若在就留著，再切換前由使用者刪除"

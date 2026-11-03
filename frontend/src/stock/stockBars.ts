@@ -5,7 +5,7 @@ import { formatDay, formatTaipeiMinute } from '../dates'
 import type { IndicatorField, StockBarRow, StockBarsInterval, StockBarsResponse } from '../types'
 import { formatTableVolume, isVerifiedShareSource } from '../units'
 
-// Pure helpers for the stock page K-line, indicator panels and header quote (bars API, docs/V1_SPEC.md 技術指標).
+// Pure helpers for the stock page K-line, indicator panels and header quote (bars API, docs/spec/indicators.md).
 
 export const STOCK_BARS_LIMIT = 250
 // The bars API price basis this page explains (backend app.indicators.PRICE_BASIS; v2 since Issue 394).

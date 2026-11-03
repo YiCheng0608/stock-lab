@@ -407,7 +407,7 @@ class GroupDailyScoreArchive(Base):
 
 class StrategyVersion(Base):
     __tablename__ = "strategy_versions"
-    # A formula sub-version keeps ``version`` unchanged (V1_SPEC), so it is part
+    # A formula sub-version keeps ``version`` unchanged (docs/spec/README.md 策略版本識別), so it is part
     # of the identity: signals written before a formula change keep pointing at
     # their untouched row and snapshot.  ``unclassified/<reason>`` rows are never
     # reused by the worker; the default marks a row nobody classified.
@@ -912,7 +912,7 @@ class CandidateRun(Base):
 
 
 class DailyCandidate(Base):
-    """A ranked candidate of one candidate run (V1_SPEC candidate_score_v1)."""
+    """A ranked candidate of one candidate run (docs/spec/candidate_score.md candidate_score_v1)."""
 
     __tablename__ = "daily_candidates"
     __table_args__ = (
@@ -1036,7 +1036,7 @@ class ThemeSuggestionNews(Base):
 
 
 class TrackingPlan(Base):
-    """A user's tracking plan copied from one conditional signal (V1_SPEC 使用者追蹤計畫).
+    """A user's tracking plan copied from one conditional signal (docs/spec/tracking.md 使用者追蹤計畫).
 
     Strategy, version and levels are a snapshot taken at creation, so a later
     rewrite of the signal never changes the plan.  ``worker.plan_tracking``
@@ -1124,7 +1124,7 @@ class TrackingPlanSession(Base):
 
 
 class StrategyLevel(Base):
-    """Observation price levels of one signal (V1_SPEC strategy_levels_v1).
+    """Observation price levels of one signal (docs/spec/strategy_levels.md).
 
     Written by ``worker.strategy_levels`` after analyze: from T's data, the
     close and volume the next session needs for the signal's strategy to pass,

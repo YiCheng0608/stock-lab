@@ -86,8 +86,10 @@ TAIPEI_OFFSET = 8 * 3600
 # An Orca terminal handle: never one starting with "-", which orca would read as an
 # option (the waker passes it as --terminal=<handle> as well, #338 review).
 HANDLE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_-]*")
-# What the coordinator does about it; the token lives in the env file (OPERATIONS §6.7).
-GH_AUTH_ACTION = "請用本機 gh 在 #1 留言，請使用者換 GH_TOKEN（OPERATIONS §6.7）"
+# What the coordinator does about it; the token lives in the env file (docs/ops/SETUP.md claude 與 gh 認證).
+GH_AUTH_ACTION = (
+    "請用本機 gh 在 #1 留言，請使用者換 GH_TOKEN（docs/ops/SETUP.md claude 與 gh 認證）"
+)
 # The merge gate: CI's required check (docs/GITHUB_WORKFLOW.md, 欄位與唯一來源).
 GATE = "required"
 

@@ -1,4 +1,4 @@
-"""Observation price levels of a session's signals (V1_SPEC strategy_levels_v1).
+"""Observation price levels of a session's signals (docs/spec/strategy_levels.md).
 
 The ``strategy_levels`` step of ``worker.cli daily`` (after a successful
 analyze; its failure never changes the run status) and ``worker.cli

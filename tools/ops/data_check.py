@@ -6,7 +6,7 @@ read-only connection (``mode=ro`` and ``query_only``).  Nothing is repaired:
 every disagreement is a finding the watchdog comments on #1.
 
 The raw captures are read with the collector's own parsers and the write
-rules of ``worker.pipeline`` (OPERATIONS 冪等), so a finding is a row the
+rules of ``worker.pipeline`` (docs/ops/SCHEDULING.md 重跑與回補的冪等), so a finding is a row the
 write step got wrong, missed or did not revise; a parser that misreads a
 field the same way today is not caught here (the full audit, #391, is).
 

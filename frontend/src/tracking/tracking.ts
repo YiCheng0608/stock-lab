@@ -38,7 +38,7 @@ export function planStatus(status: string): { label: string; tone: BadgeTone } {
   return PLAN_STATUS[status] ?? { label: '狀態待核實', tone: 'warning' }
 }
 
-// The stored status stays shown; a recomputation the plan may not move to only adds this note (V1_SPEC).
+// The stored status stays shown; a recomputation the plan may not move to only adds this note (docs/spec/tracking.md).
 export function hasTransitionConflict(plan: Pick<TrackingPlan, 'data_quality'>): boolean {
   return plan.data_quality === 'transition_conflict'
 }
@@ -126,7 +126,7 @@ export function planLink(planId: number): string {
   return `/actions#${planAnchor(planId)}`
 }
 
-// "加入追蹤" refusals (API detail codes, V1_SPEC 使用者追蹤計畫) in everyday words.
+// "加入追蹤" refusals (API detail codes, docs/spec/tracking.md 使用者追蹤計畫) in everyday words.
 const ADD_ERRORS: Record<string, string> = {
   stale_signal: '這個研究條件的資料日已過，請用最新資料日的條件建立',
   signal_not_conditional: '這個研究條件目前不成立，無法建立追蹤計畫',

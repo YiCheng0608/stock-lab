@@ -1,4 +1,4 @@
-"""Create and cancel user tracking plans (V1_SPEC 使用者追蹤計畫).
+"""Create and cancel user tracking plans (docs/spec/tracking.md 使用者追蹤計畫).
 
 A plan copies one conditional signal's strategy, versions and levels.  It can
 only be made from the latest data date of its stock: a signal of an earlier

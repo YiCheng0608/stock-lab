@@ -10,7 +10,7 @@
 # that ran it, but not the Orca terminal of the session that started it: closing a
 # terminal ends all its processes (seen 2026-10-29, with PowerShell's Start-Process too).
 # So a coordinator that closed its predecessor's terminal runs this again
-# (docs/OPERATIONS.md §6.8).
+# (docs/ops/MONITOR.md).
 # The token file's path is written here, not in the coordinator's command: a command
 # naming it is stopped by the agent guard (AGENTS.md).
 #
@@ -32,7 +32,7 @@ case "${1:-}" in
   *) die "usage: wake_listener_start.sh [--status]" 64 ;;
 esac
 port="${WAKE_LISTENER_PORT:-47338}"
-# The env file of the release checkout, which compose gives the scheduler (OPERATIONS §6.8).
+# The env file of the release checkout, which compose gives the scheduler (docs/ops/MONITOR.md).
 token_file="${WAKE_LISTENER_TOKEN_FILE:-C:/Users/YiCheng/stock-lab-release/.env}"
 logs="$data_dir/logs"
 

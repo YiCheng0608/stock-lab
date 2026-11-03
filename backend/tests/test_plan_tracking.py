@@ -1,4 +1,4 @@
-"""User tracking plans (V1_SPEC 使用者追蹤計畫): shared rules, creation and daily update."""
+"""User tracking plans (docs/spec/tracking.md 使用者追蹤計畫): shared rules, creation and daily update."""
 
 from __future__ import annotations
 

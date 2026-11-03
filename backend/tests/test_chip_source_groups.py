@@ -531,7 +531,7 @@ def test_the_cli_runs_provenance(database, monkeypatch, capsys):
 
 
 def test_the_cli_exits_2_on_a_partial_provenance(database, monkeypatch, capsys):
-    # OPERATIONS §3: partial is exit 2, as for daily.
+    # docs/ops/CLI.md: partial is exit 2, as for daily.
     import worker.cli as cli
 
     collect_at(monkeypatch, FIRST, Feeds())
