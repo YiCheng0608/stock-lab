@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -306,39 +308,16 @@ def test_cli_prefix_accepts_a_path_or_a_json_list(monkeypatch):
         cli_prefix()
 
 
-@pytest.mark.parametrize("name", ["claude.cmd", "claude.bat", "claude"])
-def test_a_non_exe_cli_on_windows_fails_closed_without_a_call(
-    db, fake, monkeypatch, tmp_path, name
-):
-    # #313 AC-5: like candidate_notes; a timeout would kill an npm shim's cmd.exe
-    # but not its node child, and the job would hang until its time limit.
-    shim = tmp_path / name
-    shim.write_text("@echo off\n", encoding="utf-8")
-    monkeypatch.setenv(news_llm.CLI_ENV, str(shim))
-    monkeypatch.setattr(news_llm, "IS_WINDOWS", True)
-    _add_news(db, 2)
-    result = run_news_llm(db, run_date=RUN_DATE)
-    assert result["status"] == "failed"
-    assert result["reason"] == f"cli_not_found: {shim} is not a native .exe"
-    assert fake() == [] and _results(db) == []
-    run = db.get(IngestionRun, result["run_id"])
-    assert run.run_type == "news_llm" and run.status == "failed"
-
-
-def test_the_native_exe_check_is_for_windows_only(monkeypatch, tmp_path):
+def test_any_cli_file_is_accepted_without_a_native_exe_check(monkeypatch, tmp_path):
+    # #333: the image runs the native binary the npm package installs (no shim);
+    # the Windows requirement of a native claude.exe (#313 AC-5) went with Task
+    # Scheduler, so the CLI's file name is not checked.
     script = tmp_path / "claude"
     script.write_text("#!/bin/sh\n", encoding="utf-8")
-    exe = tmp_path / "Claude.EXE"
-    exe.write_bytes(b"")
     for key in news_llm.API_KEY_ENV:
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv(news_llm.CLI_ENV, str(script))
-    monkeypatch.setattr(news_llm, "IS_WINDOWS", False)
-    assert news_llm.cli_problem() == ([str(script)], None)
-    monkeypatch.setattr(news_llm, "IS_WINDOWS", True)
-    assert news_llm.cli_problem()[1] == f"cli_not_found: {script} is not a native .exe"
-    monkeypatch.setenv(news_llm.CLI_ENV, str(exe))
-    assert news_llm.cli_problem() == ([str(exe)], None)
+    assert news_llm.preflight() == ([str(script)], None)
 
 
 # AC-2 ------------------------------------------------------------------------
@@ -1188,6 +1167,145 @@ def test_a_rejected_result_leaves_no_ai_block(db, fake, client, monkeypatch):
     assert client.get(f"{router.prefix}/news/{item.id}").json()["ai"] is None
     listed = client.get(f"{router.prefix}/news").json()["items"]
     assert [entry["ai"] for entry in listed] == [None]
+
+
+# Container authentication (#337) ---------------------------------------------------
+
+
+def test_tokens_in_the_environment_never_reach_the_tests(tmp_path):
+    """#339 review S1: the local checks run pytest in the api container, which gets the env
+    file's tokens; conftest drops them, so the tests asserting no leaked token stay green."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("STOCK_")}
+    temp = tmp_path / "tmp"
+    temp.mkdir()
+    env.update(
+        CLAUDE_CODE_OAUTH_TOKEN="fake-not-a-token",
+        GH_TOKEN="fake-not-a-token",
+        TMPDIR=str(temp),
+        TEMP=str(temp),
+        TMP=str(temp),
+    )
+    tests = Path(__file__).parent
+    result = subprocess.run(
+        [sys.executable, "-B", "-m", "pytest", "-p", "no:cacheprovider", "-q"]
+        + ["--basetemp", str(tmp_path / "b")]
+        + [
+            f"{tests / 'test_news_llm.py'}::test_batches_are_split_and_results_saved",
+            f"{tests / 'test_candidate_notes.py'}"
+            "::test_batches_are_split_and_notes_saved_with_versions",
+        ],
+        cwd=tests.parent,
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=300,
+    )
+    assert result.returncode == 0, result.stdout[-3000:] + result.stderr[-2000:]
+    assert "2 passed" in result.stdout
+
+
+def test_the_oauth_token_reaches_the_cli_and_no_other_claude_code_variable(
+    db, fake, monkeypatch
+):
+    # The fake only records the variable names, never their values.
+    monkeypatch.setenv(news_llm.OAUTH_TOKEN_ENV, "fake-oauth-token")
+    _add_news(db, 1)
+    assert _run(db)["status"] == "success"
+    assert fake()[0]["leaked_env"] == ["CLAUDE_CODE_OAUTH_TOKEN"]
+    assert news_llm.child_env()[news_llm.OAUTH_TOKEN_ENV] == "fake-oauth-token"
+    assert "CLAUDE_CODE_SESSION_ID" not in news_llm.child_env()
+
+
+@pytest.mark.parametrize(
+    "result,stderr,envelope_status",
+    [
+        # The -p messages of code.claude.com/docs/en/errors (read 2026-10-29).
+        ("Not logged in · Please run /login", "", None),
+        ("Failed to authenticate. API Error: 401 OAuth token has expired", "", 401),
+        (
+            "Failed to authenticate: OAuth token revoked. Please log in again or"
+            " contact your administrator.",
+            "",
+            None,
+        ),
+        (
+            "Failed to authenticate: OAuth session expired and could not be refreshed",
+            "",
+            None,
+        ),
+        (
+            "Please run /login · API Error: 401 Invalid authentication credentials",
+            "",
+            None,
+        ),
+        ("", "", 401),
+        (None, "Error: authentication_failed", None),
+    ],
+)
+def test_an_auth_error_of_the_cli_is_not_logged_in(result, stderr, envelope_status):
+    if result is None:
+        cli = news_llm.CliResult(1, "not json", stderr)
+    else:
+        envelope = {"type": "result", "is_error": True, "result": result}
+        if envelope_status is not None:
+            envelope["api_error_status"] = envelope_status
+        cli = news_llm.CliResult(1, json.dumps(envelope), stderr)
+    with pytest.raises(LlmBatchError) as caught:
+        news_llm.parse_envelope(cli)
+    assert caught.value.reason == "not_logged_in"
+    assert "not_logged_in" in news_llm.FATAL_REASONS
+
+
+@pytest.mark.parametrize(
+    "result,reason",
+    [
+        ("Claude AI usage limit reached", "rate_limited"),
+        ("API Error: 529 Overloaded (request 4012)", "cli_error"),
+    ],
+)
+def test_other_cli_errors_are_not_taken_for_an_auth_error(result, reason):
+    envelope = {"type": "result", "is_error": True, "result": result}
+    with pytest.raises(LlmBatchError) as caught:
+        news_llm.parse_envelope(news_llm.CliResult(1, json.dumps(envelope), ""))
+    assert caught.value.reason == reason
+
+
+def test_a_401_in_a_stack_trace_is_not_an_auth_error():
+    # A crashed CLI: no JSON on stdout, a line number 401 in the trace.
+    trace = "TypeError: x is undefined\n    at run (/$bunfs/root/claude:401:12)"
+    with pytest.raises(LlmBatchError) as caught:
+        news_llm.parse_envelope(news_llm.CliResult(1, "", trace))
+    assert caught.value.reason == "cli_error"
+
+
+def test_model_text_of_a_failed_call_without_is_error_is_not_read():
+    # is_error false: the result is model text, here a news figure and words
+    # of the auth messages, not the CLI's error.
+    envelope = {
+        "type": "result",
+        "is_error": False,
+        "result": "營收 401 億元，OAuth token 外洩事件，please log in",
+    }
+    with pytest.raises(LlmBatchError) as caught:
+        news_llm.parse_envelope(news_llm.CliResult(1, json.dumps(envelope), ""))
+    assert caught.value.reason == "cli_error"
+
+
+def test_an_expired_oauth_token_stops_the_run_and_leaves_the_batch_pending(
+    db, fake, monkeypatch
+):
+    items = _add_news(db, BATCH_SIZE + 1)
+    monkeypatch.setenv("FAKE_CLAUDE_MODES", "token_expired")
+    result = _run(db, limit=60)
+    assert result["status"] == "failed" and len(fake()) == 1
+    assert result["batches"][0]["reason"] == "not_logged_in"
+    assert result["skipped_batches"][0]["reason"] == "stopped_after_not_logged_in"
+    rows = _results(db)
+    assert {row.news_item_id for row in rows} == {
+        item.id for item in items[:BATCH_SIZE]
+    }
+    assert {row.llm_status for row in rows} == {"pending"}
 
 
 # Timestamps the batch writes (#376). `frozen_utcnow` (conftest) makes app.clock answer

@@ -375,6 +375,14 @@ describe('.env rules', () => {
     'docker compose exec api python -m pytest -q',
     'docker run --rm -e STOCK_DATA_DIR=/data --env-file ./fake-env.txt alpine true',
     'git commit -m "allow docker compose config -q, block docker inspect"',
+    '(docker compose config -q)',
+    "out=$(docker inspect --format '{{.State.Status}}' t360-api-1)",
+    // A process substitution or a PowerShell assignment without spaces, of a command that prints
+    // no environment (#372).
+    'diff <(docker compose config -q) <(docker compose config --services)',
+    "$out=$(docker inspect --format '{{.State.Status}}' t360-api-1)",
+    '$env:X=$(docker compose config -q)',
+    'git commit -m "diff <(docker compose config) <(docker compose -f b.yml config) later"',
   ];
   const DOCKER_BLOCKED = [
     'docker compose config',
@@ -423,6 +431,24 @@ describe('.env rules', () => {
     'docker exec t360-api-1 cat /proc/1/environ',
     `docker compose run --rm api python -c "import os; print(os.environ)"`,
     'docker run --rm --env-file ./fake-env.txt alpine env',
+    // A subshell or a command substitution (PR #370 review).
+    '(docker compose config)',
+    'out=$(docker compose config)',
+    '$(docker inspect t360-api-1)',
+    'x=`docker inspect t360-api-1`',
+    '(docker compose run --rm api env)',
+    'echo "$(docker exec t360-api-1 printenv)"',
+    // A process substitution, and a PowerShell assignment without spaces (#372, PR #370 review).
+    'diff <(docker compose config) <(docker compose -f b.yml config)',
+    'cat <(docker inspect t360-api-1)',
+    'cat >(docker compose config)',
+    'cat < <(docker compose run --rm api env)',
+    '$out=$(docker compose config)',
+    '$out=(docker inspect t360-api-1)',
+    '$out=@(docker exec t360-api-1 printenv)',
+    '$env:X=$(docker compose config)',
+    '$out+=$(docker compose config)',
+    `pwsh -c '$out=$(docker compose config)'`,
   ];
 
   for (const shell of ['bash', 'powershell']) {
@@ -434,6 +460,202 @@ describe('.env rules', () => {
       for (const command of DOCKER_BLOCKED) assert.ok(commandDenial(command, shell, [], clean), command);
     });
   }
+
+  // #341: compose down that removes named volumes, like git clean -x: blocked unless -p names a
+  // test project (tools/compose/test_project.sh).
+  const DOWN_BLOCKED = [
+    'docker compose down -v',
+    'docker compose down --volumes',
+    'docker compose down --volumes=true',
+    'docker compose down --rmi all -v',
+    'docker compose down -t 0 -v',
+    'docker compose down -vt 0',
+    'docker compose down --remove-orphans --volumes --rmi local',
+    'docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v',
+    'docker compose -p stock-lab down -v',
+    'docker compose --project-name stock-lab down --volumes',
+    'docker compose --project-name=stock-lab-release down -v',
+    'docker compose -p task-341 -p stock-lab down -v',
+    'docker compose -p stock-lab -p task-1 down -v',
+    'docker compose -p task-1 --project-name=stock-lab down --volumes',
+    'docker compose -p my-app down -v',
+    'docker compose -p t341x down -v',
+    'docker compose -p= down -v',
+    'docker-compose down -v',
+    'docker.exe compose down --volumes',
+    'docker --context default compose down -v',
+    'MSYS_NO_PATHCONV=1 docker compose down -v',
+    'cd ../stock-lab-release && docker compose down -v',
+    'COMPOSE_PROJECT_NAME=task-341 docker compose down -v',
+    'bash -c "docker compose down -v"',
+    "sh -lc 'docker compose -p stock-lab down --volumes'",
+    // A subshell or a command substitution runs it all the same (PR #370 review).
+    '(docker compose down -v)',
+    '(docker compose -p stock-lab down --volumes)',
+    'out=$(docker compose down -v)',
+    '$(docker compose down -v)',
+    '@(docker compose down --volumes)',
+    'echo "$(docker compose down -v)"',
+    'x=`docker compose down -v`',
+    '(cd ../stock-lab-release && docker compose down -v)',
+    // A process substitution, and a PowerShell assignment without spaces (#372, PR #370 review).
+    'cat <(docker compose down -v)',
+    'cat >(docker compose -p stock-lab down --volumes)',
+    'cat < <(docker compose down -v)',
+    '$out=$(docker compose down -v)',
+    '$out=(docker compose down -v)',
+    '$out=@(docker compose -p stock-lab down --volumes)',
+    '$env:X=$(docker compose down -v)',
+    '$out+=$(docker compose down -v)',
+    `pwsh -c '$out=(docker compose down -v)'`,
+  ];
+  const DOWN_ALLOWED = [
+    'docker compose down',
+    'docker compose down --rmi all --remove-orphans',
+    'docker compose -p stock-lab down',
+    'docker compose -p task-341 down --volumes --rmi all',
+    'docker compose -p task-341 -f docker-compose.yml -f docker-compose.dev.yml down --volumes --rmi all',
+    'docker compose --project-name t341 down -v',
+    'docker compose --project-name=t341-a down -v',
+    'docker compose -pt341_b down -v',
+    'docker compose -p deploy-smoke-341 down -v',
+    'docker compose -f docker-compose.yml down -v -p task-341',
+    'docker compose up -d -V',
+    'docker compose rm -v -f',
+    'docker volume rm t341_stock-data',
+    'git commit -m "block compose down -v of the production project"',
+    '(docker compose -p task-341 down --volumes --rmi all)',
+    'out=$(docker compose -p t341 down -v)',
+    '(docker compose down)',
+    'cat <(docker compose -p task-372 down -v)',
+    'cat >(docker compose -p t372 down --volumes)',
+    '$out=$(docker compose -p task-372 down -v)',
+    '$out=(docker compose -p t372 down --volumes)',
+    '$env:X=$(docker compose -p deploy-smoke-372 down -v)',
+    '$out=$(docker compose down)',
+  ];
+
+  for (const shell of ['bash', 'powershell']) {
+    test(`${shell}: compose down -v of a project not named as a test project is blocked (#341)`, () => {
+      for (const command of DOWN_BLOCKED) assert.match(commandDenial(command, shell, [], clean) || '', /down -v/, command);
+    });
+
+    test(`${shell}: compose down without -v, or of a test project, passes (#341)`, () => {
+      for (const command of DOWN_ALLOWED) assert.equal(commandDenial(command, shell, [], clean), null, command);
+    });
+  }
+
+  // #342 decision 7: docker volume rm／prune and system prune --volumes delete named volumes too.
+  const VOLUME_BLOCKED = [
+    'docker volume rm stock-lab_stock-data',
+    'docker volume remove stock-lab_stock-data',
+    'docker volume rm -f stock-lab_stock-data',
+    'docker volume rm t342_stock-data stock-lab_stock-data',
+    'docker volume rm stock-data',
+    'docker volume rm my-app_stock-data',
+    'docker volume rm t342x_stock-data',
+    'docker volume rm _t342_stock-data',
+    'docker volume rm "$V"',
+    'docker volume rm $(docker volume ls -q)',
+    'docker volume rm',
+    'docker.exe volume rm stock-lab_stock-data',
+    'docker --context default volume rm stock-lab_stock-data',
+    'docker volume prune',
+    'docker volume prune -f',
+    'docker volume prune -a -f',
+    'docker volume prune --filter label=com.docker.compose.project=stock-lab',
+    'docker volume prune --filter=label=com.docker.compose.project=my-app',
+    'docker volume prune --filter label=foo=t342',
+    'docker system prune --volumes',
+    'docker system prune -a -f --volumes',
+    'docker system prune --volumes=true',
+    'docker system prune --volumes --filter label=com.docker.compose.project=t342',
+    'bash -c "docker volume prune -f"',
+    '(docker volume rm stock-lab_stock-data)',
+    'out=$(docker system prune -f --volumes)',
+    'MSYS_NO_PATHCONV=1 docker volume rm stock-lab_stock-data',
+  ];
+  const VOLUME_ALLOWED = [
+    'docker volume ls',
+    'docker volume ls -q --filter label=com.docker.compose.project=stock-lab',
+    'docker volume inspect stock-lab_stock-data',
+    'docker volume create t342_x',
+    'docker volume rm t342_stock-data',
+    'docker volume rm -f t342-rehearsal_stock-data task-342_stock-data',
+    'docker volume rm deploy_smoke_stock-data',
+    'docker volume rm t342_a_stock-data',
+    'docker volume prune -f --filter label=com.docker.compose.project=t342',
+    'docker volume prune --filter=label=com.docker.compose.project=task-342',
+    'docker system prune',
+    'docker system prune -f',
+    'docker image prune -f',
+    'git commit -m "block docker volume rm stock-lab_stock-data"',
+  ];
+
+  for (const shell of ['bash', 'powershell']) {
+    test(`${shell}: docker volume rm／prune and system prune --volumes of production are blocked (#342)`, () => {
+      for (const command of VOLUME_BLOCKED) {
+        assert.match(commandDenial(command, shell, [], clean) || '', /named volume/, command);
+      }
+    });
+
+    test(`${shell}: volume commands that keep production's volumes pass (#342)`, () => {
+      for (const command of VOLUME_ALLOWED) assert.equal(commandDenial(command, shell, [], clean), null, command);
+    });
+  }
+
+  test('a volume of the project STOCK_COMPOSE_PROJECT names is blocked (#342)', () => {
+    const saved = process.env.STOCK_COMPOSE_PROJECT;
+    process.env.STOCK_COMPOSE_PROJECT = 't1-prod';
+    try {
+      assert.ok(commandDenial('docker volume rm t1-prod_stock-data', 'bash', [], clean));
+      assert.ok(commandDenial('docker volume prune --filter label=com.docker.compose.project=t1-prod', 'bash', [], clean));
+      assert.equal(commandDenial('docker volume rm t1-other_stock-data', 'bash', [], clean), null);
+    } finally {
+      if (saved === undefined) delete process.env.STOCK_COMPOSE_PROJECT;
+      else process.env.STOCK_COMPOSE_PROJECT = saved;
+    }
+  });
+
+  test('the hook process blocks docker volume rm through Bash and PowerShell (#342)', () => {
+    for (const tool_name of ['Bash', 'PowerShell']) {
+      const result = hook({ tool_name, tool_input: { command: 'docker volume rm stock-lab_stock-data' } });
+      assert.equal(result.code, 2, tool_name);
+      assert.match(result.stderr, /named volume/, tool_name);
+    }
+    assert.equal(hook(bash('docker volume rm t342_stock-data')).code, 0);
+  });
+
+  test('compose down -v of the project STOCK_COMPOSE_PROJECT names is blocked (#341)', () => {
+    const saved = process.env.STOCK_COMPOSE_PROJECT;
+    process.env.STOCK_COMPOSE_PROJECT = 't1-prod';
+    try {
+      assert.ok(commandDenial('docker compose -p t1-prod down -v', 'bash', [], clean));
+      assert.equal(commandDenial('docker compose -p t1-other down -v', 'bash', [], clean), null);
+    } finally {
+      if (saved === undefined) delete process.env.STOCK_COMPOSE_PROJECT;
+      else process.env.STOCK_COMPOSE_PROJECT = saved;
+    }
+  });
+
+  test('the hook process blocks compose down -v through Bash and PowerShell (#341)', () => {
+    for (const tool_name of ['Bash', 'PowerShell']) {
+      const result = hook({ tool_name, tool_input: { command: 'docker compose down -v' } });
+      assert.equal(result.code, 2, tool_name);
+      assert.match(result.stderr, /named volume/, tool_name);
+    }
+    assert.equal(hook(bash('docker compose -p task-341 down --volumes')).code, 0);
+  });
+
+  test('COMPOSE_PROJECT_NAME of the session is not read: compose down -v without -p is blocked (#341)', () => {
+    // dispatch.sh starts an engineer's claude with COMPOSE_PROJECT_NAME=task-<issue>; compose
+    // would use it, but -p is what the hook goes by.
+    const env = { ...process.env, COMPOSE_PROJECT_NAME: 'task-341' };
+    for (const command of ['docker compose down -v', 'docker compose down --volumes --rmi all']) {
+      assert.equal(hook(bash(command), env).code, 2, command);
+    }
+    assert.equal(hook(bash('docker compose -p task-341 down -v'), env).code, 0);
+  });
 
   test('the hook process allows compose config -q and blocks docker inspect (#360)', () => {
     assert.equal(hook(bash('docker compose config -q')).code, 0);

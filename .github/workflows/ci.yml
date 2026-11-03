@@ -111,14 +111,138 @@ jobs:
           nproc
           free -g
       # The whole backend/tests directory; --durations=30 puts the slowest tests in the log (#374).
+      # The suite_split plugin only records what ran (tools/ci/suite_split.py, #378); the suite
+      # job checks it with the docker job's report.
       - name: Backend pytest regressions (temp SQLite only, no source GET)
         shell: bash
         working-directory: backend
         env:
           LOCALAPPDATA: ${{ runner.temp }}
+          PYTHONPATH: ${{ github.workspace }}/tools/ci
         run: |
           set -euo pipefail
-          python -B -m pytest -p no:cacheprovider -q -rA --durations=30 tests
+          python -B -m pytest -p no:cacheprovider -p suite_split --suite-report "$RUNNER_TEMP/suite/backend.json" -q -rA --durations=30 tests
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: suite-backend
+          path: ${{ runner.temp }}/suite/backend.json
+          if-no-files-found: error
+          retention-days: 14
+
+  # The backend image (backend/Dockerfile, #333): build it, then in a container the tools it
+  # must hold, every app and worker module importing (a dependency missing from the image
+  # fails here), one screenshot of a local page with tools/ops/screenshot.cjs (its memory peak
+  # from the container's cgroup) and the tests that depend on the image's environment (#378).
+  # The backend job runs the whole of backend/tests on the runner; this job runs only what
+  # tools/ci/docker_suite.json lists, and the suite job fails CI if any test of the suite ran
+  # in neither. The tests read git history (KNOWN_FAILURES dates), so the checkout's .git is
+  # mounted read-only; the image has none.
+  docker:
+    name: docker
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    # shell: bash runs with -o pipefail, so a failing command piped to tee fails its step.
+    defaults:
+      run:
+        shell: bash
+    env:
+      IMAGE: stock-lab-backend:ci
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: docker build
+        run: docker build -f backend/Dockerfile -t "$IMAGE" .
+      - name: Image size
+        run: |
+          docker image inspect "$IMAGE" --format 'size_bytes={{.Size}}' | tee -a "$GITHUB_STEP_SUMMARY"
+          docker history --format '{{.Size}}\t{{.CreatedBy}}' "$IMAGE" | cut -c1-160
+      - name: Tools in the container
+        run: |
+          docker run --rm "$IMAGE" bash -c '
+            set -eux
+            python -c "import app, worker" && echo "import app, worker: ok"
+            gh --version
+            claude --version
+            node --version
+            chromium --version
+            date "+%F %T %Z %z"
+            cat ~/.claude.json
+            id
+            cat /proc/1/cmdline | tr "\0" " "; echo'
+      # python -c "import app, worker" above reaches two docstring-only __init__.py files; this
+      # imports every module, so a dependency only a submodule needs (httpx) must be in the image.
+      - name: Import every app and worker module
+        run: docker run --rm "$IMAGE" python -B tools/ci/import_modules.py
+      - name: Screenshot in the container
+        run: |
+          docker run --rm "$IMAGE" bash -c '
+            set -eu
+            mkdir -p /tmp/page
+            printf "<!doctype html><meta charset=utf-8><meta name=viewport content=width=device-width><title>stock-lab</title><main>stock-lab 截圖測試</main>\n" > /tmp/page/index.html
+            python -m http.server 8765 --bind 127.0.0.1 --directory /tmp/page > /tmp/http.log 2>&1 &
+            curl -fsS -o /dev/null --retry 30 --retry-delay 1 --retry-connrefused http://127.0.0.1:8765/
+            node tools/ops/screenshot.cjs --url http://127.0.0.1:8765/ --out /tmp/shot --name local --widths 1280,390
+            ls -l /tmp/shot
+            cat /tmp/shot/local-1280.txt
+            echo "memory_peak_bytes=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo unknown)"' | tee -a "$GITHUB_STEP_SUMMARY"
+      # The list is tools/ci/docker_suite.json. The whole suite is also collected, not run, so the
+      # suite job compares both jobs with the suite as the image sees it. /suite is where the
+      # reports go: the container's user (uid 1000) is not the runner's, hence chmod.
+      - name: pytest in the container
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/suite"
+          chmod 777 "$RUNNER_TEMP/suite"
+          python3 -B tools/ci/suite_split.py args --prefix backend/ > "$RUNNER_TEMP/suite/selectors.txt"
+          mapfile -t selectors < "$RUNNER_TEMP/suite/selectors.txt"
+          test "${#selectors[@]}" -gt 0
+          pytest=(docker run --rm -v "$PWD/.git:/app/.git:ro" -v "$RUNNER_TEMP/suite:/suite" -e PYTHONPATH=/app/backend:/app/tools/ci "$IMAGE" python -B -m pytest -p no:cacheprovider -p suite_split)
+          "${pytest[@]}" -qq --collect-only --suite-report /suite/image-collect.json backend/tests
+          "${pytest[@]}" -q -rA --suite-report /suite/docker.json "${selectors[@]}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: suite-docker
+          path: |
+            ${{ runner.temp }}/suite/docker.json
+            ${{ runner.temp }}/suite/image-collect.json
+          if-no-files-found: error
+          retention-days: 14
+
+  # Every test of backend/tests ran in the backend job or in the docker job, or is listed in
+  # tools/ci/docker_suite.json as skipped everywhere (#378). Collecting proves nothing here, as
+  # the backend job collects the whole suite: the check is on what passed. Not run when either
+  # job failed (required is red then anyway).
+  suite:
+    name: suite
+    needs: [changes, backend, docker]
+    if: needs.changes.outputs.python == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # shell: bash runs with -o pipefail, so a failing check piped to tee fails its step.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: suite-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/suite
+      - name: suite
+        run: |
+          python3 -B tools/ci/suite_split.py verify \
+            --backend "$RUNNER_TEMP/suite/backend.json" \
+            --docker "$RUNNER_TEMP/suite/docker.json" \
+            --image "$RUNNER_TEMP/suite/image-collect.json" | tee -a "$GITHUB_STEP_SUMMARY"
 
   # Experiment (#379): the same tests on every core with pytest-xdist, beside backend for a
   # week. Not in required's needs, and neither a red or hung pytest nor a broken summary fails
@@ -254,6 +378,69 @@ jobs:
       - run: pnpm --dir frontend run test:ci
       - run: pnpm --dir frontend run build
 
+  # The frontend image (frontend/Dockerfile, #334): the nginx stage and the dev target build;
+  # test:ci and build pass in the dev container; frontend/docker/smoke.sh checks the pages,
+  # the single-page fallback, that /api reaches the upstream with the browser's Host and that
+  # nothing in the web container runs as root; frontend/docker/context_check.sh that
+  # frontend/.dockerignore keeps secrets, dependencies and build output out at any depth.
+  frontend-image:
+    name: frontend-image
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # shell: bash runs with -o pipefail, so a failing script piped to tee fails its step.
+    defaults:
+      run:
+        shell: bash
+    env:
+      WEB_IMAGE: stock-lab-web:ci
+      DEV_IMAGE: stock-lab-web-dev:ci
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: docker build
+        run: |
+          docker build -t "$WEB_IMAGE" frontend
+          docker build --target dev -t "$DEV_IMAGE" frontend
+          docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep ':ci ' | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: test:ci and build in the dev container
+        run: |
+          docker run --rm "$DEV_IMAGE" pnpm run test:ci
+          docker run --rm "$DEV_IMAGE" pnpm run build
+      - name: smoke
+        run: bash frontend/docker/smoke.sh "$WEB_IMAGE" "$DEV_IMAGE" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: build context
+        run: bash frontend/docker/context_check.sh | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # docker-compose.yml and docker-compose.dev.yml (#335): tools/compose/smoke.sh builds the
+  # images, then in both topologies (nginx web; Vite web calling the api) checks health, writes
+  # sent as a browser sends them (2xx) and from a foreign Origin (403), the ports the entrypoint
+  # refuses, the api's restart, the scheduler's serve, and that the env file reaches the api and
+  # the scheduler while both still start without one. tools/compose/deploy_smoke.sh then deploys
+  # two tags with tools/ops/deploy.sh (#340): the services run the tagged images, a deploy
+  # refused while a job holds a lock changes no image, container or volume.
+  compose:
+    name: compose
+    needs: changes
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    # shell: bash runs with -o pipefail, so a failing script piped to tee fails its step.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - run: docker compose version
+      - name: smoke
+        run: bash tools/compose/smoke.sh | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: deploy
+        run: bash tools/compose/deploy_smoke.sh | tee -a "$GITHUB_STEP_SUMMARY"
+
   # The five main pages end to end on the fixture database (tools/verify/page_checks.py, #243):
   # API and vite preview on local ports, Chrome screenshots, every features check labeled CI.
   # Only the pages the change needs (tools/verify/verify_plan.py, #245); with none, every later
@@ -346,7 +533,7 @@ jobs:
   required:
     name: required
     if: always()
-    needs: [changes, repository, pr, backend, frontend, verify]
+    needs: [changes, repository, pr, backend, docker, suite, frontend, frontend-image, compose, verify]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:
@@ -363,10 +550,13 @@ jobs:
           assert jobs['verify']['result'] == 'success', jobs
           pr = 'success' if os.environ['EVENT'] == 'pull_request' else 'skipped'
           assert jobs['pr']['result'] == pr, jobs
-          for job, flag in [('backend', 'python'), ('frontend', 'frontend')]:
+          for job, flag in [('backend', 'python'), ('docker', 'python'), ('suite', 'python'), ('frontend', 'frontend'), ('frontend-image', 'frontend')]:
               required = jobs['changes']['outputs'].get(flag)
               assert required in ('true', 'false'), jobs
               expected = 'success' if required == 'true' else 'skipped'
               assert jobs[job]['result'] == expected, jobs
+          flags = jobs['changes']['outputs']
+          compose = 'success' if 'true' in (flags.get('python'), flags.get('frontend')) else 'skipped'
+          assert jobs['compose']['result'] == compose, jobs
           print('All applicable CI checks passed; local QA is a separate requirement.')
           PY

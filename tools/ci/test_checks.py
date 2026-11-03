@@ -12,6 +12,8 @@ from checks import (
     HIGH_RISK_PATHS,
     LINT_COMMANDS,
     ROOT,
+    RUNTIME_PATHS,
+    WINDOWS_SCRIPTS_LEFT,
     ac_results,
     anchors,
     change_flags,
@@ -21,8 +23,10 @@ from checks import (
     high_risk,
     markdown_errors,
     owns_errors,
+    path_matches,
     pr_changes,
     pr_errors,
+    windows_runtime_errors,
 )
 
 
@@ -84,6 +88,20 @@ class RoutingTests(unittest.TestCase):
         for name in ["tools/ci/README.md", ".github/workflows/README.md"]:
             self.assertEqual(
                 change_flags([name]), {"python": True, "frontend": True}, name
+            )
+
+    def test_the_image_build_context_requires_python(self):
+        # The docker job runs with the python flag (#333 review S4).
+        self.assertEqual(
+            change_flags([".dockerignore"]), {"python": True, "frontend": False}
+        )
+        self.assertTrue(change_flags(["backend/Dockerfile"])["python"])
+
+    def test_the_compose_files_require_python(self):
+        # The compose job runs with the python or the frontend flag (#335).
+        for name in ["docker-compose.yml", "docker-compose.dev.yml"]:
+            self.assertEqual(
+                change_flags([name]), {"python": True, "frontend": False}, name
             )
 
     def test_dependency_constraints_require_python(self):
@@ -306,6 +324,23 @@ class LintTests(unittest.TestCase):
                 command,
             )
         self.assertTrue((ROOT / "ruff.toml").is_file())
+
+    def test_the_backend_image_has_the_repository_job_tools(self):
+        """The local checks run in the backend image (#339) with the pins CI's repository
+        job installs."""
+
+        def pins(path: str) -> list[list[str]]:
+            text = (ROOT / path).read_text(encoding="utf-8")
+            return [
+                re.findall(r"\S+==\S+", line)
+                for line in text.splitlines()
+                if "pip install" in line and "ruff==" in line
+            ]
+
+        ci = pins(".github/workflows/ci.yml")
+        self.assertEqual(len(ci), 1, ci)
+        self.assertIn("PyYAML==6.0.3", ci[0])
+        self.assertEqual(pins("backend/Dockerfile"), ci)
 
 
 # Real merged PRs (body, changed paths, labels, non-merge commit messages) from the GitHub API.
@@ -698,6 +733,14 @@ class RepositoryWorkingTree(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertIn("docs/x.md: the first line is not <!-- owns:", result.stderr)
 
+    def test_windows_logic_in_the_runtime_fails(self):
+        (self.repo / "backend/worker").mkdir(parents=True)
+        result = self.edit("backend/worker/w.py", "import msvcrt\n")
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn(
+            "backend/worker/w.py:1: Windows execution layer (msvcrt)", result.stderr
+        )
+
 
 class WorkflowTriggers(unittest.TestCase):
     """CI runs on PRs into and pushes to every long-lived branch (#288, #332).
@@ -719,6 +762,196 @@ class WorkflowTriggers(unittest.TestCase):
         for event in ("pull_request", "push"):
             with self.subTest(event=event):
                 self.assertEqual(workflow["on"][event]["branches"], long_lived)
+
+
+class EnvExample(unittest.TestCase):
+    """.env.example holds keys and comments only; .env stays out of Git (#337)."""
+
+    def test_env_example_has_only_empty_keys_and_comments(self):
+        text = (ROOT / ".env.example").read_text(encoding="utf-8")
+        active = {}
+        for line in text.splitlines():
+            if not line.strip() or line.startswith("#"):
+                continue
+            key, sep, value = line.partition("=")
+            self.assertEqual((sep, value), ("=", ""), line)
+            active[key] = value
+        self.assertEqual(
+            sorted(active),
+            [
+                "CLAUDE_CODE_OAUTH_TOKEN",
+                "GH_TOKEN",
+                "STOCK_SKIP_NEWS_LLM",
+                "STOCK_WAKE_TOKEN",
+            ],
+        )
+        commented = set(re.findall(r"^# ([A-Z][A-Z0-9_]*)=", text, re.M))
+        self.assertLessEqual({"TZ", "STOCK_DATA_DIR"}, commented)
+        # Compose fixes TZ and STOCK_DATA_DIR in the containers: comments only.
+        self.assertNotRegex(text, r"(?m)^(TZ|STOCK_DATA_DIR)=")
+        # The key news-llm and candidate-notes keep in the claude -p environment.
+        news_llm = (ROOT / "backend/worker/news_llm.py").read_text(encoding="utf-8")
+        self.assertIn('OAUTH_TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN"', news_llm)
+
+    def test_env_files_are_ignored_and_the_example_is_not(self):
+        def ignored(path: str) -> bool:
+            result = subprocess.run(
+                ["git", "check-ignore", "--no-index", "-q", path], cwd=ROOT
+            )
+            self.assertIn(result.returncode, (0, 1), path)
+            return result.returncode == 0
+
+        for path in (".env", ".env.local", ".env.production"):
+            self.assertTrue(ignored(path), path)
+        self.assertFalse(ignored(".env.example"))
+
+
+class ShellLineEndings(unittest.TestCase):
+    """Scripts run in Linux containers stay LF on a Windows checkout (#335).
+
+    A CRLF shell script fails there, and a bind-mounted one has no execute bit, so the
+    compose entrypoint is also executable in Git (the image chmods it besides).
+    """
+
+    def test_every_shell_script_is_lf_in_the_index_and_by_attribute(self):
+        listed = subprocess.check_output(
+            ["git", "ls-files", "--eol", "-s", "--", "*.sh"], cwd=ROOT, text=True
+        )
+        # <mode> <sha> <stage>, then i/<eol> w/<eol> attr/<attributes>, then the path.
+        rows = {
+            name: (stage, eol)
+            for stage, eol, name in (line.split("\t") for line in listed.splitlines())
+        }
+        self.assertIn("backend/docker/entrypoint.sh", rows)
+        for name, (stage, eol) in rows.items():
+            with self.subTest(name=name):
+                self.assertEqual(eol.split()[0], "i/lf")
+                self.assertIn("eol=lf", eol.split())
+                if name == "backend/docker/entrypoint.sh":
+                    self.assertEqual(stage.split()[0], "100755")
+
+
+class WindowsRuntime(unittest.TestCase):
+    """The Windows execution layer does not come back (#331, #341).
+
+    What runs in the containers (RUNTIME_PATHS) has no Windows logic in its code, and no
+    Windows script is added beside the four Task Scheduler ones the cutover (#342) removes.
+    """
+
+    def check(self, files: dict[str, str]) -> list[str]:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        for name, text in files.items():
+            (root / name).parent.mkdir(parents=True, exist_ok=True)
+            (root / name).write_text(text, encoding="utf-8")
+        return windows_runtime_errors(sorted(files), root)
+
+    def test_the_working_tree_has_no_windows_execution_layer(self):
+        self.assertEqual(windows_runtime_errors(), [])
+
+    def test_windows_logic_in_runtime_code_fails(self):
+        code = [
+            "import msvcrt",
+            "kernel32 = ctypes.windll.kernel32",
+            "windows = sys.platform == 'win32'",
+            'windows = sys.platform.startswith("win")',
+            'windows = os.name == "nt"',
+            'windows = platform.system() == "Windows"',
+            "flags = subprocess.CREATE_NEW_PROCESS_GROUP",
+            "subprocess.run(cmd, creationflags=0x08000000)",
+            'query = "SELECT * FROM Win32_OperatingSystem"',
+            'run(["powershell", "-File", "x.ps1"])',
+            'run(["schtasks", "/query"])',
+            'run(["taskkill", "/F", "/PID", pid])',
+            'exe = venv / "Scripts" / "pythonw.exe"',
+            'cli = "claude.exe"',
+            # PR #370 review: code before a comment on the same line is still code.
+            "from msvcrt import getch  # one key at a time",
+            "windows = sys.platform in ('win32', 'cygwin')",
+            "windows = os.name in ('nt',)",
+            "posix = sys.platform not in {'win32'}",
+            'run(["cmd.exe", "/c", "dir"])',
+            "run('cmd /c rmdir x', shell=True)",
+            # A cmd switch right after the slash, in any case (#372).
+            "run('cmd /K dir', shell=True)",
+            "run('cmd /d /c dir', shell=True)",
+            "run('cmd /E:ON /V:ON /c dir', shell=True)",
+            "run('cmd /?', shell=True)",
+            "os.startfile(path)",
+            "process.send_signal(signal.CTRL_BREAK_EVENT)",
+            "prototype = ctypes.WINFUNCTYPE(ctypes.c_int)",
+        ]
+        errors = self.check({"backend/worker/w.py": "\n".join(code) + "\n"})
+        self.assertEqual(len(errors), len(code), errors)
+        for number, error in enumerate(errors, 1):
+            self.assertTrue(
+                error.startswith(f"backend/worker/w.py:{number}: Windows"), error
+            )
+
+    def test_each_runtime_kind_of_file_is_read(self):
+        files = {
+            "backend/Dockerfile": "RUN powershell -c x\n",
+            "backend/docker/entrypoint.sh": "exec pythonw -m x\n",
+            "docker-compose.yml": "command: [schtasks]\n",
+            "tools/ops/watchdog.sh": 'python="$repo_root/.venv/Scripts/python.exe"\n',
+            "backend/app/a.py": "import winreg\n",
+        }
+        self.assertEqual(len(self.check(files)), len(files))
+
+    def test_comments_docstrings_and_host_tools_pass(self):
+        files = {
+            "backend/worker/w.py": (
+                '"""What tools/Invoke-WorkerJob.ps1 did, without msvcrt or WMI."""\n\n\n'
+                "def f():\n"
+                '    """The Windows branches (pythonw.exe) went with Task Scheduler."""\n'
+                "    return 1  # never os.name == 'nt'\n"
+                # A refusal off POSIX or Linux names no Windows (schedule_runs, worker.job).
+                'if os.name != "posix":\n'
+                "    pass\n"
+                'linux = sys.platform.startswith("linux")\n'
+                # A Path named cmd divided is no cmd.exe switch (#372, PR #370 review).
+                'target = cmd / "x" / name\n'
+                "target = cmd / name\n"
+                "target = cmd /name\n"
+            ),
+            "tools/ops/watchdog.sh": '# Register-Watchdog.ps1 ran this.\necho "${x#win32}"\n',
+            # Agent tools on the Windows host keep their handling (#331 審查結論 3).
+            "tools/ops/close_task.sh": "cmd /d /c rmdir x; powershell -c x\n",
+            "tools/ops/coordinator_lib.sh": 'c="$repo_root/.venv/Scripts/python.exe"\n',
+        }
+        self.assertEqual(self.check(files), [])
+
+    def test_a_runtime_file_it_cannot_read_is_an_error(self):
+        errors = self.check({"backend/worker/w.py": "def (\n"})
+        self.assertEqual(len(errors), 1, errors)
+        self.assertTrue(errors[0].startswith("backend/worker/w.py: not read"), errors)
+
+    def test_a_windows_script_outside_the_list_fails(self):
+        files = {name: "x\n" for name in WINDOWS_SCRIPTS_LEFT}
+        files |= {
+            "tools/ops/Register-Daily.ps1": "x\n",
+            "tools/run.CMD": "x\n",
+            "a/b.bat": "x\n",
+        }
+        self.assertEqual(
+            [error.split(":")[0] for error in self.check(files)],
+            ["a/b.bat", "tools/ops/Register-Daily.ps1", "tools/run.CMD"],
+        )
+
+    def test_every_windows_script_left_exists(self):
+        # #342 removes them with the cutover; then this list goes too.
+        for name in WINDOWS_SCRIPTS_LEFT:
+            self.assertTrue((ROOT / name).is_file(), name)
+
+    def test_what_serve_runs_is_runtime_code(self):
+        serve = (ROOT / "backend/worker/serve.py").read_text(encoding="utf-8")
+        scripts = re.findall(r'ROOT / "tools" / "ops" / "([\w.]+)"', serve)
+        self.assertIn("watchdog.sh", scripts)
+        self.assertIn("monitor.sh", scripts)
+        for script in scripts:
+            name = f"tools/ops/{script}"
+            self.assertTrue(any(path_matches(name, p) for p in RUNTIME_PATHS), name)
 
 
 class ExperimentJob(unittest.TestCase):

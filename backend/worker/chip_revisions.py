@@ -14,12 +14,12 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import date, timezone
-from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.raw_paths import payload_file
 from app.clock import utcnow
 from app.models import IngestionRun, Instrument, RawPayload
 from worker import pipeline
@@ -61,7 +61,7 @@ def _captures(db: Session, start: date, end: date) -> list[RawPayload]:
 def _load(capture: RawPayload) -> Any:
     """The capture's payload; RevisionError when the file is not that capture."""
 
-    content = Path(capture.payload_path or "").read_bytes()
+    content = payload_file(capture.payload_path).read_bytes()
     if hashlib.sha256(content).hexdigest() != capture.sha256:
         raise RevisionError(
             f"raw payload {capture.id} does not match its SHA-256: {capture.payload_path}"

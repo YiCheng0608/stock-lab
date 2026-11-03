@@ -42,11 +42,34 @@ def _bash() -> str | None:
 
 
 BASH = _bash()
-pytestmark = pytest.mark.skipif(BASH is None, reason="bash is required")
+pytestmark = [
+    pytest.mark.skipif(BASH is None, reason="bash is required"),
+    # The watchdog runs under the job lock of worker.job, which is Linux only.
+    pytest.mark.skipif(
+        not sys.platform.startswith("linux"),
+        reason="worker.job runs on Linux only (#333)",
+    ),
+]
 
+# The repository read of every run goes to gh_api.log, the rest to
+# gh_calls.log. The file gh_mode_<subcommand>, else gh_mode, makes the call
+# fail: 401 (expired GH_TOKEN), no_token (exit 4) or down (no connection).
 FAKE_GH = r"""#!/usr/bin/env bash
 d="$FAKE_DIR"
-printf '%s\n' "$*" >>"$d/gh_calls.log"
+if [ "$1" = api ]; then
+  printf '%s\n' "$*" >>"$d/gh_api.log"
+else
+  printf '%s\n' "$*" >>"$d/gh_calls.log"
+fi
+mode="$(cat "$d/gh_mode_$1" 2>/dev/null || cat "$d/gh_mode" 2>/dev/null)"
+case "$mode" in
+  401) echo 'HTTP 401: Bad credentials (https://api.github.com/repos/YiCheng0608/stock-lab)' >&2; exit 1 ;;
+  # Only exit 4 tells: the line naming gh auth login is left out.
+  no_token) echo 'Alternatively, populate the GH_TOKEN environment variable with a GitHub API authentication token.' >&2; exit 4 ;;
+  down) echo 'error connecting to api.github.com' >&2; exit 1 ;;
+esac
+[ "$1" = api ] && { echo 'YiCheng0608/stock-lab'; exit 0; }
+# gh_fail (#390): the comment fails with a message that is not an auth error.
 [ -f "$d/gh_fail" ] && { echo boom >&2; exit 1; }
 while [ $# -gt 0 ]; do
   [ "$1" = --body-file ] && { cat "$2"; echo '-----'; } >>"$d/gh_bodies.txt"
@@ -74,9 +97,15 @@ class Watchdog:
         *args: str,
         now: int = NIGHT,
         python: str | None = None,
+        env: dict[str, str] | None = None,
         **extra: str,
     ) -> subprocess.CompletedProcess[str]:
+        # env (a dict, #340) and keyword variables (#390) both reach the script.
+        extra = {**(env or {}), **extra}
         env = dict(os.environ)
+        # Not the image's version unless the test says so (the docker CI job runs in one).
+        env.pop("STOCK_IMAGE_TAG", None)
+        env.pop("STOCK_GIT_HEAD", None)
         env.update(
             PATH=str(self.bin) + os.pathsep + env.get("PATH", ""),
             FAKE_DIR=self.fake.as_posix(),
@@ -299,14 +328,7 @@ def _hold_lock(wd: Watchdog) -> tuple[subprocess.Popen, int]:
 
 
 def _force_kill(pid: int) -> None:
-    """``taskkill /F`` on Windows, ``kill -9`` elsewhere.
-
-    taskkill /F is TerminateProcess, which os.kill calls on Windows; taskkill
-    itself goes through WMI, and a busy machine cancels it ("call cancelled",
-    the #246 failure), so the tests call TerminateProcess directly.
-    """
-
-    os.kill(pid, signal.SIGTERM if os.name == "nt" else signal.SIGKILL)
+    os.kill(pid, signal.SIGKILL)
 
 
 def test_a_running_watchdog_keeps_the_next_one_out(wd):
@@ -348,7 +370,11 @@ def test_a_run_leaves_no_work_directory(wd):
 def test_unreadable_database_is_logged_and_not_reported_ok(wd):
     (wd.data / "stock.db").write_bytes(b"not a database")
     wd.run()
-    assert wd.events() == ["news_llm_check_failed", "invariants_check_failed"]
+    assert wd.events() == [
+        "news_llm_check_failed",
+        "llm_auth_check_failed",
+        "invariants_check_failed",
+    ]
     assert wd.text("gh_calls.log") == ""
 
 
@@ -850,6 +876,81 @@ def test_a_failed_strategy_levels_step_is_commented(wd):
     assert "invariant_strategy_levels" not in wd.text("gh_calls.log")
 
 
+def _monitor_beat(wd: Watchdog, text: str) -> None:
+    (wd.logs / "monitor-heartbeat.json").write_text(text, encoding="utf-8")
+
+
+def _beat_at(epoch: int) -> str:
+    at = datetime.fromtimestamp(epoch, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return json.dumps({"written_at": at, "mode": "live", "gh_calls": 2, "pid": 1})
+
+
+def test_a_stopped_event_monitor_is_commented_once_a_day(wd):
+    # No heartbeat file: the monitor is not registered, nothing to judge.
+    wd.run()
+    _monitor_beat(wd, _beat_at(NIGHT - 600))
+    wd.run()
+    assert wd.text("gh_calls.log") == ""
+    assert wd.events() == ["schedules_ok", "schedules_ok"]
+
+    _monitor_beat(wd, _beat_at(NIGHT - 601))
+    wd.run()
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
+    body = wd.text("gh_bodies.txt")
+    assert (
+        "待使用者：事件 monitor：最後一次輪詢在 2026-10-19T13:49:59Z（10 分鐘前）"
+        in body
+    )
+    assert "\\stock-lab\\monitor" in body and "monitor.log" in body
+    assert "key=monitor_stale" in wd.log()
+    wd.run(now=NIGHT + 15 * 60)
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
+    assert wd.events()[-1] == "anomaly_already_commented"
+
+
+def test_the_watchdog_reads_the_heartbeat_of_the_monitor_dir(wd):
+    """#338: in the scheduler container the monitor's files are in the bind mounted
+    queue directory, not in the data directory's logs."""
+    queue = wd.root / "coordination"
+    queue.mkdir()
+    (queue / "monitor-heartbeat.json").write_text(_beat_at(NIGHT - 601), "utf-8")
+    _monitor_beat(wd, _beat_at(NIGHT - 60))  # a beat left in the data directory
+    result = wd.run("--dry-run")
+    assert "monitor_stale" not in result.stdout
+    result = wd.run("--dry-run", "--monitor-dir", queue.as_posix())
+    assert "anomaly_planned key=monitor_stale" in result.stdout
+    assert f"{queue.as_posix()}/monitor.log" in result.stdout
+
+
+def test_an_unreadable_monitor_heartbeat_is_commented(wd):
+    _monitor_beat(wd, '{"written_at": ')
+    result = wd.run("--dry-run")
+    assert "待使用者：事件 monitor：" in result.stdout
+    assert "monitor-heartbeat.json` 讀不出輪詢時間" in result.stdout
+
+
+def test_a_monitor_whose_gh_calls_keep_failing_is_commented(wd):
+    beat = json.loads(_beat_at(NIGHT - 60))
+    beat.update(gh_failed_polls=9, gh_failed_since="2026-10-19T13:50:00Z")
+    _monitor_beat(wd, json.dumps(beat))
+    wd.run()
+    assert wd.text("gh_calls.log") == ""
+    beat.update(gh_failed_polls=10, gh_error="HTTP 401: Bad credentials")
+    _monitor_beat(wd, json.dumps(beat))
+    wd.run()
+    body = wd.text("gh_bodies.txt")
+    assert (
+        "待使用者：事件 monitor：gh 從 2026-10-19T13:50:00Z 起連續 10 輪失敗"
+        "（最後的錯誤：HTTP 401: Bad credentials）"
+    ) in body
+    assert "`gh auth status`" in body and "`gh api rate_limit`" in body
+    assert "key=monitor_gh_failed" in wd.log()
+    beat.update(json.loads(_beat_at(NIGHT + 14 * 60)), gh_failed_polls=25)
+    _monitor_beat(wd, json.dumps(beat))
+    wd.run(now=NIGHT + 15 * 60)
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
+
+
 def _helper_module():
     spec = importlib.util.spec_from_file_location(
         "watchdog_helper", SCRIPT.with_name("watchdog_helper.py")
@@ -876,6 +977,284 @@ def test_helper_connection_refuses_writes(tmp_path):
     finally:
         conn.close()
     assert "unknown_source=0" in helper.invariants(str(db), "2026-10-19")
+
+
+# claude -p and gh authentication (#337) ------------------------------------------
+
+
+def _llm_runs(path: Path, runs: list[tuple[str, int, list[str | None]]]) -> None:
+    """LLM runs: (run_type, started seconds before NIGHT, batch reasons)."""
+
+    with sqlite3.connect(path) as conn:
+        _ingestion_runs(conn)
+        for run_type, age, reasons in runs:
+            batches = [
+                {"batch": n, "status": "done" if reason is None else "pending"}
+                | ({} if reason is None else {"reason": reason})
+                for n, reason in enumerate(reasons, start=1)
+            ]
+            conn.execute(
+                "INSERT INTO ingestion_runs (run_type, status, started_at, metadata_json)"
+                " VALUES (?, 'failed', ?, ?)",
+                (run_type, _utc_text(NIGHT - age), json.dumps({"batches": batches})),
+            )
+    conn.close()
+
+
+def test_an_auth_error_of_the_latest_llm_run_is_commented_once_a_taipei_day(wd):
+    db = wd.data / "stock.db"
+    _llm_runs(
+        db,
+        [
+            ("candidate_notes", 7200, [None]),
+            ("candidate_notes", 3600, ["not_logged_in"]),
+            ("news_llm", 1800, ["timeout", "not_logged_in"]),
+        ],
+    )
+    wd.run()
+    bodies = wd.text("gh_bodies.txt")
+    assert bodies.count("待使用者：Claude Code 認證：") == 1
+    assert "最近一次 run：news_llm run 3、candidate_notes run 2。" in bodies
+    assert "`claude setup-token`" in bodies and "`CLAUDE_CODE_OAUTH_TOKEN`" in bodies
+    wd.run(now=NIGHT + 1800)
+    assert wd.text("gh_bodies.txt").count("Claude Code 認證：") == 1
+    assert "anomaly_already_commented" in wd.events()
+
+
+def test_an_llm_auth_error_that_a_later_run_of_its_step_cleared_is_not_commented(wd):
+    db = wd.data / "stock.db"
+    _llm_runs(
+        db,
+        [
+            ("candidate_notes", 3600, ["not_logged_in"]),
+            ("candidate_notes", 1800, [None]),
+            ("news_llm", 7200, ["not_logged_in"]),
+            ("news_llm", 600, ["rate_limited"]),
+        ],
+    )
+    result = wd.run()
+    assert "Claude Code 認證" not in wd.text("gh_bodies.txt") + result.stdout
+    assert _helper_module().llm_auth(str(db), str(NIGHT)) == ""
+    empty = wd.root / "empty.db"
+    sqlite3.connect(empty).close()
+    assert _helper_module().llm_auth(str(empty), str(NIGHT)) == "skip"
+
+
+def test_an_llm_auth_error_older_than_a_day_is_not_commented(wd):
+    # The latest run of each step failed authentication; only the window keeps
+    # a step that stopped running (news-llm switched off) from a comment a day.
+    db = wd.data / "stock.db"
+    _llm_runs(
+        db,
+        [
+            ("news_llm", 24 * 3600 + 60, ["not_logged_in"]),
+            ("candidate_notes", 24 * 3600 - 60, ["not_logged_in"]),
+        ],
+    )
+    helper = _helper_module()
+    assert helper.llm_auth(str(db), str(NIGHT)) == "candidate_notes run_id=2"
+    assert helper.llm_auth(str(db), str(NIGHT + 120)) == ""
+    wd.run(now=NIGHT + 120)
+    assert "Claude Code 認證" not in wd.text("gh_bodies.txt")
+    assert wd.events() == ["schedules_ok"]
+
+
+@pytest.mark.parametrize("mode,code", [("401", 1), ("no_token", 4)])
+def test_a_refused_gh_is_commented_once_gh_is_accepted_again(wd, mode, code):
+    # AC-2: the watchdog cannot comment while GitHub refuses gh; the runs of the
+    # outage are logged and the first accepted run posts one comment a day.
+    start = NIGHT - 6 * 3600  # 16:00 Taipei: the whole day 1 stays on 10/19
+    (wd.fake / "gh_mode").write_text(mode, encoding="utf-8")
+    wd.run(now=start)
+    wd.run(now=start + 1800)
+    assert wd.text("gh_calls.log") == ""
+    assert len(wd.text("gh_api.log").splitlines()) == 2
+    assert wd.events() == ["gh_auth_failed", "gh_auth_failed"]
+    assert f"gh_auth_failed exit={code} date=20261019" in wd.log()
+
+    (wd.fake / "gh_mode").unlink()
+    wd.run(now=start + 3600)
+    bodies = wd.text("gh_bodies.txt")
+    assert bodies.count("待使用者：gh 認證：") == 1
+    assert (
+        "2026-10-19T08:00:00Z 到 2026-10-19T08:30:00Z 的 2 次看門狗執行" in bodies
+        and "期間沒有其他異常" in bodies
+        and "`GH_TOKEN`" in bodies
+    )
+    wd.run(now=start + 5400)  # nothing new since the comment
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
+
+    # A second outage the same Taipei day waits for the next day's comment.
+    (wd.fake / "gh_mode").write_text(mode, encoding="utf-8")
+    wd.run(now=start + 7200)
+    (wd.fake / "gh_mode").unlink()
+    wd.run(now=start + 9000)
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
+    assert wd.events()[-1] == "anomaly_already_commented"
+    next_day = start + 86400
+    wd.run(now=next_day)
+    bodies = wd.text("gh_bodies.txt")
+    assert bodies.count("待使用者：gh 認證：") == 2
+    assert "2026-10-19T10:00:00Z 到 2026-10-19T10:00:00Z 的 1 次看門狗執行" in bodies
+    wd.run(now=next_day + 1800)
+    assert len(wd.text("gh_calls.log").splitlines()) == 2
+
+
+def test_anomalies_held_back_by_a_refused_gh_are_posted_with_the_gh_comment(wd):
+    _anomaly_fixtures(wd)
+    (wd.fake / "gh_mode").write_text("401", encoding="utf-8")
+    wd.run()
+    assert wd.text("gh_calls.log") == ""
+    assert wd.events().count("anomaly_not_commented") == 3
+    (wd.fake / "gh_mode").unlink()
+    wd.run(now=NIGHT + 900)
+    bodies = wd.text("gh_bodies.txt")
+    assert bodies.count("待使用者：") == 4
+    assert bodies.index("待使用者：gh 認證：") < bodies.index("待使用者：daily 排程")
+    assert (
+        "期間沒能留言的異常：`daily_no_end`、`news_no_log`、`news_llm_pending`"
+        in bodies
+    )
+
+
+def test_a_comment_refused_for_its_credentials_holds_back_the_rest(wd):
+    # The repository read passed, the comment got 401: the token expired between.
+    _anomaly_fixtures(wd)
+    (wd.fake / "gh_mode_issue").write_text("401", encoding="utf-8")
+    wd.run()
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
+    events = wd.events()
+    assert events.count("gh_auth_failed") == 1
+    assert events.count("anomaly_not_commented") == 3
+    assert "anomaly_comment_failed" not in events
+
+
+def test_a_gh_network_error_is_not_taken_for_an_auth_error(wd):
+    (wd.fake / "gh_mode").write_text("down", encoding="utf-8")
+    wd.run()
+    assert wd.events() == ["gh_probe_failed", "schedules_ok"]
+    _anomaly_fixtures(wd)
+    wd.run(now=NIGHT + 900)
+    events = wd.events()
+    assert "gh_auth_failed" not in events
+    assert events.count("anomaly_comment_failed") == 3
+
+
+def test_a_dry_run_makes_no_gh_call(wd):
+    (wd.fake / "gh_mode").write_text("401", encoding="utf-8")
+    _anomaly_fixtures(wd)
+    wd.run("--dry-run")
+    assert wd.text("gh_api.log") == wd.text("gh_calls.log") == ""
+    assert "gh_auth_failed" not in wd.events()
+
+
+def test_an_expired_claude_token_leaves_the_notes_pending_and_comments_on_1(
+    wd, monkeypatch
+):
+    # AC-1 end to end: candidate_notes with the fake claude answering as an
+    # expired CLAUDE_CODE_OAUTH_TOKEN does, then the watchdog on that database.
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import Session
+
+    from app.db import Base, enable_sqlite_foreign_keys
+    from app.models import CandidateLlmNote
+    from test_candidate_notes import FAKE_CLI, RUN_DATE, T, _candidates
+    from worker import news_llm, pipeline
+    from worker.candidate_notes import BATCH_SIZE, run_candidate_notes
+
+    monkeypatch.setenv(news_llm.CLI_ENV, json.dumps([sys.executable, str(FAKE_CLI)]))
+    monkeypatch.setenv("FAKE_CLAUDE_LOG", str(wd.root / "fake_claude.jsonl"))
+    monkeypatch.setenv("FAKE_CLAUDE_MODES", "token_expired")
+    for key in news_llm.API_KEY_ENV:
+        monkeypatch.delenv(key, raising=False)
+    engine = create_engine(f"sqlite:///{(wd.data / 'stock.db').as_posix()}")
+    enable_sqlite_foreign_keys(engine)
+    Base.metadata.create_all(engine)
+    try:
+        with Session(engine, autoflush=False, expire_on_commit=False) as db:
+            db.info["strategies"] = pipeline._ensure_strategies(db)
+            db.commit()
+            _candidates(db, BATCH_SIZE + 2)
+            result = run_candidate_notes(db, T, run_date=RUN_DATE)
+            notes = db.scalars(select(CandidateLlmNote)).all()
+    finally:
+        engine.dispose()
+    assert result["status"] == "failed"
+    assert result["batches"][0]["reason"] == "not_logged_in"
+    assert result["skipped_batches"][0]["reason"] == "stopped_after_not_logged_in"
+    assert len(notes) == BATCH_SIZE
+    assert {note.llm_status for note in notes} == {"pending"}
+
+    wd.run(now=int(time.time()))
+    bodies = wd.text("gh_bodies.txt")
+    assert bodies.count("待使用者：Claude Code 認證：") == 1
+    assert f"candidate_notes run {result['run_id']}" in bodies
+
+
+# The deployed version (#314 AC-3; #340: the image, not a checkout) -----------------
+
+IMAGE = "stock-lab-backend:v1.1.0"
+HEAD = "c" * 40
+
+
+def _deploy_record(wd: Watchdog, image: str = IMAGE, head: str = HEAD) -> None:
+    record = {"tag": "v1.1.0", "HEAD": head, "image": image}
+    (wd.logs / "deploy.json").write_text(json.dumps(record), encoding="utf-8")
+
+
+def _in_image(image: str = IMAGE, head: str = HEAD) -> dict[str, str]:
+    """The scheduler container's environment (backend/Dockerfile ENV)."""
+    return {"STOCK_IMAGE_TAG": image, "STOCK_GIT_HEAD": head}
+
+
+def test_the_image_the_watchdog_runs_in_is_checked_against_the_deploy_record(wd):
+    # Never deployed: nothing to compare with.
+    result = wd.run("--dry-run", env=_in_image())
+    assert "invariant deploy_image skip reason=no_deploy_record" in result.stdout
+    assert "將在 #1 留言" not in result.stdout
+    _deploy_record(wd)
+    result = wd.run(env=_in_image())
+    assert (
+        f"invariant deploy_image ok image={IMAGE} recorded={IMAGE}"
+        f" head={HEAD} recorded_head={HEAD} tag=v1.1.0" in result.stdout
+    )
+    assert wd.events()[-1] == "schedules_ok" and wd.text("gh_calls.log") == ""
+    # Rebuilt outside deploy.sh (`docker compose up -d --build`): compose's default tag.
+    rebuilt = "stock-lab-backend:latest"
+    dry = wd.run("--dry-run", env=_in_image(rebuilt, ""))
+    assert (
+        f"invariant deploy_image violation image={rebuilt} recorded={IMAGE}"
+        f" head=unknown recorded_head={HEAD} tag=v1.1.0" in dry.stdout
+    )
+    assert f"待使用者：部署不變量：scheduler 跑的 image 是 `{rebuilt}`" in dry.stdout
+    wd.run(env=_in_image(rebuilt, ""))
+    wd.run(env=_in_image(rebuilt, ""))
+    assert wd.text("gh_calls.log").count("issue comment 1") == 1
+
+
+def test_the_same_tag_built_from_another_commit_is_a_violation(wd):
+    _deploy_record(wd)
+    dry = wd.run("--dry-run", env=_in_image(head="d" * 40))
+    assert "invariant deploy_image violation" in dry.stdout
+    assert f"recorded_head={HEAD}" in dry.stdout
+
+
+def test_outside_an_image_or_with_an_unreadable_record_it_is_commented(wd):
+    # The checkout's git is never read (#340, PR #365 review suggestion 2).
+    _deploy_record(wd)
+    dry = wd.run("--dry-run", env={"STOCK_IMAGE_TAG": "", "STOCK_GIT_HEAD": ""})
+    assert (
+        f"invariant deploy_image violation image=unknown recorded={IMAGE}" in dry.stdout
+    )
+    (wd.logs / "deploy.json").write_text("{not json", encoding="utf-8")
+    dry = wd.run("--dry-run", env=_in_image())
+    assert "invariant deploy_image violation reason=unreadable_record" in dry.stdout
+    assert "待使用者：部署不變量：部署記錄" in dry.stdout and "讀不懂" in dry.stdout
+    # #314's record (a checkout and its HEAD, no image) cannot be checked either.
+    record = {"tag": "v1.1.0", "HEAD": HEAD, "checkout": "/release"}
+    (wd.logs / "deploy.json").write_text(json.dumps(record), encoding="utf-8")
+    dry = wd.run("--dry-run", env=_in_image())
+    assert "invariant deploy_image violation reason=unreadable_record" in dry.stdout
 
 
 # --- daily data check (Issue #390) -------------------------------------------

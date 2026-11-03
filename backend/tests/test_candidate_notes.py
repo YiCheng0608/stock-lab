@@ -277,31 +277,16 @@ def test_missing_cli_fails_without_note_rows(db, fake, monkeypatch, tmp_path):
     assert run.run_type == "candidate_notes" and run.status == "failed"
 
 
-@pytest.mark.parametrize("name", ["claude.cmd", "claude.bat", "claude"])
-def test_a_non_exe_cli_on_windows_fails_closed_without_a_call(
-    db, fake, monkeypatch, tmp_path, name
-):
-    shim = tmp_path / name
-    shim.write_text("@echo off\n", encoding="utf-8")
-    monkeypatch.setenv(news_llm.CLI_ENV, str(shim))
-    monkeypatch.setattr(candidate_notes, "IS_WINDOWS", True)
+def test_a_missing_cli_fails_closed_without_a_call(db, fake, monkeypatch, tmp_path):
+    missing = tmp_path / "no-claude"
+    monkeypatch.setenv(news_llm.CLI_ENV, str(missing))
     _candidates(db, 2)
     result = _run(db)
     assert result["status"] == "failed"
-    assert result["reason"] == f"cli_not_found: {shim} is not a native .exe"
+    assert result["reason"] == f"cli_not_found: {missing}"
     assert fake() == [] and _notes(db) == []
     run = db.get(IngestionRun, result["run_id"])
     assert run.status == "failed" and run.metadata_json["calls"] == 0
-
-
-def test_a_native_exe_cli_passes_the_windows_check(monkeypatch, tmp_path):
-    exe = tmp_path / "Claude.EXE"
-    exe.write_bytes(b"")
-    monkeypatch.setenv(news_llm.CLI_ENV, str(exe))
-    for key in news_llm.API_KEY_ENV:
-        monkeypatch.delenv(key, raising=False)
-    monkeypatch.setattr(candidate_notes, "IS_WINDOWS", True)
-    assert candidate_notes.cli_problem() == ([str(exe)], None)
 
 
 def test_api_key_in_environment_refuses_to_run(db, fake, monkeypatch):
@@ -556,6 +541,27 @@ def test_a_failed_write_closes_the_run_as_failed_with_its_calls(db, fake, monkey
     assert run.metadata_json["calls"] == 1 and run.finished_at is not None
     # The call still counts toward the day's limit.
     assert candidate_notes._calls_today(db, RUN_DATE) == 1
+
+
+def test_an_expired_oauth_token_leaves_the_notes_pending_and_stops_the_run(
+    db, fake, monkeypatch
+):
+    # #337 AC-1: the -p answer to an expired CLAUDE_CODE_OAUTH_TOKEN; the
+    # watchdog side is test_watchdog's
+    # test_an_expired_claude_token_leaves_the_notes_pending_and_comments_on_1.
+    monkeypatch.setenv("FAKE_CLAUDE_MODES", "token_expired")
+    monkeypatch.setenv(news_llm.OAUTH_TOKEN_ENV, "fake-expired-token")
+    _candidates(db, BATCH_SIZE + 2)
+    result = _run(db)
+    calls = fake()
+    assert result["status"] == "failed" and len(calls) == 1
+    assert calls[0]["leaked_env"] == ["CLAUDE_CODE_OAUTH_TOKEN"]
+    assert result["batches"][0]["reason"] == "not_logged_in"
+    assert result["skipped_batches"][0]["reason"] == "stopped_after_not_logged_in"
+    notes = _notes(db)
+    assert len(notes) == BATCH_SIZE
+    assert {note.llm_status for note in notes} == {"pending"}
+    assert all("401 OAuth token has expired" in note.llm_error for note in notes)
 
 
 # Timestamps the step writes (#376). `frozen_utcnow` (conftest) makes app.clock answer
