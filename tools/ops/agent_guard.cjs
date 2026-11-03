@@ -2,7 +2,8 @@
 // Claude Code PreToolUse hook (.claude/settings.json): blocks the tool calls AGENTS.md forbids.
 // - Edit/Write: the target file's checkout is on branch master (the management checkout).
 // - Bash/PowerShell: git clean -x/-X, bare git stash, git stash pop/clear, git push --force/-f/
-//   --force-with-lease/+refspec, recursive rm of the data directory.
+//   --force-with-lease/+refspec, recursive rm of the data directory, docker compose down -v/--volumes
+//   of a project not named as a test project with -p.
 // - Every file tool, Bash/PowerShell/Monitor, Artifact uploads and codebase-memory: a .env file (`.env`, or `.env.*` not
 //   ending in `.example`, in any directory). See ENV RULES below for what each check covers.
 // Reads the hook JSON on stdin; exit 2 with the reason on stderr blocks the call, exit 0 allows
@@ -53,6 +54,19 @@ const RULES = [
   {
     test: (segment) => REMOVE.test(segment.bare) && RECURSIVE.test(segment.bare) && DATA_DIR.test(segment.raw),
     reason: '不得刪資料目錄（AGENTS.md「工具」）',
+  },
+  {
+    test: (segment, shell) => composeDownDenial(segment.raw, shell),
+    reason:
+      'docker compose down -v／--volumes 會刪掉 project 的 named volume（正式 project 的 stock-data 就是正式 DB）；' +
+      '只放行以 -p 明寫的測試 project（t<n>、task-<n> 開頭，或含 smoke 一詞），例如 docker compose -p task-<issue> down --volumes',
+  },
+  {
+    test: (segment, shell) => volumeRemovalDenial(segment.raw, shell),
+    reason:
+      'docker volume rm／volume prune／system prune --volumes 會刪 named volume（正式 project 的 stock-data 就是正式 DB）；' +
+      'volume rm 只放行測試 project 的 volume（t<n>_、task-<n>_ 開頭，或 project 名含 smoke 一詞，例如 t342_stock-data），' +
+      'volume prune 要加 --filter label=com.docker.compose.project=<測試 project>，system prune --volumes 一律擋',
   },
 ];
 
@@ -397,23 +411,32 @@ function quietConfig(rest) {
   );
 }
 
-// The reason a docker command in `raw` prints environment values, or null. A quoted word that
-// starts a command with docker (`sh -c "docker compose config"`) is checked as a command too; one
-// that only mentions docker (a commit message) is not.
-function dockerDenial(raw, shell) {
-  const texts = words(raw, shell).map((w) => w.text);
+// A word without the ( $( @( <( >( or backtick that open a subshell, a command substitution or a
+// process substitution, an assignment in front of one (`out=$(docker`, and PowerShell's `$out=(`,
+// `$env:X=$(`, `$out+=$(` written without spaces), and the ) or backtick that close it (#341, #372,
+// PR #370 review): `(docker compose down -v)` runs docker as much as the bare command does.
+const unwrap = (text) => text.replace(/^(?:\$?[\w:]+\+?=(?=[$@(`]))?(?:[$@<>]?\(|`)+/, '').replace(/[)`]+$/, '');
+
+// The docker commands in `raw`, each as `sub` (the subcommand words, lowercased; `compose` first
+// for docker-compose), `args` (the words after them) and `all` (every word after docker, options
+// included). A quoted word that starts a command with docker (`sh -c "docker compose config"`)
+// counts as a command too; one that only mentions docker (a commit message) does not. Words are
+// taken as the shell runs them inside a subshell or a command substitution (unwrap).
+function dockerCommands(raw, shell) {
+  const texts = words(raw, shell).map((w) => unwrap(w.text));
+  const found = [];
   for (const text of texts) {
     if (text !== raw && /\s/.test(text) && /docker/i.test(text)) {
       for (const inner of segments(text, shell)) {
-        const first = words(inner.raw, shell).find((w) => !/^\w+=/.test(w.text));
-        if (!first || !DOCKER.test(path.basename(normalizeTarget(first.text)))) continue;
-        const reason = dockerDenial(inner.raw, shell);
-        if (reason) return reason;
+        const first = words(inner.raw, shell)
+          .map((w) => unwrap(w.text))
+          .find((t) => !/^\w+=/.test(t));
+        if (first && DOCKER.test(path.basename(normalizeTarget(first)))) found.push(...dockerCommands(inner.raw, shell));
       }
     }
   }
   const at = texts.findIndex((t) => DOCKER.test(path.basename(normalizeTarget(t))));
-  if (at < 0) return null;
+  if (at < 0) return found;
   const sub = /compose/i.test(path.basename(normalizeTarget(texts[at]))) ? ['compose'] : [];
   let i = at + 1;
   while (i < texts.length) {
@@ -423,12 +446,97 @@ function dockerDenial(raw, shell) {
     sub.push(text.toLowerCase());
     if (!DOCKER_GROUP.test(text)) break;
   }
-  const args = texts.slice(i);
-  const command = sub[sub.length - 1];
-  // Any config/convert word after compose counts: an option this parser does not know (one that
-  // takes a value) must not hide the subcommand.
+  found.push({ sub, args: texts.slice(i), all: texts.slice(at + 1) });
+  return found;
+}
+
+// The words after compose (or stack), subcommand included, or [] when it is not compose. Any word
+// counts as the subcommand: an option this parser does not know (one that takes a value) must
+// not hide it.
+function composeWords({ sub, args }) {
   const compose = sub.findIndex((s) => s === 'compose' || s === 'stack');
-  const rest = compose < 0 ? [] : [...sub.slice(compose + 1), ...args];
+  return compose < 0 ? [] : [...sub.slice(compose + 1), ...args];
+}
+
+// compose down that removes the project's named volumes: -v (alone or among short flags) or
+// --volumes in any form, after `down` (#341). Allowed only when every -p/--project-name names a
+// test project, by the rule of tools/compose/test_project.sh: production is stock-lab and
+// STOCK_COMPOSE_PROJECT; a test project starts with t<n> or task-<n>, or has smoke as one of its
+// words. Without -p compose takes the project from COMPOSE_PROJECT_NAME, the env file or the
+// directory, which the hook cannot see, so that is blocked too.
+const TEST_PROJECT = /^(?:t\d+|task-\d+)(?:[-_][a-z0-9_-]*)?$|^(?=[a-z0-9][a-z0-9_-]*$)(?:.*[-_])?smoke(?:[-_].*)?$/;
+function downRemovesVolumes(command) {
+  const rest = composeWords(command);
+  const down = rest.findIndex((t) => /^down$/i.test(t));
+  if (down < 0) return false;
+  const volumes = rest.slice(down + 1).some((t) => /^--volumes(?:=|$)/i.test(t) || /^-(?!-)[A-Za-z]*v/.test(t));
+  if (!volumes) return false;
+  const projects = [];
+  command.all.forEach((t, j) => {
+    if (t === '-p' || t === '--project-name') projects.push(command.all[j + 1] ?? '');
+    else if (t.startsWith('--project-name=')) projects.push(t.slice('--project-name='.length));
+    else if (/^-p./.test(t)) projects.push(t.slice(2));
+  });
+  const production = process.env.STOCK_COMPOSE_PROJECT;
+  return !projects.length || projects.some((p) => p === 'stock-lab' || p === production || !TEST_PROJECT.test(p));
+}
+
+const composeDownDenial = (raw, shell) => dockerCommands(raw, shell).some(downRemovesVolumes);
+
+// A test project's name, by the rule of downRemovesVolumes, that is not production.
+function testProject(name) {
+  const production = process.env.STOCK_COMPOSE_PROJECT;
+  return name !== 'stock-lab' && name !== production && TEST_PROJECT.test(name);
+}
+
+// A compose volume is `<project>_<volume>`; the project may itself hold an underscore, so any
+// prefix before an underscore that names a test project will do (t342_stock-data,
+// deploy_smoke_stock-data). A volume of production (stock-lab_…, `${STOCK_COMPOSE_PROJECT}_…`)
+// never passes, nor does a name the hook cannot read (a variable).
+function testVolume(name) {
+  const production = process.env.STOCK_COMPOSE_PROJECT;
+  if (name.startsWith('stock-lab_') || (production && name.startsWith(`${production}_`))) return false;
+  return [...name.matchAll(/_/g)].some((m) => m.index > 0 && testProject(name.slice(0, m.index)));
+}
+
+// docker volume rm／remove／prune and docker system prune --volumes delete named volumes
+// (#342 decision 7), like compose down -v: rm passes only when every volume it names is a test
+// project's; volume prune only with --filter label=com.docker.compose.project=<test project>;
+// system prune --volumes never (no filter of it is limited to one project's volumes).
+function removesVolumes({ sub, args }) {
+  const [group, verb] = sub.slice(-2).map((s) => s.toLowerCase());
+  if (group === 'system' && verb === 'prune') return args.some((t) => /^--volumes(?:=|$)/i.test(t));
+  if (group !== 'volume') return false;
+  if (verb === 'rm' || verb === 'remove') {
+    const names = args.filter((t) => !t.startsWith('-'));
+    return !names.length || !names.every(testVolume);
+  }
+  if (verb === 'prune') {
+    const filters = [];
+    args.forEach((t, j) => {
+      if (t === '--filter') filters.push(args[j + 1] ?? '');
+      else if (t.startsWith('--filter=')) filters.push(t.slice('--filter='.length));
+    });
+    const label = 'label=com.docker.compose.project=';
+    return !filters.some((f) => f.startsWith(label) && testProject(f.slice(label.length)));
+  }
+  return false;
+}
+
+const volumeRemovalDenial = (raw, shell) => dockerCommands(raw, shell).some(removesVolumes);
+
+// The reason a docker command in `raw` prints environment values, or null.
+function dockerDenial(raw, shell) {
+  for (const command of dockerCommands(raw, shell)) {
+    const reason = dockerEnvDenial(command);
+    if (reason) return reason;
+  }
+  return null;
+}
+
+function dockerEnvDenial({ sub, args }) {
+  const command = sub[sub.length - 1];
+  const rest = composeWords({ sub, args });
   if (rest.some((t) => /^(?:config|convert)$/i.test(t))) {
     if (quietConfig(rest)) return null;
     return (
@@ -517,7 +625,7 @@ function commandDenial(command, shell = 'bash', allow = ALLOW, cwd = process.cwd
   for (const [index, segment] of list.entries()) {
     if (allow.some((re) => re.test(segment.raw))) continue;
     for (const rule of RULES) {
-      if (rule.test ? rule.test(segment) : rule.re.test(segment.bare)) {
+      if (rule.test ? rule.test(segment, shell) : rule.re.test(segment.bare)) {
         return (
           `擋下「${segment.raw}」：${rule.reason}。真的需要時請使用者執行，` +
           '或在 tools/ops/agent_guard.cjs 開頭的放行清單加一條（另開 PR）'

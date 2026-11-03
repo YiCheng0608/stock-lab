@@ -3,10 +3,10 @@
 Create, update or remove the Windows Task Scheduler task for one worker job.
 
 .DESCRIPTION
-Registers \stock-lab\<Job>, which runs `python -m worker.cli job <Job> --git-pull`
+Registers \stock-lab\<Job>, which runs `python -m worker.cli job <Job>`
 (backend/worker/job.py) from this checkout. Register only from the release
-checkout, never from a working or task checkout: every run first
-fast-forwards it. DataDir defaults to STOCK_DATA_DIR, then
+checkout, never from a working or task checkout: the task runs whatever that
+checkout has checked out, the tag tools/ops/deploy.sh deployed (#314). DataDir defaults to STOCK_DATA_DIR, then
 %USERPROFILE%\stock-lab-data. The task starts pythonw.exe next to PythonPath
 when there is one, so no console window opens; the job runs the worker with
 python.exe and no window.
@@ -188,8 +188,7 @@ $argumentList = @(
     '--trigger', 'scheduler',
     '--data-dir', ('"' + $DataDir + '"'),
     '--log-dir', ('"' + $LogDir + '"'),
-    '--min-free-memory-gb', $minFreeMemoryGB.ToString([Globalization.CultureInfo]::InvariantCulture),
-    '--git-pull'
+    '--min-free-memory-gb', $minFreeMemoryGB.ToString([Globalization.CultureInfo]::InvariantCulture)
 )
 if ($Job -eq 'news') {
     if ($NoNewsLlm) { $argumentList += '--skip-news-llm' } else { $argumentList += @('--claude-cli', ('"' + $ClaudeCli + '"')) }

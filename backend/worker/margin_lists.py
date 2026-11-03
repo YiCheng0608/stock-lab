@@ -21,12 +21,12 @@ import hashlib
 import json
 from collections.abc import Iterable
 from datetime import date
-from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.raw_paths import payload_file
 from app.models import MarginList, RawPayload
 from worker.sources import (
     TPEX_MARGIN_HISTORY_ENDPOINT,
@@ -96,7 +96,7 @@ class MarginListError(Exception):
 
 def _load(capture: RawPayload, trading_date: date) -> Any:
     try:
-        content = Path(capture.payload_path or "").read_bytes()
+        content = payload_file(capture.payload_path).read_bytes()
     except OSError as exc:
         raise MarginListError(
             f"raw payload {capture.id} cannot be read: {capture.payload_path}: {exc}"

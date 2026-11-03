@@ -37,16 +37,26 @@ once more and records an ``institutional_refetch`` step on its skipped row;
 OHLCV, margin and events are not requested.  Data idempotency itself is owned
 by the steps: collect reuses a successful run for the same request and never
 rewrites a stored value.
+
+Every row records what ran in ``summary_json["runtime"]`` (#336), the one
+place a row names its version (#340): the image tag (``STOCK_IMAGE_TAG``,
+e.g. ``stock-lab-backend:v1.1.0`` as tools/ops/deploy.sh builds it), the
+commit (``STOCK_GIT_HEAD``, else ``git rev-parse HEAD`` outside an image) and,
+when the scheduled job (worker.job) holds its daily lock, that lock's path.  A ``running`` row started under the lock the
+current run holds now has lost its process, whatever host or PID it names: a
+restarted container has a new hostname and may hand out the same PIDs again.
 """
 
 from __future__ import annotations
 
+import functools
 import importlib
 import os
 import socket
-import sys
+import subprocess
 import traceback
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Any, Callable
 
 from sqlalchemy import desc, inspect, select, text
@@ -112,7 +122,7 @@ CATCHUP_SESSIONS = 5
 CATCHUP_MAX_WEEKDAYS = 15
 TAIPEI_UTC_OFFSET = timedelta(hours=8)
 # Reasons the scheduled job (worker.job) may pass to record a run it declined to start.
-PREFLIGHT_SKIP_REASONS = frozenset({"low_memory", "git_busy", "git_pull_failed"})
+PREFLIGHT_SKIP_REASONS = frozenset({"low_memory", "git_busy"})
 # The job lock is held by another daily job: the same reason as a running row
 # found by _start_run, pointing at that row when it is already written.
 LOCK_SKIP_REASON = "already_running"
@@ -130,6 +140,11 @@ STRATEGY_LEVELS_MODULE = "worker.strategy_levels"
 STRATEGY_LEVELS_FUNCTION = "run_strategy_levels"
 TRADING_CALENDAR_MODULE = "worker.trading_calendar"
 TRADING_CALENDAR_FUNCTION = "run_trading_calendar"
+# Set by worker.job for the worker it starts while holding the job's lock (#336).
+JOB_LOCK_ENV = "STOCK_JOB_LOCK"
+IMAGE_TAG_ENV = "STOCK_IMAGE_TAG"
+GIT_HEAD_ENV = "STOCK_GIT_HEAD"
+ROOT = Path(__file__).resolve().parents[2]
 # The step an already_complete run records when it refetches the target's
 # institutional files (Issue #396).
 INSTITUTIONAL_REFETCH_STEP = "institutional_refetch"
@@ -483,7 +498,8 @@ def _finish(
         run.records = records
         run.error = error
         run.finished_at = utcnow()
-        run.summary_json = summary
+        # Keeps the runtime written when the run started.
+        run.summary_json = {**(run.summary_json or {}), **summary}
         db.commit()
 
 
@@ -492,22 +508,10 @@ def _pid_alive(pid: int) -> bool:
 
     if pid <= 0:
         return False
-    if sys.platform == "win32":
-        import ctypes
-
-        kernel32 = ctypes.windll.kernel32
-        process_query_limited_information = 0x1000
-        still_active = 259
-        handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
-        if not handle:
-            return False
-        try:
-            code = ctypes.c_ulong()
-            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
-                return False
-            return code.value == still_active
-        finally:
-            kernel32.CloseHandle(handle)
+    if os.name != "posix":
+        # Only the backend image runs schedules (#333). Without POSIX there is no probe:
+        # on Windows os.kill(pid, 0) sends CTRL_C_EVENT. The row is judged by its age.
+        return True
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -517,7 +521,44 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
-def _abandoned_reason(row: ScheduleRun, now: datetime, host: str) -> str | None:
+@functools.lru_cache(maxsize=1)
+def _git_head() -> str | None:
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    head = completed.stdout.strip()
+    return head if completed.returncode == 0 and head else None
+
+
+def runtime() -> dict[str, str | None]:
+    """What this run is: the image tag and HEAD, and the job lock it holds."""
+
+    result: dict[str, str | None] = {
+        "image": os.environ.get(IMAGE_TAG_ENV) or None,
+        "head": os.environ.get(GIT_HEAD_ENV) or _git_head(),
+    }
+    if os.environ.get(JOB_LOCK_ENV):
+        result["job_lock"] = os.environ[JOB_LOCK_ENV]
+    return result
+
+
+def _abandoned_reason(
+    row: ScheduleRun, now: datetime, host: str, job_lock: str | None = None
+) -> str | None:
+    held = ((row.summary_json or {}).get("runtime") or {}).get("job_lock")
+    if job_lock and held == job_lock:
+        # The lock is ours, so the job that held it for this row has ended, and
+        # its worker with it (worker.job); the host and PID may be a restarted
+        # container's.
+        return f"abandoned: process {row.pid} on {row.host} no longer holds {job_lock}"
     if row.host == host and row.pid is not None and not _pid_alive(row.pid):
         return f"abandoned: process {row.pid} on {host} is no longer running"
     if row.started_at and now - row.started_at > STALE_RUNNING_AFTER:
@@ -532,6 +573,7 @@ def _start_run(
 
     now = utcnow()
     host = socket.gethostname()
+    current = runtime()
     with pipeline.SessionLocal() as db:
         previous = db.scalars(
             select(ScheduleRun)
@@ -542,7 +584,7 @@ def _start_run(
         for row in previous:
             if row.status != "running":
                 continue
-            abandoned = _abandoned_reason(row, now, host)
+            abandoned = _abandoned_reason(row, now, host, current.get("job_lock"))
             if abandoned:
                 row.status = "failed"
                 row.error = abandoned
@@ -560,6 +602,7 @@ def _start_run(
             started_at=now,
             host=host,
             pid=os.getpid(),
+            summary_json={"runtime": current},
         )
         db.add(run)
         db.flush()
@@ -572,7 +615,11 @@ def _start_run(
         if skip_reason:
             run.status = "skipped"
             run.finished_at = utcnow()
-            run.summary_json = {"reason": skip_reason, "related_run_id": related}
+            run.summary_json = {
+                "runtime": current,
+                "reason": skip_reason,
+                "related_run_id": related,
+            }
         db.commit()
         if skip_reason:
             return run.id, {
@@ -630,7 +677,10 @@ def _refetch_institutional(run_id: int, target: date) -> dict[str, Any]:
 
 
 def record_preflight_skip(
-    end_date: date | None, *, reason: str, trigger: str = "scheduler"
+    end_date: date | None,
+    *,
+    reason: str,
+    trigger: str = "scheduler",
 ) -> dict[str, Any]:
     """Log a run the scheduled job declined to start; no step runs.
 
@@ -694,7 +744,7 @@ def _insert_skip(target: date, reason: str, trigger: str) -> dict[str, Any]:
             status="skipped",
             started_at=now,
             finished_at=now,
-            summary_json=summary,
+            summary_json={"runtime": runtime(), **summary},
         )
         db.add(run)
         db.commit()
@@ -840,7 +890,10 @@ def run_daily_job(
 
 
 def _summary(
-    steps: dict[str, str], collected: dict[str, Any], *, reason: str | None = None
+    steps: dict[str, str],
+    collected: dict[str, Any],
+    *,
+    reason: str | None = None,
 ) -> dict[str, Any]:
     summary: dict[str, Any] = {"steps": steps}
     if reason:
