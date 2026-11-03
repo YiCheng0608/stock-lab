@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import socket
 import stat
@@ -68,8 +69,14 @@ def _unused_port() -> int:
 NO_LISTENER_PORT = _unused_port()
 SHA = "a" * 40
 MERGE_SHA = "b" * 40
-# The tip of origin/feat/docker, the Docker integration branch (#332).
-DOCKER_SHA = "d" * 40
+# A long-lived integration branch the tests name themselves (#332, #428): close_task.sh in
+# the sandbox gets it through Harness.integration_branches, so no test depends on the
+# repository's own list (empty since feat/docker reached master, #331).
+INTEGRATION = "feat/umbrella"
+# The answer of gh run list --branch INTEGRATION (see FAKE_GH).
+INTEGRATION_RUNS = "gh_run_list_" + INTEGRATION.replace("/", "_")
+# The tip of origin/<INTEGRATION>.
+INTEGRATION_SHA = "d" * 40
 # 2026-10-25 12:00:00 UTC
 NOW = int(datetime(2026, 10, 25, 12, 0, tzinfo=timezone.utc).timestamp())
 
@@ -316,6 +323,18 @@ class Harness:
             ),
         )
         self.answer("gh_board", _board(item="ITEM-1"))
+
+    def integration_branches(self, *names: str) -> None:
+        """Set integration_branches in the sandbox copy of close_task.sh (#428)."""
+        path = self.ops / "close_task.sh"
+        text, count = re.subn(
+            r"^integration_branches=\(.*\)$",
+            f"integration_branches=({' '.join(names)})",
+            path.read_text(encoding="utf-8"),
+            flags=re.M,
+        )
+        assert count == 1, "close_task.sh has no integration_branches=(...) line"
+        path.write_text(text, encoding="utf-8", newline="\n")
 
     def answer(self, key: str, value) -> None:
         (self.fake / f"{key}.json").write_text(
@@ -719,7 +738,7 @@ def test_dispatch_without_base_fetches_and_checks_origin_master(
 ) -> None:
     """#332: no --base runs the commands dispatch.sh ran before --base existed."""
     dispatch.write(
-        "refs.txt", f"origin/master {SHA}\norigin/feat/docker {DOCKER_SHA}\n"
+        "refs.txt", f"origin/master {SHA}\norigin/{INTEGRATION} {INTEGRATION_SHA}\n"
     )
     result = _dispatch_from(dispatch, None)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -742,37 +761,37 @@ def test_dispatch_without_base_fetches_and_checks_origin_master(
 def test_dispatch_from_another_base_starts_the_worktree_at_its_tip(
     dispatch: Harness,
 ) -> None:
-    """AC-1 (#332): --base origin/feat/docker fetches it and the new HEAD is its tip."""
+    """AC-1 (#332): --base origin/<branch> fetches it and the new HEAD is its tip."""
     dispatch.write(
-        "refs.txt", f"origin/master {SHA}\norigin/feat/docker {DOCKER_SHA}\n"
+        "refs.txt", f"origin/master {SHA}\norigin/{INTEGRATION} {INTEGRATION_SHA}\n"
     )
-    result = _dispatch_from(dispatch, "origin/feat/docker")
+    result = _dispatch_from(dispatch, f"origin/{INTEGRATION}")
     assert result.returncode == 0, result.stdout + result.stderr
     line = _json_line(result)
-    assert line["head"] == DOCKER_SHA and line["base"] == DOCKER_SHA
+    assert line["head"] == INTEGRATION_SHA and line["base"] == INTEGRATION_SHA
     assert line["sent"] is True and line["branch"] == "task/282-dryrun"
     git = _git_subcommands(dispatch)
-    assert "fetch --quiet origin feat/docker" in git
-    assert "rev-parse origin/feat/docker" in git
+    assert f"fetch --quiet origin {INTEGRATION}" in git
+    assert f"rev-parse origin/{INTEGRATION}" in git
     assert not [c for c in git if "master" in c]
     (create,) = [c for c in dispatch.calls("orca") if c.startswith("worktree create")]
-    assert create.endswith("--setup skip --base-branch origin/feat/docker --json")
+    assert create.endswith(f"--setup skip --base-branch origin/{INTEGRATION} --json")
 
 
 @pytest.mark.parametrize(
     "base, worktree_head, named",
     [
-        (None, DOCKER_SHA, "origin/master"),
-        ("origin/feat/docker", SHA, "origin/feat/docker"),
+        (None, INTEGRATION_SHA, "origin/master"),
+        (f"origin/{INTEGRATION}", SHA, f"origin/{INTEGRATION}"),
     ],
-    ids=["master-worktree-elsewhere", "docker-worktree-on-master"],
+    ids=["master-worktree-elsewhere", "integration-worktree-on-master"],
 )
 def test_dispatch_opens_no_terminal_when_the_worktree_is_not_at_the_base(
     dispatch: Harness, base: str | None, worktree_head: str, named: str
 ) -> None:
     """The HEAD check compares with the --base tip, not always origin/master (#332)."""
     dispatch.write(
-        "refs.txt", f"origin/master {SHA}\norigin/feat/docker {DOCKER_SHA}\n"
+        "refs.txt", f"origin/master {SHA}\norigin/{INTEGRATION} {INTEGRATION_SHA}\n"
     )
     # Orca started the worktree somewhere other than the base asked for.
     dispatch.write("worktree_head.txt", worktree_head + "\n")
@@ -788,7 +807,7 @@ def test_dispatch_opens_no_terminal_when_the_worktree_is_not_at_the_base(
 @pytest.mark.parametrize(
     "base",
     [
-        "feat/docker",
+        INTEGRATION,
         "origin/",
         "origin/-x",
         "origin//x",
@@ -812,6 +831,7 @@ def test_dispatch_refuses_a_base_that_is_not_origin_branch(
 
 @pytest.fixture
 def close(h: Harness):
+    h.integration_branches(INTEGRATION)
     wt = h.root / "wt" / "task-282-dryrun"
     wt.mkdir(parents=True)
     (wt / "file.txt").write_text("x", encoding="utf-8")
@@ -1053,11 +1073,11 @@ def _issue_closes(h: Harness) -> list[str]:
     return [c for c in h.calls("gh") if c.startswith("issue close")]
 
 
-def _docker_green(h: Harness) -> None:
-    """A PR into feat/docker whose merge commit's CI on feat/docker is green."""
-    _merged_into(h, "feat/docker")
+def _integration_green(h: Harness) -> None:
+    """A PR into INTEGRATION whose merge commit's CI on INTEGRATION is green."""
+    _merged_into(h, INTEGRATION)
     h.answer(
-        "gh_run_list_feat_docker",
+        INTEGRATION_RUNS,
         [{"headSha": MERGE_SHA, "status": "completed", "conclusion": "success"}],
     )
 
@@ -1072,37 +1092,38 @@ def _run_branches(h: Harness) -> list[str]:
 
 
 def test_close_task_checks_ci_on_the_branch_the_pr_merged_into(close: Harness) -> None:
-    """AC-2 (#332): a PR into feat/docker is judged by feat/docker's CI and history."""
-    _merged_into(close, "feat/docker")
-    # master has no run of the merge commit and its newest run is red: only feat/docker's
+    """AC-2 (#332): a PR into an integration branch is judged by its CI and history."""
+    _merged_into(close, INTEGRATION)
+    # master has no run of the merge commit and its newest run is red: only INTEGRATION's
     # runs may decide.
     close.answer(
         "gh_run_list",
         [{"headSha": "c" * 40, "status": "completed", "conclusion": "failure"}],
     )
     close.answer(
-        "gh_run_list_feat_docker",
+        INTEGRATION_RUNS,
         [{"headSha": MERGE_SHA, "status": "completed", "conclusion": "success"}],
     )
     result = close.close_task(close.extra)
     assert result.returncode == 0, result.stdout + result.stderr
     line = _json_line(result)
-    assert line["base"] == "feat/docker" and line["merge_commit"] == MERGE_SHA
-    assert _run_branches(close) == ["feat/docker"]
+    assert line["base"] == INTEGRATION and line["merge_commit"] == MERGE_SHA
+    assert _run_branches(close) == [INTEGRATION]
     git = _git_subcommands(close)
-    assert "fetch --quiet origin feat/docker" in git
+    assert f"fetch --quiet origin {INTEGRATION}" in git
     assert (
-        "merge-base --is-ancestor refs/heads/task/282-dryrun origin/feat/docker" in git
+        f"merge-base --is-ancestor refs/heads/task/282-dryrun origin/{INTEGRATION}"
+        in git
     )
     assert not [
         c for c in git if c.startswith(("fetch", "merge-base")) and "master" in c
     ]
     assert not close.wt.exists() and not close.extra.exists()
-    # AC-5: GitHub does not act on Closes #282 in a PR into feat/docker.
+    # AC-5: GitHub does not act on Closes #282 in a PR into a branch other than master.
     assert line["issue_close"] == "closed"
     assert _issue_closes(close) == [
         "issue close 282 --repo YiCheng0608/stock-lab --comment PR #290 已合併進 "
-        "feat/docker，merge commit bbbbbbbbb 的 CI 綠（close_task.sh）"
+        f"{INTEGRATION}，merge commit bbbbbbbbb 的 CI 綠（close_task.sh）"
     ]
 
 
@@ -1125,8 +1146,8 @@ def test_close_task_checks_master_ci_for_a_pr_into_master(close: Harness) -> Non
 def test_close_task_leaves_the_issue_open_when_a_later_check_fails(
     close: Harness, why: str
 ) -> None:
-    """AC-5 (#332): feat/docker's CI is green, yet a check after it refuses."""
-    _docker_green(close)
+    """AC-5 (#332): the integration branch's CI is green, yet a later check refuses."""
+    _integration_green(close)
     dirs = [close.extra]
     if why == "dirty-worktree":
         close.write("git_status.txt", " M file.txt\n")
@@ -1143,7 +1164,7 @@ def test_close_task_leaves_the_issue_open_when_a_later_check_fails(
 def test_close_task_deletes_nothing_when_the_issue_cannot_be_closed(
     close: Harness,
 ) -> None:
-    _docker_green(close)
+    _integration_green(close)
     close.write("gh_issue_close_fails", "")
     result = close.close_task(close.extra)
     assert result.returncode == 1, result.stdout + result.stderr
@@ -1158,7 +1179,7 @@ def test_close_task_rerun_goes_on_when_the_issue_is_already_closed(
     close: Harness,
 ) -> None:
     """#332 review 3: a rerun after a failed delete step finds the Issue closed."""
-    _docker_green(close)
+    _integration_green(close)
     close.answer("gh_issue_view", {"state": "CLOSED"})
     # Were the close tried, it would fail: it must not be.
     close.write("gh_issue_close_fails", "")
@@ -1175,7 +1196,7 @@ def test_close_task_takes_a_failed_close_of_an_issue_now_closed_as_closed(
     close: Harness,
 ) -> None:
     """The close errs, yet the Issue reads back closed: cleanup goes on."""
-    _docker_green(close)
+    _integration_green(close)
     close.answer("gh_issue_view", {"state": "OPEN"})
     close.write("gh_issue_close_fails", "")
     close.write("gh_issue_close_sets_closed", "")
@@ -1198,13 +1219,62 @@ def test_close_task_refuses_a_pr_into_a_branch_that_is_not_long_lived(
     )
     result = close.close_task(close.extra)
     assert result.returncode == 1, result.stdout + result.stderr
-    assert f"目標分支 {base} 不是 master 或長期整合分支（feat/docker）" in result.stderr
+    assert (
+        f"目標分支 {base} 不是 master 或長期整合分支（{INTEGRATION}）" in result.stderr
+    )
     assert not _run_branches(close)
     _assert_nothing_deleted(close)
 
 
+def test_close_task_refuses_a_pr_into_feat_docker_now_that_it_reached_master(
+    close: Harness,
+) -> None:
+    """AC-1 (#428): feat/docker reached master (PR #420) and is no longer an integration
+    branch: the repository's own close_task.sh refuses a PR into it, deleting nothing."""
+    shutil.copyfile(OPS / "close_task.sh", close.ops / "close_task.sh")
+    _merged_into(close, "feat/docker")
+    close.answer(
+        "gh_run_list_feat_docker",
+        [{"headSha": MERGE_SHA, "status": "completed", "conclusion": "success"}],
+    )
+    result = close.close_task(close.extra)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "目標分支 feat/docker 不是 master 或長期整合分支" in result.stderr
+    assert not _run_branches(close)
+    _assert_nothing_deleted(close)
+
+
+@pytest.mark.parametrize("base", ["master", INTEGRATION])
+def test_close_task_without_integration_branches_takes_only_master(
+    close: Harness, base: str
+) -> None:
+    """#428: an empty integration_branches=() is valid; a PR into master is closed as
+    before, a PR into any other branch is refused and the message says there is none."""
+    close.integration_branches()
+    if base != "master":
+        _integration_green(close)
+    result = close.close_task(close.extra)
+    if base == "master":
+        assert result.returncode == 0, result.stdout + result.stderr
+        line = _json_line(result)
+        assert line["base"] == "master" and line["issue_close"] == "not_needed"
+        assert _docker_steps(line) == [
+            "docker_none",
+            "docker_prune_skipped:no_task_resources",
+        ]
+        assert not close.wt.exists() and not close.extra.exists()
+    else:
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert (
+            f"目標分支 {INTEGRATION} 不是 master 或長期整合分支（目前沒有）"
+            in result.stderr
+        )
+        assert not _run_branches(close)
+        _assert_nothing_deleted(close)
+
+
 def test_close_task_no_board_leaves_the_issue_open(close: Harness) -> None:
-    _docker_green(close)
+    _integration_green(close)
     result = close.run(
         "close_task.sh", "282", "--no-board", "--extra-dir", close.extra.as_posix()
     )
@@ -1217,16 +1287,16 @@ def test_close_task_no_board_leaves_the_issue_open(close: Harness) -> None:
     "state, runs, error",
     [
         ("OPEN", None, "PR 尚未合併"),
-        ("MERGED", [], "feat/docker 上 merge commit bbbbbbbbb 的 CI 是 missing"),
+        ("MERGED", [], f"{INTEGRATION} 上 merge commit bbbbbbbbb 的 CI 是 missing"),
         (
             "MERGED",
             [{"headSha": MERGE_SHA, "status": "in_progress", "conclusion": ""}],
-            "feat/docker 上 merge commit bbbbbbbbb 的 CI 是 pending",
+            f"{INTEGRATION} 上 merge commit bbbbbbbbb 的 CI 是 pending",
         ),
         (
             "MERGED",
             [{"headSha": MERGE_SHA, "status": "completed", "conclusion": "failure"}],
-            "feat/docker 上 merge commit bbbbbbbbb 的 CI 是 failure",
+            f"{INTEGRATION} 上 merge commit bbbbbbbbb 的 CI 是 failure",
         ),
         (
             "MERGED",
@@ -1234,37 +1304,37 @@ def test_close_task_no_board_leaves_the_issue_open(close: Harness) -> None:
                 {"headSha": "c" * 40, "status": "completed", "conclusion": "failure"},
                 {"headSha": MERGE_SHA, "status": "completed", "conclusion": "success"},
             ],
-            "feat/docker 最新一次 CI 是 failure",
+            f"{INTEGRATION} 最新一次 CI 是 failure",
         ),
     ],
     ids=["not-merged", "no-run", "pending", "failure", "newer-run-red"],
 )
-def test_close_task_deletes_nothing_when_a_pr_into_feat_docker_is_not_done(
+def test_close_task_deletes_nothing_when_a_pr_into_an_integration_branch_is_not_done(
     close: Harness, state: str, runs: list | None, error: str
 ) -> None:
-    """AC-2 (#332): master's CI is green for the merge commit, feat/docker's is not."""
-    _merged_into(close, "feat/docker", state)
+    """AC-2 (#332): master's CI is green for the merge commit, INTEGRATION's is not."""
+    _merged_into(close, INTEGRATION, state)
     if runs is not None:
-        close.answer("gh_run_list_feat_docker", runs)
+        close.answer(INTEGRATION_RUNS, runs)
     result = close.close_task(close.extra)
     assert result.returncode == 1, result.stdout + result.stderr
     assert error in result.stderr and "未刪除任何東西" in result.stderr
-    assert _run_branches(close) == ([] if state == "OPEN" else ["feat/docker"])
+    assert _run_branches(close) == ([] if state == "OPEN" else [INTEGRATION])
     _assert_nothing_deleted(close)
 
 
-def test_close_task_deletes_nothing_when_the_branch_is_not_in_feat_docker(
+def test_close_task_deletes_nothing_when_the_branch_is_not_in_the_integration_branch(
     close: Harness,
 ) -> None:
-    _merged_into(close, "feat/docker")
+    _merged_into(close, INTEGRATION)
     close.answer(
-        "gh_run_list_feat_docker",
+        INTEGRATION_RUNS,
         [{"headSha": MERGE_SHA, "status": "completed", "conclusion": "success"}],
     )
     close.write("git_ancestor_exit", "1")
     result = close.close_task(close.extra)
     assert result.returncode == 1, result.stdout + result.stderr
-    assert "不在 origin/feat/docker 的 commit" in result.stderr
+    assert f"不在 origin/{INTEGRATION} 的 commit" in result.stderr
     _assert_nothing_deleted(close)
 
 
@@ -2046,7 +2116,7 @@ def test_close_task_leaves_the_prune_to_the_last_docker_task(
 ) -> None:
     """AC-1 (#360): the task's own resources go, but dangling images and build cache stay
     while another Docker task is in progress: worktree task/253-other has resources named
-    t253 (a volume, an image tag), or its HEAD holds feat/docker's first commit of its own
+    t253 (a volume, an image tag), or its HEAD holds INTEGRATION's first commit of its own
     (a Docker subtask), or git cannot tell (exit 128); or while any container runs."""
     first = "e" * 40
     reason = "docker_prune_skipped:other_docker_tasks:253"
@@ -2079,7 +2149,7 @@ def test_close_task_leaves_the_prune_to_the_last_docker_task(
 def test_close_task_prunes_when_no_other_worktree_is_a_docker_subtask(
     docker: Harness,
 ) -> None:
-    """AC-1 (#360): feat/docker has commits of its own, but task/253-other's HEAD holds none
+    """AC-1 (#360): INTEGRATION has commits of its own, but task/253-other's HEAD holds none
     of them (merge-base exit 1): it is no Docker task, so the prune runs."""
     first = "e" * 40
     docker.write("git_rev_list.txt", f"{first}\n")
@@ -2092,20 +2162,20 @@ def test_close_task_prunes_when_no_other_worktree_is_a_docker_subtask(
     ]
     assert any(
         c.startswith(
-            "rev-list --first-parent --reverse origin/master..origin/feat/docker"
+            f"rev-list --first-parent --reverse origin/master..origin/{INTEGRATION}"
         )
         for c in _git_subcommands(docker)
     )
 
 
-@pytest.mark.parametrize("case", ["master", "feat-docker", "no-board"])
+@pytest.mark.parametrize("case", ["master", "integration", "no-board"])
 def test_close_task_prunes_only_for_a_docker_task(close: Harness, case: str) -> None:
     """#360: a task with no Docker resources deletes nothing in Docker; it prunes only when
-    it is a Docker subtask (its PR went into feat/docker). A dry run (--no-board) never
-    prunes, even with resources of its own."""
+    it is a Docker subtask (its PR went into an integration branch). A dry run (--no-board)
+    never prunes, even with resources of its own."""
     args = ["--extra-dir", close.extra.as_posix()]
-    if case == "feat-docker":
-        _docker_green(close)
+    if case == "integration":
+        _integration_green(close)
     elif case == "no-board":
         _set_docker(close, volumes=["t282_stock-data"])
         args.insert(0, "--no-board")
@@ -2113,7 +2183,7 @@ def test_close_task_prunes_only_for_a_docker_task(close: Harness, case: str) -> 
     assert result.returncode == 0, result.stdout + result.stderr
     expected = {
         "master": ["docker_none", "docker_prune_skipped:no_task_resources"],
-        "feat-docker": [
+        "integration": [
             "docker_none",
             "docker_pruned:images",
             "docker_pruned:build_cache",
@@ -2125,7 +2195,7 @@ def test_close_task_prunes_only_for_a_docker_task(close: Harness, case: str) -> 
     }[case]
     assert _docker_steps(_json_line(result)) == expected
     assert bool([c for c in close.calls("docker") if "prune" in c]) == (
-        case == "feat-docker"
+        case == "integration"
     )
 
 
