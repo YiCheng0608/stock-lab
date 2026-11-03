@@ -41,6 +41,7 @@ from app.models import (
 )
 from app.strategies import (
     REGISTRY,
+    SUCCESSOR,
     SUPERSEDED,
     StrategyInputs,
     canonical_config_snapshot,
@@ -53,6 +54,9 @@ from worker.sources import TPEX_MARGIN_HISTORY_ENDPOINT, TWSE_MARGIN_HISTORY_END
 
 T = date(2026, 10, 30)
 SESSIONS = pipeline.business_days(T, 21)
+# The versions #392 superseded; breakout_v2／pullback_v2 are superseded in
+# turn by breakout_v3／pullback_v3 (#404), which keep the rule tested here.
+V1 = ("breakout_v1", "pullback_v1")
 
 
 @pytest.fixture
@@ -423,7 +427,7 @@ def test_a_non_margin_security_is_judged_with_the_margin_condition_not_applicabl
         assert "margin" not in json.dumps(signal.rule_evidence_json[kind])
     # The same day's margin security is judged on its ratio as before.
     assert (
-        analyzed[("MRG", "breakout_v2")].rule_evidence_json["inputs"][
+        analyzed[("MRG", "breakout_v3")].rule_evidence_json["inputs"][
             "margin_eligibility"
         ]
         == APPLICABLE
@@ -463,7 +467,7 @@ def test_without_an_official_list_the_margin_condition_stays_missing(analyzed):
 def test_the_v1_rules_still_fail_closed_on_the_same_inputs(analyzed):
     """v1 is not changed: a non-margin security is still incomplete for it."""
 
-    inputs = analyzed[("NOM", "breakout_v2")].rule_evidence_json["inputs"]
+    inputs = analyzed[("NOM", "breakout_v3")].rule_evidence_json["inputs"]
     common = dict(
         close=101.0,
         volume=2000.0,
@@ -482,7 +486,7 @@ def test_the_v1_rules_still_fail_closed_on_the_same_inputs(analyzed):
 
 
 def test_the_condition_list_says_not_applicable(analyzed):
-    signal = analyzed[("NOM", "breakout_v2")]
+    signal = analyzed[("NOM", "breakout_v3")]
     inputs = signal.rule_evidence_json["inputs"]
     strategy_inputs = StrategyInputs(
         bar_count=60,
@@ -533,11 +537,11 @@ def test_the_condition_list_says_not_applicable(analyzed):
 
 def test_the_decision_does_not_list_margin_as_missing(db, analyzed):
     result = decision._strategy_result(
-        analyzed[("NOM", "breakout_v2")],
-        "breakout_v2",
+        analyzed[("NOM", "breakout_v3")],
+        "breakout_v3",
         T,
         strategy_version=db.scalar(
-            select(StrategyVersion).where(StrategyVersion.name == "breakout_v2")
+            select(StrategyVersion).where(StrategyVersion.name == "breakout_v3")
         ),
     )
     assert "margin_balance_change_ratio_5d" not in result["missing"]
@@ -596,7 +600,7 @@ def test_analyze_writes_only_v2_and_leaves_the_v1_rows_alone(db, tmp_path, monke
     old = {
         (day, name): _v1_signal(db, instrument, day, name)
         for day in (SESSIONS[-2], T)
-        for name in SUPERSEDED
+        for name in V1
     }
     before = {key: _row(signal) for key, signal in old.items()}
 
@@ -615,7 +619,7 @@ def test_analyze_writes_only_v2_and_leaves_the_v1_rows_alone(db, tmp_path, monke
         .join(Signal, Signal.strategy_version_id == StrategyVersion.id)
         .where(Signal.signal_date == T)
     ).all()
-    assert sorted(names) == sorted([*REGISTRY, *SUPERSEDED])
+    assert sorted(names) == sorted([*REGISTRY, *V1])
 
 
 def test_the_pages_read_v1_on_its_days_and_never_both_versions(
@@ -628,17 +632,18 @@ def test_the_pages_read_v1_on_its_days_and_never_both_versions(
     instrument = _instrument(db, "TWSE", "NOM")
     _lists(db, tmp_path, "TWSE", ["MRG"])
     earlier = SESSIONS[-2]
-    v1 = {name: _v1_signal(db, instrument, earlier, name) for name in SUPERSEDED}
-    # The successor key of each v1 strategy.
-    assert {
-        strategy.config["supersedes"]["name"]: key for key, strategy in REGISTRY.items()
-    } == {"breakout_v1": "breakout_v2", "pullback_v1": "pullback_v2"}
+    v1 = {name: _v1_signal(db, instrument, earlier, name) for name in V1}
+    # The registered key each v1 strategy is read as.
+    assert {name: SUCCESSOR[name] for name in V1} == {
+        "breakout_v1": "breakout_v3",
+        "pullback_v1": "pullback_v3",
+    }
 
     # Only v1 so far: the pages show it, keyed by its successor.
     shown = decision._latest_strategy_signals(db, instrument.id, T)
     assert {key: signal.id for key, signal in shown.items()} == {
-        "breakout_v2": v1["breakout_v1"].id,
-        "pullback_v2": v1["pullback_v1"].id,
+        "breakout_v3": v1["breakout_v1"].id,
+        "pullback_v3": v1["pullback_v1"].id,
     }
 
     # v2 runs on T; a later v1 row of T itself (a stale writer) is not shown.
@@ -646,20 +651,20 @@ def test_the_pages_read_v1_on_its_days_and_never_both_versions(
     pipeline._upsert_signal(
         db, instrument=instrument, signal_date=T, strategies=strategies
     )
-    for name in SUPERSEDED:
+    for name in V1:
         _v1_signal(db, instrument, T, name)
     shown = decision._latest_strategy_signals(db, instrument.id, T)
     versions = {
         key: db.get(StrategyVersion, signal.strategy_version_id).name
         for key, signal in shown.items()
     }
-    assert versions == {"breakout_v2": "breakout_v2", "pullback_v2": "pullback_v2"}
+    assert versions == {"breakout_v3": "breakout_v3", "pullback_v3": "pullback_v3"}
     assert {signal.signal_date for signal in shown.values()} == {T}
     # As of the earlier day the pages still show v1.
     shown = decision._latest_strategy_signals(db, instrument.id, earlier)
     assert {key: signal.id for key, signal in shown.items()} == {
-        "breakout_v2": v1["breakout_v1"].id,
-        "pullback_v2": v1["pullback_v1"].id,
+        "breakout_v3": v1["breakout_v1"].id,
+        "pullback_v3": v1["pullback_v1"].id,
     }
 
 
@@ -737,7 +742,7 @@ def test_levels_of_a_day_with_both_versions_use_the_v2_rows(db, tmp_path, monkey
     )
     instrument = _instrument(db, "TWSE", "NOM")
     _lists(db, tmp_path, "TWSE", ["MRG"])
-    old = [_v1_signal(db, instrument, T, name) for name in SUPERSEDED]
+    old = [_v1_signal(db, instrument, T, name) for name in V1]
     pipeline._upsert_signal(
         db,
         instrument=instrument,
@@ -756,10 +761,10 @@ def test_levels_of_a_day_with_both_versions_use_the_v2_rows(db, tmp_path, monkey
             .join(StrategyVersion, StrategyVersion.id == Signal.strategy_version_id)
             .where(StrategyVersion.name == name)
         )
-        for name in [*REGISTRY, *SUPERSEDED]
+        for name in [*REGISTRY, *V1]
     }
     # The superseded rows of a day the registered strategies have are skipped.
-    assert [levels_of[name] for name in SUPERSEDED] == [None, None]
+    assert [levels_of[name] for name in V1] == [None, None]
     assert all(signal.id for signal in old)
     for name in REGISTRY:
         row = levels_of[name]

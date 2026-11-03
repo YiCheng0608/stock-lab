@@ -31,9 +31,13 @@ ALLOWED_NAME_LITERALS = {
         "historical rows: only these strategies at 1.0.0 stored the fixed 0.75 "
         "confidence; a new strategy must never be read as legacy"
     ),
-    ("app/domain.py", "_V3_STRATEGIES"): (
+    ("app/domain.py", "CANDIDATE_SCORE_V3"): (
         "versioned candidate_score_v3 snapshot: the strategy names it renames "
         "candidate_score_v2's pool to (#392)"
+    ),
+    ("app/domain.py", "CANDIDATE_SCORE_V5"): (
+        "versioned candidate_score_v5 snapshot: the strategy names it renames "
+        "candidate_score_v4's pool to (#404)"
     ),
     ("app/domain.py", "CANDIDATE_SCORE_V1"): (
         "versioned candidate_score snapshot: its pool and per-strategy items are "
@@ -85,8 +89,13 @@ def _name_literals(
 
 
 def test_strategy_names_are_declared_only_in_the_registry():
-    assert set(REGISTRY) == {"breakout_v2", "pullback_v2"}
-    assert set(strategies.SUPERSEDED) == {"breakout_v1", "pullback_v1"}
+    assert set(REGISTRY) == {"breakout_v3", "pullback_v3"}
+    assert set(strategies.SUPERSEDED) == {
+        "breakout_v1",
+        "pullback_v1",
+        "breakout_v2",
+        "pullback_v2",
+    }
     # A superseded name is a strategy name too: its stored signals still read.
     names = set(REGISTRY) | set(strategies.SUPERSEDED)
     found = _name_literals(names)
@@ -266,9 +275,9 @@ def test_every_registered_kind_is_unique_and_not_reserved():
 
 
 def test_a_reused_or_reserved_kind_is_a_registry_problem():
-    reused = {**REGISTRY, "breakout_v3": _with_kind("breakout_v3", "breakout")}
+    reused = {**REGISTRY, "breakout_v4": _with_kind("breakout_v4", "breakout")}
     assert strategies.registry_problems(reused) == [
-        "breakout_v3: kind 'breakout' is already used by breakout_v2"
+        "breakout_v4: kind 'breakout' is already used by breakout_v3"
     ]
     reserved = {**REGISTRY, "inputs_v1": _with_kind("inputs_v1", "inputs")}
     assert strategies.registry_problems(reserved) == [

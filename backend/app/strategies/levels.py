@@ -16,6 +16,7 @@ from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 from fractions import Fraction
 from typing import Any
 
+from app import margin_zero_base as zero_base
 from app.domain import RuleEvaluation, instrument_eligibility
 from app.margin_lists import NOT_APPLICABLE, NOT_APPLICABLE_REASON
 
@@ -160,8 +161,12 @@ def missing_confirmations(inputs: NextSessionInputs) -> list[str]:
         "institutional_flow_to_turnover_ratio_5d": inputs.institutional_flow_ratio_5d,
         "margin_balance_change_ratio_5d": inputs.margin_change_ratio_5d,
     }
-    if inputs.margin_financing == NOT_APPLICABLE:
-        # Not a margin-financing security: no ratio is expected (#392).
+    if inputs.margin_financing == NOT_APPLICABLE or (
+        inputs.margin_zero_base in zero_base.STATES
+    ):
+        # Not a margin-financing security: no ratio is expected (#392); a
+        # zero base is judged by its balances instead (#404, v3 only: the
+        # state is not stored for older versions).
         del values["margin_balance_change_ratio_5d"]
     return [
         f"{key}_missing_or_non_finite"
@@ -224,11 +229,21 @@ def confirmation_conditions(
 
 
 def margin_condition(inputs: StrategyInputs, evaluation: RuleEvaluation) -> Condition:
-    """The margin confirmation; not judged for a non-margin security (#392)."""
+    """The margin confirmation; not judged for a non-margin security (#392).
+
+    A zero base whose balance stayed 0 shows the change 0 (#404); one that
+    increased from 0 has no ratio to show.
+    """
 
     margin = COMMON_CONFIRMATIONS["margin_financing"]
     actual = finite_number(inputs.margin_change_ratio_5d)
     not_applicable = inputs.margin_financing == NOT_APPLICABLE and actual is None
+    if (
+        actual is None
+        and not not_applicable
+        and inputs.margin_zero_base == zero_base.UNCHANGED
+    ):
+        actual = 0.0
     return Condition(
         "margin_financing",
         "confirmation",

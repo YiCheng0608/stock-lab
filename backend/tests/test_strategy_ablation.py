@@ -32,21 +32,21 @@ from app.strategies.ablation import (
     all_ablations,
     research_registry,
 )
-from app.strategies.breakout_v2 import CONFIG as BREAKOUT_CONFIG
-from app.strategies.pullback_v2 import CONFIG as PULLBACK_CONFIG
+from app.strategies.breakout_v3 import CONFIG as BREAKOUT_CONFIG
+from app.strategies.pullback_v3 import CONFIG as PULLBACK_CONFIG
 
 ROOT = Path(__file__).resolve().parents[2]
 
 # What each ablation must stop reporting; every other reason stays.
 REMOVED_REASONS = {
-    ("breakout_v2", "breakout"): {"close_not_above_prior_20_day_high"},
-    ("breakout_v2", "volume"): {"volume_ratio_below_1_20"},
-    ("pullback_v2", "trend"): {"ma20_not_above_ma60", "close_below_ma60"},
-    ("pullback_v2", "support"): {"close_outside_ma20_support_zone"},
-    ("pullback_v2", "volume"): {"pullback_volume_ratio_outside_range"},
+    ("breakout_v3", "breakout"): {"close_not_above_prior_20_day_high"},
+    ("breakout_v3", "volume"): {"volume_ratio_below_1_20"},
+    ("pullback_v3", "trend"): {"ma20_not_above_ma60", "close_below_ma60"},
+    ("pullback_v3", "support"): {"close_outside_ma20_support_zone"},
+    ("pullback_v3", "volume"): {"pullback_volume_ratio_outside_range"},
     **{
         (key, condition): {reason}
-        for key in ("breakout_v2", "pullback_v2")
+        for key in ("breakout_v3", "pullback_v3")
         for condition, reason in (
             ("group", "group_relative_strength_not_positive"),
             ("institutional", "institutional_flow_materially_adverse"),
@@ -57,7 +57,7 @@ REMOVED_REASONS = {
 
 # Inputs on which every condition of both strategies fails.
 ALL_FAIL = {
-    "breakout_v2": dict(
+    "breakout_v3": dict(
         close=90.0,
         prior_highs=[100.0] * 20,
         volume=500.0,
@@ -66,8 +66,9 @@ ALL_FAIL = {
         institutional_flow_to_turnover_ratio_5d=-0.5,
         margin_balance_change_ratio_5d=0.5,
         margin_financing="applicable",
+        margin_zero_base=None,
     ),
-    "pullback_v2": dict(
+    "pullback_v3": dict(
         bar_count=60,
         close=80.0,
         ma20=100.0,
@@ -78,6 +79,7 @@ ALL_FAIL = {
         institutional_flow_to_turnover_ratio_5d=-0.5,
         margin_balance_change_ratio_5d=0.5,
         margin_financing="applicable",
+        margin_zero_base=None,
     ),
 }
 
@@ -93,9 +95,11 @@ def _random_arguments(key: str, rng: random.Random) -> dict:
         institutional_flow_to_turnover_ratio_5d=pick(-0.004, -0.003, 0.0, None),
         margin_balance_change_ratio_5d=pick(0.04, 0.05, 0.06, None),
         margin_financing=pick("applicable", "not_applicable", "missing", None),
+        # #404: a zero base is only read without a ratio.
+        margin_zero_base=pick(None, "zero_base_unchanged", "zero_base_increased"),
     )
     volumes = pick([1000.0] * 20, [1000.0] * 19, [1000.0] * 19 + [0.0], None)
-    if key == "breakout_v2":
+    if key == "breakout_v3":
         return dict(
             close=pick(99.0, 100.0, 101.0, 0.0, None),
             prior_highs=pick([100.0] * 20, [100.0] * 19, None),
@@ -116,7 +120,7 @@ def _random_arguments(key: str, rng: random.Random) -> dict:
 
 @pytest.mark.parametrize(
     ("key", "config"),
-    [("breakout_v2", BREAKOUT_CONFIG), ("pullback_v2", PULLBACK_CONFIG)],
+    [("breakout_v3", BREAKOUT_CONFIG), ("pullback_v3", PULLBACK_CONFIG)],
 )
 def test_an_evaluator_without_config_is_the_evaluator_with_the_canonical_config(
     key, config
@@ -171,7 +175,7 @@ def test_ablations_leave_the_registry_and_canonical_snapshot_alone():
     before = canonical_config_snapshot()
     registry = research_registry(all_ablations())
 
-    assert list(REGISTRY) == ["breakout_v2", "pullback_v2"]
+    assert list(REGISTRY) == ["breakout_v3", "pullback_v3"]
     assert canonical_config_snapshot() == before
     assert list(registry)[:2] == list(REGISTRY)
     assert len(registry) == 2 + sum(len(item) for item in ABLATIONS.values())
@@ -393,16 +397,16 @@ def test_a_research_backtest_matches_the_default_one_and_removes_one_condition_p
 
 def test_a_research_backtest_writes_its_versions_and_no_canonical_row(backtest_db):
     start, end = _window(backtest_db)
-    registry = research_registry([("breakout_v2", "group")], canonical=False)
+    registry = research_registry([("breakout_v3", "group")], canonical=False)
     result = pipeline.backtest(start, end, registry=registry)
 
     assert result["run"]["status"] == "success"
     with backtest_db() as db:
         run = db.get(IngestionRun, result["run"]["id"])
-        assert run.metadata_json["research_registry"] == ["breakout_v2_ablate_group"]
+        assert run.metadata_json["research_registry"] == ["breakout_v3_ablate_group"]
         version = db.scalar(
             select(StrategyVersion).where(
-                StrategyVersion.name == "breakout_v2_ablate_group"
+                StrategyVersion.name == "breakout_v3_ablate_group"
             )
         )
         assert version.kind == "breakout_ablate_group"
@@ -414,7 +418,7 @@ def test_a_research_backtest_writes_its_versions_and_no_canonical_row(backtest_d
                 select(Signal).where(Signal.signal_key.like(f"backtest-{run.id}-%"))
             )
         }
-    assert names == {"breakout_v2_ablate_group"}
+    assert names == {"breakout_v3_ablate_group"}
     # A second research run of the same registry reuses the run.
     assert pipeline.backtest(start, end, registry=registry)["run"]["id"] == run.id
 
@@ -461,7 +465,7 @@ def test_a_failed_research_run_rerun_matches_one_uninterrupted_run(
     use_copy, monkeypatch, failing, after
 ):
     monkeypatch.setattr(pipeline, "RESEARCH_TRACKING_BATCH", 37)
-    registry = research_registry([("pullback_v2", "volume")])
+    registry = research_registry([("pullback_v3", "volume")])
     whole = use_copy("whole.db")
     start, end = _window(whole, 25)
     expected_rows, expected_groups = _research_result(whole, registry, start, end)
@@ -484,7 +488,7 @@ def test_a_failed_research_run_rerun_matches_one_uninterrupted_run(
 def test_a_research_run_commits_each_score_date(use_copy, monkeypatch):
     factory = use_copy()
     start, end = _window(factory)
-    registry = research_registry([("breakout_v2", "margin")], canonical=False)
+    registry = research_registry([("breakout_v3", "margin")], canonical=False)
     committed = []
     original = pipeline._generate_signals
 
@@ -515,7 +519,7 @@ def test_a_research_run_stops_at_the_daily_window_and_a_rerun_completes_it(
     research = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(research)
     monkeypatch.setattr(pipeline, "RESEARCH_TRACKING_BATCH", 37)
-    registry = research_registry([("breakout_v2", "volume")], canonical=False)
+    registry = research_registry([("breakout_v3", "volume")], canonical=False)
     whole = use_copy("whole.db")
     start, end = _window(whole, 25)
     expected_rows, expected_groups = _research_result(whole, registry, start, end)

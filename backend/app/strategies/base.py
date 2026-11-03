@@ -126,6 +126,10 @@ class StrategyInputs:
     # that is not a margin-financing security; None where it is not known
     # (stored evidence written before it), which reads as before.
     margin_financing: str | None = None
+    # app.margin_zero_base state (Issue #404): the margin balance five
+    # sessions ago was 0, so there is no ratio; None otherwise.  Only
+    # breakout_v3／pullback_v3 read it.
+    margin_zero_base: str | None = None
 
 
 @dataclass(frozen=True)
@@ -166,6 +170,7 @@ class NextSessionInputs:
     margin_change_ratio_5d: float | None
     price_basis: str = "score_date_raw_basis"
     margin_financing: str | None = None  # as StrategyInputs
+    margin_zero_base: str | None = None  # as StrategyInputs
 
 
 @dataclass(frozen=True)

@@ -733,7 +733,7 @@ def test_ensure_strategies_creates_current_rows_and_never_touches_older_ones(mig
         first = pipeline._ensure_strategies(db)
         db.commit()
         ids = {key: row.id for key, row in first.items()}
-        assert set(first) == {"breakout_v2", "pullback_v2", "hot_group_v1"}
+        assert set(first) == {"breakout_v3", "pullback_v3", "hot_group_v1"}
         assert all(
             row.formula_version == V2 and row.active is True for row in first.values()
         )
@@ -771,7 +771,7 @@ def test_empty_snapshot_row_is_no_longer_backfilled_or_reused(tmp_path, monkeypa
     with Session(engine) as db:
         rows = pipeline._ensure_strategies(db)
         db.commit()
-        assert rows["breakout_v2"].id != 1
+        assert rows["breakout_v3"].id != 1
     engine.dispose()
     assert query(
         path,
@@ -787,9 +787,9 @@ def test_ensure_strategies_refuses_a_current_row_that_differs_from_canonical(
 ):
     path, engine = migrated
     with Session(engine) as db:
-        row_id = pipeline._ensure_strategies(db)["breakout_v2"].id
+        row_id = pipeline._ensure_strategies(db)["breakout_v3"].id
         db.commit()
-    canonical = json.dumps(strategies.canonical_config_snapshot()["breakout_v2"])
+    canonical = json.dumps(strategies.canonical_config_snapshot()["breakout_v3"])
     with closing(sqlite3.connect(path)) as raw:
         if tamper == "kind":
             raw.execute(
@@ -820,7 +820,7 @@ def test_ensure_strategies_refuses_a_current_row_that_differs_from_canonical(
 def test_signal_formula_guard_names_the_conflict(migrated):
     _, engine = migrated
     with Session(engine) as db:
-        current = pipeline._ensure_strategies(db)["breakout_v2"]
+        current = pipeline._ensure_strategies(db)["breakout_v3"]
         db.flush()
         old = db.scalar(select(Signal).where(Signal.strategy_version_id == 1))
         with pytest.raises(pipeline.StrategyVersionError) as error:
@@ -1001,9 +1001,10 @@ def test_worker_runs_on_v2_rows_and_keeps_older_dates_on_their_v1_rows(
 
 
 def test_worker_refuses_to_overwrite_a_v1_signal_of_the_same_day(tmp_path, monkeypatch):
-    # breakout_v2／pullback_v2 (#392) have keys of their own, so a stored v1
-    # signal no longer shares one; the guard is exercised with a formula-v1
-    # row stored under the current strategies' keys.
+    # breakout_v2／pullback_v2 (#392) and breakout_v3／pullback_v3 (#404) have
+    # keys of their own, so a stored v1 signal no longer shares one; the guard
+    # is exercised with a formula-v1 row stored under the current strategies'
+    # keys.
     source, latest = e2e_source(
         tmp_path,
         date(2026, 5, 1) + timedelta(days=64),
