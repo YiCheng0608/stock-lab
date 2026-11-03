@@ -745,7 +745,8 @@ class RepositoryWorkingTree(unittest.TestCase):
 class WorkflowTriggers(unittest.TestCase):
     """CI runs on PRs into and pushes to every long-lived branch (#288, #332).
 
-    The integration branches come from close_task.sh, the one list of them.
+    The integration branches come from close_task.sh, the one list of them; it may be
+    empty (#428).
     """
 
     def test_ci_runs_on_every_long_lived_branch(self):
@@ -753,7 +754,6 @@ class WorkflowTriggers(unittest.TestCase):
 
         close_task = (ROOT / "tools/ops/close_task.sh").read_text(encoding="utf-8")
         (listed,) = re.findall(r"^integration_branches=\((.*)\)$", close_task, re.M)
-        self.assertTrue(listed.split())
         long_lived = ["master", "release/**", *listed.split()]
         workflow = yaml.load(
             (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"),

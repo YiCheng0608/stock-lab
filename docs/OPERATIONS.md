@@ -184,7 +184,7 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 | 排程器 | 跑的程式 | 資料與 job 日誌 | 本節的操作 |
 | --- | --- | --- | --- |
 | scheduler 容器（`serve`，#336） | 正式 compose project 的 image，由 [`deploy.sh`](RELEASE.md#部署) 部署（#340） | volume `stock-data` 的 `/data`（`stock.db`、`raw/`、`logs/`、`locks/`） | [§6.6](#66-scheduler-容器的排程serve)；daily、news 與看門狗的判定、日誌與 run 記錄同 §6.1～§6.5 |
-| Windows 工作排程器（切換前；切換後停用、留作回退） | 發佈 checkout 上 #333 以前的 commit。工作帶 `-GitPull`，每次起跑把發佈 checkout 拉到最新 master（#387 期間 `09b2646`→`98179c9`），所以 `feat/docker`（含 #333）合併進 master 前要先停用工作，否則下一次起跑就拉到 #333、以 exit 69 結束（[§6.6](#66-scheduler-容器的排程serve) 的切換前提）。切換後工作維持停用，`cutover.sh rollback` 重新啟用（[§6.9](#69-docker-切換與回退cutoversh)）；移除工作與 `tools/*.ps1`、`tools/ops/Register-*.ps1` 等使用者決定不再回退後另開 Issue | 主機的資料目錄（切換後原檔保留） | §6.1、§6.2、§6.8 標「工作排程器」的表 |
+| Windows 工作排程器（切換前；切換後停用、留作回退） | 發佈 checkout 上 #333 以前的 commit。工作帶 `-GitPull`，每次起跑把發佈 checkout 拉到最新 master（#387 期間 `09b2646`→`98179c9`）；`feat/docker`（含 #333）已由 PR #420 合併進 master，工作一啟用，下一次起跑就拉到 #333、以 exit 69 結束（[§6.6](#66-scheduler-容器的排程serve) 的切換前提）。切換後工作維持停用，`cutover.sh rollback` 重新啟用（[§6.9](#69-docker-切換與回退cutoversh)）；移除工作與 `tools/*.ps1`、`tools/ops/Register-*.ps1` 等使用者決定不再回退後另開 Issue | 主機的資料目錄（切換後原檔保留） | §6.1、§6.2、§6.8 標「工作排程器」的表 |
 
 位置（使用者 2026-10-17 決定）：正式資料目錄 `C:/Users/YiCheng/stock-lab-data/`（`stock.db`、`raw/`、`logs/`），以 `STOCK_DATA_DIR` 指向；切換（#342）時 `stock.db`、`raw/` 與 `logs/` 複製進 volume `stock-data`（原檔保留，回退用；`raw_payloads.payload_path` 不改寫，見 [§6.9](#69-docker-切換與回退cutoversh)），之後主機的這個目錄只剩統籌的檔案與回退用的原檔。排程只從發佈 checkout `C:/Users/YiCheng/stock-lab-release/`（repo 的獨立 clone）執行：切換前工作排程器用它的 `.venv`，起跑時 `git pull` 跟著 master；切換後它是正式 compose project 的目錄，停在 `tools/ops/deploy.sh` 部署的 tag，排程起跑不 `git pull`（升版見 [RELEASE](RELEASE.md)）；不從 `master` 管理 checkout。統籌心跳檔、換手標記與壓縮計數檔都在主機資料目錄的 `logs/` 下（[工作手冊](GITHUB_WORKFLOW.md#統籌-session)），事件 monitor 的事件佇列與它自己的心跳、日誌也是：scheduler 容器以 `STOCK_COORDINATION_DIR` 把這個目錄 bind mount 到 `/coordination`（[§6.8](#68-統籌事件-monitor)）。
 
@@ -385,7 +385,7 @@ candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(�
 - **run 記錄的 image 與 HEAD**：`schedule_runs` 每列的 `summary_json.runtime` 記 `image`（`STOCK_IMAGE_TAG`）、`head`（`STOCK_GIT_HEAD`，沒有時 `git rev-parse HEAD`，都沒有為 null）與 job 持有的鎖 `job_lock`。build context 不含 `.git`，所以 build 時帶入；正式 project 由 [`deploy.sh`](RELEASE.md#部署) 以 `STOCK_RELEASE_TAG=<tag> STOCK_GIT_HEAD=<該 commit> docker compose build` 帶入（§1.2，#340），單獨 build 時：`docker build -f backend/Dockerfile -t stock-lab-backend:<tag> --build-arg STOCK_IMAGE_TAG=stock-lab-backend:<tag> --build-arg STOCK_GIT_HEAD="$(git rev-parse HEAD)" .`。
 - 其他選項：`--data-dir`、`--log-dir`、`--claude-cli`、`--daily-min-free-memory-gb`、`--news-min-free-memory-gb`、`--daily-time-limit-minutes`、`--news-time-limit-minutes`（交給 job）；`--monitor-dir`、`--monitor-orca`、`--monitor-waker`（交給 monitor，後兩者預設 `http_orca.sh`、`http_wake.sh`，經主機的 wake listener，[§6.8](#68-統籌事件-monitor)）。只在 Linux 執行，其他系統 exit 69。
 
-**切換前提**（#342，PR #346 review S1）：#333 起 job 只在 Linux 執行，工作排程器跑到含 #333 的 commit 時 daily、news、看門狗都以 69 結束，不寫日誌也不留言，排程會無聲停擺。工作排程器的工作帶 `-GitPull` 跟著 master，所以 `feat/docker` 合併進 master 之前先停用工作；`cutover.sh` 在發佈 checkout 已含 #333 而仍有工作啟用時拒絕。切換與回退見 [§6.9](#69-docker-切換與回退cutoversh)。
+**切換前提**（#342，PR #346 review S1）：#333 起 job 只在 Linux 執行，工作排程器跑到含 #333 的 commit 時 daily、news、看門狗都以 69 結束，不寫日誌也不留言，排程會無聲停擺。工作排程器的工作帶 `-GitPull` 跟著 master，而 master 自 `feat/docker` 合併（PR #420）起已含 #333，所以工作要維持停用；`cutover.sh` 在發佈 checkout 已含 #333 而仍有工作啟用時拒絕。切換與回退見 [§6.9](#69-docker-切換與回退cutoversh)。
 
 ### 6.7 容器內的 claude 與 gh 認證（.env）
 
