@@ -1,0 +1,58 @@
+{
+  "docker": [
+    {
+      "select": "tests/test_worker_job.py",
+      "reason": "locks, process-tree kill, time limit and /proc/meminfo of worker.job; Linux only, and production is the scheduler container (tini as PID 1, uid 1000)"
+    },
+    {
+      "select": "tests/test_worker_serve.py",
+      "reason": "worker.cli serve and docker stop's SIGTERM through tini; Linux only"
+    },
+    {
+      "select": "tests/test_watchdog.py",
+      "reason": "the watchdog runs in the scheduler container under the job lock; the whole file is Linux only"
+    },
+    {
+      "select": "tests/test_compose_entrypoint.py",
+      "reason": "backend/docker/entrypoint.sh, the image's own entrypoint, run with the image's sh"
+    },
+    {
+      "select": "tests/test_deploy.py::test_a_lock_with_keep_stdin_is_held_until_its_stdin_closes",
+      "reason": "deploy.sh holds worker.job lock --keep-stdin in the scheduler container; the rest of the file is bash fakes"
+    },
+    {
+      "select": "tests/test_daily_schedule.py::test_running_row_whose_process_is_gone_is_abandoned_at_once",
+      "reason": "probes a PID; whether a killed process still counts as alive depends on PID 1 reaping it"
+    },
+    {
+      "select": "tests/test_verify_tools.py::test_screenshot_help_and_usage_errors",
+      "reason": "screenshot.cjs with the image's node; the backend job uses the runner's"
+    },
+    {
+      "select": "tests/test_verify_tools.py::test_screenshot_option_helpers",
+      "reason": "screenshot.cjs with the image's node; the backend job uses the runner's"
+    },
+    {
+      "select": "tests/test_verify_tools.py::test_screenshot_reports_a_browser_that_exits_before_listening",
+      "reason": "screenshot.cjs with the image's node; the backend job uses the runner's"
+    },
+    {
+      "select": "tests/test_verify_tools.py::test_screenshot_waits_for_data_and_reports_overflow",
+      "reason": "screenshot.cjs drives the image's /usr/bin/chromium (SCREENSHOT_BROWSER); the backend job drives the runner's Chrome"
+    }
+  ],
+  "skipped_everywhere": [
+    {
+      "id": "tests/test_coordinator_scripts.py::test_close_task_refuses_the_data_dir_by_its_short_name",
+      "reason": "8.3 short names exist on Windows only (os.name != nt)"
+    },
+    {
+      "id": "tests/test_coordinator_scripts.py::test_guard_dir_sees_one_path_in_its_msys_and_windows_spellings",
+      "reason": "the /tmp alias is Git Bash on Windows (os.name != nt)"
+    },
+    {
+      "id": "tests/test_coordinator_scripts.py::test_close_task_refuses_a_unc_extra_dir_built_in_bash",
+      "reason": "UNC paths are a Windows matter (os.name != nt)"
+    }
+  ]
+}

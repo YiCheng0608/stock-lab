@@ -426,13 +426,27 @@ def test_an_unreadable_raw_file_is_undetermined_not_failed(fx):
     assert not any(check.failures for check in checks)
 
 
-def test_raw_dir_replaces_the_stored_path_up_to_its_raw_directory(tmp_path):
-    files = audit_lib.RawFiles(tmp_path / "mount")
+def test_raw_files_find_a_capture_through_payload_file(tmp_path, monkeypatch):
+    """#418: the path comes from app.raw_paths.payload_file; --raw-dir only adds a raw copy."""
+
+    from app import config
+
     stored = r"C:\Users\YiCheng\stock-lab-data\raw\twse\2026\11\02\abc.json"
-    assert (
-        files.path(stored)
-        == tmp_path / "mount" / "twse" / "2026" / "11" / "02" / "abc.json"
-    )
+    parts = ("twse", "2026", "11", "02", "abc.json")
+    mounted = tmp_path / "mount"
+    monkeypatch.setattr(config, "RAW_DIR", mounted)
+    monkeypatch.delenv("STOCK_STORED_RAW_DIR", raising=False)
+    # A stored file that does not exist here (a container): read under STOCK_RAW_DIR,
+    # or under --raw-dir when that is not there either.
+    copy = tmp_path / "copy"
+    assert audit_lib.RawFiles().path(stored) == mounted.joinpath(*parts)
+    assert audit_lib.RawFiles(copy).path(stored) == copy.joinpath(*parts)
+    mounted.joinpath(*parts[:-1]).mkdir(parents=True)
+    mounted.joinpath(*parts).write_bytes(b"{}")
+    assert audit_lib.RawFiles(copy).path(stored) == mounted.joinpath(*parts)
+    existing = tmp_path / "x.json"
+    existing.write_bytes(b"{}")
+    assert audit_lib.RawFiles(tmp_path / "copy").path(str(existing)) == existing
     assert audit_lib.RawFiles().path("/data/raw/x.json") == Path("/data/raw/x.json")
 
 

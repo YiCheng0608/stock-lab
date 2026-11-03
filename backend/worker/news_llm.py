@@ -25,7 +25,6 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 import time
 import unicodedata
@@ -71,17 +70,36 @@ REASON_MAX_CHARS = 120
 THEME_MAX_CHARS = 40
 RATIONALE_MAX_CHARS = 120
 CLI_ENV = "STOCK_CLAUDE_CLI"
-# On Windows only the native claude.exe is run: on a timeout subprocess kills
-# an npm .cmd shim's cmd.exe but not its node child, which keeps the pipes
-# open and would hang the step until the job's time limit.
-IS_WINDOWS = sys.platform == "win32"
 # Removed from the child environment: session variables of a parent Claude
 # Code process (the CLI refuses to start as a nested session) and any
 # Anthropic API setting.  CLAUDE_CONFIG_DIR is kept so the login is found.
 STRIPPED_ENV = frozenset({"CLAUDECODE", "CLAUDE_PID", "CLAUDE_EFFORT"})
 STRIPPED_ENV_PREFIXES = ("CLAUDE_CODE_", "ANTHROPIC_")
+# Kept although it has a stripped prefix: the one-year subscription token of
+# ``claude setup-token``, which the scheduler container gets from .env (#337).
+OAUTH_TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN"
 # The batch uses the subscription login only; with these set it refuses to run.
 API_KEY_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
+# A failed call is an authentication failure (not_logged_in: no login, or a
+# login or CLAUDE_CODE_OAUTH_TOKEN that expired or was revoked) when its
+# api_error_status is 401, or its stderr or error result (is_error) has one of
+# these.  The -p messages of code.claude.com/docs/en/errors (read 2026-10-29,
+# #337): "Not logged in · Please run /login", "Failed to authenticate. API
+# Error: 401 OAuth token has expired", "Failed to authenticate: OAuth token
+# revoked. Please log in again", "Failed to authenticate: OAuth session
+# expired and could not be refreshed", "API Error: 401 Invalid authentication
+# credentials"; the structured error code is authentication_failed.  A bare
+# 401 is not enough: a stack trace line or model text can have one.
+AUTH_ERROR_TEXT = (
+    "not logged in",
+    "/login",
+    "please log in",
+    "failed to authenticate",
+    "authentication_failed",
+    "oauth token",
+    "invalid authentication credentials",
+    "api error: 401",
+)
 # Failures every later call in the same run would repeat.
 FATAL_REASONS = frozenset({"not_logged_in", "rate_limited", "cli_not_started"})
 # A rejected item failed the summary check; like done and skipped_stale it is
@@ -230,17 +248,6 @@ def preflight() -> tuple[list[str] | None, str | None]:
     return [found, *prefix[1:]], None
 
 
-def cli_problem(*, windows: bool | None = None) -> tuple[list[str] | None, str | None]:
-    """preflight, failing closed on a non-.exe CLI on Windows (not elsewhere)."""
-
-    command, problem = preflight()
-    if windows is None:
-        windows = IS_WINDOWS
-    if problem is None and windows and Path(command[0]).suffix.lower() != ".exe":
-        return None, f"cli_not_found: {command[0]} is not a native .exe"
-    return command, problem
-
-
 def cli_arguments(
     model: str = MODEL, schema: dict[str, Any] = OUTPUT_SCHEMA
 ) -> list[str]:
@@ -267,7 +274,8 @@ def child_env() -> dict[str, str]:
     return {
         key: value
         for key, value in os.environ.items()
-        if key not in STRIPPED_ENV and not key.startswith(STRIPPED_ENV_PREFIXES)
+        if key == OAUTH_TOKEN_ENV
+        or (key not in STRIPPED_ENV and not key.startswith(STRIPPED_ENV_PREFIXES))
     }
 
 
@@ -421,16 +429,20 @@ def _calls_today(db: Session, run_date: date) -> int:
 
 
 def _failure_reason(result: CliResult, envelope: dict[str, Any] | None) -> str:
+    envelope = envelope or {}
+    status = envelope.get("api_error_status")
+    # The result is the CLI's error message only when is_error is set; else it
+    # is model text.
     text = " ".join(
         str(part)
         for part in (
-            (envelope or {}).get("result"),
-            (envelope or {}).get("api_error_status"),
+            envelope.get("result") if envelope.get("is_error") else None,
+            status,
             result.stderr,
         )
         if part
     ).lower()
-    if "not logged in" in text or "/login" in text or "please log in" in text:
+    if str(status) == "401" or any(part in text for part in AUTH_ERROR_TEXT):
         return "not_logged_in"
     if (
         "429" in text
@@ -850,7 +862,7 @@ def run_news_llm(
         abandoned = close_abandoned_runs(db)
         if abandoned:
             base["abandoned_runs"] = abandoned
-    command, problem = cli_problem()
+    command, problem = preflight()
     if problem is not None:
         # A configuration error writes no pending rows.
         if dry_run:

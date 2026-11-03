@@ -1,7 +1,8 @@
 """Shared pieces of the DB audit (Issue #391): results, numbers, raw files, factors.
 
-Standard library only.  Nothing here imports the product (``app``/``worker``):
-the audit recomputes from the stored inputs and the specification
+Standard library only, except where a stored raw capture is
+(``app.raw_paths.payload_file``, #342): no product calculation is imported, the
+audit recomputes from the stored inputs and the specification
 (docs/V1_SPEC.md), so a product bug is not reproduced by the check itself.
 """
 
@@ -11,11 +12,17 @@ import json
 import math
 import re
 import sqlite3
+import sys
 from collections import Counter, OrderedDict
 from dataclasses import dataclass, field
 from datetime import date
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 from typing import Any, Iterable
+
+BACKEND = Path(__file__).resolve().parents[2] / "backend"
+if str(BACKEND) not in sys.path:
+    sys.path.insert(0, str(BACKEND))
+from app.raw_paths import legacy_relative, payload_file  # noqa: E402
 
 # What the audit recomputes against (V1_SPEC 技術指標); a product change of
 # these must change the audit too (backend/tests/test_audit.py pins them).
@@ -201,10 +208,12 @@ def mid_rank(
 class RawFiles:
     """Read official raw captures, only ever with ``open(path, "rb")`` (#391 決定).
 
-    ``raw_dir`` replaces everything up to and including the last ``raw``
-    directory of ``payload_path`` (a raw copy, or a container mount where the
-    stored Windows path does not exist).  A file that cannot be opened or
-    decoded is ``None``: the comparison it feeds is undetermined, never failed.
+    Where the file is comes from ``app.raw_paths.payload_file``: the stored
+    path when it exists, else an old Windows path under ``STOCK_RAW_DIR``.
+    ``raw_dir`` (``--raw-dir``, a raw copy) is where an old Windows path is
+    looked for when neither exists, like ``STOCK_STORED_RAW_DIR``.  A file that
+    cannot be opened or decoded is ``None``: the comparison it feeds is
+    undetermined, never failed.
     """
 
     def __init__(self, raw_dir: Path | None = None, cache_size: int = 8) -> None:
@@ -215,18 +224,11 @@ class RawFiles:
         self.unreadable = 0
 
     def path(self, payload_path: str) -> Path:
-        if self.raw_dir is None:
-            return Path(payload_path)
-        parts = (
-            PureWindowsPath(payload_path).parts
-            if "\\" in payload_path
-            else Path(payload_path).parts
-        )
-        lowered = [part.lower() for part in parts]
-        if "raw" not in lowered:
-            return self.raw_dir.joinpath(*parts[-1:])
-        last = len(lowered) - 1 - lowered[::-1].index("raw")
-        return self.raw_dir.joinpath(*parts[last + 1 :])
+        found = payload_file(payload_path)
+        if self.raw_dir is None or found.exists():
+            return found
+        relative = legacy_relative(payload_path)
+        return found if relative is None else self.raw_dir.joinpath(*relative.parts)
 
     def load(self, payload_path: str | None) -> Any:
         if not payload_path:

@@ -108,7 +108,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--raw-dir",
-        help="raw root replacing the stored payload_path up to its 'raw' directory",
+        help="raw copy where an old Windows payload_path is looked for when it does not exist",
     )
     parser.add_argument("--only", help="comma-separated items to run (default: all)")
     parser.add_argument(
