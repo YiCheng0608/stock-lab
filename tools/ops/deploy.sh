@@ -150,13 +150,21 @@ ci="$(printf '%s' "$out" | cj commit-ci "$sha")"
 
 # --- the job locks, in a running container that mounts the volume ---------------------
 # The project's running api and scheduler containers, one-off `compose run` ones included
-# (the label is the service's); the scheduler's first. web mounts no volume.
+# (the label is the service's); web mounts no volume. The scheduler is the service's own
+# container (com.docker.compose.oneoff=False, #342 decision 8): a `compose run scheduler …`
+# one-off does not run the schedule, so it is neither the previous image nor the first
+# choice to hold the locks. Without that scheduler the locks are held in the api, else in any
+# other running api or scheduler container of the project (a one-off).
 containers="$(dk ps --filter "label=com.docker.compose.project=$project" --filter status=running \
-  --format '{{.ID}} {{.Label "com.docker.compose.service"}}')" || die "docker ps 失敗" 2
+  --format '{{.ID}} {{.Label "com.docker.compose.service"}} {{.Label "com.docker.compose.oneoff"}}')" \
+  || die "docker ps 失敗" 2
 containers="${containers//$'\r'/}"
-scheduler="$(printf '%s\n' "$containers" | awk '$2 == "scheduler" { print $1; exit }')"
+service() { printf '%s\n' "$containers" | awk -v s="$1" -v o="$2" '$2 == s && (o == "" || $3 == o) { print $1; exit }'; }
+scheduler="$(service scheduler False)"
 holder="$scheduler"
-[ -n "$holder" ] || holder="$(printf '%s\n' "$containers" | awk '$2 == "api" { print $1; exit }')"
+[ -n "$holder" ] || holder="$(service api False)"
+[ -n "$holder" ] || holder="$(service api "")"
+[ -n "$holder" ] || holder="$(service scheduler "")"
 locks=none previous=""
 if [ -n "$holder" ]; then
   # Each lock runs the next as its child; the innermost says so and reads stdin until this

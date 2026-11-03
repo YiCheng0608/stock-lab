@@ -18,6 +18,17 @@ commands those tasks ran.
   (tools/ops/wake_listener.py): http_wake.sh wakes, http_orca.sh lists the
   task worktrees.
 
+At start, a daily of the day that has not completed is run once (#342, decision 5): on a
+weekday past the first daily time (18:30), when ``schedule_runs`` has no ``success`` or
+``non_trading_day`` row for the day. A container recreated by a deploy or a cutover in the
+evening would otherwise wait for the next trigger, as the triggers before its start are not
+run. A holiday is no exception: the daily records ``non_trading_day`` there, as the 18:30
+trigger does on a weekday holiday.
+
+``STOCK_SKIP_NEWS_LLM`` (from the env file, #342 decision 6) is ``--skip-news-llm``'s
+default: 1, true, yes or on skip news-llm after news; empty, 0, false, no or off do not; any
+other value stops serve (exit 2).
+
 Each run is a child process, and the job does what it did under Task
 Scheduler: its lock (one job of a kind at a time), the checks before a run,
 the time limit, the log and the exit code (worker.job, docs/OPERATIONS.md §6).
@@ -44,6 +55,7 @@ import logging
 import os
 import shutil
 import signal
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -75,6 +87,12 @@ MONITOR_DIR = "/coordination"
 BACKSTOP_MINUTES = 10.0
 # An overlapping trigger still starts its job, which records already_running.
 MAX_INSTANCES = 3
+# Decision 6 of #342: the env file switches news-llm off without a compose file change.
+SKIP_NEWS_LLM_ENV = "STOCK_SKIP_NEWS_LLM"
+SKIP_NEWS_LLM_ON = ("1", "true", "yes", "on")
+SKIP_NEWS_LLM_OFF = ("", "0", "false", "no", "off")
+# worker.schedule_runs.COMPLETE_STATUSES (not imported: it loads app and its paths).
+DAILY_COMPLETE_STATUSES = ("success", "non_trading_day")
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -84,7 +102,10 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--log-dir", help="日誌目錄；預設 <資料目錄>/logs")
     parser.add_argument("--claude-cli", help="Claude Code CLI，交給 daily、news 的 job")
     parser.add_argument(
-        "--skip-news-llm", action="store_true", help="news 不跑 news-llm"
+        "--skip-news-llm",
+        action="store_true",
+        default=None,
+        help=f"news 不跑 news-llm（沒給時看 {SKIP_NEWS_LLM_ENV}：1／true／yes／on 為不跑）",
     )
     parser.add_argument(
         "--daily-times",
@@ -172,10 +193,28 @@ def _injected(value: str | None) -> datetime | None:
     return moment if moment.tzinfo else moment.replace(tzinfo=TAIPEI)
 
 
+def skip_news_llm(args: argparse.Namespace, environ=os.environ) -> bool:
+    """--skip-news-llm, or STOCK_SKIP_NEWS_LLM when it is not given; ValueError on a bad value."""
+
+    if args.skip_news_llm:
+        return True
+    value = environ.get(SKIP_NEWS_LLM_ENV, "").strip().lower()
+    if value in SKIP_NEWS_LLM_ON:
+        return True
+    if value in SKIP_NEWS_LLM_OFF:
+        return False
+    raise ValueError(
+        f"{SKIP_NEWS_LLM_ENV}={environ.get(SKIP_NEWS_LLM_ENV)!r}: use one of "
+        f"{', '.join(SKIP_NEWS_LLM_ON)} (skip news-llm) or "
+        f"{', '.join(v for v in SKIP_NEWS_LLM_OFF if v)} or empty (run it)"
+    )
+
+
 def argument_problem(args: argparse.Namespace) -> str | None:
     try:
         _daily_times(args.daily_times)
         _injected(args.now)
+        skip_news_llm(args)
     except ValueError as exc:
         return str(exc)
     # argparse checks the choices of a given --monitor, not of the STOCK_MONITOR default.
@@ -325,7 +364,7 @@ class Serve:
         ]
         if args.claude_cli:
             argv += ["--claude-cli", args.claude_cli]
-        if name == "news" and args.skip_news_llm:
+        if name == "news" and skip_news_llm(args):
             argv.append("--skip-news-llm")
         limit = getattr(args, f"{name}_time_limit_minutes")
         if limit is not None:
@@ -333,6 +372,37 @@ class Serve:
         if self.offset and name == "daily":
             argv += ["--date", at.date().isoformat()]
         return argv, environment
+
+    def missed_daily(self) -> str | None:
+        """Why serve runs the day's daily as it starts, or None (see the module docstring)."""
+
+        now = self.now()
+        if now.weekday() >= 5:
+            return None
+        if (now.hour, now.minute) < min(_daily_times(self.args.daily_times)):
+            return None
+        db = Path(job.data_environment(self.data_dir)["STOCK_DB_PATH"])
+        if not db.is_file():
+            # An empty volume: the daily could only fail on it, as its trigger will.
+            return None
+        try:
+            uri = db.resolve().as_uri() + "?mode=ro"
+            with sqlite3.connect(uri, uri=True, timeout=30) as conn:
+                statuses = {
+                    row[0]
+                    for row in conn.execute(
+                        "SELECT status FROM schedule_runs WHERE job = 'daily' "
+                        "AND target_date = ?",
+                        (now.date().isoformat(),),
+                    )
+                }
+            conn.close()
+        except sqlite3.Error as exc:
+            # Unknown is not complete: the daily decides, as a trigger's would.
+            return f"unreadable:{type(exc).__name__}"
+        if statuses & set(DAILY_COMPLETE_STATUSES):
+            return None
+        return "not_complete"
 
     def backstop(self, name: str) -> float:
         """Seconds after which serve kills a run of NAME that is still going."""
@@ -418,6 +488,18 @@ class Serve:
                 args=[name],
                 id=name,
                 name=name,
+            )
+        missed = self.missed_daily()
+        if missed:
+            self.say("catchup", job="daily", reason=missed)
+            # Once, as soon as the scheduler starts: a date trigger at the real now.
+            scheduler.add_job(
+                self.fire,
+                "date",
+                run_date=datetime.now(TAIPEI),
+                args=["daily"],
+                id="daily-catchup",
+                name="daily-catchup",
             )
         return scheduler
 
