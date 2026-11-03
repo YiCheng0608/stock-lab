@@ -630,12 +630,14 @@ PINNED_CONDITION_DEFAULTS = {
         },
     },
 }
-# breakout_v2／pullback_v2 (#392) list the same conditions with the same
-# defaults; only a non-margin security's margin row differs, and it is stored.
+# breakout_v2／pullback_v2 (#392) and breakout_v3／pullback_v3 (#404) list
+# the same conditions with the same defaults; only a non-margin security's or a
+# zero base's margin row differs, and it is stored.
 for _name in ("breakout", "pullback"):
-    PINNED_CONDITION_DEFAULTS["strategy_levels_v1"][f"{_name}_v2"] = (
-        PINNED_CONDITION_DEFAULTS["strategy_levels_v1"][f"{_name}_v1"]
-    )
+    for _version in ("v2", "v3"):
+        PINNED_CONDITION_DEFAULTS["strategy_levels_v1"][f"{_name}_{_version}"] = (
+            PINNED_CONDITION_DEFAULTS["strategy_levels_v1"][f"{_name}_v1"]
+        )
 
 
 def test_the_condition_defaults_are_pinned_to_the_levels_version():
