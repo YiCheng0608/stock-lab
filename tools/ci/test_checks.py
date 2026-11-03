@@ -990,6 +990,27 @@ class CheckoutTime(unittest.TestCase):
                 )
 
 
+class BackendTime(unittest.TestCase):
+    """The backend job, which runs the whole backend suite, has 45 minutes.
+
+    Its green runs on 2026-11-03 and 11-04 took 20 to 29 minutes, and twice a slow runner
+    took it past the 30-minute limit on master (runs 41699184706 at 30 minutes with
+    the checkout taking 4, and 41714283264), which made `required` red; close_task.sh
+    then refuses until a rerun is green.
+    """
+
+    MINIMUM = 45
+
+    def test_the_backend_suite_has_room_for_a_slow_runner(self):
+        import yaml
+
+        jobs = yaml.load(
+            (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"),
+            Loader=yaml.BaseLoader,
+        )["jobs"]
+        self.assertGreaterEqual(int(jobs["backend"]["timeout-minutes"]), self.MINIMUM)
+
+
 class ExperimentJob(unittest.TestCase):
     """The backend-xdist experiment holds up neither a merge nor close_task.sh (#379).
 
