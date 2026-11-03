@@ -40,6 +40,7 @@ from app.theme_table import (
     parse_membership_source,
     validate_theme_table,
 )
+from worker.news_llm import PROMPT_VERSION as NEWS_PROMPT_VERSION
 from worker.theme_suggestions import refresh_theme_suggestions
 
 SCORE_DATE = date(2026, 9, 4)
@@ -989,7 +990,7 @@ def test_news_theme_suggestions_are_never_scored_ranked_or_grouped(factory, api_
             db.add(
                 NewsLlmResult(
                     news_item_id=news.id,
-                    prompt_version="news_v1",
+                    prompt_version=NEWS_PROMPT_VERSION,
                     llm_model="claude-haiku-5-5",
                     llm_input_hash="0" * 64,
                     llm_status="done",

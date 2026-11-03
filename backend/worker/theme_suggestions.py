@@ -1,8 +1,11 @@
 """Aggregate news LLM theme candidates into suggestions awaiting review.
 
-Reads the ``theme_candidates`` of ``news_llm_results`` that are ``done`` and
-not ``unsupported``, on active news items, and merges them by normalized theme
-name (``app.theme_suggestions.theme_key``) separately per prompt version:
+Reads the ``theme_candidates`` of ``news_llm_results`` of the current news
+prompt version (``worker.news_llm.PROMPT_VERSION``) that are ``done`` and not
+``unsupported``, on active news items: only that version's candidates passed
+its theme check (#413), and older versions are not shown on any page either
+(#308).  It merges them by normalized theme name
+(``app.theme_suggestions.theme_key``) separately per prompt version:
 distinct news count, first and last news date (Taipei date of published_at,
 else collected_at), the models involved and one link per news item with the
 LLM's wording and reason.  A suggestion whose name equals an active theme or
@@ -39,6 +42,7 @@ from app.theme_suggestions import (
     STATUS_PENDING,
     theme_key,
 )
+from worker.news_llm import PROMPT_VERSION
 
 TAIPEI_OFFSET = timedelta(hours=8)
 
@@ -86,12 +90,13 @@ def _taipei_date(value: datetime) -> date:
 
 
 def collect_suggestions(db: Session) -> tuple[dict[tuple[str, str], _Suggestion], int]:
-    """Group done, supported results by (prompt version, theme key)."""
+    """Group done, supported results of the current prompt by (version, theme key)."""
 
     rows = db.execute(
         select(NewsLlmResult, NewsItem)
         .join(NewsItem, NewsItem.id == NewsLlmResult.news_item_id)
         .where(
+            NewsLlmResult.prompt_version == PROMPT_VERSION,
             NewsLlmResult.llm_status == "done",
             or_(
                 NewsLlmResult.ai_unsupported.is_(None),
