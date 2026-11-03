@@ -22,6 +22,8 @@ backend/tests``).
 from __future__ import annotations
 
 import argparse
+import ast
+import io
 import json
 import os
 import re
@@ -31,6 +33,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+import tokenize
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -633,16 +636,101 @@ def test_free_memory_is_read_from_the_os():
 WMI_CALL = re.compile(r"\bwmi\b|wmic|Win32_\w+|\bCIM_\w+|psutil", re.IGNORECASE)
 
 
+def _docstring_starts(tree: ast.AST) -> set[tuple[int, int]]:
+    """(row, column) where each docstring of the module, classes and functions starts."""
+
+    starts = set()
+    for node in ast.walk(tree):
+        if isinstance(
+            node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+        ):
+            first = node.body[0] if node.body else None
+            if (
+                isinstance(first, ast.Expr)
+                and isinstance(first.value, ast.Constant)
+                and isinstance(first.value.value, str)
+            ):
+                starts.add((first.value.lineno, first.value.col_offset))
+    return starts
+
+
+def wmi_calls(source: str) -> list[tuple[int, str]]:
+    """(line number, line) of every WMI call in SOURCE.
+
+    Prose, a comment or a docstring, may name WMI to say that it is not used: a
+    line of it that carries ``#246`` is let through. Anything else that matches,
+    a name, a string, a command, is code and fails with or without the mark (#326).
+    """
+
+    docstrings = _docstring_starts(ast.parse(source))
+    lines = source.splitlines()
+    found = []
+    for token in tokenize.generate_tokens(io.StringIO(source).readline):
+        prose = token.type == tokenize.COMMENT or (
+            token.type == tokenize.STRING and token.start in docstrings
+        )
+        for offset, text in enumerate(token.string.splitlines()):
+            row = token.start[0] + offset
+            if WMI_CALL.search(text) and not (prose and "#246" in text):
+                found.append((row, lines[row - 1].strip()))
+    return found
+
+
 def test_the_job_source_has_no_wmi_call():
     # The memory check reads /proc/meminfo: busy machines cancel WMI calls
     # and the job would never start (#246).
-    lines = JOB_SOURCE.read_text(encoding="utf-8").splitlines()
     found = [
-        f"backend/worker/job.py:{number}: {line.strip()}"
-        for number, line in enumerate(lines, start=1)
-        if WMI_CALL.search(line) and "#246" not in line
+        f"backend/worker/job.py:{number}: {line}"
+        for number, line in wmi_calls(JOB_SOURCE.read_text(encoding="utf-8"))
     ]
     assert not found, "WMI in the scheduled job (#246)\n" + "\n".join(found)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import wmi  # #246\n",
+        "from wmi import WMI  # #246\n",
+        "import psutil  # #246\n",
+        'run(["wmic", "OS", "get", "FreePhysicalMemory"])  # #246\n',
+        'query = "SELECT * FROM Win32_OperatingSystem"  # #246\n',
+        # A string that is not a docstring is code.
+        'def f():\n    x = 1\n    "never WMI (#246)"\n',
+        # The mark covers a line of the docstring, not the whole function.
+        'def f():\n    """Memory (#246)."""\n    import wmi  # #246\n',
+        '"""Memory (#246)."""; import wmi\n',
+    ],
+)
+def test_the_246_mark_does_not_excuse_a_wmi_call_in_code(source):
+    # #326: the mark is for a comment or docstring that says why there is no WMI.
+    assert wmi_calls(source)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "# never through WMI (#246)\nx = 1\n",
+        "x = 1  # not WMI (#246)\n",
+        '"""Memory without WMI (#246)."""\n',
+        'def f():\n    """MemAvailable, never through WMI (#246); None when unknown."""\n',
+        'class C:\n    """First line.\n\n    Not WMI (#246), not wmic (#246).\n    """\n',
+        "import os  # not wmic (#246)\n",
+    ],
+)
+def test_a_comment_or_docstring_that_names_wmi_with_the_246_mark_passes(source):
+    assert wmi_calls(source) == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "# WMI is slow\nx = 1\n",
+        'def f():\n    """Uses WMI."""\n',
+        'def f():\n    """First line.\n\n    Uses wmic.\n    """\n',
+    ],
+)
+def test_a_comment_or_docstring_that_names_wmi_without_the_mark_fails(source):
+    assert wmi_calls(source)
 
 
 # Other systems ------------------------------------------------------------------
