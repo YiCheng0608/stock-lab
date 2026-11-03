@@ -34,6 +34,7 @@ from app.models import (
     TechnicalFeature,
     ThemeGroup,
 )
+from test_corporate_action_sync import inserted_runs
 
 
 @pytest.fixture
@@ -2689,3 +2690,53 @@ def test_a_backtest_run_finishes_at_the_clock(pipeline_env, monkeypatch, frozen_
             select(IngestionRun).where(IngestionRun.request_key == request_key)
         )
         assert run.status == "success" and run.finished_at == later
+
+
+def test_a_backtest_run_carries_its_start_when_it_is_inserted(
+    pipeline_env, monkeypatch, ticking_utcnow
+):
+    # #410: a new backtest run is built "running" and finished later, so started_at
+    # must be the clock read that built it, not whatever the default reads at insert.
+    score_date = date(2026, 9, 4)
+    with pipeline_env() as db:
+        instrument = Instrument(
+            market="TW",
+            exchange="TWSE",
+            symbol="STAMP",
+            name="Stamp",
+            instrument_type="stock",
+            status="active",
+        )
+        db.add(instrument)
+        db.flush()
+        db.add(
+            MarketBar(
+                instrument_id=instrument.id,
+                trading_date=score_date,
+                open=100,
+                high=101,
+                low=99,
+                close=100,
+                adj_close=100,
+                volume=1000,
+                turnover=100000,
+                source="fixture",
+            )
+        )
+        db.commit()
+    monkeypatch.setattr(pipeline, "_calculate_features", lambda *_args, **_kwargs: None)
+    with inserted_runs() as seen:
+        assert pipeline.backtest(score_date, score_date)["run"]["status"] == "success"
+    day = score_date.isoformat()
+    with pipeline_env() as db:
+        run = db.scalar(
+            select(IngestionRun).where(
+                IngestionRun.request_key == f"technical-backtest:v1:{day}:{day}"
+            )
+        )
+    assert [(kind, finished) for kind, _started, finished in seen] == [
+        ("backtest", None)
+    ]
+    assert seen[0][1] is not None and seen[0][1] == run.started_at
+    assert run.started_at <= run.finished_at
+    assert {run.started_at, run.finished_at} <= set(ticking_utcnow.issued)

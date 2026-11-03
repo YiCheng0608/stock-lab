@@ -1,11 +1,12 @@
 """Official ex-right history backfill and the factor check on write (#386)."""
 
 import socket
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import date, timedelta
 
 import pytest
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.orm import sessionmaker
 
 import worker.corporate_action_sync as sync
@@ -1180,6 +1181,63 @@ def test_reprice_lists_the_official_reference_rows_and_rebuild_takes_its_run(fac
             (row.id, row.cash_dividend, row.stock_dividend_ratio, row.details_json)
             for row in db.scalars(select(CorporateAction).order_by(CorporateAction.id))
         ] == rows_before
+
+
+@contextmanager
+def inserted_runs():
+    """(run_type, started_at, finished_at) of each IngestionRun as its INSERT is about to run.
+
+    A column default is applied after this point, so a ``started_at`` that is already
+    set here was written by the code that built the run, not left to the default (#410).
+    """
+
+    seen = []
+
+    def before_insert(_mapper, _connection, run):
+        seen.append((run.run_type, run.started_at, run.finished_at))
+
+    event.listen(IngestionRun, "before_insert", before_insert)
+    try:
+        yield seen
+    finally:
+        event.remove(IngestionRun, "before_insert", before_insert)
+
+
+def test_reprice_run_starts_no_later_than_it_finishes(factory, ticking_utcnow):
+    # #410: the reprice run of #394 had finished_at 17:14:55.384108 and started_at
+    # .386106. finished_at was the clock read before the run was built, started_at
+    # the column default taken at insert, a read made after it.
+    with factory() as db, inserted_runs() as seen:
+        applied = sync.reprice_corporate_actions(db, apply=True)
+        db.commit()
+        run = db.get(IngestionRun, applied["run_id"])
+    assert run.started_at <= run.finished_at
+    assert {run.started_at, run.finished_at} <= set(ticking_utcnow.issued)
+    assert seen == [(sync.REPRICE_RUN_TYPE, run.started_at, run.finished_at)]
+
+
+def test_sync_run_carries_its_start_when_it_is_inserted(factory, ticking_utcnow):
+    # #410: an apply run is built "running" and finished later, so started_at must
+    # be the clock read that built it, not whatever the default reads at insert.
+    fetcher = Fetcher(
+        routes({"stat": "ok", "fields": DETAIL_FIELDS, "data": [DETAIL_3706]})
+    )
+    with factory() as db, inserted_runs() as seen:
+        applied = sync.sync_corporate_actions(
+            db,
+            start=date(2026, 9, 1),
+            end=date(2026, 10, 5),
+            apply=True,
+            fetcher=fetcher,
+        )
+        db.commit()
+        run = db.get(IngestionRun, applied["run_id"])
+    assert [(kind, finished) for kind, _started, finished in seen] == [
+        (sync.RUN_TYPE, None)
+    ]
+    assert seen[0][1] is not None and seen[0][1] == run.started_at
+    assert run.started_at <= run.finished_at
+    assert {run.started_at, run.finished_at} <= set(ticking_utcnow.issued)
 
 
 @pytest.mark.parametrize(
