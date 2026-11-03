@@ -955,6 +955,40 @@ class WindowsRuntime(unittest.TestCase):
             self.assertTrue(any(path_matches(name, p) for p in RUNTIME_PATHS), name)
 
 
+class CheckoutTime(unittest.TestCase):
+    """A job that checks out the whole history has at least 10 minutes.
+
+    The fetch of every branch and tag took 5 minutes twice on PR #432 (runs 41689678889
+    and 41694319556, an attempt before it 73 seconds) and cancelled `changes` at its
+    5-minute limit, which made `required` red; `repository`, with the same checkout,
+    had 10.
+    """
+
+    MINIMUM = 10
+
+    def test_every_full_checkout_job_has_room_for_a_slow_fetch(self):
+        import yaml
+
+        jobs = yaml.load(
+            (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"),
+            Loader=yaml.BaseLoader,
+        )["jobs"]
+        full = [
+            name
+            for name, job in jobs.items()
+            if any(
+                step.get("with", {}).get("fetch-depth") == "0"
+                for step in job.get("steps", [])
+            )
+        ]
+        self.assertIn("changes", full)
+        for name in full:
+            with self.subTest(job=name):
+                self.assertGreaterEqual(
+                    int(jobs[name]["timeout-minutes"]), self.MINIMUM
+                )
+
+
 class ExperimentJob(unittest.TestCase):
     """The backend-xdist experiment holds up neither a merge nor close_task.sh (#379).
 
