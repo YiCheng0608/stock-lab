@@ -13,6 +13,8 @@
 #   --monitor-dir   the event monitor's queue directory, default <data>/logs (in the
 #                   scheduler container /coordination, #338)
 #   --python        default $STOCK_PYTHON, then this checkout's .venv, then python3
+# A relative DIR is taken from the current directory (#326). A run that holds the
+# lock also removes the work directories that killed runs left in <data>/logs.
 # Test hook: WATCHDOG_NOW (epoch seconds).
 set -u
 export LANG=C.UTF-8 LC_ALL=C.UTF-8
@@ -30,11 +32,32 @@ while [ $# -gt 0 ]; do
     --data-dir) data_dir="${2:?--data-dir needs a value}"; shift ;;
     --monitor-dir) monitor_dir="${2:?--monitor-dir needs a value}"; shift ;;
     --python) python="${2:?--python needs a value}"; shift ;;
-    -h|--help) sed -n '2,16p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help) sed -n '2,18p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 64 ;;
   esac
   shift
 done
+
+# The run that takes the lock starts the locked run from backend/ (below), so a
+# relative directory would name one place here and another there: the lock in the
+# caller's directory, the log, the database and the heartbeat in backend/ (#326).
+# Both are made absolute now, and the locked run gets the absolute ones (the last
+# --data-dir and --monitor-dir of its arguments win).
+absolute() { # absolute DIR: DIR from the current directory unless it already is absolute
+  case "$1" in
+    /*|[A-Za-z]:*) printf '%s' "$1" ;;
+    *) printf '%s/%s' "$PWD" "${1#./}" ;;
+  esac
+}
+data_dir="$(absolute "$data_dir")"
+# The helpers run from backend/ too, and data_check.py finds the stored raw files
+# from STOCK_DATA_DIR.
+[ -z "${STOCK_DATA_DIR:-}" ] || export STOCK_DATA_DIR="$(absolute "$STOCK_DATA_DIR")"
+arguments+=(--data-dir "$data_dir")
+if [ -n "$monitor_dir" ]; then
+  monitor_dir="$(absolute "$monitor_dir")"
+  arguments+=(--monitor-dir "$monitor_dir")
+fi
 
 GH_REPO='YiCheng0608/stock-lab'
 NEWS_INTERVAL_SECONDS=7200
@@ -88,10 +111,7 @@ fi
 # that a killed run left behind for 30 minutes, #224). Without Python the run
 # goes unlocked; the task's IgnoreNew still keeps scheduled runs apart.
 if [ -n "$python" ] && [ -z "${WATCHDOG_LOCK_HELD:-}" ]; then
-  case "$data_dir" in
-    /*|[A-Za-z]:*) lock_file="$data_dir/locks/watchdog.lock" ;;
-    *) lock_file="$PWD/$data_dir/locks/watchdog.lock" ;;
-  esac
+  lock_file="$data_dir/locks/watchdog.lock"
   (cd "$repo_root/backend" && WATCHDOG_LOCK_HELD=1 exec "$python" -X utf8 -m worker.job \
     lock "$lock_file" -- "$BASH" "$script_dir/watchdog.sh" "${arguments[@]}")
   status=$?
@@ -103,6 +123,33 @@ if [ -n "$python" ] && [ -z "${WATCHDOG_LOCK_HELD:-}" ]; then
 fi
 work="$(mktemp -d "$logs/.watchdog.XXXXXX")" || exit 1
 trap 'rm -rf "$work"' EXIT
+
+# Work directories of killed runs (#326): SIGKILL skips the trap above, so a run
+# killed at the task's time limit left its logs/.watchdog.XXXXXX behind for good.
+# Only a run that holds the lock removes them: then no other run is going, so every
+# directory but this run's own (never listed, whatever the order) is left over. A
+# run without Python is unlocked and removes nothing; a link or a file with such a
+# name is not a work directory. A dry run only says what it would remove.
+if [ -n "${WATCHDOG_LOCK_HELD:-}" ]; then
+  stale_work=()
+  for stale in "$logs"/.watchdog.??????; do
+    [ "$stale" != "$work" ] && [ -d "$stale" ] && [ ! -L "$stale" ] && stale_work+=("$stale")
+  done
+  if [ "${#stale_work[@]}" -gt 0 ]; then
+    if [ "$dry_run" = 1 ]; then
+      log stale_work_planned "count=${#stale_work[@]}" "將移除被強制終止的看門狗殘留的工作目錄：${stale_work[*]##*/}"
+    else
+      removed=()
+      kept=()
+      for stale in "${stale_work[@]}"; do
+        rm -rf -- "$stale"
+        if [ -e "$stale" ]; then kept+=("${stale##*/}"); else removed+=("${stale##*/}"); fi
+      done
+      [ "${#removed[@]}" -gt 0 ] && log stale_work_removed "count=${#removed[@]}" "已移除被強制終止的看門狗殘留的工作目錄：${removed[*]}"
+      [ "${#kept[@]}" -gt 0 ] && log stale_work_not_removed "count=${#kept[@]}" "殘留的工作目錄刪不掉：${kept[*]}"
+    fi
+  fi
+fi
 
 if [ -n "$python_missing" ]; then
   log python_missing "python=$python_missing" "找不到可用的 Python，跳過 DB 檢查（daily 結果、news_llm、資料不變量）；日誌檢查照做"
