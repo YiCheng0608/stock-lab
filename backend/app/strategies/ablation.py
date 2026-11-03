@@ -21,14 +21,14 @@ from .base import Strategy
 
 # Condition -> the config keys (paths) that hold its threshold.
 ABLATIONS: dict[str, dict[str, tuple[tuple[str, ...], ...]]] = {
-    "breakout_v2": {
+    "breakout_v3": {
         "breakout": (("price",),),
         "volume": (("volume",),),
         "group": (("confirmations", "group_relative_strength"),),
         "institutional": (("confirmations", "institutional_flow"),),
         "margin": (("confirmations", "margin_financing"),),
     },
-    "pullback_v2": {
+    "pullback_v3": {
         "trend": (("trend", "ma_alignment"), ("trend", "close_must_be_at_or_above")),
         "support": (("support_zone",),),
         "volume": (("volume",),),

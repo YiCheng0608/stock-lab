@@ -63,7 +63,7 @@ from app.models import (
     TechnicalFeature,
     ThemeGroup,
 )
-from app import margin_lists
+from app import margin_lists, margin_zero_base
 from app.news import sync_news_from_events
 from app.strategies import (
     REGISTRY,
@@ -764,9 +764,11 @@ def _strategy_institutional_flow_to_average_volume_ratio(
     return flow / average_volume if average_volume > 0 else None
 
 
-def _margin_change_ratio(
+def _margin_window_balances(
     db: Session, instrument_id: int, score_date: date
-) -> float | None:
+) -> tuple[Any, Any] | None:
+    """(T-5, T) margin balances of the six sessions; None without six chip rows."""
+
     dates = _effective_trading_dates(db, instrument_id, score_date, 6)
     if len(dates) < 6:
         return None
@@ -778,15 +780,36 @@ def _margin_change_ratio(
         )
         .order_by(ChipSnapshot.trading_date)
     ).all()
-    if (
-        len(chips) < 6
-        or chips[0].margin_balance in (None, 0)
-        or chips[-1].margin_balance is None
-    ):
+    if len(chips) < 6:
         return None
-    return (chips[-1].margin_balance - chips[0].margin_balance) / abs(
-        chips[0].margin_balance
-    )
+    return chips[0].margin_balance, chips[-1].margin_balance
+
+
+def _margin_change_ratio(
+    db: Session, instrument_id: int, score_date: date
+) -> float | None:
+    balances = _margin_window_balances(db, instrument_id, score_date)
+    if balances is None:
+        return None
+    first, last = balances
+    if first in (None, 0) or last is None:
+        return None
+    return (last - first) / abs(first)
+
+
+def _margin_zero_base(
+    db: Session, instrument_id: int, score_date: date, ratio: float | None
+) -> str | None:
+    """app.margin_zero_base state of a ratio without a base (#404); None otherwise.
+
+    Same six sessions and chip rows as ``_margin_change_ratio``; read only
+    when there is no ratio.
+    """
+
+    if _safe_float(ratio) is not None:
+        return None
+    balances = _margin_window_balances(db, instrument_id, score_date)
+    return None if balances is None else margin_zero_base.zero_base_state(*balances)
 
 
 # (exchange, session) -> (margin_lists id, raw payload id, codes); a list row
@@ -1692,6 +1715,7 @@ def _signal_context(
     )
     margin_ratio = _margin_change_ratio(db, instrument.id, signal_date)
     margin_financing = _margin_financing(db, instrument, signal_date, margin_ratio)
+    margin_base = _margin_zero_base(db, instrument.id, signal_date, margin_ratio)
     prior_window = _prior_20_window(db, instrument.id, signal_date) if feature else {}
     inputs = StrategyInputs(
         bar_count=bar_count,
@@ -1706,6 +1730,7 @@ def _signal_context(
         institutional_flow_ratio_5d=strategy_flow_ratio,
         margin_change_ratio_5d=margin_ratio,
         margin_financing=margin_financing,
+        margin_zero_base=margin_base,
     )
     input_provenance = None
     capture_mode = (
@@ -1929,6 +1954,9 @@ def _write_strategy_signal(
             # app.margin_lists state (Issue #392); the lists it read are
             # margin_lists rows of the ratio's sessions.
             "margin_eligibility": inputs.margin_financing,
+            # app.margin_zero_base state (Issue #404): the ratio's base was
+            # 0; null when the ratio is defined or its data is missing.
+            "margin_zero_base": inputs.margin_zero_base,
             "bar_count_60d": inputs.bar_count,
             "ma20": inputs.ma20,
             "ma60": inputs.ma60,

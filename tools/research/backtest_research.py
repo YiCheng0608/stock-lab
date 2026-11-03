@@ -52,7 +52,7 @@ def _parser() -> argparse.ArgumentParser:
         nargs="*",
         default=[],
         metavar="STRATEGY:CONDITION",
-        help="ablations to add, e.g. breakout_v2:group; 'all' for every one",
+        help="ablations to add, e.g. breakout_v3:group; 'all' for every one",
     )
     parser.add_argument(
         "--no-canonical",

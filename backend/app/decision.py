@@ -40,6 +40,7 @@ from .product_time import build_action_product_time, build_signal_product_time
 from .portfolio_values import read_portfolio_value
 from .candidate_runs import read_run as read_candidate_run
 from .margin_lists import NOT_APPLICABLE as MARGIN_NOT_APPLICABLE
+from .margin_zero_base import STATES as MARGIN_ZERO_BASE_STATES
 from .signal_versions import readable_signal
 from .strategies import REGISTRY, current_strategy, registry_key
 from .strategies import levels as level_rules
@@ -830,11 +831,13 @@ def _strategy_result(
         "institutional_flow_to_turnover_ratio_5d",
         "margin_balance_change_ratio_5d",
     ):
-        if (
-            field == "margin_balance_change_ratio_5d"
-            and inputs.get("margin_eligibility") == MARGIN_NOT_APPLICABLE
+        if field == "margin_balance_change_ratio_5d" and (
+            inputs.get("margin_eligibility") == MARGIN_NOT_APPLICABLE
+            or inputs.get("margin_zero_base") in MARGIN_ZERO_BASE_STATES
         ):
-            continue  # not a margin-financing security: nothing is missing
+            # Not a margin-financing security, or a zero base judged by its
+            # balances (#404): nothing is missing.
+            continue
         if field in inputs and _finite(inputs.get(field)) is None:
             missing.append(field)
     return {
