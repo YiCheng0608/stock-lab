@@ -47,8 +47,11 @@ def judge_zero_base(
     ``not_applicable`` (#392 comes first) reads the zero-base state.  No
     change is the ratio 0.  An increase from 0 runs ``evaluate`` without the
     margin comparison (the mechanism research ablations use) and adds
-    ``margin_financing_increase_abnormal`` to its result, at the place the
-    margin comparison gives it; a result without data stays
+    ``margin_financing_increase_abnormal`` to its result.  The reason goes
+    last because the margin comparison is the last check of
+    ``confirmation_failures`` (after the strategy's own conditions and the
+    group and institutional confirmations), so the reasons read as those of
+    a ratio above the maximum; a result without data stays
     ``data_incomplete``.  A configuration without the margin confirmation
     (the margin ablation) never adds it.
     """

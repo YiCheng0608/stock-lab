@@ -47,11 +47,11 @@
 
 現行策略（[#404](https://github.com/YiCheng0608/stock-lab/issues/404)）。條件、門檻、價位、`kind`、`entry_type` 與融資「不適用」都與 [breakout_v2／pullback_v2](#breakout_v2pullback_v2) 相同（`config` 只改 `name`、`version` `3.0.0`、`supersedes`，並多 `data_policy.margin_zero_base`），只差 5 日前融資餘額為 0 的判定：
 
-- **零基期**（`app.margin_zero_base.zero_base_state`）：5 日融資變動比的分母 `margin_balance[T-5]` 為 0 時比率沒有定義，`margin_balance_change_ratio_5d` 照舊記 null（`hot_group_v1` 與候選評分的融資分項讀的比率不變）。窗口與比率相同（含 T 的 6 個非停牌交易日，6 天都要有籌碼列，`T-5` 與 T 的餘額都要有值）：
+- **零基期**（`app.margin_zero_base.zero_base_state`）：5 日融資變動比的分母 `margin_balance[T-5]` 為 0 時比率沒有定義，`margin_balance_change_ratio_5d` 照舊記 null（`hot_group_v1` 與候選評分的融資分項讀的比率不變）。窗口與比率相同（含 T 的 6 個非停牌交易日，6 天都要有籌碼列，`T-5` 與 T 的餘額都要有值；中間日只看籌碼列存在，不看餘額，與比率相同）：
   - `T-5` 與 T 都是 0：`zero_base_unchanged`，變動視為 0，融資條件成立，判定與比率為 0 時相同。6 天都是 0 屬於這一種；和比率一樣只看頭尾兩天。
   - `T-5` 是 0、T 大於 0：`zero_base_increased`，視為增加異常，記 `margin_financing_increase_abnormal`，融資條件不成立；其他條件照判，理由順序與比率超過 `0.05` 時相同。其他條件缺資料時仍是 `data_incomplete`，不改成不成立。
   - 窗口內缺籌碼列、`T-5` 或 T 缺餘額：仍是缺資料，fail closed 為 `data_incomplete`。
-- **先後**：非融資標的的「不適用」（v2 規則）先判；不適用時不讀零基期。
+- **先後**：非融資標的的「不適用」（v2 規則）先判；不適用時不讀零基期。其餘標的（`margin_eligibility` 為 `applicable` 或 `missing`，含清單沒存的）都依餘額判零基期。
 - **證據**：`rule_evidence_json.inputs.margin_zero_base` 記 `zero_base_unchanged`／`zero_base_increased`，比率有定義或缺資料時為 null；`margin_eligibility` 照 v2 規則（只看比率與清單，所以零基期的標的記 `missing`）。條件清單的 `margin_financing`：不變時 `actual = 0`、成立；增加時 `actual = null`、不成立。條件價位與決策摘要的缺項不把零基期的融資算缺項。
 - **v2 不改寫**：analyze 只寫 `REGISTRY` 的策略；v2 與 v1 都在 `app.strategies.SUPERSEDED`，舊訊號照舊可讀，同一標的同一天只讀最新的一版，見[策略框架與 registry](#策略框架與-registry)。候選池改由 [candidate_score_v5](#candidate_score_v5) 讀 v3。
 

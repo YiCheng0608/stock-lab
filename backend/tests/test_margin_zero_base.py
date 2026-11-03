@@ -94,6 +94,11 @@ def analyzed(db, tmp_path, monkeypatch):
         "ZER": _window(0, 0, 0, 0, 0, 0),
         # 0 five sessions ago, 2 lots on T (0051 on 10/30).
         "INC": _window(0, 0, 0, 0, 1000, 2000),
+        # 0 at both ends; a middle session's row has no margin value (a row of
+        # the institutional group only, #395).
+        "MID": _window(0, 0, None, 0, 0, 0),
+        # 0 at both ends; the balance rose in between and went back to 0.
+        "BUM": _window(0, 0, 500, 1000, 0, 0),
         # 0 five sessions ago, no chip row on one session of the window.
         "HOL": {day: 0 for day in WINDOW if day != WINDOW[2]},
         # 0 five sessions ago, no margin value on T.
@@ -163,6 +168,21 @@ def test_an_increase_from_zero_is_an_abnormal_increase(analyzed):
         )
         above = strategy.evaluate(_inputs(margin_change_ratio_5d=0.06))
         assert list(above.reasons) == judgement["reasons"], name
+
+
+@pytest.mark.parametrize("symbol", ["MID", "BUM"])
+def test_only_the_two_ends_of_the_window_are_read(analyzed, symbol):
+    """As the ratio: the middle sessions need a chip row, not a balance (#432 review)."""
+
+    for name in REGISTRY:
+        signal = analyzed[(symbol, name)]
+        assert signal.rule_evidence_json["inputs"]["margin_zero_base"] == (
+            "zero_base_unchanged"
+        )
+        assert (signal.status, _judgement(signal, name)) == (
+            analyzed[("MRG", name)].status,
+            _judgement(analyzed[("MRG", name)], name),
+        ), name
 
 
 @pytest.mark.parametrize("symbol", ["HOL", "NUL"])
