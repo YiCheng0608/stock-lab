@@ -80,7 +80,7 @@ exit 0
 # State under $FAKE_DIR/docker: volumes (`docker volume ls -q`), running (`ps -q`, also the
 # project's containers other than one-offs), images (`ps -a --format {{.Image}}`; image inspect
 # succeeds when the file exists), probe (what the read-only `run --rm` sees in the volume),
-# volume.db (what `docker cp <container>:… <host>` copies out), fail (a call containing one of
+# volume.db (what `docker cp <project>-rollback:… <host>` copies out), fail (a call containing one of
 # its lines exits 1). `compose -p P … run` creates P_stock-data, as compose does.
 FAKE_DOCKER = r"""#!/usr/bin/env bash
 d="$FAKE_DIR/docker"
@@ -99,7 +99,7 @@ if [ "$1" = compose ]; then
 fi
 if [ "$1 $2" = "run --rm" ]; then cat "$d/probe" 2>/dev/null; exit 0; fi
 if [ "$1" = cp ]; then
-  case "$2" in *:*) [ -f "$d/volume.db" ] && cp "$d/volume.db" "$3" ;; esac
+  case "$2" in *-rollback:/*) [ -f "$d/volume.db" ] && cp "$d/volume.db" "$3" ;; esac
   exit 0
 fi
 case "$1 $2" in
@@ -118,7 +118,13 @@ exit 0
 """
 
 READ_ONLY_POWERSHELL = ("exit 0", "Get-ScheduledTask", "Get-Process")
-READ_ONLY_DOCKER = ("compose version", "volume ls ", "ps ", "image inspect ")
+READ_ONLY_DOCKER = (
+    "compose version",
+    "version --format ",
+    "volume ls ",
+    "ps ",
+    "image inspect ",
+)
 # The rollback reads the volume through a container that mounts it read-only and is removed.
 VOLUME_PROBE = "run --rm -v "
 
@@ -158,21 +164,34 @@ class Harness:
         self.env_file = root / "envfile"
         self.keys(**{key: SECRET for key in KEYS})
 
-    def tasks(self, *lines: str) -> None:
-        (self.fake / "tasks").write_text(
-            "".join(f"{line}\n" for line in lines), encoding="utf-8"
+    # Every file bash reads is written with LF: on Windows write_text writes CRLF, and a
+    # pattern ending in \r never matches (PR #424 second review, required fix 1).
+    def fake_file(self, name: str, *lines: str) -> None:
+        (self.fake / name).write_text(
+            "".join(f"{line}\n" for line in lines), encoding="utf-8", newline="\n"
         )
+
+    def tasks(self, *lines: str) -> None:
+        self.fake_file("tasks", *lines)
 
     def keys(self, **values: str) -> None:
         self.env_file.write_text(
             "".join(f"{key}={value}\n" for key, value in values.items()),
             encoding="utf-8",
+            newline="\n",
         )
 
     def docker(self, name: str, *lines: str) -> None:
-        (self.fake / "docker" / name).write_text(
-            "".join(f"{line}\n" for line in lines), encoding="utf-8"
-        )
+        self.fake_file(f"docker/{name}", *lines)
+
+    def docker_down(self) -> None:
+        """Docker Desktop not answering: every docker call fails (an empty pattern matches all)."""
+
+        self.docker("fail", "")
+
+    def record(self) -> dict | None:
+        path = self.work / "cutover-steps.json"
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
 
     def calls(self, name: str) -> list[str]:
         path = self.fake / f"{name}_calls.log"
@@ -522,48 +541,121 @@ def test_a_rollback_never_goes_back_to_a_commit_with_333(harness):
 # A switch that stopped before verify ended (PR #424 review 6591459652, required fix 1): the
 # tasks are disabled and no serve ever ran, so the rollback goes back to Task Scheduler and
 # leaves the host database alone.
-@pytest.mark.parametrize(
-    "failure",
-    ["wait", "copy_db", "build", "compose run", "docker cp stock.db"],
-)
-def test_a_switch_that_failed_before_serve_ran_rolls_back_to_task_scheduler(
-    harness, failure
-):
+# Each failure is injected at its step and the switch must stop there (the reason says so):
+# without the injection the fake docker stops the switch at verify, which the reason tells
+# apart (PR #424 second review, required fix 1).
+FAILURES = {
+    "wait": (None, "停用後 1 秒內仍有工作或 venv 程序在跑", ["pre-docker", "disable"]),
+    "copy_db": (None, "copy_db.py 失敗", ["pre-docker", "disable"]),
+    "build": (" build api", f"build {PROJECT}-backend:cutover 失敗", SWITCH_STEPS[:3]),
+    "compose run": (" run -d --no-deps", "compose run 輔助容器失敗", SWITCH_STEPS[:3]),
+    "docker cp stock.db": (
+        ":/data/stock.db",
+        "docker cp stock.db 失敗",
+        SWITCH_STEPS[:4],
+    ),
+}
+
+
+def _fail_the_switch(h: Harness, failure: str):
+    pattern, reason, steps = FAILURES[failure]
     args = ["--no-deploy"]
     if failure == "wait":
-        (harness.fake / "writers").write_text(
-            "4242 C:\\stock-lab-release\\.venv\\python.exe\n", encoding="utf-8"
-        )
+        h.fake_file("writers", "4242 C:\\stock-lab-release\\.venv\\python.exe")
         args += ["--wait-timeout", "1"]
     elif failure == "copy_db":
-        (harness.data / "stock.db").write_bytes(b"not a database, copy_db.py fails\n")
-    else:
-        if failure != "build":
-            harness.docker("images", f"{PROJECT}-backend:cutover")
-        harness.docker(
-            "fail",
-            {
-                "build": " build api",
-                "compose run": " run -d --no-deps",
-                "docker cp stock.db": ":/data/stock.db",
-            }[failure],
-        )
-    host_db = (harness.data / "stock.db").read_bytes()
-    switch = harness.run(*args)
+        (h.data / "stock.db").write_bytes(b"not a database, copy_db.py fails\n")
+    if failure != "build":
+        h.docker("images", f"{PROJECT}-backend:cutover")
+    if pattern:
+        h.docker("fail", pattern)
+    switch = h.run(*args)
     assert switch.code == 3, switch.out
-    assert "disable" in switch.result["steps"]
-    assert "verify" not in switch.result["steps"]
-    assert "Disabled" in (harness.fake / "tasks").read_text(encoding="utf-8")
-    for name in ("fail", "writers"):
-        for path in (harness.fake / "docker" / name, harness.fake / name):
-            path.unlink(missing_ok=True)
+    assert switch.result["reason"] == reason, switch.out
+    assert switch.result["steps"] == steps
+    # The host-side record holds the same steps: a rollback reads it when Docker is down.
+    assert h.record()["steps"] == steps and h.record()["project"] == PROJECT
+    assert "Disabled" in (h.fake / "tasks").read_text(encoding="utf-8")
+    for path in (h.fake / "docker" / "fail", h.fake / "writers"):
+        path.unlink(missing_ok=True)
+    return switch
 
+
+@pytest.mark.parametrize("docker", ["docker answers", "docker down"])
+@pytest.mark.parametrize("failure", list(FAILURES))
+def test_a_switch_that_failed_before_serve_ran_rolls_back_to_task_scheduler(
+    harness, failure, docker
+):
+    """Fix 1 of both reviews: back to Task Scheduler, also when Docker is what failed."""
+
+    _fail_the_switch(harness, failure)
+    host_db = (harness.data / "stock.db").read_bytes()  # the switch never writes it
+    if docker == "docker down":
+        harness.docker_down()
     result = harness.run("rollback")
     _back_on_task_scheduler(harness, result)
-    assert result.result["steps"] == EARLY_STEPS
-    assert "回退方式 early" in result.out
+    if docker == "docker down":
+        assert result.result["steps"] == ["checkout", "enable"]
+        assert "回退方式 early（Docker 不能用）" in result.out
+    else:
+        assert result.result["steps"] == EARLY_STEPS
+        assert "回退方式 early" in result.out
     assert (harness.data / "stock.db").read_bytes() == host_db
     assert not (harness.data / "backups").exists()
+
+
+def test_without_docker_a_switch_that_got_through_verify_is_refused(harness):
+    """serve may have written the volume: the rollback waits for Docker (full)."""
+
+    _fail_the_switch(harness, "docker cp stock.db")
+    record = harness.work / "cutover-steps.json"
+    data = json.loads(record.read_text(encoding="utf-8"))
+    data["steps"] = SWITCH_STEPS[:7]
+    record.write_text(json.dumps(data) + "\n", encoding="utf-8", newline="\n")
+    harness.docker_down()
+    before = harness.state()
+    result = harness.run("rollback")
+    assert result.code == 1, result.out
+    assert "Docker" in result.result["reason"] and "verify" in result.result["reason"]
+    assert harness.state() == before
+
+
+def test_without_docker_and_without_the_record_the_rollback_is_refused(harness):
+    harness.work.mkdir()
+    harness.tasks("daily Disabled", "news Disabled", "watchdog Disabled")
+    harness.docker_down()
+    before = harness.state()
+    result = harness.run("rollback")
+    assert result.code == 1, result.out
+    assert "cutover-steps.json" in result.result["reason"]
+    assert harness.state() == before
+
+
+def test_a_switch_needs_docker_to_answer(harness):
+    harness.work.mkdir()
+    harness.docker_down()
+    before = harness.state()
+    result = harness.run("--no-deploy")
+    assert result.code == 2, result.out
+    assert "docker" in result.out and harness.state() == before
+
+
+def test_a_record_of_verify_without_cutover_json_in_the_volume_is_refused(harness):
+    _fail_the_switch(harness, "docker cp stock.db")
+    record = harness.work / "cutover-steps.json"
+    data = json.loads(record.read_text(encoding="utf-8"))
+    data["steps"] = SWITCH_STEPS[:7]
+    record.write_text(json.dumps(data) + "\n", encoding="utf-8", newline="\n")
+    result = harness.run("rollback", "--dry-run")
+    assert result.code == 1 and "cutover.json" in result.result["reason"], result.out
+
+
+def test_a_cutover_json_in_the_host_logs_is_refused(harness):
+    """It would go into the volume and read as a finished verify (second review, note 2)."""
+
+    (harness.data / "logs" / "cutover.json").write_text("{}\n", encoding="utf-8")
+    result = harness.run("--dry-run", "--no-deploy")
+    assert result.code == 1 and "cutover.json" in result.result["reason"], result.out
 
 
 def test_tasks_disabled_by_hand_before_any_switch_roll_back_without_a_branch(harness):
@@ -626,7 +718,7 @@ def test_a_rerun_after_start_news_failed_keeps_what_windows_wrote(harness):
     """The rerun of review 6591446223 must-fix 2: news failed, Windows wrote, rollback again."""
 
     _ready_for_rollback(harness)
-    (harness.fake / "news_result").write_text("1\n", encoding="utf-8")
+    harness.fake_file("news_result", "1")
     first = harness.run("rollback", "--start-news")
     assert first.code == 3 and "LastTaskResult" in first.result["reason"], first.out
     assert first.result["steps"] == ROLLBACK_STEPS[:-1]
@@ -635,7 +727,7 @@ def test_a_rerun_after_start_news_failed_keeps_what_windows_wrote(harness):
     with sqlite3.connect(harness.data / "stock.db") as conn:
         conn.execute("INSERT INTO written VALUES ('windows')")
     conn.close()
-    (harness.fake / "news_result").write_text("0\n", encoding="utf-8")
+    harness.fake_file("news_result", "0")
 
     again = harness.run("rollback", "--start-news")
     _back_on_task_scheduler(harness, again)
@@ -643,6 +735,48 @@ def test_a_rerun_after_start_news_failed_keeps_what_windows_wrote(harness):
     assert "回退方式 resume" in again.out
     assert _host_rows(harness) == ["serve", "windows"]
     assert len(list((harness.data / "backups").iterdir())) == 1
+
+
+def _interrupt_after_install(h: Harness) -> None:
+    """A full rollback that stopped after the copy was in place, before installed.json."""
+
+    first = h.run("rollback")
+    assert first.code == 0, first.out
+    (h.work / "rollback" / "installed.json").unlink()
+    assert (h.work / "rollback" / "installing.json").exists()
+    h.tasks("daily Disabled", "news Disabled", "watchdog Disabled")
+
+
+def test_a_rollback_interrupted_before_installed_json_resumes(harness):
+    """Second review, required fix 3: not stuck on the mtime of the copy it installed."""
+
+    _ready_for_rollback(harness)
+    _interrupt_after_install(harness)
+    installed = (harness.data / "stock.db").read_bytes()
+    again = harness.run("rollback")
+    _back_on_task_scheduler(harness, again)
+    assert again.result["steps"] == RESUME_STEPS
+    assert "寫 " in again.out and "前中斷" in again.out
+    assert (harness.data / "stock.db").read_bytes() == installed
+    assert len(list((harness.data / "backups").iterdir())) == 1
+    record = json.loads(
+        (harness.work / "rollback" / "installed.json").read_text(encoding="utf-8")
+    )
+    assert record["cutover"] == CUTOVER_TIME and record["backup"]
+
+
+def test_an_interrupted_install_with_another_host_db_names_the_backup(harness):
+    _ready_for_rollback(harness)
+    _interrupt_after_install(harness)
+    with sqlite3.connect(harness.data / "stock.db") as conn:
+        conn.execute("INSERT INTO written VALUES ('someone')")
+    conn.close()
+    before = harness.state()
+    result = harness.run("rollback")
+    assert result.code == 1, result.out
+    assert "install 中斷" in result.result["reason"]
+    assert "pre-rollback-" in result.result["reason"]
+    assert harness.state() == before
 
 
 def test_a_full_rollback_brings_back_what_serve_wrote(harness):

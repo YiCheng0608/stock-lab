@@ -16,8 +16,9 @@
 #           #333 (d408ae7) while a task is still enabled (its jobs end with exit 69, so the
 #           schedule has stopped silently: decision 9 of #342); a task is running; the
 #           project's stock-data volume exists (the volume is created here, by compose); the
-#           data directory has no stock.db; the pre-docker commit holds #333, or a pre-docker
-#           branch points elsewhere.
+#           data directory has no stock.db, or its logs/ has a cutover.json (it would go into the
+#           volume and read as a finished verify); the pre-docker commit holds #333, or a
+#           pre-docker branch points elsewhere; Docker does not answer.
 #           The release checkout's tasks pull master (-GitPull), so they are disabled before
 #           feat/docker reaches master (docs/OPERATIONS.md §6.9); step 2 then only reads back.
 #   1 pre-docker  the release checkout gets branch pre-docker (no checkout) at --pre-docker,
@@ -62,7 +63,15 @@
 #   resume  <work>/rollback/installed.json names this cutover.json's time: an earlier rollback
 #           of the same switch installed the copy (and then failed, e.g. --start-news). Windows
 #           may have written the host stock.db since, so it is never replaced again. Steps: stop,
-#           checkout, enable.
+#           checkout, enable. Also when that rollback stopped between putting the copy in place
+#           and writing installed.json (installing.json names this switch and the host stock.db
+#           is byte for byte the copy): installed.json is written first. When installing.json
+#           names this switch but the host stock.db differs and changed after the switch, it is
+#           refused with the backup directory named.
+# Without Docker (no client, compose, or a daemon answering within 60 s; PR #424 second review)
+# the volume cannot be read: the switch's host-side record <work>/cutover-steps.json (written at
+# its start and after each step) decides. Steps without verify: early without touching Docker
+# (checkout, enable). With verify, or without the record: refused, Docker first.
 # The pre-docker branch: when missing, created at --pre-docker (default HEAD; never a commit
 # with #333) with its upstream set to itself; an existing one must not hold #333 and its
 # upstream must be itself (set when unset).
@@ -176,7 +185,8 @@ within "$work_native" "$data_native" && die "--work-dir 不能在資料目錄裡
 # A dry run creates nothing, not even the work directory.
 [ "$dry" = 1 ] || mkdir -p "$work_dir" || die "無法建立 --work-dir：$work_dir" 2
 [ -n "$env_file" ] || env_file="$checkout_native/.env"
-command -v docker >/dev/null 2>&1 || die "找不到 docker" 2
+docker_ok=1
+command -v docker >/dev/null 2>&1 || docker_ok=0
 "$powershell" -NoProfile -NonInteractive -Command 'exit 0' >/dev/null 2>&1 || die "無法執行 PowerShell：$powershell" 2
 
 dk() { MSYS_NO_PATHCONV=1 docker "$@"; }
@@ -194,7 +204,18 @@ compose_here() {
   COMPOSE_PROJECT_NAME="$project" STOCK_RELEASE_TAG=cutover \
     dk compose -p "$project" -f "$(native "$repo_root")/docker-compose.yml" "$@"
 }
-dk compose version >/dev/null 2>&1 || die "docker compose 無法執行（Docker Desktop 沒有開？）" 2
+# Docker usable: the client, compose, and a daemon that answers (compose version alone never
+# asks the daemon). The switch needs it; a rollback without it goes by the host-side record.
+if [ "$docker_ok" = 1 ]; then
+  dk compose version >/dev/null 2>&1 \
+    && MSYS_NO_PATHCONV=1 timeout 60 docker version --format '{{.Server.Version}}' >/dev/null 2>&1 \
+    || docker_ok=0
+fi
+[ "$docker_ok" = 1 ] || [ "$mode" = rollback ] \
+  || die "docker 不能用（找不到 docker、docker compose 無法執行，或 daemon 60 秒內沒有回應；Docker Desktop 沒有開？）" 2
+# The switch's steps as they are done, on the host (outside the volume): a rollback reads it
+# when Docker does not answer.
+switch_record="$work_dir/cutover-steps.json"
 
 steps=()
 note() { printf 'cutover: %s\n' "$*" >&2; }
@@ -202,11 +223,23 @@ plan() { # plan <step> <description>: what the step does, and in a dry run nothi
   note "[$1] $2"
   steps+=("$1")
 }
-finish() { # finish <status> [reason]
+step_list() {
   local list="" s
   for s in "${steps[@]+"${steps[@]}"}"; do list="$list${list:+, }$(json_str "$s")"; done
+  printf '%s' "$list"
+}
+finish() { # finish <status> [reason]
   printf '{"mode": %s, "status": %s, "project": %s, "steps": [%s], "reason": %s}\n' \
-    "$(json_str "$mode")" "$(json_str "$1")" "$(json_str "$project")" "$list" "$(json_str "${2:-}")"
+    "$(json_str "$mode")" "$(json_str "$1")" "$(json_str "$project")" "$(step_list)" "$(json_str "${2:-}")"
+}
+record_steps() { # the switch's steps so far into $switch_record (replaced whole, never half)
+  printf '{"project": %s, "time": "%s", "steps": [%s]}\n' "$(json_str "$project")" \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(step_list)" >"$switch_record.partial" \
+    && mv -f "$switch_record.partial" "$switch_record"
+}
+done_step() { # a switch step is done: list it and record it on the host
+  steps+=("$1")
+  record_steps || fail "寫不了 $switch_record（回退在 Docker 不能用時讀它）"
 }
 refuse() { finish refused "$1"; die "拒絕：$1" 1; }
 fail() {
@@ -305,6 +338,9 @@ if [ "$mode" = switch ]; then
   [ -f "$data_dir/stock.db" ] || refuse "資料目錄沒有 stock.db：$data_dir"
   [ -d "$data_dir/raw" ] || refuse "資料目錄沒有 raw/：$data_dir"
   [ -d "$data_dir/logs" ] || refuse "資料目錄沒有 logs/：$data_dir"
+  # logs/ goes into the volume whole: a cutover.json there would read as a finished verify.
+  [ ! -e "$data_dir/logs/cutover.json" ] \
+    || refuse "資料目錄的 logs/ 已有 cutover.json：它會被搬進 volume，回退會誤判切換已做完 verify；先移走它"
   [ "$deploy" = 0 ] || [ -f "$script_dir/deploy.sh" ] || die "找不到 deploy.sh" 2
 
   db_copy="$work_native/db/stock.db"
@@ -328,6 +364,7 @@ if [ "$mode" = switch ]; then
     exit 0
   fi
   steps=()
+  record_steps || die "寫不了 $switch_record（回退在 Docker 不能用時讀它）" 2
 
   # 1 pre-docker
   if [ -z "$pre_docker" ]; then
@@ -336,13 +373,13 @@ if [ "$mode" = switch ]; then
   git -C "$checkout" config branch.pre-docker.remote . \
     && git -C "$checkout" config branch.pre-docker.merge refs/heads/pre-docker \
     || fail "設定 pre-docker 的 upstream 失敗"
-  steps+=(pre-docker)
+  done_step pre-docker
   # 2 disable
   for name in "${task_list[@]}"; do
     ps1 "Disable-ScheduledTask -TaskPath '$task_path' -TaskName '$name' -ErrorAction Stop | Out-Null" \
       || fail "停用 $task_path$name 失敗"
   done
-  steps+=(disable)
+  done_step disable
   wait_quiet || fail "停用後 $wait_timeout 秒內仍有工作或 venv 程序在跑"
   any_enabled && fail "停用後讀回仍有工作啟用：$(printf '%s ' $states)"
   # 3 snapshot
@@ -351,21 +388,21 @@ if [ "$mode" = switch ]; then
   printf '%s\n' "$out" >&2
   "$python" -X utf8 "$script_dir/cutover_db.py" counts "$db_copy" >"$work_native/db/counts.json" \
     || fail "讀不到快照的列數"
-  steps+=(snapshot)
+  done_step snapshot
   # 4 volume (compose creates it with the helper)
   dk image inspect "$image" >/dev/null 2>&1 || compose_here build api >&2 || fail "build $image 失敗"
   compose_here run -d --no-deps --name "$helper" --user root --entrypoint sleep api infinity >&2 \
     || fail "compose run 輔助容器失敗"
-  steps+=(volume)
+  done_step volume
   # 5 copy
   dk exec "$helper" mkdir -p /data/raw /data/logs || fail "建立 /data/raw、/data/logs 失敗"
   dk cp "$db_copy" "$helper:/data/stock.db" || fail "docker cp stock.db 失敗"
   dk cp "$data_native/raw/." "$helper:/data/raw" || fail "docker cp raw/ 失敗"
   dk cp "$data_native/logs/." "$helper:/data/logs" || fail "docker cp logs/ 失敗"
-  steps+=(copy)
+  done_step copy
   # 6 chown
   dk exec -u root "$helper" chown -R 1000:1000 /data || fail "chown /data 失敗"
-  steps+=(chown)
+  done_step chown
   # 7 verify
   dk exec -i -u 1000 "$helper" python -X utf8 - counts /data/stock.db <"$script_dir/cutover_db.py" \
     | tr -d '\r' >"$work_native/db/counts-volume.json" || fail "讀不到 volume 裡 stock.db 的列數"
@@ -391,10 +428,10 @@ if [ "$mode" = switch ]; then
   record="{\"time\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\", \"source\": $(json_str "$data_native"), \"head\": \"$head\", \"tasks\": $(json_str "$task_path$tasks")}"
   printf '%s\n' "$record" | dk exec -i -u 1000 "$helper" sh -c 'cat > /data/logs/cutover.json' \
     || fail "uid 1000 寫不了 /data/logs/cutover.json"
-  steps+=(verify)
+  done_step verify
   # 8 helper
   dk rm -f "$helper" >/dev/null || fail "移除輔助容器 $helper 失敗"
-  steps+=(helper)
+  done_step helper
   # 9 start
   if [ "$deploy" = 1 ]; then
     args=("$tag" --checkout "$checkout_native" --project "$project" --env-file "$env_file")
@@ -407,7 +444,7 @@ if [ "$mode" = switch ]; then
     # api and scheduler: the web image is deploy.sh's to build.
     compose_here up -d --no-build --wait api scheduler >&2 || fail "compose up 失敗"
   fi
-  steps+=(start)
+  done_step start
   # 10 readback
   dk compose ls --all --filter "name=^$project\$" >&2
   dk ps --filter "label=com.docker.compose.project=$project" --format '{{.Names}} {{.Image}} {{.Status}}' >&2
@@ -427,7 +464,7 @@ if [ "$mode" = switch ]; then
     dk exec -u 1000 "$scheduler" sh -c 'stat -c "%u:%g %n" /data/stock.db $(ls -t /data/logs/news-*.log | head -1)' >&2 \
       || fail "讀不到 job news 寫的檔"
   fi
-  steps+=(readback)
+  done_step readback
   finish done
   exit 0
 fi
@@ -455,15 +492,31 @@ else
   set_upstream=1
 fi
 pre_at="${pre_docker:-$pre_target}"
+# --- the switch's host-side record: how far it got, readable without Docker
+recorded="" recorded_verify=0
+if [ -f "$switch_record" ]; then
+  grep -q "\"project\": $(json_str "$project")," "$switch_record" \
+    || refuse "$switch_record 是另一個 project 的切換紀錄（這次是 $project）"
+  recorded="$(sed -n 's/.*"steps": \[\(.*\)\].*/\1/p' "$switch_record" | tr -d '"' | sed 's/, */,/g')"
+  [[ ",$recorded," == *",verify,"* ]] && recorded_verify=1
+fi
 # --- what the volume holds
-served="$(dk ps -a -q --filter "label=com.docker.compose.project=$project" \
+served="" source_image="" vol_db=0 cutover_time=""
+if [ "$docker_ok" = 0 ]; then
+  # A rollback must not need Docker when the switch failed because Docker did: the host-side
+  # record tells whether serve could have written the volume.
+  [ -f "$switch_record" ] \
+    || refuse "Docker 不能用，且沒有 $switch_record（這個 --work-dir 沒有跑過切換，或選項不同）：讀不到 volume 就不知道 serve 有沒有寫過它；先讓 Docker 回來再跑 rollback（同一組選項）"
+  [ "$recorded_verify" = 0 ] \
+    || refuse "Docker 不能用，而 $switch_record 記錄切換已做完 verify（steps：$recorded）：serve 可能寫過 volume，要等 Docker 回來再跑 rollback（full）"
+fi
+[ "$docker_ok" = 0 ] || served="$(dk ps -a -q --filter "label=com.docker.compose.project=$project" \
   --filter label=com.docker.compose.oneoff=False | tr -d '\r')"
-source_image="$(dk ps -a --filter "label=com.docker.compose.project=$project" \
+[ "$docker_ok" = 0 ] || source_image="$(dk ps -a --filter "label=com.docker.compose.project=$project" \
   --filter label=com.docker.compose.service=scheduler --filter label=com.docker.compose.oneoff=False \
   --format '{{.Image}}' | tr -d '\r' | head -1)"
 [ -n "$source_image" ] || source_image="$image"
-vol_db=0 cutover_time=""
-if volume_exists; then
+if [ "$docker_ok" = 1 ] && volume_exists; then
   dk image inspect "$source_image" >/dev/null 2>&1 \
     || refuse "volume $volume 在，但沒有可用來讀它的 image（$source_image）"
   # Read-only and removed at once: nothing in the volume changes.
@@ -477,12 +530,24 @@ if volume_exists; then
   fi
 fi
 installed="$work_dir/rollback/installed.json"
-if [ -z "$cutover_time" ]; then
+installing="$work_dir/rollback/installing.json"
+copy="$work_native/rollback/stock.db"
+finish_install=0
+of_this_switch() { [ -f "$1" ] && grep -q "\"cutover\": \"$cutover_time\"" "$1"; }
+if [ "$docker_ok" = 0 ]; then
+  way=early
+elif [ -z "$cutover_time" ]; then
   [ -z "$served" ] \
     || refuse "project $project 有容器，但 volume 沒有 /data/logs/cutover.json（切換沒有做完 verify）：狀態不明，請人工確認"
+  [ "$recorded_verify" = 0 ] \
+    || refuse "$switch_record 記錄切換已做完 verify，volume 卻沒有 /data/logs/cutover.json：狀態不明，請人工確認"
   way=early
-elif [ -f "$installed" ] && grep -q "\"cutover\": \"$cutover_time\"" "$installed"; then
+elif of_this_switch "$installed"; then
   way=resume
+elif of_this_switch "$installing" && [ -f "$data_dir/stock.db" ] && [ -f "$copy" ] \
+  && cmp -s "$copy" "$data_dir/stock.db"; then
+  # The last rollback put the copy in place and stopped before installed.json: finish it.
+  way=resume finish_install=1
 else
   way=full
   for name in "${task_list[@]}"; do
@@ -493,19 +558,29 @@ else
   for f in "$data_dir/stock.db" "$data_dir/stock.db-wal"; do
     [ -e "$f" ] || continue
     changed_at="$(date -u -r "$f" +%Y-%m-%dT%H:%M:%SZ)"
-    [[ "$changed_at" > "$cutover_time" ]] \
-      && refuse "主機的 ${f##*/} 在切換之後改過（$changed_at；cutover.json $cutover_time）：不以 volume 的 stock.db 取代它，請人工確認誰寫了主機的 DB"
+    if [[ "$changed_at" > "$cutover_time" ]]; then
+      of_this_switch "$installing" \
+        && refuse "上一次回退在 install 中斷（$installing），主機的 ${f##*/} 與快照 $copy 不同、在切換之後改過（$changed_at）：原檔在 $(sed -n 's/.*"backup": *"\([^"]*\)".*/\1/p' "$installing")，請人工確認哪一份是正式 DB"
+      refuse "主機的 ${f##*/} 在切換之後改過（$changed_at；cutover.json $cutover_time）：不以 volume 的 stock.db 取代它，請人工確認誰寫了主機的 DB"
+    fi
   done
   [ -d "$data_dir/raw" ] || refuse "資料目錄沒有 raw/：$data_dir"
 fi
-copy="$work_native/rollback/stock.db"
 case "$way" in
   early)
-    note "回退方式 early：volume 沒有做完 verify 的切換紀錄（serve 沒有在它上面跑過），主機 stock.db 不動"
-    plan helper "docker rm -f $helper（若有）；volume ${volume} 若在就留著，再切換前由使用者刪除"
+    if [ "$docker_ok" = 0 ]; then
+      note "回退方式 early（Docker 不能用）：$switch_record 記錄切換停在 verify 之前（steps：${recorded:-無}），serve 沒有跑過；主機 stock.db 不動，只切回 pre-docker 並啟用工作。輔助容器與 volume 等 Docker 回來後再處理"
+    else
+      note "回退方式 early：volume 沒有做完 verify 的切換紀錄（serve 沒有在它上面跑過），主機 stock.db 不動"
+      plan helper "docker rm -f $helper（若有）；volume ${volume} 若在就留著，再切換前由使用者刪除"
+    fi
     ;;
   resume)
-    note "回退方式 resume：$installed 記錄這次切換（cutover.json $cutover_time）已裝回 stock.db；之後 Windows 可能已寫入，不再取代主機的 stock.db"
+    if [ "$finish_install" = 1 ]; then
+      note "回退方式 resume：上一次回退已把快照裝成主機的 stock.db（與 $copy 相同），寫 $installed 前中斷；補寫它，不再取代主機的 stock.db"
+    else
+      note "回退方式 resume：$installed 記錄這次切換（cutover.json $cutover_time）已裝回 stock.db；之後 Windows 可能已寫入，不再取代主機的 stock.db"
+    fi
     plan stop "docker stop：project $project 在跑的容器（$(project_running | wc -l | tr -d ' ') 個）"
     ;;
   full)
@@ -525,7 +600,13 @@ if [ "$dry" = 1 ]; then
 fi
 steps=()
 rb="$project-rollback"
-if [ "$way" = early ]; then
+if [ "$finish_install" = 1 ]; then
+  sed 's/"started"/"installed"/' "$installing" >"$installed" \
+    || fail "寫不了 $installed（主機的 stock.db 已是快照；重跑前先人工建立它）"
+fi
+if [ "$way" = early ] && [ "$docker_ok" = 0 ]; then
+  : # nothing of Docker's to touch
+elif [ "$way" = early ]; then
   dk rm -f "$helper" >/dev/null 2>&1 || true
   steps+=(helper)
 else
@@ -569,6 +650,11 @@ steps+=(paths)
 # 4 install
 backup="$data_dir/backups/pre-rollback-$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$backup" || fail "無法建立 $backup"
+# Before the host stock.db moves: a rerun after an interruption from here on knows it (resume
+# when the copy is in place, a clear refusal naming the backup otherwise).
+printf '{"cutover": "%s", "started": "%s", "backup": %s}\n' "$cutover_time" \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(json_str "$(native "$backup")")" >"$installing" \
+  || fail "寫不了 $installing"
 for suffix in "" -wal -shm; do
   [ ! -e "$data_dir/stock.db$suffix" ] || mv "$data_dir/stock.db$suffix" "$backup/" || fail "搬開 stock.db$suffix 失敗"
 done
