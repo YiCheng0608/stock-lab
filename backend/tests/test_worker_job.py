@@ -10,10 +10,13 @@ lesson of #207). No worker, database, network or Claude call is involved there.
 The fixture-database test runs the real worker on tools/verify/fixture_db.py with
 the outside-facing steps faked (job_daily_child.py) and the job in this process.
 
-Process trees: a job killed with ``taskkill /F`` (Windows) or SIGKILL (Linux) must
-take its worker with it, so the next run finds the run row's PID dead
-(schedule_runs._pid_alive) and the lock free. CI runs on Linux, so the Windows
-branch (msvcrt, job objects) is covered by local runs; the PR lists them.
+Process trees: a job killed with SIGKILL must take its worker with it, so the
+next run finds the run row's PID dead (schedule_runs._pid_alive) and the lock
+free.
+
+The job runs on Linux only (the backend image, #333): elsewhere every test but
+the refusal is skipped; run them in the image (``docker run --rm <image> pytest
+backend/tests``).
 """
 
 from __future__ import annotations
@@ -37,11 +40,15 @@ import pytest
 import worker.job as job
 from worker.schedule_runs import _pid_alive
 
+ON_LINUX = sys.platform.startswith("linux")
+linux_only = pytest.mark.skipif(
+    not ON_LINUX, reason="worker.job runs on Linux only (#333)"
+)
 ROOT = Path(__file__).resolve().parents[2]
 JOB_SOURCE = ROOT / "backend" / "worker" / "job.py"
 # wrapper_daily.txt, wrapper_news.txt: what the PowerShell wrapper before #313
 # (tools/Invoke-WorkerJob.ps1 at 58dadca) wrote with the old fake python of
-# test_worker_job_scripts.py: one daily run, three news runs with news-llm exit 1.
+# test_worker_job_scripts.py (removed in #333): one daily run, three news runs with news-llm exit 1.
 # Stored with LF and the data directory shortened; written back with CRLF.
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "worker_job"
 
@@ -70,7 +77,7 @@ def main():
         sys.exit(job.run(args))
     step = argv[0]
     names = ("STOCK_DATA_DIR", "STOCK_DB_PATH", "STOCK_RAW_DIR", "STOCK_CLAUDE_CLI",
-             "PYTHONPATH", "PYTHONIOENCODING")
+             "PYTHONPATH", "PYTHONIOENCODING", "STOCK_JOB_LOCK")
     record = {"step": step, "argv": argv, "pid": os.getpid(), "ppid": os.getppid(),
               "cwd": os.getcwd(), "utf8": sys.flags.utf8_mode,
               "env": {name: os.environ.get(name) for name in names}}
@@ -89,6 +96,42 @@ def main():
 
 main()
 '''
+
+# git on PATH for the job: records each call, so a test can assert there is none.
+FAKE_GIT = r"""import json, os, sys
+
+with open(os.environ["FAKE_GIT_LOG"], "a", encoding="utf-8") as log:
+    log.write(json.dumps(sys.argv[1:]) + "\n")
+sys.exit(128)
+"""
+IMAGE = "stock-lab-backend:v1.1.0"
+GIT_HEAD = "c" * 40
+# What the deployed image carries (backend/Dockerfile, tools/ops/deploy.sh, #340).
+IMAGE_ENV = {"STOCK_IMAGE_TAG": IMAGE, "STOCK_GIT_HEAD": GIT_HEAD}
+
+
+def fake_git(directory: Path) -> dict[str, str]:
+    """The environment that puts the recording git first on PATH (calls in git.jsonl)."""
+
+    script = directory / "fake_git.py"
+    script.write_text(FAKE_GIT, encoding="utf-8")
+    launcher = directory / "git"
+    launcher.write_text(
+        f'#!/bin/sh\nexec "{sys.executable}" "{script}" "$@"\n', encoding="utf-8"
+    )
+    launcher.chmod(0o755)
+    return {
+        "PATH": f"{directory}{os.pathsep}{os.environ.get('PATH', '')}",
+        "FAKE_GIT_LOG": str(directory / "git.jsonl"),
+    }
+
+
+def git_calls(directory: Path) -> list[list[str]]:
+    path = directory / "git.jsonl"
+    if not path.exists():
+        return []
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
 
 END_LINE = r"^===== (\S+) end exit=(\d+) seconds=\d+(?: news_llm_exit=(\S+))?\r?$"
 SKIPPED_LINE = r"^===== skipped reason=(\w+) \((.*)\)\r?$"
@@ -112,8 +155,16 @@ class Tree:
 
     def environment(self, extra_env=None, **fake) -> dict[str, str]:
         env = {**os.environ, "FAKE_LOG": str(self.calls_file)}
-        for name in ("STOCK_CLAUDE_CLI", "PYTHONPATH", "STOCK_DATA_DIR"):
+        for name in (
+            "STOCK_CLAUDE_CLI",
+            "PYTHONPATH",
+            "STOCK_DATA_DIR",
+            "STOCK_IMAGE_TAG",
+            "STOCK_GIT_HEAD",
+        ):
             env.pop(name, None)
+        # Inherited from a job of the caller's, it must not reach the worker.
+        env["STOCK_JOB_LOCK"] = "/inherited/daily.lock"
         env.update({f"FAKE_{key.upper()}": str(value) for key, value in fake.items()})
         env.update(extra_env or {})
         return env
@@ -199,6 +250,8 @@ class Tree:
 
 @pytest.fixture
 def tree(tmp_path) -> Tree:
+    if not ON_LINUX:
+        pytest.skip("worker.job runs on Linux only (#333)")
     return Tree(tmp_path)
 
 
@@ -211,14 +264,7 @@ def skipped_line(log: str):
 
 
 def force_kill(pid: int) -> None:
-    """``taskkill /F`` on Windows, ``kill -9`` elsewhere.
-
-    taskkill /F is TerminateProcess, which os.kill calls on Windows; taskkill
-    itself goes through WMI, and a busy machine cancels it ("call cancelled",
-    the #246 failure), so the tests call TerminateProcess directly.
-    """
-
-    os.kill(pid, signal.SIGTERM if os.name == "nt" else signal.SIGKILL)
+    os.kill(pid, signal.SIGKILL)
 
 
 def wait_dead(pid: int, timeout: float = 15) -> bool:
@@ -243,7 +289,9 @@ def test_daily_log_layout(tree):
         r" force=False db=.+stock\.db free_mb=\d+",
         lines[0],
     )
-    assert lines[1] == "--- stdout"
+    # Not in an image: no STOCK_IMAGE_TAG or STOCK_GIT_HEAD, and git is never asked.
+    assert lines[1] == "--- version image=unknown head=unknown"
+    assert lines[2] == "--- stdout"
     assert '"note": "日誌"' in result.log
     assert "--- stderr" not in result.log and "news-llm" not in result.log
     assert [groups[1:] for groups in end_line(result.log)] == [("0", "")]
@@ -390,15 +438,34 @@ def test_a_clean_git_dir_does_not_block_the_job(tree):
     assert skipped_line(result.log) is None
 
 
-def test_a_failed_git_pull_skips_the_job(tree):
-    # GIT_DIR names a directory that does not exist, so git can neither pull nor
-    # look upwards for another repository.
-    missing = tree.root / "no-git-dir"
-    result = tree.run("daily", "--git-pull", extra_env={"GIT_DIR": str(missing)})
-    assert result.code == 0
-    assert "--- git pull --ff-only" in result.log
-    assert skipped_line(result.log).group(1) == "git_pull_failed"
-    assert tree.calls()[0]["argv"][-2:] == ["--skip-reason", "git_pull_failed"]
+# The deployed version, never pulled (#314 AC-2, #340) ---------------------------
+
+
+@pytest.mark.parametrize("job_name", ["daily", "news"])
+def test_the_job_never_pulls_and_logs_the_image_it_runs(tree, job_name):
+    # --git-pull: what a task registered before #314 still passes.
+    env = {**fake_git(tree.root), **IMAGE_ENV}
+    result = tree.run(job_name, "--git-pull", extra_env=env)
+    assert result.code == 0, result.stderr
+    # The image names the version (#340): git is not run at all.
+    assert git_calls(tree.root) == []
+    assert f"--- version image={IMAGE} head={GIT_HEAD}" in result.log
+    assert "--git-pull ignored" in result.log
+    if job_name == "daily":
+        # daily reads the same two from its environment (schedule_runs.runtime).
+        assert tree.calls()[0]["argv"] == ["daily", "--trigger", "scheduler"]
+
+
+def test_a_skipped_daily_passes_only_its_reason(tree):
+    (tree.git_dir / "index.lock").touch()
+    tree.run("daily", extra_env=IMAGE_ENV)
+    assert tree.calls()[0]["argv"] == [
+        "daily",
+        "--trigger",
+        "scheduler",
+        "--skip-reason",
+        "git_busy",
+    ]
 
 
 # One job of each kind at a time (AC-3) ---------------------------------------
@@ -412,6 +479,9 @@ def test_a_second_daily_job_records_already_running(tree):
         second = tree.run("daily", daily_until=release, daily_sleep=90)
         assert second.code == 0, second.stderr
         assert tree.calls()[1]["argv"][-2:] == ["--skip-reason", "already_running"]
+        # Only the worker of the job holding the lock is told its path (#336).
+        lock = str(job.lock_path(tree.data, "daily"))
+        assert [call["env"]["STOCK_JOB_LOCK"] for call in tree.calls()] == [lock, None]
         skipped = skipped_line(second.log)
         assert skipped.group(1) == "already_running"
         assert skipped.group(2) == f"lock={job.lock_path(tree.data, 'daily')}"
@@ -463,6 +533,7 @@ def test_a_killed_job_takes_its_worker_along_and_leaves_no_lock(tree):
     assert len(end_line(again.log)) == 1
 
 
+@linux_only
 def test_the_lock_is_exclusive_and_released(tmp_path):
     path = tmp_path / "locks" / "x.lock"
     first, second = job.FileLock(path), job.FileLock(path)
@@ -473,6 +544,7 @@ def test_the_lock_is_exclusive_and_released(tmp_path):
     second.release()
 
 
+@linux_only
 def test_lock_runs_the_command_and_refuses_while_held(tmp_path):
     path = tmp_path / "locks" / "watchdog.lock"
     marker = tmp_path / "ran"
@@ -551,10 +623,10 @@ def test_logs_older_than_the_retention_are_removed(tree):
 # Memory without WMI (#246) ------------------------------------------------------
 
 
+@linux_only
 def test_free_memory_is_read_from_the_os():
     free = job.free_memory_mb()
-    if sys.platform == "win32" or Path("/proc/meminfo").exists():
-        assert free is not None and free > 0
+    assert free is not None and free > 0
 
 
 # What reaches into WMI from Python: the wmi package, the WMIC tool, CIM classes.
@@ -562,8 +634,8 @@ WMI_CALL = re.compile(r"\bwmi\b|wmic|Win32_\w+|\bCIM_\w+|psutil", re.IGNORECASE)
 
 
 def test_the_job_source_has_no_wmi_call():
-    # The memory check reads GlobalMemoryStatusEx (Windows) or /proc/meminfo:
-    # busy machines cancel WMI calls and the job would never start (#246).
+    # The memory check reads /proc/meminfo: busy machines cancel WMI calls
+    # and the job would never start (#246).
     lines = JOB_SOURCE.read_text(encoding="utf-8").splitlines()
     found = [
         f"backend/worker/job.py:{number}: {line.strip()}"
@@ -571,6 +643,30 @@ def test_the_job_source_has_no_wmi_call():
         if WMI_CALL.search(line) and "#246" not in line
     ]
     assert not found, "WMI in the scheduled job (#246)\n" + "\n".join(found)
+
+
+# Other systems ------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("platform", ["win32", "darwin"])
+def test_job_and_lock_refuse_to_start_off_linux(
+    tmp_path, monkeypatch, capsys, platform
+):
+    monkeypatch.setattr(job.sys, "platform", platform)
+    marker = tmp_path / "ran"
+    command = [sys.executable, "-c", f"open({str(marker)!r}, 'w').close()"]
+    assert job.run_locked(tmp_path / "x.lock", command) == job.PLATFORM_EXIT
+    parser = argparse.ArgumentParser()
+    job.add_arguments(parser)
+    args = parser.parse_args(["daily", "--data-dir", str(tmp_path / "job-data")])
+    assert job.run(args) == job.PLATFORM_EXIT
+    assert (
+        capsys.readouterr().err.count(
+            f"Linux only (the backend image, #333), not {platform}"
+        )
+        == 2
+    )
+    assert not marker.exists() and not (tmp_path / "job-data").exists()
 
 
 # worker.cli job ------------------------------------------------------------------
@@ -602,6 +698,7 @@ def test_cli_job_sets_the_data_dir_before_app_config_is_imported(tmp_path):
     assert job.cli_environment(["daily", "--date", "2026-10-16"]) == {}
 
 
+@linux_only
 def test_a_scheduled_daily_job_on_the_fixture_database_writes_one_run(
     tmp_path, monkeypatch
 ):
@@ -629,8 +726,12 @@ def test_a_scheduled_daily_job_on_the_fixture_database_writes_one_run(
         "worker_command",
         lambda step_args: [sys.executable, "-X", "utf8", str(child), *step_args],
     )
-    # The checkout's git state is not this test's subject (#207).
-    monkeypatch.setattr(job, "git_dir", lambda root: None)
+    # The checkout's git state is the fake git's (#207): the real checkout is never read.
+    fake_dir = tmp_path / "git"
+    fake_dir.mkdir()
+    for name, value in {**fake_git(fake_dir), **IMAGE_ENV}.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(job, "git_dir", lambda root: fake_dir)
     parser = argparse.ArgumentParser()
     job.add_arguments(parser)
     args = parser.parse_args(
@@ -645,7 +746,8 @@ def test_a_scheduled_daily_job_on_the_fixture_database_writes_one_run(
             "--date",
             "2026-10-16",
             "--claude-cli",
-            str(tmp_path / "no-claude.exe"),
+            str(tmp_path / "no-claude"),
+            "--git-pull",
         ]
     )
     code = job.run(args)
@@ -658,6 +760,16 @@ def test_a_scheduled_daily_job_on_the_fixture_database_writes_one_run(
     assert len(rows) == before + 1, log
     assert rows[-1] == ("2026-10-16", "scheduler", "success"), log
     assert [groups[1:] for groups in end_line(log)] == [("0", "")]
+    # #314 AC-2, #340: the run records the deployed image and nothing is pulled.
+    with sqlite3.connect(db) as conn:
+        (summary,) = conn.execute(
+            "SELECT summary_json FROM schedule_runs ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    summary = json.loads(summary)
+    assert summary["runtime"]["image"] == IMAGE
+    assert summary["runtime"]["head"] == GIT_HEAD
+    assert not {"git_tag", "HEAD"} & set(summary)
+    assert not [c for c in git_calls(fake_dir) if "pull" in c]
 
 
 # Old logs and new logs mean the same to the watchdog (AC-2) ------------------------
@@ -720,7 +832,7 @@ def test_the_watchdog_reads_old_and_new_logs_alike(tree, tmp_path, daily_ended):
     first = now - 3600
     day = "20261019"
     for _ in range(3):
-        tree.run("news", "--claude-cli", r"C:\tools\claude.exe", news_llm_exit=1)
+        tree.run("news", "--claude-cli", "/usr/local/bin/claude", news_llm_exit=1)
     tree.run("daily")
     new = {"daily": tree.log("daily"), "news": tree.log("news")}
     old = {
@@ -755,6 +867,9 @@ def test_the_watchdog_reads_old_and_new_logs_alike(tree, tmp_path, daily_ended):
 # value other than the one asserted here.
 
 
+# The job takes its fcntl lock before the first log line (#333), so Linux only like the
+# other runs of _Job (on master, where #376 added it, the job also ran on Windows).
+@linux_only
 def test_the_job_log_is_stamped_with_the_taipei_clock(
     tmp_path, monkeypatch, frozen_utcnow
 ):

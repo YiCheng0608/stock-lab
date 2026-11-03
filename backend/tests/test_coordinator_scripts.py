@@ -1,5 +1,8 @@
 """tools/ops/dispatch.sh, close_task.sh and patrol.sh with fake orca, gh and git (Issue #282).
 
+The event monitor (monitor.sh, event_queue.py, #316) has its own tests in
+test_event_monitor.py on the same harness.
+
 Each test copies the scripts into a sandbox repository under tmp_path, puts a bin
 directory holding fake ``orca``, ``gh`` and ``git`` scripts in front of PATH, points HOME
 and STOCK_DATA_DIR into tmp_path and runs the copy through bash. The fakes record every
@@ -24,9 +27,11 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import socket
 import stat
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -41,8 +46,26 @@ SCRIPTS = (
     "dispatch.sh",
     "close_task.sh",
     "patrol.sh",
+    "event_queue.py",
+    "monitor.sh",
+    "orca_wake.sh",
+    "http_wake.sh",
+    "http_orca.sh",
+    "wake_listener.py",
+    "wake_listener_start.sh",
+    "gh_auth.sh",
+    "compact_hook.sh",
 )
 REPO_ID = "repo-1"
+
+
+def _unused_port() -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+NO_LISTENER_PORT = _unused_port()
 SHA = "a" * 40
 MERGE_SHA = "b" * 40
 # The tip of origin/feat/docker, the Docker integration branch (#332).
@@ -78,15 +101,28 @@ pytestmark = pytest.mark.skipif(BASH is None, reason="bash is required")
 # the directory it names, as Orca does. worktree create starts the new worktree at its
 # --base-branch (origin/master without one) as <fake>/refs.txt names it, unless a test
 # wrote <fake>/worktree_head.txt first; git rev-parse HEAD answers from that file.
+# A <fake>/orca_<sub1>_<sub2>.hook file is run (bash) before that call answers.
 FAKE_ORCA = r"""#!/usr/bin/env bash
 d="$FAKE_DIR"
 printf '%s\n' "$*" >>"$d/orca_calls.log"
 key="orca_$1_$2"
+[ -f "$d/$key.hook" ] && bash "$d/$key.hook"
 if [ "$1 $2" = "worktree create" ] && [ ! -f "$d/worktree_head.txt" ]; then
   ref=origin/master prev=""
   for a in "$@"; do [ "$prev" = --base-branch ] && ref="$a"; prev="$a"; done
   sha="$(awk -v r="$ref" '$1 == r { print $2 }' "$d/refs.txt" 2>/dev/null)"
   echo "${sha:-$FAKE_SHA}" >"$d/worktree_head.txt"
+fi
+# With <fake>/run_terminal_command, terminal create runs its --command in bash, as Orca types
+# it into the terminal's Git Bash; the fake bin directory (a test's fake claude) comes first.
+# The terminal's shell does not inherit dispatch.sh's environment, so neither does this one's
+# COMPOSE_PROJECT_NAME (#339 review S2).
+if [ "$1 $2" = "terminal create" ] && [ -f "$d/run_terminal_command" ]; then
+  prev=""
+  for a in "$@"; do
+    [ "$prev" = --command ] && env -u COMPOSE_PROJECT_NAME PATH="$FAKE_BIN:$PATH" bash -c "$a"
+    prev="$a"
+  done
 fi
 if [ "$1 $2" = "terminal send" ]; then
   while [ $# -gt 0 ]; do [ "$1" = --text ] && printf '%s' "$2" >"$d/sent_text.txt"; shift; done
@@ -104,6 +140,10 @@ grep -q '"ok": *false' "$d/$key.json" 2>/dev/null && exit 1
 exit 0
 """
 
+# A <fake>/<key>.fail file makes that call exit 1 with the file's text on stderr (key
+# gh_comments for the comments listing, else gh_<sub1>_<sub2>). <key>.sleep holding N
+# makes it hang N seconds, <key>.stderr is written to stderr, <key>.hook is run (bash)
+# first.
 FAKE_GH = r"""#!/usr/bin/env bash
 d="$FAKE_DIR"
 printf '%s\n' "$*" >>"$d/gh_calls.log"
@@ -112,6 +152,11 @@ printf '%s\n' "$*" >>"$d/gh_calls.log"
 if [ "$1 $2" = "issue close" ] && [ -f "$d/gh_issue_close_sets_closed" ]; then
   echo '{"state": "CLOSED"}' >"$d/gh_issue_view.json"
 fi
+case "$1 $2" in "api repos/"*) k=gh_comments ;; *) k="gh_$1_$2" ;; esac
+[ -f "$d/$k.hook" ] && bash "$d/$k.hook"
+[ -f "$d/$k.sleep" ] && sleep "$(cat "$d/$k.sleep")"
+[ -f "$d/$k.stderr" ] && cat "$d/$k.stderr" >&2
+[ -f "$d/$k.fail" ] && { cat "$d/$k.fail" >&2; exit 1; }
 case "$1 $2" in
   "api graphql")
     case "$*" in
@@ -311,6 +356,12 @@ class Harness:
             STOCK_DATA_DIR=self.data.as_posix(),
             STOCK_PYTHON=Path(sys.executable).as_posix(),
             PATROL_NOW=str(NOW),
+            # A port nothing listens on: patrol.sh reports no wake listener, whatever
+            # runs on this machine (test_wake_listener starts its own).
+            WAKE_LISTENER_PORT=str(NO_LISTENER_PORT),
+            # A listener started here talks to the fake orca, never to a real one.
+            STOCK_WAKE_TEST="1",
+            WAKE_LISTENER_ORCA=(self.bin / "orca").as_posix(),
         )
         base.update(env)
         # Git for Windows' bin/bash.exe puts /mingw64/bin (the real git) in front of PATH,
@@ -450,7 +501,8 @@ def test_dispatch_sends_only_after_tui_idle_is_satisfied(dispatch: Harness) -> N
     assert line["task_file"] == dispatch.task.as_posix()
     terminal = next(c for c in orca if c.startswith("terminal create"))
     assert terminal.endswith(
-        "--command claude --model claude-opus-5-5 --effort high"
+        "--shell git-bash --command COMPOSE_PROJECT_NAME=task-282 claude"
+        " --model claude-opus-5-5 --effort high"
         f' --add-dir "{dispatch.root.as_posix()}" --json'
     )
     assert "branch -m YiCheng0608/task-282-dryrun task/282-dryrun" in " ".join(
@@ -458,6 +510,38 @@ def test_dispatch_sends_only_after_tui_idle_is_satisfied(dispatch: Harness) -> N
     )
     update = [c for c in dispatch.calls("gh") if "updateProjectV2ItemFieldValue" in c]
     assert len(update) == 1 and "o=OPT-DEV" in update[0] and "i=ITEM-1" in update[0]
+
+
+def test_dispatch_starts_claude_with_the_task_compose_project(
+    dispatch: Harness,
+) -> None:
+    """AC-3 (#339): the terminal's claude runs with COMPOSE_PROJECT_NAME=task-<issue>, not
+    the coordinator's."""
+    claude = dispatch.bin / "claude"
+    claude.write_text(
+        '#!/usr/bin/env bash\nprintf "%s|%s" "$COMPOSE_PROJECT_NAME" "$*" >"$FAKE_DIR/claude.txt"\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    claude.chmod(0o755)
+    dispatch.write("run_terminal_command", "")
+    result = dispatch.run(
+        "dispatch.sh",
+        "282",
+        "dryrun",
+        "--task-file",
+        dispatch.task.as_posix(),
+        COMPOSE_PROJECT_NAME="stock-lab",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    ran = (dispatch.fake / "claude.txt").read_text(encoding="utf-8")
+    assert ran == (
+        "task-282|--model claude-opus-5-5 --effort high"
+        f" --add-dir {dispatch.task.parent.as_posix()}"
+    )
+    # The prefix is POSIX syntax: the terminal's shell is Git Bash whatever Orca's default.
+    (create,) = [c for c in dispatch.calls("orca") if c.startswith("terminal create")]
+    assert " --shell git-bash " in create
 
 
 def test_dispatch_sends_one_line_with_the_path_and_none_of_the_task_text(
@@ -1303,13 +1387,15 @@ def test_guard_dir_names_every_protected_path(h: Harness) -> None:
 
 
 # Run by _inner_pytest beside a copy of backend/tests/conftest.py: repositories in
-# tmp_path as this file's Harness, test_worker_job_scripts and test_verify_tools build
+# tmp_path as this file's Harness, test_worker_job and test_verify_tools build
 # them (an empty .git directory, a .git file, a read-only git object file), one in a
-# test that then skips; with INNER_KILL=1 the last test exits the process before
-# pytest's teardown, as a killed run does.
+# test that then skips; with INNER_KILL=1 a test exits the process before pytest's
+# teardown, as a killed run does; with INNER_HOLD=<file> another keeps its repository
+# until that file exists (#422).
 INNER_TESTS = r"""
 import os
 import stat
+import time
 
 import pytest
 
@@ -1336,15 +1422,33 @@ def test_killed_after_building_one(tmp_path):
         pytest.skip("not killed")
     (tmp_path / "project" / ".git").mkdir(parents=True)
     os._exit(3)
+
+
+def test_holds_one_until_released(tmp_path):
+    hold = os.environ["INNER_HOLD"]
+    if not hold:
+        pytest.skip("not held")
+    (tmp_path / "project" / ".git").mkdir(parents=True)
+    open(hold + ".ready", "w").close()
+    deadline = time.monotonic() + 100
+    while not os.path.exists(hold) and time.monotonic() < deadline:
+        time.sleep(0.1)
+    assert os.path.exists(hold)
 """
 
 
-def _inner_pytest(
-    h: Harness, fail: bool, basetemp: str = "b", kill: bool = False
-) -> tuple[Path, subprocess.CompletedProcess]:
-    """A pytest run with --basetemp in an engineer's temp directory outside the worktree,
-    as #272 and #270 had it (C:/v270/pt/b): returns that directory and the run. Runs
-    with another BASETEMP name go to the same directory, as #279's t279/b1, bf did."""
+def _inner_run(
+    h: Harness,
+    fail: bool,
+    basetemp: str = "b",
+    kill: bool = False,
+    hold: Path | None = None,
+) -> tuple[Path, list[str], dict[str, str]]:
+    """The command and environment of a pytest run with --basetemp in an engineer's temp
+    directory outside the worktree, as #272 and #270 had it (C:/v270/pt/b): returns that
+    directory too. Runs with another BASETEMP name go to the same directory, as #279's
+    t279/b1, bf did. Every run records itself in <sandbox>/runs, never in the real
+    home (#422)."""
     inner = h.root / "inner"
     inner.mkdir(exist_ok=True)
     shutil.copyfile(Path(__file__).with_name("conftest.py"), inner / "conftest.py")
@@ -1356,12 +1460,25 @@ def _inner_pytest(
         TMPDIR=str(temp / "tmp"),
         TEMP=str(temp / "tmp"),
         TMP=str(temp / "tmp"),
+        PYTEST_RUNS_DIR=str(h.root / "runs"),
+        # An OS error text in a warning is in the console's code page otherwise.
+        PYTHONIOENCODING="utf-8",
         INNER_FAIL="1" if fail else "0",
         INNER_KILL="1" if kill else "0",
+        INNER_HOLD=str(hold) if hold else "",
     )
     command = [sys.executable, "-B", "-m", "pytest", "-p", "no:cacheprovider", "-q"]
     command += ["--rootdir", str(inner), "--confcutdir", str(inner)]
     command += ["--basetemp", str(temp / basetemp), str(inner)]
+    if hold:
+        command += ["-k", "holds_one"]
+    return temp, command, env
+
+
+def _inner_pytest(
+    h: Harness, fail: bool, basetemp: str = "b", kill: bool = False
+) -> tuple[Path, subprocess.CompletedProcess]:
+    temp, command, env = _inner_run(h, fail, basetemp, kill)
     # cwd backend: the copied conftest imports app and worker, as under CI.
     result = subprocess.run(
         command,
@@ -1381,7 +1498,7 @@ def test_a_green_pytest_run_leaves_no_repository_in_its_basetemp(h: Harness) -> 
     of a green run, so the directory passes guard_dir as it is."""
     temp, result = _inner_pytest(h, fail=False)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "1 passed, 2 skipped" in result.stdout
+    assert "1 passed, 3 skipped" in result.stdout
     assert not (temp / "b").exists(), _repositories(temp)
     assert _guard(h, temp.as_posix()) == ""
 
@@ -1421,6 +1538,139 @@ def test_a_killed_pytest_run_leaves_only_the_repository_of_the_test_it_was_in(
     assert left.startswith("b/test_killed_after_building_on"), left
     reason = _guard(h, temp.as_posix())
     assert reason.startswith("裡面有 .git（") and "test_killed" in reason, reason
+
+
+def test_the_next_run_removes_the_repository_of_a_run_that_was_killed(
+    h: Harness,
+) -> None:
+    """#422: a killed run keeps the repository of the test it was in, and the next run on
+    another basetemp never visited it (#386, #394, #392: t<issue>/ was refused by
+    close_task.sh each time). Every run now removes what the dead ones left when it
+    starts, the other files of their basetemp stay for debugging."""
+    temp, killed = _inner_pytest(h, fail=True, basetemp="full2", kill=True)
+    assert killed.returncode == 3, killed.stdout + killed.stderr
+    [left] = _repositories(temp)
+    assert left.startswith("full2/test_killed_after_building_on"), left
+    temp, green = _inner_pytest(h, fail=False, basetemp="full3")
+    assert green.returncode == 0, green.stdout + green.stderr
+    assert _repositories(temp) == []
+    assert "removed 1 .git left in" in green.stderr, green.stderr
+    assert (temp / "full2").is_dir() and not (temp / "full3").exists()
+    assert not list((h.root / "runs").iterdir())
+    assert _guard(h, temp.as_posix()) == ""
+
+
+# What #386, #394 and #392 each found in t<issue>/ (#422): the basetemp of a run that was
+# killed and the directory of the test it was in, with an empty repository.
+KILLED_RUNS = (
+    ("t386", "tmp/full2", "test_close_task_deletes_nothin0"),
+    ("t394", "pf", "test_close_task_refuses_an_ext4"),
+    ("t392", "tmp/full3", "test_close_task_takes_a_failed0"),
+)
+
+
+def test_the_next_run_removes_the_repositories_left_in_the_three_task_directories(
+    h: Harness,
+) -> None:
+    """#422: the leftovers of t386, t394 and t392 as the sessions recorded them (a record
+    in the runs directory, a marker nobody holds any more): one later run in a fourth
+    directory removes all three, and every task directory passes guard_dir as it is."""
+    runs = h.root / "runs"
+    runs.mkdir()
+    for number, (issue, basetemp, test_dir) in enumerate(KILLED_RUNS):
+        top = h.root / issue / basetemp
+        (top / test_dir / "repo" / ".git").mkdir(parents=True)
+        (top / test_dir / "repo" / "debug.txt").write_text("kept", encoding="utf-8")
+        token = f"{number:032x}"
+        (top / f".pytest-run-{token}").write_text("", encoding="utf-8")
+        (runs / f"{token}.json").write_text(
+            json.dumps({"basetemp": str(top)}), encoding="utf-8"
+        )
+        assert _guard(h, (h.root / issue).as_posix()).startswith("裡面有 .git（")
+    temp, green = _inner_pytest(h, fail=False, basetemp="b1")
+    assert green.returncode == 0, green.stdout + green.stderr
+    for issue, basetemp, test_dir in KILLED_RUNS:
+        top = h.root / issue
+        assert _repositories(top) == [], issue
+        assert _guard(h, top.as_posix()) == "", issue
+        assert (top / basetemp / test_dir / "repo" / "debug.txt").read_text(
+            encoding="utf-8"
+        ) == "kept"
+    assert not list(runs.iterdir())
+
+
+def test_a_run_that_is_still_going_keeps_its_repository_when_another_run_starts(
+    h: Harness,
+) -> None:
+    """#422: the lock on the marker tells a run that died from one that is only slow. A
+    second run starting while the first is in a test must leave its repository alone, and
+    both clear their records when they end."""
+    release = h.root / "release"
+    temp, command, env = _inner_run(h, fail=False, basetemp="going", hold=release)
+    going = subprocess.Popen(
+        command,
+        cwd=ROOT / "backend",
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+    )
+    try:
+        ready = Path(f"{release}.ready")
+        deadline = time.monotonic() + 100
+        while not ready.exists() and going.poll() is None:
+            assert time.monotonic() < deadline, "the first run never reached its test"
+            time.sleep(0.1)
+        assert ready.exists(), going.communicate()
+        temp, other = _inner_pytest(h, fail=False, basetemp="other")
+        assert other.returncode == 0, other.stdout + other.stderr
+        assert "removed" not in other.stderr, other.stderr
+        [kept] = _repositories(temp)
+        assert kept.startswith("going/test_holds_one_until_releas"), kept
+        assert len(list((h.root / "runs").glob("*.json"))) == 1
+    finally:
+        release.write_text("go", encoding="utf-8")
+        try:
+            out, err = going.communicate(timeout=100)
+        except subprocess.TimeoutExpired:
+            going.kill()
+            out, err = going.communicate()
+    assert going.returncode == 0, out + err
+    assert _repositories(temp) == [] and not (temp / "going").exists()
+    assert not list((h.root / "runs").iterdir())
+
+
+def test_a_record_whose_basetemp_was_emptied_is_dropped_without_touching_it(
+    h: Harness,
+) -> None:
+    """#422: nothing but the marker says a directory is still the basetemp of the
+    session that was recorded. A directory that lost it (pytest emptied the basetemp for
+    a new run, someone reused the path) keeps its repository; the record goes."""
+    runs = h.root / "runs"
+    runs.mkdir()
+    reused = h.root / "t11" / "b"
+    (reused / "work" / ".git").mkdir(parents=True)
+    record = runs / f"{'a' * 32}.json"
+    record.write_text(json.dumps({"basetemp": str(reused)}), encoding="utf-8")
+    _, green = _inner_pytest(h, fail=False)
+    assert green.returncode == 0, green.stdout + green.stderr
+    assert (reused / "work" / ".git").is_dir()
+    assert not record.exists()
+
+
+def test_a_record_that_cannot_be_kept_does_not_change_the_result_of_the_run(
+    h: Harness,
+) -> None:
+    """#422: the record is a convenience for the next run. With no directory to keep it
+    in, the run only warns and ends as it would have, its own basetemp cleared."""
+    (h.root / "runs").write_text(
+        "a file where the directory should be", encoding="utf-8"
+    )
+    temp, green = _inner_pytest(h, fail=False)
+    assert green.returncode == 0, green.stdout + green.stderr
+    assert "this pytest run is not recorded" in green.stderr, green.stderr
+    assert not (temp / "b").exists()
 
 
 def test_a_failed_session_keeps_its_basetemp_without_a_repository(
@@ -1928,36 +2178,62 @@ def _patrol(h: Harness, *args: str) -> subprocess.CompletedProcess:
     )
 
 
+def _queue_event(seq: int, id_: str, kind: str = "comment", **extra) -> dict:
+    return {
+        "type": "event",
+        "seq": seq,
+        "id": id_,
+        "kind": kind,
+        "detected_at": "2026-10-25T11:50:00Z",
+        "at": "2026-10-25T11:30:00Z",
+        "ref": "#282",
+        "summary": "提問： 要不要加旗標？",
+        "url": "https://github.com/YiCheng0608/stock-lab/issues/282#issuecomment-9",
+        **extra,
+    }
+
+
 @pytest.fixture
 def patrol(h: Harness) -> Harness:
-    h.answer(
-        "gh_pr_list",
-        [
-            {
-                "number": 290,
-                "title": "統籌操作腳本",
-                "isDraft": False,
-                "mergeStateStatus": "BLOCKED",
-                "statusCheckRollup": [
-                    {"conclusion": "SUCCESS"},
-                    {"status": "IN_PROGRESS"},
-                ],
-                "labels": [{"name": "independent-review"}],
-            }
-        ],
-    )
-    h.answer(
-        "gh_comments",
-        [
-            {
-                "issue_url": "https://api.github.com/repos/YiCheng0608/stock-lab/issues/282",
-                "created_at": "2026-10-25T11:30:00Z",
-                "body": "提問：\n要不要加旗標？",
-                "html_url": "https://github.com/YiCheng0608/stock-lab/issues/282#issuecomment-9",
-            }
-        ],
-    )
+    # What patrol.sh asked gh before #316 is still answered by the fake: the tests
+    # assert that patrol asks it nothing but the questions (#401).
+    h.answer("gh_pr_list", [])
     logs = h.data / "logs"
+    (logs / "events.jsonl").write_text(
+        "".join(
+            json.dumps(e, ensure_ascii=False) + "\n"
+            for e in (
+                _queue_event(1, "comment:9"),
+                _queue_event(2, "ci:290:abc:success:1", "ci", ref="PR #290", url=""),
+                _queue_event(3, "comment:10"),
+            )
+        ),
+        encoding="utf-8",
+    )
+    (logs / "monitor-heartbeat.json").write_text(
+        '{"written_at":"2026-10-25T11:59:00Z","pid":"1","mode":"wake","gh_calls":2}',
+        encoding="utf-8",
+    )
+    (logs / "monitor-state.json").write_text(
+        json.dumps(
+            {
+                "prs_at": "2026-10-25T11:59:00Z",
+                "prs": [
+                    "PR #290 ci=pending merge=BLOCKED labels=independent-review 統籌操作腳本"
+                ],
+                # The job log lines as the monitor read them (#338): in the container the
+                # logs below are in the volume, and patrol prints these instead.
+                "polled_at": "2026-10-25T11:59:00Z",
+                "jobs": {
+                    "daily": "daily-20261024.log ===== 2026-10-24T13:30:00Z end exit=0",
+                    "news": "沒有日誌",
+                    "watchdog": "2026-10-25T11:45:00Z schedules_ok | 排程無異常",
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
     (logs / "daily-20261024.log").write_text(
         "===== 2026-10-24T13:30:00Z end exit=0\n", encoding="utf-8"
     )
@@ -1979,7 +2255,7 @@ def _files(root: Path) -> dict[str, bytes]:
     }
 
 
-def test_patrol_writes_only_the_heartbeat_and_summarises(patrol: Harness) -> None:
+def test_patrol_writes_only_the_heartbeat_and_reads_the_queue(patrol: Harness) -> None:
     before = _files(patrol.data)
     result = _patrol(patrol)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -1994,32 +2270,87 @@ def test_patrol_writes_only_the_heartbeat_and_summarises(patrol: Harness) -> Non
         "logs/coordinator-heartbeat.json"
     }
     out = result.stdout
+    assert "monitor：2026-10-25T11:59:00Z（60 秒前，mode=wake）" in out
+    assert "open PR（monitor 2026-10-25T11:59:00Z）：1 個" in out
     assert "PR #290 ci=pending merge=BLOCKED" in out
-    assert "#282 2026-10-25T11:30:00Z 提問： 要不要加旗標？" in out
-    assert "daily-20261024.log ===== 2026-10-24T13:30:00Z end exit=0" in out
-    assert "schedules_ok" in out
-    # No --since and no earlier heartbeat: one hour before now.
-    assert any("since=2026-10-25T11:00:00Z" in c for c in patrol.calls("gh"))
+    assert "未處理事件：3 個（seq 1～3）" in out
+    assert "[1] comment #282 2026-10-25T11:30:00Z 提問： 要不要加旗標？" in out
+    assert (
+        "排程 daily（monitor 2026-10-25T11:59:00Z）：daily-20261024.log"
+        " ===== 2026-10-24T13:30:00Z end exit=0" in out
+    )
+    # From the state, not from news-20261025.log beside it.
+    assert "排程 news（monitor 2026-10-25T11:59:00Z）：沒有日誌" in out
+    assert (
+        "看門狗（monitor 2026-10-25T11:59:00Z）：2026-10-25T11:45:00Z schedules_ok"
+        in out
+    )
+    # #316 AC-2: the closing hint points at the queue, not at a monitor the session keeps.
+    last = out.strip().splitlines()[-1]
+    assert "--done" in last and "監看" not in last
 
 
-@pytest.mark.parametrize("cap", [None, "2", "1", "0"])
+def test_patrol_calls_gh_only_for_the_questions(patrol: Harness) -> None:
+    """#316 AC-4, AC-5 and #401: PRs, CI and new comments come from the queue; the one gh
+    call is the GraphQL query of the unanswered questions (#331 決定 6582924536)."""
+    runs = ((), ("--done", "2"), ("--take-over",))
+    for args in runs:
+        result = _patrol(patrol, *args)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "open PR（monitor 2026-10-25T11:59:00Z）：1 個" in result.stdout
+        assert "未回覆的提問：0 則" in result.stdout
+    calls = patrol.calls("gh")
+    assert len(calls) == len(runs)
+    assert all(c.startswith("api graphql ") and "OpenQuestions" in c for c in calls)
+    assert not [c for c in calls if "pr list" in c or "issues/comments" in c]
+    # --max-gh 0 leaves the questions unread and asks gh nothing.
+    result = _patrol(patrol, "--max-gh", "0")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert len(patrol.calls("gh")) == len(runs)
+    assert "未回覆的提問：未查完（gh 呼叫已達上限 0）" in result.stdout
+
+
+def test_patrol_done_marks_up_to_a_seq_or_one_id(patrol: Harness) -> None:
+    result = _patrol(patrol, "--done", "2")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "標記已處理：2 個" in result.stdout
+    assert "未處理事件：1 個（seq 3～3）" in result.stdout
+    done_file = patrol.data / "logs" / "events-done.jsonl"
+    assert [json.loads(line) for line in done_file.read_text("utf-8").splitlines()] == [
+        {
+            "type": "done",
+            "at": "2026-10-25T12:00:00Z",
+            "session_id": "sess-1",
+            "ids": ["comment:9", "ci:290:abc:success:1"],
+        }
+    ]
+    assert "未處理事件：0 個" in _patrol(patrol, "--done", "comment:10").stdout
+    result = _patrol(patrol, "--done", "comment:404")
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "沒有這個事件：comment:404" in result.stderr
+
+
+@pytest.mark.parametrize("cap", [None, "1", "0"])
 def test_patrol_stays_within_the_gh_call_cap(patrol: Harness, cap: str | None) -> None:
     result = _patrol(patrol, *(["--max-gh", cap] if cap else []))
     assert result.returncode == 0, result.stdout + result.stderr
-    limit = int(cap) if cap else 3
+    limit = int(cap) if cap else 1
     assert len(patrol.calls("gh")) <= limit
     assert f"gh 呼叫：{len(patrol.calls('gh'))}／上限 {limit}" in result.stdout
     # Past the cap the questions are reported as not read, and the rest still prints.
-    if limit < 3:
-        # One line only, not gh_budget's 略過 line as well (PR #406 review).
+    if limit < 1:
+        # One line only (PR #406 review).
         assert "略過 未回覆的提問" not in result.stdout
         assert [
             ln for ln in result.stdout.splitlines() if ln.startswith("未回覆的提問")
         ] == [f"未回覆的提問：未查完（gh 呼叫已達上限 {limit}）"]
     else:
         assert "未回覆的提問：0 則" in result.stdout
-    assert "排程 daily：daily-20261024.log" in result.stdout
-    assert "看門狗：2026-10-25T11:45:00Z schedules_ok" in result.stdout
+    assert "未處理事件：3 個（seq 1～3）" in result.stdout
+    assert (
+        "排程 daily（monitor 2026-10-25T11:59:00Z）：daily-20261024.log"
+        in result.stdout
+    )
 
 
 # --- unanswered questions (#401) ---------------------------------------------------
@@ -2271,13 +2602,22 @@ def test_patrol_goes_on_when_the_questions_cannot_be_read(
     result = _patrol(patrol)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "未回覆的提問：未查完（gh api graphql 失敗）" in result.stdout
-    assert "排程 news：news-20261025.log" in result.stdout
-    assert "gh 呼叫：3／上限 3" in result.stdout
+    assert "排程 news（monitor 2026-10-25T11:59:00Z）：沒有日誌" in result.stdout
+    assert "gh 呼叫：1／上限 1" in result.stdout
 
 
-def test_patrol_reads_compactions_handoff_and_the_previous_heartbeat(
-    patrol: Harness,
-) -> None:
+def test_patrol_says_when_the_monitor_has_stopped(patrol: Harness) -> None:
+    logs = patrol.data / "logs"
+    (logs / "monitor-heartbeat.json").write_text(
+        '{"written_at":"2026-10-25T11:40:00Z","pid":"1","mode":"wake","gh_calls":2}',
+        encoding="utf-8",
+    )
+    assert "已停擺超過 10 分鐘" in _patrol(patrol).stdout
+    (logs / "monitor-heartbeat.json").unlink()
+    assert "monitor：沒有心跳" in _patrol(patrol).stdout
+
+
+def test_patrol_reads_compactions_and_handoff(patrol: Harness) -> None:
     logs = patrol.data / "logs"
     (logs / "compactions" / "sess-1.count").write_text("2\n", encoding="utf-8")
     (logs / "handoff-sess-1.json").write_text("{}", encoding="utf-8")
@@ -2290,17 +2630,6 @@ def test_patrol_reads_compactions_handoff_and_the_previous_heartbeat(
     assert result.returncode == 0, result.stdout + result.stderr
     assert "壓縮 2 次：已達換手條件" in result.stdout
     assert "換手標記存在" in result.stdout
-    assert any("since=2026-10-25T11:40:00Z" in c for c in patrol.calls("gh"))
-
-
-def test_patrol_ignores_another_sessions_heartbeat_for_since(patrol: Harness) -> None:
-    (patrol.data / "logs" / "coordinator-heartbeat.json").write_text(
-        '{"session_id":"old","terminal_handle":"t","written_at":"2026-10-20T00:00:00Z"}',
-        encoding="utf-8",
-    )
-    result = _patrol(patrol)
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert any("since=2026-10-25T11:00:00Z" in c for c in patrol.calls("gh"))
 
 
 # --- review of PR #283 -------------------------------------------------------------
@@ -2476,7 +2805,6 @@ def test_patrol_does_not_overwrite_another_live_coordinators_heartbeat(
     result = _patrol(patrol)
     assert result.returncode != 0, result.stdout + result.stderr
     assert path.read_bytes() == before
-    assert not patrol.calls("gh")
 
 
 @pytest.mark.parametrize("how", ["handoff-marker", "take-over", "stale"])
@@ -2632,7 +2960,7 @@ def test_patrol_keeps_a_heartbeat_it_cannot_read(patrol: Harness, content: str) 
     before = path.read_bytes()
     result = _patrol(patrol)
     assert result.returncode == 3, result.stdout + result.stderr
-    assert path.read_bytes() == before and not patrol.calls("gh")
+    assert path.read_bytes() == before
     result = _patrol(patrol, "--take-over")
     assert result.returncode == 0, result.stdout + result.stderr
     assert json.loads(path.read_text(encoding="utf-8"))["session_id"] == "sess-1"
@@ -2706,7 +3034,8 @@ def _check(name: str, started: str, **state: str) -> dict:
 def test_patrol_reads_only_the_latest_run_of_each_check(
     patrol: Harness, rollup: list[dict], expected: str
 ) -> None:
-    """#286: a run replaced by a newer one of the same check no longer decides ci=."""
+    """#286: a run replaced by a newer one of the same check no longer decides ci=.
+    Since #316 the PR line comes from the monitor's last poll."""
     patrol.answer(
         "gh_pr_list",
         [
@@ -2720,6 +3049,19 @@ def test_patrol_reads_only_the_latest_run_of_each_check(
             }
         ],
     )
+    polled = patrol.run("monitor.sh", "--once", "--record-only", MONITOR_NOW=str(NOW))
+    assert polled.returncode == 0, polled.stdout + polled.stderr
     result = _patrol(patrol)
     assert result.returncode == 0, result.stdout + result.stderr
     assert f"PR #285 ci={expected} merge=CLEAN" in result.stdout
+
+
+@pytest.mark.parametrize("handle", ["-x", "--enter", "--terminal=x"])
+def test_patrol_refuses_a_handle_orca_would_read_as_an_option(tmp_path, handle) -> None:
+    """#338 review: the heartbeat's handle is what the wake listener wakes; one starting
+    with "-" never gets there (patrol.sh exits 64 before writing the heartbeat)."""
+    h = Harness(tmp_path)
+    result = h.run("patrol.sh", "--session-id", "coord", "--terminal", handle)
+    assert result.returncode == 64, result.stdout + result.stderr
+    assert "不能以 - 開頭" in result.stderr
+    assert not (h.data / "logs" / "coordinator-heartbeat.json").exists()

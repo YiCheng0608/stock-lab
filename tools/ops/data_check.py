@@ -130,6 +130,13 @@ class Finding:
     note: str = ""
 
 
+def stored_raw_dir(environ) -> str:
+    """The raw directory app.config would use with ENVIRON, before _prepare moves it."""
+
+    data = environ.get("STOCK_DATA_DIR") or str(BACKEND.parent / "data")
+    return environ.get("STOCK_RAW_DIR") or str(Path(data) / "raw")
+
+
 def _prepare(scratch: Path) -> None:
     """Make ``app``/``worker`` importable without touching the production paths.
 
@@ -141,6 +148,8 @@ def _prepare(scratch: Path) -> None:
     """
 
     if "app.config" not in sys.modules:
+        # The captures it reads stay the real ones (app.raw_paths, #342).
+        os.environ.setdefault("STOCK_STORED_RAW_DIR", stored_raw_dir(os.environ))
         os.environ["STOCK_DATA_DIR"] = str(scratch / "data")
         os.environ["STOCK_DB_PATH"] = str(scratch / "data" / "unused.db")
         os.environ["STOCK_RAW_DIR"] = str(scratch / "raw")
