@@ -640,14 +640,14 @@ def test_dispatch_refuses_a_task_path_it_cannot_pass_on(
 
 
 def test_dispatch_help_shows_the_line_it_sends(dispatch: Harness) -> None:
-    """#315 AC-3: --help and GITHUB_WORKFLOW 任務流程第 2 步 quote the sent line. The doc is
+    """#315 AC-3: --help and WORKFLOW 任務流程第 2 步 quote the sent line. The doc is
     in BACKEND_READ_FILES (tools/ci/checks.py), so a change to it alone runs this test."""
     help_text = dispatch.run("dispatch.sh", "--help")
     assert help_text.returncode == 0, help_text.stderr
     assert _notice("<path>") in help_text.stdout
     assert "--add-dir" in help_text.stdout
     assert "30000" not in help_text.stdout
-    workflow = (ROOT / "docs" / "GITHUB_WORKFLOW.md").read_text(encoding="utf-8")
+    workflow = (ROOT / "docs" / "WORKFLOW.md").read_text(encoding="utf-8")
     assert _notice("<path>") in workflow
     assert '--effort <effort> --add-dir "<任務檔目錄>"' in workflow
 

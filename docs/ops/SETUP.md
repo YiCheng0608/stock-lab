@@ -1,11 +1,11 @@
 <!-- owns: 工作目錄與環境、服務啟停、Docker Desktop 沒開的判讀、API 跨站請求防護、資料庫 migration 與 readiness、Alembic head、容器內的 claude 與 gh 認證 -->
 # 環境、啟停與資料庫
 
-本文件只保留可操作入口、安全邊界與診斷順序；本機檢查命令見[工作手冊](../GITHUB_WORKFLOW.md#本機檢查)，能力狀態見 [ROADMAP](../ROADMAP.md)。
+本文件只保留可操作入口、安全邊界與診斷順序；本機檢查命令見[工作手冊](../WORKFLOW.md#本機檢查)，能力狀態見 [CAPABILITIES](../CAPABILITIES.md)。
 
 ## 工作目錄、環境與啟停
 
-服務、測試與排程都在容器裡執行（#331）：api、web、scheduler 由 compose 啟動（[Docker compose](#docker-compose)），資料在 named volume `stock-data`，排程是 scheduler 容器的 `worker.cli serve`（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)），本機檢查也在容器內跑（[工作手冊](../GITHUB_WORKFLOW.md#本機檢查)）。主機只需要 Docker Desktop（WSL 2 backend）與 Git Bash；Docker Desktop 沒開時的判讀見 [Docker Desktop 沒開](#docker-desktop-沒開)。正式排程切到容器（#342）之前，Windows 工作排程器仍從發佈 checkout 跑 #333 以前的 commit（[排程](SCHEDULING.md)）。
+服務、測試與排程都在容器裡執行（#331）：api、web、scheduler 由 compose 啟動（[Docker compose](#docker-compose)），資料在 named volume `stock-data`，排程是 scheduler 容器的 `worker.cli serve`（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)），本機檢查也在容器內跑（[工作手冊](../WORKFLOW.md#本機檢查)）。主機只需要 Docker Desktop（WSL 2 backend）與 Git Bash；Docker Desktop 沒開時的判讀見 [Docker Desktop 沒開](#docker-desktop-沒開)。正式排程切到容器（#342）之前，Windows 工作排程器仍從發佈 checkout 跑 #333 以前的 commit（[排程](SCHEDULING.md)）。
 
 容器外（選用）：後端命令也能在主機的 venv 從專案根目錄執行，用在單次的 API 或 worker 命令；`worker.cli job`、`serve` 與 `python -m worker.job lock` 只在 Linux 執行，在 Windows 以 exit 69 拒絕，所以排程與看門狗的鎖不能在主機跑。範例預設使用 workspace 內 `.local` 開發資料；做測試、migration 或可丟棄研究時，先把三個 `STOCK_*` 改成明確的隔離路徑，不指向正式 `data/stock.db`。
 
@@ -23,7 +23,7 @@ python -m worker.cli init-db   # 明確初始化／升級指定 DB 後再啟動 
 python -m uvicorn app.main:app --reload --port 8000
 ```
 
-**後端 image**（#333，母單 #331）：[`backend/Dockerfile`](../../backend/Dockerfile) 是 api 與 scheduler 共用的 image，從 repo 根目錄 `docker build -f backend/Dockerfile -t stock-lab-backend .`。內含 Python 依賴（`backend/requirements.txt`＋lock）、CI repository job 的 ruff 與 PyYAML（同版本，本機檢查用，#339）、`tzdata`（`TZ=Asia/Taipei`）、git、`gh`、Node 22、Claude Code CLI（`~/.claude.json` 已標記 onboarding 完成）與 Chromium＋CJK 字型（`tools/ops/screenshot.cjs` 用，`SCREENSHOT_BROWSER=/usr/bin/chromium`）；以非 root 使用者 `app` 執行，PID 1 是 `tini`（回收被殺 job 留下的孤兒程序，否則 zombie 的 PID 看起來仍在、run 列不會立即記 abandoned），`STOCK_DATA_DIR=/data`，`PYTHONPATH=/app/backend`。image 本身不帶啟動命令，api 與 scheduler 的命令由 compose 給（[Docker compose](#docker-compose)）。build context 排除的檔案見根目錄 `.dockerignore`（含 `.git`）；測試讀 git 歷史，所以容器內跑測試時把 checkout 的 `.git` 唯讀掛進去：`docker run --rm -v "$PWD/.git:/app/.git:ro" stock-lab-backend pytest backend/tests -q`（CI `docker` job 的命令與此相同，但只跑 [`tools/ci/docker_suite.json`](../../tools/ci/docker_suite.json) 列的測試，全套在 `backend` job，見[工作手冊](../GITHUB_WORKFLOW.md#review-與合併)）。執行層（`worker.job` 的 `job` 與 `lock`）只在 Linux 執行，其他系統以 exit 69 拒絕。
+**後端 image**（#333，母單 #331）：[`backend/Dockerfile`](../../backend/Dockerfile) 是 api 與 scheduler 共用的 image，從 repo 根目錄 `docker build -f backend/Dockerfile -t stock-lab-backend .`。內含 Python 依賴（`backend/requirements.txt`＋lock）、CI repository job 的 ruff 與 PyYAML（同版本，本機檢查用，#339）、`tzdata`（`TZ=Asia/Taipei`）、git、`gh`、Node 22、Claude Code CLI（`~/.claude.json` 已標記 onboarding 完成）與 Chromium＋CJK 字型（`tools/ops/screenshot.cjs` 用，`SCREENSHOT_BROWSER=/usr/bin/chromium`）；以非 root 使用者 `app` 執行，PID 1 是 `tini`（回收被殺 job 留下的孤兒程序，否則 zombie 的 PID 看起來仍在、run 列不會立即記 abandoned），`STOCK_DATA_DIR=/data`，`PYTHONPATH=/app/backend`。image 本身不帶啟動命令，api 與 scheduler 的命令由 compose 給（[Docker compose](#docker-compose)）。build context 排除的檔案見根目錄 `.dockerignore`（含 `.git`）；測試讀 git 歷史，所以容器內跑測試時把 checkout 的 `.git` 唯讀掛進去：`docker run --rm -v "$PWD/.git:/app/.git:ro" stock-lab-backend pytest backend/tests -q`（CI `docker` job 的命令與此相同，但只跑 [`tools/ci/docker_suite.json`](../../tools/ci/docker_suite.json) 列的測試，全套在 `backend` job，見[工作手冊](../WORKFLOW.md#review-與合併)）。執行層（`worker.job` 的 `job` 與 `lock`）只在 Linux 執行，其他系統以 exit 69 拒絕。
 
 `init-db` 會改 schema，執行前先解析三個路徑並為既有 DB 備份（[安全升級與復原順序](#安全升級與復原順序)）。API startup 只跑 `check_database_readiness()`，不會自動建庫、migration、repair 或 stamp；缺檔、空檔、不可讀或不符契約時拒絕啟動。已啟動的 process 不會因 source 更新而改變 lifespan。
 
@@ -69,8 +69,8 @@ python -m uvicorn app.main:app --reload --port 8000
 | --- | --- |
 | 開發 | `docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build`：bind mount 整個 checkout，api 以 `uvicorn --reload`、web 以 Vite HMR 即時套用修改（Windows bind mount 不送檔案事件，兩者都以輪詢偵測：`WATCHFILES_FORCE_POLLING`、`CHOKIDAR_USEPOLLING`）。`stock-data` 沒有 `stock.db` 時，api 啟動前寫入 verify 假資料庫（`tools/verify/fixture_db.py`）；已有的 `stock.db` 不動。scheduler 只在加 `--profile scheduler` 時啟動，開發用的 checkout 不會自己跑 daily、news |
 | 正式拓撲 | `docker compose up -d --build`：web 經 nginx 服務 build 好的頁面。api 在空的 `stock-data` 上會拒絕啟動（[資料庫、migration 與 readiness](#資料庫migration-與-readiness)），要先 `docker compose run --rm api python -m worker.cli init-db`，或把 `copy_db.py` 做的副本放進 volume |
-| 後端測試、lint、前端測試與 build | `docker compose -p task-<issue> run --rm …`，命令與容器內 git 的掛法見[工作手冊「本機檢查」](../GITHUB_WORKFLOW.md#本機檢查)（#339） |
-| 狀態與停止 | `docker compose ps`（健康狀態）、`docker compose logs <服務>`、`docker compose down`（`--volumes` 會連 `stock-data` 一起刪；agent 的 hook 只放行以 `-p` 寫明測試 project 的 `down -v`，[AGENTS](../../AGENTS.md#規則與強制手段)） |
+| 後端測試、lint、前端測試與 build | `docker compose -p task-<issue> run --rm …`，命令與容器內 git 的掛法見[工作手冊「本機檢查」](../WORKFLOW.md#本機檢查)（#339） |
+| 狀態與停止 | `docker compose ps`（健康狀態）、`docker compose logs <服務>`、`docker compose down`（`--volumes` 會連 `stock-data` 一起刪；agent 的 hook 只放行以 `-p` 寫明測試 project 的 `down -v`，[GUARDRAILS](../GUARDRAILS.md)） |
 
 **變數**（從 shell 或根目錄 `.env` 讀，見 [`.env.example`](../../.env.example)）：
 

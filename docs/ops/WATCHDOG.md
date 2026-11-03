@@ -1,7 +1,7 @@
 <!-- owns: 排程看門狗 -->
 # 排程看門狗
 
-`tools/ops/watchdog.sh`（bash）在 scheduler 容器由 serve 每小時 :15、:45 執行（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)；切換前是工作排程器的 `\stock-lab\watchdog`，每 15 分鐘），只檢查排程與資料不變量：以檔案與唯讀 DB 判定異常並在 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 留言「待使用者」，每個異常每台北日最多一則。不判定統籌是否在線、不開或喚醒統籌（統籌開啟見[工作手冊](../GITHUB_WORKFLOW.md#統籌-session)，喚醒由 [統籌事件 monitor](MONITOR.md) 的事件 monitor 負責）。
+`tools/ops/watchdog.sh`（bash）在 scheduler 容器由 serve 每小時 :15、:45 執行（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)；切換前是工作排程器的 `\stock-lab\watchdog`，每 15 分鐘），只檢查排程與資料不變量：以檔案與唯讀 DB 判定異常並在 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 留言「待使用者」，每個異常每台北日最多一則。不判定統籌是否在線、不開或喚醒統籌（統籌開啟見[統籌手冊](../COORDINATOR.md#統籌-session)，喚醒由 [統籌事件 monitor](MONITOR.md) 的事件 monitor 負責）。
 
 - `daily`：週一至週五台北 21:30 後，當日 `logs/daily-YYYYMMDD.log` 不存在或沒有 `end` 列。
 - `daily` 結果：週一至週五台北 22:00 後（21:30 那次已寫入 run 列）唯讀查當日目標的 `schedule_runs`：當天有 `success`／`non_trading_day` 就算完成（之後的 `skipped` 不影響）；否則取最後一筆（略過只指向別列的 `already_complete`／`already_running`），是 `partial`、`failed`、`non_trading_unconfirmed` 或 `skipped:<原因>`（例如 `low_memory`）就留言；仍在 `running` 的等下一輪，超過 2.5 小時視為 `failed`；當日 success 但 catchup 沒補齊（`catchup_incomplete`）也留言；有日誌卻沒有任何 run 列（worker 沒能啟動）也留言。

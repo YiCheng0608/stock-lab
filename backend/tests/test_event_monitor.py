@@ -337,7 +337,7 @@ def test_a_failed_wake_is_retried_after_ten_minutes(mon: Harness) -> None:
 
 
 def test_a_busy_coordinator_terminal_is_not_woken(mon: Harness) -> None:
-    """Review B1: the wake waits for tui-idle (AGENTS #282); not idle, nothing is sent."""
+    """Review B1: the wake waits for tui-idle (GUARDRAILS #282); not idle, nothing is sent."""
     mon.answer("orca_terminal_wait", _ok({"wait": {"satisfied": False}}))
     result = _monitor(mon)
     waits = [c for c in mon.calls("orca") if c.startswith("terminal wait")]
@@ -959,7 +959,7 @@ def _section(text: str, heading: str) -> str:
 def test_the_coordinator_keeps_no_polling_of_its_own() -> None:
     """AC-2: the handbook's 統籌 session (with the handoff text) and 無人值守運作 no
     longer tell the coordinator to keep a GitHub watch or a patrol cron."""
-    text = (ROOT / "docs" / "GITHUB_WORKFLOW.md").read_text(encoding="utf-8")
+    text = (ROOT / "docs" / "COORDINATOR.md").read_text(encoding="utf-8")
     for heading in ("統籌 session", "無人值守運作"):
         section = _section(text, heading)
         for word in ("監看", "巡檢 cron", "定時巡檢", "cron"):

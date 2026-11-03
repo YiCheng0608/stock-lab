@@ -207,8 +207,8 @@ class AnchorTests(unittest.TestCase):
         # Each heading as written in docs/, and the anchor an existing link uses for it.
         for heading, anchor in [
             ("V1 範圍基線（2026-10-17 核定）", "v1-範圍基線2026-10-17-核定"),  # ROADMAP
-            ("統籌 session", "統籌-session"),  # GITHUB_WORKFLOW
-            ("Review 與合併", "review-與合併"),  # GITHUB_WORKFLOW
+            ("統籌 session", "統籌-session"),  # COORDINATOR
+            ("Review 與合併", "review-與合併"),  # WORKFLOW
             (
                 "daily／news 工作的註冊與管理",
                 "dailynews-工作的註冊與管理",
@@ -240,7 +240,7 @@ class AnchorTests(unittest.TestCase):
         self.assertEqual(
             markdown_errors(
                 "README.md",
-                f"[a]({roadmap}) [b](docs/GITHUB_WORKFLOW.md#%E7%B5%B1%E7%B1%8C-session) "
+                f"[a]({roadmap}) [b](docs/COORDINATOR.md#%E7%B5%B1%E7%B1%8C-session) "
                 "[c](tools/ci/checks.py#L1) [d](docs/PRODUCT_SPEC.md#action-merge)",
             ),
             [],
@@ -260,7 +260,7 @@ class AnchorTests(unittest.TestCase):
         self.assertEqual(
             markdown_errors(
                 "docs/x.md",
-                f"[a]({repo}/blob/master/docs/GITHUB_WORKFLOW.md#統籌-session) "
+                f"[a]({repo}/blob/master/docs/COORDINATOR.md#統籌-session) "
                 f"[b]({repo}/tree/master/tools/ci) [c]({repo}/blob/pr-assets/gone.png) "
                 f"[d]({repo}/issues/312)",
             ),

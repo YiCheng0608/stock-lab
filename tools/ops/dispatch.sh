@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start an engineer session on an Issue (Issue #282; docs/GITHUB_WORKFLOW.md 任務流程第 2 步):
+# Start an engineer session on an Issue (Issue #282; docs/WORKFLOW.md 任務流程第 2 步):
 # Orca worktree from the latest base (origin/master, or --base: a long-lived integration
 # branch such as origin/feat/docker, #332), branch task/<issue>-<slug>, a visible
 # terminal running claude with COMPOSE_PROJECT_NAME=task-<issue> (#339), and, only after
@@ -123,7 +123,7 @@ if [ "$orca_branch" != "$branch" ]; then
   git -C "$path" branch -m "$orca_branch" "$branch" || report 1 "branch 改名失敗：$orca_branch → $branch"
 fi
 
-# The task's compose project (docs/GITHUB_WORKFLOW.md 本機檢查, #339): a docker compose run
+# The task's compose project (docs/WORKFLOW.md 本機檢查, #339): a docker compose run
 # without -p uses task-<issue>, not the directory name. The prefix is POSIX shell syntax, so the
 # terminal's shell is pinned to Git Bash (#339 review S3); Orca refuses the create on a host
 # that cannot give it, and nothing is sent.

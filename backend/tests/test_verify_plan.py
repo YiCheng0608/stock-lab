@@ -266,7 +266,7 @@ def test_pull_requests_and_pushes_follow_the_diff():
 
 def test_docs_and_tests_only_are_not_verified(importers):
     result = plan(
-        "docs/GITHUB_WORKFLOW.md",
+        "docs/WORKFLOW.md",
         "AGENTS.md",
         "backend/tests/test_api.py",
         FE + "themes/themeSuggestions.test.tsx",

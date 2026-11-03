@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Coordinator patrol (Issue #282, #316, #401; docs/GITHUB_WORKFLOW.md 無人值守運作), in
+# Coordinator patrol (Issue #282, #316, #401; docs/COORDINATOR.md 無人值守運作), in
 # the handbook's order: write the heartbeat, read this session's compaction count and
 # handoff marker, then the event queue the monitor (tools/ops/monitor.sh) keeps: its
 # heartbeat, its last open PR snapshot, the schedule jobs' latest log lines as it read them,

@@ -3,7 +3,7 @@
 # tests can put recording fakes in front of them (backend/tests/test_coordinator_scripts.py).
 export LANG=C.UTF-8 LC_ALL=C.UTF-8
 # Git Bash turns /c/... arguments of native programs (python.exe, orca.exe) into C:/...; a
-# shell that exported MSYS_NO_PATHCONV=1 for `docker -v` (GITHUB_WORKFLOW.md 本機檢查)
+# shell that exported MSYS_NO_PATHCONV=1 for `docker -v` (WORKFLOW.md 本機檢查)
 # turns that off, and python then reads /c/Users as C:\c\Users: patrol.sh misread the
 # heartbeat and no wake listener started (#338). No script here passes docker a path
 # (deploy.sh sets it on each docker call). Whoever sources this lib into their own shell
@@ -160,7 +160,7 @@ guard_dir() {
   printf '%s' "$out"
 }
 
-# --- Docker resources of a closed task (#360; close_task.sh, docs/GITHUB_WORKFLOW.md 任務流程第 6 步)
+# --- Docker resources of a closed task (#360; close_task.sh, docs/WORKFLOW.md 任務流程第 6 步)
 # Every docker call has a time limit; timeout answers 124 (137 after -k) when it ran out and
 # 127 when there is no docker command.
 docker_timeout="${CLOSE_TASK_DOCKER_TIMEOUT:-30}"
