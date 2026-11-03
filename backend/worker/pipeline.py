@@ -976,10 +976,12 @@ def _calculate_group_scores(
 ) -> None:
     """Score the active groups of ``score_date`` and rank them per board.
 
-    ``group_ids`` limits the scored (and ranked) groups to those ids; daily
-    leaves it out and scores every active group.  A rebuild of an old session
-    passes the groups that session already has scores for, so it never adds
-    a group to history with today's group definitions (#409).
+    ``group_ids`` replaces that selection with exactly those ids; daily leaves
+    it out and scores every active group.  A rebuild of an old session passes
+    the groups that session already has scores for, so it never adds a group
+    to history with today's group definitions (#409), and it scores them
+    whether or not they are active now: the session's own groups are its
+    ranking population, and today's ``active`` flag must not change it (#412).
     """
     benchmark = _benchmark_instrument(db)
     benchmark_returns = (
@@ -990,9 +992,10 @@ def _calculate_group_scores(
     benchmark_dates = (
         _effective_trading_dates(db, benchmark.id, score_date, 20) if benchmark else []
     )
-    query = select(ThemeGroup).where(ThemeGroup.active.is_(True))
-    if group_ids is not None:
-        query = query.where(ThemeGroup.id.in_(list(group_ids)))
+    if group_ids is None:
+        query = select(ThemeGroup).where(ThemeGroup.active.is_(True))
+    else:
+        query = select(ThemeGroup).where(ThemeGroup.id.in_(list(group_ids)))
     groups = db.scalars(query).all()
     computed: list[dict[str, Any]] = []
     file_evidence: dict[date, dict[str, int]] = {}
