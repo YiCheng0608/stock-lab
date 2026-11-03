@@ -413,8 +413,10 @@ def rescore_dates(
     ``existing_groups_only`` rescores, on each date, only the groups that
     already have a score row that date, and ranks them among themselves: a
     group scored only from a later date is not added to an earlier one (the
-    corporate-actions rebuild, #409).  Without it every active group is scored,
-    as daily does.
+    corporate-actions rebuild, #409).  Those groups are the date's own ranking
+    population, so a group that is inactive now is rescored and keeps its rank
+    like the others: today's ``active`` flag does not change an old date
+    (#412).  Without it every active group is scored, as daily does.
     """
 
     for day in dates:
@@ -430,19 +432,19 @@ def rescore_dates(
             )
         else:
             _calculate_group_scores(db, day)
-        # Inactive groups are not rescored; their old rank would collide with
-        # the recomputed ranks of the same board.
-        for score in db.scalars(
-            select(GroupDailyScore)
-            .join(ThemeGroup, ThemeGroup.id == GroupDailyScore.group_id)
-            .where(
-                GroupDailyScore.trading_date == day,
-                ThemeGroup.active.is_(False),
-                GroupDailyScore.rank.is_not(None),
-            )
-        ).all():
-            archive_group_score(db, score, "rank_cleared_inactive_group")
-            score.rank = None
+            # Inactive groups are not rescored here; their old rank would
+            # collide with the recomputed ranks of the same board.
+            for score in db.scalars(
+                select(GroupDailyScore)
+                .join(ThemeGroup, ThemeGroup.id == GroupDailyScore.group_id)
+                .where(
+                    GroupDailyScore.trading_date == day,
+                    ThemeGroup.active.is_(False),
+                    GroupDailyScore.rank.is_not(None),
+                )
+            ).all():
+                archive_group_score(db, score, "rank_cleared_inactive_group")
+                score.rank = None
         db.flush()
         if after_each is not None:
             after_each(day)

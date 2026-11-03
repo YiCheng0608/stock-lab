@@ -294,32 +294,104 @@ def test_theme_and_industry_boards_are_ranked_apart(factory):
         } == {"G1": "industry", "G2": "industry", "T1": "theme", "T2": "theme"}
 
 
-def test_a_group_deactivated_before_the_rebuild_keeps_its_score_without_a_rank(
+def _percentiles(db, day, key="relative_return"):
+    return {
+        group: row.details_json["normalized_values"][key]
+        for (scored, group), row in _rows(db).items()
+        if scored == day
+    }
+
+
+def _cleared_ranks(db):
+    return db.scalars(
+        select(GroupDailyScoreArchive).where(
+            GroupDailyScoreArchive.archive_reason == "rank_cleared_inactive_group"
+        )
+    ).all()
+
+
+def test_a_group_deactivated_before_the_rebuild_keeps_its_rank_on_old_sessions(
     factory,
 ):
+    """#412: the population of an old session is its own groups, not today's ``active``."""
+
     with factory() as db:
         stocks = _scored_history(db)
+        # G2 (scored on OLD and NEW) is deactivated after those sessions; so is
+        # G3, which has a row on NEW only.
         db.get(ThemeGroup, "G2").active = False
+        db.get(ThemeGroup, "G3").active = False
         before = {key: row.score for key, row in _rows(db).items()}
         run = _ex_dividend(db, stocks)
         db.commit()
         sync.rebuild_after_sync(db, run.id)
         db.commit()
         after = _rows(db)
+        # No (date, group) is added or dropped, and the ranks are those of the
+        # rebuild with every group still active (see the #409 test above).
         assert set(after) == set(before)
-        # G2 is not rescored: its score stays, its rank is cleared and the
-        # ranked row is archived; G1 and G3 are ranked without it.
-        for day in (OLD, NEW):
-            assert after[(day, "G2")].score == before[(day, "G2")]
-            assert after[(day, "G2")].rank is None
-        assert _ranks(db, OLD) == {"G1": 1, "G2": None}
-        assert _ranks(db, NEW) == {"G3": 1, "G1": 2, "G2": None}
-        assert sorted(
-            (row.trading_date, row.group_id)
-            for row in db.scalars(
-                select(GroupDailyScoreArchive).where(
-                    GroupDailyScoreArchive.archive_reason
-                    == "rank_cleared_inactive_group"
-                )
-            )
-        ) == [(OLD, "G2"), (NEW, "G2")]
+        assert _ranks(db, OLD) == {"G1": 1, "G2": 2}
+        assert _ranks(db, NEW) == {"G3": 1, "G1": 2, "G2": 3}
+        # The deactivated groups are rescored with the others: the percentiles
+        # count both groups of OLD (1.0 and 0.0; a lone group would be 0.5)
+        # and the three of NEW, and the rows carry the current version.
+        assert _percentiles(db, OLD) == {"G1": 1.0, "G2": 0.0}
+        assert _percentiles(db, NEW) == {"G3": 1.0, "G1": 0.5, "G2": 0.0}
+        assert after[(OLD, "G2")].score != before[(OLD, "G2")]
+        assert after[(OLD, "G2")].details_json["hot_group_version"]
+        # No rank is cleared, so nothing is archived for it.
+        assert _cleared_ranks(db) == []
+        # The rebuild does not touch a group's ``active`` flag.
+        assert not db.get(ThemeGroup, "G2").active
+        assert not db.get(ThemeGroup, "G3").active
+
+
+def test_a_rebuild_with_deactivated_groups_equals_the_one_with_them_active(tmp_path):
+    """The same stored history gives the same scores and ranks either way."""
+
+    def rebuilt(name, deactivate):
+        engine = create_engine(f"sqlite:///{tmp_path / name}")
+        enable_sqlite_foreign_keys(engine)
+        upgrade_database(engine)
+        try:
+            with sessionmaker(
+                bind=engine, autoflush=False, expire_on_commit=False
+            )() as db:
+                stocks = _scored_history(db)
+                for group in deactivate:
+                    db.get(ThemeGroup, group).active = False
+                run = _ex_dividend(db, stocks)
+                db.commit()
+                sync.rebuild_after_sync(db, run.id)
+                db.commit()
+                return {
+                    key: (row.score, row.rank, row.details_json["normalized_values"])
+                    for key, row in _rows(db).items()
+                }
+        finally:
+            engine.dispose()
+
+    active = rebuilt("active.db", [])
+    assert rebuilt("deactivated.db", ["G2", "G3"]) == active
+    # Sanity: the comparison is not between empty results.
+    assert len(active) == 5 and all(rank for _score, rank, _n in active.values())
+
+
+def test_rescore_dates_without_the_option_still_clears_an_inactive_groups_rank(
+    factory,
+):
+    # The daily / ``--rescore-days`` path scores the active groups only, as
+    # before #412: an inactive group's old rank is archived and cleared so it
+    # cannot collide with the recomputed ranks of the board.
+    with factory() as db:
+        _scored_history(db)
+        db.get(ThemeGroup, "G2").active = False
+        db.flush()
+        before = _rows(db)[(OLD, "G2")].score
+        rescore_dates(db, [OLD])
+        db.flush()
+        assert _ranks(db, OLD) == {"G3": 1, "G1": 2, "G2": None}
+        assert _rows(db)[(OLD, "G2")].score == before
+        assert [(row.trading_date, row.group_id) for row in _cleared_ranks(db)] == [
+            (OLD, "G2")
+        ]

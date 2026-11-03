@@ -364,7 +364,8 @@ def rebuild_after_sync(
     scores.  A session without scores is not filled in, and on a rescored
     session only the groups that already have a score that session are
     rescored and ranked among themselves (#409): either would backfill
-    history with today's group definitions.  Signals are not
+    history with today's group definitions.  A group that is inactive now
+    is one of them and keeps its rank (#412).  Signals are not
     regenerated: past signals are tracked, and whether to regenerate them is
     decided per correction.  ``checkpoint`` (the CLI commits and logs) is
     called with the step name after each step; each step recomputes from
