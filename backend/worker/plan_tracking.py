@@ -1,4 +1,4 @@
-"""Daily update of the user tracking plans (V1_SPEC 使用者追蹤計畫, plan_tracking_v1).
+"""Daily update of the user tracking plans (docs/spec/tracking.md 使用者追蹤計畫, plan_tracking_v1).
 
 The ``plan_tracking`` step of ``worker.cli daily`` (after a successful collect;
 it needs no analyze because a plan keeps its own copy of the levels) and

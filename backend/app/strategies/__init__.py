@@ -1,4 +1,4 @@
-"""Strategy registry (V1_SPEC 策略版本識別).
+"""Strategy registry (docs/spec/README.md 策略版本識別).
 
 ``REGISTRY`` is the only place that declares which strategies exist.  analyze
 writes one ``signals`` row per registered strategy for every instrument and

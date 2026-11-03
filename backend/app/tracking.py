@@ -1,4 +1,4 @@
-"""Session-by-session tracking of one set of rule levels (V1_SPEC tracking).
+"""Session-by-session tracking of one set of rule levels (docs/spec/tracking.md).
 
 Shared by the system signal tracking (``worker.pipeline._evaluate_signal_tracking``)
 and the user tracking plans (``worker.plan_tracking``), so both apply the same

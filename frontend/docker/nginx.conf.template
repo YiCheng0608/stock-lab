@@ -14,7 +14,7 @@ server {
 
     resolver ${NGINX_LOCAL_RESOLVERS} valid=10s;
 
-    # The API's BrowserGate (docs/OPERATIONS.md §1.1) judges the Host and Origin the browser
+    # The API's BrowserGate (docs/ops/SETUP.md 跨站請求防護) judges the Host and Origin the browser
     # sent: Host goes through with its port ($http_host; $host drops the port), and Origin,
     # Sec-Fetch-Site and Content-Type pass untouched, as nginx forwards request headers by
     # default. The api admits that Host through STOCK_API_PUBLIC_HOSTS (#343, #335).

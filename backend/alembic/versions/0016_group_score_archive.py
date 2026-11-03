@@ -4,8 +4,7 @@ Revision ID: 0016_group_score_archive
 Revises: 0015_candidate_llm_notes
 
 ``group_daily_score_archive`` keeps a verbatim copy of a ``group_daily_scores``
-row before a newer ``hot_group_v1`` version overwrites it (V1_SPEC
-hot_group_v1).  Additive and forward-only: no existing row is read or changed.
+row before a newer ``hot_group_v1`` version overwrites it (docs/spec/hot_group.md).  Additive and forward-only: no existing row is read or changed.
 """
 
 from __future__ import annotations

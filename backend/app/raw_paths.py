@@ -22,7 +22,7 @@ from pathlib import Path, PurePosixPath
 
 from app import config
 
-# The data directory's raw/ before the cutover (docs/OPERATIONS.md §6, user decision 2026-10-17).
+# The data directory's raw/ before the cutover (docs/ops/SCHEDULING.md, user decision 2026-10-17).
 LEGACY_RAW_DIRS = (r"C:\Users\YiCheng\stock-lab-data\raw",)
 STORED_RAW_DIR_ENV = "STOCK_STORED_RAW_DIR"
 

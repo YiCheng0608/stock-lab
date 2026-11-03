@@ -1,4 +1,4 @@
-"""Shared pieces of ``strategy_levels_v1`` (V1_SPEC strategy_levels_v1).
+"""Shared pieces of ``strategy_levels_v1`` (docs/spec/strategy_levels.md).
 
 Pure calculation.  Each strategy solves its own conditions for the next
 session's close and volume (``Strategy.observation_levels``); this module

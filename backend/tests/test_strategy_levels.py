@@ -1,4 +1,4 @@
-"""Observation price levels strategy_levels_v1 (V1_SPEC strategy_levels_v1, #273)."""
+"""Observation price levels strategy_levels_v1 (docs/spec/strategy_levels.md, #273)."""
 
 from __future__ import annotations
 

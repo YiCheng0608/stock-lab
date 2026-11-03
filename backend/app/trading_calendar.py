@@ -8,7 +8,7 @@ exchanges use the TWSE calendar (DATA_SOURCES, TAIEX session baseline).
 Only the stored schedule is read, never ``market_bars``, so the answer for a
 date is the same whether or not later bars are stored.  A closure the
 schedule does not list (a typhoon) is not known on the night of the signal
-and is not applied, then or later (V1_SPEC).  When a year the walk needs is
+and is not applied, then or later (docs/spec/README.md 價位、ETF 與生命週期).  When a year the walk needs is
 not published, or a row cannot be classified, there is no answer: callers
 leave the date empty instead of guessing.
 """

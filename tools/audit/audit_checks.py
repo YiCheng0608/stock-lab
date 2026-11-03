@@ -828,7 +828,7 @@ def derived_checks(ctx: Context, stop: Callable[[], str | None]) -> list[Check]:
         "indicators",
         "技術指標全標的全歷史重算",
         issues="A1、#386、#394",
-        scope=f"{INDICATOR_VERSION}，價格基準 {PRICE_BASIS}（V1_SPEC 技術指標）",
+        scope=f"{INDICATOR_VERSION}，價格基準 {PRICE_BASIS}（docs/spec/indicators.md）",
     )
     ratios = Check(
         "chips_ratios",

@@ -27,7 +27,7 @@ _LEGACY_REQUEST_KEY_DDL = re.compile(
     r'(?:request_key|"request_key")\s+IS\s+NOT\s+NULL\s*',
     re.IGNORECASE,
 )
-# 0017: at most one plan per signal that is not cancelled (V1_SPEC 使用者追蹤計畫).
+# 0017: at most one plan per signal that is not cancelled (docs/spec/tracking.md 使用者追蹤計畫).
 _OPEN_PLAN_SIGNAL_DDL = re.compile(
     r'\s*CREATE\s+UNIQUE\s+INDEX\s+(?:uq_tracking_plan_open_signal|"uq_tracking_plan_open_signal")'
     r'\s+ON\s+(?:tracking_plans|"tracking_plans")\s*'

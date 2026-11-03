@@ -25,12 +25,12 @@ CI `verify` job（`.github/workflows/ci.yml`）每次：
 
 ### 本機重跑
 
-CI 失敗想在本機重現，或改了 verify 工具想先跑一次時用。需要後端依賴（下面借 release venv 的套件，不改它）與 `frontend/node_modules`（`pnpm --dir frontend install --frozen-lockfile`），用不到正式 DB，任何時段都可以跑。
+CI 失敗想在本機重現，或改了 verify 工具想先跑一次時用。需要後端依賴（下面借 release venv 的套件，不改它；`<…>` 換成[本機路徑](../../../docs/ops/LOCAL.md)的值）與 `frontend/node_modules`（`pnpm --dir frontend install --frozen-lockfile`），用不到正式 DB，任何時段都可以跑。
 
 ```bash
 WT="$(git rev-parse --show-toplevel)"; V="$WT/.local/verify/ci"; mkdir -p "$V/logs"
-PY=C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe
-export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site-packages" PYTHONUTF8=1
+PY='<容器外的 Python>'
+export PYTHONPATH="$WT/backend;<發佈 checkout 的 venv>/Lib/site-packages" PYTHONUTF8=1
 "$PY" -B "$WT/tools/verify/verify_plan.py" --base "$(git rev-parse origin/master)"   # 看 CI 會驗哪幾頁
 "$PY" -B "$WT/tools/verify/fixture_db.py" --dest "$V/db" > "$V/logs/fixture.json"   # $V/db 須不存在或為空
 ```
@@ -53,7 +53,7 @@ export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site
 | 容器（預設） | checkout 有 `docker-compose.yml`，而且不是 G7 的那兩次 | compose project `$P`（`task-<n>-verify`）：api（後端 image）、web（nginx 前端 image）；`page_checks.py` 以 `run --rm api` 在同一個網路跑，截圖用後端 image 內的 Chromium | 該 project 的 volume `task-<n>-verify_stock-data` |
 | 本機 | G7 的兩次（`release/v1` 沒有 compose 檔，`--g7` 照 [#260](https://github.com/YiCheng0608/stock-lab/issues/260) 在本機跑），或 checkout 沒有 compose 檔 | 本機的 Python、vite preview、Edge／Chrome（[起服務](#起服務)） | `$V/stock.db` |
 
-同一份副本兩種跑法的三態結果相同（#339 比對兩邊的 `results.json`）。`<n>` 是分支名 `task/<n>-...` 的數字。下面各步標「容器」或「本機」的只照所選跑法做，沒標的兩種都做。compose 檔要 Docker Compose 2.24 以上（[OPERATIONS §1.2](../../../docs/OPERATIONS.md#12-docker-compose)）。
+同一份副本兩種跑法的三態結果相同（#339 比對兩邊的 `results.json`）。`<n>` 是分支名 `task/<n>-...` 的數字。下面各步標「容器」或「本機」的只照所選跑法做，沒標的兩種都做。compose 檔要 Docker Compose 2.24 以上（[Docker compose](../../../docs/ops/SETUP.md#docker-compose)）。
 
 ### 1. 前置
 
@@ -61,12 +61,12 @@ export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site
    - 台北時間 18:30～21:30（排程 `daily` 時段，不碰正式 DB）：`TZ=UTC-8 date +%H%M` 在 `1830`～`2130` 之間（POSIX 寫法的 UTC+8；Git Bash 沒有時區資料庫，`Asia/Taipei` 會被當成 UTC）。
    - 目前分支是 `master`（`git rev-parse --abbrev-ref HEAD`）：管理 checkout 不跑，請在任務 worktree 執行。
    - G7 的那兩次：G7 證據必須是排程正在跑的發佈 branch 程式。先 `git fetch origin master release/v1`；worktree 要從當時的 `origin/release/v1` 建，沒有額外 commit、沒有未 commit 的改動（`--g7` 要求 HEAD 等於 `origin/release/v1`）。第 2 步加 `--g7`，`page_checks.py` 不符合就 exit 2 並寫明原因，不跑任何檢查。
-2. **變數**（Bash 工具不保留 shell 狀態，每個命令開頭重設）：
+2. **變數**（Bash 工具不保留 shell 狀態，每個命令開頭重設；`<…>` 換成[本機路徑](../../../docs/ops/LOCAL.md)的值）：
 
    ```bash
    WT="$(git rev-parse --show-toplevel)"; V="$WT/.local/verify"
-   PY=C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe
-   export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site-packages" PYTHONUTF8=1
+   PY='<容器外的 Python>'
+   export PYTHONPATH="$WT/backend;<發佈 checkout 的 venv>/Lib/site-packages" PYTHONUTF8=1
    OUT=$(cat "$V/current")   # 第 3 步寫入
    # 容器：project 名稱與 compose 命令（Git Bash 不改寫 -v 的容器路徑）
    n="$(git rev-parse --abbrev-ref HEAD)"; n="${n#task/}"; P="task-${n%%-*}-verify"
@@ -80,10 +80,10 @@ export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site
    OUT="$V/out/$(TZ=UTC-8 date +%Y%m%d-%H%M)"; mkdir -p "$OUT" "$V/logs" && printf '%s\n' "$OUT" > "$V/current"
    ```
 
-4. **副本**（唯讀複製，約 10 秒；已存在也重做，確保是最新快照）。正式 DB `C:/Users/YiCheng/stock-lab-data/stock.db` 只出現在這一行的 `--src`：
+4. **副本**（唯讀複製，約 10 秒；已存在也重做，確保是最新快照）。正式 DB（[本機路徑](../../../docs/ops/LOCAL.md#正式位置使用者決定)）只出現在這一行的 `--src`：
 
    ```bash
-   "$PY" -B "$WT/tools/ops/copy_db.py" --src C:/Users/YiCheng/stock-lab-data/stock.db --dest "$V" --force > "$OUT/copy.json"
+   "$PY" -B "$WT/tools/ops/copy_db.py" --src '<正式 DB>' --dest "$V" --force > "$OUT/copy.json"
    ```
 
    失敗（exit 非 0）→ 五個導覽全部無法判定，原因寫 stderr，跳到[證據](#4-證據)。

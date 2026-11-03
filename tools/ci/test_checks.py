@@ -141,11 +141,12 @@ class RoutingTests(unittest.TestCase):
 
     def test_docs_read_by_backend_tests_require_python(self):
         for path in sorted((ROOT / "backend/tests").glob("*.py")):
-            for name in re.findall(
-                r'"docs" / "([\w.-]+)"', path.read_text(encoding="utf-8")
+            for parts in re.findall(
+                r'"docs"((?: / "[\w.-]+")+)', path.read_text(encoding="utf-8")
             ):
+                name = "/".join(re.findall(r'"([\w.-]+)"', parts))
                 self.assertTrue(change_flags([f"docs/{name}"])["python"], name)
-        self.assertTrue(change_flags(["docs/OPERATIONS.md"])["python"])
+        self.assertTrue(change_flags(["docs/ops/SETUP.md"])["python"])
 
     def test_links(self):
         self.assertEqual(
@@ -209,18 +210,18 @@ class AnchorTests(unittest.TestCase):
             ("統籌 session", "統籌-session"),  # GITHUB_WORKFLOW
             ("Review 與合併", "review-與合併"),  # GITHUB_WORKFLOW
             (
-                "6.2 daily／news 工作的註冊與管理",
-                "62-dailynews-工作的註冊與管理",
-            ),  # OPERATIONS
+                "daily／news 工作的註冊與管理",
+                "dailynews-工作的註冊與管理",
+            ),  # ops/platform/windows
             (
-                "2. 資料庫、migration 與 readiness",
-                "2-資料庫migration-與-readiness",
-            ),  # OPERATIONS
+                "資料庫、migration 與 readiness",
+                "資料庫migration-與-readiness",
+            ),  # ops/SETUP
             ("8.1 今日／個股清單壓縮卡", "81-今日個股清單壓縮卡"),  # UI_COPY_SPEC
             ("8.4 數值表格、單位與空白", "84-數值表格單位與空白"),  # UI_COPY_SPEC
-            ("價位、ETF 與生命週期", "價位etf-與生命週期"),  # V1_SPEC
-            ("strategy_levels_v1", "strategy_levels_v1"),  # V1_SPEC
-            ("策略框架與 registry", "策略框架與-registry"),  # V1_SPEC
+            ("價位、ETF 與生命週期", "價位etf-與生命週期"),  # spec/README
+            ("strategy_levels_v1", "strategy_levels_v1"),  # spec/strategy_levels
+            ("策略框架與 registry", "策略框架與-registry"),  # spec/README
         ]:
             self.assertEqual(heading_slug(heading), anchor, heading)
 

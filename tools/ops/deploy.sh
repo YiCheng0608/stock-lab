@@ -38,8 +38,8 @@
 #   --operator NAME     who deploys, for the record and #1; default git config user.name
 #   --wait-timeout SEC  for `compose up --wait`; default 300
 #   --web-port N, --api-port N, --env-file PATH
-#                       WEB_PORT, API_PORT and STOCK_ENV_FILE for compose (docs/OPERATIONS.md
-#                       §1.2). The caller's own are dropped, so a shell left with a smoke
+#                       WEB_PORT, API_PORT and STOCK_ENV_FILE for compose (docs/ops/SETUP.md
+#                       Docker compose). The caller's own are dropped, so a shell left with a smoke
 #                       test's cannot move production: without these options compose takes
 #                       them from the checkout's .env, then its defaults
 #   --no-comment        no comment on #1 (a rehearsal on a throwaway checkout and project)

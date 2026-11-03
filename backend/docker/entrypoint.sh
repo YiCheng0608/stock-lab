@@ -4,7 +4,7 @@
 #   tini -- /app/backend/docker/entrypoint.sh <command>
 #
 # 1. WEB_PORT and API_PORT, when not empty, are the host ports compose publishes. The API's
-#    write gate (docs/OPERATIONS.md §1.1) admits a Host only with its port and a browser on
+#    write gate (docs/ops/SETUP.md 跨站請求防護) admits a Host only with its port and a browser on
 #    port 80 sends none, so 80 is refused. WEB_PORT 8000 is refused too: the api listens on
 #    8000 and would admit Host localhost:8000 without any allow list (#335, PR #349 review S2).
 # 2. With STOCK_SEED_FIXTURE=1 (docker-compose.dev.yml) and no stock.db in STOCK_DATA_DIR, it

@@ -5,7 +5,7 @@ Run one scheduled worker job (`daily` or `news`): forwards to `python -m worker.
 .DESCRIPTION
 The job itself (lock, checks before the run, time limit, dated log, news ->
 news-llm, log retention, exit code) is backend/worker/job.py; see
-docs/OPERATIONS.md §6. This script only maps its parameters onto that command,
+docs/ops/SCHEDULING.md. This script only maps its parameters onto that command,
 so a Task Scheduler task registered before #313 (it runs this script with
 -GitPull -MinFreeMemoryGB ...) keeps working until it is registered again with
 tools/Register-WorkerSchedule.ps1, which calls the Python command directly.

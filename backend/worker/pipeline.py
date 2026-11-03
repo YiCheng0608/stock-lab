@@ -3464,7 +3464,7 @@ LISTED_INSTRUMENT_TYPES = ("stock", "ipo", "etf")
 # A sync that would close more than this share of one exchange's active
 # instruments (at least STATUS_SYNC_MIN_LIMIT) is not applied: an incomplete
 # official list must not delist the market.  The skip is a non-core warning
-# plus a data_quality row the watchdog reports (OPERATIONS §6.1).
+# plus a data_quality row the watchdog reports (docs/ops/WATCHDOG.md).
 STATUS_SYNC_MAX_SHARE = 0.05
 STATUS_SYNC_MIN_LIMIT = 5
 STATUS_SYNC_VERSION = "instrument-status-v1"
@@ -5063,7 +5063,7 @@ def _corporate_action_factor(
     *,
     fallback_reference_prices: dict[date, float] | None = None,
 ) -> tuple[float, bool]:
-    """The cumulative raw price-basis factor of ``actions`` (V1_SPEC 還原因子).
+    """The cumulative raw price-basis factor of ``actions`` (docs/spec/indicators.md 還原因子).
 
     Per row: an explicit ``price_factor``; else the official reference ratio
     when it decides (``official_reference_factor``); else the field factor

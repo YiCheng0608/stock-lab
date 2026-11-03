@@ -1,7 +1,7 @@
 import type { IndicatorField, StockBarRow, StockBarsInterval, StockBarsResponse } from '../types'
 import { PRICE_BASIS } from './stockBars'
 
-// Small bars-API fixtures shaped like PR #155 (docs/V1_SPEC.md 技術指標): insufficient history, a suspended
+// Small bars-API fixtures shaped like PR #155 (docs/spec/indicators.md): insufficient history, a suspended
 // day plus a missing calendar day, a weekly series and a batch that has not run yet.
 
 export const REQUIRED_BARS: Record<IndicatorField, number> = {

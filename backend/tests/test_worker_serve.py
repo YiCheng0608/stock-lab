@@ -184,7 +184,7 @@ def stop(process: subprocess.Popen) -> int:
     return process.wait(timeout=60)
 
 
-# The schedule (OPERATIONS §6.2: the Task Scheduler triggers) -----------------------
+# The schedule (docs/ops/platform/windows.md: the Task Scheduler triggers) -----------------------
 
 
 def fire_times(trigger, start: datetime, end: datetime) -> list[datetime]:
@@ -289,7 +289,7 @@ def test_an_injected_clock_moves_the_triggers():
     assert serve.shifted(daily, timedelta(0)) is daily
 
 
-# The commands (OPERATIONS §6.2: what Task Scheduler ran) ---------------------------
+# The commands (docs/ops/platform/windows.md: what Task Scheduler ran) ---------------------------
 
 
 def test_the_commands_are_the_ones_task_scheduler_ran(tmp_path, monkeypatch):

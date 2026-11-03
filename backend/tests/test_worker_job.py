@@ -279,7 +279,7 @@ def wait_dead(pid: int, timeout: float = 15) -> bool:
     return False
 
 
-# Log layout and exit codes (OPERATIONS §6.3) ---------------------------------
+# Log layout and exit codes (docs/ops/SCHEDULING.md 日誌與 run 記錄) ---------------------------------
 
 
 def test_daily_log_layout(tree):

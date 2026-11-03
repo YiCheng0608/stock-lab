@@ -7,7 +7,7 @@ at date T is expressed in T's raw price basis and lines up with T's raw candle.
 A bar marked ``synthetic`` (an index row whose O/H/L and volume the parser
 filled in from the close) feeds only the close-based fields.
 Formulas, parameters and the "not enough bars" rules are documented in
-docs/V1_SPEC.md (技術指標); change them only together with INDICATOR_VERSION.
+docs/spec/indicators.md; change them only together with INDICATOR_VERSION.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from typing import Any
 
 INDICATOR_VERSION = "indicators/v1"
 # v2 (#394): an ex-rights event with official prices is restored by its
-# official reference price (現增、認股 included); see V1_SPEC 技術指標.
+# official reference price (現增、認股 included); see docs/spec/indicators.md.
 PRICE_BASIS = "as_of_date_raw_basis/v2"
 
 MA_WINDOWS = (5, 10, 20, 60, 120)

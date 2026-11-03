@@ -7,7 +7,7 @@ Adds ``institutional_*`` and ``margin_*`` source, raw payload, data date and
 collection time columns to ``chip_snapshots`` (Issue #395).  Additive and
 forward-only: no existing row is read or changed here.  Existing rows are
 filled from their stored raw captures by ``worker.cli chips provenance``
-(OPERATIONS §3); until then readers derive the groups from the row-level
+(docs/ops/CLI.md); until then readers derive the groups from the row-level
 fields (``app.chip_provenance.legacy_groups``).
 """
 

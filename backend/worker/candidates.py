@@ -1,4 +1,4 @@
-"""Daily candidate list scored with the current candidate_score version (V1_SPEC).
+"""Daily candidate list scored with the current candidate_score version (docs/spec/candidate_score.md).
 
 Runs after ``analyze``: it reads the trading date's signals of the
 strategies the score version's pool lists, keeps the ones analyze judged
