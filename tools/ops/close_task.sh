@@ -24,6 +24,14 @@
 # Then: close the terminals, `orca worktree rm --force`, `git worktree prune`, delete the
 # local branch (one orca already deleted counts: step branch_already_gone, #290), delete
 # each --extra-dir (junctions and symlinks unlinked first, never followed), delete the
+# Claude Code scratchpads of the task's sessions (scratchpad_cleanup below, #472): the
+# session ids come from the Issue's 回報：開工 comments by the owner, members and
+# collaborators (author_association: the repo is public), the directories are
+# $TEMP/claude/<project>/<id> (two levels down, UUID names only; this session's own,
+# CLAUDE_CODE_SESSION_ID, stays, and without that id none is deleted) and the old-format
+# $TEMP/claude/<worktree path, "-" for every character but A-Z a-z 0-9>; whatever cannot
+# be found or deleted only adds a scratchpad_skipped step, and a dry run (--no-board)
+# touches none. Then delete the
 # task's Docker resources (docker_cleanup in coordinator_lib.sh, #360: images, stopped
 # containers, volumes and networks named t<issue>/task-<issue>; none while one of them runs;
 # then dangling images and build cache once no other Docker task is in progress; no docker or
@@ -135,6 +143,93 @@ remove_tree() {
   [ -z "$(find "$1" -type l -print -quit)" ] || return 1
   rm -rf -- "$1"
   [ ! -e "$1" ] && [ ! -L "$1" ]
+}
+
+# --- Claude Code scratchpads (#472) ------------------------------------------------
+# Each Claude Code session keeps $TEMP/claude/<project>/<session id>/ (the project a hash,
+# or in the old format the working directory with every other character than A-Z, a-z,
+# 0-9 turned into "-"); nothing deletes it. Never fails the close: every outcome is a step.
+uuid_re='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+
+# scratch_remove DIR: delete one session directory, DIR = <claude>/<project>/<uuid>.
+# This session's own directory (CLAUDE_CODE_SESSION_ID) stays. A DIR that is itself a
+# junction/symlink is unlinked, never followed, once its parent has no link on the way;
+# any other DIR goes through guard_dir and remove_tree (links inside unlinked first).
+scratch_remove() {
+  local dir="$1" reason
+  [[ "${dir##*/}" =~ $uuid_re ]] || { steps+=("scratchpad_skipped:not_a_session:$dir"); return 0; }
+  if [ "${dir##*/}" = "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+    steps+=("scratchpad_skipped:own_session:$dir")
+    return 0
+  fi
+  if [ -L "$dir" ]; then
+    if [ "$(cj plain "${dir%/*}" 2>/dev/null)" != yes ]; then
+      steps+=("scratchpad_skipped:refused:$dir:上層經過 junction／symlink")
+    elif unlink_one "$dir"; then
+      steps+=("scratchpad_removed:$dir")
+    else
+      steps+=("scratchpad_skipped:delete_failed:$dir")
+    fi
+    return 0
+  fi
+  reason="$(guard_dir "$dir")"
+  if [ -n "$reason" ]; then
+    steps+=("scratchpad_skipped:refused:$dir:$reason")
+  elif remove_tree "$dir"; then
+    steps+=("scratchpad_removed:$dir")
+  else
+    steps+=("scratchpad_skipped:delete_failed:$dir")
+  fi
+}
+
+# scratchpad_cleanup: the sessions every 回報：開工 comment of the Issue names
+# (`- session：` lines; a handover adds one), at $TEMP/claude/*/<id>: one glob level, no
+# search under Temp. Then the task's old-format project directory, the worktree path in
+# that spelling, exactly: its session directories, then the directory once empty. Without
+# the worktree path the old format is not looked for (whose it is cannot be told).
+scratchpad_cleanup() {
+  local temp claude out sid dir old found sids=() dirs=()
+  [ "$set_board" = 1 ] || { steps+=("scratchpad_skipped:no_board"); return 0; }
+  # Without it this session's own directory cannot be told apart (a shell outside Claude).
+  [[ "${CLAUDE_CODE_SESSION_ID:-}" =~ $uuid_re ]] || { steps+=("scratchpad_skipped:no_own_session_id"); return 0; }
+  temp="$(native "${TEMP:-}")" || { steps+=("scratchpad_skipped:no_temp"); return 0; }
+  claude="${temp%/}/claude"
+  out="$(gh api "repos/$GH_REPO/issues/$issue/comments?per_page=100" --paginate)" \
+    && out="$(printf '%s' "$out" | cj start-sessions)" \
+    || { steps+=("scratchpad_skipped:comments_unreadable"); return 0; }
+  mapfile -t sids < <(printf '%s\n' "$out" | tr -d '\r' | grep -E "$uuid_re")
+  [ ${#sids[@]} -gt 0 ] || steps+=("scratchpad_skipped:no_session_id")
+  shopt -s nullglob
+  for sid in "${sids[@]+"${sids[@]}"}"; do
+    dirs=("$claude"/*/"$sid")
+    found=0
+    for dir in "${dirs[@]+"${dirs[@]}"}"; do
+      [ -d "$dir" ] || [ -L "$dir" ] || continue
+      found=1
+      scratch_remove "$dir"
+    done
+    [ "$found" = 1 ] || steps+=("scratchpad_skipped:not_found:$sid")
+  done
+  shopt -u nullglob
+  [ -n "$wt_path" ] && old="$(native "$wt_path")" || return 0
+  old="$claude/${old//[^A-Za-z0-9]/-}"
+  case "${old##*/}" in *-task-"$issue"-*) ;; *) return 0 ;; esac
+  [ -d "$old" ] || [ -L "$old" ] || return 0
+  if [ -L "$old" ] || [ "$(cj plain "$old" 2>/dev/null)" != yes ]; then
+    steps+=("scratchpad_skipped:refused:$old:經過 junction／symlink")
+    return 0
+  fi
+  shopt -s nullglob
+  dirs=("$old"/*)
+  shopt -u nullglob
+  for dir in "${dirs[@]+"${dirs[@]}"}"; do
+    [[ "${dir##*/}" =~ $uuid_re ]] && scratch_remove "$dir"
+  done
+  if rmdir -- "$old" 2>/dev/null; then
+    steps+=("scratchpad_removed:$old")
+  else
+    steps+=("scratchpad_skipped:not_empty:$old")
+  fi
 }
 
 # --- checks: nothing is deleted before all of them pass ---------------------------
@@ -289,6 +384,7 @@ for dir in "${extra_live[@]+"${extra_live[@]}"}"; do
   remove_tree "$dir" || report 3 "刪不掉 --extra-dir $dir"
   steps+=("extra_removed:$dir")
 done
+scratchpad_cleanup
 # Docker resources named for the task (docker_cleanup in coordinator_lib.sh, #360): never
 # fails the close; a dry run (--no-board) does not prune what other tasks share.
 docker_prune=if-found

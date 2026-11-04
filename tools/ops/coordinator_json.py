@@ -29,7 +29,14 @@ value is missing or the condition is false, so a script can test the exit code.
   comment-body FILE   {"body": FILE's text with COORDINATOR_MARK as its last line}, the
                       request comment.sh posts (#440; no stdin); exit 1 when the text is
                       empty without the mark
+  start-sessions      the session ids (UUIDs) the 回報：開工 comments of the owner, members
+                      and collaborators (author_association) name, one per line,
+                      first seen first (#472); stdin is `gh api --paginate` of an Issue's
+                      comments (pages of JSON arrays one after another); exit 1 when it
+                      is not that
   within A B          "yes" when A is B or under B, else "no" (no stdin)
+  plain PATH          "yes" when PATH as written is PATH as resolved: no junction, symlink
+                      or 8.3 short name on the way (no stdin)
   guard PATH [--residual] [--home H] [--data D]... [--root R]...
                       why close_task.sh must not delete PATH, or nothing (no stdin)
 
@@ -359,6 +366,59 @@ def unanswered_questions(doc, now: int) -> list[str]:
     return lines + notes
 
 
+# An engineer's 回報：開工 (docs/WORKFLOW.md 任務流程第 2 步) names the session on a line
+# "- session：`<uuid>`", at times with the model after it ("`<uuid>`（claude-opus-5-5）");
+# close_task.sh deletes that session's Claude Code scratchpad (#472). Only a whole UUID is
+# taken: it becomes a directory name, so nothing else may reach a path.
+_START = re.compile(r"\s*回報[：:]\s*開工")
+_SESSION_LINE = re.compile(
+    r"^\s*[-*]\s*session\s*[：:]\s*`?"
+    r"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"
+    r"(?![0-9A-Za-z-])",
+    re.M,
+)
+
+
+def _pages(text: str) -> list | None:
+    """The comments of `gh api --paginate`: one JSON array per page, back to back."""
+    decoder, comments, at = json.JSONDecoder(), [], 0
+    while True:
+        while at < len(text) and text[at].isspace():
+            at += 1
+        if at == len(text):
+            return comments
+        try:
+            page, at = decoder.raw_decode(text, at)
+        except ValueError:
+            return None
+        if not isinstance(page, list):
+            return None
+        comments += page
+
+
+# The repo is public: anyone can post a 回報：開工 naming another task's live session (the
+# ids are public on every Issue). Every session posts as the repo owner, so only comments
+# whose author is the owner or a member or collaborator count (PR #485 review).
+_TRUSTED_AUTHORS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
+
+
+def start_sessions(comments: list) -> list[str]:
+    seen: list[str] = []
+    for c in comments:
+        if (
+            not isinstance(c, dict)
+            or c.get("author_association") not in _TRUSTED_AUTHORS
+        ):
+            continue
+        body = c.get("body") or ""
+        if not _type(body, _START) or coordinator_comment(body):
+            continue
+        for sid in _SESSION_LINE.findall(body):
+            if sid.lower() not in seen:
+                seen.append(sid.lower())
+    return seen
+
+
 def _options(field) -> str:
     return ",".join(
         f"{o['id']}={o['name']}" for o in (field or {}).get("options") or []
@@ -395,8 +455,19 @@ def main(argv: list[str]) -> int:
             else "no"
         )
         return 0
+    if command == "plain":
+        written, real = _forms(args[0])
+        print("yes" if written == real else "no")
+        return 0
     if command == "guard":
         return _guard_args(args)
+    if command == "start-sessions":
+        comments = _pages(sys.stdin.read())
+        if comments is None:
+            return 1
+        for sid in start_sessions(comments):
+            print(sid)
+        return 0
     if command == "questions-query":
         print(QUESTIONS_QUERY)
         return 0
