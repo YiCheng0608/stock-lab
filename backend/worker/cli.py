@@ -29,6 +29,7 @@ from .indicator_batch import run_indicator_batch
 from .industry_repair import run_industry_repair
 from .instrument_repair import run_instrument_repair, run_unmatched_backfill
 from .market_summary import backfill_market_summaries
+from .mops_events import run_event_backfill
 from .news_batch import run_news_batch
 from .news_llm import DEFAULT_LIMIT as NEWS_LLM_DEFAULT_LIMIT, run_news_llm_batch
 from .pipeline import analyze, backtest, collect, evaluate, run_daily
@@ -278,6 +279,18 @@ def main() -> None:
         "--group-scores-from",
         help="接續在族群分數中途停下的 rebuild：跳過指標與特徵，只重算此日起的族群分數",
     )
+    events_parser = subparsers.add_parser(
+        "events", help="官方重大訊息：MOPS t05st02 依日期查詢（#464）"
+    )
+    events_subparsers = events_parser.add_subparsers(
+        dest="events_command", required=True
+    )
+    events_backfill_parser = events_subparsers.add_parser(
+        "backfill",
+        help="逐日查詢區間內每個日曆日的重大訊息清單，寫入事件與已核實查詢日（每請求間隔 3 秒，重跑冪等）",
+    )
+    events_backfill_parser.add_argument("--start-date", required=True)
+    events_backfill_parser.add_argument("--end-date", required=True)
     instruments_parser = subparsers.add_parser("instruments", help="標的狀態與歷史")
     instruments_subparsers = instruments_parser.add_subparsers(
         dest="instruments_command", required=True
@@ -433,6 +446,10 @@ def main() -> None:
         and args.instruments_command == "backfill-unmatched"
     ):
         result = run_unmatched_backfill(apply=args.apply)
+    elif args.command == "events" and args.events_command == "backfill":
+        result = run_event_backfill(
+            date.fromisoformat(args.start_date), date.fromisoformat(args.end_date)
+        )
     elif args.command == "corporate-actions":
         if args.actions_command == "sync":
             result = run_corporate_action_sync(

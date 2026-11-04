@@ -369,6 +369,9 @@ OFFICIAL_HOST_MIN_INTERVAL_SECONDS = {
     "openapi.twse.com.tw": 1.0,
     "www.tpex.org.tw": 1.0,
     "info.tpex.org.tw": 1.0,
+    # MOPS blocks fast clients without a published limit; the event-list
+    # backfill (Issue #464) stays at one request per three seconds.
+    "mops.twse.com.tw": 3.0,
 }
 _host_last_request: dict[str, float] = {}
 
@@ -391,6 +394,7 @@ def fetch_json(
     timeout_seconds: float = 30.0,
     method: str = "GET",
     data: Any = None,
+    json_body: Any = None,
 ) -> Any:
     headers = {"User-Agent": "taiwan-stock-research/0.1"}
     retry_limit = 3
@@ -398,7 +402,11 @@ def fetch_json(
     for attempt in range(redirect_retry_limit):
         _throttle_official_host(url)
         try:
-            if method.upper() == "POST":
+            if method.upper() == "POST" and json_body is not None:
+                response = httpx.post(
+                    url, json=json_body, timeout=timeout_seconds, headers=headers
+                )
+            elif method.upper() == "POST":
                 response = httpx.post(
                     url, data=data, timeout=timeout_seconds, headers=headers
                 )
@@ -776,10 +784,19 @@ def _call_fetcher(
     *,
     method: str = "GET",
     data: Any = None,
+    json_body: Any = None,
 ) -> Any:
+    # ``json_body`` is passed only when given, so fetchers without the keyword
+    # (fixtures, older callers) keep working for every other endpoint.
+    extra = {} if json_body is None else {"json_body": json_body}
     try:
-        return fetcher(url, method=method, data=data)
-    except TypeError:
+        return fetcher(url, method=method, data=data, **extra)
+    except TypeError as exc:
+        if extra:
+            # Without its body the request would ask for another date.
+            raise OfficialDataError(
+                f"official endpoint failed: {url}: fetcher takes no JSON body"
+            ) from exc
         # Fixture fetchers often expose a one-argument callable while the
         # production fetch_json also accepts a timeout keyword.
         try:
@@ -3570,9 +3587,13 @@ class OfficialMarketDataAdapter:
         tpex: TpexAdapter | None = None,
         *,
         snapshot_feeds: bool = True,
+        mops_fetcher: Callable[..., Any] | None = None,
     ) -> None:
         self.twse = twse or TwseAdapter(snapshot_feeds=snapshot_feeds)
         self.tpex = tpex or TpexAdapter(snapshot_feeds=snapshot_feeds)
+        # The date-scoped MOPS event list (Issue #464) goes through the same
+        # fetcher as the TWSE feeds unless one is given.
+        self.mops_fetcher = mops_fetcher or getattr(self.twse, "fetcher", fetch_json)
         self.captured_payloads: list[FetchedPayload] = []
 
     def fetch(self, start: date, end: date) -> OfficialBatch:
@@ -3615,23 +3636,33 @@ class OfficialMarketDataAdapter:
             raise OfficialDataError(
                 "official feeds returned no normalized universe or OHLCV"
             )
+        # Event coverage is the date-scoped MOPS list for the end date, on the
+        # snapshot and the historical path alike.  The snapshot feeds' own
+        # (unsupported) record is kept for audit only.
+        from worker import mops_events
+
+        mops_records, mops_payloads, event_coverage, mops_warnings = (
+            mops_events.fetch_date(end, self.mops_fetcher)
+        )
+        self.captured_payloads.extend(mops_payloads)
+        event_coverage["snapshot_feed_coverage"] = _merge_event_coverage(
+            [twse_batch.event_coverage, tpex_batch.event_coverage]
+        )
         return OfficialBatch(
             instruments=list(instruments.values()),
             bars=list(bars.values()),
             chips=twse_batch.chips + tpex_batch.chips,
             actions=twse_batch.actions + tpex_batch.actions,
             fundamentals=twse_batch.fundamentals + tpex_batch.fundamentals,
-            events=twse_batch.events + tpex_batch.events,
-            payloads=twse_batch.payloads + tpex_batch.payloads,
-            warnings=twse_batch.warnings + tpex_batch.warnings,
+            events=twse_batch.events + tpex_batch.events + mops_records,
+            payloads=twse_batch.payloads + tpex_batch.payloads + mops_payloads,
+            warnings=twse_batch.warnings + tpex_batch.warnings + mops_warnings,
             data_as_of=max(
                 filter(None, [twse_batch.data_as_of, tpex_batch.data_as_of]),
                 default=end.isoformat(),
             ),
             no_data_dates=no_data_dates,
-            event_coverage=_merge_event_coverage(
-                [twse_batch.event_coverage, tpex_batch.event_coverage]
-            ),
+            event_coverage=event_coverage,
             notices=twse_batch.notices + tpex_batch.notices,
             snapshot_feeds=twse_batch.snapshot_feeds and tpex_batch.snapshot_feeds,
             market_summaries=twse_batch.market_summaries + tpex_batch.market_summaries,
