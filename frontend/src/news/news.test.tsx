@@ -147,7 +147,9 @@ const summaryEnd = row.indexOf('</summary>')
 check(row.indexOf('<summary>') > 0 && summaryEnd > 0 && row.indexOf('<ul>') > summaryEnd && row.indexOf('模型 ') > summaryEnd, 'summary first; candidates and model line only show when expanded')
 // 「推論」 label and versions.
 const summaryText = row.slice(row.indexOf('<summary>'), summaryEnd).replace(/<[^>]+>/g, '')
-check(summaryText.includes('AI 候選（推論，待核實）· 2 檔') && summaryText.includes('AI 推論') && row.slice(0, summaryEnd).includes('badge badge-accent'), `summary reads 「AI 候選（推論，待核實）· 2 檔」 with the AI 推論 badge, got 「${summaryText}」`)
+// The text carries 「推論」; no second AI 推論 badge, so the card keeps one (verify N4 counts whole 「AI 推論」 lines).
+check(summaryText === 'AI 候選（推論，待核實）· 2 檔' && !row.includes('AI 推論'), `summary reads 「AI 候選（推論，待核實）· 2 檔」 without a badge, got 「${summaryText}」`)
+check(count(candidatesCard, 'AI 推論') === 1, 'a card with AI candidates still has one AI 推論 badge, after the AI direction')
 check(row.includes('模型 claude-haiku-5-5 · 提示版本 news_v1。候選未經規則核實。'), 'expanded row carries the model and prompt version')
 const unrecorded = candidateRow(render(<NewsCard item={newsItem({ ai: aiResult({ model: null, prompt_version: null }) })} />))
 check(unrecorded.includes('模型 未記錄 · 提示版本 未記錄'), 'missing model／prompt version reads 未記錄')

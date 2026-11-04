@@ -256,7 +256,6 @@ a.symbol-link:hover { color: var(--color-primary); }
 /* DESIGN_SYSTEM §5 新聞卡 AI 候選行: collapsed inference row, accent bar, apart from the verified chips. */
 .news-ai-candidates { padding-left: var(--space-3); border-left: 2px solid var(--color-accent); font-size: 14px; }
 .news-ai-candidates > summary { color: var(--color-primary); cursor: pointer; line-height: 1.8; }
-.news-ai-candidates > summary .badge { margin-left: var(--space-1); vertical-align: middle; }
 .news-ai-candidates ul { display: grid; gap: var(--space-1); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
 .news-ai-candidates li a { color: var(--color-text); }
 .news-ai-candidates li a:hover { color: var(--color-primary); }

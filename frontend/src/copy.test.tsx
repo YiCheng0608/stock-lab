@@ -180,6 +180,14 @@ for (const [source, name] of Object.entries(SOURCE_NAMES)) {
   const cells = runCells(source)
   check(cells[1] === name, `擷取狀態: source ${source} reads 「${name}」, got 「${cells[1] ?? '(no row)'}」`)
 }
+// 原始來源: raw payloads carry 「news_<feed id>」 and the LLM jobs' own codes.
+const RawTable = component('RawTable')
+const RAW_NAMES: Record<string, string> = { news_cna: '中央社', news_yahoo_tw: 'Yahoo奇摩股市', news_llm: 'Claude Code 新聞判讀（AI 推論）', candidate_notes: 'Claude Code 候選說明（AI 推論）', twse: '臺灣證券交易所', news_unknown_feed: '來源待核實' }
+for (const [source, name] of Object.entries(RAW_NAMES)) {
+  const markup = render(`RawTable ${source}`, () => <RawTable rows={[{ id: 1, collected_at: '2026-11-04T10:00:00', ingestion_run_id: 2, source, data_as_of: '2026-11-04', endpoint: 'feed', sha256: 'abc' }]} />)
+  const cells = (markup.match(/<td[^>]*>[\s\S]*?<\/td>/g) ?? []).map(text)
+  check(cells[2] === name, `原始來源: source ${source} reads 「${name}」, got 「${cells[2] ?? '(no row)'}」`)
+}
 
 // The runner keeps only the first lines of an error, so the full list goes to stderr first.
 if (failures.length) {

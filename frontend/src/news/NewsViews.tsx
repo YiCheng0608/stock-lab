@@ -95,7 +95,7 @@ function AiCandidateRow({ item }: { item: NewsItem }) {
   if (!ai || !candidates.length) return null
   return (
     <details className="news-ai-candidates" data-testid="news-ai-candidates">
-      <summary>AI 候選（推論，待核實）· {candidates.length} 檔 <AiBadge /></summary>
+      <summary>AI 候選（推論，待核實）· {candidates.length} 檔</summary>
       <ul>{candidates.map((candidate) => (
         <li key={candidate.key}>
           {candidate.name
