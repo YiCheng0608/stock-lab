@@ -371,6 +371,51 @@ class Plugin(unittest.TestCase):
         )
         self.assertEqual(len(report["collected"]), 5)
 
+    def test_under_xdist_the_controller_writes_what_the_workers_collected(self):
+        """The backend job runs under pytest-xdist (#442): the controller collects nothing,
+        each worker sends it the ids, and every worker collects the same ones."""
+        config = self.config()
+        config.rootpath = self.dir  # the rootdir is the parent of backend/ here
+        controller = suite_split.XdistController()
+        ids = ["backend/tests/t.py::ok", "backend/tests/t.py::bad"]
+        for _worker in range(2):
+            controller.pytest_xdist_node_collection_finished(
+                SimpleNamespace(config=config), ids
+            )
+        for when in ("setup", "call", "teardown"):
+            self.log("ok", when, "passed")
+        self.log("bad", "setup", "passed")
+        self.log("bad", "call", "failed")
+        suite_split.pytest_sessionfinish(SimpleNamespace(config=config))
+        report = json.loads(
+            (self.dir / "out" / "report.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(report["collected"], ["tests/t.py::bad", "tests/t.py::ok"])
+        self.assertEqual(
+            report["outcomes"], {"tests/t.py::ok": PASSED, "tests/t.py::bad": FAILED}
+        )
+
+    def test_an_xdist_worker_writes_no_report(self):
+        """A worker saw only its share of the tests; writing would race the controller."""
+        config = self.config()
+        config.workerinput = {"workerid": "gw0"}
+        self.collect(config, "ok")
+        self.log("ok", "call", "passed")
+        suite_split.pytest_sessionfinish(SimpleNamespace(config=config))
+        self.assertFalse((self.dir / "out").exists())
+
+    def test_the_xdist_hook_is_registered_only_with_xdist(self):
+        """An unknown hook fails pytest's plugin validation; the docker job has no xdist."""
+        for loaded in (False, True):
+            with self.subTest(xdist=loaded):
+                registered = []
+                manager = SimpleNamespace(
+                    hasplugin=lambda name: loaded and name == "xdist",
+                    register=lambda plugin, name: registered.append(name),
+                )
+                suite_split.pytest_configure(SimpleNamespace(pluginmanager=manager))
+                self.assertEqual(registered, ["suite_split_xdist"] if loaded else [])
+
     def test_without_the_option_nothing_is_written(self):
         options = {"suite_report": None}
         config = SimpleNamespace(getoption=options.__getitem__)
@@ -401,7 +446,13 @@ class Plugin(unittest.TestCase):
                     "--suite-root", str(self.root), *extra, "tests",
                 ],
                 cwd=self.root,
-                env={**os.environ, "PYTHONPATH": str(Path(__file__).parent)},
+                # Kept: the path where this process found xdist, when it did.
+                env={
+                    **os.environ,
+                    "PYTHONPATH": os.pathsep.join(
+                        filter(None, [str(Path(__file__).parent), os.environ.get("PYTHONPATH")])
+                    ),
+                },
                 check=True,
                 capture_output=True,
             )  # fmt: skip
@@ -424,6 +475,10 @@ class Plugin(unittest.TestCase):
         self.assertEqual(collected["collected"], ran["collected"])
         subset = pytest_run("-k", "param")
         self.assertEqual(len(subset["collected"]), 2)
+        if importlib.util.find_spec("xdist"):
+            parallel = pytest_run("-n", "2")
+            self.assertEqual(parallel["collected"], ran["collected"])
+            self.assertEqual(parallel["outcomes"], ran["outcomes"])
 
 
 class ImportModules(unittest.TestCase):
