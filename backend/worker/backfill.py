@@ -12,7 +12,7 @@ from collections import Counter, defaultdict
 from datetime import date, timedelta
 from typing import Any, Iterable
 
-from sqlalchemy import select
+from sqlalchemy import String, select, type_coerce
 from sqlalchemy.orm import Session
 
 from app.clock import utcnow
@@ -489,6 +489,35 @@ def _coverage_summary(report: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _instrument_dates(
+    db: Session, model: Any, start_date: date, end_date: date
+) -> list[tuple[int, date]]:
+    """``(instrument_id, trading_date)`` of MODEL's rows in the range.
+
+    coverage_report reads only these two columns of about 145k bar and 145k
+    chip rows on the production copy; whole ORM rows took about 7 s (#462). The
+    dates are read as text and converted with the column type's own result
+    processor once per distinct value (a few dozen), not once per row.
+    """
+
+    column = model.trading_date
+    dialect = db.get_bind().dialect
+    process = column.type.dialect_impl(dialect).result_processor(dialect, None)
+    days: dict[Any, Any] = {}
+    rows = []
+    for instrument_id, stored in db.execute(
+        select(model.instrument_id, type_coerce(column, String)).where(
+            column >= start_date, column <= end_date
+        )
+    ):
+        if stored not in days:
+            days[stored] = (
+                process(stored) if process else date.fromisoformat(str(stored)[:10])
+            )
+        rows.append((instrument_id, days[stored]))
+    return rows
+
+
 def coverage_report(
     db: Session,
     start_date: date,
@@ -522,18 +551,8 @@ def coverage_report(
         ]
     active_by_key = {(item.exchange, item.symbol): item for item in active}
 
-    all_bars = db.scalars(
-        select(MarketBar).where(
-            MarketBar.trading_date >= start_date,
-            MarketBar.trading_date <= end_date,
-        )
-    ).all()
-    all_chips = db.scalars(
-        select(ChipSnapshot).where(
-            ChipSnapshot.trading_date >= start_date,
-            ChipSnapshot.trading_date <= end_date,
-        )
-    ).all()
+    all_bars = _instrument_dates(db, MarketBar, start_date, end_date)
+    all_chips = _instrument_dates(db, ChipSnapshot, start_date, end_date)
     event_rows = db.scalars(
         select(Event).where(
             Event.event_date >= start_date,
@@ -557,7 +576,7 @@ def coverage_report(
     ).all()
 
     instrument_by_id = {item.id: item for item in all_active_rows}
-    market_dates = {row.trading_date for row in all_bars}
+    market_dates = {trading_date for _instrument_id, trading_date in all_bars}
     taiex_dates = set(
         verified_taiex_sessions(
             db,
@@ -601,22 +620,48 @@ def coverage_report(
     chips_by_date_exchange: dict[date, Counter[str]] = defaultdict(Counter)
     bars_by_key: dict[tuple[str, str], set[date]] = defaultdict(set)
     chips_by_key: dict[tuple[str, str], set[date]] = defaultdict(set)
-    for row in all_bars:
-        instrument = instrument_by_id.get(row.instrument_id)
-        if not instrument:
+    # Per-date counts for date_coverage, gathered in the same pass; counting
+    # each date with its own scan of every row was O(dates x rows), about 16 s
+    # on the production copy (#462).
+    bar_count_by_date: Counter[date] = Counter()
+    non_index_bar_count_by_date: Counter[date] = Counter()
+    taiex_count_by_date: Counter[date] = Counter()
+    chip_count_by_date: Counter[date] = Counter(day for _id, day in all_chips)
+    # What the loops need of each instrument, read once rather than per row:
+    # exchange, key, whether the key is in scope, non-index, TAIEX/TWII index.
+    info_by_id = {
+        item_id: (
+            item.exchange,
+            (item.exchange, item.symbol),
+            (item.exchange, item.symbol) in active_by_key,
+            item.instrument_type != "index",
+            item.instrument_type == "index"
+            and item.exchange == "TWSE"
+            and item.symbol in {"TAIEX", "TWII"},
+        )
+        for item_id, item in instrument_by_id.items()
+    }
+    for instrument_id, trading_date in all_bars:
+        bar_count_by_date[trading_date] += 1
+        info = info_by_id.get(instrument_id)
+        if info is None:
             continue
-        key = (instrument.exchange, instrument.symbol)
-        bars_by_date_exchange[row.trading_date][instrument.exchange] += 1
-        if key in active_by_key:
-            bars_by_key[key].add(row.trading_date)
-    for row in all_chips:
-        instrument = instrument_by_id.get(row.instrument_id)
-        if not instrument:
+        exchange, key, in_scope, non_index, taiex = info
+        if non_index:
+            non_index_bar_count_by_date[trading_date] += 1
+        elif taiex:
+            taiex_count_by_date[trading_date] += 1
+        bars_by_date_exchange[trading_date][exchange] += 1
+        if in_scope:
+            bars_by_key[key].add(trading_date)
+    for instrument_id, trading_date in all_chips:
+        info = info_by_id.get(instrument_id)
+        if info is None:
             continue
-        key = (instrument.exchange, instrument.symbol)
-        chips_by_date_exchange[row.trading_date][instrument.exchange] += 1
-        if key in active_by_key:
-            chips_by_key[key].add(row.trading_date)
+        exchange, key, in_scope, _non_index, _taiex = info
+        chips_by_date_exchange[trading_date][exchange] += 1
+        if in_scope:
+            chips_by_key[key].add(trading_date)
 
     events_by_date = Counter(row.event_date for row in event_rows)
     actions_by_date = Counter(row.action_date for row in action_rows)
@@ -746,24 +791,10 @@ def coverage_report(
 
     date_coverage = []
     for trading_date in expected_dates:
-        bar_count = sum(1 for row in all_bars if row.trading_date == trading_date)
-        non_index_bar_count = sum(
-            1
-            for row in all_bars
-            if row.trading_date == trading_date
-            and instrument_by_id.get(row.instrument_id)
-            and instrument_by_id[row.instrument_id].instrument_type != "index"
-        )
-        taiex_count = sum(
-            1
-            for row in all_bars
-            if row.trading_date == trading_date
-            and instrument_by_id.get(row.instrument_id)
-            and instrument_by_id[row.instrument_id].instrument_type == "index"
-            and instrument_by_id[row.instrument_id].exchange == "TWSE"
-            and instrument_by_id[row.instrument_id].symbol in {"TAIEX", "TWII"}
-        )
-        chip_count = sum(1 for row in all_chips if row.trading_date == trading_date)
+        bar_count = bar_count_by_date[trading_date]
+        non_index_bar_count = non_index_bar_count_by_date[trading_date]
+        taiex_count = taiex_count_by_date[trading_date]
+        chip_count = chip_count_by_date[trading_date]
         if trading_date in known_no_data and bar_count == 0:
             coverage_status = "skipped_non_trading"
         elif (taiex_count or trading_date in taiex_dates) and non_index_bar_count:
@@ -922,14 +953,9 @@ def coverage_report(
         "event_coverage": event_summary,
     }
     status_counts = Counter(item["status"] for item in date_coverage)
-    observed_non_index_dates = {
-        row.trading_date
-        for row in all_bars
-        if instrument_by_id.get(row.instrument_id)
-        and instrument_by_id[row.instrument_id].instrument_type != "index"
-    }
+    observed_non_index_dates = set(non_index_bar_count_by_date)
     verified_ohlcv_dates = observed_non_index_dates.intersection(taiex_dates)
-    chip_dates = {row.trading_date for row in all_chips}.intersection(taiex_dates)
+    chip_dates = set(chip_count_by_date).intersection(taiex_dates)
     latest_observed = max(taiex_dates, default=None)
     target_ohlcv_sessions = (
         target_ohlcv_sessions

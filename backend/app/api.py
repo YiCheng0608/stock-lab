@@ -19,7 +19,7 @@ from pydantic import (
     model_validator,
 )
 from sqlalchemy import String, and_, cast, desc, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from .chip_provenance import GroupProvenance, stored_groups
 from .clock import utcnow
@@ -37,6 +37,7 @@ from .candidate_view import candidate_for_instrument, candidate_list
 from .coverage import has_backfill_manifest
 from .db import SessionLocal
 from .domain import CANDIDATE_SCORE, ETF_CATEGORIES, signal_confidence_semantics
+from .latest_rows import ranked_ids
 from .level_semantics import build_level_semantics, canonical_evidence
 from .models import (
     ChipSnapshot,
@@ -400,17 +401,34 @@ def latest_official_attempt(db: Session) -> IngestionRun | None:
     )
 
 
-def latest_scores(db: Session) -> dict[str, GroupDailyScore]:
+def _latest_score_rows(db: Session, *where: Any) -> dict[str, GroupDailyScore]:
+    """Each group's newest score (trading_date desc, id desc) among WHERE.
+
+    Only those rows are loaded: reading every day's row and keeping the first
+    per group decoded about 1,400 ``details_json`` documents per call, 0.6 s on
+    the production copy (#462). The dict is in the same order as before.
+    """
+
+    order_by = (desc(GroupDailyScore.trading_date), desc(GroupDailyScore.id))
     rows = db.scalars(
-        select(GroupDailyScore).order_by(
-            desc(GroupDailyScore.trading_date),
-            desc(GroupDailyScore.id),
+        select(GroupDailyScore)
+        .where(
+            GroupDailyScore.id.in_(
+                ranked_ids(
+                    GroupDailyScore.id,
+                    partition_by=GroupDailyScore.group_id,
+                    order_by=order_by,
+                    where=where,
+                )
+            )
         )
+        .order_by(*order_by)
     ).all()
-    result: dict[str, GroupDailyScore] = {}
-    for row in rows:
-        result.setdefault(row.group_id, row)
-    return result
+    return {row.group_id: row for row in rows}
+
+
+def latest_scores(db: Session) -> dict[str, GroupDailyScore]:
+    return _latest_score_rows(db)
 
 
 def scores_as_of(db: Session, as_of: date | None) -> dict[str, GroupDailyScore]:
@@ -418,15 +436,7 @@ def scores_as_of(db: Session, as_of: date | None) -> dict[str, GroupDailyScore]:
         # Product ranking is official-snapshot scoped.  Do not let an
         # unscoped legacy score look like a current market ranking.
         return {}
-    query = select(GroupDailyScore)
-    query = query.where(GroupDailyScore.trading_date <= as_of)
-    rows = db.scalars(
-        query.order_by(desc(GroupDailyScore.trading_date), desc(GroupDailyScore.id))
-    ).all()
-    result: dict[str, GroupDailyScore] = {}
-    for row in rows:
-        result.setdefault(row.group_id, row)
-    return result
+    return _latest_score_rows(db, GroupDailyScore.trading_date <= as_of)
 
 
 def _score_details(score: GroupDailyScore | None) -> dict[str, Any]:
@@ -3818,10 +3828,16 @@ def ingestion_runs(
     limit: int | None = Query(
         default=None, ge=1, le=MAX_PAGE_SIZE, include_in_schema=False
     ),
+    include_metadata: bool = False,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     page_size = _effective_page_size(page_size, limit)
     query = select(IngestionRun)
+    if not include_metadata:
+        # A run's metadata is up to 10 MB (an official collect is about 300
+        # KB); a 50-row page carried 24 MB (#462). The list leaves it out and
+        # does not read the column; include_metadata=true returns it.
+        query = query.options(defer(IngestionRun.metadata_json))
     if q and q.strip():
         needle = f"%{q.strip()}%"
         query = query.where(
@@ -3841,8 +3857,9 @@ def ingestion_runs(
         page_size=page_size,
         order_by=(desc(IngestionRun.updated_at), desc(IngestionRun.id)),
     )
-    items = [
-        {
+    items = []
+    for run in rows:
+        item: dict[str, Any] = {
             "id": run.id,
             "run_type": run.run_type,
             "source": run.source,
@@ -3852,13 +3869,13 @@ def ingestion_runs(
             "error": run.error,
             "request_key": run.request_key,
             "data_as_of": run.data_as_of,
-            "metadata": run.metadata_json or {},
-            "started_at": as_utc_datetime(run.started_at),
-            "finished_at": as_utc_datetime(run.finished_at),
-            "updated_at": as_utc_datetime(run.updated_at),
         }
-        for run in rows
-    ]
+        if include_metadata:
+            item["metadata"] = run.metadata_json or {}
+        item["started_at"] = as_utc_datetime(run.started_at)
+        item["finished_at"] = as_utc_datetime(run.finished_at)
+        item["updated_at"] = as_utc_datetime(run.updated_at)
+        items.append(item)
     return _page_response(items, page=page, page_size=page_size, total=total)
 
 
