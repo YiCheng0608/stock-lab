@@ -251,7 +251,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .news-card-impact { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: 14px; }
 .news-direction { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--color-text); font-size: 14px; font-weight: 500; }
 .direction-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-.news-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.news-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .news-chips a.tag:hover { border-color: var(--color-primary); color: var(--color-text); }
 /* DESIGN_SYSTEM §5 新聞卡 AI 候選行: collapsed inference row, accent bar, apart from the verified chips. */
 .news-ai-candidates { padding-left: var(--space-3); border-left: 2px solid var(--color-accent); font-size: 14px; }

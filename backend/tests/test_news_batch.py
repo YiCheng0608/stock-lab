@@ -543,10 +543,13 @@ def test_same_code_on_two_exchanges_is_not_resolved_by_code(matcher):
     assert matcher.symbols("甲公司(7777)董事會") == ["TWSE:7777"]
 
 
-def test_two_character_name_needs_its_code_and_three_character_name_matches_alone(
+def test_two_character_name_needs_a_title_segment_start_and_three_characters_alone(
     matcher,
 ):
-    assert matcher.symbols("友達ADR昨日收低") == []
+    # Rule v2 (#451; cases in test_news_relations_v2): a unique two-character
+    # name counts at the start of a title segment, otherwise it needs its code.
+    assert matcher.symbols("友達ADR昨日收低") == ["TWSE:2409"]
+    assert matcher.symbols("面板股賣友達買群創") == []
     assert matcher.symbols("台積電熊本廠獲補助") == ["TWSE:2330"]
 
 
@@ -630,7 +633,7 @@ def test_relations_in_batch_and_unmatched_items_are_kept_with_unknown_direction(
         [],
         "unknown",
     )
-    assert _by_title(db, "友達ADR下跌 折台股34元").symbols_json == []
+    assert _by_title(db, "友達ADR下跌 折台股34元").symbols_json == ["TWSE:2409"]
     fed = _items(db, source_name="Federal Reserve")[0]
     assert (fed.symbols_json, fed.impact_scope) == ([], "market")
     assert {item.impact_direction for item in _items(db)} == {"unknown"}
@@ -702,10 +705,11 @@ def test_failing_sources_are_recorded_and_others_still_write(db):
 def test_failure_while_writing_a_feed_rolls_back_only_that_feed(db, monkeypatch):
     original = RelationMatcher.symbols
 
-    def flaky(self, text):
+    def flaky(self, title, summary=None):
+        text = f"{title} {summary or ''}"
         if "不同追蹤參數" in text or "友達ADR" in text:
             raise ValueError("matcher exploded")
-        return original(self, text)
+        return original(self, title, summary)
 
     monkeypatch.setattr(RelationMatcher, "symbols", flaky)
     result = collect_news(db, run_date=RUN_DATE, fetch=FixtureFetcher())
