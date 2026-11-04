@@ -2337,7 +2337,9 @@ def scratch(close: Harness):
             _start(S_QUESTION, first="提問：要不要換手？", cid=2),
             _start(S_HANDOVER, first="\n回報：開工（換手）", cid=3),
             # Not ids: a non-UUID, and S_OTHER with one more character.
-            _start(S_LINK, S_SELF, S_MISSING, "not-a-uuid", S_OTHER + "0", S_ENG, cid=4),
+            _start(
+                S_LINK, S_SELF, S_MISSING, "not-a-uuid", S_OTHER + "0", S_ENG, cid=4
+            ),
         ],
     )
     yield close
@@ -2496,7 +2498,9 @@ def test_close_task_goes_on_when_a_scratchpad_cannot_be_deleted(
     line = _json_line(result)
     steps = _scratch_steps(line)
     assert steps[0].startswith(reason), steps
-    assert f"scratchpad_removed:{(scratch.other_project / S_HANDOVER).as_posix()}" in steps
+    assert (
+        f"scratchpad_removed:{(scratch.other_project / S_HANDOVER).as_posix()}" in steps
+    )
     assert line["board"] == "完成"
     assert (eng / "scratchpad" / "note.txt").is_file()
 
