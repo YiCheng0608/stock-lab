@@ -21,12 +21,19 @@
 #     deploy. With none of them running no job can hold a lock, and none is taken. A scheduler
 #     of an image before #340 does not know --keep-stdin: exit 2, stop it first;
 #   - the tag predates #340: its docker-compose.yml does not tag the images with
-#     STOCK_RELEASE_TAG, so what runs could not be told from the image.
+#     STOCK_RELEASE_TAG, so what runs could not be told from the image;
+#   - after the build, before any container changes (#456): the alembic_version of the
+#     volume's DB, read by the new backend image with the volume mounted read-only
+#     (db_revision.py), is not that image's alembic head: behind (back up, then init-db with
+#     the tag's code: the commands are printed), ahead (an older tag than the DB: docs/RELEASE.md
+#     版本回退), or no volume, no DB, no single alembic_version row. The checkout is put back on
+#     what it was on; the images just built stay. Never migrates, never writes the DB.
 # Then: fetch the tag, `git checkout` it (detached HEAD), `docker compose build` with
 # STOCK_RELEASE_TAG=<tag> and STOCK_GIT_HEAD=<its commit> (images <project>-backend:<tag> and
-# <project>-web:<tag>), write /data/logs/deploy.json in the volume (tag, HEAD, images, the
-# image the scheduler ran before, time, operator; the watchdog compares the scheduler's image
-# with it), `docker compose up -d --no-build --wait`, read back that each service runs its
+# <project>-web:<tag>), check the DB revision, write /data/logs/deploy.json in the volume
+# (tag, HEAD, images, the image the scheduler ran before, time, operator; the watchdog
+# compares the scheduler's image with it), `docker compose up -d --no-build --wait`, read
+# back that each service runs its
 # tagged image and that the new scheduler's own check (watchdog_helper.py deploy-image) is
 # ok, release the locks and comment on #1. Whether a deploy is authorised is not checked
 # here: deploying is the user's decision (docs/COORDINATOR.md 無人值守運作).
@@ -44,7 +51,8 @@
 #                       them from the checkout's .env, then its defaults
 #   --no-comment        no comment on #1 (a rehearsal on a throwaway checkout and project)
 #   --python EXE        Python for the JSON; default $STOCK_PYTHON, then this checkout's .venv, then python3
-# Prints one JSON line. Exit 0 deployed; 1 refused (nothing changed); 3 a step failed after the
+# Prints one JSON line (a revision refusal adds db_revision and head). Exit 0 deployed; 1
+# refused (nothing changed but, after the build, the new images); 3 a step failed after the
 # checkout started: before the record (build) the containers still run the previous images and
 # the record is the previous one; after it (up, read-back) the watchdog reports the mismatch;
 # fix the cause and run again with the same tag; 4 deployed but the #1 comment failed; 2/64 bad
@@ -93,8 +101,10 @@ done
 [[ "$lock_wait" =~ ^[1-9][0-9]*$ ]] || die "DEPLOY_LOCK_WAIT 要是正整數秒：$lock_wait" 64
 find_python
 
+# extra: more JSON members for the refusal line (the DB revision check's).
+extra=""
 refuse() {
-  printf '{"deployed": false, "tag": %s, "reason": %s}\n' "$(json_str "$tag")" "$(json_str "$1")"
+  printf '{"deployed": false, "tag": %s, "reason": %s%s}\n' "$(json_str "$tag")" "$(json_str "$1")" "$extra"
   die "拒絕部署：$1" 1
 }
 fail() {
@@ -224,12 +234,64 @@ git -C "$checkout" fetch --quiet --no-tags origin "refs/tags/$tag:refs/tags/$tag
 git -C "$checkout" show "$sha:docker-compose.yml" 2>/dev/null | grep -q 'STOCK_RELEASE_TAG' \
   || refuse_fetched "tag $tag 早於 #340：它的 docker-compose.yml 不以 STOCK_RELEASE_TAG 為 image 打 tag，部署後無法核對跑的版本"
 
+# What the checkout was on, for a refusal after the build to put it back.
+prev_head="$(git -C "$checkout" rev-parse --verify HEAD)" || refuse_fetched "讀不到發佈 checkout 的 HEAD"
+prev_branch="$(git -C "$checkout" symbolic-ref -q --short HEAD)" || prev_branch=""
 git -C "$checkout" -c advice.detachedHead=false checkout --quiet "refs/tags/$tag" \
   || fail "git checkout $tag 失敗"
 [ "$(git -C "$checkout" rev-parse --verify HEAD)" = "$sha" ] || fail "checkout 後 HEAD 不是 ${sha:0:9}"
 backend="$project-backend:$tag" web="$project-web:$tag"
 compose build >&2 || fail "docker compose build 失敗；容器仍跑前一版，修好後以同一個 tag 再跑"
 dk image inspect "$backend" "$web" >/dev/null || fail "build 後找不到 $backend 或 $web"
+
+# --- the volume's DB revision against the tag's head (#456), before any container changes --
+# A refusal here puts the checkout back on what it was on and deletes the fetched tag ref; the
+# images just built stay (a later build of the tag takes them from the cache).
+refuse_built() {
+  if [ -n "$prev_branch" ]; then
+    git -C "$checkout" checkout --quiet "$prev_branch" --
+  else
+    git -C "$checkout" -c advice.detachedHead=false checkout --quiet --detach "$prev_head"
+  fi
+  [ "$(git -C "$checkout" rev-parse --verify HEAD 2>/dev/null)" = "$prev_head" ] \
+    || fail "$1；而且發佈 checkout 退不回 ${prev_head:0:9}（仍在 $tag），容器沒有換"
+  refuse_fetched "$1"
+}
+volume="${project}_stock-data"
+# docker run -v would create a missing volume: looked up first.
+dk volume inspect -f '{{.Name}}' "$volume" >/dev/null 2>&1 \
+  || refuse_built "沒有 volume $volume：api 會拒絕啟動。先以 tag $tag 的程式跑 init-db，或放入 DB 副本，再部署"
+# The new image's python, the volume read-only, no network; db_revision.py on stdin, so any
+# tag's image runs this checkout's check.
+revision="$(dk run --rm -i --network none -v "$volume:/data:ro" --entrypoint python "$backend" \
+  -X utf8 - /data/stock.db <"$script_dir/db_revision.py")" \
+  || refuse_built "在 $backend 讀不到 volume $volume 裡 DB 的 alembic_version"
+revision="${revision//$'\r'/}"
+read -r word state db_rev head extra_word <<<"$revision"
+[ "$word" = revision ] && [ -n "$head" ] && [ -z "${extra_word:-}" ] \
+  || refuse_built "讀不懂 DB revision 的檢查結果：$revision"
+extra=", \"db_revision\": $(json_str "$db_rev"), \"head\": $(json_str "$head")"
+case "$state" in
+  same) extra="" ;;
+  behind)
+    cat >&2 <<EOF
+DB 落後 tag $tag：先備份、再用 $tag 的程式跑 init-db，然後以同一個 tag 重跑 deploy.sh。
+在 master 管理 checkout 的 Git Bash 依序執行（B 是備份目錄；完整步驟、時段與驗證見 docs/RELEASE.md「含 migration 的版本」）：
+  export MSYS_NO_PATHCONV=1
+  docker compose -p $project stop scheduler
+  docker run --rm --network none -v $volume:/data:ro -v "\$B":/out -v "\$(pwd -W)/tools/ops/copy_db.py":/t/copy_db.py:ro $backend python /t/copy_db.py --src /data/stock.db --dest /out
+  git -C "$checkout_native" fetch --quiet --no-tags origin "refs/tags/$tag:refs/tags/$tag"
+  git -C "$checkout_native" -c advice.detachedHead=false checkout --quiet "refs/tags/$tag"
+  (cd "$checkout_native" && STOCK_RELEASE_TAG=$tag docker compose -p $project run --rm --no-deps api python -m worker.cli init-db)
+EOF
+    refuse_built "DB 的 revision 是 $db_rev，tag $tag 的 alembic head 是 $head：DB 落後，新 api 會拒絕啟動。先備份、再以 $tag 的程式跑 init-db（docs/RELEASE.md「含 migration 的版本」）"
+    ;;
+  ahead)
+    refuse_built "DB 的 revision $db_rev 不在 tag $tag 的 revision 清單裡（head 是 $head）：DB 比這個 tag 新，例如部署回舊 tag，舊 api 會拒絕啟動。照 docs/RELEASE.md「版本回退」先換回升級前的備份"
+    ;;
+  missing) refuse_built "volume $volume 裡沒有 /data/stock.db：api 會拒絕啟動。先以 tag $tag 的程式跑 init-db，或放入 DB 副本，再部署" ;;
+  *) refuse_built "volume $volume 裡 DB 的 alembic_version 不是恰好一列（$state：$db_rev）：api 會拒絕啟動" ;;
+esac
 
 [ -n "$operator" ] || operator="$(git -C "$repo_root" config user.name)" || operator="${USERNAME:-${USER:-unknown}}"
 deployed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"

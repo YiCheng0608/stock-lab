@@ -16,6 +16,9 @@
 #    and holds the lock (a refused deploy leaves a running job alone, #430). The seed marks
 #    today's daily done, so serve starts no catch-up daily that would hold the lock instead
 #    (the 18:30 and 21:30 triggers still can: see the seed).
+# 2b. The DB's alembic_version set behind, then ahead of t2's head: deploy t2 is refused (exit
+#    1) after its build, the containers, volumes and deploy.json as before, every service on
+#    t1, the DB revision as set (#456). Then back at the head.
 # 3. Deploy t2: the locks are taken and let go, every service runs its t2 image, the record
 #    names t2 and the t1 image before it, and the new scheduler's watchdog check is ok.
 #
@@ -91,13 +94,17 @@ deploy() {
         --web-port "$WEB_PORT" --api-port "$API_PORT" --env-file "$STOCK_ENV_FILE"
 }
 
-# images: the project's image tags; state: what a refused deploy must leave as it was.
+# images: the project's image tags; state: what a refused deploy must leave as it was;
+# containers: the same but the images (a deploy refused after its build keeps the new ones).
 images() { docker image ls --format '{{.Repository}}:{{.Tag}} {{.ID}}' | grep "^$project-" | sort; }
-state() {
-    images
+containers() {
     docker ps -a --filter "label=com.docker.compose.project=$project" --format '{{.Names}} {{.ID}} {{.Image}} {{.State}}' | sort
     docker volume ls -q --filter "label=com.docker.compose.project=$project" | sort
     STOCK_RELEASE_TAG=t1 compose exec -T scheduler cat /data/logs/deploy.json
+}
+state() {
+    images
+    containers
 }
 
 expect_images() {
@@ -203,6 +210,39 @@ for _ in $(seq 30); do
 done
 [ "$code" = 0 ] || fail "the daily lock is still held after the test job ended (lock exit $code)"
 echo "ok the test job ended and let go of the daily lock"
+
+echo "== 2b. the DB behind, then ahead of t2's alembic head: deploy t2 is refused, no container changes (#456)"
+# The seeded DB is at the head; the api of t1 writes the revision (it read it only at start).
+revision() {
+    STOCK_RELEASE_TAG=t1 compose exec -T api python -X utf8 -c '
+import sqlite3, sys
+from app.migration_revisions import REVISIONS
+with sqlite3.connect("/data/stock.db") as conn:
+    if len(sys.argv) > 1:
+        conn.execute("UPDATE alembic_version SET version_num = ?", (sys.argv[1],))
+    print(conn.execute("SELECT version_num FROM alembic_version").fetchone()[0], REVISIONS[-2], REVISIONS[-1])
+' "$@" | tr -d '\r'
+}
+read -r current behind head <<< "$(revision)"
+[ "$current" = "$head" ] || fail "the seeded DB is at $current, not the head $head"
+for rev in "$behind" 0099_from_a_later_tag; do
+    revision "$rev" > /dev/null
+    before="$(containers)"
+    set +e
+    deploy t2 > "$work/t2-revision.json"
+    code=$?
+    set -e
+    cat "$work/t2-revision.json"
+    [ "$code" = 1 ] || fail "deploy t2 with the DB at $rev: exit $code, want 1"
+    grep -q "\"db_revision\": \"$rev\", \"head\": \"$head\"" "$work/t2-revision.json" \
+        || fail "refused for another reason with the DB at $rev"
+    after="$(containers)"
+    [ "$before" = "$after" ] || fail "a deploy refused for the DB revision changed a container: $(diff <(echo "$before") <(echo "$after"))"
+    expect_images t1
+    [ "$(revision | cut -d' ' -f1)" = "$rev" ] || fail "the refused deploy wrote the DB revision"
+    echo "ok the DB at $rev: refused, the containers still run t1"
+done
+revision "$head" > /dev/null
 
 echo "== 3. deploy t2"
 deploy t2 | tee "$work/t2.json"
