@@ -108,6 +108,7 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
 測試與 `checks.py` 讀 git，而 image 不含 `.git`；worktree 的 `.git` 是指向 Windows 路徑的檔案，容器裡讀不到。所以唯讀掛進共用的 git 目錄，再掛一個指向其中 `worktrees/<worktree 名>` 的 `.git` 檔，容器裡的 git 讀到的就是這個 worktree 的 branch、HEAD 與 index。每個新 shell 先跑（`$T` 是 worktree 外暫存目錄，路徑見 [LOCAL](ops/LOCAL.md#工具)，寫進 PR）：
 
 ```bash
+# 換值（docs/ops/LOCAL.md）：<worktree 外暫存目錄>＝「工具」表的「worktree 外暫存目錄」，t<issue> 的 <issue> 是 Issue 號
 T=<worktree 外暫存目錄>; mkdir -p "$T"
 printf 'gitdir: /repo.git/worktrees/%s\n' "$(basename "$(git rev-parse --git-dir)")" > "$T/gitfile"
 GIT_RO=(-v "$(git rev-parse --git-common-dir):/repo.git:ro" -v "$T/gitfile:/app/.git:ro")
