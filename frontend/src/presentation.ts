@@ -161,9 +161,19 @@ function formatKnownInstant(value: string): string {
   return (validValue && formatTaipeiMinute(validValue)) ?? '待核實'
 }
 
+// UI_COPY_SPEC §8.2 (#465): a time the system never stored is 未記錄; a value that cannot be confirmed is 待核實.
+export const PRODUCT_TIME_NOTE = '時間以台灣時間顯示；系統沒有記錄的時間寫「未記錄」，有值但尚未確認的寫「待核實」。'
+
+// The backend sends every unknown role with value=null (product_time._unknown); only its reason says whether the time
+// was never stored (*_not_persisted) or failed a check (conflict, missing zone, invalid…).
+function productTimeNotRecorded(role: ProductTimeRole | undefined): boolean {
+  return !role || (role.status !== 'known' && /_not_persisted$/.test(role.reason ?? ''))
+}
+
 export function formatProductTimeRole(time: ProductTime | undefined, roleName: string, fallbackDate: string | null = null): string {
   const role = time?.roles?.[roleName]
   if (!time && fallbackDate) return formatCalendarDate(fallbackDate)
+  if (time && productTimeNotRecorded(role)) return '未記錄'
   if (!productTimeRoleKnown(role)) return '待核實'
   if (role?.precision === 'date') return formatCalendarDate(role.value)
   return formatKnownInstant(role?.utc ?? role?.value ?? '')

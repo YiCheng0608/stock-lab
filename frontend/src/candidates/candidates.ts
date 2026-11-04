@@ -70,6 +70,8 @@ export function formatCandidateClose(market: CandidateMarket | undefined): strin
 }
 
 export function candidateChange(market: CandidateMarket | undefined): { text: string; tone: 'up' | 'down' | 'flat' | null } {
+  // #465: the source published the previous session without this stock's close (UI_COPY_SPEC §8.2).
+  if (market?.change_status === 'no_previous_close') return { text: '前一交易日無收盤', tone: null }
   if (!market || market.change_status !== 'known' || !isFiniteNumber(market.change_pct)) return { text: '漲跌待核實', tone: null }
   const percent = market.change_pct * 100
   const rounded = Number(percent.toFixed(2))
@@ -129,12 +131,24 @@ export function groupBoardLabel(board: string): string {
   return BOARD_LABELS[board] ?? '其他'
 }
 
-// One line per group: name, board and rank on its board, or why it was not ranked that day.
+// The glossary term of a partial group (event_data_pending), the same words as the /themes quality badge.
+export const GROUP_EVENT_PENDING = '事件資料待補'
+
+// ranked: used by the candidate score; pending: scored on four components only (partial, #453); unranked: anything else.
+export function candidateGroupState(group: CandidateGroup): 'ranked' | 'pending' | 'unranked' {
+  if (group.qualified && isFiniteNumber(group.rank)) return 'ranked'
+  if (group.data_quality === 'partial') return 'pending'
+  return 'unranked'
+}
+
+// One line per group: name, board and rank on its board, or why it did not count that day (UI_COPY_SPEC 每日候選).
 export function candidateGroupText(group: CandidateGroup): string {
   const board = groupBoardLabel(group.board)
-  if (group.qualified && isFiniteNumber(group.rank)) {
+  const state = candidateGroupState(group)
+  if (state === 'ranked') {
     return `${group.name}（${board}，第 ${group.rank} 名${isFiniteNumber(group.board_size) ? `／${group.board_size}` : ''}）`
   }
+  if (state === 'pending') return `${group.name}（${board}，${GROUP_EVENT_PENDING}，未計入族群分）`
   return `${group.name}（${board}，當日未排名）`
 }
 

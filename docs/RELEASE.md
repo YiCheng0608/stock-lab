@@ -15,7 +15,7 @@ V1 之後的發佈（使用者 2026-10-28 決定，取代 [V1 發佈隔離](#v1-
    git push origin v1.1.0
    ```
 
-3. **部署**：排程閒置時（避開台北 21:30～23:30 的 daily：21:30 與 23:00 兩次，#466），在 master 管理 checkout 執行 `bash tools/ops/deploy.sh v1.1.0 --operator "<誰，依據的 #1 留言>"`，見下節。tag 比正式 DB 多了 migration 時，先照[含 migration 的版本](#含-migration-的版本)用新 tag 的程式升級 DB，再跑 `deploy.sh`。
+3. **部署**：排程閒置時（避開台北 21:30～23:30 的 daily：21:30 與 23:00 兩次，#466），在 master 管理 checkout 執行 `bash tools/ops/deploy.sh v1.1.0 --operator "<誰，依據的 #1 留言>"`，見下節。tag 比正式 DB 多了 migration 時，先照[含 migration 的版本](#含-migration-的版本)用新 tag 的程式升級 DB，再跑 `deploy.sh`；沒升級就跑，`deploy.sh` 在 build 之後、換容器之前拒絕（下節的「DB revision」）。
 4. **讀回**：`deploy.sh` 輸出的 JSON 與 #1 留言；`docker compose -p stock-lab ps` 的 image 欄是 `stock-lab-backend:v1.1.0`／`stock-lab-web:v1.1.0`；下一次 daily 的 `schedule_runs.summary_json.runtime` 的 `image`／`head` 是該 tag 的 image 與 commit（[日誌與 run 記錄](ops/SCHEDULING.md#日誌與-run-記錄)）；看門狗的 `invariant_deploy_image` 不留言（[排程看門狗](ops/WATCHDOG.md)）。
 
 ## 部署
@@ -27,7 +27,7 @@ V1 之後的發佈（使用者 2026-10-28 決定，取代 [V1 發佈隔離](#v1-
 - `--wait-timeout`：`compose up --wait` 等服務 healthy 的秒數，預設 300。`--no-comment` 不在 #1 留言，只用於臨時 checkout 與 project 的演練（[`tools/compose/deploy_smoke.sh`](../tools/compose/deploy_smoke.sh)，CI `compose` job）。
 - `WEB_PORT`、`API_PORT`、`STOCK_ENV_FILE`（[Docker compose](ops/SETUP.md#docker-compose)）：呼叫端 shell 裡的這三個變數一律丟掉，避免剛跑過 smoke 的 shell 把正式 project 換到別的埠或 env file。compose 改從發佈 checkout 的 `.env`、再來是 compose 檔的預設取得；要指定時用 `--web-port`、`--api-port`、`--env-file`（演練用）。
 
-下列任一情況拒絕並 exit 1，發佈 checkout 的 HEAD、工作樹與 tag，以及 image、容器、volume 都不變（在 fetch 之後才發現的拒絕，會刪掉 fetch 新建的 tag ref；部署前就有的同名 tag 保留）：
+下列任一情況拒絕並 exit 1，發佈 checkout 的 HEAD、工作樹與 tag，以及 image、容器、volume 都不變（在 fetch 之後才發現的拒絕，會刪掉 fetch 新建的 tag ref；部署前就有的同名 tag 保留；DB revision 一項在 build 之後，只多出新 build 的 image）：
 
 | 檢查 | 拒絕條件 |
 | --- | --- |
@@ -36,8 +36,9 @@ V1 之後的發佈（使用者 2026-10-28 決定，取代 [V1 發佈隔離](#v1-
 | CI | tag 所在 commit **自己的** CI（`gh run list --commit <sha> --workflow CI`）最新一次（run id 最大的，同時建立的 run 列出順序不定）不是 success：紅、執行中或沒有都拒絕。不要求是 master 的祖先（`release/v1` 的 commit 有自己的 CI） |
 | 排程 | volume 的 `locks/` 的 daily、news、watchdog 鎖（[daily／news 工作的註冊與管理](ops/platform/windows.md#dailynews-工作的註冊與管理)，與 job 同一套檔案鎖）有任一被持有。三把鎖由 `docker exec` 在該 project 一個執行中、掛著 volume 的容器內以 `worker.job lock --keep-stdin` 取得：scheduler 優先，沒有時用 api 或 `compose run` 的臨時容器（手動跑的 job 也在這裡被擋下）。鎖持有到新容器起來、讀回完成（`deploy.sh` 關閉 stdin 或中途結束就釋放）；job 在這段時間起跑會記 `already_running`。舊容器被 `up` 換掉時鎖隨它釋放，新 scheduler 只在下一個觸發時間才跑 job。api、scheduler 都沒在執行時沒有 job 能持有鎖，不取鎖（輸出 `"locks": "none"`） |
 | 版本 | tag 早於 #340（tag 的 `docker-compose.yml` 沒有 `STOCK_RELEASE_TAG`）：那一版的 image 不帶 tag，部署後無法核對跑的版本。早於 #314 的 tag 也屬於這種 |
+| DB revision（#456） | build 之後、換任何容器之前，新 backend image 的臨時容器（`docker run --rm --network none`，volume 以 `:ro` 唯讀掛載，[`db_revision.py`](../tools/ops/db_revision.py) 經 stdin 傳入）以 `mode=ro` 讀 volume 裡 DB 的 `alembic_version`，與該 image 的 alembic head（`app/migration_revisions.py` 最後一個）比對，不相同就拒絕。**落後**（DB 的 revision 在 tag 的 chain 裡但較舊）：訊息寫出兩個 revision，stderr 印出停 scheduler、備份、換 tag 與 `init-db` 的命令，照[含 migration 的版本](#含-migration-的版本)做完再以同一個 tag 重跑。**超前**（DB 的 revision 不在 tag 的 chain 裡，例如部署回舊 tag）：照[版本回退](#版本回退)。沒有 `<project>_stock-data` volume（先查，`docker run -v` 會建出空的）、volume 裡沒有 `stock.db`、`alembic_version` 不是恰好一列也拒絕。輸出的 JSON 多 `db_revision`、`head` 兩欄。腳本不跑 `init-db`、不寫 DB。這一項拒絕時剛 build 的 image 留著（之後的 build 走快取），發佈 checkout 退回部署前的 HEAD（原本在 branch 上就回到該 branch），fetch 新建的 tag ref 刪掉 |
 
-全部通過後依序：fetch 該 tag（本機已有同名但指向別處的 tag 時 fetch 失敗，拒絕）→ `git checkout <tag>`（detached HEAD）並讀回 HEAD → `docker compose build`（`STOCK_RELEASE_TAG=<tag>`、`STOCK_GIT_HEAD=<該 commit>`，image 內的 `STOCK_IMAGE_TAG`／`STOCK_GIT_HEAD` 就是這兩個）→ 在新 image 的臨時容器把部署記錄寫進 volume → `docker compose up -d --no-build --wait` → 讀回三個服務跑的都是該 tag 的 image、新 scheduler 自己的版本核對（`watchdog_helper.py deploy-image`）是 ok → 釋放鎖 → 在 #1 留言。
+全部通過後依序：fetch 該 tag（本機已有同名但指向別處的 tag 時 fetch 失敗，拒絕）→ `git checkout <tag>`（detached HEAD）並讀回 HEAD → `docker compose build`（`STOCK_RELEASE_TAG=<tag>`、`STOCK_GIT_HEAD=<該 commit>`，image 內的 `STOCK_IMAGE_TAG`／`STOCK_GIT_HEAD` 就是這兩個）→ 以新 image 唯讀比對 DB revision（上表最後一列）→ 在新 image 的臨時容器把部署記錄寫進 volume → `docker compose up -d --no-build --wait` → 讀回三個服務跑的都是該 tag 的 image、新 scheduler 自己的版本核對（`watchdog_helper.py deploy-image`）是 ok → 釋放鎖 → 在 #1 留言。
 
 **部署記錄**在 volume 的 `/data/logs/deploy.json`（`<project>_stock-data`），每次部署覆寫，歷史在 #1 留言；寫的時候舊 scheduler 的看門狗鎖仍被持有，看門狗不會讀到一半：
 
@@ -65,19 +66,19 @@ V1 之後的發佈（使用者 2026-10-28 決定，取代 [V1 發佈隔離](#v1-
 | exit | 意義與處置 |
 | --- | --- |
 | 0 | 已部署並留言 |
-| 1 | 拒絕，什麼都沒變；依訊息處理後再跑 |
+| 1 | 拒絕，容器、volume 與發佈 checkout 都沒變（DB revision 拒絕時多了新 build 的 image）；依訊息處理後再跑 |
 | 3 | checkout 已開始後某一步失敗。寫記錄之前（checkout、build）：容器仍跑前一版，記錄也是前一版的；寫記錄之後（`up`、讀回）：看門狗會回報 scheduler 的 image 與記錄不符。修好原因後以同一個 tag 再跑 |
 | 4 | 已部署、記錄已寫，只有 #1 留言失敗：手動補留言 |
 | 2、64 | 環境或參數錯誤，沒有動作：找不到 docker、Docker Desktop 沒開；拿鎖的容器 120 秒內沒有回應；拿鎖的容器是 #340 之前的 image，它的 `worker.job` 不認得 `--keep-stdin`：先 `docker compose -p <project> stop` 停掉舊容器再部署（#342 切換時若已有舊的 scheduler 或 api 在跑也一樣） |
 
 ## 含 migration 的版本
 
-tag 的 Alembic head（`backend/app/migration_revisions.py` 的最後一個）比正式 DB 的 `alembic_version` 新時，要先用**新 tag 的程式**升級 DB，再跑 `deploy.sh`（例如 0024，[#462](https://github.com/YiCheng0608/stock-lab/issues/462)）。原因有兩個：
+tag 的 Alembic head（`backend/app/migration_revisions.py` 的最後一個）比正式 DB 的 `alembic_version` 新時，要先用**新 tag 的程式**升級 DB，再跑 `deploy.sh`（例如 0024，[#462](https://github.com/YiCheng0608/stock-lab/issues/462)）；順序是 SETUP 的[安全升級與復原順序](ops/SETUP.md#安全升級與復原順序)（備份、`init-db`、驗證），下面是它在正式 compose project 的寫法。原因有兩個：
 
-- api 的 readiness 只接受 current head，DB 落後時新 api 拒絕啟動。`v1.2.0` 第一次部署就是這樣失敗的；[#456](https://github.com/YiCheng0608/stock-lab/issues/456) 合併後，`deploy.sh` 會在換容器前擋下。
+- api 的 readiness 只接受 current head，DB 落後時新 api 拒絕啟動。`v1.2.0` 第一次部署就是這樣失敗的：`up` 換掉 scheduler 與 web 之後 api 才起不來。現在 `deploy.sh` 在 build 之後、換任何容器之前比對 DB revision 與 tag 的 head，落後就拒絕（[#456](https://github.com/YiCheng0608/stock-lab/issues/456)，上節表格的「DB revision」），所有容器仍跑前一版。
 - 正式環境跑著的舊 image 不認得新 revision，用它跑 `init-db` 只會停在舊 head。
 
-以下是 #456 合併前的做法，在 master 管理 checkout 的 Git Bash 依序執行。時段選排程閒置時：避開台北 21:30～23:30 的 daily（#466），也避開 news 每 2 小時的偶數整點，例如奇數點。
+`deploy.sh` 只擋下、不升級：備份與 `init-db` 仍是人工步驟，在 master 管理 checkout 的 Git Bash 依序執行（`deploy.sh` 拒絕時在 stderr 印出第 1～4 步填好 tag、project 與發佈 checkout 的命令）。時段選排程閒置時：避開台北 21:30～23:30 的 daily（#466），也避開 news 每 2 小時的偶數整點，例如奇數點。
 
 ```bash
 # 換值：TAG＝要部署的 tag；P＝正式 compose project；R＝發佈 checkout；B＝備份目錄（docs/ops/LOCAL.md）
@@ -113,7 +114,7 @@ bash tools/ops/deploy.sh "$TAG" --operator "<誰，依據的 #1 留言>"
 ```
 
 - **時間**：`init-db` 會先做遷移前的 schema 檢查。0023 → 0024 在正式副本上約 4 分鐘（238.5 s，建 index 本身不到 1 秒），這段時間 api 照常服務。
-- **`deploy.sh` 不會因為前面幾步拒絕**：發佈 checkout 停在同一個 tag，工作樹乾淨；本機已有的同名 tag 指向同一個 commit，fetch 照常通過；scheduler 停了，`deploy.sh` 就在 api 容器裡取鎖。
+- **`deploy.sh` 不會因為前面幾步拒絕**：發佈 checkout 停在同一個 tag，工作樹乾淨；本機已有的同名 tag 指向同一個 commit，fetch 照常通過；scheduler 停了，`deploy.sh` 就在 api 容器裡取鎖；第 4 步之後 DB 已在 tag 的 head，revision 比對通過。
 - **升級後不要再啟動舊的 scheduler**：daily 起跑時會用自己的程式跑 `init_db`。舊 image 不認得新 revision，會失敗。第 6 步被拒絕或失敗時，修好原因後以同一個 tag 重跑 `deploy.sh`；要放棄這個版本，就照[版本回退](#版本回退)從第 2 步的備份還原。
 - `docker compose ... run` 用的是發佈 checkout 的 `.env`，跟 `deploy.sh` 相同；指令裡不要印出環境變數（[本機檢查](WORKFLOW.md#本機檢查)的 env file 規則）。
 

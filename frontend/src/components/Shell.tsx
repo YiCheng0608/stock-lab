@@ -10,7 +10,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const dashboard = useQuery<Dashboard>({ queryKey: ['dashboard'], queryFn: getDashboard })
   return (
     <div className="app-shell">
-      <Navbar dataDate={dashboard.data?.as_of?.slice(0, 10) ?? null} dataDateLoading={dashboard.isLoading} />
+      <Navbar dataDate={dashboard.data?.as_of?.slice(0, 10) ?? null} dataDateLoading={dashboard.isLoading} dataDateError={dashboard.isError} />
       <main className="container">{children}</main>
       <footer className="container site-footer">
         <span>T 日收盤訊號 · 最早 T+1 執行 · T+5／T+20 追蹤</span>

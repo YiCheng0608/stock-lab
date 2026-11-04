@@ -160,7 +160,7 @@ check(weeklyMarkup.includes('aria-selected="true"') && weeklyMarkup.includes('�
 const loadingMarkup = renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => undefined} data={undefined} loading error={null} />)
 check(loadingMarkup.includes('aria-busy="true"') && loadingMarkup.includes('skeleton'), 'loading shows a skeleton')
 const emptyChart = renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => undefined} data={barsResponse([])} loading={false} error={null} />)
-check(emptyChart.includes('來源未提供日線') && emptyChart.includes('資料日期待核實'), 'no bars → empty state and pending date badge')
+check(emptyChart.includes('來源未提供日線') && emptyChart.includes('資料日期未提供'), 'no bars → empty state and no-date badge')
 
 // ---- #300 研究截止日期 (DESIGN_SYSTEM §4 手機第一屏): one toggle line on phones, open when a cutoff is applied ----
 const latestCutoff = renderToStaticMarkup(<StockCutoffControl asOf="" onApply={() => undefined} />)

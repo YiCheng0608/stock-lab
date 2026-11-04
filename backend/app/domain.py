@@ -156,8 +156,12 @@ GROUP_SCORE_WEIGHTS: dict[str, float] = {
 # flow and treated a member absent from the day's official institutional file
 # as missing.  1.1.0 changes only that coverage rule (docs/spec/hot_group.md);
 # score rows it overwrites are archived first (group_daily_score_archive).
+# 1.2.0 (#453) decides the catalyst from the dated MOPS event coverage: a
+# fully answered 20-session window gives a value (0 without events); any
+# unanswered session leaves it null, events or not.  1.1.0 returned null for
+# no events and a value for any event, whatever the coverage.
 HOT_GROUP_LEGACY_VERSION = "1.0.0"
-HOT_GROUP_VERSION = "1.1.0"
+HOT_GROUP_VERSION = "1.2.0"
 # Chip-row sources written by the official institutional parsers; a row
 # without one of them carries only margin data.
 OFFICIAL_INSTITUTIONAL_CHIP_SOURCES: dict[str, str] = {
@@ -309,6 +313,13 @@ HOT_GROUP_CONFIG: dict[str, Any] = {
                     "twse_tpex_official_announcement",
                     "issuer_filing",
                 ],
+            },
+            "coverage": {
+                "source": "worker.mops_events.event_coverage_states",
+                "window": "twenty_benchmark_sessions_ending_score_date",
+                "answered_states": ["empty", "verified"],
+                "complete_window_without_events": 0.0,
+                "any_unanswered_session": "component_null",
             },
             "missing_value": None,
             "missing_policy": "component_null_and_data_quality_partial",

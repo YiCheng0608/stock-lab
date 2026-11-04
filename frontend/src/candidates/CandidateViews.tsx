@@ -9,6 +9,7 @@ import type { CandidateComponent, CandidateComponentKey, CandidateItem, Candidat
 import {
   CANDIDATE_COMPONENTS,
   CANDIDATE_DISCLAIMER,
+  GROUP_EVENT_PENDING,
   NOTE_DISCLAIMER,
   NOTE_TITLE,
   PARTIAL_NOTE,
@@ -150,7 +151,14 @@ function Targets({ levels }: { levels: CandidateItem['levels'] }) {
 
 // ---- today list (#276): desktop table with a detail row per candidate, phone cards ----
 
-const groupText = (item: CandidateItem) => item.groups.length ? candidateGroupText(item.groups[0]) : '無所屬產業或題材'
+// 「事件資料待補」 of a partial group opens its glossary term, as on /themes (neither place is inside a link).
+function groupText(item: CandidateItem) {
+  if (!item.groups.length) return '無所屬產業或題材'
+  const text = candidateGroupText(item.groups[0])
+  const at = text.indexOf(GROUP_EVENT_PENDING)
+  if (at < 0) return text
+  return <span>{text.slice(0, at)}<Term id="event_data_pending">{GROUP_EVENT_PENDING}</Term>{text.slice(at + GROUP_EVENT_PENDING.length)}</span>
+}
 
 function FirstReason({ item }: { item: CandidateItem }) {
   const reason = item.reasons[0]

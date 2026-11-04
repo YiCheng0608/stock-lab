@@ -83,6 +83,9 @@ HOT_GROUP_WEIGHTS = {
     "catalyst": 0.10,
 }
 HOT_GROUP_MINIMUM_WEIGHT = 0.90
+# Versions whose four components and score are recomputed.  1.2.0 changed only
+# the catalyst (dated MOPS coverage, #453); the catalyst itself is not recomputed.
+AUDITED_HOT_GROUP_VERSIONS = frozenset({"1.1.0", "1.2.0"})
 WINDOW_WEIGHTS = {1: 0.20, 5: 0.30, 20: 0.50}
 
 
@@ -1377,10 +1380,22 @@ def _check_groups(ctx: Context, group_rows, derived: Derived, check: Check) -> N
         for gid, details, stored in rows:
             code = [day, gid]
             version = details.get("hot_group_version")
-            if version != "1.1.0":
+            if version not in AUDITED_HOT_GROUP_VERSIONS:
                 # hot_group 1.0.0 (turnover denominator, members by symbol) is not recomputed.
                 check.undetermined("hot_group_version_not_audited", code + [version])
                 continue
+            if version == "1.2.0":
+                # 1.2.0 (#453): without a fully answered window the catalyst is null.
+                coverage = details.get("catalyst_coverage")
+                if not isinstance(coverage, dict):
+                    check.fail("catalyst_coverage_missing", code)
+                elif not coverage.get("complete") and stored[6] is not None:
+                    check.fail(
+                        "catalyst_without_coverage",
+                        code + [stored[6], coverage.get("unanswered_dates")],
+                    )
+                else:
+                    check.ok()
             members = details.get("member_returns") or []
             stored_bench = details.get("benchmark_returns") or {}
             if bench is None:

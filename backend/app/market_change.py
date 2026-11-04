@@ -24,18 +24,46 @@ def traded_close(bar: MarketBar | None) -> float | None:
     return close if close is not None and math.isfinite(close) and close > 0 else None
 
 
+def _source_has_day(
+    db: Session, source: str, day: date, sessions: dict[Any, Any]
+) -> bool:
+    """Whether ``source`` has a traded bar of any stock on ``day`` (cached in ``sessions``)."""
+
+    key = ("source_day", source, day)
+    if key not in sessions:
+        sessions[key] = (
+            db.scalar(
+                select(MarketBar.id)
+                .where(
+                    MarketBar.source == source,
+                    MarketBar.trading_date == day,
+                    MarketBar.is_suspended.is_not(True),
+                )
+                .limit(1)
+            )
+            is not None
+        )
+    return sessions[key]
+
+
 def adjacent_change(
     db: Session,
     instrument_id: int,
     trading_date: date,
     bar: MarketBar | None,
-    sessions: dict[date, list[date]],
+    sessions: dict[Any, Any],
 ) -> dict[str, Any]:
     """The close of ``trading_date`` and its change.
 
     The change is ``known`` only against the stock's bar on the previous
     verified TAIEX session from the same source (UI_COPY_SPEC §8.2); a holiday
     gap, missing or suspended bar, or another source is ``unverified``.
+    ``no_previous_close`` (#465) is the one gap the source explains: it has
+    bars on the previous session, so the day was collected, but none with a
+    traded close for this stock (no trade, suspended, or listed only now; the
+    collector keeps no row without a close, and the page names no cause). No
+    earlier close stands in: the exchange's reference price is not the last
+    traded close.
     ``missing`` means no traded bar on the day. ``sessions`` caches the TAIEX
     lookup across the stocks of one response.
     """
@@ -65,7 +93,11 @@ def adjacent_change(
         )
     )
     previous_close = traded_close(previous)
-    if previous_close is None or previous.source != bar.source:
+    if previous is not None and previous.source != bar.source:
+        return market
+    if previous_close is None:
+        if _source_has_day(db, bar.source, days[-2], sessions):
+            market["change_status"] = "no_previous_close"
         return market
     change = round(close - previous_close, 6)
     market.update(

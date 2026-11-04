@@ -40,7 +40,7 @@ function MenuIcon({ open }: { open: boolean }) {
   )
 }
 
-export function Navbar({ dataDate, dataDateLoading = false }: { dataDate: string | null; dataDateLoading?: boolean }) {
+export function Navbar({ dataDate, dataDateLoading = false, dataDateError = false }: { dataDate: string | null; dataDateLoading?: boolean; dataDateError?: boolean }) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const navigate = useNavigate()
@@ -66,7 +66,7 @@ export function Navbar({ dataDate, dataDateLoading = false }: { dataDate: string
             <form className="navbar-search" role="search" onSubmit={submit}>
               <input className="input" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="代號或名稱" aria-label="搜尋個股代號或名稱" />
             </form>
-            {!dataDateLoading && <DateBadge date={dataDate} />}
+            {!dataDateLoading && <DateBadge date={dataDate} unavailable={dataDateError && !dataDate} />}
           </div>
         </div>
       </div>
