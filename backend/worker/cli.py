@@ -44,6 +44,7 @@ from .strategy_levels import run_strategy_levels
 from .theme_suggestions import run_theme_suggestions
 from .themes import sync_themes
 from .margin_lists import run_margin_lists
+from .no_trade_days import run_no_trade_days
 from .trading_calendar import run_trading_calendar
 
 
@@ -186,6 +187,12 @@ def main() -> None:
     )
     margin_lists_parser.add_argument("--start", help="YYYY-MM-DD；未指定為最早的 raw")
     margin_lists_parser.add_argument("--end", help="YYYY-MM-DD；未指定為最新的 raw")
+    no_trade_parser = subparsers.add_parser(
+        "no-trade-days",
+        help="從已存的官方每日行情 raw 回補官方無成交日 no_trade_days（collect 會寫當日；不發網路，內容沒變不改寫）",
+    )
+    no_trade_parser.add_argument("--start", help="YYYY-MM-DD；未指定為最早的 raw")
+    no_trade_parser.add_argument("--end", help="YYYY-MM-DD；未指定為最新的 raw")
     calendar_parser = subparsers.add_parser(
         "trading-calendar",
         help="抓 TWSE 官方休市表存入 trading_calendar_days（daily 的 trading_calendar 步驟；預設今年與明年，內容沒變不改寫）",
@@ -425,6 +432,8 @@ def main() -> None:
         result = run_strategy_levels(parse_date(args.run_date))
     elif args.command == "trading-calendar":
         result = run_trading_calendar(years=args.years)
+    elif args.command == "no-trade-days":
+        result = run_no_trade_days(parse_date(args.start), parse_date(args.end))
     elif args.command == "margin-lists":
         result = run_margin_lists(parse_date(args.start), parse_date(args.end))
     elif args.command == "candidate-notes":
@@ -525,7 +534,10 @@ def main() -> None:
         "no_data",
     }:
         raise SystemExit(1)
-    if args.command == "margin-lists" and result.get("status") != "success":
+    if (
+        args.command in {"margin-lists", "no-trade-days"}
+        and result.get("status") != "success"
+    ):
         raise SystemExit(2 if result.get("status") == "partial" else 1)
     if args.command == "chips" and result.get("status") != "success":
         raise SystemExit(2 if result.get("status") == "partial" else 1)

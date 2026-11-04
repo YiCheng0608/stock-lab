@@ -721,6 +721,13 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0024_ingestion_run_indexes', CURRENT_TIMESTAMP)"
         )
     )
+    # 0025 only adds no_trade_days (#454), made by create_all with its indexes.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0025_no_trade_days', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:
