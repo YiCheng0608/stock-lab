@@ -61,7 +61,7 @@
 | 編號 | 類型 | 檢查 | 怎麼判 |
 | --- | --- | --- | --- |
 | S1 | CI | 頁面可用 | 不依賴選股：沒有 `E`、`S` 時只驗 `stocks` 兩張截圖。每張截圖 `ready` true、`missingClicks` 空、`httpErrors` 與 `consoleErrors` 空、`overflow` false |
-| S2 | CI | 目錄（不依賴選股） | `stocks-1280.txt` 有表頭整行 `代號\t名稱\t交易所\t類型\t最近收盤\t目前研究動作\t策略判斷資料`；`items[0].instrument.symbol` 開頭的列存在；`第 1／<total_pages> 頁 · 共 <total 千分位> 筆` 為整行 |
+| S2 | CI | 目錄（不依賴選股） | `stocks-1280.txt` 有表頭整行 `代號\t名稱\t交易所\t類型\t最近收盤（元）\t目前研究動作\t策略判斷資料`；`items[0].instrument.symbol` 開頭的列存在；`第 1／<total_pages> 頁 · 共 <total 千分位> 筆` 為整行 |
 | S3 | CI | 頁首資料日與來源 | `stock-1280.txt` 有整行 `<S>`；第一個 `資料 ` 開頭的行在導覽列（`資料 <facts D/>`），第二個是 `資料 <I/>`，其下一行以 `來源 ` 開頭且不是 `來源 尚無已核對的價格來源`；`I` 等於 `stock-bars.json` 的 `data_as_of` |
 | S4 | CI | K 線卡 | 整行 `K 線與技術指標` 的下一行是 `資料 <I/>`；有 `來源 ` 開頭的行與 `日線批次計算於` 開頭的行 |
 | S5 | CI | 研究條件 | `stock-research-1280.txt` 有整行 `研究動作`；有 `資料日期：<I/>` 開頭的行與 `資料日：<I/> · 價位語意：` 開頭的行（`decision_summary` 為 null 時改查 `尚無行動摘要。`）；`strategy_board.candidate` 非 null 時再查整行 `每日候選`、`AI 推論` 至少 1 行、`^來源：` 行結尾為 `（推論）`（#274 起候選資訊在策略總表的候選列，不再有 `明日候選` 區） |

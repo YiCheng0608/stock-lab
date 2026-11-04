@@ -44,6 +44,21 @@ const cells = (row: string, tag: 'th' | 'td') => row.match(new RegExp(`<${tag}(?
 function tables(markup: string): string[] {
   return markup.match(/<table[\s\S]*?<\/table>/g) ?? []
 }
+// Numeric headers without a unit, each with the reason (UI_COPY_SPEC §8.4); everything else ends in 「（單位）」.
+const UNITLESS_HEADERS: Record<string, string> = {
+  排名: 'an ordinal; the cell is #N',
+  資料日: 'a date column',
+  資料批次: 'a batch identifier, not a quantity',
+  RR: 'the cell carries 倍 (UI_COPY_SPEC §10)',
+  原值: 'mixed units per sub-item; each cell carries its own unit',
+  百分位: '0–100; the scale is in the table note, and a longer header would overflow the 390px card',
+  相對報酬: 'same-board percentile 0–100; the scale is in the table note',
+  廣度: 'same-board percentile 0–100; the scale is in the table note',
+  量能: 'same-board percentile 0–100; the scale is in the table note',
+  法人: 'same-board percentile 0–100; the scale is in the table note',
+  催化劑: 'same-board percentile 0–100; the scale is in the table note',
+}
+const hasUnit = (label: string) => /（[^（）]+）$/.test(label) || label in UNITLESS_HEADERS
 function checkAligned(name: string, markup: string, numericHeaders: string[]) {
   const found = tables(markup)
   check(found.length > 0, `${name}: no table rendered`)
@@ -56,6 +71,10 @@ function checkAligned(name: string, markup: string, numericHeaders: string[]) {
       const index = labels.indexOf(label)
       check(index >= 0 && numeric[index], `${name}: header 「${label}」 is not right-aligned (th without num)`)
     }
+    // #463 (UI_COPY_SPEC §8.4): every numeric column names its unit in the header, e.g. 「收盤（元）」.
+    labels.forEach((label, index) => {
+      if (numeric[index]) check(hasUnit(label), `${name}: numeric header 「${label}」 names no unit; write it as 「${label}（單位）」 (UI_COPY_SPEC §8.4)`)
+    })
     const rows = (/<tbody>([\s\S]*?)<\/tbody>/.exec(table)?.[1] ?? '').match(/<tr[\s\S]*?<\/tr>/g) ?? []
     for (const row of rows) {
       const data = cells(row, 'td')
@@ -77,9 +96,9 @@ const shared = render('DataTable', () => <SharedTable
   note="單位：張"
   rows={[{ id: 'a', name: '甲', value: 1 }, { id: 'b', name: '乙', value: 2 }]}
   rowKey={(row) => row.id}
-  columns={[{ key: 'name', header: '名稱', cell: (row) => row.name }, { key: 'value', header: '數值', num: true, cell: (row) => String(row.value) }]}
+  columns={[{ key: 'name', header: '名稱', cell: (row) => row.name }, { key: 'value', header: '數值（張）', num: true, cell: (row) => String(row.value) }]}
 />)
-checkAligned('DataTable', shared, ['數值'])
+checkAligned('DataTable', shared, ['數值（張）'])
 check(shared.includes('<p class="table-note">單位：張</p>'), 'DataTable keeps the unit note above the table')
 
 // ---- no table is written by hand outside the shared component ----
@@ -128,7 +147,7 @@ const chipRows = [
 ] as unknown as InstrumentDetail['chips']
 const ChipTable = component('ChipTable')
 const chips = render('ChipTable', () => <ChipTable {...{ rows: chipRows }} />)
-checkAligned('個股籌碼', chips, ['外資買賣超', '投信', '自營商', '融資增減'])
+checkAligned('個股籌碼', chips, ['外資買賣超（張）', '投信（張）', '自營商（張）', '融資增減（張）'])
 check(bodyText(chips).includes('+58') && bodyText(chips).includes('-8') && !chips.includes('57.797'), '個股籌碼: institutional flow is whole lots')
 check(chips.includes('57,797'), '個股籌碼: the original share count stays in the source details')
 // #395: each value group names its own file, data date and collection time.
@@ -150,7 +169,7 @@ const barRows = [
 ] as unknown as InstrumentDetail['bars']
 const BarTable = component('BarTable')
 const bars = render('BarTable', () => <BarTable {...{ rows: barRows, instrumentType: 'stock' }} />)
-checkAligned('原始行情', bars, ['收盤', '最高', '最低', '成交量'])
+checkAligned('原始行情', bars, ['收盤（元）', '最高（元）', '最低（元）', '成交量（張）', '成交股數（股）'])
 check(bodyText(bars).includes('21.10') && bodyText(bars).includes('20.50') && bodyText(bars).includes('2'), '原始行情: prices keep two decimals under 50, volume is whole lots')
 
 const directoryRows = [
@@ -159,7 +178,7 @@ const directoryRows = [
 ] as unknown as StockDirectoryRow[]
 const StockTable = component('StockTable')
 const directory = render('StockTable', () => <StockTable {...{ rows: directoryRows, dataAsOf: '2026-10-22' }} />)
-checkAligned('個股清單', directory, ['最近收盤'])
+checkAligned('個股清單', directory, ['最近收盤（元）'])
 check(bodyText(directory).includes('21.10') && bodyText(directory).includes('2,510.00'), '個股清單: a column across stocks keeps two decimals')
 // #300 phone cards (DESIGN_SYSTEM §5 個股清單, §5.1): name and close → 市場 · 類型 → action and quality; no table to scroll.
 const count = (markup: string, needle: string) => markup.split(needle).length - 1
@@ -183,20 +202,20 @@ const members = render('ThemeMemberTable', () => <ThemeMemberTable rows={[
   { exchange: 'TWSE', symbol: '1742', name: '台蠟', role: 'member', latest_bar: { date: '2026-10-22', close: 21.1 }, change: 0.1, change_pct: 0.0047619, change_status: 'known', turnover: 1.2e8, turnover_status: 'available', excess_return_5d: 0.01, excess_return_20d: -0.1 },
   { exchange: 'TWSE', symbol: '2330', name: '台積電', role: 'leader', latest_bar: { date: '2026-10-22', close: 2510 }, change: -10, change_pct: -0.0039683, change_status: 'known', turnover: 4.5e10, turnover_status: 'available', excess_return_5d: 0.002, excess_return_20d: 0.03 },
 ] as never} withEvidence={false} membersAsOf="2026-10-22" />)
-checkAligned('族群成員', members, ['收盤', '漲跌幅', '成交值', '5 日相對', '20 日相對'])
+checkAligned('族群成員', members, ['收盤（元）', '漲跌幅（%）', '成交金額（億元）', '5 日相對（%）', '20 日相對（%）'])
 check(bodyText(members).includes('21.10') && bodyText(members).includes('2,510.00'), '族群成員: closes keep two decimals')
 check(['+0.48', '-0.40', '1.20', '450.00', '+1.00', '-10.00', '+0.20', '+3.00'].every((value) => bodyText(members).includes(value)), `族群成員: percent and 億元 keep two decimals, got ${bodyText(members).join('|')}`)
 
 const details = render('ScoreDetails', () => <ScoreDetails item={completeItem()} open />)
-checkAligned('個股頁候選評分細節', details, ['原值', '百分位', '子項權重'])
+checkAligned('個股頁候選評分細節', details, ['原值', '百分位', '權重（%）'])
 const detailHeaders = (/<thead>([\s\S]*?)<\/thead>/.exec(details)?.[1] ?? '').match(/<th[\s>]/g) ?? []
 check(detailHeaders.length <= 4, `個股頁候選評分細節: ${detailHeaders.length} columns in a card; the group title belongs on its own row (§5.1)`)
 // Today list (#276): the levels, close, RR and total are numeric in th and every row.
 const todayList = render('CandidatesSection', () => <CandidatesSection data={longList()} loading={false} error={null} />)
-checkAligned('今日候選表', todayList, ['最近收盤', '進場區', '停損', '目標', 'RR', '總分'])
+checkAligned('今日候選表', todayList, ['最近收盤（元）', '進場區（元）', '停損（元）', '目標一／目標二（元）', 'RR', '總分（0–100）'])
 
 const chart = render('StockBarsChart', () => <StockBarsChart data={barsResponse([tradedBar('2026-10-21', 21.1, 70), tradedBar('2026-10-22', 21.15, 71)])} interval="day" onIntervalChange={() => undefined} loading={false} error={null} />)
-checkAligned('K 線資料', chart, ['開', '高', '低', '收', '成交量'])
+checkAligned('K 線資料', chart, ['開（元）', '高（元）', '低（元）', '收（元）', '成交量（張）'])
 
 const action = {
   instrument: { id: 1, exchange: 'TWSE', symbol: '1742', name: '台蠟', instrument_type: 'stock', etf_category: null },
@@ -210,14 +229,14 @@ check(compact.includes('+0.60') && compact.includes('+2.93%'), '今日與行動�
 
 const runs = [{ id: 1, updated_at: '2026-10-22T10:00:00+00:00', source: 'twse', run_date: '2026-10-22', status: 'success', records: 1234, data_as_of: '2026-10-22', error: null }]
 const IngestionRunTable = component('IngestionRunTable')
-checkAligned('系統頁擷取狀態', render('IngestionRunTable', () => <IngestionRunTable {...{ rows: runs }} />), ['筆數'])
+checkAligned('系統頁擷取狀態', render('IngestionRunTable', () => <IngestionRunTable {...{ rows: runs }} />), ['資料量（筆）'])
 const rawRows = [{ id: 1, collected_at: '2026-10-22', ingestion_run_id: 12, source: 'twse', data_as_of: '2026-10-22', endpoint: 'STOCK_DAY_ALL', sha256: 'abc' }] as unknown as RawPayload[]
 const RawTable = component('RawTable')
 checkAligned('系統頁原始來源', render('RawTable', () => <RawTable {...{ rows: rawRows }} />), ['資料批次'])
 const BacktestTable = component('BacktestTable')
-checkAligned('技術回測', render('BacktestTable', () => <BacktestTable {...{ groups: [{ strategy: 'breakout_v1', version: '1.0.0', instrument_type: 'stock', horizon: 5, sample: 12, comparable: 10, incomparable: 2, assessment: 'complete' }] }} />), ['期限', '樣本', '可比', '不可比'])
+checkAligned('技術回測', render('BacktestTable', () => <BacktestTable {...{ groups: [{ strategy: 'breakout_v1', version: '1.0.0', instrument_type: 'stock', horizon: 5, sample: 12, comparable: 10, incomparable: 2, assessment: 'complete' }] }} />), ['期限（交易日）', '樣本（筆）', '可比（筆）', '不可比（筆）'])
 const BackfillRunTable = component('BackfillRunTable')
-checkAligned('回補紀錄', render('BackfillRunTable', () => <BackfillRunTable {...{ runs: [{ id: 1, updated_at: '2026-10-22T10:00:00+00:00', metadata: { start_date: '2026-10-01', end_date: '2026-10-22' }, status: 'success', records: 99, error: null }] }} />), ['筆數'])
+checkAligned('回補紀錄', render('BackfillRunTable', () => <BackfillRunTable {...{ runs: [{ id: 1, updated_at: '2026-10-22T10:00:00+00:00', metadata: { start_date: '2026-10-01', end_date: '2026-10-22' }, status: 'success', records: 99, error: null }] }} />), ['資料量（筆）'])
 
 // The runner keeps only the first lines of an error, so the full list goes to stderr first.
 if (failures.length) {

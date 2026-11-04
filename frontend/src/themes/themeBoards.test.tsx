@@ -153,6 +153,15 @@ check(MEMBER_PAGE_SIZE === 30, 'member page size')
 const industryDetail = { ...themeDetail(), board: 'industry', theme: { ...themeDetail().theme, theme_id: 'industry-99', display_name: '玻璃陶瓷' }, members: [] }
 const offBoard = render(<ThemeDetailView detail={industryDetail} board={loaded(industryBoard())} members={loaded({ ...membersPage(), items: [] })} onMemberPageChange={noop} news={loaded({ items: [] })} />)
 check(offBoard.includes('未列入本日榜單') && offBoard.includes('不在本日產業榜') && !offBoard.includes('<th>證據</th>'), 'a group off the board: no rank, no evidence column for industries')
+// #463: rank and components come from the board request; while it loads or after it fails the page never says the
+// group is off the board (UI_COPY_SPEC §8.5 族群詳情的名次與五分項).
+const boardPending = render(<ThemeDetailView detail={themeDetail()} board={waiting} members={loaded(membersPage())} onMemberPageChange={noop} news={loaded({ items: [] })} />)
+check(!boardPending.includes('不在本日') && !boardPending.includes('未列入本日榜單'), 'a loading board is not 「不在本日榜」')
+check(count(boardPending, 'aria-busy="true"') >= 2 && boardPending.includes('榜單載入中'), `the rank cell and the components card are busy while the board loads: ${count(boardPending, 'aria-busy="true"')}`)
+const boardFailed = render(<ThemeDetailView detail={themeDetail()} board={{ data: undefined, loading: false, error: new Error('API 503') }} members={loaded(membersPage())} onMemberPageChange={noop} news={loaded({ items: [] })} />)
+check(!boardFailed.includes('不在本日') && !boardFailed.includes('未列入本日榜單') && !boardFailed.includes('aria-busy="true"'), 'a failed board is not 「不在本日榜」 and not busy')
+check(boardFailed.includes('榜單暫時無法載入') && boardFailed.includes('榜單暫時無法載入：API 503'), 'a failed board says it could not load, with the reason in the components card')
+check(detailMarkup.includes('題材榜共 2 個族群') && !detailMarkup.includes('不在本日') && !detailMarkup.includes('aria-busy="true"'), 'a loaded board on which the group ranks shows the board size')
 check(!offBoard.includes('待重新核實') && !offBoard.includes('class="data-gap"') && !offBoard.includes('題材表版本'), 'industry detail shows no temporary verification notice and no theme table version')
 // ---- #280 member table: columns, sort, stale day, blanks and phone cards (UI_COPY_SPEC §8.5) ----
 const strip = (markup: string) => markup.replace(/<[^>]+>/g, '')
@@ -168,13 +177,13 @@ const cellsOf = (row: string) => [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)]
 check(DEFAULT_MEMBER_SORT === 'turnover', 'the member table sorts by turnover by default')
 check(JSON.stringify(memberQuery(2, 'return_5d')) === JSON.stringify({ page: 2, page_size: MEMBER_PAGE_SIZE, sort: 'return_5d' }), 'a member page asks for its sort')
 check(MEMBER_SORTS.map((option) => option.id).join() === 'turnover,change_pct,return_5d,return_20d,symbol', 'sort options')
-check(MEMBER_SORTS.map((option) => option.label).join() === '成交值,漲跌幅,5 日相對,20 日相對,代號', 'sort option labels')
-check(detailMarkup.includes('aria-label="成員排序"') && detailMarkup.includes('<option value="turnover" selected="">成交值</option>'), 'the sort select shows turnover by default')
+check(MEMBER_SORTS.map((option) => option.label).join() === '成交金額,漲跌幅,5 日相對,20 日相對,代號', 'sort option labels')
+check(detailMarkup.includes('aria-label="成員排序"') && detailMarkup.includes('<option value="turnover" selected="">成交金額</option>'), 'the sort select shows turnover by default')
 const bySort = render(<ThemeDetailView detail={themeDetail()} board={loaded(themeBoard())} members={loaded(membersPage())} memberSort="change_pct" onMemberSortChange={noop} onMemberPageChange={noop} news={loaded({ items: [] })} />)
 check(bySort.includes('<option value="change_pct" selected="">漲跌幅</option>') && !bySort.includes('<option value="turnover" selected="">'), 'another sort is selected when chosen')
 check(bySort.includes('第 2／2 頁') && bySort.includes('下一頁'), 'paging stays under a chosen sort')
 // Theme board: role only as the 領先成員 badge in the name cell, evidence stays last.
-check(headersOf(detailMarkup).join('|') === '代號|名稱|市場|收盤|漲跌幅|成交值|5 日相對|20 日相對|證據', `theme member headers: ${headersOf(detailMarkup).join('|')}`)
+check(headersOf(detailMarkup).join('|') === '代號|名稱|市場|收盤（元）|漲跌幅（%）|成交金額（億元）|5 日相對（%）|20 日相對（%）|證據', `theme member headers: ${headersOf(detailMarkup).join('|')}`)
 const leader = rowOf(detailMarkup, '2330')
 const leaderCells = cellsOf(leader)
 check(leaderCells[1].includes('台積電') && leaderCells[1].includes('候選 #3') && leaderCells[1].includes('領先成員'), `leader name cell carries its badges: ${leaderCells[1]}`)
@@ -194,23 +203,23 @@ check(!cellsOf(rowOf(detailMarkup, '6640'))[3], 'a member without any bar has a 
 const noteAt = detailMarkup.indexOf('class="table-note member-note"')
 check(noteAt >= 0 && noteAt < detailMarkup.indexOf('member-table-wrap') && noteAt < detailMarkup.indexOf('class="card-list member-cards"'), 'the member note precedes the table and the cards')
 const memberNote = strip(detailMarkup.slice(detailMarkup.indexOf('>', noteAt) + 1, detailMarkup.indexOf('</p>', noteAt)))
-check(memberNote.startsWith('單位：收盤為各標的報價幣別的元，成交值為億元；漲跌幅與 5／20 日相對加權指數的報酬為 %。'), `member unit note: ${memberNote.slice(0, 80)}`)
-for (const sentence of ['漲跌幅空白表示漲跌待核實。', '成交值空白表示成交金額未取得。', '5／20 日相對空白表示未列入當日族群計分。', '收盤下方的「資料 YYYY/MM/DD」表示該檔沒有成員資料日的日線，漲跌幅與成交值留空。', '收盤空白表示該檔尚無日線。']) {
+check(memberNote.startsWith('收盤為各標的報價幣別的元；成交金額是當日成交金額；5／20 日相對是相對加權指數的報酬。'), `member unit note: ${memberNote.slice(0, 80)}`)
+for (const sentence of ['漲跌幅空白表示漲跌待核實。', '成交金額空白表示來源未提供。', '5／20 日相對空白表示未列入當日族群計分。', '收盤下方的「資料 YYYY/MM/DD」表示該檔沒有成員資料日的日線，漲跌幅與成交金額留空。', '收盤空白表示該檔尚無日線。']) {
   check(memberNote.includes(sentence), `member note says ${sentence}`)
 }
-check(!memberNote.includes('成交金額待核實'), 'an unknown turnover sentence only when a row is unknown')
-check(memberTableNote([{ ...membersPage().items[0] }], '2026-09-08') === '單位：收盤為各標的報價幣別的元，成交值為億元；漲跌幅與 5／20 日相對加權指數的報酬為 %。', 'no blank, no blank sentence')
-check(memberTableNote([{ ...membersPage().items[0], turnover: null, turnover_status: 'unknown' }], '2026-09-08').endsWith('成交值空白表示成交金額待核實。'), 'unknown turnover reads 待核實')
+check(!memberNote.includes('成交金額空白表示待核實'), 'an unknown turnover sentence only when a row is unknown')
+check(memberTableNote([{ ...membersPage().items[0] }], '2026-09-08') === '收盤為各標的報價幣別的元；成交金額是當日成交金額；5／20 日相對是相對加權指數的報酬。', 'no blank, no blank sentence')
+check(memberTableNote([{ ...membersPage().items[0], turnover: null, turnover_status: 'unknown' }], '2026-09-08').endsWith('成交金額空白表示待核實。'), 'unknown turnover reads 待核實')
 // Industry board: no role column, no evidence column.
 const industryMembers = render(<ThemeDetailView detail={industryDetail} board={loaded(industryBoard())} members={loaded(membersPage())} onMemberPageChange={noop} news={loaded({ items: [] })} />)
-check(headersOf(industryMembers).join('|') === '代號|名稱|市場|收盤|漲跌幅|成交值|5 日相對|20 日相對', `industry member headers: ${headersOf(industryMembers).join('|')}`)
+check(headersOf(industryMembers).join('|') === '代號|名稱|市場|收盤（元）|漲跌幅（%）|成交金額（億元）|5 日相對（%）|20 日相對（%）', `industry member headers: ${headersOf(industryMembers).join('|')}`)
 check(!cellsOf(rowOf(industryMembers, '2330'))[1].includes('領先成員') && cellsOf(rowOf(industryMembers, '2330'))[1].includes('候選 #3'), 'industries show no role, keep the candidate badge')
 // 390: one card per member, title row with close and change, then three cells.
 const cards = detailMarkup.slice(detailMarkup.indexOf('class="card-list member-cards"'), detailMarkup.indexOf('pagination-controls', detailMarkup.indexOf('class="card-list member-cards"')))
 check(count(cards, 'class="member-card"') === membersPage().items.length, 'one phone card per member')
 const leaderCard = cards.slice(cards.indexOf('class="member-card"'), cards.indexOf('class="member-card"', cards.indexOf('class="member-card"') + 1))
 check(strip(leaderCard).includes('2330 台積電') && leaderCard.includes('1,085.00') && leaderCard.includes('tone-up">+1.40%<'), `card title row: ${strip(leaderCard)}`)
-check(['成交值', '5 日相對', '20 日相對'].every((label) => leaderCard.includes(`<dt>${label}</dt>`)) && leaderCard.includes('<dd>325.12</dd>'), 'card has the three cells')
+check(['成交金額（億元）', '5 日相對', '20 日相對'].every((label) => leaderCard.includes(`<dt>${label}</dt>`)) && leaderCard.includes('<dd>325.12</dd>') && leaderCard.includes('tone-up">+1.23%<'), 'card has the three cells, 億元 on the label and % on the returns')
 check(leaderCard.includes('主要業務 · 關聯度高'), 'theme cards keep the evidence')
 check(strip(cards).includes('資料 2026/09/05'), 'a stale card shows its bar date')
 

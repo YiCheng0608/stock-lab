@@ -226,7 +226,7 @@ def _candidates(count=2, inference=True):
 # The 1280 table (#276): rank cell first, tab-separated cells, then the opened detail row.
 TODAY_CANDIDATES = (
     "明日候選\n資料 2026/10/16\n2 檔\n"
-    "名次\t股票\t所屬族群（名次）\t最近收盤\n"
+    "名次\t股票\t所屬族群（名次）\t最近收盤（元）\n"
     "#1\t9100 示範一\n上市 · 突破條件\t半導體（產業，第 1 名／9）\t21.10\n+0.48%\tAI 推論 ▸\n"
     "AI 推論\n" + page_checks.CANDIDATE_DISCLAIMER + "\n來源：訊號 a（推論）\n"
     "#2\t9101 示範二\n上櫃 · 回踩條件\t無所屬產業或題材\t13.20\n漲跌待核實\tAI 說明 ▸\n"
@@ -508,7 +508,7 @@ def test_a5_reports_the_line_of_an_inference_mark(tmp_path):
         page_checks.a5(run)
 
 
-MEMBER_HEADER = "代號\t名稱\t市場\t收盤\t漲跌幅\t成交值\t5 日相對\t20 日相對\n"
+MEMBER_HEADER = "代號\t名稱\t市場\t收盤（元）\t漲跌幅（%）\t成交金額（億元）\t5 日相對（%）\t20 日相對（%）\n"
 # 9102 has the most turnover, 9101 the highest close, 9201 no turnover.
 MEMBERS = [
     {"symbol": "9102", "exchange": "TWSE", "name": "示範封測", "turnover": 5e9},
@@ -583,13 +583,13 @@ def test_g8_fails_on_the_old_page_sorted_by_close(tmp_path):
 
 def test_g8_fails_when_the_api_is_not_sorted_by_turnover(tmp_path):
     items = [MEMBERS[1], MEMBERS[0], MEMBERS[2]]
-    with pytest.raises(page_checks.Fail, match="不是依成交值由大到小"):
+    with pytest.raises(page_checks.Fail, match="不是依成交金額由大到小"):
         page_checks.g8(_theme_run(tmp_path, 3, "共 3 檔", items=items))
 
 
 def test_g8_needs_a_member_without_turnover_last(tmp_path):
     items = [MEMBERS[2], MEMBERS[0], MEMBERS[1]]
-    with pytest.raises(page_checks.Fail, match="不是依成交值由大到小"):
+    with pytest.raises(page_checks.Fail, match="不是依成交金額由大到小"):
         page_checks.g8(_theme_run(tmp_path, 3, "共 3 檔", items=items))
 
 
