@@ -566,7 +566,7 @@ export type SignalTrackingResponse = {
 }
 
 // User tracking plans (GET /tracking, docs/spec/tracking.md 使用者追蹤計畫): every fill and result is simulated.
-export type PlanStatus = 'pending' | 'triggered' | 'target_hit' | 'invalidated' | 'expired' | 'closed' | 'incomparable' | 'cancelled'
+export type PlanStatus = 'pending' | 'triggered' | 'target_hit' | 'invalidated' | 'expired' | 'closed' | 'incomparable' | 'not_entered' | 'cancelled'
 
 export type TrackingPlan = {
   id: number
@@ -798,6 +798,7 @@ export type BacktestSummary = {
     status: string
     run_type: string
     request_key: string | null
+    tracking_version?: string | null
     run_date: string | null
     data_as_of: string | null
     metadata: Record<string, unknown>

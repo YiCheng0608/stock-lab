@@ -273,9 +273,9 @@ def test_payload_identity_defaults_and_idempotence(tmp_path, entry, fk, shape):
             for kind, name, owner, sql in after["main"][0]
             if owner == "signal_settlements" or name == "settlement_view"
         ]
-        assert [
-            row[:-1] for row in after["main"][1]["signal_settlements"]
-        ] == before["main"][1]["signal_settlements"]
+        assert [row[:-1] for row in after["main"][1]["signal_settlements"]] == before[
+            "main"
+        ][1]["signal_settlements"]
         assert {row[-1] for row in after["main"][1]["signal_settlements"]} == {
             ("str", "tracking_v1")
         }

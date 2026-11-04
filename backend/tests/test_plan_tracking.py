@@ -716,6 +716,49 @@ def test_rerunning_the_same_target_date_changes_nothing(db):
     assert after[0]["updated_at"] == RUN_AT
 
 
+GAP_OVER_TARGET = (104.0, 105.0, 103.5, 104.5)  # opens at or above 103.2
+
+
+def test_each_plan_keeps_its_own_tracking_rules(db):
+    # A plan_tracking_v1 plan made before #444 is still updated with tracking_v1.
+    old_instrument, old_plan = new_plan(db, "9101")
+    old_plan.tracking_version = "plan_tracking_v1"
+    db.commit()
+    instrument, plan = new_plan(db, "9102")
+    assert plan.tracking_version == "plan_tracking_v2"
+    follow(db, old_instrument, GAP_OVER_TARGET, INSIDE)
+    days = follow(db, instrument, GAP_OVER_TARGET, INSIDE)
+    assert run(db, days[-1])["transitions"] == {
+        "pending->not_entered": 1,
+        "pending->target_hit": 1,
+    }
+    assert (old_plan.status, old_plan.tracking_version) == (
+        "target_hit",
+        "plan_tracking_v1",
+    )
+    assert old_plan.execution_price == pytest.approx(104.0 * BUY)
+    assert old_plan.outcome_price == pytest.approx(103.2 * SELL)
+    # tracking_v2: the fill session opened over the first target, so no entry.
+    assert (plan.status, plan.status_reason, plan.outcome_date) == (
+        "not_entered",
+        "gap_above_target",
+        days[0],
+    )
+    assert plan.execution_date is None and plan.execution_price is None
+    assert plan.outcome_price is None and plan.result_return is None
+    assert plan.result_comparable is None and plan.data_quality == "complete"
+    assert [
+        (r.status, r.entry_trigger, r.execution_price) for r in session_rows(db, plan)
+    ] == [
+        ("not_entered", True, None),
+        ("not_entered", False, None),
+    ]
+    # Both ended: a rerun of the same date reads neither again.
+    before = snapshot(db, plan), snapshot(db, old_plan)
+    assert run(db, days[-1])["plans_checked"] == 0
+    assert (snapshot(db, plan), snapshot(db, old_plan)) == before
+
+
 def test_bars_after_the_target_date_are_not_used(db):
     instrument, plan = new_plan(db)
     days = follow(db, instrument, FLAT, FILL)

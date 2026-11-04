@@ -8,11 +8,27 @@
 3. replay 固定 canonical version，保存日期範圍、cutoff、設定快照與執行數；相同成功 request key 可重用既有 run。研究用的策略覆寫（`backtest(registry=...)`，逐一移除條件的 ablation 見 `app.strategies.ablation`）只在正式 DB 的副本或隔離 DB 執行：覆寫的策略以自己的名稱與 kind 寫 `strategy_versions`，request key 加 `:research:<策略名稱>`，不重用 canonical run，也不進 `REGISTRY`。研究 run 每個交易日的訊號寫完就 commit，追蹤每批 2,000 個訊號 commit 一次，摘要以 SQL 彙總；中途失敗時已 commit 的訊號、evaluation 與 settlement 留在同一個 namespace，run 記 `failed`，重跑（或成功後加 `--force`）會覆寫成與一次跑完相同的結果；研究腳本在 daily 時段前以同一機制停下（`should_stop`，`BacktestPaused`）。不帶覆寫的 replay 仍是單一 transaction，失敗時全部 rollback（[#318](https://github.com/YiCheng0608/stock-lab/issues/318)）。
 4. audit 保存 observation、data_incomplete 等所有規則列；technical summary 只納入 actionable evidence，按策略／標的類型／T+5、T+20 分組。
 5. 三個月或更短一律標 `insufficient_sample`；更長也不等於參數最佳化、walk-forward、獨立 OOS 或策略有效。勝率不能單獨決定採用。
-6. 逐日成交與出場規則只寫在 `app.tracking.track_path`（T+N 結果為 `settle`），系統訊號追蹤（`worker.pipeline._evaluate_signal_tracking`）與[使用者追蹤計畫](#使用者追蹤計畫)共用。
+6. 逐日成交與出場規則只寫在 `app.tracking.track_path`（T+N 結果為 `settle`），系統訊號追蹤（`worker.pipeline._evaluate_signal_tracking`）與[使用者追蹤計畫](#使用者追蹤計畫)共用；規則有版本，見[口徑版本](#口徑版本)。
+7. daily 的 `evaluate` 只重算 `analysis-*` 訊號；`backtest-*` 訊號只由它所屬的 backtest run 依該 run 的 cutoff 追蹤，daily 不重算、不改寫（[#444](https://github.com/YiCheng0608/stock-lab/issues/444)）。
+
+### 口徑版本
+
+追蹤規則以 `app.tracking` 的規則版本區分；新版本不改寫舊版本算出的列（[#444](https://github.com/YiCheng0608/stock-lab/issues/444)）。
+
+| 規則版本 | 內容 |
+| --- | --- |
+| `tracking_v1` | T+1 起第一次觸發即成交，成交當根就判定目標一／失效價；T+N 結果用整條路徑的成交（T+N 之後才成交也算）。 |
+| `tracking_v2`（現行） | 與 v1 相同，另有兩點：(1) 觸發進場的那一根，若開盤或原始成交價已在目標一（含）以上，或已在失效價（含）以下，就**不進場**（`gap_above_target`／`gap_below_invalid`），之後的日線也不再進場。理由：目標一與失效價是「成交後」首次觸及才算，開盤已越過時觸及發生在成交當下或之前；而且成交價已不在失效價～目標一之間，價位與 RR 的前提不成立。比較用換算到當日價格基準的原始價，不含滑價。(2) T+N 結果只用第 N 根以前（含）的成交；第 N 根以前沒成交的列不可比較，原因 `not_filled_by_horizon`（第 N 根以前已判定不進場則用上面兩個原因碼），不帶第 N 根之後的成交價、出場與 `first_trigger`。第 N 根以前已成交的路徑，結果與 v1 逐欄相同。 |
+
+版本記在：
+
+- **settlement**：`signal_settlements.tracking_rules`（0023；0023 以前的列為 `tracking_v1`），每次寫入都帶算它的版本；`GET /signals/{id}` 與 `GET /tracking/{signal_key}` 的 settlement 帶 `tracking_rules`。`analysis-*` 訊號在 daily 重算時改用現行版本；已結束（不再被 `evaluate` 選到）的訊號保留原版本的列。
+- **technical backtest**：request key `technical-backtest:<版本>:<起>:<迄>`，現行 `v2`（`tracking_v2`），`v1` 是 `tracking_v1`。新版本是新的 key 與新的 run，舊 run 的訊號與 settlement 不動；run metadata 記 `tracking_version`、`tracking_rules`，`GET /backtest/summary` 的 `run.tracking_version` 由 request key 讀出，技術回測頁顯示「追蹤口徑 {版本}」。
+- **使用者追蹤計畫**：`tracking_version`，`plan_tracking_v1` 用 `tracking_v1`、`plan_tracking_v2` 用 `tracking_v2`（`app.domain.PLAN_TRACKING_RULES`）。新計畫寫現行版本；舊版本的計畫照自己的版本繼續重算。
 
 ## 使用者追蹤計畫
 
-`plan_tracking_v1`：使用者把一筆成立的研究條件存成計畫，系統每日以日線規則模擬成交與出場。計畫不是實際成交，也不寫入或讀取持倉（`portfolio_positions`）；不統計勝率或達標率。
+現行 `plan_tracking_v2`（規則 `tracking_v2`；`plan_tracking_v1` 的計畫照 `tracking_v1` 更新，見[口徑版本](#口徑版本)）：使用者把一筆成立的研究條件存成計畫，系統每日以日線規則模擬成交與出場。計畫不是實際成交，也不寫入或讀取持倉（`portfolio_positions`）；不統計勝率或達標率。
 
 **建立**（`app.tracking_plans.create_plan`）：來源是今日候選（`source_kind=candidate`，另記 `daily_candidate_id` 與 `score_version`）或個股頁研究條件（`stock`）的訊號，須同時符合：
 
@@ -32,10 +48,11 @@
 | `invalidated` 失效 | 成交後首次觸及失效價（策略失效價，不是使用者停損） | 以失效價扣賣出滑價出場 |
 | `expired` 到期 | 視窗的 20 根日線內沒有成交 | 無 |
 | `closed` 期滿結算 | 已成交，視窗的 20 根日線內未達標也未失效 | 以第 20 根日線的收盤結算 |
+| `not_entered` 未進場 | `plan_tracking_v2`：觸發進場的那一根開盤已在目標一以上或失效價以下（`status_reason` 為 `gap_above_target`／`gap_below_invalid`），不進場並結束，`outcome_date` 為那一根的日期 | 無 |
 | `incomparable` 無法比較 | 同一交易日失效價與目標一都觸及（順序不明）；或全市場在 `plan_date` 之後已有 40 個交易日、該股仍不足 20 根日線（長期停牌、下市、缺日線；`status_reason=insufficient_sessions`） | 無 |
 | `cancelled` 已取消 | 使用者取消未結束的計畫 | 保留取消前的成交與明細 |
 
-允許的轉換只有 `pending` → `triggered`／`target_hit`／`invalidated`／`incomparable`／`expired`／`closed`／`cancelled`，與 `triggered` → `target_hit`／`invalidated`／`incomparable`／`closed`／`cancelled`（`app.domain.PLAN_STATUS_TRANSITIONS`）；同一根日線成交又出場、或成交與期滿出現在同一次執行（第 20 根日線才成交，或漏跑幾天）時直接跳到結果。其餘狀態都是終態，之後不再重算。
+允許的轉換只有 `pending` → `triggered`／`target_hit`／`invalidated`／`incomparable`／`expired`／`closed`／`not_entered`／`cancelled`，與 `triggered` → `target_hit`／`invalidated`／`incomparable`／`closed`／`cancelled`（`app.domain.PLAN_STATUS_TRANSITIONS`）；同一根日線成交又出場、或成交與期滿出現在同一次執行（第 20 根日線才成交，或漏跑幾天）時直接跳到結果。其餘狀態都是終態，之後不再重算。
 
 - **模擬報酬**（`result_return`）：達標、失效、期滿結算才有，＝出場價÷成交價（兩者都換回計畫資料日的價格基準）− 1 − 30 bps；從第 1 根日線到出場（期滿結算為第 20 根）之間有停牌或其他不可比較的日線時（含成交前的停牌日），`result_comparable=false`、報酬為 null 並寫原因，狀態不變。
 - **停牌**：停牌日（`is_suspended`、零量一字線、或官方停牌區間內缺日線）記一列 `suspended`，不推論觸發，狀態不變。

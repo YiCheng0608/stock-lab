@@ -241,9 +241,7 @@ def test_tracking_v2_equals_v1_on_every_path_filled_by_the_horizon(ohlcs):
 def test_tracking_v1_keeps_the_late_fill_and_the_gap_exit():
     days = sessions_after(PLAN_DAY, 6)
     late_bars = [track_bar(d, o) for d, o in zip(days, [*[FLAT] * 5, FILL])]
-    assert settle(track_path(LEVELS, late_bars, rules="tracking_v1"), 5)[
-        "comparable"
-    ]
+    assert settle(track_path(LEVELS, late_bars, rules="tracking_v1"), 5)["comparable"]
     assert not settle(track_path(LEVELS, late_bars), 5)["comparable"]
     gap = [track_bar(days[0], GAP_6221)]
     v1_gap = track_path(GAP_LEVELS, gap, rules="tracking_v1")
@@ -260,4 +258,3 @@ def test_every_plan_tracking_version_names_known_rules():
     assert PLAN_TRACKING_VERSION == "plan_tracking_v2"
     assert set(PLAN_TRACKING_RULES.values()) <= set(TRACKING_RULE_VERSIONS)
     assert PLAN_TRACKING_RULES[PLAN_TRACKING_VERSION] == TRACKING_RULES
-

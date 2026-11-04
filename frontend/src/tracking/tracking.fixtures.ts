@@ -2,7 +2,7 @@ import type { TrackingMeta, TrackingPlan, TrackingPlanDetail, TrackingPlansRespo
 
 // Shapes of GET /api/tracking and /api/tracking/plans/{id} (#253), one plan per status.
 
-export const meta = (): TrackingMeta => ({ tracking_version: 'plan_tracking_v1', window_sessions: 20, slippage_bps: 5, round_trip_cost_bps: 30, simulated: true })
+export const meta = (): TrackingMeta => ({ tracking_version: 'plan_tracking_v2', window_sessions: 20, slippage_bps: 5, round_trip_cost_bps: 30, simulated: true })
 
 export function plan(overrides: Partial<TrackingPlan> = {}): TrackingPlan {
   return {
@@ -61,6 +61,11 @@ export const invalidated = () => plan({
 
 export const expired = () => plan({
   id: 5, status: 'expired', status_reason: 'window_ended_without_entry', open: false, sessions_observed: 20, last_session_date: '2026-10-14', plan_date: '2026-09-15',
+})
+
+export const notEntered = (overrides: Partial<TrackingPlan> = {}) => plan({
+  id: 10, status: 'not_entered', status_reason: 'gap_above_target', open: false, sessions_observed: 1, last_session_date: '2026-10-19',
+  outcome_date: '2026-10-19', ...overrides,
 })
 
 export const suspendedClose = () => plan({

@@ -5446,7 +5446,7 @@ def evaluate(*, init_schema: bool = True) -> dict[str, Any]:
                         "observation",
                         "incomparable",
                     }
-                )
+                ),
             )
         ).all()
         if not signals:
