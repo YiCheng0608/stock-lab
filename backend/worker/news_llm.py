@@ -83,8 +83,10 @@ STALE_AFTER = timedelta(days=3)
 # Collected within one news interval: the arrivals since the last run, which a
 # run sends first with up to half its limit (#450).
 FRESH_WINDOW = timedelta(hours=2)
-# Sends of an item the answer left out, repeated or got wrong (the first and two
-# retries); then it is rejected.  The count is kept in llm_error (ITEM_FAILED).
+# Sends of an item the answer left out, repeated or got wrong while other items
+# of the answer were valid (the first and two retries); then it is rejected.  An
+# answer with no valid item fails the whole batch and counts for no item.  The
+# count is kept in llm_error (ITEM_FAILED).
 MAX_ITEM_ATTEMPTS = 3
 ITEM_FAILED = "item_failed"
 _ITEM_FAILURES = re.compile(rf"^{ITEM_FAILED} (\d+)/\d+")
@@ -1061,6 +1063,16 @@ def _run_batch(
         checked = validate_output(
             envelope.get("structured_output"), summary["news_ids"]
         )
+        if not checked.outputs:
+            # Nothing usable (``{"items": []}``, ids of another type): a fault of
+            # the answer, not of each item, so no item's count goes up and none
+            # is rejected for it; only a partly valid answer counts per item.
+            news_id, detail = next(iter(checked.failures.items()))
+            raise LlmBatchError(
+                "schema_mismatch",
+                f"no valid item in the answer ({len(checked.failures)} sent; "
+                f"id {news_id}: {detail}; not sent back {checked.extra_ids[:5]})",
+            )
     except LlmBatchError as exc:
         if envelope is not None:
             summary["model"], summary["usage"] = _usage(envelope)
@@ -1151,7 +1163,7 @@ def _run_batch(
                 }
             )
     summary.update(
-        status="done" if checked.outputs else "pending",
+        status="done",
         model=model,
         usage=usage,
         rejected_ids=rejected,
@@ -1160,11 +1172,6 @@ def _run_batch(
         extra_ids=checked.extra_ids,
         theme_dropped=theme_dropped,
     )
-    if not checked.outputs:
-        summary.update(
-            reason=ITEM_FAILED,
-            error=f"{ITEM_FAILED}: no valid item in the answer",
-        )
     return summary
 
 

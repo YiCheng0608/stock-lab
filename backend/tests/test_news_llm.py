@@ -1869,10 +1869,14 @@ def test_an_item_left_out_of_the_answer_is_retried_and_the_rest_written(
 
 
 def test_an_item_left_out_every_time_is_sent_at_most_three_times(db, fake, monkeypatch):
-    stubborn, other = _add_news(db, 2)
+    (stubborn,) = _add_news(db, 1)
     monkeypatch.setenv("FAKE_CLAUDE_MODES", "drop_id")
     monkeypatch.setenv("FAKE_CLAUDE_DROP_ID", str(stubborn.id))
-    for _ in range(5):
+    companions = []
+    for number in range(5):
+        # A new item each run, so the answer always has a valid one and the
+        # left-out item counts (an answer with none counts for no item).
+        companions += _add_news(db, 1, start=100 + number)
         _run(db)
     sends = [call for call in fake() if stubborn.id in call["ids"]]
     # The first send and at most 2 retries.
@@ -1881,13 +1885,15 @@ def test_an_item_left_out_every_time_is_sent_at_most_three_times(db, fake, monke
     assert row.llm_status == "rejected" and row.ai_summary is None
     assert row.llm_error.startswith("item_failed 3/3: ")
     assert row.llm_error.endswith("not sent again")
-    assert _results(db, news_item_id=other.id)[0].llm_status == "done"
+    done = {row.news_item_id for row in _results(db, llm_status="done")}
+    assert {item.id for item in companions} <= done
 
 
 def test_a_failed_batch_keeps_the_count_of_an_items_earlier_failures(
     db, fake, monkeypatch
 ):
     (item,) = _add_news(db, 1)
+    _add_news(db, 1, start=100)
     monkeypatch.setenv("FAKE_CLAUDE_MODES", "drop_id,invalid_json,drop_id")
     monkeypatch.setenv("FAKE_CLAUDE_DROP_ID", str(item.id))
     _run(db)
@@ -1896,6 +1902,7 @@ def test_a_failed_batch_keeps_the_count_of_an_items_earlier_failures(
     row = _results(db, news_item_id=item.id)[0]
     assert row.llm_status == "pending"
     assert row.llm_error.startswith("item_failed 1/3 earlier; invalid_json")
+    _add_news(db, 1, start=101)
     _run(db)
     row = _results(db, news_item_id=item.id)[0]
     assert row.llm_error.startswith("item_failed 2/3: ")
@@ -1938,15 +1945,54 @@ def test_an_invalid_item_is_pending_and_the_rest_of_its_batch_written(
     assert row.llm_error.startswith("item_failed 1/3: schema_mismatch")
 
 
-def test_an_answer_with_no_valid_item_counts_for_every_item(db, fake, monkeypatch):
+@pytest.mark.parametrize("mode", ["empty_items", "string_ids"])
+def test_an_answer_with_no_valid_item_fails_the_whole_batch(
+    db, fake, monkeypatch, mode
+):
+    # Review of PR #455: a systematic fault (an empty answer, ids sent back as
+    # strings) must not count against every item and reject a day of news.
+    _add_news(db, 2, start=10)
+    monkeypatch.setenv("FAKE_CLAUDE_MODES", f"drop_first,{mode}")
+    first = _run(db)
+    counted = fake()[0]["ids"][0]
+    assert first["status"] == "partial"
     items = _add_news(db, 2)
-    monkeypatch.setenv("FAKE_CLAUDE_MODES", "empty_items")
-    result = _run(db)
-    assert result["status"] == "failed"
-    assert result["batches"][0]["status"] == "pending"
-    for item in items:
-        row = _results(db, news_item_id=item.id)[0]
-        assert row.llm_error.startswith("item_failed 1/3: missing from the answer")
+    for _ in range(news_llm.MAX_ITEM_ATTEMPTS + 1):
+        result = _run(db)
+        assert result["status"] == "failed"
+        assert result["batches"][0]["status"] == "pending"
+        assert result["batches"][0]["reason"] == "schema_mismatch"
+    rows = _results(db, prompt_version=PROMPT_VERSION)
+    pending = {
+        row.news_item_id: row.llm_error for row in rows if row.llm_status == "pending"
+    }
+    # Still pending (retried next run), none rejected; the earlier count is kept.
+    assert [row for row in rows if row.llm_status == "rejected"] == []
+    assert set(pending) == {counted, *(item.id for item in items)}
+    assert pending[counted].startswith(
+        "item_failed 1/3 earlier; schema_mismatch: no valid item in the answer"
+    )
+    for news_id, error in pending.items():
+        if news_id != counted:
+            assert error.startswith("schema_mismatch: no valid item in the answer")
+
+
+def test_new_arrivals_beyond_half_a_run_fill_it_when_nothing_older_waits(
+    db, fake, frozen_utcnow
+):
+    # Review of PR #455: the older half of the limit goes to new items when
+    # there are no older ones.
+    limit = news_llm.DEFAULT_LIMIT
+    arrived = _arrive(db, frozen_utcnow.at, limit + 10, start=0)
+    selected = news_llm.select_items(db, now=frozen_utcnow.at)
+    assert len(selected) == limit
+    # The newest half first, then the oldest of the rest.
+    assert [item.id for item in selected[: limit // 2]] == [
+        item.id for item in arrived[: limit // 2]
+    ]
+    assert [item.id for item in selected[limit // 2 :]] == [
+        item.id for item in reversed(arrived[limit // 2 :])
+    ][: limit - limit // 2]
 
 
 def test_an_error_while_closing_the_run_is_recorded_on_it(db, fake, monkeypatch):

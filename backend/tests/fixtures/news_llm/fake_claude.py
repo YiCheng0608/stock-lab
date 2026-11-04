@@ -3,8 +3,8 @@
 Reads the prompt from stdin and prints a ``claude -p --output-format json``
 envelope.  ``FAKE_CLAUDE_MODES`` is a comma list of modes, one per call
 (the last repeats); ``FAKE_CLAUDE_LOG`` collects one JSON line per call.
-``drop_first``, ``drop_id``, ``duplicate_and_extra``, ``empty_items`` and
-``items_not_list`` answer with ids left out, repeated or not sent (#450).
+``drop_first``, ``drop_id``, ``duplicate_and_extra``, ``empty_items``,
+``string_ids`` and ``items_not_list`` answer with ids left out, repeated or not sent (#450).
 Mode ``theme_cases`` answers with the outputs of ``theme_cases.json`` matched
 by title, keeping only the theme candidate keys the sent ``--json-schema``
 allows (``evidence`` is new in news_v3).
@@ -190,6 +190,10 @@ def main() -> int:
         items.append({**items[1], "id": int(os.environ["FAKE_CLAUDE_EXTRA_ID"])})
     if mode == "empty_items":
         items = []
+    if mode == "string_ids":
+        # As if a CLI or model change sent every id back as a string.
+        for item in items:
+            item["id"] = str(item["id"])
     if mode == "items_not_list":
         items = "none"
     _out(json.dumps(_envelope({"items": items}), ensure_ascii=False))
