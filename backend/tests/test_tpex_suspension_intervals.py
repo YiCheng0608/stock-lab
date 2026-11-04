@@ -323,7 +323,19 @@ def test_actual_adapters_keep_raw_and_future_details_before_event_cutoff(
     assert json.loads(raw.payload_path.read_text(encoding="utf-8")) == rows
     assert hashlib.sha256(raw.payload_path.read_bytes()).hexdigest() == raw.sha256
     assert all(e.payload_sha256 == raw.sha256 for e in events)
-    assert not batch.no_data_dates and batch.event_coverage["status"] == "unsupported"
+    assert not batch.no_data_dates
+    # The suspension history is an event-date list, not a date-scoped answer.
+    # The combined adapter's coverage is the dated MOPS list (Issue #464; the
+    # fixture answers it empty) and keeps the feeds' own record for audit.
+    feed_coverage = (
+        batch.event_coverage["snapshot_feed_coverage"]
+        if both_markets
+        else batch.event_coverage
+    )
+    assert feed_coverage["status"] == "unsupported"
+    assert batch.event_coverage["status"] == (
+        "verified_empty" if both_markets else "unsupported"
+    )
     assert all(not bar.is_suspended for bar in batch.bars)
 
 
