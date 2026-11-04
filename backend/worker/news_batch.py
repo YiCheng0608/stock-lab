@@ -26,6 +26,7 @@ import re
 import time as _time
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
+from pathlib import Path
 from typing import Any, Callable, Iterable, TypeVar
 
 from sqlalchemy import func, inspect, select
@@ -123,6 +124,33 @@ TWO_CHAR_STOPWORDS = frozenset(
         "中華",  # 中華民國, 中華隊; a summary cut after 中華(電信)
     }
 )
+# Two-character names that are ordinary words, places or institutions and so
+# open title segments as words (新興市場, 全新iPhone, 大量資金, 信義區, 精英人才,
+# 光明前景, 美食外送, 大同小異; #457 review).  They count only as a whole
+# segment closed by punctuation, a space or the end: 「上詮、全新、前鼎」 and
+# 「其中 全新(2455)」 count, 「全新iPhone」 and 「大量資金」 do not.
+TWO_CHAR_COMMON_WORDS = frozenset(
+    {
+        "互動", "中天", "中台", "中工", "光明", "光環", "光譜", "全國", "全域",
+        "全新", "典範", "動力", "卓越", "厚生", "地球", "大同", "大成", "大樹",
+        "大量", "太子", "太極", "安心", "宏觀", "巨大", "幸福", "建國", "得力",
+        "信義", "新建", "新興", "新華", "星雲", "春雨", "東洋", "東華", "正道",
+        "海光", "神州", "秋雨", "立德", "精英", "精湛", "精確", "精華", "綠意",
+        "綠茵", "綠電", "美食", "至上", "華夏", "華東", "茂林", "藍天", "農林",
+        "辣椒", "進階", "遠見", "雙喜", "霹靂", "青雲",
+    }
+)  # fmt: skip
+# A two-character name counts on its own only for a listed stock (``status``
+# active or dormant), and only when no other listed stock has the same name:
+# a delisted or moved row (6423 億而得 TWSE ``transferred``) does not make the
+# listed one ambiguous.
+LISTED_STATUSES = ("active", "dormant")
+# Full names (公司名稱 without 股份有限公司) that start with another listed
+# stock's two-character name, read as aliases of their own company: 聯華電子 is
+# 2303, never 1229 聯華.  Built by tools/research/news_full_name_aliases.py.
+FULL_NAME_ALIASES_FILE = (
+    Path(__file__).resolve().parents[1] / "data" / "news" / "full_name_aliases.json"
+)
 # ETF names are matched on their own only from this length: 新台灣 (0060) and
 # 富邦科技 (0052) are ordinary phrases.  ETFs need no two-character rule.
 ETF_NAME_MIN_LENGTH = 5
@@ -183,11 +211,27 @@ def _closes_segment(text: str, index: int) -> bool:
     return index >= len(text) or not _CJK.match(text[index])
 
 
+def _ends_segment(text: str, index: int) -> bool:
+    """True at the end of ``text`` or before punctuation, a symbol or a space."""
+
+    return index >= len(text) or not text[index].isalnum()
+
+
+def load_full_name_aliases(
+    path: Path = FULL_NAME_ALIASES_FILE,
+) -> list[tuple[str, str, str]]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return [
+        (row["exchange"], row["symbol"], row["full_name"]) for row in data["aliases"]
+    ]
+
+
 @dataclass(frozen=True)
 class _Stock:
     exchange: str
     symbol: str
     aliases: frozenset[str]
+    listed: bool = True
 
     @property
     def key(self) -> str:
@@ -202,36 +246,57 @@ class RelationMatcher:
       matches, and a code listed on both exchanges is not resolved by the code
       alone; only the name decides which exchange.
     - Stock names are the official short name, the name without listing
-      markers and the name without a holding-company ending (日月光投控 →
-      日月光) unless that is another stock's official name.  ETF names are the
-      official short name, without a bracketed former name.
+      markers, the name without a holding-company ending (日月光投控 →
+      日月光) unless that is another stock's official name, and the full names
+      in FULL_NAME_ALIASES_FILE.  ETF names are the official short name,
+      without a bracketed former name.
     - A name counts on its own when it has three or more characters (ETF
       names: ETF_NAME_MIN_LENGTH), contains a CJK character, is not a
       stopword, and is not inside a longer matched name.
-    - A two-character stock name counts on its own only when no other stock
-      has the same name, it is not a stopword, it is not inside a longer name
-      in the text, and it opens a title segment (title start, or after
-      punctuation, a symbol or a space) or is a whole segment (opened that way
-      and followed by a non-CJK character or the end) in the title or summary.
+    - A two-character name of a listed stock counts on its own only when no
+      other listed stock has the same name, it is not a stopword, it is not
+      inside a longer name in the text, and it opens a title segment (title
+      start, or after punctuation, a symbol or a space) or is a whole segment
+      (opened that way and followed by a non-CJK character or the end) in the
+      title or summary.  A common-word name (TWO_CHAR_COMMON_WORDS) counts only
+      as a whole segment followed by punctuation, a space or the end.
     - An official industry display name adds its theme id when it is followed
       by 股／類股／族群／產業／業 and is not inside a company name.
     """
 
     def __init__(
         self,
-        stocks: Iterable[tuple[str, str, str]],
+        stocks: Iterable[tuple[str, ...]],
         themes: Iterable[tuple[str, str]],
         etfs: Iterable[tuple[str, str, str]] = (),
+        full_names: Iterable[tuple[str, str, str]] = (),
     ):
-        stock_rows = list(stocks)
-        official = {alias for _, _, name in stock_rows for alias in _name_aliases(name)}
+        # (exchange, symbol, name) or (exchange, symbol, name, status); a row
+        # without a status counts as listed.
+        stock_rows = [
+            (row[0], row[1], row[2], row[3] if len(row) > 3 else "active")
+            for row in stocks
+        ]
+        official = {
+            alias for _, _, name, _ in stock_rows for alias in _name_aliases(name)
+        }
+        extra: dict[tuple[str, str], set[str]] = {}
+        for exchange, symbol, full_name in full_names:
+            extra.setdefault((exchange, symbol), set()).add(full_name)
         self._stocks = []
-        for exchange, symbol, name in stock_rows:
-            aliases = _name_aliases(name)
+        for exchange, symbol, name, status in stock_rows:
+            aliases = _name_aliases(name) | extra.get((exchange, symbol), set())
             holding = _holding_alias(name)
             if holding and holding not in official:
                 aliases.add(holding)
-            self._stocks.append(_Stock(exchange, symbol, frozenset(aliases)))
+            self._stocks.append(
+                _Stock(
+                    exchange,
+                    symbol,
+                    frozenset(aliases),
+                    listed=status in LISTED_STATUSES,
+                )
+            )
         etf_list = [
             _Stock(exchange, symbol, frozenset(_etf_aliases(name)))
             for exchange, symbol, name in etfs
@@ -248,7 +313,7 @@ class RelationMatcher:
                     and alias not in NAME_ONLY_STOPWORDS
                 ):
                     self._name_only.setdefault(alias, []).append(stock)
-                elif _is_two_char_name(alias):
+                elif _is_two_char_name(alias) and stock.listed:
                     two_char.setdefault(alias, []).append(stock)
         for etf in etf_list:
             self._by_code.setdefault(etf.symbol, []).append(etf)
@@ -281,7 +346,12 @@ class RelationMatcher:
     @classmethod
     def from_db(cls, db: Session) -> "RelationMatcher":
         stocks = db.execute(
-            select(Instrument.exchange, Instrument.symbol, Instrument.name).where(
+            select(
+                Instrument.exchange,
+                Instrument.symbol,
+                Instrument.name,
+                Instrument.status,
+            ).where(
                 Instrument.instrument_type.in_(STOCK_TYPES),
                 Instrument.exchange.in_(("TWSE", "TPEx")),
             )
@@ -299,7 +369,7 @@ class RelationMatcher:
             ).all()
             if is_verified_theme(group)
         ]
-        return cls(stocks, themes, etfs)
+        return cls(stocks, themes, etfs, load_full_name_aliases())
 
     @staticmethod
     def _longest_spans(text: str, names: Iterable[str]) -> set[str]:
@@ -333,9 +403,13 @@ class RelationMatcher:
                     start, end = match.start(), match.end()
                     if any(s <= start and end <= e for s, e in covering):
                         continue
-                    if _opens_segment(text, start - 1) and (
-                        field == "title" or _closes_segment(text, end)
-                    ):
+                    if not _opens_segment(text, start - 1):
+                        continue
+                    if name in TWO_CHAR_COMMON_WORDS:
+                        counts = _ends_segment(text, end)
+                    else:
+                        counts = field == "title" or _closes_segment(text, end)
+                    if counts:
                         found.add(self._two_char[name].key)
                         break
         return found

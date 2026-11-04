@@ -45,6 +45,28 @@ INSTRUMENTS = [
     ("TWSE", "0050", "元大台灣50", "etf", "active"),
     ("TWSE", "00981A", "主動統一台股增長", "etf", "active"),
     ("TWSE", "0060", "新台灣", "etf", "active"),
+    # #457 review: a full name starting with another stock's two-character name.
+    ("TWSE", "1229", "聯華", "stock", "active"),
+    ("TWSE", "2412", "中華電", "stock", "active"),
+    ("TWSE", "2204", "中華", "stock", "active"),
+    # Common-word names.
+    ("TWSE", "2605", "新興", "stock", "active"),
+    ("TWSE", "2455", "全新", "stock", "active"),
+    ("TPEx", "3167", "大量", "stock", "active"),
+    ("TWSE", "9940", "信義", "stock", "active"),
+    ("TWSE", "2331", "精英", "stock", "active"),
+    ("TPEx", "4420", "光明", "stock", "active"),
+    ("TWSE", "1210", "大成", "stock", "active"),
+    ("TWSE", "2723", "美食-KY", "stock", "active"),
+    ("TWSE", "2371", "大同", "stock", "active"),
+    ("TWSE", "2515", "中工", "stock", "active"),
+    ("TWSE", "3105", "穩懋", "stock", "active"),
+    # Only listed rows decide whether a two-character name is unique.
+    ("TPEx", "8908", "欣雄", "stock", "transferred"),
+    ("TWSE", "8908", "欣雄", "stock", "active"),
+    ("TWSE", "3598", "奕力", "stock", "delisted"),
+    ("TWSE", "6962", "奕力", "stock", "active"),
+    ("TWSE", "4444", "舊名", "stock", "delisted"),
 ]
 
 
@@ -153,6 +175,58 @@ def test_a_longer_phrase_that_means_another_company_blocks_a_two_character_name(
 
 
 # ETFs ---------------------------------------------------------------------------
+
+
+def test_full_name_starting_with_another_two_character_name_is_its_own_company(
+    matcher,
+):
+    # 聯華 (1229) opens 聯華電子, the full name of 2303 聯電.
+    assert matcher.symbols("聯華電子第三季營收創高") == ["TWSE:2303"]
+    assert matcher.symbols("中華電信ADR下跌") == ["TWSE:2412"]
+    assert matcher.symbols("聯華今日公告") == ["TWSE:1229"]
+
+
+def test_full_name_aliases_come_from_the_masters_and_start_with_a_two_character_name():
+    rows = news_batch.load_full_name_aliases()
+    assert ("TWSE", "2303", "聯華電子") in rows
+    assert all(len(name) > 2 for _, _, name in rows)
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "新興市場資金流向",
+        "全新iPhone開賣",
+        "大量資金湧入台股",
+        "信義區房價創高",
+        "精英人才搶手",
+        "光明前景可期",
+        "大成長時代來臨",
+        "美食外送平台競爭",
+        "大同小異的財報",
+        "中工程進度落後",
+    ],
+)
+def test_common_word_names_do_not_match_as_words(matcher, title):
+    assert matcher.symbols(title) == []
+
+
+def test_common_word_names_still_match_as_a_whole_segment(matcher):
+    assert matcher.symbols("微波通訊元件領跌", "其中 全新、穩懋 跌停") == [
+        "TWSE:2455",
+        "TWSE:3105",
+    ]
+    assert matcher.symbols("盤中速報", "焦點個股領跌。其中 全新") == ["TWSE:2455"]
+    assert matcher.symbols("全新(2455)第3季獲利") == ["TWSE:2455"]
+
+
+def test_only_listed_rows_decide_two_character_names(matcher):
+    # The transferred TPEx row and the delisted 3598 row do not make the listed
+    # name ambiguous, and a delisted stock's name needs its code.
+    assert matcher.symbols("欣雄法說會登場") == ["TWSE:8908"]
+    assert matcher.symbols("奕力第3季獲利") == ["TWSE:6962"]
+    assert matcher.symbols("舊名今日公告") == []
+    assert matcher.symbols("舊名(4444)今日公告") == ["TWSE:4444"]
 
 
 def test_etf_matches_by_code_with_its_name_or_by_a_long_name(matcher):
