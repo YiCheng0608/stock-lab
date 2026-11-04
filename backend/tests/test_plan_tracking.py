@@ -192,12 +192,19 @@ def test_settle_nets_the_cost_and_marks_short_or_suspended_windows_incomparable(
     )
 
 
-# ---- app.domain: plan_tracking_v1 transitions ----
+# ---- app.domain: plan transitions ----
 
 
 def test_plan_transitions_only_move_forward():
     assert PLAN_OPEN_STATUSES == {"pending", "triggered"}
-    for terminal in ("target_hit", "invalidated", "incomparable", "expired", "closed"):
+    for terminal in (
+        "target_hit",
+        "invalidated",
+        "incomparable",
+        "expired",
+        "closed",
+        "not_entered",
+    ):
         assert PLAN_STATUS_TRANSITIONS[terminal] == frozenset()
         assert not validate_plan_status_transition(terminal, "pending").valid
     assert PLAN_STATUS_TRANSITIONS["cancelled"] == frozenset()
@@ -362,7 +369,7 @@ def test_a_plan_copies_the_signal_levels_and_versions(db):
         version.id,
         version.formula_version,
         "candidate_score_v1",
-        "plan_tracking_v1",
+        "plan_tracking_v2",
     )
     assert (plan.plan_date, plan.earliest_execution_date) == (
         PLAN_DAY,

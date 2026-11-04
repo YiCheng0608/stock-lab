@@ -10,6 +10,12 @@ directories), so the verify fixture can compute tracked rows with it too.
 loaded by the caller with each bar's corporate-action factor and whether an
 official suspension interval hid a missing session before it.  ``settle``
 turns a path into the T+N result.
+
+Two rule versions (docs/spec/tracking.md 口徑版本).  ``tracking_v1`` is kept
+unchanged for the rows written with it (``plan_tracking_v1`` plans).
+``tracking_v2`` (the current rules, #444) does not enter when the fill session
+opens, or fills, at or beyond the first target or the invalid price, and a
+T+N result only uses a fill on or before session N.
 """
 
 from __future__ import annotations
@@ -27,6 +33,18 @@ ROUND_TRIP_TRANSACTION_COST_BPS = 30.0
 TRACKING_WINDOW_SESSIONS = 20
 
 AMBIGUOUS_REASON = "same-session stop and target both touched; order is unknowable"
+
+TRACKING_RULES_V1 = "tracking_v1"
+TRACKING_RULES_V2 = "tracking_v2"
+TRACKING_RULES = TRACKING_RULES_V2
+TRACKING_RULE_VERSIONS = (TRACKING_RULES_V1, TRACKING_RULES_V2)
+# tracking_v2 reason codes: the fill session opened (or filled) at or above the
+# first target / at or below the invalid price, so the entry is not taken; and
+# no fill on or before session N of a T+N result.
+GAP_ABOVE_TARGET = "gap_above_target"
+GAP_BELOW_INVALID = "gap_below_invalid"
+NOT_FILLED_BY_HORIZON = "not_filled_by_horizon"
+NOT_ENTERED = "not_entered"
 
 
 @dataclass(frozen=True)
@@ -99,6 +117,11 @@ class TrackPath:
     outcome_price: float | None
     outcome_factor: float | None
     ambiguous: bool
+    rules: str = TRACKING_RULES_V1
+    execution_session_no: int | None = None
+    # tracking_v2: why and on which session the entry was not taken.
+    skip_reason: str | None = None
+    skip_session_no: int | None = None
 
 
 def buy_fill_with_slippage(price: float | None) -> float | None:
@@ -122,9 +145,41 @@ def sell_fill_with_slippage(price: float | None) -> float | None:
     return round(price * (1.0 - EXECUTION_SLIPPAGE_BPS / 10_000.0), 8)
 
 
-def track_path(levels: TrackLevels, bars: list[TrackBar]) -> TrackPath:
+def _gap_skip(
+    rules: str,
+    bar: TrackBar,
+    raw_execution_price: float,
+    target_level_raw: float | None,
+    invalid_level_raw: float | None,
+) -> str | None:
+    """tracking_v2: the reason the fill session's entry is not taken, if any.
+
+    The fill session opened (or the fill itself is) at or above the first
+    target, or at or below the invalid price: the level was crossed at or
+    before the fill, so it cannot be a touch after the fill, and the fill no
+    longer lies between the invalid price and the target.
+    """
+
+    if rules == TRACKING_RULES_V1:
+        return None
+    if target_level_raw is not None and (
+        max(bar.open, raw_execution_price) >= target_level_raw
+    ):
+        return GAP_ABOVE_TARGET
+    if invalid_level_raw is not None and (
+        min(bar.open, raw_execution_price) <= invalid_level_raw
+    ):
+        return GAP_BELOW_INVALID
+    return None
+
+
+def track_path(
+    levels: TrackLevels, bars: list[TrackBar], *, rules: str = TRACKING_RULES
+) -> TrackPath:
     """Fill from T+1 at the first executable price, then the first exit."""
 
+    if rules not in TRACKING_RULE_VERSIONS:
+        raise ValueError(f"unknown tracking rules: {rules}")
     sessions: list[TrackSession] = []
     executed = False
     execution_date: date | None = None
@@ -135,6 +190,9 @@ def track_path(levels: TrackLevels, bars: list[TrackBar]) -> TrackPath:
     execution_factor: float | None = None
     outcome_factor: float | None = None
     ambiguous = False
+    execution_session_no: int | None = None
+    skip_reason: str | None = None
+    skip_session_no: int | None = None
     for session_no, bar in enumerate(bars, start=1):
         factor = bar.factor
         # Keep raw OHLC untouched for execution and trigger checks;
@@ -188,8 +246,12 @@ def track_path(levels: TrackLevels, bars: list[TrackBar]) -> TrackPath:
                 else "trading suspended; no price trigger inferred"
             )
             comparable = False
+        elif skip_reason is not None:
+            status = NOT_ENTERED
+            reason = f"entry not taken on session {skip_session_no} ({skip_reason})"
         else:
             if not executed:
+                raw_execution_price: float | None = None
                 if (
                     levels.entry_type == "breakout"
                     and levels.breakout_price is not None
@@ -232,8 +294,30 @@ def track_path(levels: TrackLevels, bars: list[TrackBar]) -> TrackPath:
                         current_execution_price = buy_fill_with_slippage(
                             raw_execution_price
                         )
-                if breakout_trigger or pullback_trigger:
+                skip = (
+                    _gap_skip(
+                        rules,
+                        bar,
+                        raw_execution_price,
+                        target_level_raw,
+                        invalid_level_raw,
+                    )
+                    if raw_execution_price is not None
+                    else None
+                )
+                if skip is not None:
+                    skip_reason = skip
+                    skip_session_no = session_no
+                    current_execution_price = None
+                    status = NOT_ENTERED
+                    reason = (
+                        "fill session opened at or above the first target; entry not taken"
+                        if skip == GAP_ABOVE_TARGET
+                        else "fill session opened at or below the invalid price; entry not taken"
+                    )
+                elif breakout_trigger or pullback_trigger:
                     executed = True
+                    execution_session_no = session_no
                     execution_date = bar.trading_date
                     execution_price = current_execution_price
                     execution_factor = factor
@@ -313,11 +397,21 @@ def track_path(levels: TrackLevels, bars: list[TrackBar]) -> TrackPath:
         outcome_price=outcome_price,
         outcome_factor=outcome_factor,
         ambiguous=ambiguous,
+        rules=rules,
+        execution_session_no=execution_session_no,
+        skip_reason=skip_reason,
+        skip_session_no=skip_session_no,
     )
 
 
 def settle(path: TrackPath, horizon: int) -> dict[str, Any]:
-    """The T+``horizon`` result of a non-empty path, net of the cost assumption."""
+    """The T+``horizon`` result of a non-empty path, net of the cost assumption.
+
+    Under ``tracking_v2`` (``path.rules``) a fill after session ``horizon`` is
+    not a T+``horizon`` fill: the result is not comparable
+    (``not_filled_by_horizon``, or the gap reason when the entry was not
+    taken by then) and carries no fill or outcome from after the horizon.
+    """
 
     sessions = path.sessions
     execution_price = path.execution_price
@@ -334,11 +428,39 @@ def settle(path: TrackPath, horizon: int) -> dict[str, Any]:
             "execution_price": execution_price,
             "comparable": False,
             "data_quality": "incomplete",
+            "tracking_rules": path.rules,
         }
     horizon_session = sessions[horizon - 1]
     window_has_non_comparable_session = any(
         item.comparable is False for item in sessions[:horizon]
     )
+    filled_by_horizon = (
+        path.execution_session_no is not None and path.execution_session_no <= horizon
+    )
+    if path.rules != TRACKING_RULES_V1 and not filled_by_horizon:
+        unfilled_reason = (
+            path.skip_reason
+            if path.skip_session_no is not None and path.skip_session_no <= horizon
+            else NOT_FILLED_BY_HORIZON
+        )
+        return {
+            "settlement_date": horizon_session.trading_date,
+            "final_status": "incomparable",
+            "first_trigger": None,
+            "return_or_risk": None,
+            "incomparable_reason": (
+                "suspended or otherwise non-comparable session in horizon"
+                if window_has_non_comparable_session
+                else unfilled_reason
+            ),
+            "source": horizon_session.source,
+            "data_time": horizon_session.data_time,
+            "execution_date": None,
+            "execution_price": None,
+            "comparable": False,
+            "data_quality": "incomplete",
+            "tracking_rules": path.rules,
+        }
     comparable = bool(
         horizon_session.comparable
         and execution_price
@@ -383,4 +505,5 @@ def settle(path: TrackPath, horizon: int) -> dict[str, Any]:
         "execution_price": execution_price,
         "comparable": comparable,
         "data_quality": "complete" if comparable else "incomplete",
+        "tracking_rules": path.rules,
     }

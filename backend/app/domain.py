@@ -716,7 +716,14 @@ STRATEGY_LEVEL_AVAILABILITY = (
 # User tracking plans (docs/spec/tracking.md 使用者追蹤計畫).  pending may jump straight to an
 # outcome: a fill and its exit can happen in the same session, and a run that
 # follows missed daily runs can see a fill and the end of the window at once.
-PLAN_TRACKING_VERSION = "plan_tracking_v1"
+# New plans are stamped with PLAN_TRACKING_VERSION; each version keeps its own
+# tracking rules (app.tracking), so a plan_tracking_v1 plan is still updated
+# with tracking_v1 and never rewritten by the newer rules (#444).
+PLAN_TRACKING_VERSION = "plan_tracking_v2"
+PLAN_TRACKING_RULES = {
+    "plan_tracking_v1": "tracking_v1",
+    "plan_tracking_v2": "tracking_v2",
+}
 PLAN_OPEN_STATUSES = frozenset({"pending", "triggered"})
 PLAN_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
     "pending": frozenset(
@@ -727,6 +734,7 @@ PLAN_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
             "incomparable",
             "expired",
             "closed",
+            "not_entered",
             "cancelled",
         }
     ),
@@ -738,6 +746,7 @@ PLAN_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
     "incomparable": frozenset(),
     "expired": frozenset(),
     "closed": frozenset(),
+    "not_entered": frozenset(),
     "cancelled": frozenset(),
 }
 

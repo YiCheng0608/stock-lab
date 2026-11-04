@@ -548,6 +548,7 @@ export type SignalSettlement = {
   execution_price: number | null
   comparable: boolean | null
   data_quality: string
+  tracking_rules: string
   signal_key?: string | null
 }
 
