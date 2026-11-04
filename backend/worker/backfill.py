@@ -31,6 +31,7 @@ from app.models import (
     IngestionRun,
     Instrument,
     MarketBar,
+    NoTradeDay,
     PortfolioPosition,
     RawPayload,
     Signal,
@@ -477,6 +478,14 @@ def _coverage_summary(report: dict[str, Any]) -> dict[str, Any]:
         "incomplete_to_60": sum(
             1 for item in instruments if item.get("missing_bars_to_60", 0) > 0
         ),
+        # Instruments with at least one official no-trade day in the window;
+        # those days are not in incomplete_to_* (Issue #454).
+        "no_trade_to_20": sum(
+            1 for item in instruments if item.get("no_trade_bars_to_20", 0) > 0
+        ),
+        "no_trade_to_60": sum(
+            1 for item in instruments if item.get("no_trade_bars_to_60", 0) > 0
+        ),
         "incomplete_chips_to_20": sum(
             1 for item in instruments if item.get("missing_chips_to_20", 0) > 0
         ),
@@ -553,6 +562,7 @@ def coverage_report(
 
     all_bars = _instrument_dates(db, MarketBar, start_date, end_date)
     all_chips = _instrument_dates(db, ChipSnapshot, start_date, end_date)
+    all_no_trade = _instrument_dates(db, NoTradeDay, start_date, end_date)
     event_rows = db.scalars(
         select(Event).where(
             Event.event_date >= start_date,
@@ -662,6 +672,11 @@ def coverage_report(
         chips_by_date_exchange[trading_date][exchange] += 1
         if in_scope:
             chips_by_key[key].add(trading_date)
+    no_trade_by_key: dict[tuple[str, str], set[date]] = defaultdict(set)
+    for instrument_id, trading_date in all_no_trade:
+        info = info_by_id.get(instrument_id)
+        if info is not None and info[2]:
+            no_trade_by_key[info[1]].add(trading_date)
 
     events_by_date = Counter(row.event_date for row in event_rows)
     actions_by_date = Counter(row.action_date for row in action_rows)
@@ -840,6 +855,12 @@ def coverage_report(
         ]
         bar_dates = raw_bar_dates.intersection(eligible_sessions)
         chip_dates = raw_chip_dates.intersection(eligible_sessions)
+        # Official no-trade days (Issue #454) cover a session for the bar
+        # count without becoming bars; a bar of the same day outranks one.
+        no_trade_dates = (no_trade_by_key.get(key, set()) - raw_bar_dates).intersection(
+            eligible_sessions
+        )
+        covered_bar_dates = bar_dates | no_trade_dates
         suspension_dates = {
             day
             for day, event_type in event_types_by_key.get(key, [])
@@ -851,10 +872,11 @@ def coverage_report(
             window = eligible_sessions[-horizon:]
             bar_days = len(bar_dates.intersection(window))
             chip_days = len(chip_dates.intersection(window))
-            missing_bar_dates = sorted(set(window) - bar_dates)
+            window_no_trade_dates = sorted(no_trade_dates.intersection(window))
+            missing_bar_dates = sorted(set(window) - covered_bar_dates)
             missing_chip_dates = sorted(set(window) - chip_dates)
             missing_bars = (
-                max(0, horizon - len(bar_dates))
+                max(0, horizon - len(covered_bar_dates))
                 if len(eligible_sessions) < horizon
                 else len(missing_bar_dates)
             )
@@ -872,6 +894,8 @@ def coverage_report(
                 "missing_chips": missing_chips,
                 "missing_bar_dates": [day.isoformat() for day in missing_bar_dates],
                 "missing_chip_dates": [day.isoformat() for day in missing_chip_dates],
+                "no_trade_bars": len(window_no_trade_dates),
+                "no_trade_dates": [day.isoformat() for day in window_no_trade_dates],
             }
             if missing_bars:
                 if (
@@ -883,6 +907,8 @@ def coverage_report(
                     coverage_reasons.append("suspended_or_no_trade")
                 else:
                     coverage_reasons.append("missing_bar_dates")
+            if window_no_trade_dates:
+                coverage_reasons.append("official_no_trade")
             if missing_chips:
                 coverage_reasons.append("missing_chips")
         if not sessions:
@@ -931,6 +957,10 @@ def coverage_report(
                 "missing_bar_dates_to_60": windows["60"]["missing_bar_dates"],
                 "missing_chip_dates_to_20": windows["20"]["missing_chip_dates"],
                 "missing_chip_dates_to_60": windows["60"]["missing_chip_dates"],
+                "no_trade_bars_to_20": windows["20"]["no_trade_bars"],
+                "no_trade_bars_to_60": windows["60"]["no_trade_bars"],
+                "no_trade_dates_to_20": windows["20"]["no_trade_dates"],
+                "no_trade_dates_to_60": windows["60"]["no_trade_dates"],
                 "coverage_reasons": coverage_reasons,
                 "ipo_stage": ipo_stage,
                 "windows": windows,

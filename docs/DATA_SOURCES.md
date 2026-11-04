@@ -137,6 +137,17 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 - **策略怎麼用**：見 [breakout_v2](spec/breakout_pullback.md#breakout_v2pullback_v2)。
 - **已知限制：轉市標的**：判定用標的目前的交易所（`instruments.exchange`）去查各日清單。窗口 6 天裡若有轉市前的日子，那幾天查的是另一個交易所的清單，可能把融資標的誤判成不適用。轉市很少，而且只影響轉市後 5 個交易日內的判定，目前不另外處理。
 
+### 官方無成交日
+
+冷門股與債券 ETF 當天沒有一般交易時段成交時，官方每日行情表仍列出這一檔，但開、高、低、收全部空白：上市 `MI_INDEX`（`type=ALLBUT0999`）的「每日收盤行情」表是 `--`，上櫃 `dailyQuotes` 的「上櫃股票行情」表是 `---`。成交股數可能是 0，也可能只有零股或盤後的股數（[#454](https://github.com/YiCheng0608/stock-lab/issues/454) AC-1：2026-10 的 201 檔未滿 20 日中，556 個缺日是這種列）。日行情 parser 不收這種列，所以它不是 bar；它是「這天官方確認沒有價格」的證據，不是缺資料，也不補價、不補零。
+
+- **保存**：`no_trade_days` 每個標的每日一列，記 `source`（`twse`／`tpex`）、`endpoint`、`data_as_of`、`raw_payload_id`、`collected_at`。collect 寫入它剛存的行情表（`worker.no_trade_days`，失敗只記在 run 的 `no_trade_days`、不影響 collect）；歷史由 [`no-trade-days`](ops/CLI.md#現有-worker-cli) 從已存 raw 回補。
+- **判定**：四個價格欄都存在且都空白（空字串或只有 `-`）才算；只缺部分價格的列是格式異常，仍算缺資料。上市取 `parse_twse_all_daily_payload` 用來產生 bar 的同一張表。
+- **選哪份 capture**：該交易所該日最新一份「回報日期相符、而且有證券行情表」的 capture（有列但沒有行情表的 capture 跳過，不拿來清掉該日的列），並以它重建該日該交易所的所有列：之後的 capture 改成有價格，舊列就刪掉。休市日官方回「沒有符合條件的資料」或空表時記 `no_data`（不算缺）；沒有任何可用 capture 時記 `missing`。兩者都保留原有的列，coverage 照樣只看已存的列。raw 檔讀不到、不是 JSON 或 SHA-256 不符時，停在該日，回 `failed` 與 `failed_date`。
+- **與 bar 的關係**：同一標的同一天已有 bar（例如當日快照有價格）時不寫，coverage 也以 bar 為準。代號在 `instruments` 找不到的股票或 ETF 列只計入 `unmatched`，不寫；同表的權證、債券等代號不計。
+- **表上沒有這一列**：不算無成交，仍是缺資料。AC-1 的 88 個這種缺日集中在少數標的、連續數天，看起來是停止買賣，但目前沒有可對應的停牌來源，所以不推定。
+- **誰讀它**：只有 coverage（`/api/coverage`、回補報表）。指標、策略、追蹤與個股頁的「20 日基準還缺幾日」照舊只看 bar，無成交日怎麼處理另議。
+
 ### 成交金額可得狀態
 
 `turnover` 數值欄在來源成交金額缺失或無效時存 `0`，另以 `turnover_status`／`turnover_reason` 保存欄位狀態；consumer 必須讀 status，不能憑數值 `0` 判定來源為零。
