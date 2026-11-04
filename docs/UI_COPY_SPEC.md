@@ -26,6 +26,7 @@
 | impact_direction unknown | 卡片「影響尚未判定」；`/news/:id` 來源事實欄「來源未標示影響」（[§4](#4-新聞卡文案與折疊)） |
 | official_disclosure／macro_official／media | 官方公告資料／官方機構／媒體報導 |
 | 未核實 Industry 名稱、代碼或 ID | 日常頁不顯示；系統頁寫「官方產業名稱待對照」 |
+| 擷取來源代碼（`cna`、`news_cna`、`yahoo_tw`、`claude-cli`、`news_llm`…） | 系統頁「擷取狀態」「原始來源」的來源欄寫來源名稱：新聞來源的擷取紀錄代碼（`cna`）與 raw 代碼（`news_cna`）都寫 `news_sources.py` 的 `source_name`（中央社、鉅亨網、工商時報、Yahoo奇摩股市、CNBC、MarketWatch、Federal Reserve），`claude-cli` 寫「Claude Code（AI 推論）」，raw 的 `news_llm`／`candidate_notes` 寫「Claude Code 新聞判讀（AI 推論）」／「Claude Code 候選說明（AI 推論）」，`technical_backtest` 寫「技術回測（系統計算）」，`derived:corporate_actions` 寫「除權息調整（系統計算）」；不在對照表的英數代碼寫「來源待核實」 |
 
 ## 3. 三種資料完整度
 
@@ -44,8 +45,9 @@
 ## 4. 新聞卡文案與折疊
 
 - **分頁**：`/news` 以「國內」（`category=domestic`）、「國際」（`category=international`）、「官方公告」（`source_kind=official_disclosure`）三個分頁瀏覽，可再以關鍵字與股票代號篩選；個股頁「新聞與公告」顯示該股最近 50 則（交易所＋代號完全相符，官方公告為純代號相符）。三個分頁共用一個搜尋列（關鍵字、股票代號、搜尋與清除按鈕），版面見 [DESIGN_SYSTEM §5](DESIGN_SYSTEM.md#5-元件)「搜尋列」。
-- **卡片正面**：固定順序為分類與來源 → 兩行內原始標題 → 120 個全形字元或三行內摘要 → 來源時間 → 影響／關聯 → 相關標的 → 來源連結。標題只正規化連續空白與換行，列表截在兩行，詳情保留完整標題。`/news` 不展開全文；`/news/:id` 用「展開公告內容／收合公告內容」，只顯示可用的來源 description，不顯示 raw JSON 或內部 ID。
-- **今日頁重點新聞精簡列**：今日頁只列 `dashboard.news` 前 3 則，區塊標題「重點新聞」（眉標「市場基礎層 · 重大事件」），右側「查看全部新聞」。每則依序為分類與來源 → 兩行內原始標題 → 來源時間 → 影響／AI → 相關標的；不顯示摘要與來源連結（在 `/news/:id`）。沒有新聞時寫「市場新聞區尚無可顯示內容。」。
+- **卡片正面**：固定順序為分類與來源 → 兩行內原始標題 → 120 個全形字元或三行內摘要 → 來源時間 → 影響／關聯 → 相關標的 → AI 候選（預設收合，見下一條）→ 來源連結。標題只正規化連續空白與換行，列表截在兩行，詳情保留完整標題。`/news` 不展開全文；`/news/:id` 用「展開公告內容／收合公告內容」，只顯示可用的來源 description，不顯示 raw JSON 或內部 ID。
+- **AI 候選行**（[#452](https://github.com/YiCheng0608/stock-lab/issues/452)）：`/news` 與個股頁「新聞與公告」的卡片，在規則核實的相關標的那一行之後另起一行，用預設收合的 `<details>`，收合時寫「AI 候選（推論，待核實）· N 檔」（文字已標推論，不另接「AI 推論」badge：卡片的「AI 推論」badge 只接在 AI 方向後，一則一個）；展開後每檔一項「代號 名稱 · 模型把握高／中／低」，最後一行 muted 小字「模型 <model> · 提示版本 <prompt_version>。候選未經規則核實。」（沒有值寫「未記錄」）。名稱與連結同 `/news/:id` 的候選標的（代號查無標的寫「代號未對應到已知標的」且不連結）；卡片不列理由，理由在 `/news/:id`。來源是 `ai.symbol_candidates`（只用 `usableAi` 認可的 `done` 結果）；代號與規則核實的標的（`instruments`，或 `symbols` 的 `交易所:代號`／純代號）相同的那檔不列，同一代號重複時只列一次；只比代號、不比交易所，因為上市櫃代號不會重複，模型寫錯交易所的同一檔不在兩行各出現一次；剩下沒有候選時整行不顯示，不寫「無」。今日頁精簡列不顯示這一行。
+- **今日頁重點新聞精簡列**：今日頁只列 `dashboard.news` 前 3 則，區塊標題「重點新聞」（眉標「市場基礎層 · 重大事件」），右側「查看全部新聞」。每則依序為分類與來源 → 兩行內原始標題 → 來源時間 → 影響／AI → 相關標的；不顯示摘要、AI 候選行與來源連結（在 `/news/:id`）。沒有新聞時寫「市場新聞區尚無可顯示內容。」。
 - **摘要**：沒有摘要時寫「來源未提供摘要」。只有存在合法可用原文時，才可另顯示附引用與方法的「AI 摘要」；不得由標題或模型記憶補造。
 - **影響與 AI 推論**：方向寫「可能正向」「可能負向」「正負互見」「影響尚未判定」，前置色點（正向 `--color-up`、負向 `--color-down`、互見 `--color-flat`）；unknown 與 `unsupported` 不加色點。卡片上的方向若來自 AI，後接「AI 推論」badge；新聞頁、個股頁與今日頁的卡片讀同一份 `ai`，有 AI 判讀時都顯示 AI 方向，不退回規則方向。`/news/:id` 來源事實欄的「影響」列只讀來源的 `impact_direction`（新聞收集一律存 unknown，[NEWS_SPEC §3](NEWS_SPEC.md#3-去重新資訊與事件影響)），unknown 寫「來源未標示影響」、不加色點，不寫「影響尚未判定」，以免讀成與右欄 AI 方向衝突。`/news/:id` 的「AI 摘要與判讀」區與來源事實分開，列 AI 摘要、方向與範圍、理由、候選標的與候選題材（標「待核實」並寫「模型把握高／中／低」；代號查無標的寫「代號未對應到已知標的」且不連結；交易所以 API 的 `exchange` 為準，模型寫錯時 API 已依主檔更正（[NEWS_SPEC §5](NEWS_SPEC.md#5-ai-摘要與推論)），名稱與連結用更正後的交易所，不另標示），以及模型、提示版本與產生時間（`generated_at` 換算台北時間 YYYY/MM/DD HH:mm，沒有時區寫「待核實」）；沒有結果寫「此則尚未產生 AI 摘要與判讀」。
 - **日期**：`published_at`／`event_at`／`event_date` 依序寫「發布於 日期時間」／「事件於 日期時間」／「事件日 日期」；三者皆無寫「來源時間未提供」，有值但 `product_time` 角色為 unknown 或 `time_consistency=conflict` 寫「來源時間待核實」，collected_at 只在詳情稽核層顯示「系統收錄時間」；`time_consistency=conflict` 寫「資料集事件日期與公告內容提及日期不一致，時間待人工核實」。排序依 [NEWS_SPEC §4](NEWS_SPEC.md#4-時間與排序)，依 collected_at 排序的項目不可顯示成發布時間。
