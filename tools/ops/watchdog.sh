@@ -45,7 +45,8 @@ done
 # --data-dir and --monitor-dir of its arguments win).
 absolute() { # absolute DIR: DIR from the current directory unless it already is absolute
   case "$1" in
-    /*|[A-Za-z]:*) printf '%s' "$1" ;;
+    # A drive path has the separator after the colon: a:b is a relative name (#448).
+    /*|[A-Za-z]:[\\/]*) printf '%s' "$1" ;;
     *) printf '%s/%s' "$PWD" "${1#./}" ;;
   esac
 }
@@ -110,8 +111,23 @@ fi
 # killed or not, and the child ends with it (#313; replaces the lock directory
 # that a killed run left behind for 30 minutes, #224). Without Python the run
 # goes unlocked; the task's IgnoreNew still keeps scheduled runs apart.
+#
+# WATCHDOG_LOCK_HELD only tells the run it starts not to take the lock again; it
+# proves nothing, since anyone can type it. What a run needs to remove work
+# directories is that its parent is the lock runner of this lock, which only starts
+# its command after it holds the lock and holds it until the command ends. That is
+# read from /proc (the kernel's view), not from the environment (#448).
+lock_file="$data_dir/locks/watchdog.lock"
+parent_holds_lock() { # the parent process is `-m worker.job lock "$lock_file" --`
+  local args=() i
+  [ -r "/proc/$PPID/cmdline" ] && mapfile -d '' -t args <"/proc/$PPID/cmdline" || return 1
+  for ((i = 1; i + 3 < ${#args[@]}; i++)); do
+    [ "${args[i - 1]}" = -m ] && [ "${args[i]}" = worker.job ] && [ "${args[i + 1]}" = lock ] \
+      && [ "${args[i + 2]}" = "$lock_file" ] && [ "${args[i + 3]}" = -- ] && return 0
+  done
+  return 1
+}
 if [ -n "$python" ] && [ -z "${WATCHDOG_LOCK_HELD:-}" ]; then
-  lock_file="$data_dir/locks/watchdog.lock"
   (cd "$repo_root/backend" && WATCHDOG_LOCK_HELD=1 exec "$python" -X utf8 -m worker.job \
     lock "$lock_file" -- "$BASH" "$script_dir/watchdog.sh" "${arguments[@]}")
   status=$?
@@ -130,7 +146,17 @@ trap 'rm -rf "$work"' EXIT
 # directory but this run's own (never listed, whatever the order) is left over. A
 # run without Python is unlocked and removes nothing; a link or a file with such a
 # name is not a work directory. A dry run only says what it would remove.
+# "Holds the lock" is parent_holds_lock, not WATCHDOG_LOCK_HELD: a run with the flag
+# typed by hand goes on without the lock and without removing anything (#448).
+lock_proven=0
 if [ -n "${WATCHDOG_LOCK_HELD:-}" ]; then
+  if parent_holds_lock; then
+    lock_proven=1
+  else
+    log lock_unverified "" "WATCHDOG_LOCK_HELD 已設定，但上層程序不是持有 $lock_file 的 worker.job lock：本次沒有鎖，不清理殘留的工作目錄"
+  fi
+fi
+if [ "$lock_proven" = 1 ]; then
   stale_work=()
   for stale in "$logs"/.watchdog.??????; do
     [ "$stale" != "$work" ] && [ -d "$stale" ] && [ ! -L "$stale" ] && stale_work+=("$stale")
