@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import subprocess
 import sys
@@ -339,11 +340,11 @@ def test_any_cli_file_is_accepted_without_a_native_exe_check(monkeypatch, tmp_pa
 @pytest.mark.parametrize(
     "mode,reason",
     [
-        ("extra_key", "schema_mismatch"),
-        ("long_reason", "schema_mismatch"),
+        # An answer whose shape is wrong; a wrong item alone is #450's
+        # test_an_invalid_item_is_pending_and_the_rest_of_its_batch_written.
+        ("items_not_list", "schema_mismatch"),
         ("invalid_json", "invalid_json"),
         ("sleep", "timeout"),
-        ("missing_field", "schema_mismatch"),
     ],
 )
 def test_failed_batch_is_pending_and_other_batches_still_run(
@@ -430,10 +431,23 @@ def test_validation_rejects_missing_extra_and_bad_fields():
         "impact_rationale": "理由",
         "unsupported": False,
     }
-    assert validate_output({"items": [good]}, [1])[1]["impact_direction"] == "positive"
+    checked = validate_output({"items": [good]}, [1])
+    assert checked.outputs[1]["impact_direction"] == "positive"
+    assert (checked.failures, checked.extra_ids) == ({}, [])
+    # #450: a missing, repeated or unsent id fails that item alone.
+    checked = validate_output({"items": [good, dict(good, id=3)]}, [1, 2])
+    assert set(checked.outputs) == {1}
+    assert checked.failures == {2: "missing from the answer"}
+    assert checked.extra_ids == [3]
+    checked = validate_output({"items": [good, dict(good)]}, [1])
+    assert checked.outputs == {}
+    assert checked.failures == {1: "duplicate id: answered 2 times"}
+    # An answer whose shape is wrong fails the whole batch.
+    for shape in ({"items": "none"}, None, {"items": [good], "note": "extra"}):
+        with pytest.raises(LlmBatchError) as error:
+            validate_output(shape, [1])
+        assert error.value.reason == "schema_mismatch"
     bad_cases = [
-        {"items": [good]},  # expected 1 and 2
-        {"items": [good, dict(good)]},  # duplicate
         {"items": [dict(good, summary_zh="字" * 81)]},
         {"items": [dict(good, impact_direction="bullish")]},
         {
@@ -457,9 +471,6 @@ def test_validation_rejects_missing_extra_and_bad_fields():
             ]
         },
         {"items": [dict(good, unsupported="no")]},
-        {"items": "none"},
-        None,
-        {"items": [good], "note": "extra"},
         {"items": [dict(good, buy_signal=True)]},
         {"items": [dict(good, impact_rationale="理" * 121)]},
         {"items": [dict(good, theme_candidates=[{"theme": "題" * 41, "reason": "x"}])]},
@@ -502,11 +513,10 @@ def test_validation_rejects_missing_extra_and_bad_fields():
             ]
         },
     ]
-    for index, case in enumerate(bad_cases):
-        expected = [1, 2] if index == 0 else [1]
-        with pytest.raises(LlmBatchError) as error:
-            validate_output(case, expected)
-        assert error.value.reason == "schema_mismatch"
+    for case in bad_cases:
+        checked = validate_output(case, [1])
+        assert checked.outputs == {}
+        assert checked.failures[1].startswith("schema_mismatch")
 
 
 def test_unsupported_item_has_unknown_direction():
@@ -527,7 +537,7 @@ def test_unsupported_item_has_unknown_direction():
         },
         [7],
     )
-    assert output[7]["impact_direction"] == "unknown"
+    assert output.outputs[7]["impact_direction"] == "unknown"
 
 
 # AC-4 and API -------------------------------------------------------------------
@@ -1761,3 +1771,239 @@ def test_the_current_prompt_asks_for_evidence_from_the_source():
     ]["items"]
     assert theme["required"] == ["theme", "reason", "evidence"]
     assert theme["properties"]["evidence"]["maxLength"] == news_llm.EVIDENCE_MAX_CHARS
+
+
+# Issue #450 -------------------------------------------------------------------
+# Capacity: each run sends the newest arrivals with half its limit and the oldest
+# unsettled items of the window with the rest. Partial writes: an item the answer
+# leaves out, repeats or gets wrong waits for the next run, the rest are written.
+
+RUN_EVERY = timedelta(hours=2)
+
+
+def _arrive(db, at, count, *, start):
+    """COUNT items published and collected one second apart just before AT."""
+
+    items = []
+    for offset in range(count):
+        moment = at - timedelta(seconds=offset + 1)
+        items += _add_news(
+            db,
+            1,
+            start=start + offset,
+            published_at=moment,
+            display_time=moment,
+            collected_at=moment,
+        )
+    return items
+
+
+def test_old_items_of_the_window_are_done_although_new_ones_exceed_a_run(
+    db, fake, frozen_utcnow
+):
+    limit = news_llm.DEFAULT_LIMIT
+    first = frozen_utcnow.at
+    old = _arrive(db, first - timedelta(days=2), 3 * BATCH_SIZE, start=0)
+    outside = _arrive(
+        db, first - news_llm.STALE_AFTER - timedelta(minutes=1), 2, start=900
+    )
+    # N: every run keeps limit - limit // 2 items for the oldest of the window.
+    runs = math.ceil(len(old) / (limit - limit // 2))
+    start = 1000
+    for number in range(runs):
+        frozen_utcnow.at = first + number * RUN_EVERY
+        # More new items than one run takes.
+        arrived = _arrive(db, frozen_utcnow.at, limit + BATCH_SIZE, start=start)
+        start += len(arrived)
+        result = run_news_llm(db, run_date=RUN_DATE, now=frozen_utcnow.at)
+        assert result["calls"] == math.ceil(limit / BATCH_SIZE)
+        # The newest arrivals are still done in the run they arrive for.
+        done = {row.news_item_id for row in _results(db, llm_status="done")}
+        assert {item.id for item in arrived[: limit // 2]} <= done
+    done = {row.news_item_id for row in _results(db, llm_status="done")}
+    assert {item.id for item in old} <= done
+    # Items past the window are marked stale and never sent.
+    sent = {news_id for call in fake() for news_id in call["ids"]}
+    assert not sent & {item.id for item in outside}
+    assert {row.news_item_id for row in _results(db, llm_status="skipped_stale")} == {
+        item.id for item in outside
+    }
+
+
+def test_a_weekday_of_600_news_is_done_the_same_day(db, fake, frozen_utcnow):
+    # 11/03 had 588 items: 12 runs of 50 fit one Taipei day's call limit.
+    first = frozen_utcnow.at
+    for number in range(12):
+        frozen_utcnow.at = first + number * RUN_EVERY
+        _arrive(db, frozen_utcnow.at, 50, start=number * 50)
+        result = run_news_llm(db, run_date=RUN_DATE, now=frozen_utcnow.at)
+        assert result["skipped"] == 0
+    assert len(_results(db, llm_status="done")) == 600
+    assert len(fake()) == 24 <= news_llm.DAILY_CALL_LIMIT
+
+
+def test_an_item_left_out_of_the_answer_is_retried_and_the_rest_written(
+    db, fake, monkeypatch
+):
+    _add_news(db, BATCH_SIZE)
+    monkeypatch.setenv("FAKE_CLAUDE_MODES", "drop_first,ok")
+    first = _run(db)
+    left_out = fake()[0]["ids"][0]
+    assert (first["status"], first["done"], first["pending"]) == (
+        "partial",
+        BATCH_SIZE - 1,
+        1,
+    )
+    assert first["batches"][0]["status"] == "done"
+    row = _results(db, news_item_id=left_out)[0]
+    assert row.llm_status == "pending" and row.ai_summary is None
+    assert row.llm_error.startswith("item_failed 1/3: ")
+    assert len(_results(db, llm_status="done")) == BATCH_SIZE - 1
+    run = db.get(IngestionRun, first["run_id"])
+    assert str(left_out) in run.error and run.metadata_json["reason"] == "item_failed"
+
+    retry = _run(db)
+    assert fake()[1]["ids"] == [left_out] and retry["done"] == 1
+    row = _results(db, news_item_id=left_out)[0]
+    assert (row.llm_status, row.llm_error) == ("done", None)
+
+
+def test_an_item_left_out_every_time_is_sent_at_most_three_times(db, fake, monkeypatch):
+    stubborn, other = _add_news(db, 2)
+    monkeypatch.setenv("FAKE_CLAUDE_MODES", "drop_id")
+    monkeypatch.setenv("FAKE_CLAUDE_DROP_ID", str(stubborn.id))
+    for _ in range(5):
+        _run(db)
+    sends = [call for call in fake() if stubborn.id in call["ids"]]
+    # The first send and at most 2 retries.
+    assert news_llm.MAX_ITEM_ATTEMPTS == 3 and len(sends) == 3
+    row = _results(db, news_item_id=stubborn.id)[0]
+    assert row.llm_status == "rejected" and row.ai_summary is None
+    assert row.llm_error.startswith("item_failed 3/3: ")
+    assert row.llm_error.endswith("not sent again")
+    assert _results(db, news_item_id=other.id)[0].llm_status == "done"
+
+
+def test_a_failed_batch_keeps_the_count_of_an_items_earlier_failures(
+    db, fake, monkeypatch
+):
+    (item,) = _add_news(db, 1)
+    monkeypatch.setenv("FAKE_CLAUDE_MODES", "drop_id,invalid_json,drop_id")
+    monkeypatch.setenv("FAKE_CLAUDE_DROP_ID", str(item.id))
+    _run(db)
+    _run(db)
+    # A whole-batch failure is not the item's: it neither counts nor resets.
+    row = _results(db, news_item_id=item.id)[0]
+    assert row.llm_status == "pending"
+    assert row.llm_error.startswith("item_failed 1/3 earlier; invalid_json")
+    _run(db)
+    row = _results(db, news_item_id=item.id)[0]
+    assert row.llm_error.startswith("item_failed 2/3: ")
+
+
+def test_repeated_and_unsent_ids_are_not_written(db, fake, monkeypatch):
+    (outsider,) = _add_news(db, 1, start=500)
+    _run(db)
+    before = _results(db, news_item_id=outsider.id)[0]
+    kept = (before.ai_summary, before.llm_run_at, before.ingestion_run_id)
+    _add_news(db, 3)
+    monkeypatch.setenv("FAKE_CLAUDE_MODES", "duplicate_and_extra")
+    monkeypatch.setenv("FAKE_CLAUDE_EXTRA_ID", str(outsider.id))
+
+    result = _run(db)
+
+    sent = fake()[-1]["ids"]
+    assert outsider.id not in sent
+    repeated = _results(db, news_item_id=sent[0])[0]
+    assert repeated.llm_status == "pending" and repeated.ai_summary is None
+    assert repeated.llm_error.startswith("item_failed 1/3: duplicate id")
+    done = {row.news_item_id for row in _results(db, llm_status="done")}
+    assert set(sent[1:]) <= done
+    after = _results(db, news_item_id=outsider.id)[0]
+    assert (after.ai_summary, after.llm_run_at, after.ingestion_run_id) == kept
+    assert result["batches"][0]["extra_ids"] == [outsider.id]
+
+
+@pytest.mark.parametrize("mode", ["extra_key", "long_reason", "missing_field"])
+def test_an_invalid_item_is_pending_and_the_rest_of_its_batch_written(
+    db, fake, monkeypatch, mode
+):
+    _add_news(db, 3)
+    monkeypatch.setenv("FAKE_CLAUDE_MODES", mode)
+    result = _run(db)
+    bad = fake()[0]["ids"][0]
+    assert (result["status"], result["done"], result["pending"]) == ("partial", 2, 1)
+    row = _results(db, news_item_id=bad)[0]
+    assert row.llm_status == "pending" and row.ai_summary is None
+    assert row.llm_error.startswith("item_failed 1/3: schema_mismatch")
+
+
+def test_an_answer_with_no_valid_item_counts_for_every_item(db, fake, monkeypatch):
+    items = _add_news(db, 2)
+    monkeypatch.setenv("FAKE_CLAUDE_MODES", "empty_items")
+    result = _run(db)
+    assert result["status"] == "failed"
+    assert result["batches"][0]["status"] == "pending"
+    for item in items:
+        row = _results(db, news_item_id=item.id)[0]
+        assert row.llm_error.startswith("item_failed 1/3: missing from the answer")
+
+
+def test_an_error_while_closing_the_run_is_recorded_on_it(db, fake, monkeypatch):
+    _add_news(db, 2)
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("fixture metadata failure")
+
+    monkeypatch.setattr(news_llm, "_metadata", broken)
+    result = _run(db)
+    assert (result["status"], result["reason"]) == ("failed", "run_error")
+    run = db.get(IngestionRun, result["run_id"])
+    assert run.status == "failed" and run.finished_at is not None
+    assert run.error.startswith("run_error: RuntimeError: fixture metadata failure")
+    assert run.metadata_json["reason"] == "run_error"
+    # The call already made still counts toward the daily limit.
+    assert run.metadata_json["calls"] == 1 == len(fake())
+
+
+@pytest.mark.parametrize(
+    "modes,count,daily_limit,status,reason",
+    [
+        ("invalid_json", 2, None, "failed", "invalid_json"),
+        ("not_logged_in", 2, None, "failed", "not_logged_in"),
+        ("items_not_list", 2, None, "failed", "schema_mismatch"),
+        ("ok,invalid_json", BATCH_SIZE + 1, None, "partial", "invalid_json"),
+        ("drop_first", 2, None, "partial", "item_failed"),
+        ("ok", BATCH_SIZE + 1, 1, "partial", "daily_call_limit"),
+    ],
+)
+def test_every_failed_or_partial_run_records_its_reason(
+    db, fake, monkeypatch, modes, count, daily_limit, status, reason
+):
+    if daily_limit is not None:
+        monkeypatch.setattr(news_llm, "DAILY_CALL_LIMIT", daily_limit)
+    _add_news(db, count)
+    monkeypatch.setenv("FAKE_CLAUDE_MODES", modes)
+    result = _run(db)
+    run = db.get(IngestionRun, result["run_id"])
+    assert run.status == status
+    assert run.error and run.error.strip()
+    assert run.metadata_json["reason"].split(",")[0] == reason
+
+
+def test_an_abandoned_run_records_its_reason(db, frozen_utcnow):
+    run = IngestionRun(
+        run_type="news_llm",
+        source="claude-cli",
+        run_date=RUN_DATE,
+        status="running",
+        records=0,
+        started_at=frozen_utcnow.at - news_llm.ABANDONED_AFTER - timedelta(seconds=1),
+        metadata_json={"calls": 1},
+    )
+    db.add(run)
+    db.commit()
+    news_llm.close_abandoned_runs(db)
+    db.refresh(run)
+    assert run.error.startswith("abandoned")
+    assert run.metadata_json == {"calls": 1, "reason": "abandoned"}

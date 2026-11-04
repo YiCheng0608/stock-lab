@@ -2,8 +2,10 @@
 
 Active news items from the last three days without a ``done`` result for the
 current prompt version are sent in batches to the local Claude Code CLI in
-headless mode, logged in with the user's subscription (no API key).  Results
-go to news_llm_results, one row per item and prompt version, so the rule
+headless mode, logged in with the user's subscription (no API key).  Each run
+takes the newest arrivals with half its limit and the oldest unsettled items
+of the window with the rest, so new items cannot keep older ones out (#450).
+Results go to news_llm_results, one row per item and prompt version, so the rule
 relations and source summary on news_items are never overwritten and older
 prompt versions stay.  Older items are marked ``skipped_stale`` and not sent.
 An item whose summary writes a number its Chinese source does not is stored
@@ -12,12 +14,16 @@ whose quoted evidence is not in the source, or whose name the source neither
 writes nor directly gives (``theme_check``), is left out of the stored result
 and recorded in data_quality; the rest of the item is stored as usual.
 
-A failing batch (timeout, invalid JSON, schema mismatch) marks its items
-``pending`` with the reason and the other batches still run; pending items
-are retried on the next run.  A failure that every later call would repeat
-(not logged in, rate limit, CLI not started) stops the run and the remaining
-batches are skipped.  Every call stores its prompt and response as raw and
-its token usage and duration on the ``news_llm`` ingestion run.
+A failing batch (timeout, invalid JSON, an answer whose shape is wrong) marks
+its items ``pending`` with the reason and the other batches still run; pending
+items are retried on the next run.  An item the answer leaves out, repeats or
+gets wrong is ``pending`` on its own and the rest of the batch is written; after
+MAX_ITEM_ATTEMPTS such failures it is ``rejected`` and not sent again.  A
+failure that every later call would repeat (not logged in, rate limit, CLI not
+started) stops the run and the remaining batches are skipped.  Every call
+stores its prompt and response as raw and its token usage and duration on the
+``news_llm`` ingestion run; a run that ends failed or partial always records
+its reason in ``error`` and ``metadata_json.reason``.
 """
 
 from __future__ import annotations
@@ -64,12 +70,24 @@ PROMPT_SHA256 = "185471b05ec09ab6bc7c85ad79fdbb6bad396b8b587ae31efb9b1995ae69923
 # source does not (AC-3 rounds 1 and 2); sonnet had none on the same items.
 MODEL = "sonnet"
 BATCH_SIZE = 25
-DEFAULT_LIMIT = 50
-# Calls per Taipei day across all news_llm runs; the subscription quota is
-# shared with the interactive sessions.
-DAILY_CALL_LIMIT = 20
+# Items per run (#450: 50 -> 100).  A weekday collects 450-600 items; the news
+# job runs every 2 hours, so 12 runs of 100 cover a day and leave room for the
+# backlog of a prompt upgrade or an outage.
+DEFAULT_LIMIT = 100
+# Calls per Taipei day across all news_llm runs (#450: 20 -> 48, 12 runs of 4);
+# the subscription quota is shared with the interactive sessions.  A run calls
+# only for the batches it has, so a quiet day uses far fewer.
+DAILY_CALL_LIMIT = 48
 # Items whose published_at (else collected_at) is older are not sent.
 STALE_AFTER = timedelta(days=3)
+# Collected within one news interval: the arrivals since the last run, which a
+# run sends first with up to half its limit (#450).
+FRESH_WINDOW = timedelta(hours=2)
+# Sends of an item the answer left out, repeated or got wrong (the first and two
+# retries); then it is rejected.  The count is kept in llm_error (ITEM_FAILED).
+MAX_ITEM_ATTEMPTS = 3
+ITEM_FAILED = "item_failed"
+_ITEM_FAILURES = re.compile(rf"^{ITEM_FAILED} (\d+)/\d+")
 # The scheduled news task (news, then news-llm) is stopped after 90 minutes
 # and never runs twice at once, so a news_llm run still marked running after
 # that long lost its process; the next run records it as failed.
@@ -589,20 +607,33 @@ def select_items(
     limit: int = DEFAULT_LIMIT,
     now: datetime | None = None,
 ) -> list[NewsItem]:
-    """Unsettled items of the last STALE_AFTER, newest first."""
+    """Unsettled items of the last STALE_AFTER: new arrivals first, then the oldest.
 
-    cutoff = (now or utcnow()) - STALE_AFTER
-    query = (
-        _candidates_query(db, on_date)
-        .where(_item_time() >= cutoff)
-        .order_by(
-            NewsItem.display_time.is_(None),
-            NewsItem.display_time.desc(),
-            NewsItem.id.desc(),
-        )
-        .limit(limit)
+    Up to half of ``limit`` goes to the items collected within FRESH_WINDOW,
+    newest first; the rest goes to the other unsettled items of the window,
+    oldest first, so a day of new items never keeps older ones out until they
+    turn stale (#450).
+    """
+
+    current = now or utcnow()
+    window = _candidates_query(db, on_date).where(_item_time() >= current - STALE_AFTER)
+    fresh = list(
+        db.scalars(
+            window.where(NewsItem.collected_at >= current - FRESH_WINDOW)
+            .order_by(
+                NewsItem.display_time.is_(None),
+                NewsItem.display_time.desc(),
+                NewsItem.id.desc(),
+            )
+            .limit(limit // 2)
+        ).all()
     )
-    return list(db.scalars(query).all())
+    older = db.scalars(
+        window.where(NewsItem.id.not_in([item.id for item in fresh]))
+        .order_by(_item_time().asc(), NewsItem.id.asc())
+        .limit(limit - len(fresh))
+    ).all()
+    return [*fresh, *older]
 
 
 def stale_items(
@@ -763,26 +794,57 @@ def _validate_item(raw: Any) -> dict[str, Any]:
     }
 
 
-def validate_output(
-    structured: Any, expected_ids: Sequence[int]
-) -> dict[int, dict[str, Any]]:
-    """Validate the whole response; any problem fails the whole batch."""
+@dataclass(frozen=True)
+class Validated:
+    """A checked answer: ``outputs`` per sent id, the ids that failed and why,
+    and the ids answered that were not sent (never written)."""
+
+    outputs: dict[int, dict[str, Any]]
+    failures: dict[int, str]
+    extra_ids: list[Any]
+
+
+def _answer_id(raw: Any) -> int | None:
+    value = raw.get("id") if isinstance(raw, dict) else None
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def validate_output(structured: Any, expected_ids: Sequence[int]) -> Validated:
+    """Check the answer item by item (#450).
+
+    An answer whose shape is wrong (not ``{"items": [...]}``) raises
+    LlmBatchError and fails the whole batch.  Otherwise each sent id is checked
+    on its own: left out, answered more than once, or not matching the schema,
+    it goes to ``failures``; an answered id that was not sent is ignored.
+    """
 
     structured = _object(structured, ("items",), "structured_output")
     if not isinstance(structured["items"], list):
         raise LlmBatchError("schema_mismatch", "structured_output.items must be a list")
-    results: dict[int, dict[str, Any]] = {}
-    for raw in structured["items"]:
-        item = _validate_item(raw)
-        if item["id"] in results:
-            raise LlmBatchError("schema_mismatch", f"duplicate id {item['id']}")
-        results[item["id"]] = item
     expected = set(expected_ids)
-    if set(results) != expected:
-        missing = sorted(expected - set(results))
-        extra = sorted(set(results) - expected)
-        raise LlmBatchError("schema_mismatch", f"ids missing {missing} extra {extra}")
-    return results
+    answers: dict[int, list[Any]] = {}
+    extra: list[Any] = []
+    for index, raw in enumerate(structured["items"]):
+        answer_id = _answer_id(raw)
+        if answer_id is None or answer_id not in expected:
+            extra.append(f"items[{index}]" if answer_id is None else answer_id)
+            continue
+        answers.setdefault(answer_id, []).append(raw)
+    outputs: dict[int, dict[str, Any]] = {}
+    failures: dict[int, str] = {}
+    for news_id in expected_ids:
+        found = answers.get(news_id, [])
+        if not found:
+            failures[news_id] = "missing from the answer"
+        elif len(found) > 1:
+            # Two answers for one item: neither is written.
+            failures[news_id] = f"duplicate id: answered {len(found)} times"
+        else:
+            try:
+                outputs[news_id] = _validate_item(found[0])
+            except LlmBatchError as exc:
+                failures[news_id] = str(exc)
+    return Validated(outputs, failures, extra)
 
 
 _USAGE_KEYS = {
@@ -863,9 +925,14 @@ def _store_status(
     raw_payload_id: int | None,
     run_at: datetime,
     model: str | None = None,
+    keep_count: bool = True,
 ) -> None:
     # Only status, reason and audit links change; no ai_* field is written.
     row = _result_row(db, item.id) or _new_row(item)
+    failures = item_failures(row) if keep_count else 0
+    if status == "pending" and failures:
+        # A whole-batch failure is not the item's: keep its count.
+        error = f"{ITEM_FAILED} {failures}/{MAX_ITEM_ATTEMPTS} earlier; {error}"
     row.llm_model = model or row.llm_model or MODEL
     row.llm_input_hash = input_hash(item_input(item))
     row.llm_run_at = run_at
@@ -874,6 +941,46 @@ def _store_status(
     row.ingestion_run_id = run.id
     row.raw_payload_id = raw_payload_id
     db.add(row)
+
+
+def item_failures(row: NewsLlmResult | None) -> int:
+    """Failures of this item alone so far, as ``llm_error`` records them."""
+
+    if row is None or row.llm_status != "pending" or not row.llm_error:
+        return 0
+    match = _ITEM_FAILURES.match(row.llm_error)
+    return int(match.group(1)) if match else 0
+
+
+def _store_item_failure(
+    db: Session,
+    item: NewsItem,
+    detail: str,
+    *,
+    run: IngestionRun,
+    raw_payload_id: int,
+    run_at: datetime,
+    model: str | None,
+) -> bool:
+    """Record one more failure of this item; True when it is now rejected."""
+
+    count = item_failures(_result_row(db, item.id)) + 1
+    error = f"{ITEM_FAILED} {count}/{MAX_ITEM_ATTEMPTS}: {detail}"
+    given_up = count >= MAX_ITEM_ATTEMPTS
+    if given_up:
+        error = f"{error[:450]}; not sent again"
+    _store_status(
+        db,
+        item,
+        "rejected" if given_up else "pending",
+        error,
+        run=run,
+        raw_payload_id=raw_payload_id,
+        run_at=run_at,
+        model=model,
+        keep_count=False,
+    )
+    return given_up
 
 
 def _record_dropped_themes(
@@ -951,7 +1058,7 @@ def _run_batch(
     envelope: dict[str, Any] | None = None
     try:
         envelope = parse_envelope(result)
-        outputs = validate_output(
+        checked = validate_output(
             envelope.get("structured_output"), summary["news_ids"]
         )
     except LlmBatchError as exc:
@@ -972,9 +1079,26 @@ def _run_batch(
     model, usage = _usage(envelope)
     group_names = theme_group_names(db, items)
     rejected: list[int] = []
+    item_failed: list[dict[str, Any]] = []
+    given_up: list[int] = []
     theme_dropped: list[dict[str, Any]] = []
     for item, payload in zip(items, inputs):
-        output = outputs[item.id]
+        if item.id in checked.failures:
+            # Only this item waits for the next run; the rest are written (#450).
+            detail = checked.failures[item.id]
+            item_failed.append({"news_id": item.id, "error": detail[:300]})
+            if _store_item_failure(
+                db,
+                item,
+                detail,
+                run=run,
+                raw_payload_id=raw_row.id,
+                run_at=run_at,
+                model=model,
+            ):
+                given_up.append(item.id)
+            continue
+        output = checked.outputs[item.id]
         missing = summary_numbers_missing(payload, output["summary"])
         if missing:
             # Only this item; its output stays in the raw payload.
@@ -1027,12 +1151,20 @@ def _run_batch(
                 }
             )
     summary.update(
-        status="done",
+        status="done" if checked.outputs else "pending",
         model=model,
         usage=usage,
         rejected_ids=rejected,
+        item_failed=item_failed,
+        item_rejected_ids=given_up,
+        extra_ids=checked.extra_ids,
         theme_dropped=theme_dropped,
     )
+    if not checked.outputs:
+        summary.update(
+            reason=ITEM_FAILED,
+            error=f"{ITEM_FAILED}: no valid item in the answer",
+        )
     return summary
 
 
@@ -1082,6 +1214,7 @@ def close_abandoned_runs(db: Session, now: datetime | None = None) -> list[int]:
     for row in rows:
         row.status = "failed"
         row.error = f"abandoned: no finish was recorded within {ABANDONED_AFTER}"
+        row.metadata_json = {**(row.metadata_json or {}), "reason": "abandoned"}
         row.finished_at = current
     if rows:
         db.commit()
@@ -1163,6 +1296,58 @@ def run_news_llm(
     )
     db.add(run)
     db.commit()
+    active = runner or run_claude_cli
+    results: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+
+    def metadata() -> dict[str, Any]:
+        return _metadata(
+            template, limit, base["date_filter"], results, skipped, len(stale)
+        )
+
+    try:
+        _mark_stale(db, run, stale)
+        _send_batches(
+            db,
+            run,
+            batches,
+            template,
+            command,
+            active,
+            allowed,
+            results,
+            skipped,
+            metadata,
+        )
+        return {**base, **_close_run(db, run, batches, results, skipped, metadata)}
+    except Exception as exc:  # noqa: BLE001 - the run must not be left running
+        # A write failed (database locked, constraint) or a bug: close the run as
+        # failed with its reason and the calls already made, instead of leaving
+        # it running until the next run calls it abandoned (#450).
+        db.rollback()
+        error = f"run_error: {type(exc).__name__}: {exc}"[:500]
+        failed_run = db.get(IngestionRun, run.id)
+        failed_run.status = "failed"
+        failed_run.error = error
+        failed_run.data_as_of = utcnow().isoformat()
+        failed_run.finished_at = utcnow()
+        failed_run.metadata_json = {
+            **(failed_run.metadata_json or {}),
+            "calls": len(results),
+            "reason": "run_error",
+        }
+        db.commit()
+        return {
+            **base,
+            "status": "failed",
+            "reason": "run_error",
+            "error": error,
+            "run_id": run.id,
+            "calls": len(results),
+        }
+
+
+def _mark_stale(db: Session, run: IngestionRun, stale: list[NewsItem]) -> None:
     stale_at = utcnow()
     for item in stale:
         _store_status(
@@ -1175,9 +1360,20 @@ def run_news_llm(
             run_at=stale_at,
         )
     db.commit()
-    active = runner or run_claude_cli
-    results: list[dict[str, Any]] = []
-    skipped: list[dict[str, Any]] = []
+
+
+def _send_batches(
+    db: Session,
+    run: IngestionRun,
+    batches: list[list[NewsItem]],
+    template: str,
+    command: list[str],
+    runner: Runner,
+    allowed: int,
+    results: list[dict[str, Any]],
+    skipped: list[dict[str, Any]],
+    metadata: Callable[[], dict[str, Any]],
+) -> None:
     stop_reason: str | None = None
     for number, batch in enumerate(batches, start=1):
         ids = [item.id for item in batch]
@@ -1190,7 +1386,7 @@ def run_news_llm(
             )
             continue
         try:
-            outcome = _run_batch(db, run, number, batch, template, command, active)
+            outcome = _run_batch(db, run, number, batch, template, command, runner)
         except Exception as exc:  # noqa: BLE001 - one batch must not stop the others
             db.rollback()
             error = f"batch_error: {type(exc).__name__}: {exc}"[:500]
@@ -1216,51 +1412,85 @@ def run_news_llm(
             stop_reason = f"stopped_after_{outcome['reason']}"
         # Count the call as soon as it is made, so a crash later in this run
         # still counts toward the daily limit.
-        run.metadata_json = _metadata(
-            template, limit, base["date_filter"], results, skipped, len(stale)
-        )
+        run.metadata_json = metadata()
         db.commit()
-    done = [item for item in results if item["status"] == "done"]
+
+
+def _batch_counts(batch: dict[str, Any]) -> tuple[int, int, int]:
+    """Items of one sent batch that are (done, pending, rejected)."""
+
+    failed = len(batch.get("item_failed", []))
+    given_up = len(batch.get("item_rejected_ids", []))
+    checked = len(batch.get("rejected_ids", []))
+    if batch["status"] != "done":
+        return 0, len(batch["news_ids"]) - given_up, given_up
+    done = len(batch["news_ids"]) - failed - checked
+    return done, failed - given_up, checked + given_up
+
+
+def _close_run(
+    db: Session,
+    run: IngestionRun,
+    batches: list[list[NewsItem]],
+    results: list[dict[str, Any]],
+    skipped: list[dict[str, Any]],
+    metadata: Callable[[], dict[str, Any]],
+) -> dict[str, Any]:
+    done_batches = [item for item in results if item["status"] == "done"]
+    clean = [item for item in done_batches if not item.get("item_failed")]
     if not batches:
         status = "success"
     elif not results:
         status = "skipped"
-    elif len(done) == len(batches):
+    elif len(clean) == len(batches):
         status = "success"
-    elif done:
+    elif done_batches:
         status = "partial"
     else:
         status = "failed"
-    failed = [item for item in results if item["status"] != "done"]
-    errors = [
-        f"batch {item['batch']}: {item.get('error', item.get('reason'))}"
-        for item in failed
-    ]
+    errors: list[str] = []
+    reasons: list[str] = []
+    for item in results:
+        if item["status"] != "done":
+            errors.append(f"batch {item['batch']}: {item.get('error', item['reason'])}")
+            reasons.append(item["reason"])
+        elif item.get("item_failed"):
+            ids = [entry["news_id"] for entry in item["item_failed"]]
+            errors.append(f"batch {item['batch']}: {ITEM_FAILED} {ids}")
+            reasons.append(ITEM_FAILED)
     for reason in sorted({item["reason"] for item in skipped}):
         count = sum(1 for item in skipped if item["reason"] == reason)
         errors.append(f"{reason}: {count} batch(es) skipped")
-    rejected = sum(len(item["rejected_ids"]) for item in done)
+        reasons.append(reason)
+    if status in ("failed", "partial") and not errors:
+        # Never a failed or partial run without a reason (#450).
+        errors.append(f"{status}: no failing batch was recorded")
+        reasons.append("unknown")
+    counts = [_batch_counts(item) for item in results]
     run.status = status
-    run.records = sum(len(item["news_ids"]) for item in done) - rejected
+    run.records = sum(done for done, _pending, _rejected in counts)
     run.error = "; ".join(errors) or None
     run.data_as_of = utcnow().isoformat()
-    run.metadata_json = _metadata(
-        template, limit, base["date_filter"], results, skipped, len(stale)
-    )
+    run.metadata_json = metadata()
+    if reasons:
+        run.metadata_json = {
+            **run.metadata_json,
+            "reason": ",".join(dict.fromkeys(reasons)),
+        }
     run.finished_at = utcnow()
     db.commit()
     return {
-        **base,
         "status": status,
         "run_id": run.id,
         "done": run.records,
-        "rejected": rejected,
+        "rejected": sum(rejected for _done, _pending, rejected in counts),
         "themes_dropped": sum(
             len(entry["themes"])
-            for item in done
+            for item in done_batches
             for entry in item.get("theme_dropped", [])
         ),
-        "pending": sum(len(item["news_ids"]) for item in failed),
+        "pending": sum(pending for _done, pending, _rejected in counts),
+        "item_failed": sum(len(item.get("item_failed", [])) for item in results),
         "skipped": sum(len(item["news_ids"]) for item in skipped),
         "calls": len(results),
         "usage_total": _usage_total(results),
