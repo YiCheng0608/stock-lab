@@ -93,7 +93,7 @@ python -m uvicorn app.main:app --reload --port 8000
 
 - **判讀**：`docker info --format '{{.ServerVersion}}'` 與任何 `docker compose` 命令都失敗，訊息是 `failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine; check if the path is correct and if the daemon is running: open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.`（Docker 29.9.2；2026-10-29 以不存在的 pipe 名稱重現同一格式，#341）。Docker Desktop 還在啟動時，等它顯示 Engine running 再查一次。`docker info` 有回應，但 `docker compose -p <project> ps` 沒列出 scheduler 或狀態不是 `Up`，就不是 Docker Desktop 的問題，看 `docker compose -p <project> logs scheduler`。
 - **期間沒有排程，也沒有留言**：daily、news、看門狗與事件 monitor 都在 scheduler 容器內，Docker Desktop 停了就全部停；看門狗也在容器裡，所以不會在 #1 留言。主機上看得到的跡象是統籌 `patrol.sh` 印的 monitor 心跳時間不再前進（monitor 開著時，[統籌事件 monitor](MONITOR.md)）。
-- **恢復**：開啟 Docker Desktop。三個服務都是 `restart: unless-stopped`，Docker Desktop 起來後容器自動回來，不必再 `up`（以 `docker compose stop`／`down` 停掉的除外）。serve 不補它啟動前錯過的時段（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)）：錯過當天的 daily 時，看門狗在 21:30 後以 `daily_no_end` 留言，依 [重跑與回補](SCHEDULING.md#重跑與回補) 手動補跑。
+- **恢復**：開啟 Docker Desktop。三個服務都是 `restart: unless-stopped`，Docker Desktop 起來後容器自動回來，不必再 `up`（以 `docker compose stop`／`down` 停掉的除外）。serve 不補它啟動前錯過的時段（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)）：錯過當天的 daily（21:30 與 23:00）時，看門狗在 23:10 後以 `daily_no_end` 留言，依 [重跑與回補](SCHEDULING.md#重跑與回補) 手動補跑。
 
 ## 資料庫、migration 與 readiness
 
@@ -103,7 +103,7 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 
 ### 安全升級與復原順序
 
-1. **備份**：解析實際 DB 絕對路徑，用 SQLite backup API 在專案外建副本；有 WAL 或未確認 writer 時不裸複製主檔。
+1. **備份**：解析實際 DB 絕對路徑（正式 DB 在 volume `stock-lab_stock-data` 的 `/data/stock.db`），用 SQLite backup API 在專案外建副本；有 WAL 或未確認 writer 時不裸複製主檔。正式 DB 的手動備份統一放 `C:/Users/YiCheng/stock-lab-backups/<用途>-<YYYYMMDD>/stock.db`（例如 `pre-v1.2.0-20261104`），不放進主機的 `stock-lab-data/`；命令是[取正式 DB 的唯讀副本](LOCAL.md#取正式-db-的唯讀副本)，`D` 換成備份目錄。
 2. **init-db**：對目標 DB 執行 `python -m worker.cli init-db`。遷移步驟只接受已知的 SQLite schema，在破壞性 DDL 前拒絕未知的 schema、constraint、index、trigger、view 或 marker 矛盾。
 3. **驗證**：確認 revision 為 current head，並跑 `PRAGMA integrity_check` 與 `PRAGMA foreign_key_check`。
 4. **失敗**：migration 只能前進，失敗時保留 DB 與錯誤，從備份還原到新路徑再診斷；不手動刪暫存表、補 marker、關 FK 或反覆重試。

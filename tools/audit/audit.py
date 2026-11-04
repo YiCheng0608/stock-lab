@@ -8,11 +8,11 @@ captures it cites with ``open(path, "rb")``.  Nothing is repaired.
 Refuses (exit 2, before anything is read) when ``--db`` is the production
 database (inside ``stock-lab-data`` or ``STOCK_DATA_DIR``, or the same file as
 its ``stock.db``, a hard link included) or ``--out`` is inside that directory
-(the path as written or with links resolved), when Taipei time is between 18:30 and
-21:30 (the daily job), or when free physical memory is under
+(the path as written or with links resolved), when Taipei time is between 21:30 and
+23:30 (the daily job and its 23:00 retry, #466), or when free physical memory is under
 ``--min-free-gb``; the rules are ``tools/research/backtest_research.py``'s.  A
-run that reaches 18:30 stops before the next item, marks the rest
-undetermined and exits 3 (rerun after 21:30, ``--only`` the items left).
+run that reaches 21:30 stops before the next item, marks the rest
+undetermined and exits 3 (rerun after 23:30, ``--only`` the items left).
 
 Items (docs/WORKFLOW.md 任務流程第 6 步 lists how they are read):
 bars_integrity, bars_coverage, bars_raw_values, bars_raw_missing (A4),

@@ -59,7 +59,7 @@ export PYTHONPATH="$WT/backend;<發佈 checkout 的 venv>/Lib/site-packages" PYT
 ### 1. 前置
 
 1. **停止條件**（任一成立就不跑，直接回覆原因）：
-   - 台北時間 18:30～21:30（排程 `daily` 時段，不碰正式 DB）：`TZ=UTC-8 date +%H%M` 在 `1830`～`2130` 之間（POSIX 寫法的 UTC+8；Git Bash 沒有時區資料庫，`Asia/Taipei` 會被當成 UTC）。
+   - 台北時間 21:30～23:30（排程 `daily` 時段：21:30 與 23:00 的重試，#466；不碰正式 DB）：`TZ=UTC-8 date +%H%M` 在 `2130`～`2330` 之間（POSIX 寫法的 UTC+8；Git Bash 沒有時區資料庫，`Asia/Taipei` 會被當成 UTC）。
    - 目前分支是 `master`（`git rev-parse --abbrev-ref HEAD`）：管理 checkout 不跑，請在任務 worktree 執行。
    - G7 的那兩次：G7 證據必須是排程正在跑的發佈 branch 程式。先 `git fetch origin master release/v1`；worktree 要從當時的 `origin/release/v1` 建，沒有額外 commit、沒有未 commit 的改動（`--g7` 要求 HEAD 等於 `origin/release/v1`）。第 2 步加 `--g7`，`page_checks.py` 不符合就 exit 2 並寫明原因，不跑任何檢查。
 2. **變數**（Bash 工具不保留 shell 狀態，每個命令開頭重設；`<…>` 換成[本機路徑](../../../docs/ops/LOCAL.md)的值）：
@@ -82,12 +82,7 @@ export PYTHONPATH="$WT/backend;<發佈 checkout 的 venv>/Lib/site-packages" PYT
    OUT="$V/out/$(TZ=UTC-8 date +%Y%m%d-%H%M)"; mkdir -p "$OUT" "$V/logs" && printf '%s\n' "$OUT" > "$V/current"
    ```
 
-4. **副本**（唯讀複製，約 10 秒；已存在也重做，確保是最新快照）。正式 DB（[本機路徑](../../../docs/ops/LOCAL.md#正式位置使用者決定)）只出現在這一行的 `--src`：
-
-   ```bash
-   # 換值（docs/ops/LOCAL.md）：<正式 DB>＝「正式位置」表的「正式 DB」
-   "$PY" -B "$WT/tools/ops/copy_db.py" --src '<正式 DB>' --dest "$V" --force > "$OUT/copy.json"
-   ```
+4. **副本**（唯讀複製，約 4 分鐘；已存在也重做，確保是最新快照）。正式 DB 在 Docker volume `stock-lab_stock-data` 裡，主機沒有檔案可複製（[本機路徑](../../../docs/ops/LOCAL.md#正式位置使用者決定)）。照 LOCAL 的[取正式 DB 的唯讀副本](../../../docs/ops/LOCAL.md#取正式-db-的唯讀副本)跑那一個命令，三處照這裡換：`D="$V"`、`python /t/copy_db.py` 後面加 `--force`、標準輸出存成 `$OUT/copy.json`。`source` 不是 `/data/stock.db`，或 `source_latest_trading_date` 不是最近一個已收完的交易日，就不是這個 volume 的現況，不繼續。
 
    失敗（exit 非 0）→ 五個導覽全部無法判定，原因寫 stderr，跳到[證據](#4-證據)。
 

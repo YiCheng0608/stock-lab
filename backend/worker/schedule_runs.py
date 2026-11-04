@@ -24,7 +24,7 @@ analyze (the signals' earliest execution date reads it); when it fails,
 analyze uses the calendar already stored.
 
 A first "no session" answer for today's target is recorded as
-``non_trading_unconfirmed``, which is not complete: the next trigger (21:30)
+``non_trading_unconfirmed``, which is not complete: the next trigger (23:00)
 asks again and only a repeated answer becomes ``non_trading_day``.
 
 Re-running the same target date is safe: when a run for that date already
@@ -32,7 +32,7 @@ finished as ``success`` or ``non_trading_day``, the new invocation records a
 ``skipped`` row (reason ``already_complete``) without touching market data,
 unless ``force`` is set.  The one exception is the institutional (三大法人)
 files, which the exchanges revise after publishing them (Issue #396): after a
-``success``, the next invocation (the 21:30 trigger) requests the two files
+``success``, the next invocation (the 23:00 trigger) requests the two files
 once more and records an ``institutional_refetch`` step on its skipped row;
 OHLCV, margin and events are not requested.  Data idempotency itself is owned
 by the steps: collect reuses a successful run for the same request and never
@@ -107,9 +107,10 @@ NON_BLOCKING_STEPS = frozenset(
 )
 # A run still marked running after this long has lost its process (killed,
 # rebooted); the next invocation records it as abandoned instead of waiting.
-# Equal to the scheduled task's execution limit and clearly shorter than the
-# 3 hours between the 18:30 and 21:30 triggers.  On the same host a dead PID
-# is detected immediately, without waiting for this limit.
+# Equal to the job's own execution limit (a manual run).  A scheduled run ends
+# at serve's 80 minutes, before the 23:00 trigger (#466), which holds the same
+# lock and so closes the row at once.  On the same host a dead PID is detected
+# immediately, without waiting for this limit.
 STALE_RUNNING_AFTER = timedelta(hours=2, minutes=30)
 COMPLETE_STATUSES = frozenset({"success", "non_trading_day"})
 # Both markets reported no session, but only once for today's target; the
@@ -261,7 +262,7 @@ def _collect_state(db: Any, day: date) -> str:
     A no-data answer counts as closed only when it is confirmed: a daily run
     recorded ``non_trading_day`` for that date, or the answer was obtained
     after that Taipei day ended (a later catch-up or backfill).  A single
-    same-day answer (``non_trading_unconfirmed`` whose 21:30 check never ran)
+    same-day answer (``non_trading_unconfirmed`` whose 23:00 check never ran)
     stays missing, so a wrong "no session" is fetched again.
     """
 

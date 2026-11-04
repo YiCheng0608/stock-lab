@@ -3,20 +3,22 @@
 
 `tools/ops/watchdog.sh`（bash）在 scheduler 容器由 serve 每小時 :15、:45 執行（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)；切換前是工作排程器的 `\stock-lab\watchdog`，每 15 分鐘），只檢查排程與資料不變量：以檔案與唯讀 DB 判定異常並在 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 留言「待使用者」，每個異常每台北日最多一則。不判定統籌是否在線、不開或喚醒統籌（統籌開啟見[統籌手冊](../COORDINATOR.md#統籌-session)，喚醒由 [統籌事件 monitor](MONITOR.md) 的事件 monitor 負責）。
 
-- `daily`：週一至週五台北 21:30 後，當日 `logs/daily-YYYYMMDD.log` 不存在或沒有 `end` 列。
-- `daily` 結果：週一至週五台北 22:00 後（21:30 那次已寫入 run 列）唯讀查當日目標的 `schedule_runs`：當天有 `success`／`non_trading_day` 就算完成（之後的 `skipped` 不影響）；否則取最後一筆（略過只指向別列的 `already_complete`／`already_running`），是 `partial`、`failed`、`non_trading_unconfirmed` 或 `skipped:<原因>`（例如 `low_memory`）就留言；仍在 `running` 的等下一輪，超過 2.5 小時視為 `failed`；當日 success 但 catchup 沒補齊（`catchup_incomplete`）也留言；有日誌卻沒有任何 run 列（worker 沒能啟動）也留言。
-- 當日資料核對（`data_check`，#390）：daily 結果是 `success` 的交易日，22:00 後以 `tools/ops/data_check.py` 唯讀（`mode=ro`、`query_only`）核對當日寫進 DB 的資料，每個交易日只核對到有結論為止，不修資料。
+- 判定時點（#466）：daily 每個交易日跑 21:30 與 23:00 兩次（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)），23:00 是 21:30 失敗或沒跑時的重試。以下三項 daily 檢查都從台北 23:10 起判定（23:00 那次已寫入日誌與 run 列），當晚只有 23:15、23:45 兩輪：21:30 失敗而 23:00 還會重試時不提早留言；23:15 時 23:00 的重試仍在跑，就留到 23:45 判定。
+- `daily`：週一至週五台北 23:10 後，當日 `logs/daily-YYYYMMDD.log` 不存在或沒有 `end` 列。21:30 那次在排程上限 80 分鐘內結束並寫 `end` 列；23:00 遇上仍在跑的 run 時，自己記 `already_running` 也寫 `end` 列。只有 23:00 的重試（或 serve 重啟時的補跑）是當天唯一一次、23:15 仍在跑時，這一項會在 23:15 留言。
+- `daily` 結果：週一至週五台北 23:10 後唯讀查當日目標的 `schedule_runs`：當天有 `success`／`non_trading_day` 就算完成（之後的 `skipped` 不影響，例如 23:00 被 `low_memory` 擋下）；否則取最後一筆（略過只指向別列的 `already_complete`／`already_running`），是 `partial`、`failed`、`non_trading_unconfirmed` 或 `skipped:<原因>`（例如 `low_memory`）就留言；仍在 `running` 的等下一輪，超過 2.5 小時視為 `failed`；當日 success 但 catchup 沒補齊（`catchup_incomplete`）也留言；有日誌卻沒有任何 run 列（worker 沒能啟動）也留言。
+- `daily` 前一個交易日（#466 review）：每天 00:30 後，對今天以前最近的一個週間日再判定一次 daily 結果，規則同上，但仍是 `running` 而超過 85 分鐘（serve 的排程上限 80 分加第二道防線 5 分）的視為 `failed`。用來抓 23:00 的重試（或 21:30～23:00 重啟後的補跑）卡住、00:20 才被 job 結束、當晚兩輪看門狗都還看到 `running` 的情況。當晚已就該日留言（key `daily_result`）或之前已補報過（key `daily_result_<日期>`，例如週六替週五報過，週一不再報）時不再留言。
+- 當日資料核對（`data_check`，#390）：daily 結果是 `success` 的交易日，23:10 後（23:00 的法人重抓之後）以 `tools/ops/data_check.py` 唯讀（`mode=ro`、`query_only`）核對當日寫進 DB 的資料，每個交易日只核對到有結論為止，不修資料。
   - 用 collector 自己的 parser 與 [重跑與回補的冪等](SCHEDULING.md#重跑與回補)的寫入規則重讀當日 raw（`raw_payloads.payload_path` 指的檔）。日線（OHLC、成交股數與金額、暫停）與融資比對該列指向的 capture，或當日任一 capture（補空欄）；三大法人比對當日最新一份法人 capture（#387）。逐列逐欄，不抽樣。
   - 除權息：當日的列比對寫入它的 TWT48U／tpex_exright_daily 列（套 #386 防呆）。另向官方要當日的 TWT49U（權類另要 TWT49UDetail）與 exDailyQ，總預算 120 秒：TWT48U 寫的列核對因子，其他列核對欄位，並列出 DB 有、官方結果表沒有的事件（明細讀不到的權類事件除外）。預算用完或讀不到時記 `action_official_unavailable`，前面的比對照常列出。
   - 也列出：
     - raw 有、DB 沒有的日線、籌碼列與除權息事件（含先前 TWT48U 已公告當日的）。
     - 近 5 個交易日標的已建立、仍未補寫的 `unmatched_bar`（#388）。
     - 上市、上櫃普通股（`stock`／`ipo`）列數比前 5 個交易日的中位數少 3% 以上（`列數 × 100 ≤ 中位數 × 97`）。
-    - 當日 21:30 法人重抓（#396）是 `failed`／`partial`。daily 在 21:00 前成功、之後沒有重抓（例如 21:30 被 `low_memory` 擋下）也列出：此時法人只跟 18:30 的資料比過。
+    - 當日法人重抓（#396，排程上是 23:00 那次）是 `failed`／`partial`。daily 在 21:00 前成功（手動跑）、之後沒有重抓也列出：此時法人只跟 21:00 前的檔比過。21:30 起跑成功、23:00 沒有重抓（例如被 `low_memory` 擋下）不列：21:30 的 collect 已拿到較晚的法人檔。
   - 同一事件在一次核對裡只列一筆，來源寫在說明欄：TWT48U 與官方表各自缺的同一事件、同一代號同一天的 `unmatched_bar` 與 `bar_missing`。跨日不合併：還沒補寫的 `unmatched_bar` 在之後 5 個交易日的核對裡都會再列一次。
   - 一天什麼時候算核對完：
     - 沒有不一致，或不一致已經在 #1 留言（key `data_check_<日期>`）時，記 `data_check_done`。`gh` 留言失敗不算，下一輪重新核對、重新留言；`--dry-run` 不算。
-    - 21:30 法人重抓仍在跑時記 `data_check_pending`；核對失敗、超過 4 分鐘或輸出無法判讀時記 `data_check_failed`。這幾種情況都是下一輪再試。
+    - 法人重抓仍在跑時記 `data_check_pending`；核對失敗、超過 4 分鐘或輸出無法判讀時記 `data_check_failed`。這幾種情況都是下一輪再試。
     - 到當晚最後一輪（23:45）仍沒有結論時，以 key `data_check_incomplete_<日期>` 留一則「沒有核對完」，寫出原因，之後不再自動核對這一天。
     - 當晚沒跑到（關機、過了午夜）的交易日，之後 4 天內的看門狗會補核一次，沒有結論就直接留「沒有核對完」。
     - 每輪最多核對 2 天，先核舊的。DB 缺核對用的表時不判定。

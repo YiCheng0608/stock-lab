@@ -4792,7 +4792,8 @@ def collect(
                 ),
                 "value_fills": len(value_fills),
                 # Accumulated over the runs that share this request key (the
-                # 18:30 and 21:30 daily collects), like the industry history.
+                # daily collects of a day, e.g. 21:30 and its 23:00 retry), like the
+                # industry history.
                 "value_fill_groups": list(
                     stored_metadata.get("value_fill_groups", []) or []
                 )
