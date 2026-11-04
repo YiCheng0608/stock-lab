@@ -27,8 +27,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "tools" / "ops" / "watchdog.sh"
-# NIGHT is Monday 2026-10-19 22:00 Taipei.
-NIGHT = int(datetime(2026, 10, 19, 14, 0, tzinfo=timezone.utc).timestamp())
+# NIGHT is Monday 2026-10-19 23:15 Taipei: the first watchdog run after the 23:00
+# daily trigger, when the day's daily is judged (#466).
+NIGHT = int(datetime(2026, 10, 19, 15, 15, tzinfo=timezone.utc).timestamp())
 
 
 def _bash() -> str | None:
@@ -229,7 +230,7 @@ def _anomaly_fixtures(wd: Watchdog) -> None:
         "===== x start\n===== y end exit=0 seconds=1\n", encoding="utf-8"
     )
     (wd.logs / "daily-20261019.log").write_text(
-        "===== 2026-10-19T18:30:00+08:00 start job=daily\n", encoding="utf-8"
+        "===== 2026-10-19T21:30:00+08:00 start job=daily\n", encoding="utf-8"
     )
     news = wd.logs / "news-20261019.log"
     news.write_text("===== start job=news\n", encoding="utf-8")
@@ -244,7 +245,7 @@ def test_anomalies_dry_run_prints_comments(wd):
     result = wd.run("--dry-run")
     assert result.stdout.count("將在 #1 留言：") == 3
     assert (
-        "待使用者：daily 排程：台北 20261019 已過 21:30" in result.stdout
+        "待使用者：daily 排程：台北 20261019 已過 23:00 的重試" in result.stdout
         and "沒有結束列" in result.stdout
     )
     assert "待使用者：news 排程：最新日誌寫於" in result.stdout
@@ -675,16 +676,85 @@ def test_daily_result_comments_only_when_not_complete_and_once_a_day(
         assert wd.events()[-1] == "anomaly_already_commented"
 
 
-def test_daily_result_waits_until_22_and_for_a_running_trigger(wd):
+def _add_daily_run(path: Path, status: str, started: int) -> None:
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "INSERT INTO schedule_runs (job, target_date, status, started_at, summary_json)"
+            " VALUES ('daily', '2026-10-19', ?, ?, '{}')",
+            (status, _utc_text(started)),
+        )
+    conn.close()
+
+
+def _set_last_daily_run(path: Path, status: str) -> None:
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "UPDATE schedule_runs SET status = ? WHERE id = (SELECT max(id) FROM schedule_runs)",
+            (status,),
+        )
+    conn.close()
+
+
+AT_2130 = NIGHT - 105 * 60
+AT_2300 = NIGHT - 15 * 60
+
+
+def test_a_failed_2130_daily_waits_for_the_2300_retry_that_succeeds(wd):
+    """#466 AC-2: 21:30 partial, 23:00 success: no comment on the way."""
+
     _daily_log_done(wd)
-    # 18:30 partial, the 21:30 trigger still running.
-    _daily_db(wd.data / "stock.db", [("partial", {}), ("running", {})])
-    wd.run(now=NIGHT - 20 * 60)  # 21:40: not judged yet
-    wd.run()  # 22:00: the 21:30 run is still running
+    db = wd.data / "stock.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "CREATE TABLE schedule_runs (id INTEGER PRIMARY KEY, job TEXT,"
+            " target_date DATE, status TEXT, started_at DATETIME, summary_json TEXT)"
+        )
+    conn.close()
+    _add_daily_run(db, "partial", AT_2130)
+    for minutes in (-90, -60, -30):  # 21:45, 22:15, 22:45: before the retry
+        wd.run(now=NIGHT + minutes * 60)
+    _add_daily_run(db, "running", AT_2300)
+    wd.run()  # 23:15: the retry is still running
+    _set_last_daily_run(db, "success")
+    wd.run(now=LAST_RUN)  # 23:45
     assert wd.text("gh_calls.log") == ""
-    # A run still marked running past the 2.5-hour task limit has died.
-    wd.run(now=NIGHT + 100 * 60)  # 23:40, 2 h 40 min after it started
+    assert not [event for event in wd.events() if event.startswith("anomaly")]
+
+
+def test_a_failed_2300_retry_is_commented_once(wd):
+    _daily_log_done(wd)
+    _daily_db(
+        wd.data / "stock.db",
+        [("partial", {"reason": "official_collection_incomplete"}), ("failed", {})],
+    )
+    wd.run(now=NIGHT - 30 * 60)  # 22:45: not judged yet
+    assert wd.text("gh_calls.log") == ""
+    wd.run()  # 23:15
+    wd.run(now=LAST_RUN)
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
     assert "daily 結果是 `failed`" in wd.text("gh_bodies.txt")
+
+
+def test_a_daily_still_running_past_the_task_limit_has_died(wd):
+    _daily_log_done(wd)
+    db = wd.data / "stock.db"
+    _daily_db(db, [("partial", {})])
+    # The retry still marked running 2 h 40 min after it started (the 2.5-hour limit).
+    _add_daily_run(db, "running", NIGHT - 160 * 60)
+    wd.run()
+    assert "daily 結果是 `failed`" in wd.text("gh_bodies.txt")
+
+
+def test_a_missing_daily_log_waits_for_the_2300_retry(wd):
+    (wd.logs / "daily-20261016.log").write_text(
+        "===== x start\n===== y end exit=0 seconds=1\n", encoding="utf-8"
+    )
+    for minutes in (-90, -60, -30):  # 21:45, 22:15, 22:45: 23:00 may still run it
+        wd.run(now=NIGHT + minutes * 60)
+    assert "daily_no_end" not in wd.log()
+    wd.run()  # 23:15: neither trigger ran
+    body = wd.text("gh_bodies.txt")
+    assert "daily 排程：台北 20261019 已過 23:00 的重試" in body and "不存在（今日未執行）" in body
 
 
 def test_daily_result_reads_the_complete_run_of_the_day(wd):
@@ -721,7 +791,7 @@ def test_daily_result_reports_unconfirmed_no_session_and_incomplete_catchup(wd):
 def test_daily_result_is_not_judged_on_weekends(wd):
     _daily_log_done(wd)
     _daily_db(wd.data / "stock.db", [("failed", {})], day="2026-10-18")
-    wd.run(now=NIGHT - 24 * 3600)  # Sunday 22:00
+    wd.run(now=NIGHT - 24 * 3600)  # Sunday 23:15
     assert wd.text("gh_calls.log") == ""
 
 
@@ -1327,7 +1397,7 @@ def test_an_llm_auth_error_older_than_a_day_is_not_commented(wd):
 def test_a_refused_gh_is_commented_once_gh_is_accepted_again(wd, mode, code):
     # AC-2: the watchdog cannot comment while GitHub refuses gh; the runs of the
     # outage are logged and the first accepted run posts one comment a day.
-    start = NIGHT - 6 * 3600  # 16:00 Taipei: the whole day 1 stays on 10/19
+    start = NIGHT - 6 * 3600  # 17:15 Taipei: the whole day 1 stays on 10/19
     (wd.fake / "gh_mode").write_text(mode, encoding="utf-8")
     wd.run(now=start)
     wd.run(now=start + 1800)
@@ -1525,7 +1595,7 @@ def test_outside_an_image_or_with_an_unreadable_record_it_is_commented(wd):
 
 
 def _checked_day_db(path: Path, refetch: str | None) -> None:
-    """A full-schema database whose 2026-10-19 daily succeeded, with the 21:30
+    """A full-schema database whose 2026-10-19 daily succeeded, with the 23:00
     refetch step ``refetch`` (None: no refetch)."""
 
     from sqlalchemy import create_engine
@@ -1601,7 +1671,7 @@ def test_a_failed_refetch_is_commented_once_with_its_details(wd):
     assert (
         "當日資料核對：交易日 2026-10-19 寫進 DB 的資料與官方 raw 有 1 筆不一致" in body
     )
-    assert "- 21:30 法人重抓失敗或沒有執行（`institutional_refetch`）：1 筆" in body
+    assert "- 法人重抓失敗或沒有執行（`institutional_refetch`）：1 筆" in body
     assert (
         "| `institutional_refetch` | - | - | 2026-10-19 | `status` | success | partial |"
         in body
@@ -1631,11 +1701,11 @@ def test_a_dry_run_does_not_settle_the_day(wd):
     assert len(wd.text("gh_calls.log").splitlines()) == 1
 
 
-def test_the_data_check_waits_for_22_and_a_successful_daily(wd):
+def test_the_data_check_waits_for_23_10_and_a_successful_daily(wd):
     _daily_log_done(wd)
     db = wd.data / "stock.db"
     _checked_day_db(db, "failed")
-    wd.run(now=NIGHT - 20 * 60)  # 21:40
+    wd.run(now=NIGHT - 30 * 60)  # 22:45: before the 23:00 refetch
     assert _data_check_events(wd) == []
     with sqlite3.connect(db) as conn:
         conn.execute("UPDATE schedule_runs SET status='partial' WHERE status='success'")
@@ -1646,8 +1716,8 @@ def test_the_data_check_waits_for_22_and_a_successful_daily(wd):
 
 # #408 review: a day is settled only by a posted comment, never silently.
 
-LAST_RUN = NIGHT + 105 * 60  # 23:45 Taipei, the night's last run
-AFTER_MIDNIGHT = NIGHT + 135 * 60  # Tuesday 2026-10-20 00:15 Taipei
+LAST_RUN = NIGHT + 30 * 60  # 23:45 Taipei, the night's last run
+AFTER_MIDNIGHT = NIGHT + 60 * 60  # Tuesday 2026-10-20 00:15 Taipei
 
 FAKE_PYTHON = r"""#!/usr/bin/env bash
 # The real Python, except data-check as FAKE_HELPER says.
@@ -1733,7 +1803,7 @@ def test_a_refetch_running_all_night_is_commented_at_2345(wd):
     wd.run()
     wd.run(now=LAST_RUN)
     assert _data_check_events(wd) == ["data_check_pending", "data_check_pending"]
-    assert "原因：21:30 法人重抓一直是 running" in wd.text("gh_bodies.txt")
+    assert "原因：法人重抓一直是 running" in wd.text("gh_bodies.txt")
 
 
 def test_a_day_the_night_did_not_check_is_checked_after_midnight(wd):

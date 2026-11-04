@@ -922,8 +922,9 @@ def _watchdog(data: Path, now: int) -> list[str]:
 
 @pytest.mark.parametrize("daily_ended", [True, False], ids=["daily-ended", "daily-cut"])
 def test_the_watchdog_reads_old_and_new_logs_alike(tree, tmp_path, daily_ended):
-    # Monday 2026-10-19 22:00 Taipei; the logs were written from 21:00 on.
-    now = int(datetime(2026, 10, 19, 14, 0, tzinfo=timezone.utc).timestamp())
+    # Monday 2026-10-19 23:15 Taipei (#466: after the 23:00 retry); the logs were
+    # written from 22:15 on.
+    now = int(datetime(2026, 10, 19, 15, 15, tzinfo=timezone.utc).timestamp())
     first = now - 3600
     day = "20261019"
     for _ in range(3):
