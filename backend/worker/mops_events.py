@@ -29,7 +29,8 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Iterable
 
-from sqlalchemy import select
+from sqlalchemy import JSON, String, case, literal, null, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.clock import utcnow
@@ -275,14 +276,6 @@ def stored_event_manifest(db: Session) -> dict[str, dict[str, Any]]:
     never hides an earlier verified answer).
     """
 
-    runs = db.scalars(
-        select(IngestionRun)
-        .where(
-            IngestionRun.source == "official",
-            IngestionRun.run_type.in_({"collect", "backfill", RUN_TYPE}),
-        )
-        .order_by(IngestionRun.id)
-    ).all()
     manifest: dict[str, dict[str, Any]] = {}
 
     def keep(day: str, coverage: Any) -> None:
@@ -306,17 +299,97 @@ def stored_event_manifest(db: Session) -> dict[str, dict[str, Any]]:
         if day:
             keep(str(day), coverage)
 
-    for run in runs:
-        metadata = run.metadata_json or {}
-        if run.run_type in {"backfill", RUN_TYPE}:
-            for day, item in (metadata.get("coverage_manifest") or {}).items():
+    for run_type, data_as_of, run_date, manifests, coverage, gaps in _manifest_rows(db):
+        if run_type in MANIFEST_RUN_TYPES:
+            for day, item in (manifests or {}).items():
                 if isinstance(item, dict):
                     keyed(day, item.get("event_coverage"))
         else:
-            keyed(run.data_as_of or run.run_date, metadata.get("event_coverage"))
-            for day, coverage in (metadata.get("event_gap_coverage") or {}).items():
-                keyed(day, coverage)
+            keyed(data_as_of or run_date, coverage)
+            for day, gap in (gaps or {}).items():
+                keyed(day, gap)
     return manifest
+
+
+# Runs whose coverage is a per-date ``coverage_manifest``; other runs (collect)
+# carry ``event_coverage`` and ``event_gap_coverage``.
+MANIFEST_RUN_TYPES = ("backfill", RUN_TYPE)
+
+
+def _metadata_value(path: str) -> Any:
+    """``ingestion_runs.metadata_json -> path``: the JSON value there, decoded."""
+
+    # The path is bound as text; bound against the JSON column it would be
+    # JSON-encoded (quoted) and no longer read as a path.
+    return IngestionRun.metadata_json.op("->", return_type=JSON)(literal(path, String))
+
+
+def _manifest_rows(db: Session) -> list[Any]:
+    """Per official collect/backfill/event-backfill run, oldest first: run_type,
+    data_as_of, run_date, and the three metadata values stored_event_manifest
+    reads (``coverage_manifest`` for MANIFEST_RUN_TYPES, ``event_coverage`` and
+    ``event_gap_coverage`` for the others), each decoded JSON or None.
+
+    SQLite extracts the values (``->``, 3.38+), so a read does not decode whole
+    metadata documents: about 300 KB per official collect run, 165 MB in all on
+    the production copy, about a second of /api/coverage (#462). SQLAlchemy
+    writes JSON with ``json.dumps``, which emits ``NaN`` for a NaN float, and
+    SQLite before 3.42 (no JSON5) rejects such a document, failing the query
+    as a whole; then the whole-row read, which decodes in Python and accepts
+    NaN, gives the same rows. A failed SELECT does not end the SQLite
+    transaction, so nothing is rolled back: the backfill worker calls this
+    with its own uncommitted writes.
+    """
+
+    scope = (
+        IngestionRun.source == "official",
+        IngestionRun.run_type.in_({"collect", "backfill", RUN_TYPE}),
+    )
+    manifest_run = IngestionRun.run_type.in_(MANIFEST_RUN_TYPES)
+    other_run = IngestionRun.run_type.not_in(MANIFEST_RUN_TYPES)
+    # The JSON branch comes first in each case(): it gives the column its type,
+    # so the value is decoded.
+    try:
+        return db.execute(
+            select(
+                IngestionRun.run_type,
+                IngestionRun.data_as_of,
+                IngestionRun.run_date,
+                case(
+                    (manifest_run, _metadata_value("$.coverage_manifest")),
+                    else_=null(),
+                ),
+                case(
+                    (other_run, _metadata_value("$.event_coverage")),
+                    else_=null(),
+                ),
+                case(
+                    (other_run, _metadata_value("$.event_gap_coverage")),
+                    else_=null(),
+                ),
+            )
+            .where(*scope)
+            .order_by(IngestionRun.id)
+        ).all()
+    except OperationalError:
+        pass
+    rows = []
+    for run in db.scalars(
+        select(IngestionRun).where(*scope).order_by(IngestionRun.id)
+    ).all():
+        metadata = run.metadata_json or {}
+        manifest_type = run.run_type in MANIFEST_RUN_TYPES
+        rows.append(
+            (
+                run.run_type,
+                run.data_as_of,
+                run.run_date,
+                metadata.get("coverage_manifest") if manifest_type else None,
+                None if manifest_type else metadata.get("event_coverage"),
+                None if manifest_type else metadata.get("event_gap_coverage"),
+            )
+        )
+    return rows
 
 
 def event_coverage_states(db: Session, days: Iterable[date]) -> dict[date, str]:
