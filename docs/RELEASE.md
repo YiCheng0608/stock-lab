@@ -77,7 +77,7 @@ tag 的 Alembic head（`backend/app/migration_revisions.py` 的最後一個）�
 - api 的 readiness 只接受 current head，DB 落後時新 api 拒絕啟動。`v1.2.0` 第一次部署就是這樣失敗的；[#456](https://github.com/YiCheng0608/stock-lab/issues/456) 合併後，`deploy.sh` 會在換容器前擋下。
 - 正式環境跑著的舊 image 不認得新 revision，用它跑 `init-db` 只會停在舊 head。
 
-以下是 #456 合併前的做法，在 master 管理 checkout 的 Git Bash 依序執行。時段選排程閒置時：避開台北 18:30～21:30 的 daily，也避開 news 每 2 小時的偶數整點，例如奇數點。
+以下是 #456 合併前的做法，在 master 管理 checkout 的 Git Bash 依序執行。時段選排程閒置時：避開台北 21:30～23:30 的 daily（#466），也避開 news 每 2 小時的偶數整點，例如奇數點。
 
 ```bash
 # 換值：TAG＝要部署的 tag；P＝正式 compose project；R＝發佈 checkout；B＝備份目錄（docs/ops/LOCAL.md）
