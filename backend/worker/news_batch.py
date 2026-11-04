@@ -267,8 +267,9 @@ class RelationMatcher:
     - Stock names are the official short name, the name without listing
       markers, the name without a holding-company ending (日月光投控 →
       日月光) unless that is another stock's official name, and the full names
-      in FULL_NAME_ALIASES_FILE.  ETF names are the official short name,
-      without a bracketed former name.
+      in FULL_NAME_ALIASES_FILE, with the names left after taking industry
+      words off their end (群光電能 for 群光電能科技).  ETF names are the
+      official short name, without a bracketed former name.
     - A name counts on its own when it has three or more characters (ETF
       names: ETF_NAME_MIN_LENGTH), contains a CJK character, is not a
       stopword, and is not inside a longer matched name.
