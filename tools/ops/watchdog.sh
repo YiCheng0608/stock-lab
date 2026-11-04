@@ -409,7 +409,7 @@ if [ -n "$python" ] && [ -f "$data_dir/stock.db" ]; then
     && failed_runs="$(helper news-llm-failed "$data_dir/stock.db" 3 "$now" 2>>"$work/helper.err")" \
     || pending=error
   case "$pending" in
-    3) anomaly news_llm_pending "news_llm：最近連續 3 批判讀都是 pending（可能未登入 Claude Code 或額度用盡），請查 \`/api/ingestion-runs?q=news_llm\`。" ;;
+    3) anomaly news_llm_pending "news_llm：最近連續 3 批判讀都是 pending（可能未登入 Claude Code 或額度用盡），請查 \`/api/ingestion-runs?q=news_llm&include_metadata=true\`（每批的 pending 記在 metadata）。" ;;
     error) found=1; log news_llm_check_failed "" "讀取 stock.db 失敗：$(tail -n 1 "$work/helper.err" 2>/dev/null)" ;;
   esac
   [ "$pending" != error ] && [ "$failed_runs" = 3 ] \

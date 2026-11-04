@@ -560,6 +560,13 @@ class PortfolioPosition(Base):
 
 class IngestionRun(Base):
     __tablename__ = "ingestion_runs"
+    # metadata_json is stored before updated_at and is large, so an unindexed
+    # ORDER BY updated_at walks every run's metadata (0024, #462): the latest
+    # official run (app.decision.latest_official_run) and the run list order.
+    __table_args__ = (
+        Index("ix_ingestion_runs_latest", "run_type", "source", "status", "updated_at"),
+        Index("ix_ingestion_runs_updated_at", "updated_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     run_type: Mapped[str] = mapped_column(String(40), index=True)

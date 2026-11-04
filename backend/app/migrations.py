@@ -695,6 +695,32 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0023_settlement_tracking_rules', CURRENT_TIMESTAMP)"
         )
     )
+    # 0024 adds two ingestion_runs indexes (#462). create_all makes them for a
+    # new table but not for an existing one; a partial legacy schema without
+    # the columns gets none (as in the Alembic step).
+    run_columns = {
+        row[1]
+        for row in connection.exec_driver_sql('PRAGMA table_info("ingestion_runs")')
+    }
+    if {"run_type", "source", "status", "updated_at"} <= run_columns:
+        connection.execute(
+            text(
+                'CREATE INDEX IF NOT EXISTS "ix_ingestion_runs_latest" '
+                'ON "ingestion_runs" ("run_type", "source", "status", "updated_at")'
+            )
+        )
+        connection.execute(
+            text(
+                'CREATE INDEX IF NOT EXISTS "ix_ingestion_runs_updated_at" '
+                'ON "ingestion_runs" ("updated_at")'
+            )
+        )
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0024_ingestion_run_indexes', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:
