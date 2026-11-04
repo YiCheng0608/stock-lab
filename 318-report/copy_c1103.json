@@ -1,0 +1,8 @@
+{
+  "copy": "/out/c1103/stock.db",
+  "source": "/data/stock.db",
+  "source_latest_trading_date": "2026-11-03",
+  "alembic_version": "0022_margin_lists",
+  "bytes": 2888298496,
+  "seconds": 297.5
+}

@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="440" font-family="sans-serif" font-size="11">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="40" y="16" font-weight="bold">breakout_v2 T+5</text>
+<rect x="40.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="54.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="68.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="82.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="96.0" y="169.7" width="13.0" height="10.3" fill="#9db4cf"/>
+<rect x="110.0" y="126.9" width="13.0" height="53.1" fill="#9db4cf"/>
+<rect x="124.0" y="61.7" width="13.0" height="118.3" fill="#9db4cf"/>
+<rect x="138.0" y="60.0" width="13.0" height="120.0" fill="#9db4cf"/>
+<rect x="152.0" y="144.0" width="13.0" height="36.0" fill="#9db4cf"/>
+<rect x="166.0" y="174.9" width="13.0" height="5.1" fill="#9db4cf"/>
+<rect x="180.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="194.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="208.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="222.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="236.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="250.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="264.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="278.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="292.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="306.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<line x1="40" y1="180" x2="320" y2="180" stroke="#333"/>
+<text x="40.0" y="194" text-anchor="middle">-1.1%</text>
+<text x="110.0" y="194" text-anchor="middle">-0.6%</text>
+<text x="180.0" y="194" text-anchor="middle">-0.1%</text>
+<text x="250.0" y="194" text-anchor="middle">0.4%</text>
+<text x="320.0" y="194" text-anchor="middle">1.0%</text>
+<line x1="52.7" y1="40" x2="52.7" y2="180" stroke="#c0392b" stroke-width="2"/>
+<text x="55.7" y="50" fill="#c0392b">策略平均</text>
+<line x1="307.3" y1="40" x2="307.3" y2="180" stroke="#27ae60" stroke-width="2"/>
+<text x="310.3" y="64" fill="#27ae60">TAIEX</text>
+<text x="40" y="30" fill="#555">藍：基準一 200 次抽樣的平均報酬</text>
+<text x="400" y="16" font-weight="bold">breakout_v2 T+20</text>
+<rect x="400.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="414.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="428.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="442.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="456.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="470.0" y="178.7" width="13.0" height="1.3" fill="#9db4cf"/>
+<rect x="484.0" y="146.5" width="13.0" height="33.5" fill="#9db4cf"/>
+<rect x="498.0" y="60.0" width="13.0" height="120.0" fill="#9db4cf"/>
+<rect x="512.0" y="96.1" width="13.0" height="83.9" fill="#9db4cf"/>
+<rect x="526.0" y="160.6" width="13.0" height="19.4" fill="#9db4cf"/>
+<rect x="540.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="554.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="568.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="582.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="596.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="610.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="624.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="638.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="652.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="666.0" y="180.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<line x1="400" y1="180" x2="680" y2="180" stroke="#333"/>
+<text x="400.0" y="194" text-anchor="middle">-1.2%</text>
+<text x="470.0" y="194" text-anchor="middle">0.4%</text>
+<text x="540.0" y="194" text-anchor="middle">2.0%</text>
+<text x="610.0" y="194" text-anchor="middle">3.7%</text>
+<text x="680.0" y="194" text-anchor="middle">5.3%</text>
+<line x1="412.7" y1="40" x2="412.7" y2="180" stroke="#c0392b" stroke-width="2"/>
+<text x="415.7" y="50" fill="#c0392b">策略平均</text>
+<line x1="667.3" y1="40" x2="667.3" y2="180" stroke="#27ae60" stroke-width="2"/>
+<text x="670.3" y="64" fill="#27ae60">TAIEX</text>
+<text x="400" y="30" fill="#555">藍：基準一 200 次抽樣的平均報酬</text>
+<text x="40" y="236" font-weight="bold">pullback_v2 T+5</text>
+<rect x="40.0" y="398.1" width="13.0" height="1.9" fill="#9db4cf"/>
+<rect x="54.0" y="384.8" width="13.0" height="15.2" fill="#9db4cf"/>
+<rect x="68.0" y="344.8" width="13.0" height="55.2" fill="#9db4cf"/>
+<rect x="82.0" y="295.2" width="13.0" height="104.8" fill="#9db4cf"/>
+<rect x="96.0" y="280.0" width="13.0" height="120.0" fill="#9db4cf"/>
+<rect x="110.0" y="344.8" width="13.0" height="55.2" fill="#9db4cf"/>
+<rect x="124.0" y="375.2" width="13.0" height="24.8" fill="#9db4cf"/>
+<rect x="138.0" y="396.2" width="13.0" height="3.8" fill="#9db4cf"/>
+<rect x="152.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="166.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="180.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="194.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="208.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="222.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="236.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="250.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="264.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="278.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="292.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="306.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<line x1="40" y1="400" x2="320" y2="400" stroke="#333"/>
+<text x="40.0" y="414" text-anchor="middle">-0.8%</text>
+<text x="110.0" y="414" text-anchor="middle">-0.3%</text>
+<text x="180.0" y="414" text-anchor="middle">0.1%</text>
+<text x="250.0" y="414" text-anchor="middle">0.6%</text>
+<text x="320.0" y="414" text-anchor="middle">1.0%</text>
+<line x1="66.0" y1="260" x2="66.0" y2="400" stroke="#c0392b" stroke-width="2"/>
+<text x="69.0" y="270" fill="#c0392b">策略平均</text>
+<line x1="307.3" y1="260" x2="307.3" y2="400" stroke="#27ae60" stroke-width="2"/>
+<text x="310.3" y="284" fill="#27ae60">TAIEX</text>
+<text x="40" y="250" fill="#555">藍：基準一 200 次抽樣的平均報酬</text>
+<text x="400" y="236" font-weight="bold">pullback_v2 T+20</text>
+<rect x="400.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="414.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="428.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="442.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="456.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="470.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="484.0" y="398.5" width="13.0" height="1.5" fill="#9db4cf"/>
+<rect x="498.0" y="359.0" width="13.0" height="41.0" fill="#9db4cf"/>
+<rect x="512.0" y="280.0" width="13.0" height="120.0" fill="#9db4cf"/>
+<rect x="526.0" y="284.4" width="13.0" height="115.6" fill="#9db4cf"/>
+<rect x="540.0" y="385.4" width="13.0" height="14.6" fill="#9db4cf"/>
+<rect x="554.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="568.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="582.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="596.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="610.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="624.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="638.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="652.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<rect x="666.0" y="400.0" width="13.0" height="0.0" fill="#9db4cf"/>
+<line x1="400" y1="400" x2="680" y2="400" stroke="#333"/>
+<text x="400.0" y="414" text-anchor="middle">-0.6%</text>
+<text x="470.0" y="414" text-anchor="middle">1.0%</text>
+<text x="540.0" y="414" text-anchor="middle">2.7%</text>
+<text x="610.0" y="414" text-anchor="middle">4.3%</text>
+<text x="680.0" y="414" text-anchor="middle">5.9%</text>
+<line x1="412.7" y1="260" x2="412.7" y2="400" stroke="#c0392b" stroke-width="2"/>
+<text x="415.7" y="270" fill="#c0392b">策略平均</text>
+<line x1="667.3" y1="260" x2="667.3" y2="400" stroke="#27ae60" stroke-width="2"/>
+<text x="670.3" y="284" fill="#27ae60">TAIEX</text>
+<text x="400" y="250" fill="#555">藍：基準一 200 次抽樣的平均報酬</text>
+</svg>
