@@ -60,7 +60,7 @@ from .news_sources import (
 )
 from .pipeline import _upsert_raw_payload
 
-RELATION_METHOD = "rule:exact-name-code/v2"
+RELATION_METHOD = "rule:exact-name-code/v3"
 # Every version of the rule shares this prefix; a stored item whose method has
 # the prefix but is not RELATION_METHOD was related by an older version.
 RELATION_METHOD_PREFIX = "rule:exact-name-code/"
@@ -89,8 +89,9 @@ NAME_ONLY_STOPWORDS = frozenset(
 )
 # Longer phrases that contain a company name but mean something else; they
 # take the span, so 中華電視 is not read as 中華電, 大華銀投信 (UOB) not as
-# 9905 大華 and 愛普生 (Epson) not as 6531 愛普.
-NAME_BLOCKERS = frozenset({"中華電視", "大華銀", "愛普生"})
+# 9905 大華, 愛普生 (Epson) not as 6531 愛普 and 亞昕科技 (an emerging-stock
+# listing, #461 measurement) not as 5213 亞昕.
+NAME_BLOCKERS = frozenset({"中華電視", "大華銀", "愛普生", "亞昕科技"})
 # Holding-company endings of an official short name; the name without them is
 # the one the press uses (日月光投控 → 日月光).  It yields to another stock's
 # official name: 中光電 stays the (delisted) 5371, not 3718 中光電投控.
@@ -128,6 +129,9 @@ TWO_CHAR_STOPWORDS = frozenset(
         "大宇",  # Daewoo
         "大塚",  # Otsuka
         "康普",  # CommScope
+        # From tools/research/news_two_char_hits.py on the 2026-10-16～11-04
+        # domestic news (5,324 items, #461); a list item still counted:
+        "泰山",  # the district (將推桃園、泰山、台南5案)
     }
 )
 # Two-character names that are ordinary words, places or institutions and so
@@ -145,8 +149,8 @@ TWO_CHAR_COMMON_WORDS = frozenset(
         "綠茵", "綠電", "美食", "至上", "華夏", "華東", "茂林", "藍天", "農林",
         "辣椒", "進階", "遠見", "雙喜", "霹靂", "青雲",
         # Added by the #457 second review after the pre-registered draw:
-        # 陽明山, 南亞 (South Asia), 博大精深, 無敵, 泰山 (the district).
-        "陽明", "南亞", "博大", "無敵", "泰山",
+        # 陽明山, 南亞 (South Asia), 博大精深, 無敵.
+        "陽明", "南亞", "博大", "無敵",
     }
 )  # fmt: skip
 # A two-character name counts on its own only for a listed stock (``status``
@@ -156,7 +160,9 @@ TWO_CHAR_COMMON_WORDS = frozenset(
 LISTED_STATUSES = ("active", "dormant")
 # Full names (公司名稱 without 股份有限公司) that start with another listed
 # stock's two-character name, read as aliases of their own company: 聯華電子 is
-# 2303, never 1229 聯華.  Built by tools/research/news_full_name_aliases.py.
+# 2303, never 1229 聯華.  With them, the names left after taking industry words
+# off their end (群光電能 is 6412, not 2385 群光; #461).  Built by
+# tools/research/news_full_name_aliases.py.
 FULL_NAME_ALIASES_FILE = (
     Path(__file__).resolve().parents[1] / "data" / "news" / "full_name_aliases.json"
 )
@@ -236,9 +242,7 @@ def load_full_name_aliases(
     path: Path = FULL_NAME_ALIASES_FILE,
 ) -> list[tuple[str, str, str]]:
     data = json.loads(path.read_text(encoding="utf-8"))
-    return [
-        (row["exchange"], row["symbol"], row["full_name"]) for row in data["aliases"]
-    ]
+    return [(row["exchange"], row["symbol"], row["alias"]) for row in data["aliases"]]
 
 
 @dataclass(frozen=True)
@@ -263,8 +267,9 @@ class RelationMatcher:
     - Stock names are the official short name, the name without listing
       markers, the name without a holding-company ending (日月光投控 →
       日月光) unless that is another stock's official name, and the full names
-      in FULL_NAME_ALIASES_FILE.  ETF names are the official short name,
-      without a bracketed former name.
+      in FULL_NAME_ALIASES_FILE, with the names left after taking industry
+      words off their end (群光電能 for 群光電能科技).  ETF names are the
+      official short name, without a bracketed former name.
     - A name counts on its own when it has three or more characters (ETF
       names: ETF_NAME_MIN_LENGTH), contains a CJK character, is not a
       stopword, and is not inside a longer matched name.
@@ -401,9 +406,17 @@ class RelationMatcher:
             )
         }
 
-    def _two_char_keys(self, title: str, summary: str) -> set[str]:
-        found: set[str] = set()
-        for field, text in (("title", title), ("summary", summary)):
+    def two_char_hits(
+        self, title: str, summary: str | None = None
+    ) -> list[tuple[str, str, str, int]]:
+        """The two-character name matches: (stock key, name, field, start).
+
+        The first counting occurrence of each name per field (``title`` or
+        ``summary``); tools/research/news_two_char_hits.py reads it.
+        """
+
+        hits: list[tuple[str, str, str, int]] = []
+        for field, text in (("title", title), ("summary", summary or "")):
             present = [name for name in self._two_char if name in text]
             if not present:
                 continue
@@ -425,14 +438,22 @@ class RelationMatcher:
                     else:
                         counts = field == "title" or _closes_segment(text, end)
                     if counts:
-                        found.add(self._two_char[name].key)
+                        hits.append((self._two_char[name].key, name, field, start))
                         break
-        return found
+        return hits
 
-    def symbols(self, title: str, summary: str | None = None) -> list[str]:
+    def symbols(
+        self, title: str, summary: str | None = None, *, two_char: bool = True
+    ) -> list[str]:
+        """Matched stock and ETF keys; ``two_char=False`` leaves out rule 4."""
+
         summary = summary or ""
         text = f"{title}\n{summary}" if summary else title
-        found = self._two_char_keys(title, summary)
+        found = (
+            {key for key, _, _, _ in self.two_char_hits(title, summary)}
+            if two_char
+            else set()
+        )
         codes = [*_CODE.finditer(text), *_ETF_CODE.finditer(text)]
         for match in codes:
             candidates = self._by_code.get(match.group(1), [])

@@ -77,6 +77,12 @@ INSTRUMENTS = [
     ("TWSE", "8201", "無敵", "stock", "active"),
     ("TWSE", "1218", "泰山", "stock", "active"),
     ("TWSE", "6531", "愛普*", "stock", "active"),
+    # #461: full names without their industry words, and the measurement.
+    ("TWSE", "2385", "群光", "stock", "active"),
+    ("TWSE", "6412", "群電", "stock", "active"),
+    ("TWSE", "2002", "中鋼", "stock", "active"),
+    ("TWSE", "1723", "中碳", "stock", "active"),
+    ("TPEx", "5213", "亞昕", "stock", "active"),
 ]
 
 
@@ -258,10 +264,49 @@ def test_common_word_names_still_match_as_a_whole_segment(matcher):
         "TWSE:2455",
         "TWSE:3105",
     ]
-    # A list item stays a whole segment: 泰山 the district in a list still matches
-    # (a known limit, left to a follow-up Issue).
-    assert matcher.symbols("建案", "將推桃園、泰山、台南5案") == ["TWSE:1218"]
     assert matcher.symbols("盤中速報", "陽明、萬海齊揚") == ["TWSE:2609"]
+
+
+# #461 ------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        # 群光電能科技 without 科技 is 6412 群電, not 2385 群光.
+        ("群光電能營收創新高", ["TWSE:6412"]),
+        ("群光電能科技第3季獲利", ["TWSE:6412"]),
+        # 中鋼碳素化學 without 化學 is 1723 中碳, not 2002 中鋼.
+        ("中鋼碳素調價", ["TWSE:1723"]),
+        # The two-character names alone are still their own stocks.
+        ("群光營收創新高", ["TWSE:2385"]),
+        ("中鋼調價", ["TWSE:2002"]),
+    ],
+)
+def test_a_full_name_without_its_industry_words_is_its_own_company(
+    matcher, title, expected
+):
+    assert matcher.symbols(title) == expected
+
+
+def test_full_name_aliases_include_names_without_industry_words():
+    rows = news_batch.load_full_name_aliases()
+    assert ("TWSE", "6412", "群光電能") in rows
+    assert ("TWSE", "1723", "中鋼碳素") in rows
+    assert not [row for row in rows if row[2] in ("群光", "中鋼")]
+
+
+def test_taishan_the_district_needs_its_code_even_in_a_list(matcher):
+    # 1218 泰山 matched 「將推桃園、泰山、台南5案」 (#457 out-of-sample review).
+    assert matcher.symbols("建案", "將推桃園、泰山、台南5案") == []
+    assert matcher.symbols("泰山區房價創高") == []
+    assert matcher.symbols("泰山(1218)第3季獲利") == ["TWSE:1218"]
+
+
+def test_another_company_that_starts_with_a_two_character_name_is_blocked(matcher):
+    # 亞昕科技 registered on the emerging market; 5213 亞昕 is a builder (#461).
+    assert matcher.symbols("亞昕科技23日每股120元登興櫃") == []
+    assert matcher.symbols("亞昕(5213)推案") == ["TPEx:5213"]
 
 
 def test_only_listed_rows_decide_two_character_names(matcher):
