@@ -2231,7 +2231,7 @@ def test_backtest_failed_first_attempt_is_persisted_and_retry_is_idempotent(
         failed_run = db.scalar(
             select(IngestionRun).where(
                 IngestionRun.request_key
-                == f"technical-backtest:v1:{score_date.isoformat()}:{score_date.isoformat()}"
+                == f"technical-backtest:v2:{score_date.isoformat()}:{score_date.isoformat()}"
             )
         )
         assert failed_run and failed_run.status == "failed"
@@ -2246,7 +2246,7 @@ def test_backtest_failed_first_attempt_is_persisted_and_retry_is_idempotent(
         runs = db.scalars(
             select(IngestionRun).where(
                 IngestionRun.request_key
-                == f"technical-backtest:v1:{score_date.isoformat()}:{score_date.isoformat()}"
+                == f"technical-backtest:v2:{score_date.isoformat()}:{score_date.isoformat()}"
             )
         ).all()
         assert len(runs) == 1 and runs[0].id == run_id and runs[0].status == "success"
@@ -2668,7 +2668,7 @@ def test_a_backtest_run_finishes_at_the_clock(pipeline_env, monkeypatch, frozen_
         )
         db.commit()
     day = score_date.isoformat()
-    request_key = f"technical-backtest:v1:{day}:{day}"
+    request_key = f"technical-backtest:v2:{day}:{day}"
 
     def fail_features(*_args, **_kwargs):
         raise RuntimeError("fixture mid-run failure")
@@ -2731,7 +2731,7 @@ def test_a_backtest_run_carries_its_start_when_it_is_inserted(
     with pipeline_env() as db:
         run = db.scalar(
             select(IngestionRun).where(
-                IngestionRun.request_key == f"technical-backtest:v1:{day}:{day}"
+                IngestionRun.request_key == f"technical-backtest:v2:{day}:{day}"
             )
         )
     assert [(kind, finished) for kind, _started, finished in seen] == [

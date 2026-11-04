@@ -14,7 +14,14 @@ forward-only: no existing value is changed.
 from __future__ import annotations
 
 from alembic import op
-from sqlalchemy import Column, String, inspect, text
+from sqlalchemy import inspect
+
+# The same statement as the fallback step (app.migrations), so both entries
+# store the same table SQL.
+ADD_COLUMN = (
+    'ALTER TABLE "signal_settlements" ADD COLUMN "tracking_rules" '
+    "VARCHAR(20) NOT NULL DEFAULT 'tracking_v1'"
+)
 
 revision = "0023_settlement_tracking_rules"
 down_revision = "0022_margin_lists"
@@ -31,15 +38,7 @@ def upgrade() -> None:
         column["name"] for column in inspector.get_columns("signal_settlements")
     }:
         return
-    op.add_column(
-        "signal_settlements",
-        Column(
-            "tracking_rules",
-            String(length=20),
-            nullable=False,
-            server_default=text("'tracking_v1'"),
-        ),
-    )
+    op.execute(ADD_COLUMN)
 
 
 def downgrade() -> None:
