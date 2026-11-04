@@ -77,7 +77,7 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
    每個 gate 收尾、或每合併約 3 個 PR 後，統籌在以最新 `origin/master` 為底的 worktree 跑一次 [verify-stock-lab 真資料模式](../.claude/skills/verify-stock-lab/SKILL.md#真資料模式)（五頁全套，正式 DB 唯讀副本），結果貼在該 gate 的 Issue。verify（CI 或真資料）抓到的 bug，修的同一個 PR 要加一條會先失敗的檢查（測試或 verify 檢查項），不能只修不加。worktree 的 branch 命名 `task/<貼結果的 Issue>-...`（否則 Evidence 不推 `pr-assets`），並在該 worktree 另開 session 執行（skill 拒絕在 `master` 分支跑）。發佈與部署（tag、`deploy.sh`）見 [RELEASE](RELEASE.md)；V1 G7 窗口的五點（兩條 branch、V1 改動兩個 PR、真資料 verify、每日核對、窗口結束）見 [RELEASE 的 V1 發佈隔離](RELEASE.md#v1-發佈隔離g7-窗口專用)。
    每個 gate 收尾時，統籌另跑一次 DB 深度審查（[#391](https://github.com/YiCheng0608/stock-lab/issues/391)）：先照 [LOCAL](ops/LOCAL.md#取正式-db-的唯讀副本) 的標準命令（`tools/ops/copy_db.py`）取正式 DB 的唯讀副本，在以最新 `origin/master` 為底的 worktree 跑 `python tools/audit/audit.py --db <副本> --out <目錄>`，把 `<目錄>/summary.md` 貼在該 gate 的 Issue。
    - **審什麼**：工具不 import 產品的計算函式，依 [Canonical v1 規格](spec/README.md) 獨立重算全歷史，比對日線、raw、除權息欄位與缺漏、來源與日期欄位、技術指標、訊號的法人與融資比率、候選分數與族群分數。項目清單與各項範圍寫在 [`audit.py`](../tools/audit/audit.py) 開頭。
-   - **只讀**：DB 用唯讀連線，raw 依副本的 `payload_path` 經 `app.raw_paths.payload_file` 找檔（舊 Windows 路徑在容器內讀 `STOCK_RAW_DIR` 底下），只以 `rb` 開啟；兩處都沒有時，`--raw-dir` 可改指 raw 副本。主機的 `raw/` 已刪，在主機直接跑讀不到 raw，要在容器內跑或給 `--raw-dir`（[LOCAL](ops/LOCAL.md#讀-raw-的工具)）。拒絕正式 DB（含 hard link）、`--out` 指到正式資料目錄底下（字面與解析連結後都比）、台北 18:30～21:30 與可用記憶體不足（`--min-free-gb`，預設 5）。跑到 18:30 就停在下一項之前，其餘記無法判定，exit 3；21:30 後用 `--only` 補跑剩下的項目。
+   - **只讀**：DB 用唯讀連線，raw 依副本的 `payload_path` 經 `app.raw_paths.payload_file` 找檔（舊 Windows 路徑在容器內讀 `STOCK_RAW_DIR` 底下），只以 `rb` 開啟；兩處都沒有時，`--raw-dir` 可改指 raw 副本。主機的 `raw/` 已刪，在主機直接跑讀不到 raw，要在容器內跑或給 `--raw-dir`（[LOCAL](ops/LOCAL.md#讀-raw-的工具)）。拒絕正式 DB（含 hard link）、`--out` 指到正式資料目錄底下（字面與解析連結後都比）、台北 21:30～23:30 與可用記憶體不足（`--min-free-gb`，預設 5）。跑到 21:30 就停在下一項之前，其餘記無法判定，exit 3；23:30 後用 `--only` 補跑剩下的項目。
    - **三態**：失敗是 DB 和重算或 raw 不一致；無法判定是 raw 讀不到、母體重建不出，或列寫入之後它讀到的輸入才被更正而沒有重算（`inputs_changed_after_write`：籌碼比率只看窗口內的籌碼列與日線，價格類只看窗口內的除權息；筆數與例子列在 summary）。失敗的項目由統籌建 Issue 處理，工具不修資料。
    master 另有 CI 每晚全套（`schedule`，台北 22:40；也可手動 `workflow_dispatch`）：後端、前端全部跑，`verify` 驗五頁。紅了照 master CI 紅處理（見 [Review 與合併](#review-與合併)）。
 
@@ -122,7 +122,7 @@ export MSYS_NO_PATHCONV=1   # 否則 Git Bash 會把 -v 的容器路徑改寫成
 | 文件／repo | `docker compose -p task-<issue> run --rm --build "${GIT_RO[@]}" api python -B tools/ci/checks.py repository --base <PR 目標分支的完整 SHA>`（比 base 與工作樹，`--no-commit` 合併時檢的是合併結果）；`docker compose -p task-<issue> run --rm --build "${GIT_RO[@]}" api python -B -m unittest discover -s tools/ci -p 'test_*.py'` |
 
 - 有真 env file 時，哪些輸出會帶 token、不能貼到 GitHub，見 [Docker compose](ops/SETUP.md#docker-compose) 的 `STOCK_ENV_FILE`。
-- 台北 18:30～21:30 不跑全套 pytest 與 `docker build`（[無人值守運作](COORDINATOR.md#無人值守運作)）。
+- 台北 21:30～23:30 不跑全套 pytest 與 `docker build`（[無人值守運作](COORDINATOR.md#無人值守運作)）。
 - 結案時（[任務流程](#任務流程)第 6 步）統籌在 `close_task.sh` 之前跑 `docker compose -p task-<issue> -f docker-compose.yml -f docker-compose.dev.yml down --volumes --rmi all`，刪掉這個 project 的容器、網路、volume 與 image；`$T` 以 `--extra-dir` 交給 `close_task.sh`。
 
 每個 checkout 設一次 `git config blame.ignoreRevsFile .git-blame-ignore-revs`，`git blame` 會略過 [`.git-blame-ignore-revs`](../.git-blame-ignore-revs) 列出的全檔格式化 commit。
