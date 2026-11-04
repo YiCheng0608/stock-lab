@@ -354,6 +354,12 @@ def test_a_run_that_reaches_the_window_marks_the_rest_undetermined(fx):
     assert all("18:30-21:30" in check.skipped for check in checks)
 
 
+# A fixed daytime clock (Taipei 10:00): between 18:30 and 21:30 the audit skips every
+# item (#391), so a test on the real clock checks nothing or fails then (#451: CI at
+# Taipei 18:41 failed test_summary_lists_every_item_with_its_result with exit 3).
+TAIPEI_1000 = datetime(2026, 11, 3, 2, 0, tzinfo=timezone.utc)
+
+
 def test_the_audit_never_writes_the_database(fx):
     stock = fx.instrument("TWSE", "1101")
     for day in DAYS[:30]:
@@ -361,7 +367,10 @@ def test_the_audit_never_writes_the_database(fx):
     fx.commit()
     fx.close()
     before = fx.path.read_bytes()
-    audit.run(fx.path, None, audit.KEYS, False)
+    checks, _facts = audit.run(
+        fx.path, None, audit.KEYS, False, clock=lambda: TAIPEI_1000
+    )
+    assert not any(check.skipped for check in checks)
     assert fx.path.read_bytes() == before
     con = audit_lib.connect(fx.path)
     with pytest.raises(sqlite3.OperationalError):
@@ -1124,6 +1133,7 @@ def test_summary_lists_every_item_with_its_result(fx, tmp_path, monkeypatch):
     fx.commit()
     monkeypatch.setattr(audit, "free_memory_gb", lambda: 20.0)
     monkeypatch.setattr(audit, "refusals", lambda *args: [])
+    monkeypatch.setattr(audit, "daily_window_problem", lambda now: None)
     out = tmp_path / "out"
     code = audit.main(["--db", str(fx.path), "--out", str(out)])
     summary = (out / "summary.md").read_text(encoding="utf-8")
