@@ -1777,6 +1777,10 @@ OMITTED_TABLES: dict[str, str] = {
         "融資標的清單只給 analyze 判定融資條件是否適用（#392）；API 不讀，"
         "假資料的訊號直接寫好判定結果"
     ),
+    "no_trade_days": (
+        "官方無成交日只給資料覆蓋度頁計數（#454）；五個主導航不讀，"
+        "假資料的標的每個交易日都有行情"
+    ),
     "schedule_runs": "排程紀錄只給看門狗與系統頁",
     "schedule_run_steps": "同 schedule_runs",
     "signal_evaluations": "較早的訊號只當追蹤計畫的來源；系統訊號追蹤不在五頁顯示",
