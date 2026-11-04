@@ -28,6 +28,7 @@ import worker.pipeline as pipeline
 import worker.schedule_runs as schedule_runs
 import worker.sources as sources
 from test_sources import FixtureFetcher
+from worker.mops_events import MOPS_EVENT_LIST_ENDPOINT
 
 
 DAY = date(2026, 9, 4)
@@ -881,9 +882,13 @@ def test_historical_adapter_skips_current_feeds_and_reuses_the_universe(
         )
         assert {bar.symbol for bar in batch.bars} >= {"1101", "7001"}
         assert batch.chips and not batch.events and not batch.actions
-        assert batch.event_coverage["status"] == "unsupported"
+        # The dated MOPS list is not a current-only feed: the historical path
+        # queries it for the session (Issue #464); the fixture answers empty.
+        assert batch.event_coverage["status"] == "verified_empty"
+        assert batch.event_coverage["empty_dates"] == [DAY.isoformat()]
         # The reused universe payloads stay attached to every batch for provenance.
         assert any(p.endpoint == sources.TWSE_LISTED_ENDPOINT for p in batch.payloads)
+    assert fetcher.calls.count(MOPS_EVENT_LIST_ENDPOINT) == 2
 
 
 def test_snapshot_collect_uses_the_dated_report_taiex_before_the_current_index(
@@ -1982,11 +1987,17 @@ def test_historical_refetch_keeps_the_snapshot_event_coverage(database):
         db.execute(update(IngestionRun).values(status="partial"))
         db.commit()
     # The historical default would be an empty observed_event_dates list.
-    assert DAY.isoformat() in coverage["observed_event_dates"] and len(quality) == 4
+    assert (
+        DAY.isoformat() in coverage["snapshot_feed_coverage"]["observed_event_dates"]
+        and len(quality) == 4
+    )
 
+    # The historical refetch's dated MOPS list fails, so it has no verified
+    # evidence of its own and the stored coverage stays (Issue #464).
+    outage = OutageFetcher((MOPS_EVENT_LIST_ENDPOINT,))
     historical = sources.OfficialMarketDataAdapter(
-        sources.TwseAdapter(fetcher, snapshot_feeds=False),
-        sources.TpexAdapter(fetcher, snapshot_feeds=False),
+        sources.TwseAdapter(outage, snapshot_feeds=False),
+        sources.TpexAdapter(outage, snapshot_feeds=False),
     )
     refetched = pipeline.collect(DAY, adapter=historical)
     assert (
