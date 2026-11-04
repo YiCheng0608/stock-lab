@@ -83,7 +83,9 @@ def check_candidate(
     """
 
     code = _key(symbol)
-    if code and re.search(rf"(?<![0-9a-z.]){re.escape(code)}(?![0-9a-z.]|{_UNIT})", text):
+    if code and re.search(
+        rf"(?<![0-9a-z.]){re.escape(code)}(?![0-9a-z.]|{_UNIT})", text
+    ):
         return MENTIONED
     names = list(all_names)
     for variant in name_variants(name):
