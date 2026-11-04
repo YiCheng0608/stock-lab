@@ -22,6 +22,7 @@ import {
   newsTime,
   normalizeText,
   productTimeText,
+  ruleVersion,
   sourceKindLabel,
   sourceLink,
   summaryPreview,
@@ -72,8 +73,10 @@ function RelationChips({ item }: { item: NewsItem }) {
   const instruments = verifiedInstruments(item)
   const themes = userFacingNewsThemes(item)
   if (!instruments.length && !themes.length) return <span className="small-note">未有已核實的標的或族群</span>
+  const version = ruleVersion(item)
   return (
     <div className="news-chips">
+      {version && <span className="small-note news-relation-source">規則核實 · {version}</span>}
       {instruments.map((instrument) => instrument.href
         ? <Link className="tag symbol-tag" key={instrument.key} to={instrument.href}>{instrument.label}</Link>
         : <span className="tag" key={instrument.key}>{instrument.label}</span>)}
@@ -264,7 +267,7 @@ export function NewsDetailView({ item }: { item: NewsItem }) {
             <summary>技術資訊</summary>
             <div>來源類型：{sourceKindLabel(item.source_kind)}</div>
             <div>系統收錄時間：{productTimeText(item.product_time, 'collected_at')}</div>
-            {item.impact?.method && <div>關聯方法：{item.impact.method.startsWith('rule:') ? '規則比對（名稱／代號）' : '來源標示'}</div>}
+            {item.impact?.method && <div>關聯方法：{item.impact.method.startsWith('rule:') ? `規則比對（名稱／簡稱／代號）${ruleVersion(item) ? ` · 規則版本 ${ruleVersion(item)}` : ''}` : '來源標示'}</div>}
             {title !== item.title && <div>原始標題：{item.title}</div>}
             <div>原始資料識別碼：{item.provenance?.raw_payload_id ?? '—'} · 事件識別碼：{item.provenance?.event_id ?? '—'}</div>
             <div>來源位置：{item.provenance?.endpoint ?? '—'}</div>

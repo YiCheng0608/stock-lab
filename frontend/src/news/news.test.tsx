@@ -15,6 +15,7 @@ import {
   newsPageSearch,
   newsTime,
   parseNewsTab,
+  ruleVersion,
   sourceLink,
   stockNewsParams,
   summaryPreview,
@@ -114,6 +115,13 @@ const compactOrder = ['news-source-badge', 'class="news-card-title"', 'class="ne
 check(compactOrder.every((name, index) => compact.includes(name) && (index === 0 || compact.indexOf(name) > compact.indexOf(compactOrder[index - 1]))), `compact card order: ${compact}`)
 check(!compact.includes('news-card-summary') && !compact.includes('class="news-source"') && compact.includes('news-card-compact'), 'compact card drops the summary and source link')
 check(render(<NewsCard item={officialItem()} />).includes('<span class="tag">3666</span>'), 'bare official code is a plain chip')
+// Issue 451 (NEWS_SPEC §2): verified relations name their source and the rule version from impact.method.
+check(card.includes('<span class="small-note news-relation-source">規則核實 · v2</span>') && card.indexOf('規則核實 · v2') < card.indexOf('2330 台積電'), 'rule relations are labelled 規則核實 with the rule version before the chips')
+check(compact.includes('規則核實 · v2'), 'the today page row carries the same label')
+const v1Item = newsItem({ impact: { ...newsItem().impact, method: 'rule:exact-name-code/v1' } })
+check(render(<NewsCard item={v1Item} />).includes('規則核實 · v1') && ruleVersion(v1Item) === 'v1', 'an item kept on the old rule shows v1')
+check(!render(<NewsCard item={officialItem()} />).includes('規則核實') && ruleVersion(officialItem()) === null, 'official projections have no rule label')
+check(!render(<NewsCard item={newsItem({ symbols: [], instruments: [] })} />).includes('規則核實'), 'no verified relation, no rule label')
 
 // ---- AC-1 unknown direction never gets up／down colors ----
 check(card.includes('影響尚未判定') && !hasTone(card) && !card.includes('AI 推論'), 'no AI: rule direction unknown, no red／green, no AI badge')
@@ -158,6 +166,7 @@ check(factsStart > 0 && aiStart > factsStart, 'facts card first, AI block after 
 const facts = detail.slice(factsStart, aiStart)
 const inference = detail.slice(aiStart)
 check(facts.includes('來源事實') && facts.includes('台積電十五日召開法說會') && facts.includes('發布於 2026/10/18 00:05') && facts.includes('已核實關聯') && facts.includes('href="/stocks/TWSE/2330"'), 'facts: source summary, time and verified relations')
+check(facts.includes('規則核實 · v2') && facts.includes('關聯方法：規則比對（名稱／簡稱／代號） · 規則版本 v2'), 'detail: relation source and rule version')
 check(!facts.includes('AI') && !facts.includes('3奈米廠，預計2028') && !facts.includes('6751'), 'facts carry no AI content')
 check(facts.includes('來源未標示影響') && !facts.includes('影響尚未判定') && !hasTone(facts), 'source impact unknown in facts reads 來源未標示影響, no color')
 check(detail.includes('<section class="ai-inference" aria-labelledby="ai-inference-title" data-testid="ai-inference">') && inference.includes('AI 推論') && inference.includes('badge badge-accent'), 'AI block has the accent bar class and AI 推論 badge')

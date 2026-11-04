@@ -69,7 +69,7 @@ export function newsItem(overrides: Partial<NewsItem> = {}): NewsItem {
     instruments: [{ exchange: 'TWSE', symbol: '2330', name: '台積電' }],
     themes: [],
     theme_ids: [],
-    impact: { scope: 'instrument', direction: 'unknown', rationale: null, method: 'rule:exact-name-code/v1', confidence: 'unknown' },
+    impact: { scope: 'instrument', direction: 'unknown', rationale: null, method: 'rule:exact-name-code/v2', confidence: 'unknown' },
     impact_scope: 'instrument',
     impact_direction: 'unknown',
     confidence: 'unknown',

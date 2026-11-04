@@ -30,6 +30,25 @@
 
 來源可信度、關聯證據、影響推論與預測機率必須分欄；confidence 不能一欄包辦或解讀為報酬把握。
 
+### 規則關聯
+
+新聞 feed 的已核實標的與產業由 `worker.news_batch.RelationMatcher` 以規則比對標題與描述，`impact_method` 記規則版本，目前 `rule:exact-name-code/v2`（[#451](https://github.com/YiCheng0608/stock-lab/issues/451)；v1 與 v2 的差別是下列第 3、4 點的簡稱與兩字名稱，以及 ETF 與 `ipo`）。
+
+1. **對象與名稱來源**：上市／上櫃的普通股（含 `instrument_type=ipo`，上市 60 天內），以及 ETF，不論 `status`。名稱只取 `instruments.name`，也就是 TWSE `t187ap03_L` 的「公司簡稱」、TPEx `mopsfin_t187ap03_O` 的 `CompanyAbbreviation`、ETF 的 `t187ap47_L`「基金簡稱」與 `etfFilter`（[DATA_SOURCES](DATA_SOURCES.md) 的 universe 來源）；不另抓資料、不手寫別名表。公司全名（「公司名稱」）不用：多數已由簡稱或代號命中，又有「台灣半導體」（5425 台半）這類一般片語。
+2. **代號**：只在有脈絡時算命中：同一檔的名稱也出現、代號後接 `-TW`／`.TW`／`-TWO`，或前面是「代號」；純數字不算（「ETF冠軍竟然不是0050」不算）。同一代號在兩個交易所都有時，只由名稱決定。ETF 帶字母的代號（`00981A`、`00679B`）同樣適用。
+3. **名稱**：每檔普通股的名稱有正式簡稱、去掉上市標記（帶 dash 的 `-KY`、`-DR`、`-創`，以及 `*`）後的名稱，以及去掉結尾「投控」「控股」後的名稱（日月光投控 → 日月光）；最後一種若是別檔的正式簡稱就不用（中光電仍是 5371，不是 3718 中光電投控）。ETF 的名稱是基金簡稱，去掉括號內的舊名（「(原:元大電子)」）。
+   - 三字以上、含中文、不在常用詞排除表（`NAME_ONLY_STOPWORDS`：台灣大、大台北、新天地等）的名稱單獨出現即算。ETF 名稱要 5 字以上（`ETF_NAME_MIN_LENGTH`）才單獨算，「新台灣」（0060）、「富邦科技」（0052）要代號。
+   - 名稱落在文中更長的名稱或阻擋詞組（`NAME_BLOCKERS`：「中華電視」不是中華電、「大華銀投信」不是 9905 大華）內時不算，只算最長者。
+4. **兩字名稱**（普通股約三分之二是兩字）：不帶代號也算，但要同時符合：
+   - **唯一**：沒有別檔普通股有同一個名稱。「台南」（1473 台南、5906 台南-KY）這類同名不同市場仍要代號。
+   - **不在更長的名稱內**：文中的更長名稱、阻擋詞組或排除詞蓋住它就不算（台聯電不算聯電，聯發科不算 1459 聯發）。
+   - **位置**：在標題的段落開頭，也就是標題開頭，或前一字是標點、符號或空白；前一字是中文、英文字母或數字都不算（「東南亞」不算南亞，「12時報」「22日成」不算）。或在標題、描述中自成一段：前一字同上，後面是非中文字元或結尾（「群創、友達、鴻海」「捷迅Q3」「其中 全新(2455)」）。
+   - **不在兩字排除表**（`TWO_CHAR_STOPWORDS`）：一般詞、地名、基金或他公司同名。表的來源：以 2026-10-20～11-02 的 3,863 則國內新聞（不含驗收的 11/03～04）逐一判讀新增命中，新增命中有一半以上錯誤者，以及知名同名（三星＝Samsung、惠普＝HP）；另有驗收檢查時找到的「南港」「中華」。排除表的名稱帶代號時照常命中。
+5. **產業**：已核實的官方產業顯示名稱後接「股」「類股」「族群」「產業」「業」時，寫入 `theme_ids_json`；名稱落在公司名稱或更長的產業名稱內（「台光電股」的光電、「其他電子業」的電子）不算，「其他」「綜合」不比對。
+6. **寫入**：`symbols_json` 寫 `exchange:symbol`（個股頁依 `exchange:symbol` 或官方投影的純代號比對）；`impact_scope` 有標的為 `instrument`，只有產業為 `theme`，都沒有時 `macro_official` 為 `market`，其他為 `unknown`。時間衝突的列不比對（`impact_method=time_consistency_conflict`）。
+7. **版本與重算**：`news_items` 的 `symbols_json`、`theme_ids_json`、`impact_scope`、`impact_method` 是現行關聯，API、個股頁、[候選分數](spec/candidate_score.md)的新聞分項與 LLM 題材核對 B 都讀它們。規則升版時，每次新聞收集在抓 feed 之前，把 `status=active`、`impact_method` 是舊版規則、`published_at`（沒有時用 `collected_at`）在 3 天內（`RELATION_RERUN_WINDOW`，與 §5 LLM 升版的窗口相同）的列以新版重算並改寫這四欄；更早的列保留舊版結果，`impact_method` 照實記舊版，畫面顯示舊版本號。舊值保存在同一個 commit 寫入的 `run_type=news_relations` ingestion run：`metadata_json.items[]` 是關聯有變的列（`news_item_id`、`previous` 的 method、`symbols`、`theme_ids`、`impact_scope`，以及新值），`unchanged` 依舊 method 列出關聯沒變的 id；沒有要重算的列就不開 run。已寫入的候選 run 不重算（候選規格「同日不重算」），之後的候選以新關聯計算。
+8. **誤配控制的驗收**（2026-11-04 正式 DB 副本）：11/03～04 台北日的 727 則國內 `active` 新聞，有標的的則數 v1 340（46.8%）、v2 400（55.0%）；`news_v3` 已判讀的 303 則由 122（40.3%）升到 152（50.2%），AI 個股候選落在規則命中內的比例由 66.7% 升到 81.3%。新增的 112 個「新聞×標的」以固定亂數種子抽 30 個人工判讀全部正確，逐筆結果在 #451 的 PR。
+
 ## 3. 去重、新資訊與事件影響
 
 1. 同來源先按 source_item_id／canonical URL 去重；缺 ID 時才以來源、標題、日期、標的與雜湊建立可重現鍵。
@@ -42,15 +61,10 @@
 
 新聞 feed 的實作（`worker.news_batch`）：
 
-- 同來源以 guid 為 `canonical_key`，沒有 guid 時用 canonical URL（統一 https、主機小寫，去掉 `utm_*`、`mod` 等追蹤參數、fragment 與結尾斜線）；guid 或 canonical URL 任一已存在就視為同一則。既有列重跑時不改寫，`published_at` 保持第一次寫入的值。
+- 同來源以 guid 為 `canonical_key`，沒有 guid 時用 canonical URL（統一 https、主機小寫，去掉 `utm_*`、`mod` 等追蹤參數、fragment 與結尾斜線）；guid 或 canonical URL 任一已存在就視為同一則。既有列重跑時不改寫，`published_at` 保持第一次寫入的值；例外只有下方非股市內容排除改 `status`，以及規則升版時重算近 3 天的關聯（[§2 規則關聯](#規則關聯)第 7 點）。
 - 跨來源：標題經 NFKC、小寫並去掉空白、標點與符號後相同，且台北時間同一天者，給同一個 `dedupe_cluster_id`，各來源各保留一列；沒有來源時間的不併群。
-- 規則關聯（`impact_method=rule:exact-name-code/v1`），只比對標題與描述，對象為上市／上櫃普通股：
-  - 代號只在有脈絡時算命中：同一檔的名稱也出現、代號後接 `-TW`／`.TW`／`-TWO`，或前面是「代號」；純數字不算。
-  - 同一代號在兩個交易所都有時，只由名稱決定，代號本身不消歧。
-  - 名稱比對用正式名稱與去掉上市標記（帶 dash 的 `-KY`、`-DR`、`-創`，以及 `*`）後的名稱，至少兩字。名稱單獨出現時，只有三字以上、含中文、不在常用詞排除表內，且不在更長的已命中名稱或排除詞組（如「中華電視」）內者才算；兩字名稱必須同時出現其代號。
-  - `symbols_json` 寫 `exchange:symbol`；個股頁依 `exchange:symbol` 或官方投影的純代號比對。
-  - 產業：已核實的官方產業顯示名稱後接「股」「類股」「族群」「產業」「業」時，寫入 `theme_ids_json`；名稱落在公司名稱或更長的產業名稱內（「台光電股」的光電、「其他電子業」的電子）不算，「其他」「綜合」不比對。
-- `impact_scope`：有標的為 `instrument`，只有產業為 `theme`，都沒有時 `macro_official` 為 `market`，其他為 `unknown`。`impact_direction` 一律 `unknown`，`confidence` 為 `unknown`。
+- 規則關聯（標的、產業、`impact_scope`、版本與重算）見 [§2 規則關聯](#規則關聯)。
+- `impact_direction` 一律 `unknown`，`confidence` 為 `unknown`。
 - 非股市內容排除（`news-filter/v1`，`worker.news_sources.exclusion_reason`），只用下列規則，不用 LLM；分類或關鍵字有變動就升版：
   - 分類：單篇 URL 路徑的目錄段落屬於該來源的排除分類，原因記 `section:<段落>`。中央社排除 `ahel`（生活，含彩券開獎）、`asoc`（社會）、`amov`（娛樂）、`aspt`（運動）、`aloc`（地方）、`acul`（文化）；CNBC 排除 `make-it`（CNBC Make It）、`select`（CNBC Select）。其他來源的 URL 沒有分類段落，不套這條。
   - 標題關鍵字：標題經 NFKC 與小寫後含下列詞即排除，原因記 `title:<類別>`；只看標題，摘要提到不算。`lottery`：今彩539、大樂透、威力彩、雙贏彩、三星彩、四星彩、樂合彩、賓果賓果、刮刮樂、Powerball、Mega Millions。`society`：車禍、命案、兇殺、凶殺、墜樓、溺斃、性侵、酒駕。
