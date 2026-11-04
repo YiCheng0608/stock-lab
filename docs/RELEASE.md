@@ -83,7 +83,7 @@ tag 的 Alembic head（`backend/app/migration_revisions.py` 的最後一個）�
 # 換值：TAG＝要部署的 tag；P＝正式 compose project；R＝發佈 checkout；B＝備份目錄（docs/ops/LOCAL.md）
 TAG=v1.3.0 P=stock-lab
 R="$(cd ~/stock-lab-release && pwd -W)"
-B="C:/Users/YiCheng/stock-lab-backup/$(date +%Y%m%d)-before-$TAG"
+B="C:/Users/YiCheng/stock-lab-backups/pre-$TAG-$(date +%Y%m%d)"
 TOOLS="$(pwd -W)/tools/ops"; mkdir -p "$B"
 OLD="$(docker inspect -f '{{.Config.Image}}' "$P-api-1")"   # 目前跑的 image，例如 stock-lab-backend:v1.2.0
 unset WEB_PORT API_PORT STOCK_ENV_FILE   # 同 deploy.sh：不沿用 smoke 留下的設定
