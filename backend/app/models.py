@@ -846,7 +846,7 @@ class NewsLlmResult(Base):
     source summary are never overwritten; a new prompt version adds rows and
     older rows stay.  ``llm_status`` is ``done``, ``pending`` (retried later),
     ``skipped_stale`` (too old, not sent) or ``rejected`` (failed the summary
-    check, not sent again).
+    check, or left out or wrong in MAX_ITEM_ATTEMPTS answers; not sent again).
     """
 
     __tablename__ = "news_llm_results"
