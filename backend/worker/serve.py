@@ -4,8 +4,15 @@ It takes over from Windows Task Scheduler (tools/Register-WorkerSchedule.ps1,
 tools/ops/Register-Watchdog.ps1): APScheduler starts, on Taipei time, the
 commands those tasks ran.
 
-- daily: Monday to Friday 18:30 and 21:30, ``worker.cli job daily --trigger
-  scheduler --min-free-memory-gb 2``.
+- daily: Monday to Friday 21:30 and 23:00 (#466), ``worker.cli job daily
+  --trigger scheduler --min-free-memory-gb 2 --time-limit-minutes 75``. 21:30 is
+  the run: the exchanges' margin files are out by then (an 18:30 run never got
+  them and always ended partial). 23:00 is the insurance: after a 21:30
+  ``success`` it records ``already_complete`` and only refetches the day's
+  institutional files (#396); after a 21:30 that failed or did not run it is the
+  day's retry. The 75 minutes keep a stuck 21:30 run, serve's backstop included,
+  from holding the lock at 23:00 (a manual ``job daily`` keeps the job's own
+  150).
 - news: every 2 hours on the hour, ``worker.cli job news --min-free-memory-gb
   1`` (news, then news-llm).
 - watchdog: at :15 and :45, ``tools/ops/watchdog.sh``.
@@ -19,11 +26,13 @@ commands those tasks ran.
   task worktrees.
 
 At start, a daily of the day that has not completed is run once (#342, decision 5): on a
-weekday past the first daily time (18:30), when ``schedule_runs`` has no ``success`` or
+weekday past the first daily time (21:30), when ``schedule_runs`` has no ``success`` or
 ``non_trading_day`` row for the day. A container recreated by a deploy or a cutover in the
 evening would otherwise wait for the next trigger, as the triggers before its start are not
-run. A holiday is no exception: the daily records ``non_trading_day`` there, as the 18:30
-trigger does on a weekday holiday.
+run. A holiday is no exception: the daily records ``non_trading_day`` there (a first
+no-session answer is ``non_trading_unconfirmed``, which the 23:00 trigger confirms). After a
+21:30 ``success`` nothing is run at start, so a restart past 23:00 skips that night's
+institutional refetch.
 
 ``STOCK_SKIP_NEWS_LLM`` (from the env file, #342 decision 6) is ``--skip-news-llm``'s
 default: 1, true, yes or on skip news-llm after news; empty, 0, false, no or off do not; any
@@ -68,7 +77,10 @@ from . import job
 ROOT = job.ROOT
 TAIPEI = job.TAIPEI
 JOBS = ("daily", "news", "watchdog", "monitor")
-DAILY_TIMES = "18:30,21:30"
+DAILY_TIMES = "21:30,23:00"
+# A scheduled daily's limit: with serve's backstop it ends before the next daily time
+# (23:00 is 90 minutes after 21:30). The longest daily of 10/19-11/04 took 20 minutes.
+DAILY_TIME_LIMIT_MINUTES = 75.0
 NEWS_INTERVAL_HOURS = 2
 # The longest news interval is the day itself (#368): once a day, at 0:00.
 NEWS_INTERVAL_MAX_HOURS = 24
@@ -163,7 +175,13 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help=f"交給 job news（預設 {NEWS_MIN_FREE_MEMORY_GB:g}）",
     )
     parser.add_argument(
-        "--daily-time-limit-minutes", type=float, help="交給 job daily（預設 150）"
+        "--daily-time-limit-minutes",
+        type=float,
+        default=DAILY_TIME_LIMIT_MINUTES,
+        help=(
+            f"交給 job daily（預設 {DAILY_TIME_LIMIT_MINUTES:g}：連同 serve 的保險時間，"
+            "在下一個 daily 時間前結束）"
+        ),
     )
     parser.add_argument(
         "--news-time-limit-minutes", type=float, help="交給 job news（預設 90）"

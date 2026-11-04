@@ -211,7 +211,7 @@ def daily_result(db: str, day: str, now: str) -> str:
             (day,),
         ).fetchall()
     # A complete run settles the day, even if a later trigger was skipped
-    # (for example low_memory at 21:30 after a successful 18:30).
+    # (for example low_memory at 23:00 after a successful 21:30).
     for status, _started_at, raw in rows:
         if status in COMPLETE:
             steps = _json(raw).get("steps") or {}

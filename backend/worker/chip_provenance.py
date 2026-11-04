@@ -3,9 +3,10 @@
 Before #395 a chip row had one provenance.  A row whose institutional and
 margin values came from one collect is labelled ``<institutional>+<margin>``
 but links only the institutional capture; a row whose margin was filled by a
-later collect (every trading day from 2026-10-19: the 18:30 collect has no
-margin yet) is labelled and linked as institutional only, and the filling
-capture is recorded only in that run's ``value_fill_groups``.
+later collect (every trading day from 2026-10-19 until #466 dropped the 18:30
+daily: the 18:30 collect had no margin yet) is labelled and linked as
+institutional only, and the filling capture is recorded only in that run's
+``value_fill_groups``.
 
 This writes both groups of every such row.  Nothing is fetched:
 

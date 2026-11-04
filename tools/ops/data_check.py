@@ -41,10 +41,10 @@ Checks of trading date ``day``:
 - ``row_count``: a market's common-stock bars of the day are
   ``ROW_DROP_PERCENT`` percent or more below the median of its previous
   ``ROW_DROP_SESSIONS`` sessions.
-- ``institutional_refetch``: the day's 21:30 institutional refetch (#396)
-  ended ``failed`` or ``partial``, or a daily that succeeded before 21:00 has
-  no refetch (institutional flow compared with the 18:30 file only); still
-  running makes the result ``pending``.
+- ``institutional_refetch``: the day's institutional refetch (#396; the 23:00
+  daily since #466) ended ``failed`` or ``partial``, or a daily that succeeded
+  before 21:00 (a manual run) has no refetch (institutional flow compared with a
+  file from before 21:00 only); still running makes the result ``pending``.
 
 One event is one finding: the TWT48U and official ``action_missing`` of an
 event, and the ``unmatched_bar`` and ``bar_missing`` of one code and date,
@@ -82,7 +82,8 @@ BAR_FIELDS = ("open", "high", "low", "close", "volume", "is_suspended")
 ACTION_FIELDS = ("cash_dividend", "stock_dividend_ratio", "split_ratio")
 REFETCH_FAILED = ("failed", "partial")
 # A daily that succeeded from 21:00 Taipei (13:00 naive UTC) on collected the
-# late institutional files itself; one before that needs the 21:30 refetch.
+# late institutional files itself; one before that (a manual run) needs a later
+# refetch.
 LATE_COLLECT_UTC_HOUR = 13
 # All official result-table requests of one check (#408 review). fetch_json
 # may retry 3 times at 30 s, so one request can overrun it by about 95 s,
@@ -113,7 +114,7 @@ LABELS = {
     "action_not_official": "DB 有、官方結果表沒有的除權息",
     "action_official_unavailable": "官方結果表讀取失敗",
     "row_count": "普通股列數驟減",
-    "institutional_refetch": "21:30 法人重抓失敗或沒有執行",
+    "institutional_refetch": "法人重抓失敗或沒有執行",
 }
 DETAIL_WARNING = re.compile(r"TWT49UDetail (?:unavailable|has no row) for (\S+) ")
 
@@ -919,7 +920,7 @@ class DayCheck:
                     f"source {action.source}",
                 )
 
-    # --- row counts and the 21:30 refetch ------------------------------------
+    # --- row counts and the institutional refetch ----------------------------
 
     def row_counts(self) -> None:
         from sqlalchemy import func, select
@@ -995,9 +996,9 @@ class DayCheck:
                     "-",
                     "-",
                     "status",
-                    "（應有 21:30 重抓）",
+                    "（應有之後的重抓）",
                     "（沒有）",
-                    "daily 在 21:00 前成功、之後沒有重抓：法人只跟 18:30 的資料比過",
+                    "daily 在 21:00 前成功、之後沒有重抓：法人只跟 21:00 前的資料比過",
                 )
             return
         status, error, run_id = row

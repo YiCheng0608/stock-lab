@@ -93,7 +93,7 @@ python -m uvicorn app.main:app --reload --port 8000
 
 - **判讀**：`docker info --format '{{.ServerVersion}}'` 與任何 `docker compose` 命令都失敗，訊息是 `failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine; check if the path is correct and if the daemon is running: open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.`（Docker 29.9.2；2026-10-29 以不存在的 pipe 名稱重現同一格式，#341）。Docker Desktop 還在啟動時，等它顯示 Engine running 再查一次。`docker info` 有回應，但 `docker compose -p <project> ps` 沒列出 scheduler 或狀態不是 `Up`，就不是 Docker Desktop 的問題，看 `docker compose -p <project> logs scheduler`。
 - **期間沒有排程，也沒有留言**：daily、news、看門狗與事件 monitor 都在 scheduler 容器內，Docker Desktop 停了就全部停；看門狗也在容器裡，所以不會在 #1 留言。主機上看得到的跡象是統籌 `patrol.sh` 印的 monitor 心跳時間不再前進（monitor 開著時，[統籌事件 monitor](MONITOR.md)）。
-- **恢復**：開啟 Docker Desktop。三個服務都是 `restart: unless-stopped`，Docker Desktop 起來後容器自動回來，不必再 `up`（以 `docker compose stop`／`down` 停掉的除外）。serve 不補它啟動前錯過的時段（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)）：錯過當天的 daily 時，看門狗在 21:30 後以 `daily_no_end` 留言，依 [重跑與回補](SCHEDULING.md#重跑與回補) 手動補跑。
+- **恢復**：開啟 Docker Desktop。三個服務都是 `restart: unless-stopped`，Docker Desktop 起來後容器自動回來，不必再 `up`（以 `docker compose stop`／`down` 停掉的除外）。serve 不補它啟動前錯過的時段（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)）：錯過當天的 daily（21:30 與 23:00）時，看門狗在 23:10 後以 `daily_no_end` 留言，依 [重跑與回補](SCHEDULING.md#重跑與回補) 手動補跑。
 
 ## 資料庫、migration 與 readiness
 

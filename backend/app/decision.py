@@ -204,9 +204,10 @@ def latest_official_run(db: Session) -> IngestionRun | None:
     Only "success" counts (Issue #249).  "skipped" (a verified no-data day such
     as a market holiday), "failed" and "running" have no data date, so the
     newest of those would blank every page.  "partial" has bars but analyze
-    does not run on it, so it has no scores or signals; it is usually the 18:30
-    collect before institutional data is published, and the 21:30 rerun turns
-    the same row into "success".
+    does not run on it, so it has no scores or signals; before #466 it was
+    usually the 18:30 collect before the margin data was published, which the
+    21:30 rerun turned into "success" (now a 21:30 partial waits for the 23:00
+    retry).
     """
 
     # Sort ids only, then load the one row: sorting whole rows carries every

@@ -62,9 +62,13 @@ fi
 
 GH_REPO='YiCheng0608/stock-lab'
 NEWS_INTERVAL_SECONDS=7200
-# The daily result is read from 22:00 Taipei: by then the 21:30 trigger has
-# written its schedule_runs row, so an 18:30 partial is not reported early.
-DAILY_RESULT_AFTER_HM=2200
+# The day's daily is judged from 23:10 Taipei (#466): its log, its result and the
+# data check. By then the 23:00 trigger (the retry of a 21:30 that failed or did
+# not run, or the institutional refetch after a 21:30 success) has written its
+# log line and schedule_runs row, so a 21:30 that 23:00 still retries is not
+# reported early. That leaves the 23:15 and 23:45 runs; a 23:00 retry still
+# running at 23:15 is judged at 23:45.
+DAILY_RESULT_AFTER_HM=2310
 # The daily data check (#390): DATA_CHECK_MAX_DAYS checks of at most
 # DATA_CHECK_TIMEOUT_SECONDS each stay inside the task's 10-minute limit.
 DATA_CHECK_TIMEOUT_SECONDS=240
@@ -275,17 +279,20 @@ if [ "$gh_state" = ok ]; then
   fi
 fi
 
-# daily: a weekday's log needs an end line by 21:30 Taipei (only once daily logs exist).
-if compgen -G "$logs/daily-*.log" >/dev/null && [ "$taipei_dow" -le 5 ] && [ $((10#$taipei_hm)) -ge 2130 ]; then
+# daily: from 23:10 on a weekday, the day's log needs an end line (only once daily
+# logs exist). A 21:30 run ends by its 75-minute limit (backend/worker/serve.py), and
+# a 23:00 trigger that finds it running writes an end line of its own.
+if compgen -G "$logs/daily-*.log" >/dev/null && [ "$taipei_dow" -le 5 ] \
+  && [ $((10#$taipei_hm)) -ge "$DAILY_RESULT_AFTER_HM" ]; then
   daily_log="$logs/daily-$taipei_date.log"
   if [ ! -f "$daily_log" ]; then
-    anomaly daily_no_end "daily 排程：台北 $taipei_date 已過 21:30，\`$daily_log\` 不存在（今日未執行）。"
+    anomaly daily_no_end "daily 排程：台北 $taipei_date 已過 23:00 的重試，\`$daily_log\` 不存在（今日未執行）。"
   elif ! grep -qE '^===== .* end exit=' "$daily_log"; then
-    anomaly daily_no_end "daily 排程：台北 $taipei_date 已過 21:30，\`$daily_log\` 沒有結束列（可能卡住或中斷）。"
+    anomaly daily_no_end "daily 排程：台北 $taipei_date 已過 23:00 的重試，\`$daily_log\` 沒有結束列（可能卡住或中斷）。"
   fi
 fi
 
-# daily: from 22:00 on a weekday, the day's runs in schedule_runs (read-only
+# daily: from 23:10 on a weekday, the day's runs in schedule_runs (read-only
 # database) must have ended success or non_trading_day.
 if [ -n "$python" ] && [ -f "$data_dir/stock.db" ] && compgen -G "$logs/daily-*.log" >/dev/null \
   && [ "$taipei_dow" -le 5 ] && [ $((10#$taipei_hm)) -ge "$DAILY_RESULT_AFTER_HM" ]; then
@@ -302,7 +309,7 @@ if [ -n "$python" ] && [ -f "$data_dir/stock.db" ] && compgen -G "$logs/daily-*.
 fi
 
 # Daily data check (#390): each trading day whose daily ended success is
-# checked once, from 22:00 (after the 21:30 institutional refetch): the day's
+# checked once, from 23:10 (after the 23:00 institutional refetch): the day's
 # rows against their official raw captures (tools/ops/data_check.py; it also
 # requests the day's official ex-right result tables). Read-only; nothing is
 # repaired. A day is settled once its check is logged data_check_done (no
@@ -347,8 +354,8 @@ data_check_day() { # data_check_day ISO COMPACT LAST: check one day; LAST=1 comm
         fi
         reason="有 $(printf '%s\n' $facts | sed -n 's/^findings=//p') 筆不一致，但 #1 留言沒有送出" ;;
       pending)
-        reason="21:30 法人重抓一直是 running"
-        log data_check_pending "$facts" "21:30 法人重抓仍在執行，下次再核對" ;;
+        reason="法人重抓一直是 running"
+        log data_check_pending "$facts" "法人重抓仍在執行，下次再核對" ;;
       *)
         found=1
         reason="輸出無法判讀（${check%%$'\n'*}）"
