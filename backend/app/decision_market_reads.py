@@ -89,6 +89,40 @@ def _project(row: Any) -> DecisionMarketRead:
     )
 
 
+# The rows load_decision_market_reads keeps, chosen in SQL instead of iterating
+# every bar of the instruments in Python (a 25-row action page read about 12,600
+# rows to keep 3,000, #462). ``well_formed`` is read_market_date's test in SQL:
+# text, NNNN-NN-NN, a real date and year 0001 or later (Python has no year 0).
+# A real date is one SQLite's date() returns unchanged with a modifier: plain
+# date('2026-02-30') returns it as given, date(x, '+0 days') rolls it over to
+# 03-02, and month 13 or day 32 gives NULL. Only well-formed rows
+# after the cutoff are dropped before ranking, the rows the loop below skipped;
+# the first LIMIT rows per instrument in the loop's order are kept, plus every
+# malformed row, since the first of them is ``unlocated`` even outside that
+# window. The loop then sees the rows it kept before, in the same order.
+BOUNDED_BARS = text(
+    # Nested subqueries rather than WITH: every statement of the read paths
+    # starts with SELECT (test_twse_action_classification checks it).
+    "SELECT id, instrument_id, trading_date, close, adj_close, source, is_suspended,"
+    " raw_payload_id FROM ("
+    " SELECT *, ROW_NUMBER() OVER ("
+    " PARTITION BY instrument_id ORDER BY trading_date DESC, id DESC"
+    " ) AS row_rank FROM ("
+    " SELECT id, instrument_id, trading_date, close, adj_close, source,"
+    " is_suspended, raw_payload_id,"
+    " CASE WHEN typeof(trading_date) = 'text'"
+    " AND trading_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'"
+    " AND trading_date >= '0001-01-01'"
+    " AND date(trading_date, '+0 days') IS trading_date THEN 1 ELSE 0 END"
+    " AS well_formed"
+    " FROM market_bars WHERE instrument_id IN :ids"
+    " ) AS scoped"
+    " WHERE :as_of IS NULL OR well_formed = 0 OR trading_date <= :as_of"
+    " ) AS ranked WHERE row_rank <= :limit OR well_formed = 0 "
+    "ORDER BY instrument_id, trading_date DESC, id DESC"
+).bindparams(bindparam("ids", expanding=True))
+
+
 def load_decision_market_reads(
     db: Session,
     instrument_ids: Iterable[int],
@@ -99,14 +133,14 @@ def load_decision_market_reads(
     ids = set(instrument_ids)
     if not ids:
         return {}, {}
-    query = text(
-        "SELECT id, instrument_id, trading_date, close, adj_close, source, is_suspended, raw_payload_id "
-        "FROM market_bars WHERE instrument_id IN :ids "
-        "ORDER BY instrument_id, trading_date DESC, id DESC"
-    ).bindparams(bindparam("ids", expanding=True))
     candidates: dict[int, list[Any]] = {item_id: [] for item_id in ids}
     unlocated: dict[int, DecisionMarketRead] = {}
-    for row in db.execute(query, {"ids": sorted(ids)}).mappings():
+    params = {
+        "ids": sorted(ids),
+        "as_of": as_of.isoformat() if as_of is not None else None,
+        "limit": limit,
+    }
+    for row in db.execute(BOUNDED_BARS, params).mappings():
         trading_date = read_market_date(row["trading_date"])
         if trading_date is None:
             # A malformed date has no known position relative to the cutoff.
