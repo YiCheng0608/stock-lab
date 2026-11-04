@@ -6,6 +6,31 @@ import pytest
 
 import worker.sources as sources
 from app.indicators import is_synthetic_bar
+from worker.mops_events import MOPS_EVENT_LIST_ENDPOINT
+
+
+def mops_event_list_payload(rows):
+    """A ``t05st02`` response with the official column titles."""
+
+    return {
+        "code": 200,
+        "message": "查詢成功",
+        "result": {
+            "titles": [
+                {"main": name, "sub": []}
+                for name in (
+                    "發言日期",
+                    "發言時間",
+                    "公司代號",
+                    "公司名稱",
+                    "主旨",
+                    "詳細資料",
+                )
+            ],
+            "data": rows,
+        },
+        "datetime": "115/09/04 18:30:00",
+    }
 
 
 @pytest.mark.parametrize("amount", [0, 1])
@@ -433,6 +458,9 @@ class FixtureFetcher:
                     "UnmatchedCompanyNumbersSuspensionStocksIncluded": "0",
                 }
             ]
+        if url == MOPS_EVENT_LIST_ENDPOINT:
+            # The dated MOPS list (Issue #464): answered, no listed/OTC rows.
+            return mops_event_list_payload([])
         raise AssertionError(f"unexpected endpoint: {url}")
 
 

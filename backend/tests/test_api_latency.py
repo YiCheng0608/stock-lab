@@ -18,7 +18,16 @@ from datetime import date, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import bindparam, create_engine, desc, event, select, text
+from sqlalchemy import (
+    bindparam,
+    create_engine,
+    desc,
+    event,
+    func,
+    literal,
+    select,
+    text,
+)
 from sqlalchemy.dialects import sqlite
 from sqlalchemy.orm import sessionmaker
 
@@ -43,7 +52,7 @@ from app.models import (
     MarketBar,
     ThemeGroup,
 )
-from worker import backfill
+from worker import backfill, mops_events
 
 D0 = date(2026, 10, 1)
 
@@ -430,7 +439,7 @@ def test_coverage_reads_event_coverage_from_metadata_with_nan(db, monkeypatch, p
     if path == "forced_fallback":
         # Any SQLite version: a SELECT that fails the way malformed JSON does.
         monkeypatch.setattr(
-            backfill, "_event_manifest_query", lambda: text("SELECT json('{')")
+            mops_events, "_metadata_value", lambda _path: func.json(literal("{"))
         )
     pending = instrument(db, "9999")
 

@@ -12,8 +12,7 @@ from collections import Counter, defaultdict
 from datetime import date, timedelta
 from typing import Any, Iterable
 
-from sqlalchemy import JSON, String, case, literal, null, select, type_coerce
-from sqlalchemy.exc import OperationalError
+from sqlalchemy import String, select, type_coerce
 from sqlalchemy.orm import Session
 
 from app.clock import utcnow
@@ -38,6 +37,7 @@ from app.models import (
     ThemeGroup,
 )
 from worker import pipeline
+from worker.mops_events import stored_event_manifest
 from worker.sources import (
     OfficialBatch,
     OfficialMarketDataAdapter,
@@ -518,86 +518,6 @@ def _instrument_dates(
     return rows
 
 
-def _metadata_value(path: str) -> Any:
-    """``ingestion_runs.metadata_json -> path``: the JSON value there, decoded."""
-
-    # The path is bound as text; bound against the JSON column it would be
-    # JSON-encoded (quoted) and no longer read as a path.
-    return IngestionRun.metadata_json.op("->", return_type=JSON)(literal(path, String))
-
-
-def _event_manifest_query() -> Any:
-    """Official collect/backfill runs with only the metadata coverage_report reads.
-
-    Columns: run_type, data_as_of, run_date, ``metadata_json.coverage_manifest``
-    (backfill runs) and ``metadata_json.event_coverage`` (collect runs), each
-    decoded JSON or None. SQLite extracts the two values (``->``, SQLite 3.38+),
-    so the API does not decode whole metadata documents: about 300 KB per
-    collect run, 165 MB in all on the production copy (#462). The rows and their
-    order are those of the former whole-row query (same table and filter).
-    """
-
-    return select(
-        IngestionRun.run_type,
-        IngestionRun.data_as_of,
-        IngestionRun.run_date,
-        case(
-            (
-                IngestionRun.run_type == "backfill",
-                _metadata_value("$.coverage_manifest"),
-            ),
-            else_=null(),
-        ),
-        case(
-            (
-                IngestionRun.run_type != "backfill",
-                _metadata_value("$.event_coverage"),
-            ),
-            else_=null(),
-        ),
-    ).where(
-        IngestionRun.source == "official",
-        IngestionRun.run_type.in_({"collect", "backfill"}),
-    )
-
-
-def _event_manifest_rows(db: Session) -> list[Any]:
-    """The rows of ``_event_manifest_query``, decoding whole metadata if SQLite cannot.
-
-    SQLAlchemy writes JSON with ``json.dumps``, which emits ``NaN`` for a NaN
-    float; SQLite before 3.42 (no JSON5) rejects such a document as malformed,
-    so the ``->`` query fails as a whole. The former whole-row read decodes it
-    in Python, which accepts NaN, so that read is the fallback and the report
-    stays the same (#462 review). A failed SELECT does not end the SQLite
-    transaction, so nothing is rolled back: the backfill worker calls this with
-    its own uncommitted writes.
-    """
-
-    try:
-        return db.execute(_event_manifest_query()).all()
-    except OperationalError:
-        pass
-    rows = []
-    for run in db.scalars(
-        select(IngestionRun).where(
-            IngestionRun.source == "official",
-            IngestionRun.run_type.in_({"collect", "backfill"}),
-        )
-    ).all():
-        metadata = run.metadata_json or {}
-        backfill_run = run.run_type == "backfill"
-        rows.append(
-            (
-                run.run_type,
-                run.data_as_of,
-                run.run_date,
-                metadata.get("coverage_manifest") if backfill_run else None,
-                None if backfill_run else metadata.get("event_coverage"),
-            )
-        )
-    return rows
-
-
 def coverage_report(
     db: Session,
     start_date: date,
@@ -745,30 +665,26 @@ def coverage_report(
 
     events_by_date = Counter(row.event_date for row in event_rows)
     actions_by_date = Counter(row.action_date for row in action_rows)
-    event_manifest: dict[str, dict[str, Any]] = dict(event_coverage_by_date or {})
+    # A dated answer is keyed by its own query date (Issue #464), not by the
+    # date a caller filed it under.
+    event_manifest: dict[str, dict[str, Any]] = {
+        str((item or {}).get("query_date") or day)[:10]: item
+        for day, item in (event_coverage_by_date or {}).items()
+    }
     if not event_manifest:
-        # Read persisted coverage evidence from collect/backfill metadata.  An
-        # Event row alone is observational evidence, not proof that the
-        # source answered an empty query for that session.
-        for run_type, data_as_of, run_date, manifests, coverage in _event_manifest_rows(
-            db
-        ):
-            if run_type == "backfill":
-                manifests = manifests or {}
-                for day, item in manifests.items():
-                    coverage = (
-                        item.get("event_coverage") if isinstance(item, dict) else None
-                    )
-                    if coverage:
-                        event_manifest[str(day)] = dict(coverage)
-            else:
-                day = data_as_of or run_date
-                if day and coverage:
-                    event_manifest[str(day)[:10]] = dict(coverage)
+        # Read persisted coverage evidence from collect/backfill/event-backfill
+        # metadata; the strongest record per date wins (Issue #464).  An Event
+        # row alone is observational evidence, not proof that the source
+        # answered an empty query for that session.
+        event_manifest = stored_event_manifest(db)
 
     def event_state(day: date) -> str:
         item = event_manifest.get(day.isoformat()) or {}
         if not item:
+            return "unqueried"
+        queried = item.get("query_date")
+        if queried and str(queried)[:10] != day.isoformat():
+            # Never inferred from the status of another date's answer.
             return "unqueried"
         verified = set(str(value)[:10] for value in item.get("verified_dates", []))
         empty = set(str(value)[:10] for value in item.get("empty_dates", []))

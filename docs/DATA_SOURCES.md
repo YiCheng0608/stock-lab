@@ -28,13 +28,14 @@
 | TPEx 籌碼 | 法人 [`insti/dailyTrade`](https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade)；融資 [`margin/balance`](https://www.tpex.org.tw/www/zh-tw/margin/balance) | 同 TWSE 口徑；[三大法人買賣明細](https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html)明列外資及陸資、投信、自營商及合計。 | 缺資料時不補 0；官方檔未列的語意見[法人口徑](#法人口徑)。 |
 | 公司行動 | daily：TWSE [`TWT48U_ALL`](https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL)；TPEx [`tpex_exright_daily`](https://www.tpex.org.tw/openapi/v1/tpex_exright_daily)。回補：TWSE `TWT49U`＋`TWT49UDetail`、TPEx `exDailyQ`（除權除息計算結果表，見[除權息回補](#除權息回補)） | 除權息資料寫入 corporate actions，作價格調整與追蹤比較。 | daily 兩個來源只有當天的事件（`TWT48U_ALL` 另有未來預告，不寫入），沒收到的那天由回補補上。欄位規則見[公司行動欄位](#公司行動欄位)。 |
 | 停復牌 | TPEx [`tpex_spendi_today`](https://www.tpex.org.tw/openapi/v1/tpex_spendi_today)、[`tpex_spendi_history`](https://www.tpex.org.tw/openapi/v1/tpex_spendi_history) | history 轉為可稽核的停牌區間事件；區間內缺 bar 視為不可比。 | today 同時列暫停與恢復公告，代號存在不等於仍停牌；TWSE 停牌歷史未接入，追蹤可能為不可比。見[停復牌規則](#tpex-停復牌規則)。 |
+| 重大訊息（依日期） | MOPS [`t05st02`](https://mops.twse.com.tw/mops/#/web/t05st02)（`POST https://mops.twse.com.tw/mops/api/t05st02`，JSON 民國年／月／日） | 事件覆蓋的唯一證據：每個查詢日記已核實、已核實空日或 partial；上市、上櫃重大訊息寫入 events。 | 清單只有主旨，沒有說明全文。規則見[重大訊息日期查詢](#重大訊息日期查詢)。 |
 | 重大訊息／基本面 | TWSE [`t187ap04_L`](https://openapi.twse.com.tw/v1/opendata/t187ap04_L)、[`t187ap14_L`](https://openapi.twse.com.tw/v1/opendata/t187ap14_L)；TPEx [`mopsfin_t187ap04_O`](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap04_O)、[`mopsfin_t187ap14_O`](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap14_O) | 官方事件與基本面 snapshot。 | 只是取得當下的 snapshot，不能重建歷史可得時間；基本面不是 v1 策略輸入。同股同日多則不同公告標題相同時，以發言時間區分：最早一則保留原標題，之後各則標題加「（發言時間 HH:MM:SS）」（內容完全相同的重複列只留一則），之後重抓不會改名已存的事件。 |
 
 每筆 raw 保存 endpoint、SHA-256、擷取時間與 data-as-of；正規化資料可回指 raw payload；重抓時日線與籌碼列指向哪一次 capture、哪些值會改，見 [重跑與回補的冪等](ops/SCHEDULING.md#重跑與回補)。News／Event 有官方事件投影、來源連結、raw 稽核與時間欄位，但欄位存在不代表每筆來源時間可信，詳見 [NEWS_SPEC](NEWS_SPEC.md)。`ChipSnapshot` 雖定義當沖、融券與借券欄位，現有寫入路徑不收集這些值。券商分點列後版，collector 不接入。
 
 ### 核心與非核心來源
 
-collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`、`dailyQuotes`）、TAIEX、交易日曆、法人與融資。它們的 warning 讓 collect 變 `partial`，daily 不跑 analyze。重大訊息與基本面（`t187ap04_L`、`t187ap14_L`、`mopsfin_t187ap04_O`、`mopsfin_t187ap14_O`）、TPEx 停復牌（`tpex_spendi_today`、`tpex_spendi_history`）及[大盤概況](#大盤概況)（TWSE `MI_INDEX` 的大盤統計與漲跌證券數、TPEx `tpex_mainborad_highlight`；`MI_INDEX` 的日行情與 TAIEX 仍是核心）是非核心：取得失敗記為 `noncore_warnings`，collect 仍為 `success`；被防呆略過的[標的狀態同步](#標的狀態同步)也記為 `noncore_warnings`。缺的事件與基本面照「缺資料留空」處理（`mops_events`／`mops_fundamentals` 的資料品質列為 `partial`）。分類依 warning 文字（`pipeline.NONCORE_WARNING_PATTERN`），新增來源的 warning 未列入前一律算核心。
+collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`、`dailyQuotes`）、TAIEX、交易日曆、法人與融資。它們的 warning 讓 collect 變 `partial`，daily 不跑 analyze。重大訊息與基本面（`t187ap04_L`、`t187ap14_L`、`mopsfin_t187ap04_O`、`mopsfin_t187ap14_O`、MOPS `t05st02`）、TPEx 停復牌（`tpex_spendi_today`、`tpex_spendi_history`）及[大盤概況](#大盤概況)（TWSE `MI_INDEX` 的大盤統計與漲跌證券數、TPEx `tpex_mainborad_highlight`；`MI_INDEX` 的日行情與 TAIEX 仍是核心）是非核心：取得失敗記為 `noncore_warnings`，collect 仍為 `success`；被防呆略過的[標的狀態同步](#標的狀態同步)也記為 `noncore_warnings`。缺的事件與基本面照「缺資料留空」處理（`mops_events`／`mops_fundamentals` 的資料品質列為 `partial`）。分類依 warning 文字（`pipeline.NONCORE_WARNING_PATTERN`），新增來源的 warning 未列入前一律算核心。
 
 ### 標的狀態同步
 
@@ -272,6 +273,18 @@ TWSE：`GET /instruments/{symbol}` 的 `corporate_actions[]` 帶唯讀分類 `so
   - `details_json.stock_ratio_source` 記 `printed`、`from`（`權值+息值` 或 `減除股利參考價`）、`derived`、`used` 與 `disagrees`。`disagrees` 的例子：8104 2025-09-16、1529 2026-07-21、2614 2026-10-06（有現增，印出值都通過價格核對）。
 - **與 daily 同一列**：`action_type` 與 daily 的規則相同（TWSE 一律 `corporate_action`，TPEx 含「息」為 `ex_dividend`），所以回補覆寫 daily 寫的同一列，不會多出第二列。
 - **拒收**：回應區間或列的日期不在請求區間內、欄位缺漏、`stat` 不是成功時，整次 sync 失敗、不寫 DB。
+
+### 重大訊息日期查詢
+
+MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）一次 POST 回一個日曆日的全市場重大訊息清單，`t187ap04_L`／`mopsfin_t187ap04_O` 只是最新公告的快照，不能證明某日沒有公告，所以事件覆蓋只看這個來源（`worker.mops_events`）。
+
+- **請求**：body `{"year":"<民國年>","month":"MM","day":"DD"}`，每個查詢日 1 個請求；同一 host 間隔至少 3 秒（`OFFICIAL_HOST_MIN_INTERVAL_SECONDS`）。raw 存在 `mops` 來源，`data_as_of` 是查詢日。
+- **回應**：`code=200`、`message=查詢成功`，`result.titles` 依序為 發言日期、發言時間、公司代號、公司名稱、主旨、詳細資料；`result.data` 每列是這六欄，第六欄的 `parameters.marketKind` 是 `sii`（上市）、`otc`（上櫃）、`rotc`（興櫃）、`pub`（公發）。只取 `sii`／`otc`，分別寫成 TWSE／TPEx 的事件。
+- **時間範圍**：查 D 日的清單含 D 日到查詢當下的公告，加上 D−1 日 17:30 之後的公告。事件日期一律用列上的發言日期，不是查詢日；D 日晚於查詢時間的公告，下一次查 D+1 日時寫入（唯一鍵去重）。覆蓋記錄查詢時間 `fetched_at`，覆蓋只對自己的查詢日（`query_date`）成立，不依 run 的 `data_as_of` 或狀態推定到別天。
+- **補查週末與連假**：daily 只在週一到週五跑，週五與連假前一天的晚間公告在沒有人查的週六或假日清單裡。所以 collect 查完目標日後，也補查回看 14 個日曆日內、第一個已核實日之後、目標日之前所有還沒核實（含 partial）的日曆日（`worker.mops_events.gap_dates`），例如週一補查週六、週日，連假後第一天補查整段假日，前幾天查詢失敗的日子也一併重查。補查結果記在 collect run 的 `event_gap_coverage`；回看範圍內沒有任何已核實日時不補查，歷史由 `events backfill` 回補。
+- **覆蓋判定**：回應成功且可讀時，有 D 日的 `sii`／`otc` 列就是已核實（`verified_dates`），沒有就是已核實空日（`empty_dates`）。傳輸失敗、`code` 不是 200、沒有表格、欄名改變、列的發言日期不是 D 或 D−1、缺代號或主旨時，D 日記 `partial`，不推定為空，也不寫該次的事件；warning 以 `MOPS event list unavailable` 開頭，是非核心。
+- **與快照同一則**：同一標的、同日、同型別，發言時間相同、主旨相同（不計 #204 的「（發言時間 HH:MM:SS）」後綴）就是同一則。快照寫的列有說明全文時，日期清單不覆寫它；標題相同但發言時間不同時另存一列，標題加發言時間。
+- **寫入時機**：daily 與 catchup 的 collect、回補（`OfficialMarketDataAdapter`）都查目標日；另可用 `events backfill` 只回補事件（[CLI](ops/CLI.md#現有-worker-cli)）。`mops_events` 資料品質列在已核實時為 `complete`，之後的失敗不把它降回 `partial`；跨 run 讀覆蓋時，同一日以較強的證據為準（已核實／空日 > partial > 快照的 unsupported，同級取較新的 run）。
 
 ## FinMind 補缺口規則
 

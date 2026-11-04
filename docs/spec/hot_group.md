@@ -13,6 +13,7 @@
 
 membership 必須在 score date 有效；每個股票榜或 ETF 類別分區至少 3 檔合格成員。產業與題材各算一榜，「同榜」依群組類型劃分：官方產業（`official_industry`）、[題材表](../INDUSTRY_CLASSIFICATION.md#7-題材表)題材（`theme`）、其他股票群組（目前只有新上市觀察 `daily_hot_group`）各自成榜，ETF 依類別分區；percentile 與排名只在同榜內計算，榜別寫在 `details_json.board`，未達成員門檻的群組仍是同榜 percentile 的比較對象，`theme_candidate` 不計分；[新聞題材建議](theme_suggestions.md)不是群組，不進任何榜。breakout_v1／pullback_v1 的族群確認只取非題材群組，`worker.pipeline._best_group_for_signal` 會排除 `theme`；decision／行動摘要的 qualified 族群（`app.decision._qualified_groups_for_instrument`）與今日候選則含題材。`details_json.member_count` 是 score date 有效、標的 active 且類型合格（股票榜為 stock／ipo，ETF 分區為合格類別 ETF）的成員數；`eligible_members` 是其中 1／5／20 日報酬、TAIEX 基準與量能輸入皆齊全的成員數，3 檔門檻看的是 `eligible_members`。事件 missing policy：
 
+- 事件覆蓋以 MOPS `t05st02` 的日期查詢為準（[規則](../DATA_SOURCES.md#重大訊息日期查詢)）：一個交易日的狀態是 verified（有事件）、empty（已核實空日）、partial（查詢失敗）或 unqueried（沒有日期查詢，含只有快照的日子），由 `worker.mops_events.event_coverage_states` 依日期回傳。當日的查詢以查詢時間為截止，查詢之後的公告由下一個日曆日的清單補進事件，不改變該日的覆蓋狀態；週五與連假前一天的晚間公告在週六或假日的清單裡，由下一次 collect 補查（[補查週末與連假](../DATA_SOURCES.md#重大訊息日期查詢)）。一個窗口的日期要一次傳給 `event_coverage_states`，不要逐日呼叫（每次呼叫都讀全部 run 的 metadata）。
 - 官方事件完整覆蓋 1／5／20 日窗口且沒有已核實事件時，催化劑才是有效 0。
 - unsupported、partial、錯日、缺日或事件—族群關聯未核實時，催化劑為 null，不能改成 0 或推測方向。
 - 只有催化劑可以缺：其餘四個 component 都有值時，可用權重 0.90 達門檻，分數為 `(0.35×相對報酬 + 0.25×廣度 + 0.15×量能 + 0.15×法人流) / 0.90`，品質固定為 partial；不檢查同榜其他群組的事件狀態。其他任一 component 缺時可用權重低於 0.90，判為 `insufficient_data`，不給分（`app.domain.group_score_quality`）。
