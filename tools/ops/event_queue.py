@@ -16,6 +16,13 @@ host directory at /coordination, #338), each with a single writer:
         id, conclusion of its required check), one comment id, one end line of a job
         log, one Taipei day of gh refused by GitHub (the watchdog's or the monitor's
         own call). ``seq`` counts up from 1. ``at`` is the source's own time (or null).
+        A quiet event (#440) has one more field, ``quiet``, the reason it needs nobody:
+        ``coordinator_comment`` (the comment ends with comment.sh's mark),
+        ``pr_gone``, or ``merge_with_ci`` (a CLEAN or UNSTABLE merge state first seen
+        in the same poll as a new CI result of the same PR and head). A quiet event is
+        listed by patrol.sh and marked done like any other, but it is not pending: it
+        wakes nobody and does not count for the hour before the #1 comment. Lines
+        written before #440 have no ``quiet`` and are read as they were.
     {"type": "wake", "at", "ok", "terminal", "upto", "detail"}
         the coordinator terminal was sent "有 N 個事件…" (ok) or the send failed; a
         successful wake covers every event up to seq ``upto``.
@@ -41,10 +48,10 @@ Subcommands (LOGS is <data>/logs):
   note-wake LOGS NOW OK TERMINAL DETAIL     OK is 1 or 0
   note-stale LOGS NOW KEY URL     URL "-" in record-only mode: kept in the state only
   beat LOGS NOW MODE GH_CALLS PID GH_FAILED [GH_ERROR]   GH_FAILED is 1 or 0
-  pending LOGS                    the events not done yet
+  pending LOGS                    the events not done yet: pending, then quiet
   status LOGS NOW                 the monitor's heartbeat and its last open PR snapshot
-  done LOGS NOW SESSION X...      mark done; X is an event id, or a seq for every pending
-                                  event up to it
+  done LOGS NOW SESSION X...      mark done; X is an event id, or a seq for every event
+                                  not done up to it (pending or quiet)
 """
 
 from __future__ import annotations
@@ -57,7 +64,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from coordinator_json import one_line, pr_line
+from coordinator_json import coordinator_comment, one_line, pr_line, without_mark
 
 EVENTS = "events.jsonl"
 DONE = "events-done.jsonl"
@@ -76,6 +83,9 @@ WAKE_RETRY = 600
 STALE_AFTER = 3600
 SLOTS = 3
 MERGE_STATES = ("CLEAN", "DIRTY", "BEHIND", "UNSTABLE")
+# Mergeable states that add nothing to the CI result they come with (#440); DIRTY and
+# BEHIND need work, and a state that changes after the CI result is news.
+QUIET_MERGE_STATES = ("CLEAN", "UNSTABLE")
 JOB_FILES = 2  # newest log files read per job
 END_LINE = re.compile(r"^===== (\S+) end (.*)$")
 RUN_ID = re.compile(r"/actions/runs/(\d+)/")
@@ -181,8 +191,15 @@ class Queue:
     def seq(self) -> int:
         return max((e.get("seq") or 0 for e in self.events), default=0)
 
-    def pending(self) -> list[dict]:
+    def undone(self) -> list[dict]:
         return [e for e in self.events if e.get("id") not in self.done]
+
+    def pending(self) -> list[dict]:
+        """What the coordinator is woken for: quiet events left out (#440)."""
+        return [e for e in self.undone() if not e.get("quiet")]
+
+    def quiet(self) -> list[dict]:
+        return [e for e in self.undone() if e.get("quiet")]
 
     def notified_upto(self) -> int:
         return max((w.get("upto") or 0 for w in self.wakes if w.get("ok")), default=0)
@@ -282,9 +299,22 @@ def pr_events(prs: list, previous: list) -> list[dict]:
                     f"PR #{n}",
                     "已不在 open PR（合併或關閉）",
                     "",
+                    quiet="pr_gone",
                 )
             )
     return out
+
+
+def quiet_merge_states(new: list[dict]) -> None:
+    """Mark a new CLEAN or UNSTABLE merge state quiet when a new CI result of the same PR
+    and head came in the same poll (#440). Keys: ci:<n>:<sha>:..., merge:<n>:<sha>:<state>."""
+    heads = {tuple(e["id"].split(":")[1:3]) for e in new if e.get("kind") == "ci"}
+    for e in new:
+        if e.get("kind") != "merge_state":
+            continue
+        _, number, sha, state = e["id"].split(":", 3)
+        if state in QUIET_MERGE_STATES and (number, sha) in heads:
+            e["quiet"] = "merge_with_ci"
 
 
 def comment_events(comments: list, origin: float) -> list[dict]:
@@ -297,14 +327,16 @@ def comment_events(comments: list, origin: float) -> list[dict]:
         if (epoch(created) or 0) < origin:
             continue
         number = (c.get("issue_url") or "").rsplit("/", 1)[-1]
+        body = c.get("body") or ""
         out.append(
             _event(
                 f"comment:{c['id']}",
                 "comment",
                 f"#{number}",
-                one_line(c.get("body") or ""),
+                one_line(without_mark(body)),
                 c.get("html_url") or "",
                 at=created,
+                quiet="coordinator_comment" if coordinator_comment(body) else None,
             )
         )
     return out
@@ -435,8 +467,10 @@ def slot_events(worktrees: dict) -> list[dict]:
     ]
 
 
-def _event(id_: str, kind: str, ref: str, summary: str, url: str, at=None) -> dict:
-    return {
+def _event(
+    id_: str, kind: str, ref: str, summary: str, url: str, at=None, quiet=None
+) -> dict:
+    event = {
         "id": id_,
         "kind": kind,
         "ref": ref,
@@ -444,6 +478,9 @@ def _event(id_: str, kind: str, ref: str, summary: str, url: str, at=None) -> di
         "url": url,
         "at": at,
     }
+    if quiet:
+        event["quiet"] = quiet
+    return event
 
 
 # --- subcommands -------------------------------------------------------------------
@@ -506,6 +543,7 @@ def record(
         q.ids.add(item["id"])
         seq += 1
         new.append({"type": "event", "seq": seq, "detected_at": iso(now), **item})
+    quiet_merge_states(new)
     _append(logs / EVENTS, new)
     q.events += new
     q.save_state(**state)
@@ -518,10 +556,15 @@ def record(
         or last.get("ok")
         or now - (epoch(last.get("at")) or 0) >= WAKE_RETRY
     )
-    wake = bool(unnotified) and (bool(new) or retry_due)
+    # A quiet event does not bring a failed wake forward either (#440).
+    loud = [e for e in new if not e.get("quiet")]
+    wake = bool(unnotified) and (bool(loud) or retry_due)
     handle, _, _ = _heartbeat(logs)
     for item in new:
-        print(f"event [{item['seq']}] {item['id']} {item['ref']} {item['summary']}")
+        quiet = f" quiet={item['quiet']}" if item.get("quiet") else ""
+        print(
+            f"event [{item['seq']}] {item['id']} {item['ref']} {item['summary']}{quiet}"
+        )
     return (
         f"new={len(new)} pending={len(pending)} unnotified={len(unnotified)}"
         f" wake={int(wake)} terminal={handle or '-'}"
@@ -606,12 +649,8 @@ def beat(
     _write_json(logs / BEAT, value)
 
 
-def pending_lines(logs: Path) -> list[str]:
-    events = Queue(logs).pending()
-    if not events:
-        return ["未處理事件：0 個"]
-    seqs = [e.get("seq") for e in events]
-    out = [f"未處理事件：{len(events)} 個（seq {min(seqs)}～{max(seqs)}）"]
+def _event_lines(events: list[dict]) -> list[str]:
+    out = []
     for e in events:
         at = e.get("at") or e.get("detected_at") or ""
         out.append(
@@ -619,6 +658,27 @@ def pending_lines(logs: Path) -> list[str]:
         )
         if e.get("url"):
             out.append(f"      {e['url']}")
+    return out
+
+
+def pending_lines(logs: Path) -> list[str]:
+    q = Queue(logs)
+    events, quiet = q.pending(), q.quiet()
+    if events:
+        seqs = [e.get("seq") for e in events]
+        out = [f"未處理事件：{len(events)} 個（seq {min(seqs)}～{max(seqs)}）"]
+        out += _event_lines(events)
+    else:
+        out = ["未處理事件：0 個"]
+    if quiet:
+        # Listed for reference until a --done covers them (#440); they woke nobody.
+        seqs = [e.get("seq") for e in quiet]
+        out.append(
+            f"不喚醒的事件：{len(quiet)} 個（seq {min(seqs)}～{max(seqs)}；"
+            "統籌自己的留言、PR 離開 open、與 CI 同輪的 CLEAN／UNSTABLE，不用處理，"
+            "--done 一併標記）"
+        )
+        out += _event_lines(quiet)
     return out
 
 
@@ -654,11 +714,11 @@ def status_lines(logs: Path, now: float) -> list[str]:
 
 def done(logs: Path, now: float, session: str, targets: list[str]) -> list[str]:
     q = Queue(logs)
-    pending = q.pending()
+    undone = q.undone()
     ids: list[str] = []
     for t in targets:
         if t.isdigit():
-            ids += [e["id"] for e in pending if (e.get("seq") or 0) <= int(t)]
+            ids += [e["id"] for e in undone if (e.get("seq") or 0) <= int(t)]
         elif t in q.ids:
             ids.append(t)
         else:
