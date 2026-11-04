@@ -61,6 +61,8 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 
 - 後端測試用隔離 DB（`backend/tests/conftest.py` 自動指派）。
 - 瀏覽器與端到端驗證用隔離 DB 或 `tools/ops/copy_db.py` 產生的唯讀副本（放 worktree `.local/verify/`），不指向正式或其他 `.local` DB。五個主導航的端到端驗證照 skill [verify-stock-lab](../../.claude/skills/verify-stock-lab/SKILL.md) 執行（副本啟 API 與 `vite preview`、截圖、證據推 `pr-assets/<issue>`）。
+- 正式 DB 在 volume `stock-lab_stock-data` 裡，副本照 [LOCAL 的標準命令](LOCAL.md#取正式-db-的唯讀副本)從容器取（主機沒有正式 `stock.db`）。
+- 讀 raw 的工具（`tools/audit/audit.py`、`tools/ops/data_check.py`，凡經 `app.raw_paths.payload_file` 的）在主機直接跑時讀不到舊路徑 `C:\Users\YiCheng\stock-lab-data\raw\...`：主機的 `raw/` 已於 2026-11-05 刪除。要在容器內跑（volume 唯讀掛在 `/data`），或把 `STOCK_RAW_DIR`（`audit.py` 用 `--raw-dir`）指到一份 raw；命令與限制見 [LOCAL](LOCAL.md#讀-raw-的工具)。
 
 | 命令 | 用途 |
 | --- | --- |
