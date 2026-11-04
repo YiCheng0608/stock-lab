@@ -34,6 +34,7 @@ CHILDREN = [
     "technical_indicators",
     "daily_candidates",
     "tracking_plans",
+    "no_trade_days",
 ]
 HEAD = REVISIONS[-1]
 DDL = """CREATE TABLE instruments (
@@ -219,7 +220,7 @@ def _fixture(tmp_path, fk, variant="plain", *, children=True):
         if children and variant != "absent_scratch":
             # Real application tables, with all ten inbound FK descriptors.
             # Populate all ten and their required parents using typed values.
-            wanted = set(CHILDREN) | {"theme_groups", "candidate_runs"}
+            wanted = set(CHILDREN) | {"theme_groups", "candidate_runs", "raw_payloads"}
             for table in Base.metadata.sorted_tables:
                 if table.name not in wanted:
                     continue
@@ -250,6 +251,8 @@ def _fixture(tmp_path, fk, variant="plain", *, children=True):
                 if table.name == "daily_candidates":
                     # Integer parents seeded above with id 11.
                     values.update(signal_id=11, candidate_run_id=11)
+                if table.name == "no_trade_days":
+                    values.update(raw_payload_id=11)
                 if table.name == "tracking_plans":
                     values.update(signal_id=11)
                 c.execute(table.insert().values(**values))

@@ -33,7 +33,7 @@ from sqlalchemy.orm import sessionmaker
 
 import app.api as api_module
 import app.main as main_module
-from app import decision, decision_market_reads, migrations
+from app import decision, decision_market_reads, migration_revisions, migrations
 from app.db import Base, enable_sqlite_foreign_keys
 from app.decision_market_reads import (
     _project,
@@ -550,7 +550,14 @@ def test_the_upgrade_adds_the_ingestion_run_indexes(tmp_path, monkeypatch, entry
         "ix_ingestion_runs_latest": ["run_type", "source", "status", "updated_at"],
         "ix_ingestion_runs_updated_at": ["updated_at"],
     }
-    assert version == [("0024_ingestion_run_indexes",)]
+    # alembic_version holds only the head; the fallback keeps every marker.
+    assert version == [
+        (
+            migration_revisions.REVISIONS[-1]
+            if entry == "alembic"
+            else "0024_ingestion_run_indexes",
+        )
+    ]
 
 
 def test_run_orderings_use_the_indexes_not_a_sort_of_whole_rows(db):

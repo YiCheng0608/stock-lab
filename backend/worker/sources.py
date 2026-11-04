@@ -83,6 +83,24 @@ class BarRecord:
 
 
 @dataclass(frozen=True)
+class NoTradeRecord:
+    """An official quote-table row whose open, high, low and close are all blank.
+
+    TWSE ``MI_INDEX`` and TPEx ``dailyQuotes`` list a security on a day it had
+    no regular-session trade, with every price field blank (``--``/``---``).
+    That row is evidence of an official no-trade day, not a price: it is kept
+    apart from ``BarRecord`` and never becomes a bar (Issue #454).
+    """
+
+    symbol: str
+    trading_date: date
+    exchange: str
+    source: str
+    data_as_of: str | None = None
+    payload_sha256: str | None = None
+
+
+@dataclass(frozen=True)
 class ChipRecord:
     """One official same-day institutional/margin observation.
 
@@ -1142,6 +1160,101 @@ def parse_tpex_daily_rows(
     return result
 
 
+# The price fields the bar parsers read, per exchange: open, high, low, close.
+_TWSE_PRICE_KEYS = (
+    ("OpeningPrice", "開盤價", "開盤"),
+    ("HighestPrice", "最高價", "最高"),
+    ("LowestPrice", "最低價", "最低"),
+    ("ClosingPrice", "收盤價", "收盤"),
+)
+_TPEX_PRICE_KEYS = (
+    ("Open", "開盤"),
+    ("High", "最高"),
+    ("Low", "最低"),
+    ("Close", "收盤"),
+)
+
+
+def _blank_price(row: dict[str, Any], keys: tuple[str, ...]) -> bool:
+    """True when the field is present and blank: empty or only dashes."""
+
+    if not any(key in row for key in keys):
+        return False
+    raw = _text(row, *keys)
+    return not raw or set(raw) == {"-"}
+
+
+def _no_trade_rows(
+    rows: Iterable[dict[str, Any]],
+    *,
+    exchange: str,
+    source: str,
+    symbol_keys: tuple[str, ...],
+    price_keys: tuple[tuple[str, ...], ...],
+    date_of: Any,
+    data_as_of: str | None,
+    payload_sha256: str | None,
+) -> list[NoTradeRecord]:
+    result: list[NoTradeRecord] = []
+    for row in rows:
+        symbol = _text(row, *symbol_keys)
+        trading_date = date_of(row)
+        if not symbol or not trading_date:
+            continue
+        # All four prices blank; a row with only some of them blank is
+        # malformed and stays a gap rather than becoming no-trade evidence.
+        if not all(_blank_price(row, keys) for keys in price_keys):
+            continue
+        result.append(
+            NoTradeRecord(
+                symbol=symbol,
+                trading_date=trading_date,
+                exchange=exchange,
+                source=source,
+                data_as_of=data_as_of or trading_date.isoformat(),
+                payload_sha256=payload_sha256,
+            )
+        )
+    return result
+
+
+def parse_twse_no_trade_rows(
+    payload: Any, *, data_as_of: str | None = None, payload_sha256: str | None = None
+) -> list[NoTradeRecord]:
+    """The rows ``parse_twse_daily_rows`` drops because every price is blank."""
+
+    return _no_trade_rows(
+        _rows(payload),
+        exchange="TWSE",
+        source="twse",
+        symbol_keys=("Code", "證券代號", "股票代號"),
+        price_keys=_TWSE_PRICE_KEYS,
+        date_of=lambda row: _date_from_row(row, "Date", "日期"),
+        data_as_of=data_as_of,
+        payload_sha256=payload_sha256,
+    )
+
+
+def parse_tpex_no_trade_rows(
+    payload: Any, *, data_as_of: str | None = None, payload_sha256: str | None = None
+) -> list[NoTradeRecord]:
+    """The rows ``parse_tpex_daily_rows`` drops because every price is blank."""
+
+    default_date = parse_roc_date(data_as_of)
+    return _no_trade_rows(
+        _rows(payload),
+        exchange="TPEx",
+        source="tpex",
+        symbol_keys=("SecuritiesCompanyCode", "證券代號", "代號"),
+        price_keys=_TPEX_PRICE_KEYS,
+        date_of=lambda row: _date_from_row(
+            row, "Date", "資料日期", "日期", default=default_date
+        ),
+        data_as_of=data_as_of,
+        payload_sha256=payload_sha256,
+    )
+
+
 def _normalized_field_name(value: Any) -> str:
     return re.sub(r"[^0-9a-z\u4e00-\u9fff]", "", str(value).strip().lower())
 
@@ -1666,31 +1779,67 @@ def parse_twse_all_daily_payload(
     because that table does not repeat it on every row.
     """
 
+    for rows, report_date in _twse_all_daily_tables(payload, requested_date):
+        parsed = parse_twse_daily_rows(
+            rows,
+            data_as_of=data_as_of or report_date.isoformat(),
+            payload_sha256=payload_sha256,
+        )
+        if parsed:
+            return parsed
+    return []
+
+
+def _twse_all_daily_tables(
+    payload: Any, requested_date: date
+) -> list[tuple[list[dict[str, Any]], date]]:
+    """``MI_INDEX`` tables carrying a security-code field, rows dated.
+
+    The table does not repeat the report date on each row, so it is injected.
+    """
+
     if not isinstance(payload, dict):
         return []
     report_date = parse_roc_date(payload.get("date")) or requested_date
     tables = payload.get("tables")
     if not isinstance(tables, list):
         return []
+    result = []
     for table in tables:
         if not isinstance(table, dict):
             continue
         fields = {str(field) for field in table.get("fields", []) if field is not None}
         if not fields.intersection({"證券代號", "股票代號", "Code"}):
             continue
-        rows = _rows(table)
         normalized = []
-        for row in rows:
+        for row in _rows(table):
             item = dict(row)
             item.setdefault("Date", report_date.isoformat())
             normalized.append(item)
-        parsed = parse_twse_daily_rows(
-            normalized,
-            data_as_of=data_as_of or report_date.isoformat(),
-            payload_sha256=payload_sha256,
-        )
-        if parsed:
-            return parsed
+        result.append((normalized, report_date))
+    return result
+
+
+def parse_twse_all_daily_no_trade_payload(
+    payload: Any,
+    *,
+    requested_date: date,
+    data_as_of: str | None = None,
+    payload_sha256: str | None = None,
+) -> list[NoTradeRecord]:
+    """Official no-trade rows of the ``MI_INDEX`` table the bars come from.
+
+    Read from the first security table that yields bars, the same table
+    ``parse_twse_all_daily_payload`` returns, so no-trade evidence and bars
+    never come from different tables of one report.
+    """
+
+    for rows, report_date in _twse_all_daily_tables(payload, requested_date):
+        as_of = data_as_of or report_date.isoformat()
+        if parse_twse_daily_rows(rows, data_as_of=as_of, payload_sha256=payload_sha256):
+            return parse_twse_no_trade_rows(
+                rows, data_as_of=as_of, payload_sha256=payload_sha256
+            )
     return []
 
 

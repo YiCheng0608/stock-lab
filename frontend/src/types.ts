@@ -763,6 +763,9 @@ export type CoverageReport = {
     chip_rows: number
     incomplete_to_20: number
     incomplete_to_60: number
+    // Instruments with an official no-trade day in the window (#454); absent from an older API.
+    no_trade_to_20?: number
+    no_trade_to_60?: number
     incomplete_chips_to_20: number
     incomplete_chips_to_60: number
     coverage_reason_counts: Record<string, number>
