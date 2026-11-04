@@ -29,7 +29,8 @@ value is missing or the condition is false, so a script can test the exit code.
   comment-body FILE   {"body": FILE's text with COORDINATOR_MARK as its last line}, the
                       request comment.sh posts (#440; no stdin); exit 1 when the text is
                       empty without the mark
-  start-sessions      the session ids (UUIDs) the 回報：開工 comments name, one per line,
+  start-sessions      the session ids (UUIDs) the 回報：開工 comments of the owner, members
+                      and collaborators (author_association) name, one per line,
                       first seen first (#472); stdin is `gh api --paginate` of an Issue's
                       comments (pages of JSON arrays one after another); exit 1 when it
                       is not that
@@ -395,10 +396,21 @@ def _pages(text: str) -> list | None:
         comments += page
 
 
+# The repo is public: anyone can post a 回報：開工 naming another task's live session (the
+# ids are public on every Issue). Every session posts as the repo owner, so only comments
+# whose author is the owner or a member or collaborator count (PR #485 review).
+_TRUSTED_AUTHORS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
+
+
 def start_sessions(comments: list) -> list[str]:
     seen: list[str] = []
     for c in comments:
-        body = (c.get("body") or "") if isinstance(c, dict) else ""
+        if (
+            not isinstance(c, dict)
+            or c.get("author_association") not in _TRUSTED_AUTHORS
+        ):
+            continue
+        body = c.get("body") or ""
         if not _type(body, _START) or coordinator_comment(body):
             continue
         for sid in _SESSION_LINE.findall(body):

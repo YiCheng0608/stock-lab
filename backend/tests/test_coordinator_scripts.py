@@ -2266,13 +2266,18 @@ S_OLD = "88888888-8888-4888-8888-888888888888"  # in the task's old-format direc
 
 
 def _start(
-    *sessions: str, first: str = "回報：開工", cid: int = 1, tail: str = ""
+    *sessions: str,
+    first: str = "回報：開工",
+    cid: int = 1,
+    tail: str = "",
+    author: str = "OWNER",
 ) -> dict:
     lines = [first, "", "- branch：`task/282-dryrun`"]
     lines += [f"- session：`{s}`{tail}" for s in sessions]
     body = "\n".join(lines + ["- HEAD：`" + SHA + "`"])
     return {
         "id": cid,
+        "author_association": author,
         "body": body,
         "html_url": f"https://github.com/YiCheng0608/stock-lab/issues/282#issuecomment-{cid}",
     }
@@ -2335,7 +2340,10 @@ def scratch(close: Harness):
             # As engineers write it: the model after the id.
             _start(S_ENG, cid=1, tail="（claude-opus-5-5）"),
             _start(S_QUESTION, first="提問：要不要換手？", cid=2),
-            _start(S_HANDOVER, first="\n回報：開工（換手）", cid=3),
+            _start(S_HANDOVER, first="\n回報：開工（換手）", cid=3, author="MEMBER"),
+            # The repo is public: an outside account names another task's live session.
+            _start(S_OTHER, cid=5, author="NONE"),
+            _start(S_OTHER, cid=6, author="CONTRIBUTOR"),
             # Not ids: a non-UUID, and S_OTHER with one more character.
             _start(
                 S_LINK, S_SELF, S_MISSING, "not-a-uuid", S_OTHER + "0", S_ENG, cid=4
@@ -2354,8 +2362,9 @@ def test_close_task_removes_the_scratchpads_its_start_reports_name(
     scratch: Harness,
 ) -> None:
     """AC-1 (#472): the session directories every 回報：開工 names (a handover's too) and
-    the task's old-format directory go; another session's, this session's, a non-UUID name,
-    a third-level and a first-level directory stay."""
+    the task's old-format directory go; another session's (also when an outside account's
+    回報：開工 names it, PR #485 review), this session's, a non-UUID name, a third-level and
+    a first-level directory stay."""
     result = scratch.close_task(scratch.extra, CLAUDE_CODE_SESSION_ID=S_SELF)
     assert result.returncode == 0, result.stdout + result.stderr
     line = _json_line(result)
@@ -2428,22 +2437,35 @@ def test_close_task_does_not_follow_a_scratchpad_project_that_is_a_link(
     assert (target / S_MISSING / "scratchpad" / "note.txt").is_file()
 
 
-@pytest.mark.parametrize("case", ["no_start", "unreadable", "not_found", "no_temp"])
+@pytest.mark.parametrize(
+    "case",
+    ["no_start", "outside_author", "unreadable", "not_found", "no_temp", "no_own_id"],
+)
 def test_close_task_skips_the_scratchpads_it_cannot_find(
     scratch: Harness, case: str
 ) -> None:
-    """AC-2 (#472): no session id in the comments, comments gh cannot read, a session with no
-    directory, no TEMP: a scratchpad_skipped step, nothing in Temp
-    deleted, and the close done as before (exit 0, board 完成)."""
+    """AC-2 (#472): no session id in the comments (or only in an outside account's), comments
+    gh cannot read, a session with no directory, no TEMP, no CLAUDE_CODE_SESSION_ID (a shell
+    outside Claude cannot tell its own directory, PR #485 review): a scratchpad_skipped step,
+    nothing in Temp deleted, and the close done as before (exit 0, board 完成)."""
     env = {"CLAUDE_CODE_SESSION_ID": S_SELF}
     expected = {
         "no_start": ["scratchpad_skipped:no_session_id"],
+        "outside_author": ["scratchpad_skipped:no_session_id"],
         "unreadable": ["scratchpad_skipped:comments_unreadable"],
         "not_found": [f"scratchpad_skipped:not_found:{S_MISSING}"],
         "no_temp": ["scratchpad_skipped:no_temp"],
+        "no_own_id": ["scratchpad_skipped:no_own_session_id"],
     }[case]
     if case == "no_start":
         scratch.answer("gh_comments", [_start(S_ENG, first="回報：PR 已開")])
+    elif case == "outside_author":
+        scratch.answer(
+            "gh_comments",
+            [_start(S_ENG, author=a, cid=i) for i, a in enumerate(("NONE", "", None))],
+        )
+    elif case == "no_own_id":
+        del env["CLAUDE_CODE_SESSION_ID"]
     elif case == "unreadable":
         scratch.write("gh_comments.fail", "HTTP 502")
     elif case == "not_found":
@@ -2516,6 +2538,22 @@ def test_close_task_dry_run_leaves_the_scratchpads_alone(scratch: Harness) -> No
     assert not [c for c in scratch.calls("gh") if "/comments" in c]
     assert (scratch.hashed / S_ENG / "scratchpad" / "note.txt").is_file()
     assert (scratch.old / S_OLD / "scratchpad" / "note.txt").is_file()
+
+
+def test_close_task_refused_leaves_the_scratchpads_alone(scratch: Harness) -> None:
+    """#472 (PR #485 review): a close refused on its checks (the PR is not merged) deletes
+    no scratchpad and does not read the comments."""
+    scratch.answer("gh_pr_list", [])
+    result = scratch.close_task(scratch.extra, CLAUDE_CODE_SESSION_ID=S_SELF)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "未刪除任何東西" in result.stderr
+    _assert_nothing_deleted(scratch)
+    assert _scratch_steps(_json_line(result)) == []
+    assert not [c for c in scratch.calls("gh") if "/comments" in c]
+    for top in (scratch.hashed / S_ENG, scratch.other_project / S_HANDOVER):
+        assert (top / "scratchpad" / "note.txt").is_file()
+    assert (scratch.old / S_OLD / "scratchpad" / "note.txt").is_file()
+    assert (scratch.outside / "keep.txt").is_file()
 
 
 # --- patrol.sh ---------------------------------------------------------------------

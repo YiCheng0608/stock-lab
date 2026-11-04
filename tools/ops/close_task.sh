@@ -25,11 +25,13 @@
 # local branch (one orca already deleted counts: step branch_already_gone, #290), delete
 # each --extra-dir (junctions and symlinks unlinked first, never followed), delete the
 # Claude Code scratchpads of the task's sessions (scratchpad_cleanup below, #472): the
-# session ids come from the Issue's 回報：開工 comments, the directories are
+# session ids come from the Issue's 回報：開工 comments by the owner, members and
+# collaborators (author_association: the repo is public), the directories are
 # $TEMP/claude/<project>/<id> (two levels down, UUID names only; this session's own,
-# CLAUDE_CODE_SESSION_ID, stays) and the old-format $TEMP/claude/<worktree path, "-" for
-# every character but A-Z a-z 0-9>; whatever cannot be found or deleted only adds a
-# scratchpad_skipped step, and a dry run (--no-board) touches none. Then delete the
+# CLAUDE_CODE_SESSION_ID, stays, and without that id none is deleted) and the old-format
+# $TEMP/claude/<worktree path, "-" for every character but A-Z a-z 0-9>; whatever cannot
+# be found or deleted only adds a scratchpad_skipped step, and a dry run (--no-board)
+# touches none. Then delete the
 # task's Docker resources (docker_cleanup in coordinator_lib.sh, #360: images, stopped
 # containers, volumes and networks named t<issue>/task-<issue>; none while one of them runs;
 # then dangling images and build cache once no other Docker task is in progress; no docker or
@@ -188,6 +190,8 @@ scratch_remove() {
 scratchpad_cleanup() {
   local temp claude out sid dir old found sids=() dirs=()
   [ "$set_board" = 1 ] || { steps+=("scratchpad_skipped:no_board"); return 0; }
+  # Without it this session's own directory cannot be told apart (a shell outside Claude).
+  [[ "${CLAUDE_CODE_SESSION_ID:-}" =~ $uuid_re ]] || { steps+=("scratchpad_skipped:no_own_session_id"); return 0; }
   temp="$(native "${TEMP:-}")" || { steps+=("scratchpad_skipped:no_temp"); return 0; }
   claude="${temp%/}/claude"
   out="$(gh api "repos/$GH_REPO/issues/$issue/comments?per_page=100" --paginate)" \
