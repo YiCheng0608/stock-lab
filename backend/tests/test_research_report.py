@@ -6,6 +6,7 @@ import hashlib
 import importlib.util
 import json
 import random
+import sqlite3
 import subprocess
 import sys
 from datetime import date, timedelta
@@ -36,6 +37,10 @@ spec.loader.exec_module(report)
 
 COST = 0.003
 BUY = 1.0005
+# A and TAIEX gain 5 % more on session 2 (the close of T+1 of session 1):
+# a window off by one session misses or gains it.
+JUMP = 1.05
+JUMP_AT = 2
 
 
 def sessions(count: int) -> list[date]:
@@ -47,14 +52,15 @@ def sessions(count: int) -> list[date]:
     return days
 
 
-def grown(index: int, rate: float) -> float:
-    return round(100.0 * (1.0 + rate) ** index, 6)
+def grown(index: int, rate: float, jump: bool = False) -> float:
+    step = JUMP if jump and index >= JUMP_AT else 1.0
+    return round(100.0 * (1.0 + rate) ** index * step, 6)
 
 
-def hold_return(rate: float, horizon: int) -> float:
+def hold_return(rate: float, horizon: int, step: float = 1.0) -> float:
     """Open of T+1 (the close of T) to the close of T+horizon, growing at ``rate``."""
 
-    return (1.0 + rate) ** horizon / BUY - 1.0 - COST
+    return (1.0 + rate) ** horizon * step / BUY - 1.0 - COST
 
 
 def bar(
@@ -78,7 +84,8 @@ def bar(
 def research_db(tmp_path) -> Path:
     """A research run of two strategies on five instruments over 30 sessions.
 
-    A grows 1 % a session and B 2 %, with a 2:1 split on session 4 (raw prices
+    A grows 1 % a session, and 5 % more on session 2 as TAIEX does; B 2 %,
+    with a 2:1 split on session 4 (raw prices
     halve; the action's price factor restores them).  C misses session 3,
     the IPO D is suspended on session 4, E is an ETF.  breakout_v2 has two
     comparable T+5 settlements on session 1 and one on session 2;
@@ -109,8 +116,9 @@ def research_db(tmp_path) -> Path:
             for index, day in enumerate(days):
                 if instrument_id == 4 and index == 3:
                     continue  # C misses a market session
-                close = grown(index, rate)
-                open_ = grown(index - 1, rate) if index else close
+                jump = instrument_id in (1, 2)
+                close = grown(index, rate, jump)
+                open_ = grown(index - 1, rate, jump) if index else close
                 if instrument_id == 3 and index >= 4:
                     close, open_ = close / 2, open_ / 2
                 db.add(
@@ -267,8 +275,10 @@ def test_the_tables_of_a_run_and_benchmark_one_are_what_the_bars_give(
     result = run_report(research_db, tmp_path / "out", "--draws", "5")
     assert result.returncode == 0, result.stderr
     tables = json.loads((tmp_path / "out" / "tables.json").read_text("utf-8"))
-    # Read only: the copy is byte for byte what it was.
+    # Read only: the copy is byte for byte what it was, and nothing was
+    # created beside it (app.config's raw directory is in the output).
     assert hashlib.sha256(research_db.read_bytes()).hexdigest() == before
+    assert sorted(item.name for item in research_db.parent.iterdir()) == ["stock.db"]
 
     canonical = tables["results"]["breakout_v2:T+5"]
     assert canonical["returns"]["n"] == 3
@@ -276,8 +286,10 @@ def test_the_tables_of_a_run_and_benchmark_one_are_what_the_bars_give(
     assert canonical["incomparable"] == {"not_executed": 1, "filled_after_horizon": 1}
     # Session 1's pool is A and B (B through its split); C misses session 3,
     # the IPO D is suspended on session 4 and E is an ETF.  Two of two are
-    # drawn on session 1; session 2 draws one of A and B.
-    session_1 = [hold_return(0.01, 5), hold_return(0.02, 5)]
+    # drawn on session 1; session 2 draws one of A and B.  A's window of
+    # session 1 holds its jump, that of session 2 starts after it.
+    session_1 = [hold_return(0.01, 5, JUMP), hold_return(0.02, 5)]
+    session_2 = [hold_return(0.01, 5), hold_return(0.02, 5)]
     assert canonical["benchmark"]["instruments_per_draw"] == 3
     means = [
         float(line.split(",")[2])
@@ -288,11 +300,14 @@ def test_the_tables_of_a_run_and_benchmark_one_are_what_the_bars_give(
     ]
     assert len(means) == 5
     for mean in means:
-        assert mean == pytest.approx(
-            (sum(session_1) + session_1[0]) / 3
-        ) or mean == pytest.approx((sum(session_1) + session_1[1]) / 3)
-    # TAIEX grows 0.5 % a session: close of the signal date to T+5's close.
-    assert canonical["taiex"]["mean"] == pytest.approx(1.005**5 - 1.0)
+        assert any(
+            mean == pytest.approx((sum(session_1) + value) / 3) for value in session_2
+        )
+    # TAIEX: close of the signal date to T+5's close; the two settlements of
+    # session 1 hold the jump, the one of session 2 does not.
+    assert canonical["taiex"]["mean"] == pytest.approx(
+        (2 * (1.005**5 * JUMP - 1.0) + (1.005**5 - 1.0)) / 3
+    )
 
     ablation = tables["results"]["breakout_v2_ablate_group:T+5"]
     assert ablation["benchmark"]["instruments_per_draw"] == 2  # the pool's size
@@ -355,6 +370,23 @@ def test_the_draws_are_seeded_and_never_repeat_an_instrument_in_a_day():
     assert first == again and len(set(first[0])) > 1
     assert report.quantile([1.0, 2.0, 3.0, 4.0], 0.25) == pytest.approx(1.75)
     assert report.rank(2.0, [1.0, 2.0, 3.0, 4.0]) == 0.5
+
+
+def test_a_status_the_evidence_contradicts_stops_the_report(research_db, tmp_path):
+    con = sqlite3.connect(research_db)
+    con.execute(
+        "update signals set rule_evidence_json = "
+        "json_set(rule_evidence_json, '$.actionable', json('false')) where id = 1"
+    )
+    con.commit()
+    con.close()
+    result = run_report(research_db, tmp_path / "out", "--draws", "2")
+    assert result.returncode != 0
+    assert (
+        "1 canonical signals whose status disagrees with "
+        "rule_evidence_json.actionable" in result.stderr
+    )
+    assert not (tmp_path / "out" / "tables.json").exists()
 
 
 def test_the_production_database_is_refused(tmp_path):

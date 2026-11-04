@@ -63,6 +63,8 @@ INDEX_SYMBOL = "TAIEX"
 BUY_SLIPPAGE = 5.0 / 10_000.0
 ROUND_TRIP_COST = 30.0 / 10_000.0
 QUANTILES = (0.10, 0.25, 0.50, 0.75, 0.90)
+# app.config's raw directory, inside --out (hidden: push_pr_assets.sh skips it).
+RAW_DIR_NAME = ".raw-unused"
 # Statuses scoring writes for a signal that is not actionable; every other
 # status is a conditional signal or where tracking moved it (RunSignals).
 NOT_ACTIONABLE = ("observation", "data_incomplete", "invalid_levels")
@@ -411,12 +413,19 @@ def benchmark_universe(
     return instruments, listed
 
 
-def load_actions(db: Path, instruments: dict[int, Instrument], start: date):
-    """CorporateAction rows after ``start`` and the product's factor function."""
+def load_actions(
+    db: Path, instruments: dict[int, Instrument], start: date, raw_dir: Path
+):
+    """CorporateAction rows after ``start`` and the product's factor function.
+
+    Importing ``app.config`` creates its data and raw directories: the data
+    directory is the copy's (it exists), the raw one ``raw_dir`` in the
+    output, so nothing new appears beside the copy.  No raw file is read.
+    """
 
     os.environ["STOCK_DB_PATH"] = str(db.resolve())
     os.environ["STOCK_DATA_DIR"] = str(db.resolve().parent)
-    os.environ["STOCK_RAW_DIR"] = str(db.resolve().parent / "raw")
+    os.environ["STOCK_RAW_DIR"] = str(raw_dir.resolve())
     sys.path.insert(0, str(ROOT / "backend"))
     from sqlalchemy import create_engine, select
     from sqlalchemy.orm import Session
@@ -471,7 +480,7 @@ def pct(value: float | None, digits: int = 2) -> str:
 
 
 def build(
-    db: Path, run_id: int, draws: int, seed: int
+    db: Path, run_id: int, draws: int, seed: int, raw_dir: Path
 ) -> tuple[dict[str, Any], list[tuple], dict[str, list[float]]]:
     con = connect_read_only(db)
     run = con.execute(
@@ -539,7 +548,7 @@ def build(
 
     # benchmark one
     instruments, listed = benchmark_universe(con, start)
-    factor_of = load_actions(db, instruments, start)
+    factor_of = load_actions(db, instruments, start, raw_dir)
     pools: dict[tuple[int, date], list[float]] = {}
     universe_size: dict[date, int] = {}
     for day in signal_days:
@@ -971,7 +980,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    result, daily_rows, benchmark_means = build(db, args.run_id, args.draws, args.seed)
+    result, daily_rows, benchmark_means = build(
+        db, args.run_id, args.draws, args.seed, out / RAW_DIR_NAME
+    )
     command = "python tools/research/research_report.py " + " ".join(argv)
     result["command"] = command
     (out / "tables.json").write_text(
