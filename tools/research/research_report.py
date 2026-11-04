@@ -13,8 +13,7 @@ Reads the database ``--db`` (the ``tools/ops/copy_db.py`` copy the run of
 
 Strategy results are the run's comparable T+5／T+20 settlements
 (``signal_settlements``, docs/spec/tracking.md「Tracking 與 technical backtest
-口徑」); actionable is ``status = 'conditional'``, as ``worker.pipeline``
-writes it.
+口徑」); which signals are actionable is in ``RunSignals``.
 
 Benchmark one draws, for every signal date, as many instruments as the
 strategy has comparable settlements that date, without replacement, from the
@@ -61,6 +60,9 @@ INDEX_SYMBOL = "TAIEX"
 BUY_SLIPPAGE = 5.0 / 10_000.0
 ROUND_TRIP_COST = 30.0 / 10_000.0
 QUANTILES = (0.10, 0.25, 0.50, 0.75, 0.90)
+# Statuses scoring writes for a signal that is not actionable; every other
+# status is a conditional signal or where tracking moved it (RunSignals).
+NOT_ACTIONABLE = ("observation", "data_incomplete", "invalid_levels")
 
 
 def _research_module():
@@ -259,11 +261,14 @@ def row_reasons(kind_reasons: str | None, rationale: str | None) -> list[str]:
 class RunSignals:
     """What the report reads of a run's signals, from one pass over them.
 
-    Actionable is ``status = 'conditional'`` (``worker.pipeline`` writes
-    ``rule_evidence_json.actionable`` as exactly that), so only the canonical
-    strategies' rows are read as far as ``rule_evidence_json`` for their
-    reasons: a year of thirteen strategies is tens of GB of signals, and the
-    evidence is most of each row.
+    A signal is actionable when its status is not one of
+    ``NOT_ACTIONABLE``: scoring writes ``rule_evidence_json.actionable`` as
+    ``status == "conditional"`` and tracking only moves a conditional signal
+    on (active, expired, target, invalidated, incomparable).  Only the
+    canonical strategies' rows are read as far as ``rule_evidence_json``,
+    for their reasons and to check that rule against ``actionable``: a year
+    of thirteen strategies is tens of GB of signals, and the evidence is
+    most of each row.
     """
 
     strategies: list[dict[str, Any]]
@@ -286,31 +291,41 @@ def scan_signals(con: sqlite3.Connection, prefix: str) -> RunSignals:
     statuses: dict[tuple[str, date], Counter] = defaultdict(Counter)
     levels: list[tuple] = []
     days: dict[str, date] = {}
-    for strategy_id, day, status, entry, invalid, t1, t2, own, rationale in con.execute(
+    mismatched = 0
+    rows = con.execute(
         "select s.strategy_version_id, s.signal_date, s.status, "
-        "case when s.status = 'conditional' "
-        "then coalesce(s.breakout_price, s.reference_entry) end, "
+        "coalesce(s.breakout_price, s.reference_entry), "
         "s.invalid_price, s.target_1, s.target_2, "
         f"case when s.strategy_version_id in ({marks}) then json_extract("
         "s.rule_evidence_json, '$.' || sv.kind || '.reasons') end, "
-        f"case when s.strategy_version_id in ({marks}) then s.rationale end "
+        f"case when s.strategy_version_id in ({marks}) then s.rationale end, "
+        f"case when s.strategy_version_id in ({marks}) then json_extract("
+        "s.rule_evidence_json, '$.actionable') end "
         "from signals s join strategy_versions sv on sv.id = s.strategy_version_id "
         "where s.signal_key like ? order by s.id",
-        (*canonical, *canonical, prefix),
-    ):
+        (*canonical, *canonical, *canonical, prefix),
+    )
+    for strategy_id, day, status, entry, invalid, t1, t2, own, why, flag in rows:
         seen.add(strategy_id)
         name = versions[strategy_id]["name"]
         day = days.setdefault(day, date.fromisoformat(day))
         counts = daily[(name, day)]
         counts[0] += 1
-        if status == "conditional":
+        actionable = status not in NOT_ACTIONABLE
+        if actionable:
             counts[1] += 1
             levels.append((name, entry, invalid, t1, t2))
         if status == "data_incomplete":
             counts[2] += 1
         if strategy_id in canonical:
+            mismatched += bool(flag) != actionable
             statuses[(name, day)][status] += 1
-            reasons[(name, day)].update(row_reasons(own, rationale))
+            reasons[(name, day)].update(row_reasons(own, why))
+    if mismatched:
+        raise SystemExit(
+            f"{mismatched} canonical signals whose status disagrees with "
+            "rule_evidence_json.actionable"
+        )
     return RunSignals(
         strategies=[versions[strategy_id] for strategy_id in sorted(seen)],
         daily=dict(daily),

@@ -170,6 +170,7 @@ def research_db(tmp_path) -> Path:
             reasons=(),
             run_id=7,
             missing=(),
+            status=None,
         ):
             nonlocal signal_id
             signal_id += 1
@@ -179,10 +180,13 @@ def research_db(tmp_path) -> Path:
                 signal_date=days[day_index],
                 instrument_id=2,
                 strategy_version_id=strategy.id,
-                # worker.pipeline writes actionable as status == "conditional"
-                status="conditional"
-                if actionable
-                else ("data_incomplete" if missing else "observation"),
+                # scoring writes conditional; tracking moves it on.
+                status=status
+                or (
+                    ("target_1_hit" if returns[:1] != (None,) else "expired")
+                    if actionable
+                    else ("data_incomplete" if missing else "observation")
+                ),
                 breakout_price=100.0 if actionable else None,
                 invalid_price=95.0 if actionable else None,
                 target_1=108.0 if actionable else None,
@@ -228,6 +232,8 @@ def research_db(tmp_path) -> Path:
             reasons=("a_missing",),
             missing=("a_missing", "etf_excluded"),
         )
+        # Levels the validation rejected: not actionable, never tracked.
+        signal(canonical, 3, False, status="invalid_levels")
         for value in (0.03, 0.03, 0.03):
             signal(ablation, 1, True, (value, None))
         signal(ablation, 3, True, (None, None))
@@ -313,12 +319,18 @@ def test_days_without_a_conditional_signal_and_what_one_removal_gives(
         "a_missing": 1,
         "missing:etf_excluded": 1,
     }
-    assert zero["statuses_on_zero_days"] == {"observation": 3, "data_incomplete": 1}
-    # Over every session: the four actionable rows fail nothing.
-    assert zero["statuses_all_days"] == {
-        "conditional": 4,
+    assert zero["statuses_on_zero_days"] == {
         "observation": 3,
         "data_incomplete": 1,
+        "invalid_levels": 1,
+    }
+    # Over every session: the four actionable rows fail nothing.
+    assert zero["statuses_all_days"] == {
+        "target_1_hit": 3,
+        "expired": 1,
+        "observation": 3,
+        "data_incomplete": 1,
+        "invalid_levels": 1,
     }
     assert zero["reasons_all_days"] == zero["reasons_on_zero_days"]
     summary = (tmp_path / "out" / "summary.md").read_text("utf-8")
