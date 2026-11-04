@@ -14,7 +14,8 @@
 # 2. A job holds the daily lock in the scheduler: deploy t2 is refused (exit 1); the images,
 #    containers, volumes and the volume's deploy.json are as before, and the job still runs
 #    and holds the lock (a refused deploy leaves a running job alone, #430). The seed marks
-#    today's daily done, so serve starts no catch-up daily that would hold the lock instead.
+#    today's daily done, so serve starts no catch-up daily that would hold the lock instead
+#    (the 18:30 and 21:30 triggers still can: see the seed).
 # 3. Deploy t2: the locks are taken and let go, every service runs its t2 image, the record
 #    names t2 and the t1 image before it, and the new scheduler's watchdog check is ok.
 #
@@ -111,7 +112,10 @@ expect_images() {
 echo "== seed: the verify fixture database in the project's stock-data volume, today's daily done"
 # serve runs a daily as it starts on a weekday past 18:30 when the day's has not completed
 # (worker/serve.py missed_daily); that daily would hold the daily lock of step 2 (#430). A
-# success row of today (Taipei) keeps it from starting: only the smoke's own job holds it.
+# success row of today (Taipei) keeps it from starting. The 18:30 and 21:30 triggers do not
+# read schedule_runs: a smoke that runs across one of them can still find their daily holding
+# the lock (or news on an even hour, the watchdog at :15 and :45 holding theirs), and then
+# fails, saying so (step 2's checks, or deploy t2 refused in step 3).
 STOCK_RELEASE_TAG=seed compose run --rm --no-deps --build -e STOCK_SEED_FIXTURE=1 api python -X utf8 -c '
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -143,7 +147,15 @@ lock_code() {
     docker exec "$scheduler" python -m worker.job lock /data/locks/daily.lock -- true 2> /dev/null || code=$?
     echo "$code"
 }
-processes() { docker exec "$scheduler" ps -eo pid,ppid,etimes,args; }
+# processes: pid, parent pid and command line of each process in the scheduler, from /proc
+# (procps is not one of backend/Dockerfile's packages, #441 review).
+processes() {
+    docker exec "$scheduler" sh -c 'echo "PID PPID COMMAND"
+        for d in /proc/[0-9]*; do
+            c="$(tr "\0" " " < "$d/cmdline" 2> /dev/null)" && [ -n "$c" ] || continue
+            echo "${d#/proc/} $(sed -n "s/^PPid:[[:space:]]*//p" "$d/status" 2> /dev/null) $c"
+        done'
+}
 # The test job writes the pid of its lock process only once it holds the lock: the command
 # runs under it, so a lock taken by another process leaves no pid file (#430).
 docker exec "$scheduler" rm -f /tmp/holder.pid
