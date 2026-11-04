@@ -2404,7 +2404,7 @@ def test_close_task_only_unlinks_links_in_and_at_a_scratchpad(scratch: Harness) 
     assert not os.path.lexists(at)
 
 
-def test_close_task_does_not_follow_a_project_directory_that_is_a_link(
+def test_close_task_does_not_follow_a_scratchpad_project_that_is_a_link(
     scratch: Harness,
 ) -> None:
     """AC-3 (#472): Temp/claude/<project> is a junction/symlink to outside Temp: the session
