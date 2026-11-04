@@ -721,6 +721,21 @@ def test_a_failed_2130_daily_waits_for_the_2300_retry_that_succeeds(wd):
     assert not [event for event in wd.events() if event.startswith("anomaly")]
 
 
+def test_an_abandoned_2130_daily_and_a_2300_success_are_not_reported(wd):
+    """Decision 6638008818: 21:30 stuck, killed at 22:50 and recorded abandoned by 23:00."""
+
+    _daily_log_done(wd)
+    db = wd.data / "stock.db"
+    _daily_db(db, [])
+    # The abandoned row is failed (its error names the lock; the helper reads the status).
+    _add_daily_run(db, "failed", AT_2130)
+    _add_daily_run(db, "success", AT_2300)
+    wd.run()
+    wd.run(now=LAST_RUN)
+    assert wd.text("gh_calls.log") == ""
+    assert not [event for event in wd.events() if event.startswith("anomaly")]
+
+
 def test_a_failed_2300_retry_is_commented_once(wd):
     _daily_log_done(wd)
     _daily_db(
@@ -754,7 +769,10 @@ def test_a_missing_daily_log_waits_for_the_2300_retry(wd):
     assert "daily_no_end" not in wd.log()
     wd.run()  # 23:15: neither trigger ran
     body = wd.text("gh_bodies.txt")
-    assert "daily 排程：台北 20261019 已過 23:00 的重試" in body and "不存在（今日未執行）" in body
+    assert (
+        "daily 排程：台北 20261019 已過 23:00 的重試" in body
+        and "不存在（今日未執行）" in body
+    )
 
 
 def test_daily_result_reads_the_complete_run_of_the_day(wd):
@@ -827,9 +845,9 @@ def _news_end(taipei: str, news_llm_exit: str) -> str:
 def test_news_llm_exit_codes_in_news_logs_are_reported(wd):
     # news_llm_results missing: news-llm exits 1 without writing a run.
     (wd.logs / "news-20261018.log").write_text(
-        _news_end("10-18T20:00:30", "0")
+        _news_end("10-18T21:30:30", "0")
         + "\n"
-        + _news_end("10-18T22:00:30", "1")
+        + _news_end("10-18T23:30:30", "1")
         + "\n",
         encoding="utf-8",
     )
@@ -1232,7 +1250,7 @@ def test_a_stopped_event_monitor_is_commented_once_a_day(wd):
     assert len(wd.text("gh_calls.log").splitlines()) == 1
     body = wd.text("gh_bodies.txt")
     assert (
-        "待使用者：事件 monitor：最後一次輪詢在 2026-10-19T13:49:59Z（10 分鐘前）"
+        "待使用者：事件 monitor：最後一次輪詢在 2026-10-19T15:04:59Z（10 分鐘前）"
         in body
     )
     assert "\\stock-lab\\monitor" in body and "monitor.log" in body
@@ -1411,7 +1429,7 @@ def test_a_refused_gh_is_commented_once_gh_is_accepted_again(wd, mode, code):
     bodies = wd.text("gh_bodies.txt")
     assert bodies.count("待使用者：gh 認證：") == 1
     assert (
-        "2026-10-19T08:00:00Z 到 2026-10-19T08:30:00Z 的 2 次看門狗執行" in bodies
+        "2026-10-19T09:15:00Z 到 2026-10-19T09:45:00Z 的 2 次看門狗執行" in bodies
         and "期間沒有其他異常" in bodies
         and "`GH_TOKEN`" in bodies
     )

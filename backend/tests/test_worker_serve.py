@@ -315,7 +315,7 @@ def test_the_commands_are_the_ones_task_scheduler_ran(tmp_path, monkeypatch):
         "/usr/local/bin/claude",
         # #466: a scheduled daily ends before the next trigger.
         "--time-limit-minutes",
-        "75",
+        "80",
     ]
     assert environment["STOCK_DATA_DIR"] == str(data)
     assert environment["STOCK_DB_PATH"] == str(data / "stock.db")
@@ -379,7 +379,7 @@ def test_an_injected_clock_reaches_the_daily_target_and_the_watchdog(tmp_path):
 
 def test_the_backstop_is_ten_minutes_past_the_job_limit(tmp_path):
     runner = serve.Serve(serve_args("--data-dir", str(tmp_path)))
-    assert runner.backstop("daily") == 85 * 60
+    assert runner.backstop("daily") == 90 * 60
     assert runner.backstop("news") == 100 * 60
     assert runner.backstop("watchdog") == 10 * 60
     short = serve.Serve(
@@ -391,8 +391,10 @@ def test_the_backstop_is_ten_minutes_past_the_job_limit(tmp_path):
 def test_a_stuck_scheduled_daily_is_killed_before_the_next_trigger(tmp_path):
     """#466: 23:00 is 90 minutes after 21:30, inside the job's own 150-minute limit.
 
-    A 21:30 run that hangs must end, backstop included, before 23:00: otherwise
-    23:00 finds the lock held, records already_running and the day is not retried.
+    A 21:30 run that hangs must end before 23:00: otherwise 23:00 finds the lock
+    held, records already_running and the day is not retried. The job ends it at
+    its limit (22:50, decision 6638008818); serve's backstop, 10 minutes later, is
+    for a job that does not end itself.
     """
 
     runner = serve.Serve(serve_args("--data-dir", str(tmp_path)))
@@ -402,7 +404,9 @@ def test_a_stuck_scheduled_daily_is_killed_before_the_next_trigger(tmp_path):
         for earlier, later in zip(times, times[1:])
     ]
     assert gaps == [90]
-    assert runner.backstop("daily") < min(gaps) * 60
+    limit = runner.args.daily_time_limit_minutes
+    assert limit == 80 and limit < min(gaps)
+    assert runner.backstop("daily") <= min(gaps) * 60
     # A manual `job daily` keeps the job's own limit (long catch-up runs).
     assert job.TIME_LIMIT_MINUTES["daily"] == 150
 
@@ -813,7 +817,7 @@ def test_a_killed_serve_leaves_no_lock_and_the_next_daily_closes_its_run_at_once
     assert [groups[1:] for groups in end_line(log)] == [("0", "")]
 
 
-def _fire_scheduled_daily(tree: ServeTree, at: str) -> list[str]:
+def _fire_scheduled_daily(tree: ServeTree, at: str, *options: str) -> list[str]:
     """Run the real scheduler from AT (Taipei) until its daily trigger has run once.
 
     The start-up catch-up is dropped: this is the serve that has been running all
@@ -831,6 +835,7 @@ def _fire_scheduled_daily(tree: ServeTree, at: str) -> list[str]:
             str(tree.root / "no-claude"),
             "--now",
             at,
+            *options,
         )
     )
     upcoming = runner.next_times()["daily"]
@@ -855,15 +860,16 @@ def _fire_scheduled_daily(tree: ServeTree, at: str) -> list[str]:
     return [line for line in tree.log("daily").splitlines() if " start job=" in line]
 
 
-@pytest.mark.parametrize("first", ["success", "partial"])
-def test_what_the_2300_trigger_runs_after_the_2130_run(
-    serve_tree, monkeypatch, first
-):
+@pytest.mark.parametrize("first", ["success", "partial", "stuck"])
+def test_what_the_2300_trigger_runs_after_the_2130_run(serve_tree, monkeypatch, first):
     """#466 AC-1: 23:00 after 21:30, on the verify fixture database.
 
     21:30 success: 23:00 is a skipped already_complete row whose only step is the
     institutional refetch (#396; faked here, no request). 21:30 partial (the margin
-    file not out yet, say): 23:00 is a full daily of the same date again.
+    file not out yet, say): 23:00 is a full daily of the same date again. 21:30
+    stuck (decision 6638008818): the job ends it at its limit (80 minutes, 22:50;
+    3 seconds here), and 23:00 takes the lock, records the row abandoned and runs
+    the day again.
     """
 
     tree = serve_tree
@@ -881,7 +887,9 @@ def test_what_the_2300_trigger_runs_after_the_2130_run(
     assert built.returncode == 0, built.stderr
     db = tree.data / "stock.db"
     with sqlite3.connect(db) as conn:
-        before = conn.execute("SELECT coalesce(max(id), 0) FROM schedule_runs").fetchone()[0]
+        before = conn.execute(
+            "SELECT coalesce(max(id), 0) FROM schedule_runs"
+        ).fetchone()[0]
     conn.close()
     in_tree(
         tree,
@@ -893,15 +901,24 @@ def test_what_the_2300_trigger_runs_after_the_2130_run(
     if first == "partial":
         partial.touch()
     monkeypatch.setenv("JOB_DAILY_CHILD_COLLECT_PARTIAL", str(partial))
+    options = ()
+    if first == "stuck":
+        # collect waits for a file that never comes.
+        monkeypatch.setenv("JOB_DAILY_CHILD_HOLD", str(tree.root / "never"))
+        options = ("--daily-time-limit-minutes", "0.05")
     # Friday 2026-10-16 on the injected clock.
-    _fire_scheduled_daily(tree, "2026-10-16T21:29:58")
+    _fire_scheduled_daily(tree, "2026-10-16T21:29:58", *options)
     partial.unlink(missing_ok=True)
+    monkeypatch.delenv("JOB_DAILY_CHILD_HOLD", raising=False)
+    if first == "stuck":
+        log = tree.log("daily")
+        assert "timeout: killed at the 0.05 minute limit of the daily job" in log
     starts = _fire_scheduled_daily(tree, "2026-10-16T22:59:58")
     assert len(starts) == 2
     assert all(" trigger=scheduler date=2026-10-16 " in line for line in starts)
     with sqlite3.connect(db) as conn:
         rows = conn.execute(
-            "SELECT id, status, summary_json FROM schedule_runs"
+            "SELECT id, status, summary_json, error FROM schedule_runs"
             " WHERE job = 'daily' AND id > ? ORDER BY id",
             (before,),
         ).fetchall()
@@ -914,13 +931,19 @@ def test_what_the_2300_trigger_runs_after_the_2130_run(
                     (run_id,),
                 )
             ]
-            for run_id, _, _ in rows
+            for run_id, _, _, _ in rows
         }
     conn.close()
-    (first_id, first_status, _), (second_id, second_status, raw) = rows
+    (first_id, first_status, _, first_error), (second_id, second_status, raw, _) = rows
     second = json.loads(raw)
-    assert first_status == first
     assert "collect" in steps[first_id]
+    if first == "stuck":
+        lock_file = job.lock_path(tree.data, "daily")
+        assert first_status == "failed"
+        assert first_error.startswith("abandoned: process ")
+        assert first_error.endswith(f" no longer holds {lock_file}")
+    else:
+        assert first_status == first
     if first == "success":
         assert second_status == "skipped"
         assert second["reason"] == "already_complete"
