@@ -537,6 +537,46 @@ def test_sync_stops_at_a_file_that_does_not_match_its_sha256(env):
     assert set(rows) == {("TWSE", "1413"), ("TPEx", "00734B")}
 
 
+def test_a_holidays_empty_answers_are_no_data_not_missing(env):
+    _collect_day1()
+    holiday = date(2026, 10, 26)  # 光復節補假: both exchanges answered empty
+    endpoint = (
+        f"{sources.TWSE_DAILY_HISTORY_ENDPOINT}?date=20261026"
+        "&type=ALLBUT0999&response=json"
+    )
+    at = datetime(2026, 10, 26, 10, 30)
+    empty = [
+        sources.capture_payload(
+            "twse",
+            endpoint,
+            {"stat": "很抱歉，沒有符合條件的資料!"},
+            holiday.isoformat(),
+            collected_at=at,
+        ),
+        sources.capture_payload(
+            "tpex",
+            sources.TPEX_HISTORY_API,
+            harness._tpex_quotes(holiday, []),
+            holiday.isoformat(),
+            collected_at=at,
+        ),
+    ]
+    with env() as db:
+        run = db.scalar(select(IngestionRun).order_by(IngestionRun.id))
+        for capture in empty:
+            pipeline._upsert_raw_payload(db, run, capture)
+        db.commit()
+        result = no_trade_days.sync_no_trade_days(db, [holiday, date(2026, 10, 29)])
+
+    assert result["no_data"] == 2  # the holiday, both exchanges
+    assert result["missing"] == 2  # 10-29: nothing stored at all
+    assert result["status"] == "partial"
+    assert result["missing_samples"] == ["TWSE:2026-10-29", "TPEx:2026-10-29"]
+    with env() as db:
+        only_holiday = no_trade_days.sync_no_trade_days(db, [holiday])
+    assert (only_holiday["status"], only_holiday["no_data"]) == ("success", 2)
+
+
 # ---- migration 0025: the table, its identity and indexes ----
 
 

@@ -37,12 +37,15 @@ from worker.sources import (
     OfficialDataError,
     _has_tabular_rows,
     _require_reported_date,
+    is_quoted_security_code,
     parse_tpex_no_trade_rows,
     parse_twse_all_daily_no_trade_payload,
 )
 
 RUN_TYPE = "no_trade_days"
 MAX_SAMPLES = 50
+# _load's answer for a capture without table rows (see there).
+NO_ROWS = object()
 
 
 def _parse_twse(payload: Any, trading_date: date) -> list[NoTradeRecord]:
@@ -85,12 +88,13 @@ def _load(capture: RawPayload, trading_date: date) -> Any:
         raise NoTradeDayError(
             f"raw payload {capture.id} is not JSON: {capture.payload_path}: {exc}"
         ) from exc
+    # A date-less no-match answer (a TWSE holiday) or an empty table (a TPEx
+    # holiday) has no rows to read: no evidence, and not a missing report.
+    if not isinstance(payload, dict) or not _has_tabular_rows(payload):
+        return NO_ROWS
     try:
         _require_reported_date(payload, trading_date, capture.endpoint.split("?")[0])
     except OfficialDataError:
-        return None
-    # A date-less no-match answer (a holiday) or an empty table is no evidence.
-    if not isinstance(payload, dict) or not _has_tabular_rows(payload):
         return None
     return payload
 
@@ -133,14 +137,20 @@ def store_no_trade_days(
 ) -> dict[str, Any]:
     """Rebuild one exchange's no-trade rows of one session from stored raw.
 
-    Returns ``outcome`` (``written``, ``unchanged`` or ``missing`` when no
-    capture of the date has rows), ``rows`` (rows the session now has) and
-    ``unmatched`` (blank-price codes without a stored instrument).
+    Returns ``outcome`` (``written``, ``unchanged``, ``no_data`` when every
+    capture of the date is an empty answer such as a holiday's, or
+    ``missing`` when none of the date is usable), ``rows`` (rows the session
+    now has) and ``unmatched`` (blank-price share or ETF codes without a
+    stored instrument).
     """
 
     _source, _endpoint, parse = CAPTURES[exchange]
+    saw_no_rows = False
     for capture in _captures(db, exchange, trading_date):
         payload = _load(capture, trading_date)
+        if payload is NO_ROWS:
+            saw_no_rows = True
+            continue
         if payload is None:
             continue
         records = {
@@ -183,7 +193,13 @@ def store_no_trade_days(
                 )
             )
         }
-        unmatched = sorted(set(records) - set(instruments))
+        # Warrants, bonds and other products of the same tables are not
+        # instruments; only an unknown share or ETF code is worth counting.
+        unmatched = sorted(
+            symbol
+            for symbol in set(records) - set(instruments)
+            if is_quoted_security_code(symbol)
+        )
         if set(stored) == wanted and all(
             row.raw_payload_id == capture.id for row in stored.values()
         ):
@@ -203,7 +219,9 @@ def store_no_trade_days(
             row.raw_payload_id = capture.id
         db.flush()
         return {"outcome": "written", "rows": len(wanted), "unmatched": unmatched}
-    return {"outcome": "missing", "rows": 0, "unmatched": []}
+    # Only empty answers (a holiday): no rows to read, not a missing report.
+    outcome = "no_data" if saw_no_rows else "missing"
+    return {"outcome": outcome, "rows": 0, "unmatched": []}
 
 
 def sync_no_trade_days(
@@ -226,7 +244,7 @@ def sync_no_trade_days(
     """
 
     days = sorted(set(dates)) if dates is not None else _session_dates(db, start, end)
-    counts = {"written": 0, "unchanged": 0, "missing": 0}
+    counts = {"written": 0, "unchanged": 0, "no_data": 0, "missing": 0}
     rows = 0
     unmatched = 0
     missing: list[str] = []
