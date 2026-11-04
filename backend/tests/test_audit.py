@@ -1124,6 +1124,9 @@ def test_summary_lists_every_item_with_its_result(fx, tmp_path, monkeypatch):
     fx.commit()
     monkeypatch.setattr(audit, "free_memory_gb", lambda: 20.0)
     monkeypatch.setattr(audit, "refusals", lambda *args: [])
+    # The run also stops between items inside the 18:30-21:30 daily window;
+    # without this the test fails (exit 3) whenever CI runs in that window.
+    monkeypatch.setattr(audit, "daily_window_problem", lambda now: None)
     out = tmp_path / "out"
     code = audit.main(["--db", str(fx.path), "--out", str(out)])
     summary = (out / "summary.md").read_text(encoding="utf-8")
