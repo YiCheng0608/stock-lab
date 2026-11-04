@@ -284,6 +284,9 @@ class Harness:
         self.fake = root / "fake"
         self.data = root / "data"
         self.home = root / "home"
+        # TEMP and TMP of every script run (#472): close_task.sh deletes Claude Code
+        # scratchpads under $TEMP/claude, so no run may see the real Temp.
+        self.temp = root / "temp"
         # The scripts run from a copy, so repo_root is this sandbox, not the checkout.
         self.repo = root / "repo"
         self.ops = self.repo / "tools" / "ops"
@@ -292,6 +295,7 @@ class Harness:
             self.fake,
             self.data / "logs" / "compactions",
             self.home,
+            self.temp,
             self.ops,
             self.repo / ".git",
         ):
@@ -372,6 +376,8 @@ class Harness:
             FAKE_SHA=SHA,
             SANDBOX=self.root.as_posix(),
             HOME=self.home.as_posix(),
+            TEMP=self.temp.as_posix(),
+            TMP=self.temp.as_posix(),
             STOCK_DATA_DIR=self.data.as_posix(),
             STOCK_PYTHON=Path(sys.executable).as_posix(),
             PATROL_NOW=str(NOW),
@@ -2243,6 +2249,269 @@ def test_close_task_reports_a_docker_resource_it_could_not_delete(
     )
     assert steps == expected + ["docker_pruned:images", "docker_pruned:build_cache"]
     assert "t282_stock-data" in _docker_left(docker, "volumes")
+
+
+# --- Claude Code scratchpads (#472) ---------------------------------------------------
+# Every directory below lies under the sandbox's TEMP (Harness.temp): the refusals are
+# tested on stand-ins only, never on the real Temp, a worktree or the data directory (#282).
+
+S_ENG = "11111111-1111-4111-8111-111111111111"  # the engineer's 回報：開工
+S_HANDOVER = "22222222-2222-4222-8222-222222222222"  # a second 回報：開工 (a handover)
+S_SELF = "33333333-3333-4333-8333-333333333333"  # the session running close_task.sh
+S_OTHER = "44444444-4444-4444-8444-444444444444"  # another task's session
+S_QUESTION = "55555555-5555-4555-8555-555555555555"  # named in a 提問, not a 開工
+S_LINK = "66666666-6666-4666-8666-666666666666"  # its directory is a junction/symlink
+S_MISSING = "77777777-7777-4777-8777-777777777777"  # named, but no directory
+S_OLD = "88888888-8888-4888-8888-888888888888"  # in the task's old-format directory
+
+
+def _start(
+    *sessions: str, first: str = "回報：開工", cid: int = 1, tail: str = ""
+) -> dict:
+    lines = [first, "", "- branch：`task/282-dryrun`"]
+    lines += [f"- session：`{s}`{tail}" for s in sessions]
+    body = "\n".join(lines + ["- HEAD：`" + SHA + "`"])
+    return {
+        "id": cid,
+        "body": body,
+        "html_url": f"https://github.com/YiCheng0608/stock-lab/issues/282#issuecomment-{cid}",
+    }
+
+
+def _old_format(path: Path) -> str:
+    """The old Claude Code project directory name of a working directory."""
+    return re.sub(r"[^A-Za-z0-9]", "-", path.as_posix())
+
+
+def _session(top: Path, name: str, *files: str) -> Path:
+    directory = top / name
+    (directory / "scratchpad").mkdir(parents=True)
+    for file in files or ("note.txt",):
+        (directory / "scratchpad" / file).write_text(name, encoding="utf-8")
+    return directory
+
+
+def _scratch_steps(line: dict) -> list[str]:
+    return [s for s in line["steps"] if s.startswith("scratchpad_")]
+
+
+@pytest.fixture
+def scratch(close: Harness):
+    claude = close.temp / "claude"
+    hashed, other = claude / "09e6f7bbfb126098", claude / "18fda106b57dcbd6"
+    close.claude, close.hashed, close.other_project = claude, hashed, other
+    eng = _session(hashed, S_ENG)
+    # A junction (a symlink on Linux) inside the scratchpad, to a directory outside Temp.
+    outside = close.root / "outside-node-modules"
+    outside.mkdir()
+    (outside / "keep.txt").write_text("keep", encoding="utf-8")
+    _link(outside, eng / "scratchpad" / "node_modules")
+    close.outside = outside
+    for name in (S_SELF, S_OTHER, S_QUESTION, "not-a-uuid"):
+        _session(hashed, name)
+    # Third level and first level, with an engineer's id as the name: not session
+    # directories, so neither is deleted.
+    _session(hashed / "deep", S_ENG)
+    _session(claude, S_ENG)
+    _session(other, S_HANDOVER)
+    # The session directory itself is a junction/symlink to outside Temp: only the link goes.
+    linked = close.root / "outside-session"
+    _session(linked.parent, linked.name)
+    _link(linked, other / S_LINK)
+    close.linked = linked
+    # The task's own old-format directory, and two that only look like it.
+    old = claude / _old_format(close.wt)
+    _session(old, S_OLD)
+    close.old = old
+    close.lookalikes = [
+        claude / (_old_format(close.wt) + "-x"),
+        claude / _old_format(close.root / "wt" / "task-2820-other"),
+    ]
+    for top in close.lookalikes:
+        _session(top, S_OLD)
+    close.answer(
+        "gh_comments",
+        [
+            # As engineers write it: the model after the id.
+            _start(S_ENG, cid=1, tail="（claude-opus-5-5）"),
+            _start(S_QUESTION, first="提問：要不要換手？", cid=2),
+            _start(S_HANDOVER, first="\n回報：開工（換手）", cid=3),
+            # Not ids: a non-UUID, and S_OTHER with one more character.
+            _start(S_LINK, S_SELF, S_MISSING, "not-a-uuid", S_OTHER + "0", S_ENG, cid=4),
+        ],
+    )
+    yield close
+    for link in (eng / "scratchpad" / "node_modules", other / S_LINK):
+        if link.is_symlink():
+            link.unlink()
+        elif link.is_junction():
+            os.rmdir(link)
+
+
+def test_close_task_removes_the_scratchpads_its_start_reports_name(
+    scratch: Harness,
+) -> None:
+    """AC-1 (#472): the session directories every 回報：開工 names (a handover's too) and
+    the task's old-format directory go; another session's, this session's, a non-UUID name,
+    a third-level and a first-level directory stay."""
+    result = scratch.close_task(scratch.extra, CLAUDE_CODE_SESSION_ID=S_SELF)
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    hashed, other, old = scratch.hashed, scratch.other_project, scratch.old
+    assert _scratch_steps(line) == [
+        f"scratchpad_removed:{(hashed / S_ENG).as_posix()}",
+        f"scratchpad_removed:{(other / S_HANDOVER).as_posix()}",
+        f"scratchpad_removed:{(other / S_LINK).as_posix()}",
+        f"scratchpad_skipped:own_session:{(hashed / S_SELF).as_posix()}",
+        f"scratchpad_skipped:not_found:{S_MISSING}",
+        f"scratchpad_removed:{(old / S_OLD).as_posix()}",
+        f"scratchpad_removed:{old.as_posix()}",
+    ]
+    assert line["board"] == "完成"
+    assert not (hashed / S_ENG).exists() and not (other / S_HANDOVER).exists()
+    assert not old.exists()
+    for kept in (
+        hashed / S_SELF,
+        hashed / S_OTHER,
+        hashed / S_QUESTION,
+        hashed / "not-a-uuid",
+        hashed / "deep" / S_ENG,
+        scratch.claude / S_ENG,
+        *(top / S_OLD for top in scratch.lookalikes),
+    ):
+        assert (kept / "scratchpad" / "note.txt").is_file(), kept
+
+
+def test_close_task_only_unlinks_links_in_and_at_a_scratchpad(scratch: Harness) -> None:
+    """AC-3 (#472): a junction/symlink inside a session directory, and a session directory
+    that is one, point outside Temp: each link is unlinked first, never followed, and what
+    it points to stays as it was."""
+    result = scratch.close_task(scratch.extra, CLAUDE_CODE_SESSION_ID=S_SELF)
+    assert result.returncode == 0, result.stdout + result.stderr
+    steps = _json_line(result)["steps"]
+    inner = (scratch.hashed / S_ENG / "scratchpad" / "node_modules").as_posix()
+    at = (scratch.other_project / S_LINK).as_posix()
+    assert steps.index(f"unlinked:{inner}") < steps.index(
+        f"scratchpad_removed:{(scratch.hashed / S_ENG).as_posix()}"
+    )
+    assert steps.index(f"unlinked:{at}") < steps.index(f"scratchpad_removed:{at}")
+    assert (scratch.outside / "keep.txt").read_text(encoding="utf-8") == "keep"
+    assert (scratch.linked / "scratchpad" / "note.txt").read_text(
+        encoding="utf-8"
+    ) == "outside-session"
+    assert not os.path.lexists(at)
+
+
+def test_close_task_does_not_follow_a_project_directory_that_is_a_link(
+    scratch: Harness,
+) -> None:
+    """AC-3 (#472): Temp/claude/<project> is a junction/symlink to outside Temp: the session
+    directory under it is reached through a link, so it is refused, and the target stays."""
+    target = scratch.root / "outside-project"
+    _session(target, S_MISSING)
+    project = scratch.claude / "2cefcad9e5e0d6ff"
+    _link(target, project)
+    scratch.answer("gh_comments", [_start(S_MISSING)])
+    try:
+        result = scratch.close_task(scratch.extra, CLAUDE_CODE_SESSION_ID=S_SELF)
+    finally:
+        if project.is_symlink():
+            project.unlink()
+        elif project.is_junction():
+            os.rmdir(project)
+    assert result.returncode == 0, result.stdout + result.stderr
+    steps = _scratch_steps(_json_line(result))
+    refused = f"scratchpad_skipped:refused:{(project / S_MISSING).as_posix()}:"
+    assert len(steps) == 3 and steps[0].startswith(refused), steps
+    assert (target / S_MISSING / "scratchpad" / "note.txt").is_file()
+
+
+@pytest.mark.parametrize("case", ["no_start", "unreadable", "not_found", "no_temp"])
+def test_close_task_skips_the_scratchpads_it_cannot_find(
+    scratch: Harness, case: str
+) -> None:
+    """AC-2 (#472): no session id in the comments, comments gh cannot read, a session with no
+    directory, no TEMP: a scratchpad_skipped step, nothing in Temp
+    deleted, and the close done as before (exit 0, board 完成)."""
+    env = {"CLAUDE_CODE_SESSION_ID": S_SELF}
+    expected = {
+        "no_start": ["scratchpad_skipped:no_session_id"],
+        "unreadable": ["scratchpad_skipped:comments_unreadable"],
+        "not_found": [f"scratchpad_skipped:not_found:{S_MISSING}"],
+        "no_temp": ["scratchpad_skipped:no_temp"],
+    }[case]
+    if case == "no_start":
+        scratch.answer("gh_comments", [_start(S_ENG, first="回報：PR 已開")])
+    elif case == "unreadable":
+        scratch.write("gh_comments.fail", "HTTP 502")
+    elif case == "not_found":
+        scratch.answer("gh_comments", [_start(S_MISSING)])
+    shutil.rmtree(scratch.old)
+    if case == "no_temp":
+        # Unset inside bash: Git Bash turns an empty or relative TEMP it is started with
+        # into a path under the working directory.
+        result = scratch.run_bash(
+            'unset TEMP; exec bash "$@"',
+            (scratch.ops / "close_task.sh").as_posix(),
+            "282",
+            "--extra-dir",
+            scratch.extra.as_posix(),
+            **env,
+        )
+    else:
+        result = scratch.close_task(scratch.extra, **env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    assert _scratch_steps(line) == expected
+    assert line["board"] == "完成" and "task/282-dryrun" not in scratch.branches()
+    assert (scratch.hashed / S_ENG / "scratchpad" / "note.txt").is_file()
+
+
+FAILING_RM = r"""#!/usr/bin/env bash
+case "$*" in *"$FAIL_RM"*) echo "rm: cannot remove: Device or resource busy" >&2; exit 1 ;; esac
+exec /usr/bin/rm "$@"
+"""
+
+
+@pytest.mark.parametrize("case", ["rm_fails", "holds_git"])
+def test_close_task_goes_on_when_a_scratchpad_cannot_be_deleted(
+    scratch: Harness, case: str
+) -> None:
+    """AC-2 (#472): rm fails on the engineer's session directory, or guard_dir refuses it (a
+    .git inside): a scratchpad_skipped step, the other scratchpads still go, and the close
+    is done (exit 0, board 完成)."""
+    eng = scratch.hashed / S_ENG
+    env = {"CLAUDE_CODE_SESSION_ID": S_SELF}
+    if case == "rm_fails":
+        rm = scratch.bin / "rm"
+        rm.write_text(FAILING_RM, encoding="utf-8", newline="\n")
+        rm.chmod(0o755)
+        env["FAIL_RM"] = S_ENG
+        reason = f"scratchpad_skipped:delete_failed:{eng.as_posix()}"
+    else:
+        (eng / "scratchpad" / "repo" / ".git").mkdir(parents=True)
+        reason = f"scratchpad_skipped:refused:{eng.as_posix()}:裡面有 .git"
+    result = scratch.close_task(scratch.extra, **env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    steps = _scratch_steps(line)
+    assert steps[0].startswith(reason), steps
+    assert f"scratchpad_removed:{(scratch.other_project / S_HANDOVER).as_posix()}" in steps
+    assert line["board"] == "完成"
+    assert (eng / "scratchpad" / "note.txt").is_file()
+
+
+def test_close_task_dry_run_leaves_the_scratchpads_alone(scratch: Harness) -> None:
+    """#472: a dry run (--no-board) borrows a PR on a throwaway branch, and the Issue's
+    engineer may still be at work: no scratchpad is read or deleted."""
+    result = scratch.run(
+        "close_task.sh", "282", "--no-board", "--extra-dir", scratch.extra.as_posix()
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _scratch_steps(_json_line(result)) == ["scratchpad_skipped:no_board"]
+    assert not [c for c in scratch.calls("gh") if "/comments" in c]
+    assert (scratch.hashed / S_ENG / "scratchpad" / "note.txt").is_file()
+    assert (scratch.old / S_OLD / "scratchpad" / "note.txt").is_file()
 
 
 # --- patrol.sh ---------------------------------------------------------------------
