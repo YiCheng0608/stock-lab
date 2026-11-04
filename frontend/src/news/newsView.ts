@@ -201,25 +201,20 @@ export function verifiedInstruments(item: Pick<NewsItem, 'instruments' | 'symbol
 
 export type CardAiCandidate = NewsAi['symbol_candidates'][number] & { key: string }
 
-// The card's collapsed 「AI 候選」 row (UI_COPY_SPEC §4, #452): the done result's symbol candidates minus the ones the rules
-// already verified (instruments' exchange + symbol, or symbols' 「EX:SYM」／bare code), each listed once.
+// The card's collapsed 「AI 候選」 row (UI_COPY_SPEC §4, #452): the done result's symbol candidates minus the codes the rules
+// already verified (instruments, or symbols' 「EX:SYM」／bare code), each code listed once. Listed and OTC codes never repeat,
+// so the code alone is compared: a candidate on the other exchange is the same stock (PR #458 review).
 export function cardAiCandidates(item: Pick<NewsItem, 'ai' | 'instruments' | 'symbols'>): CardAiCandidate[] {
   const ai = usableAi(item)
   if (!ai) return []
-  const verified = new Set<string>()
-  const bareVerified = new Set<string>()
-  for (const instrument of item.instruments ?? []) verified.add(`${instrument.exchange}:${instrument.symbol}`)
-  for (const symbol of item.symbols ?? []) {
-    if (symbol.includes(':')) verified.add(symbol)
-    else bareVerified.add(symbol)
-  }
   const seen = new Set<string>()
+  for (const instrument of item.instruments ?? []) seen.add(instrument.symbol)
+  for (const symbol of item.symbols ?? []) seen.add(symbol.includes(':') ? symbol.split(':')[1] : symbol)
   const candidates: CardAiCandidate[] = []
   for (const candidate of ai.symbol_candidates ?? []) {
-    const key = `${candidate.exchange}:${candidate.symbol}`
-    if (verified.has(key) || bareVerified.has(candidate.symbol) || seen.has(key)) continue
-    seen.add(key)
-    candidates.push({ ...candidate, key })
+    if (seen.has(candidate.symbol)) continue
+    seen.add(candidate.symbol)
+    candidates.push({ ...candidate, key: `${candidate.exchange}:${candidate.symbol}` })
   }
   return candidates
 }

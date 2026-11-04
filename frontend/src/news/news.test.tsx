@@ -166,9 +166,13 @@ for (const [label, item] of noRows) {
   check(!markup.includes('news-ai-candidates') && !markup.includes('AI 候選'), `${label}: no AI candidates row`)
   check(cardAiCandidates(item).length === 0, `${label}: no card candidates`)
 }
-// Duplicates: verified via symbols 「EX:SYM」 without instruments, and the same candidate twice.
-const viaSymbols = newsItem({ instruments: [], symbols: ['TPEx:3105'], ai: aiResult({ symbol_candidates: [candidate('TPEx', '3105', '穩懋'), candidate('TWSE', '3105', '穩懋'), candidate('TWSE', '2454', '聯發科'), candidate('TWSE', '2454', '聯發科')] }) })
-check(cardAiCandidates(viaSymbols).map((item) => item.key).join('|') === 'TWSE:3105|TWSE:2454', `symbols EX:SYM drops only that exchange; repeats listed once, got ${cardAiCandidates(viaSymbols).map((item) => item.key).join('|')}`)
+// Duplicates compare the code only (listed and OTC codes never repeat, PR #458 review): verified via symbols 「EX:SYM」
+// without instruments drops the candidate on either exchange; the same code twice (even on two exchanges) is listed once.
+const viaSymbols = newsItem({ instruments: [], symbols: ['TPEx:3105'], ai: aiResult({ symbol_candidates: [candidate('TPEx', '3105', '穩懋'), candidate('TWSE', '3105', '穩懋'), candidate('TWSE', '2454', '聯發科'), candidate('TPEx', '2454', '聯發科')] }) })
+check(cardAiCandidates(viaSymbols).map((item) => item.key).join('|') === 'TWSE:2454', `symbols EX:SYM drops the code on both exchanges; repeats listed once, got ${cardAiCandidates(viaSymbols).map((item) => item.key).join('|')}`)
+// instruments alone (symbols empty), so this path is checked apart from the symbols one above.
+const otherExchange = newsItem({ symbols: [], ai: aiResult({ symbol_candidates: [candidate('TPEx', '2330', '台積電')] }) })
+check(cardAiCandidates(otherExchange).length === 0 && !render(<NewsCard item={otherExchange} />).includes('news-ai-candidates'), 'a candidate on the other exchange than the verified instrument is not shown twice')
 check(!render(<NewsCard item={withCandidates} compact />).includes('news-ai-candidates'), 'today page compact row has no AI candidates row')
 
 // ---- AC-1 time display (NEWS_SPEC §4, UI_COPY §4) ----
