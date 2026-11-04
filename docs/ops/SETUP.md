@@ -103,7 +103,7 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 
 ### 安全升級與復原順序
 
-1. **備份**：解析實際 DB 絕對路徑，用 SQLite backup API 在專案外建副本；有 WAL 或未確認 writer 時不裸複製主檔。
+1. **備份**：解析實際 DB 絕對路徑（正式 DB 在 volume `stock-lab_stock-data` 的 `/data/stock.db`），用 SQLite backup API 在專案外建副本；有 WAL 或未確認 writer 時不裸複製主檔。正式 DB 的手動備份統一放 `C:/Users/YiCheng/stock-lab-backups/<用途>-<YYYYMMDD>/stock.db`（例如 `pre-v1.2.0-20261104`），不放進主機的 `stock-lab-data/`；命令是[取正式 DB 的唯讀副本](LOCAL.md#取正式-db-的唯讀副本)，`D` 換成備份目錄。
 2. **init-db**：對目標 DB 執行 `python -m worker.cli init-db`。遷移步驟只接受已知的 SQLite schema，在破壞性 DDL 前拒絕未知的 schema、constraint、index、trigger、view 或 marker 矛盾。
 3. **驗證**：確認 revision 為 current head，並跑 `PRAGMA integrity_check` 與 `PRAGMA foreign_key_check`。
 4. **失敗**：migration 只能前進，失敗時保留 DB 與錯誤，從備份還原到新路徑再診斷；不手動刪暫存表、補 marker、關 FK 或反覆重試。
