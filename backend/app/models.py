@@ -281,6 +281,35 @@ class MarginList(Base):
     members_json: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
 
 
+class NoTradeDay(Base):
+    """An official no-trade day of one security (Issue #454).
+
+    The session's official daily quote table (TWSE MI_INDEX 每日收盤行情, TPEx
+    上櫃股票行情) lists the security with its open, high, low and close all
+    blank: it had no regular-session trade.  The row is source evidence that
+    the day has no price, never a price; coverage counts it apart from missing
+    data and every price reader keeps ignoring it.  A day with a bar has no
+    row.  Written by ``worker.no_trade_days`` from stored raw only.
+    """
+
+    __tablename__ = "no_trade_days"
+    __table_args__ = (
+        UniqueConstraint("instrument_id", "trading_date", name="uq_no_trade_day"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"))
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    source: Mapped[str] = mapped_column(String(40))
+    endpoint: Mapped[str] = mapped_column(String(500))
+    data_as_of: Mapped[str] = mapped_column(String(40))
+    # The capture time of the raw payload the row came from.
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+
+
 class TechnicalFeature(Base):
     __tablename__ = "technical_features"
     __table_args__ = (

@@ -95,6 +95,7 @@ from app.trading_calendar import NextSession, next_session
 from worker import mops_events
 from worker.market_summary import store_market_summaries
 from worker.margin_lists import MarginListError, sync_margin_lists
+from worker.no_trade_days import NoTradeDayError, sync_no_trade_days
 from worker.sources import (
     ActionRecord,
     BarRecord,
@@ -4596,7 +4597,27 @@ def collect(
                     "status": "failed",
                     "error": f"{type(exc).__name__}: {exc}"[:500],
                 }
+            # The sessions' official no-trade days, from the quote reports
+            # just stored (Issue #454).  A failure must not fail the day's
+            # quotes; coverage then counts those days as missing.
+            try:
+                with db.begin_nested():
+                    no_trade_result = sync_no_trade_days(
+                        db, sorted(normalized_date_set)
+                    )
+                    if no_trade_result["status"] == "failed":
+                        raise NoTradeDayError(str(no_trade_result["error"]))
+            except Exception as exc:
+                no_trade_result = {
+                    "status": "failed",
+                    "error": f"{type(exc).__name__}: {exc}"[:500],
+                }
             notices = list(getattr(batch, "notices", []) or [])
+            if no_trade_result["status"] == "failed":
+                notices.append(
+                    "no-trade day sync failed and wrote nothing: "
+                    + str(no_trade_result.get("error"))
+                )
             if margin_list_result["status"] == "failed":
                 notices.append(
                     "margin list sync failed and wrote nothing: "
@@ -4785,6 +4806,7 @@ def collect(
                 "unmatched_bars": unmatched_bars,
                 "unmatched_backfill": unmatched_backfill,
                 "margin_lists": margin_list_result,
+                "no_trade_days": no_trade_result,
                 "instrument_status_sync": status_result,
                 "value_conflicts": len(value_conflicts),
                 "value_conflict_samples": _json_safe(
@@ -4888,6 +4910,7 @@ def collect(
                 "unmatched_bars": unmatched_bars,
                 "unmatched_backfill": unmatched_backfill,
                 "margin_lists": margin_list_result,
+                "no_trade_days": no_trade_result,
                 "instrument_status_sync": status_result,
                 "value_conflicts": len(value_conflicts),
                 "value_fills": len(value_fills),
