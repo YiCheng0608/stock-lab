@@ -1043,6 +1043,18 @@ def test_group_scores_written_by_the_worker_pass_and_a_changed_score_fails(fx):
     assert groups.result == "fail" and "score" in groups.failures
 
 
+def test_a_catalyst_without_full_coverage_fails(fx):
+    # hot_group 1.2.0 (#453): the fixture has no dated MOPS coverage, so every
+    # catalyst is null; a value there is not backed by its window.
+    scored_market(fx)
+    fx.sql(
+        "update group_daily_scores set catalyst = 0.5 where trading_date = ? and group_id = 'official-industry-fixture'",
+        T.isoformat(),
+    )
+    groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
+    assert groups.result == "fail" and "catalyst_without_coverage" in groups.failures
+
+
 def test_a_member_return_of_another_price_basis_fails(fx):
     scored_market(fx)
     details = json.loads(

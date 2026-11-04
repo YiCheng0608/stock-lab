@@ -18,6 +18,7 @@ from sqlalchemy.orm import sessionmaker
 import app.api as api_module
 import app.main as main_module
 import worker.candidates as candidates
+import worker.mops_events as mops_events
 import worker.pipeline as pipeline
 from app.db import enable_sqlite_foreign_keys
 from app.domain import (
@@ -554,7 +555,7 @@ def test_overwriting_a_1_0_0_row_archives_it_first_and_keeps_other_rows(factory)
         assert rescored.data_quality == "partial" and rescored.rank is not None
         assert _fields(_score(db, day=dates[-2])) == before_untouched
 
-        # Recomputing a 1.1.0 row is the same version: nothing more is archived.
+        # Recomputing a row of the current version: nothing more is archived.
         pipeline._calculate_group_scores(db, SCORE_DATE)
         db.commit()
         assert len(db.scalars(select(GroupDailyScoreArchive)).all()) == 1
@@ -588,6 +589,7 @@ def test_new_version_gets_its_own_strategy_row_and_leaves_1_0_0_untouched(factor
         old_snapshot = canonical_config_snapshot()["hot_group_v1"]
         old_snapshot["version"] = HOT_GROUP_LEGACY_VERSION
         del old_snapshot["components"]["institutional_flow"]["coverage"]
+        del old_snapshot["components"]["catalyst"]["coverage"]
         old = StrategyVersion(
             name="hot_group_v1",
             version=HOT_GROUP_LEGACY_VERSION,
@@ -612,7 +614,7 @@ def test_new_version_gets_its_own_strategy_row_and_leaves_1_0_0_untouched(factor
         versions = pipeline._ensure_strategies(db)
         db.commit()
 
-        assert versions["hot_group_v1"].version == HOT_GROUP_VERSION == "1.1.0"
+        assert versions["hot_group_v1"].version == HOT_GROUP_VERSION == "1.2.0"
         assert versions["hot_group_v1"].id != old.id
         db.refresh(old)
         assert (
@@ -660,6 +662,23 @@ def test_api_board_quality_for_a_zero_filled_group(factory, api_client, with_cat
                         source="mops_material_information",
                     )
                 )
+            # 1.2.0 (#453): the catalyst needs the dated coverage of its window.
+            db.add(
+                IngestionRun(
+                    run_type=mops_events.RUN_TYPE,
+                    source="official",
+                    run_date=SCORE_DATE,
+                    status="success",
+                    metadata_json={
+                        "coverage_manifest": {
+                            day.isoformat(): {
+                                "event_coverage": mops_events.date_coverage(day, None)
+                            }
+                            for day in dates[-20:]
+                        }
+                    },
+                )
+            )
         db.flush()
         pipeline._calculate_group_scores(db, SCORE_DATE)
         db.add(
