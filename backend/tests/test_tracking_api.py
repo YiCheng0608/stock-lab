@@ -84,7 +84,7 @@ def test_adding_a_candidate_creates_a_pending_plan_once(db, client):
     }
     assert (plan["signal_id"], plan["daily_candidate_id"]) == (sig.id, row.id)
     assert plan["plan_date"] == PLAN_DAY.isoformat()
-    assert plan["versions"]["tracking_version"] == "plan_tracking_v1"
+    assert plan["versions"]["tracking_version"] == "plan_tracking_v2"
     assert plan["versions"]["score_version"] == "candidate_score_v1"
     assert plan["levels"]["entry_zone"] == {"low": 100.0, "high": 100.0}
     assert (plan["levels"]["invalid_price"], plan["levels"]["target_1"]) == (
@@ -221,7 +221,7 @@ def test_the_list_puts_open_plans_first_then_the_latest_ended(db, client):
     assert body["summary"] == {"open": 2, "closed": 2}
     assert body["pagination"]["total"] == 4
     meta = body["meta"]
-    assert meta["tracking_version"] == "plan_tracking_v1"
+    assert meta["tracking_version"] == "plan_tracking_v2"
     assert (
         meta["window_sessions"],
         meta["slippage_bps"],
@@ -406,11 +406,11 @@ def test_a_cancel_during_the_daily_update_is_kept(file_sessions, monkeypatch):
     real_track_path = plan_tracking.track_path
     cancelled_at = datetime(2026, 9, 2, 14, 0)
 
-    def cancel_meanwhile(levels, bars):
+    def cancel_meanwhile(levels, bars, **kwargs):
         # The API cancels after the daily read the plan and before it writes.
         cancel_plan(api, plan.id, now=cancelled_at)
         api.commit()
-        return real_track_path(levels, bars)
+        return real_track_path(levels, bars, **kwargs)
 
     monkeypatch.setattr(plan_tracking, "track_path", cancel_meanwhile)
     result = track_open_plans(daily, days[0])

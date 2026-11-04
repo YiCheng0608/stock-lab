@@ -16,7 +16,7 @@ import {
   planResultLine,
   trackingNote,
 } from './tracking'
-import { ambiguous, cancelled, conflict, detailResponse, expired, invalidated, listResponse, meta, plan, suspendedClose, targetHit, triggered } from './tracking.fixtures'
+import { ambiguous, cancelled, conflict, detailResponse, expired, invalidated, listResponse, meta, notEntered, plan, suspendedClose, targetHit, triggered } from './tracking.fixtures'
 import { AddPlanButton, PlanCard, PlanHistory, StockPlanPanel, TrackingSection } from './TrackingViews'
 import type { StrategyDecision } from '../types'
 
@@ -45,12 +45,12 @@ check(trackingNote(meta()).includes('買賣各 5 bps 滑價、來回 30 bps 成�
 // ---- status badges (DESIGN_SYSTEM §7) ----
 const tones: Record<string, [string, string]> = {
   pending: ['待觸發', 'primary'], triggered: ['已觸發', 'warning'], target_hit: ['達標', 'success'], invalidated: ['失效', 'error'],
-  incomparable: ['無法比較', 'warning'], expired: ['到期', 'default'], closed: ['期滿結算', 'default'], cancelled: ['已取消', 'default'],
+  incomparable: ['無法比較', 'warning'], expired: ['到期', 'default'], closed: ['期滿結算', 'default'], not_entered: ['未進場', 'default'], cancelled: ['已取消', 'default'],
 }
 for (const [status, [label, tone]] of Object.entries(tones)) {
   check(PLAN_STATUS[status].label === label && PLAN_STATUS[status].tone === tone, `${status} is ${label} (${tone})`)
 }
-for (const item of [plan(), triggered(), targetHit(), invalidated(), expired(), suspendedClose(), ambiguous(), cancelled()]) {
+for (const item of [plan(), triggered(), targetHit(), invalidated(), expired(), suspendedClose(), ambiguous(), notEntered(), cancelled()]) {
   const markup = render(<PlanCard plan={item} />)
   const [label, tone] = tones[item.status]
   const badge = tone === 'default' ? `class="badge badge-compact">${label}</span>` : `class="badge badge-${tone} badge-compact">${label}</span>`
@@ -66,6 +66,9 @@ check(planResultLine(expired()) === '模擬報酬：無法比較（視窗內未�
 check(planResultLine(suspendedClose()) === '模擬報酬：無法比較（期間有停牌或不可比較的日線）', 'suspension makes it incomparable')
 check(planResultLine(ambiguous()) === '模擬報酬：無法比較（同一交易日失效價與目標一都觸及，先後順序不明）', 'same-session stop and target')
 check(planResultLine(cancelled()) === '模擬報酬：無法比較（已取消）', 'cancelled')
+check(planResultLine(notEntered()) === '模擬報酬：無法比較（成交當日開盤已在目標以上，不模擬進場）', 'gap over the target: not entered')
+check(planResultLine(notEntered({ status_reason: 'gap_below_invalid' })) === '模擬報酬：無法比較（成交當日開盤已在失效價以下，不模擬進場）', 'gap under the invalid price: not entered')
+check(render(<PlanCard plan={notEntered()} />).includes('尚未模擬成交') && !render(<PlanCard plan={notEntered()} />).includes('模擬出場'), 'a plan not entered has no fill and no exit')
 check(planResultLine(plan({ status: 'incomparable', status_reason: 'insufficient_sessions', open: false, result_comparable: false, execution_date: '2026-10-19' })) === '模擬報酬：無法比較（40 個交易日內該股不足 20 根日線）', 'too few bars')
 
 // ---- one card ----

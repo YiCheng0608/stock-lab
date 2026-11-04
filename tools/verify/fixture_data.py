@@ -36,6 +36,7 @@ from app.domain import (
     HOT_GROUP_CONFIG,
     HOT_GROUP_VERSION,
     INSTITUTIONAL_FLOW_FORMULA_VERSION,
+    PLAN_TRACKING_RULES,
     PLAN_TRACKING_VERSION,
     SIGNAL_CONFIDENCE_SEMANTICS,
     STRATEGY_LEVELS_VERSION,
@@ -1577,11 +1578,12 @@ def _plan_specs() -> list[dict[str, Any]]:
         )
         cutoff = PLAN_CANCELLED_AFTER if spec["status"] == "cancelled" else T
         bars = _plan_bars(spec["symbol"], signal["signal_date"], cutoff)
-        path = track_path(levels, bars)
+        rules = PLAN_TRACKING_RULES[PLAN_TRACKING_VERSION]
+        path = track_path(levels, bars, rules=rules)
         if path.outcome_session_no:
             # The daily run of the exit session ended the plan; it is not tracked after.
             bars = bars[: path.outcome_session_no]
-            path = track_path(levels, bars)
+            path = track_path(levels, bars, rules=rules)
         spec["bars"], spec["path"] = bars, path
     return specs
 

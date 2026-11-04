@@ -23,6 +23,8 @@ return_or_risk FLOAT, incomparable_reason TEXT, source VARCHAR(500), data_time V
 ADDED = """, horizon INTEGER NOT NULL DEFAULT 20, execution_date DATE,
 execution_price FLOAT, comparable BOOLEAN, data_quality VARCHAR(30) NOT NULL DEFAULT 'complete' """
 FK = ", FOREIGN KEY(signal_id) REFERENCES signals(id)"
+# What 0023 (both entries) appends to the stored table SQL.
+TRACKING_RULES_SQL = ", \"tracking_rules\" VARCHAR(20) NOT NULL DEFAULT 'tracking_v1'"
 
 
 def _config(target):
@@ -259,19 +261,24 @@ def test_payload_identity_defaults_and_idempotence(tmp_path, entry, fk, shape):
         assert c.exec_driver_sql("PRAGMA foreign_keys").scalar() == fk
     if shape == "current_extra":
         after = _snapshot(engine)
+        # The identity is left alone; only 0023 adds tracking_rules (#444).
         assert [
             r
             for r in before["main"][0]
             if r[2] == "signal_settlements" or r[1] == "settlement_view"
         ] == [
-            r
-            for r in after["main"][0]
-            if r[2] == "signal_settlements" or r[1] == "settlement_view"
+            (kind, name, owner, (sql or "").replace(TRACKING_RULES_SQL, ""))
+            if name == "signal_settlements"
+            else (kind, name, owner, sql)
+            for kind, name, owner, sql in after["main"][0]
+            if owner == "signal_settlements" or name == "settlement_view"
         ]
-        assert (
-            before["main"][1]["signal_settlements"]
-            == after["main"][1]["signal_settlements"]
-        )
+        assert [row[:-1] for row in after["main"][1]["signal_settlements"]] == before[
+            "main"
+        ][1]["signal_settlements"]
+        assert {row[-1] for row in after["main"][1]["signal_settlements"]} == {
+            ("str", "tracking_v1")
+        }
     _run(engine, entry)
     with engine.connect() as c:
         assert (

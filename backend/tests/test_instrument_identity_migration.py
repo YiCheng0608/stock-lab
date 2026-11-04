@@ -270,10 +270,9 @@ def _assert_head(engine, entry):
         assert c.exec_driver_sql("PRAGMA foreign_key_check").all() == []
         assert identity.preflight_instrument_identity(c) == "current"
         if entry == "fallback":
-            assert (
-                len(c.exec_driver_sql("SELECT version FROM schema_migrations").all())
-                == 22
-            )
+            assert len(
+                c.exec_driver_sql("SELECT version FROM schema_migrations").all()
+            ) == len(REVISIONS)
             assert (
                 c.exec_driver_sql(
                     "SELECT version FROM schema_migrations WHERE version=?", (HEAD,)

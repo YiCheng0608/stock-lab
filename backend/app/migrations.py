@@ -672,6 +672,29 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0022_margin_lists', CURRENT_TIMESTAMP)"
         )
     )
+    # 0023 adds signal_settlements.tracking_rules after the settlement
+    # identity rebuild above (whose legacy shapes do not know it); stored rows
+    # were computed with tracking_v1.
+    if inspect(connection).has_table("signal_settlements"):
+        settlement_columns = {
+            row[1]
+            for row in connection.exec_driver_sql(
+                'PRAGMA table_info("signal_settlements")'
+            )
+        }
+        if "tracking_rules" not in settlement_columns:
+            connection.execute(
+                text(
+                    'ALTER TABLE "signal_settlements" ADD COLUMN "tracking_rules" '
+                    "VARCHAR(20) NOT NULL DEFAULT 'tracking_v1'"
+                )
+            )
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0023_settlement_tracking_rules', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:

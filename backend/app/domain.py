@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from numbers import Real
 from typing import Any
 
+from .tracking import TRACKING_RULES, TRACKING_RULES_V1, TRACKING_RULES_V2
+
 
 # These dictionaries intentionally contain JSON primitives only.  They are the
 # canonical definitions persisted by StrategyVersion.config_json once the
@@ -560,9 +562,12 @@ SIGNAL_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
         {"target_2_hit", "invalidated", "expired", "incomparable"}
     ),
     "target_2_hit": frozenset({"settled"}),
-    "invalidated": frozenset({"settled"}),
+    # A recomputation under tracking_v2 can find that a fill was never taken
+    # (the fill session opened beyond the invalid price or the target, #444),
+    # so an invalidated or incomparable signal may still end as expired.
+    "invalidated": frozenset({"settled", "expired"}),
     "expired": frozenset({"settled"}),
-    "incomparable": frozenset({"settled"}),
+    "incomparable": frozenset({"settled", "expired"}),
     "data_incomplete": frozenset({"observation", "expired"}),
     "invalid_levels": frozenset({"observation", "expired"}),
     "settled": frozenset(),
@@ -716,7 +721,17 @@ STRATEGY_LEVEL_AVAILABILITY = (
 # User tracking plans (docs/spec/tracking.md 使用者追蹤計畫).  pending may jump straight to an
 # outcome: a fill and its exit can happen in the same session, and a run that
 # follows missed daily runs can see a fill and the end of the window at once.
-PLAN_TRACKING_VERSION = "plan_tracking_v1"
+# Each plan version keeps its own tracking rules (app.tracking), so a
+# plan_tracking_v1 plan is still updated with tracking_v1 and never rewritten
+# by the newer rules (#444).  New plans are stamped with the version of the
+# current rules (app.tracking.TRACKING_RULES), so the two cannot drift.
+PLAN_TRACKING_RULES = {
+    "plan_tracking_v1": TRACKING_RULES_V1,
+    "plan_tracking_v2": TRACKING_RULES_V2,
+}
+PLAN_TRACKING_VERSION = next(
+    version for version, rules in PLAN_TRACKING_RULES.items() if rules == TRACKING_RULES
+)
 PLAN_OPEN_STATUSES = frozenset({"pending", "triggered"})
 PLAN_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
     "pending": frozenset(
@@ -727,6 +742,7 @@ PLAN_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
             "incomparable",
             "expired",
             "closed",
+            "not_entered",
             "cancelled",
         }
     ),
@@ -738,6 +754,7 @@ PLAN_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
     "incomparable": frozenset(),
     "expired": frozenset(),
     "closed": frozenset(),
+    "not_entered": frozenset(),
     "cancelled": frozenset(),
 }
 

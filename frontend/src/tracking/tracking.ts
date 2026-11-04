@@ -3,7 +3,7 @@ import type { TrackingMeta, TrackingPlan, TrackingPlanSession } from '../types'
 import { formatDate, formatPrice } from '../candidates/candidates'
 import { formatTaipeiDay } from '../dates'
 
-// User tracking plans (plan_tracking_v1, #253): labels, formatting and copy for the actions page and the
+// User tracking plans (plan_tracking_v1/v2, #253, #444): labels, formatting and copy for the actions page and the
 // "加入追蹤" buttons. Copy follows UI_COPY_SPEC §11; status badges follow DESIGN_SYSTEM §7.
 
 export const TRACKING_TITLE = '追蹤計畫'
@@ -16,7 +16,7 @@ export const ADD_LABEL = '加入追蹤'
 export const TRACKED_LABEL = '已在追蹤'
 export const PLAN_PAGE_SIZE = 20
 
-const DEFAULT_META: TrackingMeta = { tracking_version: 'plan_tracking_v1', window_sessions: 20, slippage_bps: 5, round_trip_cost_bps: 30, simulated: true }
+const DEFAULT_META: TrackingMeta = { tracking_version: 'plan_tracking_v2', window_sessions: 20, slippage_bps: 5, round_trip_cost_bps: 30, simulated: true }
 
 export function trackingNote(meta: TrackingMeta | undefined): string {
   const { slippage_bps: slippage, round_trip_cost_bps: cost } = meta ?? DEFAULT_META
@@ -31,6 +31,7 @@ export const PLAN_STATUS: Record<string, { label: string; tone: BadgeTone }> = {
   incomparable: { label: '無法比較', tone: 'warning' },
   expired: { label: '到期', tone: 'default' },
   closed: { label: '期滿結算', tone: 'default' },
+  not_entered: { label: '未進場', tone: 'default' },
   cancelled: { label: '已取消', tone: 'default' },
 }
 
@@ -50,6 +51,7 @@ const SESSION_STATUS: Record<string, string> = {
   invalidated: '失效',
   ambiguous: '順序不明',
   suspended: '停牌',
+  not_entered: '未進場',
 }
 
 export function sessionStatusLabel(status: string): string {
@@ -91,8 +93,15 @@ export function planExitLine(plan: Pick<TrackingPlan, 'outcome_date' | 'outcome_
   return plan.outcome_date && isFiniteNumber(plan.outcome_price) ? `模擬出場 ${formatDate(plan.outcome_date)} ${formatPrice(plan.outcome_price)}` : null
 }
 
+// plan_tracking_v2: the fill session opened beyond a level, so the plan was never entered (docs/spec/tracking.md).
+const NOT_ENTERED_TEXT: Record<string, string> = {
+  gap_above_target: '成交當日開盤已在目標以上，不模擬進場',
+  gap_below_invalid: '成交當日開盤已在失效價以下，不模擬進場',
+}
+
 function incomparableText(plan: Pick<TrackingPlan, 'status' | 'status_reason' | 'incomparable_reason' | 'execution_date'>): string {
   if (plan.status === 'cancelled') return '已取消'
+  if (plan.status === 'not_entered') return NOT_ENTERED_TEXT[plan.status_reason ?? ''] ?? '未模擬進場'
   if (plan.status === 'expired' || !plan.execution_date) return '視窗內未模擬成交'
   if (plan.status_reason === 'same_session_stop_and_target') return '同一交易日失效價與目標一都觸及，先後順序不明'
   if (plan.status_reason === 'insufficient_sessions') return '40 個交易日內該股不足 20 根日線'
