@@ -91,7 +91,7 @@ Collector 對三個 domain 各自計算 desired state，只操作自己擁有的
 
 ### 5.1 既有錯配 membership 修復
 
-Baseline（2026-09-14）之前匯入的 1984 筆一般產業 membership 用了錯誤的代碼→label 對照（例如 17 掛在 `Communications`、25 掛在 `Financial`），`valid_from` 填的是上市日。群組本身的 id、`name` 與 `display_name_zh` 和 label 一致，錯的是成員所在的群組。`python -m worker.cli industry repair`（`backend/worker/industry_repair.py`，[OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)）依下列規則修正：
+Baseline（2026-09-14）之前匯入的 1984 筆一般產業 membership 用了錯誤的代碼→label 對照（例如 17 掛在 `Communications`、25 掛在 `Financial`），`valid_from` 填的是上市日。群組本身的 id、`name` 與 `display_name_zh` 和 label 一致，錯的是成員所在的群組。`python -m worker.cli industry repair`（`backend/worker/industry_repair.py`，[現有 worker CLI](ops/CLI.md#現有-worker-cli)）依下列規則修正：
 
 - **證據**：`raw_payloads` 已保存的 `t187ap03_L`／`mopsfin_t187ap03_O` 擷取；每份都要核對檔案 sha256。同一檔在各份擷取的代碼不同，或和 `instruments.industry` 不一致，整批拒絕。
 - **D0**：每檔第一次出現在擷取中的 Asia/Taipei 日期（正式 DB 多數是 2026-09-08），等同補做 collector 當天略過的觀測（§4 的 `membership_effective_date`），不是分類生效日。
@@ -112,7 +112,7 @@ Baseline（2026-09-14）之前匯入的 1984 筆一般產業 membership 用了�
 
 ## 7. 題材表
 
-題材是人工維護、可跨產業、一家公司可屬多個題材的族群，與官方產業分開排行（[V1_SPEC hot_group_v1](V1_SPEC.md#hot_group_v1)）。驗證在 `backend/app/theme_table.py`，寫入在 `backend/worker/themes.py`。
+題材是人工維護、可跨產業、一家公司可屬多個題材的族群，與官方產業分開排行（[hot_group_v1](spec/hot_group.md)）。驗證在 `backend/app/theme_table.py`，寫入在 `backend/worker/themes.py`。
 
 **檔案格式**：`backend/data/themes/themes_v1.json`，`schema_version="theme-table/v1"`，頂層有 `table`（`themes_v1`）、`version`（`YYYY.MM.DD` 或 `YYYY.MM.DD.N`）與 `themes[]`。
 
@@ -134,9 +134,9 @@ Baseline（2026-09-14）之前匯入的 1984 筆一般產業 membership 用了�
 
 **初版**：`2026.10.17` 收 12 個題材、77 筆成員。生效日統一為 2026-01-01，是人工回溯判定的起日；表版本日（2026-10-17）之前算出的題材榜含後見之明，不代表當時就能取得這份分類。
 
-**維護流程**：先改 JSON（附證據），再執行 `python -m worker.cli themes sync`（[OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)）。驗證失敗時 exit 1 且不寫入；成功後由下一次 analyze／daily 計分。
+**維護流程**：先改 JSON（附證據），再執行 `python -m worker.cli themes sync`（[現有 worker CLI](ops/CLI.md#現有-worker-cli)）。驗證失敗時 exit 1 且不寫入；成功後由下一次 analyze／daily 計分。
 
-**新聞題材建議**：新聞 AI 判讀（`news_llm_results.ai_theme_candidates_json`）提出的題材，由 daily 的 `theme_suggestions` 步驟彙整進 `theme_suggestions`／`theme_suggestion_news`（規則見 [V1_SPEC 新聞題材建議](V1_SPEC.md#新聞題材建議)），狀態一律 `pending_verification`；不寫 `theme_groups`、`group_memberships` 或題材表檔，不計分、不進榜，族群頁另區列出。名稱與現有 active 題材或官方產業相同的建議記 `matched_group_id`，不當新題材列出。要把建議納入題材表，照上面的維護流程補齊附證據的成員後改 JSON 再 sync；建議本身不是證據。
+**新聞題材建議**：新聞 AI 判讀（`news_llm_results.ai_theme_candidates_json`）提出的題材，由 daily 的 `theme_suggestions` 步驟彙整進 `theme_suggestions`／`theme_suggestion_news`（規則見 [新聞題材建議](spec/theme_suggestions.md)），狀態一律 `pending_verification`；不寫 `theme_groups`、`group_memberships` 或題材表檔，不計分、不進榜，族群頁另區列出。名稱與現有 active 題材或官方產業相同的建議記 `matched_group_id`，不當新題材列出。要把建議納入題材表，照上面的維護流程補齊附證據的成員後改 JSON 再 sync；建議本身不是證據。
 
 **候選題材群組（保留）**：`group_type="theme_candidate"`（`active=false`、`name_status="pending_verification"`、成員 `role="candidate"`）保留給日後的人工核實流程，目前沒有程式產生；這類群組即使誤設為 active 也不計分、不進榜。
 

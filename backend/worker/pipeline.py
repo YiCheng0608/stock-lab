@@ -63,7 +63,7 @@ from app.models import (
     TechnicalFeature,
     ThemeGroup,
 )
-from app import margin_lists
+from app import margin_lists, margin_zero_base
 from app.news import sync_news_from_events
 from app.strategies import (
     REGISTRY,
@@ -764,9 +764,11 @@ def _strategy_institutional_flow_to_average_volume_ratio(
     return flow / average_volume if average_volume > 0 else None
 
 
-def _margin_change_ratio(
+def _margin_window_balances(
     db: Session, instrument_id: int, score_date: date
-) -> float | None:
+) -> tuple[Any, Any] | None:
+    """(T-5, T) margin balances of the six sessions; None without six chip rows."""
+
     dates = _effective_trading_dates(db, instrument_id, score_date, 6)
     if len(dates) < 6:
         return None
@@ -778,15 +780,36 @@ def _margin_change_ratio(
         )
         .order_by(ChipSnapshot.trading_date)
     ).all()
-    if (
-        len(chips) < 6
-        or chips[0].margin_balance in (None, 0)
-        or chips[-1].margin_balance is None
-    ):
+    if len(chips) < 6:
         return None
-    return (chips[-1].margin_balance - chips[0].margin_balance) / abs(
-        chips[0].margin_balance
-    )
+    return chips[0].margin_balance, chips[-1].margin_balance
+
+
+def _margin_change_ratio(
+    db: Session, instrument_id: int, score_date: date
+) -> float | None:
+    balances = _margin_window_balances(db, instrument_id, score_date)
+    if balances is None:
+        return None
+    first, last = balances
+    if first in (None, 0) or last is None:
+        return None
+    return (last - first) / abs(first)
+
+
+def _margin_zero_base(
+    db: Session, instrument_id: int, score_date: date, ratio: float | None
+) -> str | None:
+    """app.margin_zero_base state of a ratio without a base (#404); None otherwise.
+
+    Same six sessions and chip rows as ``_margin_change_ratio``; read only
+    when there is no ratio.
+    """
+
+    if _safe_float(ratio) is not None:
+        return None
+    balances = _margin_window_balances(db, instrument_id, score_date)
+    return None if balances is None else margin_zero_base.zero_base_state(*balances)
 
 
 # (exchange, session) -> (margin_lists id, raw payload id, codes); a list row
@@ -976,10 +999,12 @@ def _calculate_group_scores(
 ) -> None:
     """Score the active groups of ``score_date`` and rank them per board.
 
-    ``group_ids`` limits the scored (and ranked) groups to those ids; daily
-    leaves it out and scores every active group.  A rebuild of an old session
-    passes the groups that session already has scores for, so it never adds
-    a group to history with today's group definitions (#409).
+    ``group_ids`` replaces that selection with exactly those ids; daily leaves
+    it out and scores every active group.  A rebuild of an old session passes
+    the groups that session already has scores for, so it never adds a group
+    to history with today's group definitions (#409), and it scores them
+    whether or not they are active now: the session's own groups are its
+    ranking population, and today's ``active`` flag must not change it (#412).
     """
     benchmark = _benchmark_instrument(db)
     benchmark_returns = (
@@ -990,9 +1015,10 @@ def _calculate_group_scores(
     benchmark_dates = (
         _effective_trading_dates(db, benchmark.id, score_date, 20) if benchmark else []
     )
-    query = select(ThemeGroup).where(ThemeGroup.active.is_(True))
-    if group_ids is not None:
-        query = query.where(ThemeGroup.id.in_(list(group_ids)))
+    if group_ids is None:
+        query = select(ThemeGroup).where(ThemeGroup.active.is_(True))
+    else:
+        query = select(ThemeGroup).where(ThemeGroup.id.in_(list(group_ids)))
     groups = db.scalars(query).all()
     computed: list[dict[str, Any]] = []
     file_evidence: dict[date, dict[str, int]] = {}
@@ -1692,6 +1718,7 @@ def _signal_context(
     )
     margin_ratio = _margin_change_ratio(db, instrument.id, signal_date)
     margin_financing = _margin_financing(db, instrument, signal_date, margin_ratio)
+    margin_base = _margin_zero_base(db, instrument.id, signal_date, margin_ratio)
     prior_window = _prior_20_window(db, instrument.id, signal_date) if feature else {}
     inputs = StrategyInputs(
         bar_count=bar_count,
@@ -1706,6 +1733,7 @@ def _signal_context(
         institutional_flow_ratio_5d=strategy_flow_ratio,
         margin_change_ratio_5d=margin_ratio,
         margin_financing=margin_financing,
+        margin_zero_base=margin_base,
     )
     input_provenance = None
     capture_mode = (
@@ -1929,6 +1957,9 @@ def _write_strategy_signal(
             # app.margin_lists state (Issue #392); the lists it read are
             # margin_lists rows of the ratio's sessions.
             "margin_eligibility": inputs.margin_financing,
+            # app.margin_zero_base state (Issue #404): the ratio's base was
+            # 0; null when the ratio is defined or its data is missing.
+            "margin_zero_base": inputs.margin_zero_base,
             "bar_count_60d": inputs.bar_count,
             "ma20": inputs.ma20,
             "ma60": inputs.ma60,
@@ -3433,7 +3464,7 @@ LISTED_INSTRUMENT_TYPES = ("stock", "ipo", "etf")
 # A sync that would close more than this share of one exchange's active
 # instruments (at least STATUS_SYNC_MIN_LIMIT) is not applied: an incomplete
 # official list must not delist the market.  The skip is a non-core warning
-# plus a data_quality row the watchdog reports (OPERATIONS §6.1).
+# plus a data_quality row the watchdog reports (docs/ops/WATCHDOG.md).
 STATUS_SYNC_MAX_SHARE = 0.05
 STATUS_SYNC_MIN_LIMIT = 5
 STATUS_SYNC_VERSION = "instrument-status-v1"
@@ -5032,7 +5063,7 @@ def _corporate_action_factor(
     *,
     fallback_reference_prices: dict[date, float] | None = None,
 ) -> tuple[float, bool]:
-    """The cumulative raw price-basis factor of ``actions`` (V1_SPEC 還原因子).
+    """The cumulative raw price-basis factor of ``actions`` (docs/spec/indicators.md 還原因子).
 
     Per row: an explicit ``price_factor``; else the official reference ratio
     when it decides (``official_reference_factor``); else the field factor

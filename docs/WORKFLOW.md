@@ -1,14 +1,15 @@
-<!-- owns: 唯一來源對照、Issue 標題前綴、版本完成判定、資料與功能拆線、分流、任務流程、留言類型、本機檢查、review 與合併、PR 檢查規則、CI 後端測試分流、長期整合分支、統籌 session、無人值守運作、失敗處理、程式索引 -->
+<!-- owns: 唯一來源對照、Issue 標題前綴、版本完成判定、資料與功能拆線、分流、任務流程、留言類型、本機檢查、review 與合併、PR 檢查規則、CI 後端測試分流、長期整合分支、失敗處理、程式索引 -->
 # GitHub 工作手冊
 
-[AGENTS](../AGENTS.md) 管角色與原則，本文管操作細節與模板。
+[AGENTS](../AGENTS.md) 管角色與原則，本文管操作細節與模板；統籌 session 與無人值守運作見 [COORDINATOR](COORDINATOR.md)。
 
 ## 欄位與唯一來源
 
 | 資訊 | 位置 |
 | --- | --- |
 | 程式與文件 | [YiCheng0608/stock-lab](https://github.com/YiCheng0608/stock-lab)，正式 branch `master`；[主線規則](https://github.com/YiCheng0608/stock-lab/rules/24769026)要求 PR、只允許 merge commit、禁止強推，required check 為 CI 的 `required` |
-| 產品方向、版本範圍、已完成能力 | [ROADMAP](ROADMAP.md) |
+| 產品方向、版本範圍 | [ROADMAP](ROADMAP.md) |
+| 已完成能力 | [CAPABILITIES](CAPABILITIES.md) |
 | 前端視覺與互動 | [DESIGN_SYSTEM](DESIGN_SYSTEM.md) |
 | 任務目標、範圍、AC、決策、結果 | Issue 本文與留言 |
 | 版本任務集合 | [V1 milestone](https://github.com/YiCheng0608/stock-lab/milestone/1) |
@@ -38,7 +39,7 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
 
 ## 任務流程
 
-1. **建單**：套 [任務模板](../.github/ISSUE_TEMPLATE/task.md)，填目標、範圍、AC、依賴、對應 gate；套 milestone；看板設待辦。UI 任務（改五個主導航的頁面）的 AC 固定加一條「更新對應的 [`features/*.md`](../.claude/skills/verify-stock-lab/features/) 或寫明不需更新」。
+1. **建單**：套 [任務模板](../.github/ISSUE_TEMPLATE/task.md)，填目標、範圍、AC、依賴、對應 gate；套 milestone；看板設待辦。UI 任務（改五個主導航的頁面）的 AC 固定加一條「更新對應的 [`features/*.md`](../.claude/skills/verify-stock-lab/features) 或寫明不需更新」。
 2. **開工**：統籌把任務全文（Issue 連結、AC、白名單、驗證方式，以及「提問與回報照[留言類型](#留言類型)寫在 Issue／PR 留言」一點）寫成 UTF-8 檔（不經 PowerShell 管線），放 worktree 外、統籌換手後仍在的目錄（例如 `$HOME/t<issue>/task/task.md`；工程師把 `$HOME/t<issue>/` 列進 PR 本文的 worktree 外暫存目錄，結案時以 `--extra-dir` 刪）。pytest 的 `--basetemp` 要用同一目錄下的另一個子目錄（例如 `$HOME/t<issue>/b1`），因為 pytest 開跑時會清空 basetemp，全綠時也會刪掉它，任務檔不能放在裡面。目錄名不能含 `"`、`$`、反引號、`%`、`!`，dispatch.sh 會拒絕（exit 64）。寫好後跑一行：
 
    ```text
@@ -56,7 +57,7 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
    ```
 
    terminal 只收到這一句，`<path>` 是任務檔的絕對路徑（Windows 寫成 `C:/…`）；任務全文不經 terminal，沒有長度上限，引號、`$`、反引號與換行都不必跳脫（#315）。`--add-dir` 讓 session 不管在哪種權限模式下，讀任務檔都不會跳詢問。wait 回 `satisfied:true` 才送，送出後看 `turn_started` 並讀回 terminal，最後看板設開發中；輸出一行 JSON（worktree、branch、HEAD、terminal、任務檔路徑、是否已送出）。exit 1 是未送出；exit 3 是已送出但未見開始，先 `orca terminal read`，不要重送。工程師接手後在 Issue 留一則 `回報：開工` 留言（session、branch、HEAD、任務檔路徑、任務檔裡的 Issue 連結與 AC 數）；統籌拿 Issue 連結與 AC 數對照任務檔，對不上就是沒讀到完整檔案，在 Issue 留言後通知工程師重讀。五個主導航的端到端驗證由 CI `verify` job 負責（[verify-stock-lab CI 模式](../.claude/skills/verify-stock-lab/SKILL.md#ci-模式)，依改動範圍只驗受影響的頁），工程師不必在自己的 branch 另跑；UI 任務的截圖仍依規則 c 附在 PR。
-   派工後的新 PR 與新留言由常駐的事件 monitor 發現並喚醒統籌（[無人值守運作](#無人值守運作)），統籌 session 不必自己輪詢。工程師的提問與回報照[留言類型](#留言類型)寫在 Issue／PR 留言，不依賴口頭通知。反方向：工程師 session 不會自己查 GitHub，統籌在 Issue／PR 留言給工程師（`review：`、`決定：`）後，必須對該工程師 terminal 送一句短通知並附留言連結，再讀回確認已開始處理；內容以留言為準，terminal 只用來喚醒。
+   派工後的新 PR 與新留言由常駐的事件 monitor 發現並喚醒統籌（[無人值守運作](COORDINATOR.md#無人值守運作)），統籌 session 不必自己輪詢。工程師的提問與回報照[留言類型](#留言類型)寫在 Issue／PR 留言，不依賴口頭通知。反方向：工程師 session 不會自己查 GitHub，統籌在 Issue／PR 留言給工程師（`review：`、`決定：`）後，必須對該工程師 terminal 送一句短通知並附留言連結，再讀回確認已開始處理；內容以留言為準，terminal 只用來喚醒。
 3. **實作**：只改任務需要的檔案；共用檔案（如 `frontend/src/App.tsx`、`backend/app/api.py`）改動前先看是否有其他進行中的任務也在改，有就在 Issue 協調。放 token 的 `.env` 由使用者自己建，agent 只看 `.env.example`（key 與說明寫在那裡）；`.env` 不讀、不搜、不複製、不改，要它的值時請使用者執行。這個 hook 防的是 agent 不小心讀到，防不了刻意繞過（例如先寫一支會讀 `.env` 的腳本再執行），真 token 放進 `.env` 前要知道這點。hook 對 Bash／PowerShell 從寬擋：命令字串提到 `.env` 路徑就擋，連 commit 訊息與 heredoc 裡的字也算，要搜這段文字改用 Grep 工具（pattern 不檢查）、commit 訊息改用 `-F <檔案>`。compose 會把 env file 的值展開進容器的環境變數，所以 hook 也擋會印出它們的 docker 命令（#360）：
    - `docker compose config` 只放行 `-q`／`--quiet`、`--no-interpolate`、`--services` 三種寫法。旗標要直接寫在 `config` 後面，不能是前一個選項的值（`--profile -q` 不算）。另外不能加 `-o`／`--output`、`--environment`、`--variables`，也不能寫帶 `=` 的安全旗標或 `=false` 之類的值（`--quiet=false` 會把它關掉）。
    - `docker inspect`（含 `container`／`image`／`service inspect`）要加 `--format`／`-f`，而且 format 不能取 `Env`、整個 `.Config`、`.` 或 `$`。`network`、`volume inspect` 不擋。
@@ -72,10 +73,10 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
    - **不碰的東西**：base image（`python`、`node`、`nginx`、`alpine` 等）與其他專案的 image。
    - **docker 無回應時**：沒有 docker、daemon 沒回應，或任一次呼叫超過 30 秒（`CLOSE_TASK_DOCKER_TIMEOUT`），只記 `docker_skipped:<原因>`，不刪 Docker 資源，結案照常完成。刪不掉的資源記 `docker_failed:<種類>:<名稱>`，不讓結案失敗。
    - **steps**：JSON 的 steps 逐一列出刪掉的資源，格式是 `docker_removed:<種類>:<名稱>`。
-   結案時對照本次 review 留言、CI 失敗與使用者糾正，用一次 `gh search issues "<關鍵字>" --repo YiCheng0608/stock-lab --match comments` 查同關鍵字的「第一次」留言（留言格式見 [encode-lesson skill](../.claude/skills/encode-lesson/SKILL.md) 第 1 步），不用 `--paginate` 翻全部留言；有重複就是第二次，另建一張 `[任務]` 把它編成會失敗的檢查（[#228](https://github.com/YiCheng0608/stock-lab/issues/228)），並更新 [AGENTS](../AGENTS.md#規則與強制手段) 對照表。
+   結案時對照本次 review 留言、CI 失敗與使用者糾正，用一次 `gh search issues "<關鍵字>" --repo YiCheng0608/stock-lab --match comments` 查同關鍵字的「第一次」留言（留言格式見 [encode-lesson skill](../.claude/skills/encode-lesson/SKILL.md) 第 1 步），不用 `--paginate` 翻全部留言；有重複就是第二次，另建一張 `[任務]` 把它編成會失敗的檢查（[#228](https://github.com/YiCheng0608/stock-lab/issues/228)），並更新 [GUARDRAILS](GUARDRAILS.md) 對照表。
    每個 gate 收尾、或每合併約 3 個 PR 後，統籌在以最新 `origin/master` 為底的 worktree 跑一次 [verify-stock-lab 真資料模式](../.claude/skills/verify-stock-lab/SKILL.md#真資料模式)（五頁全套，正式 DB 唯讀副本），結果貼在該 gate 的 Issue。verify（CI 或真資料）抓到的 bug，修的同一個 PR 要加一條會先失敗的檢查（測試或 verify 檢查項），不能只修不加。worktree 的 branch 命名 `task/<貼結果的 Issue>-...`（否則 Evidence 不推 `pr-assets`），並在該 worktree 另開 session 執行（skill 拒絕在 `master` 分支跑）。發佈與部署（tag、`deploy.sh`）見 [RELEASE](RELEASE.md)；V1 G7 窗口的五點（兩條 branch、V1 改動兩個 PR、真資料 verify、每日核對、窗口結束）見 [RELEASE 的 V1 發佈隔離](RELEASE.md#v1-發佈隔離g7-窗口專用)。
    每個 gate 收尾時，統籌另跑一次 DB 深度審查（[#391](https://github.com/YiCheng0608/stock-lab/issues/391)）：先用 `tools/ops/copy_db.py` 取正式 DB 的唯讀副本，在以最新 `origin/master` 為底的 worktree 跑 `python tools/audit/audit.py --db <副本> --out <目錄>`，把 `<目錄>/summary.md` 貼在該 gate 的 Issue。
-   - **審什麼**：工具不 import 產品的計算函式，依 [V1_SPEC](V1_SPEC.md) 獨立重算全歷史，比對日線、raw、除權息欄位與缺漏、來源與日期欄位、技術指標、訊號的法人與融資比率、候選分數與族群分數。項目清單與各項範圍寫在 [`audit.py`](../tools/audit/audit.py) 開頭。
+   - **審什麼**：工具不 import 產品的計算函式，依 [Canonical v1 規格](spec/README.md) 獨立重算全歷史，比對日線、raw、除權息欄位與缺漏、來源與日期欄位、技術指標、訊號的法人與融資比率、候選分數與族群分數。項目清單與各項範圍寫在 [`audit.py`](../tools/audit/audit.py) 開頭。
    - **只讀**：DB 用唯讀連線，raw 依副本的 `payload_path` 經 `app.raw_paths.payload_file` 找檔（舊 Windows 路徑在容器內讀 `STOCK_RAW_DIR` 底下），只以 `rb` 開啟；兩處都沒有時，`--raw-dir` 可改指 raw 副本。拒絕正式 DB（含 hard link）、`--out` 指到正式資料目錄底下（字面與解析連結後都比）、台北 18:30～21:30 與可用記憶體不足（`--min-free-gb`，預設 5）。跑到 18:30 就停在下一項之前，其餘記無法判定，exit 3；21:30 後用 `--only` 補跑剩下的項目。
    - **三態**：失敗是 DB 和重算或 raw 不一致；無法判定是 raw 讀不到、母體重建不出，或列寫入之後它讀到的輸入才被更正而沒有重算（`inputs_changed_after_write`：籌碼比率只看窗口內的籌碼列與日線，價格類只看窗口內的除權息；筆數與例子列在 summary）。失敗的項目由統籌建 Issue 處理，工具不修資料。
    master 另有 CI 每晚全套（`schedule`，台北 22:40；也可手動 `workflow_dispatch`）：後端、前端全部跑，`verify` 驗五頁。紅了照 master CI 紅處理（見 [Review 與合併](#review-與合併)）。
@@ -97,16 +98,16 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
 - `決定：` 要附它回覆的提問留言連結（`…#issuecomment-<id>`，只寫 ID 不算）。`決定：` 寫在提問所在的 Issue／PR；PR 可能先關時（改開新 PR、Docker 子單），寫在 Issue：`patrol.sh` 只讀 open Issue 與 open PR，寫在已關的 PR 上的決定讀不到，提問會變回未回覆。
 - 第一行前面的空行與空白可以；第一行不要加粗或引用（`**提問：**`、`> 提問：` 都不算類型）。
 - [`patrol.sh`](../tools/ops/patrol.sh) 讀 open Issue 與 open PR 的留言，把還沒有 `決定：` 連到它的 `提問：` 逐筆列為「未回覆的提問」（Issue 號、留言連結、經過時間）；判斷只看第一行開頭與連結，寫在 [`coordinator_json.py`](../tools/ops/coordinator_json.py) 的 `unanswered_questions`。只讀對話留言，PR review 與行內留言不算。
-- 治理 Issue #1 的留言照[無人值守運作](#無人值守運作)的寫法（「待使用者」與決策紀錄），不套本表，`patrol.sh` 也不讀它：#1 是使用者決策的治理單，工程師不在那裡提問；它的留言又超過一頁，讀了只會每次都印「未查完」。
+- 治理 Issue #1 的留言照[無人值守運作](COORDINATOR.md#無人值守運作)的寫法（「待使用者」與決策紀錄），不套本表，`patrol.sh` 也不讀它：#1 是使用者決策的治理單，工程師不在那裡提問；它的留言又超過一頁，讀了只會每次都印「未查完」。
 
 ## 本機檢查
 
-在容器內跑，用 CI 同一套 image 與依賴（[OPERATIONS §1.2](OPERATIONS.md#12-docker-compose)；需要 Docker Compose 2.24 以上）。Git Bash、worktree 根目錄執行。`-p task-<issue>` 是任務的 compose project，image、容器與 volume 都以它開頭，各 worktree 互不影響；`dispatch.sh` 以 Git Bash（`--shell git-bash`，前綴是 POSIX 寫法）開 terminal，並用 `COMPOSE_PROJECT_NAME=task-<issue> claude …` 啟動，漏了 `-p` 也落在同一個 project。這個變數只跟著那一次 `claude`：resume 工程師 session 時寫成 `COMPOSE_PROJECT_NAME=task-<issue> claude --resume <ID> --effort <原 level>`；Orca 自己 resume 的 session 沒有它，只靠命令裡的 `-p`。`--build` 從工作樹（含未 commit 的改動）重建 image，沒改的層走快取。
+在容器內跑，用 CI 同一套 image 與依賴（[Docker compose](ops/SETUP.md#docker-compose)；需要 Docker Compose 2.24 以上）。Git Bash、worktree 根目錄執行。`-p task-<issue>` 是任務的 compose project，image、容器與 volume 都以它開頭，各 worktree 互不影響；`dispatch.sh` 以 Git Bash（`--shell git-bash`，前綴是 POSIX 寫法）開 terminal，並用 `COMPOSE_PROJECT_NAME=task-<issue> claude …` 啟動，漏了 `-p` 也落在同一個 project。這個變數只跟著那一次 `claude`：resume 工程師 session 時寫成 `COMPOSE_PROJECT_NAME=task-<issue> claude --resume <ID> --effort <原 level>`；Orca 自己 resume 的 session 沒有它，只靠命令裡的 `-p`。`--build` 從工作樹（含未 commit 的改動）重建 image，沒改的層走快取。
 
-測試與 `checks.py` 讀 git，而 image 不含 `.git`；worktree 的 `.git` 是指向 Windows 路徑的檔案，容器裡讀不到。所以唯讀掛進共用的 git 目錄，再掛一個指向其中 `worktrees/<worktree 名>` 的 `.git` 檔，容器裡的 git 讀到的就是這個 worktree 的 branch、HEAD 與 index。每個新 shell 先跑（`$T` 是 worktree 外暫存目錄，寫進 PR）：
+測試與 `checks.py` 讀 git，而 image 不含 `.git`；worktree 的 `.git` 是指向 Windows 路徑的檔案，容器裡讀不到。所以唯讀掛進共用的 git 目錄，再掛一個指向其中 `worktrees/<worktree 名>` 的 `.git` 檔，容器裡的 git 讀到的就是這個 worktree 的 branch、HEAD 與 index。每個新 shell 先跑（`$T` 是 worktree 外暫存目錄，路徑見 [LOCAL](ops/LOCAL.md#工具)，寫進 PR）：
 
 ```bash
-T=C:/Users/YiCheng/t<issue>; mkdir -p "$T"
+T=<worktree 外暫存目錄>; mkdir -p "$T"
 printf 'gitdir: /repo.git/worktrees/%s\n' "$(basename "$(git rev-parse --git-dir)")" > "$T/gitfile"
 GIT_RO=(-v "$(git rev-parse --git-common-dir):/repo.git:ro" -v "$T/gitfile:/app/.git:ro")
 export MSYS_NO_PATHCONV=1   # 否則 Git Bash 會把 -v 的容器路徑改寫成 Windows 路徑
@@ -118,13 +119,13 @@ export MSYS_NO_PATHCONV=1   # 否則 Git Bash 會把 -v 的容器路徑改寫成
 | 前端 | `docker compose -p task-<issue> -f docker-compose.yml -f docker-compose.dev.yml run --rm --build web pnpm run test:ci`；同樣的前綴接 `web pnpm run build`（dev image，`frontend/` bind mount 進容器，`dist/` 寫回工作樹） |
 | 文件／repo | `docker compose -p task-<issue> run --rm --build "${GIT_RO[@]}" api python -B tools/ci/checks.py repository --base <PR 目標分支的完整 SHA>`（比 base 與工作樹，`--no-commit` 合併時檢的是合併結果）；`docker compose -p task-<issue> run --rm --build "${GIT_RO[@]}" api python -B -m unittest discover -s tools/ci -p 'test_*.py'` |
 
-- 有真 env file 時，哪些輸出會帶 token、不能貼到 GitHub，見 [OPERATIONS §1.2](OPERATIONS.md#12-docker-compose) 的 `STOCK_ENV_FILE`。
-- 台北 18:30～21:30 不跑全套 pytest 與 `docker build`（[無人值守運作](#無人值守運作)）。
+- 有真 env file 時，哪些輸出會帶 token、不能貼到 GitHub，見 [Docker compose](ops/SETUP.md#docker-compose) 的 `STOCK_ENV_FILE`。
+- 台北 18:30～21:30 不跑全套 pytest 與 `docker build`（[無人值守運作](COORDINATOR.md#無人值守運作)）。
 - 結案時（[任務流程](#任務流程)第 6 步）統籌在 `close_task.sh` 之前跑 `docker compose -p task-<issue> -f docker-compose.yml -f docker-compose.dev.yml down --volumes --rmi all`，刪掉這個 project 的容器、網路、volume 與 image；`$T` 以 `--extra-dir` 交給 `close_task.sh`。
 
 每個 checkout 設一次 `git config blame.ignoreRevsFile .git-blame-ignore-revs`，`git blame` 會略過 [`.git-blame-ignore-revs`](../.git-blame-ignore-revs) 列出的全檔格式化 commit。
 
-容器外的工具（`tools/ops/*.sh`、`tools/verify/*.py` 的 G7 真資料 verify）用的 Python 是 `C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe`（PATH 上的 python 是 Store stub）。資料路徑見 [OPERATIONS](OPERATIONS.md)。
+容器外的工具（`tools/ops/*.sh`、`tools/verify/*.py` 的 G7 真資料 verify）用的 Python 是[容器外的 Python](ops/LOCAL.md#工具)（PATH 上的 python 是 Store stub）。資料路徑見 [LOCAL](ops/LOCAL.md#正式位置使用者決定)。
 
 ## Review 與合併
 
@@ -142,56 +143,17 @@ export MSYS_NO_PATHCONV=1   # 否則 Git Bash 會把 -v 的容器路徑改寫成
 
 ## 長期整合分支
 
-多張子單要整批進 master 時，子單的 PR 先進一條長期整合分支。目前只有 `feat/docker`（Docker 母單 [#331](https://github.com/YiCheng0608/stock-lab/issues/331)）。
+多張子單要整批進 master 時，子單的 PR 先進一條長期整合分支。目前沒有；過去有 `feat/docker`（Docker 母單 [#331](https://github.com/YiCheng0608/stock-lab/issues/331)），2026-11-03 由 PR #420 併入 master，#428 把它移出清單。
 
-- **建立與保護**：統籌從最新 `origin/master` 切出、推上 GitHub，再建 ruleset。ruleset 內容與 master 的[主線規則](https://github.com/YiCheng0608/stock-lab/rules/24769026)相同，只換目標分支：禁止刪除、禁止強推、只經 PR 以 merge commit 合併、CI `required` 綠才合併。另有兩項也相同：PR 分支要跟上目標分支，review 討論要全部解決。`feat/docker` 從 `5c8deb0` 切出，ruleset 是 [26027657](https://github.com/YiCheng0608/stock-lab/rules/26027657)，可用 `gh api repos/YiCheng0608/stock-lab/rulesets/<id>` 對照兩份的 `rules`。長期整合分支的清單只寫在 [`close_task.sh`](../tools/ops/close_task.sh) 的 `integration_branches`。CI 對它的 PR 與 push 都要跑，所以每個分支也要列在 `.github/workflows/ci.yml` 的 `pull_request`／`push` branches；`tools/ci/test_checks.py` 的 `WorkflowTriggers` 會核對兩邊一致。新增長期整合分支時，同一個 PR 改這兩處。
-- **第一次派工之前**：PR 的 CI 讀的是 merge ref 裡的 `ci.yml`。整合分支如果是在 `ci.yml` 列入它之前切出的，從它開的 PR 不會跑 CI，`required` 不會回報，PR 就合不進去；push 也沒有 run，`close_task.sh` 會讀到 `missing`。這種情況要先開一次「master → 整合分支」的同步 PR（做法見下方「跟上 master」），合併後才派子單。`feat/docker` 就是這種情況：它從 `5c8deb0` 切出，早於 #332。
-- **派工**：`dispatch.sh … --base origin/feat/docker`（[任務流程](#任務流程)第 2 步）。工程師以 `gh pr create --base feat/docker` 開 PR，跟上目標分支時合併 `origin/feat/docker`。
+- **建立與保護**：統籌從最新 `origin/master` 切出、推上 GitHub，再建 ruleset。ruleset 內容與 master 的[主線規則](https://github.com/YiCheng0608/stock-lab/rules/24769026)相同，只換目標分支：禁止刪除、禁止強推、只經 PR 以 merge commit 合併、CI `required` 綠才合併。另有兩項也相同：PR 分支要跟上目標分支，review 討論要全部解決。可用 `gh api repos/YiCheng0608/stock-lab/rulesets/<id>` 對照兩份的 `rules`（過去的 `feat/docker` 從 `5c8deb0` 切出，ruleset 是 26027657）。長期整合分支的清單只寫在 [`close_task.sh`](../tools/ops/close_task.sh) 的 `integration_branches`。CI 對它的 PR 與 push 都要跑，所以每個分支也要列在 `.github/workflows/ci.yml` 的 `pull_request`／`push` branches；`tools/ci/test_checks.py` 的 `WorkflowTriggers` 會核對兩邊一致。清單可以是空的（`integration_branches=()`）。新增長期整合分支時，同一個 PR 改這兩處。
+- **第一次派工之前**：PR 的 CI 讀的是 merge ref 裡的 `ci.yml`。整合分支如果是在 `ci.yml` 列入它之前切出的，從它開的 PR 不會跑 CI，`required` 不會回報，PR 就合不進去；push 也沒有 run，`close_task.sh` 會讀到 `missing`。這種情況要先開一次「master → 整合分支」的同步 PR（做法見下方「跟上 master」），合併後才派子單。`feat/docker` 當時就是這種情況：它從 `5c8deb0` 切出，早於 #332。
+- **派工**：`dispatch.sh … --base origin/<整合分支>`（[任務流程](#任務流程)第 2 步）。工程師以 `gh pr create --base <整合分支>` 開 PR，跟上目標分支時合併 `origin/<整合分支>`。
 - **結案**：`close_task.sh` 讀 PR 的 `baseRefName`，查的是目標分支的 CI 與歷史（[任務流程](#任務流程)第 6 步）。目標只接受 master 與 `integration_branches`；進 `release/*` 或其他分支的 PR 會被拒絕，什麼都不刪，要結案就用 `--pr` 指定進 master 的那個 PR。
 - **關 Issue**：PR 合併進非預設分支時，GitHub 不會依 `Closes #<issue>` 關 Issue。所以目標不是 master 時，close_task 在全部前提成立後、刪除任何東西之前，執行 `gh issue close <issue>`，並留言 PR 與 merge commit。
   - 關不掉，而且讀回 Issue 仍是開的：停下，不刪任何東西。
   - Issue 已經關了（例如刪除步驟失敗後重跑）：不再呼叫 `gh issue close`，照常清理。
   - 目標是 master 時不呼叫；`--no-board` 的試跑也不關。
-- **跟上 master 與收尾**：master 每週至少合併進整合分支一次。因為整合分支只收 PR，做法是從 `origin/feat/docker` 開 branch、合併 `origin/master` 後開 PR。全部子單完成後，整合分支開一個 PR 進 master；Docker 另要等 G7 通過，見 #331。合併後統籌移除它的 ruleset 與分支，並把分支從 `integration_branches` 與 `ci.yml` 移除。
-
-## 統籌 session
-
-同時只有一個統籌，開啟一律由 agent 執行，使用者不手動開：現任統籌觸發換手時自己開；統籌不在時使用者對任一 Claude session 說「開統籌」。開啟者先讀心跳檔 `<資料目錄>/logs/coordinator-heartbeat.json`（資料目錄見 [OPERATIONS §6](OPERATIONS.md#6-排程)）：心跳在 60 分鐘內就不開，改對心跳記的 handle 送一句「請跑 bash tools/ops/patrol.sh 處理事件佇列」；否則在 `master` 管理 checkout 開可見 terminal：
-
-```text
-orca terminal create --worktree id:<repoId>::<master 路徑> --title "統籌" --command "claude --model claude-opus-5-5 --effort medium --autocompact 400k" --json
-orca terminal wait --terminal <handle> --for tui-idle --timeout-ms 60000 --json
-orca terminal send --terminal <handle> --text "<接手文>" --enter --json
-orca terminal rename --terminal <handle> --title "統籌" --json
-```
-
-`--autocompact 400k` 把自動壓縮視窗設在 400K，不等到模型上限才壓縮。標題只是給人看的，存活判定一律用心跳檔。接手文固定如下，開啟者原文送出，心跳記的舊 terminal 已不存在時刪掉最後一句；開啟者若不是統籌本人，開完只回報 handle，不再對 repo 寫入：
-
-```text
-你是 stock-lab 的統籌。先讀 AGENTS.md、docs/GITHUB_WORKFLOW.md、docs/ROADMAP.md、治理 Issue #1 本文的決策索引與最近 10 則留言、所有 open Issues 與 PR、最近 48 小時內關閉的 Issue 與合併的 PR 的最後一則留言。接著：跑 bash tools/ops/wake_listener_start.sh（wake listener 沒在跑就啟動），再跑 bash tools/ops/patrol.sh（寫心跳檔、列出事件佇列），處理未處理的事件，處理完以 --done 標記（手冊「無人值守運作」）；在 #1 留言「統籌 session 更換：<terminal handle>／<session id>」並更新 #1 本文的現任統籌；以 `決定：` 回覆 patrol.sh 列出的每一則未回覆的提問，以及沒有類型的舊格式提問；兌現前任 `統籌承諾：` 留言的事；核對前任標「已完成」的事，不只接續；然後依手冊推進。回覆使用者一律繁體中文。舊統籌 terminal 為 <舊 handle>，用 orca terminal wait --for tui-idle 確認它閒置後以 orca terminal close 關掉它。
-```
-
-**自動換手機制**（統籌 session 自己執行，不需要人在場）：
-
-1. 偵測：壓縮次數由 repo 的 PreCompact hook（`.claude/settings.json` → `tools/ops/compact_hook.sh`）自動寫進 `<資料目錄>/logs/compactions/<session id>.count`，每次壓縮的時間另記一列在同目錄的 `<session id>.log`，不靠模型記得；工程師 session 也寫，統籌的是心跳檔記的 session id 那份。`patrol.sh` 第一步寫心跳檔（`session_id`、`terminal_handle`、`written_at`），第二步讀自己的計數檔；達 2 次、或自覺對不上 Issue 與文件，就換手。
-2. 執行：先寫換手標記 `<資料目錄>/logs/handoff-<session id>.json`（舊 handle、時間），之後不再合併、派工、留言；再照上面四行開新 session 並送接手文（含自己的 handle）。
-3. 接回：新 session 15 分鐘內未在 #1 留言，舊統籌刪標記檔、照常處理事件佇列，在 #1 記「換手失敗：<新 handle>」，下次處理佇列時再試。
-4. 收尾：新統籌在 #1 留言並寫心跳檔後，確認舊 terminal 閒置再關掉它，然後再跑一次 `bash tools/ops/wake_listener_start.sh`：舊統籌啟動的 wake listener 跟著它的 terminal 結束，換由新統籌啟動（[OPERATIONS §6.8](OPERATIONS.md#68-統籌事件-monitor)）。
-5. 換手不通知工程師：工程師的回報與提問一律在 Issue／PR 留言，不送到統籌 terminal；新統籌啟動時讀所有 open Issue 與 PR 並處理事件佇列（換手前後的留言都在佇列裡），之後 monitor 喚醒的是新心跳記的 terminal。新統籌之後給工程師的留言仍照[開工](#任務流程)的反方向規則通知 terminal。
-
-## 無人值守運作
-
-使用者不在時統籌照本節持續推進；使用者回來只看 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 本文與看板。
-
-- **事件佇列**：GitHub 與排程狀態由常駐的事件 monitor（[`monitor.sh`](../tools/ops/monitor.sh)，排程與管理見 [OPERATIONS §6.8](OPERATIONS.md#68-統籌事件-monitor)）輪詢，不用 LLM；統籌 session 只處理 monitor 送來的事件，不自己輪詢 GitHub、不排定時輪詢的工作，也不自己用 gh 查 PR、CI 或新留言；接手時一次性讀取 open Issue 與 PR（[接手文](#統籌-session)）不在此限。monitor 每輪最多 2 次 gh（open PR 的 CI 與 `mergeStateStatus`、repo 層級新留言）、兩輪至少隔 60 秒（5000 次／小時的限流全帳號共用），另讀 task worktree 數（並行名額）與排程日誌（含看門狗記的 gh 被拒）；新事件去重後寫入 `<資料目錄>/logs/events.jsonl`，並對心跳檔記的統籌 terminal 送一句「有 N 個事件，請處理佇列」，同一事件只喚醒一次。monitor 在 scheduler 容器裡時（#338），佇列與心跳仍是這兩個主機路徑（bind mount），喚醒與 task worktree 數經主機的 wake listener 用本機 orca 執行；listener 沒在跑時喚醒失敗、事件留在佇列，10 分鐘後再試。
-- **處理佇列**：被喚醒時（或自己開始一輪工作時）先跑 `bash tools/ops/wake_listener_start.sh`（wake listener 已在跑就什麼都不做），再跑 `bash tools/ops/patrol.sh`：[它](../tools/ops/patrol.sh)寫心跳檔、讀自己的計數檔與換手標記，印出 monitor 的心跳與它最後一輪看到的 open PR 與排程日誌最後一列、[未回覆的提問](#留言類型)、未處理的事件，不讀排程日誌（scheduler 容器的日誌在 volume 裡）。PR、CI 與新留言讀佇列，不呼叫 gh；只有未回覆的提問要讀每個 open Issue 與 PR 的最新留言（Issue 是否已關、`決定：` 連到哪則，佇列的留言事件看不出來），用一次 GraphQL 讀完、不逐一呼叫，gh 呼叫最多 `--max-gh` 次（預設 1；0 或到上限時印「未查完」，其他輸出照常）。patrol 只在統籌被喚醒或開始一輪工作時跑一次，不是輪詢。open Issue 或 PR 超過 100 個、單一 Issue 留言超過 100 則時也印「未查完」並寫出沒讀到的範圍。照這個順序處理：open PR 的 CI 與合併 → [未回覆的提問](#留言類型) → 名額空缺就派工 → 背景工作是否卡住；處理完以 `patrol.sh --done <seq>`（到該 seq 為止的未處理事件）或 `--done <事件 id>` 標記。統籌自己的留言也會成為事件，標記即可。`gh_auth` 事件（GitHub 拒絕容器的 `GH_TOKEN`，看門狗與 monitor 都無法留言）由統籌用本機 gh 在 #1 留言「待使用者」請換 token（[OPERATIONS §6.7](OPERATIONS.md#67-容器內的-claude-與-gh-認證env)），同一台北日只有一個這種事件。心跳檔若屬於另一個 session 且不到 60 分鐘，又沒有它的換手標記，就不覆寫並非 0 結束；確定要接手才加 `--take-over`。
-- **monitor 的留言**：佇列有事件等了 60 分鐘、這段期間統籌心跳都沒更新時，monitor 在 #1 留言「待使用者：請開統籌」（同一心跳只留一則），不自己開 session（#1 [6245309556](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6245309556)、[6320448594](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6320448594)）。monitor 停擺超過 10 分鐘由看門狗在 #1 留言（[OPERATIONS §6.1](OPERATIONS.md#61-排程看門狗)）。統籌兌現定時承諾（例如 G7 每日核對）可以排一次性的定時工作，不算輪詢。
-- **待辦隊列**：下一輪任務先建成 Issue（看板待辦），依 ROADMAP gate 順序排；並行名額（3）一空就從最新 `origin/master` 派下一張。沒有已建 Issue 就先建，不停擺。台北 18:30～21:30 是排程 `daily` 時段：不派新工、不跑全套 pytest、不跑全市場 analyze，也不做吃記憶體的 `docker build`。
-- **需要使用者的事**（來源與付費、刪資料、部署、對外操作、範圍變更、正式資料位置）：在 #1 留言寫清楚問題與統籌建議，標「待使用者」，轉做不受影響的工作；不猜答案、不停工。部署（[`deploy.sh`](RELEASE.md#部署)）與要發佈的 tag 範圍也在這裡：使用者在 #1 明確授權後統籌才執行，授權留言連結寫進 `--operator`；腳本本身不檢查授權。
-- **決策落地**：會影響後續判斷的使用者決定，當下寫進 #1 留言並同步更新 #1 本文的決策索引（只列仍有效的決策、待使用者事項與現任統籌，每條附留言連結）。
-- **統籌承諾**：統籌對工程師做出偏離手冊的承諾（例如合併後先不清 worktree）時，在該 Issue 留一則 `統籌承諾：` 留言（[留言類型](#留言類型)）；換手後由新統籌兌現。
-- **統籌換手**：觸發條件任一成立就換：同一 session 已自動壓縮兩次以上；統籌自覺回答對不上 Issue 與文件；使用者要求。偵測與執行步驟見[統籌 session](#統籌-session)的自動換手機制。
-- **前提與限制**：本機與 Orca 保持開機登入（monitor 在容器裡時，喚醒靠統籌 session 啟動的 wake listener，[OPERATIONS §6.8](OPERATIONS.md#68-統籌事件-monitor)）；訂閱額度由統籌、工程師與 LLM 批次共用，額度用盡時全部暫停到重置，不視為失敗；合併把關為 CI＋統籌 review＋高風險項獨立 review。
+- **跟上 master 與收尾**：master 每週至少合併進整合分支一次。因為整合分支只收 PR，做法是從 `origin/<整合分支>` 開 branch、合併 `origin/master` 後開 PR。全部子單完成後，整合分支開一個 PR 進 master（`feat/docker` 另等了 G7 通過，見 #331）。合併後開一個 PR 把分支從 `integration_branches` 與 `ci.yml` 移除（`feat/docker` 是 #428）；那個 PR 合併、master CI 綠後，統籌刪掉它的 ruleset 與分支。
 
 ## 失敗處理
 
@@ -204,8 +166,4 @@ orca terminal rename --terminal <handle> --title "統籌" --json
 
 ## 程式索引
 
-每個 worktree 用 codebase-memory 建索引（project 名稱含 worktree 名）；合併後統籌刷新 master 索引並刪任務索引。MCP 斷線用同引擎 CLI `C:/Users/YiCheng/.local/bin/codebase-memory-mcp.cmd cli --json <tool>`。索引只是查找工具，不當驗收證據。
-
-## 排程
-
-V1 的每日排程在本機以 Windows 工作排程器執行 `python -m worker.cli job daily` 與 `job news`；設定方式與日誌位置寫在 [OPERATIONS §6](OPERATIONS.md#6-排程)。排程失敗以 Issue 追蹤。
+每個 worktree 用 codebase-memory 建索引（project 名稱含 worktree 名）；合併後統籌刷新 master 索引並刪任務索引。MCP 斷線用同引擎 CLI（[LOCAL](ops/LOCAL.md#工具)）`<codebase-memory CLI> cli --json <tool>`。索引只是查找工具，不當驗收證據。

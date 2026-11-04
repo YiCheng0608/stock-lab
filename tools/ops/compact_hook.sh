@@ -5,7 +5,7 @@
 # hook's trigger (auto or manual), e.g. "2026-10-28T01:23:45Z trigger=auto"
 # (#316). Every session writes them, engineers too; the coordinator's are the
 # ones whose session id its heartbeat names. The coordinator reads its own count
-# during patrol to decide on handoff (docs/GITHUB_WORKFLOW.md, "統籌 session").
+# during patrol to decide on handoff (docs/COORDINATOR.md, "統籌 session").
 # Test hook: COMPACT_HOOK_NOW (epoch seconds).
 set -u
 input="$(cat 2>/dev/null || true)"

@@ -1,4 +1,4 @@
-"""hot_group_v1 1.1.0 institutional-flow coverage (V1_SPEC hot_group_v1, #208).
+"""hot_group_v1 1.1.0 institutional-flow coverage (docs/spec/hot_group.md, #208).
 
 A member absent from the day's received official institutional file counts as
 zero net flow with evidence; a missing or mismatched file keeps it unavailable;

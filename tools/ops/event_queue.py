@@ -86,9 +86,11 @@ TAIPEI_OFFSET = 8 * 3600
 # An Orca terminal handle: never one starting with "-", which orca would read as an
 # option (the waker passes it as --terminal=<handle> as well, #338 review).
 HANDLE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_-]*")
-# What the coordinator does about it; the token lives in the env file (OPERATIONS §6.7).
-GH_AUTH_ACTION = "請用本機 gh 在 #1 留言，請使用者換 GH_TOKEN（OPERATIONS §6.7）"
-# The merge gate: CI's required check (docs/GITHUB_WORKFLOW.md, 欄位與唯一來源).
+# What the coordinator does about it; the token lives in the env file (docs/ops/SETUP.md claude 與 gh 認證).
+GH_AUTH_ACTION = (
+    "請用本機 gh 在 #1 留言，請使用者換 GH_TOKEN（docs/ops/SETUP.md claude 與 gh 認證）"
+)
+# The merge gate: CI's required check (docs/WORKFLOW.md, 欄位與唯一來源).
 GATE = "required"
 
 
@@ -547,7 +549,7 @@ def stale(logs: Path, now: float, record_only: bool) -> str:
     body = (
         f"待使用者：請開統籌。事件佇列有 {len(pending)} 個未處理事件，最早的在 {iso(first)}"
         f" 記錄（{int((now - first) // 60)} 分鐘前），統籌{beat}，之後沒有處理佇列。"
-        f"開統籌照[工作手冊「統籌 session」](https://github.com/YiCheng0608/stock-lab/blob/master/docs/GITHUB_WORKFLOW.md#統籌-session)。"
+        f"開統籌照[統籌手冊「統籌 session」](https://github.com/YiCheng0608/stock-lab/blob/master/docs/COORDINATOR.md#統籌-session)。"
         f"\n\n（事件 monitor `tools/ops/monitor.sh` 自動留言，同一心跳只留一則；佇列 `{(logs / EVENTS).as_posix()}`。）"
     )
     return f"{key}\t{body}"

@@ -58,7 +58,7 @@ SKILL = ROOT / ".claude" / "skills" / "verify-stock-lab"
 FEATURES = SKILL / "features"
 SCREENSHOT = ROOT / "tools" / "ops" / "screenshot.cjs"
 PAGES = ("today", "news", "themes", "stocks", "actions")
-# The branch the scheduled jobs run during the V1 acceptance window (docs/OPERATIONS.md §6).
+# The branch the scheduled jobs run during the V1 acceptance window (docs/ops/SCHEDULING.md).
 G7_REF = "origin/release/v1"
 TAIPEI = timezone(timedelta(hours=8))
 

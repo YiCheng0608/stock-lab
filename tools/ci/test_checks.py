@@ -141,11 +141,12 @@ class RoutingTests(unittest.TestCase):
 
     def test_docs_read_by_backend_tests_require_python(self):
         for path in sorted((ROOT / "backend/tests").glob("*.py")):
-            for name in re.findall(
-                r'"docs" / "([\w.-]+)"', path.read_text(encoding="utf-8")
+            for parts in re.findall(
+                r'"docs"((?: / "[\w.-]+")+)', path.read_text(encoding="utf-8")
             ):
+                name = "/".join(re.findall(r'"([\w.-]+)"', parts))
                 self.assertTrue(change_flags([f"docs/{name}"])["python"], name)
-        self.assertTrue(change_flags(["docs/OPERATIONS.md"])["python"])
+        self.assertTrue(change_flags(["docs/ops/SETUP.md"])["python"])
 
     def test_links(self):
         self.assertEqual(
@@ -206,21 +207,21 @@ class AnchorTests(unittest.TestCase):
         # Each heading as written in docs/, and the anchor an existing link uses for it.
         for heading, anchor in [
             ("V1 範圍基線（2026-10-17 核定）", "v1-範圍基線2026-10-17-核定"),  # ROADMAP
-            ("統籌 session", "統籌-session"),  # GITHUB_WORKFLOW
-            ("Review 與合併", "review-與合併"),  # GITHUB_WORKFLOW
+            ("統籌 session", "統籌-session"),  # COORDINATOR
+            ("Review 與合併", "review-與合併"),  # WORKFLOW
             (
-                "6.2 daily／news 工作的註冊與管理",
-                "62-dailynews-工作的註冊與管理",
-            ),  # OPERATIONS
+                "daily／news 工作的註冊與管理",
+                "dailynews-工作的註冊與管理",
+            ),  # ops/platform/windows
             (
-                "2. 資料庫、migration 與 readiness",
-                "2-資料庫migration-與-readiness",
-            ),  # OPERATIONS
+                "資料庫、migration 與 readiness",
+                "資料庫migration-與-readiness",
+            ),  # ops/SETUP
             ("8.1 今日／個股清單壓縮卡", "81-今日個股清單壓縮卡"),  # UI_COPY_SPEC
             ("8.4 數值表格、單位與空白", "84-數值表格單位與空白"),  # UI_COPY_SPEC
-            ("價位、ETF 與生命週期", "價位etf-與生命週期"),  # V1_SPEC
-            ("strategy_levels_v1", "strategy_levels_v1"),  # V1_SPEC
-            ("策略框架與 registry", "策略框架與-registry"),  # V1_SPEC
+            ("價位、ETF 與生命週期", "價位etf-與生命週期"),  # spec/README
+            ("strategy_levels_v1", "strategy_levels_v1"),  # spec/strategy_levels
+            ("策略框架與 registry", "策略框架與-registry"),  # spec/README
         ]:
             self.assertEqual(heading_slug(heading), anchor, heading)
 
@@ -239,7 +240,7 @@ class AnchorTests(unittest.TestCase):
         self.assertEqual(
             markdown_errors(
                 "README.md",
-                f"[a]({roadmap}) [b](docs/GITHUB_WORKFLOW.md#%E7%B5%B1%E7%B1%8C-session) "
+                f"[a]({roadmap}) [b](docs/COORDINATOR.md#%E7%B5%B1%E7%B1%8C-session) "
                 "[c](tools/ci/checks.py#L1) [d](docs/PRODUCT_SPEC.md#action-merge)",
             ),
             [],
@@ -259,7 +260,7 @@ class AnchorTests(unittest.TestCase):
         self.assertEqual(
             markdown_errors(
                 "docs/x.md",
-                f"[a]({repo}/blob/master/docs/GITHUB_WORKFLOW.md#統籌-session) "
+                f"[a]({repo}/blob/master/docs/COORDINATOR.md#統籌-session) "
                 f"[b]({repo}/tree/master/tools/ci) [c]({repo}/blob/pr-assets/gone.png) "
                 f"[d]({repo}/issues/312)",
             ),
@@ -746,7 +747,8 @@ class RepositoryWorkingTree(unittest.TestCase):
 class WorkflowTriggers(unittest.TestCase):
     """CI runs on PRs into and pushes to every long-lived branch (#288, #332).
 
-    The integration branches come from close_task.sh, the one list of them.
+    The integration branches come from close_task.sh, the one list of them; it may be
+    empty (#428).
     """
 
     def test_ci_runs_on_every_long_lived_branch(self):
@@ -754,7 +756,6 @@ class WorkflowTriggers(unittest.TestCase):
 
         close_task = (ROOT / "tools/ops/close_task.sh").read_text(encoding="utf-8")
         (listed,) = re.findall(r"^integration_branches=\((.*)\)$", close_task, re.M)
-        self.assertTrue(listed.split())
         long_lived = ["master", "release/**", *listed.split()]
         workflow = yaml.load(
             (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"),
@@ -955,6 +956,61 @@ class WindowsRuntime(unittest.TestCase):
             self.assertTrue(any(path_matches(name, p) for p in RUNTIME_PATHS), name)
 
 
+class CheckoutTime(unittest.TestCase):
+    """A job that checks out the whole history has at least 10 minutes.
+
+    The fetch of every branch and tag took 5 minutes twice on PR #432 (runs 41689678889
+    and 41694319556, an attempt before it 73 seconds) and cancelled `changes` at its
+    5-minute limit, which made `required` red; `repository`, with the same checkout,
+    had 10.
+    """
+
+    MINIMUM = 10
+
+    def test_every_full_checkout_job_has_room_for_a_slow_fetch(self):
+        import yaml
+
+        jobs = yaml.load(
+            (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"),
+            Loader=yaml.BaseLoader,
+        )["jobs"]
+        full = [
+            name
+            for name, job in jobs.items()
+            if any(
+                step.get("with", {}).get("fetch-depth") == "0"
+                for step in job.get("steps", [])
+            )
+        ]
+        self.assertIn("changes", full)
+        for name in full:
+            with self.subTest(job=name):
+                self.assertGreaterEqual(
+                    int(jobs[name]["timeout-minutes"]), self.MINIMUM
+                )
+
+
+class BackendTime(unittest.TestCase):
+    """The backend job, which runs the whole backend suite, has 45 minutes.
+
+    Its green runs on 2026-11-03 and 11-04 took 20 to 29 minutes, and twice a slow runner
+    took it past the 30-minute limit on master (runs 41699184706 at 30 minutes with
+    the checkout taking 4, and 41714283264), which made `required` red; close_task.sh
+    then refuses until a rerun is green.
+    """
+
+    MINIMUM = 45
+
+    def test_the_backend_suite_has_room_for_a_slow_runner(self):
+        import yaml
+
+        jobs = yaml.load(
+            (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"),
+            Loader=yaml.BaseLoader,
+        )["jobs"]
+        self.assertGreaterEqual(int(jobs["backend"]["timeout-minutes"]), self.MINIMUM)
+
+
 class ExperimentJob(unittest.TestCase):
     """The backend-xdist experiment holds up neither a merge nor close_task.sh (#379).
 
@@ -997,7 +1053,7 @@ class ExperimentJob(unittest.TestCase):
 
 
 class RequiredJob(unittest.TestCase):
-    """A run cancelled for a newer run of the same PR head leaves required green (#421).
+    """A run cancelled for another run of the same PR head leaves required green (#421).
 
     Opening a PR and labeling it start two runs on one head; concurrency cancels the
     first, and its required, run by always() on needs that are all cancelled, used to be
@@ -1061,12 +1117,27 @@ class RequiredJob(unittest.TestCase):
         self.addCleanup(self.server.server_close)
         self.addCleanup(self.server.shutdown)
 
-    def make_run(self, run_id, *, workflow=None, head=None, pr=None):
+    def make_run(
+        self,
+        run_id,
+        *,
+        workflow=None,
+        head=None,
+        pr=None,
+        created=None,
+        conclusion=None,
+    ):
+        # A run's created_at follows its id unless given: the same second can hold two
+        # runs whose ids are in either order (PR #432: 41686965825 was cancelled while
+        # 41686965798, created the same second, went on).
+        second = 30 + run_id - self.RUN
         return {
             "id": run_id,
             "workflow_id": workflow or self.WORKFLOW,
             "head_sha": head or self.HEAD,
             "pull_requests": [{"number": pr or self.PR}],
+            "created_at": created or f"2026-11-03T17:43:{second:02d}Z",
+            "conclusion": conclusion,
         }
 
     def results(self, result="success"):
@@ -1128,9 +1199,24 @@ class RequiredJob(unittest.TestCase):
         self.assertTrue(self.requests)
         self.assertTrue(all(auth == "Bearer t0ken" for _, auth in self.requests))
 
+    def test_a_cancelled_run_with_a_lower_id_run_of_the_same_second_passes(self):
+        # PR #432: opening the PR and labeling it created both runs at 17:43:21Z, and
+        # concurrency cancelled the one with the higher id.
+        same = "2026-11-03T17:43:30Z"
+        self.runs = [self.make_run(self.RUN - 27, created=same)]
+        result = self.required(self.cancelled())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(str(self.RUN - 27), result.stdout)
+
     def test_a_cancelled_run_without_a_newer_run_of_the_same_pr_head_is_red(self):
         cases = {
             "only older runs": [self.make_run(self.RUN - 1)],
+            "a later run that was cancelled too": [
+                self.make_run(self.RUN + 1, conclusion="cancelled")
+            ],
+            "an earlier run that finished": [
+                self.make_run(self.RUN - 1, conclusion="success")
+            ],
             "another workflow": [
                 self.make_run(self.RUN + 1, workflow=self.WORKFLOW + 1)
             ],

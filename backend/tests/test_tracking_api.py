@@ -1,4 +1,4 @@
-"""User tracking plan API (V1_SPEC 使用者追蹤計畫, #253) and cancel/daily races."""
+"""User tracking plan API (docs/spec/tracking.md 使用者追蹤計畫, #253) and cancel/daily races."""
 
 from __future__ import annotations
 

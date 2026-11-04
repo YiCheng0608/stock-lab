@@ -1,6 +1,6 @@
 # Backend
 
-FastAPI、SQLAlchemy／SQLite，以及官方資料收集、回補、固定規則分析、指標批次、追蹤與回測。啟動、readiness 與 CLI 參數以[操作手冊](../docs/OPERATIONS.md)為準，能力邊界查[開發路線](../docs/ROADMAP.md)。
+FastAPI、SQLAlchemy／SQLite，以及官方資料收集、回補、固定規則分析、指標批次、追蹤與回測。啟動、readiness 與 CLI 參數以[環境、啟停與資料庫](../docs/ops/SETUP.md)與 [worker CLI](../docs/ops/CLI.md) 為準，能力邊界查[開發路線](../docs/ROADMAP.md)。
 
 ## 模組入口
 
@@ -18,6 +18,6 @@ FastAPI、SQLAlchemy／SQLite，以及官方資料收集、回補、固定規則
 | worker/indicator_batch.py；worker/collect.py、daily.py、analyze.py、evaluate.py | 每日指標批次；單一步驟的命令入口。 |
 | worker/backfill.py、worker/cli.py | 日期／scope 回補與 CLI。 |
 | worker/news_sources.py、worker/news_batch.py | 新聞 feed 來源登錄與解析；`news` 批次的去重、規則關聯與寫入。 |
-| alembic/versions | Schema revisions；建庫與升級見[操作手冊](../docs/OPERATIONS.md#2-資料庫migration-與-readiness)。 |
+| alembic/versions | Schema revisions；建庫與升級見[操作手冊](../docs/ops/SETUP.md#資料庫migration-與-readiness)。 |
 
-本機檢查命令見[工作手冊](../docs/GITHUB_WORKFLOW.md#本機檢查)；依賴版本以 `validation-requirements.lock.txt` 為 constraints。
+本機檢查命令見[工作手冊](../docs/WORKFLOW.md#本機檢查)；依賴版本以 `validation-requirements.lock.txt` 為 constraints。

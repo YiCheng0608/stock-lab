@@ -1,4 +1,4 @@
-"""User tracking plans (V1_SPEC 使用者追蹤計畫): shared rules, creation and daily update."""
+"""User tracking plans (docs/spec/tracking.md 使用者追蹤計畫): shared rules, creation and daily update."""
 
 from __future__ import annotations
 
@@ -275,7 +275,7 @@ def follow(db, instrument, *ohlcs, start=PLAN_DAY):
 
 
 def signal(db, instrument, *, status="conditional", day=PLAN_DAY, **levels):
-    version = db.info["strategies"]["breakout_v2"]
+    version = db.info["strategies"]["breakout_v3"]
     values = {
         "breakout_price": 100.0,
         "invalid_price": 98.0,
@@ -308,7 +308,7 @@ def candidate(db, instrument, sig):
         trading_date=sig.signal_date,
         instrument_id=instrument.id,
         signal_id=sig.id,
-        strategy="breakout_v2",
+        strategy="breakout_v3",
         score_version="candidate_score_v1",
         total_score=80.0,
         weight_coverage=1.0,
@@ -348,7 +348,7 @@ def test_a_plan_copies_the_signal_levels_and_versions(db):
     row = candidate(db, instrument, sig)
     plan, created = create_plan(db, sig.id, daily_candidate_id=row.id, now=CREATED)
     assert created
-    version = db.info["strategies"]["breakout_v2"]
+    version = db.info["strategies"]["breakout_v3"]
     assert (
         plan.source_kind,
         plan.strategy,
@@ -358,7 +358,7 @@ def test_a_plan_copies_the_signal_levels_and_versions(db):
         plan.tracking_version,
     ) == (
         "candidate",
-        "breakout_v2",
+        "breakout_v3",
         version.id,
         version.formula_version,
         "candidate_score_v1",

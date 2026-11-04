@@ -3417,7 +3417,7 @@ def tracking(
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    """User tracking plans (V1_SPEC 使用者追蹤計畫): open first, then the latest ended.
+    """User tracking plans (docs/spec/tracking.md 使用者追蹤計畫): open first, then the latest ended.
 
     The system signal tracking of one signal stays at /tracking/{signal_key}.
     """

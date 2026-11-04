@@ -9,7 +9,7 @@
 # Exit: 0 sent; 3 not idle; 1 anything else (no listener, token refused, no heartbeat on
 #   the host, throttled...), which monitor.sh records as a failed wake, tried again
 #   after 10 minutes.
-# Environment: STOCK_WAKE_TOKEN (the env file, docs/OPERATIONS.md §6.8), STOCK_WAKE_URL
+# Environment: STOCK_WAKE_TOKEN (the env file, docs/ops/MONITOR.md), STOCK_WAKE_URL
 #   (default http://host.docker.internal:47338/wake).
 set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

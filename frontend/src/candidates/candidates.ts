@@ -29,12 +29,14 @@ export const ZERO_REASON_TEXT: Record<string, string> = {
   all_excluded: '成立的訊號都因 ETF、價位不合法或評分資料不足被排除',
 }
 
-// Both versions read the same (#392): the UI never shows a version suffix.
+// Every version reads the same (#392, #404): the UI never shows a version suffix.
 const STRATEGY_LABELS: Record<string, string> = {
   breakout_v1: '突破條件',
   pullback_v1: '回踩條件',
   breakout_v2: '突破條件',
   pullback_v2: '回踩條件',
+  breakout_v3: '突破條件',
+  pullback_v3: '回踩條件',
 }
 
 export function candidateStrategyLabel(strategy: string): string {
@@ -94,7 +96,7 @@ export function formatDate(value: string | null | undefined): string | null {
   return match ? `${match[1]}/${match[2]}/${match[3]}` : null
 }
 
-// Sub-item names and value formats, matching the V1_SPEC candidate_score_v1 component table.
+// Sub-item names and value formats, matching the docs/spec/candidate_score.md candidate_score_v1 component table.
 type SubItemSpec = { label: string; format: (value: number) => string }
 const ratio = (digits: number) => (value: number) => `${value.toFixed(digits)} 倍`
 const percent = (value: number) => `${(value * 100).toFixed(1)}%`

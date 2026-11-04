@@ -147,10 +147,11 @@ def test_actual_forced_fallback_nine_revisions(tmp_path, monkeypatch):
 
 
 def test_operations_doc_names_the_code_head():
-    # OPERATIONS states the head in prose; REVISIONS is the single source it must follow.
-    text = (Path(__file__).resolve().parents[2] / "docs" / "OPERATIONS.md").read_text(
-        encoding="utf-8"
-    )
+    # docs/ops/SETUP.md states the head in prose; REVISIONS is the single source it must
+    # follow.
+    text = (
+        Path(__file__).resolve().parents[2] / "docs" / "ops" / "SETUP.md"
+    ).read_text(encoding="utf-8")
     assert re.findall(r"程式 Alembic head 是 `([^`]+)`", text) == [
         readiness.REVISIONS[-1]
     ]

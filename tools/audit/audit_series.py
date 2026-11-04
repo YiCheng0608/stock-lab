@@ -1,7 +1,7 @@
 """Per-instrument series of the audit: indicators and the window inputs (Issue #391).
 
-Written from docs/V1_SPEC.md (技術指標, breakout_v1 法人／融資, hot_group_v1,
-candidate_score_v1), not from the product code: plain loops over the stored
+Written from docs/spec/ (indicators.md, breakout_pullback.md breakout_v1 法人／融資,
+hot_group.md, candidate_score.md candidate_score_v1), not from the product code: plain loops over the stored
 bars, one common price basis (each bar divided by its own factor) and
 price-unit values mapped back to T by the factor at T.
 """
@@ -66,7 +66,7 @@ class Bar:
 
 
 def usable(bar: Bar, factor: float) -> bool:
-    """V1_SPEC 技術指標: not suspended, OHLC finite positive and consistent, volume >= 0."""
+    """docs/spec/indicators.md: not suspended, OHLC finite positive and consistent, volume >= 0."""
 
     if bar.suspended or not positive(factor):
         return False
@@ -81,7 +81,7 @@ def usable(bar: Bar, factor: float) -> bool:
 def indicators(
     bars: list[Bar], factors: list[float]
 ) -> list[tuple[int, dict[str, float | None]]]:
-    """(bar_count, values) for every bar, unusable bars all-null (V1_SPEC 公式)."""
+    """(bar_count, values) for every bar, unusable bars all-null (docs/spec/indicators.md)."""
 
     closes: list[float] = []
     highs: list[float] = []

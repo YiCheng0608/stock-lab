@@ -31,7 +31,7 @@ other value stops serve (exit 2).
 
 Each run is a child process, and the job does what it did under Task
 Scheduler: its lock (one job of a kind at a time), the checks before a run,
-the time limit, the log and the exit code (worker.job, docs/OPERATIONS.md §6).
+the time limit, the log and the exit code (worker.job, docs/ops/SCHEDULING.md).
 So an overlapping trigger starts the job too, and the job records
 ``already_running``; this scheduler keeps no lock of its own. As the task's
 own limit did, a run still going 10 minutes past its job's limit is killed
@@ -73,7 +73,7 @@ NEWS_INTERVAL_HOURS = 2
 # The longest news interval is the day itself (#368): once a day, at 0:00.
 NEWS_INTERVAL_MAX_HOURS = 24
 WATCHDOG_MINUTES = "15,45"
-# The values Register-WorkerSchedule.ps1 registered (OPERATIONS §6.2).
+# The values Register-WorkerSchedule.ps1 registered (docs/ops/platform/windows.md).
 DAILY_MIN_FREE_MEMORY_GB = 2.0
 NEWS_MIN_FREE_MEMORY_GB = 1.0
 # Register-Watchdog.ps1's limit; daily and news have the job's own.
@@ -81,7 +81,7 @@ WATCHDOG_TIME_LIMIT_MINUTES = 10.0
 # A poll past this is hung: monitor.sh takes a lock over after 10 minutes without a beat.
 MONITOR_TIME_LIMIT_MINUTES = 10.0
 MONITOR_MODES = ("off", "record-only", "on")
-# The host directory compose bind mounts for the queue (docs/OPERATIONS.md §6.8).
+# The host directory compose bind mounts for the queue (docs/ops/MONITOR.md).
 MONITOR_DIR = "/coordination"
 # Past the job's own limit, as Task Scheduler's limit was the job's plus 10 minutes.
 BACKSTOP_MINUTES = 10.0

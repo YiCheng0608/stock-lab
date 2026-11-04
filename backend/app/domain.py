@@ -152,7 +152,7 @@ GROUP_SCORE_WEIGHTS: dict[str, float] = {
 
 # 1.0.0 required every member (not every eligible member) to have a 5-day
 # flow and treated a member absent from the day's official institutional file
-# as missing.  1.1.0 changes only that coverage rule (V1_SPEC hot_group_v1);
+# as missing.  1.1.0 changes only that coverage rule (docs/spec/hot_group.md);
 # score rows it overwrites are archived first (group_daily_score_archive).
 HOT_GROUP_LEGACY_VERSION = "1.0.0"
 HOT_GROUP_VERSION = "1.1.0"
@@ -323,7 +323,7 @@ HOT_GROUP_CONFIG: dict[str, Any] = {
 }
 
 
-# Daily candidate ranking (V1_SPEC candidate_score_v1～v3).
+# Daily candidate ranking (docs/spec/candidate_score.md).
 # The score only orders signals the strategies already judged conditional; it
 # never changes a strategy decision and is not a win rate or expected return.
 # Any change to these dictionaries requires a new version: stored candidates
@@ -332,7 +332,7 @@ HOT_GROUP_CONFIG: dict[str, Any] = {
 # which identify strategy rows.  CANDIDATE_SCORE is the current version.
 # The pool lists its strategies by name: a strategy added to the registry
 # enters the candidate list only with a new score version.
-CANDIDATE_SCORE_VERSION = "candidate_score_v4"
+CANDIDATE_SCORE_VERSION = "candidate_score_v5"
 # Prompt version of the candidate LLM notes (worker.candidate_notes); the
 # API shows this version first.
 CANDIDATE_NOTE_PROMPT_VERSION = "candidate_notes_v1"
@@ -447,36 +447,62 @@ CANDIDATE_SCORE_V1: dict[str, Any] = {
 CANDIDATE_SCORE_V2: dict[str, Any] = json.loads(json.dumps(CANDIDATE_SCORE_V1))
 CANDIDATE_SCORE_V2["name"] = "candidate_score_v2"
 CANDIDATE_SCORE_V2["components"]["news_sentiment"]["llm_prompt_version"] = "news_v2"
+
+
 # candidate_score_v3 (#392): candidate_score_v2 whose pool is breakout_v2 and
 # pullback_v2, the strategies that replaced breakout_v1 and pullback_v1 (a
 # non-margin security's margin condition is not applicable).  Only the
 # strategy names change; v2's runs keep their v1 pool.
-CANDIDATE_SCORE_V3: dict[str, Any] = json.loads(json.dumps(CANDIDATE_SCORE_V2))
-CANDIDATE_SCORE_V3["name"] = "candidate_score_v3"
-_V3_STRATEGIES = {"breakout_v1": "breakout_v2", "pullback_v1": "pullback_v2"}
-CANDIDATE_SCORE_V3["pool"]["strategies"] = [
-    _V3_STRATEGIES[name] for name in CANDIDATE_SCORE_V2["pool"]["strategies"]
-]
-for _item in ("volume_ratio", "distance"):
-    _technical = CANDIDATE_SCORE_V3["components"]["technical"]["items"][_item]
-    for _key in ("better", "formula"):
-        if isinstance(_technical[_key], dict):
-            _technical[_key] = {
-                _V3_STRATEGIES[name]: value for name, value in _technical[_key].items()
-            }
+def _renamed_strategies(
+    config: dict[str, Any], name: str, renames: Mapping[str, str]
+) -> dict[str, Any]:
+    """``config`` under ``name`` whose pool and technical items use ``renames``."""
+
+    result: dict[str, Any] = json.loads(json.dumps(config))
+    result["name"] = name
+    result["pool"]["strategies"] = [
+        renames[strategy] for strategy in config["pool"]["strategies"]
+    ]
+    for item in ("volume_ratio", "distance"):
+        technical = result["components"]["technical"]["items"][item]
+        for key in ("better", "formula"):
+            if isinstance(technical[key], dict):
+                technical[key] = {
+                    renames[strategy]: value
+                    for strategy, value in technical[key].items()
+                }
+    return result
+
+
+CANDIDATE_SCORE_V3: dict[str, Any] = _renamed_strategies(
+    CANDIDATE_SCORE_V2,
+    "candidate_score_v3",
+    {"breakout_v1": "breakout_v2", "pullback_v1": "pullback_v2"},
+)
 # candidate_score_v4 (#413): candidate_score_v3 with the news direction read
 # from the news_v3 prompt (theme candidates checked against the source), the
 # news LLM's version from then on.  Only the name and the prompt change.
 CANDIDATE_SCORE_V4: dict[str, Any] = json.loads(json.dumps(CANDIDATE_SCORE_V3))
 CANDIDATE_SCORE_V4["name"] = "candidate_score_v4"
 CANDIDATE_SCORE_V4["components"]["news_sentiment"]["llm_prompt_version"] = "news_v3"
-CANDIDATE_SCORE = CANDIDATE_SCORE_V4
+# candidate_score_v5 (#404): candidate_score_v4 whose pool is breakout_v3 and
+# pullback_v3, the strategies that replaced breakout_v2 and pullback_v2 (a
+# zero margin base is judged by its balances).  Only the strategy names
+# change; v4's runs keep their v2 pool.
+CANDIDATE_SCORE_V5: dict[str, Any] = _renamed_strategies(
+    CANDIDATE_SCORE_V4,
+    "candidate_score_v5",
+    {"breakout_v2": "breakout_v3", "pullback_v2": "pullback_v3"},
+)
+CANDIDATE_SCORE = CANDIDATE_SCORE_V5
 # The run versions the pages read, current first (#407 review M3): a date
 # without a run of a version shows its run of the next one in this list, so
-# the dates before #413 show candidate_score_v3 and those before #392 show
-# candidate_score_v2 (as their signals show breakout_v1／pullback_v1); one
-# date never reads two versions (app.candidate_runs).
+# the dates before #404 show candidate_score_v4, those before #413
+# candidate_score_v3 and those before #392 candidate_score_v2 (as their
+# signals show the strategy versions of their day); one date never reads two
+# versions (app.candidate_runs).
 CANDIDATE_SCORE_READ_VERSIONS: tuple[str, ...] = (
+    CANDIDATE_SCORE_V5["name"],
     CANDIDATE_SCORE_V4["name"],
     CANDIDATE_SCORE_V3["name"],
     CANDIDATE_SCORE_V2["name"],
@@ -672,7 +698,7 @@ def validate_signal_status_transition(
     return ValidationResult(False, ("illegal_signal_status_transition",))
 
 
-# Observation price levels (V1_SPEC strategy_levels_v1, worker.strategy_levels):
+# Observation price levels (docs/spec/strategy_levels.md, worker.strategy_levels):
 # from the data known after T's close, the close and volume the next session
 # needs for each strategy to pass.  A change to the formulas or to the tick
 # ladder (app.strategies.levels.TICK_LADDERS) needs a new version; the rows of
@@ -687,7 +713,7 @@ STRATEGY_LEVEL_AVAILABILITY = (
 )
 
 
-# User tracking plans (V1_SPEC 使用者追蹤計畫).  pending may jump straight to an
+# User tracking plans (docs/spec/tracking.md 使用者追蹤計畫).  pending may jump straight to an
 # outcome: a fill and its exit can happen in the same session, and a run that
 # follows missed daily runs can see a fill and the end of the window at once.
 PLAN_TRACKING_VERSION = "plan_tracking_v1"

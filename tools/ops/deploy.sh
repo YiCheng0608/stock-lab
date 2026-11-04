@@ -29,7 +29,7 @@
 # with it), `docker compose up -d --no-build --wait`, read back that each service runs its
 # tagged image and that the new scheduler's own check (watchdog_helper.py deploy-image) is
 # ok, release the locks and comment on #1. Whether a deploy is authorised is not checked
-# here: deploying is the user's decision (docs/GITHUB_WORKFLOW.md 無人值守運作).
+# here: deploying is the user's decision (docs/COORDINATOR.md 無人值守運作).
 #
 # Usage: deploy.sh <tag> [options]
 #   --checkout DIR      the release checkout; default $STOCK_RELEASE_DIR, then $HOME/stock-lab-release
@@ -38,8 +38,8 @@
 #   --operator NAME     who deploys, for the record and #1; default git config user.name
 #   --wait-timeout SEC  for `compose up --wait`; default 300
 #   --web-port N, --api-port N, --env-file PATH
-#                       WEB_PORT, API_PORT and STOCK_ENV_FILE for compose (docs/OPERATIONS.md
-#                       §1.2). The caller's own are dropped, so a shell left with a smoke
+#                       WEB_PORT, API_PORT and STOCK_ENV_FILE for compose (docs/ops/SETUP.md
+#                       Docker compose). The caller's own are dropped, so a shell left with a smoke
 #                       test's cannot move production: without these options compose takes
 #                       them from the checkout's .env, then its defaults
 #   --no-comment        no comment on #1 (a rehearsal on a throwaway checkout and project)

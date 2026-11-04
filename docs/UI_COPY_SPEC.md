@@ -1,7 +1,7 @@
 <!-- owns: UI 文案共通原則、內部詞對照、資料完整度、新聞卡文案、行動中心分級、行動狀態文字、詞彙原則、壓縮卡與詳情文案、張與零股、表格單位與空白、族群榜文案、題材建議文案、中文原因碼、每日候選文案、個股策略總表文案、今日頁頁首文案 -->
 # UI 文案與資訊層級規格
 
-本文是日常頁的中文、資訊層級、單位、unknown 與 reason code 契約。能力狀態見 [ROADMAP](ROADMAP.md)，策略合併判定見 [PRODUCT_SPEC](PRODUCT_SPEC.md#action-merge)。
+本文是日常頁的中文、資訊層級、單位、unknown 與 reason code 契約。能力狀態見 [CAPABILITIES](CAPABILITIES.md)，策略合併判定見 [PRODUCT_SPEC](PRODUCT_SPEC.md#action-merge)。
 
 ## 1. 共通原則
 
@@ -39,7 +39,7 @@
 
 同卡有兩條策略時使用「主研究條件資料完整 · 另一研究條件資料待補：<缺項>」。只有所有呈現條件都完整時才可省略範圍。完整 observation 沒有 entry／target／RR 仍是完整，不使用資料待補 badge。
 
-族群熱度：完整與四分項條件以 [V1_SPEC](V1_SPEC.md#hot_group_v1) 為準。UI 對合格 partial 顯示「技術與籌碼觀察（事件資料待補）」，不得稱完整熱門或產生完整熱門候選。
+族群熱度：完整與四分項條件以 [hot_group_v1](spec/hot_group.md) 為準。UI 對合格 partial 顯示「技術與籌碼觀察（事件資料待補）」，不得稱完整熱門或產生完整熱門候選。
 
 ## 4. 新聞卡文案與折疊
 
@@ -65,7 +65,7 @@
 | 4 | 其他觀察 | 資料日有資料完整的觀察訊號、近 60 個交易日都有日線 | 差項最少的策略的未達成條件數（條件明細尚未產生的排最後），再依代號；同短名的條件各算一條，所以與說明欄「差 N 項」的 N（短名數，§6）可能不同 |
 | 5 | 資料待補 | 兩條策略都沒有資料完整的結果，或近 60 個已核實交易日有缺日線（含上市未滿 60 個交易日）；行動摘要對這些標的判「策略判斷資料待補」 | 自選在前，再依代號 |
 
-- **接近成立**（第 3 級，`decision.py` 的 `ACTION_NEAR_PRICE_GAP`，屬 `action_tier_v1`）：一條策略的條件價位列（`strategy_levels`，[V1_SPEC](V1_SPEC.md#strategy_levels_v1)）同時符合：
+- **接近成立**（第 3 級，`decision.py` 的 `ACTION_NEAR_PRICE_GAP`，屬 `action_tier_v1`）：一條策略的條件價位列（`strategy_levels`，[strategy_levels_v1](spec/strategy_levels.md)）同時符合：
   1. `availability=levels`，且 `reachable_next_session` 不是 false。`trend_unreachable`、ETF 排除類別（`not_applicable`）、資料不足都不算。
   2. 未達成的條件只有價格（突破的收盤突破前 20 日高點、回踩的收盤在支撐區）或量能；族群、法人、融資（回踩另含趨勢）與其他條件都已達成。
   3. 價格差距：突破 ≤ 3%、回踩 ≤ 2%（含等於）。差距是條件明細裡價格條件的下一交易日距離（突破為觸發價 ÷ 最近收盤 − 1；回踩為最近收盤到支撐區最近一端，區內為 0），取絕對值；價格條件在資料日已達成時記 0。
@@ -113,7 +113,7 @@
 - **中文對照**：日常頁用中文術語，英文、enum 與欄位名依 §2 對照，只在研究／系統層露出；別名用於搜尋。詞彙出現在 UI 不代表對應資料或模型已上線。
 - **白話與限制並列**：每個詞同時寫用途與誤讀界線，例如突破、目標價、T+1 都不等於成交或必達；資料不足時明說無法用該指標下結論。
 - **事實／推論分欄**：來源事實、規則判定與推論（AI 摘要、影響推論）分開命名；推論詞須標方法與引用，unknown 不是負面訊號。
-- **口徑**：「外資」「三大法人」依[資料來源的法人口徑](DATA_SOURCES.md#法人口徑)；「熱門族群」只用於五分項完整的群組（[V1_SPEC](V1_SPEC.md#hot_group_v1)）。
+- **口徑**：「外資」「三大法人」依[資料來源的法人口徑](DATA_SOURCES.md#法人口徑)；「熱門族群」只用於五分項完整的群組（[hot_group_v1](spec/hot_group.md)）。
 - **不用的詞**：日資料不稱「現價」，固定 confidence 或模型自評不稱「勝率」或「校準機率」；不以「主力」「隔日沖」或分點名稱推定投資人身分；不寫「保證」「必漲」等報酬承諾。
 - **呈現**：Modal 依白話定義、用途、解讀與限制排列，不以 term_id 或欄位名作標題。詞彙按鈕須支援滑鼠、觸控、Enter／Space，Esc 關閉後焦點回觸發點；定義不得只靠 hover 或顏色。詞彙按鈕不放在整張可點的連結卡片裡（如族群榜手機卡、今日頁熱門族群卡），那裡只顯示文字，說明在同一詞出現的表格、詳情頁或用語表。
 - **就地說明**：候選卡、族群頁與個股「研究條件」分頁的下列用詞以詞彙按鈕開啟詞條；`percentile` 日常頁不露出英文。
@@ -142,7 +142,7 @@
 
 個股詳情以「圖表與指標／法人籌碼／新聞與公告／研究條件／資料說明」分頁，預設為「圖表與指標」。頁首最近收盤取 bars API 日線最後一根有完整 K 線的列；直接前一列也是同來源的交易日才算漲跌，否則顯示「漲跌待核實」；沒有可信收盤時顯示「待核實」，不改稱零或負面訊號。研究截止日期不影響頁首收盤與 K 線。「研究條件」分頁依序為策略總表（[§10.1](#101-個股策略總表)）、研究動作、所屬族群；族群卡標題「所屬族群」，讀 API `groups`：`verified=true` 顯示 `display_name`（ETF 與新上市列沿用前端類別譯名），`verified=false` 顯示「族群關聯待核實」，驗證規則見 [INDUSTRY_CLASSIFICATION §5.1](INDUSTRY_CLASSIFICATION.md#51-既有錯配-membership-修復)。
 
-「圖表與指標」的日／週 K 線、成交量、MA5／10／20／60／120（可勾選）與 MACD／RSI／KD／布林面板全部取自 `GET /api/stocks/{exchange}/{symbol}/bars`（`limit=250`；公式與欄位見 [V1_SPEC 技術指標](V1_SPEC.md#技術指標)），前端不自行計算均線或指標；停牌與無效列不畫 K 線，缺日不補。指標或均線欄位為 null 時依最新一根判斷：
+「圖表與指標」的日／週 K 線、成交量、MA5／10／20／60／120（可勾選）與 MACD／RSI／KD／布林面板全部取自 `GET /api/stocks/{exchange}/{symbol}/bars`（`limit=250`；公式與欄位見 [技術指標](spec/indicators.md)），前端不自行計算均線或指標；停牌與無效列不畫 K 線，缺日不補。指標或均線欄位為 null 時依最新一根判斷：
 
 | 情況 | 顯示 |
 | --- | --- |
@@ -198,7 +198,7 @@
 
 ### 8.6 新聞題材建議
 
-[新聞題材建議](V1_SPEC.md#新聞題材建議)是 LLM 推論，與族群榜分開呈現。
+[新聞題材建議](spec/theme_suggestions.md)是 LLM 推論，與族群榜分開呈現。
 
 - **位置**：族群頁（`/themes`）排行之下另一區，眉標「新聞聚合 · 待核實」、標題「新聞題材建議」，右側「{N} 個建議 · 最近更新 YYYY/MM/DD HH:mm」（`meta.updated_at` 換算台北時間；沒有帶時區的時間不顯示）。區塊說明固定一句「由 AI 從近期新聞判讀出的題材名稱彙整，尚未經人工核實；不列入族群排行、不計分，也不作為交易理由。」
 - **每個建議**：放在 AI 推論樣式的區塊（左側強調色豎線，[DESIGN_SYSTEM §7](DESIGN_SYSTEM.md#7-資料與狀態的視覺語言)），名稱旁並列「待核實」（warning badge）與「AI 推論」（accent badge）；下一行「{則數} 則新聞 · 首次 YYYY/MM/DD · 最近 YYYY/MM/DD · 模型未提供把握」，首末同日寫「新聞日 YYYY/MM/DD」；把握有值時寫「模型把握高／中／低」。不顯示排名、分數或 `theme_key` 等內部值。
@@ -224,7 +224,7 @@ reason code 的日常文案由 `backend/app/presentation.py`（`REASON_LABELS`�
 
 ## 10. 每日候選
 
-[`candidate_score_v1`](V1_SPEC.md#candidate_score_v1) 的理由由後端依規則產生（`worker.candidates.REASON_TEMPLATES`），API 的 `reasons[].text` 已是日常文案，前端直接顯示、不自組；`inference=true` 的理由與「推論」標籤同列。
+[`candidate_score_v1`](spec/candidate_score.md#candidate_score_v1) 的理由由後端依規則產生（`worker.candidates.REASON_TEMPLATES`），API 的 `reasons[].text` 已是日常文案，前端直接顯示、不自組；`inference=true` 的理由與「推論」標籤同列。
 
 | 理由碼 | 條件 | 文案 |
 | --- | --- | --- |
@@ -248,7 +248,7 @@ reason code 的日常文案由 `backend/app/presentation.py`（`REASON_LABELS`�
 - **分項名**：technical「技術」、chips「籌碼」、group「族群」、news_sentiment「新聞情緒」；新聞情緒另標「推論」。
 - **分數**：總分與分項為 0–1，日常以 0–100 整數呈現；分項為 null 顯示「—」並附 API 的 `null_explanation`，不寫 0。`partial_components=true` 時在總分旁註明「部分分項無資料，以有資料的分項計分」。
 - **聲明**：清單頂端固定一句「評分只用於排序，不代表勝率或預期報酬」。
-- **AI 進出點說明**（`llm_note`，[V1_SPEC](V1_SPEC.md#候選-ai-進出點說明)）：每張候選卡在族群列之後、「評分細節」之前放 AI 推論樣式的區塊（左側強調色豎線，[DESIGN_SYSTEM §7](DESIGN_SYSTEM.md#7-資料與狀態的視覺語言)），標題「AI 進出點說明」，右側「AI 推論」（accent badge）。`status=done` 且三段都有字時依序列「為何入選」「進場區、停損與目標」「需留意的風險」與 API 文字；沒有說明（`llm_note` 為 null 或欄位不存在）寫「此檔尚未產生 AI 說明」，`pending` 寫「AI 說明這次未能產生」（不承諾自動重試，補跑見 [OPERATIONS §6.3](OPERATIONS.md#63-日誌與-run-記錄)）。區塊內固定一句「由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。」；有 `llm_note` 時底部「模型 {model，沒有寫未記錄} · 提示版本 {prompt_version} · 產生於 YYYY/MM/DD HH:mm」（`generated_at` 換算台北時間，沒有時區時省略時間）；`pending` 不寫模型，時間改寫「嘗試於」。今日頁與個股頁相同。
+- **AI 進出點說明**（`llm_note`，[候選 AI 進出點說明](spec/candidate_score.md#候選-ai-進出點說明)）：每張候選卡在族群列之後、「評分細節」之前放 AI 推論樣式的區塊（左側強調色豎線，[DESIGN_SYSTEM §7](DESIGN_SYSTEM.md#7-資料與狀態的視覺語言)），標題「AI 進出點說明」，右側「AI 推論」（accent badge）。`status=done` 且三段都有字時依序列「為何入選」「進場區、停損與目標」「需留意的風險」與 API 文字；沒有說明（`llm_note` 為 null 或欄位不存在）寫「此檔尚未產生 AI 說明」，`pending` 寫「AI 說明這次未能產生」（不承諾自動重試，補跑見 [日誌與 run 記錄](ops/SCHEDULING.md#日誌與-run-記錄)）。區塊內固定一句「由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。」；有 `llm_note` 時底部「模型 {model，沒有寫未記錄} · 提示版本 {prompt_version} · 產生於 YYYY/MM/DD HH:mm」（`generated_at` 換算台北時間，沒有時區時省略時間）；`pending` 不寫模型，時間改寫「嘗試於」。今日頁與個股頁相同。
 - **零候選**：顯示 API 的 `zero_reason_text`；`no_actionable_signals`「當日沒有成立（條件成立）的策略訊號」、`all_excluded`「成立的訊號都因 ETF、價位不合法或評分資料不足被排除」。`status=not_computed` 寫「此交易日尚未產生候選清單」。空狀態標題分別為「當日零候選」與「尚無候選清單」，零候選保留資料日期 badge、not_computed 不顯示日期。
 
 ### 10.1 個股策略總表
@@ -303,7 +303,7 @@ reason code 的日常文案由 `backend/app/presentation.py`（`REASON_LABELS`�
 
 ## 12. 追蹤計畫
 
-使用者把成立的研究條件存成[追蹤計畫](V1_SPEC.md#使用者追蹤計畫)；成交與結果都是依日線規則的**模擬**，不是實際成交，也不是 LLM 推論（不標「推論」）。文案常數在 `frontend/src/tracking/tracking.ts`，verify 的 actions A14～A17、today T13 依同一份字串比對。
+使用者把成立的研究條件存成[追蹤計畫](spec/tracking.md#使用者追蹤計畫)；成交與結果都是依日線規則的**模擬**，不是實際成交，也不是 LLM 推論（不標「推論」）。文案常數在 `frontend/src/tracking/tracking.ts`，verify 的 actions A14～A17、today T13 依同一份字串比對。
 
 - **加入追蹤**：今日頁每檔候選的明細（桌面展開的明細列、手機卡的「AI 說明」）在資料日期之前放 secondary 按鈕「加入追蹤」（送出中「加入中…」）；該訊號已有未取消的計畫時改成連結「已在追蹤」，連到 `/actions#plan-<id>`。個股頁的入口只有「研究條件」分頁的「追蹤計畫 · 模擬」卡，標題「把研究條件加入追蹤」：每個成立（`conditional`）的策略一列「{突破條件／回踩條件}成立」、`條件資料日 YYYY/MM/DD` 與同樣的按鈕；沒有成立的策略時只寫一行「目前沒有成立的研究條件，無法建立追蹤計畫」。卡底說明「加入後每日依日線規則模擬成交與出場，結果在行動頁「追蹤計畫」與「追蹤回看」；不是實際成交。」
 - **拒絕原因**（API `detail`）：`stale_signal`「這個研究條件的資料日已過，請用最新資料日的條件建立」、`signal_not_conditional`「這個研究條件目前不成立，無法建立追蹤計畫」、`invalid_levels`「研究條件的價位不完整或不合理，無法建立追蹤計畫」、`candidate_signal_mismatch`「候選與研究條件不一致，請重新整理頁面」、`candidate_not_found`「找不到這筆候選，請重新整理頁面」、`signal_not_found`「找不到這個研究條件，請重新整理頁面」，其他「加入失敗，請稍後再試」。

@@ -1,4 +1,4 @@
-"""Read model of the user tracking plans (``/api/tracking``, V1_SPEC 使用者追蹤計畫).
+"""Read model of the user tracking plans (``/api/tracking``, docs/spec/tracking.md 使用者追蹤計畫).
 
 Only reads ``tracking_plans`` / ``tracking_plan_sessions`` written by
 ``app.tracking_plans`` and ``worker.plan_tracking``; every fill and result is

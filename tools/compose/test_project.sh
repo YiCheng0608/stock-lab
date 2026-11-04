@@ -4,7 +4,7 @@
 #
 # test_project_problem NAME: why NAME is no test project, or nothing. Production is stock-lab
 # and STOCK_COMPOSE_PROJECT (tools/ops/deploy.sh); a test project starts with t<n> or task-<n>
-# (the task's, docs/GITHUB_WORKFLOW.md 本機檢查) or has smoke as one of its words.
+# (the task's, docs/WORKFLOW.md 本機檢查) or has smoke as one of its words.
 test_project_problem() {
   local name="$1"
   if [ "$name" = stock-lab ] || { [ -n "${STOCK_COMPOSE_PROJECT:-}" ] && [ "$name" = "$STOCK_COMPOSE_PROJECT" ]; }; then
