@@ -991,33 +991,51 @@ class CheckoutTime(unittest.TestCase):
 
 
 class BackendTime(unittest.TestCase):
-    """The backend job, which runs the whole backend suite, has 45 minutes.
+    """The backend job runs the whole suite under pytest-xdist with room for a slow runner.
 
-    Its green runs on 2026-11-03 and 11-04 took 20 to 29 minutes, and twice a slow runner
-    took it past the 30-minute limit on master (runs 41699184706 at 30 minutes with
-    the checkout taking 4, and 41714283264), which made `required` red; close_task.sh
-    then refuses until a rerun is green.
+    In #379's week (108 runs, 2026-10-30 to 11-04) its pytest took 462 seconds at the median
+    and 669 at the slowest, while a slow runner twice took the serial job past 30 minutes on
+    master (runs 41699184706 and 41714283264), which made `required` red; close_task.sh then
+    refuses until a rerun is green. PR #446's own first run took 706 seconds (run
+    41764869855), past that week's slowest. The pytest step has 20 minutes, about 1.7
+    times the slowest seen (706); the job 10 more for the checkout (5 minutes at its slowest, CheckoutTime), setup
+    and pip, so a hung pytest stops at its step and the Summary step still runs.
     """
 
-    MINIMUM = 45
+    PYTEST_MINIMUM = 20
+    JOB_MARGIN = 10
 
-    def test_the_backend_suite_has_room_for_a_slow_runner(self):
+    def setUp(self):
         import yaml
 
-        jobs = yaml.load(
+        self.jobs = yaml.load(
             (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"),
             Loader=yaml.BaseLoader,
         )["jobs"]
-        self.assertGreaterEqual(int(jobs["backend"]["timeout-minutes"]), self.MINIMUM)
+        self.job = self.jobs["backend"]
+        (self.pytest,) = [
+            s for s in self.job["steps"] if "-m pytest" in s.get("run", "")
+        ]
+
+    def test_the_backend_suite_has_room_for_a_slow_runner(self):
+        step = int(self.pytest["timeout-minutes"])
+        self.assertGreaterEqual(step, self.PYTEST_MINIMUM)
+        self.assertGreaterEqual(
+            int(self.job["timeout-minutes"]), step + self.JOB_MARGIN
+        )
+
+    def test_the_summary_runs_after_a_red_or_hung_pytest(self):
+        (summary,) = [s for s in self.job["steps"] if s.get("name") == "Summary"]
+        self.assertEqual(summary.get("if"), "always()")
+        self.assertEqual(summary["env"]["OUTCOME"], "${{ steps.pytest.outcome }}")
+        self.assertEqual(self.pytest.get("id"), "pytest")
 
 
-class ExperimentJob(unittest.TestCase):
-    """The backend-xdist experiment holds up neither a merge nor close_task.sh (#379).
+class BackendParallel(unittest.TestCase):
+    """The backend job runs pytest-xdist, and a failing test makes it and required red (#442).
 
-    required does not need it. Its pytest step continues on error and stops before the
-    job's time limit, so a hang is a step failure too, and its summary step continues on
-    error: close_task.sh reads the run's conclusion and patrol.sh every check's, so a red
-    or cancelled experiment would stop both.
+    The #379 experiment job continued on error, so its conclusion was success whatever the
+    tests did; the formal job must not, or a red suite would merge.
     """
 
     def setUp(self):
@@ -1027,29 +1045,35 @@ class ExperimentJob(unittest.TestCase):
             (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"),
             Loader=yaml.BaseLoader,
         )["jobs"]
-        self.job = self.jobs["backend-xdist"]
-        self.pytest_steps = [
-            s for s in self.job["steps"] if "-m pytest" in s.get("run", "")
-        ]
-        self.assertTrue(self.pytest_steps)
+        self.job = self.jobs["backend"]
 
-    def test_backend_xdist_cannot_turn_ci_red(self):
-        self.assertNotIn("backend-xdist", self.jobs["required"]["needs"])
-        self.assertNotIn("backend-xdist", json.dumps(self.jobs["required"]["steps"]))
-        for step in self.pytest_steps:
-            with self.subTest(step=step.get("name")):
-                self.assertEqual(step.get("continue-on-error"), "true")
+    def test_the_suite_runs_on_every_core(self):
+        (step,) = [s for s in self.job["steps"] if "-m pytest" in s.get("run", "")]
+        self.assertIn('-n "$(nproc)"', step["run"])
+        self.assertIn("--dist loadgroup", step["run"])
+        self.assertIn("-p suite_split", step["run"])
+        self.assertRegex(step["run"], r"\btests\s*$")
+        (install,) = [s for s in self.job["steps"] if "pip install" in s.get("run", "")]
+        self.assertIn("pytest-xdist==", install["run"])
+        self.assertIn("execnet==", install["run"])
 
-    def test_a_hung_pytest_stops_before_the_job_does(self):
-        job_limit = int(self.job["timeout-minutes"])
-        for step in self.pytest_steps:
-            with self.subTest(step=step.get("name")):
-                self.assertLess(int(step.get("timeout-minutes", job_limit)), job_limit)
+    def test_a_red_backend_turns_required_red(self):
+        # A pipe (| tee) without pipefail would hide pytest's exit code.
+        (pytest,) = [s for s in self.job["steps"] if "-m pytest" in s.get("run", "")]
+        self.assertIn("set -euo pipefail", pytest["run"])
+        for step in self.job["steps"]:
+            with self.subTest(
+                step=step.get("name") or step.get("uses") or step.get("run")
+            ):
+                self.assertNotIn("continue-on-error", step)
+        self.assertNotIn("continue-on-error", self.job)
+        self.assertIn("backend", self.jobs["required"]["needs"])
+        self.assertIn(
+            "('backend', 'python')", json.dumps(self.jobs["required"]["steps"])
+        )
 
-    def test_the_summary_step_continues_on_error(self):
-        (summary,) = [s for s in self.job["steps"] if s.get("name") == "Summary"]
-        self.assertEqual(summary.get("if"), "always()")
-        self.assertEqual(summary.get("continue-on-error"), "true")
+    def test_the_experiment_job_is_gone(self):
+        self.assertNotIn("backend-xdist", self.jobs)
 
 
 class RequiredJob(unittest.TestCase):
