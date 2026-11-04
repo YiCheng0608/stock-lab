@@ -524,16 +524,16 @@ def test_a_research_run_stops_at_the_daily_window_and_a_rerun_completes_it(
     start, end = _window(whole, 25)
     expected_rows, expected_groups = _research_result(whole, registry, start, end)
 
-    # A fake clock one minute per check from 18:20 Taipei: the 11th check is 18:30.
+    # A fake clock one minute per check from 21:20 Taipei: the 11th check is 21:30.
     minutes = iter(range(20, 90))
     clock = research.window_check(
-        lambda: datetime(2026, 10, 28, 10, 0, tzinfo=timezone.utc)
+        lambda: datetime(2026, 10, 28, 13, 0, tzinfo=timezone.utc)
         + timedelta(minutes=next(minutes))
     )
     factory = use_copy("paused.db")
     stopped = pipeline.backtest(start, end, registry=registry, should_stop=clock)
 
-    assert research.paused(stopped) and "18:30" in stopped["error"]
+    assert research.paused(stopped) and "21:30" in stopped["error"]
     assert stopped["run"]["status"] == "failed"
     with factory() as db:
         committed_days = db.scalar(

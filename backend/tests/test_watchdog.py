@@ -676,12 +676,14 @@ def test_daily_result_comments_only_when_not_complete_and_once_a_day(
         assert wd.events()[-1] == "anomaly_already_commented"
 
 
-def _add_daily_run(path: Path, status: str, started: int) -> None:
+def _add_daily_run(
+    path: Path, status: str, started: int, day: str = "2026-10-19", summary=None
+) -> None:
     with sqlite3.connect(path) as conn:
         conn.execute(
             "INSERT INTO schedule_runs (job, target_date, status, started_at, summary_json)"
-            " VALUES ('daily', '2026-10-19', ?, ?, '{}')",
-            (status, _utc_text(started)),
+            " VALUES ('daily', ?, ?, ?, ?)",
+            (day, status, _utc_text(started), json.dumps(summary or {})),
         )
     conn.close()
 
@@ -717,6 +719,7 @@ def test_a_failed_2130_daily_waits_for_the_2300_retry_that_succeeds(wd):
     wd.run()  # 23:15: the retry is still running
     _set_last_daily_run(db, "success")
     wd.run(now=LAST_RUN)  # 23:45
+    wd.run(now=AT_0045)  # Tuesday: the day before ended success
     assert wd.text("gh_calls.log") == ""
     assert not [event for event in wd.events() if event.startswith("anomaly")]
 
@@ -760,7 +763,69 @@ def test_a_daily_still_running_past_the_task_limit_has_died(wd):
     assert "daily 結果是 `failed`" in wd.text("gh_bodies.txt")
 
 
+# --- the previous trading day, from 00:30 (#466 review 6641540634) ---------------------
+
+AT_0015 = NIGHT + 60 * 60  # Tuesday 2026-10-20 00:15 Taipei
+AT_0045 = NIGHT + 90 * 60
+AT_0115 = NIGHT + 120 * 60
+
+
+@pytest.mark.parametrize("stuck", ["2300_retry", "2145_catchup"])
+def test_a_retry_stuck_past_midnight_is_reported_once_after_0030(wd, stuck):
+    """21:30 failed and the run after it hangs: it is judged running all night."""
+
+    _daily_log_done(wd)
+    db = wd.data / "stock.db"
+    _daily_db(db, [])
+    _add_daily_run(db, "failed", AT_2130)
+    if stuck == "2300_retry":
+        # The 23:00 retry hangs in collect; the job ends it at 00:20, the row stays running.
+        _add_daily_run(db, "running", AT_2300)
+    else:
+        # serve restarted at 21:45 and its catch-up hangs (ended at 23:05); the 23:00
+        # trigger found the lock held.
+        _add_daily_run(db, "running", NIGHT - 90 * 60)
+        _add_daily_run(
+            db, "skipped", AT_2300, summary={"reason": "already_running"}
+        )
+    for now in (NIGHT, LAST_RUN, AT_0015):  # 23:15, 23:45, 00:15: still running
+        wd.run(now=now)
+    assert wd.text("gh_calls.log") == ""
+    wd.run(now=AT_0045)
+    wd.run(now=AT_0115)
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
+    body = wd.text("gh_bodies.txt")
+    assert "daily 排程：台北 2026-10-19（前一個交易日）的 daily 結果是 `failed`" in body
+    assert " anomaly_commented key=daily_result_20261019 date=20261020 " in wd.log()
+
+
+def test_a_day_reported_that_night_is_not_reported_again_after_midnight(wd):
+    _daily_log_done(wd)
+    _daily_db(wd.data / "stock.db", [("partial", {}), ("failed", {})])
+    wd.run()  # 23:15: both runs failed, commented
+    wd.run(now=AT_0045)
+    wd.run(now=AT_0115)
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
+
+
+def test_a_friday_reported_on_saturday_is_not_reported_again_on_monday(wd):
+    friday = NIGHT + 4 * 86400  # 2026-10-23 23:15 Taipei
+    (wd.logs / "daily-20261023.log").write_text(
+        "===== s start\n===== e end exit=2 seconds=9\n", encoding="utf-8"
+    )
+    db = wd.data / "stock.db"
+    _daily_db(db, [])
+    _add_daily_run(db, "failed", friday - 105 * 60, day="2026-10-23")
+    _add_daily_run(db, "running", friday - 15 * 60, day="2026-10-23")
+    wd.run(now=friday)
+    for days in (1, 2, 3):  # Saturday, Sunday and Monday 00:45
+        wd.run(now=friday + 90 * 60 + (days - 1) * 86400)
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
+    assert "台北 2026-10-23（前一個交易日）" in wd.text("gh_bodies.txt")
+
+
 def test_a_missing_daily_log_waits_for_the_2300_retry(wd):
+
     (wd.logs / "daily-20261016.log").write_text(
         "===== x start\n===== y end exit=0 seconds=1\n", encoding="utf-8"
     )

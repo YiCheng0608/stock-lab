@@ -377,15 +377,16 @@ def test_an_injected_clock_reaches_the_daily_target_and_the_watchdog(tmp_path):
     assert environment["WATCHDOG_NOW"] == str(int(at.timestamp()))
 
 
-def test_the_backstop_is_ten_minutes_past_the_job_limit(tmp_path):
+def test_the_backstop_is_five_minutes_past_the_job_limit(tmp_path):
+    # #466 review: 5, not 10, so a scheduled daily's backstop (22:55) is before 23:00.
     runner = serve.Serve(serve_args("--data-dir", str(tmp_path)))
-    assert runner.backstop("daily") == 90 * 60
-    assert runner.backstop("news") == 100 * 60
+    assert runner.backstop("daily") == 85 * 60
+    assert runner.backstop("news") == 95 * 60
     assert runner.backstop("watchdog") == 10 * 60
     short = serve.Serve(
         serve_args("--data-dir", str(tmp_path), "--daily-time-limit-minutes", "1")
     )
-    assert short.backstop("daily") == 11 * 60
+    assert short.backstop("daily") == 6 * 60
 
 
 def test_a_stuck_scheduled_daily_is_killed_before_the_next_trigger(tmp_path):
@@ -393,8 +394,8 @@ def test_a_stuck_scheduled_daily_is_killed_before_the_next_trigger(tmp_path):
 
     A 21:30 run that hangs must end before 23:00: otherwise 23:00 finds the lock
     held, records already_running and the day is not retried. The job ends it at
-    its limit (22:50, decision 6638008818); serve's backstop, 10 minutes later, is
-    for a job that does not end itself.
+    its limit (22:50, decision 6638008818); serve's backstop (22:55, review
+    6641540634) ends a job that does not end itself, still before 23:00.
     """
 
     runner = serve.Serve(serve_args("--data-dir", str(tmp_path)))
@@ -406,7 +407,7 @@ def test_a_stuck_scheduled_daily_is_killed_before_the_next_trigger(tmp_path):
     assert gaps == [90]
     limit = runner.args.daily_time_limit_minutes
     assert limit == 80 and limit < min(gaps)
-    assert runner.backstop("daily") <= min(gaps) * 60
+    assert runner.backstop("daily") < min(gaps) * 60
     # A manual `job daily` keeps the job's own limit (long catch-up runs).
     assert job.TIME_LIMIT_MINUTES["daily"] == 150
 
