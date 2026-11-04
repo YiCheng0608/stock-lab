@@ -1,14 +1,15 @@
 """Fetch a completed session's institutional files once more (Issue #396).
 
 The exchanges revise the day's institutional (三大法人) file after it is first
-published.  When the 18:30 daily already finished as ``success``, the 21:30
-trigger has nothing else to fetch, so it asks for the two institutional files
-again, one TWSE T86 request and one TPEx daily-trade request, and applies them
-through collect's chip upsert: a later capture replaces differing
-institutional values of the stored rows (Issue #387), equal values stay as
-they are, and the margin, OHLCV and event data are not requested.
+published.  When the 21:30 daily already finished as ``success``, the 23:00
+trigger (#466; 18:30 and 21:30 before it) has nothing else to fetch, so it
+asks for the two institutional files again, one TWSE T86 request and one TPEx
+daily-trade request, and applies them through collect's chip upsert: a later
+capture replaces differing institutional values of the stored rows (Issue
+#387), equal values stay as they are, and the margin, OHLCV and event data are
+not requested.
 
-Only existing chip rows change (``create=False``): the 18:30 collect decided
+Only existing chip rows change (``create=False``): the day's collect decided
 which instruments have a row.  Each target date is refetched at most once:
 after a ``success`` refetch a later invocation reuses it without a request.
 Every capture and every replaced value is kept on one ``institutional_refetch``

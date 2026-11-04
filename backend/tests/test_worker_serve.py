@@ -4,8 +4,9 @@ The schedule and the commands are checked without starting anything. The other
 tests run serve in a project tree of its own (test_worker_job.Tree plus copies of
 serve.py and the watchdog): a fake ``worker.cli`` routes ``serve`` and ``job`` to
 those copies and scripts the steps, so no worker, network or Claude call is
-involved; only the docker kill scenario runs the real daily worker, on the verify
-fixture database with the outside-facing steps faked (job_daily_child.py).
+involved; only the docker kill and the 21:30 -> 23:00 scenarios run the real daily
+worker, on the verify fixture database with the outside-facing steps faked
+(job_daily_child.py).
 
 Like the job, serve runs on Linux only (#333): run these in the image.
 """
@@ -197,15 +198,16 @@ def fire_times(trigger, start: datetime, end: datetime) -> list[datetime]:
         previous = now = moment
 
 
-def test_the_triggers_fire_when_task_scheduler_did():
+def test_the_triggers_fire_at_the_schedule_times():
     triggers = serve.triggers(serve_args())
     monday = datetime(2026, 10, 19, tzinfo=TAIPEI)
     week = (monday, monday + timedelta(days=7))
     daily = fire_times(triggers["daily"], *week)
+    # #466: 21:30, with 23:00 as the retry (or the institutional refetch); no 18:30.
     assert [moment.strftime("%a %H:%M") for moment in daily] == [
         f"{day} {hm}"
         for day in ("Mon", "Tue", "Wed", "Thu", "Fri")
-        for hm in ("18:30", "21:30")
+        for hm in ("21:30", "23:00")
     ]
     news = fire_times(triggers["news"], *week)
     assert news == [monday + timedelta(hours=2 * index) for index in range(84)]
@@ -275,16 +277,16 @@ def test_a_news_interval_starts_again_at_midnight_every_day():
 
 def test_an_injected_clock_moves_the_triggers():
     real = datetime(2026, 10, 29, 3, 0, tzinfo=timezone.utc)
-    injected = datetime(2026, 10, 19, 18, 29, 50, tzinfo=TAIPEI)
+    injected = datetime(2026, 10, 19, 21, 29, 50, tzinfo=TAIPEI)
     offset = injected - real
     daily = serve.triggers(serve_args())["daily"]
     moved = serve.shifted(daily, offset)
-    # 10 seconds after the real now, the scheduler's clock reaches 18:30.
+    # 10 seconds after the real now, the scheduler's clock reaches 21:30.
     first = moved.get_next_fire_time(None, real)
     assert first == real + timedelta(seconds=10)
     second = moved.get_next_fire_time(first, first)
     assert (second + offset).astimezone(TAIPEI) == datetime(
-        2026, 10, 19, 21, 30, tzinfo=TAIPEI
+        2026, 10, 19, 23, 0, tzinfo=TAIPEI
     )
     assert serve.shifted(daily, timedelta(0)) is daily
 
@@ -311,6 +313,9 @@ def test_the_commands_are_the_ones_task_scheduler_ran(tmp_path, monkeypatch):
         "2",
         "--claude-cli",
         "/usr/local/bin/claude",
+        # #466: a scheduled daily ends before the next trigger.
+        "--time-limit-minutes",
+        "80",
     ]
     assert environment["STOCK_DATA_DIR"] == str(data)
     assert environment["STOCK_DB_PATH"] == str(data / "stock.db")
@@ -360,10 +365,10 @@ def test_the_commands_are_the_ones_task_scheduler_ran(tmp_path, monkeypatch):
 
 def test_an_injected_clock_reaches_the_daily_target_and_the_watchdog(tmp_path):
     runner = serve.Serve(
-        serve_args("--data-dir", str(tmp_path), "--now", "2026-10-19T18:29:50")
+        serve_args("--data-dir", str(tmp_path), "--now", "2026-10-19T21:29:50")
     )
     at = runner.now()
-    assert abs(at - datetime(2026, 10, 19, 18, 29, 50, tzinfo=TAIPEI)) < timedelta(
+    assert abs(at - datetime(2026, 10, 19, 21, 29, 50, tzinfo=TAIPEI)) < timedelta(
         seconds=30
     )
     assert runner.command("daily", at)[0][-2:] == ["--date", "2026-10-19"]
@@ -372,15 +377,39 @@ def test_an_injected_clock_reaches_the_daily_target_and_the_watchdog(tmp_path):
     assert environment["WATCHDOG_NOW"] == str(int(at.timestamp()))
 
 
-def test_the_backstop_is_ten_minutes_past_the_job_limit(tmp_path):
+def test_the_backstop_is_five_minutes_past_the_job_limit(tmp_path):
+    # #466 review: 5, not 10, so a scheduled daily's backstop (22:55) is before 23:00.
     runner = serve.Serve(serve_args("--data-dir", str(tmp_path)))
-    assert runner.backstop("daily") == 160 * 60
-    assert runner.backstop("news") == 100 * 60
+    assert runner.backstop("daily") == 85 * 60
+    assert runner.backstop("news") == 95 * 60
     assert runner.backstop("watchdog") == 10 * 60
     short = serve.Serve(
         serve_args("--data-dir", str(tmp_path), "--daily-time-limit-minutes", "1")
     )
-    assert short.backstop("daily") == 11 * 60
+    assert short.backstop("daily") == 6 * 60
+
+
+def test_a_stuck_scheduled_daily_is_killed_before_the_next_trigger(tmp_path):
+    """#466: 23:00 is 90 minutes after 21:30, inside the job's own 150-minute limit.
+
+    A 21:30 run that hangs must end before 23:00: otherwise 23:00 finds the lock
+    held, records already_running and the day is not retried. The job ends it at
+    its limit (22:50, decision 6638008818); serve's backstop (22:55, review
+    6641540634) ends a job that does not end itself, still before 23:00.
+    """
+
+    runner = serve.Serve(serve_args("--data-dir", str(tmp_path)))
+    times = serve._daily_times(serve.DAILY_TIMES)
+    gaps = [
+        (later[0] - earlier[0]) * 60 + later[1] - earlier[1]
+        for earlier, later in zip(times, times[1:])
+    ]
+    assert gaps == [90]
+    limit = runner.args.daily_time_limit_minutes
+    assert limit == 80 and limit < min(gaps)
+    assert runner.backstop("daily") < min(gaps) * 60
+    # A manual `job daily` keeps the job's own limit (long catch-up runs).
+    assert job.TIME_LIMIT_MINUTES["daily"] == 150
 
 
 def test_the_monitor_polls_every_minute_only_when_switched_on(monkeypatch):
@@ -637,9 +666,9 @@ def test_an_overlapping_daily_trigger_records_already_running(serve_tree, monkey
 def test_the_watchdog_started_by_serve_decides_as_watchdog_sh(
     serve_tree, tmp_path, daily_ended
 ):
-    # Monday 2026-10-19: the watchdog at 22:15 Taipei reads the Windows wrapper's
-    # logs (fixtures, test_worker_job), written from 21:15 on.
-    fire = datetime(2026, 10, 19, 22, 15, tzinfo=TAIPEI)
+    # Monday 2026-10-19: the watchdog at 23:15 Taipei reads the Windows wrapper's
+    # logs (fixtures, test_worker_job), written from 22:15 on.
+    fire = datetime(2026, 10, 19, 23, 15, tzinfo=TAIPEI)
     first = fire.timestamp() - 3600
     day = "20261019"
     datas = [serve_tree.data, tmp_path / "direct"]
@@ -732,11 +761,11 @@ def test_a_killed_serve_leaves_no_lock_and_the_next_daily_closes_its_run_at_once
         "FAKE_REAL_BACKEND": str(ROOT / "backend"),
     }
     claude = ("--claude-cli", str(tree.root / "no-claude"))
-    # Friday 2026-10-16 18:30 on the injected clock; collect then waits for a file
+    # Friday 2026-10-16 21:30 on the injected clock; collect then waits for a file
     # that never comes, so the run row stays running.
     killed = tree.start_serve(
         "--now",
-        "2026-10-16T18:29:58",
+        "2026-10-16T21:29:58",
         *claude,
         extra_env={**real, "JOB_DAILY_CHILD_HOLD": str(tree.root / "never")},
     )
@@ -763,10 +792,11 @@ def test_a_killed_serve_leaves_no_lock_and_the_next_daily_closes_its_run_at_once
             (os.getpid(), row_id),
         )
     started = time.monotonic()
-    # 19:00, between the two triggers: the restarted serve runs the day's daily at once,
-    # as its 18:30 run did not complete (#342, decision 5).
+    # 22:10, between the two triggers and off the news hours: the restarted serve
+    # runs the day's daily at once, as its 21:30 run did not complete (#342,
+    # decision 5).
     restarted = tree.start_serve(
-        "--now", "2026-10-16T19:00:00", *claude, extra_env=real
+        "--now", "2026-10-16T22:10:00", *claude, extra_env=real
     )
     out = Output(restarted)
     try:
@@ -788,8 +818,147 @@ def test_a_killed_serve_leaves_no_lock_and_the_next_daily_closes_its_run_at_once
     assert [groups[1:] for groups in end_line(log)] == [("0", "")]
 
 
+def _fire_scheduled_daily(tree: ServeTree, at: str, *options: str) -> list[str]:
+    """Run the real scheduler from AT (Taipei) until its daily trigger has run once.
+
+    The start-up catch-up is dropped: this is the serve that has been running all
+    evening, so 23:00 is its trigger, not a restart. Returns serve's lines.
+    """
+
+    from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED
+
+    runner = serve.Serve(
+        serve_args(
+            "--data-dir",
+            str(tree.data),
+            *NO_MEMORY_CHECK,
+            "--claude-cli",
+            str(tree.root / "no-claude"),
+            "--now",
+            at,
+            *options,
+        )
+    )
+    upcoming = runner.next_times()["daily"]
+    assert upcoming is not None and upcoming - runner.now() < timedelta(seconds=30), (
+        f"the next daily from {at} is at {upcoming}"
+    )
+    scheduler = runner.scheduler()
+    if scheduler.get_job("daily-catchup"):
+        scheduler.remove_job("daily-catchup")
+    done = threading.Event()
+    scheduler.add_listener(
+        lambda event: event.job_id == "daily" and done.set(),
+        EVENT_JOB_EXECUTED | EVENT_JOB_ERROR,
+    )
+    thread = threading.Thread(target=scheduler.start, daemon=True)
+    thread.start()
+    try:
+        assert done.wait(timeout=300), f"no daily trigger from {at} within 300 s"
+    finally:
+        scheduler.shutdown(wait=True)
+        thread.join(timeout=60)
+    return [line for line in tree.log("daily").splitlines() if " start job=" in line]
+
+
+@pytest.mark.parametrize("first", ["success", "partial", "stuck"])
+def test_what_the_2300_trigger_runs_after_the_2130_run(serve_tree, monkeypatch, first):
+    """#466 AC-1: 23:00 after 21:30, on the verify fixture database.
+
+    21:30 success: 23:00 is a skipped already_complete row whose only step is the
+    institutional refetch (#396; faked here, no request). 21:30 partial (the margin
+    file not out yet, say): 23:00 is a full daily of the same date again. 21:30
+    stuck (decision 6638008818): the job ends it at its limit (80 minutes, 22:50;
+    3 seconds here), and 23:00 takes the lock, records the row abandoned and runs
+    the day again.
+    """
+
+    tree = serve_tree
+    built = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools" / "verify" / "fixture_db.py"),
+            "--dest",
+            str(tree.data),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
+    assert built.returncode == 0, built.stderr
+    db = tree.data / "stock.db"
+    with sqlite3.connect(db) as conn:
+        before = conn.execute(
+            "SELECT coalesce(max(id), 0) FROM schedule_runs"
+        ).fetchone()[0]
+    conn.close()
+    in_tree(
+        tree,
+        monkeypatch,
+        real_daily=Path(__file__).with_name("job_daily_child.py"),
+        real_backend=ROOT / "backend",
+    )
+    partial = tree.root / "collect-partial"
+    if first == "partial":
+        partial.touch()
+    monkeypatch.setenv("JOB_DAILY_CHILD_COLLECT_PARTIAL", str(partial))
+    options = ()
+    if first == "stuck":
+        # collect waits for a file that never comes.
+        monkeypatch.setenv("JOB_DAILY_CHILD_HOLD", str(tree.root / "never"))
+        options = ("--daily-time-limit-minutes", "0.05")
+    # Friday 2026-10-16 on the injected clock.
+    _fire_scheduled_daily(tree, "2026-10-16T21:29:58", *options)
+    partial.unlink(missing_ok=True)
+    monkeypatch.delenv("JOB_DAILY_CHILD_HOLD", raising=False)
+    if first == "stuck":
+        log = tree.log("daily")
+        assert "timeout: killed at the 0.05 minute limit of the daily job" in log
+    starts = _fire_scheduled_daily(tree, "2026-10-16T22:59:58")
+    assert len(starts) == 2
+    assert all(" trigger=scheduler date=2026-10-16 " in line for line in starts)
+    with sqlite3.connect(db) as conn:
+        rows = conn.execute(
+            "SELECT id, status, summary_json, error FROM schedule_runs"
+            " WHERE job = 'daily' AND id > ? ORDER BY id",
+            (before,),
+        ).fetchall()
+        steps = {
+            run_id: [
+                step
+                for (step,) in conn.execute(
+                    "SELECT step FROM schedule_run_steps WHERE schedule_run_id = ?"
+                    " ORDER BY id",
+                    (run_id,),
+                )
+            ]
+            for run_id, _, _, _ in rows
+        }
+    conn.close()
+    (first_id, first_status, _, first_error), (second_id, second_status, raw, _) = rows
+    second = json.loads(raw)
+    assert "collect" in steps[first_id]
+    if first == "stuck":
+        lock_file = job.lock_path(tree.data, "daily")
+        assert first_status == "failed"
+        assert first_error.startswith("abandoned: process ")
+        assert first_error.endswith(f" no longer holds {lock_file}")
+    else:
+        assert first_status == first
+    if first == "success":
+        assert second_status == "skipped"
+        assert second["reason"] == "already_complete"
+        assert second["related_run_id"] == first_id
+        assert steps[second_id] == ["institutional_refetch"]
+        assert second["institutional_refetch"]["status"] == "success"
+    else:
+        assert second_status == "success"
+        assert "collect" in steps[second_id] and "analyze" in steps[second_id]
+        assert "institutional_refetch" not in steps[second_id]
+
+
 def test_a_stopped_serve_ends_its_jobs(serve_tree):
-    process = serve_tree.start_serve("--now", "2026-10-19T18:29:58", daily_sleep=120)
+    process = serve_tree.start_serve("--now", "2026-10-19T21:29:58", daily_sleep=120)
     out = Output(process)
     worker = serve_tree.wait_for_call(1)
     assert stop(process) == 0  # docker stop: SIGTERM to serve (tini forwards it)
@@ -949,24 +1118,32 @@ def _catchup(data: Path, now: str):
 @pytest.mark.parametrize(
     "rows, now, reason",
     [
-        # Started after 18:30 on a weekday with no complete daily of the day: run it once.
-        ((), f"{MONDAY}T19:05", "not_complete"),
-        (((MONDAY, "failed"), (MONDAY, "skipped")), f"{MONDAY}T21:40", "not_complete"),
-        (((MONDAY, "running"),), f"{MONDAY}T18:30", "not_complete"),
-        (((MONDAY, "non_trading_unconfirmed"),), f"{MONDAY}T20:00", "not_complete"),
+        # Started after 21:30 (#466) on a weekday with no complete daily of the day:
+        # run it once.
+        ((), f"{MONDAY}T21:35", "not_complete"),
+        (((MONDAY, "running"),), f"{MONDAY}T21:30", "not_complete"),
+        # 21:30 failed, restarted before 23:00: no wait for the 23:00 retry.
+        (((MONDAY, "failed"), (MONDAY, "skipped")), f"{MONDAY}T22:10", "not_complete"),
+        (((MONDAY, "non_trading_unconfirmed"),), f"{MONDAY}T22:00", "not_complete"),
+        # 21:30 and 23:00 both incomplete, restarted after 23:00.
+        (((MONDAY, "partial"), (MONDAY, "failed")), f"{MONDAY}T23:20", "not_complete"),
         # The day before does not count.
-        (((("2026-10-30", "success")),), f"{MONDAY}T19:05", "not_complete"),
+        (((("2026-10-30", "success")),), f"{MONDAY}T21:35", "not_complete"),
         # Complete, too early, or a weekend: nothing at start.
-        (((MONDAY, "failed"), (MONDAY, "success")), f"{MONDAY}T19:05", None),
+        (((MONDAY, "failed"), (MONDAY, "success")), f"{MONDAY}T21:50", None),
         (((MONDAY, "non_trading_day"),), f"{MONDAY}T22:00", None),
-        ((), f"{MONDAY}T18:29", None),
-        ((), f"{SATURDAY}T19:05", None),
+        # 21:30 succeeded; the 23:00 refetch is not caught up after a restart.
+        (((MONDAY, "success"), (MONDAY, "skipped")), f"{MONDAY}T23:20", None),
+        # Before 21:30: the old 18:30 time no longer counts.
+        ((), f"{MONDAY}T19:05", None),
+        ((), f"{MONDAY}T21:29", None),
+        ((), f"{SATURDAY}T21:35", None),
     ],
 )
 def test_serve_runs_the_missed_daily_of_the_day_once_at_start(
     tmp_path, rows, now, reason
 ):
-    """Decision 5 of #342: a scheduler (re)created after 18:30 runs that day's daily."""
+    """Decision 5 of #342: a scheduler (re)created after 21:30 runs that day's daily."""
 
     _runs_db(tmp_path / "data", *rows)
     missed, catchup = _catchup(tmp_path / "data", now)
@@ -982,14 +1159,14 @@ def test_serve_runs_the_missed_daily_of_the_day_once_at_start(
 
 
 def test_a_volume_without_a_database_runs_no_daily_at_start(tmp_path):
-    assert _catchup(tmp_path / "data", f"{MONDAY}T19:05") == (None, None)
+    assert _catchup(tmp_path / "data", f"{MONDAY}T21:35") == (None, None)
 
 
 def test_an_unreadable_run_table_still_runs_the_daily_at_start(tmp_path):
     data = tmp_path / "data"
     data.mkdir(exist_ok=True)
     sqlite3.connect(data / "stock.db").close()
-    missed, catchup = _catchup(data, f"{MONDAY}T19:05")
+    missed, catchup = _catchup(data, f"{MONDAY}T21:35")
     assert missed == "unreadable:OperationalError"
     assert catchup is not None
 

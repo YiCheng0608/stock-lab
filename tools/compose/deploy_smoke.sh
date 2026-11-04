@@ -15,7 +15,7 @@
 #    containers, volumes and the volume's deploy.json are as before, and the job still runs
 #    and holds the lock (a refused deploy leaves a running job alone, #430). The seed marks
 #    today's daily done, so serve starts no catch-up daily that would hold the lock instead
-#    (the 18:30 and 21:30 triggers still can: see the seed).
+#    (the 21:30 and 23:00 triggers still can: see the seed).
 # 2b. The DB's alembic_version set behind, then ahead of t2's head: deploy t2 is refused (exit
 #    1) after its build, the containers, volumes and deploy.json as before, every service on
 #    t1, the DB revision as set (#456). Then back at the head.
@@ -117,9 +117,9 @@ expect_images() {
 }
 
 echo "== seed: the verify fixture database in the project's stock-data volume, today's daily done"
-# serve runs a daily as it starts on a weekday past 18:30 when the day's has not completed
+# serve runs a daily as it starts on a weekday past 21:30 when the day's has not completed
 # (worker/serve.py missed_daily); that daily would hold the daily lock of step 2 (#430). A
-# success row of today (Taipei) keeps it from starting. The 18:30 and 21:30 triggers do not
+# success row of today (Taipei) keeps it from starting. The 21:30 and 23:00 triggers do not
 # read schedule_runs: a smoke that runs across one of them can still find their daily holding
 # the lock (or news on an even hour, the watchdog at :15 and :45 holding theirs), and then
 # fails, saying so (step 2's checks, or deploy t2 refused in step 3).

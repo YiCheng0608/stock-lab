@@ -10,9 +10,9 @@ of each instrument and session are built once.
 
 Refuses before importing the app when ``--db`` is the production database
 (inside ``stock-lab-data`` or ``STOCK_DATA_DIR``, or the same file as its
-``stock.db``, a hard link included), when Taipei time is between 18:30 and
-21:30 (the daily job), or when free physical memory is under
-``--min-free-gb``.  A replay that reaches 18:30 stops after the score date or
+``stock.db``, a hard link included), when Taipei time is between 21:30 and
+23:30 (the daily job and its 23:00 retry, #466), or when free physical memory is under
+``--min-free-gb``.  A replay that reaches 21:30 stops after the score date or
 tracking batch it was committing and exits 3 with ``rerun``, the command that
 completes it (a rerun ends with the rows of one uninterrupted run).
 Otherwise it prints one JSON object: the run, the registry, elapsed
@@ -34,7 +34,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 TAIPEI = timezone(timedelta(hours=8))  # no daylight saving time
-DAILY_WINDOW = ((18, 30), (21, 30))
+# The scheduled daily (backend/worker/serve.py): 21:30, and 23:00 as its retry (#466).
+DAILY_WINDOW = ((21, 30), (23, 30))
 PRODUCTION_DIR_NAME = "stock-lab-data"
 
 
@@ -100,7 +101,8 @@ def daily_window_problem(now: datetime) -> str | None:
     (start_h, start_m), (end_h, end_m) = DAILY_WINDOW
     minutes = local.hour * 60 + local.minute
     if start_h * 60 + start_m <= minutes < end_h * 60 + end_m:
-        return f"Taipei time {local:%H:%M} is inside 18:30-21:30 (daily job)"
+        window = f"{start_h:02d}:{start_m:02d}-{end_h:02d}:{end_m:02d}"
+        return f"Taipei time {local:%H:%M} is inside {window} (daily job)"
     return None
 
 

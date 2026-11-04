@@ -63,9 +63,9 @@ ROOT = Path(__file__).resolve().parents[2]
 TAIPEI = timezone(timedelta(hours=8))
 JOBS = ("daily", "news")
 TRIGGERS = ("scheduler", "manual", "simulation")
-# daily: the abandoned-run limit in worker.schedule_runs, clearly shorter than
-# the 3 hours between the 18:30 and 21:30 triggers. news: well inside its
-# 2-hour interval.
+# daily: the abandoned-run limit in worker.schedule_runs; a manual run's limit, as
+# serve passes its scheduled runs 80 minutes, which end before the 23:00 trigger
+# (#466). news: well inside its 2-hour interval.
 TIME_LIMIT_MINUTES = {"daily": 150.0, "news": 90.0}
 DEFAULT_MIN_FREE_MEMORY_GB = 8.0
 DEFAULT_LOG_RETENTION_DAYS = 90
