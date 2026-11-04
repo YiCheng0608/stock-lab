@@ -900,7 +900,10 @@ export type NewsAi = {
     reason: string | null
     confidence: 'high' | 'medium' | 'low' | string | null
     verified: false
+    // #465 rule check: the name or code is in the title／summary the model was sent.
+    source_check?: 'mentioned' | 'not_mentioned' | string | null
   }>
+  candidate_check_version?: string | null
   theme_candidates: Array<{ theme: string; reason: string | null }>
   impact_direction: 'positive' | 'negative' | 'mixed' | 'unknown' | string | null
   impact_scope: 'instrument' | 'theme' | 'market' | string | null
@@ -1058,7 +1061,7 @@ export type ThemeMemberRow = StockDirectoryRow & {
   // Change against the previous session, same rule as the candidate market (#280, UI_COPY_SPEC §8.5).
   change?: number | null
   change_pct?: number | null
-  change_status?: 'known' | 'unverified' | 'missing' | string
+  change_status?: 'known' | 'unverified' | 'no_previous_close' | 'missing' | string
   // Only on members_as_of; missing when the member has no bar that day.
   turnover?: number | null
   turnover_status?: 'available' | 'unavailable' | 'unknown' | 'missing' | string
@@ -1419,7 +1422,7 @@ export type CandidateMarket = {
   close: number | null
   change: number | null
   change_pct: number | null
-  change_status: 'known' | 'unverified' | 'missing' | string
+  change_status: 'known' | 'unverified' | 'no_previous_close' | 'missing' | string
   source: string | null
 }
 

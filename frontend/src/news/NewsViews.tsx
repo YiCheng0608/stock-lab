@@ -10,6 +10,9 @@ import {
   NO_SUMMARY_TEXT,
   STOCK_NEWS_LIMIT,
   aiDirection,
+  candidateCheckLabel,
+  candidateCheckNote,
+  candidateCheckSummary,
   candidateConfidenceLabel,
   cardAiCandidates,
   directionView,
@@ -98,16 +101,16 @@ function AiCandidateRow({ item }: { item: NewsItem }) {
   if (!ai || !candidates.length) return null
   return (
     <details className="news-ai-candidates" data-testid="news-ai-candidates">
-      <summary>AI 候選（推論，待核實）· {candidates.length} 檔</summary>
+      <summary>{candidateCheckSummary(candidates)}</summary>
       <ul>{candidates.map((candidate) => (
         <li key={candidate.key}>
           {candidate.name
             ? <Link to={`/stocks/${encodeURIComponent(candidate.exchange)}/${encodeURIComponent(candidate.symbol)}`}>{candidateLabel(candidate)}</Link>
             : <span>{candidateLabel(candidate)}</span>}
-          <span className="news-ai-confidence"> · {candidateConfidenceLabel(candidate.confidence)}</span>
+          <span className="news-ai-confidence">{` · ${candidateCheckLabel(candidate.source_check)} · ${candidateConfidenceLabel(candidate.confidence)}`}</span>
         </li>
       ))}</ul>
-      <p className="small-note">模型 {ai.model ?? '未記錄'} · 提示版本 {ai.prompt_version ?? '未記錄'}。候選未經規則核實。</p>
+      <p className="small-note">{`模型 ${ai.model ?? '未記錄'} · 提示版本 ${ai.prompt_version ?? '未記錄'} · ${candidateCheckNote(ai)}`}</p>
     </details>
   )
 }
@@ -240,7 +243,7 @@ export function AiInferencePanel({ ai }: { ai: NewsAi | null }) {
         <div><dt>方向</dt><dd><DirectionText view={aiDirection(ai)} /> · 範圍：{impactScopeLabel(ai.impact_scope)}</dd></div>
         <div><dt>理由</dt><dd>{normalizeText(ai.impact_rationale) ?? '模型未提供理由'}</dd></div>
       </dl>
-      <h3 className="ai-subtitle">候選標的 <Badge tone="warning" className="badge-compact">待核實</Badge></h3>
+      <h3 className="ai-subtitle">候選標的</h3>
       {ai.symbol_candidates.length
         ? <ul className="ai-candidates">{ai.symbol_candidates.map((candidate) => {
           const label = candidateLabel(candidate)
@@ -249,18 +252,18 @@ export function AiInferencePanel({ ai }: { ai: NewsAi | null }) {
               {candidate.name
                 ? <Link to={`/stocks/${encodeURIComponent(candidate.exchange)}/${encodeURIComponent(candidate.symbol)}`}>{label}</Link>
                 : <span>{label}</span>}
-              <span className="small-note">{candidateConfidenceLabel(candidate.confidence)}{normalizeText(candidate.reason) ? ` · ${normalizeText(candidate.reason)}` : ''}</span>
+              <span className="small-note">{`${candidateCheckLabel(candidate.source_check)} · ${candidateConfidenceLabel(candidate.confidence)}${normalizeText(candidate.reason) ? ` · ${normalizeText(candidate.reason)}` : ''}`}</span>
             </li>
           )
         })}</ul>
         : <p className="small-note">模型未提出候選標的。</p>}
       {ai.theme_candidates.length > 0 && <>
-        <h3 className="ai-subtitle">候選題材 <Badge tone="warning" className="badge-compact">待核實</Badge></h3>
+        <h3 className="ai-subtitle">候選題材 <Badge tone="success" className="badge-compact">已通過題材核對</Badge></h3>
         <ul className="ai-candidates">{ai.theme_candidates.map((candidate) => (
           <li key={candidate.theme}><span>{candidate.theme}</span>{normalizeText(candidate.reason) && <span className="small-note">{normalizeText(candidate.reason)}</span>}</li>
         ))}</ul>
       </>}
-      <p className="small-note ai-meta">模型 {ai.model ?? '未記錄'} · 提示版本 {ai.prompt_version ?? '未記錄'} · 產生時間 {generated ?? '待核實'}。候選未經規則核實，不作為已核實關聯或交易理由。</p>
+      <p className="small-note ai-meta">模型 {ai.model ?? '未記錄'} · 提示版本 {ai.prompt_version ?? '未記錄'} · 產生時間 {generated ?? '待核實'} · {candidateCheckNote(ai)}候選標的與題材都不作為交易理由。</p>
     </section>
   )
 }

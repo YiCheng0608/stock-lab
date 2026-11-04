@@ -39,9 +39,10 @@ check(hiddenNewsCount(suggestion()) === 2 && hiddenNewsCount(suggestion({ news_c
 
 // ---- section markup ----
 const markup = render(<ThemeSuggestionsSection data={suggestions()} loading={false} error={null} onLoadAll={noop} />)
-check(markup.includes('新聞題材建議') && markup.includes('新聞聚合 · 待核實'), 'section title and eyebrow')
-check(markup.includes(SUGGESTION_NOTE), 'not ranked, not verified, not a trading reason')
-check(count(markup, '>待核實</span>') === 2 && count(markup, 'AI 推論') === 2, 'every suggestion is marked pending verification and AI inference')
+check(markup.includes('新聞題材建議') && markup.includes('新聞聚合 · AI 推論'), 'section title and eyebrow')
+check(markup.includes(SUGGESTION_NOTE) && SUGGESTION_NOTE.includes('已通過規則題材核對') && SUGGESTION_NOTE.includes('尚未納入題材表'), 'the note gives the basis: rule-checked names, not in the theme table, not ranked, not a trading reason')
+// #465: a suggestion is inference (UI_COPY_SPEC §8.6), so it carries 「AI 推論」 and never 「待核實」.
+check(!markup.includes('待核實') && count(markup, 'AI 推論') === 3, `every suggestion is marked AI inference, none 待核實: ${count(markup, 'AI 推論')}`)
 check(count(markup, 'class="ai-inference theme-suggestion"') === 2, 'each suggestion sits in the accent-bar inference block')
 check(markup.includes('<b>7</b> 則新聞 · 首次 2026/10/11 · 最近 2026/10/17 · 模型未提供把握'), 'count, dates and confidence')
 check(markup.includes('關聯新聞（7 則）') && markup.includes('href="/news/117"') && markup.includes('無人機訂單新聞 17'), 'related news link to the news detail')

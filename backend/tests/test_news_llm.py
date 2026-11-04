@@ -593,8 +593,11 @@ def test_rule_relations_and_llm_candidates_stay_in_separate_fields(db, fake, cli
             "confidence": "medium",
             "verified": False,
             "exchange_corrected": False,
+            # 台積電 is not in 「友達(2409)擴產」／「友達宣布擴產」 (#465).
+            "source_check": "not_mentioned",
         }
     ]
+    assert ai["candidate_check_version"] == "ai-candidate-source/v1"
     assert (
         ai["impact_direction"] == "positive" and ai["prompt_version"] == PROMPT_VERSION
     )
@@ -946,6 +949,46 @@ def test_a_corrected_candidate_links_to_the_active_instrument(db, client):
     # The stored inference keeps what the model wrote; only the read side follows the master.
     stored = db.scalars(select(NewsLlmResult)).one().ai_symbol_candidates_json
     assert [row["symbol"] for row in stored] == ["TPEx:6515", "TWSE:2330"]
+
+
+def test_each_candidate_says_whether_the_sent_text_names_it(db, client):
+    # #465: 65 of 94 production candidates outside the rule relations named a stock
+    # the title or summary mentions; the rest are the model's inference.
+    db.add(Instrument(exchange="TWSE", symbol="2317", name="鴻海", status="active"))
+    item = _add_news(db, 1, title="台股重挫 鴻海、廣達領跌", summary="電子權值股走弱")[
+        0
+    ]
+    db.add(
+        NewsLlmResult(
+            news_item_id=item.id,
+            prompt_version=PROMPT_VERSION,
+            llm_model="claude-sonnet-fake",
+            llm_input_hash="0" * 64,
+            llm_run_at=NOW,
+            llm_status="done",
+            ai_summary="摘要",
+            ai_symbol_candidates_json=[
+                {"symbol": "TWSE:2317", "reason": "標題點名", "confidence": "high"},
+                {"symbol": "TWSE:2330", "reason": "權值股", "confidence": "low"},
+            ],
+            ai_theme_candidates_json=[],
+            ai_impact_direction="negative",
+            ai_impact_scope="market",
+            ai_impact_rationale="理由",
+            ai_unsupported=False,
+        )
+    )
+    db.commit()
+    for path in (f"/news/{item.id}", "/news"):
+        body = client.get(f"{router.prefix}{path}").json()
+        ai = body["ai"] if "ai" in body else body["items"][0]["ai"]
+        assert [
+            (row["symbol"], row["source_check"]) for row in ai["symbol_candidates"]
+        ] == [("2317", "mentioned"), ("2330", "not_mentioned")]
+        assert ai["candidate_check_version"] == "ai-candidate-source/v1"
+    # The check is read-side only: rule relations and the stored inference stay.
+    db.refresh(item)
+    assert item.symbols_json == []
 
 
 # Schedule wrapper: exit codes ------------------------------------------------------
