@@ -1447,7 +1447,7 @@ def test_a_refused_gh_is_commented_once_gh_is_accepted_again(wd, mode, code):
     wd.run(now=next_day)
     bodies = wd.text("gh_bodies.txt")
     assert bodies.count("待使用者：gh 認證：") == 2
-    assert "2026-10-19T10:00:00Z 到 2026-10-19T10:00:00Z 的 1 次看門狗執行" in bodies
+    assert "2026-10-19T11:15:00Z 到 2026-10-19T11:15:00Z 的 1 次看門狗執行" in bodies
     wd.run(now=next_day + 1800)
     assert len(wd.text("gh_calls.log").splitlines()) == 2
 
