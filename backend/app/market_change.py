@@ -46,24 +46,50 @@ def _source_has_day(
     return sessions[key]
 
 
+def no_close_status(
+    db: Session,
+    source: str | None,
+    previous_day: date,
+    listing_date: date | None,
+    sessions: dict[Any, Any],
+) -> str:
+    """Why a stock has no traded close on ``previous_day``, the session before its bar.
+
+    ``first_trading_day`` (#475): the master lists it after ``previous_day``,
+    so the day is its first session and there was nothing to trade.
+    ``no_previous_close`` (#465): ``source`` has traded bars of other stocks
+    on ``previous_day``, so the day was collected, but none for this stock (no
+    trade or suspended; the collector keeps no row without a close, and the
+    page names no cause).  Otherwise the day may not be collected:
+    ``unverified``.
+    """
+
+    if listing_date is not None and listing_date > previous_day:
+        return "first_trading_day"
+    if source and _source_has_day(db, source, previous_day, sessions):
+        return "no_previous_close"
+    return "unverified"
+
+
 def adjacent_change(
     db: Session,
     instrument_id: int,
     trading_date: date,
     bar: MarketBar | None,
     sessions: dict[Any, Any],
+    *,
+    listing_date: date | None,
 ) -> dict[str, Any]:
     """The close of ``trading_date`` and its change.
 
     The change is ``known`` only against the stock's bar on the previous
     verified TAIEX session from the same source (UI_COPY_SPEC §8.2); a holiday
     gap, missing or suspended bar, or another source is ``unverified``.
-    ``no_previous_close`` (#465) is the one gap the source explains: it has
-    bars on the previous session, so the day was collected, but none with a
-    traded close for this stock (no trade, suspended, or listed only now; the
-    collector keeps no row without a close, and the page names no cause). No
-    earlier close stands in: the exchange's reference price is not the last
-    traded close.
+    Without a traded close on the previous session the status says why
+    (``no_close_status``: ``first_trading_day`` for a stock the master lists
+    only from ``trading_date``, ``no_previous_close`` when the source has the
+    day). No earlier close stands in: the exchange's reference price is not
+    the last traded close.
     ``missing`` means no traded bar on the day. ``sessions`` caches the TAIEX
     lookup across the stocks of one response.
     """
@@ -96,8 +122,9 @@ def adjacent_change(
     if previous is not None and previous.source != bar.source:
         return market
     if previous_close is None:
-        if _source_has_day(db, bar.source, days[-2], sessions):
-            market["change_status"] = "no_previous_close"
+        market["change_status"] = no_close_status(
+            db, bar.source, days[-2], listing_date, sessions
+        )
         return market
     change = round(close - previous_close, 6)
     market.update(

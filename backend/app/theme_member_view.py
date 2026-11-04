@@ -130,7 +130,14 @@ def member_columns(
         else None
     )
     if as_of is not None:
-        market = adjacent_change(db, instrument.id, as_of, bar, context["sessions"])
+        market = adjacent_change(
+            db,
+            instrument.id,
+            as_of,
+            bar,
+            context["sessions"],
+            listing_date=instrument.listing_date,
+        )
     else:
         market = {"change": None, "change_pct": None, "change_status": "missing"}
     turnover_status = bar.turnover_status if bar is not None else "missing"

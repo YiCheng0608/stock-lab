@@ -23,12 +23,18 @@ name to look for and is checked by its code alone.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import unicodedata
 from collections.abc import Iterable
 
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
 from worker.news_batch import _etf_aliases, _holding_alias, _name_aliases
 from worker.news_llm import SUMMARY_INPUT_CHARS
+
+from .models import Instrument
 
 CANDIDATE_CHECK_VERSION = "ai-candidate-source/v1"
 MENTIONED = "mentioned"
@@ -54,6 +60,44 @@ def name_variants(name: str | None) -> set[str]:
     if holding:
         variants.add(holding)
     return {key for key in (_key(variant) for variant in variants) if len(key) >= 2}
+
+
+# (fingerprint of the master names, their keys); one per process (#475).
+_listed_keys: tuple[str | None, frozenset[str]] = (None, frozenset())
+
+
+def _names_fingerprint(db: Session) -> str:
+    """A digest of every master name in id order: any added, removed or renamed row changes it."""
+
+    ordered = select(Instrument.name).order_by(Instrument.id).subquery()
+    count, joined = db.execute(
+        select(func.count(), func.group_concat(ordered.c.name, "\x1f"))
+    ).one()
+    return hashlib.sha256(f"{count}\x1e{joined or ''}".encode()).hexdigest()
+
+
+def listed_name_keys(db: Session) -> frozenset[str]:
+    """``name_variants`` of every master name, cached in the process (#475).
+
+    Every page with news reads them (``news_ai_map``).  The cache holds until
+    the master names change: each call compares one aggregate of the names
+    (``_names_fingerprint``, one row) and recomputes the keys only when it
+    differs, so a rename by the worker in another process is seen on the next
+    request.
+    """
+
+    global _listed_keys
+    fingerprint = _names_fingerprint(db)
+    cached_fingerprint, keys = _listed_keys
+    if cached_fingerprint == fingerprint:
+        return keys
+    keys = frozenset(
+        key
+        for (name,) in db.execute(select(Instrument.name)).all()
+        for key in name_variants(name)
+    )
+    _listed_keys = (fingerprint, keys)
+    return keys
 
 
 def source_text(title: str | None, summary: str | None) -> str:

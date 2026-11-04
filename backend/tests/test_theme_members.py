@@ -7,7 +7,7 @@ from datetime import date, timedelta
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -368,7 +368,7 @@ def test_previous_bar_from_another_source_is_unverified(db, client):
 
 def test_no_close_on_a_previous_session_its_source_has_bars_for(db, client):
     # #465: the exchange published the previous session (other fixture-bars stocks
-    # have bars) but gave this stock no close (no trade, suspended or newly listed): the change is
+    # have bars) but gave this stock no close (no trade or suspended): the change is
     # not computed and says why, instead of 待核實. No earlier close stands in.
     _seed(db)
     row = _by_symbol(_members(client))["1104"]
@@ -378,6 +378,51 @@ def test_no_close_on_a_previous_session_its_source_has_bars_for(db, client):
         None,
         "no_previous_close",
     )
+
+
+@pytest.mark.parametrize(
+    ("listing_date", "status"),
+    [
+        # #475: listed on T, so the previous session is before its first day.
+        (T, "first_trading_day"),
+        # Listed between the two sessions (a non-trading listing day).
+        (PREVIOUS + timedelta(days=1), "first_trading_day"),
+        # Listed by the previous session: it could have traded and did not.
+        (PREVIOUS, "no_previous_close"),
+        (None, "no_previous_close"),
+    ],
+)
+def test_a_new_listing_is_not_a_stock_without_a_previous_close(
+    db, client, listing_date, status
+):
+    _seed(db)
+    d = db.scalar(select(Instrument).where(Instrument.symbol == "1104"))
+    d.listing_date = listing_date
+    db.commit()
+    row = _by_symbol(_members(client))["1104"]
+    assert (row["change"], row["change_pct"], row["change_status"]) == (
+        None,
+        None,
+        status,
+    )
+    # The stock page header reads the same status from the bars API (#475).
+    bars = client.get("/api/stocks/TWSE/1104/bars").json()
+    assert bars["latest_change"]["trading_date"] == T.isoformat()
+    assert bars["latest_change"]["change_status"] == status
+    assert bars["latest_change"]["change"] is None
+
+
+def test_the_bars_api_reports_the_latest_change_like_the_member_table(db, client):
+    _seed(db)
+    rows = _by_symbol(_members(client))
+    for symbol in ("1100", "1101", "1102", "1104"):
+        latest = client.get(f"/api/stocks/TWSE/{symbol}/bars").json()["latest_change"]
+        assert latest["trading_date"] == T.isoformat()
+        assert latest["change_status"] == rows[symbol]["change_status"]
+        assert latest["change"] == rows[symbol]["change"]
+    # The weekly payload has no header change.
+    week = client.get("/api/stocks/TWSE/1101/bars", params={"interval": "week"})
+    assert week.json()["latest_change"] is None
 
 
 def test_a_previous_session_missing_for_the_whole_source_stays_unverified(db, client):
