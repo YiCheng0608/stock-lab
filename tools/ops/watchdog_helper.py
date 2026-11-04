@@ -17,11 +17,13 @@ The result goes to stdout without a trailing newline.
                                    (not_logged_in: no login, or an expired or
                                    revoked CLAUDE_CODE_OAUTH_TOKEN), else
                                    nothing; "skip" without the table
-  daily-result <db> <date> <now>   the outcome of the daily runs for target
+  daily-result <db> <date> <now> [<minutes>]
+                                   the outcome of the daily runs for target
                                    <date> (YYYY-MM-DD): success,
                                    non_trading_day, running, none, skip, a
                                    failing run status, skipped:<reason>, or
-                                   catchup_incomplete
+                                   catchup_incomplete; a run still running
+                                   past <minutes> (default 150) is failed
   invariants <db> <today>          one line per data invariant,
                                    "<name> ok|violation|skip key=value ...":
                                    future_trading_date (latest market_bars
@@ -200,8 +202,15 @@ def llm_auth(db: str, now: str) -> str:
     return "\n".join(lines)
 
 
-def daily_result(db: str, day: str, now: str) -> str:
+def daily_result(db: str, day: str, now: str, running_limit: str | None = None) -> str:
     current = _utc(now)
+    # A scheduled run's own limit (minutes) when given: the day before is judged after
+    # midnight, past the 80-minute limit and serve's 5-minute backstop (#466).
+    limit = (
+        timedelta(minutes=float(running_limit))
+        if running_limit
+        else DAILY_RUNNING_LIMIT
+    )
     with _connect(db) as conn:
         if not _has_table(conn, "schedule_runs"):
             return "skip"
@@ -224,7 +233,7 @@ def daily_result(db: str, day: str, now: str) -> str:
             continue
         if status == "running":
             started_at = _started(started)
-            if started_at is not None and current - started_at > DAILY_RUNNING_LIMIT:
+            if started_at is not None and current - started_at > limit:
                 return "failed"
             return "running"
         if status == "skipped":
@@ -434,7 +443,7 @@ def main(argv: list[str]) -> int:
     elif command == "llm-auth":
         out = llm_auth(args[0], args[1])
     elif command == "daily-result":
-        out = daily_result(args[0], args[1], args[2])
+        out = daily_result(*args[:4])
     elif command == "invariants":
         out = invariants(args[0], args[1])
     elif command == "monitor-beat":

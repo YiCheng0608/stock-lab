@@ -10,8 +10,8 @@ commands those tasks ran.
   them and always ended partial). 23:00 is the insurance: after a 21:30
   ``success`` it records ``already_complete`` and only refetches the day's
   institutional files (#396); after a 21:30 that failed or did not run it is the
-  day's retry. The 80 minutes end a stuck 21:30 run at 22:50, so that it does not
-  hold the lock at 23:00 (#466 decision 6638008818; a manual ``job daily`` keeps
+  day's retry. The 80 minutes end a stuck 21:30 run at 22:50 (serve's backstop at
+  22:55), so that it does not hold the lock at 23:00 (#466 decision 6638008818; a manual ``job daily`` keeps
   the job's own 150).
 - news: every 2 hours on the hour, ``worker.cli job news --min-free-memory-gb
   1`` (news, then news-llm).
@@ -43,7 +43,7 @@ Scheduler: its lock (one job of a kind at a time), the checks before a run,
 the time limit, the log and the exit code (worker.job, docs/ops/SCHEDULING.md).
 So an overlapping trigger starts the job too, and the job records
 ``already_running``; this scheduler keeps no lock of its own. As the task's
-own limit did, a run still going 10 minutes past its job's limit is killed
+own limit did, a run still going 5 minutes past its job's limit is killed
 with its process group. No ``--git-pull``: the image fixes the code.
 
 The children end with this process (PR_SET_PDEATHSIG, worker.job): a killed
@@ -95,8 +95,9 @@ MONITOR_TIME_LIMIT_MINUTES = 10.0
 MONITOR_MODES = ("off", "record-only", "on")
 # The host directory compose bind mounts for the queue (docs/ops/MONITOR.md).
 MONITOR_DIR = "/coordination"
-# Past the job's own limit, as Task Scheduler's limit was the job's plus 10 minutes.
-BACKSTOP_MINUTES = 10.0
+# Past the job's own limit (Task Scheduler's was the job's plus 10 minutes). 5 since #466
+# (review 6641540634): a scheduled daily's backstop, 21:30 + 80 + 5, is before 23:00.
+BACKSTOP_MINUTES = 5.0
 # An overlapping trigger still starts its job, which records already_running.
 MAX_INSTANCES = 3
 # Decision 6 of #342: the env file switches news-llm off without a compose file change.

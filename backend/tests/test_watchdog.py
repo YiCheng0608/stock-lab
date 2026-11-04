@@ -785,9 +785,7 @@ def test_a_retry_stuck_past_midnight_is_reported_once_after_0030(wd, stuck):
         # serve restarted at 21:45 and its catch-up hangs (ended at 23:05); the 23:00
         # trigger found the lock held.
         _add_daily_run(db, "running", NIGHT - 90 * 60)
-        _add_daily_run(
-            db, "skipped", AT_2300, summary={"reason": "already_running"}
-        )
+        _add_daily_run(db, "skipped", AT_2300, summary={"reason": "already_running"})
     for now in (NIGHT, LAST_RUN, AT_0015):  # 23:15, 23:45, 00:15: still running
         wd.run(now=now)
     assert wd.text("gh_calls.log") == ""
@@ -825,7 +823,6 @@ def test_a_friday_reported_on_saturday_is_not_reported_again_on_monday(wd):
 
 
 def test_a_missing_daily_log_waits_for_the_2300_retry(wd):
-
     (wd.logs / "daily-20261016.log").write_text(
         "===== x start\n===== y end exit=0 seconds=1\n", encoding="utf-8"
     )
