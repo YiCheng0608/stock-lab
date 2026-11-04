@@ -13,21 +13,25 @@ scheduler container is worker.job's own (the Linux test at the end).
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 import time
+from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 import worker.job as job
+from app.migration_revisions import REVISIONS
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPTS = ("deploy.sh", "coordinator_lib.sh", "coordinator_json.py")
+SCRIPTS = ("deploy.sh", "coordinator_lib.sh", "coordinator_json.py", "db_revision.py")
 PROJECT = "stock-lab"
 # docker-compose.yml before and after #340: only the second tags the images.
 COMPOSE_BEFORE = "x-backend: &backend\n  image: ${COMPOSE_PROJECT_NAME}-backend\n"
@@ -81,7 +85,8 @@ exec "$REAL_GIT" "$@"
 
 # The fake docker's state, under $FAKE_DIR/docker: images (one ref per line), running (the tag
 # the project's containers run), containers (`docker ps` lines: id, service, oneoff label; none without
-# the file), volume/deploy.json, locks_held (a job holds a lock: the lock exec exits 75),
+# the file), volume/deploy.json, volume/stock.db (a real SQLite file: `docker run` of the DB
+# revision check runs the piped db_revision.py on it), no_volume (volume inspect fails), locks_held (a job holds a lock: the lock exec exits 75),
 # old_image (the holder's worker.job knows no --keep-stdin: exit 2), lock_hangs (the holder
 # never answers). Every call goes to docker_calls.log, the lock holder's end too ("lock
 # released"), so the order of the steps can be read back. on_lock, when it exists, runs as the
@@ -132,6 +137,16 @@ fi
 case "$1" in
   ps) cat "$d/containers" 2>/dev/null; exit 0 ;;
   inspect) echo "stock-lab-backend:$(running)"; exit 0 ;;
+  volume)
+    # volume inspect: the project's data volume exists unless no_volume does.
+    [ "$2" = inspect ] && [ ! -f "$d/no_volume" ] && exit 0
+    exit 1 ;;
+  run)
+    # The DB revision check (#456): the script on stdin runs on this Python against the
+    # volume's stock.db, with the repo's backend as the image's code.
+    script="$FAKE_DIR/db_revision_stdin.py"
+    cat >"$script"
+    PYTHONPATH="$FAKE_BACKEND" exec "$FAKE_PYTHON" -X utf8 "$script" "$d/volume/stock.db" ;;
   image)
     shift 2
     for ref in "$@"; do grep -qxF "$ref" "$d/images" 2>/dev/null || exit 1; done
@@ -218,6 +233,29 @@ class Harness:
         self.images(f"{PROJECT}-backend:v0", f"{PROJECT}-web:v0")
         (self.docker / "running").write_text("v0\n", encoding="utf-8")
         self.containers("c0ffee5c4ed01e7 scheduler False", "feedface0001 api False")
+        # The volume's DB is at the head of the code the images are built from.
+        self.db_revision(REVISIONS[-1])
+
+    def db_revision(self, *versions: str, table: bool = True) -> None:
+        """The volume's stock.db with these alembic_version rows (none: no table)."""
+        path = self.docker / "volume" / "stock.db"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.unlink(missing_ok=True)
+        with closing(sqlite3.connect(path)) as connection:
+            connection.execute("CREATE TABLE other (x)")
+            if table:
+                connection.execute("CREATE TABLE alembic_version (version_num TEXT)")
+                connection.executemany(
+                    "INSERT INTO alembic_version VALUES (?)", [(v,) for v in versions]
+                )
+            connection.commit()
+
+    def db_versions(self) -> list[str]:
+        path = self.docker / "volume" / "stock.db"
+        with closing(
+            sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)
+        ) as connection:
+            return [r[0] for r in connection.execute("SELECT * FROM alembic_version")]
 
     def commit(self, files: dict[str, str]) -> None:
         for name, text in files.items():
@@ -284,8 +322,17 @@ class Harness:
         return [
             call
             for call in self.calls("docker")
-            if set(call.split()) & set(changing) and not call.startswith("ps ")
+            if set(call.split()) & set(changing)
+            and not call.startswith(("ps ", "volume inspect "))
+            and not self.is_revision_check(call)
         ]
+
+    @staticmethod
+    def is_revision_check(call: str) -> bool:
+        """The DB revision check's `docker run` (#456): read-only volume, no network."""
+        return call.startswith("run --rm -i --network none -v ") and (
+            "_stock-data:/data:ro --entrypoint python " in call
+        )
 
     @property
     def record(self) -> dict | None:
@@ -307,6 +354,8 @@ class Harness:
             REAL_GIT=Path(REAL_GIT).as_posix(),
             HOME=self.home.as_posix(),
             STOCK_PYTHON=Path(sys.executable).as_posix(),
+            FAKE_PYTHON=Path(sys.executable).as_posix(),
+            FAKE_BACKEND=(ROOT / "backend").as_posix(),
             # A task session's project (tools/ops/dispatch.sh): never the one deployed.
             COMPOSE_PROJECT_NAME="task-340",
         )
@@ -409,6 +458,8 @@ def test_the_steps_run_in_order_while_the_locks_are_held(harness):
         lock,
         at("build project="),
         at("image inspect stock-lab-backend:v1 stock-lab-web:v1"),
+        at("volume inspect -f {{.Name}} stock-lab_stock-data"),
+        at("run --rm -i --network none -v stock-lab_stock-data:/data:ro "),
         at(" run --rm --no-deps -T --entrypoint sh scheduler -c "),
         at(" up -d --no-build --wait --wait-timeout 300"),
         at(" ps --format "),
@@ -421,7 +472,7 @@ def test_the_steps_run_in_order_while_the_locks_are_held(harness):
     for name in ("daily", "news", "watchdog"):
         assert f"lock --keep-stdin /data/locks/{name}.lock --" in calls[lock]
     assert calls[lock].endswith("sh -c echo held; exec cat >/dev/null")
-    assert "watchdog_helper.py deploy-image /data/logs/deploy.json" in calls[steps[6]]
+    assert "watchdog_helper.py deploy-image /data/logs/deploy.json" in calls[steps[8]]
 
 
 def test_compose_gets_the_project_and_file_and_never_the_session_project(harness):
@@ -697,6 +748,195 @@ def test_a_deploy_from_inside_the_checkout_is_refused(harness):
     result = harness.deploy("v1")
     assert result.code == 1 and "這支腳本在發佈 checkout 裡" in result.out, result.out
     assert harness.head() == before and harness.mutations() == []
+
+
+# The DB revision against the tag's alembic head (#456) ---------------------------------
+# After the build and before any container changes: a DB behind or ahead of the head is
+# refused (exit 1), the containers, the record, the DB and the checkout as they were.
+
+
+def assert_refused_after_build(h: Harness, before: tuple, result, text: str) -> None:
+    """As assert_refused_unchanged, but the build ran: its images are the one change."""
+    assert result.code == 1, result.out
+    assert text in result.out
+    assert result.result["deployed"] is False
+    head, status, tags, docker = before
+    assert h.state()[:3] == (head, status, tags)
+    after = h.docker_state()
+    built = f"{PROJECT}-backend:v1\n{PROJECT}-web:v1\n"
+    assert after["images"] == docker["images"] + built
+    assert {k: v for k, v in after.items() if k != "images"} == {
+        k: v for k, v in docker.items() if k != "images"
+    }
+    # Nothing but the build and the read-only check: no record, no up, no other run.
+    others = [c for c in h.mutations() if not c.startswith("build ")]
+    assert len(others) == 1, others
+    assert others[0].startswith(f"compose -p {PROJECT} -f ") and others[0].endswith(
+        "/docker-compose.yml build"
+    ), others
+    assert not [c for c in h.calls("docker") if " up " in f" {c} "]
+    assert h.calls("docker")[-1] == "lock released"
+    assert not [c for c in h.calls("gh") if c.startswith("issue")]
+    assert_no_pull(h)
+
+
+def test_a_db_at_the_head_is_read_by_the_new_image_read_only_and_deployed(harness):
+    result = harness.deploy("v1", "--no-comment")
+    assert result.code == 0, result.out
+    (check,) = [c for c in harness.calls("docker") if c.startswith("run ")]
+    assert check == (
+        f"run --rm -i --network none -v {PROJECT}_stock-data:/data:ro --entrypoint python "
+        f"{PROJECT}-backend:v1 -X utf8 - /data/stock.db"
+    )
+    assert harness.is_revision_check(check)
+    assert harness.db_versions() == [REVISIONS[-1]]
+    assert "db_revision" not in result.result
+
+
+@pytest.mark.parametrize(
+    "version,text",
+    [
+        (REVISIONS[-2], "DB 落後"),
+        ("0099_from_a_later_tag", "DB 比這個 tag 新"),
+    ],
+    ids=["behind", "ahead"],
+)
+def test_a_db_behind_or_ahead_of_the_head_is_refused_and_no_container_changes(
+    harness, version, text
+):
+    harness.db_revision(version)
+    before = harness.state()
+    result = harness.deploy("v1")
+    assert_refused_after_build(harness, before, result, text)
+    assert result.result["db_revision"] == version
+    assert result.result["head"] == REVISIONS[-1]
+    assert "DB 的 revision" in result.result["reason"]
+    assert (
+        version in result.result["reason"] and REVISIONS[-1] in result.result["reason"]
+    )
+    # Read only: the DB is as it was.
+    assert harness.db_versions() == [version]
+
+
+def test_a_db_behind_prints_the_backup_and_init_db_commands(harness):
+    harness.db_revision(REVISIONS[-2])
+    result = harness.deploy("v1")
+    assert result.code == 1, result.out
+    assert "docs/RELEASE.md「含 migration 的版本」" in result.out
+    assert "docker compose -p stock-lab stop scheduler" in result.out
+    # A shell left with a smoke test's settings runs init-db without them (PR #477 review).
+    assert "\n  unset WEB_PORT API_PORT STOCK_ENV_FILE\n" in result.out
+    assert (
+        '-v stock-lab_stock-data:/data:ro -v "$B":/out -v "$(pwd -W)/tools/ops/copy_db.py"'
+        ":/t/copy_db.py:ro stock-lab-backend:v1 python /t/copy_db.py --src /data/stock.db"
+        " --dest /out"
+    ) in result.out
+    assert (
+        "STOCK_RELEASE_TAG=v1 docker compose -p stock-lab run --rm --no-deps api"
+        " python -m worker.cli init-db)"
+    ) in result.out
+
+
+def test_a_db_ahead_points_to_the_rollback(harness):
+    harness.db_revision("0099_from_a_later_tag")
+    result = harness.deploy("v1")
+    assert result.code == 1, result.out
+    assert "docs/RELEASE.md「版本回退」" in result.result["reason"]
+    assert "init-db)" not in result.out
+
+
+@pytest.mark.parametrize(
+    "setup,text",
+    [
+        ("no_volume", "沒有 volume stock-lab_stock-data"),
+        ("no_db", "裡沒有 /data/stock.db"),
+        ("no_table", "不是恰好一列"),
+        ("two_rows", "不是恰好一列"),
+    ],
+    ids=["no_volume", "no_db", "no_table", "two_rows"],
+)
+def test_no_volume_db_or_single_revision_is_refused(harness, setup, text):
+    if setup == "no_volume":
+        (harness.docker / "no_volume").touch()
+    elif setup == "no_db":
+        (harness.docker / "volume" / "stock.db").unlink()
+    elif setup == "no_table":
+        harness.db_revision(table=False)
+    else:
+        harness.db_revision(REVISIONS[-2], REVISIONS[-1])
+    before = harness.state()
+    result = harness.deploy("v1")
+    assert_refused_after_build(harness, before, result, text)
+    if setup == "no_volume":
+        # docker run -v would have created the volume: no run at all.
+        assert not [c for c in harness.calls("docker") if c.startswith("run ")]
+
+
+def test_a_refusal_after_the_build_puts_a_branch_checkout_back_on_its_branch(harness):
+    git(harness.checkout, "checkout", "--quiet", "master")
+    harness.db_revision(REVISIONS[-2])
+    before = harness.state()
+    result = harness.deploy("v1")
+    assert_refused_after_build(harness, before, result, "DB 落後")
+    assert git(harness.checkout, "symbolic-ref", "--short", "HEAD") == "master"
+
+
+def _db_revision_module():
+    spec = importlib.util.spec_from_file_location(
+        "db_revision_under_test", ROOT / "tools" / "ops" / "db_revision.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize(
+    "side,falls_back",
+    [(None, True), ("-wal", False), ("-shm", False), ("-journal", False)],
+    ids=["none", "wal", "shm", "hot-journal"],
+)
+def test_db_revision_opens_immutable_only_with_no_side_file(
+    tmp_path, monkeypatch, side, falls_back
+):
+    """On the read-only volume `mode=ro` fails when no connection holds the -shm. Only the
+    main file alone is opened immutable; a -wal, -shm or hot -journal (PR #477 review) next
+    to it is not skipped."""
+    db_revision = _db_revision_module()
+    path = tmp_path / "stock.db"
+    with closing(sqlite3.connect(path)) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT)")
+        connection.execute("INSERT INTO alembic_version VALUES (?)", (REVISIONS[-1],))
+        connection.commit()
+    if side:
+        Path(f"{path}{side}").write_bytes(b"")
+    real_connect = sqlite3.connect
+    uris = []
+
+    def connect(database, *args, **kwargs):
+        uris.append(database)
+        if not database.endswith("&immutable=1"):
+            # What a read-only mount does to mode=ro without the -shm.
+            raise sqlite3.OperationalError("unable to open database file")
+        return real_connect(database, *args, **kwargs)
+
+    monkeypatch.setattr(db_revision.sqlite3, "connect", connect)
+    if falls_back:
+        assert db_revision.revision(path) == ("same", REVISIONS[-1])
+        assert uris[-1].endswith("?mode=ro&immutable=1")
+    else:
+        with pytest.raises(sqlite3.OperationalError):
+            db_revision.revision(path)
+        assert not [u for u in uris if "immutable" in u]
+
+
+def test_redeploying_after_init_db_deploys(harness):
+    """The refused deploy, then init-db (here: the DB written at the head), then the same tag."""
+    harness.db_revision(REVISIONS[-2])
+    assert harness.deploy("v1", "--no-comment").code == 1
+    harness.db_revision(REVISIONS[-1])
+    result = harness.deploy("v1", "--no-comment")
+    assert result.code == 0, result.out
+    assert harness.docker_state()["running"] == "v1\n"
 
 
 # A step failing after the checkout started (exit 3) ------------------------------------
