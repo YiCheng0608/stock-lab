@@ -12,6 +12,7 @@ from . import job as scheduled_job, serve as scheduler
 # directory, and a scheduled `job` (or `serve`) has only --data-dir.
 os.environ.update(scheduled_job.cli_environment(sys.argv[1:]))
 
+from app.config import DATA_DIR
 from app.db import init_db
 
 from .backfill import BACKFILL_SCOPES, chunked_backfill
@@ -70,6 +71,26 @@ def parse_date(value: str | None) -> date | None:
     return date.fromisoformat(value) if value else None
 
 
+def maintenance_guarded(args: argparse.Namespace) -> str | None:
+    """The name of a command that writes the database for long, as a daily does (#468).
+
+    Backfills and backtests: with the scheduler running they need maintenance mode
+    (worker.job.maintenance_refusal; docs/ops/SCHEDULING.md 維護模式).
+    """
+
+    if args.command in {"backfill", "backtest"}:
+        return args.command
+    if args.command == "events" and args.events_command == "backfill":
+        return "events backfill"
+    if (
+        args.command == "instruments"
+        and args.instruments_command == "repair"
+        and args.apply
+    ):
+        return "instruments repair --apply"
+    return None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="台股研究工具 Python worker")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -112,6 +133,17 @@ def main() -> None:
         help="scheduler 容器的常駐排程：定時執行 job daily、job news 與看門狗（取代工作排程器）",
     )
     scheduler.add_arguments(serve_parser)
+    maintenance_parser = subparsers.add_parser(
+        "maintenance",
+        help="維護模式（#468）：開啟時排程的 daily 與 news 只記 skipped，看門狗與 monitor 照常",
+    )
+    maintenance_parser.add_argument("action", choices=("on", "off", "status"))
+    maintenance_parser.add_argument(
+        "--reason", help="開啟或關閉的原因（on、off 必填），記在 logs/maintenance.log"
+    )
+    maintenance_parser.add_argument(
+        "--data-dir", help="資料目錄；預設 STOCK_DATA_DIR（scheduler 容器是 /data）"
+    )
     runs_parser = subparsers.add_parser(
         "schedule-runs", help="列出 daily 排程 run 記錄與各步驟"
     )
@@ -385,6 +417,25 @@ def main() -> None:
         if problem:
             parser.error(problem)
         sys.exit(scheduler.run(args))
+    if args.command == "maintenance":
+        data_dir = scheduled_job.resolve_data_dir(args.data_dir or str(DATA_DIR))
+        reason = (args.reason or "").strip()
+        if args.action != "status" and not reason:
+            parser.error(f"maintenance {args.action} needs --reason")
+        if args.action == "on":
+            result = scheduled_job.maintenance_on(data_dir, reason)
+        elif args.action == "off":
+            result = scheduled_job.maintenance_off(data_dir, reason)
+        else:
+            result = scheduled_job.maintenance_status(data_dir)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
+    guarded = maintenance_guarded(args)
+    if guarded:
+        refusal = scheduled_job.maintenance_refusal(DATA_DIR, guarded)
+        if refusal:
+            print(refusal, file=sys.stderr)
+            sys.exit(scheduled_job.MAINTENANCE_REFUSED_EXIT)
     if args.command == "init-db":
         init_db()
         result = {"status": "success"}

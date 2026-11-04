@@ -33,6 +33,18 @@ The news job runs ``worker.cli news`` and then ``worker.cli news-llm``; the
 job's exit code is news's alone, news-llm's goes to the log as
 ``news_llm_exit``.
 
+Maintenance mode (#468): while the marker ``<data>/locks/maintenance`` exists
+(``worker.cli maintenance on``), a daily or news job only logs ``skipped
+reason=maintenance`` and ends 0. It starts no worker, so it writes nothing to the
+database, not even the skipped row a daily records for its other skips: a
+backfill, a backtest or an ``init-db`` can have the database alone while serve
+keeps running the watchdog and the event monitor. The marker is checked after the
+job's lock is taken, so once ``maintenance on`` has written it, a job that holds
+the lock either is shown by ``maintenance status`` (it started before) or skips.
+``on`` and ``off`` are logged in ``<data>/logs/maintenance.log``. While serve
+runs it holds ``<data>/locks/serve.lock``; the backfill and backtest commands
+refuse to start while that lock is held and maintenance is off (``maintenance_refusal``).
+
 Only the standard library is imported here: the watchdog takes its lock
 through the same code without the backend's dependencies, with
 ``python -m worker.job lock <file> -- <command> ...``. tools/ops/deploy.sh
@@ -49,8 +61,10 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import json
 import os
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
@@ -82,6 +96,14 @@ NEWLINE = os.linesep
 JOB_LOCK_ENV = "STOCK_JOB_LOCK"
 IMAGE_TAG_ENV = "STOCK_IMAGE_TAG"
 GIT_HEAD_ENV = "STOCK_GIT_HEAD"
+# Maintenance mode (#468): the marker in locks/, its log, the skip reason, and the lock
+# serve holds for as long as it runs (lock_path names both).
+MAINTENANCE_MARKER = "maintenance"
+MAINTENANCE_LOG = "maintenance.log"
+MAINTENANCE_SKIP_REASON = "maintenance"
+SERVE_LOCK = "serve"
+# A backfill or backtest refused by maintenance_refusal (EX_TEMPFAIL, as `lock`).
+MAINTENANCE_REFUSED_EXIT = 75
 
 
 def platform_problem(module: str = "worker.job") -> str | None:
@@ -108,14 +130,14 @@ def data_environment(data_dir: Path) -> dict[str, str]:
 
 
 def cli_environment(argv: Sequence[str]) -> dict[str, str]:
-    """For ``worker.cli job`` and ``serve``: the data paths app.config must see.
+    """For ``worker.cli job``, ``serve`` and ``maintenance``: the data paths app.config must see.
 
     app.config reads STOCK_DATA_DIR and creates that directory on import; without
     this a scheduled task (no STOCK_* in its environment) would create ``data/``
     in the checkout. Any other command gets nothing.
     """
 
-    if not argv or argv[0] not in ("job", "serve"):
+    if not argv or argv[0] not in ("job", "serve", "maintenance"):
         return {}
     value = None
     for index, arg in enumerate(argv):
@@ -154,6 +176,172 @@ class FileLock:
         fd, self._fd = self._fd, None
         if fd is not None:
             os.close(fd)
+
+
+def lock_held(path: Path) -> bool:
+    """Whether another process holds the lock on PATH (a missing file is not held).
+
+    It takes the lock for a moment: a job starting in that moment would find it busy.
+    The maintenance checks call it only for serve's lock, and for the job locks only
+    with maintenance on, when such a job skips for maintenance before it looks at its
+    lock (``_Job._skip_reason``).
+    """
+
+    if not path.is_file():
+        return False
+    probe = FileLock(path)
+    if not probe.acquire():
+        return True
+    probe.release()
+    return False
+
+
+def maintenance_path(data_dir: Path) -> Path:
+    return data_dir / "locks" / MAINTENANCE_MARKER
+
+
+def maintenance_state(data_dir: Path) -> dict | None:
+    """The maintenance marker of DATA_DIR, or None when maintenance is off.
+
+    The file being there is what counts: a marker that cannot be read still holds the
+    jobs back (``readable`` false), dated by its modification time.
+    """
+
+    path = maintenance_path(data_dir)
+    try:
+        text = path.read_text(encoding="utf-8")
+        modified = path.stat().st_mtime
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        return {"since_epoch": None, "reason": f"unreadable: {exc}", "readable": False}
+    try:
+        state = json.loads(text)
+        since = float(state["since_epoch"])
+        reason = str(state.get("reason") or "")
+    except (ValueError, KeyError, TypeError):
+        return {"since_epoch": modified, "reason": "unreadable", "readable": False}
+    return {**state, "since_epoch": since, "reason": reason, "readable": True}
+
+
+def _taipei(epoch: float | None) -> str:
+    if epoch is None:
+        return "unknown"
+    return datetime.fromtimestamp(epoch, TAIPEI).isoformat(timespec="seconds")
+
+
+def _maintenance_log(data_dir: Path, record: dict) -> None:
+    logs = data_dir / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    with open(logs / MAINTENANCE_LOG, "a", encoding="utf-8", newline="\n") as log:
+        log.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def running_jobs(data_dir: Path) -> list[str]:
+    return [name for name in JOBS if lock_held(lock_path(data_dir, name))]
+
+
+def maintenance_status(data_dir: Path) -> dict:
+    """``worker.cli maintenance status``: what the guard and the jobs see."""
+
+    state = maintenance_state(data_dir)
+    out: dict = {
+        "maintenance": "on" if state else "off",
+        "marker": str(maintenance_path(data_dir)),
+        "serve_running": lock_held(lock_path(data_dir, SERVE_LOCK)),
+    }
+    if state:
+        since = state["since_epoch"]
+        out.update(
+            since=_taipei(since),
+            hours=None if since is None else round((time.time() - since) / 3600, 2),
+            reason=state["reason"],
+            readable=state["readable"],
+            # Probed only now: a job that starts meanwhile skips for maintenance.
+            running_jobs=running_jobs(data_dir),
+        )
+    return out
+
+
+def maintenance_on(data_dir: Path, reason: str) -> dict:
+    """Write the marker (kept as it is when maintenance is already on) and log it."""
+
+    path = maintenance_path(data_dir)
+    already = maintenance_state(data_dir) is not None
+    now = time.time()
+    if not already:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        marker = {
+            "since": _taipei(now),
+            "since_epoch": now,
+            "reason": reason,
+            "host": socket.gethostname(),
+        }
+        temporary = path.with_name(f".{path.name}.{os.getpid()}")
+        temporary.write_text(json.dumps(marker, ensure_ascii=False), encoding="utf-8")
+        os.replace(temporary, path)
+    _maintenance_log(
+        data_dir,
+        {
+            "at": _taipei(now),
+            "event": "on_again" if already else "on",
+            "reason": reason,
+            "host": socket.gethostname(),
+        },
+    )
+    return {**maintenance_status(data_dir), "already_on": already}
+
+
+def maintenance_off(data_dir: Path, reason: str) -> dict:
+    """Remove the marker and log it with how long maintenance was on."""
+
+    state = maintenance_state(data_dir)
+    now = time.time()
+    if state:
+        maintenance_path(data_dir).unlink(missing_ok=True)
+    since = state["since_epoch"] if state else None
+    _maintenance_log(
+        data_dir,
+        {
+            "at": _taipei(now),
+            "event": "off" if state else "off_again",
+            "reason": reason,
+            "since": _taipei(since) if state else None,
+            "hours": None if since is None else round((now - since) / 3600, 2),
+            "host": socket.gethostname(),
+        },
+    )
+    return {**maintenance_status(data_dir), "was_on": state is not None}
+
+
+def maintenance_refusal(data_dir: Path, command: str) -> str | None:
+    """Why COMMAND (a backfill or a backtest) must not start now, or None (#468).
+
+    It writes the database for a long time, as a daily does: with serve running it
+    needs maintenance on, so that no daily or news starts, and no daily or news job
+    still running. With no serve (the scheduler stopped) nothing is checked.
+    """
+
+    if not sys.platform.startswith("linux"):
+        return None  # no fcntl; serve and its jobs run on Linux only (#333)
+    state = maintenance_state(data_dir)
+    if state is None:
+        if lock_held(lock_path(data_dir, SERVE_LOCK)):
+            return (
+                f"{command}: the scheduler (worker.cli serve) is running and maintenance"
+                " mode is off; a daily or news could write the database alongside. Turn"
+                " it on first: python -m worker.cli maintenance on --reason '<why>'"
+                " (docs/ops/SCHEDULING.md 維護模式), and off when done."
+            )
+        return None
+    busy = running_jobs(data_dir)
+    if busy:
+        return (
+            f"{command}: maintenance mode is on, but a {' and a '.join(busy)} job"
+            " started before it is still running; wait until"
+            " python -m worker.cli maintenance status shows no running_jobs."
+        )
+    return None
 
 
 class _ProcessTree:
@@ -361,6 +549,16 @@ class _Job:
     def _skip_reason(self, locked: bool, lock_file: Path, free_mb: int | None):
         """The reason not to run the worker and the detail for the log, or None."""
 
+        # Read once the lock is taken (or found held), and ahead of already_running: in
+        # maintenance a daily that finds the lock held records nothing either
+        # (already_running would be a row in the database).
+        maintenance = maintenance_state(self.data_dir)
+        if maintenance:
+            return MAINTENANCE_SKIP_REASON, (
+                f"since={_taipei(maintenance['since_epoch'])}"
+                f", reason={maintenance['reason']}"
+                f", marker={maintenance_path(self.data_dir)}"
+            )
         if not locked:
             return LOCK_SKIP_REASON, f"lock={lock_file}"
         min_free_mb = int(self.args.min_free_memory_gb * 1024)
@@ -388,8 +586,9 @@ class _Job:
         skip_reason, detail = self._skip_reason(locked, lock_file, free_mb)
         if skip_reason:
             self.log(f"===== skipped reason={skip_reason} ({detail})")
-        if skip_reason and job != "daily":
-            # Only daily records a skipped run in the database.
+        if skip_reason and (job != "daily" or skip_reason == MAINTENANCE_SKIP_REASON):
+            # Only daily records a skipped run in the database, and not in maintenance
+            # mode: then nothing is written there (#468).
             code = 0
         else:
             step_args = [job]

@@ -250,6 +250,8 @@ def test_every_allowed_news_interval_makes_a_job(tmp_path, hours):
         "daily",
         "news",
         "watchdog",
+        # #468: serve's own read of the maintenance marker, not a job it starts.
+        "maintenance-watch",
     }
     assert all(moment is not None for moment in runner.next_times().values())
     friday = datetime(2026, 10, 23, tzinfo=TAIPEI)
@@ -1190,3 +1192,169 @@ def test_the_catchup_follows_the_first_daily_time(tmp_path):
         )
     )
     assert runner.missed_daily() == "not_complete"
+
+
+# Maintenance mode (#468) ---------------------------------------------------------------
+
+
+def _maintenance_on(data: Path, reason: str = "技術回測") -> Path:
+    """What ``worker.cli maintenance on`` writes (the format in worker/job.py)."""
+
+    path = data / "locks" / "maintenance"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"since_epoch": time.time(), "reason": reason}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _wait(condition, what: str, timeout: float = 90) -> None:
+    deadline = time.monotonic() + timeout
+    while not condition():
+        if time.monotonic() > deadline:
+            raise AssertionError(f"not within {timeout} s: {what}")
+        time.sleep(0.1)
+
+
+def test_in_maintenance_serve_skips_daily_and_news_and_runs_the_watchdog_and_monitor(
+    serve_tree, monkeypatch, capsys
+):
+    """AC-1: daily and news skip with the reason logged, no worker; the watchdog and the
+    monitor go on; once maintenance is off, daily and news run their workers again."""
+
+    from apscheduler.triggers.interval import IntervalTrigger
+
+    in_tree(serve_tree, monkeypatch)
+    every = {"daily": 1, "news": 1, "watchdog": 2, "monitor": 1}
+    monkeypatch.setattr(
+        serve,
+        "triggers",
+        lambda args: {
+            name: IntervalTrigger(seconds=seconds, timezone=TAIPEI)
+            for name, seconds in every.items()
+        },
+    )
+    monkeypatch.setattr(serve, "MAINTENANCE_POLL_SECONDS", 0.5)
+    # The monitor needs gh and Orca; that serve starts it is the point (monitor.sh
+    # itself knows nothing of maintenance mode).
+    polls = serve_tree.root / "monitor-polls"
+    command = serve.Serve.command
+
+    def fake_monitor(self, name, at):
+        if name != "monitor":
+            return command(self, name, at)
+        return ["/bin/sh", "-c", f'echo poll >> "{polls}"'], dict(os.environ)
+
+    monkeypatch.setattr(serve.Serve, "command", fake_monitor)
+    marker = _maintenance_on(serve_tree.data)
+    runner = serve.Serve(
+        serve_args(
+            "--data-dir",
+            str(serve_tree.data),
+            "--monitor",
+            "record-only",
+            "--watchdog-dry-run",
+            *NO_MEMORY_CHECK,
+        )
+    )
+    scheduler = runner.scheduler()
+    thread = threading.Thread(target=scheduler.start, daemon=True)
+    thread.start()
+    watchdog_log = serve_tree.logs / "watchdog.log"
+    try:
+
+        def skipped(name: str) -> int:
+            return serve_tree.log(name).count("===== skipped reason=maintenance (")
+
+        _wait(lambda: skipped("daily") >= 2 and skipped("news") >= 2, "skipped jobs")
+        _wait(
+            lambda: watchdog_log.exists()
+            and " maintenance_on " in watchdog_log.read_text(encoding="utf-8"),
+            "a watchdog run that saw maintenance",
+        )
+        _wait(
+            lambda: polls.exists() and len(polls.read_text().split()) >= 2,
+            "monitor polls",
+        )
+        assert serve_tree.calls() == []  # no worker: nothing reached the database
+        for name in ("daily", "news"):
+            log = serve_tree.log(name)
+            reasons = re.findall(r"^===== skipped reason=(\w+)", log, re.M)
+            assert set(reasons) == {"maintenance"}
+            # Every skip ended 0 (the end lines of the runs still going come later).
+            assert {exit for _, exit in re.findall(JOB_END, log, re.M)} == {"0"}
+        marker.unlink()
+        _wait(lambda: {"daily", "news"} <= set(serve_tree.steps()), "workers again")
+    finally:
+        scheduler.shutdown(wait=True)
+        thread.join(timeout=60)
+    assert " serve maintenance_off" in capsys.readouterr().out
+
+
+JOB_END = r"^===== (\S+) end exit=(\d+)"
+
+
+def _deferred(data: Path, now: str):
+    runner = serve.Serve(serve_args("--data-dir", str(data), "--now", now))
+    scheduler = runner.scheduler()
+    return runner, scheduler, {scheduled.id for scheduled in scheduler.get_jobs()}
+
+
+def test_the_end_of_maintenance_runs_the_missed_daily_once(tmp_path, capsys):
+    """A serve that starts in maintenance waits; turning it off runs the day's daily."""
+
+    data = tmp_path / "data"
+    _runs_db(data, (MONDAY, "partial"))
+    marker = _maintenance_on(data)
+    runner, scheduler, jobs = _deferred(data, f"{MONDAY}T23:20")
+    assert "daily-catchup" not in jobs
+    assert " serve catchup_deferred job=daily reason=not_complete maintenance=on" in (
+        capsys.readouterr().out
+    )
+    runner.watch_maintenance()  # still on: nothing
+    assert "daily-catchup" not in {s.id for s in scheduler.get_jobs()}
+    marker.unlink()
+    runner.watch_maintenance()
+    out = capsys.readouterr().out
+    assert " serve maintenance_off" in out
+    assert " serve catchup job=daily reason=not_complete" in out
+    catchup = {s.id: s for s in scheduler.get_jobs()}["daily-catchup"]
+    assert catchup.args == ("daily",)
+    runner.watch_maintenance()  # off and off: nothing more
+    assert "maintenance_off" not in capsys.readouterr().out
+
+
+def test_the_end_of_maintenance_after_a_complete_daily_runs_nothing(tmp_path, capsys):
+    data = tmp_path / "data"
+    _runs_db(data, (MONDAY, "success"))
+    marker = _maintenance_on(data)
+    runner, scheduler, _ = _deferred(data, f"{MONDAY}T23:20")
+    marker.unlink()
+    runner.watch_maintenance()
+    assert "daily-catchup" not in {s.id for s in scheduler.get_jobs()}
+
+
+def test_maintenance_turned_on_while_serve_runs_is_printed(tmp_path, capsys):
+    data = tmp_path / "data"
+    runner, _, _ = _deferred(data, f"{MONDAY}T10:00")
+    _maintenance_on(data, reason="init-db 0025")
+    runner.watch_maintenance()
+    assert " serve maintenance_on since=" in capsys.readouterr().out
+
+
+def test_serve_holds_its_lock_while_it_runs(serve_tree):
+    """The backfill and backtest guard tells a running scheduler by this lock."""
+
+    lock = job.lock_path(serve_tree.data, job.SERVE_LOCK)
+    process = serve_tree.start_serve()
+    out = Output(process)
+    try:
+        out.wait_for(r" serve ready .* maintenance=off$")
+        assert job.lock_held(lock)
+    finally:
+        # Whatever its exit code (a SIGTERM right after `ready` can come before the
+        # scheduler started; the docker stop tests cover that path): the OS drops it.
+        process.send_signal(signal.SIGTERM)
+        process.wait(timeout=60)
+    assert not job.lock_held(lock)

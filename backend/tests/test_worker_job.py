@@ -1002,3 +1002,75 @@ def test_the_job_log_is_stamped_with_the_taipei_clock(
     lines = runner.log_path.read_text(encoding="utf-8").splitlines()
     assert lines[0].startswith("===== 2026-10-30T01:04:05.678901+08:00 start job=daily")
     assert lines[-1] == "===== 2026-10-30T01:05:35.678901+08:00 end exit=0 seconds=90"
+
+
+# Maintenance mode (#468) ---------------------------------------------------------------
+
+
+def maintenance_marker(
+    data: Path, reason: str = "回補 2026-10", since: float | None = None
+):
+    """What ``worker.cli maintenance on`` writes (the format in worker/job.py)."""
+
+    path = data / "locks" / "maintenance"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    since = time.time() if since is None else since
+    path.write_text(
+        json.dumps({"since_epoch": since, "reason": reason}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return path
+
+
+@pytest.mark.parametrize("job_name", ["daily", "news"])
+def test_in_maintenance_a_job_only_logs_the_skip_and_starts_no_worker(tree, job_name):
+    """AC-1: no worker, so not even the skipped row a daily records for other skips."""
+
+    marker = maintenance_marker(tree.data)
+    result = tree.run(job_name)
+    assert result.code == 0, result.stderr
+    assert tree.steps() == []
+    skipped = skipped_line(result.log)
+    assert skipped.group(1) == "maintenance"
+    assert "reason=回補 2026-10" in skipped.group(2)
+    assert f"marker={marker}" in skipped.group(2)
+    expected = ("0", "not_run") if job_name == "news" else ("0", "")
+    assert [groups[1:] for groups in end_line(result.log)] == [expected]
+    # Nothing in the data directory but the log and the locks.
+    assert not (tree.data / "stock.db").exists()
+
+
+def test_in_maintenance_a_daily_that_finds_the_lock_held_records_nothing(tree):
+    """already_running is a row in the database: maintenance comes first."""
+
+    release = tree.root / "release"
+    first = tree.start("daily", daily_until=release, daily_sleep=90)
+    try:
+        tree.wait_for_call(1)
+        maintenance_marker(tree.data)
+        second = tree.run("daily")
+        assert second.code == 0, second.stderr
+        assert tree.steps() == ["daily"]
+        assert skipped_line(second.log).group(1) == "maintenance"
+    finally:
+        release.touch()
+        first.wait(timeout=60)
+
+
+def test_an_unreadable_maintenance_marker_still_holds_the_jobs_back(tree):
+    path = tree.data / "locks" / "maintenance"
+    path.parent.mkdir(parents=True)
+    path.write_text("not json", encoding="utf-8")
+    result = tree.run("daily")
+    assert tree.steps() == [] and result.code == 0
+    assert "reason=unreadable" in skipped_line(result.log).group(2)
+
+
+def test_once_maintenance_is_off_the_jobs_run_again(tree):
+    marker = maintenance_marker(tree.data)
+    tree.run("daily")
+    marker.unlink()
+    result = tree.run("daily")
+    assert result.code == 0
+    assert tree.steps() == ["daily"]
+    assert tree.calls()[0]["argv"] == ["daily", "--trigger", "scheduler"]
