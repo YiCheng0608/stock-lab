@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Start an engineer session on an Issue (Issue #282; docs/WORKFLOW.md 任務流程第 2 步):
 # Orca worktree from the latest base (origin/master, or --base: a long-lived integration
-# branch such as origin/feat/docker, #332), branch task/<issue>-<slug>, a visible
+# branch listed in close_task.sh, origin/<branch>, #332), branch task/<issue>-<slug>, a visible
 # terminal running claude with COMPOSE_PROJECT_NAME=task-<issue> (#339), and, only after
 # `orca terminal wait --for tui-idle` reports satisfied:true, one line pointing at the
 # UTF-8 task file outside the worktree (#315):

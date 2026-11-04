@@ -12,6 +12,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import shutil
 import signal
 import sqlite3
@@ -100,9 +101,11 @@ class Watchdog:
         python: str | None = None,
         env: dict[str, str] | None = None,
         cwd: Path | None = None,
+        wrapper: list[str] | None = None,
         **extra: str,
     ) -> subprocess.CompletedProcess[str]:
-        # env (a dict, #340) and keyword variables (#390) both reach the script.
+        # env (a dict, #340) and keyword variables (#390) both reach the script;
+        # wrapper (#448) is the command that starts it, as worker.job lock does.
         extra = {**(env or {}), **extra}
         env = dict(os.environ)
         # Not the image's version unless the test says so (the docker CI job runs in one).
@@ -119,7 +122,7 @@ class Watchdog:
         )
         env.update(extra)
         result = subprocess.run(
-            [BASH, SCRIPT.as_posix(), *args],
+            [*(wrapper or []), BASH, SCRIPT.as_posix(), *args],
             env=env,
             cwd=cwd,
             capture_output=True,
@@ -380,7 +383,7 @@ exec "$REAL_PYTHON" "$@"
 """
 
 
-@pytest.mark.parametrize("given", ["option", "variable"])
+@pytest.mark.parametrize("given", ["option", "variable", "colon"])
 def test_a_relative_data_directory_is_one_place_for_lock_log_and_database(
     tmp_path, given
 ):
@@ -388,9 +391,11 @@ def test_a_relative_data_directory_is_one_place_for_lock_log_and_database(
     # relative --data-dir, STOCK_DATA_DIR or --monitor-dir named one place for the
     # lock (the caller's directory) and another for the log, the database and the
     # heartbeat (backend/). The names are unique because backend/ has a data
-    # directory of its own.
+    # directory of its own. "colon" (#448): a relative name like a:b is not a
+    # Windows drive path, so it is made absolute too.
     token = uuid.uuid4().hex[:8]
-    wd = Watchdog(tmp_path, data_name=f"wd326-{token}")
+    data_name = f"wd326-{token}" if given != "colon" else f"w:wd448-{token}"
+    wd = Watchdog(tmp_path, data_name=data_name)
     queue = f"wd326-{token}-queue"
     stray = ROOT / "backend" / wd.data.name
     recording = wd.bin / "recpy"
@@ -404,7 +409,7 @@ def test_a_relative_data_directory_is_one_place_for_lock_log_and_database(
         )
         arguments = ["--dry-run", "--monitor-dir", queue]
         environment = {"REAL_PYTHON": Path(sys.executable).as_posix()}
-        if given == "option":
+        if given != "variable":
             arguments += ["--data-dir", wd.data.name]
         else:
             environment["STOCK_DATA_DIR"] = wd.data.name
@@ -502,6 +507,128 @@ def test_a_run_without_the_lock_removes_no_work_directory(wd):
     assert wd.events()[0] == "python_missing"
     assert "stale_work_removed" not in wd.events()
     assert (other / "comment.md").is_file()
+
+
+def _lock_runner(lock_file: Path) -> list[str]:
+    """What worker.job lock puts in front of the watchdog, for any lock file."""
+
+    return [
+        BASE_PYTHON,
+        "-X",
+        "utf8",
+        "-m",
+        "worker.job",
+        "lock",
+        str(lock_file),
+        "--",
+    ]
+
+
+# #448: WATCHDOG_LOCK_HELD, the flag the lock-taking run sets for the run it starts,
+# was also the only proof that a run holds the lock. Typed by hand it skipped the
+# lock and still removed the work directories, among them the running one's.
+
+
+def test_a_flag_typed_by_hand_does_not_remove_the_running_ones_work_directory(wd):
+    holder, _child = _hold_lock(wd)
+    running = _left_work_directory(wd, ".watchdog.run123")
+    try:
+        result = wd.run(WATCHDOG_LOCK_HELD="1")
+    finally:
+        holder.kill()
+        holder.wait(timeout=30)
+    assert (running / "comment.md").is_file(), result.stdout + result.stderr
+    assert "stale_work_removed" not in wd.events()
+    assert "lock_unverified" in wd.events()
+
+
+@pytest.mark.parametrize("python", ["real", "missing"])
+def test_a_flag_typed_by_hand_removes_no_work_directory_without_the_lock(wd, python):
+    left = _left_work_directory(wd, ".watchdog.k3Jd9a")
+    exe = None if python == "real" else (wd.root / "no-python.exe").as_posix()
+    result = wd.run(python=exe, WATCHDOG_LOCK_HELD="1")
+    assert (left / "comment.md").is_file(), result.stdout + result.stderr
+    assert "stale_work_removed" not in wd.events()
+    if python == "real":
+        assert "lock_unverified" in wd.events()
+
+
+def test_a_run_started_under_another_lock_removes_no_work_directory(wd):
+    # Its parent is a worker.job lock, but of some other file: no lock of the
+    # watchdog is held by it.
+    left = _left_work_directory(wd, ".watchdog.k3Jd9a")
+    other = wd.root / "other.lock"
+    result = wd.run(
+        "--data-dir",
+        wd.data.as_posix(),
+        wrapper=_lock_runner(other),
+        cwd=ROOT / "backend",
+        WATCHDOG_LOCK_HELD="1",
+    )
+    assert other.is_file()
+    assert (left / "comment.md").is_file(), result.stdout + result.stderr
+    assert "stale_work_removed" not in wd.events()
+    assert "lock_unverified" in wd.events()
+
+
+def test_a_run_started_under_the_watchdog_lock_removes_the_work_directories(wd):
+    # The proof is the parent, not the way it was started: any worker.job lock of
+    # the watchdog's own lock file will do.
+    left = _left_work_directory(wd, ".watchdog.k3Jd9a")
+    result = wd.run(
+        "--data-dir",
+        wd.data.as_posix(),
+        wrapper=_lock_runner(wd.data / "locks" / "watchdog.lock"),
+        cwd=ROOT / "backend",
+        WATCHDOG_LOCK_HELD="1",
+    )
+    assert not left.exists(), result.stdout + result.stderr
+    assert wd.events()[0] == "stale_work_removed"
+    assert "lock_unverified" not in wd.events()
+
+
+def _absolute(value: str, cwd: Path) -> str:
+    source = SCRIPT.read_text(encoding="utf-8")
+    function = re.search(r"^absolute\(\) \{.*?^\}$", source, re.S | re.M)
+    assert function, "absolute() is not in watchdog.sh"
+    result = subprocess.run(
+        [
+            BASH,
+            "-c",
+            function.group(0) + '\ncd "$2" && absolute "$1"',
+            "bash",
+            value,
+            str(cwd),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout
+
+
+@pytest.mark.parametrize(
+    ("given", "relative"),
+    [
+        ("data", True),
+        ("./data", True),
+        ("a:b", True),
+        ("ab:c", True),
+        ("C:", True),
+        ("/x/y", False),
+        ("C:/x", False),
+        ("c:\\x\\y", False),
+        ("D:/", False),
+    ],
+)
+def test_absolute_takes_only_a_drive_with_a_separator_for_a_full_path(
+    tmp_path, given, relative
+):
+    # #448: a:b is a name relative to the current directory, not the drive a.
+    expected = f"{tmp_path}/{given.removeprefix('./')}" if relative else given
+    assert _absolute(given, tmp_path) == expected
 
 
 def test_unreadable_database_is_logged_and_not_reported_ok(wd):
