@@ -179,7 +179,8 @@ def research_db(tmp_path) -> Path:
                 signal_date=days[day_index],
                 instrument_id=2,
                 strategy_version_id=strategy.id,
-                status="active"
+                # worker.pipeline writes actionable as status == "conditional"
+                status="conditional"
                 if actionable
                 else ("data_incomplete" if missing else "observation"),
                 breakout_price=100.0 if actionable else None,
@@ -315,7 +316,7 @@ def test_days_without_a_conditional_signal_and_what_one_removal_gives(
     assert zero["statuses_on_zero_days"] == {"observation": 3, "data_incomplete": 1}
     # Over every session: the four actionable rows fail nothing.
     assert zero["statuses_all_days"] == {
-        "active": 4,
+        "conditional": 4,
         "observation": 3,
         "data_incomplete": 1,
     }

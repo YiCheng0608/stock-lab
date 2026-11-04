@@ -12,7 +12,9 @@ Reads the database ``--db`` (the ``tools/ops/copy_db.py`` copy the run of
 - ``returns.svg``, ``ablations.svg``: the charts of the report.
 
 Strategy results are the run's comparable T+5／T+20 settlements
-(``signal_settlements``, V1_SPEC「Tracking 與 technical backtest 口徑」).
+(``signal_settlements``, docs/spec/tracking.md「Tracking 與 technical backtest
+口徑」); actionable is ``status = 'conditional'``, as ``worker.pipeline``
+writes it.
 
 Benchmark one draws, for every signal date, as many instruments as the
 strategy has comparable settlements that date, without replacement, from the
@@ -217,97 +219,134 @@ def rank(value: float, sample: Sequence[float]) -> float | None:
 # --- reading the run -----------------------------------------------------
 
 
-def run_strategies(con: sqlite3.Connection, prefix: str) -> list[dict[str, Any]]:
-    rows = con.execute(
-        "select sv.id, sv.name, sv.version, sv.kind, sv.config_json "
-        "from strategy_versions sv where sv.id in "
-        "(select distinct strategy_version_id from signals where signal_key like ?) "
-        "order by sv.id",
-        (prefix,),
-    ).fetchall()
-    result = []
-    for strategy_id, name, version, kind, config in rows:
+def strategy_versions(con: sqlite3.Connection) -> dict[int, dict[str, Any]]:
+    """Every ``strategy_versions`` row by id (the table is small)."""
+
+    result = {}
+    for strategy_id, name, version, kind, config in con.execute(
+        "select id, name, version, kind, config_json from strategy_versions"
+    ):
         config = json.loads(config) if isinstance(config, str) else (config or {})
         ablation = config.get("ablation") or {}
-        result.append(
-            {
-                "id": strategy_id,
-                "name": name,
-                "version": version,
-                "kind": kind,
-                "base": ablation.get("base_strategy"),
-                "removed": ablation.get("removed_condition"),
-            }
-        )
+        result[strategy_id] = {
+            "id": strategy_id,
+            "name": name,
+            "version": version,
+            "kind": kind,
+            "base": ablation.get("base_strategy"),
+            "removed": ablation.get("removed_condition"),
+        }
     return result
 
 
+def row_reasons(kind_reasons: str | None, rationale: str | None) -> list[str]:
+    """The failed-condition reasons of one signal, each once.
+
+    The strategy's own reasons, then the rationale's ``missing=`` ones the
+    strategy did not give (eligibility, group score, suspension) as
+    ``missing:<reason>``: the rationale repeats a data_incomplete row's own
+    reasons.
+    """
+
+    own = list(dict.fromkeys(json.loads(kind_reasons or "[]")))
+    missing: set[str] = set()
+    if "missing=" in (rationale or ""):
+        missing = set(rationale.rpartition("missing=")[2].split(",")) - set(own)
+    return own + [f"missing:{reason}" for reason in sorted(missing - {""})]
+
+
+@dataclass
+class RunSignals:
+    """What the report reads of a run's signals, from one pass over them.
+
+    Actionable is ``status = 'conditional'`` (``worker.pipeline`` writes
+    ``rule_evidence_json.actionable`` as exactly that), so only the canonical
+    strategies' rows are read as far as ``rule_evidence_json`` for their
+    reasons: a year of thirteen strategies is tens of GB of signals, and the
+    evidence is most of each row.
+    """
+
+    strategies: list[dict[str, Any]]
+    # (name, signal date) -> [signals, actionable, data_incomplete]
+    daily: dict[tuple[str, date], list[int]]
+    # (canonical name, signal date) -> reasons／statuses of its signals
+    reasons: dict[tuple[str, date], Counter]
+    statuses: dict[tuple[str, date], Counter]
+    # (name, entry, invalid, target_1, target_2) of every actionable signal
+    levels: list[tuple]
+
+
+def scan_signals(con: sqlite3.Connection, prefix: str) -> RunSignals:
+    versions = strategy_versions(con)
+    canonical = [item["id"] for item in versions.values() if not item["base"]]
+    marks = ",".join("?" * len(canonical)) or "null"
+    seen: set[int] = set()
+    daily: dict[tuple[str, date], list[int]] = defaultdict(lambda: [0, 0, 0])
+    reasons: dict[tuple[str, date], Counter] = defaultdict(Counter)
+    statuses: dict[tuple[str, date], Counter] = defaultdict(Counter)
+    levels: list[tuple] = []
+    days: dict[str, date] = {}
+    for strategy_id, day, status, entry, invalid, t1, t2, own, rationale in con.execute(
+        "select s.strategy_version_id, s.signal_date, s.status, "
+        "case when s.status = 'conditional' "
+        "then coalesce(s.breakout_price, s.reference_entry) end, "
+        "s.invalid_price, s.target_1, s.target_2, "
+        f"case when s.strategy_version_id in ({marks}) then json_extract("
+        "s.rule_evidence_json, '$.' || sv.kind || '.reasons') end, "
+        f"case when s.strategy_version_id in ({marks}) then s.rationale end "
+        "from signals s join strategy_versions sv on sv.id = s.strategy_version_id "
+        "where s.signal_key like ? order by s.id",
+        (*canonical, *canonical, prefix),
+    ):
+        seen.add(strategy_id)
+        name = versions[strategy_id]["name"]
+        day = days.setdefault(day, date.fromisoformat(day))
+        counts = daily[(name, day)]
+        counts[0] += 1
+        if status == "conditional":
+            counts[1] += 1
+            levels.append((name, entry, invalid, t1, t2))
+        if status == "data_incomplete":
+            counts[2] += 1
+        if strategy_id in canonical:
+            statuses[(name, day)][status] += 1
+            reasons[(name, day)].update(row_reasons(own, rationale))
+    return RunSignals(
+        strategies=[versions[strategy_id] for strategy_id in sorted(seen)],
+        daily=dict(daily),
+        reasons=dict(reasons),
+        statuses=dict(statuses),
+        levels=levels,
+    )
+
+
 def settlements(con: sqlite3.Connection, prefix: str) -> list[tuple]:
+    """The run's settlements, read from ``signal_settlements`` outward.
+
+    ``cross join`` keeps SQLite from scanning ``signals`` for the ``like``.
+    """
+
     return con.execute(
         "select sv.name, s.signal_date, s.instrument_id, st.horizon, st.comparable, "
         "st.return_or_risk, st.final_status, st.execution_date, st.incomparable_reason "
-        "from signal_settlements st join signals s on s.id = st.signal_id "
+        "from signal_settlements st cross join signals s on s.id = st.signal_id "
         "join strategy_versions sv on sv.id = s.strategy_version_id "
         "where s.signal_key like ?",
         (prefix,),
     ).fetchall()
 
 
-def daily_counts(con: sqlite3.Connection, prefix: str) -> list[tuple]:
-    return con.execute(
-        "select sv.name, s.signal_date, count(*), "
-        "sum(case when json_extract(s.rule_evidence_json, '$.actionable') = 1 "
-        "then 1 else 0 end), "
-        "sum(case when s.status = 'data_incomplete' then 1 else 0 end) "
-        "from signals s join strategy_versions sv on sv.id = s.strategy_version_id "
-        "where s.signal_key like ? group by sv.name, s.signal_date",
-        (prefix,),
-    ).fetchall()
-
-
-def level_distances(con: sqlite3.Connection, prefix: str) -> list[tuple]:
-    """Entry, invalid and first-target prices of every actionable signal."""
-
-    return con.execute(
-        "select sv.name, coalesce(s.breakout_price, s.reference_entry), "
-        "s.invalid_price, s.target_1, s.target_2 "
-        "from signals s join strategy_versions sv on sv.id = s.strategy_version_id "
-        "where s.signal_key like ? "
-        "and json_extract(s.rule_evidence_json, '$.actionable') = 1",
-        (prefix,),
-    ).fetchall()
-
-
-def zero_day_reasons(
-    con: sqlite3.Connection, prefix: str, name: str, kind: str, days: Iterable[date]
+def day_reasons(
+    scanned: RunSignals, name: str, days: Iterable[date]
 ) -> tuple[Counter, Counter, int]:
     """Failed-condition reasons and statuses of ``name``'s signals on ``days``."""
 
     reasons: Counter = Counter()
     statuses: Counter = Counter()
-    total = 0
     for day in days:
-        for status, kind_reasons, rationale in con.execute(
-            "select s.status, json_extract(s.rule_evidence_json, ?), s.rationale "
-            "from signals s join strategy_versions sv "
-            "on sv.id = s.strategy_version_id "
-            "where s.signal_key like ? and sv.name = ? and s.signal_date = ?",
-            (f"$.{kind}.reasons", prefix, name, day.isoformat()),
-        ):
-            total += 1
-            statuses[status] += 1
-            own = set(json.loads(kind_reasons or "[]"))
-            # The rationale's missing= repeats a data_incomplete row's own
-            # reasons; only the ones the strategy did not give (eligibility,
-            # group score, suspension) are counted from it, once per row.
-            missing = set()
-            if "missing=" in (rationale or ""):
-                missing = set(rationale.rpartition("missing=")[2].split(",")) - own
-            for reason in own:
-                reasons[reason] += 1
-            for reason in missing - {""}:
-                reasons[f"missing:{reason}"] += 1
-    return reasons, statuses, total
+        reasons.update(scanned.reasons.get((name, day), Counter()))
+        statuses.update(scanned.statuses.get((name, day), Counter()))
+    return reasons, statuses, sum(statuses.values())
 
 
 def market_sessions(con: sqlite3.Connection, start: date) -> list[date]:
@@ -425,10 +464,14 @@ def build(
     if not run:
         raise SystemExit(f"no backtest run {run_id} in {db}")
     prefix = f"backtest-{run_id}-%"
-    strategies = run_strategies(con, prefix)
+    scanned = scan_signals(con, prefix)
+    strategies = scanned.strategies
     rows = settlements(con, prefix)
-    daily = daily_counts(con, prefix)
-    signal_days = sorted({date.fromisoformat(row[1]) for row in daily})
+    daily = [
+        (name, day.isoformat(), *values)
+        for (name, day), values in sorted(scanned.daily.items())
+    ]
+    signal_days = sorted({day for _name, day in scanned.daily})
     start, end = signal_days[0], signal_days[-1]
     sessions = market_sessions(con, start)
     closes = index_closes(con, start)
@@ -548,11 +591,9 @@ def build(
                 if other["base"] == item["name"]
             ):
                 binding["(no single removal)"] += 1
-        reasons, statuses, total = zero_day_reasons(
-            con, prefix, item["name"], item["kind"], days
-        )
-        all_reasons, all_statuses, all_total = zero_day_reasons(
-            con, prefix, item["name"], item["kind"], signal_days
+        reasons, statuses, total = day_reasons(scanned, item["name"], days)
+        all_reasons, all_statuses, all_total = day_reasons(
+            scanned, item["name"], signal_days
         )
         actionable_per_day = [
             per_day[item["name"]].get(day, (0, 0, 0))[1] for day in signal_days
@@ -590,7 +631,7 @@ def build(
     distances: dict[str, dict[str, list[float]]] = defaultdict(
         lambda: defaultdict(list)
     )
-    for name, entry, invalid, target_1, target_2 in level_distances(con, prefix):
+    for name, entry, invalid, target_1, target_2 in scanned.levels:
         if entry and invalid and entry > invalid:
             risk = entry - invalid
             distances[name]["risk_pct"].append(risk / entry)
