@@ -206,6 +206,26 @@ export function verifiedInstruments(item: Pick<NewsItem, 'instruments' | 'symbol
   return (item.symbols ?? []).map((symbol) => ({ key: symbol, label: symbol.includes(':') ? symbol.split(':')[1] : symbol, href: null }))
 }
 
+export type CardAiCandidate = NewsAi['symbol_candidates'][number] & { key: string }
+
+// The card's collapsed 「AI 候選」 row (UI_COPY_SPEC §4, #452): the done result's symbol candidates minus the codes the rules
+// already verified (instruments, or symbols' 「EX:SYM」／bare code), each code listed once. Listed and OTC codes never repeat,
+// so the code alone is compared: a candidate on the other exchange is the same stock (PR #458 review).
+export function cardAiCandidates(item: Pick<NewsItem, 'ai' | 'instruments' | 'symbols'>): CardAiCandidate[] {
+  const ai = usableAi(item)
+  if (!ai) return []
+  const seen = new Set<string>()
+  for (const instrument of item.instruments ?? []) seen.add(instrument.symbol)
+  for (const symbol of item.symbols ?? []) seen.add(symbol.includes(':') ? symbol.split(':')[1] : symbol)
+  const candidates: CardAiCandidate[] = []
+  for (const candidate of ai.symbol_candidates ?? []) {
+    if (seen.has(candidate.symbol)) continue
+    seen.add(candidate.symbol)
+    candidates.push({ ...candidate, key: `${candidate.exchange}:${candidate.symbol}` })
+  }
+  return candidates
+}
+
 // /api/news?symbol= matches substrings of symbols_json; the stock timeline keeps exact matches for this exchange + symbol.
 export function matchesInstrument(item: Pick<NewsItem, 'instruments' | 'symbols'>, exchange: string, symbol: string): boolean {
   if ((item.instruments ?? []).some((instrument) => instrument.exchange === exchange && instrument.symbol === symbol)) return true

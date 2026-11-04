@@ -156,6 +156,17 @@ function actionLabel(state: string): string {
   return ACTION_STATE_LABELS[state] ?? '待判定'
 }
 
+// backend/worker/news_sources.py source_id → source_name (UI_COPY_SPEC §2).
+const NEWS_FEED_NAMES: Record<string, string> = {
+  cna: '中央社',
+  cnyes: '鉅亨網',
+  ctee: '工商時報',
+  yahoo_tw: 'Yahoo奇摩股市',
+  cnbc: 'CNBC',
+  marketwatch: 'MarketWatch',
+  fed: 'Federal Reserve',
+}
+
 function sourceLabel(source: string | null | undefined | readonly string[]): string {
   if (Array.isArray(source)) {
     const sources = [...new Set((source as readonly unknown[]).map((value) => typeof value === 'string' ? value.trim() : '').filter(Boolean))]
@@ -178,8 +189,16 @@ function sourceLabel(source: string | null | undefined | readonly string[]): str
     twse_margin: '臺灣證券交易所 融資融券',
     tpex_3insti: '證券櫃檯買賣中心 三大法人',
     tpex_margin: '證券櫃檯買賣中心 融資融券',
+    // UI_COPY_SPEC §2 擷取來源代碼 (#452): ingestion runs and raw payloads of the news, LLM and derived jobs.
+    'claude-cli': 'Claude Code（AI 推論）',
+    news_llm: 'Claude Code 新聞判讀（AI 推論）',
+    candidate_notes: 'Claude Code 候選說明（AI 推論）',
+    technical_backtest: '技術回測（系統計算）',
+    'derived:corporate_actions': '除權息調整（系統計算）',
   }
-  return names[normalized] ?? (/^[\x00-\x7F]*$/.test(source) ? '來源待核實' : source)
+  // News feeds: the run's source is the feed id, its raw payloads carry 「news_<feed id>」.
+  const feed = NEWS_FEED_NAMES[normalized] ?? NEWS_FEED_NAMES[normalized.replace(/^news_/, '')]
+  return names[normalized] ?? feed ?? (/^[\x00-\x7F]*$/.test(source) ? '來源待核實' : source)
 }
 
 function instrumentTypeLabel(type: string): string {
