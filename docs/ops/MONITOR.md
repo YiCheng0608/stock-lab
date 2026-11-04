@@ -47,7 +47,7 @@ compose 的預設佇列目錄是 checkout 內的 `.coordination/`，任務 workt
 | `STOCK_MONITOR` | `on`（只記事件、不喚醒也不留言時用 `record-only`） |
 | `STOCK_COORDINATION_DIR` | 統籌的資料目錄的 `logs/`（[LOCAL](LOCAL.md#正式位置使用者決定)） |
 
-所以 `patrol.sh`、`compact_hook.sh` 與[統籌手冊](../COORDINATOR.md#無人值守運作)的路徑都不變，每個檔仍只有一個寫入者；job 日誌在 volume 裡，`patrol.sh` 印的是 monitor 寫進 `monitor-state.json` 的最後一列。看門狗以 `--monitor-dir /coordination` 讀 monitor 的心跳。停止：`monitor.stop` 對每分鐘一輪的 monitor 沒有作用，改把 `STOCK_MONITOR` 設成 `off` 後 `docker compose up -d scheduler`。
+所以 `patrol.sh`、`compact_hook.sh` 與[統籌手冊](../COORDINATOR.md#無人值守運作)的路徑都不變，每個檔仍只有一個寫入者；job 日誌在 volume 裡，`patrol.sh` 印的是 monitor 寫進 `monitor-state.json` 的最後一列。看門狗以 `--monitor-dir /coordination` 讀 monitor 的心跳。停止：`monitor.stop` 對每分鐘一輪的 monitor 沒有作用，改把 `STOCK_MONITOR` 設成 `off` 後 `docker compose up -d scheduler`。回補、回測與 `init-db` 期間開[維護模式](SCHEDULING.md#維護模式)，不要停 scheduler：維護模式只停 daily 與 news，monitor 照常每分鐘一輪（#468；停 scheduler 會連 monitor 一起停，事件就沒人記、統籌也不會被喚醒）。
 
 **wake listener**（#338，使用者選的做法 B3）：容器裡沒有 Orca，喚醒與 task worktree 數經主機上常駐的 [`wake_listener.py`](../../tools/ops/wake_listener.py)。serve 的 `--monitor-waker` 預設 [`http_wake.sh`](../../tools/ops/http_wake.sh)、`--monitor-orca` 預設 [`http_orca.sh`](../../tools/ops/http_orca.sh)（只答 `worktree list --json`），兩者都以 `STOCK_WAKE_TOKEN` 呼叫 `STOCK_WAKE_URL`（預設 `http://host.docker.internal:47338/wake`）。
 

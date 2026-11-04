@@ -823,7 +823,14 @@ def test_a_db_behind_prints_the_backup_and_init_db_commands(harness):
     result = harness.deploy("v1")
     assert result.code == 1, result.out
     assert "docs/RELEASE.md「含 migration 的版本」" in result.out
-    assert "docker compose -p stock-lab stop scheduler" in result.out
+    # #468: maintenance mode, with stop for a scheduler image from before it.
+    assert (
+        "  docker compose -p stock-lab exec scheduler python -m worker.cli maintenance on"
+        ' --reason "init-db v1"\n'
+    ) in result.out
+    assert "worker.cli maintenance status\n" in result.out
+    assert "上兩行改為：docker compose -p stock-lab stop scheduler" in result.out
+    assert 'maintenance off --reason "deployed v1"' in result.out
     # A shell left with a smoke test's settings runs init-db without them (PR #477 review).
     assert "\n  unset WEB_PORT API_PORT STOCK_ENV_FILE\n" in result.out
     assert (

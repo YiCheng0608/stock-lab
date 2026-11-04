@@ -279,11 +279,14 @@ DB 落後 tag $tag：先備份、再用 $tag 的程式跑 init-db，然後以同
 在 master 管理 checkout 的 Git Bash 依序執行（B 是備份目錄；完整步驟、時段與驗證見 docs/RELEASE.md「含 migration 的版本」）：
   export MSYS_NO_PATHCONV=1
   unset WEB_PORT API_PORT STOCK_ENV_FILE
-  docker compose -p $project stop scheduler
+  docker compose -p $project exec scheduler python -m worker.cli maintenance on --reason "init-db $tag"
+  docker compose -p $project exec scheduler python -m worker.cli maintenance status
+  # running_jobs 要是 []；scheduler 是 #468 以前的 image 時上兩行改為：docker compose -p $project stop scheduler
   docker run --rm --network none -v $volume:/data:ro -v "\$B":/out -v "\$(pwd -W)/tools/ops/copy_db.py":/t/copy_db.py:ro $backend python /t/copy_db.py --src /data/stock.db --dest /out
   git -C "$checkout_native" fetch --quiet --no-tags origin "refs/tags/$tag:refs/tags/$tag"
   git -C "$checkout_native" -c advice.detachedHead=false checkout --quiet "refs/tags/$tag"
   (cd "$checkout_native" && STOCK_RELEASE_TAG=$tag docker compose -p $project run --rm --no-deps api python -m worker.cli init-db)
+  # 以同一個 tag 重跑 deploy.sh 成功之後（開了維護模式時）：docker compose -p $project exec scheduler python -m worker.cli maintenance off --reason "deployed $tag"
 EOF
     refuse_built "DB 的 revision 是 $db_rev，tag $tag 的 alembic head 是 $head：DB 落後，新 api 會拒絕啟動。先備份、再以 $tag 的程式跑 init-db（docs/RELEASE.md「含 migration 的版本」）"
     ;;
