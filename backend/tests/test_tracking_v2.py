@@ -7,6 +7,7 @@ old rules (the AC-1 red run) and fails by assertion rather than at collection.
 
 from __future__ import annotations
 
+import inspect
 from datetime import date, timedelta
 
 import pytest
@@ -31,6 +32,7 @@ INSIDE = (100.0, 101.0, 99.0, 101.0)
 TARGET = (101.0, 103.5, 100.5, 103.0)
 STOP = (99.0, 99.5, 97.5, 98.0)
 BOTH = (100.0, 104.0, 97.0, 100.0)
+HOLD_ABOVE = (104.0, 104.5, 103.0, 104.0)
 
 LEVELS = TrackLevels("breakout", 100.0, None, None, 98.0, 103.2)
 
@@ -63,9 +65,18 @@ def track_bar(day, ohlc):
     )
 
 
+# track_path's rules is a required keyword (tracking_v2); the tracking_v1 module
+# has no such parameter, and this file also runs against it (the AC-1 red run).
+CURRENT = (
+    {"rules": "tracking_v2"}
+    if "rules" in inspect.signature(track_path).parameters
+    else {}
+)
+
+
 def path_of(*ohlcs, levels=LEVELS):
     days = sessions_after(PLAN_DAY, len(ohlcs))
-    return track_path(levels, [track_bar(d, o) for d, o in zip(days, ohlcs)])
+    return track_path(levels, [track_bar(d, o) for d, o in zip(days, ohlcs)], **CURRENT)
 
 
 # 6221 in #318: breakout 28.15, first target 28.6, the fill session opened at 30.97.
@@ -242,19 +253,42 @@ def test_tracking_v1_keeps_the_late_fill_and_the_gap_exit():
     days = sessions_after(PLAN_DAY, 6)
     late_bars = [track_bar(d, o) for d, o in zip(days, [*[FLAT] * 5, FILL])]
     assert settle(track_path(LEVELS, late_bars, rules="tracking_v1"), 5)["comparable"]
-    assert not settle(track_path(LEVELS, late_bars), 5)["comparable"]
+    assert not settle(track_path(LEVELS, late_bars, **CURRENT), 5)["comparable"]
     gap = [track_bar(days[0], GAP_6221)]
     v1_gap = track_path(GAP_LEVELS, gap, rules="tracking_v1")
     assert v1_gap.first_outcome == "target_1_hit" and v1_gap.skip_reason is None
     assert settle(v1_gap, 1)["return_or_risk"] < 0
     with pytest.raises(ValueError):
         track_path(LEVELS, [], rules="tracking_v9")
+    # No default: a caller that names no version fails instead of moving to v2.
+    with pytest.raises(TypeError):
+        track_path(LEVELS, late_bars)
 
 
-def test_every_plan_tracking_version_names_known_rules():
+def test_a_short_window_not_entered_reports_the_gap():
+    # Two sessions, T+5 asked: not entered on session 1, so the gap is the reason.
+    result = settle(path_of((104.0, 105.0, 103.5, 104.5), HOLD_ABOVE), 5)
+    assert result["comparable"] is False
+    assert result["incomparable_reason"] == "gap_above_target"
+    assert result["execution_price"] is None and result["first_trigger"] is None
+    # Without a gap the short window keeps its own reason.
+    assert settle(path_of(FLAT, FLAT), 5)["incomparable_reason"].startswith("only 2")
+
+
+def test_every_version_table_follows_the_current_rules():
     from app.domain import PLAN_TRACKING_RULES, PLAN_TRACKING_VERSION
     from app.tracking import TRACKING_RULE_VERSIONS, TRACKING_RULES
+    from worker.pipeline import BACKTEST_TRACKING_RULES, BACKTEST_TRACKING_VERSION
 
-    assert PLAN_TRACKING_VERSION == "plan_tracking_v2"
-    assert set(PLAN_TRACKING_RULES.values()) <= set(TRACKING_RULE_VERSIONS)
-    assert PLAN_TRACKING_RULES[PLAN_TRACKING_VERSION] == TRACKING_RULES
+    assert TRACKING_RULES == "tracking_v2"
+    for table, current in (
+        (PLAN_TRACKING_RULES, PLAN_TRACKING_VERSION),
+        (BACKTEST_TRACKING_RULES, BACKTEST_TRACKING_VERSION),
+    ):
+        assert set(table.values()) == set(TRACKING_RULE_VERSIONS)
+        assert len(set(table.values())) == len(table)
+        assert table[current] == TRACKING_RULES
+    assert (PLAN_TRACKING_VERSION, BACKTEST_TRACKING_VERSION) == (
+        "plan_tracking_v2",
+        "v2",
+    )

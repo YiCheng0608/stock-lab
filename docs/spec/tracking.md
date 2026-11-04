@@ -8,8 +8,8 @@
 3. replay 固定 canonical version，保存日期範圍、cutoff、設定快照與執行數；相同成功 request key 可重用既有 run。研究用的策略覆寫（`backtest(registry=...)`，逐一移除條件的 ablation 見 `app.strategies.ablation`）只在正式 DB 的副本或隔離 DB 執行：覆寫的策略以自己的名稱與 kind 寫 `strategy_versions`，request key 加 `:research:<策略名稱>`，不重用 canonical run，也不進 `REGISTRY`。研究 run 每個交易日的訊號寫完就 commit，追蹤每批 2,000 個訊號 commit 一次，摘要以 SQL 彙總；中途失敗時已 commit 的訊號、evaluation 與 settlement 留在同一個 namespace，run 記 `failed`，重跑（或成功後加 `--force`）會覆寫成與一次跑完相同的結果；研究腳本在 daily 時段前以同一機制停下（`should_stop`，`BacktestPaused`）。不帶覆寫的 replay 仍是單一 transaction，失敗時全部 rollback（[#318](https://github.com/YiCheng0608/stock-lab/issues/318)）。
 4. audit 保存 observation、data_incomplete 等所有規則列；technical summary 只納入 actionable evidence，按策略／標的類型／T+5、T+20 分組。
 5. 三個月或更短一律標 `insufficient_sample`；更長也不等於參數最佳化、walk-forward、獨立 OOS 或策略有效。勝率不能單獨決定採用。
-6. 逐日成交與出場規則只寫在 `app.tracking.track_path`（T+N 結果為 `settle`），系統訊號追蹤（`worker.pipeline._evaluate_signal_tracking`）與[使用者追蹤計畫](#使用者追蹤計畫)共用；規則有版本，見[口徑版本](#口徑版本)。
-7. daily 的 `evaluate` 只重算 `analysis-*` 訊號；`backtest-*` 訊號只由它所屬的 backtest run 依該 run 的 cutoff 追蹤，daily 不重算、不改寫（[#444](https://github.com/YiCheng0608/stock-lab/issues/444)）。
+6. 逐日成交與出場規則只寫在 `app.tracking.track_path`（T+N 結果為 `settle`），系統訊號追蹤（`worker.pipeline._evaluate_signal_tracking`）與[使用者追蹤計畫](#使用者追蹤計畫)共用；規則有版本，見[口徑版本](#口徑版本)；`track_path` 的 `rules` 是必填參數，每個呼叫端都寫明版本。現行版本只定義在 `app.tracking.TRACKING_RULES`，backtest key 版本（`worker.pipeline.BACKTEST_TRACKING_RULES`）與計畫版本（`app.domain.PLAN_TRACKING_RULES`）都由它推導。
+7. daily 的 `evaluate` 只重算 `analysis-*` 訊號；`backtest-*` 訊號只由它所屬的 backtest run 依該 run 的 cutoff 追蹤，daily 不重算、不改寫。20 根視窗已完整（已有 20 筆 evaluation）、且 settlement 是 `tracking_v1` 的訊號也不重算，不論狀態是 `target_1_hit`、`invalidated`、`incomparable` 或 `active`，歷史列保留 v1（[#444](https://github.com/YiCheng0608/stock-lab/issues/444)）。
 
 ### 口徑版本
 
@@ -18,11 +18,11 @@
 | 規則版本 | 內容 |
 | --- | --- |
 | `tracking_v1` | T+1 起第一次觸發即成交，成交當根就判定目標一／失效價；T+N 結果用整條路徑的成交（T+N 之後才成交也算）。 |
-| `tracking_v2`（現行） | 與 v1 相同，另有兩點：(1) 觸發進場的那一根，若開盤或原始成交價已在目標一（含）以上，或已在失效價（含）以下，就**不進場**（`gap_above_target`／`gap_below_invalid`），之後的日線也不再進場。理由：目標一與失效價是「成交後」首次觸及才算，開盤已越過時觸及發生在成交當下或之前；而且成交價已不在失效價～目標一之間，價位與 RR 的前提不成立。比較用換算到當日價格基準的原始價，不含滑價。(2) T+N 結果只用第 N 根以前（含）的成交；第 N 根以前沒成交的列不可比較，原因 `not_filled_by_horizon`（第 N 根以前已判定不進場則用上面兩個原因碼），不帶第 N 根之後的成交價、出場與 `first_trigger`。第 N 根以前已成交的路徑，結果與 v1 逐欄相同。 |
+| `tracking_v2`（現行） | 與 v1 相同，另有兩點：(1) 觸發進場的那一根，若開盤或原始成交價已在目標一（含）以上，或已在失效價（含）以下，就**不進場**（`gap_above_target`／`gap_below_invalid`），之後的日線也不再進場；訊號在判定的那一次就結束為 `expired`（重算前若是 `active`、`target_1_hit`、`invalidated`、`incomparable` 也一樣），不會在視窗剩下的日子仍顯示條件成立。理由：目標一與失效價是「成交後」首次觸及才算，開盤已越過時觸及發生在成交當下或之前；而且成交價已不在失效價～目標一之間，價位與 RR 的前提不成立。比較用換算到當日價格基準的原始價，不含滑價。(2) T+N 結果只用第 N 根以前（含）的成交；第 N 根以前沒成交的列不可比較，原因 `not_filled_by_horizon`（第 N 根以前已判定不進場則用上面兩個原因碼；日線不足 N 根但已判定不進場時也用跳空的原因碼），不帶第 N 根之後的成交價、出場與 `first_trigger`。第 N 根以前已成交的路徑，結果與 v1 逐欄相同。 |
 
 版本記在：
 
-- **settlement**：`signal_settlements.tracking_rules`（0023；0023 以前的列為 `tracking_v1`），每次寫入都帶算它的版本；`GET /signals/{id}` 與 `GET /tracking/{signal_key}` 的 settlement 帶 `tracking_rules`。`analysis-*` 訊號在 daily 重算時改用現行版本；已結束（不再被 `evaluate` 選到）的訊號保留原版本的列。
+- **settlement**：`signal_settlements.tracking_rules`（0023；0023 以前的列為 `tracking_v1`），每次寫入都帶算它的版本；`GET /signals/{id}` 與 `GET /tracking/{signal_key}` 的 settlement 帶 `tracking_rules`。`analysis-*` 訊號在 daily 重算時改用現行版本；20 根視窗已完整的 `tracking_v1` 訊號不重算，保留 v1 的列（第 7 點）。
 - **technical backtest**：request key `technical-backtest:<版本>:<起>:<迄>`，現行 `v2`（`tracking_v2`），`v1` 是 `tracking_v1`。新版本是新的 key 與新的 run，舊 run 的訊號與 settlement 不動；run metadata 記 `tracking_version`、`tracking_rules`，`GET /backtest/summary` 的 `run.tracking_version` 由 request key 讀出，技術回測頁顯示「追蹤口徑 {版本}」。
 - **使用者追蹤計畫**：`tracking_version`，`plan_tracking_v1` 用 `tracking_v1`、`plan_tracking_v2` 用 `tracking_v2`（`app.domain.PLAN_TRACKING_RULES`）。新計畫寫現行版本；舊版本的計畫照自己的版本繼續重算。
 

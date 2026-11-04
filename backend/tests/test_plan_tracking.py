@@ -29,6 +29,7 @@ from app.models import (
 )
 from app.tracking import (
     ROUND_TRIP_TRANSACTION_COST_BPS,
+    TRACKING_RULES,
     TrackBar,
     TrackLevels,
     settle,
@@ -93,7 +94,8 @@ def track_bar(day, ohlc, *, factor=1.0, suspended=False, gap=False, volume=1000)
 
 def path_of(*ohlcs, levels=LEVELS, **kwargs):
     days = sessions_after(PLAN_DAY, len(ohlcs))
-    return track_path(levels, [track_bar(d, o, **kwargs) for d, o in zip(days, ohlcs)])
+    bars = [track_bar(d, o, **kwargs) for d, o in zip(days, ohlcs)]
+    return track_path(levels, bars, rules=TRACKING_RULES)
 
 
 # ---- app.tracking: the shared session rules ----
@@ -155,7 +157,7 @@ def test_a_suspended_session_infers_no_trigger():
         track_bar(days[1], (100.0, 100.0, 100.0, 100.0), volume=0),  # zero-volume flat
         track_bar(days[2], FILL, gap=True),  # an official interval hid a session
     ]
-    path = track_path(LEVELS, bars)
+    path = track_path(LEVELS, bars, rules=TRACKING_RULES)
     assert [s.status for s in path.sessions] == ["suspended"] * 3
     assert not path.executed and not any(s.comparable for s in path.sessions)
     assert "missing market session" in path.sessions[2].reason
@@ -185,7 +187,9 @@ def test_settle_nets_the_cost_and_marks_short_or_suspended_windows_incomparable(
     assert short["final_status"] == "incomparable" and short["return_or_risk"] is None
     days = sessions_after(PLAN_DAY, 2)
     suspended = track_path(
-        LEVELS, [track_bar(days[0], FILL), track_bar(days[1], FLAT, suspended=True)]
+        LEVELS,
+        [track_bar(days[0], FILL), track_bar(days[1], FLAT, suspended=True)],
+        rules=TRACKING_RULES,
     )
     assert settle(suspended, 2)["incomparable_reason"] == (
         "suspended or otherwise non-comparable session in horizon"

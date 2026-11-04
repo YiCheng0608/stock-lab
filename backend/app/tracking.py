@@ -173,10 +173,13 @@ def _gap_skip(
     return None
 
 
-def track_path(
-    levels: TrackLevels, bars: list[TrackBar], *, rules: str = TRACKING_RULES
-) -> TrackPath:
-    """Fill from T+1 at the first executable price, then the first exit."""
+def track_path(levels: TrackLevels, bars: list[TrackBar], *, rules: str) -> TrackPath:
+    """Fill from T+1 at the first executable price, then the first exit.
+
+    ``rules`` is required: every caller names the version it tracks with
+    (``TRACKING_RULES`` for the current one), so no caller silently moves to
+    a newer version.
+    """
 
     if rules not in TRACKING_RULE_VERSIONS:
         raise ValueError(f"unknown tracking rules: {rules}")
@@ -416,6 +419,23 @@ def settle(path: TrackPath, horizon: int) -> dict[str, Any]:
     sessions = path.sessions
     execution_price = path.execution_price
     if len(sessions) < horizon:
+        if path.rules != TRACKING_RULES_V1 and path.skip_reason is not None:
+            # tracking_v2: not entered within the sessions there are, so the
+            # reason is the gap, as on a full window (and as track_path says).
+            return {
+                "settlement_date": sessions[-1].trading_date,
+                "final_status": "incomparable",
+                "first_trigger": None,
+                "return_or_risk": None,
+                "incomparable_reason": path.skip_reason,
+                "source": sessions[-1].source,
+                "data_time": sessions[-1].data_time,
+                "execution_date": None,
+                "execution_price": None,
+                "comparable": False,
+                "data_quality": "incomplete",
+                "tracking_rules": path.rules,
+            }
         return {
             "settlement_date": sessions[-1].trading_date,
             "final_status": "incomparable",

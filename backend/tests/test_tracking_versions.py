@@ -21,7 +21,14 @@ import worker.pipeline as pipeline
 import worker.sources as sources
 from app.db import enable_sqlite_foreign_keys
 from app.migrations import upgrade_database
-from app.models import Instrument, IngestionRun, MarketBar, Signal, SignalSettlement
+from app.models import (
+    Instrument,
+    IngestionRun,
+    MarketBar,
+    Signal,
+    SignalEvaluation,
+    SignalSettlement,
+)
 
 SIGNAL_DAY = date(2026, 9, 1)  # a Tuesday
 LEVELS = {
@@ -73,9 +80,10 @@ def sessions_after(day: date, count: int) -> list[date]:
 
 DAYS = sessions_after(SIGNAL_DAY, 6)
 END = DAYS[-1]
+WINDOW = sessions_after(SIGNAL_DAY, 22)  # more than the 20-session window
 
 
-def stock(db, symbol: str) -> Instrument:
+def stock(db, symbol: str, days: list[date] = DAYS) -> Instrument:
     instrument = Instrument(
         market="TW",
         exchange="TWSE",
@@ -86,8 +94,8 @@ def stock(db, symbol: str) -> Instrument:
     )
     db.add(instrument)
     db.flush()
-    rows = [(SIGNAL_DAY, (99.0, 99.5, 98.5, 99.0)), (DAYS[0], GAP)]
-    rows += [(day, HOLD) for day in DAYS[1:]]
+    rows = [(SIGNAL_DAY, (99.0, 99.5, 98.5, 99.0)), (days[0], GAP)]
+    rows += [(day, HOLD) for day in days[1:]]
     for day, (o, h, low, c) in rows:
         db.add(
             MarketBar(
@@ -222,13 +230,25 @@ def test_an_open_analysis_signal_is_recomputed_as_v2_and_an_ended_one_keeps_v1(
             "expired",
             sid,
         )
+        waiting = add_signal(
+            db,
+            stock(db, "WAIT"),
+            f"analysis-TWSE-WAIT-{SIGNAL_DAY}-breakout_v3",
+            "conditional",
+            sid,
+        )
         for row in (open_signal, ended):
             stored_v1_settlements(db, row)
         db.commit()
         ended_before = settled(db, ended.id)
-        open_id, ended_id = open_signal.id, ended.id
+        open_id, ended_id, waiting_id = open_signal.id, ended.id, waiting.id
     pipeline.evaluate(init_schema=False)
     with factory() as db:
+        # Not entered ends the signal at once: no outcome without a fill, and a
+        # conditional signal does not stay "成立" for the rest of the window.
+        assert db.get(Signal, open_id).status == "expired"
+        assert db.get(Signal, waiting_id).status == "expired"
+        assert rules(db, waiting_id) == {"tracking_v2"}
         recomputed = settled(db, open_id)
         assert recomputed[5][1:] == (
             "incomparable",
@@ -246,6 +266,61 @@ def test_an_open_analysis_signal_is_recomputed_as_v2_and_an_ended_one_keeps_v1(
         # An ended signal is not tracked again: its tracking_v1 rows stay.
         assert settled(db, ended_id) == ended_before
         assert rules(db, ended_id) == {"tracking_v1"}
+
+
+def stored_window(db, signal: Signal) -> None:
+    """The 20 evaluations a finished tracking_v1 window left behind."""
+
+    for number, day in enumerate(WINDOW[:20], start=1):
+        db.add(
+            SignalEvaluation(
+                signal_id=signal.id,
+                session_date=day,
+                session_no=number,
+                status=signal.status,
+                reason="tracking_v1",
+                comparable=True,
+                data_quality="complete",
+            )
+        )
+    db.flush()
+
+
+def evaluations(db, signal_id: int) -> list[tuple]:
+    return [
+        (row.session_no, row.session_date, row.status, row.reason)
+        for row in db.scalars(
+            select(SignalEvaluation)
+            .where(SignalEvaluation.signal_id == signal_id)
+            .order_by(SignalEvaluation.session_no)
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "status", ["target_1_hit", "invalidated", "incomparable", "active"]
+)
+def test_a_finished_v1_window_is_not_recomputed_by_the_daily_evaluate(factory, status):
+    # The bars gap over the target, so tracking_v2 would not enter: any rewrite shows.
+    with factory() as db:
+        row = add_signal(
+            db,
+            stock(db, "HIST", WINDOW),
+            f"analysis-TWSE-HIST-{SIGNAL_DAY}-breakout_v3",
+            status,
+            strategy_id(db),
+        )
+        stored_v1_settlements(db, row)
+        stored_window(db, row)
+        db.commit()
+        signal_id = row.id
+        before = settled(db, signal_id), evaluations(db, signal_id)
+    pipeline.evaluate(init_schema=False)
+    with factory() as db:
+        assert (settled(db, signal_id), evaluations(db, signal_id)) == before
+        assert rules(db, signal_id) == {"tracking_v1"}
+        signal = db.get(Signal, signal_id)
+        assert signal.status == status and signal.execution_price is None
 
 
 def fake_generate(db, score_date, strategies, *, namespace="analysis", registry=None):
