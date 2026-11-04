@@ -20,6 +20,7 @@ from app.models import (
     Event,
     GroupDailyScore,
     GroupMembership,
+    IngestionRun,
     Instrument,
     MarketBar,
     PortfolioPosition,
@@ -28,7 +29,7 @@ from app.models import (
     TechnicalFeature,
     ThemeGroup,
 )
-from worker import pipeline
+from worker import mops_events, pipeline
 
 
 class GroupCandidateIdentityTest(unittest.TestCase):
@@ -147,6 +148,26 @@ class GroupCandidateIdentityTest(unittest.TestCase):
                         event_type="fixture",
                         title="Memory catalyst",
                         source="issuer_filing",
+                    )
+                )
+                # hot_group_v1 1.2.0 (#453): the catalyst counts only over a
+                # window whose every session has a dated MOPS answer.
+                db.add(
+                    IngestionRun(
+                        run_type=mops_events.RUN_TYPE,
+                        source="official",
+                        run_date=day,
+                        status="success",
+                        metadata_json={
+                            "coverage_manifest": {
+                                item.isoformat(): {
+                                    "event_coverage": mops_events.date_coverage(
+                                        item, None
+                                    )
+                                }
+                                for item in dates
+                            }
+                        },
                     )
                 )
                 for trading_day in dates:
