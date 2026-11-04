@@ -13,7 +13,10 @@ Reads the database ``--db`` (the ``tools/ops/copy_db.py`` copy the run of
 
 Strategy results are the run's comparable T+5／T+20 settlements
 (``signal_settlements``, docs/spec/tracking.md「Tracking 與 technical backtest
-口徑」); which signals are actionable is in ``RunSignals``.
+口徑」), less the ones still ``not_triggered`` at T+N: ``app.tracking.settle``
+takes the fill of the whole path, so a signal filled after T+N is
+"comparable" with T+N's close over that later fill.  Which signals are
+actionable is in ``RunSignals``.
 
 Benchmark one draws, for every signal date, as many instruments as the
 strategy has comparable settlements that date, without replacement, from the
@@ -510,10 +513,18 @@ def build(
     ) in rows:
         key = (name, horizon)
         day = date.fromisoformat(day)
-        if comparable and value is not None:
+        if comparable and value is not None and status == "not_triggered":
+            # app.tracking.settle takes the fill of the whole 20-session path:
+            # a signal filled after T+N is "comparable" with T+N's close over
+            # a later fill.  That is no T+N return; it is left out.
+            incomparable[key]["filled_after_horizon"] += 1
+        elif comparable and value is not None:
             returns[key].append(value)
             counts[key][day] += 1
             outcomes[key][status] += 1
+            if status == "target_1_hit" and value < 0:
+                # Mostly a fill at an open above target_1, sold at target_1.
+                outcomes[key]["target_1_hit_below_zero"] += 1
             at = bisect.bisect_right(sessions, day)
             if day in closes and at + horizon - 1 < len(sessions):
                 later = closes.get(sessions[at + horizon - 1])

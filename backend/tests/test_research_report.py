@@ -171,6 +171,7 @@ def research_db(tmp_path) -> Path:
             run_id=7,
             missing=(),
             status=None,
+            outcome=None,
         ):
             nonlocal signal_id
             signal_id += 1
@@ -206,9 +207,8 @@ def research_db(tmp_path) -> Path:
                         signal_id=signal_id,
                         horizon=horizon,
                         settlement_date=days[day_index + 1],
-                        final_status="target_1_hit"
-                        if value is not None
-                        else "incomparable",
+                        final_status=outcome
+                        or ("target_1_hit" if value is not None else "incomparable"),
                         return_or_risk=value,
                         comparable=value is not None,
                         execution_date=days[day_index + 1]
@@ -221,6 +221,11 @@ def research_db(tmp_path) -> Path:
             signal(canonical, 1, True, (value, None))
         signal(canonical, 2, True, (0.01, None))
         signal(canonical, 2, True, (None, None))  # never executed
+        # Filled after T+5: settle calls it comparable with T+5's close over
+        # the later fill; it is no T+5 return.
+        signal(
+            canonical, 2, True, (-0.06, None), status="active", outcome="not_triggered"
+        )
         for day_index in (3, 4):
             signal(canonical, day_index, False, reasons=("volume_ratio_below_1_20",))
         signal(canonical, 4, False, reasons=("volume_ratio_below_1_20", "x_below"))
@@ -234,7 +239,7 @@ def research_db(tmp_path) -> Path:
         )
         # Levels the validation rejected: not actionable, never tracked.
         signal(canonical, 3, False, status="invalid_levels")
-        for value in (0.03, 0.03, 0.03):
+        for value in (0.03, 0.03, 0.03, -0.01):
             signal(ablation, 1, True, (value, None))
         signal(ablation, 3, True, (None, None))
         signal(ablation, 4, False)
@@ -268,7 +273,7 @@ def test_the_tables_of_a_run_and_benchmark_one_are_what_the_bars_give(
     canonical = tables["results"]["breakout_v2:T+5"]
     assert canonical["returns"]["n"] == 3
     assert canonical["returns"]["mean"] == pytest.approx((0.04 + 0.02 + 0.01) / 3)
-    assert canonical["incomparable"] == {"not_executed": 1}
+    assert canonical["incomparable"] == {"not_executed": 1, "filled_after_horizon": 1}
     # Session 1's pool is A and B (B through its split); C misses session 3,
     # the IPO D is suspended on session 4 and E is an ETF.  Two of two are
     # drawn on session 1; session 2 draws one of A and B.
@@ -292,9 +297,10 @@ def test_the_tables_of_a_run_and_benchmark_one_are_what_the_bars_give(
     ablation = tables["results"]["breakout_v2_ablate_group:T+5"]
     assert ablation["benchmark"]["instruments_per_draw"] == 2  # the pool's size
     assert ablation["benchmark"]["mean_of_means"] == pytest.approx(sum(session_1) / 2)
+    assert ablation["outcomes"] == {"target_1_hit": 4, "target_1_hit_below_zero": 1}
     # Run 8's signal is not in run 7's tables.
-    assert tables["signal_totals"]["breakout_v2"]["actionable"] == 4
-    assert tables["signal_totals"]["breakout_v2"]["executed"] == 3
+    assert tables["signal_totals"]["breakout_v2"]["actionable"] == 5
+    assert tables["signal_totals"]["breakout_v2"]["executed"] == 4
     assert tables["levels"]["breakout_v2"]["target_1_r"]["p50"] == pytest.approx(1.6)
 
 
@@ -328,6 +334,7 @@ def test_days_without_a_conditional_signal_and_what_one_removal_gives(
     assert zero["statuses_all_days"] == {
         "target_1_hit": 3,
         "expired": 1,
+        "active": 1,
         "observation": 3,
         "data_incomplete": 1,
         "invalid_levels": 1,
