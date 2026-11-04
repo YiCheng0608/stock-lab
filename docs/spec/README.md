@@ -8,6 +8,7 @@
 - T 是訊號收盤日；最早成交為 T+1，不用 T 收盤冒充成交。
 - 價格與必要量值須為有限正數。NaN、Infinity、交易日不足、必要資料缺失、停牌或不可重建路徑一律 `data_incomplete` 或 `incomparable`，不補 0。
 - v1 以日期 T 作 cutoff；T 日 13:30 的 cutoff 字串不證明法人等盤後輸入當時已可得。`trading_date`／`event_date` 是資料日期，`collected_at` 是本系統取得時間，回補日不能反推成歷史可得日。新的 PIT 版本須另存 availability、revision 與 decision time。
+- 有證據的無資料與缺資料分開記：[官方無成交日](../DATA_SOURCES.md#官方無成交日)（行情表有列、價格全空白）在資料覆蓋度算「官方無成交」，不算缺口，也不是價格；表上沒有該列、或無法證實的空白仍是缺資料。策略與指標對無成交日的處理不因此改變。
 - failed／partial collect run 不分析或追蹤（gate 見 [現有 worker CLI](../ops/CLI.md#現有-worker-cli)）。明確官方 no-data 且無列的非交易日可略過；錯日、缺報告日期或無法證實的空 payload 必須 fail closed。
 - `observation` 表示該策略輸入完整、規則已判定但條件未成立；缺 entry／target／RR 是正常狀態；呈現方式見 [PRODUCT_SPEC §6](../PRODUCT_SPEC.md#action-merge)。
 

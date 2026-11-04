@@ -44,6 +44,7 @@ _CHILDREN = {
     "events",
     "daily_candidates",
     "tracking_plans",
+    "no_trade_days",
 }
 _TOKEN = re.compile(
     r"\s+|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|`(?:``|[^`])*`|\[[^]]*\]|[A-Za-z_][A-Za-z_0-9]*|[0-9]+|[(),;]"
