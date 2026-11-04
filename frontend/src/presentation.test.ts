@@ -40,10 +40,16 @@ expect(!productTimeRoleKnown({ status: 'known', precision: 'date', value: null }
 expect(formatProductTimeRole(undefined, 'market_date', '2026-09-08') === '2026/09/08', 'legacy date fallback')
 expect(formatProductTimeRole(undefined, 'market_date', '2026-02-30') === '待核實', 'invalid legacy date')
 expect(formatProductTimeRole({ roles: { market_date: { role: 'market_date', status: 'known', precision: 'date', value: '2026-09-08' } } } as never, 'market_date') === '2026/09/08', 'product date formatting')
-// #465: an unknown role with no value was never recorded (decision_at: legacy_decision_at_not_persisted) and reads
-// 未記錄; only a value that cannot be confirmed reads 待核實. Neither uses the legacy fallback.
-expect(formatProductTimeRole({ roles: { published_at: { role: 'published_at', status: 'unknown', precision: 'none', value: null } } } as never, 'published_at', '2026-09-08') === '未記錄', 'unknown role without a value is 未記錄 and must not use fallback')
-expect(formatProductTimeRole({ roles: { decision_at: { role: 'decision_at', status: 'unknown', precision: 'none', value: null, utc: null, reason: 'legacy_decision_at_not_persisted' } } } as never, 'decision_at') === '未記錄', 'a decision time the system never stored is 未記錄')
+// #465 (PR 473 review): the backend sends every unknown role as value=null, utc=null (product_time._unknown), so
+// only the reason tells them apart. *_not_persisted (the system never stored it) and a missing role read 未記錄;
+// every other unknown is a value that failed its check and reads 待核實. Neither uses the legacy fallback.
+const unknownRole = (role: string, reason?: string) => ({ roles: { [role]: { role, status: 'unknown', precision: 'none', value: null, utc: null, ...(reason ? { reason } : {}) } } }) as never
+expect(formatProductTimeRole(unknownRole('decision_at', 'legacy_decision_at_not_persisted'), 'decision_at') === '未記錄', 'a decision time the system never stored is 未記錄')
+expect(formatProductTimeRole(unknownRole('published_at', 'news_published_at_not_persisted'), 'published_at', '2026-09-08') === '未記錄', 'a *_not_persisted role is 未記錄 and must not use fallback')
+expect(formatProductTimeRole(unknownRole('published_at', 'time_consistency_conflict'), 'published_at') === '待核實', 'a time conflict is 待核實, not 未記錄')
+expect(formatProductTimeRole(unknownRole('published_at', 'published_at_naive_timezone_missing'), 'published_at') === '待核實', 'a value without a time zone is 待核實, not 未記錄')
+expect(formatProductTimeRole(unknownRole('event_date', 'event_date_invalid'), 'event_date') === '待核實', 'an invalid value is 待核實')
+expect(formatProductTimeRole(unknownRole('published_at'), 'published_at', '2026-09-08') === '待核實', 'an unknown role without a reason is 待核實 and must not use fallback')
 expect(formatProductTimeRole({ roles: { decision_at: { role: 'decision_at', status: 'unknown', precision: 'instant', value: '2026-09-08T09:00:00' } } } as never, 'decision_at') === '待核實', 'an unconfirmed value stays 待核實')
 expect(formatProductTimeRole({ roles: {} } as never, 'decision_at') === '未記錄', 'a role the response lacks is 未記錄')
 expect(PRODUCT_TIME_NOTE === '時間以台灣時間顯示；系統沒有記錄的時間寫「未記錄」，有值但尚未確認的寫「待核實」。', 'the time note tells 未記錄 from 待核實')

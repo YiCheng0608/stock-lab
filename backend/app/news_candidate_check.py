@@ -15,8 +15,8 @@ appear in the title or the summary the model was sent?
 
 Comparison is on NFKC, casefolded text without whitespace.  A name counts only
 outside a longer listed name that contains it (華新 inside 華新科 is 2492, not
-1605).  A code counts only when no letter or digit touches it.  Names are the
-master name and the same variants the rule matcher reads (listing markers,
+1605).  A code counts only when no letter, digit or decimal point touches it
+and no unit (點, 億, 元, %, 年…) follows it.  Names are the master name and the same variants the rule matcher reads (listing markers,
 former ETF names, holding-company endings).  A code not in the master has no
 name to look for and is checked by its code alone.
 """
@@ -35,6 +35,9 @@ MENTIONED = "mentioned"
 NOT_MENTIONED = "not_mentioned"
 
 _WHITESPACE = re.compile(r"\s+")
+# A number followed by a unit is an amount, a date or a percentage, not a code
+# (PR 473 review: 暴跌1612點, 營收2330億).  Matched after NFKC (％ is %).
+_UNIT = r"[點億萬千百元%年月日季週倍張]"
 
 
 def _key(text: str) -> str:
@@ -80,7 +83,7 @@ def check_candidate(
     """
 
     code = _key(symbol)
-    if code and re.search(rf"(?<![0-9a-z]){re.escape(code)}(?![0-9a-z])", text):
+    if code and re.search(rf"(?<![0-9a-z.]){re.escape(code)}(?![0-9a-z.]|{_UNIT})", text):
         return MENTIONED
     names = list(all_names)
     for variant in name_variants(name):

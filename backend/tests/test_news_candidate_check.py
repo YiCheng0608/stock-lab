@@ -55,6 +55,12 @@ def test_a_name_or_code_in_the_sent_text_is_mentioned(title, summary, symbol, na
         # A code touching other digits or letters is not the code.
         ("加權指數下跌123172點", "", "2317", "鴻海"),
         ("ticker A2317B", "", "2317", "鴻海"),
+        # PR 473 review: a number with a unit is an amount, not a code.
+        ("台股暴跌1612點", "", "1612", "宏泰"),
+        ("台積電營收2330億元", "", "2330", None),
+        ("外資賣超2317萬張", "", "2317", None),
+        ("股價漲2317%", "", "2317", None),
+        ("2026年展望", "", "2026", None),
         # A code not in the master is checked by its code alone.
         ("記憶體報價走揚", "", "6392", None),
     ],

@@ -368,7 +368,7 @@ def test_previous_bar_from_another_source_is_unverified(db, client):
 
 def test_no_close_on_a_previous_session_its_source_has_bars_for(db, client):
     # #465: the exchange published the previous session (other fixture-bars stocks
-    # have bars) but gave this stock no close (no trade or suspended): the change is
+    # have bars) but gave this stock no close (no trade, suspended or newly listed): the change is
     # not computed and says why, instead of 待核實. No earlier close stands in.
     _seed(db)
     row = _by_symbol(_members(client))["1104"]

@@ -58,11 +58,12 @@ def adjacent_change(
     The change is ``known`` only against the stock's bar on the previous
     verified TAIEX session from the same source (UI_COPY_SPEC §8.2); a holiday
     gap, missing or suspended bar, or another source is ``unverified``.
-    ``no_previous_close`` (#465) is the one gap whose cause is known: the
-    source has bars on the previous session, so the day was collected, but
-    none with a traded close for this stock (no trade or suspended; the
-    collector keeps no row without a close). No earlier close stands in, since
-    the exchange's reference price is not the last traded close.
+    ``no_previous_close`` (#465) is the one gap the source explains: it has
+    bars on the previous session, so the day was collected, but none with a
+    traded close for this stock (no trade, suspended, or listed only now; the
+    collector keeps no row without a close, and the page names no cause). No
+    earlier close stands in: the exchange's reference price is not the last
+    traded close.
     ``missing`` means no traded bar on the day. ``sessions`` caches the TAIEX
     lookup across the stocks of one response.
     """

@@ -125,7 +125,7 @@ check(!row1.includes('<wbr'), 'row #1: the target never breaks before 「／」 
 const row2 = slice(table, 'data-candidate-rank="2"', '</tr>')
 check(text(row2).includes('13.20') && text(row2).includes('漲跌待核實') && text(row2).includes('13.05～13.35'), 'row #2: an unverified change reads 漲跌待核實')
 check(text(slice(table, 'data-candidate-rank="4"', '</tr>')).includes('-1.50%'), 'row #4: a falling close shows a signed change')
-// #465: no close on the previous session the source published (no trade or suspended) says so, not 待核實.
+// #465: no close on the previous session the source published (no trade, suspended or newly listed) says so, not 待核實.
 const noPreviousClose = candidateChange({ trading_date: '2026-10-16', close: 13.2, change: null, change_pct: null, change_status: 'no_previous_close', source: 'tpex' })
 check(noPreviousClose.text === '前一交易日無收盤' && noPreviousClose.tone === null, `no previous close: ${noPreviousClose.text}`)
 check(text(slice(table, 'data-candidate-rank="5"', '</tr>')).includes('待核實'), 'row #5: no bar on the day reads 待核實')

@@ -210,11 +210,11 @@ for (const sentence of ['漲跌幅空白表示漲跌待核實。', '成交金額
 check(!memberNote.includes('成交金額空白表示待核實'), 'an unknown turnover sentence only when a row is unknown')
 check(memberTableNote([{ ...membersPage().items[0] }], '2026-09-08') === '收盤為各標的報價幣別的元；成交金額是當日成交金額；5／20 日相對是相對加權指數的報酬。', 'no blank, no blank sentence')
 check(memberTableNote([{ ...membersPage().items[0], turnover: null, turnover_status: 'unknown' }], '2026-09-08').endsWith('成交金額空白表示待核實。'), 'unknown turnover reads 待核實')
-// #465: the source published the previous session but gave the stock no close (no trade or suspended) — the cause is
+// #465: the source published the previous session but gave the stock no close (no trade, suspended or newly listed) — the cause is
 // known, so the note says it instead of 待核實; an unverified change on the same page keeps its own sentence.
 const noPrevious = { ...membersPage().items[0], change: null, change_pct: null, change_status: 'no_previous_close' }
 const noPreviousNote = memberTableNote([noPrevious], '2026-09-08')
-check(noPreviousNote.endsWith('漲跌幅空白表示前一交易日沒有收盤價（無成交或停牌），不計算漲跌。') && !noPreviousNote.includes('待核實'), `no previous close reads its cause: ${noPreviousNote}`)
+check(noPreviousNote.endsWith('漲跌幅空白表示前一交易日沒有收盤價，不計算漲跌。') && !noPreviousNote.includes('待核實'), `no previous close reads its cause: ${noPreviousNote}`)
 check(memberTableNote([noPrevious, { ...membersPage().items[0], change: null, change_pct: null, change_status: 'unverified' }], '2026-09-08').includes('漲跌幅空白表示漲跌待核實。'), 'an unverified change still reads 待核實')
 // Industry board: no role column, no evidence column.
 const industryMembers = render(<ThemeDetailView detail={industryDetail} board={loaded(industryBoard())} members={loaded(membersPage())} onMemberPageChange={noop} news={loaded({ items: [] })} />)

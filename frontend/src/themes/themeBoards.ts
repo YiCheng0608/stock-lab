@@ -193,7 +193,7 @@ export function memberTableNote(rows: ReadonlyArray<MemberValues>, membersAsOf: 
   const valued = rows.filter((row) => row.change_status !== undefined)
   const fresh = valued.filter((row) => row.latest_bar && !memberStaleDate(row, membersAsOf))
   const sentences = [
-    [fresh.some((row) => row.change_status === 'no_previous_close'), '漲跌幅空白表示前一交易日沒有收盤價（無成交或停牌），不計算漲跌。'],
+    [fresh.some((row) => row.change_status === 'no_previous_close'), '漲跌幅空白表示前一交易日沒有收盤價，不計算漲跌。'],
     [fresh.some((row) => row.change_status !== 'known' && row.change_status !== 'no_previous_close'), '漲跌幅空白表示漲跌待核實。'],
     [fresh.some((row) => row.turnover_status === 'unavailable'), '成交金額空白表示來源未提供。'],
     [fresh.some((row) => row.turnover_status === 'unknown'), '成交金額空白表示待核實。'],
