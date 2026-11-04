@@ -161,9 +161,13 @@ function formatKnownInstant(value: string): string {
   return (validValue && formatTaipeiMinute(validValue)) ?? '待核實'
 }
 
+// UI_COPY_SPEC §8.2 (#465): a role with no value was never recorded (未記錄); a value that cannot be confirmed is 待核實.
+export const PRODUCT_TIME_NOTE = '時間以台灣時間顯示；系統沒有記錄的時間寫「未記錄」，有值但尚未確認的寫「待核實」。'
+
 export function formatProductTimeRole(time: ProductTime | undefined, roleName: string, fallbackDate: string | null = null): string {
   const role = time?.roles?.[roleName]
   if (!time && fallbackDate) return formatCalendarDate(fallbackDate)
+  if (!role?.value && !role?.utc) return '未記錄'
   if (!productTimeRoleKnown(role)) return '待核實'
   if (role?.precision === 'date') return formatCalendarDate(role.value)
   return formatKnownInstant(role?.utc ?? role?.value ?? '')

@@ -101,6 +101,12 @@ from .news import (
     is_verified_theme,
     sync_news_from_events,
 )
+from .news_candidate_check import (
+    CANDIDATE_CHECK_VERSION,
+    check_candidate,
+    name_variants,
+    source_text,
+)
 from .product_time import (
     build_news_product_time,
     build_signal_product_time,
@@ -1175,6 +1181,17 @@ def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, A
             ).where(Instrument.symbol.in_(codes))
         ).all():
             listed.setdefault(symbol, []).append((exchange, name, status))
+    # Every listed name, so a candidate's name inside a longer one does not count (#465).
+    all_names = (
+        {
+            key
+            for (name,) in db.execute(select(Instrument.name)).all()
+            for key in name_variants(name)
+        }
+        if codes
+        else set()
+    )
+    texts = {item.id: source_text(item.title, item.summary) for item in items}
     result: dict[int, dict[str, Any]] = {}
     for news_id, row in latest.items():
         symbol_candidates = []
@@ -1190,6 +1207,9 @@ def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, A
                     "reason": candidate.get("reason"),
                     "confidence": candidate.get("confidence"),
                     "verified": False,
+                    "source_check": check_candidate(
+                        texts.get(news_id, ""), symbol, name, all_names
+                    ),
                 }
             )
         result[news_id] = {
@@ -1197,6 +1217,7 @@ def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, A
             "status": row.llm_status,
             "summary": row.ai_summary,
             "symbol_candidates": symbol_candidates,
+            "candidate_check_version": CANDIDATE_CHECK_VERSION,
             "theme_candidates": row.ai_theme_candidates_json or [],
             "impact_direction": row.ai_impact_direction,
             "impact_scope": row.ai_impact_scope,

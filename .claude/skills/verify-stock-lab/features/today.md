@@ -37,7 +37,7 @@
 
 | 區塊 | 資料來源 | 必須顯示的來源與資料日期 | 「推論」位置 | 空資料文案 |
 | --- | --- | --- | --- | --- |
-| 導覽列 | `dashboard.as_of` | `資料 <D/>`（右上 badge） | — | `資料日期待核實` |
+| 導覽列 | `dashboard.as_of` | `資料 <D/>`（右上 badge） | — | `資料日期未提供`；`/api/dashboard` 失敗時 `資料日期暫時無法載入`（#465） |
 | 頁首資料列 | `dashboard.as_of`、`market.source_label`、`mode` | 一行 `資料截至 <D/> · <來源> · <模式>`；「資料說明」內 `成交金額範圍：…` | — | 模式 `尚無官方快照` |
 | 大盤概況 | `dashboard.market_overview` | 加權指數、櫃買指數、成交金額（億元）、漲跌家數；資料日同 `D` | — | `上市大盤資料未取得`／`上櫃大盤資料未取得` |
 | 持倉風險提示列 | `dashboard.actions` 的持倉風險 | — | — | 沒有持倉風險時不出現 |
@@ -53,9 +53,9 @@
 | 編號 | 類型 | 檢查 | 怎麼判 |
 | --- | --- | --- | --- |
 | T1 | CI | 頁面可用 | 兩個寬度 `ready` true、`httpErrors` 與 `consoleErrors` 空、`overflow` false |
-| T2 | CI | 導覽列資料日 | `today-1280.txt` 有整行 `資料 <D/>`，且 `D` 等於 `facts.json` 的 `market_latest_trading_date`。`D` 缺少時：`market_latest_trading_date` 非 null 判失敗（DB 有行情、頁面沒有資料日），兩邊都沒有才查整行 `資料日期待核實`。`D` 的上游 |
+| T2 | CI | 導覽列資料日 | `today-1280.txt` 有整行 `資料 <D/>`，且 `D` 等於 `facts.json` 的 `market_latest_trading_date`。`D` 缺少時：`market_latest_trading_date` 非 null 判失敗（DB 有行情、頁面沒有資料日），兩邊都沒有才查整行 `資料日期未提供`。`D` 的上游 |
 | T3 | CI | 頁首資料列 | 第一個 `資料截至 ` 開頭的行以 `資料截至 <D/> · ` 開頭，其後以 ` · ` 分出來源與模式兩段且都非空；來源等於 `market.source_label`（null 時只要求非空）。`D` 的上游 |
-| T4 | CI | 熱門族群日期 | 整行 `熱門族群` 之後第一個 `資料 ` 開頭的行是 `資料 <B/>`；`B` 等於 `facts.json` 的 `group_scores_latest_trading_date`。`B` 缺少時：`group_scores_latest_trading_date` 非 null 判失敗，兩邊都沒有才查整行 `資料日期待核實`。`B` 的上游 |
+| T4 | CI | 熱門族群日期 | 整行 `熱門族群` 之後第一個 `資料 ` 開頭的行是 `資料 <B/>`；`B` 等於 `facts.json` 的 `group_scores_latest_trading_date`。`B` 缺少時：`group_scores_latest_trading_date` 非 null 判失敗，兩邊都沒有才查整行 `資料日期未提供`。`B` 的上游 |
 | T5 | CI | 熱門族群列 | 整行 `資料 <B/> · 相對加權指數` 的行數 = `min(5, items 數)`（今日頁各榜前 5）；`items[0].display_name` 為整行出現。`items` 空時：`facts.json` 的 `group_scores_latest_trading_date` 非 null 且等於該榜 `meta.trading_date`（或後者為 null），或 `dashboard.json` 的 `groups` 有該日 `rank` 非 null 的族群，判失敗；都沒有才查空資料文案。`T` 的上游；`B` 用 T4 |
 | T6 | CI | 新聞卡與 AI 標記 | `dashboard.news` 前 3 則的標題（`title`）各為整行出現；其中 `news-<id>.json` 的 `ai.status` 為 `done` 且 `ai.inference` 為 true 的：`dashboard.news` 該則的 `ai` 與它相同，卡片有整行 `AI 推論`，其上一行（方向行）等於 AI 方向（`ai.unsupported` 為 true 時是 `影響尚未判定`，否則 `ai.impact_direction` 照 positive／negative／mixed 寫 `可能正向`／`可能負向`／`正負互見`，其餘 `影響尚未判定`；與新聞頁同一套，#233）。一張卡的範圍是它的標題行到下一則標題行之前；最後一則到其後的 `關注標的` 之前 |
 | T7 | CI | 明日候選日期、名次列與來源 | `status` 不是 `not_computed` 且 `items` 非空時：整行 `明日候選` 的下一行是 `資料 <C/>`、再下一行 `<candidate_count> 檔`；`明日候選` 與 `熱門族群` 之間以 `#<n>` 加 tab 開頭的名次列（表格列；改版前的卡片是整行 `#<n>`，不算）依序等於 `items[].rank`（收合的其餘幾檔在截圖展開 `<details>` 後也列出）；`^來源：` 行數 = `items` 數，且 `C` 等於 `facts.json` 的 `candidate_run_latest_trading_date`。`items` 空時整行 `當日零候選`，`not_computed` 時整行 `尚無候選清單`；但 `facts.json` 的 `candidate_count_latest` > 0 且 `candidate_run_latest_trading_date` 等於 `candidates.json` 的 `trading_date`（或後者為 null）時判失敗 |

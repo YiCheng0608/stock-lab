@@ -23,9 +23,9 @@ export function Badge({ tone = 'default', dot = false, pulse = false, className,
 
 // Data-date badge for the top right of a data card (DESIGN_SYSTEM §6, §7).
 // An API date (YYYY-MM-DD) reads YYYY/MM/DD (UI_COPY_SPEC §1); an already formatted date is kept.
-export function DateBadge({ date, label = '資料' }: { date: string | null | undefined; label?: string }) {
+// No date is 「未提供」 and a failed request 「暫時無法載入」, never 待核實 (UI_COPY_SPEC §1, #465).
+export function DateBadge({ date, label = '資料', unavailable = false }: { date: string | null | undefined; label?: string; unavailable?: boolean }) {
   const day = formatDay(date) ?? date
-  return day
-    ? <Badge className="date-badge" title={`${label}日期 ${day}`}>{label} {day}</Badge>
-    : <Badge className="date-badge" tone="warning">{label}日期待核實</Badge>
+  if (day) return <Badge className="date-badge" title={`${label}日期 ${day}`}>{label} {day}</Badge>
+  return <Badge className="date-badge" tone="warning">{label}日期{unavailable ? '暫時無法載入' : '未提供'}</Badge>
 }

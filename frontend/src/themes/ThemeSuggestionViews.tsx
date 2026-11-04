@@ -27,7 +27,7 @@ function SuggestionNewsList({ news }: { news: readonly ThemeSuggestionNews[] }) 
       {news.map((item) => (
         <li key={item.news_id}>
           <Link to={`/news/${item.news_id}`}>{item.title}</Link>
-          <span className="small-note">{item.source_name} · 新聞日 {formatDate(item.news_date) ?? '待核實'} · 判讀題材「{item.theme_text}」</span>
+          <span className="small-note">{item.source_name} · 新聞日 {formatDate(item.news_date) ?? '未提供'} · 判讀題材「{item.theme_text}」</span>
           {item.reason && <span className="small-note">理由：{item.reason}</span>}
         </li>
       ))}
@@ -51,7 +51,6 @@ function SuggestionCard({
       <div className="ai-inference-head">
         <h3>{item.display_name}</h3>
         <span className="theme-suggestion-badges">
-          <Badge tone="warning" className="badge-compact">待核實</Badge>
           <AiBadge />
         </span>
       </div>
@@ -88,7 +87,7 @@ export function ThemeSuggestionsSection({
   return (
     <section className="theme-suggestions" aria-labelledby="theme-suggestions-title">
       <div className="section-head">
-        <div><div className="eyebrow">新聞聚合 · 待核實</div><h2 id="theme-suggestions-title">新聞題材建議</h2></div>
+        <div><div className="eyebrow">新聞聚合 · AI 推論</div><h2 id="theme-suggestions-title">新聞題材建議</h2></div>
         {data && data.meta.total > 0 && <span className="small-note">{data.meta.total} 個建議{updated ? ` · ${updated}` : ''}</span>}
       </div>
       <p className="small-note">{SUGGESTION_NOTE}</p>

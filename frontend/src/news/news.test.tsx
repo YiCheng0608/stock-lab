@@ -138,14 +138,18 @@ check(usableAi(newsItem({ ai: aiResult({ status: 'pending' }) })) === null && us
 
 // ---- #452 AC-1 card AI candidates row (UI_COPY_SPEC §4 AI 候選行, DESIGN_SYSTEM §5) ----
 const candidateRow = (markup: string) => /<details class="news-ai-candidates"[^>]*>[\s\S]*?<\/details>/.exec(markup)?.[0] ?? ''
-const candidate = (exchange: string, symbol: string, name: string | null, confidence: string | null = 'medium') => ({ exchange, symbol, name, reason: '理由只在詳情頁', confidence, verified: false as const })
+const candidate = (exchange: string, symbol: string, name: string | null, confidence: string | null = 'medium', source_check: string | null = 'not_mentioned') => ({ exchange, symbol, name, reason: '理由只在詳情頁', confidence, verified: false as const, source_check })
 // With candidates: 2330 is rule-verified on this item and drops out; 3105 links, 6751 has no instrument and is plain text.
-const withCandidates = newsItem({ ai: aiResult({ symbol_candidates: [candidate('TWSE', '2330', '台積電', 'high'), candidate('TPEx', '3105', '穩懋', 'high'), candidate('TWSE', '6751', null, 'low')] }) })
+const withCandidates = newsItem({ ai: aiResult({ symbol_candidates: [candidate('TWSE', '2330', '台積電', 'high'), candidate('TPEx', '3105', '穩懋', 'high', 'mentioned'), candidate('TWSE', '6751', null, 'low')] }) })
 const candidatesCard = render(<NewsCard item={withCandidates} />)
 const row = candidateRow(candidatesCard)
 check(row !== '' && count(candidatesCard, 'data-testid="news-ai-candidates"') === 1, `card with candidates shows one AI candidates row: ${candidatesCard}`)
 check(candidatesCard.indexOf('class="news-chips"') < candidatesCard.indexOf('news-ai-candidates') && candidatesCard.indexOf('news-ai-candidates') < candidatesCard.indexOf('class="news-source"'), 'AI candidates row sits after the verified chips and before the source link')
 check(row.includes('href="/stocks/TPEx/3105"') && row.includes('3105 穩懋') && row.includes('模型把握高'), 'named candidate links to the stock with the model confidence')
+// #465: each candidate says whether the rule check found it in the sent text; none reads 待核實.
+check(/3105 穩懋<\/a><span class="news-ai-confidence"> · 規則核實：原文提及 · 模型把握高/.test(row), `mentioned candidate reads 規則核實：原文提及: ${row}`)
+check(/6751 （代號未對應到已知標的）<\/span><span class="news-ai-confidence"> · 推論 · 模型把握低/.test(row), 'not mentioned candidate reads 推論')
+check(!candidatesCard.includes('待核實'), 'the card has no 待核實')
 check(row.includes('6751 （代號未對應到已知標的）') && !row.includes('/stocks/TWSE/6751') && row.includes('模型把握低'), 'unknown candidate code is plain text')
 check(!row.includes('2330') && !row.includes('理由只在詳情頁'), 'rule-verified 2330 is not repeated; reasons stay on the detail page')
 check(!row.includes('class="tag'), 'candidates are not tag chips, so they never read as verified relations')
@@ -156,9 +160,11 @@ check(row.indexOf('<summary>') > 0 && summaryEnd > 0 && row.indexOf('<ul>') > su
 // 「推論」 label and versions.
 const summaryText = row.slice(row.indexOf('<summary>'), summaryEnd).replace(/<[^>]+>/g, '')
 // The text carries 「推論」; no second AI 推論 badge, so the card keeps one (verify N4 counts whole 「AI 推論」 lines).
-check(summaryText === 'AI 候選（推論，待核實）· 2 檔' && !row.includes('AI 推論'), `summary reads 「AI 候選（推論，待核實）· 2 檔」 without a badge, got 「${summaryText}」`)
+check(summaryText === 'AI 候選 · 2 檔（規則核實 1、推論 1）' && !row.includes('AI 推論'), `summary reads 「AI 候選 · 2 檔（規則核實 1、推論 1）」 without a badge, got 「${summaryText}」`)
+const allInferred = candidateRow(render(<NewsCard item={newsItem({ ai: aiResult({ symbol_candidates: [candidate('TWSE', '6751', null), { ...candidate('TWSE', '6752', null), source_check: undefined }] }) })} />))
+check(allInferred.includes('<summary>AI 候選 · 2 檔（推論 2）</summary>'), `a candidate without a check result is 推論: ${allInferred}`)
 check(count(candidatesCard, 'AI 推論') === 1, 'a card with AI candidates still has one AI 推論 badge, after the AI direction')
-check(row.includes('模型 claude-haiku-5-5 · 提示版本 news_v1。候選未經規則核實。'), 'expanded row carries the model and prompt version')
+check(row.includes('模型 claude-haiku-5-5 · 提示版本 news_v1 · 核對規則 ai-candidate-source/v1。規則核實：名稱或代號出現在標題或摘要；推論：原文沒有寫出，由模型推得。候選不計入已核實關聯。'), `expanded row carries the model, prompt version and check rule: ${row}`)
 const unrecorded = candidateRow(render(<NewsCard item={newsItem({ ai: aiResult({ model: null, prompt_version: null }) })} />))
 check(unrecorded.includes('模型 未記錄 · 提示版本 未記錄'), 'missing model／prompt version reads 未記錄')
 // No candidates: no AI, an empty list, a pending result, or only rule-verified codes → no row and no 「無」.
@@ -219,9 +225,10 @@ check(!facts.includes('AI') && !facts.includes('3奈米廠，預計2028') && !fa
 check(facts.includes('來源未標示影響') && !facts.includes('影響尚未判定') && !hasTone(facts), 'source impact unknown in facts reads 來源未標示影響, no color')
 check(detail.includes('<section class="ai-inference" aria-labelledby="ai-inference-title" data-testid="ai-inference">') && inference.includes('AI 推論') && inference.includes('badge badge-accent'), 'AI block has the accent bar class and AI 推論 badge')
 check(inference.includes('台積電宣布臺南增建3奈米廠') && inference.includes('可能正向') && inference.includes('新廠預計2028年上半年量產'), 'AI summary, direction and rationale')
-check(inference.includes('候選標的') && count(inference, '待核實') >= 2 && inference.includes('模型把握高') && inference.includes('半導體'), 'candidates are marked 待核實 with model confidence')
+check(inference.includes('候選標的') && !inference.includes('待核實') && inference.includes('規則核實：原文提及 · 模型把握高') && inference.includes('推論 · 模型把握低') && inference.includes('半導體'), `Issue 465: candidates carry their check result and model confidence, no 待核實: ${inference}`)
+check(/候選題材 <span class="badge badge-success badge-compact">已通過題材核對<\/span>/.test(inference), 'theme candidates passed the rule theme check (Issue 413) and say so')
 check(inference.includes('href="/stocks/TWSE/2330"') && inference.includes('6751 （代號未對應到已知標的）') && !inference.includes('/stocks/TWSE/6751'), 'unknown candidate code is not linked')
-check(inference.includes('模型 claude-haiku-5-5') && inference.includes('提示版本 news_v1') && inference.includes('產生時間 2026/10/17 23:04'), 'model, prompt version and generation time')
+check(inference.includes('模型 claude-haiku-5-5') && inference.includes('提示版本 news_v1') && inference.includes('產生時間 2026/10/17 23:04') && inference.includes('核對規則 ai-candidate-source/v1'), 'model, prompt version, generation time and check rule')
 const noAi = render(<NewsDetailView item={newsItem()} />)
 check(noAi.includes('此則尚未產生 AI 摘要與判讀') && noAi.includes('class="ai-inference"'), 'without AI the block still stands apart and says so')
 const unsupportedDetail = render(<AiInferencePanel ai={aiResult({ unsupported: true, symbol_candidates: [], theme_candidates: [] })} />)

@@ -182,7 +182,8 @@ def _seed(db, *, score_date=T):
     1101 A: change known (+2%), turnover 50 億, candidate #1.
     1102 B: previous bar from another source (unverified), turnover unavailable.
     1103 C: no bar on T (latest is the previous session): stale.
-    1104 D: no bar on the previous session (gap), not in member_returns.
+    1104 D: no bar on the previous session while its source has bars that day
+    (no_previous_close), not in member_returns.
     """
 
     # TAIEX sessions; a ``twse_fixture`` source counts as verified.
@@ -354,17 +355,42 @@ def test_change_turnover_and_relative_returns_of_each_member(db, client):
     assert rows["1104"]["conditional"] is False  # an observation is not a condition
 
 
-def test_previous_bar_from_another_source_or_not_adjacent_is_unverified(db, client):
+def test_previous_bar_from_another_source_is_unverified(db, client):
     _seed(db)
-    rows = _by_symbol(_members(client))
-    for symbol in ("1102", "1104"):  # other source; gap on the previous session
-        row = rows[symbol]
-        assert row["latest_bar"]["date"] == T.isoformat()
-        assert (row["change"], row["change_pct"], row["change_status"]) == (
-            None,
-            None,
-            "unverified",
-        )
+    row = _by_symbol(_members(client))["1102"]
+    assert row["latest_bar"]["date"] == T.isoformat()
+    assert (row["change"], row["change_pct"], row["change_status"]) == (
+        None,
+        None,
+        "unverified",
+    )
+
+
+def test_no_close_on_a_previous_session_its_source_has_bars_for(db, client):
+    # #465: the exchange published the previous session (other fixture-bars stocks
+    # have bars) but gave this stock no close (no trade or suspended): the change is
+    # not computed and says why, instead of 待核實. No earlier close stands in.
+    _seed(db)
+    row = _by_symbol(_members(client))["1104"]
+    assert row["latest_bar"]["date"] == T.isoformat()
+    assert (row["change"], row["change_pct"], row["change_status"]) == (
+        None,
+        None,
+        "no_previous_close",
+    )
+
+
+def test_a_previous_session_missing_for_the_whole_source_stays_unverified(db, client):
+    # Nothing of 1104's source on the previous session is a collection gap, not a
+    # stock without a close.
+    _seed(db)
+    lone = _instrument(db, "1105")
+    _bar(db, lone, DAYS[0], 30.0, source="tpex-gap")
+    _bar(db, lone, T, 31.0, source="tpex-gap")
+    db.add(GroupMembership(group_id=GROUP, instrument_id=lone.id, valid_from=DAYS[0]))
+    db.commit()
+    row = _by_symbol(_members(client))["1105"]
+    assert (row["change"], row["change_status"]) == (None, "unverified")
 
 
 def test_unavailable_turnover_is_null_even_when_stored_as_zero(db, client):

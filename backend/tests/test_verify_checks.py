@@ -581,6 +581,30 @@ def test_g8_fails_on_the_old_page_sorted_by_close(tmp_path):
         page_checks.g8(run)
 
 
+def _g4_run(tmp_path, card):
+    payload = {"items": [{"id": 1}, {"id": 2}], "meta": {"total": 2}}
+    page = (
+        "族群榜\n新聞聚合 · AI 推論\n新聞題材建議\n2 個建議 · 最近更新 2026/11/04 20:00\n"
+        f"AI\n{card}\n3 則新聞\n資安\n{card}\n2 則新聞\n"
+    )
+    return FakeRun(
+        tmp_path,
+        {"theme-suggestions?limit=20": payload},
+        {"themes-1280": page},
+    )
+
+
+def test_g4_passes_when_every_suggestion_is_ai_inference(tmp_path):
+    assert "沒有 `待核實`" in page_checks.g4(_g4_run(tmp_path, "AI 推論"))
+
+
+def test_g4_fails_on_a_suggestion_marked_pending(tmp_path):
+    # #465: before the fix each card carried 「待核實」 next to 「AI 推論」.
+    run = _g4_run(tmp_path, "待核實\nAI 推論")
+    with pytest.raises(page_checks.Fail, match="2 行含 `待核實`"):
+        page_checks.g4(run)
+
+
 def test_g8_fails_when_the_api_is_not_sorted_by_turnover(tmp_path):
     items = [MEMBERS[1], MEMBERS[0], MEMBERS[2]]
     with pytest.raises(page_checks.Fail, match="不是依成交金額由大到小"):

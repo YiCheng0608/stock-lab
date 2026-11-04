@@ -1,4 +1,4 @@
-import { backtestTrackingLabel, groupDisplayName, staleCloseDateLabel, stockGroupLabel, researchRequirementLabel, stockDirectoryActionLabel, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productTimeRoleDateTime, productTimeRoleKnown, productTimeRoleLabel, stopPriceFieldLabel } from './presentation'
+import { backtestTrackingLabel, groupDisplayName, staleCloseDateLabel, stockGroupLabel, researchRequirementLabel, stockDirectoryActionLabel, formatProductTimeRole, PRODUCT_TIME_NOTE, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productTimeRoleDateTime, productTimeRoleKnown, productTimeRoleLabel, stopPriceFieldLabel } from './presentation'
 
 function expect(condition: boolean, message: string): void {
   if (!condition) throw new Error(message)
@@ -40,7 +40,13 @@ expect(!productTimeRoleKnown({ status: 'known', precision: 'date', value: null }
 expect(formatProductTimeRole(undefined, 'market_date', '2026-09-08') === '2026/09/08', 'legacy date fallback')
 expect(formatProductTimeRole(undefined, 'market_date', '2026-02-30') === '待核實', 'invalid legacy date')
 expect(formatProductTimeRole({ roles: { market_date: { role: 'market_date', status: 'known', precision: 'date', value: '2026-09-08' } } } as never, 'market_date') === '2026/09/08', 'product date formatting')
-expect(formatProductTimeRole({ roles: { published_at: { role: 'published_at', status: 'unknown', precision: 'none', value: null } } } as never, 'published_at', '2026-09-08') === '待核實', 'unknown role must not use fallback')
+// #465: an unknown role with no value was never recorded (decision_at: legacy_decision_at_not_persisted) and reads
+// 未記錄; only a value that cannot be confirmed reads 待核實. Neither uses the legacy fallback.
+expect(formatProductTimeRole({ roles: { published_at: { role: 'published_at', status: 'unknown', precision: 'none', value: null } } } as never, 'published_at', '2026-09-08') === '未記錄', 'unknown role without a value is 未記錄 and must not use fallback')
+expect(formatProductTimeRole({ roles: { decision_at: { role: 'decision_at', status: 'unknown', precision: 'none', value: null, utc: null, reason: 'legacy_decision_at_not_persisted' } } } as never, 'decision_at') === '未記錄', 'a decision time the system never stored is 未記錄')
+expect(formatProductTimeRole({ roles: { decision_at: { role: 'decision_at', status: 'unknown', precision: 'instant', value: '2026-09-08T09:00:00' } } } as never, 'decision_at') === '待核實', 'an unconfirmed value stays 待核實')
+expect(formatProductTimeRole({ roles: {} } as never, 'decision_at') === '未記錄', 'a role the response lacks is 未記錄')
+expect(PRODUCT_TIME_NOTE === '時間以台灣時間顯示；系統沒有記錄的時間寫「未記錄」，有值但尚未確認的寫「待核實」。', 'the time note tells 未記錄 from 待核實')
 expect(formatProductTimeRole({ roles: { published_at: { role: 'published_at', status: 'known', precision: 'instant', value: '2026-09-08T00:00:00' } } } as never, 'published_at') === '待核實', 'naive instant')
 expect(productTimeRoleDateTime({ roles: { published_at: { role: 'published_at', status: 'known', precision: 'instant', value: '2026-09-08T00:00:00+00:00' } } } as never, 'published_at') === '2026-09-08T00:00:00+00:00', 'aware instant metadata')
 expect(formatProductTimeRole({ roles: { published_at: { role: 'published_at', status: 'known', precision: 'instant', value: '2026-09-08Z' } } } as never, 'published_at') === '待核實', 'date-only Z is not an instant')
