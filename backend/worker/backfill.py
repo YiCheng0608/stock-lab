@@ -13,6 +13,7 @@ from datetime import date, timedelta
 from typing import Any, Iterable
 
 from sqlalchemy import JSON, String, case, literal, null, select, type_coerce
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.clock import utcnow
@@ -560,6 +561,43 @@ def _event_manifest_query() -> Any:
     )
 
 
+def _event_manifest_rows(db: Session) -> list[Any]:
+    """The rows of ``_event_manifest_query``, decoding whole metadata if SQLite cannot.
+
+    SQLAlchemy writes JSON with ``json.dumps``, which emits ``NaN`` for a NaN
+    float; SQLite before 3.42 (no JSON5) rejects such a document as malformed,
+    so the ``->`` query fails as a whole. The former whole-row read decodes it
+    in Python, which accepts NaN, so that read is the fallback and the report
+    stays the same (#462 review). A failed SELECT does not end the SQLite
+    transaction, so nothing is rolled back: the backfill worker calls this with
+    its own uncommitted writes.
+    """
+
+    try:
+        return db.execute(_event_manifest_query()).all()
+    except OperationalError:
+        pass
+    rows = []
+    for run in db.scalars(
+        select(IngestionRun).where(
+            IngestionRun.source == "official",
+            IngestionRun.run_type.in_({"collect", "backfill"}),
+        )
+    ).all():
+        metadata = run.metadata_json or {}
+        backfill_run = run.run_type == "backfill"
+        rows.append(
+            (
+                run.run_type,
+                run.data_as_of,
+                run.run_date,
+                metadata.get("coverage_manifest") if backfill_run else None,
+                None if backfill_run else metadata.get("event_coverage"),
+            )
+        )
+    return rows
+
+
 def coverage_report(
     db: Session,
     start_date: date,
@@ -712,9 +750,9 @@ def coverage_report(
         # Read persisted coverage evidence from collect/backfill metadata.  An
         # Event row alone is observational evidence, not proof that the
         # source answered an empty query for that session.
-        for run_type, data_as_of, run_date, manifests, coverage in db.execute(
-            _event_manifest_query()
-        ).all():
+        for run_type, data_as_of, run_date, manifests, coverage in _event_manifest_rows(
+            db
+        ):
             if run_type == "backfill":
                 manifests = manifests or {}
                 for day, item in manifests.items():

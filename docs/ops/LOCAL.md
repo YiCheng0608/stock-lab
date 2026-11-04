@@ -14,6 +14,7 @@
 | 統籌的資料目錄的 `logs/`（正式 scheduler 的 `STOCK_COORDINATION_DIR`，[統籌事件 monitor](MONITOR.md)） | `C:/Users/YiCheng/stock-lab-data/logs` |
 | 發佈 checkout | `C:/Users/YiCheng/stock-lab-release/` |
 | 發佈 checkout 的 venv | `C:/Users/YiCheng/stock-lab-release/.venv`（套件在 `.venv/Lib/site-packages`） |
+| 含 migration 的部署前備份（[RELEASE](../RELEASE.md#含-migration-的版本)） | `C:/Users/YiCheng/stock-lab-backup/<YYYYMMDD>-before-<tag>/stock.db` |
 
 ## 工具
 

@@ -37,6 +37,7 @@ from app.models import (
     ChipSnapshot,
     DataQuality,
     GroupDailyScore,
+    GroupMembership,
     IngestionRun,
     Instrument,
     MarketBar,
@@ -199,12 +200,26 @@ def test_decision_context_loads_the_newest_chips_and_quality_row_only(db):
     for day in (days[10], days[50], days[129]):
         db.add(DataQuality(entity_type="instrument", entity_key=key, as_of_date=day))
     db.add(DataQuality(entity_type="market", entity_key=key, as_of_date=days[60]))
+    db.add(ThemeGroup(id="G1", name="G1"))
+    db.flush()
+    db.add(GroupMembership(group_id="G1", instrument_id=item.id, valid_from=days[0]))
+    for day in (days[100], days[127], days[129]):
+        db.add(GroupDailyScore(group_id="G1", trading_date=day, score=day.day))
     db.commit()
     db.expunge_all()
     as_of = days[128]
 
     with orm_loads() as loads:
         context = decision._prepare_decision_context(db, as_of, [item.id, other.id])
+
+    # The group's newest score on or before the cutoff, and only that one.
+    [(group, score, membership)] = context["groups_by_instrument"][item.id]
+    assert (group.id, score.trading_date, membership.instrument_id) == (
+        "G1",
+        days[127],
+        item.id,
+    )
+    assert loads["GroupDailyScore"] == 1
 
     chips = context["chips_by_instrument"][item.id]
     assert [row.trading_date for row in chips] == list(reversed(days[9:129]))
@@ -383,6 +398,48 @@ def test_coverage_report_counts_without_hydrating_bars_chips_or_metadata(db):
         "1101",
         "6488",
     }
+
+
+@pytest.mark.parametrize("path", ["sqlite", "forced_fallback"])
+def test_coverage_reads_event_coverage_from_metadata_with_nan(db, monkeypatch, path):
+    """json.dumps writes NaN; SQLite without JSON5 (< 3.42) rejects it as malformed.
+
+    Either SQLite extracts the value or the whole-row Python read takes over,
+    with the same report, and a caller's uncommitted write survives the
+    failed SELECT (the backfill worker calls coverage_report mid-transaction).
+    """
+
+    taiex = instrument(db, "TAIEX", kind="index")
+    bar(db, taiex, D0)
+    db.add(
+        IngestionRun(
+            run_type="collect",
+            source="official",
+            run_date=D0,
+            status="success",
+            data_as_of=D0.isoformat(),
+            metadata_json={
+                "ratio": float("nan"),
+                "event_coverage": {"verified_dates": [D0.isoformat()]},
+            },
+        )
+    )
+    db.commit()
+    stored = db.execute(text("SELECT metadata_json FROM ingestion_runs")).scalar()
+    assert "NaN" in stored
+    if path == "forced_fallback":
+        # Any SQLite version: a SELECT that fails the way malformed JSON does.
+        monkeypatch.setattr(
+            backfill, "_event_manifest_query", lambda: text("SELECT json('{')")
+        )
+    pending = instrument(db, "9999")
+
+    report = backfill.coverage_report(db, D0, D0)
+
+    assert report["date_coverage"][0]["event_coverage_status"] == "success"
+    db.commit()
+    db.expunge_all()
+    assert db.get(Instrument, pending.id).symbol == "9999"
 
 
 # ---- ingestion runs: metadata only on request; the latest run without it ----
