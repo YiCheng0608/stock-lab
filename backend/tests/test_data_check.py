@@ -505,7 +505,7 @@ def test_common_stock_rows_more_than_3_percent_below_the_median(database, today,
         assert drops == []
 
 
-# --- the 21:30 institutional refetch (#396) ---------------------------------
+# --- the institutional refetch (#396; the 23:00 daily since #466) -----------
 
 
 def refetched(database, status: str, *, error: str | None = None) -> None:
@@ -614,7 +614,7 @@ def test_a_database_without_the_checked_tables_is_skipped(tmp_path):
 @pytest.mark.parametrize(
     ("started", "found"),
     [(datetime(2026, 9, 4, 10, 30), True), (datetime(2026, 9, 4, 13, 30), False)],
-    ids=["1830-success", "2130-success"],
+    ids=["1830-manual-success", "2130-success"],
 )
 def test_a_success_before_2100_without_a_refetch_is_found(database, started, found):
     with database.factory() as db:
@@ -628,9 +628,9 @@ def test_a_success_before_2100_without_a_refetch_is_found(database, started, fou
     assert check.facts["refetch"] == "none"
     if found:
         assert [(i.check, i.raw, i.db) for i in check.findings] == [
-            ("institutional_refetch", "（應有 21:30 重抓）", "（沒有）")
+            ("institutional_refetch", "（應有之後的重抓）", "（沒有）")
         ]
-        assert "法人只跟 18:30 的資料比過" in check.findings[0].note
+        assert "法人只跟 21:00 前的資料比過" in check.findings[0].note
     else:
         assert check.findings == []
 

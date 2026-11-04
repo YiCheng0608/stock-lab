@@ -41,10 +41,12 @@ def test_the_production_database_is_refused(tmp_path):
 @pytest.mark.parametrize(
     ("utc", "refused"),
     [
-        ((10, 29), False),  # 18:29 Taipei
-        ((10, 30), True),
-        ((13, 29), True),
-        ((13, 30), False),  # 21:30 Taipei
+        # #466: the daily runs at 21:30 and 23:00.
+        ((10, 30), False),  # 18:30 Taipei
+        ((13, 29), False),  # 21:29 Taipei
+        ((13, 30), True),
+        ((15, 29), True),
+        ((15, 30), False),  # 23:30 Taipei
     ],
 )
 def test_the_daily_window_is_refused(utc, refused):
@@ -76,12 +78,12 @@ def test_a_hard_link_to_the_production_file_is_refused(tmp_path):
 
 def test_the_window_check_follows_its_clock_and_a_pause_prints_the_rerun():
     times = iter(
-        datetime(2026, 10, 28, 10, minute, tzinfo=timezone.utc) for minute in (29, 30)
+        datetime(2026, 10, 28, 13, minute, tzinfo=timezone.utc) for minute in (29, 30)
     )
     check = research.window_check(lambda: next(times))
 
-    assert check() is None and "18:30" in check()
-    assert research.paused({"error": "BacktestPaused: Taipei time 18:30 ..."})
+    assert check() is None and "21:30" in check()
+    assert research.paused({"error": "BacktestPaused: Taipei time 21:30 ..."})
     assert not research.paused({"error": "RuntimeError: boom"})
     assert research.rerun_command(["--db", "x.db", "--force", "--ablate", "all"])[
         2:
@@ -129,7 +131,7 @@ def test_a_run_on_the_fixture_database_reports_each_strategy(tmp_path):
         timeout=300,
     )
     if research.daily_window_problem(datetime.now(timezone.utc)):
-        assert result.returncode == 2 and "18:30" in result.stdout
+        assert result.returncode == 2 and "21:30-23:30" in result.stdout
         return
     assert result.returncode == 0, result.stderr
     report = json.loads(result.stdout)

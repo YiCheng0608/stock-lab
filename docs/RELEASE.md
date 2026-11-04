@@ -15,7 +15,7 @@ V1 之後的發佈（使用者 2026-10-28 決定，取代 [V1 發佈隔離](#v1-
    git push origin v1.1.0
    ```
 
-3. **部署**：排程閒置時（避開台北 18:30～21:30 的 daily），在 master 管理 checkout 執行 `bash tools/ops/deploy.sh v1.1.0 --operator "<誰，依據的 #1 留言>"`，見下節。tag 比正式 DB 多了 migration 時，先照[含 migration 的版本](#含-migration-的版本)用新 tag 的程式升級 DB，再跑 `deploy.sh`；沒升級就跑，`deploy.sh` 在 build 之後、換容器之前拒絕（下節的「DB revision」）。
+3. **部署**：排程閒置時（避開台北 21:30～23:30 的 daily：21:30 與 23:00 兩次，#466），在 master 管理 checkout 執行 `bash tools/ops/deploy.sh v1.1.0 --operator "<誰，依據的 #1 留言>"`，見下節。tag 比正式 DB 多了 migration 時，先照[含 migration 的版本](#含-migration-的版本)用新 tag 的程式升級 DB，再跑 `deploy.sh`；沒升級就跑，`deploy.sh` 在 build 之後、換容器之前拒絕（下節的「DB revision」）。
 4. **讀回**：`deploy.sh` 輸出的 JSON 與 #1 留言；`docker compose -p stock-lab ps` 的 image 欄是 `stock-lab-backend:v1.1.0`／`stock-lab-web:v1.1.0`；下一次 daily 的 `schedule_runs.summary_json.runtime` 的 `image`／`head` 是該 tag 的 image 與 commit（[日誌與 run 記錄](ops/SCHEDULING.md#日誌與-run-記錄)）；看門狗的 `invariant_deploy_image` 不留言（[排程看門狗](ops/WATCHDOG.md)）。
 
 ## 部署
@@ -78,7 +78,7 @@ tag 的 Alembic head（`backend/app/migration_revisions.py` 的最後一個）�
 - api 的 readiness 只接受 current head，DB 落後時新 api 拒絕啟動。`v1.2.0` 第一次部署就是這樣失敗的：`up` 換掉 scheduler 與 web 之後 api 才起不來。現在 `deploy.sh` 在 build 之後、換任何容器之前比對 DB revision 與 tag 的 head，落後就拒絕（[#456](https://github.com/YiCheng0608/stock-lab/issues/456)，上節表格的「DB revision」），所有容器仍跑前一版。
 - 正式環境跑著的舊 image 不認得新 revision，用它跑 `init-db` 只會停在舊 head。
 
-`deploy.sh` 只擋下、不升級：備份與 `init-db` 仍是人工步驟，在 master 管理 checkout 的 Git Bash 依序執行（`deploy.sh` 拒絕時在 stderr 印出第 1～4 步填好 tag、project 與發佈 checkout 的命令）。時段選排程閒置時：避開台北 18:30～21:30 的 daily，也避開 news 每 2 小時的偶數整點，例如奇數點。
+`deploy.sh` 只擋下、不升級：備份與 `init-db` 仍是人工步驟，在 master 管理 checkout 的 Git Bash 依序執行（`deploy.sh` 拒絕時在 stderr 印出第 1～4 步填好 tag、project 與發佈 checkout 的命令）。時段選排程閒置時：避開台北 21:30～23:30 的 daily（#466），也避開 news 每 2 小時的偶數整點，例如奇數點。
 
 ```bash
 # 換值：TAG＝要部署的 tag；P＝正式 compose project；R＝發佈 checkout；B＝備份目錄（docs/ops/LOCAL.md）

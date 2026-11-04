@@ -258,7 +258,7 @@ def by_key(checks, key):
     return next(check for check in checks if check.key == key)
 
 
-# --- AC-1：只讀副本、拒絕正式 DB 與 18:30～21:30 ---------------------------------
+# --- AC-1：只讀副本、拒絕正式 DB 與 daily 時段（#466 起 21:30～23:30）------------
 
 
 def test_a_database_inside_stock_lab_data_is_refused(tmp_path):
@@ -308,18 +308,18 @@ def audit_checks_production(db, environ, production):
 
 @pytest.mark.parametrize(
     ("utc", "refused"),
-    [((10, 29), False), ((10, 30), True), ((13, 29), True), ((13, 30), False)],
+    [((13, 29), False), ((13, 30), True), ((15, 29), True), ((15, 30), False)],
 )
 def test_the_daily_window_is_refused(tmp_path, utc, refused):
     db = tmp_path / "stock.db"
     db.write_bytes(b"")
     now = datetime(
         2026, 11, 3, *utc, tzinfo=timezone.utc
-    )  # 18:29, 18:30, 21:29, 21:30 Taipei
+    )  # 21:29, 21:30, 23:29, 23:30 Taipei
     problems = audit.refusals(db, {}, now, 20.0, 5.0)
     assert bool(problems) is refused
     if refused:
-        assert "18:30-21:30" in problems[0]
+        assert "21:30-23:30" in problems[0]
 
 
 def test_low_memory_is_refused(tmp_path):
@@ -346,15 +346,15 @@ def test_a_run_that_reaches_the_window_marks_the_rest_undetermined(fx):
     for day in DAYS[:3]:
         fx.bar(stock, day, 10)
     fx.commit()
-    taipei_1845 = datetime(2026, 11, 3, 10, 45, tzinfo=timezone.utc)
+    taipei_2145 = datetime(2026, 11, 3, 13, 45, tzinfo=timezone.utc)
     checks, _facts = audit.run(
-        fx.path, None, audit.KEYS, False, clock=lambda: taipei_1845
+        fx.path, None, audit.KEYS, False, clock=lambda: taipei_2145
     )
     assert {check.result for check in checks} == {"undetermined"}
-    assert all("18:30-21:30" in check.skipped for check in checks)
+    assert all("21:30-23:30" in check.skipped for check in checks)
 
 
-# A fixed daytime clock (Taipei 10:00): between 18:30 and 21:30 the audit skips every
+# A fixed daytime clock (Taipei 10:00): inside the daily window the audit skips every
 # item (#391), so a test on the real clock checks nothing or fails then (#451: CI at
 # Taipei 18:41 failed test_summary_lists_every_item_with_its_result with exit 3).
 TAIPEI_1000 = datetime(2026, 11, 3, 2, 0, tzinfo=timezone.utc)
@@ -1145,7 +1145,7 @@ def test_summary_lists_every_item_with_its_result(fx, tmp_path, monkeypatch):
     fx.commit()
     monkeypatch.setattr(audit, "free_memory_gb", lambda: 20.0)
     monkeypatch.setattr(audit, "refusals", lambda *args: [])
-    # The run also stops between items inside the 18:30-21:30 daily window;
+    # The run also stops between items inside the 21:30-23:30 daily window;
     # without this the test fails (exit 3) whenever CI runs in that window.
     monkeypatch.setattr(audit, "daily_window_problem", lambda now: None)
     out = tmp_path / "out"
