@@ -518,6 +518,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         description="排程鎖：持有鎖時執行命令；別的程序持有時不執行並以 75 結束",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+    # tools/ops/watchdog.sh (parent_holds_lock, #448) tells that its parent is the
+    # lock runner of its lock by this command line: `-m worker.job lock FILE --`,
+    # FILE before `--`, no option between. Another shape, or a rename, makes the
+    # watchdog stop removing the work directories that killed runs left; it only
+    # logs lock_unverified. test_watchdog.py fails then (the tests that remove them).
     lock_parser = subparsers.add_parser("lock", help="持有 FILE 的鎖執行命令")
     lock_parser.add_argument(
         "--keep-stdin",

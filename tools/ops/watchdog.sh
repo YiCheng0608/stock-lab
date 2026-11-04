@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Schedule watchdog, run every 15 minutes by Windows Task Scheduler
-# (tools/ops/Register-Watchdog.ps1). Checks the daily, news and news-llm jobs
+# Schedule watchdog, run at :15 and :45 of every hour by worker.cli serve in the
+# scheduler container (backend/worker/serve.py). Checks the daily, news and news-llm jobs
 # for anomalies from their logs and the read-only database, the data
 # invariants in that database and the event monitor's heartbeat (#316), and
 # comments on #1; also whether claude -p and gh were refused for their
@@ -110,7 +110,8 @@ fi
 # and runs this script again as its child; the OS drops it when Python ends,
 # killed or not, and the child ends with it (#313; replaces the lock directory
 # that a killed run left behind for 30 minutes, #224). Without Python the run
-# goes unlocked; the task's IgnoreNew still keeps scheduled runs apart.
+# goes unlocked; scheduled runs still do not overlap: serve starts them 30 minutes
+# apart and ends one after 10 (backend/worker/serve.py).
 #
 # WATCHDOG_LOCK_HELD only tells the run it starts not to take the lock again; it
 # proves nothing, since anyone can type it. What a run needs to remove work
@@ -118,6 +119,9 @@ fi
 # its command after it holds the lock and holds it until the command ends. That is
 # read from /proc (the kernel's view), not from the environment (#448).
 lock_file="$data_dir/locks/watchdog.lock"
+# The command line `-m worker.job lock FILE --` is a contract with backend/worker/job.py
+# (main): a change to it makes this return 1 and only logs lock_unverified; the
+# watchdog tests that remove left work directories then fail.
 parent_holds_lock() { # the parent process is `-m worker.job lock "$lock_file" --`
   local args=() i
   [ -r "/proc/$PPID/cmdline" ] && mapfile -d '' -t args <"/proc/$PPID/cmdline" || return 1
