@@ -217,7 +217,7 @@ function HotGroupRow({ item }: { item: ThemeBoardItem }) {
       <dl className="hot-group-returns">
         {RETURN_WINDOWS.map((window) => <div key={window.key}><dt>{window.label}</dt><dd><ReturnValue value={item.relative_returns[window.key]} unit="%" /></dd></div>)}
       </dl>
-      <div className="small-note">資料 {formatDate(item.trading_date) ?? '日期待核實'} · 相對加權指數</div>
+      <div className="small-note">資料 {formatDate(item.trading_date) ?? '日期未提供'} · 相對加權指數</div>
     </Link>
   )
 }
@@ -523,7 +523,7 @@ export function ThemeDetailView({
         <ComponentsCard detail={detail} item={item} state={state} error={board.error} />
       </div>
       <section className="section-head">
-        <div><div className="eyebrow">成員資料截至 {formatDate(detail.members_as_of) ?? '日期待核實'}</div><h2>族群成員</h2></div>
+        <div><div className="eyebrow">成員資料截至 {formatDate(detail.members_as_of) ?? '日期未提供'}</div><h2>族群成員</h2></div>
         <MemberSortSelect value={memberSort} onChange={onMemberSortChange} />
       </section>
       {members.error

@@ -726,7 +726,7 @@ def check(
 # ---- today ----
 
 TODAY = Shot("today", "/")
-PENDING_DATE = "資料日期待核實"  # DateBadge without a date
+PENDING_DATE = "資料日期未提供"  # DateBadge without a date (#465: was 資料日期待核實)
 TODAY_GROUPS = 5  # TODAY_BOARD_LIMIT in frontend/src/themes/themeBoards.ts (#276)
 
 
@@ -1513,16 +1513,19 @@ def g4(run: Run) -> str:
     if not items:
         expect(text.has("目前沒有新聞題材建議"), "items 空，缺 `目前沒有新聞題材建議`")
         return "items 空，顯示 `目前沒有新聞題材建議`"
-    pending = text.count(lambda line: line == "待核實")
+    # #465: a suggestion is inference, marked 「AI 推論」 and never 「待核實」.
+    start = text.find("新聞聚合 · AI 推論")
+    expect(start >= 0, "缺整行 `新聞聚合 · AI 推論`")
+    pending = sum(1 for line in text.lines[start:] if "待核實" in line)
     marks = text.count(lambda line: line == "AI 推論")
-    expect(pending >= len(items), f"`待核實` {pending} 行 < items {len(items)}")
+    expect(pending == 0, f"題材建議區有 {pending} 行含 `待核實`")
     expect(marks >= len(items), f"`AI 推論` {marks} 行 < items {len(items)}")
     total = f"{(payload.get('meta') or {}).get('total')} 個建議"
     expect(
         text.find_where(lambda line: line.startswith(total)) >= 0,
         f"缺 `{total}` 開頭的行",
     )
-    return f"{len(items)} 個建議：`待核實` {pending}、`AI 推論` {marks} 行，`{total}`"
+    return f"{len(items)} 個建議：`AI 推論` {marks} 行、沒有 `待核實`，`{total}`"
 
 
 def members(run: Run) -> dict:

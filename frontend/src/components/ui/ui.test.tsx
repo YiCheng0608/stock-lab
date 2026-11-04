@@ -18,7 +18,8 @@ check(!html(<Card>x</Card>).includes('card-head'), 'Card without header renders 
 check(html(<Badge>上市</Badge>) === '<span class="badge">上市</span>', 'Badge default')
 check(html(<Badge tone="warning" dot pulse>更新中</Badge>).includes('class="badge badge-warning"') && html(<Badge tone="warning" dot pulse>更新中</Badge>).includes('badge-dot badge-dot-pulse'), 'Badge tone + pulsing dot')
 check(html(<DateBadge date="2026-10-16" />).includes('資料 2026/10/16'), 'DateBadge shows the API date as YYYY/MM/DD')
-check(html(<DateBadge date={null} />).includes('badge-warning') && html(<DateBadge date={null} />).includes('資料日期待核實'), 'DateBadge without a date warns instead of inventing one')
+check(html(<DateBadge date={null} />).includes('badge-warning') && html(<DateBadge date={null} />).includes('資料日期未提供') && !html(<DateBadge date={null} />).includes('待核實'), 'DateBadge without a date says none was provided instead of inventing one (Issue 465: not 待核實)')
+check(html(<DateBadge date={null} unavailable />).includes('資料日期暫時無法載入'), 'DateBadge whose request failed says so')
 
 // Button: variants, size, default type=button.
 check(html(<Button variant="primary">送出</Button>) === '<button type="button" class="btn btn-primary">送出</button>', 'Button primary')
@@ -55,4 +56,7 @@ check(['今日', '新聞', '族群', '個股', '行動'].every((label) => navbar
 check(navbar.includes('class="active" href="/stocks"') || navbar.includes('href="/stocks" class="active"') || /<a[^>]*aria-current="page"[^>]*href="\/stocks"/.test(navbar), `Navbar marks the current section: ${navbar}`)
 check(navbar.includes('role="search"') && navbar.includes('資料 2026/10/16') && navbar.includes('aria-expanded="false"'), 'Navbar search, data date and menu toggle')
 check(!html(<StaticRouter location="/"><Navbar dataDate={null} dataDateLoading /></StaticRouter>).includes('date-badge'), 'Navbar hides the badge while loading')
+// #465: a failed /api/dashboard (500/504 on the production copy under load) read 資料日期待核實.
+const navbarError = html(<StaticRouter location="/actions"><Navbar dataDate={null} dataDateError /></StaticRouter>)
+check(navbarError.includes('資料日期暫時無法載入') && !navbarError.includes('待核實'), `Navbar says the date could not load: ${navbarError}`)
 check(stockSearchPath(' 2330 ') === '/stocks?q=2330' && stockSearchPath('台積 電') === '/stocks?q=%E5%8F%B0%E7%A9%8D%20%E9%9B%BB' && stockSearchPath('  ') === null, 'Navbar search path')

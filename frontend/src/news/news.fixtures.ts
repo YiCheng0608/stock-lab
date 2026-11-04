@@ -88,9 +88,10 @@ export function aiResult(overrides: Partial<NewsAi> = {}): NewsAi {
     status: 'done',
     summary: '台積電宣布臺南增建3奈米廠，預計2028年上半年量產，南市府積極協助。',
     symbol_candidates: [
-      { exchange: 'TWSE', symbol: '2330', name: '台積電', reason: '新廠擴產', confidence: 'high', verified: false },
-      { exchange: 'TWSE', symbol: '6751', name: null, reason: '供應鏈', confidence: 'low', verified: false },
+      { exchange: 'TWSE', symbol: '2330', name: '台積電', reason: '新廠擴產', confidence: 'high', verified: false, source_check: 'mentioned' },
+      { exchange: 'TWSE', symbol: '6751', name: null, reason: '供應鏈', confidence: 'low', verified: false, source_check: 'not_mentioned' },
     ],
+    candidate_check_version: 'ai-candidate-source/v1',
     theme_candidates: [{ theme: '半導體', reason: '晶圓代工產能' }],
     impact_direction: 'positive',
     impact_scope: 'instrument',

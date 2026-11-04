@@ -11,7 +11,8 @@ export function themeSuggestionsPath(limit?: number): string {
   return '/theme-suggestions' + (limit != null ? `?limit=${limit}` : '')
 }
 
-export const SUGGESTION_NOTE = '由 AI 從近期新聞判讀出的題材名稱彙整，尚未經人工核實；不列入族群排行、不計分，也不作為交易理由。'
+// #465: inference, so 「AI 推論」 and its basis rather than 「待核實」 (UI_COPY_SPEC §8.6).
+export const SUGGESTION_NOTE = '由 AI 從近期新聞判讀出的題材名稱彙整。題材名都已通過規則題材核對（出現在原文，或由規則命中的標的所屬產業推得），但尚未納入題材表；不列入族群排行、不計分，也不作為交易理由。'
 export const SUGGESTION_EMPTY_TEXT = '目前沒有新聞題材建議'
 export const SUGGESTION_EMPTY_REASON = '新聞 AI 判讀尚未提出與既有族群不同名的題材'
 
@@ -24,7 +25,7 @@ export function suggestionConfidenceLabel(confidence: string | null | undefined)
 export function suggestionDates(item: Pick<ThemeSuggestion, 'first_news_date' | 'last_news_date'>): string {
   const first = formatDate(item.first_news_date)
   const last = formatDate(item.last_news_date)
-  if (!first || !last) return '新聞日期待核實'
+  if (!first || !last) return '新聞日期未提供'
   return first === last ? `新聞日 ${last}` : `首次 ${first} · 最近 ${last}`
 }
 
