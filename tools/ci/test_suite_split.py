@@ -425,6 +425,10 @@ class Plugin(unittest.TestCase):
 
     @unittest.skipUnless(importlib.util.find_spec("pytest"), "pytest is not installed")
     def test_a_real_pytest_run_and_a_collect_only_run(self):
+        """With xdist installed it also runs `-n 2`. CI never does: neither the repository
+        job nor the image installs xdist, so there the parallel path is held end to end by
+        the suite job, which compares the backend job's report (written by xdist's
+        controller) with the image's collect-only report."""
         tests = self.root / "tests"
         tests.mkdir(parents=True)
         (tests / "test_m.py").write_text(

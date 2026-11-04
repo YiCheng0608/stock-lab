@@ -996,8 +996,9 @@ class BackendTime(unittest.TestCase):
     In #379's week (108 runs, 2026-10-30 to 11-04) its pytest took 462 seconds at the median
     and 669 at the slowest, while a slow runner twice took the serial job past 30 minutes on
     master (runs 41699184706 and 41714283264), which made `required` red; close_task.sh then
-    refuses until a rerun is green. The pytest step has 20 minutes, about 1.8 times the
-    slowest; the job 10 more for the checkout (5 minutes at its slowest, CheckoutTime), setup
+    refuses until a rerun is green. PR #446's own first run took 706 seconds (run
+    41764869855), past that week's slowest. The pytest step has 20 minutes, about 1.7
+    times the slowest seen (706); the job 10 more for the checkout (5 minutes at its slowest, CheckoutTime), setup
     and pip, so a hung pytest stops at its step and the Summary step still runs.
     """
 
@@ -1057,6 +1058,9 @@ class BackendParallel(unittest.TestCase):
         self.assertIn("execnet==", install["run"])
 
     def test_a_red_backend_turns_required_red(self):
+        # A pipe (| tee) without pipefail would hide pytest's exit code.
+        (pytest,) = [s for s in self.job["steps"] if "-m pytest" in s.get("run", "")]
+        self.assertIn("set -euo pipefail", pytest["run"])
         for step in self.job["steps"]:
             with self.subTest(
                 step=step.get("name") or step.get("uses") or step.get("run")

@@ -101,7 +101,8 @@ jobs:
     if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-24.04
     # The pytest step took 462 seconds at the median and 669 at the slowest in #379's week
-    # (108 runs), and has 20 minutes, so a hang still leaves the Summary step time to run;
+    # (108 runs), 706 in PR #446's first run, and has 20 minutes (about 1.7 times 706), so a
+    # hang still leaves the Summary step time to run;
     # 10 more for the checkout (5 minutes at its slowest, CheckoutTime), setup and pip
     # (tools/ci/test_checks.py BackendTime).
     timeout-minutes: 30
