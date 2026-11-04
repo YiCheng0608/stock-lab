@@ -71,6 +71,7 @@
   --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
   --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px;
   --space-12: 48px; --space-16: 64px; --space-24: 96px;
+  --space-label: var(--space-1); /* 標籤與值的間距（§5「標籤與值」） */
 
   /* 版面 */
   --content-max: 1280px;
@@ -145,13 +146,14 @@
 | 篩選膠囊 | 行動頁的「重點／含其他觀察／全部」：`badge` 做成按鈕（`aria-pressed`），未選中同 badge；選中變體底色 `--color-primary`、文字 `--color-on-primary`、邊線 `--color-primary`。三個膠囊一列，右側接「含 ETF（N）」勾選框；窄版可換行。 |
 | 庫存一行 | 行動頁「我的庫存」沒有庫存時的樣式：整列寬的 card（圓角 12px、padding 12px 16px），一行內左側標題「我的庫存」（600），接 muted 的「尚未建立庫存。」與「有持倉風險時列在最上方。」，右側「新增庫存」展開鈕（ghost）；展開後表單在同一個 card 內。有庫存時改回完整的 panel。 |
 | 策略總表 | 個股頁「研究條件」分頁最上方的 `panel`。桌面（641px 以上）用共用 `DataTable`：每個策略一列（策略、狀態、差哪個條件、價位），列下方整列寬的明細列放「條件明細」`<details>`；640px 以下改為每策略一張卡片（§5.1）：標題列＝策略＋狀態 badge → 差哪個條件 → 價位區塊 → 條件明細。狀態 badge 變體：成立 success、觀察 primary、資料不足 warning、不適用為預設（muted）；條件明細的「已達成／未達成／無資料」同樣用 success／warning／預設。候選列（該股是資料日候選時）放在表格上方，底色 `--color-bg-alt`、圓角 12px，內含理由、AI 推論區與收合的評分細節。 |
-| 族群成員表 | 族群詳情「族群成員」（文案與欄位見 [UI_COPY_SPEC §8.5](UI_COPY_SPEC.md#85-族群榜與族群詳情)）。表上方右側一個「排序」`filter-select`。桌面（641px 以上）用共用 `DataTable`：數字欄（收盤、漲跌幅、成交值、5 日相對、20 日相對）不換行，名稱欄可換行，狀態 badge 用 compact 尺寸接在名稱後（「候選 #N」primary，「條件成立」「領先成員」預設樣式）；不同日的「資料 YYYY/MM/DD」放在收盤格第二行，12px muted。640px 以下改為卡片（§5.1）：標題列左側代號名稱與 badge、右側收盤與漲跌幅（不同日的日期在收盤下）→ 成交值、5 日相對、20 日相對三格 → 題材榜另一行證據。 |
+| 族群成員表 | 族群詳情「族群成員」（文案與欄位見 [UI_COPY_SPEC §8.5](UI_COPY_SPEC.md#85-族群榜與族群詳情)）。表上方右側一個「排序」`filter-select`。桌面（641px 以上）用共用 `DataTable`：數字欄（收盤、漲跌幅、成交金額、5 日相對、20 日相對）不換行，名稱欄可換行，狀態 badge 用 compact 尺寸接在名稱後（「候選 #N」primary，「條件成立」「領先成員」預設樣式）；不同日的「資料 YYYY/MM/DD」放在收盤格第二行，12px muted。640px 以下改為卡片（§5.1）：標題列左側代號名稱與 badge、右側收盤與漲跌幅（不同日的日期在收盤下）→ 成交金額、5 日相對、20 日相對三格 → 題材榜另一行證據。 |
 | 族群榜 | 族群頁產業榜與題材榜。桌面（641px 以上）用共用 `DataTable`（排名、族群、分數、五分項、1／5／20 日相對、成員）；640px 以下改為卡片（§5.1），整張卡連到族群詳情：標題列 `#名次`＋族群名、右側分數 → 品質 badge → 五分項、1／5／20 日、成員九格（一列三格）。 |
 | 個股清單 | 個股頁 `/stocks` 的標的目錄。桌面（641px 以上）用共用 `DataTable`（代號、名稱、交易所、類型、最近收盤、目前研究動作、策略判斷資料）；640px 以下改為卡片（§5.1）：標題列左側代號名稱（連到個股頁）、右側最近收盤（2 位；早於最新交易日時日期在下）→ muted 的「市場 · 類型」→ 目前研究動作與「策略判斷資料」pill 同一行。 |
 | 搜尋列 | 輸入框與按鈕同一列、同高（按鈕撐滿輸入框的高度），按鈕不單獨掉到下一行；輸入框可縮、按鈕不縮。新聞頁的關鍵字＋代號＋按鈕：641px 以上接在分頁籤右側一列；640px 以下關鍵字整列，代號與按鈕下一列。個股、行動頁的搜尋框（輸入框＋「搜尋」「清除」）在 640px 以下也是同一列，下拉與勾選框另起一列。 |
 | 新聞卡 AI 候選行 | 新聞卡相關標的那一行之後的收合 `<details>`（文案見 [UI_COPY_SPEC §4](UI_COPY_SPEC.md#4-新聞卡文案與折疊)）：左側 2px `--color-accent` 豎線、左 padding 12px（§7 LLM 推論）；`summary` 一行 14px 主色文字，文字本身寫「推論」，所以不另加「AI 推論」badge（同卡 AI 方向後已有一個，一張卡只放一個），窄版可換行，收合時只占這一行高度，手機首屏不因它多出空白。展開後候選每檔一行（代號名稱連結＋muted「模型把握…」），最後一行 12px muted 的模型與提示版本。不用 tag 膠囊，以免與規則核實的相關標的混淆。 |
 | 提示列 | 整列寬的 card（圓角 12px、padding 12px 16px），左側 4px 色條（同 Toast，持倉風險用 warning）；一行文字加右側 ghost 連結，窄版可換行。用於今日頁持倉風險提示，有資料才出現。 |
 | `stat-value` | 統計數字：mono、24px、600。 |
+| 標籤與值 | 標籤在上、值在下的組合（`dl` 的 `dt`／`dd`、`Stat` 指標卡、`market-widget`、候選卡與行動卡的進場區／停損／目標、策略總表價位、族群榜卡與族群成員卡的數字格、今日頁熱門族群列的報酬）：值與標籤之間一律留 `--space-label`（`--space-1`，4px），寫成值的 `margin-top`，不寫死 px，也不設 0。標籤與值左右並排時（`metric-row`）間距至少 `--space-3`。由 `frontend/src/labelSpacing.test.ts` 檢查（[#463](https://github.com/YiCheng0608/stock-lab/issues/463)）。 |
 | `badge` | 膠囊：底 card 色、1px 邊、圓角 50px、padding 6px 14px、14px 字；狀態變體把文字與邊線改成 success／primary／warning／error；`accent` 變體（只用於「AI 推論」）邊線與圓點用 `--color-accent`、文字維持主文字色以保對比。前面可放 8px 圓點（活躍狀態加 `animate-pulse`）。 |
 | `btn-primary` | 漸層 `135deg, --color-primary → --color-primary-dark`，白字 600，圓角 10px，padding 14px 28px；hover 上移 2px 加 `--shadow-btn`。每個畫面最多一個主按鈕。 |
 | `btn-secondary` | 透明底、1px `--color-border`、主文字色，圓角 10px；hover 底轉 card 色、邊線轉主文字色。 |

@@ -164,7 +164,7 @@ export function memberTableRows(detail: ThemeDetail, page: { items: ThemeMemberR
 
 // Server-side sorts: values largest first with blanks last, the symbol ascending.
 export const MEMBER_SORTS: ReadonlyArray<{ id: ThemeMemberSort; label: string }> = [
-  { id: 'turnover', label: '成交值' },
+  { id: 'turnover', label: '成交金額' },
   { id: 'change_pct', label: '漲跌幅' },
   { id: 'return_5d', label: '5 日相對' },
   { id: 'return_20d', label: '20 日相對' },
@@ -184,7 +184,8 @@ export function memberStaleDate(row: MemberValues, membersAsOf: string | null | 
   return day && membersAsOf && day < membersAsOf ? formatDay(day) : null
 }
 
-export const MEMBER_UNIT_NOTE = '單位：收盤為各標的報價幣別的元，成交值為億元；漲跌幅與 5／20 日相對加權指數的報酬為 %。'
+// The units are in the column headers (UI_COPY_SPEC §8.4); the note says what the 元 and the two returns mean.
+export const MEMBER_UNIT_NOTE = '收盤為各標的報價幣別的元；成交金額是當日成交金額；5／20 日相對是相對加權指數的報酬。'
 
 // The unit sentence, then one sentence per kind of blank this page shows (UI_COPY_SPEC §8.4, §8.5). Inline stand-in
 // rows carry no values, so they add no sentence.
@@ -193,10 +194,10 @@ export function memberTableNote(rows: ReadonlyArray<MemberValues>, membersAsOf: 
   const fresh = valued.filter((row) => row.latest_bar && !memberStaleDate(row, membersAsOf))
   const sentences = [
     [fresh.some((row) => row.change_status !== 'known'), '漲跌幅空白表示漲跌待核實。'],
-    [fresh.some((row) => row.turnover_status === 'unavailable'), '成交值空白表示成交金額未取得。'],
-    [fresh.some((row) => row.turnover_status === 'unknown'), '成交值空白表示成交金額待核實。'],
+    [fresh.some((row) => row.turnover_status === 'unavailable'), '成交金額空白表示來源未提供。'],
+    [fresh.some((row) => row.turnover_status === 'unknown'), '成交金額空白表示待核實。'],
     [valued.some((row) => !isFiniteNumber(row.excess_return_5d) || !isFiniteNumber(row.excess_return_20d)), '5／20 日相對空白表示未列入當日族群計分。'],
-    [valued.some((row) => memberStaleDate(row, membersAsOf)), '收盤下方的「資料 YYYY/MM/DD」表示該檔沒有成員資料日的日線，漲跌幅與成交值留空。'],
+    [valued.some((row) => memberStaleDate(row, membersAsOf)), '收盤下方的「資料 YYYY/MM/DD」表示該檔沒有成員資料日的日線，漲跌幅與成交金額留空。'],
     [valued.some((row) => !row.latest_bar), '收盤空白表示該檔尚無日線。'],
   ] as const
   return [MEMBER_UNIT_NOTE, ...sentences.filter(([shown]) => shown).map(([, text]) => text)].join('')

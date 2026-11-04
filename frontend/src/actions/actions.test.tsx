@@ -84,6 +84,12 @@ check(more[1].items.map((item) => item.instrument.symbol).join(',') === '2010,20
 const list = render('ActionTierList', () => <ActionTierList sections={sections} loadingTiers={new Set()} canLoadMore={() => true} onMore={() => {}} />)
 for (const line of ['今日候選', '顯示 2／2 檔', '其他成立條件', '顯示 1／50 檔', '顯示更多（還有 49 檔）', '其他觀察', '顯示 1／2 檔', '顯示更多（還有 1 檔）']) check(text(list).includes(line), `區塊: shows 「${line}」`)
 check(count(list, '顯示更多') === 2, '顯示更多: only where the tier has rows not loaded')
+// #463 (UI_COPY_SPEC §5, §8.4): the level headers name 元 and the single target is 目標一; phone cards label the same.
+const firstTable = list.slice(list.indexOf('<table'), list.indexOf('</table>'))
+const actionHeaders = [...firstTable.matchAll(/<th[^>]*>([\s\S]*?)<\/th>/g)].map((match) => match[1].replace(/<[^>]+>/g, ''))
+for (const header of ['最近收盤（元）', '進場區（元）', '停損（元）', '目標一（元）', '總分（0–100）']) check(actionHeaders.includes(header), `行動列表表頭: 「${header}」, got ${actionHeaders.join('|')}`)
+check(!actionHeaders.includes('目標'), '行動列表表頭: no bare 「目標」')
+check(/<dt>目標一（元）<\/dt>/.test(list) && !/<dt>目標<\/dt>/.test(list), '行動卡片: the target is labelled 目標一（元）')
 check(count(list, 'data-action-row=') === 4 && count(list, 'data-action-card=') === 4, '區塊: one table row and one phone card per loaded row')
 check(/<td><span class="candidate-rank"[^>]*>#1<\/span><\/td>/.test(list), '今日候選: the first cell is the rank')
 check(count(list, 'href="/stocks/TWSE/1712?tab=research"') >= 2, '每列: links to the stock research tab')

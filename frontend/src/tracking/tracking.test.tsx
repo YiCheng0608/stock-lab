@@ -77,6 +77,7 @@ for (const text of ['2377', '微星', '上市 · 突破條件', '資料 2026/10/
   check(pending.includes(text), `pending card shows ${text}`)
 }
 check(pending.includes('class="level-entry">161.50') && pending.includes('class="level-stop">157.82') && pending.includes('class="level-target">167.39'), 'level colours as the candidate card')
+check(pending.includes('<dt>目標一（元）</dt>') && pending.includes('<dt>進場區（元）</dt>') && pending.includes('<dt>失效價（元）</dt>') && !pending.includes('<dt>目標</dt>'), 'Issue 463: the plan tracks 目標一 and the levels name 元')
 check(!pending.includes('模擬報酬') && !pending.includes(CONFLICT_TEXT), 'pending card has no result and no conflict note')
 const filled = render(<PlanCard plan={triggered()} />)
 check(filled.includes('模擬成交 2026/10/20 161.58') && filled.includes('第 3／20 個交易日') && filled.includes('資料 2026/10/21'), 'triggered card: fill, progress and last tracked date')
@@ -98,7 +99,7 @@ const row1 = slice(history, 'data-session-no="1"', '</tr>')
 for (const text of ['2026/10/02', '第 1 日', '已模擬成交', '>13.20<', '>13.40<', '>13.10<', '>13.30<', '進場']) check(row1.includes(text), `first row shows ${text}`)
 check(slice(history, 'data-session-no="4"', '</tr>').includes('達標') && slice(history, 'data-session-no="4"', '</tr>').includes('目標'), 'target row')
 check(slice(history, 'data-session-no="2"', '</tr>').includes('>—<'), 'no trigger is 「—」')
-check(history.includes('class="num">13.30') && history.includes('<th class="num">收</th>'), 'numbers are right-aligned mono cells')
+check(history.includes('class="num">13.30') && history.includes('<th class="num">收（元）</th>'), 'numbers are right-aligned mono cells')
 // DESIGN_SYSTEM §5.1: a table in a card keeps at most 4 columns on a phone.
 const heads = slice(history, '<thead>', '</thead>').match(/<th(?: [^>]*)?>/g) ?? []
 check(heads.length === 8 && heads.filter((th) => !th.includes('wide-only')).length === 4, 'the phone keeps date, status, close and triggers')

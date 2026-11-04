@@ -120,7 +120,7 @@ th.num { font-family: var(--font-body); }
 .stat-value { margin: var(--space-2) 0 var(--space-1); color: var(--color-text); font: 600 24px var(--font-mono); font-variant-numeric: tabular-nums; }
 .stat-detail, .muted { color: var(--color-text-muted); font-size: 14px; }
 .market-widget { padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); }
-.market-widget-value { margin: var(--space-1) 0; font: 600 20px var(--font-mono); font-variant-numeric: tabular-nums; }
+.market-widget-value { margin: var(--space-label) 0 var(--space-1); font: 600 20px var(--font-mono); font-variant-numeric: tabular-nums; }
 .market-widget-change { font: 600 14px var(--font-mono); font-variant-numeric: tabular-nums; }
 .tone-up, .positive { color: var(--color-up) !important; }
 .tone-down, .negative { color: var(--color-down) !important; }
@@ -276,7 +276,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .ai-inference-head h2 { margin: 0; font-size: 20px; font-weight: 600; }
 .ai-fields { display: grid; gap: var(--space-3); margin: 0; }
 .ai-fields dt { color: var(--color-text-muted); font-size: 14px; font-weight: 500; }
-.ai-fields dd { margin: var(--space-1) 0 0; line-height: 1.7; }
+.ai-fields dd { margin: var(--space-label) 0 0; line-height: 1.7; }
 .ai-subtitle { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-5) 0 var(--space-2); font-size: 16px; font-weight: 600; }
 .ai-candidates { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 .ai-candidates li { display: grid; gap: 2px; padding: var(--space-2) 0; border-bottom: 1px solid var(--color-border); }
@@ -365,6 +365,8 @@ a.symbol-link:hover { color: var(--color-primary); }
 .indicator-empty { position: absolute; display: flex; align-items: center; justify-content: center; border: 1px dashed var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); }
 .indicator-empty .empty-state { min-height: 0; padding: var(--space-2); }
 .chart-skeleton { padding: 0; border: 0; }
+/* A skeleton inside a stat or a card body (族群詳情 rank and components while the board loads). */
+.inline-skeleton { padding: 0; border: 0; background: transparent; }
 .chart-note, .chart-note-list { margin: var(--space-2) 0 0; color: var(--color-text-muted); font-size: 12px; }
 .chart-note-list { padding-left: var(--space-5); }
 .chart-meta { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); margin-top: var(--space-3); }
@@ -385,7 +387,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .market-overview .market-widget { min-width: 0; padding: var(--space-3) var(--space-4); }
 .market-widget-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
 .market-widget-unit { color: var(--color-text-subtle); font-size: 12px; white-space: nowrap; }
-.market-overview .market-widget-value { margin: 2px 0 0; font-size: 18px; }
+.market-overview .market-widget-value { margin: var(--space-label) 0 0; font-size: 18px; }
 .market-widget-empty, .market-row-empty { color: var(--color-text-muted); font-size: 14px; }
 .market-widget-empty { margin-top: var(--space-2); }
 .market-row { margin-top: 2px; font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -422,7 +424,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .board-card-score { font: 600 18px var(--font-mono); font-variant-numeric: tabular-nums; }
 .board-card-grid, .hot-group-returns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2) var(--space-3); margin: var(--space-3) 0 0; }
 .board-card-grid dt, .hot-group-returns dt { color: var(--color-text-muted); font-size: 12px; }
-.board-card-grid dd, .hot-group-returns dd { margin: 0; font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; }
+.board-card-grid dd, .hot-group-returns dd { margin: var(--space-label) 0 0; font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; }
 
 .hot-group-list { display: grid; gap: var(--space-2); }
 .hot-group-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; grid-template-areas: "rank name score" "rank badge score" "rank returns returns" "rank note note"; gap: 2px var(--space-3); align-items: center; padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); color: var(--color-text); transition: var(--transition); }
@@ -540,7 +542,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .candidate-mini-levels { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin: var(--space-2) 0 0; }
 .candidate-mini-levels > div { flex: 0 0 auto; }
 .candidate-mini-levels dt { color: var(--color-text-muted); font-size: 12px; }
-.candidate-mini-levels dd { margin: 0; font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.candidate-mini-levels dd { margin: var(--space-label) 0 0; font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .candidate-mini-reason { margin: var(--space-2) 0 0; font-size: 13px; line-height: 1.5; }
 .candidate-mini-ai { margin-top: var(--space-2); }
 .candidate-mini-ai .candidate-detail-grid { grid-template-columns: minmax(0, 1fr); }
@@ -553,7 +555,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .candidate-levels > div, .candidate-components > div { min-width: 0; padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg-alt); }
 .candidate-levels dt, .candidate-components dt { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); color: var(--color-text-muted); font-size: 12px; }
 /* Prices break only at ～ or ／, never inside a number. */
-.candidate-levels dd, .candidate-components dd { margin: var(--space-1) 0 0; font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; }
+.candidate-levels dd, .candidate-components dd { margin: var(--space-label) 0 0; font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; }
 .candidate-components dd { font-size: 18px; font-weight: 600; }
 /* ---- stock strategy board (#274, DESIGN_SYSTEM §5 策略總表, §7 觀察價位) ------------------------------- */
 .strategy-board .section-head { flex-wrap: wrap; }
@@ -574,7 +576,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .strategy-levels { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin: 0; }
 .strategy-levels > div { flex: 0 0 auto; }
 .strategy-levels dt { color: var(--color-text-muted); font-size: 12px; }
-.strategy-levels dd { margin: 0; font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.strategy-levels dd { margin: var(--space-label) 0 0; font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* Observation levels: dashed frame, muted text and their own label, apart from passed levels (DESIGN_SYSTEM §7). */
 .strategy-observation { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px dashed var(--color-border-hover); border-radius: var(--radius-sm); color: var(--color-text-muted); }
 .strategy-observation-label { color: var(--color-text-muted); font-size: 12px; font-weight: 600; }
@@ -607,7 +609,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .candidate-note h3 { margin: 0; font-size: 16px; font-weight: 600; }
 .candidate-note-parts { display: grid; gap: var(--space-2); margin: 0 0 var(--space-2); }
 .candidate-note-parts dt { color: var(--color-text-muted); font-size: 12px; }
-.candidate-note-parts dd { margin: 2px 0 0; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.candidate-note-parts dd { margin: var(--space-label) 0 0; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
 .candidate-note-empty { margin: 0 0 var(--space-2); color: var(--color-text-muted); font-size: 14px; }
 .candidate-note .small-note { margin: 0; }
 

@@ -76,8 +76,8 @@ type SubItemRow = { key: CandidateComponentKey; label: string; component: Candid
 const SUB_ITEM_COLUMNS: ReadonlyArray<Column<SubItemRow>> = [
   { key: 'sub', header: '子項', wrap: true, cell: ({ name, sub }) => <>{subItemLabel(name)}{sub.null_explanation && <div className="small-note">{sub.null_explanation}</div>}</> },
   { key: 'value', header: '原值', num: true, cell: ({ name, sub }) => formatSubItemValue(name, sub.value) },
-  { key: 'percentile', header: <Term id="percentile">百分位</Term>, num: true, cell: ({ sub }) => formatCandidateScore(sub.percentile) },
-  { key: 'weight', header: '子項權重', num: true, cell: ({ sub }) => `${Math.round(sub.weight * 100)}%` },
+  { key: 'percentile', header: <><Term id="percentile">百分位</Term>（0–100）</>, num: true, cell: ({ sub }) => formatCandidateScore(sub.percentile) },
+  { key: 'weight', header: '子項權重（%）', num: true, cell: ({ sub }) => String(Math.round(sub.weight * 100)) },
 ]
 
 export function ScoreDetails({ item, open }: { item: CandidateItem; open: boolean }) {
@@ -143,7 +143,7 @@ export function ReasonList({ reasons }: { reasons: CandidateItem['reasons'] }) {
   )
 }
 
-// The today table and phone card keep a target on one line (DESIGN_SYSTEM §5).
+// 目標一／目標二 on one line in the today table and phone card (DESIGN_SYSTEM §5; UI_COPY_SPEC §8.4).
 function Targets({ levels }: { levels: CandidateItem['levels'] }) {
   return <>{formatPrice(levels.target_1)}{levels.target_2 != null && <span className="level-target-2">／{formatPrice(levels.target_2)}</span>}</>
 }
@@ -193,12 +193,12 @@ function candidateColumns(open: ReadonlySet<number>, toggle: (rank: number) => v
       </>,
     },
     { key: 'group', header: <>所屬族群（<Term id="heat_rank">名次</Term>）</>, wrap: true, cellClassName: 'candidate-group-cell', cell: groupText },
-    { key: 'close', header: '最近收盤', num: true, cell: (item) => <CloseValue item={item} /> },
-    { key: 'entry', header: <Term id="entry_zone">進場區</Term>, num: true, cellClassName: 'level-entry', cell: (item) => formatEntryZone(item.levels) },
-    { key: 'stop', header: <Term id="support">停損</Term>, num: true, cellClassName: 'level-stop', cell: (item) => formatPrice(item.levels.invalid_price) },
-    { key: 'target', header: <Term id="target">目標</Term>, num: true, cellClassName: 'level-target', cell: (item) => <Targets levels={item.levels} /> },
+    { key: 'close', header: '最近收盤（元）', num: true, cell: (item) => <CloseValue item={item} /> },
+    { key: 'entry', header: <><Term id="entry_zone">進場區</Term>（元）</>, num: true, cellClassName: 'level-entry', cell: (item) => formatEntryZone(item.levels) },
+    { key: 'stop', header: <><Term id="support">停損</Term>（元）</>, num: true, cellClassName: 'level-stop', cell: (item) => formatPrice(item.levels.invalid_price) },
+    { key: 'target', header: <><Term id="target">目標一／目標二</Term>（元）</>, num: true, cellClassName: 'level-target', cell: (item) => <Targets levels={item.levels} /> },
     { key: 'rr', header: <Term id="rr">RR</Term>, num: true, cell: (item) => <Badge tone="primary" className="badge-compact">{formatRiskReward(item.levels.risk_reward)}</Badge> },
-    { key: 'total', header: <Term id="candidate_score">總分</Term>, num: true, cell: (item) => formatCandidateScore(item.total_score) },
+    { key: 'total', header: <><Term id="candidate_score">總分</Term>（0–100）</>, num: true, cell: (item) => formatCandidateScore(item.total_score) },
     { key: 'reason', header: '主要理由', wrap: true, cellClassName: 'candidate-reason-cell', cell: (item) => <FirstReason item={item} /> },
     {
       key: 'ai', header: <span className="sr-only">AI 說明</span>, cell: (item) => (
@@ -221,10 +221,10 @@ function CandidateMiniCard({ item, hidden }: { item: CandidateItem; hidden: bool
       </div>
       <div className="small-note">{exchangeLabel(instrument.exchange)} · {candidateStrategyLabel(item.strategy)} · {groupText(item)}</div>
       <dl className="candidate-mini-levels">
-        <div><dt>收盤</dt><dd><CloseValue item={item} /></dd></div>
-        <div><dt><Term id="entry_zone">進場區</Term></dt><dd className="level-entry">{formatEntryZone(levels)}</dd></div>
-        <div><dt><Term id="support">停損</Term></dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
-        <div><dt><Term id="target">目標</Term></dt><dd className="level-target"><Targets levels={levels} /></dd></div>
+        <div><dt>收盤（元）</dt><dd><CloseValue item={item} /></dd></div>
+        <div><dt><Term id="entry_zone">進場區</Term>（元）</dt><dd className="level-entry">{formatEntryZone(levels)}</dd></div>
+        <div><dt><Term id="support">停損</Term>（元）</dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
+        <div><dt><Term id="target">{levels.target_2 != null ? '目標一／目標二' : '目標一'}</Term>（元）</dt><dd className="level-target"><Targets levels={levels} /></dd></div>
       </dl>
       <p className="candidate-mini-reason"><FirstReason item={item} /></p>
       <details className="details candidate-mini-ai"><summary>AI 說明</summary><CandidateDetail item={item} /></details>

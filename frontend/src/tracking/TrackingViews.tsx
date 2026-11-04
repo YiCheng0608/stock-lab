@@ -142,10 +142,10 @@ const SESSION_COLUMNS: ReadonlyArray<Column<TrackingPlanSession>> = [
   { key: 'date', header: '日期', cell: (session) => formatDate(session.session_date) },
   { key: 'no', header: '第幾日', wideOnly: true, cell: (session) => `第 ${session.session_no} 日` },
   { key: 'status', header: '狀態', cell: (session) => sessionStatusLabel(session.status) },
-  { key: 'open', header: '開', num: true, wideOnly: true, cell: (session) => formatPrice(session.ohlc.open) },
-  { key: 'high', header: '高', num: true, wideOnly: true, cell: (session) => formatPrice(session.ohlc.high) },
-  { key: 'low', header: '低', num: true, wideOnly: true, cell: (session) => formatPrice(session.ohlc.low) },
-  { key: 'close', header: '收', num: true, cell: (session) => formatPrice(session.ohlc.close) },
+  { key: 'open', header: '開（元）', num: true, wideOnly: true, cell: (session) => formatPrice(session.ohlc.open) },
+  { key: 'high', header: '高（元）', num: true, wideOnly: true, cell: (session) => formatPrice(session.ohlc.high) },
+  { key: 'low', header: '低（元）', num: true, wideOnly: true, cell: (session) => formatPrice(session.ohlc.low) },
+  { key: 'close', header: '收（元）', num: true, cell: (session) => formatPrice(session.ohlc.close) },
   { key: 'triggers', header: '觸發', cell: (session) => sessionTriggers(session) },
 ]
 
@@ -196,9 +196,9 @@ export function PlanCard({ plan }: { plan: TrackingPlan }) {
     >
       {hasTransitionConflict(plan) && <div className="warning-box plan-conflict">{CONFLICT_TEXT}</div>}
       <dl className="candidate-levels">
-        <div><dt>進場區</dt><dd className="level-entry">{formatEntryZone(levels)}</dd></div>
-        <div><dt>失效價</dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
-        <div><dt>目標</dt><dd className="level-target">{formatPrice(levels.target_1)}</dd></div>
+        <div><dt>進場區（元）</dt><dd className="level-entry">{formatEntryZone(levels)}</dd></div>
+        <div><dt>失效價（元）</dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
+        <div><dt>目標一（元）</dt><dd className="level-target">{formatPrice(levels.target_1)}</dd></div>
         <div><dt>RR</dt><dd><Badge tone="primary" className="badge-compact">{formatRiskReward(levels.risk_reward)}</Badge></dd></div>
       </dl>
       <div className="plan-lines">
