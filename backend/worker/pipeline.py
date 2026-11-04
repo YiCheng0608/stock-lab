@@ -4638,6 +4638,20 @@ def collect(
                 mops_events.record_quality(
                     db, score_date, event_coverage, list(batch.events)
                 )
+            # Friday's and a holiday eve's evening announcements are in the
+            # next calendar date's list, which no weekday daily queries: also
+            # query the unanswered dates since the last answered one (#464).
+            event_gap: dict[str, Any] = {"dates": [], "coverage": {}, "warnings": []}
+            mops_fetcher = getattr(active_adapter, "mops_fetcher", None)
+            if mops_fetcher is not None:
+                try:
+                    event_gap = mops_events.fill_gap_dates(
+                        db, run, score_date, mops_fetcher, instruments
+                    )
+                except Exception as exc:  # non-core: never fails the collect
+                    event_gap["warnings"] = [
+                        f"{mops_events.WARNING_PREFIX}: gap dates: {exc}"
+                    ]
             for exchange in () if keep_snapshot_evidence else ("TWSE", "TPEx"):
                 fundamental_count = sum(
                     item.exchange == exchange for item in batch.fundamentals
@@ -4678,6 +4692,7 @@ def collect(
             # non-core warning (MOPS, TPEx suspension feeds) is recorded but
             # does not hold back analysis of complete market data.
             core_warnings, noncore_warnings = split_collect_warnings(batch.warnings)
+            noncore_warnings += list(event_gap["warnings"])
             if latest_bar_date is None and verified_no_data_dates:
                 run.status = "skipped"
             else:
@@ -4730,6 +4745,11 @@ def collect(
                 + _json_safe(value_revisions),
                 "no_data_dates": [item.isoformat() for item in verified_no_data_dates],
                 "event_coverage": event_coverage,
+                # Accumulated over the runs of this request key, like the fills.
+                "event_gap_coverage": {
+                    **dict(stored_metadata.get("event_gap_coverage", {}) or {}),
+                    **event_gap["coverage"],
+                },
                 "industry_membership_observations": industry_result,
                 "industry_observation_history": list(
                     stored_metadata.get("industry_observation_history", [])
@@ -4793,6 +4813,10 @@ def collect(
                 "fundamentals": len(batch.fundamentals),
                 "market_summaries": market_summaries,
                 "event_coverage": event_coverage,
+                "event_gap_dates": {
+                    day: mops_events.coverage_state(coverage, date.fromisoformat(day))
+                    for day, coverage in event_gap["coverage"].items()
+                },
                 "run_id": run.id,
                 "industry_membership_observations": industry_result,
                 "warnings": batch.warnings,

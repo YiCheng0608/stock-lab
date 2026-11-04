@@ -57,6 +57,10 @@ DENOMINATOR = "date_scoped_event_queries"
 # event list never makes a collect partial; the date is recorded as partial.
 WARNING_PREFIX = "MOPS event list unavailable"
 RUN_TYPE = "event_backfill"
+# One run covers at most this many calendar dates (60 sessions are about 90).
+BACKFILL_MAX_DAYS = 120
+# Failed dates in a row that stop an event backfill run.
+ABORT_AFTER_FAILURES = 5
 TAIPEI = timezone(timedelta(hours=8))
 
 # Per-date coverage states, strongest evidence first.  ``unsupported`` is the
@@ -236,6 +240,11 @@ def coverage_state(item: dict[str, Any] | None, day: date) -> str:
     if not item:
         return "unqueried"
     key = day.isoformat()
+    queried = item.get("query_date")
+    if queried and str(queried)[:10] != key:
+        # A dated answer describes its own query date only; it is never read
+        # as evidence for the date it happens to be stored under.
+        return "unqueried"
 
     def dates(name: str) -> set[str]:
         return {str(value)[:10] for value in item.get(name, []) or []}
@@ -289,16 +298,24 @@ def stored_event_manifest(db: Session) -> dict[str, dict[str, Any]]:
         if new_rank >= old_rank:
             manifest[parsed.isoformat()] = dict(coverage)
 
+    def keyed(day: Any, coverage: Any) -> None:
+        # A dated answer is keyed by its own query date, not by the run's
+        # data_as_of (which can be an earlier session, e.g. months_back).
+        if isinstance(coverage, dict) and coverage.get("query_date"):
+            day = coverage["query_date"]
+        if day:
+            keep(str(day), coverage)
+
     for run in runs:
         metadata = run.metadata_json or {}
         if run.run_type in {"backfill", RUN_TYPE}:
             for day, item in (metadata.get("coverage_manifest") or {}).items():
                 if isinstance(item, dict):
-                    keep(str(day), item.get("event_coverage"))
+                    keyed(day, item.get("event_coverage"))
         else:
-            day = run.data_as_of or run.run_date
-            if day:
-                keep(str(day), metadata.get("event_coverage"))
+            keyed(run.data_as_of or run.run_date, metadata.get("event_coverage"))
+            for day, coverage in (metadata.get("event_gap_coverage") or {}).items():
+                keyed(day, coverage)
     return manifest
 
 
@@ -308,14 +325,95 @@ def event_coverage_states(db: Session, days: Iterable[date]) -> dict[date, str]:
     For the hot-group catalyst (#453): only ``verified`` and ``empty`` are
     date-scoped answers.  A snapshot-only date (``unsupported``) has no
     date-scoped query and is reported as ``unqueried``.
+
+    Each call reads every collect/backfill run's metadata once; pass all the
+    dates of a window in one call rather than calling it per date.
     """
 
-    manifest = stored_event_manifest(db)
+    return states_from_manifest(stored_event_manifest(db), days)
+
+
+def states_from_manifest(
+    manifest: dict[str, dict[str, Any]], days: Iterable[date]
+) -> dict[date, str]:
     result: dict[date, str] = {}
     for day in days:
         state = coverage_state(manifest.get(day.isoformat()), day)
         result[day] = "unqueried" if state == "unsupported" else state
     return result
+
+
+# --- calendar dates the daily list did not answer ---------------------------
+
+# The dated list of D carries D−1's announcements after 17:30, so a date's
+# evening rows arrive with the next calendar date's query.  daily runs on
+# weekdays only: Friday's (and a holiday eve's) evening rows sit in the
+# Saturday (holiday) list.  collect therefore also queries the unanswered
+# calendar dates between the last answered date and the score date.
+GAP_LOOKBACK_DAYS = 14
+
+
+def gap_dates(db: Session, score_date: date) -> list[date]:
+    """Unanswered dates after the first answered one in the lookback window.
+
+    Partial (failed) dates are retried.  With no answered date in the window
+    there is no dated history to continue; ``events backfill`` owns that.
+    """
+
+    window = [
+        score_date - timedelta(days=offset)
+        for offset in range(GAP_LOOKBACK_DAYS, 0, -1)
+    ]
+    states = states_from_manifest(stored_event_manifest(db), window)
+    answered = [day for day in window if states[day] in {"verified", "empty"}]
+    if not answered:
+        return []
+    return [
+        day
+        for day in window
+        if day > answered[0] and states[day] not in {"verified", "empty"}
+    ]
+
+
+def fill_gap_dates(
+    db: Session,
+    run: IngestionRun,
+    score_date: date,
+    fetcher: Callable[..., Any],
+    instruments: dict[tuple[str, str], Instrument],
+) -> dict[str, Any]:
+    """Query ``gap_dates`` inside a collect run; raw payloads join that run.
+
+    Requests are spaced by the MOPS host interval in ``fetch_json``.
+    """
+
+    from worker import pipeline
+
+    coverage_by_date: dict[str, dict[str, Any]] = {}
+    warnings: list[str] = []
+    written = 0
+    for day in gap_dates(db, score_date):
+        events, payloads, coverage, day_warnings = fetch_date(day, fetcher)
+        raw_ids = {
+            payload.sha256: pipeline._upsert_raw_payload(db, run, payload).id
+            for payload in payloads
+        }
+        for event in events:
+            if (event.exchange, event.symbol) in instruments:
+                pipeline._upsert_event(
+                    db, event, instruments, raw_ids.get(event.payload_sha256)
+                )
+                written += 1
+        record_quality(db, day, coverage, events)
+        coverage_by_date[day.isoformat()] = coverage
+        warnings.extend(day_warnings)
+        db.flush()
+    return {
+        "dates": sorted(coverage_by_date),
+        "coverage": coverage_by_date,
+        "events_written": written,
+        "warnings": warnings,
+    }
 
 
 # --- event backfill run -----------------------------------------------------
@@ -340,7 +438,10 @@ def backfill_events(
     One ``event_backfill`` ingestion run; ``coverage_manifest`` holds each
     date's coverage (read by ``backfill.coverage_report``).  Re-running is
     idempotent: events upsert on their unique key and the strongest coverage
-    per date wins.  Dates after today (Taipei) are refused.
+    per date wins.  Dates after today (Taipei) and ranges longer than
+    ``BACKFILL_MAX_DAYS`` are refused; ``ABORT_AFTER_FAILURES`` failed dates
+    in a row stop the run (the source is likely blocking).  Each date is
+    committed, so an interrupted run keeps the dates it finished.
     """
 
     from worker import pipeline
@@ -350,6 +451,11 @@ def backfill_events(
     today = _taipei_day(utcnow())
     if end > today:
         raise ValueError(f"end {end.isoformat()} is after today {today.isoformat()}")
+    if (end - start).days + 1 > BACKFILL_MAX_DAYS:
+        raise ValueError(
+            f"{(end - start).days + 1} calendar dates exceed the "
+            f"{BACKFILL_MAX_DAYS}-date limit; split the range"
+        )
     now = utcnow()
     run = IngestionRun(
         run_type=RUN_TYPE,
@@ -365,50 +471,75 @@ def backfill_events(
     instruments = {
         (item.exchange, item.symbol): item for item in db.scalars(select(Instrument))
     }
+    db.commit()
     manifest: dict[str, dict[str, Any]] = {}
     warnings: list[str] = []
-    stored = skipped = 0
-    day = start
-    first = True
-    while day <= end:
-        if not first:
-            sleep(interval_seconds)
-        first = False
-        events, payloads, coverage, day_warnings = fetch_date(day, fetcher)
-        raw_ids = {
-            payload.sha256: pipeline._upsert_raw_payload(db, run, payload).id
-            for payload in payloads
+    stored = skipped = failures_in_a_row = 0
+    aborted: str | None = None
+
+    def summarize(status: str) -> None:
+        states = {
+            key: coverage_state(item["event_coverage"], date.fromisoformat(key))
+            for key, item in manifest.items()
         }
-        for event in events:
-            if (event.exchange, event.symbol) not in instruments:
-                skipped += 1
-                continue
-            pipeline._upsert_event(
-                db, event, instruments, raw_ids.get(event.payload_sha256)
-            )
-            stored += 1
-        manifest[day.isoformat()] = {"event_coverage": coverage}
-        warnings.extend(day_warnings)
-        record_quality(db, day, coverage, events)
-        db.flush()
-        day += timedelta(days=1)
-    states = {
-        key: coverage_state(item["event_coverage"], date.fromisoformat(key))
-        for key, item in manifest.items()
-    }
-    run.status = "partial" if warnings else "success"
-    run.records = stored
+        run.status = status
+        run.records = stored
+        run.metadata_json = {
+            **run.metadata_json,
+            "coverage_manifest": manifest,
+            "warnings": warnings,
+            "aborted": aborted,
+            "events_written": stored,
+            "events_outside_universe": skipped,
+            "verified_dates": sorted(k for k, v in states.items() if v == "verified"),
+            "empty_dates": sorted(k for k, v in states.items() if v == "empty"),
+            "partial_dates": sorted(k for k, v in states.items() if v == "partial"),
+        }
+
+    day = start
+    try:
+        while day <= end:
+            if day != start:
+                sleep(interval_seconds)
+            events, payloads, coverage, day_warnings = fetch_date(day, fetcher)
+            raw_ids = {
+                payload.sha256: pipeline._upsert_raw_payload(db, run, payload).id
+                for payload in payloads
+            }
+            for event in events:
+                if (event.exchange, event.symbol) not in instruments:
+                    skipped += 1
+                    continue
+                pipeline._upsert_event(
+                    db, event, instruments, raw_ids.get(event.payload_sha256)
+                )
+                stored += 1
+            manifest[day.isoformat()] = {"event_coverage": coverage}
+            warnings.extend(day_warnings)
+            record_quality(db, day, coverage, events)
+            failures_in_a_row = failures_in_a_row + 1 if day_warnings else 0
+            summarize("running")
+            db.commit()
+            if failures_in_a_row >= ABORT_AFTER_FAILURES:
+                aborted = (
+                    f"stopped after {failures_in_a_row} failed dates in a row "
+                    f"at {day.isoformat()}"
+                )
+                break
+            day += timedelta(days=1)
+    except Exception as exc:
+        db.rollback()
+        # The failing date's writes were rolled back; so is its coverage.
+        manifest.pop(day.isoformat(), None)
+        aborted = f"error at {day.isoformat()}: {exc}"
+        summarize("failed")
+        run.error = aborted
+        run.finished_at = utcnow()
+        db.commit()
+        raise
+    summarize("partial" if warnings or aborted else "success")
+    run.error = aborted
     run.finished_at = utcnow()
-    run.metadata_json = {
-        **run.metadata_json,
-        "coverage_manifest": manifest,
-        "warnings": warnings,
-        "events_written": stored,
-        "events_outside_universe": skipped,
-        "verified_dates": sorted(k for k, v in states.items() if v == "verified"),
-        "empty_dates": sorted(k for k, v in states.items() if v == "empty"),
-        "partial_dates": sorted(k for k, v in states.items() if v == "partial"),
-    }
     return {
         "status": run.status,
         "run_id": run.id,
@@ -418,6 +549,7 @@ def backfill_events(
         "verified_dates": len(run.metadata_json["verified_dates"]),
         "empty_dates": len(run.metadata_json["empty_dates"]),
         "partial_dates": run.metadata_json["partial_dates"],
+        "aborted": aborted,
         "events_written": stored,
         "events_outside_universe": skipped,
         "warnings": warnings,
@@ -456,8 +588,12 @@ def record_quality(
             "complete" if complete else "partial",
             [] if complete else ["events"],
             {
+                # Rows of the dated list only: a collect batch also carries
+                # the snapshot feed's copy of the same announcements.
                 "records": sum(
-                    item.exchange == exchange and item.event_date == day
+                    item.exchange == exchange
+                    and item.event_date == day
+                    and item.endpoint == MOPS_EVENT_LIST_ENDPOINT
                     for item in events
                 ),
                 "endpoint": MOPS_EVENT_LIST_ENDPOINT,
@@ -472,6 +608,7 @@ def run_event_backfill(start: date, end: date) -> dict[str, Any]:
         try:
             result = backfill_events(db, start=start, end=end)
         except ValueError as exc:
+            # Refused before any request (range, future date).
             db.rollback()
             return {"status": "failed", "error": str(exc)}
         db.commit()

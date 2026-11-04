@@ -280,7 +280,8 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
 
 - **請求**：body `{"year":"<民國年>","month":"MM","day":"DD"}`，每個查詢日 1 個請求；同一 host 間隔至少 3 秒（`OFFICIAL_HOST_MIN_INTERVAL_SECONDS`）。raw 存在 `mops` 來源，`data_as_of` 是查詢日。
 - **回應**：`code=200`、`message=查詢成功`，`result.titles` 依序為 發言日期、發言時間、公司代號、公司名稱、主旨、詳細資料；`result.data` 每列是這六欄，第六欄的 `parameters.marketKind` 是 `sii`（上市）、`otc`（上櫃）、`rotc`（興櫃）、`pub`（公發）。只取 `sii`／`otc`，分別寫成 TWSE／TPEx 的事件。
-- **時間範圍**：查 D 日的清單含 D 日到查詢當下的公告，加上 D−1 日 17:30 之後的公告。事件日期一律用列上的發言日期，不是查詢日；D 日晚於查詢時間的公告，隔天查 D+1 日時寫入（唯一鍵去重）。覆蓋記錄查詢時間 `fetched_at`。
+- **時間範圍**：查 D 日的清單含 D 日到查詢當下的公告，加上 D−1 日 17:30 之後的公告。事件日期一律用列上的發言日期，不是查詢日；D 日晚於查詢時間的公告，下一次查 D+1 日時寫入（唯一鍵去重）。覆蓋記錄查詢時間 `fetched_at`，覆蓋只對自己的查詢日（`query_date`）成立，不依 run 的 `data_as_of` 或狀態推定到別天。
+- **補查週末與連假**：daily 只在週一到週五跑，週五與連假前一天的晚間公告在沒有人查的週六或假日清單裡。所以 collect 查完目標日後，也補查回看 14 個日曆日內、第一個已核實日之後、目標日之前所有還沒核實（含 partial）的日曆日（`worker.mops_events.gap_dates`），例如週一補查週六、週日，連假後第一天補查整段假日，前幾天查詢失敗的日子也一併重查。補查結果記在 collect run 的 `event_gap_coverage`；回看範圍內沒有任何已核實日時不補查，歷史由 `events backfill` 回補。
 - **覆蓋判定**：回應成功且可讀時，有 D 日的 `sii`／`otc` 列就是已核實（`verified_dates`），沒有就是已核實空日（`empty_dates`）。傳輸失敗、`code` 不是 200、沒有表格、欄名改變、列的發言日期不是 D 或 D−1、缺代號或主旨時，D 日記 `partial`，不推定為空，也不寫該次的事件；warning 以 `MOPS event list unavailable` 開頭，是非核心。
 - **與快照同一則**：同一標的、同日、同型別，發言時間相同、主旨相同（不計 #204 的「（發言時間 HH:MM:SS）」後綴）就是同一則。快照寫的列有說明全文時，日期清單不覆寫它；標題相同但發言時間不同時另存一列，標題加發言時間。
 - **寫入時機**：daily 與 catchup 的 collect、回補（`OfficialMarketDataAdapter`）都查目標日；另可用 `events backfill` 只回補事件（[CLI](ops/CLI.md#現有-worker-cli)）。`mops_events` 資料品質列在已核實時為 `complete`，之後的失敗不把它降回 `partial`；跨 run 讀覆蓋時，同一日以較強的證據為準（已核實／空日 > partial > 快照的 unsupported，同級取較新的 run）。

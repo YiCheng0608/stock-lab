@@ -620,7 +620,12 @@ def coverage_report(
 
     events_by_date = Counter(row.event_date for row in event_rows)
     actions_by_date = Counter(row.action_date for row in action_rows)
-    event_manifest: dict[str, dict[str, Any]] = dict(event_coverage_by_date or {})
+    # A dated answer is keyed by its own query date (Issue #464), not by the
+    # date a caller filed it under.
+    event_manifest: dict[str, dict[str, Any]] = {
+        str((item or {}).get("query_date") or day)[:10]: item
+        for day, item in (event_coverage_by_date or {}).items()
+    }
     if not event_manifest:
         # Read persisted coverage evidence from collect/backfill/event-backfill
         # metadata; the strongest record per date wins (Issue #464).  An Event
@@ -631,6 +636,10 @@ def coverage_report(
     def event_state(day: date) -> str:
         item = event_manifest.get(day.isoformat()) or {}
         if not item:
+            return "unqueried"
+        queried = item.get("query_date")
+        if queried and str(queried)[:10] != day.isoformat():
+            # Never inferred from the status of another date's answer.
             return "unqueried"
         verified = set(str(value)[:10] for value in item.get("verified_dates", []))
         empty = set(str(value)[:10] for value in item.get("empty_dates", []))

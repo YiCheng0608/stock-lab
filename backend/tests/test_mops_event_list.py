@@ -1,7 +1,7 @@
 """Date-scoped MOPS event list (t05st02): events, verified-empty and failed dates (#464)."""
 
 import socket
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import create_engine, select
@@ -420,3 +420,247 @@ def test_event_backfill_refuses_future_dates(database):
             fetcher=ListFetcher(),
             sleep=lambda _s: None,
         )
+
+
+def test_event_backfill_refuses_a_range_over_the_date_limit(database):
+    with database() as db, pytest.raises(ValueError, match="limit"):
+        mops_events.backfill_events(
+            db,
+            start=date(2026, 1, 1),
+            end=date(2026, 1, 1) + timedelta(days=mops_events.BACKFILL_MAX_DAYS),
+            fetcher=ListFetcher(),
+            sleep=lambda _s: None,
+        )
+
+
+def test_event_backfill_stops_after_consecutive_failed_dates(database):
+    start = date(2026, 8, 1)
+    failing = {start + timedelta(days=n) for n in range(10)}
+    fetcher = ListFetcher(fail=failing)
+    with database() as db:
+        result = mops_events.backfill_events(
+            db,
+            start=start,
+            end=start + timedelta(days=9),
+            fetcher=fetcher,
+            sleep=lambda _s: None,
+        )
+    assert len(fetcher.bodies) == mops_events.ABORT_AFTER_FAILURES
+    assert result["status"] == "partial" and "stopped after" in result["aborted"]
+    assert len(result["partial_dates"]) == mops_events.ABORT_AFTER_FAILURES
+
+
+# --- review of PR #469 -------------------------------------------------------
+
+FRIDAY, SATURDAY, SUNDAY, MONDAY = (
+    date(2026, 9, 4),
+    date(2026, 9, 5),
+    date(2026, 9, 6),
+    date(2026, 9, 7),
+)
+
+
+def _events(db):
+    return sorted(
+        (e.event_date, e.title, (e.details_json or {}).get("發言時間"))
+        for e in db.scalars(select(Event))
+    )
+
+
+def test_friday_evening_announcements_arrive_through_the_saturday_list(database):
+    # Friday is answered at 18:30; its 20:00 announcement is only in the
+    # Saturday list, which no weekday daily queries for itself.
+    with database() as db:
+        _instruments(db)
+        mops_events.backfill_events(
+            db,
+            start=FRIDAY,
+            end=FRIDAY,
+            fetcher=ListFetcher({FRIDAY: [row(FRIDAY, "10:00:00", "1101", "morning")]}),
+            sleep=lambda _s: None,
+        )
+        run = IngestionRun(run_type="collect", source="official", run_date=MONDAY)
+        db.add(run)
+        db.flush()
+        fetcher = ListFetcher(
+            {SATURDAY: [row(FRIDAY, "20:00:00", "1101", "friday evening")]}
+        )
+        instruments = {
+            (i.exchange, i.symbol): i for i in db.scalars(select(Instrument))
+        }
+        gap = mops_events.fill_gap_dates(db, run, MONDAY, fetcher, instruments)
+        db.commit()
+        assert [body["day"] for body in fetcher.bodies] == ["05", "06"]
+        assert gap["dates"] == [SATURDAY.isoformat(), SUNDAY.isoformat()]
+        assert _events(db) == [
+            (FRIDAY, "friday evening", "20:00:00"),
+            (FRIDAY, "morning", "10:00:00"),
+        ]
+        # The gap coverage is read back from the collect run's metadata.
+        run.metadata_json = {"event_gap_coverage": gap["coverage"]}
+        db.commit()
+        assert mops_events.event_coverage_states(db, [FRIDAY, SATURDAY, SUNDAY]) == {
+            FRIDAY: "verified",
+            SATURDAY: "empty",
+            SUNDAY: "empty",
+        }
+        # Once answered, the next collect does not query them again.
+        assert mops_events.gap_dates(db, MONDAY) == []
+
+
+def test_collect_queries_the_unanswered_dates_since_the_last_answered_one(database):
+    tuesday, wednesday, thursday = date(2026, 9, 1), date(2026, 9, 2), date(2026, 9, 3)
+    with database() as db:
+        _instruments(db)
+        mops_events.backfill_events(
+            db,
+            start=tuesday,
+            end=thursday,
+            fetcher=ListFetcher(
+                {tuesday: [row(tuesday, "09:00:00", "1101", "tue")]},
+                fail={wednesday, thursday},
+            ),
+            sleep=lambda _s: None,
+        )
+        db.commit()
+    mops = ListFetcher(
+        {thursday: [row(wednesday, "20:00:00", "1101", "late wednesday")]}
+    )
+    result = pipeline.collect(DAY, adapter=_combined(CollectFetcher(mops)))
+
+    assert result["status"] == "success", result
+    # The score date first, then the failed (partial) dates are retried.
+    assert [body["day"] for body in mops.bodies] == ["04", "02", "03"]
+    assert result["event_gap_dates"] == {
+        wednesday.isoformat(): "empty",
+        thursday.isoformat(): "empty",
+    }
+    with database() as db:
+        assert (wednesday, "late wednesday", "20:00:00") in _events(db)
+        assert mops_events.event_coverage_states(
+            db, [tuesday, wednesday, thursday, DAY]
+        ) == {
+            tuesday: "verified",
+            wednesday: "empty",
+            thursday: "empty",
+            # The score date's list (no rows of that date) answered empty.
+            DAY: "empty",
+        }
+
+
+def test_a_dated_answer_counts_only_for_its_own_query_date(database):
+    # collect --months-back on a holiday H: the run's data_as_of is the
+    # previous session T, but the MOPS list answered H.
+    holiday, session = date(2026, 9, 7), date(2026, 9, 4)
+    answered_h = mops_events.date_coverage(holiday, [])
+    failed_t = mops_events.date_coverage(session, None, error="outage")
+    with database() as db:
+        db.add_all(
+            [
+                IngestionRun(
+                    run_type="collect",
+                    source="official",
+                    run_date=session,
+                    status="partial",
+                    data_as_of=session.isoformat(),
+                    metadata_json={"event_coverage": failed_t},
+                ),
+                IngestionRun(
+                    run_type="collect",
+                    source="official",
+                    run_date=holiday,
+                    status="partial",
+                    data_as_of=session.isoformat(),
+                    metadata_json={"event_coverage": answered_h},
+                ),
+            ]
+        )
+        db.flush()
+        assert mops_events.event_coverage_states(db, [session, holiday]) == {
+            session: "partial",
+            holiday: "empty",
+        }
+        assert mops_events.coverage_state(answered_h, session) == "unqueried"
+        report = backfill.coverage_report(
+            db,
+            session,
+            holiday,
+            event_coverage_by_date={session.isoformat(): answered_h},
+        )
+    states = {
+        item["date"]: item["event_coverage_status"] for item in report["date_coverage"]
+    }
+    assert states[session.isoformat()] == "unqueried"
+    assert states[holiday.isoformat()] == "verified_empty"
+
+
+def test_same_subject_at_another_time_is_kept_as_a_second_row(database):
+    # D stores X(10:00) at 18:30; the D+1 list brings X(20:00) dated D.
+    with database() as db:
+        _instruments(db)
+        fetcher = ListFetcher(
+            {
+                FRIDAY: [row(FRIDAY, "10:00:00", "1101", "X")],
+                SATURDAY: [row(FRIDAY, "20:00:00", "1101", "X")],
+            }
+        )
+        for day in (FRIDAY, SATURDAY):
+            mops_events.backfill_events(
+                db, start=day, end=day, fetcher=fetcher, sleep=lambda _s: None
+            )
+        db.commit()
+        assert _events(db) == [
+            (FRIDAY, "X", "10:00:00"),
+            (FRIDAY, "X（發言時間 20:00:00）", "20:00:00"),
+        ]
+
+
+def test_re_running_a_date_keeps_the_same_events(database):
+    fetcher = ListFetcher(
+        {
+            FRIDAY: [
+                row(FRIDAY, "10:00:00", "1101", "X"),
+                row(FRIDAY, "11:00:00", "1101", "X", serial=2),
+                row(FRIDAY, "12:00:00", "7001", "Y", market="otc"),
+            ]
+        }
+    )
+    with database() as db:
+        _instruments(db)
+        for _ in range(2):
+            mops_events.backfill_events(
+                db, start=FRIDAY, end=FRIDAY, fetcher=fetcher, sleep=lambda _s: None
+            )
+            db.commit()
+            assert len(_events(db)) == 3
+
+
+def test_previous_date_rows_in_a_list_do_not_change_that_date_coverage(database):
+    with database() as db:
+        _instruments(db)
+        mops_events.backfill_events(
+            db,
+            start=FRIDAY,
+            end=SATURDAY,
+            fetcher=ListFetcher(
+                {SATURDAY: [row(FRIDAY, "20:00:00", "1101", "late friday")]},
+                fail={FRIDAY},
+            ),
+            sleep=lambda _s: None,
+        )
+        db.commit()
+        # Friday's own query failed: its evening row from Saturday's list is
+        # stored, but Friday stays partial and its quality rows stay partial.
+        assert (FRIDAY, "late friday", "20:00:00") in _events(db)
+        assert mops_events.event_coverage_states(db, [FRIDAY, SATURDAY]) == {
+            FRIDAY: "partial",
+            SATURDAY: "empty",
+        }
+        quality = {
+            (row.as_of_date, row.entity_key): (row.status, row.checks_json["records"])
+            for row in db.scalars(
+                select(DataQuality).where(DataQuality.entity_type == "mops_events")
+            )
+        }
+    assert quality[(FRIDAY, "TWSE")] == ("partial", 0)
+    assert quality[(SATURDAY, "TWSE")] == ("complete", 0)
