@@ -121,11 +121,11 @@ function tierColumns(context: RowContext): ReadonlyArray<Column<ActionSummary>> 
   const { tier } = context
   const stock: Column<ActionSummary> = { key: 'stock', header: '股票', cell: (action) => <StockCell action={action} /> }
   const status: Column<ActionSummary> = { key: 'status', header: '狀態', cell: (action) => <StatusCell action={action} context={context} /> }
-  const close: Column<ActionSummary> = { key: 'close', header: '最近收盤', num: true, cell: (action) => <CloseCell action={action} /> }
+  const close: Column<ActionSummary> = { key: 'close', header: '最近收盤（元）', num: true, cell: (action) => <CloseCell action={action} /> }
   const levels: Array<Column<ActionSummary>> = [
-    { key: 'entry', header: <Term id="entry_zone">進場區</Term>, num: true, cellClassName: 'level-entry', cell: (action) => actionLevels(action)?.entry ?? '' },
-    { key: 'stop', header: <Term id="support">停損</Term>, num: true, cellClassName: 'level-stop', cell: (action) => actionLevels(action)?.stop ?? '' },
-    { key: 'target', header: <Term id="target">目標</Term>, num: true, cellClassName: 'level-target', cell: (action) => actionLevels(action)?.target ?? '' },
+    { key: 'entry', header: <><Term id="entry_zone">進場區</Term>（元）</>, num: true, cellClassName: 'level-entry', cell: (action) => actionLevels(action)?.entry ?? '' },
+    { key: 'stop', header: <><Term id="support">停損</Term>（元）</>, num: true, cellClassName: 'level-stop', cell: (action) => actionLevels(action)?.stop ?? '' },
+    { key: 'target', header: <><Term id="target">目標一</Term>（元）</>, num: true, cellClassName: 'level-target', cell: (action) => actionLevels(action)?.target ?? '' },
   ]
   const day: Column<ActionSummary> = { key: 'day', header: '資料日', num: true, cell: actionDataDay }
   const link: Column<ActionSummary> = { key: 'link', header: <span className="sr-only">策略總表</span>, cell: (action) => <Link className="text-link" to={researchPath(action)}>{tier === 3 ? NEAR_RESEARCH_LINK : RESEARCH_LINK}</Link> }
@@ -133,7 +133,7 @@ function tierColumns(context: RowContext): ReadonlyArray<Column<ActionSummary>> 
     return [
       { key: 'rank', header: '名次', cell: (action) => <span className="candidate-rank" aria-label={`第 ${action.candidate?.rank ?? ''} 名`}>{rankLabel(action)}</span> },
       stock, status, close, ...levels,
-      { key: 'total', header: <Term id="candidate_score">總分</Term>, num: true, cell: (action) => action.candidate ? formatCandidateScore(action.candidate.total_score) : '' },
+      { key: 'total', header: <><Term id="candidate_score">總分</Term>（0–100）</>, num: true, cell: (action) => action.candidate ? formatCandidateScore(action.candidate.total_score) : '' },
       day, link,
     ]
   }
@@ -162,9 +162,9 @@ function ActionCard({ action, context }: { action: ActionSummary; context: RowCo
       {levels && (
         // Only the levels the row has; a blank level is left out, not shown as 0 or a dash (UI_COPY_SPEC §5).
         <dl className="candidate-mini-levels">
-          {levels.entry && <div><dt>進場區</dt><dd className="level-entry">{levels.entry}</dd></div>}
-          {levels.stop && <div><dt>停損</dt><dd className="level-stop">{levels.stop}</dd></div>}
-          {levels.target && <div><dt>目標</dt><dd className="level-target">{levels.target}</dd></div>}
+          {levels.entry && <div><dt>進場區（元）</dt><dd className="level-entry">{levels.entry}</dd></div>}
+          {levels.stop && <div><dt>停損（元）</dt><dd className="level-stop">{levels.stop}</dd></div>}
+          {levels.target && <div><dt>目標一（元）</dt><dd className="level-target">{levels.target}</dd></div>}
         </dl>
       )}
       {tier === 2 && <div className="small-note">{conditionalNote(action, context.candidateListSize)}</div>}

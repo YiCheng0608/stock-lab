@@ -168,3 +168,10 @@ check(latestCutoff.includes('class="cutoff-panel"') && latestCutoff.includes('ar
 check(latestCutoff.indexOf('cutoff-toggle') < latestCutoff.indexOf('<form id="stock-cutoff-form" class="overview-cutoff-control"') && latestCutoff.includes('套用截止'), 'the toggle precedes the unchanged cutoff form')
 const appliedCutoff = renderToStaticMarkup(<StockCutoffControl asOf="2026-10-20" onApply={() => undefined} />)
 check(appliedCutoff.includes('class="cutoff-panel open"') && appliedCutoff.includes('aria-expanded="true"') && appliedCutoff.includes('研究截止日期：2026/10/20 ▾') && appliedCutoff.includes('value="2026-10-20"'), 'an applied cutoff starts open and shows its date')
+// #463 (UI_COPY_SPEC §8.2 研究截止日期): say what the cutoff does and which day 「最新資料」 is.
+const CUTOFF_MEANING = '只用這一天收盤（含）以前的資料判斷研究條件、研究動作與候選，用來回看當時會怎麼判斷'
+const latestDated = renderToStaticMarkup(<StockCutoffControl asOf="" effectiveDate="2026-11-03" onApply={() => undefined} />)
+check(latestDated.includes('研究截止日期：最新資料（2026/11/03） ▸'), `no cutoff: the toggle names the actual data day: ${latestDated.slice(0, 240)}`)
+check(latestDated.includes(CUTOFF_MEANING) && latestDated.includes('空白或按「最新資料」時用 2026/11/03（該股最近一個有資料的交易日）'), 'the form explains the cutoff and the latest data day')
+check(latestDated.includes('頁首收盤、K 線與新聞時間線不受影響'), 'the form still says the header, K-line and news are unaffected')
+check(latestCutoff.includes(CUTOFF_MEANING) && !latestCutoff.includes('（該股最近一個有資料的交易日）'), 'without a known day the date part is left out')
