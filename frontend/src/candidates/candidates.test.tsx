@@ -10,6 +10,7 @@ import {
   NOTE_PENDING_TEXT,
   NOT_COMPUTED_TEXT,
   PARTIAL_NOTE,
+  candidateGroupState,
   candidateGroupText,
   candidateNoteMeta,
   candidateNoteView,
@@ -56,6 +57,25 @@ for (const version of ['v1', 'v2', 'v3']) {
 check(marketSourceLabel('tpex_3insti+tpex_margin') === '證券櫃檯買賣中心' && marketSourceLabel(null) === '來源未提供', 'market sources are named')
 check(candidateGroupText(completeItem().groups[0]) === 'AI 伺服器（題材，第 2 名／11）', 'ranked group shows board and rank')
 check(candidateGroupText(completeItem().groups[1]) === '電腦及週邊（產業，當日未排名）', 'unranked group says so')
+// #453: a partial group is ranked on /themes but not used by the score; it is never called unranked.
+const pendingGroup = { ...completeItem().groups[0], group_id: 'official-industry-shipping', name: '航運', board: 'industry', qualified: false, rank: null, board_size: null, board_percentile: null, data_quality: 'partial' }
+check(candidateGroupText(pendingGroup) === '航運（產業，事件資料待補，未計入族群分）', `partial group says why it did not count: ${candidateGroupText(pendingGroup)}`)
+check(candidateGroupState(completeItem().groups[0]) === 'ranked' && candidateGroupState(pendingGroup) === 'pending' && candidateGroupState(completeItem().groups[1]) === 'unranked', 'three group states')
+for (const quality of ['insufficient_members', 'insufficient_data', null]) {
+  check(candidateGroupText({ ...pendingGroup, data_quality: quality }) === '航運（產業，當日未排名）', `${quality} group is unranked`)
+}
+{
+  const pendingList = listResponse()
+  pendingList.items[1] = { ...pendingList.items[1], groups: [pendingGroup] }
+  const markup = render(<CandidatesSection data={pendingList} loading={false} error={null} />)
+  const cell = slice(slice(markup, '<table', '</table>'), 'data-candidate-rank="2"', '</tr>')
+  const card = slice(markup, 'data-candidate-card="2"', '</article>')
+  for (const [where, part] of [['table', cell], ['card', card]]) {
+    check(part.replace(/<[^>]+>/g, '').includes('航運（產業，事件資料待補，未計入族群分）'), `${where}: partial group text`)
+    check(/<button[^>]*>事件資料待補<\/button>/.test(part), `${where}: 「事件資料待補」 opens its glossary term`)
+    check(!part.includes('當日未排名'), `${where}: partial group is not called unranked`)
+  }
+}
 check(candidateSourceText(completeItem()).includes('新聞方向 LLM 判讀 news_v1（推論）'), 'news source names the prompt version and is inference')
 
 // ---- detail content under each today row (the table's levels and total are checked in today/today.test.tsx) ----
