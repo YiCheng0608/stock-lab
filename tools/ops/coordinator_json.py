@@ -1,7 +1,8 @@
 """JSON helper for the coordinator scripts dispatch.sh, close_task.sh, patrol.sh and monitor.sh (#282, #316).
 
 Git Bash has no jq, so the scripts pipe orca and gh JSON through this file; event_queue.py
-imports the PR helpers (latest_checks, check_state, pr_line). Every
+imports the PR helpers (latest_checks, check_state, pr_line) and the coordinator's comment
+mark (coordinator_comment, without_mark; #440). Every
 subcommand reads one JSON document on stdin and prints plain text; it exits 1 when the
 value is missing or the condition is false, so a script can test the exit code.
 
@@ -25,6 +26,9 @@ value is missing or the condition is false, so a script can test the exit code.
                       the answer has no data.repository (a GraphQL error)
   questions-query     the GraphQL query whose answer questions reads (no stdin)
   utf8 FILE           exit 0 when FILE is non-empty valid UTF-8 (no stdin)
+  comment-body FILE   {"body": FILE's text with COORDINATOR_MARK as its last line}, the
+                      request comment.sh posts (#440; no stdin); exit 1 when the text is
+                      empty without the mark
   within A B          "yes" when A is B or under B, else "no" (no stdin)
   guard PATH [--residual] [--home H] [--data D]... [--root R]...
                       why close_task.sh must not delete PATH, or nothing (no stdin)
@@ -191,6 +195,31 @@ def one_line(text: str, width: int = 80) -> str:
     return line if len(line) <= width else line[: width - 1] + "…"
 
 
+# The last line of every comment the coordinator posts (comment.sh, #440): an HTML comment,
+# so GitHub does not show it. The event monitor queues such a comment without waking the
+# coordinator. Every session uses the same GitHub account, so the author tells nothing; a
+# comment without this line (an engineer's, the user's) wakes as before. It goes last
+# because the comment type (提問：, 決定：, ...) is read from the first line.
+COORDINATOR_MARK = "<!-- stock-lab:coordinator -->"
+
+
+def coordinator_comment(body) -> bool:
+    lines = (body or "").rstrip().splitlines()
+    return bool(lines) and lines[-1].strip() == COORDINATOR_MARK
+
+
+def without_mark(body) -> str:
+    """The body as the reader sees it: the mark line taken off."""
+    if not coordinator_comment(body):
+        return body or ""
+    return body.rstrip().rsplit(COORDINATOR_MARK, 1)[0].rstrip()
+
+
+def marked_body(text: str) -> str:
+    text = text.lstrip("\ufeff").rstrip()
+    return text if coordinator_comment(text) else f"{text}\n\n{COORDINATOR_MARK}"
+
+
 def latest_checks(rollup) -> list[dict]:
     """The newest run of each check in a statusCheckRollup."""
     # A newer run of the same check replaces the older one (a cancelled run or an
@@ -350,6 +379,15 @@ def main(argv: list[str]) -> int:
         except (OSError, UnicodeDecodeError):
             return 1
         return 0 if text.strip() else 1
+    if command == "comment-body":
+        with open(args[0], encoding="utf-8") as handle:
+            text = handle.read()
+        if not without_mark(text.lstrip("\ufeff")).strip():
+            print("本文除了統籌標記之外是空的", file=sys.stderr)
+            return 1
+        # ASCII JSON: nothing on the way to gh depends on the console's code page.
+        print(json.dumps({"body": marked_body(text)}))
+        return 0
     if command == "within":
         print(
             "yes"

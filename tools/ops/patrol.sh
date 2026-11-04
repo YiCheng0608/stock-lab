@@ -16,7 +16,8 @@
 #   --session-id ID   default $CLAUDE_CODE_SESSION_ID
 #   --terminal H      default $ORCA_TERMINAL_HANDLE
 #   --done X          mark events handled before listing the rest: X is an event id, or
-#                     a seq for every pending event up to it; repeatable
+#                     a seq for every event not done up to it (pending or quiet, #440);
+#                     repeatable
 #   --max-gh N        at most N gh calls, default 1 (the questions); 0 prints the
 #                     questions as not read (未查完)
 #   --take-over       overwrite another session's heartbeat younger than an hour (a new
