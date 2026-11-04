@@ -29,6 +29,7 @@ from app.models import (
 )
 from app.tracking import (
     ROUND_TRIP_TRANSACTION_COST_BPS,
+    TRACKING_RULES,
     TrackBar,
     TrackLevels,
     settle,
@@ -93,7 +94,8 @@ def track_bar(day, ohlc, *, factor=1.0, suspended=False, gap=False, volume=1000)
 
 def path_of(*ohlcs, levels=LEVELS, **kwargs):
     days = sessions_after(PLAN_DAY, len(ohlcs))
-    return track_path(levels, [track_bar(d, o, **kwargs) for d, o in zip(days, ohlcs)])
+    bars = [track_bar(d, o, **kwargs) for d, o in zip(days, ohlcs)]
+    return track_path(levels, bars, rules=TRACKING_RULES)
 
 
 # ---- app.tracking: the shared session rules ----
@@ -155,7 +157,7 @@ def test_a_suspended_session_infers_no_trigger():
         track_bar(days[1], (100.0, 100.0, 100.0, 100.0), volume=0),  # zero-volume flat
         track_bar(days[2], FILL, gap=True),  # an official interval hid a session
     ]
-    path = track_path(LEVELS, bars)
+    path = track_path(LEVELS, bars, rules=TRACKING_RULES)
     assert [s.status for s in path.sessions] == ["suspended"] * 3
     assert not path.executed and not any(s.comparable for s in path.sessions)
     assert "missing market session" in path.sessions[2].reason
@@ -185,19 +187,28 @@ def test_settle_nets_the_cost_and_marks_short_or_suspended_windows_incomparable(
     assert short["final_status"] == "incomparable" and short["return_or_risk"] is None
     days = sessions_after(PLAN_DAY, 2)
     suspended = track_path(
-        LEVELS, [track_bar(days[0], FILL), track_bar(days[1], FLAT, suspended=True)]
+        LEVELS,
+        [track_bar(days[0], FILL), track_bar(days[1], FLAT, suspended=True)],
+        rules=TRACKING_RULES,
     )
     assert settle(suspended, 2)["incomparable_reason"] == (
         "suspended or otherwise non-comparable session in horizon"
     )
 
 
-# ---- app.domain: plan_tracking_v1 transitions ----
+# ---- app.domain: plan transitions ----
 
 
 def test_plan_transitions_only_move_forward():
     assert PLAN_OPEN_STATUSES == {"pending", "triggered"}
-    for terminal in ("target_hit", "invalidated", "incomparable", "expired", "closed"):
+    for terminal in (
+        "target_hit",
+        "invalidated",
+        "incomparable",
+        "expired",
+        "closed",
+        "not_entered",
+    ):
         assert PLAN_STATUS_TRANSITIONS[terminal] == frozenset()
         assert not validate_plan_status_transition(terminal, "pending").valid
     assert PLAN_STATUS_TRANSITIONS["cancelled"] == frozenset()
@@ -362,7 +373,7 @@ def test_a_plan_copies_the_signal_levels_and_versions(db):
         version.id,
         version.formula_version,
         "candidate_score_v1",
-        "plan_tracking_v1",
+        "plan_tracking_v2",
     )
     assert (plan.plan_date, plan.earliest_execution_date) == (
         PLAN_DAY,
@@ -707,6 +718,49 @@ def test_rerunning_the_same_target_date_changes_nothing(db):
     after = snapshot(db, plan)
     assert after == before
     assert after[0]["updated_at"] == RUN_AT
+
+
+GAP_OVER_TARGET = (104.0, 105.0, 103.5, 104.5)  # opens at or above 103.2
+
+
+def test_each_plan_keeps_its_own_tracking_rules(db):
+    # A plan_tracking_v1 plan made before #444 is still updated with tracking_v1.
+    old_instrument, old_plan = new_plan(db, "9101")
+    old_plan.tracking_version = "plan_tracking_v1"
+    db.commit()
+    instrument, plan = new_plan(db, "9102")
+    assert plan.tracking_version == "plan_tracking_v2"
+    follow(db, old_instrument, GAP_OVER_TARGET, INSIDE)
+    days = follow(db, instrument, GAP_OVER_TARGET, INSIDE)
+    assert run(db, days[-1])["transitions"] == {
+        "pending->not_entered": 1,
+        "pending->target_hit": 1,
+    }
+    assert (old_plan.status, old_plan.tracking_version) == (
+        "target_hit",
+        "plan_tracking_v1",
+    )
+    assert old_plan.execution_price == pytest.approx(104.0 * BUY)
+    assert old_plan.outcome_price == pytest.approx(103.2 * SELL)
+    # tracking_v2: the fill session opened over the first target, so no entry.
+    assert (plan.status, plan.status_reason, plan.outcome_date) == (
+        "not_entered",
+        "gap_above_target",
+        days[0],
+    )
+    assert plan.execution_date is None and plan.execution_price is None
+    assert plan.outcome_price is None and plan.result_return is None
+    assert plan.result_comparable is None and plan.data_quality == "complete"
+    assert [
+        (r.status, r.entry_trigger, r.execution_price) for r in session_rows(db, plan)
+    ] == [
+        ("not_entered", True, None),
+        ("not_entered", False, None),
+    ]
+    # Both ended: a rerun of the same date reads neither again.
+    before = snapshot(db, plan), snapshot(db, old_plan)
+    assert run(db, days[-1])["plans_checked"] == 0
+    assert (snapshot(db, plan), snapshot(db, old_plan)) == before
 
 
 def test_bars_after_the_target_date_are_not_used(db):

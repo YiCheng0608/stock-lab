@@ -82,6 +82,9 @@ from app.theme_table import THEME_CANDIDATE_GROUP_TYPE, THEME_GROUP_TYPE
 from app.tracking import (
     EXECUTION_SLIPPAGE_BPS,
     ROUND_TRIP_TRANSACTION_COST_BPS,
+    TRACKING_RULES,
+    TRACKING_RULES_V1,
+    TRACKING_RULES_V2,
     TRACKING_WINDOW_SESSIONS,
     TrackBar,
     TrackLevels,
@@ -5302,6 +5305,7 @@ def _evaluate_signal_tracking(
                         "execution_price": None,
                         "comparable": False,
                         "data_quality": "incomplete",
+                        "tracking_rules": TRACKING_RULES,
                     },
                 )
             signal.data_quality = "incomplete"
@@ -5328,10 +5332,11 @@ def _evaluate_signal_tracking(
         else None
     )
     signal.data_quality = signal.data_quality or "complete"
-    path = track_path(track_levels(signal), tracked)
-    if path.executed:
-        signal.execution_date = path.execution_date
-        signal.execution_price = path.execution_price
+    path = track_path(track_levels(signal), tracked, rules=TRACKING_RULES)
+    # A recomputation under newer rules may no longer fill (tracking_v2 does
+    # not enter on a gap beyond the target or the invalid price).
+    signal.execution_date = path.execution_date if path.executed else None
+    signal.execution_price = path.execution_price if path.executed else None
     evaluations: list[SignalEvaluation] = []
     for bar, session in zip(bars, path.sessions):
         chip = db.scalar(
@@ -5401,7 +5406,13 @@ def _evaluate_signal_tracking(
             },
         )
         evaluations.append(evaluation)
-    if not path.executed:
+    if path.skip_reason is not None:
+        # tracking_v2: the fill session opened beyond the target or the
+        # invalid price, so the entry is never taken; the signal ends now
+        # instead of staying conditional (or keeping a v1 outcome) for the
+        # rest of the window.
+        _set_signal_status(signal, "expired")
+    elif not path.executed:
         # A daily run may only have a partial post-signal history.  Keep the
         # conditional/observation state until the full 20-session window is
         # available; otherwise a T+5 run would permanently block T+20 OOS.
@@ -5429,8 +5440,24 @@ def evaluate(*, init_schema: bool = True) -> dict[str, Any]:
     if init_schema:
         init_db()
     with SessionLocal() as db:
+        # A backtest run tracks its own signals with its cutoff and request
+        # key version; the daily step never re-tracks (rewrites) them.  A
+        # signal whose 20-session window is complete and whose settlements
+        # were computed with tracking_v1 keeps those rows: the history is not
+        # rewritten with newer rules (#444).
+        complete_windows = (
+            select(SignalEvaluation.signal_id)
+            .group_by(SignalEvaluation.signal_id)
+            .having(func.count(SignalEvaluation.id) >= TRACKING_WINDOW_SESSIONS)
+        )
+        finished_v1 = select(SignalSettlement.signal_id).where(
+            SignalSettlement.tracking_rules == TRACKING_RULES_V1,
+            SignalSettlement.signal_id.in_(complete_windows),
+        )
         signals = db.scalars(
             select(Signal).where(
+                Signal.signal_key.not_like(f"{BACKTEST_SIGNAL_PREFIX}%"),
+                Signal.id.not_in(finished_v1),
                 Signal.status.in_(
                     {
                         "conditional",
@@ -5440,7 +5467,7 @@ def evaluate(*, init_schema: bool = True) -> dict[str, Any]:
                         "observation",
                         "incomparable",
                     }
-                )
+                ),
             )
         ).all()
         if not signals:
@@ -5493,6 +5520,29 @@ def _backtest_assessment(metadata: dict[str, Any], *, status: str) -> str:
     if sample_days < 60 or covered_days is None or covered_days <= 93:
         return "insufficient_sample"
     return "technical_only"
+
+
+# technical backtest request keys are f"{BACKTEST_REQUEST_PREFIX}:{version}:..."
+# (docs/spec/tracking.md 口徑版本); a new tracking rule version is a new key, so
+# a run with the older rules keeps its signals and settlements as they are.
+BACKTEST_REQUEST_PREFIX = "technical-backtest"
+BACKTEST_TRACKING_RULES = {"v1": TRACKING_RULES_V1, "v2": TRACKING_RULES_V2}
+# The key version of the current rules (app.tracking.TRACKING_RULES).
+BACKTEST_TRACKING_VERSION = next(
+    version
+    for version, rules in BACKTEST_TRACKING_RULES.items()
+    if rules == TRACKING_RULES
+)
+BACKTEST_SIGNAL_PREFIX = "backtest-"
+
+
+def backtest_tracking_version(request_key: str | None) -> str | None:
+    """The tracking version of a technical backtest request key (v1, v2, ...)."""
+
+    parts = (request_key or "").split(":")
+    if len(parts) >= 2 and parts[0] == BACKTEST_REQUEST_PREFIX:
+        return parts[1]
+    return None
 
 
 def summarize_backtest(db: Session, run_id: int | None = None) -> dict[str, Any]:
@@ -5593,6 +5643,7 @@ def _backtest_summary(
             "status": run.status,
             "run_type": run.run_type,
             "request_key": run.request_key,
+            "tracking_version": backtest_tracking_version(run.request_key),
             "run_date": run.run_date.isoformat() if run.run_date else None,
             "data_as_of": run.data_as_of,
             "metadata": metadata,
@@ -5740,7 +5791,8 @@ def backtest(
     init_db()
     _MARGIN_LIST_CACHE.clear()
     request_key = (
-        f"technical-backtest:v1:{start_date.isoformat()}:{end_date.isoformat()}"
+        f"{BACKTEST_REQUEST_PREFIX}:{BACKTEST_TRACKING_VERSION}:"
+        f"{start_date.isoformat()}:{end_date.isoformat()}"
     )
     if registry is not None:
         request_key += ":research:" + ",".join(registry)
@@ -5780,6 +5832,8 @@ def backtest(
         # inspect or resume by request_key.
         metadata: dict[str, Any] = {
             "workflow": "technical_backtest_v1",
+            "tracking_version": BACKTEST_TRACKING_VERSION,
+            "tracking_rules": TRACKING_RULES,
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
             "data_cutoff": f"T close through {end_date.isoformat()} 13:30 Asia/Taipei",

@@ -1,11 +1,12 @@
-"""Daily update of the user tracking plans (docs/spec/tracking.md 使用者追蹤計畫, plan_tracking_v1).
+"""Daily update of the user tracking plans (docs/spec/tracking.md 使用者追蹤計畫).
 
 The ``plan_tracking`` step of ``worker.cli daily`` (after a successful collect;
 it needs no analyze because a plan keeps its own copy of the levels) and
 ``worker.cli track-plans``.  Every open plan is recomputed from its plan date
 with the shared tracking rules (``app.tracking.track_path``, the same as the
 system signal tracking): the window is the stock's own first 20 bars after the
-plan date, as for a signal.  A stock that still has fewer bars once the market
+plan date, as for a signal, with the tracking rules of the plan's
+``tracking_version`` (``app.domain.PLAN_TRACKING_RULES``).  A stock that still has fewer bars once the market
 has had MARKET_SESSION_LIMIT sessions after the plan date ends as
 ``incomparable`` (``insufficient_sessions``).  No bar after the target date, or
 after that last market session, is read, so the same stored data gives the
@@ -26,7 +27,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.clock import utcnow
-from app.domain import PLAN_OPEN_STATUSES, validate_plan_status_transition
+from app.domain import (
+    PLAN_OPEN_STATUSES,
+    PLAN_TRACKING_RULES,
+    validate_plan_status_transition,
+)
 from app.models import MarketBar, TrackingPlan, TrackingPlanSession
 from app.tracking import AMBIGUOUS_REASON, TrackPath, settle, track_path
 from app.tracking_plans import claim_plan
@@ -101,6 +106,14 @@ def plan_outcome(
     elif path.first_outcome == "invalidated":
         result.update(status="invalidated", status_reason="invalid_price_touched")
         settled_at = path.outcome_session_no
+    elif path.skip_reason is not None and path.skip_session_no is not None:
+        # tracking_v2: the fill session opened beyond the target or the
+        # invalid price, so the plan is never entered (an end, no result).
+        result.update(
+            status="not_entered",
+            status_reason=path.skip_reason,
+            outcome_date=sessions[path.skip_session_no - 1].trading_date,
+        )
     elif count >= window and path.executed:
         result.update(status="closed", status_reason="window_ended_after_entry")
         settled_at = window
@@ -211,7 +224,11 @@ def track_plan(
     bars, tracked = pipeline._tracking_inputs(
         db, plan.instrument_id, plan.plan_date, evaluation_cutoff=cutoff
     )
-    path = track_path(pipeline.track_levels(plan), tracked)
+    path = track_path(
+        pipeline.track_levels(plan),
+        tracked,
+        rules=PLAN_TRACKING_RULES[plan.tracking_version],
+    )
     outcome = plan_outcome(path, bars, plan.window_sessions, market_limit_reached)
     previous = plan.status
     if not claim_plan(db, plan):

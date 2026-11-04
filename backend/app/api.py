@@ -341,6 +341,7 @@ def settlement_dict(item: SignalSettlement) -> dict[str, Any]:
         "execution_price": item.execution_price,
         "comparable": item.comparable,
         "data_quality": item.data_quality,
+        "tracking_rules": item.tracking_rules,
     }
 
 
