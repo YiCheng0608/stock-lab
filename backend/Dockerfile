@@ -58,7 +58,7 @@ RUN pip install --no-cache-dir -r /tmp/requirements/requirements.txt \
         -c /tmp/requirements/validation-requirements.lock.txt \
     && rm -rf /tmp/requirements
 # The CI repository job's tools (ruff; PyYAML for checks.py and tools/ci's unittest), for the
-# local checks run in the container (docs/GITHUB_WORKFLOW.md 本機檢查, #339). The same pins as
+# local checks run in the container (docs/WORKFLOW.md 本機檢查, #339). The same pins as
 # that job installs: tools/ci/test_checks.py holds the two equal.
 RUN pip install --no-cache-dir ruff==0.14.14 PyYAML==6.0.3
 

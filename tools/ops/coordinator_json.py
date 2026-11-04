@@ -253,7 +253,7 @@ QUESTIONS_QUERY = (
     f"pullRequests(states:OPEN,first:{PAGE}){{totalCount {_THREAD.format(n=PAGE)}}}"
     "}}"
 )
-# docs/GITHUB_WORKFLOW.md 留言類型: the type is how the first line starts (blank lines,
+# docs/WORKFLOW.md 留言類型: the type is how the first line starts (blank lines,
 # spaces and a BOM before it are fine; bold or a quote is not the type). A comment is
 # known by the id in its url, the same #issuecomment-<id> a 決定 links to, so no
 # GraphQL database id is read (GitHub deprecates databaseId for fullDatabaseId).

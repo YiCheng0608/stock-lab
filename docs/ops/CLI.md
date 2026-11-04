@@ -55,7 +55,7 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 
 ## 測試與驗證
 
-命令見[工作手冊](../GITHUB_WORKFLOW.md#本機檢查)，測試資料與落盤原則見 [AGENTS](../../AGENTS.md#工程原則)。
+命令見[工作手冊](../WORKFLOW.md#本機檢查)，測試資料與落盤原則見 [AGENTS](../../AGENTS.md#工程原則)。
 
 - 後端測試用隔離 DB（`backend/tests/conftest.py` 自動指派）。
 - 瀏覽器與端到端驗證用隔離 DB 或 `tools/ops/copy_db.py` 產生的唯讀副本（放 worktree `.local/verify/`），不指向正式或其他 `.local` DB。五個主導航的端到端驗證照 skill [verify-stock-lab](../../.claude/skills/verify-stock-lab/SKILL.md) 執行（副本啟 API 與 `vite preview`、截圖、證據推 `pr-assets/<issue>`）。

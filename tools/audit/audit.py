@@ -14,7 +14,7 @@ its ``stock.db``, a hard link included) or ``--out`` is inside that directory
 run that reaches 18:30 stops before the next item, marks the rest
 undetermined and exits 3 (rerun after 21:30, ``--only`` the items left).
 
-Items (docs/GITHUB_WORKFLOW.md 任務流程第 6 步 lists how they are read):
+Items (docs/WORKFLOW.md 任務流程第 6 步 lists how they are read):
 bars_integrity, bars_coverage, bars_raw_values, bars_raw_missing (A4),
 bars_raw_missing_inactive, chips_raw_institutional (A3), chips_raw_margin,
 actions_fields (A1), actions_missing (A2), provenance, indicators,

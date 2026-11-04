@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Clean up a merged task (Issue #282; docs/GITHUB_WORKFLOW.md 任務流程第 6 步). Checks first,
+# Clean up a merged task (Issue #282; docs/WORKFLOW.md 任務流程第 6 步). Checks first,
 # deletes nothing unless every check passes:
 #   - the task's PR is merged and CI on its target branch (the PR's baseRefName: master,
 #     or one of integration_branches below, #332; any other target is refused) is green
@@ -46,7 +46,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
 
 # The long-lived integration branches a task PR may merge into besides master (#332;
-# docs/GITHUB_WORKFLOW.md 長期整合分支); a PR into any other branch (release/*) is refused.
+# docs/WORKFLOW.md 長期整合分支); a PR into any other branch (release/*) is refused.
 # tools/ci/test_checks.py (WorkflowTriggers) reads this line: CI runs on PRs into and
 # pushes to master, release/** and each of these. None at present: the Docker one (#331)
 # reached master in PR #420 and was taken off in #428.

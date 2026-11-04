@@ -6,7 +6,7 @@
 #
 # Usage: orca_wake.sh TERMINAL TEXT
 #   Sends TEXT with Enter into TERMINAL only once `orca terminal wait --for tui-idle`
-#   answers satisfied:true (AGENTS #282): text sent into a busy session or an open
+#   answers satisfied:true (GUARDRAILS #282): text sent into a busy session or an open
 #   question could answer it.
 # Exit: 0 sent; 3 not idle (no answer, a timeout or a missing terminal included); 1 the
 #   send failed. Environment: ORCA_EXE (default orca on PATH, then

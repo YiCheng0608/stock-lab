@@ -29,7 +29,7 @@
 # with it), `docker compose up -d --no-build --wait`, read back that each service runs its
 # tagged image and that the new scheduler's own check (watchdog_helper.py deploy-image) is
 # ok, release the locks and comment on #1. Whether a deploy is authorised is not checked
-# here: deploying is the user's decision (docs/GITHUB_WORKFLOW.md 無人值守運作).
+# here: deploying is the user's decision (docs/COORDINATOR.md 無人值守運作).
 #
 # Usage: deploy.sh <tag> [options]
 #   --checkout DIR      the release checkout; default $STOCK_RELEASE_DIR, then $HOME/stock-lab-release

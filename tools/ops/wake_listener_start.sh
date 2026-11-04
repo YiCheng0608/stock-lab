@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Start the wake listener (tools/ops/wake_listener.py, #338) unless it already runs: the
 # coordinator session runs this when it takes over and when it handles the queue
-# (docs/GITHUB_WORKFLOW.md 統籌 session, 無人值守運作). The listener only wakes the
+# (docs/COORDINATOR.md 統籌 session, 無人值守運作). The listener only wakes the
 # coordinator, so it lives with the coordinator sessions, not as a Windows startup item
 # (the user's decision, #338). It reads the coordinator heartbeat before every wake, so
 # a listener left by an earlier coordinator wakes the new one: it is kept, not replaced.

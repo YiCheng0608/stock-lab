@@ -1,13 +1,13 @@
 <!-- owns: 發佈流程、發佈 tag、部署、部署記錄、版本回退、V1 發佈隔離 -->
 # 發佈與部署
 
-排程在 compose 的 scheduler 容器裡跑 image 內的程式（[scheduler 容器的排程（serve）](ops/SCHEDULING.md#scheduler-容器的排程serve)），新版本只經 [`tools/ops/deploy.sh`](../tools/ops/deploy.sh) 進排程：build 該 tag 的 image、以 tag 名稱標記、`docker compose up -d`，每次部署都有 volume 裡的部署記錄與 #1 留言（#340，接手 #314 的固定 tag 流程）。部署屬使用者決策：由使用者或使用者明確授權的統籌執行（[無人值守運作](GITHUB_WORKFLOW.md#無人值守運作)的「需要使用者的事」）；腳本本身不檢查授權。
+排程在 compose 的 scheduler 容器裡跑 image 內的程式（[scheduler 容器的排程（serve）](ops/SCHEDULING.md#scheduler-容器的排程serve)），新版本只經 [`tools/ops/deploy.sh`](../tools/ops/deploy.sh) 進排程：build 該 tag 的 image、以 tag 名稱標記、`docker compose up -d`，每次部署都有 volume 裡的部署記錄與 #1 留言（#340，接手 #314 的固定 tag 流程）。部署屬使用者決策：由使用者或使用者明確授權的統籌執行（[無人值守運作](COORDINATOR.md#無人值守運作)的「需要使用者的事」）；腳本本身不檢查授權。
 
 ## 流程
 
 V1 之後的發佈（使用者 2026-10-28 決定，取代 [V1 發佈隔離](#v1-發佈隔離g7-窗口專用)的 `release/*` 雙 PR）：
 
-1. **合併**：改動照[任務流程](GITHUB_WORKFLOW.md#任務流程)以 PR 合併進 master，master 上該 merge commit 的 CI 綠。
+1. **合併**：改動照[任務流程](WORKFLOW.md#任務流程)以 PR 合併進 master，master 上該 merge commit 的 CI 綠。
 2. **打 tag**：要發佈的版本範圍經使用者同意後，統籌在該 merge commit 打 annotated tag 並推上 GitHub。名稱 `v<主>.<次>.<修>`（tag 也是 image 的 tag，只能有英數字、`_`、`.`、`-`）；推上後不移動、不刪，要修正就打下一個。
 
    ```text
@@ -23,7 +23,7 @@ V1 之後的發佈（使用者 2026-10-28 決定，取代 [V1 發佈隔離](#v1-
 `deploy.sh <tag> [--checkout DIR] [--project NAME] [--operator NAME] [--wait-timeout SEC] [--web-port N] [--api-port N] [--env-file PATH] [--no-comment] [--python EXE]`。
 
 - **發佈 checkout**（`--checkout`，預設 `STOCK_RELEASE_DIR`、再來是 `~/stock-lab-release`）是 compose 的 project 目錄：tag 在這裡 checkout，build context 與 `docker-compose.yml` 都是該 tag 的；`.env`（[容器內的 claude 與 gh 認證（.env）](ops/SETUP.md#容器內的-claude-與-gh-認證env)，不進 Git、git 忽略它，不算未 commit 的改動）也放在這裡。要從另一個 checkout 執行：checkout tag 會改寫發佈 checkout 的檔案，腳本在發佈 checkout 裡就拒絕。
-- **compose project**（`--project`，預設 `STOCK_COMPOSE_PROJECT`、再來是 `stock-lab`）：image 是 `<project>-backend:<tag>`（api、scheduler）與 `<project>-web:<tag>`，資料在 volume `<project>_stock-data`。`COMPOSE_PROJECT_NAME` 不採用：任務 session 的它是 `task-<issue>`（[本機檢查](GITHUB_WORKFLOW.md#本機檢查)）。
+- **compose project**（`--project`，預設 `STOCK_COMPOSE_PROJECT`、再來是 `stock-lab`）：image 是 `<project>-backend:<tag>`（api、scheduler）與 `<project>-web:<tag>`，資料在 volume `<project>_stock-data`。`COMPOSE_PROJECT_NAME` 不採用：任務 session 的它是 `task-<issue>`（[本機檢查](WORKFLOW.md#本機檢查)）。
 - `--wait-timeout`：`compose up --wait` 等服務 healthy 的秒數，預設 300。`--no-comment` 不在 #1 留言，只用於臨時 checkout 與 project 的演練（[`tools/compose/deploy_smoke.sh`](../tools/compose/deploy_smoke.sh)，CI `compose` job）。
 - `WEB_PORT`、`API_PORT`、`STOCK_ENV_FILE`（[Docker compose](ops/SETUP.md#docker-compose)）：呼叫端 shell 裡的這三個變數一律丟掉，避免剛跑過 smoke 的 shell 把正式 project 換到別的埠或 env file。compose 改從發佈 checkout 的 `.env`、再來是 compose 檔的預設取得；要指定時用 `--web-port`、`--api-port`、`--env-file`（演練用）。
 

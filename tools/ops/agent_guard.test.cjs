@@ -77,7 +77,7 @@ describe('Bash rules', () => {
 
   test('ignores quoted text, heredoc bodies and comments', () => {
     for (const command of [
-      'grep -n "git stash" docs/GITHUB_WORKFLOW.md',
+      'grep -n "git stash" docs/WORKFLOW.md',
       "git commit -m 'Block git clean -fdx and git push --force'",
       'gh issue comment 1 --body "do not run git stash clear; use push"',
       'cat > note.md <<\'EOF\'\ngit stash\ngit clean -fdx\nEOF\ngit status',

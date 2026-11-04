@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Coordinator event monitor (Issue #316; docs/GITHUB_WORKFLOW.md 無人值守運作,
+# Coordinator event monitor (Issue #316; docs/COORDINATOR.md 無人值守運作,
 # docs/ops/MONITOR.md): resident under Windows Task Scheduler
 # (tools/ops/Register-Monitor.ps1), or one poll a minute (--once) as a job of the
 # scheduler container's `worker.cli serve` (#338). No LLM: every --interval seconds it
@@ -267,7 +267,7 @@ poll() {
     eq note-wake "$logs" "$now" 0 - no_heartbeat
     notes="$notes wake=failed(no_heartbeat)"
   elif [ "$wake" = 1 ]; then
-    # The waker sends only into an idle terminal (AGENTS #282); a failed wake is tried
+    # The waker sends only into an idle terminal (GUARDRAILS #282); a failed wake is tried
     # again after 10 minutes.
     text="有 $pending 個事件，請處理佇列：bash tools/ops/patrol.sh（處理完以 --done 標記）"
     run_waker "$terminal" "$text"
