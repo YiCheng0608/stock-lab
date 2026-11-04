@@ -15,7 +15,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Callable, Iterable
 
 from sqlalchemy import and_, desc, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from .coverage import verified_taiex_sessions
 from .decision_market_reads import (
@@ -30,6 +30,7 @@ from .domain import (
     RuleEvaluation,
     signal_confidence_semantics,
 )
+from .latest_rows import ranked_ids
 from .level_semantics import (
     build_level_semantics,
     build_stop_price_semantics,
@@ -62,6 +63,9 @@ from .models import (
     ThemeGroup,
 )
 
+
+# Chip rows per instrument a decision context keeps (newest first).
+CONTEXT_CHIP_ROWS = 120
 
 ACTION_LABELS = {
     "conditional_entry": "條件進場",
@@ -222,7 +226,13 @@ def latest_official_run(db: Session) -> IngestionRun | None:
         .order_by(desc(IngestionRun.updated_at), desc(IngestionRun.id))
         .limit(1)
     )
-    return db.get(IngestionRun, run_id) if run_id is not None else None
+    # The run's metadata_json is not read by the pages and is large (9.9 MB on
+    # the production copy's latest collect); it loads only if accessed (#462).
+    return (
+        db.get(IngestionRun, run_id, options=[defer(IngestionRun.metadata_json)])
+        if run_id is not None
+        else None
+    )
 
 
 def latest_official_as_of(db: Session) -> tuple[IngestionRun | None, date | None]:
@@ -261,18 +271,28 @@ def _prepare_decision_context(
 
     chips_by_instrument: dict[int, list[ChipSnapshot]] = defaultdict(list)
     if ids:
-        chip_query = select(ChipSnapshot).where(ChipSnapshot.instrument_id.in_(ids))
+        # Each instrument's newest 120 chip rows only; loading the whole history
+        # and keeping 120 hydrated about 12,000 rows per action page (#462).
+        chip_filter: tuple[Any, ...] = (ChipSnapshot.instrument_id.in_(ids),)
         if as_of:
-            chip_query = chip_query.where(ChipSnapshot.trading_date <= as_of)
+            chip_filter += (ChipSnapshot.trading_date <= as_of,)
+        chip_order = (desc(ChipSnapshot.trading_date), desc(ChipSnapshot.id))
         for row in db.scalars(
-            chip_query.order_by(
-                ChipSnapshot.instrument_id,
-                desc(ChipSnapshot.trading_date),
-                desc(ChipSnapshot.id),
+            select(ChipSnapshot)
+            .where(
+                ChipSnapshot.id.in_(
+                    ranked_ids(
+                        ChipSnapshot.id,
+                        partition_by=ChipSnapshot.instrument_id,
+                        order_by=chip_order,
+                        where=chip_filter,
+                        limit=CONTEXT_CHIP_ROWS,
+                    )
+                )
             )
+            .order_by(ChipSnapshot.instrument_id, *chip_order)
         ).all():
-            if len(chips_by_instrument[row.instrument_id]) < 120:
-                chips_by_instrument[row.instrument_id].append(row)
+            chips_by_instrument[row.instrument_id].append(row)
 
     signals_by_instrument: dict[int, dict[str, Signal]] = defaultdict(dict)
     strategy_versions_by_instrument: dict[int, dict[str, StrategyVersion]] = (
@@ -316,6 +336,21 @@ def _prepare_decision_context(
                     | (GroupMembership.valid_to >= (as_of or date.max))
                 ),
                 GroupDailyScore.trading_date <= (as_of or date.max),
+                # The first row per (instrument, group) below is the group's
+                # newest score, so older scores are not read: their
+                # details_json (about 37 KB each) was most of this page's JSON
+                # decoding (#462).
+                GroupDailyScore.id.in_(
+                    ranked_ids(
+                        GroupDailyScore.id,
+                        partition_by=GroupDailyScore.group_id,
+                        order_by=(
+                            desc(GroupDailyScore.trading_date),
+                            desc(GroupDailyScore.id),
+                        ),
+                        where=(GroupDailyScore.trading_date <= (as_of or date.max),),
+                    )
+                ),
             )
             .order_by(desc(GroupDailyScore.trading_date), desc(GroupDailyScore.id))
         )
@@ -335,17 +370,33 @@ def _prepare_decision_context(
     # summary only needs instrument-level rows for this page; loading the
     # entire 160k-row table here made an otherwise batched action request spend
     # seconds hydrating unrelated JSON blobs.
+    # Only each key's newest row is used, so only that row is loaded: the
+    # whole history was about 13,700 rows (two JSON columns each) per action
+    # page on the production copy (#462).
     quality_keys = [f"{row.exchange}:{row.symbol}" for row in instrument_rows]
-    quality_query = select(DataQuality).where(
-        DataQuality.entity_type == "instrument",
-        DataQuality.entity_key.in_(quality_keys) if quality_keys else False,
-    )
-    if as_of:
-        quality_query = quality_query.where(DataQuality.as_of_date <= as_of)
-    for row in db.scalars(
-        quality_query.order_by(desc(DataQuality.as_of_date), desc(DataQuality.id))
-    ).all():
-        quality_by_key.setdefault(row.entity_key, row)
+    if quality_keys:
+        quality_filter: tuple[Any, ...] = (
+            DataQuality.entity_type == "instrument",
+            DataQuality.entity_key.in_(quality_keys),
+        )
+        if as_of:
+            quality_filter += (DataQuality.as_of_date <= as_of,)
+        quality_order = (desc(DataQuality.as_of_date), desc(DataQuality.id))
+        for row in db.scalars(
+            select(DataQuality)
+            .where(
+                DataQuality.id.in_(
+                    ranked_ids(
+                        DataQuality.id,
+                        partition_by=DataQuality.entity_key,
+                        order_by=quality_order,
+                        where=quality_filter,
+                    )
+                )
+            )
+            .order_by(*quality_order)
+        ).all():
+            quality_by_key.setdefault(row.entity_key, row)
 
     positions_by_instrument: dict[int, PortfolioPosition] = {}
     if ids:

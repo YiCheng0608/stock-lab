@@ -15,7 +15,7 @@ V1 之後的發佈（使用者 2026-10-28 決定，取代 [V1 發佈隔離](#v1-
    git push origin v1.1.0
    ```
 
-3. **部署**：排程閒置時（避開台北 18:30～21:30 的 daily），在 master 管理 checkout 執行 `bash tools/ops/deploy.sh v1.1.0 --operator "<誰，依據的 #1 留言>"`，見下節。
+3. **部署**：排程閒置時（避開台北 18:30～21:30 的 daily），在 master 管理 checkout 執行 `bash tools/ops/deploy.sh v1.1.0 --operator "<誰，依據的 #1 留言>"`，見下節。tag 比正式 DB 多了 migration 時（`backend/alembic/versions` 有新檔，例如 0024，[#462](https://github.com/YiCheng0608/stock-lab/issues/462)），部署前先照 [安全升級與復原順序](ops/SETUP.md#安全升級與復原順序) 備份並對正式 DB 跑 `init-db`：api 的 readiness 只接受 current head，DB 落後時新 api 拒絕啟動（`v1.2.0` 第一次部署就是這樣失敗，[#456](https://github.com/YiCheng0608/stock-lab/issues/456) 會讓 `deploy.sh` 在換容器前擋下）。
 4. **讀回**：`deploy.sh` 輸出的 JSON 與 #1 留言；`docker compose -p stock-lab ps` 的 image 欄是 `stock-lab-backend:v1.1.0`／`stock-lab-web:v1.1.0`；下一次 daily 的 `schedule_runs.summary_json.runtime` 的 `image`／`head` 是該 tag 的 image 與 commit（[日誌與 run 記錄](ops/SCHEDULING.md#日誌與-run-記錄)）；看門狗的 `invariant_deploy_image` 不留言（[排程看門狗](ops/WATCHDOG.md)）。
 
 ## 部署
