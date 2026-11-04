@@ -104,6 +104,11 @@ const PRODUCT_TIME_ROLE_LABELS: Record<string, string> = {
   earliest_execution_date: '規則最早執行日',
 }
 
+// Technical backtest tracking rules (docs/spec/tracking.md 口徑版本): the version in the run's request key.
+export function backtestTrackingLabel(version: string | null | undefined): string {
+  return `追蹤口徑 ${version || '未記錄'}`
+}
+
 export function productTimeRoleLabel(role: string): string {
   return PRODUCT_TIME_ROLE_LABELS[role] ?? '時間'
 }

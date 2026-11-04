@@ -2361,6 +2361,7 @@ PLAN_STATUS_LABELS = {
     "incomparable": "無法比較",
     "expired": "到期",
     "closed": "期滿結算",
+    "not_entered": "未進場",
     "cancelled": "已取消",
 }
 SESSION_STATUS_LABELS = {
@@ -2370,6 +2371,7 @@ SESSION_STATUS_LABELS = {
     "invalidated": "失效",
     "ambiguous": "順序不明",
     "suspended": "停牌",
+    "not_entered": "未進場",
 }
 PLAN_DATE_LINE = re.compile(r"^計畫資料日 (\S+) · 建立 (\S+)$")
 BADGE_DATE_LINE = re.compile(r"^資料 [0-9]{4}/[0-9]{2}/[0-9]{2}$")

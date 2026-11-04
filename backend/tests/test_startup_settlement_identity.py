@@ -23,6 +23,7 @@ CREATE TABLE signal_settlements (
     incomparable_reason TEXT, source VARCHAR(500), data_time VARCHAR(80),
     execution_date DATE, execution_price FLOAT, comparable BOOLEAN,
     data_quality VARCHAR(30) NOT NULL DEFAULT 'complete',
+    tracking_rules VARCHAR(20) NOT NULL DEFAULT 'tracking_v1',
     {constraint}
 )
 """

@@ -535,6 +535,11 @@ class SignalSettlement(Base):
     data_quality: Mapped[str] = mapped_column(
         String(30), default="complete", server_default="complete"
     )
+    # The app.tracking rule version the result was computed with (0023, #444);
+    # rows from before 0023 are tracking_v1.  The worker always writes it.
+    tracking_rules: Mapped[str] = mapped_column(
+        String(20), server_default="tracking_v1"
+    )
 
 
 class PortfolioPosition(Base):
@@ -846,7 +851,7 @@ class NewsLlmResult(Base):
     source summary are never overwritten; a new prompt version adds rows and
     older rows stay.  ``llm_status`` is ``done``, ``pending`` (retried later),
     ``skipped_stale`` (too old, not sent) or ``rejected`` (failed the summary
-    check, not sent again).
+    check, or left out or wrong in MAX_ITEM_ATTEMPTS answers; not sent again).
     """
 
     __tablename__ = "news_llm_results"

@@ -1,4 +1,4 @@
-import { groupDisplayName, staleCloseDateLabel, stockGroupLabel, researchRequirementLabel, stockDirectoryActionLabel, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productTimeRoleDateTime, productTimeRoleKnown, productTimeRoleLabel, stopPriceFieldLabel } from './presentation'
+import { backtestTrackingLabel, groupDisplayName, staleCloseDateLabel, stockGroupLabel, researchRequirementLabel, stockDirectoryActionLabel, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productTimeRoleDateTime, productTimeRoleKnown, productTimeRoleLabel, stopPriceFieldLabel } from './presentation'
 
 function expect(condition: boolean, message: string): void {
   if (!condition) throw new Error(message)
@@ -70,3 +70,5 @@ expect(staleCloseDateLabel('2026-10-22T00:00:00', '2026-10-22') === null, 'curre
 expect(staleCloseDateLabel('2026-10-14', null) === '（2026/10/14）', 'unknown latest session still dates the close')
 expect(staleCloseDateLabel(null, '2026-10-22') === null, 'no close date, no label')
 expect(staleCloseDateLabel('not a date', '2026-10-22') === null, 'malformed date is not shown')
+expect(backtestTrackingLabel('v2') === '追蹤口徑 v2', 'backtest names its tracking version')
+expect(backtestTrackingLabel(null) === '追蹤口徑 未記錄', 'a run without a version says so')
