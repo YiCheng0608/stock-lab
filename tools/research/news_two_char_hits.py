@@ -12,8 +12,8 @@ source time (``published_at``, else ``collected_at``).  Writes one JSON file:
 per name, the stock, how many items it matched, where (title start, title
 segment, summary segment) and up to ``--examples`` titles with the text around
 the match; and the item ids, so a reader can go back to the rows.  The matcher
-is the one in this checkout (``worker.news_batch.RelationMatcher.from_db``), so
-running it on two commits compares two rule versions on the same data.
+is the one in this checkout (``worker.news_batch.RelationMatcher.from_db``);
+news_relation_diff.py compares two checkouts' rules on the same news.
 """
 
 from __future__ import annotations
