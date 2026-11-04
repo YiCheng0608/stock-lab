@@ -633,7 +633,11 @@ def test_free_memory_is_read_from_the_os():
 
 
 # What reaches into WMI from Python: the wmi package, the WMIC tool, CIM classes.
-WMI_CALL = re.compile(r"\bwmi\b|wmic|Win32_\w+|\bCIM_\w+|psutil", re.IGNORECASE)
+# The class prefixes match without the rest of the name, so a name that is put
+# together ("Win32_" + name) is caught on its first half (#448). Not caught: a name
+# cut inside the prefix ("Win" + "32_OperatingSystem") or built from pieces of the
+# other words; the check reads the source line by line and does not evaluate it.
+WMI_CALL = re.compile(r"\bwmi\b|wmic|Win32_|\bCIM_|psutil", re.IGNORECASE)
 
 
 def _docstring_starts(tree: ast.AST) -> set[tuple[int, int]]:
@@ -694,6 +698,9 @@ def test_the_job_source_has_no_wmi_call():
         "import psutil  # #246\n",
         'run(["wmic", "OS", "get", "FreePhysicalMemory"])  # #246\n',
         'query = "SELECT * FROM Win32_OperatingSystem"  # #246\n',
+        # A class name put together from a prefix and the rest (#448).
+        'query = "SELECT * FROM Win32_" + name  # #246\n',
+        'query = "SELECT * FROM " + "CIM_" + name  # #246\n',
         # A string that is not a docstring is code.
         'def f():\n    x = 1\n    "never WMI (#246)"\n',
         # The mark covers a line of the docstring, not the whole function.

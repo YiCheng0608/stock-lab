@@ -10,7 +10,8 @@ test passed in the docker job (a skip there means the image no longer offers wha
 Three roles, one file:
 
 * a pytest plugin (`-p suite_split --suite-report FILE`) writing the ids a run collected and what
-  each did, with ids relative to backend/ so both jobs name a test the same way;
+  each did, with ids relative to backend/ so both jobs name a test the same way; the backend job
+  runs it under pytest-xdist (#442), where the controller writes the report;
 * `args`: the docker list as pytest arguments;
 * `verify`: the check that fails CI, from the two reports and a collect-only report of the whole
   suite made inside the image.
@@ -74,6 +75,34 @@ def pytest_collection_finish(session) -> None:
     _report["outcomes"] = {}
 
 
+class XdistController:
+    """Under pytest-xdist the controller collects nothing (no pytest_collection_finish there):
+    each worker sends it the node ids it collected, and the workers' reports reach the
+    controller's pytest_runtest_logreport. A node id is its file relative to the rootdir, then
+    its own part, so the file is the rootdir joined with that part."""
+
+    def pytest_xdist_node_collection_finished(self, node, ids) -> None:
+        config = node.config
+        if not config.getoption("suite_report"):
+            return
+        root = Path(config.getoption("suite_root"))
+        for nodeid in ids:
+            path = Path(config.rootpath) / nodeid.partition("::")[0]
+            _ids[nodeid] = node_id(path, nodeid, root)
+        _report["collect_only"] = bool(config.getoption("collectonly"))
+        _report["collected"] = sorted(set(_ids.values()))
+
+
+def pytest_configure(config) -> None:
+    # The xdist hook is known only with xdist loaded; the docker job runs without it.
+    if config.pluginmanager.hasplugin("xdist"):
+        config.pluginmanager.register(XdistController(), "suite_split_xdist")
+
+
+def _is_xdist_worker(config) -> bool:
+    return hasattr(config, "workerinput")
+
+
 def pytest_runtest_logreport(report) -> None:
     key = _ids.get(report.nodeid)
     if key is None:
@@ -92,7 +121,8 @@ def pytest_runtest_logreport(report) -> None:
 
 def pytest_sessionfinish(session) -> None:
     target = session.config.getoption("suite_report")
-    if not target:
+    # A worker saw only its own share of the outcomes; the controller writes the report.
+    if not target or _is_xdist_worker(session.config):
         return
     path = Path(target)
     path.parent.mkdir(parents=True, exist_ok=True)

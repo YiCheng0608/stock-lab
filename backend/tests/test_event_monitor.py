@@ -9,6 +9,7 @@ poll by a freshly started monitor: two runs in a row are a restart (AC-1).
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -1293,3 +1294,24 @@ def test_the_comment_tool_refuses_bad_arguments_before_gh(
     result = _comment_tool(mon, *args, body=body)
     assert result.returncode == 64, result.stdout + result.stderr
     assert result.stdout == "" and mon.calls("gh") == []
+
+
+def test_a_message_that_points_to_the_setup_heading_names_it_word_for_word() -> None:
+    """#448: the messages said "docs/ops/SETUP.md claude 與 gh 認證", a title nobody
+    could search for. Every mention of docs/ops/SETUP.md in what the monitor queues
+    and in the watchdog's comments is followed by a heading of that file, in 「」."""
+    setup = (ROOT / "docs" / "ops" / "SETUP.md").read_text(encoding="utf-8")
+    headings = {
+        line[3:].strip() for line in setup.splitlines() if line.startswith("## ")
+    }
+    assert "容器內的 claude 與 gh 認證（.env）" in headings
+    mentions = 0
+    for path in (OPS / "event_queue.py", OPS / "watchdog.sh"):
+        text = path.read_text(encoding="utf-8")
+        for found in re.finditer(r"docs/ops/SETUP\.md(?:「([^」]*)」)?", text):
+            mentions += 1
+            assert found.group(1) in headings, (
+                f"{path.name}: {text[found.start() : found.start() + 60]!r} "
+                "is not followed by a heading of docs/ops/SETUP.md"
+            )
+    assert mentions >= 2, "the mentions of docs/ops/SETUP.md were not found"
