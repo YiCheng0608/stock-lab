@@ -1230,7 +1230,13 @@ def test_close_task_refuses_a_pr_into_feat_docker_now_that_it_reached_master(
     close: Harness,
 ) -> None:
     """AC-1 (#428): feat/docker reached master (PR #420) and is no longer an integration
-    branch: the repository's own close_task.sh refuses a PR into it, deleting nothing."""
+    branch: the repository's own close_task.sh refuses a PR into it, deleting nothing.
+
+    It reads the repository's list on purpose (#448): the line below copies the real
+    script over the sandbox one, whose list the other tests rewrite to INTEGRATION. So
+    the test fails if feat/docker, or any branch listed in the repository, is back in
+    ``integration_branches``; it is not a test of the sandbox list.
+    """
     shutil.copyfile(OPS / "close_task.sh", close.ops / "close_task.sh")
     _merged_into(close, "feat/docker")
     close.answer(

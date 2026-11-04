@@ -28,6 +28,7 @@ CI `verify` job（`.github/workflows/ci.yml`）每次：
 CI 失敗想在本機重現，或改了 verify 工具想先跑一次時用。需要後端依賴（下面借 release venv 的套件，不改它；`<…>` 換成[本機路徑](../../../docs/ops/LOCAL.md)的值）與 `frontend/node_modules`（`pnpm --dir frontend install --frozen-lockfile`），用不到正式 DB，任何時段都可以跑。
 
 ```bash
+# 換值（docs/ops/LOCAL.md）：<容器外的 Python>＝「工具」表的「容器外的 Python」；<發佈 checkout 的 venv>＝「正式位置」表的「發佈 checkout 的 venv」
 WT="$(git rev-parse --show-toplevel)"; V="$WT/.local/verify/ci"; mkdir -p "$V/logs"
 PY='<容器外的 Python>'
 export PYTHONPATH="$WT/backend;<發佈 checkout 的 venv>/Lib/site-packages" PYTHONUTF8=1
@@ -64,6 +65,7 @@ export PYTHONPATH="$WT/backend;<發佈 checkout 的 venv>/Lib/site-packages" PYT
 2. **變數**（Bash 工具不保留 shell 狀態，每個命令開頭重設；`<…>` 換成[本機路徑](../../../docs/ops/LOCAL.md)的值）：
 
    ```bash
+   # 換值（docs/ops/LOCAL.md）：<容器外的 Python>＝「工具」表的「容器外的 Python」；<發佈 checkout 的 venv>＝「正式位置」表的「發佈 checkout 的 venv」
    WT="$(git rev-parse --show-toplevel)"; V="$WT/.local/verify"
    PY='<容器外的 Python>'
    export PYTHONPATH="$WT/backend;<發佈 checkout 的 venv>/Lib/site-packages" PYTHONUTF8=1
@@ -83,6 +85,7 @@ export PYTHONPATH="$WT/backend;<發佈 checkout 的 venv>/Lib/site-packages" PYT
 4. **副本**（唯讀複製，約 10 秒；已存在也重做，確保是最新快照）。正式 DB（[本機路徑](../../../docs/ops/LOCAL.md#正式位置使用者決定)）只出現在這一行的 `--src`：
 
    ```bash
+   # 換值（docs/ops/LOCAL.md）：<正式 DB>＝「正式位置」表的「正式 DB」
    "$PY" -B "$WT/tools/ops/copy_db.py" --src '<正式 DB>' --dest "$V" --force > "$OUT/copy.json"
    ```
 
