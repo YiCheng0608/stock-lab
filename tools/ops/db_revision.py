@@ -18,7 +18,14 @@ is the volume's DB. Prints one line, ``revision <state> <db> <head>``:
 Exit 2 when the database cannot be read. Never writes: ``mode=ro`` and ``query_only``. On the
 read-only volume a WAL database without its -shm file (no connection open) cannot be opened
 ``mode=ro``; when there is no -wal file either, the main file alone is the whole database and
-it is opened ``immutable=1``. A -wal without -shm is not read (immutable would skip the WAL).
+it is opened ``immutable=1``. A -wal without -shm, or a hot -journal, is not read (immutable
+would skip the WAL, or read pages a rollback has yet to undo).
+
+Stricter than the api's readiness on purpose: readiness also accepts a DB with no
+alembic_version whose schema_migrations lists every revision (the fallback when Alembic
+cannot load); here that DB is ``unmarked`` and the deploy is refused. Every image carries
+Alembic and the production DB has always had alembic_version, so a DB without it is a DB
+to look at before deploying, not one to deploy onto.
 Imports nothing but the standard library and app.migration_revisions, which does no I/O.
 """
 
@@ -39,7 +46,8 @@ def _connect(path: Path) -> sqlite3.Connection:
         connection.execute("SELECT count(*) FROM sqlite_master").fetchone()
         return connection
     except sqlite3.OperationalError:
-        if any(Path(f"{path}{suffix}").exists() for suffix in ("-wal", "-shm")):
+        sides = ("-wal", "-shm", "-journal")
+        if any(Path(f"{path}{suffix}").exists() for suffix in sides):
             raise
     return sqlite3.connect(uri + "&immutable=1", uri=True)
 

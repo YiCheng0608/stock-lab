@@ -13,6 +13,7 @@ scheduler container is worker.job's own (the Linux test at the end).
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shutil
@@ -823,6 +824,8 @@ def test_a_db_behind_prints_the_backup_and_init_db_commands(harness):
     assert result.code == 1, result.out
     assert "docs/RELEASE.md「含 migration 的版本」" in result.out
     assert "docker compose -p stock-lab stop scheduler" in result.out
+    # A shell left with a smoke test's settings runs init-db without them (PR #477 review).
+    assert "\n  unset WEB_PORT API_PORT STOCK_ENV_FILE\n" in result.out
     assert (
         '-v stock-lab_stock-data:/data:ro -v "$B":/out -v "$(pwd -W)/tools/ops/copy_db.py"'
         ":/t/copy_db.py:ro stock-lab-backend:v1 python /t/copy_db.py --src /data/stock.db"
@@ -876,6 +879,54 @@ def test_a_refusal_after_the_build_puts_a_branch_checkout_back_on_its_branch(har
     result = harness.deploy("v1")
     assert_refused_after_build(harness, before, result, "DB 落後")
     assert git(harness.checkout, "symbolic-ref", "--short", "HEAD") == "master"
+
+
+def _db_revision_module():
+    spec = importlib.util.spec_from_file_location(
+        "db_revision_under_test", ROOT / "tools" / "ops" / "db_revision.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize(
+    "side,falls_back",
+    [(None, True), ("-wal", False), ("-shm", False), ("-journal", False)],
+    ids=["none", "wal", "shm", "hot-journal"],
+)
+def test_db_revision_opens_immutable_only_with_no_side_file(
+    tmp_path, monkeypatch, side, falls_back
+):
+    """On the read-only volume `mode=ro` fails when no connection holds the -shm. Only the
+    main file alone is opened immutable; a -wal, -shm or hot -journal (PR #477 review) next
+    to it is not skipped."""
+    db_revision = _db_revision_module()
+    path = tmp_path / "stock.db"
+    with closing(sqlite3.connect(path)) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT)")
+        connection.execute("INSERT INTO alembic_version VALUES (?)", (REVISIONS[-1],))
+        connection.commit()
+    if side:
+        Path(f"{path}{side}").write_bytes(b"")
+    real_connect = sqlite3.connect
+    uris = []
+
+    def connect(database, *args, **kwargs):
+        uris.append(database)
+        if not database.endswith("&immutable=1"):
+            # What a read-only mount does to mode=ro without the -shm.
+            raise sqlite3.OperationalError("unable to open database file")
+        return real_connect(database, *args, **kwargs)
+
+    monkeypatch.setattr(db_revision.sqlite3, "connect", connect)
+    if falls_back:
+        assert db_revision.revision(path) == ("same", REVISIONS[-1])
+        assert uris[-1].endswith("?mode=ro&immutable=1")
+    else:
+        with pytest.raises(sqlite3.OperationalError):
+            db_revision.revision(path)
+        assert not [u for u in uris if "immutable" in u]
 
 
 def test_redeploying_after_init_db_deploys(harness):

@@ -278,6 +278,7 @@ case "$state" in
 DB 落後 tag $tag：先備份、再用 $tag 的程式跑 init-db，然後以同一個 tag 重跑 deploy.sh。
 在 master 管理 checkout 的 Git Bash 依序執行（B 是備份目錄；完整步驟、時段與驗證見 docs/RELEASE.md「含 migration 的版本」）：
   export MSYS_NO_PATHCONV=1
+  unset WEB_PORT API_PORT STOCK_ENV_FILE
   docker compose -p $project stop scheduler
   docker run --rm --network none -v $volume:/data:ro -v "\$B":/out -v "\$(pwd -W)/tools/ops/copy_db.py":/t/copy_db.py:ro $backend python /t/copy_db.py --src /data/stock.db --dest /out
   git -C "$checkout_native" fetch --quiet --no-tags origin "refs/tags/$tag:refs/tags/$tag"
