@@ -927,7 +927,7 @@ def svg_ablations(result: dict[str, Any]) -> str:
             for h in HORIZONS
         ]
         rows.append((item["name"], own / base if base else None, means, base_means))
-    line_h, left, width = 22, 260, 760
+    line_h, left, width = 22, 260, 880
     height = 60 + line_h * len(rows)
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
