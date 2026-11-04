@@ -101,7 +101,13 @@ def _project(row: Any) -> DecisionMarketRead:
 # malformed row, since the first of them is ``unlocated`` even outside that
 # window. The loop then sees the rows it kept before, in the same order.
 BOUNDED_BARS = text(
-    "WITH scoped AS ("
+    # Nested subqueries rather than WITH: every statement of the read paths
+    # starts with SELECT (test_twse_action_classification checks it).
+    "SELECT id, instrument_id, trading_date, close, adj_close, source, is_suspended,"
+    " raw_payload_id FROM ("
+    " SELECT *, ROW_NUMBER() OVER ("
+    " PARTITION BY instrument_id ORDER BY trading_date DESC, id DESC"
+    " ) AS row_rank FROM ("
     " SELECT id, instrument_id, trading_date, close, adj_close, source,"
     " is_suspended, raw_payload_id,"
     " CASE WHEN typeof(trading_date) = 'text'"
@@ -110,14 +116,9 @@ BOUNDED_BARS = text(
     " AND date(trading_date, '+0 days') IS trading_date THEN 1 ELSE 0 END"
     " AS well_formed"
     " FROM market_bars WHERE instrument_id IN :ids"
-    "), ranked AS ("
-    " SELECT *, ROW_NUMBER() OVER ("
-    " PARTITION BY instrument_id ORDER BY trading_date DESC, id DESC"
-    " ) AS row_rank FROM scoped"
+    " ) AS scoped"
     " WHERE :as_of IS NULL OR well_formed = 0 OR trading_date <= :as_of"
-    ") "
-    "SELECT id, instrument_id, trading_date, close, adj_close, source, is_suspended,"
-    " raw_payload_id FROM ranked WHERE row_rank <= :limit OR well_formed = 0 "
+    " ) AS ranked WHERE row_rank <= :limit OR well_formed = 0 "
     "ORDER BY instrument_id, trading_date DESC, id DESC"
 ).bindparams(bindparam("ids", expanding=True))
 
