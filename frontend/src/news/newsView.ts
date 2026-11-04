@@ -199,6 +199,31 @@ export function verifiedInstruments(item: Pick<NewsItem, 'instruments' | 'symbol
   return (item.symbols ?? []).map((symbol) => ({ key: symbol, label: symbol.includes(':') ? symbol.split(':')[1] : symbol, href: null }))
 }
 
+export type CardAiCandidate = NewsAi['symbol_candidates'][number] & { key: string }
+
+// The card's collapsed 「AI 候選」 row (UI_COPY_SPEC §4, #452): the done result's symbol candidates minus the ones the rules
+// already verified (instruments' exchange + symbol, or symbols' 「EX:SYM」／bare code), each listed once.
+export function cardAiCandidates(item: Pick<NewsItem, 'ai' | 'instruments' | 'symbols'>): CardAiCandidate[] {
+  const ai = usableAi(item)
+  if (!ai) return []
+  const verified = new Set<string>()
+  const bareVerified = new Set<string>()
+  for (const instrument of item.instruments ?? []) verified.add(`${instrument.exchange}:${instrument.symbol}`)
+  for (const symbol of item.symbols ?? []) {
+    if (symbol.includes(':')) verified.add(symbol)
+    else bareVerified.add(symbol)
+  }
+  const seen = new Set<string>()
+  const candidates: CardAiCandidate[] = []
+  for (const candidate of ai.symbol_candidates ?? []) {
+    const key = `${candidate.exchange}:${candidate.symbol}`
+    if (verified.has(key) || bareVerified.has(candidate.symbol) || seen.has(key)) continue
+    seen.add(key)
+    candidates.push({ ...candidate, key })
+  }
+  return candidates
+}
+
 // /api/news?symbol= matches substrings of symbols_json; the stock timeline keeps exact matches for this exchange + symbol.
 export function matchesInstrument(item: Pick<NewsItem, 'instruments' | 'symbols'>, exchange: string, symbol: string): boolean {
   if ((item.instruments ?? []).some((instrument) => instrument.exchange === exchange && instrument.symbol === symbol)) return true

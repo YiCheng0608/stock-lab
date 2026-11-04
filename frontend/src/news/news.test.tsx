@@ -8,6 +8,7 @@ import { AiInferencePanel, NewsCard, NewsDetailView, NewsListView, StockNewsTime
 import {
   NEWS_PAGE_SIZE,
   STOCK_NEWS_LIMIT,
+  cardAiCandidates,
   directionView,
   formatTaipeiInstant,
   matchesInstrument,
@@ -126,6 +127,47 @@ check(unsupported.includes('影響尚未判定') && !hasTone(unsupported), 'unsu
 const unknownAi = render(<NewsCard item={newsItem({ ai: aiResult({ impact_direction: 'unknown' }) })} />)
 check(unknownAi.includes('影響尚未判定') && !hasTone(unknownAi), 'AI unknown direction has no red／green')
 check(usableAi(newsItem({ ai: aiResult({ status: 'pending' }) })) === null && usableAi(newsItem({ ai: undefined })) === null, 'only a done result is shown')
+
+// ---- #452 AC-1 card AI candidates row (UI_COPY_SPEC §4 AI 候選行, DESIGN_SYSTEM §5) ----
+const candidateRow = (markup: string) => /<details class="news-ai-candidates"[^>]*>[\s\S]*?<\/details>/.exec(markup)?.[0] ?? ''
+const candidate = (exchange: string, symbol: string, name: string | null, confidence: string | null = 'medium') => ({ exchange, symbol, name, reason: '理由只在詳情頁', confidence, verified: false as const })
+// With candidates: 2330 is rule-verified on this item and drops out; 3105 links, 6751 has no instrument and is plain text.
+const withCandidates = newsItem({ ai: aiResult({ symbol_candidates: [candidate('TWSE', '2330', '台積電', 'high'), candidate('TPEx', '3105', '穩懋', 'high'), candidate('TWSE', '6751', null, 'low')] }) })
+const candidatesCard = render(<NewsCard item={withCandidates} />)
+const row = candidateRow(candidatesCard)
+check(row !== '' && count(candidatesCard, 'data-testid="news-ai-candidates"') === 1, `card with candidates shows one AI candidates row: ${candidatesCard}`)
+check(candidatesCard.indexOf('class="news-chips"') < candidatesCard.indexOf('news-ai-candidates') && candidatesCard.indexOf('news-ai-candidates') < candidatesCard.indexOf('class="news-source"'), 'AI candidates row sits after the verified chips and before the source link')
+check(row.includes('href="/stocks/TPEx/3105"') && row.includes('3105 穩懋') && row.includes('模型把握高'), 'named candidate links to the stock with the model confidence')
+check(row.includes('6751 （代號未對應到已知標的）') && !row.includes('/stocks/TWSE/6751') && row.includes('模型把握低'), 'unknown candidate code is plain text')
+check(!row.includes('2330') && !row.includes('理由只在詳情頁'), 'rule-verified 2330 is not repeated; reasons stay on the detail page')
+check(!row.includes('class="tag'), 'candidates are not tag chips, so they never read as verified relations')
+// 收合與展開: closed <details> by default; the summary is the only line until opened, the list and meta follow it inside.
+check(/^<details class="news-ai-candidates" data-testid="news-ai-candidates">/.test(row) && !/<details[^>]*\sopen/.test(row), 'AI candidates row is collapsed by default')
+const summaryEnd = row.indexOf('</summary>')
+check(row.indexOf('<summary>') > 0 && summaryEnd > 0 && row.indexOf('<ul>') > summaryEnd && row.indexOf('模型 ') > summaryEnd, 'summary first; candidates and model line only show when expanded')
+// 「推論」 label and versions.
+const summaryText = row.slice(row.indexOf('<summary>'), summaryEnd).replace(/<[^>]+>/g, '')
+check(summaryText.includes('AI 候選（推論，待核實）· 2 檔') && summaryText.includes('AI 推論') && row.slice(0, summaryEnd).includes('badge badge-accent'), `summary reads 「AI 候選（推論，待核實）· 2 檔」 with the AI 推論 badge, got 「${summaryText}」`)
+check(row.includes('模型 claude-haiku-5-5 · 提示版本 news_v1。候選未經規則核實。'), 'expanded row carries the model and prompt version')
+const unrecorded = candidateRow(render(<NewsCard item={newsItem({ ai: aiResult({ model: null, prompt_version: null }) })} />))
+check(unrecorded.includes('模型 未記錄 · 提示版本 未記錄'), 'missing model／prompt version reads 未記錄')
+// No candidates: no AI, an empty list, a pending result, or only rule-verified codes → no row and no 「無」.
+const noRows: Array<[string, NewsItem]> = [
+  ['no AI', newsItem()],
+  ['empty candidates', newsItem({ ai: aiResult({ symbol_candidates: [] }) })],
+  ['pending result', newsItem({ ai: aiResult({ status: 'pending' }) })],
+  ['only the verified 2330', newsItem({ ai: aiResult({ symbol_candidates: [candidate('TWSE', '2330', '台積電')] }) })],
+  ['bare official code 3666', newsItem({ ...officialItem(), ai: aiResult({ symbol_candidates: [candidate('TWSE', '3666', '光耀')] }) })],
+]
+for (const [label, item] of noRows) {
+  const markup = render(<NewsCard item={item} />)
+  check(!markup.includes('news-ai-candidates') && !markup.includes('AI 候選'), `${label}: no AI candidates row`)
+  check(cardAiCandidates(item).length === 0, `${label}: no card candidates`)
+}
+// Duplicates: verified via symbols 「EX:SYM」 without instruments, and the same candidate twice.
+const viaSymbols = newsItem({ instruments: [], symbols: ['TPEx:3105'], ai: aiResult({ symbol_candidates: [candidate('TPEx', '3105', '穩懋'), candidate('TWSE', '3105', '穩懋'), candidate('TWSE', '2454', '聯發科'), candidate('TWSE', '2454', '聯發科')] }) })
+check(cardAiCandidates(viaSymbols).map((item) => item.key).join('|') === 'TWSE:3105|TWSE:2454', `symbols EX:SYM drops only that exchange; repeats listed once, got ${cardAiCandidates(viaSymbols).map((item) => item.key).join('|')}`)
+check(!render(<NewsCard item={withCandidates} compact />).includes('news-ai-candidates'), 'today page compact row has no AI candidates row')
 
 // ---- AC-1 time display (NEWS_SPEC §4, UI_COPY §4) ----
 check(newsTime(newsItem()).text === '發布於 2026/10/18 00:05' && card.includes('dateTime="2026-10-17T16:05:00+00:00"'), 'known published instant in Taipei time')

@@ -168,6 +168,19 @@ let atLimit = ''
 try { atLimit = positionQuantityFromText('odd_lot', '9223372036854775807') } catch { atLimit = 'rejected' }
 check(atLimit === '9223372036854775807', '我的庫存: the limit itself is still accepted')
 
+// ---- 資料品質頁擷取狀態: news feed and LLM run codes show their names, unknown codes stay 待核實 (UI_COPY_SPEC §2, #452) ----
+const IngestionRunTable = component('IngestionRunTable')
+const runRow = (id: number, source: string) => ({ id, run_type: 'news', updated_at: '2026-11-04T10:00:00+00:00', source, run_date: '2026-11-04', status: 'success', records: 3, data_as_of: '2026-11-04', error: null })
+const SOURCE_NAMES: Record<string, string> = { cna: '中央社', yahoo_tw: 'Yahoo奇摩股市', 'claude-cli': 'Claude Code（AI 推論）', some_new_feed: '來源待核實' }
+const runCells = (source: string) => {
+  const markup = render(`IngestionRunTable ${source}`, () => <IngestionRunTable rows={[runRow(1, source)]} />)
+  return (markup.match(/<td[^>]*>[\s\S]*?<\/td>/g) ?? []).map(text)
+}
+for (const [source, name] of Object.entries(SOURCE_NAMES)) {
+  const cells = runCells(source)
+  check(cells[1] === name, `擷取狀態: source ${source} reads 「${name}」, got 「${cells[1] ?? '(no row)'}」`)
+}
+
 // The runner keeps only the first lines of an error, so the full list goes to stderr first.
 if (failures.length) {
   console.error(`copy checks failed:\n- ${failures.join('\n- ')}`)

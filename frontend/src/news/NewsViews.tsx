@@ -11,6 +11,7 @@ import {
   STOCK_NEWS_LIMIT,
   aiDirection,
   candidateConfidenceLabel,
+  cardAiCandidates,
   directionView,
   sourceDirectionView,
   formatTaipeiInstant,
@@ -28,6 +29,7 @@ import {
   usableAi,
   userFacingNewsThemes,
   verifiedInstruments,
+  type CardAiCandidate,
   type DirectionView,
   type NewsFilters,
   type NewsTab,
@@ -82,8 +84,33 @@ function RelationChips({ item }: { item: NewsItem }) {
   )
 }
 
+function candidateLabel(candidate: Pick<CardAiCandidate, 'symbol' | 'name'>): string {
+  return `${candidate.symbol} ${candidate.name ?? '（代號未對應到已知標的）'}`
+}
+
+// UI_COPY_SPEC §4 AI 候選行 / DESIGN_SYSTEM §5: inference kept apart from the verified chips, collapsed by default.
+function AiCandidateRow({ item }: { item: NewsItem }) {
+  const ai = usableAi(item)
+  const candidates = cardAiCandidates(item)
+  if (!ai || !candidates.length) return null
+  return (
+    <details className="news-ai-candidates" data-testid="news-ai-candidates">
+      <summary>AI 候選（推論，待核實）· {candidates.length} 檔 <AiBadge /></summary>
+      <ul>{candidates.map((candidate) => (
+        <li key={candidate.key}>
+          {candidate.name
+            ? <Link to={`/stocks/${encodeURIComponent(candidate.exchange)}/${encodeURIComponent(candidate.symbol)}`}>{candidateLabel(candidate)}</Link>
+            : <span>{candidateLabel(candidate)}</span>}
+          <span className="news-ai-confidence"> · {candidateConfidenceLabel(candidate.confidence)}</span>
+        </li>
+      ))}</ul>
+      <p className="small-note">模型 {ai.model ?? '未記錄'} · 提示版本 {ai.prompt_version ?? '未記錄'}。候選未經規則核實。</p>
+    </details>
+  )
+}
+
 // One card for /news, the stock timeline and the today page (DESIGN_SYSTEM §5 card, UI_COPY §4 order):
-// category and source → title → summary preview → source time → impact → verified relations → source link.
+// category and source → title → summary preview → source time → impact → verified relations → AI candidates → source link.
 // compact: the today page row (#276, UI_COPY_SPEC §4), without the summary and the source link.
 export function NewsCard({ item, compact = false }: { item: NewsItem; compact?: boolean }) {
   const time = newsTime(item)
@@ -102,6 +129,7 @@ export function NewsCard({ item, compact = false }: { item: NewsItem; compact?: 
         {ai ? <><DirectionText view={aiDirection(ai)} /><AiBadge /></> : <DirectionText view={directionView(item.impact_direction)} />}
       </div>
       <RelationChips item={item} />
+      {!compact && <AiCandidateRow item={item} />}
       {!compact && <SourceLinkLine item={item} />}
     </article>
   )
@@ -212,7 +240,7 @@ export function AiInferencePanel({ ai }: { ai: NewsAi | null }) {
       <h3 className="ai-subtitle">候選標的 <Badge tone="warning" className="badge-compact">待核實</Badge></h3>
       {ai.symbol_candidates.length
         ? <ul className="ai-candidates">{ai.symbol_candidates.map((candidate) => {
-          const label = `${candidate.symbol} ${candidate.name ?? '（代號未對應到已知標的）'}`
+          const label = candidateLabel(candidate)
           return (
             <li key={`${candidate.exchange}:${candidate.symbol}`}>
               {candidate.name
