@@ -204,7 +204,7 @@ export function userFacingNewsThemes(item: Pick<NewsItem, 'themes'>): NewsItem['
 export type RelatedInstrument = { key: string; label: string; href: string | null }
 
 // NEWS_SPEC §2: feed relations come from the name／code rule, whose version is the end of impact.method
-// (rule:exact-name-code/v2). Official projections and other methods have no rule version.
+// (rule:exact-name-code/v3). Official projections and other methods have no rule version.
 export function ruleVersion(item: Pick<NewsItem, 'impact'>): string | null {
   const match = /^rule:[a-z-]+\/(v\d+)$/.exec(item.impact?.method ?? '')
   return match ? match[1] : null

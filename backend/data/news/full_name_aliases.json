@@ -1,6 +1,6 @@
 {
   "schema_version": "news-full-name-aliases/v2",
-  "rule": "公司名稱（去掉「股份有限公司」）以另一檔上市中普通股的兩字簡稱開頭時，把全名，以及從結尾逐一去掉產業尾詞（INDUSTRY_SUFFIXES）後仍有三字以上的名稱，當成自己公司的別名；與任一檔的簡稱相同或兩家公司共用的名稱不收（NEWS_SPEC §2 規則關聯）",
+  "rule": "公司名稱（去掉「股份有限公司」）以另一檔上市中普通股的兩字簡稱（含去掉投控／控股後成為兩字的簡稱）開頭時，把全名，以及從結尾逐一去掉產業尾詞（INDUSTRY_SUFFIXES）後仍有三字以上的名稱，當成自己公司的別名；與任一檔的簡稱相同或兩家公司共用的名稱不收（NEWS_SPEC §2 規則關聯）",
   "generated_by": "tools/research/news_full_name_aliases.py",
   "industry_suffixes": [
     "國際",
@@ -458,6 +458,30 @@
       ],
       "starts_with": [
         "TWSE:2002 中鋼"
+      ]
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "1762",
+      "short_name": "中化生",
+      "full_name": "中化合成生技",
+      "alias": "中化合成生技",
+      "stripped": [],
+      "starts_with": [
+        "TWSE:3716 中化"
+      ]
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "1762",
+      "short_name": "中化生",
+      "full_name": "中化合成生技",
+      "alias": "中化合成",
+      "stripped": [
+        "生技"
+      ],
+      "starts_with": [
+        "TWSE:3716 中化"
       ]
     },
     {

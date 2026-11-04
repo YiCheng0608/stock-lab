@@ -114,6 +114,8 @@ def test_listed_name_keys_are_cached_until_the_master_names_change(
     from app.models import Instrument
 
     monkeypatch.setattr(module, "_listed_keys", (None, frozenset()))
+    # Master names only; the full-name aliases have their own test.
+    monkeypatch.setattr(module, "_full_name_keys", dict)
     computed: list[str] = []
     original = module.name_variants
 
@@ -155,6 +157,50 @@ def test_an_empty_master_has_no_keys(master_db, monkeypatch):
     import app.news_candidate_check as module
 
     monkeypatch.setattr(module, "_listed_keys", (None, frozenset()))
+    # Master names only; the full-name aliases have their own test.
+    monkeypatch.setattr(module, "_full_name_keys", dict)
     assert module.listed_name_keys(master_db) == frozenset()
     _listed(master_db, "1605", "華新")
     assert "華新" in module.listed_name_keys(master_db)
+
+
+# #475 (PR #483 review): the full-name aliases the rule matcher reads.
+FULL_NAMES = [
+    ("TWSE", "2385", "群光"),
+    ("TWSE", "6412", "群電"),
+    ("TWSE", "2002", "中鋼"),
+    ("TWSE", "1723", "中碳"),
+]
+
+
+def test_a_name_inside_another_stock_s_full_name_is_not_mentioned(
+    master_db, monkeypatch
+):
+    import app.news_candidate_check as module
+
+    monkeypatch.setattr(module, "_listed_keys", (None, frozenset()))
+    for _exchange, symbol, name in FULL_NAMES:
+        _listed(master_db, symbol, name)
+    keys = module.listed_name_keys(master_db)
+    # 群光電能 (6412's full name without 科技) is among the longer names.
+    assert {"群光電能", "群光電能科技"} <= keys
+    text = source_text("群光電能營收創高", "")
+    assert check_candidate(text, "2385", "群光", keys) == NOT_MENTIONED
+    # 6412 itself is named by its full name.
+    assert check_candidate(text, "6412", "群電", keys) == MENTIONED
+    # 群光 on its own is still 2385.
+    assert (
+        check_candidate(source_text("群光營收創高", ""), "2385", "群光", keys)
+        == MENTIONED
+    )
+
+
+def test_full_name_aliases_come_from_the_matcher_file():
+    import app.news_candidate_check as module
+    from worker.news_batch import load_full_name_aliases
+
+    rows = load_full_name_aliases()
+    assert ("TWSE", "6412", "群光電能") in rows
+    assert "群光電能" in module.candidate_names("6412", "群電")
+    assert module.candidate_names("2385", "群光") == name_variants("群光")
+    assert module.CANDIDATE_CHECK_VERSION == "ai-candidate-source/v2"

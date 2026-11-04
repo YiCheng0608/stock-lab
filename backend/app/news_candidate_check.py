@@ -17,12 +17,15 @@ Comparison is on NFKC, casefolded text without whitespace.  A name counts only
 outside a longer listed name that contains it (華新 inside 華新科 is 2492, not
 1605).  A code counts only when no letter, digit or decimal point touches it
 and no unit (點, 億, 元, %, 年…) follows it.  Names are the master name and the same variants the rule matcher reads (listing markers,
-former ETF names, holding-company endings).  A code not in the master has no
-name to look for and is checked by its code alone.
+former ETF names, holding-company endings), and the matcher's full-name aliases
+(群光電能 for 6412 群電; v2, #475): a candidate's name inside another stock's
+full name does not count (「群光電能營收」 is not 2385 群光).  A code not in the
+master has no name to look for and is checked by its code alone.
 """
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import re
 import unicodedata
@@ -31,12 +34,18 @@ from collections.abc import Iterable
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from worker.news_batch import _etf_aliases, _holding_alias, _name_aliases
+from worker.news_batch import (
+    _etf_aliases,
+    _holding_alias,
+    _name_aliases,
+    load_full_name_aliases,
+)
 from worker.news_llm import SUMMARY_INPUT_CHARS
 
 from .models import Instrument
 
-CANDIDATE_CHECK_VERSION = "ai-candidate-source/v1"
+# v2 (#475): the full-name aliases of the rule matcher count as names.
+CANDIDATE_CHECK_VERSION = "ai-candidate-source/v2"
 MENTIONED = "mentioned"
 NOT_MENTIONED = "not_mentioned"
 
@@ -62,6 +71,29 @@ def name_variants(name: str | None) -> set[str]:
     return {key for key in (_key(variant) for variant in variants) if len(key) >= 2}
 
 
+@functools.cache
+def _full_name_keys() -> dict[str, frozenset[str]]:
+    """Code → keys of its full-name aliases (``worker.news_batch.FULL_NAME_ALIASES_FILE``).
+
+    The file the rule matcher reads (群光電能 is 6412 群電, #461); it ships
+    with the code, so one read per process.  Keyed by code alone: listed codes
+    do not repeat across the two exchanges.
+    """
+
+    keys: dict[str, set[str]] = {}
+    for _exchange, symbol, alias in load_full_name_aliases():
+        key = _key(alias)
+        if len(key) >= 2:
+            keys.setdefault(_key(symbol), set()).add(key)
+    return {symbol: frozenset(names) for symbol, names in keys.items()}
+
+
+def candidate_names(symbol: str, name: str | None) -> set[str]:
+    """The keys looked for of one candidate: its master name variants and full-name aliases (#475)."""
+
+    return name_variants(name) | _full_name_keys().get(_key(symbol), frozenset())
+
+
 # (fingerprint of the master names, their keys); one per process (#475).
 _listed_keys: tuple[str | None, frozenset[str]] = (None, frozenset())
 
@@ -77,9 +109,10 @@ def _names_fingerprint(db: Session) -> str:
 
 
 def listed_name_keys(db: Session) -> frozenset[str]:
-    """``name_variants`` of every master name, cached in the process (#475).
+    """``name_variants`` of every master name and every full-name alias, cached in the process (#475).
 
-    Every page with news reads them (``news_ai_map``).  The cache holds until
+    Every page with news reads them (``news_ai_map``): a candidate's name inside
+    one of them does not count (群光 inside 群光電能).  The cache holds until
     the master names change: each call compares one aggregate of the names
     (``_names_fingerprint``, one row) and recomputes the keys only when it
     differs, so a rename by the worker in another process is seen on the next
@@ -95,7 +128,7 @@ def listed_name_keys(db: Session) -> frozenset[str]:
         key
         for (name,) in db.execute(select(Instrument.name)).all()
         for key in name_variants(name)
-    )
+    ).union(*_full_name_keys().values())
     _listed_keys = (fingerprint, keys)
     return keys
 
@@ -132,7 +165,7 @@ def check_candidate(
     ):
         return MENTIONED
     names = list(all_names)
-    for variant in name_variants(name):
+    for variant in candidate_names(symbol, name):
         longer = [
             other for other in names if len(other) > len(variant) and variant in other
         ]
