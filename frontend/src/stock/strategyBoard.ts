@@ -215,11 +215,11 @@ export type LevelLine = { key: string; label: string; value: string; className?:
 // The observation box lines (UI_COPY_SPEC §10.1); prices two decimals, volume bounds whole lots (minimum up, maximum down).
 export function observationLines(levels: StrategyObservationLevels): LevelLine[] {
   const lines: LevelLine[] = []
-  if (isNumber(levels.trigger_price)) lines.push({ key: 'trigger', label: '收盤 ≥', value: formatPrice(levels.trigger_price), className: 'level-entry' })
-  if (isNumber(levels.zone_low) && isNumber(levels.zone_high)) lines.push({ key: 'zone', label: '收盤', value: `${formatPrice(levels.zone_low)}～${formatPrice(levels.zone_high)}`, className: 'level-entry' })
+  if (isNumber(levels.trigger_price)) lines.push({ key: 'trigger', label: '收盤（元） ≥', value: formatPrice(levels.trigger_price), className: 'level-entry' })
+  if (isNumber(levels.zone_low) && isNumber(levels.zone_high)) lines.push({ key: 'zone', label: '收盤（元）', value: `${formatPrice(levels.zone_low)}～${formatPrice(levels.zone_high)}`, className: 'level-entry' })
   if (isNumber(levels.min_volume) && isNumber(levels.max_volume)) lines.push({ key: 'volume', label: '成交量', value: lotRange(levels.min_volume, levels.max_volume) })
   else if (isNumber(levels.min_volume)) lines.push({ key: 'volume', label: '成交量 ≥', value: minLots(levels.min_volume) })
-  if (isNumber(levels.invalid_price)) lines.push({ key: 'stop', label: '參考停損', value: formatPrice(levels.invalid_price), className: 'level-stop' })
-  if (isNumber(levels.target_1)) lines.push({ key: 'target', label: '參考目標', value: formatPrice(levels.target_1) + (isNumber(levels.target_2) ? `／${formatPrice(levels.target_2)}` : ''), className: 'level-target' })
+  if (isNumber(levels.invalid_price)) lines.push({ key: 'stop', label: '參考停損（元）', value: formatPrice(levels.invalid_price), className: 'level-stop' })
+  if (isNumber(levels.target_1)) lines.push({ key: 'target', label: isNumber(levels.target_2) ? '參考目標一／目標二（元）' : '參考目標一（元）', value: formatPrice(levels.target_1) + (isNumber(levels.target_2) ? `／${formatPrice(levels.target_2)}` : ''), className: 'level-target' })
   return lines
 }

@@ -571,7 +571,7 @@ function stockDirectoryColumns(dataAsOf: string | null): ReadonlyArray<Column<St
     { key: 'type', header: '類型', wideOnly: true, cell: (row) => instrumentTypeLabel(instrumentOf(row).instrument_type) },
     {
       // A column across stocks keeps two decimals (DESIGN_SYSTEM §3).
-      key: 'close', header: '最近收盤', num: true, cell: (row) => {
+      key: 'close', header: '最近收盤（元）', num: true, cell: (row) => {
         const closeDate = row.latest_price != null ? staleCloseDateLabel(row.price_as_of, dataAsOf) : null
         return <>{formatTableNumber(row.latest_price ?? row.latest_bar?.close, 2)}{closeDate && <div className="small-note">{closeDate}</div>}</>
       },
@@ -678,7 +678,7 @@ function StockPage() {
   return <div className="page stock-page">
     <Link to="/stocks" className="back-link">← 回到個股</Link>
     <StockHeader symbol={data.instrument.symbol} name={data.instrument.name} exchange={data.instrument.exchange} typeLabel={instrumentTypeLabel(data.instrument.instrument_type)} instrumentType={data.instrument.instrument_type} dailyBars={dayBars.data?.bars} loading={dayBars.isLoading}>
-      <StockCutoffControl asOf={asOf} onApply={(submitted) => { const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }} />
+      <StockCutoffControl asOf={asOf} effectiveDate={asOf ? null : data.news_cutoff?.as_of ?? data.decision_summary?.data_cutoff ?? null} onApply={(submitted) => { const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }} />
     </StockHeader>
     <Tabs items={STOCK_TABS} value={tab} onChange={setTab} label="個股詳情分頁" idPrefix="stock" className="stock-tabs" />
     <div className="stock-tab-content" id={tabPanelId('stock', tab)} role="tabpanel" aria-labelledby={tabId('stock', tab)}>
@@ -727,11 +727,11 @@ export function BarTable({ rows, instrumentType }: { rows: InstrumentDetail['bar
   const digits = priceDigits(rows.find((row) => typeof row.close === 'number' && Number.isFinite(row.close))?.close, instrumentType)
   const columns: ReadonlyArray<Column<InstrumentDetail['bars'][number]>> = [
     { key: 'date', header: '日期', cell: (row) => formatTaiwanDateTime(row.date, true) },
-    { key: 'close', header: '收盤', num: true, cell: (row) => formatTableNumber(row.close, digits) },
-    { key: 'high', header: '最高', num: true, cell: (row) => formatTableNumber(row.high, digits) },
-    { key: 'low', header: '最低', num: true, cell: (row) => formatTableNumber(row.low, digits) },
-    { key: 'volume', header: '成交量', num: true, cell: (row) => formatTableVolume(row.volume, row.source, row.volume_exact) },
-    { key: 'shares', header: '成交股數', num: true, cell: (row) => formatTableVolumeShares(row.volume, row.source, row.volume_exact) },
+    { key: 'close', header: '收盤（元）', num: true, cell: (row) => formatTableNumber(row.close, digits) },
+    { key: 'high', header: '最高（元）', num: true, cell: (row) => formatTableNumber(row.high, digits) },
+    { key: 'low', header: '最低（元）', num: true, cell: (row) => formatTableNumber(row.low, digits) },
+    { key: 'volume', header: '成交量（張）', num: true, cell: (row) => formatTableVolume(row.volume, row.source, row.volume_exact) },
+    { key: 'shares', header: '成交股數（股）', num: true, cell: (row) => formatTableVolumeShares(row.volume, row.source, row.volume_exact) },
   ]
   return <DataTable
     wrapClassName="compact-table"
@@ -748,10 +748,10 @@ function formatRawChipValue(value: number | null): string {
 
 const CHIP_COLUMNS: ReadonlyArray<Column<InstrumentDetail['chips'][number]>> = [
   { key: 'date', header: '日期', cell: (row) => formatTaiwanDateTime(row.date, true) },
-  { key: 'foreign', header: <Term id="foreign_flow">外資買賣超</Term>, num: true, cell: (row) => formatTableChip(row.foreign_buy, row.institutional?.source) },
-  { key: 'trust', header: <Term id="trust_flow">投信</Term>, num: true, cell: (row) => formatTableChip(row.trust_buy, row.institutional?.source) },
-  { key: 'dealer', header: <Term id="dealer_flow">自營商</Term>, num: true, cell: (row) => formatTableChip(row.dealer_buy, row.institutional?.source) },
-  { key: 'margin', header: <Term id="margin">融資增減</Term>, num: true, cell: (row) => formatTableChip(row.margin_change, row.margin?.source, true) },
+  { key: 'foreign', header: <><Term id="foreign_flow">外資買賣超</Term>（張）</>, num: true, cell: (row) => formatTableChip(row.foreign_buy, row.institutional?.source) },
+  { key: 'trust', header: <><Term id="trust_flow">投信</Term>（張）</>, num: true, cell: (row) => formatTableChip(row.trust_buy, row.institutional?.source) },
+  { key: 'dealer', header: <><Term id="dealer_flow">自營商</Term>（張）</>, num: true, cell: (row) => formatTableChip(row.dealer_buy, row.institutional?.source) },
+  { key: 'margin', header: <><Term id="margin">融資增減</Term>（張）</>, num: true, cell: (row) => formatTableChip(row.margin_change, row.margin?.source, true) },
 ]
 
 /** One line per value group: its official file, data date and collection time (Issue #395). */
@@ -813,7 +813,7 @@ export function ActionDetailPanel({ action }: { action: ActionSummary | null }) 
         {action.entry_high != null && <div><span>{levelFieldLabel('entry_high', action.level_semantics)}</span><b className="level-entry">{formatNumber(action.entry_high)}</b></div>}
         {action.invalid_price != null && <div><span><Term id="support">{levelFieldLabel('invalid_price', action.level_semantics)}</Term></span><b className="level-stop">{formatNumber(action.invalid_price)}</b></div>}
         {action.target_1 != null && <div><span><Term id="target">{levelFieldLabel('target_1', action.level_semantics)}</Term></span><b className="level-target">{formatNumber(action.target_1)}</b></div>}
-        {action.risk_reward != null && <div><span><Term id="rr">風險報酬比</Term></span><b>{formatNumber(action.risk_reward)}</b></div>}
+        {action.risk_reward != null && <div><span><Term id="rr">風險報酬比</Term></span><b>{formatNumber(action.risk_reward)} 倍</b></div>}
       </div>}
       {detailReasons.length > 0 && <ul className="reason-list">{detailReasons.map((reason) => <li key={reason}>{action.display_reasons ? reason : productActionReasonLabel(reason)}</li>)}</ul>}
       {action.conflicts.length > 0 && <div className="warning-box">{action.conflicts.join('；')}</div>}
@@ -1003,10 +1003,10 @@ type BacktestGroup = BacktestSummary['groups'][number]
 const BACKTEST_COLUMNS: ReadonlyArray<Column<BacktestGroup>> = [
   { key: 'strategy', header: '策略', cell: (row) => `${strategyLabel(row.strategy)} · 規則版本 ${row.version}` },
   { key: 'type', header: '類型', cell: (row) => instrumentTypeLabel(row.instrument_type) },
-  { key: 'horizon', header: '期限', num: true, cell: (row) => formatTableNumber(row.horizon, 0) },
-  { key: 'sample', header: '樣本', num: true, cell: (row) => formatTableNumber(row.sample, 0) },
-  { key: 'comparable', header: '可比', num: true, cell: (row) => formatTableNumber(row.comparable, 0) },
-  { key: 'incomparable', header: '不可比', num: true, cell: (row) => formatTableNumber(row.incomparable, 0) },
+  { key: 'horizon', header: '期限（交易日）', num: true, cell: (row) => formatTableNumber(row.horizon, 0) },
+  { key: 'sample', header: '樣本（筆）', num: true, cell: (row) => formatTableNumber(row.sample, 0) },
+  { key: 'comparable', header: '可比（筆）', num: true, cell: (row) => formatTableNumber(row.comparable, 0) },
+  { key: 'incomparable', header: '不可比（筆）', num: true, cell: (row) => formatTableNumber(row.incomparable, 0) },
   { key: 'assessment', header: '評估', cell: (row) => <QualityBadge status={row.assessment} /> },
 ]
 
@@ -1018,7 +1018,7 @@ const BACKFILL_COLUMNS: ReadonlyArray<Column<BackfillRun>> = [
   { key: 'updated', header: '更新時間', cell: (run) => formatTaiwanDateTime(run.updated_at) },
   { key: 'range', header: '資料範圍', cell: (run) => `${run.metadata.start_date as string}～${run.metadata.end_date as string}` },
   { key: 'status', header: '狀態', cell: (run) => <QualityBadge status={run.status} /> },
-  { key: 'records', header: '筆數', num: true, cell: (run) => formatTableNumber(run.records, 0) },
+  { key: 'records', header: '資料量（筆）', num: true, cell: (run) => formatTableNumber(run.records, 0) },
   { key: 'error', header: '錯誤', cell: (run) => run.error ?? '—' },
 ]
 
@@ -1031,7 +1031,7 @@ const INGESTION_COLUMNS: ReadonlyArray<Column<IngestionRun>> = [
   { key: 'source', header: '來源', cell: (run) => sourceLabel(run.source) },
   { key: 'date', header: '資料日', cell: (run) => run.run_date },
   { key: 'status', header: '狀態', cell: (run) => <QualityBadge status={run.status} /> },
-  { key: 'records', header: '筆數', num: true, cell: (run) => formatTableNumber(run.records, 0) },
+  { key: 'records', header: '資料量（筆）', num: true, cell: (run) => formatTableNumber(run.records, 0) },
   { key: 'asOf', header: '資料截至', cell: (run) => formatTaiwanDateTime(run.data_as_of, true) },
   { key: 'error', header: '錯誤', cell: (run) => run.error ?? '—' },
 ]

@@ -87,8 +87,9 @@ export function candidateAiEntry(note: CandidateLlmNote | null | undefined): str
   return note ? 'AI 推論 ▸' : 'AI 說明 ▸'
 }
 
+// RR reads as a multiple (UI_COPY_SPEC §10): 「1.60 倍」.
 export function formatRiskReward(value: number | null | undefined): string {
-  return isFiniteNumber(value) ? value.toFixed(2) : '—'
+  return isFiniteNumber(value) ? `${value.toFixed(2)} 倍` : '—'
 }
 
 export function formatDate(value: string | null | undefined): string | null {

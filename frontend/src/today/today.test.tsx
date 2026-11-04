@@ -110,8 +110,11 @@ check(!long.includes('class="card candidate-card"'), 'list: the today page no lo
 const head = slice(table, '<thead>', '</thead>')
 for (const id of ['entry_zone', 'support', 'target', 'rr', 'candidate_score', 'heat_rank']) check(termIds(head).includes(id), `table head: ${id} opens its glossary term (found ${termIds(head).join('、') || 'none'})`)
 for (const label of ['名次', '股票', '所屬族群', '最近收盤', '主要理由']) check(text(head).includes(label), `table head: 「${label}」`)
+// #463: two targets are named 目標一／目標二, the levels name 元 and the total names its 0–100 scale (UI_COPY_SPEC §8.4, §10).
+for (const label of ['最近收盤（元）', '進場區（元）', '停損（元）', '目標一／目標二（元）', '總分（0–100）']) check(text(head).includes(label), `table head: 「${label}」, got ${text(head)}`)
+check(!/目標（|>目標</.test(head), 'table head: no bare 「目標」 over two numbers')
 const row1 = slice(table, 'data-candidate-rank="1"', '</tr>')
-for (const value of ['#1', '2377', '微星', '上市 · 突破條件', 'AI 伺服器（題材，第 2 名／11）', '162.00', '+2.21%', '161.50', '157.82', '167.39', '172.54', '1.60', '83', '三大法人 5 日淨買超，約 20 日均量的 2.59 倍']) {
+for (const value of ['#1', '2377', '微星', '上市 · 突破條件', 'AI 伺服器（題材，第 2 名／11）', '162.00', '+2.21%', '161.50', '157.82', '167.39', '172.54', '1.60 倍', '83', '三大法人 5 日淨買超，約 20 日均量的 2.59 倍']) {
   check(text(row1).includes(value), `row #1: shows 「${value}」`)
 }
 check(row1.includes('href="/stocks/TWSE/2377"'), 'row #1: the name links to the stock page')
@@ -139,7 +142,7 @@ check(text(slice(table, 'data-candidate-detail="3"', '</tr>')).includes(NOTE_PEN
 check(count(table, '來源：') === 12 && count(table, NOTE_DISCLAIMER) === 12, 'table: one 來源 line and one AI disclaimer per candidate')
 // Phone card: rank, name, total; market · strategy · group; four level cells; first reason; AI details.
 const card1 = slice(cards, 'data-candidate-card="1"', '</article>')
-for (const value of ['#1', '2377', '微星', '83', '上市 · 突破條件 · AI 伺服器（題材，第 2 名／11）', '收盤', '162.00', '進場區', '161.50', '停損', '157.82', '目標', '167.39', '三大法人 5 日淨買超，約 20 日均量的 2.59 倍', 'AI 說明']) {
+for (const value of ['#1', '2377', '微星', '83', '上市 · 突破條件 · AI 伺服器（題材，第 2 名／11）', '收盤（元）', '162.00', '進場區（元）', '161.50', '停損（元）', '157.82', '目標一／二（元）', '167.39', '172.54', '三大法人 5 日淨買超，約 20 日均量的 2.59 倍', 'AI 說明']) {
   check(text(card1).includes(value), `card #1: shows 「${value}」`)
 }
 check(/class="[^"]*level-stop[^"]*">157\.82/.test(card1) && /class="[^"]*level-target[^"]*">167\.39/.test(card1), 'card #1: stop and target carry the level classes')

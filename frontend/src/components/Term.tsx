@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { GLOSSARY } from '../glossary'
 
 // In-place glossary term (UI_COPY_SPEC §7): a button that opens the definition, use, reading and limits.
-// Mouse, touch, Enter／Space open it; Esc closes and returns focus. Never put it inside a link. The dialog is portalled
+// Hovering shows the plain definition as a native hint; mouse, touch, Enter／Space open it; Esc closes and returns focus. Never put it inside a link. The dialog is portalled
 // to <body>, so a term in a table header or badge does not pass its nowrap, alignment or font to the definition.
 export function Term({ id, children }: { id: string; children?: ReactNode }) {
   const [open, setOpen] = useState(false)
@@ -30,6 +30,7 @@ export function Term({ id, children }: { id: string; children?: ReactNode }) {
         type="button"
         className="term-button"
         data-term={id}
+        title={term.plain_definition.replaceAll('外陸資', '外資')}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen(true)}

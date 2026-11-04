@@ -35,10 +35,10 @@ function ActionableLevels({ levels }: { levels: StrategyActionableLevels }) {
   return (
     <dl className="strategy-levels strategy-levels-actionable">
       {breakout
-        ? <div><dt>觸發</dt><dd className="level-entry">{formatPrice(levels.trigger_price)}</dd></div>
-        : <div><dt><Term id="entry_zone">進場區</Term></dt><dd className="level-entry">{formatPrice(levels.entry_low)}～{formatPrice(levels.entry_high)}</dd></div>}
-      <div><dt><Term id="support">停損</Term></dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
-      <div><dt><Term id="target">目標</Term></dt><dd className="level-target">{formatPrice(levels.target_1)}{levels.target_2 != null && <>／{formatPrice(levels.target_2)}</>}</dd></div>
+        ? <div><dt>觸發（元）</dt><dd className="level-entry">{formatPrice(levels.trigger_price)}</dd></div>
+        : <div><dt><Term id="entry_zone">進場區</Term>（元）</dt><dd className="level-entry">{formatPrice(levels.entry_low)}～{formatPrice(levels.entry_high)}</dd></div>}
+      <div><dt><Term id="support">停損</Term>（元）</dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
+      <div><dt><Term id="target">{levels.target_2 != null ? '目標一／目標二' : '目標一'}</Term>（元）</dt><dd className="level-target">{formatPrice(levels.target_1)}{levels.target_2 != null && <>／{formatPrice(levels.target_2)}</>}</dd></div>
       <div><dt><Term id="rr">RR</Term></dt><dd><Badge tone="primary" className="badge-compact">{formatRiskReward(levels.risk_reward)}</Badge></dd></div>
     </dl>
   )

@@ -1553,7 +1553,7 @@ def g5(run: Run) -> str:
 def g6(run: Run) -> str:
     _payload, text = theme_detail(run)
     # The theme board appends 證據 (UI_COPY_SPEC §8.5).
-    header = "代號\t名稱\t市場\t收盤\t漲跌幅\t成交值\t5 日相對\t20 日相對"
+    header = "代號\t名稱\t市場\t收盤（元）\t漲跌幅（%）\t成交金額（億元）\t5 日相對（%）\t20 日相對（%）"
     expect(text.find_where(lambda line: line.startswith(header)) >= 0, "缺成員表頭")
     payload = members(run)
     items, total = (
@@ -1616,7 +1616,7 @@ def g8(run: Run) -> str:
     expected = [item["symbol"] for item in sorted(items, key=turnover_order)]
     expect(
         symbols == expected,
-        f"theme-members.json 不是依成交值由大到小：{'、'.join(symbols)}，預期 {'、'.join(expected)}",
+        f"theme-members.json 不是依成交金額由大到小：{'、'.join(symbols)}，預期 {'、'.join(expected)}",
     )
     # Member rows of the 1280 table start with the symbol cell.
     shown = [
@@ -1629,7 +1629,7 @@ def g8(run: Run) -> str:
         shown == symbols,
         f"頁面成員順序 {'、'.join(shown) or '（無）'} ≠ sort=turnover 的 {'、'.join(symbols)}",
     )
-    return f"成員依成交值：{'、'.join(symbols) or '（無成員）'}"
+    return f"成員依成交金額：{'、'.join(symbols) or '（無成員）'}"
 
 
 # ---- stocks ----
@@ -1685,7 +1685,7 @@ def s1(run: Run, stock: Stock | None) -> str:
 def s2(run: Run, stock: Stock | None) -> str:
     payload = run.get("stocks?page=1&page_size=30", "stocks.json")
     text = run.text(STOCKS)
-    header = "代號\t名稱\t交易所\t類型\t最近收盤\t目前研究動作\t策略判斷資料"
+    header = "代號\t名稱\t交易所\t類型\t最近收盤（元）\t目前研究動作\t策略判斷資料"
     expect(text.has(header), "缺目錄表頭整行")
     items = payload.get("items") or []
     total = (payload.get("meta") or {}).get("total") or 0

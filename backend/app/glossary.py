@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 
-GLOSSARY_VERSION = "1.1.0"
+GLOSSARY_VERSION = "1.2.0"
 
 
 _TERMS: tuple[dict[str, Any], ...] = (
@@ -117,11 +117,11 @@ _TERMS: tuple[dict[str, Any], ...] = (
         "name": "候選總分",
         "aliases": ["candidate_score", "total_score", "總分", "權重涵蓋"],
         "category": "strategy",
-        "plain_definition": (
-            "明日候選的排序分數：技術、籌碼、族群、新聞情緒四個分項依權重加總，"
-            "以 0–100 呈現。"
+        "plain_definition": "用來排候選順序的分數，不代表勝率。",
+        "use": (
+            "只用來排列當日條件成立的候選先後："
+            "技術、籌碼、族群、新聞情緒四個分項依權重加總，以 0–100 呈現。"
         ),
-        "use": "只用來排列當日條件成立的候選先後。",
         "how_to_read": (
             "先看總分與四分項，再展開評分細節看子項原值與百分位。"
             "權重涵蓋是有資料的分項權重合計；部分分項無資料時，"
@@ -157,9 +157,12 @@ _TERMS: tuple[dict[str, Any], ...] = (
     {
         "term_id": "target",
         "name": "目標價",
-        "aliases": ["target_1", "target_2"],
+        "aliases": ["target_1", "target_2", "目標一", "目標二"],
         "category": "strategy",
-        "plain_definition": "在風險驗證中預先定義的價格目標。",
+        "plain_definition": (
+            "規則先算好的兩個價格目標：目標一較近，RR 與追蹤的「達標」都以它計算；"
+            "目標二較遠，是延伸參考。"
+        ),
         "use": "和失效價一起檢查風險報酬，不是保證價格。",
         "how_to_read": "只有價位與基準完整且 RR 達門檻時才顯示為有效。",
         "limitations": "不代表一定會到達，也不包含交易成本以外的所有風險。",
@@ -171,9 +174,12 @@ _TERMS: tuple[dict[str, Any], ...] = (
         "name": "風險報酬比 RR",
         "aliases": ["risk/reward", "RR"],
         "category": "strategy",
-        "plain_definition": "可期待的目標距離相對於失效／停損風險距離的比例。",
+        "plain_definition": "可能賺的空間是可能賠的幾倍。",
         "use": "固定規則的價位驗證至少要求 RR ≥ 1.5。",
-        "how_to_read": "低於門檻時是無效價位，不應包裝成可執行訊號。",
+        "how_to_read": (
+            "RR =（目標一 − 進場價）÷（進場價 − 停損）；"
+            "低於門檻時是無效價位，不應包裝成可執行訊號。"
+        ),
         "limitations": "比例不會消除跳空、流動性或執行風險。",
         "related": ["target", "support"],
         "version": GLOSSARY_VERSION,

@@ -68,12 +68,12 @@ function barColumns(digits: number): ReadonlyArray<Column<StockBarRow>> {
   const price = (field: 'open' | 'high' | 'low' | 'close') => (bar: StockBarRow) => isDrawableBar(bar) ? formatPrice(bar[field], digits) : ''
   return [
     { key: 'date', header: '日期', cell: (bar) => `${formatDay(bar.date) ?? bar.date}${bar.is_suspended ? '（停牌）' : ''}` },
-    { key: 'open', header: '開', num: true, cell: price('open') },
-    { key: 'high', header: '高', num: true, cell: price('high') },
-    { key: 'low', header: '低', num: true, cell: price('low') },
-    { key: 'close', header: '收', num: true, cell: price('close') },
-    { key: 'volume', header: '成交量', num: true, cell: (bar) => isDrawableBar(bar) ? formatBarVolume(bar) : '' },
-    ...MA_LINES.map((line): Column<StockBarRow> => ({ key: line.field, header: line.label, num: true, cell: (bar) => typeof bar[line.field] === 'number' ? formatPrice(bar[line.field], digits) : '' })),
+    { key: 'open', header: '開（元）', num: true, cell: price('open') },
+    { key: 'high', header: '高（元）', num: true, cell: price('high') },
+    { key: 'low', header: '低（元）', num: true, cell: price('low') },
+    { key: 'close', header: '收（元）', num: true, cell: price('close') },
+    { key: 'volume', header: '成交量（張）', num: true, cell: (bar) => isDrawableBar(bar) ? formatBarVolume(bar) : '' },
+    ...MA_LINES.map((line): Column<StockBarRow> => ({ key: line.field, header: `${line.label}（元）`, num: true, cell: (bar) => typeof bar[line.field] === 'number' ? formatPrice(bar[line.field], digits) : '' })),
   ]
 }
 

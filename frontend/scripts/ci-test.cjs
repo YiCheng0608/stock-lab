@@ -34,6 +34,7 @@ const SUITES = [
   { file: 'tables.test.tsx' },
   { file: 'copy.test.tsx' },
   { file: 'tracking/tracking.test.tsx' },
+  { file: 'labelSpacing.test.ts' },
 ]
 
 // Test files that cannot run here: path relative to src -> why (needs a browser/DOM or a guarded environment) and

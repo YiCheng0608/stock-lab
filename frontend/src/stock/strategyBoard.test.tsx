@@ -4,6 +4,7 @@ import { StaticRouter } from 'react-router-dom/server'
 
 import { CANDIDATE_DISCLAIMER } from '../candidates/candidates'
 import { completeItem, doneNote } from '../candidates/candidates.fixtures'
+import { GLOSSARY } from '../glossary'
 import type { StrategyBoardRow } from '../types'
 import {
   LEVELS_MISSING_TEXT,
@@ -108,16 +109,21 @@ const actionable = tableRow(both, 'breakout_v1')
 check(actionable.includes('data-strategy-status="conditional"') && actionable.includes('成立') && actionable.includes('最早執行日 2026/10/23'), 'conditional row with T+1')
 check(actionable.includes('class="level-entry">2,400.00') && actionable.includes('class="level-stop">2,364.00') && actionable.includes('class="level-target">2,458.00／2,508.00'), 'actionable levels carry the level classes')
 check(!actionable.includes(OBSERVATION_LABEL) && !actionable.includes('strategy-observation'), 'actionable levels are not in an observation block')
+// #463: two targets are named one by one; RR carries 倍 (UI_COPY_SPEC §10.1).
+const actionableText = actionable.replace(/<[^>]+>/g, '')
+check(actionableText.includes('目標一／目標二') && !/目標(?!一|二)/.test(actionableText.replace('目標一／目標二', '')), `actionable: 「目標一／目標二」 over the two targets: ${actionableText}`)
+check(/>[0-9.]+ 倍</.test(actionable), 'actionable: RR reads 倍')
 const observation = tableRow(both, 'pullback_v1')
 check(observation.includes('data-strategy-status="observation"') && observation.includes('觀察'), 'observation status')
 check(observation.includes(`<div class="strategy-observation-label">${OBSERVATION_LABEL}</div>`), 'observation levels sit under the observation label')
 const box = observation.slice(observation.indexOf('class="strategy-observation"'))
-for (const text of ['2,430.00～2,535.00', '16,371～32,741 張', '參考停損', '2,399.64', '參考目標', '2,478.57／2,521.07', '下一交易日 2026/10/23']) {
+for (const text of ['2,430.00～2,535.00', '16,371～32,741 張', '參考停損', '2,399.64', '參考目標一／目標二', '2,478.57／2,521.07', '下一交易日 2026/10/23']) {
   check(box.includes(text), `observation box shows ${text}`)
 }
 check(!observation.includes('ai-inference'), 'no AI note on a strategy row')
-// Only the ranking disclaimer may name a win rate, to say the score is not one.
-for (const markup of [both.split(CANDIDATE_DISCLAIMER).join(''), plainMarkup()]) check(!markup.includes('勝率') && !markup.includes('機率'), 'no win rate or probability')
+// Only the ranking disclaimer and the 總分 hover hint (UI_COPY_SPEC §7) may name a win rate, to say the score is not one.
+const scoreHint = `title="${GLOSSARY.find((term) => term.term_id === 'candidate_score')?.plain_definition}"`
+for (const markup of [both.split(CANDIDATE_DISCLAIMER).join('').split(scoreHint).join(''), plainMarkup()]) check(!markup.includes('勝率') && !markup.includes('機率'), 'no win rate or probability')
 // Phone: one card per strategy with the same content.
 check(count(both, 'class="card strategy-card"') === 2, 'one phone card per strategy')
 check(card(both, 'pullback_v1').includes(OBSERVATION_LABEL) && card(both, 'breakout_v1').includes('class="level-stop">2,364.00'), 'cards keep the two kinds of levels apart')
@@ -127,7 +133,7 @@ check(count(both, 'strategy-conditions') === 4, 'condition details under each ro
 const plain = render(<StrategyBoardPanel board={board([observationBreakout(), unreachablePullback()])} candidate={null} />)
 check(!plain.includes('data-strategy-candidate') && !plain.includes('ai-inference') && !plain.includes('AI 推論'), 'a non-candidate has no AI note')
 const breakoutObservation = tableRow(plain, 'breakout_v1')
-check(breakoutObservation.includes('收盤 ≥') && breakoutObservation.includes('61.30') && breakoutObservation.includes('成交量 ≥') && breakoutObservation.includes('1,235 張'), 'breakout observation: trigger and minimum lots')
+check(breakoutObservation.includes('收盤（元） ≥') && breakoutObservation.includes('61.30') && breakoutObservation.includes('成交量 ≥') && breakoutObservation.includes('1,235 張'), 'breakout observation: trigger and minimum lots')
 check(breakoutObservation.includes('超出下一交易日漲跌停範圍'), 'an unreachable trigger is said so')
 const unreachable = tableRow(plain, 'pullback_v1')
 check(unreachable.includes('data-strategy-levels="trend_unreachable"') && unreachable.includes(OBSERVATION_LABEL) && unreachable.includes('收盤需高於 322.00'), 'trend_unreachable: explanation, no price')
