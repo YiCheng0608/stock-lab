@@ -1237,6 +1237,28 @@ def test_the_comment_tool_marks_the_body_and_prints_the_url(mon: Harness) -> Non
     assert _events(mon)["comment:77"]["quiet"] == "coordinator_comment"
 
 
+@pytest.mark.parametrize(
+    ("raw", "posted"),
+    [
+        ("\ufeff決定：x\r\n\r\n第二行".encode(), "決定：x\n\n第二行"),
+        ("回報：沒有結尾換行".encode(), "回報：沒有結尾換行"),
+        (f"決定：x\r\n\r\n{MARK}\r\n".encode(), "決定：x"),
+    ],
+    ids=["bom-crlf-no-final-newline", "no-final-newline", "marked-crlf"],
+)
+def test_the_comment_tool_reads_bom_crlf_and_a_missing_final_newline(
+    mon: Harness, raw: bytes, posted: str
+) -> None:
+    """AC-2: whatever editor wrote the body, the mark is its last line, once."""
+    mon.answer("gh_comments", {"id": 77, "html_url": COMMENT_URL})
+    mon.write("gh_comments.hook", 'cat >"$FAKE_DIR/posted.json"\n')
+    (mon.root / "raw.md").write_bytes(raw)
+    result = _comment_tool(mon, "440", "--body-file", (mon.root / "raw.md").as_posix())
+    assert result.returncode == 0, result.stdout + result.stderr
+    body = json.loads((mon.fake / "posted.json").read_text(encoding="utf-8"))["body"]
+    assert body == posted + "\n\n" + MARK
+
+
 def test_a_failed_comment_exits_non_zero_without_a_url(mon: Harness) -> None:
     """AC-2: gh fails, the tool exits 1 and prints no URL."""
     mon.write("gh_comments.fail", "HTTP 502: Bad Gateway\n")
@@ -1261,8 +1283,9 @@ def test_a_failed_comment_exits_non_zero_without_a_url(mon: Harness) -> None:
         (("440",), None),
         (("440",), " \n"),
         (("440", "--body-file"), None),
+        (("440",), f"{MARK}\n"),
     ],
-    ids=["not-a-number", "no-body-file", "empty-body", "no-value"],
+    ids=["not-a-number", "no-body-file", "empty-body", "no-value", "mark-only"],
 )
 def test_the_comment_tool_refuses_bad_arguments_before_gh(
     mon: Harness, args: tuple, body: str | None

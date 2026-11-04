@@ -4,12 +4,14 @@
 # GitHub does not show (coordinator_json.py COORDINATOR_MARK). The event monitor queues a
 # marked comment without waking the coordinator (tools/ops/event_queue.py, quiet
 # coordinator_comment); every session uses the same GitHub account, so the author cannot
-# tell. Engineers and the user comment as before, and those comments wake.
+# tell. Engineers and the user comment as before, and those comments wake. Only the
+# coordinator uses it: an engineer's comment posted with it would not wake the coordinator.
 #
 # One gh call: POST repos/<repo>/issues/<number>/comments (a PR is an issue there), the body
-# as a JSON request on stdin. Prints the comment URL. Exit 64 on bad arguments or an empty
-# body (gh is not called), 1 when gh fails or answers without the URL (the comment may then
-# be posted: look on GitHub before posting it again), 2 without a Python.
+# as a JSON request on stdin. Prints the comment URL. Exit 64 on bad arguments or a body
+# that is empty without the mark (gh is not called), 1 when gh fails or answers without
+# the URL (the comment may then be posted: look on GitHub before posting it again), 2
+# without a Python.
 #
 # Usage: comment.sh NUMBER --body-file FILE [--python EXE]
 #   NUMBER            the Issue or PR number
@@ -46,7 +48,7 @@ case "$number" in '' | *[!0-9]* | 0*) die "要給 Issue 或 PR 編號（正整�
 find_python
 cj utf8 "$body_file" || die "本文檔是空的或不是 UTF-8：$body_file" 64
 
-payload="$(cj comment-body "$body_file")" || die "讀不了本文檔：$body_file" 64
+payload="$(cj comment-body "$body_file")" || die "本文檔讀不了或除了標記之外是空的：$body_file" 64
 # The pipeline's status is gh's: a gh that answered without reading all of stdin succeeded.
 out="$(printf '%s\n' "$payload" 2>/dev/null \
   | gh api "repos/$GH_REPO/issues/$number/comments" --method POST --input -)" \

@@ -27,7 +27,8 @@ value is missing or the condition is false, so a script can test the exit code.
   questions-query     the GraphQL query whose answer questions reads (no stdin)
   utf8 FILE           exit 0 when FILE is non-empty valid UTF-8 (no stdin)
   comment-body FILE   {"body": FILE's text with COORDINATOR_MARK as its last line}, the
-                      request comment.sh posts (#440; no stdin)
+                      request comment.sh posts (#440; no stdin); exit 1 when the text is
+                      empty without the mark
   within A B          "yes" when A is B or under B, else "no" (no stdin)
   guard PATH [--residual] [--home H] [--data D]... [--root R]...
                       why close_task.sh must not delete PATH, or nothing (no stdin)
@@ -215,7 +216,7 @@ def without_mark(body) -> str:
 
 
 def marked_body(text: str) -> str:
-    text = text.lstrip("﻿").rstrip()
+    text = text.lstrip("\ufeff").rstrip()
     return text if coordinator_comment(text) else f"{text}\n\n{COORDINATOR_MARK}"
 
 
@@ -381,6 +382,9 @@ def main(argv: list[str]) -> int:
     if command == "comment-body":
         with open(args[0], encoding="utf-8") as handle:
             text = handle.read()
+        if not without_mark(text.lstrip("\ufeff")).strip():
+            print("本文除了統籌標記之外是空的", file=sys.stderr)
+            return 1
         # ASCII JSON: nothing on the way to gh depends on the console's code page.
         print(json.dumps({"body": marked_body(text)}))
         return 0
