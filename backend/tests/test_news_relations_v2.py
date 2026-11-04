@@ -67,6 +67,16 @@ INSTRUMENTS = [
     ("TWSE", "3598", "奕力", "stock", "delisted"),
     ("TWSE", "6962", "奕力", "stock", "active"),
     ("TWSE", "4444", "舊名", "stock", "delisted"),
+    # #457 second review: foreign companies and more common words.
+    ("TWSE", "2374", "佳能", "stock", "active"),
+    ("TWSE", "1445", "大宇", "stock", "active"),
+    ("TPEx", "3570", "大塚", "stock", "active"),
+    ("TWSE", "4739", "康普", "stock", "active"),
+    ("TWSE", "2609", "陽明", "stock", "active"),
+    ("TPEx", "8109", "博大", "stock", "active"),
+    ("TWSE", "8201", "無敵", "stock", "active"),
+    ("TWSE", "1218", "泰山", "stock", "active"),
+    ("TWSE", "6531", "愛普*", "stock", "active"),
 ]
 
 
@@ -205,10 +215,35 @@ def test_full_name_aliases_come_from_the_masters_and_start_with_a_two_character_
         "美食外送平台競爭",
         "大同小異的財報",
         "中工程進度落後",
+        # A space after the name does not end the segment (#457 second review).
+        "全新 iPhone 17 登場",
+        "大量 資金湧入",
+        "新興 市場",
+        "信義 房屋",
+        "大同 小異",
+        # Added after the pre-registered draw (#457 second review).
+        "陽明山國家公園",
+        "南亞市場需求",
+        "博大精深",
+        "無敵鐵金剛",
+        "泰山區房價創高",
     ],
 )
 def test_common_word_names_do_not_match_as_words(matcher, title):
     assert matcher.symbols(title) == []
+
+
+@pytest.mark.parametrize(
+    "title",
+    ["佳能新相機開賣", "大宇造船接單", "大塚製藥", "康普裁員", "愛普生印表機"],
+)
+def test_foreign_company_homonyms_need_their_code(matcher, title):
+    assert matcher.symbols(title) == []
+
+
+def test_foreign_company_homonyms_match_next_to_their_code(matcher):
+    assert matcher.symbols("佳能(2374)第3季獲利") == ["TWSE:2374"]
+    assert matcher.symbols("愛普(6531)營收創高") == ["TWSE:6531"]
 
 
 def test_common_word_names_still_match_as_a_whole_segment(matcher):
@@ -218,6 +253,15 @@ def test_common_word_names_still_match_as_a_whole_segment(matcher):
     ]
     assert matcher.symbols("盤中速報", "焦點個股領跌。其中 全新") == ["TWSE:2455"]
     assert matcher.symbols("全新(2455)第3季獲利") == ["TWSE:2455"]
+    # Spaces before the closing punctuation are skipped.
+    assert matcher.symbols("盤中速報", "其中 全新 、穩懋 跌停") == [
+        "TWSE:2455",
+        "TWSE:3105",
+    ]
+    # A list item stays a whole segment: 泰山 the district in a list still matches
+    # (a known limit, left to a follow-up Issue).
+    assert matcher.symbols("建案", "將推桃園、泰山、台南5案") == ["TWSE:1218"]
+    assert matcher.symbols("盤中速報", "陽明、萬海齊揚") == ["TWSE:2609"]
 
 
 def test_only_listed_rows_decide_two_character_names(matcher):

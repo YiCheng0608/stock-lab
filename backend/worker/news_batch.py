@@ -88,9 +88,9 @@ NAME_ONLY_STOPWORDS = frozenset(
     {"台灣大", "大台北", "新天地", "創業家", "雲嘉南", "新零售", "太空梭", "宅配通"}
 )
 # Longer phrases that contain a company name but mean something else; they
-# take the span, so 中華電視 is not read as 中華電 and 大華銀投信 (UOB) not as
-# 9905 大華.
-NAME_BLOCKERS = frozenset({"中華電視", "大華銀"})
+# take the span, so 中華電視 is not read as 中華電, 大華銀投信 (UOB) not as
+# 9905 大華 and 愛普生 (Epson) not as 6531 愛普.
+NAME_BLOCKERS = frozenset({"中華電視", "大華銀", "愛普生"})
 # Holding-company endings of an official short name; the name without them is
 # the one the press uses (日月光投控 → 日月光).  It yields to another stock's
 # official name: 中光電 stays the (delisted) 5371, not 3718 中光電投控.
@@ -122,6 +122,12 @@ TWO_CHAR_STOPWORDS = frozenset(
         # Found in the #451 AC-2 check of the 2026-11-03～04 news:
         "南港",  # the district (台肥：南港廢土)
         "中華",  # 中華民國, 中華隊; a summary cut after 中華(電信)
+        # Foreign companies, added by the #457 second review after the
+        # pre-registered out-of-sample draw:
+        "佳能",  # Canon
+        "大宇",  # Daewoo
+        "大塚",  # Otsuka
+        "康普",  # CommScope
     }
 )
 # Two-character names that are ordinary words, places or institutions and so
@@ -138,6 +144,9 @@ TWO_CHAR_COMMON_WORDS = frozenset(
         "海光", "神州", "秋雨", "立德", "精英", "精湛", "精確", "精華", "綠意",
         "綠茵", "綠電", "美食", "至上", "華夏", "華東", "茂林", "藍天", "農林",
         "辣椒", "進階", "遠見", "雙喜", "霹靂", "青雲",
+        # Added by the #457 second review after the pre-registered draw:
+        # 陽明山, 南亞 (South Asia), 博大精深, 無敵, 泰山 (the district).
+        "陽明", "南亞", "博大", "無敵", "泰山",
     }
 )  # fmt: skip
 # A two-character name counts on its own only for a listed stock (``status``
@@ -212,8 +221,14 @@ def _closes_segment(text: str, index: int) -> bool:
 
 
 def _ends_segment(text: str, index: int) -> bool:
-    """True at the end of ``text`` or before punctuation, a symbol or a space."""
+    """True at the end of ``text`` or before punctuation or a symbol.
 
+    Spaces are skipped first, so 「全新 iPhone」 and 「大量 資金」 do not end a
+    segment while 「全新 、穩懋」 and a name at the very end do.
+    """
+
+    while index < len(text) and text[index].isspace():
+        index += 1
     return index >= len(text) or not text[index].isalnum()
 
 
