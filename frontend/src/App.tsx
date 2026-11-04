@@ -67,7 +67,7 @@ import { GLOSSARY } from './glossary'
 import { formatDay, formatTaipeiDay, formatTaipeiMinute } from './dates'
 import { formatPortfolioValue, formatPositionValuation, formatLocalPositionValuation, formatPortfolioClose, formatQuoteRecord, portfolioValueFromText } from './portfolioValues'
 import { formatFixed, formatTableNumber, formatTableVolume, formatTableVolumeShares, formatTableChip,formatShareQuantity, formatPositionShares, positionQuantityFromText, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, type ShareUnit } from './units'
-import { backtestTrackingLabel, officialEventDisplayTitle, formatProductTimeRole, levelFieldLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, staleCloseDateLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stockGroupLabel, type ProductQualityKind } from './presentation'
+import { backtestTrackingLabel, officialEventDisplayTitle, formatProductTimeRole, PRODUCT_TIME_NOTE, levelFieldLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, staleCloseDateLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stockGroupLabel, type ProductQualityKind } from './presentation'
 import { Shell } from './components/Shell'
 import { Term } from './components/Term'
 import { Card, CardList, DataTable, EmptyState, Skeleton, Tabs, cx, tabId, tabPanelId, type Column } from './components/ui'
@@ -413,7 +413,7 @@ function ProductTimeSummary({
         <span> · 規則最早執行日：{earliest}</span>
       </div>
       {dateTime && <time dateTime={dateTime} hidden />}
-      {!compact && <div>時間以台灣時間顯示；未確認的時間保留待核實。</div>}
+      {!compact && <div>{PRODUCT_TIME_NOTE}</div>}
     </div>
   )
 }

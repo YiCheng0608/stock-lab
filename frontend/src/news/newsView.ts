@@ -150,6 +150,23 @@ export function candidateConfidenceLabel(confidence: string | null | undefined):
   return ({ high: '模型把握高', medium: '模型把握中', low: '模型把握低' } as Record<string, string>)[confidence ?? ''] ?? '模型把握未提供'
 }
 
+// #465 rule check of a symbol candidate (NEWS_SPEC §5): the name or code is in the sent title／summary, or the model
+// inferred it. A result without a check (older API) is inference too; neither is 待核實 (UI_COPY_SPEC §4).
+export function candidateCheckLabel(check: string | null | undefined): string {
+  return check === 'mentioned' ? '規則核實：原文提及' : '推論'
+}
+
+export function candidateCheckSummary(candidates: ReadonlyArray<{ source_check?: string | null }>): string {
+  const mentioned = candidates.filter((candidate) => candidate.source_check === 'mentioned').length
+  const inferred = candidates.length - mentioned
+  const parts = [mentioned ? `規則核實 ${mentioned}` : '', inferred ? `推論 ${inferred}` : ''].filter(Boolean)
+  return `AI 候選 · ${candidates.length} 檔（${parts.join('、')}）`
+}
+
+export function candidateCheckNote(ai: Pick<NewsAi, 'candidate_check_version'>): string {
+  return `核對規則 ${ai.candidate_check_version ?? '未記錄'}。規則核實：名稱或代號出現在標題或摘要；推論：原文沒有寫出，由模型推得。候選不計入已核實關聯。`
+}
+
 // The AI block is shown only for a done inference result; unsupported items keep their direction unknown.
 export function usableAi(item: Pick<NewsItem, 'ai'>): NewsAi | null {
   const ai = item.ai
