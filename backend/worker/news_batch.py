@@ -872,7 +872,7 @@ def collect_news(
         relations = _write_unit(
             db, lambda: _rerelate_recent(db, matcher, label_date, utcnow())
         )
-    except OperationalError as exc:
+    except Exception as exc:  # noqa: BLE001 - the feeds must still be collected
         # The old relations stay; the next run tries again.
         db.rollback()
         relations = {"status": "failed", "error": f"{type(exc).__name__}: {exc}"}

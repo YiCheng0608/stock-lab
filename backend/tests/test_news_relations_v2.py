@@ -260,3 +260,28 @@ def test_news_collection_relates_recent_older_rule_items_before_the_feeds(db):
         ["TPEx:2643"],
         news_batch.RELATION_METHOD,
     )
+
+
+def test_a_failing_rerelation_leaves_the_old_relations_and_still_collects(
+    db, monkeypatch
+):
+    item = _item(db, "a", "聯電ADR2日下跌", published_at=utcnow() - timedelta(hours=5))
+    fetched: list[str] = []
+
+    def explode(*args, **kwargs):
+        raise ValueError("matcher exploded")
+
+    monkeypatch.setattr(news_batch, "_rerelate_recent", explode)
+    result = collect_news(
+        db,
+        run_date=RUN_DATE,
+        fetch=lambda url: fetched.append(url),
+        news_sources=news_batch.NEWS_SOURCES[:1],
+    )
+    assert result["relations"] == {
+        "status": "failed",
+        "error": "ValueError: matcher exploded",
+    }
+    assert fetched  # the feeds were still fetched
+    db.refresh(item)
+    assert (item.symbols_json, item.impact_method) == ([], V1)
