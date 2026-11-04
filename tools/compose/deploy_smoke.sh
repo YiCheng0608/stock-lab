@@ -11,8 +11,10 @@
 # reads .env and never touches another project.
 #
 # 1. Deploy t1 with no scheduler running (no locks to take): every service runs its t1 image.
-# 2. A job holds the daily lock in the scheduler: deploy t2 is refused (exit 1) and the images,
-#    containers, volumes and the volume's deploy.json are as before.
+# 2. A job holds the daily lock in the scheduler: deploy t2 is refused (exit 1); the images,
+#    containers, volumes and the volume's deploy.json are as before, and the job still runs
+#    and holds the lock (a refused deploy leaves a running job alone, #430). The seed marks
+#    today's daily done, so serve starts no catch-up daily that would hold the lock instead.
 # 3. Deploy t2: the locks are taken and let go, every service runs its t2 image, the record
 #    names t2 and the t1 image before it, and the new scheduler's watchdog check is ok.
 #
@@ -106,8 +108,25 @@ expect_images() {
         || fail "the services do not all run their $tag images"
 }
 
-echo "== seed: the verify fixture database in the project's stock-data volume"
-STOCK_RELEASE_TAG=seed compose run --rm --no-deps --build -e STOCK_SEED_FIXTURE=1 api true
+echo "== seed: the verify fixture database in the project's stock-data volume, today's daily done"
+# serve runs a daily as it starts on a weekday past 18:30 when the day's has not completed
+# (worker/serve.py missed_daily); that daily would hold the daily lock of step 2 (#430). A
+# success row of today (Taipei) keeps it from starting: only the smoke's own job holds it.
+STOCK_RELEASE_TAG=seed compose run --rm --no-deps --build -e STOCK_SEED_FIXTURE=1 api python -X utf8 -c '
+import sqlite3
+from datetime import datetime, timedelta, timezone
+
+now = datetime.now(timezone.utc)
+today = now.astimezone(timezone(timedelta(hours=8))).date().isoformat()
+stamp = now.replace(tzinfo=None).isoformat(sep=" ")
+with sqlite3.connect("/data/stock.db") as conn:
+    conn.execute(
+        "INSERT INTO schedule_runs (job, target_date, trigger, status, started_at, finished_at,"
+        " records, summary_json) VALUES (?, ?, ?, ?, ?, ?, 0, ?)",
+        ("daily", today, "manual", "success", stamp, stamp, "{}"),
+    )
+print("daily done:", today)
+'
 
 echo "== 1. deploy t1, no scheduler running"
 deploy t1 | tee "$work/t1.json"
@@ -118,14 +137,38 @@ expect_images t1
 
 echo "== 2. a job holds the daily lock: deploy t2 is refused and changes nothing"
 scheduler="$(STOCK_RELEASE_TAG=t1 compose ps -q scheduler)"
-docker exec -d "$scheduler" sh -c 'echo $$ > /tmp/holder.pid; exec python -m worker.job lock /data/locks/daily.lock -- sleep 600'
-for _ in $(seq 30); do
-    code=0
+# lock_code: the exit of taking the daily lock in the scheduler; 75 while another holds it.
+lock_code() {
+    local code=0
     docker exec "$scheduler" python -m worker.job lock /data/locks/daily.lock -- true 2> /dev/null || code=$?
-    [ "$code" = 75 ] && break
+    echo "$code"
+}
+processes() { docker exec "$scheduler" ps -eo pid,ppid,etimes,args; }
+# The test job writes the pid of its lock process only once it holds the lock: the command
+# runs under it, so a lock taken by another process leaves no pid file (#430).
+docker exec "$scheduler" rm -f /tmp/holder.pid
+docker exec -d "$scheduler" python -m worker.job lock /data/locks/daily.lock -- \
+    sh -c 'echo "$PPID" > /tmp/holder.pid; exec sleep 600'
+holder=""
+for _ in $(seq 30); do
+    holder="$(docker exec "$scheduler" cat /tmp/holder.pid 2> /dev/null | tr -d '\r')" || holder=""
+    [ -n "$holder" ] && break
     sleep 1
 done
-[ "$code" = 75 ] || fail "the test job did not take the daily lock"
+[ -n "$holder" ] || fail "the test job did not take the daily lock (lock exit $(lock_code)); the scheduler's processes:
+$(processes)"
+# holding: the test job's lock process is still there and the daily lock still held.
+holding() {
+    docker exec "$scheduler" sh -c 'tr "\0" " " < "/proc/$1/cmdline"' _ "$holder" 2> /dev/null \
+        | grep -q 'worker.job lock /data/locks/daily.lock' \
+        || fail "the test job (pid $holder) that held the daily lock is gone $1; the scheduler's processes:
+$(processes)"
+    local code
+    code="$(lock_code)"
+    [ "$code" = 75 ] || fail "the daily lock is not held $1 (lock exit $code, want 75)"
+}
+holding "before the deploy"
+echo "ok the test job (pid $holder) holds the daily lock"
 before="$(state)"
 set +e
 deploy t2 > "$work/t2-refused.json"
@@ -134,11 +177,20 @@ set -e
 cat "$work/t2-refused.json"
 [ "$code" = 1 ] || fail "deploy t2 with the daily lock held: exit $code, want 1"
 grep -q '排程執行中' "$work/t2-refused.json" || fail "refused for another reason"
+holding "after the refused deploy"
+echo "ok the test job (pid $holder) still holds the daily lock"
 after="$(state)"
 [ "$before" = "$after" ] || fail "a refused deploy changed something: $(diff <(echo "$before") <(echo "$after"))"
 echo "ok unchanged:"
 echo "$after"
-docker exec "$scheduler" sh -c 'kill "$(cat /tmp/holder.pid)"'
+docker exec "$scheduler" sh -c 'kill "$1"' _ "$holder" || fail "could not end the test job (pid $holder)"
+for _ in $(seq 30); do
+    code="$(lock_code)"
+    [ "$code" = 0 ] && break
+    sleep 1
+done
+[ "$code" = 0 ] || fail "the daily lock is still held after the test job ended (lock exit $code)"
+echo "ok the test job ended and let go of the daily lock"
 
 echo "== 3. deploy t2"
 deploy t2 | tee "$work/t2.json"

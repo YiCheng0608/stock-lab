@@ -423,7 +423,8 @@ jobs:
   # refuses, the api's restart, the scheduler's serve, and that the env file reaches the api and
   # the scheduler while both still start without one. tools/compose/deploy_smoke.sh then deploys
   # two tags with tools/ops/deploy.sh (#340): the services run the tagged images, a deploy
-  # refused while a job holds a lock changes no image, container or volume.
+  # refused while a job holds a lock changes no image, container or volume and leaves the job
+  # holding it (#430).
   compose:
     name: compose
     needs: changes
