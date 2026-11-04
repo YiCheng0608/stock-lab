@@ -9,6 +9,7 @@ poll by a freshly started monitor: two runs in a row are a restart (AC-1).
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 import time
@@ -16,7 +17,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from test_coordinator_scripts import NOW, ROOT, Harness, _ok
+from test_coordinator_scripts import NOW, OPS, ROOT, Harness, _ok
 
 CI_RUN = "https://github.com/YiCheng0608/stock-lab/actions/runs/{}/job/{}"
 
@@ -1016,3 +1017,256 @@ def test_the_watchdog_reads_the_monitor_heartbeat(tmp_path, content, expected) -
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout == expected
+
+
+# --- #440: events queued without waking the coordinator ----------------------------
+# The coordinator's own comments (comment.sh marks them), a PR leaving the open list and a
+# CLEAN or UNSTABLE merge state seen with its head's CI result are written to the queue
+# with a "quiet" reason: patrol.sh lists them, but they are not pending, wake nobody and
+# do not count for the hour before the #1 comment.
+
+MARK = "<!-- stock-lab:coordinator -->"
+HEAD = "c" * 12
+
+
+def _patrol_here(h: Harness, at: int = NOW + 120) -> str:
+    result = h.run(
+        "patrol.sh",
+        "--session-id",
+        "coord",
+        "--terminal",
+        "term_coord",
+        PATROL_NOW=str(at),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return result.stdout
+
+
+def _events(h: Harness) -> dict:
+    return {e["id"]: e for e in _records(h, "event")}
+
+
+def _sent(h: Harness) -> str:
+    return (h.fake / "sent_text.txt").read_text(encoding="utf-8")
+
+
+def test_coordinator_comments_and_gone_prs_are_queued_without_a_wake(
+    mon: Harness,
+) -> None:
+    """AC-1: a marked comment and pr_gone are in events.jsonl, not pending, no wake."""
+    _monitor(mon)
+    _done(mon, "3")
+    mon.answer("gh_pr_list", [])
+    mon.answer(
+        "gh_comments",
+        [
+            _comment(9, "2026-10-25T11:50:00Z"),
+            # GitHub hands bodies back with CRLF.
+            _comment(10, "2026-10-25T12:00:30Z", body=f"決定：照做。\r\n\r\n{MARK}"),
+        ],
+    )
+    result = _monitor(mon, at=NOW + 60)
+    events = _events(mon)
+    assert events["pr_gone:324"]["quiet"] == "pr_gone"
+    assert events["comment:10"]["quiet"] == "coordinator_comment"
+    assert events["comment:10"]["summary"] == "決定：照做。"
+    for e in events.values():
+        assert set(e) == FIELDS["event"] | ({"quiet"} if "quiet" in e else set()), e
+    assert "new=2 pending=0 unnotified=0 wake=0" in result.stdout
+    assert len(_sends(mon)) == 1 and len(_records(mon, "wake")) == 1
+    out = _patrol_here(mon)
+    assert "未處理事件：0 個" in out
+    assert "不喚醒的事件：2 個（seq 4～5" in out
+    assert "  [4] pr_gone PR #324" in out and "  [5] comment #316" in out
+    # --done covers them as well; then they are not listed any more.
+    _done(mon, "5")
+    assert "不喚醒的事件" not in _patrol_here(mon, NOW + 180)
+    # Comments without the mark as their last line wake as before (engineers, the user).
+    mon.answer(
+        "gh_comments",
+        [
+            _comment(11, "2026-10-25T12:03:00Z", body="回報：PR 已開"),
+            _comment(12, "2026-10-25T12:03:10Z", body=f"回報：引用 {MARK} 之後還有字"),
+        ],
+    )
+    _monitor(mon, at=NOW + 240)
+    assert "quiet" not in _events(mon)["comment:11"]
+    assert "quiet" not in _events(mon)["comment:12"]
+    assert len(_sends(mon)) == 2 and _sent(mon).startswith("有 2 個事件")
+
+
+@pytest.mark.parametrize(
+    ("merge", "quiet"),
+    [("CLEAN", True), ("UNSTABLE", True), ("DIRTY", False), ("BEHIND", False)],
+)
+def test_a_merge_state_seen_with_its_ci_result_wakes_only_when_it_needs_work(
+    mon: Harness, merge: str, quiet: bool
+) -> None:
+    """AC-1: CLEAN／UNSTABLE with the head's CI result add nothing; DIRTY／BEHIND do."""
+    _monitor(mon)
+    _done(mon, "3")
+    mon.answer("gh_pr_list", [_pr(run=2, merge=merge)])
+    _monitor(mon, at=NOW + 60)
+    events = _events(mon)
+    assert "quiet" not in events[f"ci:324:{HEAD}:2:success"]
+    assert events[f"merge:324:{HEAD}:{merge}"].get("quiet") == (
+        "merge_with_ci" if quiet else None
+    )
+    assert len(_sends(mon)) == 2
+    assert _sent(mon).startswith(f"有 {1 if quiet else 2} 個事件")
+
+
+def test_a_merge_state_that_changes_after_the_ci_result_wakes(mon: Harness) -> None:
+    _monitor(mon)  # CI success, BLOCKED
+    _done(mon, "3")
+    mon.answer("gh_pr_list", [_pr(merge="CLEAN")])
+    _monitor(mon, at=NOW + 60)
+    assert "quiet" not in _events(mon)[f"merge:324:{HEAD}:CLEAN"]
+    assert len(_sends(mon)) == 2 and _sent(mon).startswith("有 1 個事件")
+
+
+def test_quiet_events_do_not_ask_the_user_for_a_coordinator(mon: Harness) -> None:
+    """AC-1: an hour after a quiet event, with no heartbeat since, nothing on #1."""
+    _monitor(mon)
+    _done(mon, "3")  # heartbeat 12:02
+    mon.answer("gh_pr_list", [])
+    _monitor(mon, at=NOW + 180)
+    for minute in (64, 65):
+        _monitor(mon, at=NOW + 60 * minute)
+    assert not [c for c in mon.calls("gh") if c.startswith("issue ")]
+    assert not _records(mon, "stale")
+
+
+def test_a_quiet_event_does_not_bring_a_failed_wake_forward(mon: Harness) -> None:
+    """A failed wake is retried after ten minutes; a quiet event does not retry it now."""
+    mon.answer("orca_terminal_send", {"ok": False, "error": "terminal busy"})
+    _monitor(mon)
+    mon.answer("gh_pr_list", [])
+    _monitor(mon, at=NOW + 60)
+    assert len(_sends(mon)) == 1
+    mon.answer("orca_terminal_send", _ok({"send": {}}))
+    _monitor(mon, at=NOW + 600)
+    assert len(_sends(mon)) == 2 and _sent(mon).startswith("有 3 個事件")
+
+
+def test_events_queued_before_440_are_read_as_they_were(mon: Harness) -> None:
+    """AC-4: old lines have no quiet field; they stay pending and are not rewritten."""
+    old = [
+        {
+            "type": "event",
+            "seq": 1,
+            "id": "pr_gone:300",
+            "kind": "pr_gone",
+            "detected_at": "2026-10-25T11:00:00Z",
+            "at": None,
+            "ref": "PR #300",
+            "summary": "已不在 open PR（合併或關閉）",
+            "url": "",
+        },
+        {
+            "type": "event",
+            "seq": 2,
+            "id": "comment:5",
+            "kind": "comment",
+            "detected_at": "2026-10-25T11:00:00Z",
+            "at": "2026-10-25T10:59:00Z",
+            "ref": "#316",
+            "summary": "決定：照做。",
+            "url": "",
+        },
+        {
+            "type": "wake",
+            "at": "2026-10-25T11:00:00Z",
+            "ok": True,
+            "terminal": "term_coord",
+            "upto": 2,
+            "detail": "sent",
+        },
+    ]
+    events_file = mon.data / "logs" / "events.jsonl"
+    text = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in old)
+    events_file.write_text(text, encoding="utf-8", newline="\n")
+    assert "未處理事件：2 個（seq 1～2）" in _patrol_here(mon, NOW)
+    _monitor(mon, at=NOW + 60)
+    assert events_file.read_text(encoding="utf-8").startswith(text)
+    assert [e["seq"] for e in _records(mon, "event")] == [1, 2, 3, 4, 5]
+    assert "未處理事件：5 個（seq 1～5）" in _patrol_here(mon)
+
+
+# --- #440: comment.sh, the coordinator's comment tool --------------------------------
+
+
+def _comment_tool(h: Harness, *args: str, body: str | None = None):
+    shutil.copyfile(OPS / "comment.sh", h.ops / "comment.sh")
+    if body is not None:
+        (h.root / "body.md").write_text(body, encoding="utf-8", newline="\n")
+        args = (*args, "--body-file", (h.root / "body.md").as_posix())
+    return h.run("comment.sh", *args)
+
+
+COMMENT_URL = "https://github.com/YiCheng0608/stock-lab/issues/440#issuecomment-77"
+
+
+def test_the_comment_tool_marks_the_body_and_prints_the_url(mon: Harness) -> None:
+    """AC-2: the body sent ends with the mark; the comment URL is printed."""
+    mon.answer("gh_comments", {"id": 77, "html_url": COMMENT_URL})
+    mon.write("gh_comments.hook", 'cat >"$FAKE_DIR/posted.json"\n')
+    body = '決定：照 A 做。\n\n- 引號 "x"、$HOME、`code`、反斜線 \\n\n'
+    result = _comment_tool(mon, "440", body=body)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout == COMMENT_URL + "\n"
+    assert mon.calls("gh") == [
+        "api repos/YiCheng0608/stock-lab/issues/440/comments --method POST --input -"
+    ]
+    posted = json.loads((mon.fake / "posted.json").read_text(encoding="utf-8"))
+    assert posted == {"body": body.rstrip() + "\n\n" + MARK}
+    # A body that already ends with the mark is not marked twice.
+    (mon.root / "again.md").write_text(posted["body"], encoding="utf-8")
+    again = mon.run(
+        "comment.sh", "440", "--body-file", (mon.root / "again.md").as_posix()
+    )
+    assert again.returncode == 0, again.stderr
+    reposted = json.loads((mon.fake / "posted.json").read_text(encoding="utf-8"))
+    assert reposted == posted
+    # What it posted comes back to the monitor as a quiet event.
+    mon.answer(
+        "gh_comments",
+        [{**_comment(77, "2026-10-25T11:58:00Z"), "body": posted["body"]}],
+    )
+    _monitor(mon)
+    assert _events(mon)["comment:77"]["quiet"] == "coordinator_comment"
+
+
+def test_a_failed_comment_exits_non_zero_without_a_url(mon: Harness) -> None:
+    """AC-2: gh fails, the tool exits 1 and prints no URL."""
+    mon.write("gh_comments.fail", "HTTP 502: Bad Gateway\n")
+    result = _comment_tool(mon, "440", body="回報：x\n")
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert "HTTP 502" in result.stderr
+    # gh answered but with no URL: the comment may be posted, say so and fail.
+    (mon.fake / "gh_comments.fail").unlink()
+    mon.answer("gh_comments", {"message": "?"})
+    result = mon.run(
+        "comment.sh", "440", "--body-file", (mon.root / "body.md").as_posix()
+    )
+    assert result.returncode == 1 and result.stdout == ""
+    assert "html_url" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("args", "body"),
+    [
+        (("44a",), "回報：x\n"),
+        (("440",), None),
+        (("440",), " \n"),
+        (("440", "--body-file"), None),
+    ],
+    ids=["not-a-number", "no-body-file", "empty-body", "no-value"],
+)
+def test_the_comment_tool_refuses_bad_arguments_before_gh(
+    mon: Harness, args: tuple, body: str | None
+) -> None:
+    result = _comment_tool(mon, *args, body=body)
+    assert result.returncode == 64, result.stdout + result.stderr
+    assert result.stdout == "" and mon.calls("gh") == []
