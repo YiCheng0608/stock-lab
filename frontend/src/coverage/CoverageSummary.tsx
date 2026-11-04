@@ -23,12 +23,12 @@ export function CoverageSummaryMetrics({ summary, snapshot }: { summary: Summary
   return <>
     <div className="metric-grid">
       <div className="metric-card"><span>加權指數 已核實交易日</span><b>{summary.verified_taiex_sessions} 日{snapshot ? '（官方快照）' : ''}</b></div>
-      <div className="metric-card"><span>行情缺資料（20 日內）</span><b>{countLabel(summary.incomplete_to_20)}</b></div>
+      <div className="metric-card"><span>行情未滿 20 日</span><b>{countLabel(summary.incomplete_to_20)}</b></div>
       <div className="metric-card"><span>官方無成交（20 日內）</span><b>{countLabel(summary.no_trade_to_20)}</b></div>
-      <div className="metric-card"><span>行情缺資料（60 日內）</span><b>{countLabel(summary.incomplete_to_60)}</b></div>
+      <div className="metric-card"><span>行情未滿 60 日</span><b>{countLabel(summary.incomplete_to_60)}</b></div>
       <div className="metric-card"><span>籌碼未滿 20 日</span><b>{countLabel(summary.incomplete_chips_to_20)}</b></div>
     </div>
-    <div className="small-note">官方無成交：官方每日行情表列出該檔、但開高低收全部空白的交易日。這些日子不算缺資料，也不補價格；同一檔可能同時有缺資料與官方無成交的日子。</div>
+    <div className="small-note">官方無成交：官方每日行情表列出該檔、但開高低收全部空白的交易日。這些日子不算缺資料，也不補價格，不計入「行情未滿」；「行情未滿」是缺資料或上市後交易日還不夠的標的。同一檔可能同時有缺日與官方無成交的日子。</div>
     {Object.keys(summary.coverage_reason_counts).length > 0 && <div className="tag-list">{Object.entries(summary.coverage_reason_counts).map(([reason, count]) => <span className="tag" key={reason}>{coverageReasonLabels[reason] ?? '其他資料缺口'}：{count}</span>)}</div>}
   </>
 }

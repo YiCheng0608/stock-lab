@@ -38,8 +38,10 @@ from worker.sources import (
     _has_tabular_rows,
     _require_reported_date,
     is_quoted_security_code,
+    parse_tpex_daily_rows,
     parse_tpex_no_trade_rows,
     parse_twse_all_daily_no_trade_payload,
+    parse_twse_all_daily_payload,
 )
 
 RUN_TYPE = "no_trade_days"
@@ -48,18 +50,27 @@ MAX_SAMPLES = 50
 NO_ROWS = object()
 
 
-def _parse_twse(payload: Any, trading_date: date) -> list[NoTradeRecord]:
+# The parsers return None for a capture without a security quote table (no
+# row the bar parser reads): it is not usable, and the day's stored rows stay.
+def _parse_twse(payload: Any, trading_date: date) -> list[NoTradeRecord] | None:
+    if not parse_twse_all_daily_payload(payload, requested_date=trading_date):
+        return None
     return parse_twse_all_daily_no_trade_payload(
         payload, requested_date=trading_date, data_as_of=trading_date.isoformat()
     )
 
 
-def _parse_tpex(payload: Any, trading_date: date) -> list[NoTradeRecord]:
-    return parse_tpex_no_trade_rows(payload, data_as_of=trading_date.isoformat())
+def _parse_tpex(payload: Any, trading_date: date) -> list[NoTradeRecord] | None:
+    as_of = trading_date.isoformat()
+    if not parse_tpex_daily_rows(payload, data_as_of=as_of):
+        return None
+    return parse_tpex_no_trade_rows(payload, data_as_of=as_of)
 
 
 # exchange -> (raw_payloads.source, endpoint without the query, parser)
-CAPTURES: dict[str, tuple[str, str, Callable[[Any, date], list[NoTradeRecord]]]] = {
+CAPTURES: dict[
+    str, tuple[str, str, Callable[[Any, date], list[NoTradeRecord] | None]]
+] = {
     "TWSE": ("twse", TWSE_DAILY_HISTORY_ENDPOINT, _parse_twse),
     "TPEx": ("tpex", TPEX_HISTORY_API, _parse_tpex),
 }
@@ -153,9 +164,12 @@ def store_no_trade_days(
             continue
         if payload is None:
             continue
+        parsed = parse(payload, trading_date)
+        if parsed is None:
+            continue
         records = {
             record.symbol: record
-            for record in parse(payload, trading_date)
+            for record in parsed
             if record.trading_date == trading_date
         }
         instruments = {

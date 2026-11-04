@@ -577,6 +577,34 @@ def test_a_holidays_empty_answers_are_no_data_not_missing(env):
     assert (only_holiday["status"], only_holiday["no_data"]) == ("success", 2)
 
 
+def test_a_capture_without_a_security_table_leaves_the_days_rows_alone(env):
+    # #482 review: a later TPEx capture of the day that has rows but no quote
+    # table is not usable; it must not clear the day's evidence.
+    _collect_day1()
+    odd = sources.capture_payload(
+        "tpex",
+        sources.TPEX_HISTORY_API,
+        {
+            "date": "20261027",
+            "stat": "ok",
+            "tables": [{"title": "說明", "fields": ["說明"], "data": [["維護中"]]}],
+        },
+        DAY1.isoformat(),
+        collected_at=datetime(2026, 10, 27, 13, 30),
+    )
+    with env() as db:
+        run = db.scalar(select(IngestionRun).order_by(IngestionRun.id))
+        pipeline._upsert_raw_payload(db, run, odd)
+        db.commit()
+        result = no_trade_days.sync_no_trade_days(db, [DAY1])
+        db.commit()
+        rows = _rows(db)
+
+    assert result["status"] == "success"
+    assert (result["unchanged"], result["written"]) == (2, 0)
+    assert set(rows) == {("TWSE", "1413"), ("TPEx", "00734B")}
+
+
 # ---- migration 0025: the table, its identity and indexes ----
 
 
