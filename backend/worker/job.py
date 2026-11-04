@@ -64,7 +64,7 @@ TAIPEI = timezone(timedelta(hours=8))
 JOBS = ("daily", "news")
 TRIGGERS = ("scheduler", "manual", "simulation")
 # daily: the abandoned-run limit in worker.schedule_runs; a manual run's limit, as
-# serve passes its scheduled runs 75 minutes, which end before the 23:00 trigger
+# serve passes its scheduled runs 80 minutes, which end before the 23:00 trigger
 # (#466). news: well inside its 2-hour interval.
 TIME_LIMIT_MINUTES = {"daily": 150.0, "news": 90.0}
 DEFAULT_MIN_FREE_MEMORY_GB = 8.0

@@ -5,14 +5,14 @@ tools/ops/Register-Watchdog.ps1): APScheduler starts, on Taipei time, the
 commands those tasks ran.
 
 - daily: Monday to Friday 21:30 and 23:00 (#466), ``worker.cli job daily
-  --trigger scheduler --min-free-memory-gb 2 --time-limit-minutes 75``. 21:30 is
+  --trigger scheduler --min-free-memory-gb 2 --time-limit-minutes 80``. 21:30 is
   the run: the exchanges' margin files are out by then (an 18:30 run never got
   them and always ended partial). 23:00 is the insurance: after a 21:30
   ``success`` it records ``already_complete`` and only refetches the day's
   institutional files (#396); after a 21:30 that failed or did not run it is the
-  day's retry. The 75 minutes keep a stuck 21:30 run, serve's backstop included,
-  from holding the lock at 23:00 (a manual ``job daily`` keeps the job's own
-  150).
+  day's retry. The 80 minutes end a stuck 21:30 run at 22:50, so that it does not
+  hold the lock at 23:00 (#466 decision 6638008818; a manual ``job daily`` keeps
+  the job's own 150).
 - news: every 2 hours on the hour, ``worker.cli job news --min-free-memory-gb
   1`` (news, then news-llm).
 - watchdog: at :15 and :45, ``tools/ops/watchdog.sh``.
@@ -78,9 +78,9 @@ ROOT = job.ROOT
 TAIPEI = job.TAIPEI
 JOBS = ("daily", "news", "watchdog", "monitor")
 DAILY_TIMES = "21:30,23:00"
-# A scheduled daily's limit: with serve's backstop it ends before the next daily time
-# (23:00 is 90 minutes after 21:30). The longest daily of 10/19-11/04 took 20 minutes.
-DAILY_TIME_LIMIT_MINUTES = 75.0
+# A scheduled daily's limit: the job ends it before the next daily time (23:00 is 90
+# minutes after 21:30). The longest daily of 10/19-11/04 took 19.7 minutes.
+DAILY_TIME_LIMIT_MINUTES = 80.0
 NEWS_INTERVAL_HOURS = 2
 # The longest news interval is the day itself (#368): once a day, at 0:00.
 NEWS_INTERVAL_MAX_HOURS = 24

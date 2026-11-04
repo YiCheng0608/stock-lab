@@ -280,7 +280,7 @@ if [ "$gh_state" = ok ]; then
 fi
 
 # daily: from 23:10 on a weekday, the day's log needs an end line (only once daily
-# logs exist). A 21:30 run ends by its 75-minute limit (backend/worker/serve.py), and
+# logs exist). A 21:30 run ends by its 80-minute limit (backend/worker/serve.py), and
 # a 23:00 trigger that finds it running writes an end line of its own.
 if compgen -G "$logs/daily-*.log" >/dev/null && [ "$taipei_dow" -le 5 ] \
   && [ $((10#$taipei_hm)) -ge "$DAILY_RESULT_AFTER_HM" ]; then

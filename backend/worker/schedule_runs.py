@@ -108,7 +108,7 @@ NON_BLOCKING_STEPS = frozenset(
 # A run still marked running after this long has lost its process (killed,
 # rebooted); the next invocation records it as abandoned instead of waiting.
 # Equal to the job's own execution limit (a manual run).  A scheduled run ends
-# at serve's 75 minutes, before the 23:00 trigger (#466), which holds the same
+# at serve's 80 minutes, before the 23:00 trigger (#466), which holds the same
 # lock and so closes the row at once.  On the same host a dead PID is detected
 # immediately, without waiting for this limit.
 STALE_RUNNING_AFTER = timedelta(hours=2, minutes=30)
