@@ -72,12 +72,12 @@ function ComponentScores({ item }: { item: CandidateItem }) {
 
 type SubItemRow = { key: CandidateComponentKey; label: string; component: CandidateComponent | undefined; name: string; sub: CandidateSubItem; first: boolean }
 
-// Four columns at most inside a card; the component title is its own row (DESIGN_SYSTEM §5.1).
+// Four columns at most inside a card, short headers so 390px fits; the component title is its own row (DESIGN_SYSTEM §5.1).
 const SUB_ITEM_COLUMNS: ReadonlyArray<Column<SubItemRow>> = [
   { key: 'sub', header: '子項', wrap: true, cell: ({ name, sub }) => <>{subItemLabel(name)}{sub.null_explanation && <div className="small-note">{sub.null_explanation}</div>}</> },
   { key: 'value', header: '原值', num: true, cell: ({ name, sub }) => formatSubItemValue(name, sub.value) },
-  { key: 'percentile', header: <><Term id="percentile">百分位</Term>（0–100）</>, num: true, cell: ({ sub }) => formatCandidateScore(sub.percentile) },
-  { key: 'weight', header: '子項權重（%）', num: true, cell: ({ sub }) => String(Math.round(sub.weight * 100)) },
+  { key: 'percentile', header: <Term id="percentile">百分位</Term>, num: true, cell: ({ sub }) => formatCandidateScore(sub.percentile) },
+  { key: 'weight', header: '權重（%）', num: true, cell: ({ sub }) => String(Math.round(sub.weight * 100)) },
 ]
 
 export function ScoreDetails({ item, open }: { item: CandidateItem; open: boolean }) {
@@ -224,7 +224,8 @@ function CandidateMiniCard({ item, hidden }: { item: CandidateItem; hidden: bool
         <div><dt>收盤（元）</dt><dd><CloseValue item={item} /></dd></div>
         <div><dt><Term id="entry_zone">進場區</Term>（元）</dt><dd className="level-entry">{formatEntryZone(levels)}</dd></div>
         <div><dt><Term id="support">停損</Term>（元）</dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
-        <div><dt><Term id="target">{levels.target_2 != null ? '目標一／目標二' : '目標一'}</Term>（元）</dt><dd className="level-target"><Targets levels={levels} /></dd></div>
+        {/* Phone card: 「目標一／二」 keeps the four cells on one row so two cards fit 390×844 (DESIGN_SYSTEM §4). */}
+        <div><dt><Term id="target">{levels.target_2 != null ? '目標一／二' : '目標一'}</Term>（元）</dt><dd className="level-target"><Targets levels={levels} /></dd></div>
       </dl>
       <p className="candidate-mini-reason"><FirstReason item={item} /></p>
       <details className="details candidate-mini-ai"><summary>AI 說明</summary><CandidateDetail item={item} /></details>

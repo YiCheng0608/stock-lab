@@ -51,6 +51,7 @@ const UNITLESS_HEADERS: Record<string, string> = {
   資料批次: 'a batch identifier, not a quantity',
   RR: 'the cell carries 倍 (UI_COPY_SPEC §10)',
   原值: 'mixed units per sub-item; each cell carries its own unit',
+  百分位: '0–100; the scale is in the table note, and a longer header would overflow the 390px card',
   相對報酬: 'same-board percentile 0–100; the scale is in the table note',
   廣度: 'same-board percentile 0–100; the scale is in the table note',
   量能: 'same-board percentile 0–100; the scale is in the table note',
@@ -206,7 +207,7 @@ check(bodyText(members).includes('21.10') && bodyText(members).includes('2,510.0
 check(['+0.48', '-0.40', '1.20', '450.00', '+1.00', '-10.00', '+0.20', '+3.00'].every((value) => bodyText(members).includes(value)), `族群成員: percent and 億元 keep two decimals, got ${bodyText(members).join('|')}`)
 
 const details = render('ScoreDetails', () => <ScoreDetails item={completeItem()} open />)
-checkAligned('個股頁候選評分細節', details, ['原值', '百分位（0–100）', '子項權重（%）'])
+checkAligned('個股頁候選評分細節', details, ['原值', '百分位', '權重（%）'])
 const detailHeaders = (/<thead>([\s\S]*?)<\/thead>/.exec(details)?.[1] ?? '').match(/<th[\s>]/g) ?? []
 check(detailHeaders.length <= 4, `個股頁候選評分細節: ${detailHeaders.length} columns in a card; the group title belongs on its own row (§5.1)`)
 // Today list (#276): the levels, close, RR and total are numeric in th and every row.

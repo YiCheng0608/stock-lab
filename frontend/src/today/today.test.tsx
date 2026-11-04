@@ -142,7 +142,7 @@ check(text(slice(table, 'data-candidate-detail="3"', '</tr>')).includes(NOTE_PEN
 check(count(table, '來源：') === 12 && count(table, NOTE_DISCLAIMER) === 12, 'table: one 來源 line and one AI disclaimer per candidate')
 // Phone card: rank, name, total; market · strategy · group; four level cells; first reason; AI details.
 const card1 = slice(cards, 'data-candidate-card="1"', '</article>')
-for (const value of ['#1', '2377', '微星', '83', '上市 · 突破條件 · AI 伺服器（題材，第 2 名／11）', '收盤（元）', '162.00', '進場區（元）', '161.50', '停損（元）', '157.82', '目標一／目標二（元）', '167.39', '172.54', '三大法人 5 日淨買超，約 20 日均量的 2.59 倍', 'AI 說明']) {
+for (const value of ['#1', '2377', '微星', '83', '上市 · 突破條件 · AI 伺服器（題材，第 2 名／11）', '收盤（元）', '162.00', '進場區（元）', '161.50', '停損（元）', '157.82', '目標一／二（元）', '167.39', '172.54', '三大法人 5 日淨買超，約 20 日均量的 2.59 倍', 'AI 說明']) {
   check(text(card1).includes(value), `card #1: shows 「${value}」`)
 }
 check(/class="[^"]*level-stop[^"]*">157\.82/.test(card1) && /class="[^"]*level-target[^"]*">167\.39/.test(card1), 'card #1: stop and target carry the level classes')
