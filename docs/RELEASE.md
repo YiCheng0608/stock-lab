@@ -99,7 +99,10 @@ export MSYS_NO_PATHCONV=1   # 否則 Git Bash 會改寫 -v 的容器路徑
 docker compose -p "$P" exec scheduler python -m worker.cli maintenance on --reason "$TAG"
 docker compose -p "$P" exec scheduler python -m worker.cli maintenance status
 
-# 2. 備份（唯讀連線，含 WAL）。輸出的 alembic_version 是 DB 目前的 revision
+# 2. 備份（唯讀連線，含 WAL）。輸出的 alembic_version 是 DB 目前的 revision，quick_check 是 ok。
+#    api 開著 DB 時 source_open 應是 ro；沒有連線開著、volume 裡沒有 -wal／-shm 時，copy_db.py
+#    以 immutable 開主檔，source_open 是 immutable（#486，docs/ops/LOCAL.md「取正式 DB 的唯讀
+#    副本」）；exit 1 說有 -wal 或 -journal 時，先讓 api 開一次 DB（打任一個 API）再重跑
 docker run --rm --network none -v "${P}_stock-data":/data:ro -v "$B":/out \
   -v "$TOOLS/copy_db.py":/t/copy_db.py:ro "$OLD" python /t/copy_db.py --src /data/stock.db --dest /out
 
