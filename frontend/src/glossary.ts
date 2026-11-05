@@ -177,7 +177,7 @@ export const GLOSSARY: GlossaryTerm[] = [
     plain_definition: '族群的催化劑（官方事件）分項沒有可核實的資料，只用相對報酬、廣度、量能、法人四項計分。',
     use: '標示這是「技術與籌碼觀察」，不是五分項完整的熱門族群。',
     how_to_read: '其餘四項都有值時仍可排名，分數以四項的權重（合計 90%）重新計算；官方事件資料完整後才稱熱門族群。',
-    limitations: '事件待補不是利空，也不代表沒有事件，只是目前無法核實。', related: ['hot_group', 'group_components', 'data_quality'], version: '1.1.0',
+    limitations: '事件待補不是利空，也不代表沒有事件，只是目前無法核實。這是我們的收集缺口（官方日期查詢失敗或尚未查詢），補查回補後才會有值，和官方本來就沒有的「未列」不同。', related: ['hot_group', 'group_components', 'data_quality'], version: '1.4.0',
   },
   {
     term_id: 'etf', name: 'ETF 分類', aliases: ['ETF'], category: 'etf',

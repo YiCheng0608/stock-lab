@@ -6,7 +6,7 @@ const INCOMPLETE_ACTION_STATES = new Set(['data_insufficient', 'data_incomplete'
 const REASON_LABELS: Record<string, string> = {
   passed: '此研究條件已符合',
   rejected: '此研究條件尚未成立',
-  data_incomplete: '此研究條件資料待補',
+  data_incomplete: '此研究條件資料不足',
   observation: '條件尚未成立，持續觀察',
   conditional: '符合條件後可研究進場',
   active: '研究追蹤中',
@@ -17,12 +17,12 @@ const REASON_LABELS: Record<string, string> = {
   incomparable: '目前資料無法比較',
   settled: '研究追蹤已結束',
   invalid_levels: '研究價位無法驗證',
-  prior_20_highs_missing_or_invalid: '前 20 個交易日高點資料待補',
-  prior_20_volumes_missing_or_invalid: '前 20 個交易日成交量資料待補',
-  close_missing_or_non_finite: '最近收盤資料待補',
-  volume_missing_or_non_finite: '當日成交量資料待補',
-  ma20_missing_or_non_finite: '20 日均線資料待補',
-  ma60_missing_or_non_finite: '60 日均線資料待補',
+  prior_20_highs_missing_or_invalid: '前 20 個交易日高點資料不足',
+  prior_20_volumes_missing_or_invalid: '前 20 個交易日成交量資料不足',
+  close_missing_or_non_finite: '最近收盤資料不足',
+  volume_missing_or_non_finite: '當日成交量資料不足',
+  ma20_missing_or_non_finite: '20 日均線資料不足',
+  ma60_missing_or_non_finite: '60 日均線資料不足',
   close_not_above_prior_20_day_high: '收盤尚未站上前 20 日高點',
   volume_ratio_below_1_20: '成交量未達前 20 日均量的 1.2 倍',
   ma20_not_above_ma60: 'MA20 尚未高於 MA60',
@@ -228,7 +228,7 @@ function reasonCodeLabel(code: string): string {
 }
 
 function strategyStateLabel(value: string): string {
-  return ({ passed: '已成立', conditional: '條件成立', observation: '未成立、持續觀察', rejected: '未成立', data_incomplete: '資料待補' }[value] ?? '狀態待核實')
+  return ({ passed: '已成立', conditional: '條件成立', observation: '未成立、持續觀察', rejected: '未成立', data_incomplete: '資料不足' }[value] ?? '狀態待核實')
 }
 
 function translateStructuredReason(value: string): string | null {
@@ -237,11 +237,11 @@ function translateStructuredReason(value: string): string | null {
   const key = value.slice(0, equal).trim().toLowerCase()
   const rest = value.slice(equal + 1).trim()
   if (key === 'group') {
-    return rest.toLowerCase() === 'missing' ? '族群條件待補' : '族群條件已核對'
+    return rest.toLowerCase() === 'missing' ? '族群條件資料不足' : '族群條件已核對'
   }
   if (key === 'missing') {
     const labels = rest.split(',').map(reasonCodeLabel).filter(Boolean)
-    return labels.length ? '待補資料：' + labels.join('、') : '必要研究資料尚未齊備'
+    return labels.length ? '缺少資料：' + labels.join('、') : '必要研究資料尚未齊備'
   }
   if (key === 'breakout' || key === 'pullback') {
     const [state, ...reasonParts] = rest.split(':')
@@ -313,7 +313,7 @@ export function groupDisplayName(value: string | null | undefined): string {
 }
 
 export function stockDirectoryQualityLabel(dataQuality?: string): string {
-  return dataQuality?.trim().toLowerCase() === 'complete' ? '可用' : '待補'
+  return dataQuality?.trim().toLowerCase() === 'complete' ? '可用' : '不足'
 }
 
 export function productActionReasonLabel(reason: string): string {
@@ -344,12 +344,26 @@ export function productResearchDescription(status?: string, missingFields: strin
   if (visibleMissing.length > 0) return '策略判斷缺少：' + visibleMissing.join('、')
   return status?.trim().toLowerCase() === 'complete'
     ? '策略判斷資料已齊備；是否有條件成立仍以行動摘要為準。'
-    : '策略判斷資料仍待補；目前沒有可列出的欄位。'
+    : '策略判斷資料不足；目前沒有可列出的欄位。'
+}
+
+// A data_insufficient summary named by what is short (Issue 524, UI_COPY_SPEC §5): an excluded ETF category is not a
+// gap but a rule that does not apply; only the frontend's wording changes, the state and its tier do not.
+export const INSUFFICIENT_ACTION_LABEL = '資料不足，無法判斷'
+export const NOT_APPLICABLE_ACTION_LABEL = '不適用一般研究條件'
+const NOT_APPLICABLE_GAP_CODES = new Set(['etf_not_general_action_eligible'])
+
+export function gapNotApplicable(reasons: ReadonlyArray<{ code: string }> | null | undefined): boolean {
+  return Boolean(reasons?.length) && (reasons ?? []).every((reason) => NOT_APPLICABLE_GAP_CODES.has(reason.code))
+}
+
+export function incompleteActionLabel(reasons: ReadonlyArray<{ code: string }> | null | undefined): string {
+  return gapNotApplicable(reasons) ? NOT_APPLICABLE_ACTION_LABEL : INSUFFICIENT_ACTION_LABEL
 }
 
 export type ProductQualityKind = 'market' | 'research' | 'theme' | 'generic'
 
-export function productQualityLabel(dataQuality?: string, kind: ProductQualityKind = 'generic'): string {
+export function productQualityLabel(dataQuality?: string, kind: ProductQualityKind = 'generic', notApplicable = false): string {
   const status = dataQuality?.trim().toLowerCase() ?? 'unknown'
 
   if (kind === 'market') {
@@ -359,7 +373,8 @@ export function productQualityLabel(dataQuality?: string, kind: ProductQualityKi
   }
 
   if (kind === 'research') {
-    return status === 'complete' ? '策略判斷資料完整' : '策略判斷資料待補'
+    if (status === 'complete') return '策略判斷資料完整'
+    return notApplicable ? '策略判斷不適用' : '策略判斷資料不足'
   }
 
   if (kind === 'theme') {

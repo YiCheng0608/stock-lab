@@ -186,7 +186,7 @@ const plain = (markup: string) => markup.replace(/<!-- -->/g, '').replace(/<[^>]
 const directoryCards = directory.slice(directory.indexOf('class="card-list stock-cards"'))
 const stockCards = directoryCards.split('<div class="stock-card">').slice(1)
 check(stockCards.length === 2 && !/<table/.test(directoryCards), `個股清單手機卡: one card per row and no table, got ${stockCards.length}`)
-check(plain(stockCards[0]).join('|') === '1742 台蠟|21.10|上市 · 股票|尚無研究動作|待補', `個股清單手機卡: field order, got ${plain(stockCards[0]).join('|')}`)
+check(plain(stockCards[0]).join('|') === '1742 台蠟|21.10|上市 · 股票|尚無研究動作|不足', `個股清單手機卡: field order, got ${plain(stockCards[0]).join('|')}`)
 check(plain(stockCards[1]).slice(0, 2).join('|') === '2330 台積電|2,510.00', `個股清單手機卡: two decimals with thousands, got ${plain(stockCards[1]).join('|')}`)
 check(/<div class="stock-card-price">[^<]*<\/div>/.test(stockCards[0]) && directoryCards.indexOf('class="table-note"') < directoryCards.indexOf('class="stock-card"'), '個股清單手機卡: the close is one text run and the unit note leads the cards')
 const staleDirectory = render('StockTable stale', () => <StockTable {...{ rows: [{ ...directoryRows[0], price_as_of: '2026-10-20' }], dataAsOf: '2026-10-22' }} />)

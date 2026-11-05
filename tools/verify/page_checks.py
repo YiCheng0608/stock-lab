@@ -2390,7 +2390,7 @@ def hidden_line(summary: dict) -> str | None:
         for label, key in (
             ("ETF", "etf"),
             ("其他觀察", "observation"),
-            ("策略判斷資料待補", "data_insufficient"),
+            ("資料不足", "data_insufficient"),
         )
         if hidden.get(key)
     ]

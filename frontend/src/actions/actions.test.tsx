@@ -45,7 +45,7 @@ function summary(extra: Partial<ActionTierSummary> = {}): ActionTierSummary {
       { tier: 2, key: 'conditional', label: '其他成立條件', stock: 50, etf: 8, shown: 50 },
       { tier: 3, key: 'near', label: '接近成立', stock: 0, etf: 0, shown: 0 },
       { tier: 4, key: 'observation', label: '其他觀察', stock: 1310, etf: 140, shown: 2 },
-      { tier: 5, key: 'data_insufficient', label: '資料待補', stock: 129, etf: 8, shown: 0 },
+      { tier: 5, key: 'data_insufficient', label: '資料不足', stock: 129, etf: 8, shown: 0 },
     ],
     hidden: { etf: 186, observation: 1308, data_insufficient: 129 },
     views: { focus: 54, with_observation: 1362, all: 1491 },
@@ -69,7 +69,7 @@ const filters = render('ActionFilters', () => <ActionFilters summary={summary()}
 for (const label of ['重點 54', '含其他觀察 1,362', '全部 1,491', '含 ETF（8）']) check(text(filters).includes(label), `篩選膠囊: shows 「${label}」 from summary, got ${text(filters)}`)
 check(count(filters, 'aria-pressed="true"') === 1 && /aria-pressed="true"[^>]*>重點 54/.test(filters), '篩選膠囊: only 重點 is selected by default')
 check(filters.includes('filter-chip-selected') && count(filters, 'class="badge filter-chip') === 3, '篩選膠囊: three badge chips, the selected variant on one')
-const sentence = '預設隱藏：ETF 186 檔、其他觀察 1,308 檔、策略判斷資料待補 129 檔；自選標的一律顯示。隱藏不刪資料，切換上方篩選即可看到。'
+const sentence = '預設隱藏：ETF 186 檔、其他觀察 1,308 檔、資料不足 129 檔；自選標的一律顯示。隱藏不刪資料，切換上方篩選即可看到。'
 check(text(filters).includes(sentence), `預設隱藏句: from summary.hidden, got ${text(filters)}`)
 check(hiddenSentence(summary({ hidden: { etf: 0, observation: 3, data_insufficient: 0 }, view: 'all' })) === '目前隱藏：其他觀察 3 檔；自選標的一律顯示。隱藏不刪資料，切換上方篩選即可看到。', '隱藏句: a zero part is left out and a non-default filter says 目前隱藏')
 check(hiddenSentence(summary({ hidden: { etf: 0, observation: 0, data_insufficient: 0 }, view: 'all', include_etf: true })) === null, '隱藏句: nothing hidden, no line')

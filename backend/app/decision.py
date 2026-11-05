@@ -2140,7 +2140,7 @@ ACTION_TIERS: tuple[ActionTier, ...] = (
         4, "observation", "其他觀察", ("unmet_conditions", "symbol", "exchange")
     ),
     ActionTier(
-        5, "data_insufficient", "資料待補", ("watchlist_first", "symbol", "exchange")
+        5, "data_insufficient", "資料不足", ("watchlist_first", "symbol", "exchange")
     ),
 )
 # Tier 0 by the holding's action summary; any other state follows these.

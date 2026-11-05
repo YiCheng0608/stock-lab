@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { ResearchGapLine, stockCoverageReasonLabels } from '../App'
 
 // Standalone regression module (no browser, no server, no network): the stock page's research tab says why the
-// strategy judgement is short of data (Issue 511, UI_COPY_SPEC §6.1), and no field code falls back to 「待補資料」.
+// strategy judgement is short of data (Issue 511, UI_COPY_SPEC §6.1), and no field code falls back to 「其他研究資料」.
 const check = (condition: boolean, message: string) => { if (!condition) throw new Error(message) }
 
 // Every code build_decision_summary can put in blocking_reasons (backend/app/decision.py).
@@ -22,15 +22,15 @@ const reasons = [
 const html = renderToStaticMarkup(<ResearchGapLine reasons={reasons} missingFields={['bars_60d', 'data_incomplete']} />)
 check(html.includes('目前不能判斷的原因：近 60 個交易日有 3 天官方行情無成交；近 5 個交易日有 1 天官方三大法人表未列此股（官方只列當天有法人買賣的股票）。'), 'the causes are the line, joined by 「；」')
 check(html.includes('<summary>查看缺少的欄位</summary><div>60 日行情、策略訊號資料不完整</div>'), 'the exact fields stay one click away')
-check(!html.includes('研究資料待補'), 'a line with causes does not say 研究資料待補')
+check(!html.includes('研究資料不足'), 'a line with causes does not say 研究資料不足')
 
 // An older response (no gap_reasons) keeps the field list.
 const older = renderToStaticMarkup(<ResearchGapLine reasons={undefined} missingFields={['bars_60d']} />)
-check(older.includes('研究資料待補：60 日行情。'), 'no causes: the field list as before')
+check(older.includes('研究資料不足：60 日行情。'), 'no causes: the field list as before')
 
 // No blocking code is unknown to the field table.
 const every = renderToStaticMarkup(<ResearchGapLine reasons={undefined} missingFields={BLOCKING_CODES} />)
-check(!every.includes('待補資料'), 'every blocking code has a field label: ' + every)
+check(!every.includes('其他研究資料'), 'every blocking code has a field label: ' + every)
 
 // The stock page's coverage panel counts a no-trade day as one of the 60 sessions still missing, so its label must
 // not call the day 「不算缺資料」 (review of PR 514); the market coverage page keeps its own label.

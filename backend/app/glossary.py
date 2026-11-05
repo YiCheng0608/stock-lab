@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 
-GLOSSARY_VERSION = "1.3.0"
+GLOSSARY_VERSION = "1.4.0"
 
 
 _TERMS: tuple[dict[str, Any], ...] = (
@@ -385,7 +385,11 @@ _TERMS: tuple[dict[str, Any], ...] = (
             "其餘四項都有值時仍可排名，分數以四項的權重（合計 90%）重新計算；"
             "官方事件資料完整後才稱熱門族群。"
         ),
-        "limitations": "事件待補不是利空，也不代表沒有事件，只是目前無法核實。",
+        "limitations": (
+            "事件待補不是利空，也不代表沒有事件，只是目前無法核實。"
+            "這是我們的收集缺口（官方日期查詢失敗或尚未查詢），補查回補後才會有值，"
+            "和官方本來就沒有的「未列」不同。"
+        ),
         "related": ["hot_group", "group_components", "data_quality"],
         "version": GLOSSARY_VERSION,
     },

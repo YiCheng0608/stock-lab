@@ -1235,7 +1235,7 @@ def test_stock_quality_explains_market_and_research_as_separate_purposes(product
     assert response.status_code == 200
     quality = response.json()["quality_summary"]
     assert quality["market"]["label"] == "當日行情來源完整"
-    assert quality["research"]["label"] == "策略判斷資料待補"
+    assert quality["research"]["label"] == "策略判斷資料不足"
     assert "bars_20d" in quality["research"]["missing_fields"]
     conditions = response.json()["strategy_conditions"]
     assert conditions["breakout"]["source"] == "系統固定研究規則"

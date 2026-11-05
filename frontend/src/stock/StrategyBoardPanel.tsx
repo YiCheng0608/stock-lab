@@ -14,7 +14,7 @@ import {
 import { Term } from '../components/Term'
 import { Badge, DataTable, DateBadge, EmptyState, type Column } from '../components/ui'
 import { productActionReasonLabel } from '../presentation'
-import type { CandidateItem, StrategyActionableLevels, StrategyBoard as Board, StrategyBoardRow } from '../types'
+import type { CandidateItem, GapReason, StrategyActionableLevels, StrategyBoard as Board, StrategyBoardRow } from '../types'
 import {
   BOARD_NOTE,
   BOARD_TITLE,
@@ -118,20 +118,20 @@ function ConditionDetails({ row }: { row: StrategyBoardRow }) {
   )
 }
 
-function columns(floorNote: string | null): ReadonlyArray<Column<StrategyBoardRow>> {
+function columns(floorNote: string | null, gapReasons: GapReason[] | undefined): ReadonlyArray<Column<StrategyBoardRow>> {
   return [
     { key: 'strategy', header: '策略', cell: (row) => <strong><Term id={row.entry_type === 'breakout' ? 'breakout' : 'pullback'}>{row.label}</Term></strong> },
     { key: 'status', header: '狀態', cell: (row) => <StatusCell row={row} floorNote={floorNote} /> },
-    { key: 'unmet', header: '差哪個條件', wrap: true, cellClassName: 'strategy-unmet', cell: unmetText },
+    { key: 'unmet', header: '差哪個條件', wrap: true, cellClassName: 'strategy-unmet', cell: (row) => unmetText(row, gapReasons) },
     { key: 'levels', header: '價位', wrap: true, cellClassName: 'strategy-levels-cell', cell: (row) => <LevelsCell row={row} folded /> },
   ]
 }
 
-function StrategyCard({ row, floorNote }: { row: StrategyBoardRow; floorNote: string | null }) {
+function StrategyCard({ row, floorNote, gapReasons }: { row: StrategyBoardRow; floorNote: string | null; gapReasons: GapReason[] | undefined }) {
   return (
     <article className="card strategy-card" data-strategy-card={row.strategy}>
       <div className="strategy-card-head"><strong><Term id={row.entry_type === 'breakout' ? 'breakout' : 'pullback'}>{row.label}</Term></strong><StatusCell row={row} floorNote={floorNote} /></div>
-      <p className="strategy-unmet">{unmetText(row)}</p>
+      <p className="strategy-unmet">{unmetText(row, gapReasons)}</p>
       <LevelsCell row={row} folded />
       <ConditionDetails row={row} />
     </article>
@@ -161,7 +161,8 @@ function CandidateRow({ board, candidate }: { board: Board; candidate: Candidate
   )
 }
 
-export function StrategyBoardPanel({ board, candidate }: { board: Board | null | undefined; candidate: CandidateItem | null | undefined }) {
+// gapReasons: the stock summary's causes (UI_COPY_SPEC §6.1), for 差哪個條件 of an incomplete row (§10.1).
+export function StrategyBoardPanel({ board, candidate, gapReasons }: { board: Board | null | undefined; candidate: CandidateItem | null | undefined; gapReasons?: GapReason[] }) {
   if (!board) return null
   // 「…低於 1,000 張門檻，不列候選」 next to every 成立 when the day's run left the stock out (#490).
   const floorNote = liquidityExclusionText(board.liquidity ? { ...board.liquidity, exclusion: board.liquidity.candidate_exclusion } : null)
@@ -186,13 +187,13 @@ export function StrategyBoardPanel({ board, candidate }: { board: Board | null |
       <DataTable
         wrapClassName="strategy-table-wrap"
         className="strategy-table"
-        columns={columns(floorNote)}
+        columns={columns(floorNote, gapReasons)}
         rows={board.strategies}
         rowKey={(row) => row.strategy}
         rowProps={(row) => ({ 'data-strategy-row': row.strategy })}
         detailRow={(row) => ({ props: { 'data-strategy-detail': row.strategy }, content: <ConditionDetails row={row} /> })}
       />
-      <div className="strategy-cards">{board.strategies.map((row) => <StrategyCard key={row.strategy} row={row} floorNote={floorNote} />)}</div>
+      <div className="strategy-cards">{board.strategies.map((row) => <StrategyCard key={row.strategy} row={row} floorNote={floorNote} gapReasons={gapReasons} />)}</div>
     </section>
   )
 }

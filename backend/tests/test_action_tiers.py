@@ -377,7 +377,7 @@ def test_the_tier_rules_are_pinned_to_the_version():
             ("unmet_conditions", "price_gap", "symbol", "exchange"),
         ),
         (4, "observation", "其他觀察", ("unmet_conditions", "symbol", "exchange")),
-        (5, "data_insufficient", "資料待補", ("watchlist_first", "symbol", "exchange")),
+        (5, "data_insufficient", "資料不足", ("watchlist_first", "symbol", "exchange")),
     ]
     assert decision.HOLDING_STATE_ORDER == (
         "reduce_exit",
