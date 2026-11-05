@@ -1,7 +1,7 @@
 import type { CursorPage, NewsAi, NewsItem, ProductTime, ProductTimeRole } from '../types'
 
 // Shapes follow GET /api/news and /api/news/{id} (backend/app/api.py news_dict); `ai` follows PR 176 (Issue 163)
-// news_ai_map: latest done result, inference=true, symbol candidates verified=false, name=null for unknown codes.
+// news_ai_map: latest done result, inference=true, symbol candidates verified=false; codes nothing names are hidden (#512).
 
 export function unknownRole(role: string, reason: string): ProductTimeRole {
   return { role, status: 'unknown', precision: 'none', value: null, utc: null, date: null, reason }
@@ -88,9 +88,10 @@ export function aiResult(overrides: Partial<NewsAi> = {}): NewsAi {
     status: 'done',
     summary: '台積電宣布臺南增建3奈米廠，預計2028年上半年量產，南市府積極協助。',
     symbol_candidates: [
-      { exchange: 'TWSE', symbol: '2330', name: '台積電', reason: '新廠擴產', confidence: 'high', verified: false, source_check: 'mentioned' },
-      { exchange: 'TWSE', symbol: '6751', name: null, reason: '供應鏈', confidence: 'low', verified: false, source_check: 'not_mentioned' },
+      { exchange: 'TWSE', symbol: '2330', name: '台積電', listing: 'listed', reason: '新廠擴產', confidence: 'high', verified: false, source_check: 'mentioned' },
+      { exchange: 'TWSE', symbol: '7808', name: '訊聯智藥', listing: 'emerging', reason: '供應鏈', confidence: 'low', verified: false, source_check: 'not_mentioned' },
     ],
+    hidden_symbol_candidates: [{ exchange: 'TPEx', symbol: '4152', reason: 'code_unknown' }],
     candidate_check_version: 'ai-candidate-source/v1',
     theme_candidates: [{ theme: '半導體', reason: '晶圓代工產能' }],
     impact_direction: 'positive',

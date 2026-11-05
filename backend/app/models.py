@@ -220,6 +220,27 @@ class MarketSummary(Base):
     )
 
 
+class EmergingIssuer(Base):
+    """A company of the TPEx emerging-market roster (興櫃, Issue #512).
+
+    Written by collect from ``mopsfin_t187ap03_R``; one row per code, moved to
+    the newest roster that lists it (``as_of_date`` is the roster's 資料日期).
+    A code missing from the newest roster keeps its older ``as_of_date``, and
+    readers only take the newest roster's codes.  Names only: never a universe,
+    quote, candidate, group or strategy input, and not an ``instruments`` row.
+    """
+
+    __tablename__ = "emerging_issuers"
+
+    symbol: Mapped[str] = mapped_column(String(12), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    market: Mapped[str] = mapped_column(String(20), default="emerging")
+    as_of_date: Mapped[date] = mapped_column(Date, index=True)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+
+
 class TradingCalendarDay(Base):
     """One row of TWSE's yearly official holiday schedule (Issue #294).
 
