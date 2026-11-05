@@ -15,6 +15,7 @@ import {
   PARTIAL_NOTE,
   TODAY_VISIBLE,
   averageVolumeText,
+  formatLots,
   candidateAiEntry,
   candidateChange,
   candidateGroupText,
@@ -166,15 +167,15 @@ function FirstReason({ item }: { item: CandidateItem }) {
   return reason ? <>{reason.text}{reason.inference && <> <InferenceBadge /></>}</> : <>—</>
 }
 
-// 「20 日均量 1,682 張 · 2026/11/04」 (#490): the lots the liquidity floor read on the candidate's data date; nothing
-// on runs scored before candidate_score_v6.
-export function LiquidityNote({ item }: { item: Pick<CandidateItem, 'liquidity'> }) {
+// 「20 日均量 1,682 張」 (#490): the lots the liquidity floor read; nothing on runs scored before candidate_score_v6.
+// The row and card keep it short (the list's date badge is its data date); the detail adds the date and the floor.
+export function LiquidityNote({ item, detail = false }: { item: Pick<CandidateItem, 'liquidity'>; detail?: boolean }) {
   const liquidity = item.liquidity
   if (!liquidity) return null
   const day = formatDate(liquidity.data_as_of)
   return (
     <div className="small-note candidate-liquidity" data-liquidity={liquidity.state ?? undefined}>
-      {averageVolumeText(liquidity.average_volume_lots_20d)}{day ? ` · ${day}` : ''}
+      {averageVolumeText(liquidity.average_volume_lots_20d) + (detail ? `（資料日期 ${day ?? '待核實'}，候選門檻 ${formatLots(liquidity.minimum_lots)}）` : '')}
     </div>
   )
 }
@@ -197,6 +198,7 @@ function CandidateDetail({ item }: { item: CandidateItem }) {
       <CandidateNote item={item} />
       <div className="candidate-detail-source">
         <AddPlanButton signalId={item.signal_id} candidateId={item.candidate_id} openPlanId={item.open_plan_id} />
+        <LiquidityNote item={item} detail />
         <div className="small-note">資料日期 {formatDate(item.data_as_of) ?? '待核實'}</div>
         <div className="small-note">來源：{candidateSourceText(item)}</div>
         <Link className="text-link" to={stockPath(item)}>評分細節 → 個股頁</Link>

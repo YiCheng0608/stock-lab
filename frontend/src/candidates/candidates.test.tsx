@@ -182,5 +182,5 @@ check(liquidityExclusionText({ ...lowVolume, exclusion: 'liquidity_data_missing'
 check(liquidityExclusionText(null) === null && liquidityExclusionText({ ...lowVolume, exclusion: null }) === null, 'no note without an exclusion')
 const liquidItem = { ...completeItem(), liquidity: { average_volume_lots_20d: 1682.3, minimum_lots: 1000, state: 'ok', below_minimum: false, data_as_of: '2026-10-16', window_start: '2026-09-18', window_end: '2026-10-16', unit: 'lots' as const } }
 const liquidList = render(<CandidatesSection data={{ ...listResponse(), items: [liquidItem] }} loading={false} error={null} />)
-check(count(liquidList, '20 日均量 1,682 張 · 2026/10/16') === 2, `the table row and the phone card show the 20-session lots and date, got ${count(liquidList, '20 日均量 1,682 張')}`)
+check(count(liquidList, '>20 日均量 1,682 張<') === 2 && count(liquidList, '20 日均量 1,682 張（資料日期 2026/10/16，候選門檻 1,000 張）') === 2, `the row and the card show the lots, both details add the date and the floor, got ${count(liquidList, '20 日均量 1,682 張')}`)
 check(!render(<CandidatesSection data={listResponse()} loading={false} error={null} />).includes('candidate-liquidity'), 'a run before candidate_score_v6 shows no average volume')
