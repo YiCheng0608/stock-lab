@@ -345,7 +345,7 @@ HOT_GROUP_CONFIG: dict[str, Any] = {
 # which identify strategy rows.  CANDIDATE_SCORE is the current version.
 # The pool lists its strategies by name: a strategy added to the registry
 # enters the candidate list only with a new score version.
-CANDIDATE_SCORE_VERSION = "candidate_score_v5"
+CANDIDATE_SCORE_VERSION = "candidate_score_v6"
 # Prompt version of the candidate LLM notes (worker.candidate_notes); the
 # API shows this version first.
 CANDIDATE_NOTE_PROMPT_VERSION = "candidate_notes_v1"
@@ -507,14 +507,33 @@ CANDIDATE_SCORE_V5: dict[str, Any] = _renamed_strategies(
     "candidate_score_v5",
     {"breakout_v2": "breakout_v3", "pullback_v2": "pullback_v3"},
 )
-CANDIDATE_SCORE = CANDIDATE_SCORE_V5
+# candidate_score_v6 (#490): candidate_score_v5 whose pool drops a stock whose
+# 20-session average volume on T is below 1,000 lots (app.liquidity), before
+# scoring, so the technical percentiles rank the liquid signals only.  The
+# floor lives here only: changing it is a new score version, never a strategy
+# version.  Only the name and the pool's liquidity block change.
+CANDIDATE_SCORE_V6: dict[str, Any] = json.loads(json.dumps(CANDIDATE_SCORE_V5))
+CANDIDATE_SCORE_V6["name"] = "candidate_score_v6"
+CANDIDATE_SCORE_V6["pool"]["liquidity"] = {
+    "metric": "average_volume_lots_20d",
+    "minimum_lots": 1000,
+    "shares_per_lot": 1000,
+    "window_sessions": 20,
+    "sessions": "verified_taiex_sessions_to_T_inclusive",
+    "suspended_session": "skipped_not_counted",
+    "no_trade_day": "zero_lots_from_official_no_trade_row",
+    "missing_session_or_volume": "excluded_liquidity_data_missing",
+    "below_minimum": "excluded_low_volume",
+}
+CANDIDATE_SCORE = CANDIDATE_SCORE_V6
 # The run versions the pages read, current first (#407 review M3): a date
 # without a run of a version shows its run of the next one in this list, so
-# the dates before #404 show candidate_score_v4, those before #413
-# candidate_score_v3 and those before #392 candidate_score_v2 (as their
-# signals show the strategy versions of their day); one date never reads two
-# versions (app.candidate_runs).
+# the dates before #490 show candidate_score_v5, those before #404
+# candidate_score_v4, those before #413 candidate_score_v3 and those before
+# #392 candidate_score_v2 (as their signals show the strategy versions of
+# their day); one date never reads two versions (app.candidate_runs).
 CANDIDATE_SCORE_READ_VERSIONS: tuple[str, ...] = (
+    CANDIDATE_SCORE_V6["name"],
     CANDIDATE_SCORE_V5["name"],
     CANDIDATE_SCORE_V4["name"],
     CANDIDATE_SCORE_V3["name"],

@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from app.clock import utcnow
 from app.config import MIN_GROUP_MEMBERS
+from app.liquidity import average_volumes, passes_volume_floor
 from app.domain import (
     CANDIDATE_SCORE,
     CANDIDATE_SCORE_VERSION,
@@ -694,6 +695,8 @@ def compute_daily_candidates(
         "signal_status_counts": dict(sorted(status_counts.items())),
         "actionable_signals": actionable,
     }
+    if "liquidity" in pool_config:
+        pool = _liquid_pool(db, trading_date, pool, pool_config, summary, exclusions)
     zero_reason = None
     selected: list[_PoolEntry] = []
     if not pool:
@@ -753,6 +756,71 @@ def compute_daily_candidates(
         "exclusions": dict(sorted(exclusions.items())),
         "elapsed_seconds": elapsed,
     }
+
+
+def _liquid_pool(
+    db: Session,
+    trading_date: date,
+    pool: list[_PoolEntry],
+    pool_config: dict[str, Any],
+    summary: dict[str, Any],
+    exclusions: dict[str, int],
+) -> list[_PoolEntry]:
+    """The pool entries at or above the liquidity floor (candidate_score_v6, #490).
+
+    Runs before scoring, so the same-day pool percentiles rank liquid signals
+    only.  Each entry is counted (one per signal, like the other exclusions);
+    the excluded stocks are listed once each in ``summary["liquidity"]`` so the
+    pages can say why a conditional signal is not a candidate.
+    """
+
+    floor = pool_config["liquidity"]
+    minimum = float(floor["minimum_lots"])
+    instruments = {entry.instrument.id: entry.instrument for entry in pool}
+    averages = average_volumes(db, instruments.values(), trading_date)
+    kept: list[_PoolEntry] = []
+    excluded: dict[str, dict[int, dict[str, Any]]] = {
+        "low_volume": {},
+        "liquidity_data_missing": {},
+    }
+    for entry in pool:
+        average = averages[entry.instrument.id]
+        passed = passes_volume_floor(average, minimum)
+        if passed:
+            entry.components["liquidity"] = {
+                **average.as_json(),
+                "minimum_lots": floor["minimum_lots"],
+                "data_as_of": trading_date.isoformat(),
+            }
+            kept.append(entry)
+            continue
+        reason = "liquidity_data_missing" if passed is None else "low_volume"
+        exclusions[reason] += 1
+        listed = excluded[reason].setdefault(
+            entry.instrument.id,
+            {
+                "instrument_id": entry.instrument.id,
+                "exchange": entry.instrument.exchange,
+                "symbol": entry.instrument.symbol,
+                "state": average.state,
+                "average_volume_lots_20d": average.as_json()["average_volume_lots_20d"],
+                "missing_sessions": average.as_json()["missing_sessions"],
+                "strategies": [],
+            },
+        )
+        listed["strategies"].append(entry.strategy)
+    summary["liquidity"] = {
+        "minimum_lots": floor["minimum_lots"],
+        "data_as_of": trading_date.isoformat(),
+        "checked_instruments": len(instruments),
+        **{
+            reason: sorted(
+                rows.values(), key=lambda row: (row["exchange"], row["symbol"])
+            )
+            for reason, rows in excluded.items()
+        },
+    }
+    return kept
 
 
 def _score_pool(

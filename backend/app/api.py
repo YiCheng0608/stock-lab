@@ -34,7 +34,12 @@ from .candidate_view import (
     DEFAULT_LIMIT as CANDIDATES_DEFAULT_LIMIT,
     MAX_LIMIT as CANDIDATES_MAX_LIMIT,
 )
-from .candidate_view import candidate_for_instrument, candidate_list
+from .candidate_runs import read_run as read_candidate_run
+from .candidate_view import (
+    candidate_for_instrument,
+    candidate_list,
+    liquidity_exclusions,
+)
 from .coverage import has_backfill_manifest
 from .db import SessionLocal
 from .domain import CANDIDATE_SCORE, ETF_CATEGORIES, signal_confidence_semantics
@@ -2764,6 +2769,11 @@ def actions(
         db, as_of, [row.instrument_id for row in page_rows], built
     )
     tier_of = {row.instrument_id: row for row in page_rows}
+    # Conditional stocks the day's candidate run left out for the liquidity
+    # floor (candidate_score_v6, #490): their row says so next to 成立.
+    floor_exclusions = (
+        liquidity_exclusions(read_candidate_run(db, as_of)) if as_of else {}
+    )
     items = []
     for item in page:
         row = tier_of[item["instrument"]["id"]]
@@ -2780,6 +2790,9 @@ def actions(
                 # Tiers 3 and 4: conditions and price gap only, no level
                 # (#277-B); null without a strategy_levels row.
                 "nearness": row.nearness if row.tier in (3, 4) else None,
+                "liquidity": floor_exclusions.get(row.instrument_id)
+                if row.candidate_rank is None
+                else None,
             }
         )
     total = len(selected)
