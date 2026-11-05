@@ -1481,19 +1481,62 @@ def g3(run: Run) -> str:
     if not items:
         return empty_board(run, payload, wide, "themes-industry.json")
     expect(
-        wide.find_where(lambda line: line.startswith("排名\t族群")) >= 0,
-        "1280 缺 `排名\\t族群` 開頭的表頭",
+        wide.find_where(lambda line: line.startswith("排名\t族群")) < 0,
+        "1280 仍有 `排名\\t族群` 表頭：族群榜應是兩行清單，不是表格（Issue 522）",
     )
+    for text in (wide, narrow):
+        for item in (items[0], items[-1]):
+            board_row(text, item)
     first, last = items[0]["display_name"], items[-1]["display_name"]
-    for name in (first, last):
-        expect(wide.has(name), f"1280 缺整行 `{name}`")
-    i = narrow.find("#1")
-    expect(i >= 0, "390 缺整行 `#1`")
+    return f"1280 與 390：`#1` → `{first}`…`#{items[-1]['rank']}` → `{last}`，五分項與成員數同 API"
+
+
+# BOARD_COMPONENTS in frontend/src/themes/themeBoards.ts, in the page's order.
+BOARD_COMPONENTS = (
+    ("relative_return", "相對報酬"),
+    ("breadth", "廣度"),
+    ("volume_strength", "量能"),
+    ("institutional_flow", "法人"),
+    ("catalyst", "催化劑"),
+)
+
+
+def board_component(value: float | None) -> str:
+    """formatComponent: a 0–1 percentile on 0–100, no data 「—」."""
+    return "—" if value is None else fixed(value * 100, 0)
+
+
+def board_count(value: int | None) -> str:
+    return "—" if value is None else str(value)
+
+
+def board_row(text: Text, item: dict) -> None:
+    """One board row (Issue 522, BoardRow in ThemeViews.tsx): `#<rank>`, the name, then after the
+    `分數 …` line and the 五分項 button the folded components (screenshot.cjs opens every <details>)
+    as label and value lines, and 成員（檔） eligible／total."""
+
+    rank, name = item["rank"], item["display_name"]
+    i = text.find(f"#{rank}")
+    expect(i >= 0, f"{text.name} 缺整行 `#{rank}`")
     expect(
-        narrow.after(i) == first,
-        f"390 `#1` 下一行是 {narrow.after(i)!r}，預期 `{first}`",
+        text.after(i) == name,
+        f"{text.name} `#{rank}` 下一行是 {text.after(i)!r}，預期 `{name}`（{text.at(i)}）",
     )
-    return f"1280 表頭與 `{first}`…`{last}`；390 `#1` → `{first}`"
+    j = text.find_where(lambda line: line.startswith("分數 "), i)
+    expect(j >= 0, f"{text.name} `#{rank}` 之後缺 `分數 …` 行")
+    components = item.get("components") or {}
+    want = [
+        part
+        for key, label in BOARD_COMPONENTS
+        for part in (label, board_component(components.get(key)))
+    ]
+    members = f"{board_count(item.get('eligible_members'))}／{board_count(item.get('member_count'))}"
+    want += ["成員（檔）", members]
+    got = text.lines[j + 2 : j + 2 + len(want)]
+    expect(
+        got == want,
+        f"{text.name} `#{rank}` 的五分項是 {got}，預期 {want}（{text.at(j)}）",
+    )
 
 
 @check("themes", "G4")

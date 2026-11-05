@@ -75,6 +75,6 @@ check(render(<ThemeSuggestionsSection data={undefined} loading={false} error={ne
 // ---- kept apart from the ranked boards ----
 const page = render(<ThemesBoardView board="industry" onBoardChange={noop} search="" onSearchChange={noop} data={industryBoard()} loading={false} error={null}
   suggestions={<ThemeSuggestionsSection data={suggestions()} loading={false} error={null} onLoadAll={noop} />} />)
-const boardEnd = page.indexOf('</table>')
-check(boardEnd > 0 && page.indexOf('新聞題材建議') > boardEnd, 'suggestions follow the board, outside its table')
+const boardEnd = page.indexOf('</ol>')
+check(boardEnd > 0 && page.indexOf('新聞題材建議') > boardEnd, 'suggestions follow the board, outside its list')
 check(!page.slice(0, page.indexOf('theme-suggestions')).includes('無人機'), 'no suggestion inside the board')

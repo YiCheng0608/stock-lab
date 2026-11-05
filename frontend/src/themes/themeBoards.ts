@@ -115,6 +115,38 @@ export function boardDates(meta: Pick<ThemeBoardMeta, 'trading_date' | 'data_as_
   return { trading, dataAsOf: dataAsOf && dataAsOf !== trading ? dataAsOf : null }
 }
 
+// ---- board rows (Issue 522, UI_COPY_SPEC §8.5 族群頁) ----
+
+export type ComponentExtreme = { key: ThemeBoardComponent; label: string; value: number }
+
+// The highest and the lowest of the components that have a value; a tie goes to the earlier component for the highest
+// and the later one for the lowest. One valued component gives one entry, none gives an empty list.
+export function componentExtremes(components: ThemeBoardItem['components']): ComponentExtreme[] {
+  const valued = BOARD_COMPONENTS.flatMap((component) => {
+    const value = components[component.key]
+    return isFiniteNumber(value) ? [{ ...component, value }] : []
+  })
+  if (valued.length === 0) return []
+  const highest = valued.reduce((best, entry) => (entry.value > best.value ? entry : best))
+  const rest = valued.filter((entry) => entry !== highest)
+  if (rest.length === 0) return [highest]
+  const lowest = rest.reduce((worst, entry) => (entry.value <= worst.value ? entry : worst))
+  return [highest, lowest]
+}
+
+type CandidateRun = { status: string; trading_date: string | null; items: ReadonlyArray<{ groups: ReadonlyArray<{ group_id: string }> }> }
+
+// 今日可買 per group: the latest candidate list counted by group, only when it is of the board's own date. null when
+// there is nothing to say (no list, a list of another day); a group without a candidate is simply absent.
+export function candidateCountsByGroup(run: CandidateRun | undefined, boardDate: string | null | undefined): ReadonlyMap<string, number> | null {
+  if (!run || run.status !== 'success' || !boardDate || run.trading_date !== boardDate) return null
+  const counts = new Map<string, number>()
+  for (const item of run.items) {
+    for (const groupId of new Set(item.groups.map((group) => group.group_id))) counts.set(groupId, (counts.get(groupId) ?? 0) + 1)
+  }
+  return counts
+}
+
 export function filterBoardItems(items: readonly ThemeBoardItem[], query: string): ThemeBoardItem[] {
   const needle = query.trim().toLocaleLowerCase()
   return needle ? items.filter((item) => item.display_name.toLocaleLowerCase().includes(needle)) : [...items]
