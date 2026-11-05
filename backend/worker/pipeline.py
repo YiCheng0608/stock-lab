@@ -2937,6 +2937,36 @@ def _upsert_action(
     row.data_as_of = action.action_date.isoformat()
 
 
+# data_json keys that describe a row's announcement_date (Issue #529); they stay
+# with the date when a later write keeps it.
+ANNOUNCEMENT_KEYS = ("announcement_basis", "statutory_deadline", "deadline_calendar")
+
+
+def first_seen_announcement(
+    row: FundamentalSnapshot, announcement: date | None, details: dict[str, Any]
+) -> tuple[date | None, dict[str, Any]]:
+    """The earlier of the stored and the new availability date, and the details.
+
+    The snapshot feeds restamp 出表日期 every time they are published again, so
+    overwriting it hid a quarter long after it was announced (2330 115Q2 read
+    2026-10-30).  The first, earliest date is kept; when the stored one wins,
+    its basis keys (``ANNOUNCEMENT_KEYS``) are carried into the new details.
+    """
+
+    stored = row.announcement_date
+    if stored is None or (announcement is not None and announcement < stored):
+        return announcement, details
+    carried = {
+        key: (row.data_json or {})[key]
+        for key in ANNOUNCEMENT_KEYS
+        if key in (row.data_json or {})
+    }
+    kept = {
+        key: value for key, value in details.items() if key not in ANNOUNCEMENT_KEYS
+    }
+    return stored, {**kept, **carried}
+
+
 def _upsert_fundamental(
     db: Session,
     fundamental: FundamentalRecord,
@@ -2960,11 +2990,12 @@ def _upsert_fundamental(
             fiscal_period=fundamental.fiscal_period,
         )
         db.add(row)
-    row.announcement_date = fundamental.announcement_date
+    row.announcement_date, row.data_json = first_seen_announcement(
+        row, fundamental.announcement_date, fundamental.details
+    )
     row.revenue = fundamental.revenue
     row.eps = fundamental.eps
     row.roe = fundamental.roe
-    row.data_json = fundamental.details
     row.source = fundamental.source
     row.raw_payload_id = raw_payload_id
     row.data_as_of = fundamental.period_end.isoformat()

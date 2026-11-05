@@ -2087,14 +2087,14 @@ def s9(run: Run, stock: Stock) -> str:
 FUNDAMENTALS_TITLE, NOT_PROVIDED = "季報營收與 EPS", "來源未提供"
 FUNDAMENTALS_EMPTY = {
     "etf": "ETF 沒有公司財報，不適用。",
-    "ipo": "新上市公司尚未有已收集的季報：系統目前只收官方最新一期的季報快照。",
+    "ipo": "新上市公司尚未有已收集的季報：官方季報快照與彙總報表都還沒有這檔。",
 }
-FUNDAMENTALS_EMPTY_STOCK = "尚未收集到這檔的季報：系統目前只收官方最新一期的季報快照，該期尚未出表或不在官方清單時沒有資料。"
+FUNDAMENTALS_EMPTY_STOCK = "尚未收集到這檔的季報：官方季報快照與彙總報表都沒有這檔。"
 QUARTER = re.compile(r"^(\d{4})-\d{2}-\d{2}$")
 
 
 def fundamental_row_prefix(row: dict) -> str:
-    """The page's first cells of one row: 期別, 累計營收（億元）, 累計 EPS, ROE, 出表日."""
+    """The page's first cells of one row: 期別, 累計營收（億元）, 累計 EPS, ROE, 可得日."""
 
     year = QUARTER.match(row["period_end"] or "")
     period = row["fiscal_period"] or ""

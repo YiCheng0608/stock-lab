@@ -197,6 +197,8 @@ function sourceLabel(source: string | null | undefined | readonly string[]): str
     tpex_margin: '證券櫃檯買賣中心 融資融券',
     // The quarterly report feeds t187ap14_L / mopsfin_t187ap14_O (#528).
     mops_fundamental: '公開資訊觀測站 季報',
+    // The t163sb04 summary report the quarterly backfill reads (#529).
+    mops_t163sb04: '公開資訊觀測站 彙總報表',
     // UI_COPY_SPEC §2 擷取來源代碼 (#452): ingestion runs and raw payloads of the news, LLM and derived jobs.
     'claude-cli': 'Claude Code（AI 推論）',
     news_llm: 'Claude Code 新聞判讀（AI 推論）',
