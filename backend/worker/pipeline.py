@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import bisect
 import copy
 import json
 import math
@@ -286,6 +287,10 @@ def _action_factor_by_bar(
     A factor maps the signal-date basis to the raw basis at the bar date.  A
     split action is therefore included on the ex-date bar itself, while an
     action after a score date can never affect that score's history.
+
+    The actions are ordered by date, so the ones effective at a bar are a
+    prefix of them; the factor is computed once per prefix length (#509)
+    instead of once per bar, from the same list as a per-bar rebuild.
     """
 
     if not bars:
@@ -313,34 +318,57 @@ def _action_factor_by_bar(
         )
         if previous and previous.close > 0:
             fallback_reference_prices[action.action_date] = previous.close
+    action_dates = [action.action_date for action in actions]
+    factor_by_prefix: dict[int, float] = {}
     factors: list[float] = []
     for bar in bars:
-        effective = [
-            action for action in actions if action.action_date <= bar.trading_date
-        ]
-        factor, _applied = _corporate_action_factor(
-            effective,
-            fallback_reference_prices=fallback_reference_prices,
-        )
-        factors.append(factor if math.isfinite(factor) and factor > 0 else 1.0)
+        prefix = bisect.bisect_right(action_dates, bar.trading_date)
+        if prefix not in factor_by_prefix:
+            factor, _applied = _corporate_action_factor(
+                actions[:prefix],
+                fallback_reference_prices=fallback_reference_prices,
+            )
+            factor_by_prefix[prefix] = (
+                factor if math.isfinite(factor) and factor > 0 else 1.0
+            )
+        factors.append(factor_by_prefix[prefix])
     return factors
+
+
+# The market_bars columns the score-date history consumers read (#509).
+_HISTORY_COLUMNS = (
+    MarketBar.trading_date,
+    MarketBar.open,
+    MarketBar.high,
+    MarketBar.low,
+    MarketBar.close,
+    MarketBar.adj_close,
+    MarketBar.volume,
+    MarketBar.is_suspended,
+)
 
 
 def _normalized_history_for_score_date(
     db: Session,
     instrument_id: int,
     score_date: date,
-) -> tuple[list[MarketBar], dict[date, dict[str, float]], float]:
-    """Normalize all pre-score raw OHLC to the score-date raw price basis."""
+    *,
+    columns_only: bool = False,
+) -> tuple[list[Any], dict[date, dict[str, float]], float]:
+    """Normalize all pre-score raw OHLC to the score-date raw price basis.
 
-    bars = db.scalars(
-        select(MarketBar)
-        .where(
-            MarketBar.instrument_id == instrument_id,
-            MarketBar.trading_date <= score_date,
-        )
-        .order_by(MarketBar.trading_date)
-    ).all()
+    ``columns_only`` returns rows of ``_HISTORY_COLUMNS`` (same values,
+    attribute access) instead of ``MarketBar`` objects: the group scores read
+    each member's whole history, and building ORM objects was most of their
+    time (#509).  Callers flush first, so the rows equal the session's bars.
+    """
+
+    query = (select(*_HISTORY_COLUMNS) if columns_only else select(MarketBar)).where(
+        MarketBar.instrument_id == instrument_id,
+        MarketBar.trading_date <= score_date,
+    )
+    query = query.order_by(MarketBar.trading_date)
+    bars = db.execute(query).all() if columns_only else db.scalars(query).all()
     factors = _action_factor_by_bar(db, instrument_id, bars)
     if not bars:
         return [], {}, 1.0
@@ -526,23 +554,58 @@ def _benchmark_instrument(db: Session) -> Instrument | None:
     )
 
 
+def _price_return_bars(
+    bars: list[Any],
+    score_date: date,
+    normalized: dict[date, dict[str, float]] | None = None,
+    *,
+    last: int | None = None,
+) -> list[Any]:
+    """The bars ``_price_return`` counts sessions over, in date order.
+
+    ``last`` keeps only the newest ``last`` of them, scanning from the end of
+    the date-ordered ``bars``; it serves every window below ``last`` (#509).
+    """
+
+    def usable(bar: Any) -> Any:
+        return (
+            bar.trading_date <= score_date
+            and not bar.is_suspended
+            and (
+                normalized.get(bar.trading_date, {}).get("close", bar.close)
+                if normalized
+                else (bar.close or bar.adj_close)
+            )
+        )
+
+    if last is None:
+        return [bar for bar in bars if usable(bar)]
+    tail: list[Any] = []
+    for bar in reversed(bars):
+        if len(tail) >= last:
+            break
+        if usable(bar):
+            tail.append(bar)
+    tail.reverse()
+    return tail
+
+
 def _price_return(
-    bars: list[MarketBar],
+    bars: list[Any],
     score_date: date,
     window: int,
     normalized: dict[date, dict[str, float]] | None = None,
+    *,
+    usable: list[Any] | None = None,
 ) -> float | None:
-    usable = [
-        bar
-        for bar in bars
-        if bar.trading_date <= score_date
-        and not bar.is_suspended
-        and (
-            normalized.get(bar.trading_date, {}).get("close", bar.close)
-            if normalized
-            else (bar.close or bar.adj_close)
-        )
-    ]
+    """``window``-session close return up to ``score_date``.
+
+    ``usable`` is ``_price_return_bars`` of the same arguments, passed when
+    one history serves several windows (#509).
+    """
+
+    if usable is None:
+        usable = _price_return_bars(bars, score_date, normalized)
     if len(usable) < window + 1:
         return None
     current = (
@@ -575,8 +638,29 @@ def _returns_by_window(
 
 
 def _effective_trading_dates(
-    db: Session, instrument_id: int, score_date: date, window: int = 20
+    db: Session,
+    instrument_id: int,
+    score_date: date,
+    window: int = 20,
+    *,
+    history: list[Any] | None = None,
 ) -> list[date]:
+    """The last ``window`` non-suspended bar dates up to ``score_date``.
+
+    ``history`` is the instrument's bars or history rows up to ``score_date``
+    in date order (``_normalized_history_for_score_date``); the dates are
+    then taken from it instead of a query, with the same suspension rule
+    (#509).
+    """
+
+    if history is not None:
+        dates: list[date] = []
+        for bar in reversed(history):
+            if len(dates) >= window:
+                break
+            if not bar.is_suspended:
+                dates.append(bar.trading_date)
+        return list(reversed(dates))
     rows = db.scalars(
         select(MarketBar.trading_date)
         .where(
@@ -651,6 +735,8 @@ def _flow_and_volume_inputs(
     instrument_id: int,
     score_date: date,
     absent_evidence: Callable[[date], int | None] | None,
+    *,
+    history: list[Any] | None = None,
 ) -> tuple[float, list[float], list[dict[str, Any]]] | None:
     """Shared body of the flow inputs; ``absent_evidence`` enables the hot_group 1.1.0 rule.
 
@@ -659,18 +745,23 @@ def _flow_and_volume_inputs(
     margin data counts as zero net flow when ``absent_evidence(day)`` returns
     the raw payload id of that day's received official file; each such day is
     returned with its evidence.  A row from the official file with a null
-    component stays unavailable.
+    component stays unavailable.  ``history`` (the bars up to ``score_date``)
+    supplies the dates and volumes instead of two queries (#509).
     """
 
-    dates = _effective_trading_dates(db, instrument_id, score_date, 20)
+    dates = _effective_trading_dates(db, instrument_id, score_date, 20, history=history)
     if len(dates) != 20:
         return None
-    bars = db.scalars(
-        select(MarketBar).where(
-            MarketBar.instrument_id == instrument_id,
-            MarketBar.trading_date.in_(dates),
-        )
-    ).all()
+    if history is not None:
+        wanted = set(dates)
+        bars = [bar for bar in history if bar.trading_date in wanted]
+    else:
+        bars = db.scalars(
+            select(MarketBar).where(
+                MarketBar.instrument_id == instrument_id,
+                MarketBar.trading_date.in_(dates),
+            )
+        ).all()
     bars_by_date = {bar.trading_date: bar for bar in bars}
     if len(bars_by_date) != len(dates):
         return None
@@ -731,10 +822,14 @@ def _hot_group_flow_with_absent_evidence(
     instrument_id: int,
     score_date: date,
     absent_evidence: Callable[[date], int | None] | None,
+    *,
+    history: list[Any] | None = None,
 ) -> tuple[float | None, list[dict[str, Any]]]:
     """Return the hot_group flow ratio and the sessions counted as absent from the official file."""
 
-    inputs = _flow_and_volume_inputs(db, instrument_id, score_date, absent_evidence)
+    inputs = _flow_and_volume_inputs(
+        db, instrument_id, score_date, absent_evidence, history=history
+    )
     if inputs is None:
         return None, []
     flow, volumes, absent = inputs
@@ -771,11 +866,15 @@ def _strategy_institutional_flow_to_average_volume_ratio(
 
 
 def _margin_window_balances(
-    db: Session, instrument_id: int, score_date: date
+    db: Session,
+    instrument_id: int,
+    score_date: date,
+    *,
+    history: list[Any] | None = None,
 ) -> tuple[Any, Any] | None:
     """(T-5, T) margin balances of the six sessions; None without six chip rows."""
 
-    dates = _effective_trading_dates(db, instrument_id, score_date, 6)
+    dates = _effective_trading_dates(db, instrument_id, score_date, 6, history=history)
     if len(dates) < 6:
         return None
     chips = db.scalars(
@@ -792,9 +891,13 @@ def _margin_window_balances(
 
 
 def _margin_change_ratio(
-    db: Session, instrument_id: int, score_date: date
+    db: Session,
+    instrument_id: int,
+    score_date: date,
+    *,
+    history: list[Any] | None = None,
 ) -> float | None:
-    balances = _margin_window_balances(db, instrument_id, score_date)
+    balances = _margin_window_balances(db, instrument_id, score_date, history=history)
     if balances is None:
         return None
     first, last = balances
@@ -1080,6 +1183,95 @@ def archive_group_score(db: Session, score: GroupDailyScore, reason: str) -> Non
     )
 
 
+def _hot_group_member_metric(
+    db: Session,
+    instrument: Instrument,
+    score_date: date,
+    benchmark_returns: dict[int, float | None],
+    absent_evidence: Callable[[date], int | None],
+) -> dict[str, Any] | None:
+    """One member's hot_group_v1 inputs on ``score_date``; None when it is not eligible.
+
+    The pre-score history is read once and also supplies the prior volumes,
+    the last five volumes, the score-date bar and the flow and margin
+    sessions, which were separate queries of the same rows before #509.
+    """
+
+    history, normalized, _score_factor = _normalized_history_for_score_date(
+        db, instrument.id, score_date, columns_only=True
+    )
+    # The longest window (20) compares the newest of 21 usable sessions.
+    usable = _price_return_bars(history, score_date, normalized, last=21)
+    returns = {
+        window: _price_return(history, score_date, window, normalized, usable=usable)
+        for window in (1, 5, 20)
+    }
+    if any(
+        returns[window] is None or benchmark_returns[window] is None
+        for window in (1, 5, 20)
+    ):
+        return None
+    features = db.scalar(
+        select(TechnicalFeature).where(
+            TechnicalFeature.instrument_id == instrument.id,
+            TechnicalFeature.trading_date == score_date,
+        )
+    )
+    values = features.features_json if features else {}
+    # The up-to-20 raw volumes before the score date (``_prior_20_window``);
+    # only the newest history bar can be the score date itself.
+    prior_volumes = (
+        [int(bar.volume) for bar in history[-21:] if bar.trading_date < score_date][
+            -20:
+        ]
+        if features
+        else []
+    )
+    current_volume = _safe_float(values.get("volume", None))
+    if current_volume is None:
+        bar = (
+            history[-1] if history and history[-1].trading_date == score_date else None
+        )
+        current_volume = float(bar.volume) if bar else None
+    if not prior_volumes or current_volume is None or sum(prior_volumes) <= 0:
+        return None
+    excess = {
+        window: float(returns[window]) - float(benchmark_returns[window])
+        for window in (1, 5, 20)
+    }
+    volume_1d = current_volume / (sum(prior_volumes) / len(prior_volumes))
+    # The last five bars up to the score date, newest first.
+    last_five = [bar.volume for bar in reversed(history[-5:])]
+    volume_5d = (
+        (sum(last_five) / len(last_five)) / (sum(prior_volumes) / len(prior_volumes))
+        if len(last_five) == 5
+        else None
+    )
+    if volume_5d is None:
+        return None
+    flow_ratio, flow_absent = _hot_group_flow_with_absent_evidence(
+        db, instrument.id, score_date, absent_evidence, history=history
+    )
+    return {
+        "instrument_id": instrument.id,
+        "exchange": instrument.exchange,
+        "symbol": instrument.symbol,
+        "instrument_type": instrument.instrument_type,
+        "etf_category": instrument.etf_category,
+        "excess": excess,
+        "relative_weighted": 0.20 * excess[1] + 0.30 * excess[5] + 0.50 * excess[20],
+        "breadth": {
+            window: 1.0 if excess[window] > 0 else 0.0 for window in (1, 5, 20)
+        },
+        "volume_raw": 0.50 * volume_1d + 0.50 * volume_5d,
+        "hot_group_flow_ratio": flow_ratio,
+        "flow_absent_from_official_file": flow_absent,
+        "margin_change_ratio": _margin_change_ratio(
+            db, instrument.id, score_date, history=history
+        ),
+    }
+
+
 def _calculate_group_scores(
     db: Session, score_date: date, *, group_ids: Iterable[str] | None = None
 ) -> None:
@@ -1136,6 +1328,10 @@ def _calculate_group_scores(
 
         return evidence
 
+    # A member's metrics depend only on the instrument and score_date, so a
+    # stock in several groups is computed once per call (#509).
+    metrics_by_instrument: dict[int, dict[str, Any] | None] = {}
+
     for group in groups:
         board = _group_board(group)
         if board is None:
@@ -1145,83 +1341,18 @@ def _calculate_group_scores(
         )
         member_metrics: list[dict[str, Any]] = []
         for _membership, instrument in members:
-            returns = _returns_by_window(db, instrument.id, score_date)
-            if any(
-                returns[window] is None or benchmark_returns[window] is None
-                for window in (1, 5, 20)
-            ):
-                continue
-            features = db.scalar(
-                select(TechnicalFeature).where(
-                    TechnicalFeature.instrument_id == instrument.id,
-                    TechnicalFeature.trading_date == score_date,
+            if instrument.id not in metrics_by_instrument:
+                metrics_by_instrument[instrument.id] = _hot_group_member_metric(
+                    db,
+                    instrument,
+                    score_date,
+                    benchmark_returns,
+                    absent_evidence_for(instrument.exchange),
                 )
-            )
-            values = features.features_json if features else {}
-            prior_volumes = (
-                _prior_20_window(db, instrument.id, score_date)["volumes"]
-                if features
-                else []
-            )
-            current_volume = _safe_float(values.get("volume", None))
-            if current_volume is None:
-                bar = db.scalar(
-                    select(MarketBar).where(
-                        MarketBar.instrument_id == instrument.id,
-                        MarketBar.trading_date == score_date,
-                    )
-                )
-                current_volume = float(bar.volume) if bar else None
-            if not prior_volumes or current_volume is None or sum(prior_volumes) <= 0:
-                continue
-            excess = {
-                window: float(returns[window]) - float(benchmark_returns[window])
-                for window in (1, 5, 20)
-            }
-            volume_1d = current_volume / (sum(prior_volumes) / len(prior_volumes))
-            last_five = db.scalars(
-                select(MarketBar.volume)
-                .where(
-                    MarketBar.instrument_id == instrument.id,
-                    MarketBar.trading_date <= score_date,
-                )
-                .order_by(desc(MarketBar.trading_date))
-                .limit(5)
-            ).all()
-            volume_5d = (
-                (sum(last_five) / len(last_five))
-                / (sum(prior_volumes) / len(prior_volumes))
-                if len(last_five) == 5
-                else None
-            )
-            if volume_5d is None:
-                continue
-            flow_ratio, flow_absent = _hot_group_flow_with_absent_evidence(
-                db, instrument.id, score_date, absent_evidence_for(instrument.exchange)
-            )
-            member_metrics.append(
-                {
-                    "instrument_id": instrument.id,
-                    "exchange": instrument.exchange,
-                    "symbol": instrument.symbol,
-                    "instrument_type": instrument.instrument_type,
-                    "etf_category": instrument.etf_category,
-                    "excess": excess,
-                    "relative_weighted": 0.20 * excess[1]
-                    + 0.30 * excess[5]
-                    + 0.50 * excess[20],
-                    "breadth": {
-                        window: 1.0 if excess[window] > 0 else 0.0
-                        for window in (1, 5, 20)
-                    },
-                    "volume_raw": 0.50 * volume_1d + 0.50 * volume_5d,
-                    "hot_group_flow_ratio": flow_ratio,
-                    "flow_absent_from_official_file": flow_absent,
-                    "margin_change_ratio": _margin_change_ratio(
-                        db, instrument.id, score_date
-                    ),
-                }
-            )
+            metric = metrics_by_instrument[instrument.id]
+            if metric is not None:
+                # Each group's rows get their own copy of the shared metric.
+                member_metrics.append(copy.deepcopy(metric))
 
         eligible = len(member_metrics)
         instrument_ids = [item["instrument_id"] for item in member_metrics]
