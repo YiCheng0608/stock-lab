@@ -88,7 +88,7 @@ import { StockPlanPanel, TrackingClientProvider, TrackingSection, type TrackingC
 import { DEFAULT_MEMBER_SORT, THEME_BOARD_LIMIT, THEME_NEWS_LIMIT, TODAY_BOARD_LIMIT, memberQuery, parseBoard } from './themes/themeBoards'
 import { HomeNewsRow, NewsDetailView, NewsListView, StockNewsTimeline } from './news/NewsViews'
 import { HoldingAlert, MarketOverviewView, TodayHeader } from './today/TodayViews'
-import { newsListParams, newsPageSearch, parseNewsTab, stockNewsParams, type NewsFilters } from './news/newsView'
+import { newsFiltersFromSearch, newsListParams, newsPageSearch, stockNewsParams, type NewsFilters } from './news/newsView'
 import { ACTIONS_PAGE_LIMIT, ACTION_STATE_LABELS, ACTION_TIER_PREVIEW, DEFAULT_ACTION_VIEW, previewTiers, stockResearchPath, tierSections } from './actions/actionTiers'
 import { ActionFilters, ActionTierList } from './actions/ActionViews'
 import { StrategyPage } from './strategy/StrategyPage'
@@ -499,7 +499,7 @@ function StatCard({ label, value, detail }: { label: string; value: string; deta
 
 function NewsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const filters: NewsFilters = { tab: parseNewsTab(searchParams.get('tab')), q: searchParams.get('q') ?? '', symbol: searchParams.get('symbol') ?? '' }
+  const filters = newsFiltersFromSearch(searchParams)
   const [page, setPage] = useState(1)
   const [pageCursors, setPageCursors] = useState<Array<string | undefined>>([undefined])
   const cursor = pageCursors[page - 1]

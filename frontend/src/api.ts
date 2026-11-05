@@ -211,6 +211,7 @@ export type CursorParams = {
   state?: string
   held_only?: boolean
   watchlist_only?: boolean
+  verified_only?: boolean
   view?: ActionView
   include_etf?: boolean
   tier?: number

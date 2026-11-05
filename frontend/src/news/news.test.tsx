@@ -9,9 +9,11 @@ import {
   NEWS_PAGE_SIZE,
   STOCK_NEWS_LIMIT,
   cardAiCandidates,
+  cleanNewsLead,
   directionView,
   formatTaipeiInstant,
   matchesInstrument,
+  newsFiltersFromSearch,
   newsListParams,
   newsPageSearch,
   newsTime,
@@ -263,3 +265,72 @@ check(timeline.includes('最近 50 則') && timeline.includes('class="news-cards
 check(timeline.includes('href="/news?symbol=2330"'), 'timeline links to the filtered news page')
 const emptyTimeline = render(<StockNewsTimeline exchange="TWSE" symbol="2330" query={loaded(newsPage([]))} />)
 check(emptyTimeline.includes('尚無與此股已核實關聯的新聞或公告。'), 'empty timeline')
+
+// ---- Issue 523: /news rows (DESIGN_SYSTEM §5 新聞清單, UI_COPY_SPEC §4) ----
+// AC-2 title and summary lead cleaning: the cases are shared with page_checks.display_title (backend/tests/test_verify_checks.py).
+const leadCases = (JSON.parse(fs.readFileSync(path.join(__dirname, 'newsLead.cases.json'), 'utf8')) as { cases: Array<{ input: string; output: string; why: string }> }).cases
+check(leadCases.length >= 20, 'the shared lead cases are read')
+for (const { input, output, why } of leadCases) check(cleanNewsLead(input) === output, `cleanNewsLead (${why}): 「${input}」 → 「${cleanNewsLead(input)}」, want 「${output}」`)
+check(cleanNewsLead(null) === null && cleanNewsLead('  ') === null, 'no text stays null')
+const squareTitle = newsItem({ id: '523', title: '■ 台積電狠甩英特爾', summary_preview: '[FTNN新聞網]記者陳献朋／綜合報導台股加權指數本週收在47111.26點' })
+check(summaryPreview(squareTitle) === '台股加權指數本週收在47111.26點', `the summary preview drops the byline: ${summaryPreview(squareTitle)}`)
+const rowsView = (filters: { verified?: boolean; watchlist?: boolean }, items: NewsItem[]) => render(
+  <NewsListView filters={{ tab: 'domestic', q: '', symbol: '', ...filters }} onFiltersChange={noop} query={loaded(newsPage(items))} page={1} onNext={noop} onPrevious={noop} onReset={noop} />,
+)
+const rows = rowsView({}, [squareTitle, newsItem({ id: '524', symbols: [], instruments: [], ai: aiResult() })])
+check(rows.includes('<ol class="news-row-list">') && count(rows, '<li class="news-row"') === 2 && !rows.includes('class="card news-card"'), `the list is one <ol> of rows, no cards: ${rows}`)
+check(count(rows, 'data-testid="news-card"') === 2, 'each row keeps the news-card test id the verify and the screenshot tools read')
+const firstRow = rows.slice(rows.indexOf('<li class="news-row"'), rows.indexOf('</li>') + 5)
+check(firstRow.includes('<h3 class="news-row-title"><a title="台積電狠甩英特爾" href="/news/523">台積電狠甩英特爾</a></h3>') && !firstRow.includes('■'), `the row title is cleaned, the full title in title: ${firstRow}`)
+// Two lines: the title, then source · time · direction and the verified tags, before the collapsed detail.
+const rowMain = firstRow.slice(0, firstRow.indexOf('<details'))
+const rowOrder = ['class="news-row-title"', 'class="news-row-impact"', 'class="news-row-line2"', 'class="news-row-source"', 'class="news-row-time"', 'class="news-row-tags"', 'class="btn btn-ghost news-row-toggle"']
+check(rowOrder.every((name, index) => rowMain.includes(name) && (index === 0 || rowMain.indexOf(name) > rowMain.indexOf(rowOrder[index - 1]))), `row parts in order: ${rowMain}`)
+check(rowMain.includes('href="/stocks/TWSE/2330">2330 台積電</a>') && !rowMain.includes('規則核實'), 'line 2 carries the verified instrument tag; the rule label waits in the detail')
+check(!/news-row-summary|news-row-kind|news-source|news-ai-candidates|台股加權指數/.test(rowMain), 'summary, category, source link and AI candidates are not on the two lines')
+check(/aria-expanded="false" aria-controls="news-row-detail-523">展開<\/button>/.test(rowMain), 'the toggle reads 展開 and controls the detail')
+const rowDetail = firstRow.slice(firstRow.indexOf('<details'))
+check(/^<details class="news-row-detail" id="news-row-detail-523">/.test(rowDetail) && !/<details[^>]*\sopen/.test(rowDetail), `the detail is collapsed by default: ${rowDetail}`)
+const detailOrder = ['class="news-row-kind"', 'class="news-row-summary"', 'class="news-chips"', 'class="news-source"', '詳情 →']
+check(detailOrder.every((name, index) => rowDetail.includes(name) && (index === 0 || rowDetail.indexOf(name) > rowDetail.indexOf(detailOrder[index - 1]))), `detail: category, summary, relations, source link, detail link: ${rowDetail}`)
+check(rowDetail.includes('國內 · 媒體報導') && rowDetail.includes('規則核實 · v2') && rowDetail.includes('>台股加權指數本週收在47111.26點</p>'), 'the detail carries the category, the rule label and the cleaned summary')
+// No verified relation: no tag group on the row and no 「未有已核實的標的或族群」 line anywhere in the list.
+const secondRow = rows.slice(rows.lastIndexOf('<li class="news-row"'))
+check(!secondRow.includes('news-row-tags') && !rows.includes('未有已核實的標的或族群') && !secondRow.includes('class="news-chips"'), `no relation, no tag group and no empty relation line: ${secondRow}`)
+// One 「AI 推論」 per AI row (page_checks N4 counts the whole lines), after the direction.
+check(count(secondRow, '>AI 推論<') === 1 && secondRow.indexOf('class="news-direction"') < secondRow.indexOf('>AI 推論<') && count(firstRow, '>AI 推論<') === 0, 'AI direction is followed by one 「AI 推論」; a rule direction has none')
+// The stock page timeline keeps the cards (Issue 519 owns that page).
+check(timeline.includes('class="card news-card"') && !timeline.includes('news-row'), 'the stock timeline still uses the cards')
+// The detail page shows the cleaned title; the source title is in 技術資訊.
+const cleanedDetail = render(<NewsDetailView item={squareTitle} />)
+check(cleanedDetail.includes('<h1 class="news-detail-title">台積電狠甩英特爾</h1>') && cleanedDetail.includes('原始標題：■ 台積電狠甩英特爾'), `detail: cleaned h1, source title under 技術資訊: ${cleanedDetail}`)
+check(!render(<NewsDetailView item={newsItem()} />).includes('原始標題：'), 'an unchanged title (only whitespace) has no 原始標題 line')
+const homeSquare = render(<HomeNewsRow item={squareTitle} />)
+check(homeSquare.includes('title="台積電狠甩英特爾"') && homeSquare.includes('>台積電狠甩英特爾</a>') && !homeSquare.includes('■'), `the today page row shows the same cleaned title: ${homeSquare}`)
+
+// ---- Issue 523 relation filters: verified_only／watchlist_only go to the API and the URL ----
+const bothFilters = { tab: 'domestic' as const, q: '', symbol: '', verified: true, watchlist: true }
+check(JSON.stringify(newsListParams(bothFilters)) === JSON.stringify({ category: 'domestic', verified_only: true, watchlist_only: true, limit: NEWS_PAGE_SIZE }), `filters reach the API: ${JSON.stringify(newsListParams(bothFilters))}`)
+check(newsListParams({ tab: 'domestic', q: '', symbol: '', verified: false }).verified_only === undefined, 'an unset filter is left out of the request')
+check(JSON.stringify(newsPageSearch(bothFilters)) === JSON.stringify({ verified: '1', watchlist: '1' }), 'filters are kept in the URL')
+const parsed = newsFiltersFromSearch(new URLSearchParams('tab=official&q=x&verified=1'))
+check(parsed.tab === 'official' && parsed.q === 'x' && parsed.symbol === '' && parsed.verified === true && parsed.watchlist === false, `URL → filters: ${JSON.stringify(parsed)}`)
+const chips = (markup: string) => /<div class="filter-chips news-relation-filters"[^>]*>([\s\S]*?)<\/div>/.exec(markup)?.[1] ?? ''
+check(/aria-pressed="false"[^>]*>只看有已核實標的<\/button>/.test(chips(rows)) && /aria-pressed="false"[^>]*>只看自選相關<\/button>/.test(chips(rows)), `both chips off by default: ${chips(rows)}`)
+const pressed = rowsView({ watchlist: true }, [squareTitle])
+check(/class="badge filter-chip filter-chip-selected" aria-pressed="true">只看自選相關</.test(chips(pressed)), `the watchlist chip shows pressed: ${chips(pressed)}`)
+check(rows.indexOf('news-relation-filters') > rows.indexOf('class="news-controls"') && rows.indexOf('news-relation-filters') < rows.indexOf('news-row-list'), 'the chips sit between the controls and the list')
+const watchEmpty = rowsView({ watchlist: true }, [])
+check(watchEmpty.includes('目前沒有與自選股相關的新聞。自選清單是空的時不會有結果；個股頁勾選「我的自選」可查看目前的自選股。') && !watchEmpty.includes('目前沒有符合條件的國內新聞。'), 'an empty watchlist filter explains itself')
+check(rowsView({ verified: true }, []).includes('目前沒有符合條件、且有已核實標的的新聞。'), 'an empty verified filter says so')
+
+// ---- Issue 523 layout rules (styles.css): one line each, the phone line two drops the tags ----
+has(wideCss, '.news-row-title', /white-space:\s*nowrap/)
+has(wideCss, '.news-row-title', /text-overflow:\s*ellipsis/)
+has(wideCss, '.news-row-line2', /display:\s*contents/)
+for (const part of ['.news-row-source', '.news-row-time', '.news-row-impact']) has(wideCss, part, /white-space:\s*nowrap/)
+has(wideCss, '.news-row-tags', /overflow:\s*hidden/)
+has(wideCss, '.news-row-detail > summary', /display:\s*none/)
+has(phoneCss, '.news-row-line2', /display:\s*flex/)
+has(phoneCss, '.news-row-tags', /display:\s*none/)
+check(!/flex-wrap:\s*wrap/.test(declarations(phoneCss, '.news-row-line2')), 'the phone line two never wraps')

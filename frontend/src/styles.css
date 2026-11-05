@@ -236,6 +236,45 @@ a.symbol-link:hover { color: var(--color-primary); }
 .news-filters { display: flex; flex-wrap: nowrap; align-items: stretch; gap: var(--space-2); padding-bottom: var(--space-3); }
 .news-filters .search-input { flex: 0 1 240px; width: 240px; min-width: 0; }
 .news-filters .news-symbol-input { flex: 0 1 140px; width: 140px; }
+/* /news (#523, DESIGN_SYSTEM §5 新聞清單): a one-line page head, the relation chips, then one card of two-line rows; the
+   rest of a row opens in a <details> under it. Every part of a row is a grid item, so it is its own line of page text. */
+.news-page-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-4); padding: 0 0 var(--space-3); }
+.news-page-title h1 { margin: 0; }
+.news-page-title p { margin: 0; color: var(--color-text-muted); font-size: var(--text-md); }
+.news-page .news-controls { margin-bottom: var(--space-3); }
+.news-relation-filters { margin-bottom: var(--space-3); }
+.news-relation-filters .filter-chip { padding: var(--space-1) var(--space-3); font-size: var(--text-sm); }
+.news-row-list { margin: 0; padding: 0; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-bg-card); list-style: none; }
+.news-row + .news-row { border-top: 1px solid var(--color-border); }
+.news-row:hover { background: var(--color-bg-elevated); }
+.news-row-open, .news-row-open:hover { background: var(--color-bg-alt); }
+.news-row-main { display: grid; grid-template-areas: "title title title title title toggle" "source sep time impact tags toggle"; grid-template-columns: minmax(0, max-content) auto auto auto minmax(0, 1fr) auto; gap: 2px var(--space-2); align-items: center; padding: var(--space-2) var(--space-3) var(--space-2) var(--space-5); }
+.news-row-line2 { display: contents; }
+.news-row-title { grid-area: title; min-width: 0; margin: 0; overflow: hidden; font-size: var(--text-base); font-weight: 600; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
+.news-row-title a { color: var(--color-text); }
+.news-row-title a:hover { color: var(--color-primary); }
+.news-row-source, .news-row-sep, .news-row-time, .news-row-impact { color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1.6; white-space: nowrap; }
+.news-row-source { grid-area: source; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.news-row-sep { grid-area: sep; }
+.news-row-time { grid-area: time; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.news-row-impact { display: flex; grid-area: impact; align-items: center; gap: var(--space-2); }
+.news-row-impact::before { content: "·"; }
+.news-row-impact .news-direction { gap: var(--space-1); font-size: var(--text-sm); }
+.news-row-impact .badge { flex: none; white-space: nowrap; }
+/* The tags wrap onto a second line that the fixed height hides, so a tag is shown whole or not at all; all of them are in
+   the detail. */
+.news-row-tags { display: flex; flex-wrap: wrap; grid-area: tags; gap: var(--space-2) var(--space-1); min-width: 0; height: calc(var(--text-xs) * 1.5 + 2px); overflow: hidden; }
+.news-row-tags .tag { flex: 0 1 auto; min-width: 0; overflow: hidden; padding: 0 var(--space-2); line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
+.news-row-tags a.tag:hover { border-color: var(--color-primary); color: var(--color-text); }
+.news-row-toggle { grid-area: toggle; padding: var(--space-1) var(--space-2); color: var(--color-primary); font-size: var(--text-sm); font-weight: 500; white-space: nowrap; }
+.news-row-detail > summary { display: none; }
+.news-row-detail[open] { padding: var(--space-3) var(--space-5) var(--space-4); border-top: 1px solid var(--color-border); }
+.news-row-detail-body { display: grid; gap: var(--space-2); justify-items: start; font-size: var(--text-md); }
+.news-row-kind { color: var(--color-text-muted); font-size: var(--text-sm); }
+.news-row-summary { margin: 0; color: var(--color-text); line-height: 1.7; }
+.news-row-detail .news-ai-candidates { justify-self: stretch; }
+.news-row-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
+.news-row-links .news-source { margin-top: 0; padding-top: 0; }
 .news-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
 .news-card { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
 .news-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--color-text-muted); font-size: 14px; }
@@ -811,6 +850,17 @@ a.symbol-link:hover { color: var(--color-primary); }
   .news-filters { flex-wrap: wrap; }
   .news-filters, .news-filters .search-input { flex: 1 1 100%; width: 100%; }
   .news-filters .news-symbol-input { flex: 1 1 0; width: auto; }
+  /* Phones (#523): as on the today page, the direction and 「AI 推論」 sit beside the title; line two is one unwrapped flex
+     line of source (cut first), time and the toggle. The tags do not fit beside the time; the detail lists them. */
+  .news-row-main { grid-template-areas: "title impact" "line2 line2"; grid-template-columns: minmax(0, 1fr) auto; padding: var(--space-2) var(--space-1) var(--space-2) var(--space-3); }
+  .news-row-impact { padding-right: var(--space-2); }
+  .news-row-impact::before { content: none; }
+  .news-row-line2 { display: flex; grid-area: line2; align-items: center; gap: var(--space-2); min-width: 0; }
+  .news-row-source { flex: 0 1 auto; }
+  .news-row-sep, .news-row-time, .news-row-toggle { flex: none; }
+  .news-row-tags { display: none; }
+  .news-row-toggle { margin-left: auto; padding-block: 0; }
+  .news-row-detail[open] { padding: var(--space-3); }
   .news-detail-title { font-size: 24px; }
   .ai-inference { padding: var(--space-4); }
   .site-footer { flex-direction: column; align-items: flex-start; }
