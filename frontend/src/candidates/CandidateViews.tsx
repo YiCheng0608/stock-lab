@@ -235,10 +235,11 @@ function EntryWay({ item }: { item: CandidateItem }) {
   return (
     <div className="candidate-entry-way">
       <div><span className="entry-type-badge"><Term id={levels.entry_type === 'pullback' ? 'pullback' : 'breakout'}>{entryTypeLabel(item.strategy)}</Term></span>
-        <span className="entry-way-label">進場</span> <b className="level-entry">{formatEntryZone(levels)}</b></div>
-      {/* Two targets are named 目標一／二 (#463), as on the phone card. */}
-      <div><span className="entry-way-label"><Term id="support">停損</Term></span> <b className="level-stop">{formatPrice(levels.invalid_price)}</b>
-        <span className="entry-way-sep"> · </span><span className="entry-way-label"><Term id="target">{levels.target_2 != null ? '目標一／二' : '目標一'}</Term></span> <b className="level-target"><Targets levels={levels} /></b></div>
+        <span className="entry-way-item"><span className="entry-way-label">進場</span> <b className="level-entry">{formatEntryZone(levels)}</b></span></div>
+      {/* Two targets are named 目標一／二 (#463), as on the phone card. Each pair keeps to one line; a long second pair
+          wraps whole instead of being cut. */}
+      <div><span className="entry-way-item"><span className="entry-way-label"><Term id="support">停損</Term></span> <b className="level-stop">{formatPrice(levels.invalid_price)}</b></span>
+        <span className="entry-way-sep"> · </span><span className="entry-way-item"><span className="entry-way-label"><Term id="target">{levels.target_2 != null ? '目標一／二' : '目標一'}</Term></span> <b className="level-target"><Targets levels={levels} /></b></span></div>
     </div>
   )
 }

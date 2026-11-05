@@ -9,7 +9,7 @@ import { Card } from '../components/ui'
 
 const STEPS: ReadonlyArray<{ title: string; text: string }> = [
   { title: '1. 收盤後掃描全市場', text: '每個交易日收盤後，系統對全部上市、上櫃普通股跑兩種固定規則：突破型與回踩型。' },
-  { title: '2. 條件全部成立才入選', text: '價格、量能、族群、法人與融資的條件都要成立；任何一項資料不足，就不列入，不會拿 0 補。ETF 不列入。' },
+  { title: '2. 條件全部成立才入選', text: '價格、量能、族群、法人與融資的條件都要成立；任何一項資料不足，就不列入，不會拿 0 補。另外 20 日平均成交量至少 1,000 張；成交量太少，或均量資料不足的股票不列入。ETF 不列入。' },
   { title: '3. 依評分排序', text: '入選的股票依技術、籌碼、族群、新聞情緒四項評分排序，最多列 20 檔。評分只決定先後，不代表勝率或預期報酬。' },
 ]
 
@@ -22,7 +22,7 @@ const TYPES: ReadonlyArray<{ id: 'breakout' | 'pullback'; title: string; rule: s
   },
   {
     id: 'pullback', title: '回踩型',
-    rule: '中期趨勢向上（20 日均線在 60 日均線之上），股價拉回到 20 日均線附近（約 −3%～+2%），而且量縮（前 20 日均量的 0.6～1.2 倍）。',
+    rule: '中期趨勢向上（20 日均線在 60 日均線之上，收盤在 60 日均線以上），股價拉回到 20 日均線附近（約 −3%～+2%），而且量縮（前 20 日均量的 0.6～1.2 倍）。',
     fits: '等拉回：趨勢向上的股票回到支撐區、賣壓變小時。',
     risk: '趨勢轉弱：拉回沒有止住，一路跌破支撐。',
   },
@@ -58,7 +58,7 @@ export function StrategyPage() {
             </Card>
           ))}
         </div>
-        <p className="small-note">兩種都另外要求：所屬族群近 20 日跑贏加權指數、三大法人 5 日沒有明顯賣超、融資 5 日增加不超過 5%。</p>
+        <p className="small-note">兩種都另外要求：所屬族群近 20 日跑贏加權指數、三大法人 5 日沒有明顯賣超、融資 5 日增加不超過 5%（非融資標的不適用這一條）。</p>
       </section>
 
       <section className="strategy-section" aria-labelledby="strategy-follow-title">

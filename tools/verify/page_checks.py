@@ -1942,7 +1942,11 @@ def s9(run: Run, stock: Stock) -> str:
 
 # The page is 觀察中 at /watch since #493; the old /actions redirects there (A18).
 ACTIONS = Shot("actions", "/watch")
-ACTIONS_LEGACY = Shot("actions-legacy", "/actions", (1280,))
+# The old URL with a query and a plan anchor; both must survive the redirect (#493 review).
+LEGACY_QUERY, LEGACY_ANCHOR = "from=legacy", "plan-0"
+ACTIONS_LEGACY = Shot(
+    "actions-legacy", f"/actions?{LEGACY_QUERY}#{LEGACY_ANCHOR}", (1280,)
+)
 WATCH_TITLE, WATCH_EYEBROW = (
     "觀察中",
     "追蹤與提醒",
@@ -2587,14 +2591,28 @@ def watch_title(text: Text) -> int:
 
 @check("actions", "A18")
 def a18(run: Run) -> str:
-    """#493: /watch is 觀察中, and the old /actions lands on it instead of a 404."""
+    """#493: /watch is 觀察中, and the old /actions redirects there with its query and anchor.
+
+    The page text alone cannot tell a redirect from /actions rendering the page in place, so
+    the URL the browser ended on (screenshot.cjs `finalUrl`) must be /watch.
+    """
 
     pages = (("`/watch`", run.text(ACTIONS)), ("`/actions`", run.text(ACTIONS_LEGACY)))
     for where, text in pages:
         expect(not text.has("找不到此頁。"), f"{where} 是找不到此頁")
         i = watch_title(text)
         expect(i >= 0, f"{where} 缺 `{WATCH_EYEBROW}` 之後整行 `{WATCH_TITLE}`")
-    return f"`/watch` 與 `/actions` 都是 `{WATCH_EYEBROW}` → `{WATCH_TITLE}`"
+    final = (run.shoot(ACTIONS_LEGACY).get(1280) or {}).get("finalUrl")
+    expect(bool(final), f"`{ACTIONS_LEGACY.path}` 的截圖結果沒有 finalUrl")
+    landed = urllib.parse.urlsplit(final)
+    want = f"/watch?{LEGACY_QUERY}#{LEGACY_ANCHOR}"
+    got = (
+        landed.path
+        + (f"?{landed.query}" if landed.query else "")
+        + (f"#{landed.fragment}" if landed.fragment else "")
+    )
+    expect(got == want, f"`{ACTIONS_LEGACY.path}` 落在 `{got}`，預期 `{want}`")
+    return f"`/watch` 是 `{WATCH_TITLE}`；`{ACTIONS_LEGACY.path}` 轉到 `{got}`"
 
 
 # ---- manual checks: samples picked by fixed rules, judged by an agent ----

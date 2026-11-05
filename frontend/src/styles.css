@@ -525,9 +525,9 @@ a.symbol-link:hover { color: var(--color-primary); }
 /* 今日可買 table (#493, DESIGN_SYSTEM §5 候選列表): fixed column widths, two lines a row at most, so nothing squeezes or
    spills at 1280 and 1440 and six rows fit the 1280×800 first screen. */
 .candidate-table { width: 100%; table-layout: fixed; }
-.candidate-table th:nth-child(1) { width: 22%; }
+.candidate-table th:nth-child(1) { width: 19%; }
 .candidate-table th:nth-child(2) { width: 104px; }
-.candidate-table th:nth-child(3) { width: 27%; }
+.candidate-table th:nth-child(3) { width: 31%; }
 .candidate-table th:nth-child(4) { width: 88px; }
 .candidate-table th:nth-child(5) { width: 120px; }
 .candidate-table th:nth-child(7) { width: 104px; }
@@ -537,7 +537,10 @@ a.symbol-link:hover { color: var(--color-primary); }
 .candidate-stock-line .candidate-rank { margin-right: var(--space-1); padding: 0 var(--space-2); }
 /* Three short lines (name, market · group, #490 average volume) stay as tall as the two-line 進場方式 cell. */
 .candidate-stock-cell .small-note { line-height: 1.35; }
-.candidate-entry-way { display: grid; gap: 2px; font-size: 14px; white-space: nowrap; }
+/* Each label with its value stays on one line; a long pair (a price above 1,000 with two targets) moves to the next line
+   instead of being cut by the fixed column. */
+.candidate-entry-way { display: grid; gap: 2px; font-size: 14px; white-space: normal; }
+.entry-way-item { white-space: nowrap; }
 .candidate-entry-way b { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; }
 .entry-way-label { color: var(--color-text-muted); font-size: 13px; }
 .entry-way-sep { color: var(--color-text-subtle); }
@@ -676,6 +679,20 @@ a.symbol-link:hover { color: var(--color-primary); }
 .suggestion-news a:hover { color: var(--color-primary); }
 
 /* ---- responsive --------------------------------------------------------------------------------- */
+/* 今日可買 below 1200px (#493 review): the seven fixed columns no longer fit, so the list is cards, two a row, one at 640px
+   and below (DESIGN_SYSTEM §5 候選列表). */
+@media (max-width: 1199px) {
+  .candidate-table-wrap { display: none; }
+  .candidate-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+}
+/* The market overview clips its turnover and breadth rows when four widgets share one row below 1200px, and the two
+   dual widgets need a whole row at 800px and below (#493 review); 640px and below show only the two indices. */
+@media (max-width: 1199px) {
+  .market-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 800px) {
+  .market-overview-grid .market-widget-dual { grid-column: 1 / -1; }
+}
 @media (max-width: 1024px) {
   .container, .navbar-inner { padding: 0 var(--space-6); }
   .navbar-search .input { width: 150px; }
@@ -739,7 +756,7 @@ a.symbol-link:hover { color: var(--color-primary); }
   .market-overview-grid .market-widget-dual { display: none; }
   .market-overview-more { display: block; }
   .candidate-table-wrap { display: none; }
-  .candidate-cards { display: grid; }
+  .candidate-cards { display: grid; grid-template-columns: minmax(0, 1fr); }
   .action-table-wrap { display: none; }
   .action-cards { display: grid; }
   .action-tier { margin-top: var(--space-6); }

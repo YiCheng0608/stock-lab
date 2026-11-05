@@ -62,6 +62,22 @@ check(!render('/actions', <App />).includes('找不到此頁'), '/actions 不是
 const redirect = (AppModule as Record<string, unknown>).watchRedirectPath as ((search: string, hash: string) => string) | undefined
 check(typeof redirect === 'function' && redirect('?q=2330', '#plan-7') === '/watch?q=2330#plan-7' && redirect('', '') === '/watch',
   `/actions 轉 /watch 並保留查詢與錨點: ${typeof redirect === 'function' ? redirect('?q=2330', '#plan-7') : 'watchRedirectPath 不存在'}`)
+// The /actions route is a redirect, not the page rendered in place (a static render cannot follow <Navigate>, so read
+// the route table and the target the redirect computes from the location it is given).
+const routes = (AppModule as Record<string, unknown>).APP_ROUTES as ReadonlyArray<{ path: string; element: ReactElement }> | undefined
+const WatchRedirect = (AppModule as Record<string, unknown>).WatchRedirect as (() => ReactElement) | undefined
+const legacy = routes?.find((route) => route.path === '/actions')
+check(Boolean(legacy && WatchRedirect && legacy.element.type === WatchRedirect), `/actions 的 Route 是 WatchRedirect: ${legacy ? String((legacy.element.type as { name?: string }).name) : 'APP_ROUTES 沒有 /actions'}`)
+check(routes?.find((route) => route.path === '/watch')?.element.type === AppModule.ActionsPage, '/watch 的 Route 是觀察中頁 (ActionsPage)')
+let landed: unknown = null
+function LandingProbe() {
+  // Calls the redirect in this component's render, so its hooks read the StaticRouter location below.
+  const element = WatchRedirect ? WatchRedirect() : null
+  landed = element ? (element.props as { to?: unknown }).to : null
+  return null
+}
+render('/actions?q=2330#plan-7', <LandingProbe />)
+check(landed === '/watch?q=2330#plan-7', `/actions?q=2330#plan-7 轉到: ${String(landed)}，預期 /watch?q=2330#plan-7`)
 check(planLink(7) === '/watch#plan-7', `已在追蹤的連結: ${planLink(7)}`)
 const alert = render('/', <HoldingAlert actions={riskActions()} />)
 check(alert.includes('href="/watch"') && text(alert).includes('查看觀察中 →'), `持倉風險提示列連到 /watch: ${text(alert)}`)
@@ -115,5 +131,10 @@ const css = fs.readFileSync(path.join(__dirname, 'styles.css'), 'utf8')
 const rule = (selector: string) => { const at = css.indexOf(selector + ' {'); return at < 0 ? '' : css.slice(at, css.indexOf('}', at)) }
 check(/align-items:\s*stretch/.test(rule('.home-columns')), `.home-columns 兩欄等高: ${rule('.home-columns')}`)
 check(/table-layout:\s*fixed/.test(rule('.candidate-table')), `.candidate-table 固定欄寬: ${rule('.candidate-table')}`)
+// Review of PR 499: below 1200px the fixed columns do not fit, so the list is cards there; a long level pair wraps whole.
+const tabletAt = css.indexOf('@media (max-width: 1199px)')
+const tablet = tabletAt < 0 ? '' : css.slice(tabletAt, css.indexOf('\n}\n', tabletAt) + 2)
+check(/\.candidate-table-wrap \{ display: none; \}/.test(tablet) && /\.candidate-cards \{ display: grid;/.test(tablet), `1199px 以下今日可買改卡片: ${tablet || '沒有這段 @media'}`)
+check(/white-space:\s*nowrap/.test(rule('.entry-way-item')) && /white-space:\s*normal/.test(rule('.candidate-entry-way')), '進場方式每組標籤與值不拆行、組與組之間可換行')
 
 if (failures.length) throw new Error(`${failures.length} of ${checks} navigation checks failed:\n- ${failures.join('\n- ')}`)

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { FormEvent, KeyboardEvent, ReactNode } from 'react'
+import type { FormEvent, KeyboardEvent, ReactElement, ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link, Navigate, Route, Routes, useLocation, useParams, useSearchParams } from 'react-router-dom'
 
@@ -386,10 +386,6 @@ function DirectoryPagination({ meta, onPageChange }: { meta: Record<string, unkn
       </div>
     </div>
   )
-}
-
-function actionPath(action: ActionSummary): string {
-  return stockResearchPath(action.instrument.exchange, action.instrument.symbol)
 }
 
 function ProductTimeSummary({
@@ -809,7 +805,7 @@ export function watchRedirectPath(search: string, hash: string): string {
   return '/watch' + search + hash
 }
 
-function WatchRedirect() {
+export function WatchRedirect() {
   const location = useLocation()
   return <Navigate replace to={watchRedirectPath(location.search, location.hash)} />
 }
@@ -1041,24 +1037,29 @@ function NotFound() {
 
 const trackingClient: TrackingClient = { plans: getTrackingPlans, plan: getTrackingPlan, add: addTrackingPlan, cancel: cancelTrackingPlan }
 
+// Every route in one table, so a test can tell a redirect (/actions) from a page rendered in place (#493 review).
+export const APP_ROUTES: ReadonlyArray<{ path: string; element: ReactElement }> = [
+  { path: '/', element: <TodayPage /> },
+  { path: '/news/:newsId', element: <NewsDetailPage /> },
+  { path: '/news', element: <NewsPage /> },
+  { path: '/themes', element: <ThemesPage /> },
+  { path: '/themes/:themeId', element: <ThemePage /> },
+  { path: '/stocks', element: <StocksPage /> },
+  { path: '/stocks/:exchange/:symbol', element: <StockPage /> },
+  { path: '/watch', element: <ActionsPage /> },
+  { path: '/actions', element: <WatchRedirect /> },
+  { path: '/actions/:exchange/:symbol', element: <ActionDetailRedirect /> },
+  { path: '/strategy', element: <StrategyPage /> },
+  { path: '/system/data-quality', element: <SystemDataPage /> },
+  { path: '/research/backtest', element: <ResearchBacktestPage /> },
+  { path: '/research/coverage', element: <BackfillCoveragePage /> },
+  { path: '/research/strategies', element: <ResearchStrategiesPage /> },
+  { path: '/glossary', element: <GlossaryPage /> },
+  { path: '*', element: <NotFound /> },
+]
+
 export default function App() {
   return <TrackingClientProvider value={trackingClient}><Shell><Routes>
-    <Route path="/" element={<TodayPage />} />
-    <Route path="/news/:newsId" element={<NewsDetailPage />} />
-    <Route path="/news" element={<NewsPage />} />
-    <Route path="/themes" element={<ThemesPage />} />
-    <Route path="/themes/:themeId" element={<ThemePage />} />
-    <Route path="/stocks" element={<StocksPage />} />
-    <Route path="/stocks/:exchange/:symbol" element={<StockPage />} />
-    <Route path="/watch" element={<ActionsPage />} />
-    <Route path="/actions" element={<WatchRedirect />} />
-    <Route path="/actions/:exchange/:symbol" element={<ActionDetailRedirect />} />
-    <Route path="/strategy" element={<StrategyPage />} />
-    <Route path="/system/data-quality" element={<SystemDataPage />} />
-    <Route path="/research/backtest" element={<ResearchBacktestPage />} />
-    <Route path="/research/coverage" element={<BackfillCoveragePage />} />
-    <Route path="/research/strategies" element={<ResearchStrategiesPage />} />
-    <Route path="/glossary" element={<GlossaryPage />} />
-    <Route path="*" element={<NotFound />} />
+    {APP_ROUTES.map((route) => <Route key={route.path} path={route.path} element={route.element} />)}
   </Routes></Shell></TrackingClientProvider>
 }

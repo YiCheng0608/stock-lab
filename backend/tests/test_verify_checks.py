@@ -922,3 +922,50 @@ def test_status_summary_leaves_out_the_evidence():
     assert "台積電" not in status and "預期 X" not in status
     assert "### 觀察中 `/watch`：失敗" in status
     assert "| A2 | 通過 |" in status and "| A3 | 失敗 |" in status
+
+
+# ---- A18: /watch is 觀察中 and /actions redirects there (#493) ----
+
+WATCH_PAGE = "今日可買\n觀察中\n族群\n追蹤與提醒\n觀察中\n我的庫存\n"
+
+
+def _a18_run(tmp_path, final_url, legacy_page=WATCH_PAGE):
+    metas = {"actions-legacy": {1280: {"width": 1280, "ready": True}}}
+    if final_url is not None:
+        metas["actions-legacy"][1280]["finalUrl"] = final_url
+    return FakeRun(
+        tmp_path,
+        {},
+        {"actions-1280": WATCH_PAGE, "actions-legacy-1280": legacy_page},
+        metas=metas,
+    )
+
+
+def test_a18_passes_when_actions_lands_on_watch_with_query_and_anchor(tmp_path):
+    run = _a18_run(tmp_path, "http://127.0.0.1:4173/watch?from=legacy#plan-0")
+    assert "轉到 `/watch?from=legacy#plan-0`" in page_checks.a18(run)
+
+
+@pytest.mark.parametrize(
+    "final_url",
+    [
+        # The pre-#493 app rendered the page at /actions itself: same text, no redirect.
+        "http://127.0.0.1:4173/actions?from=legacy#plan-0",
+        "http://127.0.0.1:4173/watch",
+        "http://127.0.0.1:4173/watch?from=legacy",
+    ],
+)
+def test_a18_fails_when_the_redirect_drops_the_url_or_does_not_happen(
+    tmp_path, final_url
+):
+    with pytest.raises(page_checks.Fail, match=r"預期 `/watch\?from=legacy#plan-0`"):
+        page_checks.a18(_a18_run(tmp_path, final_url))
+
+
+def test_a18_fails_without_the_landing_url_or_on_a_404(tmp_path):
+    with pytest.raises(page_checks.Fail, match="沒有 finalUrl"):
+        page_checks.a18(_a18_run(tmp_path, None))
+    with pytest.raises(page_checks.Fail, match="`/actions` 是找不到此頁"):
+        page_checks.a18(
+            _a18_run(tmp_path, "http://x/watch", "找不到此頁。\n回到今日可買\n")
+        )
