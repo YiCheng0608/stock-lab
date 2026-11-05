@@ -922,7 +922,7 @@ def derived_checks(ctx: Context, stop: Callable[[], str | None]) -> list[Check]:
     groups = Check(
         "groups",
         "族群分數重算",
-        scope="每列 group_daily_scores：成員超額報酬、量能、法人，群組相對報酬、廣度、同榜 percentile、分數與名次",
+        scope="每列 group_daily_scores：成員超額報酬、量能、法人，群組相對報酬、廣度、催化劑（1.2.0 起依覆蓋與事件重算）、同榜 percentile、分數與名次",
     )
     if ctx.quick:
         ind.scope += (
