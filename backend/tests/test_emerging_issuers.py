@@ -154,6 +154,56 @@ def test_a_snapshot_batch_reads_the_roster_once_with_its_raw(tmp_path, monkeypat
     assert "7808" not in {item.symbol for item in batch.instruments}
 
 
+def test_the_raw_is_dated_by_the_rosters_own_date_not_the_collect_day(
+    tmp_path, monkeypatch
+):
+    # Review of PR #518: the raw's data_as_of is the roster's 資料日期, as
+    # emerging_issuers.as_of_date; here the roster (09/03) is older than the collect (09/04).
+    monkeypatch.setattr(sources, "RAW_DIR", tmp_path / "raw")
+    roster = [
+        {
+            "Date": "1150903",
+            "SecuritiesCompanyCode": "7808",
+            "CompanyAbbreviation": "訊聯智藥",
+        }
+    ]
+    batch = _combined(RosterFetcher(roster)).fetch(DAY, DAY)
+    (capture,) = [
+        p for p in batch.payloads if p.endpoint == sources.TPEX_EMERGING_ISSUER_ENDPOINT
+    ]
+    assert capture.data_as_of == "2026-09-03"
+    meta = json.loads(capture.payload_path.with_suffix(".meta.json").read_text("utf-8"))
+    assert meta["data_as_of"] == "2026-09-03"
+    assert [r.as_of_date for r in batch.emerging_issuers] == [date(2026, 9, 3)]
+
+
+def test_a_roster_without_one_date_keeps_its_raw_undated_and_is_rejected(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(sources, "RAW_DIR", tmp_path / "raw")
+    roster = [
+        {
+            "Date": "1150903",
+            "SecuritiesCompanyCode": "7808",
+            "CompanyAbbreviation": "訊聯",
+        },
+        {
+            "Date": "1150904",
+            "SecuritiesCompanyCode": "8058",
+            "CompanyAbbreviation": "耐特",
+        },
+    ]
+    batch = _combined(RosterFetcher(roster)).fetch(DAY, DAY)
+    (capture,) = [
+        p for p in batch.payloads if p.endpoint == sources.TPEX_EMERGING_ISSUER_ENDPOINT
+    ]
+    assert capture.data_as_of is None and capture.payload_path.exists()
+    assert batch.emerging_issuers == []
+    assert any(
+        w.startswith("TPEx emerging issuers unavailable: ") for w in batch.warnings
+    )
+
+
 def test_a_historical_batch_never_reads_the_roster(tmp_path, monkeypatch):
     monkeypatch.setattr(sources, "RAW_DIR", tmp_path / "raw")
     fetcher = FixtureFetcher()

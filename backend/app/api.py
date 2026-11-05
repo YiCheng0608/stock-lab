@@ -1180,8 +1180,10 @@ def _latest_emerging_names(db: Session, codes: set[str]) -> dict[str, str]:
     the emerging market, is not named 興櫃 from an older roster.
     """
 
+    if not codes:
+        return {}
     latest = db.scalar(select(func.max(EmergingIssuer.as_of_date)))
-    if latest is None or not codes:
+    if latest is None:
         return {}
     return dict(
         db.execute(
@@ -1201,7 +1203,8 @@ def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, A
     rule relations stay in ``symbols``.  A candidate is named from the master
     (``listing`` listed or delisted) or else the newest TPEx emerging roster
     (``emerging``); a code neither names goes to ``hidden_symbol_candidates``
-    with ``reason=code_unknown`` and is not shown (#512).  Only the prompt version
+    and is not shown (#512): ``reason=code_ambiguous`` when the master has it on
+    several rows and none on the written exchange, ``code_unknown`` otherwise.  Only the prompt version
     ``worker.news_llm`` writes now counts (#308): older versions never had its
     summary check, so an item without a done result of that version (none yet,
     pending, stale, or ``rejected``) has no AI block on any page.
@@ -1248,13 +1251,20 @@ def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, A
         for candidate in row.ai_symbol_candidates_json or []:
             written, _, symbol = str(candidate.get("symbol", "")).partition(":")
             # Master first, then the newest emerging roster; a code neither
-            # names is not shown and its reason is kept (#512).
-            shown = _candidate_instrument(listed.get(symbol, []), written)
+            # names is not shown and its reason is kept (#512): code_ambiguous
+            # when the master has the code on several rows, none on the
+            # written exchange, code_unknown when nothing has it.
+            rows = listed.get(symbol, [])
+            shown = _candidate_instrument(rows, written)
             if shown is None and symbol in emerging:
                 shown = (written, emerging[symbol], "emerging")
             if shown is None:
                 hidden_candidates.append(
-                    {"exchange": written, "symbol": symbol, "reason": "code_unknown"}
+                    {
+                        "exchange": written,
+                        "symbol": symbol,
+                        "reason": "code_ambiguous" if rows else "code_unknown",
+                    }
                 )
                 continue
             exchange, name, listing = shown

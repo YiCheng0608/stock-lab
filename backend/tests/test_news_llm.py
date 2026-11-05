@@ -1075,6 +1075,86 @@ def test_a_listed_code_is_never_named_from_the_emerging_roster(db, client):
     ]
 
 
+def _candidate_ai(db, client, written):
+    """The ``ai`` block ``/news/<id>`` returns for one done result naming ``written``."""
+
+    item = _add_news(db, 1)[0]
+    db.add(
+        NewsLlmResult(
+            news_item_id=item.id,
+            prompt_version=PROMPT_VERSION,
+            llm_model="claude-sonnet-fake",
+            llm_input_hash="0" * 64,
+            llm_run_at=NOW,
+            llm_status="done",
+            ai_summary="摘要",
+            ai_symbol_candidates_json=[
+                {"symbol": symbol, "reason": "理由", "confidence": "high"}
+                for symbol in written
+            ],
+            ai_theme_candidates_json=[],
+            ai_impact_direction="positive",
+            ai_impact_scope="instrument",
+            ai_impact_rationale="理由",
+            ai_unsupported=False,
+        )
+    )
+    db.commit()
+    return client.get(f"{router.prefix}/news/{item.id}").json()["ai"]
+
+
+def test_a_delisted_master_row_wins_over_the_emerging_roster(db, client):
+    # #512 resolution order: the master names a code before the roster, so a
+    # delisted stock that also sits on the roster reads 已下市, not 興櫃.
+    from app.models import EmergingIssuer
+
+    _emerging_rosters(db)
+    db.add(Instrument(exchange="TWSE", symbol="2888", name="新光金", status="delisted"))
+    db.add(
+        EmergingIssuer(
+            symbol="2888",
+            name="名冊上的名稱",
+            market="emerging",
+            as_of_date=date(2026, 11, 5),
+            raw_payload_id=db.scalars(select(RawPayload)).one().id,
+        )
+    )
+    db.commit()
+    ai = _candidate_ai(db, client, ["TWSE:2888"])
+    assert [
+        (row["symbol"], row["name"], row["listing"]) for row in ai["symbol_candidates"]
+    ] == [("2888", "新光金", "delisted")]
+    assert ai["hidden_symbol_candidates"] == []
+
+
+def test_a_code_the_master_cannot_pick_is_hidden_as_ambiguous_not_unknown(db, client):
+    # Review of PR #518: several master rows, none on the written exchange, is a
+    # different audit finding from a code nothing knows; the roster is not asked.
+    from app.models import EmergingIssuer
+
+    _emerging_rosters(db)
+    db.add_all(
+        [
+            Instrument(exchange="TWSE", symbol="7002", name="甲", status="active"),
+            Instrument(exchange="OTC", symbol="7002", name="乙", status="active"),
+            EmergingIssuer(
+                symbol="7002",
+                name="名冊上的名稱",
+                market="emerging",
+                as_of_date=date(2026, 11, 5),
+                raw_payload_id=db.scalars(select(RawPayload)).one().id,
+            ),
+        ]
+    )
+    db.commit()
+    ai = _candidate_ai(db, client, ["TPEx:7002", "TPEx:4152"])
+    assert ai["symbol_candidates"] == []
+    assert ai["hidden_symbol_candidates"] == [
+        {"exchange": "TPEx", "symbol": "7002", "reason": "code_ambiguous"},
+        {"exchange": "TPEx", "symbol": "4152", "reason": "code_unknown"},
+    ]
+
+
 def test_each_candidate_says_whether_the_sent_text_names_it(db, client):
     # #465: 65 of 94 production candidates outside the rule relations named a stock
     # the title or summary mentions; the rest are the model's inference.

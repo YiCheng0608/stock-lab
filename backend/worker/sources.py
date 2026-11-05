@@ -2355,6 +2355,24 @@ def emerging_issuer_warning(exc: Exception) -> str:
     return f"TPEx emerging issuers unavailable: {type(exc).__name__}: {exc}"
 
 
+def emerging_roster_date(payload: Any) -> date | None:
+    """The roster's 資料日期: the ROC ``Date`` every row carries, or None.
+
+    None when the payload is not a list of rows or the rows do not agree on
+    one readable Date.  The raw capture stores this as its ``data_as_of``.
+    """
+
+    if not isinstance(payload, list) or not payload:
+        return None
+    if not all(isinstance(row, dict) for row in payload):
+        return None
+    dates = {parse_roc_date(row.get("Date")) for row in payload}
+    if len(dates) != 1 or None in dates:
+        return None
+    (as_of,) = dates
+    return as_of
+
+
 def parse_tpex_emerging_issuers(
     payload: Any, *, requested_date: date, payload_sha256: str | None = None
 ) -> list[EmergingIssuerRecord]:
@@ -2369,12 +2387,12 @@ def parse_tpex_emerging_issuers(
     rows = payload if isinstance(payload, list) else None
     if not rows or not all(isinstance(row, dict) for row in rows):
         raise OfficialDataError("TPEx emerging roster is not a non-empty list of rows")
-    dates = {parse_roc_date(row.get("Date")) for row in rows}
-    if len(dates) != 1 or None in dates:
+    as_of = emerging_roster_date(payload)
+    if as_of is None:
+        dates = {parse_roc_date(row.get("Date")) for row in rows}
         raise OfficialDataError(
             f"TPEx emerging roster rows do not share one Date: {sorted(map(str, dates))}"
         )
-    (as_of,) = dates
     if as_of > requested_date:
         raise OfficialDataError(
             f"TPEx emerging roster Date {as_of.isoformat()} is after "
@@ -3713,7 +3731,18 @@ class TpexAdapter:
         emerging_issuers: list[EmergingIssuerRecord] = []
         emerging_payloads: list[FetchedPayload] = []
         try:
-            roster = self._fetch(TPEX_EMERGING_ISSUER_ENDPOINT, end.isoformat())
+            # The raw's data_as_of is the roster's own Date (資料日期), as
+            # emerging_issuers.as_of_date, not the collect day; None when the
+            # rows do not agree on one (the parse below then rejects it).
+            payload = _call_fetcher(self.fetcher, TPEX_EMERGING_ISSUER_ENDPOINT)
+            data_date = emerging_roster_date(payload)
+            roster = capture_payload(
+                self.source,
+                TPEX_EMERGING_ISSUER_ENDPOINT,
+                payload,
+                data_date.isoformat() if data_date else None,
+            )
+            self.captured_payloads.append(roster)
             emerging_payloads.append(roster)
             emerging_issuers = parse_tpex_emerging_issuers(
                 roster.payload, requested_date=end, payload_sha256=roster.sha256

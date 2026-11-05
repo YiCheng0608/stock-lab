@@ -154,7 +154,7 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 新聞 AI 候選標的常是準備上市櫃的興櫃公司，例如 7808 訊聯智藥、8058 耐特。這些公司不在 `instruments`，以前卡片只能寫「代號未對應到已知標的」。2026-10-29～11-05 正式 DB 的 news_v3 候選裡，對不到名稱的 10 個全是興櫃股（[#512](https://github.com/YiCheng0608/stock-lab/issues/512)）。所以另存 TPEx 的興櫃公司名冊，只拿來替候選標名稱。
 
 - **來源**：TPEx OpenAPI [`mopsfin_t187ap03_R`](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_R)（興櫃公司基本資料）。格式同上櫃的 `mopsfin_t187ap03_O`，讀 `SecuritiesCompanyCode`（代號）、`CompanyAbbreviation`（簡稱）與民國 `Date`（資料日期）。2026-11-05 那份有 367 家。
-- **取得**：當日快照的 collect 每次 1 個請求，存 raw（endpoint、SHA-256、data-as-of）。歷史回補與 catchup 不抓：名冊只有當下的名單。名冊是當下清單、不是交易日報表，所以官方確認無資料的日子也照抓。
+- **取得**：當日快照的 collect 每次 1 個請求，存 raw（endpoint、SHA-256、data-as-of）。raw 的 `data_as_of` 是名冊自己的 `Date`（資料日期，與 `emerging_issuers.as_of_date` 相同），不是 collect 日；各列 `Date` 不一致時為空，該份同時被拒收。歷史回補與 catchup 不抓：名冊只有當下的名單。名冊是當下清單、不是交易日報表，所以官方確認無資料的日子也照抓。
 - **檢核**：每列的 `Date` 要相同，且不晚於 collect 日；代號不是 4～6 位數字或大寫字母、或沒有簡稱的列略過；同一代號出現兩次，或沒有任何可讀的列，整份拒收。
 - **非核心**：取得或解析失敗、或寫入失敗，記 `noncore_warnings` 的 `TPEx emerging issuers unavailable: …`，不寫任何一列，collect 仍為 `success`；run metadata 的 `emerging_issuers` 記 `inserted`／`updated`／`unchanged`／`older` 的列數，失敗時記 `failed`。
 - **保存**：`emerging_issuers`（0027）每個代號一列：`symbol`、`name`、`market`（固定 `emerging`）、`as_of_date`（名冊的資料日期）、`raw_payload_id`。新名冊會更新同代號的名稱、資料日期與 raw；資料日期較舊的名冊（重抓舊日）不改。後來不在名冊上的代號保留原列，資料日期停在舊的那天。
