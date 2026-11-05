@@ -856,6 +856,8 @@ ITEM_KEYS = {
     # User tracking plans (#253).
     "candidate_id",
     "open_plan_id",
+    # The plain-language entry plan from strategy_levels (#491).
+    "entry_plan",
 }
 
 

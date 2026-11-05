@@ -1421,6 +1421,15 @@ export type CandidateItem = {
   sources: { signal: string; market_bar: string | null; chips: string | null; groups: string; news: string }
   // Close of trading_date and its change (#276); missing on responses from before #276.
   market?: CandidateMarket
+  // The signal's strategy_levels row: next-session close and volume to pass again (#491). null without a row of the
+  // current levels version; missing on responses from before #491.
+  entry_plan?: CandidateEntryPlan | null
+}
+
+export type CandidateEntryPlan = Omit<StrategyObservationLevels, 'kind' | 'display_label'> & {
+  levels_version: string
+  entry_type: string
+  conditions: StrategyCondition[]
 }
 
 // known: against the previous verified session from the same source; unverified: change not shown; missing: no traded bar.

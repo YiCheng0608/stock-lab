@@ -21,6 +21,9 @@ IN_PLACE = {
     "heat_rank": "熱度分數與排名",
     "group_components": "五分項",
     "event_data_pending": "事件資料待補",
+    # The entry type badge on a candidate's first line (#491).
+    "breakout_entry": "突破型",
+    "pullback_entry": "回踩型",
 }
 FIELDS = ("plain_definition", "use", "how_to_read", "limitations")
 

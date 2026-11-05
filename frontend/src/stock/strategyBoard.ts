@@ -43,8 +43,8 @@ const ratio = (value: unknown) => isNumber(value) ? `${formatFixed(value, 2)} �
 const lotBound = (value: unknown, round: 'up' | 'down') => isNumber(value) && Number.isSafeInteger(value) && value >= 0
   ? (round === 'up' ? Math.ceil(value / LOT_SIZE) : Math.floor(value / LOT_SIZE)).toLocaleString('zh-TW')
   : '—'
-const minLots = (value: unknown) => `${lotBound(value, 'up')} 張`
-const lotRange = (low: unknown, high: unknown) => `${lotBound(low, 'up')}～${lotBound(high, 'down')} 張`
+export const minLots = (value: unknown) => `${lotBound(value, 'up')} 張`
+export const lotRange = (low: unknown, high: unknown) => `${lotBound(low, 'up')}～${lotBound(high, 'down')} 張`
 
 const OPERATORS: Record<string, string> = { gt: '>', gte: '≥', lt: '<', lte: '≤' }
 
@@ -198,6 +198,22 @@ export function conditionViews(row: StrategyBoardRow, reasonLabel: (code: string
     // Not applicable: the reason says why, not an empty 「—」 value.
     const value = notApplicable ? reasons : conditionValue(item) || reasons
     return { code: item.code, state, stateText: STATE_TEXT[state], label: conditionLabel(item), value, next: state === 'met' || notApplicable ? null : nextSession(item) }
+  })
+}
+
+// A candidate's full conditions for the next session (#491, the entry plan's 「完整條件」): what each condition needs
+// tomorrow; a condition that cannot be worked back (group, institutions, margin) is judged again on tomorrow's data.
+export type EntryConditionView = { code: string; label: string; next: string; notApplicable: boolean }
+const SKIPPED_ENTRY_CONDITIONS: readonly string[] = ['eligibility', 'required_inputs']
+
+export function entryConditionViews(conditions: readonly StrategyCondition[], reasonLabel: (code: string) => string): EntryConditionView[] {
+  return conditions.filter((item) => !SKIPPED_ENTRY_CONDITIONS.includes(item.code)).map((item) => {
+    const notApplicable = item.satisfied == null && item.reasons.some((reason) => NOT_APPLICABLE_REASONS.includes(reason))
+    const value = conditionValue(item)
+    const next = notApplicable
+      ? item.reasons.map(reasonLabel).join('、')
+      : nextSession(item) ?? `明天依當天資料重新判定${value ? `（最近 ${value}）` : ''}`
+    return { code: item.code, label: conditionLabel(item), next, notApplicable }
   })
 }
 

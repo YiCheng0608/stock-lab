@@ -33,6 +33,7 @@ import {
   stockPath,
   subItemLabel,
 } from './candidates'
+import { EntryPlanCard } from './EntryPlanCard'
 
 // Daily candidate list (candidate_score_v1, #215): the today list (#276); the stock strategy board (#274) reuses the
 // note, reasons and score details.
@@ -227,6 +228,8 @@ function CandidateMiniCard({ item, hidden }: { item: CandidateItem; hidden: bool
         <Link className="symbol-link" to={stockPath(item)}><strong>{instrument.symbol}</strong> {instrument.name}</Link>
         <span className="candidate-mini-total"><Term id="candidate_score">總分</Term> <b>{formatCandidateScore(item.total_score)}</b></span>
       </div>
+      {/* #491: the first line under the name says how to enter. */}
+      <EntryPlanCard item={item} className="candidate-entry" />
       <div className="small-note">{exchangeLabel(instrument.exchange)} · {candidateStrategyLabel(item.strategy)} · {groupText(item)}</div>
       <dl className="candidate-mini-levels">
         <div><dt>收盤（元）</dt><dd><CloseValue item={item} /></dd></div>
@@ -265,11 +268,15 @@ function TodayCandidateList({ items }: { items: CandidateItem[] }) {
         // Every detail stays in the DOM inside <details>, so the screenshot tool can open them all (DESIGN_SYSTEM §5).
         detailRow={(item) => ({
           props: { 'data-candidate-detail': item.rank },
+          // The entry plan is the line right under its row (#491), always shown; the AI detail stays folded.
           content: (
-            <details className="candidate-detail" id={`candidate-detail-${item.rank}`} open={open.has(item.rank)} onToggle={(event) => setRank(item.rank, event.currentTarget.open)}>
-              <summary>{item.instrument.symbol} {item.instrument.name}</summary>
-              <CandidateDetail item={item} />
-            </details>
+            <>
+              <EntryPlanCard item={item} className="candidate-entry" />
+              <details className="candidate-detail" id={`candidate-detail-${item.rank}`} open={open.has(item.rank)} onToggle={(event) => setRank(item.rank, event.currentTarget.open)}>
+                <summary>{item.instrument.symbol} {item.instrument.name}</summary>
+                <CandidateDetail item={item} />
+              </details>
+            </>
           ),
         })}
       />

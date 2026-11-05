@@ -1,4 +1,5 @@
 import { CandidateNote, ReasonList, ScoreDetails } from '../candidates/CandidateViews'
+import { EntryPlanCard } from '../candidates/EntryPlanCard'
 import { CANDIDATE_DISCLAIMER, candidateStrategyLabel, formatCandidateScore, formatDate, formatPrice, formatRiskReward } from '../candidates/candidates'
 import { Term } from '../components/Term'
 import { Badge, DataTable, DateBadge, EmptyState, type Column } from '../components/ui'
@@ -122,6 +123,8 @@ function CandidateRow({ board, candidate }: { board: Board; candidate: Candidate
         <strong>第 {summary.rank} 名 · <Term id="candidate_score">總分</Term> {formatCandidateScore(summary.total_score)} · {candidateStrategyLabel(summary.strategy)}</strong>
         <span className="small-note strategy-candidate-disclaimer">{CANDIDATE_DISCLAIMER}</span>
       </div>
+      {/* #491: how to enter, before the reasons. */}
+      {candidate && <EntryPlanCard item={candidate} />}
       {candidate && <ReasonList reasons={candidate.reasons} />}
       {candidate && <CandidateNote item={candidate} />}
       {candidate && <ScoreDetails item={candidate} open={false} />}
