@@ -17,7 +17,7 @@ from app.db import init_db
 
 from .action_tiers import run_action_tiers
 from .backfill import BACKFILL_SCOPES, chunked_backfill
-from .candidate_notes import run_candidate_notes_batch
+from .candidate_notes import notes_after_candidates, run_candidate_notes_batch
 from .candidates import run_candidates
 from .chip_provenance import run_fill_provenance
 from .chip_revisions import run_revise_institutional
@@ -207,10 +207,15 @@ def main() -> None:
     )
     candidates_parser = subparsers.add_parser(
         "candidates",
-        help="以 candidate_score_v1 產生每日候選清單（同日同版本重跑冪等）",
+        help="以目前評分版本產生每日候選清單（同日同版本重跑冪等），接著補同一天還沒完成的 AI 說明",
     )
     candidates_parser.add_argument(
         "--date", dest="run_date", help="YYYY-MM-DD；未指定使用最新訊號日"
+    )
+    candidates_parser.add_argument(
+        "--skip-notes",
+        action="store_true",
+        help="只產生候選，不接著跑 candidate-notes（之後可手動補）",
     )
     plans_parser = subparsers.add_parser(
         "track-plans",
@@ -524,7 +529,10 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
     elif args.command == "indicators":
         result = run_indicator_batch(parse_date(args.run_date), rebuild=args.rebuild)
     elif args.command == "candidates":
-        result = run_candidates(parse_date(args.run_date))
+        # The notes' outcome is only notes_status: the exit code follows the list.
+        result = notes_after_candidates(
+            run_candidates(parse_date(args.run_date)), skip=args.skip_notes
+        )
     elif args.command == "track-plans":
         result = run_plan_tracking(parse_date(args.run_date))
     elif args.command == "strategy-levels":

@@ -43,7 +43,7 @@ trading_calendar 步驟呼叫 `worker.trading_calendar.run_trading_calendar(目�
 
 indicators 步驟呼叫 `worker.indicator_batch.run_indicator_batch(目標日)`；只要 collect 成功就執行（analyze 失敗也跑），失敗時 run 記 `failed`、錯誤欄記 indicators 訊息。
 
-candidates 步驟呼叫 `worker.candidates.run_candidates(目標日)`，只讀當日訊號、籌碼、族群榜與新聞，不改行情、訊號與追蹤；失敗時 run 記 `failed`（exit code 1，看門狗與排程異常處理照 `failed` 處置）、錯誤欄記 candidates 訊息，indicators 照跑。行情與訊號已寫入，只需重跑候選：`python -m worker.cli candidates --date YYYY-MM-DD`（不需 `daily --force`）。
+candidates 步驟呼叫 `worker.candidates.run_candidates(目標日)`，只讀當日訊號、籌碼、族群榜與新聞，不改行情、訊號與追蹤；失敗時 run 記 `failed`（exit code 1，看門狗與排程異常處理照 `failed` 處置）、錯誤欄記 candidates 訊息，indicators 照跑。行情與訊號已寫入，只需重跑候選：`python -m worker.cli candidates --date YYYY-MM-DD`（不需 `daily --force`；接著會補該日的 AI 說明，`--skip-notes` 跳過，[CLI](CLI.md)）。
 
 theme_suggestions 步驟呼叫 `worker.theme_suggestions.run_theme_suggestions`，只讀 `news_llm_results`／`news_items` 與 active 族群名稱，重算[新聞題材建議](../spec/theme_suggestions.md)；collect 成功就執行（analyze 失敗也跑），失敗時 run 記 `failed`、錯誤欄記 theme_suggestions 訊息，其他步驟的結果不變。只需重算建議：`python -m worker.cli theme-suggestions`。休市日 daily 不跑後續步驟，該日新聞的建議在下一個交易日彙整（每次都由全部判讀重算，不會漏）。
 
@@ -54,7 +54,7 @@ strategy_levels 步驟呼叫 `worker.strategy_levels.run_strategy_levels(目標�
 action_tiers 步驟呼叫 `worker.action_tiers.run_action_tiers(目標日)`，在 strategy_levels 之後、candidate_notes 之前執行，analyze 成功（含 `no_data`）才跑，否則記 `skipped`（`analyze_not_successful`）。它把首頁與行動頁 action tier 的日資料部分寫進 `action_tier_snapshots`（[action tier 預算與新聞投影](#action-tier-預算與新聞投影)），步驟列的 `records` 是寫入的標的數。任何狀態（`failed`、例外）都只記在該步驟列與 `summary_json.steps`，**不改變 run 狀態與 exit code**：頁面在沒有當日預算時改為即時計算，結果相同，只是比較慢。重算以 `python -m worker.cli action-tiers --date YYYY-MM-DD`。
 
 
-candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(目標日)`，在 candidates 成功（含 `no_data`）後最後執行，為當日候選寫 [AI 進出點說明](../spec/candidate_score.md#候選-ai-進出點說明)；最多 4 次 `claude -p`，各 300 秒逾時（實測一次約 7 秒）。它的任何狀態（`success`／`partial`／`failed`／`skipped`／`no_data`，含找不到 claude、未登入、額度用盡、逾時與例外）都只記在該步驟列與 `summary_json.steps`，**不改變 run 狀態與 exit code**，也不觸發看門狗；candidates 不成功時記 `skipped`（`candidates_not_successful`）。daily 已 success 後 23:00 那次不會重跑，`pending` 或未說明的候選以 `python -m worker.cli candidate-notes --date YYYY-MM-DD` 補（只送未完成者）；結果查 `/api/ingestion-runs?q=candidate_notes&include_metadata=true` 或步驟列。
+candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(目標日)`，在 candidates 成功（含 `no_data`）後最後執行，為當日候選寫 [AI 進出點說明](../spec/candidate_score.md#候選-ai-進出點說明)；最多 4 次 `claude -p`，各 300 秒逾時（實測一次約 7 秒）。它的任何狀態（`success`／`partial`／`failed`／`skipped`／`no_data`，含找不到 claude、未登入、額度用盡、逾時與例外）都只記在該步驟列與 `summary_json.steps`，**不改變 run 狀態與 exit code**；candidates 不成功時記 `skipped`（`candidates_not_successful`）。最新候選日的候選清單產生超過 30 分鐘仍沒有一檔完成的說明時，看門狗以 `invariant_candidate_notes` 留言（daily 或 candidate_notes run 執行中不判定，[WATCHDOG](WATCHDOG.md)；#517）。daily 已 success 後 23:00 那次不會重跑，`pending` 或未說明的候選以 `python -m worker.cli candidate-notes --date YYYY-MM-DD` 補（只送未完成者）；手動 `worker.cli candidates` 重產候選後預設接著跑這一步（[CLI](CLI.md)）；結果查 `/api/ingestion-runs?q=candidate_notes&include_metadata=true` 或步驟列。
 
 ## action tier 預算與新聞投影
 

@@ -1,7 +1,9 @@
 """Candidate LLM notes: why each daily candidate was selected, how to read its
 entry zone, stop and targets, and what to watch, via ``claude -p``.
 
-Runs after ``candidates``.  The input of a candidate is only what is already
+Runs after ``candidates``: the daily's last step, and ``worker.cli
+candidates`` (``notes_after_candidates``) after a list recomputed by hand,
+unless ``--skip-notes``.  The input of a candidate is only what is already
 stored: the ``daily_candidates`` row (rank, score, components, rule reasons,
 groups), its signal's levels and the news the row links to with their
 summaries.  The output is inference kept in ``candidate_llm_notes``, one row
@@ -775,3 +777,35 @@ def run_candidate_notes_batch(
                 "reason": "candidate_llm_notes_table_missing_run_init_db",
             }
         return run_candidate_notes(db, trading_date, dry_run=dry_run, limit=limit)
+
+
+def notes_after_candidates(
+    result: dict[str, Any], *, skip: bool = False
+) -> dict[str, Any]:
+    """The notes of the list ``worker.cli candidates`` just wrote (#517).
+
+    A list recomputed by hand (a new score version deployed, a repaired day)
+    has new candidate ids and so no notes; the daily writes them in its own
+    candidate_notes step, a manual ``candidates`` did not.  This runs the notes
+    of the same trading date, which only sends the candidates without a done
+    note.  Its outcome is reported as ``notes_status`` (and ``notes``, the
+    notes run's own result) and never changes the candidates result: an LLM
+    failure leaves the notes pending for ``worker.cli candidate-notes``.
+    """
+
+    if skip:
+        notes: dict[str, Any] = {"status": "skipped", "reason": "skip_notes"}
+    elif result.get("status") != "success" or not result.get("trading_date"):
+        notes = {"status": "skipped", "reason": "candidates_not_successful"}
+    else:
+        try:
+            notes = run_candidate_notes_batch(
+                date.fromisoformat(str(result["trading_date"]))
+            )
+        except Exception as exc:  # noqa: BLE001 - the list is written either way
+            notes = {
+                "status": "failed",
+                "reason": "notes_error",
+                "error": f"{type(exc).__name__}: {exc}"[:500],
+            }
+    return {**result, "notes_status": notes.get("status"), "notes": notes}
