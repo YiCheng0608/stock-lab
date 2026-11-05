@@ -212,7 +212,7 @@ const detailHeaders = (/<thead>([\s\S]*?)<\/thead>/.exec(details)?.[1] ?? '').ma
 check(detailHeaders.length <= 4, `個股頁候選評分細節: ${detailHeaders.length} columns in a card; the group title belongs on its own row (§5.1)`)
 // Today list (#276): the levels, close, RR and total are numeric in th and every row.
 const todayList = render('CandidatesSection', () => <CandidatesSection data={longList()} loading={false} error={null} />)
-checkAligned('今日候選表', todayList, ['最近收盤（元）', '進場區（元）', '停損（元）', '目標一／目標二（元）', 'RR', '總分（0–100）'])
+checkAligned('今日候選表', todayList, ['最近收盤（元）', 'RR', '總分（0–100）'])
 
 const chart = render('StockBarsChart', () => <StockBarsChart data={barsResponse([tradedBar('2026-10-21', 21.1, 70), tradedBar('2026-10-22', 21.15, 71)])} interval="day" onIntervalChange={() => undefined} loading={false} error={null} />)
 checkAligned('K 線資料', chart, ['開（元）', '高（元）', '低（元）', '收（元）', '成交量（張）'])

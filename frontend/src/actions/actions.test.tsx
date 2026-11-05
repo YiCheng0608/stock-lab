@@ -215,13 +215,13 @@ check(text(today).includes('持倉風險 1 檔：9999 第九檔：減碼／退�
 // #475: no close on the previous session reads the candidate page's words on the action list and the compact card.
 const noChange = (status: string) => row('1104', 2, 'conditional_entry', { price_change: null, price_change_pct: null, previous_close: null, price_change_status: status })
 check(actionClose(noChange('no_previous_close')).change === '前一交易日無收盤', `action list no previous close: ${actionClose(noChange('no_previous_close')).change}`)
-check(actionClose(noChange('first_trading_day')).change === '新上市首日', `action list first trading day: ${actionClose(noChange('first_trading_day')).change}`)
+check(actionClose(noChange('first_trading_day')).change === '掛牌首日', `action list first trading day: ${actionClose(noChange('first_trading_day')).change}`)
 check(actionClose(noChange('unverified')).change === '漲跌待核實' && actionClose(row('1101', 2, 'conditional_entry')).change === '+2.43%', 'other statuses keep 漲跌待核實 and a known change')
 const CompactActionCard = appComponent('CompactActionCard')
 const compactNoPrevious = text(render('CompactActionCard', () => <CompactActionCard action={noChange('no_previous_close')} />))
 check(compactNoPrevious.includes('前一交易日無收盤') && !compactNoPrevious.includes('漲跌待核實'), `compact card no previous close: ${compactNoPrevious}`)
 const compactFirstDay = text(render('CompactActionCard', () => <CompactActionCard action={noChange('first_trading_day')} />))
-check(compactFirstDay.includes('新上市首日') && !compactFirstDay.includes('漲跌待核實'), `compact card first trading day: ${compactFirstDay}`)
+check(compactFirstDay.includes('掛牌首日') && !compactFirstDay.includes('漲跌待核實'), `compact card first trading day: ${compactFirstDay}`)
 // Without a valid market read there is no close, so the status is not shown either.
 const compactInvalid = text(render('CompactActionCard', () => <CompactActionCard action={{ ...noChange('no_previous_close'), market_read: { status: 'invalid', invalid_fields: ['close'] } }} />))
 check(compactInvalid.includes('漲跌待核實') && !compactInvalid.includes('前一交易日無收盤'), `compact card invalid read: ${compactInvalid}`)

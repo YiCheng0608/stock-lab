@@ -35,6 +35,7 @@ const SUITES = [
   { file: 'copy.test.tsx' },
   { file: 'tracking/tracking.test.tsx' },
   { file: 'labelSpacing.test.ts' },
+  { file: 'navigation.test.tsx' },
   { file: 'coverage/coverage.test.tsx' },
 ]
 

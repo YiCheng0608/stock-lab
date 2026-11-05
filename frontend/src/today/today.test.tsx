@@ -92,7 +92,7 @@ check(failed.endsWith('資料截至 未提供') && !failed.includes('·'), `head
 // ---- holding-risk alert row: only verified holding risks, linked to the action centre ----
 const alert = render('HoldingAlert', () => <HoldingAlert actions={riskActions()} />)
 check(text(alert).includes('持倉風險 4 檔：2330 台積電：減碼／退場條件；1101 台泥：持倉風險資料待補；2882 國泰金：庫存數量待核實 等 4 檔'), `持倉提示列: count, first three holdings and reasons, got ${text(alert)}`)
-check(alert.includes('href="/actions"') && text(alert).includes('查看行動中心 →'), '持倉提示列: links to /actions')
+check(alert.includes('href="/watch"') && text(alert).includes('查看觀察中 →'), '持倉提示列: links to /watch (Issue 493)')
 check(!text(alert).includes('長榮') && !text(alert).includes('鴻海'), '持倉提示列: not-held rows are no holding risk')
 const noRisk = render('HoldingAlert none', () => <HoldingAlert actions={riskActions().filter((item: ActionSummary) => !item.held)} />)
 check(noRisk === '', `持倉提示列: nothing when no holding is at risk, got ${text(noRisk)}`)
@@ -108,13 +108,15 @@ check(text(slice(long, 'class="candidate-more"', '</details>')).includes('顯示
 check(text(long).includes('2026/10/16 收盤後條件成立，最早下一個交易日（T+1）才可研究進場。') && text(long).includes(CANDIDATE_DISCLAIMER), 'list: the T+1 sentence and the disclaimer')
 check(!long.includes('class="card candidate-card"'), 'list: the today page no longer stacks full candidate cards')
 const head = slice(table, '<thead>', '</thead>')
-for (const id of ['entry_zone', 'support', 'target', 'rr', 'candidate_score', 'heat_rank']) check(termIds(head).includes(id), `table head: ${id} opens its glossary term (found ${termIds(head).join('、') || 'none'})`)
-for (const label of ['名次', '股票', '所屬族群', '最近收盤', '主要理由']) check(text(head).includes(label), `table head: 「${label}」`)
+// Issue 493: seven columns; the rank and group moved into 股票, the levels into 進場方式 (whose cells name 停損 and 目標).
+for (const id of ['entry_zone', 'rr', 'candidate_score']) check(termIds(head).includes(id), `table head: ${id} opens its glossary term (found ${termIds(head).join('、') || 'none'})`)
+for (const label of ['股票', '最近收盤', '進場方式', '主要理由']) check(text(head).includes(label), `table head: 「${label}」`)
+for (const id of ['support', 'target']) check(termIds(slice(table, '<tbody', '</tbody>')).includes(id), `table rows: ${id} opens its glossary term`)
 // #463: two targets are named 目標一／目標二, the levels name 元 and the total names its 0–100 scale (UI_COPY_SPEC §8.4, §10).
-for (const label of ['最近收盤（元）', '進場區（元）', '停損（元）', '目標一／目標二（元）', '總分（0–100）']) check(text(head).includes(label), `table head: 「${label}」, got ${text(head)}`)
+for (const label of ['最近收盤（元）', '進場方式（元）', '總分（0–100）']) check(text(head).includes(label), `table head: 「${label}」, got ${text(head)}`)
 check(!/目標（|>目標</.test(head), 'table head: no bare 「目標」 over two numbers')
 const row1 = slice(table, 'data-candidate-rank="1"', '</tr>')
-for (const value of ['#1', '2377', '微星', '上市 · 突破條件', 'AI 伺服器（題材，第 2 名／11）', '162.00', '+2.21%', '161.50', '157.82', '167.39', '172.54', '1.60 倍', '83', '三大法人 5 日淨買超，約 20 日均量的 2.59 倍']) {
+for (const value of ['#1', '2377', '微星', '上市 · AI 伺服器（題材 #2）', '突破型', '目標一／二', '162.00', '+2.21%', '161.50', '157.82', '167.39', '172.54', '1.60 倍', '83', '三大法人 5 日淨買超，約 20 日均量的 2.59 倍']) {
   check(text(row1).includes(value), `row #1: shows 「${value}」`)
 }
 check(row1.includes('href="/stocks/TWSE/2377"'), 'row #1: the name links to the stock page')
@@ -130,7 +132,7 @@ const noPreviousClose = candidateChange({ trading_date: '2026-10-16', close: 13.
 check(noPreviousClose.text === '前一交易日無收盤' && noPreviousClose.tone === null, `no previous close: ${noPreviousClose.text}`)
 // #475: a new listing's first day says so instead.
 const firstTradingDay = candidateChange({ trading_date: '2026-10-16', close: 13.2, change: null, change_pct: null, change_status: 'first_trading_day', source: 'tpex' })
-check(firstTradingDay.text === '新上市首日' && firstTradingDay.tone === null, `first trading day: ${firstTradingDay.text}`)
+check(firstTradingDay.text === '掛牌首日' && firstTradingDay.tone === null, `first trading day: ${firstTradingDay.text}`)
 check(text(slice(table, 'data-candidate-rank="5"', '</tr>')).includes('待核實'), 'row #5: no bar on the day reads 待核實')
 // AI entry: a note (done or pending) is 「AI 推論 ▸」, none is 「AI 說明 ▸」.
 check(text(row1).includes('AI 推論 ▸'), 'AI entry: done note → 「AI 推論 ▸」')

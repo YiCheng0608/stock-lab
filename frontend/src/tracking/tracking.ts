@@ -132,7 +132,7 @@ export function planAnchor(planId: number): string {
 }
 
 export function planLink(planId: number): string {
-  return `/actions#${planAnchor(planId)}`
+  return `/watch#${planAnchor(planId)}`
 }
 
 // "加入追蹤" refusals (API detail codes, docs/spec/tracking.md 使用者追蹤計畫) in everyday words.

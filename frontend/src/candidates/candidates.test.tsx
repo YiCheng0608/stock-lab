@@ -71,7 +71,8 @@ for (const quality of ['insufficient_members', 'insufficient_data', null]) {
   const cell = slice(slice(markup, '<table', '</table>'), 'data-candidate-rank="2"', '</tr>')
   const card = slice(markup, 'data-candidate-card="2"', '</article>')
   for (const [where, part] of [['table', cell], ['card', card]]) {
-    check(part.replace(/<[^>]+>/g, '').includes('航運（產業，事件資料待補，未計入族群分）'), `${where}: partial group text`)
+    // The today table keeps the group on one line (Issue 493); the card keeps the long form.
+    check(part.replace(/<[^>]+>/g, '').includes(where === 'table' ? '航運（產業，事件資料待補）' : '航運（產業，事件資料待補，未計入族群分）'), `${where}: partial group text`)
     check(/<button[^>]*>事件資料待補<\/button>/.test(part), `${where}: 「事件資料待補」 opens its glossary term`)
     check(!part.includes('當日未排名'), `${where}: partial group is not called unranked`)
   }
@@ -104,7 +105,7 @@ check(slice(second, 'data-component="group"', '</div>').includes('>—<') && sli
 check(!slice(second, 'data-component="group"', '</div>').includes('>0<'), 'null component is never 0')
 check(second.includes('族群：當日沒有已排名且資料完整的所屬產業或題材') && second.includes('新聞情緒：近 3 日沒有成功的新聞收集，新聞分項無資料'), 'null_explanation shown next to the scores')
 const row2 = slice(table, '<tr data-candidate-rank="2"', '</tr>')
-check(row2.includes('13.05～13.35') && row2.includes('上櫃') && row2.includes('回踩條件'), 'pullback zone and TPEx label')
+check(row2.includes('13.05～13.35') && row2.includes('上櫃') && row2.includes('回踩型'), 'pullback zone, TPEx label and the entry type (Issue 493)')
 check(!row2.includes('level-target-2'), 'missing target 2 is not rendered')
 check(count(second, 'data-reason=') === 2, 'fewer reasons are not padded')
 
@@ -144,7 +145,7 @@ check(notComputed.includes(NOT_COMPUTED_TEXT) && notComputed.includes('尚無候
 check(notComputed.includes(CANDIDATE_DISCLAIMER), 'disclaimer stays on top for every state')
 
 // ---- loading and error ----
-check(render(<CandidatesSection data={undefined} loading error={null} />).includes('明日候選載入中…'), 'loading skeleton')
+check(render(<CandidatesSection data={undefined} loading error={null} />).includes('今日可買載入中…'), 'loading skeleton')
 check(render(<CandidatesSection data={undefined} loading={false} error={new Error('API 500: boom')} />).includes('API 500: boom'), 'error reason shown')
 
 // ---- stock page: the strategy board's candidate row reuses the score details (stock/strategyBoard.test.tsx) ----
@@ -168,4 +169,4 @@ check(detailRows.length === todayItems.length && miniCards.length === todayItems
 check(detailRows.every((row, index) => slice(row, '<details', '</details>').includes(index === 0 ? '>已在追蹤</a>' : '>加入追蹤</button>')), 'every detail row has the plan button or link')
 check(miniCards.every((card, index) => slice(card, '<details', '</details>').includes(index === 0 ? '>已在追蹤</a>' : '>加入追蹤</button>')), 'every phone card detail has the plan button or link')
 const trackedDetail = slice(detailRows[0], '<details', '</details>')
-check(trackedDetail.includes('href="/actions#plan-7">已在追蹤</a>') && !trackedDetail.includes('加入追蹤'), 'a tracked candidate links to its plan')
+check(trackedDetail.includes('href="/watch#plan-7">已在追蹤</a>') && !trackedDetail.includes('加入追蹤'), 'a tracked candidate links to its plan')

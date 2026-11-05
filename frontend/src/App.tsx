@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { Link, Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, Route, Routes, useLocation, useParams, useSearchParams } from 'react-router-dom'
 
 import {
   deletePortfolio,
@@ -90,6 +90,7 @@ import { HoldingAlert, MarketOverviewView, TodayHeader } from './today/TodayView
 import { newsListParams, newsPageSearch, parseNewsTab, stockNewsParams, type NewsFilters } from './news/newsView'
 import { ACTIONS_PAGE_LIMIT, ACTION_STATE_LABELS, ACTION_TIER_PREVIEW, DEFAULT_ACTION_VIEW, previewTiers, stockResearchPath, tierSections } from './actions/actionTiers'
 import { ActionFilters, ActionTierList } from './actions/ActionViews'
+import { StrategyPage } from './strategy/StrategyPage'
 import { STOCK_TABS, parseStockTab, stockTabSearch, type StockTab } from './stock/stockTabs'
 
 // Fixed decimals (DESIGN_SYSTEM §3): rule levels and ratios 2, counts 0, a stock's own price by its tick.
@@ -457,6 +458,9 @@ function NewsDetailPage() {
   return <QueryState loading={query.isLoading} error={query.error}>{query.data && <NewsDetailView item={query.data} />}</QueryState>
 }
 
+// Five news beside the five hot groups keep the two home cards close in height (#493).
+const HOME_NEWS_LIMIT = 5
+
 export function TodayPage() {
   const query = useQuery<Dashboard>({ queryKey: ['dashboard'], queryFn: getDashboard })
   const [board, setBoard] = useState<ThemeBoard>('industry')
@@ -469,7 +473,8 @@ export function TodayPage() {
       .map((action) => [`${action.instrument.exchange}:${action.instrument.symbol}:${action.as_of ?? ''}`, action] as const),
   ).values())
   const modeLabel = !data ? '' : data.mode === 'official' ? '官方單日快照' : data.mode === 'official_partial' ? '官方單日快照（資料仍待補）' : '尚無官方快照'
-  // PRODUCT_SPEC §2: header line → market overview → holding-risk alert → candidates → groups and news → watched stocks.
+  // PRODUCT_SPEC §2 (#493): header line → market overview → holding-risk alert → 今日可買 → hot groups and news, two
+  // cards of one height. The watched stocks moved to 觀察中 (/watch).
   return (
     <div className="page home-page">
       <TodayHeader
@@ -488,14 +493,12 @@ export function TodayPage() {
           <HoldingAlert actions={data.holding_actions ?? data.actions ?? []} />
           <CandidatesSection data={candidates.data} loading={candidates.isLoading} error={candidates.error} />
           <div className="home-columns">
-            <HotGroupsSection title={<Term id="hot_group">熱門族群</Term>} board={board} onBoardChange={setBoard} data={hotGroups.data} loading={hotGroups.isLoading} error={hotGroups.error} />
-            <section className="home-news" aria-labelledby="home-news-title">
-              <div className="section-head"><div><div className="eyebrow">市場基礎層 · 重大事件</div><h2 id="home-news-title">重點新聞</h2></div><Link to="/news" className="text-link">查看全部新聞</Link></div>
-              {data.news?.length ? <div className="news-list-compact">{data.news.slice(0, 3).map((item) => <NewsCard key={item.id} item={item} compact />)}</div> : <div className="empty panel">市場新聞區尚無可顯示內容。</div>}
+            <HotGroupsSection className="home-panel" title={<Term id="hot_group">熱門族群</Term>} board={board} onBoardChange={setBoard} data={hotGroups.data} loading={hotGroups.isLoading} error={hotGroups.error} />
+            <section className="home-news home-panel" aria-labelledby="home-news-title">
+              <div className="section-head"><div><div className="eyebrow">市場基礎層 · 重大事件</div><h2 id="home-news-title">重點新聞</h2></div><div className="section-head-tools"><Link to="/news" className="text-link">查看全部新聞</Link></div></div>
+              {data.news?.length ? <div className="news-list-compact">{data.news.slice(0, HOME_NEWS_LIMIT).map((item) => <NewsCard key={item.id} item={item} compact />)}</div> : <div className="empty">市場新聞區尚無可顯示內容。</div>}
             </section>
           </div>
-          <section className="section-head"><div><div className="eyebrow">使用者行動</div><h2>關注標的</h2></div><Link to="/actions" className="text-link">查看行動中心</Link></section>
-          {homeActions.length ? <div className="action-grid">{homeActions.slice(0, 6).map((action) => <CompactActionCard key={action.instrument.exchange + action.instrument.symbol + (action.as_of ?? '')} action={action} />)}</div> : <div className="empty panel">{data.empty_states?.actions ?? '目前沒有可顯示的行動摘要。'}</div>}
           {data.data_quality.error && <div className="warning-box">官方擷取警告：{data.data_quality.error}</div>}
         </>
       )}
@@ -832,10 +835,23 @@ function ActionDetailRedirect() {
   return <Navigate replace to={actionDetailRedirectPath(exchange, symbol)} />
 }
 
+// /actions became /watch (#493); its query and a plan anchor (#plan-<id>) carry over, so old links still land.
+export function watchRedirectPath(search: string, hash: string): string {
+  return '/watch' + search + hash
+}
+
+function WatchRedirect() {
+  const location = useLocation()
+  return <Navigate replace to={watchRedirectPath(location.search, location.hash)} />
+}
+
 type ActionFilterState = { q?: string; view: ActionView; include_etf?: boolean }
 
-// Action centre (action_tier_v1, UI_COPY_SPEC §5): one first-page request for the counts and the top rows; each tier's
-// 顯示更多 pages that tier only.
+// For a first-time reader (UI_COPY_SPEC §5, decision 6648288563).
+const WATCH_PURPOSE = '把有興趣的候選加入追蹤，系統每天收盤後依日線模擬它的進場與出場（不是實際成交）；這裡也會提醒你庫存的風險，和快要成立的股票。'
+
+// 觀察中 (/watch, formerly the action centre; action_tier_v1, UI_COPY_SPEC §5): one first-page request for the counts
+// and the top rows; each tier's 顯示更多 pages that tier only.
 export function ActionsPage() {
   const [draft, setDraft] = useState('')
   const [search, setSearch] = useState('')
@@ -877,7 +893,7 @@ export function ActionsPage() {
     return next && !cursors.includes(next) ? { ...current, [tier]: [...cursors, next] } : current
   })
   return <div className="page actions-page">
-    <PageTitle eyebrow="行動判斷" title="行動中心" description="依級別排序：持倉風險、今日候選、成立與接近成立在前；每個標的與資料日最多一列。">
+    <PageTitle eyebrow="追蹤與提醒" title="觀察中" description={WATCH_PURPOSE}>
       <div className="filter-row"><SearchBox draft={draft} query={search} placeholder="搜尋代號或名稱" onDraftChange={setDraft} onSubmit={submit} onClear={clear} /></div>
       {query.data && <ActionFilters summary={query.data.summary} view={view} includeEtf={includeEtf} searching={Boolean(search)} onViewChange={(next) => { setView(next); resetTiers() }} onIncludeEtfChange={(next) => { setIncludeEtf(next); resetTiers() }} />}
     </PageTitle>
@@ -1051,7 +1067,7 @@ function GlossaryPage() {
 }
 
 function NotFound() {
-  return <div className="page"><div className="empty panel">找不到此頁。<Link className="text-link" to="/">回到今日</Link></div></div>
+  return <div className="page"><div className="empty panel">找不到此頁。<Link className="text-link" to="/">回到今日可買</Link></div></div>
 }
 
 const trackingClient: TrackingClient = { plans: getTrackingPlans, plan: getTrackingPlan, add: addTrackingPlan, cancel: cancelTrackingPlan }
@@ -1065,8 +1081,10 @@ export default function App() {
     <Route path="/themes/:themeId" element={<ThemePage />} />
     <Route path="/stocks" element={<StocksPage />} />
     <Route path="/stocks/:exchange/:symbol" element={<StockPage />} />
-    <Route path="/actions" element={<ActionsPage />} />
+    <Route path="/watch" element={<ActionsPage />} />
+    <Route path="/actions" element={<WatchRedirect />} />
     <Route path="/actions/:exchange/:symbol" element={<ActionDetailRedirect />} />
+    <Route path="/strategy" element={<StrategyPage />} />
     <Route path="/system/data-quality" element={<SystemDataPage />} />
     <Route path="/research/backtest" element={<ResearchBacktestPage />} />
     <Route path="/research/coverage" element={<BackfillCoveragePage />} />

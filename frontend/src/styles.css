@@ -398,7 +398,19 @@ a.symbol-link:hover { color: var(--color-primary); }
 .market-overview-more-grid { display: grid; gap: var(--space-2); }
 .alert-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-left: 4px solid var(--color-warning); border-radius: var(--radius-lg); background: var(--color-bg-card); color: var(--color-text); font-size: 14px; }
 .home-page .candidates-section .section-head { margin-top: var(--space-4); }
-.home-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-6); align-items: start; }
+/* Hot groups and news (#493, DESIGN_SYSTEM §5 熱門族群與重點新聞): two cards in one grid row; stretch makes them one height,
+   so their top and bottom edges line up whatever each holds. */
+.home-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-6); align-items: stretch; margin-top: var(--space-8); }
+.home-panel { display: flex; flex-direction: column; min-width: 0; padding: var(--space-4) var(--space-5); border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-bg-card); }
+.home-panel > .section-head { min-height: 64px; margin: 0 0 var(--space-3); align-items: flex-end; }
+.section-head-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2) var(--space-4); }
+.section-head-tools .tabs { border-bottom: 0; }
+.hot-groups-dates { margin: 0 0 var(--space-2); }
+.home-panel .hot-group-list, .home-panel .news-list-compact { gap: 0; }
+.home-panel .hot-group-row { padding: var(--space-2) 0; border: 0; border-bottom: 1px solid var(--color-border); border-radius: 0; background: transparent; }
+.home-panel .hot-group-row:last-child, .home-panel .news-card-compact:last-child { border-bottom: 0; }
+.home-panel .hot-group-row:hover h3 { color: var(--color-primary); }
+.home-panel .news-card-compact { padding: var(--space-3) 0; border: 0; border-bottom: 1px solid var(--color-border); border-radius: 0; background: transparent; }
 .news-list-compact { display: grid; gap: var(--space-3); }
 .news-card-compact { gap: var(--space-1); padding: var(--space-4); }
 .news-card-compact .news-card-title { font-size: 16px; }
@@ -513,15 +525,33 @@ a.symbol-link:hover { color: var(--color-primary); }
 
 /* ---- daily candidates (DESIGN_SYSTEM §7) -------------------------------------------------------- */
 .candidates-section .section-head { flex-wrap: wrap; }
-.candidate-t1 { margin: 0; }
-.candidate-disclaimer { margin: 0 0 var(--space-3); }
+.candidate-notes { margin: 0 0 var(--space-3); }
+.candidate-t1 + .candidate-disclaimer::before { content: " "; }
 .candidate-table-wrap { border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); }
 .candidate-table th, .candidate-table td { height: auto; padding: var(--space-2) var(--space-3); }
 .candidate-table th { height: 40px; }
 .candidate-table td { line-height: 1.45; }
 .candidate-table .candidate-rank { display: inline-block; min-width: 36px; font-size: 14px; }
-.candidate-table .candidate-group-cell { min-width: 7em; max-width: 11em; font-size: 13px; }
-.candidate-table .candidate-reason-cell { min-width: 9em; max-width: 15em; font-size: 13px; }
+/* 今日可買 table (#493, DESIGN_SYSTEM §5 候選列表): fixed column widths, two lines a row at most, so nothing squeezes or
+   spills at 1280 and 1440 and six rows fit the 1280×800 first screen. */
+.candidate-table { width: 100%; table-layout: fixed; }
+.candidate-table th:nth-child(1) { width: 24%; }
+.candidate-table th:nth-child(2) { width: 104px; }
+.candidate-table th:nth-child(3) { width: 32%; }
+.candidate-table th:nth-child(4) { width: 76px; }
+.candidate-table th:nth-child(5) { width: 96px; }
+.candidate-table th:nth-child(7) { width: 104px; }
+.candidate-table td { overflow: hidden; }
+.candidate-stock-line, .candidate-stock-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.candidate-stock-line .candidate-rank { margin-right: var(--space-1); }
+.candidate-entry-way { display: grid; gap: 2px; font-size: 14px; white-space: nowrap; }
+.candidate-entry-way b { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; }
+.entry-way-label { color: var(--color-text-muted); font-size: 13px; }
+.entry-way-sep { color: var(--color-text-subtle); }
+.entry-type-badge { display: inline-block; margin-right: var(--space-2); padding: 0 var(--space-2); border: 1px solid var(--color-primary); border-radius: var(--radius-sm); color: var(--color-primary); font-size: 13px; font-weight: 600; line-height: 1.4; }
+.entry-type-badge .term-button { padding: 0; border-bottom-color: currentColor; color: inherit; font: inherit; }
+.candidate-table .candidate-reason-cell { font-size: 13px; white-space: normal; }
+.candidate-reason-clamp { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .candidate-change { font-size: 12px; }
 .candidate-ai-toggle { cursor: pointer; white-space: nowrap; }
 .table-detail-row > td { height: auto; padding: 0; border-bottom: 0; white-space: normal; }
@@ -741,8 +771,10 @@ a.symbol-link:hover { color: var(--color-primary); }
   .candidate-mini-reason, .candidate-mini-ai { margin-top: var(--space-1); }
   .home-page { padding-top: var(--space-3); }
   .alert-row { gap: 2px var(--space-3); margin-bottom: var(--space-2); padding: var(--space-2) var(--space-3); font-size: 13px; line-height: 1.5; }
-  .candidate-t1, .candidate-disclaimer { line-height: 1.5; }
-  .candidate-disclaimer { margin-bottom: var(--space-2); }
+  .candidate-notes { margin-bottom: var(--space-2); line-height: 1.5; }
+  .home-columns { margin-top: var(--space-6); }
+  .home-panel { padding: var(--space-3) var(--space-4); }
+  .home-panel > .section-head { flex-wrap: wrap; min-height: 0; }
   .tab { padding: var(--space-2) var(--space-3); font-size: 14px; }
   .filter-row .search-controls, .filter-row .filter-select { flex: 1 1 100%; max-width: none; }
   .news-filters { flex-wrap: wrap; }
@@ -751,4 +783,22 @@ a.symbol-link:hover { color: var(--color-primary); }
   .news-detail-title { font-size: 24px; }
   .ai-inference { padding: var(--space-4); }
   .site-footer { flex-direction: column; align-items: flex-start; }
+}
+
+/* ---- 策略說明 /strategy (#493, DESIGN_SYSTEM §5 策略說明) --------------------------------------------- */
+.strategy-page .page-title p { max-width: 760px; }
+.strategy-section + .strategy-section { margin-top: var(--space-8); }
+.strategy-section h2 { margin: 0 0 var(--space-3); font-size: 24px; }
+.strategy-section p { max-width: 760px; }
+.strategy-section > .small-note { margin-top: var(--space-3); }
+.strategy-grid { display: grid; gap: var(--space-4); }
+.strategy-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.strategy-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.strategy-grid .card p { margin: var(--space-2) 0 0; }
+.strategy-facts { display: grid; gap: var(--space-3); margin: var(--space-3) 0 0; }
+.strategy-facts dt { color: var(--color-text-muted); font-size: 14px; }
+.strategy-facts dd { margin: var(--space-label) 0 0; }
+.strategy-steps { display: grid; gap: var(--space-2); max-width: 760px; margin: 0; padding-left: var(--space-5); line-height: 1.7; }
+@media (max-width: 860px) {
+  .strategy-grid-3, .strategy-grid-2 { grid-template-columns: 1fr; }
 }
