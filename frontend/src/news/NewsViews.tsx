@@ -115,28 +115,50 @@ function AiCandidateRow({ item }: { item: NewsItem }) {
   )
 }
 
-// One card for /news, the stock timeline and the today page (DESIGN_SYSTEM §5 card, UI_COPY §4 order):
+// One card for /news and the stock timeline (DESIGN_SYSTEM §5 card, UI_COPY §4 order; the today page has HomeNewsRow):
 // category and source → title → summary preview → source time → impact → verified relations → AI candidates → source link.
-// compact: the today page row (#276, UI_COPY_SPEC §4), without the summary and the source link.
-export function NewsCard({ item, compact = false }: { item: NewsItem; compact?: boolean }) {
+export function NewsCard({ item }: { item: NewsItem }) {
   const time = newsTime(item)
   const ai = usableAi(item)
   const preview = summaryPreview(item)
   return (
-    <article className={compact ? 'card news-card news-card-compact' : 'card news-card'} data-testid="news-card" data-news-id={item.id}>
+    <article className="card news-card" data-testid="news-card" data-news-id={item.id}>
       <div className="news-card-meta">
         <Badge className="badge-compact news-source-badge">{newsSourceName(item)}</Badge>
         <span>{newsCategoryLabel(item.category)} · {sourceKindLabel(item.source_kind)}</span>
       </div>
       <h3 className="news-card-title"><Link to={'/news/' + encodeURIComponent(item.id)}>{newsTitle(item)}</Link></h3>
-      {!compact && <p className={preview ? 'news-card-summary' : 'news-card-summary muted'}>{preview ?? NO_SUMMARY_TEXT}</p>}
+      <p className={preview ? 'news-card-summary' : 'news-card-summary muted'}>{preview ?? NO_SUMMARY_TEXT}</p>
       <div className="news-card-time">{time.dateTime ? <time dateTime={time.dateTime}>{time.text}</time> : time.text}</div>
       <div className="news-card-impact">
         {ai ? <><DirectionText view={aiDirection(ai)} /><AiBadge /></> : <DirectionText view={directionView(item.impact_direction)} />}
       </div>
       <RelationChips item={item} />
-      {!compact && <AiCandidateRow item={item} />}
-      {!compact && <SourceLinkLine item={item} />}
+      <AiCandidateRow item={item} />
+      <SourceLinkLine item={item} />
+    </article>
+  )
+}
+
+// The today page row (#510, UI_COPY_SPEC §4): two lines, the title (one line, the full title in `title`), then source,
+// time and direction with 「AI 推論」 when the direction is the AI's; on phones the direction sits beside the title so
+// every part fits two lines. The verified tags and category stay on the cards. Each part is a flex item, so the page
+// text has the direction on the line before 「AI 推論」.
+export function HomeNewsRow({ item }: { item: NewsItem }) {
+  const time = newsTime(item)
+  const ai = usableAi(item)
+  const title = newsTitle(item)
+  return (
+    <article className="home-news-row" data-testid="news-card" data-news-id={item.id}>
+      <h3 className="home-news-title"><Link to={'/news/' + encodeURIComponent(item.id)} title={title}>{title}</Link></h3>
+      <div className="home-news-meta">
+        <span className="home-news-source">{newsSourceName(item)}</span>
+        <span className="home-news-sep" aria-hidden="true">·</span>
+        {time.dateTime ? <time dateTime={time.dateTime}>{time.text}</time> : <span>{time.text}</span>}
+      </div>
+      <div className="home-news-impact">
+        {ai ? <><DirectionText view={aiDirection(ai)} /><AiBadge /></> : <DirectionText view={directionView(item.impact_direction)} />}
+      </div>
     </article>
   )
 }

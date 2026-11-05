@@ -728,6 +728,7 @@ def check(
 TODAY = Shot("today", "/")
 PENDING_DATE = "資料日期未提供"  # DateBadge without a date (#465: was 資料日期待核實)
 TODAY_GROUPS = 5  # TODAY_BOARD_LIMIT in frontend/src/themes/themeBoards.ts (#276)
+GROUP_RETURNS_NOTE = "1／5／20 日為相對加權指數的報酬"  # HOT_GROUP_RETURNS_NOTE (#510)
 
 
 @check("today", "T1")
@@ -841,16 +842,17 @@ def t5(run: Run) -> str:
             "B", True, ""
         )  # T4 failing on the same missing scores is the one failure
         return empty_board(run, board, text, "today-board.json")
-    b = run.B()
-    marker = f"資料 {slash(b)} · 相對加權指數"
-    cards = text.count(lambda line: line == marker)
-    expect(
-        cards == min(TODAY_GROUPS, len(items)),
-        f"`{marker}` {cards} 行，預期 {min(TODAY_GROUPS, len(items))}",
-    )
-    name = items[0]["display_name"]
-    expect(text.has(name), f"缺整行 items[0].display_name `{name}`")
-    return f"{cards} 張卡 `{marker}`；#1 `{name}`"
+    run.B()  # T4 checks the date line; a missing date is counted there
+    # #510: the card says once what the returns are relative to; each row starts with its
+    # own `#n` line, then the name line (HotGroupRow in frontend/src/themes/ThemeViews.tsx).
+    expect(text.has(GROUP_RETURNS_NOTE), f"缺整行 `{GROUP_RETURNS_NOTE}`")
+    start, end = text.find("熱門族群"), text.find("重點新聞")
+    end = end if end > start else len(text.lines)
+    rows = [i for i in range(start + 1, end) if re.fullmatch(r"#[0-9]+", text.lines[i])]
+    want = [item["display_name"] for item in items[:TODAY_GROUPS]]
+    shown = [text.after(i) for i in rows]
+    expect(shown == want, f"`熱門族群` 列 {shown}，預期 items 前 {len(want)} 名 {want}")
+    return f"{len(rows)} 列（`#n` 與名稱）= items 前 {len(want)} 名；`{GROUP_RETURNS_NOTE}`"
 
 
 def usable_ai(ai: Any) -> bool:
@@ -937,21 +939,18 @@ def source_lines(text: Text) -> list[int]:
 # An action-list row (觀察中, tier 1) starts with its rank cell and a tab (#276): `#1<TAB>…`.
 # Cards put `#1` on a line of its own, so the tab tells a table row from a card.
 RANK_ROW = re.compile(r"^#([0-9]+)\t")
-# A 今日可買 table row starts with its stock cell (#493): `#1 2330 台積電` (rank, symbol,
-# name on one line). The hot group rows put `#1` on a line of its own, and the phone cards
-# are hidden at 1280, so the symbol after the rank tells a table row.
+# A 今日可買 row starts with its title line (#493, #510): `#1 2330 台積電 上市 · 族群` (rank,
+# symbol, name on one line). The hot group rows put `#1` on a line of its own, so the symbol
+# after the rank tells a candidate row.
 CANDIDATE_ROW = re.compile(r"^#([0-9]+) [0-9A-Z]+ ")
-# CandidatesSection in frontend/src/candidates/CandidateViews.tsx (#493); the navbar has a
-# 今日可買 link too, so the title is the line after its eyebrow (hidden only at 640px and below).
-CANDIDATES_TITLE, CANDIDATES_EYEBROW = "今日可買", "條件已成立 · 依評分排序"
+# CandidatesSection in frontend/src/candidates/CandidateViews.tsx (#510: no eyebrow); the
+# navbar has a 今日可買 link too and comes first, so the title is the last line that reads it.
+CANDIDATES_TITLE = "今日可買"
 
 
 def candidates_title(text: Text) -> int:
     """The 今日可買 section title, not the navbar link; -1 when it is missing."""
 
-    i = text.find(CANDIDATES_EYEBROW)
-    if i >= 0:
-        return text.find(CANDIDATES_TITLE, i)
     found = [n for n, line in enumerate(text.lines) if line == CANDIDATES_TITLE]
     return found[-1] if found else -1
 

@@ -86,7 +86,7 @@ import { THEME_SUGGESTION_LIMIT } from './themes/themeSuggestions'
 import { CandidatesSection } from './candidates/CandidateViews'
 import { StockPlanPanel, TrackingClientProvider, TrackingSection, type TrackingClient } from './tracking/TrackingViews'
 import { DEFAULT_MEMBER_SORT, THEME_BOARD_LIMIT, THEME_NEWS_LIMIT, TODAY_BOARD_LIMIT, memberQuery, parseBoard } from './themes/themeBoards'
-import { NewsCard, NewsDetailView, NewsListView, StockNewsTimeline } from './news/NewsViews'
+import { HomeNewsRow, NewsDetailView, NewsListView, StockNewsTimeline } from './news/NewsViews'
 import { HoldingAlert, MarketOverviewView, TodayHeader } from './today/TodayViews'
 import { newsListParams, newsPageSearch, parseNewsTab, stockNewsParams, type NewsFilters } from './news/newsView'
 import { ACTIONS_PAGE_LIMIT, ACTION_STATE_LABELS, ACTION_TIER_PREVIEW, DEFAULT_ACTION_VIEW, previewTiers, stockResearchPath, tierSections } from './actions/actionTiers'
@@ -481,8 +481,8 @@ export function TodayPage() {
           <div className="home-columns">
             <HotGroupsSection className="home-panel" title={<Term id="hot_group">熱門族群</Term>} board={board} onBoardChange={setBoard} data={hotGroups.data} loading={hotGroups.isLoading} error={hotGroups.error} />
             <section className="home-news home-panel" aria-labelledby="home-news-title">
-              <div className="section-head"><div><div className="eyebrow">市場基礎層 · 重大事件</div><h2 id="home-news-title">重點新聞</h2></div><div className="section-head-tools"><Link to="/news" className="text-link">查看全部新聞</Link></div></div>
-              {data.news?.length ? <div className="news-list-compact">{data.news.slice(0, HOME_NEWS_LIMIT).map((item) => <NewsCard key={item.id} item={item} compact />)}</div> : <div className="empty">市場新聞區尚無可顯示內容。</div>}
+              <div className="panel-head"><h2 id="home-news-title">重點新聞</h2><Link to="/news" className="text-link">全部新聞 →</Link></div>
+              {data.news?.length ? <div className="home-news-list">{data.news.slice(0, HOME_NEWS_LIMIT).map((item) => <HomeNewsRow key={item.id} item={item} />)}</div> : <div className="empty">市場新聞區尚無可顯示內容。</div>}
             </section>
           </div>
           {data.data_quality.error && <div className="warning-box">官方擷取警告：{data.data_quality.error}</div>}

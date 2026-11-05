@@ -28,7 +28,6 @@ import {
   DEFAULT_MEMBER_SORT,
   MEMBER_SORTS,
   RETURN_WINDOWS,
-  TODAY_BOARD_LIMIT,
   THEME_BOARDS,
   boardDates,
   boardLabel,
@@ -206,21 +205,25 @@ export function ThemesBoardView({
 
 // ---- today: Top 5 per board ----
 
-// Today page compact row (#276, UI_COPY_SPEC §8.5): rank, name, quality, score, relative returns and date on one row.
+// Today page row (#510, UI_COPY_SPEC §8.5): two lines, rank, name, quality (only when it is not 熱門族群) and score,
+// then the three relative returns; the date and 「相對加權指數」 are said once under the card head.
 function HotGroupRow({ item }: { item: ThemeBoardItem }) {
   return (
     <Link className="hot-group-row" to={themeDetailPath(item.theme_id)} data-theme-id={item.theme_id}>
-      <span className="rank hot-group-rank" aria-label={`第 ${item.rank} 名`}>#{item.rank}</span>
-      <h3>{item.display_name}</h3>
-      <QualityBadge quality={item.quality} compact />
-      <div className="hot-group-score"><span>分數</span><b>{formatScore(item.score)}</b></div>
-      <dl className="hot-group-returns">
-        {RETURN_WINDOWS.map((window) => <div key={window.key}><dt>{window.label}</dt><dd><ReturnValue value={item.relative_returns[window.key]} unit="%" /></dd></div>)}
-      </dl>
-      <div className="small-note">資料 {formatDate(item.trading_date) ?? '日期未提供'} · 相對加權指數</div>
+      <span className="hot-group-line">
+        <span className="rank hot-group-rank" aria-label={`第 ${item.rank} 名`}>#{item.rank}</span>
+        <h3>{item.display_name}</h3>
+        {item.quality !== 'complete' && <QualityBadge quality={item.quality} compact />}
+        <span className="hot-group-score"><span>分數</span> <b>{formatScore(item.score)}</b></span>
+      </span>
+      <span className="hot-group-returns">
+        {RETURN_WINDOWS.map((window) => <span key={window.key}>{window.label} <b><ReturnValue value={item.relative_returns[window.key]} unit="%" /></b></span>)}
+      </span>
     </Link>
   )
 }
+
+export const HOT_GROUP_RETURNS_NOTE = '1／5／20 日為相對加權指數的報酬'
 
 export function HotGroupsSection({
   title = '熱門族群',
@@ -239,17 +242,15 @@ export function HotGroupsSection({
   error: unknown
   className?: string
 }) {
-  // The board tabs sit in the title row (#493), so this card's head is as tall as 重點新聞 beside it.
+  // One head line (#510): title, the board tabs and 完整排行; the date and what the returns are relative to under it.
   return (
     <section className={cx('hot-groups', className)} aria-labelledby="hot-groups-title">
-      <div className="section-head">
-        <div><div className="eyebrow">族群發現 · 各榜前 {TODAY_BOARD_LIMIT} 名</div><h2 id="hot-groups-title">{title}</h2></div>
-        <div className="section-head-tools">
-          <Tabs items={THEME_BOARDS} value={board} onChange={onBoardChange} label="熱門族群榜別" idPrefix="today-board" />
-          <Link to={boardPagePath(board)} className="text-link">查看完整排行</Link>
-        </div>
+      <div className="panel-head">
+        <h2 id="hot-groups-title">{title}</h2>
+        <Tabs items={THEME_BOARDS} value={board} onChange={onBoardChange} label="熱門族群榜別" idPrefix="today-board" className="tabs-compact" />
+        <Link to={boardPagePath(board)} className="text-link">完整排行 →</Link>
       </div>
-      {data && <div className="hot-groups-dates"><BoardDateBadges meta={data.meta} /></div>}
+      {data && <div className="hot-groups-dates"><BoardDateBadges meta={data.meta} /><span className="small-note">{HOT_GROUP_RETURNS_NOTE}</span></div>}
       <div id={tabPanelId('today-board', board)} role="tabpanel" aria-labelledby={tabId('today-board', board)}>
         {loading
           ? <Skeleton lines={4} label="熱門族群載入中…" />
