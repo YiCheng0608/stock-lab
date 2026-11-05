@@ -75,7 +75,7 @@ candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(�
   - `group_memberships`、`theme_groups`、`instruments`（投影讀的欄位）的 hash。
 - **何時回退即時計算**：沒有當日的列（`missing`），或指紋不同（`stale`）。指紋不同的例子：daily 重跑、手動 analyze、candidates、strategy-levels、族群或成員變動、版本升級。回應以 `action_tier_source`（dashboard）、`summary.tier_source`（actions）標示 `source`（`precomputed`／`live`）、`reason` 與 `computed_at`。
 - **重算**：手動重跑上述步驟之後，跑 `action-tiers --date <該日>` 補回預算；不跑也不會錯，只是頁面在下一次 daily 之前都走即時計算。
-- **指紋看不到的變動**：bar 被刪除、TAIEX 的 raw provenance 被原地改寫。前者只有標的 identity 合併或修復工具會做，那些工具也會改 `instruments`。真的遇到時，跑一次 `action-tiers`。
+- **指紋看不到的變動**：bar 被刪除、TAIEX 的 raw provenance 被原地改寫。目前的程式沒有刪 bar 的路徑。以後若新增，或真的遇到這兩種情況，跑一次 `action-tiers`。
 - **規則變更**：改了 `daily_action_tiers` 讀的內容、而指紋不會跟著變時（例如新增一個輸入表），要升 `ACTION_TIER_STORE_VERSION`。
 
 **新聞投影**（`app.news`，表 `news_projection_state`）：
