@@ -106,9 +106,9 @@ def test_every_datetime_column_default_calls_utcnow_at_write_time() -> None:
                 assert default.is_callable, name
                 assert getattr(default.arg, "__wrapped__", None) is utcnow, name
                 seen.append(name)
-    # models.py: 30 column defaults and the onupdate of ingestion_runs.updated_at
-    # and events.updated_at (#476).
-    assert len(seen) == 32
+    # models.py: 31 column defaults (monthly_revenues.collected_at since #530) and
+    # the onupdate of ingestion_runs.updated_at and events.updated_at (#476).
+    assert len(seen) == 33
 
 
 def _clock_modules(tree: ast.AST) -> set[str]:
