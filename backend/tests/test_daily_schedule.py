@@ -1824,15 +1824,17 @@ def test_noncore_source_warnings_keep_the_collect_successful(database):
         sources.TPEX_SUSPEND_HISTORY_ENDPOINT,
         # The display-only market summary (Issue #275).
         sources.TPEX_HIGHLIGHT_ENDPOINT,
+        # The emerging roster, names for AI news candidates only (Issue #512).
+        sources.TPEX_EMERGING_ISSUER_ENDPOINT,
     )
     result = pipeline.collect(DAY, adapter=combined(OutageFetcher(failing)))
     assert result["status"] == "success", result
-    assert result["core_warnings"] == [] and len(result["noncore_warnings"]) == 7
+    assert result["core_warnings"] == [] and len(result["noncore_warnings"]) == 8
     assert result["warnings"] == result["noncore_warnings"]
     with database() as db:
         run = db.get(IngestionRun, result["run_id"])
         assert (
-            run.status == "success" and len(run.metadata_json["noncore_warnings"]) == 7
+            run.status == "success" and len(run.metadata_json["noncore_warnings"]) == 8
         )
 
 

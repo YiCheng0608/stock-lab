@@ -125,7 +125,7 @@ bash tools/ops/deploy.sh "$TAG" --operator "<誰，依據的 #1 留言>"
 ```
 
 - **第 1 步用維護模式就夠**（#468）：維護模式中 serve 啟動的程序都不寫 `stock.db`。daily、news 只記日誌、不啟動 worker（連 skipped run 列也不寫）；看門狗以 `mode=ro`、`query_only` 讀 DB，DB 是 WAL，讀取不擋 `init-db` 的寫入；monitor 不開 DB（[維護模式](ops/SCHEDULING.md#維護模式)的「serve 不寫 DB 的範圍」）。開啟前就在跑的 job 由 `status` 的 `running_jobs` 看出來，所以要等它是 `[]`。手動開的維護模式沒有心跳、不會逾時解除，由第 6 步的 `deploy.sh` 關掉；作業持有的（例如同時在跑的回補）`deploy.sh` 不動，記 `kept_command_held`。好處是看門狗與 monitor 不停，部署期間的留言與 CI 事件照常喚醒統籌。`v1.2.1` 部署前是在 scheduler 停止的狀態下跑 `init-db`；正式 scheduler 還是 #468 以前的 image 時照那樣做。
-- **時間**：`init-db` 會先做遷移前的 schema 檢查。0023 → 0024 在正式副本上約 4 分鐘（238.5 s，建 index 本身不到 1 秒）；0025 → 0026 約 1 分 40 秒（98.9 s，含回補 15,614 筆 `events.updated_at`，[#476](https://github.com/YiCheng0608/stock-lab/issues/476)）。這段時間 api 照常服務。
+- **時間**：`init-db` 會先做遷移前的 schema 檢查。0023 → 0024 在正式副本上約 4 分鐘（238.5 s，建 index 本身不到 1 秒）；0025 → 0026 約 1 分 40 秒（98.9 s，含回補 15,614 筆 `events.updated_at`，[#476](https://github.com/YiCheng0608/stock-lab/issues/476)）；0026 → 0027 約 2 分 16 秒（136 s，2026-11-05 副本 3.0 GB，只建空表 `emerging_issuers`，[#512](https://github.com/YiCheng0608/stock-lab/issues/512)；名冊要等升級後第一次 collect 才有資料，在那之前興櫃候選照「查無」隱藏）。這段時間 api 照常服務。
 - **部署後的補算**（#476 起）：第 6 步完成後，在新的 api 容器跑以下兩個命令。兩者都冪等，不跑也不會錯，只是第一個開頁的人要等即時計算：
   - `docker compose -p "$P" exec api python -m worker.cli news-project`：tag 改了投影規則（`NEWS_PROJECTION_VERSION`），或第一次部署含 #476 的版本時跑。
   - `docker compose -p "$P" exec api python -m worker.cli action-tiers`：預算最新官方日的 action tier。之後由 daily 的 action_tiers 步驟寫入（[action tier 預算與新聞投影](ops/SCHEDULING.md#action-tier-預算與新聞投影)）。

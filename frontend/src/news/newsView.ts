@@ -223,7 +223,29 @@ export function verifiedInstruments(item: Pick<NewsItem, 'instruments' | 'symbol
   return (item.symbols ?? []).map((symbol) => ({ key: symbol, label: symbol.includes(':') ? symbol.split(':')[1] : symbol, href: null }))
 }
 
-export type CardAiCandidate = NewsAi['symbol_candidates'][number] & { key: string }
+type AiSymbolCandidate = NewsAi['symbol_candidates'][number]
+export type CardAiCandidate = AiSymbolCandidate & { key: string }
+
+// #512 (UI_COPY_SPEC §4): every shown candidate has a name; the API hides codes it cannot name, and a nameless one from an
+// older server is left out too, so 「代號未對應到已知標的」 never appears.
+export function namedAiCandidates<T extends Pick<AiSymbolCandidate, 'name'>>(candidates: readonly T[] | null | undefined): T[] {
+  return (candidates ?? []).filter((candidate) => Boolean(candidate.name))
+}
+
+const LISTING_NOTE: Record<string, string> = { emerging: '興櫃', delisted: '已下市' }
+
+// 「7808 訊聯智藥（興櫃）」「2888 新光金（已下市）」「2330 台積電」.
+export function candidateLabel(candidate: Pick<AiSymbolCandidate, 'symbol' | 'name' | 'listing'>): string {
+  const note = candidate.listing ? LISTING_NOTE[candidate.listing] : undefined
+  return `${candidate.symbol} ${candidate.name ?? ''}${note ? `（${note}）` : ''}`
+}
+
+// Only a listed stock links to its page; emerging and delisted ones have no current quotes here. No listing (an older
+// server) keeps the old rule: a named candidate links.
+export function candidateHref(candidate: Pick<AiSymbolCandidate, 'exchange' | 'symbol' | 'name' | 'listing'>): string | null {
+  if (!candidate.name || (candidate.listing && candidate.listing !== 'listed')) return null
+  return `/stocks/${encodeURIComponent(candidate.exchange)}/${encodeURIComponent(candidate.symbol)}`
+}
 
 // The card's collapsed 「AI 候選」 row (UI_COPY_SPEC §4, #452): the done result's symbol candidates minus the codes the rules
 // already verified (instruments, or symbols' 「EX:SYM」／bare code), each code listed once. Listed and OTC codes never repeat,
@@ -235,7 +257,7 @@ export function cardAiCandidates(item: Pick<NewsItem, 'ai' | 'instruments' | 'sy
   for (const instrument of item.instruments ?? []) seen.add(instrument.symbol)
   for (const symbol of item.symbols ?? []) seen.add(symbol.includes(':') ? symbol.split(':')[1] : symbol)
   const candidates: CardAiCandidate[] = []
-  for (const candidate of ai.symbol_candidates ?? []) {
+  for (const candidate of namedAiCandidates(ai.symbol_candidates)) {
     if (seen.has(candidate.symbol)) continue
     seen.add(candidate.symbol)
     candidates.push({ ...candidate, key: `${candidate.exchange}:${candidate.symbol}` })

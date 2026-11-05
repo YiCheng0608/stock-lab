@@ -909,12 +909,17 @@ export type NewsAi = {
     exchange: string
     symbol: string
     name: string | null
+    // #512: listed (link to the stock page), emerging (TPEx 興櫃 roster) or delisted; both of the latter are plain text.
+    // Absent on older servers.
+    listing?: 'listed' | 'emerging' | 'delisted' | string | null
     reason: string | null
     confidence: 'high' | 'medium' | 'low' | string | null
     verified: false
     // #465 rule check: the name or code is in the title／summary the model was sent.
     source_check?: 'mentioned' | 'not_mentioned' | string | null
   }>
+  // #512: codes neither the master nor the newest emerging roster names; kept for audit, never shown.
+  hidden_symbol_candidates?: Array<{ exchange: string; symbol: string; reason: string }>
   candidate_check_version?: string | null
   theme_candidates: Array<{ theme: string; reason: string | null }>
   impact_direction: 'positive' | 'negative' | 'mixed' | 'unknown' | string | null
