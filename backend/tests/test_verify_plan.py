@@ -66,6 +66,12 @@ TREE = {
         "import { unmetText } from './strategyBoard'\n"
     ),
     "stock/strategyBoard.ts": "export const unmetText = 1\n",
+    "stock/StockSummaryCard.tsx": (
+        "import { LevelsCell } from './StrategyBoardPanel'\n"
+        "import { stockVerdict } from './stockSummary'\n"
+    ),
+    "stock/stockSummary.ts": "import { unmetText } from './strategyBoard'\n",
+    "stock/StockCutoffControl.tsx": "export const StockCutoffControl = 1\n",
     "news/NewsViews.tsx": "export const AiBadge = 1\n",
     "candidates/CandidateViews.tsx": (
         "import { AiBadge } from '../news/NewsViews'\n"

@@ -86,12 +86,12 @@ export function AddPlanButton({ signalId, candidateId, openPlanId }: { signalId:
   )
 }
 
-// Stock research tab: one row per conditional strategy of the decision summary.
-export function StockPlanPanel({ strategies }: { strategies: StrategyDecision[] | undefined }) {
+// Stock research tab: one row per conditional strategy of the decision summary. `embedded` (#519) drops the card so the
+// rows sit inside the research-action panel (DESIGN_SYSTEM §5 研究動作區).
+export function StockPlanPanel({ strategies, embedded = false }: { strategies: StrategyDecision[] | undefined; embedded?: boolean }) {
   const conditional = (strategies ?? []).filter((row) => row.status === 'conditional')
-  return (
-    <Card className="stock-plan-panel" eyebrow="追蹤計畫 · 模擬" title="把研究條件加入追蹤">
-      {conditional.length
+  const body = <>
+    {conditional.length
         ? (
           <ul className="plan-strategy-list">
             {conditional.map((row) => (
@@ -104,8 +104,9 @@ export function StockPlanPanel({ strategies }: { strategies: StrategyDecision[] 
         )
         : <p className="small-note">{NO_CONDITION_TEXT}</p>}
       <p className="small-note">加入後每日依日線規則模擬成交與出場，結果在行動頁「{TRACKING_TITLE}」與「{HISTORY_TITLE}」；不是實際成交。</p>
-    </Card>
-  )
+  </>
+  if (embedded) return <div className="stock-plan-inline" aria-label="追蹤計畫">{body}</div>
+  return <Card className="stock-plan-panel" eyebrow="追蹤計畫 · 模擬" title="把研究條件加入追蹤">{body}</Card>
 }
 
 function CancelPlan({ plan }: { plan: TrackingPlan }) {
