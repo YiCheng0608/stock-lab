@@ -23,13 +23,16 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 import app.indicators as product_indicators
+import worker.mops_events as mops_events
 import worker.pipeline as pipeline
 from app.db import enable_sqlite_foreign_keys
 from app.migrations import upgrade_database
 from app.models import (
     ChipSnapshot,
     CorporateAction,
+    Event,
     GroupMembership,
+    IngestionRun,
     Instrument,
     MarketBar,
     RawPayload,
@@ -985,7 +988,9 @@ def test_a_late_action_outside_what_a_ratio_reads_keeps_a_wrong_ratio_failed(fx)
     assert not after.unknown
 
 
-def scored_market(fx: Fixture) -> dict[str, Instrument]:
+def scored_market(fx: Fixture, covered: bool = False) -> dict[str, Instrument]:
+    """Groups scored on the last three days; ``covered`` answers their event windows."""
+
     market = build_market(fx)
     group = ThemeGroup(
         id="official-industry-fixture",
@@ -1020,6 +1025,36 @@ def scored_market(fx: Fixture) -> dict[str, Instrument]:
     for instrument in market.values():
         pipeline._calculate_features(fx.db, instrument)
     fx.commit()
+    if covered:
+        # hot_group 1.3.0 (#474): dated MOPS answers for every window session,
+        # one member with an event on T and one 10 sessions before.
+        fx.db.add(
+            IngestionRun(
+                run_type=mops_events.RUN_TYPE,
+                source="official",
+                run_date=T,
+                status="success",
+                metadata_json={
+                    "coverage_manifest": {
+                        day.isoformat(): {
+                            "event_coverage": mops_events.date_coverage(day, None)
+                        }
+                        for day in DAYS[-25:]
+                    }
+                },
+            )
+        )
+        for symbol, day in (("1101", T), ("4549", DAYS[-10])):
+            fx.db.add(
+                Event(
+                    instrument_id=market[symbol].id,
+                    event_date=day,
+                    event_type="material_information",
+                    title=f"fixture {symbol}",
+                    source=mops_events.EVENT_SOURCE,
+                )
+            )
+        fx.commit()
     for day in DAYS[-3:]:
         pipeline._calculate_group_scores(fx.db, day)
     fx.commit()
@@ -1053,6 +1088,102 @@ def test_a_catalyst_without_full_coverage_fails(fx):
     )
     groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
     assert groups.result == "fail" and "catalyst_without_coverage" in groups.failures
+
+
+FIXTURE_GROUP = "trading_date = ? and group_id = 'official-industry-fixture'"
+
+
+def covered_groups(fx):
+    scored_market(fx, covered=True)
+    groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
+    assert groups.result == "pass", (
+        dict(groups.failures),
+        groups.examples,
+        dict(groups.unknown),
+    )
+    return groups
+
+
+def test_a_covered_catalyst_is_recomputed_from_its_events(fx):
+    # #474: 1.3.0 rows on a covered window pass the recount; the fixture group
+    # (1101 has an event on T) has a value, and later events do not count.
+    covered_groups(fx)
+    row = (
+        sqlite3.connect(fx.path)
+        .execute(
+            f"select catalyst, details_json from group_daily_scores where {FIXTURE_GROUP}",
+            (T.isoformat(),),
+        )
+        .fetchone()
+    )
+    details = json.loads(row[1])
+    assert details["hot_group_version"] == "1.3.0"
+    assert details["catalyst_coverage"]["complete"] is True
+    assert details["raw_values"]["catalyst"] == pytest.approx(1 / 3)
+    assert row[0] is not None
+    fx.db.add(
+        Event(
+            instrument_id=details["member_returns"][1]["instrument_id"],
+            event_date=T,
+            event_type="material_information",
+            title="collected after the run",
+            source=mops_events.EVENT_SOURCE,
+        )
+    )
+    fx.commit()
+    groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
+    assert groups.result == "pass", dict(groups.failures)
+
+
+def test_a_changed_raw_catalyst_fails(fx):
+    covered_groups(fx)
+    fx.sql(
+        "update group_daily_scores set details_json = json_set(details_json, '$.raw_values.catalyst', 0.9)"
+        f" where {FIXTURE_GROUP}",
+        T.isoformat(),
+    )
+    groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
+    assert groups.result == "fail" and "group_raw_catalyst" in groups.failures
+
+
+def test_a_catalyst_off_its_board_percentile_fails(fx):
+    covered_groups(fx)
+    fx.sql(
+        "update group_daily_scores set catalyst = 0.25,"
+        " details_json = json_set(details_json, '$.normalized_values.catalyst', 0.25)"
+        f" where {FIXTURE_GROUP}",
+        T.isoformat(),
+    )
+    groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
+    assert groups.result == "fail" and "percentile_catalyst" in groups.failures
+
+
+def test_a_null_catalyst_with_full_coverage_fails(fx):
+    # #474 (PR #478 review 2): the reverse of catalyst_without_coverage.
+    covered_groups(fx)
+    fx.sql(
+        "update group_daily_scores set catalyst = null,"
+        " details_json = json_set(details_json, '$.normalized_values.catalyst', null)"
+        f" where {FIXTURE_GROUP}",
+        T.isoformat(),
+    )
+    groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
+    assert (
+        groups.result == "fail"
+        and "catalyst_null_with_full_coverage" in groups.failures
+    )
+
+
+def test_a_complete_window_of_fewer_sessions_fails(fx):
+    # #474 (PR #478 review 1): complete needs all 20 sessions.
+    covered_groups(fx)
+    fx.sql(
+        "update group_daily_scores set details_json = json_set(details_json, '$.catalyst_coverage.sessions', 19)"
+        f" where {FIXTURE_GROUP}",
+        T.isoformat(),
+    )
+    groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
+    assert groups.result == "fail" and "catalyst_coverage_window" in groups.failures
 
 
 def test_a_member_return_of_another_price_basis_fails(fx):

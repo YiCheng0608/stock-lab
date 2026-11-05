@@ -614,7 +614,7 @@ def test_new_version_gets_its_own_strategy_row_and_leaves_1_0_0_untouched(factor
         versions = pipeline._ensure_strategies(db)
         db.commit()
 
-        assert versions["hot_group_v1"].version == HOT_GROUP_VERSION == "1.2.0"
+        assert versions["hot_group_v1"].version == HOT_GROUP_VERSION == "1.3.0"
         assert versions["hot_group_v1"].id != old.id
         db.refresh(old)
         assert (

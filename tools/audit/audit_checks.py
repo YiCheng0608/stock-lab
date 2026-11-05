@@ -84,8 +84,17 @@ HOT_GROUP_WEIGHTS = {
 }
 HOT_GROUP_MINIMUM_WEIGHT = 0.90
 # Versions whose four components and score are recomputed.  1.2.0 changed only
-# the catalyst (dated MOPS coverage, #453); the catalyst itself is not recomputed.
-AUDITED_HOT_GROUP_VERSIONS = frozenset({"1.1.0", "1.2.0"})
+# the catalyst (dated MOPS coverage, #453); 1.3.0 only its formula (#474).
+AUDITED_HOT_GROUP_VERSIONS = frozenset({"1.1.0", "1.2.0", "1.3.0"})
+# Versions whose catalyst follows the dated coverage and is recomputed from the
+# events of its window (docs/spec/hot_group.md).
+COVERAGE_HOT_GROUP_VERSIONS = frozenset({"1.2.0", "1.3.0"})
+CATALYST_SOURCES = (
+    "mops_material_information",
+    "twse_tpex_official_announcement",
+    "issuer_filing",
+)
+CATALYST_WEIGHTS = {1: 0.50, 5: 0.30, 20: 0.20}
 WINDOW_WEIGHTS = {1: 0.20, 5: 0.30, 20: 0.50}
 
 
@@ -108,6 +117,8 @@ class Context:
     last_day: str | None = None
     # TAIEX index bar dates, read once by liquidity_lots.
     taiex_days: list[str] | None = None
+    # hot_group catalyst windows (20 TAIEX sessions) by score date (#474).
+    catalyst_windows: dict[str, list[str]] = field(default_factory=dict)
 
     def load(self) -> None:
         self.instruments = {
@@ -911,7 +922,7 @@ def derived_checks(ctx: Context, stop: Callable[[], str | None]) -> list[Check]:
     groups = Check(
         "groups",
         "族群分數重算",
-        scope="每列 group_daily_scores：成員超額報酬、量能、法人，群組相對報酬、廣度、同榜 percentile、分數與名次",
+        scope="每列 group_daily_scores：成員超額報酬、量能、法人，群組相對報酬、廣度、催化劑（1.2.0 起依覆蓋與事件重算）、同榜 percentile、分數與名次",
     )
     if ctx.quick:
         ind.scope += (
@@ -1454,6 +1465,129 @@ def _check_candidates(
             check.ok()
 
 
+def _catalyst_window(ctx: Context, day: str) -> list[str]:
+    """The 20 TAIEX sessions (not suspended) ending ``day``, oldest first."""
+
+    cache = ctx.catalyst_windows
+    if day not in cache:
+        rows = ctx.con.execute(
+            "select b.trading_date from market_bars b join instruments i on i.id = b.instrument_id"
+            " where i.instrument_type = 'index' and i.symbol = 'TAIEX' and b.trading_date <= ?"
+            " and (b.is_suspended = 0 or b.is_suspended is null)"
+            " order by b.trading_date desc limit 20",
+            (day,),
+        ).fetchall()
+        cache[day] = sorted(str(row[0]) for row in rows)
+    return cache[day]
+
+
+def _recomputed_catalyst(
+    ctx: Context, version: str, window: list[str], member_ids: list[int], through_id
+) -> float | None:
+    """The raw catalyst of a covered window, from the events table.
+
+    1.2.0: weighted distinct events of the eligible members over 3, capped
+    at 1.  1.3.0 (#474): weighted share of eligible members with an event,
+    counting only events up to the id the row recorded.
+    """
+
+    if not member_ids:
+        return None
+    marks = ",".join("?" * len(member_ids))
+    dates = ",".join("?" * len(window))
+    sources = ",".join("?" * len(CATALYST_SOURCES))
+    sql = (
+        f"select id, instrument_id, event_date from events where instrument_id in ({marks})"
+        f" and event_date in ({dates}) and source in ({sources})"
+    )
+    args: list[Any] = [*member_ids, *window, *CATALYST_SOURCES]
+    if version != "1.2.0":
+        sql += " and id <= ?"
+        args.append(through_id)
+    position = {value: index + 1 for index, value in enumerate(window)}
+    events = {w: set() for w in CATALYST_WEIGHTS}
+    members = {w: set() for w in CATALYST_WEIGHTS}
+    for event_id, instrument_id, event_date in ctx.con.execute(sql, args):
+        session = position.get(str(event_date))
+        for w in CATALYST_WEIGHTS:
+            if session is not None and session > len(window) - w:
+                events[w].add(event_id)
+                members[w].add(instrument_id)
+    if version == "1.2.0":
+        weighted = sum(CATALYST_WEIGHTS[w] * len(events[w]) for w in CATALYST_WEIGHTS)
+        return max(0.0, min(1.0, weighted / 3.0))
+    eligible = len(set(member_ids))
+    return sum(
+        CATALYST_WEIGHTS[w] * len(members[w]) / eligible for w in CATALYST_WEIGHTS
+    )
+
+
+def _check_catalyst(ctx: Context, day, version, details, stored, code, check) -> None:
+    """Coverage rule (1.2.0, #453) and the recomputed raw catalyst (#474)."""
+
+    coverage = details.get("catalyst_coverage")
+    if not isinstance(coverage, dict):
+        check.fail("catalyst_coverage_missing", code)
+        return
+    complete = coverage.get("complete")
+    if not complete:
+        # Without a fully answered window the catalyst is null.
+        if stored[6] is None:
+            check.ok()
+        else:
+            check.fail(
+                "catalyst_without_coverage",
+                code + [stored[6], coverage.get("unanswered_dates")],
+            )
+        return
+    window = _catalyst_window(ctx, day)
+    if (
+        coverage.get("sessions") != 20
+        or len(window) != 20
+        or coverage.get("window") != [window[0], window[-1]]
+    ):
+        # A complete window has all 20 TAIEX sessions ending the score date.
+        check.fail(
+            "catalyst_coverage_window",
+            code
+            + [
+                coverage.get("sessions"),
+                coverage.get("window"),
+                window[:1] + window[-1:],
+            ],
+        )
+        return
+    member_ids = [
+        m["instrument_id"]
+        for m in details.get("member_returns") or []
+        if isinstance(m, dict) and m.get("instrument_id") is not None
+    ]
+    if stored[9] and stored[6] is None:
+        # An answered window with eligible members has a value (0 without
+        # events); null there drops a component the group had.
+        check.fail("catalyst_null_with_full_coverage", code)
+        return
+    if not member_ids:
+        check.ok()
+        return
+    inputs = details.get("catalyst_inputs") or {}
+    through_id = inputs.get("events_through_id")
+    if version != "1.2.0" and through_id is None:
+        check.fail("catalyst_inputs_missing", code)
+        return
+    mine = _recomputed_catalyst(ctx, version, window, member_ids, through_id)
+    # 1.2.0 rows did not record which events they counted: an event collected
+    # after the row (a later list, a backfill) makes the recount differ.
+    _judge(
+        check,
+        "group_raw_catalyst",
+        (details.get("raw_values") or {}).get("catalyst"),
+        mine,
+        code,
+        version == "1.2.0",
+    )
+
+
 def _check_groups(ctx: Context, group_rows, derived: Derived, check: Check) -> None:
     active = {
         gid: bool(flag)
@@ -1472,18 +1606,8 @@ def _check_groups(ctx: Context, group_rows, derived: Derived, check: Check) -> N
                 # hot_group 1.0.0 (turnover denominator, members by symbol) is not recomputed.
                 check.undetermined("hot_group_version_not_audited", code + [version])
                 continue
-            if version == "1.2.0":
-                # 1.2.0 (#453): without a fully answered window the catalyst is null.
-                coverage = details.get("catalyst_coverage")
-                if not isinstance(coverage, dict):
-                    check.fail("catalyst_coverage_missing", code)
-                elif not coverage.get("complete") and stored[6] is not None:
-                    check.fail(
-                        "catalyst_without_coverage",
-                        code + [stored[6], coverage.get("unanswered_dates")],
-                    )
-                else:
-                    check.ok()
+            if version in COVERAGE_HOT_GROUP_VERSIONS:
+                _check_catalyst(ctx, day, version, details, stored, code, check)
             members = details.get("member_returns") or []
             stored_bench = details.get("benchmark_returns") or {}
             if bench is None:
@@ -1694,7 +1818,12 @@ def _check_board(day: str, computed, check: Check) -> None:
                     check.fail(
                         f"percentile_{key}", code + [normalized.get(key), expected]
                     )
+            # 1.3.0 (#474): the catalyst is the board percentile of the raw
+            # member share, and no event stays 0; before, it was the raw value.
+            percentile_catalyst = details.get("hot_group_version") == "1.3.0"
             for key in ("breadth", "catalyst"):
+                if key == "catalyst" and percentile_catalyst:
+                    continue
                 _judge(
                     check,
                     f"normalized_{key}",
@@ -1703,6 +1832,44 @@ def _check_board(day: str, computed, check: Check) -> None:
                     code,
                     False,
                 )
+            if percentile_catalyst:
+                value = stored_raw.get("catalyst")
+                peers_all = [
+                    p
+                    for p in (
+                        (o[1].get("raw_values") or {}).get("catalyst") for o in items
+                    )
+                    if finite(p)
+                ]
+                peers_active = [
+                    p
+                    for p in (
+                        (o[1].get("raw_values") or {}).get("catalyst")
+                        for o in items
+                        if o[4]
+                    )
+                    if finite(p)
+                ]
+                if value == 0:
+                    _judge(
+                        check,
+                        "percentile_catalyst",
+                        normalized.get("catalyst"),
+                        0.0,
+                        code,
+                        False,
+                    )
+                else:
+                    matched, expected = _percentile_matches(
+                        value, normalized.get("catalyst"), peers_all, peers_active
+                    )
+                    if matched:
+                        check.ok()
+                    else:
+                        check.fail(
+                            "percentile_catalyst",
+                            code + [normalized.get("catalyst"), expected],
+                        )
             for key, column in (
                 ("volume_strength", 4),
                 ("institutional_flow", 5),

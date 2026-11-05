@@ -160,8 +160,11 @@ GROUP_SCORE_WEIGHTS: dict[str, float] = {
 # fully answered 20-session window gives a value (0 without events); any
 # unanswered session leaves it null, events or not.  1.1.0 returned null for
 # no events and a value for any event, whatever the coverage.
+# 1.3.0 (#474) keeps that coverage rule and replaces the capped event count
+# (3 events saturated most groups once the dated lists filled the window) with
+# the board percentile of the weighted share of eligible members with events.
 HOT_GROUP_LEGACY_VERSION = "1.0.0"
-HOT_GROUP_VERSION = "1.2.0"
+HOT_GROUP_VERSION = "1.3.0"
 # Chip-row sources written by the official institutional parsers; a row
 # without one of them carries only margin data.
 OFFICIAL_INSTITUTIONAL_CHIP_SOURCES: dict[str, str] = {
@@ -301,13 +304,17 @@ HOT_GROUP_CONFIG: dict[str, Any] = {
             "weight": 0.10,
             "value_range": [0.0, 1.0],
             "formula": {
-                "operation": "weighted_capped_distinct_verified_events",
+                "operation": "weighted_share_of_eligible_members_with_verified_events",
                 "terms": [
                     {"weight": 0.50, "window_trading_days": 1},
                     {"weight": 0.30, "window_trading_days": 5},
                     {"weight": 0.20, "window_trading_days": 20},
                 ],
-                "normalization": {"cap_distinct_events": 3},
+                "normalization": {
+                    "method": "same_board_percentile",
+                    "no_events": 0.0,
+                    "single_value_with_events": 0.5,
+                },
                 "accepted_source_types": [
                     "mops_material_information",
                     "twse_tpex_official_announcement",
