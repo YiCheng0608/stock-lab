@@ -19,9 +19,19 @@ description: 對 stock-lab 五個資料與行動頁（今日可買、觀察中�
 CI `verify` job（`.github/workflows/ci.yml`）每次：
 
 1. 跑 [`tools/verify/verify_plan.py`](../../../tools/verify/verify_plan.py)，依 PR 改到的檔案決定要驗哪幾頁（規則在 [features 驗證範圍](features/README.md#驗證範圍)），plan 寫進 job summary。一頁都不用驗時其餘步驟全部跳過，job 仍以 success 結束。每晚排程（`schedule`）與手動觸發（`workflow_dispatch`）以 `--event` 選全部五頁。
-2. 用 `fixture_db.py` 建假資料庫，建置前端，在 runner 上起 API 與 vite preview（[`tools/verify/vite.preview.mjs`](../../../tools/verify/vite.preview.mjs)）。
+2. 裝截圖用的 CJK 字型（[`tools/verify/install_fonts.sh`](../../../tools/verify/install_fonts.sh)，見下方[診斷](#診斷)），用 `fixture_db.py` 建假資料庫，建置前端，在 runner 上起 API 與 vite preview（[`tools/verify/vite.preview.mjs`](../../../tools/verify/vite.preview.mjs)）。
 3. 跑 `page_checks.py --fixture --pages <plan 的頁>`：每頁的 `CI` 檢查，加上 `API` 檢查（頁面用到的 API 回應等於 `fixture_data.EXPECTED`）。結果是三態（[features 三態與上游](features/README.md#三態與上游)）；假資料庫每個值都在，所以 `--fixture` 下無法判定也讓 job 失敗。`KNOWN_FAILURES` 列出的已知產品缺陷只在失敗訊息含登記的片段時照報而不讓 job 失敗（[已知失敗](features/README.md#已知失敗)），修好後要從清單移除。
 4. 結果寫進 job summary；`out/`（API JSON、截圖、`summary.md`、`results.json`）與 `logs/` 上傳成 artifact `verify-<attempt>`，保留 14 天。
+
+### 診斷
+
+job 失敗或被取消時，先看哪一步花了時間，再讀那一步的 log：
+
+- **各步時間**：`gh api repos/YiCheng0608/stock-lab/actions/runs/<run>/attempts/<n>/jobs --jq '.jobs[] | select(.name=="verify") | .steps[] | "\(.name) \(.started_at) \(.completed_at) \(.conclusion)"'`。重跑過的 job 要指定 attempt；`gh run view --job` 只顯示最後一次。
+- **整份 log**：`gh api --allow-escape-sequences repos/YiCheng0608/stock-lab/actions/jobs/<job_id>/logs`。
+- **字型（`Fonts` 步驟）**：#489 時裸跑的 `apt-get` 曾 12～15 分鐘以上沒結束，把 job 拖到 15 分鐘上限。現在字型檔走 `actions/cache`（`Restore fonts`／`Save fonts`，各有步驟逾時與 `continue-on-error`，快取慢或壞掉只會退回 apt），命中時不碰 apt。沒命中才跑 `apt-get update`、`apt-get install`，各有上限並重試；step log 每個命令一行（開始、完成秒數，或 `逾時：<命令> 跑了 N 秒仍未結束`），逾時或失敗時印出 `logs/fonts.log`（含 apt 輸出）最後 40 行、還在跑的 apt／dpkg／http 行程與 apt 來源，以 `::error title=verify fonts::` 失敗結束。完整輸出在 artifact 的 `logs/fonts.log`。
+- **API 與 preview**：`Start API and preview` 的 `curl --retry 60` 約 1 分鐘等不到 `/api/health` 就失敗；`Summary` 步驟印出 `logs/api.log`、`logs/preview.log` 最後 20 行。
+- **檢查（`Checks` 步驟）**：步驟上限 8 分鐘；各頁結果在 job summary 與 artifact 的 `out/summary.md`，截圖在 `out/shots`。
 
 ### 本機重跑
 

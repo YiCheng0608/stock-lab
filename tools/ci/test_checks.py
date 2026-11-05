@@ -1269,5 +1269,157 @@ class RequiredJob(unittest.TestCase):
         self.assertEqual(env.get("TOKEN"), "${{ github.token }}")
 
 
+@unittest.skipIf(os.name == "nt", "runs the verify job's bash step with fake commands")
+class VerifyFonts(unittest.TestCase):
+    """The verify job's font step ends a hung apt-get inside its limits and says where (#489).
+
+    On 2026-11-04 the step's `apt-get update && apt-get install fonts-noto-cjk` ran 12 to
+    over 15 minutes three times and the job was cancelled at its 15-minute limit. The step's
+    run text from ci.yml runs here with fake sudo, apt-get, dpkg, fc-list and fc-cache first
+    on PATH, and the script's limits cut to seconds: a hung apt-get must end the step red well
+    inside WAIT with the command, its seconds and the diagnosis; a cached copy must not touch
+    apt at all.
+    """
+
+    WAIT = 30  # seconds the test gives the step; a step with no limit of its own is still waiting
+    FAKES = {
+        "sudo": 'exec "$@"\n',
+        "fc-cache": "exit 0\n",
+        "fc-list": '[ -e "$FAKE_FONTS/NotoSansCJK-Regular.ttc" ] && echo "Noto Sans CJK TC"\n'
+        "exit 0\n",
+        "dpkg": 'printf "%s\\n" "$FAKE_FONTS" "$FAKE_FONTS/NotoSansCJK-Regular.ttc"\n',
+        "apt-get": 'echo "apt-get $*" >> "$FAKE_CALLS"\n'
+        'case "$FAKE_APT" in\n'
+        "  hang) exec sleep 600 ;;\n"
+        "  fail) exit 100 ;;\n"
+        "esac\n"
+        'case " $* " in *" install "*)\n'
+        '  mkdir -p "$FAKE_FONTS" && echo font > "$FAKE_FONTS/NotoSansCJK-Regular.ttc" ;;\n'
+        "esac\n",
+    }
+
+    def setUp(self):
+        import yaml
+
+        self.job = yaml.load(
+            (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"),
+            Loader=yaml.BaseLoader,
+        )["jobs"]["verify"]
+        (self.step,) = [
+            s
+            for s in self.job["steps"]
+            if re.search(r"fonts-noto-cjk|install_fonts\.sh", s.get("run", ""))
+        ]
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.tmp = Path(temporary.name)
+        fake_bin = self.tmp / "bin"
+        fake_bin.mkdir()
+        for name, body in self.FAKES.items():
+            path = fake_bin / name
+            path.write_text("#!/bin/sh\n" + body, encoding="utf-8", newline="\n")
+            path.chmod(0o755)
+        self.fonts = self.tmp / "system" / "fonts"  # stands in for /usr/share/fonts/...
+        self.calls = self.tmp / "calls.log"
+        self.env = {
+            **os.environ,
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+            "HOME": str(self.tmp / "home"),
+            "RUNNER_TEMP": str(self.tmp),
+            "V": str(self.tmp / "verify"),
+            "GITHUB_ENV": str(self.tmp / "github_env"),
+            "FAKE_FONTS": str(self.fonts),
+            "FAKE_CALLS": str(self.calls),
+            "VERIFY_FONTS_UPDATE_TIMEOUT": "2",
+            "VERIFY_FONTS_INSTALL_TIMEOUT": "2",
+            "VERIFY_FONTS_RESTORE_TIMEOUT": "2",
+            "VERIFY_FONTS_ATTEMPTS": "2",
+        }
+
+    def run_step(self, apt: str) -> tuple[int, str, float]:
+        import signal
+        import time
+
+        started = time.monotonic()
+        process = subprocess.Popen(
+            ["bash", "-e", "-c", self.step["run"]],
+            cwd=ROOT,
+            env={**self.env, "FAKE_APT": apt},
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            start_new_session=True,
+        )
+        try:
+            output, _ = process.communicate(timeout=self.WAIT)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            output, _ = process.communicate()
+            self.fail(
+                f"the font step was still waiting on a hung apt-get after {self.WAIT} s:\n{output}"
+            )
+        return process.returncode, output, time.monotonic() - started
+
+    def apt_calls(self) -> list[str]:
+        return self.calls.read_text().splitlines() if self.calls.exists() else []
+
+    def test_a_hung_apt_get_fails_the_step_with_a_diagnosis(self):
+        status, output, took = self.run_step("hang")
+        self.assertNotEqual(status, 0, output)
+        self.assertLess(took, self.WAIT)
+        self.assertRegex(
+            output, r"逾時：apt-get update（第 1／2 次） 跑了 \d+ 秒仍未結束"
+        )
+        self.assertIn("逾時：apt-get update（第 2／2 次）", output)
+        self.assertIn("---- 診斷：", output)
+        self.assertIn(
+            "::error title=verify fonts::fonts-noto-cjk 試了 2 次都沒裝好", output
+        )
+        self.assertEqual(len(self.apt_calls()), 2, self.apt_calls())
+
+    def test_a_cached_copy_skips_apt(self):
+        status, output, _ = self.run_step("ok")
+        self.assertEqual(status, 0, output)
+        self.assertIn("字型就緒（apt）", output)
+        self.assertEqual(
+            [call.split()[-1] for call in self.apt_calls()],
+            ["update", "fonts-noto-cjk"],
+        )
+        tarball = self.tmp / "home/.cache/verify-fonts/fonts-noto-cjk.tar"
+        self.assertTrue(tarball.is_file())
+        # A fresh runner: the font is gone, the cache is back, and apt would fail.
+        (self.fonts / "NotoSansCJK-Regular.ttc").unlink()
+        self.calls.unlink()
+        status, output, _ = self.run_step("fail")
+        self.assertEqual(status, 0, output)
+        self.assertIn("字型就緒（快取）", output)
+        self.assertTrue((self.fonts / "NotoSansCJK-Regular.ttc").is_file())
+        self.assertEqual(self.apt_calls(), [])
+
+    def test_the_limits_fit_inside_the_step_and_the_cache_cannot_fail_the_job(self):
+        script = (ROOT / "tools/verify/install_fonts.sh").read_text(encoding="utf-8")
+
+        def default(name: str) -> int:
+            (value,) = re.findall(rf"\${{VERIFY_FONTS_{name}:-(\d+)}}", script)
+            return int(value)
+
+        kill_after = 5  # timeout --kill-after per command
+        worst = default("ATTEMPTS") * (
+            default("UPDATE_TIMEOUT") + default("INSTALL_TIMEOUT") + 2 * kill_after
+        ) + 2 * (default("RESTORE_TIMEOUT") + kill_after)
+        self.assertIn(f"--kill-after={kill_after} ", script)
+        self.assertLess(worst, int(self.step["timeout-minutes"]) * 60)
+        self.assertLess(
+            int(self.step["timeout-minutes"]), int(self.job["timeout-minutes"])
+        )
+        caches = [s for s in self.job["steps"] if "actions/cache/" in s.get("uses", "")]
+        self.assertEqual(len(caches), 2, caches)
+        for step in caches:
+            with self.subTest(step=step["name"]):
+                self.assertEqual(step.get("continue-on-error"), "true")
+                self.assertIn("timeout-minutes", step)
+
+
 if __name__ == "__main__":
     unittest.main()
