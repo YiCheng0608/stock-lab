@@ -1205,7 +1205,11 @@ def _llm_rows() -> list[dict[str, Any]]:
             2,
             "示範電腦液冷機櫃訂單增加。",
             [
-                {"symbol": "TWSE:9103", "reason": "液冷機櫃接單", "confidence": "medium"},
+                {
+                    "symbol": "TWSE:9103",
+                    "reason": "液冷機櫃接單",
+                    "confidence": "medium",
+                },
                 # Not an instrument: named from the emerging roster (Issue #512).
                 {"symbol": "TPEx:9801", "reason": "供應液冷零件", "confidence": "low"},
             ],
