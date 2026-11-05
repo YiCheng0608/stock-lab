@@ -3,16 +3,17 @@ import type { FundamentalSnapshot } from '../types'
 import { formatFixed } from '../units'
 
 // The stock page 「財務」 tab (#528; UI_COPY_SPEC §8.2 財務分頁, DESIGN_SYSTEM §5 個股財務表). The rows are the stock API's
-// `fundamentals`, already cut at the research cutoff by their 出表日 (announcement_date <= as_of), so nothing published
-// after the cutoff reaches here. The MOPS feed (t187ap14_L / mopsfin_t187ap14_O) reports revenue in NT$ thousands and both
-// revenue and EPS as year-to-date sums, so the table says 累計 and converts revenue to 億元.
+// `fundamentals`, already cut at the research cutoff by their 可得日 (announcement_date <= as_of; #529: the first
+// 出表日期 of the snapshot feeds t187ap14_L / mopsfin_t187ap14_O, or the statutory filing deadline of a quarter backfilled
+// from the t163sb04 summary report), so nothing available after the cutoff reaches here. Both MOPS sources report revenue
+// in NT$ thousands and both revenue and EPS as year-to-date sums, so the table says 累計 and converts revenue to 億元.
 
 export const FUNDAMENTALS_TITLE = '季報營收與 EPS'
 export const FUNDAMENTALS_EYEBROW = '財務資料'
 export const NOT_PROVIDED = '來源未提供'
 // The first header line of the revenue and EPS columns (#528 decision: the header says the sums are year-to-date).
 export const CUMULATIVE = '年初至季底累計'
-export const FUNDAMENTALS_NOTE = '營收與 EPS 都是年初至季底累計（該年 1 月 1 日到該季最後一天，官方綜合損益表口徑），不是單季；營收單位為億元（官方千元 ÷ 100,000）。出表日是官方開放資料的出表日期，每次收集會更新為最近一次出表的日期，可能晚於公司實際公告日；研究截止日期以前尚未出表的季度不顯示。官方開放資料沒有的欄位寫「來源未提供」。財務資料不納入策略或評分。'
+export const FUNDAMENTALS_NOTE = '營收與 EPS 都是年初至季底累計（該年 1 月 1 日到該季最後一天，官方綜合損益表口徑），不是單季；營收單位為億元（官方千元 ÷ 100,000）。可得日是官方季報快照第一次收到的出表日期，或回補季度的法定申報期限（遇休市順延；期限未到時是第一次抓到的日期），研究截止日期以可得日篩選，之前尚未可得的季度不顯示。來源沒有的欄位寫「來源未提供」。財務資料不納入策略或評分。'
 
 const THOUSANDS_PER_HUNDRED_MILLION = 100_000
 
@@ -46,9 +47,9 @@ export function roeText(value: number | null | undefined): string {
 export function fundamentalsEmptyReason(instrumentType: string, asOf: string | null | undefined): string {
   if (instrumentType.toLowerCase() === 'etf') return 'ETF 沒有公司財報，不適用。'
   const cutoff = formatDay(asOf)
-  if (cutoff) return `研究截止日期 ${cutoff} 以前沒有已出表的季報。`
-  if (instrumentType.toLowerCase() === 'ipo') return '新上市公司尚未有已收集的季報：系統目前只收官方最新一期的季報快照。'
-  return '尚未收集到這檔的季報：系統目前只收官方最新一期的季報快照，該期尚未出表或不在官方清單時沒有資料。'
+  if (cutoff) return `研究截止日期 ${cutoff} 以前沒有已可得的季報。`
+  if (instrumentType.toLowerCase() === 'ipo') return '新上市公司尚未有已收集的季報：官方季報快照與彙總報表都還沒有這檔。'
+  return '尚未收集到這檔的季報：官方季報快照與彙總報表都沒有這檔。'
 }
 
 /** The latest period's data date for the card's badge. */

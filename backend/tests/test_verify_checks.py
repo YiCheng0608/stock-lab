@@ -1312,7 +1312,7 @@ def _financials_page(rows_text: str, badge: str = "資料 2026/09/30\n") -> str:
     return (
         "圖表與指標\n法人籌碼\n財務\n新聞與公告\n財務資料\n季報營收與 EPS\n"
         f"{badge}說明\n期別\t年初至季底累計營收（億元）\t年初至季底累計 EPS（元）\t"
-        f"ROE（%）\t出表日\t來源\n{rows_text}來源：公開資訊觀測站 季報\n"
+        f"ROE（%）\t可得日\t來源\n{rows_text}來源：公開資訊觀測站 季報\n"
     )
 
 

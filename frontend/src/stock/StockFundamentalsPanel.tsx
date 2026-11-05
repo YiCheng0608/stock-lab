@@ -16,7 +16,7 @@ import {
 } from './stockFundamentals'
 
 // The stock page 「財務」 tab (#528; DESIGN_SYSTEM §5 個股財務表, UI_COPY_SPEC §8.2 財務分頁): the collected quarterly
-// reports as the API returns them (newest period first), with their 出表日 and source on every row.
+// reports as the API returns them (newest period first), with their 可得日 (#529) and source on every row.
 export function StockFundamentalsPanel({
   rows,
   instrumentType,
@@ -35,7 +35,7 @@ export function StockFundamentalsPanel({
     { key: 'revenue', header: <><span className="th-qualifier">{CUMULATIVE}</span><br />營收（億元）</>, num: true, cell: (row) => revenueText(row.revenue) },
     { key: 'eps', header: <><span className="th-qualifier">{CUMULATIVE}</span><br />EPS（元）</>, num: true, cell: (row) => epsText(row.eps) },
     { key: 'roe', header: 'ROE（%）', num: true, cell: (row) => roeText(row.roe) },
-    { key: 'announced', header: '出表日', cell: (row) => formatDay(row.announcement_date) ?? NOT_PROVIDED },
+    { key: 'announced', header: '可得日', cell: (row) => formatDay(row.announcement_date) ?? NOT_PROVIDED },
     { key: 'source', header: '來源', wideOnly: true, cell: (row) => sourceLabel(row.source) },
   ]
   const sources = [...new Set(rows.map((row) => sourceLabel(row.source)))]
