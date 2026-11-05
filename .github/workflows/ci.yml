@@ -459,15 +459,41 @@ jobs:
         with:
           node-version: '22'
           package-manager-cache: false
-      # The runner has no CJK monospace font; without it the screenshots show boxes (the text checks do not care).
       - name: Install
         if: steps.plan.outputs.pages != ''
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk > /dev/null
           python -m pip install --disable-pip-version-check --no-cache-dir -r backend/requirements.txt -c backend/validation-requirements.lock.txt
           npm install --global pnpm@10.18.3
           pnpm --dir frontend install --frozen-lockfile
           echo "V=$RUNNER_TEMP/verify" >> "$GITHUB_ENV"
+      # The runner has no CJK monospace font; without it the screenshots show boxes (the text checks
+      # do not care). A bare apt-get took 12 to over 15 minutes three times on 2026-11-04 (#489):
+      # the package's files come from the cache, and apt runs only on a miss, each command under
+      # its own limit, failing with a diagnosis (tools/verify/install_fonts.sh). The cache steps
+      # only save time, so a slow or broken cache falls through to apt.
+      - name: Restore fonts
+        id: fonts-cache
+        if: steps.plan.outputs.pages != ''
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: '1'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/verify-fonts
+          key: verify-fonts-noto-cjk-ubuntu-24.04-v1
+      - name: Fonts
+        if: steps.plan.outputs.pages != ''
+        timeout-minutes: 10
+        run: bash tools/verify/install_fonts.sh --cache "$HOME/.cache/verify-fonts" --log "$V/logs/fonts.log"
+      - name: Save fonts
+        if: steps.plan.outputs.pages != '' && steps.fonts-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        timeout-minutes: 3
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/verify-fonts
+          key: verify-fonts-noto-cjk-ubuntu-24.04-v1
       - name: Fixture database
         if: steps.plan.outputs.pages != ''
         run: |
