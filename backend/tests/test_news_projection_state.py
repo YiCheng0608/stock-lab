@@ -26,6 +26,7 @@ import app.main as main_module
 from app.db import enable_sqlite_foreign_keys
 from app.migrations import upgrade_database
 import worker.industry_repair as industry_repair
+import worker.instrument_repair as instrument_repair
 import worker.mops_events as mops_events
 import worker.pipeline as pipeline
 import worker.sources as sources
@@ -335,7 +336,7 @@ def test_an_interrupted_backfill_keeps_the_projected_dates(database, monkeypatch
         assert [item.title for item in db.scalars(select(NewsItem))] == ["monday news"]
 
 
-@pytest.mark.parametrize("command", ["themes", "industry_repair"])
+@pytest.mark.parametrize("command", ["themes", "industry_repair", "instrument_repair"])
 def test_membership_commands_project_before_their_commit(
     database, monkeypatch, command
 ):
@@ -372,13 +373,23 @@ def test_membership_commands_project_before_their_commit(
         monkeypatch.setattr(themes, "apply_theme_table", lambda db, t, path: {})
         monkeypatch.setattr(themes, "project_news", project)
         themes.sync_themes("fixture.json")
-    else:
+    elif command == "industry_repair":
         monkeypatch.setattr(industry_repair, "SessionLocal", Session)
         monkeypatch.setattr(
             industry_repair, "repair_industry_memberships", lambda db, apply: {}
         )
         monkeypatch.setattr(industry_repair, "project_news", project)
         industry_repair.run_industry_repair(apply=True)
+    else:
+        # Its status sync ends memberships (pipeline.apply_instrument_status).
+        monkeypatch.setattr(instrument_repair, "SessionLocal", Session)
+        monkeypatch.setattr(
+            instrument_repair,
+            "repair_instruments",
+            lambda db, **kwargs: {"status": "applied"},
+        )
+        monkeypatch.setattr(instrument_repair, "project_news", project)
+        instrument_repair.run_instrument_repair(apply=True)
     assert order == ["project", "commit"]
     assert _current(database)
 

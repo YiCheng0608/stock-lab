@@ -47,7 +47,7 @@ candidates 步驟呼叫 `worker.candidates.run_candidates(目標日)`，只讀�
 
 theme_suggestions 步驟呼叫 `worker.theme_suggestions.run_theme_suggestions`，只讀 `news_llm_results`／`news_items` 與 active 族群名稱，重算[新聞題材建議](../spec/theme_suggestions.md)；collect 成功就執行（analyze 失敗也跑），失敗時 run 記 `failed`、錯誤欄記 theme_suggestions 訊息，其他步驟的結果不變。只需重算建議：`python -m worker.cli theme-suggestions`。休市日 daily 不跑後續步驟，該日新聞的建議在下一個交易日彙整（每次都由全部判讀重算，不會漏）。
 
-plan_tracking 步驟呼叫 `worker.plan_tracking.run_plan_tracking(目標日)`，在 theme_suggestions 之後、candidate_notes 之前執行（candidate_notes 可能跑很久），只讀日線、公司行動、停牌事件與計畫自己的價位快照，更新[使用者追蹤計畫](../spec/tracking.md#使用者追蹤計畫)；collect 成功就執行（analyze 失敗也跑），失敗時 run 記 `failed`、錯誤欄記 plan_tracking 訊息，其他步驟的結果不變。只需重算計畫：`python -m worker.cli track-plans --date YYYY-MM-DD`。`schedule_run_steps` 以 run 與步驟名稱找列，`sequence` 只用來排序（trading_calendar 為 2、analyze 為 3，plan_tracking 為 8、strategy_levels 為 9、candidate_notes 為 10；之前的 run 維持寫入當時的號碼）。
+plan_tracking 步驟呼叫 `worker.plan_tracking.run_plan_tracking(目標日)`，在 theme_suggestions 之後、candidate_notes 之前執行（candidate_notes 可能跑很久），只讀日線、公司行動、停牌事件與計畫自己的價位快照，更新[使用者追蹤計畫](../spec/tracking.md#使用者追蹤計畫)；collect 成功就執行（analyze 失敗也跑），失敗時 run 記 `failed`、錯誤欄記 plan_tracking 訊息，其他步驟的結果不變。只需重算計畫：`python -m worker.cli track-plans --date YYYY-MM-DD`。`schedule_run_steps` 以 run 與步驟名稱找列，`sequence` 只用來排序（trading_calendar 為 2、analyze 為 3，plan_tracking 為 8、strategy_levels 為 9、action_tiers 為 10、candidate_notes 為 11（#476 以前 candidate_notes 為 10）；之前的 run 維持寫入當時的號碼）。
 
 strategy_levels 步驟呼叫 `worker.strategy_levels.run_strategy_levels(目標日)`，在 plan_tracking 之後、candidate_notes 之前執行，analyze 成功（含 `no_data`）才跑，否則記 `skipped`（`analyze_not_successful`）；為當日 analysis 訊號寫[條件價位](../spec/strategy_levels.md)，只讀已存資料、不改訊號、候選與追蹤，處理的訊號數記在步驟列的 `records`，`details_json` 有寫入列數與 `availability` 分佈。它的任何狀態（`failed`、`partial`、例外）都只記在該步驟列與 `summary_json.steps`，**不改變 run 狀態與 exit code**，不觸發 daily 失敗的看門狗；失敗由看門狗的資料不變量 `invariant_strategy_levels`（[排程](#)）回報，個股頁策略總表對沒有條件價位列的觀察訊號顯示「觀察價位未產生」（#274）。daily 已 success 後不會重跑，補算或重算以 `python -m worker.cli strategy-levels --date YYYY-MM-DD`（[現有 worker CLI](CLI.md#現有-worker-cli)）。
 
@@ -82,9 +82,9 @@ candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(�
 
 - **worker 寫入後投影**：凡是寫 Event 或族群成員的路徑，都在 commit 前呼叫 `project_news`（完整投影並記下指紋）：
   - collect：當日快照與歷史 batch，含 catchup、回補、MOPS 日期清單的 gap 日。
-  - `events backfill`：每個日期 commit 前投影該日的事件，結束時做一次完整投影。
+  - `events backfill`：每個日期 commit 前投影該日的事件，結束時做一次完整投影。回補期間每 commit 一個日期，之後的第一個新聞或首頁 GET 會對不上指紋，完整投影一次（約 3 秒）並寫下新指紋，再之後的 GET 就不投影；改版前是每次 GET 都投影。
   - `themes`。
-  - `industry repair --apply`。
+  - `industry repair --apply`、`instruments repair --apply`（狀態同步會結束族群成員的期間）。
 - **GET 只做檢查**：三支 GET 重算指紋（副本上約 60 ms）並和上次存下的比對，不同時才完整投影並寫入，否則什麼都不寫。DB 裡沒有任何官方事件、也沒有已投影的新聞時也不寫。指紋包含：
   - `NEWS_PROJECTION_VERSION`。
   - Event：筆數、最大 id、最大 `collected_at` 與 `updated_at`，以及標題、內容、details、來源、endpoint、raw id、標的、日期、類型的總和。

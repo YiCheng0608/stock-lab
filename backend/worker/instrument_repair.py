@@ -35,6 +35,7 @@ from sqlalchemy.orm import Session
 from app.raw_paths import payload_file
 from app.clock import utcnow
 from app.db import SessionLocal
+from app.news import project_news
 from app.models import (
     ChipSnapshot,
     DataQuality,
@@ -637,6 +638,8 @@ def run_instrument_repair(
         if apply and rescore_days and result["status"] == "applied":
             result["rescored_dates"] = rescore_recent(db, rescore_days)
         if apply:
+            # Ending memberships changes the projected news' theme IDs (#476).
+            project_news(db)
             db.commit()
         return result
 
