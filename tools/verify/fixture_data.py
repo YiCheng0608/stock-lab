@@ -1726,6 +1726,42 @@ def _tracking_plan_session_rows() -> list[dict[str, Any]]:
     return rows
 
 
+# ---- quarterly reports (the stock page 財務 tab, Issue #528) ----
+
+FUNDAMENTAL_SOURCE = "mops_fundamental"
+
+
+def _fundamental_rows() -> list[dict[str, Any]]:
+    """9101's reports: Q1 without 營業收入 (來源未提供), Q2, and a Q3 whose 出表日 is
+    after T, which the stock API must leave out (its cutoff is the latest bar, T)."""
+
+    def report(item_id, period_end, quarter, announced, revenue, eps):
+        return {
+            "id": item_id,
+            "instrument_id": INSTRUMENT_IDS["9101"],
+            "period_end": period_end,
+            "fiscal_period": f"Q{quarter}",
+            "announcement_date": announced,
+            "revenue": revenue,
+            "eps": eps,
+            "data_json": {
+                "出表日期": f"{announced.year - 1911}{announced:%m%d}",
+                "年度": str(period_end.year - 1911),
+                "季別": str(quarter),
+                "公司代號": "9101",
+            },
+            "source": FUNDAMENTAL_SOURCE,
+            "data_as_of": period_end.isoformat(),
+            "collected_at": _at(announced, 9, 30),
+        }
+
+    return [
+        report(1, date(2026, 3, 31), 1, date(2026, 5, 15), None, 1.12),
+        report(2, date(2026, 6, 30), 2, date(2026, 8, 14), 12_345_678.0, 2.35),
+        report(3, date(2026, 9, 30), 3, T + timedelta(days=20), 19_000_000.0, 3.6),
+    ]
+
+
 # ---- assembled tables (insertion order respects foreign keys) ----
 
 TABLES: dict[str, list[dict[str, Any]]] = {
@@ -1740,6 +1776,7 @@ TABLES: dict[str, list[dict[str, Any]]] = {
     "market_bars": _bar_rows(),
     "technical_indicators": _indicator_rows(),
     "chip_snapshots": _chip_rows(),
+    "fundamental_snapshots": _fundamental_rows(),
     "data_quality": _data_quality_rows(),
     "group_daily_scores": _score_rows(),
     "signals": _signal_rows() + _plan_signal_rows(),
@@ -1766,6 +1803,10 @@ INTENTIONALLY_EMPTY: dict[str, dict[str, str]] = {
         "raw_payload_id": "假資料不附法人原始檔",
         "institutional_raw_payload_id": "假資料不附法人原始檔",
         "margin_raw_payload_id": "假資料不附融資原始檔",
+    },
+    "fundamental_snapshots": {
+        "roe": "官方季報開放資料沒有 ROE（正式 DB 也全為空），頁面寫「來源未提供」",
+        "raw_payload_id": "假資料不附季報原始檔",
     },
     "ingestion_runs": {"error": "沒有失敗的執行；休市日的 skipped 不寫 error"},
     "market_bars": {
@@ -1803,7 +1844,6 @@ OMITTED_TABLES: dict[str, str] = {
         "官方公告直接寫成 news_items（source_kind=official_disclosure）；"
         "有 events 時，GET 發現投影指紋不符就改寫 news_items（#476）"
     ),
-    "fundamental_snapshots": "五個主導航的檢查不讀基本面；個股頁該區顯示無資料",
     "group_daily_score_archive": "只在 hot_group 版本升級時封存舊分數；假資料只有現行版本",
     "margin_lists": (
         "融資標的清單只給 analyze 判定融資條件是否適用（#392）；API 不讀，"
@@ -1976,6 +2016,10 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
             LIFECYCLE[DELISTED][1].isoformat(),
         ),
         (f"stocks/{E}/{S}", "chips", 25),
+        # Q3 is published after the cutoff (T, the latest bar) and stays out (#528).
+        (f"stocks/{E}/{S}", "fundamentals[].fiscal_period", ["Q2", "Q1"]),
+        (f"stocks/{E}/{S}", "fundamentals[].revenue", [12_345_678.0, None]),
+        ("stocks/{}/{}".format(*NO_DATA_STOCK), "fundamentals", 0),
         (f"stocks/{E}/{S}", "news", 1),
         (f"stocks/{E}/{S}", "candidate.rank", 1),
         (f"stocks/{E}/{S}", "candidate.open_plan_id", 1),

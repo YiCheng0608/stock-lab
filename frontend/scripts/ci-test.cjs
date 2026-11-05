@@ -31,6 +31,7 @@ const SUITES = [
   { file: 'candidates/entryPlan.test.tsx' },
   { file: 'stock/strategyBoard.test.tsx' },
   { file: 'stock/stockSummary.test.tsx' },
+  { file: 'stock/stockFundamentals.test.tsx' },
   { file: 'today/today.test.tsx' },
   { file: 'actions/actions.test.tsx' },
   { file: 'tables.test.tsx' },

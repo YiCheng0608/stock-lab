@@ -1,9 +1,10 @@
 // Stock page tabs follow ?tab= (#278), so /actions/:exchange/:symbol can land on the research tab and a tab is a link.
-export type StockTab = 'chart' | 'chips' | 'news' | 'research' | 'data'
+export type StockTab = 'chart' | 'chips' | 'financials' | 'news' | 'research' | 'data'
 
 export const STOCK_TABS: ReadonlyArray<{ id: StockTab; label: string }> = [
   { id: 'chart', label: '圖表與指標' },
   { id: 'chips', label: '法人籌碼' },
+  { id: 'financials', label: '財務' },
   { id: 'news', label: '新聞與公告' },
   { id: 'research', label: '研究條件' },
   { id: 'data', label: '資料說明' },

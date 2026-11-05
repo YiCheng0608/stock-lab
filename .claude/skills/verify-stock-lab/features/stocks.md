@@ -1,6 +1,6 @@
 # 個股 `/stocks`
 
-入口：主導航「個股」，`StocksPage`（目錄）與 `StockPage`（`/stocks/:exchange/:symbol`，`frontend/src/App.tsx`、`frontend/src/stock/`；五個分頁 `chart`、`chips`、`news`、`research`、`data`，按鈕 id 為 `stock-tab-<分頁>`）。路徑：族群詳情第一個成員 → 個股頁（族群榜空時改用明日候選 #1、再改用市場列表第一筆，見 [README 選股](README.md#選股)）。
+入口：主導航「個股」，`StocksPage`（目錄）與 `StockPage`（`/stocks/:exchange/:symbol`，`frontend/src/App.tsx`、`frontend/src/stock/`；六個分頁 `chart`、`chips`、`financials`、`news`、`research`、`data`，按鈕 id 為 `stock-tab-<分頁>`）。路徑：族群詳情第一個成員 → 個股頁（族群榜空時改用明日候選 #1、再改用市場列表第一筆，見 [README 選股](README.md#選股)）。
 
 ## API
 
@@ -30,6 +30,8 @@
 | 前端檔 | `frontend/src/stock/StrategyBoardPanel.tsx` |
 | 前端檔 | `frontend/src/stock/strategyBoard.ts` |
 | 前端檔 | `frontend/src/stock/stockTabs.ts` |
+| 前端檔 | `frontend/src/stock/StockFundamentalsPanel.tsx` |
+| 前端檔 | `frontend/src/stock/stockFundamentals.ts` |
 | API route | `GET /dashboard` |
 | API route | `GET /stocks` |
 | API route | `GET /stocks/{exchange}/{symbol}` |
@@ -43,6 +45,7 @@
 | `stocks` | `--url <WEB>/stocks --name stocks`（1280 與 390） |
 | `stock` | `--url <WEB>/stocks/<E>/<S> --name stock`（1280 與 390，預設「圖表與指標」分頁） |
 | `stock-chips` | 同上 URL，`--name stock-chips --widths 1280 --click '#stock-tab-chips'` |
+| `stock-financials` | 同上 URL，`--name stock-financials --widths 1280 --click '#stock-tab-financials'` |
 | `stock-research` | 同上 URL，`--name stock-research --widths 1280 --click '#stock-tab-research'` |
 | `stock-news` | 同上 URL，`--name stock-news --widths 1280 --click '#stock-tab-news'` |
 | `stock-data` | 同上 URL，`--name stock-data --widths 1280 --click '#stock-tab-data'` |
@@ -57,6 +60,7 @@
 | K 線與技術指標 | `stock-bars.json` | 卡片標題下 `資料 <I/>`、`來源 …`、`日線批次計算於 …` | — | 無日線時的 EmptyState |
 | 法人籌碼 | `stock.json` 的 `chips`（日期由舊到新，表格只列最近 30 筆、由新到舊） | 卡片 `法人與融資`；每筆來源說明分兩行 `法人：…（<source>） · 資料截至：… · 收集：…` 與 `融資：…`，該筆沒有那份官方檔時是 `法人：無資料`／`融資：無資料`（#395）；`券商／分點` 區塊 | — | `尚無可核實的籌碼資料。` |
 | 研究條件 | `stock.json` 的 `strategy_board`、`decision_summary`、`candidate` | 策略總表 `資料 <strategy_board.as_of/>`；`資料日期：<I/>`（時間摘要）、`資料日：<I/> · 價位語意：…` | 策略總表有候選列（`strategy_board.candidate` 非 null）時，候選列的 `AI 推論` 與來源行 `（推論）`（同今日 T8）；觀察價位在 `條件未成立・觀察價位` 標籤之下，不是推論 | `此股尚無策略判定資料。`、`尚無行動摘要。` |
+| 財務（#528） | `stock.json` 的 `fundamentals`（API 已依截止日篩掉出表日較晚的列，期別由新到舊） | 卡片 `季報營收與 EPS` 之後的 `資料 <最新一列 data_as_of/>` badge；每列的出表日與來源，表格下 `來源：…` | — | ETF `ETF 沒有公司財報，不適用。`；新上市與其他股票各一句（UI_COPY_SPEC §8.2 財務分頁） |
 | 新聞與公告 | `stock-news.json`（只留交易所＋代號相符） | 每張卡時間行與來源 | 有 AI 判讀的卡接 `AI 推論` | `尚無與此股已核實關聯的新聞或公告。` |
 | 資料說明 | `stock.json`、`stock-bars.json` | `行情來源`、`K 線資料日期` 兩列與當日行情來源品質行 `<品質說明> · 資料日 <I/>`（例如 `行情來源完整 · 資料日 2026/10/21`） | — | `待核實` |
 
@@ -75,6 +79,7 @@
 | S9 | CI | 法人籌碼 | `stock-chips-1280.txt` 有整行 `法人與融資` 與 `券商／分點`；`stock.json` 的 `chips` 空時有整行 `尚無可核實的籌碼資料。`，否則有以 `<chips[-1].date 的 YYYY/MM/DD>\t` 開頭的行（表格第一列是最新一筆），且 `法人：`、`融資：` 開頭的行數各 = `min(30, chips 數)`；第一個 `法人：` 行（最新一筆）在 `chips[-1].institutional` 為 null 時是整行 `法人：無資料`，否則含 `（<institutional.source>） · 資料截至：<institutional.data_as_of 的 YYYY/MM/DD> · 收集：`，`融資：` 行同理對 `margin`（#395） |
 | S10 | CI | 策略總表（#274） | `stock-research-1280.txt` 有整行 `策略總表`，下一行是 `資料 <strategy_board.as_of 的 YYYY/MM/DD>`（`as_of` 為 null 時改查 `此股尚無策略判定資料。`）；`strategies` 每一列在桌面表格有 `<label><TAB>` 開頭的行，下一行是 `<狀態>` 或以 `<狀態><TAB>` 開頭（成立列的最早執行日在 badge 下方另起一行；`conditional` 成立、`observation` 觀察、`data_incomplete` 資料不足、`not_applicable` 不適用）；從 `策略總表` 那一行起（#519：之前的摘要卡會重複最接近成立那一條的觀察價位），整行 `條件未成立・觀察價位` 的行數等於 `levels.kind=observation` 的列數，而且不出現在成立列的範圍內（成立價位與觀察價位不混）；`candidate` 非 null 時有 `第 <rank> 名 · 總分 <round(total_score×100)> · ` 開頭的行，null 時沒有整行 `每日候選` |
 | S11 | CI | 摘要卡（#519） | `stock-1280.txt` 有整行 `目前判斷`，它之後、分頁籤 `圖表與指標` 之前是摘要卡：`目前判斷` 後三行內有判斷 badge，依 [UI_COPY_SPEC §8.2 摘要卡](../../../../docs/UI_COPY_SPEC.md#82-個股詳情的第一屏) 的順序由 `stock.json` 推得（沒有行動摘要也沒有策略總表 `無資料`；`reduce_exit` 持倉風險；`strategy_board.candidate` 非 null 可買；`hold_observe` 持倉觀察；`manual_review` 需人工判讀；每列 `not_applicable` 不適用；行動摘要資料不足 資料不足；有 `conditional` 列 條件成立；其他 觀察）；可買的下一行是 `每日候選第 <rank> 名 · 總分 <round(total_score×100)> · <策略>`，資料不足且有 `gap_reasons` 時下一行是各 `label` 以 `；` 連接，觀察且有 `primary_reason` 時下一行是它的 `label`，無資料的下一行是 `尚無行動摘要。`；之後有整行 `最接近成立`、`規則價位`（`strategies` 空時不查 `規則價位`）與 `完整條件 →` |
+| S12 | CI | 財務（#528） | `stock-financials-1280.txt` 有整行 `季報營收與 EPS`。`stock.json` 的 `fundamentals` 空時：依 `instrument.instrument_type` 有整行原因句（`etf` 為 `ETF 沒有公司財報，不適用。`，`ipo` 與其他各一句，見 [UI_COPY_SPEC §8.2 財務分頁](../../../../docs/UI_COPY_SPEC.md#82-個股詳情的第一屏)），且沒有期別列。不空時：標題之後有 `資料 <最新一列 data_as_of 的 YYYY/MM/DD>`；每一列有以 `<期別>\t<營收÷100,000，兩位小數>\t<EPS 兩位小數>\t<ROE 兩位小數>\t<出表日>\t` 開頭的行（沒有值的格是 `來源未提供`，期別 `Q<n>` 寫 `YYYY 年第 n 季`），順序與 API 相同；表格下有 `來源：` 開頭的行 |
 
 ## 陷阱
 
@@ -88,7 +93,7 @@
 
 ## 判定
 
-- 通過：S1～S11 全部通過。
+- 通過：S1～S12 全部通過。
 - 失敗：任一條失敗，列出編號、預期與實際。
 - 無法判定：沒有失敗，但有檢查無法判定（截圖未 ready、分頁按鈕找不到（`missingClicks`）、API 非 200、沒有選到個股，或上游沒通過，見 [README 三態與上游](README.md#三態與上游)）；列出 URL 或上游編號。
 
