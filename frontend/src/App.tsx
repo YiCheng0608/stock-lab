@@ -77,6 +77,7 @@ import { StockBarsChart } from './stock/StockBarsChart'
 import { PRICE_BASIS, priceDigits } from './stock/stockBars'
 import { StockCutoffControl } from './stock/StockCutoffControl'
 import { StockHeader } from './stock/StockHeader'
+import { StockFundamentalsPanel } from './stock/StockFundamentalsPanel'
 import { StockSummaryCard } from './stock/StockSummaryCard'
 import { StrategyBoardPanel } from './stock/StrategyBoardPanel'
 import { StrategyVersionList, backtestGroupKey } from './components/StrategyVersionCard'
@@ -194,6 +195,8 @@ function sourceLabel(source: string | null | undefined | readonly string[]): str
     twse_margin: '臺灣證券交易所 融資融券',
     tpex_3insti: '證券櫃檯買賣中心 三大法人',
     tpex_margin: '證券櫃檯買賣中心 融資融券',
+    // The quarterly report feeds t187ap14_L / mopsfin_t187ap14_O (#528).
+    mops_fundamental: '公開資訊觀測站 季報',
     // UI_COPY_SPEC §2 擷取來源代碼 (#452): ingestion runs and raw payloads of the news, LLM and derived jobs.
     'claude-cli': 'Claude Code（AI 推論）',
     news_llm: 'Claude Code 新聞判讀（AI 推論）',
@@ -682,6 +685,7 @@ function StockPage() {
     <div className="stock-tab-content" id={tabPanelId('stock', tab)} role="tabpanel" aria-labelledby={tabId('stock', tab)}>
       {tab === 'chart' && <StockBarsChart interval={barsInterval} onIntervalChange={setBarsInterval} data={chartBars.data} loading={chartBars.isLoading} error={chartBars.error} instrumentType={data.instrument.instrument_type} />}
       {tab === 'chips' && <Card eyebrow="籌碼資料" title="法人與融資">{data.chips.length ? <ChipTable rows={data.chips.slice(-30).reverse()} /> : <EmptyState reason="尚無可核實的籌碼資料。" />}<BrokerBranchEntry exchange={data.instrument.exchange} /></Card>}
+      {tab === 'financials' && <StockFundamentalsPanel rows={data.fundamentals} instrumentType={data.instrument.instrument_type} asOf={asOf || null} sourceLabel={sourceLabel} />}
       {tab === 'news' && <><StockNewsTimeline exchange={data.instrument.exchange} symbol={data.instrument.symbol} query={{ data: stockNews.data, loading: stockNews.isLoading, error: stockNews.error }} /><StockEventList events={data.events} /></>}
       {tab === 'research' && <><StrategyBoardPanel board={data.strategy_board} candidate={data.candidate} gapReasons={data.decision_summary?.gap_reasons} /><ActionDetailPanel action={data.decision_summary ?? null} gap={fallbackResearchIncomplete ? { reasons: data.decision_summary?.gap_reasons, missingFields: qualitySummary.research.missing_fields } : null}><StockPlanPanel strategies={data.decision_summary?.strategies} embedded /></ActionDetailPanel><GroupPanel groups={data.groups} /></>}
       {tab === 'data' && <><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><Card className="stock-source-panel" eyebrow="資料說明" title="原始時間、來源與技術指標"><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div><IndicatorMetaRows bars={dayBars.data} /><details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} instrumentType={data.instrument.instrument_type} /></details></Card></>}
