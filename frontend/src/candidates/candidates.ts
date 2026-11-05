@@ -32,9 +32,10 @@ export const ZERO_REASON_TEXT: Record<string, string> = {
 
 // ---- liquidity floor (candidate_score_v6, #490; UI_COPY_SPEC §10) ----
 
-// Lots (張) as a whole number with thousands separators; null is 「—」, never 0.
+// Lots (張) as a whole number with thousands separators, rounded down so an average below the floor never reads as
+// the floor (999.6 is 「999 張」, PR 496 review); null is 「—」, never 0.
 export function formatLots(value: number | null | undefined): string {
-  return isFiniteNumber(value) ? `${Math.round(value).toLocaleString('zh-TW')} 張` : '—'
+  return isFiniteNumber(value) ? `${Math.floor(value).toLocaleString('zh-TW')} 張` : '—'
 }
 
 // 「20 日均量 1,682 張」, or 「20 日均量資料不足」 without an average.

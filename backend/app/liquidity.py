@@ -77,7 +77,11 @@ class AverageVolume:
         return {
             "state": self.state,
             "average_volume_lots_20d": (
-                None if self.average_lots is None else round(self.average_lots, 3)
+                # Rounded down: a stored 999.9999 never reads as 1000.0 (#496 review).
+                None
+                if self.average_lots is None
+                # (the inner round only drops float noise such as 999999.9999999).
+                else math.floor(round(self.average_lots * 1000, 6)) / 1000
             ),
             "window_start": self.sessions[0].isoformat() if self.sessions else None,
             "window_end": self.sessions[-1].isoformat() if self.sessions else None,

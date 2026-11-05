@@ -71,7 +71,7 @@
 - **停牌日不計入**：日線標 `is_suspended` 的交易日跳過，窗口再往前多取一日。
 - **無成交日算 0 張**：當天沒有日線、但有官方無成交日列（`no_trade_days`，[#454](https://github.com/YiCheng0608/stock-lab/issues/454)）時，計入並以 0 張計。有日線而 `volume = 0` 也照 0 計。
 - **缺資料不當 0**：窗口內某交易日既沒有日線也沒有無成交日列，或 `volume` 不是有限的非負數，均量為 null（`missing_bars`）；上市不足 20 個計入日（`insufficient_sessions`）、T 不是已驗證交易日（`session_baseline_missing`）也一樣。均量為 null 時排除，原因 `liquidity_data_missing`，與低於門檻的 `low_volume` 分開計數。
-- **計數與記錄**：`exclusions_json` 的 `low_volume`／`liquidity_data_missing` 與其他排除一樣每個訊號算一次（同一檔兩個策略都入池時算兩次）。`summary_json.liquidity` 記門檻、資料日期、檢查的標的數，以及兩種原因各自的股票清單（每檔一列：代號、均量張數或 null、狀態、缺資料的交易日、被排除的策略）。入選的列在 `components_json.liquidity` 記均量、門檻、狀態、窗口起訖、計入日數與跳過的停牌日、無成交日、缺資料日；它不是分項，不計分、不進理由。
+- **計數與記錄**：`exclusions_json` 的 `low_volume`／`liquidity_data_missing` 與其他排除一樣每個訊號算一次（同一檔兩個策略都入池時算兩次）。`summary_json.liquidity` 記門檻、資料日期、檢查的標的數，以及兩種原因各自的股票清單（每檔一列：代號、均量張數或 null、狀態、缺資料的交易日、被排除的策略）。入選的列在 `components_json.liquidity` 記均量（張，小數三位、無條件捨去，所以未達門檻的值不會存成 1000.0；畫面再捨去成整數張）、門檻、狀態、窗口起訖、計入日數與跳過的停牌日、無成交日、缺資料日；它不是分項，不計分、不進理由。
 - **零檔**：全部可行動訊號都被門檻排除時零檔原因是 `all_excluded`。
 
 **API**：`/api/candidates` 與個股 `candidate` 的每列多 `liquidity`（`average_volume_lots_20d`、`minimum_lots`、`state`、`below_minimum`、`data_as_of`、窗口起訖、`unit=lots`；v5 以前的 run 為 null）。個股 API 的 `strategy_board.liquidity` 為策略總表當日的 20 日均量（當日 run 因門檻排除該股時取 run 記的值，否則以同一規則計算），`minimum_lots` 取當日 run 的設定（沒有門檻的版本為 null），`candidate_exclusion` 為 `low_volume`／`liquidity_data_missing`／null。`/api/actions` 的每列多 `liquidity`：當日 run 因門檻排除、又不在候選名單的股票為 `{average_volume_lots_20d, minimum_lots, state, below_minimum, exclusion, data_as_of, score_version, unit}`，其餘為 null。文案見 [UI_COPY_SPEC §10](../UI_COPY_SPEC.md#10-每日候選)。

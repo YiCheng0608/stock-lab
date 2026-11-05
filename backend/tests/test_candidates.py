@@ -1501,3 +1501,17 @@ def test_the_action_row_of_an_excluded_stock_carries_the_floor_note(db, client):
     # A run of a version without the floor has no note.
     run.summary_json = {}
     assert liquidity_exclusions(run) == {}
+
+
+def test_an_average_just_under_the_floor_is_stored_rounded_down(db):
+    """999.99995 lots is low_volume and stored as 999.999, never 1000.0 (#496 review)."""
+
+    a = stock(db, "1101", volume=_lots(1000))
+    bar(db, a, DAYS[-5]).volume = _lots(1000) - 1
+    signal(db, a)
+    result, run = _floor_run(db)
+
+    assert rows(db) == []
+    assert result["exclusions"]["low_volume"] == 1
+    [row] = run.summary_json["liquidity"]["low_volume"]
+    assert row["average_volume_lots_20d"] == 999.999
