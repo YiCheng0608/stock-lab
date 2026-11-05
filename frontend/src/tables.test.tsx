@@ -4,8 +4,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom/server'
 
 import * as AppModule from './App'
-import { CandidatesSection, ScoreDetails } from './candidates/CandidateViews'
-import { completeItem, longList } from './candidates/candidates.fixtures'
+import { ScoreDetails } from './candidates/CandidateViews'
+import { completeItem } from './candidates/candidates.fixtures'
 import * as ui from './components/ui'
 import { StockBarsChart } from './stock/StockBarsChart'
 import { barsResponse, tradedBar } from './stock/stockBars.fixtures'
@@ -211,8 +211,7 @@ checkAligned('個股頁候選評分細節', details, ['原值', '百分位', '�
 const detailHeaders = (/<thead>([\s\S]*?)<\/thead>/.exec(details)?.[1] ?? '').match(/<th[\s>]/g) ?? []
 check(detailHeaders.length <= 4, `個股頁候選評分細節: ${detailHeaders.length} columns in a card; the group title belongs on its own row (§5.1)`)
 // Today list (#276): the levels, close, RR and total are numeric in th and every row.
-const todayList = render('CandidatesSection', () => <CandidatesSection data={longList()} loading={false} error={null} />)
-checkAligned('今日候選表', todayList, ['最近收盤（元）', 'RR', '總分（0–100）'])
+// The today list is not a table since Issue 510 (one list at every width, DESIGN_SYSTEM §5 候選列表); its numbers are checked in today/today.test.tsx.
 
 const chart = render('StockBarsChart', () => <StockBarsChart data={barsResponse([tradedBar('2026-10-21', 21.1, 70), tradedBar('2026-10-22', 21.15, 71)])} interval="day" onIntervalChange={() => undefined} loading={false} error={null} />)
 checkAligned('K 線資料', chart, ['開（元）', '高（元）', '低（元）', '收（元）', '成交量（張）'])

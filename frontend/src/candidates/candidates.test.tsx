@@ -32,7 +32,7 @@ import { CandidatesSection, ScoreDetails } from './CandidateViews'
 // Standalone regression module (no browser, no server, no network) for the daily candidate list (#215):
 // the detail content under each today row (components, reasons, AI note), partial components, the score details
 // the stock page shows, and zero and not-computed runs.
-// The today list (table rows and phone cards, #276) is checked in today/today.test.tsx.
+// The today list (one list at every width, Issue 510) is checked in today/today.test.tsx.
 const check = (condition: boolean, message: string) => { if (!condition) throw new Error(message) }
 // The "加入追蹤" button (#253) reads the query client.
 const render = (element: ReactElement) => renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}><StaticRouter location="/">{element}</StaticRouter></QueryClientProvider>)
@@ -41,6 +41,14 @@ const slice = (markup: string, start: string, end: string) => {
   const from = markup.indexOf(start)
   return from < 0 ? '' : markup.slice(from, markup.indexOf(end, from + start.length))
 }
+// One today row (Issue 510): from its data-candidate-rank to the next row; its detail is the <details> inside it.
+const rowOf = (markup: string, rank: number) => {
+  const from = markup.indexOf(`data-candidate-rank="${rank}"`)
+  if (from < 0) return ''
+  const next = markup.indexOf('data-candidate-rank=', from + 1)
+  return markup.slice(from, next < 0 ? markup.indexOf('</ol>', from) : next)
+}
+const detailOf = (row: string) => row.slice(row.indexOf('<details class="candidate-detail"'))
 
 // ---- request parameters ----
 check(candidatesPath() === '/candidates', 'no date asks for the latest run')
@@ -71,22 +79,19 @@ for (const quality of ['insufficient_members', 'insufficient_data', null]) {
   const pendingList = listResponse()
   pendingList.items[1] = { ...pendingList.items[1], groups: [pendingGroup] }
   const markup = render(<CandidatesSection data={pendingList} loading={false} error={null} />)
-  const cell = slice(slice(markup, '<table', '</table>'), 'data-candidate-rank="2"', '</tr>')
-  const card = slice(markup, 'data-candidate-card="2"', '</article>')
-  for (const [where, part] of [['table', cell], ['card', card]]) {
-    // The today table keeps the group on one line (Issue 493); the card keeps the long form.
-    check(part.replace(/<[^>]+>/g, '').includes(where === 'table' ? '航運（產業，事件資料待補）' : '航運（產業，事件資料待補，未計入族群分）'), `${where}: partial group text`)
-    check(/<button[^>]*>事件資料待補<\/button>/.test(part), `${where}: 「事件資料待補」 opens its glossary term`)
-    check(!part.includes('當日未排名'), `${where}: partial group is not called unranked`)
-  }
+  // The today row keeps the group on one line (Issue 493, 510); the long form is its title.
+  const meta = slice(rowOf(markup, 2), 'class="candidate-row-meta"', '</p>')
+  check(meta.replace(/<[^>]+>/g, '').includes('航運（產業，事件資料待補）'), 'row: partial group text')
+  check(meta.includes('title="航運（產業，事件資料待補，未計入族群分）"'), 'row: the long form is the title')
+  check(/<button[^>]*>事件資料待補<\/button>/.test(meta), 'row: 「事件資料待補」 opens its glossary term')
+  check(!meta.includes('當日未排名'), 'row: partial group is not called unranked')
 }
 check(candidateSourceText(completeItem()).includes('新聞方向 LLM 判讀 news_v1（推論）'), 'news source names the prompt version and is inference')
 
 // ---- detail content under each today row (the table's levels and total are checked in today/today.test.tsx) ----
 const list = render(<CandidatesSection data={listResponse()} loading={false} error={null} />)
-const table = slice(list, '<table', '</table>')
-const first = slice(table, 'data-candidate-detail="1"', '</tr>')
-check(count(table, 'data-candidate-detail=') === 2, 'one detail row per candidate')
+const first = detailOf(rowOf(list, 1))
+check(count(list, '<details class="candidate-detail"') === 2, 'one detail per candidate')
 check(!first.includes(PARTIAL_NOTE) && !first.includes('candidate-null-notes'), 'complete row has no partial note')
 for (const [component, score] of [['technical', '74'], ['chips', '92'], ['news_sentiment', '81'], ['group', '90']]) {
   check(slice(first, `data-component="${component}"`, '</div>').includes(`>${score}<`), `component ${component} shows ${score}`)
@@ -102,12 +107,12 @@ check(!slice(first, 'data-reason="breakout_20d_high"', '</li>').includes('badge-
 check(first.includes('資料日期 2026/10/16') && first.includes('臺灣證券交易所'), 'data date and sources in the detail')
 
 // ---- partial components ----
-const second = slice(table, 'data-candidate-detail="2"', '</tr>')
+const second = detailOf(rowOf(list, 2))
 check(second.includes(PARTIAL_NOTE), 'partial row explains the renormalised score')
 check(slice(second, 'data-component="group"', '</div>').includes('>—<') && slice(second, 'data-component="news_sentiment"', '</div>').includes('>—<'), 'null components show 「—」')
 check(!slice(second, 'data-component="group"', '</div>').includes('>0<'), 'null component is never 0')
 check(second.includes('族群：當日沒有已排名且資料完整的所屬產業或題材') && second.includes('新聞情緒：近 3 日沒有成功的新聞收集，新聞分項無資料'), 'null_explanation shown next to the scores')
-const row2 = slice(table, '<tr data-candidate-rank="2"', '</tr>')
+const row2 = rowOf(list, 2)
 check(row2.includes('13.05～13.35') && row2.includes('上櫃') && row2.includes('回踩型'), 'pullback zone, TPEx label and the entry type (Issue 493)')
 check(!row2.includes('level-target-2'), 'missing target 2 is not rendered')
 check(count(second, 'data-reason=') === 2, 'fewer reasons are not padded')
@@ -124,8 +129,9 @@ for (const [part, label, text] of [
 }
 check(note.includes(NOTE_DISCLAIMER), 'note says it is inference, not advice')
 check(note.includes('模型 claude-sonnet-5-5 · 提示版本 candidate_notes_v1 · 產生於 2026/10/16 19:05'), 'model, prompt version and Taipei time')
-check(first.indexOf('candidate-reasons') < first.indexOf('candidate-note') && first.indexOf('candidate-note') < first.indexOf('candidate-detail-source'), 'note sits after the rule components and reasons, before the date and sources')
-check(!slice(list, 'class="candidate-mini-levels"', '</dl>').includes('ai-inference'), 'rule levels stay outside the AI block')
+// Issue 510: the note opens the detail; the rule levels, the components and reasons, the date and sources come after it.
+check(first.indexOf('candidate-note') > 0 && first.indexOf('candidate-note') < first.indexOf('candidate-detail-levels') && first.indexOf('candidate-detail-levels') < first.indexOf('candidate-reasons') && first.indexOf('candidate-reasons') < first.indexOf('來源：'), 'note first, then the levels, the reasons, the date and sources')
+check(!note.includes('candidate-detail-levels') && !note.includes('level-stop'), 'rule levels stay outside the AI block')
 const missing = slice(second, 'class="ai-inference candidate-note"', '</section>')
 check(missing.includes('data-note-state="empty"') && missing.includes(NOTE_MISSING_TEXT) && !missing.includes('data-note-part') && !missing.includes('ai-meta'), 'a row without a note shows the fixed copy')
 const pending = candidateNoteView({ ...doneNote(), status: 'pending', model: null, selection: null, levels: null, risks: null })
@@ -162,17 +168,13 @@ check(completeDetails.includes('同檔另一策略：回踩條件 總分 61') &&
 check(completeDetails.includes('資料日期 2026/10/16') && completeDetails.includes('臺灣證券交易所'), 'data date and sources in details')
 
 // ---- 加入追蹤 (#253): one button or link per candidate ----
-check(count(list, '>加入追蹤</button>') === 4 && !list.includes('已在追蹤'), 'every untracked candidate has the add button, in its detail row and its phone card')
-// The today list (#276) puts it in each candidate's detail: once in the desktop detail row, once in the phone card.
+check(count(list, '>加入追蹤</button>') === 2 && !list.includes('已在追蹤'), 'every untracked candidate has the add button once, in its detail')
+// The today list (Issue 510) puts it in each candidate's detail, beside the AI note.
 const todayItems = listResponse().items.map((item, index) => index === 0 ? { ...item, candidate_id: 11, open_plan_id: 7 } : item)
 const today = render(<CandidatesSection data={{ ...listResponse(), items: todayItems }} loading={false} error={null} />)
-const detailRows = today.split('data-candidate-detail=').slice(1)
-const miniCards = today.split('class="card candidate-mini"').slice(1)
-check(detailRows.length === todayItems.length && miniCards.length === todayItems.length, 'one detail row and one phone card per candidate')
-check(detailRows.every((row, index) => slice(row, '<details class="candidate-detail"', '</tr>').includes(index === 0 ? '>已在追蹤</a>' : '>加入追蹤</button>')), 'every detail row has the plan button or link')
-check(miniCards.every((card, index) => slice(card, '<details class="details candidate-mini-ai"', '</article>').includes(index === 0 ? '>已在追蹤</a>' : '>加入追蹤</button>')), 'every phone card detail has the plan button or link')
-const trackedDetail = slice(detailRows[0], '<details class="candidate-detail"', '</tr>')
-check(trackedDetail.includes('href="/watch#plan-7">已在追蹤</a>') && !trackedDetail.includes('加入追蹤'), 'a tracked candidate links to its plan')
+const details2 = todayItems.map((item) => detailOf(rowOf(today, item.rank)))
+check(details2.every((detail, index) => slice(detail, 'class="candidate-detail-actions"', '</div>').includes(index === 0 ? '>已在追蹤</a>' : '>加入追蹤</button>')), 'every detail has the plan button or link')
+check(details2[0].includes('href="/watch#plan-7">已在追蹤</a>') && !details2[0].includes('加入追蹤'), 'a tracked candidate links to its plan')
 
 // ---- liquidity floor (candidate_score_v6, #490; UI_COPY_SPEC §10) ----
 check(formatLots(1681.55) === '1,681 張' && formatLots(999.6) === '999 張' && formatLots(0) === '0 張' && formatLots(null) === '—', 'lots: whole lots rounded down with separators, null is 「—」')
@@ -184,5 +186,6 @@ check(liquidityExclusionText({ ...lowVolume, exclusion: 'liquidity_data_missing'
 check(liquidityExclusionText(null) === null && liquidityExclusionText({ ...lowVolume, exclusion: null }) === null, 'no note without an exclusion')
 const liquidItem = { ...completeItem(), liquidity: { average_volume_lots_20d: 1682.3, minimum_lots: 1000, state: 'ok', below_minimum: false, data_as_of: '2026-10-16', window_start: '2026-09-18', window_end: '2026-10-16', unit: 'lots' as const } }
 const liquidList = render(<CandidatesSection data={{ ...listResponse(), items: [liquidItem] }} loading={false} error={null} />)
-check(count(liquidList, '>20 日均量 1,682 張<') === 2 && count(liquidList, '20 日均量 1,682 張（資料日期 2026/10/16，候選門檻 1,000 張）') === 2, `the row and the card show the lots, both details add the date and the floor, got ${count(liquidList, '20 日均量 1,682 張')}`)
+// Issue 510: the average volume moved off the row into the detail's 資料日期與來源, with its date and the floor.
+check(count(liquidList, '20 日均量 1,682 張') === 1 && slice(liquidList, 'candidate-detail-sources', '</details>').includes('20 日均量 1,682 張（資料日期 2026/10/16，候選門檻 1,000 張）'), `the detail shows the lots with the date and the floor, the row none, got ${count(liquidList, '20 日均量 1,682 張')}`)
 check(!render(<CandidatesSection data={listResponse()} loading={false} error={null} />).includes('candidate-liquidity'), 'a run before candidate_score_v6 shows no average volume')

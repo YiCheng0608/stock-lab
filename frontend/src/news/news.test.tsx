@@ -4,7 +4,7 @@ import { StaticRouter } from 'react-router-dom/server'
 
 import type { NewsItem } from '../types'
 import { aiResult, internationalItem, naiveTimeItem, newsItem, newsPage, officialItem, productTime } from './news.fixtures'
-import { AiInferencePanel, NewsCard, NewsDetailView, NewsListView, StockNewsTimeline } from './NewsViews'
+import { AiInferencePanel, HomeNewsRow, NewsCard, NewsDetailView, NewsListView, StockNewsTimeline } from './NewsViews'
 import {
   NEWS_PAGE_SIZE,
   STOCK_NEWS_LIMIT,
@@ -110,15 +110,23 @@ check(card.includes('href="/stocks/TWSE/2330"') && card.includes('2330 台積電
 const longSummary = '字'.repeat(130)
 check(summaryPreview({ summary_preview: longSummary, summary: null }) === '字'.repeat(119) + '…' && summaryPreview({ summary_preview: null, summary: null, description: null }) === null, 'preview is cut at 120 characters')
 check(render(<NewsCard item={internationalItem()} />).includes('來源未提供摘要'), 'missing summary says so')
-// Today page compact row (#276, UI_COPY_SPEC §4): no summary and no source link; the rest keeps its order.
-const compact = render(<NewsCard item={newsItem()} compact />)
-const compactOrder = ['news-source-badge', 'class="news-card-title"', 'class="news-card-time"', 'class="news-card-impact"', 'class="news-chips"']
-check(compactOrder.every((name, index) => compact.includes(name) && (index === 0 || compact.indexOf(name) > compact.indexOf(compactOrder[index - 1]))), `compact card order: ${compact}`)
-check(!compact.includes('news-card-summary') && !compact.includes('class="news-source"') && compact.includes('news-card-compact'), 'compact card drops the summary and source link')
+// Today page row (Issue 510, UI_COPY_SPEC §4): two lines, the title then source · time and the direction; the tags,
+// category, summary, AI candidates and source link stay on the cards.
+const homeRow = render(<HomeNewsRow item={newsItem()} />)
+const homeOrder = ['class="home-news-title"', 'class="home-news-source"', '<time', 'class="home-news-impact"']
+check(homeOrder.every((name, index) => homeRow.includes(name) && (index === 0 || homeRow.indexOf(name) > homeRow.indexOf(homeOrder[index - 1]))), `home row order: ${homeRow}`)
+check(!/news-card-summary|class="news-source"|news-chips|news-card-meta|規則核實|news-ai-candidates/.test(homeRow), 'the home row drops the summary, source link, tags, category and AI candidates')
+check(homeRow.includes('title="台積電宣布臺南再蓋新廠 南市府：積極協助行政程序"'), 'the full title is the link title (the line is cut with an ellipsis)')
+const aiRow = render(<HomeNewsRow item={newsItem({ ai: aiResult({ impact_direction: 'positive' }) })} />)
+check(aiRow.includes('class="news-direction"') && aiRow.includes('可能正向') && aiRow.indexOf('news-direction') < aiRow.indexOf('>AI 推論<'), 'an AI direction is followed by 「AI 推論」 (page_checks T6 reads the line before it)')
+check(!render(<HomeNewsRow item={newsItem({ ai: undefined })} />).includes('>AI 推論<'), 'a rule direction has no 「AI 推論」')
+// Issue 512: the home row names no stock, so an emerging, delisted or hidden candidate never reaches it as a bare code;
+// its link goes to /news/:id, which reads 「7808 訊聯智藥（興櫃）」.
+const homeEmerging = render(<HomeNewsRow item={newsItem({ ai: aiResult({ symbol_candidates: [{ exchange: 'TWSE', symbol: '7808', name: '訊聯智藥', listing: 'emerging', reason: null, confidence: 'low', verified: false, source_check: 'mentioned' }, { exchange: 'TWSE', symbol: '2888', name: '新光金', listing: 'delisted', reason: null, confidence: 'low', verified: false, source_check: 'mentioned' }] }) })} />)
+check(!/7808|2888|4152|代號未對應/.test(homeEmerging) && homeEmerging.includes('href="/news/'), `the home row shows no candidate code and links to the detail: ${homeEmerging}`)
 check(render(<NewsCard item={officialItem()} />).includes('<span class="tag">3666</span>'), 'bare official code is a plain chip')
 // Issue 451 (NEWS_SPEC §2): verified relations name their source and the rule version from impact.method.
 check(card.includes('<span class="small-note news-relation-source">規則核實 · v2</span>') && card.indexOf('規則核實 · v2') < card.indexOf('2330 台積電'), 'rule relations are labelled 規則核實 with the rule version before the chips')
-check(compact.includes('規則核實 · v2'), 'the today page row carries the same label')
 const v1Item = newsItem({ impact: { ...newsItem().impact, method: 'rule:exact-name-code/v1' } })
 check(render(<NewsCard item={v1Item} />).includes('規則核實 · v1') && ruleVersion(v1Item) === 'v1', 'an item kept on the old rule shows v1')
 check(!render(<NewsCard item={officialItem()} />).includes('規則核實') && ruleVersion(officialItem()) === null, 'official projections have no rule label')
@@ -192,7 +200,6 @@ check(cardAiCandidates(viaSymbols).map((item) => item.key).join('|') === 'TWSE:2
 // instruments alone (symbols empty), so this path is checked apart from the symbols one above.
 const otherExchange = newsItem({ symbols: [], ai: aiResult({ symbol_candidates: [candidate('TPEx', '2330', '台積電')] }) })
 check(cardAiCandidates(otherExchange).length === 0 && !render(<NewsCard item={otherExchange} />).includes('news-ai-candidates'), 'a candidate on the other exchange than the verified instrument is not shown twice')
-check(!render(<NewsCard item={withCandidates} compact />).includes('news-ai-candidates'), 'today page compact row has no AI candidates row')
 
 // ---- AC-1 time display (NEWS_SPEC §4, UI_COPY §4) ----
 check(newsTime(newsItem()).text === '發布於 2026/10/18 00:05' && card.includes('dateTime="2026-10-17T16:05:00+00:00"'), 'known published instant in Taipei time')

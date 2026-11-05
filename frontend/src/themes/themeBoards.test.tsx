@@ -251,16 +251,22 @@ check(memberRest.includes('2410 成員11') && memberRest.includes('2411 成員12
 check(themeDefinitionVersion({ ...themeDetail(), theme: { ...themeDetail().theme, definition_version: 'themes_v1:2026.10.18' } }) === 'themes_v1:2026.10.18', 'theme.definition_version wins when present')
 check(evidenceUrl({ kind: null, url: 'http://x.test', relation: null, relevance: null, theme_version: null }) === 'http://x.test' && evidenceUrl(null) === null, 'evidence url rule')
 
-// ---- today Top 5 compact rows (#276; UI_COPY_SPEC §8.5) ----
-const topTen = { ...industryBoard(), items: Array.from({ length: 5 }, (_, index) => boardItem({ theme_id: `industry-${index + 1}`, display_name: `產業 ${index + 1}`, rank: index + 1 })) }
+// ---- today Top 5 rows (Issue 510; UI_COPY_SPEC §8.5): two lines each, the quality badge only when it is not 熱門族群 ----
+const topTen = { ...industryBoard(), items: Array.from({ length: 5 }, (_, index) => boardItem({ theme_id: `industry-${index + 1}`, display_name: `產業 ${index + 1}`, rank: index + 1, quality: index === 1 ? 'partial' : 'complete' })) }
 const today = render(<HotGroupsSection board="industry" onBoardChange={noop} data={topTen} loading={false} error={null} />)
-check(count(today, 'class="hot-group-row"') === 5 && !today.includes('feature-card'), 'five compact rows, no feature cards')
-check(today.includes('各榜前 5 名'), 'eyebrow says Top 5')
+check(count(today, 'class="hot-group-row"') === 5 && !today.includes('feature-card'), 'five rows, no feature cards')
+check(!today.includes('eyebrow') && !today.includes('各榜前 5 名'), 'Issue 510: the head has no eyebrow')
 check(today.includes('href="/themes/industry-1"') && today.includes('href="/themes/industry-5"'), 'rows link to the detail page')
-check(today.includes('href="/themes">查看完整排行'), 'full ranking link for the industry tab')
-const firstCard = today.slice(today.indexOf('data-theme-id="industry-1"'), today.indexOf('data-theme-id="industry-2"'))
-for (const text of ['第 1 名', '產業 1', '熱門族群', '81.25', '+1.23%', '-0.45%', '0.00%', '資料 2026/09/08']) check(firstCard.includes(text), `today card shows ${text}: ${firstCard}`)
+check(today.includes('href="/themes">完整排行 →'), 'full ranking link 「完整排行 →」 for the industry tab')
+check(today.includes('資料 2026/09/08') && today.includes('1／5／20 日為相對加權指數的報酬') && count(today, '資料 2026/09/08') === 1, 'Issue 510: the date and 「相對加權指數」 are said once under the head, not per row')
+const rowOfGroup = (id: string) => today.slice(today.indexOf(`data-theme-id="${id}"`), today.indexOf('</a>', today.indexOf(`data-theme-id="${id}"`)))
+const firstCard = rowOfGroup('industry-1')
+for (const text of ['第 1 名', '產業 1', '81.25', '+1.23%', '-0.45%', '0.00%']) check(firstCard.includes(text), `today row shows ${text}: ${firstCard}`)
+// Two lines: the line with rank, name, quality and score; the line with the three returns. Nothing else.
+check(/^data-theme-id="industry-1"[^>]*><span class="hot-group-line">.*<\/span><span class="hot-group-returns">.*<\/span>$/.test(firstCard), `Issue 510: a row is the head line and the returns line: ${firstCard}`)
+check(!firstCard.includes('badge-success') && !firstCard.includes('熱門族群'), 'Issue 510: a complete group (熱門族群) carries no quality badge')
+check(rowOfGroup('industry-2').includes('技術與籌碼觀察（事件資料待補）'), 'Issue 510: a group that is not 熱門族群 shows its quality badge')
 const todayTheme = render(<HotGroupsSection board="theme" onBoardChange={noop} data={themeBoard()} loading={false} error={null} />)
-check(todayTheme.includes('id="today-board-tab-theme" aria-selected="true"') && todayTheme.includes('href="/themes?board=theme">查看完整排行') && todayTheme.includes('CoWoS 先進封裝'), 'theme tab and its full-ranking link')
+check(todayTheme.includes('id="today-board-tab-theme" aria-selected="true"') && todayTheme.includes('href="/themes?board=theme">完整排行 →') && todayTheme.includes('CoWoS 先進封裝'), 'theme tab and its full-ranking link')
 const todayEmpty = render(<HotGroupsSection board="industry" onBoardChange={noop} data={emptyBoard('industry', 'no_ranked_groups')} loading={false} error={null} />)
 check(todayEmpty.includes(EMPTY_MESSAGES.no_ranked_groups) && !todayEmpty.includes('hot-group-row'), 'today empty board shows empty_message')

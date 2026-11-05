@@ -81,7 +81,7 @@ check(plainOf('target').includes('目標一') && plainOf('target').includes('目
 
 // ---- candidates: score, levels and RR (today list) and the score details header (stock page) are terms; no English 「percentile」 ----
 const candidate = render('CandidatesSection', () => <CandidatesSection data={listResponse()} loading={false} error={null} />)
-for (const label of ['總分', '進場方式', '停損', '目標', 'RR']) check(hasTerm(candidate, label), `今日候選: 「${label}」 opens its glossary term (found ${termLabels(candidate).join('、') || 'none'})`)
+for (const label of ['總分', '進場區', '停損', '目標', 'RR']) check(hasTerm(candidate, label), `今日候選: 「${label}」 opens its glossary term (found ${termLabels(candidate).join('、') || 'none'})`)
 const rrButton = /<button[^>]*data-term="rr"[^>]*>/.exec(candidate)?.[0] ?? ''
 check(rrButton.includes('title="可能賺的空間是可能賠的幾倍。"'), `今日候選: hovering RR shows the plain sentence, got ${rrButton}`)
 const scoreDetails = render('ScoreDetails', () => <ScoreDetails item={completeItem()} open />)

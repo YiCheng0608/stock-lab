@@ -15,7 +15,7 @@ import { ENTRY_LEVELS_MISSING_STOCK_TEXT, ENTRY_LEVELS_MISSING_TEXT, ENTRY_UNKNO
 // Standalone regression module for a candidate's plain-language entry plan (Issue 491; UI_COPY_SPEC §10.2; decision
 // 6647568372, review 6648572346): one sentence per entry type with the signal's own levels (the table's numbers), the
 // stop as the only exit, no price from strategy_levels (its next-session levels decide a new signal, not this one's
-// failure), where it shows (today table and phone card, stock page candidate row), the signal day's judgement under
+// failure), where it shows (today row, stock page candidate row), the signal day's judgement under
 // 「完整條件」, and the stated reason when a price is missing — never a blank, NaN or a guessed number.
 const check = (condition: boolean, message: string) => { if (!condition) throw new Error(message) }
 const render = (element: ReactElement) => renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}><StaticRouter location="/">{element}</StaticRouter></QueryClientProvider>)
@@ -70,17 +70,22 @@ check(text(card).includes('量比 ≥ 1.20 倍量比 2.88 倍') && text(card).in
 check(card.includes('data-condition="margin_financing" data-condition-state="not_applicable"') && text(card).includes('非融資標的，融資條件不適用'), 'a non-margin security\'s margin condition says why it does not apply')
 check(!render(<EntryPlanCard item={{ ...completeItem(), entry_plan: null }} />).includes('entry-plan-conditions'), 'no levels row: no 完整條件 block')
 
-// ---- the two places: today table (the 進場方式 cell, #493) and phone card (first line under the name), stock page ----
+// ---- the two places: today row (the line under the name, Issue 510) and the stock page ----
 const today = render(<CandidatesSection data={listResponse()} loading={false} error={null} />)
-check(count(today, 'data-entry-plan="levels"') === 4, 'today: each of two candidates has a plan in the table and in its phone card')
-check(count(text(today), BREAKOUT) === 2 && count(text(today), PULLBACK) === 2, 'today: both sentences in the table and the cards')
-const dataRow = today.slice(today.indexOf('data-candidate-rank="1"'), today.indexOf('data-candidate-detail="1"'))
-check(dataRow.indexOf('candidate-entry-cell') >= 0 && dataRow.indexOf('data-entry-plan') > dataRow.indexOf('candidate-entry-cell'), 'today table: the plan is the row\'s 進場方式 cell (Issue 493)')
-const detailRow = today.slice(today.indexOf('data-candidate-detail="1"'), today.indexOf('</tr>', today.indexOf('data-candidate-detail="1"')))
-check(!detailRow.includes('data-entry-plan') && detailRow.indexOf('entry-plan-conditions') > detailRow.indexOf('class="candidate-detail"'), 'today table: the folded conditions open with the AI detail, no second sentence')
+check(count(today, 'data-entry-plan="levels"') === 2, 'today: each of two candidates has one plan, at every width')
+check(count(text(today), BREAKOUT) === 1 && count(text(today), PULLBACK) === 1, 'today: both sentences, once each')
+const rowOf = (markup: string, rank: number) => {
+  const from = markup.indexOf(`data-candidate-rank="${rank}"`)
+  if (from < 0) return ''
+  const next = markup.indexOf('data-candidate-rank=', from + 1)
+  return markup.slice(from, next < 0 ? markup.indexOf('</ol>', from) : next)
+}
+const row1 = rowOf(today, 1)
+const dataRow = row1.slice(0, row1.indexOf('<details class="candidate-detail"'))
+check(dataRow.indexOf('candidate-row-title') >= 0 && dataRow.indexOf('data-entry-plan') > dataRow.indexOf('candidate-row-title'), 'today row: the plan is the line under the name (Issue 510)')
+const detailRow = row1.slice(row1.indexOf('<details class="candidate-detail"'))
+check(!detailRow.includes('data-entry-plan') && detailRow.indexOf('entry-plan-conditions') > detailRow.indexOf('class="candidate-detail-folds"'), 'today row: the folded conditions are in the detail\'s folds, no second sentence')
 check(/<button[^>]*data-term="support"[^>]*>停損<\/button>/.test(dataRow) && /<button[^>]*data-term="target"[^>]*>目標<\/button>/.test(dataRow), 'the sentence\'s 停損 and 目標 open their glossary terms')
-const phone = today.slice(today.indexOf('data-candidate-card="1"'))
-check(phone.indexOf('candidate-mini-head') < phone.indexOf('data-entry-plan') && phone.indexOf('data-entry-plan') < phone.indexOf('candidate-mini-levels'), 'phone card: the plan is the first line under the name')
 
 const stockCandidate = { ...completeItem(), trading_date: '2026-10-22' }
 const summary = { rank: 1, total_score: 0.83, score_version: 'candidate_score_v5', strategy: 'breakout_v3', llm_note: null }
@@ -113,22 +118,16 @@ check(reasonOf({ ...completeItem(), entry_plan: undefined, trading_date: '' }) =
 const unknown = entryPlanView(withLevels({ ...completeItem(), entry_plan: { ...breakoutPlan(), entry_type: 'other' } }, { entry_type: 'other' }))
 check(unknown.kind === 'reason' && entryText(unknown.parts) === ENTRY_UNKNOWN_TYPE_TEXT && unknown.type === null, 'an unknown entry type has no sentence and no type term')
 
-// ---- phone card (decision 6647903049): levels in the sentence -> only the close cell; a reason -> all four cells ----
-const cardOf = (markup: string, rank: number) => {
-  const from = markup.indexOf(`data-candidate-card="${rank}"`)
-  return markup.slice(from, markup.indexOf('</article>', from))
-}
-const levelCells = (card: string) => card.slice(card.indexOf('candidate-mini-levels'), card.indexOf('</dl>', card.indexOf('candidate-mini-levels')))
-for (const rank of [1, 2]) {
-  const cells = levelCells(cardOf(today, rank))
-  check(cells.includes('收盤（元）') && count(cells, '<dt>') === 1, `phone card #${rank}: the sentence has the levels, only the close cell stays`)
-  check(!cells.includes('data-term="entry_zone"') && !cells.includes('data-term="support"') && !cells.includes('data-term="target"'), `phone card #${rank}: no 進場區／停損／目標 cell`)
-}
+// ---- today row (decision 6647903049): levels in the sentence -> no level cells; a reason -> the three cells ----
+const rowMain = (markup: string, rank: number) => { const row = rowOf(markup, rank); return row.slice(0, row.indexOf('<details class="candidate-detail"')) }
+const levelCells = (row: string) => row.indexOf('candidate-row-levels') < 0 ? '' : row.slice(row.indexOf('candidate-row-levels'), row.indexOf('</dl>', row.indexOf('candidate-row-levels')))
+for (const rank of [1, 2]) check(levelCells(rowMain(today, rank)) === '', `today row #${rank}: the sentence has the levels, no level cell repeats them`)
 const missingLevels = { ...listResponse(), items: [withLevels(completeItem(), { invalid_price: null }), partialItem()] }
 const fallback = render(<CandidatesSection data={missingLevels} loading={false} error={null} />)
-const fallbackCells = levelCells(cardOf(fallback, 1))
-check(text(cardOf(fallback, 1)).includes(ENTRY_LEVELS_MISSING_TEXT), 'phone card #1: the sentence states the reason')
-check(count(fallbackCells, '<dt>') === 4 && fallbackCells.includes('data-term="entry_zone"') && fallbackCells.includes('data-term="support"') && fallbackCells.includes('data-term="target"'), 'phone card #1: without levels in the sentence the four cells come back')
-check(count(levelCells(cardOf(fallback, 2)), '<dt>') === 1, 'phone card #2 still has levels in its sentence: close only')
-// The desktop table keeps every level column either way.
-check(count(today, 'class="level-stop"') >= 2 && today.includes('<th') && today.includes('停損'), 'desktop table: the level columns stay')
+const fallbackCells = levelCells(rowMain(fallback, 1))
+check(text(rowMain(fallback, 1)).includes(ENTRY_LEVELS_MISSING_TEXT), 'today row #1: the sentence states the reason')
+check(count(fallbackCells, '<dt>') === 3 && fallbackCells.includes('data-term="entry_zone"') && fallbackCells.includes('data-term="support"') && fallbackCells.includes('data-term="target"'), 'today row #1: without levels in the sentence the three level cells come back')
+check(text(fallbackCells).includes('停損（元）—'), 'today row #1: the missing stop reads 「—」')
+check(levelCells(rowMain(fallback, 2)) === '', 'today row #2 still has levels in its sentence: no cells')
+// The detail keeps the four level cells either way (Issue 510).
+check(count(fallback, 'class="candidate-detail-levels"') === 2, 'today detail: the level cells stay for every candidate')
