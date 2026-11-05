@@ -224,7 +224,7 @@ function groupShortText(item: CandidateItem): ReactNode {
   return `${group.name}（${board}，未排名）`
 }
 
-// Seven columns that fit 1200 and wider without squeezing (#493): rank in the stock cell, the group and the average
+// Seven columns that fit 1280 and wider without squeezing (#493): rank in the stock cell, the group and the average
 // volume under it, and the #491 entry sentence as 進場方式 (its folded conditions sit in the row's detail). Each row is
 // about three short lines, so six rows fit the 1280×800 first screen (DESIGN_SYSTEM §4).
 function candidateColumns(open: ReadonlySet<number>, toggle: (rank: number) => void): ReadonlyArray<Column<CandidateItem>> {
