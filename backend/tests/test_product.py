@@ -762,6 +762,140 @@ def _news_by_title(client, titles):
     return result
 
 
+def _seed_relation_news(db, *, watch_2330=True):
+    """Feed rows with and without verified relations; 2330 is the watchlisted stock."""
+
+    db.add_all(
+        [
+            Instrument(
+                market="TW",
+                exchange="TWSE",
+                symbol="2330",
+                name="台積電",
+                instrument_type="stock",
+                status="active",
+                is_watchlisted=watch_2330,
+            ),
+            Instrument(
+                market="TW",
+                exchange="TWSE",
+                symbol="2317",
+                name="鴻海",
+                instrument_type="stock",
+                status="active",
+                is_watchlisted=False,
+            ),
+        ]
+    )
+    rows = [
+        ("watched", ["TWSE:2330"]),
+        ("other stock", ["TWSE:2317"]),
+        ("no relation", []),
+        ("watched bare code", ["2330"]),
+        ("watched and other", ["TWSE:2317", "TWSE:2330"]),
+    ]
+    for minute, (title, symbols) in enumerate(rows):
+        published = datetime(2026, 11, 5, 8, minute)
+        db.add(
+            _feed_news(
+                title,
+                title=title,
+                symbols_json=symbols,
+                published_at=published,
+                display_time=published,
+                time_basis="published",
+                time_precision="datetime",
+            )
+        )
+    db.commit()
+
+
+def _news_titles(client, query):
+    """Every title of /api/news?<query> walked one item per page, and the first total."""
+
+    titles, totals, cursor = [], set(), None
+    while True:
+        url = f"/api/news?limit=1&{query}" + (f"&cursor={cursor}" if cursor else "")
+        response = client.get(url)
+        assert response.status_code == 200
+        body = response.json()
+        titles += [item["title"] for item in body["items"]]
+        totals.add(body["meta"]["total"])
+        cursor = body["meta"]["next_cursor"]
+        if not cursor:
+            return titles, totals
+
+
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        (
+            "verified_only=true",
+            [
+                "watched and other",
+                "watched bare code",
+                "other stock",
+                "watched",
+            ],
+        ),
+        (
+            "watchlist_only=true",
+            ["watched and other", "watched bare code", "watched"],
+        ),
+        (
+            "verified_only=true&watchlist_only=true",
+            ["watched and other", "watched bare code", "watched"],
+        ),
+    ],
+)
+def test_news_relation_filters_page_and_count_correctly(product_api, query, expected):
+    """#523: both filters run in the server loop, so paging and meta.total agree."""
+
+    with product_api() as db:
+        _seed_relation_news(db)
+    with TestClient(app) as client:
+        titles, totals = _news_titles(client, query)
+        unfiltered, _ = _news_titles(client, "category=domestic")
+    assert titles == expected
+    assert totals == {len(expected)}
+    assert len(unfiltered) == 5
+
+
+def test_news_watchlist_filter_with_an_empty_watchlist_returns_nothing(product_api):
+    with product_api() as db:
+        _seed_relation_news(db, watch_2330=False)
+    with TestClient(app) as client:
+        response = client.get("/api/news?watchlist_only=true&limit=20")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"] == []
+    assert body["meta"]["total"] == 0
+    assert body["meta"]["next_cursor"] is None
+
+
+def test_news_watchlist_filter_reads_the_watchlist_once(product_api):
+    """#523 decision: no per-item watchlist query on the read path."""
+
+    with product_api() as db:
+        _seed_relation_news(db)
+    engine = product_api.kw["bind"]
+    statements: list[str] = []
+
+    def record(_conn, _cursor, statement, *_args):
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        with TestClient(app) as client:
+            response = client.get("/api/news?watchlist_only=true&limit=20")
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+    assert response.status_code == 200
+    assert len(response.json()["items"]) == 3
+    watch_reads = [s for s in statements if "WHERE instruments.is_watchlisted" in s]
+    assert len(watch_reads) == 1, watch_reads
+
+
 def test_feed_news_api_exposes_aware_utc_and_known_published_at(product_api):
     published = datetime(2026, 10, 17, 8, 48, 10)
     with product_api() as db:

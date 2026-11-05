@@ -1119,6 +1119,23 @@ def _decode_news_cursor(cursor: str | None) -> tuple[Any, ...] | None:
         raise HTTPException(status_code=400, detail="invalid cursor")
 
 
+def _watchlist_symbol_keys(db: Session) -> set[str]:
+    """Watchlisted instruments as the two forms ``news_items.symbols_json`` uses.
+
+    Media rows store ``EXCHANGE:SYMBOL``; official projections store the bare
+    code. Listed and OTC codes never repeat, so the bare code is one stock.
+    """
+
+    keys: set[str] = set()
+    for exchange, symbol in db.execute(
+        select(Instrument.exchange, Instrument.symbol).where(
+            Instrument.is_watchlisted.is_(True)
+        )
+    ):
+        keys.update((f"{exchange}:{symbol}", symbol))
+    return keys
+
+
 def _news_theme_ids(
     db: Session, item: NewsItem, event: Event | None = None
 ) -> list[str]:
@@ -1988,6 +2005,8 @@ def news(
     source_kind: str | None = None,
     impact_direction: str | None = None,
     time_consistency: str | None = Query(default=None),
+    verified_only: bool = False,
+    watchlist_only: bool = False,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     # Existing official Events may predate the product projection.  Refreshing
@@ -2021,6 +2040,8 @@ def news(
     ).all()
     needle = q.strip().casefold() if q and q.strip() else None
     symbol_needle = symbol.strip().casefold() if symbol and symbol.strip() else None
+    # The watchlist is read once for the whole list, never per item (#523).
+    watch_keys = _watchlist_symbol_keys(db) if watchlist_only else set()
     filtered: list[NewsItem] = []
     seen_keys: set[str] = set()
     for item in rows:
@@ -2045,6 +2066,14 @@ def news(
         if symbol_needle and not any(
             symbol_needle in str(value).casefold()
             for value in (item.symbols_json or [])
+        ):
+            continue
+        # NEWS_SPEC §6: the verified relations are symbols_json, the same list the
+        # card's tags come from (instruments, or the bare codes as a fallback).
+        if (verified_only or watchlist_only) and not item.symbols_json:
+            continue
+        if watchlist_only and not any(
+            str(value) in watch_keys for value in item.symbols_json
         ):
             continue
         if theme_id and theme_id not in _news_theme_ids(db, item):

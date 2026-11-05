@@ -890,8 +890,9 @@ def t6(run: Run) -> str:
         return f"dashboard.news 空，顯示 `{message}`"
     starts = []
     for item in news:
-        i = text.find(item["title"])
-        expect(i >= 0, f"缺新聞標題整行 `{item['title']}`（id {item['id']}）")
+        title = display_title(item["title"])
+        i = text.find(title)
+        expect(i >= 0, f"缺新聞標題整行 `{title}`（id {item['id']}）")
         starts.append(i)
     # The news card is the last block of the page (#493); the footer ends the last card.
     end = text.find(FOOTER_FIRST_LINE, max(starts))
@@ -1285,6 +1286,33 @@ def news_source_label(source: str | None) -> str:
     return value if "官方" in value else "官方公告資料"
 
 
+# Same as cleanNewsLead in frontend/src/news/newsView.ts (#523, NEWS_SPEC §6): the pages
+# show a title without its leading marks and byline; the API keeps the source title.
+LEAD_MARKS = re.compile(r"^[\s■□▪▫◆◇◈●○◎◉•・‧∙★☆▲△▶►▸▷※]+")
+LEAD_BRACKET = re.compile(r"^[\[［【〔(（]([^\]］】〕)）]{1,30})[\]］】〕)）]")
+BYLINE_BRACKET = re.compile(r"記者|報導$|電$|新聞網|新聞$")
+LEAD_REPORTER = re.compile(
+    r"^(?:實習)?記者[^／/╱\s]{1,12}[／/╱][^，。；、\s]{0,10}?報導"
+)
+
+
+def display_title(title: str | None) -> str:
+    text = re.sub(r"\s+", " ", title or "").strip()
+    if not text:
+        return "標題未提供"
+    rest = text
+    for _ in range(4):
+        before = rest
+        rest = LEAD_MARKS.sub("", rest)
+        bracket = LEAD_BRACKET.match(rest)
+        if bracket and BYLINE_BRACKET.search(bracket.group(1).strip()):
+            rest = rest[bracket.end() :]
+        rest = LEAD_REPORTER.sub("", rest).lstrip()
+        if rest == before:
+            break
+    return rest or text
+
+
 def news_detail_id(run: Run) -> Any:
     items = news_items(run, "domestic")
     if not items:
@@ -1327,7 +1355,7 @@ def n2(run: Run) -> str:
                 if item.get("event_date"):
                     wanted.append(f"事件日 {slash(item['event_date'])}")
         else:
-            wanted = [item["title"] for item in items[:3]]
+            wanted = [display_title(item["title"]) for item in items[:3]]
         missing = in_order(text, wanted)
         if missing:
             problems.append(f"{tab}：{missing}（{text.name}）")
