@@ -39,10 +39,12 @@ The result goes to stdout without a trailing newline.
                                    strategy_levels (the latest finished daily
                                    run's strategy_levels step did not succeed),
                                    candidate_notes (the latest candidate list
-                                   has candidates, no done AI note and was
-                                   computed over 30 minutes before <now>; not
-                                   judged while a daily or candidate_notes run
-                                   is running, skipped without <now>)
+                                   of CANDIDATE_SCORE_VERSION has candidates,
+                                   no done AI note and was computed over 30
+                                   minutes before <now>; not judged while a
+                                   daily or candidate_notes run is running or
+                                   the latest candidate_notes run was refused
+                                   for its login, skipped without <now>)
   deploy-image <deploy.json>       "deploy_image ok|violation|skip key=value ...":
                                    the image this process runs in
                                    (STOCK_IMAGE_TAG, STOCK_GIT_HEAD: the
@@ -105,6 +107,11 @@ AUTH_REASON = "not_logged_in"
 # A candidate list this old without one done AI note is reported (#517): the
 # notes follow the list, in the daily or in worker.cli candidates.
 CANDIDATE_NOTES_GRACE = timedelta(minutes=30)
+# The score version worker.candidate_notes writes notes for
+# (app.domain.CANDIDATE_SCORE_VERSION; backend/tests/test_watchdog.py keeps
+# them equal).  Lists of other versions are never given notes, so they are
+# not judged.
+CANDIDATE_SCORE_VERSION = "candidate_score_v6"
 # Skipped rows that only point at another run of the same date.
 REFERENCE_SKIPS = ("already_complete", "already_running")
 
@@ -201,25 +208,37 @@ def llm_auth(db: str, now: str) -> str:
         if not _has_table(conn, "ingestion_runs"):
             return "skip"
         for run_type in LLM_RUN_TYPES:
-            row = conn.execute(
-                "SELECT id, started_at, metadata_json FROM ingestion_runs"
-                " WHERE run_type=? ORDER BY id DESC LIMIT 1",
-                (run_type,),
-            ).fetchone()
-            if row is None:
-                continue
-            run_id, started, raw = row
-            started_at = _started(started)
-            # A run of a step that stopped is not reported again every day.
-            if started_at is None or current - started_at > RECENT_WINDOW:
-                continue
-            batches = _json(raw).get("batches") or []
-            if any(
-                isinstance(batch, dict) and batch.get("reason") == AUTH_REASON
-                for batch in batches
-            ):
+            run_id = _auth_refused(conn, run_type, current)
+            if run_id is not None:
                 lines.append(f"{run_type} run_id={run_id}")
     return "\n".join(lines)
+
+
+def _auth_refused(
+    conn: sqlite3.Connection, run_type: str, current: datetime
+) -> int | None:
+    """The id of the latest run of ``run_type`` when it started within
+    RECENT_WINDOW and had a batch refused for its login, else None."""
+
+    row = conn.execute(
+        "SELECT id, started_at, metadata_json FROM ingestion_runs"
+        " WHERE run_type=? ORDER BY id DESC LIMIT 1",
+        (run_type,),
+    ).fetchone()
+    if row is None:
+        return None
+    run_id, started, raw = row
+    started_at = _started(started)
+    # A run of a step that stopped is not reported again every day.
+    if started_at is None or current - started_at > RECENT_WINDOW:
+        return None
+    batches = _json(raw).get("batches") or []
+    if any(
+        isinstance(batch, dict) and batch.get("reason") == AUTH_REASON
+        for batch in batches
+    ):
+        return int(run_id)
+    return None
 
 
 def daily_result(db: str, day: str, now: str, running_limit: str | None = None) -> str:
@@ -416,12 +435,15 @@ def _candidate_notes(conn: sqlite3.Connection, now: str | None) -> str:
     (Issue #517): a list recomputed by hand without its notes, or a notes step
     that wrote none (claude -p refused, the daily call limit).
 
-    The latest list is the one of the latest trading date computed last (a new
-    score version recomputed by hand is newer than the daily's).  A note of any
-    prompt version counts: this only catches a list with none at all.  Not
-    judged while a daily or a candidate_notes run is running (the notes are
-    being written), nor within CANDIDATE_NOTES_GRACE of the list's
-    computed_at.  Without the clock argument or the tables it is skipped."""
+    Only the latest trading date's list of CANDIDATE_SCORE_VERSION is judged:
+    the one worker.candidate_notes writes notes for (its _candidate_run), so
+    ``candidate-notes --date`` can always clear it.  A note of any prompt
+    version counts: this only catches a list with none at all.  Not judged
+    while a daily or a candidate_notes run is running (the notes are being
+    written), nor within CANDIDATE_NOTES_GRACE of the list's computed_at, nor
+    when the latest candidate_notes run was refused for its login (llm_auth
+    reports that cause already).  Without the clock argument or the tables it
+    is skipped."""
 
     if now is None:
         return "candidate_notes skip reason=no_clock"
@@ -446,7 +468,8 @@ def _candidate_notes(conn: sqlite3.Connection, now: str | None) -> str:
         return "candidate_notes skip reason=notes_running"
     row = conn.execute(
         "SELECT id, trading_date, computed_at FROM candidate_runs"
-        " ORDER BY trading_date DESC, computed_at DESC, id DESC LIMIT 1"
+        " WHERE score_version=? ORDER BY trading_date DESC LIMIT 1",
+        (CANDIDATE_SCORE_VERSION,),
     ).fetchone()
     if row is None:
         return "candidate_notes skip reason=no_candidate_run"
@@ -474,6 +497,14 @@ def _candidate_notes(conn: sqlite3.Connection, now: str | None) -> str:
     if computed_at is None or current - computed_at <= CANDIDATE_NOTES_GRACE:
         # The notes follow the list (the daily's last step, worker.cli candidates).
         return "candidate_notes skip reason=recent" + facts
+    refused = (
+        _auth_refused(conn, "candidate_notes", current)
+        if _has_table(conn, "ingestion_runs")
+        else None
+    )
+    if refused is not None:
+        # One cause, one comment: the llm_auth check comments on the login.
+        return f"candidate_notes skip reason=notes_auth notes_run_id={refused}" + facts
     return "candidate_notes violation" + facts
 
 
