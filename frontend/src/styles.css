@@ -449,7 +449,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .board-row-main:hover { background: var(--color-bg-elevated); }
 .board-row-open > .board-row-main { background: var(--color-bg-alt); }
 .board-rank { grid-area: rank; padding: var(--space-1) 0; border-radius: var(--radius-sm); background: var(--color-bg-elevated); font: 700 var(--text-md) var(--font-mono); text-align: center; }
-.board-row-title { display: flex; grid-area: title; align-items: center; gap: var(--space-2); min-width: 0; max-width: none; margin: 0; line-height: 1.4; white-space: nowrap; }
+.board-row-title { display: flex; grid-area: title; align-items: center; gap: var(--space-2); min-width: 0; max-width: none; margin: 0; overflow: hidden; line-height: 1.4; white-space: nowrap; }
 .board-row-name { flex: 0 1 auto; min-width: 4em; overflow: hidden; color: var(--color-text); font-size: var(--text-base); font-weight: 600; text-overflow: ellipsis; }
 .board-row-name:hover { color: var(--color-primary); }
 .board-row-title .badge { flex: none; padding: 0 var(--space-2); line-height: 1.4; white-space: nowrap; }
@@ -777,6 +777,8 @@ a.symbol-link:hover { color: var(--color-primary); }
   .board-row-toggle { align-self: start; padding: var(--space-1) 0; font-size: var(--text-xs); }
   .board-row-meta b { font-size: var(--text-xs); }
   .board-row-score b { font-size: var(--text-base); }
+  /* The quality badge is cut before it reaches the score: the name keeps its 4em, then the badge, then the components. */
+  .board-row-title .badge { display: block; flex: 0 1 auto; min-width: 3em; overflow: hidden; text-overflow: ellipsis; }
   .board-row-detail[open] { padding: var(--space-3); }
   .board-components { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2) var(--space-3); }
   .member-table-wrap { display: none; }
