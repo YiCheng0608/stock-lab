@@ -459,6 +459,8 @@ export type StrategyBoard = {
   as_of: string | null
   levels_version: string
   candidate: { rank: number; total_score: number; score_version: string; strategy: string; llm_note?: CandidateLlmNote | null } | null
+  // Missing on responses from before #490; null without a board day.
+  liquidity?: StrategyBoardLiquidity | null
   strategies: StrategyBoardRow[]
 }
 
@@ -1213,6 +1215,44 @@ export type ActionSummary = {
   candidate?: { rank: number; total_score: number } | null
   // Tiers 3 and 4 (#277-B): the nearest strategy's conditions, no level; null without a strategy_levels row.
   nearness?: ActionNearness | null
+  // A conditional stock the day's candidate run left out for the liquidity floor (#490); null otherwise.
+  liquidity?: LiquidityExclusion | null
+}
+
+// The 20-session average volume in lots (張) of candidate_score_v6's floor (#490).
+export type CandidateLiquidity = {
+  average_volume_lots_20d: number | null
+  minimum_lots: number | null
+  state: 'ok' | 'missing_bars' | 'insufficient_sessions' | 'session_baseline_missing' | string | null
+  below_minimum: boolean
+  data_as_of: string | null
+  window_start: string | null
+  window_end: string | null
+  unit: 'lots'
+}
+
+// Why a conditional stock is not a candidate: below the floor, or no 20-session average.
+export type LiquidityExclusion = {
+  average_volume_lots_20d: number | null
+  minimum_lots: number | null
+  state: string | null
+  below_minimum: boolean
+  exclusion: 'low_volume' | 'liquidity_data_missing' | string
+  data_as_of: string | null
+  score_version: string
+  unit: 'lots'
+}
+
+// The strategy board day's 20-session average volume (#490); minimum_lots is null on a day scored without the floor.
+export type StrategyBoardLiquidity = {
+  average_volume_lots_20d: number | null
+  state: string | null
+  unit: 'lots'
+  data_as_of: string
+  minimum_lots: number | null
+  below_minimum: boolean | null
+  candidate_exclusion: 'low_volume' | 'liquidity_data_missing' | string | null
+  score_version: string | null
 }
 
 // One unmet condition of a near card: a price condition carries its gap, a volume condition its ratio; never a price.
@@ -1421,6 +1461,8 @@ export type CandidateItem = {
   sources: { signal: string; market_bar: string | null; chips: string | null; groups: string; news: string }
   // Close of trading_date and its change (#276); missing on responses from before #276.
   market?: CandidateMarket
+  // The liquidity floor's 20-session lots (#490); null on runs of versions before candidate_score_v6.
+  liquidity?: CandidateLiquidity | null
   // The signal's strategy_levels row: next-session close and volume to pass again (#491). null without a row of the
   // current levels version; missing on responses from before #491.
   entry_plan?: CandidateEntryPlan | null

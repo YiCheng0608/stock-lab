@@ -5,7 +5,7 @@
 
 - 判定時點（#466）：daily 每個交易日跑 21:30 與 23:00 兩次（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)），23:00 是 21:30 失敗或沒跑時的重試。以下三項 daily 檢查都從台北 23:10 起判定（23:00 那次已寫入日誌與 run 列），當晚只有 23:15、23:45 兩輪：21:30 失敗而 23:00 還會重試時不提早留言；23:15 時 23:00 的重試仍在跑，就留到 23:45 判定。
 - `daily`：週一至週五台北 23:10 後，當日 `logs/daily-YYYYMMDD.log` 不存在或沒有 `end` 列。21:30 那次在排程上限 80 分鐘內結束並寫 `end` 列；23:00 遇上仍在跑的 run 時，自己記 `already_running` 也寫 `end` 列。只有 23:00 的重試（或 serve 重啟時的補跑）是當天唯一一次、23:15 仍在跑時，這一項會在 23:15 留言。
-- `daily` 結果：週一至週五台北 23:10 後唯讀查當日目標的 `schedule_runs`：當天有 `success`／`non_trading_day` 就算完成（之後的 `skipped` 不影響，例如 23:00 被 `low_memory` 擋下）；否則取最後一筆（略過只指向別列的 `already_complete`／`already_running`），是 `partial`、`failed`、`non_trading_unconfirmed` 或 `skipped:<原因>`（例如 `low_memory`）就留言；仍在 `running` 的等下一輪，超過 2.5 小時視為 `failed`；當日 success 但 catchup 沒補齊（`catchup_incomplete`）也留言；有日誌卻沒有任何 run 列（worker 沒能啟動）也留言。
+- `daily` 結果：週一至週五台北 23:10 後唯讀查當日目標的 `schedule_runs`：當天有 `success`／`non_trading_day` 就算完成（之後的 `skipped` 不影響，例如 23:00 被 `low_memory` 擋下）；否則取最後一筆（略過只指向別列的 `already_complete`／`already_running`），是 `partial`、`failed`、`non_trading_unconfirmed` 或 `skipped:<原因>`（例如 `low_memory`）就留言；仍在 `running` 的等下一輪，超過 2.5 小時視為 `failed`；當日 success 但 catchup 沒補齊（`catchup_incomplete`）也留言；有日誌卻沒有任何 run 列（worker 沒能啟動）也留言，但日誌裡有 `skipped reason=maintenance` 的不算：那天的 daily 因[維護模式](SCHEDULING.md#維護模式)跳過，不寫 run 列，只記 `daily_maintenance`：解除後 serve 還會補跑。下一條的前一個交易日例外：到 00:30 還是只有維護的跳過、沒有 run 列，表示維護跨過午夜、serve 不會再補，就留言（`daily_result_<日期>`，寫出手動補跑的命令）。
 - `daily` 前一個交易日（#466 review）：每天 00:30 後，對今天以前最近的一個週間日再判定一次 daily 結果，規則同上，但仍是 `running` 而超過 85 分鐘（serve 的排程上限 80 分加第二道防線 5 分）的視為 `failed`。用來抓 23:00 的重試（或 21:30～23:00 重啟後的補跑）卡住、00:20 才被 job 結束、當晚兩輪看門狗都還看到 `running` 的情況。當晚已就該日留言（key `daily_result`）或之前已補報過（key `daily_result_<日期>`，例如週六替週五報過，週一不再報）時不再留言。
 - 當日資料核對（`data_check`，#390）：daily 結果是 `success` 的交易日，23:10 後（23:00 的法人重抓之後）以 `tools/ops/data_check.py` 唯讀（`mode=ro`、`query_only`）核對當日寫進 DB 的資料，每個交易日只核對到有結論為止，不修資料。
   - 用 collector 自己的 parser 與 [重跑與回補的冪等](SCHEDULING.md#重跑與回補)的寫入規則重讀當日 raw（`raw_payloads.payload_path` 指的檔）。日線（OHLC、成交股數與金額、暫停）與融資比對該列指向的 capture，或當日任一 capture（補空欄）；三大法人比對當日最新一份法人 capture（#387）。逐列逐欄，不抽樣。
@@ -24,6 +24,8 @@
     - 每輪最多核對 2 天，先核舊的。DB 缺核對用的表時不判定。
   - 處置：統籌依留言決定開 Issue 修寫入端，再依 [重跑與回補](SCHEDULING.md#重跑與回補) 或該 Issue 的修正命令修資料。全部明細：`python tools/ops/watchdog_helper.py data-check <stock.db> <日期> --all`（`--offline` 不向官方要結果表）。
   - 抓不到的：parser 今天仍以同樣方式讀錯的欄位（全歷史審查見 #391）；daily 沒有成功的交易日不核對。
+- `maintenance_long`（#468）：[維護模式](SCHEDULING.md#維護模式)的標記檔 `<data>/locks/maintenance` 在時，每輪記 `maintenance_on`（開始時間與時數）；開超過 12 小時（`MAINTENANCE_MAX_HOURS`）就留言請關掉，每台北日一則。開始時間取標記檔記的時間，讀不懂（或找不到 Python）時取檔案的修改時間。維護模式期間 daily、news 照樣寫日誌（skipped），所以 `daily` 的日誌檢查與下一條 `news` 不會因此留言。
+- `maintenance_expired`（#468 AC-5）：`logs/maintenance.log` 24 小時內有 `expired` 紀錄，也就是 serve 解除了一個心跳停了 10 分鐘以上的作業（回補或回測被 SIGKILL 或 OOM 結束，`finally` 沒有執行）的維護模式。留言寫出命令、PID、原因與停了幾分鐘；daily 與 news 已恢復，作業沒有跑完，要查它的輸出並決定是否重跑（回補以相同參數重跑會從 manifest 續做）。每台北日一則。
 - `news`：最新的 `logs/news-*.log` 已超過 6 小時（連續 3 次）沒有更新。
 - `monitor_stale`：事件 monitor 的 `logs/monitor-heartbeat.json`（`--monitor-dir` 給了就讀那個目錄的，scheduler 容器是 `/coordination`，#338）超過 10 分鐘沒有更新，或讀不出輪詢時間（[統籌事件 monitor](MONITOR.md)；monitor 每分鐘寫一次）；檔案不存在（monitor 尚未註冊）時不判定。心跳仍在更新、但記錄 gh 已連續 10 輪失敗（例如登入過期，佇列收不到 PR 與留言）時另以 `monitor_gh_failed` 留言，附第一次失敗的時間與最後的錯誤，請查 `gh auth status` 與 `gh api rate_limit`（帳號共用的 5000 次／小時可能已用完）。
 - `news_llm`：`stock.db` 最近 3 批判讀都是 `pending`；或 24 小時內最近 3 筆 `run_type=news_llm` 都是 `failed`（`running` 超過 90 分鐘也算）；或 news 日誌（今昨兩天的檔）24 小時內最後 3 個 `news_llm_exit=` 都是 `1`／`wrapper_error`（涵蓋表不存在等不寫 run 的失敗）。後兩者合為一則 `news_llm_failed` 留言；限 24 小時是為了 news 停擺後不再每天就舊失敗留言，停擺本身由上一條 `news` 判定。
@@ -40,7 +42,7 @@
   - 處置：看門狗不修資料，違反持續存在就每台北日留言一則。前兩條查該日 daily 日誌與 `/api/ingestion-runs`，修好寫入端後依 [重跑與回補](SCHEDULING.md#重跑與回補) 重跑或回補該日；第三條查 news 日誌的 news-llm 段落。`invariant_status_sync` 由統籌處理，步驟如下：
     1. 看該日 collect run 的 `instrument_status_sync.exchanges.<交易所>` 的 `absent_symbols` 與 `dormant_symbols`。
     2. 清單是暫時不完整時（例如官方 payload 截斷），下一次 daily 同步成功後自動恢復，不需處理。
-    3. 核對官方公告確認真的有大量下市或轉市時，停用排程，執行 `instruments repair --apply --max-status-share <比例>`，再恢復排程；比例、依據與輸出記在該 Issue。修正資料前先備份 `stock.db`（[安全升級與復原順序](SETUP.md#安全升級與復原順序)）。`market_bars` 不存在或沒有資料時前兩條印 `skip`，`news_llm_results` 不存在時第三條印 `skip`，都不留言。
+    3. 核對官方公告確認真的有大量下市或轉市時，執行 `instruments repair --apply --max-status-share <比例>`（它起跑時自己持有[維護模式](SCHEDULING.md#維護模式)，結束時關掉）；比例、依據與輸出記在該 Issue。修正資料前先備份 `stock.db`（[安全升級與復原順序](SETUP.md#安全升級與復原順序)）。`market_bars` 不存在或沒有資料時前兩條印 `skip`，`news_llm_results` 不存在時第三條印 `skip`，都不留言。
 
 `daily`／`news` 還沒有任何日誌時不判定（排程尚未註冊）。執行環境：bash、PATH 上有 `gh`（有 `GH_TOKEN` 或已登入，[容器內的 claude 與 gh 認證（.env）](SETUP.md#容器內的-claude-與-gh-認證env)）；Python 只用來唯讀查 DB（找不到時跳過 daily 結果、`news_llm` 與資料不變量的 DB 檢查，日誌檢查照做），依序取 `--python`、`STOCK_PYTHON`、checkout 的 `.venv/bin/python`、`python3`、`python`。serve 以 `--data-dir /data --python <serve 的 python>` 呼叫它，monitor 開著時另加 `--monitor-dir /coordination`。
 
@@ -51,7 +53,7 @@ scheduler 容器的命令（在發佈 checkout 執行；`<P>` 是正式 compose 
 | 手動判定（只輸出將留的言與資料不變量的數字，不留言） | `docker compose -p <P> exec scheduler bash tools/ops/watchdog.sh --dry-run` |
 | 手動核對某交易日 | `docker compose -p <P> exec scheduler python tools/ops/watchdog_helper.py data-check /data/stock.db <YYYY-MM-DD> [--offline] [--all]`（唯讀，不記日誌、不留言） |
 | 日誌 | `docker compose -p <P> exec scheduler tail -n 50 /data/logs/watchdog.log`；serve 的輸出是 `docker compose -p <P> logs scheduler` |
-| 停用／啟用 | 看門狗由 serve 排程：`docker compose -p <P> stop scheduler`／`start scheduler`（daily、news、monitor 一起停） |
+| 停用／啟用 | 看門狗由 serve 排程：`docker compose -p <P> stop scheduler`／`start scheduler`（daily、news、monitor 一起停）；回補、回測起跑時自己開[維護模式](SCHEDULING.md#維護模式)，看門狗照常跑，不必停 |
 
 以下是工作排程器（切換前）的命令，在發佈 checkout 執行：
 

@@ -51,6 +51,18 @@ The result goes to stdout without a trailing newline.
                                    <since> <error>" after MONITOR_GH_FAILED_POLLS
                                    polls in a row with a failed gh call, or
                                    "unreadable"
+  maintenance <marker> <now>       the maintenance marker (#468, written by
+                                   worker.cli maintenance on; format in
+                                   backend/worker/job.py): "off" without the
+                                   file, else "on <age_s> <since> <reason>",
+                                   dated by the file's modification time and
+                                   reason "unreadable" when it is not the JSON
+                                   it writes
+  maintenance-expired <log> <now>  the latest "expired" record of the last 24 hours in
+                                   <data>/logs/maintenance.log (#468 AC-5: serve
+                                   removed a marker whose command stopped beating):
+                                   "<at> <owner> <pid> <minutes_without_beat>
+                                   <reason>", or nothing
   data-check <db> <date> [--offline] [--all] [--scratch DIR]
                                    the daily data check of trading date
                                    <date> (tools/ops/data_check.py, #390):
@@ -411,6 +423,55 @@ def monitor_beat(path: str, now: str) -> str:
     return f"ok {age}"
 
 
+def maintenance(path: str, now: str) -> str:
+    """The maintenance marker as worker.job.maintenance_state reads it (stdlib only)."""
+
+    try:
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read()
+        modified = os.stat(path).st_mtime
+    except FileNotFoundError:
+        return "off"
+    try:
+        marker = json.loads(text)
+        since = float(marker["since_epoch"])
+        reason = " ".join(str(marker.get("reason") or "-").split())
+    except (ValueError, KeyError, TypeError):
+        since, reason = modified, "unreadable"
+    at = datetime.fromtimestamp(since, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    age = int(float(now) - since)
+    return f"on {age} {at} {reason.replace('`', "'")[:200]}"
+
+
+def maintenance_expired(path: str, now: str) -> str:
+    try:
+        with open(path, encoding="utf-8") as handle:
+            lines = handle.read().splitlines()
+    except FileNotFoundError:
+        return ""
+    current = _utc(now)
+    for line in reversed(lines):
+        try:
+            record = json.loads(line)
+            if record.get("event") != "expired":
+                continue
+            at = datetime.fromisoformat(record["at"])
+        except (ValueError, KeyError, TypeError, AttributeError):
+            continue
+        at_utc = at.astimezone(timezone.utc).replace(tzinfo=None)
+        if not timedelta(0) <= current - at_utc <= RECENT_WINDOW:
+            return ""
+        words = [
+            at_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            str(record.get("owner") or "?").replace(" ", "_"),
+            str(record.get("pid") or "?"),
+            str(record.get("heartbeat_age_minutes") or "?"),
+            " ".join(str(record.get("reason") or "-").split()).replace("`", "'")[:200],
+        ]
+        return " ".join(words)
+    return ""
+
+
 def deploy_image(path: str) -> str:
     """The image this process runs in against the one tools/ops/deploy.sh recorded."""
 
@@ -450,6 +511,10 @@ def main(argv: list[str]) -> int:
         out = monitor_beat(args[0], args[1])
     elif command == "deploy-image":
         out = deploy_image(args[0])
+    elif command == "maintenance":
+        out = maintenance(args[0], args[1])
+    elif command == "maintenance-expired":
+        out = maintenance_expired(args[0], args[1])
     elif command == "data-check":
         # Imported here: it loads the backend; the other checks stay stdlib only.
         from data_check import data_check

@@ -79,6 +79,8 @@ DATA_CHECK_TIMEOUT_SECONDS=240
 DATA_CHECK_MAX_DAYS=2
 DATA_CHECK_LOOKBACK_DAYS=4
 DATA_CHECK_LAST_HM=2345
+# Maintenance mode (#468): on longer than this is reported, so that it is not forgotten.
+MAINTENANCE_MAX_HOURS=12
 
 now="${WATCHDOG_NOW:-$(date -u +%s)}"
 data_check_timeout="${WATCHDOG_DATA_CHECK_TIMEOUT:-$DATA_CHECK_TIMEOUT_SECONDS}"
@@ -283,6 +285,40 @@ if [ "$gh_state" = ok ]; then
   fi
 fi
 
+# Maintenance mode (#468, backend/worker/job.py): while <data>/locks/maintenance is
+# there, the daily and news jobs only log `skipped reason=maintenance` and write no
+# run row. Each run logs that it is on; on past MAINTENANCE_MAX_HOURS is reported. A
+# day whose daily only skipped for it (no run row) is not reported below. Without
+# Python the marker is dated by its modification time.
+maintenance_marker="$data_dir/locks/maintenance"
+if [ -e "$maintenance_marker" ]; then
+  state=""
+  [ -n "$python" ] && state="$(helper maintenance "$maintenance_marker" "$now" 2>>"$work/helper.err")"
+  if [ -z "$state" ] && modified="$(stat -c %Y "$maintenance_marker" 2>/dev/null)"; then
+    state="on $((now - modified)) $(iso "$modified") unknown"
+  fi
+  if [ "${state%% *}" = on ]; then
+    read -r _ maintenance_age maintenance_since maintenance_reason <<<"$state"
+    log maintenance_on "since=$maintenance_since hours=$((maintenance_age / 3600))" "維護模式中（原因：$maintenance_reason）：daily 與 news 只記 skipped，看門狗與 monitor 照常"
+    if [ "$maintenance_age" -gt $((MAINTENANCE_MAX_HOURS * 3600)) ]; then
+      anomaly maintenance_long "維護模式：自 $maintenance_since 開啟已 $((maintenance_age / 3600)) 小時（上限 $MAINTENANCE_MAX_HOURS 小時；原因：$maintenance_reason），這段期間 daily 與 news 都沒有執行。維護做完了就關掉：\`docker compose -p <P> exec scheduler python -m worker.cli maintenance off --reason '<做完什麼>'\`；還要繼續就不用處理，每天會再提醒一次（docs/ops/SCHEDULING.md 維護模式）。"
+    fi
+  fi
+fi
+# Expired (#468 AC-5): serve removed the marker of a backfill or backtest that stopped
+# beating (killed without its finally, e.g. SIGKILL or the OOM killer). Daily and news
+# run again, but the command did not finish: reported once a Taipei day.
+if [ -n "$python" ]; then
+  expired="$(helper maintenance-expired "$logs/maintenance.log" "$now" 2>>"$work/helper.err")" || expired=""
+  if [ -n "$expired" ]; then
+    read -r expired_at expired_owner expired_pid expired_minutes expired_reason <<<"$expired"
+    anomaly maintenance_expired "維護模式：\`$expired_owner\`（pid $expired_pid，\`$expired_reason\`）的心跳停了 $expired_minutes 分鐘，serve 在 $expired_at 自動解除維護模式，daily 與 news 已恢復。這個作業沒有正常結束（可能被 OOM 或 SIGKILL 結束），請查它的輸出與 \`$logs/maintenance.log\`，必要時以相同參數重跑（回補會從 manifest 續做）。"
+  fi
+fi
+skipped_for_maintenance() { # skipped_for_maintenance LOG: a daily of that log skipped for maintenance
+  [ -f "$1" ] && grep -qE '^===== skipped reason=maintenance ' "$1"
+}
+
 # daily: from 23:10 on a weekday, the day's log needs an end line (only once daily
 # logs exist). A 21:30 run ends by its 80-minute limit (backend/worker/serve.py), and
 # a 23:00 trigger that finds it running writes an end line of its own.
@@ -304,8 +340,13 @@ if [ -n "$python" ] && [ -f "$data_dir/stock.db" ] && compgen -G "$logs/daily-*.
   case "$result" in
     success|non_trading_day|running|skip) ;;
     none)
-      # Without a log the daily_no_end check above has reported it already.
-      [ -f "$logs/daily-$taipei_date.log" ] && anomaly daily_result "daily 排程：台北 $taipei_iso 有日誌但 \`schedule_runs\` 沒有這一天的 run（worker 未能啟動），請看 \`$logs/daily-$taipei_date.log\`。" ;;
+      # Without a log the daily_no_end check above has reported it already. A daily
+      # that only skipped for maintenance mode wrote no row (#468).
+      if skipped_for_maintenance "$logs/daily-$taipei_date.log"; then
+        log daily_maintenance "date=$taipei_iso" "daily 因維護模式跳過，沒有 run 列，不算異常"
+      else
+        [ -f "$logs/daily-$taipei_date.log" ] && anomaly daily_result "daily 排程：台北 $taipei_iso 有日誌但 \`schedule_runs\` 沒有這一天的 run（worker 未能啟動），請看 \`$logs/daily-$taipei_date.log\`。"
+      fi ;;
     error) found=1; log daily_check_failed "" "讀取 stock.db 的 schedule_runs 失敗：$(tail -n 1 "$work/helper.err" 2>/dev/null)" ;;
     catchup_incomplete) anomaly daily_result "daily 排程：台北 $taipei_iso 當日成功，但補抓前幾個交易日沒有補齊（catchup），請查 \`python -m worker.cli schedule-runs --date $taipei_iso\` 的 catchup 步驟，必要時依 docs/ops/SCHEDULING.md 重跑與回補 手動 backfill。" ;;
     *) anomaly daily_result "daily 排程：台北 $taipei_iso 的 daily 結果是 \`$result\`（不是 success／non_trading_day），請查 \`python -m worker.cli schedule-runs --date $taipei_iso\` 與 \`$logs/daily-$taipei_date.log\`。" ;;
@@ -331,7 +372,13 @@ if [ -n "$python" ] && [ -f "$data_dir/stock.db" ] && compgen -G "$logs/daily-*.
     case "$result" in
       success|non_trading_day|running|skip) ;;
       none)
-        [ -f "$logs/daily-$previous_date.log" ] && anomaly "daily_result_$previous_date" "daily 排程：台北 $previous_iso（前一個交易日）有日誌但 \`schedule_runs\` 沒有這一天的 run（worker 未能啟動），請看 \`$logs/daily-$previous_date.log\`。" ;;
+        if skipped_for_maintenance "$logs/daily-$previous_date.log"; then
+          # Maintenance across midnight (#468 review 6647096392): 21:30 and 23:00 both
+          # skipped, ended after midnight, so serve's catch-up (today's date only) never ran it.
+          anomaly "daily_result_$previous_date" "daily 排程：台北 $previous_iso（前一個交易日）的 daily 因維護模式整晚都被跳過（21:30 與 23:00 都在維護中，午夜後才解除），沒有補跑。下一個交易日 daily 的 catchup 會補抓這一天的 collect，但不補 analyze、candidates 等；要這一天的訊號與候選，請在維護結束後手動跑 \`python -m worker.cli daily --date $previous_iso\`（docs/ops/SCHEDULING.md 維護模式）。"
+        else
+          [ -f "$logs/daily-$previous_date.log" ] && anomaly "daily_result_$previous_date" "daily 排程：台北 $previous_iso（前一個交易日）有日誌但 \`schedule_runs\` 沒有這一天的 run（worker 未能啟動），請看 \`$logs/daily-$previous_date.log\`。"
+        fi ;;
       error) found=1; log daily_check_failed "date=$previous_iso" "讀取 stock.db 的 schedule_runs 失敗：$(tail -n 1 "$work/helper.err" 2>/dev/null)" ;;
       catchup_incomplete) anomaly "daily_result_$previous_date" "daily 排程：台北 $previous_iso（前一個交易日）成功，但補抓前幾個交易日沒有補齊（catchup），請查 \`python -m worker.cli schedule-runs --date $previous_iso\` 的 catchup 步驟，必要時依 docs/ops/SCHEDULING.md 重跑與回補 手動 backfill。" ;;
       *) anomaly "daily_result_$previous_date" "daily 排程：台北 $previous_iso（前一個交易日）的 daily 結果是 \`$result\`（不是 success／non_trading_day；仍是 running 而超過 ${DAILY_PREVIOUS_RUNNING_MINUTES} 分的視為 failed，例如 23:00 的重試卡住），請查 \`python -m worker.cli schedule-runs --date $previous_iso\` 與 \`$logs/daily-$previous_date.log\`。" ;;

@@ -9,6 +9,7 @@ import {
   NOTE_MISSING_TEXT,
   NOTE_PENDING_TEXT,
   NOT_COMPUTED_TEXT,
+  averageVolumeText,
   PARTIAL_NOTE,
   candidateGroupState,
   candidateGroupText,
@@ -20,6 +21,8 @@ import {
   candidatesState,
   formatCandidateScore,
   formatEntryZone,
+  formatLots,
+  liquidityExclusionText,
   formatSubItemValue,
   marketSourceLabel,
 } from './candidates'
@@ -169,3 +172,16 @@ check(detailRows.every((row, index) => slice(row, '<details class="candidate-det
 check(miniCards.every((card, index) => slice(card, '<details class="details candidate-mini-ai"', '</details>').includes(index === 0 ? '>已在追蹤</a>' : '>加入追蹤</button>')), 'every phone card detail has the plan button or link')
 const trackedDetail = slice(detailRows[0], '<details class="candidate-detail"', '</details>')
 check(trackedDetail.includes('href="/actions#plan-7">已在追蹤</a>') && !trackedDetail.includes('加入追蹤'), 'a tracked candidate links to its plan')
+
+// ---- liquidity floor (candidate_score_v6, #490; UI_COPY_SPEC §10) ----
+check(formatLots(1681.55) === '1,681 張' && formatLots(999.6) === '999 張' && formatLots(0) === '0 張' && formatLots(null) === '—', 'lots: whole lots rounded down with separators, null is 「—」')
+check(liquidityExclusionText({ exclusion: 'low_volume', average_volume_lots_20d: 999.6, minimum_lots: 1000 }) === '20 日均量 999 張，低於 1,000 張門檻，不列候選', 'just under the floor never reads as the floor (PR 496 review)')
+check(averageVolumeText(29803.2) === '20 日均量 29,803 張' && averageVolumeText(null) === '20 日均量資料不足', 'average volume copy')
+const lowVolume = { exclusion: 'low_volume', average_volume_lots_20d: 32.4, minimum_lots: 1000 }
+check(liquidityExclusionText(lowVolume) === '20 日均量 32 張，低於 1,000 張門檻，不列候選', `low volume note, got ${liquidityExclusionText(lowVolume)}`)
+check(liquidityExclusionText({ ...lowVolume, exclusion: 'liquidity_data_missing', average_volume_lots_20d: null }) === '20 日均量資料不足，無法確認是否達 1,000 張門檻，不列候選', 'missing data note')
+check(liquidityExclusionText(null) === null && liquidityExclusionText({ ...lowVolume, exclusion: null }) === null, 'no note without an exclusion')
+const liquidItem = { ...completeItem(), liquidity: { average_volume_lots_20d: 1682.3, minimum_lots: 1000, state: 'ok', below_minimum: false, data_as_of: '2026-10-16', window_start: '2026-09-18', window_end: '2026-10-16', unit: 'lots' as const } }
+const liquidList = render(<CandidatesSection data={{ ...listResponse(), items: [liquidItem] }} loading={false} error={null} />)
+check(count(liquidList, '>20 日均量 1,682 張<') === 2 && count(liquidList, '20 日均量 1,682 張（資料日期 2026/10/16，候選門檻 1,000 張）') === 2, `the row and the card show the lots, both details add the date and the floor, got ${count(liquidList, '20 日均量 1,682 張')}`)
+check(!render(<CandidatesSection data={listResponse()} loading={false} error={null} />).includes('candidate-liquidity'), 'a run before candidate_score_v6 shows no average volume')

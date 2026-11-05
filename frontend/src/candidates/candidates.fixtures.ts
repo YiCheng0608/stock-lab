@@ -242,7 +242,7 @@ export const listResponse = (): CandidatesResponse => run([completeItem(), parti
 
 export const zeroResponse = (reason: 'no_actionable_signals' | 'all_excluded'): CandidatesResponse => run([], {
   zero_reason: reason,
-  zero_reason_text: reason === 'no_actionable_signals' ? '當日沒有成立（條件成立）的策略訊號' : '成立的訊號都因 ETF、價位不合法或評分資料不足被排除',
+  zero_reason_text: reason === 'no_actionable_signals' ? '當日沒有成立（條件成立）的策略訊號' : '成立的訊號都因 ETF、價位不合法、成交量低於門檻或評分資料不足被排除',
 })
 
 export const notComputedResponse = (): CandidatesResponse => ({

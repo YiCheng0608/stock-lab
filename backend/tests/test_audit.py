@@ -1079,8 +1079,22 @@ def test_candidates_written_by_the_worker_pass_and_a_changed_total_fails(fx):
     market = scored_market(fx)
     versions = pipeline._ensure_strategies(fx.db)
     fx.commit()
+    # candidate_score_v6's liquidity floor (#490) walks verified TAIEX
+    # sessions (a fixture source counts as one) and needs 1,000 lots: 1101
+    # and 2330 trade about a thousand times their fixture volume, 1102 (with
+    # one suspended session) stays at about one lot and is left out.
+    fx.sql(
+        "update market_bars set source = 'twse_index_fixture' where instrument_id = ?",
+        market["TAIEX"].id,
+    )
+    fx.sql(
+        "update market_bars set volume = volume * 1000 where instrument_id in (?, ?)",
+        market["1101"].id,
+        market["2330"].id,
+    )
+    fx.db.expire_all()
     for name, entry_type in (("breakout_v3", "breakout"), ("pullback_v3", "pullback")):
-        for symbol in ("1101", "2330"):
+        for symbol in ("1101", "2330", "1102"):
             instrument = market[symbol]
             bars = (
                 fx.db.query(MarketBar)
@@ -1121,6 +1135,7 @@ def test_candidates_written_by_the_worker_pass_and_a_changed_total_fails(fx):
     fx.commit()
     result = compute_daily_candidates(fx.db, T)
     assert result["status"] == "success" and result["candidate_count"] >= 1, result
+    assert result["exclusions"]["low_volume"] == 2, result  # 1102's two signals
     checks = audit_checks.derived_checks(fx.context(), lambda: None)
     cands = by_key(checks, "candidates")
     assert cands.result == "pass", (
@@ -1136,6 +1151,16 @@ def test_candidates_written_by_the_worker_pass_and_a_changed_total_fails(fx):
         audit_checks.derived_checks(fx.context(), lambda: None), "candidates"
     )
     assert cands.result == "fail" and "total" in cands.failures
+    fx.sql(
+        "update daily_candidates set total_score = total_score - 0.01,"
+        " components_json = json_set(components_json,"
+        " '$.liquidity.average_volume_lots_20d', 999.0) where rank = 1"
+    )
+    cands = by_key(
+        audit_checks.derived_checks(fx.context(), lambda: None), "candidates"
+    )
+    assert cands.result == "fail"
+    assert set(cands.failures) == {"liquidity:average_volume_lots_20d"}
 
 
 def test_summary_lists_every_item_with_its_result(fx, tmp_path, monkeypatch):

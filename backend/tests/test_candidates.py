@@ -23,9 +23,11 @@ from app.domain import (
     CANDIDATE_SCORE_V3,
     CANDIDATE_SCORE_V4,
     CANDIDATE_SCORE_V5,
+    CANDIDATE_SCORE_V6,
     CANDIDATE_SCORE_VERSION,
     weighted_available_mean,
 )
+from app.liquidity import LIQUIDITY_WINDOW_SESSIONS, SHARES_PER_LOT
 from app.strategies import REGISTRY
 from app.models import (
     CandidateRun,
@@ -38,6 +40,8 @@ from app.models import (
     MarketBar,
     NewsItem,
     NewsLlmResult,
+    NoTradeDay,
+    RawPayload,
     Signal,
     ThemeGroup,
 )
@@ -57,6 +61,12 @@ def _weekdays(end: date, count: int) -> list[date]:
 T = date(2026, 9, 4)
 DAYS = _weekdays(T, 25)
 CLOSE = 100.0
+# Daily volume in shares: 1,500 lots, above candidate_score_v6's 1,000-lot
+# liquidity floor (#490).
+VOLUME = 1_500_000
+# ``stock``'s flows are per 1,000 shares of daily volume, so the flow ratios
+# the tests assert read as they did when the fixture volume was 1,000 shares.
+FLOW_SCALE = VOLUME / 1000
 NEWS_PROMPT_VERSION = CANDIDATE_SCORE["components"]["news_sentiment"][
     "llm_prompt_version"
 ]
@@ -95,11 +105,13 @@ def stock(
     *,
     exchange="TWSE",
     instrument_type="stock",
-    volume=1000,
+    volume=VOLUME,
     flow=(10.0, 10.0, 0.0),
     margin=(1000.0, 1000.0),
     chips=True,
 ):
+    # The liquidity floor walks the verified TAIEX sessions.
+    taiex(db)
     instrument = Instrument(
         exchange=exchange,
         symbol=symbol,
@@ -129,9 +141,9 @@ def stock(
                 ChipSnapshot(
                     instrument_id=instrument.id,
                     trading_date=day,
-                    foreign_buy=flow[0],
-                    trust_buy=flow[1],
-                    dealer_buy=flow[2],
+                    foreign_buy=flow[0] * FLOW_SCALE,
+                    trust_buy=flow[1] * FLOW_SCALE,
+                    dealer_buy=flow[2] * FLOW_SCALE,
                     margin_balance=margin[1] if day == T else margin[0],
                     source="fixture-chips",
                 )
@@ -155,7 +167,7 @@ def signal(
     actionable_flag=True,
 ):
     breakout = strategy == "breakout_v3"
-    prior_volume = 1000 / volume_ratio
+    prior_volume = VOLUME / volume_ratio
     inputs = (
         {
             "prior_20_volumes": [prior_volume] * 20,
@@ -276,6 +288,7 @@ def rows(db):
 V3_SHA256 = "2995cb22b87ff998ace16c66174aaf6b4cc4850a8d1764898eb252a688cc244e"
 V4_SHA256 = "3a9eaf719381644a8cd465b23933007df73226cfb2f03ca4371d78a3727496f1"
 V5_SHA256 = "8ca355cd2eb7a93a0051b7c3e5ca7ac9683e8267e151eb58e623d44c9d5104b0"
+V6_SHA256 = "e67b016648af677ed44f5ccd79f738046c83fe44f48ebe409af9101dcfd9b725"
 
 
 def _snapshot_sha256(config):
@@ -350,8 +363,6 @@ def test_v4_differs_from_v3_only_in_its_name_and_news_prompt():
 def test_v5_differs_from_v4_only_in_its_name_and_strategy_names():
     """Changing candidate_score_v5 without a new version must fail here (#404)."""
 
-    assert CANDIDATE_SCORE is CANDIDATE_SCORE_V5
-    assert CANDIDATE_SCORE["name"] == CANDIDATE_SCORE_VERSION == "candidate_score_v5"
     assert _snapshot_sha256(CANDIDATE_SCORE_V5) == V5_SHA256
     expected = copy.deepcopy(CANDIDATE_SCORE_V4)
     expected["name"] = "candidate_score_v5"
@@ -366,8 +377,34 @@ def test_v5_differs_from_v4_only_in_its_name_and_strategy_names():
         "pullback_v3": "abs(close[T]/MA20[T]-1)",
     }
     assert CANDIDATE_SCORE_V5 == expected
+
+
+def test_v6_differs_from_v5_only_in_its_name_and_liquidity_floor():
+    """Changing candidate_score_v6 without a new version must fail here (#490)."""
+
+    assert CANDIDATE_SCORE is CANDIDATE_SCORE_V6
+    assert CANDIDATE_SCORE["name"] == CANDIDATE_SCORE_VERSION == "candidate_score_v6"
+    assert _snapshot_sha256(CANDIDATE_SCORE_V6) == V6_SHA256
+    expected = copy.deepcopy(CANDIDATE_SCORE_V5)
+    expected["name"] = "candidate_score_v6"
+    expected["pool"]["liquidity"] = {
+        "metric": "average_volume_lots_20d",
+        "minimum_lots": 1000,
+        "shares_per_lot": 1000,
+        "window_sessions": 20,
+        "sessions": "verified_taiex_sessions_to_T_inclusive",
+        "suspended_session": "skipped_not_counted",
+        "no_trade_day": "zero_lots_from_official_no_trade_row",
+        "missing_session_or_volume": "excluded_liquidity_data_missing",
+        "below_minimum": "excluded_low_volume",
+    }
+    assert CANDIDATE_SCORE_V6 == expected
     # The pool is the registry: every registered strategy, nothing else.
-    assert CANDIDATE_SCORE_V5["pool"]["strategies"] == list(REGISTRY)
+    assert CANDIDATE_SCORE_V6["pool"]["strategies"] == list(REGISTRY)
+    # The rule's constants are the configuration's.
+    floor = CANDIDATE_SCORE_V6["pool"]["liquidity"]
+    assert floor["shares_per_lot"] == SHARES_PER_LOT
+    assert floor["window_sessions"] == LIQUIDITY_WINDOW_SESSIONS
 
 
 def test_score_reads_the_news_prompt_version_the_news_llm_writes():
@@ -856,14 +893,26 @@ ITEM_KEYS = {
     # User tracking plans (#253).
     "candidate_id",
     "open_plan_id",
+    # The 20-session average volume the liquidity floor read (#490).
+    "liquidity",
     # The plain-language entry plan from strategy_levels (#491).
     "entry_plan",
 }
 
 
 def taiex(db, days=DAYS):
-    """TAIEX sessions; a ``fixture`` source counts as a verified session."""
+    """TAIEX sessions; a ``fixture`` source counts as a verified session.
 
+    Idempotent: ``stock`` calls it, so the first stock adds the index.
+    """
+
+    existing = db.scalar(
+        select(Instrument).where(
+            Instrument.instrument_type == "index", Instrument.symbol == "TAIEX"
+        )
+    )
+    if existing is not None:
+        return existing
     index = Instrument(
         exchange="TWSE",
         symbol="TAIEX",
@@ -887,6 +936,7 @@ def taiex(db, days=DAYS):
             )
         )
     db.flush()
+    return index
 
 
 def bar(db, instrument, day):
@@ -966,9 +1016,17 @@ def test_candidate_market_keeps_every_existing_field(db, client):
     signal(db, a)
     db.commit()
     compute_daily_candidates(db, T)
+    # Without verified TAIEX sessions the change cannot be checked (the list
+    # was computed with them: the liquidity floor reads them, #490).
+    db.execute(
+        delete(MarketBar).where(
+            MarketBar.instrument_id == taiex(db).id,
+        )
+    )
+    db.commit()
+    db.info.pop("_decision_taiex_dates", None)
     item = client.get("/api/candidates").json()["items"][0]
     assert set(item) == ITEM_KEYS | {"market"}
-    # Without verified TAIEX sessions the change cannot be checked.
     assert item["market"]["close"] == CLOSE
     assert item["market"]["change_status"] == "unverified"
     detail = client.get("/api/stocks/TWSE/1101").json()["candidate"]
@@ -1070,10 +1128,11 @@ def test_a_candidate_run_is_computed_at_the_clock(db, frozen_utcnow):
     assert db.scalar(select(CandidateRun.computed_at)) == frozen_utcnow.at
 
 
-def test_the_read_versions_fall_back_from_v5_to_v4_to_v3_to_v2():
+def test_the_read_versions_fall_back_from_v6_to_v5_to_v4_to_v3_to_v2():
     from app.domain import CANDIDATE_SCORE_READ_VERSIONS
 
     assert CANDIDATE_SCORE_READ_VERSIONS == (
+        "candidate_score_v6",
         "candidate_score_v5",
         "candidate_score_v4",
         "candidate_score_v3",
@@ -1084,6 +1143,9 @@ def test_the_read_versions_fall_back_from_v5_to_v4_to_v3_to_v2():
 @pytest.mark.parametrize(
     ("previous", "newer"),
     [
+        ("candidate_score_v5", "candidate_score_v6"),
+        ("candidate_score_v4", "candidate_score_v6"),
+        # #490: a date with v5 and v4 runs and no v6 reads v5.
         ("candidate_score_v4", "candidate_score_v5"),
         ("candidate_score_v3", "candidate_score_v5"),
         ("candidate_score_v2", "candidate_score_v5"),
@@ -1099,7 +1161,7 @@ def test_a_date_with_only_a_previous_version_run_still_shows_its_candidates(
     """#392／#407 review M3, #413, #404: past dates keep their earlier lists.
 
     Runs are not recomputed when the score version changes, so a date without
-    a current-version run (candidate_score_v5) shows its candidate_score_v4
+    a current-version run (candidate_score_v6) shows its candidate_score_v5
     run, or the version before it, in /api/candidates, the
     action list's tier 1 and the theme member table; a date with two versions
     shows only the one earlier in CANDIDATE_SCORE_READ_VERSIONS.
@@ -1151,3 +1213,307 @@ def test_a_date_with_only_a_previous_version_run_still_shows_its_candidates(
     assert (listed["score_version"], listed["items"]) == (newer, [])
     assert action_tier_rows(db, T)[0].tier != 1
     assert member_context(db, T, None, [a.id])["ranks"] == {}
+
+
+# --- liquidity floor (candidate_score_v6, #490) ------------------------------
+
+
+def _no_trade_day(db, instrument, day):
+    """An official no-trade day: the stored quote table lists it without trades."""
+
+    raw = RawPayload(
+        source="twse",
+        endpoint="fixture-no-trade",
+        sha256="0" * 64,
+        data_as_of=day.isoformat(),
+    )
+    db.add(raw)
+    db.flush()
+    db.add(
+        NoTradeDay(
+            instrument_id=instrument.id,
+            trading_date=day,
+            source="twse",
+            endpoint="fixture-no-trade",
+            data_as_of=day.isoformat(),
+            collected_at=datetime(day.year, day.month, day.day, 10, 30),
+            raw_payload_id=raw.id,
+        )
+    )
+    db.flush()
+
+
+def _lots(lots):
+    return int(lots * SHARES_PER_LOT)
+
+
+def _floor_run(db):
+    db.commit()
+    result = compute_daily_candidates(db, T)
+    return result, db.get(CandidateRun, result["candidate_run_id"])
+
+
+def test_a_stock_below_1000_lots_is_excluded_as_low_volume(db):
+    thin = stock(db, "1101", volume=_lots(999))
+    exact = stock(db, "1102", volume=_lots(1000))
+    signal(db, thin)
+    signal(db, exact)
+    result, run = _floor_run(db)
+
+    assert [row.instrument_id for row in rows(db)] == [exact.id]
+    assert result["exclusions"]["low_volume"] == 1
+    assert "liquidity_data_missing" not in result["exclusions"]
+    assert result["pool_count"] == 1
+    liquidity = run.summary_json["liquidity"]
+    assert liquidity["minimum_lots"] == 1000
+    assert liquidity["data_as_of"] == T.isoformat()
+    assert [
+        (row["symbol"], row["average_volume_lots_20d"], row["strategies"])
+        for row in liquidity["low_volume"]
+    ] == [("1101", 999.0, ["breakout_v3"])]
+    assert liquidity["liquidity_data_missing"] == []
+    # Exactly 1,000 lots enters, and the row keeps the value it read.
+    stored = rows(db)[0].components_json["liquidity"]
+    assert stored["average_volume_lots_20d"] == 1000.0
+    assert stored["minimum_lots"] == 1000 and stored["state"] == "ok"
+    assert (stored["window_start"], stored["window_end"]) == (
+        DAYS[-20].isoformat(),
+        T.isoformat(),
+    )
+
+
+def test_a_high_priced_stock_with_few_lots_is_excluded_whatever_its_turnover(db):
+    """The floor is lots, not turnover: 500 lots at 5,000 is 2.5 billion a day."""
+
+    dear = stock(db, "1101", volume=_lots(500))
+    for row in db.scalars(select(MarketBar).where(MarketBar.instrument_id == dear.id)):
+        row.open = row.close = row.adj_close = 5000.0
+        row.high, row.low = 5001.0, 4999.0
+        row.turnover = 5000.0 * row.volume
+    cheap = stock(db, "1102", volume=_lots(1200))
+    signal(db, dear)
+    signal(db, cheap)
+    result, run = _floor_run(db)
+
+    assert bar(db, dear, T).turnover > 20 * bar(db, cheap, T).turnover
+    assert [row.instrument_id for row in rows(db)] == [cheap.id]
+    assert result["exclusions"]["low_volume"] == 1
+    assert run.summary_json["liquidity"]["low_volume"][0]["symbol"] == "1101"
+
+
+def test_the_average_is_of_20_sessions_and_the_last_is_the_trading_date(db):
+    a = stock(db, "1101", volume=_lots(1000))
+    # Older than the 20 sessions: never read.
+    bar(db, a, DAYS[-21]).volume = 0
+    # Inside the window: one heavy day lifts a thin stock to the floor.
+    b = stock(db, "1102", volume=_lots(960))
+    bar(db, b, T).volume = _lots(960 + 20 * 40)
+    signal(db, a)
+    signal(db, b)
+    _floor_run(db)
+
+    stored = {
+        row.instrument_id: row.components_json["liquidity"]["average_volume_lots_20d"]
+        for row in rows(db)
+    }
+    assert stored == {a.id: 1000.0, b.id: 1000.0}
+
+
+def test_a_suspended_session_is_not_counted(db):
+    """A suspended day is skipped and the window reaches one session further back."""
+
+    a = stock(db, "1101", volume=_lots(1000))
+    suspended = bar(db, a, DAYS[-3])
+    suspended.is_suspended, suspended.volume = True, 0
+    signal(db, a)
+    _floor_run(db)
+
+    [row] = rows(db)
+    stored = row.components_json["liquidity"]
+    assert stored["average_volume_lots_20d"] == 1000.0
+    assert stored["suspended_sessions"] == [DAYS[-3].isoformat()]
+    assert stored["counted_sessions"] == 20
+    assert stored["window_start"] == DAYS[-21].isoformat()
+
+
+def test_an_official_no_trade_day_counts_zero_lots(db):
+    """A session without a bar but with a no-trade row is 0 lots, not missing (#454)."""
+
+    a = stock(db, "1101", volume=_lots(1050))
+    db.delete(bar(db, a, DAYS[-2]))
+    db.flush()
+    _no_trade_day(db, a, DAYS[-2])
+    signal(db, a)
+    result, run = _floor_run(db)
+
+    # 19 sessions of 1,050 lots and one of 0: 997.5 lots, below the floor.
+    assert rows(db) == []
+    assert result["exclusions"]["low_volume"] == 1
+    [row] = run.summary_json["liquidity"]["low_volume"]
+    assert row["average_volume_lots_20d"] == 997.5
+    assert row["state"] == "ok"
+
+
+def test_a_session_without_a_bar_is_missing_data_never_zero(db):
+    """A gap is liquidity_data_missing: read as 0 the stock would be low_volume."""
+
+    a = stock(db, "1101", volume=_lots(1050))
+    db.delete(bar(db, a, DAYS[-2]))
+    db.flush()
+    signal(db, a)
+    result, run = _floor_run(db)
+
+    assert rows(db) == []
+    assert result["exclusions"] == {"liquidity_data_missing": 1}
+    assert result["zero_reason"] == "all_excluded"
+    [row] = run.summary_json["liquidity"]["liquidity_data_missing"]
+    assert row["state"] == "missing_bars"
+    assert row["average_volume_lots_20d"] is None
+    assert row["missing_sessions"] == [DAYS[-2].isoformat()]
+    assert run.summary_json["liquidity"]["low_volume"] == []
+
+
+def test_a_stock_listed_under_20_sessions_has_no_average(db):
+    a = stock(db, "1101", volume=_lots(5000))
+    a.listing_date = DAYS[-10]
+    signal(db, a)
+    result, run = _floor_run(db)
+
+    assert rows(db) == []
+    assert result["exclusions"] == {"liquidity_data_missing": 1}
+    [row] = run.summary_json["liquidity"]["liquidity_data_missing"]
+    assert row["state"] == "insufficient_sessions"
+
+
+def test_a_date_that_is_not_a_verified_session_has_no_average(db):
+    a = stock(db, "1101")
+    db.execute(
+        delete(MarketBar).where(
+            MarketBar.instrument_id == taiex(db).id, MarketBar.trading_date == T
+        )
+    )
+    signal(db, a)
+    result, run = _floor_run(db)
+
+    assert result["exclusions"] == {"liquidity_data_missing": 1}
+    [row] = run.summary_json["liquidity"]["liquidity_data_missing"]
+    assert row["state"] == "session_baseline_missing"
+
+
+def test_the_pool_percentiles_rank_the_liquid_signals_only(db):
+    """The floor runs before scoring: an excluded signal is not in any population."""
+
+    liquid = stock(db, "1101")
+    thin = stock(db, "1102", volume=_lots(10))
+    signal(db, liquid, volume_ratio=1.3)
+    signal(db, thin, volume_ratio=3.0)
+    _floor_run(db)
+
+    [row] = rows(db)
+    technical = row.components_json["technical"]
+    assert technical["population"] == 1
+    assert technical["items"]["volume_ratio"]["percentile"] == 0.5
+
+
+def test_a_stock_with_two_low_volume_signals_is_listed_once(db):
+    a = stock(db, "1101", volume=_lots(10))
+    signal(db, a, "breakout_v3")
+    signal(db, a, "pullback_v3")
+    result, run = _floor_run(db)
+
+    assert result["exclusions"]["low_volume"] == 2  # one per signal
+    [row] = run.summary_json["liquidity"]["low_volume"]
+    assert row["strategies"] == ["breakout_v3", "pullback_v3"]
+
+
+def test_v5_has_no_floor(db):
+    """An earlier version keeps its own pool rule: a v5 recompute is unchanged."""
+
+    thin = stock(db, "1101", volume=_lots(10))
+    signal(db, thin)
+    db.commit()
+    result = compute_daily_candidates(db, T, config=CANDIDATE_SCORE_V5)
+
+    assert result["candidate_count"] == 1
+    run = db.get(CandidateRun, result["candidate_run_id"])
+    assert "liquidity" not in run.summary_json
+    assert "liquidity" not in rows(db)[0].components_json
+
+
+def test_pages_show_the_average_volume_and_the_floor_note(db, client):
+    """Candidates, stock and action pages: the 20-session lots and the floor note."""
+
+    listed = stock(db, "1101", volume=_lots(1500))
+    thin = stock(db, "1102", volume=_lots(32))
+    signal(db, listed)
+    signal(db, thin)
+    _floor_run(db)
+
+    [item] = client.get("/api/candidates").json()["items"]
+    assert item["liquidity"] == {
+        "average_volume_lots_20d": 1500.0,
+        "minimum_lots": 1000,
+        "state": "ok",
+        "below_minimum": False,
+        "data_as_of": T.isoformat(),
+        "window_start": DAYS[-20].isoformat(),
+        "window_end": T.isoformat(),
+        "unit": "lots",
+    }
+
+    board = client.get("/api/stocks/TWSE/1102").json()["strategy_board"]
+    assert board["candidate"] is None
+    assert board["liquidity"] == {
+        "average_volume_lots_20d": 32.0,
+        "state": "ok",
+        "unit": "lots",
+        "data_as_of": T.isoformat(),
+        "minimum_lots": 1000,
+        "below_minimum": True,
+        "candidate_exclusion": "low_volume",
+        "score_version": "candidate_score_v6",
+    }
+    board = client.get("/api/stocks/TWSE/1101").json()["strategy_board"]
+    assert board["liquidity"]["average_volume_lots_20d"] == 1500.0
+    assert board["liquidity"]["below_minimum"] is False
+    assert board["liquidity"]["candidate_exclusion"] is None
+
+
+def test_the_action_row_of_an_excluded_stock_carries_the_floor_note(db, client):
+    from app.candidate_view import liquidity_exclusions
+
+    listed = stock(db, "1101", volume=_lots(1500))
+    thin = stock(db, "1102", volume=_lots(32))
+    signal(db, listed)
+    signal(db, thin)
+    _, run = _floor_run(db)
+
+    exclusions = liquidity_exclusions(run)
+    assert set(exclusions) == {thin.id}
+    assert exclusions[thin.id] == {
+        "average_volume_lots_20d": 32.0,
+        "minimum_lots": 1000,
+        "state": "ok",
+        "below_minimum": True,
+        "exclusion": "low_volume",
+        "data_as_of": T.isoformat(),
+        "score_version": "candidate_score_v6",
+        "unit": "lots",
+    }
+    # A run of a version without the floor has no note.
+    run.summary_json = {}
+    assert liquidity_exclusions(run) == {}
+
+
+def test_an_average_just_under_the_floor_is_stored_rounded_down(db):
+    """999.99995 lots is low_volume and stored as 999.999, never 1000.0 (#496 review)."""
+
+    a = stock(db, "1101", volume=_lots(1000))
+    bar(db, a, DAYS[-5]).volume = _lots(1000) - 1
+    signal(db, a)
+    result, run = _floor_run(db)
+
+    assert rows(db) == []
+    assert result["exclusions"]["low_volume"] == 1
+    [row] = run.summary_json["liquidity"]["low_volume"]
+    assert row["average_volume_lots_20d"] == 999.999

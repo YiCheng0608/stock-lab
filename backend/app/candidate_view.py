@@ -53,8 +53,53 @@ NULL_EXPLANATIONS = {
 }
 ZERO_REASONS = {
     "no_actionable_signals": "當日沒有成立（條件成立）的策略訊號",
-    "all_excluded": "成立的訊號都因 ETF、價位不合法或評分資料不足被排除",
+    "all_excluded": "成立的訊號都因 ETF、價位不合法、成交量低於門檻或評分資料不足被排除",
 }
+
+
+def liquidity_view(stored: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The page fields of a stored liquidity check (candidate_score_v6, #490)."""
+
+    if not isinstance(stored, dict):
+        return None
+    return {
+        "average_volume_lots_20d": stored.get("average_volume_lots_20d"),
+        "minimum_lots": stored.get("minimum_lots"),
+        "state": stored.get("state"),
+        "below_minimum": stored.get("below_minimum", False),
+        "data_as_of": stored.get("data_as_of"),
+        "window_start": stored.get("window_start"),
+        "window_end": stored.get("window_end"),
+        "unit": "lots",
+    }
+
+
+def liquidity_exclusions(run: CandidateRun | None) -> dict[int, dict[str, Any]]:
+    """Stocks a run left out for the liquidity floor, by instrument id.
+
+    Read from the run's summary (``worker.candidates._liquid_pool``); empty for
+    the runs of versions without the floor.  ``below_minimum`` is true for
+    ``low_volume``, false for ``liquidity_data_missing``.
+    """
+
+    summary = (run.summary_json if run is not None else None) or {}
+    stored = summary.get("liquidity")
+    if not isinstance(stored, dict):
+        return {}
+    result: dict[int, dict[str, Any]] = {}
+    for reason in ("low_volume", "liquidity_data_missing"):
+        for row in stored.get(reason) or []:
+            result[int(row["instrument_id"])] = {
+                "average_volume_lots_20d": row.get("average_volume_lots_20d"),
+                "minimum_lots": stored.get("minimum_lots"),
+                "state": row.get("state"),
+                "below_minimum": reason == "low_volume",
+                "exclusion": reason,
+                "data_as_of": stored.get("data_as_of"),
+                "score_version": run.score_version,
+                "unit": "lots",
+            }
+    return result
 
 
 def _explained(node: dict[str, Any]) -> dict[str, Any]:
@@ -195,6 +240,9 @@ def candidate_item(
         "partial_components": row.weight_coverage < 1.0 - 1e-9,
         "components": _components(row.components_json or {}),
         "alternatives": (row.components_json or {}).get("alternatives", []),
+        # candidate_score_v6 (#490): the 20-session average volume the floor
+        # read; null for the runs of earlier versions.
+        "liquidity": liquidity_view((row.components_json or {}).get("liquidity")),
         "reasons": row.reasons_json or [],
         "groups": row.groups_json or [],
         "data_as_of": row.data_as_of.isoformat(),

@@ -106,6 +106,8 @@ class Context:
     raw_payloads: list[tuple] = field(default_factory=list)
     first_day: str | None = None
     last_day: str | None = None
+    # TAIEX index bar dates, read once by liquidity_lots.
+    taiex_days: list[str] | None = None
 
     def load(self) -> None:
         self.instruments = {
@@ -818,10 +820,73 @@ class Derived:
     run_times: dict[str, str] = field(default_factory=dict)
     changed: dict[tuple[int, str], bool] = field(default_factory=dict)
     changed_prices: dict[tuple[int, str], bool] = field(default_factory=dict)
+    # (run id, instrument id) -> recomputed 20-session lots (runs with a floor).
+    liquidity: dict[tuple[int, int], float | None] = field(default_factory=dict)
 
 
 def breakout_strategy(name: str) -> bool:
     return name.startswith("breakout")
+
+
+def liquidity_lots(
+    ctx: Context, instrument_id: int, day: str, window: int, shares_per_lot: int
+) -> float | None:
+    """candidate_score.md candidate_score_v6: 20-session average volume in lots.
+
+    Sessions are the TAIEX index bar dates; a suspended bar is skipped, a
+    session without a bar is 0 lots with an official no-trade row and missing
+    otherwise; missing data, a date that is not a session or fewer sessions
+    than the window (since listing) give None.
+    """
+
+    if ctx.taiex_days is None:
+        ctx.taiex_days = [
+            row[0]
+            for row in ctx.con.execute(
+                "select distinct b.trading_date from market_bars b join instruments i on i.id=b.instrument_id"
+                " where i.instrument_type='index' and i.exchange='TWSE' and i.symbol in ('TAIEX','TWII')"
+                " order by b.trading_date"
+            )
+        ]
+    sessions = [d for d in ctx.taiex_days if d <= day]
+    if not sessions or sessions[-1] != day:
+        return None
+    start = sessions[-min(len(sessions), 120)]
+    bars = {
+        row[0]: (row[1], row[2])
+        for row in ctx.con.execute(
+            "select trading_date, volume, is_suspended from market_bars where instrument_id=? and trading_date between ? and ?",
+            (instrument_id, start, day),
+        )
+    }
+    no_trade = {
+        row[0]
+        for row in ctx.con.execute(
+            "select trading_date from no_trade_days where instrument_id=? and trading_date between ? and ?",
+            (instrument_id, start, day),
+        )
+    }
+    listing = (ctx.instruments.get(instrument_id) or (None,) * 6)[5]
+    total, counted = 0.0, 0
+    for session in reversed(sessions[-120:]):
+        if counted == window:
+            break
+        if listing and session < str(listing)[:10]:
+            break
+        volume, suspended = bars.get(session, (None, None))
+        if session in bars and suspended:
+            continue
+        counted += 1
+        if session not in bars:
+            if session in no_trade:
+                continue
+            return None
+        if not finite(volume) or volume < 0:
+            return None
+        total += volume
+    if counted < window:
+        return None
+    return total / window / shares_per_lot
 
 
 def derived_checks(ctx: Context, stop: Callable[[], str | None]) -> list[Check]:
@@ -841,7 +906,7 @@ def derived_checks(ctx: Context, stop: Callable[[], str | None]) -> list[Check]:
     cands = Check(
         "candidates",
         "候選分數重算",
-        scope="每個 candidate run：籌碼分項值與全市場 percentile、技術分項值與同策略池 percentile、族群分項、分項分數、總分、名次",
+        scope="每個 candidate run：流動性門檻（v6 起，20 日均量張數與入池）、籌碼分項值與全市場 percentile、技術分項值與同策略池 percentile、族群分項、分項分數、總分、名次",
     )
     groups = Check(
         "groups",
@@ -919,6 +984,18 @@ def derived_checks(ctx: Context, stop: Callable[[], str | None]) -> list[Check]:
                     continue
                 if (t1 - entry) / (entry - invalid) < 1.5:
                     continue
+                floor = pool_config.get("liquidity")
+                if isinstance(floor, dict):
+                    lots = liquidity_lots(
+                        ctx,
+                        instrument_id,
+                        day,
+                        int(floor.get("window_sessions", 20)),
+                        int(floor.get("shares_per_lot", 1000)),
+                    )
+                    derived.liquidity[(run_id, instrument_id)] = lots
+                    if lots is None or lots < float(floor["minimum_lots"]):
+                        continue
                 entries.append((instrument_id, name))
                 derived.pool_needs[instrument_id].add((day, name))
         pools[run_id] = entries
@@ -1242,6 +1319,17 @@ def _check_candidates(
                     mid_rank(value, peers, better),
                     code,
                     population_changed,
+                )
+            # liquidity floor (candidate_score_v6): the stored 20-session lots
+            if (run_id, instrument_id) in derived.liquidity:
+                _judge(
+                    check,
+                    "liquidity:average_volume_lots_20d",
+                    (comp.get("liquidity") or {}).get("average_volume_lots_20d"),
+                    derived.liquidity[(run_id, instrument_id)],
+                    code,
+                    bool(derived.changed.get((instrument_id, day))),
+                    1e-3,
                 )
             # technical: values and same-strategy pool percentiles
             technical = comp.get("technical", {})
