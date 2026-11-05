@@ -919,6 +919,7 @@ def _percentile(value: float | None, peers: list[float | None]) -> float | None:
 
 
 CATALYST_ANSWERED_STATES = frozenset({"verified", "empty"})
+CATALYST_WINDOW_SESSIONS = 20
 
 
 def _catalyst_coverage(
@@ -926,9 +927,10 @@ def _catalyst_coverage(
 ) -> dict[str, Any]:
     """Dated event coverage of a catalyst window (hot_group_v1 1.2.0, #453).
 
-    The window is complete only when every session is a dated answer
-    (``verified`` or ``empty``, ``worker.mops_events.event_coverage_states``);
-    a ``partial`` or ``unqueried`` session leaves the catalyst null.
+    The window is complete only when it has all 20 sessions and every one is
+    a dated answer (``verified`` or ``empty``,
+    ``worker.mops_events.event_coverage_states``); a shorter TAIEX history, or
+    a ``partial`` or ``unqueried`` session, leaves the catalyst null (#474).
     """
 
     counts: dict[str, int] = defaultdict(int)
@@ -946,51 +948,86 @@ def _catalyst_coverage(
         ),
         "sessions": len(trading_dates),
         "states": dict(sorted(counts.items())),
-        "complete": bool(trading_dates) and not unanswered,
+        "complete": len(trading_dates) == CATALYST_WINDOW_SESSIONS and not unanswered,
         "unanswered_dates": unanswered,
     }
+
+
+CATALYST_EVENT_SOURCES = frozenset(
+    {"mops_material_information", "twse_tpex_official_announcement", "issuer_filing"}
+)
+CATALYST_WINDOW_WEIGHTS = ((1, 0.50), (5, 0.30), (20, 0.20))
 
 
 def _catalyst_value(
     db: Session,
     instrument_ids: list[int],
-    score_date: date,
     trading_dates: list[date],
     coverage: dict[str, Any],
-) -> float | None:
-    """Capped, weighted distinct official events; null without full coverage.
+    events_through_id: int,
+) -> tuple[float | None, dict[str, Any] | None]:
+    """Weighted share of eligible members with official events (hot_group 1.3.0).
 
-    With every window session answered, no event is a valid 0; with any
-    session unanswered the value is null even when events were stored (the
-    coverage, not the events found, decides whether the count is complete).
+    ``share_N`` is the fraction of ``instrument_ids`` (the eligible members)
+    with at least one official event in the last N window sessions; the raw
+    value is ``0.5×share_1 + 0.3×share_5 + 0.2×share_20`` (#474), which the
+    board percentile then normalises (:func:`_catalyst_percentile`).  Counting
+    members instead of events keeps one prolific filer, or a large group, from
+    saturating it.  With every window session answered, no event is a valid 0;
+    with any session unanswered the value is null even when events were
+    stored (the coverage, not the events found, decides whether the count is
+    complete).  Only events with ``id <= events_through_id`` count, so the
+    stored inputs can be recomputed after later collects add events.
     """
 
     if not instrument_ids or not trading_dates or not coverage["complete"]:
-        return None
-    events = db.scalars(
-        select(Event).where(
+        return None, None
+    rows = db.execute(
+        select(Event.instrument_id, Event.event_date).where(
             Event.instrument_id.in_(instrument_ids),
             Event.event_date.in_(trading_dates),
-            Event.source.in_(
-                {
-                    "mops_material_information",
-                    "twse_tpex_official_announcement",
-                    "issuer_filing",
-                }
-            ),
+            Event.source.in_(CATALYST_EVENT_SOURCES),
+            Event.id <= events_through_id,
         )
     ).all()
     date_index = {value: index + 1 for index, value in enumerate(trading_dates)}
-    counts = {1: set(), 5: set(), 20: set()}
-    for event in events:
-        session_no = date_index.get(event.event_date)
+    members: dict[int, set[int]] = {
+        window: set() for window, _ in CATALYST_WINDOW_WEIGHTS
+    }
+    for instrument_id, event_date in rows:
+        session_no = date_index.get(event_date)
         if session_no is None:
             continue
-        for window in counts:
+        for window in members:
             if session_no > len(trading_dates) - window:
-                counts[window].add(event.id)
-    weighted = 0.50 * len(counts[1]) + 0.30 * len(counts[5]) + 0.20 * len(counts[20])
-    return max(0.0, min(1.0, weighted / 3.0))
+                members[window].add(instrument_id)
+    eligible = len(set(instrument_ids))
+    value = sum(
+        weight * len(members[window]) / eligible
+        for window, weight in CATALYST_WINDOW_WEIGHTS
+    )
+    inputs = {
+        "eligible": eligible,
+        "event_members": {str(window): len(ids) for window, ids in members.items()},
+        "events_through_id": events_through_id,
+    }
+    return value, inputs
+
+
+def _catalyst_percentile(
+    value: float | None, peers: list[float | None]
+) -> float | None:
+    """Board percentile of the member share; no event stays a valid 0 (#474).
+
+    A board with a single value scores 0.5 when it has events, as the other
+    percentile components do, and 0 without events.
+    """
+
+    if value is None:
+        return None
+    if value == 0:
+        return 0.0
+    return _percentile(value, peers)
 
 
 def stored_hot_group_version(score: GroupDailyScore) -> str:
@@ -1074,6 +1111,9 @@ def _calculate_group_scores(
     # Dated event coverage per catalyst window: read once for the benchmark
     # window (event_coverage_states reads every run's metadata per call).
     catalyst_coverages: dict[tuple[date, ...], dict[str, Any]] = {}
+    # Every group of this run counts the same events (#474: recorded in the
+    # row so the audit can recompute the catalyst after later collects).
+    events_through_id = int(db.scalar(select(func.max(Event.id))) or 0)
 
     def catalyst_coverage_for(trading_dates: list[date]) -> dict[str, Any]:
         key = tuple(trading_dates)
@@ -1262,8 +1302,8 @@ def _calculate_group_scores(
         }
         flow_raw = sum(flow_values) / eligible if flow_coverage["complete"] else None
         catalyst_coverage = catalyst_coverage_for(trading_dates)
-        catalyst = _catalyst_value(
-            db, instrument_ids, score_date, trading_dates, catalyst_coverage
+        catalyst, catalyst_inputs = _catalyst_value(
+            db, instrument_ids, trading_dates, catalyst_coverage, events_through_id
         )
         categories = sorted(
             {item["etf_category"] for item in member_metrics if item["etf_category"]}
@@ -1309,6 +1349,7 @@ def _calculate_group_scores(
                 "candidates": candidates,
                 "flow_coverage": flow_coverage,
                 "catalyst_coverage": catalyst_coverage,
+                "catalyst_inputs": catalyst_inputs,
             }
         )
 
@@ -1337,7 +1378,10 @@ def _calculate_group_scores(
                 raw["institutional_flow"],
                 [other["raw_values"]["institutional_flow"] for other in peers],
             ),
-            "catalyst": raw["catalyst"],
+            "catalyst": _catalyst_percentile(
+                raw["catalyst"],
+                [other["raw_values"]["catalyst"] for other in peers],
+            ),
         }
         score_row = db.scalar(
             select(GroupDailyScore).where(
@@ -1429,6 +1473,7 @@ def _calculate_group_scores(
             "normalized_values": normalized,
             "institutional_flow_coverage": item["flow_coverage"],
             "catalyst_coverage": item["catalyst_coverage"],
+            "catalyst_inputs": item["catalyst_inputs"],
             "leaderboard": item["leaderboard"],
             "board": item["board"],
             "member_count": item["member_count"],
