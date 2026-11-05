@@ -28,6 +28,7 @@ const SUITES = [
   { file: 'themes/themeSuggestions.test.tsx' },
   { file: 'news/news.test.tsx' },
   { file: 'candidates/candidates.test.tsx' },
+  { file: 'candidates/entryPlan.test.tsx' },
   { file: 'stock/strategyBoard.test.tsx' },
   { file: 'today/today.test.tsx' },
   { file: 'actions/actions.test.tsx' },
@@ -35,6 +36,7 @@ const SUITES = [
   { file: 'copy.test.tsx' },
   { file: 'tracking/tracking.test.tsx' },
   { file: 'labelSpacing.test.ts' },
+  { file: 'navigation.test.tsx' },
   { file: 'coverage/coverage.test.tsx' },
 ]
 

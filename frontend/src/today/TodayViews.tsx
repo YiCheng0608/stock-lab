@@ -166,7 +166,7 @@ function holdingRisk(action: ActionSummary): string | null {
 
 const ALERT_LISTED = 3
 
-// Shown above the candidates only when a holding is at risk; the action centre has the detail (PRODUCT_SPEC §2).
+// Shown above the candidates only when a holding is at risk; 觀察中 (/watch) has the detail (PRODUCT_SPEC §2).
 export function HoldingAlert({ actions }: { actions: readonly ActionSummary[] }) {
   const risks = actions.flatMap((action) => {
     const reason = holdingRisk(action)
@@ -177,7 +177,7 @@ export function HoldingAlert({ actions }: { actions: readonly ActionSummary[] })
   return (
     <div className="alert-row alert-warning" role="status">
       <span>持倉風險 {risks.length} 檔：{listed}</span>
-      <Link className="text-link" to="/actions">查看行動中心 →</Link>
+      <Link className="text-link" to="/watch">查看觀察中 →</Link>
     </div>
   )
 }

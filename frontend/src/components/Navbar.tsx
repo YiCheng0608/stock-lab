@@ -4,14 +4,16 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 
 import { DateBadge } from './ui'
 
-// Fixed 64px top bar (DESIGN_SYSTEM §4): logo, five main links, stock search, data-date badge, hamburger on narrow screens.
+// Fixed 64px top bar (DESIGN_SYSTEM §4): logo, six main links (#493: the two pages that ask for action, three data
+// pages, the explanation), stock search, data-date badge, hamburger on narrow screens.
 
 export const MAIN_NAV: ReadonlyArray<{ to: string; label: string; end?: boolean }> = [
-  { to: '/', label: '今日', end: true },
-  { to: '/news', label: '新聞' },
+  { to: '/', label: '今日可買', end: true },
+  { to: '/watch', label: '觀察中' },
   { to: '/themes', label: '族群' },
   { to: '/stocks', label: '個股' },
-  { to: '/actions', label: '行動' },
+  { to: '/news', label: '新聞' },
+  { to: '/strategy', label: '策略說明' },
 ]
 
 export function stockSearchPath(value: string): string | null {

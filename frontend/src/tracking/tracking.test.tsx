@@ -127,11 +127,11 @@ check(render(<TrackingSection />).includes('追蹤計畫載入中…'), 'loading
 // ---- 加入追蹤 ----
 check(render(<AddPlanButton signalId={1} />).includes('>加入追蹤</button>'), 'untracked signal: secondary button')
 check(render(<AddPlanButton signalId={1} />).includes('class="btn btn-secondary btn-sm"'), 'the add button is secondary, not primary')
-check(render(<AddPlanButton signalId={1} openPlanId={5} />).includes('href="/actions#plan-5">已在追蹤</a>'), 'tracked signal: link to its plan')
+check(render(<AddPlanButton signalId={1} openPlanId={5} />).includes('href="/watch#plan-5">已在追蹤</a>'), 'tracked signal: link to its plan')
 const strategy = (status: string, signalId: number, openPlanId: number | null = null) => ({ strategy: 'breakout_v1', signal_id: signalId, signal_date: '2026-10-16', status, open_plan_id: openPlanId }) as unknown as StrategyDecision
 const stockPanel = render(<StockPlanPanel strategies={[strategy('conditional', 1), strategy('observation', 2), strategy('conditional', 3, 9)]} />)
 check(count(stockPanel, '突破條件成立') === 2 && stockPanel.includes('條件資料日 2026/10/16'), 'one row per conditional strategy')
-check(stockPanel.includes('>加入追蹤</button>') && stockPanel.includes('href="/actions#plan-9">已在追蹤</a>'), 'add or tracked per row')
+check(stockPanel.includes('>加入追蹤</button>') && stockPanel.includes('href="/watch#plan-9">已在追蹤</a>'), 'add or tracked per row')
 check(!stockPanel.includes(NO_CONDITION_TEXT), 'conditional rows hide the no-condition line')
 check(render(<StockPlanPanel strategies={[strategy('observation', 2)]} />).includes(NO_CONDITION_TEXT) && render(<StockPlanPanel strategies={undefined} />).includes(NO_CONDITION_TEXT), 'no conditional strategy: no button, one line')
 

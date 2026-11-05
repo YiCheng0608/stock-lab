@@ -58,8 +58,7 @@ CANDIDATES = {
 TODAY_PAGE = (
     "資料日期未提供\n今日\n資料截至\n資料日期未提供\n"
     f"熱門族群\n產業榜\n資料日期未提供\n{NO_RUN}\n"
-    "明日候選\n資料 2026/10/22\n20 檔\n"
-    f"關注標的\n{ACTIONS_EMPTY}\n"
+    "今日可買\n資料 2026/10/22\n20 檔\n"
 )
 
 
@@ -142,7 +141,7 @@ def test_a_failure_after_a_failed_check_of_the_same_rows_is_undetermined(
         }
     }
     # The row is there (#276 table) but its detail lost the 來源 line.
-    pages = {"today-1280": "明日候選\n資料 2026/10/22\n1 檔\n#1\t2301 光寶科\n"}
+    pages = {"today-1280": "今日可買\n資料 2026/10/22\n1 檔\n#1 2301 光寶科\n"}
     _only(monkeypatch, "today", "T7", "T8")
     t7, t8 = page_checks.run_page(_run(tmp_path, payloads, pages), "today", [])
     assert (t7.status, t8.status) == ("失敗", "無法判定")
@@ -222,25 +221,24 @@ def test_an_empty_board_passes_when_nothing_has_scores(tmp_path):
     assert NO_RUN in page_checks.g3(run)
 
 
-def test_the_empty_watch_list_fails_next_to_todays_candidates(tmp_path):
-    # Before #251 T9 passed on 「沒有卡片，顯示 `目前沒有資料完整的可執行條件…`」.
-    with pytest.raises(page_checks.Fail, match="candidates.json 有 20 檔 2026-10-22"):
-        page_checks.t9(_run(tmp_path))
+def test_the_home_page_keeps_one_list(tmp_path):
+    # #493: 關注標的 moved to 觀察中; the home page passes without it.
+    assert "首頁沒有 `關注標的`" in page_checks.t9(_run(tmp_path))
 
 
-def test_the_watch_list_fails_when_the_dashboard_has_cards_to_show(tmp_path):
-    action = {
-        "instrument": {"exchange": "TWSE", "symbol": "2330"},
-        "action_state": "hold_observe",
-    }
-    run = _run(tmp_path, {"dashboard": {**DASHBOARD, "actions": [action]}})
-    with pytest.raises(page_checks.Fail, match="dashboard.actions／candidates 有 1 筆"):
+@pytest.mark.parametrize(
+    "line", ["關注標的", "查看個股詳情 →", "查看行動中心 →", "明日候選"]
+)
+def test_the_home_page_fails_when_the_old_sections_come_back(tmp_path, line):
+    # The pre-#493 home page: a 關注標的 grid of 查看個股詳情 → cards and a 明日候選 title.
+    run = _run(tmp_path, {}, {"today-1280": TODAY_PAGE + f"{line}\n{ACTIONS_EMPTY}\n"})
+    with pytest.raises(page_checks.Fail, match=f"首頁仍有整行 `{line}`"):
         page_checks.t9(run)
 
 
 def test_zero_candidates_fail_when_the_db_has_them(tmp_path):
     payloads = {"candidates": {**CANDIDATES, "candidate_count": 0, "items": []}}
-    run = _run(tmp_path, payloads, {"today-1280": "明日候選\n當日零候選\n"})
+    run = _run(tmp_path, payloads, {"today-1280": "今日可買\n當日零候選\n"})
     with pytest.raises(page_checks.Fail, match="DB candidate_runs 2026-10-22 有 20 檔"):
         page_checks.t7(run)
 
@@ -274,7 +272,7 @@ def test_a_copy_without_a_current_version_run_runs_to_the_end(tmp_path, monkeypa
         "actions?tier=0&limit=100": {"items": []},
     }
     pages = {
-        "today-1280": "明日候選\n尚無候選清單\n",
+        "today-1280": "今日可買\n尚無候選清單\n",
         "actions-1280": "第 1 級\n今日候選\n顯示 0／0 檔\n",
     }
     run = CopyRun(tmp_path, payloads, pages)
@@ -317,7 +315,7 @@ def test_the_stock_comes_from_the_candidates_when_the_board_is_empty(tmp_path):
     run = _run(tmp_path)
     # Before #251 there was no stock and all of S1～S9 were 無法判定 (counted 失敗).
     assert page_checks.stocks_for(run, None) == [page_checks.Stock("TWSE", "2301")]
-    assert run.picked.startswith("明日候選 #1（略過 今日榜：")
+    assert run.picked.startswith("今日可買 #1（略過 今日榜：")
 
 
 def test_the_stock_comes_from_the_list_without_candidates(tmp_path):
@@ -331,7 +329,7 @@ def test_the_stock_comes_from_the_list_without_candidates(tmp_path):
     )
     assert run.stock() == page_checks.Stock("TWSE", "0050")
     assert run.picked.startswith("市場列表第一筆（略過 今日榜：")
-    assert "明日候選：candidates.json 的 items 為空" in run.picked
+    assert "今日可買：candidates.json 的 items 為空" in run.picked
 
 
 def test_stocks_checks_that_need_no_stock_run_without_one(tmp_path, monkeypatch):
