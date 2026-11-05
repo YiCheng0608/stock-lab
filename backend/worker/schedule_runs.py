@@ -80,6 +80,7 @@ DAILY_STEPS = (
     "theme_suggestions",
     "plan_tracking",
     "strategy_levels",
+    "action_tiers",
     "candidate_notes",
 )
 # Steps after collect and the earlier steps each needs to have succeeded.
@@ -92,6 +93,7 @@ STEP_REQUIRES = {
     "theme_suggestions": (),
     "plan_tracking": (),
     "strategy_levels": ("analyze",),
+    "action_tiers": ("analyze",),
     "candidate_notes": ("candidates",),
 }
 # Steps whose failure is kept on the step row only: the run stays success, so
@@ -103,7 +105,7 @@ STEP_REQUIRES = {
 # calendar already stored and records in its own details whether the day's
 # signals got an earliest execution date (the watchdog checks that).
 NON_BLOCKING_STEPS = frozenset(
-    {"trading_calendar", "candidate_notes", "strategy_levels"}
+    {"trading_calendar", "candidate_notes", "strategy_levels", "action_tiers"}
 )
 # A run still marked running after this long has lost its process (killed,
 # rebooted); the next invocation records it as abandoned instead of waiting.
@@ -139,6 +141,8 @@ PLAN_TRACKING_MODULE = "worker.plan_tracking"
 PLAN_TRACKING_FUNCTION = "run_plan_tracking"
 STRATEGY_LEVELS_MODULE = "worker.strategy_levels"
 STRATEGY_LEVELS_FUNCTION = "run_strategy_levels"
+ACTION_TIERS_MODULE = "worker.action_tiers"
+ACTION_TIERS_FUNCTION = "run_action_tiers"
 TRADING_CALENDAR_MODULE = "worker.trading_calendar"
 TRADING_CALENDAR_FUNCTION = "run_trading_calendar"
 # Set by worker.job for the worker it starts while holding the job's lock (#336).
@@ -235,6 +239,11 @@ def _plan_tracking_step(target: date) -> dict[str, Any]:
 def _strategy_levels_step(target: date) -> dict[str, Any]:
     module = importlib.import_module(STRATEGY_LEVELS_MODULE)
     return getattr(module, STRATEGY_LEVELS_FUNCTION)(target)
+
+
+def _action_tiers_step(target: date) -> dict[str, Any]:
+    module = importlib.import_module(ACTION_TIERS_MODULE)
+    return getattr(module, ACTION_TIERS_FUNCTION)(target)
 
 
 def _trading_calendar_step(target: date) -> dict[str, Any]:
@@ -815,7 +824,9 @@ def run_daily_job(
         # the step rows (rows are found by step name).
         ("plan_tracking", 8, lambda: _plan_tracking_step(target)),
         ("strategy_levels", 9, lambda: _strategy_levels_step(target)),
-        ("candidate_notes", 10, lambda: _candidate_note_step(target)),
+        # After strategy_levels, whose rows the tiers read (#476).
+        ("action_tiers", 10, lambda: _action_tiers_step(target)),
+        ("candidate_notes", 11, lambda: _candidate_note_step(target)),
     ]
     if collect_status != "success":
         if collect_status == "skipped" and _no_session_confirmed(run_id, target):

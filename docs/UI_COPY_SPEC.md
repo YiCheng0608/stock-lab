@@ -70,7 +70,7 @@
 
 ## 5. 行動中心的分級與預設篩選
 
-列表依 `action_tier_v1` 分六級，級內依下表排序（`backend/app/decision.py` 的 `ACTION_TIERS`，由測試釘住）。分級只決定列表順序與預設篩選，每列的狀態、價位與理由仍是該檔的行動摘要（[PRODUCT_SPEC §6](PRODUCT_SPEC.md#action-merge)）。
+列表依 `action_tier_v1` 分六級，級內依下表排序（`backend/app/decision.py` 的 `ACTION_TIERS`，由測試釘住）。分級只決定列表順序與預設篩選，每列的狀態、價位與理由仍是該檔的行動摘要（[PRODUCT_SPEC §6](PRODUCT_SPEC.md#action-merge)）。分級的日資料部分由 daily 預算（`action_tier_snapshots`，[action tier 預算與新聞投影](ops/SCHEDULING.md#action-tier-預算與新聞投影)）；持股、自選與名稱每次即時讀。沒有當日預算或依據已變時即時計算，結果相同；API 以 `action_tier_source`（`/api/dashboard`）、`summary.tier_source`（`/api/actions`）標示來源。
 
 | 級 | 區塊標題 | 條件 | 級內排序 |
 | --- | --- | --- | --- |
