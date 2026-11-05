@@ -34,6 +34,19 @@ no-session answer is ``non_trading_unconfirmed``, which the 23:00 trigger confir
 21:30 ``success`` nothing is run at start, so a restart past 23:00 skips that night's
 institutional refetch.
 
+Maintenance mode (#468, worker.job.MaintenanceHold and ``worker.cli maintenance
+on|off``): while it is on, the daily and news jobs serve starts only log ``skipped
+reason=maintenance`` and write nothing to the database; the watchdog and the event
+monitor run as usual. Serve reads the marker every minute and prints
+``maintenance_on`` and ``maintenance_off``; a marker whose holding command stopped
+beating for 10 minutes (killed without its ``finally``) is removed then
+(``maintenance_expired``, logged for the watchdog). As a start does, the end of
+maintenance runs the day's daily once when it is missing (``missed_daily``): turned
+off at 22:10 after a skipped 21:30, the day gets its daily at once, and the 23:00
+trigger then only records already_complete. A serve that starts in maintenance runs
+no daily at start; the end of maintenance does. Serve holds
+``<data>/locks/serve.lock`` while it runs (``maintenance status`` shows it).
+
 ``STOCK_SKIP_NEWS_LLM`` (from the env file, #342 decision 6) is ``--skip-news-llm``'s
 default: 1, true, yes or on skip news-llm after news; empty, 0, false, no or off do not; any
 other value stops serve (exit 2).
@@ -60,6 +73,7 @@ Linux only, like worker.job (the backend image, #333).
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import shutil
@@ -106,6 +120,8 @@ SKIP_NEWS_LLM_ON = ("1", "true", "yes", "on")
 SKIP_NEWS_LLM_OFF = ("", "0", "false", "no", "off")
 # worker.schedule_runs.COMPLETE_STATUSES (not imported: it loads app and its paths).
 DAILY_COMPLETE_STATUSES = ("success", "non_trading_day")
+# How often serve reads the maintenance marker (#468), on the real clock.
+MAINTENANCE_POLL_SECONDS = 60
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -313,6 +329,10 @@ class Serve:
         self._running: dict[int, subprocess.Popen] = {}
         self._lock = threading.Lock()
         self._stopping = False
+        self._maintenance = job.maintenance_state(self.data_dir)
+        self._serve_lock = job.FileLock(job.lock_path(self.data_dir, job.SERVE_LOCK))
+        self._serve_lock_held = False
+        self._scheduler = None
 
     def now(self) -> datetime:
         """The scheduler's clock: the real time, moved by --now."""
@@ -423,6 +443,57 @@ class Serve:
             return None
         return "not_complete"
 
+    def hold_serve_lock(self) -> None:
+        """Take serve.lock for as long as serve runs (the backfill guard reads it)."""
+
+        if self._serve_lock_held:
+            return
+        self._serve_lock_held = self._serve_lock.acquire()
+        if not self._serve_lock_held:
+            # Taken for a moment by a guard's probe, or another serve on this volume.
+            self.say("serve_lock_busy", lock=self._serve_lock.path)
+
+    def _catch_up_daily(self, scheduler, missed: str) -> None:
+        self.say("catchup", job="daily", reason=missed)
+        # Once, as soon as the scheduler runs it: a date trigger at the real now.
+        scheduler.add_job(
+            self.fire,
+            "date",
+            run_date=datetime.now(TAIPEI),
+            args=["daily"],
+            id="daily-catchup",
+            name="daily-catchup",
+            replace_existing=True,
+        )
+
+    def watch_maintenance(self) -> None:
+        """Every MAINTENANCE_POLL_SECONDS: the marker's changes, and serve.lock again."""
+
+        self.hold_serve_lock()
+        expired = job.expire_stale_maintenance(self.data_dir)
+        if expired:
+            # Its holder died without its finally (SIGKILL, OOM): daily and news resume.
+            self.say(
+                "maintenance_expired",
+                owner=json.dumps(expired["owner"], ensure_ascii=False),
+                pid=expired["pid"],
+                heartbeat=expired["heartbeat"],
+                minutes_without_beat=expired["heartbeat_age_minutes"],
+            )
+        state = job.maintenance_state(self.data_dir)
+        was, self._maintenance = self._maintenance, state
+        if state and not was:
+            self.say(
+                "maintenance_on",
+                since=job._taipei(state["since_epoch"]),
+                reason=json.dumps(state["reason"], ensure_ascii=False),
+            )
+        elif was and not state:
+            self.say("maintenance_off")
+            missed = self.missed_daily()
+            if missed and self._scheduler is not None:
+                self._catch_up_daily(self._scheduler, missed)
+
     def backstop(self, name: str) -> float:
         """Seconds after which serve kills a run of NAME that is still going."""
 
@@ -508,18 +579,22 @@ class Serve:
                 id=name,
                 name=name,
             )
+        # On the real clock: the marker is read now, whatever --now says.
+        scheduler.add_job(
+            self.watch_maintenance,
+            "interval",
+            seconds=MAINTENANCE_POLL_SECONDS,
+            id="maintenance-watch",
+            name="maintenance-watch",
+            max_instances=1,
+        )
         missed = self.missed_daily()
-        if missed:
-            self.say("catchup", job="daily", reason=missed)
-            # Once, as soon as the scheduler starts: a date trigger at the real now.
-            scheduler.add_job(
-                self.fire,
-                "date",
-                run_date=datetime.now(TAIPEI),
-                args=["daily"],
-                id="daily-catchup",
-                name="daily-catchup",
-            )
+        if missed and self._maintenance:
+            # The daily would only skip: the end of maintenance catches it up.
+            self.say("catchup_deferred", job="daily", reason=missed, maintenance="on")
+        elif missed:
+            self._catch_up_daily(scheduler, missed)
+        self._scheduler = scheduler
         return scheduler
 
     def next_times(self) -> dict[str, datetime | None]:
@@ -544,13 +619,39 @@ def run(args: argparse.Namespace) -> int:
     )
     serve = Serve(args)
     serve.log_dir.mkdir(parents=True, exist_ok=True)
+    serve.hold_serve_lock()
     scheduler = serve.scheduler()
 
-    def stop(signum, _frame) -> None:
-        serve.say("stopping", signal=signal.Signals(signum).name)
-        serve.stop()
-        scheduler.shutdown(wait=False)
+    from apscheduler.events import EVENT_SCHEDULER_START
+    from apscheduler.schedulers import SchedulerNotRunningError
 
+    stop_requested = threading.Event()
+
+    def stop(signum, _frame) -> None:
+        # Only a thread from here (#468 CI run 41949855780): a signal that lands inside
+        # scheduler.start() would deadlock on the scheduler's own locks if the handler
+        # shut it down, and print() inside a handler can be a reentrant write.
+        if not stop_requested.is_set():
+            stop_requested.set()
+            name = signal.Signals(signum).name
+            threading.Thread(target=stop_now, args=(name,), daemon=True).start()
+
+    def stop_now(name: str) -> None:
+        serve.say("stopping", signal=name)
+        serve.stop()
+        try:
+            scheduler.shutdown(wait=False)
+        except SchedulerNotRunningError:
+            # Not running yet (a docker stop right after `ready`): start() sets the state
+            # before it dispatches EVENT_SCHEDULER_START, so the listener below sees
+            # serve._stopping and shuts it down.
+            pass
+
+    def stopped_before_start(_event) -> None:
+        if serve._stopping:
+            scheduler.shutdown(wait=False)
+
+    scheduler.add_listener(stopped_before_start, EVENT_SCHEDULER_START)
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     serve.say(
@@ -561,7 +662,9 @@ def run(args: argparse.Namespace) -> int:
             f"next_{name}": moment.isoformat() if moment else "none"
             for name, moment in serve.next_times().items()
         },
+        maintenance="on" if serve._maintenance else "off",
     )
-    scheduler.start()
+    if not serve._stopping:
+        scheduler.start()
     serve.say("stopped")
     return 0
