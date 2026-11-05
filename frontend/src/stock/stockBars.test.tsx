@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 
 import { StockBarsChart } from './StockBarsChart'
-import { StockCutoffControl } from './StockCutoffControl'
+import { StockCutoffControl, cutoffSubmission } from './StockCutoffControl'
 import { StockQuoteLine } from './StockHeader'
 import {
   CHART_THEME_TOKENS,
@@ -188,3 +188,16 @@ check(latestDated.includes('研究截止日期：最新資料（2026/11/03） �
 check(latestDated.includes(CUTOFF_MEANING) && latestDated.includes('空白或按「最新資料」時用 2026/11/03（該股最近一個有資料的交易日）'), 'the form explains the cutoff and the latest data day')
 check(latestDated.includes('頁首收盤、K 線與新聞時間線不受影響'), 'the form still says the header, K-line and news are unaffected')
 check(latestCutoff.includes(CUTOFF_MEANING) && !latestCutoff.includes('（該股最近一個有資料的交易日）'), 'without a known day the date part is left out')
+// #492: the date field starts on the latest data day instead of blank, and cannot go past it; applying it unchanged
+// keeps 「最新資料」 (no as_of in the URL), any other day is applied as the cutoff.
+const cutoffInput = (markup: string) => /<input id="stock-cutoff"[^>]*>/.exec(markup)?.[0] ?? ''
+check(cutoffInput(latestDated).includes('value="2026-11-03"') && cutoffInput(latestDated).includes('max="2026-11-03"'), `no cutoff: the field shows and caps at the latest data day: ${cutoffInput(latestDated)}`)
+const latestStamped = renderToStaticMarkup(<StockCutoffControl asOf="" effectiveDate="2026-11-03T13:30:00+08:00" onApply={() => undefined} />)
+check(cutoffInput(latestStamped).includes('value="2026-11-03"') && cutoffInput(latestStamped).includes('max="2026-11-03"'), `a timestamped latest day fills the field with its calendar day: ${cutoffInput(latestStamped)}`)
+check(cutoffInput(appliedCutoff).includes('value="2026-10-20"'), 'an applied cutoff shows as_of in the field')
+const appliedWithLatest = renderToStaticMarkup(<StockCutoffControl asOf="2026-10-20" effectiveDate="2026-11-03" onApply={() => undefined} />)
+check(cutoffInput(appliedWithLatest).includes('value="2026-10-20"'), 'as_of wins over the latest data day in the field')
+check(cutoffInput(latestCutoff).includes('value=""') && !cutoffInput(latestCutoff).includes('max='), 'without a known day the field stays empty and uncapped')
+check(cutoffSubmission('2026-11-03', '2026-11-03') === '', 'applying the unchanged latest day keeps 最新資料 (no as_of)')
+check(cutoffSubmission('2026-10-31', '2026-11-03') === '2026-10-31', 'applying a changed day sets it as the cutoff')
+check(cutoffSubmission('', '2026-11-03') === '' && cutoffSubmission('2026-10-20', null) === '2026-10-20', 'a cleared field is 最新資料; without a known latest day the value is applied as typed')
