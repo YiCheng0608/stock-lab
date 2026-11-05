@@ -11,7 +11,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.api import get_db, router
@@ -89,8 +89,10 @@ def fake(tmp_path, monkeypatch):
     return calls
 
 
-def _candidates(db, count):
-    """``count`` breakout candidates on T; the first has linked, judged news."""
+def _candidates(db, count, *, compute=True):
+    """``count`` breakout candidates on T; the first has linked, judged news.
+
+    ``compute=False`` stores only the inputs: ``worker.cli candidates`` writes the list."""
 
     instruments = [stock(db, str(1101 + index)) for index in range(count)]
     for index, instrument in enumerate(instruments):
@@ -102,6 +104,8 @@ def _candidates(db, count):
         select(NewsLlmResult).where(NewsLlmResult.news_item_id == item.id)
     ).ai_summary = "AI 摘要：接單增加"
     db.commit()
+    if not compute:
+        return []
     result = compute_daily_candidates(db, T)
     assert result["candidate_count"] == count
     return rows(db)
@@ -462,6 +466,114 @@ def test_cli_exit_code_follows_the_run_status(monkeypatch, capsys, status, code)
     assert exit_info.value.code == code
     assert seen == [(T, False, 3)]
     assert json.loads(capsys.readouterr().out)["status"] == status
+
+
+# worker.cli candidates follows with the notes (#517) ----------------------------
+
+
+@pytest.fixture
+def session_local(db, monkeypatch):
+    """The CLI's sessions on the test database (pipeline.SessionLocal)."""
+
+    monkeypatch.setattr(
+        pipeline,
+        "SessionLocal",
+        sessionmaker(bind=db.get_bind(), autoflush=False, expire_on_commit=False),
+    )
+
+
+def _candidates_cli(monkeypatch, capsys, *args):
+    """``worker.cli candidates --date T [args]``: (exit code, printed result)."""
+
+    from worker import cli
+
+    monkeypatch.setattr(
+        sys, "argv", ["worker.cli", "candidates", "--date", T.isoformat(), *args]
+    )
+    code = 0
+    try:
+        cli.main()
+    except SystemExit as exit_info:
+        code = exit_info.code
+    return code, json.loads(capsys.readouterr().out)
+
+
+def test_recomputed_candidates_get_their_notes(
+    db, fake, session_local, monkeypatch, capsys
+):
+    _candidates(db, 7, compute=False)
+    code, result = _candidates_cli(monkeypatch, capsys)
+    assert code == 0 and result["status"] == "success"
+    assert result["candidate_count"] == 7 and result["already_complete"] is False
+    assert result["notes_status"] == "success"
+    assert result["notes"]["trading_date"] == T.isoformat()
+    assert result["notes"]["candidate_run_id"] == result["candidate_run_id"]
+    assert result["notes"]["records"] == 7 and len(fake()) == 2
+    assert [note.llm_status for note in _notes(db)] == ["done"] * 7
+    # A rerun of the same day sends only what is not done: nothing.
+    code, again = _candidates_cli(monkeypatch, capsys)
+    assert code == 0 and again["already_complete"] is True
+    assert again["notes_status"] == "success"
+    assert again["notes"]["already_complete"] is True and len(fake()) == 2
+
+
+def test_skip_notes_writes_the_list_without_a_call(
+    db, fake, session_local, monkeypatch, capsys
+):
+    _candidates(db, 3, compute=False)
+    code, result = _candidates_cli(monkeypatch, capsys, "--skip-notes")
+    assert code == 0 and result["candidate_count"] == 3
+    assert result["notes_status"] == "skipped"
+    assert result["notes"] == {"status": "skipped", "reason": "skip_notes"}
+    assert fake() == [] and _notes(db) == []
+    assert (
+        db.scalars(
+            select(IngestionRun).where(
+                IngestionRun.run_type == candidate_notes.RUN_TYPE
+            )
+        ).all()
+        == []
+    )
+
+
+def test_failed_notes_leave_candidates_successful(
+    db, fake, session_local, monkeypatch, capsys
+):
+    monkeypatch.setenv("FAKE_CLAUDE_MODES", "not_logged_in")
+    _candidates(db, 3, compute=False)
+    code, result = _candidates_cli(monkeypatch, capsys)
+    assert code == 0 and result["status"] == "success"
+    assert result["candidate_count"] == 3
+    assert result["notes_status"] == "failed" and len(fake()) == 1
+    assert result["notes"]["batches"][0]["reason"] == "not_logged_in"
+    assert [note.llm_status for note in _notes(db)] == ["pending"] * 3
+
+
+def test_notes_that_raise_leave_candidates_successful(
+    db, fake, session_local, monkeypatch, capsys
+):
+    def broken(day):
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(candidate_notes, "run_candidate_notes_batch", broken)
+    _candidates(db, 2, compute=False)
+    code, result = _candidates_cli(monkeypatch, capsys)
+    assert code == 0 and result["status"] == "success"
+    assert result["notes_status"] == "failed"
+    assert result["notes"] == {
+        "status": "failed",
+        "reason": "notes_error",
+        "error": "RuntimeError: database is locked",
+    }
+
+
+def test_no_list_runs_no_notes(db, fake, session_local, monkeypatch, capsys):
+    # No signal on T: the list is no_data (exit 0) and no note is attempted.
+    code, result = _candidates_cli(monkeypatch, capsys)
+    assert code == 0 and result["status"] == "no_data"
+    assert result["notes_status"] == "skipped"
+    assert result["notes"]["reason"] == "candidates_not_successful"
+    assert fake() == []
 
 
 def test_a_candidate_whose_input_cannot_be_built_is_pending_alone(

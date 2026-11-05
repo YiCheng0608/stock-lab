@@ -24,7 +24,7 @@ The result goes to stdout without a trailing newline.
                                    failing run status, skipped:<reason>, or
                                    catchup_incomplete; a run still running
                                    past <minutes> (default 150) is failed
-  invariants <db> <today>          one line per data invariant,
+  invariants <db> <today> [<now>]  one line per data invariant,
                                    "<name> ok|violation|skip key=value ...":
                                    future_trading_date (latest market_bars
                                    trading_date after <today>, YYYY-MM-DD),
@@ -37,7 +37,14 @@ The result goes to stdout without a trailing newline.
                                    latest signal date written with the calendar
                                    but without earliest_execution_date),
                                    strategy_levels (the latest finished daily
-                                   run's strategy_levels step did not succeed)
+                                   run's strategy_levels step did not succeed),
+                                   candidate_notes (the latest candidate list
+                                   of CANDIDATE_SCORE_VERSION has candidates,
+                                   no done AI note and was computed over 30
+                                   minutes before <now>; not judged while a
+                                   daily or candidate_notes run is running or
+                                   the latest candidate_notes run was refused
+                                   for its login, skipped without <now>)
   deploy-image <deploy.json>       "deploy_image ok|violation|skip key=value ...":
                                    the image this process runs in
                                    (STOCK_IMAGE_TAG, STOCK_GIT_HEAD: the
@@ -97,6 +104,14 @@ COMPLETE = ("success", "non_trading_day")
 # authentication (worker.news_llm.AUTH_ERROR_TEXT).
 LLM_RUN_TYPES = ("news_llm", "candidate_notes")
 AUTH_REASON = "not_logged_in"
+# A candidate list this old without one done AI note is reported (#517): the
+# notes follow the list, in the daily or in worker.cli candidates.
+CANDIDATE_NOTES_GRACE = timedelta(minutes=30)
+# The score version worker.candidate_notes writes notes for
+# (app.domain.CANDIDATE_SCORE_VERSION; backend/tests/test_watchdog.py keeps
+# them equal).  Lists of other versions are never given notes, so they are
+# not judged.
+CANDIDATE_SCORE_VERSION = "candidate_score_v6"
 # Skipped rows that only point at another run of the same date.
 REFERENCE_SKIPS = ("already_complete", "already_running")
 
@@ -193,25 +208,37 @@ def llm_auth(db: str, now: str) -> str:
         if not _has_table(conn, "ingestion_runs"):
             return "skip"
         for run_type in LLM_RUN_TYPES:
-            row = conn.execute(
-                "SELECT id, started_at, metadata_json FROM ingestion_runs"
-                " WHERE run_type=? ORDER BY id DESC LIMIT 1",
-                (run_type,),
-            ).fetchone()
-            if row is None:
-                continue
-            run_id, started, raw = row
-            started_at = _started(started)
-            # A run of a step that stopped is not reported again every day.
-            if started_at is None or current - started_at > RECENT_WINDOW:
-                continue
-            batches = _json(raw).get("batches") or []
-            if any(
-                isinstance(batch, dict) and batch.get("reason") == AUTH_REASON
-                for batch in batches
-            ):
+            run_id = _auth_refused(conn, run_type, current)
+            if run_id is not None:
                 lines.append(f"{run_type} run_id={run_id}")
     return "\n".join(lines)
+
+
+def _auth_refused(
+    conn: sqlite3.Connection, run_type: str, current: datetime
+) -> int | None:
+    """The id of the latest run of ``run_type`` when it started within
+    RECENT_WINDOW and had a batch refused for its login, else None."""
+
+    row = conn.execute(
+        "SELECT id, started_at, metadata_json FROM ingestion_runs"
+        " WHERE run_type=? ORDER BY id DESC LIMIT 1",
+        (run_type,),
+    ).fetchone()
+    if row is None:
+        return None
+    run_id, started, raw = row
+    started_at = _started(started)
+    # A run of a step that stopped is not reported again every day.
+    if started_at is None or current - started_at > RECENT_WINDOW:
+        return None
+    batches = _json(raw).get("batches") or []
+    if any(
+        isinstance(batch, dict) and batch.get("reason") == AUTH_REASON
+        for batch in batches
+    ):
+        return int(run_id)
+    return None
 
 
 def daily_result(db: str, day: str, now: str, running_limit: str | None = None) -> str:
@@ -258,7 +285,7 @@ def _state(violations: int) -> str:
     return "violation" if violations else "ok"
 
 
-def invariants(db: str, today: str) -> str:
+def invariants(db: str, today: str, now: str | None = None) -> str:
     lines: list[str] = []
     with _connect(db) as conn:
         latest = None
@@ -326,6 +353,7 @@ def invariants(db: str, today: str) -> str:
             )
         lines.append(_execution_calendar(conn))
         lines.append(_strategy_levels(conn))
+        lines.append(_candidate_notes(conn, now))
     return "\n".join(lines)
 
 
@@ -390,6 +418,94 @@ def _strategy_levels(conn: sqlite3.Connection) -> str:
         f"strategy_levels {_state(failed)} target_date={str(target)[:10]}"
         f" run_id={run_id} status={status}"
     )
+
+
+def _running(conn: sqlite3.Connection, query: str, current: datetime) -> bool:
+    """A row of ``query`` (its started_at) still running within the jobs' limit."""
+
+    for (started,) in conn.execute(query).fetchall():
+        started_at = _started(started)
+        if started_at is not None and current - started_at <= DAILY_RUNNING_LIMIT:
+            return True
+    return False
+
+
+def _candidate_notes(conn: sqlite3.Connection, now: str | None) -> str:
+    """The latest candidate list has candidates but not one done AI note
+    (Issue #517): a list recomputed by hand without its notes, or a notes step
+    that wrote none (claude -p refused, the daily call limit).
+
+    Only the latest trading date's list of CANDIDATE_SCORE_VERSION is judged:
+    the one worker.candidate_notes writes notes for (its _candidate_run), so
+    ``candidate-notes --date`` can always clear it.  A note of any prompt
+    version counts: this only catches a list with none at all.  Not judged
+    while a daily or a candidate_notes run is running (the notes are being
+    written), nor within CANDIDATE_NOTES_GRACE of the list's computed_at, nor
+    when the latest candidate_notes run was refused for its login (llm_auth
+    reports that cause already).  Without the clock argument or the tables it
+    is skipped."""
+
+    if now is None:
+        return "candidate_notes skip reason=no_clock"
+    if not all(
+        _has_table(conn, name)
+        for name in ("candidate_runs", "daily_candidates", "candidate_llm_notes")
+    ):
+        return "candidate_notes skip reason=no_candidate_tables"
+    current = _utc(now)
+    if _has_table(conn, "schedule_runs") and _running(
+        conn,
+        "SELECT started_at FROM schedule_runs WHERE job='daily' AND status='running'",
+        current,
+    ):
+        return "candidate_notes skip reason=daily_running"
+    if _has_table(conn, "ingestion_runs") and _running(
+        conn,
+        "SELECT started_at FROM ingestion_runs"
+        " WHERE run_type='candidate_notes' AND status='running'",
+        current,
+    ):
+        return "candidate_notes skip reason=notes_running"
+    row = conn.execute(
+        "SELECT id, trading_date, computed_at FROM candidate_runs"
+        " WHERE score_version=? ORDER BY trading_date DESC LIMIT 1",
+        (CANDIDATE_SCORE_VERSION,),
+    ).fetchone()
+    if row is None:
+        return "candidate_notes skip reason=no_candidate_run"
+    run_id, trading_date, computed = row
+    candidates = conn.execute(
+        "SELECT count(*) FROM daily_candidates WHERE candidate_run_id=?", (run_id,)
+    ).fetchone()[0]
+    done = conn.execute(
+        "SELECT count(*) FROM candidate_llm_notes"
+        " WHERE candidate_run_id=? AND llm_status='done'",
+        (run_id,),
+    ).fetchone()[0]
+    computed_at = _started(computed)
+    minutes = (
+        int((current - computed_at).total_seconds() // 60)
+        if computed_at is not None
+        else None
+    )
+    facts = (
+        f" trading_date={str(trading_date)[:10]} candidate_run_id={run_id}"
+        f" candidates={candidates} done={done} minutes={minutes}"
+    )
+    if not candidates or done:
+        return "candidate_notes ok" + facts
+    if computed_at is None or current - computed_at <= CANDIDATE_NOTES_GRACE:
+        # The notes follow the list (the daily's last step, worker.cli candidates).
+        return "candidate_notes skip reason=recent" + facts
+    refused = (
+        _auth_refused(conn, "candidate_notes", current)
+        if _has_table(conn, "ingestion_runs")
+        else None
+    )
+    if refused is not None:
+        # One cause, one comment: the llm_auth check comments on the login.
+        return f"candidate_notes skip reason=notes_auth notes_run_id={refused}" + facts
+    return "candidate_notes violation" + facts
 
 
 # The monitor polls every minute; ten minutes without a poll is a stop (#316 AC-3).
@@ -506,7 +622,7 @@ def main(argv: list[str]) -> int:
     elif command == "daily-result":
         out = daily_result(*args[:4])
     elif command == "invariants":
-        out = invariants(args[0], args[1])
+        out = invariants(*args[:3])
     elif command == "monitor-beat":
         out = monitor_beat(args[0], args[1])
     elif command == "deploy-image":
