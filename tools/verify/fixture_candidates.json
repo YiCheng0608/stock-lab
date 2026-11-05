@@ -14,6 +14,13 @@
         "observation": 10
       },
       "actionable_signals": 4,
+      "liquidity": {
+        "minimum_lots": 1000,
+        "data_as_of": "2026-10-16",
+        "checked_instruments": 3,
+        "low_volume": [],
+        "liquidity_data_missing": []
+      },
       "chips_population": {
         "institutional_flow_5d": 6,
         "institutional_flow_20d": 6,
@@ -47,6 +54,18 @@
       "weight_coverage": 1.0,
       "rank": 1,
       "components_json": {
+        "liquidity": {
+          "state": "ok",
+          "average_volume_lots_20d": 10672.0,
+          "window_start": "2026-09-21",
+          "window_end": "2026-10-16",
+          "counted_sessions": 20,
+          "no_trade_sessions": [],
+          "missing_sessions": [],
+          "suspended_sessions": [],
+          "minimum_lots": 1000,
+          "data_as_of": "2026-10-16"
+        },
         "technical": {
           "score": 0.75,
           "weight": 0.35,
@@ -255,6 +274,18 @@
       "weight_coverage": 1.0,
       "rank": 2,
       "components_json": {
+        "liquidity": {
+          "state": "ok",
+          "average_volume_lots_20d": 16008.0,
+          "window_start": "2026-09-21",
+          "window_end": "2026-10-16",
+          "counted_sessions": 20,
+          "no_trade_sessions": [],
+          "missing_sessions": [],
+          "suspended_sessions": [],
+          "minimum_lots": 1000,
+          "data_as_of": "2026-10-16"
+        },
         "technical": {
           "score": 0.5,
           "weight": 0.35,
@@ -451,6 +482,18 @@
       "weight_coverage": 1.0,
       "rank": 3,
       "components_json": {
+        "liquidity": {
+          "state": "ok",
+          "average_volume_lots_20d": 4002.0,
+          "window_start": "2026-09-21",
+          "window_end": "2026-10-16",
+          "counted_sessions": 20,
+          "no_trade_sessions": [],
+          "missing_sessions": [],
+          "suspended_sessions": [],
+          "minimum_lots": 1000,
+          "data_as_of": "2026-10-16"
+        },
         "technical": {
           "score": 0.25,
           "weight": 0.35,

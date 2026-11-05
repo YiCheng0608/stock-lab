@@ -26,7 +26,30 @@ export const PARTIAL_NOTE = '部分分項無資料，以有資料的分項計分
 export const NOT_COMPUTED_TEXT = '此交易日尚未產生候選清單'
 export const ZERO_REASON_TEXT: Record<string, string> = {
   no_actionable_signals: '當日沒有成立（條件成立）的策略訊號',
-  all_excluded: '成立的訊號都因 ETF、價位不合法或評分資料不足被排除',
+  all_excluded: '成立的訊號都因 ETF、價位不合法、成交量低於門檻或評分資料不足被排除',
+}
+
+// ---- liquidity floor (candidate_score_v6, #490; UI_COPY_SPEC §10) ----
+
+// Lots (張) as a whole number with thousands separators; null is 「—」, never 0.
+export function formatLots(value: number | null | undefined): string {
+  return isFiniteNumber(value) ? `${Math.round(value).toLocaleString('zh-TW')} 張` : '—'
+}
+
+// 「20 日均量 1,682 張」, or 「20 日均量資料不足」 without an average.
+export function averageVolumeText(lots: number | null | undefined): string {
+  return isFiniteNumber(lots) ? `20 日均量 ${formatLots(lots)}` : '20 日均量資料不足'
+}
+
+// The note next to 成立 when the day's run left the stock out for the floor; null when it did not.
+export function liquidityExclusionText(
+  exclusion: { exclusion: string | null; average_volume_lots_20d: number | null; minimum_lots: number | null } | null | undefined,
+): string | null {
+  if (!exclusion || !exclusion.exclusion) return null
+  const floor = formatLots(exclusion.minimum_lots)
+  if (exclusion.exclusion === 'low_volume') return `${averageVolumeText(exclusion.average_volume_lots_20d)}，低於 ${floor}門檻，不列候選`
+  if (exclusion.exclusion === 'liquidity_data_missing') return `20 日均量資料不足，無法確認是否達 ${floor}門檻，不列候選`
+  return null
 }
 
 // Every version reads the same (#392, #404): the UI never shows a version suffix.
