@@ -35,7 +35,8 @@ export function StockCutoffControl({ asOf, effectiveDate = null, onApply }: { as
         <input id="stock-cutoff" name="as_of" type="date" className="input" value={draft} max={latestInput ?? undefined} onInput={(event) => setDraft(event.currentTarget.value)} onChange={(event) => setDraft(event.target.value)} />
         <button type="submit" className="btn btn-secondary btn-sm">套用截止</button>
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => { onApply(''); setDraft(latestInput ?? '') }}>最新資料</button>
-        <span className="small-note">只用這一天收盤（含）以前的資料判斷研究條件、研究動作與候選，用來回看當時會怎麼判斷；空白或按「最新資料」時用{asOf ? '最新資料日' : latestDay ? ` ${latestDay}（該股最近一個有資料的交易日）` : '最新資料日'}。頁首收盤、K 線與新聞時間線不受影響。</span>
+        {/* #519: the sentence folds behind 說明 so the form is one row (UI_COPY_SPEC §8.2 研究截止日期). */}
+        <details className="cutoff-help"><summary>說明</summary><p className="small-note">只用這一天收盤（含）以前的資料判斷研究條件、研究動作與候選，用來回看當時會怎麼判斷；空白或按「最新資料」時用{asOf ? '最新資料日' : latestDay ? ` ${latestDay}（該股最近一個有資料的交易日）` : '最新資料日'}。頁首收盤、K 線與新聞時間線不受影響。</p></details>
       </form>
     </div>
   )

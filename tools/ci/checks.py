@@ -46,6 +46,8 @@ BACKEND_READ_FILES: frozenset[str] = frozenset(
         "docs/COORDINATOR.md",
         "docs/WORKFLOW.md",
         "docs/ops/SETUP.md",
+        # backend/tests/test_verify_checks.py runs page_checks.display_title on these (#523).
+        "frontend/src/news/newsLead.cases.json",
         "frontend/src/stock/strategyBoard.ts",
     }
 )

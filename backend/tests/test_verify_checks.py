@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import json
 import shutil
 import subprocess
 import sys
@@ -1026,6 +1027,60 @@ def test_n6_fails_when_generated_at_has_no_zone(tmp_path):
         page_checks.n6(run)
 
 
+def test_display_title_matches_the_frontend_cases():
+    """#523: the same cases the frontend news test runs through cleanNewsLead."""
+
+    cases = json.loads(
+        (ROOT / "frontend" / "src" / "news" / "newsLead.cases.json").read_text(
+            encoding="utf-8"
+        )
+    )["cases"]
+    assert len(cases) >= 20
+    wrong = [
+        (case["why"], page_checks.display_title(case["input"]), case["output"])
+        for case in cases
+        if page_checks.display_title(case["input"]) != case["output"]
+    ]
+    assert wrong == []
+    assert page_checks.display_title(None) == "標題未提供"
+
+
+def _n2_run(tmp_path, domestic_page):
+    items = [{"id": "1", "title": "■ 台積電狠甩英特爾"}]
+    empty = {
+        "news-international-1280": "目前沒有符合條件的國際新聞。\n",
+        "news-official-1280": "目前沒有符合條件的官方公告。\n",
+    }
+    return FakeRun(
+        tmp_path,
+        {
+            "news?category=domestic&limit=20": {"items": items},
+            "news?category=international&limit=20": {"items": []},
+            "news?source_kind=official_disclosure&limit=20": {"items": []},
+        },
+        {"news-1280": domestic_page, **empty},
+    )
+
+
+def test_n2_reads_the_cleaned_title(tmp_path):
+    # #523: the page drops the leading ■; the API keeps the source title.
+    page = "新聞\n台積電狠甩英特爾\n可能正向\nAI 推論\nYahoo奇摩股市\n·\n發布於 2026/11/05 23:49\n展開\n"
+    assert "domestic 前 1 則" in page_checks.n2(_n2_run(tmp_path, page))
+    raw = page.replace("台積電狠甩英特爾", "■ 台積電狠甩英特爾")
+    with pytest.raises(page_checks.Fail, match="缺 `台積電狠甩英特爾`"):
+        page_checks.n2(_n2_run(tmp_path, raw))
+
+
+def test_t6_reads_the_cleaned_title(tmp_path):
+    item = {"id": "7", "title": "● 新聞甲", "ai": AI_DONE}
+    run = FakeRun(
+        tmp_path,
+        {"dashboard": {"news": [item]}, "news/7": {"ai": AI_DONE}},
+        {"today-1280": "重點新聞\n新聞甲\n可能正向\nAI 推論\n熱門族群\n"},
+    )
+    assert "7 `可能正向`" in page_checks.t6(run)
+
+
 def test_news_source_label_matches_the_frontend():
     presentation = (ROOT / "frontend" / "src" / "presentation.ts").read_text(
         encoding="utf-8"
@@ -1101,3 +1156,126 @@ def test_a18_fails_without_the_landing_url_or_on_a_404(tmp_path):
         page_checks.a18(
             _a18_run(tmp_path, "http://x/watch", "找不到此頁。\n回到今日可買\n")
         )
+
+
+# ---- stock page summary card and strategy board (#519) ----
+
+STOCK = page_checks.Stock("TWSE", "2884")
+OBSERVED_ROW = {
+    "label": "突破條件",
+    "status": "observation",
+    "levels": {"kind": "observation"},
+}
+PASSED_ROW = {
+    "label": "回踩條件",
+    "status": "conditional",
+    "levels": {"kind": "actionable"},
+}
+
+
+def _stock_payload(board=None, action=None):
+    return {"strategy_board": board, "decision_summary": action}
+
+
+def _summary_page(
+    verdict, reason, closest="最接近成立\n突破條件\n觀察\n差：收盤未突破前 20 日高點\n"
+):
+    # StockSummaryCard as innerText: the three column labels, the date badge beside the first.
+    return (
+        "2884\n玉山金\n資料 2026/11/05\n來源 臺灣證券交易所\n"
+        f"目前判斷\n資料 2026/11/05\n{verdict}\n{reason}\n{closest}"
+        "規則價位\n條件未成立・觀察價位\n收盤（元） ≥\n50.20\n完整條件 →\n"
+        "圖表與指標\n法人籌碼\n"
+    )
+
+
+def _s11(tmp_path, payload, page):
+    run = FakeRun(tmp_path, {"stocks/TWSE/2884": payload}, {"stock-1280": page})
+    return page_checks.s11(run, STOCK)
+
+
+def test_s11_passes_on_the_candidate_verdict(tmp_path):
+    board = {
+        "as_of": "2026-11-05",
+        "candidate": {"rank": 1, "total_score": 0.814, "strategy": "pullback_v1"},
+        "strategies": [OBSERVED_ROW, PASSED_ROW],
+    }
+    page = _summary_page("可買", "每日候選第 1 名 · 總分 81 · 回踩條件")
+    result = _s11(
+        tmp_path, _stock_payload(board, {"action_state": "conditional_entry"}), page
+    )
+    assert "摘要卡 `可買`：`每日候選第 1 名 · 總分 81 · 回踩條件`" in result
+
+
+def test_s11_reads_the_gap_reasons_and_the_primary_reason(tmp_path):
+    gaps = [
+        {"label": "上市（櫃）後只有 41 個交易日，未滿 60 個交易日"},
+        {"label": "近 60 個交易日有 3 天官方行情無成交"},
+    ]
+    action = {"action_state": "data_insufficient", "gap_reasons": gaps}
+    payload = _stock_payload({"strategies": [OBSERVED_ROW]}, action)
+    reason = "；".join(g["label"] for g in gaps)
+    assert reason in _s11(tmp_path, payload, _summary_page("資料不足", reason))
+    observed = _stock_payload(
+        {"strategies": [OBSERVED_ROW]},
+        {
+            "action_state": "no_condition",
+            "primary_reason": {"label": "回踩條件差 1 項：支撐區"},
+        },
+    )
+    assert "`觀察`" in _s11(
+        tmp_path, observed, _summary_page("觀察", "回踩條件差 1 項：支撐區")
+    )
+    with pytest.raises(page_checks.Fail, match="預期 `回踩條件差 1 項：支撐區`"):
+        _s11(tmp_path, observed, _summary_page("觀察", "突破條件差 2 項：價格、量能"))
+
+
+def test_s11_fails_on_a_wrong_verdict_or_the_old_page(tmp_path):
+    payload = _stock_payload(
+        {"strategies": [{**PASSED_ROW}]}, {"action_state": "conditional_entry"}
+    )
+    with pytest.raises(page_checks.Fail, match="預期判斷 `條件成立`"):
+        _s11(tmp_path, payload, _summary_page("觀察", "x"))
+    # Before #519 the header was followed by the cutoff form and the tabs.
+    old = (
+        "2884\n玉山金\n資料 2026/11/05\n來源 臺灣證券交易所\n研究截止日期\n圖表與指標\n"
+    )
+    with pytest.raises(page_checks.Fail, match="缺整行 `目前判斷`"):
+        _s11(tmp_path, payload, old)
+    no_link = _summary_page("條件成立", "不在這個資料日的每日候選名單").replace(
+        "完整條件 →\n", ""
+    )
+    with pytest.raises(page_checks.Fail, match="缺整行 `完整條件 →`"):
+        _s11(tmp_path, payload, no_link)
+
+
+def test_s11_without_any_judgement_reads_no_data(tmp_path):
+    page = _summary_page(
+        "無資料", "尚無行動摘要。", closest="最接近成立\n此股尚無策略判定資料。\n"
+    ).replace("規則價位\n條件未成立・觀察價位\n收盤（元） ≥\n50.20\n", "")
+    assert "`無資料`" in _s11(tmp_path, _stock_payload(), page)
+
+
+def _board_page(summary_label: bool) -> str:
+    summary = (
+        "目前判斷\n觀察\n規則價位\n條件未成立・觀察價位\n" if summary_label else ""
+    )
+    return (
+        f"{summary}圖表與指標\n研究條件\n策略總表\n資料 2026/11/05\n價位規則 v1\n"
+        "突破條件\t\n觀察\t收盤未突破前 20 日高點\n條件未成立・觀察價位\n"
+        "回踩條件\t\n成立\t全部達成\n"
+    )
+
+
+def test_s10_counts_only_the_board_observation_labels(tmp_path):
+    board = {
+        "as_of": "2026-11-05",
+        "candidate": None,
+        "strategies": [OBSERVED_ROW, PASSED_ROW],
+    }
+    run = FakeRun(
+        tmp_path,
+        {"stocks/TWSE/2884": {"strategy_board": board}},
+        {"stock-research-1280": _board_page(summary_label=True)},
+    )
+    assert "觀察價位 1 列" in page_checks.s10(run, STOCK)

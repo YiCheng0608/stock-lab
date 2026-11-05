@@ -890,8 +890,9 @@ def t6(run: Run) -> str:
         return f"dashboard.news 空，顯示 `{message}`"
     starts = []
     for item in news:
-        i = text.find(item["title"])
-        expect(i >= 0, f"缺新聞標題整行 `{item['title']}`（id {item['id']}）")
+        title = display_title(item["title"])
+        i = text.find(title)
+        expect(i >= 0, f"缺新聞標題整行 `{title}`（id {item['id']}）")
         starts.append(i)
     # The news card is the last block of the page (#493); the footer ends the last card.
     end = text.find(FOOTER_FIRST_LINE, max(starts))
@@ -1285,6 +1286,33 @@ def news_source_label(source: str | None) -> str:
     return value if "官方" in value else "官方公告資料"
 
 
+# Same as cleanNewsLead in frontend/src/news/newsView.ts (#523, NEWS_SPEC §6): the pages
+# show a title without its leading marks and byline; the API keeps the source title.
+LEAD_MARKS = re.compile(r"^[\s■□▪▫◆◇◈●○◎◉•・‧∙★☆▲△▶►▸▷※]+")
+LEAD_BRACKET = re.compile(r"^[\[［【〔(（]([^\]］】〕)）]{1,30})[\]］】〕)）]")
+BYLINE_BRACKET = re.compile(r"記者|報導$|電$|新聞網|新聞$")
+LEAD_REPORTER = re.compile(
+    r"^(?:實習)?記者[^／/╱\s]{1,12}[／/╱][^，。；、\s]{0,10}?報導"
+)
+
+
+def display_title(title: str | None) -> str:
+    text = re.sub(r"\s+", " ", title or "").strip()
+    if not text:
+        return "標題未提供"
+    rest = text
+    for _ in range(4):
+        before = rest
+        rest = LEAD_MARKS.sub("", rest)
+        bracket = LEAD_BRACKET.match(rest)
+        if bracket and BYLINE_BRACKET.search(bracket.group(1).strip()):
+            rest = rest[bracket.end() :]
+        rest = LEAD_REPORTER.sub("", rest).lstrip()
+        if rest == before:
+            break
+    return rest or text
+
+
 def news_detail_id(run: Run) -> Any:
     items = news_items(run, "domestic")
     if not items:
@@ -1327,7 +1355,7 @@ def n2(run: Run) -> str:
                 if item.get("event_date"):
                     wanted.append(f"事件日 {slash(item['event_date'])}")
         else:
-            wanted = [item["title"] for item in items[:3]]
+            wanted = [display_title(item["title"]) for item in items[:3]]
         missing = in_order(text, wanted)
         if missing:
             problems.append(f"{tab}：{missing}（{text.name}）")
@@ -1854,7 +1882,9 @@ def s10(run: Run, stock: Stock) -> str:
     observed = [
         row for row in rows if (row.get("levels") or {}).get("kind") == "observation"
     ]
-    labels = text.count(lambda line: line == OBSERVATION_LABEL)
+    # #519: the summary card above the tabs repeats the closest strategy's observation
+    # levels, so only the labels from `策略總表` on are the board's.
+    labels = text.lines[k:].count(OBSERVATION_LABEL)
     expect(
         labels == len(observed),
         f"`{OBSERVATION_LABEL}` {labels} 行，API 有 {len(observed)} 列觀察價位",
@@ -1883,6 +1913,79 @@ def s10(run: Run, stock: Stock) -> str:
     )
     return f"`策略總表` 資料 {as_of}；{statuses}；觀察價位 {len(observed)} 列；" + (
         f"候選第 {candidate['rank']} 名" if candidate else "非候選"
+    )
+
+
+# The summary card under the stock header (#519, UI_COPY_SPEC §8.2 摘要卡): StockSummaryCard
+# and stockVerdict in frontend/src/stock/.
+SUMMARY_COLUMNS = ("目前判斷", "最接近成立", "規則價位")
+SUMMARY_LINK = "完整條件 →"
+INCOMPLETE_ACTIONS = ("data_insufficient", "data_incomplete", "insufficient_data")
+CANDIDATE_STRATEGY = {
+    f"{kind}_v{n}": label
+    for kind, label in (("breakout", "突破條件"), ("pullback", "回踩條件"))
+    for n in (1, 2, 3)
+}  # candidateStrategyLabel
+
+
+def summary_verdict(payload: dict) -> tuple[str, str | None]:
+    """The verdict badge and, where the API alone gives it, the reason sentence."""
+
+    board = payload.get("strategy_board") or {}
+    action = payload.get("decision_summary") or {}
+    rows = board.get("strategies") or []
+    state = action.get("action_state")
+    candidate = board.get("candidate")
+    if not board and not action:
+        return "無資料", "尚無行動摘要。"
+    if state == "reduce_exit":
+        return "持倉風險", None
+    if candidate:
+        strategy = CANDIDATE_STRATEGY.get(candidate.get("strategy"), "策略條件")
+        score = round(candidate["total_score"] * 100)
+        return "可買", f"每日候選第 {candidate['rank']} 名 · 總分 {score} · {strategy}"
+    if state == "hold_observe":
+        return "持倉觀察", None
+    if state == "manual_review":
+        return "需人工判讀", None
+    if rows and all(row.get("status") == "not_applicable" for row in rows):
+        return "不適用", None
+    if state in INCOMPLETE_ACTIONS:
+        gaps = [g["label"] for g in action.get("gap_reasons") or [] if g.get("label")]
+        return "資料不足", "；".join(gaps) if gaps else None
+    if any(row.get("status") == "conditional" for row in rows):
+        return "條件成立", None
+    reason = (action.get("primary_reason") or {}).get("label")
+    return "觀察", reason
+
+
+@check("stocks", "S11", per_stock=True)
+def s11(run: Run, stock: Stock) -> str:
+    text = stock_text(run, stock)
+    payload = stock_payload(run, stock)
+    verdict, reason = summary_verdict(payload)
+    k = text.find(SUMMARY_COLUMNS[0])
+    expect(k >= 0, f"缺整行 `{SUMMARY_COLUMNS[0]}`（摘要卡）")
+    tabs = text.find("圖表與指標", k)
+    expect(tabs > k, "摘要卡之後缺分頁籤 `圖表與指標`")
+    card = text.lines[k:tabs]
+    expect(
+        verdict in card[1:4],
+        f"`目前判斷` 後三行 {card[1:4]}，預期判斷 `{verdict}`（{text.at(k)}）",
+    )
+    v = card.index(verdict)
+    if reason is not None:
+        shown = card[v + 1] if v + 1 < len(card) else None
+        expect(shown == reason, f"判斷 `{verdict}` 下一行是 {shown!r}，預期 `{reason}`")
+    rows = (payload.get("strategy_board") or {}).get("strategies") or []
+    columns = SUMMARY_COLUMNS if rows else SUMMARY_COLUMNS[:2]
+    for label in columns[1:]:
+        expect(label in card[v:], f"摘要卡缺整行 `{label}`")
+    expect(SUMMARY_LINK in card, f"摘要卡缺整行 `{SUMMARY_LINK}`")
+    return (
+        f"摘要卡 `{verdict}`"
+        + (f"：`{reason}`" if reason else "")
+        + f"；{'、'.join(columns)}、`{SUMMARY_LINK}`"
     )
 
 
