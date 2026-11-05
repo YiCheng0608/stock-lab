@@ -8,6 +8,7 @@ bash. Nothing touches the real data directory or GitHub.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import importlib.util
 import json
@@ -18,6 +19,7 @@ import subprocess
 import sys
 import threading
 import time
+from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -160,6 +162,205 @@ def test_copy_db_leaves_a_writerless_wal_source_untouched(tmp_path: Path) -> Non
     assert json.loads(result.stdout)["source_latest_trading_date"] == "2026-10-21"
     assert wal.exists()
     assert (_digest(src), _digest(wal)) == before
+
+
+@pytest.fixture
+def read_only_dir(tmp_path: Path):
+    """Make a directory and its files read-only like the `:ro` volume mount (#486): SQLite
+    can neither create a -shm or -wal next to the database nor write the ones there.
+    Skipped where 0o555 does not stop that (Windows, root); CI's backend job runs it as an
+    ordinary user on Linux."""
+    made: list[Path] = []
+
+    def make(directory: Path) -> Path:
+        for path in directory.iterdir():
+            path.chmod(0o444)
+        directory.chmod(0o555)
+        made.append(directory)
+        try:
+            (directory / "probe").touch()
+        except PermissionError:
+            return directory
+        (directory / "probe").unlink()
+        pytest.skip("a 0o555 directory is still writable here (Windows or root)")
+
+    yield make
+    for directory in made:
+        directory.chmod(0o755)
+        for path in directory.iterdir():
+            path.chmod(0o644)
+
+
+def _snapshot(live: Path, src: Path, *sides: str) -> None:
+    """Copy the database and the given side files while the writer holds them."""
+    src.parent.mkdir(parents=True, exist_ok=True)
+    for side in ("", *sides):
+        shutil.copyfile(f"{live}{side}", f"{src}{side}")
+
+
+def _source_state(src: Path) -> dict[str, str]:
+    return {p.name: _digest(p) for p in sorted(src.parent.iterdir())}
+
+
+def test_copy_db_reads_a_wal_db_with_no_side_files_on_a_read_only_mount(
+    tmp_path: Path, read_only_dir
+) -> None:
+    """The v1.2.3 pre-deploy backup (#486): nothing has the DB open, so the volume holds
+    only stock.db, and mode=ro cannot create the -shm it needs. The main file is the
+    whole database, so it is read immutable."""
+    src = tmp_path / "prod" / "stock.db"
+    conn = _wal_source(src)
+    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    conn.close()
+    assert sorted(p.name for p in src.parent.iterdir()) == ["stock.db"]
+    with sqlite3.connect(src) as check:
+        assert check.execute("PRAGMA journal_mode").fetchone() == ("wal",)
+    check.close()
+    for side in ("-wal", "-shm"):
+        Path(f"{src}{side}").unlink(missing_ok=True)
+    read_only_dir(src.parent)
+    before = _source_state(src)
+    result = _copy(src, tmp_path / "verify")
+    assert result.returncode == 0, result.stderr
+    out = json.loads(result.stdout)
+    assert out["source_open"] == "immutable"
+    assert out["source_latest_trading_date"] == "2026-10-21"
+    assert out["alembic_version"] == "0016_group_score_archive"
+    assert _source_state(src) == before
+    copy = tmp_path / "verify" / "stock.db"
+    with closing(sqlite3.connect(copy.as_uri() + "?mode=ro", uri=True)) as check:
+        assert check.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+        assert check.execute("SELECT count(*) FROM market_bars").fetchone() == (2,)
+
+
+def test_copy_db_reads_the_wal_on_a_read_only_mount(
+    tmp_path: Path, read_only_dir
+) -> None:
+    """A connection is open, so the -wal and -shm are there: mode=ro reads them, the last
+    commit (only in the -wal) included, and immutable is not used."""
+    live = tmp_path / "live" / "stock.db"
+    writer = _wal_source(live)
+    src = tmp_path / "prod" / "stock.db"
+    try:
+        _snapshot(live, src, "-wal", "-shm")
+    finally:
+        writer.close()
+    read_only_dir(src.parent)
+    before = _source_state(src)
+    result = _copy(src, tmp_path / "verify")
+    assert result.returncode == 0, result.stderr
+    out = json.loads(result.stdout)
+    assert out["source_open"] == "ro"
+    assert out["source_latest_trading_date"] == "2026-10-21"
+    assert _source_state(src) == before
+
+
+def _hot_journal_source(live: Path, src: Path) -> None:
+    """A rollback-journal DB whose last transaction spilled pages into the main file and
+    was cut off: the -journal is hot and the main file holds pages it has yet to undo."""
+    live.parent.mkdir(parents=True)
+    writer = sqlite3.connect(live, isolation_level=None)
+    try:
+        writer.execute("PRAGMA journal_mode=DELETE")
+        writer.execute("PRAGMA cache_size=1")
+        writer.execute("CREATE TABLE market_bars (trading_date TEXT)")
+        writer.execute("INSERT INTO market_bars VALUES ('2026-10-20')")
+        writer.execute("BEGIN")
+        for _ in range(2000):
+            writer.execute("INSERT INTO market_bars VALUES (?)", ("2026-10-21" * 50,))
+        _snapshot(live, src, "-journal")
+        writer.execute("ROLLBACK")
+    finally:
+        writer.close()
+    assert Path(f"{src}-journal").stat().st_size > 0
+
+
+@pytest.mark.parametrize("case", ["wal-without-shm", "hot-journal"])
+def test_copy_db_refuses_side_files_it_cannot_read_on_a_read_only_mount(
+    tmp_path: Path, read_only_dir, case: str
+) -> None:
+    """mode=ro cannot open these, and immutable would skip the -wal or read pages the hot
+    -journal has yet to roll back, so nothing is copied (PR #477 review)."""
+    live = tmp_path / "live" / "stock.db"
+    src = tmp_path / "prod" / "stock.db"
+    if case == "hot-journal":
+        _hot_journal_source(live, src)
+    else:
+        writer = _wal_source(live)
+        try:
+            _snapshot(live, src, "-wal")
+        finally:
+            writer.close()
+    read_only_dir(src.parent)
+    before = _source_state(src)
+    result = _copy(src, tmp_path / "verify")
+    assert result.returncode == 1
+    side = "-journal" if case == "hot-journal" else "-wal"
+    assert f"{side} is next to it" in result.stderr
+    assert "immutable" in result.stderr
+    assert _source_state(src) == before
+    assert not (tmp_path / "verify" / "stock.db").exists()
+    assert not (tmp_path / "verify" / "stock.db.partial").exists()
+
+
+def _copy_db_module():
+    spec = importlib.util.spec_from_file_location("copy_db_under_test", COPY_DB)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize("writer", ["still-open", "closed"])
+def test_copy_db_drops_an_immutable_copy_when_a_writer_opened_the_source(
+    tmp_path: Path, monkeypatch, writer: str
+) -> None:
+    """immutable=1 takes no lock: a writer that opened the source during the copy may have
+    changed the main file under it. Still open, its -wal is there; closed, the -wal is gone
+    but the checkpoint moved the main file's mtime. Either way the copy is removed."""
+    copy_db = _copy_db_module()
+    src = tmp_path / "prod" / "stock.db"
+    conn = _wal_source(src)
+    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    conn.close()
+    for side in ("-wal", "-shm"):
+        Path(f"{src}{side}").unlink(missing_ok=True)
+    real_connect = sqlite3.connect
+
+    def connect(database, *args, **kwargs):
+        if str(database).endswith("?mode=ro"):
+            # What the read-only mount does to mode=ro without the -shm.
+            raise sqlite3.OperationalError("unable to open database file")
+        if str(database).endswith("&immutable=1"):
+            # The api starts meanwhile.
+            if writer == "still-open":
+                Path(f"{src}-wal").write_bytes(b"")
+            else:
+                status = src.stat()
+                os.utime(src, ns=(status.st_atime_ns, status.st_mtime_ns + 10**9))
+        return real_connect(database, *args, **kwargs)
+
+    monkeypatch.setattr(copy_db.sqlite3, "connect", connect)
+    with pytest.raises(copy_db.CopyError, match="changed during the copy"):
+        copy_db.copy_db(src, tmp_path / "verify")
+    assert sorted(p.name for p in (tmp_path / "verify").iterdir()) == []
+
+
+def test_copy_db_and_db_revision_open_the_source_the_same_way() -> None:
+    """One rule for opening the volume read-only (#486). copy_db.py is mounted alone into
+    whichever image runs and db_revision.py is piped on stdin, so neither imports the
+    other; the two copies of open_read_only must stay identical instead."""
+
+    def function(path: Path) -> str:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        nodes = [
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "open_read_only"
+        ]
+        assert len(nodes) == 1, path
+        return ast.dump(nodes[0])
+
+    assert function(COPY_DB) == function(OPS / "db_revision.py")
 
 
 def test_copy_db_refuses_a_destination_inside_the_source_directory(
