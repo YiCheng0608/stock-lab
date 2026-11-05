@@ -549,6 +549,23 @@ a.symbol-link:hover { color: var(--color-primary); }
 .candidate-more { margin-top: var(--space-2); }
 .candidate-more > summary { color: var(--color-primary); cursor: pointer; font-size: 14px; }
 .candidate-table tr[hidden], .candidate-mini[hidden] { display: none; }
+/* ---- entry plan (#491, DESIGN_SYSTEM §5 進場卡片, §7 進出點) ------------------------------------------ */
+.entry-plan { display: grid; gap: 2px; min-width: 0; }
+.entry-plan-line { max-width: none; margin: 0; color: var(--color-text); font-size: 14px; line-height: 1.5; }
+.entry-plan-type { display: inline-block; margin-right: var(--space-2); padding: 0 var(--space-2); border: 1px solid var(--color-primary); border-radius: var(--radius-sm); color: var(--color-primary); font-size: 13px; font-weight: 600; line-height: 1.4; white-space: nowrap; }
+.entry-plan-type .term-button { padding: 0; border-bottom-color: currentColor; color: inherit; font: inherit; }
+.entry-plan-sentence { min-width: 0; overflow-wrap: anywhere; }
+.entry-plan-sentence b { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.entry-plan-reason { color: var(--color-warning); }
+.entry-plan-conditions > summary { color: var(--color-primary); cursor: pointer; font-size: 13px; }
+.entry-plan-condition-list { display: grid; gap: var(--space-1); margin: var(--space-1) 0 0; padding: 0; list-style: none; font-size: 13px; }
+.entry-plan-condition-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); }
+/* Today table: the plan is the full-width line under its row; one border closes the row, the plan and its detail. */
+.candidate-table tbody tr:not(.table-detail-row) td { border-bottom: 0; }
+.candidate-table .table-detail-row > td { border-bottom: 1px solid var(--color-border); }
+.candidate-table .candidate-entry { padding: 0 var(--space-3) var(--space-2) calc(36px + var(--space-3) * 2); }
+.candidate-table .candidate-detail[open] { border-bottom: 0; }
+.candidate-mini .candidate-entry { margin-top: var(--space-2); }
 .candidate-rank { flex: none; min-width: 40px; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); background: var(--color-bg-elevated); font: 700 16px var(--font-mono); text-align: center; }
 .candidate-partial { margin-top: var(--space-2); color: var(--color-warning); }
 .candidate-levels, .candidate-components { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); margin: var(--space-3) 0 0; }

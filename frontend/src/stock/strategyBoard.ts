@@ -43,8 +43,8 @@ const ratio = (value: unknown) => isNumber(value) ? `${formatFixed(value, 2)} �
 const lotBound = (value: unknown, round: 'up' | 'down') => isNumber(value) && Number.isSafeInteger(value) && value >= 0
   ? (round === 'up' ? Math.ceil(value / LOT_SIZE) : Math.floor(value / LOT_SIZE)).toLocaleString('zh-TW')
   : '—'
-const minLots = (value: unknown) => `${lotBound(value, 'up')} 張`
-const lotRange = (low: unknown, high: unknown) => `${lotBound(low, 'up')}～${lotBound(high, 'down')} 張`
+export const minLots = (value: unknown) => `${lotBound(value, 'up')} 張`
+export const lotRange = (low: unknown, high: unknown) => `${lotBound(low, 'up')}～${lotBound(high, 'down')} 張`
 
 const OPERATORS: Record<string, string> = { gt: '>', gte: '≥', lt: '<', lte: '≤' }
 
@@ -190,7 +190,8 @@ function nextSession(item: StrategyCondition): string | null {
   }
 }
 
-export function conditionViews(row: StrategyBoardRow, reasonLabel: (code: string) => string): ConditionView[] {
+// Also the candidate entry plan's 「完整條件」 (#491): the signal day's judgement only, no next-session line there.
+export function conditionViews(row: Pick<StrategyBoardRow, 'conditions'>, reasonLabel: (code: string) => string): ConditionView[] {
   return row.conditions.map((item) => {
     const notApplicable = item.satisfied == null && item.reasons.some((reason) => NOT_APPLICABLE_REASONS.includes(reason))
     const state = notApplicable ? 'not_applicable' : item.satisfied === true ? 'met' : item.satisfied === false ? 'unmet' : 'unknown'
@@ -199,6 +200,12 @@ export function conditionViews(row: StrategyBoardRow, reasonLabel: (code: string
     const value = notApplicable ? reasons : conditionValue(item) || reasons
     return { code: item.code, state, stateText: STATE_TEXT[state], label: conditionLabel(item), value, next: state === 'met' || notApplicable ? null : nextSession(item) }
   })
+}
+
+// A candidate entry plan's 「完整條件」 (#491): the signal day's judgement, without the eligibility and required-inputs rows.
+const ENTRY_SKIPPED_CONDITIONS: readonly string[] = ['eligibility', 'required_inputs']
+export function signalDayConditionViews(conditions: readonly StrategyCondition[], reasonLabel: (code: string) => string): ConditionView[] {
+  return conditionViews({ conditions: conditions.filter((item) => !ENTRY_SKIPPED_CONDITIONS.includes(item.code)) }, reasonLabel)
 }
 
 // Pullback whose trend cannot pass next session: both numbers, no price (#268 design §2).

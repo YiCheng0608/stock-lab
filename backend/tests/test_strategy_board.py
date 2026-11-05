@@ -397,7 +397,8 @@ def test_the_board_changes_no_other_field_or_page(db, client):
             return {
                 k: without(v)
                 for k, v in value.items()
-                if k not in clock and k != "strategy_board"
+                # A candidate's entry plan shows its levels row (#491).
+                if k not in clock and k not in ("strategy_board", "entry_plan")
             }
         if isinstance(value, list):
             return [without(item) for item in value]
@@ -405,6 +406,9 @@ def test_the_board_changes_no_other_field_or_page(db, client):
 
     assert without(after) == without(before)
     assert after["stock"]["strategy_board"] != before["stock"]["strategy_board"]
+    [listed] = after["candidates"]["items"]
+    assert before["candidates"]["items"][0]["entry_plan"] is None
+    assert listed["entry_plan"]["trigger_price"] == 1.0
 
 
 def test_a_stock_without_signals_has_one_empty_row_per_strategy(db, client):

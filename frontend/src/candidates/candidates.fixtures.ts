@@ -1,4 +1,4 @@
-import type { CandidateComponent, CandidateItem, CandidateLlmNote, CandidatesResponse, CandidateSubItem } from '../types'
+import type { CandidateComponent, CandidateEntryPlan, CandidateItem, CandidateLlmNote, CandidatesResponse, CandidateSubItem, StrategyCondition } from '../types'
 
 // Shapes copied from GET /api/candidates on a read-only copy of the production DB (2026-10-16 run, #215),
 // trimmed to two rows: a complete row and a partial row whose group and news components are null.
@@ -95,6 +95,45 @@ export function completeItem(): CandidateItem {
     llm_note: doneNote(),
     sources,
     market: { trading_date: '2026-10-16', close: 162, change: 3.5, change_pct: 0.022082, change_status: 'known', source: 'twse' },
+    entry_plan: breakoutPlan(),
+  }
+}
+
+// strategy_levels rows (#491): the next session's close and volume, the shape of the API's entry_plan.
+const planBase = {
+  levels_version: 'strategy_levels_v1', next_session_date: '2026-10-19', price_basis: 'score_date_raw_basis',
+  trigger_price: null, zone_low: null, zone_high: null, min_volume: null, max_volume: null, reference_entry: null,
+  entry_low: null, entry_high: null, invalid_price: null, target_1: null, target_2: null, risk_reward: null,
+  reachable_next_session: null, missing_inputs: [], missing_labels: [],
+}
+const condition = (code: string, extra: Partial<StrategyCondition> = {}): StrategyCondition => ({
+  code, kind: 'price', satisfied: true, actual: null, threshold: null, threshold_high: null, operator: null, reasons: [], next_session: null, ...extra,
+})
+
+export function breakoutPlan(): CandidateEntryPlan {
+  return {
+    ...planBase, entry_type: 'breakout', availability: 'levels',
+    trigger_price: 164.5, min_volume: 12_345_600, reference_entry: 164.5, invalid_price: 160.7, target_1: 170.6, target_2: 175.9,
+    risk_reward: 1.6, reachable_next_session: true,
+    conditions: [
+      condition('eligibility', { kind: 'eligibility' }),
+      condition('breakout_price', { actual: 162, threshold: 160, operator: 'gt', next_session: { min_close: 164.5, gap: 0.015432 } }),
+      condition('breakout_volume', { kind: 'volume', actual: 2.88, threshold: 1.2, operator: 'gte', next_session: { min_volume: 12_345_600 } }),
+      condition('group_relative_strength', { kind: 'confirmation', actual: 0.0321, threshold: 0, operator: 'gt' }),
+      condition('margin_financing', { kind: 'confirmation', satisfied: null, reasons: ['margin_financing_not_applicable'] }),
+    ],
+  }
+}
+
+export function pullbackPlan(): CandidateEntryPlan {
+  return {
+    ...planBase, entry_type: 'pullback', availability: 'levels',
+    zone_low: 13.1, zone_high: 13.3, min_volume: 600_400, max_volume: 1_200_900, reference_entry: 13.2,
+    entry_low: 13.0, entry_high: 13.4, invalid_price: 12.75, target_1: 13.92, risk_reward: 1.6, reachable_next_session: true,
+    conditions: [
+      condition('pullback_support_zone', { actual: 13.2, threshold: 12.9, threshold_high: 13.5, operator: 'between', next_session: { min_close: 13.1, max_close: 13.3, gap: 0, position: 'inside' } }),
+      condition('pullback_volume', { kind: 'volume', actual: 0.8, threshold: 0.6, threshold_high: 1.2, operator: 'between', next_session: { min_volume: 600_400, max_volume: 1_200_900 } }),
+    ],
   }
 }
 
@@ -143,6 +182,7 @@ export function partialItem(): CandidateItem {
     sources: { ...sources, signal: 'analysis:pullback_v1', market_bar: 'tpex', chips: 'tpex_3insti+tpex_margin' },
     // The previous session's bar came from another source, so the change is not shown.
     market: { trading_date: '2026-10-16', close: 13.2, change: null, change_pct: null, change_status: 'unverified', source: 'tpex' },
+    entry_plan: pullbackPlan(),
   }
 }
 

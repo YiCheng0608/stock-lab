@@ -17,6 +17,21 @@ export const GLOSSARY: GlossaryTerm[] = [
     how_to_read: '區分回踩區、觸發價與失效價。',
     limitations: '不是價格一定反彈，也不是立即進場。', related: ['ma20', 'ma60'], version: '1.0.0',
   },
+  // The two entry types a candidate's first line names (#491).
+  {
+    term_id: 'breakout_entry', name: '突破型', aliases: ['突破型進場', 'breakout entry'], category: 'strategy',
+    plain_definition: '等股價帶量站上近期高點才進場，追的是正在轉強的股票。',
+    use: '適合已經走強、想跟上趨勢的股票；候選第一行寫明天收盤要站上的價位與成交量門檻。',
+    how_to_read: '收盤站上價位、而且成交量達門檻，兩項都做到才算成立；盤中短暫突破、收盤又跌回不算。成立後照停損與目標規劃。',
+    limitations: '風險是假突破：站上後很快跌回，所以先定好停損；不保證會續漲。', related: ['breakout', 'pullback_entry', 'support', 'target'], version: '1.3.0',
+  },
+  {
+    term_id: 'pullback_entry', name: '回踩型', aliases: ['回踩型進場', 'pullback entry'], category: 'strategy',
+    plain_definition: '等上升中的股票拉回 20 日均線附近、量縮時才進場，買的是回檔。',
+    use: '適合趨勢向上、不想追高的股票；候選第一行寫明天收盤要落在的區間與量縮範圍。',
+    how_to_read: '收盤落在區間內、成交量在範圍內（沒有爆量），才算成立；跌破停損價代表支撐失守。',
+    limitations: '風險是趨勢轉弱：拉回可能變成下跌，跌破停損就出場；不保證會反彈。', related: ['pullback', 'breakout_entry', 'ma20', 'support'], version: '1.3.0',
+  },
   {
     term_id: 'ma20', name: 'MA20', aliases: ['20 日均線'], category: 'technical',
     plain_definition: '最近 20 個有效交易日收盤價的移動平均。',

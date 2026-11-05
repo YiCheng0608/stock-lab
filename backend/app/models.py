@@ -1191,8 +1191,10 @@ class StrategyLevel(Base):
     Written by ``worker.strategy_levels`` after analyze: from T's data, the
     close and volume the next session needs for the signal's strategy to pass,
     with reference stop and targets.  Never a passed signal's levels: the
-    decision summary, the today page and the tracking plans do not read it,
-    and ``signals`` is never changed.  One row per signal and levels version;
+    decision summary, candidate scoring and the tracking plans do not read
+    it, and ``signals`` is never changed.  A candidate's entry plan shows its
+    condition list's signal-day judgement (``app.entry_plan``, #491), display
+    only.  One row per signal and levels version;
     a new formula version adds rows and keeps the old ones.
     """
 

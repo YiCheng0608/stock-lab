@@ -1,7 +1,7 @@
 <!-- owns: strategy_levels_v1 -->
 # strategy_levels_v1
 
-條件價位：以 T 日收盤後已知的資料，反推下一個交易日（T+1）的收盤與成交量要落在哪裡，T+1 的 analyze 才會判該策略的價格與量能條件成立。T+1 的前 20 日窗口是 T−19～T，所以門檻是已知數，不是預測；族群、法人、融資無法反推，只列 T 日實際值與門檻。版本 `levels_version = "strategy_levels_v1"`（`app.domain.STRATEGY_LEVELS_VERSION`），公式、升降單位表（`app.strategies.levels.TICK_LADDERS`）與漲跌幅由 `backend/tests/test_strategy_levels.py` 釘住；改任何一項要升版另寫新列，舊列保留。觀察價位**不是**成立的價位：`signals` 不改，決策摘要、今日頁、候選與使用者追蹤計畫都不讀這張表（行動頁列表只讀 `conditions_json` 與價格差距，不顯示觀察價位），追蹤計畫仍只收 conditional 訊號。
+條件價位：以 T 日收盤後已知的資料，反推下一個交易日（T+1）的收盤與成交量要落在哪裡，T+1 的 analyze 才會判該策略的價格與量能條件成立。T+1 的前 20 日窗口是 T−19～T，所以門檻是已知數，不是預測；族群、法人、融資無法反推，只列 T 日實際值與門檻。版本 `levels_version = "strategy_levels_v1"`（`app.domain.STRATEGY_LEVELS_VERSION`），公式、升降單位表（`app.strategies.levels.TICK_LADDERS`）與漲跌幅由 `backend/tests/test_strategy_levels.py` 釘住；改任何一項要升版另寫新列，舊列保留。觀察價位**不是**成立的價位：`signals` 不改，決策摘要、候選評分與使用者追蹤計畫都不讀這張表（行動頁列表只讀 `conditions_json` 與價格差距，不顯示觀察價位），追蹤計畫仍只收 conditional 訊號。候選的進場方式（`/api/candidates` 與個股 API `candidate` 的 `entry_plan`，`app.entry_plan`，[#491](https://github.com/YiCheng0608/stock-lab/issues/491)）原樣帶出候選訊號的這一列與展開的條件清單；畫面只用條件清單裡資料日的判定（「完整條件」，[UI_COPY_SPEC §10.2](../UI_COPY_SPEC.md#102-進場方式)），進場句的價位都讀訊號。這一列的觸發價與區間是下一交易日能否再出新訊號的門檻，不是已成立訊號的失效條件（失效只看停損）。
 
 **價格基準**：價格用 T 日價格基準的還原序列（與 `technical_features`、`rule_evidence_json.inputs` 相同）。T 之後到下一交易日（含）的公司行動若已存入 `corporate_actions`，全部價格乘上該段的換算因子，改用下一交易日的基準（`price_basis = next_session_raw_basis`；現金股利沒有參考價時以 T 收盤代替，同 analyze）；沒有存入時維持 `score_date_raw_basis`，T+1 除權息時門檻會偏差。下一交易日同[規則最早執行日](README.md#價位etf-與生命週期)（官方休市表推算，連假後第一天的除權息也會換算）；休市表答不出來時取 T 之後第一個週間日。`next_session_date` 記用哪一天。量用原始股數。
 

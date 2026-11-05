@@ -35,6 +35,8 @@ import {
   stockPath,
   subItemLabel,
 } from './candidates'
+import { EntryPlanCard } from './EntryPlanCard'
+import { entryPlanView } from './entryPlan'
 
 // Daily candidate list (candidate_score_v1, #215): the today list (#276); the stock strategy board (#274) reuses the
 // note, reasons and score details.
@@ -237,6 +239,9 @@ function candidateColumns(open: ReadonlySet<number>, toggle: (rank: number) => v
 
 function CandidateMiniCard({ item, hidden }: { item: CandidateItem; hidden: boolean }) {
   const { instrument, levels } = item
+  // Decision 6647903049: when the entry sentence carries the levels, the card keeps only the close; the three level
+  // cells return when the sentence states a reason instead.
+  const levelsInSentence = entryPlanView(item).kind === 'levels'
   return (
     <article className="card candidate-mini" data-candidate-card={item.rank} hidden={hidden}>
       <div className="candidate-mini-head">
@@ -244,14 +249,18 @@ function CandidateMiniCard({ item, hidden }: { item: CandidateItem; hidden: bool
         <Link className="symbol-link" to={stockPath(item)}><strong>{instrument.symbol}</strong> {instrument.name}</Link>
         <span className="candidate-mini-total"><Term id="candidate_score">總分</Term> <b>{formatCandidateScore(item.total_score)}</b></span>
       </div>
+      {/* #491: the first line under the name says how to enter. */}
+      <EntryPlanCard item={item} className="candidate-entry" />
       <div className="small-note">{exchangeLabel(instrument.exchange)} · {candidateStrategyLabel(item.strategy)} · {groupText(item)}</div>
       <LiquidityNote item={item} />
       <dl className="candidate-mini-levels">
         <div><dt>收盤（元）</dt><dd><CloseValue item={item} /></dd></div>
-        <div><dt><Term id="entry_zone">進場區</Term>（元）</dt><dd className="level-entry">{formatEntryZone(levels)}</dd></div>
-        <div><dt><Term id="support">停損</Term>（元）</dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
-        {/* Phone card: 「目標一／二」 keeps the four cells on one row so two cards fit 390×844 (DESIGN_SYSTEM §4). */}
-        <div><dt><Term id="target">{levels.target_2 != null ? '目標一／二' : '目標一'}</Term>（元）</dt><dd className="level-target"><Targets levels={levels} /></dd></div>
+        {!levelsInSentence && <>
+          <div><dt><Term id="entry_zone">進場區</Term>（元）</dt><dd className="level-entry">{formatEntryZone(levels)}</dd></div>
+          <div><dt><Term id="support">停損</Term>（元）</dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
+          {/* Phone card: 「目標一／二」 keeps the four cells on one row so two cards fit 390×844 (DESIGN_SYSTEM §4). */}
+          <div><dt><Term id="target">{levels.target_2 != null ? '目標一／二' : '目標一'}</Term>（元）</dt><dd className="level-target"><Targets levels={levels} /></dd></div>
+        </>}
       </dl>
       <p className="candidate-mini-reason"><FirstReason item={item} /></p>
       <details className="details candidate-mini-ai"><summary>AI 說明</summary><CandidateDetail item={item} /></details>
@@ -283,11 +292,15 @@ function TodayCandidateList({ items }: { items: CandidateItem[] }) {
         // Every detail stays in the DOM inside <details>, so the screenshot tool can open them all (DESIGN_SYSTEM §5).
         detailRow={(item) => ({
           props: { 'data-candidate-detail': item.rank },
+          // The entry plan is the line right under its row (#491), always shown; the AI detail stays folded.
           content: (
-            <details className="candidate-detail" id={`candidate-detail-${item.rank}`} open={open.has(item.rank)} onToggle={(event) => setRank(item.rank, event.currentTarget.open)}>
-              <summary>{item.instrument.symbol} {item.instrument.name}</summary>
-              <CandidateDetail item={item} />
-            </details>
+            <>
+              <EntryPlanCard item={item} className="candidate-entry" />
+              <details className="candidate-detail" id={`candidate-detail-${item.rank}`} open={open.has(item.rank)} onToggle={(event) => setRank(item.rank, event.currentTarget.open)}>
+                <summary>{item.instrument.symbol} {item.instrument.name}</summary>
+                <CandidateDetail item={item} />
+              </details>
+            </>
           ),
         })}
       />

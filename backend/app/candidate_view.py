@@ -5,6 +5,10 @@ Only reads ``candidate_runs`` / ``daily_candidates`` written by
 ``worker.candidate_notes``; nothing is scored or generated at request time.
 Each item's ``market`` is the stored close of its trading date (#276).
 ``open_plan_id`` is the candidate signal's user tracking plan, if any.
+``entry_plan`` is the signal's ``strategy_levels`` row (``app.entry_plan``,
+#491); the page shows its condition list's signal-day judgement under the
+plain-language entry sentence, which reads the signal's own levels.  It
+never feeds the score or the tracking plans.
 """
 
 from __future__ import annotations
@@ -17,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from .candidate_runs import read_run
 from .domain import CANDIDATE_NOTE_PROMPT_VERSION, CANDIDATE_SCORE_VERSION
+from .entry_plan import entry_plan
 from .market_change import adjacent_change
 from .models import (
     CandidateLlmNote,
@@ -229,6 +234,8 @@ def candidate_item(
         "signal_status": signal.status,
         "open_plan_id": plan.id if plan else None,
         "levels": _levels(signal),
+        # The signal's strategy_levels row for its 「完整條件」 (#491); display only.
+        "entry_plan": entry_plan(db, signal),
         "total_score": row.total_score,
         "weight_coverage": row.weight_coverage,
         "partial_components": row.weight_coverage < 1.0 - 1e-9,

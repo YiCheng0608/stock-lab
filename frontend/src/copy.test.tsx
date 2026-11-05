@@ -63,6 +63,9 @@ const IN_PLACE_TERMS: Record<string, string> = {
   heat_rank: '熱度分數與排名',
   group_components: '五分項',
   event_data_pending: '事件資料待補',
+  // The entry type badge on a candidate's first line (#491).
+  breakout_entry: '突破型',
+  pullback_entry: '回踩型',
 }
 for (const [id, name] of Object.entries(IN_PLACE_TERMS)) {
   const term = GLOSSARY.find((item) => item.term_id === id)
