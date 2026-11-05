@@ -41,6 +41,15 @@
   --font-body: "Inter", "Noto Sans TC", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
 
+  /* 字級（DESIGN_SYSTEM §3） */
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-base: 16px;
+  --text-lg: 17px;
+  --text-xl: 20px;
+  --text-2xl: 26px;
+
   /* 圓角 */
   --radius-sm: 8px;
   --radius-md: 10px;
@@ -53,6 +62,8 @@
   --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px;
   --space-12: 48px; --space-16: 64px; --space-24: 96px;
   --space-label: var(--space-1); /* 標籤與值的間距（DESIGN_SYSTEM §5「標籤與值」） */
+  --space-row: var(--space-3);   /* 清單列上下 padding（今日可買列） */
+  --space-block: var(--space-8); /* 今日頁區塊間距 */
 
   /* 版面 */
   --content-max: 1280px;

@@ -97,78 +97,98 @@ check(!text(alert).includes('長榮') && !text(alert).includes('鴻海'), '持�
 const noRisk = render('HoldingAlert none', () => <HoldingAlert actions={riskActions().filter((item: ActionSummary) => !item.held)} />)
 check(noRisk === '', `持倉提示列: nothing when no holding is at risk, got ${text(noRisk)}`)
 
-// ---- candidates: desktop table rows and phone cards, top 10 plus the rest folded ----
+// ---- candidates (Issue 510; DESIGN_SYSTEM §5 候選列表): one list at every width, two lines a candidate, top 10 plus the rest ----
 const long = render('CandidatesSection long', () => <CandidatesSection data={longList()} loading={false} error={null} />)
-const table = slice(long, '<table', '</table>')
-const cards = slice(long, 'class="candidate-cards"', 'class="candidate-more"')
-check(count(table, '<tr data-candidate-rank=') + count(table, '<tr hidden="" data-candidate-rank=') === 12, 'table: one row per candidate')
-check(count(table, '<tr data-candidate-rank=') === 10, `table: the first 10 rows show, got ${count(table, '<tr data-candidate-rank=')}`)
-check(count(cards, 'data-candidate-card=') === 12 && count(cards, 'hidden=""') === 2, 'cards: one per candidate, the last 2 hidden')
+const list = slice(long, '<ol class="candidate-list"', '</ol>')
+// One row: from its data-candidate-rank to the next row (a row holds nested <li> of reasons and conditions).
+const rowOf = (markup: string, rank: number) => {
+  const from = markup.indexOf(`data-candidate-rank="${rank}"`)
+  if (from < 0) return ''
+  const next = markup.indexOf('data-candidate-rank=', from + 1)
+  return markup.slice(from, next < 0 ? markup.indexOf('</ol>', from) : next)
+}
+const mainOf = (row: string) => slice(row, 'class="candidate-row-main"', '<details class="candidate-detail"')
+const detailOf = (row: string) => row.slice(row.indexOf('<details class="candidate-detail"'))
+check(list.length > 0 && !long.includes('<table') && !long.includes('candidate-mini') && !long.includes('candidate-cards'), 'Issue 510: one list, no table and no phone cards')
+check(count(list, '<li class="candidate-row') === 12, `list: one row per candidate, got ${count(list, '<li class="candidate-row')}`)
+check(count(list, 'hidden=""') === 2 && rowOf(list, 11).includes('hidden=""') && !rowOf(list, 10).includes('hidden=""'), 'list: the first 10 rows show, the last 2 are folded')
 check(text(slice(long, 'class="candidate-more"', '</details>')).includes('顯示其餘 2 檔'), 'list: 「顯示其餘 2 檔」 folds the rest')
 check(text(long).includes('2026/10/16 收盤後條件成立，最早下一個交易日（T+1）才可研究進場。') && text(long).includes(CANDIDATE_DISCLAIMER), 'list: the T+1 sentence and the disclaimer')
-check(!long.includes('class="card candidate-card"'), 'list: the today page no longer stacks full candidate cards')
-const head = slice(table, '<thead>', '</thead>')
-// Issue 493: seven columns; the rank and group moved into 股票, the levels into 進場方式 (whose cells name 停損 and 目標).
-for (const id of ['entry_zone', 'rr', 'candidate_score']) check(termIds(head).includes(id), `table head: ${id} opens its glossary term (found ${termIds(head).join('、') || 'none'})`)
-for (const label of ['股票', '最近收盤', '進場方式', '主要理由']) check(text(head).includes(label), `table head: 「${label}」`)
-for (const id of ['support', 'target']) check(termIds(slice(table, '<tbody', '</tbody>')).includes(id), `table rows: ${id} opens its glossary term`)
-// #463: two targets are named 目標一／目標二, the levels name 元 and the total names its 0–100 scale (UI_COPY_SPEC §8.4, §10).
-for (const label of ['最近收盤（元）', '進場方式', '總分（0–100）']) check(text(head).includes(label), `table head: 「${label}」, got ${text(head)}`)
-check(!/目標（|>目標</.test(head), 'table head: no bare 「目標」 over two numbers')
-const row1 = slice(table, 'data-candidate-rank="1"', '</tr>')
-for (const value of ['#1', '2377', '微星', '上市 · AI 伺服器（題材 #2）', '突破型', '162.00', '+2.21%', '161.50', '157.82', '167.39', '1.60 倍', '83', '三大法人 5 日淨買超，約 20 日均量的 2.59 倍']) {
-  check(text(row1).includes(value), `row #1: shows 「${value}」`)
-}
-check(row1.includes('href="/stocks/TWSE/2377"'), 'row #1: the name links to the stock page')
-check(!text(row1).includes('突破 20 日高點'), 'row #1: only the first reason on the row (DESIGN_SYSTEM §7)')
-check(/class="[^"]*level-stop[^"]*">157\.82/.test(row1) && /class="[^"]*level-target[^"]*">167\.39/.test(row1), 'row #1: stop and target carry the level classes')
-check(/class="num[^"]*"/.test(row1), 'row #1: numeric cells are num')
-check(!row1.includes('<wbr'), 'row #1: the target never breaks before 「／」 (numeric cells do not wrap)')
-const row2 = slice(table, 'data-candidate-rank="2"', '</tr>')
-check(text(row2).includes('13.20') && text(row2).includes('漲跌待核實') && text(row2).includes('13.05～13.35'), 'row #2: an unverified change reads 漲跌待核實')
-check(text(slice(table, 'data-candidate-rank="4"', '</tr>')).includes('-1.50%'), 'row #4: a falling close shows a signed change')
+// The head is one line (Issue 510): no eyebrow; title, date badge, count, the notes and 策略說明 in one flex row.
+const head = slice(long, 'class="candidates-head"', '<ol')
+check(!head.includes('eyebrow') && head.includes('id="candidates-title">今日可買</h2>') && head.includes('href="/strategy"'), 'Issue 510: the head has no eyebrow, the title and 策略說明 are in it')
+check(head.indexOf('今日可買</h2>') < head.indexOf('資料 2026/10/16') && head.indexOf('資料 2026/10/16') < head.indexOf('12 檔') && head.indexOf('12 檔') < head.indexOf('收盤後條件成立'), 'Issue 510: title → date → count → notes in the head')
+// AC-2: each row shows the name, the entry sentence (with its stop and target) and the levels' classes; the reason and
+// the average volume moved into the detail.
+const main1 = mainOf(rowOf(list, 1))
+check(/^#1 2377 微星 上市 · AI 伺服器（題材 #2）$/.test(text(slice(main1, '<p class="candidate-row-title"', '</p>') + '</p>').trim()), `row #1: one title line 「#1 2377 微星 上市 · 族群」, got 「${text(slice(main1, '<p class="candidate-row-title"', '</p>'))}」`)
+for (const value of ['突破型', '161.50 元', '157.82 元', '167.39 元', '162.00', '+2.21%', '1.60 倍', '83', 'AI 推論 ▸']) check(text(main1).includes(value), `row #1: shows 「${value}」`)
+check(main1.includes('href="/stocks/TWSE/2377"'), 'row #1: the name links to the stock page')
+check(/class="level-stop">157\.82 元/.test(main1) && /class="level-target">167\.39 元/.test(main1), 'row #1: stop and target carry the level classes')
+check(!text(main1).includes('三大法人 5 日淨買超') && !main1.includes('candidate-reasons'), 'Issue 510: no reason on the row (it is in the detail)')
+check(!main1.includes('entry-plan-conditions'), 'row #1: the folded conditions are in the detail, not the row')
+check(!/candidate-row-levels/.test(main1), 'row #1: the sentence has the levels, so no level cells repeat it (decision 6647903049)')
+// #463: the row's numbers name 元 and the total its 0–100 scale; RR and 總分 open their terms.
+const nums1 = slice(main1, '<dl class="candidate-row-nums"', '</dl>')
+for (const label of ['收盤（元）', 'RR', '總分（0–100）']) check(text(nums1).includes(label), `row nums: 「${label}」, got ${text(nums1)}`)
+for (const id of ['rr', 'candidate_score']) check(termIds(nums1).includes(id), `row nums: ${id} opens its glossary term`)
+for (const id of ['support', 'target']) check(termIds(main1).includes(id), `row #1: the sentence's ${id} opens its glossary term`)
+const main2 = mainOf(rowOf(list, 2))
+check(text(main2).includes('13.20') && text(main2).includes('漲跌待核實') && text(main2).includes('13.05～13.35') && text(main2).includes('上櫃') && text(main2).includes('回踩型'), 'row #2: pullback zone, TPEx, and an unverified change reads 漲跌待核實')
+check(text(mainOf(rowOf(list, 4))).includes('-1.50%'), 'row #4: a falling close shows a signed change')
 // #465: no close on the previous session the source published (no trade, suspended or newly listed) says so, not 待核實.
 const noPreviousClose = candidateChange({ trading_date: '2026-10-16', close: 13.2, change: null, change_pct: null, change_status: 'no_previous_close', source: 'tpex' })
 check(noPreviousClose.text === '前一交易日無收盤' && noPreviousClose.tone === null, `no previous close: ${noPreviousClose.text}`)
 // #475: a new listing's first day says so instead.
 const firstTradingDay = candidateChange({ trading_date: '2026-10-16', close: 13.2, change: null, change_pct: null, change_status: 'first_trading_day', source: 'tpex' })
 check(firstTradingDay.text === '掛牌首日' && firstTradingDay.tone === null, `first trading day: ${firstTradingDay.text}`)
-check(text(slice(table, 'data-candidate-rank="5"', '</tr>')).includes('待核實'), 'row #5: no bar on the day reads 待核實')
-// AI entry: a note (done or pending) is 「AI 推論 ▸」, none is 「AI 說明 ▸」.
-check(text(row1).includes('AI 推論 ▸'), 'AI entry: done note → 「AI 推論 ▸」')
-check(text(row2).includes('AI 說明 ▸') && !text(row2).includes('AI 推論 ▸'), 'AI entry: no note → 「AI 說明 ▸」')
-check(text(slice(table, 'data-candidate-rank="3"', '</tr>')).includes('AI 推論 ▸'), 'AI entry: pending note → 「AI 推論 ▸」')
-// Detail row under each row: all reasons and components, the AI block, date, source and the stock-page link.
-const detail1 = slice(table, 'data-candidate-detail="1"', '</tr>')
-check(detail1.includes('<details') && count(detail1, 'data-reason=') === 4 && detail1.includes('data-component="technical"'), 'detail #1: every reason and the four components')
+check(text(mainOf(rowOf(list, 5))).includes('待核實'), 'row #5: no bar on the day reads 待核實')
+// AI entry: a note (done or pending) is 「AI 推論 ▸」, none is 「AI 說明 ▸」; one entry per row (page_checks T8).
+check(text(mainOf(rowOf(list, 2))).includes('AI 說明 ▸') && !text(mainOf(rowOf(list, 2))).includes('AI 推論 ▸'), 'AI entry: no note → 「AI 說明 ▸」')
+check(text(mainOf(rowOf(list, 3))).includes('AI 推論 ▸'), 'AI entry: pending note → 「AI 推論 ▸」')
+check(count(text(list), 'AI 推論 ▸') + count(text(list), 'AI 說明 ▸') === 12, 'one AI entry per candidate')
+check(/<button[^>]*aria-expanded="false"[^>]*aria-controls="candidate-detail-1"/.test(main1), 'the AI entry is a button that controls the row\'s detail')
+// AC-2: the detail opens with the AI note, its 為何入選 first; the levels and 加入追蹤 beside it; the facts folded under.
+const detail1 = detailOf(rowOf(list, 1))
+const body1 = slice(detail1, 'class="candidate-detail-body"', 'class="candidate-detail-side"')
+check(/^class="candidate-detail-body"><section class="ai-inference candidate-note"/.test(body1), `Issue 510: the detail's first block is the AI note, got ${body1.slice(0, 120)}`)
+check(body1.indexOf('data-note-part="selection"') > 0 && body1.indexOf('data-note-part="selection"') < body1.indexOf('data-note-part="levels"') && body1.indexOf('data-note-part="levels"') < body1.indexOf('data-note-part="risks"'), 'Issue 510: the note reads 為何入選 → 進場區、停損與目標 → 需留意的風險')
 check(detail1.includes('data-note-state="done"') && detail1.includes(NOTE_DISCLAIMER), 'detail #1: the done AI note with its disclaimer')
-check(text(detail1).includes('資料日期 2026/10/16') && text(detail1).includes('來源：' + candidateSourceText(completeItem())), 'detail #1: data date and 來源 line')
-check(detail1.includes('href="/stocks/TWSE/2377"') && text(detail1).includes('評分細節 → 個股頁'), 'detail #1: score details link to the stock page')
+const side1 = slice(detail1, 'class="candidate-detail-side"', 'class="candidate-detail-folds"')
+check(!side1.includes('ai-inference') && /class="level-entry">161\.50</.test(side1) && /class="level-stop">157\.82</.test(side1) && /class="level-target">167\.39</.test(side1) && text(side1).includes('1.60 倍'), 'Issue 510: the rule levels and RR sit beside the note, outside the AI block')
+for (const label of ['進場區（元）', '停損（元）', '目標一／二（元）', 'RR']) check(text(side1).includes(label), `detail levels: 「${label}」, got ${text(side1)}`)
+check(text(side1).includes('加入追蹤') && side1.includes('href="/stocks/TWSE/2377"') && text(side1).includes('評分細節 → 個股頁'), 'detail #1: 加入追蹤 and the stock-page link beside the note')
+const folds1 = detail1.slice(detail1.indexOf('class="candidate-detail-folds"'))
+for (const summary of ['完整條件（2026/10/16 判定）', '分項分數與理由', '資料日期與來源']) check(folds1.includes(`<summary>${summary}</summary>`), `Issue 510: 「${summary}」 is folded under the note`)
+check(!/<details[^>]*open/.test(folds1), 'the three folds are closed by default')
+check(count(folds1, 'data-reason=') === 4 && folds1.includes('data-component="technical"'), 'detail #1: every reason and the four components in 分項分數與理由')
+check(text(folds1).includes('資料日期 2026/10/16') && text(folds1).includes('來源：' + candidateSourceText(completeItem())), 'detail #1: data date and 來源 line in 資料日期與來源')
 check(!detail1.includes('data-sub-item='), 'detail #1: the score-detail table stays on the stock page')
-check(text(slice(table, 'data-candidate-detail="2"', '</tr>')).includes(NOTE_MISSING_TEXT), 'detail #2: no note → fixed copy')
-check(text(slice(table, 'data-candidate-detail="3"', '</tr>')).includes(NOTE_PENDING_TEXT), 'detail #3: pending note → fixed copy')
-check(count(table, '來源：') === 12 && count(table, NOTE_DISCLAIMER) === 12, 'table: one 來源 line and one AI disclaimer per candidate')
-// Phone card: rank, name, total; the entry plan (its sentence carries entry, stop and target, so only the close cell stays,
-// decision 6647903049); market · strategy · group; first reason; AI details.
-const card1 = slice(cards, 'data-candidate-card="1"', '</article>')
-for (const value of ['#1', '2377', '微星', '83', '上市 · 突破條件 · AI 伺服器（題材，第 2 名／11）', '收盤（元）', '162.00', '突破型', '161.50', '157.82', '167.39', '三大法人 5 日淨買超，約 20 日均量的 2.59 倍', 'AI 說明']) {
-  check(text(card1).includes(value), `card #1: shows 「${value}」`)
-}
-check(['進場區（元）', '停損（元）', '目標一／二（元）'].every((label) => !text(slice(card1, '<dl', '</dl>')).includes(label)), 'card #1: no level cell repeats the sentence')
-check(/class="[^"]*level-stop[^"]*">157\.82/.test(card1) && /class="[^"]*level-target[^"]*">167\.39/.test(card1), 'card #1: stop and target carry the level classes')
-check(!slice(card1, '<dl', '</dl>').includes('<wbr'), 'card #1: level cells never break inside')
-check(card1.includes('<details') && card1.includes('data-note-state="done"') && text(card1).includes('來源：'), 'card #1: 「AI 說明」 opens the same detail content')
+check(text(detailOf(rowOf(list, 2))).includes(NOTE_MISSING_TEXT), 'detail #2: no note → fixed copy')
+check(text(detailOf(rowOf(list, 3))).includes(NOTE_PENDING_TEXT), 'detail #3: pending note → fixed copy')
+check(count(list, '來源：') === 12 && count(list, NOTE_DISCLAIMER) === 12 && count(list, '>加入追蹤</button>') === 12, 'list: one 來源 line, one AI disclaimer and one 加入追蹤 per candidate (page_checks T7, T8, T13)')
 const short = render('CandidatesSection two', () => <CandidatesSection data={listResponse()} loading={false} error={null} />)
-check(!short.includes('candidate-more') && count(short, '<tr data-candidate-rank=') === 2, 'list of 2: no fold')
+check(!short.includes('candidate-more') && count(short, '<li class="candidate-row') === 2, 'list of 2: no fold')
 check(text(short).includes('資料 2026/10/16') && text(short).includes('2 檔'), 'list: run date badge and count')
 // Zero candidates and not computed keep their copy.
 for (const reason of ['no_actionable_signals', 'all_excluded'] as const) {
   const data = zeroResponse(reason)
   const markup = render(`CandidatesSection zero ${reason}`, () => <CandidatesSection data={data} loading={false} error={null} />)
-  check(text(markup).includes(data.zero_reason_text ?? '?') && text(markup).includes('當日零候選') && !markup.includes('<table'), `zero ${reason}: copy, no table`)
+  check(text(markup).includes(data.zero_reason_text ?? '?') && text(markup).includes('當日零候選') && !markup.includes('candidate-list'), `zero ${reason}: copy, no list`)
 }
 const notComputed = render('CandidatesSection not computed', () => <CandidatesSection data={notComputedResponse()} loading={false} error={null} />)
 check(text(notComputed).includes(NOT_COMPUTED_TEXT) && text(notComputed).includes('尚無候選清單') && !notComputed.includes('date-badge') && !text(notComputed).includes('T+1'), 'not_computed: copy without a date badge or T+1 sentence')
+
+// ---- Issue 510 layout rules the static markup cannot show (DESIGN_SYSTEM §5 候選列表, 熱門族群與重點新聞) ----
+const styles = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8')
+const ruleOf = (selector: string) => { const at = styles.indexOf('\n' + selector + ' {'); return at < 0 ? '' : styles.slice(at, styles.indexOf('}', at)) }
+check(/white-space:\s*nowrap/.test(ruleOf('.candidate-row-title')) && /text-overflow:\s*ellipsis/.test(ruleOf('.candidate-row-title')), 'Issue 510: the title line never wraps; market · group is cut with an ellipsis')
+check(/white-space:\s*nowrap/.test(ruleOf('.home-news-title')) && /text-overflow:\s*ellipsis/.test(ruleOf('.home-news-title')), 'Issue 510: a news title is one line')
+check(/white-space:\s*nowrap/.test(ruleOf('.home-news-meta, .home-news-impact')) && /white-space:\s*nowrap/.test(ruleOf('.hot-group-returns')), 'Issue 510: line two of news and groups never wraps')
+check(/white-space:\s*nowrap/.test(ruleOf('.hot-group-line h3')), 'Issue 510: a group name is one line')
+check(!/var\(--text-|--space-row|--space-block/.test(styles.replace(/var\(--text-(xs|sm|md|base|lg|xl|2xl)\)|var\(--space-(row|block)\)/g, '')), 'Issue 510: only the defined type and spacing tokens are used')
+const tokenCss = fs.readFileSync(path.join(__dirname, '..', 'styles', 'tokens.css'), 'utf8')
+for (const token of ['--text-xs', '--text-sm', '--text-md', '--text-base', '--text-lg', '--text-xl', '--text-2xl', '--space-row', '--space-block']) check(tokenCss.includes(token + ':'), `tokens.css defines ${token} (DESIGN_SYSTEM §2)`)
 
 // ---- level colours site-wide: stop warning, target primary; red and green only for up and down ----
 const css = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8')

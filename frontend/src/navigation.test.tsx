@@ -103,37 +103,30 @@ check(!text(home).includes('明日候選') && !text(home).includes('關注標的
 const columns = home.slice(home.indexOf('home-columns'))
 const panels = columns.match(/class="[^"]*\bhome-panel\b[^"]*"/g) ?? []
 check(panels.length === 2, `熱門族群與重點新聞各是一張 home-panel 卡: ${panels.length}`)
-const hotHead = home.slice(home.indexOf('id="hot-groups-title"'), home.indexOf('id="hot-groups-title"') + 1500)
-check(/^[^]*?role="tablist"/.test(hotHead.slice(0, hotHead.indexOf('</div></div>') + 12)) || hotHead.split('section-head')[0].includes('role="tablist"'),
-  '熱門族群的產業／題材 tab 在標題列內')
-const newsCount = (columns.match(/class="[^"]*\bnews-card-compact\b/g) ?? []).length
-check(newsCount === 5, `重點新聞列 5 則: ${newsCount}`)
+// Issue 510: each card head is one line (no eyebrow): title, the board tabs and 完整排行 →, or 全部新聞 →.
+const hotHead = home.slice(home.indexOf('<div class="panel-head"><h2 id="hot-groups-title"'), home.indexOf('class="hot-groups-dates"'))
+check(hotHead.includes('role="tablist"') && hotHead.includes('>完整排行 →</a>') && !hotHead.includes('eyebrow'), `熱門族群標題列：標題、產業／題材 tab、「完整排行 →」，不放眉標: ${text(hotHead)}`)
+const newsHead = home.slice(home.indexOf('<div class="panel-head"><h2 id="home-news-title"'), home.indexOf('class="home-news-list"'))
+check(newsHead.includes('href="/news">全部新聞 →</a>') && !newsHead.includes('eyebrow'), `重點新聞標題列：標題與「全部新聞 →」: ${text(newsHead)}`)
+const newsCount = count(columns, 'class="home-news-row"')
+check(newsCount === 5, `重點新聞列 5 則（dashboard 有 6 則）: ${newsCount}`)
+// Issue 510 AC-3: a news row is two lines: the title, then source · time and the direction; no tags, category or summary.
+const newsRow = columns.slice(columns.indexOf('class="home-news-row"'), columns.indexOf('</article>', columns.indexOf('class="home-news-row"')))
+check(/<h3 class="home-news-title"><a [^>]*title="[^"]+"/.test(newsRow) && newsRow.includes('class="home-news-meta"') && newsRow.includes('class="home-news-impact"'), `新聞列：標題（全文在 title）、來源與時間、方向: ${newsRow.slice(0, 300)}`)
+check(!newsRow.includes('news-chips') && !newsRow.includes('news-card-summary') && !newsRow.includes('news-card-meta') && !newsRow.includes('news-ai-candidates'), '新聞列不放已核實標的 tag、摘要、分類與 AI 候選行（在 /news）')
+check((newsRow.match(/<(h3|div) class="home-news-/g) ?? []).length === 3, '新聞列只有標題、來源時間、方向三塊（排成兩行）')
 
-// ---- 今日可買 table: 7 columns, the strategy type and levels in one 進場方式 column, the group on one line ----
+// ---- 今日可買 (Issue 510): one list at every width, the group on one line, the #491 sentence under the name ----
 const list = render('/', <CandidatesSection data={listResponse()} loading={false} error={null} />)
-const table = list.slice(list.indexOf('<table'), list.indexOf('</thead>'))
-const headers = (table.match(/<th[\s>]/g) ?? []).length
-check(headers === 7, `今日可買表格 7 欄: ${headers}`)
-for (const header of ['股票', '最近收盤（元）', '進場方式', 'RR', '總分（0–100）', '主要理由']) {
-  check(text(table).replace(/\s/g, '').includes(header), `今日可買表格缺欄「${header}」: ${text(table)}`)
-}
-check(!text(table).includes('所屬族群') && !text(table).includes('名次'), `族群與名次併進股票欄: ${text(table)}`)
-const body = list.slice(list.indexOf('<tbody'), list.indexOf('</table>'))
-check(text(body).includes('#1 2377 微星') || text(body).includes('#1 2377 微星'.replace(' ', '  ')), `股票欄以名次開頭: ${text(body).slice(0, 200)}`)
-check(text(body).includes('上市 · AI 伺服器（題材 #2）'), `股票欄第二行是「市場 · 族群（榜 #名次）」: ${text(body).slice(0, 300)}`)
-// The #491 entry sentence is the 進場方式 cell (PR 498 merged), not a line under the row; its conditions fold in the detail.
-const rowStart = body.indexOf('data-candidate-rank="1"')
-const firstRow = body.slice(rowStart, body.indexOf('</tr>', rowStart))
-const entryCell = firstRow.slice(firstRow.indexOf('candidate-entry-cell'))
-check(entryCell.includes('data-entry-plan="levels"') && text(entryCell).includes('突破型') && text(entryCell).includes('161.50 元') && text(entryCell).includes('157.82 元') && text(entryCell).includes('167.39 元'),
-  `進場方式欄是進場句: ${text(entryCell).slice(0, 300)}`)
-check(!entryCell.includes('entry-plan-conditions'), '進場方式欄不放完整條件（在明細裡）')
-check(count(body, 'aria-label="進場方式"') === listResponse().items.length, `桌面每檔只有一份進場句: ${count(body, 'aria-label="進場方式"')}`)
-// Phone card: the sentence under the name without its conditions, which open with 「AI 說明」 (two cards at 390×844).
-const card1 = list.slice(list.indexOf('data-candidate-card="1"'), list.indexOf('</article>', list.indexOf('data-candidate-card="1"')))
-const cardPlan = card1.slice(card1.indexOf('aria-label="進場方式"'), card1.indexOf('</section>', card1.indexOf('aria-label="進場方式"')))
-check(cardPlan.length > 0 && !cardPlan.includes('entry-plan-conditions') && card1.indexOf('entry-plan-conditions') > card1.indexOf('candidate-mini-ai'), '手機卡的完整條件在「AI 說明」裡')
-check(card1.includes('candidate-mini-levels candidate-mini-levels-close'), '主句有價位時手機卡的收盤排成一行')
+check(!list.includes('<table') && list.includes('<ol class="candidate-list"'), `今日可買是同一份清單，不是表格: ${list.slice(0, 200)}`)
+const firstRow = list.slice(list.indexOf('data-candidate-rank="1"'), list.indexOf('data-candidate-rank="2"'))
+const titleLine = firstRow.slice(firstRow.indexOf('<p class="candidate-row-title"'), firstRow.indexOf('</p>'))
+check(text(titleLine).trim() === '#1 2377 微星 上市 · AI 伺服器（題材 #2）', `標題列是「#名次 代號 名稱 市場 · 族群（榜 #名次）」一行: ${text(titleLine)}`)
+const plan = firstRow.slice(firstRow.indexOf('aria-label="進場方式"'), firstRow.indexOf('</section>', firstRow.indexOf('aria-label="進場方式"')))
+check(plan.includes('data-entry-plan="levels"') && text(plan).includes('突破型') && text(plan).includes('161.50 元') && text(plan).includes('157.82 元') && text(plan).includes('167.39 元'),
+  `名稱下一行是進場句: ${text(plan).slice(0, 300)}`)
+check(!plan.includes('entry-plan-conditions') && firstRow.indexOf('entry-plan-conditions') > firstRow.indexOf('candidate-detail-folds'), '進場句不帶完整條件（在明細的收合列）')
+check(count(list, 'aria-label="進場方式"') === listResponse().items.length, `每檔只有一份進場句: ${count(list, 'aria-label="進場方式"')}`)
 
 // ---- first_trading_day reads 掛牌首日: a market transfer also starts a new listing row (#475 review) ----
 check(noPreviousCloseText('first_trading_day') === '掛牌首日', `first_trading_day: ${noPreviousCloseText('first_trading_day')}`)
@@ -142,11 +135,7 @@ check(noPreviousCloseText('first_trading_day') === '掛牌首日', `first_tradin
 const css = fs.readFileSync(path.join(__dirname, 'styles.css'), 'utf8')
 const rule = (selector: string) => { const at = css.indexOf(selector + ' {'); return at < 0 ? '' : css.slice(at, css.indexOf('}', at)) }
 check(/align-items:\s*stretch/.test(rule('.home-columns')), `.home-columns 兩欄等高: ${rule('.home-columns')}`)
-check(/table-layout:\s*fixed/.test(rule('.candidate-table')), `.candidate-table 固定欄寬: ${rule('.candidate-table')}`)
-// Review of PR 499: the fixed columns fill the 1214px content of 1280 and wider; narrower, the list is cards.
-const tabletAt = css.indexOf('@media (max-width: 1279px)')
-const tablet = tabletAt < 0 ? '' : css.slice(tabletAt, css.indexOf('\n}\n', tabletAt) + 2)
-check(/\.candidate-table-wrap \{ display: none; \}/.test(tablet) && /\.candidate-cards \{ display: grid;/.test(tablet), `1279px 以下今日可買改卡片: ${tablet || '沒有這段 @media'}`)
-check(/white-space:\s*nowrap/.test(rule('.entry-plan-sentence b')), '進場句的價位不拆行（長句在價位之間換行，不被固定欄寬切掉）')
+check(!css.includes('.candidate-table') && !css.includes('.candidate-cards'), 'Issue 510: no table or card styles left for the today list')
+check(/white-space:\s*nowrap/.test(rule('.entry-plan-sentence b')), '進場句的價位不拆行（長句在價位之間換行，不切字）')
 
 if (failures.length) throw new Error(`${failures.length} of ${checks} navigation checks failed:\n- ${failures.join('\n- ')}`)

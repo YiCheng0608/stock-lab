@@ -223,16 +223,21 @@ def _candidates(count=2, inference=True):
     }
 
 
-# The 1280 table (#493): the navbar's 今日可買 link, the section title after its eyebrow,
-# then rows whose stock cell starts `#<rank> <symbol> <name>`, then the opened detail row.
+# The 1280 list (#510): the navbar's 今日可買 link, the section title (no eyebrow), then rows
+# whose title line starts `#<rank> <symbol> <name>`, then the opened detail.
 TODAY_CANDIDATES = (
     "今日可買\n觀察中\n"
-    "條件已成立 · 依評分排序\n今日可買\n資料 2026/10/16\n2 檔\n策略說明 →\n"
-    "股票\t最近收盤（元）\t進場方式（元）\tRR\n"
-    "#1 9100 示範一\n上市 · 半導體（產業 #1）\t21.10\n+0.48%\t突破型進場 21.10\tAI 推論 ▸\n"
-    "AI 推論\n" + page_checks.CANDIDATE_DISCLAIMER + "\n來源：訊號 a（推論）\n"
-    "#2 9101 示範二\n上櫃 · 無所屬族群\t13.20\n漲跌待核實\t回踩型進場 13.00～13.20\tAI 說明 ▸\n"
-    "AI 推論\n" + page_checks.CANDIDATE_DISCLAIMER + "\n來源：訊號 b（推論）\n"
+    "今日可買\n資料 2026/10/16\n2 檔\n2026/10/16 收盤後條件成立\n策略說明 →\n"
+    "#1 9100 示範一 上市 · 半導體（產業 #1）\n突破型\n2026/10/16 收盤已突破 21.10 元\n"
+    "收盤（元）\n21.10\n+0.48%\nRR\n1.60 倍\nAI 推論 ▸\n"
+    "AI 進出點說明\nAI 推論\n"
+    + page_checks.CANDIDATE_DISCLAIMER
+    + "\n來源：訊號 a（推論）\n"
+    "#2 9101 示範二 上櫃 · 無所屬族群\n回踩型\n2026/10/16 已拉回到支撐區\n"
+    "收盤（元）\n13.20\n漲跌待核實\nRR\n1.60 倍\nAI 說明 ▸\n"
+    "AI 進出點說明\nAI 推論\n"
+    + page_checks.CANDIDATE_DISCLAIMER
+    + "\n來源：訊號 b（推論）\n"
     "熱門族群\n#1\n半導體\n"
 )
 
@@ -268,7 +273,7 @@ def test_t7_fails_on_the_old_candidate_rows(tmp_path):
 
 def test_t7_reads_the_section_title_not_the_navbar_link(tmp_path):
     # #493: the navbar 今日可買 comes first; the date must follow the section title.
-    page = TODAY_CANDIDATES.replace("條件已成立 · 依評分排序\n今日可買\n", "")
+    page = TODAY_CANDIDATES.replace("觀察中\n今日可買\n", "觀察中\n", 1)
     run = FakeRun(
         tmp_path,
         {"candidates": _candidates()},
@@ -300,6 +305,50 @@ def test_t8_fails_when_an_ai_entry_does_not_match_the_note(tmp_path):
         page_checks.Fail, match="`AI 推論 ▸` 2 個、`AI 說明 ▸` 0 個，預期 1／1"
     ):
         page_checks.t8(run)
+
+
+# The 1280 hot groups card (#510): one head line, the date and the returns note once, then
+# five rows of two lines (`#n`, the name, the score; the returns).
+def _board(count=6):
+    return {
+        "meta": {"trading_date": "2026-10-16"},
+        "items": [{"display_name": f"族群{n}"} for n in range(1, count + 1)],
+    }
+
+
+TODAY_GROUPS = (
+    "熱門族群\n產業\n題材\n完整排行 →\n資料 2026/10/16\n"
+    + page_checks.GROUP_RETURNS_NOTE
+    + "\n"
+    + "".join(
+        f"#{n}\n族群{n}\n分數 8{n}.00\n1 日 +0.10% 5 日 +1.00% 20 日 +2.00%\n"
+        for n in range(1, 6)
+    )
+    + "重點新聞\n全部新聞 →\n"
+)
+
+
+def test_t5_passes_on_the_five_two_line_rows(tmp_path):
+    run = FakeRun(
+        tmp_path,
+        {"themes?board=industry&limit=5": _board()},
+        {"today-1280": TODAY_GROUPS},
+    )
+    assert page_checks.t5(run).startswith("5 列（`#n` 與名稱）= items 前 5 名")
+
+
+def test_t5_fails_on_a_missing_note_or_a_row_out_of_order(tmp_path):
+    payloads = {"themes?board=industry&limit=5": _board()}
+    no_note = TODAY_GROUPS.replace(page_checks.GROUP_RETURNS_NOTE + "\n", "")
+    run = FakeRun(tmp_path, payloads, {"today-1280": no_note})
+    with pytest.raises(
+        page_checks.Fail, match="缺整行 `1／5／20 日為相對加權指數的報酬`"
+    ):
+        page_checks.t5(run)
+    swapped = TODAY_GROUPS.replace("#1\n族群1\n", "#1\n族群2\n", 1)
+    run = FakeRun(tmp_path, payloads, {"today-1280": swapped})
+    with pytest.raises(page_checks.Fail, match="`熱門族群` 列 \\['族群2', '族群2'"):
+        page_checks.t5(run)
 
 
 def test_t7_fails_when_the_page_drops_the_candidates(tmp_path):
