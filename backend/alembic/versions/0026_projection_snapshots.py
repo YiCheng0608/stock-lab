@@ -41,9 +41,12 @@ def upgrade() -> None:
         columns = {column["name"] for column in inspector.get_columns("events")}
         if "updated_at" not in columns:
             op.add_column("events", Column("updated_at", DateTime, nullable=True))
-        bind.exec_driver_sql(
-            "UPDATE events SET updated_at = collected_at WHERE updated_at IS NULL"
-        )
+        # A legacy partial events table (the old-revision fixtures) may lack
+        # collected_at; its rows keep a null updated_at.
+        if "collected_at" in columns:
+            bind.exec_driver_sql(
+                "UPDATE events SET updated_at = collected_at WHERE updated_at IS NULL"
+            )
     if not inspector.has_table("news_projection_state"):
         op.create_table(
             "news_projection_state",

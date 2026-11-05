@@ -738,9 +738,14 @@ def _fallback_upgrade_on_connection(connection) -> None:
             connection.execute(
                 text('ALTER TABLE "events" ADD COLUMN "updated_at" DATETIME')
             )
-        connection.execute(
-            text("UPDATE events SET updated_at = collected_at WHERE updated_at IS NULL")
-        )
+        # A legacy partial events table may lack collected_at (as in 0026).
+        if "collected_at" in event_columns:
+            connection.execute(
+                text(
+                    "UPDATE events SET updated_at = collected_at "
+                    "WHERE updated_at IS NULL"
+                )
+            )
     connection.execute(
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
