@@ -423,7 +423,7 @@ def test_a_research_backtest_writes_its_versions_and_no_canonical_row(backtest_d
     assert pipeline.backtest(start, end, registry=registry)["run"]["id"] == run.id
 
 
-# ---- research runs commit as they go ----
+# ---- runs commit as they go (research #318, canonical #484) ----
 
 
 class _Boom(RuntimeError):
@@ -445,30 +445,89 @@ def _fail_once(monkeypatch, name: str, *, after: int):
     monkeypatch.setattr(pipeline, name, wrapper)
 
 
-def _research_result(factory, registry, start, end, **kwargs):
+def _loaded_summary(db, run_id: int) -> dict:
+    """The summary as summarize_backtest counted it before #484, from loaded rows.
+
+    The reference the SQL summary must equal: every signal of the run read into
+    memory, actionable by its evidence, settlements grouped per strategy,
+    instrument type and horizon.
+    """
+
+    from app.models import Instrument
+
+    run = db.get(IngestionRun, run_id)
+    signals = db.scalars(
+        select(Signal).where(Signal.signal_key.like(f"backtest-{run_id}-%"))
+    ).all()
+    actionable = [s for s in signals if (s.rule_evidence_json or {}).get("actionable")]
+    grouped: dict = {}
+    for signal in actionable:
+        strategy = db.get(StrategyVersion, signal.strategy_version_id)
+        instrument = db.get(Instrument, signal.instrument_id)
+        for settlement in db.scalars(
+            select(SignalSettlement).where(SignalSettlement.signal_id == signal.id)
+        ):
+            row = grouped.setdefault(
+                (
+                    strategy.name,
+                    strategy.version,
+                    instrument.instrument_type,
+                    settlement.horizon,
+                ),
+                {
+                    "strategy": strategy.name,
+                    "version": strategy.version,
+                    "instrument_type": instrument.instrument_type,
+                    "horizon": settlement.horizon,
+                    "sample": 0,
+                    "comparable": 0,
+                    "incomparable": 0,
+                },
+            )
+            row["sample"] += 1
+            row["comparable" if settlement.comparable else "incomparable"] += 1
+    return pipeline._backtest_summary(run, grouped, len(signals) - len(actionable))
+
+
+def _whole_result(factory, registry, start, end, **kwargs):
     result = pipeline.backtest(start, end, registry=registry, **kwargs)
     assert result["run"]["status"] == "success", result.get("error")
     with factory() as db:
         expected = pipeline.summarize_backtest(db, result["run"]["id"])
-    # The SQL summary is summarize_backtest's.
-    assert {
-        key: value for key, value in result.items() if key != "idempotent_reuse"
-    } == expected
+        loaded = _loaded_summary(db, result["run"]["id"])
+    # The returned summary is the API's, and the SQL counts are the loaded rows'.
+    assert (
+        {
+            key: value
+            for key, value in result.items()
+            if key not in {"idempotent_reuse", "abandoned_runs"}
+        }
+        == expected
+        == loaded
+    )
     return _rows(factory, result["run"]["id"]), result["groups"]
 
 
+def _registry(kind: str):
+    return (
+        None if kind == "canonical" else research_registry([("pullback_v3", "volume")])
+    )
+
+
+@pytest.mark.parametrize("kind", ["canonical", "research"])
 @pytest.mark.parametrize(
     ("failing", "after"),
     [("_generate_signals", 20), ("_evaluate_signal_tracking", 30)],
 )
-def test_a_failed_research_run_rerun_matches_one_uninterrupted_run(
-    use_copy, monkeypatch, failing, after
+def test_a_failed_run_rerun_matches_one_uninterrupted_run(
+    use_copy, monkeypatch, kind, failing, after
 ):
-    monkeypatch.setattr(pipeline, "RESEARCH_TRACKING_BATCH", 37)
-    registry = research_registry([("pullback_v3", "volume")])
+    monkeypatch.setattr(pipeline, "BACKTEST_TRACKING_BATCH", 37)
+    registry = _registry(kind)
     whole = use_copy("whole.db")
     start, end = _window(whole, 25)
-    expected_rows, expected_groups = _research_result(whole, registry, start, end)
+    expected_rows, expected_groups = _whole_result(whole, registry, start, end)
+    assert any(row["settlements"] for row in expected_rows.values())
 
     factory = use_copy("failed.db")
     _fail_once(monkeypatch, failing, after=after)
@@ -477,37 +536,52 @@ def test_a_failed_research_run_rerun_matches_one_uninterrupted_run(
     # What the failed run committed stays (docs/spec/tracking.md 3).
     assert _rows(factory, failed["run"]["id"])
 
-    rows, groups = _research_result(factory, registry, start, end)
+    rows, groups = _whole_result(factory, registry, start, end)
     assert rows == expected_rows and groups == expected_groups
-    forced_rows, forced_groups = _research_result(
+    forced_rows, forced_groups = _whole_result(
         factory, registry, start, end, force=True
     )
     assert forced_rows == expected_rows and forced_groups == expected_groups
 
 
-def test_a_research_run_commits_each_score_date(use_copy, monkeypatch):
+@pytest.mark.parametrize("kind", ["canonical", "research"])
+def test_a_run_commits_each_score_date_and_tracking_batch(use_copy, monkeypatch, kind):
+    monkeypatch.setattr(pipeline, "BACKTEST_TRACKING_BATCH", 37)
     factory = use_copy()
     start, end = _window(factory)
-    registry = research_registry([("breakout_v3", "margin")], canonical=False)
+    registry = (
+        None
+        if kind == "canonical"
+        else research_registry([("breakout_v3", "margin")], canonical=False)
+    )
     committed = []
     original = pipeline._generate_signals
 
-    def spy(db, score_date, strategies, **kwargs):
+    def count(model) -> int:
         with factory() as probe:  # another connection sees only committed rows
-            committed.append(
-                probe.scalar(
-                    select(func.count(Signal.id)).where(
-                        Signal.signal_key.like("backtest-%")
-                    )
-                )
-            )
+            return probe.scalar(select(func.count(model.id)))
+
+    def spy(db, score_date, strategies, **kwargs):
+        committed.append(count(Signal))
         return original(db, score_date, strategies, **kwargs)
 
+    tracked = []
+    original_track = pipeline._evaluate_signal_tracking
+
+    def track_spy(db, signal, **kwargs):
+        tracked.append(count(SignalSettlement))
+        return original_track(db, signal, **kwargs)
+
     monkeypatch.setattr(pipeline, "_generate_signals", spy)
-    pipeline.backtest(start, end, registry=registry)
+    monkeypatch.setattr(pipeline, "_evaluate_signal_tracking", track_spy)
+    result = pipeline.backtest(start, end, registry=registry)
+    assert result["run"]["status"] == "success"
     per_day = committed[1] - committed[0]
     assert per_day > 0
     assert committed == [committed[0] + per_day * day for day in range(len(committed))]
+    # Settlements become visible to other connections batch by batch, before
+    # the run ends: more than one distinct committed count while tracking.
+    assert len(set(tracked)) > 1
 
 
 def test_a_research_run_stops_at_the_daily_window_and_a_rerun_completes_it(
@@ -518,11 +592,11 @@ def test_a_research_run_stops_at_the_daily_window_and_a_rerun_completes_it(
     )
     research = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(research)
-    monkeypatch.setattr(pipeline, "RESEARCH_TRACKING_BATCH", 37)
+    monkeypatch.setattr(pipeline, "BACKTEST_TRACKING_BATCH", 37)
     registry = research_registry([("breakout_v3", "volume")], canonical=False)
     whole = use_copy("whole.db")
     start, end = _window(whole, 25)
-    expected_rows, expected_groups = _research_result(whole, registry, start, end)
+    expected_rows, expected_groups = _whole_result(whole, registry, start, end)
 
     # A fake clock one minute per check from 21:20 Taipei: the 11th check is 21:30.
     minutes = iter(range(20, 90))
@@ -542,5 +616,5 @@ def test_a_research_run_stops_at_the_daily_window_and_a_rerun_completes_it(
             )
         )
     assert committed_days == 11  # stopped after the 11th score date's commit
-    rows, groups = _research_result(factory, registry, start, end)
+    rows, groups = _whole_result(factory, registry, start, end)
     assert rows == expected_rows and groups == expected_groups
