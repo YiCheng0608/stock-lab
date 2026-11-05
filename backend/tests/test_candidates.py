@@ -895,6 +895,8 @@ ITEM_KEYS = {
     "open_plan_id",
     # The 20-session average volume the liquidity floor read (#490).
     "liquidity",
+    # The plain-language entry plan from strategy_levels (#491).
+    "entry_plan",
 }
 
 

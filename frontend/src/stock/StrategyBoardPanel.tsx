@@ -1,4 +1,5 @@
 import { CandidateNote, ReasonList, ScoreDetails } from '../candidates/CandidateViews'
+import { EntryPlanCard } from '../candidates/EntryPlanCard'
 import {
   CANDIDATE_DISCLAIMER,
   averageVolumeText,
@@ -135,6 +136,8 @@ function CandidateRow({ board, candidate }: { board: Board; candidate: Candidate
         <strong>第 {summary.rank} 名 · <Term id="candidate_score">總分</Term> {formatCandidateScore(summary.total_score)} · {candidateStrategyLabel(summary.strategy)}</strong>
         <span className="small-note strategy-candidate-disclaimer">{CANDIDATE_DISCLAIMER}</span>
       </div>
+      {/* #491: how to enter, before the reasons. */}
+      {candidate && <EntryPlanCard item={candidate} onStockPage />}
       {candidate && <ReasonList reasons={candidate.reasons} />}
       {candidate && <CandidateNote item={candidate} />}
       {candidate && <ScoreDetails item={candidate} open={false} />}

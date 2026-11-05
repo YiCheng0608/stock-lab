@@ -29,6 +29,7 @@ const path = require('node:path') as { join(...parts: string[]): string }
 // links, 觀察中 at /watch with /actions redirecting, the 策略說明 page, the 今日可買 home and its table and columns.
 const failures: string[] = []
 let checks = 0
+const count = (html: string, part: string) => html.split(part).length - 1
 const check = (condition: boolean, message: string) => { checks++; if (!condition) failures.push(message) }
 const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/\s+/g, ' ')
 
@@ -120,8 +121,14 @@ check(!text(table).includes('所屬族群') && !text(table).includes('名次'), 
 const body = list.slice(list.indexOf('<tbody'), list.indexOf('</table>'))
 check(text(body).includes('#1 2377 微星') || text(body).includes('#1 2377 微星'.replace(' ', '  ')), `股票欄以名次開頭: ${text(body).slice(0, 200)}`)
 check(text(body).includes('上市 · AI 伺服器（題材 #2）'), `股票欄第二行是「市場 · 族群（榜 #名次）」: ${text(body).slice(0, 300)}`)
-check(text(body).includes('突破型') && text(body).includes('161.50') && text(body).includes('157.82') && text(body).replace(/\s/g, '').includes('167.39／172.54'),
-  `進場方式欄有策略類型與進場、停損、目標一／二: ${text(body).slice(0, 400)}`)
+// The #491 entry sentence is the 進場方式 cell (PR 498 merged), not a line under the row; its conditions fold in the detail.
+const rowStart = body.indexOf('data-candidate-rank="1"')
+const firstRow = body.slice(rowStart, body.indexOf('</tr>', rowStart))
+const entryCell = firstRow.slice(firstRow.indexOf('candidate-entry-cell'))
+check(entryCell.includes('data-entry-plan="levels"') && text(entryCell).includes('突破型') && text(entryCell).includes('161.50 元') && text(entryCell).includes('157.82 元') && text(entryCell).includes('167.39 元'),
+  `進場方式欄是進場句: ${text(entryCell).slice(0, 300)}`)
+check(!entryCell.includes('entry-plan-conditions'), '進場方式欄不放完整條件（在明細裡）')
+check(count(body, 'aria-label="進場方式"') === listResponse().items.length, `桌面每檔只有一份進場句: ${count(body, 'aria-label="進場方式"')}`)
 
 // ---- first_trading_day reads 掛牌首日: a market transfer also starts a new listing row (#475 review) ----
 check(noPreviousCloseText('first_trading_day') === '掛牌首日', `first_trading_day: ${noPreviousCloseText('first_trading_day')}`)
@@ -131,10 +138,10 @@ const css = fs.readFileSync(path.join(__dirname, 'styles.css'), 'utf8')
 const rule = (selector: string) => { const at = css.indexOf(selector + ' {'); return at < 0 ? '' : css.slice(at, css.indexOf('}', at)) }
 check(/align-items:\s*stretch/.test(rule('.home-columns')), `.home-columns 兩欄等高: ${rule('.home-columns')}`)
 check(/table-layout:\s*fixed/.test(rule('.candidate-table')), `.candidate-table 固定欄寬: ${rule('.candidate-table')}`)
-// Review of PR 499: below 1200px the fixed columns do not fit, so the list is cards there; a long level pair wraps whole.
-const tabletAt = css.indexOf('@media (max-width: 1199px)')
+// Review of PR 499: the fixed columns fill the 1214px content of 1280 and wider; narrower, the list is cards.
+const tabletAt = css.indexOf('@media (max-width: 1279px)')
 const tablet = tabletAt < 0 ? '' : css.slice(tabletAt, css.indexOf('\n}\n', tabletAt) + 2)
-check(/\.candidate-table-wrap \{ display: none; \}/.test(tablet) && /\.candidate-cards \{ display: grid;/.test(tablet), `1199px 以下今日可買改卡片: ${tablet || '沒有這段 @media'}`)
-check(/white-space:\s*nowrap/.test(rule('.entry-way-item')) && /white-space:\s*normal/.test(rule('.candidate-entry-way')), '進場方式每組標籤與值不拆行、組與組之間可換行')
+check(/\.candidate-table-wrap \{ display: none; \}/.test(tablet) && /\.candidate-cards \{ display: grid;/.test(tablet), `1279px 以下今日可買改卡片: ${tablet || '沒有這段 @media'}`)
+check(/white-space:\s*nowrap/.test(rule('.entry-plan-sentence b')), '進場句的價位不拆行（長句在價位之間換行，不被固定欄寬切掉）')
 
 if (failures.length) throw new Error(`${failures.length} of ${checks} navigation checks failed:\n- ${failures.join('\n- ')}`)

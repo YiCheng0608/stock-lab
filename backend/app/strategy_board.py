@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from .candidate_runs import read_run
 from .candidate_view import liquidity_exclusions
 from .domain import CANDIDATE_SCORE, STRATEGY_LEVELS_VERSION
+from .entry_plan import level_fields
 from .liquidity import average_volumes
 from .models import Instrument, Signal, StrategyLevel, StrategyVersion
 from .presentation import display_reason
@@ -106,30 +107,7 @@ def _observation_levels(row: StrategyLevel) -> dict[str, Any]:
     return {
         "kind": "observation",
         "display_label": OBSERVATION_LABEL,
-        "availability": row.availability,
-        "next_session_date": row.next_session_date.isoformat()
-        if row.next_session_date
-        else None,
-        "trigger_price": row.trigger_price,
-        "zone_low": row.zone_low,
-        "zone_high": row.zone_high,
-        "min_volume": row.min_volume,
-        "max_volume": row.max_volume,
-        "reference_entry": row.reference_entry,
-        "entry_low": row.entry_low,
-        "entry_high": row.entry_high,
-        "invalid_price": row.invalid_price,
-        "target_1": row.target_1,
-        "target_2": row.target_2,
-        "risk_reward": row.risk_reward,
-        "reachable_next_session": row.reachable_next_session,
-        "price_basis": row.price_basis,
-        "missing_inputs": list(row.missing_inputs_json or []),
-        "missing_labels": list(
-            dict.fromkeys(
-                display_reason(item) for item in row.missing_inputs_json or []
-            )
-        ),
+        **level_fields(row),
     }
 
 

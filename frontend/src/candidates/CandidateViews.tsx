@@ -38,6 +38,8 @@ import {
   stockPath,
   subItemLabel,
 } from './candidates'
+import { EntryConditions, EntryPlanCard } from './EntryPlanCard'
+import { entryPlanView } from './entryPlan'
 
 // Daily candidate list (candidate_score_v1, #215): the today list (#276); the stock strategy board (#274) reuses the
 // note, reasons and score details.
@@ -222,30 +224,9 @@ function groupShortText(item: CandidateItem): ReactNode {
   return `${group.name}（${board}，未排名）`
 }
 
-// 突破型／回踩型 (#493; glossary breakout / pullback).
-export function entryTypeLabel(strategy: string): string {
-  const label = candidateStrategyLabel(strategy)
-  return label === '突破條件' ? '突破型' : label === '回踩條件' ? '回踩型' : label
-}
-
-// 進場方式: the strategy type and the signal's levels in one column, two lines at most (#493; DESIGN_SYSTEM §5 候選列表).
-// The same numbers and level colours as the phone card's cells (DESIGN_SYSTEM §7).
-function EntryWay({ item }: { item: CandidateItem }) {
-  const { levels } = item
-  return (
-    <div className="candidate-entry-way">
-      <div><span className="entry-type-badge"><Term id={levels.entry_type === 'pullback' ? 'pullback' : 'breakout'}>{entryTypeLabel(item.strategy)}</Term></span>
-        <span className="entry-way-item"><span className="entry-way-label">進場</span> <b className="level-entry">{formatEntryZone(levels)}</b></span></div>
-      {/* Two targets are named 目標一／二 (#463), as on the phone card. Each pair keeps to one line; a long second pair
-          wraps whole instead of being cut. */}
-      <div><span className="entry-way-item"><span className="entry-way-label"><Term id="support">停損</Term></span> <b className="level-stop">{formatPrice(levels.invalid_price)}</b></span>
-        <span className="entry-way-sep"> · </span><span className="entry-way-item"><span className="entry-way-label"><Term id="target">{levels.target_2 != null ? '目標一／二' : '目標一'}</Term></span> <b className="level-target"><Targets levels={levels} /></b></span></div>
-    </div>
-  )
-}
-
-// Seven columns that fit 1280 without squeezing (#493): rank in the stock cell, the group on its second line, the levels
-// in 進場方式. Each row is two lines, so six rows fit the 1280×800 first screen (DESIGN_SYSTEM §4).
+// Seven columns that fit 1200 and wider without squeezing (#493): rank in the stock cell, the group and the average
+// volume under it, and the #491 entry sentence as 進場方式 (its folded conditions sit in the row's detail). Each row is
+// about three short lines, so six rows fit the 1280×800 first screen (DESIGN_SYSTEM §4).
 function candidateColumns(open: ReadonlySet<number>, toggle: (rank: number) => void): ReadonlyArray<Column<CandidateItem>> {
   return [
     {
@@ -256,7 +237,7 @@ function candidateColumns(open: ReadonlySet<number>, toggle: (rank: number) => v
       </>,
     },
     { key: 'close', header: '最近收盤（元）', num: true, cellClassName: 'candidate-close-cell', cell: (item) => <CloseValue item={item} /> },
-    { key: 'entry', header: <><Term id="entry_zone">進場方式</Term>（元）</>, cellClassName: 'candidate-entry-cell', cell: (item) => <EntryWay item={item} /> },
+    { key: 'entry', header: <Term id="entry_zone">進場方式</Term>, cellClassName: 'candidate-entry-cell', cell: (item) => <EntryPlanCard item={item} conditions={false} /> },
     { key: 'rr', header: <Term id="rr">RR</Term>, num: true, cellClassName: 'candidate-rr-cell', cell: (item) => <Badge tone="primary" className="badge-compact">{formatRiskReward(item.levels.risk_reward)}</Badge> },
     { key: 'total', header: <><Term id="candidate_score">總分</Term>（0–100）</>, num: true, cellClassName: 'candidate-total-cell', cell: (item) => formatCandidateScore(item.total_score) },
     { key: 'reason', header: '主要理由', cellClassName: 'candidate-reason-cell', cell: (item) => <div className="candidate-reason-clamp" title={item.reasons[0]?.text}><FirstReason item={item} /></div> },
@@ -272,6 +253,9 @@ function candidateColumns(open: ReadonlySet<number>, toggle: (rank: number) => v
 
 function CandidateMiniCard({ item, hidden }: { item: CandidateItem; hidden: boolean }) {
   const { instrument, levels } = item
+  // Decision 6647903049: when the entry sentence carries the levels, the card keeps only the close; the three level
+  // cells return when the sentence states a reason instead.
+  const levelsInSentence = entryPlanView(item).kind === 'levels'
   return (
     <article className="card candidate-mini" data-candidate-card={item.rank} hidden={hidden}>
       <div className="candidate-mini-head">
@@ -279,14 +263,18 @@ function CandidateMiniCard({ item, hidden }: { item: CandidateItem; hidden: bool
         <Link className="symbol-link" to={stockPath(item)}><strong>{instrument.symbol}</strong> {instrument.name}</Link>
         <span className="candidate-mini-total"><Term id="candidate_score">總分</Term> <b>{formatCandidateScore(item.total_score)}</b></span>
       </div>
+      {/* #491: the first line under the name says how to enter. */}
+      <EntryPlanCard item={item} className="candidate-entry" />
       <div className="small-note">{exchangeLabel(instrument.exchange)} · {candidateStrategyLabel(item.strategy)} · {groupText(item)}</div>
       <LiquidityNote item={item} />
       <dl className="candidate-mini-levels">
         <div><dt>收盤（元）</dt><dd><CloseValue item={item} /></dd></div>
-        <div><dt><Term id="entry_zone">進場區</Term>（元）</dt><dd className="level-entry">{formatEntryZone(levels)}</dd></div>
-        <div><dt><Term id="support">停損</Term>（元）</dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
-        {/* Phone card: 「目標一／二」 keeps the four cells on one row so two cards fit 390×844 (DESIGN_SYSTEM §4). */}
-        <div><dt><Term id="target">{levels.target_2 != null ? '目標一／二' : '目標一'}</Term>（元）</dt><dd className="level-target"><Targets levels={levels} /></dd></div>
+        {!levelsInSentence && <>
+          <div><dt><Term id="entry_zone">進場區</Term>（元）</dt><dd className="level-entry">{formatEntryZone(levels)}</dd></div>
+          <div><dt><Term id="support">停損</Term>（元）</dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
+          {/* Phone card: 「目標一／二」 keeps the four cells on one row so two cards fit 390×844 (DESIGN_SYSTEM §4). */}
+          <div><dt><Term id="target">{levels.target_2 != null ? '目標一／二' : '目標一'}</Term>（元）</dt><dd className="level-target"><Targets levels={levels} /></dd></div>
+        </>}
       </dl>
       <p className="candidate-mini-reason"><FirstReason item={item} /></p>
       <details className="details candidate-mini-ai"><summary>AI 說明</summary><CandidateDetail item={item} /></details>
@@ -318,9 +306,11 @@ function TodayCandidateList({ items }: { items: CandidateItem[] }) {
         // Every detail stays in the DOM inside <details>, so the screenshot tool can open them all (DESIGN_SYSTEM §5).
         detailRow={(item) => ({
           props: { 'data-candidate-detail': item.rank },
+          // The entry sentence is the row's 進場方式 cell (#491, #493); its folded conditions open with the AI detail.
           content: (
             <details className="candidate-detail" id={`candidate-detail-${item.rank}`} open={open.has(item.rank)} onToggle={(event) => setRank(item.rank, event.currentTarget.open)}>
               <summary>{item.instrument.symbol} {item.instrument.name}</summary>
+              <EntryConditions item={item} />
               <CandidateDetail item={item} />
             </details>
           ),

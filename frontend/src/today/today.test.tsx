@@ -113,10 +113,10 @@ for (const id of ['entry_zone', 'rr', 'candidate_score']) check(termIds(head).in
 for (const label of ['股票', '最近收盤', '進場方式', '主要理由']) check(text(head).includes(label), `table head: 「${label}」`)
 for (const id of ['support', 'target']) check(termIds(slice(table, '<tbody', '</tbody>')).includes(id), `table rows: ${id} opens its glossary term`)
 // #463: two targets are named 目標一／目標二, the levels name 元 and the total names its 0–100 scale (UI_COPY_SPEC §8.4, §10).
-for (const label of ['最近收盤（元）', '進場方式（元）', '總分（0–100）']) check(text(head).includes(label), `table head: 「${label}」, got ${text(head)}`)
+for (const label of ['最近收盤（元）', '進場方式', '總分（0–100）']) check(text(head).includes(label), `table head: 「${label}」, got ${text(head)}`)
 check(!/目標（|>目標</.test(head), 'table head: no bare 「目標」 over two numbers')
 const row1 = slice(table, 'data-candidate-rank="1"', '</tr>')
-for (const value of ['#1', '2377', '微星', '上市 · AI 伺服器（題材 #2）', '突破型', '目標一／二', '162.00', '+2.21%', '161.50', '157.82', '167.39', '172.54', '1.60 倍', '83', '三大法人 5 日淨買超，約 20 日均量的 2.59 倍']) {
+for (const value of ['#1', '2377', '微星', '上市 · AI 伺服器（題材 #2）', '突破型', '162.00', '+2.21%', '161.50', '157.82', '167.39', '1.60 倍', '83', '三大法人 5 日淨買超，約 20 日均量的 2.59 倍']) {
   check(text(row1).includes(value), `row #1: shows 「${value}」`)
 }
 check(row1.includes('href="/stocks/TWSE/2377"'), 'row #1: the name links to the stock page')
@@ -148,11 +148,13 @@ check(!detail1.includes('data-sub-item='), 'detail #1: the score-detail table st
 check(text(slice(table, 'data-candidate-detail="2"', '</tr>')).includes(NOTE_MISSING_TEXT), 'detail #2: no note → fixed copy')
 check(text(slice(table, 'data-candidate-detail="3"', '</tr>')).includes(NOTE_PENDING_TEXT), 'detail #3: pending note → fixed copy')
 check(count(table, '來源：') === 12 && count(table, NOTE_DISCLAIMER) === 12, 'table: one 來源 line and one AI disclaimer per candidate')
-// Phone card: rank, name, total; market · strategy · group; four level cells; first reason; AI details.
+// Phone card: rank, name, total; the entry plan (its sentence carries entry, stop and target, so only the close cell stays,
+// decision 6647903049); market · strategy · group; first reason; AI details.
 const card1 = slice(cards, 'data-candidate-card="1"', '</article>')
-for (const value of ['#1', '2377', '微星', '83', '上市 · 突破條件 · AI 伺服器（題材，第 2 名／11）', '收盤（元）', '162.00', '進場區（元）', '161.50', '停損（元）', '157.82', '目標一／二（元）', '167.39', '172.54', '三大法人 5 日淨買超，約 20 日均量的 2.59 倍', 'AI 說明']) {
+for (const value of ['#1', '2377', '微星', '83', '上市 · 突破條件 · AI 伺服器（題材，第 2 名／11）', '收盤（元）', '162.00', '突破型', '161.50', '157.82', '167.39', '三大法人 5 日淨買超，約 20 日均量的 2.59 倍', 'AI 說明']) {
   check(text(card1).includes(value), `card #1: shows 「${value}」`)
 }
+check(['進場區（元）', '停損（元）', '目標一／二（元）'].every((label) => !text(slice(card1, '<dl', '</dl>')).includes(label)), 'card #1: no level cell repeats the sentence')
 check(/class="[^"]*level-stop[^"]*">157\.82/.test(card1) && /class="[^"]*level-target[^"]*">167\.39/.test(card1), 'card #1: stop and target carry the level classes')
 check(!slice(card1, '<dl', '</dl>').includes('<wbr'), 'card #1: level cells never break inside')
 check(card1.includes('<details') && card1.includes('data-note-state="done"') && text(card1).includes('來源：'), 'card #1: 「AI 說明」 opens the same detail content')

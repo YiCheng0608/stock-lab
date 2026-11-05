@@ -522,30 +522,25 @@ a.symbol-link:hover { color: var(--color-primary); }
 .candidate-table th { height: 40px; }
 .candidate-table td { line-height: 1.45; }
 .candidate-table .candidate-rank { display: inline-block; min-width: 36px; font-size: 14px; }
-/* 今日可買 table (#493, DESIGN_SYSTEM §5 候選列表): fixed column widths, two lines a row at most, so nothing squeezes or
-   spills at 1280 and 1440 and six rows fit the 1280×800 first screen. */
+/* 今日可買 table (#493, DESIGN_SYSTEM §5 候選列表): fixed px columns filling the 1214px content of 1280 and wider (cards
+   below), about three short lines a row, so nothing squeezes or spills and six rows fit the 1280×800 first screen. */
 .candidate-table { width: 100%; table-layout: fixed; }
-.candidate-table th:nth-child(1) { width: 19%; }
-.candidate-table th:nth-child(2) { width: 104px; }
-.candidate-table th:nth-child(3) { width: 31%; }
-.candidate-table th:nth-child(4) { width: 88px; }
+.candidate-table th:nth-child(1) { width: 180px; }
+.candidate-table th:nth-child(2) { width: 124px; }
+.candidate-table th:nth-child(3) { width: 452px; }
+.candidate-table th:nth-child(4) { width: 96px; }
 .candidate-table th:nth-child(5) { width: 120px; }
-.candidate-table th:nth-child(7) { width: 104px; }
+.candidate-table th:nth-child(7) { width: 96px; }
 .candidate-table td { overflow: hidden; }
 .candidate-table .candidate-rr-cell .badge { white-space: nowrap; }
 .candidate-stock-line, .candidate-stock-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .candidate-stock-line .candidate-rank { margin-right: var(--space-1); padding: 0 var(--space-2); }
 /* Three short lines (name, market · group, #490 average volume) stay as tall as the two-line 進場方式 cell. */
 .candidate-stock-cell .small-note { line-height: 1.35; }
-/* Each label with its value stays on one line; a long pair (a price above 1,000 with two targets) moves to the next line
-   instead of being cut by the fixed column. */
-.candidate-entry-way { display: grid; gap: 2px; font-size: 14px; white-space: normal; }
-.entry-way-item { white-space: nowrap; }
-.candidate-entry-way b { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; }
-.entry-way-label { color: var(--color-text-muted); font-size: 13px; }
-.entry-way-sep { color: var(--color-text-subtle); }
-.entry-type-badge { display: inline-block; margin-right: var(--space-2); padding: 0 var(--space-2); border: 1px solid var(--color-primary); border-radius: var(--radius-sm); color: var(--color-primary); font-size: 13px; font-weight: 600; line-height: 1.4; }
-.entry-type-badge .term-button { padding: 0; border-bottom-color: currentColor; color: inherit; font: inherit; }
+/* 進場方式 holds the #491 entry sentence (#493): 13px wraps it to two lines in the column; a price never splits. */
+.candidate-table .candidate-entry-cell { white-space: normal; }
+.candidate-table .entry-plan-line { font-size: 13px; line-height: 1.45; }
+.candidate-table .entry-plan-type { font-size: 12px; }
 .candidate-table .candidate-reason-cell { font-size: 13px; white-space: normal; }
 .candidate-reason-clamp { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .candidate-change { font-size: 12px; }
@@ -575,6 +570,18 @@ a.symbol-link:hover { color: var(--color-primary); }
 .candidate-more { margin-top: var(--space-2); }
 .candidate-more > summary { color: var(--color-primary); cursor: pointer; font-size: 14px; }
 .candidate-table tr[hidden], .candidate-mini[hidden] { display: none; }
+/* ---- entry plan (#491, DESIGN_SYSTEM §5 進場卡片, §7 進出點) ------------------------------------------ */
+.entry-plan { display: grid; gap: 2px; min-width: 0; }
+.entry-plan-line { max-width: none; margin: 0; color: var(--color-text); font-size: 14px; line-height: 1.5; }
+.entry-plan-type { display: inline-block; margin-right: var(--space-2); padding: 0 var(--space-2); border: 1px solid var(--color-primary); border-radius: var(--radius-sm); color: var(--color-primary); font-size: 13px; font-weight: 600; line-height: 1.4; white-space: nowrap; }
+.entry-plan-type .term-button { padding: 0; border-bottom-color: currentColor; color: inherit; font: inherit; }
+.entry-plan-sentence { min-width: 0; overflow-wrap: anywhere; }
+.entry-plan-sentence b { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.entry-plan-reason { color: var(--color-warning); }
+.entry-plan-conditions > summary { color: var(--color-primary); cursor: pointer; font-size: 13px; }
+.entry-plan-condition-list { display: grid; gap: var(--space-1); margin: var(--space-1) 0 0; padding: 0; list-style: none; font-size: 13px; }
+.entry-plan-condition-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); }
+.candidate-mini .candidate-entry { margin-top: var(--space-2); }
 .candidate-rank { flex: none; min-width: 40px; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); background: var(--color-bg-elevated); font: 700 16px var(--font-mono); text-align: center; }
 .candidate-partial { margin-top: var(--space-2); color: var(--color-warning); }
 .candidate-levels, .candidate-components { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); margin: var(--space-3) 0 0; }
@@ -679,9 +686,9 @@ a.symbol-link:hover { color: var(--color-primary); }
 .suggestion-news a:hover { color: var(--color-primary); }
 
 /* ---- responsive --------------------------------------------------------------------------------- */
-/* 今日可買 below 1200px (#493 review): the seven fixed columns no longer fit, so the list is cards, two a row, one at 640px
-   and below (DESIGN_SYSTEM §5 候選列表). */
-@media (max-width: 1199px) {
+/* 今日可買 below 1280px (#493 review): the table is the 1214px content width of 1280 and wider, with fixed columns; any
+   narrower and they squeeze, so the list is cards, two a row, one at 640px and below (DESIGN_SYSTEM §5 候選列表). */
+@media (max-width: 1279px) {
   .candidate-table-wrap { display: none; }
   .candidate-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
 }

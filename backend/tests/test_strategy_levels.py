@@ -792,8 +792,10 @@ def test_an_observation_with_levels_cannot_become_a_tracking_plan(db):
 
 
 def test_decision_today_and_tracking_code_does_not_read_the_table():
-    # The action page list may read conditions_json (#277); the decision
-    # summary, the today page, candidates and tracking plans may not.
+    # The action page list may read conditions_json (#277), and the candidate
+    # read model shows a candidate's row as its plain-language entry plan
+    # (app.entry_plan, #491, display only); the decision summary, the
+    # dashboard, candidate scoring and tracking plans may not.
     endpoints = {
         route.path: route.endpoint
         for route in api_module.router.routes
@@ -810,7 +812,6 @@ def test_decision_today_and_tracking_code_does_not_read_the_table():
         **{
             name: (BACKEND / name).read_text(encoding="utf-8")
             for name in (
-                "app/candidate_view.py",
                 "app/tracking.py",
                 "app/tracking_plans.py",
                 "worker/candidates.py",
@@ -825,6 +826,11 @@ def test_decision_today_and_tracking_code_does_not_read_the_table():
         if "StrategyLevel" in source or "strategy_levels" in source
     ]
     assert readers == []
+    # candidate_view reads the table only through app.entry_plan, into the
+    # item's entry_plan key; the candidate's levels stay the signal's.
+    candidate_source = (BACKEND / "app/candidate_view.py").read_text(encoding="utf-8")
+    assert "StrategyLevel" not in candidate_source
+    assert candidate_source.count("entry_plan(db, signal)") == 1
 
 
 def _without_clock(value):
