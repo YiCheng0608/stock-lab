@@ -202,6 +202,20 @@ class MarketSummaryRecord:
     payload_sha256: str | None = None
 
 
+@dataclass(frozen=True)
+class EmergingIssuerRecord:
+    """One company of the TPEx emerging-market roster (興櫃, Issue #512).
+
+    ``as_of_date`` is the roster's own ``Date`` (資料日期), not the collect
+    date.  Names only: no quote, universe or strategy reads it.
+    """
+
+    symbol: str
+    name: str
+    as_of_date: date
+    payload_sha256: str | None = None
+
+
 @dataclass
 class OfficialBatch:
     instruments: list[InstrumentRecord] = field(default_factory=list)
@@ -234,6 +248,9 @@ class OfficialBatch:
     snapshot_feeds: bool = True
     # Display-only market summaries; a failure is a non-core warning.
     market_summaries: list[MarketSummaryRecord] = field(default_factory=list)
+    # The TPEx emerging-market roster (names only, Issue #512); a failure is a
+    # non-core warning.
+    emerging_issuers: list[EmergingIssuerRecord] = field(default_factory=list)
 
 
 def _merge_event_coverage(values: Iterable[dict[str, Any]]) -> dict[str, Any]:
@@ -376,6 +393,11 @@ TPEX_FUNDAMENTAL_ENDPOINT = f"{TPEX_API}/mopsfin_t187ap14_O"
 # 上櫃股票市場現況: the latest session only.  The official path is spelled
 # ``mainborad``.
 TPEX_HIGHLIGHT_ENDPOINT = f"{TPEX_API}/tpex_mainborad_highlight"
+# 興櫃公司基本資料: the current emerging-market roster, same shape as the listed
+# issuer master ``mopsfin_t187ap03_O``.  Only codes and names are kept, so an
+# AI news candidate on an emerging stock is shown by name (Issue #512); it is
+# never a universe, quote, candidate or strategy source.
+TPEX_EMERGING_ISSUER_ENDPOINT = f"{TPEX_API}/mopsfin_t187ap03_R"
 
 
 # Minimum spacing between requests to one official host.  TWSE's web
@@ -2322,6 +2344,79 @@ def parse_tpex_market_highlight(
     )
 
 
+# ---- emerging-market roster (Issue #512) ----
+
+_EMERGING_CODE = re.compile(r"[0-9A-Z]{4,6}")
+
+
+def emerging_issuer_warning(exc: Exception) -> str:
+    """The non-core warning for a roster that could not be fetched or read."""
+
+    return f"TPEx emerging issuers unavailable: {type(exc).__name__}: {exc}"
+
+
+def emerging_roster_date(payload: Any) -> date | None:
+    """The roster's 資料日期: the ROC ``Date`` every row carries, or None.
+
+    None when the payload is not a list of rows or the rows do not agree on
+    one readable Date.  The raw capture stores this as its ``data_as_of``.
+    """
+
+    if not isinstance(payload, list) or not payload:
+        return None
+    if not all(isinstance(row, dict) for row in payload):
+        return None
+    dates = {parse_roc_date(row.get("Date")) for row in payload}
+    if len(dates) != 1 or None in dates:
+        return None
+    (as_of,) = dates
+    return as_of
+
+
+def parse_tpex_emerging_issuers(
+    payload: Any, *, requested_date: date, payload_sha256: str | None = None
+) -> list[EmergingIssuerRecord]:
+    """Read TPEx ``mopsfin_t187ap03_R`` (興櫃公司基本資料).
+
+    Every row carries the roster's ROC ``Date`` (``1151105``); the rows must
+    agree on it and it must not be after the requested day.  A row without a
+    code of 4～6 digits or capitals, or without a short name, is left out; a
+    code listed twice, or a roster with no readable row, is rejected whole.
+    """
+
+    rows = payload if isinstance(payload, list) else None
+    if not rows or not all(isinstance(row, dict) for row in rows):
+        raise OfficialDataError("TPEx emerging roster is not a non-empty list of rows")
+    as_of = emerging_roster_date(payload)
+    if as_of is None:
+        dates = {parse_roc_date(row.get("Date")) for row in rows}
+        raise OfficialDataError(
+            f"TPEx emerging roster rows do not share one Date: {sorted(map(str, dates))}"
+        )
+    if as_of > requested_date:
+        raise OfficialDataError(
+            f"TPEx emerging roster Date {as_of.isoformat()} is after "
+            f"{requested_date.isoformat()}"
+        )
+    records: dict[str, EmergingIssuerRecord] = {}
+    for row in rows:
+        symbol = _text(row, "SecuritiesCompanyCode")
+        name = _text(row, "CompanyAbbreviation")
+        if not _EMERGING_CODE.fullmatch(symbol) or not name:
+            continue
+        if symbol in records:
+            raise OfficialDataError(f"TPEx emerging roster lists {symbol} twice")
+        records[symbol] = EmergingIssuerRecord(
+            symbol=symbol,
+            name=name,
+            as_of_date=as_of,
+            payload_sha256=payload_sha256,
+        )
+    if not records:
+        raise OfficialDataError("TPEx emerging roster contained no readable company")
+    return list(records.values())
+
+
 def parse_mops_event_rows(
     payload: Any,
     *,
@@ -3631,6 +3726,29 @@ class TpexAdapter:
                 )
             except Exception as exc:
                 warnings.append(market_summary_warning("TPEx", end, exc))
+        # The emerging roster is the current list, not a session report, so a
+        # snapshot batch reads it once even on a verified no-data day.
+        emerging_issuers: list[EmergingIssuerRecord] = []
+        emerging_payloads: list[FetchedPayload] = []
+        try:
+            # The raw's data_as_of is the roster's own Date (資料日期), as
+            # emerging_issuers.as_of_date, not the collect day; None when the
+            # rows do not agree on one (the parse below then rejects it).
+            payload = _call_fetcher(self.fetcher, TPEX_EMERGING_ISSUER_ENDPOINT)
+            data_date = emerging_roster_date(payload)
+            roster = capture_payload(
+                self.source,
+                TPEX_EMERGING_ISSUER_ENDPOINT,
+                payload,
+                data_date.isoformat() if data_date else None,
+            )
+            self.captured_payloads.append(roster)
+            emerging_payloads.append(roster)
+            emerging_issuers = parse_tpex_emerging_issuers(
+                roster.payload, requested_date=end, payload_sha256=roster.sha256
+            )
+        except Exception as exc:
+            warnings.append(emerging_issuer_warning(exc))
         try:
             suspension_payload = self._fetch(TPEX_SUSPEND_ENDPOINT, end.isoformat())
             suspension_payloads.append(suspension_payload)
@@ -3716,6 +3834,7 @@ class TpexAdapter:
             + chip_payloads
             + action_payloads
             + highlight_payloads
+            + emerging_payloads
             + suspension_payloads
             + mops_payloads,
             warnings=warnings,
@@ -3724,6 +3843,7 @@ class TpexAdapter:
             event_coverage=event_coverage,
             notices=notices,
             market_summaries=market_summaries,
+            emerging_issuers=emerging_issuers,
         )
 
 
@@ -3815,6 +3935,7 @@ class OfficialMarketDataAdapter:
             notices=twse_batch.notices + tpex_batch.notices,
             snapshot_feeds=twse_batch.snapshot_feeds and tpex_batch.snapshot_feeds,
             market_summaries=twse_batch.market_summaries + tpex_batch.market_summaries,
+            emerging_issuers=twse_batch.emerging_issuers + tpex_batch.emerging_issuers,
         )
 
 

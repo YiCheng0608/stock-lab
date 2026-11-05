@@ -110,6 +110,7 @@ TWSE_MI_INDEX_ENDPOINT = (
     f"?date={TRADING_DATE:%Y%m%d}&type=ALLBUT0999&response=json"
 )
 TPEX_HIGHLIGHT_ENDPOINT = "https://www.tpex.org.tw/openapi/v1/tpex_mainborad_highlight"
+TPEX_EMERGING_ISSUER_ENDPOINT = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_R"
 OFFICIAL_INDUSTRY_SOURCE = "TWSE/TPEx official OpenAPI"
 
 # id, exchange, symbol, name, type, etf_category, industry code, listing date
@@ -943,6 +944,24 @@ def _raw_payload_rows() -> list[dict[str, Any]]:
         ),
         raw(6, 1, "twse", TWSE_MI_INDEX_ENDPOINT, T.isoformat()),
         raw(7, 1, "tpex", TPEX_HIGHLIGHT_ENDPOINT, T.isoformat()),
+        raw(8, 1, "tpex", TPEX_EMERGING_ISSUER_ENDPOINT, T.isoformat()),
+    ]
+
+
+# ---- TPEx emerging roster (names AI news candidates only, Issue #512) ----
+
+
+def _emerging_issuer_rows() -> list[dict[str, Any]]:
+    """One fictional 興櫃 company, named on news 2's AI candidates as 「（興櫃）」."""
+
+    return [
+        {
+            "symbol": "9801",
+            "name": "示範興櫃",
+            "market": "emerging",
+            "as_of_date": T,
+            "raw_payload_id": 8,
+        }
     ]
 
 
@@ -1185,7 +1204,15 @@ def _llm_rows() -> list[dict[str, Any]]:
             2,
             2,
             "示範電腦液冷機櫃訂單增加。",
-            [{"symbol": "TWSE:9103", "reason": "液冷機櫃接單", "confidence": "medium"}],
+            [
+                {
+                    "symbol": "TWSE:9103",
+                    "reason": "液冷機櫃接單",
+                    "confidence": "medium",
+                },
+                # Not an instrument: named from the emerging roster (Issue #512).
+                {"symbol": "TPEx:9801", "reason": "供應液冷零件", "confidence": "low"},
+            ],
             [{"theme": "示範液冷散熱", "reason": "液冷機櫃需求"}],
             "positive",
             "instrument",
@@ -1704,6 +1731,7 @@ def _tracking_plan_session_rows() -> list[dict[str, Any]]:
 TABLES: dict[str, list[dict[str, Any]]] = {
     "ingestion_runs": _ingestion_rows(),
     "raw_payloads": _raw_payload_rows(),
+    "emerging_issuers": _emerging_issuer_rows(),
     "market_summaries": _market_summary_rows(),
     "instruments": _instrument_rows(),
     "strategy_versions": _strategy_rows(),
@@ -1882,6 +1910,10 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         ("news/1", "ai.prompt_version", NEWS_PROMPT_VERSION),
         # llm_run_at is stored naive UTC; the API states the zone (#234).
         ("news/1", "ai.generated_at", f"{D}T03:01:00+00:00"),
+        # The emerging candidate is named from the roster, never left without a name (#512).
+        ("news/2", "ai.symbol_candidates[].name", ["示範電腦", "示範興櫃"]),
+        ("news/2", "ai.symbol_candidates[].listing", ["listed", "emerging"]),
+        ("news/2", "ai.hidden_symbol_candidates", []),
     ],
     "themes": [
         ("themes?board=industry&limit=100", "meta.total", 2),

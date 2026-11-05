@@ -94,6 +94,7 @@ from app.tracking import (
 )
 from app.trading_calendar import NextSession, next_session
 from worker import mops_events
+from worker.emerging_issuers import store_emerging_issuers
 from worker.market_summary import store_market_summaries
 from worker.margin_lists import MarginListError, sync_margin_lists
 from worker.no_trade_days import NoTradeDayError, sync_no_trade_days
@@ -4365,13 +4366,14 @@ def _json_safe(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # Warnings from sources the daily analysis does not depend on: MOPS material
 # events and EPS, the TPEx suspension announcement/history feeds (events
 # only; they never set bar flags), the display-only market summaries (the
-# TWSE MI_INDEX summary tables and the TPEx highlight, Issue #275), and a
+# TWSE MI_INDEX summary tables and the TPEx highlight, Issue #275), the TPEx
+# emerging roster (names for AI news candidates only, Issue #512), and a
 # skipped instrument status sync (the watchdog reports it).  Every other
 # warning, including any not matched here, concerns OHLCV, the TAIEX
 # baseline, the holiday calendar or chips, and keeps the collect partial.
 NONCORE_WARNING_PATTERN = re.compile(
     r"^((TWSE|TPEx) (MOPS events|MOPS fundamentals|suspension feed|suspension history"
-    r"|market summary) unavailable"
+    r"|market summary|emerging issuers) unavailable"
     r"|MOPS event list unavailable"
     r"|instrument status sync skipped)"
 )
@@ -4654,6 +4656,12 @@ def collect(
                 start=start_date,
                 end=score_date,
                 overwrite=force,
+            )
+            emerging_issuers = store_emerging_issuers(
+                db,
+                list(getattr(batch, "emerging_issuers", []) or []),
+                lambda digest: _raw_id_for_digest(raw_ids, digest),
+                batch.warnings,
             )
             event_coverage = dict(batch.event_coverage or {})
             if not event_coverage:
@@ -4974,6 +4982,7 @@ def collect(
                 "events": len(batch.events),
                 "fundamentals": len(batch.fundamentals),
                 "market_summaries": market_summaries,
+                "emerging_issuers": emerging_issuers,
                 "raw_payloads": raw_payload_count,
                 "warnings": list(batch.warnings),
                 "core_warnings": core_warnings,
@@ -5078,6 +5087,7 @@ def collect(
                 "events": len(batch.events),
                 "fundamentals": len(batch.fundamentals),
                 "market_summaries": market_summaries,
+                "emerging_issuers": emerging_issuers,
                 "event_coverage": event_coverage,
                 "event_gap_dates": {
                     day: mops_events.coverage_state(coverage, date.fromisoformat(day))
