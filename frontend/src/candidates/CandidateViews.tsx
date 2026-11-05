@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 import { Term } from '../components/Term'
@@ -18,6 +19,7 @@ import {
   formatLots,
   candidateAiEntry,
   candidateChange,
+  candidateGroupState,
   candidateGroupText,
   candidateNoteView,
   candidateSourceText,
@@ -32,10 +34,11 @@ import {
   formatPrice,
   formatRiskReward,
   formatSubItemValue,
+  groupBoardLabel,
   stockPath,
   subItemLabel,
 } from './candidates'
-import { EntryPlanCard } from './EntryPlanCard'
+import { EntryConditions, EntryPlanCard } from './EntryPlanCard'
 import { entryPlanView } from './entryPlan'
 
 // Daily candidate list (candidate_score_v1, #215): the today list (#276); the stock strategy board (#274) reuses the
@@ -209,24 +212,35 @@ function CandidateDetail({ item }: { item: CandidateItem }) {
   )
 }
 
+// The group on one line in the today table (#493): name and board rank; the long form with 「事件資料待補」 stays on the
+// phone card, the stock page and the detail.
+function groupShortText(item: CandidateItem): ReactNode {
+  const group = item.groups[0]
+  if (!group) return '無所屬族群'
+  const board = groupBoardLabel(group.board)
+  const state = candidateGroupState(group)
+  if (state === 'ranked') return `${group.name}（${board} #${group.rank}）`
+  if (state === 'pending') return <>{group.name}（{board}，<Term id="event_data_pending">{GROUP_EVENT_PENDING}</Term>）</>
+  return `${group.name}（${board}，未排名）`
+}
+
+// Seven columns that fit 1280 and wider without squeezing (#493): rank in the stock cell, the group and the average
+// volume under it, and the #491 entry sentence as 進場方式 (its folded conditions sit in the row's detail). Each row is
+// about three short lines, so six rows fit the 1280×800 first screen (DESIGN_SYSTEM §4).
 function candidateColumns(open: ReadonlySet<number>, toggle: (rank: number) => void): ReadonlyArray<Column<CandidateItem>> {
   return [
-    { key: 'rank', header: '名次', cell: (item) => <span className="candidate-rank" aria-label={`第 ${item.rank} 名`}>#{item.rank}</span> },
     {
-      key: 'stock', header: '股票', cell: (item) => <>
-        <Link className="symbol-link" to={stockPath(item)}><strong>{item.instrument.symbol}</strong> {item.instrument.name}</Link>
-        <div className="small-note">{exchangeLabel(item.instrument.exchange)} · {candidateStrategyLabel(item.strategy)}</div>
+      key: 'stock', header: '股票', cellClassName: 'candidate-stock-cell', cell: (item) => <>
+        <div className="candidate-stock-line"><span className="candidate-rank" aria-label={`第 ${item.rank} 名`}>#{item.rank}</span> <Link className="symbol-link" to={stockPath(item)}><strong>{item.instrument.symbol}</strong> {item.instrument.name}</Link></div>
+        <div className="small-note candidate-stock-meta" title={item.groups[0] ? candidateGroupText(item.groups[0]) : undefined}>{exchangeLabel(item.instrument.exchange)} · {groupShortText(item)}</div>
         <LiquidityNote item={item} />
       </>,
     },
-    { key: 'group', header: <>所屬族群（<Term id="heat_rank">名次</Term>）</>, wrap: true, cellClassName: 'candidate-group-cell', cell: groupText },
-    { key: 'close', header: '最近收盤（元）', num: true, cell: (item) => <CloseValue item={item} /> },
-    { key: 'entry', header: <><Term id="entry_zone">進場區</Term>（元）</>, num: true, cellClassName: 'level-entry', cell: (item) => formatEntryZone(item.levels) },
-    { key: 'stop', header: <><Term id="support">停損</Term>（元）</>, num: true, cellClassName: 'level-stop', cell: (item) => formatPrice(item.levels.invalid_price) },
-    { key: 'target', header: <><Term id="target">目標一／目標二</Term>（元）</>, num: true, cellClassName: 'level-target', cell: (item) => <Targets levels={item.levels} /> },
-    { key: 'rr', header: <Term id="rr">RR</Term>, num: true, cell: (item) => <Badge tone="primary" className="badge-compact">{formatRiskReward(item.levels.risk_reward)}</Badge> },
-    { key: 'total', header: <><Term id="candidate_score">總分</Term>（0–100）</>, num: true, cell: (item) => formatCandidateScore(item.total_score) },
-    { key: 'reason', header: '主要理由', wrap: true, cellClassName: 'candidate-reason-cell', cell: (item) => <FirstReason item={item} /> },
+    { key: 'close', header: '最近收盤（元）', num: true, cellClassName: 'candidate-close-cell', cell: (item) => <CloseValue item={item} /> },
+    { key: 'entry', header: <Term id="entry_zone">進場方式</Term>, cellClassName: 'candidate-entry-cell', cell: (item) => <EntryPlanCard item={item} conditions={false} /> },
+    { key: 'rr', header: <Term id="rr">RR</Term>, num: true, cellClassName: 'candidate-rr-cell', cell: (item) => <Badge tone="primary" className="badge-compact">{formatRiskReward(item.levels.risk_reward)}</Badge> },
+    { key: 'total', header: <><Term id="candidate_score">總分</Term>（0–100）</>, num: true, cellClassName: 'candidate-total-cell', cell: (item) => formatCandidateScore(item.total_score) },
+    { key: 'reason', header: '主要理由', cellClassName: 'candidate-reason-cell', cell: (item) => <div className="candidate-reason-clamp" title={item.reasons[0]?.text}><FirstReason item={item} /></div> },
     {
       key: 'ai', header: <span className="sr-only">AI 說明</span>, cell: (item) => (
         <button type="button" className="badge badge-accent badge-compact candidate-ai-toggle" aria-expanded={open.has(item.rank)} aria-controls={`candidate-detail-${item.rank}`} onClick={() => toggle(item.rank)}>
@@ -249,11 +263,12 @@ function CandidateMiniCard({ item, hidden }: { item: CandidateItem; hidden: bool
         <Link className="symbol-link" to={stockPath(item)}><strong>{instrument.symbol}</strong> {instrument.name}</Link>
         <span className="candidate-mini-total"><Term id="candidate_score">總分</Term> <b>{formatCandidateScore(item.total_score)}</b></span>
       </div>
-      {/* #491: the first line under the name says how to enter. */}
-      <EntryPlanCard item={item} className="candidate-entry" />
+      {/* #491: the first line under the name says how to enter; its folded conditions open with 「AI 說明」, as in the
+          desktop detail (#493), so two cards fit the 390×844 first screen (DESIGN_SYSTEM §4). */}
+      <EntryPlanCard item={item} className="candidate-entry" conditions={false} />
       <div className="small-note">{exchangeLabel(instrument.exchange)} · {candidateStrategyLabel(item.strategy)} · {groupText(item)}</div>
       <LiquidityNote item={item} />
-      <dl className="candidate-mini-levels">
+      <dl className={cx('candidate-mini-levels', levelsInSentence && 'candidate-mini-levels-close')}>
         <div><dt>收盤（元）</dt><dd><CloseValue item={item} /></dd></div>
         {!levelsInSentence && <>
           <div><dt><Term id="entry_zone">進場區</Term>（元）</dt><dd className="level-entry">{formatEntryZone(levels)}</dd></div>
@@ -263,7 +278,7 @@ function CandidateMiniCard({ item, hidden }: { item: CandidateItem; hidden: bool
         </>}
       </dl>
       <p className="candidate-mini-reason"><FirstReason item={item} /></p>
-      <details className="details candidate-mini-ai"><summary>AI 說明</summary><CandidateDetail item={item} /></details>
+      <details className="details candidate-mini-ai"><summary>AI 說明</summary><EntryConditions item={item} /><CandidateDetail item={item} /></details>
     </article>
   )
 }
@@ -292,15 +307,13 @@ function TodayCandidateList({ items }: { items: CandidateItem[] }) {
         // Every detail stays in the DOM inside <details>, so the screenshot tool can open them all (DESIGN_SYSTEM §5).
         detailRow={(item) => ({
           props: { 'data-candidate-detail': item.rank },
-          // The entry plan is the line right under its row (#491), always shown; the AI detail stays folded.
+          // The entry sentence is the row's 進場方式 cell (#491, #493); its folded conditions open with the AI detail.
           content: (
-            <>
-              <EntryPlanCard item={item} className="candidate-entry" />
-              <details className="candidate-detail" id={`candidate-detail-${item.rank}`} open={open.has(item.rank)} onToggle={(event) => setRank(item.rank, event.currentTarget.open)}>
-                <summary>{item.instrument.symbol} {item.instrument.name}</summary>
-                <CandidateDetail item={item} />
-              </details>
-            </>
+            <details className="candidate-detail" id={`candidate-detail-${item.rank}`} open={open.has(item.rank)} onToggle={(event) => setRank(item.rank, event.currentTarget.open)}>
+              <summary>{item.instrument.symbol} {item.instrument.name}</summary>
+              <EntryConditions item={item} />
+              <CandidateDetail item={item} />
+            </details>
           ),
         })}
       />
@@ -322,15 +335,18 @@ export function CandidatesSection({ data, loading, error }: { data: CandidatesRe
   return (
     <section className="candidates-section" aria-labelledby="candidates-title">
       <div className="section-head">
-        <div><div className="eyebrow">每日候選 · 依評分排序</div><h2 id="candidates-title">明日候選</h2></div>
-        {data && data.status !== 'not_computed' && (
-          <div className="board-dates"><DateBadge date={formatDate(data.trading_date)} />{state?.kind === 'list' && <Badge>{data.candidate_count} 檔</Badge>}</div>
-        )}
+        <div><div className="eyebrow">條件已成立 · 依評分排序</div><h2 id="candidates-title">今日可買</h2></div>
+        <div className="section-head-tools">
+          {data && data.status !== 'not_computed' && (
+            <div className="board-dates"><DateBadge date={formatDate(data.trading_date)} />{state?.kind === 'list' && <Badge>{data.candidate_count} 檔</Badge>}</div>
+          )}
+          <Link className="text-link" to="/strategy">策略說明 →</Link>
+        </div>
       </div>
-      {t1 && <p className="small-note candidate-t1">{t1}</p>}
-      <p className="small-note candidate-disclaimer">{CANDIDATE_DISCLAIMER}</p>
+      {/* One line under the title (#493), so six rows fit the 1280×800 first screen (DESIGN_SYSTEM §4). */}
+      <p className="small-note candidate-notes">{t1 && <span className="candidate-t1">{t1}</span>}<span className="candidate-disclaimer">{CANDIDATE_DISCLAIMER}。</span></p>
       {loading
-        ? <Skeleton lines={4} label="明日候選載入中…" />
+        ? <Skeleton lines={4} label="今日可買載入中…" />
         : error
           ? <Card><EmptyState title="資料暫時無法載入" reason={errorReason(error)} /></Card>
           : !state

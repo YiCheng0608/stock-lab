@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import ReactEChartsModule from 'echarts-for-react'
 
 import { Term } from '../components/Term'
-import { Badge, Card, CardList, DataTable, DateBadge, EmptyState, Skeleton, Stat, Tabs, tabId, tabPanelId, type Column } from '../components/ui'
+import { Badge, Card, CardList, DataTable, DateBadge, EmptyState, Skeleton, Stat, Tabs, cx, tabId, tabPanelId, type Column } from '../components/ui'
 import { newsSourceName, newsTime } from '../news/newsView'
 import { officialEventDisplayTitle } from '../presentation'
 import { isFiniteNumber, readChartTheme, type ChartTheme } from '../stock/stockBars'
@@ -229,6 +229,7 @@ export function HotGroupsSection({
   data,
   loading,
   error,
+  className,
 }: {
   title?: ReactNode
   board: ThemeBoard
@@ -236,17 +237,19 @@ export function HotGroupsSection({
   data: ThemeBoardResponse | undefined
   loading: boolean
   error: unknown
+  className?: string
 }) {
+  // The board tabs sit in the title row (#493), so this card's head is as tall as 重點新聞 beside it.
   return (
-    <section className="hot-groups" aria-labelledby="hot-groups-title">
+    <section className={cx('hot-groups', className)} aria-labelledby="hot-groups-title">
       <div className="section-head">
         <div><div className="eyebrow">族群發現 · 各榜前 {TODAY_BOARD_LIMIT} 名</div><h2 id="hot-groups-title">{title}</h2></div>
-        <Link to={boardPagePath(board)} className="text-link">查看完整排行</Link>
+        <div className="section-head-tools">
+          <Tabs items={THEME_BOARDS} value={board} onChange={onBoardChange} label="熱門族群榜別" idPrefix="today-board" />
+          <Link to={boardPagePath(board)} className="text-link">查看完整排行</Link>
+        </div>
       </div>
-      <div className="board-controls">
-        <Tabs items={THEME_BOARDS} value={board} onChange={onBoardChange} label="熱門族群榜別" idPrefix="today-board" />
-        {data && <BoardDateBadges meta={data.meta} />}
-      </div>
+      {data && <div className="hot-groups-dates"><BoardDateBadges meta={data.meta} /></div>}
       <div id={tabPanelId('today-board', board)} role="tabpanel" aria-labelledby={tabId('today-board', board)}>
         {loading
           ? <Skeleton lines={4} label="熱門族群載入中…" />

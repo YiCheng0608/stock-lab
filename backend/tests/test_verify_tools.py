@@ -528,6 +528,8 @@ fetch('/slow').then((r) => r.text()).then((text) => {
   document.body.insertAdjacentHTML('beforeend', '<p id="done">' + text + '</p>')
 })
 console.error('boom')
+// A client-side redirect, as the app's /actions -> /watch (#493): finalUrl reports where the page landed.
+history.replaceState(null, '', '/landed?from=old#plan-7')
 </script></body></html>"""
 
 
@@ -599,6 +601,7 @@ def test_screenshot_waits_for_data_and_reports_overflow(tmp_path: Path) -> None:
         assert "data 2026-10-21" in text and "hidden detail" in text
         assert "tab opened" in text
         assert line["missingClicks"] == []
+        assert line["url"] == url and line["finalUrl"] == url + "landed?from=old#plan-7"
         assert "loading" not in text
         assert line["consoleErrors"] == ["boom"]
         assert line["httpErrors"] == []

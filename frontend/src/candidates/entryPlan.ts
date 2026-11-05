@@ -28,8 +28,9 @@ export function entryConditionsTitle(tradingDate: string | null | undefined): st
   return day ? `完整條件（${day} 判定）` : '完整條件'
 }
 
-// One run of a sentence; a price carries its DESIGN_SYSTEM §7 level class (entry, stop, target).
-export type EntryPart = { text: string; className?: 'level-entry' | 'level-stop' | 'level-target' }
+// One run of a sentence; a price carries its DESIGN_SYSTEM §7 level class (entry, stop, target); a word may open its
+// glossary term (停損, 目標; #493: the today table has no level headers left to carry them). The text is unchanged.
+export type EntryPart = { text: string; className?: 'level-entry' | 'level-stop' | 'level-target'; term?: 'support' | 'target' }
 
 export type EntryPlanView = {
   // levels: the sentence has every price; reason: it says why there is none.
@@ -62,7 +63,7 @@ function mainParts(type: EntryType, item: PlanItem): EntryPart[] | null {
   const stop = levels?.invalid_price
   const target = levels?.target_1
   if (!day || !isPrice(stop) || !isPrice(target)) return null
-  const tail: EntryPart[] = [{ text: '；跌破 ' }, price(stop, 'level-stop'), { text: '停損，目標 ' }, price(target, 'level-target')]
+  const tail: EntryPart[] = [{ text: '；跌破 ' }, price(stop, 'level-stop'), { text: '停損', term: 'support' }, { text: '，' }, { text: '目標', term: 'target' }, { text: ' ' }, price(target, 'level-target')]
   if (type === 'breakout') {
     const entry = levels.entry ?? levels.entry_zone?.low
     if (!isPrice(entry) || !(stop < entry && entry < target)) return null

@@ -103,7 +103,7 @@ check(noPreviousQuote.change === null && noPreviousQuote.changePct === null && n
 const noPreviousMarkup = renderToStaticMarkup(<StockQuoteLine bars={gapBars} latestChange={latestChange('no_previous_close')} />)
 check(noPreviousMarkup.includes('前一交易日無收盤') && noPreviousMarkup.includes('tone-flat') && !noPreviousMarkup.includes('+1.5') && !noPreviousMarkup.includes('漲跌待核實'), `no previous close markup: ${noPreviousMarkup}`)
 const firstDayMarkup = renderToStaticMarkup(<StockQuoteLine bars={[tradedBar('2026-10-16', 100, 2)]} latestChange={latestChange('first_trading_day')} />)
-check(firstDayMarkup.includes('新上市首日') && !firstDayMarkup.includes('前一交易日無收盤') && !firstDayMarkup.includes('漲跌待核實'), `first trading day markup: ${firstDayMarkup}`)
+check(firstDayMarkup.includes('掛牌首日') && !firstDayMarkup.includes('前一交易日無收盤') && !firstDayMarkup.includes('漲跌待核實'), `first trading day markup: ${firstDayMarkup}`)
 // Another day's status, or a status that names no cause, leaves the bars rule alone.
 check(stockQuote(gapBars, 'stock', latestChange('no_previous_close', '2026-10-15')).change === 1.5, 'a status for another day does not apply')
 check(stockQuote(gapBars, 'stock', latestChange('unverified')).change === 1.5 && stockQuote(gapBars, 'stock', latestChange('known')).noChange === null, 'unverified and known keep the bars rule')

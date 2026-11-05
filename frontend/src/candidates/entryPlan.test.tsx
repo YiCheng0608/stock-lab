@@ -70,12 +70,15 @@ check(text(card).includes('量比 ≥ 1.20 倍量比 2.88 倍') && text(card).in
 check(card.includes('data-condition="margin_financing" data-condition-state="not_applicable"') && text(card).includes('非融資標的，融資條件不適用'), 'a non-margin security\'s margin condition says why it does not apply')
 check(!render(<EntryPlanCard item={{ ...completeItem(), entry_plan: null }} />).includes('entry-plan-conditions'), 'no levels row: no 完整條件 block')
 
-// ---- the two places: today table (the line under each row) and phone card (first line under the name), stock page ----
+// ---- the two places: today table (the 進場方式 cell, #493) and phone card (first line under the name), stock page ----
 const today = render(<CandidatesSection data={listResponse()} loading={false} error={null} />)
 check(count(today, 'data-entry-plan="levels"') === 4, 'today: each of two candidates has a plan in the table and in its phone card')
 check(count(text(today), BREAKOUT) === 2 && count(text(today), PULLBACK) === 2, 'today: both sentences in the table and the cards')
-const detailRow = today.slice(today.indexOf('data-candidate-detail="1"'))
-check(detailRow.indexOf('data-entry-plan') < detailRow.indexOf('class="candidate-detail"'), 'today table: the plan is the line under the row, above the folded AI detail')
+const dataRow = today.slice(today.indexOf('data-candidate-rank="1"'), today.indexOf('data-candidate-detail="1"'))
+check(dataRow.indexOf('candidate-entry-cell') >= 0 && dataRow.indexOf('data-entry-plan') > dataRow.indexOf('candidate-entry-cell'), 'today table: the plan is the row\'s 進場方式 cell (Issue 493)')
+const detailRow = today.slice(today.indexOf('data-candidate-detail="1"'), today.indexOf('</tr>', today.indexOf('data-candidate-detail="1"')))
+check(!detailRow.includes('data-entry-plan') && detailRow.indexOf('entry-plan-conditions') > detailRow.indexOf('class="candidate-detail"'), 'today table: the folded conditions open with the AI detail, no second sentence')
+check(/<button[^>]*data-term="support"[^>]*>停損<\/button>/.test(dataRow) && /<button[^>]*data-term="target"[^>]*>目標<\/button>/.test(dataRow), 'the sentence\'s 停損 and 目標 open their glossary terms')
 const phone = today.slice(today.indexOf('data-candidate-card="1"'))
 check(phone.indexOf('candidate-mini-head') < phone.indexOf('data-entry-plan') && phone.indexOf('data-entry-plan') < phone.indexOf('candidate-mini-levels'), 'phone card: the plan is the first line under the name')
 
