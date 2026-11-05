@@ -1246,6 +1246,85 @@ def test_a_window_changed_after_the_row_is_undetermined(fx):
     ]
 
 
+NULL_CATALYST = (
+    "catalyst = null, details_json = json_set(details_json,"
+    " '$.normalized_values.catalyst', null, '$.raw_values.catalyst', null"
+)
+
+
+@pytest.mark.parametrize(
+    "mutation, category",
+    [
+        (f"{NULL_CATALYST})", "catalyst_null_with_full_coverage"),
+        (
+            "details_json = json_remove(details_json,"
+            " '$.catalyst_inputs.events_through_id')",
+            "catalyst_inputs_missing",
+        ),
+    ],
+    ids=["null_catalyst", "no_events_through_id"],
+)
+def test_a_changed_window_does_not_hide_a_wrong_row(fx, mutation, category):
+    # #501 (PR #507 review 1): what the row says about itself is judged before
+    # the window against TAIEX now; an undetermined window must not hide it.
+    covered_groups(fx)
+    fx.sql(
+        f"update group_daily_scores set {mutation} where {FIXTURE_GROUP}",
+        T.isoformat(),
+    )
+    fx.sql(
+        "update group_daily_scores set details_json = json_set(details_json,"
+        " '$.catalyst_coverage.window[0]', ?)"
+        f" where {FIXTURE_GROUP}",
+        DAYS[-21].isoformat(),
+        T.isoformat(),
+    )
+    groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
+    assert groups.result == "fail" and category in groups.failures
+    assert "catalyst_window_changed_after_write" not in groups.unknown
+
+
+def test_a_1_2_0_short_window_does_not_hide_a_null_catalyst(fx):
+    # #501 (PR #507 review 1): a complete 1.2.0 window with eligible members
+    # has a value whatever its length.
+    covered_groups(fx)
+    fx.sql(
+        f"update group_daily_scores set {NULL_CATALYST},"
+        " '$.hot_group_version', '1.2.0',"
+        " '$.catalyst_coverage.sessions', 19,"
+        " '$.catalyst_coverage.window[0]', ?)"
+        f" where {FIXTURE_GROUP}",
+        DAYS[-19].isoformat(),
+        T.isoformat(),
+    )
+    groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
+    assert groups.result == "fail"
+    assert "catalyst_null_with_full_coverage" in groups.failures
+    assert "catalyst_window_short_before_1_3_0" not in groups.unknown
+
+
+def test_a_window_not_ending_on_the_score_date_fails(fx):
+    # #501 (PR #507 review 2): a later TAIEX bar or suspension moves only the
+    # start of the window; another end is a wrong write.
+    covered_groups(fx)
+    fx.sql(
+        "update group_daily_scores set details_json = json_set(details_json,"
+        " '$.catalyst_coverage.window[1]', ?)"
+        f" where {FIXTURE_GROUP}",
+        DAYS[-2].isoformat(),
+        T.isoformat(),
+    )
+    groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
+    assert groups.result == "fail", dict(groups.unknown)
+    assert groups.examples["catalyst_window_end_not_score_date"] == [
+        [
+            T.isoformat(),
+            "official-industry-fixture",
+            [DAYS[-20].isoformat(), DAYS[-2].isoformat()],
+        ]
+    ]
+
+
 def test_a_tied_nonzero_catalyst_takes_the_mid_rank(fx):
     # #501 (PR #500 review): two groups with the same non-zero member share
     # both take the mid rank 0.5; 0 is only for no event.

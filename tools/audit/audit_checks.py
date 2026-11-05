@@ -1529,8 +1529,10 @@ def _recomputed_catalyst(
 def _check_catalyst(ctx: Context, day, version, details, stored, code, check) -> None:
     """Coverage rule (1.2.0, #453; 20 sessions from 1.3.0) and the recomputed raw catalyst (#474).
 
-    A window that differs from TAIEX now, or a 1.2.0 window under 20
-    sessions, is undetermined (#501, docs/spec/hot_group.md).
+    The row's own record (a null catalyst, missing inputs, a window not ending
+    on the score date) fails first; then a window whose start differs from
+    TAIEX now, or a 1.2.0 window under 20 sessions, is undetermined (#501,
+    docs/spec/hot_group.md).
     """
 
     coverage = details.get("catalyst_coverage")
@@ -1548,8 +1550,34 @@ def _check_catalyst(ctx: Context, day, version, details, stored, code, check) ->
                 code + [stored[6], coverage.get("unanswered_dates")],
             )
         return
+    # What the row says about itself is judged before the window against
+    # TAIEX now, so an undetermined window cannot hide a wrong write (#501).
+    member_ids = [
+        m["instrument_id"]
+        for m in details.get("member_returns") or []
+        if isinstance(m, dict) and m.get("instrument_id") is not None
+    ]
+    if stored[9] and stored[6] is None:
+        # An answered window with eligible members has a value (0 without
+        # events); null there drops a component the group had.
+        check.fail("catalyst_null_with_full_coverage", code)
+        return
+    inputs = details.get("catalyst_inputs") or {}
+    through_id = inputs.get("events_through_id")
+    if member_ids and version != "1.2.0" and through_id is None:
+        check.fail("catalyst_inputs_missing", code)
+        return
     sessions = coverage.get("sessions")
     stored_window = coverage.get("window")
+    if (
+        not isinstance(stored_window, list)
+        or not stored_window
+        or stored_window[-1] != day
+    ):
+        # The window ends on the score date: a later TAIEX bar or suspension
+        # moves only its start, so another end is a wrong write (#501).
+        check.fail("catalyst_window_end_not_score_date", code + [stored_window])
+        return
     if sessions != CATALYST_WINDOW_SESSIONS:
         if version in SHORT_WINDOW_HOT_GROUP_VERSIONS:
             # 1.2.0 did not require 20 sessions (#501): the row followed its
@@ -1573,23 +1601,8 @@ def _check_catalyst(ctx: Context, day, version, details, stored, code, check) ->
             "catalyst_window_changed_after_write", code + [stored_window, now]
         )
         return
-    member_ids = [
-        m["instrument_id"]
-        for m in details.get("member_returns") or []
-        if isinstance(m, dict) and m.get("instrument_id") is not None
-    ]
-    if stored[9] and stored[6] is None:
-        # An answered window with eligible members has a value (0 without
-        # events); null there drops a component the group had.
-        check.fail("catalyst_null_with_full_coverage", code)
-        return
     if not member_ids:
         check.ok()
-        return
-    inputs = details.get("catalyst_inputs") or {}
-    through_id = inputs.get("events_through_id")
-    if version != "1.2.0" and through_id is None:
-        check.fail("catalyst_inputs_missing", code)
         return
     mine = _recomputed_catalyst(ctx, version, window, member_ids, through_id)
     # 1.2.0 rows did not record which events they counted: an event collected
