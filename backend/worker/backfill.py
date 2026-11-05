@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.clock import utcnow
 from app.config import MAX_GROUP_CANDIDATES, OFFICIAL_MAX_BACKFILL_DAYS
 from app.coverage import (
+    confirmed_non_trading_dates,
     has_backfill_manifest,
     official_snapshot_status,
     verified_taiex_sessions,
@@ -127,6 +128,23 @@ def _target_session_count(requested_dates: list[date]) -> int:
     # Short fixture/targeted runs should remain bounded to their explicit
     # range; the full Phase 3 window has 65 weekday candidates.
     return min(TARGET_OHLCV_TAIEX_SESSIONS, len(requested_dates))
+
+
+def effective_target_sessions(
+    target_sessions: int, weekdays: Iterable[date], closures: Iterable[date]
+) -> int:
+    """The verified sessions a window needs: its confirmed closures excluded.
+
+    ``target_sessions`` is the cap (65 for a full window, fewer for a short
+    range); a window whose weekdays minus its confirmed closures
+    (``app.coverage.collect_states``) are fewer than the cap needs only those.
+    The 93-day bound often leaves no room to extend past the holidays, so
+    without this a holiday window could never meet the target (Issue #479).
+    """
+
+    weekday_set = set(weekdays)
+    open_weekdays = weekday_set - set(closures)
+    return min(target_sessions, len(open_weekdays))
 
 
 def _merge_batch_plan(
@@ -543,9 +561,16 @@ def coverage_report(
     """Aggregate date/exchange/instrument coverage without mutating the DB."""
 
     _validate_range(start_date, end_date)
+    # Confirmed closures by the catch-up rule (Issue #479): in a bounded
+    # calendar they show as skipped_non_trading and leave the session target.
+    confirmed_closures = (
+        confirmed_non_trading_dates(db, start_date, end_date)
+        if include_calendar_dates
+        else set()
+    )
     known_no_data = {
         item for item in (known_no_data_dates or []) if start_date <= item <= end_date
-    }
+    } | confirmed_closures
     all_active_rows = db.scalars(
         select(Instrument).where(Instrument.status == "active")
     ).all()
@@ -987,13 +1012,25 @@ def coverage_report(
     verified_ohlcv_dates = observed_non_index_dates.intersection(taiex_dates)
     chip_dates = set(chip_count_by_date).intersection(taiex_dates)
     latest_observed = max(taiex_dates, default=None)
-    target_ohlcv_sessions = (
+    snapshot_only = require_provenance and not has_manifest
+    target_ohlcv_cap = (
         target_ohlcv_sessions
         if target_ohlcv_sessions is not None
         else (
             TARGET_OHLCV_TAIEX_SESSIONS
-            if require_provenance and not has_manifest
+            if snapshot_only
             else min(TARGET_OHLCV_TAIEX_SESSIONS, len(requested_weekdays))
+        )
+    )
+    # A snapshot without a bounded run has no calendar to take closures from.
+    target_closures = (
+        set() if snapshot_only else confirmed_closures & requested_weekdays
+    )
+    target_ohlcv_sessions = (
+        target_ohlcv_cap
+        if snapshot_only
+        else effective_target_sessions(
+            target_ohlcv_cap, requested_weekdays, target_closures
         )
     )
     target_chip_event_sessions = (
@@ -1025,6 +1062,10 @@ def coverage_report(
         "verified_chip_sessions": len(chip_dates),
         "verified_event_sessions": event_summary["verified_sessions"],
         "target_ohlcv_taiex_sessions": target_ohlcv_sessions,
+        "target_ohlcv_taiex_cap": target_ohlcv_cap,
+        "confirmed_non_trading_dates": sorted(
+            item.isoformat() for item in target_closures
+        ),
         "target_chip_event_sessions": target_chip_event_sessions,
         "target_met": target_met_value,
         "status_counts": dict(sorted(status_counts.items())),
@@ -1566,8 +1607,29 @@ def targeted_backfill(
             for item in taiex
         }
 
+    def confirmed_closures() -> list[str]:
+        """Candidate weekdays that are confirmed closures (Issue #479)."""
+
+        with pipeline.SessionLocal() as db:
+            closed = confirmed_non_trading_dates(db, min(candidate_dates), end_date)
+        candidates = set(candidate_dates)
+        return sorted(item.isoformat() for item in closed if item in candidates)
+
+    def target_state() -> tuple[int, list[str], int, bool]:
+        """(target, closures, verified count, met) by one rule for every field."""
+
+        closures = confirmed_closures()
+        target = effective_target_sessions(
+            target_sessions,
+            candidate_dates,
+            (date.fromisoformat(item) for item in closures),
+        )
+        verified_count = len(verified_trading_dates())
+        return target, closures, verified_count, verified_count >= target
+
     def persist_state(status: str = "running", error: str | None = None) -> None:
         verified = sorted(verified_trading_dates())
+        effective_target, closures, _count, met = target_state()
         for skipped_date in skipped:
             skipped_manifest = metadata.setdefault("coverage_manifest", {}).get(
                 skipped_date
@@ -1586,7 +1648,9 @@ def targeted_backfill(
                 "candidate_dates": [item.isoformat() for item in candidate_dates],
                 "extension_dates": sorted(extension_dates),
                 "verified_trading_sessions": verified,
-                "target_met": len(verified) >= target_sessions,
+                "target_sessions": effective_target,
+                "confirmed_non_trading_dates": closures,
+                "target_met": met,
                 "reused_dates": sorted(reused),
                 "retry_exhausted_dates": sorted(exhausted),
                 "received_dates": sorted(completed | partial),
@@ -1835,6 +1899,7 @@ def targeted_backfill(
             event_coverage_by_date=event_coverage_by_date,
         )
     metadata["coverage"] = report["summary"]
+    effective_target, closures, verified_count, met = target_state()
     metadata["coverage_manifest_summary"] = {
         "requested_dates": len(candidate_dates),
         "requested_calendar_dates": len(
@@ -1844,8 +1909,10 @@ def targeted_backfill(
         "received_dates": len(completed | partial),
         "missing_dates": len(failed | partial),
         "skipped_non_trading_dates": len(skipped),
-        "verified_trading_sessions": len(verified_trading_dates()),
-        "target_met": len(verified_trading_dates()) >= target_sessions,
+        "verified_trading_sessions": verified_count,
+        "target_sessions": effective_target,
+        "confirmed_non_trading_dates": closures,
+        "target_met": met,
         "status": "success" if not (failed or partial or skipped) else "partial",
         "data_as_of": report["summary"].get("data_cutoff"),
     }

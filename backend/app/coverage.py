@@ -17,16 +17,139 @@ becomes a verified TAIEX session.
 from __future__ import annotations
 
 import json
-from datetime import date
+from collections import defaultdict
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
 from typing import Iterable
 
 from sqlalchemy import literal_column, select
 from sqlalchemy.orm import Session
 
-from .models import IngestionRun, Instrument, MarketBar, RawPayload
+from .models import IngestionRun, Instrument, MarketBar, RawPayload, ScheduleRun
 from .raw_paths import payload_file
 from .decision_market_reads import read_market_date, read_market_source
 from worker.sources import parse_twse_taiex_from_all_daily_payload
+
+
+DAILY_JOB = "daily"
+TAIPEI_UTC_OFFSET = timedelta(hours=8)
+
+
+def collect_states(db: Session, start_date: date, end_date: date) -> dict[date, str]:
+    """complete, non_trading (confirmed official no-data) or missing per weekday.
+
+    The one rule for a confirmed closure, read by the daily catch-up, the
+    bounded backfill's target and /api/coverage (Issue #479).  A no-data
+    answer counts as closed only when it is confirmed: a daily run recorded
+    ``non_trading_day`` for that date, or the answer was obtained after that
+    Taipei day ended (a later catch-up or backfill).  A single same-day answer
+    (``non_trading_unconfirmed`` whose 23:00 check never ran) stays missing,
+    so a wrong "no session" is fetched again.  The holiday schedule is not
+    read: a typhoon closure is not in it, while the official no-data answer
+    covers both.
+    """
+
+    rows_by_day, confirmed_days = _collect_rows(db, start_date, end_date)
+    states: dict[date, str] = {}
+    day = start_date
+    while day <= end_date:
+        if day.weekday() < 5:
+            states[day] = _collect_state(
+                db, day, rows_by_day.get(day, []), day in confirmed_days
+            )
+        day += timedelta(days=1)
+    return states
+
+
+def confirmed_non_trading_dates(
+    db: Session, start_date: date, end_date: date
+) -> set[date]:
+    """The weekdays of the range that are confirmed closures (``collect_states``).
+
+    Only a day with a no-data answer can be one, so the other days' runs are
+    never judged (their metadata is never read).
+    """
+
+    rows_by_day, confirmed_days = _collect_rows(db, start_date, end_date)
+    return {
+        day
+        for day, rows in rows_by_day.items()
+        if day.weekday() < 5
+        and any(row.status == "skipped" for row in rows)
+        and _collect_state(db, day, rows, day in confirmed_days) == "non_trading"
+    }
+
+
+@dataclass(frozen=True)
+class _CollectRow:
+    id: int
+    status: str
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+def _collect_rows(
+    db: Session, start_date: date, end_date: date
+) -> tuple[dict[date, list[_CollectRow]], set[date]]:
+    # Without metadata_json: a collect run's metadata is large (about 130 MB
+    # for the 69 runs of the 93-day window on the production copy).
+    rows_by_day: dict[date, list[_CollectRow]] = defaultdict(list)
+    for run_id, run_date, status, started_at, finished_at in db.execute(
+        select(
+            IngestionRun.id,
+            IngestionRun.run_date,
+            IngestionRun.status,
+            IngestionRun.started_at,
+            IngestionRun.finished_at,
+        ).where(
+            IngestionRun.run_type == "collect",
+            IngestionRun.run_date >= start_date,
+            IngestionRun.run_date <= end_date,
+        )
+    ).all():
+        rows_by_day[run_date].append(
+            _CollectRow(run_id, status, started_at, finished_at)
+        )
+    confirmed_days = set(
+        db.scalars(
+            select(ScheduleRun.target_date).where(
+                ScheduleRun.job == DAILY_JOB,
+                ScheduleRun.target_date >= start_date,
+                ScheduleRun.target_date <= end_date,
+                ScheduleRun.status == "non_trading_day",
+            )
+        ).all()
+    )
+    return rows_by_day, confirmed_days
+
+
+def _collect_state(
+    db: Session, day: date, rows: list[_CollectRow], daily_confirmed: bool
+) -> str:
+    # Same test as collect's idempotency shortcut: a success with a TAIEX row.
+    # The metadata is read in Python, only for that day's successful runs:
+    # SQLite 3.40 (the image's) refuses json_extract on a row holding NaN.
+    success_ids = [row.id for row in rows if row.status == "success"]
+    if success_ids and any(
+        int((metadata or {}).get("taiex_records", 0) or 0) > 0
+        for metadata in db.scalars(
+            select(IngestionRun.metadata_json).where(IngestionRun.id.in_(success_ids))
+        ).all()
+    ):
+        return "complete"
+    skipped = [row for row in rows if row.status == "skipped"]
+    if not skipped:
+        return "missing"
+    # The end of the Taipei day in naive UTC, like the stored timestamps.
+    day_end = (
+        datetime(day.year, day.month, day.day) + timedelta(days=1) - TAIPEI_UTC_OFFSET
+    )
+    if daily_confirmed or any(
+        (row.finished_at or row.started_at or datetime.min) >= day_end
+        for row in skipped
+    ):
+        return "non_trading"
+    return "missing"
 
 
 def _as_date(value: object) -> date | None:
