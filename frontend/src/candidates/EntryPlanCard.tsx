@@ -20,6 +20,8 @@ export function EntryPlanCard({ item, className }: { item: Pick<CandidateItem, '
         <span className="entry-plan-type">{type ? <Term id={type.term}>{type.label}</Term> : '進場方式'}</span>
         <span className={cx('entry-plan-sentence', view.kind === 'reason' && 'entry-plan-reason')}><Parts parts={view.parts} /></span>
       </p>
+      {/* One small line under the sentence: the reminder, then the folded full conditions (they take the full width when open). */}
+      {(view.holds || view.conditions.length > 0) && <div className="entry-plan-foot">
       {view.holds && <p className="small-note entry-plan-holds" data-entry-holds=""><Parts parts={view.holds} /></p>}
       {view.conditions.length > 0 && (
         <details className="details entry-plan-conditions">
@@ -34,6 +36,7 @@ export function EntryPlanCard({ item, className }: { item: Pick<CandidateItem, '
           </ul>
         </details>
       )}
+      </div>}
     </section>
   )
 }
