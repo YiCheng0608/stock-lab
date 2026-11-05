@@ -109,7 +109,7 @@ export function observationBreakout(): StrategyBoardRow {
 export function incompleteRow(): StrategyBoardRow {
   return {
     ...conditionalBreakout(), status: 'data_incomplete', earliest_execution_date: null, levels: null,
-    unmet: [], missing: ['margin_balance_change_ratio_5d_missing_or_non_finite'], missing_labels: ['近 5 日融資變化資料待補'],
+    unmet: [], missing: ['margin_balance_change_ratio_5d_missing_or_non_finite'], missing_labels: ['近 5 日融資變化資料不足'],
     conditions: [...common(false), ...confirmations(null)],
   }
 }

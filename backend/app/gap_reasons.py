@@ -125,14 +125,17 @@ def coverage_gap_reasons(coverage: Mapping[str, Any]) -> list[dict[str, str]]:
             if item not in explained
         ]
         label = (
-            f"近 60 個交易日有 {len(days)} 天行情尚未收錄"
+            f"近 60 個交易日有 {len(days)} 天行情尚未收錄（待回補）"
             if days
-            else "近 20 個交易日有行情尚未收錄"
+            else "近 20 個交易日有行情尚未收錄（待回補）"
         )
         reasons.append({"code": "missing_bar_dates", "label": label})
     if not reasons and not codes - _NOT_BAR_COVERAGE:
         reasons.append(
-            {"code": "missing_bar_dates", "label": "近 60 個交易日有行情尚未收錄"}
+            {
+                "code": "missing_bar_dates",
+                "label": "近 60 個交易日有行情尚未收錄（待回補）",
+            }
         )
     return reasons
 
@@ -178,7 +181,7 @@ def chip_gap_reasons(
             "institutional_not_listed",
             INSTITUTIONAL_FIELDS,
             "天官方三大法人表未列此股（官方只列當天有法人買賣的股票）",
-            "天法人資料尚未收錄",
+            "天法人資料尚未收錄（待回補）",
             blockers & {"institutional_flow_5d", *INSTITUTIONAL_FIELDS},
             CHIP_WINDOW_SESSIONS,
         ),
@@ -187,7 +190,7 @@ def chip_gap_reasons(
             "margin_not_listed",
             MARGIN_FIELDS,
             "天官方融資餘額表未列此股",
-            "天融資資料尚未收錄",
+            "天融資資料尚未收錄（待回補）",
             blockers & set(MARGIN_FIELDS),
             # The five-day margin change reads the balance five sessions back.
             MARGIN_WINDOW_SESSIONS,

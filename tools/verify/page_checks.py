@@ -645,7 +645,7 @@ def stock_shots(stock: Stock) -> dict[str, Shot]:
     url = f"/stocks/{stock.exchange}/{stock.symbol}"
     tabs = {
         tab: Shot(f"{stock.prefix}-{tab}", url, (1280,), (f"#stock-tab-{tab}",))
-        for tab in ("chips", "research", "news", "data")
+        for tab in ("chips", "financials", "research", "news", "data")
     }
     return {"main": Shot(stock.prefix, url), **tabs}
 
@@ -2083,6 +2083,78 @@ def s9(run: Run, stock: Stock) -> str:
     )
 
 
+# The 財務 tab (#528; UI_COPY_SPEC §8.2 財務分頁), frontend/src/stock/stockFundamentals.ts.
+FUNDAMENTALS_TITLE, NOT_PROVIDED = "季報營收與 EPS", "來源未提供"
+FUNDAMENTALS_EMPTY = {
+    "etf": "ETF 沒有公司財報，不適用。",
+    "ipo": "新上市公司尚未有已收集的季報：系統目前只收官方最新一期的季報快照。",
+}
+FUNDAMENTALS_EMPTY_STOCK = "尚未收集到這檔的季報：系統目前只收官方最新一期的季報快照，該期尚未出表或不在官方清單時沒有資料。"
+QUARTER = re.compile(r"^(\d{4})-\d{2}-\d{2}$")
+
+
+def fundamental_row_prefix(row: dict) -> str:
+    """The page's first cells of one row: 期別, 累計營收（億元）, 累計 EPS, ROE, 出表日."""
+
+    year = QUARTER.match(row["period_end"] or "")
+    period = row["fiscal_period"] or ""
+    if year and re.fullmatch(r"Q[1-4]", period):
+        label = f"{year.group(1)} 年第 {period[1]} 季"
+    elif year and re.fullmatch(r"M(0[1-9]|1[0-2])", period):
+        label = f"{year.group(1)} 年 {int(period[1:])} 月"
+    else:
+        label = slash(row["period_end"])
+
+    def cell(value: Any, scale: float = 1) -> str:
+        if isinstance(value, (int, float)) and math.isfinite(value):
+            return fixed(value / scale, 2)
+        return NOT_PROVIDED
+
+    announced = slash(row["announcement_date"]) if row["announcement_date"] else None
+    return "\t".join(
+        [
+            label,
+            cell(row["revenue"], 100_000),
+            cell(row["eps"]),
+            cell(row["roe"]),
+            announced or NOT_PROVIDED,
+        ]
+    )
+
+
+@check("stocks", "S12", per_stock=True)
+def s12(run: Run, stock: Stock) -> str:
+    text = stock_text(run, stock, "financials")
+    payload = stock_payload(run, stock)
+    rows = payload.get("fundamentals") or []
+    title = text.find(FUNDAMENTALS_TITLE)
+    expect(title >= 0, f"缺整行 `{FUNDAMENTALS_TITLE}`")
+    if not rows:
+        kind = ((payload.get("instrument") or {}).get("instrument_type") or "").lower()
+        reason = FUNDAMENTALS_EMPTY.get(kind, FUNDAMENTALS_EMPTY_STOCK)
+        expect(text.has(reason), f"fundamentals 空，缺 `{reason}`")
+        expect(
+            text.find_where(lambda line: "年第" in line and "\t" in line) < 0,
+            "fundamentals 空卻有期別列",
+        )
+        return f"fundamentals 空，顯示 `{reason}`"
+    latest = max(row["data_as_of"] or row["period_end"] for row in rows)
+    badge = f"資料 {slash(latest)}"
+    expect(text.find(badge, title) >= 0, f"`{FUNDAMENTALS_TITLE}` 之後缺 `{badge}`")
+    found = []
+    for row in rows:
+        prefix = fundamental_row_prefix(row) + "\t"
+        at = text.find_where(lambda line, p=prefix: line.startswith(p), title)
+        expect(at >= 0, f"缺 `{prefix.strip()}` 開頭的列")
+        found.append(at)
+    expect(found == sorted(found), f"列的順序不是 API 的順序：{found}")
+    expect(
+        text.find_where(lambda line: line.startswith("來源："), title) >= 0,
+        "表格下缺 `來源：` 行",
+    )
+    return f"{len(rows)} 列與 API 相同（第一列 `{fundamental_row_prefix(rows[0])}`）；{badge}"
+
+
 # ---- actions ----
 
 # The page is 觀察中 at /watch since #493; the old /actions redirects there (A18).
@@ -2390,7 +2462,7 @@ def hidden_line(summary: dict) -> str | None:
         for label, key in (
             ("ETF", "etf"),
             ("其他觀察", "observation"),
-            ("策略判斷資料待補", "data_insufficient"),
+            ("資料不足", "data_insufficient"),
         )
         if hidden.get(key)
     ]

@@ -1,7 +1,7 @@
 import { liquidityExclusionText } from '../candidates/candidates'
 import { formatDay } from '../dates'
 import { noPreviousCloseText } from '../marketChange'
-import { productActionReasonLabel } from '../presentation'
+import { INSUFFICIENT_ACTION_LABEL, incompleteActionLabel, productActionReasonLabel } from '../presentation'
 import { nearLine } from '../stock/strategyBoard'
 import type { ActionNearness, ActionSummary, ActionTierNumber, ActionTierSummary, ActionView, ActionsResponse } from '../types'
 import { formatFixed, formatTableNumber } from '../units'
@@ -34,7 +34,7 @@ export const ACTION_STATE_LABELS: Record<string, string> = {
   wait_pullback: '等待回踩',
   hold_observe: '持有觀察',
   reduce_exit: '庫存風險：減碼／退場條件',
-  data_insufficient: '策略判斷資料待補',
+  data_insufficient: INSUFFICIENT_ACTION_LABEL,
   no_condition: '暫無研究條件',
   manual_review: '需人工判讀',
 }
@@ -42,7 +42,7 @@ export const ACTION_STATE_LABELS: Record<string, string> = {
 const INCOMPLETE_STATES = ['data_insufficient', 'data_incomplete', 'insufficient_data']
 
 export function actionStateLabel(action: ActionSummary): string {
-  if (INCOMPLETE_STATES.includes(action.action_state)) return '策略判斷資料待補'
+  if (INCOMPLETE_STATES.includes(action.action_state)) return incompleteActionLabel(action.gap_reasons)
   return action.display_action || ACTION_STATE_LABELS[action.action_state] || '待判定'
 }
 
@@ -68,7 +68,7 @@ export function hiddenSentence(summary: ActionTierSummary): string | null {
   const parts = [
     ['ETF', summary.hidden.etf],
     ['其他觀察', summary.hidden.observation],
-    ['策略判斷資料待補', summary.hidden.data_insufficient],
+    ['資料不足', summary.hidden.data_insufficient],
   ] as const
   const listed = parts.filter(([, value]) => value > 0).map(([label, value]) => `${label} ${count(value)} 檔`)
   if (!listed.length) return null
@@ -136,9 +136,13 @@ export function actionLevels(action: ActionSummary): ActionLevels | null {
   return null
 }
 
-// The 說明 column of tiers 4 and 5: the summary's main reason, or what data is missing.
+// The 說明 column of tiers 4 and 5: the summary's main reason, or what data is missing. A summary with causes
+// (gap_reasons, UI_COPY_SPEC §6.1) leads with the first one, the primary reason; an older one keeps its data-gap line.
 export function actionNote(action: ActionSummary): string | null {
-  if (INCOMPLETE_STATES.includes(action.action_state)) return productActionReasonLabel(action.data_gap ?? '研究資料尚未完整，尚不能計算進場、失效與目標價。')
+  if (INCOMPLETE_STATES.includes(action.action_state)) {
+    if (action.gap_reasons?.length && action.primary_reason?.label) return action.primary_reason.label
+    return productActionReasonLabel(action.data_gap ?? '研究資料尚未完整，尚不能計算進場、失效與目標價。')
+  }
   return action.primary_reason?.label ?? null
 }
 

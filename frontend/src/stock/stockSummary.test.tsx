@@ -109,7 +109,7 @@ check(render(<StockPlanPanel strategies={[]} embedded />).includes(NO_CONDITION_
 const gapSentence = '60 日基準還缺 3 個有效交易日，尚不能計算進場、失效與目標價。'
 const shortAction = action({ action_state: 'data_insufficient', display_instruction: `目前無法產生研究動作。${gapSentence}`, data_gap: gapSentence, primary_reason: { label: gaps[0].label, scope: 'data' }, gap_reasons: gaps, data_quality: 'partial' })
 const actionPanel = render(<ActionDetailPanel action={shortAction} gap={{ reasons: gaps, missingFields: ['bars_60d'] }}><StockPlanPanel strategies={[]} embedded /></ActionDetailPanel>)
-check(actionPanel.includes('<h2 id="stock-action-title">研究動作</h2>') && actionPanel.includes('策略判斷資料待補'), 'research action: the panel title and the action name')
+check(actionPanel.includes('<h2 id="stock-action-title">研究動作</h2>') && actionPanel.includes('資料不足，無法判斷'), 'research action: the panel title and the action name')
 check(text(actionPanel).includes(`目前不能判斷的原因：${gaps[0].label}；${gaps[1].label}。`), 'research action: the gap causes sit inside the panel')
 check(count(text(actionPanel), gapSentence) === 1, `research action: the data-gap sentence the instruction carries is not repeated: ${text(actionPanel).slice(0, 400)}`)
 check(count(text(actionPanel), gaps[0].label) === 1, 'research action: the primary reason that is a gap cause is not repeated')

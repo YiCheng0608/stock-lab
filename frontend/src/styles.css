@@ -403,9 +403,11 @@ a.symbol-link:hover { color: var(--color-primary); }
 .board-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-4); margin-bottom: var(--space-3); }
 .board-meta .strategy-liquidity { margin: 0; }
 .board-help[open] { flex-basis: 100%; }
-.chip-unit-note { margin: 0 0 var(--space-2); }
-.board-help > summary, .chip-unit-note > summary, .stock-group-periods > summary, .strategy-candidate-more > summary { font-size: var(--text-sm); }
-.board-help p, .chip-unit-note p { margin: 0; font-size: var(--text-xs); }
+.chip-unit-note, .stock-fundamentals-note { margin: 0 0 var(--space-2); }
+.board-help > summary, .chip-unit-note > summary, .stock-fundamentals-note > summary, .stock-group-periods > summary, .strategy-candidate-more > summary { font-size: var(--text-sm); }
+.board-help p, .chip-unit-note p, .stock-fundamentals-note p { margin: 0; font-size: var(--text-xs); }
+.stock-fundamentals-source { margin: var(--space-2) 0 0; }
+.stock-fundamentals .th-qualifier { font-size: var(--text-xs); }
 .stock-action-detail .action-detail-summary { padding: var(--space-2) 0; }
 .stock-action-detail .action-detail-summary strong { font-size: var(--text-base); }
 .stock-action-detail .action-detail-summary .action-detail-instruction { color: var(--color-text); }

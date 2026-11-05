@@ -83,6 +83,11 @@ TREE = {
     "actions/ActionViews.tsx": "import { actionKey } from './actionTiers'\n",
     "actions/actionTiers.ts": "export const actionKey = 1\n",
     "stock/stockTabs.ts": "export const STOCK_TABS = 1\n",
+    "stock/StockFundamentalsPanel.tsx": (
+        "import { Card } from '../components/ui'\n"
+        "import { revenueText } from './stockFundamentals'\n"
+    ),
+    "stock/stockFundamentals.ts": "export const revenueText = 1\n",
 }
 
 

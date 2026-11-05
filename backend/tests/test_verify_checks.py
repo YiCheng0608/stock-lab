@@ -1279,3 +1279,98 @@ def test_s10_counts_only_the_board_observation_labels(tmp_path):
         {"stock-research-1280": _board_page(summary_label=True)},
     )
     assert "觀察價位 1 列" in page_checks.s10(run, STOCK)
+
+
+# ---- stock page 財務 tab (#528) ----
+
+FUNDAMENTAL_ROWS = [
+    {
+        "period_end": "2026-09-30",
+        "fiscal_period": "Q3",
+        "announcement_date": "2026-11-05",
+        "revenue": 385478.0,
+        "eps": -0.52,
+        "roe": None,
+        "source": "mops_fundamental",
+        "data_as_of": "2026-09-30",
+    },
+    {
+        "period_end": "2026-06-30",
+        "fiscal_period": "Q2",
+        "announcement_date": "2026-10-30",
+        "revenue": None,
+        "eps": 49.33,
+        "roe": None,
+        "source": "mops_fundamental",
+        "data_as_of": "2026-06-30",
+    },
+]
+
+
+def _financials_page(rows_text: str, badge: str = "資料 2026/09/30\n") -> str:
+    # StockFundamentalsPanel as innerText: eyebrow, title, badge, 說明, table, source line.
+    return (
+        "圖表與指標\n法人籌碼\n財務\n新聞與公告\n財務資料\n季報營收與 EPS\n"
+        f"{badge}說明\n期別\t年初至季底累計營收（億元）\t年初至季底累計 EPS（元）\t"
+        f"ROE（%）\t出表日\t來源\n{rows_text}來源：公開資訊觀測站 季報\n"
+    )
+
+
+ROWS_TEXT = (
+    "2026 年第 3 季\t3.85\t-0.52\t來源未提供\t2026/11/05\t公開資訊觀測站 季報\n"
+    "2026 年第 2 季\t來源未提供\t49.33\t來源未提供\t2026/10/30\t公開資訊觀測站 季報\n"
+)
+
+
+def _s12(tmp_path, payload, page):
+    run = FakeRun(
+        tmp_path, {"stocks/TWSE/2884": payload}, {"stock-financials-1280": page}
+    )
+    return page_checks.s12(run, STOCK)
+
+
+def test_s12_passes_when_every_row_matches_the_api(tmp_path):
+    payload = {
+        "fundamentals": FUNDAMENTAL_ROWS,
+        "instrument": {"instrument_type": "stock"},
+    }
+    result = _s12(tmp_path, payload, _financials_page(ROWS_TEXT))
+    assert "2 列與 API 相同" in result
+    assert "資料 2026/09/30" in result
+
+
+def test_s12_fails_on_a_wrong_value_order_or_badge(tmp_path):
+    payload = {
+        "fundamentals": FUNDAMENTAL_ROWS,
+        "instrument": {"instrument_type": "stock"},
+    }
+    # A missing revenue shown as 0 is not 來源未提供.
+    zero = ROWS_TEXT.replace("2 季\t來源未提供", "2 季\t0.00")
+    with pytest.raises(page_checks.Fail, match="2026 年第 2 季\t來源未提供"):
+        _s12(tmp_path, payload, _financials_page(zero))
+    swapped = "\n".join(reversed(ROWS_TEXT.strip().split("\n"))) + "\n"
+    with pytest.raises(page_checks.Fail, match="順序"):
+        _s12(tmp_path, payload, _financials_page(swapped))
+    with pytest.raises(page_checks.Fail, match="缺 `資料 2026/09/30`"):
+        _s12(tmp_path, payload, _financials_page(ROWS_TEXT, badge=""))
+
+
+def test_s12_fails_on_the_old_page_without_the_tab(tmp_path):
+    payload = {"fundamentals": [], "instrument": {"instrument_type": "stock"}}
+    with pytest.raises(page_checks.Fail, match="缺整行 `季報營收與 EPS`"):
+        _s12(tmp_path, payload, "圖表與指標\n法人籌碼\n新聞與公告\n")
+
+
+def test_s12_reads_the_empty_reason_by_instrument_type(tmp_path):
+    etf = {"fundamentals": [], "instrument": {"instrument_type": "etf"}}
+    page = _financials_page("無資料\nETF 沒有公司財報，不適用。\n", badge="")
+    assert "ETF 沒有公司財報，不適用。" in _s12(tmp_path, etf, page)
+    stock = {"fundamentals": [], "instrument": {"instrument_type": "stock"}}
+    with pytest.raises(page_checks.Fail, match="尚未收集到這檔的季報"):
+        _s12(tmp_path, stock, page)
+    with pytest.raises(page_checks.Fail, match="沒有期別列|卻有期別列"):
+        _s12(
+            tmp_path,
+            etf,
+            _financials_page("ETF 沒有公司財報，不適用。\n" + ROWS_TEXT, badge=""),
+        )

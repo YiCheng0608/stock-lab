@@ -1,5 +1,6 @@
 import { formatPrice } from '../candidates/candidates'
-import type { ActionNearnessItem, StrategyBoardRow, StrategyBoardStatus, StrategyCondition, StrategyObservationLevels } from '../types'
+import { productActionReasonLabel } from '../presentation'
+import type { ActionNearnessItem, GapReason, StrategyBoardRow, StrategyBoardStatus, StrategyCondition, StrategyObservationLevels } from '../types'
 import { LOT_SIZE, formatFixed } from '../units'
 
 // Pure helpers for the stock strategy board (#274); copy follows UI_COPY_SPEC §10.1, visuals DESIGN_SYSTEM §7.
@@ -75,7 +76,7 @@ const nearVolume = (item: ActionNearnessItem) => `量能 ${bound(item, two, ' �
 
 const CONDITIONS: Record<string, ConditionCopy> = {
   eligibility: fixed('適用標的', '標的不適用'),
-  required_inputs: fixed('必要資料齊備', '資料待補'),
+  required_inputs: fixed('必要資料齊備', '資料不足'),
   breakout_price: { ...fixed('收盤突破前 20 日高點', '收盤未突破前 20 日高點'), near: (item) => `收盤站上前 20 日高點（還差 ${gapText(item.gap)}）` },
   breakout_volume: {
     label: (item) => `量比 ${bound(item, two, ' 倍') ?? '達規則門檻'}`,
@@ -123,12 +124,52 @@ export function nearLine(item: ActionNearnessItem): string {
   return `差：${copy?.near ? copy.near(item) : copy ? copy.unmet() : UNKNOWN_CONDITION}`
 }
 
-// 「差哪個條件」: one line per row.
-export function unmetText(row: StrategyBoardRow): string {
+// The topic of a signal's data reason (backend/app/gap_reasons.py) and the summary's cause codes that explain it.
+const GAP_TOPICS: ReadonlyArray<{ reasons: ReadonlySet<string>; causes: ReadonlySet<string> }> = [
+  {
+    reasons: new Set(['institutional_flow_to_turnover_ratio_5d_missing_or_non_finite', 'institutional_flow_5d_missing_or_incomplete']),
+    causes: new Set(['institutional_not_listed', 'institutional_not_collected']),
+  },
+  {
+    reasons: new Set(['margin_balance_change_ratio_5d_missing_or_non_finite', 'margin_change_5d_missing_or_incomplete']),
+    causes: new Set(['margin_not_listed', 'margin_not_collected', 'margin_zero_base']),
+  },
+  {
+    reasons: new Set(['history_under_60_bars', 'ipo_history_under_20_bars', 'ipo_observation_only_under_60_bars', 'bar_count_missing_or_invalid',
+      'prior_20_highs_missing_or_invalid', 'prior_20_volumes_missing_or_invalid', 'close_missing_or_non_finite', 'volume_missing_or_non_finite',
+      'ma20_missing_or_non_finite', 'ma60_missing_or_non_finite']),
+    causes: new Set(['coverage_baseline_unknown', 'listed_under_threshold', 'suspended_or_no_trade', 'official_no_trade', 'bar_invalid', 'quote_not_listed', 'missing_bar_dates']),
+  },
+  { reasons: new Set(['group_excess_return_20d_missing_or_non_finite']), causes: new Set(['group_return_unavailable']) },
+]
+// A stock listed fewer than 20 sessions ago has no group return or chip ratios either: its listing explains them.
+const SHORT_LISTING_REASONS = new Set(['group_excess_return_20d_missing_or_non_finite', 'institutional_flow_to_turnover_ratio_5d_missing_or_non_finite',
+  'margin_balance_change_ratio_5d_missing_or_non_finite', 'margin_change_5d_missing_or_incomplete'])
+
+// An incomplete row's sentences (UI_COPY_SPEC §10.1, Issue 524): each missing input in the summary's own words for its
+// topic (an official table without the stock, a short listing, a gap still to backfill), else the input's label.
+function incompleteSentences(row: StrategyBoardRow, gapReasons: ReadonlyArray<GapReason> | undefined): string[] {
+  const causes = gapReasons ?? []
+  const lines = row.missing.flatMap((code, index) => {
+    const base = code.split(':', 1)[0]
+    const topic = GAP_TOPICS.find((item) => item.reasons.has(base))
+    let found = topic ? causes.filter((cause) => topic.causes.has(cause.code)) : []
+    if (!found.length && SHORT_LISTING_REASONS.has(base)) found = causes.filter((cause) => cause.code === 'listed_under_threshold')
+    if (found.length) return found.map((cause) => cause.label)
+    const label = row.missing_labels.length === row.missing.length ? row.missing_labels[index] : productActionReasonLabel(code)
+    return label ? [label] : []
+  })
+  const unique = [...new Set(lines.filter(Boolean))]
+  return unique.length ? unique : row.missing_labels
+}
+
+// 「差哪個條件」: one line per row. gapReasons are the stock summary's causes (decision_summary.gap_reasons).
+export function unmetText(row: StrategyBoardRow, gapReasons?: ReadonlyArray<GapReason>): string {
   if (row.status === 'conditional') return '全部達成'
-  if (row.status === 'data_incomplete' || row.status === 'not_applicable') {
-    const labels = row.missing_labels.length ? row.missing_labels.join('、') : '原因待核實'
-    return row.status === 'not_applicable' ? labels : `缺：${labels}`
+  if (row.status === 'not_applicable') return row.missing_labels.length ? row.missing_labels.join('、') : '原因待核實'
+  if (row.status === 'data_incomplete') {
+    const lines = incompleteSentences(row, gapReasons)
+    return `無法判斷：${lines.length ? lines.join('；') : '原因待核實'}`
   }
   if (row.levels_missing && row.conditions.length === 0) return '條件明細未產生'
   return row.unmet.length ? row.unmet.map((code) => unmetLabel(code, row.conditions.find((item) => item.code === code))).join('、') : '條件明細待核實'
