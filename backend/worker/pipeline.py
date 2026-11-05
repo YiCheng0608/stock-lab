@@ -11,8 +11,9 @@ from datetime import date, datetime, timedelta, timezone
 from statistics import median
 from typing import Any, Callable, Iterable, Mapping
 
-from sqlalchemy import desc, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, desc, func, select
+from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm.attributes import flag_modified
 
 from app import chip_provenance
 from app.raw_paths import payload_file
@@ -66,6 +67,7 @@ from app.models import (
 )
 from app import margin_lists, margin_zero_base
 from app.news import project_news
+from app.signal_versions import BACKTEST_PREFIX
 from app.strategies import (
     REGISTRY,
     SignalLevels,
@@ -5888,7 +5890,19 @@ BACKTEST_TRACKING_VERSION = next(
     for version, rules in BACKTEST_TRACKING_RULES.items()
     if rules == TRACKING_RULES
 )
-BACKTEST_SIGNAL_PREFIX = "backtest-"
+BACKTEST_SIGNAL_PREFIX = BACKTEST_PREFIX
+
+
+def _run_signals(run_id: int, signal: Any = Signal) -> Any:
+    """The signals of one backtest run (namespace ``backtest-<id>-``).
+
+    A range on the unique ``signal_key`` index: ``-`` is followed by ``.``, so
+    the range holds exactly the keys that start with the prefix.  A LIKE would
+    read every signal of every run.  ``signal`` is ``Signal`` or an alias of it.
+    """
+
+    prefix = f"{BACKTEST_SIGNAL_PREFIX}{run_id}-"
+    return and_(signal.signal_key >= prefix, signal.signal_key < f"{prefix[:-1]}.")
 
 
 def backtest_tracking_version(request_key: str | None) -> str | None:
@@ -5920,62 +5934,7 @@ def summarize_backtest(db: Session, run_id: int | None = None) -> dict[str, Any]
             "assessment": "no_run",
             "zero_actionable_count": 0,
         }
-    expected_prefix = f"backtest-{run.id}-"
-    signals = [
-        signal
-        for signal in db.scalars(
-            select(Signal).where(Signal.signal_key.like("backtest-%"))
-        ).all()
-        if signal.signal_key.startswith(expected_prefix)
-    ]
-    actionable_signals = [
-        signal
-        for signal in signals
-        if (signal.rule_evidence_json or {}).get("actionable")
-    ]
-    zero_actionable_count = len(signals) - len(actionable_signals)
-    grouped: dict[tuple[str, str, str, int], dict[str, Any]] = {}
-    for signal in actionable_signals:
-        # Backtest keeps observation/data_incomplete rows for rule audit, but
-        # only a conditional setup is a performance sample.  This guard also
-        # protects summaries of legacy runs that may contain settlements for
-        # non-actionable rows.
-        strategy = (
-            db.get(StrategyVersion, signal.strategy_version_id)
-            if signal.strategy_version_id
-            else None
-        )
-        instrument = db.get(Instrument, signal.instrument_id)
-        if not strategy or not instrument:
-            continue
-        settlements = db.scalars(
-            select(SignalSettlement).where(SignalSettlement.signal_id == signal.id)
-        ).all()
-        for settlement in settlements:
-            key = (
-                strategy.name,
-                strategy.version,
-                instrument.instrument_type,
-                settlement.horizon,
-            )
-            row = grouped.setdefault(
-                key,
-                {
-                    "strategy": strategy.name,
-                    "version": strategy.version,
-                    "instrument_type": instrument.instrument_type,
-                    "horizon": settlement.horizon,
-                    "sample": 0,
-                    "comparable": 0,
-                    "incomparable": 0,
-                },
-            )
-            row["sample"] += 1
-            if settlement.comparable:
-                row["comparable"] += 1
-            else:
-                row["incomparable"] += 1
-    return _backtest_summary(run, grouped, zero_actionable_count)
+    return _summarize_backtest_run(db, run)
 
 
 def _backtest_summary(
@@ -5984,7 +5943,12 @@ def _backtest_summary(
     zero_actionable_count: int,
 ) -> dict[str, Any]:
     metadata = dict(run.metadata_json or {})
-    assessment = _backtest_assessment(metadata, status=run.status)
+    # running / failed: the run is not a sample yet (_summarize_backtest_run).
+    assessment = (
+        _backtest_assessment(metadata, status=run.status)
+        if run.status == "success"
+        else run.status
+    )
     for row in grouped.values():
         row["assessment"] = assessment
         row["interpretation"] = (
@@ -6014,24 +5978,42 @@ def _backtest_summary(
     }
 
 
-# Signals a research backtest tracks per committed batch.
-RESEARCH_TRACKING_BATCH = 2000
+# Signals a backtest tracks per committed batch.
+BACKTEST_TRACKING_BATCH = 2000
 
 
-def _summarize_research_backtest(db: Session, run: IngestionRun) -> dict[str, Any]:
-    """``summarize_backtest`` of one research run, counted in SQL.
+def _summarize_backtest_run(db: Session, run: IngestionRun) -> dict[str, Any]:
+    """``summarize_backtest`` of one run, counted in SQL.
 
-    A research run has hundreds of thousands of signals per strategy;
-    ``summarize_backtest`` loads every backtest signal into memory.
+    A twelve-month run has over a million signals; loading them (about 14 KB
+    each with their evidence) took more memory than the 2 GiB scheduler and the
+    1 GiB api containers have (#484).
+
+    A run that has not succeeded has no groups: it commits as it goes, so a
+    running or failed run already has some signals and settlements, which must
+    not read as a finished sample.  Its assessment is its status.
     """
 
-    prefix = f"backtest-{run.id}-%"
+    if run.status != "success":
+        return _backtest_summary(run, {}, 0)
     actionable = func.json_extract(Signal.rule_evidence_json, "$.actionable") == 1
-    signal_total = db.scalar(
-        select(func.count(Signal.id)).where(Signal.signal_key.like(prefix))
-    )
-    actionable_total = db.scalar(
-        select(func.count(Signal.id)).where(Signal.signal_key.like(prefix), actionable)
+    zero_actionable = (run.metadata_json or {}).get("zero_actionable_count")
+    if type(zero_actionable) is not int:
+        # A run that did not record it: the evidence of every signal is read.
+        zero_actionable = db.scalar(
+            select(func.count(Signal.id)).where(_run_signals(run.id))
+        ) - db.scalar(
+            select(func.count(Signal.id)).where(_run_signals(run.id), actionable)
+        )
+    # Only the run's settled signals are read: their ids come from the
+    # signal_key and settlement indexes, where a filter on the joined signal's
+    # key would read the evidence of every signal of the run (#484 review).
+    run_signal = aliased(Signal)
+    settled = aliased(SignalSettlement)
+    settled_ids = select(settled.signal_id).where(
+        settled.signal_id.in_(
+            select(run_signal.id).where(_run_signals(run.id, run_signal))
+        )
     )
     grouped: dict[tuple[str, str, str, int], dict[str, Any]] = {}
     for name, version, instrument_type, horizon, comparable, count in db.execute(
@@ -6046,7 +6028,7 @@ def _summarize_research_backtest(db: Session, run: IngestionRun) -> dict[str, An
         .join(Signal, Signal.id == SignalSettlement.signal_id)
         .join(StrategyVersion, StrategyVersion.id == Signal.strategy_version_id)
         .join(Instrument, Instrument.id == Signal.instrument_id)
-        .where(Signal.signal_key.like(prefix), actionable)
+        .where(Signal.id.in_(settled_ids), actionable)
         .group_by(
             StrategyVersion.name,
             StrategyVersion.version,
@@ -6069,7 +6051,41 @@ def _summarize_research_backtest(db: Session, run: IngestionRun) -> dict[str, An
         )
         row["sample"] += count
         row["comparable" if comparable else "incomparable"] += count
-    return _backtest_summary(run, grouped, signal_total - actionable_total)
+    return _backtest_summary(run, grouped, zero_actionable)
+
+
+def close_abandoned_backtests(db: Session) -> list[int]:
+    """Close the canonical backtest runs a dead process left ``running`` (#484).
+
+    A canonical backtest runs only through ``worker.cli backtest``, which holds
+    maintenance mode (``worker.job.MaintenanceHold``: one backfill or backtest at
+    a time), so a canonical run still ``running`` when another one starts has no
+    process left; run 2286 was ended by the OOM killer.  It is closed as the
+    other jobs close theirs: ``failed`` with an ``abandoned:`` error.  Research
+    runs (``:research:`` keys) run on copies outside that hold and are left alone.
+    """
+
+    now = utcnow()
+    rows = db.scalars(
+        select(IngestionRun)
+        .where(
+            IngestionRun.run_type == "backtest",
+            IngestionRun.status == "running",
+            IngestionRun.request_key.like(f"{BACKTEST_REQUEST_PREFIX}:%"),
+            IngestionRun.request_key.not_like("%:research:%"),
+        )
+        .order_by(IngestionRun.id)
+    ).all()
+    for row in rows:
+        row.status = "failed"
+        row.error = (
+            "abandoned: still running when the next canonical backtest started,"
+            " which holds maintenance mode alone"
+        )
+        row.finished_at = now
+    if rows:
+        db.commit()
+    return [row.id for row in rows]
 
 
 class BacktestPaused(RuntimeError):
@@ -6082,18 +6098,20 @@ def _pause_if(should_stop: Callable[[], str | None] | None) -> None:
         raise BacktestPaused(reason)
 
 
-def _track_research_signals(
+def _track_backtest_signals(
     db: Session,
     run_id: int,
     evaluation_cutoff: date,
     should_stop: Callable[[], str | None] | None = None,
 ) -> tuple[int, int, int, int]:
-    """Track a research run's signals one committed batch at a time.
+    """Track a backtest run's signals one committed batch at a time.
 
     Returns the signal, evaluation, settlement and non-actionable counts;
     ``should_stop`` is asked after each batch's commit.
     """
 
+    # A LIKE, not _run_signals: SQLite then walks the rowid from last_id, where
+    # the key range would sort all of the run's signals for every batch.
     prefix = f"backtest-{run_id}-%"
     signals = evaluations = settlements = zero_actionable = 0
     last_id = 0
@@ -6102,7 +6120,7 @@ def _track_research_signals(
             select(Signal)
             .where(Signal.signal_key.like(prefix), Signal.id > last_id)
             .order_by(Signal.id)
-            .limit(RESEARCH_TRACKING_BATCH)
+            .limit(BACKTEST_TRACKING_BATCH)
         ).all()
         if not batch:
             return signals, evaluations, settlements, zero_actionable
@@ -6135,10 +6153,17 @@ def backtest(
     database (``app.strategies.ablation``, ``tools/research``): its strategies
     are evaluated and their StrategyVersion rows written, and the request key
     names them so the run never reuses or is reused as a canonical run.
-    A research run asks ``should_stop`` after each score date's and each
-    tracking batch's commit; a reason stops it as a failed run
-    (``BacktestPaused``) that a rerun completes.  Without ``registry`` it is
-    never asked.
+
+    Every run commits as it goes (#318, canonical too since #484): after the
+    features, after each score date, and after each tracking batch, so memory
+    and the WAL stay one session's size.  A failed run keeps what it committed;
+    a rerun with the same range overwrites it with the result of one
+    uninterrupted run.  A research run asks ``should_stop`` after each of those
+    commits; a reason stops it as a failed run (``BacktestPaused``) that a rerun
+    completes.  Without ``registry`` it is never asked.
+
+    A canonical run first closes the canonical runs left ``running``
+    (``close_abandoned_backtests``) and lists their ids in ``abandoned_runs``.
     """
 
     if start_date > end_date:
@@ -6152,17 +6177,22 @@ def backtest(
     if registry is not None:
         request_key += ":research:" + ",".join(registry)
     with SessionLocal() as db:
+        # Before the request key is read: a killed run of this same range is
+        # closed too, then retried in place like any failed run.
+        abandoned = close_abandoned_backtests(db) if registry is None else None
+
+        def finish(summary: dict[str, Any]) -> dict[str, Any]:
+            if abandoned is not None:
+                summary["abandoned_runs"] = abandoned
+            return summary
+
         run = db.scalar(
             select(IngestionRun).where(IngestionRun.request_key == request_key)
         )
         if run and run.status == "success" and not force:
-            summary = (
-                summarize_backtest(db, run.id)
-                if registry is None
-                else _summarize_research_backtest(db, run)
-            )
+            summary = _summarize_backtest_run(db, run)
             summary["idempotent_reuse"] = True
-            return summary
+            return finish(summary)
         if not run:
             run = IngestionRun(
                 run_type="backtest",
@@ -6223,10 +6253,9 @@ def backtest(
             # derived as-of features visible to the subsequent group/signal
             # queries before replaying each score date.
             db.flush()
-            # A research run commits as it goes so the transaction (the WAL)
-            # stays one session's size; a failed one keeps what it committed.
-            if registry is not None:
-                db.commit()
+            # Commit as it goes so the transaction (the WAL) and the session
+            # stay one score date's size; a failed run keeps what it committed.
+            db.commit()
             score_dates = db.scalars(
                 select(MarketBar.trading_date)
                 .where(
@@ -6240,6 +6269,12 @@ def backtest(
             metadata["as_of_rule"] = (
                 "all feature/group inputs are bounded by score_date"
             )
+            # The JSON column does not track in-place changes, and with
+            # expire_on_commit=False its committed value is this same mutated
+            # dict, so even a new equal dict would not be written.
+            run.metadata_json = dict(metadata)
+            flag_modified(run, "metadata_json")
+            db.commit()
             signal_count = 0
             for score_date in score_dates:
                 _calculate_group_scores(db, score_date)
@@ -6251,46 +6286,17 @@ def backtest(
                     namespace=f"backtest-{run.id}",
                     registry=registry,
                 )
-                if registry is not None:
-                    db.flush()
-                    db.commit()
-                    _pause_if(should_stop)
-            # The session intentionally uses autoflush=False.  Flush the
-            # final score date before auditing the run, otherwise the last
-            # day's strategy rows disappear from signal_count and
-            # zero_actionable_count until after the run has been committed.
-            db.flush()
-            if registry is not None:
-                (
-                    signal_count,
-                    evaluations,
-                    settlements,
-                    zero_actionable_count,
-                ) = _track_research_signals(db, run.id, end_date, should_stop)
-            else:
-                backtest_signals = db.scalars(
-                    select(Signal).where(Signal.signal_key.like(f"backtest-{run.id}-%"))
-                ).all()
-                signal_count = len(backtest_signals)
-                evaluations = 0
-                settlements = 0
-                for signal in backtest_signals:
-                    if not (signal.rule_evidence_json or {}).get("actionable"):
-                        continue
-                    current_evaluations, current_settlements = (
-                        _evaluate_signal_tracking(
-                            db,
-                            signal,
-                            evaluation_cutoff=end_date,
-                        )
-                    )
-                    evaluations += current_evaluations
-                    settlements += current_settlements
-                zero_actionable_count = sum(
-                    1
-                    for signal in backtest_signals
-                    if not (signal.rule_evidence_json or {}).get("actionable")
-                )
+                db.flush()
+                db.commit()
+                _pause_if(should_stop)
+            # Tracking reads the run's signals back one batch at a time
+            # instead of all at once (a year is over a million rows, #484).
+            (
+                signal_count,
+                evaluations,
+                settlements,
+                zero_actionable_count,
+            ) = _track_backtest_signals(db, run.id, end_date, should_stop)
             run.status = "success"
             run.records = signal_count
             run.data_as_of = end_date.isoformat()
@@ -6307,9 +6313,7 @@ def backtest(
             )
             run.finished_at = utcnow()
             db.commit()
-            if registry is not None:
-                return _summarize_research_backtest(db, run)
-            return summarize_backtest(db, run.id)
+            return finish(_summarize_backtest_run(db, run))
         except Exception as exc:
             db.rollback()
             failed = db.get(IngestionRun, run.id)
@@ -6323,19 +6327,21 @@ def backtest(
                 }
                 failed.finished_at = utcnow()
                 db.commit()
-            return {
-                "run": {
-                    "id": run.id,
-                    "status": "failed",
-                    "request_key": request_key,
+            return finish(
+                {
+                    "run": {
+                        "id": run.id,
+                        "status": "failed",
+                        "request_key": request_key,
+                        "assessment": "failed",
+                        "zero_actionable_count": 0,
+                    },
+                    "groups": [],
                     "assessment": "failed",
                     "zero_actionable_count": 0,
-                },
-                "groups": [],
-                "assessment": "failed",
-                "zero_actionable_count": 0,
-                "error": f"{type(exc).__name__}: {exc}",
-            }
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            )
 
 
 def run_daily(

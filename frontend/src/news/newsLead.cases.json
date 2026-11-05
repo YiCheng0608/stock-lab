@@ -1,0 +1,28 @@
+{
+  "about": "NEWS_SPEC §6 標題與摘要前綴清理: cleanNewsLead (frontend/src/news/newsView.ts) and display_title (tools/verify/page_checks.py) must both turn each input into its output.",
+  "cases": [
+    { "input": "■ 台積電狠甩英特爾", "output": "台積電狠甩英特爾", "why": "leading square" },
+    { "input": "● 外資連三買 台積電領漲", "output": "外資連三買 台積電領漲", "why": "leading dot" },
+    { "input": "◆★ 雙符號開頭", "output": "雙符號開頭", "why": "several marks" },
+    { "input": "[FTNN新聞網]記者陳献朋／綜合報導台股加權指數本週收在47111.26點", "output": "台股加權指數本週收在47111.26點", "why": "outlet bracket, then reporter 綜合報導" },
+    { "input": "[FTNN新聞網]實習記者周宗怡／綜合報導瑞士百年巧克力品牌", "output": "瑞士百年巧克力品牌", "why": "實習記者" },
+    { "input": "【時報記者郭鴻慧台北報導】遠雄(5522)板橋府中住宅案", "output": "遠雄(5522)板橋府中住宅案", "why": "bracketed byline" },
+    { "input": "【記者蕭文康／台北報導】台積電（2330）周四舉行法說會", "output": "台積電（2330）周四舉行法說會", "why": "bracketed reporter with slash" },
+    { "input": "【財經中心╱台北報導】隨著恐慌指數VIX突破22", "output": "隨著恐慌指數VIX突破22", "why": "desk byline" },
+    { "input": "（中央社記者潘智義新竹17日電）友達董事長彭双浪表示", "output": "友達董事長彭双浪表示", "why": "CNA dateline" },
+    { "input": "[Newtalk新聞] 台積電本月15日召開法說會", "output": "台積電本月15日召開法說會", "why": "outlet bracket ending in 新聞" },
+    { "input": "【中時新聞網 吳美觀】台股16日呈現量縮震盪", "output": "台股16日呈現量縮震盪", "why": "outlet and reporter in one bracket" },
+    { "input": "記者王小明／台北報導 台股開高走低", "output": "台股開高走低", "why": "bare reporter clause" },
+    { "input": "■ [FTNN新聞網]記者莊蕙如／綜合報導 台積電法說會後", "output": "台積電法說會後", "why": "mark, outlet and reporter together" },
+    { "input": "  台積電\n法說會　登場 ", "output": "台積電 法說會 登場", "why": "whitespace collapses as before" },
+    { "input": "《營建股》遠雄明年佈局5大建案", "output": "《營建股》遠雄明年佈局5大建案", "why": "section label stays" },
+    { "input": "【盤前】恐慌指數急拉費半狂瀉", "output": "【盤前】恐慌指數急拉費半狂瀉", "why": "section label stays" },
+    { "input": "〈熱門股〉敬鵬獲新訂單挹注", "output": "〈熱門股〉敬鵬獲新訂單挹注", "why": "section label stays" },
+    { "input": "【新聞快訊】台股開盤", "output": "【新聞快訊】台股開盤", "why": "a label that only contains 新聞 stays" },
+    { "input": "[更新]公告本公司竹北AI第二廠區", "output": "[更新]公告本公司竹北AI第二廠區", "why": "MOPS amendment tag stays" },
+    { "input": "(影)《晶爆新頭殼》台積電喊無稀土馬達", "output": "(影)《晶爆新頭殼》台積電喊無稀土馬達", "why": "video tag stays" },
+    { "input": "記者會揭細節 鴻海三菱共治", "output": "記者會揭細節 鴻海三菱共治", "why": "記者 without a byline slash stays" },
+    { "input": "快訊／台股開盤重挫逾800點", "output": "快訊／台股開盤重挫逾800點", "why": "no reporter, stays" },
+    { "input": "■", "output": "■", "why": "nothing left: keep the source text" }
+  ]
+}

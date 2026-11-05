@@ -128,6 +128,7 @@ from .units import (
     volume_exact_text,
 )
 from .strategies import REGISTRY
+from .signal_versions import product_signal, product_signal_ids
 from .strategy_board import strategy_board
 from .stock_bars import (
     DEFAULT_LIMIT as BARS_DEFAULT_LIMIT,
@@ -1119,6 +1120,23 @@ def _decode_news_cursor(cursor: str | None) -> tuple[Any, ...] | None:
         raise HTTPException(status_code=400, detail="invalid cursor")
 
 
+def _watchlist_symbol_keys(db: Session) -> set[str]:
+    """Watchlisted instruments as the two forms ``news_items.symbols_json`` uses.
+
+    Media rows store ``EXCHANGE:SYMBOL``; official projections store the bare
+    code. Listed and OTC codes never repeat, so the bare code is one stock.
+    """
+
+    keys: set[str] = set()
+    for exchange, symbol in db.execute(
+        select(Instrument.exchange, Instrument.symbol).where(
+            Instrument.is_watchlisted.is_(True)
+        )
+    ):
+        keys.update((f"{exchange}:{symbol}", symbol))
+    return keys
+
+
 def _news_theme_ids(
     db: Session, item: NewsItem, event: Event | None = None
 ) -> list[str]:
@@ -1828,10 +1846,17 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
     )
     bars_count = db.scalar(select(func.count(MarketBar.id))) or 0
     signal_rows = db.scalars(
-        select(Signal).order_by(desc(Signal.signal_date), desc(Signal.id)).limit(8)
+        select(Signal)
+        .where(product_signal())
+        .order_by(desc(Signal.signal_date), desc(Signal.id))
+        .limit(8)
     ).all()
     status_rows = db.execute(
-        select(Signal.status, func.count(Signal.id)).group_by(Signal.status)
+        select(Signal.status, func.count(Signal.id))
+        # The ids from the signal_key index, then the status index alone: a
+        # filter on the key itself makes SQLite read every row (#484 review).
+        .where(Signal.id.in_(product_signal_ids()))
+        .group_by(Signal.status)
     ).all()
     # The latest successful run (Issue #249: a newer holiday "skipped" run must
     # not blank as_of); the newest attempt only when none has succeeded.
@@ -1991,6 +2016,8 @@ def news(
     source_kind: str | None = None,
     impact_direction: str | None = None,
     time_consistency: str | None = Query(default=None),
+    verified_only: bool = False,
+    watchlist_only: bool = False,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     # Existing official Events may predate the product projection.  Refreshing
@@ -2024,6 +2051,8 @@ def news(
     ).all()
     needle = q.strip().casefold() if q and q.strip() else None
     symbol_needle = symbol.strip().casefold() if symbol and symbol.strip() else None
+    # The watchlist is read once for the whole list, never per item (#523).
+    watch_keys = _watchlist_symbol_keys(db) if watchlist_only else set()
     filtered: list[NewsItem] = []
     seen_keys: set[str] = set()
     for item in rows:
@@ -2048,6 +2077,14 @@ def news(
         if symbol_needle and not any(
             symbol_needle in str(value).casefold()
             for value in (item.symbols_json or [])
+        ):
+            continue
+        # NEWS_SPEC §6: the verified relations are symbols_json, the same list the
+        # card's tags come from (instruments, or the bare codes as a fallback).
+        if (verified_only or watchlist_only) and not item.symbols_json:
+            continue
+        if watchlist_only and not any(
+            str(value) in watch_keys for value in item.symbols_json
         ):
             continue
         if theme_id and theme_id not in _news_theme_ids(db, item):
@@ -3247,6 +3284,7 @@ def instrument_detail(
         select(Signal)
         .where(
             Signal.instrument_id == instrument.id,
+            product_signal(),
             Signal.signal_date <= (as_of or date.max),
         )
         .order_by(desc(Signal.signal_date), desc(Signal.id))
@@ -3395,7 +3433,11 @@ def signals(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     page_size = _effective_page_size(page_size, limit)
-    query = select(Signal).join(Instrument, Instrument.id == Signal.instrument_id)
+    query = (
+        select(Signal)
+        .join(Instrument, Instrument.id == Signal.instrument_id)
+        .where(product_signal())
+    )
     if status:
         query = query.where(Signal.status == status)
     if instrument_symbol:
@@ -3492,17 +3534,22 @@ def events(
 
 
 def _tracking_rows(db: Session, signal_key: str | None = None) -> list[dict[str, Any]]:
+    # The signal is chosen in SQL before the limit: a backtest run writes tens
+    # of thousands of newer evaluations, which would otherwise fill the 1,000
+    # rows and leave a product signal's tracking empty (#484).
     query = (
-        select(SignalEvaluation)
+        select(SignalEvaluation, Signal)
+        .join(Signal, Signal.id == SignalEvaluation.signal_id)
+        .where(
+            Signal.signal_key == signal_key
+            if signal_key is not None
+            else product_signal()
+        )
         .order_by(desc(SignalEvaluation.session_date), desc(SignalEvaluation.id))
         .limit(1000)
     )
-    evaluations = db.scalars(query).all()
     rows: list[dict[str, Any]] = []
-    for evaluation in evaluations:
-        signal = db.get(Signal, evaluation.signal_id)
-        if not signal or (signal_key and signal.signal_key != signal_key):
-            continue
+    for evaluation, signal in db.execute(query).all():
         instrument = db.get(Instrument, signal.instrument_id)
         rows.append(
             {

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import json
 import shutil
 import subprocess
 import sys
@@ -941,6 +942,60 @@ def test_n6_fails_when_generated_at_has_no_zone(tmp_path):
     run = _n6_run(tmp_path, "2026-10-21T16:01:32.746332", "待核實")
     with pytest.raises(page_checks.Fail, match="沒有時區"):
         page_checks.n6(run)
+
+
+def test_display_title_matches_the_frontend_cases():
+    """#523: the same cases the frontend news test runs through cleanNewsLead."""
+
+    cases = json.loads(
+        (ROOT / "frontend" / "src" / "news" / "newsLead.cases.json").read_text(
+            encoding="utf-8"
+        )
+    )["cases"]
+    assert len(cases) >= 20
+    wrong = [
+        (case["why"], page_checks.display_title(case["input"]), case["output"])
+        for case in cases
+        if page_checks.display_title(case["input"]) != case["output"]
+    ]
+    assert wrong == []
+    assert page_checks.display_title(None) == "標題未提供"
+
+
+def _n2_run(tmp_path, domestic_page):
+    items = [{"id": "1", "title": "■ 台積電狠甩英特爾"}]
+    empty = {
+        "news-international-1280": "目前沒有符合條件的國際新聞。\n",
+        "news-official-1280": "目前沒有符合條件的官方公告。\n",
+    }
+    return FakeRun(
+        tmp_path,
+        {
+            "news?category=domestic&limit=20": {"items": items},
+            "news?category=international&limit=20": {"items": []},
+            "news?source_kind=official_disclosure&limit=20": {"items": []},
+        },
+        {"news-1280": domestic_page, **empty},
+    )
+
+
+def test_n2_reads_the_cleaned_title(tmp_path):
+    # #523: the page drops the leading ■; the API keeps the source title.
+    page = "新聞\n台積電狠甩英特爾\n可能正向\nAI 推論\nYahoo奇摩股市\n·\n發布於 2026/11/05 23:49\n展開\n"
+    assert "domestic 前 1 則" in page_checks.n2(_n2_run(tmp_path, page))
+    raw = page.replace("台積電狠甩英特爾", "■ 台積電狠甩英特爾")
+    with pytest.raises(page_checks.Fail, match="缺 `台積電狠甩英特爾`"):
+        page_checks.n2(_n2_run(tmp_path, raw))
+
+
+def test_t6_reads_the_cleaned_title(tmp_path):
+    item = {"id": "7", "title": "● 新聞甲", "ai": AI_DONE}
+    run = FakeRun(
+        tmp_path,
+        {"dashboard": {"news": [item]}, "news/7": {"ai": AI_DONE}},
+        {"today-1280": "重點新聞\n新聞甲\n可能正向\nAI 推論\n熱門族群\n"},
+    )
+    assert "7 `可能正向`" in page_checks.t6(run)
 
 
 def test_news_source_label_matches_the_frontend():

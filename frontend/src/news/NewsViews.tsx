@@ -3,9 +3,11 @@ import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 
 import { Badge, Card, EmptyState, Skeleton, Tabs, tabId, tabPanelId } from '../components/ui'
+import { cx } from '../components/ui/cx'
 import { officialEventDisplayTitle } from '../presentation'
 import type { CursorPage, NewsAi, NewsItem } from '../types'
 import {
+  NEWS_RELATION_FILTERS,
   NEWS_TABS,
   NO_SUMMARY_TEXT,
   STOCK_NEWS_LIMIT,
@@ -17,6 +19,7 @@ import {
   candidateHref,
   candidateLabel,
   cardAiCandidates,
+  cleanNewsLead,
   directionView,
   sourceDirectionView,
   formatTaipeiInstant,
@@ -48,8 +51,10 @@ function errorReason(error: unknown): string {
   return error instanceof Error ? error.message : '請稍後重新整理'
 }
 
+// The shown title (#523): the official event names, then the leading marks and byline cleared (NEWS_SPEC §6); the
+// source title stays in the API and on /news/:id 技術資訊.
 function newsTitle(item: Pick<NewsItem, 'title'>): string {
-  return normalizeText(officialEventDisplayTitle(item.title)) ?? '標題未提供'
+  return cleanNewsLead(officialEventDisplayTitle(item.title)) ?? '標題未提供'
 }
 
 function DirectionText({ view }: { view: DirectionView }) {
@@ -77,10 +82,28 @@ function SourceLinkLine({ item }: { item: NewsItem }) {
   )
 }
 
-function RelationChips({ item }: { item: NewsItem }) {
+// UI_COPY_SPEC §4 (#523): the relation filters' empty states name the filter; the watchlist one also says where to add.
+function emptyReason(filters: NewsFilters): string {
+  if (filters.watchlist) return '目前沒有與自選股相關的新聞。自選清單是空的時不會有結果；個股頁勾選「我的自選」可查看目前的自選股。'
+  if (filters.verified) return '目前沒有符合條件、且有已核實標的的新聞。'
+  return TAB_EMPTY[filters.tab]
+}
+
+function RelationFilterChips({ filters, onChange }: { filters: NewsFilters; onChange: (filters: NewsFilters) => void }) {
+  return (
+    <div className="filter-chips news-relation-filters" role="group" aria-label="新聞關聯篩選">
+      {NEWS_RELATION_FILTERS.map(({ key, label }) => {
+        const pressed = Boolean(filters[key])
+        return <button key={key} type="button" className={cx('badge filter-chip', pressed && 'filter-chip-selected')} aria-pressed={pressed} onClick={() => onChange({ ...filters, [key]: !pressed })}>{label}</button>
+      })}
+    </div>
+  )
+}
+
+function RelationChips({ item, hideEmpty = false }: { item: NewsItem; hideEmpty?: boolean }) {
   const instruments = verifiedInstruments(item)
   const themes = userFacingNewsThemes(item)
-  if (!instruments.length && !themes.length) return <span className="small-note">未有已核實的標的或族群</span>
+  if (!instruments.length && !themes.length) return hideEmpty ? null : <span className="small-note">未有已核實的標的或族群</span>
   const version = ruleVersion(item)
   return (
     <div className="news-chips">
@@ -167,6 +190,79 @@ export function HomeNewsRow({ item }: { item: NewsItem }) {
   )
 }
 
+function ImpactText({ item }: { item: NewsItem }) {
+  const ai = usableAi(item)
+  return ai ? <><DirectionText view={aiDirection(ai)} /><AiBadge /></> : <DirectionText view={directionView(item.impact_direction)} />
+}
+
+function InstrumentTag({ instrument }: { instrument: ReturnType<typeof verifiedInstruments>[number] }) {
+  return instrument.href
+    ? <Link className="tag symbol-tag" to={instrument.href}>{instrument.label}</Link>
+    : <span className="tag">{instrument.label}</span>
+}
+
+// What the /news row keeps collapsed (#523, UI_COPY_SPEC §4): category and source kind, the summary preview, the verified
+// relations (with the rule version), the AI candidates and the source link; no line for a missing relation.
+function NewsRowDetail({ item }: { item: NewsItem }) {
+  const preview = summaryPreview(item)
+  return (
+    <div className="news-row-detail-body">
+      <div className="news-row-kind">{newsCategoryLabel(item.category)} · {sourceKindLabel(item.source_kind)}</div>
+      <p className={preview ? 'news-row-summary' : 'news-row-summary muted'}>{preview ?? NO_SUMMARY_TEXT}</p>
+      <RelationChips item={item} hideEmpty />
+      <AiCandidateRow item={item} />
+      <div className="news-row-links">
+        <SourceLinkLine item={item} />
+        <Link className="text-link" to={'/news/' + encodeURIComponent(item.id)}>詳情 →</Link>
+      </div>
+    </div>
+  )
+}
+
+// One /news item (#523, DESIGN_SYSTEM §5 新聞清單): the title on line 1; source · time · direction (「AI 推論」 after an AI
+// direction) and the verified instrument tags on line 2; 「展開」 opens the rest in a <details> under the row, so the
+// screenshot tool can open them all. Every part is a grid or flex item, so each is its own line of page text (page_checks
+// N2–N4). Line two is one element (`display: contents` on wide screens) so phones can lay it out as one unwrapped flex line,
+// with the direction moved up beside the title as on the today page.
+export function NewsListRow({ item, open, onOpen }: { item: NewsItem; open: boolean; onOpen: (open: boolean) => void }) {
+  const time = newsTime(item)
+  const title = newsTitle(item)
+  const instruments = verifiedInstruments(item)
+  const detailId = `news-row-detail-${item.id}`
+  return (
+    <li className={cx('news-row', open && 'news-row-open')} data-testid="news-card" data-news-id={item.id}>
+      <div className="news-row-main">
+        <h3 className="news-row-title"><Link to={'/news/' + encodeURIComponent(item.id)} title={title}>{title}</Link></h3>
+        <span className="news-row-impact"><ImpactText item={item} /></span>
+        <div className="news-row-line2">
+          <span className="news-row-source">{newsSourceName(item)}</span>
+          <span className="news-row-sep" aria-hidden="true">·</span>
+          {time.dateTime ? <time className="news-row-time" dateTime={time.dateTime}>{time.text}</time> : <span className="news-row-time">{time.text}</span>}
+          {instruments.length > 0 && <span className="news-row-tags">{instruments.map((instrument) => <InstrumentTag key={instrument.key} instrument={instrument} />)}</span>}
+          <button type="button" className="btn btn-ghost news-row-toggle" aria-expanded={open} aria-controls={detailId} onClick={() => onOpen(!open)}>{open ? '收合' : '展開'}</button>
+        </div>
+      </div>
+      <details className="news-row-detail" id={detailId} open={open} onToggle={(event) => onOpen(event.currentTarget.open)}>
+        <summary>{title}</summary>
+        <NewsRowDetail item={item} />
+      </details>
+    </li>
+  )
+}
+
+export function NewsList({ items, emptyReason }: { items: readonly NewsItem[]; emptyReason: string }) {
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set())
+  if (!items.length) return <Card><EmptyState reason={emptyReason} /></Card>
+  const toggle = (id: string, next: boolean) => setOpen((current) => {
+    if (current.has(id) === next) return current
+    const copy = new Set(current)
+    if (next) copy.add(id)
+    else copy.delete(id)
+    return copy
+  })
+  return <ol className="news-row-list">{items.map((item) => <NewsListRow key={item.id} item={item} open={open.has(item.id)} onOpen={(next) => toggle(item.id, next)} />)}</ol>
+}
+
 export function NewsCardList({ items, emptyReason, timeline = false }: { items: readonly NewsItem[]; emptyReason: string; timeline?: boolean }) {
   if (!items.length) return <Card><EmptyState reason={emptyReason} /></Card>
   return <div className={timeline ? 'news-cards news-timeline' : 'news-cards'}>{items.map((item) => <NewsCard key={item.id} item={item} />)}</div>
@@ -217,8 +313,7 @@ export function NewsListView({
   const data = query.data
   return (
     <div className="page news-page">
-      <section className="page-title">
-        <div className="eyebrow">新聞與公告</div>
+      <section className="page-title news-page-title">
         <h1>新聞</h1>
         <p>國內、國際財經新聞與官方公告；每則標示來源與時間，AI 摘要與判讀另標「AI 推論」。</p>
       </section>
@@ -226,13 +321,14 @@ export function NewsListView({
         <Tabs items={NEWS_TABS} value={filters.tab} onChange={(tab) => onFiltersChange({ ...filters, tab })} label="新聞分類" idPrefix="news" />
         <NewsFilterForm key={JSON.stringify(newsPageSearch(filters))} filters={filters} onSubmit={onFiltersChange} />
       </div>
+      <RelationFilterChips filters={filters} onChange={onFiltersChange} />
       <div id={tabPanelId('news', filters.tab)} role="tabpanel" aria-labelledby={tabId('news', filters.tab)} className="news-panel">
         {query.loading
           ? <Skeleton lines={6} label="新聞載入中…" />
           : query.error
             ? <Card><EmptyState title="新聞暫時無法載入" reason={errorReason(query.error)} /></Card>
             : data && <>
-              <NewsCardList items={data.items} emptyReason={TAB_EMPTY[filters.tab]} />
+              <NewsList key={JSON.stringify(newsPageSearch(filters))} items={data.items} emptyReason={emptyReason(filters)} />
               {(data.items.length > 0 || page > 1) && (
                 <div className="pagination-controls">
                   <span>第 {page} 頁 · 本頁 {data.items.length} 則{data.meta.total == null ? '' : ` · 共 ${data.meta.total.toLocaleString()} 則`}</span>
@@ -295,13 +391,13 @@ export function NewsDetailView({ item }: { item: NewsItem }) {
   const time = newsTime(item)
   const summary = normalizeText(item.summary)
   const description = normalizeText(item.description)
-  const title = officialEventDisplayTitle(item.title)
+  const title = newsTitle(item)
   return (
     <div className="page news-detail-page">
       <Link to="/news" className="back-link">← 回到新聞</Link>
       <section className="page-title">
         <div className="eyebrow">{newsCategoryLabel(item.category)} · {sourceKindLabel(item.source_kind)}</div>
-        <h1 className="news-detail-title">{title || '標題未提供'}</h1>
+        <h1 className="news-detail-title">{title}</h1>
       </section>
       <div className="news-detail-grid">
         <Card as="article" className="news-facts" eyebrow="來源事實" title={newsSourceName(item)} data-testid="news-facts">
@@ -322,7 +418,7 @@ export function NewsDetailView({ item }: { item: NewsItem }) {
             <div>來源類型：{sourceKindLabel(item.source_kind)}</div>
             <div>系統收錄時間：{productTimeText(item.product_time, 'collected_at')}</div>
             {item.impact?.method && <div>關聯方法：{item.impact.method.startsWith('rule:') ? `規則比對（名稱／簡稱／代號）${ruleVersion(item) ? ` · 規則版本 ${ruleVersion(item)}` : ''}` : '來源標示'}</div>}
-            {title !== item.title && <div>原始標題：{item.title}</div>}
+            {item.title && title !== normalizeText(item.title) && <div>原始標題：{item.title}</div>}
             <div>原始資料識別碼：{item.provenance?.raw_payload_id ?? '—'} · 事件識別碼：{item.provenance?.event_id ?? '—'}</div>
             <div>來源位置：{item.provenance?.endpoint ?? '—'}</div>
           </details>
