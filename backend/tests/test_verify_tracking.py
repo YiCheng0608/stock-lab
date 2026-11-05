@@ -255,7 +255,7 @@ def test_t13_counts_one_add_or_tracked_line_per_candidate(tmp_path):
     payload = _candidates()
     payload["items"][0]["open_plan_id"] = 1
     payload["items"][1]["open_plan_id"] = None
-    good = "明日候選\n已在追蹤\n加入追蹤\n"
+    good = "今日可買\n已在追蹤\n加入追蹤\n"
     run = FakeRun(tmp_path, {"candidates": payload}, {"today-1280": good})
     assert "`已在追蹤` 1 = open_plan_id" in page_checks.t13(run)
     run = FakeRun(

@@ -421,37 +421,6 @@ function ProductTimeSummary({
   )
 }
 
-export function CompactActionCard({ action }: { action: ActionSummary }) {
-  const instrument = action.instrument
-  const read = action.market_read
-  const explicitRead = read !== undefined
-  const validRead = !explicitRead || (read != null && !Array.isArray(read) && read.status === 'known'
-    && Array.isArray(read.invalid_fields) && read.invalid_fields.length === 0
-    && typeof action.current_price === 'number' && Number.isFinite(action.current_price) && action.current_price > 0)
-  const price = validRead && typeof action.current_price === 'number' && Number.isFinite(action.current_price) ? action.current_price : null
-  const incomplete = (explicitRead && !validRead) || ['data_insufficient', 'data_incomplete', 'insufficient_data'].includes(action.action_state)
-  const title = incomplete ? '策略判斷資料待補' : action.display_action || actionLabel(action.action_state)
-  const validChange = validRead && price !== null && typeof action.price_change === 'number' && Number.isFinite(action.price_change)
-    && typeof action.price_change_pct === 'number' && Number.isFinite(action.price_change_pct) && Number.isFinite(action.price_change_pct * 100)
-  // Change keeps the close's tick decimals (DESIGN_SYSTEM §3).
-  const digits = priceDigits(price, instrument.instrument_type)
-  const change = validChange
-    ? `漲跌（元） ${formatSignedNumber(action.price_change, digits)}（${formatSignedPercent(action.price_change_pct)}）`
-    : (validRead && price !== null && noPreviousCloseText(action.price_change_status)) || '漲跌待核實'
-  return (
-    <Link className="panel compact-action-card" to={actionPath(action)} aria-label={`${instrument.symbol} ${title}`}>
-      <div className="position-head"><span className="symbol-link"><strong>{instrument.symbol}</strong> {instrument.name}</span><span className="pill action-status-pill">{title}</span></div>
-      <div className="small-note">{marketDisplayLabel(instrument.exchange)} · {instrumentTypeLabel(instrument.instrument_type)}</div>
-      {action.position_quantity_status === 'unknown' && <span className="pill ambiguous">庫存數量待核實</span>}
-      <div className="compact-price" style={{ minWidth: 0, flexWrap: 'wrap' }}><div style={{ minWidth: 0, flex: '1 1 140px', overflowWrap: 'anywhere' }}><span className="compact-label">最近收盤（報價幣別元）</span><strong>{price !== null ? formatNumber(price, digits) : '待核實'}</strong></div><span style={{ minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' }} className={cx('compact-change', priceChangeTone(validChange ? action.price_change : null))}>{change}</span></div>
-      {explicitRead && !validRead && read?.status !== 'missing' && <div className="small-note">行情讀值無效，先核對原記錄。</div>}
-      {read?.status === 'missing' && <div className="small-note">尚無行情記錄。</div>}
-      <div className="small-note">資料日 {formatTaiwanDateTime(action.data_cutoff ?? action.price_as_of, true)}</div>
-      <span className="compact-detail-link">查看個股詳情 →</span>
-    </Link>
-  )
-}
-
 function NewsDetailPage() {
   const { newsId = '' } = useParams()
   const query = useQuery({ queryKey: ['news-detail', newsId], queryFn: () => getNewsDetail(newsId), enabled: Boolean(newsId) })

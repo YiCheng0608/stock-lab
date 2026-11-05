@@ -217,16 +217,6 @@ checkAligned('今日候選表', todayList, ['最近收盤（元）', 'RR', '總�
 const chart = render('StockBarsChart', () => <StockBarsChart data={barsResponse([tradedBar('2026-10-21', 21.1, 70), tradedBar('2026-10-22', 21.15, 71)])} interval="day" onIntervalChange={() => undefined} loading={false} error={null} />)
 checkAligned('K 線資料', chart, ['開（元）', '高（元）', '低（元）', '收（元）', '成交量（張）'])
 
-const action = {
-  instrument: { id: 1, exchange: 'TWSE', symbol: '1742', name: '台蠟', instrument_type: 'stock', etf_category: null },
-  action_state: 'conditional_entry', action_label_zh: '符合條件後可研究進場', current_price: 21.1, price_change: 0.6, price_change_pct: 0.0293,
-  market_read: { status: 'known', invalid_fields: [] }, price_as_of: '2026-10-22', data_cutoff: '2026-10-22',
-} as unknown as ActionSummary
-const CompactActionCard = component('CompactActionCard')
-const compact = render('CompactActionCard', () => <CompactActionCard {...{ action }} />)
-check(bodyText(compact).includes('21.10'), `今日與行動卡片: close keeps the tick decimals (21.10), got ${bodyText(compact).join('|')}`)
-check(compact.includes('+0.60') && compact.includes('+2.93%'), '今日與行動卡片: change uses the price decimals and the percent sign')
-
 const runs = [{ id: 1, updated_at: '2026-10-22T10:00:00+00:00', source: 'twse', run_date: '2026-10-22', status: 'success', records: 1234, data_as_of: '2026-10-22', error: null }]
 const IngestionRunTable = component('IngestionRunTable')
 checkAligned('系統頁擷取狀態', render('IngestionRunTable', () => <IngestionRunTable {...{ rows: runs }} />), ['資料量（筆）'])

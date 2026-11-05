@@ -107,7 +107,7 @@ check(text(body).includes('上市 · AI 伺服器（題材 #2）'), `股票欄�
 check(text(body).includes('突破型') && text(body).includes('161.50') && text(body).includes('157.82') && text(body).replace(/\s/g, '').includes('167.39／172.54'),
   `進場方式欄有策略類型與進場、停損、目標一／二: ${text(body).slice(0, 400)}`)
 
-// ---- 掛牌首日 replaces 新上市首日 (a market transfer also starts a new listing row, #475 review) ----
+// ---- first_trading_day reads 掛牌首日: a market transfer also starts a new listing row (#475 review) ----
 check(noPreviousCloseText('first_trading_day') === '掛牌首日', `first_trading_day: ${noPreviousCloseText('first_trading_day')}`)
 
 // ---- layout rules the static markup cannot show ----

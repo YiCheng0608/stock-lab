@@ -934,10 +934,13 @@ def source_lines(text: Text) -> list[int]:
     return [i for i, line in enumerate(text.lines) if line.startswith("來源：")]
 
 
-# A candidate table row starts with its stock cell (#493): `#1 2330 台積電` (rank, symbol,
+# An action-list row (觀察中, tier 1) starts with its rank cell and a tab (#276): `#1<TAB>…`.
+# Cards put `#1` on a line of its own, so the tab tells a table row from a card.
+RANK_ROW = re.compile(r"^#([0-9]+)\t")
+# A 今日可買 table row starts with its stock cell (#493): `#1 2330 台積電` (rank, symbol,
 # name on one line). The hot group rows put `#1` on a line of its own, and the phone cards
 # are hidden at 1280, so the symbol after the rank tells a table row.
-RANK_ROW = re.compile(r"^#([0-9]+) [0-9A-Z]+ ")
+CANDIDATE_ROW = re.compile(r"^#([0-9]+) [0-9A-Z]+ ")
 # CandidatesSection in frontend/src/candidates/CandidateViews.tsx (#493); the navbar has a
 # 今日可買 link too, so the title is the line after its eyebrow (hidden only at 640px and below).
 CANDIDATES_TITLE, CANDIDATES_EYEBROW = "今日可買", "條件已成立 · 依評分排序"
@@ -961,7 +964,7 @@ def candidate_ranks(text: Text) -> list[int]:
     return [
         int(match.group(1))
         for line in text.lines[start + 1 : end]
-        if (match := RANK_ROW.match(line))
+        if (match := CANDIDATE_ROW.match(line))
     ]
 
 
@@ -1940,7 +1943,10 @@ def s9(run: Run, stock: Stock) -> str:
 # The page is 觀察中 at /watch since #493; the old /actions redirects there (A18).
 ACTIONS = Shot("actions", "/watch")
 ACTIONS_LEGACY = Shot("actions-legacy", "/actions", (1280,))
-WATCH_TITLE, WATCH_EYEBROW = "觀察中", "追蹤與提醒"  # ActionsPage in frontend/src/App.tsx
+WATCH_TITLE, WATCH_EYEBROW = (
+    "觀察中",
+    "追蹤與提醒",
+)  # ActionsPage in frontend/src/App.tsx
 
 
 def actions_payload(run: Run) -> dict:
