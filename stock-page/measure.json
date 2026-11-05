@@ -1,0 +1,122 @@
+[
+  {
+    "stock": "2884",
+    "width": 1280,
+    "research_before": 1929,
+    "research_after": 959,
+    "reduction": "50.3%",
+    "summary_bottom": 552,
+    "verdict_bottom": 531,
+    "viewport": 800,
+    "overflow": false,
+    "errors": 0
+  },
+  {
+    "stock": "2884",
+    "width": 390,
+    "research_before": 2585,
+    "research_after": 1280,
+    "reduction": "50.5%",
+    "summary_bottom": 768,
+    "verdict_bottom": 493,
+    "viewport": 844,
+    "overflow": false,
+    "errors": 0
+  },
+  {
+    "stock": "1236",
+    "width": 1280,
+    "research_before": 1275,
+    "research_after": 640,
+    "reduction": "49.8%",
+    "summary_bottom": 649,
+    "verdict_bottom": 628,
+    "viewport": 800,
+    "overflow": false,
+    "errors": 0
+  },
+  {
+    "stock": "1236",
+    "width": 390,
+    "research_before": 1604,
+    "research_after": 851,
+    "reduction": "46.9%",
+    "summary_bottom": 833,
+    "verdict_bottom": 461,
+    "viewport": 844,
+    "overflow": false,
+    "errors": 0
+  },
+  {
+    "stock": "1240",
+    "width": 1280,
+    "research_before": 1222,
+    "research_after": 699,
+    "reduction": "42.8%",
+    "summary_bottom": 543,
+    "verdict_bottom": 522,
+    "viewport": 800,
+    "overflow": false,
+    "errors": 0
+  },
+  {
+    "stock": "1240",
+    "width": 390,
+    "research_before": 1542,
+    "research_after": 915,
+    "reduction": "40.7%",
+    "summary_bottom": 740,
+    "verdict_bottom": 541,
+    "viewport": 844,
+    "overflow": false,
+    "errors": 0
+  },
+  {
+    "stock": "009811",
+    "width": 1280,
+    "research_before": 1275,
+    "research_after": 640,
+    "reduction": "49.8%",
+    "summary_bottom": 649,
+    "verdict_bottom": 628,
+    "viewport": 800,
+    "overflow": false,
+    "errors": 0
+  },
+  {
+    "stock": "009811",
+    "width": 390,
+    "research_before": 1604,
+    "research_after": 851,
+    "reduction": "46.9%",
+    "summary_bottom": 875,
+    "verdict_bottom": 503,
+    "viewport": 844,
+    "overflow": false,
+    "errors": 0
+  },
+  {
+    "stock": "3718",
+    "width": 1280,
+    "research_before": 1351,
+    "research_after": 713,
+    "reduction": "47.2%",
+    "summary_bottom": 677,
+    "verdict_bottom": 656,
+    "viewport": 800,
+    "overflow": false,
+    "errors": 0
+  },
+  {
+    "stock": "3718",
+    "width": 390,
+    "research_before": 1735,
+    "research_after": 908,
+    "reduction": "47.7%",
+    "summary_bottom": 961,
+    "verdict_bottom": 561,
+    "viewport": 844,
+    "overflow": false,
+    "errors": 0
+  }
+]
