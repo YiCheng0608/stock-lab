@@ -111,6 +111,26 @@ candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(�
 - **限流**：`fetch_json` 對同一官方主機保持最小間隔（`www.twse.com.tw` 2.5 秒，其餘官方主機 1 秒），另有 429／5xx／暫時性 307 的有界重試。
 - **不要並行回補**：回補與 daily 都長時間寫 DB，analyze 也依 collect run 決定分析日；回補、回測期間停用 daily：scheduler 容器不必停：`backfill`、`backtest` 起跑時自己開[維護模式](#維護模式)（daily 與 news 不跑，看門狗與 monitor 照常），結束時自己關，作業死掉由 serve 在心跳逾時後解除。工作排程器（切換前）是 `Disable-ScheduledTask`，完成後再啟用。
 
+### 技術回測
+
+`python -m worker.cli backtest --start-date <起> --end-date <迄>` 在正式環境的跑法：`docker compose -p <P> exec scheduler python -m worker.cli backtest …`，起跑時自己持有[維護模式](#維護模式)，不必停 scheduler。
+
+- **記憶體**：每個交易日與每 2,000 個訊號的追蹤批次各 commit 一次（[Tracking 口徑](../spec/tracking.md#tracking-與-technical-backtest-口徑)第 3 點，#484），所以記憶體不隨區間成長。
+  - **峰值**：在 2g 的 scheduler 容器、正式 DB 副本上，cgroup anon 峰值 1 個月 235 MB。
+  - **WAL**：最大約 34 MB。
+  - **#484 以前**：整段是一個 transaction，追蹤時一次載入全部回測訊號（約 14 KB／訊號）。1 個月就到 2,002 MB；12 個月的 run 2286 被 OOM 結束。
+- **耗時**：
+  - **固定成本**：`init_db` 約 4 分鐘（2.99 GB 的 DB），features 約 1.6 分鐘。
+  - **重播**：每個交易日約 95～100 秒，其中族群分數約 60 秒、訊號約 36 秒，隨交易日數線性成長。
+  - **追蹤**：1 個月約 30 秒。
+  - **合計**：1 個月約 40 分鐘。
+- **何時跑**：預估會跨過 21:30 就改在 23:30 後起跑。原因是 21:30 的 daily 會被維護模式跳過，要等回測結束才補跑。
+- **中途失敗**：OOM、`docker stop`、例外都算。已 commit 的訊號與結算會留下，run 記 `failed`；以相同起訖重跑，會覆寫成一次跑完的結果。
+  - 行程被殺時 `finally` 不會執行，run 會停在 `running`。下一次 canonical backtest 開始時，會把它記成 `failed`（`abandoned:`），並列在輸出的 `abandoned_runs`。
+- **量記憶體**：
+  - 每 5 秒讀一次容器 cgroup `memory.stat` 的 `anon`，取最大值；同時記行程的 `VmRSS`。
+  - `memory.peak` 與 `docker stats` 的 MEM USAGE 含 page cache，讀這份 DB 時就會頂到 2g，不能用來判斷會不會 OOM。
+
 ## 維護模式
 
 回補、回測、`init-db` 這類長時間寫 DB 的作業期間，以維護模式取代停 scheduler（#468）：daily 與 news 不執行，看門狗與[事件 monitor](MONITOR.md) 照常跑，統籌照樣收得到 Issue／PR 留言與 CI 的事件。#468 以前停 scheduler 會連 monitor 一起停：2026-11-04 技術回測前停了 scheduler，回測結束就 `start` 的那一步放在統籌 session 的背景指令裡，換手時跟著消失；回測又在 04:52 被 OOM 結束，scheduler 一直停到 05:15 部署時才起來，約 7.5 小時沒有 monitor、看門狗與 news（[#468 決定](https://github.com/YiCheng0608/stock-lab/issues/468#issuecomment-6646001167)）。所以恢復不靠任何 session：作業自己開關，作業死掉由 serve 解除。
