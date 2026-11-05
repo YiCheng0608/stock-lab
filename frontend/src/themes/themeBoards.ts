@@ -1,4 +1,5 @@
 import { formatDay } from '../dates'
+import { noPreviousCloseText } from '../marketChange'
 import type { ChartTheme } from '../stock/stockBars'
 import type {
   ThemeBoard,
@@ -194,7 +195,8 @@ export function memberTableNote(rows: ReadonlyArray<MemberValues>, membersAsOf: 
   const fresh = valued.filter((row) => row.latest_bar && !memberStaleDate(row, membersAsOf))
   const sentences = [
     [fresh.some((row) => row.change_status === 'no_previous_close'), '漲跌幅空白表示前一交易日沒有收盤價，不計算漲跌。'],
-    [fresh.some((row) => row.change_status !== 'known' && row.change_status !== 'no_previous_close'), '漲跌幅空白表示漲跌待核實。'],
+    [fresh.some((row) => row.change_status === 'first_trading_day'), '漲跌幅空白表示該檔為新上市首日，沒有前一交易日收盤。'],
+    [fresh.some((row) => row.change_status !== 'known' && !noPreviousCloseText(row.change_status)), '漲跌幅空白表示漲跌待核實。'],
     [fresh.some((row) => row.turnover_status === 'unavailable'), '成交金額空白表示來源未提供。'],
     [fresh.some((row) => row.turnover_status === 'unknown'), '成交金額空白表示待核實。'],
     [valued.some((row) => !isFiniteNumber(row.excess_return_5d) || !isFiniteNumber(row.excess_return_20d)), '5／20 日相對空白表示未列入當日族群計分。'],

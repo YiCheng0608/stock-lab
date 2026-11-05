@@ -1,19 +1,50 @@
 {
-  "schema_version": "news-full-name-aliases/v1",
-  "rule": "公司名稱（去掉「股份有限公司」）以另一檔上市中普通股的兩字簡稱開頭時，把全名當成自己公司的別名（NEWS_SPEC §2 規則關聯）",
+  "schema_version": "news-full-name-aliases/v2",
+  "rule": "公司名稱（去掉「股份有限公司」）以另一檔上市中普通股的兩字簡稱（含去掉投控／控股後成為兩字的簡稱）開頭時，把全名，以及從結尾逐一去掉產業尾詞（INDUSTRY_SUFFIXES）後仍有三字以上的名稱，當成自己公司的別名；與任一檔的簡稱相同或兩家公司共用的名稱不收（NEWS_SPEC §2 規則關聯）",
   "generated_by": "tools/research/news_full_name_aliases.py",
+  "industry_suffixes": [
+    "國際",
+    "實業",
+    "企業",
+    "工業",
+    "科技",
+    "電子",
+    "電機",
+    "電能",
+    "碳素",
+    "化學",
+    "化工",
+    "光電",
+    "精密",
+    "材料",
+    "生技",
+    "生物科技",
+    "工程",
+    "建設",
+    "開發",
+    "食品",
+    "紡織",
+    "機械",
+    "電腦",
+    "資訊",
+    "通訊",
+    "半導體",
+    "投資控股",
+    "控股",
+    "集團"
+  ],
   "sources": [
     {
       "endpoint": "https://openapi.twse.com.tw/v1/opendata/t187ap03_L",
-      "raw_payload_id": 9688,
+      "raw_payload_id": 9706,
       "sha256": "b845f01d02879d40ddf1232ce1d0536d934feab9601df03653944c04186e1afd",
       "report_date": "1151103"
     },
     {
       "endpoint": "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O",
-      "raw_payload_id": 9691,
-      "sha256": "384855d348a86b812346c6439b471024b70860ced0b223ce7ab6d1c1589b4aeb",
-      "report_date": "1151103"
+      "raw_payload_id": 9716,
+      "sha256": "a29acf953dc422122f9830e9a81fa5352f039677694ad5a5d5864dac9f9d8974",
+      "report_date": "1151104"
     }
   ],
   "aliases": [
@@ -22,6 +53,8 @@
       "symbol": "2756",
       "short_name": "聯發國際",
       "full_name": "聯發國際餐飲事業",
+      "alias": "聯發國際餐飲事業",
+      "stripped": [],
       "starts_with": [
         "TWSE:1459 聯發"
       ]
@@ -31,6 +64,8 @@
       "symbol": "3083",
       "short_name": "網龍",
       "full_name": "中華網龍",
+      "alias": "中華網龍",
+      "stripped": [],
       "starts_with": [
         "TWSE:2204 中華"
       ]
@@ -40,6 +75,8 @@
       "symbol": "3228",
       "short_name": "金麗科",
       "full_name": "金麗科技",
+      "alias": "金麗科技",
+      "stripped": [],
       "starts_with": [
         "TWSE:8429 金麗"
       ]
@@ -49,6 +86,8 @@
       "symbol": "3388",
       "short_name": "崇越電",
       "full_name": "崇越電通",
+      "alias": "崇越電通",
+      "stripped": [],
       "starts_with": [
         "TWSE:5434 崇越"
       ]
@@ -58,6 +97,8 @@
       "symbol": "4160",
       "short_name": "訊聯基因",
       "full_name": "訊聯基因數位",
+      "alias": "訊聯基因數位",
+      "stripped": [],
       "starts_with": [
         "TPEx:1784 訊聯"
       ]
@@ -67,6 +108,21 @@
       "symbol": "4205",
       "short_name": "中華食",
       "full_name": "中華食品實業",
+      "alias": "中華食品實業",
+      "stripped": [],
+      "starts_with": [
+        "TWSE:2204 中華"
+      ]
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "4205",
+      "short_name": "中華食",
+      "full_name": "中華食品實業",
+      "alias": "中華食品",
+      "stripped": [
+        "實業"
+      ],
       "starts_with": [
         "TWSE:2204 中華"
       ]
@@ -76,6 +132,8 @@
       "symbol": "4903",
       "short_name": "聯光通",
       "full_name": "聯合光纖通信",
+      "alias": "聯合光纖通信",
+      "stripped": [],
       "starts_with": [
         "TPEx:4129 聯合"
       ]
@@ -85,6 +143,21 @@
       "symbol": "5364",
       "short_name": "力麗店",
       "full_name": "力麗觀光開發",
+      "alias": "力麗觀光開發",
+      "stripped": [],
+      "starts_with": [
+        "TWSE:1444 力麗"
+      ]
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "5364",
+      "short_name": "力麗店",
+      "full_name": "力麗觀光開發",
+      "alias": "力麗觀光",
+      "stripped": [
+        "開發"
+      ],
       "starts_with": [
         "TWSE:1444 力麗"
       ]
@@ -94,6 +167,21 @@
       "symbol": "5508",
       "short_name": "永信建",
       "full_name": "永信建設開發",
+      "alias": "永信建設開發",
+      "stripped": [],
+      "starts_with": [
+        "TWSE:3705 永信"
+      ]
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "5508",
+      "short_name": "永信建",
+      "full_name": "永信建設開發",
+      "alias": "永信建設",
+      "stripped": [
+        "開發"
+      ],
       "starts_with": [
         "TWSE:3705 永信"
       ]
@@ -103,6 +191,8 @@
       "symbol": "5609",
       "short_name": "中菲行",
       "full_name": "中菲行國際物流",
+      "alias": "中菲行國際物流",
+      "stripped": [],
       "starts_with": [
         "TPEx:5403 中菲"
       ]
@@ -112,6 +202,8 @@
       "symbol": "6015",
       "short_name": "宏遠證",
       "full_name": "宏遠證券",
+      "alias": "宏遠證券",
+      "stripped": [],
       "starts_with": [
         "TWSE:1460 宏遠"
       ]
@@ -121,6 +213,8 @@
       "symbol": "6163",
       "short_name": "華電網",
       "full_name": "華電聯網",
+      "alias": "華電聯網",
+      "stripped": [],
       "starts_with": [
         "TWSE:1603 華電"
       ]
@@ -130,6 +224,21 @@
       "symbol": "6510",
       "short_name": "精測",
       "full_name": "中華精測科技",
+      "alias": "中華精測科技",
+      "stripped": [],
+      "starts_with": [
+        "TWSE:2204 中華"
+      ]
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "6510",
+      "short_name": "精測",
+      "full_name": "中華精測科技",
+      "alias": "中華精測",
+      "stripped": [
+        "科技"
+      ],
       "starts_with": [
         "TWSE:2204 中華"
       ]
@@ -139,6 +248,21 @@
       "symbol": "6535",
       "short_name": "順藥",
       "full_name": "順天醫藥生技",
+      "alias": "順天醫藥生技",
+      "stripped": [],
+      "starts_with": [
+        "TWSE:5525 順天"
+      ]
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "6535",
+      "short_name": "順藥",
+      "full_name": "順天醫藥生技",
+      "alias": "順天醫藥",
+      "stripped": [
+        "生技"
+      ],
       "starts_with": [
         "TWSE:5525 順天"
       ]
@@ -148,6 +272,8 @@
       "symbol": "6548",
       "short_name": "長科",
       "full_name": "長華科技",
+      "alias": "長華科技",
+      "stripped": [],
       "starts_with": [
         "TWSE:8070 長華"
       ]
@@ -157,6 +283,8 @@
       "symbol": "6697",
       "short_name": "東捷資訊",
       "full_name": "東捷資訊服務",
+      "alias": "東捷資訊服務",
+      "stripped": [],
       "starts_with": [
         "TPEx:8064 東捷"
       ]
@@ -166,6 +294,8 @@
       "symbol": "6727",
       "short_name": "亞泰金屬",
       "full_name": "亞泰金屬工業",
+      "alias": "亞泰金屬工業",
+      "stripped": [],
       "starts_with": [
         "TPEx:4974 亞泰"
       ]
@@ -175,6 +305,8 @@
       "symbol": "6811",
       "short_name": "宏碁資訊",
       "full_name": "宏碁資訊服務",
+      "alias": "宏碁資訊服務",
+      "stripped": [],
       "starts_with": [
         "TWSE:2353 宏碁"
       ]
@@ -184,6 +316,8 @@
       "symbol": "7708",
       "short_name": "全家餐飲",
       "full_name": "全家國際餐飲",
+      "alias": "全家國際餐飲",
+      "stripped": [],
       "starts_with": [
         "TPEx:5903 全家"
       ]
@@ -193,6 +327,8 @@
       "symbol": "7777",
       "short_name": "能率亞洲",
       "full_name": "能率亞洲資本",
+      "alias": "能率亞洲資本",
+      "stripped": [],
       "starts_with": [
         "TPEx:5392 能率"
       ]
@@ -202,6 +338,8 @@
       "symbol": "7819",
       "short_name": "精誠金融",
       "full_name": "精誠金融科技",
+      "alias": "精誠金融科技",
+      "stripped": [],
       "starts_with": [
         "TWSE:6214 精誠"
       ]
@@ -211,6 +349,21 @@
       "symbol": "8099",
       "short_name": "大世科",
       "full_name": "大同世界科技",
+      "alias": "大同世界科技",
+      "stripped": [],
+      "starts_with": [
+        "TWSE:2371 大同"
+      ]
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "8099",
+      "short_name": "大世科",
+      "full_name": "大同世界科技",
+      "alias": "大同世界",
+      "stripped": [
+        "科技"
+      ],
       "starts_with": [
         "TWSE:2371 大同"
       ]
@@ -220,6 +373,8 @@
       "symbol": "8415",
       "short_name": "大國鋼",
       "full_name": "大成國際鋼鐵",
+      "alias": "大成國際鋼鐵",
+      "stripped": [],
       "starts_with": [
         "TWSE:1210 大成"
       ]
@@ -229,6 +384,8 @@
       "symbol": "1225",
       "short_name": "福懋油",
       "full_name": "福懋油脂",
+      "alias": "福懋油脂",
+      "stripped": [],
       "starts_with": [
         "TWSE:1434 福懋"
       ]
@@ -238,6 +395,21 @@
       "symbol": "1231",
       "short_name": "聯華食",
       "full_name": "聯華食品工業",
+      "alias": "聯華食品工業",
+      "stripped": [],
+      "starts_with": [
+        "TWSE:1229 聯華"
+      ]
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "1231",
+      "short_name": "聯華食",
+      "full_name": "聯華食品工業",
+      "alias": "聯華食品",
+      "stripped": [
+        "工業"
+      ],
       "starts_with": [
         "TWSE:1229 聯華"
       ]
@@ -247,6 +419,8 @@
       "symbol": "1603",
       "short_name": "華電",
       "full_name": "中華電線電纜",
+      "alias": "中華電線電纜",
+      "stripped": [],
       "starts_with": [
         "TWSE:2204 中華"
       ]
@@ -256,6 +430,8 @@
       "symbol": "1623",
       "short_name": "大東電",
       "full_name": "大東電業廠",
+      "alias": "大東電業廠",
+      "stripped": [],
       "starts_with": [
         "TWSE:1441 大東"
       ]
@@ -265,8 +441,47 @@
       "symbol": "1723",
       "short_name": "中碳",
       "full_name": "中鋼碳素化學",
+      "alias": "中鋼碳素化學",
+      "stripped": [],
       "starts_with": [
         "TWSE:2002 中鋼"
+      ]
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "1723",
+      "short_name": "中碳",
+      "full_name": "中鋼碳素化學",
+      "alias": "中鋼碳素",
+      "stripped": [
+        "化學"
+      ],
+      "starts_with": [
+        "TWSE:2002 中鋼"
+      ]
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "1762",
+      "short_name": "中化生",
+      "full_name": "中化合成生技",
+      "alias": "中化合成生技",
+      "stripped": [],
+      "starts_with": [
+        "TWSE:3716 中化"
+      ]
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "1762",
+      "short_name": "中化生",
+      "full_name": "中化合成生技",
+      "alias": "中化合成",
+      "stripped": [
+        "生技"
+      ],
+      "starts_with": [
+        "TWSE:3716 中化"
       ]
     },
     {
@@ -274,6 +489,8 @@
       "symbol": "1905",
       "short_name": "華紙",
       "full_name": "中華紙漿",
+      "alias": "中華紙漿",
+      "stripped": [],
       "starts_with": [
         "TWSE:2204 中華"
       ]
@@ -283,6 +500,8 @@
       "symbol": "2006",
       "short_name": "東和鋼鐵",
       "full_name": "東和鋼鐵企業",
+      "alias": "東和鋼鐵企業",
+      "stripped": [],
       "starts_with": [
         "TWSE:1414 東和"
       ]
@@ -292,6 +511,21 @@
       "symbol": "2027",
       "short_name": "大成鋼",
       "full_name": "大成不銹鋼工業",
+      "alias": "大成不銹鋼工業",
+      "stripped": [],
+      "starts_with": [
+        "TWSE:1210 大成"
+      ]
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "2027",
+      "short_name": "大成鋼",
+      "full_name": "大成不銹鋼工業",
+      "alias": "大成不銹鋼",
+      "stripped": [
+        "工業"
+      ],
       "starts_with": [
         "TWSE:1210 大成"
       ]
@@ -301,6 +535,8 @@
       "symbol": "2072",
       "short_name": "世紀能源",
       "full_name": "世紀能源設備",
+      "alias": "世紀能源設備",
+      "stripped": [],
       "starts_with": [
         "TPEx:5314 世紀"
       ]
@@ -310,6 +546,8 @@
       "symbol": "2211",
       "short_name": "長榮鋼",
       "full_name": "長榮鋼鐵",
+      "alias": "長榮鋼鐵",
+      "stripped": [],
       "starts_with": [
         "TWSE:2603 長榮"
       ]
@@ -319,6 +557,8 @@
       "symbol": "2227",
       "short_name": "裕日車",
       "full_name": "裕隆日產汽車",
+      "alias": "裕隆日產汽車",
+      "stripped": [],
       "starts_with": [
         "TWSE:2201 裕隆"
       ]
@@ -328,6 +568,8 @@
       "symbol": "2303",
       "short_name": "聯電",
       "full_name": "聯華電子",
+      "alias": "聯華電子",
+      "stripped": [],
       "starts_with": [
         "TWSE:1229 聯華"
       ]
@@ -337,6 +579,8 @@
       "symbol": "2408",
       "short_name": "南亞科",
       "full_name": "南亞科技",
+      "alias": "南亞科技",
+      "stripped": [],
       "starts_with": [
         "TWSE:1303 南亞"
       ]
@@ -346,6 +590,8 @@
       "symbol": "2412",
       "short_name": "中華電",
       "full_name": "中華電信",
+      "alias": "中華電信",
+      "stripped": [],
       "starts_with": [
         "TWSE:2204 中華"
       ]
@@ -355,6 +601,8 @@
       "symbol": "2427",
       "short_name": "三商電",
       "full_name": "三商電腦",
+      "alias": "三商電腦",
+      "stripped": [],
       "starts_with": [
         "TWSE:2905 三商"
       ]
@@ -364,6 +612,8 @@
       "symbol": "2454",
       "short_name": "聯發科",
       "full_name": "聯發科技",
+      "alias": "聯發科技",
+      "stripped": [],
       "starts_with": [
         "TWSE:1459 聯發"
       ]
@@ -373,6 +623,8 @@
       "symbol": "2492",
       "short_name": "華新科",
       "full_name": "華新科技",
+      "alias": "華新科技",
+      "stripped": [],
       "starts_with": [
         "TWSE:1605 華新"
       ]
@@ -382,6 +634,8 @@
       "symbol": "2515",
       "short_name": "中工",
       "full_name": "中華工程",
+      "alias": "中華工程",
+      "stripped": [],
       "starts_with": [
         "TWSE:2204 中華"
       ]
@@ -391,6 +645,8 @@
       "symbol": "2530",
       "short_name": "華建",
       "full_name": "大華建設",
+      "alias": "大華建設",
+      "stripped": [],
       "starts_with": [
         "TWSE:9905 大華"
       ]
@@ -400,6 +656,8 @@
       "symbol": "2537",
       "short_name": "聯上發",
       "full_name": "聯上開發",
+      "alias": "聯上開發",
+      "stripped": [],
       "starts_with": [
         "TPEx:4113 聯上"
       ]
@@ -409,6 +667,8 @@
       "symbol": "2539",
       "short_name": "櫻花建",
       "full_name": "櫻花建設",
+      "alias": "櫻花建設",
+      "stripped": [],
       "starts_with": [
         "TWSE:9911 櫻花"
       ]
@@ -418,6 +678,8 @@
       "symbol": "2607",
       "short_name": "榮運",
       "full_name": "長榮國際儲運",
+      "alias": "長榮國際儲運",
+      "stripped": [],
       "starts_with": [
         "TWSE:2603 長榮"
       ]
@@ -427,6 +689,8 @@
       "symbol": "2610",
       "short_name": "華航",
       "full_name": "中華航空",
+      "alias": "中華航空",
+      "stripped": [],
       "starts_with": [
         "TWSE:2204 中華"
       ]
@@ -436,6 +700,8 @@
       "symbol": "2618",
       "short_name": "長榮航",
       "full_name": "長榮航空",
+      "alias": "長榮航空",
+      "stripped": [],
       "starts_with": [
         "TWSE:2603 長榮"
       ]
@@ -445,6 +711,8 @@
       "symbol": "2645",
       "short_name": "長榮航太",
       "full_name": "長榮航太科技",
+      "alias": "長榮航太科技",
+      "stripped": [],
       "starts_with": [
         "TWSE:2603 長榮"
       ]
@@ -454,6 +722,8 @@
       "symbol": "2712",
       "short_name": "遠雄來",
       "full_name": "遠雄悅來大飯店",
+      "alias": "遠雄悅來大飯店",
+      "stripped": [],
       "starts_with": [
         "TWSE:5522 遠雄"
       ]
@@ -463,6 +733,8 @@
       "symbol": "2820",
       "short_name": "華票",
       "full_name": "中華票券金融",
+      "alias": "中華票券金融",
+      "stripped": [],
       "starts_with": [
         "TWSE:2204 中華"
       ]
@@ -472,6 +744,8 @@
       "symbol": "2855",
       "short_name": "統一證",
       "full_name": "統一綜合證券",
+      "alias": "統一綜合證券",
+      "stripped": [],
       "starts_with": [
         "TWSE:1216 統一"
       ]
@@ -481,6 +755,8 @@
       "symbol": "2912",
       "short_name": "統一超",
       "full_name": "統一超商",
+      "alias": "統一超商",
+      "stripped": [],
       "starts_with": [
         "TWSE:1216 統一"
       ]
@@ -490,6 +766,8 @@
       "symbol": "3008",
       "short_name": "大立光",
       "full_name": "大立光電",
+      "alias": "大立光電",
+      "stripped": [],
       "starts_with": [
         "TPEx:4716 大立"
       ]
@@ -499,6 +777,21 @@
       "symbol": "3532",
       "short_name": "台勝科",
       "full_name": "台塑勝高科技",
+      "alias": "台塑勝高科技",
+      "stripped": [],
+      "starts_with": [
+        "TWSE:1301 台塑"
+      ]
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "3532",
+      "short_name": "台勝科",
+      "full_name": "台塑勝高科技",
+      "alias": "台塑勝高",
+      "stripped": [
+        "科技"
+      ],
       "starts_with": [
         "TWSE:1301 台塑"
       ]
@@ -508,6 +801,8 @@
       "symbol": "3576",
       "short_name": "聯合再生",
       "full_name": "聯合再生能源",
+      "alias": "聯合再生能源",
+      "stripped": [],
       "starts_with": [
         "TPEx:4129 聯合"
       ]
@@ -517,6 +812,8 @@
       "symbol": "5236",
       "short_name": "凌陽創新",
       "full_name": "凌陽創新科技",
+      "alias": "凌陽創新科技",
+      "stripped": [],
       "starts_with": [
         "TWSE:2401 凌陽"
       ]
@@ -526,6 +823,21 @@
       "symbol": "5607",
       "short_name": "遠雄港",
       "full_name": "遠雄自貿港投資控股",
+      "alias": "遠雄自貿港投資控股",
+      "stripped": [],
+      "starts_with": [
+        "TWSE:5522 遠雄"
+      ]
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "5607",
+      "short_name": "遠雄港",
+      "full_name": "遠雄自貿港投資控股",
+      "alias": "遠雄自貿港",
+      "stripped": [
+        "投資控股"
+      ],
       "starts_with": [
         "TWSE:5522 遠雄"
       ]
@@ -535,6 +847,8 @@
       "symbol": "6281",
       "short_name": "全國電",
       "full_name": "全國電子",
+      "alias": "全國電子",
+      "stripped": [],
       "starts_with": [
         "TWSE:9937 全國"
       ]
@@ -544,6 +858,21 @@
       "symbol": "6412",
       "short_name": "群電",
       "full_name": "群光電能科技",
+      "alias": "群光電能科技",
+      "stripped": [],
+      "starts_with": [
+        "TWSE:2385 群光"
+      ]
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "6412",
+      "short_name": "群電",
+      "full_name": "群光電能科技",
+      "alias": "群光電能",
+      "stripped": [
+        "科技"
+      ],
       "starts_with": [
         "TWSE:2385 群光"
       ]
@@ -553,6 +882,8 @@
       "symbol": "6505",
       "short_name": "台塑化",
       "full_name": "台塑石化",
+      "alias": "台塑石化",
+      "stripped": [],
       "starts_with": [
         "TWSE:1301 台塑"
       ]
@@ -562,6 +893,8 @@
       "symbol": "6754",
       "short_name": "匯僑設計",
       "full_name": "匯僑室內裝修設計",
+      "alias": "匯僑室內裝修設計",
+      "stripped": [],
       "starts_with": [
         "TWSE:2904 匯僑"
       ]
@@ -571,6 +904,8 @@
       "symbol": "7765",
       "short_name": "中華資安",
       "full_name": "中華資安國際",
+      "alias": "中華資安國際",
+      "stripped": [],
       "starts_with": [
         "TWSE:2204 中華"
       ]
@@ -580,6 +915,8 @@
       "symbol": "7821",
       "short_name": "神數",
       "full_name": "神達數位",
+      "alias": "神達數位",
+      "stripped": [],
       "starts_with": [
         "TWSE:3706 神達"
       ]
@@ -589,6 +926,21 @@
       "symbol": "8028",
       "short_name": "昇陽半導體",
       "full_name": "昇陽國際半導體",
+      "alias": "昇陽國際半導體",
+      "stripped": [],
+      "starts_with": [
+        "TWSE:3266 昇陽"
+      ]
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "8028",
+      "short_name": "昇陽半導體",
+      "full_name": "昇陽國際半導體",
+      "alias": "昇陽國際",
+      "stripped": [
+        "半導體"
+      ],
       "starts_with": [
         "TWSE:3266 昇陽"
       ]
@@ -598,6 +950,8 @@
       "symbol": "8046",
       "short_name": "南電",
       "full_name": "南亞電路板",
+      "alias": "南亞電路板",
+      "stripped": [],
       "starts_with": [
         "TWSE:1303 南亞"
       ]
@@ -607,6 +961,8 @@
       "symbol": "8131",
       "short_name": "福懋科",
       "full_name": "福懋科技",
+      "alias": "福懋科技",
+      "stripped": [],
       "starts_with": [
         "TWSE:1434 福懋"
       ]
@@ -616,6 +972,8 @@
       "symbol": "9105",
       "short_name": "泰金寶",
       "full_name": "泰金寶科技",
+      "alias": "泰金寶科技",
+      "stripped": [],
       "starts_with": [
         "TPEx:6629 泰金"
       ]
@@ -625,6 +983,8 @@
       "symbol": "911622",
       "short_name": "泰聚亨",
       "full_name": "聚亨企業集團(泰國)大眾",
+      "alias": "聚亨企業集團(泰國)大眾",
+      "stripped": [],
       "starts_with": [
         "TWSE:2022 聚亨"
       ]
@@ -634,6 +994,8 @@
       "symbol": "9907",
       "short_name": "統一實",
       "full_name": "統一實業",
+      "alias": "統一實業",
+      "stripped": [],
       "starts_with": [
         "TWSE:1216 統一"
       ]
@@ -643,6 +1005,8 @@
       "symbol": "9918",
       "short_name": "欣天然",
       "full_name": "欣欣天然氣",
+      "alias": "欣欣天然氣",
+      "stripped": [],
       "starts_with": [
         "TWSE:2901 欣欣"
       ]
@@ -652,9 +1016,12 @@
       "symbol": "9958",
       "short_name": "世紀鋼",
       "full_name": "世紀鋼鐵結構",
+      "alias": "世紀鋼鐵結構",
+      "stripped": [],
       "starts_with": [
         "TPEx:5314 世紀"
       ]
     }
-  ]
+  ],
+  "left_out_shared": []
 }

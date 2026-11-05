@@ -128,6 +128,9 @@ check(text(slice(table, 'data-candidate-rank="4"', '</tr>')).includes('-1.50%'),
 // #465: no close on the previous session the source published (no trade, suspended or newly listed) says so, not 待核實.
 const noPreviousClose = candidateChange({ trading_date: '2026-10-16', close: 13.2, change: null, change_pct: null, change_status: 'no_previous_close', source: 'tpex' })
 check(noPreviousClose.text === '前一交易日無收盤' && noPreviousClose.tone === null, `no previous close: ${noPreviousClose.text}`)
+// #475: a new listing's first day says so instead.
+const firstTradingDay = candidateChange({ trading_date: '2026-10-16', close: 13.2, change: null, change_pct: null, change_status: 'first_trading_day', source: 'tpex' })
+check(firstTradingDay.text === '新上市首日' && firstTradingDay.tone === null, `first trading day: ${firstTradingDay.text}`)
 check(text(slice(table, 'data-candidate-rank="5"', '</tr>')).includes('待核實'), 'row #5: no bar on the day reads 待核實')
 // AI entry: a note (done or pending) is 「AI 推論 ▸」, none is 「AI 說明 ▸」.
 check(text(row1).includes('AI 推論 ▸'), 'AI entry: done note → 「AI 推論 ▸」')
