@@ -36,6 +36,7 @@ from sqlalchemy.orm import Session
 from app.clock import utcnow
 from app.db import SessionLocal
 from app.models import IngestionRun, Instrument
+from app.news import project_news, sync_news_from_events
 from worker.sources import (
     EventRecord,
     FetchedPayload,
@@ -548,6 +549,7 @@ def backfill_events(
     manifest: dict[str, dict[str, Any]] = {}
     warnings: list[str] = []
     stored = skipped = failures_in_a_row = 0
+    touched: list[Any] = []
     aborted: str | None = None
 
     def summarize(status: str) -> None:
@@ -583,15 +585,21 @@ def backfill_events(
                 if (event.exchange, event.symbol) not in instruments:
                     skipped += 1
                     continue
-                pipeline._upsert_event(
+                row = pipeline._upsert_event(
                     db, event, instruments, raw_ids.get(event.payload_sha256)
                 )
+                if row is not None:
+                    touched.append(row)
                 stored += 1
             manifest[day.isoformat()] = {"event_coverage": coverage}
             warnings.extend(day_warnings)
             record_quality(db, day, coverage, events)
             failures_in_a_row = failures_in_a_row + 1 if day_warnings else 0
             summarize("running")
+            # The date's events reach the news before its commit; the full
+            # projection with its fingerprint runs once at the end (#476).
+            sync_news_from_events(db, touched)
+            touched.clear()
             db.commit()
             if failures_in_a_row >= ABORT_AFTER_FAILURES:
                 aborted = (
@@ -613,6 +621,7 @@ def backfill_events(
     summarize("partial" if warnings or aborted else "success")
     run.error = aborted
     run.finished_at = utcnow()
+    project_news(db)
     return {
         "status": run.status,
         "run_id": run.id,

@@ -15,6 +15,7 @@ os.environ.update(scheduled_job.cli_environment(sys.argv[1:]))
 from app.config import DATA_DIR
 from app.db import init_db
 
+from .action_tiers import run_action_tiers
 from .backfill import BACKFILL_SCOPES, chunked_backfill
 from .candidate_notes import run_candidate_notes_batch
 from .candidates import run_candidates
@@ -33,6 +34,7 @@ from .market_summary import backfill_market_summaries
 from .mops_events import run_event_backfill
 from .news_batch import run_news_batch
 from .news_llm import DEFAULT_LIMIT as NEWS_LLM_DEFAULT_LIMIT, run_news_llm_batch
+from .news_projection import run_news_project
 from .pipeline import analyze, backtest, collect, evaluate, run_daily
 from .plan_tracking import run_plan_tracking
 from .schedule_runs import (
@@ -225,6 +227,17 @@ def main() -> None:
     )
     levels_parser.add_argument(
         "--date", dest="run_date", help="YYYY-MM-DD 訊號日；未指定使用最新訊號日"
+    )
+    tiers_parser = subparsers.add_parser(
+        "action-tiers",
+        help="預算首頁與行動頁的 action tier 日資料（daily 的 action_tiers 步驟；同日重跑改寫，#476）",
+    )
+    tiers_parser.add_argument(
+        "--date", dest="run_date", help="YYYY-MM-DD 交易日；未指定使用頁面的最新官方日"
+    )
+    subparsers.add_parser(
+        "news-project",
+        help="把全部官方事件投影成新聞並記下指紋（部署改投影規則的版本後跑一次，#476）",
     )
     margin_lists_parser = subparsers.add_parser(
         "margin-lists",
@@ -516,6 +529,10 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
         result = run_plan_tracking(parse_date(args.run_date))
     elif args.command == "strategy-levels":
         result = run_strategy_levels(parse_date(args.run_date))
+    elif args.command == "action-tiers":
+        result = run_action_tiers(parse_date(args.run_date))
+    elif args.command == "news-project":
+        result = run_news_project()
     elif args.command == "trading-calendar":
         result = run_trading_calendar(years=args.years)
     elif args.command == "no-trade-days":
@@ -615,6 +632,8 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
         "market-summary",
         "strategy-levels",
         "trading-calendar",
+        "action-tiers",
+        "news-project",
     } and result.get("status") not in {
         "success",
         "no_data",

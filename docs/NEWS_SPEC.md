@@ -27,6 +27,7 @@
 | 關聯 | exchange+symbol、題材、方法、原始證據、程度與生效／失效時間；不能只靠 symbol 消除跨市場歧義。 |
 | 影響 | scope、positive/negative/mixed/unknown、傳導理由、期間、反證與方法。 |
 | 稽核 | 事實引用、抽取／模型／提示版本、輸入雜湊、驗證結果；必要時含 reviewer／reviewed_at。 |
+| 官方事件投影 | `events` 投影成 `news_items`（`app.news`）。由寫入事件或族群成員的 worker 路徑在 commit 前投影；新聞與首頁 GET 只在投影指紋（`NEWS_PROJECTION_VERSION`、事件與成員）變了才重投影（[action tier 預算與新聞投影](ops/SCHEDULING.md#action-tier-預算與新聞投影)）。 |
 
 來源可信度、關聯證據、影響推論與預測機率必須分欄；confidence 不能一欄包辦或解讀為報酬把握。
 

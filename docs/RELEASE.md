@@ -122,7 +122,10 @@ bash tools/ops/deploy.sh "$TAG" --operator "<誰，依據的 #1 留言>"
 ```
 
 - **第 1 步用維護模式就夠**（#468）：維護模式中 serve 啟動的程序都不寫 `stock.db`。daily、news 只記日誌、不啟動 worker（連 skipped run 列也不寫）；看門狗以 `mode=ro`、`query_only` 讀 DB，DB 是 WAL，讀取不擋 `init-db` 的寫入；monitor 不開 DB（[維護模式](ops/SCHEDULING.md#維護模式)的「serve 不寫 DB 的範圍」）。開啟前就在跑的 job 由 `status` 的 `running_jobs` 看出來，所以要等它是 `[]`。手動開的維護模式沒有心跳、不會逾時解除，由第 6 步的 `deploy.sh` 關掉；作業持有的（例如同時在跑的回補）`deploy.sh` 不動，記 `kept_command_held`。好處是看門狗與 monitor 不停，部署期間的留言與 CI 事件照常喚醒統籌。`v1.2.1` 部署前是在 scheduler 停止的狀態下跑 `init-db`；正式 scheduler 還是 #468 以前的 image 時照那樣做。
-- **時間**：`init-db` 會先做遷移前的 schema 檢查。0023 → 0024 在正式副本上約 4 分鐘（238.5 s，建 index 本身不到 1 秒），這段時間 api 照常服務。
+- **時間**：`init-db` 會先做遷移前的 schema 檢查。0023 → 0024 在正式副本上約 4 分鐘（238.5 s，建 index 本身不到 1 秒）；0025 → 0026 約 1 分 40 秒（98.9 s，含回補 15,614 筆 `events.updated_at`，[#476](https://github.com/YiCheng0608/stock-lab/issues/476)）。這段時間 api 照常服務。
+- **部署後的補算**（#476 起）：第 6 步完成後，在新的 api 容器跑以下兩個命令。兩者都冪等，不跑也不會錯，只是第一個開頁的人要等即時計算：
+  - `docker compose -p "$P" exec api python -m worker.cli news-project`：tag 改了投影規則（`NEWS_PROJECTION_VERSION`），或第一次部署含 #476 的版本時跑。
+  - `docker compose -p "$P" exec api python -m worker.cli action-tiers`：預算最新官方日的 action tier。之後由 daily 的 action_tiers 步驟寫入（[action tier 預算與新聞投影](ops/SCHEDULING.md#action-tier-預算與新聞投影)）。
 - **`deploy.sh` 不會因為前面幾步拒絕**：發佈 checkout 停在同一個 tag，工作樹乾淨；本機已有的同名 tag 指向同一個 commit，fetch 照常通過；維護模式下 scheduler 照常在跑，`deploy.sh` 在它裡面取鎖（第 1 步停了 scheduler 時改在 api 容器）；第 4 步之後 DB 已在 tag 的 head，revision 比對通過。新 scheduler 起來時標記檔還在，所以它不在啟動時補跑 daily；`deploy.sh` 關掉維護模式後，serve 在一分鐘內偵測到解除，需要時補跑。
 - **第 6 步完成前不要關維護模式，也不要再啟動舊的 scheduler**：舊 scheduler 的 daily 起跑時會用自己的程式跑 `init_db`。舊 image 不認得新 revision，會失敗。第 6 步被拒絕或失敗時，修好原因後以同一個 tag 重跑 `deploy.sh`；要放棄這個版本，就照[版本回退](#版本回退)從第 2 步的備份還原。
 - `docker compose ... run` 用的是發佈 checkout 的 `.env`，跟 `deploy.sh` 相同；指令裡不要印出環境變數（[本機檢查](WORKFLOW.md#本機檢查)的 env file 規則）。
