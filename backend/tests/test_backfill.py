@@ -1455,3 +1455,63 @@ def test_target_not_met_when_a_trading_day_is_unverified(backfill_env, monkeypat
         "coverage": False,
     }
     assert _coverage_summary_via_api(backfill_env, monkeypatch)["target_met"] is False
+
+
+def test_collect_states_reads_the_catchup_rule_without_whole_metadata(backfill_env):
+    """``app.coverage.collect_states`` per weekday, NaN metadata included (#479)."""
+
+    from app.coverage import collect_states
+
+    monday = date(2026, 10, 19)
+    days = [monday + timedelta(days=offset) for offset in range(5)]
+    after_day = datetime(2026, 10, 31, 12, 0)
+    same_day = datetime(2026, 10, 23, 10, 0)  # 18:00 Taipei of 10/23
+    with backfill_env() as db:
+        db.add_all(
+            [
+                # json.dumps writes NaN; SQLite 3.40 json_extract refuses it.
+                IngestionRun(
+                    run_type="collect",
+                    source="official",
+                    run_date=days[0],
+                    status="success",
+                    records=2,
+                    metadata_json={"taiex_records": 1, "ratio": float("nan")},
+                ),
+                IngestionRun(
+                    run_type="collect",
+                    source="official",
+                    run_date=days[1],
+                    status="success",
+                    records=2,
+                    metadata_json={"taiex_records": 0},
+                ),
+                IngestionRun(
+                    run_type="collect",
+                    source="official",
+                    run_date=days[2],
+                    status="skipped",
+                    records=0,
+                    started_at=after_day,
+                    finished_at=after_day,
+                ),
+                IngestionRun(
+                    run_type="collect",
+                    source="official",
+                    run_date=days[4],
+                    status="skipped",
+                    records=0,
+                    started_at=same_day,
+                    finished_at=same_day,
+                ),
+            ]
+        )
+        db.commit()
+        states = collect_states(db, monday, monday + timedelta(days=6))
+    assert states == {
+        days[0]: "complete",
+        days[1]: "missing",  # a success without a TAIEX row
+        days[2]: "non_trading",  # no-data answered after the day ended
+        days[3]: "missing",  # never collected
+        days[4]: "missing",  # one same-day no-data, unconfirmed
+    }

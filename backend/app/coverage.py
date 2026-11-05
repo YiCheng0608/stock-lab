@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Iterable
 
@@ -48,15 +49,67 @@ def collect_states(db: Session, start_date: date, end_date: date) -> dict[date, 
     covers both.
     """
 
-    rows_by_day: dict[date, list[IngestionRun]] = defaultdict(list)
-    for row in db.scalars(
-        select(IngestionRun).where(
+    rows_by_day, confirmed_days = _collect_rows(db, start_date, end_date)
+    states: dict[date, str] = {}
+    day = start_date
+    while day <= end_date:
+        if day.weekday() < 5:
+            states[day] = _collect_state(
+                db, day, rows_by_day.get(day, []), day in confirmed_days
+            )
+        day += timedelta(days=1)
+    return states
+
+
+def confirmed_non_trading_dates(
+    db: Session, start_date: date, end_date: date
+) -> set[date]:
+    """The weekdays of the range that are confirmed closures (``collect_states``).
+
+    Only a day with a no-data answer can be one, so the other days' runs are
+    never judged (their metadata is never read).
+    """
+
+    rows_by_day, confirmed_days = _collect_rows(db, start_date, end_date)
+    return {
+        day
+        for day, rows in rows_by_day.items()
+        if day.weekday() < 5
+        and any(row.status == "skipped" for row in rows)
+        and _collect_state(db, day, rows, day in confirmed_days) == "non_trading"
+    }
+
+
+@dataclass(frozen=True)
+class _CollectRow:
+    id: int
+    status: str
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+def _collect_rows(
+    db: Session, start_date: date, end_date: date
+) -> tuple[dict[date, list[_CollectRow]], set[date]]:
+    # Without metadata_json: a collect run's metadata is large (about 130 MB
+    # for the 69 runs of the 93-day window on the production copy).
+    rows_by_day: dict[date, list[_CollectRow]] = defaultdict(list)
+    for run_id, run_date, status, started_at, finished_at in db.execute(
+        select(
+            IngestionRun.id,
+            IngestionRun.run_date,
+            IngestionRun.status,
+            IngestionRun.started_at,
+            IngestionRun.finished_at,
+        ).where(
             IngestionRun.run_type == "collect",
             IngestionRun.run_date >= start_date,
             IngestionRun.run_date <= end_date,
         )
     ).all():
-        rows_by_day[row.run_date].append(row)
+        rows_by_day[run_date].append(
+            _CollectRow(run_id, status, started_at, finished_at)
+        )
     confirmed_days = set(
         db.scalars(
             select(ScheduleRun.target_date).where(
@@ -67,23 +120,21 @@ def collect_states(db: Session, start_date: date, end_date: date) -> dict[date, 
             )
         ).all()
     )
-    states: dict[date, str] = {}
-    day = start_date
-    while day <= end_date:
-        if day.weekday() < 5:
-            states[day] = _collect_state(
-                day, rows_by_day.get(day, []), day in confirmed_days
-            )
-        day += timedelta(days=1)
-    return states
+    return rows_by_day, confirmed_days
 
 
-def _collect_state(day: date, rows: list[IngestionRun], daily_confirmed: bool) -> str:
+def _collect_state(
+    db: Session, day: date, rows: list[_CollectRow], daily_confirmed: bool
+) -> str:
     # Same test as collect's idempotency shortcut: a success with a TAIEX row.
-    if any(
-        row.status == "success"
-        and int((row.metadata_json or {}).get("taiex_records", 0) or 0) > 0
-        for row in rows
+    # The metadata is read in Python, only for that day's successful runs:
+    # SQLite 3.40 (the image's) refuses json_extract on a row holding NaN.
+    success_ids = [row.id for row in rows if row.status == "success"]
+    if success_ids and any(
+        int((metadata or {}).get("taiex_records", 0) or 0) > 0
+        for metadata in db.scalars(
+            select(IngestionRun.metadata_json).where(IngestionRun.id.in_(success_ids))
+        ).all()
     ):
         return "complete"
     skipped = [row for row in rows if row.status == "skipped"]
@@ -99,18 +150,6 @@ def _collect_state(day: date, rows: list[IngestionRun], daily_confirmed: bool) -
     ):
         return "non_trading"
     return "missing"
-
-
-def confirmed_non_trading_dates(
-    db: Session, start_date: date, end_date: date
-) -> set[date]:
-    """The weekdays of the range that are confirmed closures (``collect_states``)."""
-
-    return {
-        day
-        for day, state in collect_states(db, start_date, end_date).items()
-        if state == "non_trading"
-    }
 
 
 def _as_date(value: object) -> date | None:
