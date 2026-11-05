@@ -91,7 +91,7 @@ check(failed.endsWith('資料截至 未提供') && !failed.includes('·'), `head
 
 // ---- holding-risk alert row: only verified holding risks, linked to the action centre ----
 const alert = render('HoldingAlert', () => <HoldingAlert actions={riskActions()} />)
-check(text(alert).includes('持倉風險 4 檔：2330 台積電：減碼／退場條件；1101 台泥：持倉風險資料待補；2882 國泰金：庫存數量待核實 等 4 檔'), `持倉提示列: count, first three holdings and reasons, got ${text(alert)}`)
+check(text(alert).includes('持倉風險 4 檔：2330 台積電：減碼／退場條件；1101 台泥：持倉風險資料不足；2882 國泰金：庫存數量待核實 等 4 檔'), `持倉提示列: count, first three holdings and reasons, got ${text(alert)}`)
 check(alert.includes('href="/watch"') && text(alert).includes('查看觀察中 →'), '持倉提示列: links to /watch (Issue 493)')
 check(!text(alert).includes('長榮') && !text(alert).includes('鴻海'), '持倉提示列: not-held rows are no holding risk')
 const noRisk = render('HoldingAlert none', () => <HoldingAlert actions={riskActions().filter((item: ActionSummary) => !item.held)} />)
