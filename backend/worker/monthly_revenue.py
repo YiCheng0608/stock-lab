@@ -67,6 +67,8 @@ DEADLINE_DAY = 10
 ABORT_AFTER_FAILURES = 3
 TAIPEI = timezone(timedelta(hours=8))
 PAGE_ENCODING = "cp950"
+# Waits before the second, third and fourth try of one page (review of PR #533).
+RETRY_DELAYS_SECONDS = (5.0, 10.0, 20.0)
 BLOCK_MARKERS = ("FOR SECURITY REASONS", "查詢過於頻繁", "THE PAGE CANNOT BE ACCESSED")
 PAGE_HEADER = (
     "公司代號",
@@ -460,28 +462,30 @@ def fetch_page(url: str, *, timeout_seconds: float = 60.0) -> str:
     """GET one page and decode it from Big5 (cp950); transient failures retry.
 
     MOPS answers an occasional 502 ``Unreachable Server`` (seen while probing,
-    #530); the next try succeeded.
+    #530); a try 10 seconds later succeeded.  A transport error, 429 or 5xx is
+    retried after ``RETRY_DELAYS_SECONDS`` (5, 10, 20 s), so a short outage
+    does not fail a page of a 96-page run.
     """
 
     headers = {"User-Agent": "taiwan-stock-research/0.1"}
-    retry_limit = 3
-    for attempt in range(retry_limit):
+    attempts = len(RETRY_DELAYS_SECONDS) + 1
+    for attempt in range(attempts):
         _throttle_official_host(url)
         try:
             response = httpx.get(url, timeout=timeout_seconds, headers=headers)
         except httpx.TransportError as exc:
-            if attempt + 1 >= retry_limit:
+            if attempt + 1 >= attempts:
                 raise OfficialDataError(
                     f"official endpoint transport retry exhausted: {url}"
                 ) from exc
-            time.sleep(min(2.0, 0.25 * (2**attempt)))
+            time.sleep(RETRY_DELAYS_SECONDS[attempt])
             continue
         if response.status_code == 429 or response.status_code >= 500:
-            if attempt + 1 >= retry_limit:
+            if attempt + 1 >= attempts:
                 raise OfficialDataError(
                     f"official endpoint retry exhausted ({response.status_code}): {url}"
                 )
-            time.sleep(0.5 * (2**attempt))
+            time.sleep(RETRY_DELAYS_SECONDS[attempt])
             continue
         if response.status_code != 200:
             raise OfficialDataError(
@@ -565,7 +569,8 @@ def backfill_monthly_revenues(
     run = IngestionRun(
         run_type=RUN_TYPE,
         source="official",
-        run_date=now.date(),
+        # The Taipei day, as the other runs (review of PR #533).
+        run_date=_taipei_day(now),
         status="running",
         started_at=now,
         data_as_of=end.last_day.isoformat(),
@@ -583,7 +588,7 @@ def backfill_monthly_revenues(
     db.commit()
     manifest: dict[str, dict[str, Any]] = {}
     warnings: list[str] = []
-    totals = dict.fromkeys((*OUTCOMES, "outside_universe"), 0)
+    totals = dict.fromkeys((*OUTCOMES, "outside_universe", "duplicate"), 0)
     failures_in_a_row = 0
     aborted: str | None = None
     key = ""
@@ -604,6 +609,8 @@ def backfill_monthly_revenues(
         for month in targets:
             deadline, calendar = roll_to_session(db, nominal_deadline(month))
             for market in MARKETS:
+                # The page each code of this market and month was read from.
+                seen: dict[str, int] = {}
                 for page in PAGES:
                     key = f"{month.label}:{market}:{page}"
                     if not first:
@@ -618,6 +625,7 @@ def backfill_monthly_revenues(
                         (deadline, calendar),
                         fetcher,
                         instruments,
+                        seen,
                     )
                     manifest[key] = item
                     if item["status"] == "failed":
@@ -625,6 +633,12 @@ def backfill_monthly_revenues(
                         failures_in_a_row += 1
                     else:
                         failures_in_a_row = 0
+                        if item["duplicate"]:
+                            codes = ", ".join(item["duplicate_codes"])
+                            warnings.append(
+                                f"{key}: {codes} also on another page this month; "
+                                "kept the first page's row"
+                            )
                         for name in totals:
                             totals[name] += item[name]
                     summarize("running")
@@ -679,7 +693,16 @@ def _fetch_and_store(
     deadline_and_calendar: tuple[date, str],
     fetcher: Callable[[str], str],
     instruments: dict[tuple[str, str], Instrument],
+    seen: dict[str, int],
 ) -> dict[str, Any]:
+    """Fetch, keep the raw, parse and write one page; its manifest entry.
+
+    ``seen`` maps each code of this market and month to the page it was read
+    from.  The two pages do not overlap; a code the other page already listed
+    is not written again (the first page's row stays) and is counted
+    ``duplicate``, which the run reports as a warning.
+    """
+
     url = page_url(market, month, page)
     try:
         html = fetcher(url)
@@ -702,8 +725,14 @@ def _fetch_and_store(
         return {**item, "status": "failed", "error": str(exc)}
     deadline, calendar = deadline_and_calendar
     available, basis = availability(deadline, _taipei_day(captured.collected_at))
-    counts = dict.fromkeys((*OUTCOMES, "outside_universe"), 0)
+    counts = dict.fromkeys((*OUTCOMES, "outside_universe", "duplicate"), 0)
+    duplicate_codes: list[str] = []
     for row in rows:
+        if seen.get(row.symbol, page) != page:
+            counts["duplicate"] += 1
+            duplicate_codes.append(row.symbol)
+            continue
+        seen[row.symbol] = page
         instrument = instruments.get((MARKETS[market], row.symbol))
         if instrument is None:
             counts["outside_universe"] += 1
@@ -728,6 +757,7 @@ def _fetch_and_store(
         "deadline": {"date": deadline.isoformat(), "calendar": calendar},
         "availability": {"date": available.isoformat(), "basis": basis},
         **counts,
+        "duplicate_codes": duplicate_codes,
     }
 
 

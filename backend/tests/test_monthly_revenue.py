@@ -499,17 +499,48 @@ def test_fetch_page_decodes_big5_and_retries_a_502(monkeypatch):
         httpx.Response(502, content=b"Unreachable Server"),
         httpx.Response(200, content=body),
     ]
+    slept: list[float] = []
     monkeypatch.setattr(mr.httpx, "get", lambda *args, **kwargs: answers.pop(0))
     monkeypatch.setattr(mr, "_throttle_official_host", lambda url: None)
-    monkeypatch.setattr(mr.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(mr.time, "sleep", slept.append)
 
     html = mr.fetch_page(mr.page_url("sii", SEPTEMBER, 1))
 
     assert answers == []
+    # Seconds, not a fraction: the probe's 502 cleared 10 s later (review of PR #533).
+    assert slept == [5.0]
     assert [row.name for row in mr.parse_page(html, "sii", SEPTEMBER, 1)] == [
         "鮮活果汁-KY",
         "泰金寶-DR",
     ]
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        pytest.param(lambda: httpx.Response(502, content=b"x"), id="502"),
+        pytest.param(lambda: httpx.Response(429, content=b"x"), id="429"),
+        pytest.param(
+            lambda: (_ for _ in ()).throw(httpx.ConnectError("down")), id="transport"
+        ),
+    ],
+)
+def test_fetch_page_waits_5_10_20_seconds_then_fails(monkeypatch, answer):
+    calls: list[str] = []
+    slept: list[float] = []
+
+    def get(url, **kwargs):
+        calls.append(url)
+        return answer()
+
+    monkeypatch.setattr(mr.httpx, "get", get)
+    monkeypatch.setattr(mr, "_throttle_official_host", lambda url: None)
+    monkeypatch.setattr(mr.time, "sleep", slept.append)
+
+    with pytest.raises(sources.OfficialDataError, match="retry exhausted"):
+        mr.fetch_page(mr.page_url("sii", SEPTEMBER, 0))
+
+    assert len(calls) == 4 and slept == [5.0, 10.0, 20.0]
 
 
 def test_page_urls_and_deadlines():
@@ -699,6 +730,54 @@ def test_backfill_refuses_before_any_request(factory, kwargs):
     with pytest.raises(ValueError):
         backfill(factory, fetcher, **kwargs)
     assert fetcher.urls == []
+
+
+def test_a_code_on_both_pages_keeps_the_first_and_is_a_warning(factory):
+    # Review of PR #533: _0 and _1 never overlap; if they did, _1 must not
+    # silently overwrite the domestic row.
+    class Overlapping(PageFetcher):
+        def __call__(self, url):
+            html = super().__call__(url)
+            if url == mr.page_url("sii", SEPTEMBER, 1):
+                return html.replace(
+                    "<td align=center>1256</td>", "<td align=center>2330</td>"
+                )
+            return html
+
+    result = backfill(factory, Overlapping(), months=1, end=SEPTEMBER)
+
+    assert result["status"] == "partial"
+    assert result["duplicate"] == 1 and result["aborted"] is None
+    assert result["warnings"] == [
+        "2026-09:sii:1: 2330 also on another page this month; kept the first page's row"
+    ]
+    assert result["pages"]["2026-09:sii:1"]["duplicate_codes"] == ["2330"]
+    with factory() as db:
+        tsmc = rows(db)[("2330", "2026-09")]
+        assert (tsmc.revenue, tsmc.data_json["page"]) == (511857399.0, 0)
+
+
+@pytest.mark.parametrize("module", ["monthly", "quarterly"])
+def test_a_backfill_run_is_dated_by_the_taipei_day(factory, isolated, module):
+    # Review of PR #533: 2026-11-05 20:00 UTC is 2026-11-06 in Taipei.
+    from test_quarterly_fundamentals import PageFetcher as QuarterFetcher
+    from worker import quarterly_fundamentals as qf
+
+    isolated.at = datetime(2026, 11, 5, 20, 0)
+    with factory() as db:
+        if module == "monthly":
+            result = mr.backfill_monthly_revenues(
+                db, months=1, end=SEPTEMBER, fetcher=PageFetcher(), sleep=lambda s: None
+            )
+        else:
+            result = qf.backfill_quarterly_fundamentals(
+                db,
+                quarters=1,
+                end=qf.Quarter(2026, 2),
+                fetcher=QuarterFetcher(),
+                sleep=lambda s: None,
+            )
+        assert db.get(IngestionRun, result["run_id"]).run_date == date(2026, 11, 6)
 
 
 def test_run_revenue_backfill_reports_a_bad_month(monkeypatch):
