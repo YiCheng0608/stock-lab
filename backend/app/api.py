@@ -49,6 +49,7 @@ from .models import (
     ChipSnapshot,
     CorporateAction,
     DataQuality,
+    EmergingIssuer,
     Event,
     FundamentalSnapshot,
     GroupDailyScore,
@@ -1135,25 +1136,61 @@ def _news_theme_ids(
     ]
 
 
+# Master statuses whose stock still trades: its page has current quotes.  A
+# delisted or transferred row without an active one is shown as 已下市 (#512).
+_TRADING_STATUSES = frozenset({"active", "dormant"})
+
+
+def _master_listing(status: str) -> str:
+    return "listed" if status in _TRADING_STATUSES else "delisted"
+
+
 def _candidate_instrument(
     rows: list[tuple[str, str, str]], written: str
-) -> tuple[str, str | None]:
-    """The (exchange, name) an AI symbol candidate is shown with.
+) -> tuple[str, str, str] | None:
+    """The (exchange, name, listing) an AI symbol candidate is shown with.
 
     ``rows`` are the master's (exchange, name, status) for the candidate's code and
     ``written`` is the exchange the model wrote.  The model often gets the exchange
     wrong (#264), so a code whose master has exactly one active row is shown with
-    that row's exchange; any other master state keeps the written exchange and only
-    looks up its row (no row: ``None``).
+    that row's exchange.  Otherwise the written exchange's row is used, or the
+    code's only row when the written exchange has none.  ``listing`` is
+    ``listed`` for a trading status and ``delisted`` for the rest (#512).
+    ``None``: the master cannot name the code (no row, or several rows and none
+    on the written exchange).
     """
 
     exact = next((row for row in rows if row[0] == written), None)
     if exact is not None and exact[2] == "active":
-        return written, exact[1]
+        return written, exact[1], "listed"
     active = [row for row in rows if row[2] == "active"]
     if len(active) == 1:
-        return active[0][0], active[0][1]
-    return written, exact[1] if exact is not None else None
+        return active[0][0], active[0][1], "listed"
+    if exact is not None:
+        return written, exact[1], _master_listing(exact[2])
+    if len(rows) == 1:
+        return rows[0][0], rows[0][1], _master_listing(rows[0][2])
+    return None
+
+
+def _latest_emerging_names(db: Session, codes: set[str]) -> dict[str, str]:
+    """Names of ``codes`` on the newest stored TPEx emerging roster (#512).
+
+    Only the newest roster counts, so a company that has since listed, or left
+    the emerging market, is not named 興櫃 from an older roster.
+    """
+
+    latest = db.scalar(select(func.max(EmergingIssuer.as_of_date)))
+    if latest is None or not codes:
+        return {}
+    return dict(
+        db.execute(
+            select(EmergingIssuer.symbol, EmergingIssuer.name).where(
+                EmergingIssuer.as_of_date == latest,
+                EmergingIssuer.symbol.in_(codes),
+            )
+        ).all()
+    )
 
 
 def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, Any]]:
@@ -1161,7 +1198,10 @@ def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, A
 
     The result is inference, kept apart from source facts; symbol candidates are
     unverified (their exchange follows the master, ``_candidate_instrument``) and
-    rule relations stay in ``symbols``.  Only the prompt version
+    rule relations stay in ``symbols``.  A candidate is named from the master
+    (``listing`` listed or delisted) or else the newest TPEx emerging roster
+    (``emerging``); a code neither names goes to ``hidden_symbol_candidates``
+    with ``reason=code_unknown`` and is not shown (#512).  Only the prompt version
     ``worker.news_llm`` writes now counts (#308): older versions never had its
     summary check, so an item without a done result of that version (none yet,
     pending, stale, or ``rejected``) has no AI block on any page.
@@ -1196,6 +1236,7 @@ def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, A
             ).where(Instrument.symbol.in_(codes))
         ).all():
             listed.setdefault(symbol, []).append((exchange, name, status))
+    emerging = _latest_emerging_names(db, codes - set(listed))
     # Every listed name, so a candidate's name inside a longer one does not count
     # (#465); cached until the master names change (#475).
     all_names = listed_name_keys(db) if codes else frozenset()
@@ -1203,14 +1244,26 @@ def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, A
     result: dict[int, dict[str, Any]] = {}
     for news_id, row in latest.items():
         symbol_candidates = []
+        hidden_candidates = []
         for candidate in row.ai_symbol_candidates_json or []:
             written, _, symbol = str(candidate.get("symbol", "")).partition(":")
-            exchange, name = _candidate_instrument(listed.get(symbol, []), written)
+            # Master first, then the newest emerging roster; a code neither
+            # names is not shown and its reason is kept (#512).
+            shown = _candidate_instrument(listed.get(symbol, []), written)
+            if shown is None and symbol in emerging:
+                shown = (written, emerging[symbol], "emerging")
+            if shown is None:
+                hidden_candidates.append(
+                    {"exchange": written, "symbol": symbol, "reason": "code_unknown"}
+                )
+                continue
+            exchange, name, listing = shown
             symbol_candidates.append(
                 {
                     "exchange": exchange,
                     "symbol": symbol,
                     "name": name,
+                    "listing": listing,
                     "exchange_corrected": exchange != written,
                     "reason": candidate.get("reason"),
                     "confidence": candidate.get("confidence"),
@@ -1225,6 +1278,7 @@ def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, A
             "status": row.llm_status,
             "summary": row.ai_summary,
             "symbol_candidates": symbol_candidates,
+            "hidden_symbol_candidates": hidden_candidates,
             "candidate_check_version": CANDIDATE_CHECK_VERSION,
             "theme_candidates": row.ai_theme_candidates_json or [],
             "impact_direction": row.ai_impact_direction,

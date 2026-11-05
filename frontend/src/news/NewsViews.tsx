@@ -14,12 +14,15 @@ import {
   candidateCheckNote,
   candidateCheckSummary,
   candidateConfidenceLabel,
+  candidateHref,
+  candidateLabel,
   cardAiCandidates,
   directionView,
   sourceDirectionView,
   formatTaipeiInstant,
   impactScopeLabel,
   matchesInstrument,
+  namedAiCandidates,
   newsCategoryLabel,
   newsPageSearch,
   newsSourceName,
@@ -90,8 +93,11 @@ function RelationChips({ item }: { item: NewsItem }) {
   )
 }
 
-function candidateLabel(candidate: Pick<CardAiCandidate, 'symbol' | 'name'>): string {
-  return `${candidate.symbol} ${candidate.name ?? '（代號未對應到已知標的）'}`
+// Listed candidates link to the stock page; emerging and delisted ones are plain text (#512, UI_COPY_SPEC §4).
+function CandidateName({ candidate }: { candidate: Pick<CardAiCandidate, 'exchange' | 'symbol' | 'name' | 'listing'> }) {
+  const href = candidateHref(candidate)
+  const label = candidateLabel(candidate)
+  return href ? <Link to={href}>{label}</Link> : <span>{label}</span>
 }
 
 // UI_COPY_SPEC §4 AI 候選行 / DESIGN_SYSTEM §5: inference kept apart from the verified chips, collapsed by default.
@@ -104,9 +110,7 @@ function AiCandidateRow({ item }: { item: NewsItem }) {
       <summary>{candidateCheckSummary(candidates)}</summary>
       <ul>{candidates.map((candidate) => (
         <li key={candidate.key}>
-          {candidate.name
-            ? <Link to={`/stocks/${encodeURIComponent(candidate.exchange)}/${encodeURIComponent(candidate.symbol)}`}>{candidateLabel(candidate)}</Link>
-            : <span>{candidateLabel(candidate)}</span>}
+          <CandidateName candidate={candidate} />
           <span className="news-ai-confidence">{` · ${candidateCheckLabel(candidate.source_check)} · ${candidateConfidenceLabel(candidate.confidence)}`}</span>
         </li>
       ))}</ul>
@@ -233,6 +237,8 @@ export function AiInferencePanel({ ai }: { ai: NewsAi | null }) {
       </section>
     )
   }
+  const named = namedAiCandidates(ai.symbol_candidates)
+  const proposedAny = ai.symbol_candidates.length > 0 || (ai.hidden_symbol_candidates?.length ?? 0) > 0
   const generated = formatTaipeiInstant(ai.generated_at)
   return (
     <section className="ai-inference" aria-labelledby="ai-inference-title" data-testid="ai-inference">
@@ -244,19 +250,14 @@ export function AiInferencePanel({ ai }: { ai: NewsAi | null }) {
         <div><dt>理由</dt><dd>{normalizeText(ai.impact_rationale) ?? '模型未提供理由'}</dd></div>
       </dl>
       <h3 className="ai-subtitle">候選標的</h3>
-      {ai.symbol_candidates.length
-        ? <ul className="ai-candidates">{ai.symbol_candidates.map((candidate) => {
-          const label = candidateLabel(candidate)
-          return (
-            <li key={`${candidate.exchange}:${candidate.symbol}`}>
-              {candidate.name
-                ? <Link to={`/stocks/${encodeURIComponent(candidate.exchange)}/${encodeURIComponent(candidate.symbol)}`}>{label}</Link>
-                : <span>{label}</span>}
-              <span className="small-note">{`${candidateCheckLabel(candidate.source_check)} · ${candidateConfidenceLabel(candidate.confidence)}${normalizeText(candidate.reason) ? ` · ${normalizeText(candidate.reason)}` : ''}`}</span>
-            </li>
-          )
-        })}</ul>
-        : <p className="small-note">模型未提出候選標的。</p>}
+      {named.length
+        ? <ul className="ai-candidates">{named.map((candidate) => (
+          <li key={`${candidate.exchange}:${candidate.symbol}`}>
+            <CandidateName candidate={candidate} />
+            <span className="small-note">{`${candidateCheckLabel(candidate.source_check)} · ${candidateConfidenceLabel(candidate.confidence)}${normalizeText(candidate.reason) ? ` · ${normalizeText(candidate.reason)}` : ''}`}</span>
+          </li>
+        ))}</ul>
+        : <p className="small-note">{proposedAny ? '模型提出的候選代號都查無對應標的，不列出。' : '模型未提出候選標的。'}</p>}
       {ai.theme_candidates.length > 0 && <>
         <h3 className="ai-subtitle">候選題材 <Badge tone="success" className="badge-compact">已通過題材核對</Badge></h3>
         <ul className="ai-candidates">{ai.theme_candidates.map((candidate) => (

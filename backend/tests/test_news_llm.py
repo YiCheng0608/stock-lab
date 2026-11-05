@@ -589,6 +589,7 @@ def test_rule_relations_and_llm_candidates_stay_in_separate_fields(db, fake, cli
             "exchange": "TWSE",
             "symbol": "2330",
             "name": "台積電",
+            "listing": "listed",
             "reason": "新聞提到晶圓代工需求",
             "confidence": "medium",
             "verified": False,
@@ -597,6 +598,7 @@ def test_rule_relations_and_llm_candidates_stay_in_separate_fields(db, fake, cli
             "source_check": "not_mentioned",
         }
     ]
+    assert ai["hidden_symbol_candidates"] == []
     assert ai["candidate_check_version"] == "ai-candidate-source/v2"
     assert (
         ai["impact_direction"] == "positive" and ai["prompt_version"] == PROMPT_VERSION
@@ -901,13 +903,13 @@ def _moved_to(exchange, status_there="active"):
         pytest.param(
             [("TWSE", "7002", "甲", "active"), ("OTC", "7002", "乙", "active")],
             "TPEx:7002",
-            ("TPEx", "7002", None, False),
+            None,  # the master cannot name it: hidden (#512)
             id="two-active-rows-neither-on-the-written-exchange",
         ),
         pytest.param(
             [],
             "TWSE:6392",
-            ("TWSE", "6392", None, False),
+            None,  # no name anywhere: hidden as code_unknown (#512)
             id="code-not-in-the-master",
         ),
         pytest.param(
@@ -919,7 +921,8 @@ def _moved_to(exchange, status_there="active"):
         pytest.param(
             [("TWSE", "7004", "甲", "delisted")],
             "TPEx:7004",
-            ("TPEx", "7004", None, False),
+            # The code's only row names it, delisted (#512).
+            ("TWSE", "7004", "甲", True),
             id="no-active-row-and-wrong-exchange",
         ),
         pytest.param(
@@ -934,8 +937,10 @@ def test_candidate_exchange_follows_the_master_when_the_model_wrote_it_wrong(
     db, client, instruments, written, shown
 ):
     # #264: 80 of 1,570 production candidates named the other exchange and showed
-    # 「代號未對應到已知標的」.
-    assert _candidate_views(db, client, instruments, [written]) == [shown]
+    # 「代號未對應到已知標的」.  #512: a code the master cannot name is not shown.
+    assert _candidate_views(db, client, instruments, [written]) == (
+        [] if shown is None else [shown]
+    )
 
 
 def test_a_corrected_candidate_links_to_the_active_instrument(db, client):
@@ -949,6 +954,125 @@ def test_a_corrected_candidate_links_to_the_active_instrument(db, client):
     # The stored inference keeps what the model wrote; only the read side follows the master.
     stored = db.scalars(select(NewsLlmResult)).one().ai_symbol_candidates_json
     assert [row["symbol"] for row in stored] == ["TPEx:6515", "TWSE:2330"]
+
+
+def _emerging_rosters(db):
+    """Two stored TPEx emerging rosters: 9998 was only on the older one."""
+
+    from app.models import EmergingIssuer  # here, so the module loads before #512
+
+    raw = RawPayload(source="tpex", endpoint="mopsfin_t187ap03_R", sha256="r")
+    db.add(raw)
+    db.flush()
+    db.add_all(
+        [
+            EmergingIssuer(
+                symbol="7808",
+                name="訊聯智藥",
+                market="emerging",
+                as_of_date=date(2026, 11, 5),
+                raw_payload_id=raw.id,
+            ),
+            EmergingIssuer(
+                symbol="9998",
+                name="已掛牌興櫃",
+                market="emerging",
+                as_of_date=date(2026, 11, 4),
+                raw_payload_id=raw.id,
+            ),
+        ]
+    )
+
+
+def test_candidates_are_named_listed_delisted_or_emerging_and_unknown_codes_hidden(
+    db, client
+):
+    # #512: 10 production news_v3 candidates (10/29～11/05) were emerging stocks
+    # shown as 「代號未對應到已知標的」; 2888 新光金 is delisted and was linked.
+    db.add_all(
+        [
+            Instrument(
+                exchange="TWSE", symbol="2888", name="新光金", status="delisted"
+            ),
+            Instrument(exchange="TPEx", symbol="7005", name="休眠股", status="dormant"),
+        ]
+    )
+    _emerging_rosters(db)
+    item = _add_news(db, 1, title="訊聯智藥（7808）創新板審議", summary="TLC-KY 新藥")[
+        0
+    ]
+    written = [
+        "TWSE:2330",
+        "TWSE:2888",
+        "TPEx:7005",
+        "TWSE:7808",
+        "TPEx:9998",
+        "TPEx:4152",
+    ]
+    db.add(
+        NewsLlmResult(
+            news_item_id=item.id,
+            prompt_version=PROMPT_VERSION,
+            llm_model="claude-sonnet-fake",
+            llm_input_hash="0" * 64,
+            llm_run_at=NOW,
+            llm_status="done",
+            ai_summary="摘要",
+            ai_symbol_candidates_json=[
+                {"symbol": symbol, "reason": "理由", "confidence": "high"}
+                for symbol in written
+            ],
+            ai_theme_candidates_json=[],
+            ai_impact_direction="positive",
+            ai_impact_scope="instrument",
+            ai_impact_rationale="理由",
+            ai_unsupported=False,
+        )
+    )
+    db.commit()
+    for path in (f"/news/{item.id}", "/news"):
+        body = client.get(f"{router.prefix}{path}").json()
+        ai = body["ai"] if "ai" in body else body["items"][0]["ai"]
+        assert [
+            (row["exchange"], row["symbol"], row["name"], row["listing"])
+            for row in ai["symbol_candidates"]
+        ] == [
+            ("TWSE", "2330", "台積電", "listed"),
+            ("TWSE", "2888", "新光金", "delisted"),
+            ("TPEx", "7005", "休眠股", "listed"),
+            ("TWSE", "7808", "訊聯智藥", "emerging"),
+        ]
+        assert all(row["name"] for row in ai["symbol_candidates"])
+        # 7808 is in the title; the emerging name is checked like any other.
+        assert ai["symbol_candidates"][3]["source_check"] == "mentioned"
+        # 9998 is only on an older roster and 4152 nowhere: not shown, reason kept.
+        assert ai["hidden_symbol_candidates"] == [
+            {"exchange": "TPEx", "symbol": "9998", "reason": "code_unknown"},
+            {"exchange": "TPEx", "symbol": "4152", "reason": "code_unknown"},
+        ]
+    # Read side only: the stored inference keeps all six as the model wrote them.
+    stored = db.scalars(select(NewsLlmResult)).one().ai_symbol_candidates_json
+    assert [row["symbol"] for row in stored] == written
+
+
+def test_a_listed_code_is_never_named_from_the_emerging_roster(db, client):
+    # 8058 耐特 lists on 11/19: once the master has it, the master names it.
+    from app.models import EmergingIssuer
+
+    _emerging_rosters(db)
+    db.add(
+        EmergingIssuer(
+            symbol="2330",
+            name="興櫃名",
+            market="emerging",
+            as_of_date=date(2026, 11, 5),
+            raw_payload_id=db.scalars(select(RawPayload)).one().id,
+        )
+    )
+    db.commit()
+    assert _candidate_views(db, client, [], ["TWSE:2330"]) == [
+        ("TWSE", "2330", "台積電", False)
+    ]
 
 
 def test_each_candidate_says_whether_the_sent_text_names_it(db, client):

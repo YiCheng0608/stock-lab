@@ -19,6 +19,7 @@
 | --- | --- | --- | --- |
 | TWSE universe | [上市公司 `t187ap03_L`](https://openapi.twse.com.tw/v1/opendata/t187ap03_L)、[ETF `t187ap47_L`](https://openapi.twse.com.tw/v1/opendata/t187ap47_L)、[新上市 `company/newlisting`](https://openapi.twse.com.tw/v1/company/newlisting) | 建立上市普通股與 ETF allowlist；數字代號 ETF 以 `t187ap47_L` 辨識。`company/newlisting` 列出 2011 年起所有上市案，只把 60 天內生效、主檔還沒有的列當新上市（`ipo`）。 | 名單是取得當下狀態，不含歷史上下市版本；用法見[標的狀態同步](#標的狀態同步)。 |
 | TPEx universe | [issuer master `mopsfin_t187ap03_O`](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O)、[ETF allowlist `etfFilter`](https://info.tpex.org.tw/api/etfFilter)（POST） | 建立上櫃普通股與 ETF allowlist。 | 混合行情中的權證、CB、ETN、興櫃不當成股票；興櫃 feed 不用來建 universe。 |
+| TPEx 興櫃名冊 | [`mopsfin_t187ap03_R`](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_R)（興櫃公司基本資料） | 當日 collect 1 個請求，只存代號、簡稱、市場別與資料日期，替新聞 AI 候選標名稱（[興櫃名冊](#興櫃名冊)，#512）。 | 非核心；不建 universe，不進行情、候選、族群或策略。 |
 | TWSE 日行情 | 當日 [`STOCK_DAY_ALL`](https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL)；歷史 [`MI_INDEX`](https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX)（單日全市場表） | 保留 allowlist、普通股與 ETF 代號（[標的狀態同步](#標的狀態同步)），讀 OHLC、`TradeVolume`（股）、`TradeValue`。歷史以逐日全市場表回補，不逐檔逐月請求。同一份 `MI_INDEX`（`type=ALLBUT0999`，當日 collect 也會抓）另讀大盤統計資訊與漲跌證券數，寫[大盤概況](#大盤概況)；成交金額取「總計(1~15)」（含 ETF、權證等全部證券）。 | 明確 no-data 且無列可略過；錯日、缺日或日期不可驗的 payload fail-closed，不映射到其他交易日。 |
 | TWSE 交易日曆 | OpenAPI [`holidaySchedule`](https://openapi.twse.com.tw/v1/holidaySchedule/holidaySchedule)；網站版逐年 [`holidaySchedule?date=YYYY0101`](https://www.twse.com.tw/rwd/zh/holidaySchedule/holidaySchedule?date=20260101&response=json) | OpenAPI 版：多日回補時作正面排除清單，明列休市日不送 `MI_INDEX`。網站版：daily 的 trading_calendar 步驟存成 `trading_calendar_days`，推算訊號的規則最早執行日（見[交易日曆](#交易日曆)）。兩者的休市判定是同一個分類規則。 | 取得失敗不推論休市，回補該日照常請求並 fail-closed；只描述年度最新版本，不是歷史版本；颱風等臨時休市不會列入。 |
 | TAIEX | 當日 [`exchangeReport/MI_INDEX`](https://openapi.twse.com.tw/v1/exchangeReport/MI_INDEX)；歷史取自 `MI_INDEX` 全市場表 | 加權指數作 hot-group 超額報酬基準與交易日基準（見 [TAIEX 交易日基準](#taiex-交易日基準)）。 | 只有收盤值；合成的 O／H／L、成交量與成交額不是真實欄位。 |
@@ -35,7 +36,7 @@
 
 ### 核心與非核心來源
 
-collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`、`dailyQuotes`）、TAIEX、交易日曆、法人與融資。它們的 warning 讓 collect 變 `partial`，daily 不跑 analyze。重大訊息與基本面（`t187ap04_L`、`t187ap14_L`、`mopsfin_t187ap04_O`、`mopsfin_t187ap14_O`、MOPS `t05st02`）、TPEx 停復牌（`tpex_spendi_today`、`tpex_spendi_history`）及[大盤概況](#大盤概況)（TWSE `MI_INDEX` 的大盤統計與漲跌證券數、TPEx `tpex_mainborad_highlight`；`MI_INDEX` 的日行情與 TAIEX 仍是核心）是非核心：取得失敗記為 `noncore_warnings`，collect 仍為 `success`；被防呆略過的[標的狀態同步](#標的狀態同步)也記為 `noncore_warnings`。缺的事件與基本面照「缺資料留空」處理（`mops_events`／`mops_fundamentals` 的資料品質列為 `partial`）。分類依 warning 文字（`pipeline.NONCORE_WARNING_PATTERN`），新增來源的 warning 未列入前一律算核心。
+collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`、`dailyQuotes`）、TAIEX、交易日曆、法人與融資。它們的 warning 讓 collect 變 `partial`，daily 不跑 analyze。重大訊息與基本面（`t187ap04_L`、`t187ap14_L`、`mopsfin_t187ap04_O`、`mopsfin_t187ap14_O`、MOPS `t05st02`）、TPEx 停復牌（`tpex_spendi_today`、`tpex_spendi_history`）、[興櫃名冊](#興櫃名冊)（`mopsfin_t187ap03_R`）及[大盤概況](#大盤概況)（TWSE `MI_INDEX` 的大盤統計與漲跌證券數、TPEx `tpex_mainborad_highlight`；`MI_INDEX` 的日行情與 TAIEX 仍是核心）是非核心：取得失敗記為 `noncore_warnings`，collect 仍為 `success`；被防呆略過的[標的狀態同步](#標的狀態同步)也記為 `noncore_warnings`。缺的事件與基本面照「缺資料留空」處理（`mops_events`／`mops_fundamentals` 的資料品質列為 `partial`）。分類依 warning 文字（`pipeline.NONCORE_WARNING_PATTERN`），新增來源的 warning 未列入前一律算核心。
 
 ### 標的狀態同步
 
@@ -147,6 +148,17 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 - **與 bar 的關係**：同一標的同一天已有 bar（例如當日快照有價格）時不寫，coverage 也以 bar 為準。代號在 `instruments` 找不到的股票或 ETF 列只計入 `unmatched`，不寫；同表的權證、債券等代號不計。
 - **表上沒有這一列**：不算無成交，仍是缺資料。AC-1 的 88 個這種缺日集中在少數標的、連續數天，看起來是停止買賣，但目前沒有可對應的停牌來源，所以不推定。
 - **誰讀它**：只有 coverage（`/api/coverage`、回補報表）。指標、策略、追蹤與個股頁的「20 日基準還缺幾日」照舊只看 bar，無成交日怎麼處理另議。
+
+### 興櫃名冊
+
+新聞 AI 候選標的常是準備上市櫃的興櫃公司，例如 7808 訊聯智藥、8058 耐特。這些公司不在 `instruments`，以前卡片只能寫「代號未對應到已知標的」。2026-10-29～11-05 正式 DB 的 news_v3 候選裡，對不到名稱的 10 個全是興櫃股（[#512](https://github.com/YiCheng0608/stock-lab/issues/512)）。所以另存 TPEx 的興櫃公司名冊，只拿來替候選標名稱。
+
+- **來源**：TPEx OpenAPI [`mopsfin_t187ap03_R`](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_R)（興櫃公司基本資料）。格式同上櫃的 `mopsfin_t187ap03_O`，讀 `SecuritiesCompanyCode`（代號）、`CompanyAbbreviation`（簡稱）與民國 `Date`（資料日期）。2026-11-05 那份有 367 家。
+- **取得**：當日快照的 collect 每次 1 個請求，存 raw（endpoint、SHA-256、data-as-of）。歷史回補與 catchup 不抓：名冊只有當下的名單。名冊是當下清單、不是交易日報表，所以官方確認無資料的日子也照抓。
+- **檢核**：每列的 `Date` 要相同，且不晚於 collect 日；代號不是 4～6 位數字或大寫字母、或沒有簡稱的列略過；同一代號出現兩次，或沒有任何可讀的列，整份拒收。
+- **非核心**：取得或解析失敗、或寫入失敗，記 `noncore_warnings` 的 `TPEx emerging issuers unavailable: …`，不寫任何一列，collect 仍為 `success`；run metadata 的 `emerging_issuers` 記 `inserted`／`updated`／`unchanged`／`older` 的列數，失敗時記 `failed`。
+- **保存**：`emerging_issuers`（0027）每個代號一列：`symbol`、`name`、`market`（固定 `emerging`）、`as_of_date`（名冊的資料日期）、`raw_payload_id`。新名冊會更新同代號的名稱、資料日期與 raw；資料日期較舊的名冊（重抓舊日）不改。後來不在名冊上的代號保留原列，資料日期停在舊的那天。
+- **誰讀它**：只有新聞 API 替 AI 候選標名稱（[NEWS_SPEC §5](NEWS_SPEC.md#5-ai-摘要與推論)），而且只讀資料日期最新那份名冊上的代號，所以已經掛牌上市櫃、或已撤銷興櫃的公司，不會沿用舊名冊標成興櫃。它不是 `instruments`，不建 universe，也不進行情、指標、候選、族群、策略、`/api/stocks` 或規則關聯的名稱比對。沒有興櫃行情。
 
 ### 成交金額可得狀態
 

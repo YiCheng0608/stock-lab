@@ -461,6 +461,15 @@ class FixtureFetcher:
         if url == MOPS_EVENT_LIST_ENDPOINT:
             # The dated MOPS list (Issue #464): answered, no listed/OTC rows.
             return mops_event_list_payload([])
+        if url == sources.TPEX_EMERGING_ISSUER_ENDPOINT:
+            # The emerging roster (Issue #512): names only.
+            return [
+                {
+                    "Date": "1150904",
+                    "SecuritiesCompanyCode": "7808",
+                    "CompanyAbbreviation": "訊聯智藥",
+                }
+            ]
         raise AssertionError(f"unexpected endpoint: {url}")
 
 
