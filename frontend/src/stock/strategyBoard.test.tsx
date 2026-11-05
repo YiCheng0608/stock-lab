@@ -115,7 +115,7 @@ check(actionableText.includes('目標一／目標二') && !/目標(?!一|二)/.t
 check(/>[0-9.]+ 倍</.test(actionable), 'actionable: RR reads 倍')
 const observation = tableRow(both, 'pullback_v1')
 check(observation.includes('data-strategy-status="observation"') && observation.includes('觀察'), 'observation status')
-check(observation.includes(`<div class="strategy-observation-label">${OBSERVATION_LABEL}</div>`), 'observation levels sit under the observation label')
+check(observation.includes(`<summary class="strategy-observation-label">${OBSERVATION_LABEL}</summary>`), 'observation levels sit under the observation label, folded behind it (Issue 519)')
 const box = observation.slice(observation.indexOf('class="strategy-observation"'))
 for (const text of ['2,430.00～2,535.00', '16,371～32,741 張', '參考停損', '2,399.64', '參考目標一／目標二', '2,478.57／2,521.07', '下一交易日 2026/10/23']) {
   check(box.includes(text), `observation box shows ${text}`)

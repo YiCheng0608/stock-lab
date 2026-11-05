@@ -18,6 +18,7 @@ import type { CandidateItem, StrategyActionableLevels, StrategyBoard as Board, S
 import {
   BOARD_NOTE,
   BOARD_TITLE,
+  CANDIDATE_MORE_LABEL,
   LEVELS_MISSING_TEXT,
   OBSERVATION_LABEL,
   STATUS_TONES,
@@ -42,7 +43,7 @@ function StatusCell({ row, floorNote }: { row: StrategyBoardRow; floorNote: stri
   </>
 }
 
-function ActionableLevels({ levels }: { levels: StrategyActionableLevels }) {
+export function ActionableLevels({ levels }: { levels: StrategyActionableLevels }) {
   const breakout = levels.entry_type === 'breakout'
   return (
     <dl className="strategy-levels strategy-levels-actionable">
@@ -56,7 +57,7 @@ function ActionableLevels({ levels }: { levels: StrategyActionableLevels }) {
   )
 }
 
-function ObservationBlock({ row }: { row: StrategyBoardRow }) {
+export function ObservationBlock({ row, folded = false }: { row: StrategyBoardRow; folded?: boolean }) {
   const levels = row.levels?.kind === 'observation' ? row.levels : null
   if (!levels) return <div className="strategy-observation strategy-missing" data-strategy-levels="missing">{LEVELS_MISSING_TEXT}</div>
   let body
@@ -73,6 +74,15 @@ function ObservationBlock({ row }: { row: StrategyBoardRow }) {
   } else {
     body = <p className="small-note">不產生觀察價位：{levels.missing_labels.join('、') || '原因待核實'}</p>
   }
+  // #519: the research tab folds the block behind its own label; the summary card keeps it open.
+  if (folded) {
+    return (
+      <details className="strategy-observation" data-strategy-levels={levels.availability}>
+        <summary className="strategy-observation-label">{OBSERVATION_LABEL}</summary>
+        {body}
+      </details>
+    )
+  }
   return (
     <div className="strategy-observation" data-strategy-levels={levels.availability}>
       <div className="strategy-observation-label">{OBSERVATION_LABEL}</div>
@@ -81,10 +91,12 @@ function ObservationBlock({ row }: { row: StrategyBoardRow }) {
   )
 }
 
-function LevelsCell({ row }: { row: StrategyBoardRow }) {
+export const NO_LEVELS_TEXT = '無價位'
+
+export function LevelsCell({ row, folded = false }: { row: StrategyBoardRow; folded?: boolean }) {
   if (row.status === 'conditional' && row.levels?.kind === 'actionable') return <ActionableLevels levels={row.levels} />
-  if (row.status === 'observation') return <ObservationBlock row={row} />
-  return <span className="muted">無價位</span>
+  if (row.status === 'observation') return <ObservationBlock row={row} folded={folded} />
+  return <span className="muted">{NO_LEVELS_TEXT}</span>
 }
 
 function ConditionDetails({ row }: { row: StrategyBoardRow }) {
@@ -111,7 +123,7 @@ function columns(floorNote: string | null): ReadonlyArray<Column<StrategyBoardRo
     { key: 'strategy', header: '策略', cell: (row) => <strong><Term id={row.entry_type === 'breakout' ? 'breakout' : 'pullback'}>{row.label}</Term></strong> },
     { key: 'status', header: '狀態', cell: (row) => <StatusCell row={row} floorNote={floorNote} /> },
     { key: 'unmet', header: '差哪個條件', wrap: true, cellClassName: 'strategy-unmet', cell: unmetText },
-    { key: 'levels', header: '價位', wrap: true, cellClassName: 'strategy-levels-cell', cell: (row) => <LevelsCell row={row} /> },
+    { key: 'levels', header: '價位', wrap: true, cellClassName: 'strategy-levels-cell', cell: (row) => <LevelsCell row={row} folded /> },
   ]
 }
 
@@ -120,7 +132,7 @@ function StrategyCard({ row, floorNote }: { row: StrategyBoardRow; floorNote: st
     <article className="card strategy-card" data-strategy-card={row.strategy}>
       <div className="strategy-card-head"><strong><Term id={row.entry_type === 'breakout' ? 'breakout' : 'pullback'}>{row.label}</Term></strong><StatusCell row={row} floorNote={floorNote} /></div>
       <p className="strategy-unmet">{unmetText(row)}</p>
-      <LevelsCell row={row} />
+      <LevelsCell row={row} folded />
       <ConditionDetails row={row} />
     </article>
   )
@@ -138,8 +150,12 @@ function CandidateRow({ board, candidate }: { board: Board; candidate: Candidate
       </div>
       {/* #491: how to enter, before the reasons. */}
       {candidate && <EntryPlanCard item={candidate} onStockPage />}
-      {candidate && <ReasonList reasons={candidate.reasons} />}
-      {candidate && <CandidateNote item={candidate} />}
+      {/* #519: the reasons and the AI note fold behind one line; the score details stay their own fold. */}
+      {candidate && <details className="details strategy-candidate-more">
+        <summary>{CANDIDATE_MORE_LABEL}</summary>
+        <ReasonList reasons={candidate.reasons} />
+        <CandidateNote item={candidate} />
+      </details>}
       {candidate && <ScoreDetails item={candidate} open={false} />}
     </div>
   )
@@ -151,17 +167,20 @@ export function StrategyBoardPanel({ board, candidate }: { board: Board | null |
   const floorNote = liquidityExclusionText(board.liquidity ? { ...board.liquidity, exclusion: board.liquidity.candidate_exclusion } : null)
   return (
     <section className="panel strategy-board" aria-labelledby="strategy-board-title">
-      <div className="section-head">
-        <div><div className="eyebrow">研究條件 · 每個策略一列</div><h2 id="strategy-board-title">{BOARD_TITLE}</h2></div>
+      <div className="panel-head">
+        <h2 id="strategy-board-title">{BOARD_TITLE}</h2>
         <div className="board-dates">{board.as_of && <DateBadge date={board.as_of} />}<Badge>{levelsVersionLabel(board.levels_version)}</Badge></div>
       </div>
-      <p className="small-note">{BOARD_NOTE}</p>
-      {board.liquidity && (
-        <p className="small-note strategy-liquidity" data-liquidity={board.liquidity.state ?? undefined}>
-          {averageVolumeText(board.liquidity.average_volume_lots_20d)} · 資料日期 {formatDate(board.liquidity.data_as_of)}
-          {board.liquidity.minimum_lots != null && `（候選門檻 ${formatLots(board.liquidity.minimum_lots)}）`}
-        </p>
-      )}
+      {/* #519: the 20-session lots and the 說明 fold share one line; opened, the note takes the next. */}
+      <div className="board-meta">
+        {board.liquidity && (
+          <p className="small-note strategy-liquidity" data-liquidity={board.liquidity.state ?? undefined}>
+            {averageVolumeText(board.liquidity.average_volume_lots_20d)} · 資料日期 {formatDate(board.liquidity.data_as_of)}
+            {board.liquidity.minimum_lots != null && `（候選門檻 ${formatLots(board.liquidity.minimum_lots)}）`}
+          </p>
+        )}
+        <details className="details board-help"><summary>說明</summary><p className="small-note">{BOARD_NOTE}</p></details>
+      </div>
       {!board.as_of && <EmptyState reason="此股尚無策略判定資料。" />}
       <CandidateRow board={board} candidate={candidate} />
       <DataTable

@@ -77,6 +77,7 @@ import { StockBarsChart } from './stock/StockBarsChart'
 import { PRICE_BASIS, priceDigits } from './stock/stockBars'
 import { StockCutoffControl } from './stock/StockCutoffControl'
 import { StockHeader } from './stock/StockHeader'
+import { StockSummaryCard } from './stock/StockSummaryCard'
 import { StrategyBoardPanel } from './stock/StrategyBoardPanel'
 import { StrategyVersionList, backtestGroupKey } from './components/StrategyVersionCard'
 import { CoverageSummaryMetrics, backfillSessionsLabel, coverageReasonLabels } from './coverage/CoverageSummary'
@@ -292,12 +293,15 @@ function fieldLabel(field: string): string {
 
 // The research tab's data-gap line (UI_COPY_SPEC §6.1): the summary's causes, one sentence each; the exact
 // fields stay one click away.  A response from before Issue 511 has no causes and keeps the field list.
-export function ResearchGapLine({ reasons, missingFields }: { reasons: GapReason[] | undefined; missingFields: string[] }) {
+// #519: inside the research-action panel the action's own data-gap sentence (`note`) shares the box.
+export function ResearchGapLine({ reasons, missingFields, note }: { reasons: GapReason[] | undefined; missingFields: string[]; note?: string | null }) {
   const labels = (reasons ?? []).map((reason) => reason.label).filter(Boolean)
   const fields = missingFields.map(fieldLabel).join('、')
-  if (!labels.length) return <div className="data-gap stock-data-gap">研究資料待補：{fields || '尚不能形成完整策略判斷'}。</div>
+  const noteLine = note ? <div className="stock-data-gap-note">{note}</div> : null
+  if (!labels.length) return <div className="data-gap stock-data-gap"><div>研究資料待補：{fields || '尚不能形成完整策略判斷'}。</div>{noteLine}</div>
   return <div className="data-gap stock-data-gap">
     <div>目前不能判斷的原因：{labels.join('；')}。</div>
+    {noteLine}
     {fields && <details className="technical-details"><summary>查看缺少的欄位</summary><div>{fields}</div></details>}
   </div>
 }
@@ -671,12 +675,13 @@ function StockPage() {
     <StockHeader symbol={data.instrument.symbol} name={data.instrument.name} exchange={data.instrument.exchange} typeLabel={instrumentTypeLabel(data.instrument.instrument_type)} instrumentType={data.instrument.instrument_type} dailyBars={dayBars.data?.bars} latestChange={dayBars.data?.latest_change} loading={dayBars.isLoading}>
       <StockCutoffControl asOf={asOf} effectiveDate={asOf ? null : data.news_cutoff?.as_of ?? data.decision_summary?.data_cutoff ?? null} onApply={(submitted) => { const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }} />
     </StockHeader>
+    <StockSummaryCard board={data.strategy_board} action={data.decision_summary ?? null} researchHref={`?${stockTabSearch(searchParams, 'research').toString()}`} onResearch={() => document.getElementById(tabId('stock', 'research'))?.scrollIntoView({ block: 'start' })} />
     <Tabs items={STOCK_TABS} value={tab} onChange={setTab} label="個股詳情分頁" idPrefix="stock" className="stock-tabs" />
     <div className="stock-tab-content" id={tabPanelId('stock', tab)} role="tabpanel" aria-labelledby={tabId('stock', tab)}>
       {tab === 'chart' && <StockBarsChart interval={barsInterval} onIntervalChange={setBarsInterval} data={chartBars.data} loading={chartBars.isLoading} error={chartBars.error} instrumentType={data.instrument.instrument_type} />}
       {tab === 'chips' && <Card eyebrow="籌碼資料" title="法人與融資">{data.chips.length ? <ChipTable rows={data.chips.slice(-30).reverse()} /> : <EmptyState reason="尚無可核實的籌碼資料。" />}<BrokerBranchEntry exchange={data.instrument.exchange} /></Card>}
       {tab === 'news' && <><StockNewsTimeline exchange={data.instrument.exchange} symbol={data.instrument.symbol} query={{ data: stockNews.data, loading: stockNews.isLoading, error: stockNews.error }} /><StockEventList events={data.events} /></>}
-      {tab === 'research' && <><StrategyBoardPanel board={data.strategy_board} candidate={data.candidate} />{fallbackResearchIncomplete && <ResearchGapLine reasons={data.decision_summary?.gap_reasons} missingFields={qualitySummary.research.missing_fields} />}<ActionDetailPanel action={data.decision_summary ?? null} /><StockPlanPanel strategies={data.decision_summary?.strategies} /><Card eyebrow="研究條件 · 只讀快照" title="所屬族群"><GroupList groups={data.groups} /></Card></>}
+      {tab === 'research' && <><StrategyBoardPanel board={data.strategy_board} candidate={data.candidate} /><ActionDetailPanel action={data.decision_summary ?? null} gap={fallbackResearchIncomplete ? { reasons: data.decision_summary?.gap_reasons, missingFields: qualitySummary.research.missing_fields } : null}><StockPlanPanel strategies={data.decision_summary?.strategies} embedded /></ActionDetailPanel><GroupPanel groups={data.groups} /></>}
       {tab === 'data' && <><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><Card className="stock-source-panel" eyebrow="資料說明" title="原始時間、來源與技術指標"><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div><IndicatorMetaRows bars={dayBars.data} /><details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} instrumentType={data.instrument.instrument_type} /></details></Card></>}
     </div>
     <p className="disclaimer">此為研究工具與資料摘要，不構成投資建議、報酬保證或自動下單指令。</p>
@@ -695,12 +700,18 @@ export function IndicatorMetaRows({ bars }: { bars: StockBarsResponse | undefine
   </>
 }
 
-function GroupList({ groups }: { groups: InstrumentDetail['groups'] }) {
-  if (!groups.length) return <div className="empty">尚無可顯示的族群歸屬。</div>
-  return <div className="research-list">{groups.map((group) => <div className="research-list-item" key={group.id + '-' + group.valid_from}>
-    <strong>{stockGroupLabel(group)}</strong>
-    <span className="small-note">有效期間：{formatTaiwanDateTime(group.valid_from, true)}～{group.valid_to ? formatTaiwanDateTime(group.valid_to, true) : '截止日未提供'}</span>
-  </div>)}</div>
+// #519: one row — the title, the names joined by 、, and each group's validity folded behind 有效期間 (UI_COPY_SPEC §8.2).
+function GroupPanel({ groups }: { groups: InstrumentDetail['groups'] }) {
+  return <section className="panel stock-groups" aria-labelledby="stock-groups-title"><div className="panel-head">
+    <h2 id="stock-groups-title">所屬族群</h2>
+    {groups.length ? <>
+      <span className="stock-group-names">{groups.map((group) => stockGroupLabel(group)).join('、')}</span>
+      <details className="details stock-group-periods"><summary>有效期間</summary><div className="research-list">{groups.map((group) => <div className="research-list-item" key={group.id + '-' + group.valid_from}>
+        <strong>{stockGroupLabel(group)}</strong>
+        <span className="small-note">有效期間：{formatTaiwanDateTime(group.valid_from, true)}～{group.valid_to ? formatTaiwanDateTime(group.valid_to, true) : '截止日未提供'}</span>
+      </div>)}</div></details>
+    </> : <span className="empty">尚無可顯示的族群歸屬。</span>}
+  </div></section>
 }
 
 function BrokerBranchEntry({ exchange }: { exchange: string }) {
@@ -753,7 +764,7 @@ function ChipGroupLine({ label, group }: { label: string; group: ChipGroupSource
 
 export function ChipTable({ rows }: { rows: InstrumentDetail['chips'] }) {
   return <>
-    <div className="small-note chip-unit-note">單位：張（三大法人為股數 ÷ 1,000 四捨五入，不足 500 股為 0）。三大法人為外資、投信、自營商；正值為買超，負值為賣超。融資正值為餘額增加，負值為減少。三大法人欄空白：官方三大法人表當天未列此股（只列當天有法人買賣的股票）；融資欄空白：當天不是融資標的，或官方融資餘額表未列此股；其他空白表示數值無效或來源單位待核實。原始股數與來源見下方說明。</div>
+    <details className="details chip-unit-note"><summary>說明</summary><p className="small-note">單位：張（三大法人為股數 ÷ 1,000 四捨五入，不足 500 股為 0）。三大法人為外資、投信、自營商；正值為買超，負值為賣超。融資正值為餘額增加，負值為減少。三大法人欄空白：官方三大法人表當天未列此股（只列當天有法人買賣的股票）；融資欄空白：當天不是融資標的，或官方融資餘額表未列此股；其他空白表示數值無效或來源單位待核實。原始股數與來源見下方說明。</p></details>
     <DataTable wrapClassName="compact-table" columns={CHIP_COLUMNS} rows={rows} rowKey={(row, index) => row.id ?? row.date ?? index} />
     <details className="technical-details chip-source-details"><summary>資料來源與原始值</summary><div className="chip-source-list">{rows.map((row) => <div className="chip-source-row" key={`${row.date}-${row.source}`}><strong>{formatTaiwanDateTime(row.date, true)}</strong><ChipGroupLine label="法人" group={row.institutional} /><ChipGroupLine label="融資" group={row.margin} /><span>來源稽核原值：外資（{isVerifiedChipFlowSource(row.institutional?.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.foreign_buy)} · 投信（{isVerifiedChipFlowSource(row.institutional?.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.trust_buy)} · 自營商（{isVerifiedChipFlowSource(row.institutional?.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.dealer_buy)} · 融資（{isVerifiedMarginSource(row.margin?.source) ? '張' : '單位待核實'}） {formatRawChipValue(row.margin_change)}</span></div>)}</div></details>
   </>
@@ -785,17 +796,25 @@ function CoveragePanel({ coverage }: { coverage: InstrumentDetail['coverage'] })
   return <section className="panel coverage-panel"><div className="section-head"><div><div className="eyebrow">研究資料覆蓋</div><h2>距離策略判斷還缺幾個有效交易日</h2></div><span className="small-note">基準 {baselineLabel}</span></div><div className="metric-row"><span>有效行情交易日</span><b>{barCountLabel}</b></div><div className="metric-row"><span>距離 20 日條件</span><b>{missing20Label}</b></div><div className="metric-row"><span>距離 60 日條件</span><b>{missing60Label}</b></div><div className="metric-row"><span>籌碼資料</span><b>{missingChipLabel}</b></div>{labels.length ? <div className="data-gap">目前原因：{labels.join('、')}</div> : <div className="small-note">目前沒有已知資料覆蓋缺口。</div>}<details className="technical-details"><summary>查看缺口日期與資料明細</summary><div className="small-note">20 日行情缺口：{coverage.missing_bar_dates_to_20.length ? coverage.missing_bar_dates_to_20.join('、') : '無'}</div><div className="small-note">60 日行情缺口：{coverage.missing_bar_dates_to_60.length ? coverage.missing_bar_dates_to_60.join('、') : '無'}</div><div className="small-note">20 日籌碼缺口：{coverage.missing_chip_dates_to_20.length ? coverage.missing_chip_dates_to_20.join('、') : '無'}</div></details></section>
 }
 
-export function ActionDetailPanel({ action }: { action: ActionSummary | null }) {
-  if (!action) return <section className="panel stock-action-detail"><h2>研究條件</h2><div className="empty">尚無行動摘要。</div></section>
+// #519: one panel for the research action, its risk and time fold, and the tracking rows passed as children (DESIGN_SYSTEM §5 研究動作區).
+export function ActionDetailPanel({ action, gap, children }: { action: ActionSummary | null; gap?: { reasons: GapReason[] | undefined; missingFields: string[] } | null; children?: ReactNode }) {
+  if (!action) return <section className="panel stock-action-detail"><div className="panel-head"><h2>研究動作</h2></div>{gap && <ResearchGapLine reasons={gap.reasons} missingFields={gap.missingFields} />}<div className="empty">尚無行動摘要。</div></section>
   const incomplete = ['data_insufficient', 'data_incomplete', 'insufficient_data'].includes(action.action_state)
+  const instruction = action.display_instruction ?? action.action_instruction ?? actionLabel(action.action_state)
+  // #519: one panel says a sentence once — the data-gap sentence the instruction already carries, and the primary reason
+  // that is one of the gap causes, are not repeated (UI_COPY_SPEC §8.2 研究動作區).
+  const fullGap = incomplete ? productActionReasonLabel(action.data_gap ?? '研究資料尚未完整，尚不能計算進場、失效與目標價。') : null
+  const gapNote = fullGap && !instruction.includes(fullGap) ? fullGap : null
+  const primary = action.primary_reason?.label
+  const showPrimary = Boolean(primary) && !(gap?.reasons ?? []).some((reason) => reason.label === primary)
   const actionTitle = incomplete ? '策略判斷資料待補' : action.display_action ?? actionLabel(action.action_state)
   const detailReasons = action.display_reasons ?? action.reasons
   const showLevels = ['conditional_entry', 'wait_breakout', 'wait_pullback', 'hold_observe', 'reduce_exit'].includes(action.action_state)
-  return <section className="panel stock-action-detail">
-    <div className="section-head"><div><div className="eyebrow">研究動作</div><h2>{actionTitle}</h2></div><QualityBadge kind="research" status={action.data_quality} /></div>
-    <div className="action-detail-summary"><strong>{action.display_instruction ?? action.action_instruction ?? actionLabel(action.action_state)}</strong>{action.primary_reason?.label && <span>{action.primary_reason.label}</span>}</div>
+  return <section className="panel stock-action-detail" aria-labelledby="stock-action-title">
+    <div className="panel-head"><h2 id="stock-action-title">研究動作</h2><QualityBadge kind="research" status={action.data_quality} /></div>
+    <div className="action-detail-summary"><strong>{actionTitle}</strong><span className="action-detail-instruction">{instruction}</span>{showPrimary && <span>{primary}</span>}</div>
     {action.position_quantity_status === 'unknown' && <div className="small-note"><span className="pill ambiguous">庫存數量待核實</span> 請先核對原記錄，再確認持倉狀態。</div>}
-    {incomplete && <div className="data-gap">{productActionReasonLabel(action.data_gap ?? '研究資料尚未完整，尚不能計算進場、失效與目標價。')}</div>}
+    {gap ? <ResearchGapLine reasons={gap.reasons} missingFields={gap.missingFields} note={gapNote} /> : gapNote && <div className="data-gap">{gapNote}</div>}
     <details className="technical-details"><summary>查看風險提醒、時間與價位</summary>
       <ProductTimeSummary time={action.product_time} fallbackDate={action.data_cutoff} fallbackEarliestDate={action.earliest_execution_date} />
       {showLevels && <div className="level-grid stock-detail-levels">
@@ -810,6 +829,7 @@ export function ActionDetailPanel({ action }: { action: ActionSummary | null }) 
       {action.conflicts.length > 0 && <div className="warning-box">{action.conflicts.join('；')}</div>}
       <div className="small-note">資料日：{formatTaiwanDateTime(action.data_cutoff, true)} · 價位語意：{levelSemanticsLabel(action.level_semantics)} · 規則與官方資料詳見資料說明。</div>
     </details>
+    {children && <div className="action-detail-plan">{children}</div>}
   </section>
 }
 
