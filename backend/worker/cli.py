@@ -472,6 +472,9 @@ def main() -> None:
     except scheduled_job.MaintenanceRefused as exc:
         print(exc, file=sys.stderr)
         sys.exit(scheduled_job.MAINTENANCE_REFUSED_EXIT)
+    except scheduled_job.MaintenanceLost as exc:
+        print(f"{guarded}: stopped, maintenance mode was lost: {exc}", file=sys.stderr)
+        sys.exit(scheduled_job.MAINTENANCE_LOST_EXIT)
 
 
 def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:

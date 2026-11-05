@@ -255,14 +255,108 @@ def test_a_sigterm_releases_maintenance(data):
     assert log(data)[-1]["outcome"] == f"exit {128 + signal.SIGTERM}"
 
 
-def test_a_command_runs_under_a_maintenance_turned_on_by_hand_and_leaves_it_on(
-    data, monkeypatch, capsys
+def test_a_command_is_refused_under_a_maintenance_turned_on_by_hand(
+    data, serve_running
 ):
-    job.maintenance_on(data, "init-db v1.3.0")
-    seen = run_held(monkeypatch, capsys, data, "backfill")
-    assert seen["marker"]["owner"] == "manual"
+    """Review 6647096392 must 3: by hand is a deploy's init-db; deploy.sh turns it off
+    with the command still running underneath, so the command does not start."""
+
+    job.maintenance_on(data, "v1.3.0")
+    result = cli(data, *GUARDED["backtest"][0])
+    assert result.returncode == REFUSED, result.stdout + result.stderr
+    assert "目前是手動維護（部署中，原因：v1.3.0" in result.stderr
+    assert "請等部署完成" in result.stderr
     assert marker(data)["owner"] == "manual"
     assert [e["event"] for e in log(data)] == ["on"]
+    assert not (data / "stock.db").exists()
+
+
+def _lose_by(data: Path, how: str):
+    """What takes maintenance mode from a running holder."""
+
+    def work(seen):
+        if how == "removed":
+            job.maintenance_path(data).unlink()
+        elif how == "taken":
+            job._write_marker(
+                job.maintenance_path(data), {**marker(data), "token": "other:1:2"}
+            )
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            time.sleep(0.05)
+        seen["carried_on"] = True
+
+    return work
+
+
+@pytest.mark.parametrize("how", ["removed", "taken", "beat_fails"])
+def test_a_holder_that_loses_maintenance_stops_within_a_heartbeat(
+    data, monkeypatch, capsys, how
+):
+    """Review 6647096392 must 1: expired after a pause (removed), someone else's marker
+    (taken), or a beat that cannot write: the command stops with 70, not carries on."""
+
+    monkeypatch.setattr(job, "MAINTENANCE_HEARTBEAT_SECONDS", 0.2)
+    if how == "beat_fails":
+        write = job._write_marker
+        calls = []
+
+        def failing(path, content):
+            calls.append(path)
+            if len(calls) > 1:  # the first is taking it
+                raise OSError(28, "No space left on device")
+            write(path, content)
+
+        monkeypatch.setattr(job, "_write_marker", failing)
+    started = time.monotonic()
+    seen = run_held(monkeypatch, capsys, data, "backfill", _lose_by(data, how))
+    assert seen["exit"] == job.MAINTENANCE_LOST_EXIT == 70
+    assert "carried_on" not in seen
+    assert time.monotonic() - started < 10
+    assert "stopped, maintenance mode was lost" in seen["stderr"]
+    events = [e["event"] for e in log(data)]
+    assert events[:2] == ["held", "lost"]
+    if how == "beat_fails":
+        # Still its own marker: released on the way out, with the reason.
+        assert events[-1] == "released" and "lost:" in log(data)[-1]["outcome"]
+        assert "No space left on device" in log(data)[-1]["outcome"]
+        assert marker(data) is None
+    elif how == "taken":
+        assert marker(data)["token"] == "other:1:2"  # not ours to remove
+
+
+def test_two_commands_starting_at_once_take_it_one_only(data):
+    """Review 6647096392 must 2: taking it is atomic (the marker lock)."""
+
+    for attempt in range(5):
+        go = data.parent / f"go{attempt}"
+        script = (
+            "import sys, time; from pathlib import Path; import worker.job as job\n"
+            "go = Path(sys.argv[2])\n"
+            "while not go.exists(): time.sleep(0.001)\n"
+            "try:\n"
+            "    with job.MaintenanceHold(Path(sys.argv[1]), sys.argv[3]):\n"
+            "        print('held', flush=True); time.sleep(2)\n"
+            "except job.MaintenanceRefused as exc:\n"
+            "    print('refused', exc, flush=True); sys.exit(75)\n"
+        )
+        children = [
+            subprocess.Popen(
+                [sys.executable, "-c", script, str(data), str(go), name],
+                cwd=ROOT / "backend",
+                stdout=subprocess.PIPE,
+                text=True,
+            )
+            for name in ("backfill", "backtest")
+        ]
+        time.sleep(0.5)
+        go.touch()
+        outcomes = sorted(
+            child.communicate(timeout=60)[0].split()[0] for child in children
+        )
+        assert outcomes == ["held", "refused"], attempt
+        assert sorted(child.returncode for child in children) == [0, 75]
+        assert marker(data) is None
 
 
 def test_a_command_takes_over_the_marker_of_a_dead_holder(data, monkeypatch, capsys):

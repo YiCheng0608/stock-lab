@@ -345,10 +345,11 @@ esac
 # ends with the deploy, now that the new containers check out (#468 decision 6646032625); one a
 # backfill or backtest holds (it beats) is left to it. Recorded in deploy.json as
 # "maintenance": turned_off, none, kept_command_held, or failed (the deploy still stands; the
-# watchdog reports a maintenance mode left on past 12 hours). Before the locks go, so the
+# watchdog reports a maintenance mode left on past 12 hours). Only its stdout is parsed: a warning
+# on stderr (it goes to ours) does not turn a success into failed. Before the locks go, so the
 # watchdog never reads the record halfway.
 maintenance="$(compose exec -T scheduler python -X utf8 -m worker.cli maintenance off --only-manual \
-  --reason "deployed $tag" </dev/null 2>&1)" \
+  --reason "deployed $tag" </dev/null)" \
   && maintenance="$(printf '%s' "$maintenance" | "$python" -X utf8 -c \
     'import json, sys; print(json.loads(sys.stdin.read())["deploy_maintenance"])' 2>/dev/null)" \
   && [ -n "$maintenance" ] || maintenance=failed

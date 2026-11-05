@@ -76,11 +76,11 @@ candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(�
 回補、回測、`init-db` 這類長時間寫 DB 的作業期間，以維護模式取代停 scheduler（#468）：daily 與 news 不執行，看門狗與[事件 monitor](MONITOR.md) 照常跑，統籌照樣收得到 Issue／PR 留言與 CI 的事件。#468 以前停 scheduler 會連 monitor 一起停：2026-11-04 技術回測前停了 scheduler，回測結束就 `start` 的那一步放在統籌 session 的背景指令裡，換手時跟著消失；回測又在 04:52 被 OOM 結束，scheduler 一直停到 05:15 部署時才起來，約 7.5 小時沒有 monitor、看門狗與 news（[#468 決定](https://github.com/YiCheng0608/stock-lab/issues/468#issuecomment-6646001167)）。所以恢復不靠任何 session：作業自己開關，作業死掉由 serve 解除。
 
 - **作業自己持有**：`backfill`、`backtest`、`events backfill`、`instruments repair --apply` 起跑時自己開維護模式，正常結束、例外或 SIGTERM（`docker stop`）都在 `finally` 關掉（[`MaintenanceHold`](../../backend/worker/job.py)）。直接照平常跑，不必先停 scheduler，例如 `docker compose -p <P> exec scheduler python -m worker.cli backtest --start-date … --end-date …`；`exec scheduler` 或 `compose run api` 都一樣，標記檔在同一個 volume。起跑時 stderr 會提示：**預估會跨過 21:30 時，請改在 23:30 後開始**（21:30 的 daily 會被跳過，要等解除才補跑）。
-- **標記檔**：`/data/locks/maintenance`（JSON）。作業持有時記 owner（命令、容器 hostname、PID、token）、開始時間與心跳時間，作業期間每 60 秒更新心跳。
-- **拒絕起跑**（exit 75，stderr 寫出原因）：有開啟前就在跑的 daily／news job（等它結束再跑），或維護模式由另一個仍有心跳的作業持有（一次只跑一個回補或回測）。其餘情況自動開，不拒絕。
-- **心跳逾時**：作業被 SIGKILL 或 OOM 結束時 `finally` 不會執行。serve 每分鐘檢查一次，心跳超過 10 分鐘沒更新就視為 owner 已死：刪掉標記檔、恢復 daily 與 news，在 `docker logs` 記 `serve maintenance_expired`，在 `maintenance.log` 記一筆 `expired`，看門狗據此在 #1 留言 `maintenance_expired`（[排程看門狗](WATCHDOG.md)）。作業沒有跑完，回補以相同參數重跑即從 manifest 續做。下一個回補或回測遇到心跳已停的標記檔會直接接手（記 `took_over_from`）。
+- **標記檔**：`/data/locks/maintenance`（JSON）。作業持有時記 owner（命令、容器 hostname、PID、token）、開始時間與心跳時間，作業期間每 60 秒更新心跳。取得、心跳、解除、逾時與手動 `on`／`off` 都在 `/data/locks/maintenance.lock` 的 flock 下進行：兩個作業同時起跑只有一個取得，心跳也不會讓 serve 剛解除的標記檔復活。
+- **拒絕起跑**（exit 75，stderr 寫出原因）：有開啟前就在跑的 daily／news job（等它結束再跑），維護模式由另一個仍有心跳的作業持有（一次只跑一個回補或回測），或維護模式是手動開的（部署中：`deploy.sh` 會在作業還在跑時把它關掉，所以等部署完成再跑）。其餘情況自動開，不拒絕。
+- **心跳逾時**：作業被 SIGKILL 或 OOM 結束時 `finally` 不會執行。serve 每分鐘檢查一次，心跳超過 10 分鐘沒更新就視為 owner 已死：刪掉標記檔、恢復 daily 與 news，在 `docker logs` 記 `serve maintenance_expired`，在 `maintenance.log` 記一筆 `expired`，看門狗據此在 #1 留言 `maintenance_expired`（[排程看門狗](WATCHDOG.md)）。作業沒有跑完，回補以相同參數重跑即從 manifest 續做。下一個回補或回測遇到心跳已停的標記檔會直接接手（記 `took_over_from`）。反過來，作業還活著卻失去維護模式時（主機睡眠或 VM 暫停後 serve 先醒、判定逾時；或心跳寫不進去），心跳執行緒會在一個週期內發現，記 `lost`，以 SIGUSR1 讓主執行緒丟出 `MaintenanceLost`，作業以 exit 70 結束，不和接著開跑的 daily 並行寫 DB。
 - **daily 與 news**：job 取鎖後先看標記檔（[`job.py`](../../backend/worker/job.py)），有就只在日誌記 `===== skipped reason=maintenance (since=<開始時間>, reason=<原因>, marker=<標記檔>)` 與 `end exit=0`（news 的 `news_llm_exit=not_run`），不啟動 worker，所以不寫 DB：daily 其他跳過原因會寫的 `skipped` run 列（含 `already_running`）也不寫。排程觸發與手動的 `job daily|news` 一樣跳過；維護期間要手動跑就直接 `worker.cli daily`。標記檔讀不懂時也算開著。
-- **解除後補跑**：serve 偵測到維護模式解除（作業結束、手動 off 或心跳逾時）時，是週一至週五、已過 21:30，而當日 daily 沒有完成，就立即補跑一次（與[錯過的時段](#scheduler-容器的排程serve)的啟動補跑相同）。例：21:30 在維護中被跳過、22:10 解除，就在 22:10 補跑；補跑成功後 23:00 那次只記 `already_complete`（做法人重抓），不重跑。在維護模式中啟動的 serve（例如部署換了容器）不在啟動時補跑（記 `catchup_deferred`），等解除時補。
+- **解除後補跑**：serve 偵測到維護模式解除（作業結束、手動 off 或心跳逾時）時，是週一至週五、已過 21:30，而當日 daily 沒有完成，就立即補跑一次（與[錯過的時段](#scheduler-容器的排程serve)的啟動補跑相同）。例：21:30 在維護中被跳過、22:10 解除，就在 22:10 補跑；補跑成功後 23:00 那次只記 `already_complete`（做法人重抓），不重跑。在維護模式中啟動的 serve（例如部署換了容器）不在啟動時補跑（記 `catchup_deferred`），等解除時補。**跨午夜**：21:30 與 23:00 都在維護中、午夜後才解除時，補跑只看「今天」，前一天不會補跑；下一個交易日 daily 的 catchup 會補抓那天的 collect，但不補 analyze、candidates 等，看門狗在 00:30 後就那天留言（`daily_result_<日期>`），要那天的訊號與候選就手動跑 `python -m worker.cli daily --date <那天>`。
 - **看門狗與 monitor**：照常執行。看門狗每輪記 `maintenance_on`，開超過 12 小時在 #1 留言（`maintenance_long`，每台北日一則）；只因維護模式跳過、沒有 run 列的那天 daily 不算異常。
 - **手動開關**：只用在 [RELEASE 含 migration 的版本](../RELEASE.md#含-migration-的版本)的 `init-db`→`deploy.sh` 這一段，因為維護模式要從 `init-db` 前一路開到新容器起來，沒有單一作業能持有它。手動開的沒有心跳、不會逾時解除；`deploy.sh` 換完容器、核對都通過後自己關掉它，記在部署記錄的 `maintenance`。部署失敗時留著，忘了關由看門狗 12 小時的警報提醒。命令（`<P>` 是正式 compose project；`STOCK_DATA_DIR=/data` 由 compose 給，另可加 `--data-dir`）：
 
@@ -91,7 +91,7 @@ candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(�
   | 關 | `docker compose -p <P> exec scheduler python -m worker.cli maintenance off --reason "<結果>"`（`--only-manual` 只關手動開的，`deploy.sh` 用） |
 
   `on` 在已開時不改開始時間，只記一列 `on_again`；`running_jobs` 是 `[]` 才開始作業。
-- **紀錄**：`/data/logs/maintenance.log` 每次變更一列 JSON：`held`／`released`（作業，`released` 有結果 `success`、`exit <碼>`、例外或 `refused: …`）、`expired`、`on`／`on_again`／`off`／`off_again`（手動）。
+- **紀錄**：`/data/logs/maintenance.log` 每次變更一列 JSON：`held`／`released`（作業，`released` 有結果 `success`、`exit <碼>`、例外、`lost: …` 或 `refused: …`）、`lost`（作業失去持有權）、`expired`、`on`／`on_again`／`off`／`off_again`（手動）。
 - **serve 不寫 DB 的範圍**：維護模式中 serve 啟動的程序都不寫 `stock.db`：daily、news 不啟動 worker；看門狗以唯讀連線查 DB（`mode=ro`、`query_only`）；monitor 只讀日誌、寫佇列目錄；serve 自己的補跑判定也是唯讀。api 照常服務，使用者的寫入（例如追蹤計畫）不受影響，與停 scheduler 相同。scheduler 跑的是 #468 以前的 image（v1.2.3 以前）時沒有維護模式，仍要 `stop scheduler`。
 - 不讓回補與 daily 並行。
 

@@ -347,7 +347,7 @@ if [ -n "$python" ] && [ -f "$data_dir/stock.db" ] && compgen -G "$logs/daily-*.
       else
         [ -f "$logs/daily-$taipei_date.log" ] && anomaly daily_result "daily 排程：台北 $taipei_iso 有日誌但 \`schedule_runs\` 沒有這一天的 run（worker 未能啟動），請看 \`$logs/daily-$taipei_date.log\`。"
       fi ;;
-    error) found=1; log daily_check_failed """讀取 stock.db 的 schedule_runs 失敗：$(tail -n 1 "$work/helper.err" 2>/dev/null)" ;;
+    error) found=1; log daily_check_failed "" "讀取 stock.db 的 schedule_runs 失敗：$(tail -n 1 "$work/helper.err" 2>/dev/null)" ;;
     catchup_incomplete) anomaly daily_result "daily 排程：台北 $taipei_iso 當日成功，但補抓前幾個交易日沒有補齊（catchup），請查 \`python -m worker.cli schedule-runs --date $taipei_iso\` 的 catchup 步驟，必要時依 docs/ops/SCHEDULING.md 重跑與回補 手動 backfill。" ;;
     *) anomaly daily_result "daily 排程：台北 $taipei_iso 的 daily 結果是 \`$result\`（不是 success／non_trading_day），請查 \`python -m worker.cli schedule-runs --date $taipei_iso\` 與 \`$logs/daily-$taipei_date.log\`。" ;;
   esac
@@ -373,7 +373,9 @@ if [ -n "$python" ] && [ -f "$data_dir/stock.db" ] && compgen -G "$logs/daily-*.
       success|non_trading_day|running|skip) ;;
       none)
         if skipped_for_maintenance "$logs/daily-$previous_date.log"; then
-          log daily_maintenance "date=$previous_iso" "前一個交易日的 daily 因維護模式跳過，沒有 run 列，不算異常"
+          # Maintenance across midnight (#468 review 6647096392): 21:30 and 23:00 both
+          # skipped, ended after midnight, so serve's catch-up (today's date only) never ran it.
+          anomaly "daily_result_$previous_date" "daily 排程：台北 $previous_iso（前一個交易日）的 daily 因維護模式整晚都被跳過（21:30 與 23:00 都在維護中，午夜後才解除），沒有補跑。下一個交易日 daily 的 catchup 會補抓這一天的 collect，但不補 analyze、candidates 等；要這一天的訊號與候選，請在維護結束後手動跑 \`python -m worker.cli daily --date $previous_iso\`（docs/ops/SCHEDULING.md 維護模式）。"
         else
           [ -f "$logs/daily-$previous_date.log" ] && anomaly "daily_result_$previous_date" "daily 排程：台北 $previous_iso（前一個交易日）有日誌但 \`schedule_runs\` 沒有這一天的 run（worker 未能啟動），請看 \`$logs/daily-$previous_date.log\`。"
         fi ;;

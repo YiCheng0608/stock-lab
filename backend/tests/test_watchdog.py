@@ -1936,8 +1936,10 @@ def _maintenance_daily_log(wd: Watchdog, day: str = "20261019") -> None:
     )
 
 
-def test_a_daily_skipped_for_maintenance_is_not_reported(wd):
-    """AC-2: no run row for the day, as a worker that could not start; not an anomaly."""
+def test_a_daily_skipped_for_maintenance_is_not_reported_that_night(wd):
+    """AC-2: no run row for the day, as a worker that could not start; not an anomaly
+    while serve may still catch it up. Across midnight it cannot any more (its catch-up
+    runs today's date): the 00:30 check reports it once (review 6647096392)."""
 
     _maintenance_daily_log(wd)
     _daily_db(wd.data / "stock.db", [])
@@ -1947,14 +1949,19 @@ def test_a_daily_skipped_for_maintenance_is_not_reported(wd):
     os.utime(news, (NIGHT - 3600, NIGHT - 3600))
     wd.run()  # 23:15
     wd.run(now=LAST_RUN)  # 23:45
-    marker.unlink()  # off after midnight: the day before is judged at 00:30
-    wd.run(now=AT_0045)
     assert wd.text("gh_calls.log") == ""
     events = wd.events()
     assert not [event for event in events if event.startswith("anomaly")]
     assert events.count("maintenance_on") == 2
-    assert events.count("daily_maintenance") == 3
+    assert events.count("daily_maintenance") == 2
     assert " maintenance_on since=2026-10-19T13:15:00Z hours=2 " in wd.log()
+    marker.unlink()  # off after midnight: the day before is judged at 00:30
+    wd.run(now=AT_0045)
+    wd.run(now=AT_0115)
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
+    body = wd.text("gh_bodies.txt")
+    assert "台北 2026-10-19（前一個交易日）的 daily 因維護模式整晚都被跳過" in body
+    assert "python -m worker.cli daily --date 2026-10-19" in body
 
 
 def test_a_day_with_no_run_row_and_no_maintenance_skip_is_still_reported(wd):
