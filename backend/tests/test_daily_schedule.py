@@ -934,6 +934,8 @@ def test_historical_adapter_skips_current_feeds_and_reuses_the_universe(
         sources.TPEX_SUSPEND_HISTORY_ENDPOINT,
         sources.TPEX_EVENT_ENDPOINT,
         sources.TPEX_FUNDAMENTAL_ENDPOINT,
+        sources.TWSE_MONTHLY_REVENUE_ENDPOINT,
+        sources.TPEX_MONTHLY_REVENUE_ENDPOINT,
     }
     assert not current_only.intersection(fetcher.calls)
     for endpoint in (sources.TWSE_LISTED_ENDPOINT, sources.TPEX_LISTED_ENDPOINT):
@@ -1826,15 +1828,18 @@ def test_noncore_source_warnings_keep_the_collect_successful(database):
         sources.TPEX_HIGHLIGHT_ENDPOINT,
         # The emerging roster, names for AI news candidates only (Issue #512).
         sources.TPEX_EMERGING_ISSUER_ENDPOINT,
+        # The display-only monthly revenue snapshots (Issue #530).
+        sources.TWSE_MONTHLY_REVENUE_ENDPOINT,
+        sources.TPEX_MONTHLY_REVENUE_ENDPOINT,
     )
     result = pipeline.collect(DAY, adapter=combined(OutageFetcher(failing)))
     assert result["status"] == "success", result
-    assert result["core_warnings"] == [] and len(result["noncore_warnings"]) == 8
+    assert result["core_warnings"] == [] and len(result["noncore_warnings"]) == 10
     assert result["warnings"] == result["noncore_warnings"]
     with database() as db:
         run = db.get(IngestionRun, result["run_id"])
         assert (
-            run.status == "success" and len(run.metadata_json["noncore_warnings"]) == 8
+            run.status == "success" and len(run.metadata_json["noncore_warnings"]) == 10
         )
 
 

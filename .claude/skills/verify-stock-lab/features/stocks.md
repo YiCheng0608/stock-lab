@@ -61,6 +61,7 @@
 | 法人籌碼 | `stock.json` 的 `chips`（日期由舊到新，表格只列最近 30 筆、由新到舊） | 卡片 `法人與融資`；每筆來源說明分兩行 `法人：…（<source>） · 資料截至：… · 收集：…` 與 `融資：…`，該筆沒有那份官方檔時是 `法人：無資料`／`融資：無資料`（#395）；`券商／分點` 區塊 | — | `尚無可核實的籌碼資料。` |
 | 研究條件 | `stock.json` 的 `strategy_board`、`decision_summary`、`candidate` | 策略總表 `資料 <strategy_board.as_of/>`；`資料日期：<I/>`（時間摘要）、`資料日：<I/> · 價位語意：…` | 策略總表有候選列（`strategy_board.candidate` 非 null）時，候選列的 `AI 推論` 與來源行 `（推論）`（同今日 T8）；觀察價位在 `條件未成立・觀察價位` 標籤之下，不是推論 | `此股尚無策略判定資料。`、`尚無行動摘要。` |
 | 財務（#528） | `stock.json` 的 `fundamentals`（API 已依截止日篩掉可得日較晚的列，期別由新到舊） | 卡片 `季報營收與 EPS` 之後的 `資料 <最新一列 data_as_of/>` badge；每列的可得日與來源，表格下 `來源：…` | — | ETF `ETF 沒有公司財報，不適用。`；新上市與其他股票各一句（UI_COPY_SPEC §8.2 財務分頁） |
+| 月營收（#530） | `stock.json` 的 `monthly_revenues`（API 已依截止日篩掉可得日較晚的月份，由新到舊，最多 12 個月） | 季報卡之下的卡片 `月營收` 之後的 `資料 <最新月份 data_as_of/>` badge；每列的可得日與來源，表格下 `來源：…` | — | ETF `ETF 不申報月營收，不適用。`；新上市與其他股票各一句（UI_COPY_SPEC §8.2 財務分頁） |
 | 新聞與公告 | `stock-news.json`（只留交易所＋代號相符） | 每張卡時間行與來源 | 有 AI 判讀的卡接 `AI 推論` | `尚無與此股已核實關聯的新聞或公告。` |
 | 資料說明 | `stock.json`、`stock-bars.json` | `行情來源`、`K 線資料日期` 兩列與當日行情來源品質行 `<品質說明> · 資料日 <I/>`（例如 `行情來源完整 · 資料日 2026/10/21`） | — | `待核實` |
 
@@ -80,6 +81,7 @@
 | S10 | CI | 策略總表（#274） | `stock-research-1280.txt` 有整行 `策略總表`，下一行是 `資料 <strategy_board.as_of 的 YYYY/MM/DD>`（`as_of` 為 null 時改查 `此股尚無策略判定資料。`）；`strategies` 每一列在桌面表格有 `<label><TAB>` 開頭的行，下一行是 `<狀態>` 或以 `<狀態><TAB>` 開頭（成立列的最早執行日在 badge 下方另起一行；`conditional` 成立、`observation` 觀察、`data_incomplete` 資料不足、`not_applicable` 不適用）；從 `策略總表` 那一行起（#519：之前的摘要卡會重複最接近成立那一條的觀察價位），整行 `條件未成立・觀察價位` 的行數等於 `levels.kind=observation` 的列數，而且不出現在成立列的範圍內（成立價位與觀察價位不混）；`candidate` 非 null 時有 `第 <rank> 名 · 總分 <round(total_score×100)> · ` 開頭的行，null 時沒有整行 `每日候選` |
 | S11 | CI | 摘要卡（#519） | `stock-1280.txt` 有整行 `目前判斷`，它之後、分頁籤 `圖表與指標` 之前是摘要卡：`目前判斷` 後三行內有判斷 badge，依 [UI_COPY_SPEC §8.2 摘要卡](../../../../docs/UI_COPY_SPEC.md#82-個股詳情的第一屏) 的順序由 `stock.json` 推得（沒有行動摘要也沒有策略總表 `無資料`；`reduce_exit` 持倉風險；`strategy_board.candidate` 非 null 可買；`hold_observe` 持倉觀察；`manual_review` 需人工判讀；每列 `not_applicable` 不適用；行動摘要資料不足 資料不足；有 `conditional` 列 條件成立；其他 觀察）；可買的下一行是 `每日候選第 <rank> 名 · 總分 <round(total_score×100)> · <策略>`，資料不足且有 `gap_reasons` 時下一行是各 `label` 以 `；` 連接，觀察且有 `primary_reason` 時下一行是它的 `label`，無資料的下一行是 `尚無行動摘要。`；之後有整行 `最接近成立`、`規則價位`（`strategies` 空時不查 `規則價位`）與 `完整條件 →` |
 | S12 | CI | 財務（#528） | `stock-financials-1280.txt` 有整行 `季報營收與 EPS`。`stock.json` 的 `fundamentals` 空時：依 `instrument.instrument_type` 有整行原因句（`etf` 為 `ETF 沒有公司財報，不適用。`，`ipo` 與其他各一句，見 [UI_COPY_SPEC §8.2 財務分頁](../../../../docs/UI_COPY_SPEC.md#82-個股詳情的第一屏)），且沒有期別列。不空時：標題之後有 `資料 <最新一列 data_as_of 的 YYYY/MM/DD>`；每一列有以 `<期別>\t<營收÷100,000，兩位小數>\t<EPS 兩位小數>\t<ROE 兩位小數>\t<可得日>\t` 開頭的行（沒有值的格是 `來源未提供`，期別 `Q<n>` 寫 `YYYY 年第 n 季`），順序與 API 相同；表格下有 `來源：` 開頭的行 |
+| S13 | CI | 月營收（#530） | `stock-financials-1280.txt` 有整行 `月營收`，以下都從這一行起找。`stock.json` 的 `monthly_revenues` 空時：依 `instrument.instrument_type` 有整行原因句（`etf` 為 `ETF 不申報月營收，不適用。`，`ipo` 與其他各一句），且沒有月份列。不空時：有 `資料 <最新月份 data_as_of 的 YYYY/MM/DD>`；每個月有以 `<YYYY 年 M 月>\t<營收÷100,000，兩位小數>\t<年增率一位小數，正數帶 +>\t<可得日>\t` 開頭的行（沒有值的格是 `來源未提供`），順序與 API 相同；表格下有 `來源：` 開頭的行 |
 
 ## 陷阱
 
@@ -93,7 +95,7 @@
 
 ## 判定
 
-- 通過：S1～S12 全部通過。
+- 通過：S1～S13 全部通過。
 - 失敗：任一條失敗，列出編號、預期與實際。
 - 無法判定：沒有失敗，但有檢查無法判定（截圖未 ready、分頁按鈕找不到（`missingClicks`）、API 非 200、沒有選到個股，或上游沒通過，見 [README 三態與上游](README.md#三態與上游)）；列出 URL 或上游編號。
 

@@ -707,6 +707,43 @@ class FundamentalSnapshot(Base):
     collected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class MonthlyRevenue(Base):
+    """One company's revenue for one month (Issue #530).
+
+    Amounts are NT$ thousands as the source reports them; ``yoy`` is the
+    source's 去年同月增減(%) (the snapshot's full precision, the MOPS page's two
+    truncated decimals), never recomputed.  ``revenue_month`` is the month's
+    first day.  ``announcement_date`` is the availability date: the snapshot's
+    first 出表日期, or the statutory deadline (the 10th of the next month,
+    rolled to a session) of a backfilled month; ``data_json.announcement_basis``
+    names which.  collect writes the snapshot month, ``worker.monthly_revenue``
+    the backfill.  Display only: no strategy or score reads it.
+    """
+
+    __tablename__ = "monthly_revenues"
+    __table_args__ = (
+        UniqueConstraint(
+            "instrument_id", "revenue_month", name="uq_monthly_revenue_month"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"))
+    revenue_month: Mapped[date] = mapped_column(Date, index=True)
+    revenue: Mapped[float | None] = mapped_column(Float, nullable=True)
+    prior_year_revenue: Mapped[float | None] = mapped_column(Float, nullable=True)
+    yoy: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cumulative_revenue: Mapped[float | None] = mapped_column(Float, nullable=True)
+    announcement_date: Mapped[date] = mapped_column(Date)
+    source: Mapped[str] = mapped_column(String(40))
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+    data_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    data_as_of: Mapped[str] = mapped_column(String(40))
+    collected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class Event(Base):
     __tablename__ = "events"
     __table_args__ = (

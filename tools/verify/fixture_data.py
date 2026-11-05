@@ -111,6 +111,7 @@ TWSE_MI_INDEX_ENDPOINT = (
 )
 TPEX_HIGHLIGHT_ENDPOINT = "https://www.tpex.org.tw/openapi/v1/tpex_mainborad_highlight"
 TPEX_EMERGING_ISSUER_ENDPOINT = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_R"
+TWSE_MONTHLY_REVENUE_ENDPOINT = "https://openapi.twse.com.tw/v1/opendata/t187ap05_L"
 OFFICIAL_INDUSTRY_SOURCE = "TWSE/TPEx official OpenAPI"
 
 # id, exchange, symbol, name, type, etf_category, industry code, listing date
@@ -945,6 +946,7 @@ def _raw_payload_rows() -> list[dict[str, Any]]:
         raw(6, 1, "twse", TWSE_MI_INDEX_ENDPOINT, T.isoformat()),
         raw(7, 1, "tpex", TPEX_HIGHLIGHT_ENDPOINT, T.isoformat()),
         raw(8, 1, "tpex", TPEX_EMERGING_ISSUER_ENDPOINT, T.isoformat()),
+        raw(9, 1, "twse", TWSE_MONTHLY_REVENUE_ENDPOINT, T.isoformat()),
     ]
 
 
@@ -1762,6 +1764,73 @@ def _fundamental_rows() -> list[dict[str, Any]]:
     ]
 
 
+# ---- monthly revenue (the stock page 財務 tab's 月營收 card, Issue #530) ----
+
+MONTHLY_REVENUE_SOURCE = "mops_t187ap05"
+
+
+def _monthly_revenue_rows() -> list[dict[str, Any]]:
+    """9101's months: July without 去年同月增減 (來源未提供), August, September, and an
+    October whose deadline is after T, which the stock API must leave out."""
+
+    def month(item_id, first_day, announced, revenue, prior, yoy, cumulative):
+        return {
+            "id": item_id,
+            "instrument_id": INSTRUMENT_IDS["9101"],
+            "revenue_month": first_day,
+            "revenue": revenue,
+            "prior_year_revenue": prior,
+            "yoy": yoy,
+            "cumulative_revenue": cumulative,
+            "announcement_date": announced,
+            "source": MONTHLY_REVENUE_SOURCE,
+            "raw_payload_id": 9,
+            "data_json": {
+                "出表日期": f"{announced.year - 1911}{announced:%m%d}",
+                "資料年月": f"{first_day.year - 1911}{first_day:%m}",
+                "公司代號": "9101",
+                "announcement_basis": "release_date",
+            },
+            "data_as_of": (
+                date(first_day.year, first_day.month + 1, 1) - timedelta(days=1)
+            ).isoformat(),
+            "collected_at": _at(announced, 9, 30),
+        }
+
+    return [
+        month(
+            1, date(2026, 7, 1), date(2026, 8, 10), 4_100_000.0, 0.0, None, 28_000_000.0
+        ),
+        month(
+            2,
+            date(2026, 8, 1),
+            date(2026, 9, 10),
+            4_250_000.0,
+            4_393_000.0,
+            -3.255,
+            32_250_000.0,
+        ),
+        month(
+            3,
+            date(2026, 9, 1),
+            date(2026, 10, 12),
+            4_600_000.0,
+            3_980_000.0,
+            15.578,
+            36_850_000.0,
+        ),
+        month(
+            4,
+            date(2026, 10, 1),
+            T + timedelta(days=25),
+            4_700_000.0,
+            4_000_000.0,
+            17.5,
+            41_550_000.0,
+        ),
+    ]
+
+
 # ---- assembled tables (insertion order respects foreign keys) ----
 
 TABLES: dict[str, list[dict[str, Any]]] = {
@@ -1777,6 +1846,7 @@ TABLES: dict[str, list[dict[str, Any]]] = {
     "technical_indicators": _indicator_rows(),
     "chip_snapshots": _chip_rows(),
     "fundamental_snapshots": _fundamental_rows(),
+    "monthly_revenues": _monthly_revenue_rows(),
     "data_quality": _data_quality_rows(),
     "group_daily_scores": _score_rows(),
     "signals": _signal_rows() + _plan_signal_rows(),
@@ -2020,6 +2090,14 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         (f"stocks/{E}/{S}", "fundamentals[].fiscal_period", ["Q2", "Q1"]),
         (f"stocks/{E}/{S}", "fundamentals[].revenue", [12_345_678.0, None]),
         ("stocks/{}/{}".format(*NO_DATA_STOCK), "fundamentals", 0),
+        # October's deadline is after the cutoff (T) and stays out (#530).
+        (
+            f"stocks/{E}/{S}",
+            "monthly_revenues[].revenue_month",
+            ["2026-09", "2026-08", "2026-07"],
+        ),
+        (f"stocks/{E}/{S}", "monthly_revenues[].yoy", [15.578, -3.255, None]),
+        ("stocks/{}/{}".format(*NO_DATA_STOCK), "monthly_revenues", 0),
         (f"stocks/{E}/{S}", "news", 1),
         (f"stocks/{E}/{S}", "candidate.rank", 1),
         (f"stocks/{E}/{S}", "candidate.open_plan_id", 1),

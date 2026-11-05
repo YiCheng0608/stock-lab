@@ -57,6 +57,7 @@ from app.models import (
     Instrument,
     MarginList,
     MarketBar,
+    MonthlyRevenue,
     RawPayload,
     Signal,
     SignalEvaluation,
@@ -2943,9 +2944,13 @@ ANNOUNCEMENT_KEYS = ("announcement_basis", "statutory_deadline", "deadline_calen
 
 
 def first_seen_announcement(
-    row: FundamentalSnapshot, announcement: date | None, details: dict[str, Any]
+    row: FundamentalSnapshot | MonthlyRevenue,
+    announcement: date | None,
+    details: dict[str, Any],
 ) -> tuple[date | None, dict[str, Any]]:
     """The earlier of the stored and the new availability date, and the details.
+
+    Quarterly reports and monthly revenue (Issue #530) share the rule.
 
     The snapshot feeds restamp 出表日期 every time they are published again, so
     overwriting it hid a quarter long after it was announced (2330 115Q2 read
@@ -4400,13 +4405,14 @@ def _json_safe(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # events and EPS, the TPEx suspension announcement/history feeds (events
 # only; they never set bar flags), the display-only market summaries (the
 # TWSE MI_INDEX summary tables and the TPEx highlight, Issue #275), the TPEx
-# emerging roster (names for AI news candidates only, Issue #512), and a
-# skipped instrument status sync (the watchdog reports it).  Every other
-# warning, including any not matched here, concerns OHLCV, the TAIEX
-# baseline, the holiday calendar or chips, and keeps the collect partial.
+# emerging roster (names for AI news candidates only, Issue #512), the
+# display-only monthly revenue snapshots (Issue #530), and a skipped
+# instrument status sync (the watchdog reports it).  Every other warning,
+# including any not matched here, concerns OHLCV, the TAIEX baseline, the
+# holiday calendar or chips, and keeps the collect partial.
 NONCORE_WARNING_PATTERN = re.compile(
     r"^((TWSE|TPEx) (MOPS events|MOPS fundamentals|suspension feed|suspension history"
-    r"|market summary|emerging issuers) unavailable"
+    r"|market summary|emerging issuers|monthly revenue) unavailable"
     r"|MOPS event list unavailable"
     r"|instrument status sync skipped)"
 )
@@ -4693,6 +4699,17 @@ def collect(
             emerging_issuers = store_emerging_issuers(
                 db,
                 list(getattr(batch, "emerging_issuers", []) or []),
+                lambda digest: _raw_id_for_digest(raw_ids, digest),
+                batch.warnings,
+            )
+            # worker.monthly_revenue imports this module (its backfill stores
+            # raw payloads here), so it is loaded when collect first runs.
+            from worker.monthly_revenue import store_monthly_revenues
+
+            monthly_revenues = store_monthly_revenues(
+                db,
+                list(getattr(batch, "monthly_revenues", []) or []),
+                instruments,
                 lambda digest: _raw_id_for_digest(raw_ids, digest),
                 batch.warnings,
             )
@@ -5016,6 +5033,7 @@ def collect(
                 "fundamentals": len(batch.fundamentals),
                 "market_summaries": market_summaries,
                 "emerging_issuers": emerging_issuers,
+                "monthly_revenues": monthly_revenues,
                 "raw_payloads": raw_payload_count,
                 "warnings": list(batch.warnings),
                 "core_warnings": core_warnings,
@@ -5121,6 +5139,7 @@ def collect(
                 "fundamentals": len(batch.fundamentals),
                 "market_summaries": market_summaries,
                 "emerging_issuers": emerging_issuers,
+                "monthly_revenues": monthly_revenues,
                 "event_coverage": event_coverage,
                 "event_gap_dates": {
                     day: mops_events.coverage_state(coverage, date.fromisoformat(day))

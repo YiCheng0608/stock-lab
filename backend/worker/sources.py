@@ -216,6 +216,29 @@ class EmergingIssuerRecord:
     payload_sha256: str | None = None
 
 
+@dataclass(frozen=True)
+class MonthlyRevenueRecord:
+    """One company's revenue for one month (Issue #530).
+
+    Amounts are NT$ thousands; ``yoy`` is the source's 去年同月增減(%) as
+    reported (None when blank).  ``revenue_month`` is the month's first day;
+    ``announcement_date`` is the availability date (``details`` names its
+    basis).
+    """
+
+    symbol: str
+    exchange: str
+    revenue_month: date
+    revenue: float | None
+    prior_year_revenue: float | None
+    yoy: float | None
+    cumulative_revenue: float | None
+    announcement_date: date
+    details: dict[str, Any] = field(default_factory=dict)
+    source: str = "mops_t187ap05"
+    payload_sha256: str | None = None
+
+
 @dataclass
 class OfficialBatch:
     instruments: list[InstrumentRecord] = field(default_factory=list)
@@ -251,6 +274,9 @@ class OfficialBatch:
     # The TPEx emerging-market roster (names only, Issue #512); a failure is a
     # non-core warning.
     emerging_issuers: list[EmergingIssuerRecord] = field(default_factory=list)
+    # The latest month of the monthly revenue snapshots (display only, Issue
+    # #530); a failure is a non-core warning.
+    monthly_revenues: list[MonthlyRevenueRecord] = field(default_factory=list)
 
 
 def _merge_event_coverage(values: Iterable[dict[str, Any]]) -> dict[str, Any]:
@@ -361,6 +387,8 @@ TWSE_ACTION_ENDPOINT = f"{TWSE_API}/exchangeReport/TWT48U_ALL"
 TWSE_SUSPEND_ENDPOINT = f"{TWSE_API}/company/suspendListingCsvAndHtml"
 TWSE_EVENT_ENDPOINT = f"{TWSE_API}/opendata/t187ap04_L"
 TWSE_FUNDAMENTAL_ENDPOINT = f"{TWSE_API}/opendata/t187ap14_L"
+# 上市公司每月營業收入彙總表: the latest month only (Issue #530).
+TWSE_MONTHLY_REVENUE_ENDPOINT = f"{TWSE_API}/opendata/t187ap05_L"
 TWSE_CHIP_ENDPOINT = "https://www.twse.com.tw/rwd/zh/fund/T86"
 TWSE_MARGIN_ENDPOINT = f"{TWSE_API}/exchangeReport/MI_MARGN"
 TWSE_MARGIN_HISTORY_ENDPOINT = "https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN"
@@ -390,6 +418,8 @@ TPEX_SUSPEND_ENDPOINT = f"{TPEX_API}/tpex_spendi_today"
 TPEX_SUSPEND_HISTORY_ENDPOINT = f"{TPEX_API}/tpex_spendi_history"
 TPEX_EVENT_ENDPOINT = f"{TPEX_API}/mopsfin_t187ap04_O"
 TPEX_FUNDAMENTAL_ENDPOINT = f"{TPEX_API}/mopsfin_t187ap14_O"
+# 上櫃公司每月營業收入彙總表, same fields as t187ap05_L (Issue #530).
+TPEX_MONTHLY_REVENUE_ENDPOINT = f"{TPEX_API}/mopsfin_t187ap05_O"
 # 上櫃股票市場現況: the latest session only.  The official path is spelled
 # ``mainborad``.
 TPEX_HIGHLIGHT_ENDPOINT = f"{TPEX_API}/tpex_mainborad_highlight"
@@ -2419,6 +2449,104 @@ def parse_tpex_emerging_issuers(
     return list(records.values())
 
 
+# ---- monthly revenue snapshots (Issue #530) ----
+
+MONTHLY_REVENUE_SOURCE = "mops_t187ap05"
+# The field names of t187ap05_L／mopsfin_t187ap05_O (the MOPS t21sc03 pages
+# use the same names without the group prefix).
+REVENUE_FIELD = "營業收入-當月營收"
+PRIOR_YEAR_REVENUE_FIELD = "營業收入-去年當月營收"
+YOY_FIELD = "營業收入-去年同月增減(%)"
+CUMULATIVE_REVENUE_FIELD = "累計營業收入-當月累計營收"
+
+
+def monthly_revenue_warning(exchange: str, exc: Exception) -> str:
+    """The non-core warning for a snapshot that could not be fetched, read or stored."""
+
+    return f"{exchange} monthly revenue unavailable: {type(exc).__name__}: {exc}"
+
+
+def parse_roc_month(value: Any) -> date | None:
+    """``11509`` (ROC YYYMM) as the month's first day, or None."""
+
+    digits = str(value or "").strip()
+    if not re.fullmatch(r"\d{4,5}", digits):
+        return None
+    year, month = int(digits[:-2]) + 1911, int(digits[-2:])
+    if not 1 <= month <= 12:
+        return None
+    return date(year, month, 1)
+
+
+def month_end(month: date) -> date:
+    return date(month.year, month.month, monthrange(month.year, month.month)[1])
+
+
+def parse_monthly_revenue_rows(
+    payload: Any,
+    *,
+    exchange: str,
+    requested_date: date,
+    payload_sha256: str | None = None,
+) -> list[MonthlyRevenueRecord]:
+    """Read ``t187ap05_L``／``mopsfin_t187ap05_O`` (每月營業收入彙總表).
+
+    The feed carries one month (``資料年月``) and its table's ROC ``出表日期``,
+    the availability date.  The rows must agree on the month; a row without a
+    code of 4～6 digits or capitals is left out, one released after the
+    requested day (a historical collect reading today's feed) is left out, and
+    a code listed twice, a 出表日期 that is unreadable or not after the month,
+    or a feed with no readable row is rejected whole.
+    """
+
+    rows = payload if isinstance(payload, list) else None
+    if not rows or not all(isinstance(row, dict) for row in rows):
+        raise OfficialDataError(
+            f"{exchange} monthly revenue is not a non-empty list of rows"
+        )
+    months = {parse_roc_month(row.get("資料年月")) for row in rows}
+    if len(months) != 1 or None in months:
+        raise OfficialDataError(
+            f"{exchange} monthly revenue rows do not share one 資料年月: "
+            f"{sorted(map(str, months))}"
+        )
+    (month,) = months
+    assert month is not None
+    records: dict[str, MonthlyRevenueRecord] = {}
+    for row in rows:
+        symbol = _text(row, "公司代號")
+        if not _EMERGING_CODE.fullmatch(symbol):
+            continue
+        if symbol in records:
+            raise OfficialDataError(f"{exchange} monthly revenue lists {symbol} twice")
+        released = parse_roc_date(row.get("出表日期"))
+        if released is None or released <= month_end(month):
+            raise OfficialDataError(
+                f"{exchange} monthly revenue {symbol} has 出表日期 "
+                f"{row.get('出表日期')!r} for {month:%Y-%m}"
+            )
+        if released > requested_date:
+            continue
+        records[symbol] = MonthlyRevenueRecord(
+            symbol=symbol,
+            exchange=exchange,
+            revenue_month=month,
+            revenue=parse_number(row.get(REVENUE_FIELD)),
+            prior_year_revenue=parse_number(row.get(PRIOR_YEAR_REVENUE_FIELD)),
+            yoy=parse_number(row.get(YOY_FIELD)),
+            cumulative_revenue=parse_number(row.get(CUMULATIVE_REVENUE_FIELD)),
+            announcement_date=released,
+            details={**row, "announcement_basis": "release_date"},
+            source=MONTHLY_REVENUE_SOURCE,
+            payload_sha256=payload_sha256,
+        )
+    if not records and not any(
+        _EMERGING_CODE.fullmatch(_text(row, "公司代號")) for row in rows
+    ):
+        raise OfficialDataError(f"{exchange} monthly revenue contained no company")
+    return list(records.values())
+
+
 def parse_mops_event_rows(
     payload: Any,
     *,
@@ -3345,6 +3473,20 @@ class TwseAdapter:
             ]
         except OfficialDataError as exc:
             warnings.append(f"TWSE MOPS fundamentals unavailable: {exc}")
+        monthly_revenues: list[MonthlyRevenueRecord] = []
+        try:
+            revenue_payload = self._fetch(
+                TWSE_MONTHLY_REVENUE_ENDPOINT, end.isoformat()
+            )
+            mops_payloads.append(revenue_payload)
+            monthly_revenues = parse_monthly_revenue_rows(
+                revenue_payload.payload,
+                exchange="TWSE",
+                requested_date=end,
+                payload_sha256=revenue_payload.sha256,
+            )
+        except Exception as exc:
+            warnings.append(monthly_revenue_warning("TWSE", exc))
         event_coverage = {
             "status": "unsupported",
             "denominator": "date_scoped_event_queries",
@@ -3375,6 +3517,7 @@ class TwseAdapter:
             no_data_dates=sorted(set(self.no_data_dates)),
             event_coverage=event_coverage,
             market_summaries=list(self.market_summaries),
+            monthly_revenues=monthly_revenues,
         )
 
 
@@ -3812,6 +3955,20 @@ class TpexAdapter:
             ]
         except OfficialDataError as exc:
             warnings.append(f"TPEx MOPS fundamentals unavailable: {exc}")
+        monthly_revenues: list[MonthlyRevenueRecord] = []
+        try:
+            revenue_payload = self._fetch(
+                TPEX_MONTHLY_REVENUE_ENDPOINT, end.isoformat()
+            )
+            mops_payloads.append(revenue_payload)
+            monthly_revenues = parse_monthly_revenue_rows(
+                revenue_payload.payload,
+                exchange="TPEx",
+                requested_date=end,
+                payload_sha256=revenue_payload.sha256,
+            )
+        except Exception as exc:
+            warnings.append(monthly_revenue_warning("TPEx", exc))
         event_coverage = {
             "status": "unsupported",
             "denominator": "date_scoped_event_queries",
@@ -3846,6 +4003,7 @@ class TpexAdapter:
             notices=notices,
             market_summaries=market_summaries,
             emerging_issuers=emerging_issuers,
+            monthly_revenues=monthly_revenues,
         )
 
 
@@ -3938,6 +4096,7 @@ class OfficialMarketDataAdapter:
             snapshot_feeds=twse_batch.snapshot_feeds and tpex_batch.snapshot_feeds,
             market_summaries=twse_batch.market_summaries + tpex_batch.market_summaries,
             emerging_issuers=twse_batch.emerging_issuers + tpex_batch.emerging_issuers,
+            monthly_revenues=twse_batch.monthly_revenues + tpex_batch.monthly_revenues,
         )
 
 

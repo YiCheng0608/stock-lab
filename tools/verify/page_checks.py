@@ -2155,6 +2155,82 @@ def s12(run: Run, stock: Stock) -> str:
     return f"{len(rows)} 列與 API 相同（第一列 `{fundamental_row_prefix(rows[0])}`）；{badge}"
 
 
+# The 月營收 card under the quarterly table (#530; UI_COPY_SPEC §8.2 財務分頁),
+# frontend/src/stock/stockFundamentals.ts.
+MONTHLY_TITLE = "月營收"
+MONTHLY_EMPTY = {
+    "etf": "ETF 不申報月營收，不適用。",
+    "ipo": "新上市公司尚未有已收集的月營收：官方月營收快照與營業收入統計表都還沒有這檔。",
+}
+MONTHLY_EMPTY_STOCK = (
+    "尚未收集到這檔的月營收：官方月營收快照與營業收入統計表都沒有這檔。"
+)
+REVENUE_MONTH = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
+
+
+def monthly_row_prefix(row: dict) -> str:
+    """The page's first cells of one month: 月份, 營收（億元）, 年增率（%）, 可得日."""
+
+    month = REVENUE_MONTH.match(row["revenue_month"] or "")
+    label = (
+        f"{month.group(1)} 年 {int(month.group(2))} 月"
+        if month
+        else row["revenue_month"]
+    )
+
+    def cell(value: Any, scale: float, digits: int, signed: bool = False) -> str:
+        if isinstance(value, (int, float)) and math.isfinite(value):
+            return fixed(value / scale, digits, signed)
+        return NOT_PROVIDED
+
+    announced = slash(row["announcement_date"]) if row["announcement_date"] else None
+    return "\t".join(
+        [
+            label,
+            cell(row["revenue"], 100_000, 2),
+            cell(row["yoy"], 1, 1, signed=True),
+            announced or NOT_PROVIDED,
+        ]
+    )
+
+
+@check("stocks", "S13", per_stock=True)
+def s13(run: Run, stock: Stock) -> str:
+    text = stock_text(run, stock, "financials")
+    payload = stock_payload(run, stock)
+    rows = payload.get("monthly_revenues") or []
+    title = text.find(MONTHLY_TITLE)
+    expect(title >= 0, f"缺整行 `{MONTHLY_TITLE}`")
+    if not rows:
+        kind = ((payload.get("instrument") or {}).get("instrument_type") or "").lower()
+        reason = MONTHLY_EMPTY.get(kind, MONTHLY_EMPTY_STOCK)
+        expect(text.find(reason, title) >= 0, f"monthly_revenues 空，缺 `{reason}`")
+        expect(
+            text.find_where(
+                lambda line: re.match(r"^\d{4} 年 \d{1,2} 月\t", line) is not None,
+                title,
+            )
+            < 0,
+            "monthly_revenues 空卻有月份列",
+        )
+        return f"monthly_revenues 空，顯示 `{reason}`"
+    latest = max(row["data_as_of"] or row["revenue_month"] for row in rows)
+    badge = f"資料 {slash(latest)}"
+    expect(text.find(badge, title) >= 0, f"`{MONTHLY_TITLE}` 之後缺 `{badge}`")
+    found = []
+    for row in rows:
+        prefix = monthly_row_prefix(row) + "\t"
+        at = text.find_where(lambda line, p=prefix: line.startswith(p), title)
+        expect(at >= 0, f"缺 `{prefix.strip()}` 開頭的列")
+        found.append(at)
+    expect(found == sorted(found), f"列的順序不是 API 的順序：{found}")
+    expect(
+        text.find_where(lambda line: line.startswith("來源："), title) >= 0,
+        f"`{MONTHLY_TITLE}` 表格下缺 `來源：` 行",
+    )
+    return f"{len(rows)} 個月與 API 相同（第一列 `{monthly_row_prefix(rows[0])}`）；{badge}"
+
+
 # ---- actions ----
 
 # The page is 觀察中 at /watch since #493; the old /actions redirects there (A18).

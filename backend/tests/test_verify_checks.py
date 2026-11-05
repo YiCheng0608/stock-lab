@@ -1374,3 +1374,90 @@ def test_s12_reads_the_empty_reason_by_instrument_type(tmp_path):
             etf,
             _financials_page("ETF 沒有公司財報，不適用。\n" + ROWS_TEXT, badge=""),
         )
+
+
+# ---- stock page 財務 tab: the 月營收 card (#530) ----
+
+MONTHLY_ROWS = [
+    {
+        "revenue_month": "2026-09",
+        "revenue": 511857399.0,
+        "yoy": 54.648,
+        "announcement_date": "2026-10-12",
+        "source": "mops_t21sc03",
+        "data_as_of": "2026-09-30",
+    },
+    {
+        "revenue_month": "2026-08",
+        "revenue": 514805337.0,
+        "yoy": None,
+        "announcement_date": "2026-09-10",
+        "source": "mops_t21sc03",
+        "data_as_of": "2026-08-31",
+    },
+]
+MONTHLY_TEXT = (
+    "2026 年 9 月\t5,118.57\t+54.6\t2026/10/12\t公開資訊觀測站 營業收入統計表\n"
+    "2026 年 8 月\t5,148.05\t來源未提供\t2026/09/10\t公開資訊觀測站 營業收入統計表\n"
+)
+
+
+def _monthly_page(rows_text: str, badge: str = "資料 2026/09/30\n") -> str:
+    # The quarterly card (empty here) and then the 月營收 card, as innerText.
+    return _financials_page(
+        "無資料\n尚未收集到這檔的季報：官方季報快照與彙總報表都沒有這檔。\n", badge=""
+    ) + (
+        f"財務資料\n月營收\n{badge}說明\n月份\t營收（億元）\t年增率（%）\t可得日\t來源\n"
+        f"{rows_text}來源：公開資訊觀測站 營業收入統計表\n"
+    )
+
+
+def _s13(tmp_path, payload, page):
+    run = FakeRun(
+        tmp_path, {"stocks/TWSE/2884": payload}, {"stock-financials-1280": page}
+    )
+    return page_checks.s13(run, STOCK)
+
+
+def test_s13_passes_when_every_month_matches_the_api(tmp_path):
+    payload = {
+        "monthly_revenues": MONTHLY_ROWS,
+        "instrument": {"instrument_type": "stock"},
+    }
+    result = _s13(tmp_path, payload, _monthly_page(MONTHLY_TEXT))
+    assert "2 個月與 API 相同" in result and "資料 2026/09/30" in result
+
+
+def test_s13_fails_on_a_wrong_value_order_or_badge(tmp_path):
+    payload = {
+        "monthly_revenues": MONTHLY_ROWS,
+        "instrument": {"instrument_type": "stock"},
+    }
+    # An unsigned yoy, and a missing yoy shown as 0.
+    with pytest.raises(page_checks.Fail, match=r"\+54\.6"):
+        _s13(tmp_path, payload, _monthly_page(MONTHLY_TEXT.replace("+54.6", "54.6")))
+    with pytest.raises(page_checks.Fail, match="來源未提供"):
+        _s13(
+            tmp_path, payload, _monthly_page(MONTHLY_TEXT.replace("來源未提供", "0.0"))
+        )
+    swapped = "\n".join(reversed(MONTHLY_TEXT.strip().split("\n"))) + "\n"
+    with pytest.raises(page_checks.Fail, match="順序"):
+        _s13(tmp_path, payload, _monthly_page(swapped))
+    with pytest.raises(page_checks.Fail, match="缺 `資料 2026/09/30`"):
+        _s13(tmp_path, payload, _monthly_page(MONTHLY_TEXT, badge=""))
+    with pytest.raises(page_checks.Fail, match="缺整行 `月營收`"):
+        _s13(tmp_path, payload, _financials_page(ROWS_TEXT))
+
+
+def test_s13_reads_the_empty_reason_by_instrument_type(tmp_path):
+    etf = {"monthly_revenues": [], "instrument": {"instrument_type": "etf"}}
+    page = _monthly_page("", badge="").replace(
+        "說明\n月份\t營收（億元）\t年增率（%）\t可得日\t來源\n來源：公開資訊觀測站 營業收入統計表\n",
+        "無資料\nETF 不申報月營收，不適用。\n",
+    )
+    assert "ETF 不申報月營收，不適用。" in _s13(tmp_path, etf, page)
+    stock = {"monthly_revenues": [], "instrument": {"instrument_type": "stock"}}
+    with pytest.raises(page_checks.Fail, match="尚未收集到這檔的月營收"):
+        _s13(tmp_path, stock, page)
+    with pytest.raises(page_checks.Fail, match="卻有月份列"):
+        _s13(tmp_path, etf, page + MONTHLY_TEXT)
