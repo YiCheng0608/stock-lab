@@ -513,20 +513,44 @@ a.symbol-link:hover { color: var(--color-primary); }
 .board-controls { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-4); }
 .board-controls .tabs { flex: 1 1 auto; }
 .board-search { max-width: 280px; }
-.board-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-3); }
+/* The page title is the eyebrow and the heading only; the tabs and the board line sit closer under it (Issue 522). */
+.themes-page .page-title { padding-bottom: var(--space-3); }
+.themes-page .board-controls { margin-bottom: var(--space-2); }
+.board-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2) var(--space-3); margin-bottom: var(--space-3); }
 .board-dates { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); }
-.board-table td { height: 64px; }
-.board-name-cell { min-width: 200px; white-space: normal; }
-.board-name-cell > a { display: block; }
-.board-name-cell .badge { margin-top: var(--space-1); }
 .badge-compact { padding: 2px 10px; font-size: 12px; white-space: normal; }
-.board-score { color: var(--color-text); font-weight: 600; }
-.board-cards { display: none; gap: var(--space-3); }
-.board-card { display: block; padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); transition: var(--transition); }
-.board-card:hover { border-color: var(--color-primary); }
-.board-card-head { display: flex; align-items: baseline; gap: var(--space-3); margin-bottom: var(--space-2); }
-.board-card-head strong { flex: 1; min-width: 0; font-size: 16px; }
-.board-card-score { font: 600 18px var(--font-mono); font-variant-numeric: tabular-nums; }
+/* 說明 sits at the right of the board line; opened, the four sentences take the next line (Issue 522). */
+.board-help { margin-left: auto; }
+.board-help > summary { font-size: var(--text-sm); }
+.board-help[open] { flex: 1 1 100%; margin-left: 0; }
+.board-help-body p { max-width: 760px; margin: var(--space-1) 0 0; color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1.7; }
+/* The board (Issue 522, DESIGN_SYSTEM §5 族群榜): one list at every width, two lines a group, the five components folded. */
+.board-list { margin: 0; padding: 0; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-bg-card); list-style: none; }
+.board-row + .board-row { border-top: 1px solid var(--color-border); }
+.board-row-main { display: grid; grid-template-areas: "rank title score toggle" "rank meta score toggle"; grid-template-columns: 48px minmax(0, 1fr) auto auto; align-items: center; gap: 2px var(--space-4); padding: var(--space-2) var(--space-5); transition: var(--transition); }
+.board-row-main:hover { background: var(--color-bg-elevated); }
+.board-row-open > .board-row-main { background: var(--color-bg-alt); }
+.board-rank { grid-area: rank; padding: var(--space-1) 0; border-radius: var(--radius-sm); background: var(--color-bg-elevated); font: 700 var(--text-md) var(--font-mono); text-align: center; }
+.board-row-title { display: flex; grid-area: title; align-items: center; gap: var(--space-2); min-width: 0; max-width: none; margin: 0; overflow: hidden; line-height: 1.4; white-space: nowrap; }
+.board-row-name { flex: 0 1 auto; min-width: 4em; overflow: hidden; color: var(--color-text); font-size: var(--text-base); font-weight: 600; text-overflow: ellipsis; }
+.board-row-name:hover { color: var(--color-primary); }
+.board-row-title .badge { flex: none; padding: 0 var(--space-2); line-height: 1.4; white-space: nowrap; }
+/* The highest and lowest components give way first when the line is short. */
+.board-row-extremes { flex: 0 1000 auto; min-width: 0; overflow: hidden; color: var(--color-text-muted); font-size: var(--text-sm); text-overflow: ellipsis; }
+.board-row-extremes b, .board-row-meta b { color: var(--color-text); font: 500 var(--text-sm) var(--font-mono); font-variant-numeric: tabular-nums; }
+.board-row-meta { display: flex; grid-area: meta; align-items: center; gap: var(--space-4); min-width: 0; max-width: none; margin: 0; overflow: hidden; color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1.4; white-space: nowrap; }
+/* 今日可買 N 檔 keeps to the line height, so a row with it is as tall as one without. */
+.board-row-meta .badge { flex: none; padding: 0 var(--space-2); line-height: 1.4; white-space: nowrap; }
+.board-row-score { grid-area: score; white-space: nowrap; }
+.board-row-score span { color: var(--color-text-muted); font-size: var(--text-xs); }
+.board-row-score b { font: 600 var(--text-lg) var(--font-mono); font-variant-numeric: tabular-nums; }
+.board-row-toggle { grid-area: toggle; padding: var(--space-1) var(--space-2); font-size: var(--text-sm); font-weight: 500; white-space: nowrap; }
+.board-row-detail > summary { display: none; }
+.board-row-detail[open] { padding: var(--space-3) var(--space-5) var(--space-4) calc(var(--space-5) + 48px + var(--space-4)); border-top: 1px solid var(--color-border); background: var(--color-bg-alt); }
+.board-row-detail-body { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-3) var(--space-6); }
+.board-components { display: grid; grid-template-columns: repeat(6, auto); gap: var(--space-2) var(--space-8); margin: 0; }
+.board-components dt { color: var(--color-text-muted); font-size: var(--text-xs); white-space: nowrap; }
+.board-components dd { margin: var(--space-label) 0 0; font: 600 var(--text-md) var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .board-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2) var(--space-3); margin: var(--space-3) 0 0; }
 .board-card-grid dt { color: var(--color-text-muted); font-size: 12px; }
 .board-card-grid dd { margin: var(--space-label) 0 0; font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -835,8 +859,18 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .table-wrap .table-group-row td:first-child { position: static; background: var(--color-bg-alt); white-space: normal; }
   .table-wrap .wide-only { display: none; }
   .table-wrap .cell-wrap { min-width: 0; }
-  .board-table-wrap { display: none; }
-  .board-cards { display: grid; }
+  /* Phones (Issue 522): the rank stays on line one, so the returns and the 五分項 button get the whole width of line two. */
+  .board-row-main { grid-template-areas: "rank title score" "meta meta toggle"; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2px var(--space-2); padding: var(--space-2) var(--space-3); }
+  .board-rank { min-width: 32px; padding: 0 var(--space-1); font-size: var(--text-sm); }
+  /* The returns keep one line at 390px in the small size; 今日可買 N 檔 wraps under them rather than being cut. */
+  .board-row-meta { flex-wrap: wrap; gap: 2px var(--space-2); font-size: var(--text-xs); }
+  .board-row-toggle { align-self: start; padding: var(--space-1) 0; font-size: var(--text-xs); }
+  .board-row-meta b { font-size: var(--text-xs); }
+  .board-row-score b { font-size: var(--text-base); }
+  /* The quality badge is cut before it reaches the score: the name keeps its 4em, then the badge, then the components. */
+  .board-row-title .badge { display: block; flex: 0 1 auto; min-width: 3em; overflow: hidden; text-overflow: ellipsis; }
+  .board-row-detail[open] { padding: var(--space-3); }
+  .board-components { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2) var(--space-3); }
   .member-table-wrap { display: none; }
   .member-cards { display: grid; }
   .stock-table-wrap { display: none; }

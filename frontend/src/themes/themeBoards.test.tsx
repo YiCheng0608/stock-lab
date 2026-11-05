@@ -2,6 +2,7 @@ import type { ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom/server'
 
+import { completeItem, listResponse } from '../candidates/candidates.fixtures'
 import { productTime, unknownRole } from '../news/news.fixtures'
 import { readChartTheme } from '../stock/stockBars'
 import type { ThemeBoardEmptyReason } from '../types'
@@ -14,6 +15,8 @@ import {
   boardDates,
   boardPagePath,
   buildTrendChartOption,
+  candidateCountsByGroup,
+  componentExtremes,
   evidenceUrl,
   filterBoardItems,
   formatComponent,
@@ -56,20 +59,63 @@ check(dates.trading === '2026/09/08' && dates.dataAsOf === '2026/09/09', 'offici
 check(boardDates(industryBoard().meta).dataAsOf === null, 'same-day data date is not repeated')
 check(filterBoardItems(industryBoard().items, '電子').map((item) => item.theme_id).join() === 'industry-28', 'search filters the board by name')
 
-// ---- AC-1 board page markup ----
+// ---- Issue 522 the highest and lowest components, and 今日可買 per group (UI_COPY_SPEC §8.5 族群頁) ----
+const extremesOf = (components: Parameters<typeof componentExtremes>[0]) => componentExtremes(components).map((entry) => `${entry.label} ${formatComponent(entry.value)}`).join('・')
+check(extremesOf(boardItem().components) === '催化劑 100・法人 25', `highest and lowest of five: ${extremesOf(boardItem().components)}`)
+check(extremesOf(industryBoard().items[1].components) === '量能 80・法人 40', 'null components are left out, never read as 0')
+const flatComponents = { relative_return: 0.5, breadth: 0.5, volume_strength: 0.5, institutional_flow: 0.5, catalyst: 0.5 }
+check(extremesOf(flatComponents) === '相對報酬 50・催化劑 50', `a tie: the earlier component is the highest, the later the lowest: ${extremesOf(flatComponents)}`)
+const oneComponent = { relative_return: null, breadth: 0.4, volume_strength: null, institutional_flow: null, catalyst: null }
+check(extremesOf(oneComponent) === '廣度 40' && componentExtremes({ ...oneComponent, breadth: null }).length === 0, 'one valued component gives one entry; none gives none')
+const picksRun = (date: string | null, groups: string[][], status = 'success') => ({ ...listResponse(), status, trading_date: date, items: groups.map((ids) => ({ ...completeItem(), groups: ids.map((group_id) => ({ ...completeItem().groups[0], group_id })) })) })
+const counted = candidateCountsByGroup(picksRun('2026-09-08', [['industry-24', 'theme-cowos'], ['industry-24'], ['theme-cowos', 'theme-cowos']]), '2026-09-08')
+check(counted?.get('industry-24') === 2 && counted?.get('theme-cowos') === 2 && !counted?.has('industry-28'), 'candidates counted per group, a stock once per group')
+check(candidateCountsByGroup(picksRun('2026-09-07', [['industry-24']]), '2026-09-08') === null, 'a candidate list of another day says nothing')
+check(candidateCountsByGroup(undefined, '2026-09-08') === null && candidateCountsByGroup(picksRun(null, [], 'not_computed'), '2026-09-08') === null, 'no list, or a list not computed, says nothing')
+
+// ---- AC-1 board page markup: one list of two-line rows at every width (Issue 522, DESIGN_SYSTEM §5 族群榜) ----
 const industryMarkup = render(<ThemesBoardView board="industry" onBoardChange={noop} search="" onSearchChange={noop} data={industryBoard()} loading={false} error={null} />)
 check(industryMarkup.includes('id="board-tab-industry" aria-selected="true"') && industryMarkup.includes('id="board-panel-industry"'), 'industry tab selected by default with its panel')
-const industryRow = industryMarkup.slice(industryMarkup.indexOf('data-theme-id="industry-24"'), industryMarkup.indexOf('</tr>', industryMarkup.indexOf('data-theme-id="industry-24"')))
-for (const text of ['>1<', '半導體業', '熱門族群', '81.25', '>90<', '>75<', '>50<', '>25<', '>100<', 'tone-up">+1.23<', 'tone-down">-0.45<', 'tone-flat">0.00<', '12／14']) {
-  check(industryRow.includes(text), `industry row shows ${text}: ${industryRow}`)
+check(industryMarkup.includes('<ol class="board-list">') && count(industryMarkup, '<li class="board-row" data-theme-id=') === 2, 'one list, one row per group')
+check(!industryMarkup.includes('<table') && !industryMarkup.includes('board-card'), 'Issue 522: no 12-column table and no phone cards')
+const boardRowOf = (markup: string, id: string) => markup.slice(markup.indexOf(`data-theme-id="${id}"`), markup.indexOf('</li>', markup.indexOf(`data-theme-id="${id}"`)))
+const mainOf = (row: string) => row.slice(row.indexOf('<div class="board-row-main">'), row.indexOf('<details'))
+const detailOf = (row: string) => row.slice(row.indexOf('<details'), row.indexOf('</details>'))
+const industryRow = boardRowOf(industryMarkup, 'industry-24')
+const industryMain = mainOf(industryRow)
+for (const text of ['第 1 名', '#1', '半導體業', '81.25', '催化劑 <b>100</b>', '法人 <b>25</b>', 'tone-up">+1.23%<', 'tone-down">-0.45%<', 'tone-flat">0.00%<']) {
+  check(industryMain.includes(text), `industry row shows ${text}: ${industryMain}`)
 }
-check(industryRow.includes('href="/themes/industry-24"'), 'row links to the detail page')
-const partialRow = industryMarkup.slice(industryMarkup.indexOf('data-theme-id="industry-28"'), industryMarkup.indexOf('</tr>', industryMarkup.indexOf('data-theme-id="industry-28"')))
-check(partialRow.replace(/<[^>]+>/g, '').includes('技術與籌碼觀察（事件資料待補）') && !partialRow.includes('熱門族群'), 'partial row is not called a hot group')
-check(count(partialRow, '>—<') === 3, `null breadth, catalyst and 20d return show 「—」: ${partialRow}`)
+check(industryMain.includes('href="/themes/industry-24"'), 'the name links to the detail page')
+// Two lines: the title (name, quality, extremes) and the meta (returns, 今日可買); the score and the 五分項 button beside them.
+check(/^<div class="board-row-main"><span class="board-rank"[^>]*>#1<\/span><p class="board-row-title">.*<\/p><p class="board-row-meta">.*<\/p><span class="board-row-score">.*<\/span><button[^>]*>五分項 ▸<\/button><\/div>$/.test(industryMain), `Issue 522: a row is a title line and a meta line: ${industryMain}`)
+check(!industryMain.includes('熱門族群') && !industryMain.includes('badge-success'), 'Issue 522: a complete group (熱門族群) carries no quality badge')
+check(!industryMain.includes('今日可買') && !industryMarkup.includes('board-row-picks'), 'without a candidate list no row says 今日可買')
+// AC-2: the five components and the members stay on the page, folded under the row.
+const industryFold = detailOf(industryRow)
+for (const [label, value] of [['相對報酬', '90'], ['廣度', '75'], ['量能', '50'], ['法人', '25'], ['催化劑', '100'], ['成員（檔）', '12／14']]) {
+  check(industryFold.includes(`<dt>${label}</dt><dd>${value}</dd>`), `AC-2: the fold shows ${label} ${value}: ${industryFold}`)
+}
+check(industryFold.startsWith('<details class="board-row-detail" id="board-detail-industry-24">') && industryRow.includes('aria-controls="board-detail-industry-24"') && industryRow.includes('aria-expanded="false"'), 'the fold is closed by default and the button controls it')
+check(industryFold.includes('href="/themes/industry-24">族群詳情 →'), 'the fold links to the detail page')
+const partialRow = boardRowOf(industryMarkup, 'industry-28')
+check(mainOf(partialRow).replace(/<[^>]+>/g, '').includes('技術與籌碼觀察（事件資料待補）'), 'a partial group shows its quality badge on the title line')
+check(count(detailOf(partialRow), '<dd>—</dd>') === 2 && count(mainOf(partialRow), '>—<') === 1, `null breadth and catalyst show 「—」 in the fold, the null 20d return on the row: ${partialRow}`)
 check(industryMarkup.includes('資料 2026/09/08') && !industryMarkup.includes('官方資料 '), 'board date badge')
 check(!industryMarkup.includes('待重新核實') && !industryMarkup.includes('class="data-gap"'), 'industry board shows no temporary verification notice')
-check(industryMarkup.includes('class="card-list board-cards"') && count(industryMarkup, 'class="board-card"') === 2 && !industryMarkup.includes('card-list-rest'), 'phone cards render every row; ten or fewer fold nothing')
+// The page explanation and the units moved into the closed 說明 fold beside the board line.
+const help = industryMarkup.slice(industryMarkup.indexOf('<details class="details board-help">'), industryMarkup.indexOf('</details>', industryMarkup.indexOf('board-help')))
+check(help.includes('<summary>說明</summary>') && !help.includes('open=""'), 'Issue 522: 說明 is a closed fold')
+for (const sentence of ['只有五分項完整的族群稱為熱門族群', '1／5／20 日為相對加權指數的報酬（%）', '「—」表示該項無資料。', '名稱後的兩個分項是五分項中最高與最低的一項。', '今日可買 N 檔是當日今日可買名單中屬於這個族群的檔數，沒有時不顯示。']) {
+  check(help.replace(/<[^>]+>/g, '').includes(sentence), `說明 says ${sentence}`)
+}
+const pageTitle = industryMarkup.slice(industryMarkup.indexOf('<section class="page-title">'), industryMarkup.indexOf('</section>'))
+check(!pageTitle.includes('<p>'), 'Issue 522: the title holds no explanation paragraph')
+// 今日可買 N 檔 only from a list of the board's own date, and only for a group with candidates.
+const withPicks = render(<ThemesBoardView board="industry" onBoardChange={noop} search="" onSearchChange={noop} data={industryBoard()} loading={false} error={null} candidates={picksRun('2026-09-08', [['industry-24'], ['industry-24', 'theme-cowos']])} />)
+check(mainOf(boardRowOf(withPicks, 'industry-24')).includes('今日可買 2 檔') && !boardRowOf(withPicks, 'industry-28').includes('今日可買'), 'Issue 522: 今日可買 2 檔 on the group with two candidates, nothing on a group with none')
+const stalePicks = render(<ThemesBoardView board="industry" onBoardChange={noop} search="" onSearchChange={noop} data={industryBoard()} loading={false} error={null} candidates={picksRun('2026-09-07', [['industry-24']])} />)
+check(!stalePicks.includes('board-row-picks') && !mainOf(boardRowOf(stalePicks, 'industry-24')).includes('今日可買'), 'Issue 522: a candidate list of another day is not counted')
 
 const themeMarkup = render(<ThemesBoardView board="theme" onBoardChange={noop} search="" onSearchChange={noop} data={themeBoard()} loading={false} error={null} />)
 check(themeMarkup.includes('id="board-tab-theme" aria-selected="true"') && themeMarkup.includes('id="board-tab-industry" aria-selected="false"') && themeMarkup.includes('id="board-panel-theme"'), 'theme tab selected')
@@ -232,15 +278,12 @@ check(['成交金額（億元）', '5 日相對', '20 日相對'].every((label) 
 check(leaderCard.includes('主要業務 · 關聯度高'), 'theme cards keep the evidence')
 check(strip(cards).includes('資料 2026/09/05'), 'a stale card shows its bar date')
 
-// ---- #300 phone cards past the first ten fold into <details> (DESIGN_SYSTEM §5.1); the desktop table keeps every row ----
+// ---- Issue 522 the board is the full ranking: every group is a row at every width, nothing folds behind 「顯示其餘」 ----
 const twelveGroups = { ...industryBoard(), items: Array.from({ length: 12 }, (_, i) => boardItem({ theme_id: `industry-${i + 1}`, rank: i + 1, display_name: `族群${i + 1}` })) }
 twelveGroups.meta = { ...twelveGroups.meta, total: 12 }
 const longBoard = render(<ThemesBoardView board="industry" onBoardChange={noop} search="" onSearchChange={noop} data={twelveGroups} loading={false} error={null} />)
-const boardPhone = longBoard.slice(longBoard.indexOf('class="card-list board-cards"'))
-const boardRest = boardPhone.slice(boardPhone.indexOf('<details class="details card-list-rest">'))
-check(count(longBoard, 'data-theme-id=') === 12, 'the desktop board keeps all 12 rows')
-check(count(boardPhone, 'class="board-card"') === 12 && count(boardRest, 'class="board-card"') === 2, `phone board: 10 cards open, 2 folded, got ${count(boardPhone, 'class="board-card"') - count(boardRest, 'class="board-card"')} open`)
-check(boardRest.includes('<summary>顯示其餘 2 個族群</summary>') && boardRest.indexOf('族群11') < boardRest.indexOf('族群12') && !boardPhone.slice(0, boardPhone.indexOf('<details')).includes('族群11'), 'the folded groups keep the rank order behind 「顯示其餘 2 個族群」')
+check(count(longBoard, '<li class="board-row" data-theme-id=') === 12 && !longBoard.includes('顯示其餘'), 'all 12 rows, none folded')
+check(longBoard.indexOf('族群11') < longBoard.indexOf('族群12') && longBoard.indexOf('>#11<') < longBoard.indexOf('>#12<'), 'rows keep the rank order')
 const twelveMembers = { ...membersPage(), items: Array.from({ length: 12 }, (_, i) => ({ ...membersPage().items[0], symbol: String(2400 + i), name: `成員${i + 1}`, candidate_rank: null, conditional: false })) }
 const longMembers = render(<ThemeDetailView detail={themeDetail()} board={loaded(themeBoard())} members={loaded(twelveMembers)} onMemberPageChange={noop} news={loaded({ items: [] })} />)
 const memberPhone = longMembers.slice(longMembers.indexOf('class="card-list member-cards"'))

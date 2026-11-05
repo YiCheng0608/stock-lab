@@ -91,14 +91,15 @@ check(text(scoreDetails).includes('分數與百分位為 0–100'), '評分細�
 
 // ---- themes: rank, score, same-board percentile and 「事件資料待補」 explain themselves; never inside a link ----
 const boardMarkup = render('ThemeBoardPanel', () => <ThemeBoardPanel board="industry" data={industryBoard()} search="" />)
-const tableMarkup = /<table[\s\S]*<\/table>/.exec(boardMarkup)?.[0] ?? ''
-const tableHead = /<thead>[\s\S]*?<\/thead>/.exec(tableMarkup)?.[0] ?? ''
-check(hasTerm(tableHead, '排名') && hasTerm(tableHead, '分數'), `族群榜: 「排名」「分數」 headers open 熱度分數與排名 (found ${termLabels(tableHead).join('、') || 'none'})`)
-check(hasTerm(boardMarkup, '同榜百分位'), '族群榜: the table note explains 「同榜百分位」')
-check(hasTerm(tableMarkup, '事件資料待補'), '族群榜: the partial-quality badge in the table explains 「事件資料待補」')
-check(/<span>技術與籌碼觀察（<button[^>]*>事件資料待補<\/button>）<\/span>/.test(tableMarkup), '族群榜: the badge label stays one inline span, so the flex badge does not split it into three items')
+// Issue 522: the board is one list; 排名, 分數 and 同榜百分位 are explained in its 說明 fold, the quality badge on the row.
+const helpMarkup = /<details class="details board-help">[\s\S]*?<\/details>/.exec(boardMarkup)?.[0] ?? ''
+const listMarkup = /<ol class="board-list">[\s\S]*<\/ol>/.exec(boardMarkup)?.[0] ?? ''
+check(hasTerm(helpMarkup, '排名') && hasTerm(helpMarkup, '分數'), `族群榜: 「排名」「分數」 in 說明 open 熱度分數與排名 (found ${termLabels(helpMarkup).join('、') || 'none'})`)
+check(hasTerm(helpMarkup, '同榜百分位'), '族群榜: 說明 explains 「同榜百分位」')
+check(hasTerm(listMarkup, '事件資料待補'), '族群榜: the partial-quality badge on the row explains 「事件資料待補」')
+check(/<span>技術與籌碼觀察（<button[^>]*>事件資料待補<\/button>）<\/span>/.test(listMarkup), '族群榜: the badge label stays one inline span, so the flex badge does not split it into three items')
 const links = boardMarkup.match(/<a [\s\S]*?<\/a>/g) ?? []
-check(links.every((link) => !link.includes('<button')), '族群榜: no term button sits inside a link (the phone cards stay plain)')
+check(links.length >= 4 && links.every((link) => !link.includes('<button')), '族群榜: no term button sits inside a link (the name and 族群詳情 links stay plain)')
 const detailMarkup = render('ThemeDetailView', () => <ThemeDetailView detail={themeDetail()} board={loaded(themeBoard())} members={loaded(membersPage())} onMemberPageChange={noop} news={loaded({ items: [] })} />)
 for (const label of ['排名', '五分項', '同榜百分位', '事件資料待補']) check(hasTerm(detailMarkup, label), `族群詳情: 「${label}」 opens its glossary term (found ${termLabels(detailMarkup).join('、') || 'none'})`)
 

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import ReactEChartsModule from 'echarts-for-react'
@@ -10,6 +10,7 @@ import { officialEventDisplayTitle } from '../presentation'
 import { isFiniteNumber, readChartTheme, type ChartTheme } from '../stock/stockBars'
 import { formatFixed, formatTableNumber } from '../units'
 import type {
+  CandidatesResponse,
   NewsItem,
   ThemeBoard,
   ThemeBoardItem,
@@ -33,6 +34,8 @@ import {
   boardLabel,
   boardPagePath,
   buildTrendChartOption,
+  candidateCountsByGroup,
+  componentExtremes,
   evidenceUrl,
   filterBoardItems,
   formatComponent,
@@ -93,62 +96,100 @@ export function BoardDateBadges({ meta }: { meta: Pick<ThemeBoardMeta, 'trading_
   )
 }
 
-// ---- /themes: one board as a desktop table and phone cards ----
+// ---- /themes: one board as one list of two-line rows (Issue 522, DESIGN_SYSTEM §5 族群榜, UI_COPY_SPEC §8.5 族群頁) ----
 
-const BOARD_TABLE_NOTE = <>分數 0–100；五分項為<Term id="percentile">同榜百分位</Term>（0–100）；1／5／20 日為相對加權指數的報酬（%）；成員為有效／總數（檔）；「—」表示該項無資料。</>
-
-const BOARD_COLUMNS: ReadonlyArray<Column<ThemeBoardItem>> = [
-  { key: 'rank', header: <Term id="heat_rank">排名</Term>, num: true, cell: (item) => item.rank },
-  {
-    key: 'name', header: '族群', cellClassName: 'board-name-cell', cell: (item) => <>
-      <Link className="symbol-link" to={themeDetailPath(item.theme_id)}>{item.display_name}</Link>
-      <QualityBadge quality={item.quality} compact explain />
-    </>,
-  },
-  { key: 'score', header: <><Term id="heat_rank">分數</Term>（0–100）</>, num: true, cellClassName: 'board-score', cell: (item) => formatScore(item.score) },
-  ...BOARD_COMPONENTS.map((component): Column<ThemeBoardItem> => ({ key: component.key, header: component.label, num: true, cell: (item) => formatComponent(item.components[component.key]) })),
-  ...RETURN_WINDOWS.map((window): Column<ThemeBoardItem> => ({ key: window.key, header: `${window.label}（%）`, num: true, cell: (item) => <ReturnValue value={item.relative_returns[window.key]} /> })),
-  { key: 'members', header: '成員（檔）', num: true, cell: (item) => formatMembers(item.eligible_members, item.member_count) },
-]
-
-function BoardTable({ items }: { items: readonly ThemeBoardItem[] }) {
-  return <DataTable wrapClassName="board-table-wrap" className="board-table" note={BOARD_TABLE_NOTE} columns={BOARD_COLUMNS} rows={items} rowKey={(item) => item.theme_id} rowProps={(item) => ({ 'data-theme-id': item.theme_id })} />
-}
-
-// 640px and below: one card per group, the first ten open (DESIGN_SYSTEM §5.1).
-function BoardCards({ items }: { items: readonly ThemeBoardItem[] }) {
+// The 說明 fold: what the page ranks, the units and blanks, and what the row's short forms mean.
+function BoardHelp() {
   return (
-    <CardList className="board-cards" items={items} itemKey={(item) => item.theme_id} restLabel={(count) => `顯示其餘 ${count} 個族群`} renderCard={(item) => (
-        <Link className="board-card" to={themeDetailPath(item.theme_id)}>
-          <div className="board-card-head">
-            <span className="rank">#{item.rank}</span>
-            <strong>{item.display_name}</strong>
-            <span className="board-card-score">{formatScore(item.score)}</span>
-          </div>
-          <QualityBadge quality={item.quality} compact />
-          <dl className="board-card-grid">
-            {BOARD_COMPONENTS.map((component) => <div key={component.key}><dt>{component.label}</dt><dd>{formatComponent(item.components[component.key])}</dd></div>)}
-            {RETURN_WINDOWS.map((window) => <div key={window.key}><dt>{window.label}</dt><dd><ReturnValue value={item.relative_returns[window.key]} unit="%" /></dd></div>)}
-            <div><dt>成員（檔）</dt><dd>{formatMembers(item.eligible_members, item.member_count)}</dd></div>
-          </dl>
-        </Link>
-    )} />
+    <details className="details board-help">
+      <summary>說明</summary>
+      <div className="board-help-body">
+        <p>產業與題材各自成榜，依相對報酬、廣度、量能、法人與催化劑五分項計分；只有五分項完整的族群稱為熱門族群，熱門族群不另標，其他族群在名稱後標出資料完整度。</p>
+        <p><Term id="heat_rank">分數</Term> 0–100，依分數<Term id="heat_rank">排名</Term>；五分項為<Term id="percentile">同榜百分位</Term>（0–100）；1／5／20 日為相對加權指數的報酬（%）；成員為有效／總數（檔）；「—」表示該項無資料。</p>
+        <p>名稱後的兩個分項是五分項中最高與最低的一項。</p>
+        <p>今日可買 N 檔是當日今日可買名單中屬於這個族群的檔數，沒有時不顯示。</p>
+      </div>
+    </details>
   )
 }
 
-export function ThemeBoardPanel({ board, data, search }: { board: ThemeBoard; data: ThemeBoardResponse; search: string }) {
+function ComponentExtremes({ item }: { item: ThemeBoardItem }) {
+  const extremes = componentExtremes(item.components)
+  if (extremes.length === 0) return <span className="board-row-extremes">五分項無資料</span>
+  const title = extremes.length === 2 ? `五分項最高：${extremes[0].label} ${formatComponent(extremes[0].value)}；最低：${extremes[1].label} ${formatComponent(extremes[1].value)}` : `五分項只有${extremes[0].label}有值`
+  return (
+    <span className="board-row-extremes" title={title}>
+      {extremes.map((entry, index) => <span key={entry.key}>{index > 0 && '・'}{entry.label} <b>{formatComponent(entry.value)}</b></span>)}
+    </span>
+  )
+}
+
+// One group (Issue 522): rank, name, quality (only when it is not 熱門族群) and the highest and lowest components, then the
+// three relative returns and 今日可買 N 檔; the score at the right, then the 五分項 button. The five components are a
+// <details> under the row the button opens, so every row's components stay in the DOM (the screenshot tool opens them).
+function BoardRow({ item, picks, open, onOpen }: { item: ThemeBoardItem; picks: number | null; open: boolean; onOpen: (open: boolean) => void }) {
+  const detailId = `board-detail-${item.theme_id}`
+  return (
+    <li className={cx('board-row', open && 'board-row-open')} data-theme-id={item.theme_id}>
+      <div className="board-row-main">
+        <span className="board-rank" aria-label={`第 ${item.rank} 名`}>#{item.rank}</span>
+        <p className="board-row-title">
+          <Link className="board-row-name" to={themeDetailPath(item.theme_id)}>{item.display_name}</Link>
+          {item.quality !== 'complete' && <QualityBadge quality={item.quality} compact explain />}
+          <ComponentExtremes item={item} />
+        </p>
+        <p className="board-row-meta">
+          {RETURN_WINDOWS.map((window) => <span key={window.key}>{window.label} <b><ReturnValue value={item.relative_returns[window.key]} unit="%" /></b></span>)}
+          {picks !== null && picks > 0 && <Badge tone="primary" className="badge-compact board-row-picks">今日可買 {picks} 檔</Badge>}
+        </p>
+        <span className="board-row-score"><span>分數</span> <b>{formatScore(item.score)}</b></span>
+        <button type="button" className="btn btn-ghost board-row-toggle" aria-expanded={open} aria-controls={detailId} onClick={() => onOpen(!open)}>五分項 {open ? '▾' : '▸'}</button>
+      </div>
+      <details className="board-row-detail" id={detailId} open={open} onToggle={(event) => onOpen(event.currentTarget.open)}>
+        <summary>{item.display_name} 五分項</summary>
+        <div className="board-row-detail-body">
+          <dl className="board-components">
+            {BOARD_COMPONENTS.map((component) => <div key={component.key}><dt>{component.label}</dt><dd>{formatComponent(item.components[component.key])}</dd></div>)}
+            <div><dt>成員（檔）</dt><dd>{formatMembers(item.eligible_members, item.member_count)}</dd></div>
+          </dl>
+          <Link className="text-link" to={themeDetailPath(item.theme_id)}>族群詳情 →</Link>
+        </div>
+      </details>
+    </li>
+  )
+}
+
+function BoardList({ items, picks }: { items: readonly ThemeBoardItem[]; picks: ReadonlyMap<string, number> | null }) {
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set())
+  const setTheme = (id: string, value: boolean) => setOpen((current) => {
+    if (current.has(id) === value) return current
+    const next = new Set(current)
+    if (value) next.add(id)
+    else next.delete(id)
+    return next
+  })
+  return (
+    <ol className="board-list">
+      {items.map((item) => <BoardRow key={item.theme_id} item={item} picks={picks ? picks.get(item.theme_id) ?? 0 : null} open={open.has(item.theme_id)} onOpen={(value) => setTheme(item.theme_id, value)} />)}
+    </ol>
+  )
+}
+
+export function ThemeBoardPanel({ board, data, search, candidates }: { board: ThemeBoard; data: ThemeBoardResponse; search: string; candidates?: CandidatesResponse }) {
   const filtered = filterBoardItems(data.items, search)
+  const picks = candidateCountsByGroup(candidates, data.meta.trading_date)
   return (
     <>
       <div className="board-toolbar">
         <span className="small-note">{boardLabel(board)}榜 · 共 {data.meta.total} 個族群{search.trim() ? ` · 符合搜尋 ${filtered.length} 個` : ''}</span>
         <BoardDateBadges meta={data.meta} />
+        <BoardHelp />
       </div>
       {data.items.length === 0
         ? <Card><EmptyState reason={data.meta.empty_message ?? '此榜目前沒有族群'} /></Card>
         : filtered.length === 0
           ? <Card><EmptyState title="沒有符合的族群" reason="換個名稱關鍵字再試" /></Card>
-          : <><BoardTable items={filtered} /><BoardCards items={filtered} /></>}
+          : <BoardList items={filtered} picks={picks} />}
     </>
   )
 }
@@ -161,6 +202,7 @@ export function ThemesBoardView({
   data,
   loading,
   error,
+  candidates,
   suggestions,
 }: {
   board: ThemeBoard
@@ -170,15 +212,17 @@ export function ThemesBoardView({
   data: ThemeBoardResponse | undefined
   loading: boolean
   error: unknown
+  // The latest 今日可買 list, counted per group on the rows (Issue 522); missing or of another day, the rows say nothing.
+  candidates?: CandidatesResponse
   // News theme suggestions (#216), kept outside the ranked boards.
   suggestions?: ReactNode
 }) {
+  // The page explanation moved into the board's 說明 fold (Issue 522), so the title is only the eyebrow and the heading.
   return (
-    <div className="page">
+    <div className="page themes-page">
       <section className="page-title">
         <div className="eyebrow">族群排行</div>
         <h1>族群</h1>
-        <p>產業與題材各自成榜，依相對報酬、廣度、量能、法人與催化劑五分項計分；只有五分項完整的族群稱為熱門族群。</p>
       </section>
       <div className="board-controls">
         <Tabs items={THEME_BOARDS} value={board} onChange={onBoardChange} label="族群榜別" idPrefix="board" />
@@ -196,7 +240,7 @@ export function ThemesBoardView({
           ? <Skeleton lines={6} label="族群榜載入中…" />
           : error
             ? <Card><EmptyState title="資料暫時無法載入" reason={errorReason(error)} /></Card>
-            : data && <ThemeBoardPanel board={board} data={data} search={search} />}
+            : data && <ThemeBoardPanel board={board} data={data} search={search} candidates={candidates} />}
       </div>
       {suggestions}
     </div>

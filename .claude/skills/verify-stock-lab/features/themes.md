@@ -53,7 +53,7 @@
 | --- | --- | --- | --- |
 | G1 | CI | 頁面可用 | 每張截圖 `ready` true、`httpErrors` 與 `consoleErrors` 空、`overflow` false |
 | G2 | CI | 榜單資料日期標記 | `themes-1280.txt` 整行 `產業榜 · 共 <total> 個族群` 的下一行是 `資料 <B/>`；`themes-theme-1280.txt` 的 `題材榜 · 共 <total> 個族群` 同樣；`B` 等於 `facts.json` 的 `group_scores_latest_trading_date` |
-| G3 | CI | 榜單內容 | 在 G2 之後（G2 沒通過時 G3 的失敗記「無法判定（上游 G2）」）。`items` 空時同 today T5 的[空狀態交叉核對](README.md#空狀態交叉核對)：DB 或 dashboard 有該日名次就失敗，都沒有才查空資料文案。1280 表格：以 `排名\t族群` 開頭的表頭存在；`items[0].display_name` 與 `items[-1].display_name` 各為整行出現。390：`#1` 為整行、下一行為 `items[0].display_name` |
+| G3 | CI | 榜單內容 | 在 G2 之後（G2 沒通過時 G3 的失敗記「無法判定（上游 G2）」）。`items` 空時同 today T5 的[空狀態交叉核對](README.md#空狀態交叉核對)：DB 或 dashboard 有該日名次就失敗，都沒有才查空資料文案。兩行清單（#522）：1280 沒有以 `排名\t族群` 開頭的表頭；1280 與 390 各自對 `items[0]` 與 `items[-1]` 查：`#<rank>` 為整行、下一行為 `display_name`；其後第一個 `分數 ` 開頭的行再隔一行（「五分項」按鈕）起，依序是 `相對報酬`、`廣度`、`量能`、`法人`、`催化劑` 與各自的值（`components` × 100 取整數，進位同 JS `toFixed`；null 為 `—`），再接 `成員（檔）` 與 `<eligible_members>／<member_count>` |
 | G4 | CI | 題材建議推論標記 | 看 `themes-1280.txt`。`items` 非空時：有整行 `新聞聚合 · AI 推論`，從該行起沒有任何一行含 `待核實`，整行 `AI 推論` 的行數 ≥ `items` 數，且 `<meta.total> 個建議` 開頭的行存在；空時空資料文案為整行出現 |
 | G5 | CI | 詳情日期（用 `T`，上游 today T5） | `theme-detail-1280.txt` 整行 `熱度走勢` 與 `五分項` 的下一行都是 `資料 <B/>`；有 `成員資料截至 <M/>` 這行 |
 | G6 | CI | 詳情成員（用 `T`，上游 today T5） | 表頭以 `代號\t名稱\t市場\t收盤（元）\t漲跌幅（%）\t成交金額（億元）\t5 日相對（%）\t20 日相對（%）` 開頭的行存在（題材榜後接 `\t證據`）；`theme-members.json` 第一個成員的 `symbol` 與 `name` 出現在同一行；`第 1／<total_pages> 頁 · 共 <meta.total> 檔` 存在（`total_pages` 以每頁 30 檔計；只有 1 頁時 `MemberPager` 只顯示 `共 <meta.total> 檔`） |
@@ -62,8 +62,9 @@
 
 ## 陷阱
 
-- 1280 的榜單是表格（以 tab 分欄），390 是卡片（`#1` 一行、名稱在下一行），G3 兩個寬度的判法不同。
-- 390 的族群榜與成員卡超過 10 張時，其餘收在「顯示其餘 N 個族群」「顯示其餘 N 檔」`<details>` 裡（#300）；`screenshot.cjs` 會展開它們，`themes-390.txt` 仍有每一張卡。
+- 族群榜（#522）兩個寬度是同一份兩行清單，`#<rank>` 一行、名稱在下一行，G3 兩個寬度同一個判法。五分項收在每列的 `<details>`，`screenshot.cjs` 會展開它們，txt 有每一列的五分項；族群榜不收「顯示其餘」。
+- 390 的成員卡超過 10 張時，其餘收在「顯示其餘 N 檔」`<details>` 裡（#300）；`screenshot.cjs` 會展開它們，`theme-detail-390.txt` 仍有每一張卡。
+- 「說明」`<details>` 在榜名那一行的右側，展開後的四句在 `資料 <B/>` 之後，不影響 G2。
 - 產業榜是 `/themes` 預設分頁，題材榜要帶 `?board=theme`；兩榜的 `B` 各自取該榜的 `meta.trading_date`。
 
 ## 判定

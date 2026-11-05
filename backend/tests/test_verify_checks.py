@@ -648,6 +648,89 @@ def test_g8_fails_on_the_old_page_sorted_by_close(tmp_path):
         page_checks.g8(run)
 
 
+# Issue 522: the industry board as screenshot.cjs reads it, one list at every width with each
+# row's five components opened: `#<rank>`, the name, the extremes, the returns, the score, the
+# button, then the components as label and value lines.
+G3_ITEMS = [
+    {
+        "rank": 1,
+        "display_name": "水泥",
+        "components": {
+            "relative_return": 0.968,
+            "breadth": 0.97,
+            "volume_strength": 0.85,
+            "institutional_flow": 0.91,
+            "catalyst": 0.3,
+        },
+        "eligible_members": 7,
+        "member_count": 7,
+    },
+    {
+        "rank": 2,
+        "display_name": "半導體",
+        "components": {
+            "relative_return": 0.125,
+            "breadth": None,
+            "volume_strength": 0.5,
+            "institutional_flow": 0,
+            "catalyst": 0.94,
+        },
+        "eligible_members": 70,
+        "member_count": 82,
+    },
+]
+G3_ROWS = {
+    1: "#1\n水泥\n廣度 97・催化劑 30\n1 日 +2.68%\n5 日 +8.03%\n20 日 +18.25%\n分數 87.62\n五分項 ▾\n"
+    "相對報酬\n97\n廣度\n97\n量能\n85\n法人\n91\n催化劑\n30\n成員（檔）\n7／7\n族群詳情 →\n",
+    # 0.125 shows 13 (toFixed rounds the tie up), the null breadth 「—」.
+    2: "#2\n半導體\n催化劑 94・法人 0\n1 日 -0.12%\n5 日 +1.00%\n20 日 —\n分數 40.10\n五分項 ▾\n"
+    "相對報酬\n13\n廣度\n—\n量能\n50\n法人\n0\n催化劑\n94\n成員（檔）\n70／82\n族群詳情 →\n",
+}
+G3_HEAD = "族群排行\n族群\n產業\n題材\n產業榜 · 共 2 個族群\n資料 2026/11/05\n說明\n"
+# Before Issue 522: the 12-column table at 1280 and one card per group at 390.
+G3_OLD_WIDE = (
+    "產業榜 · 共 2 個族群\n資料 2026/11/05\n"
+    "排名\t族群\t分數（0–100）\t相對報酬\t廣度\t量能\t法人\t催化劑\t1 日（%）\t5 日（%）\t20 日（%）\t成員（檔）\n"
+    "1\t水泥\n熱門族群\t87.62\t97\t97\t85\t91\t30\t+2.68\t+8.03\t+18.25\t7／7\n"
+    "2\t半導體\n熱門族群\t40.10\t13\t—\t50\t0\t94\t-0.12\t+1.00\t—\t70／82\n"
+)
+G3_OLD_NARROW = "產業榜 · 共 2 個族群\n資料 2026/11/05\n#1\n水泥\n87.62\n熱門族群\n相對報酬\n97\n#2\n半導體\n40.10\n"
+
+
+def _g3_run(tmp_path, wide, narrow, items=None):
+    return FakeRun(
+        tmp_path,
+        {"themes?board=industry&limit=100": {"items": items or G3_ITEMS, "meta": {}}},
+        {"themes-1280": wide, "themes-390": narrow},
+    )
+
+
+def test_g3_passes_on_the_two_line_board(tmp_path):
+    page = G3_HEAD + G3_ROWS[1] + G3_ROWS[2]
+    detail = page_checks.g3(_g3_run(tmp_path, page, page))
+    assert "`#1` → `水泥`" in detail and "`#2` → `半導體`" in detail
+
+
+def test_g3_fails_on_the_old_table(tmp_path):
+    with pytest.raises(page_checks.Fail, match="仍有 `排名\\\\t族群` 表頭"):
+        page_checks.g3(_g3_run(tmp_path, G3_OLD_WIDE, G3_OLD_NARROW))
+
+
+def test_g3_fails_on_the_old_phone_cards(tmp_path):
+    page = G3_HEAD + G3_ROWS[1] + G3_ROWS[2]
+    with pytest.raises(
+        page_checks.Fail,
+        match="themes-390.txt `#1` 之後缺 `分數 …` 行|themes-390.txt `#1` 的五分項",
+    ):
+        page_checks.g3(_g3_run(tmp_path, page, G3_OLD_NARROW))
+
+
+def test_g3_fails_when_a_component_differs_from_the_api(tmp_path):
+    page = G3_HEAD + G3_ROWS[1] + G3_ROWS[2].replace("相對報酬\n13\n", "相對報酬\n12\n")
+    with pytest.raises(page_checks.Fail, match="`#2` 的五分項是"):
+        page_checks.g3(_g3_run(tmp_path, page, page))
+
+
 def _g4_run(tmp_path, card):
     payload = {"items": [{"id": 1}, {"id": 2}], "meta": {"total": 2}}
     page = (
