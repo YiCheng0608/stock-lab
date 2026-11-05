@@ -4,11 +4,14 @@ A candidate is a signal judged actionable on its date T.  Its entry plan is
 that signal's ``strategy_levels`` row (docs/spec/strategy_levels.md): the
 close and volume the next session (T+1) needs for the strategy to pass again,
 with the reference stop and targets computed from it, and the full condition
-list.  It is display only: candidate scoring, the decision summary and the
-tracking plans do not read it, the candidate's own ``levels`` (the signal's)
-are unchanged, and nothing is computed at request time.  A signal without a
-row of the current levels version (a date before the table, or a failed
-step) has no plan (None); the page says so instead of guessing a price.
+list.  Those next-session levels decide whether T+1 raises a new signal, not
+whether this one fails, so the page's entry sentence reads the signal's own
+levels and shows only the condition list's signal-day judgement
+(UI_COPY_SPEC §10.2, review 6648572346).  It is display only: candidate
+scoring, the decision summary and the tracking plans do not read it, the
+candidate's own ``levels`` (the signal's) are unchanged, and nothing is
+computed at request time.  A signal without a row of the current levels
+version (a date before the table, or a failed step) has no plan (None).
 """
 
 from __future__ import annotations

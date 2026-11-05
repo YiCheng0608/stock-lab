@@ -137,7 +137,7 @@ function CandidateRow({ board, candidate }: { board: Board; candidate: Candidate
         <span className="small-note strategy-candidate-disclaimer">{CANDIDATE_DISCLAIMER}</span>
       </div>
       {/* #491: how to enter, before the reasons. */}
-      {candidate && <EntryPlanCard item={candidate} />}
+      {candidate && <EntryPlanCard item={candidate} onStockPage />}
       {candidate && <ReasonList reasons={candidate.reasons} />}
       {candidate && <CandidateNote item={candidate} />}
       {candidate && <ScoreDetails item={candidate} open={false} />}

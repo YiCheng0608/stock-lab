@@ -5,8 +5,9 @@ Only reads ``candidate_runs`` / ``daily_candidates`` written by
 ``worker.candidate_notes``; nothing is scored or generated at request time.
 Each item's ``market`` is the stored close of its trading date (#276).
 ``open_plan_id`` is the candidate signal's user tracking plan, if any.
-``entry_plan`` is the signal's next-session conditions from
-``strategy_levels`` (``app.entry_plan``, #491), shown in plain words; it
+``entry_plan`` is the signal's ``strategy_levels`` row (``app.entry_plan``,
+#491); the page shows its condition list's signal-day judgement under the
+plain-language entry sentence, which reads the signal's own levels.  It
 never feeds the score or the tracking plans.
 """
 
@@ -233,7 +234,7 @@ def candidate_item(
         "signal_status": signal.status,
         "open_plan_id": plan.id if plan else None,
         "levels": _levels(signal),
-        # The next session's conditions in plain words (#491); display only.
+        # The signal's strategy_levels row for its 「完整條件」 (#491); display only.
         "entry_plan": entry_plan(db, signal),
         "total_score": row.total_score,
         "weight_coverage": row.weight_coverage,

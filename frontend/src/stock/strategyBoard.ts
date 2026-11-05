@@ -190,7 +190,8 @@ function nextSession(item: StrategyCondition): string | null {
   }
 }
 
-export function conditionViews(row: StrategyBoardRow, reasonLabel: (code: string) => string): ConditionView[] {
+// Also the candidate entry plan's 「完整條件」 (#491): the signal day's judgement only, no next-session line there.
+export function conditionViews(row: Pick<StrategyBoardRow, 'conditions'>, reasonLabel: (code: string) => string): ConditionView[] {
   return row.conditions.map((item) => {
     const notApplicable = item.satisfied == null && item.reasons.some((reason) => NOT_APPLICABLE_REASONS.includes(reason))
     const state = notApplicable ? 'not_applicable' : item.satisfied === true ? 'met' : item.satisfied === false ? 'unmet' : 'unknown'
@@ -201,20 +202,10 @@ export function conditionViews(row: StrategyBoardRow, reasonLabel: (code: string
   })
 }
 
-// A candidate's full conditions for the next session (#491, the entry plan's 「完整條件」): what each condition needs
-// tomorrow; a condition that cannot be worked back (group, institutions, margin) is judged again on tomorrow's data.
-export type EntryConditionView = { code: string; label: string; next: string; notApplicable: boolean }
-const SKIPPED_ENTRY_CONDITIONS: readonly string[] = ['eligibility', 'required_inputs']
-
-export function entryConditionViews(conditions: readonly StrategyCondition[], reasonLabel: (code: string) => string): EntryConditionView[] {
-  return conditions.filter((item) => !SKIPPED_ENTRY_CONDITIONS.includes(item.code)).map((item) => {
-    const notApplicable = item.satisfied == null && item.reasons.some((reason) => NOT_APPLICABLE_REASONS.includes(reason))
-    const value = conditionValue(item)
-    const next = notApplicable
-      ? item.reasons.map(reasonLabel).join('、')
-      : nextSession(item) ?? `明天依當天資料重新判定${value ? `（最近 ${value}）` : ''}`
-    return { code: item.code, label: conditionLabel(item), next, notApplicable }
-  })
+// A candidate entry plan's 「完整條件」 (#491): the signal day's judgement, without the eligibility and required-inputs rows.
+const ENTRY_SKIPPED_CONDITIONS: readonly string[] = ['eligibility', 'required_inputs']
+export function signalDayConditionViews(conditions: readonly StrategyCondition[], reasonLabel: (code: string) => string): ConditionView[] {
+  return conditionViews({ conditions: conditions.filter((item) => !ENTRY_SKIPPED_CONDITIONS.includes(item.code)) }, reasonLabel)
 }
 
 // Pullback whose trend cannot pass next session: both numbers, no price (#268 design §2).
