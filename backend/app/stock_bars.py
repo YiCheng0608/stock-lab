@@ -25,6 +25,7 @@ from .indicators import (
     aggregate_weekly,
     compute_indicators,
 )
+from .market_change import adjacent_change, traded_close
 from .models import CorporateAction, Instrument, MarketBar, TechnicalIndicator
 
 NOT_COMPUTED = "not_computed"
@@ -94,6 +95,40 @@ def _daily(
     return items, _iso(computed_at)
 
 
+def _latest_change(
+    db: Session, instrument: Instrument, items: list[dict[str, Any]]
+) -> dict[str, Any] | None:
+    """``adjacent_change`` of the latest traded daily bar, for the page header (#475).
+
+    The header computes its change from the bars, but only this says why there
+    is none: ``no_previous_close`` or ``first_trading_day``, the same status as
+    the candidate and theme member ``market``.
+    """
+
+    if not items:
+        return None
+    bar = db.scalar(
+        select(MarketBar)
+        .where(
+            MarketBar.instrument_id == instrument.id,
+            MarketBar.is_suspended.is_not(True),
+            MarketBar.close > 0,
+        )
+        .order_by(desc(MarketBar.trading_date))
+        .limit(1)
+    )
+    if traded_close(bar) is None:
+        return None
+    return adjacent_change(
+        db,
+        instrument.id,
+        bar.trading_date,
+        bar,
+        {},
+        listing_date=instrument.listing_date,
+    )
+
+
 def _weekly(
     db: Session, instrument: Instrument, limit: int
 ) -> tuple[list[dict[str, Any]], list[str]]:
@@ -143,10 +178,12 @@ def build_stock_bars(
         items, sources = _weekly(db, instrument, limit)
         computed_at = None
         indicator_source = f"{INDICATOR_SOURCE}:weekly_on_request"
+        latest_change = None
     else:
         items, computed_at = _daily(db, instrument, limit)
         sources = sorted({item["source"] for item in items})
         indicator_source = f"{INDICATOR_SOURCE}:technical_indicators"
+        latest_change = _latest_change(db, instrument, items)
     return {
         "instrument": {
             "id": instrument.id,
@@ -169,5 +206,6 @@ def build_stock_bars(
             "source": indicator_source,
             "computed_at": computed_at,
         },
+        "latest_change": latest_change,
         "bars": items,
     }

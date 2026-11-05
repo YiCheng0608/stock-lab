@@ -199,6 +199,7 @@ def candidate_item(
             row.trading_date,
             bar,
             {} if sessions is None else sessions,
+            listing_date=instrument.listing_date,
         ),
         "sources": {
             "signal": f"analysis:{row.strategy}",

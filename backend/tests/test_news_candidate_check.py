@@ -80,3 +80,127 @@ def test_only_the_summary_the_model_was_sent_counts():
 def test_a_name_outside_its_longer_neighbour_still_counts():
     # 華新科 covers one 華新; the second 華新 stands alone.
     assert _check("華新科、華新同步上漲", "1605", "華新") == MENTIONED
+
+
+@pytest.fixture
+def master_db():
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+    from sqlalchemy.pool import StaticPool
+
+    from app.db import Base
+
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        yield session
+    engine.dispose()
+
+
+def _listed(db, symbol, name):
+    from app.models import Instrument
+
+    db.add(Instrument(exchange="TWSE", symbol=symbol, name=name, status="active"))
+    db.commit()
+
+
+def test_listed_name_keys_are_cached_until_the_master_names_change(
+    master_db, monkeypatch
+):
+    # #475: news_ai_map no longer recomputes every master name per request.
+    import app.news_candidate_check as module
+    from app.models import Instrument
+
+    monkeypatch.setattr(module, "_listed_keys", (None, frozenset()))
+    # Master names only; the full-name aliases have their own test.
+    monkeypatch.setattr(module, "_full_name_keys", dict)
+    computed: list[str] = []
+    original = module.name_variants
+
+    def counting(name):
+        computed.append(name)
+        return original(name)
+
+    monkeypatch.setattr(module, "name_variants", counting)
+    _listed(master_db, "1605", "華新")
+    _listed(master_db, "2492", "華新科")
+    first = module.listed_name_keys(master_db)
+    assert first == name_variants("華新") | name_variants("華新科")
+    assert len(computed) == 2
+    # Unchanged master: the cached keys, nothing recomputed.
+    assert module.listed_name_keys(master_db) is first
+    assert len(computed) == 2
+
+    # A new listing is a change.
+    _listed(master_db, "3711", "日月光投控")
+    added = module.listed_name_keys(master_db)
+    assert "日月光" in added and len(computed) == 5
+    # A rename (another process's worker writes it) is a change.
+    row = master_db.query(Instrument).filter_by(symbol="2492").one()
+    row.name = "華新科技"
+    master_db.commit()
+    renamed = module.listed_name_keys(master_db)
+    assert "華新科技" in renamed and "華新科" not in renamed
+    # A removed row is a change.
+    master_db.delete(row)
+    master_db.commit()
+    removed = module.listed_name_keys(master_db)
+    assert "華新科技" not in removed and "華新" in removed
+    calls = len(computed)
+    assert module.listed_name_keys(master_db) is removed
+    assert len(computed) == calls
+
+
+def test_an_empty_master_has_no_keys(master_db, monkeypatch):
+    import app.news_candidate_check as module
+
+    monkeypatch.setattr(module, "_listed_keys", (None, frozenset()))
+    # Master names only; the full-name aliases have their own test.
+    monkeypatch.setattr(module, "_full_name_keys", dict)
+    assert module.listed_name_keys(master_db) == frozenset()
+    _listed(master_db, "1605", "華新")
+    assert "華新" in module.listed_name_keys(master_db)
+
+
+# #475 (PR #483 review): the full-name aliases the rule matcher reads.
+FULL_NAMES = [
+    ("TWSE", "2385", "群光"),
+    ("TWSE", "6412", "群電"),
+    ("TWSE", "2002", "中鋼"),
+    ("TWSE", "1723", "中碳"),
+]
+
+
+def test_a_name_inside_another_stock_s_full_name_is_not_mentioned(
+    master_db, monkeypatch
+):
+    import app.news_candidate_check as module
+
+    monkeypatch.setattr(module, "_listed_keys", (None, frozenset()))
+    for _exchange, symbol, name in FULL_NAMES:
+        _listed(master_db, symbol, name)
+    keys = module.listed_name_keys(master_db)
+    # 群光電能 (6412's full name without 科技) is among the longer names.
+    assert {"群光電能", "群光電能科技"} <= keys
+    text = source_text("群光電能營收創高", "")
+    assert check_candidate(text, "2385", "群光", keys) == NOT_MENTIONED
+    # 6412 itself is named by its full name.
+    assert check_candidate(text, "6412", "群電", keys) == MENTIONED
+    # 群光 on its own is still 2385.
+    assert (
+        check_candidate(source_text("群光營收創高", ""), "2385", "群光", keys)
+        == MENTIONED
+    )
+
+
+def test_full_name_aliases_come_from_the_matcher_file():
+    import app.news_candidate_check as module
+    from worker.news_batch import load_full_name_aliases
+
+    rows = load_full_name_aliases()
+    assert ("TWSE", "6412", "群光電能") in rows
+    assert "群光電能" in module.candidate_names("6412", "群電")
+    assert module.candidate_names("2385", "群光") == name_variants("群光")
+    assert module.CANDIDATE_CHECK_VERSION == "ai-candidate-source/v2"

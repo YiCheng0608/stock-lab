@@ -1064,7 +1064,7 @@ export type ThemeMemberRow = StockDirectoryRow & {
   // Change against the previous session, same rule as the candidate market (#280, UI_COPY_SPEC §8.5).
   change?: number | null
   change_pct?: number | null
-  change_status?: 'known' | 'unverified' | 'no_previous_close' | 'missing' | string
+  change_status?: 'known' | 'unverified' | 'no_previous_close' | 'first_trading_day' | 'missing' | string
   // Only on members_as_of; missing when the member has no bar that day.
   turnover?: number | null
   turnover_status?: 'available' | 'unavailable' | 'unknown' | 'missing' | string
@@ -1184,6 +1184,8 @@ export type ActionSummary = {
   previous_close?: number | null
   price_change?: number | null
   price_change_pct?: number | null
+  // The candidate market's change_status for the same bar (#475); no_previous_close / first_trading_day say why there is no change.
+  price_change_status?: CandidateMarket['change_status']
   trigger_kind: string | null
   trigger_price: number | null
   entry_low: number | null
@@ -1317,6 +1319,8 @@ export type StockBarsResponse = {
     source: string
     computed_at: string | null
   }
+  // Daily only (null on weekly): the candidate market of the latest traded bar, so the header can say why it has no change (#475).
+  latest_change?: CandidateMarket | null
   bars: StockBarRow[]
 }
 
@@ -1425,7 +1429,7 @@ export type CandidateMarket = {
   close: number | null
   change: number | null
   change_pct: number | null
-  change_status: 'known' | 'unverified' | 'no_previous_close' | 'missing' | string
+  change_status: 'known' | 'unverified' | 'no_previous_close' | 'first_trading_day' | 'missing' | string
   source: string | null
 }
 
