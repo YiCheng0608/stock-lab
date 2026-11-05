@@ -69,7 +69,7 @@ import { formatDay, formatTaipeiDay, formatTaipeiMinute } from './dates'
 import { noPreviousCloseText } from './marketChange'
 import { formatPortfolioValue, formatPositionValuation, formatLocalPositionValuation, formatPortfolioClose, formatQuoteRecord, portfolioValueFromText } from './portfolioValues'
 import { formatFixed, formatTableNumber, formatTableVolume, formatTableVolumeShares, formatTableChip,formatShareQuantity, formatPositionShares, positionQuantityFromText, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, type ShareUnit } from './units'
-import { backtestTrackingLabel, officialEventDisplayTitle, formatProductTimeRole, PRODUCT_TIME_NOTE, levelFieldLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, staleCloseDateLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stockGroupLabel, type ProductQualityKind } from './presentation'
+import { backtestTrackingLabel, officialEventDisplayTitle, formatProductTimeRole, PRODUCT_TIME_NOTE, levelFieldLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, gapNotApplicable, incompleteActionLabel, staleCloseDateLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stockGroupLabel, type ProductQualityKind } from './presentation'
 import { Shell } from './components/Shell'
 import { Term } from './components/Term'
 import { Card, CardList, DataTable, EmptyState, Skeleton, Tabs, cx, tabId, tabPanelId, type Column } from './components/ui'
@@ -267,7 +267,7 @@ const fieldNames: Record<string, string> = {
   margin_balance_change_ratio_5d: '5 日融資餘額變化率',
   signal_data_quality: '訊號資料品質',
   signal: '策略訊號',
-  // Every other code a summary's blocking_reasons can carry (Issue 511): none falls back to 「待補資料」.
+  // Every other code a summary's blocking_reasons can carry (Issue 511): none falls back to 「其他研究資料」.
   data_incomplete: '策略訊號資料不完整',
   invalid_levels: '研究價位',
   market_bar_read_invalid: '日行情數值',
@@ -291,7 +291,7 @@ const fieldAliases: Record<string, string> = {
 function fieldLabel(field: string): string {
   const value = field.trim()
   const normalized = value.toLowerCase()
-  return fieldNames[value] ?? fieldNames[normalized] ?? fieldAliases[normalized] ?? (/[\u3400-\u9fff]/.test(value) ? value : '待補資料')
+  return fieldNames[value] ?? fieldNames[normalized] ?? fieldAliases[normalized] ?? (/[\u3400-\u9fff]/.test(value) ? value : '其他研究資料')
 }
 
 // The research tab's data-gap line (UI_COPY_SPEC §6.1): the summary's causes, one sentence each; the exact
@@ -301,7 +301,7 @@ export function ResearchGapLine({ reasons, missingFields, note }: { reasons: Gap
   const labels = (reasons ?? []).map((reason) => reason.label).filter(Boolean)
   const fields = missingFields.map(fieldLabel).join('、')
   const noteLine = note ? <div className="stock-data-gap-note">{note}</div> : null
-  if (!labels.length) return <div className="data-gap stock-data-gap"><div>研究資料待補：{fields || '尚不能形成完整策略判斷'}。</div>{noteLine}</div>
+  if (!labels.length) return <div className="data-gap stock-data-gap"><div>研究資料不足：{fields || '尚不能形成完整策略判斷'}。</div>{noteLine}</div>
   return <div className="data-gap stock-data-gap">
     <div>目前不能判斷的原因：{labels.join('；')}。</div>
     {noteLine}
@@ -317,9 +317,9 @@ function researchSourceLabel(source: string | null | undefined): string {
   return sourceLabel(value)
 }
 
-function QualityBadge({ status, kind = 'technical' }: { status: string | null | undefined; kind?: 'technical' | ProductQualityKind }) {
+function QualityBadge({ status, kind = 'technical', notApplicable = false }: { status: string | null | undefined; kind?: 'technical' | ProductQualityKind; notApplicable?: boolean }) {
   const value = status ?? 'unknown'
-  const label = kind === 'technical' ? uiStatusLabel(value) : productQualityLabel(value, kind)
+  const label = kind === 'technical' ? uiStatusLabel(value) : productQualityLabel(value, kind, notApplicable)
   return <span className={'pill ' + value.replace(/[^a-zA-Z0-9]+/g, '_')}>{label}</span>
 }
 
@@ -668,7 +668,7 @@ function StockPage() {
     },
     research: {
       status: fallbackResearchStatus,
-      label: fallbackResearchIncomplete ? '策略判斷資料待補' : '策略判斷資料完整',
+      label: fallbackResearchIncomplete ? '策略判斷資料不足' : '策略判斷資料完整',
       as_of: data.decision_summary?.data_cutoff ?? null,
       missing_fields: data.decision_summary?.blocking_reasons ?? [],
       action_state: data.decision_summary?.action_state ?? null,
@@ -687,7 +687,7 @@ function StockPage() {
       {tab === 'chips' && <Card eyebrow="籌碼資料" title="法人與融資">{data.chips.length ? <ChipTable rows={data.chips.slice(-30).reverse()} /> : <EmptyState reason="尚無可核實的籌碼資料。" />}<BrokerBranchEntry exchange={data.instrument.exchange} /></Card>}
       {tab === 'financials' && <StockFundamentalsPanel rows={data.fundamentals} instrumentType={data.instrument.instrument_type} asOf={asOf || null} sourceLabel={sourceLabel} />}
       {tab === 'news' && <><StockNewsTimeline exchange={data.instrument.exchange} symbol={data.instrument.symbol} query={{ data: stockNews.data, loading: stockNews.isLoading, error: stockNews.error }} /><StockEventList events={data.events} /></>}
-      {tab === 'research' && <><StrategyBoardPanel board={data.strategy_board} candidate={data.candidate} /><ActionDetailPanel action={data.decision_summary ?? null} gap={fallbackResearchIncomplete ? { reasons: data.decision_summary?.gap_reasons, missingFields: qualitySummary.research.missing_fields } : null}><StockPlanPanel strategies={data.decision_summary?.strategies} embedded /></ActionDetailPanel><GroupPanel groups={data.groups} /></>}
+      {tab === 'research' && <><StrategyBoardPanel board={data.strategy_board} candidate={data.candidate} gapReasons={data.decision_summary?.gap_reasons} /><ActionDetailPanel action={data.decision_summary ?? null} gap={fallbackResearchIncomplete ? { reasons: data.decision_summary?.gap_reasons, missingFields: qualitySummary.research.missing_fields } : null}><StockPlanPanel strategies={data.decision_summary?.strategies} embedded /></ActionDetailPanel><GroupPanel groups={data.groups} /></>}
       {tab === 'data' && <><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><Card className="stock-source-panel" eyebrow="資料說明" title="原始時間、來源與技術指標"><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div><IndicatorMetaRows bars={dayBars.data} /><details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} instrumentType={data.instrument.instrument_type} /></details></Card></>}
     </div>
     <p className="disclaimer">此為研究工具與資料摘要，不構成投資建議、報酬保證或自動下單指令。</p>
@@ -813,11 +813,11 @@ export function ActionDetailPanel({ action, gap, children }: { action: ActionSum
   const gapNote = fullGap && !instruction.includes(fullGap) ? fullGap : null
   const primary = action.primary_reason?.label
   const showPrimary = Boolean(primary) && !(gap?.reasons ?? []).some((reason) => reason.label === primary)
-  const actionTitle = incomplete ? '策略判斷資料待補' : action.display_action ?? actionLabel(action.action_state)
+  const actionTitle = incomplete ? incompleteActionLabel(action.gap_reasons) : action.display_action ?? actionLabel(action.action_state)
   const detailReasons = action.display_reasons ?? action.reasons
   const showLevels = ['conditional_entry', 'wait_breakout', 'wait_pullback', 'hold_observe', 'reduce_exit'].includes(action.action_state)
   return <section className="panel stock-action-detail" aria-labelledby="stock-action-title">
-    <div className="panel-head"><h2 id="stock-action-title">研究動作</h2><QualityBadge kind="research" status={action.data_quality} /></div>
+    <div className="panel-head"><h2 id="stock-action-title">研究動作</h2><QualityBadge kind="research" status={action.data_quality} notApplicable={incomplete && gapNotApplicable(action.gap_reasons)} /></div>
     <div className="action-detail-summary"><strong>{actionTitle}</strong><span className="action-detail-instruction">{instruction}</span>{showPrimary && <span>{primary}</span>}</div>
     {action.position_quantity_status === 'unknown' && <div className="small-note"><span className="pill ambiguous">庫存數量待核實</span> 請先核對原記錄，再確認持倉狀態。</div>}
     {gap ? <ResearchGapLine reasons={gap.reasons} missingFields={gap.missingFields} note={gapNote} /> : gapNote && <div className="data-gap">{gapNote}</div>}

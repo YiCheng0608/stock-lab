@@ -20,7 +20,7 @@ DISPLAY_ACTION_LABELS = {
     "wait_pullback": "等待回踩條件",
     "hold_observe": "持有觀察",
     "reduce_exit": "持倉風險：減碼／退場條件",
-    "data_insufficient": "策略判斷資料待補",
+    "data_insufficient": "資料不足，無法判斷",
     "no_condition": "暫無研究條件",
     "manual_review": "需人工判讀",
 }
@@ -29,22 +29,22 @@ DISPLAY_ACTION_LABELS = {
 REASON_LABELS = {
     "passed": "此研究條件已符合",
     "rejected": "此研究條件尚未成立",
-    "data_incomplete": "此研究條件資料待補",
+    "data_incomplete": "此研究條件資料不足",
     "observation": "條件尚未成立，持續觀察",
     "conditional": "符合條件後可研究進場",
     "invalid_levels": "研究價位無法驗證",
-    "prior_20_highs_missing_or_invalid": "前 20 個交易日高點資料待補",
-    "prior_20_volumes_missing_or_invalid": "前 20 個交易日成交量資料待補",
-    "close_missing_or_non_finite": "最近收盤資料待補",
-    "volume_missing_or_non_finite": "當日成交量資料待補",
-    "ma20_missing_or_non_finite": "20 日均線資料待補",
-    "ma60_missing_or_non_finite": "60 日均線資料待補",
+    "prior_20_highs_missing_or_invalid": "前 20 個交易日高點資料不足",
+    "prior_20_volumes_missing_or_invalid": "前 20 個交易日成交量資料不足",
+    "close_missing_or_non_finite": "最近收盤資料不足",
+    "volume_missing_or_non_finite": "當日成交量資料不足",
+    "ma20_missing_or_non_finite": "20 日均線資料不足",
+    "ma60_missing_or_non_finite": "60 日均線資料不足",
     "group_relative_strength_not_positive": "所屬已核實群組未呈相對大盤正向",
-    "group_excess_return_20d_missing_or_non_finite": "近 20 日相對大盤資料待補",
-    "institutional_flow_to_turnover_ratio_5d_missing_or_non_finite": "近 5 日法人籌碼資料待補",
-    "institutional_flow_5d_missing_or_incomplete": "近 5 日法人籌碼資料待補",
-    "margin_balance_change_ratio_5d_missing_or_non_finite": "近 5 日融資變化資料待補",
-    "margin_change_5d_missing_or_incomplete": "近 5 日融資變化資料待補",
+    "group_excess_return_20d_missing_or_non_finite": "近 20 日相對大盤資料不足",
+    "institutional_flow_to_turnover_ratio_5d_missing_or_non_finite": "近 5 日法人籌碼資料不足",
+    "institutional_flow_5d_missing_or_incomplete": "近 5 日法人籌碼資料不足",
+    "margin_balance_change_ratio_5d_missing_or_non_finite": "近 5 日融資變化資料不足",
+    "margin_change_5d_missing_or_incomplete": "近 5 日融資變化資料不足",
     "margin_financing_not_applicable": "非融資標的，融資條件不適用",
     "effective_group_score_missing_or_under_minimum_members": "族群成員或相對大盤資料不足，無法取得有效群組脈絡",
     "close_or_volume_must_be_positive": "收盤或成交量資料無法用於計算",
@@ -112,7 +112,7 @@ def display_reason(reason: Any, *, fallback: str = "研究條件需要人工核�
                 "conditional": "符合條件",
                 "observation": "未成立、持續觀察",
                 "rejected": "尚未成立",
-                "data_incomplete": "資料待補",
+                "data_incomplete": "資料不足",
             }.get(state, "狀態待核實")
             reason_labels = [
                 display_reason(item, fallback="") for item in reasons.split(",") if item
@@ -130,13 +130,13 @@ def display_reason(reason: Any, *, fallback: str = "研究條件需要人工核�
                 if item
             ]
             return (
-                "待補資料：" + "、".join(item for item in labels if item)
+                "缺少資料：" + "、".join(item for item in labels if item)
                 if any(labels)
                 else "必要研究資料尚未齊備"
             )
         if key == "group":
             return (
-                "族群條件待補"
+                "族群條件資料不足"
                 if raw_value.casefold() == "missing"
                 else "族群條件已核對"
             )

@@ -1548,6 +1548,9 @@ _ACTION_LIST_FIELDS = (
     "context_badges",
     "detail_url",
     "data_gap",
+    # The causes of a data_insufficient summary (UI_COPY_SPEC §6.1): the list names an excluded ETF
+    # category 「不適用」 and words its note from them (#524).
+    "gap_reasons",
     "priority",
     "held",
     "position_quantity_status",
@@ -3150,7 +3153,7 @@ def _instrument_quality_summary(
         # Product pages must not expose the raw/ambiguous distinction between
         # partial and insufficient.  The missing_fields list below carries the
         # exact reason; this label only states the research purpose.
-        research_label = "策略判斷資料待補"
+        research_label = "策略判斷資料不足"
     return {
         "market": {
             "status": market_status,

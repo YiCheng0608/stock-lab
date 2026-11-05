@@ -159,7 +159,7 @@ function holdingRisk(action: ActionSummary): string | null {
   const held = action.held === true || action.position_quantity_status === 'unknown'
   if (!held) return null
   if (action.action_state === 'reduce_exit') return '減碼／退場條件'
-  if (['data_insufficient', 'data_incomplete', 'insufficient_data'].includes(action.action_state)) return '持倉風險資料待補'
+  if (['data_insufficient', 'data_incomplete', 'insufficient_data'].includes(action.action_state)) return '持倉風險資料不足'
   if (action.position_quantity_status === 'unknown') return QUANTITY_UNKNOWN
   return null
 }

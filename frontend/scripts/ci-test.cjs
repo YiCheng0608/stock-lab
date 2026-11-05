@@ -41,6 +41,7 @@ const SUITES = [
   { file: 'navigation.test.tsx' },
   { file: 'coverage/coverage.test.tsx' },
   { file: 'stock/researchGap.test.tsx' },
+  { file: 'stock/gapWording.test.tsx' },
 ]
 
 // Test files that cannot run here: path relative to src -> why (needs a browser/DOM or a guarded environment) and

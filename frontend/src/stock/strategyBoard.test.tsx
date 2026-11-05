@@ -51,7 +51,7 @@ check(statusLabel('active') === '狀態待核實', 'an unknown status is not pas
 check(levelsVersionLabel('strategy_levels_v1') === '價位規則 v1', 'levels version label')
 check(unmetText(conditionalBreakout()) === '全部達成', 'conditional: every condition met')
 check(unmetText(observationPullback()) === '收盤不在支撐區、量比不在 0.60～1.20 倍', `observation lists the unmet conditions, got ${unmetText(observationPullback())}`)
-check(unmetText(incompleteRow()) === '缺：近 5 日融資變化資料待補', 'incomplete lists what is missing')
+check(unmetText(incompleteRow()) === '無法判斷：近 5 日融資變化資料不足', 'incomplete lists what is missing')
 check(unmetText(notApplicableRow()) === '債券、槓桿或反向 ETF 不適用一般突破／回踩研究條件', 'not applicable says why')
 check(unmetText(missingLevelsRow()) === '條件明細未產生', 'a missing levels row is not filled')
 check(trendUnreachableText(unreachablePullback()).includes('收盤需高於 322.00') && trendUnreachableText(unreachablePullback()).includes('支撐區上緣只有 253.00'), 'trend_unreachable shows both numbers')
@@ -79,8 +79,8 @@ check(volume?.state === 'unmet' && volume.stateText === '未達成' && volume.ne
 check(views.find((view) => view.code === 'pullback_trend')?.next === null, 'a met condition has no next-session line')
 const zone = views.find((view) => view.code === 'pullback_support_zone')
 check(zone?.next === '下一交易日收盤 2,430.00～2,535.00（距最近收盤 -1.55%）', `support zone next session, got ${zone?.next}`)
-const incompleteViews = conditionViews(incompleteRow(), (code) => code === 'margin_balance_change_ratio_5d_missing_or_non_finite' ? '近 5 日融資變化資料待補' : code)
-check(incompleteViews.find((view) => view.code === 'required_inputs')?.value === '近 5 日融資變化資料待補', 'reasons are translated')
+const incompleteViews = conditionViews(incompleteRow(), (code) => code === 'margin_balance_change_ratio_5d_missing_or_non_finite' ? '近 5 日融資變化資料不足' : code)
+check(incompleteViews.find((view) => view.code === 'required_inputs')?.value === '近 5 日融資變化資料不足', 'reasons are translated')
 check(incompleteViews.find((view) => view.code === 'margin_financing')?.stateText === '無資料', 'null satisfied is 無資料')
 
 // ---- a non-margin security's margin condition (#392): 不適用, with its reason, never 「—」 or a next-session line ----
@@ -143,7 +143,7 @@ check(!unreachable.includes('level-stop') && !unreachable.includes('level-target
 const gaps = render(<StrategyBoardPanel board={board([incompleteRow(), notApplicableRow(), missingLevelsRow()].map((row, index): StrategyBoardRow => ({ ...row, strategy: `s${index}` })))} candidate={null} />)
 const incomplete = tableRow(gaps, 's0')
 check(incomplete.includes('data-strategy-status="data_incomplete"') && incomplete.includes('資料不足') && incomplete.includes('badge-warning'), 'data incomplete: warning badge')
-check(incomplete.includes('缺：近 5 日融資變化資料待補') && incomplete.includes('無價位') && !incomplete.includes('level-'), 'data incomplete: missing items and no levels')
+check(incomplete.includes('無法判斷：近 5 日融資變化資料不足') && incomplete.includes('無價位') && !incomplete.includes('level-'), 'data incomplete: missing items and no levels')
 const notApplicable = tableRow(gaps, 's1')
 check(notApplicable.includes('data-strategy-status="not_applicable"') && notApplicable.includes('不適用') && !notApplicable.includes('badge-warning') && notApplicable.includes('無價位'), 'not applicable: muted badge, no levels')
 const missing = tableRow(gaps, 's2')

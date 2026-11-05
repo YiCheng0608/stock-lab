@@ -183,7 +183,10 @@ def test_a_session_no_stock_of_the_exchange_has_is_uncollected(db):
 
     assert _bar_reasons(summary) == ["missing_bar_dates"]
     assert summary["gap_reasons"] == [
-        {"code": "missing_bar_dates", "label": "近 60 個交易日有 1 天行情尚未收錄"}
+        {
+            "code": "missing_bar_dates",
+            "label": "近 60 個交易日有 1 天行情尚未收錄（待回補）",
+        }
     ]
 
 
@@ -380,11 +383,11 @@ def test_a_chip_day_no_stock_of_the_exchange_has_is_not_collected():
     assert reasons == [
         {
             "code": "institutional_not_collected",
-            "label": "近 5 個交易日有 1 天法人資料尚未收錄",
+            "label": "近 5 個交易日有 1 天法人資料尚未收錄（待回補）",
         },
         {
             "code": "margin_not_collected",
-            "label": "近 6 個交易日有 1 天融資資料尚未收錄",
+            "label": "近 6 個交易日有 1 天融資資料尚未收錄（待回補）",
         },
     ]
     # One stock left out on a collected day, another day not collected.
@@ -504,7 +507,7 @@ def test_every_reason_is_a_sentence_never_a_pending_placeholder():
         "quote_not_listed",
         "missing_bar_dates",
     ]
-    assert reasons[-1]["label"] == "近 60 個交易日有 1 天行情尚未收錄"
+    assert reasons[-1]["label"] == "近 60 個交易日有 1 天行情尚未收錄（待回補）"
     assert not any("待補" in item["label"] for item in reasons)
     assert coverage_gap_reasons({"coverage_status": "unknown"})[0]["code"] == (
         "coverage_baseline_unknown"
