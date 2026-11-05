@@ -20,7 +20,7 @@ import subprocess
 import sys
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -1994,3 +1994,42 @@ def test_an_unreadable_marker_is_dated_by_its_file(wd):
     # Without Python the marker is not read, only dated.
     result = wd.run("--dry-run", python=(wd.root / "no-python.exe").as_posix())
     assert "開啟已 13 小時（上限 12 小時；原因：unknown）" in result.stdout
+
+
+def test_a_maintenance_mode_serve_expired_is_commented_once(wd):
+    """#468 AC-5: serve removed the marker of a holder that stopped beating."""
+
+    expired_at = datetime.fromtimestamp(NIGHT - 30 * 60, tz=timezone.utc).astimezone(
+        timezone(timedelta(hours=8))
+    )
+    (wd.logs / "maintenance.log").write_text(
+        json.dumps(
+            {"at": "2026-10-19T10:00:00+08:00", "event": "held", "owner": "backtest"}
+        )
+        + "\n"
+        + json.dumps(
+            {
+                "at": expired_at.isoformat(timespec="seconds"),
+                "event": "expired",
+                "owner": "backtest",
+                "pid": 4242,
+                "reason": "backtest --start-date 2025-11-04",
+                "heartbeat_age_minutes": 10.5,
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    wd.run()
+    wd.run(now=LAST_RUN)
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
+    body = wd.text("gh_bodies.txt")
+    assert (
+        "維護模式：`backtest`（pid 4242，`backtest --start-date 2025-11-04`）的心跳停了 10.5 分鐘"
+        in body
+    )
+    assert "serve 在 2026-10-19T14:45:00Z 自動解除維護模式" in body
+    # A day later the record is out of the window: nothing more.
+    wd.run(now=NIGHT + 86400 + 3600)
+    assert len(wd.text("gh_calls.log").splitlines()) == 1

@@ -35,7 +35,8 @@
 # compares the scheduler's image with it), `docker compose up -d --no-build --wait`, read
 # back that each service runs its
 # tagged image and that the new scheduler's own check (watchdog_helper.py deploy-image) is
-# ok, release the locks and comment on #1. Whether a deploy is authorised is not checked
+# ok, turn off a maintenance mode turned on by hand (#468; a backfill's own is left alone;
+# deploy.json gets "maintenance"), release the locks and comment on #1. Whether a deploy is authorised is not checked
 # here: deploying is the user's decision (docs/COORDINATOR.md 無人值守運作).
 #
 # Usage: deploy.sh <tag> [options]
@@ -279,14 +280,14 @@ DB 落後 tag $tag：先備份、再用 $tag 的程式跑 init-db，然後以同
 在 master 管理 checkout 的 Git Bash 依序執行（B 是備份目錄；完整步驟、時段與驗證見 docs/RELEASE.md「含 migration 的版本」）：
   export MSYS_NO_PATHCONV=1
   unset WEB_PORT API_PORT STOCK_ENV_FILE
-  docker compose -p $project exec scheduler python -m worker.cli maintenance on --reason "init-db $tag"
+  docker compose -p $project exec scheduler python -m worker.cli maintenance on --reason "$tag"
   docker compose -p $project exec scheduler python -m worker.cli maintenance status
   # running_jobs 要是 []；scheduler 是 #468 以前的 image 時上兩行改為：docker compose -p $project stop scheduler
   docker run --rm --network none -v $volume:/data:ro -v "\$B":/out -v "\$(pwd -W)/tools/ops/copy_db.py":/t/copy_db.py:ro $backend python /t/copy_db.py --src /data/stock.db --dest /out
   git -C "$checkout_native" fetch --quiet --no-tags origin "refs/tags/$tag:refs/tags/$tag"
   git -C "$checkout_native" -c advice.detachedHead=false checkout --quiet "refs/tags/$tag"
   (cd "$checkout_native" && STOCK_RELEASE_TAG=$tag docker compose -p $project run --rm --no-deps api python -m worker.cli init-db)
-  # 以同一個 tag 重跑 deploy.sh 成功之後（開了維護模式時）：docker compose -p $project exec scheduler python -m worker.cli maintenance off --reason "deployed $tag"
+  # 以同一個 tag 重跑 deploy.sh：成功後它自己關掉手動開的維護模式（deploy.json 的 maintenance 是 turned_off）
 EOF
     refuse_built "DB 的 revision 是 $db_rev，tag $tag 的 alembic head 是 $head：DB 落後，新 api 會拒絕啟動。先備份、再以 $tag 的程式跑 init-db（docs/RELEASE.md「含 migration 的版本」）"
     ;;
@@ -340,6 +341,27 @@ case "$check" in
   "deploy_image ok "*) ;;
   *) fail "新 scheduler 的版本核對不是 ok：$check" ;;
 esac
+# Maintenance mode turned on by hand for init-db (docs/RELEASE.md 含 migration 的版本 step 1)
+# ends with the deploy, now that the new containers check out (#468 decision 6646032625); one a
+# backfill or backtest holds (it beats) is left to it. Recorded in deploy.json as
+# "maintenance": turned_off, none, kept_command_held, or failed (the deploy still stands; the
+# watchdog reports a maintenance mode left on past 12 hours). Before the locks go, so the
+# watchdog never reads the record halfway.
+maintenance="$(compose exec -T scheduler python -X utf8 -m worker.cli maintenance off --only-manual \
+  --reason "deployed $tag" </dev/null 2>&1)" \
+  && maintenance="$(printf '%s' "$maintenance" | "$python" -X utf8 -c \
+    'import json, sys; print(json.loads(sys.stdin.read())["deploy_maintenance"])' 2>/dev/null)" \
+  && [ -n "$maintenance" ] || maintenance=failed
+record="$(printf '%s' "$record" | "$python" -X utf8 -c '
+import json, sys
+sys.stdout.reconfigure(newline="\n")
+record = json.loads(sys.stdin.read())
+record["maintenance"] = sys.argv[1]
+print(json.dumps(record, ensure_ascii=False, indent=2))
+' "$maintenance")" || fail "部署記錄補不進 maintenance=$maintenance"
+printf '%s\n' "$record" | compose run --rm --no-deps -T --entrypoint sh scheduler -c \
+  'cat >/data/logs/deploy.json.tmp && mv /data/logs/deploy.json.tmp /data/logs/deploy.json' >&2 \
+  || fail "部署記錄補不進 maintenance=$maintenance（容器已是 $tag）"
 if [ "$locks" = held ]; then
   # The old scheduler took its exec along when up replaced it; a scheduler up kept as it was
   # (the same image) still holds them until now.
@@ -360,6 +382,7 @@ if [ "$comment" = 1 ]; then
 - image：\`$backend\`（api、scheduler）、\`$web\`（web）；前一版 $before
 - compose project：\`$project\`；發佈 checkout：\`$checkout_native\`
 - 操作者：$operator；時間：$deployed_at（UTC）
+- 維護模式：\`$maintenance\`（turned_off＝手動開的已在部署後關掉；none＝沒開；kept_command_held＝回補或回測持有，不動；failed＝關不掉，看門狗 12 小時後提醒）
 
 （\`tools/ops/deploy.sh\` 自動留言；部署記錄在 volume 的 \`/data/logs/deploy.json\`，看門狗以它核對 scheduler 跑的 image。）
 EOF
@@ -370,7 +393,7 @@ EOF
   fi
   commented=true
 fi
-printf '{"deployed": true, "tag": %s, "HEAD": "%s", "image": %s, "web_image": %s, "previous_image": %s, "locks": "%s", "commented": %s}\n' \
+printf '{"deployed": true, "tag": %s, "HEAD": "%s", "image": %s, "web_image": %s, "previous_image": %s, "locks": "%s", "maintenance": "%s", "commented": %s}\n' \
   "$(json_str "$tag")" "$sha" "$(json_str "$backend")" "$(json_str "$web")" \
-  "$([ -n "$previous" ] && json_str "$previous" || echo null)" "$locks" "$commented"
+  "$([ -n "$previous" ] && json_str "$previous" || echo null)" "$locks" "$maintenance" "$commented"
 exit 0

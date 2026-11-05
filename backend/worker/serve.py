@@ -34,15 +34,18 @@ no-session answer is ``non_trading_unconfirmed``, which the 23:00 trigger confir
 21:30 ``success`` nothing is run at start, so a restart past 23:00 skips that night's
 institutional refetch.
 
-Maintenance mode (#468, ``worker.cli maintenance on|off``; worker.job): while it is on,
-the daily and news jobs serve starts only log ``skipped reason=maintenance`` and write
-nothing to the database; the watchdog and the event monitor run as usual. Serve reads
-the marker every minute and prints ``maintenance_on`` and ``maintenance_off``. As a
-start does, the end of maintenance runs the day's daily once when it is missing
-(``missed_daily``): turned off at 23:30 after a skipped 21:30 and 23:00, the day still
-gets its daily. A serve that starts in maintenance runs no daily at start; the end of
-maintenance does. Serve holds ``<data>/locks/serve.lock`` while it runs, which the
-backfill and backtest commands look at (``job.maintenance_refusal``).
+Maintenance mode (#468, worker.job.MaintenanceHold and ``worker.cli maintenance
+on|off``): while it is on, the daily and news jobs serve starts only log ``skipped
+reason=maintenance`` and write nothing to the database; the watchdog and the event
+monitor run as usual. Serve reads the marker every minute and prints
+``maintenance_on`` and ``maintenance_off``; a marker whose holding command stopped
+beating for 10 minutes (killed without its ``finally``) is removed then
+(``maintenance_expired``, logged for the watchdog). As a start does, the end of
+maintenance runs the day's daily once when it is missing (``missed_daily``): turned
+off at 22:10 after a skipped 21:30, the day gets its daily at once, and the 23:00
+trigger then only records already_complete. A serve that starts in maintenance runs
+no daily at start; the end of maintenance does. Serve holds
+``<data>/locks/serve.lock`` while it runs (``maintenance status`` shows it).
 
 ``STOCK_SKIP_NEWS_LLM`` (from the env file, #342 decision 6) is ``--skip-news-llm``'s
 default: 1, true, yes or on skip news-llm after news; empty, 0, false, no or off do not; any
@@ -467,6 +470,16 @@ class Serve:
         """Every MAINTENANCE_POLL_SECONDS: the marker's changes, and serve.lock again."""
 
         self.hold_serve_lock()
+        expired = job.expire_stale_maintenance(self.data_dir)
+        if expired:
+            # Its holder died without its finally (SIGKILL, OOM): daily and news resume.
+            self.say(
+                "maintenance_expired",
+                owner=json.dumps(expired["owner"], ensure_ascii=False),
+                pid=expired["pid"],
+                heartbeat=expired["heartbeat"],
+                minutes_without_beat=expired["heartbeat_age_minutes"],
+            )
         state = job.maintenance_state(self.data_dir)
         was, self._maintenance = self._maintenance, state
         if state and not was:

@@ -305,6 +305,16 @@ if [ -e "$maintenance_marker" ]; then
     fi
   fi
 fi
+# Expired (#468 AC-5): serve removed the marker of a backfill or backtest that stopped
+# beating (killed without its finally, e.g. SIGKILL or the OOM killer). Daily and news
+# run again, but the command did not finish: reported once a Taipei day.
+if [ -n "$python" ]; then
+  expired="$(helper maintenance-expired "$logs/maintenance.log" "$now" 2>>"$work/helper.err")" || expired=""
+  if [ -n "$expired" ]; then
+    read -r expired_at expired_owner expired_pid expired_minutes expired_reason <<<"$expired"
+    anomaly maintenance_expired "維護模式：\`$expired_owner\`（pid $expired_pid，\`$expired_reason\`）的心跳停了 $expired_minutes 分鐘，serve 在 $expired_at 自動解除維護模式，daily 與 news 已恢復。這個作業沒有正常結束（可能被 OOM 或 SIGKILL 結束），請查它的輸出與 \`$logs/maintenance.log\`，必要時以相同參數重跑（回補會從 manifest 續做）。"
+  fi
+fi
 skipped_for_maintenance() { # skipped_for_maintenance LOG: a daily of that log skipped for maintenance
   [ -f "$1" ] && grep -qE '^===== skipped reason=maintenance ' "$1"
 }

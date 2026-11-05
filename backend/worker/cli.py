@@ -72,11 +72,19 @@ def parse_date(value: str | None) -> date | None:
     return date.fromisoformat(value) if value else None
 
 
+# Printed as a held command starts (#468 AC-6 decision 6646001167).
+MAINTENANCE_HINT = (
+    "{command}: 已開維護模式（作業持有，每分鐘心跳，結束時自動關閉）：排程的 daily 與 news"
+    " 期間只記 skipped，看門狗與 monitor 照常。預估會跨過 21:30 時，請改在 23:30 後開始："
+    "21:30 的 daily 會被跳過，要等維護模式解除才補跑。"
+)
+
+
 def maintenance_guarded(args: argparse.Namespace) -> str | None:
     """The name of a command that writes the database for long, as a daily does (#468).
 
-    Backfills and backtests: with the scheduler running they need maintenance mode
-    (worker.job.maintenance_refusal; docs/ops/SCHEDULING.md 維護模式).
+    Backfills and backtests run holding maintenance mode (worker.job.MaintenanceHold;
+    docs/ops/SCHEDULING.md 維護模式): the scheduled daily and news skip meanwhile.
     """
 
     if args.command in {"backfill", "backtest"}:
@@ -144,6 +152,11 @@ def main() -> None:
     )
     maintenance_parser.add_argument(
         "--data-dir", help="資料目錄；預設 STOCK_DATA_DIR（scheduler 容器是 /data）"
+    )
+    maintenance_parser.add_argument(
+        "--only-manual",
+        action="store_true",
+        help="只給 off：只關手動開的（沒有心跳）；作業持有的不動（deploy.sh 用）",
     )
     runs_parser = subparsers.add_parser(
         "schedule-runs", help="列出 daily 排程 run 記錄與各步驟"
@@ -429,20 +442,39 @@ def main() -> None:
         reason = (args.reason or "").strip()
         if args.action != "status" and not reason:
             parser.error(f"maintenance {args.action} needs --reason")
+        if args.only_manual and args.action != "off":
+            parser.error("--only-manual applies only to maintenance off")
         if args.action == "on":
             result = scheduled_job.maintenance_on(data_dir, reason)
         elif args.action == "off":
-            result = scheduled_job.maintenance_off(data_dir, reason)
+            off = (
+                scheduled_job.maintenance_off_if_manual
+                if args.only_manual
+                else scheduled_job.maintenance_off
+            )
+            result = off(data_dir, reason)
         else:
             result = scheduled_job.maintenance_status(data_dir)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
     guarded = maintenance_guarded(args)
-    if guarded:
-        refusal = scheduled_job.maintenance_refusal(DATA_DIR, guarded)
-        if refusal:
-            print(refusal, file=sys.stderr)
-            sys.exit(scheduled_job.MAINTENANCE_REFUSED_EXIT)
+    if not guarded:
+        run_command(args, parser)
+        return
+    try:
+        with scheduled_job.MaintenanceHold(
+            scheduled_job.resolve_data_dir(str(DATA_DIR)),
+            guarded,
+            reason=" ".join(sys.argv[1:]),
+        ):
+            print(MAINTENANCE_HINT.format(command=guarded), file=sys.stderr, flush=True)
+            run_command(args, parser)
+    except scheduled_job.MaintenanceRefused as exc:
+        print(exc, file=sys.stderr)
+        sys.exit(scheduled_job.MAINTENANCE_REFUSED_EXIT)
+
+
+def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     if args.command == "init-db":
         init_db()
         result = {"status": "success"}

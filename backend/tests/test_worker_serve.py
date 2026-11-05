@@ -1358,3 +1358,151 @@ def test_serve_holds_its_lock_while_it_runs(serve_tree):
         process.send_signal(signal.SIGTERM)
         process.wait(timeout=60)
     assert not job.lock_held(lock)
+
+
+def test_a_daily_skipped_for_maintenance_runs_when_it_ends_and_2300_does_not_again(
+    serve_tree, monkeypatch, capsys
+):
+    """#468 AC-6, on the verify fixture database with the real daily: in maintenance at
+    21:30, the daily skips (no row); maintenance ends at 22:10 and serve runs the day's
+    daily at once; it succeeds, so 23:00 only records already_complete (its refetch)."""
+
+    from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED
+
+    tree = serve_tree
+    built = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools" / "verify" / "fixture_db.py"),
+            "--dest",
+            str(tree.data),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
+    assert built.returncode == 0, built.stderr
+    db = tree.data / "stock.db"
+    with sqlite3.connect(db) as conn:
+        before = conn.execute(
+            "SELECT coalesce(max(id), 0) FROM schedule_runs"
+        ).fetchone()[0]
+    conn.close()
+    in_tree(
+        tree,
+        monkeypatch,
+        real_daily=Path(__file__).with_name("job_daily_child.py"),
+        real_backend=ROOT / "backend",
+    )
+    monkeypatch.setenv("JOB_DAILY_CHILD_COLLECT_PARTIAL", str(tree.root / "never"))
+    marker = _maintenance_on(tree.data, reason="技術回測")
+    _fire_scheduled_daily(tree, "2026-10-16T21:29:58")
+    assert "===== skipped reason=maintenance (" in tree.log("daily")
+
+    def rows():
+        with sqlite3.connect(db) as conn:
+            found = conn.execute(
+                "SELECT id, status, summary_json FROM schedule_runs"
+                " WHERE job = 'daily' AND id > ? ORDER BY id",
+                (before,),
+            ).fetchall()
+        conn.close()
+        return found
+
+    assert rows() == []  # nothing written in maintenance
+    # 22:10: the serve that has run all evening sees the marker go.
+    runner = serve.Serve(
+        serve_args(
+            "--data-dir",
+            str(tree.data),
+            *NO_MEMORY_CHECK,
+            "--claude-cli",
+            str(tree.root / "no-claude"),
+            "--now",
+            "2026-10-16T22:10:00",
+        )
+    )
+    scheduler = runner.scheduler()
+    assert scheduler.get_job("daily-catchup") is None  # deferred while on
+    done = threading.Event()
+    scheduler.add_listener(
+        lambda event: event.job_id == "daily-catchup" and done.set(),
+        EVENT_JOB_EXECUTED | EVENT_JOB_ERROR,
+    )
+    thread = threading.Thread(target=scheduler.start, daemon=True)
+    thread.start()
+    try:
+        marker.unlink()
+        runner.watch_maintenance()
+        assert done.wait(timeout=300), "no catch-up daily after maintenance ended"
+    finally:
+        scheduler.shutdown(wait=True)
+        thread.join(timeout=60)
+    out = capsys.readouterr().out
+    assert " serve maintenance_off" in out
+    assert " serve catchup job=daily reason=not_complete" in out
+    ((catchup_id, catchup_status, _),) = rows()
+    assert catchup_status == "success"
+    _fire_scheduled_daily(tree, "2026-10-16T22:59:58")
+    (_, _, _), (_, second_status, raw) = rows()
+    second = json.loads(raw)
+    assert second_status == "skipped"
+    assert second["reason"] == "already_complete"
+    assert second["related_run_id"] == catchup_id
+
+
+def test_serve_expires_the_maintenance_of_a_command_that_stopped_beating(
+    tmp_path, capsys
+):
+    """#468 AC-5: a holder killed without its finally (SIGKILL, OOM) beats no more; after
+    10 minutes serve removes its marker, logs expired and runs the missed daily."""
+
+    data = tmp_path / "data"
+    _runs_db(data, (MONDAY, "partial"))
+    now = time.time()
+    marker = data / "locks" / "maintenance"
+    marker.parent.mkdir(parents=True)
+    marker.write_text(
+        json.dumps(
+            {
+                "since_epoch": now - 3600,
+                "reason": "backtest --start-date 2025-11-04",
+                "owner": "command",
+                "command": "backtest",
+                "host": "c0ffee",
+                "pid": 4242,
+                "token": "c0ffee:4242:1",
+                "heartbeat_epoch": now - 9 * 60,
+            }
+        ),
+        encoding="utf-8",
+    )
+    runner, scheduler, jobs = _deferred(data, f"{MONDAY}T22:10")
+    runner.watch_maintenance()  # 9 minutes without a beat: still held
+    assert marker.exists() and "daily-catchup" not in jobs
+    beat = json.loads(marker.read_text(encoding="utf-8"))
+    beat["heartbeat_epoch"] = now - 11 * 60
+    marker.write_text(json.dumps(beat), encoding="utf-8")
+    runner.watch_maintenance()
+    assert not marker.exists()
+    out = capsys.readouterr().out
+    assert ' serve maintenance_expired owner="backtest" pid=4242 ' in out
+    assert " serve maintenance_off" in out
+    assert "daily-catchup" in {s.id for s in scheduler.get_jobs()}
+    (record,) = [
+        json.loads(line)
+        for line in (data / "logs" / "maintenance.log").read_text("utf-8").splitlines()
+    ]
+    assert record["event"] == "expired" and record["owner"] == "backtest"
+    assert record["pid"] == 4242 and record["heartbeat_age_minutes"] >= 11
+
+
+def test_a_maintenance_mode_turned_on_by_hand_never_expires(tmp_path):
+    data = tmp_path / "data"
+    marker = _maintenance_on(data)
+    beat = json.loads(marker.read_text(encoding="utf-8"))
+    beat["since_epoch"] = time.time() - 30 * 3600
+    marker.write_text(json.dumps(beat), encoding="utf-8")
+    runner, _, _ = _deferred(data, f"{MONDAY}T10:00")
+    runner.watch_maintenance()
+    assert marker.exists()

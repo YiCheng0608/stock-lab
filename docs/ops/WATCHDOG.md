@@ -25,6 +25,7 @@
   - 處置：統籌依留言決定開 Issue 修寫入端，再依 [重跑與回補](SCHEDULING.md#重跑與回補) 或該 Issue 的修正命令修資料。全部明細：`python tools/ops/watchdog_helper.py data-check <stock.db> <日期> --all`（`--offline` 不向官方要結果表）。
   - 抓不到的：parser 今天仍以同樣方式讀錯的欄位（全歷史審查見 #391）；daily 沒有成功的交易日不核對。
 - `maintenance_long`（#468）：[維護模式](SCHEDULING.md#維護模式)的標記檔 `<data>/locks/maintenance` 在時，每輪記 `maintenance_on`（開始時間與時數）；開超過 12 小時（`MAINTENANCE_MAX_HOURS`）就留言請關掉，每台北日一則。開始時間取標記檔記的時間，讀不懂（或找不到 Python）時取檔案的修改時間。維護模式期間 daily、news 照樣寫日誌（skipped），所以 `daily` 的日誌檢查與下一條 `news` 不會因此留言。
+- `maintenance_expired`（#468 AC-5）：`logs/maintenance.log` 24 小時內有 `expired` 紀錄，也就是 serve 解除了一個心跳停了 10 分鐘以上的作業（回補或回測被 SIGKILL 或 OOM 結束，`finally` 沒有執行）的維護模式。留言寫出命令、PID、原因與停了幾分鐘；daily 與 news 已恢復，作業沒有跑完，要查它的輸出並決定是否重跑（回補以相同參數重跑會從 manifest 續做）。每台北日一則。
 - `news`：最新的 `logs/news-*.log` 已超過 6 小時（連續 3 次）沒有更新。
 - `monitor_stale`：事件 monitor 的 `logs/monitor-heartbeat.json`（`--monitor-dir` 給了就讀那個目錄的，scheduler 容器是 `/coordination`，#338）超過 10 分鐘沒有更新，或讀不出輪詢時間（[統籌事件 monitor](MONITOR.md)；monitor 每分鐘寫一次）；檔案不存在（monitor 尚未註冊）時不判定。心跳仍在更新、但記錄 gh 已連續 10 輪失敗（例如登入過期，佇列收不到 PR 與留言）時另以 `monitor_gh_failed` 留言，附第一次失敗的時間與最後的錯誤，請查 `gh auth status` 與 `gh api rate_limit`（帳號共用的 5000 次／小時可能已用完）。
 - `news_llm`：`stock.db` 最近 3 批判讀都是 `pending`；或 24 小時內最近 3 筆 `run_type=news_llm` 都是 `failed`（`running` 超過 90 分鐘也算）；或 news 日誌（今昨兩天的檔）24 小時內最後 3 個 `news_llm_exit=` 都是 `1`／`wrapper_error`（涵蓋表不存在等不寫 run 的失敗）。後兩者合為一則 `news_llm_failed` 留言；限 24 小時是為了 news 停擺後不再每天就舊失敗留言，停擺本身由上一條 `news` 判定。
@@ -41,7 +42,7 @@
   - 處置：看門狗不修資料，違反持續存在就每台北日留言一則。前兩條查該日 daily 日誌與 `/api/ingestion-runs`，修好寫入端後依 [重跑與回補](SCHEDULING.md#重跑與回補) 重跑或回補該日；第三條查 news 日誌的 news-llm 段落。`invariant_status_sync` 由統籌處理，步驟如下：
     1. 看該日 collect run 的 `instrument_status_sync.exchanges.<交易所>` 的 `absent_symbols` 與 `dormant_symbols`。
     2. 清單是暫時不完整時（例如官方 payload 截斷），下一次 daily 同步成功後自動恢復，不需處理。
-    3. 核對官方公告確認真的有大量下市或轉市時，開[維護模式](SCHEDULING.md#維護模式)，執行 `instruments repair --apply --max-status-share <比例>`，再關掉；比例、依據與輸出記在該 Issue。修正資料前先備份 `stock.db`（[安全升級與復原順序](SETUP.md#安全升級與復原順序)）。`market_bars` 不存在或沒有資料時前兩條印 `skip`，`news_llm_results` 不存在時第三條印 `skip`，都不留言。
+    3. 核對官方公告確認真的有大量下市或轉市時，執行 `instruments repair --apply --max-status-share <比例>`（它起跑時自己持有[維護模式](SCHEDULING.md#維護模式)，結束時關掉）；比例、依據與輸出記在該 Issue。修正資料前先備份 `stock.db`（[安全升級與復原順序](SETUP.md#安全升級與復原順序)）。`market_bars` 不存在或沒有資料時前兩條印 `skip`，`news_llm_results` 不存在時第三條印 `skip`，都不留言。
 
 `daily`／`news` 還沒有任何日誌時不判定（排程尚未註冊）。執行環境：bash、PATH 上有 `gh`（有 `GH_TOKEN` 或已登入，[容器內的 claude 與 gh 認證（.env）](SETUP.md#容器內的-claude-與-gh-認證env)）；Python 只用來唯讀查 DB（找不到時跳過 daily 結果、`news_llm` 與資料不變量的 DB 檢查，日誌檢查照做），依序取 `--python`、`STOCK_PYTHON`、checkout 的 `.venv/bin/python`、`python3`、`python`。serve 以 `--data-dir /data --python <serve 的 python>` 呼叫它，monitor 開著時另加 `--monitor-dir /coordination`。
 
@@ -52,7 +53,7 @@ scheduler 容器的命令（在發佈 checkout 執行；`<P>` 是正式 compose 
 | 手動判定（只輸出將留的言與資料不變量的數字，不留言） | `docker compose -p <P> exec scheduler bash tools/ops/watchdog.sh --dry-run` |
 | 手動核對某交易日 | `docker compose -p <P> exec scheduler python tools/ops/watchdog_helper.py data-check /data/stock.db <YYYY-MM-DD> [--offline] [--all]`（唯讀，不記日誌、不留言） |
 | 日誌 | `docker compose -p <P> exec scheduler tail -n 50 /data/logs/watchdog.log`；serve 的輸出是 `docker compose -p <P> logs scheduler` |
-| 停用／啟用 | 看門狗由 serve 排程：`docker compose -p <P> stop scheduler`／`start scheduler`（daily、news、monitor 一起停）；回補、回測時改開[維護模式](SCHEDULING.md#維護模式)，看門狗照常跑 |
+| 停用／啟用 | 看門狗由 serve 排程：`docker compose -p <P> stop scheduler`／`start scheduler`（daily、news、monitor 一起停）；回補、回測起跑時自己開[維護模式](SCHEDULING.md#維護模式)，看門狗照常跑，不必停 |
 
 以下是工作排程器（切換前）的命令，在發佈 checkout 執行：
 

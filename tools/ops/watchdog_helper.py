@@ -58,6 +58,11 @@ The result goes to stdout without a trailing newline.
                                    dated by the file's modification time and
                                    reason "unreadable" when it is not the JSON
                                    it writes
+  maintenance-expired <log> <now>  the latest "expired" record of the last 24 hours in
+                                   <data>/logs/maintenance.log (#468 AC-5: serve
+                                   removed a marker whose command stopped beating):
+                                   "<at> <owner> <pid> <minutes_without_beat>
+                                   <reason>", or nothing
   data-check <db> <date> [--offline] [--all] [--scratch DIR]
                                    the daily data check of trading date
                                    <date> (tools/ops/data_check.py, #390):
@@ -438,6 +443,35 @@ def maintenance(path: str, now: str) -> str:
     return f"on {age} {at} {reason.replace('`', "'")[:200]}"
 
 
+def maintenance_expired(path: str, now: str) -> str:
+    try:
+        with open(path, encoding="utf-8") as handle:
+            lines = handle.read().splitlines()
+    except FileNotFoundError:
+        return ""
+    current = _utc(now)
+    for line in reversed(lines):
+        try:
+            record = json.loads(line)
+            if record.get("event") != "expired":
+                continue
+            at = datetime.fromisoformat(record["at"])
+        except (ValueError, KeyError, TypeError, AttributeError):
+            continue
+        at_utc = at.astimezone(timezone.utc).replace(tzinfo=None)
+        if not timedelta(0) <= current - at_utc <= RECENT_WINDOW:
+            return ""
+        words = [
+            at_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            str(record.get("owner") or "?").replace(" ", "_"),
+            str(record.get("pid") or "?"),
+            str(record.get("heartbeat_age_minutes") or "?"),
+            " ".join(str(record.get("reason") or "-").split()).replace("`", "'")[:200],
+        ]
+        return " ".join(words)
+    return ""
+
+
 def deploy_image(path: str) -> str:
     """The image this process runs in against the one tools/ops/deploy.sh recorded."""
 
@@ -479,6 +513,8 @@ def main(argv: list[str]) -> int:
         out = deploy_image(args[0])
     elif command == "maintenance":
         out = maintenance(args[0], args[1])
+    elif command == "maintenance-expired":
+        out = maintenance_expired(args[0], args[1])
     elif command == "data-check":
         # Imported here: it loads the backend; the other checks stay stdlib only.
         from data_check import data_check

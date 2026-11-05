@@ -41,9 +41,13 @@ backfill, a backtest or an ``init-db`` can have the database alone while serve
 keeps running the watchdog and the event monitor. The marker is checked after the
 job's lock is taken, so once ``maintenance on`` has written it, a job that holds
 the lock either is shown by ``maintenance status`` (it started before) or skips.
-``on`` and ``off`` are logged in ``<data>/logs/maintenance.log``. While serve
-runs it holds ``<data>/locks/serve.lock``; the backfill and backtest commands
-refuse to start while that lock is held and maintenance is off (``maintenance_refusal``).
+The backfill and backtest commands hold it themselves (``MaintenanceHold``): on as
+they start, a heartbeat every minute, off in their ``finally``; serve expires a
+marker whose heartbeat stopped for 10 minutes (``expire_stale_maintenance``: a
+holder killed by SIGKILL or the OOM killer). ``maintenance on`` by hand has no
+heartbeat and stays on until ``off`` (tools/ops/deploy.sh turns it off after a
+deploy). Every change is logged in ``<data>/logs/maintenance.log``. While serve
+runs it holds ``<data>/locks/serve.lock`` (``maintenance status`` shows it).
 
 Only the standard library is imported here: the watchdog takes its lock
 through the same code without the backend's dependencies, with
@@ -102,8 +106,12 @@ MAINTENANCE_MARKER = "maintenance"
 MAINTENANCE_LOG = "maintenance.log"
 MAINTENANCE_SKIP_REASON = "maintenance"
 SERVE_LOCK = "serve"
-# A backfill or backtest refused by maintenance_refusal (EX_TEMPFAIL, as `lock`).
+# A backfill or backtest refused by MaintenanceHold (EX_TEMPFAIL, as `lock`).
 MAINTENANCE_REFUSED_EXIT = 75
+# A command holding maintenance mode beats this often; serve expires a marker whose
+# beat is older than MAINTENANCE_STALE_SECONDS (the holder died without its finally).
+MAINTENANCE_HEARTBEAT_SECONDS = 60.0
+MAINTENANCE_STALE_SECONDS = 600.0
 
 
 def platform_problem(module: str = "worker.job") -> str | None:
@@ -224,10 +232,27 @@ def maintenance_state(data_dir: Path) -> dict | None:
     return {**state, "since_epoch": since, "reason": reason, "readable": True}
 
 
+def heartbeat_age(state: dict | None, now: float | None = None) -> float | None:
+    """Seconds since the holding command's last beat; None for a marker without one
+    (turned on by hand, or unreadable): that one never expires."""
+
+    beat = state.get("heartbeat_epoch") if state else None
+    if isinstance(beat, bool) or not isinstance(beat, (int, float)):
+        return None
+    return (time.time() if now is None else now) - beat
+
+
 def _taipei(epoch: float | None) -> str:
     if epoch is None:
         return "unknown"
     return datetime.fromtimestamp(epoch, TAIPEI).isoformat(timespec="seconds")
+
+
+def _write_marker(path: Path, marker: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}")
+    temporary.write_text(json.dumps(marker, ensure_ascii=False), encoding="utf-8")
+    os.replace(temporary, path)
 
 
 def _maintenance_log(data_dir: Path, record: dict) -> None:
@@ -238,25 +263,33 @@ def _maintenance_log(data_dir: Path, record: dict) -> None:
 
 
 def running_jobs(data_dir: Path) -> list[str]:
+    if not sys.platform.startswith("linux"):
+        return []  # no fcntl; serve and its jobs run on Linux only (#333)
     return [name for name in JOBS if lock_held(lock_path(data_dir, name))]
 
 
 def maintenance_status(data_dir: Path) -> dict:
-    """``worker.cli maintenance status``: what the guard and the jobs see."""
+    """``worker.cli maintenance status``: what the jobs and serve see."""
 
     state = maintenance_state(data_dir)
     out: dict = {
         "maintenance": "on" if state else "off",
         "marker": str(maintenance_path(data_dir)),
-        "serve_running": lock_held(lock_path(data_dir, SERVE_LOCK)),
+        "serve_running": sys.platform.startswith("linux")
+        and lock_held(lock_path(data_dir, SERVE_LOCK)),
     }
     if state:
         since = state["since_epoch"]
+        age = heartbeat_age(state)
         out.update(
             since=_taipei(since),
             hours=None if since is None else round((time.time() - since) / 3600, 2),
             reason=state["reason"],
             readable=state["readable"],
+            owner=state.get("command") or state.get("owner") or "unknown",
+            host=state.get("host"),
+            pid=state.get("pid"),
+            heartbeat_age_seconds=None if age is None else round(age),
             # Probed only now: a job that starts meanwhile skips for maintenance.
             running_jobs=running_jobs(data_dir),
         )
@@ -264,22 +297,23 @@ def maintenance_status(data_dir: Path) -> dict:
 
 
 def maintenance_on(data_dir: Path, reason: str) -> dict:
-    """Write the marker (kept as it is when maintenance is already on) and log it."""
+    """Turn it on by hand (kept as it is when already on). No heartbeat: it stays on
+    until ``maintenance off``, and the watchdog reports it past 12 hours."""
 
     path = maintenance_path(data_dir)
     already = maintenance_state(data_dir) is not None
     now = time.time()
     if not already:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        marker = {
-            "since": _taipei(now),
-            "since_epoch": now,
-            "reason": reason,
-            "host": socket.gethostname(),
-        }
-        temporary = path.with_name(f".{path.name}.{os.getpid()}")
-        temporary.write_text(json.dumps(marker, ensure_ascii=False), encoding="utf-8")
-        os.replace(temporary, path)
+        _write_marker(
+            path,
+            {
+                "since": _taipei(now),
+                "since_epoch": now,
+                "reason": reason,
+                "owner": "manual",
+                "host": socket.gethostname(),
+            },
+        )
     _maintenance_log(
         data_dir,
         {
@@ -306,6 +340,7 @@ def maintenance_off(data_dir: Path, reason: str) -> dict:
             "at": _taipei(now),
             "event": "off" if state else "off_again",
             "reason": reason,
+            "owner": (state.get("command") or state.get("owner")) if state else None,
             "since": _taipei(since) if state else None,
             "hours": None if since is None else round((now - since) / 3600, 2),
             "host": socket.gethostname(),
@@ -314,34 +349,211 @@ def maintenance_off(data_dir: Path, reason: str) -> dict:
     return {**maintenance_status(data_dir), "was_on": state is not None}
 
 
-def maintenance_refusal(data_dir: Path, command: str) -> str | None:
-    """Why COMMAND (a backfill or a backtest) must not start now, or None (#468).
+def maintenance_off_if_manual(data_dir: Path, reason: str) -> dict:
+    """``maintenance off --only-manual``: what tools/ops/deploy.sh runs once its new
+    containers check out (#468 decision 6646032625). A maintenance mode turned on by
+    hand for init-db ends with the deploy; one a command holds (a heartbeat) is left to
+    that command. ``deploy_maintenance`` says which: turned_off, none or
+    kept_command_held."""
 
-    It writes the database for a long time, as a daily does: with serve running it
-    needs maintenance on, so that no daily or news starts, and no daily or news job
-    still running. With no serve (the scheduler stopped) nothing is checked.
-    """
-
-    if not sys.platform.startswith("linux"):
-        return None  # no fcntl; serve and its jobs run on Linux only (#333)
     state = maintenance_state(data_dir)
     if state is None:
-        if lock_held(lock_path(data_dir, SERVE_LOCK)):
-            return (
-                f"{command}: the scheduler (worker.cli serve) is running and maintenance"
-                " mode is off; a daily or news could write the database alongside. Turn"
-                " it on first: python -m worker.cli maintenance on --reason '<why>'"
-                " (docs/ops/SCHEDULING.md 維護模式), and off when done."
-            )
+        return {**maintenance_status(data_dir), "deploy_maintenance": "none"}
+    if heartbeat_age(state) is not None:
+        return {
+            **maintenance_status(data_dir),
+            "deploy_maintenance": "kept_command_held",
+        }
+    return {**maintenance_off(data_dir, reason), "deploy_maintenance": "turned_off"}
+
+
+def expire_stale_maintenance(data_dir: Path, now: float | None = None) -> dict | None:
+    """Turn off maintenance whose command stopped beating (#468 AC-5), or None.
+
+    Killed by the OOM killer or SIGKILL, a command never reaches its ``finally``; after
+    MAINTENANCE_STALE_SECONDS without a beat its marker is removed and an ``expired``
+    record logged, which the watchdog reports. A marker without a heartbeat (on by
+    hand) never expires.
+    """
+
+    state = maintenance_state(data_dir)
+    # One clock for both reads: two time.time() calls never give the same age.
+    moment = time.time() if now is None else now
+    age = heartbeat_age(state, moment)
+    if age is None or age <= MAINTENANCE_STALE_SECONDS:
         return None
-    busy = running_jobs(data_dir)
-    if busy:
-        return (
-            f"{command}: maintenance mode is on, but a {' and a '.join(busy)} job"
-            " started before it is still running; wait until"
-            " python -m worker.cli maintenance status shows no running_jobs."
+    # Only the marker read: a beat or a new holder since then keeps it.
+    current = maintenance_state(data_dir)
+    if not current or current.get("token") != state.get("token"):
+        return None
+    if heartbeat_age(current, moment) != age:
+        return None
+    maintenance_path(data_dir).unlink(missing_ok=True)
+    record = {
+        "at": _taipei(moment),
+        "event": "expired",
+        "owner": state.get("command") or state.get("owner"),
+        "host": state.get("host"),
+        "pid": state.get("pid"),
+        "reason": state["reason"],
+        "since": _taipei(state["since_epoch"]),
+        "heartbeat": _taipei(state["heartbeat_epoch"]),
+        "heartbeat_age_minutes": round(age / 60, 1),
+        "hours": round((moment - state["since_epoch"]) / 3600, 2),
+    }
+    _maintenance_log(data_dir, record)
+    return record
+
+
+class MaintenanceRefused(Exception):
+    """A command that needs maintenance mode cannot take it now (exit 75)."""
+
+
+class MaintenanceHold:
+    """Maintenance mode held by the command that needs it (#468 AC-5).
+
+    ``with MaintenanceHold(data_dir, "backfill"):`` turns maintenance on (or runs under
+    one turned on by hand, which it leaves on), beats every
+    MAINTENANCE_HEARTBEAT_SECONDS from a thread, and turns it off in its ``finally``,
+    however the command ends; SIGTERM is turned into SystemExit so that ``docker
+    stop`` reaches it too. A command killed outright stops beating and serve expires
+    its marker (``expire_stale_maintenance``). Refused (MaintenanceRefused) while
+    another command with a live heartbeat holds it, or while a daily or news job that
+    started before it is still running.
+    """
+
+    def __init__(
+        self,
+        data_dir: Path,
+        command: str,
+        reason: str | None = None,
+        heartbeat_seconds: float | None = None,
+    ) -> None:
+        self.data_dir = data_dir
+        self.command = command
+        self.reason = reason or command
+        self.heartbeat_seconds = heartbeat_seconds or MAINTENANCE_HEARTBEAT_SECONDS
+        self.token = f"{socket.gethostname()}:{os.getpid()}:{time.time_ns()}"
+        self.owned = False
+        self.state: dict | None = None
+        self._stop = None
+        self._thread = None
+        self._previous_sigterm = None
+
+    def __enter__(self) -> "MaintenanceHold":
+        import threading
+
+        state = maintenance_state(self.data_dir)
+        age = heartbeat_age(state)
+        if state and age is not None and age <= MAINTENANCE_STALE_SECONDS:
+            raise MaintenanceRefused(
+                f"{self.command}: maintenance mode is held by {state.get('command')}"
+                f" (pid {state.get('pid')} on {state.get('host')}, since"
+                f" {_taipei(state['since_epoch'])}): one backfill or backtest at a time;"
+                " python -m worker.cli maintenance status shows it."
+            )
+        now = time.time()
+        if state and age is None:
+            # On by hand (or unreadable): run under it and leave it on.
+            self.state = state
+        else:
+            self.state = {
+                "since": _taipei(now),
+                "since_epoch": now,
+                "reason": self.reason,
+                "owner": "command",
+                "command": self.command,
+                "host": socket.gethostname(),
+                "pid": os.getpid(),
+                "token": self.token,
+                "heartbeat_epoch": now,
+            }
+            _write_marker(maintenance_path(self.data_dir), self.state)
+            self.owned = True
+            record = {
+                "at": _taipei(now),
+                "event": "held",
+                "owner": self.command,
+                "reason": self.reason,
+                "host": socket.gethostname(),
+                "pid": os.getpid(),
+            }
+            if state:
+                record["took_over_from"] = state.get("command")
+            _maintenance_log(self.data_dir, record)
+        busy = running_jobs(self.data_dir)
+        if busy:
+            self._release(f"refused: {' and '.join(busy)} still running")
+            raise MaintenanceRefused(
+                f"{self.command}: a {' and a '.join(busy)} job that started before"
+                " maintenance mode is still running; start again once it has ended"
+                " (python -m worker.cli maintenance status shows running_jobs)."
+            )
+        if self.owned:
+            self._stop = threading.Event()
+            self._thread = threading.Thread(target=self._beat, daemon=True)
+            self._thread.start()
+        if threading.current_thread() is threading.main_thread():
+            self._previous_sigterm = signal.signal(signal.SIGTERM, _sigterm_exit)
+        return self
+
+    def __exit__(self, exc_type, exc, _traceback) -> bool:
+        if self._previous_sigterm is not None:
+            signal.signal(signal.SIGTERM, self._previous_sigterm)
+        if self._stop is not None:
+            self._stop.set()
+            self._thread.join(timeout=30)
+        if exc_type is None:
+            outcome = "success"
+        elif issubclass(exc_type, SystemExit):
+            outcome = f"exit {exc.code}"
+        else:
+            outcome = f"{exc_type.__name__}: {exc}"[:300]
+        self._release(outcome)
+        return False
+
+    def _beat(self) -> None:
+        while not self._stop.wait(self.heartbeat_seconds):
+            current = maintenance_state(self.data_dir)
+            if not current or current.get("token") != self.token:
+                print(
+                    f"{self.command}: maintenance mode is no longer held by this run"
+                    " (expired or turned off); daily and news may run again",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                return
+            _write_marker(
+                maintenance_path(self.data_dir),
+                {**self.state, "heartbeat_epoch": time.time()},
+            )
+
+    def _release(self, outcome: str) -> None:
+        if not self.owned:
+            return
+        self.owned = False
+        current = maintenance_state(self.data_dir)
+        if not current or current.get("token") != self.token:
+            return  # expired meanwhile, or another holder: not ours to remove
+        maintenance_path(self.data_dir).unlink(missing_ok=True)
+        now = time.time()
+        _maintenance_log(
+            self.data_dir,
+            {
+                "at": _taipei(now),
+                "event": "released",
+                "owner": self.command,
+                "outcome": outcome,
+                "since": _taipei(self.state["since_epoch"]),
+                "hours": round((now - self.state["since_epoch"]) / 3600, 2),
+                "host": socket.gethostname(),
+                "pid": os.getpid(),
+            },
         )
-    return None
+
+
+def _sigterm_exit(signum, _frame) -> None:
+    raise SystemExit(128 + signum)
 
 
 class _ProcessTree:
