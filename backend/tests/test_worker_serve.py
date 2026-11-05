@@ -116,7 +116,9 @@ class ServeTree(Tree):
                 *args,
             ],
             cwd=self.backend,
-            env=self.environment(extra_env, **fake),
+            env=self.environment(
+                {"PYTHONFAULTHANDLER": "1", **(extra_env or {})}, **fake
+            ),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -180,9 +182,28 @@ def in_tree(tree: ServeTree, monkeypatch, **fake) -> None:
             monkeypatch.setenv(name, value)
 
 
-def stop(process: subprocess.Popen) -> int:
+def stop(process: subprocess.Popen, out: Output | None = None) -> int:
     process.send_signal(signal.SIGTERM)
-    return process.wait(timeout=60)
+    try:
+        return process.wait(timeout=60)
+    except subprocess.TimeoutExpired:
+        pass
+    # Still running (#503): SIGABRT makes faulthandler (PYTHONFAULTHANDLER, set by
+    # start_serve) print every thread's stack to the output before the process dies.
+    process.send_signal(signal.SIGABRT)
+    try:
+        process.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=30)
+    lines = out.lines if out is not None else []
+    if out is None and process.stdout is not None:
+        lines = process.stdout.read().splitlines()
+    time.sleep(0.5)  # the reader thread takes the last lines
+    raise AssertionError(
+        "serve did not stop within 60 s of SIGTERM; its output and stacks:\n"
+        + "\n".join(lines)
+    )
 
 
 # The schedule (docs/ops/platform/windows.md: the Task Scheduler triggers) -----------------------
@@ -1355,7 +1376,7 @@ def test_serve_holds_its_lock_while_it_runs(serve_tree):
     finally:
         # A SIGTERM right after `ready` may come before the scheduler runs: still a
         # clean stop (CI run 41949855780 hung there).
-        assert stop(process) == 0
+        assert stop(process, out) == 0
     assert not job.lock_held(lock)
 
 
@@ -1382,6 +1403,55 @@ def test_a_sigterm_before_the_scheduler_starts_still_stops_serve(tmp_path, monke
         for signum, handler in previous.items():
             signal.signal(signum, handler)
     assert code == 0
+
+
+def test_a_sigterm_the_main_thread_does_not_see_still_stops_serve(
+    tmp_path, monkeypatch
+):
+    """#503 (master CI 3720acb): CPython runs a Python signal handler only when the main
+    thread next checks for signals. A SIGTERM that lands after its last check, as it
+    goes into the scheduler's wait, waited there for the next job: the 60-second
+    maintenance watch, past the test's stop timeout. Sent to another thread, a SIGTERM
+    is in that state every time; serve has to stop at once all the same."""
+
+    if not ON_LINUX:
+        pytest.skip("worker.serve runs on Linux only (#333)")
+    from apscheduler.schedulers.blocking import BlockingScheduler
+
+    # Nothing due for the next 20 s: the main thread waits that long.
+    monkeypatch.setattr(serve, "triggers", lambda args: {})
+    monkeypatch.setattr(serve, "MAINTENANCE_POLL_SECONDS", 20)
+    started = threading.Event()
+    start = BlockingScheduler.start
+
+    def noted_start(self, *args, **kwargs):
+        started.set()
+        return start(self, *args, **kwargs)
+
+    monkeypatch.setattr(BlockingScheduler, "start", noted_start)
+    sent: list[float] = []
+
+    def sigterm_on_this_thread() -> None:
+        started.wait(30)
+        time.sleep(0.5)  # the main thread is in the scheduler's wait by now
+        sent.append(time.monotonic())
+        signal.pthread_kill(threading.get_ident(), signal.SIGTERM)
+
+    other = threading.Thread(target=sigterm_on_this_thread, daemon=True)
+    previous = {s: signal.getsignal(s) for s in (signal.SIGTERM, signal.SIGINT)}
+    other.start()
+    try:
+        code = serve.run(serve_args("--data-dir", str(tmp_path / "data")))
+    finally:
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
+    stopped = time.monotonic()
+    other.join(timeout=5)
+    assert code == 0
+    assert sent, "the scheduler never started"
+    assert stopped - sent[0] < 5, (
+        f"serve stopped {stopped - sent[0]:.1f} s after SIGTERM"
+    )
 
 
 def test_a_daily_skipped_for_maintenance_runs_when_it_ends_and_2300_does_not_again(
