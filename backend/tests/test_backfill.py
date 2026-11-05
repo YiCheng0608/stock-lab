@@ -1272,3 +1272,119 @@ def test_a_backfill_run_is_stamped_with_the_clock(backfill_env, frozen_utcnow):
     frozen_utcnow.at = later
     backfill.targeted_backfill(trading_date, trading_date, adapter=AlwaysFail())
     assert stamps() == (later, later)
+
+
+# Issue #479: run 2266's window (08/03~11/03) holds 67 weekdays and five
+# official no-data weekdays; inside the 93-day cap it can never verify 65
+# sessions.  The run metadata and /api/coverage must judge such a window by
+# one rule (DATA_SOURCES, backfill target).
+_RUN_2266_START = date(2026, 8, 3)
+_RUN_2266_END = date(2026, 11, 3)
+_RUN_2266_HOLIDAYS = frozenset(
+    {
+        date(2026, 9, 25),
+        date(2026, 9, 28),
+        date(2026, 10, 9),
+        date(2026, 10, 23),
+        date(2026, 10, 26),
+    }
+)
+
+
+class _WindowAdapter:
+    """No-data for ``holidays``, a failure for ``failing``, else a session."""
+
+    def __init__(self, holidays=frozenset(), failing=frozenset()):
+        self.holidays = set(holidays)
+        self.failing = set(failing)
+        self.calls: list[date] = []
+
+    def fetch(self, requested_start: date, requested_end: date) -> sources.OfficialBatch:
+        assert requested_start == requested_end
+        self.calls.append(requested_start)
+        if requested_start in self.failing:
+            raise sources.OfficialDataError("fixture date unavailable")
+        if requested_start in self.holidays:
+            return _no_data_batch_for(requested_start)
+        return _batch_for(requested_start)
+
+
+def _coverage_summary_via_api(backfill_env, monkeypatch) -> dict:
+    """The coverage page's request: GET /api/coverage with no parameters."""
+
+    def override_get_db():
+        with backfill_env() as db:
+            yield db
+
+    monkeypatch.setattr(main_module, "check_database_readiness", lambda: None)
+    app.dependency_overrides[api_module.get_db] = override_get_db
+    try:
+        with TestClient(app) as client:
+            response = client.get("/api/coverage")
+    finally:
+        app.dependency_overrides.pop(api_module.get_db, None)
+    assert response.status_code == 200
+    return response.json()["summary"]
+
+
+def _run_target_flags(result: dict) -> dict:
+    metadata = result["metadata"]
+    return {
+        "metadata": metadata["target_met"],
+        "manifest": metadata["coverage_manifest_summary"]["target_met"],
+        "coverage": metadata["coverage"]["target_met"],
+    }
+
+
+def test_target_met_when_window_holidays_leave_fewer_than_65_sessions(
+    backfill_env, monkeypatch
+):
+    adapter = _WindowAdapter(holidays=_RUN_2266_HOLIDAYS)
+    result = backfill.targeted_backfill(
+        _RUN_2266_START, _RUN_2266_END, adapter=adapter
+    )
+    metadata = result["metadata"]
+    assert len(metadata["requested_calendar_dates"]) == 67
+    assert metadata["skipped_non_trading"] == sorted(
+        day.isoformat() for day in _RUN_2266_HOLIDAYS
+    )
+    # Every weekday of the window is either a verified session or an explicit
+    # official no-data day: nothing is missing, so the target is met.
+    assert _run_target_flags(result) == {
+        "metadata": True,
+        "manifest": True,
+        "coverage": True,
+    }
+    assert _coverage_summary_via_api(backfill_env, monkeypatch)["target_met"] is True
+
+
+def test_target_met_when_window_has_no_holidays(backfill_env, monkeypatch):
+    start, end = date(2026, 6, 8), date(2026, 9, 8)
+    result = backfill.targeted_backfill(start, end, adapter=_WindowAdapter())
+    metadata = result["metadata"]
+    assert len(metadata["verified_trading_sessions"]) == 67
+    assert metadata["extension_dates"] == []
+    assert _run_target_flags(result) == {
+        "metadata": True,
+        "manifest": True,
+        "coverage": True,
+    }
+    assert _coverage_summary_via_api(backfill_env, monkeypatch)["target_met"] is True
+
+
+def test_target_not_met_when_a_trading_day_is_unverified(backfill_env, monkeypatch):
+    missing = date(2026, 10, 14)
+    adapter = _WindowAdapter(holidays=_RUN_2266_HOLIDAYS, failing={missing})
+    result = backfill.targeted_backfill(
+        _RUN_2266_START, _RUN_2266_END, adapter=adapter
+    )
+    metadata = result["metadata"]
+    assert metadata["failed_dates"] == [missing.isoformat()]
+    # A failed weekday is not a holiday: it stays missing and the target
+    # stays unmet, in the run and on the coverage page.
+    assert _run_target_flags(result) == {
+        "metadata": False,
+        "manifest": False,
+        "coverage": False,
+    }
+    assert _coverage_summary_via_api(backfill_env, monkeypatch)["target_met"] is False
