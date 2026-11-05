@@ -128,6 +128,18 @@ if [ "$1" = compose ]; then
         "$COMPOSE_PROJECT_NAME-backend:$t" "$COMPOSE_PROJECT_NAME-web:$t"
       exit 0 ;;
     exec)
+      # #468: `maintenance off --only-manual` in the new scheduler. volume/maintenance holds
+      # manual or command (who turned it on); maintenance_fails makes the call fail.
+      case "$*" in
+        *"worker.cli maintenance off --only-manual"*)
+          [ -f "$d/maintenance_fails" ] && { echo boom >&2; exit 1; }
+          case "$(cat "$d/volume/maintenance" 2>/dev/null)" in
+            manual) rm -f "$d/volume/maintenance"; echo '{"deploy_maintenance": "turned_off"}' ;;
+            command) echo '{"deploy_maintenance": "kept_command_held"}' ;;
+            *) echo '{"deploy_maintenance": "none"}' ;;
+          esac
+          exit 0 ;;
+      esac
       [ -f "$d/readback_fails" ] && exit 1
       cat "$d/readback" 2>/dev/null || echo "deploy_image ok image=fake"
       exit 0 ;;
@@ -429,6 +441,8 @@ def test_a_green_tag_is_built_tagged_started_and_recorded(harness):
         "operator": "測試者",
         "project": PROJECT,
         "checkout": record["checkout"],
+        # #468: no maintenance mode was on.
+        "maintenance": "none",
     }
     assert record["deployed_at"].endswith("Z")
     assert record["checkout"].endswith("/release")
@@ -440,6 +454,7 @@ def test_a_green_tag_is_built_tagged_started_and_recorded(harness):
         "web_image": f"{PROJECT}-web:v1",
         "previous_image": f"{PROJECT}-backend:v0",
         "locks": "held",
+        "maintenance": "none",
         "commented": True,
     }
     assert any(f"--commit {sha}" in c for c in harness.calls("gh"))
@@ -464,6 +479,8 @@ def test_the_steps_run_in_order_while_the_locks_are_held(harness):
         at(" up -d --no-build --wait --wait-timeout 300"),
         at(" ps --format "),
         at(" exec -T scheduler "),
+        # #468: a manual maintenance mode ends once the new scheduler checks out.
+        at("worker.cli maintenance off --only-manual --reason deployed v1"),
         at("lock released"),
     ]
     # The record is in the volume before the new containers start; the locks go last.
@@ -581,6 +598,8 @@ def test_the_comment_on_1_names_the_tag_head_images_and_record(harness):
         "前一版 `stock-lab-backend:v0`\n"
         f"- compose project：`stock-lab`；發佈 checkout：`{record['checkout']}`\n"
         f"- 操作者：測試者；時間：{record['deployed_at']}（UTC）\n"
+        "- 維護模式：`none`（turned_off＝手動開的已在部署後關掉；none＝沒開；"
+        "kept_command_held＝回補或回測持有，不動；failed＝關不掉，看門狗 12 小時後提醒）\n"
         "\n"
         "（`tools/ops/deploy.sh` 自動留言；部署記錄在 volume 的 `/data/logs/deploy.json`，"
         "看門狗以它核對 scheduler 跑的 image。）\n"
@@ -823,7 +842,14 @@ def test_a_db_behind_prints_the_backup_and_init_db_commands(harness):
     result = harness.deploy("v1")
     assert result.code == 1, result.out
     assert "docs/RELEASE.md「含 migration 的版本」" in result.out
-    assert "docker compose -p stock-lab stop scheduler" in result.out
+    # #468: maintenance mode, with stop for a scheduler image from before it.
+    assert (
+        "  docker compose -p stock-lab exec scheduler python -m worker.cli maintenance on"
+        ' --reason "v1"\n'
+    ) in result.out
+    assert "worker.cli maintenance status\n" in result.out
+    assert "上兩行改為：docker compose -p stock-lab stop scheduler" in result.out
+    assert "成功後它自己關掉手動開的維護模式" in result.out
     # A shell left with a smoke test's settings runs init-db without them (PR #477 review).
     assert "\n  unset WEB_PORT API_PORT STOCK_ENV_FILE\n" in result.out
     assert (
@@ -1094,3 +1120,55 @@ def test_a_one_off_scheduler_alone_still_holds_the_locks(harness):
     before = harness.state()
     result = harness.deploy("v1")
     assert_refused_unchanged(harness, before, result, "排程執行中")
+
+
+# Maintenance mode after the deploy (#468 decision 6646032625) -----------------------------
+
+
+def _maintenance(harness, who: str) -> Path:
+    path = harness.docker / "volume" / "maintenance"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(who, encoding="utf-8")
+    return path
+
+
+def test_a_deploy_turns_off_a_maintenance_mode_turned_on_by_hand(harness):
+    marker = _maintenance(harness, "manual")
+    result = harness.deploy("v1")
+    assert result.code == 0, result.out
+    assert not marker.exists()
+    assert harness.record["maintenance"] == "turned_off"
+    assert result.result["maintenance"] == "turned_off"
+    comment = (harness.fake / "comment.md").read_text(encoding="utf-8")
+    assert "- 維護模式：`turned_off`（turned_off＝手動開的已在部署後關掉" in comment
+
+
+def test_a_deploy_leaves_a_maintenance_mode_a_backfill_holds(harness):
+    marker = _maintenance(harness, "command")
+    result = harness.deploy("v1", "--no-comment")
+    assert result.code == 0, result.out
+    assert marker.read_text(encoding="utf-8") == "command"
+    assert harness.record["maintenance"] == "kept_command_held"
+
+
+@pytest.mark.parametrize("step", ["up_fails", "readback_fails"])
+def test_a_failed_deploy_leaves_the_maintenance_mode_on(harness, step):
+    """Left to the watchdog's 12-hour report: nothing turns it off on the way out."""
+
+    marker = _maintenance(harness, "manual")
+    (harness.docker / step).touch()
+    result = harness.deploy("v1", "--no-comment")
+    assert result.code == 3, result.out
+    assert marker.read_text(encoding="utf-8") == "manual"
+    assert not [c for c in harness.calls("docker") if "worker.cli maintenance" in c]
+
+
+def test_a_maintenance_mode_that_cannot_be_turned_off_is_recorded_and_the_deploy_stands(
+    harness,
+):
+    _maintenance(harness, "manual")
+    (harness.docker / "maintenance_fails").touch()
+    result = harness.deploy("v1", "--no-comment")
+    assert result.code == 0, result.out
+    assert harness.record["maintenance"] == "failed"
+    assert result.result["maintenance"] == "failed"
