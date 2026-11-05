@@ -39,24 +39,33 @@ from pathlib import Path
 from app.migration_revisions import REVISIONS
 
 
-def _connect(path: Path) -> sqlite3.Connection:
+# Kept identical in tools/ops/db_revision.py and tools/ops/copy_db.py (#486; a test compares
+# the two). Neither can import the other: copy_db.py is mounted alone into whichever image is
+# running, db_revision.py is piped on stdin.
+def open_read_only(path: Path) -> tuple[sqlite3.Connection, bool]:
+    """(connection, immutable): ``mode=ro``; ``immutable=1`` only when that cannot open the
+    file and nothing is next to it (no -wal, -shm or hot -journal), so it is the whole DB."""
     uri = path.resolve().as_uri() + "?mode=ro"
     try:
         connection = sqlite3.connect(uri, uri=True)
-        connection.execute("SELECT count(*) FROM sqlite_master").fetchone()
-        return connection
+        try:
+            connection.execute("SELECT count(*) FROM sqlite_master").fetchone()
+        except sqlite3.OperationalError:
+            connection.close()
+            raise
+        return connection, False
     except sqlite3.OperationalError:
         sides = ("-wal", "-shm", "-journal")
-        if any(Path(f"{path}{suffix}").exists() for suffix in sides):
+        if any(Path(f"{path}{side}").exists() for side in sides):
             raise
-    return sqlite3.connect(uri + "&immutable=1", uri=True)
+    return sqlite3.connect(uri + "&immutable=1", uri=True), True
 
 
 def revision(path: Path) -> tuple[str, str]:
     """(state, db revision) of the database at path; see the module docstring."""
     if not path.is_file():
         return "missing", "-"
-    with closing(_connect(path)) as connection:
+    with closing(open_read_only(path)[0]) as connection:
         connection.execute("PRAGMA query_only=ON")
         has_table = connection.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='alembic_version'"

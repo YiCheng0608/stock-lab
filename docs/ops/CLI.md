@@ -69,7 +69,7 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 
 | 命令 | 用途 |
 | --- | --- |
-| `python tools/ops/copy_db.py --src <stock.db> --dest <目錄> [--force]` | 以 `mode=ro` 連線經 SQLite backup API 複製一份快照（含 WAL 內容；唯讀連線無法也不需要 checkpoint），寫成 `<目錄>/stock.db`；目的地不得在來源目錄內，已有 `stock.db` 時要加 `--force` 才覆蓋；印出副本路徑與來源最新 `trading_date` |
+| `python tools/ops/copy_db.py --src <stock.db> --dest <目錄> [--force]` | 以 `mode=ro` 連線經 SQLite backup API 複製一份快照（含 WAL 內容；唯讀連線無法也不需要 checkpoint；唯讀掛載上沒有 `-wal`／`-shm`、`-journal` 時改以 `immutable=1` 開，見 [LOCAL](LOCAL.md#取正式-db-的唯讀副本)；副本要通過 `PRAGMA quick_check` 才改名，任何失敗都不留 `.partial`），寫成 `<目錄>/stock.db`；目的地不得在來源目錄內，已有 `stock.db` 時要加 `--force` 才覆蓋；印出副本路徑與來源最新 `trading_date` |
 | `node tools/ops/screenshot.cjs --url <頁> --out <目錄>` | headless Edge（或 Chrome）截 1280 與 390 全頁圖並存頁面文字；等骨架消失與請求結束、展開 `details`，可 `--click` 切分頁；印出 `scrollWidth` 與錯誤 |
 | `bash tools/ops/push_pr_assets.sh --issue <n> --dir <目錄>` | 不動 checkout，把目錄推到 `pr-assets/<n>`（第一次 orphan commit，之後疊加不強推），印出可貼 PR 的連結 |
 | `python tools/verify/fixture_db.py --dest <空目錄>` | 產生 verify 用的固定假資料庫 `<目錄>/stock.db`：走 `init-db` 的 migration 到 head，寫入 `tools/verify/fixture_data.py` 的虛構資料（五個主導航都有內容，每頁預期寫在 `EXPECTED`）；印出 `alembic_version`、各表列數與內容雜湊，兩次產生結果相同。schema 同步與 API 預期由 `backend/tests/test_verify_fixture.py` 檢查 |
