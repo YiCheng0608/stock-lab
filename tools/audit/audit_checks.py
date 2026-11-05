@@ -89,6 +89,10 @@ AUDITED_HOT_GROUP_VERSIONS = frozenset({"1.1.0", "1.2.0", "1.3.0"})
 # Versions whose catalyst follows the dated coverage and is recomputed from the
 # events of its window (docs/spec/hot_group.md).
 COVERAGE_HOT_GROUP_VERSIONS = frozenset({"1.2.0", "1.3.0"})
+# Coverage versions written before the 20-session rule (#474): 1.2.0 called any
+# answered window complete, a TAIEX history shorter than 20 sessions too (#501).
+SHORT_WINDOW_HOT_GROUP_VERSIONS = frozenset({"1.2.0"})
+CATALYST_WINDOW_SESSIONS = 20
 CATALYST_SOURCES = (
     "mops_material_information",
     "twse_tpex_official_announcement",
@@ -1523,7 +1527,11 @@ def _recomputed_catalyst(
 
 
 def _check_catalyst(ctx: Context, day, version, details, stored, code, check) -> None:
-    """Coverage rule (1.2.0, #453) and the recomputed raw catalyst (#474)."""
+    """Coverage rule (1.2.0, #453; 20 sessions from 1.3.0) and the recomputed raw catalyst (#474).
+
+    A window that differs from TAIEX now, or a 1.2.0 window under 20
+    sessions, is undetermined (#501, docs/spec/hot_group.md).
+    """
 
     coverage = details.get("catalyst_coverage")
     if not isinstance(coverage, dict):
@@ -1540,21 +1548,29 @@ def _check_catalyst(ctx: Context, day, version, details, stored, code, check) ->
                 code + [stored[6], coverage.get("unanswered_dates")],
             )
         return
+    sessions = coverage.get("sessions")
+    stored_window = coverage.get("window")
+    if sessions != CATALYST_WINDOW_SESSIONS:
+        if version in SHORT_WINDOW_HOT_GROUP_VERSIONS:
+            # 1.2.0 did not require 20 sessions (#501): the row followed its
+            # own rule, which the audit does not hold it to.
+            check.undetermined(
+                "catalyst_window_short_before_1_3_0",
+                code + [version, sessions, stored_window],
+            )
+        else:
+            # 1.3.0 (#474): a complete window has all 20 TAIEX sessions.
+            check.fail("catalyst_coverage_window", code + [sessions, stored_window])
+        return
     window = _catalyst_window(ctx, day)
-    if (
-        coverage.get("sessions") != 20
-        or len(window) != 20
-        or coverage.get("window") != [window[0], window[-1]]
-    ):
-        # A complete window has all 20 TAIEX sessions ending the score date.
-        check.fail(
-            "catalyst_coverage_window",
-            code
-            + [
-                coverage.get("sessions"),
-                coverage.get("window"),
-                window[:1] + window[-1:],
-            ],
+    now = window[:1] + window[-1:]
+    if len(window) != CATALYST_WINDOW_SESSIONS or stored_window != now:
+        # The row stored 20 sessions; TAIEX now gives another window (a bar
+        # backfilled, or is_suspended changed, after the row was written).
+        # The audit keeps no TAIEX snapshot to tell that from a wrong write,
+        # and the events of the stored window cannot be recounted (#501).
+        check.undetermined(
+            "catalyst_window_changed_after_write", code + [stored_window, now]
         )
         return
     member_ids = [
@@ -1865,6 +1881,17 @@ def _check_board(day: str, computed, check: Check) -> None:
                     )
                     if matched:
                         check.ok()
+                    elif board_changed:
+                        # Same fallback as the other percentiles (#501).
+                        check.undetermined(
+                            CHANGED,
+                            code
+                            + [
+                                "percentile_catalyst",
+                                normalized.get("catalyst"),
+                                expected,
+                            ],
+                        )
                     else:
                         check.fail(
                             "percentile_catalyst",

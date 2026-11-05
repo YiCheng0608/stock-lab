@@ -924,12 +924,13 @@ CATALYST_WINDOW_SESSIONS = 20
 def _catalyst_coverage(
     states: dict[date, str], trading_dates: list[date]
 ) -> dict[str, Any]:
-    """Dated event coverage of a catalyst window (hot_group_v1 1.2.0, #453).
+    """Dated event coverage of a catalyst window (hot_group_v1 1.3.0, #453/#474).
 
     The window is complete only when it has all 20 sessions and every one is
     a dated answer (``verified`` or ``empty``,
     ``worker.mops_events.event_coverage_states``); a shorter TAIEX history, or
     a ``partial`` or ``unqueried`` session, leaves the catalyst null (#474).
+    1.2.0 (#453) also called a window of fewer sessions complete.
     """
 
     counts: dict[str, int] = defaultdict(int)
