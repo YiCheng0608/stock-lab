@@ -625,17 +625,6 @@ def run(args: argparse.Namespace) -> int:
     from apscheduler.events import EVENT_SCHEDULER_START
     from apscheduler.schedulers import SchedulerNotRunningError
 
-    stop_requested = threading.Event()
-
-    def stop(signum, _frame) -> None:
-        # Only a thread from here (#468 CI run 41949855780): a signal that lands inside
-        # scheduler.start() would deadlock on the scheduler's own locks if the handler
-        # shut it down, and print() inside a handler can be a reentrant write.
-        if not stop_requested.is_set():
-            stop_requested.set()
-            name = signal.Signals(signum).name
-            threading.Thread(target=stop_now, args=(name,), daemon=True).start()
-
     def stop_now(name: str) -> None:
         serve.say("stopping", signal=name)
         serve.stop()
@@ -652,19 +641,86 @@ def run(args: argparse.Namespace) -> int:
             scheduler.shutdown(wait=False)
 
     scheduler.add_listener(stopped_before_start, EVENT_SCHEDULER_START)
-    signal.signal(signal.SIGTERM, stop)
-    signal.signal(signal.SIGINT, stop)
-    serve.say(
-        "ready",
-        data=serve.data_dir,
-        offset_seconds=round(serve.offset.total_seconds()),
-        **{
-            f"next_{name}": moment.isoformat() if moment else "none"
-            for name, moment in serve.next_times().items()
-        },
-        maintenance="on" if serve._maintenance else "off",
-    )
-    if not serve._stopping:
-        scheduler.start()
+    with StopSignals(stop_now):
+        serve.say(
+            "ready",
+            data=serve.data_dir,
+            offset_seconds=round(serve.offset.total_seconds()),
+            **{
+                f"next_{name}": moment.isoformat() if moment else "none"
+                for name, moment in serve.next_times().items()
+            },
+            maintenance="on" if serve._maintenance else "off",
+        )
+        if not serve._stopping:
+            scheduler.start()
     serve.say("stopped")
     return 0
+
+
+STOP_SIGNALS = (signal.SIGTERM, signal.SIGINT)
+
+
+class StopSignals:
+    """SIGTERM and SIGINT call STOP (with the signal's name) from a thread of its own.
+
+    Not from a Python signal handler (#503): CPython runs one only when the main thread
+    next checks for signals. A signal that lands after the main thread's last check, as
+    it goes into the scheduler's wait, or on another thread, waits there until the next
+    job is due, up to MAINTENANCE_POLL_SECONDS (CI's 60-second stop timeout). The C
+    handler writes the signal number to the wakeup fd as the signal arrives, and the
+    thread reads it. Nor does the stop run inside a handler (#468 CI run 41949855780): a
+    signal landing inside scheduler.start() would deadlock on the scheduler's own locks.
+    """
+
+    def __init__(self, stop) -> None:
+        self._stop = stop
+        self._previous: dict[int, object] = {}
+        self._previous_fd = -1
+        self._read = self._write = -1
+        self._thread: threading.Thread | None = None
+
+    def __enter__(self) -> "StopSignals":
+        self._read, self._write = os.pipe()
+        os.set_blocking(self._write, False)
+        self._previous_fd = signal.set_wakeup_fd(self._write, warn_on_full_buffer=False)
+        self._thread = threading.Thread(
+            target=self._watch, name="stop-signals", daemon=True
+        )
+        self._thread.start()
+        # Last, so that no stop signal is taken before the wakeup fd is there. The
+        # Python handler is what keeps the C handler, which writes the fd; it has
+        # nothing to do itself.
+        for signum in STOP_SIGNALS:
+            self._previous[signum] = signal.signal(signum, _no_python_handler)
+        return self
+
+    def _watch(self) -> None:
+        while True:
+            data = os.read(self._read, 64)
+            if not data:
+                return
+            for signum in data:
+                if signum == 0:
+                    return  # __exit__
+                if signum in STOP_SIGNALS:
+                    self._stop(signal.Signals(signum).name)
+                    return  # once, as a second SIGTERM did nothing more before
+
+    def __exit__(self, *_exc) -> None:
+        for signum, handler in self._previous.items():
+            if handler is not None:  # None: not installed from Python
+                signal.signal(signum, handler)
+        signal.set_wakeup_fd(self._previous_fd)
+        try:
+            os.write(self._write, b"\0")
+        except OSError:
+            pass  # full: the thread has stopped reading (it ran the stop)
+        if self._thread is not None:
+            self._thread.join(timeout=10)
+        os.close(self._write)
+        os.close(self._read)
+
+
+def _no_python_handler(_signum, _frame) -> None:
+    """See StopSignals."""
