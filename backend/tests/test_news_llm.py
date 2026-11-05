@@ -597,7 +597,7 @@ def test_rule_relations_and_llm_candidates_stay_in_separate_fields(db, fake, cli
             "source_check": "not_mentioned",
         }
     ]
-    assert ai["candidate_check_version"] == "ai-candidate-source/v1"
+    assert ai["candidate_check_version"] == "ai-candidate-source/v2"
     assert (
         ai["impact_direction"] == "positive" and ai["prompt_version"] == PROMPT_VERSION
     )
@@ -985,7 +985,7 @@ def test_each_candidate_says_whether_the_sent_text_names_it(db, client):
         assert [
             (row["symbol"], row["source_check"]) for row in ai["symbol_candidates"]
         ] == [("2317", "mentioned"), ("2330", "not_mentioned")]
-        assert ai["candidate_check_version"] == "ai-candidate-source/v1"
+        assert ai["candidate_check_version"] == "ai-candidate-source/v2"
     # The check is read-side only: rule relations and the stored inference stay.
     db.refresh(item)
     assert item.symbols_json == []

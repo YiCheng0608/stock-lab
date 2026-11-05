@@ -94,6 +94,19 @@ check(downMarkup.includes('tone-down') && downMarkup.includes('-10（-1.67%）')
 const emptyMarkup = renderToStaticMarkup(<StockQuoteLine bars={[]} />)
 check(emptyMarkup.includes('待核實') && emptyMarkup.includes('漲跌待核實') && emptyMarkup.includes('tone-flat') && !emptyMarkup.includes('>0<'), 'no bars → 待核實, never 0')
 check(upMarkup.includes('資料 2026/10/16') && upMarkup.includes('臺灣證券交易所'), 'header shows data date badge and source')
+// #475: the bars API says the stock had no close on the previous verified session; the older row (10/14, a gap
+// day between) does not stand in, and the header uses the candidate page's words.
+const gapBars = [tradedBar('2026-10-14', 98.5, 1), tradedBar('2026-10-16', 100, 2)]
+const latestChange = (status: string, day = '2026-10-16') => ({ trading_date: day, close: 100, change: null, change_pct: null, change_status: status, source: 'twse' })
+const noPreviousQuote = stockQuote(gapBars, 'stock', latestChange('no_previous_close'))
+check(noPreviousQuote.change === null && noPreviousQuote.changePct === null && noPreviousQuote.noChange === '前一交易日無收盤' && noPreviousQuote.close === 100, `no previous close: ${JSON.stringify(noPreviousQuote)}`)
+const noPreviousMarkup = renderToStaticMarkup(<StockQuoteLine bars={gapBars} latestChange={latestChange('no_previous_close')} />)
+check(noPreviousMarkup.includes('前一交易日無收盤') && noPreviousMarkup.includes('tone-flat') && !noPreviousMarkup.includes('+1.5') && !noPreviousMarkup.includes('漲跌待核實'), `no previous close markup: ${noPreviousMarkup}`)
+const firstDayMarkup = renderToStaticMarkup(<StockQuoteLine bars={[tradedBar('2026-10-16', 100, 2)]} latestChange={latestChange('first_trading_day')} />)
+check(firstDayMarkup.includes('新上市首日') && !firstDayMarkup.includes('前一交易日無收盤') && !firstDayMarkup.includes('漲跌待核實'), `first trading day markup: ${firstDayMarkup}`)
+// Another day's status, or a status that names no cause, leaves the bars rule alone.
+check(stockQuote(gapBars, 'stock', latestChange('no_previous_close', '2026-10-15')).change === 1.5, 'a status for another day does not apply')
+check(stockQuote(gapBars, 'stock', latestChange('unverified')).change === 1.5 && stockQuote(gapBars, 'stock', latestChange('known')).noChange === null, 'unverified and known keep the bars rule')
 
 // ---- weekly series ----
 const weekly = weeklySeries()

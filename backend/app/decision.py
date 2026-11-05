@@ -18,6 +18,7 @@ from sqlalchemy import and_, desc, func, select
 from sqlalchemy.orm import Session, defer
 
 from .coverage import verified_taiex_sessions
+from .market_change import no_close_status
 from .decision_market_reads import (
     DecisionMarketRead,
     load_decision_market_reads,
@@ -131,12 +132,16 @@ def _verified_adjacent_change(
     bar: DecisionMarketRead | None,
     bars: list[DecisionMarketRead],
     as_of: date | None,
-) -> tuple[float | None, float | None, float | None]:
+) -> tuple[float | None, float | None, float | None, str]:
     """Return a change only for the previous verified TAIEX session.
 
     A bar immediately before the current row is not enough: a holiday,
     suspension, missing row, or adjustment-basis change must result in the
-    explicit ``unverified`` UI state.
+    explicit ``unverified`` UI state.  The last item is the change status of
+    ``market_change.adjacent_change`` (#475): ``known``, ``missing`` (no
+    traded bar), ``first_trading_day`` / ``no_previous_close`` when the stock
+    has no traded close on the previous session (``no_close_status``), or
+    ``unverified``.
     """
 
     if (
@@ -146,10 +151,10 @@ def _verified_adjacent_change(
         or not _trusted_bar_for_display(bar)
         or bar.is_suspended
     ):
-        return None, None, None
+        return None, None, None, "missing"
     current_close = _finite(bar.close)
     if current_close is None or current_close <= 0:
-        return None, None, None
+        return None, None, None, "missing"
     session_cache = db.info.setdefault("_decision_taiex_dates", {})
     session_key = bar.trading_date.isoformat()
     if session_key not in session_cache:
@@ -163,30 +168,41 @@ def _verified_adjacent_change(
     try:
         index = sessions.index(bar.trading_date)
     except ValueError:
-        return None, None, None
+        return None, None, None, "unverified"
     if index <= 0:
-        return None, None, None
+        return None, None, None, "unverified"
     previous_date = sessions[index - 1]
     previous = next((row for row in bars if row.trading_date == previous_date), None)
+    if previous is None or (
+        previous.is_suspended is True and previous.source == bar.source
+    ):
+        # The same rule as the candidate and theme member ``market`` (#475).
+        status = no_close_status(
+            db,
+            bar.source,
+            previous_date,
+            instrument.listing_date,
+            db.info.setdefault("_decision_source_days", {}),
+        )
+        return None, None, None, status
     if (
-        previous is None
-        or not previous.core_valid
+        not previous.core_valid
         or previous.is_suspended
         or not _trusted_bar_for_display(previous)
     ):
-        return None, None, None
+        return None, None, None, "unverified"
     previous_close = _finite(previous.close)
     if (
         previous_close is None
         or previous_close <= 0
         or not _same_adjustment_basis(previous, bar)
     ):
-        return None, None, None
+        return None, None, None, "unverified"
     change = current_close - previous_close
     percent = _finite(change / previous_close)
     if _finite(change) is None or percent is None:
-        return None, None, None
-    return previous_close, change, percent
+        return None, None, None, "unverified"
+    return previous_close, change, percent, "known"
 
 
 def _date_from_as_of(value: str | date | datetime | None) -> date | None:
@@ -1251,12 +1267,8 @@ def build_decision_summary(
 
     current_price = bar.close if bar and bar.core_valid else None
     price_as_of = bar.trading_date.isoformat() if bar and bar.core_valid else None
-    previous_close, price_change, price_change_pct = _verified_adjacent_change(
-        db,
-        instrument,
-        bar,
-        bars,
-        as_of,
+    previous_close, price_change, price_change_pct, price_change_status = (
+        _verified_adjacent_change(db, instrument, bar, bars, as_of)
     )
     levels: dict[str, Any] = {
         "trigger_kind": None,
@@ -1691,6 +1703,7 @@ def build_decision_summary(
         "previous_close": previous_close,
         "price_change": price_change,
         "price_change_pct": price_change_pct,
+        "price_change_status": price_change_status,
         **levels,
         "primary_strategy": selected.get("strategy") if selected else None,
         "alternative_strategies": [

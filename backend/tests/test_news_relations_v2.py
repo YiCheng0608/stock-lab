@@ -448,3 +448,19 @@ def test_a_failing_rerelation_leaves_the_old_relations_and_still_collects(
     assert fetched  # the feeds were still fetched
     db.refresh(item)
     assert (item.symbols_json, item.impact_method) == ([], V1)
+
+
+def test_a_full_name_starting_with_a_holding_company_s_two_character_name():
+    # #475 (PR #483 review): 3716 中化控股 is read as 中化, so 中化合成 (the
+    # full name of 1762 中化生 without 生技) is 1762, never 3716.
+    rows = news_batch.load_full_name_aliases()
+    assert ("TWSE", "1762", "中化合成") in rows
+    assert ("TWSE", "1762", "中化合成生技") in rows
+    matcher = RelationMatcher(
+        [("TWSE", "3716", "中化控股"), ("TWSE", "1762", "中化生")],
+        [],
+        full_names=rows,
+    )
+    assert matcher.symbols("中化合成第3季獲利") == ["TWSE:1762"]
+    assert matcher.symbols("中化合成生技擴產") == ["TWSE:1762"]
+    assert matcher.symbols("中化第3季獲利") == ["TWSE:3716"]

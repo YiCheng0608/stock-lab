@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 import { Badge, DateBadge, Skeleton } from '../components/ui'
-import type { StockBarRow } from '../types'
+import type { CandidateMarket, StockBarRow } from '../types'
 import { formatPrice, formatSignedPercent, formatSignedPrice, sourcesLabel, stockQuote } from './stockBars'
 
 export function exchangeLabel(exchange: string | null | undefined): string {
@@ -18,6 +18,7 @@ export function StockHeader({
   exchange,
   typeLabel,
   dailyBars,
+  latestChange,
   loading = false,
   instrumentType,
   children,
@@ -27,6 +28,7 @@ export function StockHeader({
   exchange: string
   typeLabel: string
   dailyBars: readonly StockBarRow[] | undefined
+  latestChange?: CandidateMarket | null
   loading?: boolean
   instrumentType?: string | null
   children?: ReactNode
@@ -39,16 +41,16 @@ export function StockHeader({
         <Badge>{exchangeLabel(exchange)}</Badge>
         <Badge>{typeLabel}</Badge>
       </div>
-      {loading ? <Skeleton lines={2} className="stock-header-skeleton" label="最近收盤載入中…" /> : <StockQuoteLine bars={dailyBars ?? []} instrumentType={instrumentType} />}
+      {loading ? <Skeleton lines={2} className="stock-header-skeleton" label="最近收盤載入中…" /> : <StockQuoteLine bars={dailyBars ?? []} instrumentType={instrumentType} latestChange={latestChange} />}
       {children}
     </section>
   )
 }
 
-export function StockQuoteLine({ bars, instrumentType }: { bars: readonly StockBarRow[]; instrumentType?: string | null }) {
-  const quote = stockQuote(bars, instrumentType)
+export function StockQuoteLine({ bars, instrumentType, latestChange }: { bars: readonly StockBarRow[]; instrumentType?: string | null; latestChange?: CandidateMarket | null }) {
+  const quote = stockQuote(bars, instrumentType, latestChange)
   const change = quote.change == null
-    ? '漲跌待核實'
+    ? quote.noChange ?? '漲跌待核實'
     : `${formatSignedPrice(quote.change, quote.digits)}（${formatSignedPercent(quote.changePct)}）`
   return (
     <div className="stock-header-quote">
