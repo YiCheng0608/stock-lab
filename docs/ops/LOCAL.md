@@ -33,8 +33,8 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none \
 
 - **為什麼這樣寫**：volume 以 `:ro` 掛、容器沒有網路，正式資料寫不到；`copy_db.py` 以 `mode=ro` 連線經 SQLite backup API 複製一份一致的快照，含 WAL（[CLI](CLI.md#測試與驗證)），所以 scheduler 與 api 照常執行，不必停。用跑著的 image（`docker inspect` 取 tag）是因為它的 SQLite 與寫入端同版本；`copy_db.py` 從 worktree 掛進去，不依賴 image 裡的版本。`MSYS_NO_PATHCONV=1` 只加在 `docker run` 這一行，不要 export：Git Bash 否則會把 `/data`、`/t` 改寫成 Windows 路徑，而 export 後容器外的 Windows Python 會把 `/c/Users` 讀成 `C:\c\Users`。
 - **沒有連線開著時**（[#486](https://github.com/YiCheng0608/stock-lab/issues/486)）：scheduler 停了、api 也沒有開著的連線時，volume 裡只有 `stock.db`，沒有 `-wal`／`-shm`。這時唯讀掛載建不出 `-shm`，`mode=ro` 開不了，`copy_db.py` 改用 `immutable=1` 開主檔（主檔就是完整的 DB），輸出的 `source_open` 是 `immutable`（平常是 `ro`）。判斷條件與部署前的 [`db_revision.py`](../../tools/ops/db_revision.py) 是同一段程式。有 `-wal` 卻沒有 `-shm`、或有 hot `-journal` 時不讀，exit 1，訊息寫出是哪個檔：先讓 api 開一次 DB（打任一個 API），再重跑。immutable 不加鎖，所以複製完時旁邊多了 `-wal`、`-shm` 或 `-journal`，或主檔的修改時間、大小變了（有程式在途中開過 DB），副本會被刪掉並 exit 1，重跑即可。不要為此把 `:ro` 拿掉。
-- **輸出**：一列 JSON，副本是 `$D/stock.db`（輸出裡的 `/out/stock.db` 是容器內路徑）。`source` 必須是 `/data/stock.db`；`alembic_version` 與 `source_latest_trading_date` 是驗收要貼的。`source_latest_trading_date` 要是最近一個交易日（當天的資料要等台北 18:30 之後的 daily 收完才有），落後就不是這個 volume 的現況，停下來查，不要拿去驗收。`$D/stock.db` 已存在時加 `--force`。
-- **大小與時間**：2026-11-05 副本約 2.95 GB、229 秒（來源另有約 4 GB 的 WAL）；要留 DB 大小的磁碟。
+- **輸出**：一列 JSON，副本是 `$D/stock.db`（輸出裡的 `/out/stock.db` 是容器內路徑）。副本改名前要通過 `PRAGMA quick_check`，輸出的 `quick_check` 一定是 `ok`；不是 `ok`、備份失敗、來源中途不見都 exit 1，`$D` 不留 `stock.db.partial`。`source` 必須是 `/data/stock.db`；`alembic_version` 與 `source_latest_trading_date` 是驗收要貼的。`source_latest_trading_date` 要是最近一個交易日（當天的資料要等台北 18:30 之後的 daily 收完才有），落後就不是這個 volume 的現況，停下來查，不要拿去驗收。`$D/stock.db` 已存在時加 `--force`。
+- **大小與時間**：2026-11-05 副本約 3.0 GB；加上 quick_check 共 463 秒（不含 quick_check 約 200～230 秒，來源另有約 4 GB 的 WAL）；要留 DB 大小的磁碟。
 - **取了以後**：副本是獨立的檔案，後續工具照各自文件對它跑（[CLI](CLI.md#測試與驗證)、[verify-stock-lab 真資料模式](../../.claude/skills/verify-stock-lab/SKILL.md#真資料模式)、[DB 深度審查](../WORKFLOW.md#任務流程)）；不要把 `-v stock-lab_stock-data` 的 `:ro` 拿掉。
 
 ### 讀 raw 的工具

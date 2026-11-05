@@ -224,6 +224,7 @@ def test_copy_db_reads_a_wal_db_with_no_side_files_on_a_read_only_mount(
     assert result.returncode == 0, result.stderr
     out = json.loads(result.stdout)
     assert out["source_open"] == "immutable"
+    assert out["quick_check"] == "ok"
     assert out["source_latest_trading_date"] == "2026-10-21"
     assert out["alembic_version"] == "0016_group_score_archive"
     assert _source_state(src) == before
@@ -343,6 +344,103 @@ def test_copy_db_drops_an_immutable_copy_when_a_writer_opened_the_source(
     with pytest.raises(copy_db.CopyError, match="changed during the copy"):
         copy_db.copy_db(src, tmp_path / "verify")
     assert sorted(p.name for p in (tmp_path / "verify").iterdir()) == []
+
+
+def test_copy_db_refuses_a_copy_that_fails_quick_check(tmp_path: Path) -> None:
+    """The copy is the pre-migration backup (PR #505 review): a damaged page, which the
+    backup API copies as it is, is caught before the rename and nothing is left."""
+    src = tmp_path / "prod" / "stock.db"
+    src.parent.mkdir()
+    with closing(sqlite3.connect(src)) as conn:
+        conn.execute("CREATE TABLE market_bars (trading_date TEXT)")
+        conn.execute("INSERT INTO market_bars VALUES ('2026-10-21')")
+        conn.execute("CREATE TABLE other (x TEXT)")
+        conn.executemany(
+            "INSERT INTO other VALUES (?)", [(f"v{i:05d}" * 20,) for i in range(2000)]
+        )
+        conn.commit()
+        size = conn.execute("PRAGMA page_size").fetchone()[0]
+        pages = conn.execute("PRAGMA page_count").fetchone()[0]
+    # Overwrite the cells of the last page (a leaf of `other`); its header stays.
+    with open(src, "r+b") as file:
+        file.seek((pages - 1) * size + 200)
+        file.write(b"\xff" * (size - 400))
+    result = _copy(src, tmp_path / "verify")
+    assert result.returncode == 1
+    assert "quick_check of the copy" in result.stderr
+    assert "Traceback" not in result.stderr
+    assert sorted(p.name for p in (tmp_path / "verify").iterdir()) == []
+
+
+class _FailingBackup:
+    """A source connection whose backup writes into the copy and then fails."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self.conn = conn
+
+    def execute(self, sql: str):
+        return self.conn.execute(sql)
+
+    def backup(self, target: sqlite3.Connection, pages: int) -> None:
+        target.execute("CREATE TABLE half_copied (x)")
+        target.commit()
+        raise sqlite3.OperationalError("disk I/O error")
+
+    def close(self) -> None:
+        self.conn.close()
+
+
+def test_copy_db_removes_the_partial_when_the_backup_fails(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    copy_db = _copy_db_module()
+    src = tmp_path / "prod" / "stock.db"
+    _wal_source(src).close()
+
+    def failing_source(path: Path):
+        conn, immutable = copy_db.open_read_only(path)
+        return _FailingBackup(conn), immutable
+
+    monkeypatch.setattr(copy_db, "_open_source", failing_source)
+    dest = tmp_path / "verify"
+    assert copy_db.main(["--src", str(src), "--dest", str(dest)]) == 1
+    assert capsys.readouterr().err == "copy_db: disk I/O error\n"
+    assert sorted(p.name for p in dest.iterdir()) == []
+
+
+def test_copy_db_reports_a_source_that_vanished_midway_without_a_traceback(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """The source is deleted or replaced while it is read immutable: the second stamp
+    finds no file. That is a CopyError for main, and the .partial is removed."""
+    copy_db = _copy_db_module()
+    src = tmp_path / "prod" / "stock.db"
+    conn = _wal_source(src)
+    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    conn.close()
+    real_connect = sqlite3.connect
+    real_stamp = copy_db._stamp
+    stamps = []
+
+    def connect(database, *args, **kwargs):
+        if str(database).endswith("?mode=ro"):
+            raise sqlite3.OperationalError("unable to open database file")
+        return real_connect(database, *args, **kwargs)
+
+    def stamp(path: Path):
+        stamps.append(path)
+        if len(stamps) == 2:
+            raise FileNotFoundError(2, "No such file or directory", str(path))
+        return real_stamp(path)
+
+    monkeypatch.setattr(copy_db.sqlite3, "connect", connect)
+    monkeypatch.setattr(copy_db, "_stamp", stamp)
+    dest = tmp_path / "verify"
+    assert copy_db.main(["--src", str(src), "--dest", str(dest)]) == 1
+    err = capsys.readouterr().err
+    assert err.startswith("copy_db: ") and "disappeared or was replaced" in err
+    assert len(stamps) == 2
+    assert sorted(p.name for p in dest.iterdir()) == []
 
 
 def test_copy_db_and_db_revision_open_the_source_the_same_way() -> None:

@@ -16,13 +16,17 @@ An immutable copy is removed and refused when, by the end, a -wal, -shm or
 -journal is there or the main file's mtime or size changed: something opened
 the source meanwhile and the copy may mix two states.
 
+Before the rename the copy must pass ``PRAGMA quick_check``. Whatever fails
+(the check, the backup, the source vanishing midway, the rename), the
+``.partial`` is removed and the run exits 1 with one line on stderr.
+
 The destination must not be the source's directory or inside it, so the
 production data directory is never written. An existing ``<dest>/stock.db`` is
 replaced only with ``--force``, so a mistyped destination (another worktree's
 copy, say) is refused before anything there is touched. Prints one JSON object:
 the copy path, the source path, the source's latest ``market_bars.trading_date``,
-the copied Alembic revision and how the source was opened (``ro`` or
-``immutable``).
+the copied Alembic revision, how the source was opened (``ro`` or
+``immutable``) and the quick_check result (always ``ok`` on success).
 """
 
 from __future__ import annotations
@@ -124,6 +128,46 @@ def _open_source(src: Path) -> tuple[sqlite3.Connection, bool]:
         ) from error
 
 
+def _remove_partial(partial: Path) -> None:
+    for path in [partial] + [Path(f"{partial}{s}") for s in SIDE_FILES]:
+        path.unlink(missing_ok=True)
+
+
+def _snapshot(src: Path, partial: Path) -> tuple[object, object, bool]:
+    """Back src up into partial and check the copy: (latest trading_date, Alembic
+    revision, whether the source was read immutable). Raises when it must not be used."""
+    stamp = _stamp(src)
+    connection, immutable = _open_source(src)
+    with closing(connection) as source:
+        source.execute("PRAGMA query_only=ON")
+        with closing(sqlite3.connect(partial)) as copy:
+            # pages=-1: one step, one read transaction, one snapshot.
+            source.backup(copy, pages=-1)
+            copy.execute("PRAGMA journal_mode=DELETE")
+            # Before anything reads the tables: a damaged page is reported, not raised.
+            problems = [row[0] for row in copy.execute("PRAGMA quick_check")]
+            if problems != ["ok"]:
+                raise CopyError(
+                    f"PRAGMA quick_check of the copy of {src} is not ok, so the copy "
+                    f"was removed: {'; '.join(problems)[:500]}"
+                )
+            trading_date = _scalar(
+                copy, "market_bars", "SELECT max(trading_date) FROM market_bars"
+            )
+            alembic = _scalar(
+                copy, "alembic_version", "SELECT version_num FROM alembic_version"
+            )
+    # immutable=1 takes no lock, so a writer that opened the source meanwhile went unseen:
+    # its side files are still there, or it closed and the checkpoint changed the main file.
+    if immutable and (_side_files(src) or _stamp(src) != stamp):
+        raise CopyError(
+            f"{src} changed during the copy, which read it immutable (no -wal/-shm at "
+            "the start): something opened it meanwhile, so the copy may mix two states "
+            "and was removed. Rerun"
+        )
+    return trading_date, alembic, immutable
+
+
 def copy_db(src: Path, dest: Path, force: bool = False) -> dict[str, object]:
     src = src.resolve()
     dest = dest.resolve()
@@ -139,49 +183,34 @@ def copy_db(src: Path, dest: Path, force: bool = False) -> dict[str, object]:
         raise CopyError(f"{target} already exists; pass --force to replace it")
     dest.mkdir(parents=True, exist_ok=True)
     partial = dest / (COPY_NAME + ".partial")
-    for name in [partial.name] + [partial.name + s for s in SIDE_FILES]:
-        (dest / name).unlink(missing_ok=True)
+    _remove_partial(partial)
 
     started = time.monotonic()
-    stamp = _stamp(src)
-    connection, immutable = _open_source(src)
-    with closing(connection) as source:
-        source.execute("PRAGMA query_only=ON")
-        with closing(sqlite3.connect(partial)) as copy:
-            # pages=-1: one step, one read transaction, one snapshot.
-            source.backup(copy, pages=-1)
-            copy.execute("PRAGMA journal_mode=DELETE")
-            trading_date = _scalar(
-                copy, "market_bars", "SELECT max(trading_date) FROM market_bars"
-            )
-            alembic = _scalar(
-                copy, "alembic_version", "SELECT version_num FROM alembic_version"
-            )
-    # immutable=1 takes no lock, so a writer that opened the source meanwhile went unseen:
-    # its side files are still there, or it closed and the checkpoint changed the main file.
-    changed = (_side_files(src) or _stamp(src) != stamp) if immutable else False
-    if changed:
-        partial.unlink(missing_ok=True)
-        raise CopyError(
-            f"{src} changed during the copy, which read it immutable (no -wal/-shm at "
-            "the start): something opened it meanwhile, so the copy may mix two states "
-            "and was removed. Rerun"
-        )
-
+    # Whatever fails from here on, no .partial is left behind (PR #505 review).
     try:
+        trading_date, alembic, immutable = _snapshot(src, partial)
         for suffix in SIDE_FILES:
             Path(str(target) + suffix).unlink(missing_ok=True)
         os.replace(partial, target)
-    except PermissionError as error:
-        raise CopyError(
-            f"{target} is in use (stop the API that opened it first): {error}"
-        ) from error
+    except BaseException as error:
+        _remove_partial(partial)
+        if isinstance(error, FileNotFoundError):
+            raise CopyError(
+                f"{src} disappeared or was replaced during the copy ({error}); "
+                "the copy was removed. Rerun"
+            ) from error
+        if isinstance(error, PermissionError):
+            raise CopyError(
+                f"{target} is in use (stop the API that opened it first): {error}"
+            ) from error
+        raise
     return {
         "copy": target.as_posix(),
         "source": src.as_posix(),
         "source_latest_trading_date": trading_date,
         "alembic_version": alembic,
         "source_open": "immutable" if immutable else "ro",
+        "quick_check": "ok",
         "bytes": target.stat().st_size,
         "seconds": round(time.monotonic() - started, 1),
     }
