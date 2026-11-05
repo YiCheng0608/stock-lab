@@ -1,4 +1,4 @@
-<!-- owns: 來源選用原則、資料庫政策、官方來源、標的狀態同步、官方來源限制、新聞來源清單、法人口徑、籌碼來源欄位、融資標的清單、成交金額可得狀態、成交量整數規則、TAIEX 交易日基準、大盤概況欄位、大盤概況 API 契約、交易日曆、TPEx 停復牌規則、公司行動欄位、FinMind 補缺口規則 -->
+<!-- owns: 來源選用原則、資料庫政策、官方來源、標的狀態同步、官方來源限制、新聞來源清單、法人口徑、籌碼來源欄位、融資標的清單、成交金額可得狀態、成交量整數規則、TAIEX 交易日基準、回補目標與確定休市日、大盤概況欄位、大盤概況 API 契約、交易日曆、TPEx 停復牌規則、公司行動欄位、FinMind 補缺口規則 -->
 # 資料來源與限制
 
 本文記錄資料來源、保存規則與已知限制；能力狀態以 [CAPABILITIES](CAPABILITIES.md) 為準。
@@ -176,6 +176,24 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
 ### TAIEX 交易日基準
 
 [`verified_taiex_sessions`](../backend/app/coverage.py) 與 backfill 日期報表的 `taiex_rows` 只計 `exchange=TWSE` 的 TAIEX／TWII index bar；TPEx 同名 index 不增加交易日分母、`taiex_rows` 或普通股票有效 bar 日。交易日校驗要求 active index、日期範圍與 provenance，並可回退到來源與日期相符的 raw `MI_INDEX`。TWSE 基準是兩市場普通股票共用的日期基準，沒有兩市場各自的交易日曆；session 列數不代表欄位可用。
+
+### 回補目標與確定休市日
+
+回補 run 的 `target_met` 有三處：metadata 頂層、`coverage_manifest_summary`、`coverage`。這三處和 `/api/coverage` 的 `summary.target_met` 都用同一條規則（[#479](https://github.com/YiCheng0608/stock-lab/issues/479)）：
+
+- **目標**：`min(65, 窗口平日數 − 確定休市日)`，已驗證交易日（[TAIEX 交易日基準](#taiex-交易日基準)）達到目標就算達成。
+  - 回補 run 的窗口平日數含延伸補抓日；短範圍的上限是範圍內的平日數。
+  - run metadata 記 `target_sessions` 與 `confirmed_non_trading_dates`。
+  - `/api/coverage` 的 summary 記 `target_ohlcv_taiex_sessions`（扣除後）、`target_ohlcv_taiex_cap`（扣除前）與 `confirmed_non_trading_dates`。
+  - `coverage_targets.ohlcv_taiex_sessions` 仍是上限 65；要不要延伸補抓照舊看它，窗口還有空間就往前補。
+- **確定休市日**：要同時符合三個條件：
+  - 那個週間日沒有成功、含 TAIEX 的 collect；
+  - 有官方明確回 no-data 的 collect（status `skipped`）；
+  - 這個 no-data 已經確認：回應是在該台北日結束後才取得的（之後的 catchup 或回補），或 daily 對該日記過 `non_trading_day`（23:00 再問一次仍是 no-data）。
+
+  只有當天一次 no-data、沒有確認的日子仍算缺資料。這條規則也決定 catchup 要不要補抓（[重跑與回補](ops/SCHEDULING.md#重跑與回補)），只寫在 `app.coverage.collect_states` 一處。官方休市表（[交易日曆](#交易日曆)）不讀：颱風等臨時休市不在表上（2026-10-23），官方 no-data 兩種都涵蓋。
+- **為什麼要扣**：延伸補抓不能早於迄日前 93 日。93 日的窗口約 66～67 個平日，扣掉休市日常湊不到 65 日。例如 run 2266（08/03～11/03）有 67 個平日、5 個確定休市日、驗證到 62 日：舊規則永遠「尚未達成」，新規則的目標是 62，已達成。
+- **日期表**：有回補 manifest 或指定了起訖時，`/api/coverage` 把確定休市日列為 `skipped_non_trading`，計入 `skipped_non_trading_dates`；當天有 MOPS 事件列也一樣，不顯示成 `partial`。完全沒有回補 manifest 的快照模式不扣休市日，目標維持 65。
 
 ### 大盤概況
 

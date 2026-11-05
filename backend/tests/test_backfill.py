@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -25,6 +25,7 @@ from app.models import (
     MarketBar,
     PortfolioPosition,
     RawPayload,
+    ScheduleRun,
     Signal,
     ThemeGroup,
 )
@@ -1277,7 +1278,9 @@ def test_a_backfill_run_is_stamped_with_the_clock(backfill_env, frozen_utcnow):
 # Issue #479: run 2266's window (08/03~11/03) holds 67 weekdays and five
 # official no-data weekdays; inside the 93-day cap it can never verify 65
 # sessions.  The run metadata and /api/coverage must judge such a window by
-# one rule (DATA_SOURCES, backfill target).
+# one rule (DATA_SOURCES, backfill target).  The fixture DB has no holiday
+# schedule rows, so every holiday here is like 10/23 in production: not in
+# the schedule, closed only by the official no-data answer.
 _RUN_2266_START = date(2026, 8, 3)
 _RUN_2266_END = date(2026, 11, 3)
 _RUN_2266_HOLIDAYS = frozenset(
@@ -1299,7 +1302,9 @@ class _WindowAdapter:
         self.failing = set(failing)
         self.calls: list[date] = []
 
-    def fetch(self, requested_start: date, requested_end: date) -> sources.OfficialBatch:
+    def fetch(
+        self, requested_start: date, requested_end: date
+    ) -> sources.OfficialBatch:
         assert requested_start == requested_end
         self.calls.append(requested_start)
         if requested_start in self.failing:
@@ -1309,7 +1314,7 @@ class _WindowAdapter:
         return _batch_for(requested_start)
 
 
-def _coverage_summary_via_api(backfill_env, monkeypatch) -> dict:
+def _coverage_via_api(backfill_env, monkeypatch) -> dict:
     """The coverage page's request: GET /api/coverage with no parameters."""
 
     def override_get_db():
@@ -1324,7 +1329,11 @@ def _coverage_summary_via_api(backfill_env, monkeypatch) -> dict:
     finally:
         app.dependency_overrides.pop(api_module.get_db, None)
     assert response.status_code == 200
-    return response.json()["summary"]
+    return response.json()
+
+
+def _coverage_summary_via_api(backfill_env, monkeypatch) -> dict:
+    return _coverage_via_api(backfill_env, monkeypatch)["summary"]
 
 
 def _run_target_flags(result: dict) -> dict:
@@ -1340,9 +1349,7 @@ def test_target_met_when_window_holidays_leave_fewer_than_65_sessions(
     backfill_env, monkeypatch
 ):
     adapter = _WindowAdapter(holidays=_RUN_2266_HOLIDAYS)
-    result = backfill.targeted_backfill(
-        _RUN_2266_START, _RUN_2266_END, adapter=adapter
-    )
+    result = backfill.targeted_backfill(_RUN_2266_START, _RUN_2266_END, adapter=adapter)
     metadata = result["metadata"]
     assert len(metadata["requested_calendar_dates"]) == 67
     assert metadata["skipped_non_trading"] == sorted(
@@ -1355,7 +1362,69 @@ def test_target_met_when_window_holidays_leave_fewer_than_65_sessions(
         "manifest": True,
         "coverage": True,
     }
-    assert _coverage_summary_via_api(backfill_env, monkeypatch)["target_met"] is True
+    holidays = sorted(day.isoformat() for day in _RUN_2266_HOLIDAYS)
+    assert metadata["target_sessions"] == 62
+    assert metadata["confirmed_non_trading_dates"] == holidays
+    assert metadata["coverage_manifest_summary"]["target_sessions"] == 62
+    assert metadata["coverage_targets"]["ohlcv_taiex_sessions"] == 65
+    assert metadata["extension_dates"] == []
+
+    report = _coverage_via_api(backfill_env, monkeypatch)
+    summary = report["summary"]
+    # 08/02 (end - 93 days) is a Saturday: the same 67 weekdays.
+    assert summary["requested_calendar_sessions"] == 67
+    assert summary["target_ohlcv_taiex_cap"] == 65
+    assert summary["target_ohlcv_taiex_sessions"] == 62
+    assert summary["confirmed_non_trading_dates"] == holidays
+    assert summary["target_met"] is True
+    statuses = {item["date"]: item["status"] for item in report["date_coverage"]}
+    assert {day: statuses[day] for day in holidays} == {
+        day: "skipped_non_trading" for day in holidays
+    }
+    assert summary["skipped_non_trading_dates"] == holidays
+
+
+def test_unconfirmed_same_day_no_data_is_not_a_closure(backfill_env, monkeypatch):
+    """One same-day no-data answer stays missing until confirmed (catch-up rule)."""
+
+    adapter = _WindowAdapter(holidays=_RUN_2266_HOLIDAYS)
+    backfill.targeted_backfill(_RUN_2266_START, _RUN_2266_END, adapter=adapter)
+    typhoon = date(2026, 10, 23)
+    with backfill_env() as db:
+        run = db.scalar(
+            select(IngestionRun).where(
+                IngestionRun.run_type == "collect", IngestionRun.run_date == typhoon
+            )
+        )
+        assert run.status == "skipped"
+        # Answered at 18:00 Taipei of that day, and nothing asked again.
+        run.started_at = run.finished_at = datetime(2026, 10, 23, 10, 0)
+        db.commit()
+
+    report = _coverage_via_api(backfill_env, monkeypatch)
+    summary = report["summary"]
+    assert typhoon.isoformat() not in summary["confirmed_non_trading_dates"]
+    assert summary["target_ohlcv_taiex_sessions"] == 63
+    assert summary["target_met"] is False
+    statuses = {item["date"]: item["status"] for item in report["date_coverage"]}
+    assert statuses[typhoon.isoformat()] != "skipped_non_trading"
+
+    # The daily's confirmation (23:00 asked again: non_trading_day) closes it.
+    with backfill_env() as db:
+        db.add(
+            ScheduleRun(
+                job="daily",
+                target_date=typhoon,
+                status="non_trading_day",
+                started_at=datetime(2026, 10, 23, 15, 0),
+                finished_at=datetime(2026, 10, 23, 15, 1),
+            )
+        )
+        db.commit()
+    summary = _coverage_summary_via_api(backfill_env, monkeypatch)
+    assert typhoon.isoformat() in summary["confirmed_non_trading_dates"]
+    assert summary["target_ohlcv_taiex_sessions"] == 62
+    assert summary["target_met"] is True
 
 
 def test_target_met_when_window_has_no_holidays(backfill_env, monkeypatch):
@@ -1375,9 +1444,7 @@ def test_target_met_when_window_has_no_holidays(backfill_env, monkeypatch):
 def test_target_not_met_when_a_trading_day_is_unverified(backfill_env, monkeypatch):
     missing = date(2026, 10, 14)
     adapter = _WindowAdapter(holidays=_RUN_2266_HOLIDAYS, failing={missing})
-    result = backfill.targeted_backfill(
-        _RUN_2266_START, _RUN_2266_END, adapter=adapter
-    )
+    result = backfill.targeted_backfill(_RUN_2266_START, _RUN_2266_END, adapter=adapter)
     metadata = result["metadata"]
     assert metadata["failed_dates"] == [missing.isoformat()]
     # A failed weekday is not a holiday: it stays missing and the target
