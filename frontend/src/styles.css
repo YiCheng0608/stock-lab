@@ -544,7 +544,9 @@ a.symbol-link:hover { color: var(--color-primary); }
 .candidate-table td { overflow: hidden; }
 .candidate-table .candidate-rr-cell .badge { white-space: nowrap; }
 .candidate-stock-line, .candidate-stock-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.candidate-stock-line .candidate-rank { margin-right: var(--space-1); }
+.candidate-stock-line .candidate-rank { margin-right: var(--space-1); padding: 0 var(--space-2); }
+/* Three short lines (name, market · group, #490 average volume) stay as tall as the two-line 進場方式 cell. */
+.candidate-stock-cell .small-note { line-height: 1.35; }
 .candidate-entry-way { display: grid; gap: 2px; font-size: 14px; white-space: nowrap; }
 .candidate-entry-way b { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; }
 .entry-way-label { color: var(--color-text-muted); font-size: 13px; }

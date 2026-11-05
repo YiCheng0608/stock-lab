@@ -20,7 +20,10 @@ from typing import Any
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
+from .candidate_runs import read_run
+from .candidate_view import liquidity_exclusions
 from .domain import CANDIDATE_SCORE, STRATEGY_LEVELS_VERSION
+from .liquidity import average_volumes
 from .models import Instrument, Signal, StrategyLevel, StrategyVersion
 from .presentation import display_reason
 from .signal_versions import readable_signal
@@ -203,6 +206,45 @@ def _candidate(candidate: dict[str, Any] | None, day: Any) -> dict[str, Any] | N
     }
 
 
+def _liquidity(db: Session, instrument: Instrument, day: Any) -> dict[str, Any] | None:
+    """The board day's 20-session average volume in lots (#490).
+
+    The value is the one the day's candidate run read when the run left the
+    stock out for the floor (``summary_json.liquidity``), otherwise it is
+    computed with the same rule (``app.liquidity``).  ``minimum_lots`` comes
+    from the day's run, so a day scored by a version without the floor has
+    none and the page shows no floor note.
+    """
+
+    if day is None:
+        return None
+    run = read_run(db, day)
+    floor = (
+        ((run.config_json or {}).get("pool") or {}).get("liquidity") if run else None
+    )
+    excluded = liquidity_exclusions(run).get(instrument.id)
+    if excluded is not None:
+        lots, state = excluded["average_volume_lots_20d"], excluded["state"]
+    else:
+        average = average_volumes(db, [instrument], day)[instrument.id]
+        lots, state = average.as_json()["average_volume_lots_20d"], average.state
+    minimum = floor.get("minimum_lots") if isinstance(floor, dict) else None
+    return {
+        "average_volume_lots_20d": lots,
+        "state": state,
+        "unit": "lots",
+        "data_as_of": day.isoformat(),
+        "minimum_lots": minimum,
+        "below_minimum": (
+            lots < minimum if lots is not None and minimum is not None else None
+        ),
+        # low_volume / liquidity_data_missing when the day's run left the
+        # stock's conditional signal out of the candidates for the floor.
+        "candidate_exclusion": excluded["exclusion"] if excluded else None,
+        "score_version": run.score_version if run else None,
+    }
+
+
 def strategy_board(
     db: Session,
     instrument: Instrument,
@@ -244,6 +286,7 @@ def strategy_board(
         "as_of": day.isoformat() if day else None,
         "levels_version": STRATEGY_LEVELS_VERSION,
         "candidate": _candidate(candidate, day),
+        "liquidity": _liquidity(db, instrument, day),
         "strategies": [
             _row(db, *signals[key], day)
             if key in signals

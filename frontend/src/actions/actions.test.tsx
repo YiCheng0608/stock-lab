@@ -177,6 +177,15 @@ check(!/45\.55|44\.12|49\.99/.test(near) && !near.includes('單位：價格'), '
 check(near.includes('class="badge badge-primary badge-compact">接近回踩條件'), `接近成立: a primary badge, got ${near.slice(near.indexOf('接近回踩') - 80, near.indexOf('接近回踩'))}`)
 const conditional = tierMarkup(2)
 check(text(conditional).includes('條件成立，未進今日候選前 20') && text(conditional).includes('條件成立，ETF 不列入候選評分'), `其他成立條件: why it is not a candidate, got ${text(conditional).slice(0, 300)}`)
+// #490: a conditional stock the run left out for the liquidity floor says so on its row and card, never like a candidate.
+const thinLiquidity = { average_volume_lots_20d: 32.4, minimum_lots: 1000, state: 'ok', below_minimum: true, exclusion: 'low_volume', data_as_of: '2026-10-22', score_version: 'candidate_score_v6', unit: 'lots' as const }
+const thinPage = page([row('6666', 2, 'conditional_entry', { trigger_price: 30, invalid_price: 28, target_1: 33, liquidity: thinLiquidity })], {
+  candidate_list_size: 20,
+  tiers: summary().tiers.map((tier) => ({ ...tier, shown: tier.tier === 2 ? 1 : 0 })),
+})
+const thinList = render('ActionTierList liquidity floor', () => <ActionTierList sections={tierSections(thinPage)} loadingTiers={new Set()} canLoadMore={() => true} onMore={() => {}} />)
+check(count(text(thinList), '條件成立，20 日均量 32 張，低於 1,000 張門檻，不列候選') === 2, `其他成立條件: the floor note on the row and the card, got ${text(thinList).slice(0, 300)}`)
+check(!text(thinList).includes('未進今日候選前'), '其他成立條件: a stock left out for the floor is not called cut by rank')
 const observation = tierMarkup(4)
 check(text(observation).includes('突破條件差 3 項：價格、量能、法人') && text(observation).includes('回踩條件差 1 項：趨勢'), '其他觀察: the 差 N 項 line')
 check(count(observation, CONDITIONS_PENDING_TEXT) === 2, `其他觀察: 條件明細尚未產生 only without a strategy_levels row (table and card), got ${count(observation, CONDITIONS_PENDING_TEXT)}`)

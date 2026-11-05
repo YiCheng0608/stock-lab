@@ -1,3 +1,4 @@
+import { liquidityExclusionText } from '../candidates/candidates'
 import { formatDay } from '../dates'
 import { noPreviousCloseText } from '../marketChange'
 import { productActionReasonLabel } from '../presentation'
@@ -147,6 +148,9 @@ export const conditionsPending = (action: ActionSummary, tier: number) => tier =
 // Tier 2: why a passed condition is not in today's candidates (UI_COPY_SPEC §6).
 export function conditionalNote(action: ActionSummary, candidateListSize: number | null): string {
   if (action.instrument.instrument_type === 'etf') return '條件成立，ETF 不列入候選評分'
+  // Left out for the liquidity floor (candidate_score_v6, #490): never reads like a candidate.
+  const floor = liquidityExclusionText(action.liquidity)
+  if (floor) return `條件成立，${floor}`
   return candidateListSize ? `條件成立，未進今日候選前 ${candidateListSize}` : '條件成立，未進今日候選'
 }
 

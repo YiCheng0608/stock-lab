@@ -1,5 +1,15 @@
 import { CandidateNote, ReasonList, ScoreDetails } from '../candidates/CandidateViews'
-import { CANDIDATE_DISCLAIMER, candidateStrategyLabel, formatCandidateScore, formatDate, formatPrice, formatRiskReward } from '../candidates/candidates'
+import {
+  CANDIDATE_DISCLAIMER,
+  averageVolumeText,
+  candidateStrategyLabel,
+  formatCandidateScore,
+  formatDate,
+  formatLots,
+  formatPrice,
+  formatRiskReward,
+  liquidityExclusionText,
+} from '../candidates/candidates'
 import { Term } from '../components/Term'
 import { Badge, DataTable, DateBadge, EmptyState, type Column } from '../components/ui'
 import { productActionReasonLabel } from '../presentation'
@@ -23,10 +33,11 @@ import {
 // (DESIGN_SYSTEM §5 策略總表). Actionable levels come from the signal, observation levels from strategy_levels;
 // the two never share a block (DESIGN_SYSTEM §7). The AI note appears only on the candidate row.
 
-function StatusCell({ row }: { row: StrategyBoardRow }) {
+function StatusCell({ row, floorNote }: { row: StrategyBoardRow; floorNote: string | null }) {
   return <>
     <Badge tone={STATUS_TONES[row.status] ?? 'default'} dot className="badge-compact" data-strategy-status={row.status}>{statusLabel(row.status)}</Badge>
     {row.status === 'conditional' && row.earliest_execution_date && <div className="small-note">最早執行日 {formatDate(row.earliest_execution_date)}</div>}
+    {row.status === 'conditional' && floorNote && <div className="small-note strategy-floor-note" data-liquidity-exclusion>{floorNote}</div>}
   </>
 }
 
@@ -94,17 +105,19 @@ function ConditionDetails({ row }: { row: StrategyBoardRow }) {
   )
 }
 
-const COLUMNS: ReadonlyArray<Column<StrategyBoardRow>> = [
-  { key: 'strategy', header: '策略', cell: (row) => <strong><Term id={row.entry_type === 'breakout' ? 'breakout' : 'pullback'}>{row.label}</Term></strong> },
-  { key: 'status', header: '狀態', cell: (row) => <StatusCell row={row} /> },
-  { key: 'unmet', header: '差哪個條件', wrap: true, cellClassName: 'strategy-unmet', cell: unmetText },
-  { key: 'levels', header: '價位', wrap: true, cellClassName: 'strategy-levels-cell', cell: (row) => <LevelsCell row={row} /> },
-]
+function columns(floorNote: string | null): ReadonlyArray<Column<StrategyBoardRow>> {
+  return [
+    { key: 'strategy', header: '策略', cell: (row) => <strong><Term id={row.entry_type === 'breakout' ? 'breakout' : 'pullback'}>{row.label}</Term></strong> },
+    { key: 'status', header: '狀態', cell: (row) => <StatusCell row={row} floorNote={floorNote} /> },
+    { key: 'unmet', header: '差哪個條件', wrap: true, cellClassName: 'strategy-unmet', cell: unmetText },
+    { key: 'levels', header: '價位', wrap: true, cellClassName: 'strategy-levels-cell', cell: (row) => <LevelsCell row={row} /> },
+  ]
+}
 
-function StrategyCard({ row }: { row: StrategyBoardRow }) {
+function StrategyCard({ row, floorNote }: { row: StrategyBoardRow; floorNote: string | null }) {
   return (
     <article className="card strategy-card" data-strategy-card={row.strategy}>
-      <div className="strategy-card-head"><strong><Term id={row.entry_type === 'breakout' ? 'breakout' : 'pullback'}>{row.label}</Term></strong><StatusCell row={row} /></div>
+      <div className="strategy-card-head"><strong><Term id={row.entry_type === 'breakout' ? 'breakout' : 'pullback'}>{row.label}</Term></strong><StatusCell row={row} floorNote={floorNote} /></div>
       <p className="strategy-unmet">{unmetText(row)}</p>
       <LevelsCell row={row} />
       <ConditionDetails row={row} />
@@ -131,6 +144,8 @@ function CandidateRow({ board, candidate }: { board: Board; candidate: Candidate
 
 export function StrategyBoardPanel({ board, candidate }: { board: Board | null | undefined; candidate: CandidateItem | null | undefined }) {
   if (!board) return null
+  // 「…低於 1,000 張門檻，不列候選」 next to every 成立 when the day's run left the stock out (#490).
+  const floorNote = liquidityExclusionText(board.liquidity ? { ...board.liquidity, exclusion: board.liquidity.candidate_exclusion } : null)
   return (
     <section className="panel strategy-board" aria-labelledby="strategy-board-title">
       <div className="section-head">
@@ -138,18 +153,24 @@ export function StrategyBoardPanel({ board, candidate }: { board: Board | null |
         <div className="board-dates">{board.as_of && <DateBadge date={board.as_of} />}<Badge>{levelsVersionLabel(board.levels_version)}</Badge></div>
       </div>
       <p className="small-note">{BOARD_NOTE}</p>
+      {board.liquidity && (
+        <p className="small-note strategy-liquidity" data-liquidity={board.liquidity.state ?? undefined}>
+          {averageVolumeText(board.liquidity.average_volume_lots_20d)} · 資料日期 {formatDate(board.liquidity.data_as_of)}
+          {board.liquidity.minimum_lots != null && `（候選門檻 ${formatLots(board.liquidity.minimum_lots)}）`}
+        </p>
+      )}
       {!board.as_of && <EmptyState reason="此股尚無策略判定資料。" />}
       <CandidateRow board={board} candidate={candidate} />
       <DataTable
         wrapClassName="strategy-table-wrap"
         className="strategy-table"
-        columns={COLUMNS}
+        columns={columns(floorNote)}
         rows={board.strategies}
         rowKey={(row) => row.strategy}
         rowProps={(row) => ({ 'data-strategy-row': row.strategy })}
         detailRow={(row) => ({ props: { 'data-strategy-detail': row.strategy }, content: <ConditionDetails row={row} /> })}
       />
-      <div className="strategy-cards">{board.strategies.map((row) => <StrategyCard key={row.strategy} row={row} />)}</div>
+      <div className="strategy-cards">{board.strategies.map((row) => <StrategyCard key={row.strategy} row={row} floorNote={floorNote} />)}</div>
     </section>
   )
 }

@@ -15,6 +15,8 @@ import {
   NOTE_TITLE,
   PARTIAL_NOTE,
   TODAY_VISIBLE,
+  averageVolumeText,
+  formatLots,
   candidateAiEntry,
   candidateChange,
   candidateGroupState,
@@ -168,6 +170,19 @@ function FirstReason({ item }: { item: CandidateItem }) {
   return reason ? <>{reason.text}{reason.inference && <> <InferenceBadge /></>}</> : <>—</>
 }
 
+// 「20 日均量 1,682 張」 (#490): the lots the liquidity floor read; nothing on runs scored before candidate_score_v6.
+// The row and card keep it short (the list's date badge is its data date); the detail adds the date and the floor.
+export function LiquidityNote({ item, detail = false }: { item: Pick<CandidateItem, 'liquidity'>; detail?: boolean }) {
+  const liquidity = item.liquidity
+  if (!liquidity) return null
+  const day = formatDate(liquidity.data_as_of)
+  return (
+    <div className="small-note candidate-liquidity" data-liquidity={liquidity.state ?? undefined}>
+      {averageVolumeText(liquidity.average_volume_lots_20d) + (detail ? `（資料日期 ${day ?? '待核實'}，候選門檻 ${formatLots(liquidity.minimum_lots)}）` : '')}
+    </div>
+  )
+}
+
 function CloseValue({ item }: { item: CandidateItem }) {
   const change = candidateChange(item.market)
   return <><div>{formatCandidateClose(item.market)}</div><div className={cx('candidate-change', change.tone && `tone-${change.tone}`)}>{change.text}</div></>
@@ -186,6 +201,7 @@ function CandidateDetail({ item }: { item: CandidateItem }) {
       <CandidateNote item={item} />
       <div className="candidate-detail-source">
         <AddPlanButton signalId={item.signal_id} candidateId={item.candidate_id} openPlanId={item.open_plan_id} />
+        <LiquidityNote item={item} detail />
         <div className="small-note">資料日期 {formatDate(item.data_as_of) ?? '待核實'}</div>
         <div className="small-note">來源：{candidateSourceText(item)}</div>
         <Link className="text-link" to={stockPath(item)}>評分細節 → 個股頁</Link>
@@ -235,6 +251,7 @@ function candidateColumns(open: ReadonlySet<number>, toggle: (rank: number) => v
       key: 'stock', header: '股票', cellClassName: 'candidate-stock-cell', cell: (item) => <>
         <div className="candidate-stock-line"><span className="candidate-rank" aria-label={`第 ${item.rank} 名`}>#{item.rank}</span> <Link className="symbol-link" to={stockPath(item)}><strong>{item.instrument.symbol}</strong> {item.instrument.name}</Link></div>
         <div className="small-note candidate-stock-meta" title={item.groups[0] ? candidateGroupText(item.groups[0]) : undefined}>{exchangeLabel(item.instrument.exchange)} · {groupShortText(item)}</div>
+        <LiquidityNote item={item} />
       </>,
     },
     { key: 'close', header: '最近收盤（元）', num: true, cellClassName: 'candidate-close-cell', cell: (item) => <CloseValue item={item} /> },
@@ -262,6 +279,7 @@ function CandidateMiniCard({ item, hidden }: { item: CandidateItem; hidden: bool
         <span className="candidate-mini-total"><Term id="candidate_score">總分</Term> <b>{formatCandidateScore(item.total_score)}</b></span>
       </div>
       <div className="small-note">{exchangeLabel(instrument.exchange)} · {candidateStrategyLabel(item.strategy)} · {groupText(item)}</div>
+      <LiquidityNote item={item} />
       <dl className="candidate-mini-levels">
         <div><dt>收盤（元）</dt><dd><CloseValue item={item} /></dd></div>
         <div><dt><Term id="entry_zone">進場區</Term>（元）</dt><dd className="level-entry">{formatEntryZone(levels)}</dd></div>

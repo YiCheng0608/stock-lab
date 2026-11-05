@@ -152,3 +152,18 @@ check(missing.includes('data-strategy-levels="missing"') && missing.includes(LEV
 // ---- no board, no signals ----
 check(render(<StrategyBoardPanel board={null} candidate={null} />) === '', 'no board renders nothing')
 check(render(<StrategyBoardPanel board={{ ...board([]), as_of: null }} candidate={null} />).includes('此股尚無策略判定資料。'), 'a stock without signals says so')
+
+// ---- liquidity floor (#490): 20-session lots on the board, the floor note next to every 成立 ----
+const thinBoard = {
+  ...board([conditionalBreakout(), observationPullback()]),
+  liquidity: { average_volume_lots_20d: 32.4, state: 'ok', unit: 'lots' as const, data_as_of: '2026-10-22', minimum_lots: 1000, below_minimum: true, candidate_exclusion: 'low_volume', score_version: 'candidate_score_v6' },
+}
+const thin = render(<StrategyBoardPanel board={thinBoard} candidate={null} />)
+check(thin.includes('20 日均量 32 張 · 資料日期 2026/10/22（候選門檻 1,000 張）'), 'the board shows the 20-session lots, date and floor')
+const floorNote = '20 日均量 32 張，低於 1,000 張門檻，不列候選'
+check(tableRow(thin, 'breakout_v1').includes(floorNote) && card(thin, 'breakout_v1').includes(floorNote), 'the 成立 row and card carry the floor note')
+check(!tableRow(thin, 'pullback_v1').includes(floorNote), 'an observation row has no floor note')
+const liquid = render(<StrategyBoardPanel board={{ ...thinBoard, liquidity: { ...thinBoard.liquidity, average_volume_lots_20d: 1682, below_minimum: false, candidate_exclusion: null } }} candidate={null} />)
+check(liquid.includes('20 日均量 1,682 張') && !liquid.includes('不列候選'), 'a liquid stock shows its lots and no note')
+const before = render(<StrategyBoardPanel board={{ ...thinBoard, liquidity: { ...thinBoard.liquidity, minimum_lots: null, candidate_exclusion: null } }} candidate={null} />)
+check(before.includes('20 日均量 32 張') && !before.includes('候選門檻') && !before.includes('不列候選'), 'a day scored without the floor shows no floor')
