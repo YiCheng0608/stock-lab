@@ -622,11 +622,36 @@ def run(args: argparse.Namespace) -> int:
     serve.hold_serve_lock()
     scheduler = serve.scheduler()
 
-    def stop(signum, _frame) -> None:
-        serve.say("stopping", signal=signal.Signals(signum).name)
-        serve.stop()
-        scheduler.shutdown(wait=False)
+    from apscheduler.events import EVENT_SCHEDULER_START
+    from apscheduler.schedulers import SchedulerNotRunningError
 
+    stop_requested = threading.Event()
+
+    def stop(signum, _frame) -> None:
+        # Only a thread from here (#468 CI run 41949855780): a signal that lands inside
+        # scheduler.start() would deadlock on the scheduler's own locks if the handler
+        # shut it down, and print() inside a handler can be a reentrant write.
+        if not stop_requested.is_set():
+            stop_requested.set()
+            name = signal.Signals(signum).name
+            threading.Thread(target=stop_now, args=(name,), daemon=True).start()
+
+    def stop_now(name: str) -> None:
+        serve.say("stopping", signal=name)
+        serve.stop()
+        try:
+            scheduler.shutdown(wait=False)
+        except SchedulerNotRunningError:
+            # Not running yet (a docker stop right after `ready`): start() sets the state
+            # before it dispatches EVENT_SCHEDULER_START, so the listener below sees
+            # serve._stopping and shuts it down.
+            pass
+
+    def stopped_before_start(_event) -> None:
+        if serve._stopping:
+            scheduler.shutdown(wait=False)
+
+    scheduler.add_listener(stopped_before_start, EVENT_SCHEDULER_START)
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     serve.say(
@@ -639,6 +664,7 @@ def run(args: argparse.Namespace) -> int:
         },
         maintenance="on" if serve._maintenance else "off",
     )
-    scheduler.start()
+    if not serve._stopping:
+        scheduler.start()
     serve.say("stopped")
     return 0

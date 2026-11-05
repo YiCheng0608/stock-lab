@@ -1353,11 +1353,35 @@ def test_serve_holds_its_lock_while_it_runs(serve_tree):
         out.wait_for(r" serve ready .* maintenance=off$")
         assert job.lock_held(lock)
     finally:
-        # Whatever its exit code (a SIGTERM right after `ready` can come before the
-        # scheduler started; the docker stop tests cover that path): the OS drops it.
-        process.send_signal(signal.SIGTERM)
-        process.wait(timeout=60)
+        # A SIGTERM right after `ready` may come before the scheduler runs: still a
+        # clean stop (CI run 41949855780 hung there).
+        assert stop(process) == 0
     assert not job.lock_held(lock)
+
+
+def test_a_sigterm_before_the_scheduler_starts_still_stops_serve(tmp_path, monkeypatch):
+    """docker stop right after the container started (#468 CI run 41949855780): the
+    signal lands after `ready`, before the scheduler runs. serve used to raise
+    SchedulerNotRunningError there, or, inside start(), ignore it and run on."""
+
+    if not ON_LINUX:
+        pytest.skip("worker.serve runs on Linux only (#333)")
+    from apscheduler.schedulers.blocking import BlockingScheduler
+
+    start = BlockingScheduler.start
+
+    def signalled_start(self, *args, **kwargs):
+        os.kill(os.getpid(), signal.SIGTERM)  # the handler runs here, before start
+        return start(self, *args, **kwargs)
+
+    monkeypatch.setattr(BlockingScheduler, "start", signalled_start)
+    previous = {s: signal.getsignal(s) for s in (signal.SIGTERM, signal.SIGINT)}
+    try:
+        code = serve.run(serve_args("--data-dir", str(tmp_path / "data")))
+    finally:
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
+    assert code == 0
 
 
 def test_a_daily_skipped_for_maintenance_runs_when_it_ends_and_2300_does_not_again(
