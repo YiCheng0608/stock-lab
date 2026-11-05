@@ -63,12 +63,12 @@ from sqlalchemy import desc, inspect, select, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.clock import utcnow
+from app.coverage import DAILY_JOB, collect_states
 from app.migration_revisions import REVISIONS
-from app.models import IngestionRun, ScheduleRun, ScheduleRunStep
+from app.models import ScheduleRun, ScheduleRunStep
 from worker import institutional_refetch, pipeline, theme_suggestions
 from worker.sources import OfficialMarketDataAdapter
 
-DAILY_JOB = "daily"
 DAILY_STEPS = (
     "catchup",
     "collect",
@@ -123,7 +123,6 @@ NON_TRADING_UNCONFIRMED = "non_trading_unconfirmed"
 # at most CATCHUP_MAX_WEEKDAYS weekdays.
 CATCHUP_SESSIONS = 5
 CATCHUP_MAX_WEEKDAYS = 15
-TAIPEI_UTC_OFFSET = timedelta(hours=8)
 # Reasons the scheduled job (worker.job) may pass to record a run it declined to start.
 PREFLIGHT_SKIP_REASONS = frozenset({"low_memory", "git_busy"})
 # The job lock is held by another daily job: the same reason as a running row
@@ -268,47 +267,11 @@ def _catchup_adapter() -> OfficialMarketDataAdapter:
 def _collect_state(db: Any, day: date) -> str:
     """complete, non_trading (confirmed official no-data) or missing.
 
-    A no-data answer counts as closed only when it is confirmed: a daily run
-    recorded ``non_trading_day`` for that date, or the answer was obtained
-    after that Taipei day ended (a later catch-up or backfill).  A single
-    same-day answer (``non_trading_unconfirmed`` whose 23:00 check never ran)
-    stays missing, so a wrong "no session" is fetched again.
+    The rule is ``app.coverage.collect_states``, shared with the backfill
+    target and /api/coverage (Issue #479).
     """
 
-    rows = db.scalars(
-        select(IngestionRun).where(
-            IngestionRun.run_type == "collect", IngestionRun.run_date == day
-        )
-    ).all()
-    # Same test as collect's idempotency shortcut: a success with a TAIEX row.
-    if any(
-        row.status == "success"
-        and int((row.metadata_json or {}).get("taiex_records", 0) or 0) > 0
-        for row in rows
-    ):
-        return "complete"
-    skipped = [row for row in rows if row.status == "skipped"]
-    if not skipped:
-        return "missing"
-    # The end of the Taipei day in naive UTC, like the stored timestamps.
-    day_end = (
-        datetime(day.year, day.month, day.day) + timedelta(days=1) - TAIPEI_UTC_OFFSET
-    )
-    if any(
-        (row.finished_at or row.started_at or datetime.min) >= day_end
-        for row in skipped
-    ):
-        return "non_trading"
-    confirmed = db.scalar(
-        select(ScheduleRun.id)
-        .where(
-            ScheduleRun.job == DAILY_JOB,
-            ScheduleRun.target_date == day,
-            ScheduleRun.status == "non_trading_day",
-        )
-        .limit(1)
-    )
-    return "non_trading" if confirmed is not None else "missing"
+    return collect_states(db, day, day)[day]
 
 
 def catchup_dates(

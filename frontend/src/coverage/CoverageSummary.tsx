@@ -16,6 +16,12 @@ function countLabel(value: number | null | undefined): string {
   return value == null ? '尚無資料' : `${value} 個標的`
 }
 
+// The backfill card's verified sessions (Issue #479): the target excludes the
+// window's confirmed closures, and the card says how many it took out.
+export function backfillSessionsLabel(verified: number, target: number, closures: number): string {
+  return `${verified}／${target} 日${closures > 0 ? `（已扣除 ${closures} 個確定休市日）` : ''}`
+}
+
 // The market coverage cards (Issue #454): an official no-trade day (the quote
 // table lists the security with every price blank) is counted apart from
 // missing data, never as a gap and never as a price.

@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server'
-import { CoverageSummaryMetrics, coverageReasonLabels } from './CoverageSummary'
+import { CoverageSummaryMetrics, backfillSessionsLabel, coverageReasonLabels } from './CoverageSummary'
 import type { CoverageReport } from '../types'
 
 // Standalone regression module (no browser, no server, no network): the market
@@ -33,3 +33,7 @@ const older = summary({ no_trade_to_20: undefined })
 const olderHtml = renderToStaticMarkup(<CoverageSummaryMetrics summary={older} snapshot />)
 check(olderHtml.includes('<span>官方無成交（20 日內）</span><b>尚無資料</b>'), 'missing no_trade_to_20 is shown as no data')
 check(olderHtml.includes('62 日（官方快照）'), 'snapshot suffix kept')
+
+// The backfill card (#479): the target excludes the confirmed closures and says so.
+check(backfillSessionsLabel(62, 62, 5) === '62／62 日（已扣除 5 個確定休市日）', 'closures are named on the card')
+check(backfillSessionsLabel(65, 65, 0) === '65／65 日', 'no suffix without closures')

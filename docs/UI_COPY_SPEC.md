@@ -1,4 +1,4 @@
-<!-- owns: UI 文案共通原則、內部詞對照、資料完整度、新聞卡文案、行動中心分級、行動狀態文字、詞彙原則、壓縮卡與詳情文案、張與零股、表格單位與空白、族群榜文案、題材建議文案、中文原因碼、每日候選文案、個股策略總表文案、候選進場方式文案、今日頁頁首文案、策略說明頁文案 -->
+<!-- owns: UI 文案共通原則、內部詞對照、資料完整度、新聞卡文案、行動中心分級、行動狀態文字、詞彙原則、壓縮卡與詳情文案、張與零股、表格單位與空白、族群榜文案、題材建議文案、中文原因碼、每日候選文案、個股策略總表文案、候選進場方式文案、今日頁頁首文案、策略說明頁文案、資料覆蓋度頁文案 -->
 # UI 文案與資訊層級規格
 
 本文是日常頁的中文、資訊層級、單位、unknown 與 reason code 契約。能力狀態見 [CAPABILITIES](CAPABILITIES.md)，策略合併判定見 [PRODUCT_SPEC](PRODUCT_SPEC.md#action-merge)。
@@ -382,3 +382,12 @@ reason code 的日常文案由 `backend/app/presentation.py`（`REASON_LABELS`�
 - **怎麼照著做**：T+1 才進場、進場區（突破型一個價位、回踩型一段區間；開盤就跳過目標或跌破停損時不進場）、停損（跌破就出場）、目標（目標一主要出場、目標二延伸參考）、RR（至少 1.5 倍），各以詞彙按鈕開詞條。
 - **觀察中在做什麼**：「加入追蹤」後從下一個交易日起每天收盤後依日線模擬進場與出場（最多 20 個交易日），結果在觀察中的「追蹤計畫」「追蹤回看」；已扣固定手續費與滑價假設，不是實際成交，也不寫進庫存。另一句寫觀察中也提醒庫存風險與差一點成立的股票。
 - **不做的事**：不自動下單、不提供盤中即時價格；不顯示勝率或成立機率；AI 只寫說明文字並標「AI 推論」，價位以規則數值為準。最後一行連到「策略版本」與「用語表」。
+
+## 14. 資料覆蓋度頁
+
+`/research/coverage`（官方資料回補與覆蓋度）的「最近一次回補」卡讀最新一筆回補 run 的 metadata；「目前市場資料覆蓋度」讀 `/api/coverage`。
+
+- **已驗證交易日**：寫「{已驗證}／{目標} 日」，有確定休市日時接「（已扣除 {N} 個確定休市日）」，例如「62／62 日（已扣除 5 個確定休市日）」（[#479](https://github.com/YiCheng0608/stock-lab/issues/479)）。
+  - 目標取 run 的 `target_sessions`，N 是 `confirmed_non_trading_dates` 的筆數。規則見[回補目標與確定休市日](DATA_SOURCES.md#回補目標與確定休市日)。
+  - 規則改版前的 run 沒有 `target_sessions`，目標寫 `coverage_targets.ohlcv_taiex_sessions`（上限 65），不加後綴。
+- **覆蓋目標**與「回補目標：」那一行：`target_met` 為真寫「已達成」，否則寫「尚未達成」；`/api/coverage` 的 `target_met` 是 null 時寫「尚無回補稽核基準」。頁面在 `frontend/src/App.tsx` 的 `BackfillCoveragePage`；「已驗證交易日」的字串由 `frontend/src/coverage/CoverageSummary.tsx` 的 `backfillSessionsLabel` 組出。

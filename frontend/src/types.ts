@@ -778,6 +778,9 @@ export type CoverageReport = {
     verified_chip_sessions: number
     verified_event_sessions: number
     target_ohlcv_taiex_sessions: number
+    // #479: the cap before confirmed closures, and the closures taken out.
+    target_ohlcv_taiex_cap?: number
+    confirmed_non_trading_dates?: string[]
     target_chip_event_sessions: number
     target_met: boolean | null
     latest_observed: string | null
