@@ -37,6 +37,8 @@ from .news_llm import DEFAULT_LIMIT as NEWS_LLM_DEFAULT_LIMIT, run_news_llm_batc
 from .news_projection import run_news_project
 from .pipeline import analyze, backtest, collect, evaluate, run_daily
 from .plan_tracking import run_plan_tracking
+from .quarterly_fundamentals import DEFAULT_QUARTERS as FUNDAMENTAL_DEFAULT_QUARTERS
+from .quarterly_fundamentals import run_fundamental_backfill
 from .schedule_runs import (
     LOCK_SKIP_REASON,
     PREFLIGHT_SKIP_REASONS,
@@ -93,6 +95,8 @@ def maintenance_guarded(args: argparse.Namespace) -> str | None:
         return args.command
     if args.command == "events" and args.events_command == "backfill":
         return "events backfill"
+    if args.command == "fundamentals" and args.fundamentals_command == "backfill":
+        return "fundamentals backfill"
     if (
         args.command == "instruments"
         and args.instruments_command == "repair"
@@ -361,6 +365,22 @@ def main() -> None:
     )
     events_backfill_parser.add_argument("--start-date", required=True)
     events_backfill_parser.add_argument("--end-date", required=True)
+    fundamentals_parser = subparsers.add_parser(
+        "fundamentals", help="季度 EPS 與營收：MOPS t163sb04 彙總報表（#529）"
+    )
+    fundamentals_subparsers = fundamentals_parser.add_subparsers(
+        dest="fundamentals_command", required=True
+    )
+    fundamentals_backfill_parser = fundamentals_subparsers.add_parser(
+        "backfill",
+        help="上市、上櫃各季 1 個請求（間隔 3 秒），回補近 N 季的累計營收與基本 EPS，重跑冪等",
+    )
+    fundamentals_backfill_parser.add_argument(
+        "--quarters", type=int, default=FUNDAMENTAL_DEFAULT_QUARTERS
+    )
+    fundamentals_backfill_parser.add_argument(
+        "--end-quarter", help="YYYYQn；預設是最近一個已結束的季度"
+    )
     instruments_parser = subparsers.add_parser("instruments", help="標的狀態與歷史")
     instruments_subparsers = instruments_parser.add_subparsers(
         dest="instruments_command", required=True
@@ -570,6 +590,8 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
         result = run_event_backfill(
             date.fromisoformat(args.start_date), date.fromisoformat(args.end_date)
         )
+    elif args.command == "fundamentals" and args.fundamentals_command == "backfill":
+        result = run_fundamental_backfill(args.quarters, args.end_quarter)
     elif args.command == "corporate-actions":
         if args.actions_command == "sync":
             result = run_corporate_action_sync(
@@ -651,6 +673,8 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
         args.command in {"margin-lists", "no-trade-days"}
         and result.get("status") != "success"
     ):
+        raise SystemExit(2 if result.get("status") == "partial" else 1)
+    if args.command == "fundamentals" and result.get("status") != "success":
         raise SystemExit(2 if result.get("status") == "partial" else 1)
     if args.command == "chips" and result.get("status") != "success":
         raise SystemExit(2 if result.get("status") == "partial" else 1)

@@ -121,6 +121,10 @@ GUARDED = {
         ],
         "run_event_backfill",
     ),
+    "fundamentals backfill": (
+        ["fundamentals", "backfill", "--quarters", "8"],
+        "run_fundamental_backfill",
+    ),
     "instruments repair --apply": (
         ["instruments", "repair", "--apply"],
         "run_instrument_repair",

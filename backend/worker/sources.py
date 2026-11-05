@@ -412,6 +412,8 @@ OFFICIAL_HOST_MIN_INTERVAL_SECONDS = {
     # MOPS blocks fast clients without a published limit; the event-list
     # backfill (Issue #464) stays at one request per three seconds.
     "mops.twse.com.tw": 3.0,
+    # The old MOPS site serves the quarterly report pages (Issue #529).
+    "mopsov.twse.com.tw": 3.0,
 }
 _host_last_request: dict[str, float] = {}
 
