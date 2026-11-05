@@ -236,6 +236,45 @@ a.symbol-link:hover { color: var(--color-primary); }
 .news-filters { display: flex; flex-wrap: nowrap; align-items: stretch; gap: var(--space-2); padding-bottom: var(--space-3); }
 .news-filters .search-input { flex: 0 1 240px; width: 240px; min-width: 0; }
 .news-filters .news-symbol-input { flex: 0 1 140px; width: 140px; }
+/* /news (#523, DESIGN_SYSTEM §5 新聞清單): a one-line page head, the relation chips, then one card of two-line rows; the
+   rest of a row opens in a <details> under it. Every part of a row is a grid item, so it is its own line of page text. */
+.news-page-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-4); padding: 0 0 var(--space-3); }
+.news-page-title h1 { margin: 0; }
+.news-page-title p { margin: 0; color: var(--color-text-muted); font-size: var(--text-md); }
+.news-page .news-controls { margin-bottom: var(--space-3); }
+.news-relation-filters { margin-bottom: var(--space-3); }
+.news-relation-filters .filter-chip { padding: var(--space-1) var(--space-3); font-size: var(--text-sm); }
+.news-row-list { margin: 0; padding: 0; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-bg-card); list-style: none; }
+.news-row + .news-row { border-top: 1px solid var(--color-border); }
+.news-row:hover { background: var(--color-bg-elevated); }
+.news-row-open, .news-row-open:hover { background: var(--color-bg-alt); }
+.news-row-main { display: grid; grid-template-areas: "title title title title title toggle" "source sep time impact tags toggle"; grid-template-columns: minmax(0, max-content) auto auto auto minmax(0, 1fr) auto; gap: 2px var(--space-2); align-items: center; padding: var(--space-2) var(--space-3) var(--space-2) var(--space-5); }
+.news-row-line2 { display: contents; }
+.news-row-title { grid-area: title; min-width: 0; margin: 0; overflow: hidden; font-size: var(--text-base); font-weight: 600; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
+.news-row-title a { color: var(--color-text); }
+.news-row-title a:hover { color: var(--color-primary); }
+.news-row-source, .news-row-sep, .news-row-time, .news-row-impact { color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1.6; white-space: nowrap; }
+.news-row-source { grid-area: source; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.news-row-sep { grid-area: sep; }
+.news-row-time { grid-area: time; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.news-row-impact { display: flex; grid-area: impact; align-items: center; gap: var(--space-2); }
+.news-row-impact::before { content: "·"; }
+.news-row-impact .news-direction { gap: var(--space-1); font-size: var(--text-sm); }
+.news-row-impact .badge { flex: none; white-space: nowrap; }
+/* The tags wrap onto a second line that the fixed height hides, so a tag is shown whole or not at all; all of them are in
+   the detail. */
+.news-row-tags { display: flex; flex-wrap: wrap; grid-area: tags; gap: var(--space-2) var(--space-1); min-width: 0; height: calc(var(--text-xs) * 1.5 + 2px); overflow: hidden; }
+.news-row-tags .tag { flex: 0 1 auto; min-width: 0; overflow: hidden; padding: 0 var(--space-2); line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
+.news-row-tags a.tag:hover { border-color: var(--color-primary); color: var(--color-text); }
+.news-row-toggle { grid-area: toggle; padding: var(--space-1) var(--space-2); color: var(--color-primary); font-size: var(--text-sm); font-weight: 500; white-space: nowrap; }
+.news-row-detail > summary { display: none; }
+.news-row-detail[open] { padding: var(--space-3) var(--space-5) var(--space-4); border-top: 1px solid var(--color-border); }
+.news-row-detail-body { display: grid; gap: var(--space-2); justify-items: start; font-size: var(--text-md); }
+.news-row-kind { color: var(--color-text-muted); font-size: var(--text-sm); }
+.news-row-summary { margin: 0; color: var(--color-text); line-height: 1.7; }
+.news-row-detail .news-ai-candidates { justify-self: stretch; }
+.news-row-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
+.news-row-links .news-source { margin-top: 0; padding-top: 0; }
 .news-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
 .news-card { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
 .news-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--color-text-muted); font-size: 14px; }
@@ -318,17 +357,21 @@ a.symbol-link:hover { color: var(--color-primary); }
 .modal-backdrop { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: var(--space-6); background: var(--color-overlay); }
 .glossary-modal { width: min(620px, 100%); max-height: 90vh; overflow: auto; padding: var(--space-6); border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-bg-card); }
 .glossary-modal p { max-width: none; margin: var(--space-3) 0; }
-.overview-cutoff-control { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px solid var(--color-border); }
-.overview-cutoff-control label { color: var(--color-text-muted); font-size: 14px; }
+.overview-cutoff-control { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--color-border); }
+.overview-cutoff-control label { color: var(--color-text-muted); font-size: var(--text-md); }
 .overview-cutoff-control input { width: auto; padding: var(--space-2) var(--space-3); }
 .cutoff-toggle { display: none; }
+/* 說明 ends the form row; opened, its sentence takes the next line (#519, DESIGN_SYSTEM §4 個股頁頁首與摘要卡). */
+.cutoff-help > summary { color: var(--color-primary); cursor: pointer; font-size: var(--text-sm); }
+.cutoff-help[open] { flex-basis: 100%; }
+.cutoff-help p { margin: var(--space-1) 0 0; font-size: var(--text-xs); }
 
 /* ---- stock page --------------------------------------------------------------------------------- */
-.stock-header { margin-bottom: var(--space-6); }
+.stock-header { margin-bottom: var(--space-4); padding: var(--space-5); }
 .stock-header-id { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
-.stock-header-symbol { font: 600 20px var(--font-mono); color: var(--color-text-muted); }
-.stock-header-name { margin: 0; font-size: 30px; }
-.stock-header-quote { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-5); }
+.stock-header-symbol { font: 600 var(--text-xl) var(--font-mono); color: var(--color-text-muted); }
+.stock-header-name { margin: 0; font-size: var(--text-2xl); }
+.stock-header-quote { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-3); }
 .stock-header-price { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
 .stock-header-label { flex-basis: 100%; color: var(--color-text-muted); font-size: 14px; }
 .stock-header-close { font: 700 36px/1.1 var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -338,8 +381,47 @@ a.symbol-link:hover { color: var(--color-primary); }
 .stock-tabs { margin-bottom: var(--space-4); }
 .stock-tab-content { min-width: 0; }
 .stock-data-gap { margin-top: 0; }
-.stock-action-detail { margin-bottom: var(--space-4); }
+.stock-action-detail { margin-bottom: 0; }
 .stock-detail-levels { margin-top: var(--space-3); }
+/* Summary card under the header (#519, DESIGN_SYSTEM §5 個股摘要卡): verdict, closest strategy, rule levels. */
+.stock-summary { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 3fr) minmax(0, 4fr); gap: var(--space-3) var(--space-6); margin-bottom: var(--space-4); padding: var(--space-5); }
+.stock-summary-col { display: grid; align-content: start; gap: var(--space-2); min-width: 0; }
+.stock-summary-label { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--color-text-muted); font-size: var(--text-xs); font-weight: 500; }
+.stock-summary-label .badge { padding: 2px 8px; font-size: var(--text-xs); }
+.stock-summary-verdict { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-3); }
+.stock-summary-badge { font-size: var(--text-md); font-weight: 600; }
+.stock-summary-reason { font-size: var(--text-base); line-height: 1.5; }
+.stock-summary-strategy { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.stock-summary-unmet { font-size: var(--text-sm); line-height: 1.5; }
+.stock-summary-link { margin-left: auto; font-size: var(--text-sm); font-weight: 500; }
+/* Tab content: card titles and help text follow the summary's scale (#519). */
+.stock-tab-content .card, .stock-tab-content .panel { padding: var(--space-4) var(--space-5); }
+.stock-tab-content > * + * { margin-top: var(--space-3); }
+.stock-tab-content .card-title, .stock-tab-content .panel h2 { font-size: var(--text-xl); font-weight: 700; }
+.stock-tab-content .panel-head { margin-bottom: var(--space-2); }
+.stock-tab-content .panel-head .board-dates { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.board-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-4); margin-bottom: var(--space-3); }
+.board-meta .strategy-liquidity { margin: 0; }
+.board-help[open] { flex-basis: 100%; }
+.chip-unit-note { margin: 0 0 var(--space-2); }
+.board-help > summary, .chip-unit-note > summary, .stock-group-periods > summary, .strategy-candidate-more > summary { font-size: var(--text-sm); }
+.board-help p, .chip-unit-note p { margin: 0; font-size: var(--text-xs); }
+.stock-action-detail .action-detail-summary { padding: var(--space-2) 0; }
+.stock-action-detail .action-detail-summary strong { font-size: var(--text-base); }
+.stock-action-detail .action-detail-summary .action-detail-instruction { color: var(--color-text); }
+.action-detail-plan { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--color-border); }
+.stock-plan-inline .plan-strategy-list { gap: var(--space-2); margin-bottom: var(--space-2); }
+.stock-plan-inline .plan-strategy-list li { padding: var(--space-2) var(--space-3); }
+.stock-plan-inline { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-4); }
+.stock-plan-inline .plan-strategy-list { flex-basis: 100%; }
+.stock-plan-inline .small-note { margin: 0; font-size: var(--text-xs); }
+.stock-groups .panel-head { margin-bottom: 0; }
+.stock-groups .panel-head h2 { flex: none; }
+.stock-group-names { font-weight: 600; }
+.stock-group-periods { margin-left: auto; }
+.stock-group-periods[open] { flex-basis: 100%; }
+.stock-data-gap-note { margin-top: var(--space-1); }
+.stock-group-periods .research-list { margin-top: var(--space-2); }
 
 .chart-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-3); }
 .ma-toggles { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
@@ -373,8 +455,13 @@ a.symbol-link:hover { color: var(--color-primary); }
 .home-header .data-explanation[open] { flex: 1 1 100%; }
 .home-header .data-explanation > div { margin-top: var(--space-1); }
 .market-overview { margin-bottom: var(--space-3); }
-.market-overview-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr); gap: var(--space-3); }
-.market-overview .market-widget { min-width: 0; padding: var(--space-3) var(--space-4); }
+/* One bar (#510): the four widgets share one framed row, divided by 1px lines; an index's points and change on one line. */
+.market-overview-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr); overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); }
+.market-overview .market-widget { min-width: 0; padding: var(--space-2) var(--space-4); }
+.market-overview-grid > .market-widget { border: 0; border-left: 1px solid var(--color-border); border-radius: 0; background: transparent; }
+.market-overview-grid > .market-widget:first-child { border-left: 0; }
+.market-overview .market-index { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-3); }
+.market-overview .market-index .market-widget-head { flex: 1 1 100%; }
 .market-widget-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
 .market-widget-unit { color: var(--color-text-subtle); font-size: 12px; white-space: nowrap; }
 .market-overview .market-widget-value { margin: var(--space-label) 0 0; font-size: 18px; }
@@ -387,23 +474,39 @@ a.symbol-link:hover { color: var(--color-primary); }
 .market-overview-more { display: none; margin-top: var(--space-2); }
 .market-overview-more-grid { display: grid; gap: var(--space-2); }
 .alert-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-left: 4px solid var(--color-warning); border-radius: var(--radius-lg); background: var(--color-bg-card); color: var(--color-text); font-size: 14px; }
-.home-page .candidates-section .section-head { margin-top: var(--space-4); }
 /* Hot groups and news (#493, DESIGN_SYSTEM §5 熱門族群與重點新聞): two cards in one grid row; stretch makes them one height,
-   so their top and bottom edges line up whatever each holds. */
-.home-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-6); align-items: stretch; margin-top: var(--space-8); }
+   so their top and bottom edges line up whatever each holds. #510: one head line, at most five items of two lines. */
+.home-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-6); align-items: stretch; margin-top: var(--space-block); }
 .home-panel { display: flex; flex-direction: column; min-width: 0; padding: var(--space-4) var(--space-5); border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-bg-card); }
-.home-panel > .section-head { min-height: 64px; margin: 0 0 var(--space-3); align-items: flex-end; }
-.section-head-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2) var(--space-4); }
-.section-head-tools .tabs { border-bottom: 0; }
-.hot-groups-dates { margin: 0 0 var(--space-2); }
-.home-panel .hot-group-list, .home-panel .news-list-compact { gap: 0; }
-.home-panel .hot-group-row { padding: var(--space-2) 0; border: 0; border-bottom: 1px solid var(--color-border); border-radius: 0; background: transparent; }
-.home-panel .hot-group-row:last-child, .home-panel .news-card-compact:last-child { border-bottom: 0; }
-.home-panel .hot-group-row:hover h3 { color: var(--color-primary); }
-.home-panel .news-card-compact { padding: var(--space-3) 0; border: 0; border-bottom: 1px solid var(--color-border); border-radius: 0; background: transparent; }
-.news-list-compact { display: grid; gap: var(--space-3); }
-.news-card-compact { gap: var(--space-1); padding: var(--space-4); }
-.news-card-compact .news-card-title { font-size: 16px; }
+.panel-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); min-height: 40px; }
+.panel-head h2 { flex: 1 1 auto; margin: 0; font-size: var(--text-xl); }
+.panel-head .text-link { white-space: nowrap; }
+.hot-groups-dates { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); margin: var(--space-1) 0 var(--space-1); }
+.home-panel .hot-group-list, .home-news-list { display: grid; margin-top: var(--space-1); }
+.home-panel .hot-group-row, .home-news-row { display: grid; gap: 2px; min-width: 0; padding: var(--space-2) 0; border-top: 1px solid var(--color-border); color: var(--color-text); }
+.home-panel .hot-group-row:hover h3, .home-news-row:hover .home-news-title a { color: var(--color-primary); }
+.hot-group-line { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.hot-group-line .hot-group-rank { flex: none; min-width: 28px; font-size: var(--text-md); font-weight: 700; }
+.hot-group-line h3 { flex: 0 1 auto; min-width: 0; margin: 0; overflow: hidden; font-size: var(--text-base); text-overflow: ellipsis; white-space: nowrap; }
+.hot-group-line .badge { flex: none; white-space: nowrap; }
+.hot-group-line .hot-group-score { flex: none; margin-left: auto; }
+.hot-group-score span { color: var(--color-text-muted); font-size: var(--text-xs); }
+.hot-group-score b { font: 600 var(--text-base) var(--font-mono); font-variant-numeric: tabular-nums; }
+.hot-group-returns { display: flex; gap: var(--space-4); padding-left: calc(28px + var(--space-2)); overflow: hidden; color: var(--color-text-muted); font-size: var(--text-sm); white-space: nowrap; }
+.hot-group-returns b { font: 500 var(--text-sm) var(--font-mono); font-variant-numeric: tabular-nums; }
+.home-news-row { grid-template-areas: "title title" "meta impact"; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--space-2); }
+.home-news-title { grid-area: title; min-width: 0; margin: 0; overflow: hidden; font-size: var(--text-base); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.home-news-title a { color: var(--color-text); }
+/* Line two never wraps: source and time, then the direction and 「AI 推論」; the source is cut first. */
+.home-news-meta, .home-news-impact { display: flex; align-items: center; gap: var(--space-2); min-width: 0; overflow: hidden; color: var(--color-text-muted); font-size: var(--text-sm); white-space: nowrap; }
+.home-news-meta { grid-area: meta; }
+.home-news-meta > * { flex: none; }
+.home-news-meta > .home-news-source { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.home-news-meta time { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.home-news-impact { grid-area: impact; }
+.home-news-impact::before { content: "·"; }
+.home-news-impact .news-direction { display: inline-flex; flex: none; align-items: center; gap: var(--space-1); color: var(--color-text); }
+.home-news-impact .badge { flex: none; white-space: nowrap; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* ---- group boards: /themes, today Top 5, /themes/:id ------------------------------------------------------ */
@@ -424,28 +527,14 @@ a.symbol-link:hover { color: var(--color-primary); }
 .board-card-head { display: flex; align-items: baseline; gap: var(--space-3); margin-bottom: var(--space-2); }
 .board-card-head strong { flex: 1; min-width: 0; font-size: 16px; }
 .board-card-score { font: 600 18px var(--font-mono); font-variant-numeric: tabular-nums; }
-.board-card-grid, .hot-group-returns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2) var(--space-3); margin: var(--space-3) 0 0; }
-.board-card-grid dt, .hot-group-returns dt { color: var(--color-text-muted); font-size: 12px; }
-.board-card-grid dd, .hot-group-returns dd { margin: var(--space-label) 0 0; font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; }
+.board-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2) var(--space-3); margin: var(--space-3) 0 0; }
+.board-card-grid dt { color: var(--color-text-muted); font-size: 12px; }
+.board-card-grid dd { margin: var(--space-label) 0 0; font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; }
 
-.hot-group-list { display: grid; gap: var(--space-2); }
-.hot-group-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; grid-template-areas: "rank name score" "rank badge score" "rank returns returns" "rank note note"; gap: 2px var(--space-3); align-items: center; padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); color: var(--color-text); transition: var(--transition); }
-.hot-group-row:hover { border-color: var(--color-primary); }
-.hot-group-row .hot-group-rank { grid-area: rank; align-self: start; }
-.hot-group-row h3 { grid-area: name; margin: 0; overflow: hidden; font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
-.hot-group-row .badge { grid-area: badge; justify-self: start; }
-.hot-group-row .hot-group-score { grid-area: score; flex-direction: column; align-items: flex-end; }
-.hot-group-row .hot-group-score b { font-size: 18px; }
-.hot-group-row .hot-group-returns { grid-area: returns; margin: var(--space-1) 0 0; }
-.hot-group-row .small-note { grid-area: note; }
 .feature-card { display: block; min-width: 0; padding: var(--space-6); border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-bg-card); transition: var(--transition); }
 .feature-card:hover { border-color: var(--color-primary); transform: translateY(-4px); box-shadow: var(--shadow-hover); }
 .feature-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
 .feature-icon { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: var(--radius-lg); background: var(--color-primary-soft); color: var(--color-primary); }
-.hot-group-rank { font-size: 18px; font-weight: 700; }
-.hot-group-score { display: flex; align-items: baseline; justify-content: space-between; }
-.hot-group-score span { color: var(--color-text-muted); font-size: 14px; }
-.hot-group-score b { font: 600 24px var(--font-mono); font-variant-numeric: tabular-nums; }
 
 .theme-header { padding: var(--space-2) 0 var(--space-6); }
 .theme-header-badges { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
@@ -512,64 +601,63 @@ a.symbol-link:hover { color: var(--color-primary); }
 .action-near-line { color: var(--color-text); overflow-wrap: anywhere; }
 .action-tier-note { margin-top: 2px; white-space: normal; }
 .action-card-note { display: grid; gap: 2px; }
-
-/* ---- daily candidates (DESIGN_SYSTEM §7) -------------------------------------------------------- */
-.candidates-section .section-head { flex-wrap: wrap; }
-.candidate-notes { margin: 0 0 var(--space-3); }
-.candidate-t1 + .candidate-disclaimer::before { content: " "; }
-.candidate-table-wrap { border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); }
-.candidate-table th, .candidate-table td { height: auto; padding: var(--space-2) var(--space-3); }
-.candidate-table th { height: 40px; }
-.candidate-table td { line-height: 1.45; }
-.candidate-table .candidate-rank { display: inline-block; min-width: 36px; font-size: 14px; }
-/* 今日可買 table (#493, DESIGN_SYSTEM §5 候選列表): fixed px columns filling the 1214px content of 1280 and wider (cards
-   below), about three short lines a row, so nothing squeezes or spills and six rows fit the 1280×800 first screen. */
-.candidate-table { width: 100%; table-layout: fixed; }
-.candidate-table th:nth-child(1) { width: 180px; }
-.candidate-table th:nth-child(2) { width: 124px; }
-.candidate-table th:nth-child(3) { width: 452px; }
-.candidate-table th:nth-child(4) { width: 96px; }
-.candidate-table th:nth-child(5) { width: 120px; }
-.candidate-table th:nth-child(7) { width: 96px; }
-.candidate-table td { overflow: hidden; }
-.candidate-table .candidate-rr-cell .badge { white-space: nowrap; }
-.candidate-stock-line, .candidate-stock-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.candidate-stock-line .candidate-rank { margin-right: var(--space-1); padding: 0 var(--space-2); }
-/* Three short lines (name, market · group, #490 average volume) stay as tall as the two-line 進場方式 cell. */
-.candidate-stock-cell .small-note { line-height: 1.35; }
-/* 進場方式 holds the #491 entry sentence (#493): 13px wraps it to two lines in the column; a price never splits. */
-.candidate-table .candidate-entry-cell { white-space: normal; }
-.candidate-table .entry-plan-line { font-size: 13px; line-height: 1.45; }
-.candidate-table .entry-plan-type { font-size: 12px; }
-.candidate-table .candidate-reason-cell { font-size: 13px; white-space: normal; }
-.candidate-reason-clamp { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.candidate-change { font-size: 12px; }
-.candidate-ai-toggle { cursor: pointer; white-space: nowrap; }
-.table-detail-row > td { height: auto; padding: 0; border-bottom: 0; white-space: normal; }
-.table-detail-row:hover { background: transparent; }
-.candidate-detail > summary { display: none; }
-.candidate-detail[open] { padding: var(--space-3) var(--space-4) var(--space-4); border-bottom: 1px solid var(--color-border); background: var(--color-bg-alt); }
-.candidate-detail-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 0.8fr); gap: var(--space-4); align-items: start; }
-.candidate-detail-grid .candidate-note { margin-top: 0; }
-.candidate-detail-source { display: grid; gap: var(--space-2); }
-.candidate-cards { display: none; gap: var(--space-3); }
-.candidate-mini { min-width: 0; padding: var(--space-4); }
-.candidate-mini-head { display: flex; align-items: center; gap: var(--space-2); }
-.candidate-mini-head .symbol-link { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.candidate-mini-head .candidate-rank { min-width: 36px; font-size: 14px; }
-.candidate-mini-total { flex: none; color: var(--color-text-muted); font-size: 12px; }
-.candidate-mini-total b { color: var(--color-text); font: 700 18px var(--font-mono); font-variant-numeric: tabular-nums; }
-/* Level cells never wrap inside; a cell that does not fit moves to its own line. */
+/* Level cells of the action phone card (DESIGN_SYSTEM §5 行動列表): never wrap inside; a cell that does not fit moves to
+   its own line. */
 .candidate-mini-levels { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin: var(--space-2) 0 0; }
 .candidate-mini-levels > div { flex: 0 0 auto; }
 .candidate-mini-levels dt { color: var(--color-text-muted); font-size: 12px; }
 .candidate-mini-levels dd { margin: var(--space-label) 0 0; font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.candidate-mini-reason { margin: var(--space-2) 0 0; font-size: 13px; line-height: 1.5; }
-.candidate-mini-ai { margin-top: var(--space-2); }
-.candidate-mini-ai .candidate-detail-grid { grid-template-columns: minmax(0, 1fr); }
+
+/* ---- 今日可買 (#510, DESIGN_SYSTEM §5 候選列表): one list at every width; two lines a candidate, the detail below ---- */
+.candidates-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin: var(--space-4) 0 var(--space-3); }
+.candidates-head h2 { margin: 0; font-size: var(--text-2xl); }
+.candidates-head .badge { padding: 2px 10px; font-size: var(--text-sm); }
+.candidate-notes { flex: 1 1 320px; margin: 0; }
+.candidate-t1 + .candidate-disclaimer::before { content: " "; }
+.candidates-strategy-link { white-space: nowrap; }
+.candidate-list { margin: 0; padding: 0; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-bg-card); list-style: none; }
+.candidate-row + .candidate-row { border-top: 1px solid var(--color-border); }
+.candidate-row[hidden] { display: none; }
+.candidate-row-main { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--space-5); align-items: center; padding: var(--space-row) var(--space-5); transition: var(--transition); }
+.candidate-row-main:hover { background: var(--color-bg-elevated); }
+.candidate-row-open > .candidate-row-main { background: var(--color-bg-alt); }
+/* The rank opens the title line (one line of page text); the sentence under it is indented by the rank's 52px, so the
+   name and the sentence share one left edge. */
+.candidate-row-body { display: grid; gap: var(--space-1); min-width: 0; }
+.candidate-row-title { max-width: none; margin: 0; overflow: hidden; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
+.candidate-row-title .candidate-rank { display: inline-block; width: 40px; min-width: 0; margin-right: var(--space-3); padding: 2px 0; font-size: var(--text-md); }
+.candidate-row-name { font-size: var(--text-lg); }
+.candidate-row-name strong { margin-right: var(--space-1); }
+.candidate-row-meta { margin-left: var(--space-2); color: var(--color-text-muted); font-size: var(--text-sm); }
+.candidate-row .entry-plan-line { font-size: var(--text-md); line-height: 1.55; }
+.candidate-row .candidate-entry { margin-left: 52px; }
+.candidate-row-levels { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin: var(--space-1) 0 0 52px; }
+.candidate-row-nums { display: flex; gap: var(--space-5); margin: 0; }
+.candidate-row-nums > div { display: grid; justify-items: end; }
+.candidate-row-levels dt, .candidate-row-nums dt, .candidate-detail-levels dt { color: var(--color-text-muted); font-size: var(--text-xs); white-space: nowrap; }
+.candidate-row-levels dd, .candidate-row-nums dd, .candidate-detail-levels dd { margin: var(--space-label) 0 0; font: 600 var(--text-md) var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.candidate-row-close dd { display: grid; justify-items: end; }
+.candidate-change { font-size: var(--text-xs); font-weight: 500; }
+.candidate-ai-toggle { cursor: pointer; white-space: nowrap; }
+.table-detail-row > td { height: auto; padding: 0; border-bottom: 0; white-space: normal; }
+.table-detail-row:hover { background: transparent; }
+/* The detail: the AI note (its 為何入選 the lead) beside the rule levels; the facts folded underneath. */
+.candidate-detail > summary { display: none; }
+.candidate-detail[open] { padding: var(--space-4) var(--space-5) var(--space-5) calc(var(--space-5) + 52px); border-top: 1px solid var(--color-border); background: var(--color-bg-alt); }
+.candidate-detail-body { display: grid; grid-template-areas: "note side" "folds folds"; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-3) var(--space-8); align-items: start; }
+.candidate-detail-body > .candidate-note { grid-area: note; margin: 0; padding: 0 0 0 var(--space-4); border-width: 0 0 0 2px; border-radius: 0; background: transparent; }
+.candidate-detail [data-note-part="selection"] dd { color: var(--color-text); font-size: var(--text-base); line-height: 1.7; }
+.candidate-detail-side { display: grid; grid-area: side; gap: var(--space-3); justify-items: start; }
+.candidate-detail-levels { display: grid; grid-template-columns: repeat(2, auto); gap: var(--space-3) var(--space-6); margin: 0; }
+.candidate-detail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
+.candidate-detail-actions .plan-add { margin-top: 0; }
+.candidate-detail-folds { display: flex; flex-wrap: wrap; grid-area: folds; align-items: flex-start; gap: var(--space-2) var(--space-6); padding-top: var(--space-2); border-top: 1px solid var(--color-border); }
+.candidate-detail-folds > details[open] { flex: 1 1 100%; }
+.candidate-detail-folds > details > summary { color: var(--color-primary); cursor: pointer; font-size: var(--text-sm); }
+.candidate-detail-folds .candidate-components { max-width: 640px; }
+.candidate-detail-sources > .small-note { margin-top: var(--space-1); }
 .candidate-more { margin-top: var(--space-2); }
 .candidate-more > summary { color: var(--color-primary); cursor: pointer; font-size: 14px; }
-.candidate-table tr[hidden], .candidate-mini[hidden] { display: none; }
 /* ---- entry plan (#491, DESIGN_SYSTEM §5 進場卡片, §7 進出點) ------------------------------------------ */
 .entry-plan { display: grid; gap: 2px; min-width: 0; }
 .entry-plan-line { max-width: none; margin: 0; color: var(--color-text); font-size: 14px; line-height: 1.5; }
@@ -581,10 +669,6 @@ a.symbol-link:hover { color: var(--color-primary); }
 .entry-plan-conditions > summary { color: var(--color-primary); cursor: pointer; font-size: 13px; }
 .entry-plan-condition-list { display: grid; gap: var(--space-1); margin: var(--space-1) 0 0; padding: 0; list-style: none; font-size: 13px; }
 .entry-plan-condition-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); }
-.candidate-mini .candidate-entry { margin-top: var(--space-2); }
-/* Only the close is left when the sentence has the levels (#491): label, close and change on one line (#493). */
-.candidate-mini-levels-close > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-3); }
-.candidate-mini-levels-close dd { display: flex; align-items: baseline; gap: var(--space-3); }
 .candidate-rank { flex: none; min-width: 40px; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); background: var(--color-bg-elevated); font: 700 16px var(--font-mono); text-align: center; }
 .candidate-partial { margin-top: var(--space-2); color: var(--color-warning); }
 .candidate-levels, .candidate-components { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); margin: var(--space-3) 0 0; }
@@ -599,11 +683,11 @@ a.symbol-link:hover { color: var(--color-primary); }
 .strategy-candidate-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .strategy-candidate .candidate-note { margin-top: 0; padding: var(--space-4); }
 .strategy-table-wrap { border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); }
-.strategy-table th, .strategy-table td { height: auto; padding: var(--space-3); vertical-align: top; }
+.strategy-table th, .strategy-table td { height: auto; padding: var(--space-2) var(--space-3); vertical-align: top; }
 .strategy-table th { height: 40px; vertical-align: middle; }
 .strategy-table .strategy-unmet { min-width: 10em; max-width: 18em; font-size: 14px; line-height: 1.5; }
 .strategy-table .strategy-levels-cell { min-width: 18em; }
-.strategy-table .table-detail-row > td { padding: 0 var(--space-3) var(--space-3); border-bottom: 1px solid var(--color-border); }
+.strategy-table .table-detail-row > td { padding: 0 var(--space-3) var(--space-2); border-bottom: 1px solid var(--color-border); }
 .strategy-table tbody tr:not(.table-detail-row) td { border-bottom: 0; }
 .strategy-cards { display: none; gap: var(--space-3); }
 .strategy-card { min-width: 0; padding: var(--space-4); }
@@ -616,11 +700,15 @@ a.symbol-link:hover { color: var(--color-primary); }
 /* Observation levels: dashed frame, muted text and their own label, apart from passed levels (DESIGN_SYSTEM §7). */
 .strategy-observation { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px dashed var(--color-border-hover); border-radius: var(--radius-sm); color: var(--color-text-muted); }
 .strategy-observation-label { color: var(--color-text-muted); font-size: 12px; font-weight: 600; }
+/* The research tab folds observation levels behind their label (#519); the summary card keeps the open block. */
+details.strategy-observation > summary { cursor: pointer; }
+details.strategy-observation:not([open]) { display: block; padding: var(--space-2) var(--space-3); }
+.strategy-candidate { gap: var(--space-2); }
 .strategy-observation .strategy-levels dd { font-weight: 400; }
 .strategy-observation .level-entry { color: var(--color-text-muted); }
 .strategy-missing { border-color: var(--color-warning); color: var(--color-warning); font-size: 14px; }
 .strategy-unreachable { color: var(--color-warning); }
-.strategy-conditions { margin-top: var(--space-2); }
+.strategy-conditions { margin-top: var(--space-1); }
 .strategy-condition-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 .strategy-condition-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); font-size: 14px; }
 .strategy-condition-label { font-weight: 500; }
@@ -689,19 +777,16 @@ a.symbol-link:hover { color: var(--color-primary); }
 .suggestion-news a:hover { color: var(--color-primary); }
 
 /* ---- responsive --------------------------------------------------------------------------------- */
-/* 今日可買 below 1280px (#493 review): the table is the 1214px content width of 1280 and wider, with fixed columns; any
-   narrower and they squeeze, so the list is cards, two a row, one at 640px and below (DESIGN_SYSTEM §5 候選列表). */
-@media (max-width: 1279px) {
-  .candidate-table-wrap { display: none; }
-  .candidate-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
-}
 /* The market overview clips its turnover and breadth rows when four widgets share one row below 1200px, and the two
-   dual widgets need a whole row at 800px and below (#493 review); 640px and below show only the two indices. */
+   dual widgets need a whole row at 800px and below (#493 review); 640px and below show only the two indices. Inside
+   the one bar (#510) a cell starting a row has no left divider, and the second row has a top one. */
 @media (max-width: 1199px) {
   .market-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .market-overview-grid > .market-widget:nth-child(3) { border-left: 0; }
+  .market-overview-grid > .market-widget:nth-child(n+3) { border-top: 1px solid var(--color-border); }
 }
 @media (max-width: 800px) {
-  .market-overview-grid .market-widget-dual { grid-column: 1 / -1; }
+  .market-overview-grid .market-widget-dual { grid-column: 1 / -1; border-left: 0; }
 }
 @media (max-width: 1024px) {
   .container, .navbar-inner { padding: 0 var(--space-6); }
@@ -726,15 +811,18 @@ a.symbol-link:hover { color: var(--color-primary); }
   .position-list, .news-grid, .glossary-grid, .inline-form { grid-template-columns: 1fr; }
   .theme-suggestion-grid, .plan-grid { grid-template-columns: 1fr; }
   .home-columns { grid-template-columns: 1fr; }
-  .candidate-detail-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .candidate-detail-source { grid-column: 1 / -1; }
+  .candidate-detail-body { grid-template-areas: "note" "side" "folds"; grid-template-columns: minmax(0, 1fr); }
   .news-cards, .news-detail-grid { grid-template-columns: 1fr; }
   .data-explanation { margin-left: 0; }
+  /* Summary card: one column, the parts split by a rule (#519). */
+  .stock-summary { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+  .stock-summary-col + .stock-summary-col { padding-top: var(--space-3); border-top: 1px solid var(--color-border); }
 }
 @media (max-width: 640px) {
   .container, .navbar-inner { padding: 0 var(--space-4); }
   .page { padding: var(--space-6) 0; }
   .card, .panel { padding: var(--space-4); }
+  .stock-header, .stock-summary, .stock-tab-content .card, .stock-tab-content .panel { padding: var(--space-4); }
   h1, .stock-header-name { font-size: 26px; }
   .stock-header-close { font-size: 30px; }
   .stat-grid, .three-stats, .level-grid { grid-template-columns: 1fr; }
@@ -765,16 +853,22 @@ a.symbol-link:hover { color: var(--color-primary); }
   .market-overview-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-2); }
   .market-overview-grid .market-widget-dual { display: none; }
   .market-overview-more { display: block; }
-  .candidate-table-wrap { display: none; }
-  .candidate-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
-  .candidate-mini .candidate-entry { margin-top: var(--space-1); }
   .action-table-wrap { display: none; }
   .action-cards { display: grid; }
   .action-tier { margin-top: var(--space-6); }
   .strategy-table-wrap { display: none; }
-  .strategy-cards { display: grid; }
-  /* Phones keep at least two candidate cards on the first screen (DESIGN_SYSTEM §4): the header text takes its own
-     line with the badge and 資料說明 sharing the next, the run badges sit beside the title, level cells stay on one row. */
+  .strategy-cards { display: grid; gap: var(--space-2); }
+  /* Phone strategy cards inside the board panel (#519): tighter so the research tab keeps its fold. */
+  .strategy-card { padding: var(--space-3); }
+  .strategy-card .strategy-unmet { margin: var(--space-1) 0; }
+  /* 無價位 and the 條件明細 toggle share a line; opened details take the full width (#519). */
+  .strategy-card { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-3); }
+  .strategy-card > * { flex-basis: 100%; }
+  .strategy-card > .muted, .strategy-card > .muted + .strategy-conditions:not([open]) { flex-basis: auto; margin-top: 0; }
+  .stock-tab-content .panel-head .badge { padding: 2px 8px; font-size: var(--text-xs); }
+  .stock-tab-content .card, .stock-tab-content .panel { padding: var(--space-3) var(--space-4); }
+  /* Phones keep at least two candidates on the first screen (DESIGN_SYSTEM §4): the header text takes its own line
+     with the badge and 資料說明 sharing the next, the run badges and 策略說明 sit beside the title. */
   .home-dataline { display: contents; }
   .home-dataline-text { flex: 1 1 100%; font-size: 12px; }
   .home-header { gap: var(--space-1) var(--space-3); }
@@ -782,29 +876,51 @@ a.symbol-link:hover { color: var(--color-primary); }
   .market-overview .market-widget { padding: var(--space-2) var(--space-3); }
   .market-overview .market-widget-value { font-size: 16px; }
   .market-overview-more { margin-top: var(--space-1); }
-  .home-page .candidates-section .section-head { flex-wrap: nowrap; align-items: flex-end; margin: var(--space-3) 0 var(--space-2); }
-  .candidates-section .section-head h2 { font-size: 22px; }
-  .candidates-section .board-dates { flex-wrap: nowrap; gap: var(--space-1); }
-  /* One title row on phones (#493): the eyebrow repeats the note below it, the badges and 策略說明 sit beside 今日可買. */
-  .home-page .candidates-section .section-head .eyebrow { display: none; }
-  .candidates-section .section-head-tools { flex-wrap: nowrap; gap: var(--space-2); }
-  .candidates-section .section-head-tools .text-link { font-size: 13px; white-space: nowrap; }
-  .candidates-section .board-dates .badge { padding: 2px 8px; font-size: 12px; }
-  .candidate-mini { padding: var(--space-3); }
+  .candidates-head { gap: var(--space-1) var(--space-2); margin: var(--space-3) 0 var(--space-2); }
+  .candidates-head h2 { font-size: var(--text-xl); }
+  .candidates-head .board-dates { flex-wrap: nowrap; gap: var(--space-1); }
+  .candidates-head .badge { padding: 2px 8px; font-size: var(--text-xs); }
+  .candidate-notes { order: 9; flex: 1 1 100%; line-height: 1.5; }
+  .candidates-strategy-link { margin-left: auto; font-size: var(--text-sm); }
+  /* A row on phones (#510): the body takes the whole width, the title stays one line (market · group cut first); the close,
+     RR and total go under the sentence with the close and its change side by side, the AI entry at the right of that line. */
+  .candidate-row-main { grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2) var(--space-3); padding: var(--space-row) var(--space-3); }
+  .candidate-row .candidate-entry, .candidate-row-levels { margin-left: 42px; }
+  .candidate-row .entry-plan-line { line-height: 1.45; }
+  .candidate-row-body { grid-column: 1 / -1; }
+  .candidate-row-title .candidate-rank { width: 34px; margin-right: var(--space-2); font-size: var(--text-sm); }
+  .candidate-row-name { font-size: var(--text-base); }
+  .candidate-row-nums { gap: var(--space-4); padding-left: 42px; }
+  .candidate-row-nums > div { justify-items: start; }
+  .candidate-row-close dd { display: flex; align-items: baseline; gap: var(--space-2); }
+  .candidate-ai-toggle { align-self: end; }
+  .candidate-detail[open] { padding: var(--space-3); }
+  .candidate-detail-body > .candidate-note { padding-left: var(--space-3); }
   .candidate-mini-levels { gap: var(--space-1) var(--space-2); margin-top: var(--space-1); }
   .candidate-mini-levels dd { font-size: 12px; }
-  .candidate-mini-reason, .candidate-mini-ai { margin-top: var(--space-1); }
   .home-page { padding-top: var(--space-3); }
   .alert-row { gap: 2px var(--space-3); margin-bottom: var(--space-2); padding: var(--space-2) var(--space-3); font-size: 13px; line-height: 1.5; }
-  .candidate-notes { margin-bottom: var(--space-2); line-height: 1.5; }
   .home-columns { margin-top: var(--space-6); }
   .home-panel { padding: var(--space-3) var(--space-4); }
-  .home-panel > .section-head { flex-wrap: wrap; min-height: 0; }
+  /* Phones (#510): the direction and 「AI 推論」 sit beside the title, so source and time keep line two to themselves. */
+  .home-news-row { grid-template-areas: "title impact" "meta meta"; grid-template-columns: minmax(0, 1fr) auto; }
+  .home-news-impact::before { content: none; }
   .tab { padding: var(--space-2) var(--space-3); font-size: 14px; }
   .filter-row .search-controls, .filter-row .filter-select { flex: 1 1 100%; max-width: none; }
   .news-filters { flex-wrap: wrap; }
   .news-filters, .news-filters .search-input { flex: 1 1 100%; width: 100%; }
   .news-filters .news-symbol-input { flex: 1 1 0; width: auto; }
+  /* Phones (#523): as on the today page, the direction and 「AI 推論」 sit beside the title; line two is one unwrapped flex
+     line of source (cut first), time and the toggle. The tags do not fit beside the time; the detail lists them. */
+  .news-row-main { grid-template-areas: "title impact" "line2 line2"; grid-template-columns: minmax(0, 1fr) auto; padding: var(--space-2) var(--space-1) var(--space-2) var(--space-3); }
+  .news-row-impact { padding-right: var(--space-2); }
+  .news-row-impact::before { content: none; }
+  .news-row-line2 { display: flex; grid-area: line2; align-items: center; gap: var(--space-2); min-width: 0; }
+  .news-row-source { flex: 0 1 auto; }
+  .news-row-sep, .news-row-time, .news-row-toggle { flex: none; }
+  .news-row-tags { display: none; }
+  .news-row-toggle { margin-left: auto; padding-block: 0; }
+  .news-row-detail[open] { padding: var(--space-3); }
   .news-detail-title { font-size: 24px; }
   .ai-inference { padding: var(--space-4); }
   .site-footer { flex-direction: column; align-items: flex-start; }

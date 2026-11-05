@@ -487,6 +487,10 @@ export type InstrumentCoverage = {
   missing_bar_dates_to_60: string[]
   missing_chip_dates_to_20: string[]
   missing_chip_dates_to_60: string[]
+  no_trade_dates_to_60?: string[]
+  suspended_dates_to_60?: string[]
+  quote_not_listed_dates_to_60?: string[]
+  invalid_bar_dates_to_60?: string[]
   coverage_reasons: string[]
   ipo_stage: string | null
   windows: Record<string, Record<string, unknown>>
@@ -905,12 +909,17 @@ export type NewsAi = {
     exchange: string
     symbol: string
     name: string | null
+    // #512: listed (link to the stock page), emerging (TPEx 興櫃 roster) or delisted; both of the latter are plain text.
+    // Absent on older servers.
+    listing?: 'listed' | 'emerging' | 'delisted' | string | null
     reason: string | null
     confidence: 'high' | 'medium' | 'low' | string | null
     verified: false
     // #465 rule check: the name or code is in the title／summary the model was sent.
     source_check?: 'mentioned' | 'not_mentioned' | string | null
   }>
+  // #512: codes neither the master nor the newest emerging roster names; kept for audit, never shown.
+  hidden_symbol_candidates?: Array<{ exchange: string; symbol: string; reason: string }>
   candidate_check_version?: string | null
   theme_candidates: Array<{ theme: string; reason: string | null }>
   impact_direction: 'positive' | 'negative' | 'mixed' | 'unknown' | string | null
@@ -1116,6 +1125,11 @@ export type StockDirectoryRow = {
   response_generated_at?: string
 }
 
+export type GapReason = {
+  code: string
+  label: string
+}
+
 export type MissingDataPriority = {
   field: string
   priority: string
@@ -1209,6 +1223,8 @@ export type ActionSummary = {
   evidence_refs: string[]
   data_quality: string
   blocking_reasons: string[]
+  // Why the judgement is short of data, one plain sentence each (Issue 511, UI_COPY_SPEC §6.1).
+  gap_reasons?: GapReason[]
   missing_data_priority: MissingDataPriority[]
   theme_ids: string[]
   event_ids: number[]

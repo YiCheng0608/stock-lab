@@ -43,7 +43,7 @@ trading_calendar 步驟呼叫 `worker.trading_calendar.run_trading_calendar(目�
 
 indicators 步驟呼叫 `worker.indicator_batch.run_indicator_batch(目標日)`；只要 collect 成功就執行（analyze 失敗也跑），失敗時 run 記 `failed`、錯誤欄記 indicators 訊息。
 
-candidates 步驟呼叫 `worker.candidates.run_candidates(目標日)`，只讀當日訊號、籌碼、族群榜與新聞，不改行情、訊號與追蹤；失敗時 run 記 `failed`（exit code 1，看門狗與排程異常處理照 `failed` 處置）、錯誤欄記 candidates 訊息，indicators 照跑。行情與訊號已寫入，只需重跑候選：`python -m worker.cli candidates --date YYYY-MM-DD`（不需 `daily --force`）。
+candidates 步驟呼叫 `worker.candidates.run_candidates(目標日)`，只讀當日訊號、籌碼、族群榜與新聞，不改行情、訊號與追蹤；失敗時 run 記 `failed`（exit code 1，看門狗與排程異常處理照 `failed` 處置）、錯誤欄記 candidates 訊息，indicators 照跑。行情與訊號已寫入，只需重跑候選：`python -m worker.cli candidates --date YYYY-MM-DD`（不需 `daily --force`；接著會補該日的 AI 說明，`--skip-notes` 跳過，[CLI](CLI.md)）。
 
 theme_suggestions 步驟呼叫 `worker.theme_suggestions.run_theme_suggestions`，只讀 `news_llm_results`／`news_items` 與 active 族群名稱，重算[新聞題材建議](../spec/theme_suggestions.md)；collect 成功就執行（analyze 失敗也跑），失敗時 run 記 `failed`、錯誤欄記 theme_suggestions 訊息，其他步驟的結果不變。只需重算建議：`python -m worker.cli theme-suggestions`。休市日 daily 不跑後續步驟，該日新聞的建議在下一個交易日彙整（每次都由全部判讀重算，不會漏）。
 
@@ -54,7 +54,7 @@ strategy_levels 步驟呼叫 `worker.strategy_levels.run_strategy_levels(目標�
 action_tiers 步驟呼叫 `worker.action_tiers.run_action_tiers(目標日)`，在 strategy_levels 之後、candidate_notes 之前執行，analyze 成功（含 `no_data`）才跑，否則記 `skipped`（`analyze_not_successful`）。它把首頁與行動頁 action tier 的日資料部分寫進 `action_tier_snapshots`（[action tier 預算與新聞投影](#action-tier-預算與新聞投影)），步驟列的 `records` 是寫入的標的數。任何狀態（`failed`、例外）都只記在該步驟列與 `summary_json.steps`，**不改變 run 狀態與 exit code**：頁面在沒有當日預算時改為即時計算，結果相同，只是比較慢。重算以 `python -m worker.cli action-tiers --date YYYY-MM-DD`。
 
 
-candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(目標日)`，在 candidates 成功（含 `no_data`）後最後執行，為當日候選寫 [AI 進出點說明](../spec/candidate_score.md#候選-ai-進出點說明)；最多 4 次 `claude -p`，各 300 秒逾時（實測一次約 7 秒）。它的任何狀態（`success`／`partial`／`failed`／`skipped`／`no_data`，含找不到 claude、未登入、額度用盡、逾時與例外）都只記在該步驟列與 `summary_json.steps`，**不改變 run 狀態與 exit code**，也不觸發看門狗；candidates 不成功時記 `skipped`（`candidates_not_successful`）。daily 已 success 後 23:00 那次不會重跑，`pending` 或未說明的候選以 `python -m worker.cli candidate-notes --date YYYY-MM-DD` 補（只送未完成者）；結果查 `/api/ingestion-runs?q=candidate_notes&include_metadata=true` 或步驟列。
+candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(目標日)`，在 candidates 成功（含 `no_data`）後最後執行，為當日候選寫 [AI 進出點說明](../spec/candidate_score.md#候選-ai-進出點說明)；最多 4 次 `claude -p`，各 300 秒逾時（實測一次約 7 秒）。它的任何狀態（`success`／`partial`／`failed`／`skipped`／`no_data`，含找不到 claude、未登入、額度用盡、逾時與例外）都只記在該步驟列與 `summary_json.steps`，**不改變 run 狀態與 exit code**；candidates 不成功時記 `skipped`（`candidates_not_successful`）。最新候選日的候選清單產生超過 30 分鐘仍沒有一檔完成的說明時，看門狗以 `invariant_candidate_notes` 留言（daily 或 candidate_notes run 執行中不判定，[WATCHDOG](WATCHDOG.md)；#517）。daily 已 success 後 23:00 那次不會重跑，`pending` 或未說明的候選以 `python -m worker.cli candidate-notes --date YYYY-MM-DD` 補（只送未完成者）；手動 `worker.cli candidates` 重產候選後預設接著跑這一步（[CLI](CLI.md)）；結果查 `/api/ingestion-runs?q=candidate_notes&include_metadata=true` 或步驟列。
 
 ## action tier 預算與新聞投影
 
@@ -116,14 +116,20 @@ candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(�
 `python -m worker.cli backtest --start-date <起> --end-date <迄>` 在正式環境的跑法：`docker compose -p <P> exec scheduler python -m worker.cli backtest …`，起跑時自己持有[維護模式](#維護模式)，不必停 scheduler。
 
 - **記憶體**：每個交易日與每 2,000 個訊號的追蹤批次各 commit 一次（[Tracking 口徑](../spec/tracking.md#tracking-與-technical-backtest-口徑)第 3 點，#484），所以記憶體不隨區間成長。
-  - **峰值**：在 2g 的 scheduler 容器、2026-11-04 正式 DB 副本上，cgroup anon 峰值 1 個月 235 MB、3 個月 244 MB（281,674 個訊號）。
-  - **WAL**：最大約 50 MB。
+  - **峰值**：在 2g 的 scheduler 容器、2026-11-04 正式 DB 副本上量 cgroup anon 峰值：
+    - 1 個月 235 MB。
+    - 3 個月 244 MB（281,674 個訊號）。
+    - 12 個月 290 MB（241 個交易日、1,092,604 個訊號，[#484 AC-3](https://github.com/YiCheng0608/stock-lab/issues/484#issuecomment-6666172768)）。290 MB 是換交易日時的短暫尖峰，平常在 145～190 MB。
+  - **WAL**：最大約 60 MB。
   - **#484 以前**：整段是一個 transaction，追蹤時一次載入全部回測訊號（約 14 KB／訊號）。1 個月就到 2,002 MB；3 個月在載入時 OOM；12 個月的 run 2286 也被 OOM 結束。
 - **耗時**：
-  - **固定成本**：`init_db` 約 2～4 分鐘（2.99 GB 的 DB），features 約 1.6 分鐘。
-  - **重播**：每個交易日約 95～100 秒，其中族群分數約 60 秒、訊號約 36 秒，隨交易日數線性成長。
-  - **追蹤**：1 個月約 30 秒，3 個月約 2 分鐘。
-  - **合計**：1 個月約 40 分鐘，3 個月約 1 小時 55 分。
+  - **固定成本**：`init_db` 約 2～4 分鐘（2.99 GB 的 DB），features 約 1.5 分鐘。
+  - **重播**：每個交易日約 55～60 秒，隨交易日數線性成長。
+    - **族群分數**：約 17 秒（#509 實測 17.0～17.3 秒）。#509 以前約 60 秒。
+    - **訊號**：約 36～43 秒。
+  - **追蹤**：1 個月約 30 秒，3 個月約 2 分鐘，12 個月約 9 分鐘。
+  - **合計（推算）**：1 個月約 25 分鐘，3 個月約 1 小時 5 分，12 個月約 4 小時。這些是以族群分數 17 秒推算的，沒有實測。
+  - **#509 以前的實測**：1 個月 40 分鐘，3 個月 1 小時 55 分，12 個月 6 小時 59 分。12 個月那次後段和主機上其他負載重疊，每日一度慢到 150～200 秒。
 - **何時跑**：預估會跨過 21:30 就改在 23:30 後起跑。原因是 21:30 的 daily 會被維護模式跳過，要等回測結束才補跑。
 - **中途失敗**：OOM、`docker stop`、例外都算。已 commit 的訊號與結算會留下，run 記 `failed`；以相同起訖重跑，會覆寫成一次跑完的結果（前提是資料沒有更正，見 [Tracking 口徑](../spec/tracking.md#tracking-與-technical-backtest-口徑)第 3 點）。
   - 行程被殺時 `finally` 不會執行，run 會停在 `running`。下一次 canonical backtest 開始時，會把它記成 `failed`（`abandoned:`），並列在輸出的 `abandoned_runs`。

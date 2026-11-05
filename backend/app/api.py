@@ -49,6 +49,7 @@ from .models import (
     ChipSnapshot,
     CorporateAction,
     DataQuality,
+    EmergingIssuer,
     Event,
     FundamentalSnapshot,
     GroupDailyScore,
@@ -1119,6 +1120,23 @@ def _decode_news_cursor(cursor: str | None) -> tuple[Any, ...] | None:
         raise HTTPException(status_code=400, detail="invalid cursor")
 
 
+def _watchlist_symbol_keys(db: Session) -> set[str]:
+    """Watchlisted instruments as the two forms ``news_items.symbols_json`` uses.
+
+    Media rows store ``EXCHANGE:SYMBOL``; official projections store the bare
+    code. Listed and OTC codes never repeat, so the bare code is one stock.
+    """
+
+    keys: set[str] = set()
+    for exchange, symbol in db.execute(
+        select(Instrument.exchange, Instrument.symbol).where(
+            Instrument.is_watchlisted.is_(True)
+        )
+    ):
+        keys.update((f"{exchange}:{symbol}", symbol))
+    return keys
+
+
 def _news_theme_ids(
     db: Session, item: NewsItem, event: Event | None = None
 ) -> list[str]:
@@ -1136,25 +1154,63 @@ def _news_theme_ids(
     ]
 
 
+# Master statuses whose stock still trades: its page has current quotes.  A
+# delisted or transferred row without an active one is shown as 已下市 (#512).
+_TRADING_STATUSES = frozenset({"active", "dormant"})
+
+
+def _master_listing(status: str) -> str:
+    return "listed" if status in _TRADING_STATUSES else "delisted"
+
+
 def _candidate_instrument(
     rows: list[tuple[str, str, str]], written: str
-) -> tuple[str, str | None]:
-    """The (exchange, name) an AI symbol candidate is shown with.
+) -> tuple[str, str, str] | None:
+    """The (exchange, name, listing) an AI symbol candidate is shown with.
 
     ``rows`` are the master's (exchange, name, status) for the candidate's code and
     ``written`` is the exchange the model wrote.  The model often gets the exchange
     wrong (#264), so a code whose master has exactly one active row is shown with
-    that row's exchange; any other master state keeps the written exchange and only
-    looks up its row (no row: ``None``).
+    that row's exchange.  Otherwise the written exchange's row is used, or the
+    code's only row when the written exchange has none.  ``listing`` is
+    ``listed`` for a trading status and ``delisted`` for the rest (#512).
+    ``None``: the master cannot name the code (no row, or several rows and none
+    on the written exchange).
     """
 
     exact = next((row for row in rows if row[0] == written), None)
     if exact is not None and exact[2] == "active":
-        return written, exact[1]
+        return written, exact[1], "listed"
     active = [row for row in rows if row[2] == "active"]
     if len(active) == 1:
-        return active[0][0], active[0][1]
-    return written, exact[1] if exact is not None else None
+        return active[0][0], active[0][1], "listed"
+    if exact is not None:
+        return written, exact[1], _master_listing(exact[2])
+    if len(rows) == 1:
+        return rows[0][0], rows[0][1], _master_listing(rows[0][2])
+    return None
+
+
+def _latest_emerging_names(db: Session, codes: set[str]) -> dict[str, str]:
+    """Names of ``codes`` on the newest stored TPEx emerging roster (#512).
+
+    Only the newest roster counts, so a company that has since listed, or left
+    the emerging market, is not named 興櫃 from an older roster.
+    """
+
+    if not codes:
+        return {}
+    latest = db.scalar(select(func.max(EmergingIssuer.as_of_date)))
+    if latest is None:
+        return {}
+    return dict(
+        db.execute(
+            select(EmergingIssuer.symbol, EmergingIssuer.name).where(
+                EmergingIssuer.as_of_date == latest,
+                EmergingIssuer.symbol.in_(codes),
+            )
+        ).all()
+    )
 
 
 def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, Any]]:
@@ -1162,7 +1218,11 @@ def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, A
 
     The result is inference, kept apart from source facts; symbol candidates are
     unverified (their exchange follows the master, ``_candidate_instrument``) and
-    rule relations stay in ``symbols``.  Only the prompt version
+    rule relations stay in ``symbols``.  A candidate is named from the master
+    (``listing`` listed or delisted) or else the newest TPEx emerging roster
+    (``emerging``); a code neither names goes to ``hidden_symbol_candidates``
+    and is not shown (#512): ``reason=code_ambiguous`` when the master has it on
+    several rows and none on the written exchange, ``code_unknown`` otherwise.  Only the prompt version
     ``worker.news_llm`` writes now counts (#308): older versions never had its
     summary check, so an item without a done result of that version (none yet,
     pending, stale, or ``rejected``) has no AI block on any page.
@@ -1197,6 +1257,7 @@ def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, A
             ).where(Instrument.symbol.in_(codes))
         ).all():
             listed.setdefault(symbol, []).append((exchange, name, status))
+    emerging = _latest_emerging_names(db, codes - set(listed))
     # Every listed name, so a candidate's name inside a longer one does not count
     # (#465); cached until the master names change (#475).
     all_names = listed_name_keys(db) if codes else frozenset()
@@ -1204,14 +1265,33 @@ def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, A
     result: dict[int, dict[str, Any]] = {}
     for news_id, row in latest.items():
         symbol_candidates = []
+        hidden_candidates = []
         for candidate in row.ai_symbol_candidates_json or []:
             written, _, symbol = str(candidate.get("symbol", "")).partition(":")
-            exchange, name = _candidate_instrument(listed.get(symbol, []), written)
+            # Master first, then the newest emerging roster; a code neither
+            # names is not shown and its reason is kept (#512): code_ambiguous
+            # when the master has the code on several rows, none on the
+            # written exchange, code_unknown when nothing has it.
+            rows = listed.get(symbol, [])
+            shown = _candidate_instrument(rows, written)
+            if shown is None and symbol in emerging:
+                shown = (written, emerging[symbol], "emerging")
+            if shown is None:
+                hidden_candidates.append(
+                    {
+                        "exchange": written,
+                        "symbol": symbol,
+                        "reason": "code_ambiguous" if rows else "code_unknown",
+                    }
+                )
+                continue
+            exchange, name, listing = shown
             symbol_candidates.append(
                 {
                     "exchange": exchange,
                     "symbol": symbol,
                     "name": name,
+                    "listing": listing,
                     "exchange_corrected": exchange != written,
                     "reason": candidate.get("reason"),
                     "confidence": candidate.get("confidence"),
@@ -1226,6 +1306,7 @@ def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, A
             "status": row.llm_status,
             "summary": row.ai_summary,
             "symbol_candidates": symbol_candidates,
+            "hidden_symbol_candidates": hidden_candidates,
             "candidate_check_version": CANDIDATE_CHECK_VERSION,
             "theme_candidates": row.ai_theme_candidates_json or [],
             "impact_direction": row.ai_impact_direction,
@@ -1932,6 +2013,8 @@ def news(
     source_kind: str | None = None,
     impact_direction: str | None = None,
     time_consistency: str | None = Query(default=None),
+    verified_only: bool = False,
+    watchlist_only: bool = False,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     # Existing official Events may predate the product projection.  Refreshing
@@ -1965,6 +2048,8 @@ def news(
     ).all()
     needle = q.strip().casefold() if q and q.strip() else None
     symbol_needle = symbol.strip().casefold() if symbol and symbol.strip() else None
+    # The watchlist is read once for the whole list, never per item (#523).
+    watch_keys = _watchlist_symbol_keys(db) if watchlist_only else set()
     filtered: list[NewsItem] = []
     seen_keys: set[str] = set()
     for item in rows:
@@ -1989,6 +2074,14 @@ def news(
         if symbol_needle and not any(
             symbol_needle in str(value).casefold()
             for value in (item.symbols_json or [])
+        ):
+            continue
+        # NEWS_SPEC §6: the verified relations are symbols_json, the same list the
+        # card's tags come from (instruments, or the bare codes as a fallback).
+        if (verified_only or watchlist_only) and not item.symbols_json:
+            continue
+        if watchlist_only and not any(
+            str(value) in watch_keys for value in item.symbols_json
         ):
             continue
         if theme_id and theme_id not in _news_theme_ids(db, item):

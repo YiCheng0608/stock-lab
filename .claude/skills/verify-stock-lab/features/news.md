@@ -35,7 +35,7 @@
 
 | 區塊 | 資料來源 | 必須顯示的來源與資料日期 | 「推論」位置 | 空資料文案 |
 | --- | --- | --- | --- | --- |
-| 列表卡（三個分頁） | 各分頁 API `items` | 來源 badge（`source_name`；官方公告為來源標籤）、`<分類> · <來源類型>`、時間行 `發布於／事件於／事件日 …`（或 `來源時間待核實／來源時間未提供`） | 有 AI 判讀的卡在方向後接整行 `AI 推論`；媒體新聞有已核實標的時，標的前有 `規則核實 · v<版本>`（[NEWS_SPEC §2](../../../../docs/NEWS_SPEC.md#規則關聯)）；扣掉規則核實的標的後仍有 AI 候選時，相關標的之後多一行收合的 `AI 候選 · N 檔（規則核實 M、推論 K）`（只列非 0 的部分；不帶 `AI 推論` badge，所以 N4 的整行數不變；`screenshot.cjs` 會展開它，展開後是 `<代號> <名稱> · 規則核實：原文提及｜推論 · 模型把握…` 各行與 `模型 <model> · 提示版本 <prompt_version> · 核對規則 <candidate_check_version>。…`；#465 起不寫 `待核實`，[UI_COPY_SPEC §4](../../../../docs/UI_COPY_SPEC.md#4-新聞卡文案與折疊)） | 國內 `目前沒有符合條件的國內新聞。`、國際 `目前沒有符合條件的國際新聞。`、官方 `目前沒有符合條件的官方公告。` |
+| 清單列（三個分頁，#523 起兩行一列，其餘在 `<details>` 展開區，`screenshot.cjs` 會展開） | 各分頁 API `items` | 標題（`display_title(title)`，見 N2）、來源（`source_name`；官方公告為來源標籤）、展開區的 `<分類> · <來源類型>`、時間行 `發布於／事件於／事件日 …`（或 `來源時間待核實／來源時間未提供`） | 有 AI 判讀的卡在方向後接整行 `AI 推論`；媒體新聞有已核實標的時，標的前有 `規則核實 · v<版本>`（[NEWS_SPEC §2](../../../../docs/NEWS_SPEC.md#規則關聯)）；扣掉規則核實的標的後仍有 AI 候選時，相關標的之後多一行收合的 `AI 候選 · N 檔（規則核實 M、推論 K）`（只列非 0 的部分；不帶 `AI 推論` badge，所以 N4 的整行數不變；`screenshot.cjs` 會展開它，展開後是 `<代號> <名稱> · 規則核實：原文提及｜推論 · 模型把握…` 各行與 `模型 <model> · 提示版本 <prompt_version> · 核對規則 <candidate_check_version>。…`；#465 起不寫 `待核實`，[UI_COPY_SPEC §4](../../../../docs/UI_COPY_SPEC.md#4-新聞卡文案與折疊)） | 國內 `目前沒有符合條件的國內新聞。`、國際 `目前沒有符合條件的國際新聞。`、官方 `目前沒有符合條件的官方公告。` |
 | 詳情：來源事實 | `news-detail.json` | 區塊 `來源事實`、來源名稱、時間行、`查看原文` 或來源說明 | — | 摘要空時 `NO_SUMMARY_TEXT` |
 | 詳情：AI 摘要與判讀 | `news-detail.json` 的 `ai` | `模型 <model> · 提示版本 <prompt_version> · 產生時間 …` | 標題 `AI 摘要與判讀` 下一行 `AI 推論`；候選標的每檔標 `規則核實：原文提及` 或 `推論`，候選題材標 `已通過題材核對`（#465 起不寫 `待核實`） | `此則尚未產生 AI 摘要與判讀。` |
 
@@ -44,7 +44,7 @@
 | 編號 | 類型 | 檢查 | 怎麼判 |
 | --- | --- | --- | --- |
 | N1 | CI | 頁面可用 | 每張截圖 `ready` true、`httpErrors` 與 `consoleErrors` 空、`overflow` false |
-| N2 | CI | 列表與 API 一致 | 國內用 `news-1280.txt`、國際用 `news-international-1280.txt`、官方用 `news-official-1280.txt`（N3、N4 同）。三個分頁各自：API `items` 空時空資料文案為整行出現；否則前 3 則 `title`（官方公告的標題會被改寫，改比來源 badge 與時間行：badge 是 `newsSourceLabel(source_name)`（`frontend/src/presentation.ts`，例如 `MOPS` → `公開資訊觀測站公告`），時間行是 `事件日 <event_date 的 YYYY/MM/DD>`）依序為整行出現 |
+| N2 | CI | 列表與 API 一致 | 國內用 `news-1280.txt`、國際用 `news-international-1280.txt`、官方用 `news-official-1280.txt`（N3、N4 同）。三個分頁各自：API `items` 空時空資料文案為整行出現；否則前 3 則的顯示標題 `display_title(title)`（`page_checks.py`，與前端 `cleanNewsLead` 同規則、共用 `frontend/src/news/newsLead.cases.json`：去掉開頭的符號與署名，[NEWS_SPEC §6](../../../../docs/NEWS_SPEC.md#6-ui-與-api-契約)；官方公告的標題會被改寫，改比來源 badge 與時間行：badge 是 `newsSourceLabel(source_name)`（`frontend/src/presentation.ts`，例如 `MOPS` → `公開資訊觀測站公告`），時間行是 `事件日 <event_date 的 YYYY/MM/DD>`）依序為整行出現 |
 | N3 | CI | 每張卡有時間 | 各分頁 `^(發布於\|事件於\|事件日) \|^來源時間(待核實\|未提供)$` 的行數 = API `items` 數 |
 | N4 | CI | AI 標記 | 各分頁整行 `AI 推論` 的行數 = API `items` 中 `ai.status` 為 `done` 且 `ai.inference` 為 true 的數量 |
 | N5 | CI | 新聞日期合理 | `facts.json` 的 `news_latest_published_at`（UTC，加 8 小時）不晚於現在的台北時間；國內第一則的時間行日期不晚於今天 |
@@ -56,7 +56,7 @@
 
 - 「有 AI 判讀」與前端 `usableAi` 相同：`ai.status` 為 `done` 且 `ai.inference` 為 true（方向欄位是 `ai.impact_direction`）。今日 T6 與個股「新聞與公告」也用這個定義。
 - DB 與 API 裡沒有時區的時間（例如 `news_items.published_at`、`ai.generated_at`）是 UTC，與台北時間比較前加 8 小時（N5）。
-- `ai.symbol_candidates` 的 `exchange`／`name` 已依主檔更正（`exchange_corrected`，[NEWS_SPEC §5](../../../../docs/NEWS_SPEC.md#5-ai-摘要與推論)）；詳情頁出現「代號未對應到已知標的」只表示代號不在主檔，或模型寫的交易所沒有該代號的列、同代號也沒有唯一一列 `active`。
+- `ai.symbol_candidates` 的 `exchange`／`name` 已依主檔更正（`exchange_corrected`，[NEWS_SPEC §5](../../../../docs/NEWS_SPEC.md#5-ai-摘要與推論)）；每項都有名稱，`listing` 是 `listed`、`delisted`（標「已下市」、不連結）或 `emerging`（名稱取自 TPEx 興櫃名冊，標「興櫃」、不連結，#512）。主檔與最新興櫃名冊都叫不出名稱的代號不在 `symbol_candidates`，改列在 `ai.hidden_symbol_candidates`（主檔與名冊都沒有為 `reason=code_unknown`，主檔同代號有多列、都不在模型寫的交易所為 `code_ambiguous`），頁面不顯示；N8 判讀時，這些代號不算模型提出的候選。
 - `news_v3` 起 `ai.theme_candidates` 每項有 `evidence`（模型引用的原文片段），寫入前已由程式核對它逐字在原文、題材名與原文有字面或群組上的關聯，沒過的不會出現（[NEWS_SPEC §5](../../../../docs/NEWS_SPEC.md#5-ai-摘要與推論) 題材核對，#413）。N8 的判準不變：仍要判題材能否由原文推得，有 `evidence` 不代表有依據；判失敗時證據附上 `evidence`，供調整規則。
 
 ## 判定

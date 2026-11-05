@@ -21,24 +21,45 @@ export function parseNewsTab(value: string | null | undefined): NewsTab {
   return NEWS_TABS.some((tab) => tab.id === value) ? value as NewsTab : 'domestic'
 }
 
-export type NewsFilters = { tab: NewsTab; q: string; symbol: string }
+// verified／watchlist (#523): only items with a verified instrument, or with a watchlisted one among them; the API filters
+// (verified_only／watchlist_only, NEWS_SPEC §6), so paging and the total stay right.
+export type NewsFilters = { tab: NewsTab; q: string; symbol: string; verified?: boolean; watchlist?: boolean }
 
-export function newsListParams({ tab, q, symbol }: NewsFilters, cursor?: string, limit = NEWS_PAGE_SIZE): CursorParams {
+export const NEWS_RELATION_FILTERS: ReadonlyArray<{ key: 'verified' | 'watchlist'; label: string }> = [
+  { key: 'verified', label: '只看有已核實標的' },
+  { key: 'watchlist', label: '只看自選相關' },
+]
+
+export function newsListParams({ tab, q, symbol, verified, watchlist }: NewsFilters, cursor?: string, limit = NEWS_PAGE_SIZE): CursorParams {
   const params: CursorParams = tab === 'official' ? { source_kind: 'official_disclosure' } : { category: tab }
   if (q.trim()) params.q = q.trim()
   if (symbol.trim()) params.symbol = symbol.trim()
+  if (verified) params.verified_only = true
+  if (watchlist) params.watchlist_only = true
   if (cursor) params.cursor = cursor
   params.limit = limit
   return params
 }
 
 // Search params of /news: the tab is omitted for the default (domestic), empty filters are dropped.
-export function newsPageSearch({ tab, q, symbol }: NewsFilters): Record<string, string> {
+export function newsPageSearch({ tab, q, symbol, verified, watchlist }: NewsFilters): Record<string, string> {
   const search: Record<string, string> = {}
   if (tab !== 'domestic') search.tab = tab
   if (q.trim()) search.q = q.trim()
   if (symbol.trim()) search.symbol = symbol.trim()
+  if (verified) search.verified = '1'
+  if (watchlist) search.watchlist = '1'
   return search
+}
+
+export function newsFiltersFromSearch(search: Pick<URLSearchParams, 'get'>): NewsFilters {
+  return {
+    tab: parseNewsTab(search.get('tab')),
+    q: search.get('q') ?? '',
+    symbol: search.get('symbol') ?? '',
+    verified: search.get('verified') === '1',
+    watchlist: search.get('watchlist') === '1',
+  }
 }
 
 export function newsCategoryLabel(category: string | null | undefined): string {
@@ -115,8 +136,32 @@ export function normalizeText(value: string | null | undefined): string | null {
   return cleaned || null
 }
 
+// NEWS_SPEC §6 標題與摘要前綴清理 (#523), display only: the DB, the API and the detail page's source facts keep the source
+// text. Leading marks (■ ● ◆ ★ ※ …), then a byline: a bracket naming the outlet or the reporter (「[FTNN新聞網]」
+// 「【時報記者郭鴻慧台北報導】」「（中央社記者潘智義新竹17日電）」「[Newtalk新聞]」) and a bare 「記者某某／綜合報導」 after it.
+// Section labels (《營建股》【盤前】〈熱門股〉) and MOPS's [更新] carry meaning and stay.
+const LEAD_MARKS = /^[\s■□▪▫◆◇◈●○◎◉•・‧∙★☆▲△▶►▸▷※]+/u
+const LEAD_BRACKET = /^[[［【〔(（]([^\]］】〕)）]{1,30})[\]］】〕)）]/u
+const BYLINE_BRACKET = /記者|報導$|電$|新聞網|新聞$/u
+const LEAD_REPORTER = /^(?:實習)?記者[^／/╱\s]{1,12}[／/╱][^，。；、\s]{0,10}?報導/u
+
+export function cleanNewsLead(value: string | null | undefined): string | null {
+  const text = normalizeText(value)
+  if (!text) return null
+  let rest = text
+  for (let pass = 0; pass < 4; pass += 1) {
+    const before = rest
+    rest = rest.replace(LEAD_MARKS, '')
+    const bracket = LEAD_BRACKET.exec(rest)
+    if (bracket && BYLINE_BRACKET.test(bracket[1].trim())) rest = rest.slice(bracket[0].length)
+    rest = rest.replace(LEAD_REPORTER, '').trimStart()
+    if (rest === before) break
+  }
+  return rest || text
+}
+
 export function summaryPreview(item: Pick<NewsItem, 'summary_preview' | 'summary' | 'description'>, maxLength = NEWS_SUMMARY_PREVIEW_CHARS): string | null {
-  const text = normalizeText(item.summary_preview ?? item.summary ?? item.description)
+  const text = cleanNewsLead(item.summary_preview ?? item.summary ?? item.description)
   if (!text) return null
   const chars = Array.from(text)
   return chars.length <= maxLength ? text : chars.slice(0, maxLength - 1).join('').trimEnd() + '…'
@@ -223,7 +268,29 @@ export function verifiedInstruments(item: Pick<NewsItem, 'instruments' | 'symbol
   return (item.symbols ?? []).map((symbol) => ({ key: symbol, label: symbol.includes(':') ? symbol.split(':')[1] : symbol, href: null }))
 }
 
-export type CardAiCandidate = NewsAi['symbol_candidates'][number] & { key: string }
+type AiSymbolCandidate = NewsAi['symbol_candidates'][number]
+export type CardAiCandidate = AiSymbolCandidate & { key: string }
+
+// #512 (UI_COPY_SPEC §4): every shown candidate has a name; the API hides codes it cannot name, and a nameless one from an
+// older server is left out too, so 「代號未對應到已知標的」 never appears.
+export function namedAiCandidates<T extends Pick<AiSymbolCandidate, 'name'>>(candidates: readonly T[] | null | undefined): T[] {
+  return (candidates ?? []).filter((candidate) => Boolean(candidate.name))
+}
+
+const LISTING_NOTE: Record<string, string> = { emerging: '興櫃', delisted: '已下市' }
+
+// 「7808 訊聯智藥（興櫃）」「2888 新光金（已下市）」「2330 台積電」.
+export function candidateLabel(candidate: Pick<AiSymbolCandidate, 'symbol' | 'name' | 'listing'>): string {
+  const note = candidate.listing ? LISTING_NOTE[candidate.listing] : undefined
+  return `${candidate.symbol} ${candidate.name ?? ''}${note ? `（${note}）` : ''}`
+}
+
+// Only a listed stock links to its page; emerging and delisted ones have no current quotes here. No listing (an older
+// server) keeps the old rule: a named candidate links.
+export function candidateHref(candidate: Pick<AiSymbolCandidate, 'exchange' | 'symbol' | 'name' | 'listing'>): string | null {
+  if (!candidate.name || (candidate.listing && candidate.listing !== 'listed')) return null
+  return `/stocks/${encodeURIComponent(candidate.exchange)}/${encodeURIComponent(candidate.symbol)}`
+}
 
 // The card's collapsed 「AI 候選」 row (UI_COPY_SPEC §4, #452): the done result's symbol candidates minus the codes the rules
 // already verified (instruments, or symbols' 「EX:SYM」／bare code), each code listed once. Listed and OTC codes never repeat,
@@ -235,7 +302,7 @@ export function cardAiCandidates(item: Pick<NewsItem, 'ai' | 'instruments' | 'sy
   for (const instrument of item.instruments ?? []) seen.add(instrument.symbol)
   for (const symbol of item.symbols ?? []) seen.add(symbol.includes(':') ? symbol.split(':')[1] : symbol)
   const candidates: CardAiCandidate[] = []
-  for (const candidate of ai.symbol_candidates ?? []) {
+  for (const candidate of namedAiCandidates(ai.symbol_candidates)) {
     if (seen.has(candidate.symbol)) continue
     seen.add(candidate.symbol)
     candidates.push({ ...candidate, key: `${candidate.exchange}:${candidate.symbol}` })

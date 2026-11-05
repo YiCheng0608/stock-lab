@@ -1290,6 +1290,213 @@ def test_a_failed_strategy_levels_step_is_commented(wd):
     assert "invariant_strategy_levels" not in wd.text("gh_calls.log")
 
 
+CURRENT_SCORE = "candidate_score_v6"
+
+
+def _candidate_list(
+    path: Path,
+    candidates: int,
+    done: int,
+    age_minutes: int,
+    day: str = "2026-10-19",
+    version: str = CURRENT_SCORE,
+) -> int:
+    """A candidate run of ``day`` and score ``version`` computed ``age_minutes``
+    before NIGHT with ``candidates`` rows, the first ``done`` of them with a done
+    AI note and the rest pending; returns its id."""
+
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS candidate_runs (id INTEGER PRIMARY KEY,"
+            " trading_date DATE, score_version VARCHAR(40), computed_at DATETIME)"
+        )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS daily_candidates (id INTEGER PRIMARY KEY,"
+            " candidate_run_id INTEGER)"
+        )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS candidate_llm_notes (id INTEGER PRIMARY KEY,"
+            " daily_candidate_id INTEGER, candidate_run_id INTEGER, llm_status VARCHAR(20))"
+        )
+        run_id = conn.execute(
+            "INSERT INTO candidate_runs (trading_date, score_version, computed_at)"
+            " VALUES (?, ?, ?)",
+            (day, version, _utc_text(NIGHT - age_minutes * 60)),
+        ).lastrowid
+        for index in range(candidates):
+            row_id = conn.execute(
+                "INSERT INTO daily_candidates (candidate_run_id) VALUES (?)", (run_id,)
+            ).lastrowid
+            conn.execute(
+                "INSERT INTO candidate_llm_notes (daily_candidate_id, candidate_run_id,"
+                " llm_status) VALUES (?, ?, ?)",
+                (row_id, run_id, "done" if index < done else "pending"),
+            )
+    conn.close()
+    return run_id
+
+
+def _notes_running(path: Path) -> None:
+    """A candidate_notes run started ten minutes before NIGHT, still running."""
+
+    with sqlite3.connect(path) as conn:
+        _ingestion_runs(conn)
+        conn.execute(
+            "INSERT INTO ingestion_runs (run_type, status, started_at, metadata_json)"
+            " VALUES ('candidate_notes', 'running', ?, '{}')",
+            (_utc_text(NIGHT - 600),),
+        )
+    conn.close()
+
+
+def test_a_candidate_list_without_notes_is_commented_after_30_minutes(wd):
+    # #517: 2026-11-05 a list recomputed by hand had 17 candidates and no note.
+    db = wd.data / "stock.db"
+    _candidate_list(db, 3, 0, 20)
+    result = wd.run("--dry-run")
+    assert (
+        "invariant candidate_notes skip reason=recent trading_date=2026-10-19"
+        " candidate_run_id=1 candidates=3 done=0 minutes=20"
+    ) in result.stdout
+    assert "invariant_candidate_notes" not in result.stdout
+    late = NIGHT + 11 * 60
+    dry = wd.run("--dry-run", now=late)
+    assert (
+        "invariant candidate_notes violation trading_date=2026-10-19"
+        " candidate_run_id=1 candidates=3 done=0 minutes=31"
+    ) in dry.stdout
+    assert (
+        "待使用者：資料不變量：最新候選日 2026-10-19 的候選清單（candidate run 1）有 3"
+        " 檔候選，已產生 31 分鐘，但完成的 AI 說明是 0 檔"
+    ) in dry.stdout
+    assert "candidate-notes --date 2026-10-19" in dry.stdout
+    wd.run(now=late)
+    wd.run(now=late + 30 * 60)
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
+    assert "最新候選日 2026-10-19" in wd.text("gh_bodies.txt")
+    assert wd.events()[-1] == "anomaly_already_commented"
+
+
+def test_a_recomputed_list_is_judged_not_the_daily_one_with_notes(wd):
+    db = wd.data / "stock.db"
+    # 2026-11-05: the daily's list of the day (the old score version) had its
+    # notes; the current version's list recomputed by hand had none.
+    _candidate_list(db, 3, 3, 120, version="candidate_score_v5")
+    _candidate_list(db, 2, 0, 45)
+    assert (
+        "invariant candidate_notes violation trading_date=2026-10-19"
+        " candidate_run_id=2 candidates=2 done=0 minutes=45"
+    ) in wd.run("--dry-run").stdout
+
+
+def test_only_the_current_score_version_is_judged(wd):
+    # #520 review: candidate-notes writes notes only for the current version, so a
+    # list of another version computed later would be reported for good.
+    db = wd.data / "stock.db"
+    _candidate_list(db, 3, 3, 120)
+    _candidate_list(db, 2, 0, 45, version="candidate_score_v5")
+    _candidate_list(db, 4, 0, 40, day="2026-10-20", version="candidate_score_v7")
+    result = wd.run()
+    assert (
+        "invariant candidate_notes ok trading_date=2026-10-19 candidate_run_id=1"
+        " candidates=3 done=3 minutes=120"
+    ) in result.stdout
+    assert wd.text("gh_calls.log") == ""
+
+
+def test_helper_score_version_is_the_one_notes_are_written_for():
+    from app.domain import CANDIDATE_SCORE_VERSION
+
+    assert _helper_module().CANDIDATE_SCORE_VERSION == CANDIDATE_SCORE_VERSION
+    assert CURRENT_SCORE == CANDIDATE_SCORE_VERSION
+
+
+@pytest.mark.parametrize(
+    ("setup", "line"),
+    [
+        (
+            lambda db: _candidate_list(db, 3, 1, 90),
+            "invariant candidate_notes ok trading_date=2026-10-19 candidate_run_id=1"
+            " candidates=3 done=1 minutes=90",
+        ),
+        (
+            lambda db: _candidate_list(db, 0, 0, 90),
+            "invariant candidate_notes ok trading_date=2026-10-19 candidate_run_id=1"
+            " candidates=0 done=0 minutes=90",
+        ),
+        (
+            lambda db: (
+                _candidate_list(db, 3, 0, 90),
+                _daily_db(db, [("running", {})]),
+            ),
+            "invariant candidate_notes skip reason=daily_running",
+        ),
+        (
+            lambda db: (_candidate_list(db, 3, 0, 90), _notes_running(db)),
+            "invariant candidate_notes skip reason=notes_running",
+        ),
+        (lambda db: None, "invariant candidate_notes skip reason=no_candidate_tables"),
+    ],
+    ids=["notes_done", "no_candidates", "daily_running", "notes_running", "no_tables"],
+)
+def test_a_candidate_list_with_notes_or_being_written_is_not_commented(wd, setup, line):
+    db = wd.data / "stock.db"
+    _invariant_db(db, HEALTHY_BARS, HEALTHY_LLM)
+    setup(db)
+    result = wd.run()
+    assert line in result.stdout
+    assert wd.text("gh_calls.log") == ""
+    assert wd.events() == ["schedules_ok"]
+
+
+def test_a_list_left_without_notes_by_a_refused_login_is_commented_once(wd):
+    # #520 review: llm_auth comments on the login; this check skips while that
+    # run is within llm_auth's 24 hours, and reports the list after them.
+    db = wd.data / "stock.db"
+    _candidate_list(db, 3, 0, 90)
+    with sqlite3.connect(db) as conn:
+        _ingestion_runs(conn)
+        conn.execute(
+            "INSERT INTO ingestion_runs (run_type, status, started_at, metadata_json)"
+            " VALUES ('candidate_notes', 'failed', ?, ?)",
+            (
+                _utc_text(NIGHT - 80 * 60),
+                json.dumps({"batches": [{"batch": 1, "reason": "not_logged_in"}]}),
+            ),
+        )
+    conn.close()
+    result = wd.run()
+    assert (
+        "invariant candidate_notes skip reason=notes_auth notes_run_id=1"
+        " trading_date=2026-10-19 candidate_run_id=1 candidates=3 done=0 minutes=90"
+    ) in result.stdout
+    bodies = wd.text("gh_bodies.txt")
+    assert bodies.count("待使用者：") == 1 and "Claude Code 認證：" in bodies
+    assert "最新候選日" not in bodies
+    # A day later llm_auth no longer reports that run: the list is reported.
+    later = wd.run("--dry-run", now=NIGHT + 24 * 3600)
+    assert "invariant candidate_notes violation" in later.stdout
+    assert "待使用者：資料不變量：最新候選日 2026-10-19" in later.stdout
+
+
+def test_a_stale_running_daily_does_not_hold_the_check_off(wd):
+    # A daily row left running past the jobs' 2.5 hours lost its process.
+    db = wd.data / "stock.db"
+    _candidate_list(db, 3, 0, 90)
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "CREATE TABLE schedule_runs (id INTEGER PRIMARY KEY, job TEXT,"
+            " target_date DATE, status TEXT, started_at DATETIME, summary_json TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO schedule_runs (job, target_date, status, started_at, summary_json)"
+            " VALUES ('daily', '2026-10-16', 'running', ?, '{}')",
+            (_utc_text(NIGHT - 3 * 3600),),
+        )
+    conn.close()
+    assert "invariant candidate_notes violation" in wd.run("--dry-run").stdout
+
+
 def _monitor_beat(wd: Watchdog, text: str) -> None:
     (wd.logs / "monitor-heartbeat.json").write_text(text, encoding="utf-8")
 
@@ -1603,6 +1810,13 @@ def test_an_expired_claude_token_leaves_the_notes_pending_and_comments_on_1(
     bodies = wd.text("gh_bodies.txt")
     assert bodies.count("待使用者：Claude Code 認證：") == 1
     assert f"candidate_notes run {result['run_id']}" in bodies
+    # Past the 30 minutes the list still has no note, for the same cause: the
+    # candidate_notes invariant does not comment it a second time (#520 review).
+    later = wd.run(now=int(time.time()) + 31 * 60)
+    assert (
+        f"invariant candidate_notes skip reason=notes_auth notes_run_id={result['run_id']}"
+    ) in later.stdout
+    assert "最新候選日" not in wd.text("gh_bodies.txt")
 
 
 # The deployed version (#314 AC-3; #340: the image, not a checkout) -----------------

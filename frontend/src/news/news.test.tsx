@@ -4,14 +4,16 @@ import { StaticRouter } from 'react-router-dom/server'
 
 import type { NewsItem } from '../types'
 import { aiResult, internationalItem, naiveTimeItem, newsItem, newsPage, officialItem, productTime } from './news.fixtures'
-import { AiInferencePanel, NewsCard, NewsDetailView, NewsListView, StockNewsTimeline } from './NewsViews'
+import { AiInferencePanel, HomeNewsRow, NewsCard, NewsDetailView, NewsListView, StockNewsTimeline } from './NewsViews'
 import {
   NEWS_PAGE_SIZE,
   STOCK_NEWS_LIMIT,
   cardAiCandidates,
+  cleanNewsLead,
   directionView,
   formatTaipeiInstant,
   matchesInstrument,
+  newsFiltersFromSearch,
   newsListParams,
   newsPageSearch,
   newsTime,
@@ -110,15 +112,23 @@ check(card.includes('href="/stocks/TWSE/2330"') && card.includes('2330 台積電
 const longSummary = '字'.repeat(130)
 check(summaryPreview({ summary_preview: longSummary, summary: null }) === '字'.repeat(119) + '…' && summaryPreview({ summary_preview: null, summary: null, description: null }) === null, 'preview is cut at 120 characters')
 check(render(<NewsCard item={internationalItem()} />).includes('來源未提供摘要'), 'missing summary says so')
-// Today page compact row (#276, UI_COPY_SPEC §4): no summary and no source link; the rest keeps its order.
-const compact = render(<NewsCard item={newsItem()} compact />)
-const compactOrder = ['news-source-badge', 'class="news-card-title"', 'class="news-card-time"', 'class="news-card-impact"', 'class="news-chips"']
-check(compactOrder.every((name, index) => compact.includes(name) && (index === 0 || compact.indexOf(name) > compact.indexOf(compactOrder[index - 1]))), `compact card order: ${compact}`)
-check(!compact.includes('news-card-summary') && !compact.includes('class="news-source"') && compact.includes('news-card-compact'), 'compact card drops the summary and source link')
+// Today page row (Issue 510, UI_COPY_SPEC §4): two lines, the title then source · time and the direction; the tags,
+// category, summary, AI candidates and source link stay on the cards.
+const homeRow = render(<HomeNewsRow item={newsItem()} />)
+const homeOrder = ['class="home-news-title"', 'class="home-news-source"', '<time', 'class="home-news-impact"']
+check(homeOrder.every((name, index) => homeRow.includes(name) && (index === 0 || homeRow.indexOf(name) > homeRow.indexOf(homeOrder[index - 1]))), `home row order: ${homeRow}`)
+check(!/news-card-summary|class="news-source"|news-chips|news-card-meta|規則核實|news-ai-candidates/.test(homeRow), 'the home row drops the summary, source link, tags, category and AI candidates')
+check(homeRow.includes('title="台積電宣布臺南再蓋新廠 南市府：積極協助行政程序"'), 'the full title is the link title (the line is cut with an ellipsis)')
+const aiRow = render(<HomeNewsRow item={newsItem({ ai: aiResult({ impact_direction: 'positive' }) })} />)
+check(aiRow.includes('class="news-direction"') && aiRow.includes('可能正向') && aiRow.indexOf('news-direction') < aiRow.indexOf('>AI 推論<'), 'an AI direction is followed by 「AI 推論」 (page_checks T6 reads the line before it)')
+check(!render(<HomeNewsRow item={newsItem({ ai: undefined })} />).includes('>AI 推論<'), 'a rule direction has no 「AI 推論」')
+// Issue 512: the home row names no stock, so an emerging, delisted or hidden candidate never reaches it as a bare code;
+// its link goes to /news/:id, which reads 「7808 訊聯智藥（興櫃）」.
+const homeEmerging = render(<HomeNewsRow item={newsItem({ ai: aiResult({ symbol_candidates: [{ exchange: 'TWSE', symbol: '7808', name: '訊聯智藥', listing: 'emerging', reason: null, confidence: 'low', verified: false, source_check: 'mentioned' }, { exchange: 'TWSE', symbol: '2888', name: '新光金', listing: 'delisted', reason: null, confidence: 'low', verified: false, source_check: 'mentioned' }] }) })} />)
+check(!/7808|2888|4152|代號未對應/.test(homeEmerging) && homeEmerging.includes('href="/news/'), `the home row shows no candidate code and links to the detail: ${homeEmerging}`)
 check(render(<NewsCard item={officialItem()} />).includes('<span class="tag">3666</span>'), 'bare official code is a plain chip')
 // Issue 451 (NEWS_SPEC §2): verified relations name their source and the rule version from impact.method.
 check(card.includes('<span class="small-note news-relation-source">規則核實 · v2</span>') && card.indexOf('規則核實 · v2') < card.indexOf('2330 台積電'), 'rule relations are labelled 規則核實 with the rule version before the chips')
-check(compact.includes('規則核實 · v2'), 'the today page row carries the same label')
 const v1Item = newsItem({ impact: { ...newsItem().impact, method: 'rule:exact-name-code/v1' } })
 check(render(<NewsCard item={v1Item} />).includes('規則核實 · v1') && ruleVersion(v1Item) === 'v1', 'an item kept on the old rule shows v1')
 check(!render(<NewsCard item={officialItem()} />).includes('規則核實') && ruleVersion(officialItem()) === null, 'official projections have no rule label')
@@ -138,9 +148,9 @@ check(usableAi(newsItem({ ai: aiResult({ status: 'pending' }) })) === null && us
 
 // ---- #452 AC-1 card AI candidates row (UI_COPY_SPEC §4 AI 候選行, DESIGN_SYSTEM §5) ----
 const candidateRow = (markup: string) => /<details class="news-ai-candidates"[^>]*>[\s\S]*?<\/details>/.exec(markup)?.[0] ?? ''
-const candidate = (exchange: string, symbol: string, name: string | null, confidence: string | null = 'medium', source_check: string | null = 'not_mentioned') => ({ exchange, symbol, name, reason: '理由只在詳情頁', confidence, verified: false as const, source_check })
-// With candidates: 2330 is rule-verified on this item and drops out; 3105 links, 6751 has no instrument and is plain text.
-const withCandidates = newsItem({ ai: aiResult({ symbol_candidates: [candidate('TWSE', '2330', '台積電', 'high'), candidate('TPEx', '3105', '穩懋', 'high', 'mentioned'), candidate('TWSE', '6751', null, 'low')] }) })
+const candidate = (exchange: string, symbol: string, name: string | null, confidence: string | null = 'medium', source_check: string | null = 'not_mentioned', listing: string | undefined = 'listed') => ({ exchange, symbol, name, listing, reason: '理由只在詳情頁', confidence, verified: false as const, source_check })
+// With candidates: 2330 is rule-verified on this item and drops out; 3105 links, 7808 is an emerging stock (Issue 512) in plain text.
+const withCandidates = newsItem({ ai: aiResult({ symbol_candidates: [candidate('TWSE', '2330', '台積電', 'high'), candidate('TPEx', '3105', '穩懋', 'high', 'mentioned'), candidate('TWSE', '7808', '訊聯智藥', 'low', 'not_mentioned', 'emerging')] }) })
 const candidatesCard = render(<NewsCard item={withCandidates} />)
 const row = candidateRow(candidatesCard)
 check(row !== '' && count(candidatesCard, 'data-testid="news-ai-candidates"') === 1, `card with candidates shows one AI candidates row: ${candidatesCard}`)
@@ -148,9 +158,14 @@ check(candidatesCard.indexOf('class="news-chips"') < candidatesCard.indexOf('new
 check(row.includes('href="/stocks/TPEx/3105"') && row.includes('3105 穩懋') && row.includes('模型把握高'), 'named candidate links to the stock with the model confidence')
 // #465: each candidate says whether the rule check found it in the sent text; none reads 待核實.
 check(/3105 穩懋<\/a><span class="news-ai-confidence"> · 規則核實：原文提及 · 模型把握高/.test(row), `mentioned candidate reads 規則核實：原文提及: ${row}`)
-check(/6751 （代號未對應到已知標的）<\/span><span class="news-ai-confidence"> · 推論 · 模型把握低/.test(row), 'not mentioned candidate reads 推論')
+check(/7808 訊聯智藥（興櫃）<\/span><span class="news-ai-confidence"> · 推論 · 模型把握低/.test(row), `not mentioned candidate reads 推論: ${row}`)
 check(!candidatesCard.includes('待核實'), 'the card has no 待核實')
-check(row.includes('6751 （代號未對應到已知標的）') && !row.includes('/stocks/TWSE/6751') && row.includes('模型把握低'), 'unknown candidate code is plain text')
+check(row.includes('7808 訊聯智藥（興櫃）') && !row.includes('/stocks/TWSE/7808') && !row.includes('代號未對應'), 'an emerging candidate is named and marked 興櫃, without a stock link (Issue 512)')
+// #512: a delisted stock is marked 已下市 and not linked; a nameless one (an older server) is not listed at all.
+const delistedRow = candidateRow(render(<NewsCard item={newsItem({ ai: aiResult({ symbol_candidates: [candidate('TWSE', '2888', '新光金', 'high', 'mentioned', 'delisted'), candidate('TWSE', '6751', null, 'low', 'not_mentioned', undefined), candidate('TWSE', '2454', '聯發科', 'low', 'not_mentioned', undefined)] }) })} />))
+check(delistedRow.includes('<span>2888 新光金（已下市）</span>') && !delistedRow.includes('/stocks/TWSE/2888'), `a delisted candidate reads 已下市 and is plain text: ${delistedRow}`)
+check(!delistedRow.includes('6751') && !delistedRow.includes('代號未對應') && delistedRow.includes('<summary>AI 候選 · 2 檔（規則核實 1、推論 1）</summary>'), `a nameless candidate is left out of the row and its count: ${delistedRow}`)
+check(delistedRow.includes('href="/stocks/TWSE/2454"') && delistedRow.includes('2454 聯發科</a>'), 'without listing (an older server) a named candidate still links')
 check(!row.includes('2330') && !row.includes('理由只在詳情頁'), 'rule-verified 2330 is not repeated; reasons stay on the detail page')
 check(!row.includes('class="tag'), 'candidates are not tag chips, so they never read as verified relations')
 // 收合與展開: closed <details> by default; the summary is the only line until opened, the list and meta follow it inside.
@@ -161,7 +176,7 @@ check(row.indexOf('<summary>') > 0 && summaryEnd > 0 && row.indexOf('<ul>') > su
 const summaryText = row.slice(row.indexOf('<summary>'), summaryEnd).replace(/<[^>]+>/g, '')
 // The text carries 「推論」; no second AI 推論 badge, so the card keeps one (verify N4 counts whole 「AI 推論」 lines).
 check(summaryText === 'AI 候選 · 2 檔（規則核實 1、推論 1）' && !row.includes('AI 推論'), `summary reads 「AI 候選 · 2 檔（規則核實 1、推論 1）」 without a badge, got 「${summaryText}」`)
-const allInferred = candidateRow(render(<NewsCard item={newsItem({ ai: aiResult({ symbol_candidates: [candidate('TWSE', '6751', null), { ...candidate('TWSE', '6752', null), source_check: undefined }] }) })} />))
+const allInferred = candidateRow(render(<NewsCard item={newsItem({ ai: aiResult({ symbol_candidates: [candidate('TWSE', '6751', '甲'), { ...candidate('TWSE', '6752', '乙'), source_check: undefined }] }) })} />))
 check(allInferred.includes('<summary>AI 候選 · 2 檔（推論 2）</summary>'), `a candidate without a check result is 推論: ${allInferred}`)
 check(count(candidatesCard, 'AI 推論') === 1, 'a card with AI candidates still has one AI 推論 badge, after the AI direction')
 check(row.includes('模型 claude-haiku-5-5 · 提示版本 news_v1 · 核對規則 ai-candidate-source/v1。規則核實：名稱或代號出現在標題或摘要；推論：原文沒有寫出，由模型推得。候選不計入已核實關聯。'), `expanded row carries the model, prompt version and check rule: ${row}`)
@@ -187,7 +202,6 @@ check(cardAiCandidates(viaSymbols).map((item) => item.key).join('|') === 'TWSE:2
 // instruments alone (symbols empty), so this path is checked apart from the symbols one above.
 const otherExchange = newsItem({ symbols: [], ai: aiResult({ symbol_candidates: [candidate('TPEx', '2330', '台積電')] }) })
 check(cardAiCandidates(otherExchange).length === 0 && !render(<NewsCard item={otherExchange} />).includes('news-ai-candidates'), 'a candidate on the other exchange than the verified instrument is not shown twice')
-check(!render(<NewsCard item={withCandidates} compact />).includes('news-ai-candidates'), 'today page compact row has no AI candidates row')
 
 // ---- AC-1 time display (NEWS_SPEC §4, UI_COPY §4) ----
 check(newsTime(newsItem()).text === '發布於 2026/10/18 00:05' && card.includes('dateTime="2026-10-17T16:05:00+00:00"'), 'known published instant in Taipei time')
@@ -221,17 +235,22 @@ const facts = detail.slice(factsStart, aiStart)
 const inference = detail.slice(aiStart)
 check(facts.includes('來源事實') && facts.includes('台積電十五日召開法說會') && facts.includes('發布於 2026/10/18 00:05') && facts.includes('已核實關聯') && facts.includes('href="/stocks/TWSE/2330"'), 'facts: source summary, time and verified relations')
 check(facts.includes('規則核實 · v2') && facts.includes('關聯方法：規則比對（名稱／簡稱／代號） · 規則版本 v2'), 'detail: relation source and rule version')
-check(!facts.includes('AI') && !facts.includes('3奈米廠，預計2028') && !facts.includes('6751'), 'facts carry no AI content')
+check(!facts.includes('AI') && !facts.includes('3奈米廠，預計2028') && !facts.includes('7808'), 'facts carry no AI content')
 check(facts.includes('來源未標示影響') && !facts.includes('影響尚未判定') && !hasTone(facts), 'source impact unknown in facts reads 來源未標示影響, no color')
 check(detail.includes('<section class="ai-inference" aria-labelledby="ai-inference-title" data-testid="ai-inference">') && inference.includes('AI 推論') && inference.includes('badge badge-accent'), 'AI block has the accent bar class and AI 推論 badge')
 check(inference.includes('台積電宣布臺南增建3奈米廠') && inference.includes('可能正向') && inference.includes('新廠預計2028年上半年量產'), 'AI summary, direction and rationale')
 check(inference.includes('候選標的') && !inference.includes('待核實') && inference.includes('規則核實：原文提及 · 模型把握高') && inference.includes('推論 · 模型把握低') && inference.includes('半導體'), `Issue 465: candidates carry their check result and model confidence, no 待核實: ${inference}`)
 check(/候選題材 <span class="badge badge-success badge-compact">已通過題材核對<\/span>/.test(inference), 'theme candidates passed the rule theme check (Issue 413) and say so')
-check(inference.includes('href="/stocks/TWSE/2330"') && inference.includes('6751 （代號未對應到已知標的）') && !inference.includes('/stocks/TWSE/6751'), 'unknown candidate code is not linked')
+check(inference.includes('href="/stocks/TWSE/2330"') && inference.includes('<span>7808 訊聯智藥（興櫃）</span>') && !inference.includes('/stocks/TWSE/7808'), 'an emerging candidate is marked 興櫃 and not linked (Issue 512)')
+check(!inference.includes('4152') && !inference.includes('代號未對應'), 'a hidden code (code_unknown) never shows on the detail page')
+const allHidden = render(<AiInferencePanel ai={aiResult({ symbol_candidates: [], hidden_symbol_candidates: [{ exchange: 'TPEx', symbol: '4152', reason: 'code_unknown' }] })} />)
+check(allHidden.includes('模型提出的候選代號都查無對應標的，不列出。') && !allHidden.includes('4152'), `only hidden codes: says so without the codes: ${allHidden}`)
+const delistedDetail = render(<AiInferencePanel ai={aiResult({ symbol_candidates: [candidate('TWSE', '2888', '新光金', 'high', 'mentioned', 'delisted')] })} />)
+check(delistedDetail.includes('<span>2888 新光金（已下市）</span>') && !delistedDetail.includes('/stocks/TWSE/2888'), 'detail: a delisted candidate reads 已下市 and is not linked')
 check(inference.includes('模型 claude-haiku-5-5') && inference.includes('提示版本 news_v1') && inference.includes('產生時間 2026/10/17 23:04') && inference.includes('核對規則 ai-candidate-source/v1'), 'model, prompt version, generation time and check rule')
 const noAi = render(<NewsDetailView item={newsItem()} />)
 check(noAi.includes('此則尚未產生 AI 摘要與判讀') && noAi.includes('class="ai-inference"'), 'without AI the block still stands apart and says so')
-const unsupportedDetail = render(<AiInferencePanel ai={aiResult({ unsupported: true, symbol_candidates: [], theme_candidates: [] })} />)
+const unsupportedDetail = render(<AiInferencePanel ai={aiResult({ unsupported: true, symbol_candidates: [], hidden_symbol_candidates: [], theme_candidates: [] })} />)
 check(unsupportedDetail.includes('沒有直接關聯') && !hasTone(unsupportedDetail) && unsupportedDetail.includes('模型未提出候選標的'), 'unsupported AI result: notice, no direction color')
 const officialDetail = render(<NewsDetailView item={officialItem()} />)
 check(officialDetail.includes('個股公告 · 官方公告資料') && officialDetail.includes('公開資訊觀測站公告') && officialDetail.includes('展開公告內容') && officialDetail.includes('事件日 2026/09/08'), 'official detail: source label, collapsed full text, date-only')
@@ -246,3 +265,72 @@ check(timeline.includes('最近 50 則') && timeline.includes('class="news-cards
 check(timeline.includes('href="/news?symbol=2330"'), 'timeline links to the filtered news page')
 const emptyTimeline = render(<StockNewsTimeline exchange="TWSE" symbol="2330" query={loaded(newsPage([]))} />)
 check(emptyTimeline.includes('尚無與此股已核實關聯的新聞或公告。'), 'empty timeline')
+
+// ---- Issue 523: /news rows (DESIGN_SYSTEM §5 新聞清單, UI_COPY_SPEC §4) ----
+// AC-2 title and summary lead cleaning: the cases are shared with page_checks.display_title (backend/tests/test_verify_checks.py).
+const leadCases = (JSON.parse(fs.readFileSync(path.join(__dirname, 'newsLead.cases.json'), 'utf8')) as { cases: Array<{ input: string; output: string; why: string }> }).cases
+check(leadCases.length >= 20, 'the shared lead cases are read')
+for (const { input, output, why } of leadCases) check(cleanNewsLead(input) === output, `cleanNewsLead (${why}): 「${input}」 → 「${cleanNewsLead(input)}」, want 「${output}」`)
+check(cleanNewsLead(null) === null && cleanNewsLead('  ') === null, 'no text stays null')
+const squareTitle = newsItem({ id: '523', title: '■ 台積電狠甩英特爾', summary_preview: '[FTNN新聞網]記者陳献朋／綜合報導台股加權指數本週收在47111.26點' })
+check(summaryPreview(squareTitle) === '台股加權指數本週收在47111.26點', `the summary preview drops the byline: ${summaryPreview(squareTitle)}`)
+const rowsView = (filters: { verified?: boolean; watchlist?: boolean }, items: NewsItem[]) => render(
+  <NewsListView filters={{ tab: 'domestic', q: '', symbol: '', ...filters }} onFiltersChange={noop} query={loaded(newsPage(items))} page={1} onNext={noop} onPrevious={noop} onReset={noop} />,
+)
+const rows = rowsView({}, [squareTitle, newsItem({ id: '524', symbols: [], instruments: [], ai: aiResult() })])
+check(rows.includes('<ol class="news-row-list">') && count(rows, '<li class="news-row"') === 2 && !rows.includes('class="card news-card"'), `the list is one <ol> of rows, no cards: ${rows}`)
+check(count(rows, 'data-testid="news-card"') === 2, 'each row keeps the news-card test id the verify and the screenshot tools read')
+const firstRow = rows.slice(rows.indexOf('<li class="news-row"'), rows.indexOf('</li>') + 5)
+check(firstRow.includes('<h3 class="news-row-title"><a title="台積電狠甩英特爾" href="/news/523">台積電狠甩英特爾</a></h3>') && !firstRow.includes('■'), `the row title is cleaned, the full title in title: ${firstRow}`)
+// Two lines: the title, then source · time · direction and the verified tags, before the collapsed detail.
+const rowMain = firstRow.slice(0, firstRow.indexOf('<details'))
+const rowOrder = ['class="news-row-title"', 'class="news-row-impact"', 'class="news-row-line2"', 'class="news-row-source"', 'class="news-row-time"', 'class="news-row-tags"', 'class="btn btn-ghost news-row-toggle"']
+check(rowOrder.every((name, index) => rowMain.includes(name) && (index === 0 || rowMain.indexOf(name) > rowMain.indexOf(rowOrder[index - 1]))), `row parts in order: ${rowMain}`)
+check(rowMain.includes('href="/stocks/TWSE/2330">2330 台積電</a>') && !rowMain.includes('規則核實'), 'line 2 carries the verified instrument tag; the rule label waits in the detail')
+check(!/news-row-summary|news-row-kind|news-source|news-ai-candidates|台股加權指數/.test(rowMain), 'summary, category, source link and AI candidates are not on the two lines')
+check(/aria-expanded="false" aria-controls="news-row-detail-523">展開<\/button>/.test(rowMain), 'the toggle reads 展開 and controls the detail')
+const rowDetail = firstRow.slice(firstRow.indexOf('<details'))
+check(/^<details class="news-row-detail" id="news-row-detail-523">/.test(rowDetail) && !/<details[^>]*\sopen/.test(rowDetail), `the detail is collapsed by default: ${rowDetail}`)
+const detailOrder = ['class="news-row-kind"', 'class="news-row-summary"', 'class="news-chips"', 'class="news-source"', '詳情 →']
+check(detailOrder.every((name, index) => rowDetail.includes(name) && (index === 0 || rowDetail.indexOf(name) > rowDetail.indexOf(detailOrder[index - 1]))), `detail: category, summary, relations, source link, detail link: ${rowDetail}`)
+check(rowDetail.includes('國內 · 媒體報導') && rowDetail.includes('規則核實 · v2') && rowDetail.includes('>台股加權指數本週收在47111.26點</p>'), 'the detail carries the category, the rule label and the cleaned summary')
+// No verified relation: no tag group on the row and no 「未有已核實的標的或族群」 line anywhere in the list.
+const secondRow = rows.slice(rows.lastIndexOf('<li class="news-row"'))
+check(!secondRow.includes('news-row-tags') && !rows.includes('未有已核實的標的或族群') && !secondRow.includes('class="news-chips"'), `no relation, no tag group and no empty relation line: ${secondRow}`)
+// One 「AI 推論」 per AI row (page_checks N4 counts the whole lines), after the direction.
+check(count(secondRow, '>AI 推論<') === 1 && secondRow.indexOf('class="news-direction"') < secondRow.indexOf('>AI 推論<') && count(firstRow, '>AI 推論<') === 0, 'AI direction is followed by one 「AI 推論」; a rule direction has none')
+// The stock page timeline keeps the cards (Issue 519 owns that page).
+check(timeline.includes('class="card news-card"') && !timeline.includes('news-row'), 'the stock timeline still uses the cards')
+// The detail page shows the cleaned title; the source title is in 技術資訊.
+const cleanedDetail = render(<NewsDetailView item={squareTitle} />)
+check(cleanedDetail.includes('<h1 class="news-detail-title">台積電狠甩英特爾</h1>') && cleanedDetail.includes('原始標題：■ 台積電狠甩英特爾'), `detail: cleaned h1, source title under 技術資訊: ${cleanedDetail}`)
+check(!render(<NewsDetailView item={newsItem()} />).includes('原始標題：'), 'an unchanged title (only whitespace) has no 原始標題 line')
+const homeSquare = render(<HomeNewsRow item={squareTitle} />)
+check(homeSquare.includes('title="台積電狠甩英特爾"') && homeSquare.includes('>台積電狠甩英特爾</a>') && !homeSquare.includes('■'), `the today page row shows the same cleaned title: ${homeSquare}`)
+
+// ---- Issue 523 relation filters: verified_only／watchlist_only go to the API and the URL ----
+const bothFilters = { tab: 'domestic' as const, q: '', symbol: '', verified: true, watchlist: true }
+check(JSON.stringify(newsListParams(bothFilters)) === JSON.stringify({ category: 'domestic', verified_only: true, watchlist_only: true, limit: NEWS_PAGE_SIZE }), `filters reach the API: ${JSON.stringify(newsListParams(bothFilters))}`)
+check(newsListParams({ tab: 'domestic', q: '', symbol: '', verified: false }).verified_only === undefined, 'an unset filter is left out of the request')
+check(JSON.stringify(newsPageSearch(bothFilters)) === JSON.stringify({ verified: '1', watchlist: '1' }), 'filters are kept in the URL')
+const parsed = newsFiltersFromSearch(new URLSearchParams('tab=official&q=x&verified=1'))
+check(parsed.tab === 'official' && parsed.q === 'x' && parsed.symbol === '' && parsed.verified === true && parsed.watchlist === false, `URL → filters: ${JSON.stringify(parsed)}`)
+const chips = (markup: string) => /<div class="filter-chips news-relation-filters"[^>]*>([\s\S]*?)<\/div>/.exec(markup)?.[1] ?? ''
+check(/aria-pressed="false"[^>]*>只看有已核實標的<\/button>/.test(chips(rows)) && /aria-pressed="false"[^>]*>只看自選相關<\/button>/.test(chips(rows)), `both chips off by default: ${chips(rows)}`)
+const pressed = rowsView({ watchlist: true }, [squareTitle])
+check(/class="badge filter-chip filter-chip-selected" aria-pressed="true">只看自選相關</.test(chips(pressed)), `the watchlist chip shows pressed: ${chips(pressed)}`)
+check(rows.indexOf('news-relation-filters') > rows.indexOf('class="news-controls"') && rows.indexOf('news-relation-filters') < rows.indexOf('news-row-list'), 'the chips sit between the controls and the list')
+const watchEmpty = rowsView({ watchlist: true }, [])
+check(watchEmpty.includes('目前沒有與自選股相關的新聞。自選清單是空的時不會有結果；個股頁勾選「我的自選」可查看目前的自選股。') && !watchEmpty.includes('目前沒有符合條件的國內新聞。'), 'an empty watchlist filter explains itself')
+check(rowsView({ verified: true }, []).includes('目前沒有符合條件、且有已核實標的的新聞。'), 'an empty verified filter says so')
+
+// ---- Issue 523 layout rules (styles.css): one line each, the phone line two drops the tags ----
+has(wideCss, '.news-row-title', /white-space:\s*nowrap/)
+has(wideCss, '.news-row-title', /text-overflow:\s*ellipsis/)
+has(wideCss, '.news-row-line2', /display:\s*contents/)
+for (const part of ['.news-row-source', '.news-row-time', '.news-row-impact']) has(wideCss, part, /white-space:\s*nowrap/)
+has(wideCss, '.news-row-tags', /overflow:\s*hidden/)
+has(wideCss, '.news-row-detail > summary', /display:\s*none/)
+has(phoneCss, '.news-row-line2', /display:\s*flex/)
+has(phoneCss, '.news-row-tags', /display:\s*none/)
+check(!/flex-wrap:\s*wrap/.test(declarations(phoneCss, '.news-row-line2')), 'the phone line two never wraps')

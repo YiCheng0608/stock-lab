@@ -988,7 +988,11 @@ def test_a_late_action_outside_what_a_ratio_reads_keeps_a_wrong_ratio_failed(fx)
     assert not after.unknown
 
 
-def scored_market(fx: Fixture, covered: bool = False) -> dict[str, Instrument]:
+def scored_market(
+    fx: Fixture,
+    covered: bool = False,
+    events: tuple[tuple[str, date], ...] = (("1101", T), ("4549", DAYS[-10])),
+) -> dict[str, Instrument]:
     """Groups scored on the last three days; ``covered`` answers their event windows."""
 
     market = build_market(fx)
@@ -1027,7 +1031,7 @@ def scored_market(fx: Fixture, covered: bool = False) -> dict[str, Instrument]:
     fx.commit()
     if covered:
         # hot_group 1.3.0 (#474): dated MOPS answers for every window session,
-        # one member with an event on T and one 10 sessions before.
+        # by default one member with an event on T and one 10 sessions before.
         fx.db.add(
             IngestionRun(
                 run_type=mops_events.RUN_TYPE,
@@ -1044,7 +1048,7 @@ def scored_market(fx: Fixture, covered: bool = False) -> dict[str, Instrument]:
                 },
             )
         )
-        for symbol, day in (("1101", T), ("4549", DAYS[-10])):
+        for symbol, day in events:
             fx.db.add(
                 Event(
                     instrument_id=market[symbol].id,
@@ -1093,8 +1097,8 @@ def test_a_catalyst_without_full_coverage_fails(fx):
 FIXTURE_GROUP = "trading_date = ? and group_id = 'official-industry-fixture'"
 
 
-def covered_groups(fx):
-    scored_market(fx, covered=True)
+def covered_groups(fx, **kwargs):
+    scored_market(fx, covered=True, **kwargs)
     groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
     assert groups.result == "pass", (
         dict(groups.failures),
@@ -1184,6 +1188,193 @@ def test_a_complete_window_of_fewer_sessions_fails(fx):
     )
     groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
     assert groups.result == "fail" and "catalyst_coverage_window" in groups.failures
+
+
+def test_a_1_2_0_complete_window_of_fewer_sessions_is_undetermined(fx):
+    # #501: 1.2.0 called any answered window complete, a TAIEX history under
+    # 20 sessions too; the 20-session rule is 1.3.0's (#474), so the audit
+    # cannot hold a 1.2.0 row to it.  As a 1.2.0 row the catalyst is the raw
+    # value (no board percentile).
+    covered_groups(fx)
+    fx.sql(
+        "update group_daily_scores set details_json = json_set(details_json,"
+        " '$.hot_group_version', '1.2.0',"
+        " '$.catalyst_coverage.sessions', 19,"
+        " '$.catalyst_coverage.window[0]', ?,"
+        " '$.raw_values.catalyst', json_extract(details_json, '$.normalized_values.catalyst'))"
+        f" where {FIXTURE_GROUP}",
+        DAYS[-19].isoformat(),
+        T.isoformat(),
+    )
+    groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
+    assert groups.result == "undetermined", (dict(groups.failures), groups.examples)
+    assert groups.unknown["catalyst_window_short_before_1_3_0"] == 1
+    assert groups.unknown_examples["catalyst_window_short_before_1_3_0"] == [
+        [
+            T.isoformat(),
+            "official-industry-fixture",
+            "1.2.0",
+            19,
+            [DAYS[-19].isoformat(), T.isoformat()],
+        ]
+    ]
+
+
+def test_a_window_changed_after_the_row_is_undetermined(fx):
+    # #501: the row stored the 20 sessions TAIEX had when it was scored; a
+    # TAIEX bar backfilled (or is_suspended changed) inside the window later
+    # gives another window now.  The audit cannot tell that from a wrong
+    # write, so the catalyst is undetermined, not a failure.
+    covered_groups(fx)
+    fx.sql(
+        "update group_daily_scores set details_json = json_set(details_json,"
+        " '$.catalyst_coverage.window[0]', ?)"
+        f" where {FIXTURE_GROUP}",
+        DAYS[-21].isoformat(),
+        T.isoformat(),
+    )
+    groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
+    assert groups.result == "undetermined", (dict(groups.failures), groups.examples)
+    assert groups.unknown["catalyst_window_changed_after_write"] == 1
+    assert groups.unknown_examples["catalyst_window_changed_after_write"] == [
+        [
+            T.isoformat(),
+            "official-industry-fixture",
+            [DAYS[-21].isoformat(), T.isoformat()],
+            [DAYS[-20].isoformat(), T.isoformat()],
+        ]
+    ]
+
+
+NULL_CATALYST = (
+    "catalyst = null, details_json = json_set(details_json,"
+    " '$.normalized_values.catalyst', null, '$.raw_values.catalyst', null"
+)
+
+
+@pytest.mark.parametrize(
+    "mutation, category",
+    [
+        (f"{NULL_CATALYST})", "catalyst_null_with_full_coverage"),
+        (
+            "details_json = json_remove(details_json,"
+            " '$.catalyst_inputs.events_through_id')",
+            "catalyst_inputs_missing",
+        ),
+    ],
+    ids=["null_catalyst", "no_events_through_id"],
+)
+def test_a_changed_window_does_not_hide_a_wrong_row(fx, mutation, category):
+    # #501 (PR #507 review 1): what the row says about itself is judged before
+    # the window against TAIEX now; an undetermined window must not hide it.
+    covered_groups(fx)
+    fx.sql(
+        f"update group_daily_scores set {mutation} where {FIXTURE_GROUP}",
+        T.isoformat(),
+    )
+    fx.sql(
+        "update group_daily_scores set details_json = json_set(details_json,"
+        " '$.catalyst_coverage.window[0]', ?)"
+        f" where {FIXTURE_GROUP}",
+        DAYS[-21].isoformat(),
+        T.isoformat(),
+    )
+    groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
+    assert groups.result == "fail" and category in groups.failures
+    assert "catalyst_window_changed_after_write" not in groups.unknown
+
+
+def test_a_1_2_0_short_window_does_not_hide_a_null_catalyst(fx):
+    # #501 (PR #507 review 1): a complete 1.2.0 window with eligible members
+    # has a value whatever its length.
+    covered_groups(fx)
+    fx.sql(
+        f"update group_daily_scores set {NULL_CATALYST},"
+        " '$.hot_group_version', '1.2.0',"
+        " '$.catalyst_coverage.sessions', 19,"
+        " '$.catalyst_coverage.window[0]', ?)"
+        f" where {FIXTURE_GROUP}",
+        DAYS[-19].isoformat(),
+        T.isoformat(),
+    )
+    groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
+    assert groups.result == "fail"
+    assert "catalyst_null_with_full_coverage" in groups.failures
+    assert "catalyst_window_short_before_1_3_0" not in groups.unknown
+
+
+def test_a_window_not_ending_on_the_score_date_fails(fx):
+    # #501 (PR #507 review 2): a later TAIEX bar or suspension moves only the
+    # start of the window; another end is a wrong write.
+    covered_groups(fx)
+    fx.sql(
+        "update group_daily_scores set details_json = json_set(details_json,"
+        " '$.catalyst_coverage.window[1]', ?)"
+        f" where {FIXTURE_GROUP}",
+        DAYS[-2].isoformat(),
+        T.isoformat(),
+    )
+    groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
+    assert groups.result == "fail", dict(groups.unknown)
+    assert groups.examples["catalyst_window_end_not_score_date"] == [
+        [
+            T.isoformat(),
+            "official-industry-fixture",
+            [DAYS[-20].isoformat(), DAYS[-2].isoformat()],
+        ]
+    ]
+
+
+def test_a_tied_nonzero_catalyst_takes_the_mid_rank(fx):
+    # #501 (PR #500 review): two groups with the same non-zero member share
+    # both take the mid rank 0.5; 0 is only for no event.
+    covered_groups(fx, events=(("1101", T), ("1102", DAYS[-10]), ("4549", DAYS[-10])))
+    rows = dict(
+        sqlite3.connect(fx.path).execute(
+            "select group_id, details_json from group_daily_scores where trading_date = ?",
+            (T.isoformat(),),
+        )
+    )
+    values = {gid: json.loads(d) for gid, d in rows.items()}
+    raws = {gid: d["raw_values"]["catalyst"] for gid, d in values.items()}
+    assert raws["official-industry-fixture"] == pytest.approx(0.4)
+    assert raws["official-industry-other"] == pytest.approx(0.4)
+    for gid in ("official-industry-fixture", "official-industry-other"):
+        assert values[gid]["normalized_values"]["catalyst"] == 0.5
+    fx.sql(
+        "update group_daily_scores set catalyst = 1.0,"
+        " details_json = json_set(details_json, '$.normalized_values.catalyst', 1.0)"
+        f" where {FIXTURE_GROUP}",
+        T.isoformat(),
+    )
+    groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
+    assert groups.result == "fail" and "percentile_catalyst" in groups.failures
+
+
+def test_an_off_percentile_catalyst_on_a_changed_board_is_undetermined(fx, monkeypatch):
+    # #501 (PR #500 review 3): like the other percentiles, a board whose
+    # member inputs changed after the write is not judged.
+    monkeypatch.setattr(audit_lib, "EXAMPLES", 10_000)
+    covered_groups(fx)
+    fx.sql(
+        "update group_daily_scores set"
+        " details_json = json_set(details_json, '$.normalized_values.catalyst', 0.25)"
+        f" where {FIXTURE_GROUP}",
+        T.isoformat(),
+    )
+    groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
+    assert "percentile_catalyst" in groups.failures
+    stock = fx.db.query(Instrument).filter_by(symbol="1102").one()
+    action(
+        fx, stock, DAYS[-5], cash=0.5, reference=40.0, collected=datetime(2099, 1, 1)
+    )
+    fx.commit()
+    groups = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "groups")
+    assert "percentile_catalyst" not in groups.failures
+    assert any(
+        "percentile_catalyst" in example
+        for example in groups.unknown_examples["inputs_changed_after_write"]
+    )
 
 
 def test_a_member_return_of_another_price_basis_fails(fx):

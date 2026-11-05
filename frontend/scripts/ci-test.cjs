@@ -30,6 +30,7 @@ const SUITES = [
   { file: 'candidates/candidates.test.tsx' },
   { file: 'candidates/entryPlan.test.tsx' },
   { file: 'stock/strategyBoard.test.tsx' },
+  { file: 'stock/stockSummary.test.tsx' },
   { file: 'today/today.test.tsx' },
   { file: 'actions/actions.test.tsx' },
   { file: 'tables.test.tsx' },
@@ -38,6 +39,7 @@ const SUITES = [
   { file: 'labelSpacing.test.ts' },
   { file: 'navigation.test.tsx' },
   { file: 'coverage/coverage.test.tsx' },
+  { file: 'stock/researchGap.test.tsx' },
 ]
 
 // Test files that cannot run here: path relative to src -> why (needs a browser/DOM or a guarded environment) and
