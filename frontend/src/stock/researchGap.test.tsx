@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 
-import { ResearchGapLine } from '../App'
+import { ResearchGapLine, stockCoverageReasonLabels } from '../App'
 
 // Standalone regression module (no browser, no server, no network): the stock page's research tab says why the
 // strategy judgement is short of data (Issue 511, UI_COPY_SPEC §6.1), and no field code falls back to 「待補資料」.
@@ -31,3 +31,9 @@ check(older.includes('研究資料待補：60 日行情。'), 'no causes: the fi
 // No blocking code is unknown to the field table.
 const every = renderToStaticMarkup(<ResearchGapLine reasons={undefined} missingFields={BLOCKING_CODES} />)
 check(!every.includes('待補資料'), 'every blocking code has a field label: ' + every)
+
+// The stock page's coverage panel counts a no-trade day as one of the 60 sessions still missing, so its label must
+// not call the day 「不算缺資料」 (review of PR 514); the market coverage page keeps its own label.
+check(!stockCoverageReasonLabels.official_no_trade.includes('不算缺資料'), 'stock coverage: a no-trade day is still a missing session')
+check(stockCoverageReasonLabels.bar_invalid === '已收到行情但數值不完整', 'stock coverage: an unusable stored bar has its own label')
+check(stockCoverageReasonLabels.quote_not_listed === '官方行情表當日未列此股', 'stock coverage keeps the shared labels')

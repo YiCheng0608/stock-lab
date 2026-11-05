@@ -238,8 +238,84 @@ def test_a_complete_stock_has_no_gap_reasons(db):
     summary = _summary(db, stock)
 
     assert _bar_reasons(summary) == []
-    assert summary.get("gap_reasons") == [] or summary["action_state"] != (
-        "data_insufficient"
+    assert summary["coverage"]["missing_bars_to_60"] == 0
+    # The fixture has no chips or signals, so the summary is still short of
+    # data, but no bar reason may appear for a stock with every session.
+    assert coverage_gap_reasons(summary["coverage"]) == []
+    bar_codes = {
+        "listed_under_threshold",
+        "suspended_or_no_trade",
+        "official_no_trade",
+        "bar_invalid",
+        "quote_not_listed",
+        "missing_bar_dates",
+    }
+    assert not bar_codes & set(_codes(summary))
+
+
+def test_a_stored_bar_with_unusable_values_is_not_called_unlisted(db):
+    # Review of PR 514: the official table listed the stock that day; the
+    # stored bar is just not usable (core_valid false).
+    full = _instrument(db, "FULL")
+    _bars(db, full, SESSIONS)
+    stock = _instrument(db, "BAD")
+    _bars(db, stock, [day for day in SESSIONS if day != GAP_DAY])
+    db.add(
+        MarketBar(
+            instrument_id=stock.id,
+            trading_date=GAP_DAY,
+            open=10,
+            high=10,
+            low=10,
+            close=0,
+            adj_close=0,
+            volume=1000,
+            turnover=10000,
+            source="official-fixture",
+        )
+    )
+
+    summary = _summary(db, stock)
+
+    assert summary["coverage"]["missing_bars_to_60"] == 1
+    assert _bar_reasons(summary) == ["bar_invalid"]
+    assert summary["coverage"]["invalid_bar_dates_to_60"] == [GAP_DAY.isoformat()]
+    assert summary["coverage"]["quote_not_listed_dates_to_60"] == []
+    assert summary["gap_reasons"][0] == {
+        "code": "bar_invalid",
+        "label": "近 60 個交易日有 1 天已收到行情但數值不完整（開高低收或來源無法使用）",
+    }
+
+
+def test_a_resumption_and_a_suspension_on_one_day(db):
+    # The earlier suspension ends on the day, the new one starts on it.
+    full = _instrument(db, "FULL")
+    _bars(db, full, SESSIONS)
+    stock = _instrument(db, "TWICE")
+    first, day, last = SESSIONS[25], SESSIONS[24], SESSIONS[22]
+    halted = {first, day, SESSIONS[23]}
+    _bars(db, stock, [item for item in SESSIONS if item not in halted])
+    for when, kind in (
+        (first, "suspension"),
+        (day, "suspension"),
+        (day, "resumption"),
+        (last, "resumption"),
+    ):
+        db.add(
+            Event(
+                instrument_id=stock.id,
+                event_date=when,
+                event_type=kind,
+                title=kind,
+                source="tpex",
+                details_json={},
+            )
+        )
+
+    summary = _summary(db, stock)
+
+    assert summary["coverage"]["suspended_dates_to_60"] == sorted(
+        item.isoformat() for item in halted
     )
 
 
@@ -259,7 +335,9 @@ def test_chip_days_off_the_official_tables_are_counted():
     days = sorted(SESSIONS[:6])
     rows = [_chip(day, institutional=day != days[-1]) for day in days]
 
-    reasons = chip_gap_reasons(["foreign_buy", "trust_buy"], rows, days)
+    reasons = chip_gap_reasons(
+        ["foreign_buy", "trust_buy"], rows, days, chip_collected=lambda *_: True
+    )
 
     assert reasons == [
         {
@@ -274,6 +352,7 @@ def test_chip_days_off_the_official_tables_are_counted():
         [_chip(day) for day in days[1:]],
         days,
         ["margin_balance_change_ratio_5d_missing_or_non_finite"],
+        chip_collected=lambda *_: True,
     )
     assert margin == [
         {
@@ -281,6 +360,60 @@ def test_chip_days_off_the_official_tables_are_counted():
             "label": "近 6 個交易日有 1 天官方融資餘額表未列此股",
         }
     ]
+
+
+def test_a_chip_day_no_stock_of_the_exchange_has_is_not_collected():
+    # Review of PR 514: when the whole exchange has no institutional (or
+    # margin) values on a day, the table was not collected; a backfill can
+    # fill it, so it is not 「官方未列此股」.
+    days = sorted(SESSIONS[:6])
+    missing_day = days[-1]
+    rows = [_chip(day) for day in days[:-1]]
+
+    def collected(day, group):
+        return day != missing_day
+
+    reasons = chip_gap_reasons(
+        ["foreign_buy", "margin_balance"], rows, days, chip_collected=collected
+    )
+
+    assert reasons == [
+        {
+            "code": "institutional_not_collected",
+            "label": "近 5 個交易日有 1 天法人資料尚未收錄",
+        },
+        {
+            "code": "margin_not_collected",
+            "label": "近 6 個交易日有 1 天融資資料尚未收錄",
+        },
+    ]
+    # One stock left out on a collected day, another day not collected.
+    rows = [_chip(day, institutional=day != days[-2]) for day in days[:-1]]
+    mixed = chip_gap_reasons(["foreign_buy"], rows, days, chip_collected=collected)
+    assert [item["code"] for item in mixed] == [
+        "institutional_not_listed",
+        "institutional_not_collected",
+    ]
+
+
+def test_the_exchange_chip_check_reads_the_day_of_that_exchange(db):
+    from app.decision import _exchange_has_chips
+    from app.models import ChipSnapshot
+
+    twse = _instrument(db, "LISTED")
+    tpex = _instrument(db, "OTC", exchange="TPEx")
+    db.add(ChipSnapshot(instrument_id=twse.id, trading_date=GAP_DAY, foreign_buy=1.0))
+    db.add(
+        ChipSnapshot(instrument_id=tpex.id, trading_date=GAP_DAY, margin_balance=5.0)
+    )
+    db.commit()
+    db.info.clear()
+
+    assert _exchange_has_chips(db, "TWSE", GAP_DAY, "institutional") is True
+    assert _exchange_has_chips(db, "TWSE", GAP_DAY, "margin") is False
+    assert _exchange_has_chips(db, "TPEx", GAP_DAY, "institutional") is False
+    assert _exchange_has_chips(db, "TPEx", GAP_DAY, "margin") is True
+    assert _exchange_has_chips(db, "TWSE", SESSIONS[0], "institutional") is False
 
 
 def _incomplete(*codes):

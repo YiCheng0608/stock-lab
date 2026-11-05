@@ -766,9 +766,17 @@ function QualityPanel({ summary, rows }: { summary: InstrumentDetail['quality_su
 }
 
 
+// The stock page counts a no-trade day toward 「距離 60 日條件還缺」 (the strategy needs 60 traded sessions), so its
+// label must not say 「不算缺資料」 as the market coverage page does (UI_COPY_SPEC §6.1).
+export const stockCoverageReasonLabels: Record<string, string> = {
+  ...coverageReasonLabels,
+  official_no_trade: '官方行情表列出但當日無成交（依規則仍算缺一日）',
+  bar_invalid: '已收到行情但數值不完整',
+}
+
 function CoveragePanel({ coverage }: { coverage: InstrumentDetail['coverage'] }) {
   if (!coverage) return <section className="panel"><h2>有效資料日數</h2><div className="empty">尚無可核實的交易日基準。</div></section>
-  const labels = coverage.coverage_reasons.map((reason) => coverageReasonLabels[reason] ?? '資料覆蓋仍待核實')
+  const labels = coverage.coverage_reasons.map((reason) => stockCoverageReasonLabels[reason] ?? '資料覆蓋仍待核實')
   const baselineLabel = coverage.verified_taiex_sessions == null ? '尚無可核實基準' : `${formatNumber(coverage.verified_taiex_sessions, 0)} 日`
   const barCountLabel = coverage.effective_bar_sessions == null ? '尚無可核實基準' : `${formatNumber(coverage.effective_bar_sessions, 0)} 日`
   const missing20Label = coverage.missing_bars_to_20 == null ? '尚無可核實基準' : coverage.missing_bars_to_20 > 0 ? `還缺 ${coverage.missing_bars_to_20} 日` : '已達成'

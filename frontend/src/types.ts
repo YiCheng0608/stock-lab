@@ -490,6 +490,7 @@ export type InstrumentCoverage = {
   no_trade_dates_to_60?: string[]
   suspended_dates_to_60?: string[]
   quote_not_listed_dates_to_60?: string[]
+  invalid_bar_dates_to_60?: string[]
   coverage_reasons: string[]
   ipo_stage: string | null
   windows: Record<string, Record<string, unknown>>

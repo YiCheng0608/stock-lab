@@ -126,17 +126,19 @@
 
 ### 6.1 資料不足的原因句
 
-`data_insufficient` 不只列缺項，還要說為什麼缺（[#511](https://github.com/YiCheng0608/stock-lab/issues/511)）。行動摘要的 `gap_reasons` 是 `{code, label}` 的清單，每個原因一句；`primary_reason` 取第一句（行動列表的說明欄與個股頁共用），個股頁「研究條件」分頁的缺資料列寫「目前不能判斷的原因：{各句以「；」連接}。」，精確缺項（`blocking_reasons` 經欄位對照表）收在「查看缺少的欄位」。舊回應沒有 `gap_reasons` 時照舊寫「研究資料待補：{缺項}」。原因只解釋，哪些標的是 `data_insufficient` 與策略規則都不變（60 日基準照舊只數有 bar 的交易日）。各原因的日期在個股 API `coverage` 的 `no_trade_dates_to_20`／`no_trade_dates_to_60`、`suspended_dates_to_60`、`quote_not_listed_dates_to_60`，個股頁「資料說明」的缺口明細照列。
+`data_insufficient` 不只列缺項，還要說為什麼缺（[#511](https://github.com/YiCheng0608/stock-lab/issues/511)）。行動摘要的 `gap_reasons` 是 `{code, label}` 的清單，每個原因一句；`primary_reason` 取第一句（行動列表的說明欄與個股頁共用），個股頁「研究條件」分頁的缺資料列寫「目前不能判斷的原因：{各句以「；」連接}。」，精確缺項（`blocking_reasons` 經欄位對照表）收在「查看缺少的欄位」。舊回應沒有 `gap_reasons` 時照舊寫「研究資料待補：{缺項}」。原因只解釋，哪些標的是 `data_insufficient` 與策略規則都不變（60 日基準照舊只數有 bar 的交易日）。各原因的日期在個股 API `coverage` 的 `no_trade_dates_to_20`／`no_trade_dates_to_60`、`suspended_dates_to_60`、`quote_not_listed_dates_to_60`、`invalid_bar_dates_to_60`，個股頁「資料說明」的缺口明細照列；那裡的原因標籤用個股頁自己的寫法，官方無成交日寫「官方行情表列出但當日無成交（依規則仍算缺一日）」，不沿用市場覆蓋頁的「不算缺資料」。
 
 | code | 句子（{} 為數字） | 依據 |
 | --- | --- | --- |
 | `listed_under_threshold` | 上市（櫃）後只有 {N} 個交易日，未滿 60 個交易日 | 上市日在 60 個已核實交易日的窗口內，不分股票、ETF、新上市類型 |
 | `suspended_or_no_trade` | 近 60 個交易日有 {N} 天停牌 | 官方 `suspension` 事件到下一個 `resumption` 事件之間的交易日 |
 | `official_no_trade` | 近 60 個交易日有 {N} 天官方行情無成交 | `no_trade_days`（[DATA_SOURCES 官方無成交日](DATA_SOURCES.md#官方無成交日)） |
+| `bar_invalid` | 近 60 個交易日有 {N} 天已收到行情但數值不完整（開高低收或來源無法使用） | 該日有存 bar，但收盤、來源等核心欄位無法使用（`core_valid` 為否）：官方表有列，是存下的值不能用 |
 | `quote_not_listed` | 近 60 個交易日有 {N} 天官方行情表未列此股（可能是停止買賣，官方未提供停牌資料） | 該日同交易所已有其他股票的 bar，但這檔沒有 bar、也沒有無成交列；不推定原因 |
 | `missing_bar_dates` | 近 60 個交易日有 {N} 天行情尚未收錄 | 該日同交易所沒有任何股票的 bar：是收集缺口，可回補 |
 | `institutional_not_listed` | 近 5 個交易日有 {N} 天官方三大法人表未列此股（官方只列當天有法人買賣的股票） | [法人口徑](DATA_SOURCES.md#法人口徑)；策略照舊把缺列當缺資料 |
 | `margin_not_listed` | 近 6 個交易日有 {N} 天官方融資餘額表未列此股 | 融資變化率讀 T−5～T 六個交易日 |
+| `institutional_not_collected`／`margin_not_collected` | 近 5（融資 6）個交易日有 {N} 天法人（融資）資料尚未收錄 | 該日同交易所沒有任何股票有法人（融資）值：是收集缺口，可回補；只有這檔沒有時才是上兩列的「未列此股」 |
 | `margin_zero_base` | 5 個交易日前融資餘額為 0，無法計算融資變化率 | 六天都有融資值、但基期為 0（#404 的比率沒有分母） |
 | `etf_not_general_action_eligible` | 債券、槓桿或反向 ETF 不適用一般突破／回踩研究條件 | ETF 類別（[§10.1](#101-個股策略總表)） |
 | `group_return_unavailable` | 未歸屬任何有效族群，無法計算族群相對加權指數的 20 日報酬；有族群時寫「所屬族群的分數資料不完整，…」 | 訊號缺 `group_excess_return_20d` |

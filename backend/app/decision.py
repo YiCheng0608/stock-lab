@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Callable, Iterable
 
-from sqlalchemy import and_, desc, func, literal_column, select
+from sqlalchemy import and_, desc, exists, func, select
 from sqlalchemy.orm import Session, defer
 
 from .coverage import verified_taiex_sessions
@@ -23,7 +23,6 @@ from .decision_market_reads import (
     DecisionMarketRead,
     load_decision_market_reads,
     market_read_status,
-    read_market_date,
 )
 from .config import MAX_GROUP_CANDIDATES
 from .domain import (
@@ -537,6 +536,7 @@ def _instrument_coverage(
             "no_trade_dates_to_60": [],
             "suspended_dates_to_60": [],
             "quote_not_listed_dates_to_60": [],
+            "invalid_bar_dates_to_60": [],
             "coverage_reasons": ["coverage_baseline_unknown"],
             "ipo_stage": None,
         }
@@ -570,6 +570,16 @@ def _instrument_coverage(
             or row.trading_date >= instrument.listing_date
         )
     }
+    # Sessions with a stored bar the decision cannot use (#511 review): a
+    # reason only, they stay missing bars.
+    invalid_bar_days = (
+        {
+            row.trading_date
+            for row in bars
+            if row.trading_date is not None and not row.core_valid
+        }
+        & set(eligible_sessions)
+    ) - bar_dates
     context = db.info.get("_decision_contexts", {}).get(as_of.isoformat())
     if context and instrument.id in context["instrument_ids"]:
         chip_dates = {
@@ -663,9 +673,16 @@ def _instrument_coverage(
             reasons.append("suspended_or_no_trade")
         if missing_days & no_trade_days:
             reasons.append("official_no_trade")
-        unexplained = missing_days - suspension_dates - no_trade_days
-        quoted = _exchange_quote_days(db, instrument.exchange, sessions)
-        unlisted = {day for day in unexplained if day in quoted}
+        if missing_days & invalid_bar_days:
+            # A stored bar the decision cannot use (core_valid false): the
+            # official table listed the stock, the stored values are unusable.
+            reasons.append("bar_invalid")
+        unexplained = missing_days - suspension_dates - no_trade_days - invalid_bar_days
+        unlisted = {
+            day
+            for day in unexplained
+            if _exchange_has_bar(db, instrument.exchange, day)
+        }
         unlisted_dates = sorted(day.isoformat() for day in unlisted)
         if unlisted:
             # The exchange's quote table of the day was stored (other stocks
@@ -716,6 +733,11 @@ def _instrument_coverage(
         "quote_not_listed_dates_to_60": [
             item for item in unlisted_dates if item in set(missing_bar_dates[60])
         ],
+        "invalid_bar_dates_to_60": sorted(
+            item
+            for item in missing_bar_dates[60]
+            if date.fromisoformat(item) in invalid_bar_days
+        ),
         "coverage_reasons": list(dict.fromkeys(reasons)),
         "ipo_stage": ipo_stage,
     }
@@ -729,11 +751,17 @@ def _suspended_sessions(events: Iterable[Event], sessions: list[date]) -> set[da
     again).  Without a resumption the suspension runs to the last session.
     """
 
+    # On one day a resumption is read before a suspension: the earlier
+    # suspension ends that day and the new one starts on it.
+    order = {"resumption": 0, "suspension": 1}
     marks = sorted(
-        (event.event_date, kind)
-        for event in events
-        for kind in (_suspension_kind(event.event_type),)
-        if kind is not None
+        (
+            (event.event_date, kind)
+            for event in events
+            for kind in (_suspension_kind(event.event_type),)
+            if kind is not None
+        ),
+        key=lambda item: (item[0], order[item[1]]),
     )
     suspended: set[date] = set()
     start: date | None = None
@@ -757,30 +785,59 @@ def _suspension_kind(event_type: str | None) -> str | None:
     return None
 
 
-def _exchange_quote_days(db: Session, exchange: str, sessions: list[date]) -> set[date]:
-    """Sessions on which ``exchange`` has a stored bar of any of its stocks."""
+def _exchange_has_bar(db: Session, exchange: str, day: date) -> bool:
+    """Whether ``exchange`` has a stored bar of any of its stocks on ``day``.
 
-    if not sessions:
-        return set()
-    cache = db.info.setdefault("_decision_exchange_quote_days", {})
-    key = (exchange, sessions[0], sessions[-1])
+    One EXISTS per (exchange, day), asked only for a stock's unexplained
+    missing sessions and cached per session (#511 review: no scan of the
+    exchange's whole window on every stock page).
+    """
+
+    cache = db.info.setdefault("_decision_exchange_bar_days", {})
+    key = (exchange, day)
     if key not in cache:
-        cache[key] = {
-            read_market_date(value)
-            for value in db.scalars(
-                # Untyped: read_market_date validates the stored text itself.
-                select(literal_column("market_bars.trading_date"))
-                .select_from(MarketBar)
-                .join(Instrument, Instrument.id == MarketBar.instrument_id)
-                .where(
-                    Instrument.exchange == exchange,
-                    Instrument.instrument_type != "index",
-                    MarketBar.trading_date >= sessions[0],
-                    MarketBar.trading_date <= sessions[-1],
+        cache[key] = bool(
+            db.scalar(
+                select(
+                    exists().where(
+                        MarketBar.instrument_id == Instrument.id,
+                        Instrument.exchange == exchange,
+                        Instrument.instrument_type != "index",
+                        MarketBar.trading_date == day,
+                    )
                 )
-                .distinct()
-            ).all()
-        }
+            )
+        )
+    return cache[key]
+
+
+def _exchange_has_chips(db: Session, exchange: str, day: date, group: str) -> bool:
+    """Whether any ``exchange`` stock has a chip row with ``group``'s values on ``day``.
+
+    ``group`` is ``institutional`` or ``margin``.  False means the official
+    table of the day was not collected, not that it left one stock out.
+    """
+
+    cache = db.info.setdefault("_decision_exchange_chip_days", {})
+    key = (exchange, day, group)
+    if key not in cache:
+        value = (
+            ChipSnapshot.foreign_buy
+            if group == "institutional"
+            else ChipSnapshot.margin_balance
+        )
+        cache[key] = bool(
+            db.scalar(
+                select(
+                    exists().where(
+                        ChipSnapshot.instrument_id == Instrument.id,
+                        Instrument.exchange == exchange,
+                        ChipSnapshot.trading_date == day,
+                        value.is_not(None),
+                    )
+                )
+            )
+        )
     return cache[key]
 
 
@@ -1632,6 +1689,9 @@ def build_decision_summary(
             sessions=sorted(set(stock_sessions)),
             strategy_results=strategy_results,
             group_missing=group_missing,
+            chip_collected=lambda day, group: _exchange_has_chips(
+                db, instrument.exchange, day, group
+            ),
         )
     elif action_state == "conditional_entry":
         action_instruction = "現在：條件成立；僅在觸發價與風險條件同時符合時行動。"
