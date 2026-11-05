@@ -535,13 +535,14 @@ a.symbol-link:hover { color: var(--color-primary); }
 /* 今日可買 table (#493, DESIGN_SYSTEM §5 候選列表): fixed column widths, two lines a row at most, so nothing squeezes or
    spills at 1280 and 1440 and six rows fit the 1280×800 first screen. */
 .candidate-table { width: 100%; table-layout: fixed; }
-.candidate-table th:nth-child(1) { width: 24%; }
+.candidate-table th:nth-child(1) { width: 22%; }
 .candidate-table th:nth-child(2) { width: 104px; }
-.candidate-table th:nth-child(3) { width: 32%; }
-.candidate-table th:nth-child(4) { width: 76px; }
-.candidate-table th:nth-child(5) { width: 96px; }
+.candidate-table th:nth-child(3) { width: 27%; }
+.candidate-table th:nth-child(4) { width: 88px; }
+.candidate-table th:nth-child(5) { width: 120px; }
 .candidate-table th:nth-child(7) { width: 104px; }
 .candidate-table td { overflow: hidden; }
+.candidate-table .candidate-rr-cell .badge { white-space: nowrap; }
 .candidate-stock-line, .candidate-stock-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .candidate-stock-line .candidate-rank { margin-right: var(--space-1); }
 .candidate-entry-way { display: grid; gap: 2px; font-size: 14px; white-space: nowrap; }
@@ -764,6 +765,10 @@ a.symbol-link:hover { color: var(--color-primary); }
   .home-page .candidates-section .section-head { flex-wrap: nowrap; align-items: flex-end; margin: var(--space-3) 0 var(--space-2); }
   .candidates-section .section-head h2 { font-size: 22px; }
   .candidates-section .board-dates { flex-wrap: nowrap; gap: var(--space-1); }
+  /* One title row on phones (#493): the eyebrow repeats the note below it, the badges and 策略說明 sit beside 今日可買. */
+  .home-page .candidates-section .section-head .eyebrow { display: none; }
+  .candidates-section .section-head-tools { flex-wrap: nowrap; gap: var(--space-2); }
+  .candidates-section .section-head-tools .text-link { font-size: 13px; white-space: nowrap; }
   .candidates-section .board-dates .badge { padding: 2px 8px; font-size: 12px; }
   .candidate-mini { padding: var(--space-3); }
   .candidate-mini-levels { gap: var(--space-1) var(--space-2); margin-top: var(--space-1); }

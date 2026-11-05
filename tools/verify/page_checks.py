@@ -562,7 +562,7 @@ class Run:
         skipped = []
         for source, pick in (
             ("今日榜", self._pick_from_board),
-            ("明日候選", self._pick_from_candidates),
+            ("今日可買", self._pick_from_candidates),
             ("市場列表", self._pick_from_list),
         ):
             try:
@@ -588,7 +588,7 @@ class Run:
         if not items:
             raise Undetermined("candidates.json 的 items 為空")
         instrument = items[0]["instrument"]
-        return Stock(instrument["exchange"], instrument["symbol"]), "明日候選 #1"
+        return Stock(instrument["exchange"], instrument["symbol"]), "今日可買 #1"
 
     def _pick_from_list(self) -> tuple[Stock, str]:
         items = self.get("stocks?page=1&page_size=30", "stocks.json").get("items") or []
@@ -664,7 +664,7 @@ def action_detail_shot(stock: Stock) -> Shot:
 
 
 def actions_shots(run: Run) -> list[Shot]:
-    shots = [Shot("actions", "/actions")]
+    shots = [ACTIONS, ACTIONS_LEGACY]
     try:
         shots.append(action_detail_shot(run.stock()))
     except CheckError:
@@ -873,10 +873,15 @@ def ai_direction_label(ai: dict) -> str:
     return DIRECTION_LABELS.get(direction, "影響尚未判定")
 
 
+# HOME_NEWS_LIMIT in frontend/src/App.tsx (#493); the first line of the Shell footer.
+HOME_NEWS = 5
+FOOTER_FIRST_LINE = "T 日收盤訊號 · 最早 T+1 執行 · T+5／T+20 追蹤"
+
+
 @check("today", "T6")
 def t6(run: Run) -> str:
     text = run.text(TODAY)
-    news = (run.dashboard().get("news") or [])[:3]
+    news = (run.dashboard().get("news") or [])[:HOME_NEWS]
     if not news:
         message = "市場新聞區尚無可顯示內容。"
         expect(text.has(message), f"dashboard.news 空，缺 `{message}`")
@@ -886,7 +891,8 @@ def t6(run: Run) -> str:
         i = text.find(item["title"])
         expect(i >= 0, f"缺新聞標題整行 `{item['title']}`（id {item['id']}）")
         starts.append(i)
-    end = text.find("關注標的", max(starts))
+    # The news card is the last block of the page (#493); the footer ends the last card.
+    end = text.find(FOOTER_FIRST_LINE, max(starts))
     bounds = sorted(starts) + [end if end >= 0 else len(text.lines)]
     problems, marked = [], []
     for item, start in zip(news, starts):
@@ -928,15 +934,29 @@ def source_lines(text: Text) -> list[int]:
     return [i for i, line in enumerate(text.lines) if line.startswith("來源：")]
 
 
-# A candidate table row starts with its rank cell and a tab (#276): `#1<TAB>…`. The old
-# cards put `#1` on a line of its own, so the tab tells a table row from a card.
-RANK_ROW = re.compile(r"^#([0-9]+)\t")
+# A candidate table row starts with its stock cell (#493): `#1 2330 台積電` (rank, symbol,
+# name on one line). The hot group rows put `#1` on a line of its own, and the phone cards
+# are hidden at 1280, so the symbol after the rank tells a table row.
+RANK_ROW = re.compile(r"^#([0-9]+) [0-9A-Z]+ ")
+# CandidatesSection in frontend/src/candidates/CandidateViews.tsx (#493); the navbar has a
+# 今日可買 link too, so the title is the line after its eyebrow (hidden only at 640px and below).
+CANDIDATES_TITLE, CANDIDATES_EYEBROW = "今日可買", "條件已成立 · 依評分排序"
+
+
+def candidates_title(text: Text) -> int:
+    """The 今日可買 section title, not the navbar link; -1 when it is missing."""
+
+    i = text.find(CANDIDATES_EYEBROW)
+    if i >= 0:
+        return text.find(CANDIDATES_TITLE, i)
+    found = [n for n, line in enumerate(text.lines) if line == CANDIDATES_TITLE]
+    return found[-1] if found else -1
 
 
 def candidate_ranks(text: Text) -> list[int]:
-    """Rank cells between 明日候選 and 熱門族群 (the group rows have their own `#n`)."""
+    """Rank cells between 今日可買 and 熱門族群 (the group rows have their own `#n`)."""
 
-    start, end = text.find("明日候選"), text.find("熱門族群")
+    start, end = candidates_title(text), text.find("熱門族群")
     end = end if end > start else len(text.lines)
     return [
         int(match.group(1))
@@ -969,11 +989,11 @@ def t7(run: Run) -> str:
         expect(text.has("當日零候選"), "items 空，缺 `當日零候選`")
         return "items 空，DB 也是 0 檔，顯示 `當日零候選`"
     c = payload["trading_date"]
-    i = text.find("明日候選")
-    expect(i >= 0, "缺整行 `明日候選`")
+    i = candidates_title(text)
+    expect(i >= 0, f"缺整行 `{CANDIDATES_TITLE}`")
     expect(
         text.after(i) == f"資料 {slash(c)}",
-        f"`明日候選` 下一行是 {text.after(i)!r}，預期 `資料 {slash(c)}`（{text.at(i)}）",
+        f"`{CANDIDATES_TITLE}` 下一行是 {text.after(i)!r}，預期 `資料 {slash(c)}`（{text.at(i)}）",
     )
     count_line = f"{payload['candidate_count']} 檔"
     expect(
@@ -1030,54 +1050,17 @@ def t8(run: Run) -> str:
     )
 
 
-def home_actions(dashboard: dict) -> list[dict]:
-    """The 關注標的 cards of TodayPage (frontend/src/App.tsx homeActions), deduplicated."""
-
-    shown = {}
-    for action in (dashboard.get("actions") or []) + (
-        dashboard.get("candidates") or []
-    ):
-        if (
-            action.get("action_state") != "data_insufficient"
-            or action.get("held") is True
-            or action.get("position_quantity_status") == "unknown"
-        ):
-            instrument = action.get("instrument") or {}
-            key = (
-                instrument.get("exchange"),
-                instrument.get("symbol"),
-                action.get("as_of"),
-            )
-            shown.setdefault(key, action)
-    return list(shown.values())
-
-
 @check("today", "T9")
 def t9(run: Run) -> str:
+    """#493: 今日可買 keeps one list; 關注標的 moved to 觀察中 and every home link to it is /watch."""
+
     text = run.text(TODAY)
-    k = text.count(lambda line: line == "查看個股詳情 →")
-    if k == 0:
-        # #251: the empty state passes only when no other source has something to show.
-        shown = home_actions(run.dashboard())
-        expect(
-            not shown,
-            f"沒有卡片，但 dashboard.actions／candidates 有 {len(shown)} 筆可顯示",
-        )
-        payload = candidates(run)
-        listed, day = payload.get("items") or [], payload.get("trading_date")
-        latest = run.facts()["market_latest_trading_date"]
-        expect(
-            not (listed and day and day == latest),
-            f"沒有卡片，但 candidates.json 有 {len(listed)} 檔 {day}（DB 最新交易日）成立條件的候選",
-        )
-        message = (run.dashboard().get("empty_states") or {}).get(
-            "actions"
-        ) or "目前沒有可顯示的行動摘要。"
-        expect(text.has(message), f"沒有卡片，缺空資料文案 `{message}`")
-        return f"沒有卡片，dashboard 與候選也沒有，顯示 `{message}`"
-    dates = text.count(lambda line: bool(DATE_LINE.match(line)))
-    expect(dates == k, f"`查看個股詳情 →` {k} 行，`資料日 YYYY/MM/DD` {dates} 行")
-    return f"{k} 張卡各有 `資料日`"
+    for line in ("關注標的", "查看個股詳情 →", "查看行動中心 →", "明日候選"):
+        expect(not text.has(line), f"首頁仍有整行 `{line}`")
+    alert = text.has("查看觀察中 →")
+    return "首頁沒有 `關注標的`、`明日候選`；" + (
+        "持倉風險提示列連到 `查看觀察中 →`" if alert else "沒有持倉風險提示列"
+    )
 
 
 # ---- T11 market overview (#276, UI_COPY_SPEC §11) ----
@@ -1202,18 +1185,23 @@ def t12(run: Run) -> str:
     """#276: candidates come before the groups and the news (PRODUCT_SPEC §2)."""
 
     text = run.text(TODAY)
-    found = {title: text.find(title) for title in ("明日候選", "熱門族群", "重點新聞")}
+    found = {
+        CANDIDATES_TITLE: candidates_title(text),
+        "熱門族群": text.find("熱門族群"),
+        "重點新聞": text.find("重點新聞"),
+    }
     missing = [title for title, i in found.items() if i < 0]
     expect(not missing, "缺整行 " + "、".join(f"`{title}`" for title in missing))
+    first = found[CANDIDATES_TITLE]
     expect(
-        found["明日候選"] < found["熱門族群"] and found["明日候選"] < found["重點新聞"],
+        first < found["熱門族群"] and first < found["重點新聞"],
         "區塊順序 "
         + " → ".join(
             title for title, _ in sorted(found.items(), key=lambda item: item[1])
         )
-        + "，預期 `明日候選` 在 `熱門族群` 與 `重點新聞` 之前",
+        + f"，預期 `{CANDIDATES_TITLE}` 在 `熱門族群` 與 `重點新聞` 之前",
     )
-    return "`明日候選`（{0}）→ `熱門族群`（{1}）、`重點新聞`（{2}）".format(
+    return "`今日可買`（{0}）→ `熱門族群`（{1}）、`重點新聞`（{2}）".format(
         *(text.at(i) for i in found.values())
     )
 
@@ -1949,7 +1937,10 @@ def s9(run: Run, stock: Stock) -> str:
 
 # ---- actions ----
 
-ACTIONS = Shot("actions", "/actions")
+# The page is 觀察中 at /watch since #493; the old /actions redirects there (A18).
+ACTIONS = Shot("actions", "/watch")
+ACTIONS_LEGACY = Shot("actions-legacy", "/actions", (1280,))
+WATCH_TITLE, WATCH_EYEBROW = "觀察中", "追蹤與提醒"  # ActionsPage in frontend/src/App.tsx
 
 
 def actions_payload(run: Run) -> dict:
@@ -2581,6 +2572,25 @@ def a17(run: Run) -> str:
     return f"{total} 列明細 = 各卡 sessions_observed；計畫 {plan_id} 的 {len(want)} 列 = tracking-plan.json"
 
 
+def watch_title(text: Text) -> int:
+    """The page title line: 觀察中 right after its eyebrow (the navbar also has a 觀察中 link)."""
+
+    i = text.find(WATCH_EYEBROW)
+    return i + 1 if i >= 0 and text.after(i) == WATCH_TITLE else -1
+
+
+@check("actions", "A18")
+def a18(run: Run) -> str:
+    """#493: /watch is 觀察中, and the old /actions lands on it instead of a 404."""
+
+    pages = (("`/watch`", run.text(ACTIONS)), ("`/actions`", run.text(ACTIONS_LEGACY)))
+    for where, text in pages:
+        expect(not text.has("找不到此頁。"), f"{where} 是找不到此頁")
+        i = watch_title(text)
+        expect(i >= 0, f"{where} 缺 `{WATCH_EYEBROW}` 之後整行 `{WATCH_TITLE}`")
+    return f"`/watch` 與 `/actions` 都是 `{WATCH_EYEBROW}` → `{WATCH_TITLE}`"
+
+
 # ---- manual checks: samples picked by fixed rules, judged by an agent ----
 #
 # Each features check labeled 人工 has a sampler here (registry_problems enforces
@@ -2855,11 +2865,11 @@ def summary_markdown(
 
     lines = [head, ""]
     names = {
-        "today": "今日 `/`",
+        "today": "今日可買 `/`",
         "news": "新聞 `/news`",
         "themes": "族群 `/themes`",
         "stocks": "個股 `/stocks`",
-        "actions": "行動 `/actions`",
+        "actions": "觀察中 `/watch`",
     }
     if samples:
         lines += [
