@@ -5885,6 +5885,40 @@ def _summarize_research_backtest(db: Session, run: IngestionRun) -> dict[str, An
     return _backtest_summary(run, grouped, signal_total - actionable_total)
 
 
+def close_abandoned_backtests(db: Session) -> list[int]:
+    """Close the canonical backtest runs a dead process left ``running`` (#484).
+
+    A canonical backtest runs only through ``worker.cli backtest``, which holds
+    maintenance mode (``worker.job.MaintenanceHold``: one backfill or backtest at
+    a time), so a canonical run still ``running`` when another one starts has no
+    process left; run 2286 was ended by the OOM killer.  It is closed as the
+    other jobs close theirs: ``failed`` with an ``abandoned:`` error.  Research
+    runs (``:research:`` keys) run on copies outside that hold and are left alone.
+    """
+
+    now = utcnow()
+    rows = db.scalars(
+        select(IngestionRun)
+        .where(
+            IngestionRun.run_type == "backtest",
+            IngestionRun.status == "running",
+            IngestionRun.request_key.like(f"{BACKTEST_REQUEST_PREFIX}:%"),
+            IngestionRun.request_key.not_like("%:research:%"),
+        )
+        .order_by(IngestionRun.id)
+    ).all()
+    for row in rows:
+        row.status = "failed"
+        row.error = (
+            "abandoned: still running when the next canonical backtest started,"
+            " which holds maintenance mode alone"
+        )
+        row.finished_at = now
+    if rows:
+        db.commit()
+    return [row.id for row in rows]
+
+
 class BacktestPaused(RuntimeError):
     """A research backtest stopped by its ``should_stop`` check after a commit."""
 
@@ -5952,6 +5986,9 @@ def backtest(
     tracking batch's commit; a reason stops it as a failed run
     (``BacktestPaused``) that a rerun completes.  Without ``registry`` it is
     never asked.
+
+    A canonical run first closes the canonical runs left ``running``
+    (``close_abandoned_backtests``) and lists their ids in ``abandoned_runs``.
     """
 
     if start_date > end_date:
@@ -5965,6 +6002,15 @@ def backtest(
     if registry is not None:
         request_key += ":research:" + ",".join(registry)
     with SessionLocal() as db:
+        # Before the request key is read: a killed run of this same range is
+        # closed too, then retried in place like any failed run.
+        abandoned = close_abandoned_backtests(db) if registry is None else None
+
+        def finish(summary: dict[str, Any]) -> dict[str, Any]:
+            if abandoned is not None:
+                summary["abandoned_runs"] = abandoned
+            return summary
+
         run = db.scalar(
             select(IngestionRun).where(IngestionRun.request_key == request_key)
         )
@@ -5975,7 +6021,7 @@ def backtest(
                 else _summarize_research_backtest(db, run)
             )
             summary["idempotent_reuse"] = True
-            return summary
+            return finish(summary)
         if not run:
             run = IngestionRun(
                 run_type="backtest",
@@ -6122,7 +6168,7 @@ def backtest(
             db.commit()
             if registry is not None:
                 return _summarize_research_backtest(db, run)
-            return summarize_backtest(db, run.id)
+            return finish(summarize_backtest(db, run.id))
         except Exception as exc:
             db.rollback()
             failed = db.get(IngestionRun, run.id)
@@ -6136,19 +6182,21 @@ def backtest(
                 }
                 failed.finished_at = utcnow()
                 db.commit()
-            return {
-                "run": {
-                    "id": run.id,
-                    "status": "failed",
-                    "request_key": request_key,
+            return finish(
+                {
+                    "run": {
+                        "id": run.id,
+                        "status": "failed",
+                        "request_key": request_key,
+                        "assessment": "failed",
+                        "zero_actionable_count": 0,
+                    },
+                    "groups": [],
                     "assessment": "failed",
                     "zero_actionable_count": 0,
-                },
-                "groups": [],
-                "assessment": "failed",
-                "zero_actionable_count": 0,
-                "error": f"{type(exc).__name__}: {exc}",
-            }
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            )
 
 
 def run_daily(
