@@ -10,6 +10,9 @@ export const coverageReasonLabels: Record<string, string> = {
   missing_taiex: '缺少 加權指數 交易日基準',
   missing_chips: '部分有效交易日缺少籌碼',
   etf_not_general_action_eligible: '此 ETF 類型不套用一般股票進出場判斷',
+  // The stock page's coverage only (Issue 511): the day's quote table was stored but has no row for the stock.
+  quote_not_listed: '官方行情表當日未列此股',
+  coverage_baseline_unknown: '尚無可核實的 加權指數 交易日基準',
 }
 
 function countLabel(value: number | null | undefined): string {
