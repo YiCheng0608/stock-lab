@@ -263,11 +263,12 @@ function CandidateMiniCard({ item, hidden }: { item: CandidateItem; hidden: bool
         <Link className="symbol-link" to={stockPath(item)}><strong>{instrument.symbol}</strong> {instrument.name}</Link>
         <span className="candidate-mini-total"><Term id="candidate_score">總分</Term> <b>{formatCandidateScore(item.total_score)}</b></span>
       </div>
-      {/* #491: the first line under the name says how to enter. */}
-      <EntryPlanCard item={item} className="candidate-entry" />
+      {/* #491: the first line under the name says how to enter; its folded conditions open with 「AI 說明」, as in the
+          desktop detail (#493), so two cards fit the 390×844 first screen (DESIGN_SYSTEM §4). */}
+      <EntryPlanCard item={item} className="candidate-entry" conditions={false} />
       <div className="small-note">{exchangeLabel(instrument.exchange)} · {candidateStrategyLabel(item.strategy)} · {groupText(item)}</div>
       <LiquidityNote item={item} />
-      <dl className="candidate-mini-levels">
+      <dl className={cx('candidate-mini-levels', levelsInSentence && 'candidate-mini-levels-close')}>
         <div><dt>收盤（元）</dt><dd><CloseValue item={item} /></dd></div>
         {!levelsInSentence && <>
           <div><dt><Term id="entry_zone">進場區</Term>（元）</dt><dd className="level-entry">{formatEntryZone(levels)}</dd></div>
@@ -277,7 +278,7 @@ function CandidateMiniCard({ item, hidden }: { item: CandidateItem; hidden: bool
         </>}
       </dl>
       <p className="candidate-mini-reason"><FirstReason item={item} /></p>
-      <details className="details candidate-mini-ai"><summary>AI 說明</summary><CandidateDetail item={item} /></details>
+      <details className="details candidate-mini-ai"><summary>AI 說明</summary><EntryConditions item={item} /><CandidateDetail item={item} /></details>
     </article>
   )
 }

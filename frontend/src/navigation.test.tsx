@@ -129,6 +129,11 @@ check(entryCell.includes('data-entry-plan="levels"') && text(entryCell).includes
   `進場方式欄是進場句: ${text(entryCell).slice(0, 300)}`)
 check(!entryCell.includes('entry-plan-conditions'), '進場方式欄不放完整條件（在明細裡）')
 check(count(body, 'aria-label="進場方式"') === listResponse().items.length, `桌面每檔只有一份進場句: ${count(body, 'aria-label="進場方式"')}`)
+// Phone card: the sentence under the name without its conditions, which open with 「AI 說明」 (two cards at 390×844).
+const card1 = list.slice(list.indexOf('data-candidate-card="1"'), list.indexOf('</article>', list.indexOf('data-candidate-card="1"')))
+const cardPlan = card1.slice(card1.indexOf('aria-label="進場方式"'), card1.indexOf('</section>', card1.indexOf('aria-label="進場方式"')))
+check(cardPlan.length > 0 && !cardPlan.includes('entry-plan-conditions') && card1.indexOf('entry-plan-conditions') > card1.indexOf('candidate-mini-ai'), '手機卡的完整條件在「AI 說明」裡')
+check(card1.includes('candidate-mini-levels candidate-mini-levels-close'), '主句有價位時手機卡的收盤排成一行')
 
 // ---- first_trading_day reads 掛牌首日: a market transfer also starts a new listing row (#475 review) ----
 check(noPreviousCloseText('first_trading_day') === '掛牌首日', `first_trading_day: ${noPreviousCloseText('first_trading_day')}`)

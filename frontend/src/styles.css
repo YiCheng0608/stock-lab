@@ -582,6 +582,9 @@ a.symbol-link:hover { color: var(--color-primary); }
 .entry-plan-condition-list { display: grid; gap: var(--space-1); margin: var(--space-1) 0 0; padding: 0; list-style: none; font-size: 13px; }
 .entry-plan-condition-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); }
 .candidate-mini .candidate-entry { margin-top: var(--space-2); }
+/* Only the close is left when the sentence has the levels (#491): label, close and change on one line (#493). */
+.candidate-mini-levels-close > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-3); }
+.candidate-mini-levels-close dd { display: flex; align-items: baseline; gap: var(--space-3); }
 .candidate-rank { flex: none; min-width: 40px; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); background: var(--color-bg-elevated); font: 700 16px var(--font-mono); text-align: center; }
 .candidate-partial { margin-top: var(--space-2); color: var(--color-warning); }
 .candidate-levels, .candidate-components { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); margin: var(--space-3) 0 0; }
@@ -763,7 +766,8 @@ a.symbol-link:hover { color: var(--color-primary); }
   .market-overview-grid .market-widget-dual { display: none; }
   .market-overview-more { display: block; }
   .candidate-table-wrap { display: none; }
-  .candidate-cards { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .candidate-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+  .candidate-mini .candidate-entry { margin-top: var(--space-1); }
   .action-table-wrap { display: none; }
   .action-cards { display: grid; }
   .action-tier { margin-top: var(--space-6); }

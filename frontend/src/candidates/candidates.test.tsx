@@ -170,7 +170,7 @@ const detailRows = today.split('data-candidate-detail=').slice(1)
 const miniCards = today.split('class="card candidate-mini"').slice(1)
 check(detailRows.length === todayItems.length && miniCards.length === todayItems.length, 'one detail row and one phone card per candidate')
 check(detailRows.every((row, index) => slice(row, '<details class="candidate-detail"', '</tr>').includes(index === 0 ? '>已在追蹤</a>' : '>加入追蹤</button>')), 'every detail row has the plan button or link')
-check(miniCards.every((card, index) => slice(card, '<details class="details candidate-mini-ai"', '</details>').includes(index === 0 ? '>已在追蹤</a>' : '>加入追蹤</button>')), 'every phone card detail has the plan button or link')
+check(miniCards.every((card, index) => slice(card, '<details class="details candidate-mini-ai"', '</article>').includes(index === 0 ? '>已在追蹤</a>' : '>加入追蹤</button>')), 'every phone card detail has the plan button or link')
 const trackedDetail = slice(detailRows[0], '<details class="candidate-detail"', '</tr>')
 check(trackedDetail.includes('href="/watch#plan-7">已在追蹤</a>') && !trackedDetail.includes('加入追蹤'), 'a tracked candidate links to its plan')
 
