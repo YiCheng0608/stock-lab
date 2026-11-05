@@ -753,7 +753,7 @@ function ChipGroupLine({ label, group }: { label: string; group: ChipGroupSource
 
 export function ChipTable({ rows }: { rows: InstrumentDetail['chips'] }) {
   return <>
-    <div className="small-note chip-unit-note">單位：張（三大法人為股數 ÷ 1,000 四捨五入，不足 500 股為 0）。三大法人為外資、投信、自營商；正值為買超，負值為賣超。融資正值為餘額增加，負值為減少。空白表示未提供資料、數值無效或來源單位待核實；原始股數與來源見下方說明。</div>
+    <div className="small-note chip-unit-note">單位：張（三大法人為股數 ÷ 1,000 四捨五入，不足 500 股為 0）。三大法人為外資、投信、自營商；正值為買超，負值為賣超。融資正值為餘額增加，負值為減少。三大法人欄空白：官方三大法人表當天未列此股（只列當天有法人買賣的股票）；融資欄空白：當天不是融資標的，或官方融資餘額表未列此股；其他空白表示數值無效或來源單位待核實。原始股數與來源見下方說明。</div>
     <DataTable wrapClassName="compact-table" columns={CHIP_COLUMNS} rows={rows} rowKey={(row, index) => row.id ?? row.date ?? index} />
     <details className="technical-details chip-source-details"><summary>資料來源與原始值</summary><div className="chip-source-list">{rows.map((row) => <div className="chip-source-row" key={`${row.date}-${row.source}`}><strong>{formatTaiwanDateTime(row.date, true)}</strong><ChipGroupLine label="法人" group={row.institutional} /><ChipGroupLine label="融資" group={row.margin} /><span>來源稽核原值：外資（{isVerifiedChipFlowSource(row.institutional?.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.foreign_buy)} · 投信（{isVerifiedChipFlowSource(row.institutional?.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.trust_buy)} · 自營商（{isVerifiedChipFlowSource(row.institutional?.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.dealer_buy)} · 融資（{isVerifiedMarginSource(row.margin?.source) ? '張' : '單位待核實'}） {formatRawChipValue(row.margin_change)}</span></div>)}</div></details>
   </>
