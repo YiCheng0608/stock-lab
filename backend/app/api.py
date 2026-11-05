@@ -127,6 +127,7 @@ from .units import (
     volume_exact_text,
 )
 from .strategies import REGISTRY
+from .signal_versions import product_signal
 from .strategy_board import strategy_board
 from .stock_bars import (
     DEFAULT_LIMIT as BARS_DEFAULT_LIMIT,
@@ -1761,10 +1762,15 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
     )
     bars_count = db.scalar(select(func.count(MarketBar.id))) or 0
     signal_rows = db.scalars(
-        select(Signal).order_by(desc(Signal.signal_date), desc(Signal.id)).limit(8)
+        select(Signal)
+        .where(product_signal())
+        .order_by(desc(Signal.signal_date), desc(Signal.id))
+        .limit(8)
     ).all()
     status_rows = db.execute(
-        select(Signal.status, func.count(Signal.id)).group_by(Signal.status)
+        select(Signal.status, func.count(Signal.id))
+        .where(product_signal())
+        .group_by(Signal.status)
     ).all()
     # The latest successful run (Issue #249: a newer holiday "skipped" run must
     # not blank as_of); the newest attempt only when none has succeeded.
@@ -3180,6 +3186,7 @@ def instrument_detail(
         select(Signal)
         .where(
             Signal.instrument_id == instrument.id,
+            product_signal(),
             Signal.signal_date <= (as_of or date.max),
         )
         .order_by(desc(Signal.signal_date), desc(Signal.id))
@@ -3328,7 +3335,11 @@ def signals(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     page_size = _effective_page_size(page_size, limit)
-    query = select(Signal).join(Instrument, Instrument.id == Signal.instrument_id)
+    query = (
+        select(Signal)
+        .join(Instrument, Instrument.id == Signal.instrument_id)
+        .where(product_signal())
+    )
     if status:
         query = query.where(Signal.status == status)
     if instrument_symbol:
