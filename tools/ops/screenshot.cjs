@@ -24,7 +24,7 @@ const USAGE = `usage: node tools/ops/screenshot.cjs --url <page> --out <dir> [op
   -h, --help           show this help
 
 Writes <out>/<name>-<width>.png and <out>/<name>-<width>.txt and prints one JSON line per
-width: {"url","width","ready","png","txt","scrollWidth","clientWidth","overflow",
+width: {"url","finalUrl","width","ready","png","txt","scrollWidth","clientWidth","overflow",
 "consoleErrors","httpErrors","missingClicks"}. Exit 0 when every width became ready, 1 otherwise, 2 on usage.`
 
 // Phone widths use mobile emulation; heights are the viewport before the full-page capture.
@@ -229,6 +229,7 @@ async function captureWidth(cdp, options, width, watch) {
     clientWidth: document.documentElement.clientWidth,
     scrollHeight: document.documentElement.scrollHeight,
     text: document.body ? document.body.innerText : '',
+    finalUrl: location.href,
   })`)
   const shot = await cdp.send('Page.captureScreenshot', {
     format: 'png',
@@ -241,6 +242,8 @@ async function captureWidth(cdp, options, width, watch) {
   fs.writeFileSync(txt, metrics.text, 'utf8')
   return {
     url: options.url,
+    // Where the page ended up after client-side redirects (#493: /actions must land on /watch).
+    finalUrl: metrics.finalUrl,
     width,
     ready,
     png: png.split(path.sep).join('/'),

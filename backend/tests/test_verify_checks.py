@@ -223,13 +223,15 @@ def _candidates(count=2, inference=True):
     }
 
 
-# The 1280 table (#276): rank cell first, tab-separated cells, then the opened detail row.
+# The 1280 table (#493): the navbar's 今日可買 link, the section title after its eyebrow,
+# then rows whose stock cell starts `#<rank> <symbol> <name>`, then the opened detail row.
 TODAY_CANDIDATES = (
-    "明日候選\n資料 2026/10/16\n2 檔\n"
-    "名次\t股票\t所屬族群（名次）\t最近收盤（元）\n"
-    "#1\t9100 示範一\n上市 · 突破條件\t半導體（產業，第 1 名／9）\t21.10\n+0.48%\tAI 推論 ▸\n"
+    "今日可買\n觀察中\n"
+    "條件已成立 · 依評分排序\n今日可買\n資料 2026/10/16\n2 檔\n策略說明 →\n"
+    "股票\t最近收盤（元）\t進場方式（元）\tRR\n"
+    "#1 9100 示範一\n上市 · 半導體（產業 #1）\t21.10\n+0.48%\t突破型進場 21.10\tAI 推論 ▸\n"
     "AI 推論\n" + page_checks.CANDIDATE_DISCLAIMER + "\n來源：訊號 a（推論）\n"
-    "#2\t9101 示範二\n上櫃 · 回踩條件\t無所屬產業或題材\t13.20\n漲跌待核實\tAI 說明 ▸\n"
+    "#2 9101 示範二\n上櫃 · 無所屬族群\t13.20\n漲跌待核實\t回踩型進場 13.00～13.20\tAI 說明 ▸\n"
     "AI 推論\n" + page_checks.CANDIDATE_DISCLAIMER + "\n來源：訊號 b（推論）\n"
     "熱門族群\n#1\n半導體\n"
 )
@@ -247,18 +249,33 @@ def test_t7_and_t8_pass_on_matching_text(tmp_path):
     assert "`AI 推論` 2 行" in result and "`AI 推論 ▸` 1、`AI 說明 ▸` 1" in result
 
 
-def test_t7_fails_on_the_old_candidate_cards(tmp_path):
-    # Before #276 each candidate was a card: its rank `#1` on a line of its own.
-    page = TODAY_CANDIDATES.replace("#1\t", "#1\n").replace("#2\t", "#2\n")
+def test_t7_fails_on_the_old_candidate_rows(tmp_path):
+    # Before #493 the rank was a cell of its own (`#1<TAB>9100 …`), and before #276 a card
+    # (`#1` on a line of its own); neither is a 今日可買 row.
+    for old in ("\t", "\n"):
+        page = TODAY_CANDIDATES.replace("#1 ", "#1" + old).replace("#2 ", "#2" + old)
+        run = FakeRun(
+            tmp_path,
+            {"candidates": _candidates()},
+            {"today-1280": page},
+            {"candidate_run_latest_trading_date": "2026-10-16"},
+        )
+        with pytest.raises(
+            page_checks.Fail, match=r"`#n` 名次列 \[\]，預期依 items \[1, 2\]"
+        ):
+            page_checks.t7(run)
+
+
+def test_t7_reads_the_section_title_not_the_navbar_link(tmp_path):
+    # #493: the navbar 今日可買 comes first; the date must follow the section title.
+    page = TODAY_CANDIDATES.replace("條件已成立 · 依評分排序\n今日可買\n", "")
     run = FakeRun(
         tmp_path,
         {"candidates": _candidates()},
         {"today-1280": page},
         {"candidate_run_latest_trading_date": "2026-10-16"},
     )
-    with pytest.raises(
-        page_checks.Fail, match=r"`#n` 名次列 \[\]，預期依 items \[1, 2\]"
-    ):
+    with pytest.raises(page_checks.Fail, match="`今日可買` 下一行是 '觀察中'"):
         page_checks.t7(run)
 
 
@@ -289,7 +306,7 @@ def test_t7_fails_when_the_page_drops_the_candidates(tmp_path):
     run = FakeRun(
         tmp_path,
         {"candidates": _candidates()},
-        {"today-1280": "明日候選\n資料 2026/10/16\n2 檔\n"},
+        {"today-1280": "今日可買\n資料 2026/10/16\n2 檔\n"},
         {"candidate_run_latest_trading_date": "2026-10-16"},
     )
     with pytest.raises(page_checks.Fail, match=r"`#n` 名次列 \[\]，預期依 items"):
@@ -482,16 +499,16 @@ def test_t11_fails_on_the_old_page_without_an_overview(tmp_path):
 
 
 def test_t12_needs_the_candidates_before_groups_and_news(tmp_path):
-    page = "明日候選\n資料 2026/10/16\n熱門族群\n資料 2026/10/16\n重點新聞\n關注標的\n"
+    page = "今日可買\n資料 2026/10/16\n熱門族群\n資料 2026/10/16\n重點新聞\n"
     run = FakeRun(tmp_path, {}, {"today-1280": page})
-    assert "`明日候選`" in page_checks.t12(run)
-    old = "今日市場／重大事件\n熱門族群\n明日候選\n關注標的\n"
+    assert "`今日可買`" in page_checks.t12(run)
+    old = "今日市場／重大事件\n熱門族群\n今日可買\n關注標的\n"
     run = FakeRun(tmp_path, {}, {"today-1280": old})
     with pytest.raises(page_checks.Fail, match="缺整行 `重點新聞`"):
         page_checks.t12(run)
-    swapped = "熱門族群\n重點新聞\n明日候選\n"
+    swapped = "熱門族群\n重點新聞\n今日可買\n"
     run = FakeRun(tmp_path, {}, {"today-1280": swapped})
-    with pytest.raises(page_checks.Fail, match="熱門族群 → 重點新聞 → 明日候選"):
+    with pytest.raises(page_checks.Fail, match="熱門族群 → 重點新聞 → 今日可買"):
         page_checks.t12(run)
 
 
@@ -903,5 +920,52 @@ def test_status_summary_leaves_out_the_evidence():
     status = page_checks.summary_markdown(results, ["actions"], "## head", False)
     assert "台積電" in full and "預期 X" in full
     assert "台積電" not in status and "預期 X" not in status
-    assert "### 行動 `/actions`：失敗" in status
+    assert "### 觀察中 `/watch`：失敗" in status
     assert "| A2 | 通過 |" in status and "| A3 | 失敗 |" in status
+
+
+# ---- A18: /watch is 觀察中 and /actions redirects there (#493) ----
+
+WATCH_PAGE = "今日可買\n觀察中\n族群\n追蹤與提醒\n觀察中\n我的庫存\n"
+
+
+def _a18_run(tmp_path, final_url, legacy_page=WATCH_PAGE):
+    metas = {"actions-legacy": {1280: {"width": 1280, "ready": True}}}
+    if final_url is not None:
+        metas["actions-legacy"][1280]["finalUrl"] = final_url
+    return FakeRun(
+        tmp_path,
+        {},
+        {"actions-1280": WATCH_PAGE, "actions-legacy-1280": legacy_page},
+        metas=metas,
+    )
+
+
+def test_a18_passes_when_actions_lands_on_watch_with_query_and_anchor(tmp_path):
+    run = _a18_run(tmp_path, "http://127.0.0.1:4173/watch?from=legacy#plan-0")
+    assert "轉到 `/watch?from=legacy#plan-0`" in page_checks.a18(run)
+
+
+@pytest.mark.parametrize(
+    "final_url",
+    [
+        # The pre-#493 app rendered the page at /actions itself: same text, no redirect.
+        "http://127.0.0.1:4173/actions?from=legacy#plan-0",
+        "http://127.0.0.1:4173/watch",
+        "http://127.0.0.1:4173/watch?from=legacy",
+    ],
+)
+def test_a18_fails_when_the_redirect_drops_the_url_or_does_not_happen(
+    tmp_path, final_url
+):
+    with pytest.raises(page_checks.Fail, match=r"預期 `/watch\?from=legacy#plan-0`"):
+        page_checks.a18(_a18_run(tmp_path, final_url))
+
+
+def test_a18_fails_without_the_landing_url_or_on_a_404(tmp_path):
+    with pytest.raises(page_checks.Fail, match="沒有 finalUrl"):
+        page_checks.a18(_a18_run(tmp_path, None))
+    with pytest.raises(page_checks.Fail, match="`/actions` 是找不到此頁"):
+        page_checks.a18(
+            _a18_run(tmp_path, "http://x/watch", "找不到此頁。\n回到今日可買\n")
+        )

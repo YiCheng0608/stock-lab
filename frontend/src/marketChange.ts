@@ -4,7 +4,8 @@
 export function noPreviousCloseText(status: string | null | undefined): string | null {
   // The source published the previous session without this stock's close (#465).
   if (status === 'no_previous_close') return '前一交易日無收盤'
-  // The master lists the stock only from this session (#475).
-  if (status === 'first_trading_day') return '新上市首日'
+  // The master lists the stock only from this session (#475): a new listing, or the first session after a
+  // market transfer, whose master row starts on the transfer day (#493).
+  if (status === 'first_trading_day') return '掛牌首日'
   return null
 }
