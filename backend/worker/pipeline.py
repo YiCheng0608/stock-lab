@@ -64,7 +64,7 @@ from app.models import (
     ThemeGroup,
 )
 from app import margin_lists, margin_zero_base
-from app.news import sync_news_from_events
+from app.news import project_news
 from app.strategies import (
     REGISTRY,
     SignalLevels,
@@ -2796,10 +2796,12 @@ def _upsert_event(
     event: EventRecord,
     instruments: dict[tuple[str, str], Instrument],
     raw_payload_id: int | None,
-) -> None:
+) -> Event | None:
+    """Upsert one official event; returns its row (None outside the universe)."""
+
     instrument = instruments.get((event.exchange, event.symbol))
     if not instrument:
-        return
+        return None
     rows = db.scalars(
         select(Event).where(
             Event.instrument_id == instrument.id,
@@ -2833,7 +2835,7 @@ def _upsert_event(
     if row is not None and not event.description and row.description:
         # A row with the announcement text (the snapshot feed) keeps its
         # content and provenance; the dated list has subjects only.
-        return
+        return row
     if not row:
         row = Event(
             instrument_id=instrument.id,
@@ -2852,6 +2854,7 @@ def _upsert_event(
     row.raw_payload_id = raw_payload_id
     row.data_as_of = event.event_date.isoformat()
     row.collected_at = utcnow()
+    return row
 
 
 _TITLE_SUFFIX = re.compile(r"（(發言時間 \d{2}:\d{2}:\d{2}|#\d+)）$")
@@ -4545,10 +4548,6 @@ def collect(
                     ),
                 )
                 batch.warnings.extend(status_result["warnings"])
-                # Project official Events only after memberships are in place so
-                # the NewsItem relation carries the effective theme IDs.  The
-                # projection is idempotent and retains Event/raw provenance.
-                sync_news_from_events(db)
             else:
                 # A historical batch carries today's universe, which is not an
                 # observation of the requested session's classification.
@@ -4880,6 +4879,12 @@ def collect(
                 },
                 source="official",
             )
+            # Project the Events this batch (snapshot or historical: catch-up,
+            # backfill, the MOPS gap dates) wrote, after the memberships are in
+            # place so the NewsItem relation carries the effective theme IDs.
+            # The GETs then find the fingerprint current and do not project
+            # (#476).  Idempotent; it keeps Event/raw provenance.
+            project_news(db)
             db.commit()
             return {
                 "status": run.status,

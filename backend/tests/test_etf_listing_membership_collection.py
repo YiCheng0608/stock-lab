@@ -805,7 +805,8 @@ def test_collect_failure_after_helper_rolls_back_normalized_writes(env, monkeypa
         assert db.scalars(select(GroupMembership)).all()
         raise sources.OfficialDataError("injected after memberships")
 
-    monkeypatch.setattr(pipeline, "sync_news_from_events", fail_after_memberships)
+    # The projection now runs just before the collect's commit (#476).
+    monkeypatch.setattr(pipeline, "project_news", fail_after_memberships)
     result = pipeline.collect(D, adapter=SimpleNamespace(fetch=lambda *_: batch))
     assert result["status"] == "failed"
     with env() as db:

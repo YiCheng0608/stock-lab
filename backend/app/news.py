@@ -17,7 +17,16 @@ from typing import Iterable
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .models import Event, GroupMembership, Instrument, NewsItem, ThemeGroup
+from .clock import utcnow
+from .fingerprints import aggregate, digest, taxonomy_digest
+from .models import (
+    Event,
+    GroupMembership,
+    Instrument,
+    NewsItem,
+    NewsProjectionState,
+    ThemeGroup,
+)
 from .taxonomy import INDUSTRY_DISPLAY_ZH, canonical_group_id, canonical_industry_label
 
 
@@ -513,3 +522,74 @@ def sync_news_from_events(db: Session, events: Iterable[Event] | None = None) ->
         changed += int(is_new or before != after)
     db.flush()
     return changed
+
+
+# Bump when a change to this module makes the projection of an unchanged Event
+# differ (fields, theme validation, time rules): the stored fingerprint then no
+# longer matches and the next GET (or ``worker.cli news-project``) projects
+# every Event again (#476).
+NEWS_PROJECTION_VERSION = "news_projection_v1"
+NEWS_PROJECTION_STATE_KEY = "official_events"
+
+# Events: rows, the newest id and times, and content totals.  ``updated_at``
+# moves on every ORM write that changes a row; the totals catch a Core or raw
+# SQL correction that left it alone (#476 review 6644932172).
+_EVENT_AGGREGATE = (
+    "SELECT count(*), max(id), max(collected_at), max(updated_at), "
+    "total(length(title)), total(length(description)), "
+    "total(length(details_json)), total(length(source)), total(length(endpoint)), "
+    "total(raw_payload_id), total(instrument_id), total(julianday(event_date)), "
+    "total(length(event_type)) FROM events"
+)
+_NEWS_AGGREGATE = "SELECT count(*), max(id) FROM news_items WHERE event_id IS NOT NULL"
+
+
+def news_projection_basis(db: Session) -> dict[str, object]:
+    """What the official-event projection depends on, as cheap aggregates."""
+
+    return {
+        "version": NEWS_PROJECTION_VERSION,
+        "events": aggregate(db, _EVENT_AGGREGATE),
+        "news_items": aggregate(db, _NEWS_AGGREGATE),
+        "taxonomy": taxonomy_digest(db),
+    }
+
+
+def project_news(db: Session) -> int:
+    """Project every official Event and record the fingerprint it ran against.
+
+    The worker calls it before committing a write of Events or memberships;
+    the GETs call it through ``ensure_news_projection`` when the stored
+    fingerprint is stale.  Returns the changed NewsItem count.
+    """
+
+    changed = sync_news_from_events(db)
+    basis = news_projection_basis(db)
+    state = db.get(NewsProjectionState, NEWS_PROJECTION_STATE_KEY)
+    if state is None:
+        state = NewsProjectionState(key=NEWS_PROJECTION_STATE_KEY)
+        db.add(state)
+    state.fingerprint = digest(basis)
+    state.basis_json = basis
+    state.projected_at = utcnow()
+    db.flush()
+    return changed
+
+
+def ensure_news_projection(db: Session) -> bool:
+    """Project only when the inputs changed since the last projection.
+
+    Returns whether anything was written (the caller commits).  An unchanged
+    database costs the fingerprint's few aggregates and writes nothing.
+    """
+
+    state = db.get(NewsProjectionState, NEWS_PROJECTION_STATE_KEY)
+    basis = news_projection_basis(db)
+    if state is not None and state.fingerprint == digest(basis):
+        return False
+    if state is None and basis["events"][0] == "0" and basis["news_items"][0] == "0":
+        # No Event and no projected item: a projection would write nothing,
+        # so a read of such a database stays a read.
+        return False
+    project_news(db)
+    return True

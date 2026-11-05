@@ -2282,88 +2282,85 @@ def _short_of_bars(db: Session, ids: set[int], as_of: date) -> set[int]:
     }
 
 
-def action_tier_rows(
-    db: Session, as_of: date | None, holding_states: dict[int, str] | None = None
-) -> list[ActionTierRow]:
-    """Return the action-center projection in action_tier_v1 order.
+@dataclass
+class DailyTier:
+    """One instrument's action tier from the day's data, before holdings.
 
-    Only small identity/status projections run here.  The expensive decision
-    builder is called after the API has selected a page, so a 20-row request
-    never evaluates every scoped instrument.  ``holding_states`` (instrument
-    id -> action_state of its summary) orders tier 0; without it tier 0 is in
-    code order.
+    The daily-data half of ``action_tier_rows`` (Issue #476): what signals,
+    candidates, group scores, events, bars and strategy_levels of ``as_of``
+    give an instrument.  Holdings (tier 0), the watchlist and names are read
+    at request time by ``compose_action_tier_rows``, so a position or
+    watchlist change never waits for a recomputation.
     """
 
-    held_ids, unknown_ids, recorded_ids = position_holding_ids(db)
-    holding_ids = held_ids | unknown_ids
-    watch_ids: set[int] = set(
+    tier: int
+    candidate_rank: int | None = None
+    candidate_score: float | None = None
+    group_rank: int | None = None
+    unmet_conditions: int | None = None
+    price_gap: float | None = None
+    nearness: dict[str, Any] | None = None
+
+
+def daily_action_tiers(db: Session, as_of: date | None) -> dict[int, DailyTier]:
+    """The daily-data tier of every instrument the day's data lists.
+
+    ``app.action_tier_store`` stores this per trading day; ``action_tier_rows``
+    computes it live.  Tiers 1 to 5 only: a holding's tier 0 is applied on top.
+    """
+
+    if not as_of:
+        return {}
+    conditional_ids, observation_signals = _tier_signals(db, as_of)
+    observation_ids = {item[1] for item in observation_signals}
+    candidate_rows: dict[int, tuple[int, float]] = {}
+    run = read_candidate_run(db, as_of)
+    if run is not None:
+        for instrument_id, rank, score in db.execute(
+            select(
+                DailyCandidate.instrument_id,
+                DailyCandidate.rank,
+                DailyCandidate.total_score,
+            ).where(DailyCandidate.candidate_run_id == run.id)
+        ).all():
+            candidate_rows[instrument_id] = (rank, score)
+    group_candidate_ids: set[int] = set()
+    for group, score in _latest_group_scores(db, as_of):
+        if (
+            score.data_quality != "complete"
+            or (score.eligible_members or 0) < 3
+            or score.rank is None
+        ):
+            continue
+        details = score.details_json
+        if not isinstance(details, dict) or details.get("benchmark") != "TAIEX":
+            continue
+        group_candidate_ids.update(_group_candidate_ids(db, group, score, as_of))
+    # Recent official events keep an instrument in the list but never raise
+    # its tier (action_tier_v1).
+    event_ids = set(
         db.scalars(
-            select(Instrument.id).where(
-                Instrument.status == "active", Instrument.is_watchlisted.is_(True)
+            select(Event.instrument_id).where(
+                Event.instrument_id.is_not(None),
+                Event.event_date >= as_of - timedelta(days=7),
+                Event.event_date <= as_of,
             )
         ).all()
     )
-    conditional_ids: set[int] = set()
-    observation_ids: set[int] = set()
-    observation_signals: list[tuple[int, int, tuple[str, str, str]]] = []
-    candidate_rows: dict[int, tuple[int, float]] = {}
-    group_candidate_ids: set[int] = set()
-    event_ids: set[int] = set()
-    if as_of:
-        conditional_ids, observation_signals = _tier_signals(db, as_of)
-        observation_ids = {item[1] for item in observation_signals}
-        run = read_candidate_run(db, as_of)
-        if run is not None:
-            for instrument_id, rank, score in db.execute(
-                select(
-                    DailyCandidate.instrument_id,
-                    DailyCandidate.rank,
-                    DailyCandidate.total_score,
-                ).where(DailyCandidate.candidate_run_id == run.id)
-            ).all():
-                candidate_rows[instrument_id] = (rank, score)
-        for group, score in _latest_group_scores(db, as_of):
-            if (
-                score.data_quality != "complete"
-                or (score.eligible_members or 0) < 3
-                or score.rank is None
-            ):
-                continue
-            details = score.details_json
-            if not isinstance(details, dict) or details.get("benchmark") != "TAIEX":
-                continue
-            group_candidate_ids.update(_group_candidate_ids(db, group, score, as_of))
-        # Recent official events keep an instrument in the list but never raise
-        # its tier (action_tier_v1).
-        event_ids = set(
-            db.scalars(
-                select(Event.instrument_id).where(
-                    Event.instrument_id.is_not(None),
-                    Event.event_date >= as_of - timedelta(days=7),
-                    Event.event_date <= as_of,
-                )
-            ).all()
-        )
-    all_ids = (
-        recorded_ids
-        | watch_ids
-        | conditional_ids
+    daily_ids = (
+        conditional_ids
         | observation_ids
         | set(candidate_rows)
         | group_candidate_ids
         | event_ids
     )
-    if not all_ids:
-        return []
-    # Tiers 2 and 4 need the summary's 60-day bars; without them the row is tier 5.
-    short = (
-        _short_of_bars(
-            db,
-            (conditional_ids | observation_ids) - holding_ids - set(candidate_rows),
-            as_of,
-        )
-        if as_of
-        else set()
+    if not daily_ids:
+        return {}
+    # Tiers 2 and 4 need the summary's 60-day bars; without them the row is
+    # tier 5.  A holding is tier 0 whatever its bars, so holdings are not
+    # excluded here: the result of every other row is the same.
+    short = _short_of_bars(
+        db, (conditional_ids | observation_ids) - set(candidate_rows), as_of
     )
     conditional_ids -= short
     observation_ids -= short
@@ -2376,6 +2373,47 @@ def action_tier_rows(
             if item[1] not in conditional_ids and item[1] not in candidate_rows
         ],
     )
+    tiers: dict[int, DailyTier] = {}
+    for item_id in daily_ids:
+        if item_id in candidate_rows:
+            rank, score = candidate_rows[item_id]
+            tiers[item_id] = DailyTier(1, candidate_rank=rank, candidate_score=score)
+        elif item_id in conditional_ids:
+            tiers[item_id] = DailyTier(2, group_rank=group_ranks.get(item_id))
+        elif item_id in observation_ids:
+            items = nearness.get(item_id, [])
+            near = nearest_strategy([item for item in items if item["near"]])
+            chosen = near or nearest_strategy(items)
+            tiers[item_id] = DailyTier(
+                3 if near else 4,
+                nearness=chosen,
+                unmet_conditions=chosen["unmet_count"] if chosen else None,
+                price_gap=chosen["price_gap"] if chosen else None,
+            )
+        else:
+            tiers[item_id] = DailyTier(5)
+    return tiers
+
+
+def compose_action_tier_rows(
+    db: Session,
+    daily: dict[int, DailyTier],
+    holding_states: dict[int, str] | None = None,
+) -> list[ActionTierRow]:
+    """Apply holdings, the watchlist and names to the daily tiers, sorted."""
+
+    held_ids, unknown_ids, recorded_ids = position_holding_ids(db)
+    holding_ids = held_ids | unknown_ids
+    watch_ids: set[int] = set(
+        db.scalars(
+            select(Instrument.id).where(
+                Instrument.status == "active", Instrument.is_watchlisted.is_(True)
+            )
+        ).all()
+    )
+    all_ids = recorded_ids | watch_ids | set(daily)
+    if not all_ids:
+        return []
     rows: list[ActionTierRow] = []
     for item_id, exchange, symbol, name, kind in db.execute(
         select(
@@ -2395,26 +2433,37 @@ def action_tier_rows(
             watchlisted=item_id in watch_ids,
             tier=5,
         )
+        found = daily.get(item_id)
         if item_id in holding_ids:
             row.tier = 0
             row.holding_state = (holding_states or {}).get(item_id)
-        elif item_id in candidate_rows:
-            row.tier = 1
-            row.candidate_rank, row.candidate_score = candidate_rows[item_id]
-        elif item_id in conditional_ids:
-            row.tier = 2
-            row.group_rank = group_ranks.get(item_id)
-        elif item_id in observation_ids:
-            items = nearness.get(item_id, [])
-            near = nearest_strategy([item for item in items if item["near"]])
-            row.tier = 3 if near else 4
-            row.nearness = near or nearest_strategy(items)
-            if row.nearness is not None:
-                row.unmet_conditions = row.nearness["unmet_count"]
-                row.price_gap = row.nearness["price_gap"]
+        elif found is not None:
+            row.tier = found.tier
+            row.candidate_rank = found.candidate_rank
+            row.candidate_score = found.candidate_score
+            row.group_rank = found.group_rank
+            row.unmet_conditions = found.unmet_conditions
+            row.price_gap = found.price_gap
+            row.nearness = found.nearness
         rows.append(row)
     rows.sort(key=action_tier_sort_key)
     return rows
+
+
+def action_tier_rows(
+    db: Session, as_of: date | None, holding_states: dict[int, str] | None = None
+) -> list[ActionTierRow]:
+    """Return the action-center projection in action_tier_v1 order.
+
+    Only small identity/status projections run here.  The expensive decision
+    builder is called after the API has selected a page, so a 20-row request
+    never evaluates every scoped instrument.  ``holding_states`` (instrument
+    id -> action_state of its summary) orders tier 0; without it tier 0 is in
+    code order.  Computed live; the pages read the stored daily part through
+    ``app.action_tier_store`` (#476).
+    """
+
+    return compose_action_tier_rows(db, daily_action_tiers(db, as_of), holding_states)
 
 
 def action_view_hidden_reason(

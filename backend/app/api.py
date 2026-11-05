@@ -21,6 +21,7 @@ from pydantic import (
 from sqlalchemy import String, and_, cast, desc, func, or_, select
 from sqlalchemy.orm import Session, defer
 
+from .action_tier_store import read_action_tier_rows
 from .chip_provenance import GroupProvenance, stored_groups
 from .clock import utcnow
 from .config import (
@@ -79,7 +80,6 @@ from .decision import (
     DEFAULT_ACTION_VIEW,
     HOLDING_STATE_ORDER,
     ActionTierRow,
-    action_tier_rows,
     action_tier_sort_key,
     action_view_hidden_reason,
     build_action_summaries,
@@ -99,8 +99,8 @@ from .theme_suggestions import suggestion_detail, suggestion_list
 from .news import (
     _is_verified_theme_for_instrument,
     _theme_ids_for_event,
+    ensure_news_projection,
     is_verified_theme,
-    sync_news_from_events,
 )
 from .news_candidate_check import (
     CANDIDATE_CHECK_VERSION,
@@ -1583,12 +1583,15 @@ def action_list_rows(
     held_only: bool = False,
     watchlist_only: bool = False,
     theme_id: str | None = None,
-) -> tuple[list[ActionTierRow], set[int], set[int]]:
-    """The action_tier_v1 projection narrowed by the research filters."""
+) -> tuple[list[ActionTierRow], set[int], set[int], dict[str, Any]]:
+    """The action_tier_v1 projection narrowed by the research filters.
 
-    rows = action_tier_rows(db, as_of)
+    Also returns where the tiers came from (``app.action_tier_store``).
+    """
+
+    rows, source = read_action_tier_rows(db, as_of)
     if not rows:
-        return [], set(), set()
+        return [], set(), set(), source
     held_ids, unknown_ids, _recorded_ids = position_holding_ids(db)
     theme_ids: set[int] | None = None
     if theme_id:
@@ -1615,7 +1618,7 @@ def action_list_rows(
         and (not watchlist_only or row.watchlisted)
         and (theme_ids is None or row.instrument_id in theme_ids)
     ]
-    return filtered, held_ids, unknown_ids
+    return filtered, held_ids, unknown_ids, source
 
 
 def order_holdings(
@@ -1729,7 +1732,7 @@ def health() -> dict[str, str]:
 def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
     # Keep the read model current for existing official Events.  This is an
     # idempotent projection only; it does not introduce any non-official feed.
-    if sync_news_from_events(db):
+    if ensure_news_projection(db):
         db.commit()
     groups = db.scalars(select(ThemeGroup).where(ThemeGroup.active.is_(True))).all()
     scores = latest_scores(db)
@@ -1805,7 +1808,7 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
     product_themes = product_themes[:8]
     # Build only the compact first page for the home dashboard.  Full
     # strategies/evidence/coverage are reserved for stock/action detail.
-    tier_rows = action_tier_rows(db, official_as_of)
+    tier_rows, tier_source = read_action_tier_rows(db, official_as_of)
     # Every holding is built, not only the first page: the holding-risk line
     # counts all of them (#297 review L1).
     holdings = order_holdings(db, official_as_of, tier_rows)
@@ -1891,6 +1894,8 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
             ),
             "scope": "compact_first_page",
         },
+        # Stored daily tiers or a live computation, and why (#476).
+        "action_tier_source": tier_source,
         "empty_states": {
             "news": "尚未接入核准的國際／媒體新聞" if not product_news else None,
             "themes": "目前沒有同時達到完整資料與至少 3 檔成員的熱門族群"
@@ -1918,7 +1923,7 @@ def news(
 ) -> dict[str, Any]:
     # Existing official Events may predate the product projection.  Refreshing
     # this read model is idempotent and keeps the API useful after migration.
-    if sync_news_from_events(db):
+    if ensure_news_projection(db):
         db.commit()
     if time_consistency == "conflict":
         # Quarantined chronology is intentionally opt-in.  It remains
@@ -2011,7 +2016,7 @@ def news(
 def news_detail(news_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
     """Return one active projected official event with full audit context."""
 
-    if sync_news_from_events(db):
+    if ensure_news_projection(db):
         db.commit()
     item = db.get(NewsItem, news_id)
     if not item or (item.status != "active" and item.time_consistency != "conflict"):
@@ -2696,7 +2701,7 @@ def actions(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     run, as_of = latest_official_as_of(db)
-    base, held_ids, unknown_ids = action_list_rows(
+    base, held_ids, unknown_ids, tier_source = action_list_rows(
         db,
         as_of,
         held_only=held_only,
@@ -2797,6 +2802,8 @@ def actions(
             "held": sum(row.instrument_id in held_ids for row in base),
             "held_unknown": sum(row.instrument_id in unknown_ids for row in base),
             "scope": "filtered_results",
+            # Stored daily tiers or a live computation, and why (#476).
+            "tier_source": tier_source,
         }
         | action_tier_summary(base, listed, view, include_etf),
     }
