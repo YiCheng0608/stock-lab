@@ -715,6 +715,27 @@ class Event(Base):
     )
     data_as_of: Mapped[str | None] = mapped_column(String(80), nullable=True)
     collected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    # Moves on every ORM write that changes the row, so the news projection's
+    # fingerprint sees a corrected event whose collected_at did not move (#476).
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, default=utcnow, onupdate=utcnow
+    )
+
+
+class NewsProjectionState(Base):
+    """The fingerprint the official-event news projection last ran against (#476).
+
+    One row (``key`` = ``official_events``).  ``app.news.project_news`` writes
+    it after a full projection; the news and dashboard GETs recompute the
+    fingerprint and project again only when it differs.
+    """
+
+    __tablename__ = "news_projection_state"
+
+    key: Mapped[str] = mapped_column(String(40), primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    basis_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    projected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class NewsItem(Base):
@@ -1203,4 +1224,33 @@ class StrategyLevel(Base):
     conditions_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     missing_inputs_json: Mapped[list[str]] = mapped_column(JSON, default=list)
     price_basis: Mapped[str] = mapped_column(String(40))
+    computed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class ActionTierSnapshot(Base):
+    """The daily-data part of one trading day's action tiers (Issue #476).
+
+    Written by ``worker.action_tiers`` after the daily's strategy_levels step
+    (and ``worker.cli action-tiers``): per instrument, the tier action_tier_v1
+    gives it before holdings are applied, with the candidate, group-rank and
+    nearness fields.  Holdings, the watchlist and instrument names are read at
+    request time.  ``basis_json`` and ``fingerprint`` are the inputs it was
+    computed from; a GET whose live fingerprint differs computes the tiers
+    itself (``app.action_tier_store``).
+    """
+
+    __tablename__ = "action_tier_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "trading_date", "store_version", name="uq_action_tier_snapshot_day"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    store_version: Mapped[str] = mapped_column(String(40))
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    basis_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    rows_json: Mapped[list[list[Any]]] = mapped_column(JSON, default=list)
+    row_count: Mapped[int] = mapped_column(Integer, default=0)
     computed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

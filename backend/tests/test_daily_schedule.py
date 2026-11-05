@@ -36,6 +36,8 @@ DAY = date(2026, 9, 4)
 REAL_CATCHUP_STEP = schedule_runs._catchup_step
 REAL_PLAN_TRACKING_STEP = schedule_runs._plan_tracking_step
 REAL_STRATEGY_LEVELS_STEP = schedule_runs._strategy_levels_step
+# getattr: on code without the step each test fails alone instead of the module.
+REAL_ACTION_TIERS_STEP = getattr(schedule_runs, "_action_tiers_step", None)
 REAL_TRADING_CALENDAR_STEP = schedule_runs._trading_calendar_step
 
 
@@ -80,6 +82,7 @@ class Steps:
             "theme_suggestions": {"status": "success", "records": 4},
             "plan_tracking": {"status": "success", "records": 0},
             "strategy_levels": {"status": "success", "records": 6},
+            "action_tiers": {"status": "success", "records": 5},
             "candidate_notes": {"status": "success", "records": 3},
             # Issue #396; the real refetch has its own tests.
             "institutional_refetch": {
@@ -116,6 +119,7 @@ class Steps:
         monkeypatch.setattr(
             schedule_runs, "_strategy_levels_step", make("strategy_levels")
         )
+        monkeypatch.setattr(schedule_runs, "_action_tiers_step", make("action_tiers"))
         monkeypatch.setattr(
             schedule_runs, "_candidate_note_step", make("candidate_notes")
         )
@@ -165,6 +169,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "theme_suggestions",
         "plan_tracking",
         "strategy_levels",
+        "action_tiers",
         "candidate_notes",
     ]
     rows, by_run = runs(database)
@@ -183,6 +188,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "theme_suggestions": ("success", 4),
         "plan_tracking": ("success", 0),
         "strategy_levels": ("success", 6),
+        "action_tiers": ("success", 5),
         "candidate_notes": ("success", 3),
     }
     assert all(step.started_at and step.finished_at for step in logged.values())
@@ -202,6 +208,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "theme_suggestions",
         "plan_tracking",
         "strategy_levels",
+        "action_tiers",
         "candidate_notes",
         "institutional_refetch",
     ]
@@ -242,6 +249,7 @@ def test_partial_collect_stops_later_steps_and_keeps_the_warning(database, monke
         "theme_suggestions": "skipped",
         "plan_tracking": "skipped",
         "strategy_levels": "skipped",
+        "action_tiers": "skipped",
         "candidate_notes": "skipped",
     }
     # A partial day is retried by the next trigger instead of being reused.
@@ -258,6 +266,7 @@ def test_partial_collect_stops_later_steps_and_keeps_the_warning(database, monke
         "theme_suggestions",
         "plan_tracking",
         "strategy_levels",
+        "action_tiers",
         "candidate_notes",
     ]
 
@@ -336,6 +345,7 @@ def test_failed_evaluate_still_runs_candidates_and_indicators(database, monkeypa
         "theme_suggestions",
         "plan_tracking",
         "strategy_levels",
+        "action_tiers",
         "candidate_notes",
     ]
     rows, by_run = runs(database)
@@ -359,6 +369,7 @@ def test_failed_candidates_fail_the_run_without_blocking_indicators(
         "theme_suggestions",
         "plan_tracking",
         "strategy_levels",
+        "action_tiers",
     ]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
@@ -448,6 +459,7 @@ def test_failed_theme_suggestions_fail_the_run_after_every_other_step(
         "theme_suggestions",
         "plan_tracking",
         "strategy_levels",
+        "action_tiers",
         "candidate_notes",
     ]
     rows, by_run = runs(database)
@@ -463,7 +475,12 @@ def test_failed_plan_tracking_fails_the_run_but_the_notes_still_run(
     steps = Steps(monkeypatch, plan_tracking=RuntimeError("fixture plan crash"))
     result = pipeline.run_daily(DAY)
     assert result["status"] == "failed"
-    assert steps.calls[-3:] == ["plan_tracking", "strategy_levels", "candidate_notes"]
+    assert steps.calls[-4:] == [
+        "plan_tracking",
+        "strategy_levels",
+        "action_tiers",
+        "candidate_notes",
+    ]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
     assert "plan_tracking" in rows[0].error and "fixture plan crash" in rows[0].error
@@ -472,8 +489,13 @@ def test_failed_plan_tracking_fails_the_run_but_the_notes_still_run(
     # Rows are found by step name; the sequence only orders them.
     assert [
         logged[name].sequence
-        for name in ("plan_tracking", "strategy_levels", "candidate_notes")
-    ] == [8, 9, 10]
+        for name in (
+            "plan_tracking",
+            "strategy_levels",
+            "action_tiers",
+            "candidate_notes",
+        )
+    ] == [8, 9, 10, 11]
 
 
 @pytest.mark.parametrize(
@@ -491,7 +513,7 @@ def test_strategy_level_failures_stay_on_the_step_and_the_run_succeeds(
     steps = Steps(monkeypatch, strategy_levels=outcome)
     result = pipeline.run_daily(DAY)
     assert result["status"] == "success"
-    assert steps.calls[-2:] == ["strategy_levels", "candidate_notes"]
+    assert steps.calls[-3:] == ["strategy_levels", "action_tiers", "candidate_notes"]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
     assert rows[0].status == "success" and rows[0].error is None
@@ -500,6 +522,46 @@ def test_strategy_level_failures_stay_on_the_step_and_the_run_succeeds(
     assert "fixture" in step.error and "levels" in step.error
     assert rows[0].summary_json["steps"]["strategy_levels"] == step.status
     assert logged["candidate_notes"].status == "success"
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        {"status": "failed", "error": "fixture tiers failure"},
+        RuntimeError("fixture tiers crash"),
+    ],
+)
+def test_action_tier_failures_stay_on_the_step_and_the_run_succeeds(
+    database, monkeypatch, outcome
+):
+    # The pages compute the tiers live without a stored day (#476).
+    steps = Steps(monkeypatch, action_tiers=outcome)
+    result = pipeline.run_daily(DAY)
+    assert result["status"] == "success"
+    assert steps.calls[-2:] == ["action_tiers", "candidate_notes"]
+    rows, by_run = runs(database)
+    logged = by_run[rows[0].id]
+    assert rows[0].status == "success" and rows[0].error is None
+    assert logged["action_tiers"].status == "failed"
+    assert "fixture tiers" in logged["action_tiers"].error
+    assert logged["candidate_notes"].status == "success"
+
+
+def test_the_real_action_tier_step_stores_the_day(database, monkeypatch):
+    from app.models import ActionTierSnapshot
+    from test_action_tiers import AS_OF, build_market
+
+    Steps(monkeypatch)
+    monkeypatch.setattr(schedule_runs, "_action_tiers_step", REAL_ACTION_TIERS_STEP)
+    with database() as db:
+        build_market(db)
+    assert pipeline.run_daily(AS_OF)["status"] == "success"
+    rows, by_run = runs(database)
+    step = by_run[rows[0].id]["action_tiers"]
+    assert (step.status, step.error) == ("success", None)
+    with database() as db:
+        stored = db.scalar(select(ActionTierSnapshot))
+        assert stored.trading_date == AS_OF and stored.row_count == step.records > 0
 
 
 def test_the_real_strategy_level_step_records_the_signals_it_processed(
@@ -701,6 +763,7 @@ def test_list_schedule_runs_reports_steps(database, monkeypatch):
         "theme_suggestions",
         "plan_tracking",
         "strategy_levels",
+        "action_tiers",
         "candidate_notes",
     ]
 
@@ -1189,6 +1252,7 @@ def test_running_row_whose_process_is_gone_is_abandoned_at_once(database, monkey
         "theme_suggestions",
         "plan_tracking",
         "strategy_levels",
+        "action_tiers",
         "candidate_notes",
     ]
     rows, _ = runs(database)
@@ -1581,6 +1645,7 @@ def test_daily_collects_missed_sessions_oldest_first_then_the_target(
         "theme_suggestions",
         "plan_tracking",
         "strategy_levels",
+        "action_tiers",
         "candidate_notes",
     ]
     caught = result["catchup"]
@@ -2034,7 +2099,7 @@ def test_a_daily_run_and_its_steps_are_stamped_with_the_clock(
     rows, by_run = runs(database)
     assert (rows[0].started_at, rows[0].finished_at) == (first, first)
     logged = by_run[rows[0].id]
-    assert len(logged) == 11
+    assert len(logged) == 12
     assert {(step.started_at, step.finished_at) for step in logged.values()} == {
         (first, first)
     }

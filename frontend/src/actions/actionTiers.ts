@@ -1,5 +1,6 @@
 import { liquidityExclusionText } from '../candidates/candidates'
 import { formatDay } from '../dates'
+import { noPreviousCloseText } from '../marketChange'
 import { productActionReasonLabel } from '../presentation'
 import { nearLine } from '../stock/strategyBoard'
 import type { ActionNearness, ActionSummary, ActionTierNumber, ActionTierSummary, ActionView, ActionsResponse } from '../types'
@@ -109,7 +110,8 @@ export function actionClose(action: ActionSummary): ActionClose {
   if (!validRead || price === null) return { close: null, change: null, tone: '' }
   const pct = action.price_change_pct
   if (typeof action.price_change !== 'number' || !Number.isFinite(action.price_change) || typeof pct !== 'number' || !Number.isFinite(pct * 100)) {
-    return { close: formatFixed(price, 2), change: '漲跌待核實', tone: '' }
+    // The same words as the candidate and theme member pages when the API says why (#475).
+    return { close: formatFixed(price, 2), change: noPreviousCloseText(action.price_change_status) ?? '漲跌待核實', tone: '' }
   }
   // The tone follows the shown percent, so +0.00% is not coloured.
   const shown = Number((pct * 100).toFixed(2))

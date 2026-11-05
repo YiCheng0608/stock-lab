@@ -27,7 +27,7 @@ import worker.no_trade_days as no_trade_days
 import worker.pipeline as pipeline
 import worker.sources as sources
 from app.db import enable_sqlite_foreign_keys
-from app import migrations
+from app import migration_revisions, migrations
 from app.migrations import upgrade_database
 from app.models import IngestionRun, Instrument, MarketBar, NoTradeDay, RawPayload
 
@@ -653,4 +653,11 @@ def test_the_upgrade_adds_the_no_trade_day_table(tmp_path, monkeypatch, entry):
     assert indexes["ix_no_trade_days_trading_date"] == ["trading_date"]
     assert indexes["ix_no_trade_days_raw_payload_id"] == ["raw_payload_id"]
     assert ["instrument_id", "trading_date"] in indexes.values()
-    assert marker == [("0025_no_trade_days",)]
+    # alembic_version holds only the head; the fallback keeps every marker.
+    assert marker == [
+        (
+            migration_revisions.REVISIONS[-1]
+            if entry == "alembic"
+            else "0025_no_trade_days",
+        )
+    ]

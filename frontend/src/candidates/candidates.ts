@@ -1,3 +1,4 @@
+import { noPreviousCloseText } from '../marketChange'
 import { formatTaipeiInstant } from '../news/newsView'
 import type { CandidateComponentKey, CandidateGroup, CandidateItem, CandidateLevels, CandidateLlmNote, CandidateMarket, CandidatesResponse } from '../types'
 
@@ -93,8 +94,9 @@ export function formatCandidateClose(market: CandidateMarket | undefined): strin
 }
 
 export function candidateChange(market: CandidateMarket | undefined): { text: string; tone: 'up' | 'down' | 'flat' | null } {
-  // #465: the source published the previous session without this stock's close (UI_COPY_SPEC §8.2).
-  if (market?.change_status === 'no_previous_close') return { text: '前一交易日無收盤', tone: null }
+  // #465, #475: no close on the previous session, and why (UI_COPY_SPEC §8.2).
+  const noClose = noPreviousCloseText(market?.change_status)
+  if (noClose) return { text: noClose, tone: null }
   if (!market || market.change_status !== 'known' || !isFiniteNumber(market.change_pct)) return { text: '漲跌待核實', tone: null }
   const percent = market.change_pct * 100
   const rounded = Number(percent.toFixed(2))

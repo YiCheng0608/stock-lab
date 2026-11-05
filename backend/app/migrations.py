@@ -728,6 +728,30 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0025_no_trade_days', CURRENT_TIMESTAMP)"
         )
     )
+    # 0026 (#476): create_all makes news_projection_state and
+    # action_tier_snapshots; events gains updated_at, filled from collected_at.
+    if inspect(connection).has_table("events"):
+        event_columns = {
+            row[1] for row in connection.exec_driver_sql('PRAGMA table_info("events")')
+        }
+        if "updated_at" not in event_columns:
+            connection.execute(
+                text('ALTER TABLE "events" ADD COLUMN "updated_at" DATETIME')
+            )
+        # A legacy partial events table may lack collected_at (as in 0026).
+        if "collected_at" in event_columns:
+            connection.execute(
+                text(
+                    "UPDATE events SET updated_at = collected_at "
+                    "WHERE updated_at IS NULL"
+                )
+            )
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0026_projection_snapshots', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:

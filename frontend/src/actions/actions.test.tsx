@@ -8,7 +8,7 @@ import type { ActionNearness, ActionNearnessItem, ActionSummary, ActionTierSumma
 import { action } from '../today/today.fixtures'
 import { parseStockTab, stockTabSearch } from '../stock/stockTabs'
 import { ActionFilters, ActionTierList, ActionTierSectionView } from './ActionViews'
-import { ACTION_TIER_PREVIEW, CONDITIONS_PENDING_TEXT, EMPTY_TEXT, NEAR_RESEARCH_LINK, SEARCH_NOTE, hiddenSentence, nearCopy, previewTiers, tierSections } from './actionTiers'
+import { ACTION_TIER_PREVIEW, actionClose, CONDITIONS_PENDING_TEXT, EMPTY_TEXT, NEAR_RESEARCH_LINK, SEARCH_NOTE, hiddenSentence, nearCopy, previewTiers, tierSections } from './actionTiers'
 
 // Action centre tiers (#278, UI_COPY_SPEC §5, DESIGN_SYSTEM §5 行動列表／篩選膠囊／庫存一行), the tier 3 接近成立 cards
 // and the tier 2／4 lines (#277-B, UI_COPY_SPEC §6, DESIGN_SYSTEM §7), and the today page's holding line reading every
@@ -220,5 +220,19 @@ const dashboard = { as_of: '2026-10-22', mode: 'official', scan_scope: '', marke
 const TodayPage = appComponent('TodayPage')
 const today = render('TodayPage', () => <TodayPage />, [[['dashboard'], dashboard]])
 check(text(today).includes('持倉風險 1 檔：9999 第九檔：減碼／退場條件'), `今日持倉提示列: reads holding_actions, got ${text(today).slice(0, 400)}`)
+
+// #475: no close on the previous session reads the candidate page's words on the action list and the compact card.
+const noChange = (status: string) => row('1104', 2, 'conditional_entry', { price_change: null, price_change_pct: null, previous_close: null, price_change_status: status })
+check(actionClose(noChange('no_previous_close')).change === '前一交易日無收盤', `action list no previous close: ${actionClose(noChange('no_previous_close')).change}`)
+check(actionClose(noChange('first_trading_day')).change === '新上市首日', `action list first trading day: ${actionClose(noChange('first_trading_day')).change}`)
+check(actionClose(noChange('unverified')).change === '漲跌待核實' && actionClose(row('1101', 2, 'conditional_entry')).change === '+2.43%', 'other statuses keep 漲跌待核實 and a known change')
+const CompactActionCard = appComponent('CompactActionCard')
+const compactNoPrevious = text(render('CompactActionCard', () => <CompactActionCard action={noChange('no_previous_close')} />))
+check(compactNoPrevious.includes('前一交易日無收盤') && !compactNoPrevious.includes('漲跌待核實'), `compact card no previous close: ${compactNoPrevious}`)
+const compactFirstDay = text(render('CompactActionCard', () => <CompactActionCard action={noChange('first_trading_day')} />))
+check(compactFirstDay.includes('新上市首日') && !compactFirstDay.includes('漲跌待核實'), `compact card first trading day: ${compactFirstDay}`)
+// Without a valid market read there is no close, so the status is not shown either.
+const compactInvalid = text(render('CompactActionCard', () => <CompactActionCard action={{ ...noChange('no_previous_close'), market_read: { status: 'invalid', invalid_fields: ['close'] } }} />))
+check(compactInvalid.includes('漲跌待核實') && !compactInvalid.includes('前一交易日無收盤'), `compact card invalid read: ${compactInvalid}`)
 
 if (failures.length) throw new Error(`${failures.length} of ${checks} action-tier checks failed:\n- ${failures.join('\n- ')}`)

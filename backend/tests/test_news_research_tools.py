@@ -49,6 +49,9 @@ STOCKS = [
     ("TWSE", "7001", "甲乙", "active"),
     ("TWSE", "7002", "甲乙丙", "active"),
     ("TWSE", "7003", "甲乙丁", "active"),
+    # Two characters only without the holding-company ending (#475).
+    ("TWSE", "3708", "上緯投控", "active"),
+    ("TWSE", "7004", "上緯新", "active"),
 ]
 
 
@@ -278,6 +281,34 @@ def test_full_name_aliases_include_the_names_without_industry_words(tmp_path):
         {"alias": "甲乙丙丁", "stocks": ["TWSE:7002", "TWSE:7003"]}
     ]
     assert [source["raw_payload_id"] for source in data["sources"]] == [1, 2]
+
+
+def test_full_name_aliases_read_two_char_names_without_a_holding_ending(tmp_path):
+    # #475 (PR #483 review): the matcher reads 上緯 for 3708 上緯投控
+    # (worker.news_batch._holding_alias), so a full name starting with 上緯 is
+    # an alias of its own company, as for any two-character short name.
+    twse = tmp_path / "twse.json"
+    twse.write_text(
+        json.dumps(
+            [
+                _twse("7004", "上緯新", "上緯新材料科技股份有限公司"),
+                # 3708's own full name starts with its own holding alias: no alias.
+                _twse("3708", "上緯投控", "上緯國際投資控股股份有限公司"),
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    tpex = tmp_path / "tpex.json"
+    tpex.write_text("[]", encoding="utf-8")
+    db = _db(tmp_path / "stock.db", raws=[(TWSE, twse), (TPEX, tpex)])
+
+    data = alias_tool.build(db, None)
+
+    rows = {(row["symbol"], row["alias"]): row for row in data["aliases"]}
+    assert sorted(rows) == [("7004", "上緯新材料"), ("7004", "上緯新材料科技")]
+    assert rows[("7004", "上緯新材料")]["starts_with"] == ["TWSE:3708 上緯"]
+    assert "去掉投控／控股" in data["rule"]
 
 
 # Relation diff of two checkouts --------------------------------------------------

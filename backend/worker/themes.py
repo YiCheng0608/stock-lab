@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.config import PROJECT_ROOT
 from app.db import SessionLocal
 from app.models import GroupMembership, Instrument, ThemeGroup
+from app.news import project_news
 from app.theme_table import (
     THEME_DISPLAY_CATEGORY,
     THEME_GROUP_TYPE,
@@ -279,5 +280,7 @@ def sync_themes(path: Path | str | None = None) -> dict[str, Any]:
         except ThemeTableError as error:
             db.rollback()
             return {"status": "failed", "file": str(target), "errors": error.errors}
+        # Memberships carry the theme IDs of the projected news (#476).
+        project_news(db)
         db.commit()
     return {"file": str(target), **result}

@@ -2,7 +2,8 @@ import type { EChartsOption } from 'echarts'
 
 import type { ChangeTone } from '../components/ui/Stat'
 import { formatDay, formatTaipeiMinute } from '../dates'
-import type { IndicatorField, StockBarRow, StockBarsInterval, StockBarsResponse } from '../types'
+import { noPreviousCloseText } from '../marketChange'
+import type { CandidateMarket, IndicatorField, StockBarRow, StockBarsInterval, StockBarsResponse } from '../types'
 import { formatTableVolume, isVerifiedShareSource } from '../units'
 
 // Pure helpers for the stock page K-line, indicator panels and header quote (bars API, docs/spec/indicators.md).
@@ -166,6 +167,8 @@ export type StockQuote = {
   sources: string[]
   tone: ChangeTone
   digits: number
+  // Why there is no change, in the candidate page's words (#475); null when there is one or the reason is unknown.
+  noChange: string | null
 }
 
 export function changeTone(value: number | null | undefined): ChangeTone {
@@ -199,17 +202,22 @@ export function formatSignedPercent(ratio: number | null | undefined): string {
 
 // Latest traded close, and its change against the directly preceding row only when that row is also a traded
 // day from the same source (UI_COPY_SPEC §10.1: no adjacent trusted previous close → 漲跌待核實).
-export function stockQuote(bars: readonly StockBarRow[], instrumentType?: string | null): StockQuote {
+// When the bars API's latest_change for the same day says the stock has no close on the previous verified session
+// (no_previous_close, first_trading_day), no older row stands in and the header shows the candidate page's words (#475).
+export function stockQuote(bars: readonly StockBarRow[], instrumentType?: string | null, latestChange?: CandidateMarket | null): StockQuote {
   let index = bars.length - 1
   while (index >= 0 && !isDrawableBar(bars[index])) index--
   const latest = index >= 0 ? bars[index] : undefined
-  if (!latest || !isDrawableBar(latest)) return { close: null, change: null, changePct: null, date: null, sources: [], tone: 'flat', digits: 2 }
+  if (!latest || !isDrawableBar(latest)) return { close: null, change: null, changePct: null, date: null, sources: [], tone: 'flat', digits: 2, noChange: null }
   const previous = bars[index - 1]
   const sources = barSources(latest)
+  const digits = priceDigits(latest.close, instrumentType)
+  const noChange = latestChange?.trading_date === latest.date ? noPreviousCloseText(latestChange.change_status) : null
+  if (noChange) return { close: latest.close, change: null, changePct: null, date: latest.date, sources, tone: 'flat', digits, noChange }
   const sameSource = previous ? barSources(previous).join('+') === sources.join('+') : false
   const change = isDrawableBar(previous) && sameSource ? Number((latest.close - previous.close).toFixed(6)) : null
   const changePct = change != null && isDrawableBar(previous) ? change / previous.close : null
-  return { close: latest.close, change, changePct, date: latest.date, sources, tone: changeTone(change), digits: priceDigits(latest.close, instrumentType) }
+  return { close: latest.close, change, changePct, date: latest.date, sources, tone: changeTone(change), digits, noChange: null }
 }
 
 // ---- chart --------------------------------------------------------------------------------------

@@ -1765,11 +1765,15 @@ INTENTIONALLY_EMPTY: dict[str, dict[str, str]] = {
 }
 
 OMITTED_TABLES: dict[str, str] = {
+    "action_tier_snapshots": (
+        "沒有預算列時首頁與行動頁即時計算 action tier（#476），結果相同；"
+        "預算與即時一致由後端測試驗"
+    ),
     "alembic_version": "migration 自己寫入 head 版本，假資料不寫",
     "corporate_actions": "沒有除權息或分割；個股頁不需還原價格",
     "events": (
         "官方公告直接寫成 news_items（source_kind=official_disclosure）；"
-        "有 events 時 sync_news_from_events 會在 GET 時改寫 news_items"
+        "有 events 時，GET 發現投影指紋不符就改寫 news_items（#476）"
     ),
     "fundamental_snapshots": "五個主導航的檢查不讀基本面；個股頁該區顯示無資料",
     "group_daily_score_archive": "只在 hot_group 版本升級時封存舊分數；假資料只有現行版本",
@@ -1780,6 +1784,10 @@ OMITTED_TABLES: dict[str, str] = {
     "no_trade_days": (
         "官方無成交日只給資料覆蓋度頁計數（#454）；五個主導航不讀，"
         "假資料的標的每個交易日都有行情"
+    ),
+    "news_projection_state": (
+        "新聞投影的指紋（#476）；由 worker 投影後寫入。假資料沒有 events，"
+        "GET 沒有可投影的事件時不寫"
     ),
     "schedule_runs": "排程紀錄只給看門狗與系統頁",
     "schedule_run_steps": "同 schedule_runs",

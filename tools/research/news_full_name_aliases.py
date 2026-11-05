@@ -12,8 +12,9 @@ more characters remain (#461).
 A name is left out when it is the stock's own short name, any stock's official
 name (or its variants, ``worker.news_batch._name_aliases``), or the name of two
 companies.  The two-character names are those the rule reads: listed
-(``active``／``dormant``) common stocks whose name without listing markers no
-other listed stock shares.
+(``active``／``dormant``) common stocks whose name without listing markers, or
+without a holding-company ending (``worker.news_batch._holding_alias``, as the
+matcher reads it: 上緯投控 → 上緯; #475), no other listed stock shares.
 
 Reads a stock.db copy read-only and the latest stored TWSE ``t187ap03_L`` and
 TPEx ``mopsfin_t187ap03_O`` captures; no network.  A stored path is resolved by
@@ -40,6 +41,7 @@ from app.raw_paths import payload_file  # noqa: E402
 from worker.news_batch import (  # noqa: E402
     LISTED_STATUSES,
     STOCK_TYPES,
+    _holding_alias,
     _is_two_char_name,
     _name_aliases,
     _NAME_SUFFIX,
@@ -141,14 +143,22 @@ def build(db: Path, raw_root: str | None) -> dict:
     official = {
         alias for _, _, name, _ in stock_rows for alias in _name_aliases(name or "")
     }
-    listed = {
-        (exchange, symbol): _base(name)
-        for exchange, symbol, name, status in stock_rows
-        if status in LISTED_STATUSES
-    }
+    # Each listed stock's names the matcher reads: the name without listing
+    # markers and, as in RelationMatcher, the name without a holding-company
+    # ending unless that is another stock's official name (上緯投控 → 上緯; #475).
+    listed: dict[tuple[str, str], set[str]] = {}
+    for exchange, symbol, name, status in stock_rows:
+        if status not in LISTED_STATUSES:
+            continue
+        names = {_base(name)}
+        holding = _holding_alias(name or "")
+        if holding and holding not in official:
+            names.add(holding)
+        listed[(exchange, symbol)] = names
     owners: dict[str, list[tuple[str, str]]] = {}
-    for key, name in listed.items():
-        owners.setdefault(name, []).append(key)
+    for key, names in listed.items():
+        for name in names:
+            owners.setdefault(name, []).append(key)
     two_char = {
         name
         for name, keys in owners.items()
@@ -183,7 +193,9 @@ def build(db: Path, raw_root: str | None) -> dict:
             full = _LEGAL.sub("", str(row.get(full_key, "")).strip())
             short = _base(str(row.get(short_key, "")))
             prefixes = sorted(
-                name for name in two_char if full.startswith(name) and name != short
+                name
+                for name in two_char
+                if full.startswith(name) and name != short and name not in listed[key]
             )
             if not prefixes:
                 continue
@@ -219,7 +231,8 @@ def build(db: Path, raw_root: str | None) -> dict:
     return {
         "schema_version": SCHEMA_VERSION,
         "rule": (
-            "公司名稱（去掉「股份有限公司」）以另一檔上市中普通股的兩字簡稱開頭時，"
+            "公司名稱（去掉「股份有限公司」）以另一檔上市中普通股的兩字簡稱"
+            "（含去掉投控／控股後成為兩字的簡稱）開頭時，"
             "把全名，以及從結尾逐一去掉產業尾詞（INDUSTRY_SUFFIXES）後仍有三字以上的名稱，"
             "當成自己公司的別名；與任一檔的簡稱相同或兩家公司共用的名稱不收"
             "（NEWS_SPEC §2 規則關聯）"

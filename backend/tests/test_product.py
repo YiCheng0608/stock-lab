@@ -1203,8 +1203,102 @@ def test_product_price_change_requires_adjacent_verified_same_basis(product_api)
     assert first["previous_close"] == pytest.approx(100)
     assert first["price_change"] == pytest.approx(3)
     assert first["price_change_pct"] == pytest.approx(0.03)
+    assert first["price_change_status"] == "known"
     assert second["previous_close"] is None
     assert second["price_change_pct"] is None
+    assert second["price_change_status"] == "unverified"
+
+
+@pytest.mark.parametrize(
+    ("listing_date", "source_has_previous_day", "status"),
+    [
+        (None, True, "no_previous_close"),
+        (date(2026, 9, 7), True, "no_previous_close"),
+        (date(2026, 9, 8), True, "first_trading_day"),
+        # The source has nothing on the previous session: a collection gap.
+        (None, False, "unverified"),
+    ],
+)
+def test_action_summary_says_why_there_is_no_previous_close(
+    product_api, listing_date, source_has_previous_day, status
+):
+    # #475: the action page reads the same status as the candidate and theme
+    # member ``market`` (app.market_change.no_close_status).
+    with product_api() as db:
+        as_of, alpha, beta, _etf = _add_base_fixture(db)
+        previous_day = date(2026, 9, 7)
+        run = db.scalar(select(IngestionRun).where(IngestionRun.run_type == "collect"))
+        raws = [
+            RawPayload(
+                ingestion_run_id=run.id,
+                source="twse",
+                endpoint="https://www.twse.com.tw/rwd/zh/fund/MI_INDEX",
+                sha256=letter * 64,
+                data_as_of=day.isoformat(),
+            )
+            for letter, day in (("d", previous_day), ("e", as_of))
+        ]
+        taiex = Instrument(
+            market="TW",
+            exchange="TWSE",
+            symbol="TAIEX",
+            name="TAIEX",
+            instrument_type="index",
+            status="active",
+        )
+        db.add_all([*raws, taiex])
+        db.flush()
+        current = db.scalar(
+            select(MarketBar).where(
+                MarketBar.instrument_id == alpha.id, MarketBar.trading_date == as_of
+            )
+        )
+        current.source = "official"
+        current.raw_payload_id = raws[1].id
+        alpha.listing_date = listing_date
+        for raw, day in zip(raws, (previous_day, as_of)):
+            db.add(
+                MarketBar(
+                    instrument_id=taiex.id,
+                    trading_date=day,
+                    open=100,
+                    high=100,
+                    low=100,
+                    close=100,
+                    adj_close=100,
+                    volume=1000,
+                    turnover=100000,
+                    # The index has its own source, as in production.
+                    source="twse_index",
+                    raw_payload_id=raw.id,
+                )
+            )
+        if source_has_previous_day:
+            # Another stock of alpha's source traded on the previous session.
+            db.add(
+                MarketBar(
+                    instrument_id=beta.id,
+                    trading_date=previous_day,
+                    open=50,
+                    high=50,
+                    low=50,
+                    close=50,
+                    adj_close=50,
+                    volume=1000,
+                    turnover=50000,
+                    source="official",
+                    raw_payload_id=raws[0].id,
+                )
+            )
+        db.commit()
+        summary = build_action_summaries(db, instrument_ids=[alpha.id])[0]
+
+    assert summary["current_price"] is not None
+    assert (summary["previous_close"], summary["price_change"]) == (None, None)
+    assert summary["price_change_pct"] is None
+    assert summary["price_change_status"] == status
+    # The action list and dashboard send the compact projection.
+    assert api_module.compact_action_summary(summary)["price_change_status"] == status
 
 
 def func_count_news():

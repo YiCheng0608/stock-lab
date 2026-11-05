@@ -216,6 +216,9 @@ const noPrevious = { ...membersPage().items[0], change: null, change_pct: null, 
 const noPreviousNote = memberTableNote([noPrevious], '2026-09-08')
 check(noPreviousNote.endsWith('漲跌幅空白表示前一交易日沒有收盤價，不計算漲跌。') && !noPreviousNote.includes('待核實'), `no previous close reads its cause: ${noPreviousNote}`)
 check(memberTableNote([noPrevious, { ...membersPage().items[0], change: null, change_pct: null, change_status: 'unverified' }], '2026-09-08').includes('漲跌幅空白表示漲跌待核實。'), 'an unverified change still reads 待核實')
+// #475: a new listing's first day is its own sentence, not 「前一交易日沒有收盤價」 or 待核實.
+const firstDayNote = memberTableNote([{ ...noPrevious, change_status: 'first_trading_day' }], '2026-09-08')
+check(firstDayNote.endsWith('漲跌幅空白表示該檔為新上市首日，沒有前一交易日收盤。') && !firstDayNote.includes('前一交易日沒有收盤價') && !firstDayNote.includes('待核實'), `first trading day note: ${firstDayNote}`)
 // Industry board: no role column, no evidence column.
 const industryMembers = render(<ThemeDetailView detail={industryDetail} board={loaded(industryBoard())} members={loaded(membersPage())} onMemberPageChange={noop} news={loaded({ items: [] })} />)
 check(headersOf(industryMembers).join('|') === '代號|名稱|市場|收盤（元）|漲跌幅（%）|成交金額（億元）|5 日相對（%）|20 日相對（%）', `industry member headers: ${headersOf(industryMembers).join('|')}`)

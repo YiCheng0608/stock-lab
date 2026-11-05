@@ -37,6 +37,7 @@ from app.models import (
     RawPayload,
     ThemeGroup,
 )
+from app.news import project_news
 from app.taxonomy import (
     INDUSTRY_CODE_TO_CANONICAL_BY_EXCHANGE,
     INDUSTRY_DISPLAY_ZH,
@@ -526,5 +527,7 @@ def run_industry_repair(
         if apply and rescore_days:
             result["rescored_dates"] = rescore_recent(db, rescore_days)
         if apply:
+            # Memberships carry the theme IDs of the projected news (#476).
+            project_news(db)
             db.commit()
         return result
