@@ -127,7 +127,7 @@ from .units import (
     volume_exact_text,
 )
 from .strategies import REGISTRY
-from .signal_versions import product_signal
+from .signal_versions import product_signal, product_signal_ids
 from .strategy_board import strategy_board
 from .stock_bars import (
     DEFAULT_LIMIT as BARS_DEFAULT_LIMIT,
@@ -1769,7 +1769,9 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
     ).all()
     status_rows = db.execute(
         select(Signal.status, func.count(Signal.id))
-        .where(product_signal())
+        # The ids from the signal_key index, then the status index alone: a
+        # filter on the key itself makes SQLite read every row (#484 review).
+        .where(Signal.id.in_(product_signal_ids()))
         .group_by(Signal.status)
     ).all()
     # The latest successful run (Issue #249: a newer holiday "skipped" run must
@@ -3436,17 +3438,22 @@ def events(
 
 
 def _tracking_rows(db: Session, signal_key: str | None = None) -> list[dict[str, Any]]:
+    # The signal is chosen in SQL before the limit: a backtest run writes tens
+    # of thousands of newer evaluations, which would otherwise fill the 1,000
+    # rows and leave a product signal's tracking empty (#484).
     query = (
-        select(SignalEvaluation)
+        select(SignalEvaluation, Signal)
+        .join(Signal, Signal.id == SignalEvaluation.signal_id)
+        .where(
+            Signal.signal_key == signal_key
+            if signal_key is not None
+            else product_signal()
+        )
         .order_by(desc(SignalEvaluation.session_date), desc(SignalEvaluation.id))
         .limit(1000)
     )
-    evaluations = db.scalars(query).all()
     rows: list[dict[str, Any]] = []
-    for evaluation in evaluations:
-        signal = db.get(Signal, evaluation.signal_id)
-        if not signal or (signal_key and signal.signal_key != signal_key):
-            continue
+    for evaluation, signal in db.execute(query).all():
         instrument = db.get(Instrument, signal.instrument_id)
         rows.append(
             {

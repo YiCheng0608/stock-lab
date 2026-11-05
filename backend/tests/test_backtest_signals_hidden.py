@@ -116,3 +116,42 @@ def test_the_readable_signals_of_the_action_pages_leave_out_backtests(factory):
             .where(readable_signal())
         ).all()
     assert keys == [ANALYSIS_KEY]
+
+
+def test_a_product_signal_keeps_its_tracking_under_newer_backtest_evaluations(factory):
+    # _tracking_rows read the newest 1,000 evaluations of every signal and only
+    # then kept the asked one: a backtest run's newer rows pushed it out.
+    from datetime import timedelta
+
+    from app.models import SignalEvaluation
+
+    with factory() as db:
+        ids = {
+            key: signal_id
+            for key, signal_id in db.execute(select(Signal.signal_key, Signal.id))
+        }
+        backtest_id = next(v for k, v in ids.items() if k.startswith("backtest-"))
+        db.add(
+            SignalEvaluation(
+                signal_id=ids[ANALYSIS_KEY],
+                session_date=DAY + timedelta(days=1),
+                session_no=1,
+                status="未觸發",
+            )
+        )
+        db.add_all(
+            SignalEvaluation(
+                signal_id=backtest_id,
+                session_date=DAY + timedelta(days=2 + day),
+                session_no=day + 1,
+                status="未觸發",
+            )
+            for day in range(1001)
+        )
+        db.commit()
+    with TestClient(app) as client:
+        response = client.get(f"/api/tracking/{ANALYSIS_KEY}")
+    assert response.status_code == 200
+    rows = response.json()["evaluations"]
+    assert [row["signal"]["signal_key"] for row in rows] == [ANALYSIS_KEY]
+    assert rows[0]["evaluation"]["session_date"] == str(DAY + timedelta(days=1))

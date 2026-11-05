@@ -7,8 +7,10 @@
 2. 每筆訊號最多追蹤 20 個交易日；T+5、T+20 各寫一筆 settlement。公司行動需可追溯調整因子；停牌、缺可判定價格或同日 stop／target 皆觸及且順序未知時標 incomparable。
 3. replay 固定 canonical version，保存日期範圍、cutoff、設定快照與執行數；相同成功 request key 可重用既有 run。研究用的策略覆寫（`backtest(registry=...)`，逐一移除條件的 ablation 見 `app.strategies.ablation`）只在正式 DB 的副本或隔離 DB 執行：覆寫的策略以自己的名稱與 kind 寫 `strategy_versions`，request key 加 `:research:<策略名稱>`，不重用 canonical run，也不進 `REGISTRY`。
    - **分段 commit**：canonical 與研究 run 都一樣（研究 [#318](https://github.com/YiCheng0608/stock-lab/issues/318)，canonical [#484](https://github.com/YiCheng0608/stock-lab/issues/484)）。features 算完 commit，每個交易日的訊號寫完 commit，追蹤每批 2,000 個訊號 commit 一次。
-   - **摘要**：以 SQL 彙總，不載入訊號；範圍是該 run 的 `backtest-<id>-` namespace。
-   - **中途失敗**：已 commit 的訊號、evaluation 與 settlement 留在同一個 namespace，run 記 `failed`。以相同起訖重跑（成功後加 `--force`）會覆寫成與一次跑完相同的結果。
+   - **摘要**：以 SQL 彙總，不載入訊號；範圍是該 run 的 `backtest-<id>-` namespace。還沒成功的 run（`running`、`failed`）已經有部分列，但不算樣本：摘要的 `groups` 是空的，`assessment` 是它的狀態，技術回測頁顯示「執行中」或「失敗」。
+   - **中途失敗**：已 commit 的訊號、evaluation 與 settlement 留在同一個 namespace，run 記 `failed`。以相同起訖重跑會覆寫成與一次跑完相同的結果。
+     - **成功的 run 再跑**：`worker.cli backtest` 沒有 `--force`，以相同起訖再跑會直接重用（回傳 `idempotent_reuse`）。只有研究腳本 `backtest_research.py` 有 `--force`，對應 `backtest(force=True)`。
+     - **前提**：兩次之間資料沒有更正。重跑只覆寫同 key 的列；資料更正後（例如某檔不再是 active），前一次寫過、這次不再產生的列會留下。
    - **研究腳本**：在 daily 時段前以同一機制停下（`should_stop`，`BacktestPaused`）。
    - **頁面不讀**：回測訊號在執行中與失敗後也存在，所以除了回測摘要，沒有頁面讀 `backtest-*` 訊號（`app.signal_versions.product_signal`）。
    - **殘留 run**：canonical run 開始時，把其他仍是 `running` 的 canonical run 記成 `failed`（`error` 以 `abandoned:` 開頭），id 列在回傳的 `abandoned_runs`。理由是 canonical backtest 只經 `worker.cli backtest` 執行，持有維護模式，一次只跑一個，所以這些 run 已經沒有行程（`close_abandoned_backtests`）。研究 run 不動。

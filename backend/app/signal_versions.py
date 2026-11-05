@@ -31,10 +31,31 @@ def product_signal() -> Any:
     """Filter out the technical backtest signals (#484).
 
     A backtest run commits its signals as it goes, so they exist while it runs
-    and after it fails, not only after it succeeds.
+    and after it fails, not only after it succeeds.  Two ranges on the unique
+    ``signal_key`` index (``-`` is followed by ``.``) rather than NOT LIKE,
+    which reads every row's key from the table: a year of backtest rows is
+    over a million (#484 review).
     """
 
-    return Signal.signal_key.not_like(f"{BACKTEST_PREFIX}%")
+    return _outside_backtests(Signal)
+
+
+def _outside_backtests(signal: Any) -> Any:
+    return or_(
+        signal.signal_key < BACKTEST_PREFIX,
+        signal.signal_key >= f"{BACKTEST_PREFIX[:-1]}.",
+    )
+
+
+def product_signal_ids() -> Any:
+    """The ids of ``product_signal()``, read from the signal_key index alone.
+
+    For a filter whose query is driven by another index of ``signals`` (the
+    status counts): there a condition on the key itself reads every row.
+    """
+
+    inner = aliased(Signal)
+    return select(inner.id).where(_outside_backtests(inner))
 
 
 def _newer_same_day(names: tuple[str, ...]) -> Any:

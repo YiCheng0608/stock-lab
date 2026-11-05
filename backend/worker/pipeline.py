@@ -11,7 +11,8 @@ from statistics import median
 from typing import Any, Callable, Iterable, Mapping
 
 from sqlalchemy import and_, desc, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm.attributes import flag_modified
 
 from app import chip_provenance
 from app.raw_paths import payload_file
@@ -5750,16 +5751,16 @@ BACKTEST_TRACKING_VERSION = next(
 BACKTEST_SIGNAL_PREFIX = BACKTEST_PREFIX
 
 
-def _run_signals(run_id: int) -> Any:
+def _run_signals(run_id: int, signal: Any = Signal) -> Any:
     """The signals of one backtest run (namespace ``backtest-<id>-``).
 
     A range on the unique ``signal_key`` index: ``-`` is followed by ``.``, so
     the range holds exactly the keys that start with the prefix.  A LIKE would
-    read every signal of every run.
+    read every signal of every run.  ``signal`` is ``Signal`` or an alias of it.
     """
 
     prefix = f"{BACKTEST_SIGNAL_PREFIX}{run_id}-"
-    return and_(Signal.signal_key >= prefix, Signal.signal_key < f"{prefix[:-1]}.")
+    return and_(signal.signal_key >= prefix, signal.signal_key < f"{prefix[:-1]}.")
 
 
 def backtest_tracking_version(request_key: str | None) -> str | None:
@@ -5800,7 +5801,12 @@ def _backtest_summary(
     zero_actionable_count: int,
 ) -> dict[str, Any]:
     metadata = dict(run.metadata_json or {})
-    assessment = _backtest_assessment(metadata, status=run.status)
+    # running / failed: the run is not a sample yet (_summarize_backtest_run).
+    assessment = (
+        _backtest_assessment(metadata, status=run.status)
+        if run.status == "success"
+        else run.status
+    )
     for row in grouped.values():
         row["assessment"] = assessment
         row["interpretation"] = (
@@ -5840,13 +5846,32 @@ def _summarize_backtest_run(db: Session, run: IngestionRun) -> dict[str, Any]:
     A twelve-month run has over a million signals; loading them (about 14 KB
     each with their evidence) took more memory than the 2 GiB scheduler and the
     1 GiB api containers have (#484).
+
+    A run that has not succeeded has no groups: it commits as it goes, so a
+    running or failed run already has some signals and settlements, which must
+    not read as a finished sample.  Its assessment is its status.
     """
 
-    in_run = _run_signals(run.id)
+    if run.status != "success":
+        return _backtest_summary(run, {}, 0)
     actionable = func.json_extract(Signal.rule_evidence_json, "$.actionable") == 1
-    signal_total = db.scalar(select(func.count(Signal.id)).where(in_run))
-    actionable_total = db.scalar(
-        select(func.count(Signal.id)).where(in_run, actionable)
+    zero_actionable = (run.metadata_json or {}).get("zero_actionable_count")
+    if type(zero_actionable) is not int:
+        # A run that did not record it: the evidence of every signal is read.
+        zero_actionable = db.scalar(
+            select(func.count(Signal.id)).where(_run_signals(run.id))
+        ) - db.scalar(
+            select(func.count(Signal.id)).where(_run_signals(run.id), actionable)
+        )
+    # Only the run's settled signals are read: their ids come from the
+    # signal_key and settlement indexes, where a filter on the joined signal's
+    # key would read the evidence of every signal of the run (#484 review).
+    run_signal = aliased(Signal)
+    settled = aliased(SignalSettlement)
+    settled_ids = select(settled.signal_id).where(
+        settled.signal_id.in_(
+            select(run_signal.id).where(_run_signals(run.id, run_signal))
+        )
     )
     grouped: dict[tuple[str, str, str, int], dict[str, Any]] = {}
     for name, version, instrument_type, horizon, comparable, count in db.execute(
@@ -5861,7 +5886,7 @@ def _summarize_backtest_run(db: Session, run: IngestionRun) -> dict[str, Any]:
         .join(Signal, Signal.id == SignalSettlement.signal_id)
         .join(StrategyVersion, StrategyVersion.id == Signal.strategy_version_id)
         .join(Instrument, Instrument.id == Signal.instrument_id)
-        .where(in_run, actionable)
+        .where(Signal.id.in_(settled_ids), actionable)
         .group_by(
             StrategyVersion.name,
             StrategyVersion.version,
@@ -5884,7 +5909,7 @@ def _summarize_backtest_run(db: Session, run: IngestionRun) -> dict[str, Any]:
         )
         row["sample"] += count
         row["comparable" if comparable else "incomparable"] += count
-    return _backtest_summary(run, grouped, signal_total - actionable_total)
+    return _backtest_summary(run, grouped, zero_actionable)
 
 
 def close_abandoned_backtests(db: Session) -> list[int]:
@@ -6102,6 +6127,12 @@ def backtest(
             metadata["as_of_rule"] = (
                 "all feature/group inputs are bounded by score_date"
             )
+            # The JSON column does not track in-place changes, and with
+            # expire_on_commit=False its committed value is this same mutated
+            # dict, so even a new equal dict would not be written.
+            run.metadata_json = dict(metadata)
+            flag_modified(run, "metadata_json")
+            db.commit()
             signal_count = 0
             for score_date in score_dates:
                 _calculate_group_scores(db, score_date)

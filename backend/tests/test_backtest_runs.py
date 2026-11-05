@@ -151,3 +151,92 @@ def test_an_idempotent_reuse_still_closes_the_abandoned_run(factory):
     assert again["abandoned_runs"] == [killed]
     with factory() as db:
         assert db.get(IngestionRun, killed).status == "failed"
+
+
+def _partial_run(db, status: str) -> int:
+    """A run that committed one actionable signal and its settlement so far."""
+
+    from app.models import Signal, SignalSettlement, StrategyVersion
+
+    run_id = _run(db, f"technical-backtest:v2:2026-01-05:2026-{status}", status)
+    strategy = StrategyVersion(name="breakout_v3", version="3.0.0", kind="breakout")
+    db.add(strategy)
+    db.flush()
+    instrument_id = db.scalar(select(Instrument.id))
+    signal = Signal(
+        signal_key=f"backtest-{run_id}-breakout_v3-STALE-{DAY}",
+        signal_date=SCORE_DATE,
+        instrument_id=instrument_id,
+        strategy_version_id=strategy.id,
+        status="active",
+        entry_type="breakout",
+        rule_evidence_json={"actionable": True},
+    )
+    db.add(signal)
+    db.flush()
+    db.add(
+        SignalSettlement(
+            signal_id=signal.id,
+            horizon=5,
+            settlement_date=SCORE_DATE,
+            comparable=True,
+        )
+    )
+    db.add(
+        Signal(
+            signal_key=f"backtest-{run_id}-pullback_v3-STALE-{DAY}",
+            signal_date=SCORE_DATE,
+            instrument_id=instrument_id,
+            strategy_version_id=strategy.id,
+            status="observation",
+            entry_type="pullback",
+            rule_evidence_json={"actionable": False},
+        )
+    )
+    db.commit()
+    return run_id
+
+
+@pytest.mark.parametrize("status", ["running", "failed"])
+def test_an_unfinished_run_summarizes_as_its_status_without_groups(factory, status):
+    # A run commits as it goes: its partial rows must not read as a sample.
+    with factory() as db:
+        run_id = _partial_run(db, status)
+        summary = pipeline.summarize_backtest(db)
+        assert summary["run"]["id"] == run_id
+        assert summary["assessment"] == summary["run"]["assessment"] == status
+        assert summary["groups"] == [] and summary["zero_actionable_count"] == 0
+
+
+@pytest.mark.parametrize("recorded", [False, True])
+def test_a_successful_run_still_counts_its_settlements(factory, recorded):
+    with factory() as db:
+        run_id = _partial_run(db, "success")
+        if recorded:
+            # The count the run's tracking wrote is read instead of the evidence.
+            db.get(IngestionRun, run_id).metadata_json = {"zero_actionable_count": 1}
+            db.commit()
+        summary = pipeline.summarize_backtest(db, run_id)
+        assert summary["assessment"] == "insufficient_sample"
+        assert summary["zero_actionable_count"] == 1
+        assert [
+            (g["strategy"], g["horizon"], g["sample"], g["comparable"])
+            for g in summary["groups"]
+        ] == [("breakout_v3", 5, 1, 1)]
+
+
+def test_a_running_run_has_its_session_count_in_the_database(factory, monkeypatch):
+    seen = []
+    original = pipeline._generate_signals
+
+    def spy(db, score_date, strategies, **kwargs):
+        with factory() as probe:  # another connection: committed state only
+            run = probe.scalar(
+                select(IngestionRun).where(IngestionRun.status == "running")
+            )
+            seen.append((run.metadata_json or {}).get("score_session_count"))
+        return original(db, score_date, strategies, **kwargs)
+
+    monkeypatch.setattr(pipeline, "_generate_signals", spy)
+    assert pipeline.backtest(SCORE_DATE, SCORE_DATE)["run"]["status"] == "success"
+    assert seen == [1]

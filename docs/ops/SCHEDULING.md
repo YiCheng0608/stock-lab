@@ -125,7 +125,7 @@ candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(�
   - **追蹤**：1 個月約 30 秒，3 個月約 2 分鐘。
   - **合計**：1 個月約 40 分鐘，3 個月約 1 小時 55 分。
 - **何時跑**：預估會跨過 21:30 就改在 23:30 後起跑。原因是 21:30 的 daily 會被維護模式跳過，要等回測結束才補跑。
-- **中途失敗**：OOM、`docker stop`、例外都算。已 commit 的訊號與結算會留下，run 記 `failed`；以相同起訖重跑，會覆寫成一次跑完的結果。
+- **中途失敗**：OOM、`docker stop`、例外都算。已 commit 的訊號與結算會留下，run 記 `failed`；以相同起訖重跑，會覆寫成一次跑完的結果（前提是資料沒有更正，見 [Tracking 口徑](../spec/tracking.md#tracking-與-technical-backtest-口徑)第 3 點）。
   - 行程被殺時 `finally` 不會執行，run 會停在 `running`。下一次 canonical backtest 開始時，會把它記成 `failed`（`abandoned:`），並列在輸出的 `abandoned_runs`。
 - **量記憶體**：
   - 每 5 秒讀一次容器 cgroup `memory.stat` 的 `anon`，取最大值；同時記行程的 `VmRSS`。
