@@ -117,3 +117,23 @@ for (const [label, item] of [
   check(!render(<EntryPlanCard item={item as CandidateItem} />).includes('data-entry-holds'), `${label}: no reminder line`)
 }
 check(entryPlanView({ ...completeItem(), entry_plan: null }).conditions.length === 0, 'no row: no 完整條件 block')
+
+// ---- phone card (decision 6647903049): levels in the sentence -> only the close cell; a reason -> all four cells ----
+const cardOf = (markup: string, rank: number) => {
+  const from = markup.indexOf(`data-candidate-card="${rank}"`)
+  return markup.slice(from, markup.indexOf('</article>', from))
+}
+const levelCells = (card: string) => card.slice(card.indexOf('candidate-mini-levels'), card.indexOf('</dl>', card.indexOf('candidate-mini-levels')))
+for (const rank of [1, 2]) {
+  const cells = levelCells(cardOf(today, rank))
+  check(cells.includes('收盤（元）') && count(cells, '<dt>') === 1, `phone card #${rank}: the sentence has the levels, only the close cell stays`)
+  check(!cells.includes('data-term="entry_zone"') && !cells.includes('data-term="support"') && !cells.includes('data-term="target"'), `phone card #${rank}: no 進場區／停損／目標 cell`)
+}
+const missingLevels = { ...listResponse(), items: [withLevels(completeItem(), { invalid_price: null }), partialItem()] }
+const fallback = render(<CandidatesSection data={missingLevels} loading={false} error={null} />)
+const fallbackCells = levelCells(cardOf(fallback, 1))
+check(text(cardOf(fallback, 1)).includes(ENTRY_LEVELS_MISSING_TEXT), 'phone card #1: the sentence states the reason')
+check(count(fallbackCells, '<dt>') === 4 && fallbackCells.includes('data-term="entry_zone"') && fallbackCells.includes('data-term="support"') && fallbackCells.includes('data-term="target"'), 'phone card #1: without levels in the sentence the four cells come back')
+check(count(levelCells(cardOf(fallback, 2)), '<dt>') === 1, 'phone card #2 still has levels in its sentence: close only')
+// The desktop table keeps every level column either way.
+check(count(today, 'class="level-stop"') >= 2 && today.includes('<th') && today.includes('停損'), 'desktop table: the level columns stay')
