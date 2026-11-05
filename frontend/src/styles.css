@@ -452,12 +452,13 @@ a.symbol-link:hover { color: var(--color-primary); }
 .board-row-title { display: flex; grid-area: title; align-items: center; gap: var(--space-2); min-width: 0; max-width: none; margin: 0; line-height: 1.4; white-space: nowrap; }
 .board-row-name { flex: 0 1 auto; min-width: 4em; overflow: hidden; color: var(--color-text); font-size: var(--text-base); font-weight: 600; text-overflow: ellipsis; }
 .board-row-name:hover { color: var(--color-primary); }
-.board-row-title .badge { flex: none; white-space: nowrap; }
+.board-row-title .badge { flex: none; padding: 0 var(--space-2); line-height: 1.4; white-space: nowrap; }
 /* The highest and lowest components give way first when the line is short. */
 .board-row-extremes { flex: 0 1000 auto; min-width: 0; overflow: hidden; color: var(--color-text-muted); font-size: var(--text-sm); text-overflow: ellipsis; }
 .board-row-extremes b, .board-row-meta b { color: var(--color-text); font: 500 var(--text-sm) var(--font-mono); font-variant-numeric: tabular-nums; }
 .board-row-meta { display: flex; grid-area: meta; align-items: center; gap: var(--space-4); min-width: 0; max-width: none; margin: 0; overflow: hidden; color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1.4; white-space: nowrap; }
-.board-row-meta .badge { flex: none; white-space: nowrap; }
+/* 今日可買 N 檔 keeps to the line height, so a row with it is as tall as one without. */
+.board-row-meta .badge { flex: none; padding: 0 var(--space-2); line-height: 1.4; white-space: nowrap; }
 .board-row-score { grid-area: score; white-space: nowrap; }
 .board-row-score span { color: var(--color-text-muted); font-size: var(--text-xs); }
 .board-row-score b { font: 600 var(--text-lg) var(--font-mono); font-variant-numeric: tabular-nums; }
