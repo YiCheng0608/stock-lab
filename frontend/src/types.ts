@@ -487,6 +487,9 @@ export type InstrumentCoverage = {
   missing_bar_dates_to_60: string[]
   missing_chip_dates_to_20: string[]
   missing_chip_dates_to_60: string[]
+  no_trade_dates_to_60?: string[]
+  suspended_dates_to_60?: string[]
+  quote_not_listed_dates_to_60?: string[]
   coverage_reasons: string[]
   ipo_stage: string | null
   windows: Record<string, Record<string, unknown>>
@@ -1116,6 +1119,11 @@ export type StockDirectoryRow = {
   response_generated_at?: string
 }
 
+export type GapReason = {
+  code: string
+  label: string
+}
+
 export type MissingDataPriority = {
   field: string
   priority: string
@@ -1209,6 +1217,8 @@ export type ActionSummary = {
   evidence_refs: string[]
   data_quality: string
   blocking_reasons: string[]
+  // Why the judgement is short of data, one plain sentence each (Issue 511, UI_COPY_SPEC §6.1).
+  gap_reasons?: GapReason[]
   missing_data_priority: MissingDataPriority[]
   theme_ids: string[]
   event_ids: number[]

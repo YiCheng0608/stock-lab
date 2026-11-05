@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Callable, Iterable
 
-from sqlalchemy import and_, desc, func, select
+from sqlalchemy import and_, desc, func, literal_column, select
 from sqlalchemy.orm import Session, defer
 
 from .coverage import verified_taiex_sessions
@@ -23,6 +23,7 @@ from .decision_market_reads import (
     DecisionMarketRead,
     load_decision_market_reads,
     market_read_status,
+    read_market_date,
 )
 from .config import MAX_GROUP_CANDIDATES
 from .domain import (
@@ -37,6 +38,7 @@ from .level_semantics import (
     build_stop_price_semantics,
     utc_now_iso,
 )
+from .gap_reasons import data_gap_reasons
 from .presentation import display_action_label, display_reason, primary_reason
 from .product_time import build_action_product_time, build_signal_product_time
 from .portfolio_values import read_portfolio_value
@@ -57,6 +59,7 @@ from .models import (
     IngestionRun,
     Instrument,
     MarketBar,
+    NoTradeDay,
     PortfolioPosition,
     Signal,
     StrategyLevel,
@@ -67,6 +70,9 @@ from .models import (
 
 # Chip rows per instrument a decision context keeps (newest first).
 CONTEXT_CHIP_ROWS = 120
+# Calendar days of official no-trade days (#454) a decision reads back: more
+# than the 120 verified sessions the coverage counts against.
+NO_TRADE_LOOKBACK_DAYS = 200
 
 ACTION_LABELS = {
     "conditional_entry": "條件進場",
@@ -432,6 +438,20 @@ def _prepare_decision_context(
         ).all():
             events_by_instrument[row.instrument_id].append(row)
 
+    no_trade_by_instrument: dict[int, set[date]] = defaultdict(set)
+    if ids:
+        no_trade_query = select(
+            NoTradeDay.instrument_id, NoTradeDay.trading_date
+        ).where(NoTradeDay.instrument_id.in_(ids))
+        if as_of:
+            no_trade_query = no_trade_query.where(
+                NoTradeDay.trading_date <= as_of,
+                NoTradeDay.trading_date
+                >= as_of - timedelta(days=NO_TRADE_LOOKBACK_DAYS),
+            )
+        for instrument_id, trading_date in db.execute(no_trade_query).all():
+            no_trade_by_instrument[instrument_id].add(trading_date)
+
     context = {
         "instrument_ids": ids,
         "bars_by_instrument": bars_by_instrument,
@@ -443,6 +463,7 @@ def _prepare_decision_context(
         "quality_by_key": quality_by_key,
         "positions_by_instrument": positions_by_instrument,
         "events_by_instrument": events_by_instrument,
+        "no_trade_by_instrument": no_trade_by_instrument,
         "instruments": {row.id: row for row in instrument_rows},
     }
     contexts[key] = context
@@ -512,6 +533,10 @@ def _instrument_coverage(
             "missing_bar_dates_to_60": [],
             "missing_chip_dates_to_20": [],
             "missing_chip_dates_to_60": [],
+            "no_trade_dates_to_20": [],
+            "no_trade_dates_to_60": [],
+            "suspended_dates_to_60": [],
+            "quote_not_listed_dates_to_60": [],
             "coverage_reasons": ["coverage_baseline_unknown"],
             "ipo_stage": None,
         }
@@ -576,23 +601,35 @@ def _instrument_coverage(
                     Event.event_date <= as_of,
                 )
             ).all()
-        suspension_cache[instrument.id] = {
-            event.event_date
-            for event in event_rows
-            if any(
-                token in (event.event_type or "").casefold()
-                for token in ("suspension", "停牌")
-            )
-        }
+        suspension_cache[instrument.id] = _suspended_sessions(event_rows, sessions)
     suspension_dates = set(suspension_cache[instrument.id])
+    if context and instrument.id in context["instrument_ids"]:
+        no_trade_days = set(context["no_trade_by_instrument"].get(instrument.id, ()))
+    else:
+        no_trade_days = set(
+            db.scalars(
+                select(NoTradeDay.trading_date).where(
+                    NoTradeDay.instrument_id == instrument.id,
+                    NoTradeDay.trading_date <= as_of,
+                    NoTradeDay.trading_date >= sessions[0],
+                )
+            ).all()
+        )
+    # A day with a bar outranks a no-trade row (#454); the row only explains a
+    # missing bar, it never counts as one.
+    no_trade_days = (no_trade_days & set(eligible_sessions)) - bar_dates
     missing_bars: dict[str, int] = {}
     missing_chips: dict[str, int] = {}
     missing_bar_dates: dict[str, list[str]] = {}
     missing_chip_dates: dict[str, list[str]] = {}
+    no_trade_dates: dict[str, list[str]] = {}
     for horizon in (20, 60):
         window = eligible_sessions[-horizon:]
         missing_bar_dates[horizon] = sorted(
             day.isoformat() for day in set(window) - bar_dates
+        )
+        no_trade_dates[horizon] = sorted(
+            day.isoformat() for day in no_trade_days.intersection(window)
         )
         missing_chip_dates[horizon] = sorted(
             day.isoformat() for day in set(window) - chip_dates
@@ -610,17 +647,32 @@ def _instrument_coverage(
     reasons: list[str] = []
     if not sessions:
         reasons.append("missing_taiex")
+    unlisted_dates: list[str] = []
     if missing_bars[20] or missing_bars[60]:
+        # Why each short session is short (#511).  Only the reason changes;
+        # the counts above, which the strategy readiness reads, do not.
         missing_days = {
             date.fromisoformat(item)
             for values in missing_bar_dates.values()
             for item in values
         }
-        if missing_days.intersection(suspension_dates):
-            reasons.append("suspended_or_no_trade")
-        elif instrument.instrument_type == "ipo" and len(bar_dates) < 60:
+        if len(eligible_sessions) < 60:
+            # Listed after the 60-session window opened, whatever its type.
             reasons.append("listed_under_threshold")
-        else:
+        if missing_days & suspension_dates:
+            reasons.append("suspended_or_no_trade")
+        if missing_days & no_trade_days:
+            reasons.append("official_no_trade")
+        unexplained = missing_days - suspension_dates - no_trade_days
+        quoted = _exchange_quote_days(db, instrument.exchange, sessions)
+        unlisted = {day for day in unexplained if day in quoted}
+        unlisted_dates = sorted(day.isoformat() for day in unlisted)
+        if unlisted:
+            # The exchange's quote table of the day was stored (other stocks
+            # have bars) but has no row for this one: no cause is inferred
+            # (DATA_SOURCES 官方無成交日).
+            reasons.append("quote_not_listed")
+        if unexplained - unlisted:
             reasons.append("missing_bar_dates")
     if missing_chips[20] or missing_chips[60]:
         reasons.append("missing_chips")
@@ -654,9 +706,82 @@ def _instrument_coverage(
         "missing_bar_dates_to_60": missing_bar_dates[60],
         "missing_chip_dates_to_20": missing_chip_dates[20],
         "missing_chip_dates_to_60": missing_chip_dates[60],
+        "no_trade_dates_to_20": no_trade_dates[20],
+        "no_trade_dates_to_60": no_trade_dates[60],
+        "suspended_dates_to_60": sorted(
+            item
+            for item in missing_bar_dates[60]
+            if date.fromisoformat(item) in suspension_dates
+        ),
+        "quote_not_listed_dates_to_60": [
+            item for item in unlisted_dates if item in set(missing_bar_dates[60])
+        ],
         "coverage_reasons": list(dict.fromkeys(reasons)),
         "ipo_stage": ipo_stage,
     }
+
+
+def _suspended_sessions(events: Iterable[Event], sessions: list[date]) -> set[date]:
+    """Sessions an official suspension event covers, up to its resumption.
+
+    A ``suspension`` event dates the first suspended session; the next
+    ``resumption`` event of the same instrument ends it (that day trades
+    again).  Without a resumption the suspension runs to the last session.
+    """
+
+    marks = sorted(
+        (event.event_date, kind)
+        for event in events
+        for kind in (_suspension_kind(event.event_type),)
+        if kind is not None
+    )
+    suspended: set[date] = set()
+    start: date | None = None
+    for day, kind in marks:
+        if kind == "suspension" and start is None:
+            start = day
+        elif kind == "resumption" and start is not None:
+            suspended.update(item for item in sessions if start <= item < day)
+            start = None
+    if start is not None:
+        suspended.update(item for item in sessions if item >= start)
+    return suspended
+
+
+def _suspension_kind(event_type: str | None) -> str | None:
+    value = (event_type or "").casefold()
+    if "resumption" in value or "恢復" in value:
+        return "resumption"
+    if "suspension" in value or "停牌" in value:
+        return "suspension"
+    return None
+
+
+def _exchange_quote_days(db: Session, exchange: str, sessions: list[date]) -> set[date]:
+    """Sessions on which ``exchange`` has a stored bar of any of its stocks."""
+
+    if not sessions:
+        return set()
+    cache = db.info.setdefault("_decision_exchange_quote_days", {})
+    key = (exchange, sessions[0], sessions[-1])
+    if key not in cache:
+        cache[key] = {
+            read_market_date(value)
+            for value in db.scalars(
+                # Untyped: read_market_date validates the stored text itself.
+                select(literal_column("market_bars.trading_date"))
+                .select_from(MarketBar)
+                .join(Instrument, Instrument.id == MarketBar.instrument_id)
+                .where(
+                    Instrument.exchange == exchange,
+                    Instrument.instrument_type != "index",
+                    MarketBar.trading_date >= sessions[0],
+                    MarketBar.trading_date <= sessions[-1],
+                )
+                .distinct()
+            ).all()
+        }
+    return cache[key]
 
 
 def _latest_strategy_signals(
@@ -717,6 +842,28 @@ def _chips_complete(
         if len(rows) < 5 or any(_finite(getattr(row, field)) is None for row in rows):
             missing.append(field)
     return not missing, list(dict.fromkeys(missing)), rows
+
+
+def _recent_chip_rows(
+    db: Session, instrument_id: int, as_of: date | None, limit: int = 10
+) -> list[ChipSnapshot]:
+    """The newest ``limit`` chip rows up to ``as_of``, for the gap reasons (#511)."""
+
+    context = db.info.get("_decision_contexts", {}).get(
+        as_of.isoformat() if as_of else "none"
+    )
+    if context and instrument_id in context["instrument_ids"]:
+        return list(context["chips_by_instrument"].get(instrument_id, [])[:limit])
+    query = select(ChipSnapshot).where(ChipSnapshot.instrument_id == instrument_id)
+    if as_of:
+        query = query.where(ChipSnapshot.trading_date <= as_of)
+    return list(
+        db.scalars(
+            query.order_by(
+                desc(ChipSnapshot.trading_date), desc(ChipSnapshot.id)
+            ).limit(limit)
+        ).all()
+    )
 
 
 def _effective_groups_for_instrument(
@@ -1430,6 +1577,7 @@ def build_decision_summary(
     else:
         priority = 5
 
+    gap_reasons: list[dict[str, str]] = []
     if action_state == "data_insufficient":
         action_instruction = "現在：先不行動"
         coverage_gaps: list[str] = []
@@ -1470,6 +1618,21 @@ def build_decision_summary(
                 data_gap = "官方族群資料尚未完整，尚不能驗證進場、失效與目標價。"
             else:
                 data_gap = "研究資料尚未完整，尚不能計算進場、失效與目標價。"
+        stock_sessions = [
+            day
+            for day in db.info.get("_decision_taiex_dates", {}).get(
+                as_of.isoformat() if as_of else "none", []
+            )
+            if instrument.listing_date is None or day >= instrument.listing_date
+        ]
+        gap_reasons = data_gap_reasons(
+            coverage=coverage,
+            missing=missing,
+            chip_rows=_recent_chip_rows(db, instrument.id, as_of),
+            sessions=sorted(set(stock_sessions)),
+            strategy_results=strategy_results,
+            group_missing=group_missing,
+        )
     elif action_state == "conditional_entry":
         action_instruction = "現在：條件成立；僅在觸發價與風險條件同時符合時行動。"
         data_gap = None
@@ -1667,7 +1830,11 @@ def build_decision_summary(
         "display_action": display_action_label(action_state),
         "display_instruction": display_instruction,
         "display_reasons": display_reasons,
-        "primary_reason": primary_reason(
+        # A data gap's main reason is its first cause (#511); a machine field
+        # name such as bars_60d has no sentence of its own.
+        "primary_reason": {"label": gap_reasons[0]["label"], "scope": "research"}
+        if gap_reasons
+        else primary_reason(
             action_state=action_state,
             reasons=reasons,
             missing=missing,
@@ -1693,6 +1860,7 @@ def build_decision_summary(
         "context_badges": context_badges[:3],
         "detail_url": f"/stocks/{instrument.exchange}/{instrument.symbol}",
         "data_gap": data_gap,
+        "gap_reasons": gap_reasons,
         "priority": priority,
         "held": held,
         "position_quantity_status": quantity_status,
