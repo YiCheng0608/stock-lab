@@ -61,10 +61,14 @@ period_backfill 步驟呼叫 [`worker.period_backfill.run_period_backfill(目標
 - **窗口**：以步驟執行當天的台北日期判斷，不看目標日。窗口外 `skipped`（`reason=outside_window`），不發任何請求。
   - 季報：從該季最早的申報期限前 14 天，到最晚的期限後 14 天。Q1 是 5/1～6/13，Q2 是 7/31～9/14，Q3 是 10/31～12/13，Q4（年報 3/31）是 3/17～4/14。窗口內補該季與前一季，例如 11/6 補 2026Q2、2026Q3。
   - 月營收：從次月 1 日到期限（次月 10 日）後 10 天，即次月 1～20 日。窗口內補上個月與上上個月，例如 11/6 補 9 月、10 月。
-- **上限**：每次最多 12 頁，季報 2 季 × 2 市場，月營收 2 個月 × 2 市場 × 2 頁；重試算在內最多 44 次 HTTP（季報每頁 3 次、月營收每頁 4 次）。同 host 間隔 3 秒，每次 HTTP 逾時 30 秒（手動 CLI 是 60 秒）。步驟開始 300 秒後不再發新的請求，該部分記 `aborted`（`time budget 300 s used up before <鍵>`），狀態 `partial`。最壞情況是第 300 秒剛開始一頁月營收，要再等 155 秒（4 次 30 秒逾時加上 5、10、20 秒的重試等待），所以這一步最多約 7.6 分鐘。
-- **實測**（2026-11-06，正式 DB 副本，alembic `0028_monthly_revenues`）：窗口內 12 頁，68.1 秒與 75.7 秒；第二次 `records 0`。daily 21:30 起跑，10-19～11-05 的 success run 耗時 5.1～23.1 分鐘，加上最壞的 7.6 分鐘仍早於 serve 的 80 分鐘上限（22:50）與 23:00 那一輪。
+- **上限**：每次最多 12 頁，季報 2 季 × 2 市場，月營收 2 個月 × 2 市場 × 2 頁；重試算在內最多 44 次 HTTP（季報每頁 3 次、月營收每頁 4 次）。同 host 間隔 3 秒。時間是硬上限（[#539](https://github.com/YiCheng0608/stock-lab/issues/539)，[`worker.bounded_http`](../../backend/worker/bounded_http.py)）：
+  - 每次 HTTP 從連線到讀完整個回應合計最多 30 秒（`ATTEMPT_SECONDS`），超過就當傳輸錯誤重試。httpx 的 `timeout` 是每次連線、每次讀取各自計時，來源一點一點吐資料時一次請求可以拖很久（2026-11-06 實測一頁 `t21sc03` 超過 5 分鐘沒有回完），所以不能只靠它。手動 CLI 不受這條限制，照舊每次讀取 60 秒。
+  - 步驟開始 300 秒（`TIME_BUDGET_SECONDS`）就停：之後不再發請求（間隔的 3 秒也算在內），進行中的那次 HTTP 只等到第 300 秒，重試的等待會超過第 300 秒就不等、直接記失敗。該部分記 `aborted`（`time budget <剩餘秒數> s used up before <鍵>`），狀態 `partial`。
+  - 所以這一步的 HTTP 在開始後 300 秒內結束，整步最多是 300 秒加上寫入最後一頁的時間（幾秒）。測試以本機每 0.05 秒吐 1 byte 的假來源核對（`test_period_backfill_time_limit.py`）。
+- **月初**：月營收窗口從次月 1 日開始，那時還沒有公司申報最新月份。MOPS 對沒有資料的月份回 200 加「查無資料」，不是 404（2026-11-06 實測尚未結束的 115/11：`https://mopsov.twse.com.tw/nas/t21/sii/t21sc03_115_11_0.html`，200，918 bytes）。這一頁在該月期限（遇休市順延）以前記 `empty`（`no_data: true`），不算失敗；過了期限仍是「查無資料」才算失敗。手動 CLI 也一樣。
+- **實測**（2026-11-06，正式 DB 副本，alembic `0028_monthly_revenues`）：窗口內 12 頁，68.1 秒與 75.7 秒；第二次 `records 0`。daily 21:30 起跑，10-19～11-05 的 success run 耗時 5.1～23.1 分鐘，加上這一步最多的 5 分鐘多仍早於 serve 的 80 分鐘上限（22:50）與 23:00 那一輪。
 - **記錄**：季報與月營收各寫一筆 `run_type=fundamental_backfill`／`revenue_backfill` 的 ingestion run，`metadata_json.trigger` 是 `daily`（手動 CLI 是 `manual`）。步驟列的 `records` 是兩者 `changed` 的和，`details_json` 有兩者的完整結果。run 的 `summary_json.period_backfill` 記 `status`、`reason`、`today`、`quarters`、`months`、`requests`、`records`、`seconds`、`error`，以及 `fundamentals`／`revenue` 各自的 `status`、`run_id`、`requests`、`changed`、`aborted`。
-- **失敗**：任何狀態（`partial`、`failed`、例外）都只記在步驟列、`summary_json.steps`、`summary_json.period_backfill`，**不改變 run 狀態與 exit code**。不是 `success`／`skipped` 時，`summary_json.noncore_warnings` 加一則 `MOPS period backfill <狀態>: <原因>`。季報與月營收分開跑：一邊例外，另一邊照跑。看門狗不為它留言。窗口每天都會再跑一次，所以失敗的那天隔天就補；要立即補，對該期手動跑 `fundamentals backfill --quarters 2`／`revenue backfill --months 2`（[CLI](CLI.md#現有-worker-cli)）。
+- **失敗**：任何狀態（`partial`、`failed`、例外）都只記在步驟列、`summary_json.steps`、`summary_json.period_backfill`，**不改變 run 狀態與 exit code**。不是 `success`／`skipped` 時，`summary_json.noncore_warnings` 加一則 `MOPS period backfill <狀態>: <原因>`。季報與月營收分開跑：一邊例外，另一邊照跑。連續 3 次 daily 都不是 `success`／`skipped` 時，看門狗在 #1 留言，同一窗口一則（[`invariant_period_backfill`](WATCHDOG.md)）。窗口每天都會再跑一次，所以失敗的那天隔天就補；要立即補，對該期手動跑 `fundamentals backfill --quarters 2`／`revenue backfill --months 2`（[CLI](CLI.md#現有-worker-cli)）。
 - **只在 daily 跑**：23:00 那一輪在 21:30 已 `success` 時只重抓法人檔，不再跑這一步；collect 不是 `success`（`partial`、休市）時，這一步記 `skipped`，等下一次 daily。
 
 ## action tier 預算與新聞投影
