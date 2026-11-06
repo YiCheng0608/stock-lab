@@ -3,7 +3,8 @@
 Every ``worker.cli daily`` invocation writes one ``schedule_runs`` row and one
 ``schedule_run_steps`` row per step (catchup -> collect -> trading_calendar ->
 analyze -> evaluate -> candidates -> indicators -> theme_suggestions ->
-plan_tracking -> strategy_levels -> candidate_notes).  catchup
+plan_tracking -> strategy_levels -> action_tiers -> candidate_notes ->
+period_backfill).  catchup
 first collects recent official
 sessions that have no successful collect yet (the machine was off, or every
 trigger of that day failed); its outcome never blocks the target date.
@@ -18,7 +19,11 @@ dependent steps are recorded as skipped.  strategy_levels (the observation
 price levels of the day's signals) runs after a successful analyze, and
 candidate_notes (LLM explanations of the day's candidates) last after a
 successful candidates step; whatever their status, they only stay on their
-step rows and never change the run status.  So does trading_calendar, which
+step rows and never change the run status, and neither does period_backfill
+(#536; last, after every successful collect: the newest quarters and months
+on the days around their statutory deadlines), whose outcome is also kept in
+the run's ``summary_json.period_backfill`` and, when it did not succeed, in
+``summary_json.noncore_warnings``.  So does trading_calendar, which
 refreshes the official holiday schedule after a successful collect and before
 analyze (the signals' earliest execution date reads it); when it fails,
 analyze uses the calendar already stored.
@@ -66,7 +71,12 @@ from app.clock import utcnow
 from app.coverage import DAILY_JOB, collect_states
 from app.migration_revisions import REVISIONS
 from app.models import ScheduleRun, ScheduleRunStep
-from worker import institutional_refetch, pipeline, theme_suggestions
+from worker import (
+    institutional_refetch,
+    period_backfill,
+    pipeline,
+    theme_suggestions,
+)
 from worker.sources import OfficialMarketDataAdapter
 
 DAILY_STEPS = (
@@ -82,6 +92,7 @@ DAILY_STEPS = (
     "strategy_levels",
     "action_tiers",
     "candidate_notes",
+    "period_backfill",
 )
 # Steps after collect and the earlier steps each needs to have succeeded.
 STEP_REQUIRES = {
@@ -95,6 +106,7 @@ STEP_REQUIRES = {
     "strategy_levels": ("analyze",),
     "action_tiers": ("analyze",),
     "candidate_notes": ("candidates",),
+    "period_backfill": (),
 }
 # Steps whose failure is kept on the step row only: the run stays success, so
 # the run's success definition does not depend on them.  The LLM notes
@@ -103,9 +115,17 @@ STEP_REQUIRES = {
 # targets its own date); worker.cli candidate-notes / strategy-levels --date
 # fill them.  The holiday schedule refresh (#294): analyze then reads the
 # calendar already stored and records in its own details whether the day's
-# signals got an earliest execution date (the watchdog checks that).
+# signals got an earliest execution date (the watchdog checks that).  The
+# window backfill of the newest quarters and months (#536): a failure is a
+# non-core warning in the run's summary, as a failed fundamentals snapshot is.
 NON_BLOCKING_STEPS = frozenset(
-    {"trading_calendar", "candidate_notes", "strategy_levels", "action_tiers"}
+    {
+        "trading_calendar",
+        "candidate_notes",
+        "strategy_levels",
+        "action_tiers",
+        "period_backfill",
+    }
 )
 # A run still marked running after this long has lost its process (killed,
 # rebooted); the next invocation records it as abandoned instead of waiting.
@@ -248,6 +268,10 @@ def _action_tiers_step(target: date) -> dict[str, Any]:
 def _trading_calendar_step(target: date) -> dict[str, Any]:
     module = importlib.import_module(TRADING_CALENDAR_MODULE)
     return getattr(module, TRADING_CALENDAR_FUNCTION)(target)
+
+
+def _period_backfill_step(target: date) -> dict[str, Any]:
+    return period_backfill.run_period_backfill(target)
 
 
 def _institutional_refetch_step(target: date) -> dict[str, Any]:
@@ -790,6 +814,8 @@ def run_daily_job(
         # After strategy_levels, whose rows the tiers read (#476).
         ("action_tiers", 10, lambda: _action_tiers_step(target)),
         ("candidate_notes", 11, lambda: _candidate_note_step(target)),
+        # Last: it reads nothing the others write, and no other step waits on it.
+        ("period_backfill", 12, lambda: _period_backfill_step(target)),
     ]
     if collect_status != "success":
         if collect_status == "skipped" and _no_session_confirmed(run_id, target):
@@ -858,7 +884,7 @@ def run_daily_job(
         status,
         records=int(collected.get("records", 0) or 0),
         error=error,
-        summary=_summary(statuses, collected),
+        summary=_summary(statuses, collected, backfill=output.get("period_backfill")),
     )
     output["status"] = status
     return output
@@ -869,13 +895,22 @@ def _summary(
     collected: dict[str, Any],
     *,
     reason: str | None = None,
+    backfill: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     summary: dict[str, Any] = {"steps": steps}
     if reason:
         summary["reason"] = reason
     # Non-core source warnings do not change the status; keep them visible.
-    if collected.get("noncore_warnings"):
-        summary["noncore_warnings"] = list(collected["noncore_warnings"])[:20]
+    warnings = list(collected.get("noncore_warnings") or [])[:20]
+    if isinstance(backfill, dict):
+        # The window backfill's outcome (#536), shown by schedule-runs; when it
+        # did not succeed it is one more non-core warning.
+        summary[period_backfill.STEP] = period_backfill.summary(backfill)
+        warning = period_backfill.noncore_warning(backfill)
+        if warning:
+            warnings.append(warning)
+    if warnings:
+        summary["noncore_warnings"] = warnings
     return summary
 
 

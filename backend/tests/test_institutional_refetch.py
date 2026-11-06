@@ -108,6 +108,8 @@ class Daily:
             "_plan_tracking_step",
             "_strategy_levels_step",
             "_candidate_note_step",
+            # MOPS pages (#536); the real step has its own tests.
+            "_period_backfill_step",
         ):
             monkeypatch.setattr(schedule_runs, name, lambda *_: done)
         monkeypatch.setattr(schedule_runs, "_theme_suggestion_step", lambda: done)

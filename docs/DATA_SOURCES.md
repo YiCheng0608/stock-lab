@@ -31,9 +31,9 @@
 | 停復牌 | TPEx [`tpex_spendi_today`](https://www.tpex.org.tw/openapi/v1/tpex_spendi_today)、[`tpex_spendi_history`](https://www.tpex.org.tw/openapi/v1/tpex_spendi_history) | history 轉為可稽核的停牌區間事件；區間內缺 bar 視為不可比。 | today 同時列暫停與恢復公告，代號存在不等於仍停牌；TWSE 停牌歷史未接入，追蹤可能為不可比。見[停復牌規則](#tpex-停復牌規則)。 |
 | 重大訊息（依日期） | MOPS [`t05st02`](https://mops.twse.com.tw/mops/#/web/t05st02)（`POST https://mops.twse.com.tw/mops/api/t05st02`，JSON 民國年／月／日） | 事件覆蓋的唯一證據：每個查詢日記已核實、已核實空日或 partial；上市、上櫃重大訊息寫入 events。 | 清單只有主旨，沒有說明全文。規則見[重大訊息日期查詢](#重大訊息日期查詢)。 |
 | 重大訊息／基本面 | TWSE [`t187ap04_L`](https://openapi.twse.com.tw/v1/opendata/t187ap04_L)、[`t187ap14_L`](https://openapi.twse.com.tw/v1/opendata/t187ap14_L)；TPEx [`mopsfin_t187ap04_O`](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap04_O)、[`mopsfin_t187ap14_O`](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap14_O) | 官方事件與基本面 snapshot。基本面的「出表日期」寫成可得日，同一季只保留第一次看到的最早日期，之後重新出表不覆寫（[季度財報回補](#季度財報回補)）。 | 只是取得當下的 snapshot，不能重建歷史可得時間；基本面不是 v1 策略輸入。同股同日多則不同公告標題相同時，以發言時間區分：最早一則保留原標題，之後各則標題加「（發言時間 HH:MM:SS）」（內容完全相同的重複列只留一則），之後重抓不會改名已存的事件。 |
-| 季度財報（回補） | MOPS 彙總報表－綜合損益表 [`t163sb04`](https://mops.twse.com.tw/mops/#/web/t163sb04)（舊站 `POST https://mopsov.twse.com.tw/mops/web/ajax_t163sb04`，HTML） | 手動的 `fundamentals backfill` 回補近 8 季的累計營收與基本 EPS，寫入 `fundamental_snapshots`（`source=mops_t163sb04`）。上市、上櫃每季各 1 個請求。 | 沒有實際公告日，可得日用法定申報期限；不屬於 collect。規則見[季度財報回補](#季度財報回補)。 |
+| 季度財報（回補） | MOPS 彙總報表－綜合損益表 [`t163sb04`](https://mops.twse.com.tw/mops/#/web/t163sb04)（舊站 `POST https://mopsov.twse.com.tw/mops/web/ajax_t163sb04`，HTML） | 手動的 `fundamentals backfill` 回補近 8 季的累計營收與基本 EPS，寫入 `fundamental_snapshots`（`source=mops_t163sb04`）；daily 在申報期限前後的窗口自動補最近 2 季。上市、上櫃每季各 1 個請求。 | 沒有實際公告日，可得日用法定申報期限；不屬於 collect。規則見[季度財報回補](#季度財報回補)。 |
 | 月營收（快照） | TWSE [`t187ap05_L`](https://openapi.twse.com.tw/v1/opendata/t187ap05_L)、TPEx [`mopsfin_t187ap05_O`](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O)（每月營業收入彙總表） | 當日 collect 各 1 個請求，寫入 `monthly_revenues`（`source=mops_t187ap05`）：當月營收、去年當月營收、去年同月增減(%)、當月累計營收（千元），可得日用出表日期（[月營收](#月營收)，#530）。 | 非核心；只有最新一個月，整份共用一個出表日期，不是各公司的申報日。 |
-| 月營收（回補） | MOPS 營業收入統計表 `t21sc03` 靜態頁（`GET https://mopsov.twse.com.tw/nas/t21/<sii\|otc>/t21sc03_<民國年>_<月>_<0\|1>.html`，Big5 HTML） | 手動的 `revenue backfill` 回補近 24 個月，寫入 `monthly_revenues`（`source=mops_t21sc03`）。每個市場月 2 頁：`_0` 國內公司、`_1` 國外公司（`-KY`、`-DR`）。 | 沒有實際申報日，可得日用法定期限次月 10 日；不屬於 collect。規則見[月營收](#月營收)。 |
+| 月營收（回補） | MOPS 營業收入統計表 `t21sc03` 靜態頁（`GET https://mopsov.twse.com.tw/nas/t21/<sii\|otc>/t21sc03_<民國年>_<月>_<0\|1>.html`，Big5 HTML） | 手動的 `revenue backfill` 回補近 24 個月，寫入 `monthly_revenues`（`source=mops_t21sc03`）；daily 在每月 1～20 日自動補最近 2 個月。每個市場月 2 頁：`_0` 國內公司、`_1` 國外公司（`-KY`、`-DR`）。 | 沒有實際申報日，可得日用法定期限次月 10 日；不屬於 collect。規則見[月營收](#月營收)。 |
 
 每筆 raw 保存 endpoint、SHA-256、擷取時間與 data-as-of；正規化資料可回指 raw payload；重抓時日線與籌碼列指向哪一次 capture、哪些值會改，見 [重跑與回補的冪等](ops/SCHEDULING.md#重跑與回補)。News／Event 有官方事件投影、來源連結、raw 稽核與時間欄位，但欄位存在不代表每筆來源時間可信，詳見 [NEWS_SPEC](NEWS_SPEC.md)。`ChipSnapshot` 雖定義當沖、融券與借券欄位，現有寫入路徑不收集這些值。券商分點列後版，collector 不接入。
 
@@ -354,6 +354,7 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
 - **與快照並存**：唯一鍵 `(instrument_id, period_end, fiscal_period)` 不變，不會多列。回補遇到快照寫的列，不改數值與來源，只在法定期限較早時把可得日往前調；回補寫的列由回補更新數值。之後日快照涵蓋同一季時，照上一點覆寫數值、保留較早的可得日。
 - **冪等**：數值、可得日與 `data_json` 都沒變的列不寫（`raw_payload_id`、`collected_at` 也不動，列指向它的數值來自的那次 capture），重跑時 `changed` 是 0。HTML 含當次產生的 CSV 檔名，每次抓的 SHA-256 都不同，raw 每次都存。
 - **實測**（2026-11-06，正式 DB 副本，alembic `0027_emerging_issuers`）：16 個請求約 66 秒；2024Q4～2026Q2 每季 1,930～1,986 檔，2026Q3 當時 283 檔；重跑 `changed 0`。
+- **daily 自動回補**（[#536](https://github.com/YiCheng0608/stock-lab/issues/536)）：日快照換季後（2026Q2 在 11-02 換成 Q3）不再更新上一季，所以換季後才上市的公司（2026Q2 的 7867 特力屋，10-30 上市）、晚申報與更正都收不到。daily 的 period_backfill 步驟在每季最早期限前 14 天到最晚期限後 14 天之間（Q3 是 10/31～12/13）每天補該季與前一季，窗口、上限與記錄見 [SCHEDULING](ops/SCHEDULING.md#日誌與-run-記錄)。快照落後的期別不算漏：2026Q3 回補在 11-06 早上比 11-05 的快照多 85 檔，11-06 的上市快照就全部列入了。
 
 ### 月營收
 
@@ -366,6 +367,7 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
 - **可得日**：回補的月份沒有申報時間，`announcement_date` 用法定期限次月 10 日（證券交易法第 36 條），遇休市順延到下一個交易日，順延規則同[季度財報回補](#季度財報回補)（有 `trading_calendar_days` 的年度照官方休市表，沒有的只順延週末）；`data_json` 記 `announcement_basis: statutory_deadline`、`statutory_deadline`、`deadline_calendar`。回補前要先有對應年度的休市表（`trading-calendar --year <年>`），缺的話會退回只順延週末（`deadline_calendar: weekend_only`），例如 2025-10-10 國慶會記成當天而不是 10/13；網站版休市表抓不到 2024 年，2024 年用到的期限只有 2024-12-10，是平日。期限還沒到的月份（例如 11/6 跑時的 10 月，已申報的公司先列出）用抓到那天的台北日期，`announcement_basis: first_seen`。可得日的意思同季報：該日結束後可得，研究截止日期等於可得日時列入。逾期申報的公司會比實際早「可見」。
 - **兩個來源同一個月**：照季度回補的規則。回補遇到快照寫的列，不改數值與來源，只在期限較早時把可得日往前調（9 月快照的 10/17 調成 10/12，10/10 是週六）；回補寫的列被快照涵蓋時，數值與來源換成快照的，可得日保留較早的那個與它的依據。快照出表後更正的數字，MOPS 頁會更新、快照不會（115/09 有 7 檔不同，例如 4426 利勤），同月以快照為準。
 - **冪等**：數值、來源、可得日與它的依據都沒變的列不寫（`data_json`、`raw_payload_id`、`collected_at` 也不動），重跑 `changed` 是 0；快照換了出表日期但數字相同時也不寫。
+- **daily 自動回補**（[#536](https://github.com/YiCheng0608/stock-lab/issues/536)）：月快照出表後到下個月換表前不再更新，例如 9 月表 10-17 出表、到 11 月 10 月表出來前都是那一份。2026-11-06 比對時，10-20～10-30 上市的 7 檔新股（2249、6825、6898、6938、6467、7710、7867）的 9 月營收只在 MOPS 頁上有；期限前已申報的下個月（11-06 時 10 月有 289 檔）也要等換表才進快照。daily 的 period_backfill 步驟在每月 1～20 日每天補上個月與上上個月，窗口、上限與記錄見 [SCHEDULING](ops/SCHEDULING.md#日誌與-run-記錄)。出表後更正的數字仍依「兩個來源同一個月」以快照為準，自動回補不會改回 MOPS 頁的值。
 
 ## FinMind 補缺口規則
 

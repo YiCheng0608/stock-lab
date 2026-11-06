@@ -4,7 +4,8 @@
 the steps that reach outside faked: no socket may connect, collect hands over the
 fixture's own collect run of the target date instead of fetching, catch-up reports
 success, the trading calendar is not downloaded, candidate_notes never starts
-claude and the institutional refetch (#396) reports success without a request.
+claude, the window backfill of quarters and months (#536) is skipped and the
+institutional refetch (#396) reports success without a request.
 Everything else (schedule_runs, analyze,
 evaluate, candidates, ...) runs for real on the database the job points it at.
 With JOB_DAILY_CHILD_HOLD set, collect waits until that file exists, so that a
@@ -70,6 +71,11 @@ schedule_runs._trading_calendar_step = lambda *_args: {
     "records": 0,
 }
 schedule_runs._candidate_note_step = lambda *_args: {
+    "status": "skipped",
+    "reason": "faked by the test",
+}
+# The window backfill (#536) requests MOPS pages; it has its own tests.
+schedule_runs._period_backfill_step = lambda *_args: {
     "status": "skipped",
     "reason": "faked by the test",
 }

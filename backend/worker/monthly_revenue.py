@@ -38,7 +38,7 @@ from app.clock import utcnow
 from app.db import SessionLocal
 from app.models import IngestionRun, Instrument, MonthlyRevenue
 from worker import pipeline
-from worker.quarterly_fundamentals import availability, roll_to_session
+from worker.quarterly_fundamentals import availability, over_budget, roll_to_session
 from worker.sources import (
     MonthlyRevenueRecord,
     OfficialDataError,
@@ -548,6 +548,9 @@ def backfill_monthly_revenues(
     fetcher: Callable[[str], str] = fetch_page,
     sleep: Callable[[float], None] = time.sleep,
     interval_seconds: float = 3.0,
+    budget_seconds: float | None = None,
+    clock: Callable[[], float] = time.monotonic,
+    trigger: str = "manual",
 ) -> dict[str, Any]:
     """Fetch ``months`` months up to ``end`` for both markets and both pages.
 
@@ -555,7 +558,9 @@ def backfill_monthly_revenues(
     page's counts.  Months run oldest first, listed before OTC, domestic before
     foreign; each page is committed, so an interrupted run keeps what it
     finished.  A month that has not ended, a count outside 1..``MAX_MONTHS`` or
-    an unknown month are refused before any request.
+    an unknown month are refused before any request.  ``budget_seconds``,
+    ``clock`` and ``trigger`` as in
+    ``quarterly_fundamentals.backfill_quarterly_fundamentals``.
     """
 
     today = _taipei_day(utcnow())
@@ -578,6 +583,7 @@ def backfill_monthly_revenues(
             "start_month": targets[0].label,
             "end_month": end.label,
             "endpoint": PAGE_URL,
+            "trigger": trigger,
         },
     )
     db.add(run)
@@ -605,6 +611,7 @@ def backfill_monthly_revenues(
         }
 
     first = True
+    started = clock()
     try:
         for month in targets:
             deadline, calendar = roll_to_session(db, nominal_deadline(month))
@@ -613,6 +620,9 @@ def backfill_monthly_revenues(
                 seen: dict[str, int] = {}
                 for page in PAGES:
                     key = f"{month.label}:{market}:{page}"
+                    aborted = over_budget(budget_seconds, clock() - started, key)
+                    if aborted:
+                        break
                     if not first:
                         sleep(interval_seconds)
                     first = False
