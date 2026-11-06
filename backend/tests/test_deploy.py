@@ -724,6 +724,74 @@ def test_a_running_job_refuses_the_deploy_and_changes_nothing(harness):
     assert not [c for c in harness.calls("git") if c.split()[2:3] == ["fetch"]]
 
 
+# #538: a held lock's coprocess exits 75 at once, and bash, once it has reaped it, unsets
+# LOCKS and LOCKS_PID and closes their fds at the next command. REAPED, put after a line of
+# the lock block of the sandbox's deploy.sh, waits for that and says what is left of LOCKS.
+REAPED = (
+    'while kill -0 "$!" 2>/dev/null; do sleep 0.1; done; sleep 0.1; '
+    "printf 'probe LOCKS_PID=%s\\n' \"${LOCKS_PID-unset}\" >&2"
+)
+LOCK_BLOCK = (
+    "  coproc LOCKS {",
+    "  lock_pid=$!",
+    "  lock_r=${LOCKS[0]-}",
+    "    exec {lock_r}<&- {lock_w}>&-",
+)
+LOCK_BLOCK_IDS = ("after-coproc", "after-pid", "after-fds-read", "after-copies")
+
+
+def delay_after(h: Harness, start: str, code: str) -> None:
+    """Puts a line of code after the one line of the sandbox's deploy.sh starting so."""
+    lines = h.script.read_text(encoding="utf-8").split("\n")
+    at = [n for n, line in enumerate(lines) if line.startswith(start)]
+    assert len(at) == 1, start
+    lines.insert(at[0] + 1, code)
+    h.script.write_text("\n".join(lines), encoding="utf-8", newline="\n")
+
+
+def test_bash_drops_an_ended_coprocess_and_its_pid_but_not_its_status(tmp_path):
+    # Why: the line deploy.sh had before #538 fails here under set -u; $! and wait do not.
+    script = tmp_path / "coproc.sh"
+    script.write_text(
+        "set -u\ncoproc LOCKS { exit 75; }\np=$!\n"
+        f"{REAPED}\n"
+        'wait "$p"; echo "wait $?"\nlock_pid=$LOCKS_PID\necho unreachable\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    completed = subprocess.run(
+        [BASH, script.as_posix()], capture_output=True, text=True, timeout=60
+    )
+    assert completed.stdout == "wait 75\n"
+    assert "probe LOCKS_PID=unset" in completed.stderr
+    assert "LOCKS_PID: unbound variable" in completed.stderr
+    assert completed.returncode != 0
+
+
+@pytest.mark.parametrize("start", LOCK_BLOCK, ids=LOCK_BLOCK_IDS)
+def test_a_held_lock_whose_coprocess_is_gone_before_it_is_read_refuses(harness, start):
+    (harness.docker / "locks_held").touch()
+    delay_after(harness, start, REAPED)
+    before = harness.state()
+    result = harness.deploy("v1")
+    # The probe shows the coprocess was reaped and LOCKS dropped before the next line ran.
+    assert "probe LOCKS_PID=unset" in result.out
+    assert "unbound variable" not in result.out
+    assert_refused_unchanged(harness, before, result, "排程執行中")
+    assert not [c for c in harness.calls("git") if c.split()[2:3] == ["fetch"]]
+
+
+@pytest.mark.parametrize("start", LOCK_BLOCK, ids=LOCK_BLOCK_IDS)
+def test_a_lock_taken_with_a_delay_in_the_lock_block_still_deploys(harness, start):
+    # A held lock's coprocess does not end, so the same delay changes nothing.
+    delay_after(harness, start, "sleep 0.5")
+    result = harness.deploy("v1", "--no-comment")
+    assert result.code == 0, result.out
+    assert result.result["locks"] == "held"
+    assert harness.head() == harness.sha["v1"]
+    assert "lock released" in harness.calls("docker")
+
+
 def test_a_tag_that_moved_after_the_ci_check_is_refused(harness):
     # origin's tag moves to another commit between the CI check and the fetch.
     (harness.docker / "on_lock").write_text(

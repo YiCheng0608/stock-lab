@@ -187,16 +187,22 @@ if [ -n "$holder" ]; then
   hold+=(sh -c 'echo held; exec cat >/dev/null')
   # exec: the coprocess is docker itself, so a kill reaches it.
   coproc LOCKS { MSYS_NO_PATHCONV=1 exec docker exec -i "$holder" "${hold[@]}"; }
-  lock_pid=$LOCKS_PID
-  # Copies, as bash drops LOCKS when the coprocess ends; the originals closed, so closing
-  # lock_in is the end of its stdin.
-  exec {lock_out}<&"${LOCKS[0]}" {lock_in}>&"${LOCKS[1]}"
-  eval "exec ${LOCKS[0]}<&- ${LOCKS[1]}>&-"
-  line=""
-  IFS= read -r -t "$lock_wait" line <&"$lock_out"
-  answered=$?
+  # Once the coprocess has ended, bash reaps it at any later command and then unsets LOCKS
+  # and LOCKS_PID and closes their fds (#538: a held lock exits 75 at once). $! and `wait`
+  # outlive that, so the pid is $!, LOCKS is read once with defaults, and its fds are copied
+  # in one command that may fail; a coprocess gone by then is left with its exit status
+  # only, as one that ended without answering. The originals closed, closing lock_in is the
+  # end of its stdin.
+  lock_pid=$!
+  lock_r=${LOCKS[0]-} lock_w=${LOCKS[1]-} lock_in="" line="" answered=1
+  if [ -n "$lock_r" ] && [ -n "$lock_w" ] \
+    && { exec {lock_out}<&"$lock_r" {lock_in}>&"$lock_w"; } 2>/dev/null; then
+    exec {lock_r}<&- {lock_w}>&-
+    IFS= read -r -t "$lock_wait" line <&"$lock_out"
+    answered=$?
+  fi
   if [ "${line%$'\r'}" != held ]; then
-    exec {lock_in}>&-
+    [ -z "$lock_in" ] || exec {lock_in}>&-
     if [ "$answered" -gt 128 ]; then
       # No answer at all: not waited for any longer than this.
       kill "$lock_pid" 2>/dev/null
