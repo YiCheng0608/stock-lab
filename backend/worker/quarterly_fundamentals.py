@@ -530,6 +530,14 @@ def apply_record(
 OUTCOMES = ("inserted", "updated", "dated", "unchanged")
 
 
+def over_budget(budget_seconds: float | None, elapsed: float, key: str) -> str | None:
+    """The ``aborted`` text when ``budget_seconds`` is used up before ``key``."""
+
+    if budget_seconds is None or elapsed < budget_seconds:
+        return None
+    return f"time budget {budget_seconds:g} s used up before {key}"
+
+
 def _taipei_day(value: datetime) -> date:
     aware = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
     return aware.astimezone(TAIPEI).date()
@@ -543,6 +551,9 @@ def backfill_quarterly_fundamentals(
     fetcher: Callable[[str, dict[str, str]], str] = fetch_html,
     sleep: Callable[[float], None] = time.sleep,
     interval_seconds: float = 3.0,
+    budget_seconds: float | None = None,
+    clock: Callable[[], float] = time.monotonic,
+    trigger: str = "manual",
 ) -> dict[str, Any]:
     """Fetch ``quarters`` quarters up to ``end`` for both markets and store them.
 
@@ -551,6 +562,10 @@ def backfill_quarterly_fundamentals(
     OTC; each market-quarter is committed, so an interrupted run keeps what
     it finished.  A quarter that has not ended, a count outside
     1..``MAX_QUARTERS`` or an unknown quarter are refused before any request.
+    With ``budget_seconds`` (daily's window backfill, #536) no request starts
+    once that many seconds of ``clock`` have passed: the run stops
+    ``aborted`` and is ``partial``.  ``trigger`` (``manual`` or ``daily``) is
+    kept in the run's metadata.
     """
 
     today = _taipei_day(utcnow())
@@ -573,6 +588,7 @@ def backfill_quarterly_fundamentals(
             "start_quarter": targets[0].label,
             "end_quarter": end.label,
             "endpoint": ENDPOINT,
+            "trigger": trigger,
         },
     )
     db.add(run)
@@ -600,10 +616,14 @@ def backfill_quarterly_fundamentals(
         }
 
     first = True
+    started = clock()
     try:
         for quarter in targets:
             for market, exchange in MARKETS.items():
                 key = f"{quarter.label}:{market}"
+                aborted = over_budget(budget_seconds, clock() - started, key)
+                if aborted:
+                    break
                 if not first:
                     sleep(interval_seconds)
                 first = False
