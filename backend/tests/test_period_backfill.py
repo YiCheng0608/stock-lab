@@ -17,10 +17,12 @@ from sqlalchemy.orm import sessionmaker
 from app.db import enable_sqlite_foreign_keys
 from app.migrations import upgrade_database
 from app.models import IngestionRun, Instrument
+from test_monthly_revenue import NoDataFetcher as NoDataMonths
 from test_monthly_revenue import PageFetcher as MonthPages
 from test_quarterly_fundamentals import PageFetcher as QuarterPages
 from worker import period_backfill as pb
 from worker import pipeline, quarterly_fundamentals, sources
+from worker.monthly_revenue import Month
 
 # 2026-11-06 12:00 Taipei: inside 115Q3's window (10/31～12/13) and 115/10's
 # (11/01～11/20).
@@ -196,6 +198,21 @@ def test_in_the_window_the_latest_two_periods_are_backfilled(factory):
         sleep=lambda _seconds: None,
     )
     assert (again["status"], again["requests"], again["records"]) == ("success", 12, 0)
+
+
+def test_on_the_first_of_the_month_the_unfiled_month_is_no_warning(factory, isolated):
+    # 12-01: November's window opens, but nobody has filed November yet; its
+    # pages answer 「查無資料」 (200, measured 2026-11-06 on a month not yet
+    # filed, #539 AC-2).  Before its 12-10 deadline that is empty, not failed.
+    isolated.at = datetime(2026, 12, 1, 4, 0)
+    months = NoDataMonths({Month(2026, 11)})
+    result = pb.run_period_backfill(
+        quarter_fetcher=QuarterPages(), month_fetcher=months, sleep=lambda _s: None
+    )
+    assert result["months"] == ["2026-10", "2026-11"]
+    assert (result["status"], result["requests"]) == ("success", 12)
+    assert result["revenue"]["status"] == "success"
+    assert pb.noncore_warning(result) is None
 
 
 def test_a_source_outage_is_partial_and_names_the_failed_part(factory):
