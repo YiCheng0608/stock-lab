@@ -115,7 +115,7 @@ def test_no_time_left_sends_nothing_and_is_not_retried(monkeypatch):
     def refuse(*_args, **_kwargs):
         raise AssertionError("no request after the deadline")
 
-    monkeypatch.setattr(bounded_http.httpx, "stream", refuse)
+    monkeypatch.setattr(bounded_http.httpx, "Client", refuse)
     monkeypatch.setattr(monthly_revenue, "_throttle_official_host", lambda url: None)
     slept: list[float] = []
     monkeypatch.setattr(monthly_revenue.time, "sleep", slept.append)
@@ -126,6 +126,86 @@ def test_no_time_left_sends_nothing_and_is_not_retried(monkeypatch):
             deadline=time.monotonic() - 1,
         )
     assert slept == []
+
+
+def test_an_abandoned_attempt_is_closed_before_the_next_one_starts(drip, monkeypatch):
+    # Review of PR #541: a retry must not be a second connection to the host
+    # while the abandoned one still reads (MOPS blocks clients that ask too
+    # often).  Every attempt times out; when each next one starts, the
+    # previous one's thread has ended and its socket is closed.
+    shut: list = []
+    real_shut = bounded_http._shut
+
+    def record(sock):
+        shut.append(sock)
+        real_shut(sock)
+
+    monkeypatch.setattr(bounded_http, "_shut", record)
+    starts: list[tuple[int, list[int]]] = []
+    real = bounded_http.request
+
+    def spy(*args, **kwargs):
+        alive = [t for t in threading.enumerate() if t.name == "bounded-http"]
+        starts.append((len(alive), [sock.fileno() for sock in shut]))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(bounded_http, "request", spy)
+    monkeypatch.setattr(
+        quarterly_fundamentals, "_throttle_official_host", lambda u: None
+    )
+
+    with pytest.raises(sources.OfficialDataError, match="transport retry exhausted"):
+        quarterly_fundamentals.fetch_html(
+            f"{drip}/ajax_t163sb04", {"a": "1"}, attempt_seconds=0.3
+        )
+
+    # Three attempts (0.25 s and 0.5 s apart); each abandoned one's socket was
+    # shut down, and none was open or reading when the next began.
+    assert [alive for alive, _fds in starts] == [0, 0, 0]
+    assert [fds for _alive, fds in starts] == [[], [-1], [-1, -1]]
+    assert len(shut) == 3
+    assert not [t for t in threading.enumerate() if t.name == "bounded-http"]
+
+
+def test_an_attempt_that_cannot_be_closed_is_not_retried(monkeypatch):
+    # Stuck before its socket exists (DNS, the TCP connect): nothing to shut
+    # down, so the attempt is not retried rather than opening a second one.
+    release = threading.Event()
+
+    class Hanging:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def __enter__(self):
+            release.wait(10)
+            raise httpx.ConnectError("released")
+
+        def __exit__(self, *_exc):
+            return False
+
+    monkeypatch.setattr(bounded_http.httpx, "Client", Hanging)
+    monkeypatch.setattr(bounded_http, "CLOSE_SECONDS", 0.2)
+    monkeypatch.setattr(
+        quarterly_fundamentals, "_throttle_official_host", lambda u: None
+    )
+    calls: list[float] = []
+    real = bounded_http.request
+
+    def spy(*args, limit_seconds, **kwargs):
+        calls.append(limit_seconds)
+        return real(*args, limit_seconds=limit_seconds, **kwargs)
+
+    monkeypatch.setattr(bounded_http, "request", spy)
+    began = time.monotonic()
+    try:
+        with pytest.raises(bounded_http.AttemptStuck, match="not retried"):
+            quarterly_fundamentals.fetch_html(
+                "http://127.0.0.1:9/x", {}, attempt_seconds=0.3
+            )
+    finally:
+        release.set()
+    assert calls == [0.3]
+    assert time.monotonic() - began < 0.3 + 0.2 + 0.4
 
 
 def test_a_retry_wait_past_the_deadline_is_not_taken():
@@ -176,9 +256,19 @@ def test_the_step_stays_within_its_budget_on_a_dripping_source(
     assert re.search(
         "retry exhausted|deadline reached", result["fundamentals"]["warnings"][0]
     )
-    # What was left of the step's budget when the fundamentals began.
-    assert re.fullmatch(
-        r"time budget 1\.9\d* s used up before 2026Q2:otc",
+    # What was left of the step's budget when the fundamentals began: just
+    # under 2 s, or 2 itself on a coarse clock (Windows, about 15.6 ms; review
+    # of PR #541).
+    left = re.fullmatch(
+        r"time budget ([0-9.]+) s used up before 2026Q2:otc",
         result["fundamentals"]["aborted"],
     )
-    assert result["revenue"]["aborted"].startswith("time budget 0 s used up")
+    assert left and 1.5 < float(left.group(1)) <= budget
+    # The revenue gets what the fundamentals left, under the second kept for
+    # closing an attempt: its first page sends nothing (the deadline is
+    # reached) and the next one is over budget.
+    assert re.fullmatch(
+        r"time budget [0-9.]+ s used up before 2026-09:sii:[01]",
+        result["revenue"]["aborted"],
+    )
+    assert all("deadline reached" in w for w in result["revenue"]["warnings"])

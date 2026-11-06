@@ -118,9 +118,10 @@ CANDIDATE_NOTES_GRACE = timedelta(minutes=30)
 # not judged.
 CANDIDATE_SCORE_VERSION = "candidate_score_v6"
 # daily's period_backfill (#536) reported after this many runs in a row that
-# did not succeed (#539): about three trading days, which leaves a month's
+# did not succeed (#539): usually three trading days, which leaves a month's
 # window (the 1st to the 20th) time for a fix and a manual backfill, and one
-# MOPS outage of a day is not reported.
+# MOPS outage of a day is not reported.  Runs, not days: a failed 21:30 run
+# and its 23:00 rerun both run the step, so three can span two days.
 PERIOD_BACKFILL_FAILURES = 3
 PERIOD_BACKFILL_OK = ("success", "skipped")
 # Skipped rows that only point at another run of the same date.
