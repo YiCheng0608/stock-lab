@@ -19,10 +19,10 @@ dependent steps are recorded as skipped.  strategy_levels (the observation
 price levels of the day's signals) runs after a successful analyze, and
 candidate_notes (LLM explanations of the day's candidates) last after a
 successful candidates step; whatever their status, they only stay on their
-step rows and never change the run status.  period_backfill (#536, last,
-after every successful collect) backfills the newest quarters and months on
-the days around their statutory deadlines; its outcome is also kept in the
-run's ``summary_json.period_backfill``, and a failure in
+step rows and never change the run status, and neither does period_backfill
+(#536; last, after every successful collect: the newest quarters and months
+on the days around their statutory deadlines), whose outcome is also kept in
+the run's ``summary_json.period_backfill`` and, when it did not succeed, in
 ``summary_json.noncore_warnings``.  So does trading_calendar, which
 refreshes the official holiday schedule after a successful collect and before
 analyze (the signals' earliest execution date reads it); when it fails,
@@ -903,8 +903,8 @@ def _summary(
     # Non-core source warnings do not change the status; keep them visible.
     warnings = list(collected.get("noncore_warnings") or [])[:20]
     if isinstance(backfill, dict):
-        # The window backfill's outcome (#536), read by the watchdog's helpers
-        # and schedule-runs; its failure is one more non-core warning.
+        # The window backfill's outcome (#536), shown by schedule-runs; when it
+        # did not succeed it is one more non-core warning.
         summary[period_backfill.STEP] = period_backfill.summary(backfill)
         warning = period_backfill.noncore_warning(backfill)
         if warning:
