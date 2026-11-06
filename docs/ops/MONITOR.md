@@ -60,7 +60,7 @@ compose 的預設佇列目錄是 checkout 內的 `.coordination/`，任務 workt
 - **回答與 exit code**：`/wake` 回 `sent`、`not_idle`、`send_failed`、`no_heartbeat`、`nothing_pending`；`http_wake.sh` 對 `sent` exit 0、`not_idle` exit 3，其他（含 listener 沒在跑、401、429）exit 1，monitor 記失敗的喚醒，10 分鐘後再試，事件留在佇列。每個請求在主機 `<資料目錄>/logs/wake-listener.log` 記一列。
 - **token**：`STOCK_WAKE_TOKEN` 只寫在發佈 checkout 根目錄那份由使用者自己建立的認證檔（`.env`，[容器內的 claude 與 gh 認證（.env）](SETUP.md#容器內的-claude-與-gh-認證env)），至少 32 字元、不含空白；容器經 `env_file` 拿到它，listener 以 `--token-file` 讀同一個檔、只取這一列。由使用者產生並寫入（例如 `python -c "import secrets; print(secrets.token_urlsafe(32))"`），agent 不產生、不讀；換 token 後重建 scheduler 容器，並結束 listener 後重跑 `wake_listener_start.sh`。
 
-**啟動**（使用者決定，#338）：listener 只負責喚醒統籌，所以由統籌 session 啟動，不在 Windows 另外安裝。統籌接手時、每次處理佇列時跑 `bash tools/ops/wake_listener_start.sh`（[`wake_listener_start.sh`](../../tools/ops/wake_listener_start.sh)），可重複執行：
+**啟動**（使用者決定，#338）：listener 只負責喚醒統籌，所以由統籌 session 啟動，不在 Windows 另外安裝。統籌接手時（`take_over.sh` 會跑，關掉舊統籌 terminal 後再跑一次）、每次處理佇列時跑 `bash tools/ops/wake_listener_start.sh`（[`wake_listener_start.sh`](../../tools/ops/wake_listener_start.sh)），可重複執行：
 
 - 先 `GET /health`（不需 token，只回 `{"result": "ok", "service": "stock-lab-wake"}`）：有回應就 exit 0、不另起；port 沒有人聽才在背景啟動並等到 `/health` 回應，印出停止它的命令 `Stop-Process -Id (Get-NetTCPConnection -LocalPort 47338 -State Listen).OwningProcess`（不印 pid：Git Bash 的 pid 不是 Windows 的，拿去 `Stop-Process` 會停錯程序）；port 被別的程序占用（回應不是 listener 的）就 exit 2 並印出查占用者的命令；起不來（例如認證檔沒有 `STOCK_WAKE_TOKEN`）exit 1 並印出原因。`--status` 只回報、不啟動，`patrol.sh` 每次都印這一列。
 - 認證檔的路徑（發佈 checkout 根目錄那份）寫在腳本裡，不出現在統籌的命令裡（命令提到它會被 agent hook 擋下）；listener 的輸出附加到 `<資料目錄>/logs/wake-listener.out`。

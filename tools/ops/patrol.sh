@@ -9,8 +9,18 @@
 # GraphQL query, as whether a question is answered needs every open thread's comments as
 # they are now (closed Issues, which 決定 links which), which the queue's events do not hold.
 #
+# Then the commitments not kept yet (commit.sh, #534), past-due ones marked. When this
+# session reached the handoff condition (2 compactions), the last line says so again and
+# the exit code is 10, so neither a grep of the event lines nor `| tail -1` misses it
+# (#534: the header line was filtered out and a coordinator went on for 6 compactions).
+#
 # Files written: <data>/logs/coordinator-heartbeat.json (through a temporary file in the
 # same directory and mv), and with --done one line in <data>/logs/events-done.jsonl.
+#
+# Exit: 0; 10 the handoff condition holds (whether or not every part of the listing could
+#   be read, such as the questions 未查完); 2 a file could not be written or read back, a
+#   --done failed; 3 another session's heartbeat was kept;
+#   64 bad arguments.
 #
 # Usage: patrol.sh [options]
 #   --session-id ID   default $CLAUDE_CODE_SESSION_ID
@@ -22,6 +32,7 @@
 #                     questions as not read (未查完)
 #   --take-over       overwrite another session's heartbeat younger than an hour (a new
 #                     coordinator taking over without the old one's handoff marker)
+#   --heartbeat-only  write the heartbeat and stop (take_over.sh's first step)
 #   --data-dir DIR    default $STOCK_DATA_DIR, then $HOME/stock-lab-data
 #   --python EXE      default $STOCK_PYTHON, then this checkout's .venv, then python3
 # Test hook: PATROL_NOW (epoch seconds).
@@ -30,10 +41,12 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
 
 session_id="${CLAUDE_CODE_SESSION_ID:-}" handle="${ORCA_TERMINAL_HANDLE:-}" max_gh=1 take_over=0 done_args=()
+heartbeat_only=0
 while [ $# -gt 0 ]; do
   case "$1" in
     -h | --help) awk 'NR > 1 && !/^#/ { exit } NR > 1' "${BASH_SOURCE[0]}"; exit 0 ;;
     --take-over) take_over=1; shift; continue ;;
+    --heartbeat-only) heartbeat_only=1; shift; continue ;;
     --session-id | --terminal | --done | --max-gh | --data-dir | --python)
       [ $# -ge 2 ] || die "$1 needs a value" 64
       case "$1" in
@@ -90,13 +103,18 @@ if ! printf '{"session_id":"%s","terminal_handle":"%s","written_at":"%s"}' "$ses
 fi
 [ "$(cj get written_at <"$heartbeat")" = "$written_at" ] || die "心跳檔讀回不符：$heartbeat" 2
 echo "心跳 $written_at session=$session_id terminal=$handle（$heartbeat）"
+[ "$heartbeat_only" = 0 ] || exit 0
 
 # 2. compaction count and handoff marker
 count_file="$logs/compactions/$session_id.count"
 count=0
 [ -f "$count_file" ] && count="$(tr -dc '0-9' <"$count_file")"
 count="${count:-0}"
+# Strip leading zeros so 08 is not read as octal.
+count="$((10#$count))"
+handoff_due=0
 if [ "$count" -ge 2 ]; then
+  handoff_due=1
   echo "壓縮 $count 次：已達換手條件（手冊「統籌 session」自動換手機制）"
 else
   echo "壓縮 $count 次"
@@ -132,4 +150,16 @@ else
 fi
 echo "gh 呼叫：$gh_calls／上限 $max_gh"
 eq pending "$logs"
-echo "其餘依手冊：處理上面的未處理事件（PR 的 CI 與合併、未回覆的提問、名額空缺就派工），處理完以 --done <seq> 標記；monitor 停擺時看 logs/monitor.log"
+# Commitments kept across sessions (#534): what the coordinators promised and did not do yet.
+"$python" -X utf8 "$script_dir/commitments.py" list "$logs" "$now" \
+  || echo "未兌現的承諾：讀不了承諾檔（$logs/commitments.jsonl）"
+echo "其餘依手冊：處理上面的未處理事件（PR 的 CI 與合併、未回覆的提問、名額空缺就派工）與到期的承諾，處理完以 --done <seq>、commit.sh done <id> 標記；monitor 停擺時看 logs/monitor.log"
+# Last, so no filter of the lines above hides it (#534).
+if [ "$handoff_due" = 1 ]; then
+  if [ -f "$marker" ]; then
+    echo "已達換手條件：本 session 已壓縮 $count 次（門檻 2 次），換手標記已寫，換手中：不合併、不派工、不留言，等新統籌在 #1 留言（patrol exit 10）"
+  else
+    echo "已達換手條件：本 session 已壓縮 $count 次（門檻 2 次），現在照 docs/COORDINATOR.md「統籌 session」自動換手機制換手（patrol exit 10）"
+  fi
+  exit 10
+fi

@@ -56,6 +56,11 @@ SCRIPTS = (
     "wake_listener_start.sh",
     "gh_auth.sh",
     "compact_hook.sh",
+    # #534: the commitments file, and the take-over run (test_take_over.py)
+    "commitments.py",
+    "commit.sh",
+    "comment.sh",
+    "take_over.sh",
 )
 REPO_ID = "repo-1"
 
@@ -3014,9 +3019,241 @@ def test_patrol_reads_compactions_and_handoff(patrol: Harness) -> None:
         encoding="utf-8",
     )
     result = _patrol(patrol)
-    assert result.returncode == 0, result.stdout + result.stderr
+    # #534: the handoff condition ends the run with exit 10 and a last line of its own.
+    assert result.returncode == 10, result.stdout + result.stderr
     assert "壓縮 2 次：已達換手條件" in result.stdout
     assert "換手標記存在" in result.stdout
+    assert "換手中" in result.stdout.strip().splitlines()[-1]
+
+
+# --- #534: handoff condition as the last line, commitments ----------------------------
+
+
+@pytest.mark.parametrize("count", ["0", "1", "2", "7"])
+def test_patrol_ends_with_the_handoff_condition_and_exit_10(
+    patrol: Harness, count: str
+) -> None:
+    """AC-2: at 2 compactions or more the last line says so and the exit code is 10;
+    below that neither. The rest of the listing is printed as before."""
+    if count != "0":
+        (patrol.data / "logs" / "compactions" / "sess-1.count").write_text(
+            count + "\n", encoding="utf-8"
+        )
+    result = _patrol(patrol)
+    last = result.stdout.strip().splitlines()[-1]
+    due = int(count) >= 2
+    assert result.returncode == (10 if due else 0), result.stdout + result.stderr
+    assert ("已達換手條件" in last) is due
+    assert (f"已壓縮 {count} 次" in last) is due
+    # Nothing else changed: the events, the commitments and the closing hint are there.
+    assert "未處理事件：3 個（seq 1～3）" in result.stdout
+    assert "未兌現的承諾：0 則" in result.stdout
+    assert "其餘依手冊" in result.stdout
+    # Through a pipe, | tail -1 shows it too, and the shell sees the code with pipefail.
+    piped = patrol.run_bash(
+        'set -o pipefail; bash "$1" --session-id sess-1 --terminal term_coord | tail -1',
+        (patrol.ops / "patrol.sh").as_posix(),
+    )
+    assert piped.returncode == (10 if due else 0), piped.stdout + piped.stderr
+    assert ("已達換手條件" in piped.stdout) is due
+    assert piped.stdout.count("\n") == 1
+
+
+def _commit(h: Harness, *args: str, session: str = "sess-old"):
+    return h.run("commit.sh", *args, CLAUDE_CODE_SESSION_ID=session)
+
+
+PROMISE = "https://github.com/YiCheng0608/stock-lab/issues/461#issuecomment-6672885313"
+
+
+def test_commitments_outlive_the_session_until_done(patrol: Harness) -> None:
+    """AC-1: what commit.sh add wrote in one session is listed by patrol.sh in another,
+    past-due ones marked; after done it is no longer listed."""
+    # NOW is 2026-10-25 12:00 UTC (20:00 Taipei).
+    added = [
+        (
+            "2026-10-25T21:30+08:00",
+            "21:30 daily 後查 emerging_issuers 有列、「興櫃」名稱",
+        ),
+        ("2026-10-25T09:00:00Z", "#461 AC-3：seed 20261107，30 筆"),
+        ("none", "合併後才清 worktree"),
+    ]
+    for due, text in added:
+        result = _commit(patrol, "add", "--due", due, "--url", PROMISE, "--text", text)
+        assert result.returncode == 0, result.stdout + result.stderr
+    assert [
+        json.loads(line)["id"]
+        for line in (patrol.data / "logs" / "commitments.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ] == ["c1", "c2", "c3"]
+    first = json.loads(
+        (patrol.data / "logs" / "commitments.jsonl").read_text("utf-8").splitlines()[0]
+    )
+    assert first == {
+        "type": "add",
+        "id": "c1",
+        "issue": 461,
+        "due": "2026-10-25T13:30:00Z",
+        "text": added[0][1],
+        "url": PROMISE,
+        "at": "2026-10-25T12:00:00Z",
+        "session_id": "sess-old",
+    }
+
+    # Another session's patrol (sess-1) lists all three: past due first, no time last.
+    result = _patrol(patrol)
+    assert result.returncode == 0, result.stdout + result.stderr
+    lines = result.stdout.splitlines()
+    head = lines.index("未兌現的承諾：3 則（已到期 1 則）")
+    assert lines[head + 1 : head + 4] == [
+        f"  [c2] [已到期] 2026-10-25 17:00（台北） #461 #461 AC-3：seed 20261107，30 筆 {PROMISE}",
+        f"  [c1] 2026-10-25 21:30（台北） #461 {added[0][1]} {PROMISE}",
+        f"  [c3] 無到期時間 #461 合併後才清 worktree {PROMISE}",
+    ]
+
+    done = _commit(patrol, "done", "c2", session="sess-1")
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert "c2 已兌現" in done.stdout
+    # Marking it again changes nothing.
+    again = _commit(patrol, "done", "c2", session="sess-1")
+    assert again.returncode == 0 and "已標記兌現" in again.stdout
+    result = _patrol(patrol)
+    assert "未兌現的承諾：2 則（已到期 0 則）" in result.stdout
+    assert "[c2]" not in result.stdout
+    assert "[c1]" in result.stdout and "[c3]" in result.stdout
+    # commit.sh list prints the same lines.
+    listed = _commit(patrol, "list")
+    assert listed.returncode == 0, listed.stderr
+    assert listed.stdout.splitlines()[0] == "未兌現的承諾：2 則（已到期 0 則）"
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("add", "--due", "2026-10-25 21:30", "--url", PROMISE, "--text", "x"),
+        ("add", "--due", "none", "--url", "https://example.com/1", "--text", "x"),
+        ("add", "--due", "none", "--url", PROMISE, "--text", "  "),
+        ("add", "--due", "none", "--url", PROMISE),
+        ("add", "--due", "none", "--url", PROMISE, "--text", "x", "--extra", "y"),
+        ("list", "extra"),
+        ("forget", "c1"),
+    ],
+    ids=[
+        "due-format",
+        "url",
+        "empty-text",
+        "no-text",
+        "unknown-flag",
+        "list-arg",
+        "verb",
+    ],
+)
+def test_commit_refuses_bad_arguments_and_writes_nothing(
+    patrol: Harness, args: tuple
+) -> None:
+    result = _commit(patrol, *args)
+    assert result.returncode == 64, result.stdout + result.stderr
+    assert not (patrol.data / "logs" / "commitments.jsonl").exists()
+
+
+def test_commit_done_of_an_unknown_id_and_an_unreadable_line(patrol: Harness) -> None:
+    result = _commit(patrol, "done", "c9")
+    assert result.returncode == 3, result.stdout + result.stderr
+    assert "沒有這個承諾：c9" in result.stderr
+    path = patrol.data / "logs" / "commitments.jsonl"
+    # A partial last line (a crash mid-write) is reported and does not hide the rest.
+    path.write_text('{"type": "add", "id": "c1"', encoding="utf-8")
+    added = _commit(patrol, "add", "--due", "none", "--url", PROMISE, "--text", "y")
+    assert added.returncode == 0, added.stderr
+    assert added.stdout.strip() == "c1"
+    out = _patrol(patrol).stdout
+    assert "未兌現的承諾：1 則（已到期 0 則）" in out
+    assert "  [c1] 無到期時間 #461 y" in out
+    assert "承諾檔第 1 列讀不懂，略過" in out
+
+
+DONE_URL = "https://github.com/YiCheng0608/stock-lab/issues/461#issuecomment-7"
+
+
+def test_commit_done_takes_the_id_and_url_in_any_order(patrol: Harness) -> None:
+    """PR #535 review: `done --url X c1` is c1, not an id "--url"."""
+    for _ in range(2):
+        _commit(patrol, "add", "--due", "none", "--url", PROMISE, "--text", "x")
+    result = _commit(patrol, "done", "--url", DONE_URL, "c2")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "c2 已兌現" in result.stdout
+    last = (patrol.data / "logs" / "commitments.jsonl").read_text("utf-8").splitlines()
+    assert json.loads(last[-1])["id"] == "c2"
+    assert json.loads(last[-1])["url"] == DONE_URL
+    for args in (("--url", DONE_URL), ("c1", "c2"), ("c1", "--url"), ("--url",)):
+        bad = _commit(patrol, "done", *args)
+        assert bad.returncode == 64, (args, bad.stdout + bad.stderr)
+    assert "[c1]" in _commit(patrol, "list").stdout
+
+
+def test_commitments_list_both_adds_of_one_id(patrol: Harness) -> None:
+    """PR #535 review: two adds with one id (a hand edit) are both listed, flagged, and
+    done marks both."""
+    line = {
+        "type": "add",
+        "id": "c1",
+        "issue": 461,
+        "due": None,
+        "url": PROMISE,
+        "at": "2026-10-25T11:00:00Z",
+        "session_id": "s",
+    }
+    (patrol.data / "logs" / "commitments.jsonl").write_text(
+        "".join(
+            json.dumps({**line, "text": t}, ensure_ascii=False) + "\n"
+            for t in ("第一件", "第二件")
+        ),
+        encoding="utf-8",
+    )
+    out = _commit(patrol, "list").stdout
+    assert "未兌現的承諾：2 則（已到期 0 則）" in out
+    assert "第一件" in out and "第二件" in out
+    assert "承諾檔的 id c1 有 2 筆" in out
+    assert (
+        _commit(
+            patrol, "add", "--due", "none", "--url", PROMISE, "--text", "y"
+        ).stdout.strip()
+        == "c2"
+    )
+    assert _commit(patrol, "done", "c1").returncode == 0
+    assert "未兌現的承諾：1 則" in _commit(patrol, "list").stdout
+
+
+def test_commit_add_waits_for_the_lock_and_never_reuses_an_id(patrol: Harness) -> None:
+    """PR #535 review: add holds a lock while it reads the next id and appends, so adds
+    run together take different ids; a lock held by another writer stops it (exit 2,
+    nothing written), and one left behind long ago is taken over."""
+    together = patrol.run_bash(
+        "pids=(); for i in 1 2 3 4; do"
+        ' bash "$1" add --due none --url "$2" --text "同時 $i" & pids+=($!); done;'
+        ' rc=0; for p in "${pids[@]}"; do wait "$p" || rc=1; done; exit $rc',
+        (patrol.ops / "commit.sh").as_posix(),
+        PROMISE,
+    )
+    assert together.returncode == 0, together.stdout + together.stderr
+    assert sorted(together.stdout.split()) == ["c1", "c2", "c3", "c4"]
+    lock = patrol.data / "logs" / ".commitments.lock"
+    assert not lock.exists()
+    # Held by a live writer: refused after the wait, nothing written.
+    lock.mkdir()
+    before = (patrol.data / "logs" / "commitments.jsonl").read_bytes()
+    held = _commit(patrol, "add", "--due", "none", "--url", PROMISE, "--text", "z")
+    assert held.returncode == 2, held.stdout + held.stderr
+    assert "被鎖住" in held.stderr
+    assert (patrol.data / "logs" / "commitments.jsonl").read_bytes() == before
+    # Left by a writer that died two minutes ago: taken over.
+    old = time.time() - 120
+    os.utime(lock, (old, old))
+    taken = _commit(patrol, "add", "--due", "none", "--url", PROMISE, "--text", "z")
+    assert taken.returncode == 0, taken.stdout + taken.stderr
+    assert taken.stdout.strip() == "c5"
+    assert not lock.exists()
 
 
 # --- review of PR #283 -------------------------------------------------------------

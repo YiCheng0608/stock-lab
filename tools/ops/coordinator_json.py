@@ -34,6 +34,13 @@ value is missing or the condition is false, so a script can test the exit code.
                       first seen first (#472); stdin is `gh api --paginate` of an Issue's
                       comments (pages of JSON arrays one after another); exit 1 when it
                       is not that
+  coordinator-row ROW {"body": ...} of the Issue on stdin (gh api repos/<repo>/issues/1)
+                      with the one list line under "## 現任統籌" replaced by ROW and
+                      every other character as it was (take_over.sh, #534); exit 1 with
+                      the reason on stderr when there is no such section, or it holds no
+                      list line or more than one
+  same-body FILE      exit 0 when the Issue on stdin has the body of FILE ({"body": ...},
+                      what coordinator-row printed): the read-back of the edit
   within A B          "yes" when A is B or under B, else "no" (no stdin)
   plain PATH          "yes" when PATH as written is PATH as resolved: no junction, symlink
                       or 8.3 short name on the way (no stdin)
@@ -225,6 +232,47 @@ def without_mark(body) -> str:
 def marked_body(text: str) -> str:
     text = text.lstrip("\ufeff").rstrip()
     return text if coordinator_comment(text) else f"{text}\n\n{COORDINATOR_MARK}"
+
+
+# The section of the governance Issue #1 that names the coordinator (docs/COORDINATOR.md):
+# its heading and one list line under it, which take_over.sh replaces (#534).
+COORDINATOR_HEADING = "## 現任統籌"
+
+
+def replace_coordinator_row(body: str, row: str) -> str:
+    """BODY with the one list line under COORDINATOR_HEADING replaced by ROW.
+
+    Lines are split with their endings kept (CRLF, LF or none on the last one), so every
+    other byte, the replaced line's own ending included, stays as it was. Raises
+    ValueError with the reason when the section is missing, holds no list line or more
+    than one (nothing is guessed).
+    """
+    if "\n" in row or "\r" in row or not row.startswith("- "):
+        raise ValueError("新的一列要以 '- ' 開頭、只有一行")
+    # Not str.splitlines: it also splits at form feed, NEL, LINE SEPARATOR (U+2028) and the like, which a
+    # list line may hold.
+    lines = re.findall(r"[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+\Z", body)
+    if "".join(lines) != body:
+        raise ValueError("#1 本文分行後接不回原文")
+    heads = [i for i, ln in enumerate(lines) if ln.rstrip() == COORDINATOR_HEADING]
+    if len(heads) != 1:
+        raise ValueError(
+            f"#1 本文的「{COORDINATOR_HEADING}」標題有 {len(heads)} 個，要剛好 1 個"
+        )
+    rows = []
+    for i in range(heads[0] + 1, len(lines)):
+        if lines[i].startswith("#"):
+            break
+        if lines[i].startswith("- "):
+            rows.append(i)
+    if len(rows) != 1:
+        raise ValueError(
+            f"「{COORDINATOR_HEADING}」底下有 {len(rows)} 列清單，要剛好 1 列"
+        )
+    line = lines[rows[0]]
+    content = line.rstrip("\r\n")
+    lines[rows[0]] = row + line[len(content) :]
+    return "".join(lines)
 
 
 def latest_checks(rollup) -> list[dict]:
@@ -474,6 +522,24 @@ def main(argv: list[str]) -> int:
     doc = _load()
     if doc is None:
         return 1
+    if command == "coordinator-row":
+        body = doc.get("body") if isinstance(doc, dict) else None
+        if not isinstance(body, str):
+            print("Issue 的回答沒有 body", file=sys.stderr)
+            return 1
+        try:
+            new = replace_coordinator_row(body, args[0])
+        except ValueError as error:
+            print(error, file=sys.stderr)
+            return 1
+        # ASCII JSON: nothing on the way to gh depends on the console's code page.
+        print(json.dumps({"body": new}))
+        return 0
+    if command == "same-body":
+        with open(args[0], encoding="utf-8") as handle:
+            want = json.load(handle).get("body")
+        body = doc.get("body") if isinstance(doc, dict) else None
+        return 0 if isinstance(want, str) and body == want else 1
     if command == "get":
         return _print_value(get(doc, args[0]))
     if command == "ok":
