@@ -554,6 +554,16 @@ if [ -n "$python" ] && [ -f "$data_dir/stock.db" ]; then
         execution_calendar) anomaly invariant_execution_calendar "資料不變量：最新訊號日 $(value signal_date) 的 $(value signals) 筆 analysis 訊號中，$(value without_date) 筆沒有規則最早執行日（\`earliest_execution_date\` 為空）：官方休市表缺該年度，或 daily 的 trading_calendar 步驟失敗。請依 docs/ops/SCHEDULING.md 日誌與 run 記錄 查該日 analyze 步驟的 \`execution_calendar\` 與 trading_calendar 步驟，必要時跑 \`python -m worker.cli trading-calendar\`。" ;;
         strategy_levels) anomaly invariant_strategy_levels "資料不變量：daily run $(value run_id)（目標日 $(value target_date)）的 strategy_levels 步驟是 \`$(value status)\`：這一步不影響 run 狀態，個股頁策略總表的觀察價位不會更新。請依 docs/ops/SCHEDULING.md 日誌與 run 記錄 查該 run 的 \`schedule_run_steps\` 錯誤，修正後跑 \`python -m worker.cli strategy-levels --date $(value target_date)\`。" ;;
         candidate_notes) anomaly invariant_candidate_notes "資料不變量：最新候選日 $(value trading_date) 的候選清單（candidate run $(value candidate_run_id)）有 $(value candidates) 檔候選，已產生 $(value minutes) 分鐘，但完成的 AI 說明是 0 檔（首頁與候選頁只會顯示「此檔尚未產生 AI 說明」）：可能是手動重產候選時加了 \`--skip-notes\`、在其他指令重算了候選，或 \`claude -p\` 失敗（額度或每日呼叫上限；登入被拒時由「Claude Code 認證」那則留言處理，這則不重複）。請查 \`/api/ingestion-runs?q=candidate_notes&include_metadata=true\`，再跑 \`python -m worker.cli candidate-notes --date $(value trading_date)\` 補上（docs/ops/CLI.md）。" ;;
+        period_backfill)
+          # Once per window (#539), not once a day: the step runs every day of
+          # the window, and a fix waits for the next window's first days anyway.
+          pb_key="invariant_period_backfill_$(value window)"
+          if grep -qF " anomaly_commented key=$pb_key date=" "$log_file" 2>/dev/null; then
+            found=1
+            log anomaly_already_commented "key=$pb_key" "此窗口已就 period_backfill 留言，不再留"
+          else
+            anomaly "$pb_key" "資料不變量：daily 最近 $(value failures) 次的 period_backfill（MOPS 季報與月營收在法定期限前後的窗口回補，期別到 $(value window)）都不是 \`success\`／\`skipped\`，最近一次是 run $(value run_id)（目標日 $(value target_date)）的 \`$(value status)\`：窗口內換期後才上市的新股、晚申報與更正沒有補進來。這一步不影響 run 狀態。請以 \`python -m worker.cli schedule-runs --date $(value target_date)\` 看 \`summary_json.period_backfill\` 的 \`error\`，修正後手動跑 \`python -m worker.cli fundamentals backfill --quarters 2\`／\`revenue backfill --months 2\`（docs/ops/SCHEDULING.md）。同一窗口只留這一則。"
+          fi ;;
         llm_done_provenance) anomaly invariant_llm_provenance "資料不變量：\`news_llm_results\` 的 $(value done) 列 \`llm_status=done\` 中，$(value missing_model) 列沒有 \`llm_model\`、$(value empty_prompt_version) 列 \`prompt_version\` 為空，請查 news 日誌的 news-llm 段落。" ;;
       esac
     done <<<"$checks"

@@ -44,7 +44,12 @@ The result goes to stdout without a trailing newline.
                                    minutes before <now>; not judged while a
                                    daily or candidate_notes run is running or
                                    the latest candidate_notes run was refused
-                                   for its login, skipped without <now>)
+                                   for its login, skipped without <now>),
+                                   period_backfill (the latest
+                                   PERIOD_BACKFILL_FAILURES daily
+                                   period_backfill steps were neither success
+                                   nor skipped; not judged when the latest is
+                                   outside its windows)
   deploy-image <deploy.json>       "deploy_image ok|violation|skip key=value ...":
                                    the image this process runs in
                                    (STOCK_IMAGE_TAG, STOCK_GIT_HEAD: the
@@ -112,6 +117,13 @@ CANDIDATE_NOTES_GRACE = timedelta(minutes=30)
 # them equal).  Lists of other versions are never given notes, so they are
 # not judged.
 CANDIDATE_SCORE_VERSION = "candidate_score_v6"
+# daily's period_backfill (#536) reported after this many runs in a row that
+# did not succeed (#539): usually three trading days, which leaves a month's
+# window (the 1st to the 20th) time for a fix and a manual backfill, and one
+# MOPS outage of a day is not reported.  Runs, not days: a failed 21:30 run
+# and its 23:00 rerun both run the step, so three can span two days.
+PERIOD_BACKFILL_FAILURES = 3
+PERIOD_BACKFILL_OK = ("success", "skipped")
 # Skipped rows that only point at another run of the same date.
 REFERENCE_SKIPS = ("already_complete", "already_running")
 
@@ -354,7 +366,56 @@ def invariants(db: str, today: str, now: str | None = None) -> str:
         lines.append(_execution_calendar(conn))
         lines.append(_strategy_levels(conn))
         lines.append(_candidate_notes(conn, now))
+        lines.append(_period_backfill(conn))
     return "\n".join(lines)
+
+
+def _period_backfill(conn: sqlite3.Connection) -> str:
+    """The latest PERIOD_BACKFILL_FAILURES daily period_backfill steps all did
+    not succeed (Issue #539).
+
+    The step (#536) never changes the run status; its outcome is in the run's
+    ``summary_json.period_backfill``.  Runs without it (collect not
+    successful, before #536, still running) are passed over.  ``success`` and
+    ``skipped`` are not failures, so either ends the streak; the latest one
+    ``skipped`` with reason ``outside_window`` is not judged at all.
+    ``window`` names the latest quarter and month the latest step backfilled:
+    the watchdog comments once per window."""
+
+    if not _has_table(conn, "schedule_runs"):
+        return "period_backfill skip reason=no_schedule_runs"
+    steps: list[tuple[int, str, dict]] = []
+    for run_id, target, raw in conn.execute(
+        "SELECT id, target_date, summary_json FROM schedule_runs"
+        " WHERE job='daily' ORDER BY id DESC LIMIT 50"
+    ):
+        step = _json(_json(raw).get("period_backfill"))
+        if step:
+            steps.append((int(run_id), str(target)[:10], step))
+            if len(steps) >= PERIOD_BACKFILL_FAILURES:
+                break
+    if not steps:
+        return "period_backfill skip reason=no_period_backfill"
+    run_id, target, latest = steps[0]
+    status = str(latest.get("status"))
+    facts = f"run_id={run_id} target_date={target} today={latest.get('today')}"
+    if status == "skipped" and latest.get("reason") == "outside_window":
+        return f"period_backfill skip reason=outside_window {facts}"
+    failures = 0
+    for _run_id, _target, step in steps:
+        if step.get("status") in PERIOD_BACKFILL_OK:
+            break
+        failures += 1
+    periods = [
+        str(labels[-1])
+        for labels in (latest.get("quarters"), latest.get("months"))
+        if isinstance(labels, list) and labels
+    ]
+    return (
+        f"period_backfill {_state(failures >= PERIOD_BACKFILL_FAILURES)} {facts}"
+        f" status={status} failures={failures}"
+        f" window={'_'.join(periods) or 'none'}"
+    )
 
 
 def _execution_calendar(conn: sqlite3.Connection) -> str:

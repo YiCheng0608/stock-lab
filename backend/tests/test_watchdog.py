@@ -1290,6 +1290,141 @@ def test_a_failed_strategy_levels_step_is_commented(wd):
     assert "invariant_strategy_levels" not in wd.text("gh_calls.log")
 
 
+def _backfill_runs(
+    path: Path, steps: list[dict | None], day: str = "2026-10-19"
+) -> None:
+    """Successful daily runs, oldest first, with this summary_json.period_backfill
+    (None: a run without the step, as when collect did not succeed)."""
+
+    rows = []
+    for step in steps:
+        summary: dict = {"steps": {"collect": "success"}}
+        if step is not None:
+            summary["period_backfill"] = step
+        rows.append(("success", summary))
+    _daily_db(path, rows, day)
+
+
+def _backfill(status: str, months=("2026-09", "2026-10")) -> dict:
+    step = {
+        "status": status,
+        "today": "2026-11-06",
+        "quarters": ["2026Q2", "2026Q3"],
+        "months": list(months),
+    }
+    if status == "skipped":
+        step.update(reason="outside_window", quarters=[], months=[])
+    else:
+        step["error"] = f"revenue {status}: stopped after 3 failures at 2026-10:sii:1"
+    return step
+
+
+PERIOD_BACKFILL_COMMENT = (
+    "待使用者：資料不變量：daily 最近 3 次的 period_backfill（MOPS 季報與月營收在"
+    "法定期限前後的窗口回補，期別到 2026Q3_2026-10）都不是 `success`／`skipped`，"
+    "最近一次是 run 4（目標日 2026-10-19）的 `partial`"
+)
+
+
+def comments(wd: Watchdog) -> int:
+    """#1 comments about period_backfill (other anomalies may comment too)."""
+
+    return wd.text("gh_bodies.txt").count("次的 period_backfill（MOPS")
+
+
+def test_period_backfill_failures_are_commented_once_per_window(wd):
+    # #539: the step never changes the run status; three in a row that did not
+    # succeed are commented, once for the window, not once a day.
+    db = wd.data / "stock.db"
+    _invariant_db(db, HEALTHY_BARS, HEALTHY_LLM)
+    _daily_log_done(wd)
+    assert "invariant period_backfill skip reason=no_schedule_runs" in (
+        wd.run("--dry-run").stdout
+    )
+    _backfill_runs(
+        db, [_backfill("success"), _backfill("failed"), _backfill("partial")]
+    )
+    result = wd.run()
+    assert (
+        "invariant period_backfill ok run_id=3 target_date=2026-10-19 today=2026-11-06"
+        " status=partial failures=2 window=2026Q3_2026-10"
+    ) in result.stdout
+    assert comments(wd) == 0
+
+    _backfill_runs(db, [_backfill("partial")])
+    result = wd.run()
+    assert (
+        "invariant period_backfill violation run_id=4 target_date=2026-10-19"
+        " today=2026-11-06 status=partial failures=3 window=2026Q3_2026-10"
+    ) in result.stdout
+    assert PERIOD_BACKFILL_COMMENT in wd.text("gh_bodies.txt")
+    assert "同一窗口只留這一則。" in wd.text("gh_bodies.txt")
+    assert comments(wd) == 1
+
+    # Later that night, and the next days of the same window: no new comment.
+    wd.run(now=NIGHT + 15 * 60)
+    _backfill_runs(db, [_backfill("failed")], day="2026-10-20")
+    result = wd.run(now=NIGHT + 86400)
+    assert "failures=3 window=2026Q3_2026-10" in result.stdout
+    assert comments(wd) == 1
+    assert (
+        " anomaly_already_commented key=invariant_period_backfill_2026Q3_2026-10 "
+    ) in wd.log()
+
+    # The next month's window is a new one.
+    _backfill_runs(db, [_backfill("failed", ("2026-10", "2026-11"))], day="2026-10-21")
+    result = wd.run(now=NIGHT + 2 * 86400)
+    assert "violation run_id=6 target_date=2026-10-21" in result.stdout
+    assert "window=2026Q3_2026-11" in result.stdout
+    assert comments(wd) == 2
+
+
+@pytest.mark.parametrize(
+    ("steps", "line"),
+    [
+        pytest.param(
+            ["failed", "failed", "failed", "success"],
+            "ok run_id=4 target_date=2026-10-19 today=2026-11-06 status=success"
+            " failures=0",
+            id="success_ends_the_streak",
+        ),
+        pytest.param(
+            ["failed", "success", "failed", "partial"],
+            "ok run_id=4 target_date=2026-10-19 today=2026-11-06 status=partial"
+            " failures=2",
+            id="success_in_between",
+        ),
+        pytest.param(
+            ["failed", "skipped", "failed", "failed"],
+            "ok run_id=4 target_date=2026-10-19 today=2026-11-06 status=failed"
+            " failures=2",
+            id="skipped_in_between",
+        ),
+        pytest.param(
+            ["failed", "failed", "failed", "skipped"],
+            "skip reason=outside_window run_id=4 target_date=2026-10-19"
+            " today=2026-11-06",
+            id="outside_the_window",
+        ),
+        pytest.param(
+            ["failed", "failed", None, "failed"],
+            "violation run_id=4 target_date=2026-10-19 today=2026-11-06"
+            " status=failed failures=3",
+            id="a_run_without_the_step_is_passed_over",
+        ),
+    ],
+)
+def test_period_backfill_success_and_skipped_are_not_failures(wd, steps, line):
+    db = wd.data / "stock.db"
+    _invariant_db(db, HEALTHY_BARS, HEALTHY_LLM)
+    _daily_log_done(wd)
+    _backfill_runs(db, [None if s is None else _backfill(s) for s in steps])
+    result = wd.run()
+    assert f"invariant period_backfill {line}" in result.stdout
+    commented = "invariant_period_backfill" in wd.log()
+    assert commented == line.startswith("violation")
+
+
 CURRENT_SCORE = "candidate_score_v6"
 
 
