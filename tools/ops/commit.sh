@@ -15,13 +15,13 @@
 #       URL   the 統籌承諾 comment (…/issues/<n>#issuecomment-<id>); the Issue comes from it
 #       TEXT  what is to be done, one line
 #     prints the new id (c<N>)
-#   commit.sh done ID [--url URL]   kept; URL is the comment that says so
+#   commit.sh done ID [--url URL]   kept; URL is the comment that says so (any order)
 #   commit.sh list                  what is not kept yet (as patrol.sh prints it)
 # Options for all: --data-dir DIR (default $STOCK_DATA_DIR, then $HOME/stock-lab-data),
 #   --python EXE (default $STOCK_PYTHON, then this checkout's .venv, then python3),
 #   --session-id ID (default $CLAUDE_CODE_SESSION_ID; recorded, may be empty).
 # Exit: 0 done; 64 bad arguments (nothing written); 3 done of an id never added; 2 no
-#   logs/ directory or no Python.
+#   logs/ directory, no Python, or the file locked by another add/done past 5 seconds.
 # Test hook: PATROL_NOW (epoch seconds).
 set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

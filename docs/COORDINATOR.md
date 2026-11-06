@@ -25,14 +25,14 @@ orca terminal rename --terminal <handle> --title "統籌" --json
 你是 stock-lab 的統籌。先讀 AGENTS.md、docs/COORDINATOR.md、治理 Issue #1 本文的決策索引與最近 10 則留言、所有 open Issues 與 PR、最近 48 小時內關閉的 Issue 與合併的 PR 的最後一則留言。接著跑 bash tools/ops/take_over.sh <舊 handle>：它寫心跳、啟動 wake listener、在 #1 留「統籌 session 更換」並改 #1 本文的現任統籌、等舊統籌 terminal 閒置後關掉它、列出未兌現的承諾；中途失敗會停下並印出已做的步驟與續跑命令，修好原因後照它續跑，不手動補做。再跑 bash tools/ops/patrol.sh 處理未處理的事件，處理完以 --done 標記（docs/COORDINATOR.md「無人值守運作」）；以 `決定：` 回覆 patrol.sh 列出的每一則未回覆的提問，以及沒有類型的舊格式提問；兌現 take_over.sh 與 patrol.sh 列出的承諾，以及前任 `統籌承諾：` 留言裡承諾檔沒有的事（補寫進承諾檔）；核對前任標「已完成」的事，不只接續；然後依手冊推進。回覆使用者一律繁體中文。
 ```
 
-[`take_over.sh`](../tools/ops/take_over.sh) 的步驟依序是：`patrol.sh --heartbeat-only --take-over` 寫心跳並讀回；`wake_listener_start.sh`；以 `comment.sh` 在 #1 留「回報：統籌 session 更換：<handle>／<session id>」，附未兌現的承諾；讀 #1 本文、只換掉「## 現任統籌」底下那一列（其他內容逐位元組不變；標題或那一列不是剛好一個就不改並停下），送出後讀回比對；對舊 terminal `orca terminal wait --for tui-idle`，`satisfied:true` 才 `orca terminal close`；等舊 terminal 的 listener 停掉再跑一次 `wake_listener_start.sh`；最後印出未兌現的承諾。任一步失敗就停下，後面的步驟都不做，stderr 印出已完成的步驟與 `--from <步驟>` 的續跑命令（從改本文起要帶 `--comment-url` 前一次的 #1 留言），最後一行是 JSON。
+[`take_over.sh`](../tools/ops/take_over.sh) 開始前先核對給的舊 handle 就是心跳記的 terminal（空字串、或心跳記的是別的 terminal，就以 64 停下、什麼都不做），所以不會關到工程師的 terminal；心跳會被第一步覆寫，舊 handle 與接手前有沒有 listener 記在 `<資料目錄>/logs/take-over-<session id>.json`，續跑時讀它核對，全部完成後刪掉。步驟依序是：`patrol.sh --heartbeat-only --take-over` 寫心跳並讀回；`wake_listener_start.sh`，之後 `--status` 要說在跑；以 `comment.sh` 在 #1 留「回報：統籌 session 更換：<handle>／<session id>」，附未兌現的承諾；讀 #1 本文、只換掉「## 現任統籌」底下那一列（其他內容逐位元組不變；標題或那一列不是剛好一個就不改並停下），送出後讀回比對；對舊 terminal `orca terminal wait --for tui-idle`，`satisfied:true` 才 `orca terminal close`；接手前就在跑的 listener（舊 terminal 的）要在關掉舊 terminal 後 10 秒內停止回應，再跑一次 `wake_listener_start.sh` 並以 `--status` 確認，逾時就停下（它可能不是舊 terminal 的，或晚點才結束而沒有 listener；查清後以 `--from relisten` 續跑，不再等待），本次接手才啟動的 listener 在新 terminal 裡，保留；最後印出未兌現的承諾。任一步失敗就停下，後面的步驟都不做，stderr 印出已完成的步驟與 `--from <步驟>` 的續跑命令（從改本文起要帶 `--comment-url` 前一次的 #1 留言），最後一行是 JSON。
 
 **自動換手機制**（統籌 session 自己執行，不需要人在場）：
 
 1. 偵測：壓縮次數由 repo 的 PreCompact hook（`.claude/settings.json` → `tools/ops/compact_hook.sh`）自動寫進 `<資料目錄>/logs/compactions/<session id>.count`，每次壓縮的時間另記一列在同目錄的 `<session id>.log`，不靠模型記得；工程師 session 也寫，統籌的是心跳檔記的 session id 那份。`patrol.sh` 第一步寫心跳檔（`session_id`、`terminal_handle`、`written_at`），第二步讀自己的計數檔；達 2 次時表頭印「已達換手條件」，最後一行再印一次，並以 exit 10 結束（`| tail -1` 或只看結束碼也看得到）。達 2 次、或自覺對不上 Issue 與文件，就換手。
 2. 執行：先寫換手標記 `<資料目錄>/logs/handoff-<session id>.json`（舊 handle、時間），之後不再合併、派工、留言；手上的定時承諾都要已在承諾檔（`commit.sh list` 核對，缺的先補）；再照上面四行開新 session 並送接手文（`<舊 handle>` 換成自己的 handle）。
 3. 接回：新 session 15 分鐘內未在 #1 留言，舊統籌刪標記檔、照常處理事件佇列，在 #1 記「換手失敗：<新 handle>」，下次處理佇列時再試。
-4. 收尾：由新統籌的 `take_over.sh` 做：在 #1 留言並寫心跳檔後，確認舊 terminal 閒置再關掉它，然後再跑一次 `wake_listener_start.sh`：舊統籌啟動的 wake listener 跟著它的 terminal 結束，換由新統籌啟動（[統籌事件 monitor](ops/MONITOR.md)）。
+4. 收尾：由新統籌的 [`take_over.sh`](../tools/ops/take_over.sh) 做（步驟見上面接手文之後的說明）。
 5. 換手不通知工程師：工程師的回報與提問一律在 Issue／PR 留言，不送到統籌 terminal；新統籌啟動時讀所有 open Issue 與 PR 並處理事件佇列（換手前後的留言都在佇列裡），之後 monitor 喚醒的是新心跳記的 terminal。新統籌之後給工程師的留言仍照[開工](WORKFLOW.md#任務流程)的反方向規則通知 terminal。
 
 ## 無人值守運作

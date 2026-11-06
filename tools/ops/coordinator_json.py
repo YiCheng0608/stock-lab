@@ -249,7 +249,7 @@ def replace_coordinator_row(body: str, row: str) -> str:
     """
     if "\n" in row or "\r" in row or not row.startswith("- "):
         raise ValueError("新的一列要以 '- ' 開頭、只有一行")
-    # Not str.splitlines: it also splits at \x0c, \x85,   and the like, which a
+    # Not str.splitlines: it also splits at form feed, NEL, LINE SEPARATOR (U+2028) and the like, which a
     # list line may hold.
     lines = re.findall(r"[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+\Z", body)
     if "".join(lines) != body:

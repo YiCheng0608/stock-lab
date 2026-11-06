@@ -17,8 +17,9 @@
 # Files written: <data>/logs/coordinator-heartbeat.json (through a temporary file in the
 # same directory and mv), and with --done one line in <data>/logs/events-done.jsonl.
 #
-# Exit: 0; 10 the listing is complete and the handoff condition holds; 2 a file could not
-#   be written or read back, a --done failed; 3 another session's heartbeat was kept;
+# Exit: 0; 10 the handoff condition holds (whether or not every part of the listing could
+#   be read, such as the questions 未查完); 2 a file could not be written or read back, a
+#   --done failed; 3 another session's heartbeat was kept;
 #   64 bad arguments.
 #
 # Usage: patrol.sh [options]

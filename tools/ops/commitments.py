@@ -14,7 +14,9 @@ File: LOGS/commitments.jsonl (LOGS is <data>/logs), appended, one JSON object pe
   {"type": "done", "id", "at", "session_id", "url"}
       kept; ``url`` (or null) is the comment that says so.
 A line that cannot be read is reported by ``list`` and skipped; it never hides the rest.
-Times are UTC ISO; NOW is epoch seconds.
+add and done hold LOGS/.commitments.lock while they read and append, so two adds never
+take the same id; should one id still have two adds (a hand edit), both are listed and
+``list`` says so. Times are UTC ISO; NOW is epoch seconds.
 
 Subcommands:
   add LOGS NOW SESSION --due DUE --url URL --text TEXT
@@ -22,7 +24,9 @@ Subcommands:
       https://github.com/YiCheng0608/stock-lab/(issues|pull)/<n>#issuecomment-<id>.
       Prints the new id. Exit 64 on a bad argument (nothing written).
   done LOGS NOW SESSION ID [--url URL]
-      Exit 3 when ID was never added; an ID already kept is reported and exits 0.
+      ID and --url in any order. Exit 3 when ID was never added; an ID already kept is
+      reported and exits 0.
+Exit 2 for add and done when the lock stays held past 5 seconds (nothing written).
   list LOGS NOW
       "未兌現的承諾：N 則（已到期 M 則）", then one line per commitment not kept, the
       ones due first, by due time; those without a time last.
@@ -34,6 +38,8 @@ import json
 import os
 import re
 import sys
+import time
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
 FILE = "commitments.jsonl"
@@ -115,15 +121,50 @@ def _valid_iso(stamp: str) -> bool:
     return True
 
 
-def state(records: list[dict]) -> tuple[dict[str, dict], set[str]]:
-    added: dict[str, dict] = {}
+def state(records: list[dict]) -> tuple[dict[str, list[dict]], set[str]]:
+    """Every add by id (more than one when two adds raced past the lock, or the file was
+    edited by hand: all are kept and listed), and the ids marked done."""
+    added: dict[str, list[dict]] = {}
     kept: set[str] = set()
     for record in records:
         if record["type"] == "add":
-            added.setdefault(record["id"], record)
+            added.setdefault(record["id"], []).append(record)
         else:
             kept.add(record["id"])
     return added, kept
+
+
+LOCK = ".commitments.lock"
+LOCK_WAIT = 5.0
+# A lock left by a writer that died: no add or done holds it for long.
+LOCK_STALE = 60.0
+
+
+@contextmanager
+def locked(logs: str):
+    """Hold LOGS/.commitments.lock (a directory: mkdir is atomic on every file system)
+    while reading the next id and appending, so two adds never take the same id. Raises
+    TimeoutError when another writer holds it past LOCK_WAIT."""
+    path = os.path.join(logs, LOCK)
+    deadline = time.monotonic() + LOCK_WAIT
+    while True:
+        try:
+            os.mkdir(path)
+            break
+        except FileExistsError:
+            try:
+                if time.time() - os.stat(path).st_mtime > LOCK_STALE:
+                    os.rmdir(path)
+                    continue
+            except FileNotFoundError:
+                continue
+            if time.monotonic() > deadline:
+                raise TimeoutError(path) from None
+            time.sleep(0.1)
+    try:
+        yield
+    finally:
+        os.rmdir(path)
 
 
 def append(logs: str, record: dict) -> None:
@@ -164,7 +205,7 @@ def one_line(text: str) -> str:
 def listing(logs: str, now: int) -> list[str]:
     records, bad = read(logs)
     added, kept = state(records)
-    open_ = [c for cid, c in added.items() if cid not in kept]
+    open_ = [c for cid, cs in added.items() if cid not in kept for c in cs]
     due = [c for c in open_ if c.get("due") and _epoch(c["due"]) <= now]
 
     def key(c: dict):
@@ -186,6 +227,11 @@ def listing(logs: str, now: int) -> list[str]:
         lines.append(
             f"  承諾檔第 {number} 列讀不懂，略過（{os.path.join(logs, FILE)}）"
         )
+    for cid, cs in added.items():
+        if len(cs) > 1:
+            lines.append(
+                f"  承諾檔的 id {cid} 有 {len(cs)} 筆（都列在上面），done {cid} 會一起標記"
+            )
     return lines
 
 
@@ -239,59 +285,71 @@ def add(logs: str, now: int, session: str, args: list[str]) -> int:
                 file=sys.stderr,
             )
             return 64
-    records, _ = read(logs)
-    added, _ = state(records)
-    cid = f"c{max((_number(i) for i in added), default=0) + 1}"
-    append(
-        logs,
-        {
-            "type": "add",
-            "id": cid,
-            "issue": int(m.group(1)),
-            "due": due,
-            "text": text,
-            "url": opts["--url"],
-            "at": iso(now),
-            "session_id": session or None,
-        },
-    )
+    with locked(logs):
+        records, _ = read(logs)
+        added, _ = state(records)
+        cid = f"c{max((_number(i) for i in added), default=0) + 1}"
+        append(
+            logs,
+            {
+                "type": "add",
+                "id": cid,
+                "issue": int(m.group(1)),
+                "due": due,
+                "text": text,
+                "url": opts["--url"],
+                "at": iso(now),
+                "session_id": session or None,
+            },
+        )
     print(cid)
     return 0
 
 
 def done(logs: str, now: int, session: str, args: list[str]) -> int:
-    if not args:
-        print("要給承諾 id（c<N>）", file=sys.stderr)
+    # The id and --url in any order (PR #535 review): `done --url X c1` is c1.
+    ids: list[str] = []
+    url = None
+    it = iter(args)
+    for arg in it:
+        if arg == "--url":
+            url = next(it, None)
+            if url is None:
+                print("--url needs a value", file=sys.stderr)
+                return 64
+        elif arg.startswith("-"):
+            print(f"unknown argument: {arg}", file=sys.stderr)
+            return 64
+        else:
+            ids.append(arg)
+    if len(ids) != 1 or not ID_RE.match(ids[0]):
+        print("要給剛好一個承諾 id（c<N>）", file=sys.stderr)
         return 64
-    cid, rest = args[0], args[1:]
-    try:
-        opts = _options(rest, {"--url"})
-    except ValueError as error:
-        print(error, file=sys.stderr)
-        return 64
-    url = opts.get("--url")
+    cid = ids[0]
     if url is not None and not URL_RE.match(url):
         print("--url 要是兌現留言的連結（…#issuecomment-<id>）", file=sys.stderr)
         return 64
-    records, _ = read(logs)
-    added, kept = state(records)
-    if cid not in added:
-        print(f"沒有這個承諾：{cid}", file=sys.stderr)
-        return 3
-    if cid in kept:
-        print(f"{cid} 已標記兌現")
-        return 0
-    append(
-        logs,
-        {
-            "type": "done",
-            "id": cid,
-            "at": iso(now),
-            "session_id": session or None,
-            "url": url,
-        },
-    )
-    print(f"{cid} 已兌現：{one_line(added[cid]['text'])}")
+    with locked(logs):
+        records, _ = read(logs)
+        added, kept = state(records)
+        if cid not in added:
+            print(f"沒有這個承諾：{cid}", file=sys.stderr)
+            return 3
+        if cid in kept:
+            print(f"{cid} 已標記兌現")
+            return 0
+        append(
+            logs,
+            {
+                "type": "done",
+                "id": cid,
+                "at": iso(now),
+                "session_id": session or None,
+                "url": url,
+            },
+        )
+    texts = "；".join(one_line(c["text"]) for c in added[cid])
+    print(f"{cid} 已兌現：{texts}")
     return 0
 
 
@@ -314,12 +372,14 @@ def main(argv: list[str]) -> int:
         print(__doc__, file=sys.stderr)
         return 64
     session, rest = argv[3], argv[4:]
-    if command == "add":
-        return add(logs, now, session, rest)
-    if command == "done":
-        return done(logs, now, session, rest)
-    print(f"unknown command: {command}", file=sys.stderr)
-    return 64
+    if command not in ("add", "done"):
+        print(f"unknown command: {command}", file=sys.stderr)
+        return 64
+    try:
+        return (add if command == "add" else done)(logs, now, session, rest)
+    except TimeoutError as error:
+        print(f"承諾檔被鎖住超過 {LOCK_WAIT:.0f} 秒，未寫入：{error}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

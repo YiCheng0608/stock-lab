@@ -3173,6 +3173,89 @@ def test_commit_done_of_an_unknown_id_and_an_unreadable_line(patrol: Harness) ->
     assert "承諾檔第 1 列讀不懂，略過" in out
 
 
+DONE_URL = "https://github.com/YiCheng0608/stock-lab/issues/461#issuecomment-7"
+
+
+def test_commit_done_takes_the_id_and_url_in_any_order(patrol: Harness) -> None:
+    """PR #535 review: `done --url X c1` is c1, not an id "--url"."""
+    for _ in range(2):
+        _commit(patrol, "add", "--due", "none", "--url", PROMISE, "--text", "x")
+    result = _commit(patrol, "done", "--url", DONE_URL, "c2")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "c2 已兌現" in result.stdout
+    last = (patrol.data / "logs" / "commitments.jsonl").read_text("utf-8").splitlines()
+    assert json.loads(last[-1])["id"] == "c2"
+    assert json.loads(last[-1])["url"] == DONE_URL
+    for args in (("--url", DONE_URL), ("c1", "c2"), ("c1", "--url"), ("--url",)):
+        bad = _commit(patrol, "done", *args)
+        assert bad.returncode == 64, (args, bad.stdout + bad.stderr)
+    assert "[c1]" in _commit(patrol, "list").stdout
+
+
+def test_commitments_list_both_adds_of_one_id(patrol: Harness) -> None:
+    """PR #535 review: two adds with one id (a hand edit) are both listed, flagged, and
+    done marks both."""
+    line = {
+        "type": "add",
+        "id": "c1",
+        "issue": 461,
+        "due": None,
+        "url": PROMISE,
+        "at": "2026-10-25T11:00:00Z",
+        "session_id": "s",
+    }
+    (patrol.data / "logs" / "commitments.jsonl").write_text(
+        "".join(
+            json.dumps({**line, "text": t}, ensure_ascii=False) + "\n"
+            for t in ("第一件", "第二件")
+        ),
+        encoding="utf-8",
+    )
+    out = _commit(patrol, "list").stdout
+    assert "未兌現的承諾：2 則（已到期 0 則）" in out
+    assert "第一件" in out and "第二件" in out
+    assert "承諾檔的 id c1 有 2 筆" in out
+    assert (
+        _commit(
+            patrol, "add", "--due", "none", "--url", PROMISE, "--text", "y"
+        ).stdout.strip()
+        == "c2"
+    )
+    assert _commit(patrol, "done", "c1").returncode == 0
+    assert "未兌現的承諾：1 則" in _commit(patrol, "list").stdout
+
+
+def test_commit_add_waits_for_the_lock_and_never_reuses_an_id(patrol: Harness) -> None:
+    """PR #535 review: add holds a lock while it reads the next id and appends, so adds
+    run together take different ids; a lock held by another writer stops it (exit 2,
+    nothing written), and one left behind long ago is taken over."""
+    together = patrol.run_bash(
+        "pids=(); for i in 1 2 3 4; do"
+        ' bash "$1" add --due none --url "$2" --text "同時 $i" & pids+=($!); done;'
+        ' rc=0; for p in "${pids[@]}"; do wait "$p" || rc=1; done; exit $rc',
+        (patrol.ops / "commit.sh").as_posix(),
+        PROMISE,
+    )
+    assert together.returncode == 0, together.stdout + together.stderr
+    assert sorted(together.stdout.split()) == ["c1", "c2", "c3", "c4"]
+    lock = patrol.data / "logs" / ".commitments.lock"
+    assert not lock.exists()
+    # Held by a live writer: refused after the wait, nothing written.
+    lock.mkdir()
+    before = (patrol.data / "logs" / "commitments.jsonl").read_bytes()
+    held = _commit(patrol, "add", "--due", "none", "--url", PROMISE, "--text", "z")
+    assert held.returncode == 2, held.stdout + held.stderr
+    assert "被鎖住" in held.stderr
+    assert (patrol.data / "logs" / "commitments.jsonl").read_bytes() == before
+    # Left by a writer that died two minutes ago: taken over.
+    old = time.time() - 120
+    os.utime(lock, (old, old))
+    taken = _commit(patrol, "add", "--due", "none", "--url", PROMISE, "--text", "z")
+    assert taken.returncode == 0, taken.stdout + taken.stderr
+    assert taken.stdout.strip() == "c5"
+    assert not lock.exists()
+
+
 # --- review of PR #283 -------------------------------------------------------------
 
 

@@ -11,16 +11,23 @@
 #               byte as it was), then the body read back and compared
 #   close       the old coordinator terminal: orca terminal wait --for tui-idle, then
 #               orca terminal close (skipped with --no-old-terminal)
-#   relisten    wake_listener_start.sh again once the old terminal's listener, which ends
-#               with that terminal, stopped answering (docs/ops/MONITOR.md; skipped with
-#               --no-old-terminal)
+#   relisten    wake_listener_start.sh again, then --status: a listener that ran before the
+#               take-over (the old terminal's, which ends with it, docs/ops/MONITOR.md)
+#               must stop answering within TAKE_OVER_LISTENER_WAIT seconds first, else the
+#               step fails; one this run started is kept (skipped with --no-old-terminal)
 #   commitments the commitments not kept yet (commit.sh list)
 # A step that fails stops the run: nothing after it is done, and the steps already done are
 # printed with the command that goes on from the failed one (--from). The last line is
 # JSON: {"ok", "done": [steps], "failed": step or null, "reason", "comment_url"}.
 #
+# OLD_HANDLE must be the terminal the heartbeat names (another session's), so no other
+# terminal is closed. The first step overwrites the heartbeat, so the run keeps what it
+# named, and whether a listener ran before it, in <data>/logs/take-over-<session id>.json;
+# a run with --from reads that instead and is refused without it. The file goes when every
+# step is done.
+#
 # Usage: take_over.sh OLD_HANDLE|--no-old-terminal [options]
-#   OLD_HANDLE         the old coordinator terminal (the handover text names it)
+#   OLD_HANDLE         the old coordinator terminal, as the heartbeat names it
 #   --no-old-terminal  it no longer exists: the close step is skipped
 #   --from STEP        start at STEP (heartbeat, listener, comment, row, close, relisten,
 #                      commitments)
@@ -30,8 +37,8 @@
 #   --terminal H       this session's terminal, default $ORCA_TERMINAL_HANDLE
 #   --data-dir DIR     default $STOCK_DATA_DIR, then $HOME/stock-lab-data
 #   --python EXE       default $STOCK_PYTHON, then this checkout's .venv, then python3
-# Exit: 0 every step done; 1 a step failed (see the output); 64 bad arguments (nothing done);
-#   2 no Python.
+# Exit: 0 every step done; 1 a step failed (see the output); 64 bad arguments, or an
+#   OLD_HANDLE the heartbeat (or the record) does not name (nothing done); 2 no Python.
 # Test hooks: PATROL_NOW (epoch seconds), TAKE_OVER_LISTENER_WAIT (seconds the old
 #   terminal's listener gets to stop after the close, default 10).
 set -u
@@ -58,7 +65,14 @@ while [ $# -gt 0 ]; do
       shift 2
       ;;
     -*) die "unknown argument: $1" 64 ;;
-    *) [ "$old_given" = 0 ] || die "舊 handle 只能給一個：$1" 64; old_given=1; old="$1"; shift ;;
+    *)
+      [ "$old_given" = 0 ] || die "舊 handle 只能給一個：$1" 64
+      # An empty handle would read as --no-old-terminal (PR #535 review 1).
+      [ -n "$1" ] || die "舊 handle 是空字串；舊 terminal 已不存在時明寫 --no-old-terminal" 64
+      old_given=1
+      old="$1"
+      shift
+      ;;
   esac
 done
 [ "$old_given" = 1 ] || die "要給舊統籌的 terminal handle，或 --no-old-terminal" 64
@@ -80,6 +94,38 @@ fi
 find_python
 logs="$data_dir/logs"
 now="${PATROL_NOW:-$(date -u +%s)}"
+heartbeat="$logs/coordinator-heartbeat.json"
+handle_re='^[A-Za-z0-9_][A-Za-z0-9_-]*$'
+
+# The old handle must be the terminal the heartbeat names, so no other terminal (an
+# engineer's waiting for a review) is closed (PR #535 review 2). The heartbeat is
+# overwritten by the first step, so what it named is kept in the run's record, which a
+# run going on with --from reads instead; the record goes when every step is done.
+record="$logs/take-over-$session_id.json"
+rec_old="" rec_listener=""
+if [ -f "$record" ]; then
+  rec_old="$(cj get old_handle <"$record" 2>/dev/null)" || rec_old=""
+  rec_listener="$(cj get listener <"$record" 2>/dev/null)" || rec_listener=""
+elif [ "$start" = 0 ]; then
+  if [ -f "$heartbeat" ] && [ "$(cj get session_id <"$heartbeat" 2>/dev/null)" != "$session_id" ]; then
+    rec_old="$(cj get terminal_handle <"$heartbeat" 2>/dev/null)" || rec_old=""
+  fi
+elif [ -n "$old" ]; then
+  die "續跑（--from $from）要有前一次記下的舊 handle，找不到 $record；未做任何步驟" 64
+fi
+[[ "$rec_old" =~ $handle_re ]] || rec_old=""
+case "$rec_listener" in running | started) ;; *) rec_listener="" ;; esac
+if [ -n "$old" ] && [ "$old" != "$rec_old" ]; then
+  die "給的舊 handle $old 不是心跳記的舊統籌 terminal（${rec_old:-心跳沒有記別的 session 的 terminal}），未做任何步驟；照心跳給，舊 terminal 已不存在時用 --no-old-terminal" 64
+fi
+write_record() {
+  local tmp="$record.tmp.$$"
+  printf '{"session_id":"%s","old_handle":"%s","listener":"%s","written_at":"%s"}\n' \
+    "$session_id" "$rec_old" "$rec_listener" "$(date -u -d "@$now" +%Y-%m-%dT%H:%M:%SZ)" >"$tmp" \
+    && mv -f "$tmp" "$record" && [ "$(cj get old_handle <"$record" 2>/dev/null)" = "$rec_old" ] \
+    || { rm -f "$tmp"; return 1; }
+}
+
 work="$(mktemp -d)" || die "建不了暫存目錄" 2
 trap 'rm -rf -- "$work"' EXIT
 
@@ -106,12 +152,16 @@ fail() {
   exit 1
 }
 
+listener_up() { bash "$script_dir/wake_listener_start.sh" --status >/dev/null 2>&1; }
+listener_wait="${TAKE_OVER_LISTENER_WAIT:-10}"
+# listener_gone: the listener that ran before the take-over (the old terminal's) stops with
+# that terminal; wait for it before starting a new one, else the start finds the dying one
+# answering and starts nothing. Fails when it still answers after the wait: then it may be
+# no listener of the old terminal, or one that ends later and leaves none (PR #535 review 3).
 listener_gone() {
-  # The old terminal's listener stops with it; wait for that before starting a new one,
-  # else the start finds the dying one answering and starts nothing.
-  local waited=0 limit="${TAKE_OVER_LISTENER_WAIT:-10}"
-  while bash "$script_dir/wake_listener_start.sh" --status >/dev/null 2>&1; do
-    [ "$waited" -lt "$limit" ] || return 0
+  local waited=0
+  while listener_up; do
+    [ "$waited" -lt "$listener_wait" ] || return 1
     sleep 1
     waited=$((waited + 1))
   done
@@ -120,6 +170,7 @@ listener_gone() {
 for step in "${steps_all[@]:$start}"; do
   case "$step" in
     heartbeat)
+      write_record || fail heartbeat "寫不了接手記錄 $record"
       bash "$script_dir/patrol.sh" --heartbeat-only --take-over --session-id "$session_id" \
         --terminal "$handle" --data-dir "$data_dir" --python "$python" \
         || fail heartbeat "patrol.sh --heartbeat-only 失敗"
@@ -128,7 +179,12 @@ for step in "${steps_all[@]:$start}"; do
         || fail heartbeat "心跳檔讀回不是這個 session"
       ;;
     listener)
+      # Whether a listener ran before this run (the old terminal's, most likely) or this
+      # run starts one in this session's terminal decides what relisten waits for.
+      if listener_up; then rec_listener=running; else rec_listener=started; fi
+      write_record || fail listener "寫不了接手記錄 $record"
       bash "$script_dir/wake_listener_start.sh" || fail listener "wake_listener_start.sh 失敗"
+      listener_up || fail listener "wake_listener_start.sh 之後 --status 仍說 listener 沒在跑"
       ;;
     comment)
       list="$("$python" -X utf8 "$script_dir/commitments.py" list "$logs" "$now")" \
@@ -180,8 +236,14 @@ for step in "${steps_all[@]:$start}"; do
         done_steps+=("relisten:skipped")
         continue
       fi
-      listener_gone
+      # A listener this run started lives in this terminal and is kept. One that ran before
+      # must stop with the old terminal first; a run going on --from relisten does not wait
+      # again: whoever runs it checked the listener that still answers.
+      if [ "$rec_listener" != started ] && [ "$from" != relisten ]; then
+        listener_gone || fail relisten "關掉舊 terminal $listener_wait 秒後，接手前就在跑的 wake listener 仍在回應：它可能不是舊 terminal 啟動的，或還沒結束，結束後就沒有 listener。查埠的占用者（docs/ops/MONITOR.md），確認後續跑（不再等待）"
+      fi
       bash "$script_dir/wake_listener_start.sh" || fail relisten "wake_listener_start.sh 失敗"
+      listener_up || fail relisten "wake_listener_start.sh 之後 --status 仍說 listener 沒在跑"
       ;;
     commitments)
       "$python" -X utf8 "$script_dir/commitments.py" list "$logs" "$now" \
@@ -190,4 +252,5 @@ for step in "${steps_all[@]:$start}"; do
   esac
   done_steps+=("$step")
 done
+rm -f -- "$record"
 report true ""

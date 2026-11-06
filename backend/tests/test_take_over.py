@@ -59,13 +59,20 @@ case "$*" in
 esac
 """
 
-# --status answers <fake>/listener_status (default 1: not running), a start
-# <fake>/listener_exit (default 0).
+# A listener answers while <fake>/listener_up exists: --status exits 0 then, else 1; a
+# start creates it (exit 0) unless <fake>/listener_start_fails exists (exit 1, none
+# started) or <fake>/listener_start_dud exists (exit 0, none started).
 FAKE_LISTENER = r"""#!/usr/bin/env bash
-printf '%s\n' "${1:-start}" >>"$FAKE_DIR/listener_calls.log"
-if [ "${1:-}" = --status ]; then exit "$(cat "$FAKE_DIR/listener_status" 2>/dev/null || echo 1)"; fi
-exit "$(cat "$FAKE_DIR/listener_exit" 2>/dev/null || echo 0)"
+d="$FAKE_DIR"
+printf '%s\n' "${1:-start}" >>"$d/listener_calls.log"
+if [ "${1:-}" = --status ]; then [ -f "$d/listener_up" ]; exit; fi
+[ -f "$d/listener_start_fails" ] && exit 1
+[ -f "$d/listener_start_dud" ] || touch "$d/listener_up"
+exit 0
 """
+# Closing the old terminal ends the listener it started (docs/ops/MONITOR.md): the hook of
+# orca terminal close, for the tests where one ran before the take-over.
+CLOSE_ENDS_LISTENER = 'rm -f "$FAKE_DIR/listener_up"\n'
 
 
 @pytest.fixture
@@ -197,19 +204,76 @@ def test_take_over_runs_every_step_in_order_and_reads_each_back(to: Harness) -> 
         "terminal wait --terminal term_old --for tui-idle --timeout-ms 60000 --json",
         "terminal close --terminal term_old --json",
     ]
-    assert _listener(to) == ["start", "--status", "start"]
+    # No listener ran before: this run starts one in its own terminal and keeps it.
+    assert _listener(to) == ["--status", "start", "--status", "start", "--status"]
     # The commitments are printed last, before the JSON line.
     out = result.stdout.strip().splitlines()
     assert out[-4] == "未兌現的承諾：1 則（已到期 1 則）"
     assert out[-3].startswith("  [c1] [已到期]")
     assert out[-2].startswith("take_over：全部完成：")
     assert list(to.temp.iterdir()) == []
+    # The run's record goes once every step is done.
+    assert not (to.data / "logs" / "take-over-sess-new.json").exists()
+
+
+def test_take_over_waits_for_the_old_terminals_listener_to_end(to: Harness) -> None:
+    """Review 3: a listener that ran before the take-over ends with the old terminal; a new
+    one is started after it stopped answering, and checked."""
+    to.write("listener_up", "")
+    to.write("orca_terminal_close.hook", CLOSE_ENDS_LISTENER)
+    result = _take_over(to, "term_old")
+    assert result.returncode == 0, result.stdout + result.stderr
+    # listener: it runs, so the start keeps it; relisten: it is gone after the close,
+    # then started again and answering.
+    assert _listener(to) == [
+        "--status",
+        "start",
+        "--status",
+        "--status",
+        "start",
+        "--status",
+    ]
+    assert (to.fake / "listener_up").exists()
+
+
+def test_take_over_stops_when_the_old_listener_still_answers(to: Harness) -> None:
+    """Review 3: a listener that ran before and still answers after the close may not be
+    the old terminal's, or may end later and leave none: relisten fails, and a run going
+    on --from relisten does not wait again."""
+    to.write("listener_up", "")
+    result = _take_over(to, "term_old")
+    assert result.returncode == 1, result.stdout + result.stderr
+    line = _last(result)
+    assert line["failed"] == "relisten"
+    assert line["done"] == ["heartbeat", "listener", "comment", "row", "close"]
+    assert "仍在回應" in line["reason"]
+    assert (
+        f"bash tools/ops/take_over.sh term_old --from relisten --comment-url {COMMENT_URL}"
+        in result.stderr
+    )
+    record = to.data / "logs" / "take-over-sess-new.json"
+    assert json.loads(record.read_text(encoding="utf-8"))["listener"] == "running"
+    again = _take_over(
+        to, "term_old", "--from", "relisten", "--comment-url", COMMENT_URL
+    )
+    assert again.returncode == 0, again.stdout + again.stderr
+    assert _last(again)["done"] == ["relisten", "commitments"]
+    assert not record.exists()
+
+
+def test_take_over_checks_the_listener_it_started(to: Harness) -> None:
+    """A start that exits 0 but leaves no listener answering is a failure."""
+    to.write("listener_start_dud", "")
+    result = _take_over(to, "term_old")
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert _last(result)["failed"] == "listener"
+    assert to.calls("gh") == [] and _orca(to) == []
 
 
 @pytest.mark.parametrize(
     ("step", "setup", "gh_calls", "orca_calls"),
     [
-        ("listener", lambda h: h.write("listener_exit", "1"), 0, 0),
+        ("listener", lambda h: h.write("listener_start_fails", ""), 0, 0),
         ("comment", lambda h: h.write("fail_comment", ""), 1, 0),
         ("row", lambda h: h.write("fail_get", ""), 2, 0),
         ("row", lambda h: h.write("fail_patch", ""), 3, 0),
@@ -313,7 +377,7 @@ def test_take_over_without_an_old_terminal_touches_no_terminal(to: Harness) -> N
         "commitments",
     ]
     assert _orca(to) == []
-    assert _listener(to) == ["start"]
+    assert _listener(to) == ["--status", "start", "--status"]
     posted = json.loads((to.fake / "posted.json").read_text(encoding="utf-8"))["body"]
     assert "前任 terminal 已不存在。" in posted
 
@@ -322,6 +386,7 @@ def test_take_over_without_an_old_terminal_touches_no_terminal(to: Harness) -> N
     "args",
     [
         (),
+        ("",),
         ("term_new",),
         ("term_old", "term_other"),
         ("-x",),
@@ -329,8 +394,24 @@ def test_take_over_without_an_old_terminal_touches_no_terminal(to: Harness) -> N
         ("term_old", "--from", "nope"),
         ("term_old", "--comment-url", COMMENT_URL),
         ("term_old", "--from", "close", "--comment-url", "https://example.com/1"),
+        # Review 2: a handle the heartbeat does not name (an engineer's terminal).
+        ("term_engineer",),
+        # Going on without the record of an earlier run: what the heartbeat named is gone.
+        ("term_old", "--from", "close", "--comment-url", COMMENT_URL),
     ],
-    ids=["none", "own", "two", "flag", "no-url", "step", "url-early", "bad-url"],
+    ids=[
+        "none",
+        "empty",
+        "own",
+        "two",
+        "flag",
+        "no-url",
+        "step",
+        "url-early",
+        "bad-url",
+        "not-the-heartbeats",
+        "no-record",
+    ],
 )
 def test_take_over_refuses_bad_arguments_before_any_step(
     to: Harness, args: tuple
@@ -340,6 +421,50 @@ def test_take_over_refuses_bad_arguments_before_any_step(
     assert result.returncode == 64, result.stdout + result.stderr
     assert (to.data / "logs" / "coordinator-heartbeat.json").read_bytes() == before
     assert to.calls("gh") == [] and _orca(to) == [] and _listener(to) == []
+    assert not (to.data / "logs" / "take-over-sess-new.json").exists()
+
+
+@pytest.mark.parametrize("heartbeat", ["mine", "none", "unreadable"])
+def test_take_over_refuses_a_handle_without_a_heartbeat_naming_it(
+    to: Harness, heartbeat: str
+) -> None:
+    """Review 2: with no other session's heartbeat there is nothing to check the handle
+    against, so it is refused; --no-old-terminal still works."""
+    path = to.data / "logs" / "coordinator-heartbeat.json"
+    if heartbeat == "mine":
+        path.write_text(
+            '{"session_id":"sess-new","terminal_handle":"term_old",'
+            '"written_at":"2026-10-25T11:55:00Z"}',
+            encoding="utf-8",
+        )
+    elif heartbeat == "none":
+        path.unlink()
+    else:
+        path.write_text("{", encoding="utf-8")
+    result = _take_over(to, "term_old")
+    assert result.returncode == 64, result.stdout + result.stderr
+    assert "不是心跳記的舊統籌 terminal" in result.stderr
+    assert to.calls("gh") == [] and _orca(to) == []
+    assert _take_over(to, "--no-old-terminal").returncode == 0
+
+
+def test_take_over_going_on_checks_the_handle_against_its_record(to: Harness) -> None:
+    """Review 2: after the heartbeat step the heartbeat names this session; a run going on
+    with --from checks the handle against what the first run recorded."""
+    to.answer("orca_terminal_wait", _ok({"satisfied": False}))
+    assert _take_over(to, "term_old").returncode == 1
+    record = json.loads(
+        (to.data / "logs" / "take-over-sess-new.json").read_text(encoding="utf-8")
+    )
+    assert record["old_handle"] == "term_old"
+    to.answer("orca_terminal_wait", _ok({"satisfied": True}))
+    resume = ("--from", "close", "--comment-url", COMMENT_URL)
+    wrong = _take_over(to, "term_engineer", *resume)
+    assert wrong.returncode == 64, wrong.stdout + wrong.stderr
+    assert "terminal close" not in " ".join(_orca(to))
+    result = _take_over(to, "term_old", *resume)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _orca(to)[-1] == "terminal close --terminal term_old --json"
 
 
 def test_the_handover_text_runs_take_over() -> None:
