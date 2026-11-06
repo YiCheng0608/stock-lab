@@ -140,10 +140,10 @@ def test_a_retry_wait_past_the_deadline_is_not_taken():
 def test_the_step_stays_within_its_budget_on_a_dripping_source(
     drip,
     timed,
-    factory,
+    factory,  # noqa: F811  (the fixture imported above)
     monkeypatch,
     frozen_utcnow,
-    tmp_path,  # noqa: F811
+    tmp_path,
 ):
     frozen_utcnow.at = NOW
     monkeypatch.setattr(sources, "RAW_DIR", tmp_path / "raw")
