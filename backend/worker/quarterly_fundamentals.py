@@ -44,7 +44,7 @@ from app.clock import utcnow
 from app.db import SessionLocal
 from app.models import FundamentalSnapshot, IngestionRun, Instrument
 from app.trading_calendar import next_session
-from worker import pipeline
+from worker import bounded_http, pipeline
 from worker.sources import (
     FundamentalRecord,
     OfficialDataError,
@@ -368,30 +368,57 @@ def parse_report(html: str, market: str, quarter: Quarter) -> list[QuarterRow]:
 # --- fetch --------------------------------------------------------------------
 
 
-def fetch_html(url: str, form: dict[str, str], *, timeout_seconds: float = 60.0) -> str:
-    """POST the form and return the decoded page; transient failures retry."""
+def fetch_html(
+    url: str,
+    form: dict[str, str],
+    *,
+    timeout_seconds: float = 60.0,
+    attempt_seconds: float | None = None,
+    deadline: float | None = None,
+) -> str:
+    """POST the form and return the decoded page; transient failures retry.
+
+    With ``attempt_seconds`` (daily's period_backfill, #539) each attempt ends
+    within that many seconds in all and none waits past ``deadline``
+    (``time.monotonic``); see ``bounded_http``.
+    """
 
     headers = {"User-Agent": "taiwan-stock-research/0.1"}
     retry_limit = 3
     for attempt in range(retry_limit):
         _throttle_official_host(url)
         try:
-            response = httpx.post(
-                url, data=form, timeout=timeout_seconds, headers=headers
-            )
-        except httpx.TransportError as exc:
+            if attempt_seconds is None:
+                response = httpx.post(
+                    url, data=form, timeout=timeout_seconds, headers=headers
+                )
+            else:
+                response = bounded_http.request(
+                    "POST",
+                    url,
+                    limit_seconds=bounded_http.attempt_limit(
+                        url, attempt_seconds, deadline
+                    ),
+                    headers=headers,
+                    data=form,
+                )
+        except (httpx.TransportError, bounded_http.AttemptTimeout) as exc:
             if attempt + 1 >= retry_limit:
                 raise OfficialDataError(
                     f"official endpoint transport retry exhausted: {url}"
                 ) from exc
-            time.sleep(min(2.0, 0.25 * (2**attempt)))
+            bounded_http.retry_wait(
+                url, min(2.0, 0.25 * (2**attempt)), deadline, exc, time.sleep
+            )
             continue
         if response.status_code == 429 or response.status_code >= 500:
             if attempt + 1 >= retry_limit:
                 raise OfficialDataError(
                     f"official endpoint retry exhausted ({response.status_code}): {url}"
                 )
-            time.sleep(0.25 * (2**attempt))
+            bounded_http.retry_wait(
+                url, 0.25 * (2**attempt), deadline, None, time.sleep
+            )
             continue
         if response.status_code != 200:
             raise OfficialDataError(
@@ -621,7 +648,9 @@ def backfill_quarterly_fundamentals(
         for quarter in targets:
             for market, exchange in MARKETS.items():
                 key = f"{quarter.label}:{market}"
-                aborted = over_budget(budget_seconds, clock() - started, key)
+                # The interval before the request counts (#539).
+                wait = 0.0 if first else interval_seconds
+                aborted = over_budget(budget_seconds, clock() - started + wait, key)
                 if aborted:
                     break
                 if not first:

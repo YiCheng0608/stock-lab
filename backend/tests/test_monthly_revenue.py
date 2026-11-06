@@ -696,6 +696,79 @@ def test_a_month_before_its_deadline_is_dated_by_the_fetch_day(factory):
         assert tsmc.data_json["statutory_deadline"] == "2026-11-10"
 
 
+def no_data_html(market: str, month: mr.Month) -> str:
+    """The 2026-11-06 sii t21sc03_115_11_0 page (200, 「查無資料」, #539 AC-2)."""
+
+    html = (PAGES / "sii_115_11_0_no_data.html").read_text(encoding="utf-8")
+    return html.replace(
+        "上市公司115年11月份",
+        f"{mr.MARKET_TITLES[market]}公司{month.year - 1911}年{month.month}月份",
+    )
+
+
+class NoDataFetcher(PageFetcher):
+    """Answers the months in ``no_data`` with the 「查無資料」 page."""
+
+    def __init__(self, no_data):
+        super().__init__()
+        self.no_data = set(no_data)
+
+    def __call__(self, url):
+        self.urls.append(url)
+        market, rest = url.split("/t21/")[1].split("/t21sc03_")
+        year, month, _page = rest.removesuffix(".html").split("_")
+        month = mr.Month(int(year) + 1911, int(month))
+        if month in self.no_data:
+            return no_data_html(market, month)
+        return super().__call__(url)
+
+
+def test_a_no_data_page_is_its_own_error_and_other_pages_are_not():
+    october = mr.Month(2026, 10)
+    with pytest.raises(mr.NoDataPage, match="查無資料"):
+        mr.parse_page(no_data_html("otc", october), "otc", october, 1)
+    # A page without the total and without the marker is still untrusted.
+    html = no_data_html("sii", october).replace("查無資料", "")
+    with pytest.raises(sources.OfficialDataError, match="has no") as caught:
+        mr.parse_page(html, "sii", october, 0)
+    assert not isinstance(caught.value, mr.NoDataPage)
+
+
+def test_a_month_nobody_has_filed_is_empty_before_its_deadline(factory):
+    # 11-06: October is due 11-10.  The window opens on the 1st, before anyone
+    # files; the four pages answer 「查無資料」 and the run still succeeds.
+    october = mr.Month(2026, 10)
+    fetcher = NoDataFetcher({october})
+    result = backfill(factory, fetcher, months=2, end=october)
+
+    assert (result["status"], result["requests"], result["warnings"]) == (
+        "success",
+        8,
+        [],
+    )
+    assert result["aborted"] is None
+    for market in ("sii", "otc"):
+        for page in (0, 1):
+            item = result["pages"][f"2026-10:{market}:{page}"]
+            assert (item["status"], item["rows"], item["no_data"]) == ("empty", 0, True)
+            assert item["deadline"]["date"] == "2026-11-10"
+    with factory() as db:
+        assert {month for _symbol, month in rows(db)} == {"2026-09"}
+
+
+def test_a_month_nobody_has_filed_after_its_deadline_fails(factory, isolated):
+    isolated.at = datetime(2026, 11, 12, 4, 0)  # past October's 11-10
+    october = mr.Month(2026, 10)
+    result = backfill(factory, NoDataFetcher({october}), months=1, end=october)
+
+    assert result["status"] == "partial"
+    assert result["aborted"] == "stopped after 3 failures at 2026-10:otc:0"
+    assert result["warnings"][0] == (
+        "2026-10:sii:0: MOPS t21sc03 sii 2026-10 _0 answered 查無資料"
+        " after its deadline 2026-11-10"
+    )
+
+
 def test_failed_pages_are_partial_and_three_in_a_row_stop_the_run(factory):
     fail = {
         mr.page_url("sii", mr.Month(2026, 8), 1),

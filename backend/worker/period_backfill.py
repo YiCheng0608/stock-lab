@@ -11,7 +11,9 @@ So daily's ``period_backfill`` step runs the #529／#530 backfills for the
 latest period and the one before it, but only on the days around the
 statutory deadline (``quarter_window``, ``month_window``); outside both
 windows it sends no request.  At most ``QUARTERS`` × 2 + ``MONTHS`` × 4 = 12
-pages per daily, under one ``TIME_BUDGET_SECONDS`` budget.  Its outcome never
+pages per daily, under one ``TIME_BUDGET_SECONDS`` budget that is a hard
+limit on its HTTP (#539: ``bounded_http``; httpx's own timeouts bound each
+read, not an attempt).  Its outcome never
 changes the daily run's status: a failure is a non-core warning in the run's
 ``summary_json`` (``noncore_warnings``, ``period_backfill``).
 """
@@ -41,10 +43,12 @@ MONTH_GRACE_DAYS = 10
 # The latest period and the one before it.
 QUARTERS = 2
 MONTHS = 2
-# No request starts after this many seconds of the step.
+# No request starts, and no HTTP attempt or retry wait goes on, after this many
+# seconds of the step (#539: a hard limit, bounded_http).
 TIME_BUDGET_SECONDS = 300.0
-# Per HTTP attempt; the manual backfills keep 60 s.
-FETCH_TIMEOUT_SECONDS = 30.0
+# One HTTP attempt in all (connect, send and the whole body); the manual
+# backfills keep httpx's 60 s per read.
+ATTEMPT_SECONDS = 30.0
 SUMMARY_KEYS = (
     "status",
     "run_id",
@@ -131,6 +135,7 @@ def run_period_backfill(
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.monotonic,
     budget_seconds: float = TIME_BUDGET_SECONDS,
+    attempt_seconds: float = ATTEMPT_SECONDS,
 ) -> dict[str, Any]:
     """daily's ``period_backfill`` step; ``target`` is the daily's target date.
 
@@ -138,7 +143,10 @@ def run_period_backfill(
     what is filed now, whatever the target), ``today``.  Fundamentals run
     first, then revenue, with what is left of the budget.  ``skipped`` with
     reason ``outside_window`` sends nothing; otherwise ``success`` when every
-    part succeeded, ``failed`` when none did and ``partial`` between.
+    part succeeded, ``failed`` when none did and ``partial`` between.  The
+    real fetchers (no ``*_fetcher`` given) end every attempt within
+    ``attempt_seconds`` and stop at ``budget_seconds`` after the step began
+    (``time.monotonic``), however slowly the source answers.
     """
 
     today = today or taipei_today()
@@ -160,6 +168,8 @@ def run_period_backfill(
             "records": 0,
         }
     started = clock()
+    # The real fetchers' hard stop, on the real clock whatever ``clock`` is.
+    deadline = time.monotonic() + budget_seconds
     parts: dict[str, dict[str, Any]] = {}
 
     def remaining() -> float:
@@ -186,7 +196,8 @@ def run_period_backfill(
                 fetcher=quarter_fetcher
                 or functools.partial(
                     quarterly_fundamentals.fetch_html,
-                    timeout_seconds=FETCH_TIMEOUT_SECONDS,
+                    attempt_seconds=attempt_seconds,
+                    deadline=deadline,
                 ),
                 sleep=sleep,
                 budget_seconds=max(remaining(), 0.0),
@@ -203,7 +214,9 @@ def run_period_backfill(
                 end=months[-1],
                 fetcher=month_fetcher
                 or functools.partial(
-                    monthly_revenue.fetch_page, timeout_seconds=FETCH_TIMEOUT_SECONDS
+                    monthly_revenue.fetch_page,
+                    attempt_seconds=attempt_seconds,
+                    deadline=deadline,
                 ),
                 sleep=sleep,
                 budget_seconds=max(remaining(), 0.0),

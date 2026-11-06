@@ -37,7 +37,7 @@ from sqlalchemy.orm import Session
 from app.clock import utcnow
 from app.db import SessionLocal
 from app.models import IngestionRun, Instrument, MonthlyRevenue
-from worker import pipeline
+from worker import bounded_http, pipeline
 from worker.quarterly_fundamentals import availability, over_budget, roll_to_session
 from worker.sources import (
     MonthlyRevenueRecord,
@@ -70,6 +70,11 @@ PAGE_ENCODING = "cp950"
 # Waits before the second, third and fourth try of one page (review of PR #533).
 RETRY_DELAYS_SECONDS = (5.0, 10.0, 20.0)
 BLOCK_MARKERS = ("FOR SECURITY REASONS", "查詢過於頻繁", "THE PAGE CANNOT BE ACCESSED")
+# A month no company has filed yet: the page is there (200, not 404) with its
+# title and 「查無資料」 instead of the tables.  Measured 2026-11-06 on
+# sii t21sc03_115_11_0, a month not yet ended (#539 AC-2).  Before the month's
+# deadline that is an empty page; after it, a failure as before.
+NO_DATA_MARKER = "查無資料"
 PAGE_HEADER = (
     "公司代號",
     "公司名稱",
@@ -390,6 +395,10 @@ class _RowParser(HTMLParser):
         self.text.append(data)
 
 
+class NoDataPage(OfficialDataError):
+    """The page answered 「查無資料」: no company has filed the month yet."""
+
+
 @dataclass(frozen=True)
 class PageRow:
     symbol: str
@@ -423,6 +432,10 @@ def parse_page(html: str, market: str, month: Month, page: int) -> list[PageRow]
         raise OfficialDataError(f"{label} is not the {title} page")
     footer = f"全部{PAGES[page]}{MARKET_TITLES[market]}公司合計"
     if footer not in text:
+        if NO_DATA_MARKER in text and not any(
+            cells and _CODE.fullmatch(cells[0]) for cells in parser.rows
+        ):
+            raise NoDataPage(f"{label} answered {NO_DATA_MARKER}")
         raise OfficialDataError(f"{label} has no {footer} total")
     result: list[PageRow] = []
     seen: set[str] = set()
@@ -458,13 +471,22 @@ def parse_page(html: str, market: str, month: Month, page: int) -> list[PageRow]
 # --- fetch --------------------------------------------------------------------
 
 
-def fetch_page(url: str, *, timeout_seconds: float = 60.0) -> str:
+def fetch_page(
+    url: str,
+    *,
+    timeout_seconds: float = 60.0,
+    attempt_seconds: float | None = None,
+    deadline: float | None = None,
+) -> str:
     """GET one page and decode it from Big5 (cp950); transient failures retry.
 
     MOPS answers an occasional 502 ``Unreachable Server`` (seen while probing,
     #530); a try 10 seconds later succeeded.  A transport error, 429 or 5xx is
     retried after ``RETRY_DELAYS_SECONDS`` (5, 10, 20 s), so a short outage
-    does not fail a page of a 96-page run.
+    does not fail a page of a 96-page run.  With ``attempt_seconds`` (daily's
+    period_backfill, #539) each attempt ends within that many seconds in all
+    and none waits past ``deadline`` (``time.monotonic``): see
+    ``bounded_http.attempt_limit``.
     """
 
     headers = {"User-Agent": "taiwan-stock-research/0.1"}
@@ -472,20 +494,34 @@ def fetch_page(url: str, *, timeout_seconds: float = 60.0) -> str:
     for attempt in range(attempts):
         _throttle_official_host(url)
         try:
-            response = httpx.get(url, timeout=timeout_seconds, headers=headers)
-        except httpx.TransportError as exc:
+            if attempt_seconds is None:
+                response = httpx.get(url, timeout=timeout_seconds, headers=headers)
+            else:
+                response = bounded_http.request(
+                    "GET",
+                    url,
+                    limit_seconds=bounded_http.attempt_limit(
+                        url, attempt_seconds, deadline
+                    ),
+                    headers=headers,
+                )
+        except (httpx.TransportError, bounded_http.AttemptTimeout) as exc:
             if attempt + 1 >= attempts:
                 raise OfficialDataError(
                     f"official endpoint transport retry exhausted: {url}"
                 ) from exc
-            time.sleep(RETRY_DELAYS_SECONDS[attempt])
+            bounded_http.retry_wait(
+                url, RETRY_DELAYS_SECONDS[attempt], deadline, exc, time.sleep
+            )
             continue
         if response.status_code == 429 or response.status_code >= 500:
             if attempt + 1 >= attempts:
                 raise OfficialDataError(
                     f"official endpoint retry exhausted ({response.status_code}): {url}"
                 )
-            time.sleep(RETRY_DELAYS_SECONDS[attempt])
+            bounded_http.retry_wait(
+                url, RETRY_DELAYS_SECONDS[attempt], deadline, None, time.sleep
+            )
             continue
         if response.status_code != 200:
             raise OfficialDataError(
@@ -620,7 +656,9 @@ def backfill_monthly_revenues(
                 seen: dict[str, int] = {}
                 for page in PAGES:
                     key = f"{month.label}:{market}:{page}"
-                    aborted = over_budget(budget_seconds, clock() - started, key)
+                    # The interval before the request counts (#539).
+                    wait = 0.0 if first else interval_seconds
+                    aborted = over_budget(budget_seconds, clock() - started + wait, key)
                     if aborted:
                         break
                     if not first:
@@ -729,12 +767,30 @@ def _fetch_and_store(
     raw = pipeline._upsert_raw_payload(db, run, captured)
     db.flush()
     item: dict[str, Any] = {"raw_sha256": captured.sha256, "raw_payload_id": raw.id}
+    deadline, calendar = deadline_and_calendar
+    fetched_on = _taipei_day(captured.collected_at)
     try:
         rows = parse_page(html, market, month, page)
+    except NoDataPage as exc:
+        if fetched_on <= deadline:
+            # Nobody has filed yet: the first days of the month's window (#539).
+            return {
+                **item,
+                "status": "empty",
+                "rows": 0,
+                "no_data": True,
+                "deadline": {"date": deadline.isoformat(), "calendar": calendar},
+                **dict.fromkeys((*OUTCOMES, "outside_universe", "duplicate"), 0),
+                "duplicate_codes": [],
+            }
+        return {
+            **item,
+            "status": "failed",
+            "error": f"{exc} after its deadline {deadline.isoformat()}",
+        }
     except OfficialDataError as exc:
         return {**item, "status": "failed", "error": str(exc)}
-    deadline, calendar = deadline_and_calendar
-    available, basis = availability(deadline, _taipei_day(captured.collected_at))
+    available, basis = availability(deadline, fetched_on)
     counts = dict.fromkeys((*OUTCOMES, "outside_universe", "duplicate"), 0)
     duplicate_codes: list[str] = []
     for row in rows:
