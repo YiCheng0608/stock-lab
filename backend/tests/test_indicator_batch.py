@@ -508,6 +508,12 @@ def _daily_stubs(monkeypatch, *, collect="success", analyze="success", indicator
         "_catchup_step",
         lambda *_args: {"status": "success", "records": 0},
     )
+    # The window backfill requests MOPS pages (#536; test_period_backfill).
+    monkeypatch.setattr(
+        schedule_runs,
+        "_period_backfill_step",
+        lambda *_args: {"status": "skipped", "reason": "outside_window"},
+    )
     return pipeline, calls
 
 
