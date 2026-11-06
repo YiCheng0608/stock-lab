@@ -321,6 +321,19 @@ export type FundamentalSnapshot = {
   data_as_of: string | null
 }
 
+// One month of the stock page's 月營收 table (#530): amounts in NT$ thousands, yoy in percent as the source reported it.
+export type MonthlyRevenue = {
+  revenue_month: string
+  revenue: number | null
+  prior_year_revenue: number | null
+  yoy: number | null
+  cumulative_revenue: number | null
+  announcement_date: string | null
+  announcement_basis: string | null
+  source: string
+  data_as_of: string | null
+}
+
 export type EventRow = {
   date: string
   type: string
@@ -368,6 +381,7 @@ export type InstrumentDetail = {
   chips: StockDetailChip[]
   corporate_actions: CorporateAction[]
   fundamentals: FundamentalSnapshot[]
+  monthly_revenues?: MonthlyRevenue[]
   events: EventRow[]
   data_quality: DataQualityRow[]
   coverage?: InstrumentCoverage | null

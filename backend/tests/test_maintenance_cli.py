@@ -125,6 +125,10 @@ GUARDED = {
         ["fundamentals", "backfill", "--quarters", "8"],
         "run_fundamental_backfill",
     ),
+    "revenue backfill": (
+        ["revenue", "backfill", "--months", "24"],
+        "run_revenue_backfill",
+    ),
     "instruments repair --apply": (
         ["instruments", "repair", "--apply"],
         "run_instrument_repair",

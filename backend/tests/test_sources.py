@@ -470,6 +470,23 @@ class FixtureFetcher:
                     "CompanyAbbreviation": "訊聯智藥",
                 }
             ]
+        if url in (
+            sources.TWSE_MONTHLY_REVENUE_ENDPOINT,
+            sources.TPEX_MONTHLY_REVENUE_ENDPOINT,
+        ):
+            # The monthly revenue snapshots (Issue #530): August, released 09/03.
+            code = "1101" if url == sources.TWSE_MONTHLY_REVENUE_ENDPOINT else "7001"
+            return [
+                {
+                    "出表日期": "1150903",
+                    "資料年月": "11508",
+                    "公司代號": code,
+                    "營業收入-當月營收": "1000",
+                    "營業收入-去年當月營收": "800",
+                    "營業收入-去年同月增減(%)": "25",
+                    "累計營業收入-當月累計營收": "8000",
+                }
+            ]
         raise AssertionError(f"unexpected endpoint: {url}")
 
 

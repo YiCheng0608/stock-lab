@@ -1,8 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 
-import type { FundamentalSnapshot } from '../types'
+import type { FundamentalSnapshot, MonthlyRevenue } from '../types'
 import { StockFundamentalsPanel } from './StockFundamentalsPanel'
-import { FUNDAMENTALS_TITLE, NOT_PROVIDED, fundamentalPeriodLabel, fundamentalsEmptyReason, revenueText } from './stockFundamentals'
+import { FUNDAMENTALS_TITLE, MONTHLY_NOTE, MONTHLY_TITLE, NOT_PROVIDED, fundamentalPeriodLabel, fundamentalsEmptyReason, monthlyEmptyReason, revenueMonthLabel, revenueText, yoyText } from './stockFundamentals'
 import { STOCK_TABS, parseStockTab } from './stockTabs'
 
 // Standalone regression module for the stock page 「財務」 tab (Issue 528; UI_COPY_SPEC §8.2 財務分頁, DESIGN_SYSTEM §5
@@ -56,3 +56,36 @@ check(fundamentalsEmptyReason('etf', '2026-08-01') === 'ETF 沒有公司財報�
 check(text(panel([], 'ipo')).includes('新上市公司尚未有已收集的季報：官方季報快照與彙總報表都還沒有這檔。'), 'a new listing without a report')
 check(text(panel([], 'stock')).includes('尚未收集到這檔的季報：官方季報快照與彙總報表都沒有這檔。') && !text(panel([], 'stock')).includes('最新一期'), 'a stock without a report')
 check(text(panel([], 'stock')).includes('無資料'), 'the empty state title')
+
+// ---- 月營收 (Issue 530): the 12 newest months under the quarterly table ----
+const month = (extra: Partial<MonthlyRevenue> = {}): MonthlyRevenue => ({
+  revenue_month: '2026-09', revenue: 511857399, prior_year_revenue: 330980920, yoy: 54.64861207105231,
+  cumulative_revenue: 3898726974, announcement_date: '2026-10-12', announcement_basis: 'statutory_deadline',
+  source: 'mops_t21sc03', data_as_of: '2026-09-30', ...extra,
+})
+const monthlyLabel = (source: string) => (source === 'mops_t21sc03' ? '公開資訊觀測站 營業收入統計表' : source === 'mops_t187ap05' ? '公開資訊觀測站 月營收' : label(source))
+const tab = (rows: FundamentalSnapshot[], months: MonthlyRevenue[], instrumentType = 'stock', asOf: string | null = null) =>
+  renderToStaticMarkup(<StockFundamentalsPanel rows={rows} monthlyRows={months} instrumentType={instrumentType} asOf={asOf} sourceLabel={monthlyLabel} />)
+
+const august = month({ revenue_month: '2026-08', revenue: 514805337, yoy: -0.0001, announcement_date: '2026-09-10', data_as_of: '2026-08-31', source: 'mops_t187ap05' })
+const both = tab([row()], [month(), august])
+const bothText = text(both)
+check(bothText.includes(MONTHLY_TITLE) && both.indexOf(FUNDAMENTALS_TITLE) < both.indexOf(`>${MONTHLY_TITLE}<`), `the monthly card sits under the quarterly table; got ${bothText}`)
+check(bothText.includes('月份 營收（億元） 年增率（%） 可得日 來源'), `monthly headers; got ${bothText}`)
+check(bothText.includes('2026 年 9 月 5,118.57 +54.6 2026/10/12 公開資訊觀測站 營業收入統計表'), `one month: 億元, signed one-decimal yoy, 可得日, source; got ${bothText}`)
+check(bothText.includes('2026 年 8 月 5,148.05 0.0 2026/09/10 公開資訊觀測站 月營收'), `a yoy that rounds to zero has no sign; got ${bothText}`)
+check(both.indexOf('2026 年 9 月') < both.indexOf('2026 年 8 月'), 'months keep the API order, newest first')
+check(both.includes('資料 2026/09/30'), 'the monthly badge is the newest month end')
+check(bothText.includes('來源：公開資訊觀測站 營業收入統計表、公開資訊觀測站 月營收'), `the monthly source line; got ${bothText}`)
+check(['不是累計', '次月 10 日', '研究截止日期以可得日篩選', '月營收不納入策略或評分'].every((part) => MONTHLY_NOTE.includes(part)) && bothText.includes(MONTHLY_NOTE), 'the monthly 說明')
+check(yoyText(null) === NOT_PROVIDED && text(tab([], [month({ yoy: null, revenue: null })])).includes(`2026 年 9 月 ${NOT_PROVIDED} ${NOT_PROVIDED}`), 'a blank yoy or revenue reads 來源未提供, never 0')
+check(revenueMonthLabel('2026-01') === '2026 年 1 月' && revenueMonthLabel('bad') === 'bad', 'month labels')
+
+// No month: one reason sentence each, the quarterly card unchanged.
+const etfTab = text(tab([], [], 'etf'))
+check(etfTab.includes('ETF 沒有公司財報，不適用。') && etfTab.includes('ETF 不申報月營收，不適用。'), `ETF: both cards say not applicable; got ${etfTab}`)
+check(monthlyEmptyReason('stock', '2026-08-01') === '研究截止日期 2026/08/01 以前沒有已可得的月營收。', 'a cutoff before every month')
+check(monthlyEmptyReason('etf', '2026-08-01') === 'ETF 不申報月營收，不適用。', 'an ETF stays not applicable under a cutoff')
+check(monthlyEmptyReason('ipo', null).startsWith('新上市公司尚未有已收集的月營收') && monthlyEmptyReason('stock', null).startsWith('尚未收集到這檔的月營收'), 'new listing and stock without a month')
+check((tab([row()], []).match(/<table/g) ?? []).length === 1 && (both.match(/<table/g) ?? []).length === 2, 'no monthly table without a month')
+check(text(panel([row()])).includes('尚未收集到這檔的月營收'), 'a caller without monthly rows shows the monthly empty state')

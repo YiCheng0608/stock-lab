@@ -33,6 +33,7 @@ REVISIONS = (
     "0025_no_trade_days",
     "0026_projection_snapshots",
     "0027_emerging_issuers",
+    "0028_monthly_revenues",
 )
 # The instrument identity gates match 0002 onward and never 0001.
 INSTRUMENT_IDENTITY_REVISIONS = REVISIONS[1:]

@@ -57,6 +57,7 @@ from .models import (
     IngestionRun,
     Instrument,
     MarketBar,
+    MonthlyRevenue,
     NewsItem,
     NewsLlmResult,
     PortfolioPosition,
@@ -3318,6 +3319,18 @@ def instrument_detail(
         .order_by(desc(FundamentalSnapshot.period_end))
         .limit(20)
     ).all()
+    # The stock page's 月營收 table (#530): the 12 newest months available by
+    # the cutoff (可得日 = announcement_date; available at the end of that day).
+    monthly_revenues = db.scalars(
+        select(MonthlyRevenue)
+        .where(
+            MonthlyRevenue.instrument_id == instrument.id,
+            MonthlyRevenue.revenue_month <= (as_of or date.max),
+            MonthlyRevenue.announcement_date <= as_of if as_of else True,
+        )
+        .order_by(desc(MonthlyRevenue.revenue_month))
+        .limit(12)
+    ).all()
     events = db.scalars(
         select(Event)
         .where(
@@ -3388,6 +3401,20 @@ def instrument_detail(
                 "data_as_of": item.data_as_of,
             }
             for item in fundamentals
+        ],
+        "monthly_revenues": [
+            {
+                "revenue_month": item.revenue_month.strftime("%Y-%m"),
+                "revenue": item.revenue,
+                "prior_year_revenue": item.prior_year_revenue,
+                "yoy": item.yoy,
+                "cumulative_revenue": item.cumulative_revenue,
+                "announcement_date": as_date(item.announcement_date),
+                "announcement_basis": (item.data_json or {}).get("announcement_basis"),
+                "source": item.source,
+                "data_as_of": item.data_as_of,
+            }
+            for item in monthly_revenues
         ],
         "events": [
             {

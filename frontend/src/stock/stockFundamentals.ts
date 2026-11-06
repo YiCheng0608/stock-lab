@@ -1,5 +1,5 @@
 import { formatDay } from '../dates'
-import type { FundamentalSnapshot } from '../types'
+import type { FundamentalSnapshot, MonthlyRevenue } from '../types'
 import { formatFixed } from '../units'
 
 // The stock page 「財務」 tab (#528; UI_COPY_SPEC §8.2 財務分頁, DESIGN_SYSTEM §5 個股財務表). The rows are the stock API's
@@ -50,6 +50,41 @@ export function fundamentalsEmptyReason(instrumentType: string, asOf: string | n
   if (cutoff) return `研究截止日期 ${cutoff} 以前沒有已可得的季報。`
   if (instrumentType.toLowerCase() === 'ipo') return '新上市公司尚未有已收集的季報：官方季報快照與彙總報表都還沒有這檔。'
   return '尚未收集到這檔的季報：官方季報快照與彙總報表都沒有這檔。'
+}
+
+// ---- 月營收 (#530; UI_COPY_SPEC §8.2 財務分頁). The rows are the stock API's `monthly_revenues`: the 12 newest months
+// whose 可得日 is on or before the research cutoff, newest first. Revenue is one month (not year-to-date) in NT$
+// thousands; 年增率 is the source's 去年同月增減(%), never recomputed here.
+
+export const MONTHLY_TITLE = '月營收'
+export const MONTHLY_NOTE = '營收是單月（該月 1 日到月底），不是累計；單位為億元（官方千元 ÷ 100,000）。年增率是與去年同月相比的增減（%），用來源的數字顯示到小數一位。可得日是官方月營收快照第一次收到的出表日期，或回補月份的法定申報期限次月 10 日（遇休市順延；期限未到時是第一次抓到的日期），研究截止日期以可得日篩選，之前尚未可得的月份不顯示。來源沒有的欄位寫「來源未提供」。月營收不納入策略或評分。'
+
+/** 2026 年 9 月 for 2026-09. */
+export function revenueMonthLabel(month: string): string {
+  const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(month)
+  return match ? `${match[1]} 年 ${Number(match[2])} 月` : month
+}
+
+/** Year-on-year change in percent, one decimal, signed. */
+export function yoyText(value: number | null | undefined): string {
+  return finite(value) ? formatFixed(value, 1, true) : NOT_PROVIDED
+}
+
+/** One sentence for why there is no month: ETF files no monthly revenue; a cutoff can predate every month. */
+export function monthlyEmptyReason(instrumentType: string, asOf: string | null | undefined): string {
+  if (instrumentType.toLowerCase() === 'etf') return 'ETF 不申報月營收，不適用。'
+  const cutoff = formatDay(asOf)
+  if (cutoff) return `研究截止日期 ${cutoff} 以前沒有已可得的月營收。`
+  if (instrumentType.toLowerCase() === 'ipo') return '新上市公司尚未有已收集的月營收：官方月營收快照與營業收入統計表都還沒有這檔。'
+  return '尚未收集到這檔的月營收：官方月營收快照與營業收入統計表都沒有這檔。'
+}
+
+/** The newest month's data date (its last day) for the card's badge. */
+export function monthlyDataDate(rows: readonly MonthlyRevenue[]): string | null {
+  return rows.reduce<string | null>((latest, row) => {
+    const day = row.data_as_of ?? row.revenue_month
+    return latest == null || day > latest ? day : latest
+  }, null)
 }
 
 /** The latest period's data date for the card's badge. */

@@ -759,6 +759,13 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0027_emerging_issuers', CURRENT_TIMESTAMP)"
         )
     )
+    # 0028 only adds monthly_revenues (#530), made by create_all with its indexes.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0028_monthly_revenues', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:

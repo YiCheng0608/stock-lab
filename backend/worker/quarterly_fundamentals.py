@@ -564,7 +564,8 @@ def backfill_quarterly_fundamentals(
     run = IngestionRun(
         run_type=RUN_TYPE,
         source="official",
-        run_date=now.date(),
+        # The Taipei day, as the other runs (review of PR #533).
+        run_date=_taipei_day(now),
         status="running",
         started_at=now,
         data_as_of=end.period_end.isoformat(),

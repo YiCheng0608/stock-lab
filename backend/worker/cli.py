@@ -31,6 +31,8 @@ from .indicator_batch import run_indicator_batch
 from .industry_repair import run_industry_repair
 from .instrument_repair import run_instrument_repair, run_unmatched_backfill
 from .market_summary import backfill_market_summaries
+from .monthly_revenue import DEFAULT_MONTHS as REVENUE_DEFAULT_MONTHS
+from .monthly_revenue import run_revenue_backfill
 from .mops_events import run_event_backfill
 from .news_batch import run_news_batch
 from .news_llm import DEFAULT_LIMIT as NEWS_LLM_DEFAULT_LIMIT, run_news_llm_batch
@@ -97,6 +99,8 @@ def maintenance_guarded(args: argparse.Namespace) -> str | None:
         return "events backfill"
     if args.command == "fundamentals" and args.fundamentals_command == "backfill":
         return "fundamentals backfill"
+    if args.command == "revenue" and args.revenue_command == "backfill":
+        return "revenue backfill"
     if (
         args.command == "instruments"
         and args.instruments_command == "repair"
@@ -381,6 +385,22 @@ def main() -> None:
     fundamentals_backfill_parser.add_argument(
         "--end-quarter", help="YYYYQn；預設是最近一個已結束的季度"
     )
+    revenue_parser = subparsers.add_parser(
+        "revenue", help="月營收：MOPS t21sc03 營業收入統計表（#530）"
+    )
+    revenue_subparsers = revenue_parser.add_subparsers(
+        dest="revenue_command", required=True
+    )
+    revenue_backfill_parser = revenue_subparsers.add_parser(
+        "backfill",
+        help="上市、上櫃各月國內與國外公司各 1 頁（間隔 3 秒），回補近 N 個月的月營收，重跑冪等",
+    )
+    revenue_backfill_parser.add_argument(
+        "--months", type=int, default=REVENUE_DEFAULT_MONTHS
+    )
+    revenue_backfill_parser.add_argument(
+        "--end-month", help="YYYY-MM；預設是上個月（最近一個已結束的月份）"
+    )
     instruments_parser = subparsers.add_parser("instruments", help="標的狀態與歷史")
     instruments_subparsers = instruments_parser.add_subparsers(
         dest="instruments_command", required=True
@@ -592,6 +612,8 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
         )
     elif args.command == "fundamentals" and args.fundamentals_command == "backfill":
         result = run_fundamental_backfill(args.quarters, args.end_quarter)
+    elif args.command == "revenue" and args.revenue_command == "backfill":
+        result = run_revenue_backfill(args.months, args.end_month)
     elif args.command == "corporate-actions":
         if args.actions_command == "sync":
             result = run_corporate_action_sync(
@@ -674,7 +696,10 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
         and result.get("status") != "success"
     ):
         raise SystemExit(2 if result.get("status") == "partial" else 1)
-    if args.command == "fundamentals" and result.get("status") != "success":
+    if (
+        args.command in {"fundamentals", "revenue"}
+        and result.get("status") != "success"
+    ):
         raise SystemExit(2 if result.get("status") == "partial" else 1)
     if args.command == "chips" and result.get("status") != "success":
         raise SystemExit(2 if result.get("status") == "partial" else 1)
