@@ -51,7 +51,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 HORIZONS = (5, 20)
 NOT_ACTIONABLE = ("observation", "data_incomplete", "invalid_levels")
-# Tracking statuses the report names; any other one is counted under its name.
+# Tracking statuses the report names (``conditional``: not filled by the run's
+# cutoff); any other one is counted under 「其他」.
 STATUSES = (
     "target_2_hit",
     "target_1_hit",
@@ -59,6 +60,7 @@ STATUSES = (
     "active",
     "incomparable",
     "expired",
+    "conditional",
 )
 STATES = ("passed", "rejected", "data_incomplete")
 STATE_ZH = {"passed": "成立", "rejected": "不成立", "data_incomplete": "資料不足"}
