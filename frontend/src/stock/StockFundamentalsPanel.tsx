@@ -2,6 +2,8 @@ import { Card, DataTable, DateBadge, EmptyState, type Column } from '../componen
 import { formatDay } from '../dates'
 import type { FundamentalSnapshot, MonthlyRevenue } from '../types'
 import {
+  CORRECTED,
+  CORRECTION_HEADER,
   CUMULATIVE,
   FUNDAMENTALS_EYEBROW,
   FUNDAMENTALS_NOTE,
@@ -9,10 +11,12 @@ import {
   MONTHLY_NOTE,
   MONTHLY_TITLE,
   NOT_PROVIDED,
+  correctionNote,
   epsText,
   fundamentalPeriodLabel,
   fundamentalsDataDate,
   fundamentalsEmptyReason,
+  isCorrected,
   monthlyDataDate,
   monthlyEmptyReason,
   revenueMonthLabel,
@@ -78,9 +82,15 @@ function MonthlyRevenueCard({
     { key: 'revenue', header: '營收（億元）', num: true, cell: (row) => revenueText(row.revenue) },
     { key: 'yoy', header: '年增率（%）', num: true, cell: (row) => yoyText(row.yoy) },
     { key: 'announced', header: '可得日', cell: (row) => formatDay(row.announcement_date) ?? NOT_PROVIDED },
+    // Only when a listed month is corrected (#543), after 可得日 and visible at every width; plain text, no color.
+    ...(rows.some(isCorrected) ? [{ key: 'correction', header: CORRECTION_HEADER, cell: (row: MonthlyRevenue) => (isCorrected(row) ? CORRECTED : '') }] : []),
     { key: 'source', header: '來源', wideOnly: true, cell: (row) => sourceLabel(row.source) },
   ]
   const sources = [...new Set(rows.map((row) => sourceLabel(row.source)))]
+  const notes = rows.flatMap((row) => {
+    const note = correctionNote(row, sourceLabel)
+    return note ? [{ month: row.revenue_month, note }] : []
+  })
   return (
     <Card className="stock-fundamentals stock-monthly-revenue" eyebrow={FUNDAMENTALS_EYEBROW} title={MONTHLY_TITLE} aside={rows.length ? <DateBadge date={monthlyDataDate(rows)} /> : undefined}>
       {rows.length
@@ -88,6 +98,7 @@ function MonthlyRevenueCard({
           <details className="details stock-fundamentals-note"><summary>說明</summary><p className="small-note">{MONTHLY_NOTE}</p></details>
           <DataTable wrapClassName="compact-table" columns={columns} rows={rows} rowKey={(row) => row.revenue_month} />
           <p className="small-note stock-fundamentals-source">來源：{sources.join('、')}</p>
+          {notes.map(({ month, note }) => <p key={month} className="small-note stock-fundamentals-source stock-revenue-correction">{note}</p>)}
         </>
         : <EmptyState reason={monthlyEmptyReason(instrumentType, asOf)} />}
     </Card>

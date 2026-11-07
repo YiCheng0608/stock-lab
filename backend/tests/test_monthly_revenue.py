@@ -684,6 +684,211 @@ def test_a_snapshot_takes_backfilled_values_and_keeps_the_earlier_date(factory):
         assert tsmc.data_json["deadline_calendar"] == "weekend_only"
 
 
+# --- a company's correction: MOPS values win (#543) ------------------------------
+
+# 2330's 115/09 as a snapshot published before a correction: the page (the
+# fixture) has 511,857,399 and 3,898,726,974.
+BEFORE_CORRECTION = {
+    "營業收入-當月營收": "500000000",
+    "營業收入-去年同月增減(%)": "51.06612812771786",
+    "累計營業收入-當月累計營收": "3886869575",
+}
+
+
+def snapshot_records(sha, corrected=BEFORE_CORRECTION, released=None):
+    rows_ = [
+        {**row, **(corrected if row["公司代號"] == "2330" else {})}
+        for row in snapshot("TWSE")
+    ]
+    if released:
+        rows_ = [{**row, "出表日期": released} for row in rows_]
+    return sources.parse_monthly_revenue_rows(
+        rows_,
+        exchange="TWSE",
+        requested_date=date(2026, 11, 6),
+        payload_sha256=sha,
+    )
+
+
+def store_snapshot(factory, sha, **kwargs):
+    with factory() as db:
+        identifier = raw(db, sha)
+        counts = mr.store_monthly_revenues(
+            db,
+            snapshot_records(sha, **kwargs),
+            instruments(db),
+            {sha: identifier}.get,
+            [],
+        )
+        db.commit()
+    return identifier, counts
+
+
+SUPERSEDED_2330 = {
+    "revenue": 500000000.0,
+    "prior_year_revenue": 330980920.0,
+    "yoy": 51.06612812771786,
+    "cumulative_revenue": 3886869575.0,
+    "source": "mops_t187ap05",
+    "release_date": "2026-10-17",
+}
+
+
+def test_backfill_replaces_a_snapshot_month_the_company_corrected(factory):
+    identifier, counts = store_snapshot(factory, "s1")
+    assert counts == {"inserted": 3}
+
+    result = backfill(factory, months=1, end=SEPTEMBER)
+
+    # 2330 differs from the page; 1101 and 1256 match it (yoy within the
+    # page's truncation) and only take the earlier date.
+    assert (result["corrected"], result["dated"], result["inserted"]) == (1, 2, 3)
+    assert result["changed"] == 6
+    with factory() as db:
+        stored = rows(db)
+        tsmc = stored[("2330", "2026-09")]
+        assert (
+            tsmc.revenue,
+            tsmc.yoy,
+            tsmc.cumulative_revenue,
+            tsmc.source,
+            tsmc.announcement_date,
+        ) == (511857399.0, 54.64, 3898726974.0, "mops_t21sc03", date(2026, 10, 12))
+        assert db.get(RawPayload, tsmc.raw_payload_id).endpoint == mr.page_url(
+            "sii", SEPTEMBER, 0
+        )
+        assert tsmc.data_json["superseded_snapshot"] == {
+            **SUPERSEDED_2330,
+            "raw_payload_id": identifier,
+        }
+        assert tsmc.data_json["announcement_basis"] == "statutory_deadline"
+        assert tsmc.data_json["當月營收"] == "511,857,399"
+        # The same values are not a correction.
+        cement = stored[("1101", "2026-09")]
+        assert (cement.source, cement.yoy) == ("mops_t187ap05", 7.626848357921993)
+        assert "superseded_snapshot" not in cement.data_json
+        assert "superseded_snapshot" not in stored[("2884", "2026-09")].data_json
+
+    # The snapshot republishes the replaced value (restamped): nothing goes back.
+    _second, counts = store_snapshot(factory, "s2", released="1151105")
+    assert counts == {"unchanged": 3}
+    # A rerun of the backfill changes nothing and keeps the replaced value.
+    again = backfill(factory, months=1, end=SEPTEMBER)
+    assert (again["changed"], again["unchanged"]) == (0, 6)
+    with factory() as db:
+        tsmc = rows(db)[("2330", "2026-09")]
+        assert (tsmc.revenue, tsmc.source) == (511857399.0, "mops_t21sc03")
+        assert tsmc.data_json["superseded_snapshot"]["raw_payload_id"] == identifier
+
+
+def test_a_snapshot_after_a_correction_never_writes_its_values_back(factory):
+    store_snapshot(factory, "s1")
+    backfill(factory, months=1, end=SEPTEMBER)
+
+    # Yet another value (a second correction the page does not show yet): the
+    # MOPS values stay, the next backfill decides.
+    _identifier, counts = store_snapshot(
+        factory, "s2", corrected={"營業收入-當月營收": "520000000"}
+    )
+    assert counts == {"unchanged": 3}
+    with factory() as db:
+        tsmc = rows(db)[("2330", "2026-09")]
+        assert (tsmc.revenue, tsmc.source) == (511857399.0, "mops_t21sc03")
+        assert tsmc.data_json["superseded_snapshot"]["revenue"] == 500000000.0
+
+    # The snapshot now agrees with the page: still the MOPS row, still 已更正.
+    _identifier, counts = store_snapshot(factory, "s3", corrected={})
+    assert counts == {"unchanged": 3}
+    with factory() as db:
+        tsmc = rows(db)[("2330", "2026-09")]
+        assert tsmc.source == "mops_t21sc03"
+        assert tsmc.data_json["superseded_snapshot"]["revenue"] == 500000000.0
+
+
+def test_a_snapshot_that_differs_from_a_backfilled_month_is_kept_as_replaced(factory):
+    backfill(factory, months=1, end=SEPTEMBER)
+
+    identifier, counts = store_snapshot(factory, "s1")
+
+    # 1101 and 1256 match the page and take the snapshot's values and source.
+    assert counts == {"corrected": 1, "updated": 2}
+    with factory() as db:
+        stored = rows(db)
+        tsmc = stored[("2330", "2026-09")]
+        assert (tsmc.revenue, tsmc.source, tsmc.announcement_date) == (
+            511857399.0,
+            "mops_t21sc03",
+            date(2026, 10, 12),
+        )
+        assert tsmc.data_json["superseded_snapshot"] == {
+            **SUPERSEDED_2330,
+            "raw_payload_id": identifier,
+        }
+        assert stored[("1101", "2026-09")].source == "mops_t187ap05"
+        assert "superseded_snapshot" not in stored[("1101", "2026-09")].data_json
+
+    assert store_snapshot(factory, "s2")[1] == {"unchanged": 3}
+    assert backfill(factory, months=1, end=SEPTEMBER)["changed"] == 0
+
+
+def test_a_page_back_on_the_snapshot_value_is_no_longer_corrected(factory):
+    store_snapshot(factory, "s1")
+    backfill(factory, months=1, end=SEPTEMBER)
+
+    class Reverted(PageFetcher):
+        # The page truncates 51.0661 to 51.06.
+        def __call__(self, url):
+            html = super().__call__(url)
+            for page_value, snapshot_value in (
+                ("511,857,399", "500,000,000"),
+                ("3,898,726,974", "3,886,869,575"),
+                ("54.64", "51.06"),
+            ):
+                html = html.replace(page_value, snapshot_value)
+            return html
+
+    result = backfill(factory, Reverted(), months=1, end=SEPTEMBER)
+
+    assert result["updated"] == 1
+    with factory() as db:
+        tsmc = rows(db)[("2330", "2026-09")]
+        assert (tsmc.revenue, tsmc.source) == (500000000.0, "mops_t21sc03")
+        assert "superseded_snapshot" not in tsmc.data_json
+
+
+@pytest.mark.parametrize(
+    "first,second,same",
+    [
+        pytest.param({"yoy": 54.64861207105231}, {"yoy": 54.64}, True, id="truncated"),
+        pytest.param({"yoy": -3.2559}, {"yoy": -3.25}, True, id="negative"),
+        pytest.param({"yoy": 54.66}, {"yoy": 54.64}, False, id="yoy"),
+        pytest.param({"yoy": None}, {"yoy": None}, True, id="both-blank"),
+        pytest.param({"yoy": None}, {"yoy": 0.0}, False, id="one-blank"),
+        pytest.param({"revenue": 1.0}, {"revenue": 2.0}, False, id="revenue"),
+        pytest.param(
+            {"prior_year_revenue": None},
+            {"prior_year_revenue": 0.0},
+            False,
+            id="prior-year",
+        ),
+        pytest.param(
+            {"cumulative_revenue": 3.0},
+            {"cumulative_revenue": 4.0},
+            False,
+            id="cumulative",
+        ),
+    ],
+)
+def test_same_month_values(first, second, same):
+    base = {
+        "revenue": 1.0,
+        "prior_year_revenue": 1.0,
+        "yoy": 1.0,
+        "cumulative_revenue": 1.0,
+    }
+    assert mr.same_month_values({**base, **first}, {**base, **second}) is same
+
+
 def test_a_month_before_its_deadline_is_dated_by_the_fetch_day(factory):
     october = mr.Month(2026, 10)
     result = backfill(factory, months=1, end=october)
@@ -897,6 +1102,46 @@ def test_the_stock_page_hides_a_month_until_its_availability_date(factory):
                 "announcement_basis": "statutory_deadline",
                 "source": "mops_t21sc03",
                 "data_as_of": "2026-09-30",
+                "corrected": False,
+                "superseded_snapshot": None,
             }
+    finally:
+        app.dependency_overrides.pop(api_module.get_db, None)
+
+
+def test_the_stock_page_shows_a_corrected_month_and_its_snapshot_value(factory):
+    with factory() as db:
+        store_calendar(db, [2026])
+    store_snapshot(factory, "s1")
+    backfill(factory, months=1, end=SEPTEMBER)
+
+    def override_get_db():
+        with factory() as db:
+            yield db
+
+    app.dependency_overrides[api_module.get_db] = override_get_db
+    try:
+        with TestClient(app) as client:
+
+            def september(symbol):
+                body = client.get(
+                    f"/api/stocks/TWSE/{symbol}", params={"as_of": "2026-11-06"}
+                ).json()
+                (row,) = body["monthly_revenues"]
+                return row
+
+            tsmc = september("2330")
+            assert (tsmc["revenue"], tsmc["source"], tsmc["corrected"]) == (
+                511857399.0,
+                "mops_t21sc03",
+                True,
+            )
+            # The raw payload id stays in the DB, not on the page.
+            assert tsmc["superseded_snapshot"] == SUPERSEDED_2330
+            cement = september("1101")
+            assert (cement["corrected"], cement["superseded_snapshot"]) == (
+                False,
+                None,
+            )
     finally:
         app.dependency_overrides.pop(api_module.get_db, None)

@@ -70,6 +70,27 @@ export function yoyText(value: number | null | undefined): string {
   return finite(value) ? formatFixed(value, 1, true) : NOT_PROVIDED
 }
 
+// 已更正 (#543): a company corrected the month after the snapshot was published; the MOPS page's values replaced the
+// snapshot's. The 更正 column appears only when a listed month is corrected, after 可得日 (verify S13 reads the first four
+// cells), and one note per corrected month under the source line gives the snapshot's values.
+export const CORRECTION_HEADER = '更正'
+export const CORRECTED = '已更正'
+
+export function isCorrected(row: MonthlyRevenue): boolean {
+  return row.corrected === true && row.superseded_snapshot != null
+}
+
+/** 「2026 年 9 月已更正：原快照營收 50.00 億元、年增率 +51.1%（…，出表日期 2026/10/17），現以…為準。」 */
+export function correctionNote(row: MonthlyRevenue, sourceLabel: (source: string) => string): string | null {
+  const old = row.superseded_snapshot
+  if (!isCorrected(row) || !old) return null
+  const revenue = finite(old.revenue) ? `${revenueText(old.revenue)} 億元` : NOT_PROVIDED
+  const yoy = finite(old.yoy) ? `${yoyText(old.yoy)}%` : NOT_PROVIDED
+  const released = formatDay(old.release_date)
+  const origin = released ? `${sourceLabel(old.source)}，出表日期 ${released}` : sourceLabel(old.source)
+  return `${revenueMonthLabel(row.revenue_month)}已更正：原快照營收 ${revenue}、年增率 ${yoy}（${origin}），現以${sourceLabel(row.source)}為準。`
+}
+
 /** One sentence for why there is no month: ETF files no monthly revenue; a cutoff can predate every month. */
 export function monthlyEmptyReason(instrumentType: string, asOf: string | null | undefined): string {
   if (instrumentType.toLowerCase() === 'etf') return 'ETF 不申報月營收，不適用。'
