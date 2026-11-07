@@ -181,11 +181,16 @@ case "$1 $2" in
     esac ;;
   "api repos/"*) cat "$d/gh_comments.json" 2>/dev/null || echo '[]' ;;
   # run list --branch B answers from gh_run_list_<B, / as _>.json when the test wrote
-  # one, else from gh_run_list.json.
+  # one, else from gh_run_list.json; with --commit, from gh_run_list_commit.json first
+  # (#542), and gh_run_list_commit_fails makes that call exit 1.
   "run list")
-    b="" prev=""
-    for a in "$@"; do [ "$prev" = --branch ] && b="$a"; prev="$a"; done
-    f="$d/gh_run_list_$(printf '%s' "$b" | tr / _).json"
+    b="" c="" prev=""
+    for a in "$@"; do
+      [ "$prev" = --branch ] && b="$a"; [ "$prev" = --commit ] && c="$a"; prev="$a"
+    done
+    [ -n "$c" ] && [ -f "$d/gh_run_list_commit_fails" ] && exit 1
+    f="$d/gh_run_list_commit.json"
+    [ -n "$c" ] && [ -f "$f" ] || f="$d/gh_run_list_$(printf '%s' "$b" | tr / _).json"
     [ -f "$f" ] || f="$d/gh_run_list.json"
     if [ -f "$f" ]; then cat "$f"; else echo '[]'; fi ;;
   # <fake>/gh_<sub1>_<sub2>_fails makes that call exit 1.
@@ -1065,6 +1070,112 @@ def test_close_task_deletes_nothing_when_master_ci_is_not_green(
     _assert_nothing_deleted(close)
 
 
+# The branch's 20 newest runs, all green and none of them the merge commit's (#542).
+NEWER_RUNS = [
+    {"headSha": f"{i:040x}", "status": "completed", "conclusion": "success"}
+    for i in range(1, 21)
+]
+
+
+def _commit_lookups(h: Harness) -> list[str]:
+    return [c for c in h.calls("gh") if c.startswith("run list") and "--commit" in c]
+
+
+def test_close_task_looks_up_a_merge_commit_older_than_the_newest_runs(
+    close: Harness,
+) -> None:
+    """AC-1 (#542): an Issue reopened for an AC after the merge (#461) can be closed."""
+    close.answer("gh_run_list", NEWER_RUNS)
+    # Two runs of the merge commit: the latest one (highest databaseId) decides (#314).
+    close.answer(
+        "gh_run_list_commit",
+        [
+            {
+                "databaseId": 7,
+                "headSha": MERGE_SHA,
+                "status": "completed",
+                "conclusion": "success",
+            },
+            {
+                "databaseId": 3,
+                "headSha": MERGE_SHA,
+                "status": "completed",
+                "conclusion": "cancelled",
+            },
+        ],
+    )
+    result = close.close_task(close.extra)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not close.wt.exists() and not close.extra.exists()
+    [lookup] = _commit_lookups(close)
+    assert f"--branch master --event push --workflow CI --commit {MERGE_SHA}" in lookup
+    assert _run_branches(close) == ["master", "master"]
+
+
+@pytest.mark.parametrize(
+    "commit_runs, error",
+    [
+        ([], "merge commit bbbbbbbbb 的 CI 是 missing"),
+        (
+            [
+                {
+                    "databaseId": 9,
+                    "headSha": MERGE_SHA,
+                    "status": "completed",
+                    "conclusion": "failure",
+                },
+                {
+                    "databaseId": 4,
+                    "headSha": MERGE_SHA,
+                    "status": "completed",
+                    "conclusion": "success",
+                },
+            ],
+            "merge commit bbbbbbbbb 的 CI 是 failure",
+        ),
+        (
+            [
+                {
+                    "databaseId": 9,
+                    "headSha": "c" * 40,
+                    "status": "completed",
+                    "conclusion": "success",
+                }
+            ],
+            "merge commit bbbbbbbbb 的 CI 是 missing",
+        ),
+        (None, "gh run list --commit 失敗"),
+    ],
+    ids=["no-run", "latest-red", "other-commit", "gh-fails"],
+)
+def test_close_task_deletes_nothing_when_an_older_merge_commit_is_not_green(
+    close: Harness, commit_runs: list | None, error: str
+) -> None:
+    """AC-2 (#542): the lookup by commit refuses as the branch list does."""
+    close.answer("gh_run_list", NEWER_RUNS)
+    if commit_runs is None:
+        close.write("gh_run_list_commit_fails", "")
+    else:
+        close.answer("gh_run_list_commit", commit_runs)
+    result = close.close_task(close.extra)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert error in result.stderr
+    _assert_nothing_deleted(close)
+
+
+def test_close_task_does_not_look_up_a_merge_commit_the_newest_runs_list(
+    close: Harness,
+) -> None:
+    close.answer(
+        "gh_run_list",
+        NEWER_RUNS
+        + [{"headSha": MERGE_SHA, "status": "completed", "conclusion": "success"}],
+    )
+    result = close.close_task(close.extra)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not _commit_lookups(close)
+
+
 def _merged_into(h: Harness, base: str, state: str = "MERGED") -> None:
     h.answer(
         "gh_pr_list",
@@ -1336,7 +1447,10 @@ def test_close_task_deletes_nothing_when_a_pr_into_an_integration_branch_is_not_
     result = close.close_task(close.extra)
     assert result.returncode == 1, result.stdout + result.stderr
     assert error in result.stderr and "未刪除任何東西" in result.stderr
-    assert _run_branches(close) == ([] if state == "OPEN" else [INTEGRATION])
+    # A merge commit the branch list does not show is looked up by itself (#542), also
+    # on INTEGRATION.
+    lookups = 2 if runs == [] else 1
+    assert _run_branches(close) == ([] if state == "OPEN" else [INTEGRATION] * lookups)
     _assert_nothing_deleted(close)
 
 

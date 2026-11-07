@@ -285,6 +285,14 @@ fi
 out="$(gh run list --repo "$GH_REPO" --branch "$base_branch" --event push --workflow CI --limit 20 \
   --json headSha,status,conclusion)" || refuse "gh run list 失敗"
 read -r mine newest <<<"$(printf '%s' "$out" | cj ci-state "$merge_sha")"
+# A merge commit older than the branch's 20 newest runs (an Issue reopened for an AC after
+# the merge, #542) is looked up by itself: its latest run, highest databaseId (#314).
+if [ "$mine" = missing ]; then
+  out="$(gh run list --repo "$GH_REPO" --branch "$base_branch" --event push --workflow CI \
+    --commit "$merge_sha" --limit 20 --json databaseId,headSha,status,conclusion)" \
+    || refuse "gh run list --commit 失敗"
+  mine="$(printf '%s' "$out" | cj commit-ci "$merge_sha")"
+fi
 [ "$mine" = success ] || refuse "$base_branch 上 merge commit ${merge_sha:0:9} 的 CI 是 $mine，不是 success"
 [ "$newest" != failure ] || refuse "$base_branch 最新一次 CI 是 failure，先修 $base_branch"
 
