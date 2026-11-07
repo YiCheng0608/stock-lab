@@ -557,7 +557,9 @@ def test_t11_reads_the_market_page_and_its_date_badge(tmp_path):
     )
     with pytest.raises(page_checks.Undetermined, match="market-1280 未 ready"):
         page_checks.t11(run)
-    page = OVERVIEW_PAGE.replace("大盤概況\n資料 2026/10/22", "大盤概況\n資料 2026/10/21")
+    page = OVERVIEW_PAGE.replace(
+        "大盤概況\n資料 2026/10/22", "大盤概況\n資料 2026/10/21"
+    )
     run = FakeRun(tmp_path, {"dashboard": _overview()}, {"market-1280": page}, facts)
     with pytest.raises(page_checks.Fail, match="預期日期 badge `資料 2026/10/22`"):
         page_checks.t11(run)
@@ -655,7 +657,9 @@ def test_t15_without_bars_needs_the_empty_copy(tmp_path):
     )
     run = FakeRun(tmp_path, {TAIEX_PATH: _taiex_bars([])}, {"market-1280": page})
     assert "來源未提供日線" in page_checks.t15(run)
-    run = FakeRun(tmp_path, {TAIEX_PATH: _taiex_bars([(22, None)])}, {"market-1280": CHART_PAGE})
+    run = FakeRun(
+        tmp_path, {TAIEX_PATH: _taiex_bars([(22, None)])}, {"market-1280": CHART_PAGE}
+    )
     with pytest.raises(page_checks.Fail, match="缺整行 `來源未提供日線`"):
         page_checks.t15(run)
 
