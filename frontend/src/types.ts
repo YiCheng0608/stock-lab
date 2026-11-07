@@ -332,6 +332,18 @@ export type MonthlyRevenue = {
   announcement_basis: string | null
   source: string
   data_as_of: string | null
+  // 已更正 (#543): the MOPS page replaced the snapshot's values; superseded_snapshot is what the snapshot reported.
+  corrected?: boolean
+  superseded_snapshot?: SupersededRevenue | null
+}
+
+export type SupersededRevenue = {
+  revenue: number | null
+  prior_year_revenue: number | null
+  yoy: number | null
+  cumulative_revenue: number | null
+  source: string
+  release_date: string | null
 }
 
 export type EventRow = {

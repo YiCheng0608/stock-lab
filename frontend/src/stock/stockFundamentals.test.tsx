@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 
 import type { FundamentalSnapshot, MonthlyRevenue } from '../types'
 import { StockFundamentalsPanel } from './StockFundamentalsPanel'
-import { FUNDAMENTALS_TITLE, MONTHLY_NOTE, MONTHLY_TITLE, NOT_PROVIDED, fundamentalPeriodLabel, fundamentalsEmptyReason, monthlyEmptyReason, revenueMonthLabel, revenueText, yoyText } from './stockFundamentals'
+import { CORRECTED, CORRECTION_HEADER, FUNDAMENTALS_TITLE, MONTHLY_NOTE, MONTHLY_TITLE, NOT_PROVIDED, correctionNote, fundamentalPeriodLabel, fundamentalsEmptyReason, isCorrected, monthlyEmptyReason, revenueMonthLabel, revenueText, yoyText } from './stockFundamentals'
 import { STOCK_TABS, parseStockTab } from './stockTabs'
 
 // Standalone regression module for the stock page 「財務」 tab (Issue 528; UI_COPY_SPEC §8.2 財務分頁, DESIGN_SYSTEM §5
@@ -89,3 +89,22 @@ check(monthlyEmptyReason('etf', '2026-08-01') === 'ETF 不申報月營收，不�
 check(monthlyEmptyReason('ipo', null).startsWith('新上市公司尚未有已收集的月營收') && monthlyEmptyReason('stock', null).startsWith('尚未收集到這檔的月營收'), 'new listing and stock without a month')
 check((tab([row()], []).match(/<table/g) ?? []).length === 1 && (both.match(/<table/g) ?? []).length === 2, 'no monthly table without a month')
 check(text(panel([row()])).includes('尚未收集到這檔的月營收'), 'a caller without monthly rows shows the monthly empty state')
+
+// ---- 已更正 (Issue 543): the MOPS page replaced the snapshot's values ----
+check(!bothText.includes(CORRECTION_HEADER) && !bothText.includes(CORRECTED) && !both.includes('stock-revenue-correction'), `no 更正 column or note without a corrected month; got ${bothText}`)
+const corrected = month({
+  revenue: 64332, prior_year_revenue: 50000, yoy: 28.66, cumulative_revenue: 500000, corrected: true,
+  superseded_snapshot: { revenue: 60251, prior_year_revenue: 50000, yoy: 20.502, cumulative_revenue: 495919, source: 'mops_t187ap05', release_date: '2026-10-17' },
+})
+const fixed = tab([], [corrected, august])
+const fixedText = text(fixed)
+check(fixedText.includes('月份 營收（億元） 年增率（%） 可得日 更正 來源'), `the 更正 column sits between 可得日 and 來源; got ${fixedText}`)
+check(fixedText.includes('2026 年 9 月 0.64 +28.7 2026/10/12 已更正 公開資訊觀測站 營業收入統計表'), `the corrected month shows the MOPS values and 已更正 after 可得日; got ${fixedText}`)
+check(fixedText.includes('2026 年 8 月 5,148.05 0.0 2026/09/10 公開資訊觀測站 月營收') && (fixedText.match(/已更正/g) ?? []).length === 2, `other months leave the 更正 cell empty; got ${fixedText}`)
+// The 更正 cell is not wideOnly: a 390px screen scrolls to it (the 來源 cell is the one hidden).
+check(/<td[^>]*>已更正<\/td>/.test(fixed) && !/<td[^>]*wide[^>]*>已更正/.test(fixed), `the 更正 cell shows at every width; got ${fixed}`)
+const fixedNote = '2026 年 9 月已更正：原快照營收 0.60 億元、年增率 +20.5%（公開資訊觀測站 月營收，出表日期 2026/10/17），現以公開資訊觀測站 營業收入統計表為準。'
+check(correctionNote(corrected, monthlyLabel) === fixedNote && fixedText.includes(`來源：公開資訊觀測站 營業收入統計表、公開資訊觀測站 月營收 ${fixedNote}`), `one note after the source line gives the snapshot values; got ${fixedText}`)
+const blankOld = month({ corrected: true, superseded_snapshot: { revenue: null, prior_year_revenue: null, yoy: null, cumulative_revenue: null, source: 'mops_t187ap05', release_date: null } })
+check(correctionNote(blankOld, monthlyLabel) === `2026 年 9 月已更正：原快照營收 ${NOT_PROVIDED}、年增率 ${NOT_PROVIDED}（公開資訊觀測站 月營收），現以公開資訊觀測站 營業收入統計表為準。`, 'a blank snapshot value reads 來源未提供 and an unknown 出表日期 is left out')
+check(!isCorrected(month({ corrected: true })) && correctionNote(month({ corrected: false, superseded_snapshot: corrected.superseded_snapshot }), monthlyLabel) === null, 'only corrected=true with a snapshot value is 已更正')

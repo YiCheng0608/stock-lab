@@ -16,9 +16,17 @@ A backfilled month has no filing time.  Its availability is the statutory
 deadline, the 10th of the next month (證券交易法第 36 條), rolled forward to a
 session, ``data_json.announcement_basis = statutory_deadline``; while the
 deadline is ahead it is the Taipei date the page was fetched (``first_seen``).
-Two sources meet on one month as in #529: a snapshot row keeps its values and
-source and only takes an earlier date from the backfill; a backfilled row takes
-the snapshot's values and keeps the earlier date.
+Two sources meet on one month as in #529, the earlier date kept; their values
+decide the rest (#543).  The same values (``same_month_values``: the amounts
+equal, the yoy within the page's truncation) keep the snapshot's row, its
+full-precision yoy and its source.  Different values are a company's
+correction: the MOPS page is regenerated, the snapshot is not, so the MOPS
+values and source win, and the snapshot's values, source, raw payload id and
+出表日期 stay in ``data_json.superseded_snapshot`` (the API's 已更正).  Either
+order ends there: a backfill corrects a snapshot row, and a snapshot that
+differs from a MOPS row keeps its values only in ``superseded_snapshot``.  A
+snapshot republishing the replaced value, or bringing yet another one, never
+writes the values back; the next backfill reads the page again and decides.
 """
 
 from __future__ import annotations
@@ -47,6 +55,7 @@ from worker.sources import (
     month_end,
     monthly_revenue_warning,
     parse_number,
+    parse_roc_date,
 )
 
 PAGE_URL = (
@@ -88,7 +97,14 @@ PAGE_HEADER = (
     "前期比較增減(%)",
 )
 _CODE = re.compile(r"[0-9A-Z]{4,6}")
-OUTCOMES = ("inserted", "updated", "dated", "unchanged")
+# ``corrected``: the MOPS values replaced a snapshot's, or a snapshot that
+# differs was kept as the replaced value (#543).
+OUTCOMES = ("inserted", "updated", "corrected", "dated", "unchanged")
+# data_json key of a corrected month: the snapshot values the MOPS ones replaced.
+SUPERSEDED_KEY = "superseded_snapshot"
+# The page truncates 去年同月增減(%) to two decimals, the snapshot does not
+# (54.6486 → 54.64): a yoy closer than this is the same value.
+YOY_TOLERANCE = 0.01
 
 
 # --- months -------------------------------------------------------------------
@@ -163,6 +179,53 @@ def _same_values(row: MonthlyRevenue, record: MonthlyRevenueRecord) -> bool:
         and row.yoy == record.yoy
         and row.cumulative_revenue == record.cumulative_revenue
     )
+
+
+VALUE_FIELDS = ("revenue", "prior_year_revenue", "yoy", "cumulative_revenue")
+
+
+def _values(item: Any) -> dict[str, float | None]:
+    if isinstance(item, dict):
+        return {name: item.get(name) for name in VALUE_FIELDS}
+    return {name: getattr(item, name) for name in VALUE_FIELDS}
+
+
+def same_month_values(first: Any, second: Any) -> bool:
+    """Whether two sources report the same month (rows, records or dicts; #543).
+
+    The amounts must be equal (both blank counts as equal); the yoy within
+    ``YOY_TOLERANCE``, since the page truncates what the snapshot does not.
+    """
+
+    one, other = _values(first), _values(second)
+    for name in ("revenue", "prior_year_revenue", "cumulative_revenue"):
+        if one[name] != other[name]:
+            return False
+    yoy, other_yoy = one["yoy"], other["yoy"]
+    if yoy is None or other_yoy is None:
+        return yoy is None and other_yoy is None
+    return abs(yoy - other_yoy) < YOY_TOLERANCE
+
+
+def _release_date(details: dict[str, Any] | None) -> str | None:
+    released = parse_roc_date((details or {}).get("出表日期"))
+    return released.isoformat() if released else None
+
+
+def _superseded(
+    item: MonthlyRevenue | MonthlyRevenueRecord,
+    source: str,
+    raw_id: int,
+    details: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """What ``data_json.superseded_snapshot`` keeps of a replaced snapshot month."""
+
+    return {
+        **_values(item),
+        "source": source,
+        "raw_payload_id": raw_id,
+        "release_date": _release_date(details),
+    }
 
 
 def _insert(
@@ -241,15 +304,50 @@ def _existing(
     )
 
 
+def _keep_values(
+    row: MonthlyRevenue,
+    announcement: date,
+    details: dict[str, Any],
+    superseded: dict[str, Any] | None = None,
+) -> str:
+    """Keep the row's values and source; take the date (and a replaced value).
+
+    ``dated`` when only the availability date and its basis moved,
+    ``corrected`` when ``superseded`` is recorded, else ``unchanged``.  The raw
+    payload id and ``collected_at`` stay with the values.
+    """
+
+    if announcement == row.announcement_date and superseded is None:
+        return "unchanged"
+    # The date's basis keys are the new ones only: a snapshot's release date
+    # has no statutory deadline.
+    data = {
+        **{
+            key: value
+            for key, value in (row.data_json or {}).items()
+            if key not in pipeline.ANNOUNCEMENT_KEYS
+        },
+        **{key: details[key] for key in pipeline.ANNOUNCEMENT_KEYS if key in details},
+    }
+    if superseded is not None:
+        data[SUPERSEDED_KEY] = superseded
+    row.announcement_date = announcement
+    row.data_json = data
+    return "dated" if superseded is None else "corrected"
+
+
 def apply_snapshot(
     db: Session, record: MonthlyRevenueRecord, instrument: Instrument, raw_id: int
 ) -> str:
-    """Write one snapshot month; ``inserted``, ``updated`` or ``unchanged``.
+    """Write one snapshot month; ``inserted``, ``updated``, ``corrected``, ``dated`` or ``unchanged``.
 
-    The values are the snapshot's, the availability date the earlier of the
-    stored and the new one (``pipeline.first_seen_announcement``): the feed
-    restamps 出表日期 when it is published again, and a backfilled row's
-    deadline is usually earlier.
+    The availability date is the earlier of the stored and the new one
+    (``pipeline.first_seen_announcement``): the feed restamps 出表日期 when it
+    is published again, and a backfilled row's deadline is usually earlier.
+    A backfilled row with the same values takes the snapshot's values and
+    source.  One with other values, or already corrected, keeps the MOPS
+    values (#543): the first snapshot that differs is recorded as the replaced
+    value, and a republished or new snapshot value never writes them back.
     """
 
     row = _existing(db, record, instrument)
@@ -259,6 +357,17 @@ def apply_snapshot(
         row, record.announcement_date, record.details
     )
     assert announcement is not None
+    if row.source == SOURCE:
+        corrected = SUPERSEDED_KEY in (row.data_json or {})
+        if corrected or not same_month_values(row, record):
+            return _keep_values(
+                row,
+                announcement,
+                details,
+                None
+                if corrected
+                else _superseded(record, record.source, raw_id, record.details),
+            )
     return _write_values(row, record, announcement, details, raw_id)
 
 
@@ -269,11 +378,15 @@ def _basis(details: dict[str, Any] | None) -> str | None:
 def apply_backfill(
     db: Session, record: MonthlyRevenueRecord, instrument: Instrument, raw_id: int
 ) -> str:
-    """Write one backfilled month; ``inserted``, ``updated``, ``dated`` or ``unchanged``.
+    """Write one backfilled month; ``inserted``, ``updated``, ``corrected``, ``dated`` or ``unchanged``.
 
-    A row the snapshot wrote keeps its values and source; only an earlier
-    availability date is taken, with its basis.  A stored statutory deadline is
-    recomputed rather than kept, so a holiday calendar loaded later corrects it.
+    A row the snapshot wrote with the same values keeps them and its source;
+    only an earlier availability date is taken, with its basis.  One with other
+    values is corrected (#543): the MOPS values and source, the earlier date,
+    and the snapshot's values in ``superseded_snapshot``.  A backfilled row
+    takes the page's values and keeps its replaced snapshot value while the
+    two still differ.  A stored statutory deadline is recomputed rather than
+    kept, so a holiday calendar loaded later corrects it.
     """
 
     row = _existing(db, record, instrument)
@@ -291,18 +404,16 @@ def apply_backfill(
         assert found is not None
         announcement = found
     if row.source != record.source:
-        if announcement == row.announcement_date:
-            return "unchanged"
-        row.announcement_date = announcement
-        row.data_json = {
-            **(row.data_json or {}),
-            **{
-                key: details[key]
-                for key in pipeline.ANNOUNCEMENT_KEYS
-                if key in details
-            },
-        }
-        return "dated"
+        if same_month_values(row, record):
+            return _keep_values(row, announcement, details)
+        superseded = _superseded(row, row.source, row.raw_payload_id, row.data_json)
+        _write_values(
+            row, record, announcement, {**details, SUPERSEDED_KEY: superseded}, raw_id
+        )
+        return "corrected"
+    kept = (row.data_json or {}).get(SUPERSEDED_KEY)
+    if kept is not None and not same_month_values(kept, record):
+        details = {**details, SUPERSEDED_KEY: kept}
     return _write_values(row, record, announcement, details, raw_id)
 
 
@@ -637,7 +748,9 @@ def backfill_monthly_revenues(
 
     def summarize(status: str) -> None:
         run.status = status
-        run.records = totals["inserted"] + totals["updated"] + totals["dated"]
+        run.records = sum(
+            totals[name] for name in ("inserted", "updated", "corrected", "dated")
+        )
         run.metadata_json = {
             **run.metadata_json,
             "coverage_manifest": manifest,

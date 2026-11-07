@@ -71,6 +71,7 @@ from .models import (
     TrackingPlan,
 )
 from worker.pipeline import _group_board, summarize_backtest
+from worker.monthly_revenue import SUPERSEDED_KEY
 from worker.news_llm import PROMPT_VERSION as NEWS_PROMPT_VERSION
 from worker.backfill import (
     BACKFILL_SCOPES,
@@ -3242,6 +3243,28 @@ def _source_action_classification(
     )
 
 
+def _revenue_correction(item: MonthlyRevenue) -> dict[str, Any]:
+    """A month's 已更正 and the snapshot values the MOPS ones replaced (#543)."""
+
+    kept = (item.data_json or {}).get(SUPERSEDED_KEY)
+    if not isinstance(kept, dict):
+        return {"corrected": False, "superseded_snapshot": None}
+    return {
+        "corrected": True,
+        "superseded_snapshot": {
+            key: kept.get(key)
+            for key in (
+                "revenue",
+                "prior_year_revenue",
+                "yoy",
+                "cumulative_revenue",
+                "source",
+                "release_date",
+            )
+        },
+    }
+
+
 @router.get("/instruments/{symbol}")
 def instrument_detail(
     symbol: str,
@@ -3413,6 +3436,7 @@ def instrument_detail(
                 "announcement_basis": (item.data_json or {}).get("announcement_basis"),
                 "source": item.source,
                 "data_as_of": item.data_as_of,
+                **_revenue_correction(item),
             }
             for item in monthly_revenues
         ],
