@@ -1,7 +1,7 @@
 <!-- owns: 模板清單 -->
 # 模板
 
-協作用的模板都在這個目錄（#550 從 `.github/` 搬來）。GitHub 網頁不會自動帶入這裡的模板：建 Issue 與開 PR 一律複製模板填好，再用 `gh issue create --body-file`／`gh pr create --body-file`。
+協作用的模板都在這個目錄（#550 從 `.github/` 搬來）。GitHub 網頁不會自動帶入這裡的模板（「New issue」頁只有一個連到本頁的連結，`.github/ISSUE_TEMPLATE/config.yml`）：建 Issue 與開 PR 一律複製模板填好，再用 `gh issue create --body-file`／`gh pr create --body-file`。
 
 | 模板 | 用在 | 誰填 |
 | --- | --- | --- |
