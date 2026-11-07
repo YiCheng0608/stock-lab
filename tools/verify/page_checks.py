@@ -613,7 +613,8 @@ OWNERS: dict[str, tuple[str, str]] = {
 
 
 def today_shots(run: Run) -> list[Shot]:
-    return [Shot("today", "/")]
+    # The market page (/market, Issue 549) was split off the today page and is checked with it (features/today.md).
+    return [TODAY, MARKET]
 
 
 def news_shots(run: Run) -> list[Shot]:
@@ -726,6 +727,7 @@ def check(
 # ---- today ----
 
 TODAY = Shot("today", "/")
+MARKET = Shot("market", "/market")
 PENDING_DATE = "資料日期未提供"  # DateBadge without a date (#465: was 資料日期待核實)
 TODAY_GROUPS = 5  # TODAY_BOARD_LIMIT in frontend/src/themes/themeBoards.ts (#276)
 GROUP_RETURNS_NOTE = "1／5／20 日為相對加權指數的報酬"  # HOT_GROUP_RETURNS_NOTE (#510)
@@ -1066,10 +1068,11 @@ def t9(run: Run) -> str:
     )
 
 
-# ---- T11 market overview (#276, UI_COPY_SPEC §11) ----
+# ---- T11 market overview, on the market page since Issue 549 (#276, UI_COPY_SPEC §11) ----
 
 OVERVIEW_EXCHANGES = (("TWSE", "上市"), ("TPEx", "上櫃"))
-# SHORT_SCOPE_LABELS in frontend/src/today/TodayViews.tsx; other scopes show scope_label.
+OVERVIEW_TITLE = "大盤概況"  # MarketOverviewPanel's h2
+# SHORT_SCOPE_LABELS in frontend/src/market/marketOverview.ts; other scopes show scope_label.
 SHORT_SCOPES = {"twse_all_securities": "集中市場總計", "tpex_stocks": "上櫃股票"}
 
 
@@ -1093,7 +1096,7 @@ def dash(value: Any) -> str:
 
 
 def overview_lines(exchange: dict, label: str) -> list[str]:
-    """The lines the four widgets show for one available exchange (TodayViews.tsx)."""
+    """The lines the four widgets show for one available exchange (market/MarketViews.tsx)."""
 
     index, turnover = exchange.get("index") or {}, exchange.get("turnover") or {}
     breadth = exchange.get("breadth") or {}
@@ -1132,13 +1135,22 @@ SUMMARY_FIELDS = {
 
 @check("today", "T11")
 def t11(run: Run) -> str:
-    """Market overview values equal dashboard.market_overview and the DB rows; scope labels in 資料說明."""
+    """Market page overview = dashboard.market_overview and the DB rows; its date badge; scope labels in 資料說明."""
 
-    text, overview = run.text(TODAY), run.dashboard().get("market_overview") or {}
+    text, overview = run.text(MARKET), run.dashboard().get("market_overview") or {}
     rows = {item.get("exchange"): item for item in overview.get("exchanges") or []}
     latest = run.facts().get("market_summary_latest") or {}
     day = overview.get("trading_date")
     problems, shown, scopes = [], [], []
+    # Issue 549: the block has its own title and date badge (DESIGN_SYSTEM §4 大盤頁).
+    i = text.find(OVERVIEW_TITLE)
+    want = f"資料 {slash(day)}" if day else PENDING_DATE
+    if i < 0:
+        problems.append(f"缺整行 `{OVERVIEW_TITLE}`")
+    elif text.after(i) != want:
+        problems.append(
+            f"`{OVERVIEW_TITLE}` 下一行是 {text.after(i)!r}，預期日期 badge `{want}`"
+        )
     for code, label in OVERVIEW_EXCHANGES:
         exchange, stored = rows.get(code) or {}, latest.get(code)
         if exchange.get("status") != "available":
@@ -1235,6 +1247,94 @@ def t13(run: Run) -> str:
         f"`{TRACKED_PLAN}` {tracked} 行，open_plan_id 非 null {want} 筆",
     )
     return f"{len(items)} 張卡：`{ADD_PLAN}` {add}、`{TRACKED_PLAN}` {tracked} = open_plan_id 非 null"
+
+
+# ---- T14 / T15: the today summary line and the market page's daily chart (Issue 549, UI_COPY_SPEC §11) ----
+
+SUMMARY_NAMES = (("TWSE", "加權"), ("TPEx", "櫃買"))  # EXCHANGES[].short in market/marketOverview.ts
+MARKET_LINK = "看大盤 →"
+TAIEX_BARS = "stocks/TWSE/TAIEX/bars?interval=day&limit=250"  # MarketPage: TAIEX, TAIEX_BARS_LIMIT
+CHART_TITLE = "加權指數日線"
+NO_TAIEX_BARS = "來源未提供日線"
+TPEX_BARS_TITLE = "櫃買指數日線"
+TPEX_NO_BARS = "無資料：櫃買中心大盤資料的來源只提供當日數值，沒有歷史日線"  # TPEX_NO_BARS_TEXT
+
+
+def summary_line(exchange: dict, name: str) -> str:
+    """The summary item for one exchange (summaryItems in market/marketOverview.ts)."""
+
+    index = exchange.get("index") or {}
+    if exchange.get("status") != "available" or index.get("close") is None:
+        return f"{name} 未取得"
+    pct = index.get("change_pct")
+    shown = "—" if pct is None else f"{fixed(pct * 100, 2, True)}%"
+    return f"{name} {fixed(index['close'], 2)} {shown}"
+
+
+@check("today", "T14")
+def t14(run: Run) -> str:
+    """The today page keeps one market line (加權, 櫃買, the date, 看大盤 →), not the four widgets."""
+
+    text, overview = run.text(TODAY), run.dashboard().get("market_overview") or {}
+    rows = {item.get("exchange"): item for item in overview.get("exchanges") or []}
+    day = overview.get("trading_date")
+    lines = [summary_line(rows.get(code) or {}, name) for code, name in SUMMARY_NAMES]
+    lines += [f"資料 {slash(day)}" if day else PENDING_DATE, MARKET_LINK]
+    # One line of the page per part, in order (the navbar has its own 資料 badge, so search from the first item).
+    start = text.find(lines[0])
+    expect(start >= 0, f"缺整行 `{lines[0]}`（{text.name}）")
+    got = [text.after(start, k) for k in range(len(lines))]
+    expect(
+        got == lines,
+        "摘要列是 " + "、".join(f"`{line}`" for line in got if line is not None)
+        + "，預期 " + "、".join(f"`{line}`" for line in lines),
+    )
+    candidates_at = candidates_title(text)
+    expect(
+        candidates_at < 0 or start < candidates_at,
+        f"摘要列在 `{CANDIDATES_TITLE}` 之後",
+    )
+    # The overview moved to /market: its widgets' own lines are not on the today page.
+    old = [line for line in ("漲跌家數（股票）", "括號為漲停／跌停") if text.has(line)]
+    expect(not old, "今日可買頁仍有大盤概況的 " + "、".join(f"`{line}`" for line in old))
+    return "、".join(f"`{line}`" for line in lines) + f"（{text.at(start)}）"
+
+
+@check("today", "T15")
+def t15(run: Run) -> str:
+    """The market page's TAIEX chart: the bars' date badge, count and newest close; 櫃買 says why it has none."""
+
+    text, payload = run.text(MARKET), run.get(TAIEX_BARS, "taiex-bars.json")
+    i = text.find(CHART_TITLE)
+    expect(i >= 0, f"缺整行 `{CHART_TITLE}`（{text.name}）")
+    j = text.find(TPEX_BARS_TITLE, i)
+    expect(
+        j > i and text.after(j) == TPEX_NO_BARS,
+        f"`{CHART_TITLE}` 之後缺 `{TPEX_BARS_TITLE}` 與下一行 `{TPEX_NO_BARS}`",
+    )
+    bars = [
+        bar
+        for bar in payload.get("bars") or []
+        if not bar.get("is_suspended")
+        and isinstance(bar.get("close"), (int, float))
+        and bar["close"] > 0
+    ]
+    if not bars:
+        expect(
+            text.find(NO_TAIEX_BARS, i) >= 0,
+            f"API 沒有可畫的收盤，缺整行 `{NO_TAIEX_BARS}`",
+        )
+        return f"API 沒有可畫的收盤，頁面顯示 `{NO_TAIEX_BARS}`；櫃買 `{TPEX_NO_BARS}`"
+    as_of = payload.get("data_as_of")
+    badge = f"資料 {slash(as_of)}" if as_of else PENDING_DATE
+    expect(text.after(i) == badge, f"`{CHART_TITLE}` 下一行是 {text.after(i)!r}，預期 `{badge}`")
+    count = f"最近 {payload.get('count')} 根日線；缺日不補"
+    expect(text.find(count, i) >= 0, f"缺整行 `{count}`")
+    # The data table (newest first) has the newest drawn close: the date, a tab, two decimals.
+    newest = bars[-1]
+    row = f"{slash(newest['date'])}\t{fixed(newest['close'], 2)}"
+    expect(text.find(row, i) >= 0, f"資料表缺最新一根收盤 `{row}`")
+    return f"`{badge}`、`{count}`、最新 `{row}`；櫃買 `{TPEX_NO_BARS}`"
 
 
 # ---- news ----

@@ -33,6 +33,7 @@ const SUITES = [
   { file: 'stock/stockSummary.test.tsx' },
   { file: 'stock/stockFundamentals.test.tsx' },
   { file: 'today/today.test.tsx' },
+  { file: 'market/market.test.tsx' },
   { file: 'actions/actions.test.tsx' },
   { file: 'tables.test.tsx' },
   { file: 'copy.test.tsx' },

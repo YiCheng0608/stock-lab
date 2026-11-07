@@ -121,7 +121,7 @@ th.num { font-family: var(--font-body); }
 .stat-detail, .muted { color: var(--color-text-muted); font-size: 14px; }
 .market-widget { padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); }
 .market-widget-value { margin: var(--space-label) 0 var(--space-1); font: 600 20px var(--font-mono); font-variant-numeric: tabular-nums; }
-.market-widget-change { font: 600 14px var(--font-mono); font-variant-numeric: tabular-nums; }
+.market-widget-change { font: 600 14px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tone-up, .positive { color: var(--color-up) !important; }
 .tone-down, .negative { color: var(--color-down) !important; }
 .tone-flat { color: var(--color-flat); }
@@ -447,7 +447,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .chart-data-table { margin-top: var(--space-4); }
 .chart-data-table td, .chart-data-table th { height: 40px; font-size: 13px; }
 
-/* ---- today page (DESIGN_SYSTEM §4: header line, market overview, alert row, candidates first; no hero or glow) -- */
+/* ---- today page (DESIGN_SYSTEM §4: header line, market summary, alert row, candidates first; no hero or glow) --- */
 .gradient-text { background: linear-gradient(135deg, var(--color-primary), var(--color-accent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .home-page { overflow-x: clip; padding-top: var(--space-4); }
 .home-header { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-bottom: var(--space-3); }
@@ -456,7 +456,6 @@ a.symbol-link:hover { color: var(--color-primary); }
 .home-header .data-explanation { margin-left: auto; }
 .home-header .data-explanation[open] { flex: 1 1 100%; }
 .home-header .data-explanation > div { margin-top: var(--space-1); }
-.market-overview { margin-bottom: var(--space-3); }
 /* One bar (#510): the four widgets share one framed row, divided by 1px lines; an index's points and change on one line. */
 .market-overview-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr); overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); }
 .market-overview .market-widget { min-width: 0; padding: var(--space-2) var(--space-4); }
@@ -473,8 +472,21 @@ a.symbol-link:hover { color: var(--color-primary); }
 .market-row-label { color: var(--color-text-muted); font-family: var(--font-body); font-size: 12px; }
 .market-row-scope { color: var(--color-text-muted); font-family: var(--font-body); font-size: 12px; }
 .market-row-empty { font-family: var(--font-body); }
-.market-overview-more { display: none; margin-top: var(--space-2); }
-.market-overview-more-grid { display: grid; gap: var(--space-2); }
+/* 大盤摘要列 (Issue 549, DESIGN_SYSTEM §5): one framed line under the header; the overview itself is on /market. */
+.market-summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-4); margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); font-size: var(--text-md); }
+.market-summary-label { color: var(--color-text-muted); font-size: var(--text-sm); }
+.market-summary-item { white-space: nowrap; }
+.market-summary-name, .market-summary-empty { color: var(--color-text-muted); }
+.market-summary-item b { font: 600 var(--text-md) var(--font-mono); font-variant-numeric: tabular-nums; }
+.market-summary-change { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.market-summary .badge { padding: 2px 10px; font-size: var(--text-xs); }
+.market-summary-link { margin-left: auto; white-space: nowrap; }
+/* 大盤頁 (Issue 549, DESIGN_SYSTEM §4): one panel per block in a fixed order. */
+.market-panel .panel-head { margin-bottom: var(--space-3); }
+.market-panel .panel-head .data-explanation[open] { flex: 1 1 100%; }
+.market-panel .panel-head .data-explanation > div { margin-top: var(--space-1); }
+.market-no-bars { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); margin: var(--space-4) 0 0; padding-top: var(--space-3); border-top: 1px solid var(--color-border); color: var(--color-text-muted); font-size: var(--text-md); }
+.market-no-bars b { color: var(--color-text); font-weight: 600; }
 .alert-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-left: 4px solid var(--color-warning); border-radius: var(--radius-lg); background: var(--color-bg-card); color: var(--color-text); font-size: 14px; }
 /* Hot groups and news (#493, DESIGN_SYSTEM §5 熱門族群與重點新聞): two cards in one grid row; stretch makes them one height,
    so their top and bottom edges line up whatever each holds. #510: one head line, at most five items of two lines. */
@@ -804,7 +816,7 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
 
 /* ---- responsive --------------------------------------------------------------------------------- */
 /* The market overview clips its turnover and breadth rows when four widgets share one row below 1200px, and the two
-   dual widgets need a whole row at 800px and below (#493 review); 640px and below show only the two indices. Inside
+   dual widgets need a whole row at 800px and below (#493 review); on the market page phones keep all four (Issue 549). Inside
    the one bar (#510) a cell starting a row has no left divider, and the second row has a top one. */
 @media (max-width: 1199px) {
   .market-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -886,9 +898,8 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .theme-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
   .theme-stats .stat { padding: var(--space-3); }
   .theme-stats .stat-value { font-size: 18px; }
-  .market-overview-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-2); }
-  .market-overview-grid .market-widget-dual { display: none; }
-  .market-overview-more { display: block; }
+  /* The market page keeps all four widgets on phones (Issue 549): a row wraps rather than being cut. */
+  .market-row { font-size: var(--text-sm); white-space: normal; }
   .action-table-wrap { display: none; }
   .action-cards { display: grid; }
   .action-tier { margin-top: var(--space-6); }
@@ -911,7 +922,9 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .home-header .data-explanation { margin-left: 0; }
   .market-overview .market-widget { padding: var(--space-2) var(--space-3); }
   .market-overview .market-widget-value { font-size: 16px; }
-  .market-overview-more { margin-top: var(--space-1); }
+  /* Phones: the two indexes on line one, the date and 看大盤 → on line two; the link names the block, so the label goes. */
+  .market-summary { gap: var(--space-1) var(--space-3); padding: var(--space-2) var(--space-3); }
+  .market-summary-label { display: none; }
   .candidates-head { gap: var(--space-1) var(--space-2); margin: var(--space-3) 0 var(--space-2); }
   .candidates-head h2 { font-size: var(--text-xl); }
   .candidates-head .board-dates { flex-wrap: nowrap; gap: var(--space-1); }

@@ -89,7 +89,8 @@ import { CandidatesSection } from './candidates/CandidateViews'
 import { StockPlanPanel, TrackingClientProvider, TrackingSection, type TrackingClient } from './tracking/TrackingViews'
 import { DEFAULT_MEMBER_SORT, THEME_BOARD_LIMIT, THEME_NEWS_LIMIT, TODAY_BOARD_LIMIT, memberQuery, parseBoard } from './themes/themeBoards'
 import { HomeNewsRow, NewsDetailView, NewsListView, StockNewsTimeline } from './news/NewsViews'
-import { HoldingAlert, MarketOverviewView, TodayHeader } from './today/TodayViews'
+import { HoldingAlert, MarketSummaryLine, TodayHeader } from './today/TodayViews'
+import { MarketPage } from './market/MarketPage'
 import { newsFiltersFromSearch, newsListParams, newsPageSearch, stockNewsParams, type NewsFilters } from './news/newsView'
 import { ACTIONS_PAGE_LIMIT, ACTION_STATE_LABELS, ACTION_TIER_PREVIEW, DEFAULT_ACTION_VIEW, previewTiers, stockResearchPath, tierSections } from './actions/actionTiers'
 import { ActionFilters, ActionTierList } from './actions/ActionViews'
@@ -471,7 +472,7 @@ export function TodayPage() {
       .map((action) => [`${action.instrument.exchange}:${action.instrument.symbol}:${action.as_of ?? ''}`, action] as const),
   ).values())
   const modeLabel = !data ? '' : data.mode === 'official' ? '官方單日快照' : data.mode === 'official_partial' ? '官方單日快照（資料仍待補）' : '尚無官方快照'
-  // PRODUCT_SPEC §2 (#493): header line → market overview → holding-risk alert → 今日可買 → hot groups and news, two
+  // PRODUCT_SPEC §2 (#493, Issue 549): header line → one-line market summary (the overview is on /market) → holding-risk alert → 今日可買 → hot groups and news, two
   // cards of one height. The watched stocks moved to 觀察中 (/watch).
   return (
     <div className="page home-page">
@@ -487,7 +488,7 @@ export function TodayPage() {
     <QueryState loading={query.isLoading} error={query.error}>
       {data && (
         <>
-          <MarketOverviewView overview={data.market_overview} />
+          <MarketSummaryLine overview={data.market_overview} />
           <HoldingAlert actions={data.holding_actions ?? data.actions ?? []} />
           <CandidatesSection data={candidates.data} loading={candidates.isLoading} error={candidates.error} />
           <div className="home-columns">
@@ -1102,6 +1103,7 @@ const trackingClient: TrackingClient = { plans: getTrackingPlans, plan: getTrack
 // Every route in one table, so a test can tell a redirect (/actions) from a page rendered in place (#493 review).
 export const APP_ROUTES: ReadonlyArray<{ path: string; element: ReactElement }> = [
   { path: '/', element: <TodayPage /> },
+  { path: '/market', element: <MarketPage /> },
   { path: '/news/:newsId', element: <NewsDetailPage /> },
   { path: '/news', element: <NewsPage /> },
   { path: '/themes', element: <ThemesPage /> },

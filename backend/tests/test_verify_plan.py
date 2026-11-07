@@ -48,6 +48,7 @@ TREE = {
         "import { StockBarsChart } from './stock/StockBarsChart'\n"
         "import { NewsCard } from './news/NewsViews'\n"
         "import { TodayHeader } from './today/TodayViews'\n"
+        "import { MarketPage } from './market/MarketPage'\n"
     ),
     "styles.css": "body {}\n",
     "components/ui/index.ts": "export { Card } from './Card'\n",
@@ -79,7 +80,14 @@ TREE = {
     ),
     "tracking/TrackingViews.tsx": "import { planStatus } from './tracking'\n",
     "tracking/tracking.ts": "export const planStatus = 1\n",
-    "today/TodayViews.tsx": "import { Card } from '../components/ui'\n",
+    "today/TodayViews.tsx": (
+        "import { Card } from '../components/ui'\n"
+        "import { summaryItems } from '../market/marketOverview'\n"
+    ),
+    # Issue 549: the market page belongs to the today page's features file.
+    "market/MarketPage.tsx": "import { MarketOverviewPanel } from './MarketViews'\n",
+    "market/MarketViews.tsx": "import { available } from './marketOverview'\n",
+    "market/marketOverview.ts": "import { isFiniteNumber } from '../stock/stockBars'\n",
     "actions/ActionViews.tsx": "import { actionKey } from './actionTiers'\n",
     "actions/actionTiers.ts": "export const actionKey = 1\n",
     "stock/stockTabs.ts": "export const STOCK_TABS = 1\n",
@@ -136,8 +144,13 @@ def test_api_endpoint_verifies_the_pages_that_use_it():
     assert plan("backend/app/api.py", api_lines=lines).pages == ["today"]
     lines = route_lines("GET /theme-suggestions")
     assert plan("backend/app/api.py", api_lines=lines).pages == ["themes"]
+    # The market page's TAIEX chart reads it too (Issue 549).
     lines = route_lines("GET /stocks/{exchange}/{symbol}/bars")
-    assert plan("backend/app/api.py", api_lines=lines).pages == ["stocks", "actions"]
+    assert plan("backend/app/api.py", api_lines=lines).pages == [
+        "today",
+        "stocks",
+        "actions",
+    ]
 
 
 def test_api_route_not_on_a_page_is_not_verified():

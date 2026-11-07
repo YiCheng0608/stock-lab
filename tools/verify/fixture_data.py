@@ -1987,6 +1987,10 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
             "market_overview.exchanges[].turnover.scope_label",
             ["集中市場總計（含 ETF、權證等）", "上櫃股票"],
         ),
+        # The market page's TAIEX daily chart (Issue 549): every fixture session of the index.
+        ("stocks/TWSE/TAIEX/bars?interval=day&limit=250", "data_as_of", D),
+        ("stocks/TWSE/TAIEX/bars?interval=day&limit=250", "bars", len(SERIES["TAIEX"])),
+        ("stocks/TWSE/TAIEX/bars?interval=day&limit=250", "sources", ["twse_index_fixture"]),
         ("themes?board=industry&limit=5", "meta.trading_date", D),
         ("themes?board=industry&limit=5", "items", 2),
         ("themes?board=industry&limit=5", "items.0.theme_id", TOP_THEME),
