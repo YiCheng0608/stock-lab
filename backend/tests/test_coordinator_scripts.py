@@ -1086,21 +1086,22 @@ def test_close_task_looks_up_a_merge_commit_older_than_the_newest_runs(
 ) -> None:
     """AC-1 (#542): an Issue reopened for an AC after the merge (#461) can be closed."""
     close.answer("gh_run_list", NEWER_RUNS)
-    # Two runs of the merge commit: the latest one (highest databaseId) decides (#314).
+    # Two runs of the merge commit listed lowest id first: the latest one (highest
+    # databaseId) decides, not the first listed (#314).
     close.answer(
         "gh_run_list_commit",
         [
-            {
-                "databaseId": 7,
-                "headSha": MERGE_SHA,
-                "status": "completed",
-                "conclusion": "success",
-            },
             {
                 "databaseId": 3,
                 "headSha": MERGE_SHA,
                 "status": "completed",
                 "conclusion": "cancelled",
+            },
+            {
+                "databaseId": 7,
+                "headSha": MERGE_SHA,
+                "status": "completed",
+                "conclusion": "success",
             },
         ],
     )
@@ -1119,16 +1120,16 @@ def test_close_task_looks_up_a_merge_commit_older_than_the_newest_runs(
         (
             [
                 {
-                    "databaseId": 9,
-                    "headSha": MERGE_SHA,
-                    "status": "completed",
-                    "conclusion": "failure",
-                },
-                {
                     "databaseId": 4,
                     "headSha": MERGE_SHA,
                     "status": "completed",
                     "conclusion": "success",
+                },
+                {
+                    "databaseId": 9,
+                    "headSha": MERGE_SHA,
+                    "status": "completed",
+                    "conclusion": "failure",
                 },
             ],
             "merge commit bbbbbbbbb 的 CI 是 failure",
