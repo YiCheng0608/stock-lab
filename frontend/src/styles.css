@@ -472,6 +472,11 @@ a.symbol-link:hover { color: var(--color-primary); }
 .market-row-label { color: var(--color-text-muted); font-family: var(--font-body); font-size: 12px; }
 .market-row-scope { color: var(--color-text-muted); font-family: var(--font-body); font-size: 12px; }
 .market-row-empty { font-family: var(--font-body); }
+/* 加權指數與季線 (Issue 561): a strip in the same frame under the four widgets; neutral text only, no up/down colors. */
+.market-ma60 { margin-top: var(--space-2); padding: var(--space-2) var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); }
+.market-ma60-line { margin-top: var(--space-label); color: var(--color-text); font-size: var(--text-md); font-variant-numeric: tabular-nums; }
+.market-ma60-position { font-weight: 600; }
+.market-ma60-segments { margin-top: 2px; color: var(--color-text-muted); font-size: 12px; line-height: 1.65; }
 /* 大盤摘要列 (Issue 549, DESIGN_SYSTEM §5): one framed line under the header; the overview itself is on /market. */
 .market-summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-4); margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); font-size: var(--text-md); }
 .market-summary-label { color: var(--color-text-muted); font-size: var(--text-sm); }
@@ -935,6 +940,8 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .home-header .data-explanation { margin-left: 0; }
   .market-overview .market-widget { padding: var(--space-2) var(--space-3); }
   .market-overview .market-widget-value { font-size: 16px; }
+  .market-ma60 { padding: var(--space-2) var(--space-3); }
+  .market-ma60-line { font-size: var(--text-sm); }
   /* A US index falls by four digits and two-digit percents (費半 -1,257.51（-12.25%）): the percent wraps, not cut. */
   .market-us .market-widget-change { white-space: normal; }
   /* Phones: the two indexes on line one, the date and 看大盤 → on line two; the link names the block, so the label goes. */

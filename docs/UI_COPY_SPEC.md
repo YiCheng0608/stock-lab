@@ -415,7 +415,11 @@ reason code 的日常文案由 `backend/app/presentation.py`（`REASON_LABELS`�
   | 成交金額 | 「成交金額」，單位「億元」 | 兩行「上市 {億元} {短範圍}」「上櫃 {億元} {短範圍}」：`turnover.value` ÷ 1 億、兩位小數、千分位；金額後常駐 muted 短範圍，`twse_all_securities` 寫「集中市場總計」、`tpex_stocks` 寫「上櫃股票」，其他值寫 API 的 `scope_label` |
   | 漲跌家數 | 「漲跌家數（股票）」，右側「括號為漲停／跌停」 | 兩行「上市 上漲 {n} · 下跌 {n} · 平盤 {n}（{漲停}／{跌停}）」，家數整數 |
 
-  「資料說明」依序列：來源「來源：上市為{上市 `source.label`}；上櫃為{上櫃 `source.label`}」；成交金額範圍「成交金額範圍：上市為{上市 `scope_label`}；上櫃為{上櫃 `scope_label`}」；上櫃漲跌幅為 `derived` 時「櫃買指數漲跌幅依前一日收市指數計算」；固定一句「紅色為上漲、綠色為下跌（台股慣例）」。來源與範圍都只列 `available` 的交易所。
+  「資料說明」依序列：來源「來源：上市為{上市 `source.label`}；上櫃為{上櫃 `source.label`}」；成交金額範圍「成交金額範圍：上市為{上市 `scope_label`}；上櫃為{上櫃 `scope_label`}」；上櫃漲跌幅為 `derived` 時「櫃買指數漲跌幅依前一日收市指數計算」；固定一句「紅色為上漲、綠色為下跌（台股慣例）」；`taiex_ma60` 為 `available` 或 `insufficient` 時再兩句「季線：臺灣證券交易所加權指數最近 60 個交易日收盤的平均（indicators/v1）；位置以當日收盤是否高於季線判定，等於季線不算高於」「季線位置只是背景資訊，不是買賣建議，也不影響今日可買名單」。來源與範圍都只列 `available` 的交易所。
+- **加權指數與季線**（大盤概況四格之下，#561）：讀 `market_overview.taiex_ma60`（加權指數 `market_bars` 收盤與 `technical_indicators` 的 `indicators/v1` `ma60`；定義同 #546 研究版 R3：收盤嚴格高於 MA60 才算在季線之上，需要 60 根收盤）。標籤「加權指數與季線（MA60）」，單位「點」。不用紅綠色。
+  - 有位置（`status=available`）：「加權指數 {收盤}（YYYY/MM/DD）{位置}（季線 {MA60}）」，收盤與季線兩位小數、千分位；位置 `above`「在季線之上」、`below`「在季線之下」、`equal`「與季線持平」。下一行 muted「近 {N} 個交易日在季線之上：{起}–{訖}（{n} 日，持續中）；…」：最新的在前、最多 3 段（`segment_window.max_segments`），N 是 `segment_window.sessions`（最多 250）；只有一天的區段只寫一個日期；訖日是資料日時接「，持續中」；`starts_before_window` 時起日後接「（或更早）」；沒有區段寫「近 {N} 個交易日沒有在季線之上的日子」。
+  - 資料不足（`status=insufficient`）：「季線資料不足：加權指數到 YYYY/MM/DD 只有 {n} 個交易日收盤，季線需要 60 個」，不寫位置。
+  - 無資料（`status=unavailable`）：「季線無資料：{原因}」，`no_verified_session`「尚無已驗證的資料日」、`not_collected`「加權指數日線未收集」、`row_date_mismatch`「加權指數日線最新為 YYYY/MM/DD，不是資料日」、`indicator_not_computed`「季線尚未計算」，其他「當日收盤無法計算季線」；API 沒有這個欄位時「尚未提供」。
 - **範圍**：成交金額口徑依來源，上市為「集中市場總計（含 ETF、權證等）」、上櫃為「上櫃股票」。成交金額格每行常駐短範圍（上表），完整的 `turnover.scope_label` 寫在「資料說明」；家數兩邊都是股票。
 - **缺資料**：某交易所 `status=unavailable` 時，該交易所的指數格與成交金額、漲跌家數的該行都寫「上市大盤資料未取得」或「上櫃大盤資料未取得」，另一交易所照常；欄位為 null 寫「—」，不寫 0。
 - **手機**：大盤頁 640px 以下不收合，四格都顯示（兩個指數一列兩格，成交金額、漲跌家數各占一列）。

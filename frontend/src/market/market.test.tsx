@@ -5,12 +5,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import * as AppModule from '../App'
 import { MAIN_NAV } from '../components/Navbar'
-import type { Dashboard, ForeignIndex, MarketOverview, StockBarRow, StockBarsResponse } from '../types'
+import type { Dashboard, ForeignIndex, MarketOverview, StockBarRow, StockBarsResponse, TaiexMa60 } from '../types'
 import { overviewBoth, overviewNone, overviewTwseOnly } from '../today/today.fixtures'
 import { CLOSE_ONLY_NOTE, STOCK_BARS_LIMIT, axisDigits, buildBarsChartOption, chartLayout, isCloseOnlySeries, priceDigits, readChartTheme } from '../stock/stockBars'
 import { MarketChartView, MarketOverviewPanel, MarketOverviewView, UsChartFooter, UsIndexPanel } from './MarketViews'
 import { MarketPage } from './MarketPage'
-import { FRED_ATTRIBUTION, MARKET_CHARTS, TAIEX, TAIFEX_ATTRIBUTION, US_INDEXES, collectedSinceText, foreignLatestDate, futuresLatestText, marketOverviewNotes, summaryItems, usChartSpec } from './marketOverview'
+import { FRED_ATTRIBUTION, MA60_BACKGROUND_NOTE, MA60_NOTE, MARKET_CHARTS, TAIEX, TAIFEX_ATTRIBUTION, US_INDEXES, collectedSinceText, foreignLatestDate, futuresLatestText, marketOverviewNotes, summaryItems, usChartSpec } from './marketOverview'
 
 const expectedText = (overview: MarketOverview) => `資料 ${(foreignLatestDate(overview) ?? '').replace(/-/g, '/')}`
 
@@ -213,6 +213,51 @@ check(!(mixedOption.series as Array<{ name?: string; xAxisIndex?: number }>).som
 const mixedChart = text(render('/market mixed', <MarketChartView spec={MARKET_CHARTS[0]} interval="day" onIntervalChange={() => {}} data={taiexBars(mixedRows)} loading={false} error={null} />))
 check(!mixedChart.includes(CLOSE_ONLY_NOTE) && mixedChart.includes('來源 臺灣證券交易所'), 'a Taiwan index with one close-only day: no close-only note')
 check(expectedText(usOverview) === '資料 2026/11/06', 'the section badge reads the newest data date')
+
+// ---- 加權指數與季線, Issue 561: above, below or equal, too few closes, and no data ----
+const ma60 = (extra: Partial<TaiexMa60>): TaiexMa60 => ({
+  trading_date: '2026-10-22', required_closes: 60, status: 'available', close: 46041.43, ma60: 44012.5, above: true, position: 'above', close_count: 250,
+  segments: [
+    { start: '2026-09-01', end: '2026-10-22', sessions: 37, ongoing: true, starts_before_window: false },
+    { start: '2026-06-02', end: '2026-07-15', sessions: 31, ongoing: false, starts_before_window: false },
+    { start: '2025-10-28', end: '2025-10-28', sessions: 1, ongoing: false, starts_before_window: true },
+  ],
+  segment_window: { start: '2025-10-28', end: '2026-10-22', sessions: 250, max_segments: 3 },
+  source: { label: '臺灣證券交易所', bar_source: 'twse_index_ohlcv', formula_version: 'indicators/v1', computed_at: '2026-10-22T10:40:00+00:00', data_as_of: '2026-10-22' },
+  ...extra,
+})
+const ma60Panel = (item: TaiexMa60 | undefined) => {
+  const markup = render(`/market ma60 ${item?.status}`, <MarketOverviewPanel overview={{ ...overviewBoth(), taiex_ma60: item }} />)
+  return { markup, strip: markup.slice(markup.indexOf('class="market-ma60"')), notes: marketOverviewNotes({ ...overviewBoth(), taiex_ma60: item }) }
+}
+const above = ma60Panel(ma60({}))
+check(text(above.strip).includes('加權指數與季線（MA60） 點'), `季線: the strip's label and unit: ${text(above.strip).slice(0, 120)}`)
+check(text(above.strip).includes('加權指數 46,041.43（2026/10/22） 在季線之上 （季線 44,012.50）'), `季線（之上）: close, date, position and MA60: ${text(above.strip).slice(0, 200)}`)
+check(text(above.strip).includes('近 250 個交易日在季線之上：2026/09/01–2026/10/22（37 日，持續中）；2026/06/02–2026/07/15（31 日）；2025/10/28（或更早）（1 日）'), `季線: the newest runs first, an open start said: ${text(above.strip)}`)
+check(above.markup.indexOf('class="market-ma60"') > above.markup.indexOf('market-overview-grid'), '季線: under the four widgets, in the 大盤概況 panel')
+check(!/tone-(up|down)/.test(above.strip.slice(0, above.strip.indexOf('</section>'))), '季線: no up/down colors (background, not a signal)')
+check(above.notes.includes(MA60_NOTE) && above.notes.includes(MA60_BACKGROUND_NOTE), `季線 資料說明: the definition and that it is background only: ${JSON.stringify(above.notes)}`)
+const below = ma60Panel(ma60({ close: 43000, ma60: 44012.5, above: false, position: 'below', segments: [{ start: '2026-09-01', end: '2026-10-21', sessions: 36, ongoing: false, starts_before_window: false }] }))
+check(text(below.strip).includes('加權指數 43,000.00（2026/10/22） 在季線之下 （季線 44,012.50）') && !text(below.strip).includes('在季線之上 （'), `季線（之下）: ${text(below.strip).slice(0, 200)}`)
+check(text(below.strip).includes('2026/09/01–2026/10/21（36 日）') && !text(below.strip).includes('持續中'), '季線（之下）: the last run has ended')
+const equal = ma60Panel(ma60({ close: 44012.5, above: false, position: 'equal', segments: [] }))
+check(text(equal.strip).includes('與季線持平 （季線 44,012.50）') && text(equal.strip).includes('近 250 個交易日沒有在季線之上的日子'), `季線（持平）: not above, no runs: ${text(equal.strip).slice(0, 200)}`)
+const short = ma60Panel({ trading_date: '2026-10-22', required_closes: 60, status: 'insufficient', reason: 'insufficient_closes', close_count: 59 })
+check(text(short.strip).includes('季線資料不足：加權指數到 2026/10/22 只有 59 個交易日收盤，季線需要 60 個'), `季線（資料不足）: the reason: ${text(short.strip).slice(0, 200)}`)
+check(!/季線之[上下]|持平/.test(text(short.markup)), `季線（資料不足）: no position anywhere on the panel: ${text(short.markup)}`)
+check(short.notes.includes(MA60_NOTE), '季線（資料不足）: 資料說明 explains the 60 closes')
+for (const [item, reason] of [
+  [{ trading_date: null, required_closes: 60, status: 'unavailable', reason: 'no_verified_session' }, '季線無資料：尚無已驗證的資料日'],
+  [{ trading_date: '2026-10-22', required_closes: 60, status: 'unavailable', reason: 'not_collected' }, '季線無資料：加權指數日線未收集'],
+  [{ trading_date: '2026-10-22', required_closes: 60, status: 'unavailable', reason: 'row_date_mismatch', latest_trading_date: '2026-10-21' }, '季線無資料：加權指數日線最新為 2026/10/21，不是資料日'],
+  [{ trading_date: '2026-10-22', required_closes: 60, status: 'unavailable', reason: 'indicator_not_computed' }, '季線無資料：季線尚未計算'],
+  [{ trading_date: '2026-10-22', required_closes: 60, status: 'unavailable', reason: 'ma60_unavailable', null_reason: 'invalid_bar' }, '季線無資料：當日收盤無法計算季線'],
+  [undefined, '季線無資料：尚未提供'],
+] as const) {
+  const panel = ma60Panel(item as TaiexMa60 | undefined)
+  check(text(panel.strip).includes(reason) && !/季線之[上下]|持平/.test(text(panel.markup)), `季線（${item?.reason ?? '欄位不存在'}）: 「${reason}」, no position: ${text(panel.strip).slice(0, 160)}`)
+  check(!panel.notes.includes(MA60_NOTE), `季線（${item?.reason ?? '欄位不存在'}）: no MA60 definition in 資料說明`)
+}
 
 // ---- pure helpers ----
 const items = summaryItems(overviewTwseOnly())
