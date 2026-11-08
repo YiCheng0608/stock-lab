@@ -5,7 +5,7 @@
 
 價格基準另有版本（`PRICE_BASIS`，每列記在 `price_basis`）。改還原規則要升價格基準；同一 `formula_version` 下舊基準的列不再提供：bars API 只讀目前基準的列，舊列當作 `not_computed`。指標批次遇到某標的沒有目前基準的列時，刪掉該標的這個 `formula_version` 的列並整段重寫（結果的 `instruments_rebased`）。
 
-**輸入與價格基準**：輸入是 DB 保存的日線 `market_bars`。停牌列（`is_suspended`）與無效列（OHLC 非有限正數、`low` 高於開收或 `high` 低於開收、成交量缺漏或為負）不進任何窗口、不補值；該日每欄為 null，原因 `suspended`／`invalid_bar`。窗口以該股「可用日線根數」計，不比對交易所日曆；缺日不補，前後兩根直接相鄰。價格基準 `as_of_date_raw_basis/v2`：T 日的值以 T 日原始價為基準，T 以前的價格依 DB 已收錄的除權息、分割事件（`worker.pipeline._action_factor_by_bar`）換算到 T 日基準，所以 T 日的均線與 T 日原始 K 線同一尺度；之後才發生的事件不影響 T。未收錄的事件等同不還原。成交量不還原。
+**輸入與價格基準**：輸入是 DB 保存的日線 `market_bars`。停牌列（`is_suspended`）與無效列（OHLC 非有限正數、`low` 高於開收或 `high` 低於開收、成交量為負）不進任何窗口、不補值；該日每欄為 null，原因 `suspended`／`invalid_bar`。開高低任一欄存 null（指數與台指期來源沒有或不合理的開高低，美股只有收盤；不看 `price_reason`）的列只檢查收盤，量存 null 的列不檢查量，兩者都照樣計入可用根數，讀到它們的欄位依下方「合成資料」段為 null；DB 深度審查（`tools/audit`）重算時用同一口徑（#557）。窗口以該股「可用日線根數」計，不比對交易所日曆；缺日不補，前後兩根直接相鄰。價格基準 `as_of_date_raw_basis/v2`：T 日的值以 T 日原始價為基準，T 以前的價格依 DB 已收錄的除權息、分割事件（`worker.pipeline._action_factor_by_bar`）換算到 T 日基準，所以 T 日的均線與 T 日原始 K 線同一尺度；之後才發生的事件不影響 T。未收錄的事件等同不還原。成交量不還原。
 
 **還原因子**（`worker.pipeline._corporate_action_factor`，每個事件一個因子，累乘；指標、`technical_features`、訊號與計畫追蹤、觀察價位共用）：
 

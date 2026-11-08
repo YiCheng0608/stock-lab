@@ -19,7 +19,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, null
 from sqlalchemy.orm import sessionmaker
 
 import app.indicators as product_indicators
@@ -50,6 +50,7 @@ sys.path.insert(0, str(ROOT / "tools" / "research"))
 import audit  # noqa: E402
 import audit_checks  # noqa: E402
 import audit_lib  # noqa: E402
+import audit_series  # noqa: E402
 
 T86 = "https://www.twse.com.tw/rwd/zh/fund/T86"
 MI_INDEX = "https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX"
@@ -902,6 +903,201 @@ def test_indicators_follow_the_official_ratio_of_a_cash_capital_increase(fx):
     )
     ind = by_key(audit_checks.derived_checks(fx.context(), lambda: None), "indicators")
     assert ind.result == "fail" and "value" in ind.failures
+
+
+# --- #557：開高低或量是 null 的日線（#552 指數與台指期、#547 美股）-----------------
+
+NO_OHLC_DAY, INVALID_OHLC_DAY, NO_VOLUME_DAY = 60, 70, 90
+
+
+def index_with_null_bars(
+    fx: Fixture,
+    exchange: str,
+    symbol: str,
+    source: str,
+    nulls: dict[int, str],
+    *,
+    kind: str = "index",
+) -> Instrument:
+    """A full OHLCV series whose ``nulls`` days are stored the #552 way.
+
+    ``nulls`` maps a day index to ``source_missing_ohlc``/``source_invalid_ohlc``
+    (open/high/low NULL with that ``price_reason``) or ``volume`` (volume NULL).
+    """
+
+    item = fx.instrument(exchange, symbol, kind=kind)
+    for i, day in enumerate(DAYS):
+        close = price(i, 300)
+        bar = fx.bar(
+            item,
+            day,
+            close,
+            high=round(close * 1.01, 2),
+            low=round(close * 0.98, 2),
+            open_=round(close * 0.995, 2),
+            volume=5000 + 113 * (i % 7),
+            source=source,
+        )
+        reason = nulls.get(i)
+        if reason == "volume":
+            bar.volume = null()  # the column defaults to 0 on insert
+        elif reason is not None:
+            bar.open = bar.high = bar.low = None
+            bar.price_reason = reason
+    fx.commit()
+    return item
+
+
+def stored_indicators(fx: Fixture, item: Instrument) -> dict[str, dict]:
+    with sqlite3.connect(fx.path) as con:
+        con.row_factory = sqlite3.Row
+        return {
+            row["trading_date"]: dict(row)
+            for row in con.execute(
+                "select * from technical_indicators where instrument_id = ?",
+                (item.id,),
+            )
+        }
+
+
+def indicators_check(fx: Fixture):
+    return by_key(audit_checks.derived_checks(fx.context(), lambda: None), "indicators")
+
+
+def test_an_index_day_without_open_high_low_counts_and_nulls_only_kd(fx):
+    """AC-1: the bar counts, the close fields go on, KD is null from that day on."""
+
+    tpex = index_with_null_bars(
+        fx,
+        "TPEx",
+        "TPEX",
+        "tpex_index_ohlcv",
+        {NO_OHLC_DAY: "source_missing_ohlc"},
+    )
+    compute_market_indicators(fx.db, rebuild=True)
+    fx.commit()
+    stored = stored_indicators(fx, tpex)
+    day, before = DAYS[NO_OHLC_DAY].isoformat(), DAYS[NO_OHLC_DAY - 1].isoformat()
+    assert stored[day]["bar_count"] == NO_OHLC_DAY + 1
+    assert stored[day]["ma20"] is not None and stored[day]["rsi6"] is not None
+    assert stored[day]["vol_ma5"] is not None
+    assert stored[day]["kd_k"] is None and stored[T.isoformat()]["kd_d"] is None
+    assert stored[before]["kd_k"] is not None
+    ind = indicators_check(fx)
+    assert ind.result == "pass", (dict(ind.failures), ind.examples)
+    assert ind.compared == len(DAYS)
+
+
+def test_invalid_open_high_low_and_a_day_without_volume_null_only_their_fields(fx):
+    """AC-2: source_invalid_ohlc nulls KD; a day without volume nulls the volume averages of its windows."""
+
+    tx = index_with_null_bars(
+        fx,
+        "TAIFEX",
+        "TX",
+        "taifex_daily_futures",
+        {INVALID_OHLC_DAY: "source_invalid_ohlc", NO_VOLUME_DAY: "volume"},
+        kind="futures",
+    )
+    taiex = index_with_null_bars(
+        fx, "TWSE", "TAIEX", "twse_index_ohlcv", {NO_VOLUME_DAY: "volume"}
+    )
+    compute_market_indicators(fx.db, rebuild=True)
+    fx.commit()
+    futures = stored_indicators(fx, tx)
+    assert futures[DAYS[INVALID_OHLC_DAY].isoformat()]["kd_k"] is None
+    assert futures[DAYS[INVALID_OHLC_DAY].isoformat()]["ma60"] is not None
+    assert futures[DAYS[INVALID_OHLC_DAY - 1].isoformat()]["kd_k"] is not None
+    index = stored_indicators(fx, taiex)
+    for offset in range(5):
+        row = index[DAYS[NO_VOLUME_DAY + offset].isoformat()]
+        assert row["bar_count"] == NO_VOLUME_DAY + offset + 1
+        assert row["vol_ma5"] is None and row["ma5"] is not None
+        assert row["kd_k"] is not None
+    assert index[DAYS[NO_VOLUME_DAY + 5].isoformat()]["vol_ma5"] is not None
+    assert index[DAYS[NO_VOLUME_DAY + 19].isoformat()]["vol_ma20"] is None
+    assert index[DAYS[NO_VOLUME_DAY + 20].isoformat()]["vol_ma20"] is not None
+    ind = indicators_check(fx)
+    assert ind.result == "pass", (dict(ind.failures), ind.examples)
+    assert ind.compared == len(DAYS) * 2
+
+
+def test_a_complete_but_inconsistent_stock_bar_stays_invalid(fx):
+    """AC-2: open/high/low all present but inconsistent is still an invalid bar."""
+
+    stock = fx.instrument("TWSE", "1101")
+    for i, day in enumerate(DAYS[:40]):
+        close = price(i)
+        high, low = round(close * 1.02, 2), round(close * 0.98, 2)
+        if i == 20:
+            high = close - 1  # high below the close
+        if i == 30:
+            low = close + 0.5  # low above the open and the close
+        fx.bar(stock, day, close, high=high, low=low, open_=close)
+    fx.commit()
+    compute_market_indicators(fx.db, rebuild=True)
+    fx.commit()
+    stored = stored_indicators(fx, stock)
+    for i in (20, 30):
+        row = stored[DAYS[i].isoformat()]
+        assert row["ma5"] is None and json.loads(row["null_reasons"])["ma5"] == (
+            "invalid_bar"
+        )
+    assert stored[DAYS[39].isoformat()]["bar_count"] == 38
+    ctx = fx.context()
+    bars = audit_series.load_series(ctx.con, ctx.instruments[stock.id][:5], set()).bars
+    assert not audit_series.usable(bars[20], 1.0)
+    assert not audit_series.usable(bars[30], 1.0)
+    assert audit_series.usable(bars[21], 1.0)
+    ind = indicators_check(fx)
+    assert ind.result == "pass", (dict(ind.failures), ind.examples)
+    # Treating such a bar as usable would be found.
+    fx.sql(
+        "update technical_indicators set bar_count = bar_count + 1 where trading_date = ?",
+        DAYS[25].isoformat(),
+    )
+    assert "bar_count" in indicators_check(fx).failures
+
+
+def test_a_close_only_us_index_passes_the_whole_audit(fx, tmp_path, monkeypatch):
+    """AC-3: the FRED series (#547): open, high, low and volume NULL on every row."""
+
+    spx = fx.instrument("US", "SPX", kind="index")
+    spx.market = "US"
+    stock = fx.instrument("TWSE", "1101")
+    for i, day in enumerate(DAYS):
+        fx.bar(stock, day, price(i), volume=1000 + 37 * (i % 9))
+        bar = fx.bar(
+            spx, day, price(i, 6000), volume=0, turnover=0, source="fred_close"
+        )
+        bar.open = bar.high = bar.low = None
+        bar.volume = null()
+        bar.price_reason = "source_missing_ohlc"
+        bar.turnover_status, bar.turnover_reason = "unavailable", "not_published"
+    fx.commit()
+    compute_market_indicators(fx.db, rebuild=True)
+    fx.commit()
+    stored = stored_indicators(fx, spx)
+    assert stored[T.isoformat()]["bar_count"] == len(DAYS)
+    assert stored[T.isoformat()]["ma120"] is not None
+    assert stored[T.isoformat()]["kd_k"] is None
+    assert stored[T.isoformat()]["vol_ma5"] is None
+    monkeypatch.setattr(audit, "free_memory_gb", lambda: 20.0)
+    monkeypatch.setattr(audit, "refusals", lambda *args: [])
+    monkeypatch.setattr(audit, "daily_window_problem", lambda now: None)
+    out = tmp_path / "out"
+    assert audit.main(["--db", str(fx.path), "--out", str(out)]) in (0, 1)
+    checks = {
+        check["key"]: check
+        for check in json.loads((out / "findings.json").read_text(encoding="utf-8"))[
+            "checks"
+        ]
+    }
+    assert checks["indicators"]["result"] == "pass", checks["indicators"]
+    assert checks["indicators"]["compared"] == 2 * len(DAYS)
+    assert checks["bars_integrity"]["result"] == "pass", checks["bars_integrity"]
+    for check in checks.values():
+        assert not {"null_mismatch", "bar_count"} & set(check["failures"]), check
 
 
 def test_the_audit_pins_the_product_versions_it_recomputes():
