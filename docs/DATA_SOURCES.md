@@ -1,4 +1,4 @@
-<!-- owns: 來源選用原則、資料庫政策、官方來源、標的狀態同步、官方來源限制、新聞來源清單、法人口徑、籌碼來源欄位、融資標的清單、成交金額可得狀態、成交量整數規則、TAIEX 交易日基準、回補目標與確定休市日、大盤概況欄位、大盤概況 API 契約、指數日 K、台指期、交易日曆、TPEx 停復牌規則、公司行動欄位、FinMind 補缺口規則 -->
+<!-- owns: 來源選用原則、資料庫政策、官方來源、標的狀態同步、官方來源限制、新聞來源清單、法人口徑、籌碼來源欄位、融資標的清單、成交金額可得狀態、成交量整數規則、TAIEX 交易日基準、回補目標與確定休市日、大盤概況欄位、大盤概況 API 契約、指數日 K、台指期、美股指數、美股指數 API 契約、交易日曆、TPEx 停復牌規則、公司行動欄位、FinMind 補缺口規則 -->
 # 資料來源與限制
 
 本文記錄資料來源、保存規則與已知限制；能力狀態以 [CAPABILITIES](CAPABILITIES.md) 為準。
@@ -25,6 +25,7 @@
 | TAIEX | 當日 [`exchangeReport/MI_INDEX`](https://openapi.twse.com.tw/v1/exchangeReport/MI_INDEX)；歷史取自 `MI_INDEX` 全市場表 | 加權指數作 hot-group 超額報酬基準與交易日基準（見 [TAIEX 交易日基準](#taiex-交易日基準)）。collect 先寫收盤列（`twse_index`），再由下一列的月報原地升級成真實日 K（[指數日 K](#指數日-k)）。 | `MI_INDEX` 只有收盤值；收盤列合成的 O／H／L、成交量與成交額不是真實欄位。 |
 | 指數日 K（加權、櫃買） | TWSE [`TAIEX/MI_5MINS_HIST`](https://www.twse.com.tw/rwd/zh/TAIEX/MI_5MINS_HIST?date=20261101&response=json)（發行量加權股價指數歷史資料）＋[`afterTrading/FMTQIK`](https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK?date=20261101&response=json)（市場成交資訊）；TPEx [`indexInfo/inx`](https://www.tpex.org.tw/www/zh-tw/indexInfo/inx)（櫃買指數月查詢，POST）＋[`afterTrading/tradingIndex`](https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingIndex)（日成交量值指數，POST） | 每個指數每月 2 個請求，寫真實開高低收與成交量值（[指數日 K](#指數日-k)，#552）；大盤頁的 K 線與指標讀它。 | 網站報表，同 `MI_INDEX`／`dailyQuotes` 的條款與限流；非核心。 |
 | 台指期近月 | 期交所 OpenAPI [`DailyMarketReportFut`](https://openapi.taifex.com.tw/v1/DailyMarketReportFut)（期貨每日交易行情；[data.gov.tw 11319](https://data.gov.tw/dataset/11319)） | 當日 collect 1 個請求，存 TX 近月一般時段的日 K、合約月份、未平倉量與結算價（[台指期](#台指期)，#552）。 | 只有最新一個交易日，沒有日期參數：從開始收集的那天起累積，沒有歷史、漏抓的日子補不回；非核心。 |
+| 美股指數（S&P 500、NASDAQ、道瓊、費半） | FRED（Federal Reserve Bank of St. Louis）[`fredgraph.csv`](https://fred.stlouisfed.org/graph/fredgraph.csv?id=SP500&cosd=2026-10-26&coed=2026-11-04)，序列 [`SP500`](https://fred.stlouisfed.org/series/SP500)、[`NASDAQCOM`](https://fred.stlouisfed.org/series/NASDAQCOM)、[`DJIA`](https://fred.stlouisfed.org/series/DJIA)、[`NASDAQSOX`](https://fred.stlouisfed.org/series/NASDAQSOX)；不用金鑰 | 當日 collect 每個序列 1 個請求，寫收盤-only 的日 K（[美股指數](#美股指數)，#547）；大盤頁的「美股（前一交易日）」與各指數的 K 線讀它。只顯示，不進策略、候選、族群、追蹤或回測。 | 只有收盤，沒有開高低與成交量。[FRED 條款](https://fred.stlouisfed.org/legal/)：有版權標示的序列只限個人、非商業使用，並保留版權標示（S&P DJI 的 `SP500`、`DJIA`，Nasdaq 的 `NASDAQCOM`、`NASDAQSOX`）；**對外公開或分享畫面前，要先取得 S&P Dow Jones Indices 與 Nasdaq 的書面同意**。`SP500` 約在美東次日上午才更新，晚另外三個一天。非核心。 |
 | TPEx 大盤概況 | [`tpex_mainborad_highlight`](https://www.tpex.org.tw/openapi/v1/tpex_mainborad_highlight)（上櫃股票市場現況；官方路徑拼作 `mainborad`） | 當日 collect 每天 1 個請求，寫[大盤概況](#大盤概況)：`CloseIndex`、`IndexChange`、`DailyTradingValue`（**百萬元**，×1,000,000 存成元，只算上櫃股票）與 `PriceRise`／`PriceDecline`／`PriceFlat`／`LimitUp`／`LimitDown` 各 `…CompanyNumbers`、`UnmatchedCompanyNumbersSuspensionStocksIncluded`；`DailyTradingVolume`（**千股**）、`ListedCompanyNumbers`、`MarketCapitalization` 等不保存。 | 只有最新一天，沒有歷史：`Date` 是民國日期（`1151022`），不等於請求的交易日（例如還沒更新）時不寫並記 warning，不映射到其他日期；漏抓的日子不回補，那天沒有上櫃列。 |
 | TPEx 日行情 | [`dailyQuotes`](https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes)（POST） | 逐日擷取，保留股票／ETF allowlist、普通股與 ETF 代號（[標的狀態同步](#標的狀態同步)），讀 OHLC、`TradingShares`（股）、`TransactionAmount`。 | 回報日期須等於請求日期；非空但全部被拒收的表格不算合法空日。 |
 | TWSE 籌碼 | 法人 [`T86`](https://www.twse.com.tw/rwd/zh/fund/T86)；融資 [`MI_MARGN`](https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN) | 法人依外資及陸資、投信、自營商分類；融資讀餘額與增減。 | 請求可能被限流、重導或缺可驗證日期。 |
@@ -41,7 +42,7 @@
 
 ### 核心與非核心來源
 
-collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`、`dailyQuotes`）、TAIEX、交易日曆、法人與融資。它們的 warning 讓 collect 變 `partial`，daily 不跑 analyze。重大訊息與基本面（`t187ap04_L`、`t187ap14_L`、`mopsfin_t187ap04_O`、`mopsfin_t187ap14_O`、MOPS `t05st02`）、TPEx 停復牌（`tpex_spendi_today`、`tpex_spendi_history`）、[興櫃名冊](#興櫃名冊)（`mopsfin_t187ap03_R`）、[月營收](#月營收)快照（`t187ap05_L`、`mopsfin_t187ap05_O`）、[指數日 K](#指數日-k) 的月報（`MI_5MINS_HIST`、`FMTQIK`、`inx`、`tradingIndex`，warning 以 `index bars ` 開頭）、[台指期](#台指期)（`DailyMarketReportFut`，`futures bars ` 開頭）及[大盤概況](#大盤概況)（TWSE `MI_INDEX` 的大盤統計與漲跌證券數、TPEx `tpex_mainborad_highlight`；`MI_INDEX` 的日行情與 TAIEX 仍是核心）是非核心：取得失敗記為 `noncore_warnings`，collect 仍為 `success`；被防呆略過的[標的狀態同步](#標的狀態同步)也記為 `noncore_warnings`。缺的事件與基本面照「缺資料留空」處理（`mops_events`／`mops_fundamentals` 的資料品質列為 `partial`）。分類依 warning 文字（`pipeline.NONCORE_WARNING_PATTERN`），新增來源的 warning 未列入前一律算核心。
+collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`、`dailyQuotes`）、TAIEX、交易日曆、法人與融資。它們的 warning 讓 collect 變 `partial`，daily 不跑 analyze。重大訊息與基本面（`t187ap04_L`、`t187ap14_L`、`mopsfin_t187ap04_O`、`mopsfin_t187ap14_O`、MOPS `t05st02`）、TPEx 停復牌（`tpex_spendi_today`、`tpex_spendi_history`）、[興櫃名冊](#興櫃名冊)（`mopsfin_t187ap03_R`）、[月營收](#月營收)快照（`t187ap05_L`、`mopsfin_t187ap05_O`）、[指數日 K](#指數日-k) 的月報（`MI_5MINS_HIST`、`FMTQIK`、`inx`、`tradingIndex`，warning 以 `index bars ` 開頭）、[台指期](#台指期)（`DailyMarketReportFut`，`futures bars ` 開頭）、[美股指數](#美股指數)（FRED `fredgraph.csv`，`us index bars ` 開頭）及[大盤概況](#大盤概況)（TWSE `MI_INDEX` 的大盤統計與漲跌證券數、TPEx `tpex_mainborad_highlight`；`MI_INDEX` 的日行情與 TAIEX 仍是核心）是非核心：取得失敗記為 `noncore_warnings`，collect 仍為 `success`；被防呆略過的[標的狀態同步](#標的狀態同步)也記為 `noncore_warnings`。缺的事件與基本面照「缺資料留空」處理（`mops_events`／`mops_fundamentals` 的資料品質列為 `partial`）。分類依 warning 文字（`pipeline.NONCORE_WARNING_PATTERN`），新增來源的 warning 未列入前一律算核心。
 
 ### 標的狀態同步
 
@@ -283,6 +284,44 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
 - **缺日**：回傳的 `Date` 不等於 collect 日（尚未更新或已是下一個交易日）、或近月列不只一列、收盤或量讀不出時，那天不寫，記 `noncore_warnings`（`futures bars unavailable …`），raw 照存。漏抓的日子之後補不回（沒有歷史），大盤頁照實缺日。
 - **重讀**：同一天已存的列值相同不改，不同時保留第一次的值並記 conflict；`--force` 才改寫。
 - **歷史**：從開始收集的那天起累積，沒有 2024-09-30 起的回補；取得期交所書面同意後才另開單回補。
+
+### 美股指數
+
+S&P 500、NASDAQ 綜合指數、道瓊工業指數與費城半導體指數的每日收盤，來源 FRED（[#547](https://github.com/YiCheng0608/stock-lab/issues/547)，決定 [6717082903](https://github.com/YiCheng0608/stock-lab/issues/547#issuecomment-6717082903)；程式 [`worker/us_index_bars.py`](../backend/worker/us_index_bars.py)）。只顯示，不進策略、候選、族群分數、追蹤或回測。
+
+| 代號（`US` 交易所，`index`，`market=US`） | FRED 序列 | 版權標示（照抄序列頁） |
+| --- | --- | --- |
+| `SPX` S&P 500 | `SP500` | Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved. |
+| `IXIC` NASDAQ 綜合指數 | `NASDAQCOM` | Copyright © 2016, NASDAQ OMX Group, Inc. |
+| `DJI` 道瓊工業指數 | `DJIA` | Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved. |
+| `SOX` 費城半導體指數 | `NASDAQSOX` | Copyright © 2025, NASDAQ, Inc. |
+
+- **請求**：`GET https://fred.stlouisfed.org/graph/fredgraph.csv?id=<序列>&cosd=<起>&coed=<迄>`，用 HTTP/1.1（#547 實測時 HTTP/2 串流會被伺服器斷掉），每個序列 1 個請求，序列之間至少間隔 2 秒；transport 錯誤、429 或 5xx 隔 5 秒重試 1 次，不再多試。只在抓當日快照、且該交易日 D 的 TAIEX 列已寫入的 collect 請求：`coed` 是 D 的前一天（美股收盤都在 D 之前），`cosd` 是已存最後一根往前 10 天（沒有任何列時從 2024-09-30 起，也就是第一次 collect 一次抓完歷史，不另做回補）。
+- **回應**：兩欄 CSV，表頭 `observation_date,<序列>`；值只有收盤（點）。美股休市日是空值列（`2024-11-28,`，也可能是 `.`），不寫、不補零，但記在該序列的 `data_quality`（`entity_type=us_index_series`、`entity_key=US:<代號>`、`as_of_date`＝D）的 `checks_json.closed_dates`。
+- **拒收**：回應不是文字、第一行不是該序列的表頭（例如被導到 HTML 驗證頁）、某行不是「日期,值」、有日期在 `cosd`～`coed` 之外、同一天兩行、收盤讀不出或不是正數，或整份沒有任何一行時，該序列整份不寫，記 `noncore_warnings`（`us index bars unavailable for US <代號> (<序列>): …`），`data_quality` 記 `failed` 與原因；raw 照存（`source=fred`），其他序列照常。
+- **欄位**：開高低 null、`price_reason=source_missing_ohlc`；`volume` null；`turnover` 0／`unavailable`／`not_published`；`source=fred_close`；`raw_payload_id` 指向該次 CSV（raw 的 `data_as_of` 是 CSV 最後一個有值的日期，所以一份 raw 涵蓋多個交易日，同 #552 的月報）。
+- **重讀**：已存的日子收盤相同不改，不同時保留第一次的值並記 warning（`us index bars kept …`）；`--force` 才改寫。
+- **指標**：照[指數日 K](#指數日-k) 的 null 規則，KD 為 null（`missing_ohlc`）、量均為 null（`missing_volume`），MA、RSI、MACD、布林照算。
+- **台股交易日**：美股有些交易日是台股休市日。這些列不是台股交易日，回測的 score dates 只算 `market=TW` 標的的日線（`pipeline.taiwan_bar_dates`）。
+
+#### 美股指數 API 契約
+
+`GET /api/dashboard` 的 `market_overview.foreign_indices` 固定四項，順序同上表，各自判斷：
+
+```json
+{ "exchange": "US", "symbol": "SPX", "name": "S&P 500", "series_id": "SP500", "status": "available",
+  "trading_date": "2026-11-05", "expected_date": "2026-11-06", "freshness": "stale",
+  "close": 7353.73, "change": -334.89, "change_pct": -0.043557, "change_pct_method": "derived",
+  "previous_trading_date": "2026-11-04",
+  "source": { "label": "FRED SP500", "copyright": "Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved.",
+              "collected_at": "2026-11-09T13:40:05+00:00", "data_as_of": "2026-11-05", "raw_payload_id": 812 } }
+```
+
+- `expected_date` 是預期的美股交易日：`market_overview.trading_date`（台股資料日；沒有時用台北今天）往前推到最近的平日，週一推到上週五（#547 決定）。
+- `freshness`：`latest`（`trading_date` 不早於 `expected_date`）、`us_market_closed`（`expected_date` 在 FRED 是空值列，而 `trading_date` 是它之前最近一個美股交易日）、`stale`（其他較舊的情況，畫面標「非最新」）。空值列讀自該序列最近 5 列 `data_quality` 的 `closed_dates`。
+- `change` 是收盤減去前一筆已存收盤，`change_pct` 是比例，`change_pct_method` 固定 `derived`（FRED 沒有漲跌欄）。
+- `unavailable` 的 `reason`：`not_collected`（沒有任何列）、`fetch_failed`（沒有任何列，且最近一次 `data_quality` 是 `failed`；附 `last_attempt_date`）。
+- 日 K 走既有的 `GET /api/stocks/US/<代號>/bars`。
 
 ### 交易日曆
 

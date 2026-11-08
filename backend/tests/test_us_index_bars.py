@@ -427,6 +427,100 @@ def test_a_us_close_on_a_taiwan_holiday_is_not_a_backtest_session(factory):
         ]
 
 
+def _taiwan_sessions(db, days):
+    """TAIEX and one stock with a bar on each of ``days`` (Taiwan sessions)."""
+
+    for exchange, symbol, kind in (
+        ("TWSE", "TAIEX", "index"),
+        ("TWSE", "2330", "stock"),
+    ):
+        item = Instrument(
+            market="TW",
+            exchange=exchange,
+            symbol=symbol,
+            name=symbol,
+            instrument_type=kind,
+            industry="Index" if kind == "index" else "24",
+            status="active",
+        )
+        db.add(item)
+        db.flush()
+        for day in days:
+            db.add(
+                MarketBar(
+                    instrument_id=item.id,
+                    trading_date=day,
+                    open=10,
+                    high=11,
+                    low=9,
+                    close=10,
+                    adj_close=10,
+                    volume=1000,
+                    turnover=10000,
+                    turnover_status="available",
+                    source="twse_index" if kind == "index" else "twse",
+                )
+            )
+    db.commit()
+
+
+def _session_views(db, start, end, holiday):
+    from worker.backfill import coverage_report
+    from worker.plan_tracking import _market_dates_after
+
+    return {
+        "score_dates": pipeline.taiwan_bar_dates(db, start, end),
+        "tracking_sessions": _market_dates_after(
+            db, start - timedelta(days=1), end, 40
+        ),
+        # The whole report: every date's status and bars by exchange, the summary.
+        "coverage": coverage_report(db, start, end, known_no_data_dates={holiday}),
+    }
+
+
+def test_a_us_close_on_a_taiwan_holiday_changes_no_taiwan_session_view(factory):
+    # 2026-09-30 (Wednesday): Taiwan closed (confirmed), the US open.
+    start, holiday, end = date(2026, 9, 28), date(2026, 9, 30), date(2026, 10, 2)
+    taiwan = [
+        date(2026, 9, 28),
+        date(2026, 9, 29),
+        date(2026, 10, 1),
+        date(2026, 10, 2),
+    ]
+    us_days = [
+        ("2026-09-28", "6400"),
+        ("2026-09-29", "6410"),
+        ("2026-09-30", "6420"),
+        ("2026-10-01", "6430"),
+        ("2026-10-02", "6440"),
+    ]
+    with factory() as db:
+        _taiwan_sessions(db, taiwan)
+        before = _session_views(db, start, end, holiday)
+        us.collect_us_index_bars(
+            db,
+            _run(db),
+            date(2026, 10, 5),
+            Fred(rows=us_days),
+            pipeline._upsert_raw_payload,
+            [],
+        )
+        db.commit()
+        assert holiday in {row.trading_date for row in _bars(db, "SPX")}
+        after = _session_views(db, start, end, holiday)
+
+    assert after == before
+    assert before["score_dates"] == taiwan
+    assert before["tracking_sessions"] == taiwan
+    statuses = {
+        item["date"]: item["status"] for item in before["coverage"]["date_coverage"]
+    }
+    assert statuses[holiday.isoformat()] == "skipped_non_trading"
+    assert before["coverage"]["summary"]["skipped_non_trading_dates"] == [
+        holiday.isoformat()
+    ]
+
+
 # --- API --------------------------------------------------------------------------
 
 

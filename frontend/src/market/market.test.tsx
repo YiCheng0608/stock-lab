@@ -205,6 +205,13 @@ check(closeLine?.data?.length === fredRows.length && closeLine.data[fredRows.len
 const taiexOption = buildBarsChartOption(fullBars, { panel: 'macd', panelState: { kind: 'chart' } as never, visibleMa: new Set(), theme, layout, zoom: { start: 0, end: 100 }, digits: 2 })
 check(!(taiexOption.series as Array<{ name?: string; xAxisIndex?: number }>).some((series) => series.name === '收盤' && series.xAxisIndex === 0), 'a series with candles has no extra close line')
 check(isCloseOnlySeries(fredRows) && !isCloseOnlySeries(days) && !isCloseOnlySeries([]), 'isCloseOnlySeries: every bar close-only')
+// DESIGN_SYSTEM §6: only a whole close-only series gets the line. A Taiwan index with one day lacking open/high/low
+// (Issue 552) keeps its candles, no close line and no note, as before.
+const mixedRows = days.map((row, i) => i === 10 ? { ...row, open: null, high: null, low: null, price_reason: 'source_missing_ohlc' } : row)
+const mixedOption = buildBarsChartOption(taiexBars(mixedRows), { panel: 'macd', panelState: { kind: 'chart' } as never, visibleMa: new Set(), theme, layout, zoom: { start: 0, end: 100 }, digits: 2 })
+check(!(mixedOption.series as Array<{ name?: string; xAxisIndex?: number }>).some((series) => series.name === '收盤' && series.xAxisIndex === 0), 'a Taiwan index with one close-only day: no close line')
+const mixedChart = text(render('/market mixed', <MarketChartView spec={MARKET_CHARTS[0]} interval="day" onIntervalChange={() => {}} data={taiexBars(mixedRows)} loading={false} error={null} />))
+check(!mixedChart.includes(CLOSE_ONLY_NOTE) && mixedChart.includes('來源 臺灣證券交易所'), 'a Taiwan index with one close-only day: no close-only note')
 check(expectedText(usOverview) === '資料 2026/11/06', 'the section badge reads the newest data date')
 
 // ---- pure helpers ----
@@ -217,5 +224,6 @@ check(small[0].pct === '-0.49%' && small[0].tone === 'tone-down', `a small fall 
 const css = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8')
 check(!css.includes('market-overview-more'), 'Issue 549: no folded overview left (the market page shows all four widgets)')
 check(/\.market-summary-item \{[^}]*white-space:\s*nowrap/.test(css), 'summary: an index item never breaks inside')
+check(/\.market-us-grid \{[^}]*repeat\(4, minmax\(0, 1fr\)\)/.test(css) && /\.market-overview-grid, \.market-us-grid \{[^}]*repeat\(2,/.test(css), '美股: four equal widgets, two per row below 1200px')
 
 if (failures.length) throw new Error(`${failures.length} of ${checks} market checks failed:\n- ${failures.join('\n- ')}`)

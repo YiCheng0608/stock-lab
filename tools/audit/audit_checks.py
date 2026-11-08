@@ -135,8 +135,11 @@ class Context:
         self.raw_payloads = self.con.execute(
             "select id, endpoint, data_as_of, collected_at, payload_path from raw_payloads order by collected_at, id"
         ).fetchall()
+        # Taiwan bars only: the US indexes (market US, Issue #547) start at
+        # their own history start and include Taiwan holidays.
         self.first_day, self.last_day = self.con.execute(
-            "select min(trading_date), max(trading_date) from market_bars"
+            "select min(b.trading_date), max(b.trading_date) from market_bars b"
+            " join instruments i on i.id = b.instrument_id where i.market = 'TW'"
         ).fetchone()
 
     def first_captures(self) -> set[int]:
@@ -730,6 +733,11 @@ def actions_missing(ctx: Context) -> Check:
 # --- 7. 來源與日期欄位 ------------------------------------------------------------
 
 
+# market_bars sources whose raw covers many trading days (#547 decision 6717301923).
+MULTI_DATE_SOURCES = ("twse_index_ohlcv", "tpex_index_ohlcv", "fred_close")
+MULTI_DATE_SQL = ", ".join(f"'{source}'" for source in MULTI_DATE_SOURCES)
+
+
 def provenance(ctx: Context) -> Check:
     check = Check(
         "provenance",
@@ -765,13 +773,28 @@ def provenance(ctx: Context) -> Check:
             ),
             (
                 f"{table}:raw_date_not_trading_date",
-                f"select count(*) from {table} x join raw_payloads r on r.id=x.raw_payload_id where substr(r.data_as_of, 1, 10) != x.trading_date",
+                f"select count(*) from {table} x join raw_payloads r on r.id=x.raw_payload_id where substr(r.data_as_of, 1, 10) != x.trading_date"
+                + (
+                    f" and x.source not in ({MULTI_DATE_SQL})"
+                    if table == "market_bars"
+                    else ""
+                ),
             ),
             (
                 f"{table}:collected_before_raw",
                 f"select count(*) from {table} x join raw_payloads r on r.id=x.raw_payload_id where x.collected_at < r.collected_at",
             ),
         ]
+    # A multi-date report (one raw for a month or a range, data_as_of its last
+    # row) only has to reach the row's day (Issue #552 monthly reports, #547
+    # FRED CSV).
+    rules.append(
+        (
+            "market_bars:raw_date_before_trading_date",
+            "select count(*) from market_bars x join raw_payloads r on r.id=x.raw_payload_id"
+            f" where x.source in ({MULTI_DATE_SQL}) and x.trading_date > substr(r.data_as_of, 1, 10)",
+        )
+    )
     chip_cols = columns(ctx.con, "chip_snapshots")
     if "institutional_raw_payload_id" in chip_cols:
         rules += [

@@ -35,6 +35,7 @@ from app.domain import (
     INSTITUTIONAL_FLOW_FORMULA_VERSION,
     OFFICIAL_INSTITUTIONAL_CHIP_SOURCES,
     SIGNAL_CONFIDENCE_SEMANTICS,
+    TAIWAN_MARKET,
     RuleEvaluation,
     calculate_group_score,
     group_score_quality,
@@ -4521,26 +4522,38 @@ def store_collect_futures_bars(
     return result.metadata()
 
 
-def taiwan_bar_dates(db: Session, start: date, end: date) -> list[date]:
-    """Dates in ``start``..``end`` with a bar of a Taiwan instrument.
+def taiwan_bar_dates(
+    db: Session,
+    start: date | None = None,
+    end: date | None = None,
+    *,
+    after: date | None = None,
+    limit: int | None = None,
+) -> list[date]:
+    """Dates with a bar of a Taiwan instrument, oldest first.
 
-    A US index close (market ``US``, Issue #547) can fall on a day the Taiwan
-    market was closed, so "any stored bar" is not a Taiwan session.
+    ``start``/``end`` are inclusive, ``after`` exclusive; ``limit`` keeps the
+    first dates.  A US index close (market ``US``, Issue #547) can fall on a
+    day the Taiwan market was closed, so "any stored bar" is not a Taiwan
+    session: the backtest's score dates and plan tracking's sessions both read
+    this.
     """
 
-    return list(
-        db.scalars(
-            select(MarketBar.trading_date)
-            .join(Instrument, Instrument.id == MarketBar.instrument_id)
-            .where(
-                Instrument.market == "TW",
-                MarketBar.trading_date >= start,
-                MarketBar.trading_date <= end,
-            )
-            .distinct()
-            .order_by(MarketBar.trading_date)
-        ).all()
+    query = (
+        select(MarketBar.trading_date)
+        .join(Instrument, Instrument.id == MarketBar.instrument_id)
+        .where(Instrument.market == TAIWAN_MARKET)
     )
+    if start is not None:
+        query = query.where(MarketBar.trading_date >= start)
+    if end is not None:
+        query = query.where(MarketBar.trading_date <= end)
+    if after is not None:
+        query = query.where(MarketBar.trading_date > after)
+    query = query.distinct().order_by(MarketBar.trading_date)
+    if limit is not None:
+        query = query.limit(limit)
+    return list(db.scalars(query).all())
 
 
 def store_collect_us_index_bars(

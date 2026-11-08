@@ -640,6 +640,10 @@ VALID_INSTRUMENT_TYPES = frozenset({"stock", "etf", "ipo"})
 # the TX futures near month and the US indexes (Issue #547).  Never in the
 # stock list, counts or scope.
 NON_SECURITY_TYPES = frozenset({"index", "futures"})
+# ``Instrument.market`` of every Taiwan instrument (stocks, ETFs, TAIEX, TPEX,
+# TX).  A bar of another market (the US indexes, Issue #547) is not a Taiwan
+# session: session lists and coverage read only this market's bars.
+TAIWAN_MARKET = "TW"
 
 
 @dataclass(frozen=True)
