@@ -289,7 +289,7 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
 - **歷史**（[#563](https://github.com/YiCheng0608/stock-lab/issues/563)；程式 [`worker/futures_history.py`](../backend/worker/futures_history.py)）：OpenAPI 開始累積之前的日子（2023-09-01 起）用期交所網站 `futDataDown` 回補，`worker.cli index-bars futures-history`（[CLI](ops/CLI.md#現有-worker-cli)）。條款限制見[官方來源共同限制](#官方來源共同限制)。
   - 請求：`POST https://www.taifex.com.tw/cht/3/futDataDown`，form `down_type=1&commodity_id=TX&queryStartDate=YYYY/MM/DD&queryEndDate=YYYY/MM/DD`，一個自然月一個請求（區間超過約一個月回 HTML「日期時間錯誤」），請求間隔 3 秒；當月只查到當天。2023-09～2026-11 共 39 個月、39 個請求，一次最多 36 個月，分兩次跑。
   - 回應：cp950 CSV，表頭 19 欄 `交易日期`（`YYYY/MM/DD`）、`契約`、`到期月份(週別)`（尾端補空白）、`開盤價`、`最高價`、`最低價`、`收盤價`、`漲跌價`、`漲跌%`、`成交量`（口）、`結算價`、`未沖銷契約數`（口）、`最後最佳買價`、`最後最佳賣價`、`歷史最高價`、`歷史最低價`、`是否因訊息面暫停交易`、`交易時段`（一般／盤後）、`價差對單式委託成交量`；資料列尾端多一個空欄。缺值是 `-`。
-  - 近月與欄位：同上面的近月與換月、欄位與缺值規則（只取 `交易時段=一般`、`到期月份(週別)` 去空白後等於近月的列；價差單 `202410/202411` 與盤後不取）。某天沒有恰好一列可用的近月列，那天不寫，記在 run metadata 的 `unusable_dates` 與 warning。
+  - 近月與欄位：同上面的近月與換月、欄位與缺值規則（只取 `交易時段=一般`、`到期月份(週別)` 去空白後等於近月的列；價差單 `202410/202411` 與盤後不取）。某天有一般時段的列、卻沒有恰好一列可用的近月列，那天不寫，記在 run metadata 的 `unusable_dates` 與 warning。夜盤算下一個交易日，所以那天一般時段開盤前，CSV 已經列出只有盤後列的那一天（2026-11-09 01:15 實測）：記在 `after_hours_only_dates`，不算缺漏、不寫。
   - 拒收：回應不是 cp950、是 HTML 頁、表頭不是那 19 欄、有列少於 19 欄、日期讀不出或不在請求區間、`契約` 不是 TX，整月不寫，記 warning（`futures history unavailable …`），raw 照存。
   - 來源分開：`source=taifex_futdatadown`、raw `source=taifex_web`（raw 的 endpoint 帶查詢區間，`data_as_of` 是當月最後一列）；OpenAPI 的列是 `taifex_daily_futures`／`taifex`。只寫早於 OpenAPI 第一列的日子，所以兩者不重疊；沒有 OpenAPI 列時寫到查詢區間的最後一天。
   - 寫入：`run_type=futures_bar_backfill`、`source=official` 的 run（不是交易日證據，也不是有界回補 manifest）；先抓完全部月份再一次寫入、一次 commit，中途被停不改任何列；結束時重建 TX 的 `technical_indicators` 與 `technical_features`；重跑冪等。

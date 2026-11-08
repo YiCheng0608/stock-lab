@@ -114,8 +114,12 @@ def request_for(month: Month, today: date) -> Request:
 @dataclass(frozen=True)
 class ParsedMonth:
     bars: list[FuturesBar]
-    # Sessions listed in the CSV without a usable near-month regular row.
+    # Sessions with regular-session rows but no usable near-month one.
     unusable_dates: list[str]
+    # Days listed with after-hours rows only: the evening session of the day
+    # before, filed under the next trading day, whose regular session has not
+    # traded yet.  Not a gap; no bar until a later read.
+    after_hours_only_dates: list[str] = field(default_factory=list)
 
 
 def decode(content: Any) -> str:
@@ -169,13 +173,14 @@ def parse_month(text: Any, request: Request) -> ParsedMonth:
     The header must be the 19 ``FIELDS``; every row a TX row dated inside the
     request.  An HTML page (the error answer), another header, a short row,
     an unreadable date or a date outside the request rejects the whole month
-    (OfficialDataError).  A session with no single readable near-month
-    regular row is listed in ``unusable_dates`` and gets no bar.
+    (OfficialDataError).  A session with regular rows but no single readable
+    near-month one is listed in ``unusable_dates`` and gets no bar; a day with
+    after-hours rows only is ``after_hours_only_dates`` (not yet traded).
     """
 
     if not isinstance(text, str):
         raise OfficialDataError("TAIFEX futDataDown answer is not text")
-    body = text.lstrip("﻿")
+    body = text.lstrip(chr(0xFEFF))  # a byte-order mark, if any
     if body.lstrip().startswith("<"):
         raise OfficialDataError("TAIFEX futDataDown answered an HTML page, not CSV")
     lines = [line for line in body.splitlines() if line.strip()]
@@ -188,6 +193,7 @@ def parse_month(text: Any, request: Request) -> ParsedMonth:
             f"TAIFEX futDataDown header is not the 19 fields: {header[:5]}"
         )
     candidates: dict[date, list[dict[str, str]]] = {}
+    listed: set[date] = set()
     for cells in reader:
         if len(cells) < len(FIELDS):
             raise OfficialDataError(
@@ -209,10 +215,11 @@ def parse_month(text: Any, request: Request) -> ParsedMonth:
             raise OfficialDataError(
                 f"TAIFEX futDataDown has contract {row['契約']!r}, not {CONTRACT}"
             )
+        listed.add(day)
+        if row["交易時段"] != REGULAR_SESSION:
+            continue
         rows = candidates.setdefault(day, [])
-        if row["交易時段"] == REGULAR_SESSION and row["到期月份(週別)"] == near_month(
-            day
-        ):
+        if row["到期月份(週別)"] == near_month(day):
             rows.append(row)
     bars: list[FuturesBar] = []
     unusable: list[str] = []
@@ -223,7 +230,10 @@ def parse_month(text: Any, request: Request) -> ParsedMonth:
             unusable.append(day.isoformat())
         else:
             bars.append(bar)
-    return ParsedMonth(bars, unusable)
+    # The evening session belongs to the next trading day: before that day's
+    # regular session the CSV lists the day with after-hours rows only.
+    after_hours_only = sorted(day.isoformat() for day in listed - set(candidates))
+    return ParsedMonth(bars, unusable, after_hours_only)
 
 
 def fetch_month(request: Request, *, timeout_seconds: float = 30.0) -> bytes:
@@ -421,6 +431,7 @@ def backfill_futures_history(
                     for bar in item.parsed.bars
                 ),
                 unusable_dates=item.parsed.unusable_dates,
+                after_hours_only_dates=item.parsed.after_hours_only_dates,
                 counts={k: v for k, v in written.counts.items() if v},
             )
             if item.parsed.unusable_dates:

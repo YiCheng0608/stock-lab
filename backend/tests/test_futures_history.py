@@ -197,6 +197,30 @@ def test_a_missing_open_is_left_empty_and_a_day_without_close_is_listed():
     assert parsed.unusable_dates == [other.isoformat()]
 
 
+def test_a_day_with_after_hours_rows_only_is_not_a_gap():
+    """Before a session trades, the CSV already files the evening before under it (11/09 01:15)."""
+    friday, monday = date(2024, 10, 4), date(2024, 10, 7)
+    text = csv_text(
+        [friday],
+        [_row(monday, "202410", "盤後"), _row(monday, "202411", "盤後")],
+    )
+
+    parsed = fh.parse_month(text, _request())
+
+    assert [bar.trading_date for bar in parsed.bars] == [friday]
+    assert parsed.unusable_dates == []
+    assert parsed.after_hours_only_dates == [monday.isoformat()]
+
+
+def test_a_day_with_regular_rows_but_no_near_month_is_listed():
+    day = date(2024, 10, 4)
+    text = csv_text([], [_row(day, "202411", "一般"), _row(day, "202410", "盤後")])
+
+    parsed = fh.parse_month(text, _request())
+
+    assert parsed.bars == [] and parsed.unusable_dates == [day.isoformat()]
+
+
 @pytest.mark.parametrize(
     "text,message",
     [
