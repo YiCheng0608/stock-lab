@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.raw_paths import payload_file
 from app.clock import utcnow
+from app.coverage import SESSION_BASIS_START
 from app.db import SessionLocal
 from app.models import (
     GroupDailyScore,
@@ -394,7 +395,17 @@ def rescore_recent(db: Session, days: int) -> list[str]:
         .order_by(MarketBar.trading_date.desc())
         .limit(1)
     )
-    dates = _effective_trading_dates(db, benchmark.id, latest, days) if latest else []
+    # Not before the stock history: the earlier TAIEX rows are index history
+    # (Issue #563), days without stocks to score.
+    dates = (
+        [
+            day
+            for day in _effective_trading_dates(db, benchmark.id, latest, days)
+            if day >= SESSION_BASIS_START
+        ]
+        if latest
+        else []
+    )
     rescore_dates(db, dates)
     return [day.isoformat() for day in dates]
 

@@ -16,8 +16,11 @@ never a zero; the blank dates of the request are kept in the series'
 ``data_quality`` row so the market page can say 美股休市.
 
 A collect of Taipei session D asks for ``cosd`` = 10 days before the newest
-stored row (2024-09-30 when there is none) to ``coed`` = D − 1: every US
-session is before D.  A response that is not that series' CSV, has a
+stored row (``HISTORY_START``, 2023-09-01, when there is none) to ``coed`` =
+D − 1: every US session is before D.  A series whose oldest row is later than
+``HISTORY_START`` (it was first collected from 2024-09-30) is extended by
+``backfill_us_index_history``: one request per series, ``HISTORY_START`` to
+the day before its oldest row (Issue #563).  A response that is not that series' CSV, has a
 malformed line or a date outside the request is rejected whole (a
 ``us index bars`` non-core warning; the raw is kept).  A stored row keeps its
 close (a different close is a conflict) unless ``force``.
@@ -62,7 +65,10 @@ SOURCE_MISSING_OHLC = "source_missing_ohlc"
 NO_TURNOVER = "not_published"
 WARNING_PREFIX = "us index bars"
 QUALITY_ENTITY = US_INDEX_QUALITY_ENTITY
-HISTORY_START = date(2024, 9, 30)
+# About a year before the stock history (2024-09-30), so the 240-session
+# average exists on the stocks' first day (#1 6723720803, Issue #563).
+HISTORY_START = date(2023, 9, 1)
+BACKFILL_RUN_TYPE = "us_index_backfill"
 # Re-read this many days before the newest stored row, so a blank FRED filled
 # in later (or a late close) is still picked up.
 LOOKBACK_DAYS = 10
@@ -551,3 +557,191 @@ def collect_us_index_bars(
     return write_us_index_series(
         db, run, session, fetched, upsert_raw, warnings, force=force
     )
+
+
+# --- history (Issue #563) -----------------------------------------------------
+
+
+def earliest_stored(db: Session, series: UsIndex) -> date | None:
+    item = find_instrument(db, series)
+    if item is None:
+        return None
+    return db.scalar(
+        select(func.min(MarketBar.trading_date)).where(
+            MarketBar.instrument_id == item.id
+        )
+    )
+
+
+def history_window(earliest: date | None, session: date) -> tuple[date, date] | None:
+    """``cosd``/``coed`` that extend a series back to ``HISTORY_START``, or None.
+
+    None when the series has no row yet (the next collect reads from
+    ``HISTORY_START``) or already starts within ``LOOKBACK_DAYS`` of it (US
+    holidays right after the start never make it ask again).  Otherwise
+    ``HISTORY_START`` to the day before the oldest row: one request.
+    """
+
+    if earliest is None or earliest <= HISTORY_START + timedelta(days=LOOKBACK_DAYS):
+        return None
+    end = min(earliest - timedelta(days=1), session - timedelta(days=1))
+    return (HISTORY_START, end) if HISTORY_START <= end else None
+
+
+def backfill_us_index_history(
+    db: Session,
+    *,
+    session: date,
+    fetch: Callable[[str], Any] = fetch_csv,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Extend every series back to ``HISTORY_START`` (one FRED GET per series).
+
+    One ``us_index_backfill`` run.  Each series is fetched (``history_window``)
+    and written in its own savepoint like collect: a failed or rejected answer
+    writes no bar and is a warning (the raw is kept); a stored day keeps its
+    close unless ``force``.  The rows are the collect's (``store_us_index_bars``)
+    and point at this run's CSV.  The ``data_quality`` rows stay the collect's:
+    a history request says nothing about the latest session.  The indicator and
+    feature rows of the extended series are rebuilt at the end.
+    """
+
+    from app.models import IngestionRun
+
+    from .index_bars import rebuild_derived
+    from .pipeline import _upsert_raw_payload
+
+    run = IngestionRun(
+        run_type=BACKFILL_RUN_TYPE,
+        source="official",
+        run_date=session,
+        status="running",
+        started_at=utcnow(),
+        metadata_json={
+            "history_start": HISTORY_START.isoformat(),
+            "force": force,
+            "trigger": "manual",
+        },
+    )
+    db.add(run)
+    db.commit()
+    requests = []
+    skipped: dict[str, str] = {}
+    for series in SERIES:
+        earliest = earliest_stored(db, series)
+        window = history_window(earliest, session)
+        if window is None:
+            skipped[series.symbol] = (
+                "no_rows_yet" if earliest is None else "already_from_history_start"
+            )
+            continue
+        requests.append(SeriesRequest(series, *window))
+    db.commit()  # only reads: end the transaction before the HTTP calls
+    fetched = fetch_us_index_series(requests, fetch)
+    results: dict[str, Any] = {}
+    warnings: list[str] = []
+    changed: list[int] = []
+    try:
+        for item in fetched:
+            series, request = item.request.series, item.request
+            entry: dict[str, Any] = {
+                "series_id": series.series_id,
+                "endpoint": request.url,
+                "requested": [request.start.isoformat(), request.end.isoformat()],
+            }
+            if item.captured is not None:
+                # Kept as evidence whether or not the answer is used.
+                entry["raw_payload_id"] = _upsert_raw_payload(db, run, item.captured).id
+            try:
+                if item.parsed is None:
+                    raise item.error or OfficialDataError("no answer")
+                with db.begin_nested():
+                    written = store_us_index_bars(
+                        db,
+                        series,
+                        item.parsed.bars,
+                        entry["raw_payload_id"],
+                        force=force,
+                    )
+            except Exception as exc:
+                warnings.append(us_index_warning(series, exc))
+                entry.update(status="failed", error=f"{type(exc).__name__}: {exc}")
+                results[series.symbol] = entry
+                continue
+            if written.conflicts:
+                warnings.append(
+                    f"{WARNING_PREFIX} kept {len(written.conflicts)} stored "
+                    f"{EXCHANGE} {series.symbol} close(s) that differ from FRED "
+                    f"{series.series_id}"
+                )
+            if written.counts["inserted"] or written.counts["replaced"]:
+                changed.append(find_instrument(db, series).id)
+            entry.update(
+                status="complete",
+                counts=dict(written.counts),
+                conflicts=written.conflicts,
+                first_observation=(
+                    item.parsed.bars[0].trading_date.isoformat()
+                    if item.parsed.bars
+                    else None
+                ),
+                latest_observation=(
+                    item.parsed.latest.isoformat() if item.parsed.latest else None
+                ),
+                closed_dates=len(item.parsed.closed_dates),
+            )
+            results[series.symbol] = entry
+        indicators = rebuild_derived(db, changed)
+        failed = [
+            symbol for symbol, entry in results.items() if entry["status"] != "complete"
+        ]
+        run.status = "partial" if failed else "success"
+        run.records = sum(
+            entry.get("counts", {}).get("inserted", 0)
+            + entry.get("counts", {}).get("replaced", 0)
+            for entry in results.values()
+        )
+        run.finished_at = utcnow()
+        run.metadata_json = {
+            **run.metadata_json,
+            "series": results,
+            "skipped": skipped,
+            "requests": len(requests),
+            "warnings": warnings,
+            "indicators": indicators,
+        }
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        failed_run = db.get(IngestionRun, run.id)
+        if failed_run is not None:
+            failed_run.status = "failed"
+            failed_run.error = f"{type(exc).__name__}: {exc}"
+            failed_run.finished_at = utcnow()
+            db.commit()
+        raise
+    return {
+        "status": run.status,
+        "run_id": run.id,
+        "requests": len(requests),
+        "series": {
+            symbol: {
+                key: entry.get(key)
+                for key in ("status", "requested", "counts", "error")
+                if key in entry
+            }
+            for symbol, entry in results.items()
+        },
+        "skipped": skipped,
+        "indicators": indicators,
+        "warnings": warnings,
+    }
+
+
+def run_us_index_history(*, force: bool = False) -> dict[str, Any]:
+    from app.db import SessionLocal
+
+    from .index_bars import taipei_today
+
+    with SessionLocal() as db:
+        return backfill_us_index_history(db, session=taipei_today(), force=force)

@@ -21,6 +21,7 @@ from audit_lib import (
     INDICATOR_VERSION,
     PRICE_BASIS,
     REFERENCE_TOLERANCE,
+    SESSION_BASIS_START,
     Action,
     Check,
     RawFiles,
@@ -135,11 +136,13 @@ class Context:
         self.raw_payloads = self.con.execute(
             "select id, endpoint, data_as_of, collected_at, payload_path from raw_payloads order by collected_at, id"
         ).fetchall()
-        # Taiwan bars only: the US indexes (market US, Issue #547) start at
-        # their own history start and include Taiwan holidays.
+        # The stock history: the US indexes (market US, Issue #547) include
+        # Taiwan holidays, and the indexes and TX reach back a year before the
+        # stocks (2023-09-01, Issue #563).
         self.first_day, self.last_day = self.con.execute(
             "select min(b.trading_date), max(b.trading_date) from market_bars b"
             " join instruments i on i.id = b.instrument_id where i.market = 'TW'"
+            " and i.instrument_type in ('stock', 'ipo', 'etf')"
         ).fetchone()
 
     def first_captures(self) -> set[int]:
@@ -734,7 +737,13 @@ def actions_missing(ctx: Context) -> Check:
 
 
 # market_bars sources whose raw covers many trading days (#547 decision 6717301923).
-MULTI_DATE_SOURCES = ("twse_index_ohlcv", "tpex_index_ohlcv", "fred_close")
+# worker.futures_history.SOURCE (Issue #563): one futDataDown CSV per month.
+MULTI_DATE_SOURCES = (
+    "twse_index_ohlcv",
+    "tpex_index_ohlcv",
+    "fred_close",
+    "taifex_futdatadown",
+)
 MULTI_DATE_SQL = ", ".join(f"'{source}'" for source in MULTI_DATE_SOURCES)
 
 
@@ -871,7 +880,8 @@ def liquidity_lots(
 ) -> float | None:
     """candidate_score.md candidate_score_v6: 20-session average volume in lots.
 
-    Sessions are the TAIEX index bar dates; a suspended bar is skipped, a
+    Sessions are the TAIEX index bar dates from ``SESSION_BASIS_START`` on
+    (the app's ``verified_taiex_sessions``, Issue #563); a suspended bar is skipped, a
     session without a bar is 0 lots with an official no-trade row and missing
     otherwise; missing data, a date that is not a session or fewer sessions
     than the window (since listing) give None.
@@ -883,7 +893,8 @@ def liquidity_lots(
             for row in ctx.con.execute(
                 "select distinct b.trading_date from market_bars b join instruments i on i.id=b.instrument_id"
                 " where i.instrument_type='index' and i.exchange='TWSE' and i.symbol in ('TAIEX','TWII')"
-                " order by b.trading_date"
+                " and b.trading_date >= ? order by b.trading_date",
+                (SESSION_BASIS_START,),
             )
         ]
     sessions = [d for d in ctx.taiex_days if d <= day]
@@ -1493,7 +1504,11 @@ def _check_candidates(
 
 
 def _catalyst_window(ctx: Context, day: str) -> list[str]:
-    """The 20 TAIEX sessions (not suspended) ending ``day``, oldest first."""
+    """The 20 TAIEX sessions (not suspended) ending ``day``, oldest first.
+
+    Not before ``SESSION_BASIS_START`` (``pipeline._benchmark_session_dates``,
+    Issue #563).
+    """
 
     cache = ctx.catalyst_windows
     if day not in cache:
@@ -1504,6 +1519,7 @@ def _catalyst_window(ctx: Context, day: str) -> list[str]:
             " order by b.trading_date desc limit 20",
             (day,),
         ).fetchall()
+        rows = [row for row in rows if str(row[0]) >= SESSION_BASIS_START]
         cache[day] = sorted(str(row[0]) for row in rows)
     return cache[day]
 

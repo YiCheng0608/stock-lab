@@ -22,6 +22,7 @@ import pytest
 from sqlalchemy import create_engine, null
 from sqlalchemy.orm import sessionmaker
 
+import app.coverage as product_coverage
 import app.indicators as product_indicators
 import worker.mops_events as mops_events
 import worker.pipeline as pipeline
@@ -778,6 +779,28 @@ def test_a_multi_date_report_only_has_to_reach_the_row_day(fx):
     assert fx.context().first_day is None
 
 
+def test_a_futdatadown_month_is_a_multi_date_report(fx):
+    """Issue #563: one TX history CSV per month, data_as_of its last row."""
+    from worker import futures_history
+
+    tx = fx.instrument("TAIFEX", "TX", kind="futures")
+    month_raw = fx.raw(futures_history.ENDPOINT, T, {"csv": ""}, query="?x=1")
+    fx.bar(
+        tx, T - timedelta(days=1), 20000.0, raw=month_raw, source=futures_history.SOURCE
+    )
+    fx.commit()
+    fx.sql(
+        "update market_bars set collected_at = ?",
+        (datetime.combine(T, datetime.min.time()) + timedelta(hours=11)).isoformat(" "),
+    )
+
+    check = audit_checks.provenance(fx.context())
+
+    assert futures_history.SOURCE in audit_checks.MULTI_DATE_SOURCES
+    assert "market_bars:raw_date_not_trading_date" not in check.failures
+    assert "market_bars:raw_date_before_trading_date" not in check.failures
+
+
 # --- 指標、比率、候選、族群：產品寫入的列要通過 -------------------------------------
 
 
@@ -1104,6 +1127,39 @@ def test_the_audit_pins_the_product_versions_it_recomputes():
     assert audit_lib.INDICATOR_VERSION == product_indicators.INDICATOR_VERSION
     assert audit_lib.PRICE_BASIS == product_indicators.PRICE_BASIS
     assert audit_lib.REFERENCE_TOLERANCE == pipeline.ACTION_REFERENCE_TOLERANCE
+    assert (
+        audit_lib.SESSION_BASIS_START
+        == product_coverage.SESSION_BASIS_START.isoformat()
+    )
+
+
+def test_index_history_before_the_stock_history_is_never_a_stock_session(fx):
+    """Issue #563: TAIEX rows from 2023-09 on, stocks from 2024-09-30 on."""
+    basis = product_coverage.SESSION_BASIS_START
+    pre = [basis - timedelta(days=offset) for offset in (3, 4, 5, 6, 7)]
+    sessions = [basis + timedelta(days=offset) for offset in (0, 1, 2, 3, 4, 7)]
+    taiex = fx.instrument("TWSE", "TAIEX", "index")
+    stock = fx.instrument("TWSE", "2330")
+    for i, day in enumerate(sorted(pre) + sessions):
+        fx.bar(taiex, day, 21000.0 + i, source="twse_index_ohlcv")
+    for i, day in enumerate(sessions):
+        fx.bar(stock, day, 1000.0 + i, volume=2000 * (i + 1))
+    fx.commit()
+
+    ctx = fx.context()
+
+    assert (ctx.first_day, ctx.last_day) == (
+        basis.isoformat(),
+        sessions[-1].isoformat(),
+    )
+    assert audit_checks._catalyst_window(ctx, sessions[2].isoformat()) == [
+        day.isoformat() for day in sessions[:3]
+    ]
+    assert (
+        audit_checks.liquidity_lots(ctx, stock.id, sessions[2].isoformat(), 3, 1000)
+        == (2000 + 4000 + 6000) / 3 / 1000
+    )
+    assert ctx.taiex_days == [day.isoformat() for day in sessions]
 
 
 def evidence(

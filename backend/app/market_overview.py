@@ -8,19 +8,34 @@ alone; a row of another date is never shown in its place.
 instruments (``worker.us_index_bars``) and their ``data_quality`` rows: the
 newest close of each, its change from the stored close before it, and whether
 it is the expected US session (the weekday before the dashboard date).
+
+``taiex_ma60`` (Issue #561) reads TAIEX's ``market_bars`` close and the stored
+``technical_indicators`` ``ma60`` (``indicators/v1``) of the dashboard date:
+whether the close is above its 60-session average, as the research filter R3
+defines it (``app.strategies.regime``: close strictly above MA60, 60 closes
+needed), and the latest runs of sessions above it.  Display only: no strategy,
+candidate or group reads it.
 """
 
 from __future__ import annotations
 
+import math
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import desc, select
+from sqlalchemy import and_, desc, select
 from sqlalchemy.orm import Session
 
 from .clock import utcnow
 from .domain import US_INDEX_EXCHANGE, US_INDEX_QUALITY_ENTITY, US_INDEXES, UsIndex
-from .models import DataQuality, Instrument, MarketBar, MarketSummary
+from .indicators import INDICATOR_VERSION, PRICE_BASIS, REQUIRED_BARS
+from .models import (
+    DataQuality,
+    Instrument,
+    MarketBar,
+    MarketSummary,
+    TechnicalIndicator,
+)
 
 EXCHANGES = ("TWSE", "TPEx")
 INDEX_LABELS = {"TWSE": "加權指數", "TPEx": "櫃買指數"}
@@ -124,7 +139,184 @@ def market_overview(db: Session, as_of: str | None) -> dict[str, Any]:
     return {
         "trading_date": as_of,
         "exchanges": exchanges,
+        "taiex_ma60": taiex_ma60(db, as_of),
         "foreign_indices": foreign_indices(db, as_of),
+    }
+
+
+# --- TAIEX against its MA60 (Issue #561) ---------------------------------------
+
+MA60_REQUIRED_CLOSES = REQUIRED_BARS["ma60"]
+# Runs above MA60 are looked for in the last SEGMENT_SESSIONS TAIEX sessions
+# through the dashboard date; the newest MAX_SEGMENTS of them are returned.
+SEGMENT_SESSIONS = 250
+MAX_SEGMENTS = 3
+TAIEX_SOURCE_LABEL = "臺灣證券交易所"
+
+
+def _taiex_instrument(db: Session) -> Instrument | None:
+    # The benchmark the research run reads (worker.pipeline._benchmark_instrument).
+    return db.scalar(
+        select(Instrument)
+        .where(
+            Instrument.symbol == "TAIEX",
+            Instrument.instrument_type == "index",
+            Instrument.status == "active",
+        )
+        .limit(1)
+    )
+
+
+def _above(close: float | None, ma60: float | None) -> bool:
+    """R3 on one day: the close strictly above the stored MA60."""
+
+    return (
+        ma60 is not None
+        and close is not None
+        and math.isfinite(close)
+        and close > 0
+        and close > ma60
+    )
+
+
+def _segments(rows: list[Any], earlier_above: bool) -> list[dict[str, Any]]:
+    """Runs of consecutive TAIEX sessions above MA60 in ``rows`` (oldest first), newest first.
+
+    ``earlier_above``: the session before ``rows`` was above too, so the first
+    run started before the window (``starts_before_window``).
+    """
+
+    runs: list[list[Any]] = []
+    current: list[Any] | None = None
+    for row in rows:
+        if _above(row.close, row.ma60):
+            if current is None:
+                current = []
+                runs.append(current)
+            current.append(row)
+        else:
+            current = None
+    last = rows[-1].trading_date if rows else None
+    result = [
+        {
+            "start": run[0].trading_date.isoformat(),
+            "end": run[-1].trading_date.isoformat(),
+            "sessions": len(run),
+            "ongoing": run[-1].trading_date == last,
+            "starts_before_window": earlier_above and run[0] is rows[0],
+        }
+        for run in runs
+    ]
+    return list(reversed(result))[:MAX_SEGMENTS]
+
+
+def taiex_ma60(db: Session, as_of: str | None) -> dict[str, Any]:
+    """TAIEX's close against its stored MA60 on ``as_of`` (module docstring).
+
+    ``status``: ``available`` (``above`` is R3; ``position`` is ``above``,
+    ``below`` or ``equal``), ``insufficient`` (fewer than 60 usable closes
+    through ``as_of``: ``close_count``) or ``unavailable`` with ``reason``
+    ``no_verified_session``, ``not_collected`` (no TAIEX bar), ``row_date_mismatch``
+    (TAIEX's newest bar is of another date: ``latest_trading_date``),
+    ``indicator_not_computed`` (no ``indicators/v1`` row for the bar) or
+    ``ma60_unavailable`` (MA60 is null for another reason: ``null_reason``).
+    """
+
+    base: dict[str, Any] = {
+        "trading_date": as_of,
+        "required_closes": MA60_REQUIRED_CLOSES,
+    }
+    if not as_of:
+        return {**base, "status": "unavailable", "reason": "no_verified_session"}
+    session = date.fromisoformat(as_of)
+    instrument = _taiex_instrument(db)
+    rows = (
+        db.execute(
+            select(
+                MarketBar.trading_date,
+                MarketBar.close,
+                MarketBar.source,
+                TechnicalIndicator.id.label("indicator_id"),
+                TechnicalIndicator.ma60,
+                TechnicalIndicator.bar_count,
+                TechnicalIndicator.null_reasons,
+                TechnicalIndicator.computed_at,
+            )
+            .outerjoin(
+                TechnicalIndicator,
+                and_(
+                    TechnicalIndicator.instrument_id == MarketBar.instrument_id,
+                    TechnicalIndicator.trading_date == MarketBar.trading_date,
+                    TechnicalIndicator.formula_version == INDICATOR_VERSION,
+                    TechnicalIndicator.price_basis == PRICE_BASIS,
+                ),
+            )
+            .where(
+                MarketBar.instrument_id == instrument.id,
+                MarketBar.trading_date <= session,
+            )
+            .order_by(desc(MarketBar.trading_date))
+            # One more than the window: whether its first run started earlier.
+            .limit(SEGMENT_SESSIONS + 1)
+        ).all()
+        if instrument is not None
+        else []
+    )
+    if not rows:
+        return {**base, "status": "unavailable", "reason": "not_collected"}
+    latest = rows[0]
+    if latest.trading_date != session:
+        return {
+            **base,
+            "status": "unavailable",
+            "reason": "row_date_mismatch",
+            "latest_trading_date": latest.trading_date.isoformat(),
+        }
+    if latest.indicator_id is None:
+        return {**base, "status": "unavailable", "reason": "indicator_not_computed"}
+    if latest.ma60 is None:
+        null_reason = (latest.null_reasons or {}).get("ma60")
+        if null_reason == "insufficient_bars":
+            return {
+                **base,
+                "status": "insufficient",
+                "reason": "insufficient_closes",
+                "close_count": latest.bar_count,
+            }
+        return {
+            **base,
+            "status": "unavailable",
+            "reason": "ma60_unavailable",
+            "null_reason": null_reason,
+        }
+    window = list(reversed(rows[:SEGMENT_SESSIONS]))
+    earlier = rows[SEGMENT_SESSIONS] if len(rows) > SEGMENT_SESSIONS else None
+    close, ma60 = latest.close, latest.ma60
+    above = _above(close, ma60)
+    return {
+        **base,
+        "status": "available",
+        "close": close,
+        "ma60": ma60,
+        "above": above,
+        "position": "above" if above else "equal" if close == ma60 else "below",
+        "close_count": latest.bar_count,
+        "segments": _segments(
+            window, earlier is not None and _above(earlier.close, earlier.ma60)
+        ),
+        "segment_window": {
+            "start": window[0].trading_date.isoformat(),
+            "end": as_of,
+            "sessions": len(window),
+            "max_segments": MAX_SEGMENTS,
+        },
+        "source": {
+            "label": TAIEX_SOURCE_LABEL,
+            "bar_source": latest.source,
+            "formula_version": INDICATOR_VERSION,
+            "computed_at": _iso_utc(latest.computed_at),
+            "data_as_of": as_of,
+        },
     }
 
 

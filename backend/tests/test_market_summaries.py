@@ -899,6 +899,13 @@ def test_dashboard_overview_without_a_verified_session(api_db):
     overview = payload["market_overview"]
     # The US indexes (Issue #547) stand on their own; none is collected here.
     foreign = overview.pop("foreign_indices")
+    # So does TAIEX against its MA60 (Issue #561).
+    assert overview.pop("taiex_ma60") == {
+        "trading_date": None,
+        "required_closes": 60,
+        "status": "unavailable",
+        "reason": "no_verified_session",
+    }
     assert [(item["symbol"], item["reason"]) for item in foreign] == [
         ("SPX", "not_collected"),
         ("IXIC", "not_collected"),

@@ -209,9 +209,33 @@ export type ForeignIndex = {
   source?: { label: string | null; copyright: string | null; collected_at: string | null; data_as_of?: string | null; raw_payload_id?: number | null }
 }
 
+// market_overview.taiex_ma60 (#561): TAIEX's close against its stored MA60 (indicators/v1) on dashboard.as_of, as
+// the research filter R3 defines it (close strictly above MA60, 60 closes needed). Display only.
+export type TaiexMa60Segment = { start: string; end: string; sessions: number; ongoing: boolean; starts_before_window: boolean }
+export type TaiexMa60 = {
+  trading_date: string | null
+  required_closes: number
+  status: 'available' | 'insufficient' | 'unavailable' | string
+  // insufficient: insufficient_closes; unavailable: no_verified_session | not_collected | row_date_mismatch |
+  // indicator_not_computed | ma60_unavailable
+  reason?: string
+  latest_trading_date?: string | null
+  null_reason?: string | null
+  close_count?: number | null
+  close?: number | null
+  ma60?: number | null
+  above?: boolean
+  position?: 'above' | 'below' | 'equal' | string
+  // Newest first, at most segment_window.max_segments.
+  segments?: TaiexMa60Segment[]
+  segment_window?: { start: string; end: string; sessions: number; max_segments: number }
+  source?: { label: string | null; bar_source: string | null; formula_version: string; computed_at: string | null; data_as_of: string | null }
+}
+
 export type MarketOverview = {
   trading_date: string | null
   exchanges: MarketOverviewExchange[]
+  taiex_ma60?: TaiexMa60
   foreign_indices?: ForeignIndex[]
 }
 
