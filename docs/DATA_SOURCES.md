@@ -296,7 +296,7 @@ S&P 500、NASDAQ 綜合指數、道瓊工業指數與費城半導體指數的每
 | `DJI` 道瓊工業指數 | `DJIA` | Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved. |
 | `SOX` 費城半導體指數 | `NASDAQSOX` | Copyright © 2025, NASDAQ, Inc. |
 
-- **請求**：`GET https://fred.stlouisfed.org/graph/fredgraph.csv?id=<序列>&cosd=<起>&coed=<迄>`，用 HTTP/1.1（#547 實測時 HTTP/2 串流會被伺服器斷掉），每個序列 1 個請求，序列之間至少間隔 2 秒；transport 錯誤、429 或 5xx 隔 5 秒重試 1 次，不再多試。只在抓當日快照、且該交易日 D 的 TAIEX 列已寫入的 collect 請求：`coed` 是 D 的前一天（美股收盤都在 D 之前），`cosd` 是已存最後一根往前 10 天（沒有任何列時從 2024-09-30 起，也就是第一次 collect 一次抓完歷史，不另做回補）。
+- **請求**：`GET https://fred.stlouisfed.org/graph/fredgraph.csv?id=<序列>&cosd=<起>&coed=<迄>`，用 HTTP/1.1（#547 實測時 HTTP/2 串流會被伺服器斷掉），每個序列 1 個請求，序列之間至少間隔 2 秒；transport 錯誤、429 或 5xx 隔 5 秒重試 1 次，不再多試。只在抓當日快照、且該交易日 D 的 TAIEX 列已寫入的 collect 請求：`coed` 是 D 的前一天（美股收盤都在 D 之前），`cosd` 是已存最後一根往前 10 天（沒有任何列時從 2024-09-30 起，也就是第一次 collect 一次抓完歷史，不另做回補）。四個請求在 collect 的抓取階段、寫入任何列之前發出（先讀完區間並結束讀取交易），寫入時只寫 raw、日線與 `data_quality`，FRED 慢或卡住不會讓 collect 握著 SQLite 寫鎖等待（PR #558 review）。寫入整步是一個 savepoint、每個序列再各一個：其中任何資料庫錯誤只撤回該部分並記非核心 warning，台股的 collect 照常 commit。
 - **回應**：兩欄 CSV，表頭 `observation_date,<序列>`；值只有收盤（點）。美股休市日是空值列（`2024-11-28,`，也可能是 `.`），不寫、不補零，但記在該序列的 `data_quality`（`entity_type=us_index_series`、`entity_key=US:<代號>`、`as_of_date`＝D）的 `checks_json.closed_dates`。
 - **拒收**：回應不是文字、第一行不是該序列的表頭（例如被導到 HTML 驗證頁）、某行不是「日期,值」、有日期在 `cosd`～`coed` 之外、同一天兩行、收盤讀不出或不是正數，或整份沒有任何一行時，該序列整份不寫，記 `noncore_warnings`（`us index bars unavailable for US <代號> (<序列>): …`），`data_quality` 記 `failed` 與原因；raw 照存（`source=fred`），其他序列照常。
 - **欄位**：開高低 null、`price_reason=source_missing_ohlc`；`volume` null；`turnover` 0／`unavailable`／`not_published`；`source=fred_close`；`raw_payload_id` 指向該次 CSV（raw 的 `data_as_of` 是 CSV 最後一個有值的日期，所以一份 raw 涵蓋多個交易日，同 #552 的月報）。
