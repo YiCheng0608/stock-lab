@@ -779,6 +779,28 @@ def test_a_multi_date_report_only_has_to_reach_the_row_day(fx):
     assert fx.context().first_day is None
 
 
+def test_a_futdatadown_month_is_a_multi_date_report(fx):
+    """Issue #563: one TX history CSV per month, data_as_of its last row."""
+    from worker import futures_history
+
+    tx = fx.instrument("TAIFEX", "TX", kind="futures")
+    month_raw = fx.raw(futures_history.ENDPOINT, T, {"csv": ""}, query="?x=1")
+    fx.bar(
+        tx, T - timedelta(days=1), 20000.0, raw=month_raw, source=futures_history.SOURCE
+    )
+    fx.commit()
+    fx.sql(
+        "update market_bars set collected_at = ?",
+        (datetime.combine(T, datetime.min.time()) + timedelta(hours=11)).isoformat(" "),
+    )
+
+    check = audit_checks.provenance(fx.context())
+
+    assert futures_history.SOURCE in audit_checks.MULTI_DATE_SOURCES
+    assert "market_bars:raw_date_not_trading_date" not in check.failures
+    assert "market_bars:raw_date_before_trading_date" not in check.failures
+
+
 # --- 指標、比率、候選、族群：產品寫入的列要通過 -------------------------------------
 
 

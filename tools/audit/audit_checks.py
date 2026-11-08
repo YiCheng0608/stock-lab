@@ -737,7 +737,13 @@ def actions_missing(ctx: Context) -> Check:
 
 
 # market_bars sources whose raw covers many trading days (#547 decision 6717301923).
-MULTI_DATE_SOURCES = ("twse_index_ohlcv", "tpex_index_ohlcv", "fred_close")
+# worker.futures_history.SOURCE (Issue #563): one futDataDown CSV per month.
+MULTI_DATE_SOURCES = (
+    "twse_index_ohlcv",
+    "tpex_index_ohlcv",
+    "fred_close",
+    "taifex_futdatadown",
+)
 MULTI_DATE_SQL = ", ".join(f"'{source}'" for source in MULTI_DATE_SOURCES)
 
 
