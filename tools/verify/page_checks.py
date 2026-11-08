@@ -1537,13 +1537,18 @@ def t16(run: Run) -> str:
     )
     start, chart = text.find(INDEX_TABLE_TITLE), text.find(CHART_TITLES[0])
     expect(
-        text.find(OVERVIEW_TITLE) < start and start >= 0 and (chart < 0 or start < chart),
+        text.find(OVERVIEW_TITLE) < start
+        and start >= 0
+        and (chart < 0 or start < chart),
         f"缺整行 `{INDEX_TABLE_TITLE}`，或不在 `{OVERVIEW_TITLE}` 與 `{CHART_TITLES[0]}` 之間",
     )
     us_title = us_group_title(overview)
     tw = text.find(TW_GROUP_TITLE, start)
     us = text.find(us_title, tw if tw >= 0 else start)
-    expect(tw > start and us > tw, f"`{INDEX_TABLE_TITLE}` 之後缺分組 `{TW_GROUP_TITLE}`、`{us_title}`")
+    expect(
+        tw > start and us > tw,
+        f"`{INDEX_TABLE_TITLE}` 之後缺分組 `{TW_GROUP_TITLE}`、`{us_title}`",
+    )
     found, at = [], tw
     for row in rows:
         line = index_row_line(row)
@@ -1556,7 +1561,10 @@ def t16(run: Run) -> str:
         at = k
         found.append(f"`{line}`")
     for line in (TAIFEX_ATTRIBUTION, FRED_ATTRIBUTION):
-        expect(text.find(line, start) >= 0, f"`{INDEX_TABLE_TITLE}` 之後缺整行 `{line}`（資料說明）")
+        expect(
+            text.find(line, start) >= 0,
+            f"`{INDEX_TABLE_TITLE}` 之後缺整行 `{line}`（資料說明）",
+        )
     return f"{us_title}；" + "；".join(found)
 
 

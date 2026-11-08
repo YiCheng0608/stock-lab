@@ -694,7 +694,9 @@ def test_t15_fails_on_a_wrong_close_a_missing_chart_or_attribution(tmp_path):
     with pytest.raises(page_checks.Fail, match="資料表缺最新一根"):
         page_checks.t15(run)
     run = FakeRun(
-        tmp_path, _payloads(), _chart_pages(tpex=TPEX_PAGE.replace("櫃買指數日線\n", ""))
+        tmp_path,
+        _payloads(),
+        _chart_pages(tpex=TPEX_PAGE.replace("櫃買指數日線\n", "")),
     )
     with pytest.raises(page_checks.Fail, match="缺整行 `櫃買指數日線`"):
         page_checks.t15(run)
@@ -740,9 +742,9 @@ def test_t15_newest_row_skips_a_suspended_day(tmp_path):
         **_payloads(),
         TAIEX_PATH: _taiex_bars([(21, 46887.77), (22, 46041.43), (23, None)]),
     }
-    page = TAIEX_PAGE.replace("加權指數日線\n資料 2026/10/22", "加權指數日線\n資料 2026/10/23").replace(
-        "最近 2 根", "最近 3 根"
-    )
+    page = TAIEX_PAGE.replace(
+        "加權指數日線\n資料 2026/10/22", "加權指數日線\n資料 2026/10/23"
+    ).replace("最近 2 根", "最近 3 根")
     run = FakeRun(tmp_path, payloads, _chart_pages(taiex=page))
     assert "`2026/10/22\t46,041.43" in page_checks.t15(run)
 
@@ -810,7 +812,12 @@ def _indexes(**changes):
             change_pct=None,
             change_status="contract_roll",
             contract_month="202611",
-            ma60={"status": "available", "required_closes": 60, "ma60": 46502.4, "position": "below"},
+            ma60={
+                "status": "available",
+                "required_closes": 60,
+                "ma60": 46502.4,
+                "position": "below",
+            },
             source={"label": "臺灣期貨交易所"},
         ),
         _index("spx", "us", close=7353.73, change=-334.89, change_pct=-0.043557),
@@ -820,7 +827,11 @@ def _indexes(**changes):
             close=24579.42,
             change=264.42,
             change_pct=0.010875,
-            ma60={"status": "unavailable", "required_closes": 60, "reason": "indicator_not_computed"},
+            ma60={
+                "status": "unavailable",
+                "required_closes": 60,
+                "reason": "indicator_not_computed",
+            },
         ),
         _index(
             "dji",
@@ -830,7 +841,12 @@ def _indexes(**changes):
             change_pct=-0.000784,
             trading_date="2026-10-20",
             freshness="us_market_closed",
-            ma60={"status": "available", "required_closes": 60, "ma60": 51285.73, "position": "equal"},
+            ma60={
+                "status": "available",
+                "required_closes": 60,
+                "ma60": 51285.73,
+                "position": "equal",
+            },
         ),
         {
             "key": "sox",
@@ -844,7 +860,11 @@ def _indexes(**changes):
     ]
     for key, extra in changes.items():
         rows = [{**row, **extra} if row["key"] == key else row for row in rows]
-    return {"dashboard": {"market_overview": {"trading_date": "2026-10-22", "indexes": rows}}}
+    return {
+        "dashboard": {
+            "market_overview": {"trading_date": "2026-10-22", "indexes": rows}
+        }
+    }
 
 
 INDEX_PAGE = (
@@ -869,8 +889,14 @@ def test_t16_passes_on_the_index_table(tmp_path):
     run = FakeRun(tmp_path, _indexes(), {"market-1280": INDEX_PAGE})
     summary = page_checks.t16(run)
     assert summary.startswith("美股（前一交易日）；")
-    assert "`台指期近月 合約 2026/11\t46,110\t換月\t換月\t2026/10/22\t之下 季線 46,502\t臺灣期貨交易所`" in summary
-    assert "`費城半導體指數\t—\t—\t—\t無資料：最近一次擷取失敗（2026/10/22）\t—\tFRED`" in summary
+    assert (
+        "`台指期近月 合約 2026/11\t46,110\t換月\t換月\t2026/10/22\t之下 季線 46,502\t臺灣期貨交易所`"
+        in summary
+    )
+    assert (
+        "`費城半導體指數\t—\t—\t—\t無資料：最近一次擷取失敗（2026/10/22）\t—\tFRED`"
+        in summary
+    )
 
 
 def test_t16_fails_on_a_wrong_cell_order_or_group(tmp_path):
@@ -886,20 +912,29 @@ def test_t16_fails_on_a_wrong_cell_order_or_group(tmp_path):
         page_checks.t16(run)
     # One US row 非最新: the group is 美股 only (decision 6725073156).
     stale = _indexes(spx={"freshness": "stale"})
-    page = INDEX_PAGE.replace("2026/10/21\t之上 季線 44,012.50\tFRED", "2026/10/21 非最新\t之上 季線 44,012.50\tFRED")
+    page = INDEX_PAGE.replace(
+        "2026/10/21\t之上 季線 44,012.50\tFRED",
+        "2026/10/21 非最新\t之上 季線 44,012.50\tFRED",
+    )
     run = FakeRun(tmp_path, stale, {"market-1280": page})
     with pytest.raises(page_checks.Fail, match="缺分組 `台股`、`美股`"):
         page_checks.t16(run)
-    run = FakeRun(tmp_path, stale, {"market-1280": page.replace("美股（前一交易日）\n", "美股\n")})
+    run = FakeRun(
+        tmp_path, stale, {"market-1280": page.replace("美股（前一交易日）\n", "美股\n")}
+    )
     assert page_checks.t16(run).startswith("美股；")
     # The table after the chart, or without the attributions in 資料說明.
     page = INDEX_PAGE.replace("技術指標 indicators/v1\n加權指數日線\n", "").replace(
         "大盤概況\n", "大盤概況\n加權指數日線\n"
     )
     run = FakeRun(tmp_path, _indexes(), {"market-1280": page})
-    with pytest.raises(page_checks.Fail, match="不在 `大盤概況` 與 `加權指數日線` 之間"):
+    with pytest.raises(
+        page_checks.Fail, match="不在 `大盤概況` 與 `加權指數日線` 之間"
+    ):
         page_checks.t16(run)
-    run = FakeRun(tmp_path, _indexes(), {"market-1280": INDEX_PAGE.replace(f"{FRED}\n", "")})
+    run = FakeRun(
+        tmp_path, _indexes(), {"market-1280": INDEX_PAGE.replace(f"{FRED}\n", "")}
+    )
     with pytest.raises(page_checks.Fail, match="資料說明"):
         page_checks.t16(run)
     # A Taiwan row listed under the US group.
@@ -910,7 +945,11 @@ def test_t16_fails_on_a_wrong_cell_order_or_group(tmp_path):
     run = FakeRun(tmp_path, _indexes(), {"market-1280": page})
     with pytest.raises(page_checks.Fail, match="tx：不在 `台股` 分組內"):
         page_checks.t16(run)
-    run = FakeRun(tmp_path, {"dashboard": {"market_overview": {"indexes": []}}}, {"market-1280": INDEX_PAGE})
+    run = FakeRun(
+        tmp_path,
+        {"dashboard": {"market_overview": {"indexes": []}}},
+        {"market-1280": INDEX_PAGE},
+    )
     with pytest.raises(page_checks.Fail, match="indexes 的列是"):
         page_checks.t16(run)
 

@@ -51,7 +51,9 @@ AS_OF = DAYS[-1]
 TAIEX_CLOSES = [20000.0 + 15 * i for i in range(80)]  # rising: above MA60
 TPEX_CLOSES = [300.0 - 0.5 * i for i in range(40)]  # only 40 sessions
 TX_CLOSES = [20100.0 - 10 * i for i in range(80)]  # falling: below MA60
-SPX_CLOSES = [6000.0 + (i % 7) for i in range(79)]  # through the US session before AS_OF
+SPX_CLOSES = [
+    6000.0 + (i % 7) for i in range(79)
+]  # through the US session before AS_OF
 
 
 @pytest.fixture
@@ -93,7 +95,9 @@ def _instrument(db, exchange, symbol, kind="index"):
 
 def _bars(db, instrument, days, closes, source, **extra):
     for i, (day, close) in enumerate(zip(days, closes)):
-        values = {key: value(i) if callable(value) else value for key, value in extra.items()}
+        values = {
+            key: value(i) if callable(value) else value for key, value in extra.items()
+        }
         db.add(
             MarketBar(
                 instrument_id=instrument.id,
@@ -124,9 +128,13 @@ def _summary(db, exchange, day, close, change, pct, method):
             index_change_pct=pct,
             change_pct_method=method,
             turnover=1,
-            turnover_scope="twse_all_securities" if exchange == "TWSE" else "tpex_stocks",
+            turnover_scope="twse_all_securities"
+            if exchange == "TWSE"
+            else "tpex_stocks",
             breadth_scope="stocks",
-            source="twse_mi_index" if exchange == "TWSE" else "tpex_mainborad_highlight",
+            source="twse_mi_index"
+            if exchange == "TWSE"
+            else "tpex_mainborad_highlight",
         )
     )
 
@@ -137,8 +145,20 @@ def _seed(factory, *, tx_months=None, tpex_summary_day=AS_OF, run=True):
     tx_months = tx_months or (lambda i: "202604")
     with factory() as db:
         # The TAIEX bars are fixture rows, so they are verified sessions for the TX change.
-        _bars(db, _instrument(db, "TWSE", "TAIEX"), DAYS, TAIEX_CLOSES, "fixture_twse_index")
-        _bars(db, _instrument(db, "TPEx", "TPEX"), DAYS[-40:], TPEX_CLOSES, "tpex_index_ohlcv")
+        _bars(
+            db,
+            _instrument(db, "TWSE", "TAIEX"),
+            DAYS,
+            TAIEX_CLOSES,
+            "fixture_twse_index",
+        )
+        _bars(
+            db,
+            _instrument(db, "TPEx", "TPEX"),
+            DAYS[-40:],
+            TPEX_CLOSES,
+            "tpex_index_ohlcv",
+        )
         _bars(
             db,
             _instrument(db, "TAIFEX", "TX", "futures"),
@@ -150,7 +170,15 @@ def _seed(factory, *, tx_months=None, tpex_summary_day=AS_OF, run=True):
             settlement_price=lambda i: TX_CLOSES[i],
         )
         _bars(db, _instrument(db, "US", "SPX"), DAYS[:-1], SPX_CLOSES, "fred_close")
-        _summary(db, "TWSE", AS_OF, TAIEX_CLOSES[-1], 15.0, 15.0 / TAIEX_CLOSES[-2], "official")
+        _summary(
+            db,
+            "TWSE",
+            AS_OF,
+            TAIEX_CLOSES[-1],
+            15.0,
+            15.0 / TAIEX_CLOSES[-2],
+            "official",
+        )
         _summary(db, "TPEx", tpex_summary_day, 280.5, -0.5, -0.5 / 281.0, "derived")
         db.flush()
         compute_market_indicators(db, as_of=AS_OF)
@@ -185,7 +213,9 @@ def _stored_ma60(factory, exchange, symbol, day):
 def _rows(factory, as_of=AS_OF):
     with factory() as db:
         value = as_of.isoformat() if as_of else None
-        return {row["key"]: row for row in index_rows(db, value, foreign_indices(db, value))}
+        return {
+            row["key"]: row for row in index_rows(db, value, foreign_indices(db, value))
+        }
 
 
 # ---- AC-3: the MA60 of each row is the stored indicators/v1 ma60; TAIEX is taiex_ma60 ----
@@ -205,7 +235,10 @@ def test_the_table_is_seven_rows_in_order_through_the_dashboard(factory, client)
     # The 大盤概況 numbers (market_summaries), not a change of its own.
     assert taiex["close"] == TAIEX_CLOSES[-1] and taiex["change"] == 15.0
     assert taiex["change_pct_method"] == "official"
-    assert taiex["source"] == {"label": "臺灣證券交易所", "detail": "臺灣證券交易所 MI_INDEX"}
+    assert taiex["source"] == {
+        "label": "臺灣證券交易所",
+        "detail": "臺灣證券交易所 MI_INDEX",
+    }
     # The TAIEX row and the #561 strip are one judgement.
     strip = overview["taiex_ma60"]
     for field in ("status", "close", "ma60", "above", "position", "close_count"):
@@ -277,13 +310,18 @@ def test_an_older_summary_is_stale_and_its_ma60_is_of_that_day(factory):
 def test_us_rows_are_foreign_indices(factory):
     _seed(factory)
     with factory() as db:
-        foreign = {item["symbol"]: item for item in foreign_indices(db, AS_OF.isoformat())}
+        foreign = {
+            item["symbol"]: item for item in foreign_indices(db, AS_OF.isoformat())
+        }
     spx = _rows(factory)["spx"]
 
     assert spx["trading_date"] == DAYS[-2].isoformat() == foreign["SPX"]["trading_date"]
     assert spx["expected_date"] == foreign["SPX"]["expected_date"]
     assert spx["freshness"] == foreign["SPX"]["freshness"] == "latest"
-    assert spx["close"] == foreign["SPX"]["close"] and spx["change"] == foreign["SPX"]["change"]
+    assert (
+        spx["close"] == foreign["SPX"]["close"]
+        and spx["change"] == foreign["SPX"]["change"]
+    )
     assert spx["source"]["detail"] == "FRED SP500" and spx["source"]["copyright"]
 
 
