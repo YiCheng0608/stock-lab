@@ -222,7 +222,7 @@
 
 - 圖表顏色同樣只來自 tokens：ECharts 畫在 canvas 上不能解析 `var()`，元件在執行時以 `getComputedStyle(document.documentElement)` 讀取 §2 的變數再傳給 option。
 - 背景透明，格線 `--chart-grid`，軸文字 `--color-text-muted` 12px mono。
-- K 線：漲 `--color-up`、跌 `--color-down`，實體與影線同色；成交量柱同漲跌色、60% 透明。量能 y 軸標籤 1 萬以上縮寫成「萬」「億」（最多 1 位小數），在 64px 左邊界內不被切（PR #553 review）；個股以張、指數以億股、台指期以口。
+- K 線：漲 `--color-up`、跌 `--color-down`，實體與影線同色；成交量柱同漲跌色、60% 透明。量能 y 軸標籤 1 萬以上縮寫成「萬」「億」（最多 1 位小數），在 64px 左邊界內不被切（PR #553 review）；個股以張、指數以億股、台指期以口。指標面板的 y 軸標籤 1,000 以上不帶小數（指數的 MACD 可到數千點）。
 - 均線固定色：MA5 `--chart-ma5`（`#f59e0b`）、MA10 `--chart-ma10`（`#8b5cf6`）、MA20 `--chart-ma20`（`#3b82f6`）、MA60 `--chart-ma60`（`#10b981`）、MA120 `--chart-ma120`（`#9ca3af`）。布林面板：中軌主色、上下軌強調色、收盤線 muted。
 - 指標面板（MACD／RSI／KD／布林）置於主圖下方，高度為主圖 35%，共用 x 軸與 dataZoom；MACD 柱用漲跌色，DIF／DEA 用主色與強調色；RSI／KD 參考線（20／80、30／70）用 `--color-text-subtle` 虛線。
 - 單線圖（熱度走勢、淨值）：主色線寬 2px，下方用主色漸層填充（頂部 25% 透明到底部 0）。指數（大盤頁）不用單線圖，用個股頁同一套 K 線與指標面板（§4 大盤頁）。

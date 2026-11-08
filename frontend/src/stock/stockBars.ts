@@ -493,7 +493,8 @@ export function buildBarsChartOption(response: StockBarsResponse, options: BarsC
       { type: 'value', gridIndex: 1, scale: false, splitNumber: 2, axisLabel: { ...axisLabel, showMaxLabel: false, formatter: (value: number) => volumeAxisLabel(kind, value) }, splitLine },
       bounded
         ? { type: 'value', gridIndex: 2, min: 0, max: 100, interval: 50, axisLabel, splitLine }
-        : { type: 'value', gridIndex: 2, scale: true, splitNumber: 2, axisLabel: { ...axisLabel, formatter: (value: number) => indicatorNumber(value, options.panel === 'boll' ? digits : 2) }, splitLine },
+        // MACD of an index runs into the thousands: no decimals from 1,000 up, so「-2,000」fits the 64px gutter.
+        : { type: 'value', gridIndex: 2, scale: true, splitNumber: 2, axisLabel: { ...axisLabel, formatter: (value: number) => indicatorNumber(value, Math.abs(value) >= 1000 ? 0 : options.panel === 'boll' ? digits : 2) }, splitLine },
     ],
     dataZoom: [
       { type: 'inside', xAxisIndex: [0, 1, 2], filterMode: 'filter', start: zoom.start, end: zoom.end },

@@ -488,7 +488,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .market-chart { margin-top: var(--space-4); }
 /* The TX chart's lines under the K line (Issue 552): latest contract in mono, then muted notes and the attribution. */
 .market-chart-footer { display: grid; gap: var(--space-1); margin-top: var(--space-3); color: var(--color-text-muted); font-size: 12px; line-height: 1.65; }
-.market-chart-footer p { margin: 0; }
+.market-chart-footer p { margin: 0; font-size: 12px; line-height: 1.65; }
 .market-chart-contract { color: var(--color-text); font: 500 var(--text-sm) var(--font-mono); }
 .alert-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-left: 4px solid var(--color-warning); border-radius: var(--radius-lg); background: var(--color-bg-card); color: var(--color-text); font-size: 14px; }
 /* Hot groups and news (#493, DESIGN_SYSTEM §5 熱門族群與重點新聞): two cards in one grid row; stretch makes them one height,
