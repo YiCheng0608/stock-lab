@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from sqlalchemy import create_engine, text
 
 from app.market_bar_migration import NEW_COLUMNS, needs_upgrade, upgrade_market_bars
@@ -171,6 +172,19 @@ def test_a_nullable_table_only_gets_the_missing_columns(tmp_path):
         assert (
             connection.exec_driver_sql("SELECT count(*) FROM market_bars").scalar()
             == rows
+        )
+
+
+def test_a_column_outside_the_model_stops_the_rebuild(tmp_path):
+    engine = _old_database(tmp_path / "extra.db")
+    with engine.begin() as connection:
+        connection.exec_driver_sql("ALTER TABLE market_bars ADD COLUMN local_note TEXT")
+    with engine.begin() as connection, pytest.raises(RuntimeError, match="local_note"):
+        upgrade_market_bars(connection)
+    with engine.begin() as connection:
+        assert "local_note" in _columns(connection)
+        assert (
+            connection.exec_driver_sql("SELECT count(*) FROM market_bars").scalar() == 2
         )
 
 

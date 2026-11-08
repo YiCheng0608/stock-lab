@@ -51,6 +51,12 @@ def needs_upgrade(connection) -> bool:
 
 def _rebuild(connection, columns: dict[str, tuple]) -> None:
     table = MarketBar.__table__
+    # The copy keeps only the model's columns; refuse rather than drop one.
+    unknown = sorted(set(columns) - {column.name for column in table.columns})
+    if unknown:
+        raise RuntimeError(
+            f"cannot rebuild market_bars: columns outside the model {unknown}"
+        )
     # CREATE TABLE only: the named indexes go on the final table after the
     # rename, since index names are global.
     # The referenced tables are copied too so the foreign keys resolve.

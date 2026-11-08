@@ -799,6 +799,17 @@ def store_index_bars(
                 outcome = "upgraded"
         elif row.source == bar.source:
             if force:
+                if not _same_close(row.close, bar.close):
+                    # Overwritten, but kept on record (PR #556 review).
+                    result.conflicts.append(
+                        {
+                            "row": label,
+                            "field": "close",
+                            "stored": row.close,
+                            "incoming": bar.close,
+                            "forced": True,
+                        }
+                    )
                 _set_all(row, bar, price_raw, volume_raw)
                 outcome = "upgraded"
             else:
@@ -824,8 +835,11 @@ def warnings_for(result: WriteResult) -> list[str]:
     warnings = []
     if result.close_mismatches:
         days = ", ".join(item["trading_date"] for item in result.close_mismatches)
+        # KD reads every high/low since the first bar, so a day left close-only
+        # keeps the later TAIEX KD empty until it is upgraded (PR #556 review).
         warnings.append(
-            f"{WARNING_PREFIX} close mismatch for TWSE TAIEX, not upgraded: {days}"
+            f"{WARNING_PREFIX} close mismatch for TWSE TAIEX, not upgraded "
+            f"(TAIEX KD stays empty from the first such day): {days}"
         )
     if result.conflicts:
         warnings.append(
@@ -872,9 +886,11 @@ def backfill_index_bars(
 ) -> dict[str, Any]:
     """Fetch ``first``..``last`` for both indexes and write them (module docstring rules).
 
-    One ``index_bar_backfill`` ingestion run; each exchange-month is committed,
-    so an interrupted run keeps what it finished.  Months run oldest first,
-    TWSE before TPEx; ``interval_seconds`` separates every request.  The
+    One ``index_bar_backfill`` ingestion run.  Every report is fetched first
+    (months oldest first, TWSE before TPEx, ``interval_seconds`` between
+    requests); then the raws, the bars, the rebuilt indicators and features
+    and the run's status are written and committed together, so a run killed
+    or failing midway leaves every row as it was (rerun to fetch again).  The
     indicator and feature rows of the instruments it changed are rebuilt at the
     end.  Sessions before ``HISTORY_START`` are not written.
     A month after the current Taipei month or more than ``MAX_MONTHS`` months
@@ -932,33 +948,42 @@ def backfill_index_bars(
             RAW_SOURCES[request.exchange], request.url, payload, data_as_of
         )
 
+    # Fetch everything first (the captures are files only), then write it all
+    # in one transaction: an upgraded TAIEX row points at this run's report,
+    # and coverage trusts that report only once the run is success/partial.
+    # A run killed or failing midway therefore changes no row (PR #556 review).
+    fetched_months: list[tuple[str, MonthResult]] = []
     try:
         for month in months:
             for exchange in EXCHANGES:
-                key = f"{month.label}:{exchange}"
-                fetched = fetch_month(exchange, month, get_spaced, capture)
-                raw_ids = {
-                    item.sha256: _upsert_raw_payload(db, run, item).id
-                    for item in fetched.payloads
-                }
-                bars = [
-                    bar
-                    for bar in fetched.bars
-                    if HISTORY_START <= bar.trading_date <= today
-                ]
-                written = store_index_bars(db, bars, raw_ids.get, force=force)
-                total.merge(written)
-                warnings.extend(fetched.warnings)
-                manifest[key] = {
-                    "bars": len(bars),
-                    "before_history_start": sum(
-                        bar.trading_date < HISTORY_START for bar in fetched.bars
-                    ),
-                    "raw_payload_ids": sorted(raw_ids.values()),
-                    "counts": {k: v for k, v in written.counts.items() if v},
-                    "warnings": fetched.warnings,
-                }
-                db.commit()
+                fetched_months.append(
+                    (
+                        f"{month.label}:{exchange}",
+                        fetch_month(exchange, month, get_spaced, capture),
+                    )
+                )
+        for key, fetched in fetched_months:
+            raw_ids = {
+                item.sha256: _upsert_raw_payload(db, run, item).id
+                for item in fetched.payloads
+            }
+            bars = [
+                bar
+                for bar in fetched.bars
+                if HISTORY_START <= bar.trading_date <= today
+            ]
+            written = store_index_bars(db, bars, raw_ids.get, force=force)
+            total.merge(written)
+            warnings.extend(fetched.warnings)
+            manifest[key] = {
+                "bars": len(bars),
+                "before_history_start": sum(
+                    bar.trading_date < HISTORY_START for bar in fetched.bars
+                ),
+                "raw_payload_ids": sorted(raw_ids.values()),
+                "counts": {k: v for k, v in written.counts.items() if v},
+                "warnings": fetched.warnings,
+            }
         changed = sorted({instrument_id for instrument_id, _ in total.written})
         indicators = (
             compute_market_indicators(db, rebuild=True, instrument_ids=changed)

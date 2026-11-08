@@ -266,8 +266,9 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
 - **驗證**：TWSE `stat` 不是 `OK`、回報的 `date` 不是請求月份、表名不對、欄名找不到或不只一個、某列日期不在請求月份、同一天兩列，整份拒收（記 warning，raw 照存）；TWSE「很抱歉，沒有符合條件的資料」與 TPEx 空表是還沒有交易日。TPEx 量欄名稱不是上面兩種就整月拒收，不猜單位。價格只接受完整的十進位數字；成交量與金額只接受整數。
 - **缺值**：沒有收盤的日子沒有列。開高低缺任一個、或高低沒有包住開收時，三個都存 null 並記 `price_reason`（`source_missing_ohlc`、`source_invalid_ohlc`），不用收盤填。量值報表沒有那天（或讀不出）時 `volume` 存 null、`turnover` 0／`unavailable`／`missing`，`volume_raw_payload_id` null；之後的讀取補上時改寫這三欄並記 fill。
 - **raw**：`raw_payload_id` 指向開高低收那份月報，`volume_raw_payload_id` 指向量值那份；raw 的 `data_as_of` 是該份月報最後一列的日期（沒有列時是月底）。
-- **加權的收盤列**：`MI_INDEX` 寫的收盤列（`twse_index`，交易日基準）原地升級：月報收盤（兩位小數）等於已存收盤才升級，`source`、raw 與開高低量改成月報的值，舊的 `source` 與 raw id 記在 run metadata 的 `upgraded_rows`（舊 `MI_INDEX` raw 不刪）；收盤不同就不升級，記 `close_mismatches` 與 warning。月報有、但沒有已存收盤列的日子不新增（交易日仍只由 `MI_INDEX` 決定），記在 `skipped_dates`。升級後之後的 `MI_INDEX` 收盤列（含 `--force`）不會把它改回收盤-only，收盤不同時記 conflict。
-- **重讀**：同來源已存的列值相同不改、只補空欄、不同值保留第一次的值並記 conflict；`--force` 才改寫。
+- **加權的收盤列**：`MI_INDEX` 寫的收盤列（`twse_index`，交易日基準）原地升級：月報收盤（兩位小數）等於已存收盤才升級，`source`、raw 與開高低量改成月報的值，舊的 `source` 與 raw id 記在 run metadata 的 `upgraded_rows`（舊 `MI_INDEX` raw 不刪）；收盤不同就不升級，記 `close_mismatches` 與 warning；那天留收盤-only，KD 遞迴到第一根，所以加權 KD 從那天起都是 null（`synthetic_index`），直到那天升級。月報有、但沒有已存收盤列的日子不新增（交易日仍只由 `MI_INDEX` 決定），記在 `skipped_dates`。升級後之後的 `MI_INDEX` 收盤列（含 `--force`）不會把它改回收盤-only，收盤不同時記 conflict。
+- **重讀**：同來源已存的列值相同不改、只補空欄、不同值保留第一次的值並記 conflict；`--force` 才改寫（收盤不同的仍記 conflict，標 `forced`）。
+- **回補的寫入**：先抓完全部月報再一次寫入、一次 commit（run 狀態同一個交易）。升級後的加權列指向這個 run 的月報，而交易日基準只認 `success`／`partial` 的 run；中途被停的 run 不留任何改過的列，所以加權不會指向一個停在 `running` 的 run（PR #556 review）。
 - **交易日基準**：升級後的列指向 `MI_5MINS_HIST` raw，[`_raw_is_date_verified`](../backend/app/coverage.py) 以「同月份、不晚於月報最後一列」核實；`index_bar_backfill` run 算官方 run，但不是有界回補 manifest（只有 `run_type=backfill` 才是）。
 - **指標**：`technical_indicators`／`technical_features` 照個股算；開高低為 null 的日子讓 KD（遞迴到第一根）為 null、原因 `missing_ohlc`，量為 null 的日子讓窗口內的量均為 null、原因 `missing_volume`（[指標規格](spec/indicators.md)）。回補結束時重建這兩檔的指標列。
 

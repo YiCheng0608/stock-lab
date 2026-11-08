@@ -615,6 +615,91 @@ def test_the_session_basis_and_benchmark_returns_do_not_change(factory):
     assert after[3] is False
 
 
+def _basis(db, taiex_id):
+    """What reads only the TAIEX close: the sessions, benchmark returns and window."""
+    score_date = SESSIONS[-1]
+    return (
+        coverage.verified_taiex_sessions(db),
+        pipeline._returns_by_window(db, taiex_id, score_date),
+        pipeline._effective_trading_dates(db, taiex_id, score_date, 20),
+    )
+
+
+class Killed(ReportGet):
+    """The process is stopped (container stop, low memory, Ctrl+C) at the third request."""
+
+    def __call__(self, request):
+        if len(self.requests) == 2:
+            raise KeyboardInterrupt
+        return super().__call__(request)
+
+
+def test_a_backfill_killed_midway_changes_no_row(factory):
+    with factory() as db:
+        taiex = _seed_taiex(db)
+        db.commit()
+        before = _basis(db, taiex.id)
+
+    with pytest.raises(KeyboardInterrupt):
+        _backfill(factory, Killed(_real_rows(), _tpex_rows()))
+
+    with factory() as db:
+        run = db.scalar(
+            select(IngestionRun).where(IngestionRun.run_type == ib.RUN_TYPE)
+        )
+        assert run.status == "running"
+        assert {b.source for b in _bars(db, "TWSE", "TAIEX")} == {"twse_index"}
+        assert db.scalar(select(Instrument).where(Instrument.symbol == "TPEX")) is None
+        assert _basis(db, taiex.id) == before
+
+
+def test_a_backfill_failing_while_writing_changes_no_row(factory, monkeypatch):
+    with factory() as db:
+        taiex = _seed_taiex(db)
+        db.commit()
+        before = _basis(db, taiex.id)
+    calls = []
+    real = ib.store_index_bars
+
+    def store_then_fail(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 3:
+            raise RuntimeError("disk full")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(ib, "store_index_bars", store_then_fail)
+
+    with pytest.raises(RuntimeError, match="disk full"):
+        _backfill(factory, ReportGet(_real_rows(), _tpex_rows()))
+
+    with factory() as db:
+        run = db.scalar(
+            select(IngestionRun).where(IngestionRun.run_type == ib.RUN_TYPE)
+        )
+        assert run.status == "failed" and "disk full" in run.error
+        # The first month was stored before the failure, and rolled back with it.
+        assert {b.source for b in _bars(db, "TWSE", "TAIEX")} == {"twse_index"}
+        assert _basis(db, taiex.id) == before
+
+
+def test_force_rewrites_a_differing_close_and_records_it(factory):
+    with factory() as db:
+        _seed_taiex(db)
+        db.commit()
+    _backfill(factory, ReportGet(_real_rows(), _tpex_rows()))
+    shifted = _tpex_rows()
+    shifted = ([(d, o, h, low, c + 1) for d, o, h, low, c in shifted[0]], shifted[1])
+
+    result, _ = _backfill(factory, ReportGet(_real_rows(), shifted), force=True)
+
+    assert result["conflicts"] == len(SESSIONS)
+    with factory() as db:
+        run = db.get(IngestionRun, result["run_id"])
+        forced = run.metadata_json["conflicts"]
+        assert {item["forced"] for item in forced} == {True}
+        assert _bars(db, "TPEx", "TPEX")[0].close == shifted[0][0][4]
+
+
 def test_a_monthly_report_verifies_only_sessions_of_its_month_up_to_its_last_row():
     raw = RawPayload(
         ingestion_run_id=1,
