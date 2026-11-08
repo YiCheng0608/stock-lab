@@ -4,11 +4,12 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 
 import { DateBadge } from './ui'
 
-// Fixed 64px top bar (DESIGN_SYSTEM §4): logo, six main links (#493: the two pages that ask for action, three data
+// Fixed 64px top bar (DESIGN_SYSTEM §4): logo, seven main links (#493; Issue 549 added 大盤 after 今日可買: the pages that ask for action, the data
 // pages, the explanation), stock search, data-date badge, hamburger on narrow screens.
 
 export const MAIN_NAV: ReadonlyArray<{ to: string; label: string; end?: boolean }> = [
   { to: '/', label: '今日可買', end: true },
+  { to: '/market', label: '大盤' },
   { to: '/watch', label: '觀察中' },
   { to: '/themes', label: '族群' },
   { to: '/stocks', label: '個股' },

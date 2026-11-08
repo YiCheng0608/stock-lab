@@ -25,7 +25,7 @@ declare const __dirname: string
 const fs = require('node:fs') as { readFileSync(file: string, encoding: 'utf8'): string }
 const path = require('node:path') as { join(...parts: string[]): string }
 
-// Information architecture (#493; PRODUCT_SPEC §2, DESIGN_SYSTEM §4/§5, UI_COPY_SPEC §5/§10/§11): the six main
+// Information architecture (#493, Issue 549; PRODUCT_SPEC §2, DESIGN_SYSTEM §4/§5, UI_COPY_SPEC §5/§10/§11): the seven main
 // links, 觀察中 at /watch with /actions redirecting, the 策略說明 page, the 今日可買 home and its table and columns.
 const failures: string[] = []
 let checks = 0
@@ -43,9 +43,9 @@ function render(location: string, element: ReactElement, client = new QueryClien
   }
 }
 
-// ---- main navigation: two pages that ask for action, three data pages, then the explanation ----
+// ---- main navigation: 今日可買, 大盤 (Issue 549), 觀察中, three data pages, then the explanation ----
 const nav = MAIN_NAV.map((item) => `${item.to} ${item.label}`)
-const expectedNav = ['/ 今日可買', '/watch 觀察中', '/themes 族群', '/stocks 個股', '/news 新聞', '/strategy 策略說明']
+const expectedNav = ['/ 今日可買', '/market 大盤', '/watch 觀察中', '/themes 族群', '/stocks 個股', '/news 新聞', '/strategy 策略說明']
 check(JSON.stringify(nav) === JSON.stringify(expectedNav), `MAIN_NAV: ${JSON.stringify(nav)}，預期 ${JSON.stringify(expectedNav)}`)
 
 // ---- routes: /watch and /strategy render their pages; /actions keeps its query and plan anchor ----
@@ -99,6 +99,9 @@ homeClient.setQueryData(['candidates', 'latest'], listResponse())
 const TodayPage = AppModule.TodayPage as () => ReactElement
 const home = render('/', <TodayPage />, homeClient)
 check(home.includes('id="candidates-title">今日可買</h2>'), '首頁名單標題是「今日可買」')
+// Issue 549: one market line linking to /market sits above the list; the four-widget overview moved there.
+check(home.includes('class="market-summary"') && home.includes('href="/market"') && !home.includes('market-overview-grid'), '首頁大盤只留一行摘要，連到 /market')
+check(home.indexOf('class="market-summary"') < home.indexOf('id="candidates-title"'), '大盤摘要在今日可買名單之前')
 check(!text(home).includes('明日候選') && !text(home).includes('關注標的'), '首頁不再有「明日候選」與「關注標的」')
 const columns = home.slice(home.indexOf('home-columns'))
 const panels = columns.match(/class="[^"]*\bhome-panel\b[^"]*"/g) ?? []

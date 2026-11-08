@@ -46,43 +46,38 @@ const slice = (markup: string, start: string, end: string) => {
 }
 const termIds = (markup: string) => [...markup.matchAll(/data-term="([^"]+)"/g)].map((match) => match[1])
 
-const MarketOverviewView = component(TodayModule, 'MarketOverviewView')
+const MarketSummaryLine = component(TodayModule, 'MarketSummaryLine')
 const TodayHeader = component(TodayModule, 'TodayHeader')
 const HoldingAlert = component(TodayModule, 'HoldingAlert')
 const CandidatesSection = component(CandidateModule, 'CandidatesSection')
 
-// ---- market overview: four widgets, both / one / no exchange (UI_COPY_SPEC §11) ----
-const both = render('MarketOverviewView both', () => <MarketOverviewView overview={overviewBoth()} />)
-const wide = slice(both, 'class="market-overview-grid"', '<details')
-for (const value of ['加權指數', '46,041.43', '-846.34（-1.81%）', '櫃買指數', '381.69', '-13.73（-3.47%）', '成交金額', '億元', '上市 9,334.37 集中市場總計', '上櫃 2,255.45 上櫃股票',
-  '漲跌家數（股票）', '括號為漲停／跌停', '上市 上漲 247 · 下跌 756 · 平盤 74（3／5）', '上櫃 上漲 146 · 下跌 659 · 平盤 63（17／11）']) {
-  check(text(wide).includes(value), `大盤概況（兩邊都有）: shows 「${value}」`)
-}
-check(count(wide, 'market-widget') >= 4 && count(wide, 'market-widget-dual') === 2, '大盤概況: four widgets, turnover and breadth are the dual-row variant')
-check(/class="market-widget-change[^"]*tone-down"/.test(wide), '大盤概況: a falling index change is green (tone-down)')
-// The turnover scope stays on screen next to each amount (#1 6394637858 point 2); the full wording is in 資料說明.
-check(count(slice(wide, 'market-turnover', 'market-breadth'), 'class="market-row-scope"') === 2, '大盤概況: each turnover row carries its short scope')
-const otherScope = { ...overviewBoth(), exchanges: overviewBoth().exchanges.map((row) => row.exchange === 'TPEx' ? { ...row, turnover: { value: 1e8, scope: 'tpex_all', scope_label: '上櫃全部證券' } } : row) }
-check(text(render('MarketOverviewView other scope', () => <MarketOverviewView overview={otherScope} />)).includes('上櫃 1.00 上櫃全部證券'), '大盤概況: an unknown scope shows the API scope_label')
-check(text(slice(both, '<details', '</details>')).includes('成交金額與漲跌家數'), '大盤概況: phones fold turnover and breadth into 「成交金額與漲跌家數」')
-const one = text(render('MarketOverviewView TWSE only', () => <MarketOverviewView overview={overviewTwseOnly()} />))
-check(one.includes('上櫃大盤資料未取得') && !one.includes('381.69') && !one.includes('2,255.45'), '大盤概況（只有上市）: the TPEx cells read 「上櫃大盤資料未取得」')
-check(one.includes('46,041.43') && one.includes('上市 9,334.37'), '大盤概況（只有上市）: TWSE shows as usual')
+// ---- market summary (Issue 549, UI_COPY_SPEC §11): one line of 加權 and 櫃買, the date and 看大盤 →; the overview is on /market ----
+const summary = render('MarketSummaryLine both', () => <MarketSummaryLine overview={overviewBoth()} />)
+const summaryText = text(summary)
+const order = ['大盤', '加權 46,041.43 -1.81%', '櫃買 381.69 -3.47%', '資料 2026/10/22', '看大盤 →'].map((part) => summaryText.indexOf(part))
+check(order.every((at, i) => at >= 0 && (i === 0 || at > order[i - 1])), `摘要列: 大盤 → 加權 → 櫃買 → date → 看大盤 →, got 「${summaryText}」`)
+check(summary.includes('href="/market"'), '摘要列: 看大盤 → links to /market')
+check(count(summary, 'tone-down') === 2, '摘要列: falling changes are green')
+check(!summary.includes('market-widget') && !text(summary).includes('成交金額') && !text(summary).includes('上漲'), '摘要列: no widgets, turnover or breadth (they are on /market)')
+check(/<section class="market-summary" aria-label="大盤摘要">/.test(summary), '摘要列: one framed section')
+const summaryTwse = text(render('MarketSummaryLine TWSE only', () => <MarketSummaryLine overview={overviewTwseOnly()} />))
+check(summaryTwse.includes('46,041.43') && summaryTwse.includes('櫃買 未取得') && !summaryTwse.includes('381.69'), `摘要列（只有上市）: 櫃買 未取得, got ${summaryTwse}`)
 for (const [name, overview] of [['都沒有', overviewNone()], ['欄位不存在', undefined]] as const) {
-  const none = text(render(`MarketOverviewView ${name}`, () => <MarketOverviewView overview={overview} />))
-  check(none.includes('上市大盤資料未取得') && none.includes('上櫃大盤資料未取得') && !/\d,\d{3}\.\d{2}/.test(none), `大盤概況（${name}）: both read 未取得 and show no number`)
+  const none = text(render(`MarketSummaryLine ${name}`, () => <MarketSummaryLine overview={overview} />))
+  check(none.includes('加權 未取得') && none.includes('櫃買 未取得') && !/\d,\d{3}\.\d{2}/.test(none) && none.includes('看大盤 →'), `摘要列（${name}）: both 未取得, still links to /market`)
 }
+check(text(render('MarketSummaryLine no field', () => <MarketSummaryLine overview={undefined} />)).includes('資料日期未提供'), '摘要列: no overview → 資料日期未提供')
 
-// ---- header line and 資料說明: turnover scope, derived TPEx change, red/green meaning ----
+// ---- header line and 資料說明: derived TPEx change, red/green meaning (the turnover scope moved to /market) ----
 const headerProps = { asOf: '2026-10-22T10:30:00+00:00', sourceLabel: 'TWSE／TPEx 官方資料', modeLabel: '官方單日快照', badge: <span className="pill complete">行情來源完整</span>, scopeText: '官方標的範圍 · 1,950 檔標的' }
 const header = render('TodayHeader', () => <TodayHeader {...headerProps} overview={overviewBoth()} />)
 check(text(slice(header, 'class="home-dataline-text"', '</span>')).includes('資料截至 2026/10/22 · TWSE／TPEx 官方資料 · 官方單日快照'), 'header: one line 「資料截至 2026/10/22 · 來源 · 模式」')
 const explanation = text(slice(header, '<details', '</details>'))
-check(explanation.includes('成交金額範圍：上市為集中市場總計（含 ETF、權證等）；上櫃為上櫃股票'), `資料說明: the turnover scope of both exchanges, got ${explanation}`)
+check(!explanation.includes('成交金額範圍'), `資料說明: the turnover scope is on /market now, got ${explanation}`)
 check(explanation.includes('櫃買指數漲跌幅依前一日收市指數計算'), '資料說明: the derived TPEx change says how it was computed')
 check(explanation.includes('紅色為上漲、綠色為下跌（台股慣例）'), '資料說明: red is up and green is down')
 const headerTwse = text(render('TodayHeader TWSE only', () => <TodayHeader {...headerProps} overview={overviewTwseOnly()} />))
-check(headerTwse.includes('成交金額範圍：上市為集中市場總計（含 ETF、權證等）') && !headerTwse.includes('上櫃為') && !headerTwse.includes('依前一日收市指數'), '資料說明（只有上市）: only the TWSE scope, no TPEx note')
+check(!headerTwse.includes('依前一日收市指數'), '資料說明（只有上市）: no TPEx note')
 check(!/hero|glow/.test(header), 'header: no hero or glow (DESIGN_SYSTEM §1)')
 check(/<h1 class="sr-only">今日<\/h1>/.test(header), 'header: the page still has an h1 for assistive tech')
 // Without a dashboard (load failed) the line has no empty source or mode parts.
