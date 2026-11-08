@@ -54,57 +54,86 @@ SYNTHETIC_SOURCES = {"twse_index"}
 @dataclass
 class Bar:
     day: str
-    open: float
-    high: float
-    low: float
+    # None when the source published no open/high/low or no volume (index
+    # bars, #552; the US closes of #547 have neither).
+    open: float | None
+    high: float | None
+    low: float | None
     close: float
-    volume: float
+    volume: float | None
     suspended: bool
     synthetic: bool
     source: str
     collected_at: str = ""
 
+    @property
+    def missing_range(self) -> bool:
+        """No published open/high/low: any of them is NULL (#552, #557)."""
+
+        return self.open is None or self.high is None or self.low is None
+
+    @property
+    def missing_volume(self) -> bool:
+        return self.volume is None
+
 
 def usable(bar: Bar, factor: float) -> bool:
-    """docs/spec/indicators.md: not suspended, OHLC finite positive and consistent, volume >= 0."""
+    """docs/spec/indicators.md: not suspended, OHLC finite positive and consistent, volume >= 0.
+
+    A bar without a published open/high/low is judged on its close alone, one
+    without a published volume on its prices alone (#552, #557).
+    """
 
     if bar.suspended or not positive(factor):
         return False
-    prices = (bar.open, bar.high, bar.low, bar.close)
+    missing_range = bar.missing_range
+    prices = (bar.close,) if missing_range else (bar.open, bar.high, bar.low, bar.close)
     if not all(positive(value) for value in prices):
         return False
-    if bar.low > min(bar.open, bar.close) or bar.high < max(bar.open, bar.close):
+    if not missing_range and (
+        bar.low > min(bar.open, bar.close) or bar.high < max(bar.open, bar.close)
+    ):
         return False
-    return finite(bar.volume) and bar.volume >= 0
+    return bar.missing_volume or (finite(bar.volume) and bar.volume >= 0)
 
 
 def indicators(
     bars: list[Bar], factors: list[float]
 ) -> list[tuple[int, dict[str, float | None]]]:
-    """(bar_count, values) for every bar, unusable bars all-null (docs/spec/indicators.md)."""
+    """(bar_count, values) for every bar, unusable bars all-null (docs/spec/indicators.md).
+
+    A usable bar without a published open/high/low or volume (#552) counts
+    like any other and feeds the close fields; KD is null from the first such
+    bar on (it recurses to the first bar), a volume average only while its own
+    window holds a bar without volume, the same as a synthetic bar (#557).
+    """
 
     closes: list[float] = []
     highs: list[float] = []
     lows: list[float] = []
     volumes: list[float] = []
     synthetic: list[bool] = []
+    no_volume: list[bool] = []
     out: list[tuple[int, dict[str, float | None]]] = []
     ema12 = ema26 = signal = None
     difs: list[float] = []
     gains = {6: 0.0, 12: 0.0}
     losses = {6: 0.0, 12: 0.0}
     k_value = d_value = 50.0
-    synthetic_seen = False
+    synthetic_seen = no_range_seen = False
     for bar, factor in zip(bars, factors):
         if not usable(bar, factor):
             out.append((len(closes), {name: None for name in FIELDS}))
             continue
         closes.append(bar.close / factor)
-        highs.append(bar.high / factor)
-        lows.append(bar.low / factor)
-        volumes.append(float(bar.volume))
+        # The close only keeps the positions; KD is null from here on.
+        highs.append((bar.close if bar.missing_range else bar.high) / factor)
+        lows.append((bar.close if bar.missing_range else bar.low) / factor)
+        volumes.append(0.0 if bar.missing_volume else float(bar.volume))
         synthetic.append(bar.synthetic)
+        no_volume.append(bar.missing_volume)
         synthetic_seen = synthetic_seen or bar.synthetic
+        no_range_seen = no_range_seen or bar.missing_range
         n = len(closes)
         values: dict[str, float | None] = {}
         for window in (5, 10, 20, 60, 120):
@@ -158,7 +187,7 @@ def indicators(
             rsv = 50.0 if h9 == l9 else 100 * (closes[-1] - l9) / (h9 - l9)
             k_value = (2 * k_value + rsv) / 3
             d_value = (2 * d_value + k_value) / 3
-        kd_ok = n >= 9 and not synthetic_seen
+        kd_ok = n >= 9 and not synthetic_seen and not no_range_seen
         values["kd_k"] = k_value if kd_ok else None
         values["kd_d"] = d_value if kd_ok else None
         if n >= 20:
@@ -173,7 +202,11 @@ def indicators(
         else:
             values["boll_mid"] = values["boll_upper"] = values["boll_lower"] = None
         for window in (5, 20):
-            enough = n >= window and not any(synthetic[-window:])
+            enough = (
+                n >= window
+                and not any(synthetic[-window:])
+                and not any(no_volume[-window:])
+            )
             values[f"vol_ma{window}"] = (
                 sum(volumes[-window:]) / window if enough else None
             )
