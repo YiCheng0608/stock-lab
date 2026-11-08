@@ -132,7 +132,13 @@ _INSTRUMENTS = (
     # The market page's other two daily K charts (Issue #552).
     (12, "TPEx", "TPEX", "櫃買指數", "index", None, None, None),
     (13, "TAIFEX", "TX", "臺股期貨近月", "futures", None, None, None),
+    # The US indexes of the market page (Issue #547): FRED closes, market US.
+    (14, "US", "SPX", "S&P 500", "index", None, None, None),
+    (15, "US", "IXIC", "NASDAQ 綜合指數", "index", None, None, None),
+    (16, "US", "DJI", "道瓊工業指數", "index", None, None, None),
+    (17, "US", "SOX", "費城半導體指數", "index", None, None, None),
 )
+US_INDEX_SYMBOLS = ("SPX", "IXIC", "DJI", "SOX")
 # symbol -> first close, daily drift, base volume in lots
 PRICE_PLAN = {
     "9101": (300.0, 0.0020, 8000),
@@ -149,6 +155,11 @@ PRICE_PLAN = {
     # Index shares and TX contracts are not lots: the base is the count / 1000.
     "TPEX": (260.0, 0.0005, 900000),
     "TX": (22000.0, 0.0006, 100),
+    # FRED publishes closes only (Issue #547); the volume base is unused.
+    "SPX": (6400.0, 0.0004, 0),
+    "IXIC": (21000.0, 0.0005, 0),
+    "DJI": (46000.0, 0.0003, 0),
+    "SOX": (6000.0, 0.0008, 0),
 }
 # TX accumulates from its first collect (open data has only the latest
 # session, Issue #552): its last TX_SESSIONS sessions, in whole points.
@@ -159,6 +170,7 @@ SERIES_SOURCE = {
     "TAIEX": "twse_index_fixture",
     "TPEX": "tpex_index_ohlcv",
     "TX": "taifex_daily_futures",
+    **{symbol: "fred_close" for symbol in ("SPX", "IXIC", "DJI", "SOX")},
 }
 BREAKS_OUT = {"9101", "9103", "9201", "00990"}  # close above the 20-day high on T
 WATCHLIST = {"9201"}
@@ -194,7 +206,7 @@ def _instrument_rows() -> list[dict[str, Any]]:
     return [
         {
             "id": item_id,
-            "market": "TW",
+            "market": "US" if exchange == "US" else "TW",
             "exchange": exchange,
             "symbol": symbol,
             "name": name,
@@ -239,6 +251,14 @@ def _series(symbol: str) -> list[dict[str, Any]]:
         )
     if symbol in LIFECYCLE:
         rows = [row for row in rows if row["day"] <= LIFECYCLE[symbol][1]]
+    if symbol in US_INDEX_SYMBOLS:
+        # FRED closes of the US sessions before T (the collect of T asks up to
+        # T - 1): no open/high/low or volume (worker.us_index_bars).
+        rows = [
+            {**row, "open": None, "high": None, "low": None, "volume": None}
+            for row in rows
+            if row["day"] < T
+        ]
     if symbol == "TX":
         rows = [
             {
@@ -283,8 +303,22 @@ def _bar_rows() -> list[dict[str, Any]]:
                     "close": bar["close"],
                     "adj_close": bar["close"],
                     "volume": bar["volume"],
-                    "turnover": round(bar["close"] * bar["volume"], 0),
-                    "turnover_status": "available",
+                    # Close only (Issue #547): the #552 null rules.
+                    **(
+                        {
+                            "turnover": 0.0,
+                            "turnover_status": "unavailable",
+                            "turnover_reason": "not_published",
+                            "price_reason": "source_missing_ohlc",
+                        }
+                        if symbol in US_INDEX_SYMBOLS
+                        else {
+                            "turnover": round(bar["close"] * bar["volume"], 0),
+                            "turnover_status": "available",
+                            "turnover_reason": None,
+                            "price_reason": None,
+                        }
+                    ),
                     "source": source,
                     "data_as_of": _at(day, 6),
                     "collected_at": _at(day, 9, 30),
@@ -1909,8 +1943,6 @@ INTENTIONALLY_EMPTY: dict[str, dict[str, str]] = {
     },
     "ingestion_runs": {"error": "沒有失敗的執行；休市日的 skipped 不寫 error"},
     "market_bars": {
-        "turnover_reason": "成交值都是 available；原因只在 unavailable／unknown 時寫",
-        "price_reason": "假資料沒有缺開高低的日子（#552）",
         "volume_raw_payload_id": "指數列不附量值月報 raw（#552）",
     },
     "news_items": {
@@ -2035,6 +2067,24 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
             "instrument.instrument_type",
             "futures",
         ),
+        # The US indexes (Issue #547): closes up to T - 1, the expected session of T.
+        (
+            "dashboard",
+            "market_overview.foreign_indices[].symbol",
+            list(US_INDEX_SYMBOLS),
+        ),
+        (
+            "dashboard",
+            "market_overview.foreign_indices[].freshness",
+            ["latest"] * len(US_INDEX_SYMBOLS),
+        ),
+        (
+            "dashboard",
+            "market_overview.foreign_indices.0.trading_date",
+            SERIES["SPX"][-1]["day"].isoformat(),
+        ),
+        ("stocks/US/SPX/bars?interval=day&limit=250", "bars", len(SERIES["SPX"])),
+        ("stocks/US/SPX/bars?interval=day&limit=250", "sources", ["fred_close"]),
         ("themes?board=industry&limit=5", "meta.trading_date", D),
         ("themes?board=industry&limit=5", "items", 2),
         ("themes?board=industry&limit=5", "items.0.theme_id", TOP_THEME),

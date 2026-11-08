@@ -5,12 +5,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import * as AppModule from '../App'
 import { MAIN_NAV } from '../components/Navbar'
-import type { Dashboard, StockBarRow, StockBarsResponse } from '../types'
+import type { Dashboard, ForeignIndex, MarketOverview, StockBarRow, StockBarsResponse } from '../types'
 import { overviewBoth, overviewNone, overviewTwseOnly } from '../today/today.fixtures'
-import { STOCK_BARS_LIMIT, axisDigits, priceDigits } from '../stock/stockBars'
-import { MarketChartView, MarketOverviewPanel, MarketOverviewView } from './MarketViews'
+import { CLOSE_ONLY_NOTE, STOCK_BARS_LIMIT, axisDigits, buildBarsChartOption, chartLayout, isCloseOnlySeries, priceDigits, readChartTheme } from '../stock/stockBars'
+import { MarketChartView, MarketOverviewPanel, MarketOverviewView, UsChartFooter, UsIndexPanel } from './MarketViews'
 import { MarketPage } from './MarketPage'
-import { MARKET_CHARTS, TAIEX, TAIFEX_ATTRIBUTION, collectedSinceText, futuresLatestText, marketOverviewNotes, summaryItems } from './marketOverview'
+import { FRED_ATTRIBUTION, MARKET_CHARTS, TAIEX, TAIFEX_ATTRIBUTION, US_INDEXES, collectedSinceText, foreignLatestDate, futuresLatestText, marketOverviewNotes, summaryItems, usChartSpec } from './marketOverview'
+
+const expectedText = (overview: MarketOverview) => `資料 ${(foreignLatestDate(overview) ?? '').replace(/-/g, '/')}`
 
 // The frontend ships no Node typings; scripts/ci-test.cjs runs this module under Node, so declare what it uses.
 declare const require: (id: string) => unknown
@@ -94,7 +96,10 @@ check(JSON.stringify(MARKET_CHARTS.map((spec) => `${spec.exchange}/${spec.symbol
 const order = ['id="market-overview-title"', 'id="market-chart-title"', 'id="market-tpex-chart-title"', 'id="market-tx-chart-title"'].map((id) => page.indexOf(id))
 check(order.every((at, i) => at > 0 && (i === 0 || at > order[i - 1])), `DESIGN_SYSTEM §4: 大盤概況 → 加權 → 櫃買 → 台指期, got ${order}`)
 check(!page.includes('market-no-bars') && !pageText.includes('歷史日 K 尚未收集'), '櫃買 has its K line now, no 無資料 row')
-check(!/美股|大盤狀態/.test(pageText), 'no placeholder for 美股 (Issue 547) or 大盤狀態 (Issue 546) yet')
+check(!/大盤狀態/.test(pageText), 'no placeholder for 大盤狀態 (Issue 546) yet')
+// Issue 547: 美股（前一交易日） after the TX chart; without foreign_indices every index says it has no data.
+check(page.indexOf('id="market-us-title"') > page.indexOf('id="market-tx-chart-title"') && page.indexOf('id="market-tx-chart-title"') > 0, 'DESIGN_SYSTEM §4: 美股 comes after 台指期近月日線')
+check(count(page, '無資料：尚未收集') === 4, `美股 without foreign_indices: four 無資料：尚未收集, got ${count(page, '無資料：尚未收集')}`)
 const overviewPanel = slice(page, 'id="market-overview-title"', 'id="market-chart-title"')
 for (const value of ['大盤概況', '資料 2026/10/22', '加權指數', '46,041.43', '-846.34（-1.81%）', '櫃買指數', '381.69', '-13.73（-3.47%）', '上市 9,334.37 集中市場總計', '上櫃 2,255.45 上櫃股票', '上市 上漲 247 · 下跌 756 · 平盤 74（3／5）', '上櫃 上漲 146 · 下跌 659 · 平盤 63（17／11）']) {
   check(text(overviewPanel).includes(value), `大盤概況: shows 「${value}」`)
@@ -128,7 +133,7 @@ check(text(txPanel).includes('自 2026/09/29 起收集，無更早歷史') && te
 check(collectedSinceText(fullBars) === '自 2026/09/01 起收集，無更早歷史' && collectedSinceText({ ...fullBars, count: STOCK_BARS_LIMIT }) === null, 'collectedSinceText: only when the series is shorter than the request')
 check(futuresLatestText(fullBars) === null, 'futuresLatestText: nothing for an index')
 check(priceDigits(46041.43, 'index') === 2 && priceDigits(46041.43, 'stock') === 0, 'priceDigits: an index has two decimals, a stock above 500 none')
-check(axisDigits(24500, 2) === 0 && axisDigits(9999, 2) === 2, 'price axis: five-digit index labels drop the decimals so they fit the gutter')
+check(axisDigits(24500, 2) === 0 && axisDigits(8000, 2) === 0 && axisDigits(999, 2) === 2, 'price axis: index labels from 1,000 drop the decimals so 「8,000」 fits the phone gutter (Issue 547)')
 // The close-only TAIEX rows still read as before (synthetic bars, volume unit unverified).
 const closeOnly = taiexBars([bar('2026-10-22', 46041.43, { open: 46041.43, high: 46041.43, low: 46041.43, volume: 0, source: 'twse_index' })])
 const closeOnlyMarkup = text(render('/market close-only', <MarketChartView spec={MARKET_CHARTS[0]} interval="day" onIntervalChange={() => {}} data={closeOnly} loading={false} error={null} />))
@@ -153,6 +158,62 @@ const otherScope = { ...overviewBoth(), exchanges: overviewBoth().exchanges.map(
 check(text(render('MarketOverviewView other scope', <MarketOverviewView overview={otherScope} />)).includes('上櫃 1.00 上櫃全部證券'), '大盤概況: an unknown scope shows the API scope_label')
 check(JSON.stringify(marketOverviewNotes(overviewNone())) === JSON.stringify(['紅色為上漲、綠色為下跌（台股慣例）']), `資料說明 without data: only the red/green line, got ${JSON.stringify(marketOverviewNotes(overviewNone()))}`)
 
+// ---- 美股（前一交易日）, Issue 547: four FRED closes, their freshness and their close-only daily K ----
+const fred = (symbol: string, name: string, series_id: string, extra: Partial<ForeignIndex>): ForeignIndex => ({
+  exchange: 'US', symbol, name, series_id, status: 'available', expected_date: '2026-11-06', trading_date: '2026-11-06', freshness: 'latest',
+  close: 6820.5, change: -40.25, change_pct: -0.005867, change_pct_method: 'derived', previous_trading_date: '2026-11-05',
+  source: { label: `FRED ${series_id}`, copyright: 'Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved.', collected_at: '2026-11-09T13:40:00+00:00', data_as_of: '2026-11-06', raw_payload_id: 7 },
+  ...extra,
+})
+const usOverview = {
+  ...overviewBoth(),
+  foreign_indices: [
+    fred('SPX', 'S&P 500', 'SP500', { trading_date: '2026-11-05', freshness: 'stale', close: 7353.73, change: -334.89, change_pct: -0.043557 }),
+    fred('IXIC', 'NASDAQ 綜合指數', 'NASDAQCOM', { close: 24579.42, change: 264.42, change_pct: 0.010875, source: { label: 'FRED NASDAQCOM', copyright: 'Copyright © 2016, NASDAQ OMX Group, Inc.', collected_at: null } }),
+    fred('DJI', '道瓊工業指數', 'DJIA', { trading_date: '2026-11-05', freshness: 'us_market_closed', close: 51285.73 }),
+    { exchange: 'US', symbol: 'SOX', name: '費城半導體指數', series_id: 'NASDAQSOX', status: 'unavailable', reason: 'fetch_failed', expected_date: '2026-11-06', last_attempt_date: '2026-11-09' },
+  ],
+}
+const usCharts: string[] = []
+const usPanel = render('/market us', <UsIndexPanel overview={usOverview} chart={(spec) => { usCharts.push(spec.symbol); return null }} />)
+const usText = text(usPanel)
+for (const value of ['美股（前一交易日）', 'S&P 500', '7,353.73', '-334.89（-4.36%）', '資料 2026/11/05 非最新', 'NASDAQ 綜合指數', '24,579.42', '+264.42（+1.09%）', '資料 2026/11/06', '道瓊工業指數', '資料 2026/11/05 2026/11/06 美股休市', '費城半導體指數', '無資料：最近一次擷取失敗（2026/11/09）']) {
+  check(usText.includes(value), `美股: shows 「${value}」: ${usText.slice(0, 400)}`)
+}
+check(!usText.includes('資料 2026/11/06 非最新'), '美股: the latest close has no 非最新')
+check(count(usPanel, 'market-us-index') === 4 && count(usPanel, 'market-us-stale') === 1, '美股: four widgets, one marked 非最新')
+check(/data-symbol="SPX"[^>]*>(?:(?!data-symbol)[\s\S])*tone-down/.test(usPanel) && /data-symbol="IXIC"[^>]*>(?:(?!data-symbol)[\s\S])*tone-up/.test(usPanel), '美股: 台股 colors, a fall green and a rise red')
+check(usText.includes('資料 2026/11/06') && usPanel.includes('market-us-title'), '美股: the section badge is the newest data date')
+const usExplanation = text(slice(usPanel, '<details class="data-explanation"', '</details>'))
+for (const line of [FRED_ATTRIBUTION, 'Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved.', 'Copyright © 2016, NASDAQ OMX Group, Inc.', '台股資料日的前一個平日']) {
+  check(usExplanation.includes(line), `美股 資料說明: 「${line}」, got ${usExplanation}`)
+}
+check(count(usPanel, 'class="details market-us-chart"') === 4 && usCharts.length === 0, '美股: four closed rows of daily K, no chart (or bars request) until one is opened')
+check(US_INDEXES.map((spec) => usChartSpec(spec).symbol).join() === 'SPX,IXIC,DJI,SOX' && usChartSpec(US_INDEXES[0]).exchange === 'US', 'the US charts read /api/stocks/US/<symbol>/bars')
+// A FRED series: closes only, so a close line and the note; the table keeps each close (Issue 552 null rules).
+const fredRows = days.map((row) => ({ ...row, open: null, high: null, low: null, volume: null, source: 'fred_close', price_reason: 'source_missing_ohlc' }))
+const fredBars: StockBarsResponse = { ...taiexBars(fredRows), instrument: { id: 14, exchange: 'US', symbol: 'SPX', name: 'S&P 500', instrument_type: 'index' } }
+const fredChart = text(render('/market us chart', <MarketChartView spec={usChartSpec(US_INDEXES[0])} interval="day" onIntervalChange={() => {}} data={fredBars} loading={false} error={null} footer={<UsChartFooter item={usOverview.foreign_indices[0]} />} />))
+check(fredChart.includes('S&P 500日線') && fredChart.includes(CLOSE_ONLY_NOTE), `FRED chart: titled, with the close-only note: ${fredChart.slice(0, 300)}`)
+check(fredChart.includes('2026/10/22 46,041.43') && !fredChart.includes('2026/10/22 46,021.43'), 'FRED chart table: the close, no open/high/low')
+check(fredChart.includes('來源 FRED（聖路易聯邦準備銀行）') && fredChart.includes(FRED_ATTRIBUTION) && fredChart.includes('S&P Dow Jones Indices LLC'), 'FRED chart: FRED named, the attribution and copyright under it')
+const theme = readChartTheme(() => 'black')
+const layout = chartLayout(320)
+const fredOption = buildBarsChartOption(fredBars, { panel: 'macd', panelState: { kind: 'chart' } as never, visibleMa: new Set(), theme, layout, zoom: { start: 0, end: 100 }, digits: 2 })
+const closeLine = (fredOption.series as Array<{ name?: string; xAxisIndex?: number; data?: unknown[] }>).find((series) => series.name === '收盤' && series.xAxisIndex === 0)
+check(closeLine?.data?.length === fredRows.length && closeLine.data[fredRows.length - 1] === 46041.43, 'FRED chart: one close line on the price pane')
+const taiexOption = buildBarsChartOption(fullBars, { panel: 'macd', panelState: { kind: 'chart' } as never, visibleMa: new Set(), theme, layout, zoom: { start: 0, end: 100 }, digits: 2 })
+check(!(taiexOption.series as Array<{ name?: string; xAxisIndex?: number }>).some((series) => series.name === '收盤' && series.xAxisIndex === 0), 'a series with candles has no extra close line')
+check(isCloseOnlySeries(fredRows) && !isCloseOnlySeries(days) && !isCloseOnlySeries([]), 'isCloseOnlySeries: every bar close-only')
+// DESIGN_SYSTEM §6: only a whole close-only series gets the line. A Taiwan index with one day lacking open/high/low
+// (Issue 552) keeps its candles, no close line and no note, as before.
+const mixedRows = days.map((row, i) => i === 10 ? { ...row, open: null, high: null, low: null, price_reason: 'source_missing_ohlc' } : row)
+const mixedOption = buildBarsChartOption(taiexBars(mixedRows), { panel: 'macd', panelState: { kind: 'chart' } as never, visibleMa: new Set(), theme, layout, zoom: { start: 0, end: 100 }, digits: 2 })
+check(!(mixedOption.series as Array<{ name?: string; xAxisIndex?: number }>).some((series) => series.name === '收盤' && series.xAxisIndex === 0), 'a Taiwan index with one close-only day: no close line')
+const mixedChart = text(render('/market mixed', <MarketChartView spec={MARKET_CHARTS[0]} interval="day" onIntervalChange={() => {}} data={taiexBars(mixedRows)} loading={false} error={null} />))
+check(!mixedChart.includes(CLOSE_ONLY_NOTE) && mixedChart.includes('來源 臺灣證券交易所'), 'a Taiwan index with one close-only day: no close-only note')
+check(expectedText(usOverview) === '資料 2026/11/06', 'the section badge reads the newest data date')
+
 // ---- pure helpers ----
 const items = summaryItems(overviewTwseOnly())
 check(items[0].close === '46,041.43' && items[0].pct === '-1.81%' && items[0].tone === 'tone-down' && items[1].close === null, `summary items: ${JSON.stringify(items)}`)
@@ -163,5 +224,6 @@ check(small[0].pct === '-0.49%' && small[0].tone === 'tone-down', `a small fall 
 const css = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8')
 check(!css.includes('market-overview-more'), 'Issue 549: no folded overview left (the market page shows all four widgets)')
 check(/\.market-summary-item \{[^}]*white-space:\s*nowrap/.test(css), 'summary: an index item never breaks inside')
+check(/\.market-us-grid \{[^}]*repeat\(4, minmax\(0, 1fr\)\)/.test(css) && /\.market-overview-grid, \.market-us-grid \{[^}]*repeat\(2,/.test(css), '美股: four equal widgets, two per row below 1200px')
 
 if (failures.length) throw new Error(`${failures.length} of ${checks} market checks failed:\n- ${failures.join('\n- ')}`)

@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.clock import utcnow
 from app.config import MAX_GROUP_CANDIDATES, OFFICIAL_MAX_BACKFILL_DAYS
-from app.domain import NON_SECURITY_TYPES
+from app.domain import NON_SECURITY_TYPES, TAIWAN_MARKET
 from app.coverage import (
     confirmed_non_trading_dates,
     has_backfill_manifest,
@@ -526,6 +526,8 @@ def _instrument_dates(
     chip rows on the production copy; whole ORM rows took about 7 s (#462). The
     dates are read as text and converted with the column type's own result
     processor once per distinct value (a few dozen), not once per row.
+    Only Taiwan instruments' rows: a US index close on a Taiwan holiday (Issue
+    #547) must not turn a confirmed closed day into a partial one.
     """
 
     column = model.trading_date
@@ -533,11 +535,16 @@ def _instrument_dates(
     process = column.type.dialect_impl(dialect).result_processor(dialect, None)
     days: dict[Any, Any] = {}
     rows = []
-    for instrument_id, stored in db.execute(
-        select(model.instrument_id, type_coerce(column, String)).where(
-            column >= start_date, column <= end_date
+    query = (
+        select(model.instrument_id, type_coerce(column, String))
+        .join(Instrument, Instrument.id == model.instrument_id)
+        .where(
+            Instrument.market == TAIWAN_MARKET,
+            column >= start_date,
+            column <= end_date,
         )
-    ):
+    )
+    for instrument_id, stored in db.execute(query):
         if stored not in days:
             days[stored] = (
                 process(stored) if process else date.fromisoformat(str(stored)[:10])

@@ -35,6 +35,7 @@ from app.domain import (
     INSTITUTIONAL_FLOW_FORMULA_VERSION,
     OFFICIAL_INSTITUTIONAL_CHIP_SOURCES,
     SIGNAL_CONFIDENCE_SEMANTICS,
+    TAIWAN_MARKET,
     RuleEvaluation,
     calculate_group_score,
     group_score_quality,
@@ -4459,6 +4460,7 @@ NONCORE_WARNING_PATTERN = re.compile(
     r"|MOPS event list unavailable"
     r"|index bars "
     r"|futures bars "
+    r"|us index bars "
     r"|instrument status sync skipped)"
 )
 
@@ -4518,6 +4520,142 @@ def store_collect_futures_bars(
             f"futures bars kept {len(result.conflicts)} stored TX session(s) that differ from the report"
         )
     return result.metadata()
+
+
+def taiwan_bar_dates(
+    db: Session,
+    start: date | None = None,
+    end: date | None = None,
+    *,
+    after: date | None = None,
+    limit: int | None = None,
+) -> list[date]:
+    """Dates with a bar of a Taiwan instrument, oldest first.
+
+    ``start``/``end`` are inclusive, ``after`` exclusive; ``limit`` keeps the
+    first dates.  A US index close (market ``US``, Issue #547) can fall on a
+    day the Taiwan market was closed, so "any stored bar" is not a Taiwan
+    session: the backtest's score dates and plan tracking's sessions both read
+    this.
+    """
+
+    query = (
+        select(MarketBar.trading_date)
+        .join(Instrument, Instrument.id == MarketBar.instrument_id)
+        .where(Instrument.market == TAIWAN_MARKET)
+    )
+    if start is not None:
+        query = query.where(MarketBar.trading_date >= start)
+    if end is not None:
+        query = query.where(MarketBar.trading_date <= end)
+    if after is not None:
+        query = query.where(MarketBar.trading_date > after)
+    query = query.distinct().order_by(MarketBar.trading_date)
+    if limit is not None:
+        query = query.limit(limit)
+    return list(db.scalars(query).all())
+
+
+def prefetch_us_index_series(
+    db: Session,
+    session: date,
+    fetch: Callable[[str], Any] | None,
+    batch: Any,
+    warnings: list[str],
+    *,
+    no_data: bool,
+) -> dict[str, Any] | None:
+    """collect's US index fetch (worker.us_index_bars, Issue #547), before any write.
+
+    Runs in collect's fetch phase: the four FRED GETs never wait while the
+    collect holds the SQLite write lock (#558 review item 3).  Only a snapshot
+    collect whose batch has the session's TAIEX row asks.  The request windows
+    are read first and that read transaction is ended before the GETs.  A
+    failure is a non-core warning.  None when the adapter has no FRED fetcher.
+    """
+
+    if fetch is None:
+        return None
+    if not getattr(batch, "snapshot_feeds", False) or no_data:
+        return {"status": "skipped", "reason": "not_a_snapshot_session"}
+    if not any(
+        record.symbol == "TAIEX" and record.trading_date == session
+        for record in batch.bars
+    ):
+        return {"status": "skipped", "reason": "no_taiex_session"}
+    from worker.us_index_bars import fetch_us_index_series, us_index_requests
+
+    try:
+        requests = us_index_requests(db, session)
+        db.commit()  # only reads: end the transaction before the HTTP calls
+        return {
+            "status": "fetched",
+            "fetched": fetch_us_index_series(requests, fetch),
+        }
+    except Exception as exc:
+        db.rollback()
+        warnings.append(
+            f"us index bars unavailable for collect: {type(exc).__name__}: {exc}"
+        )
+        return {"status": "failed"}
+
+
+def store_collect_us_index_bars(
+    db: Session,
+    run: IngestionRun,
+    session: date,
+    prefetched: dict[str, Any] | None,
+    warnings: list[str],
+    *,
+    force: bool = False,
+) -> dict[str, Any]:
+    """collect's US index write (worker.us_index_bars, Issue #547); non-core.
+
+    Writes what ``prefetch_us_index_series`` fetched, only when the session's
+    TAIEX row was written, so every US row (all before ``session``) comes with
+    a Taiwan session after it and never becomes the newest bar date.  The whole
+    step is one savepoint (each series another inside it): a database error
+    rolls back only this step, becomes a warning, and the rest of collect
+    commits as usual (#558 review item 2).
+    """
+
+    if prefetched is None:
+        return {}
+    if prefetched.get("status") != "fetched":
+        return dict(prefetched)
+    benchmark = _benchmark_instrument(db)
+    if benchmark is None or (
+        db.scalar(
+            select(MarketBar.id).where(
+                MarketBar.instrument_id == benchmark.id,
+                MarketBar.trading_date == session,
+            )
+        )
+        is None
+    ):
+        return {"status": "skipped", "reason": "no_taiex_session"}
+    from worker.us_index_bars import write_us_index_series
+
+    step_warnings: list[str] = []
+    try:
+        with db.begin_nested():
+            series = write_us_index_series(
+                db,
+                run,
+                session,
+                prefetched["fetched"],
+                _upsert_raw_payload,
+                step_warnings,
+                force=force,
+            )
+    except Exception as exc:
+        warnings.append(
+            f"us index bars unavailable for collect: {type(exc).__name__}: {exc}"
+        )
+        return {"status": "failed"}
+    warnings.extend(step_warnings)
+    # Strings and numbers only (dates as ISO strings).
+    return {"status": "complete", "series": series}
 
 
 def split_collect_warnings(warnings: Iterable[str]) -> tuple[list[str], list[str]]:
@@ -4680,6 +4818,15 @@ def collect(
                 raise OfficialDataError(
                     "official batch did not include raw payload captures"
                 )
+            # Still the fetch phase: FRED is asked before collect writes a row.
+            us_index_prefetched = prefetch_us_index_series(
+                db,
+                score_date,
+                getattr(active_adapter, "us_index_fetcher", None),
+                batch,
+                batch.warnings,
+                no_data=score_date in batch_no_data_dates,
+            )
             raw_ids: dict[tuple[str, str], int] = {}
             stored_raw_ids: set[int] = set()
             for payload in batch.payloads:
@@ -4826,6 +4973,14 @@ def collect(
                 db,
                 list(getattr(batch, "futures_bars", []) or []),
                 lambda digest: _raw_id_for_digest(raw_ids, digest),
+                batch.warnings,
+                force=force,
+            )
+            us_index_daily_bars = store_collect_us_index_bars(
+                db,
+                run,
+                score_date,
+                us_index_prefetched,
                 batch.warnings,
                 force=force,
             )
@@ -5152,6 +5307,7 @@ def collect(
                 "monthly_revenues": monthly_revenues,
                 "index_daily_bars": index_daily_bars,
                 "futures_daily_bars": futures_daily_bars,
+                "us_index_daily_bars": us_index_daily_bars,
                 "raw_payloads": raw_payload_count,
                 "warnings": list(batch.warnings),
                 "core_warnings": core_warnings,
@@ -5260,6 +5416,7 @@ def collect(
                 "monthly_revenues": monthly_revenues,
                 "index_daily_bars": index_daily_bars,
                 "futures_daily_bars": futures_daily_bars,
+                "us_index_daily_bars": us_index_daily_bars,
                 "event_coverage": event_coverage,
                 "event_gap_dates": {
                     day: mops_events.coverage_state(coverage, date.fromisoformat(day))
@@ -6426,15 +6583,7 @@ def backtest(
             # Commit as it goes so the transaction (the WAL) and the session
             # stay one score date's size; a failed run keeps what it committed.
             db.commit()
-            score_dates = db.scalars(
-                select(MarketBar.trading_date)
-                .where(
-                    MarketBar.trading_date >= start_date,
-                    MarketBar.trading_date <= end_date,
-                )
-                .distinct()
-                .order_by(MarketBar.trading_date)
-            ).all()
+            score_dates = taiwan_bar_dates(db, start_date, end_date)
             metadata["score_session_count"] = len(score_dates)
             metadata["as_of_rule"] = (
                 "all feature/group inputs are bounded by score_date"

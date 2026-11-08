@@ -5,6 +5,7 @@ import { Card, DataTable, DateBadge, EmptyState, Skeleton, Tabs, tabPanelId, typ
 import { formatDay } from '../dates'
 import type { StockBarRow, StockBarsInterval, StockBarsResponse } from '../types'
 import {
+  CLOSE_ONLY_NOTE,
   INDICATOR_PANELS,
   INTERVALS,
   MA_LINES,
@@ -17,6 +18,7 @@ import {
   formatPrice,
   formatTaipeiDateTime,
   indicatorPanelState,
+  isCloseOnlySeries,
   isDrawableBar,
   maNotes,
   priceDigits,
@@ -190,6 +192,7 @@ export function StockBarsChart({
                 </div>
               )}
             </div>
+            {isCloseOnlySeries(data.bars) && <p className="chart-note">{CLOSE_ONLY_NOTE}</p>}
             {panelState?.kind === 'chart' && panelState.note && <p className="chart-note">{panelState.note}</p>}
             {notes.length > 0 && <ul className="chart-note-list">{notes.map((note) => <li key={note}>{note}</li>)}</ul>}
             <div className="chart-meta">

@@ -749,6 +749,34 @@ def test_provenance(fx):
     assert "market_bars:raw_payload_missing" in check.failures
 
 
+def test_a_multi_date_report_only_has_to_reach_the_row_day(fx):
+    # One FRED CSV (Issue #547) holds many days; data_as_of is its last row.
+    spx = fx.instrument("US", "SPX", kind="index")
+    spx.market = "US"
+    csv_raw = fx.raw("https://fred.stlouisfed.org/graph/fredgraph.csv", T, {"csv": ""})
+    earlier = T - timedelta(days=1)
+    fx.bar(
+        spx, earlier, 6400.0, raw=csv_raw, source="fred_close", volume=None, turnover=0
+    )
+    fx.commit()
+    fx.sql(
+        "update market_bars set collected_at = ?",
+        (datetime.combine(T, datetime.min.time()) + timedelta(hours=11)).isoformat(" "),
+    )
+    check = audit_checks.provenance(fx.context())
+    assert "market_bars:raw_date_not_trading_date" not in check.failures
+    assert "market_bars:raw_date_before_trading_date" not in check.failures
+    # A row after the report's last day is not in that report.
+    fx.sql(
+        "update raw_payloads set data_as_of = ?",
+        (earlier - timedelta(days=1)).isoformat(),
+    )
+    check = audit_checks.provenance(fx.context())
+    assert "market_bars:raw_date_before_trading_date" in check.failures
+    # The audit's date range is the Taiwan bars'; this database has none.
+    assert fx.context().first_day is None
+
+
 # --- 指標、比率、候選、族群：產品寫入的列要通過 -------------------------------------
 
 

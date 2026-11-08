@@ -1391,6 +1391,63 @@ def t15(run: Run) -> str:
     return "；".join(found)
 
 
+# ---- T16: the market page's US indexes (Issue 547, UI_COPY_SPEC §11) ----
+
+US_TITLE = "美股（前一交易日）"  # US_SECTION_TITLE in market/marketOverview.ts
+# FRED_ATTRIBUTION in market/marketOverview.ts (FRED terms: personal, non-commercial use).
+FRED_ATTRIBUTION = "資料來源：FRED，Federal Reserve Bank of St. Louis（個人非商業使用）"
+
+
+def us_index_lines(item: dict) -> list[str]:
+    """The lines one US index widget shows (UsIndexWidget in market/MarketViews.tsx)."""
+
+    if item.get("status") != "available":
+        if item.get("reason") == "fetch_failed":
+            day = item.get("last_attempt_date")
+            return [f"無資料：最近一次擷取失敗{f'（{slash(day)}）' if day else ''}"]
+        return ["無資料：尚未收集"]
+    lines = [item["name"]]
+    if item.get("close") is not None:
+        lines.append(fixed(item["close"], 2))
+    change, pct = item.get("change"), item.get("change_pct")
+    lines.append(
+        f"{'—' if change is None else fixed(change, 2, True)}"
+        f"（{'—' if pct is None else fixed(pct * 100, 2, True) + '%'}）"
+    )
+    date = f"資料 {slash(item['trading_date'])}"
+    if item.get("freshness") == "stale":
+        date += " 非最新"
+    elif item.get("freshness") == "us_market_closed":
+        date += f" {slash(item['expected_date'])} 美股休市"
+    lines.append(date)
+    return lines
+
+
+@check("today", "T16")
+def t16(run: Run) -> str:
+    """The US index block after the three charts: each index's close, change and data date, or why it has none."""
+
+    text = run.text(MARKET)
+    items = (run.dashboard().get("market_overview") or {}).get("foreign_indices") or []
+    expect(bool(items), "dashboard.market_overview.foreign_indices 是空的")
+    tx = text.find(MARKET_CHARTS[-1][0])
+    i = text.find(US_TITLE, tx + 1 if tx >= 0 else 0)
+    expect(i >= 0 and i > tx, f"缺整行 `{US_TITLE}`，或不在台指期日線之後")
+    found = []
+    for item in items:
+        for line in us_index_lines(item):
+            expect(text.find(line, i) >= 0, f"{item.get('symbol')}：缺整行 `{line}`")
+        found.append(
+            f"{item.get('symbol')} {item.get('status')}/{item.get('freshness') or item.get('reason')}"
+        )
+    if any(item.get("status") == "available" for item in items):
+        expect(
+            text.find(FRED_ATTRIBUTION, i) >= 0,
+            f"`{US_TITLE}` 之後缺整行 `{FRED_ATTRIBUTION}`（資料說明）",
+        )
+    return "；".join(found)
+
+
 # ---- news ----
 
 NEWS_TABS = {

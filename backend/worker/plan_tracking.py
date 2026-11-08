@@ -57,15 +57,12 @@ def _assign(row: Any, values: dict[str, Any]) -> bool:
 def _market_dates_after(
     db: Session, start_after: date, cutoff: date, limit: int
 ) -> list[date]:
-    """The first ``limit`` market sessions (any stored bar) after ``start_after``."""
+    """The first ``limit`` Taiwan sessions (any stored Taiwan bar) after ``start_after``.
 
-    return db.scalars(
-        select(MarketBar.trading_date)
-        .where(MarketBar.trading_date > start_after, MarketBar.trading_date <= cutoff)
-        .distinct()
-        .order_by(MarketBar.trading_date)
-        .limit(limit)
-    ).all()
+    A US index close on a Taiwan holiday (Issue #547) is not a session.
+    """
+
+    return pipeline.taiwan_bar_dates(db, end=cutoff, after=start_after, limit=limit)
 
 
 def plan_outcome(

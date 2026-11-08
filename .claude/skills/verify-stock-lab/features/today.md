@@ -2,7 +2,7 @@
 
 入口：主導航「今日可買」（`MAIN_NAV` 第一項，#493 前叫「今日」），`TodayPage`（`frontend/src/App.tsx`）；`MAIN_NAV` 在 `frontend/src/components/Navbar.tsx`。
 
-大盤頁 `/market`（主導航「大盤」，`MAIN_NAV` 第二項，`MarketPage`，`frontend/src/market/MarketPage.tsx`）也歸這個檔（#549）：它是從今日可買頁拆出的大盤概況，讀同一支 `dashboard.market_overview`，今日可買頁只留一行摘要連過去，兩頁一起驗。
+大盤頁 `/market`（主導航「大盤」，`MAIN_NAV` 第二項，`MarketPage`，`frontend/src/market/MarketPage.tsx`）也歸這個檔（#549）：它是從今日可買頁拆出的大盤概況，讀同一支 `dashboard.market_overview`（#547 起含美股指數的 `foreign_indices`），今日可買頁只留一行摘要連過去，兩頁一起驗。
 
 ## API
 
@@ -54,6 +54,7 @@
 | 今日可買 | `candidates.json` | 標題下 `資料 <C/>` 與 `<n> 檔`；每列 `#<名次>`；每列明細 `資料日期 <C/>`、`來源：…`；每列明細一行 `加入追蹤`（按鈕）或 `已在追蹤`（連到觀察中的計畫） | 新聞情緒分項與理由後的 `推論`；每列 AI 入口 `AI 推論 ▸`（有 `llm_note`）或 `AI 說明 ▸`；明細的 `AI 推論` 說明區；來源行結尾 `（推論）` | `當日零候選`／`尚無候選清單` |
 | 大盤頁：大盤概況 | `dashboard.market_overview` | 標題 `大盤概況` 下一行 `資料 <market_overview.trading_date>`；加權指數、櫃買指數、成交金額（億元）、漲跌家數；資料日同 `D`；「資料說明」內來源與 `成交金額範圍：…` | — | `上市大盤資料未取得`／`上櫃大盤資料未取得` |
 | 大盤頁：三張日 K 卡 | `taiex-bars.json`、`tpex-bars.json`、`tx-bars.json` | 依序 `加權指數日線`、`櫃買指數日線`、`台指期近月日線`，都是個股頁的 K 線卡（`StockBarsChart`），標題下一行 `資料 <data_as_of>`；`最近 <count> 根日線；缺日不補、停牌不畫 K 線`；資料表最新一根（單位「點」，指數兩位小數、台指期整數）；台指期卡最後有開放資料顯名 | — | `無資料`＋`來源未提供日線` |
+| 大盤頁：美股（前一交易日） | `dashboard.market_overview.foreign_indices` | 在三張日 K 卡之後，標題 `美股（前一交易日）`；S&P 500、NASDAQ 綜合指數、道瓊工業指數、費城半導體指數四格：收盤（點，兩位小數）、`<±漲跌>（<±漲跌幅>%）`、`資料 <trading_date>`，`freshness=stale` 時同一行接 ` 非最新`、`us_market_closed` 時接 ` <expected_date> 美股休市`；「資料說明」內 FRED 顯名與各序列的版權標示；每個指數可展開的日 K 卡（`/stocks/US/<代號>/bars`，只畫收盤線，#547） | — | `無資料：尚未收集`／`無資料：最近一次擷取失敗（<日期>）` |
 | 熱門族群 | `today-board.json` | 榜別分頁下一行 `資料 <B/>`；每列 `資料 <B/> · 相對加權指數` | — | `meta.empty_message` 或 `此榜目前沒有族群` |
 | 重點新聞 | `dashboard.news` 前 5 則 | 每則：來源 badge、`發布於／事件於／事件日 …` 時間 | 有 AI 判讀的卡在方向後接 `AI 推論` | `市場新聞區尚無可顯示內容。` |
 
@@ -78,6 +79,7 @@
 | T13 | CI | 加入追蹤 | 在 T7 之後。截圖展開每列明細；`items` 非空時，整行 `加入追蹤` 與整行 `已在追蹤` 的行數合計 = `items` 數，`已在追蹤` 的行數 = `items[].open_plan_id` 非 null 的筆數；`items` 空時兩種行都不出現 |
 | T14 | CI | 今日可買的大盤摘要列 | `today-1280.txt` 有相連的四行：`加權 <收盤，兩位小數> <±漲跌幅，兩位小數>%`（`change_pct` 為 null 時 `—`；`unavailable` 或收盤為 null 時整行 `加權 未取得`）、同格式的 `櫃買 …`、`資料 <market_overview.trading_date 換成 YYYY/MM/DD>`（null 時 `資料日期未提供`）、`看大盤 →`；四行在標題 `今日可買`（同 T7 的定位）之前；頁面沒有整行 `漲跌家數（股票）`、`括號為漲停／跌停`（四格大盤概況已移到大盤頁） |
 | T15 | CI | 大盤頁的三張日 K | 讀 `market-1280.txt` 與 `taiex-bars.json`、`tpex-bars.json`、`tx-bars.json`。整行 `加權指數日線`、`櫃買指數日線`、`台指期近月日線` 依序出現。每張：API `bars` 非空時至少一根可畫（同前端 `isDrawableBar`：未停牌、開高低收都是正數且高、低包住開收；收盤-only 的列開＝高＝低＝收也算），標題的下一行是 `資料 <data_as_of 換成 YYYY/MM/DD>`，其後有整行 `最近 <count> 根日線；缺日不補、停牌不畫 K 線`，資料表（截圖展開）有一行以 `<最新一根可畫的日期 YYYY/MM/DD>`、tab、開、高、低、收（指數兩位小數、台指期整數，以 tab 分隔）開頭；`bars` 空時其後有整行 `來源未提供日線`。台指期標題之後有整行 `資料來源：臺灣期貨交易所（政府資料開放平臺，政府資料開放授權條款第1版）`。CI 假資料庫有三者的日線（台指期只有最後 10 個交易日、整數點，`fixture_data.TX_SESSIONS`） |
+| T16 | CI | 大盤頁的美股（前一交易日） | 讀 `market-1280.txt` 與 `dashboard.json` 的 `market_overview.foreign_indices`（不可為空）。整行 `美股（前一交易日）` 在 `台指期近月日線` 之後；其後每個指數：`available` 時有整行名稱、收盤（兩位小數、千分位）、`<±漲跌>（<±漲跌幅>%）`（null 寫 `—`）與 `資料 <trading_date 換成 YYYY/MM/DD>`（`stale` 接 ` 非最新`，`us_market_closed` 接 ` <expected_date> 美股休市`）；`unavailable` 時整行 `無資料：尚未收集`，`reason=fetch_failed` 時 `無資料：最近一次擷取失敗（<last_attempt_date>）`。有任一 `available` 時其後有整行 `資料來源：FRED，Federal Reserve Bank of St. Louis（個人非商業使用）`（資料說明，截圖展開）。CI 假資料庫有四檔到 T 前一個平日的收盤（`fixture_data.US_INDEX_SYMBOLS`，#547） |
 
 ## 陷阱
 
@@ -87,7 +89,7 @@
 
 ## 判定
 
-- 通過：T1～T9、T11～T13 全部通過；T10 由人工判讀另記。
+- 通過：T1～T9、T11～T16 全部通過；T10 由人工判讀另記。
 - 失敗：任一條失敗，列出編號、預期與實際。
 - 無法判定：沒有失敗，但有檢查無法判定（API 非 200、截圖未 ready，或上游沒通過，見 [README 三態與上游](README.md#三態與上游)）；列出 URL 或上游編號。
 
