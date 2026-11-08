@@ -197,7 +197,7 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
 
 [`verified_taiex_sessions`](../backend/app/coverage.py) 與 backfill 日期報表的 `taiex_rows` 只計 `exchange=TWSE` 的 TAIEX／TWII index bar；TPEx 同名 index 不增加交易日分母、`taiex_rows` 或普通股票有效 bar 日。交易日校驗要求 active index、日期範圍與 provenance，並可回退到來源與日期相符的 raw `MI_INDEX`；升級成真實日 K 的列以 `MI_5MINS_HIST` 月報核實（[指數日 K](#指數日-k)）。TWSE 基準是兩市場普通股票共用的日期基準，沒有兩市場各自的交易日曆；session 列數不代表欄位可用。
 
-基準從個股歷史的第一天 2024-09-30（`app.coverage.SESSION_BASIS_START`）起算。指數歷史往前到 2023-09-01（[#563](https://github.com/YiCheng0608/stock-lab/issues/563)），這天之前的加權列只是指數資料、不是交易日基準：`MI_5MINS_HIST` 月報只核實這天起的日子；族群分數的催化劑窗口（`pipeline._benchmark_session_dates`）、休眠推定的近 60 個交易日（`pipeline._quote_sessions`）與稽核的加權交易日（`tools/audit`）也都從這天起算。回測的 `--start-date` 不早於這天。日後要把個股歷史延伸到更早，要先處理只看加權列、不驗來源的兩處：`worker/backfill.py` 的 `verified_trading_dates` 與 `require_provenance=False` 的日期報表。
+基準從個股歷史的第一天 2024-09-30（`app.coverage.SESSION_BASIS_START`）起算。指數歷史往前到 2023-09-01（[#563](https://github.com/YiCheng0608/stock-lab/issues/563)），這天之前的加權列只是指數資料、不是交易日基準：`MI_5MINS_HIST` 月報只核實這天起的日子；族群分數的催化劑窗口（`pipeline._benchmark_session_dates`）、休眠推定的近 60 個交易日（`pipeline._quote_sessions`）與稽核的加權交易日（`tools/audit`）也都從這天起算。不驗來源的路徑也一樣：`app.coverage.is_index_history`（這天之前、`twse_index_ohlcv` 的加權列）在 `require_provenance=False` 時也不算交易日（有回補 manifest 時 `/api/coverage` 走這條），回補日期報表略過這天之前的指數與台指期列，延伸補抓的已驗證日也不含它們。回測的 `--start-date` 不早於這天。日後要把個股歷史延伸到更早，`SESSION_BASIS_START` 與 `is_index_history` 要一起改。
 
 ### 回補目標與確定休市日
 
