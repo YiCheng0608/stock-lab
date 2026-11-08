@@ -74,7 +74,12 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 - [TWSE Swagger](https://openapi.twse.com.tw/v1/swagger.json)（`basePath=/v1`）與 [TPEx Swagger](https://www.tpex.org.tw/openapi/swagger.json)（server `https://www.tpex.org.tw/openapi/v1`）是 OpenAPI 端點與欄位的參考。
 - OpenAPI 資料集標示免費並採[政府資料開放授權條款第 1 版](https://data.gov.tw/license)；raw 保存與摘要須顯名、保留來源完整性與可追溯性。授權不等於 endpoint SLA。
 - 期交所[使用條款](https://www.taifex.com.tw/cht/edu/userTerms)：網站內容引用或轉載須事前書面同意，只有「已授權政府資料開放平臺提供」的資料除外。所以只用開放授權的 OpenAPI `DailyMarketReportFut`，不用網站下載 `futDataDown`（使用者 2026-11-08 決定，[#552](https://github.com/YiCheng0608/stock-lab/issues/552#issuecomment-6715831640)）；畫面依授權條款第三條顯名「資料來源：臺灣期貨交易所（政府資料開放平臺，政府資料開放授權條款第1版）」。
-- [TWSE 使用條款](https://www.twse.com.tw/zh/terms/use.html)限制未經同意的自動下載，collector 只做有上限的批次請求；[TPEx 條款](https://www.tpex.org.tw/zh-tw/gtsm_disclaimer.html?l=zh-tw)要求引用標示來源並維持完整性。
+- [TWSE 使用條款](https://www.twse.com.tw/zh/terms/use.html)限制未經同意的自動下載，collector 只做有上限的批次請求。
+- [TPEx 網站使用條款](https://www.tpex.org.tw/zh-tw/gtsm_disclaimer.html?l=zh-tw)：
+  - 第七條：引用要標示來源並維持完整性；已授權政府資料開放平臺提供的資料，不受重製等限制。
+  - 第五條：禁止「非依櫃檯買賣中心同意之方式」以自動程式下載本網站資料。OpenAPI 是同意的方式（[swagger](https://www.tpex.org.tw/openapi/swagger.json) 寫「歡迎各位介接使用」）。collector 讀的網站端點 `dailyQuotes`、`insti/dailyTrade`、`margin/balance`、`exDailyQ` 不是，`inx`、`tradingIndex`、`info.tpex.org.tw` 的 `etfFilter` 也不是。
+  - 查核結論（2026-11-08，[#555](https://github.com/YiCheng0608/stock-lab/issues/555)）：前四個端點的資料集都登錄在 data.gov.tw（[11370](https://data.gov.tw/dataset/11370)、[11856](https://data.gov.tw/dataset/11856)、[11387](https://data.gov.tw/dataset/11387)、[11633](https://data.gov.tw/dataset/11633)，政府資料開放授權條款第1版）。OpenAPI 有內容相同的端點：`tpex_mainboard_daily_close_quotes`、`tpex_3insti_daily_trading`、`tpex_mainboard_margin_balance`、`tpex_exright_daily`。2026-11-06 的日行情、法人、融資，全部列逐欄比對都一致；OpenAPI 的法人檔少了自營商自行買賣與避險明細，collector 沒有讀這些欄。
+  - 限制：OpenAPI 與 data.gov.tw 的下載都只有最新一天、不能指定日期。所以漏日補抓、回補與除權息回補，沒有開放授權的替代來源，目前仍走網站端點；要不要改，等使用者在 #555 決定。
 - 各端點的數字 rate limit、精確發布時間、逐筆首次可得時間、修訂／撤回紀錄與停用通知都未公開；一次 HTTP 200、今日的 payload 形狀或名稱含「history」都不能證明歷史可重建。
 - TWSE 的 [A05 付費商品](https://eshop.twse.com.tw/zh/product/detail/cfec9a1470e448ec91bfde006db361e8) 不是本專案資料來源。
 
