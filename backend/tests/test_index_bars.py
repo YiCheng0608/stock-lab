@@ -554,6 +554,36 @@ def test_taiex_history_before_the_stock_history_is_inserted_but_never_a_session(
     assert again["counts"]["unchanged"] == 2 * len(PRE_SESSIONS + BASIS_SESSIONS)
 
 
+def test_the_backfill_report_and_api_coverage_see_no_index_history(factory):
+    """/api/coverage with a manifest reads coverage_report(require_provenance=False)."""
+    from worker.backfill import coverage_report
+
+    with factory() as db:
+        _seed_taiex(db, BASIS_SESSIONS)
+        db.commit()
+        start, end = date(2024, 8, 1), date(2024, 10, 31)
+        before = coverage_report(db, start, end, require_provenance=False)
+
+    _history_backfill(factory)
+
+    assert coverage.INDEX_HISTORY_SOURCE == ib.TWSE_SOURCE
+    with factory() as db:
+        assert (
+            coverage.verified_taiex_sessions(db, require_provenance=False)
+            == BASIS_SESSIONS
+        )
+        after = coverage_report(db, start, end, require_provenance=False)
+    by_day = {item["date"]: item for item in after["date_coverage"]}
+    for day in PRE_SESSIONS:
+        assert by_day[day.isoformat()]["received"] is False
+        assert by_day[day.isoformat()]["bars"] == {}
+    assert after["summary"]["verified_taiex_sessions"] == len(
+        [day for day in BASIS_SESSIONS if day <= end]
+    )
+    assert after["summary"]["status_counts"] == before["summary"]["status_counts"]
+    assert after["summary"]["missing_dates"] == before["summary"]["missing_dates"]
+
+
 def test_the_collect_still_inserts_no_taiex_day(factory):
     """Only the backfill adds TAIEX history: collect keeps MI_INDEX as the basis."""
     bars = ib.build_bars(

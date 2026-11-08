@@ -38,6 +38,15 @@ TAIPEI_UTC_OFFSET = timedelta(hours=8)
 # exist on this day; a TAIEX row before it only carries index data and is
 # never a session denominator for the stocks (_raw_is_date_verified).
 SESSION_BASIS_START = date(2024, 9, 30)
+# worker.index_bars.TWSE_SOURCE: the TAIEX rows the monthly report backfill
+# writes.  Before SESSION_BASIS_START only that backfill writes TAIEX rows.
+INDEX_HISTORY_SOURCE = "twse_index_ohlcv"
+
+
+def is_index_history(trading_date: date, source: str | None) -> bool:
+    """A TAIEX row of the index history before the stock history (Issue #563)."""
+
+    return trading_date < SESSION_BASIS_START and source == INDEX_HISTORY_SOURCE
 
 
 def collect_states(db: Session, start_date: date, end_date: date) -> dict[date, str]:
@@ -295,6 +304,10 @@ def verified_taiex_sessions(
     for stored_date, stored_source, raw in rows:
         trading_date = read_market_date(stored_date)
         if trading_date is None:
+            continue
+        if is_index_history(trading_date, read_market_source(stored_source)):
+            # Index history, in both modes: the backfill report's
+            # require_provenance=False reads /api/coverage (Issue #563).
             continue
         if not require_provenance:
             sessions.add(trading_date)
