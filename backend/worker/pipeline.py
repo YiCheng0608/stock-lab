@@ -4556,28 +4556,73 @@ def taiwan_bar_dates(
     return list(db.scalars(query).all())
 
 
+def prefetch_us_index_series(
+    db: Session,
+    session: date,
+    fetch: Callable[[str], Any] | None,
+    batch: Any,
+    warnings: list[str],
+    *,
+    no_data: bool,
+) -> dict[str, Any] | None:
+    """collect's US index fetch (worker.us_index_bars, Issue #547), before any write.
+
+    Runs in collect's fetch phase: the four FRED GETs never wait while the
+    collect holds the SQLite write lock (#558 review item 3).  Only a snapshot
+    collect whose batch has the session's TAIEX row asks.  The request windows
+    are read first and that read transaction is ended before the GETs.  A
+    failure is a non-core warning.  None when the adapter has no FRED fetcher.
+    """
+
+    if fetch is None:
+        return None
+    if not getattr(batch, "snapshot_feeds", False) or no_data:
+        return {"status": "skipped", "reason": "not_a_snapshot_session"}
+    if not any(
+        record.symbol == "TAIEX" and record.trading_date == session
+        for record in batch.bars
+    ):
+        return {"status": "skipped", "reason": "no_taiex_session"}
+    from worker.us_index_bars import fetch_us_index_series, us_index_requests
+
+    try:
+        requests = us_index_requests(db, session)
+        db.commit()  # only reads: end the transaction before the HTTP calls
+        return {
+            "status": "fetched",
+            "fetched": fetch_us_index_series(requests, fetch),
+        }
+    except Exception as exc:
+        db.rollback()
+        warnings.append(
+            f"us index bars unavailable for collect: {type(exc).__name__}: {exc}"
+        )
+        return {"status": "failed"}
+
+
 def store_collect_us_index_bars(
     db: Session,
     run: IngestionRun,
     session: date,
-    fetch: Callable[[str], Any] | None,
+    prefetched: dict[str, Any] | None,
     warnings: list[str],
     *,
-    snapshot: bool,
-    no_data: bool,
     force: bool = False,
 ) -> dict[str, Any]:
-    """collect's US index step (worker.us_index_bars, Issue #547); non-core.
+    """collect's US index write (worker.us_index_bars, Issue #547); non-core.
 
-    Only a snapshot collect of a Taiwan session whose TAIEX row was written
-    asks FRED, so every US row (all before ``session``) is written together
-    with a Taiwan session after it and never becomes the newest bar date.
+    Writes what ``prefetch_us_index_series`` fetched, only when the session's
+    TAIEX row was written, so every US row (all before ``session``) comes with
+    a Taiwan session after it and never becomes the newest bar date.  The whole
+    step is one savepoint (each series another inside it): a database error
+    rolls back only this step, becomes a warning, and the rest of collect
+    commits as usual (#558 review item 2).
     """
 
-    if fetch is None:
+    if prefetched is None:
         return {}
-    if not snapshot or no_data:
-        return {"status": "skipped", "reason": "not_a_snapshot_session"}
+    if prefetched.get("status") != "fetched":
+        return dict(prefetched)
     benchmark = _benchmark_instrument(db)
     if benchmark is None or (
         db.scalar(
@@ -4589,17 +4634,26 @@ def store_collect_us_index_bars(
         is None
     ):
         return {"status": "skipped", "reason": "no_taiex_session"}
-    from worker.us_index_bars import collect_us_index_bars
+    from worker.us_index_bars import write_us_index_series
 
+    step_warnings: list[str] = []
     try:
-        series = collect_us_index_bars(
-            db, run, session, fetch, _upsert_raw_payload, warnings, force=force
-        )
+        with db.begin_nested():
+            series = write_us_index_series(
+                db,
+                run,
+                session,
+                prefetched["fetched"],
+                _upsert_raw_payload,
+                step_warnings,
+                force=force,
+            )
     except Exception as exc:
         warnings.append(
             f"us index bars unavailable for collect: {type(exc).__name__}: {exc}"
         )
         return {"status": "failed"}
+    warnings.extend(step_warnings)
     # Strings and numbers only (dates as ISO strings).
     return {"status": "complete", "series": series}
 
@@ -4764,6 +4818,15 @@ def collect(
                 raise OfficialDataError(
                     "official batch did not include raw payload captures"
                 )
+            # Still the fetch phase: FRED is asked before collect writes a row.
+            us_index_prefetched = prefetch_us_index_series(
+                db,
+                score_date,
+                getattr(active_adapter, "us_index_fetcher", None),
+                batch,
+                batch.warnings,
+                no_data=score_date in batch_no_data_dates,
+            )
             raw_ids: dict[tuple[str, str], int] = {}
             stored_raw_ids: set[int] = set()
             for payload in batch.payloads:
@@ -4917,10 +4980,8 @@ def collect(
                 db,
                 run,
                 score_date,
-                getattr(active_adapter, "us_index_fetcher", None),
+                us_index_prefetched,
                 batch.warnings,
-                snapshot=bool(getattr(batch, "snapshot_feeds", False)),
-                no_data=score_date in batch_no_data_dates,
                 force=force,
             )
             event_coverage = dict(batch.event_coverage or {})

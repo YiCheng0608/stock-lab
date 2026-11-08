@@ -21,6 +21,12 @@ session is before D.  A response that is not that series' CSV, has a
 malformed line or a date outside the request is rejected whole (a
 ``us index bars`` non-core warning; the raw is kept).  A stored row keeps its
 close (a different close is a conflict) unless ``force``.
+
+collect fetches in its fetch phase, before it writes anything
+(``us_index_requests`` reads, ``fetch_us_index_series`` has no database
+access), and writes later in one savepoint per series inside one for the step
+(``write_us_index_series``), so a slow FRED never holds the write lock and a
+database error stays non-core (PR #558 review).
 """
 
 from __future__ import annotations
@@ -369,6 +375,162 @@ def _upsert_quality(
     row.checked_at = utcnow()
 
 
+@dataclass(frozen=True)
+class SeriesRequest:
+    series: UsIndex
+    start: date
+    end: date
+
+    @property
+    def url(self) -> str:
+        return request_url(self.series, self.start, self.end)
+
+
+@dataclass
+class FetchedSeries:
+    """One series' answer, fetched and parsed before collect writes anything."""
+
+    request: SeriesRequest
+    # The raw capture (file written, no DB row yet); None when the GET failed.
+    captured: Any = None
+    parsed: ParsedSeries | None = None
+    error: Exception | None = None
+
+
+def us_index_requests(db: Session, session: date) -> list[SeriesRequest]:
+    """The four requests of the collect of Taipei session ``session`` (reads only)."""
+
+    return [
+        SeriesRequest(series, *request_window(latest_stored(db, series), session))
+        for series in SERIES
+    ]
+
+
+def fetch_us_index_series(
+    requests: Iterable[SeriesRequest], fetch: Callable[[str], Any]
+) -> list[FetchedSeries]:
+    """GET and parse every series; no database access (#558 review item 3).
+
+    collect calls this in its fetch phase, before it writes any row, so a slow
+    FRED never holds the SQLite write lock.  A failed GET or a rejected answer
+    is kept with its error; an answer is captured as a raw file either way.
+    """
+
+    fetched: list[FetchedSeries] = []
+    for request in requests:
+        item = FetchedSeries(request)
+        try:
+            text = fetch(request.url)
+        except Exception as exc:
+            item.error = exc
+            fetched.append(item)
+            continue
+        try:
+            item.parsed = parse_csv(
+                text, request.series, start=request.start, end=request.end
+            )
+        except Exception as exc:
+            item.error = exc
+        item.captured = capture_payload(
+            RAW_SOURCE,
+            request.url,
+            {
+                "series_id": request.series.series_id,
+                "csv": text if isinstance(text, str) else None,
+            },
+            item.parsed.latest.isoformat()
+            if item.parsed and item.parsed.latest
+            else None,
+        )
+        fetched.append(item)
+    return fetched
+
+
+def _write_series(
+    db: Session,
+    run: Any,
+    session: date,
+    item: FetchedSeries,
+    upsert_raw: Callable[[Session, Any, Any], Any],
+    warnings: list[str],
+    *,
+    force: bool,
+) -> dict[str, Any]:
+    series, request = item.request.series, item.request
+    checks: dict[str, Any] = {
+        "series_id": series.series_id,
+        "endpoint": request.url,
+        "requested": [request.start.isoformat(), request.end.isoformat()],
+    }
+    if item.captured is not None:
+        checks["raw_payload_id"] = upsert_raw(db, run, item.captured).id
+    if item.parsed is None:
+        error = item.error or OfficialDataError("no answer")
+        warnings.append(us_index_warning(series, error))
+        checks["error"] = f"{type(error).__name__}: {error}"
+        _upsert_quality(db, series, session, "failed", checks)
+        return {**checks, "status": "failed"}
+    parsed = item.parsed
+    checks["latest_observation"] = parsed.latest.isoformat() if parsed.latest else None
+    checks["closed_dates"] = [day.isoformat() for day in parsed.closed_dates]
+    try:
+        with db.begin_nested():
+            written = store_us_index_bars(
+                db, series, parsed.bars, checks["raw_payload_id"], force=force
+            )
+    except Exception as exc:
+        warnings.append(us_index_warning(series, exc))
+        checks["error"] = f"{type(exc).__name__}: {exc}"
+        _upsert_quality(db, series, session, "failed", checks)
+        return {**checks, "status": "failed"}
+    if written.conflicts:
+        warnings.append(
+            f"{WARNING_PREFIX} kept {len(written.conflicts)} stored {EXCHANGE} "
+            f"{series.symbol} close(s) that differ from FRED {series.series_id}"
+        )
+    checks["counts"] = dict(written.counts)
+    _upsert_quality(db, series, session, "complete", checks)
+    return {**checks, "status": "complete", "conflicts": written.conflicts}
+
+
+def write_us_index_series(
+    db: Session,
+    run: Any,
+    session: date,
+    fetched: Iterable[FetchedSeries],
+    upsert_raw: Callable[[Session, Any, Any], Any],
+    warnings: list[str],
+    *,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Write the fetched series: raw rows, bars and data_quality; non-core.
+
+    Each series is one savepoint (#558 review item 2): a database error in
+    its raw, bars or quality row rolls back that series only and becomes a
+    warning, and the session stays usable for the rest of collect.  A rejected
+    or failed series writes no bar and records the reason in its quality row.
+    """
+
+    result: dict[str, Any] = {}
+    for item in fetched:
+        series = item.request.series
+        series_warnings: list[str] = []
+        try:
+            with db.begin_nested():
+                result[series.symbol] = _write_series(
+                    db, run, session, item, upsert_raw, series_warnings, force=force
+                )
+        except Exception as exc:
+            series_warnings = [us_index_warning(series, exc)]
+            result[series.symbol] = {
+                "series_id": series.series_id,
+                "status": "failed",
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        warnings.extend(series_warnings)
+    return result
+
+
 def collect_us_index_bars(
     db: Session,
     run: Any,
@@ -379,80 +541,13 @@ def collect_us_index_bars(
     *,
     force: bool = False,
 ) -> dict[str, Any]:
-    """collect's US index step for Taipei session ``session``; non-core.
+    """Requests, fetch and write in one call (tests and one-off runs).
 
-    One request per series.  The raw is stored even when the answer is
-    rejected; a rejected or failed series writes no bar, records the reason in
-    its ``data_quality`` row and adds one warning.  Other series go on.
+    collect itself fetches in its fetch phase and writes later
+    (``pipeline.prefetch_us_index_series``, ``store_collect_us_index_bars``).
     """
 
-    result: dict[str, Any] = {}
-    for series in SERIES:
-        start, end = request_window(latest_stored(db, series), session)
-        url = request_url(series, start, end)
-        checks: dict[str, Any] = {
-            "series_id": series.series_id,
-            "endpoint": url,
-            "requested": [start.isoformat(), end.isoformat()],
-        }
-        try:
-            text = fetch(url)
-        except Exception as exc:
-            warnings.append(us_index_warning(series, exc))
-            checks["error"] = f"{type(exc).__name__}: {exc}"
-            _upsert_quality(db, series, session, "failed", checks)
-            result[series.symbol] = {**checks, "status": "failed"}
-            continue
-        parsed: ParsedSeries | None = None
-        error: Exception | None = None
-        try:
-            parsed = parse_csv(text, series, start=start, end=end)
-        except Exception as exc:
-            error = exc
-        captured = capture_payload(
-            RAW_SOURCE,
-            url,
-            {
-                "series_id": series.series_id,
-                "csv": text if isinstance(text, str) else None,
-            },
-            parsed.latest.isoformat() if parsed and parsed.latest else None,
-        )
-        raw = upsert_raw(db, run, captured)
-        checks["raw_payload_id"] = raw.id
-        if parsed is None:
-            assert error is not None
-            warnings.append(us_index_warning(series, error))
-            checks["error"] = f"{type(error).__name__}: {error}"
-            _upsert_quality(db, series, session, "failed", checks)
-            result[series.symbol] = {**checks, "status": "failed"}
-            continue
-        checks["latest_observation"] = (
-            parsed.latest.isoformat() if parsed.latest else None
-        )
-        checks["closed_dates"] = [day.isoformat() for day in parsed.closed_dates]
-        try:
-            with db.begin_nested():
-                written = store_us_index_bars(
-                    db, series, parsed.bars, raw.id, force=force
-                )
-        except Exception as exc:
-            warnings.append(us_index_warning(series, exc))
-            checks["error"] = f"{type(exc).__name__}: {exc}"
-            _upsert_quality(db, series, session, "failed", checks)
-            result[series.symbol] = {**checks, "status": "failed"}
-            continue
-        if written.conflicts:
-            warnings.append(
-                f"{WARNING_PREFIX} kept {len(written.conflicts)} stored {EXCHANGE} "
-                f"{series.symbol} close(s) that differ from FRED {series.series_id}"
-            )
-        checks["counts"] = dict(written.counts)
-        _upsert_quality(db, series, session, "complete", checks)
-        result[series.symbol] = {
-            **checks,
-            "status": "complete",
-            "conflicts": written.conflicts,
-        }
-    db.flush()
-    return result
+    fetched = fetch_us_index_series(us_index_requests(db, session), fetch)
+    return write_us_index_series(
+        db, run, session, fetched, upsert_raw, warnings, force=force
+    )

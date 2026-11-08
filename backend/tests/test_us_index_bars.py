@@ -329,6 +329,77 @@ def test_a_fixture_adapter_without_a_fred_fetcher_asks_nothing(collect_db):
         assert run.metadata_json["us_index_daily_bars"] == {}
 
 
+def test_a_database_error_in_the_us_step_leaves_the_collect_committed(
+    collect_db, monkeypatch
+):
+    # A flush that fails inside the step (a unique-key clash in the quality
+    # write) must roll back the US rows only (PR #558 review item 2).
+    def clash(db, series, session, status, checks):
+        for _ in range(2):
+            db.add(
+                DataQuality(entity_type="t547", entity_key="clash", as_of_date=session)
+            )
+        db.flush()
+
+    monkeypatch.setattr(us, "_upsert_quality", clash)
+
+    result = pipeline.collect(COLLECT_DAY, adapter=_adapter(Fred()))
+
+    assert result["status"] == "success", result
+    assert result["core_warnings"] == []
+    assert len(result["noncore_warnings"]) == 4
+    assert all(
+        warning.startswith("us index bars unavailable for US ")
+        and "IntegrityError" in warning
+        for warning in result["noncore_warnings"]
+    )
+    with collect_db() as db:
+        taiex = db.scalar(select(Instrument).where(Instrument.symbol == "TAIEX"))
+        assert db.scalar(
+            select(MarketBar.id).where(
+                MarketBar.instrument_id == taiex.id,
+                MarketBar.trading_date == COLLECT_DAY,
+            )
+        )
+        assert db.get(IngestionRun, result["run_id"]).status == "success"
+        assert all(_bars(db, item.symbol) == [] for item in US_INDEXES)
+        assert (
+            db.scalar(
+                select(func.count())
+                .select_from(DataQuality)
+                .where(DataQuality.entity_type == "t547")
+            )
+            == 0
+        )
+
+
+def test_fred_is_asked_before_collect_writes_anything(collect_db, monkeypatch):
+    # The GETs are in collect's fetch phase, not while it holds the write lock
+    # (PR #558 review item 3): every FRED call comes before the first raw row.
+    events: list[str] = []
+    original = pipeline._upsert_raw_payload
+
+    def recorded(db, run, payload):
+        events.append(f"write {payload.source}")
+        return original(db, run, payload)
+
+    class Ordered(Fred):
+        def __call__(self, url):
+            events.append("fetch fred")
+            return super().__call__(url)
+
+    monkeypatch.setattr(pipeline, "_upsert_raw_payload", recorded)
+
+    result = pipeline.collect(COLLECT_DAY, adapter=_adapter(Ordered()))
+
+    assert result["status"] == "success", result
+    fetches = [i for i, event in enumerate(events) if event == "fetch fred"]
+    writes = [i for i, event in enumerate(events) if event.startswith("write")]
+    assert len(fetches) == 4 and writes
+    assert max(fetches) < min(writes)
+    assert "write fred" in events
+
+
 def _run(db):
     run = IngestionRun(
         run_type="collect", source="official", run_date=COLLECT_DAY, status="running"
@@ -389,7 +460,7 @@ def test_a_different_close_for_a_stored_day_is_kept_and_warned(factory):
     assert pipeline.NONCORE_WARNING_PATTERN.match(warnings[0])
 
 
-def test_a_us_close_on_a_taiwan_holiday_is_not_a_backtest_session(factory):
+def test_taiwan_bar_dates_skip_a_us_only_day(factory):
     # 2026-09-03 has a US close here but no Taiwan bar (a Taiwan holiday).
     holiday = Fred(rows=[("2026-09-02", "6420.50"), ("2026-09-03", "6430.00")])
     with factory() as db:
@@ -464,21 +535,48 @@ def _taiwan_sessions(db, days):
     db.commit()
 
 
-def _session_views(db, start, end, holiday):
+def _session_views(factory, monkeypatch, start, end, holiday):
+    """What backtest, plan tracking and the coverage report take as sessions."""
+
     from worker.backfill import coverage_report
     from worker.plan_tracking import _market_dates_after
 
-    return {
-        "score_dates": pipeline.taiwan_bar_dates(db, start, end),
-        "tracking_sessions": _market_dates_after(
-            db, start - timedelta(days=1), end, 40
-        ),
-        # The whole report: every date's status and bars by exchange, the summary.
-        "coverage": coverage_report(db, start, end, known_no_data_dates={holiday}),
-    }
+    # The real backtest() on this database (PR #558 review item 1): the score
+    # dates it replays and the score_session_count it records.
+    monkeypatch.setattr(pipeline, "SessionLocal", factory)
+    monkeypatch.setattr(pipeline, "init_db", lambda: None)
+    replayed: list[date] = []
+    original = pipeline._generate_signals
+
+    def spy(db, score_date, strategies, **kwargs):
+        replayed.append(score_date)
+        return original(db, score_date, strategies, **kwargs)
+
+    monkeypatch.setattr(pipeline, "_generate_signals", spy)
+    result = pipeline.backtest(start, end, force=True)
+    monkeypatch.setattr(pipeline, "_generate_signals", original)
+    with factory() as db:
+        run = db.scalar(
+            select(IngestionRun)
+            .where(IngestionRun.run_type == "backtest")
+            .order_by(IngestionRun.id.desc())
+            .limit(1)
+        )
+        return {
+            "backtest_status": result["run"]["status"],
+            "backtest_score_dates": replayed,
+            "score_session_count": run.metadata_json["score_session_count"],
+            "tracking_sessions": _market_dates_after(
+                db, start - timedelta(days=1), end, 40
+            ),
+            # The whole report: every date's status and bars by exchange, the summary.
+            "coverage": coverage_report(db, start, end, known_no_data_dates={holiday}),
+        }
 
 
-def test_a_us_close_on_a_taiwan_holiday_changes_no_taiwan_session_view(factory):
+def test_a_us_close_on_a_taiwan_holiday_changes_no_taiwan_session_view(
+    factory, monkeypatch
+):
     # 2026-09-30 (Wednesday): Taiwan closed (confirmed), the US open.
     start, holiday, end = date(2026, 9, 28), date(2026, 9, 30), date(2026, 10, 2)
     taiwan = [
@@ -496,7 +594,8 @@ def test_a_us_close_on_a_taiwan_holiday_changes_no_taiwan_session_view(factory):
     ]
     with factory() as db:
         _taiwan_sessions(db, taiwan)
-        before = _session_views(db, start, end, holiday)
+    before = _session_views(factory, monkeypatch, start, end, holiday)
+    with factory() as db:
         us.collect_us_index_bars(
             db,
             _run(db),
@@ -507,10 +606,12 @@ def test_a_us_close_on_a_taiwan_holiday_changes_no_taiwan_session_view(factory):
         )
         db.commit()
         assert holiday in {row.trading_date for row in _bars(db, "SPX")}
-        after = _session_views(db, start, end, holiday)
+    after = _session_views(factory, monkeypatch, start, end, holiday)
 
     assert after == before
-    assert before["score_dates"] == taiwan
+    assert before["backtest_status"] == "success"
+    assert before["backtest_score_dates"] == taiwan
+    assert before["score_session_count"] == len(taiwan)
     assert before["tracking_sessions"] == taiwan
     statuses = {
         item["date"]: item["status"] for item in before["coverage"]["date_coverage"]
