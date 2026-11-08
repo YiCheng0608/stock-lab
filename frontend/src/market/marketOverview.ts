@@ -1,5 +1,5 @@
 import { formatDay } from '../dates'
-import type { ForeignIndex, MarketOverview, MarketOverviewExchange, StockBarsResponse } from '../types'
+import type { ForeignIndex, MarketOverview, MarketOverviewExchange, StockBarsResponse, TaiexMa60 } from '../types'
 import { formatFixed } from '../units'
 import { isFiniteNumber } from '../stock/stockBars'
 
@@ -114,7 +114,60 @@ export function marketOverviewNotes(overview: MarketOverview | undefined): strin
     ...(scopes.length ? [`成交金額範圍：${scopes.join('；')}`] : []),
     ...(isDerived(overview) ? [DERIVED_NOTE] : []),
     UP_DOWN_NOTE,
+    // The MA60 definition only when the MA60 line has a position or a count to explain (Issue 561).
+    ...(['available', 'insufficient'].includes(overview?.taiex_ma60?.status ?? '') ? [MA60_NOTE, MA60_BACKGROUND_NOTE] : []),
   ]
+}
+
+// ---- 加權指數與季線, Issue 561 ------------------------------------------------------------------------
+// market_overview.taiex_ma60: one neutral line under the four widgets (no red/green: it is background, not a signal).
+
+export const MA60_LABEL = '加權指數與季線（MA60）'
+export const MA60_NOTE = '季線：臺灣證券交易所加權指數最近 60 個交易日收盤的平均（indicators/v1）；位置以當日收盤是否高於季線判定，等於季線不算高於'
+export const MA60_BACKGROUND_NOTE = '季線位置只是背景資訊，不是買賣建議，也不影響今日可買名單'
+export const MA60_POSITION: Record<string, string> = { above: '在季線之上', below: '在季線之下', equal: '與季線持平' }
+
+const day = (value: string | null | undefined) => formatDay(value) ?? value ?? '—'
+
+// 「季線無資料：…」 or 「季線資料不足：…」 when there is no position to show (UI_COPY_SPEC §11); null when there is.
+export function ma60MissingText(item: TaiexMa60 | undefined): string | null {
+  if (item?.status === 'available' && isFiniteNumber(item.close) && isFiniteNumber(item.ma60) && item.position && MA60_POSITION[item.position]) return null
+  if (item?.status === 'insufficient') {
+    const count = isFiniteNumber(item.close_count) ? `只有 ${formatFixed(item.close_count, 0)} 個交易日收盤` : '收盤不足'
+    return `季線資料不足：加權指數到 ${day(item.trading_date)} ${count}，季線需要 ${item.required_closes} 個`
+  }
+  const reasons: Record<string, string> = {
+    no_verified_session: '尚無已驗證的資料日',
+    not_collected: '加權指數日線未收集',
+    row_date_mismatch: `加權指數日線最新為 ${day(item?.latest_trading_date)}，不是資料日`,
+    indicator_not_computed: '季線尚未計算',
+  }
+  return `季線無資料：${(item?.reason && reasons[item.reason]) ?? (item ? '當日收盤無法計算季線' : '尚未提供')}`
+}
+
+// 「加權指數 27,123.45（2026/11/06）」 + 「在季線之上」 + 「（季線 25,890.12）」.
+export function ma60PositionParts(item: TaiexMa60): { lead: string; position: string; ma60: string } | null {
+  if (ma60MissingText(item) !== null) return null
+  return {
+    lead: `加權指數 ${dash(item.close, 2)}（${day(item.trading_date)}）`,
+    position: MA60_POSITION[item.position as string],
+    ma60: `（季線 ${dash(item.ma60, 2)}）`,
+  }
+}
+
+// 「近 250 個交易日在季線之上：2026/09/01–2026/11/06（48 日，持續中）；…」, newest first.
+export function ma60SegmentsText(item: TaiexMa60): string | null {
+  const window = item.segment_window
+  if (ma60MissingText(item) !== null || !window) return null
+  const scope = `近 ${formatFixed(window.sessions, 0)} 個交易日`
+  const segments = item.segments ?? []
+  if (!segments.length) return `${scope}沒有在季線之上的日子`
+  const runs = segments.map((run) => {
+    const start = `${day(run.start)}${run.starts_before_window ? '（或更早）' : ''}`
+    const span = run.start === run.end ? start : `${start}–${day(run.end)}`
+    return `${span}（${formatFixed(run.sessions, 0)} 日${run.ongoing ? '，持續中' : ''}）`
+  })
+  return `${scope}在季線之上：${runs.join('；')}`
 }
 
 export const isDerived = (overview: MarketOverview | undefined) => available(overview, 'TPEx')?.index?.change_pct_method === 'derived'

@@ -1,13 +1,14 @@
 import { useState, type ReactNode } from 'react'
 
 import { DateBadge, cx } from '../components/ui'
-import type { ForeignIndex, MarketOverview, MarketOverviewExchange, StockBarsInterval, StockBarsResponse } from '../types'
+import type { ForeignIndex, MarketOverview, MarketOverviewExchange, StockBarsInterval, StockBarsResponse, TaiexMa60 } from '../types'
 import { formatFixed } from '../units'
 import { isFiniteNumber } from '../stock/stockBars'
 import { StockBarsChart } from '../stock/StockBarsChart'
 import {
   EXCHANGES,
   FRED_ATTRIBUTION,
+  MA60_LABEL,
   SHORT_SCOPE_LABELS,
   TAIFEX_ATTRIBUTION,
   TX_ROLL_NOTE,
@@ -24,6 +25,9 @@ import {
   foreignMissingText,
   foreignNotes,
   futuresLatestText,
+  ma60MissingText,
+  ma60PositionParts,
+  ma60SegmentsText,
   marketOverviewNotes,
   missingText,
   signedPercent,
@@ -89,6 +93,23 @@ export function MarketOverviewView({ overview }: { overview: MarketOverview | un
   )
 }
 
+// 加權指數與季線 (Issue 561): one neutral strip under the four widgets — the close, its date, the position against MA60 and
+// the latest runs above it; without a position only the reason. No up/down colors: background, not a signal.
+export function TaiexMa60View({ item }: { item: TaiexMa60 | undefined }) {
+  const missing = ma60MissingText(item)
+  const parts = item ? ma60PositionParts(item) : null
+  const segments = item ? ma60SegmentsText(item) : null
+  return (
+    <div className="market-ma60" data-status={item?.status ?? 'missing'}>
+      <div className="market-widget-head"><span className="market-widget-label">{MA60_LABEL}</span><span className="market-widget-unit">點</span></div>
+      {parts
+        ? <div className="market-ma60-line">{parts.lead}<strong className="market-ma60-position">{parts.position}</strong>{parts.ma60}</div>
+        : <div className="market-widget-empty market-ma60-empty">{missing}</div>}
+      {segments && <div className="market-ma60-segments">{segments}</div>}
+    </div>
+  )
+}
+
 export function MarketOverviewPanel({ overview }: { overview: MarketOverview | undefined }) {
   return (
     <section className="panel market-panel market-overview" aria-labelledby="market-overview-title">
@@ -101,6 +122,7 @@ export function MarketOverviewPanel({ overview }: { overview: MarketOverview | u
         </details>
       </div>
       <MarketOverviewView overview={overview} />
+      <TaiexMa60View item={overview?.taiex_ma60} />
     </section>
   )
 }
