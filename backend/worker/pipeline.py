@@ -4459,6 +4459,7 @@ NONCORE_WARNING_PATTERN = re.compile(
     r"|MOPS event list unavailable"
     r"|index bars "
     r"|futures bars "
+    r"|us index bars "
     r"|instrument status sync skipped)"
 )
 
@@ -4518,6 +4519,76 @@ def store_collect_futures_bars(
             f"futures bars kept {len(result.conflicts)} stored TX session(s) that differ from the report"
         )
     return result.metadata()
+
+
+def taiwan_bar_dates(db: Session, start: date, end: date) -> list[date]:
+    """Dates in ``start``..``end`` with a bar of a Taiwan instrument.
+
+    A US index close (market ``US``, Issue #547) can fall on a day the Taiwan
+    market was closed, so "any stored bar" is not a Taiwan session.
+    """
+
+    return list(
+        db.scalars(
+            select(MarketBar.trading_date)
+            .join(Instrument, Instrument.id == MarketBar.instrument_id)
+            .where(
+                Instrument.market == "TW",
+                MarketBar.trading_date >= start,
+                MarketBar.trading_date <= end,
+            )
+            .distinct()
+            .order_by(MarketBar.trading_date)
+        ).all()
+    )
+
+
+def store_collect_us_index_bars(
+    db: Session,
+    run: IngestionRun,
+    session: date,
+    fetch: Callable[[str], Any] | None,
+    warnings: list[str],
+    *,
+    snapshot: bool,
+    no_data: bool,
+    force: bool = False,
+) -> dict[str, Any]:
+    """collect's US index step (worker.us_index_bars, Issue #547); non-core.
+
+    Only a snapshot collect of a Taiwan session whose TAIEX row was written
+    asks FRED, so every US row (all before ``session``) is written together
+    with a Taiwan session after it and never becomes the newest bar date.
+    """
+
+    if fetch is None:
+        return {}
+    if not snapshot or no_data:
+        return {"status": "skipped", "reason": "not_a_snapshot_session"}
+    benchmark = _benchmark_instrument(db)
+    if benchmark is None or (
+        db.scalar(
+            select(MarketBar.id).where(
+                MarketBar.instrument_id == benchmark.id,
+                MarketBar.trading_date == session,
+            )
+        )
+        is None
+    ):
+        return {"status": "skipped", "reason": "no_taiex_session"}
+    from worker.us_index_bars import collect_us_index_bars
+
+    try:
+        series = collect_us_index_bars(
+            db, run, session, fetch, _upsert_raw_payload, warnings, force=force
+        )
+    except Exception as exc:
+        warnings.append(
+            f"us index bars unavailable for collect: {type(exc).__name__}: {exc}"
+        )
+        return {"status": "failed"}
+    # Strings and numbers only (dates as ISO strings).
+    return {"status": "complete", "series": series}
 
 
 def split_collect_warnings(warnings: Iterable[str]) -> tuple[list[str], list[str]]:
@@ -4827,6 +4898,16 @@ def collect(
                 list(getattr(batch, "futures_bars", []) or []),
                 lambda digest: _raw_id_for_digest(raw_ids, digest),
                 batch.warnings,
+                force=force,
+            )
+            us_index_daily_bars = store_collect_us_index_bars(
+                db,
+                run,
+                score_date,
+                getattr(active_adapter, "us_index_fetcher", None),
+                batch.warnings,
+                snapshot=bool(getattr(batch, "snapshot_feeds", False)),
+                no_data=score_date in batch_no_data_dates,
                 force=force,
             )
             event_coverage = dict(batch.event_coverage or {})
@@ -5152,6 +5233,7 @@ def collect(
                 "monthly_revenues": monthly_revenues,
                 "index_daily_bars": index_daily_bars,
                 "futures_daily_bars": futures_daily_bars,
+                "us_index_daily_bars": us_index_daily_bars,
                 "raw_payloads": raw_payload_count,
                 "warnings": list(batch.warnings),
                 "core_warnings": core_warnings,
@@ -5260,6 +5342,7 @@ def collect(
                 "monthly_revenues": monthly_revenues,
                 "index_daily_bars": index_daily_bars,
                 "futures_daily_bars": futures_daily_bars,
+                "us_index_daily_bars": us_index_daily_bars,
                 "event_coverage": event_coverage,
                 "event_gap_dates": {
                     day: mops_events.coverage_state(coverage, date.fromisoformat(day))
@@ -6426,15 +6509,7 @@ def backtest(
             # Commit as it goes so the transaction (the WAL) and the session
             # stay one score date's size; a failed run keeps what it committed.
             db.commit()
-            score_dates = db.scalars(
-                select(MarketBar.trading_date)
-                .where(
-                    MarketBar.trading_date >= start_date,
-                    MarketBar.trading_date <= end_date,
-                )
-                .distinct()
-                .order_by(MarketBar.trading_date)
-            ).all()
+            score_dates = taiwan_bar_dates(db, start_date, end_date)
             metadata["score_session_count"] = len(score_dates)
             metadata["as_of_rule"] = (
                 "all feature/group inputs are bounded by score_date"

@@ -460,6 +460,8 @@ OFFICIAL_HOST_MIN_INTERVAL_SECONDS = {
     "www.tpex.org.tw": 1.0,
     "info.tpex.org.tw": 1.0,
     "openapi.taifex.com.tw": 1.0,
+    # FRED fredgraph.csv (US indexes, Issue #547): series apart, never a burst.
+    "fred.stlouisfed.org": 2.0,
     # MOPS blocks fast clients without a published limit; the event-list
     # backfill (Issue #464) stays at one request per three seconds.
     "mops.twse.com.tw": 3.0,
@@ -4097,7 +4099,16 @@ class OfficialMarketDataAdapter:
         *,
         snapshot_feeds: bool = True,
         mops_fetcher: Callable[..., Any] | None = None,
+        us_index_fetcher: Callable[[str], Any] | None = None,
     ) -> None:
+        # The FRED CSV GET of collect's US index step (worker.us_index_bars,
+        # Issue #547).  The production adapter uses fetch_csv; one built from
+        # fixture exchange adapters asks FRED only when given a fetcher.
+        if us_index_fetcher is None and twse is None and tpex is None:
+            from .us_index_bars import fetch_csv
+
+            us_index_fetcher = fetch_csv
+        self.us_index_fetcher = us_index_fetcher
         self.twse = twse or TwseAdapter(snapshot_feeds=snapshot_feeds)
         self.tpex = tpex or TpexAdapter(snapshot_feeds=snapshot_feeds)
         # The date-scoped MOPS event list (Issue #464) goes through the same

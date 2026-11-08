@@ -1,29 +1,40 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import { DateBadge, cx } from '../components/ui'
-import type { MarketOverview, MarketOverviewExchange, StockBarsInterval, StockBarsResponse } from '../types'
+import type { ForeignIndex, MarketOverview, MarketOverviewExchange, StockBarsInterval, StockBarsResponse } from '../types'
 import { formatFixed } from '../units'
 import { isFiniteNumber } from '../stock/stockBars'
 import { StockBarsChart } from '../stock/StockBarsChart'
 import {
   EXCHANGES,
+  FRED_ATTRIBUTION,
   SHORT_SCOPE_LABELS,
   TAIFEX_ATTRIBUTION,
   TX_ROLL_NOTE,
+  US_INDEXES,
+  US_SECTION_TITLE,
   available,
   changeTone,
   collectedSinceText,
   dash,
+  foreignAvailable,
+  foreignDateText,
+  foreignIndex,
+  foreignLatestDate,
+  foreignMissingText,
+  foreignNotes,
   futuresLatestText,
   marketOverviewNotes,
   missingText,
   signedPercent,
+  usChartSpec,
   type ExchangeSpec,
   type MarketChartSpec,
+  type UsIndexSpec,
 } from './marketOverview'
 
-// The market page blocks (/market, Issue 549/552): 大盤概況 and the three daily K charts, in the order DESIGN_SYSTEM §4
-// fixes.
+// The market page blocks (/market, Issue 549/552/547): 大盤概況, the three daily K charts and 美股（前一交易日）, in the
+// order DESIGN_SYSTEM §4 fixes.
 // Copy and units follow UI_COPY_SPEC §11.
 
 function IndexWidget({ spec, row }: { spec: ExchangeSpec; row: MarketOverviewExchange | null }) {
@@ -110,19 +121,84 @@ function FuturesFooter({ data }: { data: StockBarsResponse | undefined }) {
 
 // Each chart is the stock page's StockBarsChart (same period switch, indicators and empty states), titled for the
 // series (DESIGN_SYSTEM §4 大盤頁, Issue 549/552).
-export function MarketChartView({ spec, interval, onIntervalChange, data, loading, error }: {
+export function MarketChartView({ spec, interval, onIntervalChange, data, loading, error, footer }: {
   spec: MarketChartSpec
   interval: StockBarsInterval
   onIntervalChange: (interval: StockBarsInterval) => void
   data: StockBarsResponse | undefined
   loading: boolean
   error: unknown
+  // Lines under the chart other than the TX ones (the US indexes' FRED attribution, Issue 547).
+  footer?: ReactNode
 }) {
   return (
     <div className="market-chart" data-chart={spec.key}>
       <StockBarsChart interval={interval} onIntervalChange={onIntervalChange} data={data} loading={loading} error={error}
         instrumentType={spec.instrumentType} title={spec.title} titleId={spec.titleId}
-        footer={spec.instrumentType === 'futures' ? <FuturesFooter data={data} /> : undefined} />
+        footer={spec.instrumentType === 'futures' ? <FuturesFooter data={data} /> : footer} />
     </div>
+  )
+}
+
+// ---- 美股（前一交易日）, Issue 547 --------------------------------------------------------------------
+
+// One index: close (點, two decimals), change and percent in the 台股 colors, then its data date with 非最新 / 美股休市.
+function UsIndexWidget({ spec, item }: { spec: UsIndexSpec; item: ForeignIndex | null }) {
+  return (
+    <div className="market-widget market-index market-us-index" data-symbol={spec.symbol}>
+      <div className="market-widget-head"><span className="market-widget-label">{spec.name}</span><span className="market-widget-unit">點</span></div>
+      {foreignAvailable(item) ? <>
+        <div className="market-widget-value">{dash(item.close, 2)}</div>
+        <div className={cx('market-widget-change', changeTone(item.change))}>{isFiniteNumber(item.change) ? formatFixed(item.change, 2, true) : '—'}（{signedPercent(item.change_pct)}）</div>
+        <UsIndexDate item={item} />
+      </> : <div className="market-widget-empty">{foreignMissingText(item)}</div>}
+    </div>
+  )
+}
+
+function UsIndexDate({ item }: { item: ForeignIndex & { trading_date: string } }) {
+  const { date, flag } = foreignDateText(item)
+  return <div className="market-us-date">{date}{flag && <> <span className={cx('market-us-flag', item.freshness === 'stale' && 'market-us-stale')}>{flag}</span></>}</div>
+}
+
+// The FRED attribution and the series' copyright notice (FRED terms: keep the notices intact).
+export function UsChartFooter({ item }: { item: ForeignIndex | null }) {
+  return (
+    <div className="market-chart-footer" data-exchange="US">
+      <p>{FRED_ATTRIBUTION}</p>
+      {item?.source?.copyright && <p>{item.source.copyright}</p>}
+    </div>
+  )
+}
+
+// A chart is mounted only once its row is opened, so the page does not load four more bar series up front.
+function UsChartDetails({ spec, item, chart }: { spec: UsIndexSpec; item: ForeignIndex | null; chart: (spec: MarketChartSpec, footer: ReactNode) => ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <details className="details market-us-chart" data-symbol={spec.symbol} onToggle={(event) => setOpen((event.currentTarget as HTMLDetailsElement).open)}>
+      <summary>{spec.name} 日 K 與指標</summary>
+      {open && chart(usChartSpec(spec), <UsChartFooter item={item} />)}
+    </details>
+  )
+}
+
+export function UsIndexPanel({ overview, chart }: { overview: MarketOverview | undefined; chart: (spec: MarketChartSpec, footer: ReactNode) => ReactNode }) {
+  return (
+    <section className="panel market-panel market-overview market-us" aria-labelledby="market-us-title">
+      <div className="panel-head">
+        <h2 id="market-us-title">{US_SECTION_TITLE}</h2>
+        <DateBadge date={foreignLatestDate(overview)} />
+        <details className="data-explanation">
+          <summary>資料說明</summary>
+          {foreignNotes(overview).map((line) => <div key={line}>{line}</div>)}
+        </details>
+      </div>
+      <div className="market-overview-grid market-us-grid">
+        {US_INDEXES.map((spec) => <UsIndexWidget key={spec.symbol} spec={spec} item={foreignIndex(overview, spec.symbol)} />)}
+      </div>
+      <div className="market-us-charts">
+        {US_INDEXES.map((spec) => <UsChartDetails key={spec.symbol} spec={spec} item={foreignIndex(overview, spec.symbol)} chart={chart} />)}
+      </div>
+    </section>
   )
 }

@@ -1,5 +1,5 @@
 import { formatDay } from '../dates'
-import type { MarketOverview, MarketOverviewExchange, StockBarsResponse } from '../types'
+import type { ForeignIndex, MarketOverview, MarketOverviewExchange, StockBarsResponse } from '../types'
 import { formatFixed } from '../units'
 import { isFiniteNumber } from '../stock/stockBars'
 
@@ -13,10 +13,12 @@ export const EXCHANGES = [
 export type ExchangeSpec = (typeof EXCHANGES)[number]
 
 export const MARKET_PATH = '/market'
+export const MARKET_PAGE_LEAD = '上市、上櫃的收盤概況，加權、櫃買指數與台指期的日 K，以及前一個交易日的美股指數。'
 // The three daily K charts of the market page, each the stock page's StockBarsChart on the same bars API (Issue 549,
 // 552): the TWSE capitalization-weighted index, the TPEx index and the TX near month (TAIFEX open data).
 export type MarketChartSpec = {
-  key: 'taiex' | 'tpex' | 'tx'
+  // 'us-spx' … for the US index charts (Issue 547).
+  key: string
   exchange: string
   symbol: string
   title: string
@@ -116,3 +118,60 @@ export function marketOverviewNotes(overview: MarketOverview | undefined): strin
 }
 
 export const isDerived = (overview: MarketOverview | undefined) => available(overview, 'TPEx')?.index?.change_pct_method === 'derived'
+
+// ---- 美股（前一交易日）, Issue 547 ------------------------------------------------------------------
+// FRED closes of four US indexes (market_overview.foreign_indices), in this order; each also has a daily K chart the
+// user can open (the stock page's StockBarsChart on /api/stocks/US/<symbol>/bars, close line only).
+
+export type UsIndexSpec = { symbol: string; name: string; titleId: string }
+export const US_INDEXES: readonly UsIndexSpec[] = [
+  { symbol: 'SPX', name: 'S&P 500', titleId: 'market-us-spx-chart-title' },
+  { symbol: 'IXIC', name: 'NASDAQ 綜合指數', titleId: 'market-us-ixic-chart-title' },
+  { symbol: 'DJI', name: '道瓊工業指數', titleId: 'market-us-dji-chart-title' },
+  { symbol: 'SOX', name: '費城半導體指數', titleId: 'market-us-sox-chart-title' },
+]
+export const US_SECTION_TITLE = '美股（前一交易日）'
+export const FRED_ATTRIBUTION = '資料來源：FRED，Federal Reserve Bank of St. Louis（個人非商業使用）'
+export const US_CHANGE_NOTE = '漲跌依前一筆收盤計算；紅色為上漲、綠色為下跌（台股慣例）'
+export const US_EXPECTED_NOTE = '預期資料日為台股資料日的前一個平日（週一為上週五）；S&P 500 在 FRED 約晚一天更新'
+export const STALE_LABEL = '非最新'
+
+export function usChartSpec(spec: UsIndexSpec): MarketChartSpec {
+  return { key: `us-${spec.symbol.toLowerCase()}`, exchange: 'US', symbol: spec.symbol, title: `${spec.name}日線`, titleId: spec.titleId, instrumentType: 'index' }
+}
+
+export function foreignIndex(overview: MarketOverview | undefined, symbol: string): ForeignIndex | null {
+  return overview?.foreign_indices?.find((item) => item.symbol === symbol) ?? null
+}
+
+export const foreignAvailable = (item: ForeignIndex | null): item is ForeignIndex & { trading_date: string } =>
+  item?.status === 'available' && typeof item.trading_date === 'string'
+
+// 「無資料：尚未收集」 or 「無資料：最近一次擷取失敗（YYYY/MM/DD）」 (UI_COPY_SPEC §11).
+export function foreignMissingText(item: ForeignIndex | null): string {
+  if (item?.reason === 'fetch_failed') {
+    const day = item.last_attempt_date ? formatDay(item.last_attempt_date) ?? item.last_attempt_date : null
+    return `無資料：最近一次擷取失敗${day ? `（${day}）` : ''}`
+  }
+  return '無資料：尚未收集'
+}
+
+// The line under each available index: 「資料 YYYY/MM/DD」 plus 非最新, or 美股休市 when the expected day was a FRED blank.
+export function foreignDateText(item: ForeignIndex & { trading_date: string }): { date: string; flag: string | null } {
+  const date = `資料 ${formatDay(item.trading_date) ?? item.trading_date}`
+  if (item.freshness === 'stale') return { date, flag: STALE_LABEL }
+  if (item.freshness === 'us_market_closed') return { date, flag: `${formatDay(item.expected_date) ?? item.expected_date} 美股休市` }
+  return { date, flag: null }
+}
+
+// The section badge: the newest data date among the indexes shown.
+export function foreignLatestDate(overview: MarketOverview | undefined): string | null {
+  const dates = (overview?.foreign_indices ?? []).filter(foreignAvailable).map((item) => item.trading_date).sort()
+  return dates.length ? dates[dates.length - 1] : null
+}
+
+// 資料說明 of the US section, and the per-series copyright notices of the indexes shown (FRED terms).
+export function foreignNotes(overview: MarketOverview | undefined): string[] {
+  const copyrights = [...new Set((overview?.foreign_indices ?? []).filter(foreignAvailable).flatMap((item) => item.source?.copyright ? [item.source.copyright] : []))]
+  return [FRED_ATTRIBUTION, ...copyrights, US_EXPECTED_NOTE, US_CHANGE_NOTE]
+}

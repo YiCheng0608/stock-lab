@@ -168,6 +168,9 @@ def _weekly(
             "low": week.low,
             "close": week.close,
             "volume": week.volume,
+            # A week with a day the source gave without open/high/low (the
+            # close-only US indexes, Issue #547) keeps its close only.
+            "price_reason": "source_missing_ohlc" if week.open is None else None,
             "sources": sorted(week_sources.get(week.week_end.isocalendar()[:2], ())),
             "bar_count": point.bar_count,
             **point.values,
