@@ -232,11 +232,58 @@ export type TaiexMa60 = {
   source?: { label: string | null; bar_source: string | null; formula_version: string; computed_at: string | null; data_as_of: string | null }
 }
 
+// One row's close against its stored MA60 (indicators/v1) on the row's own data date (#564), judged as taiex_ma60.
+export type IndexMa60 = {
+  trading_date: string
+  required_closes: number
+  // insufficient: insufficient_closes; unavailable: not_collected | row_date_mismatch | indicator_not_computed |
+  // ma60_unavailable
+  status: 'available' | 'insufficient' | 'unavailable' | string
+  reason?: string
+  latest_trading_date?: string | null
+  null_reason?: string | null
+  close?: number | null
+  ma60?: number | null
+  above?: boolean
+  position?: 'above' | 'below' | 'equal' | string
+  close_count?: number | null
+}
+
+// market_overview.indexes (#564): the market page's index table, in table order (TAIEX, TPEX, TX, then the four US).
+export type IndexRow = {
+  key: string
+  group: 'tw' | 'us' | string
+  exchange: string
+  symbol: string
+  name: string
+  instrument_type: 'index' | 'futures' | string
+  status: 'available' | 'unavailable' | string
+  // unavailable: no_verified_session | not_collected | fetch_failed (US)
+  reason?: string
+  last_attempt_date?: string | null
+  trading_date?: string
+  expected_date?: string
+  // latest | stale | us_market_closed (US only)
+  freshness?: 'latest' | 'stale' | 'us_market_closed' | string
+  close?: number | null
+  change?: number | null
+  change_pct?: number | null
+  change_pct_method?: 'official' | 'derived' | string | null
+  // TX only: known | contract_roll | unverified | no_previous_close | missing
+  change_status?: string
+  contract_month?: string | null
+  previous_contract_month?: string | null
+  open_interest?: number | null
+  ma60: IndexMa60 | null
+  source: { label: string; detail?: string | null; copyright?: string | null }
+}
+
 export type MarketOverview = {
   trading_date: string | null
   exchanges: MarketOverviewExchange[]
   taiex_ma60?: TaiexMa60
   foreign_indices?: ForeignIndex[]
+  indexes?: IndexRow[]
 }
 
 export type Dashboard = {

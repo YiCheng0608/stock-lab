@@ -15,6 +15,10 @@ whether the close is above its 60-session average, as the research filter R3
 defines it (``app.strategies.regime``: close strictly above MA60, 60 closes
 needed), and the latest runs of sessions above it.  Display only: no strategy,
 candidate or group reads it.
+
+``indexes`` (Issue #564) is the market page's index table: TAIEX, TPEX, the
+TX near month and the four US indexes, each with its close, change, data date
+and its close against its own stored MA60, judged as ``taiex_ma60`` judges it.
 """
 
 from __future__ import annotations
@@ -29,6 +33,7 @@ from sqlalchemy.orm import Session
 from .clock import utcnow
 from .domain import US_INDEX_EXCHANGE, US_INDEX_QUALITY_ENTITY, US_INDEXES, UsIndex
 from .indicators import INDICATOR_VERSION, PRICE_BASIS, REQUIRED_BARS
+from .market_change import adjacent_change
 from .models import (
     DataQuality,
     Instrument,
@@ -136,11 +141,13 @@ def market_overview(db: Session, as_of: str | None) -> dict[str, Any]:
                 "latest_trading_date": latest.isoformat() if latest else None,
             }
         )
+    foreign = foreign_indices(db, as_of)
     return {
         "trading_date": as_of,
         "exchanges": exchanges,
         "taiex_ma60": taiex_ma60(db, as_of),
-        "foreign_indices": foreign_indices(db, as_of),
+        "foreign_indices": foreign,
+        "indexes": index_rows(db, as_of, foreign),
     }
 
 
@@ -210,27 +217,14 @@ def _segments(rows: list[Any], earlier_above: bool) -> list[dict[str, Any]]:
     return list(reversed(result))[:MAX_SEGMENTS]
 
 
-def taiex_ma60(db: Session, as_of: str | None) -> dict[str, Any]:
-    """TAIEX's close against its stored MA60 on ``as_of`` (module docstring).
+def _ma60_rows(
+    db: Session, instrument: Instrument | None, session: date, limit: int
+) -> list[Any]:
+    """The instrument's newest ``limit`` bars through ``session`` with their ``indicators/v1`` row, newest first."""
 
-    ``status``: ``available`` (``above`` is R3; ``position`` is ``above``,
-    ``below`` or ``equal``), ``insufficient`` (fewer than 60 usable closes
-    through ``as_of``: ``close_count``) or ``unavailable`` with ``reason``
-    ``no_verified_session``, ``not_collected`` (no TAIEX bar), ``row_date_mismatch``
-    (TAIEX's newest bar is of another date: ``latest_trading_date``),
-    ``indicator_not_computed`` (no ``indicators/v1`` row for the bar) or
-    ``ma60_unavailable`` (MA60 is null for another reason: ``null_reason``).
-    """
-
-    base: dict[str, Any] = {
-        "trading_date": as_of,
-        "required_closes": MA60_REQUIRED_CLOSES,
-    }
-    if not as_of:
-        return {**base, "status": "unavailable", "reason": "no_verified_session"}
-    session = date.fromisoformat(as_of)
-    instrument = _taiex_instrument(db)
-    rows = (
+    if instrument is None:
+        return []
+    return list(
         db.execute(
             select(
                 MarketBar.trading_date,
@@ -256,51 +250,82 @@ def taiex_ma60(db: Session, as_of: str | None) -> dict[str, Any]:
                 MarketBar.trading_date <= session,
             )
             .order_by(desc(MarketBar.trading_date))
-            # One more than the window: whether its first run started earlier.
-            .limit(SEGMENT_SESSIONS + 1)
+            .limit(limit)
         ).all()
-        if instrument is not None
-        else []
     )
+
+
+def _ma60_on(rows: list[Any], session: date) -> dict[str, Any]:
+    """The close of ``session`` against its stored MA60: the one judgement of
+    ``taiex_ma60`` and every ``indexes`` row (``rows`` from ``_ma60_rows``)."""
+
     if not rows:
-        return {**base, "status": "unavailable", "reason": "not_collected"}
+        return {"status": "unavailable", "reason": "not_collected"}
     latest = rows[0]
     if latest.trading_date != session:
         return {
-            **base,
             "status": "unavailable",
             "reason": "row_date_mismatch",
             "latest_trading_date": latest.trading_date.isoformat(),
         }
     if latest.indicator_id is None:
-        return {**base, "status": "unavailable", "reason": "indicator_not_computed"}
+        return {"status": "unavailable", "reason": "indicator_not_computed"}
     if latest.ma60 is None:
         null_reason = (latest.null_reasons or {}).get("ma60")
         if null_reason == "insufficient_bars":
             return {
-                **base,
                 "status": "insufficient",
                 "reason": "insufficient_closes",
                 "close_count": latest.bar_count,
             }
         return {
-            **base,
             "status": "unavailable",
             "reason": "ma60_unavailable",
             "null_reason": null_reason,
         }
-    window = list(reversed(rows[:SEGMENT_SESSIONS]))
-    earlier = rows[SEGMENT_SESSIONS] if len(rows) > SEGMENT_SESSIONS else None
     close, ma60 = latest.close, latest.ma60
     above = _above(close, ma60)
     return {
-        **base,
         "status": "available",
         "close": close,
         "ma60": ma60,
         "above": above,
         "position": "above" if above else "equal" if close == ma60 else "below",
         "close_count": latest.bar_count,
+    }
+
+
+def taiex_ma60(db: Session, as_of: str | None) -> dict[str, Any]:
+    """TAIEX's close against its stored MA60 on ``as_of`` (module docstring).
+
+    ``status``: ``available`` (``above`` is R3; ``position`` is ``above``,
+    ``below`` or ``equal``), ``insufficient`` (fewer than 60 usable closes
+    through ``as_of``: ``close_count``) or ``unavailable`` with ``reason``
+    ``no_verified_session``, ``not_collected`` (no TAIEX bar), ``row_date_mismatch``
+    (TAIEX's newest bar is of another date: ``latest_trading_date``),
+    ``indicator_not_computed`` (no ``indicators/v1`` row for the bar) or
+    ``ma60_unavailable`` (MA60 is null for another reason: ``null_reason``).
+    """
+
+    base: dict[str, Any] = {
+        "trading_date": as_of,
+        "required_closes": MA60_REQUIRED_CLOSES,
+    }
+    if not as_of:
+        return {**base, "status": "unavailable", "reason": "no_verified_session"}
+    session = date.fromisoformat(as_of)
+    instrument = _taiex_instrument(db)
+    # One more than the window: whether its first run started earlier.
+    rows = _ma60_rows(db, instrument, session, SEGMENT_SESSIONS + 1)
+    state = _ma60_on(rows, session)
+    if state["status"] != "available":
+        return {**base, **state}
+    latest = rows[0]
+    window = list(reversed(rows[:SEGMENT_SESSIONS]))
+    earlier = rows[SEGMENT_SESSIONS] if len(rows) > SEGMENT_SESSIONS else None
+    return {
+        **base,
+        **state,
         "segments": _segments(
             window, earlier is not None and _above(earlier.close, earlier.ma60)
         ),
@@ -469,3 +494,218 @@ def foreign_indices(db: Session, as_of: str | None) -> list[dict[str, Any]]:
     reference = date.fromisoformat(as_of) if as_of else _taipei_today()
     expected = expected_us_session(reference)
     return [_foreign_index(db, series, expected) for series in US_INDEXES]
+
+
+# --- The index table of the market page (Issue #564) ---------------------------
+
+# key, exchange, symbol, name and the short source of the Taiwan rows, in table
+# order; the four US rows follow in US_INDEXES order.
+TW_INDEX_ROWS: tuple[tuple[str, str, str, str, str], ...] = (
+    ("taiex", "TWSE", "TAIEX", "加權指數", "臺灣證券交易所"),
+    ("tpex", "TPEx", "TPEX", "櫃買指數", "證券櫃檯買賣中心"),
+    ("tx", "TAIFEX", "TX", "台指期近月", "臺灣期貨交易所"),
+)
+US_SOURCE_LABEL = "FRED"
+
+
+def _instrument(db: Session, exchange: str, symbol: str) -> Instrument | None:
+    if exchange == "TWSE" and symbol == "TAIEX":
+        return _taiex_instrument(db)
+    return db.scalar(
+        select(Instrument)
+        .where(Instrument.exchange == exchange, Instrument.symbol == symbol)
+        .limit(1)
+    )
+
+
+def _row_ma60(
+    db: Session, instrument: Instrument | None, trading_date: str
+) -> dict[str, Any]:
+    """The row's close against its stored MA60 on the row's own data date."""
+
+    day = date.fromisoformat(trading_date)
+    return {
+        "trading_date": trading_date,
+        "required_closes": MA60_REQUIRED_CLOSES,
+        **_ma60_on(_ma60_rows(db, instrument, day, 1), day),
+    }
+
+
+def _summary_row(db: Session, exchange: str, session: date | None) -> dict[str, Any]:
+    """TAIEX / TPEX: the exchange's newest ``market_summaries`` row through
+    ``session`` (the numbers of the 大盤概況 widgets); another day is ``stale``."""
+
+    if session is None:
+        return {"status": "unavailable", "reason": "no_verified_session"}
+    row = db.scalar(
+        select(MarketSummary)
+        .where(
+            MarketSummary.exchange == exchange,
+            MarketSummary.trading_date <= session,
+        )
+        .order_by(desc(MarketSummary.trading_date))
+        .limit(1)
+    )
+    if row is None:
+        return {"status": "unavailable", "reason": "not_collected"}
+    return {
+        "status": "available",
+        "trading_date": row.trading_date.isoformat(),
+        "expected_date": session.isoformat(),
+        "freshness": "latest" if row.trading_date == session else "stale",
+        "close": row.index_close,
+        "change": row.index_change,
+        "change_pct": row.index_change_pct,
+        "change_pct_method": row.change_pct_method,
+        "source_detail": SOURCE_LABELS.get(row.source, row.source),
+    }
+
+
+def _futures_row(
+    db: Session, instrument: Instrument | None, session: date | None
+) -> dict[str, Any]:
+    """TX: the newest near-month bar through ``session``.
+
+    The change is ``adjacent_change`` (the stock page header's, #475): against
+    the bar of the previous verified TAIEX session only.  On a roll day that
+    bar is another contract, so there is no change
+    (``change_status=contract_roll``; bars are not adjusted across a roll).
+    """
+
+    if session is None:
+        return {"status": "unavailable", "reason": "no_verified_session"}
+    bar = (
+        db.scalar(
+            select(MarketBar)
+            .where(
+                MarketBar.instrument_id == instrument.id,
+                MarketBar.trading_date <= session,
+            )
+            .order_by(desc(MarketBar.trading_date))
+            .limit(1)
+        )
+        if instrument is not None
+        else None
+    )
+    if bar is None:
+        return {"status": "unavailable", "reason": "not_collected"}
+    change = adjacent_change(
+        db, instrument.id, bar.trading_date, bar, {}, listing_date=None
+    )
+    previous = db.scalar(
+        select(MarketBar)
+        .where(
+            MarketBar.instrument_id == instrument.id,
+            MarketBar.trading_date < bar.trading_date,
+        )
+        .order_by(desc(MarketBar.trading_date))
+        .limit(1)
+    )
+    previous_month = previous.contract_month if previous is not None else None
+    status = change["change_status"]
+    rolled = (
+        status == "known"
+        and previous_month is not None
+        and bar.contract_month is not None
+        and previous_month != bar.contract_month
+    )
+    if rolled:
+        status = "contract_roll"
+    return {
+        "status": "available",
+        "trading_date": bar.trading_date.isoformat(),
+        "expected_date": session.isoformat(),
+        "freshness": "latest" if bar.trading_date == session else "stale",
+        "close": change["close"],
+        "change": None if rolled else change["change"],
+        "change_pct": None if rolled else change["change_pct"],
+        "change_pct_method": "derived",
+        "change_status": status,
+        "contract_month": bar.contract_month,
+        "previous_contract_month": previous_month if rolled else None,
+        "open_interest": bar.open_interest,
+        "source_detail": bar.source,
+    }
+
+
+_US_ROW_FIELDS = (
+    "status",
+    "reason",
+    "last_attempt_date",
+    "trading_date",
+    "expected_date",
+    "freshness",
+    "close",
+    "change",
+    "change_pct",
+    "change_pct_method",
+)
+
+
+def index_rows(
+    db: Session, as_of: str | None, foreign: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """The seven rows of the market page's index table, in table order.
+
+    Each row has its close, change and data date (``freshness``: ``latest``,
+    ``stale`` or, US only, ``us_market_closed``) and ``ma60``: its close against
+    the stored ``indicators/v1`` MA60 on the row's own data date, judged by the
+    code ``taiex_ma60`` uses (``_ma60_on``), so the TAIEX row of ``as_of`` is
+    ``taiex_ma60``'s judgement.  Taiwan rows read through ``as_of``; the US rows
+    are ``foreign`` (``foreign_indices``: #547's expected session and closures).
+    An ``unavailable`` row has a ``reason`` and ``ma60`` null.
+    """
+
+    session = date.fromisoformat(as_of) if as_of else None
+    rows: list[dict[str, Any]] = []
+    for key, exchange, symbol, name, source in TW_INDEX_ROWS:
+        instrument = _instrument(db, exchange, symbol)
+        quote = (
+            _futures_row(db, instrument, session)
+            if exchange == "TAIFEX"
+            else _summary_row(db, exchange, session)
+        )
+        detail = quote.pop("source_detail", None)
+        rows.append(
+            {
+                "key": key,
+                "group": "tw",
+                "exchange": exchange,
+                "symbol": symbol,
+                "name": name,
+                "instrument_type": "futures" if exchange == "TAIFEX" else "index",
+                **quote,
+                "ma60": _row_ma60(db, instrument, quote["trading_date"])
+                if quote["status"] == "available"
+                else None,
+                "source": {"label": source, "detail": detail},
+            }
+        )
+    by_symbol = {item["symbol"]: item for item in foreign}
+    for series in US_INDEXES:
+        item = by_symbol.get(series.symbol) or {"status": "unavailable"}
+        quote = {field: item[field] for field in _US_ROW_FIELDS if field in item}
+        rows.append(
+            {
+                "key": series.symbol.lower(),
+                "group": "us",
+                "exchange": US_INDEX_EXCHANGE,
+                "symbol": series.symbol,
+                "name": series.name,
+                "instrument_type": "index",
+                **quote,
+                "ma60": _row_ma60(
+                    db,
+                    _instrument(db, US_INDEX_EXCHANGE, series.symbol),
+                    quote["trading_date"],
+                )
+                if quote.get("status") == "available"
+                else None,
+                "source": {
+                    "label": US_SOURCE_LABEL,
+                    "detail": f"FRED {series.series_id}",
+                    "copyright": series.copyright,
+                },
+            }
+        )
+    return rows
