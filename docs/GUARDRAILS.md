@@ -17,7 +17,7 @@
 | CI 抓完整歷史（`fetch-depth: 0`）的 job 上限至少 10 分鐘：這種 checkout 曾兩次花滿 5 分鐘，把 `changes` 取消、`required` 變紅（PR #432） | unittest `CheckoutTime`（`test_every_full_checkout_job_has_room_for_a_slow_fetch`） | `.github/workflows/ci.yml`、`tools/ci/test_checks.py`（`CheckoutTime`） |
 | CI `backend` job（後端全套，pytest-xdist 平行，#442）的 pytest step 上限至少 20 分鐘、job 上限至少再多 10 分鐘：#379 一週 108 個 run 的平行 pytest 中位數 462 秒、最慢 669 秒，PR #446 第一次 run（41764869855）706 秒，已超過那週最慢；20 分鐘約是目前最慢 706 秒的 1.7 倍；多出的 10 分鐘給 checkout（最慢 5 分鐘，`CheckoutTime`）、setup 與 pip，pytest 卡住時停在 step，`Summary` step 仍能寫出 notice。序列跑時慢的 runner 兩次讓它在 master 跑滿 30 分鐘被取消、`required` 變紅（run 41699184706、41714283264） | unittest `BackendTime`（`test_the_backend_suite_has_room_for_a_slow_runner`、`test_the_summary_runs_after_a_red_or_hung_pytest`） | `.github/workflows/ci.yml`（`backend` job）、`tools/ci/test_checks.py`（`BackendTime`） |
 | CI `verify` job 的字型步驟不能無限等 apt：字型檔走 `actions/cache`（restore／save 有步驟逾時且 `continue-on-error`），沒命中時 `apt-get update`／`install` 各有上限並重試，逾時印出診斷並以失敗結束；最壞情況在步驟上限 10 分鐘內，步驟上限小於 job 上限。2026-11-04 裸跑的 apt 三次花了 12～15 分鐘以上，job 被 15 分鐘上限取消、`required` 變紅（#489） | unittest `VerifyFonts`（`test_a_hung_apt_get_fails_the_step_with_a_diagnosis`、`test_a_cached_copy_skips_apt`、`test_the_limits_fit_inside_the_step_and_the_cache_cannot_fail_the_job`） | `.github/workflows/ci.yml`（`verify` job）、`tools/verify/install_fonts.sh`、`tools/ci/test_checks.py`（`VerifyFonts`） |
-| PR 套模板 | 部分：規則 a、b 檢查 `Closes` 與 AC 區，其餘欄位無 | `.github/pull_request_template.md` |
+| PR 套模板 | 部分：規則 a、b 檢查 `Closes` 與 AC 區，其餘欄位無 | `docs/templates/pull-request.md` |
 | 不在 master 管理 checkout 改檔 | Claude Code PreToolUse hook（Edit、Write） | `tools/ops/agent_guard.cjs`、`.claude/settings.json` |
 | 不跑 `git clean -x`／`-X` | PreToolUse hook（Bash、PowerShell） | `tools/ops/agent_guard.cjs`、`.claude/settings.json` |
 | 不用裸 `git stash`、`git stash pop`、`git stash clear` | PreToolUse hook（Bash、PowerShell） | `tools/ops/agent_guard.cjs`、`.claude/settings.json` |
@@ -31,7 +31,7 @@
 | Python lint 與格式（#225） | CI `repository` job 的 `lint` step | `tools/ci/checks.py`（`LINT_COMMANDS`）、`ruff.toml` |
 | Alembic head 只有一個來源（#225） | 後端測試 `test_operations_doc_names_the_code_head` | `backend/app/migration_revisions.py`、`backend/tests/test_database_readiness.py` |
 | `git blame` 略過全檔格式化 commit（#225） | 無（每個 checkout 手動設 `blame.ignoreRevsFile`） | `.git-blame-ignore-revs` |
-| worktree 外暫存目錄路徑寫進 PR | 無（PR 模板欄位） | `.github/pull_request_template.md` |
+| worktree 外暫存目錄路徑寫進 PR | 無（PR 模板欄位） | `docs/templates/pull-request.md` |
 | 統籌接手時核對前任標「已完成」的事 | 無 | `docs/COORDINATOR.md`（統籌 session） |
 | 同類錯誤第二次發生就編成檢查 | 無（流程用 encode-lesson skill，#228） | `docs/WORKFLOW.md`（任務流程第 6 步）、`.claude/skills/encode-lesson/SKILL.md` |
 | 五個主導航在假資料庫上通過 features 標「CI」的檢查（#243） | CI `verify` job（`required` 依賴它；已知產品缺陷列在 `KNOWN_FAILURES` 並附 Issue 與失敗訊息片段，訊息不符照常失敗，#251） | `tools/verify/page_checks.py`、`.github/workflows/ci.yml`（`verify` job） |

@@ -457,9 +457,7 @@ class PrGateTests(unittest.TestCase):
         self.assertEqual(self.check(listed_nothing, ["docs/ROADMAP.md"]), [])
 
     def test_unfilled_template_fails_and_filled_template_passes(self):
-        template = (ROOT / ".github/pull_request_template.md").read_text(
-            encoding="utf-8"
-        )
+        template = (ROOT / "docs/templates/pull-request.md").read_text(encoding="utf-8")
         errors = self.check(template, API)
         self.assertEqual(rules(errors), ["a", "b"], errors)
         self.assertEqual(len(errors), 4, errors)  # no Closes, AC-1..3 empty

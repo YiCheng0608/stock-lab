@@ -300,7 +300,7 @@ def test_docs_and_tests_only_are_not_verified(importers):
         FE + "themes/themeSuggestions.test.tsx",
         FE + "news/news.fixtures.ts",
         "tools/ci/checks.py",
-        ".github/pull_request_template.md",
+        "docs/templates/pull-request.md",
         importers=importers,
     )
     assert result.pages == []
