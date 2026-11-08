@@ -1,0 +1,6 @@
+# Only a link: the templates live in docs/templates (#550), so the "New issue" page points there.
+blank_issues_enabled: true
+contact_links:
+  - name: 模板（任務／功能母單／候選）
+    url: https://github.com/YiCheng0608/stock-lab/blob/master/docs/templates/README.md
+    about: 複製 docs/templates 的模板填好，再用 gh issue create --body-file 建 Issue。

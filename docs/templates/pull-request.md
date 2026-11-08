@@ -1,3 +1,5 @@
+<!-- owns: PR 模板 -->
+<!-- 用法見 [模板清單](README.md)。複製本檔（含 HTML 註解）當 PR 本文再填；`gh pr create --body-file` 不會自動帶入。 -->
 Closes #<issue>
 
 <!-- 分流見 docs/WORKFLOW.md「分流」。第 3 類（文件、流程檔、tools/ci/、純測試）沒有 Issue 時刪掉上一行，AC 區改寫「無 Issue，驗證見 CI」。CI 的 pr 檢查會讀本文。 -->

@@ -1,7 +1,7 @@
 <!-- owns: 唯一來源對照、Issue 標題前綴、版本完成判定、資料與功能拆線、分流、任務流程、留言類型、本機檢查、review 與合併、PR 檢查規則、CI 後端測試分流、長期整合分支、失敗處理、程式索引 -->
 # GitHub 工作手冊
 
-[AGENTS](../AGENTS.md) 管角色與原則，本文管操作細節與模板；統籌 session 與無人值守運作見 [COORDINATOR](COORDINATOR.md)。
+[AGENTS](../AGENTS.md) 管角色與原則，本文管操作細節，模板在 [docs/templates](templates/README.md)；統籌 session 與無人值守運作見 [COORDINATOR](COORDINATOR.md)。
 
 ## 欄位與唯一來源
 
@@ -39,8 +39,8 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
 
 ## 任務流程
 
-1. **建單**：套 [任務模板](../.github/ISSUE_TEMPLATE/task.md)，填目標、範圍、AC、依賴、對應 gate；套 milestone；看板設待辦。UI 任務（改五個主導航的頁面）的 AC 固定加一條「更新對應的 [`features/*.md`](../.claude/skills/verify-stock-lab/features) 或寫明不需更新」。
-2. **開工**：統籌把任務全文（Issue 連結、AC、白名單、驗證方式，以及「提問與回報照[留言類型](#留言類型)寫在 Issue／PR 留言」一點）寫成 UTF-8 檔（不經 PowerShell 管線），放 worktree 外、統籌換手後仍在的目錄（例如 `$HOME/t<issue>/task/task.md`；工程師把 `$HOME/t<issue>/` 列進 PR 本文的 worktree 外暫存目錄，結案時以 `--extra-dir` 刪）。pytest 的 `--basetemp` 要用同一目錄下的另一個子目錄（例如 `$HOME/t<issue>/b1`），因為 pytest 開跑時會清空 basetemp，全綠時也會刪掉它，任務檔不能放在裡面。目錄名不能含 `"`、`$`、反引號、`%`、`!`，dispatch.sh 會拒絕（exit 64）。寫好後跑一行：
+1. **建單**：套[任務 Issue 模板](templates/issue-task.md)，填目標、範圍、AC、依賴、對應 gate；套 milestone；看板設待辦。UI 任務（改五個主導航的頁面）的 AC 固定加一條「更新對應的 [`features/*.md`](../.claude/skills/verify-stock-lab/features) 或寫明不需更新」。
+2. **開工**：統籌照[任務檔模板](templates/task-file.md)把任務全文（Issue 連結、AC、白名單、驗證方式，以及「提問與回報照[留言類型](#留言類型)寫在 Issue／PR 留言」一點）寫成 UTF-8 檔（不經 PowerShell 管線），放 worktree 外、統籌換手後仍在的目錄（例如 `$HOME/t<issue>/task/task.md`；工程師把 `$HOME/t<issue>/` 列進 PR 本文的 worktree 外暫存目錄，結案時以 `--extra-dir` 刪）。pytest 的 `--basetemp` 要用同一目錄下的另一個子目錄（例如 `$HOME/t<issue>/b1`），因為 pytest 開跑時會清空 basetemp，全綠時也會刪掉它，任務檔不能放在裡面。目錄名不能含 `"`、`$`、反引號、`%`、`!`，dispatch.sh 會拒絕（exit 64）。寫好後跑一行：
 
    ```text
    bash tools/ops/dispatch.sh <issue> <slug> --task-file <任務全文檔> [--model <model> --effort <effort>] [--base origin/<branch>]
@@ -65,7 +65,7 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
 
    以變數名印出（`sh -c 'echo $TOKEN'`）的寫法擋不到。任務自己 build 的 image 用 `t<issue>` tag，compose project 名稱用 `t<issue>` 或 `task-<issue>` 開頭，結案時才會被清掉（第 6 步）。工程師與 review session 不跑 `docker image prune`、`docker builder prune`、`docker volume prune`、`docker system prune`：dangling image 與 build cache 是所有任務共用的，只由 `close_task.sh` 清。
 4. **本機檢查**：見下節；全部通過才開 PR。
-5. **PR**：套 [PR 模板](../.github/pull_request_template.md)（`gh pr create --body-file` 不會自動帶入模板，先複製模板再填），`Closes #<issue>`，附驗證結果與截圖（前端）。看板設待整合。
+5. **PR**：套 [PR 模板](templates/pull-request.md)（`gh pr create --body-file` 不會自動帶入模板，先複製模板再填），`Closes #<issue>`，附驗證結果與截圖（前端）。看板設待整合。
 6. **Review 與合併**：見下節。合併後 master CI 綠 → Issue 自動關閉、看板完成（PR 進[長期整合分支](#長期整合分支)時 GitHub 不自動關，由 `close_task.sh` 關）；遠端 branch 由 GitHub 自動刪（repo 設定 `delete_branch_on_merge`）；統籌在 `master` 管理 checkout 跑 `bash tools/ops/close_task.sh <issue> [--extra-dir <PR 本文寫的 worktree 外暫存目錄>]...`（同一 Issue 有多個 `task/<issue>-*` worktree 時加 `--slug <slug>`），再刷新程式索引。[`close_task.sh`](../tools/ops/close_task.sh) 先確認 PR 已合併、PR 目標分支（`baseRefName`：master 或[長期整合分支](#長期整合分支)）上它的 merge commit CI 綠（該分支最新一次也不是紅）、本地 branch 已在 `origin/<目標分支>` 裡、worktree 沒有未 commit 的改動、terminal 都閒置，才關 terminal、`orca worktree rm --force`＋`git worktree prune`（殘留目錄一併刪）、刪本地 branch、刪暫存目錄（裡面的 junction／symlink 先拆，不跟隨）、並刪該任務各工程師 session 的 Claude Code scratchpad（#472，規則見 `close_task.sh` 開頭與 GUARDRAILS）、清該任務的 Docker 資源、看板設完成並讀回；任一前提不符就不刪任何東西並非 0 結束。repo 與各 worktree、`$HOME`、磁碟根、`stock-lab-data` 與 `STOCK_DATA_DIR` 不能當 `--extra-dir`；路徑中間經過 junction／symlink 或用了 8.3 短檔名也拒絕，請給實際路徑。Issue 有 `統籌承諾：` 留言時依承諾的順序與時點清理。Docker 資源的清法如下（#360）：
    - **刪除範圍**：tag 是 `t<issue>`／`t<issue>-*` 的 image，repository 以 `t<issue>-`／`task-<issue>-` 開頭的 image（compose 的 `<project>-<service>`），以及名稱以 `t<issue>`／`task-<issue>` 開頭的已停止容器、volume、network。名稱的數字後面要接 `-`、`_`、`.` 或結尾，所以 `t36` 不會刪到 `t360` 的資源。image 一律以 `repository:tag` 刪，不用 id、不加 `-f`，同一個 image 的其他 tag 會留著。
    - **有容器在跑時**：容器名稱屬於這個任務，或用到上述 image／volume／network 時，這個任務的資源一個都不刪，JSON 的 steps 列出 `docker_running:<容器>` 與每個留下的 `docker_kept:<種類>:<名稱>`。
