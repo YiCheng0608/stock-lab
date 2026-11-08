@@ -595,6 +595,10 @@ def test_the_catalyst_window_and_dormant_sessions_skip_index_history(factory):
             == window_before
         )
         assert pipeline._quote_sessions(db, BASIS_SESSIONS[-1]) == dormant_before
+        # Fewer than DORMANT_SESSIONS stock sessions: nothing is presumed
+        # dormant, although the TAIEX rows alone would reach 60.
+        assert len(dormant_before) < pipeline.DORMANT_SESSIONS
+        assert len(PRE_SESSIONS + BASIS_SESSIONS) >= pipeline.DORMANT_SESSIONS
 
 
 def test_a_failed_volume_report_leaves_volume_empty_until_a_later_read(factory):
