@@ -33,6 +33,11 @@ from worker.sources import parse_twse_taiex_from_all_daily_payload
 
 DAILY_JOB = "daily"
 TAIPEI_UTC_OFFSET = timedelta(hours=8)
+# The first session of the stock history (#1 6714433517).  The index history
+# reaches back further (2023-09-01, Issue #563) so its long moving averages
+# exist on this day; a TAIEX row before it only carries index data and is
+# never a session denominator for the stocks (_raw_is_date_verified).
+SESSION_BASIS_START = date(2024, 9, 30)
 
 
 def collect_states(db: Session, start_date: date, end_date: date) -> dict[date, str]:
@@ -215,9 +220,12 @@ def _raw_is_date_verified(
         # The monthly TAIEX history report a real index bar points at (Issue
         # #552): its data_as_of is the report's latest row, so the row must be
         # of that month and not after it.  worker.index_bars upgrades only a
-        # row that already was a session and has the same close.
+        # row that already was a session and has the same close.  The rows it
+        # inserts before SESSION_BASIS_START (Issue #563) are index history,
+        # not sessions of the stock history.
         return (
-            reported is not None
+            trading_date >= SESSION_BASIS_START
+            and reported is not None
             and (reported.year, reported.month)
             == (trading_date.year, trading_date.month)
             and trading_date <= reported

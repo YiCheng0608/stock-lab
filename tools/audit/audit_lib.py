@@ -27,6 +27,9 @@ from app.raw_paths import legacy_relative, payload_file  # noqa: E402
 # What the audit recomputes against (docs/spec/indicators.md); a product change of
 # these must change the audit too (backend/tests/test_audit.py pins them).
 INDICATOR_VERSION = "indicators/v1"
+# app.coverage.SESSION_BASIS_START: the first session of the stock history.
+# The TAIEX rows before it are index history (Issue #563), never a session.
+SESSION_BASIS_START = "2024-09-30"
 PRICE_BASIS = "as_of_date_raw_basis/v2"
 # The official reference prices are published in 0.01 units, cut (docs/spec/indicators.md 還原因子).
 REFERENCE_TOLERANCE = 0.02

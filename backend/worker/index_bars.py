@@ -17,7 +17,9 @@ The TAIEX close-only rows ``collect`` writes from ``MI_INDEX`` (source
 ``twse_index``, the trading-day basis) are upgraded in place: only when the
 report's close equals the stored close, recording the old source and raw in
 ``upgraded_rows``.  A TAIEX day without a stored row is not inserted (the
-session basis stays ``MI_INDEX``'s).  The TPEx index rows are written as new
+session basis stays ``MI_INDEX``'s), except by the backfill before the stock
+history starts (``SESSION_BASIS_START``, Issue #563): there it is index
+history only, never a session.  The TPEx index rows are written as new
 rows of the ``TPEx``/``TPEX`` index instrument.  An existing real row keeps
 its values (a differing value is a conflict) and only gains empty fields,
 unless ``force``.
@@ -36,6 +38,7 @@ from sqlalchemy import null, select
 from sqlalchemy.orm import Session
 
 from app.clock import utcnow
+from app.coverage import SESSION_BASIS_START
 from app.indicators import SYNTHETIC_BAR_SOURCES
 from app.models import Instrument, MarketBar
 
@@ -733,8 +736,15 @@ def store_index_bars(
     raw_id: Callable[[str | None], int | None],
     *,
     force: bool = False,
+    history_before: date | None = None,
 ) -> WriteResult:
-    """Write the bars (rules in the module docstring); the caller commits."""
+    """Write the bars (rules in the module docstring); the caller commits.
+
+    ``history_before`` (the backfill passes ``SESSION_BASIS_START``, Issue
+    #563): a TAIEX day before it without a stored row is inserted as index
+    history.  There is no MI_INDEX row to upgrade before the stock history
+    starts, and coverage never counts such a row as a session.
+    """
 
     result = WriteResult()
     taiex = None
@@ -764,7 +774,12 @@ def store_index_bars(
             else None
         )
         if row is None:
-            if bar.exchange == "TWSE":
+            if instrument is None:
+                # No TAIEX instrument yet: nothing to attach the day to.
+                outcome = "no_close_row"
+            elif bar.exchange == "TWSE" and not (
+                history_before is not None and bar.trading_date < history_before
+            ):
                 # The session basis stays MI_INDEX's: no new TAIEX day here.
                 outcome = "no_close_row"
             else:
@@ -858,13 +873,37 @@ def taipei_today(now: datetime | None = None) -> date:
 # --- backfill -----------------------------------------------------------------
 
 RUN_TYPE = "index_bar_backfill"
-# The stock history starts 2024-09-30 (#1 6714433517); the index history does too,
-# so the first month's earlier sessions are read but not written.
-HISTORY_START = date(2024, 9, 30)
-DEFAULT_FIRST_MONTH = "2024-09"
+# The index history starts about a year before the stock history (2024-09-30,
+# app.coverage.SESSION_BASIS_START), so the index's 240-session average exists
+# on the stocks' first day (#1 6723720803, Issue #563).  Earlier sessions of
+# the first month are read but not written.
+HISTORY_START = date(2023, 9, 1)
+DEFAULT_FIRST_MONTH = "2023-09"
 MAX_MONTHS = 36
 EXCHANGES = ("TWSE", "TPEx")
 RAW_SOURCES = {"TWSE": "twse", "TPEx": "tpex"}
+
+
+def rebuild_derived(db: Session, instrument_ids: Iterable[int]) -> dict[str, Any]:
+    """Rebuild the indicator and feature rows of instruments whose bars a backfill changed.
+
+    ``technical_indicators`` in full (an earlier bar changes every later
+    average) and ``technical_features`` as analyze writes them, so both match
+    the new bars before the next daily.  Shared by the index, US index and TX
+    history backfills (Issue #563).
+    """
+
+    from .indicator_batch import compute_market_indicators
+    from .pipeline import _calculate_features
+
+    changed = sorted(set(instrument_ids))
+    if not changed:
+        return {"status": "skipped", "reason": "no_changed_bars"}
+    indicators = compute_market_indicators(db, rebuild=True, instrument_ids=changed)
+    for instrument_id in changed:
+        _calculate_features(db, db.get(Instrument, instrument_id))
+    db.flush()
+    return indicators
 
 
 def _default_get(request: Request) -> Any:
@@ -901,8 +940,7 @@ def backfill_index_bars(
 
     from app.models import IngestionRun
 
-    from .indicator_batch import compute_market_indicators
-    from .pipeline import _calculate_features, _upsert_raw_payload
+    from .pipeline import _upsert_raw_payload
     from .sources import capture_payload
 
     sleep = sleep or time.sleep
@@ -972,7 +1010,13 @@ def backfill_index_bars(
                 for bar in fetched.bars
                 if HISTORY_START <= bar.trading_date <= today
             ]
-            written = store_index_bars(db, bars, raw_ids.get, force=force)
+            written = store_index_bars(
+                db,
+                bars,
+                raw_ids.get,
+                force=force,
+                history_before=SESSION_BASIS_START,
+            )
             total.merge(written)
             warnings.extend(fetched.warnings)
             manifest[key] = {
@@ -985,16 +1029,7 @@ def backfill_index_bars(
                 "warnings": fetched.warnings,
             }
         changed = sorted({instrument_id for instrument_id, _ in total.written})
-        indicators = (
-            compute_market_indicators(db, rebuild=True, instrument_ids=changed)
-            if changed
-            else {"status": "skipped", "reason": "no_changed_bars"}
-        )
-        # technical_features as analyze writes them, so they match the new bars
-        # before the next daily.
-        for instrument_id in changed:
-            _calculate_features(db, db.get(Instrument, instrument_id))
-        db.flush()
+        indicators = rebuild_derived(db, changed)
         warnings.extend(warnings_for(total))
         failed_months = [key for key, item in manifest.items() if item["warnings"]]
         run.status = "partial" if failed_months or total.close_mismatches else "success"
