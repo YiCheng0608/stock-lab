@@ -495,16 +495,31 @@ a.symbol-link:hover { color: var(--color-primary); }
 .market-chart-footer { display: grid; gap: var(--space-1); margin-top: var(--space-3); color: var(--color-text-muted); font-size: 12px; line-height: 1.65; }
 .market-chart-footer p { margin: 0; font-size: 12px; line-height: 1.65; }
 .market-chart-contract { color: var(--color-text); font: 500 var(--text-sm) var(--font-mono); }
-/* 美股（前一交易日） (Issue 547): four equal index widgets in the overview's bar, each with a muted date line (非最新 in
-   the warning color, 美股休市 muted), then one folded row per index whose daily K mounts when opened. */
-.market-us { margin-top: var(--space-4); }
-.market-us-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.market-us .market-us-date { flex: 1 1 100%; margin-top: 2px; color: var(--color-text-muted); font-size: 12px; }
-.market-us-flag { margin-left: var(--space-1); }
-.market-us-stale { color: var(--color-warning); font-weight: 600; }
-.market-us-charts { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
-.market-us-chart > summary { font-size: var(--text-sm); }
-.market-us-chart .market-chart { margin-top: var(--space-2); }
+/* 指數總表 (Issue 564): one table of the seven indexes in two groups; rows are 44px, the selected row has the selection
+   background and a 3px primary bar on its left edge; a click anywhere on a row selects it (the name is its button).
+   非最新 in the warning color, 美股休市, 換月 and the MA60 value muted; up/down colors only on the change. */
+.market-indexes { margin-top: var(--space-4); }
+.market-index-table th, .market-index-table td { height: 44px; padding: 0 var(--space-3); }
+.market-index-table .table-group-row td { height: 32px; font-size: var(--text-sm); }
+.market-index-row { cursor: pointer; }
+.market-index-row.is-selected { background: var(--color-primary-soft); }
+.market-index-row.is-selected:hover { background: var(--color-primary-soft); }
+.market-index-row.is-selected td:first-child { box-shadow: inset 3px 0 0 var(--color-primary); }
+.market-index-select { padding: 0; border: 0; background: transparent; color: var(--color-text); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
+.market-index-row.is-selected .market-index-select { color: var(--color-primary); }
+.market-index-sub { margin-left: var(--space-1); color: var(--color-text-muted); font: 500 var(--text-xs) var(--font-mono); white-space: nowrap; }
+.market-index-muted, .market-index-flag, .market-index-missing { color: var(--color-text-muted); }
+.market-index-stale { color: var(--color-warning); font-weight: 600; }
+.market-index-position { color: var(--color-text); font-weight: 600; }
+.market-index-date { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.market-index-missing, .market-index-flag { font-family: var(--font-body); }
+/* A flag wraps as a whole on phones (「非最新」, 「2026/11/07 美股休市」), never inside a word. */
+.market-index-flag { white-space: nowrap; }
+.market-index-missing { white-space: normal; }
+.market-index-ma60 { font-variant-numeric: tabular-nums; }
+.market-index-ma60 .market-index-muted { font-family: var(--font-mono); }
+.market-index-source { color: var(--color-text-muted); }
+.market-index-note { margin: var(--space-2) 0 0; }
 .alert-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-left: 4px solid var(--color-warning); border-radius: var(--radius-lg); background: var(--color-bg-card); color: var(--color-text); font-size: 14px; }
 /* Hot groups and news (#493, DESIGN_SYSTEM §5 熱門族群與重點新聞): two cards in one grid row; stretch makes them one height,
    so their top and bottom edges line up whatever each holds. #510: one head line, at most five items of two lines. */
@@ -837,7 +852,7 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
    dual widgets need a whole row at 800px and below (#493 review); on the market page phones keep all four (Issue 549). Inside
    the one bar (#510) a cell starting a row has no left divider, and the second row has a top one. */
 @media (max-width: 1199px) {
-  .market-overview-grid, .market-us-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .market-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .market-overview-grid > .market-widget:nth-child(3) { border-left: 0; }
   .market-overview-grid > .market-widget:nth-child(n+3) { border-top: 1px solid var(--color-border); }
 }
@@ -942,8 +957,24 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .market-overview .market-widget-value { font-size: 16px; }
   .market-ma60 { padding: var(--space-2) var(--space-3); }
   .market-ma60-line { font-size: var(--text-sm); }
-  /* A US index falls by four digits and two-digit percents (費半 -1,257.51（-12.25%）): the percent wraps, not cut. */
-  .market-us .market-widget-change { white-space: normal; }
+  /* 指數總表 on phones (Issue 564): the same table, each row two lines without horizontal scroll — the name, close,
+     change and percent, then the data date and the MA60 position; the 來源 column goes (the 來源 note stays). */
+  .market-index-table table, .market-index-table tbody { display: block; }
+  .market-index-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .market-index-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 2px var(--space-2); align-items: baseline; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--color-border); }
+  .market-index-table tr:last-child { border-bottom: 0; }
+  .market-index-table .table-group-row { display: block; padding: 0; }
+  .market-index-table .table-group-row td, .market-index-table .table-group-row td:first-child { display: block; height: auto; padding: var(--space-1) var(--space-3); }
+  .market-index-table td, .market-index-table td:first-child { position: static; height: auto; padding: 0; border-bottom: 0; background: transparent; }
+  .market-index-table tbody tr:hover td:first-child { background: transparent; }
+  .market-index-row.is-selected { box-shadow: inset 3px 0 0 var(--color-primary); }
+  .market-index-row.is-selected td:first-child { box-shadow: none; }
+  .market-index-table .market-index-name { grid-column: 1; grid-row: 1; white-space: normal; }
+  .market-index-table .market-index-close { grid-column: 2; grid-row: 1; }
+  .market-index-table .market-index-change { grid-column: 3; grid-row: 1; }
+  .market-index-table .market-index-pct { grid-column: 4; grid-row: 1; }
+  .market-index-table .market-index-date { grid-column: 1; grid-row: 2; font-size: var(--text-xs); white-space: normal; }
+  .market-index-table .market-index-ma60 { grid-column: 2 / -1; grid-row: 2; font-size: var(--text-xs); text-align: right; }
   /* Phones: the two indexes on line one, the date and 看大盤 → on line two; the link names the block, so the label goes. */
   .market-summary { gap: var(--space-1) var(--space-3); padding: var(--space-2) var(--space-3); }
   .market-summary-label { display: none; }

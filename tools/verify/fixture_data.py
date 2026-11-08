@@ -2083,6 +2083,13 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
             "market_overview.foreign_indices.0.trading_date",
             SERIES["SPX"][-1]["day"].isoformat(),
         ),
+        # The market page's index table (Issue #564): seven rows in table order, all with data.
+        (
+            "dashboard",
+            "market_overview.indexes[].key",
+            ["taiex", "tpex", "tx", "spx", "ixic", "dji", "sox"],
+        ),
+        ("dashboard", "market_overview.indexes[].status", ["available"] * 7),
         ("stocks/US/SPX/bars?interval=day&limit=250", "bars", len(SERIES["SPX"])),
         ("stocks/US/SPX/bars?interval=day&limit=250", "sources", ["fred_close"]),
         ("themes?board=industry&limit=5", "meta.trading_date", D),
