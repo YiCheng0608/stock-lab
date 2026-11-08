@@ -187,7 +187,10 @@ def _official_run_ids(db: Session) -> set[int]:
         select(IngestionRun.id).where(
             IngestionRun.source == "official",
             IngestionRun.status.in_({"success", "partial", "skipped"}),
-            IngestionRun.run_type.in_({"collect", "backfill"}),
+            # index_bar_backfill (Issue #552) stores only the four monthly
+            # index reports; _raw_is_date_verified accepts only MI_5MINS_HIST
+            # of them, and has_backfill_manifest reads run_type backfill only.
+            IngestionRun.run_type.in_({"collect", "backfill", "index_bar_backfill"}),
         )
     ).all()
     return {int(item) for item in rows}
@@ -203,11 +206,23 @@ def _raw_is_date_verified(
 
     if raw.ingestion_run_id not in run_ids:
         return False
-    if _as_date(raw.data_as_of) != trading_date:
-        return False
     source = (raw.source or "").casefold()
     endpoint = (raw.endpoint or "").casefold()
     if source != "twse":
+        return False
+    reported = _as_date(raw.data_as_of)
+    if "mi_5mins_hist" in endpoint:
+        # The monthly TAIEX history report a real index bar points at (Issue
+        # #552): its data_as_of is the report's latest row, so the row must be
+        # of that month and not after it.  worker.index_bars upgrades only a
+        # row that already was a session and has the same close.
+        return (
+            reported is not None
+            and (reported.year, reported.month)
+            == (trading_date.year, trading_date.month)
+            and trading_date <= reported
+        )
+    if reported != trading_date:
         return False
     # MI_INDEX is the date-scoped TWSE report that contains the benchmark
     # summary table.  Other TWSE feeds must not be promoted to a TAIEX basis.

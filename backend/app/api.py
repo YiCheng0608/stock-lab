@@ -42,7 +42,12 @@ from .candidate_view import (
 )
 from .coverage import has_backfill_manifest
 from .db import SessionLocal
-from .domain import CANDIDATE_SCORE, ETF_CATEGORIES, signal_confidence_semantics
+from .domain import (
+    CANDIDATE_SCORE,
+    ETF_CATEGORIES,
+    NON_SECURITY_TYPES,
+    signal_confidence_semantics,
+)
 from .latest_rows import ranked_ids
 from .level_semantics import build_level_semantics, canonical_evidence
 from .models import (
@@ -1840,7 +1845,7 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
     instruments_count = (
         db.scalar(
             select(func.count(Instrument.id)).where(
-                Instrument.instrument_type != "index",
+                Instrument.instrument_type.not_in(NON_SECURITY_TYPES),
                 Instrument.status == "active",
             )
         )
@@ -2511,7 +2516,8 @@ def stocks(
 ) -> dict[str, Any]:
     run, as_of = latest_official_as_of(db)
     query = select(Instrument).where(
-        Instrument.status == "active", Instrument.instrument_type != "index"
+        Instrument.status == "active",
+        Instrument.instrument_type.not_in(NON_SECURITY_TYPES),
     )
     if q and q.strip():
         needle = f"%{q.strip()}%"

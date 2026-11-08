@@ -1,4 +1,5 @@
-import type { MarketOverview, MarketOverviewExchange } from '../types'
+import { formatDay } from '../dates'
+import type { MarketOverview, MarketOverviewExchange, StockBarsResponse } from '../types'
 import { formatFixed } from '../units'
 import { isFiniteNumber } from '../stock/stockBars'
 
@@ -12,14 +13,46 @@ export const EXCHANGES = [
 export type ExchangeSpec = (typeof EXCHANGES)[number]
 
 export const MARKET_PATH = '/market'
-// The TWSE capitalization-weighted index, drawn by the stock page's StockBarsChart from the same bars API (Issue 549;
-// close-only twse_index rows follow its synthetic-bar rules until Issue 552 stores real daily K bars).
-export const TAIEX = { exchange: 'TWSE', symbol: 'TAIEX' } as const
-export const TAIEX_CHART_TITLE = '加權指數日線'
+// The three daily K charts of the market page, each the stock page's StockBarsChart on the same bars API (Issue 549,
+// 552): the TWSE capitalization-weighted index, the TPEx index and the TX near month (TAIFEX open data).
+export type MarketChartSpec = {
+  key: 'taiex' | 'tpex' | 'tx'
+  exchange: string
+  symbol: string
+  title: string
+  titleId: string
+  instrumentType: 'index' | 'futures'
+}
+export const MARKET_CHARTS: readonly MarketChartSpec[] = [
+  { key: 'taiex', exchange: 'TWSE', symbol: 'TAIEX', title: '加權指數日線', titleId: 'market-chart-title', instrumentType: 'index' },
+  { key: 'tpex', exchange: 'TPEx', symbol: 'TPEX', title: '櫃買指數日線', titleId: 'market-tpex-chart-title', instrumentType: 'index' },
+  { key: 'tx', exchange: 'TAIFEX', symbol: 'TX', title: '台指期近月日線', titleId: 'market-tx-chart-title', instrumentType: 'futures' },
+]
+export const TAIEX = MARKET_CHARTS[0]
 
 export const UP_DOWN_NOTE = '紅色為上漲、綠色為下跌（台股慣例）'
 export const DERIVED_NOTE = '櫃買指數漲跌幅依前一日收市指數計算'
-export const TPEX_NO_BARS_TEXT = '無資料：目前只收櫃買指數的當日數值，歷史日 K 尚未收集'
+// 政府資料開放授權條款第1版 第三條 attribution, on the TX chart (coordinator decision 6715831640).
+export const TAIFEX_ATTRIBUTION = '資料來源：臺灣期貨交易所（政府資料開放平臺，政府資料開放授權條款第1版）'
+export const TX_ROLL_NOTE = '近月合約：每月第三個週三（到期日）起改用次月，換月不做價差調整；只含一般交易時段'
+
+// The TX history starts at the first collect (open data has the latest session only): said when the daily series is
+// shorter than the request, so the first bar is the first collected session.
+export function collectedSinceText(data: StockBarsResponse | undefined): string | null {
+  if (!data || data.interval !== 'day' || !data.bars.length || data.count >= data.limit) return null
+  const first = data.bars[0].date
+  return `自 ${formatDay(first) ?? first} 起收集，無更早歷史`
+}
+
+// 「合約 2026/11 · 未平倉 125,793 口 · 結算價 39,652」 for the latest daily bar with a contract month.
+export function futuresLatestText(data: StockBarsResponse | undefined): string | null {
+  const latest = data?.interval === 'day' ? [...data.bars].reverse().find((bar) => bar.contract_month) : undefined
+  if (!latest?.contract_month) return null
+  const month = /^\d{6}$/.test(latest.contract_month) ? `${latest.contract_month.slice(0, 4)}/${latest.contract_month.slice(4)}` : latest.contract_month
+  const interest = isFiniteNumber(latest.open_interest) ? `${formatFixed(latest.open_interest, 0)} 口` : '—'
+  const settlement = isFiniteNumber(latest.settlement_price) ? formatFixed(latest.settlement_price, 0) : '—'
+  return `${formatDay(latest.date) ?? latest.date} 合約 ${month} · 未平倉 ${interest} · 結算價 ${settlement}`
+}
 
 export const SCOPE_LABELS: Record<string, string> = {
   twse_all_securities: '集中市場總計（含 ETF、權證等）',

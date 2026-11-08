@@ -1256,13 +1256,32 @@ SUMMARY_NAMES = (
     ("TPEx", "櫃買"),
 )  # EXCHANGES[].short in market/marketOverview.ts
 MARKET_LINK = "看大盤 →"
-# MarketPage reads TAIEX with the stock page's StockBarsChart and STOCK_BARS_LIMIT (Issue 549, decision 6715021190).
-TAIEX_BARS = "stocks/TWSE/TAIEX/bars?interval=day&limit=250"
-CHART_TITLE = "加權指數日線"  # TAIEX_CHART_TITLE
-NO_TAIEX_BARS = "來源未提供日線"
-TPEX_BARS_TITLE = "櫃買指數日線"
-TPEX_NO_BARS = (
-    "無資料：目前只收櫃買指數的當日數值，歷史日 K 尚未收集"  # TPEX_NO_BARS_TEXT
+# MarketPage draws three charts with the stock page's StockBarsChart and STOCK_BARS_LIMIT (Issue 549, decision
+# 6715021190; Issue 552): (title, bars path, saved name, price decimals) in page order (MARKET_CHARTS).
+MARKET_CHARTS = (
+    (
+        "加權指數日線",
+        "stocks/TWSE/TAIEX/bars?interval=day&limit=250",
+        "taiex-bars.json",
+        2,
+    ),
+    (
+        "櫃買指數日線",
+        "stocks/TPEx/TPEX/bars?interval=day&limit=250",
+        "tpex-bars.json",
+        2,
+    ),
+    (
+        "台指期近月日線",
+        "stocks/TAIFEX/TX/bars?interval=day&limit=250",
+        "tx-bars.json",
+        0,
+    ),
+)
+NO_BARS = "來源未提供日線"
+# TAIFEX_ATTRIBUTION in market/marketOverview.ts (政府資料開放授權條款第1版 第三條).
+TAIFEX_ATTRIBUTION = (
+    "資料來源：臺灣期貨交易所（政府資料開放平臺，政府資料開放授權條款第1版）"
 )
 
 
@@ -1324,40 +1343,52 @@ def t14(run: Run) -> str:
 
 @check("today", "T15")
 def t15(run: Run) -> str:
-    """The market page's TAIEX chart (the stock page's K-line card): date badge, count, newest row; 櫃買 says why it has none."""
+    """The market page's three daily K charts (the stock page's K-line card), in order: badge, count, newest row."""
 
-    text, payload = run.text(MARKET), run.get(TAIEX_BARS, "taiex-bars.json")
-    i = text.find(CHART_TITLE)
-    expect(i >= 0, f"缺整行 `{CHART_TITLE}`（{text.name}）")
-    j = text.find(TPEX_BARS_TITLE, i)
-    expect(
-        j > i and text.after(j) == TPEX_NO_BARS,
-        f"`{CHART_TITLE}` 之後缺 `{TPEX_BARS_TITLE}` 與下一行 `{TPEX_NO_BARS}`",
-    )
-    if not payload.get("bars"):
+    text = run.text(MARKET)
+    found, at = [], -1
+    for title, path, name, digits in MARKET_CHARTS:
+        try:
+            payload = run.get(path, name)
+        except Undetermined as exc:
+            # No instrument yet (TPEX / TX before their first collect): the page
+            # shows the chart without daily bars (MarketPage notFound).
+            if "回 404" not in str(exc):
+                raise
+            payload = {"bars": []}
+        i = text.find(title, at + 1)
+        expect(i > at, f"缺整行 `{title}`，或不在前一張圖之後（{text.name}）")
+        at = i
+        if not payload.get("bars"):
+            expect(
+                text.find(NO_BARS, i) >= 0,
+                f"`{title}`：API 沒有日線，缺整行 `{NO_BARS}`",
+            )
+            found.append(f"`{title}` `{NO_BARS}`")
+            continue
+        bars = [bar for bar in payload["bars"] if drawable(bar)]
+        expect(bool(bars), f"`{title}`：API 的日線沒有一根可畫的 K 棒")
+        as_of = payload.get("data_as_of")
+        badge = f"資料 {slash(as_of)}" if as_of else PENDING_DATE
         expect(
-            text.find(NO_TAIEX_BARS, i) >= 0,
-            f"API 沒有日線，缺整行 `{NO_TAIEX_BARS}`",
+            text.after(i) == badge,
+            f"`{title}` 下一行是 {text.after(i)!r}，預期 `{badge}`",
         )
-        return f"API 沒有日線，頁面顯示 `{NO_TAIEX_BARS}`；櫃買 `{TPEX_NO_BARS}`"
-    bars = [bar for bar in payload["bars"] if drawable(bar)]
-    expect(bool(bars), "API 的日線沒有一根可畫的 K 棒")
-    as_of = payload.get("data_as_of")
-    badge = f"資料 {slash(as_of)}" if as_of else PENDING_DATE
+        count = f"最近 {payload.get('count')} 根日線；缺日不補、停牌不畫 K 線"
+        expect(text.find(count, i) >= 0, f"`{title}`：缺整行 `{count}`")
+        # The data table (newest first): date, then 開 高 低 收 in 點, tab separated.
+        newest = bars[-1]
+        row = f"{slash(newest['date'])}\t" + "\t".join(
+            fixed(newest[key], digits) for key in ("open", "high", "low", "close")
+        )
+        k = text.find_where(lambda line: line.startswith(row), i)
+        expect(k >= 0, f"`{title}`：資料表缺最新一根 `{row}`")
+        found.append(f"`{title}` `{badge}`、`{count}`、最新 `{row}`")
     expect(
-        text.after(i) == badge,
-        f"`{CHART_TITLE}` 下一行是 {text.after(i)!r}，預期 `{badge}`",
+        text.find(TAIFEX_ATTRIBUTION, at) >= 0,
+        f"台指期之後缺整行 `{TAIFEX_ATTRIBUTION}`",
     )
-    count = f"最近 {payload.get('count')} 根日線；缺日不補、停牌不畫 K 線"
-    expect(text.find(count, i) >= 0, f"缺整行 `{count}`")
-    # The data table (newest first): date, then 開 高 低 收 in 點 with two decimals, tab separated.
-    newest = bars[-1]
-    row = f"{slash(newest['date'])}\t" + "\t".join(
-        fixed(newest[key], 2) for key in ("open", "high", "low", "close")
-    )
-    k = text.find_where(lambda line: line.startswith(row), i)
-    expect(k >= 0, f"資料表缺最新一根 `{row}`")
-    return f"`{badge}`、`{count}`、最新 `{row}`；櫃買 `{TPEX_NO_BARS}`"
+    return "；".join(found)
 
 
 # ---- news ----

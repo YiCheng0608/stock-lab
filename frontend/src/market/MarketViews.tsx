@@ -8,18 +8,22 @@ import { StockBarsChart } from '../stock/StockBarsChart'
 import {
   EXCHANGES,
   SHORT_SCOPE_LABELS,
-  TAIEX_CHART_TITLE,
-  TPEX_NO_BARS_TEXT,
+  TAIFEX_ATTRIBUTION,
+  TX_ROLL_NOTE,
   available,
   changeTone,
+  collectedSinceText,
   dash,
+  futuresLatestText,
   marketOverviewNotes,
   missingText,
   signedPercent,
   type ExchangeSpec,
+  type MarketChartSpec,
 } from './marketOverview'
 
-// The market page blocks (/market, Issue 549): 大盤概況 and 加權指數日線, in the order DESIGN_SYSTEM §4 fixes.
+// The market page blocks (/market, Issue 549/552): 大盤概況 and the three daily K charts, in the order DESIGN_SYSTEM §4
+// fixes.
 // Copy and units follow UI_COPY_SPEC §11.
 
 function IndexWidget({ spec, row }: { spec: ExchangeSpec; row: MarketOverviewExchange | null }) {
@@ -90,9 +94,24 @@ export function MarketOverviewPanel({ overview }: { overview: MarketOverview | u
   )
 }
 
-// 加權指數日線 is the stock page's StockBarsChart (same period switch, indicators and synthetic-bar rules) so the real
-// daily K bars of Issue 552 need no new view; 櫃買 has no daily history yet and says so in one line under it.
-export function IndexChartSection({ interval, onIntervalChange, data, loading, error }: {
+// The TX chart's lines under the K line: the latest contract month, open interest and settlement price, when the
+// history starts, the roll rule and the open-data attribution (Issue 552; UI_COPY_SPEC §11).
+function FuturesFooter({ data }: { data: StockBarsResponse | undefined }) {
+  const latest = futuresLatestText(data)
+  const since = collectedSinceText(data)
+  return (
+    <div className="market-chart-footer" data-exchange="TAIFEX">
+      {latest && <p className="market-chart-contract">{latest}</p>}
+      <p>{since ? `${since}；` : ''}{TX_ROLL_NOTE}</p>
+      <p>{TAIFEX_ATTRIBUTION}</p>
+    </div>
+  )
+}
+
+// Each chart is the stock page's StockBarsChart (same period switch, indicators and empty states), titled for the
+// series (DESIGN_SYSTEM §4 大盤頁, Issue 549/552).
+export function MarketChartView({ spec, interval, onIntervalChange, data, loading, error }: {
+  spec: MarketChartSpec
   interval: StockBarsInterval
   onIntervalChange: (interval: StockBarsInterval) => void
   data: StockBarsResponse | undefined
@@ -100,10 +119,10 @@ export function IndexChartSection({ interval, onIntervalChange, data, loading, e
   error: unknown
 }) {
   return (
-    <div className="market-chart">
+    <div className="market-chart" data-chart={spec.key}>
       <StockBarsChart interval={interval} onIntervalChange={onIntervalChange} data={data} loading={loading} error={error}
-        instrumentType="index" title={TAIEX_CHART_TITLE} titleId="market-chart-title" />
-      <p className="market-no-bars" data-exchange="TPEx"><b>櫃買指數日線</b> <span>{TPEX_NO_BARS_TEXT}</span></p>
+        instrumentType={spec.instrumentType} title={spec.title} titleId={spec.titleId}
+        footer={spec.instrumentType === 'futures' ? <FuturesFooter data={data} /> : undefined} />
     </div>
   )
 }

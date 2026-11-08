@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.clock import utcnow
 from app.config import MAX_GROUP_CANDIDATES, OFFICIAL_MAX_BACKFILL_DAYS
+from app.domain import NON_SECURITY_TYPES
 from app.coverage import (
     confirmed_non_trading_dates,
     has_backfill_manifest,
@@ -669,7 +670,7 @@ def coverage_report(
             item.exchange,
             (item.exchange, item.symbol),
             (item.exchange, item.symbol) in active_by_key,
-            item.instrument_type != "index",
+            item.instrument_type not in NON_SECURITY_TYPES,
             item.instrument_type == "index"
             and item.exchange == "TWSE"
             and item.symbol in {"TAIEX", "TWII"},

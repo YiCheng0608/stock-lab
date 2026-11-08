@@ -68,9 +68,14 @@ export function barSources(bar: StockBarRow): string[] {
   return typeof bar.source === 'string' && bar.source ? [bar.source] : []
 }
 
+// Index and futures daily bars (Issue 552): the TAIEX close-only rows, the monthly index reports and TAIFEX open data.
+export const INDEX_BAR_SOURCES: ReadonlySet<string> = new Set(['twse_index_ohlcv', 'tpex_index_ohlcv'])
+export const FUTURES_BAR_SOURCE = 'taifex_daily_futures'
+
 export function sourceName(source: string): string {
-  if (source === 'twse') return '臺灣證券交易所'
-  if (source === 'tpex') return '證券櫃檯買賣中心'
+  if (source === 'twse' || source === 'twse_index' || source === 'twse_index_ohlcv') return '臺灣證券交易所'
+  if (source === 'tpex' || source === 'tpex_index_ohlcv') return '證券櫃檯買賣中心'
+  if (source === FUTURES_BAR_SOURCE) return '臺灣期貨交易所'
   return '來源待核實'
 }
 
@@ -102,6 +107,8 @@ export function nullReasonText(code: string | undefined, context: { interval: St
     case 'invalid_bar': return '當日行情無效，不計算'
     case 'no_price_change': return '期間內收盤沒有漲跌，無法計算'
     case 'synthetic_index': return '指數只有收盤價，高低點與成交量不計算'
+    case 'missing_ohlc': return '來源有一天未提供開高低，高低點不計算'
+    case 'missing_volume': return '來源有一天未提供成交量，不計算'
     case 'not_computed': return '指標尚未計算'
     default: return '原因待核實'
   }
@@ -180,6 +187,8 @@ export function changeTone(value: number | null | undefined): ChangeTone {
 // ETFs and indexes (published in points with two decimals, Issue 549) keep 2.
 export function priceDigits(price: number | null | undefined, instrumentType?: string | null): number {
   const type = instrumentType?.toLowerCase()
+  // TX trades in whole index points (Issue 552).
+  if (type === 'futures') return 0
   if (type === 'etf' || type === 'index') return 2
   if (!isFiniteNumber(price) || price < 50) return 2
   return price < 500 ? 1 : 0
@@ -286,15 +295,42 @@ export function dataZoomPercent(event: unknown): ChartZoom | null {
   return { start: Math.max(0, Math.min(100, source.start)), end: Math.max(0, Math.min(100, source.end)) }
 }
 
-// Volume in lots (張) only when every source is a verified share-count source; otherwise blank (unit unverified).
-export function formatBarVolume(bar: StockBarRow): string {
-  const sources = barSources(bar)
-  const verified = sources.length > 0 && sources.every(isVerifiedShareSource)
-  return formatTableVolume(bar.volume, verified ? sources[0] : null)
+// How a volume is shown (Issue 552): stocks in lots (張); an index's whole-market shares in 億股; TX in contracts (口).
+// A source whose unit is not verified (the close-only TAIEX rows, volume 0) shows nothing.
+export type VolumeKind = 'lots' | 'index_shares' | 'contracts' | 'unverified'
+export const VOLUME_UNITS: Record<VolumeKind, string> = { lots: '張', index_shares: '億股', contracts: '口', unverified: '張' }
+
+export function volumeKind(sources: readonly string[]): VolumeKind {
+  if (!sources.length) return 'unverified'
+  if (sources.every(isVerifiedShareSource)) return 'lots'
+  if (sources.every((source) => INDEX_BAR_SOURCES.has(source))) return 'index_shares'
+  if (sources.every((source) => source === FUTURES_BAR_SOURCE)) return 'contracts'
+  return 'unverified'
 }
 
-function volumeUnitVerified(response: StockBarsResponse): boolean {
-  return response.sources.length > 0 && response.sources.every(isVerifiedShareSource)
+export function formatBarVolume(bar: StockBarRow): string {
+  const sources = barSources(bar)
+  const kind = volumeKind(sources)
+  if (kind === 'lots') return formatTableVolume(bar.volume, sources[0])
+  if (!isFiniteNumber(bar.volume) || bar.volume < 0) return ''
+  if (kind === 'index_shares') return (bar.volume / 1e8).toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  if (kind === 'contracts') return bar.volume.toLocaleString('zh-TW', { maximumFractionDigits: 0 })
+  return ''
+}
+
+// Volume axis labels stay inside the 64px gutter on phones (PR 553 review): 萬／億 above 10,000.
+export function compactCount(value: number): string {
+  const abs = Math.abs(value)
+  const short = (number: number) => number.toLocaleString('zh-TW', { maximumFractionDigits: 1 })
+  if (abs >= 1e8) return `${short(value / 1e8)}億`
+  if (abs >= 1e4) return `${short(value / 1e4)}萬`
+  return value.toLocaleString('zh-TW', { maximumFractionDigits: 0 })
+}
+
+function volumeAxisLabel(kind: VolumeKind, value: number): string {
+  if (kind === 'lots') return compactCount(value / 1000)
+  if (kind === 'index_shares') return (value / 1e8).toLocaleString('zh-TW', { maximumFractionDigits: 0 })
+  return compactCount(value)
 }
 
 function escapeHtml(value: unknown): string {
@@ -318,7 +354,7 @@ export function formatBarsTooltip(response: StockBarsResponse, index: number, pa
     lines.push(
       `開 ${escapeHtml(formatPrice(bar.open, digits))}　高 ${escapeHtml(formatPrice(bar.high, digits))}`,
       `低 ${escapeHtml(formatPrice(bar.low, digits))}　收 ${escapeHtml(formatPrice(bar.close, digits))}`,
-      `成交量（張） ${escapeHtml(formatBarVolume(bar) || '單位待核實')}`,
+      `成交量（${VOLUME_UNITS[volumeKind(barSources(bar))]}） ${escapeHtml(formatBarVolume(bar) || (isFiniteNumber(bar.volume) ? '單位待核實' : '來源未提供'))}`,
     )
   }
   for (const line of MA_LINES) {
@@ -413,7 +449,7 @@ export function buildBarsChartOption(response: StockBarsResponse, options: BarsC
   const axisLabel = { color: theme.muted, fontSize: 12, fontFamily: theme.fontMono }
   const splitLine = { lineStyle: { color: theme.grid } }
   const gridBase = { left: layout.left, right: layout.right }
-  const lots = volumeUnitVerified(response)
+  const kind = volumeKind(response.sources)
   const xAxis = [0, 1, 2].map((gridIndex) => ({
     type: 'category' as const,
     gridIndex,
@@ -454,10 +490,11 @@ export function buildBarsChartOption(response: StockBarsResponse, options: BarsC
       // Axis labels of 10,000 and up (an index in points, Issue 549) drop the decimals so they fit the 64px gutter;
       // the tooltip and the data table keep them.
       { type: 'value', gridIndex: 0, scale: true, axisLabel: { ...axisLabel, showMinLabel: false, formatter: (value: number) => formatPrice(value, axisDigits(value, digits)) }, splitLine },
-      { type: 'value', gridIndex: 1, scale: false, splitNumber: 2, axisLabel: { ...axisLabel, showMaxLabel: false, formatter: (value: number) => (lots ? value / 1000 : value).toLocaleString('zh-TW', { maximumFractionDigits: 0 }) }, splitLine },
+      { type: 'value', gridIndex: 1, scale: false, splitNumber: 2, axisLabel: { ...axisLabel, showMaxLabel: false, formatter: (value: number) => volumeAxisLabel(kind, value) }, splitLine },
       bounded
         ? { type: 'value', gridIndex: 2, min: 0, max: 100, interval: 50, axisLabel, splitLine }
-        : { type: 'value', gridIndex: 2, scale: true, splitNumber: 2, axisLabel: { ...axisLabel, formatter: (value: number) => indicatorNumber(value, options.panel === 'boll' ? digits : 2) }, splitLine },
+        // MACD of an index runs into the thousands: no decimals from 1,000 up, so「-2,000」fits the 64px gutter.
+        : { type: 'value', gridIndex: 2, scale: true, splitNumber: 2, axisLabel: { ...axisLabel, formatter: (value: number) => indicatorNumber(value, Math.abs(value) >= 1000 ? 0 : options.panel === 'boll' ? digits : 2) }, splitLine },
     ],
     dataZoom: [
       { type: 'inside', xAxisIndex: [0, 1, 2], filterMode: 'filter', start: zoom.start, end: zoom.end },

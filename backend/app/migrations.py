@@ -12,6 +12,7 @@ from .domain import (
     INSTITUTIONAL_FLOW_FORMULA_V2,
     INSTITUTIONAL_FLOW_FORMULAS,
 )
+from .market_bar_migration import upgrade_market_bars
 from .news_json_defaults import ensure_news_json_server_defaults
 from .portfolio_share_migration import ensure_portfolio_share_integer
 from .settlement_identity_migration import (
@@ -764,6 +765,16 @@ def _fallback_upgrade_on_connection(connection) -> None:
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
             "VALUES ('0028_monthly_revenues', CURRENT_TIMESTAMP)"
+        )
+    )
+    # 0029 (#552): nullable open/high/low/volume and the index/futures columns
+    # of market_bars; an older table is rebuilt once with every row copied.
+    if connection.dialect.name == "sqlite":
+        upgrade_market_bars(connection)
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0029_market_bar_ohlc_nullable', CURRENT_TIMESTAMP)"
         )
     )
 

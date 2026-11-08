@@ -97,7 +97,10 @@ from app.tracking import (
 )
 from app.trading_calendar import NextSession, next_session
 from worker import mops_events
+from app.indicators import is_synthetic_bar
 from worker.emerging_issuers import store_emerging_issuers
+from worker.futures_bars import store_futures_bars
+from worker.index_bars import INDEX_BAR_SOURCES, store_index_bars, warnings_for
 from worker.market_summary import store_market_summaries
 from worker.margin_lists import MarginListError, sync_margin_lists
 from worker.no_trade_days import NoTradeDayError, sync_no_trade_days
@@ -380,10 +383,11 @@ def _normalized_history_for_score_date(
     normalized: dict[date, dict[str, float]] = {}
     for bar, bar_factor in zip(bars, factors):
         ratio = score_factor / bar_factor if bar_factor > 0 else 1.0
+        # An index day may keep an unpublished open/high/low empty (#552).
         normalized[bar.trading_date] = {
-            "open": bar.open * ratio,
-            "high": bar.high * ratio,
-            "low": bar.low * ratio,
+            "open": None if bar.open is None else bar.open * ratio,
+            "high": None if bar.high is None else bar.high * ratio,
+            "low": None if bar.low is None else bar.low * ratio,
             "close": bar.close * ratio,
             # Official adapters intentionally preserve adj_close as the raw
             # close.  Derived consumers use this explicit normalized value.
@@ -391,6 +395,15 @@ def _normalized_history_for_score_date(
             "factor_bar_to_score": ratio,
         }
     return bars, normalized, score_factor
+
+
+def _extreme(pick: Callable[..., float], values: list[float | None]) -> float | None:
+    """``max``/``min`` of the window rounded to 6 places; None when it is empty
+    or holds an unpublished index high/low (#552)."""
+
+    if not values or None in values:
+        return None
+    return round(pick(values), 6)
 
 
 def _calculate_features(
@@ -432,9 +445,12 @@ def _calculate_features(
         score_factor = factors[index] if factors else 1.0
         series = series_by_factor.get(score_factor)
         if series is None:
+            # An index day without a published high/low keeps None (#552).
             series = tuple(
                 [
-                    getattr(item, field) * score_factor / (factor or 1.0)
+                    None
+                    if getattr(item, field) is None
+                    else getattr(item, field) * score_factor / (factor or 1.0)
                     for item, factor in zip(bars, factors)
                 ]
                 for field in ("close", "high", "low")
@@ -446,9 +462,18 @@ def _calculate_features(
         closes, highs, lows = (values[start : index + 1] for values in series)
         prior_volumes = volumes[max(0, index - 20) : index]
         prior_20_volumes = prior_volumes if index >= 20 else []
+        if bar.volume is None or None in prior_20_volumes:
+            # An index day without a published volume (#552): no ratio.
+            prior_20_volumes = []
         ma20 = moving_average(closes, 20)
         ma60 = moving_average(closes, 60)
-        atr_values = [high - low for high, low in zip(highs[-14:], lows[-14:])]
+        atr_values = [
+            high - low
+            for high, low in zip(highs[-14:], lows[-14:])
+            if high is not None and low is not None
+        ]
+        if len(atr_values) < len(highs[-14:]):
+            atr_values = []
         ma5 = moving_average(closes, 5)
         feature_values: dict[str, Any] = {
             "return_1d": round(closes[-1] / closes[-2] - 1, 8)
@@ -463,14 +488,14 @@ def _calculate_features(
             "ma5": round(ma5, 6) if ma5 is not None else None,
             "ma20": round(ma20, 6) if ma20 is not None else None,
             "ma60": round(ma60, 6) if ma60 is not None else None,
-            "high_20d": round(max(highs[-20:]), 6) if highs else None,
-            "low_20d": round(min(lows[-20:]), 6) if lows else None,
-            "prior_high_20d": round(max(highs[-21:-1]), 6) if index >= 20 else None,
-            "prior_low_20d": round(min(lows[-21:-1]), 6) if index >= 20 else None,
+            "high_20d": _extreme(max, highs[-20:]),
+            "low_20d": _extreme(min, lows[-20:]),
+            "prior_high_20d": _extreme(max, highs[-21:-1]) if index >= 20 else None,
+            "prior_low_20d": _extreme(min, lows[-21:-1]) if index >= 20 else None,
             "atr14": round(sum(atr_values) / len(atr_values), 6)
             if atr_values
             else None,
-            "volume": int(bar.volume),
+            "volume": int(bar.volume) if bar.volume is not None else None,
             "volume_ratio_20d": (
                 round(bar.volume / (sum(prior_20_volumes) / len(prior_20_volumes)), 6)
                 if prior_20_volumes and sum(prior_20_volumes) > 0
@@ -2529,10 +2554,28 @@ def _upsert_official_bar(
         )
     )
     is_new = bar is None
+    label = f"market_bars:{instrument.exchange}:{instrument.symbol}:{record.trading_date.isoformat()}"
+    if (
+        not is_new
+        and bar.source in INDEX_BAR_SOURCES
+        and is_synthetic_bar(record.source, record.turnover_reason)
+    ):
+        # A real index bar (worker.index_bars, Issue #552) is never put back to
+        # the close-only MI_INDEX values, even with --force; a differing close
+        # is a conflict.
+        if conflicts is not None and round(bar.close, 2) != round(record.close, 2):
+            conflicts.append(
+                {
+                    "row": label,
+                    "field": "close",
+                    "stored": bar.close,
+                    "incoming": record.close,
+                }
+            )
+        return bar
     if is_new:
         bar = MarketBar(instrument_id=instrument.id, trading_date=record.trading_date)
         db.add(bar)
-    label = f"market_bars:{instrument.exchange}:{instrument.symbol}:{record.trading_date.isoformat()}"
     changed = _apply_official_values(
         bar,
         {
@@ -4414,8 +4457,67 @@ NONCORE_WARNING_PATTERN = re.compile(
     r"^((TWSE|TPEx) (MOPS events|MOPS fundamentals|suspension feed|suspension history"
     r"|market summary|emerging issuers|monthly revenue) unavailable"
     r"|MOPS event list unavailable"
+    r"|index bars "
+    r"|futures bars "
     r"|instrument status sync skipped)"
 )
+
+
+def store_collect_index_bars(
+    db: Session,
+    bars: list[Any],
+    raw_id: Callable[[str | None], int | None],
+    warnings: list[str],
+    *,
+    force: bool = False,
+) -> dict[str, Any]:
+    """collect's index daily K step (worker.index_bars, Issue #552).
+
+    Runs after the TAIEX close row of the day is written, so the day is
+    upgraded in place.  Non-core: a failure rolls back only this step and
+    becomes a warning.
+    """
+
+    if not bars:
+        return {}
+    try:
+        with db.begin_nested():
+            result = store_index_bars(db, bars, raw_id, force=force)
+    except Exception as exc:
+        warnings.append(
+            f"index bars unavailable for collect: {type(exc).__name__}: {exc}"
+        )
+        return {"failed": len(bars)}
+    warnings.extend(warnings_for(result))
+    # Strings and numbers only (dates as ISO strings).
+    return result.metadata()
+
+
+def store_collect_futures_bars(
+    db: Session,
+    bars: list[Any],
+    raw_id: Callable[[str | None], int | None],
+    warnings: list[str],
+    *,
+    force: bool = False,
+) -> dict[str, Any]:
+    """collect's TX near-month step (worker.futures_bars, Issue #552); non-core."""
+
+    if not bars:
+        return {}
+    try:
+        with db.begin_nested():
+            result = store_futures_bars(db, bars, raw_id, force=force)
+    except Exception as exc:
+        warnings.append(
+            f"futures bars unavailable for collect: {type(exc).__name__}: {exc}"
+        )
+        return {"failed": len(bars)}
+    if result.conflicts:
+        warnings.append(
+            f"futures bars kept {len(result.conflicts)} stored TX session(s) that differ from the report"
+        )
+    return result.metadata()
 
 
 def split_collect_warnings(warnings: Iterable[str]) -> tuple[list[str], list[str]]:
@@ -4712,6 +4814,20 @@ def collect(
                 instruments,
                 lambda digest: _raw_id_for_digest(raw_ids, digest),
                 batch.warnings,
+            )
+            index_daily_bars = store_collect_index_bars(
+                db,
+                list(getattr(batch, "index_daily_bars", []) or []),
+                lambda digest: _raw_id_for_digest(raw_ids, digest),
+                batch.warnings,
+                force=force,
+            )
+            futures_daily_bars = store_collect_futures_bars(
+                db,
+                list(getattr(batch, "futures_bars", []) or []),
+                lambda digest: _raw_id_for_digest(raw_ids, digest),
+                batch.warnings,
+                force=force,
             )
             event_coverage = dict(batch.event_coverage or {})
             if not event_coverage:
@@ -5034,6 +5150,8 @@ def collect(
                 "market_summaries": market_summaries,
                 "emerging_issuers": emerging_issuers,
                 "monthly_revenues": monthly_revenues,
+                "index_daily_bars": index_daily_bars,
+                "futures_daily_bars": futures_daily_bars,
                 "raw_payloads": raw_payload_count,
                 "warnings": list(batch.warnings),
                 "core_warnings": core_warnings,
@@ -5140,6 +5258,8 @@ def collect(
                 "market_summaries": market_summaries,
                 "emerging_issuers": emerging_issuers,
                 "monthly_revenues": monthly_revenues,
+                "index_daily_bars": index_daily_bars,
+                "futures_daily_bars": futures_daily_bars,
                 "event_coverage": event_coverage,
                 "event_gap_dates": {
                     day: mops_events.coverage_state(coverage, date.fromisoformat(day))

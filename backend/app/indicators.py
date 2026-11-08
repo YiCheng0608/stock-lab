@@ -5,7 +5,9 @@ order; each bar may carry the cumulative corporate-action factor effective on
 its date (``worker.pipeline._action_factor_by_bar`` semantics), so every value
 at date T is expressed in T's raw price basis and lines up with T's raw candle.
 A bar marked ``synthetic`` (an index row whose O/H/L and volume the parser
-filled in from the close) feeds only the close-based fields.
+filled in from the close) feeds only the close-based fields; a bar marked
+``missing_range`` (no published open/high/low) or ``missing_volume`` (no
+published volume, Issue #552) leaves out only the fields that read them.
 Formulas, parameters and the "not enough bars" rules are documented in
 docs/spec/indicators.md; change them only together with INDICATOR_VERSION.
 """
@@ -77,6 +79,9 @@ SUSPENDED = "suspended"
 INVALID_BAR = "invalid_bar"
 NO_PRICE_CHANGE = "no_price_change"
 SYNTHETIC_INDEX = "synthetic_index"
+# An index day the source published without open/high/low, or without volume.
+MISSING_OHLC = "missing_ohlc"
+MISSING_VOLUME = "missing_volume"
 
 _DIGITS = 6
 
@@ -104,6 +109,10 @@ class IndicatorBar:
     price_factor: float = 1.0
     # O/H/L and volume are not published values (TAIEX: close only).
     synthetic: bool = False
+    # The day has a published close but no open/high/low, or no volume
+    # (index bars, Issue #552); those values are None.
+    missing_range: bool = False
+    missing_volume: bool = False
 
 
 @dataclass
@@ -127,13 +136,19 @@ def bar_problem(bar: IndicatorBar) -> str | None:
     """Why a bar cannot enter the series, or None when it is usable."""
     if bar.is_suspended:
         return SUSPENDED
-    prices = (bar.open, bar.high, bar.low, bar.close)
+    prices = (
+        (bar.close,) if bar.missing_range else (bar.open, bar.high, bar.low, bar.close)
+    )
     if not all(_finite_positive(value) for value in prices) or not _finite_positive(
         bar.price_factor
     ):
         return INVALID_BAR
-    if bar.low > min(bar.open, bar.close) or bar.high < max(bar.open, bar.close):
+    if not bar.missing_range and (
+        bar.low > min(bar.open, bar.close) or bar.high < max(bar.open, bar.close)
+    ):
         return INVALID_BAR
+    if bar.missing_volume:
+        return None
     volume = bar.volume
     if (
         not isinstance(volume, (int, float))
@@ -295,14 +310,27 @@ def compute_indicators(
     usable = [bar for bar, problem in zip(items, problems) if problem is None]
     # Divide by each bar's own factor to reach one common basis; multiplying a
     # price-unit value by the factor at T maps it back to T's raw basis.
-    highs = [bar.high / bar.price_factor for bar in usable]
-    lows = [bar.low / bar.price_factor for bar in usable]
+    # A missing high/low/volume enters as the close/0 only to keep positions;
+    # every field reading it is nulled below (``_unpublished_input``).
+    highs = [
+        (bar.close if bar.missing_range else bar.high) / bar.price_factor
+        for bar in usable
+    ]
+    lows = [
+        (bar.close if bar.missing_range else bar.low) / bar.price_factor
+        for bar in usable
+    ]
     closes = [bar.close / bar.price_factor for bar in usable]
-    volumes = [float(bar.volume) for bar in usable]
-    # synthetic_seen[i]: usable bars before position i that are synthetic.
-    synthetic_seen = [0]
+    volumes = [0.0 if bar.missing_volume else float(bar.volume) for bar in usable]
+    # seen[kind][i]: usable bars before position i of that kind.
+    seen = {kind: [0] for kind in (SYNTHETIC_INDEX, MISSING_OHLC, MISSING_VOLUME)}
     for bar in usable:
-        synthetic_seen.append(synthetic_seen[-1] + bar.synthetic)
+        for kind, flag in (
+            (SYNTHETIC_INDEX, bar.synthetic),
+            (MISSING_OHLC, bar.missing_range),
+            (MISSING_VOLUME, bar.missing_volume),
+        ):
+            seen[kind].append(seen[kind][-1] + flag)
     first_output = sum(
         1 for bar in usable if since is not None and bar.trading_date < since
     )
@@ -326,9 +354,10 @@ def compute_indicators(
         position += 1
         point = IndicatorPoint(bar.trading_date, position + 1)
         for name in FIELDS:
-            if _synthetic_input(name, position, synthetic_seen):
+            unpublished = _unpublished_input(name, position, seen)
+            if unpublished is not None:
                 point.values[name] = None
-                point.reasons[name] = SYNTHETIC_INDEX
+                point.reasons[name] = unpublished
                 continue
             value = columns[name][position]
             if value is None:
@@ -343,19 +372,26 @@ def compute_indicators(
     return points
 
 
-def _synthetic_input(name: str, position: int, synthetic_seen: list[int]) -> bool:
-    """Whether field ``name`` at usable ``position`` reads a synthetic high, low or volume.
+def _unpublished_input(
+    name: str, position: int, seen: dict[str, list[int]]
+) -> str | None:
+    """Why field ``name`` at usable ``position`` reads an unpublished value, if it does.
 
-    KD is recursive, so one synthetic bar affects every later value; a volume
-    average reads only its own window.
+    KD is recursive, so one bar without a published high/low affects every
+    later value; a volume average reads only its own window.  A synthetic bar
+    comes first, then the missing value of the field's own kind.
     """
     if name in _RANGE_FIELDS:
-        return synthetic_seen[position + 1] > 0
-    window = _VOLUME_FIELDS.get(name)
-    if window is None:
-        return False
-    start = max(0, position - window + 1)
-    return synthetic_seen[position + 1] - synthetic_seen[start] > 0
+        kinds, start = (SYNTHETIC_INDEX, MISSING_OHLC), 0
+    elif name in _VOLUME_FIELDS:
+        kinds = (SYNTHETIC_INDEX, MISSING_VOLUME)
+        start = max(0, position - _VOLUME_FIELDS[name] + 1)
+    else:
+        return None
+    for kind in kinds:
+        if seen[kind][position + 1] - seen[kind][start] > 0:
+            return kind
+    return None
 
 
 @dataclass(frozen=True)
@@ -363,11 +399,12 @@ class WeeklyBar:
     week_start: date
     week_end: date
     trading_days: int
-    open: float
-    high: float
-    low: float
+    # None when a day of the week has no published open/high/low (or volume).
+    open: float | None
+    high: float | None
+    low: float | None
     close: float
-    volume: float
+    volume: float | None
     # The same week in its last day's raw basis, for indicator input.
     calc: IndicatorBar
 
@@ -388,24 +425,32 @@ def aggregate_weekly(bars: Iterable[IndicatorBar]) -> list[WeeklyBar]:
         days = sorted(weeks[key], key=lambda item: item.trading_date)
         last = days[-1]
         scale = [last.price_factor / day.price_factor for day in days]
+        missing_range = any(day.missing_range for day in days)
+        missing_volume = any(day.missing_volume for day in days)
         calc = IndicatorBar(
             trading_date=last.trading_date,
-            open=days[0].open * scale[0],
-            high=max(day.high * ratio for day, ratio in zip(days, scale)),
-            low=min(day.low * ratio for day, ratio in zip(days, scale)),
+            open=None if missing_range else days[0].open * scale[0],
+            high=None
+            if missing_range
+            else max(day.high * ratio for day, ratio in zip(days, scale)),
+            low=None
+            if missing_range
+            else min(day.low * ratio for day, ratio in zip(days, scale)),
             close=last.close,
-            volume=sum(float(day.volume) for day in days),
+            volume=None if missing_volume else sum(float(day.volume) for day in days),
             price_factor=last.price_factor,
             synthetic=any(day.synthetic for day in days),
+            missing_range=missing_range,
+            missing_volume=missing_volume,
         )
         result.append(
             WeeklyBar(
                 week_start=days[0].trading_date,
                 week_end=last.trading_date,
                 trading_days=len(days),
-                open=days[0].open,
-                high=max(day.high for day in days),
-                low=min(day.low for day in days),
+                open=None if missing_range else days[0].open,
+                high=None if missing_range else max(day.high for day in days),
+                low=None if missing_range else min(day.low for day in days),
                 close=last.close,
                 volume=calc.volume,
                 calc=calc,
