@@ -1,0 +1,10 @@
+{
+  "copy": "/out/stock.db",
+  "source": "/data/stock.db",
+  "source_latest_trading_date": "2026-11-06",
+  "alembic_version": "0029_market_bar_ohlc_nullable",
+  "source_open": "ro",
+  "quick_check": "ok",
+  "bytes": 3450974208,
+  "seconds": 18.7
+}

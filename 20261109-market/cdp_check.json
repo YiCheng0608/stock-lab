@@ -1,0 +1,218 @@
+[
+ {
+  "width": 1280,
+  "firstScreen": {
+   "rows": [
+    [
+     "taiex",
+     665
+    ],
+    [
+     "tpex",
+     709
+    ],
+    [
+     "tx",
+     753
+    ],
+    [
+     "spx",
+     829
+    ],
+    [
+     "ixic",
+     873
+    ],
+    [
+     "dji",
+     917
+    ],
+    [
+     "sox",
+     961
+    ]
+   ],
+   "viewport": 800,
+   "chartTitleTop": 1106
+  }
+ },
+ {
+  "width": 1280,
+  "tabs": 14,
+  "beforeEnter": {
+   "url": "/market",
+   "chart": "加權指數日線",
+   "selected": [
+    "taiex"
+   ],
+   "pressed": [
+    "加權指數"
+   ],
+   "focus": "台指期近月",
+   "scrollWidth": 1280,
+   "clientWidth": 1280
+  },
+  "afterEnter": {
+   "url": "/market?index=tx",
+   "chart": "台指期近月日線",
+   "selected": [
+    "tx"
+   ],
+   "pressed": [
+    "台指期近月"
+   ],
+   "focus": "台指期近月",
+   "scrollWidth": 1280,
+   "clientWidth": 1280
+  },
+  "nextFocus": "S&P 500",
+  "afterSpace": {
+   "url": "/market?index=spx",
+   "chart": "S&P 500日線",
+   "selected": [
+    "spx"
+   ],
+   "pressed": [
+    "S&P 500"
+   ],
+   "focus": "S&P 500",
+   "scrollWidth": 1280,
+   "clientWidth": 1280
+  },
+  "afterClick": {
+   "url": "/market?index=ixic",
+   "chart": "NASDAQ 綜合指數日線",
+   "selected": [
+    "ixic"
+   ],
+   "pressed": [
+    "NASDAQ 綜合指數"
+   ],
+   "focus": "\n    台股研究台今日可買大盤觀察中族群個股新聞策略說明資",
+   "scrollWidth": 1280,
+   "clientWidth": 1280
+  },
+  "history": 2,
+  "afterReload": {
+   "url": "/market?index=ixic",
+   "chart": "NASDAQ 綜合指數日線",
+   "selected": [
+    "ixic"
+   ],
+   "pressed": [
+    "NASDAQ 綜合指數"
+   ],
+   "focus": "\n    台股研究台今日可買大盤觀察中族群個股新聞策略說明資",
+   "scrollWidth": 1280,
+   "clientWidth": 1280
+  }
+ },
+ {
+  "width": 390,
+  "firstScreen": {
+   "rows": [
+    [
+     "taiex",
+     947
+    ],
+    [
+     "tpex",
+     1009
+    ],
+    [
+     "tx",
+     1093
+    ],
+    [
+     "spx",
+     1204
+    ],
+    [
+     "ixic",
+     1288
+    ],
+    [
+     "dji",
+     1350
+    ],
+    [
+     "sox",
+     1410
+    ]
+   ],
+   "viewport": 844,
+   "chartTitleTop": 1559
+  }
+ },
+ {
+  "width": 390,
+  "tabs": 7,
+  "beforeEnter": {
+   "url": "/market",
+   "chart": "加權指數日線",
+   "selected": [
+    "taiex"
+   ],
+   "pressed": [
+    "加權指數"
+   ],
+   "focus": "台指期近月",
+   "scrollWidth": 390,
+   "clientWidth": 390
+  },
+  "afterEnter": {
+   "url": "/market?index=tx",
+   "chart": "台指期近月日線",
+   "selected": [
+    "tx"
+   ],
+   "pressed": [
+    "台指期近月"
+   ],
+   "focus": "台指期近月",
+   "scrollWidth": 390,
+   "clientWidth": 390
+  },
+  "nextFocus": "S&P 500",
+  "afterSpace": {
+   "url": "/market?index=spx",
+   "chart": "S&P 500日線",
+   "selected": [
+    "spx"
+   ],
+   "pressed": [
+    "S&P 500"
+   ],
+   "focus": "S&P 500",
+   "scrollWidth": 390,
+   "clientWidth": 390
+  },
+  "afterClick": {
+   "url": "/market?index=ixic",
+   "chart": "NASDAQ 綜合指數日線",
+   "selected": [
+    "ixic"
+   ],
+   "pressed": [
+    "NASDAQ 綜合指數"
+   ],
+   "focus": "\n    台股研究台今日可買大盤觀察中族群個股新聞策略說明資",
+   "scrollWidth": 390,
+   "clientWidth": 390
+  },
+  "history": 3,
+  "afterReload": {
+   "url": "/market?index=ixic",
+   "chart": "NASDAQ 綜合指數日線",
+   "selected": [
+    "ixic"
+   ],
+   "pressed": [
+    "NASDAQ 綜合指數"
+   ],
+   "focus": "\n    台股研究台今日可買大盤觀察中族群個股新聞策略說明資",
+   "scrollWidth": 390,
+   "clientWidth": 390
+  }
+ }
+]
