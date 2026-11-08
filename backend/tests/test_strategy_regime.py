@@ -479,3 +479,60 @@ def test_an_unknown_regime_strategy_is_refused(tmp_path):
     with pytest.raises(research.Refused, match="unknown regime"):
         research.regime_items(["breakout_v1:r1"])
     assert research.regime_items(["all"]) == all_regimes()
+
+
+def test_a_slim_run_keeps_every_number_of_a_full_run(fixture_db, tmp_path, monkeypatch):
+    """--slim cuts non-actionable rows down; status, levels and tracking stay."""
+
+    monkeypatch.setattr(pipeline, "init_db", lambda: None)
+    results = {}
+    for slim in (False, True):
+        path = tmp_path / f"slim-{slim}.db"
+        shutil.copyfile(fixture_db, path)
+        engine = create_engine(f"sqlite:///{path.as_posix()}")
+        enable_sqlite_foreign_keys(engine)
+        factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+        monkeypatch.setattr(pipeline, "SessionLocal", factory)
+        with factory() as db:
+            days = db.scalars(
+                select(MarketBar.trading_date)
+                .distinct()
+                .order_by(MarketBar.trading_date)
+            ).all()
+        start = days[-30]
+        closes = TaiexCloses(
+            dict(zip(days, [160.0 if n % 3 else 60.0 for n in range(len(days))]))
+        )
+        registry = with_regimes(
+            dict(REGISTRY), [(key, "r2") for key in REGISTRY], closes
+        )
+        with research.score_dates(closes, pipeline, slim=slim):
+            run = pipeline.backtest(start, days[-1], registry=registry)["run"]
+        assert run["status"] == "success"
+        results[slim] = (_rows(factory, run["id"]), run)
+        engine.dispose()
+
+    (full, full_run), (slim, slim_run) = results[False], results[True]
+    assert full_run["request_key"] == slim_run["request_key"]
+    assert set(full) == set(slim)
+    shrunk = 0
+    for key, row in full.items():
+        cut = slim[key]
+        assert (cut["status"], cut["levels"], cut["settlements"]) == (
+            row["status"],
+            row["levels"],
+            row["settlements"],
+        )
+        kind = registry[key[0]].kind
+        if row["status"] in NOT_ACTIONABLE:
+            assert cut["evidence"] == {
+                "strategy": row["evidence"]["strategy"],
+                "strategy_version": row["evidence"]["strategy_version"],
+                "actionable": False,
+                "research_slim": research.SLIM_MARK,
+                kind: row["evidence"][kind],
+            }
+            shrunk += 1
+        else:
+            assert cut["evidence"] == row["evidence"]
+    assert shrunk and shrunk < len(full)

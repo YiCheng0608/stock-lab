@@ -67,6 +67,11 @@ def _parser() -> argparse.ArgumentParser:
         help="regime strategies to add, e.g. pullback_v3:r3; 'all' for every one",
     )
     parser.add_argument(
+        "--slim",
+        action="store_true",
+        help="keep only the actionable flag and own state of non-actionable rows (score_dates)",
+    )
+    parser.add_argument(
         "--no-canonical",
         action="store_true",
         help="evaluate only the ablations and regime strategies, not the registered ones",
@@ -259,24 +264,61 @@ def taiex_closes():
     return TaiexCloses({day: close for day, close in rows})
 
 
-@contextmanager
-def score_dates(closes, pipeline_module):
-    """Point ``closes`` at each score date while the replay writes its signals.
+# Statuses scoring writes for a signal that is not actionable; tracking never
+# reads such a row past ``rule_evidence_json.actionable``.
+NOT_ACTIONABLE = ("observation", "data_incomplete", "invalid_levels")
+SLIM_MARK = "tools/research/backtest_research.py --slim (#546)"
+# One score date's non-actionable rows of the run: evidence down to the keys
+# the backtest reads (``actionable``) and the row's own strategy state;
+# rationale (every strategy's state again) emptied.
+SLIM_SQL = (
+    "update signals set rationale = null, rule_evidence_json = json_object("
+    "'strategy', json_extract(rule_evidence_json, '$.strategy'), "
+    "'strategy_version', json_extract(rule_evidence_json, '$.strategy_version'), "
+    "'actionable', json('false'), 'research_slim', :mark, sv.kind, "
+    "json(json_extract(rule_evidence_json, '$.' || sv.kind))) "
+    "from strategy_versions sv where sv.id = signals.strategy_version_id "
+    "and signals.signal_date = :day and signals.signal_key like :prefix "
+    f"and signals.status in ({', '.join(repr(s) for s in NOT_ACTIONABLE)})"
+)
 
-    Strategy inputs carry no date; the replay writes one score date's signals
-    with one ``_generate_signals(db, signal_date, ...)`` call, so the date is
-    set around that call and cleared after it (a regime strategy evaluated
-    outside it raises).
+
+@contextmanager
+def score_dates(closes, pipeline_module, *, slim: bool = False):
+    """Wrap the replay's per-score-date ``_generate_signals(db, signal_date, ...)``.
+
+    Strategy inputs carry no date, so ``closes`` (when given) is pointed at the
+    score date around that call and cleared after it (a regime strategy
+    evaluated outside it raises).  With ``slim``, the date's non-actionable
+    rows of the run are then cut down (``SLIM_SQL``) before the replay commits
+    them: every row records every strategy's state, so a registry of twelve
+    makes each row about 6 KB, and these rows are most of them.  Status,
+    levels, tracking and settlements are not touched.
     """
+
+    from sqlalchemy import text
 
     original = pipeline_module._generate_signals
 
     def generate(db, signal_date, *args, **kwargs):
-        closes.set_session(signal_date)
+        if closes is not None:
+            closes.set_session(signal_date)
         try:
-            return original(db, signal_date, *args, **kwargs)
+            count = original(db, signal_date, *args, **kwargs)
         finally:
-            closes.set_session(None)
+            if closes is not None:
+                closes.set_session(None)
+        if slim:
+            db.flush()
+            db.execute(
+                text(SLIM_SQL),
+                {
+                    "mark": SLIM_MARK,
+                    "day": signal_date.isoformat(),
+                    "prefix": f"{kwargs['namespace']}-%",
+                },
+            )
+        return count
 
     pipeline_module._generate_signals = generate
     try:
@@ -389,7 +431,11 @@ def main(argv: list[str] | None = None) -> int:
             wal.stop()
             print(json.dumps({"refused": [str(exc)]}, ensure_ascii=False))
             return 2
-    with score_dates(closes, pipeline) if closes else nullcontext():
+    with (
+        score_dates(closes, pipeline, slim=args.slim)
+        if closes or args.slim
+        else nullcontext()
+    ):
         result = pipeline.backtest(
             args.start,
             args.end,
@@ -408,6 +454,7 @@ def main(argv: list[str] | None = None) -> int:
                 "start": args.start.isoformat(),
                 "end": args.end.isoformat(),
                 "registry": list(registry),
+                "slim": args.slim,
                 **(
                     {
                         "taiex_closes": len(closes.dates),
