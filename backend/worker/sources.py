@@ -460,6 +460,9 @@ OFFICIAL_HOST_MIN_INTERVAL_SECONDS = {
     "www.tpex.org.tw": 1.0,
     "info.tpex.org.tw": 1.0,
     "openapi.taifex.com.tw": 1.0,
+    # The TAIFEX site's futDataDown (TX history, Issue #563): one month per
+    # request, as the TWSE/TPEx monthly report backfill paces itself.
+    "www.taifex.com.tw": 3.0,
     # FRED fredgraph.csv (US indexes, Issue #547): series apart, never a burst.
     "fred.stlouisfed.org": 2.0,
     # MOPS blocks fast clients without a published limit; the event-list

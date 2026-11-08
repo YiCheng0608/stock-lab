@@ -409,25 +409,26 @@ def test_backfill_upgrades_taiex_in_place_and_writes_tpex_rows(factory):
 
 
 def test_sessions_before_the_history_start_are_not_written(factory):
-    days = [date(2024, 9, 26), date(2024, 9, 27), date(2024, 9, 30)]
+    days = [date(2023, 8, 30), date(2023, 8, 31), date(2023, 9, 1)]
     get = ReportGet(([], []), _tpex_rows(days))
     with factory() as db:
         result = ib.backfill_index_bars(
             db,
-            first=ib.Month(2024, 9),
-            last=ib.Month(2024, 9),
+            first=ib.Month(2023, 8),
+            last=ib.Month(2023, 9),
             get=get,
             sleep=lambda _: None,
-            today=date(2024, 10, 5),
+            today=date(2023, 10, 5),
         )
 
+    assert ib.HISTORY_START == date(2023, 9, 1)
     assert result["counts"]["inserted"] == 1
     with factory() as db:
         tpex = _bars(db, "TPEx", "TPEX")
-        assert [b.trading_date for b in tpex] == [date(2024, 9, 30)]
+        assert [b.trading_date for b in tpex] == [date(2023, 9, 1)]
         run = db.get(IngestionRun, result["run_id"])
         assert (
-            run.metadata_json["coverage_manifest"]["2024-09:TPEx"][
+            run.metadata_json["coverage_manifest"]["2023-08:TPEx"][
                 "before_history_start"
             ]
             == 2
@@ -469,6 +470,195 @@ def test_a_taiex_day_without_a_stored_row_is_not_inserted(factory):
     assert result["skipped_dates"]["TWSE:no_close_row"] == [SESSIONS[0].isoformat()]
     with factory() as db:
         assert len(_bars(db, "TWSE", "TAIEX")) == len(SESSIONS) - 1
+
+
+BASIS = coverage.SESSION_BASIS_START
+# The stock history starts 2024-09-30; the index history about a year earlier.
+BASIS_SESSIONS = [
+    day
+    for day in (BASIS + timedelta(days=offset) for offset in range(30))
+    if day.weekday() < 5
+]
+PRE_SESSIONS = [
+    day
+    for day in (date(2024, 8, 1) + timedelta(days=offset) for offset in range(60))
+    if day.weekday() < 5 and day < BASIS
+]
+
+
+def _history_rows():
+    """Reports for 2024-08..2024-10: earlier sessions, then the seeded ones."""
+    pre_prices = [
+        (day, 21000.0 + i, 21060.0 + i, 20950.0 + i, 21010.0 + i)
+        for i, day in enumerate(PRE_SESSIONS)
+    ]
+    pre_volumes = [
+        (day, 8_000_000_000 + i, 300_000_000_000 + i, 21010.0 + i)
+        for i, day in enumerate(PRE_SESSIONS)
+    ]
+    prices, volumes = _real_rows(BASIS_SESSIONS)
+    return pre_prices + prices, pre_volumes + volumes
+
+
+def _history_backfill(factory):
+    with factory() as db:
+        return ib.backfill_index_bars(
+            db,
+            first=ib.Month(2024, 8),
+            last=ib.Month(2024, 10),
+            get=ReportGet(_history_rows(), _tpex_rows(PRE_SESSIONS + BASIS_SESSIONS)),
+            sleep=lambda _: None,
+            today=date(2024, 11, 8),
+        )
+
+
+def test_taiex_history_before_the_stock_history_is_inserted_but_never_a_session(
+    factory,
+):
+    with factory() as db:
+        taiex = _seed_taiex(db, BASIS_SESSIONS)
+        db.commit()
+        before = coverage.verified_taiex_sessions(db)
+
+    result = _history_backfill(factory)
+
+    assert result["status"] == "success", result
+    assert result["counts"]["upgraded"] == len(BASIS_SESSIONS)
+    # The TAIEX days before 2024-09-30 have no MI_INDEX row to upgrade: inserted.
+    assert result["counts"]["inserted"] == len(PRE_SESSIONS) + len(
+        PRE_SESSIONS + BASIS_SESSIONS
+    )
+    with factory() as db:
+        bars = _bars(db, "TWSE", "TAIEX")
+        assert [b.trading_date for b in bars] == PRE_SESSIONS + BASIS_SESSIONS
+        assert {b.source for b in bars} == {"twse_index_ohlcv"}
+        assert all(
+            "MI_5MINS_HIST" in db.get(RawPayload, b.raw_payload_id).endpoint
+            for b in bars
+        )
+        # The session basis is still the stocks': only the seeded MI_INDEX days.
+        assert before == BASIS_SESSIONS
+        assert coverage.verified_taiex_sessions(db) == BASIS_SESSIONS
+        assert coverage.verified_taiex_sessions(db, limit=20) == BASIS_SESSIONS[-20:]
+        # The stocks' first day now has the index's longer averages.
+        first_day = db.scalar(
+            select(TechnicalIndicator).where(
+                TechnicalIndicator.instrument_id == taiex.id,
+                TechnicalIndicator.trading_date == BASIS,
+            )
+        )
+        assert first_day.ma20 is not None
+        assert len(PRE_SESSIONS) + 1 < 60 and first_day.ma60 is None
+    # A rerun changes nothing.
+    again = _history_backfill(factory)
+    assert again["counts"]["unchanged"] == 2 * len(PRE_SESSIONS + BASIS_SESSIONS)
+
+
+def test_the_backfill_report_and_api_coverage_see_no_index_history(factory):
+    """/api/coverage with a manifest reads coverage_report(require_provenance=False)."""
+    from worker.backfill import coverage_report
+
+    with factory() as db:
+        _seed_taiex(db, BASIS_SESSIONS)
+        db.commit()
+        start, end = date(2024, 8, 1), date(2024, 10, 31)
+        before = coverage_report(db, start, end, require_provenance=False)
+
+    _history_backfill(factory)
+
+    assert coverage.INDEX_HISTORY_SOURCE == ib.TWSE_SOURCE
+    with factory() as db:
+        assert (
+            coverage.verified_taiex_sessions(db, require_provenance=False)
+            == BASIS_SESSIONS
+        )
+        after = coverage_report(db, start, end, require_provenance=False)
+    by_day = {item["date"]: item for item in after["date_coverage"]}
+    for day in PRE_SESSIONS:
+        assert by_day[day.isoformat()]["received"] is False
+        assert by_day[day.isoformat()]["bars"] == {}
+    assert after["summary"]["verified_taiex_sessions"] == len(
+        [day for day in BASIS_SESSIONS if day <= end]
+    )
+    assert after["summary"]["status_counts"] == before["summary"]["status_counts"]
+    assert after["summary"]["missing_dates"] == before["summary"]["missing_dates"]
+
+
+def test_backtest_score_dates_and_rescores_skip_index_history(factory):
+    """PR #565 review: a backtest from 2024-01 or a 600-day rescore never scores index-only days."""
+    from worker.industry_repair import rescore_recent
+
+    with factory() as db:
+        _seed_taiex(db, BASIS_SESSIONS)
+        db.commit()
+    _history_backfill(factory)
+
+    with factory() as db:
+        # The TAIEX, TPEX rows before 2024-09-30 are there ...
+        assert len(_bars(db, "TPEx", "TPEX")) == len(PRE_SESSIONS + BASIS_SESSIONS)
+        # ... but no backtest score date or tracking session comes from them.
+        assert pipeline.taiwan_bar_dates(db, date(2024, 1, 1), BASIS_SESSIONS[-1]) == (
+            BASIS_SESSIONS
+        )
+        assert (
+            pipeline.taiwan_bar_dates(db, after=date(2024, 1, 1), limit=3)
+            == (BASIS_SESSIONS[:3])
+        )
+        assert rescore_recent(db, 600) == [day.isoformat() for day in BASIS_SESSIONS]
+
+
+def test_the_default_range_fits_in_one_run():
+    """PR #565 review: 2023-09 to the current month is not refused by default."""
+    months = ib.month_range(ib.Month.parse(ib.DEFAULT_FIRST_MONTH), ib.Month(2026, 11))
+
+    assert len(months) == 39 <= ib.MAX_MONTHS
+
+
+def test_the_collect_still_inserts_no_taiex_day(factory):
+    """Only the backfill adds TAIEX history: collect keeps MI_INDEX as the basis."""
+    bars = ib.build_bars(
+        "TWSE",
+        [ib.PriceRow(PRE_SESSIONS[0], 1.0, 3.0, 0.5, 2.0)],
+        None,
+        price_sha256="p",
+        volume_sha256=None,
+    )
+    with factory() as db:
+        _seed_taiex(db, BASIS_SESSIONS)
+        result = ib.store_index_bars(db, bars, lambda _sha: 1)
+
+    assert result.counts["no_close_row"] == 1 and result.counts["inserted"] == 0
+
+
+def test_the_catalyst_window_and_dormant_sessions_skip_index_history(factory):
+    """Issue #563: the TAIEX rows before 2024-09-30 never enter a stock window."""
+    with factory() as db:
+        taiex = _seed_taiex(db, BASIS_SESSIONS)
+        db.commit()
+        window_before = pipeline._effective_trading_dates(
+            db, taiex.id, BASIS_SESSIONS[5], 20
+        )
+        dormant_before = pipeline._quote_sessions(db, BASIS_SESSIONS[-1])
+
+    _history_backfill(factory)
+
+    with factory() as db:
+        assert window_before == BASIS_SESSIONS[:6]
+        # The raw window now reaches back into the index history ...
+        assert (
+            pipeline._effective_trading_dates(db, taiex.id, BASIS_SESSIONS[5], 20)
+            == (PRE_SESSIONS + BASIS_SESSIONS[:6])[-20:]
+        )
+        # ... the catalyst window and the dormant presumption do not.
+        assert (
+            pipeline._benchmark_session_dates(db, taiex.id, BASIS_SESSIONS[5])
+            == window_before
+        )
+        assert pipeline._quote_sessions(db, BASIS_SESSIONS[-1]) == dormant_before
+        # Fewer than DORMANT_SESSIONS stock sessions: nothing is presumed
+        # dormant, although the TAIEX rows alone would reach 60.
+        assert len(dormant_before) < pipeline.DORMANT_SESSIONS
+        assert len(PRE_SESSIONS + BASIS_SESSIONS) >= pipeline.DORMANT_SESSIONS
 
 
 def test_a_failed_volume_report_leaves_volume_empty_until_a_later_read(factory):
@@ -717,6 +907,24 @@ def test_a_monthly_report_verifies_only_sessions_of_its_month_up_to_its_last_row
     assert not coverage._raw_is_date_verified(
         raw, run_ids={2}, trading_date=date(2026, 10, 1)
     )
+
+
+def test_a_monthly_report_verifies_no_session_before_the_stock_history():
+    """Issue #563: the September 2024 report covers 09/02..09/30, only 09/30 is a session."""
+    raw = RawPayload(
+        ingestion_run_id=1,
+        source="twse",
+        endpoint=f"{sources.TWSE_INDEX_HISTORY_ENDPOINT}?date=20240901&response=json",
+        data_as_of="2024-09-30",
+    )
+
+    def verified(day):
+        return coverage._raw_is_date_verified(raw, run_ids={1}, trading_date=day)
+
+    assert coverage.SESSION_BASIS_START == date(2024, 9, 30)
+    assert verified(date(2024, 9, 30))
+    assert not verified(date(2024, 9, 27))
+    assert not verified(date(2024, 9, 2))
 
 
 # --- indicators ---------------------------------------------------------------

@@ -12,13 +12,15 @@ from collections import Counter, defaultdict
 from datetime import date, timedelta
 from typing import Any, Iterable
 
-from sqlalchemy import String, select, type_coerce
+from sqlalchemy import String, or_, select, type_coerce
 from sqlalchemy.orm import Session
 
 from app.clock import utcnow
 from app.config import MAX_GROUP_CANDIDATES, OFFICIAL_MAX_BACKFILL_DAYS
 from app.domain import NON_SECURITY_TYPES, TAIWAN_MARKET
 from app.coverage import (
+    INDEX_HISTORY_SOURCE,
+    SESSION_BASIS_START,
     confirmed_non_trading_dates,
     has_backfill_manifest,
     official_snapshot_status,
@@ -527,7 +529,9 @@ def _instrument_dates(
     dates are read as text and converted with the column type's own result
     processor once per distinct value (a few dozen), not once per row.
     Only Taiwan instruments' rows: a US index close on a Taiwan holiday (Issue
-    #547) must not turn a confirmed closed day into a partial one.
+    #547) must not turn a confirmed closed day into a partial one.  Nor an
+    index or TX row before the stock history (``SESSION_BASIS_START``, Issue
+    #563): that history must not turn a day without stocks into a received one.
     """
 
     column = model.trading_date
@@ -542,6 +546,10 @@ def _instrument_dates(
             Instrument.market == TAIWAN_MARKET,
             column >= start_date,
             column <= end_date,
+            or_(
+                column >= SESSION_BASIS_START,
+                Instrument.instrument_type.not_in(NON_SECURITY_TYPES),
+            ),
         )
     )
     for instrument_id, stored in db.execute(query):
@@ -1607,6 +1615,11 @@ def targeted_backfill(
                         Instrument.symbol.in_({"TAIEX", "TWII"}),
                         MarketBar.trading_date >= min(candidate_dates),
                         MarketBar.trading_date <= end_date,
+                        # Index history is not a stock session (Issue #563).
+                        or_(
+                            MarketBar.trading_date >= SESSION_BASIS_START,
+                            MarketBar.source != INDEX_HISTORY_SOURCE,
+                        ),
                     )
                 ).all()
             )

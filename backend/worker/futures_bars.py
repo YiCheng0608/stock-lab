@@ -243,8 +243,15 @@ def store_futures_bars(
     raw_id: Callable[[str | None], int | None],
     *,
     force: bool = False,
+    source: str = SOURCE,
 ) -> FuturesWriteResult:
-    """Insert new sessions; a stored session keeps its values (a difference is a conflict) unless ``force``."""
+    """Insert new sessions; a stored session keeps its values (a difference is a conflict) unless ``force``.
+
+    ``source`` names the report the rows come from: the OpenAPI daily report
+    (``SOURCE``) or the website history (``worker.futures_history``, Issue
+    #563).  A stored row of another source is never replaced, even with
+    ``force``: it is a conflict.
+    """
 
     result = FuturesWriteResult()
     instrument = None
@@ -260,17 +267,17 @@ def store_futures_bars(
             )
         )
         incoming = {name: getattr(bar, name) for name in _FIELDS}
-        if row is not None and not force:
+        if row is not None and (not force or row.source != source):
             stored = {name: getattr(row, name) for name in _FIELDS}
-            if stored == incoming:
+            if stored == incoming and row.source == source:
                 result.counts["unchanged"] += 1
             else:
                 result.counts["conflict"] += 1
                 result.conflicts.append(
                     {
                         "trading_date": bar.trading_date.isoformat(),
-                        "stored": stored,
-                        "incoming": incoming,
+                        "stored": {**stored, "source": row.source},
+                        "incoming": {**incoming, "source": source},
                         "raw_payload_id": raw,
                     }
                 )
@@ -288,7 +295,7 @@ def store_futures_bars(
             NO_TURNOVER,
         )
         row.is_suspended = False
-        row.source = SOURCE
+        row.source = source
         row.data_as_of = datetime.combine(bar.trading_date, datetime.min.time())
         row.collected_at = utcnow()
         row.raw_payload_id = raw

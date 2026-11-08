@@ -33,6 +33,20 @@ from worker.sources import parse_twse_taiex_from_all_daily_payload
 
 DAILY_JOB = "daily"
 TAIPEI_UTC_OFFSET = timedelta(hours=8)
+# The first session of the stock history (#1 6714433517).  The index history
+# reaches back further (2023-09-01, Issue #563) so its long moving averages
+# exist on this day; a TAIEX row before it only carries index data and is
+# never a session denominator for the stocks (_raw_is_date_verified).
+SESSION_BASIS_START = date(2024, 9, 30)
+# worker.index_bars.TWSE_SOURCE: the TAIEX rows the monthly report backfill
+# writes.  Before SESSION_BASIS_START only that backfill writes TAIEX rows.
+INDEX_HISTORY_SOURCE = "twse_index_ohlcv"
+
+
+def is_index_history(trading_date: date, source: str | None) -> bool:
+    """A TAIEX row of the index history before the stock history (Issue #563)."""
+
+    return trading_date < SESSION_BASIS_START and source == INDEX_HISTORY_SOURCE
 
 
 def collect_states(db: Session, start_date: date, end_date: date) -> dict[date, str]:
@@ -215,9 +229,12 @@ def _raw_is_date_verified(
         # The monthly TAIEX history report a real index bar points at (Issue
         # #552): its data_as_of is the report's latest row, so the row must be
         # of that month and not after it.  worker.index_bars upgrades only a
-        # row that already was a session and has the same close.
+        # row that already was a session and has the same close.  The rows it
+        # inserts before SESSION_BASIS_START (Issue #563) are index history,
+        # not sessions of the stock history.
         return (
-            reported is not None
+            trading_date >= SESSION_BASIS_START
+            and reported is not None
             and (reported.year, reported.month)
             == (trading_date.year, trading_date.month)
             and trading_date <= reported
@@ -287,6 +304,10 @@ def verified_taiex_sessions(
     for stored_date, stored_source, raw in rows:
         trading_date = read_market_date(stored_date)
         if trading_date is None:
+            continue
+        if is_index_history(trading_date, read_market_source(stored_source)):
+            # Index history, in both modes: the backfill report's
+            # require_provenance=False reads /api/coverage (Issue #563).
             continue
         if not require_provenance:
             sessions.add(trading_date)

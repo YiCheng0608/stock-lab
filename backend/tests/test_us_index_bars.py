@@ -18,7 +18,14 @@ from app.db import enable_sqlite_foreign_keys
 from app.domain import US_INDEXES
 from app.market_overview import expected_us_session, foreign_indices
 from app.migrations import upgrade_database
-from app.models import DataQuality, IngestionRun, Instrument, MarketBar, RawPayload
+from app.models import (
+    DataQuality,
+    IngestionRun,
+    Instrument,
+    MarketBar,
+    RawPayload,
+    TechnicalIndicator,
+)
 from test_daily_schedule import combined
 from test_index_bars import COLLECT_DAY, IndexReportFetcher
 from worker import pipeline, sources
@@ -168,7 +175,7 @@ def test_an_answer_that_is_not_the_requested_csv_is_rejected_whole(text, message
 
 def test_the_request_window_starts_at_the_history_start_then_re_reads_ten_days():
     assert us.request_window(None, COLLECT_DAY) == (
-        date(2024, 9, 30),
+        date(2023, 9, 1),
         COLLECT_DAY - timedelta(days=1),
     )
     assert us.request_window(date(2026, 9, 2), COLLECT_DAY) == (
@@ -199,7 +206,7 @@ def test_collect_writes_close_only_rows_of_the_four_indexes(collect_db):
         "DJIA",
         "NASDAQSOX",
     ]
-    assert all("cosd=2024-09-30&coed=2026-09-03" in url for url in fred.calls)
+    assert all("cosd=2023-09-01&coed=2026-09-03" in url for url in fred.calls)
     with collect_db() as db:
         rows = _bars(db, "SPX")
         assert [(row.trading_date, row.close) for row in rows] == [
@@ -697,3 +704,127 @@ def test_an_index_without_rows_says_why(factory):
         "2026-09-04",
     )
     assert after[0]["status"] == "available"
+
+
+# --- history to 2023-09-01 (Issue #563) -----------------------------------------
+
+HISTORY_ROWS = [
+    ("2023-09-01", "4515.77"),
+    ("2023-09-04", ""),  # Labor Day
+    ("2023-09-05", "4496.83"),
+    ("2024-09-27", "5738.17"),
+]
+BASIS_ROWS = [("2024-09-30", "5762.48"), ("2024-10-01", "5708.75")]
+
+
+def test_the_history_window_reaches_back_once_with_one_request():
+    session = date(2026, 11, 9)
+    assert us.HISTORY_START == date(2023, 9, 1)
+    assert us.history_window(date(2024, 9, 30), session) == (
+        date(2023, 9, 1),
+        date(2024, 9, 29),
+    )
+    # No row yet: the next collect reads from the start itself.
+    assert us.history_window(None, session) is None
+    # Already from the start (a US holiday right after it does not count).
+    assert us.history_window(date(2023, 9, 1), session) is None
+    assert us.history_window(date(2023, 9, 5), session) is None
+
+
+def test_the_history_backfill_extends_each_series_before_its_oldest_row(factory):
+    with factory() as db:
+        us.collect_us_index_bars(
+            db,
+            _run(db),
+            date(2024, 10, 2),
+            Fred(rows=BASIS_ROWS),
+            pipeline._upsert_raw_payload,
+            [],
+        )
+        db.commit()
+        quality_before = [
+            (row.entity_key, row.as_of_date, row.checks_json)
+            for row in db.scalars(select(DataQuality).order_by(DataQuality.id))
+        ]
+    fred = Fred(rows=HISTORY_ROWS + BASIS_ROWS)
+
+    with factory() as db:
+        result = us.backfill_us_index_history(db, session=date(2026, 11, 9), fetch=fred)
+
+    assert result["status"] == "success", result
+    # One request per series, from 2023-09-01 to the day before the oldest row.
+    assert result["requests"] == 4
+    assert all("cosd=2023-09-01&coed=2024-09-29" in url for url in fred.calls)
+    with factory() as db:
+        rows = _bars(db, "SPX")
+        assert [(row.trading_date, row.close) for row in rows] == [
+            (date(2023, 9, 1), 4515.77),
+            (date(2023, 9, 5), 4496.83),
+            (date(2024, 9, 27), 5738.17),
+            (date(2024, 9, 30), 5762.48),
+            (date(2024, 10, 1), 5708.75),
+        ]
+        assert {row.source for row in rows} == {"fred_close"}
+        raw = db.get(RawPayload, rows[0].raw_payload_id)
+        run = db.get(IngestionRun, result["run_id"])
+        assert (raw.source, raw.ingestion_run_id) == ("fred", run.id)
+        assert (run.run_type, run.status) == ("us_index_backfill", "success")
+        assert run.metadata_json["series"]["SOX"]["counts"]["inserted"] == 3
+        # The collect's data_quality rows (closed days of the latest session) stay.
+        assert [
+            (row.entity_key, row.as_of_date, row.checks_json)
+            for row in db.scalars(select(DataQuality).order_by(DataQuality.id))
+        ] == quality_before
+        # Every row gets its indicator row, rebuilt from the new first bar.
+        for item in US_INDEXES:
+            instrument = us.find_instrument(db, item)
+            assert db.scalar(
+                select(func.count())
+                .select_from(TechnicalIndicator)
+                .where(TechnicalIndicator.instrument_id == instrument.id)
+            ) == len(_bars(db, item.symbol))
+
+    # A second run asks nothing.
+    again_fred = Fred(rows=HISTORY_ROWS + BASIS_ROWS)
+    with factory() as db:
+        again = us.backfill_us_index_history(
+            db, session=date(2026, 11, 9), fetch=again_fred
+        )
+    assert again["requests"] == 0 and again_fred.calls == []
+    assert set(again["skipped"].values()) == {"already_from_history_start"}
+
+
+def test_a_rejected_history_answer_writes_nothing_for_that_series(factory):
+    with factory() as db:
+        us.collect_us_index_bars(
+            db,
+            _run(db),
+            date(2024, 10, 2),
+            Fred(rows=BASIS_ROWS),
+            pipeline._upsert_raw_payload,
+            [],
+        )
+        db.commit()
+    fred = Fred({"SP500": "<html>blocked</html>"}, rows=HISTORY_ROWS + BASIS_ROWS)
+
+    with factory() as db:
+        result = us.backfill_us_index_history(db, session=date(2026, 11, 9), fetch=fred)
+
+    assert result["status"] == "partial"
+    assert result["series"]["SPX"]["status"] == "failed"
+    assert result["warnings"][0].startswith("us index bars unavailable for US SPX")
+    with factory() as db:
+        assert [row.trading_date for row in _bars(db, "SPX")] == [
+            date(2024, 9, 30),
+            date(2024, 10, 1),
+        ]
+        assert len(_bars(db, "IXIC")) == 5
+        # The rejected answer is still kept as raw evidence.
+        assert (
+            db.scalar(
+                select(func.count())
+                .select_from(RawPayload)
+                .where(RawPayload.ingestion_run_id == result["run_id"])
+            )
+            == 4
+        )

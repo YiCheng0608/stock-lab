@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta, timezone
 from statistics import median
 from typing import Any, Callable, Iterable, Mapping
 
-from sqlalchemy import and_, desc, func, select
+from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -33,6 +33,7 @@ from app.domain import (
     HOT_GROUP_LEGACY_VERSION,
     HOT_GROUP_VERSION,
     INSTITUTIONAL_FLOW_FORMULA_VERSION,
+    NON_SECURITY_TYPES,
     OFFICIAL_INSTITUTIONAL_CHIP_SOURCES,
     SIGNAL_CONFIDENCE_SEMANTICS,
     TAIWAN_MARKET,
@@ -99,6 +100,7 @@ from app.tracking import (
 from app.trading_calendar import NextSession, next_session
 from worker import mops_events
 from app.indicators import is_synthetic_bar
+from app.coverage import SESSION_BASIS_START
 from worker.emerging_issuers import store_emerging_issuers
 from worker.futures_bars import store_futures_bars
 from worker.index_bars import INDEX_BAR_SOURCES, store_index_bars, warnings_for
@@ -570,6 +572,22 @@ def _prior_20_window(
         ],
         "volumes": [int(bar.volume) for bar, _factor in prior],
     }
+
+
+def _benchmark_session_dates(
+    db: Session, benchmark_id: int, score_date: date
+) -> list[date]:
+    """The benchmark's last 20 sessions through ``score_date``: the catalyst window.
+
+    TAIEX rows before the stock history (``SESSION_BASIS_START``, Issue #563)
+    are index history only; they never enter a window of the stocks.
+    """
+
+    return [
+        day
+        for day in _effective_trading_dates(db, benchmark_id, score_date, 20)
+        if day >= SESSION_BASIS_START
+    ]
 
 
 def _benchmark_instrument(db: Session) -> Instrument | None:
@@ -1321,7 +1339,7 @@ def _calculate_group_scores(
         else {1: None, 5: None, 20: None}
     )
     benchmark_dates = (
-        _effective_trading_dates(db, benchmark.id, score_date, 20) if benchmark else []
+        _benchmark_session_dates(db, benchmark.id, score_date) if benchmark else []
     )
     if group_ids is None:
         query = select(ThemeGroup).where(ThemeGroup.active.is_(True))
@@ -3987,7 +4005,11 @@ def _quote_row_codes(payload: Any) -> set[str]:
 
 
 def _quote_sessions(db: Session, observed: date) -> list[date]:
-    """The latest DORMANT_SESSIONS TAIEX sessions up to ``observed``."""
+    """The latest DORMANT_SESSIONS TAIEX sessions up to ``observed``.
+
+    Not before ``SESSION_BASIS_START``: the earlier TAIEX rows are index
+    history (Issue #563), days no stock has a quote for.
+    """
 
     benchmark = _benchmark_instrument(db)
     if benchmark is None:
@@ -3997,6 +4019,7 @@ def _quote_sessions(db: Session, observed: date) -> list[date]:
             select(MarketBar.trading_date)
             .where(
                 MarketBar.instrument_id == benchmark.id,
+                MarketBar.trading_date >= SESSION_BASIS_START,
                 MarketBar.trading_date <= observed,
             )
             .order_by(MarketBar.trading_date.desc())
@@ -4536,13 +4559,20 @@ def taiwan_bar_dates(
     first dates.  A US index close (market ``US``, Issue #547) can fall on a
     day the Taiwan market was closed, so "any stored bar" is not a Taiwan
     session: the backtest's score dates and plan tracking's sessions both read
-    this.
+    this.  Nor is an index or TX row before the stock history
+    (``SESSION_BASIS_START``, Issue #563): that history has no stocks to score.
     """
 
     query = (
         select(MarketBar.trading_date)
         .join(Instrument, Instrument.id == MarketBar.instrument_id)
-        .where(Instrument.market == TAIWAN_MARKET)
+        .where(
+            Instrument.market == TAIWAN_MARKET,
+            or_(
+                MarketBar.trading_date >= SESSION_BASIS_START,
+                Instrument.instrument_type.not_in(NON_SECURITY_TYPES),
+            ),
+        )
     )
     if start is not None:
         query = query.where(MarketBar.trading_date >= start)
