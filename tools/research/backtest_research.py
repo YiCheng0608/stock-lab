@@ -268,24 +268,39 @@ def taiex_closes():
 # reads such a row past ``rule_evidence_json.actionable``.
 NOT_ACTIONABLE = ("observation", "data_incomplete", "invalid_levels")
 SLIM_MARK = "tools/research/backtest_research.py --slim (#546)"
-# One score date's non-actionable rows of the run, found through the
-# signal_date index (a plan over strategy_version_id or the key reads every
-# signal of the database once per date), then cut down one by one: evidence
-# to the keys the backtest reads (``actionable``) and the row's own strategy
-# state, rationale (every strategy's state again) emptied.
-SLIM_ROWS_SQL = (
-    "select s.id, sv.kind from signals s indexed by ix_signals_signal_date "
-    "join strategy_versions sv on sv.id = s.strategy_version_id "
-    "where s.signal_date = :day and s.signal_key like :prefix "
-    f"and s.status in ({', '.join(repr(s) for s in NOT_ACTIONABLE)})"
-)
-SLIM_SQL = (
-    "update signals set rationale = null, rule_evidence_json = json_object("
-    "'strategy', json_extract(rule_evidence_json, '$.strategy'), "
-    "'strategy_version', json_extract(rule_evidence_json, '$.strategy_version'), "
-    "'actionable', json('false'), 'research_slim', :mark, :kind, "
-    "json(json_extract(rule_evidence_json, '$.' || :kind))) where id = :id"
-)
+
+
+def slim_pending(db, prefix: str, kinds: dict[int, str]) -> int:
+    """Cut down the session's unflushed non-actionable signals of ``prefix``.
+
+    Evidence keeps the keys the backtest reads (``actionable``), the row's
+    strategy and version, and its own strategy's state; rationale (every
+    strategy's state again) is emptied.  Done before the flush, so a row is
+    written small once: shrinking a written row leaves its page part empty.
+    """
+
+    from app.models import Signal
+
+    count = 0
+    for item in [*db.new, *db.dirty]:
+        if (
+            not isinstance(item, Signal)
+            or not item.signal_key.startswith(prefix)
+            or item.status not in NOT_ACTIONABLE
+        ):
+            continue
+        evidence = item.rule_evidence_json or {}
+        kind = kinds[item.strategy_version_id]
+        item.rule_evidence_json = {
+            "strategy": evidence.get("strategy"),
+            "strategy_version": evidence.get("strategy_version"),
+            "actionable": False,
+            "research_slim": SLIM_MARK,
+            kind: evidence.get(kind),
+        }
+        item.rationale = None
+        count += 1
+    return count
 
 
 @contextmanager
@@ -295,13 +310,16 @@ def score_dates(closes, pipeline_module, *, slim: bool = False):
     Strategy inputs carry no date, so ``closes`` (when given) is pointed at the
     score date around that call and cleared after it (a regime strategy
     evaluated outside it raises).  With ``slim``, the date's non-actionable
-    rows of the run are then cut down (``SLIM_SQL``) before the replay commits
-    them: every row records every strategy's state, so a registry of twelve
-    makes each row about 6 KB, and these rows are most of them.  Status,
+    signals of the run are then cut down (``slim_pending``) before the replay
+    flushes them: every row records every strategy's state, so a registry of
+    twelve makes each row about 6 KB, and these rows are most of them.  The
+    call writes nothing itself (the session does not autoflush); status,
     levels, tracking and settlements are not touched.
     """
 
-    from sqlalchemy import text
+    from sqlalchemy import select
+
+    from app.models import StrategyVersion
 
     original = pipeline_module._generate_signals
 
@@ -314,19 +332,10 @@ def score_dates(closes, pipeline_module, *, slim: bool = False):
             if closes is not None:
                 closes.set_session(None)
         if slim:
-            db.flush()
-            rows = db.execute(
-                text(SLIM_ROWS_SQL),
-                {"day": signal_date.isoformat(), "prefix": f"{kwargs['namespace']}-%"},
-            ).all()
-            if rows:
-                db.execute(
-                    text(SLIM_SQL),
-                    [
-                        {"mark": SLIM_MARK, "kind": kind, "id": id_}
-                        for id_, kind in rows
-                    ],
-                )
+            kinds = dict(
+                db.execute(select(StrategyVersion.id, StrategyVersion.kind)).all()
+            )
+            slim_pending(db, f"{kwargs['namespace']}-", kinds)
         return count
 
     pipeline_module._generate_signals = generate
