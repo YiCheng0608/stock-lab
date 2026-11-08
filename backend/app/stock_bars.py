@@ -79,6 +79,12 @@ def _daily(
             "volume": bar.volume,
             "source": bar.source,
             "is_suspended": bool(bar.is_suspended),
+            # Why open/high/low are empty on an index day (Issue #552).
+            "price_reason": bar.price_reason,
+            # Futures rows only (TX near month); null elsewhere.
+            "contract_month": bar.contract_month,
+            "open_interest": bar.open_interest,
+            "settlement_price": bar.settlement_price,
             "bar_count": row.bar_count if row else None,
         }
         for name in FIELDS:

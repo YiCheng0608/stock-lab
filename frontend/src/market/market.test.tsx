@@ -8,9 +8,9 @@ import { MAIN_NAV } from '../components/Navbar'
 import type { Dashboard, StockBarRow, StockBarsResponse } from '../types'
 import { overviewBoth, overviewNone, overviewTwseOnly } from '../today/today.fixtures'
 import { STOCK_BARS_LIMIT, axisDigits, priceDigits } from '../stock/stockBars'
-import { IndexChartSection, MarketOverviewPanel, MarketOverviewView } from './MarketViews'
+import { MarketChartView, MarketOverviewPanel, MarketOverviewView } from './MarketViews'
 import { MarketPage } from './MarketPage'
-import { TAIEX, TPEX_NO_BARS_TEXT, marketOverviewNotes, summaryItems } from './marketOverview'
+import { MARKET_CHARTS, TAIEX, TAIFEX_ATTRIBUTION, collectedSinceText, futuresLatestText, marketOverviewNotes, summaryItems } from './marketOverview'
 
 // The frontend ships no Node typings; scripts/ci-test.cjs runs this module under Node, so declare what it uses.
 declare const require: (id: string) => unknown
@@ -18,8 +18,8 @@ declare const __dirname: string
 const fs = require('node:fs') as { readFileSync(file: string, encoding: 'utf8'): string }
 const path = require('node:path') as { join(...parts: string[]): string }
 
-// 大盤 page (/market, Issue 549; PRODUCT_SPEC §2, DESIGN_SYSTEM §4/§5/§6, UI_COPY_SPEC §11): navigation, the page with
-// data, and the states without data (no 櫃買 daily history, no TAIEX bars, no overview). Failures are listed together.
+// 大盤 page (/market, Issue 549/552; PRODUCT_SPEC §2, DESIGN_SYSTEM §4/§5/§6, UI_COPY_SPEC §11): navigation, the page with
+// data (the overview and the TAIEX, TPEx and TX daily K charts), and the states without data. Failures are listed together.
 const failures: string[] = []
 let checks = 0
 const check = (condition: boolean, message: string) => { checks++; if (!condition) failures.push(message) }
@@ -40,8 +40,9 @@ function render(location: string, element: ReactElement, client = new QueryClien
   }
 }
 
+// Real daily K bars (Issue 552): open below the close, a range around both, volume in shares.
 const bar = (date: string, close: number | null, extra: Partial<StockBarRow> = {}): StockBarRow =>
-  ({ date, open: close, high: close, low: close, close, volume: 0, source: 'twse_index', is_suspended: false, bar_count: null, reasons: {}, ...extra })
+  ({ date, open: close == null ? null : close - 20, high: close == null ? null : close + 35.5, low: close == null ? null : close - 60.25, close, volume: 19_339_729_647, source: 'twse_index_ohlcv', is_suspended: false, bar_count: null, reasons: {}, ...extra })
 
 function taiexBars(rows: StockBarRow[], extra: Partial<StockBarsResponse> = {}): StockBarsResponse {
   return {
@@ -50,16 +51,24 @@ function taiexBars(rows: StockBarRow[], extra: Partial<StockBarsResponse> = {}):
     limit: STOCK_BARS_LIMIT,
     count: rows.length,
     data_as_of: rows.length ? rows[rows.length - 1].date : null,
-    sources: rows.length ? ['twse_index'] : [],
+    sources: [...new Set(rows.map((row) => row.source ?? ''))].filter(Boolean),
     indicators: { formula_version: 'indicators/v1', price_basis: 'as_of_date_raw_basis/v2', parameters: {}, required_bars: {}, fields: [], source: 'technical_indicators', computed_at: null },
     bars: rows,
     ...extra,
   }
 }
 
-const days = Array.from({ length: 40 }, (_, i) => bar(new Date(Date.UTC(2026, 8, 1) + i * 86400000).toISOString().slice(0, 10), 45000 + i * 25.5))
+const dateOf = (i: number) => new Date(Date.UTC(2026, 8, 1) + i * 86400000).toISOString().slice(0, 10)
+const days = Array.from({ length: 40 }, (_, i) => bar(dateOf(i), 45000 + i * 25.5))
 days[days.length - 1] = bar('2026-10-22', 46041.43)
 const fullBars = taiexBars(days)
+const tpexBars: StockBarsResponse = {
+  ...taiexBars(days.map((row, i) => ({ ...row, open: 300 + i, high: 302 + i, low: 299 + i, close: 301 + i, volume: 1_069_692_000, source: 'tpex_index_ohlcv' }))),
+  instrument: { id: 10, exchange: 'TPEx', symbol: 'TPEX', name: '櫃買指數', instrument_type: 'index' },
+}
+// TX from the first collect only: 12 sessions, so fewer than the limit (UI_COPY_SPEC §11 「自 … 起收集」).
+const txRows = Array.from({ length: 12 }, (_, i) => bar(dateOf(28 + i), 46000 + i * 10, { open: 45990 + i * 10, high: 46100 + i * 10, low: 45900 + i * 10, volume: 143277, source: 'taifex_daily_futures', contract_month: i < 6 ? '202609' : '202610', open_interest: 125000 + i, settlement_price: 45995 + i * 10 }))
+const txBars: StockBarsResponse = { ...taiexBars(txRows), instrument: { id: 11, exchange: 'TAIFEX', symbol: 'TX', name: '臺股期貨近月', instrument_type: 'futures' } }
 
 // ---- navigation: 大盤 right after 今日可買, the /market route renders this page ----
 const nav = MAIN_NAV.map((item) => `${item.to} ${item.label}`)
@@ -71,16 +80,20 @@ const shell = render('/market', <App />)
 check(!shell.includes('找不到此頁') && shell.includes('<h1>大盤</h1>'), `/market is not a 404 and its title is 大盤: ${text(shell).slice(0, 200)}`)
 check(/<a[^>]*class="active"[^>]*href="\/market"[^>]*>大盤<\/a>|<a[^>]*href="\/market"[^>]*class="active"[^>]*>大盤<\/a>|aria-current="page"[^>]*href="\/market"|href="\/market"[^>]*aria-current="page"/.test(shell), '/market: the navbar marks 大盤 as the current page')
 
-// ---- the page with data: overview first, then the TAIEX daily chart, then the 櫃買 no-history row ----
+// ---- the page with data: overview first, then the TAIEX, TPEx and TX daily charts ----
 const dashboard = { as_of: '2026-10-22', market_overview: overviewBoth() } as unknown as Dashboard
 const client = new QueryClient()
 client.setQueryData(['dashboard'], dashboard)
 // The stock page's query key: /stocks/TWSE/TAIEX and /market share one cache entry.
 client.setQueryData(['stock-bars', TAIEX.exchange, TAIEX.symbol, 'day'], fullBars)
+client.setQueryData(['stock-bars', 'TPEx', 'TPEX', 'day'], tpexBars)
+client.setQueryData(['stock-bars', 'TAIFEX', 'TX', 'day'], txBars)
 const page = render('/market', <MarketPage />, client)
 const pageText = text(page)
-check(page.indexOf('id="market-overview-title"') > 0 && page.indexOf('id="market-overview-title"') < page.indexOf('id="market-chart-title"'), 'DESIGN_SYSTEM §4: 大盤概況 before 加權指數日線')
-check(page.indexOf('id="market-chart-title"') < page.indexOf('class="market-no-bars"'), '櫃買指數日線 row is the last thing of the chart block')
+check(JSON.stringify(MARKET_CHARTS.map((spec) => `${spec.exchange}/${spec.symbol}`)) === '["TWSE/TAIEX","TPEx/TPEX","TAIFEX/TX"]', 'the three charts read the bars API of TAIEX, TPEX and TX')
+const order = ['id="market-overview-title"', 'id="market-chart-title"', 'id="market-tpex-chart-title"', 'id="market-tx-chart-title"'].map((id) => page.indexOf(id))
+check(order.every((at, i) => at > 0 && (i === 0 || at > order[i - 1])), `DESIGN_SYSTEM §4: 大盤概況 → 加權 → 櫃買 → 台指期, got ${order}`)
+check(!page.includes('market-no-bars') && !pageText.includes('歷史日 K 尚未收集'), '櫃買 has its K line now, no 無資料 row')
 check(!/美股|大盤狀態/.test(pageText), 'no placeholder for 美股 (Issue 547) or 大盤狀態 (Issue 546) yet')
 const overviewPanel = slice(page, 'id="market-overview-title"', 'id="market-chart-title"')
 for (const value of ['大盤概況', '資料 2026/10/22', '加權指數', '46,041.43', '-846.34（-1.81%）', '櫃買指數', '381.69', '-13.73（-3.47%）', '上市 9,334.37 集中市場總計', '上櫃 2,255.45 上櫃股票', '上市 上漲 247 · 下跌 756 · 平盤 74（3／5）', '上櫃 上漲 146 · 下跌 659 · 平盤 63（17／11）']) {
@@ -94,7 +107,7 @@ for (const line of ['來源：上市為臺灣證券交易所 MI_INDEX；上櫃�
 }
 // The chart is the stock page's StockBarsChart (coordinator decision 6715021190): same tabs, indicator panels and
 // synthetic-bar rules, so the real daily K bars of Issue 552 need no new view.
-const chartPanel = slice(page, 'id="market-chart-title"', 'class="market-no-bars"')
+const chartPanel = slice(page, 'id="market-chart-title"', 'id="market-tpex-chart-title"')
 check(page.includes('<h3 class="card-title" id="market-chart-title">加權指數日線</h3>') && page.includes('aria-labelledby="market-chart-title"'), '加權指數日線: the StockBarsChart card, titled for the index')
 check(text(chartPanel).includes('資料 2026/10/22'), `加權指數日線: the last bar's date badge: ${text(chartPanel).slice(0, 160)}`)
 check(chartPanel.includes('id="bars-interval-tab-day"') && chartPanel.includes('id="bars-interval-tab-week"') && text(chartPanel).includes('日K') && text(chartPanel).includes('週K'), '加權指數日線: the stock page period switch (日K／週K)')
@@ -102,18 +115,34 @@ check(chartPanel.includes('class="ma-toggles"') && chartPanel.includes('id="indi
 check(text(chartPanel).includes('最近 40 根日線；缺日不補、停牌不畫 K 線'), '加權指數日線: the stock page chart meta')
 for (const header of ['開（點）', '收（點）', 'MA5（點）']) check(text(chartPanel).includes(header), `資料表: an index is in 點 (「${header}」)`)
 check(!text(chartPanel).includes('收（元）') && text(chartPanel).includes('單位：指數與均線為點'), '資料表: no 元 for an index')
-check(text(chartPanel).includes('2026/10/22 46,041.43 46,041.43 46,041.43 46,041.43'), '資料表: an index keeps two decimals (close-only bars: 開＝高＝低＝收)')
+check(text(chartPanel).includes('2026/10/22 46,021.43 46,076.93 45,981.18 46,041.43'), '資料表: an index keeps two decimals and its real open, high and low')
+check(text(chartPanel).includes('成交量（億股）') && text(chartPanel).includes('193.40') && text(chartPanel).includes('成交量為億股'), '資料表: an index volume is in 億股 (PR 553 review), 19,339,729,647 shares = 193.40')
+check(text(chartPanel).includes('來源 臺灣證券交易所'), 'chart meta: the TAIEX report source is named')
+const tpexPanel = slice(page, 'id="market-tpex-chart-title"', 'id="market-tx-chart-title"')
+check(page.includes('<h3 class="card-title" id="market-tpex-chart-title">櫃買指數日線</h3>') && text(tpexPanel).includes('來源 證券櫃檯買賣中心') && text(tpexPanel).includes('10.70'), `櫃買指數日線: the same card on the TPEx index, volume in 億股: ${text(tpexPanel).slice(0, 200)}`)
+const txPanel = page.slice(page.indexOf('id="market-tx-chart-title"'))
+check(txPanel.includes('>台指期近月日線</h3>') && text(txPanel).includes('來源 臺灣期貨交易所'), '台指期近月日線: the same card on the TX near month')
+check(text(txPanel).includes('成交量（口）') && text(txPanel).includes('143,277') && text(txPanel).includes('開（點）') && text(txPanel).includes('46,110'), '台指期: whole points and volume in 口')
+check(text(txPanel).includes('2026/10/10 合約 2026/10 · 未平倉 125,011 口 · 結算價 46,105'), `台指期: the latest contract month, open interest and settlement: ${text(txPanel).slice(-600)}`)
+check(text(txPanel).includes('自 2026/09/29 起收集，無更早歷史') && text(txPanel).includes(TAIFEX_ATTRIBUTION), '台指期: when the history starts and the open-data attribution')
+check(collectedSinceText(fullBars) === '自 2026/09/01 起收集，無更早歷史' && collectedSinceText({ ...fullBars, count: STOCK_BARS_LIMIT }) === null, 'collectedSinceText: only when the series is shorter than the request')
+check(futuresLatestText(fullBars) === null, 'futuresLatestText: nothing for an index')
 check(priceDigits(46041.43, 'index') === 2 && priceDigits(46041.43, 'stock') === 0, 'priceDigits: an index has two decimals, a stock above 500 none')
 check(axisDigits(24500, 2) === 0 && axisDigits(9999, 2) === 2, 'price axis: five-digit index labels drop the decimals so they fit the gutter')
-check(text(slice(page, 'class="market-no-bars"', '</p>')).includes('櫃買指數日線') && pageText.includes(TPEX_NO_BARS_TEXT), `無資料（櫃買日線）: 「${TPEX_NO_BARS_TEXT}」`)
+// The close-only TAIEX rows still read as before (synthetic bars, volume unit unverified).
+const closeOnly = taiexBars([bar('2026-10-22', 46041.43, { open: 46041.43, high: 46041.43, low: 46041.43, volume: 0, source: 'twse_index' })])
+const closeOnlyMarkup = text(render('/market close-only', <MarketChartView spec={MARKET_CHARTS[0]} interval="day" onIntervalChange={() => {}} data={closeOnly} loading={false} error={null} />))
+check(closeOnlyMarkup.includes('2026/10/22 46,041.43 46,041.43 46,041.43 46,041.43') && closeOnlyMarkup.includes('成交量（張）'), `close-only TAIEX rows: 開＝高＝低＝收, no unit change: ${closeOnlyMarkup.slice(-300)}`)
 
-// ---- no data: no TAIEX bars, a failed bars request, a loading request, no overview ----
-const emptyBars = render('/market', <IndexChartSection interval="day" onIntervalChange={() => {}} data={taiexBars([])} loading={false} error={null} />)
-check(text(emptyBars).includes('無資料') && text(emptyBars).includes('來源未提供日線') && text(emptyBars).includes('資料日期未提供') && !emptyBars.includes('chart-data-table'), `沒有日線: 無資料＋來源未提供日線, no table: ${text(emptyBars)}`)
-check(text(emptyBars).includes(TPEX_NO_BARS_TEXT), '沒有日線: the 櫃買 row still says why it has none')
-const failedBars = render('/market', <IndexChartSection interval="week" onIntervalChange={() => {}} data={undefined} loading={false} error={new Error('HTTP 502')} />)
+// ---- no data: no bars, a failed bars request, a loading request, no overview ----
+for (const spec of MARKET_CHARTS) {
+  const emptyBars = render(`/market ${spec.key}`, <MarketChartView spec={spec} interval="day" onIntervalChange={() => {}} data={taiexBars([])} loading={false} error={null} />)
+  check(text(emptyBars).includes(spec.title) && text(emptyBars).includes('無資料') && text(emptyBars).includes('來源未提供日線') && text(emptyBars).includes('資料日期未提供') && !emptyBars.includes('chart-data-table'), `沒有日線（${spec.key}）: 無資料＋來源未提供日線, no table: ${text(emptyBars)}`)
+  check(text(emptyBars).includes(TAIFEX_ATTRIBUTION) === (spec.key === 'tx'), `沒有日線（${spec.key}）: the TX attribution stays, only on TX`)
+}
+const failedBars = render('/market', <MarketChartView spec={MARKET_CHARTS[1]} interval="week" onIntervalChange={() => {}} data={undefined} loading={false} error={new Error('HTTP 502')} />)
 check(text(failedBars).includes('資料暫時無法載入') && text(failedBars).includes('HTTP 502'), `載入失敗: 資料暫時無法載入: ${text(failedBars)}`)
-const loadingBars = render('/market', <IndexChartSection interval="day" onIntervalChange={() => {}} data={undefined} loading error={null} />)
+const loadingBars = render('/market', <MarketChartView spec={MARKET_CHARTS[2]} interval="day" onIntervalChange={() => {}} data={undefined} loading error={null} />)
 check(loadingBars.includes('aria-busy="true"'), 'loading: a skeleton')
 for (const [name, overview] of [['只有上市', overviewTwseOnly()], ['都沒有', overviewNone()], ['欄位不存在', undefined]] as const) {
   const markup = text(render(`/market ${name}`, <MarketOverviewPanel overview={overview} />))

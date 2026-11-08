@@ -636,6 +636,9 @@ ENTRY_REQUIRED_LEVELS: dict[str, tuple[str, ...]] = {
 }
 VALID_ENTRY_TYPES = frozenset(ENTRY_LEVEL_FIELDS)
 VALID_INSTRUMENT_TYPES = frozenset({"stock", "etf", "ipo"})
+# Market-level series, not securities (Issue #552): the TAIEX and TPEx indexes
+# and the TX futures near month.  Never in the stock list, counts or scope.
+NON_SECURITY_TYPES = frozenset({"index", "futures"})
 
 
 def _finite(value: object) -> bool:

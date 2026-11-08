@@ -76,6 +76,10 @@ def load_indicator_bars(
             bool(bar.is_suspended),
             factor,
             is_synthetic_bar(bar.source, bar.turnover_reason),
+            # Index bars may keep an unpublished open/high/low or volume
+            # empty (Issue #552); stock bars always carry them.
+            missing_range=bar.open is None or bar.high is None or bar.low is None,
+            missing_volume=bar.volume is None,
         )
         for bar, factor in zip(bars, factors)
     ]

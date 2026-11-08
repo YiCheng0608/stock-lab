@@ -4,6 +4,7 @@ from datetime import date
 import httpx
 import pytest
 
+import index_bar_payloads
 import worker.sources as sources
 from app.indicators import is_synthetic_bar
 from worker.mops_events import MOPS_EVENT_LIST_ENDPOINT
@@ -487,6 +488,13 @@ class FixtureFetcher:
                     "累計營業收入-當月累計營收": "8000",
                 }
             ]
+        if index_bar_payloads.is_index_report(url):
+            # The monthly index reports (Issue #552): no session yet, so the
+            # collect keeps the close-only TAIEX row these tests expect.
+            return index_bar_payloads.empty_report(url, _kwargs.get("data"))
+        if url == sources.TAIFEX_DAILY_FUTURES_ENDPOINT:
+            # The TAIFEX open-data report (Issue #552) of the fixture session.
+            return index_bar_payloads.taifex_report(date(2026, 9, 4))
         raise AssertionError(f"unexpected endpoint: {url}")
 
 

@@ -105,12 +105,16 @@ class MarketBar(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), index=True)
     trading_date: Mapped[date] = mapped_column(Date, index=True)
-    open: Mapped[float] = mapped_column(Float)
-    high: Mapped[float] = mapped_column(Float)
-    low: Mapped[float] = mapped_column(Float)
+    # Open/high/low and volume are nullable since 0029 (Issue #552): an index
+    # day whose source gave no open/high/low keeps them empty with
+    # ``price_reason`` instead of the close, and a day without the volume
+    # report keeps volume empty.  Stock rows still always carry them.
+    open: Mapped[float | None] = mapped_column(Float, nullable=True)
+    high: Mapped[float | None] = mapped_column(Float, nullable=True)
+    low: Mapped[float | None] = mapped_column(Float, nullable=True)
     close: Mapped[float] = mapped_column(Float)
     adj_close: Mapped[float] = mapped_column(Float)
-    volume: Mapped[int] = mapped_column(Integer, default=0)
+    volume: Mapped[int | None] = mapped_column(Integer, default=0, nullable=True)
     turnover: Mapped[float] = mapped_column(Float, default=0)
     turnover_status: Mapped[str] = mapped_column(
         String(20), default="unknown", server_default="unknown"
@@ -125,6 +129,19 @@ class MarketBar(Base):
     is_suspended: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0"
     )
+    # Why open/high/low are empty (``source_missing_ohlc``); null otherwise.
+    price_reason: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # The capture of the volume and turnover when they came from a different
+    # report than the prices (index bars: FMTQIK / tradingIndex, Issue #552);
+    # null when ``raw_payload_id`` holds both.
+    volume_raw_payload_id: Mapped[int | None] = mapped_column(
+        ForeignKey("raw_payloads.id"), nullable=True, index=True
+    )
+    # Futures only (Issue #552): the contract month the row is, its open
+    # interest (contracts) and its settlement price.  Null on other rows.
+    contract_month: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    open_interest: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    settlement_price: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class ChipSnapshot(Base):

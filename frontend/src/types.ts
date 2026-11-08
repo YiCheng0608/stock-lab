@@ -1383,8 +1383,15 @@ export type StockBarRow = {
   week_start?: string
   week_end?: string
   trading_days?: number
+  // Daily rows (Issue 552): why open/high/low are empty (source_missing_ohlc, source_invalid_ohlc); futures rows carry
+  // their contract month (YYYYMM), open interest (contracts) and settlement price, null elsewhere.
+  price_reason?: string | null
+  contract_month?: string | null
+  open_interest?: number | null
+  settlement_price?: number | null
   bar_count: number | null
-  // Only null fields are listed: insufficient_bars, suspended, invalid_bar, no_price_change, synthetic_index or not_computed.
+  // Only null fields are listed: insufficient_bars, suspended, invalid_bar, no_price_change, synthetic_index, missing_ohlc,
+  // missing_volume or not_computed.
   reasons: Partial<Record<IndicatorField, string>>
 } & Partial<Record<IndicatorField, number | null>>
 

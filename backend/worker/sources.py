@@ -277,6 +277,12 @@ class OfficialBatch:
     # The latest month of the monthly revenue snapshots (display only, Issue
     # #530); a failure is a non-core warning.
     monthly_revenues: list[MonthlyRevenueRecord] = field(default_factory=list)
+    # Real index daily K bars of the collect month (worker.index_bars, Issue
+    # #552); a failure is a non-core warning.
+    index_daily_bars: list[Any] = field(default_factory=list)
+    # The TX near-month bar of the collect day (worker.futures_bars, Issue
+    # #552); a failure is a non-core warning.
+    futures_bars: list[Any] = field(default_factory=list)
 
 
 def _merge_event_coverage(values: Iterable[dict[str, Any]]) -> dict[str, Any]:
@@ -428,6 +434,20 @@ TPEX_HIGHLIGHT_ENDPOINT = f"{TPEX_API}/tpex_mainborad_highlight"
 # AI news candidate on an emerging stock is shown by name (Issue #512); it is
 # never a universe, quote, candidate or strategy source.
 TPEX_EMERGING_ISSUER_ENDPOINT = f"{TPEX_API}/mopsfin_t187ap03_R"
+# Index daily K bars, one month per request (Issue #552; worker.index_bars):
+# 發行量加權股價指數歷史資料 (open/high/low/close) and 市場成交資訊 (shares, NT$)
+# on the TWSE site, 櫃買指數 月查詢 (open/high/low/close) and 日成交量值指數
+# (thousand shares, NT$ thousand) on the TPEx site.
+TWSE_INDEX_HISTORY_ENDPOINT = "https://www.twse.com.tw/rwd/zh/TAIEX/MI_5MINS_HIST"
+TWSE_MARKET_TRADING_ENDPOINT = "https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK"
+TPEX_INDEX_HISTORY_ENDPOINT = "https://www.tpex.org.tw/www/zh-tw/indexInfo/inx"
+TPEX_INDEX_TRADING_ENDPOINT = (
+    "https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingIndex"
+)
+# 期貨每日交易行情 (TAIFEX OpenAPI, data.gov.tw 11319, 政府資料開放授權條款第1版):
+# the latest session of every futures contract; the TX near month is kept
+# (worker.futures_bars, Issue #552).  No date parameter, so no history.
+TAIFEX_DAILY_FUTURES_ENDPOINT = "https://openapi.taifex.com.tw/v1/DailyMarketReportFut"
 
 
 # Minimum spacing between requests to one official host.  TWSE's web
@@ -439,6 +459,7 @@ OFFICIAL_HOST_MIN_INTERVAL_SECONDS = {
     "openapi.twse.com.tw": 1.0,
     "www.tpex.org.tw": 1.0,
     "info.tpex.org.tw": 1.0,
+    "openapi.taifex.com.tw": 1.0,
     # MOPS blocks fast clients without a published limit; the event-list
     # backfill (Issue #464) stays at one request per three seconds.
     "mops.twse.com.tw": 3.0,
@@ -848,6 +869,43 @@ def parse_suspended_symbols(payload: Any) -> set[str]:
         if symbol:
             symbols.add(symbol)
     return symbols
+
+
+def fetch_index_bar_months(
+    source: str,
+    exchange: str,
+    fetcher: Callable[..., Any],
+    end: date,
+    captured: list[FetchedPayload],
+) -> tuple[list[Any], list[FetchedPayload], list[str]]:
+    """The collect's index daily K reports (worker.index_bars, Issue #552).
+
+    The month of ``end`` (and the month before during the first week, so the
+    last sessions of a month are read once more after it ends).  Every answer
+    is kept as raw in ``captured``; failures are non-core warnings.
+    """
+
+    from .index_bars import collect_months, fetch_month
+
+    def get(request: Any) -> Any:
+        return _call_fetcher(
+            fetcher, request.url, method=request.method, data=request.data
+        )
+
+    def capture(request: Any, payload: Any, data_as_of: str) -> FetchedPayload:
+        item = capture_payload(source, request.url, payload, data_as_of)
+        captured.append(item)
+        return item
+
+    bars: list[Any] = []
+    payloads: list[FetchedPayload] = []
+    warnings: list[str] = []
+    for month in collect_months(end):
+        result = fetch_month(exchange, month, get, capture)
+        bars.extend(bar for bar in result.bars if bar.trading_date <= end)
+        payloads.extend(result.payloads)
+        warnings.extend(result.warnings)
+    return bars, payloads, warnings
 
 
 def _call_fetcher(
@@ -3487,6 +3545,15 @@ class TwseAdapter:
             )
         except Exception as exc:
             warnings.append(monthly_revenue_warning("TWSE", exc))
+        index_daily_bars: list[Any] = []
+        index_daily_payloads: list[FetchedPayload] = []
+        if end not in self.no_data_dates:
+            index_daily_bars, index_daily_payloads, index_warnings = (
+                fetch_index_bar_months(
+                    self.source, "TWSE", self.fetcher, end, self.captured_payloads
+                )
+            )
+            warnings.extend(index_warnings)
         event_coverage = {
             "status": "unsupported",
             "denominator": "date_scoped_event_queries",
@@ -3511,13 +3578,15 @@ class TwseAdapter:
             + chip_payloads
             + action_payloads
             + index_payloads
-            + mops_payloads,
+            + mops_payloads
+            + index_daily_payloads,
             warnings=warnings,
             data_as_of=end.isoformat(),
             no_data_dates=sorted(set(self.no_data_dates)),
             event_coverage=event_coverage,
             market_summaries=list(self.market_summaries),
             monthly_revenues=monthly_revenues,
+            index_daily_bars=index_daily_bars,
         )
 
 
@@ -3871,6 +3940,15 @@ class TpexAdapter:
                 )
             except Exception as exc:
                 warnings.append(market_summary_warning("TPEx", end, exc))
+        index_daily_bars: list[Any] = []
+        index_daily_payloads: list[FetchedPayload] = []
+        if end not in self.no_data_dates:
+            index_daily_bars, index_daily_payloads, index_warnings = (
+                fetch_index_bar_months(
+                    self.source, "TPEx", self.fetcher, end, self.captured_payloads
+                )
+            )
+            warnings.extend(index_warnings)
         # The emerging roster is the current list, not a session report, so a
         # snapshot batch reads it once even on a verified no-data day.
         emerging_issuers: list[EmergingIssuerRecord] = []
@@ -3995,7 +4073,8 @@ class TpexAdapter:
             + highlight_payloads
             + emerging_payloads
             + suspension_payloads
-            + mops_payloads,
+            + mops_payloads
+            + index_daily_payloads,
             warnings=warnings,
             data_as_of=end.isoformat(),
             no_data_dates=sorted(set(self.no_data_dates)),
@@ -4004,6 +4083,7 @@ class TpexAdapter:
             market_summaries=market_summaries,
             emerging_issuers=emerging_issuers,
             monthly_revenues=monthly_revenues,
+            index_daily_bars=index_daily_bars,
         )
 
 
@@ -4077,6 +4157,11 @@ class OfficialMarketDataAdapter:
         event_coverage["snapshot_feed_coverage"] = _merge_event_coverage(
             [twse_batch.event_coverage, tpex_batch.event_coverage]
         )
+        futures_bars, futures_payloads, futures_warnings = self._fetch_futures(
+            end,
+            snapshot=twse_batch.snapshot_feeds and tpex_batch.snapshot_feeds,
+            no_data=end in no_data_dates,
+        )
         return OfficialBatch(
             instruments=list(instruments.values()),
             bars=list(bars.values()),
@@ -4084,8 +4169,14 @@ class OfficialMarketDataAdapter:
             actions=twse_batch.actions + tpex_batch.actions,
             fundamentals=twse_batch.fundamentals + tpex_batch.fundamentals,
             events=twse_batch.events + tpex_batch.events + mops_records,
-            payloads=twse_batch.payloads + tpex_batch.payloads + mops_payloads,
-            warnings=twse_batch.warnings + tpex_batch.warnings + mops_warnings,
+            payloads=twse_batch.payloads
+            + tpex_batch.payloads
+            + mops_payloads
+            + futures_payloads,
+            warnings=twse_batch.warnings
+            + tpex_batch.warnings
+            + mops_warnings
+            + futures_warnings,
             data_as_of=max(
                 filter(None, [twse_batch.data_as_of, tpex_batch.data_as_of]),
                 default=end.isoformat(),
@@ -4097,7 +4188,44 @@ class OfficialMarketDataAdapter:
             market_summaries=twse_batch.market_summaries + tpex_batch.market_summaries,
             emerging_issuers=twse_batch.emerging_issuers + tpex_batch.emerging_issuers,
             monthly_revenues=twse_batch.monthly_revenues + tpex_batch.monthly_revenues,
+            index_daily_bars=twse_batch.index_daily_bars + tpex_batch.index_daily_bars,
+            futures_bars=futures_bars,
         )
+
+    def _fetch_futures(
+        self, end: date, *, snapshot: bool, no_data: bool
+    ) -> tuple[list[Any], list[FetchedPayload], list[str]]:
+        """The TX near-month bar of ``end`` (worker.futures_bars, Issue #552).
+
+        Only a snapshot collect of a session asks: the report has the latest
+        session only.  Non-core; the answer is kept as raw even when it is
+        another session's.
+        """
+
+        if not snapshot or no_data:
+            return [], [], []
+        from .futures_bars import futures_warning, parse_near_month, report_date
+
+        fetcher = getattr(self.twse, "fetcher", fetch_json)
+        try:
+            payload = _call_fetcher(fetcher, TAIFEX_DAILY_FUTURES_ENDPOINT)
+        except Exception as exc:
+            return [], [], [futures_warning(exc)]
+        reported = report_date(payload)
+        captured = capture_payload(
+            "taifex",
+            TAIFEX_DAILY_FUTURES_ENDPOINT,
+            payload,
+            reported.isoformat() if reported else None,
+        )
+        self.captured_payloads.append(captured)
+        try:
+            bar = parse_near_month(
+                payload, requested_date=end, payload_sha256=captured.sha256
+            )
+        except Exception as exc:
+            return [], [captured], [futures_warning(exc)]
+        return [bar], [captured], []
 
 
 def _month_windows(start: date, end: date) -> list[tuple[date, date]]:
