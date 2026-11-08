@@ -25,6 +25,7 @@
 | 前端檔 | `frontend/src/market/MarketPage.tsx` |
 | 前端檔 | `frontend/src/market/MarketViews.tsx` |
 | 前端檔 | `frontend/src/market/marketOverview.ts` |
+| 前端檔 | `frontend/src/stock/StockBarsChart.tsx` |
 | 前端檔 | `frontend/src/news/NewsViews.tsx` |
 | 前端檔 | `frontend/src/themes/ThemeViews.tsx` |
 | 前端檔 | `frontend/src/tracking/TrackingViews.tsx` |
@@ -50,7 +51,7 @@
 | 持倉風險提示列 | `dashboard.actions` 的持倉風險 | — | — | 沒有持倉風險時不出現 |
 | 今日可買 | `candidates.json` | 標題下 `資料 <C/>` 與 `<n> 檔`；每列 `#<名次>`；每列明細 `資料日期 <C/>`、`來源：…`；每列明細一行 `加入追蹤`（按鈕）或 `已在追蹤`（連到觀察中的計畫） | 新聞情緒分項與理由後的 `推論`；每列 AI 入口 `AI 推論 ▸`（有 `llm_note`）或 `AI 說明 ▸`；明細的 `AI 推論` 說明區；來源行結尾 `（推論）` | `當日零候選`／`尚無候選清單` |
 | 大盤頁：大盤概況 | `dashboard.market_overview` | 標題 `大盤概況` 下一行 `資料 <market_overview.trading_date>`；加權指數、櫃買指數、成交金額（億元）、漲跌家數；資料日同 `D`；「資料說明」內來源與 `成交金額範圍：…` | — | `上市大盤資料未取得`／`上櫃大盤資料未取得` |
-| 大盤頁：加權指數日線 | `taiex-bars.json` | 標題 `加權指數日線` 下一行 `資料 <data_as_of>`；`最近 <count> 根日線；缺日不補`；資料表最新一根；最下方 `櫃買指數日線` 與 `無資料：…` | — | `無資料`＋`來源未提供日線` |
+| 大盤頁：加權指數日線 | `taiex-bars.json` | 個股頁的 K 線卡（`StockBarsChart`），標題 `加權指數日線` 下一行 `資料 <data_as_of>`；`最近 <count> 根日線；缺日不補、停牌不畫 K 線`；資料表最新一根（單位「點」）；卡片下方 `櫃買指數日線` 與 `無資料：…` | — | `無資料`＋`來源未提供日線` |
 | 熱門族群 | `today-board.json` | 榜別分頁下一行 `資料 <B/>`；每列 `資料 <B/> · 相對加權指數` | — | `meta.empty_message` 或 `此榜目前沒有族群` |
 | 重點新聞 | `dashboard.news` 前 5 則 | 每則：來源 badge、`發布於／事件於／事件日 …` 時間 | 有 AI 判讀的卡在方向後接 `AI 推論` | `市場新聞區尚無可顯示內容。` |
 
@@ -74,7 +75,7 @@
 | T12 | CI | 區塊順序 | 標題 `今日可買`（同 T7 的定位）、整行 `熱門族群`、`重點新聞` 都在，且 `今日可買` 在另兩行之前（PRODUCT_SPEC §2） |
 | T13 | CI | 加入追蹤 | 在 T7 之後。截圖展開每列明細；`items` 非空時，整行 `加入追蹤` 與整行 `已在追蹤` 的行數合計 = `items` 數，`已在追蹤` 的行數 = `items[].open_plan_id` 非 null 的筆數；`items` 空時兩種行都不出現 |
 | T14 | CI | 今日可買的大盤摘要列 | `today-1280.txt` 有相連的四行：`加權 <收盤，兩位小數> <±漲跌幅，兩位小數>%`（`change_pct` 為 null 時 `—`；`unavailable` 或收盤為 null 時整行 `加權 未取得`）、同格式的 `櫃買 …`、`資料 <market_overview.trading_date 換成 YYYY/MM/DD>`（null 時 `資料日期未提供`）、`看大盤 →`；四行在標題 `今日可買`（同 T7 的定位）之前；頁面沒有整行 `漲跌家數（股票）`、`括號為漲停／跌停`（四格大盤概況已移到大盤頁） |
-| T15 | CI | 大盤頁的加權指數日線 | 讀 `market-1280.txt` 與 `taiex-bars.json`。整行 `加權指數日線` 之後有整行 `櫃買指數日線`，其下一行是 `無資料：櫃買中心大盤資料的來源只提供當日數值，沒有歷史日線`。`bars` 有可畫的收盤（未停牌、收盤為正數）時：`加權指數日線` 的下一行是 `資料 <data_as_of 換成 YYYY/MM/DD>`，其後有整行 `最近 <count> 根日線；缺日不補`，資料表（截圖展開）有整行 `<最新一根可畫的日期 YYYY/MM/DD>` + tab + `<收盤，兩位小數>`；沒有可畫的收盤時其後有整行 `來源未提供日線` |
+| T15 | CI | 大盤頁的加權指數日線 | 讀 `market-1280.txt` 與 `taiex-bars.json`。整行 `加權指數日線` 之後有整行 `櫃買指數日線`，其下一行是 `無資料：目前只收櫃買指數的當日數值，歷史日 K 尚未收集`。`bars` 非空時：至少一根可畫（同前端 `isDrawableBar`：未停牌、開高低收都是正數且高、低包住開收；收盤-only 的列開＝高＝低＝收也算），`加權指數日線` 的下一行是 `資料 <data_as_of 換成 YYYY/MM/DD>`，其後有整行 `最近 <count> 根日線；缺日不補、停牌不畫 K 線`，資料表（截圖展開）有一行以 `<最新一根可畫的日期 YYYY/MM/DD>`、tab、開、高、低、收（兩位小數，以 tab 分隔）開頭；`bars` 空時其後有整行 `來源未提供日線` |
 
 ## 陷阱
 

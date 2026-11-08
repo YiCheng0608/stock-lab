@@ -1,25 +1,18 @@
-import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import ReactEChartsModule from 'echarts-for-react'
 
-import { DataTable, DateBadge, EmptyState, Skeleton, Tabs, cx, tabPanelId, type Column } from '../components/ui'
-import { formatDay } from '../dates'
-import type { MarketOverview, MarketOverviewExchange, StockBarRow, StockBarsInterval, StockBarsResponse } from '../types'
+import { DateBadge, cx } from '../components/ui'
+import type { MarketOverview, MarketOverviewExchange, StockBarsInterval, StockBarsResponse } from '../types'
 import { formatFixed } from '../units'
-import { dataZoomPercent, defaultZoom, isFiniteNumber, readChartTheme, type ChartTheme, type ChartZoom } from '../stock/stockBars'
+import { isFiniteNumber } from '../stock/stockBars'
+import { StockBarsChart } from '../stock/StockBarsChart'
 import {
   EXCHANGES,
-  MARKET_INTERVALS,
   SHORT_SCOPE_LABELS,
-  TABLE_ROWS,
+  TAIEX_CHART_TITLE,
   TPEX_NO_BARS_TEXT,
   available,
-  buildIndexChartOption,
   changeTone,
-  chartMeta,
-  closeOf,
   dash,
-  indexChartLayout,
   marketOverviewNotes,
   missingText,
   signedPercent,
@@ -28,9 +21,6 @@ import {
 
 // The market page blocks (/market, Issue 549): 大盤概況 and 加權指數日線, in the order DESIGN_SYSTEM §4 fixes.
 // Copy and units follow UI_COPY_SPEC §11.
-
-// Vite resolves the ESM default export; under plain Node (scripts/ci-test.cjs) the CJS build arrives as its module object.
-const ReactECharts = (ReactEChartsModule as unknown as { default?: typeof ReactEChartsModule }).default ?? ReactEChartsModule
 
 function IndexWidget({ spec, row }: { spec: ExchangeSpec; row: MarketOverviewExchange | null }) {
   const index = row?.index
@@ -100,85 +90,20 @@ export function MarketOverviewPanel({ overview }: { overview: MarketOverview | u
   )
 }
 
-function documentTheme(): ChartTheme {
-  const style = typeof document === 'undefined' ? null : getComputedStyle(document.documentElement)
-  return readChartTheme((token) => style?.getPropertyValue(token) ?? '')
-}
-
-function useNarrow(query = '(max-width: 640px)'): boolean {
-  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches)
-  useEffect(() => {
-    const media = window.matchMedia(query)
-    const onChange = () => setNarrow(media.matches)
-    onChange()
-    media.addEventListener('change', onChange)
-    return () => media.removeEventListener('change', onChange)
-  }, [query])
-  return narrow
-}
-
-const TABLE_COLUMNS: ReadonlyArray<Column<StockBarRow>> = [
-  { key: 'date', header: '日期', cell: (bar) => formatDay(bar.date) ?? bar.date },
-  { key: 'close', header: '收盤（點）', num: true, cell: (bar) => { const close = closeOf(bar); return close == null ? '' : formatFixed(close, 2) } },
-]
-
-// 加權指數日線 with the stock page's period switch; 櫃買 has no daily history and says so in the last row.
-export function IndexChartPanel({ interval, onIntervalChange, data, loading, error }: {
+// 加權指數日線 is the stock page's StockBarsChart (same period switch, indicators and synthetic-bar rules) so the real
+// daily K bars of Issue 552 need no new view; 櫃買 has no daily history yet and says so in one line under it.
+export function IndexChartSection({ interval, onIntervalChange, data, loading, error }: {
   interval: StockBarsInterval
   onIntervalChange: (interval: StockBarsInterval) => void
   data: StockBarsResponse | undefined
   loading: boolean
   error: unknown
 }) {
-  const narrow = useNarrow()
-  const theme = useMemo(documentTheme, [])
-  const layout = useMemo(() => indexChartLayout(narrow ? 220 : 320), [narrow])
-  const count = data?.bars.length ?? 0
-  const [zoom, setZoom] = useState<ChartZoom>(() => defaultZoom(count))
-  useEffect(() => setZoom(defaultZoom(count)), [data, count])
-  const drawable = Boolean(data?.bars.some((bar) => closeOf(bar) != null))
-  const option = useMemo(() => data && drawable ? buildIndexChartOption(data, theme, layout, zoom) : null, [data, drawable, theme, layout, zoom])
-  const unit = interval === 'week' ? '週線' : '日線'
   return (
-    <section className="panel market-panel market-chart-panel" aria-labelledby="market-chart-title">
-      <div className="panel-head">
-        <h2 id="market-chart-title">加權指數日線</h2>
-        {!loading && <DateBadge date={data?.data_as_of ?? null} />}
-      </div>
-      <div className="chart-toolbar">
-        <Tabs items={MARKET_INTERVALS} value={interval} onChange={onIntervalChange} label="加權指數週期" idPrefix="market-interval" className="tabs-compact" />
-      </div>
-      <div id={tabPanelId('market-interval', interval)} role="tabpanel" aria-labelledby={`market-interval-tab-${interval}`}>
-        {loading ? (
-          <Skeleton height={layout.height} label={`${unit}載入中…`} className="chart-skeleton" />
-        ) : error ? (
-          <EmptyState title="資料暫時無法載入" reason={error instanceof Error ? error.message : '請稍後重新整理'} />
-        ) : !data || !option ? (
-          <EmptyState reason={`來源未提供${unit}`} />
-        ) : (
-          <>
-            <div className="chart-stage" style={{ height: layout.height }}>
-              <ReactECharts
-                option={option}
-                notMerge
-                lazyUpdate
-                autoResize
-                opts={{ renderer: 'canvas' }}
-                style={{ width: '100%', height: layout.height }}
-                role="img"
-                aria-label={`加權指數${unit}收盤走勢圖；數值見下方資料表`}
-                onEvents={{ datazoom: (event: unknown) => { const next = dataZoomPercent(event); if (next) setZoom(next) } }}
-              />
-            </div>
-            <div className="chart-meta">{chartMeta(data).map((line) => <span key={line}>{line}</span>)}</div>
-            <details className="details chart-data-table">
-              <summary>查看圖表資料表（最近 {TABLE_ROWS} 根）</summary>
-              <DataTable note="單位：點。空白表示來源未提供收盤。" columns={TABLE_COLUMNS} rows={data.bars.slice(-TABLE_ROWS).reverse()} rowKey={(bar) => bar.date} />
-            </details>
-          </>
-        )}
-      </div>
+    <div className="market-chart">
+      <StockBarsChart interval={interval} onIntervalChange={onIntervalChange} data={data} loading={loading} error={error}
+        instrumentType="index" title={TAIEX_CHART_TITLE} titleId="market-chart-title" />
       <p className="market-no-bars" data-exchange="TPEx"><b>櫃買指數日線</b> <span>{TPEX_NO_BARS_TEXT}</span></p>
-    </section>
+    </div>
   )
 }

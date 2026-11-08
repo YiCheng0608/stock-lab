@@ -86,7 +86,10 @@ TREE = {
     ),
     # Issue 549: the market page belongs to the today page's features file.
     "market/MarketPage.tsx": "import { MarketOverviewPanel } from './MarketViews'\n",
-    "market/MarketViews.tsx": "import { available } from './marketOverview'\n",
+    "market/MarketViews.tsx": (
+        "import { available } from './marketOverview'\n"
+        "import { StockBarsChart } from '../stock/StockBarsChart'\n"
+    ),
     "market/marketOverview.ts": "import { isFiniteNumber } from '../stock/stockBars'\n",
     "actions/ActionViews.tsx": "import { actionKey } from './actionTiers'\n",
     "actions/actionTiers.ts": "export const actionKey = 1\n",
@@ -132,8 +135,9 @@ def test_single_frontend_page_verifies_only_that_page(importers):
 
 
 def test_frontend_file_shared_by_some_pages_verifies_those_pages(importers):
+    # The market page draws TAIEX with it too (Issue 549).
     result = plan(FE + "stock/StockBarsChart.tsx", importers=importers)
-    assert result.pages == ["stocks", "actions"]
+    assert result.pages == ["today", "stocks", "actions"]
     # Not listed: the pages of the listed files importing it.
     result = plan(FE + "stock/stockBars.ts", importers=importers)
     assert result.pages == ["today", "themes", "stocks", "actions"]

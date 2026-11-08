@@ -176,12 +176,16 @@ export function changeTone(value: number | null | undefined): ChangeTone {
   return value > 0 ? 'up' : 'down'
 }
 
-// Decimal places follow the TWSE/TPEx stock tick ladder (0.01 / 0.05 under 50, 0.1 / 0.5 under 500, whole yuan above).
+// Decimal places follow the TWSE/TPEx stock tick ladder (0.01 / 0.05 under 50, 0.1 / 0.5 under 500, whole yuan above);
+// ETFs and indexes (published in points with two decimals, Issue 549) keep 2.
 export function priceDigits(price: number | null | undefined, instrumentType?: string | null): number {
-  if (instrumentType?.toLowerCase() === 'etf') return 2
+  const type = instrumentType?.toLowerCase()
+  if (type === 'etf' || type === 'index') return 2
   if (!isFiniteNumber(price) || price < 50) return 2
   return price < 500 ? 1 : 0
 }
+
+export const axisDigits = (value: number, digits: number) => Math.abs(value) >= 10000 ? 0 : digits
 
 export function formatPrice(value: number | null | undefined, digits: number): string {
   if (!isFiniteNumber(value)) return '待核實'
@@ -447,7 +451,9 @@ export function buildBarsChartOption(response: StockBarsResponse, options: BarsC
     },
     xAxis,
     yAxis: [
-      { type: 'value', gridIndex: 0, scale: true, axisLabel: { ...axisLabel, showMinLabel: false, formatter: (value: number) => formatPrice(value, digits) }, splitLine },
+      // Axis labels of 10,000 and up (an index in points, Issue 549) drop the decimals so they fit the 64px gutter;
+      // the tooltip and the data table keep them.
+      { type: 'value', gridIndex: 0, scale: true, axisLabel: { ...axisLabel, showMinLabel: false, formatter: (value: number) => formatPrice(value, axisDigits(value, digits)) }, splitLine },
       { type: 'value', gridIndex: 1, scale: false, splitNumber: 2, axisLabel: { ...axisLabel, showMaxLabel: false, formatter: (value: number) => (lots ? value / 1000 : value).toLocaleString('zh-TW', { maximumFractionDigits: 0 }) }, splitLine },
       bounded
         ? { type: 'value', gridIndex: 2, min: 0, max: 100, interval: 50, axisLabel, splitLine }

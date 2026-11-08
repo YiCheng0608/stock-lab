@@ -1256,13 +1256,24 @@ SUMMARY_NAMES = (
     ("TPEx", "櫃買"),
 )  # EXCHANGES[].short in market/marketOverview.ts
 MARKET_LINK = "看大盤 →"
-TAIEX_BARS = "stocks/TWSE/TAIEX/bars?interval=day&limit=250"  # MarketPage: TAIEX, TAIEX_BARS_LIMIT
-CHART_TITLE = "加權指數日線"
+# MarketPage reads TAIEX with the stock page's StockBarsChart and STOCK_BARS_LIMIT (Issue 549, decision 6715021190).
+TAIEX_BARS = "stocks/TWSE/TAIEX/bars?interval=day&limit=250"
+CHART_TITLE = "加權指數日線"  # TAIEX_CHART_TITLE
 NO_TAIEX_BARS = "來源未提供日線"
 TPEX_BARS_TITLE = "櫃買指數日線"
-TPEX_NO_BARS = (
-    "無資料：櫃買中心大盤資料的來源只提供當日數值，沒有歷史日線"  # TPEX_NO_BARS_TEXT
-)
+TPEX_NO_BARS = "無資料：目前只收櫃買指數的當日數值，歷史日 K 尚未收集"  # TPEX_NO_BARS_TEXT
+
+
+def drawable(bar: dict) -> bool:
+    """isDrawableBar in frontend/src/stock/stockBars.ts: a traded day with positive, self-consistent OHLC."""
+
+    values = [bar.get(key) for key in ("open", "high", "low", "close")]
+    if bar.get("is_suspended") or not all(
+        isinstance(v, (int, float)) and v > 0 for v in values
+    ):
+        return False
+    open_, high, low, close = values
+    return high >= max(open_, close) and low <= min(open_, close)
 
 
 def summary_line(exchange: dict, name: str) -> str:
@@ -1311,7 +1322,7 @@ def t14(run: Run) -> str:
 
 @check("today", "T15")
 def t15(run: Run) -> str:
-    """The market page's TAIEX chart: the bars' date badge, count and newest close; 櫃買 says why it has none."""
+    """The market page's TAIEX chart (the stock page's K-line card): date badge, count, newest row; 櫃買 says why it has none."""
 
     text, payload = run.text(MARKET), run.get(TAIEX_BARS, "taiex-bars.json")
     i = text.find(CHART_TITLE)
@@ -1321,31 +1332,29 @@ def t15(run: Run) -> str:
         j > i and text.after(j) == TPEX_NO_BARS,
         f"`{CHART_TITLE}` 之後缺 `{TPEX_BARS_TITLE}` 與下一行 `{TPEX_NO_BARS}`",
     )
-    bars = [
-        bar
-        for bar in payload.get("bars") or []
-        if not bar.get("is_suspended")
-        and isinstance(bar.get("close"), (int, float))
-        and bar["close"] > 0
-    ]
-    if not bars:
+    if not payload.get("bars"):
         expect(
             text.find(NO_TAIEX_BARS, i) >= 0,
-            f"API 沒有可畫的收盤，缺整行 `{NO_TAIEX_BARS}`",
+            f"API 沒有日線，缺整行 `{NO_TAIEX_BARS}`",
         )
-        return f"API 沒有可畫的收盤，頁面顯示 `{NO_TAIEX_BARS}`；櫃買 `{TPEX_NO_BARS}`"
+        return f"API 沒有日線，頁面顯示 `{NO_TAIEX_BARS}`；櫃買 `{TPEX_NO_BARS}`"
+    bars = [bar for bar in payload["bars"] if drawable(bar)]
+    expect(bool(bars), "API 的日線沒有一根可畫的 K 棒")
     as_of = payload.get("data_as_of")
     badge = f"資料 {slash(as_of)}" if as_of else PENDING_DATE
     expect(
         text.after(i) == badge,
         f"`{CHART_TITLE}` 下一行是 {text.after(i)!r}，預期 `{badge}`",
     )
-    count = f"最近 {payload.get('count')} 根日線；缺日不補"
+    count = f"最近 {payload.get('count')} 根日線；缺日不補、停牌不畫 K 線"
     expect(text.find(count, i) >= 0, f"缺整行 `{count}`")
-    # The data table (newest first) has the newest drawn close: the date, a tab, two decimals.
+    # The data table (newest first): date, then 開 高 低 收 in 點 with two decimals, tab separated.
     newest = bars[-1]
-    row = f"{slash(newest['date'])}\t{fixed(newest['close'], 2)}"
-    expect(text.find(row, i) >= 0, f"資料表缺最新一根收盤 `{row}`")
+    row = f"{slash(newest['date'])}\t" + "\t".join(
+        fixed(newest[key], 2) for key in ("open", "high", "low", "close")
+    )
+    k = text.find_where(lambda line: line.startswith(row), i)
+    expect(k >= 0, f"資料表缺最新一根 `{row}`")
     return f"`{badge}`、`{count}`、最新 `{row}`；櫃買 `{TPEX_NO_BARS}`"
 
 
