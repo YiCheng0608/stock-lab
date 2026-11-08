@@ -1,12 +1,15 @@
-"""Research backtest on a copy of stock.db: canonical strategies and ablations (#318).
+"""Research backtest on a copy of stock.db: canonical strategies, ablations (#318), regime filters (#546).
 
 Runs ``worker.pipeline.backtest(registry=...)`` once over ``--start``..``--end``
 on the database given by ``--db`` (a ``tools/ops/copy_db.py`` copy or another
 isolated database; the backtest writes signals, settlements and a
 ``run_type=backtest`` run).  The registry is the canonical strategies (unless
 ``--no-canonical``) followed by the ablations ``--ablate`` names
-(``app.strategies.ablation``); every strategy shares one replay, so the inputs
-of each instrument and session are built once.
+(``app.strategies.ablation``) and the regime strategies ``--regime`` names
+(``app.strategies.regime``); every strategy shares one replay, so the inputs
+of each instrument and session are built once.  Regime strategies read
+TAIEX's ``market_bars`` closes, loaded once before the replay and pointed at
+each score date while its signals are written (``score_dates``).
 
 Refuses before importing the app when ``--db`` is the production database
 (inside ``stock-lab-data`` or ``STOCK_DATA_DIR``, or the same file as its
@@ -29,6 +32,7 @@ import os
 import sys
 import threading
 import time
+from contextlib import contextmanager, nullcontext
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -56,9 +60,21 @@ def _parser() -> argparse.ArgumentParser:
         help="ablations to add, e.g. breakout_v3:group; 'all' for every one",
     )
     parser.add_argument(
+        "--regime",
+        nargs="*",
+        default=[],
+        metavar="STRATEGY:FILTER",
+        help="regime strategies to add, e.g. pullback_v3:r3; 'all' for every one",
+    )
+    parser.add_argument(
+        "--slim",
+        action="store_true",
+        help="keep only the actionable flag and own state of non-actionable rows (score_dates)",
+    )
+    parser.add_argument(
         "--no-canonical",
         action="store_true",
-        help="evaluate only the ablations, not the registered strategies",
+        help="evaluate only the ablations and regime strategies, not the registered ones",
     )
     parser.add_argument("--min-free-gb", type=float, default=10.0)
     parser.add_argument("--force", action="store_true", help="rerun a finished run")
@@ -211,6 +227,124 @@ def ablation_items(names: list[str]) -> list[tuple[str, str]]:
     return items
 
 
+def regime_items(names: list[str]) -> list[tuple[str, str]]:
+    from app.strategies import REGISTRY
+    from app.strategies.regime import FILTERS, all_regimes
+
+    if names == ["all"]:
+        return all_regimes()
+    items = []
+    for name in names:
+        key, _, code = name.partition(":")
+        if key not in REGISTRY or code not in FILTERS:
+            raise Refused(f"unknown regime strategy {name!r}")
+        items.append((key, code))
+    return items
+
+
+def taiex_closes():
+    """Every TAIEX ``market_bars`` close of the database, as a ``TaiexCloses``."""
+
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import MarketBar
+    from app.strategies.regime import TaiexCloses
+    from worker.pipeline import _benchmark_instrument
+
+    with SessionLocal() as db:
+        benchmark = _benchmark_instrument(db)
+        if benchmark is None:
+            raise Refused("no active TAIEX index instrument")
+        rows = db.execute(
+            select(MarketBar.trading_date, MarketBar.close).where(
+                MarketBar.instrument_id == benchmark.id
+            )
+        ).all()
+    return TaiexCloses({day: close for day, close in rows})
+
+
+# Statuses scoring writes for a signal that is not actionable; tracking never
+# reads such a row past ``rule_evidence_json.actionable``.
+NOT_ACTIONABLE = ("observation", "data_incomplete", "invalid_levels")
+SLIM_MARK = "tools/research/backtest_research.py --slim (#546)"
+
+
+def slim_pending(db, prefix: str, kinds: dict[int, str]) -> int:
+    """Cut down the session's unflushed non-actionable signals of ``prefix``.
+
+    Evidence keeps the keys the backtest reads (``actionable``), the row's
+    strategy and version, and its own strategy's state; rationale (every
+    strategy's state again) is emptied.  Done before the flush, so a row is
+    written small once: shrinking a written row leaves its page part empty.
+    """
+
+    from app.models import Signal
+
+    count = 0
+    for item in [*db.new, *db.dirty]:
+        if (
+            not isinstance(item, Signal)
+            or not item.signal_key.startswith(prefix)
+            or item.status not in NOT_ACTIONABLE
+        ):
+            continue
+        evidence = item.rule_evidence_json or {}
+        kind = kinds[item.strategy_version_id]
+        item.rule_evidence_json = {
+            "strategy": evidence.get("strategy"),
+            "strategy_version": evidence.get("strategy_version"),
+            "actionable": False,
+            "research_slim": SLIM_MARK,
+            kind: evidence.get(kind),
+        }
+        item.rationale = None
+        count += 1
+    return count
+
+
+@contextmanager
+def score_dates(closes, pipeline_module, *, slim: bool = False):
+    """Wrap the replay's per-score-date ``_generate_signals(db, signal_date, ...)``.
+
+    Strategy inputs carry no date, so ``closes`` (when given) is pointed at the
+    score date around that call and cleared after it (a regime strategy
+    evaluated outside it raises).  With ``slim``, the date's non-actionable
+    signals of the run are then cut down (``slim_pending``) before the replay
+    flushes them: every row records every strategy's state, so a registry of
+    twelve makes each row about 6 KB, and these rows are most of them.  The
+    call writes nothing itself (the session does not autoflush); status,
+    levels, tracking and settlements are not touched.
+    """
+
+    from sqlalchemy import select
+
+    from app.models import StrategyVersion
+
+    original = pipeline_module._generate_signals
+
+    def generate(db, signal_date, *args, **kwargs):
+        if closes is not None:
+            closes.set_session(signal_date)
+        try:
+            count = original(db, signal_date, *args, **kwargs)
+        finally:
+            if closes is not None:
+                closes.set_session(None)
+        if slim:
+            kinds = dict(
+                db.execute(select(StrategyVersion.id, StrategyVersion.kind)).all()
+            )
+            slim_pending(db, f"{kwargs['namespace']}-", kinds)
+        return count
+
+    pipeline_module._generate_signals = generate
+    try:
+        yield
+    finally:
+        pipeline_module._generate_signals = original
+
+
 def counts(run_id: int) -> dict[str, dict[str, int]]:
     from sqlalchemy import func, select
 
@@ -286,12 +420,18 @@ def main(argv: list[str] | None = None) -> int:
     os.environ["STOCK_RAW_DIR"] = str(db.resolve().parent / "raw")
     sys.path.insert(0, str(ROOT / "backend"))
     from app.db import init_db
+    from app.strategies import REGISTRY
     from app.strategies.ablation import research_registry
+    from app.strategies.regime import with_regimes
     from worker import pipeline
 
     try:
         items = ablation_items(args.ablate)
-        registry = research_registry(items, canonical=not args.no_canonical)
+        regimes = regime_items(args.regime)
+        if items or not regimes:
+            registry = research_registry(items, canonical=not args.no_canonical)
+        else:
+            registry = {} if args.no_canonical else dict(REGISTRY)
     except (Refused, ValueError) as exc:
         print(json.dumps({"refused": [str(exc)]}, ensure_ascii=False))
         return 2
@@ -300,13 +440,27 @@ def main(argv: list[str] | None = None) -> int:
     started = time.perf_counter()
     init_db()
     migrated = time.perf_counter()
-    result = pipeline.backtest(
-        args.start,
-        args.end,
-        force=args.force,
-        registry=registry,
-        should_stop=window_check(),
-    )
+    closes = None
+    if regimes:
+        try:
+            closes = taiex_closes()
+            registry = with_regimes(registry, regimes, closes)
+        except (Refused, ValueError) as exc:
+            wal.stop()
+            print(json.dumps({"refused": [str(exc)]}, ensure_ascii=False))
+            return 2
+    with (
+        score_dates(closes, pipeline, slim=args.slim)
+        if closes or args.slim
+        else nullcontext()
+    ):
+        result = pipeline.backtest(
+            args.start,
+            args.end,
+            force=args.force,
+            registry=registry,
+            should_stop=window_check(),
+        )
     finished = time.perf_counter()
     peak = peak_memory_gb()
     wal_largest = wal.stop()
@@ -318,6 +472,16 @@ def main(argv: list[str] | None = None) -> int:
                 "start": args.start.isoformat(),
                 "end": args.end.isoformat(),
                 "registry": list(registry),
+                "slim": args.slim,
+                **(
+                    {
+                        "taiex_closes": len(closes.dates),
+                        "taiex_first": closes.dates[0].isoformat(),
+                        "taiex_last": closes.dates[-1].isoformat(),
+                    }
+                    if closes and closes.dates
+                    else {}
+                ),
                 "run_id": run["id"],
                 "status": run["status"],
                 "request_key": run["request_key"],
