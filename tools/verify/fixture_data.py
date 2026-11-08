@@ -59,6 +59,7 @@ from app.indicators import (
     compute_indicators,
 )
 from app.taxonomy import INDUSTRY_DISPLAY_ZH, canonical_group_id
+from worker.futures_bars import near_month
 from app.tracking import (
     TRACKING_WINDOW_SESSIONS,
     TrackBar,
@@ -128,7 +129,16 @@ _INSTRUMENTS = (
     # Instrument lifecycle (Issue #212), see LIFECYCLE.
     (10, "TPEx", "9205", "示範下市", "stock", None, "22", date(2010, 4, 1)),
     (11, "TPEx", "9206", "示範轉市", "stock", None, "25", date(2011, 6, 1)),
+    # The market page's other two daily K charts (Issue #552).
+    (12, "TPEx", "TPEX", "櫃買指數", "index", None, None, None),
+    (13, "TAIFEX", "TX", "臺股期貨近月", "futures", None, None, None),
+    # The US indexes of the market page (Issue #547): FRED closes, market US.
+    (14, "US", "SPX", "S&P 500", "index", None, None, None),
+    (15, "US", "IXIC", "NASDAQ 綜合指數", "index", None, None, None),
+    (16, "US", "DJI", "道瓊工業指數", "index", None, None, None),
+    (17, "US", "SOX", "費城半導體指數", "index", None, None, None),
 )
+US_INDEX_SYMBOLS = ("SPX", "IXIC", "DJI", "SOX")
 # symbol -> first close, daily drift, base volume in lots
 PRICE_PLAN = {
     "9101": (300.0, 0.0020, 8000),
@@ -142,6 +152,25 @@ PRICE_PLAN = {
     "TAIEX": (22000.0, 0.0006, 5000000),
     "9205": (30.0, -0.0010, 900),
     "9206": (70.0, 0.0009, 1500),
+    # Index shares and TX contracts are not lots: the base is the count / 1000.
+    "TPEX": (260.0, 0.0005, 900000),
+    "TX": (22000.0, 0.0006, 100),
+    # FRED publishes closes only (Issue #547); the volume base is unused.
+    "SPX": (6400.0, 0.0004, 0),
+    "IXIC": (21000.0, 0.0005, 0),
+    "DJI": (46000.0, 0.0003, 0),
+    "SOX": (6000.0, 0.0008, 0),
+}
+# TX accumulates from its first collect (open data has only the latest
+# session, Issue #552): its last TX_SESSIONS sessions, in whole points.
+TX_SESSIONS = 10
+# Non-stock series and their bar source (the TAIEX one marks itself as test
+# data for coverage.verified_taiex_sessions; the fixture has no MI_INDEX files).
+SERIES_SOURCE = {
+    "TAIEX": "twse_index_fixture",
+    "TPEX": "tpex_index_ohlcv",
+    "TX": "taifex_daily_futures",
+    **{symbol: "fred_close" for symbol in ("SPX", "IXIC", "DJI", "SOX")},
 }
 BREAKS_OUT = {"9101", "9103", "9201", "00990"}  # close above the 20-day high on T
 WATCHLIST = {"9201"}
@@ -177,7 +206,7 @@ def _instrument_rows() -> list[dict[str, Any]]:
     return [
         {
             "id": item_id,
-            "market": "TW",
+            "market": "US" if exchange == "US" else "TW",
             "exchange": exchange,
             "symbol": symbol,
             "name": name,
@@ -222,6 +251,25 @@ def _series(symbol: str) -> list[dict[str, Any]]:
         )
     if symbol in LIFECYCLE:
         rows = [row for row in rows if row["day"] <= LIFECYCLE[symbol][1]]
+    if symbol in US_INDEX_SYMBOLS:
+        # FRED closes of the US sessions before T (the collect of T asks up to
+        # T - 1): no open/high/low or volume (worker.us_index_bars).
+        rows = [
+            {**row, "open": None, "high": None, "low": None, "volume": None}
+            for row in rows
+            if row["day"] < T
+        ]
+    if symbol == "TX":
+        rows = [
+            {
+                **row,
+                **{
+                    key: float(round(row[key]))
+                    for key in ("open", "high", "low", "close")
+                },
+            }
+            for row in rows[-TX_SESSIONS:]
+        ]
     if symbol in BREAKS_OUT:
         prior = rows[-21:-1]
         last = rows[-1]
@@ -241,12 +289,7 @@ def _bar_rows() -> list[dict[str, Any]]:
     rows = []
     next_id = 1
     for item_id, exchange, symbol, _name, kind, *_rest in _INSTRUMENTS:
-        if kind == "index":
-            # coverage.verified_taiex_sessions accepts a TAIEX row whose source
-            # names it as test data; the fixture has no MI_INDEX files.
-            source = "twse_index_fixture"
-        else:
-            source = "twse" if exchange == "TWSE" else "tpex"
+        source = SERIES_SOURCE.get(symbol) or ("twse" if exchange == "TWSE" else "tpex")
         for bar in SERIES[symbol]:
             day = bar["day"]
             rows.append(
@@ -260,16 +303,36 @@ def _bar_rows() -> list[dict[str, Any]]:
                     "close": bar["close"],
                     "adj_close": bar["close"],
                     "volume": bar["volume"],
-                    "turnover": round(bar["close"] * bar["volume"], 0),
-                    "turnover_status": "available",
+                    # Close only (Issue #547): the #552 null rules.
+                    **(
+                        {
+                            "turnover": 0.0,
+                            "turnover_status": "unavailable",
+                            "turnover_reason": "not_published",
+                            "price_reason": "source_missing_ohlc",
+                        }
+                        if symbol in US_INDEX_SYMBOLS
+                        else {
+                            "turnover": round(bar["close"] * bar["volume"], 0),
+                            "turnover_status": "available",
+                            "turnover_reason": None,
+                            "price_reason": None,
+                        }
+                    ),
                     "source": source,
                     "data_as_of": _at(day, 6),
                     "collected_at": _at(day, 9, 30),
                     # Only T came from the fixture's official collect run.
                     "raw_payload_id": RAW_PAYLOAD_BY_EXCHANGE[exchange]
-                    if day == T and kind != "index"
+                    if day == T and kind not in ("index", "futures")
                     else None,
                     "is_suspended": False,
+                    # TX rows: the near month of each day (worker.futures_bars).
+                    "contract_month": near_month(day) if kind == "futures" else None,
+                    "open_interest": 80000 + bar["volume"] % 997
+                    if kind == "futures"
+                    else None,
+                    "settlement_price": bar["close"] - 5 if kind == "futures" else None,
                 }
             )
             next_id += 1
@@ -360,7 +423,7 @@ def _chip_rows() -> list[dict[str, Any]]:
 def _data_quality_rows() -> list[dict[str, Any]]:
     rows = []
     for item_id, exchange, symbol, _name, kind, *_rest in _INSTRUMENTS:
-        if kind == "index":
+        if kind in ("index", "futures"):
             continue
         missing = (
             ["foreign_buy", "trust_buy", "dealer_buy", "institutional_flow_5d"]
@@ -1880,7 +1943,7 @@ INTENTIONALLY_EMPTY: dict[str, dict[str, str]] = {
     },
     "ingestion_runs": {"error": "沒有失敗的執行；休市日的 skipped 不寫 error"},
     "market_bars": {
-        "turnover_reason": "成交值都是 available；原因只在 unavailable／unknown 時寫"
+        "volume_raw_payload_id": "指數列不附量值月報 raw（#552）",
     },
     "news_items": {
         "event_at": "媒體新聞用發布時間、官方公告用事件日，沒有事件時刻",
@@ -1987,6 +2050,41 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
             "market_overview.exchanges[].turnover.scope_label",
             ["集中市場總計（含 ETF、權證等）", "上櫃股票"],
         ),
+        # The market page's TAIEX daily chart (Issue 549): every fixture session of the index.
+        ("stocks/TWSE/TAIEX/bars?interval=day&limit=250", "data_as_of", D),
+        ("stocks/TWSE/TAIEX/bars?interval=day&limit=250", "bars", len(SERIES["TAIEX"])),
+        (
+            "stocks/TWSE/TAIEX/bars?interval=day&limit=250",
+            "sources",
+            ["twse_index_fixture"],
+        ),
+        # The TPEx index and the TX near month (Issue #552).
+        ("stocks/TPEx/TPEX/bars?interval=day&limit=250", "data_as_of", D),
+        ("stocks/TPEx/TPEX/bars?interval=day&limit=250", "bars", len(SERIES["TPEX"])),
+        ("stocks/TAIFEX/TX/bars?interval=day&limit=250", "bars", TX_SESSIONS),
+        (
+            "stocks/TAIFEX/TX/bars?interval=day&limit=250",
+            "instrument.instrument_type",
+            "futures",
+        ),
+        # The US indexes (Issue #547): closes up to T - 1, the expected session of T.
+        (
+            "dashboard",
+            "market_overview.foreign_indices[].symbol",
+            list(US_INDEX_SYMBOLS),
+        ),
+        (
+            "dashboard",
+            "market_overview.foreign_indices[].freshness",
+            ["latest"] * len(US_INDEX_SYMBOLS),
+        ),
+        (
+            "dashboard",
+            "market_overview.foreign_indices.0.trading_date",
+            SERIES["SPX"][-1]["day"].isoformat(),
+        ),
+        ("stocks/US/SPX/bars?interval=day&limit=250", "bars", len(SERIES["SPX"])),
+        ("stocks/US/SPX/bars?interval=day&limit=250", "sources", ["fred_close"]),
         ("themes?board=industry&limit=5", "meta.trading_date", D),
         ("themes?board=industry&limit=5", "items", 2),
         ("themes?board=industry&limit=5", "items.0.theme_id", TOP_THEME),

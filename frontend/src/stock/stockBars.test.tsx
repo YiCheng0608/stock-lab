@@ -9,6 +9,9 @@ import {
   MA_LINES,
   STOCK_BARS_LIMIT,
   buildBarsChartOption,
+  compactCount,
+  formatBarVolume,
+  volumeKind,
   chartLayout,
   defaultZoom,
   fieldsState,
@@ -54,6 +57,12 @@ check(nullReasonText('insufficient_bars', { interval: 'week', required: 20, barC
 check(nullReasonText('no_price_change', { interval: 'day' }) === '期間內收盤沒有漲跌，無法計算', 'no_price_change reason')
 check(nullReasonText('something_new', { interval: 'day' }) === '原因待核實', 'unknown codes are not shown raw')
 check(nullReasonText('synthetic_index', { interval: 'day' }) === '指數只有收盤價，高低點與成交量不計算', 'synthetic index reason text (Issue 394)')
+check(nullReasonText('missing_ohlc', { interval: 'day' }) === '來源有一天未提供開高低，高低點不計算' && nullReasonText('missing_volume', { interval: 'day' }) === '來源有一天未提供成交量，不計算', 'index days without open/high/low or volume (Issue 552)')
+// Volume units (Issue 552, PR 553 review): stocks in 張, an index in 億股, TX in 口; the close-only TAIEX rows unverified.
+check(volumeKind(['twse']) === 'lots' && volumeKind(['twse_index_ohlcv', 'tpex_index_ohlcv']) === 'index_shares' && volumeKind(['taifex_daily_futures']) === 'contracts' && volumeKind(['twse_index']) === 'unverified' && volumeKind(['twse', 'twse_index_ohlcv']) === 'unverified', 'volumeKind by source')
+check(formatBarVolume({ ...tradedBar('2026-11-06', 39701.64, 1), volume: 19_339_729_647, source: 'twse_index_ohlcv' }) === '193.40' && formatBarVolume({ ...tradedBar('2026-11-06', 39786, 1), volume: 143277, source: 'taifex_daily_futures' }) === '143,277' && formatBarVolume({ ...tradedBar('2026-11-06', 304, 1), volume: null, source: 'tpex_index_ohlcv' }) === '', 'formatBarVolume: 億股, 口, empty without a volume')
+check(compactCount(9999) === '9,999' && compactCount(52_000) === '5.2萬' && compactCount(1_234_567) === '123.5萬' && compactCount(320_000_000) === '3.2億', 'volume axis labels fit the gutter (萬／億)')
+check(priceDigits(39786, 'futures') === 0, 'TX is in whole points')
 const allMa = new Set<MaField>(MA_LINES.map((line) => line.field))
 check(maNotes(insufficient, allMa).join('|') === 'MA60 無資料：日線不足 60 根，現有 20 根|MA120 無資料：日線不足 120 根，現有 20 根', 'MA notes list only lines without a value')
 check(maNotes(insufficient, new Set<MaField>(['ma5', 'ma20'])).length === 0, 'hidden MA lines have no note')

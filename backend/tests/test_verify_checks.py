@@ -437,8 +437,9 @@ TPEX_SUMMARY = {
     "advancers": 146,
     "decliners": 659,
 }
+# The market page (/market, Issue 549): the overview block's title, date badge and 資料說明, then the widgets.
 OVERVIEW_PAGE = (
-    "資料截至 2026/10/22 · TWSE／TPEx 官方資料 · 官方單日快照\n資料說明\n"
+    "大盤\n上市、上櫃的收盤概況與加權指數走勢。\n大盤概況\n資料 2026/10/22\n資料說明\n"
     "成交金額範圍：上市為集中市場總計（含 ETF、權證等）；上櫃為上櫃股票\n"
     "加權指數\n點\n46,041.43\n-846.34（-1.81%）\n"
     "櫃買指數\n點\n381.69\n-13.73（-3.47%）\n"
@@ -453,7 +454,7 @@ def test_t11_passes_when_the_widgets_show_the_api_and_db_values(tmp_path):
     run = FakeRun(
         tmp_path,
         {"dashboard": _overview()},
-        {"today-1280": OVERVIEW_PAGE},
+        {"market-1280": OVERVIEW_PAGE},
         {"market_summary_latest": {"TWSE": _summary(), "TPEx": TPEX_SUMMARY}},
     )
     assert "TWSE 46,041.43、TPEx 381.69" in page_checks.t11(run)
@@ -463,7 +464,7 @@ def test_t11_fails_on_a_widget_that_differs_from_the_api(tmp_path):
     run = FakeRun(
         tmp_path,
         {"dashboard": _overview()},
-        {"today-1280": OVERVIEW_PAGE.replace("上市 9,334.37", "上市 9,334.38")},
+        {"market-1280": OVERVIEW_PAGE.replace("上市 9,334.37", "上市 9,334.38")},
         {"market_summary_latest": {"TWSE": _summary(), "TPEx": TPEX_SUMMARY}},
     )
     with pytest.raises(
@@ -477,7 +478,7 @@ def test_t11_fails_on_an_api_value_that_differs_from_the_db(tmp_path):
     run = FakeRun(
         tmp_path,
         {"dashboard": _overview()},
-        {"today-1280": OVERVIEW_PAGE},
+        {"market-1280": OVERVIEW_PAGE},
         {"market_summary_latest": facts},
     )
     with pytest.raises(
@@ -494,12 +495,12 @@ def test_t11_unavailable_needs_its_copy_and_no_db_row_of_the_day(tmp_path):
     )
     facts = {"market_summary_latest": {"TWSE": _summary()}}
     run = FakeRun(
-        tmp_path, {"dashboard": _overview("unavailable")}, {"today-1280": page}, facts
+        tmp_path, {"dashboard": _overview("unavailable")}, {"market-1280": page}, facts
     )
     assert "TPEx 未取得" in page_checks.t11(run)
     facts = {"market_summary_latest": {"TWSE": _summary(), "TPEx": TPEX_SUMMARY}}
     run = FakeRun(
-        tmp_path, {"dashboard": _overview("unavailable")}, {"today-1280": page}, facts
+        tmp_path, {"dashboard": _overview("unavailable")}, {"market-1280": page}, facts
     )
     with pytest.raises(
         page_checks.Fail,
@@ -526,7 +527,7 @@ def test_t11_passes_on_a_change_that_rounds_at_a_half(tmp_path):
     run = FakeRun(
         tmp_path,
         {"dashboard": overview},
-        {"today-1280": page},
+        {"market-1280": page},
         {
             "market_summary_latest": {
                 "TWSE": _summary(index_change=1.125),
@@ -541,11 +542,191 @@ def test_t11_fails_on_the_old_page_without_an_overview(tmp_path):
     run = FakeRun(
         tmp_path,
         {"dashboard": _overview()},
-        {"today-1280": "資料截至\n2026/10/22\nTWSE／TPEx 官方資料\n"},
+        {"market-1280": "資料截至\n2026/10/22\nTWSE／TPEx 官方資料\n"},
         {"market_summary_latest": {"TWSE": _summary(), "TPEx": TPEX_SUMMARY}},
     )
     with pytest.raises(page_checks.Fail, match="TWSE 缺整行 `46,041.43`"):
         page_checks.t11(run)
+
+
+def test_t11_reads_the_market_page_and_its_date_badge(tmp_path):
+    facts = {"market_summary_latest": {"TWSE": _summary(), "TPEx": TPEX_SUMMARY}}
+    # Issue 549: the overview on the today page no longer counts.
+    run = FakeRun(
+        tmp_path, {"dashboard": _overview()}, {"today-1280": OVERVIEW_PAGE}, facts
+    )
+    with pytest.raises(page_checks.Undetermined, match="market-1280 未 ready"):
+        page_checks.t11(run)
+    page = OVERVIEW_PAGE.replace(
+        "大盤概況\n資料 2026/10/22", "大盤概況\n資料 2026/10/21"
+    )
+    run = FakeRun(tmp_path, {"dashboard": _overview()}, {"market-1280": page}, facts)
+    with pytest.raises(page_checks.Fail, match="預期日期 badge `資料 2026/10/22`"):
+        page_checks.t11(run)
+
+
+def test_today_shots_include_the_market_page():
+    shots = page_checks.today_shots(None)
+    assert [(shot.name, shot.path) for shot in shots] == [
+        ("today", "/"),
+        ("market", "/market"),
+    ]
+
+
+# The today page's one market line (Issue 549): the two indexes, the date, the link.
+SUMMARY_PAGE = (
+    "今日可買\n資料 2026/10/22\n資料截至 2026/10/22 · TWSE／TPEx 官方資料 · 官方單日快照\n"
+    "大盤\n加權 46,041.43 -1.81%\n櫃買 381.69 -3.47%\n資料 2026/10/22\n看大盤 →\n"
+    "條件已成立 · 依評分排序\n今日可買\n資料 2026/10/16\n2 檔\n"
+)
+
+
+def test_t14_passes_on_the_summary_line(tmp_path):
+    run = FakeRun(tmp_path, {"dashboard": _overview()}, {"today-1280": SUMMARY_PAGE})
+    assert "`加權 46,041.43 -1.81%`" in page_checks.t14(run)
+
+
+def test_t14_unavailable_and_missing_pct(tmp_path):
+    overview = _overview("unavailable")
+    overview["market_overview"]["exchanges"][0]["index"]["change_pct"] = None
+    page = SUMMARY_PAGE.replace("-1.81%", "—").replace(
+        "櫃買 381.69 -3.47%", "櫃買 未取得"
+    )
+    run = FakeRun(tmp_path, {"dashboard": overview}, {"today-1280": page})
+    assert "`櫃買 未取得`" in page_checks.t14(run)
+
+
+def test_t14_fails_on_a_wrong_value_or_the_old_widgets(tmp_path):
+    page = SUMMARY_PAGE.replace("-3.47%", "-3.48%")
+    run = FakeRun(tmp_path, {"dashboard": _overview()}, {"today-1280": page})
+    with pytest.raises(page_checks.Fail, match="預期 `加權 46,041.43 -1.81%`"):
+        page_checks.t14(run)
+    page = SUMMARY_PAGE + "漲跌家數（股票）\n括號為漲停／跌停\n"
+    run = FakeRun(tmp_path, {"dashboard": _overview()}, {"today-1280": page})
+    with pytest.raises(page_checks.Fail, match="仍有大盤概況"):
+        page_checks.t14(run)
+    # The old page: four widgets and no summary line.
+    run = FakeRun(tmp_path, {"dashboard": _overview()}, {"today-1280": OVERVIEW_PAGE})
+    with pytest.raises(page_checks.Fail, match="缺整行 `加權 46,041.43 -1.81%`"):
+        page_checks.t14(run)
+
+
+def _taiex_bars(closes):
+    """Close-only twse_index rows (開＝高＝低＝收) as the bars API returns them today; None is a suspended day."""
+
+    bars = [
+        {
+            "date": f"2026-10-{day:02d}",
+            "open": close,
+            "high": close,
+            "low": close,
+            "close": close,
+            "is_suspended": close is None,
+        }
+        for day, close in closes
+    ]
+    return {
+        "count": len(bars),
+        "data_as_of": bars[-1]["date"] if bars else None,
+        "bars": bars,
+    }
+
+
+TAIEX_PATH = "stocks/TWSE/TAIEX/bars?interval=day&limit=250"
+TPEX_PATH = "stocks/TPEx/TPEX/bars?interval=day&limit=250"
+TX_PATH = "stocks/TAIFEX/TX/bars?interval=day&limit=250"
+ATTRIBUTION = "資料來源：臺灣期貨交易所（政府資料開放平臺，政府資料開放授權條款第1版）"
+# The three stock-page K-line cards (decision 6715021190, Issue 552): TAIEX close-only rows, the TPEx index with no
+# bars (no instrument yet: 404), TX with one real bar in whole points, then its footer.
+CHART_PAGE = (
+    "技術指標 indicators/v1\n加權指數日線\n資料 2026/10/22\n日K\n週K\nMA5\n"
+    "來源 臺灣證券交易所\n最近 2 根日線；缺日不補、停牌不畫 K 線\n查看圖表資料表（最近 30 根）\n"
+    "日期\t開（點）\t高（點）\t低（點）\t收（點）\t成交量（張）\tMA5（點）\n"
+    "2026/10/22\t46,041.43\t46,041.43\t46,041.43\t46,041.43\t\t\n"
+    "2026/10/21\t46,887.77\t46,887.77\t46,887.77\t46,887.77\t\t\n"
+    "技術指標\n櫃買指數日線\n資料日期未提供\n日K\n週K\n無資料\n來源未提供日線\n"
+    "技術指標 indicators/v1\n台指期近月日線\n資料 2026/10/22\n日K\n週K\n"
+    "來源 臺灣期貨交易所\n最近 1 根日線；缺日不補、停牌不畫 K 線\n查看圖表資料表（最近 30 根）\n"
+    "日期\t開（點）\t高（點）\t低（點）\t收（點）\t成交量（口）\tMA5（點）\n"
+    "2026/10/22\t46,100\t46,330\t45,900\t46,272\t55,226\t\n"
+    "2026/10/22 合約 2026/11 · 未平倉 115,258 口 · 結算價 46,234\n"
+    f"自 2026/10/22 起收集，無更早歷史；近月合約：每月第三個週三（到期日）起改用次月，換月不做價差調整；只含一般交易時段\n{ATTRIBUTION}\n"
+)
+
+
+def _payloads(taiex_close=46041.43):
+    tx = {
+        "date": "2026-10-22",
+        "open": 46100,
+        "high": 46330,
+        "low": 45900,
+        "close": 46272,
+    }
+    return {
+        TAIEX_PATH: _taiex_bars([(21, 46887.77), (22, taiex_close)]),
+        TX_PATH: {"count": 1, "data_as_of": "2026-10-22", "bars": [tx]},
+    }
+
+
+def test_t15_passes_on_the_three_charts(tmp_path):
+    run = FakeRun(tmp_path, _payloads(), {"market-1280": CHART_PAGE})
+    summary = page_checks.t15(run)
+    assert "`2026/10/22\t46,041.43\t46,041.43\t46,041.43\t46,041.43`" in summary
+    assert "`櫃買指數日線` `來源未提供日線`" in summary
+    assert "`2026/10/22\t46,100\t46,330\t45,900\t46,272`" in summary
+
+
+def test_t15_fails_on_a_wrong_close_a_missing_chart_or_attribution(tmp_path):
+    run = FakeRun(tmp_path, _payloads(46041.44), {"market-1280": CHART_PAGE})
+    with pytest.raises(page_checks.Fail, match="資料表缺最新一根"):
+        page_checks.t15(run)
+    page = CHART_PAGE.replace("櫃買指數日線\n", "")
+    run = FakeRun(tmp_path, _payloads(), {"market-1280": page})
+    with pytest.raises(page_checks.Fail, match="缺整行 `櫃買指數日線`"):
+        page_checks.t15(run)
+    page = CHART_PAGE.replace(ATTRIBUTION, "資料來源：臺灣期貨交易所")
+    run = FakeRun(tmp_path, _payloads(), {"market-1280": page})
+    with pytest.raises(page_checks.Fail, match="台指期之後缺整行"):
+        page_checks.t15(run)
+    # TX in two decimals (an index's format) is not the futures card.
+    page = CHART_PAGE.replace(
+        "46,100\t46,330\t45,900\t46,272", "46,100.00\t46,330.00\t45,900.00\t46,272.00"
+    )
+    run = FakeRun(tmp_path, _payloads(), {"market-1280": page})
+    with pytest.raises(page_checks.Fail, match="`台指期近月日線`：資料表缺最新一根"):
+        page_checks.t15(run)
+    # The old close-line chart (before the decision) has no stock-page meta line.
+    old = CHART_PAGE.replace(
+        "最近 2 根日線；缺日不補、停牌不畫 K 線", "最近 2 根日線；缺日不補"
+    )
+    run = FakeRun(tmp_path, _payloads(), {"market-1280": old})
+    with pytest.raises(page_checks.Fail, match="缺整行 `最近 2 根日線"):
+        page_checks.t15(run)
+
+
+def test_t15_newest_row_skips_a_suspended_day(tmp_path):
+    payloads = {
+        **_payloads(),
+        TAIEX_PATH: _taiex_bars([(21, 46887.77), (22, 46041.43), (23, None)]),
+    }
+    page = CHART_PAGE.replace("資料 2026/10/22", "資料 2026/10/23", 1).replace(
+        "最近 2 根", "最近 3 根"
+    )
+    run = FakeRun(tmp_path, payloads, {"market-1280": page})
+    assert "`2026/10/22\t46,041.43" in page_checks.t15(run)
+
+
+def test_t15_without_bars_needs_the_empty_copy(tmp_path):
+    empty = "\n資料日期未提供\n日K\n週K\n無資料\n來源未提供日線\n"
+    page = (
+        f"技術指標\n加權指數日線{empty}技術指標\n櫃買指數日線{empty}"
+        f"技術指標\n台指期近月日線{empty}{ATTRIBUTION}\n"
+    )
+    run = FakeRun(tmp_path, {TAIEX_PATH: _taiex_bars([])}, {"market-1280": page})
+    assert "`加權指數日線` `來源未提供日線`" in page_checks.t15(run)
+    run = FakeRun(tmp_path, {TAIEX_PATH: _taiex_bars([])}, {"market-1280": CHART_PAGE})
+    with pytest.raises(page_checks.Fail, match="缺整行 `來源未提供日線`"):
+        page_checks.t15(run)
 
 
 def test_t12_needs_the_candidates_before_groups_and_news(tmp_path):

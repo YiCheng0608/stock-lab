@@ -27,6 +27,8 @@ from .corporate_action_sync import (
     run_corporate_action_reprice,
     run_corporate_action_sync,
 )
+from .index_bars import DEFAULT_FIRST_MONTH as INDEX_BARS_FIRST_MONTH
+from .index_bars import run_index_bar_backfill
 from .indicator_batch import run_indicator_batch
 from .industry_repair import run_industry_repair
 from .instrument_repair import run_instrument_repair, run_unmatched_backfill
@@ -101,6 +103,8 @@ def maintenance_guarded(args: argparse.Namespace) -> str | None:
         return "fundamentals backfill"
     if args.command == "revenue" and args.revenue_command == "backfill":
         return "revenue backfill"
+    if args.command == "index-bars" and args.index_bars_command == "backfill":
+        return "index-bars backfill"
     if (
         args.command == "instruments"
         and args.instruments_command == "repair"
@@ -401,6 +405,27 @@ def main() -> None:
     revenue_backfill_parser.add_argument(
         "--end-month", help="YYYY-MM；預設是上個月（最近一個已結束的月份）"
     )
+    index_bars_parser = subparsers.add_parser(
+        "index-bars", help="加權、櫃買指數的日 K（開高低收與量值，#552）"
+    )
+    index_bars_subparsers = index_bars_parser.add_subparsers(
+        dest="index_bars_command", required=True
+    )
+    index_bars_backfill_parser = index_bars_subparsers.add_parser(
+        "backfill",
+        help="每月每個指數 2 個請求（間隔 3 秒），寫入真實日 K、把加權的收盤列原地升級，重跑冪等",
+    )
+    index_bars_backfill_parser.add_argument(
+        "--from-month",
+        default=INDEX_BARS_FIRST_MONTH,
+        help=f"YYYY-MM；預設 {INDEX_BARS_FIRST_MONTH}",
+    )
+    index_bars_backfill_parser.add_argument(
+        "--to-month", help="YYYY-MM；預設是本月（台北）"
+    )
+    index_bars_backfill_parser.add_argument(
+        "--force", action="store_true", help="同來源已存的列也以報表值改寫"
+    )
     instruments_parser = subparsers.add_parser("instruments", help="標的狀態與歷史")
     instruments_subparsers = instruments_parser.add_subparsers(
         dest="instruments_command", required=True
@@ -614,6 +639,10 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
         result = run_fundamental_backfill(args.quarters, args.end_quarter)
     elif args.command == "revenue" and args.revenue_command == "backfill":
         result = run_revenue_backfill(args.months, args.end_month)
+    elif args.command == "index-bars" and args.index_bars_command == "backfill":
+        result = run_index_bar_backfill(
+            args.from_month, args.to_month, force=args.force
+        )
     elif args.command == "corporate-actions":
         if args.actions_command == "sync":
             result = run_corporate_action_sync(
@@ -697,7 +726,7 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
     ):
         raise SystemExit(2 if result.get("status") == "partial" else 1)
     if (
-        args.command in {"fundamentals", "revenue"}
+        args.command in {"fundamentals", "revenue", "index-bars"}
         and result.get("status") != "success"
     ):
         raise SystemExit(2 if result.get("status") == "partial" else 1)

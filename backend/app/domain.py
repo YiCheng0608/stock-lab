@@ -636,6 +636,53 @@ ENTRY_REQUIRED_LEVELS: dict[str, tuple[str, ...]] = {
 }
 VALID_ENTRY_TYPES = frozenset(ENTRY_LEVEL_FIELDS)
 VALID_INSTRUMENT_TYPES = frozenset({"stock", "etf", "ipo"})
+# Market-level series, not securities (Issue #552): the TAIEX and TPEx indexes,
+# the TX futures near month and the US indexes (Issue #547).  Never in the
+# stock list, counts or scope.
+NON_SECURITY_TYPES = frozenset({"index", "futures"})
+# ``Instrument.market`` of every Taiwan instrument (stocks, ETFs, TAIEX, TPEX,
+# TX).  A bar of another market (the US indexes, Issue #547) is not a Taiwan
+# session: session lists and coverage read only this market's bars.
+TAIWAN_MARKET = "TW"
+
+
+@dataclass(frozen=True)
+class UsIndex:
+    """One FRED series of a display-only US index (Issue #547)."""
+
+    symbol: str
+    series_id: str
+    name: str
+    # The series' copyright notice on FRED, kept verbatim (shown on the page).
+    copyright: str
+
+
+# The ``US`` exchange's index instruments, in the market page's order.  The
+# notices are the FRED series pages' (#547 source registration).
+US_INDEX_EXCHANGE = "US"
+US_INDEXES: tuple[UsIndex, ...] = (
+    UsIndex(
+        "SPX",
+        "SP500",
+        "S&P 500",
+        "Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved.",
+    ),
+    UsIndex(
+        "IXIC",
+        "NASDAQCOM",
+        "NASDAQ 綜合指數",
+        "Copyright © 2016, NASDAQ OMX Group, Inc.",
+    ),
+    UsIndex(
+        "DJI",
+        "DJIA",
+        "道瓊工業指數",
+        "Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved.",
+    ),
+    UsIndex("SOX", "NASDAQSOX", "費城半導體指數", "Copyright © 2025, NASDAQ, Inc."),
+)
+# The data_quality rows collect writes per series and Taipei session.
+US_INDEX_QUALITY_ENTITY = "us_index_series"
 
 
 def _finite(value: object) -> bool:

@@ -187,9 +187,32 @@ export type MarketOverviewExchange = {
   source?: { label: string | null; collected_at: string | null; data_as_of?: string | null; raw_payload_id?: number | null }
 }
 
+// market_overview.foreign_indices (#547): the FRED closes of the US indexes, each on its own.
+export type ForeignIndex = {
+  exchange: 'US' | string
+  symbol: string
+  name: string
+  series_id: string
+  status: 'available' | 'unavailable' | string
+  // unavailable: not_collected | fetch_failed
+  reason?: string
+  last_attempt_date?: string | null
+  expected_date: string
+  trading_date?: string
+  // latest | us_market_closed | stale
+  freshness?: 'latest' | 'us_market_closed' | 'stale' | string
+  close?: number | null
+  change?: number | null
+  change_pct?: number | null
+  change_pct_method?: 'derived' | string | null
+  previous_trading_date?: string | null
+  source?: { label: string | null; copyright: string | null; collected_at: string | null; data_as_of?: string | null; raw_payload_id?: number | null }
+}
+
 export type MarketOverview = {
   trading_date: string | null
   exchanges: MarketOverviewExchange[]
+  foreign_indices?: ForeignIndex[]
 }
 
 export type Dashboard = {
@@ -1383,8 +1406,15 @@ export type StockBarRow = {
   week_start?: string
   week_end?: string
   trading_days?: number
+  // Daily rows (Issue 552): why open/high/low are empty (source_missing_ohlc, source_invalid_ohlc); futures rows carry
+  // their contract month (YYYYMM), open interest (contracts) and settlement price, null elsewhere.
+  price_reason?: string | null
+  contract_month?: string | null
+  open_interest?: number | null
+  settlement_price?: number | null
   bar_count: number | null
-  // Only null fields are listed: insufficient_bars, suspended, invalid_bar, no_price_change, synthetic_index or not_computed.
+  // Only null fields are listed: insufficient_bars, suspended, invalid_bar, no_price_change, synthetic_index, missing_ohlc,
+  // missing_volume or not_computed.
   reasons: Partial<Record<IndicatorField, string>>
 } & Partial<Record<IndicatorField, number | null>>
 

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import ReactEChartsModule from 'echarts-for-react'
 
 import { Card, DataTable, DateBadge, EmptyState, Skeleton, Tabs, tabPanelId, type Column } from '../components/ui'
 import { formatDay } from '../dates'
 import type { StockBarRow, StockBarsInterval, StockBarsResponse } from '../types'
 import {
+  CLOSE_ONLY_NOTE,
   INDICATOR_PANELS,
   INTERVALS,
   MA_LINES,
@@ -17,11 +18,14 @@ import {
   formatPrice,
   formatTaipeiDateTime,
   indicatorPanelState,
+  isCloseOnlySeries,
   isDrawableBar,
   maNotes,
   priceDigits,
   readChartTheme,
   sourcesLabel,
+  VOLUME_UNITS,
+  volumeKind,
   type ChartTheme,
   type ChartZoom,
   type IndicatorPanelId,
@@ -63,18 +67,30 @@ function indicatorSourceLabel(response: StockBarsResponse): string {
   return computedAt ? `日線批次計算於 ${computedAt}（台灣時間）` : '日線批次尚未計算'
 }
 
-// Prices and moving averages share the latest close's tick decimals (DESIGN_SYSTEM §3).
-function barColumns(digits: number): ReadonlyArray<Column<StockBarRow>> {
+// Prices and moving averages share the latest close's tick decimals (DESIGN_SYSTEM §3); an index or futures contract is
+// in 點 (Issue 549/552). A day the source gave a close without open/high/low (Issue 552) keeps its close in the table.
+function barColumns(digits: number, unit: string, volumeUnit: string): ReadonlyArray<Column<StockBarRow>> {
   const price = (field: 'open' | 'high' | 'low' | 'close') => (bar: StockBarRow) => isDrawableBar(bar) ? formatPrice(bar[field], digits) : ''
+  const close = (bar: StockBarRow) => isDrawableBar(bar) || (bar.price_reason && !bar.is_suspended) ? formatPrice(bar.close, digits) : ''
   return [
     { key: 'date', header: '日期', cell: (bar) => `${formatDay(bar.date) ?? bar.date}${bar.is_suspended ? '（停牌）' : ''}` },
-    { key: 'open', header: '開（元）', num: true, cell: price('open') },
-    { key: 'high', header: '高（元）', num: true, cell: price('high') },
-    { key: 'low', header: '低（元）', num: true, cell: price('low') },
-    { key: 'close', header: '收（元）', num: true, cell: price('close') },
-    { key: 'volume', header: '成交量（張）', num: true, cell: (bar) => isDrawableBar(bar) ? formatBarVolume(bar) : '' },
-    ...MA_LINES.map((line): Column<StockBarRow> => ({ key: line.field, header: `${line.label}（元）`, num: true, cell: (bar) => typeof bar[line.field] === 'number' ? formatPrice(bar[line.field], digits) : '' })),
+    { key: 'open', header: `開（${unit}）`, num: true, cell: price('open') },
+    { key: 'high', header: `高（${unit}）`, num: true, cell: price('high') },
+    { key: 'low', header: `低（${unit}）`, num: true, cell: price('low') },
+    { key: 'close', header: `收（${unit}）`, num: true, cell: close },
+    { key: 'volume', header: `成交量（${volumeUnit}）`, num: true, cell: (bar) => isDrawableBar(bar) || bar.price_reason ? formatBarVolume(bar) : '' },
+    ...MA_LINES.map((line): Column<StockBarRow> => ({ key: line.field, header: `${line.label}（${unit}）`, num: true, cell: (bar) => typeof bar[line.field] === 'number' ? formatPrice(bar[line.field], digits) : '' })),
   ]
+}
+
+export const isIndexInstrument = (instrumentType?: string | null) => instrumentType?.toLowerCase() === 'index'
+export const isFuturesInstrument = (instrumentType?: string | null) => instrumentType?.toLowerCase() === 'futures'
+
+function tableNote(instrumentType: string | null | undefined, volumeUnit: string): string {
+  const blank = '空白表示來源未提供、停牌或指標無資料。'
+  if (isIndexInstrument(instrumentType)) return `單位：指數與均線為點；成交量為${volumeUnit}。${blank}`
+  if (isFuturesInstrument(instrumentType)) return `單位：價格與均線為點；成交量為${volumeUnit}。${blank}`
+  return `單位：價格與均線為各標的報價幣別的元；成交量為${volumeUnit}。${blank}`
 }
 
 export function StockBarsChart({
@@ -84,6 +100,9 @@ export function StockBarsChart({
   loading,
   error,
   instrumentType,
+  title = 'K 線與技術指標',
+  titleId = 'stock-chart-title',
+  footer,
 }: {
   interval: StockBarsInterval
   onIntervalChange: (interval: StockBarsInterval) => void
@@ -91,6 +110,11 @@ export function StockBarsChart({
   loading: boolean
   error: unknown
   instrumentType?: string | null
+  // The market page (Issue 549) names its index; the stock page keeps the default.
+  title?: string
+  titleId?: string
+  // Lines under the chart (the market page's TX contract and attribution, Issue 552), shown in every state.
+  footer?: ReactNode
 }) {
   const narrow = useNarrow()
   const [panel, setPanel] = useState<IndicatorPanelId>('macd')
@@ -115,14 +139,15 @@ export function StockBarsChart({
   })
   const notes = data ? maNotes(data, visibleMa) : []
   const unit = interval === 'week' ? '週線' : '日線'
+  const volumeUnit = VOLUME_UNITS[volumeKind(data?.sources ?? [])]
 
   return (
     <Card
       className="stock-chart-card"
       eyebrow={data ? `技術指標 ${data.indicators.formula_version}` : '技術指標'}
-      title="K 線與技術指標"
-      titleId="stock-chart-title"
-      aria-labelledby="stock-chart-title"
+      title={title}
+      titleId={titleId}
+      aria-labelledby={titleId}
       aside={<DateBadge date={data?.data_as_of ?? null} />}
     >
       <div className="chart-toolbar">
@@ -167,6 +192,7 @@ export function StockBarsChart({
                 </div>
               )}
             </div>
+            {isCloseOnlySeries(data.bars) && <p className="chart-note">{CLOSE_ONLY_NOTE}</p>}
             {panelState?.kind === 'chart' && panelState.note && <p className="chart-note">{panelState.note}</p>}
             {notes.length > 0 && <ul className="chart-note-list">{notes.map((note) => <li key={note}>{note}</li>)}</ul>}
             <div className="chart-meta">
@@ -178,8 +204,8 @@ export function StockBarsChart({
             <details className="details chart-data-table">
               <summary>查看圖表資料表（最近 30 根）</summary>
               <DataTable
-                note="單位：價格與均線為各標的報價幣別的元；成交量為張。空白表示來源未提供、停牌或指標無資料。"
-                columns={barColumns(digits)}
+                note={tableNote(instrumentType, volumeUnit)}
+                columns={barColumns(digits, isIndexInstrument(instrumentType) || isFuturesInstrument(instrumentType) ? '點' : '元', volumeUnit)}
                 rows={data.bars.slice(-30).reverse()}
                 rowKey={(bar) => bar.date}
               />
@@ -187,6 +213,7 @@ export function StockBarsChart({
           </>
         )}
       </div>
+      {footer}
     </Card>
   )
 }

@@ -896,7 +896,16 @@ def test_dashboard_overview_without_a_verified_session(api_db):
     with TestClient(app) as client:
         payload = client.get("/api/dashboard").json()
     assert payload["as_of"] is None
-    assert payload["market_overview"] == {
+    overview = payload["market_overview"]
+    # The US indexes (Issue #547) stand on their own; none is collected here.
+    foreign = overview.pop("foreign_indices")
+    assert [(item["symbol"], item["reason"]) for item in foreign] == [
+        ("SPX", "not_collected"),
+        ("IXIC", "not_collected"),
+        ("DJI", "not_collected"),
+        ("SOX", "not_collected"),
+    ]
+    assert overview == {
         "trading_date": None,
         "exchanges": [
             {

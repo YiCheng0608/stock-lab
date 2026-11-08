@@ -79,6 +79,12 @@ def _daily(
             "volume": bar.volume,
             "source": bar.source,
             "is_suspended": bool(bar.is_suspended),
+            # Why open/high/low are empty on an index day (Issue #552).
+            "price_reason": bar.price_reason,
+            # Futures rows only (TX near month); null elsewhere.
+            "contract_month": bar.contract_month,
+            "open_interest": bar.open_interest,
+            "settlement_price": bar.settlement_price,
             "bar_count": row.bar_count if row else None,
         }
         for name in FIELDS:
@@ -162,6 +168,9 @@ def _weekly(
             "low": week.low,
             "close": week.close,
             "volume": week.volume,
+            # A week with a day the source gave without open/high/low (the
+            # close-only US indexes, Issue #547) keeps its close only.
+            "price_reason": "source_missing_ohlc" if week.open is None else None,
             "sources": sorted(week_sources.get(week.week_end.isocalendar()[:2], ())),
             "bar_count": point.bar_count,
             **point.values,
