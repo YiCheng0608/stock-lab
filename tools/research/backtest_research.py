@@ -268,18 +268,23 @@ def taiex_closes():
 # reads such a row past ``rule_evidence_json.actionable``.
 NOT_ACTIONABLE = ("observation", "data_incomplete", "invalid_levels")
 SLIM_MARK = "tools/research/backtest_research.py --slim (#546)"
-# One score date's non-actionable rows of the run: evidence down to the keys
-# the backtest reads (``actionable``) and the row's own strategy state;
-# rationale (every strategy's state again) emptied.
+# One score date's non-actionable rows of the run, found through the
+# signal_date index (a plan over strategy_version_id or the key reads every
+# signal of the database once per date), then cut down one by one: evidence
+# to the keys the backtest reads (``actionable``) and the row's own strategy
+# state, rationale (every strategy's state again) emptied.
+SLIM_ROWS_SQL = (
+    "select s.id, sv.kind from signals s indexed by ix_signals_signal_date "
+    "join strategy_versions sv on sv.id = s.strategy_version_id "
+    "where s.signal_date = :day and s.signal_key like :prefix "
+    f"and s.status in ({', '.join(repr(s) for s in NOT_ACTIONABLE)})"
+)
 SLIM_SQL = (
     "update signals set rationale = null, rule_evidence_json = json_object("
     "'strategy', json_extract(rule_evidence_json, '$.strategy'), "
     "'strategy_version', json_extract(rule_evidence_json, '$.strategy_version'), "
-    "'actionable', json('false'), 'research_slim', :mark, sv.kind, "
-    "json(json_extract(rule_evidence_json, '$.' || sv.kind))) "
-    "from strategy_versions sv where sv.id = signals.strategy_version_id "
-    "and signals.signal_date = :day and signals.signal_key like :prefix "
-    f"and signals.status in ({', '.join(repr(s) for s in NOT_ACTIONABLE)})"
+    "'actionable', json('false'), 'research_slim', :mark, :kind, "
+    "json(json_extract(rule_evidence_json, '$.' || :kind))) where id = :id"
 )
 
 
@@ -310,14 +315,18 @@ def score_dates(closes, pipeline_module, *, slim: bool = False):
                 closes.set_session(None)
         if slim:
             db.flush()
-            db.execute(
-                text(SLIM_SQL),
-                {
-                    "mark": SLIM_MARK,
-                    "day": signal_date.isoformat(),
-                    "prefix": f"{kwargs['namespace']}-%",
-                },
-            )
+            rows = db.execute(
+                text(SLIM_ROWS_SQL),
+                {"day": signal_date.isoformat(), "prefix": f"{kwargs['namespace']}-%"},
+            ).all()
+            if rows:
+                db.execute(
+                    text(SLIM_SQL),
+                    [
+                        {"mark": SLIM_MARK, "kind": kind, "id": id_}
+                        for id_, kind in rows
+                    ],
+                )
         return count
 
     pipeline_module._generate_signals = generate
