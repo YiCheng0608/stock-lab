@@ -197,7 +197,7 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
 
 [`verified_taiex_sessions`](../backend/app/coverage.py) 與 backfill 日期報表的 `taiex_rows` 只計 `exchange=TWSE` 的 TAIEX／TWII index bar；TPEx 同名 index 不增加交易日分母、`taiex_rows` 或普通股票有效 bar 日。交易日校驗要求 active index、日期範圍與 provenance，並可回退到來源與日期相符的 raw `MI_INDEX`；升級成真實日 K 的列以 `MI_5MINS_HIST` 月報核實（[指數日 K](#指數日-k)）。TWSE 基準是兩市場普通股票共用的日期基準，沒有兩市場各自的交易日曆；session 列數不代表欄位可用。
 
-基準從個股歷史的第一天 2024-09-30（`app.coverage.SESSION_BASIS_START`）起算。指數歷史往前到 2023-09-01（[#563](https://github.com/YiCheng0608/stock-lab/issues/563)），這天之前的加權列只是指數資料、不是交易日基準：`MI_5MINS_HIST` 月報只核實這天起的日子；族群分數的催化劑窗口（`pipeline._benchmark_session_dates`）、休眠推定的近 60 個交易日（`pipeline._quote_sessions`）與稽核的加權交易日（`tools/audit`）也都從這天起算。不驗來源的路徑也一樣：`app.coverage.is_index_history`（這天之前、`twse_index_ohlcv` 的加權列）在 `require_provenance=False` 時也不算交易日（有回補 manifest 時 `/api/coverage` 走這條），回補日期報表略過這天之前的指數與台指期列，延伸補抓的已驗證日也不含它們。回測的 `--start-date` 不早於這天。日後要把個股歷史延伸到更早，`SESSION_BASIS_START` 與 `is_index_history` 要一起改。
+基準從個股歷史的第一天 2024-09-30（`app.coverage.SESSION_BASIS_START`）起算。指數歷史往前到 2023-09-01（[#563](https://github.com/YiCheng0608/stock-lab/issues/563)），這天之前的加權列只是指數資料、不是交易日基準：`MI_5MINS_HIST` 月報只核實這天起的日子；族群分數的催化劑窗口（`pipeline._benchmark_session_dates`）、休眠推定的近 60 個交易日（`pipeline._quote_sessions`）與稽核的加權交易日（`tools/audit`）也都從這天起算。不驗來源的路徑也一樣：`app.coverage.is_index_history`（這天之前、`twse_index_ohlcv` 的加權列）在 `require_provenance=False` 時也不算交易日（有回補 manifest 時 `/api/coverage` 走這條），回補日期報表略過這天之前的指數與台指期列，延伸補抓的已驗證日也不含它們。回測的 score dates 與計畫追蹤的 session（`pipeline.taiwan_bar_dates`）、`industry repair --rescore-days` 重算的日子也都從這天起（PR #565 review），`--start-date` 給得更早也不會多出只有指數的日子。日後要把個股歷史延伸到更早，`SESSION_BASIS_START` 與 `is_index_history` 要一起改。
 
 ### 回補目標與確定休市日
 
@@ -287,11 +287,11 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
 - **缺日**：回傳的 `Date` 不等於 collect 日（尚未更新或已是下一個交易日）、或近月列不只一列、收盤或量讀不出時，那天不寫，記 `noncore_warnings`（`futures bars unavailable …`），raw 照存。漏抓的日子之後補不回（下面的網站歷史只補 OpenAPI 第一列之前的日子），大盤頁照實缺日。
 - **重讀**：同一天已存的列值相同不改，不同時保留第一次的值並記 conflict；`--force` 才改寫。另一個來源（下面的網站歷史）的列連 `--force` 也不改寫，記 conflict。
 - **歷史**（[#563](https://github.com/YiCheng0608/stock-lab/issues/563)；程式 [`worker/futures_history.py`](../backend/worker/futures_history.py)）：OpenAPI 開始累積之前的日子（2023-09-01 起）用期交所網站 `futDataDown` 回補，`worker.cli index-bars futures-history`（[CLI](ops/CLI.md#現有-worker-cli)）。條款限制見[官方來源共同限制](#官方來源共同限制)。
-  - 請求：`POST https://www.taifex.com.tw/cht/3/futDataDown`，form `down_type=1&commodity_id=TX&queryStartDate=YYYY/MM/DD&queryEndDate=YYYY/MM/DD`，一個自然月一個請求（區間超過約一個月回 HTML「日期時間錯誤」），請求間隔 3 秒；當月只查到當天。2023-09～2026-11 共 39 個月、39 個請求，一次最多 36 個月，分兩次跑。
+  - 請求：`POST https://www.taifex.com.tw/cht/3/futDataDown`，form `down_type=1&commodity_id=TX&queryStartDate=YYYY/MM/DD&queryEndDate=YYYY/MM/DD`，一個自然月一個請求（區間超過約一個月回 HTML「日期時間錯誤」），請求間隔 3 秒（`www.taifex.com.tw` 登記在 `OFFICIAL_HOST_MIN_INTERVAL_SECONDS`）；當月只查到當天。2023-09～2026-11 共 39 個月、39 個請求，一次最多 48 個月。
   - 回應：cp950 CSV，表頭 19 欄 `交易日期`（`YYYY/MM/DD`）、`契約`、`到期月份(週別)`（尾端補空白）、`開盤價`、`最高價`、`最低價`、`收盤價`、`漲跌價`、`漲跌%`、`成交量`（口）、`結算價`、`未沖銷契約數`（口）、`最後最佳買價`、`最後最佳賣價`、`歷史最高價`、`歷史最低價`、`是否因訊息面暫停交易`、`交易時段`（一般／盤後）、`價差對單式委託成交量`；資料列尾端多一個空欄。缺值是 `-`。
   - 近月與欄位：同上面的近月與換月、欄位與缺值規則（只取 `交易時段=一般`、`到期月份(週別)` 去空白後等於近月的列；價差單 `202410/202411` 與盤後不取）。某天有一般時段的列、卻沒有恰好一列可用的近月列，那天不寫，記在 run metadata 的 `unusable_dates` 與 warning。夜盤算下一個交易日，所以那天一般時段開盤前，CSV 已經列出只有盤後列的那一天（2026-11-09 01:15 實測）：記在 `after_hours_only_dates`，不算缺漏、不寫。
   - 拒收：回應不是 cp950、是 HTML 頁、表頭不是那 19 欄、有列少於 19 欄、日期讀不出或不在請求區間、`契約` 不是 TX，整月不寫，記 warning（`futures history unavailable …`），raw 照存。
-  - 來源分開：`source=taifex_futdatadown`、raw `source=taifex_web`（raw 的 endpoint 帶查詢區間，`data_as_of` 是當月最後一列）；OpenAPI 的列是 `taifex_daily_futures`／`taifex`。只寫早於 OpenAPI 第一列的日子，所以兩者不重疊；沒有 OpenAPI 列時寫到查詢區間的最後一天。
+  - 來源分開：`source=taifex_futdatadown`、raw `source=taifex_web`（raw 的 endpoint 帶查詢區間，`data_as_of` 是當月最後一列）；OpenAPI 的列是 `taifex_daily_futures`／`taifex`。只寫早於 OpenAPI 第一列的日子，所以兩者不重疊；沒有 OpenAPI 列時寫到昨天（今天的 session 留給 daily 的 OpenAPI，PR #565 review）。
   - 寫入：`run_type=futures_bar_backfill`、`source=official` 的 run（不是交易日證據，也不是有界回補 manifest）；先抓完全部月份再一次寫入、一次 commit，中途被停不改任何列；結束時重建 TX 的 `technical_indicators` 與 `technical_features`；重跑冪等。
 
 ### 美股指數

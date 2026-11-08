@@ -584,6 +584,36 @@ def test_the_backfill_report_and_api_coverage_see_no_index_history(factory):
     assert after["summary"]["missing_dates"] == before["summary"]["missing_dates"]
 
 
+def test_backtest_score_dates_and_rescores_skip_index_history(factory):
+    """PR #565 review: a backtest from 2024-01 or a 600-day rescore never scores index-only days."""
+    from worker.industry_repair import rescore_recent
+
+    with factory() as db:
+        _seed_taiex(db, BASIS_SESSIONS)
+        db.commit()
+    _history_backfill(factory)
+
+    with factory() as db:
+        # The TAIEX, TPEX rows before 2024-09-30 are there ...
+        assert len(_bars(db, "TPEx", "TPEX")) == len(PRE_SESSIONS + BASIS_SESSIONS)
+        # ... but no backtest score date or tracking session comes from them.
+        assert pipeline.taiwan_bar_dates(db, date(2024, 1, 1), BASIS_SESSIONS[-1]) == (
+            BASIS_SESSIONS
+        )
+        assert (
+            pipeline.taiwan_bar_dates(db, after=date(2024, 1, 1), limit=3)
+            == (BASIS_SESSIONS[:3])
+        )
+        assert rescore_recent(db, 600) == [day.isoformat() for day in BASIS_SESSIONS]
+
+
+def test_the_default_range_fits_in_one_run():
+    """PR #565 review: 2023-09 to the current month is not refused by default."""
+    months = ib.month_range(ib.Month.parse(ib.DEFAULT_FIRST_MONTH), ib.Month(2026, 11))
+
+    assert len(months) == 39 <= ib.MAX_MONTHS
+
+
 def test_the_collect_still_inserts_no_taiex_day(factory):
     """Only the backfill adds TAIEX history: collect keeps MI_INDEX as the basis."""
     bars = ib.build_bars(

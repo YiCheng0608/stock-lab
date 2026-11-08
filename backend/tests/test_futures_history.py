@@ -402,6 +402,44 @@ def test_without_openapi_rows_the_history_runs_to_the_requested_end(factory):
     assert result["openapi_first_day"] is None
 
 
+def test_without_openapi_rows_today_is_left_to_the_daily(factory):
+    """PR #565 review: today's session is the daily's OpenAPI row, not the site's."""
+    today = date(2024, 10, 18)
+    sessions = [day for day in SEP_OCT if day <= today]
+    with factory() as db:
+        result = fh.backfill_futures_history(
+            db,
+            first=Month(2024, 10),
+            last=Month(2024, 10),
+            get=SiteGet(sessions),
+            sleep=lambda _: None,
+            today=today,
+        )
+
+    assert (
+        result["counts"]["inserted"] == len([d for d in sessions if d.month == 10]) - 1
+    )
+    with factory() as db:
+        assert _tx(db)[-1].trading_date == date(2024, 10, 17)
+
+
+def test_the_site_is_spaced_like_every_official_host(monkeypatch):
+    calls: list[str] = []
+    monkeypatch.setattr(sources, "_throttle_official_host", calls.append)
+
+    class Response:
+        status_code = 200
+        content = b"x"
+
+    import httpx
+
+    monkeypatch.setattr(httpx, "post", lambda *args, **kwargs: Response())
+
+    assert fh.fetch_month(_request()) == b"x"
+    assert calls == [fh.ENDPOINT]
+    assert sources.OFFICIAL_HOST_MIN_INTERVAL_SECONDS["www.taifex.com.tw"] == 3.0
+
+
 def test_the_openapi_collect_never_overwrites_a_history_row(factory):
     _backfill(factory, SiteGet(SEP_OCT))
     day = SEP_OCT[-1]

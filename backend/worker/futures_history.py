@@ -237,12 +237,19 @@ def parse_month(text: Any, request: Request) -> ParsedMonth:
 
 
 def fetch_month(request: Request, *, timeout_seconds: float = 30.0) -> bytes:
-    """POST one month; one retry after 5 seconds on a transport error, 429 or 5xx."""
+    """POST one month; one retry after 5 seconds on a transport error, 429 or 5xx.
+
+    Spaced by ``sources.OFFICIAL_HOST_MIN_INTERVAL_SECONDS`` like every
+    official host (``www.taifex.com.tw``, 3 seconds).
+    """
 
     import httpx
 
+    from .sources import _throttle_official_host
+
     headers = {"User-Agent": "taiwan-stock-research/0.1"}
     for attempt in range(2):
+        _throttle_official_host(ENDPOINT)
         try:
             response = httpx.post(
                 ENDPOINT, data=request.form, timeout=timeout_seconds, headers=headers
@@ -316,8 +323,9 @@ def backfill_futures_history(
     month is fetched first (oldest first, ``interval_seconds`` apart), then
     the raws, bars, rebuilt indicators and features and the run's status are
     committed together, so a run stopped midway changes no row.  Only days
-    from ``HISTORY_START`` up to the day before the first OpenAPI row (or
-    ``today`` without one) are written.  A month after the current Taipei
+    from ``HISTORY_START`` up to the day before the first OpenAPI row (the
+    day before ``today`` without one: today's session is the daily's, from
+    the OpenAPI) are written.  A month after the current Taipei
     month or more than ``MAX_MONTHS`` months are refused before any request.
     """
 
@@ -335,6 +343,9 @@ def backfill_futures_history(
     if len(months) > MAX_MONTHS:
         raise ValueError(f"at most {MAX_MONTHS} months per run")
     cutoff = first_openapi_day(db)
+    # Written days are before ``stop``: the first OpenAPI row, or today, whose
+    # session the daily's OpenAPI read writes (PR #565 review item 5).
+    stop = min(cutoff, today) if cutoff is not None else today
     run = IngestionRun(
         run_type=RUN_TYPE,
         source="official",
@@ -404,8 +415,7 @@ def backfill_futures_history(
             bars = [
                 bar
                 for bar in item.parsed.bars
-                if HISTORY_START <= bar.trading_date <= today
-                and (cutoff is None or bar.trading_date < cutoff)
+                if HISTORY_START <= bar.trading_date < stop
             ]
             raw_id = entry["raw_payload_id"]
             written = store_futures_bars(

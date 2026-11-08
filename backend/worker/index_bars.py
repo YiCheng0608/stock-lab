@@ -879,7 +879,8 @@ RUN_TYPE = "index_bar_backfill"
 # the first month are read but not written.
 HISTORY_START = date(2023, 9, 1)
 DEFAULT_FIRST_MONTH = "2023-09"
-MAX_MONTHS = 36
+# 2023-09 to the current month (39 months in 2026-11) fits in one default run.
+MAX_MONTHS = 48
 EXCHANGES = ("TWSE", "TPEx")
 RAW_SOURCES = {"TWSE": "twse", "TPEx": "tpex"}
 
