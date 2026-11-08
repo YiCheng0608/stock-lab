@@ -1,7 +1,7 @@
 <!-- owns: 協作角色、任務生命週期、並行上限、工程原則、文件原則、上下文壓縮保留、流程變更 -->
 # 專案協作規則
 
-本文管角色與原則；操作、欄位與模板見[工作手冊](docs/WORKFLOW.md)；統籌的開啟、換手與無人值守見 [COORDINATOR](docs/COORDINATOR.md)；會擋下違規的檢查見 [GUARDRAILS](docs/GUARDRAILS.md)；產品方向與版本範圍見[ROADMAP](docs/ROADMAP.md)；前端視覺見[設計規範](docs/DESIGN_SYSTEM.md)。
+本文管角色與原則；操作與欄位見[工作手冊](docs/WORKFLOW.md)，模板見 [docs/templates](docs/templates/README.md)；統籌的開啟、換手與無人值守見 [COORDINATOR](docs/COORDINATOR.md)；會擋下違規的檢查見 [GUARDRAILS](docs/GUARDRAILS.md)；產品方向與版本範圍見[ROADMAP](docs/ROADMAP.md)；前端視覺見[設計規範](docs/DESIGN_SYSTEM.md)。
 
 ## 目標
 
