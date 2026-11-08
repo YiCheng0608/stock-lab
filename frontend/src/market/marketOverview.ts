@@ -83,4 +83,3 @@ export function marketOverviewNotes(overview: MarketOverview | undefined): strin
 }
 
 export const isDerived = (overview: MarketOverview | undefined) => available(overview, 'TPEx')?.index?.change_pct_method === 'derived'
-

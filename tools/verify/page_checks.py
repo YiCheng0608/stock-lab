@@ -1261,7 +1261,9 @@ TAIEX_BARS = "stocks/TWSE/TAIEX/bars?interval=day&limit=250"
 CHART_TITLE = "加權指數日線"  # TAIEX_CHART_TITLE
 NO_TAIEX_BARS = "來源未提供日線"
 TPEX_BARS_TITLE = "櫃買指數日線"
-TPEX_NO_BARS = "無資料：目前只收櫃買指數的當日數值，歷史日 K 尚未收集"  # TPEX_NO_BARS_TEXT
+TPEX_NO_BARS = (
+    "無資料：目前只收櫃買指數的當日數值，歷史日 K 尚未收集"  # TPEX_NO_BARS_TEXT
+)
 
 
 def drawable(bar: dict) -> bool:
