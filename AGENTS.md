@@ -35,7 +35,7 @@
 5. **Review 與合併**：統籌 review（必要時獨立 review），以 merge commit 合併；不 squash／rebase、不直接 push master。
 6. **結案**：合併後 master CI 綠即關 Issue、移除 worktree；遠端 branch 由 GitHub 自動刪。master CI 紅就先修，不開新功能。
 
-並行以不互改同一組檔案為原則，建議同時進行的任務不超過 3 個；「做完、只等合併」的任務（PR CI 綠、review 完、工程師不再改）不算在內（使用者 2026-10-26 決定）。衝突由後合併者在自己的 branch 解決，不全選一方。
+並行以不互改同一組檔案為原則，建議同時進行的任務不超過 3 個；「做完、只等合併」的任務（PR CI 綠、review 完、工程師不再改）不算在內（使用者 2026-10-26 決定）；只剩等外部時點的實測或抽樣、工程師不再改程式的任務也不算（使用者 2026-11-09 決定，#1 [6728938283](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6728938283)）。衝突由後合併者在自己的 branch 解決，不全選一方。
 
 ## 工程原則
 
