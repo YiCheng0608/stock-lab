@@ -133,7 +133,7 @@ check(text(txPanel).includes('自 2026/09/29 起收集，無更早歷史') && te
 check(collectedSinceText(fullBars) === '自 2026/09/01 起收集，無更早歷史' && collectedSinceText({ ...fullBars, count: STOCK_BARS_LIMIT }) === null, 'collectedSinceText: only when the series is shorter than the request')
 check(futuresLatestText(fullBars) === null, 'futuresLatestText: nothing for an index')
 check(priceDigits(46041.43, 'index') === 2 && priceDigits(46041.43, 'stock') === 0, 'priceDigits: an index has two decimals, a stock above 500 none')
-check(axisDigits(24500, 2) === 0 && axisDigits(9999, 2) === 2, 'price axis: five-digit index labels drop the decimals so they fit the gutter')
+check(axisDigits(24500, 2) === 0 && axisDigits(8000, 2) === 0 && axisDigits(999, 2) === 2, 'price axis: index labels from 1,000 drop the decimals so 「8,000」 fits the phone gutter (Issue 547)')
 // The close-only TAIEX rows still read as before (synthetic bars, volume unit unverified).
 const closeOnly = taiexBars([bar('2026-10-22', 46041.43, { open: 46041.43, high: 46041.43, low: 46041.43, volume: 0, source: 'twse_index' })])
 const closeOnlyMarkup = text(render('/market close-only', <MarketChartView spec={MARKET_CHARTS[0]} interval="day" onIntervalChange={() => {}} data={closeOnly} loading={false} error={null} />))

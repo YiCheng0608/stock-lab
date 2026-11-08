@@ -492,6 +492,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .market-chart-contract { color: var(--color-text); font: 500 var(--text-sm) var(--font-mono); }
 /* 美股（前一交易日） (Issue 547): four equal index widgets in the overview's bar, each with a muted date line (非最新 in
    the warning color, 美股休市 muted), then one folded row per index whose daily K mounts when opened. */
+.market-us { margin-top: var(--space-4); }
 .market-us-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .market-us .market-us-date { flex: 1 1 100%; margin-top: 2px; color: var(--color-text-muted); font-size: 12px; }
 .market-us-flag { margin-left: var(--space-1); }
@@ -934,6 +935,8 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .home-header .data-explanation { margin-left: 0; }
   .market-overview .market-widget { padding: var(--space-2) var(--space-3); }
   .market-overview .market-widget-value { font-size: 16px; }
+  /* A US index falls by four digits and two-digit percents (費半 -1,257.51（-12.25%）): the percent wraps, not cut. */
+  .market-us .market-widget-change { white-space: normal; }
   /* Phones: the two indexes on line one, the date and 看大盤 → on line two; the link names the block, so the label goes. */
   .market-summary { gap: var(--space-1) var(--space-3); padding: var(--space-2) var(--space-3); }
   .market-summary-label { display: none; }

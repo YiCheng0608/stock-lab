@@ -207,7 +207,9 @@ export function priceDigits(price: number | null | undefined, instrumentType?: s
   return price < 500 ? 1 : 0
 }
 
-export const axisDigits = (value: number, digits: number) => Math.abs(value) >= 10000 ? 0 : digits
+// Price axis labels from 1,000 up drop the decimals: 「8,000.00」 (the US indexes, Issue 547) is cut by the 64px gutter on
+// phones. Stocks of 500 and up already show no decimals, so this changes index and ETF axes only.
+export const axisDigits = (value: number, digits: number) => Math.abs(value) >= 1000 ? 0 : digits
 
 export function formatPrice(value: number | null | undefined, digits: number): string {
   if (!isFiniteNumber(value)) return '待核實'
@@ -502,7 +504,7 @@ export function buildBarsChartOption(response: StockBarsResponse, options: BarsC
     },
     xAxis,
     yAxis: [
-      // Axis labels of 10,000 and up (an index in points, Issue 549) drop the decimals so they fit the 64px gutter;
+      // Axis labels of 1,000 and up (an index in points, Issue 549/547) drop the decimals so they fit the 64px gutter;
       // the tooltip and the data table keep them.
       { type: 'value', gridIndex: 0, scale: true, axisLabel: { ...axisLabel, showMinLabel: false, formatter: (value: number) => formatPrice(value, axisDigits(value, digits)) }, splitLine },
       { type: 'value', gridIndex: 1, scale: false, splitNumber: 2, axisLabel: { ...axisLabel, showMaxLabel: false, formatter: (value: number) => volumeAxisLabel(kind, value) }, splitLine },
