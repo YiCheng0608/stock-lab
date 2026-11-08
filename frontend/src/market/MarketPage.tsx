@@ -1,20 +1,26 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
-import { getDashboard, getStockBars } from '../api'
+import { ApiError, getDashboard, getStockBars } from '../api'
 import { EmptyState, Skeleton } from '../components/ui'
 import type { Dashboard, StockBarsInterval } from '../types'
 import { MarketChartView, MarketOverviewPanel } from './MarketViews'
 import { MARKET_CHARTS, type MarketChartSpec } from './marketOverview'
 
+const notFound = (error: unknown) => error instanceof ApiError && error.status === 404
+
 // One chart with its own period switch; the stock page's query key, so /stocks/TWSE/TAIEX and /market share a cache.
+// A series whose instrument is not collected yet (404: TPEX before its first report, TX before its first collect) is a
+// chart without daily bars, not a load failure.
 function MarketChart({ spec }: { spec: MarketChartSpec }) {
   const [interval, setBarsInterval] = useState<StockBarsInterval>('day')
   const bars = useQuery({
     queryKey: ['stock-bars', spec.exchange, spec.symbol, interval],
     queryFn: () => getStockBars(spec.exchange, spec.symbol, interval),
+    retry: (count, error) => !notFound(error) && count < 3,
   })
-  return <MarketChartView spec={spec} interval={interval} onIntervalChange={setBarsInterval} data={bars.data} loading={bars.isLoading} error={bars.error} />
+  const missing = notFound(bars.error)
+  return <MarketChartView spec={spec} interval={interval} onIntervalChange={setBarsInterval} data={bars.data} loading={bars.isLoading} error={missing ? null : bars.error} />
 }
 
 // 大盤 (/market, Issue 549/552; PRODUCT_SPEC §2, DESIGN_SYSTEM §4): every market-level block in a fixed order —

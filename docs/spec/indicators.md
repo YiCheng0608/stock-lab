@@ -34,7 +34,7 @@ EMA 與 Wilder 平滑依賴全部可用歷史，起算點是該股在 DB 的第�
 
 **資料不足**：可用根數少於上表時該欄為 null，原因 `insufficient_bars`，並保存 `bar_count`（含 T 的可用根數），API 另附 `required_bars` 讓畫面說明「需 N 根、現有 M 根」。RSI 在該股自第一根可用日線起完全沒有漲跌時為 null，原因 `no_price_change`（Wilder 平滑下只要曾有漲跌，平均值就不會回到 0）。批次尚未寫入的日期，API 回 `not_computed`。
 
-**合成資料**：指數 parser 寫的日線（`source=twse_index`，或 `turnover_reason=synthetic_index`；`app.indicators.is_synthetic_bar`）只有收盤是官方值，開高低是收盤、量是 0（[DATA_SOURCES](../DATA_SOURCES.md#官方來源)）。讀高低點或量的欄位遇到合成日線為 null，原因 `synthetic_index`，即使根數不足也記這個原因：`kd_k`／`kd_d` 會遞迴到第一根，所以只要 T 以前有一根合成日線就留空；`vol_ma5`／`vol_ma20` 只看自己的窗口。其餘欄位只讀收盤，照算。週線含一天合成日線就算合成。這條規則從價格基準 `as_of_date_raw_basis/v2` 起生效；v1 的列照合成值算了 KD 與量均，換基準時整段重寫（見上方價格基準版本）。
+**合成資料**：指數 parser 寫的日線（`source=twse_index`，或 `turnover_reason=synthetic_index`；`app.indicators.is_synthetic_bar`）只有收盤是官方值，開高低是收盤、量是 0（[DATA_SOURCES](../DATA_SOURCES.md#官方來源)）。讀高低點或量的欄位遇到合成日線為 null，原因 `synthetic_index`，即使根數不足也記這個原因：`kd_k`／`kd_d` 會遞迴到第一根，所以只要 T 以前有一根合成日線就留空；`vol_ma5`／`vol_ma20` 只看自己的窗口。其餘欄位只讀收盤，照算。週線含一天合成日線就算合成。指數與台指期的真實日線（[DATA_SOURCES 指數日 K](../DATA_SOURCES.md#指數日-k)，#552）某天來源沒有開高低時存 null：KD 同樣從那天起為 null，原因 `missing_ohlc`；某天沒有成交量時，窗口含那天的 `vol_ma5`／`vol_ma20` 為 null，原因 `missing_volume`；那天的收盤照樣進只讀收盤的欄位，週線含那天時週線的開高低（或量）為 null。同一欄同時遇到合成日線時記 `synthetic_index`。這條規則從價格基準 `as_of_date_raw_basis/v2` 起生效；v1 的列照合成值算了 KD 與量均，換基準時整段重寫（見上方價格基準版本）。
 
 **週線**：由日線聚合，依 ISO 週（週一起算；補班交易日併入當週）分組，只用可用日線：開＝首日開、高＝最高高、低＝最低低、收＝末日收、量＝加總，`date` 為該週最後一個交易日並附 `week_start`、`trading_days`。週指標以週線序列套用同一公式與參數重算（MA5 即 5 週），價格基準為該週最後一日；整週停牌則無該週。週線指標於 API 請求時計算，不入庫。
 

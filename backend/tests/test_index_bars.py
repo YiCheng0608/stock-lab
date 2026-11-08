@@ -408,6 +408,41 @@ def test_backfill_upgrades_taiex_in_place_and_writes_tpex_rows(factory):
     assert again["counts"]["upgraded"] == again["counts"]["inserted"] == 0
 
 
+def test_sessions_before_the_history_start_are_not_written(factory):
+    days = [date(2024, 9, 26), date(2024, 9, 27), date(2024, 9, 30)]
+    get = ReportGet(([], []), _tpex_rows(days))
+    with factory() as db:
+        result = ib.backfill_index_bars(
+            db,
+            first=ib.Month(2024, 9),
+            last=ib.Month(2024, 9),
+            get=get,
+            sleep=lambda _: None,
+            today=date(2024, 10, 5),
+        )
+
+    assert result["counts"]["inserted"] == 1
+    with factory() as db:
+        tpex = _bars(db, "TPEx", "TPEX")
+        assert [b.trading_date for b in tpex] == [date(2024, 9, 30)]
+        run = db.get(IngestionRun, result["run_id"])
+        assert (
+            run.metadata_json["coverage_manifest"]["2024-09:TPEx"][
+                "before_history_start"
+            ]
+            == 2
+        )
+        # The features are rebuilt with the indicators, as analyze writes them.
+        assert (
+            db.scalar(
+                select(func.count())
+                .select_from(TechnicalFeature)
+                .where(TechnicalFeature.instrument_id == tpex[0].instrument_id)
+            )
+            == 1
+        )
+
+
 def test_a_differing_close_is_not_upgraded(factory):
     with factory() as db:
         _seed_taiex(db)

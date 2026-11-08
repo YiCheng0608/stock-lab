@@ -633,45 +633,83 @@ def _taiex_bars(closes):
 
 
 TAIEX_PATH = "stocks/TWSE/TAIEX/bars?interval=day&limit=250"
-# The stock page's K-line card titled for the index (decision 6715021190), then the 櫃買 line.
+TPEX_PATH = "stocks/TPEx/TPEX/bars?interval=day&limit=250"
+TX_PATH = "stocks/TAIFEX/TX/bars?interval=day&limit=250"
+ATTRIBUTION = "資料來源：臺灣期貨交易所（政府資料開放平臺，政府資料開放授權條款第1版）"
+# The three stock-page K-line cards (decision 6715021190, Issue 552): TAIEX close-only rows, the TPEx index with no
+# bars (no instrument yet: 404), TX with one real bar in whole points, then its footer.
 CHART_PAGE = (
     "技術指標 indicators/v1\n加權指數日線\n資料 2026/10/22\n日K\n週K\nMA5\n"
-    "來源 來源待核實\n最近 2 根日線；缺日不補、停牌不畫 K 線\n查看圖表資料表（最近 30 根）\n"
+    "來源 臺灣證券交易所\n最近 2 根日線；缺日不補、停牌不畫 K 線\n查看圖表資料表（最近 30 根）\n"
     "日期\t開（點）\t高（點）\t低（點）\t收（點）\t成交量（張）\tMA5（點）\n"
     "2026/10/22\t46,041.43\t46,041.43\t46,041.43\t46,041.43\t\t\n"
     "2026/10/21\t46,887.77\t46,887.77\t46,887.77\t46,887.77\t\t\n"
-    "櫃買指數日線\n無資料：目前只收櫃買指數的當日數值，歷史日 K 尚未收集\n"
+    "技術指標\n櫃買指數日線\n資料日期未提供\n日K\n週K\n無資料\n來源未提供日線\n"
+    "技術指標 indicators/v1\n台指期近月日線\n資料 2026/10/22\n日K\n週K\n"
+    "來源 臺灣期貨交易所\n最近 1 根日線；缺日不補、停牌不畫 K 線\n查看圖表資料表（最近 30 根）\n"
+    "日期\t開（點）\t高（點）\t低（點）\t收（點）\t成交量（口）\tMA5（點）\n"
+    "2026/10/22\t46,100\t46,330\t45,900\t46,272\t55,226\t\n"
+    "2026/10/22 合約 2026/11 · 未平倉 115,258 口 · 結算價 46,234\n"
+    f"自 2026/10/22 起收集，無更早歷史；近月合約：每月第三個週三（到期日）起改用次月，換月不做價差調整；只含一般交易時段\n{ATTRIBUTION}\n"
 )
 
 
-def test_t15_passes_on_the_chart_block(tmp_path):
-    payloads = {TAIEX_PATH: _taiex_bars([(21, 46887.77), (22, 46041.43)])}
-    run = FakeRun(tmp_path, payloads, {"market-1280": CHART_PAGE})
-    assert "`2026/10/22\t46,041.43\t46,041.43\t46,041.43\t46,041.43`" in (
-        page_checks.t15(run)
-    )
+def _payloads(taiex_close=46041.43):
+    tx = {
+        "date": "2026-10-22",
+        "open": 46100,
+        "high": 46330,
+        "low": 45900,
+        "close": 46272,
+    }
+    return {
+        TAIEX_PATH: _taiex_bars([(21, 46887.77), (22, taiex_close)]),
+        TX_PATH: {"count": 1, "data_as_of": "2026-10-22", "bars": [tx]},
+    }
 
 
-def test_t15_fails_on_a_wrong_close_or_without_the_tpex_row(tmp_path):
-    payloads = {TAIEX_PATH: _taiex_bars([(21, 46887.77), (22, 46041.44)])}
-    run = FakeRun(tmp_path, payloads, {"market-1280": CHART_PAGE})
+def test_t15_passes_on_the_three_charts(tmp_path):
+    run = FakeRun(tmp_path, _payloads(), {"market-1280": CHART_PAGE})
+    summary = page_checks.t15(run)
+    assert "`2026/10/22\t46,041.43\t46,041.43\t46,041.43\t46,041.43`" in summary
+    assert "`櫃買指數日線` `來源未提供日線`" in summary
+    assert "`2026/10/22\t46,100\t46,330\t45,900\t46,272`" in summary
+
+
+def test_t15_fails_on_a_wrong_close_a_missing_chart_or_attribution(tmp_path):
+    run = FakeRun(tmp_path, _payloads(46041.44), {"market-1280": CHART_PAGE})
     with pytest.raises(page_checks.Fail, match="資料表缺最新一根"):
         page_checks.t15(run)
-    payloads = {TAIEX_PATH: _taiex_bars([(21, 46887.77), (22, 46041.43)])}
-    page = CHART_PAGE.split("櫃買指數日線")[0]
-    run = FakeRun(tmp_path, payloads, {"market-1280": page})
-    with pytest.raises(page_checks.Fail, match="缺 `櫃買指數日線`"):
+    page = CHART_PAGE.replace("櫃買指數日線\n", "")
+    run = FakeRun(tmp_path, _payloads(), {"market-1280": page})
+    with pytest.raises(page_checks.Fail, match="缺整行 `櫃買指數日線`"):
+        page_checks.t15(run)
+    page = CHART_PAGE.replace(ATTRIBUTION, "資料來源：臺灣期貨交易所")
+    run = FakeRun(tmp_path, _payloads(), {"market-1280": page})
+    with pytest.raises(page_checks.Fail, match="台指期之後缺整行"):
+        page_checks.t15(run)
+    # TX in two decimals (an index's format) is not the futures card.
+    page = CHART_PAGE.replace(
+        "46,100\t46,330\t45,900\t46,272", "46,100.00\t46,330.00\t45,900.00\t46,272.00"
+    )
+    run = FakeRun(tmp_path, _payloads(), {"market-1280": page})
+    with pytest.raises(page_checks.Fail, match="`台指期近月日線`：資料表缺最新一根"):
         page_checks.t15(run)
     # The old close-line chart (before the decision) has no stock-page meta line.
-    old = CHART_PAGE.replace("；缺日不補、停牌不畫 K 線", "；缺日不補")
-    run = FakeRun(tmp_path, payloads, {"market-1280": old})
+    old = CHART_PAGE.replace(
+        "最近 2 根日線；缺日不補、停牌不畫 K 線", "最近 2 根日線；缺日不補"
+    )
+    run = FakeRun(tmp_path, _payloads(), {"market-1280": old})
     with pytest.raises(page_checks.Fail, match="缺整行 `最近 2 根日線"):
         page_checks.t15(run)
 
 
 def test_t15_newest_row_skips_a_suspended_day(tmp_path):
-    payloads = {TAIEX_PATH: _taiex_bars([(21, 46887.77), (22, 46041.43), (23, None)])}
-    page = CHART_PAGE.replace("資料 2026/10/22", "資料 2026/10/23").replace(
+    payloads = {
+        **_payloads(),
+        TAIEX_PATH: _taiex_bars([(21, 46887.77), (22, 46041.43), (23, None)]),
+    }
+    page = CHART_PAGE.replace("資料 2026/10/22", "資料 2026/10/23", 1).replace(
         "最近 2 根", "最近 3 根"
     )
     run = FakeRun(tmp_path, payloads, {"market-1280": page})
@@ -679,12 +717,13 @@ def test_t15_newest_row_skips_a_suspended_day(tmp_path):
 
 
 def test_t15_without_bars_needs_the_empty_copy(tmp_path):
+    empty = "\n資料日期未提供\n日K\n週K\n無資料\n來源未提供日線\n"
     page = (
-        "技術指標\n加權指數日線\n資料日期未提供\n日K\n週K\n無資料\n來源未提供日線\n"
-        "櫃買指數日線\n無資料：目前只收櫃買指數的當日數值，歷史日 K 尚未收集\n"
+        f"技術指標\n加權指數日線{empty}技術指標\n櫃買指數日線{empty}"
+        f"技術指標\n台指期近月日線{empty}{ATTRIBUTION}\n"
     )
     run = FakeRun(tmp_path, {TAIEX_PATH: _taiex_bars([])}, {"market-1280": page})
-    assert "來源未提供日線" in page_checks.t15(run)
+    assert "`加權指數日線` `來源未提供日線`" in page_checks.t15(run)
     run = FakeRun(tmp_path, {TAIEX_PATH: _taiex_bars([])}, {"market-1280": CHART_PAGE})
     with pytest.raises(page_checks.Fail, match="缺整行 `來源未提供日線`"):
         page_checks.t15(run)

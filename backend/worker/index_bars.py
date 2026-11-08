@@ -844,7 +844,9 @@ def taipei_today(now: datetime | None = None) -> date:
 # --- backfill -----------------------------------------------------------------
 
 RUN_TYPE = "index_bar_backfill"
-# The collect's first month (DATA_SOURCES 回補目標, #1 6714433517).
+# The stock history starts 2024-09-30 (#1 6714433517); the index history does too,
+# so the first month's earlier sessions are read but not written.
+HISTORY_START = date(2024, 9, 30)
 DEFAULT_FIRST_MONTH = "2024-09"
 MAX_MONTHS = 36
 EXCHANGES = ("TWSE", "TPEx")
@@ -873,7 +875,8 @@ def backfill_index_bars(
     One ``index_bar_backfill`` ingestion run; each exchange-month is committed,
     so an interrupted run keeps what it finished.  Months run oldest first,
     TWSE before TPEx; ``interval_seconds`` separates every request.  The
-    indicator rows of the instruments it changed are rebuilt at the end.
+    indicator and feature rows of the instruments it changed are rebuilt at the
+    end.  Sessions before ``HISTORY_START`` are not written.
     A month after the current Taipei month or more than ``MAX_MONTHS`` months
     are refused before any request.
     """
@@ -883,7 +886,7 @@ def backfill_index_bars(
     from app.models import IngestionRun
 
     from .indicator_batch import compute_market_indicators
-    from .pipeline import _upsert_raw_payload
+    from .pipeline import _calculate_features, _upsert_raw_payload
     from .sources import capture_payload
 
     sleep = sleep or time.sleep
@@ -938,12 +941,19 @@ def backfill_index_bars(
                     item.sha256: _upsert_raw_payload(db, run, item).id
                     for item in fetched.payloads
                 }
-                bars = [bar for bar in fetched.bars if bar.trading_date <= today]
+                bars = [
+                    bar
+                    for bar in fetched.bars
+                    if HISTORY_START <= bar.trading_date <= today
+                ]
                 written = store_index_bars(db, bars, raw_ids.get, force=force)
                 total.merge(written)
                 warnings.extend(fetched.warnings)
                 manifest[key] = {
                     "bars": len(bars),
+                    "before_history_start": sum(
+                        bar.trading_date < HISTORY_START for bar in fetched.bars
+                    ),
                     "raw_payload_ids": sorted(raw_ids.values()),
                     "counts": {k: v for k, v in written.counts.items() if v},
                     "warnings": fetched.warnings,
@@ -955,6 +965,11 @@ def backfill_index_bars(
             if changed
             else {"status": "skipped", "reason": "no_changed_bars"}
         )
+        # technical_features as analyze writes them, so they match the new bars
+        # before the next daily.
+        for instrument_id in changed:
+            _calculate_features(db, db.get(Instrument, instrument_id))
+        db.flush()
         warnings.extend(warnings_for(total))
         failed_months = [key for key, item in manifest.items() if item["warnings"]]
         run.status = "partial" if failed_months or total.close_mismatches else "success"
