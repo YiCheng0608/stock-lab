@@ -570,6 +570,33 @@ def test_the_collect_still_inserts_no_taiex_day(factory):
     assert result.counts["no_close_row"] == 1 and result.counts["inserted"] == 0
 
 
+def test_the_catalyst_window_and_dormant_sessions_skip_index_history(factory):
+    """Issue #563: the TAIEX rows before 2024-09-30 never enter a stock window."""
+    with factory() as db:
+        taiex = _seed_taiex(db, BASIS_SESSIONS)
+        db.commit()
+        window_before = pipeline._effective_trading_dates(
+            db, taiex.id, BASIS_SESSIONS[5], 20
+        )
+        dormant_before = pipeline._quote_sessions(db, BASIS_SESSIONS[-1])
+
+    _history_backfill(factory)
+
+    with factory() as db:
+        assert window_before == BASIS_SESSIONS[:6]
+        # The raw window now reaches back into the index history ...
+        assert (
+            pipeline._effective_trading_dates(db, taiex.id, BASIS_SESSIONS[5], 20)
+            == (PRE_SESSIONS + BASIS_SESSIONS[:6])[-20:]
+        )
+        # ... the catalyst window and the dormant presumption do not.
+        assert (
+            pipeline._benchmark_session_dates(db, taiex.id, BASIS_SESSIONS[5])
+            == window_before
+        )
+        assert pipeline._quote_sessions(db, BASIS_SESSIONS[-1]) == dormant_before
+
+
 def test_a_failed_volume_report_leaves_volume_empty_until_a_later_read(factory):
     with factory() as db:
         _seed_taiex(db)
