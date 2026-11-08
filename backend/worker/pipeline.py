@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta, timezone
 from statistics import median
 from typing import Any, Callable, Iterable, Mapping
 
-from sqlalchemy import and_, desc, func, select
+from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -33,6 +33,7 @@ from app.domain import (
     HOT_GROUP_LEGACY_VERSION,
     HOT_GROUP_VERSION,
     INSTITUTIONAL_FLOW_FORMULA_VERSION,
+    NON_SECURITY_TYPES,
     OFFICIAL_INSTITUTIONAL_CHIP_SOURCES,
     SIGNAL_CONFIDENCE_SEMANTICS,
     TAIWAN_MARKET,
@@ -4558,13 +4559,20 @@ def taiwan_bar_dates(
     first dates.  A US index close (market ``US``, Issue #547) can fall on a
     day the Taiwan market was closed, so "any stored bar" is not a Taiwan
     session: the backtest's score dates and plan tracking's sessions both read
-    this.
+    this.  Nor is an index or TX row before the stock history
+    (``SESSION_BASIS_START``, Issue #563): that history has no stocks to score.
     """
 
     query = (
         select(MarketBar.trading_date)
         .join(Instrument, Instrument.id == MarketBar.instrument_id)
-        .where(Instrument.market == TAIWAN_MARKET)
+        .where(
+            Instrument.market == TAIWAN_MARKET,
+            or_(
+                MarketBar.trading_date >= SESSION_BASIS_START,
+                Instrument.instrument_type.not_in(NON_SECURITY_TYPES),
+            ),
+        )
     )
     if start is not None:
         query = query.where(MarketBar.trading_date >= start)
