@@ -4601,7 +4601,8 @@ def prefetch_us_index_series(
     collect holds the SQLite write lock (#558 review item 3).  Only a snapshot
     collect whose batch has the session's TAIEX row asks.  The request windows
     are read first and that read transaction is ended before the GETs.  A
-    failure is a non-core warning.  None when the adapter has no FRED fetcher.
+    failure is a non-core warning.  None when the adapter has no FRED fetcher,
+    which since #571 is always the production adapter (Taiwan-only collect).
     """
 
     if fetch is None:
@@ -4848,7 +4849,8 @@ def collect(
                 raise OfficialDataError(
                     "official batch did not include raw payload captures"
                 )
-            # Still the fetch phase: FRED is asked before collect writes a row.
+            # Still the fetch phase: FRED is asked (only by an adapter given a
+            # fetcher; never the production one since #571) before any write.
             us_index_prefetched = prefetch_us_index_series(
                 db,
                 score_date,
