@@ -493,7 +493,15 @@ def fetch_json(
     method: str = "GET",
     data: Any = None,
     json_body: Any = None,
+    text_fallback: bool = False,
 ) -> Any:
+    """GET/POST one official endpoint and decode its JSON.
+
+    ``text_fallback`` returns the bytes of a 200 answer that is not JSON
+    instead of failing: TAIFEX ``DailyMarketReportFut`` answers a CSV
+    (Issue #586), which its reader decodes.
+    """
+
     headers = {"User-Agent": "taiwan-stock-research/0.1"}
     retry_limit = 3
     redirect_retry_limit = 6
@@ -583,6 +591,8 @@ def fetch_json(
         try:
             return response.json()
         except ValueError as exc:
+            if text_fallback:
+                return response.content
             raise OfficialDataError(
                 f"official endpoint returned non-JSON: {url}"
             ) from exc
@@ -4102,7 +4112,16 @@ class OfficialMarketDataAdapter:
         *,
         snapshot_feeds: bool = True,
         mops_fetcher: Callable[..., Any] | None = None,
+        futures_history_get: Callable[..., Any] | None = None,
     ) -> None:
+        # The TX gap fill after a snapshot collect (worker.futures_history,
+        # Issue #586) asks the TAIFEX website.  An adapter built on given
+        # feeds (fixtures) does not, unless a getter is given too.
+        if futures_history_get is None and twse is None:
+            from .futures_history import fetch_month
+
+            futures_history_get = fetch_month
+        self.futures_history_get = futures_history_get
         # No US index step: index-bars us-collect asks FinMind on its own (#568).
         self.twse = twse or TwseAdapter(snapshot_feeds=snapshot_feeds)
         self.tpex = tpex or TpexAdapter(snapshot_feeds=snapshot_feeds)
@@ -4201,7 +4220,7 @@ class OfficialMarketDataAdapter:
     def _fetch_futures(
         self, end: date, *, snapshot: bool, no_data: bool
     ) -> tuple[list[Any], list[FetchedPayload], list[str]]:
-        """The TX near-month bar of ``end`` (worker.futures_bars, Issue #552).
+        """The TX near-month bar the report holds (worker.futures_bars, #552, #586).
 
         Only a snapshot collect of a session asks: the report has the latest
         session only.  Non-core; the answer is kept as raw even when it is
@@ -4210,28 +4229,58 @@ class OfficialMarketDataAdapter:
 
         if not snapshot or no_data:
             return [], [], []
-        from .futures_bars import futures_warning, parse_near_month, report_date
-
-        fetcher = getattr(self.twse, "fetcher", fetch_json)
-        try:
-            payload = _call_fetcher(fetcher, TAIFEX_DAILY_FUTURES_ENDPOINT)
-        except Exception as exc:
-            return [], [], [futures_warning(exc)]
-        reported = report_date(payload)
-        captured = capture_payload(
-            "taifex",
-            TAIFEX_DAILY_FUTURES_ENDPOINT,
-            payload,
-            reported.isoformat() if reported else None,
+        bars, payloads, warnings = fetch_latest_futures(
+            getattr(self.twse, "fetcher", fetch_json), end
         )
-        self.captured_payloads.append(captured)
+        self.captured_payloads.extend(payloads)
+        return bars, payloads, warnings
+
+
+def fetch_latest_futures(
+    fetcher: Callable[..., Any], end: date
+) -> tuple[list[Any], list[FetchedPayload], list[str]]:
+    """Read ``DailyMarketReportFut`` once: the bar of the session it holds.
+
+    The answer is a CSV or JSON (worker.futures_bars.capture_form); its raw
+    (source ``taifex``) is dated by the report.  The bar is of the report's
+    own session, which the caller stores only when it is a verified session
+    without a TX row (pipeline.store_collect_futures_bars).  A report of a
+    session before ``end`` adds the "not yet published" warning for ``end``;
+    every warning is non-core (``futures bars ``).
+    """
+
+    from .futures_bars import (
+        capture_form,
+        futures_warning,
+        not_published_warning,
+        parse_near_month,
+        report_date,
+    )
+
+    try:
         try:
-            bar = parse_near_month(
-                payload, requested_date=end, payload_sha256=captured.sha256
-            )
-        except Exception as exc:
-            return [], [captured], [futures_warning(exc)]
-        return [bar], [captured], []
+            # fetch_json hands back the bytes of a non-JSON answer (the CSV).
+            answer = fetcher(TAIFEX_DAILY_FUTURES_ENDPOINT, text_fallback=True)
+        except TypeError:
+            answer = _call_fetcher(fetcher, TAIFEX_DAILY_FUTURES_ENDPOINT)
+    except Exception as exc:
+        return [], [], [futures_warning(exc)]
+    payload = capture_form(answer)
+    reported = report_date(payload)
+    captured = capture_payload(
+        "taifex",
+        TAIFEX_DAILY_FUTURES_ENDPOINT,
+        payload,
+        reported.isoformat() if reported else None,
+    )
+    try:
+        bar = parse_near_month(payload, payload_sha256=captured.sha256)
+    except Exception as exc:
+        return [], [captured], [futures_warning(exc)]
+    warnings = (
+        [not_published_warning(end, bar.trading_date)] if bar.trading_date < end else []
+    )
+    return [bar], [captured], warnings
 
 
 def _month_windows(start: date, end: date) -> list[tuple[date, date]]:
