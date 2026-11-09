@@ -9,6 +9,7 @@ import type { StrategyBoardRow } from '../types'
 import {
   LEVELS_MISSING_TEXT,
   OBSERVATION_LABEL,
+  conditionDetailsTitle,
   conditionViews,
   levelsVersionLabel,
   statusLabel,
@@ -128,6 +129,9 @@ for (const markup of [both.split(CANDIDATE_DISCLAIMER).join('').split(scoreHint)
 check(count(both, 'class="card strategy-card"') === 2, 'one phone card per strategy')
 check(card(both, 'pullback_v1').includes(OBSERVATION_LABEL) && card(both, 'breakout_v1').includes('class="level-stop">2,364.00'), 'cards keep the two kinds of levels apart')
 check(count(both, 'strategy-conditions') === 4, 'condition details under each row and each card')
+// Issue 581: the fold reads 突破條件明細, not 突破條件條件明細.
+check(count(both, '<summary>突破條件明細</summary>') === 2 && count(both, '<summary>回踩條件明細</summary>') === 2 && !both.includes('條件條件'), 'condition folds name the strategy once')
+check(conditionDetailsTitle('突破條件') === '突破條件明細' && conditionDetailsTitle('自訂') === '自訂條件明細', 'a label without 條件 gets it once')
 
 // ---- not a candidate: no candidate row, no AI note ----
 const plain = render(<StrategyBoardPanel board={board([observationBreakout(), unreachablePullback()])} candidate={null} />)

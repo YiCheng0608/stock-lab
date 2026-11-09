@@ -76,11 +76,11 @@ export const GLOSSARY: GlossaryTerm[] = [
     limitations: '不代表一定會到達，也不包含交易成本以外的所有風險。', related: ['support', 'rr'], version: '1.2.0',
   },
   {
-    term_id: 'support', name: '停損／條件失效價', aliases: ['support', 'invalid_price', 'stop_price', '支撐', '失效價', '條件失效'], category: 'strategy',
-    plain_definition: '價格跌破後，原本的研究條件（突破或回踩）不再成立的界線，也就是條件失效；候選卡的「停損」就是這個價。',
+    term_id: 'support', name: '停損', aliases: ['support', 'invalid_price', 'stop_price', '支撐', '條件失效價', '失效價', '條件失效'], category: 'strategy',
+    plain_definition: '價格跌破後，原本的研究條件（突破或回踩）不再成立的界線，所以也叫條件失效價；候選卡與追蹤回看卡的「停損」就是這個價。',
     use: '用來界定策略失效與持倉風險。',
-    how_to_read: '規則算出的失效價和庫存自己設定的停損價是不同欄位，前者是策略條件，後者是持倉設定。',
-    limitations: '遇停牌、除權息或無法比價時不能硬算觸發。', related: ['target', 'rr', 'incomparable'], version: '1.1.0',
+    how_to_read: '規則算出的停損（條件失效價）和庫存自己設定的停損價是不同欄位，前者是策略條件，後者是持倉設定。',
+    limitations: '遇停牌、除權息或無法比價時不能硬算觸發。', related: ['target', 'rr', 'incomparable'], version: '1.2.0',
   },
   {
     term_id: 'entry_zone', name: '進場區', aliases: ['entry_zone', 'entry'], category: 'strategy',

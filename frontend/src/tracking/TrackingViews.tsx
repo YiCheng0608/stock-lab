@@ -198,7 +198,7 @@ export function PlanCard({ plan }: { plan: TrackingPlan }) {
       {hasTransitionConflict(plan) && <div className="warning-box plan-conflict">{CONFLICT_TEXT}</div>}
       <dl className="candidate-levels">
         <div><dt>進場區（元）</dt><dd className="level-entry">{formatEntryZone(levels)}</dd></div>
-        <div><dt>失效價（元）</dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
+        <div><dt>停損（元）</dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
         <div><dt>目標一（元）</dt><dd className="level-target">{formatPrice(levels.target_1)}</dd></div>
         <div><dt>RR</dt><dd><Badge tone="primary" className="badge-compact">{formatRiskReward(levels.risk_reward)}</Badge></dd></div>
       </dl>
