@@ -64,10 +64,10 @@ check(planResultLine(plan()) === null && planResultLine(triggered()) === null, '
 check(planResultLine(targetHit()) === '模擬報酬 +9.39%' && planResultLine(invalidated()) === '模擬報酬 -2.68%', 'comparable results')
 check(planResultLine(expired()) === '模擬報酬：無法比較（視窗內未模擬成交）', 'expired: no fill')
 check(planResultLine(suspendedClose()) === '模擬報酬：無法比較（期間有停牌或不可比較的日線）', 'suspension makes it incomparable')
-check(planResultLine(ambiguous()) === '模擬報酬：無法比較（同一交易日失效價與目標一都觸及，先後順序不明）', 'same-session stop and target')
+check(planResultLine(ambiguous()) === '模擬報酬：無法比較（同一交易日停損與目標一都觸及，先後順序不明）', 'same-session stop and target')
 check(planResultLine(cancelled()) === '模擬報酬：無法比較（已取消）', 'cancelled')
 check(planResultLine(notEntered()) === '模擬報酬：無法比較（成交當日開盤已在目標以上，不模擬進場）', 'gap over the target: not entered')
-check(planResultLine(notEntered({ status_reason: 'gap_below_invalid' })) === '模擬報酬：無法比較（成交當日開盤已在失效價以下，不模擬進場）', 'gap under the invalid price: not entered')
+check(planResultLine(notEntered({ status_reason: 'gap_below_invalid' })) === '模擬報酬：無法比較（成交當日開盤已在停損以下，不模擬進場）', 'gap under the invalid price: not entered')
 check(render(<PlanCard plan={notEntered()} />).includes('尚未模擬成交') && !render(<PlanCard plan={notEntered()} />).includes('模擬出場'), 'a plan not entered has no fill and no exit')
 check(planResultLine(plan({ status: 'incomparable', status_reason: 'insufficient_sessions', open: false, result_comparable: false, execution_date: '2026-10-19' })) === '模擬報酬：無法比較（40 個交易日內該股不足 20 根日線）', 'too few bars')
 
@@ -77,7 +77,8 @@ for (const text of ['2377', '微星', '上市 · 突破條件', '資料 2026/10/
   check(pending.includes(text), `pending card shows ${text}`)
 }
 check(pending.includes('class="level-entry">161.50') && pending.includes('class="level-stop">157.82') && pending.includes('class="level-target">167.39'), 'level colours as the candidate card')
-check(pending.includes('<dt>目標一（元）</dt>') && pending.includes('<dt>進場區（元）</dt>') && pending.includes('<dt>失效價（元）</dt>') && !pending.includes('<dt>目標</dt>'), 'Issue 463: the plan tracks 目標一 and the levels name 元')
+check(pending.includes('<dt>目標一（元）</dt>') && pending.includes('<dt>進場區（元）</dt>') && pending.includes('<dt>停損（元）</dt>') && !pending.includes('<dt>目標</dt>'), 'Issue 463: the plan tracks 目標一 and the levels name 元')
+check(!pending.includes('失效價'), 'Issue 581: the plan card names the stop 停損, as the candidate card')
 check(!pending.includes('模擬報酬') && !pending.includes(CONFLICT_TEXT), 'pending card has no result and no conflict note')
 const filled = render(<PlanCard plan={triggered()} />)
 check(filled.includes('模擬成交 2026/10/20 161.58') && filled.includes('第 3／20 個交易日') && filled.includes('資料 2026/10/21'), 'triggered card: fill, progress and last tracked date')

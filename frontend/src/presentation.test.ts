@@ -1,4 +1,4 @@
-import { backtestTrackingLabel, groupDisplayName, staleCloseDateLabel, stockGroupLabel, researchRequirementLabel, stockDirectoryActionLabel, formatProductTimeRole, PRODUCT_TIME_NOTE, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productTimeRoleDateTime, productTimeRoleKnown, productTimeRoleLabel, stopPriceFieldLabel } from './presentation'
+import { backtestStartedText, backtestTrackingLabel, groupDisplayName, staleCloseDateLabel, stockGroupLabel, researchRequirementLabel, stockDirectoryActionLabel, formatProductTimeRole, PRODUCT_TIME_NOTE, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productTimeRoleDateTime, productTimeRoleKnown, productTimeRoleLabel, stopPriceFieldLabel } from './presentation'
 
 function expect(condition: boolean, message: string): void {
   if (!condition) throw new Error(message)
@@ -84,3 +84,7 @@ expect(staleCloseDateLabel(null, '2026-10-22') === null, 'no close date, no labe
 expect(staleCloseDateLabel('not a date', '2026-10-22') === null, 'malformed date is not shown')
 expect(backtestTrackingLabel('v2') === '追蹤口徑 v2', 'backtest names its tracking version')
 expect(backtestTrackingLabel(null) === '追蹤口徑 未記錄', 'a run without a version says so')
+// Issue 581: run 2286 stayed running from 2026-11-04 13:54 UTC; the page names its start, in Taipei time.
+expect(backtestStartedText({ status: 'running', started_at: '2026-11-04T13:54:00+00:00' }) === '開始於 2026/11/04 21:54', 'a running backtest names its Taipei start')
+expect(backtestStartedText({ status: 'running', started_at: null }) === '開始於 未提供', 'a running backtest without a start says so')
+expect(backtestStartedText({ status: 'failed', started_at: '2026-11-04T13:54:00+00:00' }) === null && backtestStartedText({ status: 'success' }) === null, 'a finished backtest shows no start line')

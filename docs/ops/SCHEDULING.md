@@ -148,7 +148,7 @@ period_backfill 步驟呼叫 [`worker.period_backfill.run_period_backfill(目標
   - **#509 以前的實測**：1 個月 40 分鐘，3 個月 1 小時 55 分，12 個月 6 小時 59 分。12 個月那次後段和主機上其他負載重疊，每日一度慢到 150～200 秒。
 - **何時跑**：預估會跨過 21:30 就改在 23:30 後起跑。原因是 21:30 的 daily 會被維護模式跳過，要等回測結束才補跑。
 - **中途失敗**：OOM、`docker stop`、例外都算。已 commit 的訊號與結算會留下，run 記 `failed`；以相同起訖重跑，會覆寫成一次跑完的結果（前提是資料沒有更正，見 [Tracking 口徑](../spec/tracking.md#tracking-與-technical-backtest-口徑)第 3 點）。
-  - 行程被殺時 `finally` 不會執行，run 會停在 `running`。下一次 canonical backtest 開始時，會把它記成 `failed`（`abandoned:`），並列在輸出的 `abandoned_runs`。
+  - 行程被殺時 `finally` 不會執行，run 會停在 `running`。下一次 canonical backtest 開始時，會把它記成 `failed`（`abandoned:`），並列在輸出的 `abandoned_runs`。daily 開工時（任何步驟之前）也會收：在維護標記的鎖內確認沒有標記（沒有回測持有維護模式，也沒有手動維護），就把正規 `running` 回測記成 `failed`（`abandoned: … daily started with no maintenance hold …`），結果記在 daily 輸出的 `abandoned_backtests`（`checked` 附 `runs`、有標記時 `skipped`、出錯時 `failed`，出錯不讓 daily 失敗，下一次 daily 再試）；研究 run（`:research:`）任何情況都不收（[#581](https://github.com/YiCheng0608/stock-lab/issues/581)）。
 - **量記憶體**：
   - 每 5 秒讀一次容器 cgroup `memory.stat` 的 `anon`，取最大值；同時記行程的 `VmRSS`。
   - `memory.peak` 與 `docker stats` 的 MEM USAGE 含 page cache，讀這份 DB 時就會頂到 2g，不能用來判斷會不會 OOM。

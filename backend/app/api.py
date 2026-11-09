@@ -1220,6 +1220,57 @@ def _latest_emerging_names(db: Session, codes: set[str]) -> dict[str, str]:
     )
 
 
+HOME_NEWS_KNOWN_DIRECTIONS = ("positive", "negative", "mixed")
+
+
+def home_news_eligible() -> Any:
+    """Which news the home page's 重點新聞 may list (#581, NEWS_SPEC 首頁重點新聞).
+
+    A domestic item (feed ``domestic`` and the official ``company``／``taiwan``
+    projections) needs a rule-verified symbol or a current-prompt AI direction
+    other than ``unknown``; an international item needs a Taiwan symbol, rule
+    verified or an AI candidate (the home row shows neither, it only lets the
+    item in).  Others stay on /news.  Fewer than the row count are shown as
+    they are, never filled with the rest.
+    """
+
+    def symbols(column: Any) -> Any:
+        # JSON null and [] are both no symbol; json_array_length of null is 0.
+        return func.coalesce(func.json_array_length(column), 0) > 0
+
+    def current_ai(*conditions: Any) -> Any:
+        return (
+            select(NewsLlmResult.id)
+            .where(
+                NewsLlmResult.news_item_id == NewsItem.id,
+                NewsLlmResult.prompt_version == NEWS_PROMPT_VERSION,
+                NewsLlmResult.llm_status == "done",
+                *conditions,
+            )
+            .exists()
+        )
+
+    verified = symbols(NewsItem.symbols_json)
+    return or_(
+        and_(
+            NewsItem.category != "international",
+            or_(
+                verified,
+                current_ai(
+                    NewsLlmResult.ai_impact_direction.in_(HOME_NEWS_KNOWN_DIRECTIONS)
+                ),
+            ),
+        ),
+        and_(
+            NewsItem.category == "international",
+            or_(
+                verified,
+                current_ai(symbols(NewsLlmResult.ai_symbol_candidates_json)),
+            ),
+        ),
+    )
+
+
 def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, Any]]:
     """Done LLM result of the current prompt per news item, in two queries.
 
@@ -1928,6 +1979,7 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
                 NewsItem.time_consistency.is_(None),
                 NewsItem.time_consistency != "conflict",
             ),
+            home_news_eligible(),
         )
         .order_by(*_news_order_by())
         .limit(6)

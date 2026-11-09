@@ -96,14 +96,14 @@ export function planExitLine(plan: Pick<TrackingPlan, 'outcome_date' | 'outcome_
 // plan_tracking_v2: the fill session opened beyond a level, so the plan was never entered (docs/spec/tracking.md).
 const NOT_ENTERED_TEXT: Record<string, string> = {
   gap_above_target: '成交當日開盤已在目標以上，不模擬進場',
-  gap_below_invalid: '成交當日開盤已在失效價以下，不模擬進場',
+  gap_below_invalid: '成交當日開盤已在停損以下，不模擬進場',
 }
 
 function incomparableText(plan: Pick<TrackingPlan, 'status' | 'status_reason' | 'incomparable_reason' | 'execution_date'>): string {
   if (plan.status === 'cancelled') return '已取消'
   if (plan.status === 'not_entered') return NOT_ENTERED_TEXT[plan.status_reason ?? ''] ?? '未模擬進場'
   if (plan.status === 'expired' || !plan.execution_date) return '視窗內未模擬成交'
-  if (plan.status_reason === 'same_session_stop_and_target') return '同一交易日失效價與目標一都觸及，先後順序不明'
+  if (plan.status_reason === 'same_session_stop_and_target') return '同一交易日停損與目標一都觸及，先後順序不明'
   if (plan.status_reason === 'insufficient_sessions') return '40 個交易日內該股不足 20 根日線'
   if (plan.incomparable_reason?.includes('suspended')) return '期間有停牌或不可比較的日線'
   return '原因待核實'
