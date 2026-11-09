@@ -1,0 +1,86 @@
+[
+  {
+    "width": 1280,
+    "index": "spx",
+    "ready": true,
+    "scrollWidth": 1280,
+    "clientWidth": 1280,
+    "finmindLines": [
+      "來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所；美股 FinMind",
+      "資料來源：FinMind（個人非商業使用）",
+      "S&P 500\t7,376.86\t+23.13\t+0.31%\t2026/11/06\t之下 季線 7,682.59\tFinMind",
+      "NASDAQ 綜合指數\t24,579.43\t+264.43\t+1.09%\t2026/11/06\t之下 季線 26,432.28\tFinMind",
+      "道瓊工業指數\t51,285.73\t-237.33\t-0.46%\t2026/11/06\t之下 季線 52,287.74\tFinMind",
+      "費城半導體指數\t9,390.25\t+379.11\t+4.21%\t2026/11/06\t之下 季線 11,725.78\tFinMind",
+      "來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所；美股 FinMind",
+      "來源 FinMind",
+      "資料來源：FinMind（個人非商業使用）"
+    ],
+    "fredLines": [],
+    "closeOnlyNote": false,
+    "chartMeta": [
+      "來源 FinMind"
+    ]
+  },
+  {
+    "width": 1280,
+    "index": "sox",
+    "ready": true,
+    "scrollWidth": 1280,
+    "clientWidth": 1280,
+    "finmindLines": [
+      "來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所；美股 FinMind",
+      "資料來源：FinMind（個人非商業使用）",
+      "S&P 500\t7,376.86\t+23.13\t+0.31%\t2026/11/06\t之下 季線 7,682.59\tFinMind",
+      "NASDAQ 綜合指數\t24,579.43\t+264.43\t+1.09%\t2026/11/06\t之下 季線 26,432.28\tFinMind",
+      "道瓊工業指數\t51,285.73\t-237.33\t-0.46%\t2026/11/06\t之下 季線 52,287.74\tFinMind",
+      "費城半導體指數\t9,390.25\t+379.11\t+4.21%\t2026/11/06\t之下 季線 11,725.78\tFinMind",
+      "來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所；美股 FinMind",
+      "來源 FinMind",
+      "資料來源：FinMind（個人非商業使用）"
+    ],
+    "fredLines": [],
+    "closeOnlyNote": false,
+    "chartMeta": [
+      "來源 FinMind"
+    ]
+  },
+  {
+    "width": 390,
+    "index": "spx",
+    "ready": true,
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "finmindLines": [
+      "來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所；美股 FinMind",
+      "資料來源：FinMind（個人非商業使用）",
+      "來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所；美股 FinMind",
+      "來源 FinMind",
+      "資料來源：FinMind（個人非商業使用）"
+    ],
+    "fredLines": [],
+    "closeOnlyNote": false,
+    "chartMeta": [
+      "來源 FinMind"
+    ]
+  },
+  {
+    "width": 390,
+    "index": "sox",
+    "ready": true,
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "finmindLines": [
+      "來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所；美股 FinMind",
+      "資料來源：FinMind（個人非商業使用）",
+      "來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所；美股 FinMind",
+      "來源 FinMind",
+      "資料來源：FinMind（個人非商業使用）"
+    ],
+    "fredLines": [],
+    "closeOnlyNote": false,
+    "chartMeta": [
+      "來源 FinMind"
+    ]
+  }
+]
