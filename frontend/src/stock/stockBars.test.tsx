@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 
 import { StockBarsChart } from './StockBarsChart'
 import { StockCutoffControl, cutoffSubmission } from './StockCutoffControl'
-import { StockQuoteLine } from './StockHeader'
+import { StockQuoteLine, tradingHaltLabel } from './StockHeader'
 import {
   CHART_THEME_TOKENS,
   INDICATOR_PANELS,
@@ -30,7 +30,7 @@ import {
   type MaField,
 } from './stockBars'
 import { barsResponse, insufficientDaily, notComputedDaily, suspendedWithGapDaily, tradedBar, weeklySeries } from './stockBars.fixtures'
-import type { StockBarsResponse } from '../types'
+import type { StockBarsResponse, TradingHalt } from '../types'
 
 // Standalone regression module (no browser, no server, no network) for the stock page K-line, indicator
 // panels and header quote, on bars-API fixtures (PR #155 shape).
@@ -119,6 +119,14 @@ check(firstDayMarkup.includes('掛牌首日') && !firstDayMarkup.includes('前�
 // Another day's status, or a status that names no cause, leaves the bars rule alone.
 check(stockQuote(gapBars, 'stock', latestChange('no_previous_close', '2026-10-15')).change === 1.5, 'a status for another day does not apply')
 check(stockQuote(gapBars, 'stock', latestChange('unverified')).change === 1.5 && stockQuote(gapBars, 'stock', latestChange('known')).noChange === null, 'unverified and known keep the bars rule')
+
+// Issue 582: on a session an official stop of trading covers, the header says why the close is older than the market.
+const halt: TradingHalt = { reason: 'capital_reduction', reason_label: '減資換發新股', reason_detail: '退還股款', halt_start: '2026-11-05', resume_date: '2026-11-16', last_trade_date: '2026-11-04', exchange: 'TWSE', source: 'twse_twtauu', endpoint: 'TWTAUU', data_as_of: '2026-11-09', as_of: '2026-11-09' }
+check(tradingHaltLabel(halt) === '停止買賣中（減資換發新股，預計 2026/11/16 恢復）', `halt label: ${tradingHaltLabel(halt)}`)
+check(tradingHaltLabel(null) === null && tradingHaltLabel(undefined) === null, 'no stop, no label')
+const haltMarkup = renderToStaticMarkup(<StockQuoteLine bars={[tradedBar('2026-11-03', 57.3, 1), tradedBar('2026-11-04', 56.7, 2)]} halt={halt} />)
+check(haltMarkup.includes('badge-warning stock-header-halt') && haltMarkup.includes('停止買賣中（減資換發新股，預計 2026/11/16 恢復）') && haltMarkup.includes('資料 2026/11/04'), `halt markup: ${haltMarkup}`)
+check(!upMarkup.includes('停止買賣中'), 'a stock that trades has no stop badge')
 
 // ---- weekly series ----
 const weekly = weeklySeries()

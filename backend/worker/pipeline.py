@@ -4482,14 +4482,16 @@ def _json_safe(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # TWSE MI_INDEX summary tables and the TPEx highlight, Issue #275), the TPEx
 # emerging roster (names for AI news candidates only, Issue #512), the
 # display-only monthly revenue snapshots (Issue #530), a skipped instrument
-# status sync (the watchdog reports it), and a TPEx OpenAPI table that was not
+# status sync (the watchdog reports it), a TPEx OpenAPI table that was not
 # used or lacks a 管理股票 (Issue #579: the website report was read instead,
-# or the source is kept and the gap is only reported).  Every other warning,
-# including any not matched here, concerns OHLCV, the TAIEX baseline, the
-# holiday calendar or chips, and keeps the collect partial.
+# or the source is kept and the gap is only reported), and the capital
+# reduction stops of trading (Issue #582: coverage reasons only).  Every other
+# warning, including any not matched here, concerns OHLCV, the TAIEX baseline,
+# the holiday calendar or chips, and keeps the collect partial.
 NONCORE_WARNING_PATTERN = re.compile(
     r"^((TWSE|TPEx) (MOPS events|MOPS fundamentals|suspension feed|suspension history"
     r"|market summary|emerging issuers|monthly revenue) unavailable"
+    r"|(TWSE|TPEx) trading halts "
     r"|MOPS event list unavailable"
     r"|index bars "
     r"|futures bars "
@@ -4892,6 +4894,17 @@ def collect(
                 lambda digest: _raw_id_for_digest(raw_ids, digest),
                 batch.warnings,
             )
+            # worker.trading_halts imports this module too (Issue #582).
+            from worker.trading_halts import store_trading_halts
+
+            trading_halts = store_trading_halts(
+                db,
+                list(getattr(batch, "trading_halts", []) or []),
+                list(getattr(batch, "trading_halt_windows", []) or []),
+                instruments,
+                lambda digest: _raw_id_for_digest(raw_ids, digest),
+                batch.warnings,
+            )
             index_daily_bars = store_collect_index_bars(
                 db,
                 list(getattr(batch, "index_daily_bars", []) or []),
@@ -5227,6 +5240,7 @@ def collect(
                 "market_summaries": market_summaries,
                 "emerging_issuers": emerging_issuers,
                 "monthly_revenues": monthly_revenues,
+                "trading_halts": trading_halts,
                 "index_daily_bars": index_daily_bars,
                 "futures_daily_bars": futures_daily_bars,
                 "raw_payloads": raw_payload_count,
@@ -5337,6 +5351,7 @@ def collect(
                 "market_summaries": market_summaries,
                 "emerging_issuers": emerging_issuers,
                 "monthly_revenues": monthly_revenues,
+                "trading_halts": trading_halts,
                 "index_daily_bars": index_daily_bars,
                 "futures_daily_bars": futures_daily_bars,
                 "event_coverage": event_coverage,

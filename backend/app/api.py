@@ -127,6 +127,7 @@ from .product_time import (
 )
 from .portfolio_values import read_portfolio_value
 from .portfolio_quotes import portfolio_quote
+from .trading_halts import halt_dict, halt_on
 from .units import (
     MAX_SAFE_SHARES,
     share_quantity_dict,
@@ -2666,6 +2667,33 @@ def _stock_cutoff(
     return max((day for day in observed if day is not None), default=None)
 
 
+def _stock_trading_halt(
+    db: Session, instrument: Instrument, requested: date | None
+) -> dict[str, Any] | None:
+    """The official stop of trading on the page's day (Issue #582).
+
+    The day is the requested cutoff, or else the latest TAIEX session: the
+    default cutoff is the stock's own last bar, which a stop leaves behind, so
+    the header says why the price is older than the market.
+    """
+
+    day = requested or db.scalar(
+        select(func.max(MarketBar.trading_date))
+        .join(Instrument, Instrument.id == MarketBar.instrument_id)
+        .where(
+            Instrument.exchange == "TWSE",
+            Instrument.instrument_type == "index",
+            Instrument.symbol.in_({"TAIEX", "TWII"}),
+        )
+    )
+    if day is None:
+        return None
+    row = halt_on(db, instrument.id, day)
+    if row is None:
+        return None
+    return {**halt_dict(row), "as_of": day.isoformat()}
+
+
 @router.get("/stocks/{exchange}/{symbol}")
 def stock_detail(
     exchange: str, symbol: str, db: Session = Depends(get_db), as_of: date | None = None
@@ -2698,6 +2726,9 @@ def stock_detail(
         payload["decision_summary"].get("coverage")
         if payload.get("decision_summary")
         else None
+    )
+    payload["trading_halt"] = (
+        _stock_trading_halt(db, instrument_row, as_of) if instrument_row else None
     )
     # News remains a sub-section of the stock detail; the main product feed is
     # still /news and its cursor contract.

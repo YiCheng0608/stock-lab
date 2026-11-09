@@ -491,6 +491,8 @@ export type InstrumentDetail = {
   events: EventRow[]
   data_quality: DataQualityRow[]
   coverage?: InstrumentCoverage | null
+  // The official stop of trading on the page's day (Issue 582): the requested cutoff, else the latest market session.
+  trading_halt?: TradingHalt | null
   quality_summary?: {
     market: { status: string; label: string; as_of: string | null; missing_fields: string[]; source: string | null }
     research: { status: string; label: string; as_of: string | null; missing_fields: string[]; action_state: string | null }
@@ -584,6 +586,23 @@ export type StrategyBoard = {
   strategies: StrategyBoardRow[]
 }
 
+// An official stop of trading (Issue 582): the sessions from halt_start up to, not including, resume_date.
+export type TradingHalt = {
+  reason: string
+  reason_label: string
+  reason_detail: string | null
+  halt_start: string
+  resume_date: string
+  last_trade_date: string | null
+  exchange: string
+  source: string
+  endpoint: string
+  data_as_of: string
+  as_of?: string
+}
+
+export type TradingHaltPeriod = TradingHalt & { first_session: string; last_session: string }
+
 export type InstrumentCoverage = {
   coverage_status?: 'unknown' | 'verified' | string
   exchange: string
@@ -611,6 +630,9 @@ export type InstrumentCoverage = {
   suspended_dates_to_60?: string[]
   quote_not_listed_dates_to_60?: string[]
   invalid_bar_dates_to_60?: string[]
+  // Sessions of an official stop of trading (Issue 582) and the stops behind them; absent from an older API.
+  halted_dates_to_60?: string[]
+  halt_periods_to_60?: TradingHaltPeriod[]
   coverage_reasons: string[]
   ipo_stage: string | null
   windows: Record<string, Record<string, unknown>>
@@ -892,6 +914,9 @@ export type CoverageReport = {
     // Instruments with an official no-trade day in the window (#454); absent from an older API.
     no_trade_to_20?: number
     no_trade_to_60?: number
+    // Instruments with a session of an official stop of trading in the window (Issue 582).
+    halted_to_20?: number
+    halted_to_60?: number
     incomplete_chips_to_20: number
     incomplete_chips_to_60: number
     coverage_reason_counts: Record<string, number>
