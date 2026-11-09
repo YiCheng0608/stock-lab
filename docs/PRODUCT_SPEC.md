@@ -19,7 +19,7 @@
 | `/news`、`/news/:id` | 新聞 | 新資訊、來源、相關標的與已知／推論／未知的影響。 |
 | `/themes`、`/themes/:id` | 族群 | 官方產業與題材、熱度、廣度、集中度及資料限制。 |
 | `/stocks`、`/stocks/:exchange/:symbol` | 個股 | 四個判斷面向、條件計畫與完整證據。 |
-| `/strategy` | 策略說明 | 名單怎麼選出來、突破型與回踩型差在哪、怎麼照著做、觀察中在做什麼（[UI_COPY_SPEC §13](UI_COPY_SPEC.md#13-策略說明)）。 |
+| `/strategy` | 策略說明 | 目前策略的名稱（順勢籌碼型）、名單怎麼選出來、突破型與回踩型差在哪、三個確認條件的門檻與評分四分項的權重、怎麼照著做、觀察中在做什麼（[UI_COPY_SPEC §13](UI_COPY_SPEC.md#13-策略說明)）。 |
 
 觀察中的分級是列表排序，不改變 [§6](#action-merge) 的行動摘要判定；每列的狀態、價位與理由仍來自該檔的行動摘要。`/actions/:exchange/:symbol` 轉到個股頁的「研究條件」分頁（`/stocks/:exchange/:symbol?tab=research`），不另設行動詳情頁。
 

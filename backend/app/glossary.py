@@ -64,6 +64,20 @@ _TERMS: tuple[dict[str, Any], ...] = (
         "related": ["pullback", "breakout_entry", "ma20", "support"],
         "version": GLOSSARY_VERSION,
     },
+    # The strategy behind 今日可買 (#577); the frontend copy is compared by
+    # backend/tests/test_glossary.py.
+    {
+        "term_id": "trend_chips",
+        "name": "順勢籌碼型",
+        "aliases": ["順勢籌碼", "trend chips"],
+        "category": "strategy",
+        "plain_definition": "目前今日可買名單用的策略：只做多頭趨勢的股票，而且要族群強、法人不賣、融資不過熱。",
+        "use": "說明名單怎麼從資料得到：突破型或回踩型的價量條件成立，再通過族群、法人、融資三個確認條件，最後依評分排序；策略說明頁逐項列出門檻與權重。",
+        "how_to_read": "名單裡的股票都通過這套固定規則；規則只看價量、族群、法人與融資，大盤好壞目前不影響判斷。",
+        "limitations": "只是篩選與排序的規則，不代表勝率或預期報酬；資料不足的股票不列入，不以 0 補。",
+        "related": ["breakout_entry", "pullback_entry", "candidate_score"],
+        "version": GLOSSARY_VERSION,
+    },
     {
         "term_id": "ma20",
         "name": "MA20",
