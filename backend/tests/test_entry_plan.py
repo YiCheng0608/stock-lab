@@ -51,7 +51,7 @@ def listed(client):
 def test_breakout_and_pullback_plans_are_the_stored_levels(db, client):
     a, b = stock(db, "1101"), stock(db, "1102")
     breakout = signal(db, a, volume_ratio=2.0)
-    pullback = signal(db, b, "pullback_v3", volume_ratio=0.8)
+    pullback = signal(db, b, "pullback_v4", volume_ratio=0.8)
     levels_row(
         db,
         breakout,
@@ -153,7 +153,7 @@ def test_breakout_and_pullback_plans_are_the_stored_levels(db, client):
 
 def test_a_plan_without_levels_carries_the_reason(db, client):
     a = stock(db, "1101")
-    pullback = signal(db, a, "pullback_v3", volume_ratio=0.8)
+    pullback = signal(db, a, "pullback_v4", volume_ratio=0.8)
     levels_row(
         db,
         pullback,

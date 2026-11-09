@@ -184,7 +184,7 @@ def _partial_run(db, status: str) -> int:
     )
     db.add(
         Signal(
-            signal_key=f"backtest-{run_id}-pullback_v3-STALE-{DAY}",
+            signal_key=f"backtest-{run_id}-pullback_v4-STALE-{DAY}",
             signal_date=SCORE_DATE,
             instrument_id=instrument_id,
             strategy_version_id=strategy.id,

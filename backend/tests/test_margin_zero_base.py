@@ -376,17 +376,20 @@ def _zero_base_security(db, tmp_path, monkeypatch) -> Instrument:
     return instrument
 
 
-def test_the_registry_is_v3_and_the_older_versions_are_superseded():
-    assert list(REGISTRY) == ["breakout_v3", "pullback_v3"]
-    assert set(SUPERSEDED) == {*V1, *V2}
-    assert {
-        key: strategy.config["supersedes"] for key, strategy in REGISTRY.items()
-    } == {
+def test_v3_supersedes_v2_and_the_older_versions_are_superseded():
+    # pullback_v4 (#580) took the place of pullback_v3; v3's rule is unchanged.
+    v3 = {
+        "breakout_v3": REGISTRY["breakout_v3"],
+        "pullback_v3": SUPERSEDED["pullback_v3"],
+    }
+    assert list(REGISTRY) == ["breakout_v3", "pullback_v4"]
+    assert set(SUPERSEDED) == {*V1, *V2, "pullback_v3"}
+    assert {key: strategy.config["supersedes"] for key, strategy in v3.items()} == {
         "breakout_v3": {"name": "breakout_v2", "version": "2.0.0"},
         "pullback_v3": {"name": "pullback_v2", "version": "2.0.0"},
     }
     # Only the margin zero-base rule and the identity differ from v2.
-    for key, strategy in REGISTRY.items():
+    for key, strategy in v3.items():
         old = dict(SUPERSEDED[strategy.config["supersedes"]["name"]].config)
         new = dict(strategy.config)
         policy = dict(new["data_policy"])
@@ -446,7 +449,7 @@ def test_the_pages_read_the_newest_version_of_each_day(db, tmp_path, monkeypatch
         _old_signal(db, instrument, v2_day, name)
     for name in V2:
         _old_signal(db, instrument, v2_day, name)
-    keys = {"breakout_v3", "pullback_v3"}
+    keys = {"breakout_v3", "pullback_v4"}
 
     assert _shown(db, instrument, v1_day) == {
         key: (v1_day, name) for key, name in zip(sorted(keys), V1)

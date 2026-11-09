@@ -10,6 +10,7 @@ import {
   formatPrice,
   formatRiskReward,
   liquidityExclusionText,
+  riskRewardBasisSuffix,
 } from '../candidates/candidates'
 import { Term } from '../components/Term'
 import { Badge, DataTable, DateBadge, EmptyState, type Column } from '../components/ui'
@@ -45,6 +46,8 @@ function StatusCell({ row, floorNote }: { row: StrategyBoardRow; floorNote: stri
 
 export function ActionableLevels({ levels }: { levels: StrategyActionableLevels }) {
   const breakout = levels.entry_type === 'breakout'
+  // #580: the RR's entry, 「（以進場區中點 27.27 元計算）」 (UI_COPY_SPEC §10.1).
+  const basis = riskRewardBasisSuffix(levels.risk_reward, levels.risk_reward_basis, breakout ? levels.trigger_price : levels.reference_entry)
   return (
     <dl className="strategy-levels strategy-levels-actionable">
       {breakout
@@ -52,7 +55,7 @@ export function ActionableLevels({ levels }: { levels: StrategyActionableLevels 
         : <div><dt><Term id="entry_zone">進場區</Term>（元）</dt><dd className="level-entry">{formatPrice(levels.entry_low)}～{formatPrice(levels.entry_high)}</dd></div>}
       <div><dt><Term id="support">停損</Term>（元）</dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
       <div><dt><Term id="target">{levels.target_2 != null ? '目標一／目標二' : '目標一'}</Term>（元）</dt><dd className="level-target">{formatPrice(levels.target_1)}{levels.target_2 != null && <>／{formatPrice(levels.target_2)}</>}</dd></div>
-      <div><dt><Term id="rr">RR</Term></dt><dd><Badge tone="primary" className="badge-compact">{formatRiskReward(levels.risk_reward)}</Badge></dd></div>
+      <div><dt><Term id="rr">RR</Term></dt><dd><Badge tone="primary" className="badge-compact">{formatRiskReward(levels.risk_reward)}</Badge>{basis && <span className="small-note strategy-rr-basis">{basis}</span>}</dd></div>
     </dl>
   )
 }

@@ -1,10 +1,10 @@
 // What 策略說明 (/strategy) says about the current strategy (#577; UI_COPY_SPEC §13). These numbers are copy, not config: the
 // rules are read from backend/app/strategies (base.py COMMON_CONFIRMATIONS, breakout_v1.py, pullback_v1.py, which
-// breakout_v3 and pullback_v3 inherit) and the score from backend/app/domain.py (CANDIDATE_SCORE_V6). A change to either
+// breakout_v3 and pullback_v4 inherit) and the score from backend/app/domain.py (CANDIDATE_SCORE_V7). A change to either
 // changes this file and UI_COPY_SPEC §13 in the same PR.
 
 // What the strategy is made of: its two rules and its score, by version id.
-export const COMPOSITION = { breakout: 'breakout_v3', pullback: 'pullback_v3', score: 'candidate_score_v6' } as const
+export const COMPOSITION = { breakout: 'breakout_v3', pullback: 'pullback_v4', score: 'candidate_score_v7' } as const
 
 export type ConfirmationRow = { key: 'group' | 'institutional' | 'margin'; name: string; threshold: string; meaning: string }
 
@@ -29,7 +29,7 @@ export const CONFIRMATIONS: ReadonlyArray<ConfirmationRow> = [
 
 export type ScoreRow = { key: 'technical' | 'chips' | 'group' | 'news_sentiment'; name: string; weight: number; inference?: boolean; looks: string }
 
-// The four score components and their weights in percent (candidate_score_v6 weights; the sum is 100).
+// The four score components and their weights in percent (candidate_score_v7 weights, unchanged since v1; the sum is 100).
 export const SCORE_COMPONENTS: ReadonlyArray<ScoreRow> = [
   {
     key: 'technical', name: '技術', weight: 35,

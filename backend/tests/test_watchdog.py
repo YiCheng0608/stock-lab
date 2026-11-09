@@ -1425,7 +1425,7 @@ def test_period_backfill_success_and_skipped_are_not_failures(wd, steps, line):
     assert commented == line.startswith("violation")
 
 
-CURRENT_SCORE = "candidate_score_v6"
+CURRENT_SCORE = "candidate_score_v7"
 
 
 def _candidate_list(

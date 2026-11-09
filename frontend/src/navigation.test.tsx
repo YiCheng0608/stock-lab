@@ -70,7 +70,7 @@ check(/<h2 id="strategy-current-title"><button[^>]*data-term="trend_chips"[^>]*>
 // text() puts a space where a tag was (a term button, <code>); the paragraph is compared without spaces.
 const flat = (markup: string) => text(markup).replace(/\s+/g, '')
 const firstParagraph = flat(/<\/h2><p>([\s\S]*?)<\/p>/.exec(block)?.[1] ?? '')
-for (const part of ['順勢籌碼型', '只做多頭趨勢', '所屬族群比大盤強', '三大法人沒有明顯賣超', '融資沒有過熱', '大盤好壞目前不影響判斷', '突破型（breakout_v3）', '回踩型（pullback_v3）', '候選總分（candidate_score_v6）']) {
+for (const part of ['順勢籌碼型', '只做多頭趨勢', '所屬族群比大盤強', '三大法人沒有明顯賣超', '融資沒有過熱', '大盤好壞目前不影響判斷', '突破型（breakout_v3）', '回踩型（pullback_v4）', '候選總分（candidate_score_v7）']) {
   check(firstParagraph.includes(part.replace(/\s+/g, '')), `/strategy 策略區塊第一段缺「${part}」: ${firstParagraph}`)
 }
 check(strategyText.indexOf('順勢籌碼型') < strategyText.indexOf('今日可買怎麼來') && strategy.indexOf('data-strategy="trend_chips"') < strategy.indexOf('aria-labelledby="strategy-follow-title"'), '/strategy 先寫策略名稱與區塊，再寫「怎麼照著做」')

@@ -1,4 +1,4 @@
-<!-- owns: candidate_score_v1、candidate_score_v2、candidate_score_v3、candidate_score_v4、candidate_score_v5、candidate_score_v6、候選 AI 進出點說明 -->
+<!-- owns: candidate_score_v1、candidate_score_v2、candidate_score_v3、candidate_score_v4、candidate_score_v5、candidate_score_v6、candidate_score_v7、候選 AI 進出點說明 -->
 # candidate_score
 
 ## candidate_score_v1
@@ -47,23 +47,23 @@
 
 ## candidate_score_v2
 
-更早的評分（[#262](https://github.com/YiCheng0608/stock-lab/issues/262)），現行為 [candidate_score_v6](#candidate_score_v6)。與 [candidate_score_v1](#candidate_score_v1) 只差兩處：`name` 為 `candidate_score_v2`，新聞分項的 `llm_prompt_version` 為 `news_v2`（當時的現行新聞提示，[NEWS_SPEC §5](../NEWS_SPEC.md#5-ai-摘要與推論)）；其餘權重、子項、窗口、門檻、名單、理由、保存與 API 規則都照 v1。設定是 `domain.py` 的 `CANDIDATE_SCORE_V2`（快照與「只差兩處」由 `test_candidates.py` 釘住），當時 `CANDIDATE_SCORE` 指向它。新聞提示升版時評分也要升版：測試 `test_score_reads_the_news_prompt_version_the_news_llm_writes` 要求現行評分讀的版本等於 `worker.news_llm.PROMPT_VERSION`，否則新版提示寫的方向不會被計分。v2 現行時 `/api/candidates` 與個股 `candidate` 只讀 v2 的 run；v1 的 run 與列保留不改。現在的讀取規則見 [candidate_score_v6 的交界](#candidate_score_v6)。換版的 T 日窗口內若有只做過 `news_v1` 判讀的新聞，這些新聞記 `unscored`。
+更早的評分（[#262](https://github.com/YiCheng0608/stock-lab/issues/262)），現行為 [candidate_score_v7](#candidate_score_v7)。與 [candidate_score_v1](#candidate_score_v1) 只差兩處：`name` 為 `candidate_score_v2`，新聞分項的 `llm_prompt_version` 為 `news_v2`（當時的現行新聞提示，[NEWS_SPEC §5](../NEWS_SPEC.md#5-ai-摘要與推論)）；其餘權重、子項、窗口、門檻、名單、理由、保存與 API 規則都照 v1。設定是 `domain.py` 的 `CANDIDATE_SCORE_V2`（快照與「只差兩處」由 `test_candidates.py` 釘住），當時 `CANDIDATE_SCORE` 指向它。新聞提示升版時評分也要升版：測試 `test_score_reads_the_news_prompt_version_the_news_llm_writes` 要求現行評分讀的版本等於 `worker.news_llm.PROMPT_VERSION`，否則新版提示寫的方向不會被計分。v2 現行時 `/api/candidates` 與個股 `candidate` 只讀 v2 的 run；v1 的 run 與列保留不改。現在的讀取規則見 [candidate_score_v7 的交界](#candidate_score_v7)。換版的 T 日窗口內若有只做過 `news_v1` 判讀的新聞，這些新聞記 `unscored`。
 
 ## candidate_score_v3
 
-更早的評分（[#392](https://github.com/YiCheng0608/stock-lab/issues/392)），現行為 [candidate_score_v6](#candidate_score_v6)。與 [candidate_score_v2](#candidate_score_v2) 只差策略名稱：`name` 為 `candidate_score_v3`，候選池與技術分項（量比方向、距離公式）的 `breakout_v1`／`pullback_v1` 換成 [`breakout_v2`／`pullback_v2`](breakout_pullback.md#breakout_v2pullback_v2)；其餘照 v2。設定是 `domain.py` 的 `CANDIDATE_SCORE_V3`（快照與「只差策略名稱」由 `test_candidates.py` 釘住）；v2 的 run 與列保留不改。
+更早的評分（[#392](https://github.com/YiCheng0608/stock-lab/issues/392)），現行為 [candidate_score_v7](#candidate_score_v7)。與 [candidate_score_v2](#candidate_score_v2) 只差策略名稱：`name` 為 `candidate_score_v3`，候選池與技術分項（量比方向、距離公式）的 `breakout_v1`／`pullback_v1` 換成 [`breakout_v2`／`pullback_v2`](breakout_pullback.md#breakout_v2pullback_v2)；其餘照 v2。設定是 `domain.py` 的 `CANDIDATE_SCORE_V3`（快照與「只差策略名稱」由 `test_candidates.py` 釘住）；v2 的 run 與列保留不改。
 
 ## candidate_score_v4
 
-更早的評分（[#413](https://github.com/YiCheng0608/stock-lab/issues/413)），現行為 [candidate_score_v6](#candidate_score_v6)。與 [candidate_score_v3](#candidate_score_v3) 只差兩處：`name` 為 `candidate_score_v4`，新聞分項的 `llm_prompt_version` 為 `news_v3`（[NEWS_SPEC §5](../NEWS_SPEC.md#5-ai-摘要與推論) 的現行新聞提示）；其餘權重、子項、窗口、門檻、候選池、名單、理由、保存與 API 規則都照 v3。設定是 `domain.py` 的 `CANDIDATE_SCORE_V4`（快照與「只差兩處」由 `test_candidates.py` 釘住）；v3 的 run 與列保留不改。換版的 T 日窗口內若有只做過 `news_v2` 判讀的新聞，這些新聞記 `unscored`。
+更早的評分（[#413](https://github.com/YiCheng0608/stock-lab/issues/413)），現行為 [candidate_score_v7](#candidate_score_v7)。與 [candidate_score_v3](#candidate_score_v3) 只差兩處：`name` 為 `candidate_score_v4`，新聞分項的 `llm_prompt_version` 為 `news_v3`（[NEWS_SPEC §5](../NEWS_SPEC.md#5-ai-摘要與推論) 的現行新聞提示）；其餘權重、子項、窗口、門檻、候選池、名單、理由、保存與 API 規則都照 v3。設定是 `domain.py` 的 `CANDIDATE_SCORE_V4`（快照與「只差兩處」由 `test_candidates.py` 釘住）；v3 的 run 與列保留不改。換版的 T 日窗口內若有只做過 `news_v2` 判讀的新聞，這些新聞記 `unscored`。
 
 ## candidate_score_v5
 
-前一版評分（[#404](https://github.com/YiCheng0608/stock-lab/issues/404)），現行為 [candidate_score_v6](#candidate_score_v6)。與 [candidate_score_v4](#candidate_score_v4) 只差策略名稱：`name` 為 `candidate_score_v5`，候選池與技術分項（量比方向、距離公式）的 `breakout_v2`／`pullback_v2` 換成 [`breakout_v3`／`pullback_v3`](breakout_pullback.md#breakout_v3pullback_v3)；其餘權重、子項、窗口、門檻、新聞提示（`news_v3`）、名單、理由、保存與 API 規則都照 v4。設定是 `domain.py` 的 `CANDIDATE_SCORE_V5`（快照與「只差策略名稱」由 `test_candidates.py` 釘住）；v4 的 run 與列保留不改。
+前一版評分（[#404](https://github.com/YiCheng0608/stock-lab/issues/404)），現行為 [candidate_score_v7](#candidate_score_v7)。與 [candidate_score_v4](#candidate_score_v4) 只差策略名稱：`name` 為 `candidate_score_v5`，候選池與技術分項（量比方向、距離公式）的 `breakout_v2`／`pullback_v2` 換成 [`breakout_v3`／`pullback_v3`](breakout_pullback.md#breakout_v3pullback_v3)；其餘權重、子項、窗口、門檻、新聞提示（`news_v3`）、名單、理由、保存與 API 規則都照 v4。設定是 `domain.py` 的 `CANDIDATE_SCORE_V5`（快照與「只差策略名稱」由 `test_candidates.py` 釘住）；v4 的 run 與列保留不改。
 
 ## candidate_score_v6
 
-目前的評分版本（`CANDIDATE_SCORE_VERSION`，[#490](https://github.com/YiCheng0608/stock-lab/issues/490)）。與 [candidate_score_v5](#candidate_score_v5) 只差兩處：`name` 為 `candidate_score_v6`，候選池多一道**流動性門檻**（設定 `pool.liquidity`）；策略（`breakout_v3`／`pullback_v3`）、權重、子項、窗口、新聞提示（`news_v3`）、名單、理由與保存規則都照 v5。設定是 `domain.py` 的 `CANDIDATE_SCORE_V6`（快照與「只差兩處」由 `test_candidates.py` 釘住），`CANDIDATE_SCORE` 指向它；v5 的 run 與列保留不改。門檻只放在評分版本裡，訊號、條件價位、追蹤與回測都不受影響；調整門檻要升評分版，不升策略版。
+前一版評分（[#490](https://github.com/YiCheng0608/stock-lab/issues/490)），現行為 [candidate_score_v7](#candidate_score_v7)。與 [candidate_score_v5](#candidate_score_v5) 只差兩處：`name` 為 `candidate_score_v6`，候選池多一道**流動性門檻**（設定 `pool.liquidity`）；策略（`breakout_v3`／`pullback_v3`）、權重、子項、窗口、新聞提示（`news_v3`）、名單、理由與保存規則都照 v5。設定是 `domain.py` 的 `CANDIDATE_SCORE_V6`（快照與「只差兩處」由 `test_candidates.py` 釘住），當時 `CANDIDATE_SCORE` 指向它；v5 的 run 與列保留不改。門檻只放在評分版本裡，訊號、條件價位、追蹤與回測都不受影響；調整門檻要升評分版，不升策略版。
 
 **流動性門檻**（實作 `app.liquidity`，在 `worker.candidates._liquid_pool` 套用）：入池的其他條件都通過後，T 日（含）的 20 日平均成交量須 **≥ 1,000 張**（1 張 = 1,000 股，`market_bars.volume` 為股），剛好 1,000 張會進。只看張數不看成交值：高價股成交值再高，張數少一樣排除。門檻在評分之前套用，所以技術分項的同策略池 percentile 只排達門檻的訊號。
 
@@ -78,4 +78,13 @@
 
 **稽核**：`tools/audit` 的候選重算以 TAIEX 指數日線的日期為交易日，獨立重算 20 日均量，重建的池子先套同一門檻，入選列的 `liquidity.average_volume_lots_20d` 要與重算值相符。
 
-**交界**（[#407](https://github.com/YiCheng0608/stock-lab/pull/407) review M3、[#413](https://github.com/YiCheng0608/stock-lab/issues/413)、[#404](https://github.com/YiCheng0608/stock-lab/issues/404)、[#490](https://github.com/YiCheng0608/stock-lab/issues/490)）：過去日期的候選不重算。讀取端（`/api/candidates` 與個股 `candidate`、行動頁第 1 級、族群成員表）每個日期依版本清單 `CANDIDATE_SCORE_READ_VERSIONS`（v6、v5、v4、v3、v2）取它有的第一個版本的 run（`app.candidate_runs.read_run`）：沒有 v6 run 的日期取 v5 run，依此類推。所以切換前的日期照舊顯示當時的名單，同一天只讀一版，與訊號的交界相同（[策略框架與 registry](README.md#策略框架與-registry)）。`daily` 只寫 v6，候選 AI 說明只寫 v6 run。
+
+## candidate_score_v7
+
+目前的評分版本（`CANDIDATE_SCORE_VERSION`，[#580](https://github.com/YiCheng0608/stock-lab/issues/580)）。與 [candidate_score_v6](#candidate_score_v6) 只差策略名稱：`name` 為 `candidate_score_v7`，候選池與技術分項（量比方向、距離公式）的 `pullback_v3` 換成 [`pullback_v4`](breakout_pullback.md#pullback_v4)（RR 以進場區中點計算），`breakout_v3` 不變；流動性門檻、權重、子項、窗口、新聞提示（`news_v3`）、名單、理由與保存規則都照 v6。設定是 `domain.py` 的 `CANDIDATE_SCORE_V7`（快照與「只差策略名稱」由 `test_candidates.py` 釘住），`CANDIDATE_SCORE` 指向它；v6 的 run 與列保留不改。
+
+- **入池的 RR**：入池仍要求通過 `validate_signal_levels`（RR ≥ 1.5）與 analyze 判定可行動。v4 的 RR 以進場區中點計算，不足 1.5 的回踩訊號在 analyze 就記 `invalid_levels`、不是可行動訊號，所以不入池（不算可行動訊號，只出現在 run 摘要的訊號狀態分佈 `invalid_levels`，不計入 `exclusions_json`）。今日可買的回踩型因此可能變少（使用者接受，[#1 6744852194](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6744852194)）。
+- **RR 子項**：權重仍是 0（只顯示、不計分）。v4 起回踩型的 RR 會隨收盤在進場區的位置變動，不再固定約 1.6；要不要計分另議，改權重要再升版。
+- **API**：`/api/candidates` 與個股 `candidate` 的 `levels` 多 `risk_reward_basis`（`entry_zone_midpoint`／`signal_close`／`entry_price`，依訊號的策略版本；畫面據此標明 RR 的計算基準，[UI_COPY_SPEC §10](../UI_COPY_SPEC.md#10-每日候選)），其餘欄位不變。
+
+**交界**（[#407](https://github.com/YiCheng0608/stock-lab/pull/407) review M3、[#413](https://github.com/YiCheng0608/stock-lab/issues/413)、[#404](https://github.com/YiCheng0608/stock-lab/issues/404)、[#490](https://github.com/YiCheng0608/stock-lab/issues/490)、[#580](https://github.com/YiCheng0608/stock-lab/issues/580)）：過去日期的候選不重算。讀取端（`/api/candidates` 與個股 `candidate`、行動頁第 1 級、族群成員表）每個日期依版本清單 `CANDIDATE_SCORE_READ_VERSIONS`（v7、v6、v5、v4、v3、v2）取它有的第一個版本的 run（`app.candidate_runs.read_run`）：沒有 v7 run 的日期取 v6 run，依此類推。所以切換前的日期照舊顯示當時的名單，同一天只讀一版，與訊號的交界相同（[策略框架與 registry](README.md#策略框架與-registry)）。`daily` 只寫 v7，候選 AI 說明只寫 v7 run。

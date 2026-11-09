@@ -65,8 +65,8 @@ export const GLOSSARY: GlossaryTerm[] = [
     term_id: 'rr', name: '風險報酬比 RR', aliases: ['RR'], category: 'strategy',
     plain_definition: '可能賺的空間是可能賠的幾倍。',
     use: '固定規則的價位驗證至少要求 RR ≥ 1.5。',
-    how_to_read: 'RR =（目標一 − 進場價）÷（進場價 − 停損）；低於門檻時是無效價位，不應包裝成可執行訊號。',
-    limitations: '比例不會消除跳空、流動性或執行風險。', related: ['target', 'support'], version: '1.2.0',
+    how_to_read: 'RR =（目標一 − 進場價）÷（進場價 − 停損）；回踩型的進場價取進場區中點；低於門檻時是無效價位，不應包裝成可執行訊號。',
+    limitations: '比例不會消除跳空、流動性或執行風險。', related: ['target', 'support'], version: '1.5.0',
   },
   {
     term_id: 'target', name: '目標價', aliases: ['target_1', 'target_2', '目標一', '目標二'], category: 'strategy',

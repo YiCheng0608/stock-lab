@@ -684,7 +684,7 @@ def _score_rows() -> list[dict[str, Any]]:
 
 # ---- strategies and signals ----
 
-STRATEGY_IDS = {"breakout_v3": 1, "pullback_v3": 2, "hot_group_v1": 3}
+STRATEGY_IDS = {"breakout_v3": 1, "pullback_v4": 2, "hot_group_v1": 3}
 
 
 def _strategy_rows() -> list[dict[str, Any]]:
@@ -736,7 +736,7 @@ def _signal_rows() -> list[dict[str, Any]]:
         closes = [bar["close"] for bar in bars]
         ma20 = round(sum(closes[-20:]) / 20, 4)
         ma60 = round(sum(closes[-60:]) / 60, 4)
-        for strategy, status in zip(("breakout_v3", "pullback_v3"), statuses):
+        for strategy, status in zip(("breakout_v3", "pullback_v4"), statuses):
             breakout = strategy == "breakout_v3"
             conditional = status == "conditional"
             entry = close
@@ -1502,7 +1502,7 @@ _PLANS = (
     (
         3,
         "9201",
-        "pullback_v3",
+        "pullback_v4",
         SESSIONS[-12],
         "target_hit",
         {
