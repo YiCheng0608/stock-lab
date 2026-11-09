@@ -281,8 +281,30 @@ SEP_OCT = [
 ]
 
 
-def _seed_openapi(db, day: date) -> None:
-    """A TX row the OpenAPI collect wrote (taifex_daily_futures, raw source taifex)."""
+def site_bar(day: date) -> futures_bars.FuturesBar:
+    """The bar the site's CSV (``_row``) gives for ``day``."""
+    contract = futures_bars.near_month(day)
+    close = _close(day, contract)
+    return futures_bars.FuturesBar(
+        trading_date=day,
+        contract_month=contract,
+        open=close - 30,
+        high=close + 40,
+        low=close - 50,
+        close=close,
+        volume=50000,
+        settlement_price=close - 2,
+        open_interest=60000,
+        price_reason=None,
+    )
+
+
+def _seed_openapi(db, day: date, *, site_values: bool = False) -> None:
+    """A TX row the OpenAPI collect wrote (taifex_daily_futures, raw source taifex).
+
+    Made-up values unlike the site's, or ``site_values``: the same session
+    from both reports.
+    """
     run = IngestionRun(
         run_type="collect",
         source="official",
@@ -296,24 +318,27 @@ def _seed_openapi(db, day: date) -> None:
         ingestion_run_id=run.id,
         source="taifex",
         endpoint=sources.TAIFEX_DAILY_FUTURES_ENDPOINT,
-        sha256="openapi",
+        sha256=f"openapi{day:%Y%m%d}",
         data_as_of=day.isoformat(),
         collected_at=datetime(2026, 11, 9),
     )
     db.add(raw)
     db.flush()
-    bar = futures_bars.FuturesBar(
-        trading_date=day,
-        contract_month=futures_bars.near_month(day),
-        open=1.0,
-        high=3.0,
-        low=0.5,
-        close=2.0,
-        volume=7,
-        settlement_price=2.0,
-        open_interest=9,
-        price_reason=None,
-        payload_sha256="openapi",
+    bar = (
+        site_bar(day)
+        if site_values
+        else futures_bars.FuturesBar(
+            trading_date=day,
+            contract_month=futures_bars.near_month(day),
+            open=1.0,
+            high=3.0,
+            low=0.5,
+            close=2.0,
+            volume=7,
+            settlement_price=2.0,
+            open_interest=9,
+            price_reason=None,
+        )
     )
     futures_bars.store_futures_bars(db, [bar], lambda _sha: raw.id)
     db.commit()
@@ -343,12 +368,12 @@ def _tx(db):
     ).all()
 
 
-def test_the_backfill_writes_its_own_source_and_stops_before_the_openapi_rows(
-    factory,
-):
-    first_openapi = date(2024, 10, 21)
+def test_the_backfill_writes_its_own_source_and_keeps_the_openapi_rows(factory):
+    """Issue #586: every session without a TX row, before and after an OpenAPI row."""
+    openapi_days = [date(2024, 10, 21), date(2024, 10, 23)]
     with factory() as db:
-        _seed_openapi(db, first_openapi)
+        for day in openapi_days:
+            _seed_openapi(db, day)
     get = SiteGet(SEP_OCT)
 
     result, sleeps = _backfill(factory, get)
@@ -357,26 +382,27 @@ def test_the_backfill_writes_its_own_source_and_stops_before_the_openapi_rows(
     # One request per calendar month, 3 seconds apart.
     assert get.requests == [("2024/09/01", "2024/09/30"), ("2024/10/01", "2024/10/31")]
     assert sleeps == [3.0]
-    assert result["openapi_first_day"] == first_openapi.isoformat()
-    history = [day for day in SEP_OCT if day < first_openapi]
+    history = [day for day in SEP_OCT if day not in openapi_days]
     assert result["counts"]["inserted"] == len(history)
+    # The OpenAPI rows (made-up values unlike the site's) stay: a conflict each.
+    assert result["counts"]["conflict"] == len(openapi_days)
+    assert result["written_dates"] == [day.isoformat() for day in history]
     with factory() as db:
         rows = _tx(db)
-        # The history, then the OpenAPI row: no overlap, no gap.
-        assert [row.trading_date for row in rows] == history + [first_openapi]
-        assert {row.source for row in rows[:-1]} == {"taifex_futdatadown"}
-        assert rows[-1].source == "taifex_daily_futures"
-        assert rows[-1].close == 2.0  # untouched
+        # Both sources, one row a session: the gap after 10/21 is filled.
+        assert [row.trading_date for row in rows] == SEP_OCT
+        by_day = {row.trading_date: row for row in rows}
+        for day in openapi_days:
+            assert by_day[day].source == "taifex_daily_futures"
+            assert by_day[day].close == 2.0  # untouched
+        assert {by_day[day].source for day in history} == {"taifex_futdatadown"}
         raw = db.get(RawPayload, rows[0].raw_payload_id)
         run = db.get(IngestionRun, result["run_id"])
         assert (raw.source, raw.ingestion_run_id) == ("taifex_web", run.id)
         assert raw.endpoint.startswith(fh.ENDPOINT)
         assert raw.data_as_of == "2024-09-30"
         assert (run.run_type, run.source) == ("futures_bar_backfill", "official")
-        manifest = run.metadata_json["coverage_manifest"]
-        assert manifest["2024-10"]["from_openapi_day"] == len(
-            [day for day in SEP_OCT if day >= first_openapi]
-        )
+        assert run.metadata_json["trigger"] == "manual"
         assert [row.contract_month for row in rows if row.trading_date.month == 10][
             :3
         ] == ["202410", "202410", "202410"]
@@ -399,11 +425,10 @@ def test_without_openapi_rows_the_history_runs_to_the_requested_end(factory):
     result, _ = _backfill(factory, SiteGet(SEP_OCT))
 
     assert result["counts"]["inserted"] == len(SEP_OCT)
-    assert result["openapi_first_day"] is None
 
 
-def test_without_openapi_rows_today_is_left_to_the_daily(factory):
-    """PR #565 review: today's session is the daily's OpenAPI row, not the site's."""
+def test_today_is_left_to_a_later_read(factory):
+    """PR #565 review: today's session is not the site's (the OpenAPI gives it later)."""
     today = date(2024, 10, 18)
     sessions = [day for day in SEP_OCT if day <= today]
     with factory() as db:
@@ -547,5 +572,320 @@ def test_us_collect_runs_without_maintenance_mode():
     from worker.cli import maintenance_guarded
 
     args = Namespace(command="index-bars", index_bars_command="us-collect")
+
+    assert maintenance_guarded(args) is None
+
+
+# --- the gap fill after a snapshot collect (Issue #586) ---------------------------
+
+OCT_NOV = [
+    day
+    for day in (date(2024, 10, 1) + timedelta(days=offset) for offset in range(61))
+    if day.weekday() < 5 and day != date(2024, 10, 10)
+]
+
+
+def _seed_sessions(db, days) -> None:
+    """Verified TAIEX sessions (a fixture-source row counts, app.coverage)."""
+    taiex = Instrument(
+        market="TW",
+        exchange="TWSE",
+        symbol="TAIEX",
+        name="TAIEX",
+        instrument_type="index",
+        industry="Index",
+        status="active",
+    )
+    db.add(taiex)
+    db.flush()
+    for day in days:
+        db.add(
+            MarketBar(
+                instrument_id=taiex.id,
+                trading_date=day,
+                open=24000.0,
+                high=24000.0,
+                low=24000.0,
+                close=24000.0,
+                adj_close=24000.0,
+                volume=0,
+                turnover=0.0,
+                source="twse_fixture",
+                data_as_of=datetime.combine(day, datetime.min.time()),
+            )
+        )
+    db.commit()
+
+
+def _daily(factory, before: date, missing=()) -> None:
+    """Sessions to ``before`` (inclusive), each before it with the OpenAPI's TX row but ``missing``."""
+    with factory() as db:
+        _seed_sessions(db, [day for day in OCT_NOV if day <= before])
+        for day in OCT_NOV:
+            if day < before and day not in missing:
+                _seed_openapi(db, day, site_values=True)
+
+
+def _fill(factory, before: date, get, today=None):
+    sleeps: list[float] = []
+    with factory() as db:
+        result = fh.fill_recent_gaps(
+            db, before=before, get=get, sleep=sleeps.append, today=today or before
+        )
+    return result, sleeps
+
+
+def test_a_gap_is_filled_from_its_month_without_touching_the_openapi_rows(factory):
+    before = date(2024, 11, 20)
+    gaps = [date(2024, 11, 12), date(2024, 11, 14)]
+    _daily(factory, before, gaps)
+    with factory() as db:
+        openapi = {row.trading_date: row.collected_at for row in _tx(db)}
+    get = SiteGet(OCT_NOV)
+
+    result, sleeps = _fill(factory, before, get)
+
+    assert result["status"] == "success", result
+    assert result["missing_dates"] == ["2024-11-12", "2024-11-14"]
+    # One request (the month of the gaps, up to today), so no sleep.
+    assert get.requests == [("2024/11/01", "2024/11/20")] and sleeps == []
+    assert result["requests"] == 1
+    assert result["written_dates"] == ["2024-11-12", "2024-11-14"]
+    assert result["still_missing"] == []
+    with factory() as db:
+        rows = {row.trading_date: row for row in _tx(db)}
+        assert {rows[day].source for day in gaps} == {"taifex_futdatadown"}
+        # Every other session keeps its OpenAPI row as it was; today is not written.
+        for day, collected in openapi.items():
+            assert (rows[day].source, rows[day].collected_at) == (
+                "taifex_daily_futures",
+                collected,
+            )
+        assert before not in rows
+        run = db.get(IngestionRun, result["run_id"])
+        assert (run.run_type, run.metadata_json["trigger"]) == (
+            "futures_bar_backfill",
+            "collect",
+        )
+        counts = run.metadata_json["counts"]
+        # The November sessions both reports have: kept, no conflict, no warning.
+        assert counts["kept_other_source"] == len(
+            [day for day in openapi if day.month == 11]
+        )
+        assert counts["conflict"] == 0 and result["warnings"] == []
+
+
+def test_gaps_in_two_months_are_two_requests(factory):
+    before = date(2024, 11, 8)
+    _daily(factory, before, [date(2024, 10, 31), date(2024, 11, 4)])
+    get = SiteGet(OCT_NOV)
+
+    result, sleeps = _fill(factory, before, get)
+
+    assert get.requests == [("2024/10/01", "2024/10/31"), ("2024/11/01", "2024/11/08")]
+    assert sleeps == [3.0]
+    assert result["written_dates"] == ["2024-10-31", "2024-11-04"]
+
+
+def test_no_gap_is_no_request(factory):
+    before = date(2024, 11, 20)
+    _daily(factory, before)
+    get = SiteGet(OCT_NOV)
+
+    result, _ = _fill(factory, before, get)
+
+    assert get.requests == [] and result["requests"] == 0
+    assert result["status"] == "complete" and result["sessions_checked"] == 10
+    with factory() as db:
+        # The seeded OpenAPI runs only: no backfill run.
+        assert (
+            db.scalar(
+                select(func.count())
+                .select_from(IngestionRun)
+                .where(IngestionRun.run_type == "futures_bar_backfill")
+            )
+            == 0
+        )
+
+
+def test_only_the_last_ten_sessions_are_checked(factory):
+    before = date(2024, 11, 20)
+    # 11/05 is the 11th session before 11/20: left to the manual history.
+    _daily(factory, before, [date(2024, 10, 1), date(2024, 11, 5)])
+    get = SiteGet(OCT_NOV)
+
+    result, _ = _fill(factory, before, get)
+
+    assert result["window"] == ["2024-11-06", "2024-11-19"]
+    assert get.requests == [] and result["missing_dates"] == []
+
+
+def test_a_session_the_site_has_not_listed_stays_missing(factory):
+    before = date(2024, 11, 20)
+    gap = date(2024, 11, 19)
+    _daily(factory, before, [gap])
+
+    result, _ = _fill(factory, before, SiteGet([day for day in OCT_NOV if day != gap]))
+
+    assert result["written_dates"] == [] and result["still_missing"] == ["2024-11-19"]
+
+
+@pytest.mark.parametrize(
+    "missing,months",
+    [
+        ([], []),
+        ([date(2024, 11, 12)], [Month(2024, 11)]),
+        ([date(2024, 10, 31), date(2024, 11, 4)], [Month(2024, 10), Month(2024, 11)]),
+        # At most two months: the newest gap's and the one before it.
+        (
+            [date(2025, 1, 24), date(2025, 2, 3), date(2025, 3, 3)],
+            [Month(2025, 2), Month(2025, 3)],
+        ),
+        ([date(2025, 1, 24), date(2025, 3, 3)], [Month(2025, 3)]),
+        ([date(2024, 12, 31), date(2025, 1, 2)], [Month(2024, 12), Month(2025, 1)]),
+    ],
+)
+def test_the_gap_fill_asks_for_at_most_two_months(missing, months):
+    assert fh.gap_months(missing) == months
+
+
+def test_the_collect_fills_gaps_only_with_a_getter(factory, monkeypatch):
+    from worker import pipeline
+
+    before = date(2024, 11, 20)
+    _daily(factory, before, [date(2024, 11, 12)])
+    with factory() as db:
+        run = IngestionRun(
+            run_type="collect",
+            source="official",
+            run_date=before,
+            status="success",
+            started_at=datetime(2026, 11, 9),
+            metadata_json={"records": 1},
+        )
+        db.add(run)
+        db.commit()
+        get = SiteGet(OCT_NOV)
+        # Fixture feeds (no getter) or a collect that is not of a session: nothing.
+        assert (
+            pipeline.fill_collect_futures_gaps(db, run, None, before, enabled=True)
+            == {}
+        )
+        assert (
+            pipeline.fill_collect_futures_gaps(db, run, get, before, enabled=False)
+            == {}
+        )
+        assert get.requests == []
+        monkeypatch.setattr(fh, "taipei_today", lambda: before)
+        monkeypatch.setattr(fh.time, "sleep", lambda _: None)
+
+        result = pipeline.fill_collect_futures_gaps(db, run, get, before, enabled=True)
+
+        assert result["written_dates"] == ["2024-11-12"]
+        stored = db.get(IngestionRun, run.id).metadata_json
+        assert stored["records"] == 1
+        assert stored["futures_gap_fill"]["written_dates"] == ["2024-11-12"]
+
+        def broken(*args, **kwargs):
+            raise RuntimeError("fixture outage")
+
+        monkeypatch.setattr(fh, "fill_recent_gaps", broken)
+        failed = pipeline.fill_collect_futures_gaps(db, run, get, before, enabled=True)
+        assert failed == {"status": "failed", "error": "RuntimeError: fixture outage"}
+        stored_run = db.get(IngestionRun, run.id)
+        assert stored_run.metadata_json["futures_gap_fill"] == failed
+        assert stored_run.status == "success"
+
+
+def _openapi_report(day: date) -> list[dict[str, str]]:
+    """A one-row DailyMarketReportFut answer (JSON) of ``day`` with the site's values."""
+    bar = site_bar(day)
+    return [
+        {
+            "Date": f"{day:%Y%m%d}",
+            "Contract": "TX",
+            "ContractMonth(Week)": bar.contract_month,
+            "Open": str(bar.open),
+            "High": str(bar.high),
+            "Low": str(bar.low),
+            "Last": str(bar.close),
+            "Volume": str(bar.volume),
+            "SettlementPrice": str(bar.settlement_price),
+            "OpenInterest": str(bar.open_interest),
+            "TradingSession": "一般",
+        }
+    ]
+
+
+def test_futures_collect_stores_the_report_session_then_fills_the_gaps(factory):
+    today = date(2024, 11, 20)
+    _daily(factory, today, [date(2024, 11, 12), date(2024, 11, 19)])
+    get = SiteGet(OCT_NOV)
+    asked: list[str] = []
+
+    def fetcher(url, **kwargs):
+        asked.append(url)
+        return _openapi_report(date(2024, 11, 19))
+
+    with factory() as db:
+        result = fh.collect_latest(
+            db, fetcher=fetcher, get=get, sleep=lambda _: None, today=today
+        )
+
+    assert result["status"] == "success", result
+    assert asked == [sources.TAIFEX_DAILY_FUTURES_ENDPOINT]
+    assert result["futures_daily_bars"]["counts"]["inserted"] == 1
+    assert result["warnings"] == [
+        "futures bars not yet published for TAIFEX TX 2024-11-20: "
+        "DailyMarketReportFut reports 2024-11-19"
+    ]
+    # The report gave 11/19; the site only the gap it did not.
+    assert result["gap_fill"]["missing_dates"] == ["2024-11-12"]
+    assert result["gap_fill"]["written_dates"] == ["2024-11-12"]
+    assert get.requests == [("2024/11/01", "2024/11/20")]
+    with factory() as db:
+        rows = {row.trading_date: row for row in _tx(db)}
+        assert rows[date(2024, 11, 19)].source == "taifex_daily_futures"
+        assert rows[date(2024, 11, 12)].source == "taifex_futdatadown"
+        run = db.get(IngestionRun, result["run_id"])
+        assert (run.run_type, run.status) == ("futures_bar_backfill", "success")
+        assert run.metadata_json["trigger"] == "futures-collect"
+        raw = db.get(RawPayload, rows[date(2024, 11, 19)].raw_payload_id)
+        assert (raw.source, raw.ingestion_run_id) == ("taifex", run.id)
+        assert db.scalar(
+            select(func.count())
+            .select_from(TechnicalIndicator)
+            .where(
+                TechnicalIndicator.instrument_id
+                == rows[today - timedelta(1)].instrument_id
+            )
+        ) == len(rows)
+
+    # Run again: nothing to write, no site request.
+    with factory() as db:
+        again = fh.collect_latest(
+            db, fetcher=fetcher, get=get, sleep=lambda _: None, today=today
+        )
+    assert again["futures_daily_bars"]["counts"]["unchanged"] == 1
+    assert again["gap_fill"]["requests"] == 0 and len(get.requests) == 1
+
+
+def test_an_adapter_on_given_feeds_does_not_ask_the_site():
+    feeds = sources.OfficialMarketDataAdapter(
+        sources.TwseAdapter(lambda url, **kwargs: []),
+        sources.TpexAdapter(lambda url, **kwargs: []),
+    )
+
+    assert feeds.futures_history_get is None
+    assert sources.OfficialMarketDataAdapter().futures_history_get is fh.fetch_month
+
+
+def test_futures_collect_runs_without_maintenance_mode():
+    # One OpenAPI read and at most two site months, idempotent: no maintenance.
+    from argparse import Namespace
+
+    from worker.cli import maintenance_guarded
+
+    args = Namespace(command="index-bars", index_bars_command="futures-collect")
 
     assert maintenance_guarded(args) is None
