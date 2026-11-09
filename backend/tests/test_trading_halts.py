@@ -288,9 +288,9 @@ def _halt_capture(exchange, payload, day=DAY):
     return captured, records, window
 
 
-def _collect(twse_rows, tpex_rows, *, twse_quotes=(), day=DAY):
+def _collect(twse_rows, tpex_rows, *, twse_quotes=(), tpex_quotes=(), day=DAY):
     quotes, bars = harness._session(
-        day, [harness._twse_row("2330", "1000.00"), *twse_quotes], []
+        day, [harness._twse_row("2330", "1000.00"), *twse_quotes], list(tpex_quotes)
     )
     twse = _halt_capture(
         "TWSE", lambda start, end: twse_payload(start, end, *twse_rows), day
@@ -388,19 +388,74 @@ def test_an_unchanged_answer_keeps_the_capture_that_brought_it(env):
 
 
 def test_a_stop_the_quote_table_contradicts_is_not_written(env):
-    # 3714 has a price on 11/09, inside the stated stop: the bar wins.
+    # 3714 has a price on 11/09, inside the stated stop, and it is not the
+    # stated 停止買賣前收盤: the bar wins.  4534 (TPEx states its first
+    # stopped day) has one too.
     result, _captures = _collect(
-        [TWSE_3714], [], twse_quotes=[harness._twse_row("3714", "56.70")]
+        [TWSE_3714],
+        [TPEX_4534],
+        twse_quotes=[harness._twse_row("3714", "60.00")],
+        tpex_quotes=[harness._tpex_row("4534", "25.45")],
     )
 
     assert result["status"] == "success", result
-    assert any(
-        item.startswith("TWSE trading halts rejected: 3714 has a bar on 2026-11-09")
+    rejected = [
+        item
         for item in result["noncore_warnings"]
-    )
+        if item.startswith(
+            ("TWSE trading halts rejected", "TPEx trading halts rejected")
+        )
+    ]
+    assert rejected == [
+        "TWSE trading halts rejected: 3714 has a bar on 2026-11-09 inside its stop "
+        "2026-11-05..2026-11-16",
+        "TPEx trading halts rejected: 4534 has a bar on 2026-11-09 inside its stop "
+        "2026-11-05..2026-11-16",
+    ]
     assert result["core_warnings"] == []
     with env() as db:
-        assert ("TWSE", "3714") not in _halts(db)
+        assert _halts(db) == {}
+
+
+def test_a_twse_last_trading_day_stated_a_session_early_follows_the_bar(env):
+    # 4155 訊映 (2026-10): 詳細資料 20261005, but its 停止買賣前收盤 14.20 is the
+    # 10/06 close; that session traded and the stop began after it.
+    row = ["115/10/19", "4155", "訊映", "14.20", "14.68", "16.10", "13.25", "14.70"]
+    row += ["--", "退還股款", "4155  ,20261005"]
+    xunying = sources.InstrumentRecord("4155", "訊映", exchange="TWSE", industry="22")
+    day = date(2026, 10, 6)
+    quotes, bars = harness._session(
+        day,
+        [harness._twse_row("2330", "1000.00"), harness._twse_row("4155", "14.20")],
+        [],
+    )
+    twse = _halt_capture("TWSE", lambda start, end: twse_payload(start, end, row), day)
+    batch = sources.OfficialBatch(
+        instruments=[harness.INDEX, harness.TSMC, xunying],
+        bars=bars,
+        chips=[],
+        payloads=quotes + [twse[0]],
+        data_as_of=day.isoformat(),
+        snapshot_feeds=False,
+        trading_halts=twse[1],
+        trading_halt_windows=[twse[2]],
+    )
+
+    result = pipeline.collect(day, months_back=0, adapter=harness.FakeAdapter(batch))
+
+    assert result["status"] == "success", result
+    assert not [item for item in result["noncore_warnings"] if "4155" in item]
+    with env() as db:
+        halt = _halts(db)[("TWSE", "4155")]
+        run = db.get(IngestionRun, result["run_id"])
+    assert (halt.last_trade_date, halt.halt_start, halt.resume_date) == (
+        date(2026, 10, 6),
+        date(2026, 10, 7),
+        date(2026, 10, 19),
+    )
+    assert halt.details_json["stated_last_trade_date"] == "2026-10-05"
+    assert halt.details_json["last_trade_date_basis"] == "last_bar_before_resumption"
+    assert run.metadata_json["trading_halts"]["TWSE"]["moved_past_bars"] == 1
 
 
 class _HaltOutage:
@@ -704,6 +759,8 @@ def test_the_cli_backfills_a_range_with_one_request_per_exchange(env):
         raws = db.scalars(select(RawPayload)).all()
     assert set(halts) == {("TWSE", "3714"), ("TPEx", "4534")}
     assert run.run_type == "trading_halts" and run.status == "success"
+    # The day asked, not the end of the range (which can be in the future).
+    assert {row.data_as_of for row in halts.values()} == {date.today().isoformat()}
     assert {raw.endpoint for raw in raws} == set(calls)
 
     again = trading_halts.run_trading_halts(start, end, fetcher=fetcher)

@@ -377,6 +377,8 @@ a.symbol-link:hover { color: var(--color-primary); }
 .stock-header-close { font: 700 36px/1.1 var(--font-mono); font-variant-numeric: tabular-nums; }
 .stock-header-change { font: 600 18px var(--font-mono); font-variant-numeric: tabular-nums; }
 .stock-header-meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); color: var(--color-text-muted); font-size: 14px; }
+/* An official stop of trading (Issue 582): a long sentence, so it wraps inside the phone width. */
+.stock-header-halt { max-width: 100%; white-space: normal; }
 .stock-header-skeleton { margin-top: var(--space-5); padding: var(--space-4); }
 .stock-tabs { margin-bottom: var(--space-4); }
 .stock-tab-content { min-width: 0; }

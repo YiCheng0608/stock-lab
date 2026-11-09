@@ -383,11 +383,11 @@ TWSE 的年度市場開休市日期，上市與上櫃共用（同 [TAIEX 交易�
 
 - **來源**：TWSE `TWTAUU`（股票減資恢復買賣參考價格）與 TPEx `revivt`（減資恢復買賣）都是網站報表，以恢復買賣日的區間查詢（`startDate`／`endDate`）。一個請求回該區間全部的列：2024-09-01～2026-11-30 實測 TWSE 44 列、TPEx 42 列。停止買賣開始前就會列出，例如 11/10 查到的表已有 11/16 恢復的 3714、4534。
 - **判定**：停止買賣期間是 `halt_start` 起、到 `resume_date` 前一天為止的交易日（交易日以 TAIEX 為準）。
-  - TWSE：「詳細資料」是 `<代號>  ,<最後交易日 YYYYMMDD>`，`halt_start` 取最後交易日的下一個日曆日，`last_trade_date` 存最後交易日。
+  - TWSE：「詳細資料」是 `<代號>  ,<YYYYMMDD>`，多數是最後交易日，`halt_start` 取它的下一個日曆日，`last_trade_date` 存這一天。少數列的日期早一個交易日（2025-09 2101 南港、2026-10 4155 訊映：「停止買賣前收盤價格」是下一個交易日的收盤）。所以推出的區間內已存 bar、而且最後一根 bar 的收盤等於「停止買賣前收盤價格」（或該列還沒有價格）時，最後交易日改用那根 bar 的日期，原日期留在 `details_json.stated_last_trade_date`（`last_trade_date_basis = last_bar_before_resumption`；run metadata 記 `moved_past_bars`）。
   - TPEx：「詳細資料」的 HTML 寫明停止買賣日期與恢復買賣日期，`halt_start` 取停止買賣日期；TPEx 沒有最後交易日，`last_trade_date` 留空。
-  - 列被略過、記 warning `<交易所> trading halts rejected: …` 的情形：「詳細資料」的代號或恢復日跟該列不一致、讀不到日期，或停止買賣不早於恢復日。該股在區間內已存 bar 時也一樣（官方行情表有價格，以 bar 為準）。
+  - 列被略過、記 warning `<交易所> trading halts rejected: …` 的情形：「詳細資料」的代號或恢復日跟該列不一致、讀不到日期，或停止買賣不早於恢復日。該股在區間內已存 bar、又不是上一點的 TWSE 情形時也一樣（TPEx 明寫停止買賣日期，區間內有 bar 一律略過；官方行情表有價格，以 bar 為準）。
   - 整份不採用的情形：回應的區間跟請求的不同、欄名改變、TPEx `totalCount` 多於列數（回應被截斷），或有列的恢復日在區間外。
-- **保存**：`trading_halts` 每個標的、每個來源、每個恢復日一列，記 `exchange`、`halt_start`、`resume_date`、`last_trade_date`、`reason`（`capital_reduction`）、`reason_detail`（減資原因，如「退還股款」「彌補虧損」）、`source`（`twse_twtauu`／`tpex_revivt`）、`endpoint`（含查詢區間）、`data_as_of`、`collected_at`、`raw_payload_id` 與官方原列 `details_json`。
+- **保存**：`trading_halts` 每個標的、每個來源、每個恢復日一列，記 `exchange`、`halt_start`、`resume_date`、`last_trade_date`、`reason`（`capital_reduction`）、`reason_detail`（減資原因，如「退還股款」「彌補虧損」）、`source`（`twse_twtauu`／`tpex_revivt`）、`endpoint`（含查詢區間）、`data_as_of`（查詢那天：collect 的收集日或 CLI 的執行日）、`collected_at`、`raw_payload_id` 與官方原列 `details_json`。
 - **重建**：每份可讀的回應對它的區間是完整的。同一來源、恢復日落在該區間的已存列都用它重建：
   - 回應不再列出的列刪除（例如恢復日延後，舊列刪掉、新列寫入）。
   - 內容改變的列改指向新的 capture；沒變的列保留原 capture。

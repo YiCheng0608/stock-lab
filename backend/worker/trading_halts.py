@@ -13,9 +13,10 @@ Each answer covers a range of resumption days and is complete for it, so the
 exchange's stored rows resuming in that range are rebuilt from it: a row the
 answer no longer lists is removed, one whose content changed points at the new
 capture, an unchanged one keeps the capture that brought it.  A row whose own
-dates disagree (sources' parsers) or whose security has a stored bar inside
-the stop is left out with a warning.  A code without a stored instrument is
-counted, not written.
+dates disagree (sources' parsers) is left out with a warning; so is one whose
+security has a stored bar inside the stop, except a TWSE row whose stated
+last trading day is a session early (``_check_bars``).  A code without a
+stored instrument is counted, not written.
 
 collect asks for the resumptions from ten days before to sixty days after the
 collect day (one request per exchange, non-core: a failure is a warning and
@@ -25,6 +26,7 @@ the collect stays ``success``); ``worker.cli trading-halts`` asks for any range
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, timedelta
 from typing import Any, Callable, Iterable
 
@@ -43,6 +45,7 @@ from worker.sources import (
     capture_payload,
     fetch_json,
     fetch_reduction_window,
+    parse_number,
     trading_halt_warning,
 )
 
@@ -71,20 +74,66 @@ def _stored_content(row: TradingHalt) -> tuple[Any, ...]:
     )
 
 
-def _bar_inside(
+def _bars_inside(
     db: Session, instrument_id: int, record: TradingHaltRecord
-) -> date | None:
-    """The first stored bar of the security inside the stop, if any."""
+) -> list[tuple[date, float | None]]:
+    """The stored bars of the security inside the stop, oldest first."""
 
-    return db.scalar(
-        select(MarketBar.trading_date)
-        .where(
-            MarketBar.instrument_id == instrument_id,
-            MarketBar.trading_date >= record.halt_start,
-            MarketBar.trading_date < record.resume_date,
+    return [
+        (day, close)
+        for day, close in db.execute(
+            select(MarketBar.trading_date, MarketBar.close)
+            .where(
+                MarketBar.instrument_id == instrument_id,
+                MarketBar.trading_date >= record.halt_start,
+                MarketBar.trading_date < record.resume_date,
+            )
+            .order_by(MarketBar.trading_date)
+        ).all()
+    ]
+
+
+def _check_bars(
+    db: Session, instrument_id: int, record: TradingHaltRecord
+) -> tuple[TradingHaltRecord | None, str | None]:
+    """The record as the quote tables allow it, or None and why not.
+
+    TWSE's 詳細資料 date is mostly the last trading day but sometimes the
+    session before it (2025-09 2101 南港, 2026-10 4155 訊映: their 停止買賣前收盤
+    is the close of the next session).  So a TWSE stop whose stated start has
+    bars is moved past the last of them when that bar's close is the row's
+    停止買賣前收盤價格 (or the row has no price yet); the stated date stays in
+    ``details``.  Any other bar inside a stop, and every one inside a TPEx stop
+    (TPEx states its 停止買賣日期), rejects the row: the bar is the evidence.
+    """
+
+    inside = _bars_inside(db, instrument_id, record)
+    if not inside:
+        return record, None
+    last_day, last_close = inside[-1]
+    stated = parse_number(record.details.get("停止買賣前收盤價格"))
+    if record.exchange == "TWSE" and (
+        stated is None
+        or (last_close is not None and abs(float(last_close) - stated) < 1e-6)
+    ):
+        return (
+            replace(
+                record,
+                last_trade_date=last_day,
+                halt_start=last_day + timedelta(days=1),
+                details={
+                    **record.details,
+                    "stated_last_trade_date": record.last_trade_date.isoformat()
+                    if record.last_trade_date
+                    else None,
+                    "last_trade_date_basis": "last_bar_before_resumption",
+                },
+            ),
+            None,
         )
-        .order_by(MarketBar.trading_date)
-        .limit(1)
+    return None, (
+        f"{record.symbol} has a bar on {inside[0][0]} inside its stop "
+        f"{record.halt_start}..{record.resume_date}"
     )
 
 
@@ -134,16 +183,13 @@ def _apply_window(
         if instrument is None:
             outcome["outside_universe"] += 1
             continue
-        traded = _bar_inside(db, instrument.id, record)
-        if traded is not None:
-            # The official quote table priced it inside the stated stop: the
-            # bar is the evidence, the row is not written.
-            conflicts.append(
-                f"{record.symbol} has a bar on {traded} inside its stop "
-                f"{record.halt_start}..{record.resume_date}"
-            )
+        checked, conflict = _check_bars(db, instrument.id, record)
+        if checked is None:
+            conflicts.append(str(conflict))
             continue
-        incoming[(instrument.id, record.resume_date)] = record
+        if checked is not record:
+            outcome["moved_past_bars"] = outcome.get("moved_past_bars", 0) + 1
+        incoming[(instrument.id, record.resume_date)] = checked
     for key, row in stored.items():
         if key not in incoming:
             db.delete(row)
@@ -269,7 +315,7 @@ def run_trading_halts(
         for exchange in EXCHANGES:
             try:
                 found, window, _captured = fetch_reduction_window(
-                    fetch(exchange), exchange, start, end, data_as_of=end.isoformat()
+                    fetch(exchange), exchange, start, end, data_as_of=day.isoformat()
                 )
             except Exception as exc:
                 warnings.append(trading_halt_warning(exchange, exc))
