@@ -30,7 +30,7 @@ from .corporate_action_sync import (
 from .index_bars import DEFAULT_FIRST_MONTH as INDEX_BARS_FIRST_MONTH
 from .index_bars import run_index_bar_backfill
 from .futures_history import DEFAULT_FIRST_MONTH as FUTURES_HISTORY_FIRST_MONTH
-from .futures_history import run_futures_history
+from .futures_history import run_futures_collect, run_futures_history
 from .us_index_bars import run_us_collect
 from .indicator_batch import run_indicator_batch
 from .industry_repair import run_industry_repair
@@ -470,7 +470,7 @@ def main() -> None:
     index_bars_us_parser.add_argument("--skip-reason", help=argparse.SUPPRESS)
     index_bars_futures_parser = index_bars_subparsers.add_parser(
         "futures-history",
-        help="台指期近月從期交所網站 futDataDown 回補到 OpenAPI 第一列之前：每月 1 個請求、間隔 3 秒（#563）",
+        help="台指期近月從期交所網站 futDataDown 回補 DB 沒有的日子（不含今天）：每月 1 個請求、間隔 3 秒（#563、#586）",
     )
     index_bars_futures_parser.add_argument(
         "--from-month",
@@ -482,6 +482,13 @@ def main() -> None:
     )
     index_bars_futures_parser.add_argument(
         "--force", action="store_true", help="同來源已存的列也以報表值改寫"
+    )
+    index_bars_subparsers.add_parser(
+        "futures-collect",
+        help=(
+            "只跑 collect 的台指期這段：OpenAPI 1 個請求、存檔內那天，"
+            "再補今天之前 10 個交易日的缺日（futDataDown 最多 2 個請求，#586）"
+        ),
     )
     instruments_parser = subparsers.add_parser("instruments", help="標的狀態與歷史")
     instruments_subparsers = instruments_parser.add_subparsers(
@@ -714,6 +721,8 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
         )
     elif args.command == "index-bars" and args.index_bars_command == "futures-history":
         result = run_futures_history(args.from_month, args.to_month, force=args.force)
+    elif args.command == "index-bars" and args.index_bars_command == "futures-collect":
+        result = run_futures_collect()
     elif args.command == "corporate-actions":
         if args.actions_command == "sync":
             result = run_corporate_action_sync(

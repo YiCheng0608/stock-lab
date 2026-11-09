@@ -100,7 +100,7 @@ from app.tracking import (
 from app.trading_calendar import NextSession, next_session
 from worker import mops_events
 from app.indicators import is_synthetic_bar
-from app.coverage import SESSION_BASIS_START
+from app.coverage import SESSION_BASIS_START, verified_taiex_sessions
 from worker.emerging_issuers import store_emerging_issuers
 from worker.futures_bars import store_futures_bars
 from worker.index_bars import INDEX_BAR_SOURCES, store_index_bars, warnings_for
@@ -4538,24 +4538,95 @@ def store_collect_futures_bars(
     warnings: list[str],
     *,
     force: bool = False,
+    current_sessions: Iterable[date] = (),
 ) -> dict[str, Any]:
-    """collect's TX near-month step (worker.futures_bars, Issue #552); non-core."""
+    """collect's TX near-month step (worker.futures_bars, #552, #586); non-core.
+
+    A bar is of the session the report holds, which may be before the collect
+    day.  It is written only for a verified session
+    (``app.coverage.verified_taiex_sessions``, plus ``current_sessions``: the
+    TAIEX days this collect itself wrote, whose run is still running); a
+    session another source already stored is kept (``store_futures_bars``).
+    """
 
     if not bars:
         return {}
+    days = sorted({bar.trading_date for bar in bars})
     try:
-        with db.begin_nested():
-            result = store_futures_bars(db, bars, raw_id, force=force)
+        verified = set(verified_taiex_sessions(db, days[0], days[-1]))
     except Exception as exc:
         warnings.append(
             f"futures bars unavailable for collect: {type(exc).__name__}: {exc}"
         )
         return {"failed": len(bars)}
-    if result.conflicts:
-        warnings.append(
-            f"futures bars kept {len(result.conflicts)} stored TX session(s) that differ from the report"
-        )
-    return result.metadata()
+    verified.update(current_sessions)
+    unverified = sorted(
+        bar.trading_date.isoformat() for bar in bars if bar.trading_date not in verified
+    )
+    for day in unverified:
+        warnings.append(f"futures bars skipped TAIFEX TX {day}: not a verified session")
+    usable = [bar for bar in bars if bar.trading_date in verified]
+    result = None
+    if usable:
+        try:
+            with db.begin_nested():
+                result = store_futures_bars(db, usable, raw_id, force=force)
+        except Exception as exc:
+            warnings.append(
+                f"futures bars unavailable for collect: {type(exc).__name__}: {exc}"
+            )
+            return {"failed": len(usable), "unverified_dates": unverified}
+        if result.conflicts:
+            warnings.append(
+                f"futures bars kept {len(result.conflicts)} stored TX session(s) that differ from the report"
+            )
+    metadata = result.metadata() if result is not None else {}
+    return {
+        **metadata,
+        "report_dates": [day.isoformat() for day in days],
+        "unverified_dates": unverified,
+    }
+
+
+def fill_collect_futures_gaps(
+    db: Session,
+    run: IngestionRun,
+    get: Callable[..., Any] | None,
+    score_date: date,
+    *,
+    enabled: bool,
+) -> dict[str, Any]:
+    """After a snapshot collect: fill the recent TX gaps (worker.futures_history, #586).
+
+    Runs once the collect is committed, as its own ``futures_bar_backfill``
+    run; its summary is added to the collect run's metadata
+    (``futures_gap_fill``).  Non-core: a failure is recorded there and never
+    changes the collect's status.  No getter (an adapter on fixture feeds) or
+    a collect that is not of a session asks nothing.
+    """
+
+    if not enabled or get is None:
+        return {}
+    from worker.futures_history import fill_recent_gaps
+
+    try:
+        result = fill_recent_gaps(db, before=score_date, get=get, trigger="collect")
+    except Exception as exc:
+        db.rollback()
+        result = {"status": "failed", "error": f"{type(exc).__name__}: {exc}"}
+    try:
+        stored = db.get(IngestionRun, run.id)
+        if stored is not None:
+            stored.metadata_json = {
+                **(stored.metadata_json or {}),
+                # Strings, numbers and lists of them only.
+                "futures_gap_fill": result,
+            }
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        result = {**result, "metadata_error": f"{type(exc).__name__}: {exc}"}
+    return result
 
 
 def taiwan_bar_dates(
@@ -4778,6 +4849,8 @@ def collect(
             normalized_bars = 0
             normalized_non_index_bars = 0
             normalized_index_bars = 0
+            # This collect's TAIEX days: sessions for the TX step (Issue #586).
+            taiex_dates: set[date] = set()
             normalized_chips = 0
             normalized_dates: list[date] = []
             normalized_instruments: set[tuple[str, str]] = set()
@@ -4821,6 +4894,11 @@ def collect(
                     normalized_non_index_bars += 1
                 else:
                     normalized_index_bars += 1
+                    if record.exchange == "TWSE" and record.symbol in {
+                        "TAIEX",
+                        "TWII",
+                    }:
+                        taiex_dates.add(record.trading_date)
             normalized_date_set = set(normalized_dates)
             verified_no_data_dates = sorted(
                 item for item in batch_no_data_dates if item not in normalized_date_set
@@ -4918,6 +4996,7 @@ def collect(
                 lambda digest: _raw_id_for_digest(raw_ids, digest),
                 batch.warnings,
                 force=force,
+                current_sessions=taiex_dates,
             )
             event_coverage = dict(batch.event_coverage or {})
             if not event_coverage:
@@ -5334,12 +5413,22 @@ def collect(
             # (#476).  Idempotent; it keeps Event/raw provenance.
             project_news(db)
             db.commit()
+            futures_gap_fill = fill_collect_futures_gaps(
+                db,
+                run,
+                getattr(active_adapter, "futures_history_get", None),
+                score_date,
+                enabled=bool(batch.snapshot_feeds)
+                and run.status != "skipped"
+                and score_date not in verified_no_data_dates,
+            )
             return {
                 "status": run.status,
                 "date": score_date.isoformat(),
                 "start_date": start_date.isoformat(),
                 "data_as_of": run.data_as_of,
                 "requested_data_as_of": batch.data_as_of or score_date.isoformat(),
+                "futures_gap_fill": futures_gap_fill,
                 "records": normalized_bars,
                 "taiex_records": normalized_index_bars,
                 "chips": normalized_chips,
