@@ -1,0 +1,46 @@
+{
+ "data": [
+  {
+   "holders": "23,869",
+   "indexName": "",
+   "issuer": "統一投信",
+   "issuerID": "A00009",
+   "issuerLink": "https://www.ezmoney.com.tw/",
+   "listingDate": "20260826",
+   "rorYTD": 0,
+   "stockName": "主動統一前沿科技",
+   "stockNo": "00411A",
+   "totalAv": "39.47",
+   "valueYTD": "178.98",
+   "volumeYTD": "17,870,421"
+  },
+  {
+   "holders": "5,113",
+   "indexName": "櫃買富櫃五十指數",
+   "issuer": "元大投信",
+   "issuerID": "A00005",
+   "issuerLink": "http://www.yuantaetfs.com/",
+   "listingDate": "20110127",
+   "rorYTD": 30.54,
+   "stockName": "元大富櫃50",
+   "stockNo": "006201",
+   "totalAv": "8.81",
+   "valueYTD": "13.78",
+   "volumeYTD": "339,331"
+  },
+  {
+   "holders": "725",
+   "indexName": "ICE 20年期以上BBB級成熟市場美元公司債指數",
+   "issuer": "富蘭克林華美",
+   "issuerID": "A00045",
+   "issuerLink": "https://www.ftft.com.tw/",
+   "listingDate": "20250428",
+   "rorYTD": -100,
+   "stockName": "FT投資級債20+",
+   "stockNo": "00982B",
+   "totalAv": "2.43",
+   "valueYTD": "1.02",
+   "volumeYTD": "103,988"
+  }
+ ]
+}

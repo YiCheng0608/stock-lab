@@ -8,7 +8,7 @@ import time
 from calendar import monthrange
 from collections import defaultdict
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -283,6 +283,10 @@ class OfficialBatch:
     # The TX near-month bar of the collect day (worker.futures_bars, Issue
     # #552); a failure is a non-core warning.
     futures_bars: list[Any] = field(default_factory=list)
+    # Per exchange, which endpoint each core feed was read from and why
+    # (Issue #579: the TPEx quotes, institutional and margin feeds); run
+    # metadata ``feed_sources``.
+    feed_sources: dict[str, Any] = field(default_factory=dict)
 
 
 def _merge_event_coverage(values: Iterable[dict[str, Any]]) -> dict[str, Any]:
@@ -408,6 +412,26 @@ TPEX_CHIP_ENDPOINT = f"{TPEX_API}/tpex_3insti_daily_trading"
 TPEX_MARGIN_ENDPOINT = f"{TPEX_API}/tpex_mainboard_margin_balance"
 TPEX_CHIP_HISTORY_ENDPOINT = "https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade"
 TPEX_MARGIN_HISTORY_ENDPOINT = "https://www.tpex.org.tw/www/zh-tw/margin/balance"
+# The collect of the current session reads the three OpenAPI tables first and
+# the website reports above only when an OpenAPI table is not of that session
+# (Issue #579, #555 決定 B).  Catch-up and backfill read the website reports.
+# feed -> (OpenAPI endpoint, website endpoint)
+TPEX_CURRENT_FEEDS = {
+    "quotes": (TPEX_DAILY_ENDPOINT, TPEX_HISTORY_API),
+    "institutional": (TPEX_CHIP_ENDPOINT, TPEX_CHIP_HISTORY_ENDPOINT),
+    "margin": (TPEX_MARGIN_ENDPOINT, TPEX_MARGIN_HISTORY_ENDPOINT),
+}
+# The OpenAPI institutional keys of the website table's columns 4 (外資及陸資
+# 不含外資自營商), 13 (投信), 22 (自營商合計) and 23 (三大法人合計).
+TPEX_OPENAPI_INSTITUTIONAL_KEYS = {
+    "foreign_buy": "Foreign Investors include Mainland Area Investors "
+    "(Foreign Dealers excluded)-Difference",
+    "trust_buy": "SecuritiesInvestmentTrustCompanies-Difference",
+    "dealer_buy": "Dealers-Difference",
+    "total_buy_sell": "TotalDifference",
+}
+# The MOPS issuer master's industry code of 管理股票 (docs/INDUSTRY_CLASSIFICATION.md).
+TPEX_MANAGED_INDUSTRY_CODE = "80"
 # Kept as a catalog reference only.  The official ESB feed is deliberately
 # not used to construct the listed/OTC universe.
 TPEX_EMERGING_ENDPOINT = f"{TPEX_API}/tpex_esb_latest_statistics"
@@ -771,6 +795,34 @@ def parse_roc_date(value: Any) -> date | None:
         return None
 
 
+TAIPEI_TZ = timezone(timedelta(hours=8))
+
+
+def taipei_today() -> date:
+    """Today's date in Taipei, the session a 21:30 daily collect asks for."""
+
+    return datetime.now(TAIPEI_TZ).date()
+
+
+def openapi_reported_date(payload: Any) -> date | None:
+    """The one session a TPEx OpenAPI table reports, else None (Issue #579).
+
+    The OpenAPI feeds have no date parameter and no report-level date: every
+    row carries ``Date`` (ROC, ``1151109``).  A table is one session only when
+    it has rows and every row names the same, readable date.
+    """
+
+    if not isinstance(payload, list):
+        return None
+    rows = [row for row in payload if isinstance(row, dict)]
+    if not rows or len(rows) != len(payload):
+        return None
+    values = {str(row.get("Date") or "").strip() for row in rows}
+    if len(values) != 1:
+        return None
+    return parse_roc_date(values.pop())
+
+
 def _require_reported_date(payload: Any, requested_date: date, endpoint: str) -> None:
     """Reject date-report responses that silently fall back to the latest day."""
 
@@ -778,6 +830,20 @@ def _require_reported_date(payload: Any, requested_date: date, endpoint: str) ->
         # TPEx may return an empty list for a weekday with no historical
         # quote rows; its caller applies the range-level no-prior-session
         # guard.  A non-empty list still lacks a report date and fails below.
+        return
+    if isinstance(payload, list):
+        # A TPEx OpenAPI table (Issue #579): the date is on every row, and
+        # the rows must agree on one session.
+        reported_date = openapi_reported_date(payload)
+        if reported_date is None:
+            raise OfficialDataError(
+                f"official date report omitted its reported date: {endpoint}"
+            )
+        if reported_date != requested_date:
+            raise OfficialDataError(
+                f"official date report mismatch for {endpoint}: "
+                f"requested {requested_date.isoformat()}, reported {reported_date.isoformat()}"
+            )
         return
     if not isinstance(payload, dict):
         raise OfficialDataError(
@@ -1585,37 +1651,49 @@ def parse_tpex_institutional_rows(
         )
         if not symbol:
             continue
-        foreign_buy = _number_from_row(
-            row,
-            exact_keys=(
-                "ForeignBuySellDifference",
-                "ForeignInvestorsDifference",
-                "Foreign-BuySellDifference",
-            ),
-            contains=(("foreign", "difference"), ("外資", "差額")),
-        )
-        trust_buy = _number_from_row(
-            row,
-            exact_keys=(
-                "SecuritiesInvestmentTrustCompaniesDifference",
-                "SecuritiesInvestmentTrustCompanies-BuySellDifference",
-                "InvestmentTrustDifference",
-            ),
-            contains=(
-                ("securitiesinvestmenttrustcompanies", "difference"),
-                ("investmenttrust", "difference"),
-                ("投信", "差額"),
-            ),
-        )
-        dealer_buy = _number_from_row(
-            row,
-            exact_keys=("DealersDifference", "DealerDifference"),
-            contains=(
-                ("dealers", "difference"),
-                ("dealer", "difference"),
-                ("自營商", "差額"),
-            ),
-        )
+        if TPEX_OPENAPI_INSTITUTIONAL_KEYS["foreign_buy"] in row:
+            # An OpenAPI ``tpex_3insti_daily_trading`` row (Issue #579): the
+            # website table's columns 4, 13, 22 and 23, by exact key only.
+            # Several of its keys contain both "dealers" and "difference"
+            # (the foreign dealers, and the foreign investors "Foreign Dealers
+            # excluded"), so the token match below must not decide for it.
+            foreign_buy, trust_buy, dealer_buy, total_buy_sell = (
+                parse_number(row.get(TPEX_OPENAPI_INSTITUTIONAL_KEYS[name]))
+                for name in ("foreign_buy", "trust_buy", "dealer_buy", "total_buy_sell")
+            )
+        else:
+            foreign_buy = _number_from_row(
+                row,
+                exact_keys=(
+                    "ForeignBuySellDifference",
+                    "ForeignInvestorsDifference",
+                    "Foreign-BuySellDifference",
+                ),
+                contains=(("foreign", "difference"), ("外資", "差額")),
+            )
+            trust_buy = _number_from_row(
+                row,
+                exact_keys=(
+                    "SecuritiesInvestmentTrustCompaniesDifference",
+                    "SecuritiesInvestmentTrustCompanies-BuySellDifference",
+                    "InvestmentTrustDifference",
+                ),
+                contains=(
+                    ("securitiesinvestmenttrustcompanies", "difference"),
+                    ("investmenttrust", "difference"),
+                    ("投信", "差額"),
+                ),
+            )
+            dealer_buy = _number_from_row(
+                row,
+                exact_keys=("DealersDifference", "DealerDifference"),
+                contains=(
+                    ("dealers", "difference"),
+                    ("dealer", "difference"),
+                    ("自營商", "差額"),
+                ),
+            )
+            total_buy_sell = None
         result.append(
             ChipRecord(
                 symbol=symbol,
@@ -1623,6 +1701,7 @@ def parse_tpex_institutional_rows(
                 foreign_buy=foreign_buy,
                 trust_buy=trust_buy,
                 dealer_buy=dealer_buy,
+                total_buy_sell=total_buy_sell,
                 exchange="TPEx",
                 source="tpex_3insti",
                 data_as_of=data_as_of or trading_date.isoformat(),
@@ -1679,16 +1758,24 @@ def parse_tpex_margin_rows(
         )
         if not symbol:
             continue
-        previous = _number_from_row(
-            row,
-            exact_keys=("MarginPurchaseBalancePreviousDay", "前資餘額(張)"),
-            contains=(("marginpurchasebalancepreviousday",), ("前資", "餘額")),
-        )
-        current = _number_from_row(
-            row,
-            exact_keys=("MarginPurchaseBalance", "資餘額"),
-            contains=(("marginpurchasebalance",), ("資餘額",)),
-        )
+        if "MarginPurchaseBalance" in row or "MarginPurchaseBalancePreviousDay" in row:
+            # An OpenAPI ``tpex_mainboard_margin_balance`` row (Issue #579):
+            # exact keys only.  "marginpurchasebalance" is also a prefix of
+            # the previous-day key, so the token match would read a blank
+            # balance as the previous day's.
+            previous = parse_number(row.get("MarginPurchaseBalancePreviousDay"))
+            current = parse_number(row.get("MarginPurchaseBalance"))
+        else:
+            previous = _number_from_row(
+                row,
+                exact_keys=("MarginPurchaseBalancePreviousDay", "前資餘額(張)"),
+                contains=(("marginpurchasebalancepreviousday",), ("前資", "餘額")),
+            )
+            current = _number_from_row(
+                row,
+                exact_keys=("MarginPurchaseBalance", "資餘額"),
+                contains=(("marginpurchasebalance",), ("資餘額",)),
+            )
         result.append(
             ChipRecord(
                 symbol=symbol,
@@ -3653,7 +3740,11 @@ class TpexAdapter:
     source = "tpex"
 
     def __init__(
-        self, fetcher: Callable[..., Any] = fetch_json, *, snapshot_feeds: bool = True
+        self,
+        fetcher: Callable[..., Any] = fetch_json,
+        *,
+        snapshot_feeds: bool = True,
+        today: Callable[[], date] | None = None,
     ) -> None:
         self.fetcher = fetcher
         self.captured_payloads: list[FetchedPayload] = []
@@ -3664,6 +3755,127 @@ class TpexAdapter:
         self._universe_cache: (
             tuple[list[InstrumentRecord], list[FetchedPayload]] | None
         ) = None
+        # The Taipei date the OpenAPI tables are expected to report (Issue
+        # #579); injectable so a test or a copy rehearsal can name the session.
+        self.today = today or taipei_today
+        # Per feed of the last fetch: which endpoint was read and why.
+        self.feed_sources: dict[str, Any] = {}
+        self.current_warnings: list[str] = []
+        self._current_quote_payload: FetchedPayload | None = None
+
+    def current_session(self, start: date, end: date) -> date | None:
+        """The session whose quotes, institutional and margin come from OpenAPI.
+
+        Only a one-day snapshot collect of today's Taipei date (the daily
+        collect and its 23:00 retry): the OpenAPI tables carry the latest
+        session only.  Catch-up and backfill (``snapshot_feeds=False``), a
+        range, or an earlier date read the website reports (#555 決定 B).
+        """
+
+        if self.snapshot_feeds and start == end == self.today():
+            return end
+        return None
+
+    def _fetch_current(
+        self, feed: str, session: date
+    ) -> tuple[FetchedPayload | None, bool]:
+        """One OpenAPI table of ``session``: (capture, whether it is that session's).
+
+        An unavailable table or one of another session is recorded in
+        ``feed_sources`` and the caller reads the website report instead; a
+        quote or institutional fallback is also a non-core warning, a margin
+        one is not (the OpenAPI margin table is published after 21:30 on most
+        days, #555 P1/P2).  The capture is kept either way; its ``data_as_of``
+        is the requested session, so a reader's reported-date check rejects
+        a table of another session.
+        """
+
+        openapi, website = TPEX_CURRENT_FEEDS[feed]
+        try:
+            captured = self._fetch(openapi, session.isoformat())
+        except OfficialDataError as exc:
+            self._fallback(feed, session, "openapi_unavailable", error=str(exc))
+            return None, False
+        reported = openapi_reported_date(captured.payload)
+        if reported != session:
+            self._fallback(
+                feed,
+                session,
+                "openapi_not_current",
+                reported=reported.isoformat() if reported else None,
+                payload_sha256=captured.sha256,
+            )
+            return captured, False
+        self.feed_sources[feed] = {
+            "source": "openapi",
+            "endpoint": openapi,
+            "reported_date": reported.isoformat(),
+            "payload_sha256": captured.sha256,
+        }
+        return captured, True
+
+    def _fallback(
+        self,
+        feed: str,
+        session: date,
+        reason: str,
+        *,
+        reported: str | None = None,
+        payload_sha256: str | None = None,
+        error: str | None = None,
+    ) -> None:
+        openapi, website = TPEX_CURRENT_FEEDS[feed]
+        self.feed_sources[feed] = {
+            "source": "website",
+            "endpoint": website,
+            "reason": reason,
+            "openapi_endpoint": openapi,
+            "openapi_reported_date": reported,
+            "openapi_payload_sha256": payload_sha256,
+            "openapi_error": error,
+        }
+        if feed == "margin":
+            return
+        detail = (
+            f"reported {reported or 'no single date'}"
+            if reason == "openapi_not_current"
+            else f"unavailable: {error}"
+        )
+        self.current_warnings.append(
+            f"TPEx OpenAPI {feed} not used for {session.isoformat()} ({detail}); "
+            f"read {website}"
+        )
+
+    def _managed_stock_check(self, universe_payloads: list[FetchedPayload]) -> None:
+        """A non-core warning when a 管理股票 is not in the OpenAPI quote table.
+
+        The website report has a separate 管理股票 table; whether the OpenAPI
+        table lists those stocks has not been observed (no TPEx stock has been
+        in industry 80 since 2024-09, Issue #579).  The source is not changed.
+        """
+
+        quotes = self._current_quote_payload
+        listed = next(
+            (p for p in universe_payloads if p.endpoint == TPEX_LISTED_ENDPOINT), None
+        )
+        if quotes is None or listed is None:
+            return
+        managed = sorted(
+            code
+            for row in _rows(listed.payload)
+            if _text(row, "SecuritiesIndustryCode") == TPEX_MANAGED_INDUSTRY_CODE
+            and (code := _text(row, "SecuritiesCompanyCode"))
+        )
+        quoted = {_text(row, "SecuritiesCompanyCode") for row in _rows(quotes.payload)}
+        missing = [code for code in managed if code not in quoted]
+        self.feed_sources["quotes"]["managed_stocks"] = managed
+        self.feed_sources["quotes"]["managed_stocks_missing"] = missing
+        if missing:
+            self.current_warnings.append(
+                "TPEx OpenAPI quotes omit managed stocks (industry "
+                f"{TPEX_MANAGED_INDUSTRY_CODE}) listed by {TPEX_LISTED_ENDPOINT}: "
+                + ",".join(missing)
+            )
 
     def _fetch(
         self,
@@ -3718,7 +3930,12 @@ class TpexAdapter:
         return self._universe_cache
 
     def fetch_bars(
-        self, symbols: Iterable[str], start: date, end: date
+        self,
+        symbols: Iterable[str],
+        start: date,
+        end: date,
+        *,
+        current_session: date | None = None,
     ) -> tuple[list[BarRecord], list[FetchedPayload]]:
         _ensure_backfill_window(start, end)
         self.no_data_dates = []
@@ -3728,6 +3945,26 @@ class TpexAdapter:
         bars: list[BarRecord] = []
         payloads: list[FetchedPayload] = []
         historical_bar_dates: set[date] = set()
+        if current_session is not None:
+            # ``current_session`` is a one-day range (``current_session()``).
+            current, usable = self._fetch_current("quotes", current_session)
+            if current is not None:
+                payloads.append(current)
+            if usable:
+                self._current_quote_payload = current
+                bars = [
+                    bar
+                    for bar in parse_tpex_daily_rows(
+                        current.payload,
+                        data_as_of=current_session.isoformat(),
+                        payload_sha256=current.sha256,
+                    )
+                    if (bar.symbol in wanted or is_quoted_security_code(bar.symbol))
+                    and bar.trading_date == current_session
+                ]
+                return list(
+                    {(bar.symbol, bar.trading_date): bar for bar in bars}.values()
+                ), payloads
         for trading_date in _weekday_dates(start, end):
             payload = self._fetch(
                 TPEX_HISTORY_API,
@@ -3788,24 +4025,66 @@ class TpexAdapter:
             },
         )
 
+    def fetch_margin_file(self, trading_date: date) -> FetchedPayload:
+        """One request: the session's website margin balance report (all securities)."""
+
+        return self._fetch(
+            TPEX_MARGIN_HISTORY_ENDPOINT,
+            trading_date.isoformat(),
+            method="POST",
+            data={"date": trading_date.strftime("%Y/%m/%d"), "response": "json"},
+        )
+
+    def _chip_file(
+        self,
+        feed: str,
+        trading_date: date,
+        current_session: date | None,
+        payloads: list[FetchedPayload],
+    ) -> FetchedPayload:
+        """The session's OpenAPI table when it is current, else the website report.
+
+        Both are date-checked: the OpenAPI one by ``_fetch_current``, the
+        website one here (OfficialDataError on another date).
+        """
+
+        if trading_date == current_session:
+            current, usable = self._fetch_current(feed, trading_date)
+            if current is not None:
+                payloads.append(current)
+            if usable:
+                return current
+        if feed == "institutional":
+            payload = self.fetch_institutional_file(trading_date)
+        else:
+            payload = self.fetch_margin_file(trading_date)
+        payloads.append(payload)
+        _require_reported_date(
+            payload.payload, trading_date, TPEX_CURRENT_FEEDS[feed][1]
+        )
+        return payload
+
     def fetch_chips(
         self,
         trading_dates: Iterable[date],
         allowed_symbols: set[str],
+        *,
+        current_session: date | None = None,
     ) -> tuple[list[ChipRecord], list[FetchedPayload], list[str]]:
-        """Fetch TPEx date-based institutional and margin reports."""
+        """Fetch TPEx date-based institutional and margin reports.
+
+        ``current_session`` reads that session's OpenAPI tables first
+        (``_chip_file``); every other date reads the website reports.
+        """
 
         institutional: list[ChipRecord] = []
         margin: list[ChipRecord] = []
         payloads: list[FetchedPayload] = []
         warnings: list[str] = []
         for trading_date in sorted(set(trading_dates)):
-            date_text = trading_date.strftime("%Y/%m/%d")
             try:
-                chip_payload = self.fetch_institutional_file(trading_date)
-                payloads.append(chip_payload)
-                _require_reported_date(
-                    chip_payload.payload, trading_date, TPEX_CHIP_HISTORY_ENDPOINT
+                chip_payload = self._chip_file(
+                    "institutional", trading_date, current_session, payloads
                 )
                 parsed = parse_tpex_institutional_rows(
                     chip_payload.payload,
@@ -3825,15 +4104,8 @@ class TpexAdapter:
                     f"TPEx institutional chips unavailable for {trading_date.isoformat()}: {exc}"
                 )
             try:
-                margin_payload = self._fetch(
-                    TPEX_MARGIN_HISTORY_ENDPOINT,
-                    trading_date.isoformat(),
-                    method="POST",
-                    data={"date": date_text, "response": "json"},
-                )
-                payloads.append(margin_payload)
-                _require_reported_date(
-                    margin_payload.payload, trading_date, TPEX_MARGIN_HISTORY_ENDPOINT
+                margin_payload = self._chip_file(
+                    "margin", trading_date, current_session, payloads
                 )
                 parsed = parse_tpex_margin_rows(
                     margin_payload.payload,
@@ -3898,14 +4170,23 @@ class TpexAdapter:
     def fetch(self, start: date, end: date) -> OfficialBatch:
         self.captured_payloads = []
         self.no_data_dates = []
+        self.feed_sources = {}
+        self.current_warnings = []
+        self._current_quote_payload = None
+        session = self.current_session(start, end)
         instruments, universe_payloads = self._universe(end)
         bars, bar_payloads = self.fetch_bars(
-            (item.symbol for item in instruments), start, end
+            (item.symbol for item in instruments),
+            start,
+            end,
+            current_session=session,
         )
         chip_dates = {bar.trading_date for bar in bars}
         chips, chip_payloads, chip_warnings = self.fetch_chips(
-            chip_dates, _chip_symbols(instruments, bars)
+            chip_dates, _chip_symbols(instruments, bars), current_session=session
         )
+        self._managed_stock_check(universe_payloads)
+        feed_sources = self._feed_source_record(start, end, session)
         if not self.snapshot_feeds:
             return OfficialBatch(
                 instruments=instruments,
@@ -3919,13 +4200,14 @@ class TpexAdapter:
                     end, "TPEx suspension-history/MOPS event feeds"
                 ),
                 snapshot_feeds=False,
+                feed_sources=feed_sources,
             )
         actions, action_payloads = self.fetch_actions(end)
         events: list[EventRecord] = []
         fundamentals: list[FundamentalRecord] = []
         mops_payloads: list[FetchedPayload] = []
         suspension_payloads: list[FetchedPayload] = []
-        warnings: list[str] = list(chip_warnings)
+        warnings: list[str] = list(chip_warnings) + self.current_warnings
         notices: list[str] = []
         # The highlight has only the latest session, so a historical batch
         # never requests it and a verified no-data day has nothing to read.
@@ -4089,7 +4371,29 @@ class TpexAdapter:
             emerging_issuers=emerging_issuers,
             monthly_revenues=monthly_revenues,
             index_daily_bars=index_daily_bars,
+            feed_sources=feed_sources,
         )
+
+    def _feed_source_record(
+        self, start: date, end: date, session: date | None
+    ) -> dict[str, Any]:
+        """``{"TPEx": ...}``: which endpoint each core feed read and why (#579)."""
+
+        if session is None:
+            return {
+                "TPEx": {
+                    "session": None,
+                    "reason": "not_current_session",
+                    "range": [start.isoformat(), end.isoformat()],
+                    **{
+                        feed: {"source": "website", "endpoint": website}
+                        for feed, (_openapi, website) in TPEX_CURRENT_FEEDS.items()
+                    },
+                }
+            }
+        # A feed that was not requested (a verified no-data day has no chips)
+        # is absent.
+        return {"TPEx": {"session": session.isoformat(), **self.feed_sources}}
 
 
 class OfficialMarketDataAdapter:
@@ -4196,6 +4500,7 @@ class OfficialMarketDataAdapter:
             monthly_revenues=twse_batch.monthly_revenues + tpex_batch.monthly_revenues,
             index_daily_bars=twse_batch.index_daily_bars + tpex_batch.index_daily_bars,
             futures_bars=futures_bars,
+            feed_sources={**twse_batch.feed_sources, **tpex_batch.feed_sources},
         )
 
     def _fetch_futures(
