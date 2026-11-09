@@ -194,6 +194,33 @@ def test_the_collect_read_of_a_csv_answer_gives_the_bar(monkeypatch):
     assert payloads[0].payload["format"] == "csv"
 
 
+def test_a_type_error_inside_the_fetcher_is_one_request():
+    """PR #589 review: the fetcher's signature decides, so an error is not retried."""
+    calls: list[dict] = []
+
+    def failing(url, **kwargs):
+        calls.append(kwargs)
+        raise TypeError("fixture: broken inside the fetcher")
+
+    bars, payloads, warnings = sources.fetch_latest_futures(failing, COLLECT_DAY)
+
+    assert calls == [{"text_fallback": True}]
+    assert (bars, payloads) == ([], [])
+    assert warnings[0].startswith("futures bars unavailable for TAIFEX TX: TypeError")
+
+    # A fetcher without the keyword is called once, without it.
+    plain: list[str] = []
+
+    def one_argument(url):
+        plain.append(url)
+        return csv_answer()
+
+    bars, _, _ = sources.fetch_latest_futures(one_argument, REPORT_DAY)
+    assert plain == [sources.TAIFEX_DAILY_FUTURES_ENDPOINT]
+    assert [bar.trading_date for bar in bars] == [REPORT_DAY]
+    assert sources._takes_keyword(sources.fetch_json, "text_fallback")
+
+
 # --- AC-2: the session the report holds -----------------------------------------
 
 

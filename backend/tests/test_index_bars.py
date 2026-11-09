@@ -1157,6 +1157,41 @@ def test_collect_upgrades_the_day_and_writes_the_tpex_index(collect_db):
         assert run.metadata_json["futures_daily_bars"]["counts"]["inserted"] == 1
 
 
+@pytest.mark.parametrize("snapshot", [True, False], ids=["snapshot", "historical"])
+def test_only_a_snapshot_collect_fills_the_tx_gaps(collect_db, snapshot):
+    """PR #589 review: catchup and backfill collect with snapshot_feeds=False and must not ask the site."""
+    with collect_db() as db:
+        # 09/03: a verified session before the collect day, without a TX row.
+        _seed_taiex(db, [date(2026, 9, 3)])
+        db.commit()
+    asked: list[str] = []
+
+    def get(request):
+        asked.append(request.month.label)
+        raise OfficialDataError("fixture: no site")
+
+    fetcher = IndexReportFetcher()
+    adapter = sources.OfficialMarketDataAdapter(
+        sources.TwseAdapter(fetcher, snapshot_feeds=snapshot),
+        sources.TpexAdapter(fetcher, snapshot_feeds=snapshot),
+        futures_history_get=get,
+    )
+
+    result = pipeline.collect(COLLECT_DAY, adapter=adapter)
+
+    assert result["status"] in ("success", "partial"), result
+    if snapshot:
+        assert asked == ["2026-09"]
+        assert result["futures_gap_fill"]["missing_dates"] == ["2026-09-03"]
+    else:
+        assert asked == [] and result["futures_gap_fill"] == {}
+    # Without a getter, a historical adapter never gets the site's default.
+    assert (
+        sources.OfficialMarketDataAdapter(snapshot_feeds=False).futures_history_get
+        is None
+    )
+
+
 def test_a_futures_report_of_another_day_is_a_noncore_warning(collect_db):
     """Issue #586: the report's own session, when verified; 09/03 is not one here."""
 

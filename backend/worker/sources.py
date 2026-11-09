@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import math
 import re
@@ -4116,8 +4117,10 @@ class OfficialMarketDataAdapter:
     ) -> None:
         # The TX gap fill after a snapshot collect (worker.futures_history,
         # Issue #586) asks the TAIFEX website.  An adapter built on given
-        # feeds (fixtures) does not, unless a getter is given too.
-        if futures_history_get is None and twse is None:
+        # feeds (fixtures) or for a historical collect (catchup, backfill:
+        # snapshot_feeds=False) does not, unless a getter is given too; the
+        # collect also asks only after a snapshot batch.
+        if futures_history_get is None and twse is None and snapshot_feeds:
             from .futures_history import fetch_month
 
             futures_history_get = fetch_month
@@ -4236,6 +4239,24 @@ class OfficialMarketDataAdapter:
         return bars, payloads, warnings
 
 
+def _takes_keyword(fn: Callable[..., Any], name: str) -> bool:
+    """Whether ``fn`` accepts the keyword ``name`` (by name or ``**kwargs``)."""
+
+    try:
+        parameters = inspect.signature(fn).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(
+        parameter.kind is inspect.Parameter.VAR_KEYWORD
+        or (
+            parameter.name == name
+            and parameter.kind
+            in (inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        )
+        for parameter in parameters
+    )
+
+
 def fetch_latest_futures(
     fetcher: Callable[..., Any], end: date
 ) -> tuple[list[Any], list[FetchedPayload], list[str]]:
@@ -4258,10 +4279,12 @@ def fetch_latest_futures(
     )
 
     try:
-        try:
-            # fetch_json hands back the bytes of a non-JSON answer (the CSV).
+        # fetch_json hands back the bytes of a non-JSON answer (the CSV).  The
+        # signature decides, not a TypeError: one raised inside the fetcher
+        # must not send the request again (PR #589 review).
+        if _takes_keyword(fetcher, "text_fallback"):
             answer = fetcher(TAIFEX_DAILY_FUTURES_ENDPOINT, text_fallback=True)
-        except TypeError:
+        else:
             answer = _call_fetcher(fetcher, TAIFEX_DAILY_FUTURES_ENDPOINT)
     except Exception as exc:
         return [], [], [futures_warning(exc)]
