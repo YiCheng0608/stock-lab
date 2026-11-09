@@ -1,12 +1,13 @@
-"""US index closes from FRED (Issue #547): parsing, collect's non-core step, the API.
+"""US index bars from FinMind (Issues #547, #568): parsing, index-bars us-collect, the API.
 
-Fixtures only: FRED answers are small CSV strings, the database is an isolated
+Fixtures only: FinMind answers are small dicts, the database is an isolated
 temporary SQLite file and sockets are forbidden.
 """
 
 from __future__ import annotations
 
 import socket
+from pathlib import Path
 from datetime import date, timedelta
 from urllib.parse import parse_qs, urlsplit
 
@@ -16,7 +17,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db import enable_sqlite_foreign_keys
 from app.domain import US_INDEXES
-from app.market_overview import expected_us_session, foreign_indices
+from app.market_overview import expected_us_session, foreign_indices, index_rows
 from app.migrations import upgrade_database
 from app.models import (
     DataQuality,
@@ -33,6 +34,8 @@ from worker import us_index_bars as us
 from worker.sources import OfficialDataError
 
 SPX = us.SERIES_BY_SYMBOL["SPX"]
+# Taipei Tuesday 2026-09-08: the request ends Monday 09-07.
+SESSION = date(2026, 9, 8)
 
 
 @pytest.fixture(autouse=True)
@@ -45,76 +48,95 @@ def no_network(monkeypatch, tmp_path):
     monkeypatch.setattr(sources, "RAW_DIR", tmp_path / "raw")
 
 
-@pytest.fixture
-def factory(tmp_path):
-    engine = create_engine(f"sqlite:///{tmp_path / 'us.db'}")
+def _factory(path):
+    engine = create_engine(f"sqlite:///{path}")
     enable_sqlite_foreign_keys(engine)
     upgrade_database(engine)
-    made = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
-    yield made
-    engine.dispose()
+    return sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
 @pytest.fixture
-def collect_db(factory, monkeypatch):
-    monkeypatch.setattr(pipeline, "SessionLocal", factory)
-    monkeypatch.setattr(pipeline, "init_db", lambda: None)
-    return factory
+def factory(tmp_path):
+    made = _factory(tmp_path / "us.db")
+    yield made
+    made.kw["bind"].dispose()
 
 
-def csv(series_id: str, rows: list[tuple[str, str]]) -> str:
-    lines = [f"observation_date,{series_id}"] + [
-        f"{day},{value}" for day, value in rows
-    ]
-    return "\n".join(lines) + "\n"
+def row(data_id: str, day: str, close: float, volume: int = 1_000_000) -> dict:
+    return {
+        "date": day,
+        "stock_id": data_id,
+        "Adj_Close": close,
+        "Close": close,
+        "High": close + 2,
+        "Low": close - 3,
+        "Open": close - 1,
+        "Volume": volume,
+    }
 
 
-# Two sessions, a US holiday (blank) and a third session, all before COLLECT_DAY.
-ROWS = [
-    ("2026-09-01", "6400.10"),
-    ("2026-09-02", "6420.50"),
-    ("2026-09-03", ""),
-    ("2024-09-30", "5762.48"),
-]
+def answer(rows: list[dict]) -> dict:
+    return {"msg": "success", "status": 200, "data": rows}
 
 
-class Fred:
-    """A FRED fixture: each series answers ROWS (scaled by series), or a per-series override."""
+def weekdays(start: date, end: date, skip: tuple[date, ...] = ()) -> list[date]:
+    out, day = [], start
+    while day <= end:
+        if day.weekday() < 5 and day not in skip:
+            out.append(day)
+        day += timedelta(days=1)
+    return out
 
-    def __init__(self, overrides=None, rows=ROWS):
+
+# The history from 2023-09-01 (Labor Day 09-04 closed) and four sessions of
+# 2026-09 before SESSION, with Labor Day 2026-09-07 closed... except it is the
+# last weekday of the request, so it is not yet called closed (#568 decision 1).
+LABOR_DAY_2023 = date(2023, 9, 4)
+HISTORY_DAYS = weekdays(date(2023, 9, 1), date(2023, 9, 22), (LABOR_DAY_2023,))
+RECENT_DAYS = weekdays(date(2026, 9, 1), date(2026, 9, 4))
+DAYS = HISTORY_DAYS + RECENT_DAYS
+
+
+class FinMind:
+    """A FinMind fixture: each index answers DAYS (scaled by index) in the window.
+
+    ``^SOX`` answers volume 0 on every day, as FinMind does.  ``overrides`` maps
+    a data_id to an answer, an exception, or a callable (data_id, start, end).
+    """
+
+    def __init__(self, overrides=None, days=DAYS, closes=None):
         self.calls: list[str] = []
         self.overrides = overrides or {}
-        self.rows = rows
+        self.days = days
+        self.closes = closes or {}
 
     def __call__(self, url):
         self.calls.append(url)
         query = parse_qs(urlsplit(url).query)
-        series_id = query["id"][0]
-        start = date.fromisoformat(query["cosd"][0])
-        end = date.fromisoformat(query["coed"][0])
-        override = self.overrides.get(series_id)
+        assert query["dataset"] == ["USStockPrice"]
+        data_id = query["data_id"][0]
+        start = date.fromisoformat(query["start_date"][0])
+        end = date.fromisoformat(query["end_date"][0])
+        override = self.overrides.get(data_id)
         if isinstance(override, Exception):
             raise override
         if callable(override):
-            return override(series_id, start, end)
-        if isinstance(override, str):
+            return override(data_id, start, end)
+        if override is not None:
             return override
-        scale = 1 + US_INDEXES.index(
-            next(item for item in US_INDEXES if item.series_id == series_id)
+        scale = 1 + [item.series_id for item in US_INDEXES].index(data_id)
+        return answer(
+            [
+                row(
+                    data_id,
+                    day.isoformat(),
+                    self.closes.get(day, 1000.0 + i) * scale,
+                    0 if data_id == "^SOX" else 1_000_000 + i,
+                )
+                for i, day in enumerate(self.days)
+                if start <= day <= end
+            ]
         )
-        rows = sorted(
-            (day, f"{float(value) * scale:.2f}" if value else value)
-            for day, value in self.rows
-            if start <= date.fromisoformat(day) <= end
-        )
-        return csv(series_id, rows)
-
-
-def _adapter(fred):
-    fetcher = IndexReportFetcher()
-    adapter = combined(fetcher)
-    adapter.us_index_fetcher = fred
-    return adapter
 
 
 def _bars(db, symbol):
@@ -134,189 +156,491 @@ def _bars(db, symbol):
     )
 
 
+def _collect(factory, fetch, session=SESSION, **kwargs):
+    with factory() as db:
+        return us.collect_us_indexes(db, session=session, fetch=fetch, **kwargs)
+
+
+def _windows(fetch):
+    return [
+        (
+            parse_qs(urlsplit(url).query)["data_id"][0],
+            parse_qs(urlsplit(url).query)["start_date"][0],
+            parse_qs(urlsplit(url).query)["end_date"][0],
+        )
+        for url in fetch.calls
+    ]
+
+
 # --- parsing ------------------------------------------------------------------
 
 
-def test_a_blank_observation_is_a_closed_day_not_a_zero():
-    parsed = us.parse_csv(
-        csv(
-            "SP500",
-            [("2026-09-01", "6400.10"), ("2026-09-02", "."), ("2026-09-03", "")],
+def test_a_weekday_without_a_row_before_the_newest_row_is_a_closed_day():
+    parsed = us.parse_rows(
+        answer(
+            [
+                row("^GSPC", "2026-09-01", 6400.10),
+                row("^GSPC", "2026-09-03", 6420.50),
+            ]
         ),
         SPX,
         start=date(2026, 9, 1),
-        end=date(2026, 9, 3),
+        end=date(2026, 9, 4),
     )
 
     assert [(bar.trading_date, bar.close) for bar in parsed.bars] == [
-        (date(2026, 9, 1), 6400.10)
+        (date(2026, 9, 1), 6400.10),
+        (date(2026, 9, 3), 6420.50),
     ]
-    assert parsed.closed_dates == [date(2026, 9, 2), date(2026, 9, 3)]
+    first = parsed.bars[0]
+    assert (first.open, first.high, first.low, first.volume) == (
+        6399.10,
+        6402.10,
+        6397.10,
+        1_000_000,
+    )
+    # 09-02 is between two sessions: closed.  09-04 is after the newest row:
+    # maybe not published yet, so not called closed.
+    assert parsed.closed_dates == [date(2026, 9, 2)]
 
 
 @pytest.mark.parametrize(
-    "text, message",
+    "payload, message",
     [
-        ("<!DOCTYPE html><html>verify your browser</html>", "not its CSV"),
-        (csv("NASDAQCOM", [("2026-09-01", "1.0")]), "not its CSV"),
-        (csv("SP500", [("2026-09-04", "6400.10")]), "outside"),
-        (csv("SP500", [("2026-08-31", "6400.10")]), "outside"),
-        (csv("SP500", [("2026-09-01", "1"), ("2026-09-01", "2")]), "twice"),
-        (csv("SP500", [("2026-09-01", "-5")]), "unreadable close"),
-        (csv("SP500", [("2026-09-01", "1,2")]), "malformed"),
-        (csv("SP500", []), "no observation"),
-        (None, "not text"),
+        ("<html>blocked</html>", "not a JSON object"),
+        ({"msg": "error", "status": 400, "data": []}, "not a success"),
+        (answer([row("^IXIC", "2026-09-01", 10.0)]), "a row of '\\^IXIC'"),
+        (answer([row("^GSPC", "2026-09-05", 6400.10)]), "outside"),
+        (answer([row("^GSPC", "2026-08-31", 6400.10)]), "outside"),
+        (
+            answer(
+                [row("^GSPC", "2026-09-01", 10.0), row("^GSPC", "2026-09-01", 20.0)]
+            ),
+            "twice",
+        ),
+        (answer([{**row("^GSPC", "2026-09-01", 6400.0), "Close": -5}]), "price"),
+        (answer([{**row("^GSPC", "2026-09-01", 6400.0), "High": 6000}]), "high/low"),
+        (answer([{**row("^GSPC", "2026-09-01", 6400.0), "Volume": 1.5}]), "volume"),
+        (answer([{**row("^GSPC", "2026-09-01", 6400.0), "date": "09/01"}]), "date"),
+        (answer([]), "no row"),
     ],
 )
-def test_an_answer_that_is_not_the_requested_csv_is_rejected_whole(text, message):
+def test_an_answer_that_is_not_the_requested_rows_is_rejected_whole(payload, message):
     with pytest.raises(OfficialDataError, match=message):
-        us.parse_csv(text, SPX, start=date(2026, 9, 1), end=date(2026, 9, 3))
+        us.parse_rows(payload, SPX, start=date(2026, 9, 1), end=date(2026, 9, 4))
+
+
+def test_a_refused_answer_is_finmind_refused():
+    with pytest.raises(us.FinMindRefused):
+        us.parse_rows(
+            {"msg": "Requests reach the upper limit.", "status": 402},
+            SPX,
+            start=date(2026, 9, 1),
+            end=date(2026, 9, 4),
+        )
+
+
+def test_volume_zero_everywhere_is_no_volume_and_a_single_zero_is_named():
+    window = {"start": date(2026, 9, 1), "end": date(2026, 9, 4)}
+    sox = us.SERIES_BY_SYMBOL["SOX"]
+    none = us.parse_rows(
+        answer([row("^SOX", f"2026-09-0{d}", 9000.0, 0) for d in (1, 2, 3)]),
+        sox,
+        **window,
+    )
+    assert none.no_volume and none.zero_volume_dates == []
+    assert {bar.volume for bar in none.bars} == {None}
+
+    one = us.parse_rows(
+        answer(
+            [
+                row("^GSPC", "2026-09-01", 6400.0, 5_000),
+                row("^GSPC", "2026-09-02", 6410.0, 0),
+            ]
+        ),
+        SPX,
+        **window,
+    )
+    assert not one.no_volume
+    assert one.zero_volume_dates == [date(2026, 9, 2)]
+    assert [bar.volume for bar in one.bars] == [5_000, None]
 
 
 def test_the_request_window_starts_at_the_history_start_then_re_reads_ten_days():
-    assert us.request_window(None, COLLECT_DAY) == (
-        date(2023, 9, 1),
-        COLLECT_DAY - timedelta(days=1),
+    start = date(2023, 9, 1)
+    end = SESSION - timedelta(days=1)
+    # No row: the whole history in one request.
+    assert us.request_window(None, None, SESSION) == (start, end)
+    # Rows from the history start: ten days before the newest one.
+    assert us.request_window(start, date(2026, 9, 4), SESSION) == (
+        date(2026, 8, 25),
+        end,
     )
-    assert us.request_window(date(2026, 9, 2), COLLECT_DAY) == (
-        date(2026, 8, 23),
-        date(2026, 9, 3),
+    # A series whose oldest row is later than the start (#563's case): from the start.
+    assert us.request_window(date(2024, 9, 30), date(2026, 9, 4), SESSION) == (
+        start,
+        end,
     )
-    url = us.request_url(SPX, date(2026, 8, 23), date(2026, 9, 3))
+    url = us.request_url(SPX, date(2026, 8, 25), end)
     assert url == (
-        "https://fred.stlouisfed.org/graph/fredgraph.csv"
-        "?id=SP500&cosd=2026-08-23&coed=2026-09-03"
+        "https://api.finmindtrade.com/api/v4/data?dataset=USStockPrice"
+        "&data_id=%5EGSPC&start_date=2026-08-25&end_date=2026-09-07"
     )
 
 
-# --- collect --------------------------------------------------------------------
+# --- us-collect -----------------------------------------------------------------
 
 
-def test_collect_writes_close_only_rows_of_the_four_indexes(collect_db):
-    fred = Fred()
+def test_a_first_run_reads_from_2023_09_01_and_writes_full_bars(factory):
+    fetch = FinMind()
 
-    result = pipeline.collect(COLLECT_DAY, adapter=_adapter(fred))
+    result = _collect(factory, fetch)
 
     assert result["status"] == "success", result
-    assert result["noncore_warnings"] == []
-    # One request per series, from the history start to the day before.
-    assert [parse_qs(urlsplit(url).query)["id"][0] for url in fred.calls] == [
-        "SP500",
-        "NASDAQCOM",
-        "DJIA",
-        "NASDAQSOX",
+    assert result["warnings"] == []
+    # One request per index, from the history start to the day before.
+    assert _windows(fetch) == [
+        (item.series_id, "2023-09-01", "2026-09-07") for item in US_INDEXES
     ]
-    assert all("cosd=2023-09-01&coed=2026-09-03" in url for url in fred.calls)
-    with collect_db() as db:
+    assert result["requests"] == 4
+    with factory() as db:
         rows = _bars(db, "SPX")
-        assert [(row.trading_date, row.close) for row in rows] == [
-            (date(2024, 9, 30), 5762.48),
-            (date(2026, 9, 1), 6400.10),
-            (date(2026, 9, 2), 6420.50),
-        ]
-        for row in rows:
-            assert (row.open, row.high, row.low, row.volume) == (None, None, None, None)
-            assert row.price_reason == "source_missing_ohlc"
-            assert (row.turnover_status, row.turnover_reason) == (
-                "unavailable",
-                "not_published",
-            )
-            assert row.source == "fred_close"
+        assert [row.trading_date for row in rows] == DAYS
+        first = rows[0]
+        assert (first.open, first.high, first.low, first.close) == (
+            999.0,
+            1002.0,
+            997.0,
+            1000.0,
+        )
+        assert first.volume == 1_000_000
+        assert first.price_reason is None
+        assert (first.turnover_status, first.turnover_reason) == (
+            "unavailable",
+            "not_published",
+        )
+        assert {row.source for row in rows} == {"finmind_us_index"}
         raw = db.get(RawPayload, rows[-1].raw_payload_id)
-        assert raw.source == "fred"
-        assert raw.endpoint == fred.calls[0]
+        assert raw.source == "finmind"
+        assert raw.endpoint == fetch.calls[0]
         assert raw.ingestion_run_id == result["run_id"]
-        assert raw.data_as_of == "2026-09-02"
-        instrument = db.get(Instrument, rows[0].instrument_id)
+        assert raw.data_as_of == "2026-09-04"
+        instrument = db.get(Instrument, first.instrument_id)
         assert (instrument.market, instrument.instrument_type, instrument.name) == (
             "US",
             "index",
             "S&P 500",
         )
-        assert [len(_bars(db, item.symbol)) for item in US_INDEXES] == [3, 3, 3, 3]
-        quality = db.scalar(
-            select(DataQuality).where(
-                DataQuality.entity_type == "us_index_series",
-                DataQuality.entity_key == "US:SPX",
+        assert [len(_bars(db, item.symbol)) for item in US_INDEXES] == [len(DAYS)] * 4
+        # SOX: FinMind's 0 is no volume.
+        assert {row.volume for row in _bars(db, "SOX")} == {None}
+        quality = {
+            row.entity_key: row
+            for row in db.scalars(
+                select(DataQuality).where(DataQuality.entity_type == "us_index_series")
             )
-        )
-        assert quality.status == "complete"
-        assert quality.as_of_date == COLLECT_DAY
-        assert quality.checks_json["closed_dates"] == ["2026-09-03"]
+        }
+        assert quality["US:SPX"].status == "complete"
+        assert quality["US:SPX"].as_of_date == SESSION
+        assert quality["US:SPX"].missing_fields_json == []
+        assert quality["US:SOX"].missing_fields_json == ["volume"]
+        assert quality["US:SOX"].checks_json["volume"] == "not_published"
+        # Closed: every weekday without a row before the newest (2023 Labor Day,
+        # and the gap between the history and 2026-09-01); not 2026-09-07.
+        closed = quality["US:SPX"].checks_json["closed_dates"]
+        assert "2023-09-04" in closed and "2026-09-07" not in closed
         run = db.get(IngestionRun, result["run_id"])
-        series = run.metadata_json["us_index_daily_bars"]["series"]
-        assert series["SOX"]["counts"]["inserted"] == 3
-
-
-def test_a_holiday_gets_no_row_and_no_zero(collect_db):
-    pipeline.collect(COLLECT_DAY, adapter=_adapter(Fred()))
-
-    with collect_db() as db:
+        assert (run.run_type, run.source, run.status) == (
+            "us_index_collect",
+            "finmind",
+            "success",
+        )
+        assert run.records == 4 * len(DAYS)
+        assert run.metadata_json["series"]["SOX"]["counts"]["inserted"] == len(DAYS)
+        # Every row gets its indicator row; with open/high/low, KD is computed
+        # (no #552 close-only rule); SOX has no volume average.
         for item in US_INDEXES:
-            rows = _bars(db, item.symbol)
-            assert date(2026, 9, 3) not in {row.trading_date for row in rows}
-            assert all(row.close > 0 for row in rows)
+            instrument = us.find_instrument(db, item)
+            indicators = list(
+                db.scalars(
+                    select(TechnicalIndicator)
+                    .where(TechnicalIndicator.instrument_id == instrument.id)
+                    .order_by(TechnicalIndicator.trading_date)
+                )
+            )
+            assert len(indicators) == len(DAYS)
+            assert indicators[-1].kd_k is not None
+            assert (indicators[-1].vol_ma5 is None) == (item.symbol == "SOX")
 
 
-def test_a_date_outside_the_request_rejects_that_series_with_a_warning(collect_db):
-    late = csv("SP500", [("2026-09-02", "6420.50"), ("2026-09-04", "6500.00")])
-    fred = Fred({"SP500": late})
+def test_a_second_run_of_the_day_asks_nothing_and_writes_nothing(factory):
+    _collect(factory, FinMind(days=DAYS + [date(2026, 9, 7)]))
+    again = FinMind(days=DAYS + [date(2026, 9, 7)])
 
-    result = pipeline.collect(COLLECT_DAY, adapter=_adapter(fred))
+    result = _collect(factory, again)
+
+    assert result["status"] == "already_complete"
+    assert result["requests"] == 0 and again.calls == []
+    with factory() as db:
+        runs = list(db.scalars(select(IngestionRun).order_by(IngestionRun.id)))
+        assert [run.status for run in runs] == ["success", "already_complete"]
+        assert runs[-1].records == 0
+
+
+def test_a_rerun_without_new_sessions_writes_no_row(factory):
+    # 09-07 (Labor Day) never arrives: every run asks, but writes nothing new.
+    _collect(factory, FinMind())
+    with factory() as db:
+        before = [(r.id, r.collected_at) for r in _bars(db, "SPX")]
+
+    result = _collect(factory, FinMind())
+
+    assert result["status"] == "success"
+    assert result["series"]["SPX"]["counts"] == {
+        "inserted": 0,
+        "revised": 0,
+        "unchanged": 4,
+        "conflict": 0,
+    }
+    assert result["indicators"] == {"status": "skipped", "reason": "no_changed_bars"}
+    with factory() as db:
+        assert [(r.id, r.collected_at) for r in _bars(db, "SPX")] == before
+
+
+def test_a_later_run_reads_only_the_recent_window_and_adds_new_dates(factory):
+    _collect(factory, FinMind())
+    later = FinMind(days=DAYS + [date(2026, 9, 8)])
+
+    result = _collect(factory, later, session=date(2026, 9, 9))
 
     assert result["status"] == "success", result
-    assert result["core_warnings"] == []
-    assert len(result["noncore_warnings"]) == 1
-    assert result["noncore_warnings"][0].startswith(
-        "us index bars unavailable for US SPX (SP500): OfficialDataError"
+    assert _windows(later)[0] == ("^GSPC", "2026-08-25", "2026-09-08")
+    assert result["series"]["SPX"]["counts"] == {
+        "inserted": 1,
+        "revised": 0,
+        "unchanged": 4,
+        "conflict": 0,
+    }
+    with factory() as db:
+        assert _bars(db, "SPX")[-1].trading_date == date(2026, 9, 8)
+        quality = db.scalar(
+            select(DataQuality).where(
+                DataQuality.entity_key == "US:SPX",
+                DataQuality.as_of_date == date(2026, 9, 9),
+            )
+        )
+        # Labor Day 2026 is now between two sessions: closed.
+        # (The fixture has no session in 2026-08, so those weekdays count too.)
+        closed = quality.checks_json["closed_dates"]
+        assert closed[-1] == "2026-09-07" and "2026-09-04" not in closed
+
+
+def test_a_later_capture_revises_finmind_rows_and_records_old_and_new(factory):
+    # A first value of 09-04 revised by FinMind within the 10-day re-read
+    # (#568 review item 1): the stored row takes the later capture's values.
+    first = _collect(factory, FinMind())
+    with factory() as db:
+        before = _bars(db, "SPX")[-1]
+        old_raw = before.raw_payload_id
+    changed = FinMind(closes={date(2026, 9, 4): 1010.0})
+
+    result = _collect(factory, changed)
+
+    assert result["status"] == "success"
+    # The re-read window (from 08-25) holds 09-01..09-04: three unchanged, 09-04 revised.
+    assert result["series"]["SPX"]["counts"] == {
+        "inserted": 0,
+        "revised": 1,
+        "unchanged": 3,
+        "conflict": 0,
+    }
+    assert result["value_revision_rows"] == 4  # each index's 09-04
+    assert result["warnings"] == []
+    with factory() as db:
+        row = _bars(db, "SPX")[-1]
+        assert (row.close, row.open, row.high, row.low) == (
+            1010.0,
+            1009.0,
+            1012.0,
+            1007.0,
+        )
+        assert row.raw_payload_id != old_raw and row.source == "finmind_us_index"
+        run = db.get(IngestionRun, result["run_id"])
+        spx = next(
+            r for r in run.metadata_json["value_revision_rows"] if r["symbol"] == "SPX"
+        )
+        assert spx["trading_date"] == "2026-09-04"
+        assert (
+            spx["old"]["close"] == before.close
+            and spx["old"]["raw_payload_id"] == old_raw
+        )
+        assert (
+            spx["new"]["close"] == 1010.0
+            and spx["new"]["raw_payload_id"] == row.raw_payload_id
+        )
+        # The indicators of the revised series are rebuilt.
+        assert result["indicators"] != {
+            "status": "skipped",
+            "reason": "no_changed_bars",
+        }
+    assert first["status"] == "success"
+
+
+def test_a_capture_older_than_the_stored_row_does_not_revise_it(factory):
+    _collect(factory, FinMind())
+    with factory() as db:
+        stored = _bars(db, "SPX")[-1]
+        result = us.store_us_index_bars(
+            db,
+            SPX,
+            [us.UsIndexBar(stored.trading_date, 1.0, 3.0, 0.5, 2.0, 5)],
+            stored.raw_payload_id,
+            captured_at=stored.collected_at - timedelta(minutes=1),
+        )
+        assert result.counts["conflict"] == 1 and result.revisions == []
+        assert _bars(db, "SPX")[-1].close == stored.close
+        db.rollback()
+
+
+def test_a_stored_fred_row_is_never_overwritten(factory):
+    # A FRED close (#547) for 2026-09-03, as a database written before #568 has.
+    with factory() as db:
+        instrument = us.us_index_instrument(db, SPX)
+        db.add(
+            MarketBar(
+                instrument_id=instrument.id,
+                trading_date=date(2026, 9, 3),
+                open=None,
+                high=None,
+                low=None,
+                close=6420.5,
+                adj_close=6420.5,
+                volume=None,
+                turnover=0.0,
+                turnover_status="unavailable",
+                turnover_reason="not_published",
+                price_reason="source_missing_ohlc",
+                source="fred_close",
+            )
+        )
+        db.commit()
+
+    for force in (False, True):
+        result = _collect(factory, FinMind(), force=force)
+        assert result["series"]["SPX"]["counts"]["conflict"] == 1, force
+
+    with factory() as db:
+        kept = next(r for r in _bars(db, "SPX") if r.trading_date == date(2026, 9, 3))
+        assert (kept.source, kept.close, kept.open) == ("fred_close", 6420.5, None)
+        others = [r for r in _bars(db, "SPX") if r.trading_date != date(2026, 9, 3)]
+        assert {r.source for r in others} == {"finmind_us_index"}
+
+
+def test_a_single_zero_volume_is_stored_null_with_a_warning(factory):
+    def one_zero(data_id, start, end):
+        rows = FinMind()(
+            f"{us.ENDPOINT}?dataset=USStockPrice&data_id={data_id}"
+            f"&start_date={start}&end_date={end}"
+        )["data"]
+        rows[-1]["Volume"] = 0
+        return answer(rows)
+
+    result = _collect(factory, FinMind({"^GSPC": one_zero}))
+
+    assert result["status"] == "success"
+    assert result["warnings"] == [
+        "us index bars stored no volume for US SPX on 1 day(s) FinMind ^GSPC gave 0: "
+        "2026-09-04"
+    ]
+    with factory() as db:
+        assert _bars(db, "SPX")[-1].volume is None
+        assert _bars(db, "SPX")[-2].volume is not None
+
+    # FinMind publishes that day's volume later: the NULL is filled (review item 1).
+    later = _collect(factory, FinMind())
+    assert later["series"]["SPX"]["counts"]["revised"] == 1
+    assert later["warnings"] == []
+    with factory() as db:
+        assert _bars(db, "SPX")[-1].volume == 1_000_000 + len(DAYS) - 1
+
+
+def test_an_answer_that_is_not_json_is_rejected_and_kept_as_raw(factory, monkeypatch):
+    # #568 review item 5: a 200 whose body is not JSON (a block page) comes back
+    # as its text, is rejected whole and is still kept as raw.
+    class Response:
+        status_code = 200
+        text = "<html>verify you are human</html>"
+
+        def json(self):
+            raise ValueError("not JSON")
+
+    import httpx
+
+    monkeypatch.setattr(httpx, "get", lambda *args, **kwargs: Response())
+    monkeypatch.setattr(us.time, "sleep", lambda seconds: None)
+    assert us.fetch_json(us.request_url(SPX, date(2026, 9, 1), date(2026, 9, 4))) == (
+        Response.text
     )
-    assert "2026-09-04 outside" in result["noncore_warnings"][0]
-    with collect_db() as db:
+
+    fetch = FinMind({"^GSPC": Response.text})
+    result = _collect(factory, fetch)
+
+    assert result["series"]["SPX"]["status"] == "failed"
+    assert "not a JSON object" in result["series"]["SPX"]["error"]
+    with factory() as db:
         assert _bars(db, "SPX") == []
-        assert len(_bars(db, "IXIC")) == 3
-        # The rejected answer is kept as raw evidence.
+        quality = db.scalar(
+            select(DataQuality).where(DataQuality.entity_key == "US:SPX")
+        )
+        raw = db.get(RawPayload, quality.checks_json["raw_payload_id"])
+        assert raw.source == "finmind" and raw.endpoint == fetch.calls[0]
+        assert Response.text in Path(raw.payload_path).read_text(encoding="utf-8")
+
+
+def test_a_rejected_or_failed_index_is_partial_and_keeps_its_raw(factory):
+    fetch = FinMind(
+        {
+            "^GSPC": answer([row("^GSPC", "2026-09-30", 1.0)]),
+            "^DJI": OfficialDataError("FinMind answered 503"),
+        }
+    )
+
+    result = _collect(factory, fetch)
+
+    assert result["status"] == "partial"
+    assert result["series"]["SPX"]["status"] == "failed"
+    assert "outside" in result["series"]["SPX"]["error"]
+    assert result["series"]["DJI"]["status"] == "failed"
+    assert result["warnings"][0].startswith(
+        "us index bars unavailable for US SPX (^GSPC): OfficialDataError"
+    )
+    with factory() as db:
+        assert _bars(db, "SPX") == [] and _bars(db, "DJI") == []
+        assert len(_bars(db, "IXIC")) == len(DAYS)
+        # The rejected answer is kept as raw evidence (the failed GET has none).
         assert (
             db.scalar(
                 select(func.count())
                 .select_from(RawPayload)
-                .where(RawPayload.source == "fred")
+                .where(RawPayload.source == "finmind")
             )
-            == 4
+            == 3
         )
         quality = db.scalar(
             select(DataQuality).where(DataQuality.entity_key == "US:SPX")
         )
         assert quality.status == "failed"
-        assert "outside" in quality.checks_json["error"]
 
 
-def test_a_failed_request_is_only_a_noncore_warning(collect_db):
-    fred = Fred(
-        {
-            series.series_id: OfficialDataError("FRED answered 503")
-            for series in US_INDEXES
-        }
-    )
+def test_every_index_failing_is_a_failed_run(factory):
+    fetch = FinMind({item.series_id: OfficialDataError("boom") for item in US_INDEXES})
 
-    result = pipeline.collect(COLLECT_DAY, adapter=_adapter(fred))
+    result = _collect(factory, fetch)
 
-    assert result["status"] == "success", result
-    assert result["core_warnings"] == []
-    assert len(result["noncore_warnings"]) == 4
-    assert all(
-        warning.startswith("us index bars unavailable for US ")
-        for warning in result["noncore_warnings"]
-    )
-    with collect_db() as db:
-        assert all(_bars(db, item.symbol) == [] for item in US_INDEXES)
-        # The Taiwan session is unaffected.
-        taiex = db.scalar(select(Instrument).where(Instrument.symbol == "TAIEX"))
-        assert db.scalar(
-            select(MarketBar.id).where(
-                MarketBar.instrument_id == taiex.id,
-                MarketBar.trading_date == COLLECT_DAY,
-            )
-        )
+    assert result["status"] == "failed"
+    with factory() as db:
+        run = db.get(IngestionRun, result["run_id"])
+        assert run.status == "failed" and "boom" in run.error
         assert (
             db.scalar(
                 select(func.count())
@@ -327,195 +651,74 @@ def test_a_failed_request_is_only_a_noncore_warning(collect_db):
         )
 
 
-def test_a_fixture_adapter_without_a_fred_fetcher_asks_nothing(collect_db):
-    result = pipeline.collect(COLLECT_DAY, adapter=combined(IndexReportFetcher()))
+def test_a_refusal_stops_the_run_without_asking_the_rest(factory):
+    fetch = FinMind({"^IXIC": us.FinMindRefused("FinMind answered 402")})
+
+    result = _collect(factory, fetch)
+
+    # ^GSPC was asked and written, ^IXIC refused, ^DJI and ^SOX never asked.
+    assert [call[0] for call in _windows(fetch)] == ["^GSPC", "^IXIC"]
+    assert result["status"] == "partial"
+    assert result["requests"] == 2
+    assert result["series"]["SOX"]["error"].startswith("OfficialDataError: not asked")
+
+
+def test_a_skip_reason_records_a_skipped_run_and_asks_nothing(factory):
+    fetch = FinMind()
+
+    result = _collect(factory, fetch, skip_reason="low_memory", trigger="scheduler")
+
+    assert result["status"] == "skipped" and fetch.calls == []
+    with factory() as db:
+        run = db.get(IngestionRun, result["run_id"])
+        assert (run.status, run.metadata_json["skip_reason"]) == (
+            "skipped",
+            "low_memory",
+        )
+        assert run.metadata_json["trigger"] == "scheduler"
+        assert _bars(db, "SPX") == []
+
+
+# --- collect no longer asks for the US indexes (#568, #571) -----------------------
+
+
+@pytest.fixture
+def collect_db(factory, monkeypatch):
+    monkeypatch.setattr(pipeline, "SessionLocal", factory)
+    monkeypatch.setattr(pipeline, "init_db", lambda: None)
+    return factory
+
+
+def test_collect_asks_no_us_index_and_writes_no_us_row(collect_db):
+    adapter = combined(IndexReportFetcher())
+    # The attribute #547's collect read its fetcher from: given one, it asked.
+    fetch = FinMind()
+    adapter.us_index_fetcher = fetch
+
+    result = pipeline.collect(COLLECT_DAY, adapter=adapter)
 
     assert result["status"] == "success", result
+    assert fetch.calls == []
+    assert not hasattr(sources.OfficialMarketDataAdapter(), "us_index_fetcher")
     with collect_db() as db:
         run = db.get(IngestionRun, result["run_id"])
-        assert run.metadata_json["us_index_daily_bars"] == {}
-
-
-def test_the_production_adapter_never_asks_fred(monkeypatch):
-    # #571: the daily collect is Taiwan only; US indexes have their own job (#568).
-    asked: list[str] = []
-    monkeypatch.setattr(us, "fetch_csv", lambda url: asked.append(url))
-
-    adapter = sources.OfficialMarketDataAdapter()
-
-    assert adapter.us_index_fetcher is None
-    assert (
-        pipeline.prefetch_us_index_series(
-            None, COLLECT_DAY, adapter.us_index_fetcher, None, [], no_data=False
-        )
-        is None
-    )
-    assert asked == []
-
-
-def test_a_database_error_in_the_us_step_leaves_the_collect_committed(
-    collect_db, monkeypatch
-):
-    # A flush that fails inside the step (a unique-key clash in the quality
-    # write) must roll back the US rows only (PR #558 review item 2).
-    def clash(db, series, session, status, checks):
-        for _ in range(2):
-            db.add(
-                DataQuality(entity_type="t547", entity_key="clash", as_of_date=session)
-            )
-        db.flush()
-
-    monkeypatch.setattr(us, "_upsert_quality", clash)
-
-    result = pipeline.collect(COLLECT_DAY, adapter=_adapter(Fred()))
-
-    assert result["status"] == "success", result
-    assert result["core_warnings"] == []
-    assert len(result["noncore_warnings"]) == 4
-    assert all(
-        warning.startswith("us index bars unavailable for US ")
-        and "IntegrityError" in warning
-        for warning in result["noncore_warnings"]
-    )
-    with collect_db() as db:
-        taiex = db.scalar(select(Instrument).where(Instrument.symbol == "TAIEX"))
-        assert db.scalar(
-            select(MarketBar.id).where(
-                MarketBar.instrument_id == taiex.id,
-                MarketBar.trading_date == COLLECT_DAY,
-            )
-        )
-        assert db.get(IngestionRun, result["run_id"]).status == "success"
-        assert all(_bars(db, item.symbol) == [] for item in US_INDEXES)
+        assert "us_index_daily_bars" not in run.metadata_json
         assert (
             db.scalar(
                 select(func.count())
-                .select_from(DataQuality)
-                .where(DataQuality.entity_type == "t547")
+                .select_from(Instrument)
+                .where(Instrument.exchange == "US")
             )
             == 0
         )
 
 
-def test_fred_is_asked_before_collect_writes_anything(collect_db, monkeypatch):
-    # The GETs are in collect's fetch phase, not while it holds the write lock
-    # (PR #558 review item 3): every FRED call comes before the first raw row.
-    events: list[str] = []
-    original = pipeline._upsert_raw_payload
-
-    def recorded(db, run, payload):
-        events.append(f"write {payload.source}")
-        return original(db, run, payload)
-
-    class Ordered(Fred):
-        def __call__(self, url):
-            events.append("fetch fred")
-            return super().__call__(url)
-
-    monkeypatch.setattr(pipeline, "_upsert_raw_payload", recorded)
-
-    result = pipeline.collect(COLLECT_DAY, adapter=_adapter(Ordered()))
-
-    assert result["status"] == "success", result
-    fetches = [i for i, event in enumerate(events) if event == "fetch fred"]
-    writes = [i for i, event in enumerate(events) if event.startswith("write")]
-    assert len(fetches) == 4 and writes
-    assert max(fetches) < min(writes)
-    assert "write fred" in events
-
-
-def _run(db):
-    run = IngestionRun(
-        run_type="collect", source="official", run_date=COLLECT_DAY, status="running"
-    )
-    db.add(run)
-    db.flush()
-    return run
-
-
-def test_a_later_collect_re_reads_ten_days_and_adds_only_new_dates(factory):
-    first = Fred()
-    with factory() as db:
-        us.collect_us_index_bars(
-            db, _run(db), COLLECT_DAY, first, pipeline._upsert_raw_payload, []
-        )
-        db.commit()
-    later_day = date(2026, 9, 8)
-    second = Fred(rows=ROWS + [("2026-09-04", "6450.00")])
-    warnings: list[str] = []
-    with factory() as db:
-        result = us.collect_us_index_bars(
-            db, _run(db), later_day, second, pipeline._upsert_raw_payload, warnings
-        )
-        db.commit()
-        assert warnings == []
-        assert "cosd=2026-08-23&coed=2026-09-07" in second.calls[0]
-        assert result["SPX"]["counts"] == {
-            "inserted": 1,
-            "replaced": 0,
-            "unchanged": 2,
-            "conflict": 0,
-        }
-        assert [row.trading_date for row in _bars(db, "SPX")][-1] == date(2026, 9, 4)
-
-
-def test_a_different_close_for_a_stored_day_is_kept_and_warned(factory):
-    with factory() as db:
-        us.collect_us_index_bars(
-            db, _run(db), COLLECT_DAY, Fred(), pipeline._upsert_raw_payload, []
-        )
-        db.commit()
-    changed = csv("SP500", [("2026-09-01", "6400.10"), ("2026-09-02", "9999.00")])
-    warnings: list[str] = []
-    with factory() as db:
-        us.collect_us_index_bars(
-            db,
-            _run(db),
-            COLLECT_DAY,
-            Fred({"SP500": changed}),
-            pipeline._upsert_raw_payload,
-            warnings,
-        )
-        db.commit()
-        assert _bars(db, "SPX")[-1].close == 6420.50
-    assert warnings == [
-        "us index bars kept 1 stored US SPX close(s) that differ from FRED SP500"
-    ]
-    assert pipeline.NONCORE_WARNING_PATTERN.match(warnings[0])
-
-
 def test_taiwan_bar_dates_skip_a_us_only_day(factory):
-    # 2026-09-03 has a US close here but no Taiwan bar (a Taiwan holiday).
-    holiday = Fred(rows=[("2026-09-02", "6420.50"), ("2026-09-03", "6430.00")])
+    # 2026-09-03 has a US bar here but no Taiwan bar (a Taiwan holiday).
     with factory() as db:
-        taiex = Instrument(
-            market="TW",
-            exchange="TWSE",
-            symbol="TAIEX",
-            name="加權指數",
-            instrument_type="index",
-            industry="Index",
-            status="active",
-        )
-        db.add(taiex)
-        db.flush()
-        db.add(
-            MarketBar(
-                instrument_id=taiex.id,
-                trading_date=date(2026, 9, 2),
-                open=1,
-                high=1,
-                low=1,
-                close=1,
-                adj_close=1,
-                volume=1,
-                source="twse_index",
-            )
-        )
-        us.collect_us_index_bars(
-            db, _run(db), COLLECT_DAY, holiday, pipeline._upsert_raw_payload, []
-        )
-        db.commit()
+        _taiwan_sessions(db, [date(2026, 9, 2)])
+    _collect(factory, FinMind(days=[date(2026, 9, 2), date(2026, 9, 3)]))
+    with factory() as db:
         assert date(2026, 9, 3) in {row.trading_date for row in _bars(db, "SPX")}
         assert pipeline.taiwan_bar_dates(db, date(2026, 9, 1), date(2026, 9, 4)) == [
             date(2026, 9, 2)
@@ -565,8 +768,6 @@ def _session_views(factory, monkeypatch, start, end, holiday):
     from worker.backfill import coverage_report
     from worker.plan_tracking import _market_dates_after
 
-    # The real backtest() on this database (PR #558 review item 1): the score
-    # dates it replays and the score_session_count it records.
     monkeypatch.setattr(pipeline, "SessionLocal", factory)
     monkeypatch.setattr(pipeline, "init_db", lambda: None)
     replayed: list[date] = []
@@ -593,12 +794,11 @@ def _session_views(factory, monkeypatch, start, end, holiday):
             "tracking_sessions": _market_dates_after(
                 db, start - timedelta(days=1), end, 40
             ),
-            # The whole report: every date's status and bars by exchange, the summary.
             "coverage": coverage_report(db, start, end, known_no_data_dates={holiday}),
         }
 
 
-def test_a_us_close_on_a_taiwan_holiday_changes_no_taiwan_session_view(
+def test_a_us_bar_on_a_taiwan_holiday_changes_no_taiwan_session_view(
     factory, monkeypatch
 ):
     # 2026-09-30 (Wednesday): Taiwan closed (confirmed), the US open.
@@ -609,41 +809,18 @@ def test_a_us_close_on_a_taiwan_holiday_changes_no_taiwan_session_view(
         date(2026, 10, 1),
         date(2026, 10, 2),
     ]
-    us_days = [
-        ("2026-09-28", "6400"),
-        ("2026-09-29", "6410"),
-        ("2026-09-30", "6420"),
-        ("2026-10-01", "6430"),
-        ("2026-10-02", "6440"),
-    ]
     with factory() as db:
         _taiwan_sessions(db, taiwan)
     before = _session_views(factory, monkeypatch, start, end, holiday)
+    _collect(factory, FinMind(days=weekdays(start, end)), session=date(2026, 10, 5))
     with factory() as db:
-        us.collect_us_index_bars(
-            db,
-            _run(db),
-            date(2026, 10, 5),
-            Fred(rows=us_days),
-            pipeline._upsert_raw_payload,
-            [],
-        )
-        db.commit()
         assert holiday in {row.trading_date for row in _bars(db, "SPX")}
     after = _session_views(factory, monkeypatch, start, end, holiday)
 
     assert after == before
     assert before["backtest_status"] == "success"
     assert before["backtest_score_dates"] == taiwan
-    assert before["score_session_count"] == len(taiwan)
     assert before["tracking_sessions"] == taiwan
-    statuses = {
-        item["date"]: item["status"] for item in before["coverage"]["date_coverage"]
-    }
-    assert statuses[holiday.isoformat()] == "skipped_non_trading"
-    assert before["coverage"]["summary"]["skipped_non_trading_dates"] == [
-        holiday.isoformat()
-    ]
 
 
 # --- API --------------------------------------------------------------------------
@@ -659,189 +836,141 @@ def test_a_us_close_on_a_taiwan_holiday_changes_no_taiwan_session_view(
 )
 def test_the_expected_us_session_is_the_weekday_before(reference, expected):
     assert expected_us_session(reference) == expected
+    # us-collect's already_complete waits for the same session.
+    assert us.expected_session(reference) == expected
 
 
-def _seed(db, session=COLLECT_DAY, fred=None):
-    us.collect_us_index_bars(
-        db, _run(db), session, fred or Fred(), pipeline._upsert_raw_payload, []
-    )
+def _fred_rows(db, closes):
+    """FRED close-only rows (#547), as a database written before #568 holds them."""
+
+    for symbol_index, series in enumerate(US_INDEXES):
+        instrument = us.us_index_instrument(db, series)
+        for day, close in closes:
+            db.add(
+                MarketBar(
+                    instrument_id=instrument.id,
+                    trading_date=day,
+                    open=None,
+                    high=None,
+                    low=None,
+                    close=close * (1 + symbol_index),
+                    adj_close=close * (1 + symbol_index),
+                    volume=None,
+                    turnover=0.0,
+                    turnover_status="unavailable",
+                    turnover_reason="not_published",
+                    price_reason="source_missing_ohlc",
+                    source="fred_close",
+                )
+            )
     db.commit()
 
 
-def test_foreign_indices_give_the_latest_close_and_its_change(factory):
+def test_foreign_indices_give_finmind_bars_in_the_fred_format(factory, tmp_path):
+    days = [date(2026, 9, 3), date(2026, 9, 4)]
+    closes = {days[0]: 6400.10, days[1]: 6420.50}
+    _collect(factory, FinMind(days=days, closes=closes))
     with factory() as db:
-        _seed(db)
-        # Taipei Thursday 09/03: the expected US session is 09/02.
-        items = foreign_indices(db, "2026-09-03")
+        # Taipei Monday 09/07: the expected US session is Friday 09/04.
+        items = foreign_indices(db, "2026-09-07")
+        table = {row["key"]: row for row in index_rows(db, "2026-09-07", items)}
 
     assert [item["symbol"] for item in items] == ["SPX", "IXIC", "DJI", "SOX"]
     spx = items[0]
     assert spx["status"] == "available"
     assert (spx["trading_date"], spx["expected_date"], spx["freshness"]) == (
-        "2026-09-02",
-        "2026-09-02",
+        "2026-09-04",
+        "2026-09-04",
         "latest",
     )
     assert spx["close"] == 6420.50
     assert spx["change"] == pytest.approx(20.40)
     assert spx["change_pct"] == pytest.approx(20.40 / 6400.10, abs=1e-6)
-    assert spx["previous_trading_date"] == "2026-09-01"
-    assert spx["source"]["label"] == "FRED SP500"
+    assert spx["previous_trading_date"] == "2026-09-03"
+    assert spx["series_id"] == "^GSPC"
+    assert spx["source"]["label"] == "FinMind USStockPrice ^GSPC"
     assert "S&P Dow Jones Indices" in spx["source"]["copyright"]
     assert spx["source"]["collected_at"].endswith("+00:00")
+    assert table["spx"]["source"]["label"] == "FinMind"
+    assert table["spx"]["source"]["detail"] == "FinMind USStockPrice ^GSPC"
+
+    # The same days as FRED rows (#547) in another database: the same fields and
+    # values; only the source differs (#568 decision 6729023767).
+    fred_factory = _factory(tmp_path / "fred.db")
+    with fred_factory() as db:
+        _fred_rows(db, sorted(closes.items()))
+        fred = foreign_indices(db, "2026-09-07")[0]
+        fred_table = index_rows(db, "2026-09-07", foreign_indices(db, "2026-09-07"))
+    fred_factory.kw["bind"].dispose()
+    assert fred.keys() == spx.keys()
+    assert fred["source"].keys() == spx["source"].keys()
+    assert {k: v for k, v in fred.items() if k != "source"} == {
+        k: v for k, v in spx.items() if k != "source"
+    }
+    assert fred["source"]["label"] == "FRED"
+    fred_spx = next(row for row in fred_table if row["key"] == "spx")
+    assert fred_spx.keys() == table["spx"].keys()
+    assert fred_spx["source"]["label"] == "FRED"
 
 
-def test_an_older_close_is_stale_unless_the_expected_day_was_a_us_holiday(factory):
+def test_the_newest_missing_weekday_is_stale_not_closed(factory):
+    # Labor Day 09-07 is the last weekday of the request: not yet called closed.
+    _collect(factory, FinMind(days=[date(2026, 9, 3), date(2026, 9, 4)]))
     with factory() as db:
-        _seed(db)
-        # Taipei Friday 09/04: expected 09/03, a FRED blank → the 09/02 close is the latest session.
-        closed = foreign_indices(db, "2026-09-04")[0]
-        # Taipei Tuesday 09/08: expected Monday 09/07, not a blank → stale.
-        stale = foreign_indices(db, "2026-09-08")[0]
+        spx = foreign_indices(db, "2026-09-08")[0]
 
-    assert (closed["trading_date"], closed["freshness"]) == (
-        "2026-09-02",
+    assert (spx["trading_date"], spx["expected_date"], spx["freshness"]) == (
+        "2026-09-04",
+        "2026-09-07",
+        "stale",
+    )
+
+
+def test_a_recorded_holiday_makes_the_session_before_it_us_market_closed(factory):
+    # The reading side only (#568 review item 4): us-collect records a holiday
+    # once a later session is stored, so the page then shows that later session
+    # as latest; it never stores this state itself.  The 09-08 bar is deleted
+    # below to reach it.  A run whose newest row is 09-08 records Labor Day
+    # 09-07 as closed.
+    _collect(
+        factory,
+        FinMind(days=[date(2026, 9, 3), date(2026, 9, 4), date(2026, 9, 8)]),
+        session=date(2026, 9, 9),
+    )
+    with factory() as db:
+        # Read as of Taipei 09/08 without the 09-08 bar: expected 09-07, closed,
+        # so the 09-04 bar is the latest session.
+        spx = us.find_instrument(db, SPX)
+        db.execute(
+            MarketBar.__table__.delete().where(
+                MarketBar.instrument_id == spx.id,
+                MarketBar.trading_date == date(2026, 9, 8),
+            )
+        )
+        db.commit()
+        item = foreign_indices(db, "2026-09-08")[0]
+        # Taipei Thursday 09/10: expected 09/09, no row, not recorded → stale.
+        stale = foreign_indices(db, "2026-09-10")[1]
+
+    assert (item["trading_date"], item["freshness"]) == (
+        "2026-09-04",
         "us_market_closed",
     )
-    assert (stale["expected_date"], stale["freshness"]) == ("2026-09-07", "stale")
+    assert (stale["expected_date"], stale["freshness"]) == ("2026-09-09", "stale")
 
 
 def test_an_index_without_rows_says_why(factory):
-    fred = Fred({"NASDAQSOX": OfficialDataError("FRED answered 503")})
     with factory() as db:
-        empty = foreign_indices(db, "2026-09-04")
-        _seed(db, fred=fred)
-        after = foreign_indices(db, "2026-09-04")
+        empty = foreign_indices(db, "2026-09-08")
+    _collect(factory, FinMind({"^SOX": OfficialDataError("FinMind answered 503")}))
+    with factory() as db:
+        after = foreign_indices(db, "2026-09-08")
 
     assert {item["status"] for item in empty} == {"unavailable"}
     assert {item["reason"] for item in empty} == {"not_collected"}
     assert after[3]["status"] == "unavailable"
     assert (after[3]["reason"], after[3]["last_attempt_date"]) == (
         "fetch_failed",
-        "2026-09-04",
+        "2026-09-08",
     )
     assert after[0]["status"] == "available"
-
-
-# --- history to 2023-09-01 (Issue #563) -----------------------------------------
-
-HISTORY_ROWS = [
-    ("2023-09-01", "4515.77"),
-    ("2023-09-04", ""),  # Labor Day
-    ("2023-09-05", "4496.83"),
-    ("2024-09-27", "5738.17"),
-]
-BASIS_ROWS = [("2024-09-30", "5762.48"), ("2024-10-01", "5708.75")]
-
-
-def test_the_history_window_reaches_back_once_with_one_request():
-    session = date(2026, 11, 9)
-    assert us.HISTORY_START == date(2023, 9, 1)
-    assert us.history_window(date(2024, 9, 30), session) == (
-        date(2023, 9, 1),
-        date(2024, 9, 29),
-    )
-    # No row yet: the next collect reads from the start itself.
-    assert us.history_window(None, session) is None
-    # Already from the start (a US holiday right after it does not count).
-    assert us.history_window(date(2023, 9, 1), session) is None
-    assert us.history_window(date(2023, 9, 5), session) is None
-
-
-def test_the_history_backfill_extends_each_series_before_its_oldest_row(factory):
-    with factory() as db:
-        us.collect_us_index_bars(
-            db,
-            _run(db),
-            date(2024, 10, 2),
-            Fred(rows=BASIS_ROWS),
-            pipeline._upsert_raw_payload,
-            [],
-        )
-        db.commit()
-        quality_before = [
-            (row.entity_key, row.as_of_date, row.checks_json)
-            for row in db.scalars(select(DataQuality).order_by(DataQuality.id))
-        ]
-    fred = Fred(rows=HISTORY_ROWS + BASIS_ROWS)
-
-    with factory() as db:
-        result = us.backfill_us_index_history(db, session=date(2026, 11, 9), fetch=fred)
-
-    assert result["status"] == "success", result
-    # One request per series, from 2023-09-01 to the day before the oldest row.
-    assert result["requests"] == 4
-    assert all("cosd=2023-09-01&coed=2024-09-29" in url for url in fred.calls)
-    with factory() as db:
-        rows = _bars(db, "SPX")
-        assert [(row.trading_date, row.close) for row in rows] == [
-            (date(2023, 9, 1), 4515.77),
-            (date(2023, 9, 5), 4496.83),
-            (date(2024, 9, 27), 5738.17),
-            (date(2024, 9, 30), 5762.48),
-            (date(2024, 10, 1), 5708.75),
-        ]
-        assert {row.source for row in rows} == {"fred_close"}
-        raw = db.get(RawPayload, rows[0].raw_payload_id)
-        run = db.get(IngestionRun, result["run_id"])
-        assert (raw.source, raw.ingestion_run_id) == ("fred", run.id)
-        assert (run.run_type, run.status) == ("us_index_backfill", "success")
-        assert run.metadata_json["series"]["SOX"]["counts"]["inserted"] == 3
-        # The collect's data_quality rows (closed days of the latest session) stay.
-        assert [
-            (row.entity_key, row.as_of_date, row.checks_json)
-            for row in db.scalars(select(DataQuality).order_by(DataQuality.id))
-        ] == quality_before
-        # Every row gets its indicator row, rebuilt from the new first bar.
-        for item in US_INDEXES:
-            instrument = us.find_instrument(db, item)
-            assert db.scalar(
-                select(func.count())
-                .select_from(TechnicalIndicator)
-                .where(TechnicalIndicator.instrument_id == instrument.id)
-            ) == len(_bars(db, item.symbol))
-
-    # A second run asks nothing.
-    again_fred = Fred(rows=HISTORY_ROWS + BASIS_ROWS)
-    with factory() as db:
-        again = us.backfill_us_index_history(
-            db, session=date(2026, 11, 9), fetch=again_fred
-        )
-    assert again["requests"] == 0 and again_fred.calls == []
-    assert set(again["skipped"].values()) == {"already_from_history_start"}
-
-
-def test_a_rejected_history_answer_writes_nothing_for_that_series(factory):
-    with factory() as db:
-        us.collect_us_index_bars(
-            db,
-            _run(db),
-            date(2024, 10, 2),
-            Fred(rows=BASIS_ROWS),
-            pipeline._upsert_raw_payload,
-            [],
-        )
-        db.commit()
-    fred = Fred({"SP500": "<html>blocked</html>"}, rows=HISTORY_ROWS + BASIS_ROWS)
-
-    with factory() as db:
-        result = us.backfill_us_index_history(db, session=date(2026, 11, 9), fetch=fred)
-
-    assert result["status"] == "partial"
-    assert result["series"]["SPX"]["status"] == "failed"
-    assert result["warnings"][0].startswith("us index bars unavailable for US SPX")
-    with factory() as db:
-        assert [row.trading_date for row in _bars(db, "SPX")] == [
-            date(2024, 9, 30),
-            date(2024, 10, 1),
-        ]
-        assert len(_bars(db, "IXIC")) == 5
-        # The rejected answer is still kept as raw evidence.
-        assert (
-            db.scalar(
-                select(func.count())
-                .select_from(RawPayload)
-                .where(RawPayload.ingestion_run_id == result["run_id"])
-            )
-            == 4
-        )

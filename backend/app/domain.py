@@ -648,40 +648,41 @@ TAIWAN_MARKET = "TW"
 
 @dataclass(frozen=True)
 class UsIndex:
-    """One FRED series of a display-only US index (Issue #547)."""
+    """One display-only US index (Issues #547, #568) and its FinMind data_id."""
 
     symbol: str
     series_id: str
     name: str
-    # The series' copyright notice on FRED, kept verbatim (shown on the page).
+    # The index owner's copyright notice, kept verbatim (shown on the page).
     copyright: str
 
 
 # The ``US`` exchange's index instruments, in the market page's order.  The
-# notices are the FRED series pages' (#547 source registration).
+# notices are the index owners' (as FRED's series pages gave them, #547); the
+# series ids are FinMind's USStockPrice data_id (#568 decision 6729065016).
 US_INDEX_EXCHANGE = "US"
 US_INDEXES: tuple[UsIndex, ...] = (
     UsIndex(
         "SPX",
-        "SP500",
+        "^GSPC",
         "S&P 500",
         "Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved.",
     ),
     UsIndex(
         "IXIC",
-        "NASDAQCOM",
+        "^IXIC",
         "NASDAQ 綜合指數",
         "Copyright © 2016, NASDAQ OMX Group, Inc.",
     ),
     UsIndex(
         "DJI",
-        "DJIA",
+        "^DJI",
         "道瓊工業指數",
         "Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved.",
     ),
-    UsIndex("SOX", "NASDAQSOX", "費城半導體指數", "Copyright © 2025, NASDAQ, Inc."),
+    UsIndex("SOX", "^SOX", "費城半導體指數", "Copyright © 2025, NASDAQ, Inc."),
 )
-# The data_quality rows collect writes per series and Taipei session.
+# The data_quality rows index-bars us-collect writes per series and Taipei day.
 US_INDEX_QUALITY_ENTITY = "us_index_series"
 
 

@@ -2389,3 +2389,75 @@ def test_a_maintenance_mode_serve_expired_is_commented_once(wd):
     # A day later the record is out of the window: nothing more.
     wd.run(now=NIGHT + 86400 + 3600)
     assert len(wd.text("gh_calls.log").splitlines()) == 1
+
+
+# The us job (#568): index-bars us-collect, Tuesday to Saturday 06:30 and 09:30 -------------
+
+
+def _healthy_daily_and_news(wd: Watchdog) -> None:
+    _daily_log_done(wd)
+    news = wd.logs / "news-20261019.log"
+    news.write_text("===== start\n", encoding="utf-8")
+    os.utime(news, (NIGHT - 3600, NIGHT - 3600))
+
+
+def _us_log(wd: Watchdog, day: str, *exits: int, age_days: float = 0.5) -> Path:
+    path = wd.logs / f"us-{day}.log"
+    path.write_text(
+        "".join(
+            f"===== {day}T06:30:00+08:00 start job=us\n"
+            f"===== {day}T06:30:09+08:00 end exit={code} seconds=9\n"
+            for code in exits
+        ),
+        encoding="utf-8",
+    )
+    stamp = NIGHT - int(age_days * 86400)
+    os.utime(path, (stamp, stamp))
+    return path
+
+
+def test_no_us_log_yet_is_not_judged(wd):
+    _healthy_daily_and_news(wd)
+    result = wd.run("--dry-run")
+    assert "us_no_log" not in result.stdout and "us_failed" not in result.stdout
+
+
+def test_a_healthy_us_job_is_not_reported(wd):
+    _healthy_daily_and_news(wd)
+    # Saturday's log read on Monday night (2.6 days): the weekend gap, not stale.
+    _us_log(wd, "20261017", 1, 0, age_days=2.6)
+    result = wd.run("--dry-run")
+    assert "將在 #1 留言" not in result.stdout, result.stdout
+
+
+def test_a_us_log_older_than_four_days_is_reported(wd):
+    _healthy_daily_and_news(wd)
+    _us_log(wd, "20261014", 0, age_days=4.2)
+    result = wd.run("--dry-run")
+    assert "anomaly_planned key=us_no_log " in result.stdout
+    assert "待使用者：美股 us 排程：最新日誌寫於" in result.stdout
+    assert "已超過 4 天沒有新日誌" in result.stdout
+
+
+def test_the_last_two_us_runs_failing_are_reported_once_a_day(wd):
+    _healthy_daily_and_news(wd)
+    # The two latest end lines, across the day's files: Friday 09:30 and today's 06:30.
+    _us_log(wd, "20261016", 0, 1, age_days=3)
+    _us_log(wd, "20261019", 2, age_days=0.4)
+    result = wd.run("--dry-run")
+    assert "anomaly_planned key=us_failed " in result.stdout
+    assert "最近 2 次都沒有成功（exit 1 2）" in result.stdout
+    # The manual rerun it suggests passes the memory threshold, or the job's 8 GB
+    # default skips it (#568 review item 2).
+    assert "job us --trigger manual --min-free-memory-gb 2" in result.stdout
+    wd.run()
+    wd.run(now=NIGHT + 15 * 60)
+    bodies = wd.text("gh_bodies.txt")
+    assert bodies.count("美股 us 排程：最近 2 次都沒有成功") == 1
+
+
+def test_one_failed_us_run_after_a_success_is_not_reported(wd):
+    _healthy_daily_and_news(wd)
+    _us_log(wd, "20261019", 0, 1, age_days=0.4)
+    result = wd.run("--dry-run")
+    assert "us_failed" not in result.stdout

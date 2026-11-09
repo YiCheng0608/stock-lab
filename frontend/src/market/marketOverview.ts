@@ -91,7 +91,7 @@ export function indexMissingText(row: IndexRow | null): string {
   return '無資料：尚未收集'
 }
 
-// The 資料日 cell: 「YYYY/MM/DD」 plus 非最新, or 「YYYY/MM/DD 美股休市」 when the expected US day was a FRED blank.
+// The 資料日 cell: 「YYYY/MM/DD」 plus 非最新, or 「YYYY/MM/DD 美股休市」 when the expected US day is a recorded US holiday.
 export function indexDateText(row: IndexRow & { trading_date: string }): { date: string; flag: string | null } {
   const date = day(row.trading_date)
   if (row.freshness === 'stale') return { date, flag: STALE_LABEL }
@@ -136,12 +136,12 @@ export function usGroupTitle(overview: MarketOverview | undefined): string {
 }
 
 // 「來源：…」 under the table at every width (the 來源 column is hidden at 640px and below, DESIGN_SYSTEM §5.1).
-export const INDEX_SOURCE_NOTE = '來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所；美股 FRED'
+export const INDEX_SOURCE_NOTE = '來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所；美股 FinMind'
 export const INDEX_CHANGE_NOTE = '漲跌：加權、櫃買為交易所公布的收盤概況（同大盤概況）；台指期近月與美股依前一筆收盤計算，台指期換月日不計漲跌'
 export const INDEX_STALE_NOTE = '「非最新」：資料日不是預期的資料日（台股為台股資料日，美股為台股資料日的前一個平日）'
 export const INDEX_MA60_NOTE = '季線：各指數最近 60 個交易日收盤的平均（indicators/v1），以該列資料日的收盤判定，高於季線為「之上」、等於季線不算高於；不足 60 個交易日寫「資料不足」'
 
-// 資料說明 of the index table: sources and their notices (FRED terms: keep the series' copyright notices), how dates,
+// 資料說明 of the index table: sources and their notices (the index owners' copyright notices kept), how dates,
 // changes and the MA60 position are read.
 export function indexTableNotes(overview: MarketOverview | undefined): string[] {
   const rows = (overview?.indexes ?? []).filter(indexAvailable)
@@ -149,7 +149,7 @@ export function indexTableNotes(overview: MarketOverview | undefined): string[] 
   return [
     INDEX_SOURCE_NOTE,
     TAIFEX_ATTRIBUTION,
-    FRED_ATTRIBUTION,
+    US_ATTRIBUTION,
     ...copyrights,
     INDEX_STALE_NOTE,
     US_EXPECTED_NOTE,
@@ -302,10 +302,10 @@ export function ma60SegmentsText(item: TaiexMa60): string | null {
 export const isDerived = (overview: MarketOverview | undefined) => available(overview, 'TPEx')?.index?.change_pct_method === 'derived'
 
 // ---- 美股, Issue 547 --------------------------------------------------------------------------------
-// FRED closes of four US indexes (market_overview.foreign_indices; the index table's US rows, Issue 564). The chart of
-// a US row is a close line only.
+// Daily bars of four US indexes from FinMind (Issue 568; market_overview.foreign_indices, the index table's US rows,
+// Issue 564). FRED's close-only rows (Issue 547), where a database has them, still chart as a close line.
 
 export const US_SECTION_TITLE = '美股（前一交易日）'
-export const FRED_ATTRIBUTION = '資料來源：FRED，Federal Reserve Bank of St. Louis（個人非商業使用）'
-export const US_EXPECTED_NOTE = '預期資料日為台股資料日的前一個平日（週一為上週五）；S&P 500 在 FRED 約晚一天更新'
+export const US_ATTRIBUTION = '資料來源：FinMind（個人非商業使用）'
+export const US_EXPECTED_NOTE = '預期資料日為台股資料日的前一個平日（週一為上週五）'
 export const STALE_LABEL = '非最新'

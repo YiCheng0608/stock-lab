@@ -12,7 +12,7 @@ const notFound = (error: unknown) => error instanceof ApiError && error.status =
 
 // The shared chart of the selected row, on the stock page's query key, so /stocks/TWSE/TAIEX and /market share a cache.
 // A series whose instrument is not collected yet (404: TPEX before its first report, TX before its first collect, a US
-// index before its first FRED read) is a chart without daily bars, not a load failure.
+// index before its first FinMind read) is a chart without daily bars, not a load failure.
 function MarketChart({ spec, overview, interval, onIntervalChange }: { spec: IndexSpec; overview: MarketOverview | undefined; interval: StockBarsInterval; onIntervalChange: (interval: StockBarsInterval) => void }) {
   const bars = useQuery({
     queryKey: ['stock-bars', spec.exchange, spec.symbol, interval],

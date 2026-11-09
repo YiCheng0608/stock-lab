@@ -81,12 +81,22 @@ from typing import BinaryIO, Sequence
 
 ROOT = Path(__file__).resolve().parents[2]
 TAIPEI = timezone(timedelta(hours=8))
-JOBS = ("daily", "news")
+JOBS = ("daily", "news", "us")
 TRIGGERS = ("scheduler", "manual", "simulation")
 # daily: the abandoned-run limit in worker.schedule_runs; a manual run's limit, as
 # serve passes its scheduled runs 80 minutes, which end before the 23:00 trigger
-# (#466). news: well inside its 2-hour interval.
-TIME_LIMIT_MINUTES = {"daily": 150.0, "news": 90.0}
+# (#466). news: well inside its 2-hour interval. us: four FinMind requests and the
+# four indexes' indicators, well inside the 3 hours between 06:30 and 09:30 (#568).
+TIME_LIMIT_MINUTES = {"daily": 150.0, "news": 90.0, "us": 20.0}
+# The worker command of each job (us is ``index-bars us-collect``, #568).
+JOB_COMMANDS = {
+    "daily": ["daily"],
+    "news": ["news"],
+    "us": ["index-bars", "us-collect"],
+}
+# Jobs that record a skip (low_memory, git_busy, already_running) in the database:
+# daily in schedule_runs, us as a skipped us_index_collect run (#568 AC-3).
+RECORDS_SKIPS = ("daily", "us")
 DEFAULT_MIN_FREE_MEMORY_GB = 8.0
 DEFAULT_LOG_RETENTION_DAYS = 90
 LOCK_SKIP_REASON = "already_running"
@@ -740,7 +750,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="YYYY-MM-DD；news-llm 不帶（它的 --date 是篩選）",
     )
     parser.add_argument("--trigger", choices=TRIGGERS, default="scheduler")
-    parser.add_argument("--force", action="store_true", help="只給 daily")
+    parser.add_argument("--force", action="store_true", help="只給 daily 與 us")
     # Passed by tasks registered before #314; the checkout is no longer pulled.
     parser.add_argument("--git-pull", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
@@ -764,15 +774,15 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--time-limit-minutes",
         type=float,
-        help="單次上限；預設 daily 150、news 90（news 與 news-llm 合計）",
+        help="單次上限；預設 daily 150、news 90（news 與 news-llm 合計）、us 20",
     )
 
 
 def argument_problem(args: argparse.Namespace) -> str | None:
     if args.job != "news" and args.skip_news_llm:
         return "--skip-news-llm applies only to the news job"
-    if args.job != "daily" and args.force:
-        return "--force applies only to the daily job"
+    if args.job not in RECORDS_SKIPS and args.force:
+        return "--force applies only to the daily and us jobs"
     if not 1 <= args.log_retention_days <= 3650:
         return "--log-retention-days must be between 1 and 3650"
     if not 0 <= args.min_free_memory_gb <= 1024:
@@ -915,14 +925,20 @@ class _Job:
         skip_reason, detail = self._skip_reason(locked, lock_file, free_mb)
         if skip_reason:
             self.log(f"===== skipped reason={skip_reason} ({detail})")
-        if skip_reason and (job != "daily" or skip_reason == MAINTENANCE_SKIP_REASON):
-            # Only daily records a skipped run in the database, and not in maintenance
-            # mode: then nothing is written there (#468).
+        if skip_reason and (
+            job not in RECORDS_SKIPS or skip_reason == MAINTENANCE_SKIP_REASON
+        ):
+            # Only daily and us record a skipped run in the database, and not in
+            # maintenance mode: then nothing is written there (#468).
             code = 0
         else:
-            step_args = [job]
-            if job == "daily":
-                step_args += ["--trigger", args.trigger]
+            step_args = list(JOB_COMMANDS[job])
+            if job in RECORDS_SKIPS:
+                # us-collect takes manual or scheduler; a simulation is a manual run.
+                trigger = args.trigger
+                if job == "us" and trigger not in ("scheduler", "manual"):
+                    trigger = "manual"
+                step_args += ["--trigger", trigger]
                 if args.force:
                     step_args.append("--force")
                 if skip_reason:
