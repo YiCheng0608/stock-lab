@@ -24,6 +24,8 @@ IN_PLACE = {
     # The entry type badge on a candidate's first line (#491).
     "breakout_entry": "突破型",
     "pullback_entry": "回踩型",
+    # The strategy behind 今日可買, named on the 策略說明 page and the 今日可買 head (#577).
+    "trend_chips": "順勢籌碼型",
 }
 FIELDS = ("plain_definition", "use", "how_to_read", "limitations")
 
