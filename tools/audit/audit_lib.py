@@ -256,6 +256,25 @@ class RawFiles:
 # --- official raw tables ------------------------------------------------------
 
 
+def openapi_session(payload: Any) -> str | None:
+    """ISO session of a TPEx OpenAPI table (Issue #579): every row's ``Date`` the same.
+
+    The OpenAPI tables have no date parameter; a table of another session (the
+    margin table before TPEx updates it) is kept as raw under the requested date.
+    """
+
+    if not isinstance(payload, list) or not payload:
+        return None
+    if not all(isinstance(row, dict) for row in payload):
+        return None
+    days = {official_date(row.get("Date")) for row in payload}
+    return days.pop() if len(days) == 1 else None
+
+
+def _openapi_rows(payload: Any) -> list[dict[str, Any]] | None:
+    return payload if openapi_session(payload) is not None else None
+
+
 def table_rows(
     payload: Any, required: Iterable[str]
 ) -> Iterable[tuple[list[str], list[Any]]]:
@@ -303,6 +322,21 @@ def quote_rows(payload: Any, exchange: str) -> dict[str, dict[str, float | None]
         }
     )
     rows: dict[str, dict[str, float | None]] = {}
+    if exchange == "TPEx" and isinstance(payload, list):
+        # tpex_mainboard_daily_close_quotes: the website table's columns by key.
+        keys = {
+            "open": "Open",
+            "high": "High",
+            "low": "Low",
+            "close": "Close",
+            "volume": "TradingShares",
+            "turnover": "TransactionAmount",
+        }
+        for row in _openapi_rows(payload) or []:
+            code = str(row.get("SecuritiesCompanyCode") or "").strip()
+            if code:
+                rows[code] = {name: num(row.get(key)) for name, key in keys.items()}
+        return rows
     for fields, row in table_rows(payload, names.values()):
         index = {name: fields.index(label) for name, label in names.items()}
         code = str(row[index["code"]]).strip()
@@ -318,6 +352,14 @@ def taiex_close(payload: Any) -> float | None:
         if str(row[fields.index("指數")]).strip() == TAIEX_ROW:
             return num(row[fields.index("收盤指數")])
     return None
+
+
+# tpex_3insti_daily_trading keys of the website table's columns 4, 13 and 22.
+TPEX_OPENAPI_INSTITUTIONAL = (
+    "Foreign Investors include Mainland Area Investors (Foreign Dealers excluded)-Difference",
+    "SecuritiesInvestmentTrustCompanies-Difference",
+    "Dealers-Difference",
+)
 
 
 def institutional_rows(
@@ -343,6 +385,18 @@ def institutional_rows(
                 num(row[i[3]]),
             )
         return rows if found else None
+    if isinstance(payload, list):
+        # tpex_3insti_daily_trading: the same three columns by key.
+        listed = _openapi_rows(payload)
+        if listed is None:
+            return None
+        for row in listed:
+            code = str(row.get("SecuritiesCompanyCode") or "").strip()
+            if code:
+                rows[code] = tuple(
+                    num(row.get(key)) for key in TPEX_OPENAPI_INSTITUTIONAL
+                )
+        return rows
     # TPEx: 24 columns, the 買賣超 of 外資及陸資(不含外資自營商), 投信 and 自營商合計
     # are columns 4, 13 and 22 (the headers repeat, so positions are the contract).
     found = False
@@ -361,6 +415,19 @@ def margin_rows(
 
     rows: dict[str, tuple[float | None, float | None]] = {}
     found = False
+    if exchange == "TPEx" and isinstance(payload, list):
+        # tpex_mainboard_margin_balance: 前資餘額(張) and 資餘額 by key.
+        listed = _openapi_rows(payload)
+        if listed is None:
+            return None
+        for row in listed:
+            code = str(row.get("SecuritiesCompanyCode") or "").strip()
+            if code:
+                rows[code] = (
+                    num(row.get("MarginPurchaseBalancePreviousDay")),
+                    num(row.get("MarginPurchaseBalance")),
+                )
+        return rows
     if exchange == "TWSE":
         for fields, row in table_rows(payload, ("代號", "前日餘額", "今日餘額")):
             found = True

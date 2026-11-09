@@ -24,6 +24,7 @@ from app.clock import utcnow
 from app.models import IngestionRun, Instrument, RawPayload
 from worker import pipeline
 from worker.sources import (
+    TPEX_CHIP_ENDPOINT,
     TPEX_CHIP_HISTORY_ENDPOINT,
     TWSE_CHIP_ENDPOINT,
     OfficialDataError,
@@ -34,9 +35,12 @@ from worker.sources import (
 
 RUN_TYPE = "chip_revision"
 REVISION_VERSION = "chip_revision_v1"
+# The TPEx OpenAPI table is the current session's file since Issue #579; the
+# same parser reads both shapes.
 PARSERS = {
     TWSE_CHIP_ENDPOINT: parse_twse_institutional_rows,
     TPEX_CHIP_HISTORY_ENDPOINT: parse_tpex_institutional_rows,
+    TPEX_CHIP_ENDPOINT: parse_tpex_institutional_rows,
 }
 
 

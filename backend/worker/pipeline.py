@@ -120,7 +120,9 @@ from worker.sources import (
     TWSE_CHIP_ENDPOINT,
     TWSE_LISTED_ENDPOINT,
     TWSE_NEW_LISTING_ENDPOINT,
+    TPEX_CHIP_ENDPOINT,
     TPEX_CHIP_HISTORY_ENDPOINT,
+    TPEX_DAILY_ENDPOINT,
     TPEX_LISTED_ENDPOINT,
     TWSE_ETF_ENDPOINT,
     TPEX_ETF_ENDPOINT,
@@ -751,7 +753,11 @@ def _official_institutional_file_evidence(
     chip row linked to a raw payload of that endpoint and date is the evidence.
     """
 
-    endpoints = {"TWSE": TWSE_CHIP_ENDPOINT, "TPEx": TPEX_CHIP_HISTORY_ENDPOINT}
+    # The current TPEx session's file may be the OpenAPI table (Issue #579).
+    endpoints = {
+        "TWSE": {TWSE_CHIP_ENDPOINT},
+        "TPEx": {TPEX_CHIP_HISTORY_ENDPOINT, TPEX_CHIP_ENDPOINT},
+    }
     rows = db.execute(
         select(
             Instrument.exchange,
@@ -771,7 +777,7 @@ def _official_institutional_file_evidence(
             exchange in OFFICIAL_INSTITUTIONAL_CHIP_SOURCES
             and (source or "").split("+")[0]
             == OFFICIAL_INSTITUTIONAL_CHIP_SOURCES[exchange]
-            and (endpoint or "").split("?", 1)[0] == endpoints[exchange]
+            and (endpoint or "").split("?", 1)[0] in endpoints[exchange]
             and data_as_of == trading_date.isoformat()
         ):
             evidence[exchange] = min(raw_id, evidence.get(exchange, raw_id))
@@ -3876,7 +3882,9 @@ DORMANT_SESSIONS = 60
 # The pre-rwd TWSE all-security report, still present in older captures.
 TWSE_LEGACY_DAILY_HISTORY_ENDPOINT = "https://www.twse.com.tw/exchangeReport/MI_INDEX"
 QUOTE_TABLE_ENDPOINTS = {
-    "TPEx": RawPayload.endpoint == TPEX_HISTORY_API,
+    # The current session's table is the OpenAPI one (Issue #579); every row
+    # of either table is a listed code, traded or not.
+    "TPEx": RawPayload.endpoint.in_((TPEX_HISTORY_API, TPEX_DAILY_ENDPOINT)),
     "TWSE": RawPayload.endpoint.startswith(TWSE_DAILY_HISTORY_ENDPOINT + "?")
     | RawPayload.endpoint.startswith(TWSE_LEGACY_DAILY_HISTORY_ENDPOINT + "?"),
 }
@@ -4473,8 +4481,10 @@ def _json_safe(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # only; they never set bar flags), the display-only market summaries (the
 # TWSE MI_INDEX summary tables and the TPEx highlight, Issue #275), the TPEx
 # emerging roster (names for AI news candidates only, Issue #512), the
-# display-only monthly revenue snapshots (Issue #530), and a skipped
-# instrument status sync (the watchdog reports it).  Every other warning,
+# display-only monthly revenue snapshots (Issue #530), a skipped instrument
+# status sync (the watchdog reports it), and a TPEx OpenAPI table that was not
+# used or lacks a 管理股票 (Issue #579: the website report was read instead,
+# or the source is kept and the gap is only reported).  Every other warning,
 # including any not matched here, concerns OHLCV, the TAIEX baseline, the
 # holiday calendar or chips, and keeps the collect partial.
 NONCORE_WARNING_PATTERN = re.compile(
@@ -4484,7 +4494,8 @@ NONCORE_WARNING_PATTERN = re.compile(
     r"|index bars "
     r"|futures bars "
     r"|us index bars "
-    r"|instrument status sync skipped)"
+    r"|instrument status sync skipped"
+    r"|TPEx OpenAPI )"
 )
 
 
@@ -5219,6 +5230,8 @@ def collect(
                 "index_daily_bars": index_daily_bars,
                 "futures_daily_bars": futures_daily_bars,
                 "raw_payloads": raw_payload_count,
+                # Issue #579: the endpoint each TPEx core feed was read from.
+                "feed_sources": dict(getattr(batch, "feed_sources", {}) or {}),
                 "warnings": list(batch.warnings),
                 "core_warnings": core_warnings,
                 "noncore_warnings": noncore_warnings,
@@ -5333,6 +5346,7 @@ def collect(
                 },
                 "run_id": run.id,
                 "industry_membership_observations": industry_result,
+                "feed_sources": dict(getattr(batch, "feed_sources", {}) or {}),
                 "warnings": batch.warnings,
                 "core_warnings": core_warnings,
                 "noncore_warnings": noncore_warnings,

@@ -35,6 +35,7 @@ from audit_lib import (
     mid_rank,
     num,
     official_prices,
+    openapi_session,
     positive,
     quote_rows,
     taiex_close,
@@ -42,17 +43,29 @@ from audit_lib import (
 )
 from audit_series import FIELDS, Series, evidence_lookup, indicators, load_series
 
+# The current TPEx session's three files are the OpenAPI tables, the website
+# reports are the fallback and every other date's source (Issue #579).
+TPEX_OPENAPI = "https://www.tpex.org.tw/openapi/v1/"
 QUOTE_ENDPOINTS = {
-    "TWSE": "https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX",
-    "TPEx": "https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes",
+    "TWSE": ("https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX",),
+    "TPEx": (
+        "https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes",
+        TPEX_OPENAPI + "tpex_mainboard_daily_close_quotes",
+    ),
 }
 INSTITUTIONAL_ENDPOINTS = {
-    "TWSE": "https://www.twse.com.tw/rwd/zh/fund/T86",
-    "TPEx": "https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade",
+    "TWSE": ("https://www.twse.com.tw/rwd/zh/fund/T86",),
+    "TPEx": (
+        "https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade",
+        TPEX_OPENAPI + "tpex_3insti_daily_trading",
+    ),
 }
 MARGIN_ENDPOINTS = {
-    "TWSE": "https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN",
-    "TPEx": "https://www.tpex.org.tw/www/zh-tw/margin/balance",
+    "TWSE": ("https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN",),
+    "TPEx": (
+        "https://www.tpex.org.tw/www/zh-tw/margin/balance",
+        TPEX_OPENAPI + "tpex_mainboard_margin_balance",
+    ),
 }
 ACTION_ENDPOINTS = (
     "https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL",
@@ -146,23 +159,54 @@ class Context:
         ).fetchone()
 
     def first_captures(self) -> set[int]:
-        """The earliest capture of each (chip endpoint, day): a row citing another was revised."""
+        """The earliest capture of each (chip file, day): a row citing another was revised.
 
-        first: dict[tuple[str, str], int] = {}
-        wanted = set(INSTITUTIONAL_ENDPOINTS.values()) | set(MARGIN_ENDPOINTS.values())
+        A file is an exchange's institutional or margin file, from either of
+        its endpoints; a TPEx OpenAPI table of another session is no capture
+        of the day (``of_day``).
+        """
+
+        first: dict[tuple[str, str, str], int] = {}
+        wanted = {
+            endpoint: (exchange, group)
+            for group, table in (
+                ("institutional", INSTITUTIONAL_ENDPOINTS),
+                ("margin", MARGIN_ENDPOINTS),
+            )
+            for exchange, endpoints in table.items()
+            for endpoint in endpoints
+        }
         for row in self.raw_payloads:
-            endpoint = (row[1] or "").split("?", 1)[0]
-            if endpoint in wanted:
-                first.setdefault((endpoint, (row[2] or "")[:10]), row[0])
+            key = wanted.get((row[1] or "").split("?", 1)[0])
+            day = (row[2] or "")[:10]
+            if key is None or (*key, day) in first or not self.of_day(row, day):
+                continue
+            first[(*key, day)] = row[0]
         return set(first.values())
 
-    def captures(self, endpoint: str) -> dict[str, list[tuple]]:
-        """data_as_of -> captures of ``endpoint`` (no query string), oldest first."""
+    def of_day(self, capture: tuple, day: str) -> bool:
+        """False for a TPEx OpenAPI table of another session (Issue #579).
+
+        Collect then read the website report; the table stays as raw under the
+        requested date.  An unreadable one is kept, so the check reports it.
+        """
+
+        if not (capture[1] or "").startswith(TPEX_OPENAPI):
+            return True
+        payload = self.raw.load(capture[4])
+        return payload is None or openapi_session(payload) == day
+
+    def captures(self, *endpoints: str) -> dict[str, list[tuple]]:
+        """data_as_of -> captures of ``endpoints`` (no query string), oldest first.
+
+        TPEx OpenAPI tables of another session are left out (``of_day``).
+        """
 
         found: dict[str, list[tuple]] = defaultdict(list)
         for row in self.raw_payloads:
-            if (row[1] or "").split("?", 1)[0] == endpoint:
-                found[(row[2] or "")[:10]].append(row)
+            day = (row[2] or "")[:10]
+            if (row[1] or "").split("?", 1)[0] in endpoints and self.of_day(row, day):
+                found[day].append(row)
         return found
 
 
@@ -307,8 +351,8 @@ def bars_raw(ctx: Context) -> list[Check]:
     )
     unknown_codes = Counter()
     captures = {
-        exchange: ctx.captures(endpoint)
-        for exchange, endpoint in QUOTE_ENDPOINTS.items()
+        exchange: ctx.captures(*endpoints)
+        for exchange, endpoints in QUOTE_ENDPOINTS.items()
     }
     days = sorted(set(captures["TWSE"]) | set(captures["TPEx"]))
     for day in days:
@@ -441,12 +485,12 @@ def chips_raw(ctx: Context) -> list[Check]:
         scope="每列融資對該日任一份 MI_MARGN／margin balance",
     )
     inst_captures = {
-        exchange: ctx.captures(endpoint)
-        for exchange, endpoint in INSTITUTIONAL_ENDPOINTS.items()
+        exchange: ctx.captures(*endpoints)
+        for exchange, endpoints in INSTITUTIONAL_ENDPOINTS.items()
     }
     margin_captures = {
-        exchange: ctx.captures(endpoint)
-        for exchange, endpoint in MARGIN_ENDPOINTS.items()
+        exchange: ctx.captures(*endpoints)
+        for exchange, endpoints in MARGIN_ENDPOINTS.items()
     }
     days = sorted(
         set().union(

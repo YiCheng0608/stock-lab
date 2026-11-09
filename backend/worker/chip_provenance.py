@@ -45,7 +45,9 @@ from app.domain import OFFICIAL_MARGIN_CHIP_SOURCES
 from app.models import ChipSnapshot, IngestionRun, Instrument, RawPayload
 from worker import pipeline
 from worker.sources import (
+    TPEX_CHIP_ENDPOINT,
     TPEX_CHIP_HISTORY_ENDPOINT,
+    TPEX_MARGIN_ENDPOINT,
     TPEX_MARGIN_HISTORY_ENDPOINT,
     TWSE_CHIP_ENDPOINT,
     TWSE_MARGIN_HISTORY_ENDPOINT,
@@ -75,6 +77,10 @@ ENDPOINT_GROUP = {
     endpoint: (exchange, group)
     for (exchange, group), (endpoint, _parser) in CAPTURES.items()
 }
+# The current TPEx session's files may be the OpenAPI tables (Issue #579); the
+# group's parser reads both shapes.
+ENDPOINT_GROUP[TPEX_CHIP_ENDPOINT] = ("TPEx", INSTITUTIONAL)
+ENDPOINT_GROUP[TPEX_MARGIN_ENDPOINT] = ("TPEx", MARGIN)
 
 
 class ProvenanceError(Exception):
