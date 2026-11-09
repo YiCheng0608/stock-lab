@@ -7,14 +7,14 @@ export const GLOSSARY: GlossaryTerm[] = [
     term_id: 'breakout', name: '突破', aliases: ['breakout'], category: 'strategy',
     plain_definition: '價格有效越過近期壓力或高點的條件式型態。',
     use: '描述可能在下一交易日執行的條件，不代表已成交。',
-    how_to_read: '同時看觸發價、失效價、目標與資料完整度。',
+    how_to_read: '同時看觸發價、停損、目標與資料完整度。',
     limitations: '資料不足時不會形成可執行結論。', related: ['rr', 't_plus_1'], version: '1.0.0',
   },
   {
     term_id: 'pullback', name: '回踩', aliases: ['pullback'], category: 'strategy',
     plain_definition: '價格回到預定支撐區、等待重新轉強的條件。',
     use: '標示回踩區間與重新站回的觀察條件。',
-    how_to_read: '區分回踩區、觸發價與失效價。',
+    how_to_read: '區分回踩區、觸發價與停損。',
     limitations: '不是價格一定反彈，也不是立即進場。', related: ['ma20', 'ma60'], version: '1.0.0',
   },
   // The two entry types a candidate's first line names (#491).
@@ -71,7 +71,7 @@ export const GLOSSARY: GlossaryTerm[] = [
   {
     term_id: 'target', name: '目標價', aliases: ['target_1', 'target_2', '目標一', '目標二'], category: 'strategy',
     plain_definition: '規則先算好的兩個價格目標：目標一較近，RR 與追蹤的「達標」都以它計算；目標二較遠，是延伸參考。',
-    use: '和失效價一起檢查風險報酬，不是保證價格。',
+    use: '和停損一起檢查風險報酬，不是保證價格。',
     how_to_read: '只有價位與基準完整且 RR 達門檻時才顯示為有效。',
     limitations: '不代表一定會到達，也不包含交易成本以外的所有風險。', related: ['support', 'rr'], version: '1.2.0',
   },

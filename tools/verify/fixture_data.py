@@ -2022,13 +2022,14 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
     "today": [
         ("dashboard", "as_of", D),
         ("dashboard", "market.instruments", 8),  # 7 stocks + 1 ETF, not TAIEX
-        ("dashboard", "news", 6),
-        ("dashboard", "news[].id", ["1", "5", "6", "4", "2", "3"]),
+        # Only linked or judged news reaches the home page (#581, NEWS_SPEC 首頁重點新聞).
+        ("dashboard", "news", 4),
+        ("dashboard", "news[].id", ["1", "6", "2", "3"]),
         # The today card carries the detail's ai block (#233).
         (
             "dashboard",
             "news[].ai.status",
-            ["done", "done", None, "done", "done", None],
+            ["done", None, "done", None],
         ),
         ("dashboard", "themes", 5),
         (

@@ -9,6 +9,7 @@ close theirs.
 """
 
 import json
+import sys
 from datetime import date, datetime
 
 import pytest
@@ -342,3 +343,23 @@ def test_the_summary_names_when_a_run_started(factory):
         summary = pipeline.summarize_backtest(db, killed)
     assert summary["run"]["started_at"] == "2026-11-04T13:54:00+00:00"
     assert summary["run"]["finished_at"] is None
+
+
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux"), reason="_MarkerLock is a no-op off Linux"
+)
+def test_a_marker_lock_held_elsewhere_reports_failed_and_leaves_the_rows(
+    factory, tmp_path, monkeypatch
+):
+    # Another holder keeps the marker lock past the timeout: nothing is closed, the
+    # daily goes on and the next one tries again (review 6745932189).
+    from worker import job, schedule_runs
+
+    with factory() as db:
+        live = _run(db, "technical-backtest:v2:2025-11-04:2026-11-03", "running")
+    monkeypatch.setattr(job, "MAINTENANCE_LOCK_TIMEOUT_SECONDS", 0.2)
+    with job._MarkerLock(tmp_path):
+        result = schedule_runs.close_abandoned_backtests_at_daily_start(tmp_path)
+    assert result["status"] == "failed"
+    assert result["error"].startswith("TimeoutError: ")
+    assert _statuses(factory, live) == ["running"]

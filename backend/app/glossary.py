@@ -16,7 +16,7 @@ _TERMS: tuple[dict[str, Any], ...] = (
         "category": "strategy",
         "plain_definition": "價格有效越過前方壓力或近期高點的條件式型態。",
         "use": "用來描述可能在下一個交易日執行的突破條件，不代表已成交。",
-        "how_to_read": "同時查看觸發價、失效價、目標與資料完整度。",
+        "how_to_read": "同時查看觸發價、停損、目標與資料完整度。",
         "limitations": "若前 20 日價格、量能、族群或籌碼資料不完整，系統會採資料不足或觀察。",
         "related": ["pullback", "rr", "t_plus_1", "data_incomplete"],
         "version": GLOSSARY_VERSION,
@@ -210,7 +210,7 @@ _TERMS: tuple[dict[str, Any], ...] = (
             "規則先算好的兩個價格目標：目標一較近，RR 與追蹤的「達標」都以它計算；"
             "目標二較遠，是延伸參考。"
         ),
-        "use": "和失效價一起檢查風險報酬，不是保證價格。",
+        "use": "和停損一起檢查風險報酬，不是保證價格。",
         "how_to_read": "只有價位與基準完整且 RR 達門檻時才顯示為有效。",
         "limitations": "不代表一定會到達，也不包含交易成本以外的所有風險。",
         "related": ["support", "rr"],
