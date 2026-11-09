@@ -1,6 +1,6 @@
 ---
 name: verify-stock-lab
-description: 對 stock-lab 五個資料與行動頁（今日可買、觀察中、族群、個股、新聞；策略說明是靜態頁，由前端測試涵蓋）做端到端驗證並留下可重跑的證據。兩種模式：CI 模式由 CI `verify` job 在假資料庫上自動跑（本機可重跑）；真資料模式在 gate 收尾與 G7 窗口頭尾時用正式 DB 的唯讀副本跑 `page_checks.py`（容器內；G7 在本機），agent 只判讀標「人工」的檢查（樣本由程式依規則抽好）與失敗原因，輸出每個導覽的三態結果（通過／失敗／無法判定）與截圖、API 回應、DB 查詢。G7 驗收、gate 收尾或使用者說「跑 verify-stock-lab」時使用。
+description: 對 stock-lab 五個資料與行動頁（今日可買、觀察中、族群、個股、新聞；策略說明是靜態頁，由前端測試涵蓋）做端到端驗證並留下可重跑的證據。兩種模式：CI 模式由 CI `verify` job 在假資料庫上自動跑（本機可重跑）；真資料模式在 gate 收尾與每合併約 3 個 PR 後用正式 DB 的唯讀副本跑 `page_checks.py`（容器內），agent 只判讀標「人工」的檢查（樣本由程式依規則抽好）與失敗原因，輸出每個導覽的三態結果（通過／失敗／無法判定）與截圖、API 回應、DB 查詢。gate 收尾、定期真資料驗證或使用者說「跑 verify-stock-lab」時使用。
 ---
 
 # verify-stock-lab
@@ -10,7 +10,7 @@ description: 對 stock-lab 五個資料與行動頁（今日可買、觀察中�
 | 模式 | 什麼時候 | 資料 | 誰跑 |
 | --- | --- | --- | --- |
 | [CI 模式](#ci-模式) | 每個 PR 與 master push；master 每晚 22:40（台北）與手動觸發（`workflow_dispatch`）跑五頁全套 | 假資料庫（[`fixture_db.py`](../../../tools/verify/fixture_db.py)），數值固定 | CI `verify` job，自動 |
-| [真資料模式](#真資料模式) | 每個 gate 收尾、每合併約 3 個 PR、G7 的 5 個交易日窗口開頭與結尾各一次（[工作手冊](../../../docs/WORKFLOW.md#任務流程)第 6 步、[RELEASE 的 V1 發佈隔離](../../../docs/RELEASE.md#v1-發佈隔離g7-窗口專用)） | 正式 DB 的唯讀副本（`tools/ops/copy_db.py`），容器跑法放在 compose volume | 統籌在以最新 `origin/master` 為底的任務 worktree 另開 session |
+| [真資料模式](#真資料模式) | 每個 gate 收尾、每合併約 3 個 PR（[工作手冊](../../../docs/WORKFLOW.md#任務流程)第 6 步）；V1 的 G7 窗口頭尾各跑過一次，已結束（[RELEASE 的 V1 發佈隔離（歷史）](../../../docs/RELEASE.md#v1-發佈隔離歷史)） | 正式 DB 的唯讀副本（`tools/ops/copy_db.py`），容器跑法放在 compose volume | 統籌在以最新 `origin/master` 為底的任務 worktree 另開 session |
 
 回覆使用者一律繁體中文。所有命令在 Git Bash（Claude Code 的 Bash 工具）執行，cwd 為 worktree 根目錄。
 
@@ -61,8 +61,8 @@ export PYTHONPATH="$WT/backend;<發佈 checkout 的 venv>/Lib/site-packages" PYT
 
 | 跑法 | 什麼時候 | API、前端、`page_checks.py` 與截圖 | 副本 |
 | --- | --- | --- | --- |
-| 容器（預設） | checkout 有 `docker-compose.yml`，而且不是 G7 的那兩次 | compose project `$P`（`task-<n>-verify`）：api（後端 image）、web（nginx 前端 image）；`page_checks.py` 以 `run --rm api` 在同一個網路跑，截圖用後端 image 內的 Chromium | 該 project 的 volume `task-<n>-verify_stock-data` |
-| 本機 | G7 的兩次（`release/v1` 沒有 compose 檔，`--g7` 照 [#260](https://github.com/YiCheng0608/stock-lab/issues/260) 在本機跑），或 checkout 沒有 compose 檔 | 本機的 Python、vite preview、Edge／Chrome（[起服務](#起服務)） | `$V/stock.db` |
+| 容器（預設） | checkout 有 `docker-compose.yml` | compose project `$P`（`task-<n>-verify`）：api（後端 image）、web（nginx 前端 image）；`page_checks.py` 以 `run --rm api` 在同一個網路跑，截圖用後端 image 內的 Chromium | 該 project 的 volume `task-<n>-verify_stock-data` |
+| 本機 | checkout 沒有 compose 檔（歷史：V1 G7 的兩次因發佈 branch 沒有 compose 檔，照 [#260](https://github.com/YiCheng0608/stock-lab/issues/260) 在本機加 `--g7` 跑） | 本機的 Python、vite preview、Edge／Chrome（[起服務](#起服務)） | `$V/stock.db` |
 
 同一份副本兩種跑法的三態結果相同（#339 比對兩邊的 `results.json`）。`<n>` 是分支名 `task/<n>-...` 的數字。下面各步標「容器」或「本機」的只照所選跑法做，沒標的兩種都做。compose 檔要 Docker Compose 2.24 以上（[Docker compose](../../../docs/ops/SETUP.md#docker-compose)）。
 
@@ -71,7 +71,7 @@ export PYTHONPATH="$WT/backend;<發佈 checkout 的 venv>/Lib/site-packages" PYT
 1. **停止條件**（任一成立就不跑，直接回覆原因）：
    - 台北時間 21:30～23:30（排程 `daily` 時段：21:30 與 23:00 的重試，#466；不碰正式 DB）：`TZ=UTC-8 date +%H%M` 在 `2130`～`2330` 之間（POSIX 寫法的 UTC+8；Git Bash 沒有時區資料庫，`Asia/Taipei` 會被當成 UTC）。
    - 目前分支是 `master`（`git rev-parse --abbrev-ref HEAD`）：管理 checkout 不跑，請在任務 worktree 執行。
-   - G7 的那兩次：G7 證據必須是排程正在跑的發佈 branch 程式。先 `git fetch origin master release/v1`；worktree 要從當時的 `origin/release/v1` 建，沒有額外 commit、沒有未 commit 的改動（`--g7` 要求 HEAD 等於 `origin/release/v1`）。第 2 步加 `--g7`，`page_checks.py` 不符合就 exit 2 並寫明原因，不跑任何檢查。
+   - `--g7` 只屬於已結束的 V1 G7 窗口（要求工作樹乾淨且 HEAD 等於 `origin/release/v1`，不符合就 exit 2、不跑任何檢查；[RELEASE 的 V1 發佈隔離（歷史）](../../../docs/RELEASE.md#v1-發佈隔離歷史)），現行的真資料驗證不加。
 2. **變數**（Bash 工具不保留 shell 狀態，每個命令開頭重設；`<…>` 換成[本機路徑](../../../docs/ops/LOCAL.md)的值）：
 
    ```bash
@@ -122,11 +122,11 @@ dc run --rm --no-deps -v "$(git rev-parse --git-common-dir):/repo.git:ro" -v "$V
 **本機**：照[起服務](#起服務)（`DB="$V/stock.db"`），再跑（私人模式把 `--out "$OUT"` 換成 `--out "$OUT/.private"`）：
 
 ```bash
-"$PY" -B "$WT/tools/verify/page_checks.py" --db "$V/stock.db" --out "$OUT" [--g7] \
+"$PY" -B "$WT/tools/verify/page_checks.py" --db "$V/stock.db" --out "$OUT" \
   --api "http://127.0.0.1:$API_PORT" --web "http://127.0.0.1:$WEB_PORT" > "$V/logs/checks.log" 2>&1
 ```
 
-約 3～5 分鐘。exit 0 沒有失敗（可能有無法判定）、1 有失敗、2 是 features 檔與程式不一致或 `--g7` 前置不符（不跑檢查；features 不一致時五個導覽判無法判定並附 stderr）。輸出：`summary.md`（開頭是程式版本、個股 `E`／`S` 的來源、三態計數與人工檢查樣本，接著每頁每條檢查的三態結果與證據）、`results.json`、`api/`、`shots/`、`manual/`（人工檢查樣本）。
+約 3～5 分鐘。exit 0 沒有失敗（可能有無法判定）、1 有失敗、2 是 features 檔與程式不一致（加了 `--g7` 而前置不符也是 2；不跑檢查；features 不一致時五個導覽判無法判定並附 stderr）。輸出：`summary.md`（開頭是程式版本、個股 `E`／`S` 的來源、三態計數與人工檢查樣本，接著每頁每條檢查的三態結果與證據）、`results.json`、`api/`、`shots/`、`manual/`（人工檢查樣本）。
 
 ### 3. 人工檢查與判讀
 
@@ -154,7 +154,7 @@ dc run --rm --no-deps -v "$(git rev-parse --git-common-dir):/repo.git:ro" -v "$V
    ```markdown
    ## verify-stock-lab 真資料結果（2026-10-22 01:30 台北）
 
-   - 程式：`task/227-verify-skill` @ `5fbf04c`（照 `summary.md` 開頭的「程式」行；有未 commit 的改動時註明照工作樹建置；G7 加註 `--g7`）
+   - 程式：`task/227-verify-skill` @ `5fbf04c`（照 `summary.md` 開頭的「程式」行；有未 commit 的改動時註明照工作樹建置）
    - 副本：資料日 2026-10-21（`facts.json` 的 `market_latest_trading_date`），alembic `0016_group_score_archive`，複製 10.1 秒
    - 個股 E／S：TWSE 3004，今日榜 #1 族群「電機機械」的第一個成員（照 `summary.md` 開頭的「個股 E／S」行）
    - 證據：https://github.com/YiCheng0608/stock-lab/tree/pr-assets/227/20261022-0130
