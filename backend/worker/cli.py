@@ -31,7 +31,7 @@ from .index_bars import DEFAULT_FIRST_MONTH as INDEX_BARS_FIRST_MONTH
 from .index_bars import run_index_bar_backfill
 from .futures_history import DEFAULT_FIRST_MONTH as FUTURES_HISTORY_FIRST_MONTH
 from .futures_history import run_futures_history
-from .us_index_bars import run_us_index_history
+from .us_index_bars import run_us_collect
 from .indicator_batch import run_indicator_batch
 from .industry_repair import run_industry_repair
 from .instrument_repair import run_instrument_repair, run_unmatched_backfill
@@ -66,6 +66,13 @@ DAILY_EXIT_CODES = {
     "skipped": 0,
     "non_trading_day": 0,
     "non_trading_unconfirmed": 0,
+    "partial": 2,
+}
+# index-bars us-collect (#568): a skip and a run that found D − 1 stored are no failure.
+US_COLLECT_EXIT_CODES = {
+    "success": 0,
+    "already_complete": 0,
+    "skipped": 0,
     "partial": 2,
 }
 # news-llm (and candidate-notes): the schedule wrapper logs this next to news's own
@@ -108,7 +115,6 @@ def maintenance_guarded(args: argparse.Namespace) -> str | None:
         return "revenue backfill"
     if args.command == "index-bars" and args.index_bars_command in {
         "backfill",
-        "us-history",
         "futures-history",
     }:
         return f"index-bars {args.index_bars_command}"
@@ -435,12 +441,24 @@ def main() -> None:
         "--force", action="store_true", help="同來源已存的列也以報表值改寫"
     )
     index_bars_us_parser = index_bars_subparsers.add_parser(
-        "us-history",
-        help="美股四檔從 2023-09-01 補到已存最早一列之前：每序列 1 個 FRED 請求（#563）",
+        "us-collect",
+        help=(
+            "美股四檔抓到台北前一天：每檔 1 個 FinMind 請求；沒有列時從 2023-09-01 起，"
+            "有列時從最後一列往前 10 天（#568）"
+        ),
     )
     index_bars_us_parser.add_argument(
-        "--force", action="store_true", help="已存的收盤也以 FRED 值改寫"
+        "--date", help="台北日期 YYYY-MM-DD，抓到它的前一天；預設今天（台北）"
     )
+    index_bars_us_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="已存的 FinMind 列也以新值改寫（FRED 列不改）",
+    )
+    index_bars_us_parser.add_argument(
+        "--trigger", choices=("scheduler", "manual"), default="manual"
+    )
+    index_bars_us_parser.add_argument("--skip-reason", help=argparse.SUPPRESS)
     index_bars_futures_parser = index_bars_subparsers.add_parser(
         "futures-history",
         help="台指期近月從期交所網站 futDataDown 回補到 OpenAPI 第一列之前：每月 1 個請求、間隔 3 秒（#563）",
@@ -673,8 +691,13 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
         result = run_index_bar_backfill(
             args.from_month, args.to_month, force=args.force
         )
-    elif args.command == "index-bars" and args.index_bars_command == "us-history":
-        result = run_us_index_history(force=args.force)
+    elif args.command == "index-bars" and args.index_bars_command == "us-collect":
+        result = run_us_collect(
+            session=date.fromisoformat(args.date) if args.date else None,
+            force=args.force,
+            trigger=args.trigger,
+            skip_reason=args.skip_reason,
+        )
     elif args.command == "index-bars" and args.index_bars_command == "futures-history":
         result = run_futures_history(args.from_month, args.to_month, force=args.force)
     elif args.command == "corporate-actions":
@@ -759,6 +782,8 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
         and result.get("status") != "success"
     ):
         raise SystemExit(2 if result.get("status") == "partial" else 1)
+    if args.command == "index-bars" and args.index_bars_command == "us-collect":
+        sys.exit(US_COLLECT_EXIT_CODES.get(str(result.get("status")), 1))
     if (
         args.command in {"fundamentals", "revenue", "index-bars"}
         and result.get("status") != "success"

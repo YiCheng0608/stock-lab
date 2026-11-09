@@ -12,7 +12,7 @@ import { IndexTablePanel, IndexTableView, MarketChartView, MarketOverviewPanel, 
 import { MarketPage } from './MarketPage'
 import { indexRows, overviewWithIndexes } from './market.fixtures'
 import {
-  FRED_ATTRIBUTION, INDEX_MA60_NOTE, INDEX_SPECS, MA60_BACKGROUND_NOTE, MA60_NOTE, TAIEX, TAIFEX_ATTRIBUTION, US_SECTION_TITLE,
+  US_ATTRIBUTION, INDEX_MA60_NOTE, INDEX_SPECS, MA60_BACKGROUND_NOTE, MA60_NOTE, TAIEX, TAIFEX_ATTRIBUTION, US_SECTION_TITLE,
   chartTitle, collectedSinceText, futuresLatestText, indexMa60Cell, indexSearch, indexTableNotes, marketOverviewNotes, selectedIndex,
   summaryItems, usGroupTitle,
 } from './marketOverview'
@@ -91,6 +91,9 @@ const txBars: StockBarsResponse = { ...taiexBars(txRows), instrument: { id: 11, 
 // A FRED series: closes only (Issue 547).
 const fredRows = days.map((row) => ({ ...row, open: null, high: null, low: null, volume: null, source: 'fred_close', price_reason: 'source_missing_ohlc' }))
 const fredBars: StockBarsResponse = { ...taiexBars(fredRows), instrument: { id: 14, exchange: 'US', symbol: 'SPX', name: 'S&P 500', instrument_type: 'index' } }
+// A FinMind series (Issue 568): open, high, low and close; SOX has no volume (NULL).
+const finmindRows = days.map((row) => ({ ...row, volume: null, source: 'finmind_us_index', price_reason: null }))
+const finmindBars: StockBarsResponse = { ...taiexBars(finmindRows), instrument: { id: 17, exchange: 'US', symbol: 'SOX', name: '費城半導體指數', instrument_type: 'index' } }
 
 const spec = (key: string) => INDEX_SPECS.find((item) => item.key === key) ?? TAIEX
 const chart = (key: string, data: StockBarsResponse | undefined, extra: { loading?: boolean; error?: unknown; row?: IndexRow | null; interval?: 'day' | 'week' } = {}) =>
@@ -151,22 +154,22 @@ expectRow('tx', ['台指期近月', '合約 2026/11', '46,110', '換月', '2026/
 check(!/46,110\.\d/.test(rowText('tx')) && !/46,502\.\d/.test(rowText('tx')), 'tx: whole points for the close and MA60 (DESIGN_SYSTEM §3)')
 check(count(rowOf('tx'), '換月') === 2 && !/tone-(up|down)/.test(rowOf('tx')), 'tx on a roll day: 換月 in both change cells (the reason, not a blank; decision 6725073156), no up/down color')
 check(tableText.includes('台指期近月 2026/10/22 換月（2026/10 → 2026/11），與前一筆是不同合約，不計漲跌'), `tx roll note under the table: ${tableText.slice(-400)}`)
-expectRow('spx', ['S&P 500', '7,353.73', '-334.89', '-4.36%', '2026/10/20 非最新', '之上', '季線 6,900.12', 'FRED'])
+expectRow('spx', ['S&P 500', '7,353.73', '-334.89', '-4.36%', '2026/10/20 非最新', '之上', '季線 6,900.12', 'FinMind'])
 expectRow('ixic', ['NASDAQ 綜合指數', '24,579.42', '+264.42', '+1.09%', '2026/10/21', '無資料：季線尚未計算'])
 check(!rowText('ixic').includes('非最新') && !rowText('ixic').includes('美股休市'), 'ixic: the expected US session, no flag')
 expectRow('dji', ['道瓊工業指數', '51,285.73', '2026/10/20 2026/10/21 美股休市', '持平', '季線 51,285.73'])
 check(!rowText('dji').includes('非最新'), 'dji: 美股休市 is not 非最新')
-expectRow('sox', ['費城半導體指數', '無資料：最近一次擷取失敗（2026/10/22）', 'FRED'])
+expectRow('sox', ['費城半導體指數', '無資料：最近一次擷取失敗（2026/10/22）', 'FinMind'])
 check(!/\d,\d{3}\.\d{2}/.test(rowText('sox')) && count(rowOf('sox'), '>—<') >= 4, `sox without data: no number, — in the value cells: ${rowText('sox')}`)
 check(count(table, 'market-index-stale') === 2, `非最新 in the warning color on TPEX and SPX, got ${count(table, 'market-index-stale')}`)
 check(/data-index="taiex"(?:(?!<\/tr>)[\s\S])*tone-down/.test(table) && /data-index="ixic"(?:(?!<\/tr>)[\s\S])*tone-up/.test(table) && /data-index="tpex"(?:(?!<\/tr>)[\s\S])*tone-up/.test(table), '漲跌: 台股 colors on the change only, a fall green and a rise red')
 check(!/market-index-ma60[^>]*>(?:(?!<\/td>)[\s\S])*tone-(up|down)/.test(table), '相對季線: no up/down colors (background, not a signal)')
 const groupTitles = [...table.matchAll(/class="table-group-row"><td colSpan="7">([^<]*)<\/td>/gi)].map((match) => match[1])
 check(groupTitles.join() === '台股,美股', `groups: 台股 and 美股 (one US row is 非最新, so not ${US_SECTION_TITLE}), got ${groupTitles.join()}`)
-check(tableText.includes('來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所；美股 FRED'), 'the 來源 note under the table (the column is hidden on phones)')
+check(tableText.includes('來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所；美股 FinMind'), 'the 來源 note under the table (the column is hidden on phones)')
 check(page.indexOf('data-index="taiex"') < page.indexOf('data-index="tpex"') && page.indexOf('data-index="tx"') < page.indexOf('data-index="spx"') && page.indexOf('data-index="dji"') < page.indexOf('data-index="sox"'), 'rows in table order')
 const tableNotes = text(slice(table, '<details class="data-explanation"', '</details>'))
-for (const line of [TAIFEX_ATTRIBUTION, FRED_ATTRIBUTION, 'Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved.', 'Copyright © 2016, NASDAQ OMX Group, Inc.', '台股資料日的前一個平日', '台指期換月日不計漲跌', INDEX_MA60_NOTE, MA60_BACKGROUND_NOTE, '紅色為上漲、綠色為下跌（台股慣例）']) {
+for (const line of [TAIFEX_ATTRIBUTION, US_ATTRIBUTION, 'Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved.', 'Copyright © 2016, NASDAQ OMX Group, Inc.', '台股資料日的前一個平日', '台指期換月日不計漲跌', INDEX_MA60_NOTE, MA60_BACKGROUND_NOTE, '紅色為上漲、綠色為下跌（台股慣例）']) {
   check(tableNotes.includes(line), `指數總表 資料說明: 「${line}」, got ${tableNotes}`)
 }
 check(count(tableNotes, 'S&P Dow Jones Indices LLC') === 1, '資料說明: a copyright notice shared by two series is listed once')
@@ -181,7 +184,7 @@ for (const [location, key, title] of [['/market?index=tpex', 'tpex', '櫃買指�
   check(count(markup, 'is-selected') === 1 && markup.indexOf(`data-index="${key}"`) >= 0 && markup.lastIndexOf('<tr', markup.indexOf('is-selected')) === markup.lastIndexOf('<tr', markup.indexOf(`data-index="${key}"`)) && selectedRow.includes('aria-pressed="true"'), `${location}: the ${key} row is selected after a reload`)
 }
 const soxPage = render('/market?index=sox', <MarketPage />, client)
-check(text(soxPage).includes(CLOSE_ONLY_NOTE) && text(soxPage).includes(FRED_ATTRIBUTION) && text(soxPage).includes('Copyright © 2016, NASDAQ OMX Group, Inc.'), 'a US row: the close line note, the FRED attribution and its copyright under the chart')
+check(text(soxPage).includes(CLOSE_ONLY_NOTE) && text(soxPage).includes(US_ATTRIBUTION) && text(soxPage).includes('Copyright © 2016, NASDAQ OMX Group, Inc.'), 'a US row: the close line note, the FRED attribution and its copyright under the chart')
 const txPage = render('/market?index=tx', <MarketPage />, client)
 check(text(txPage).includes('2026/10/10 合約 2026/10 · 未平倉 125,011 口 · 結算價 46,105') && text(txPage).includes(TAIFEX_ATTRIBUTION), 'the TX row: contract month, open interest and the attribution under the chart (Issue 552)')
 check(selectedIndex(new URLSearchParams('index=dji')).key === 'dji' && selectedIndex(new URLSearchParams('')).key === 'taiex' && selectedIndex(new URLSearchParams('index=TAIEX')).key === 'taiex', 'selectedIndex: ?index=<key>, 加權指數 otherwise')
@@ -254,8 +257,12 @@ check(closeOnlyMarkup.includes('2026/10/22 46,041.43 46,041.43 46,041.43 46,041.
 const fredChart = text(render('/market us chart', chart('spx', fredBars, { row: indexRows()[3] })))
 check(fredChart.includes('S&P 500日線') && fredChart.includes(CLOSE_ONLY_NOTE), `FRED chart: titled, with the close-only note: ${fredChart.slice(0, 300)}`)
 check(fredChart.includes('2026/10/22 46,041.43') && !fredChart.includes('2026/10/22 46,021.43'), 'FRED chart table: the close, no open/high/low')
-check(fredChart.includes('來源 FRED（聖路易聯邦準備銀行）') && fredChart.includes(FRED_ATTRIBUTION) && fredChart.includes('S&P Dow Jones Indices LLC'), 'FRED chart: FRED named, the attribution and copyright under it')
-check(text(render('UsChartFooter', <UsChartFooter row={null} />)).trim() === FRED_ATTRIBUTION, 'US footer without a row: the attribution alone')
+check(fredChart.includes('來源 FRED（聖路易聯邦準備銀行）') && fredChart.includes(US_ATTRIBUTION) && fredChart.includes('S&P Dow Jones Indices LLC'), 'FRED chart: FRED named, the attribution and copyright under it')
+check(text(render('UsChartFooter', <UsChartFooter row={null} />)).trim() === US_ATTRIBUTION, 'US footer without a row: the attribution alone')
+// A FinMind series: candles like a Taiwan index, no close-only note, FinMind named (Issue 568).
+const finmindChart = text(render('/market us finmind chart', chart('sox', finmindBars, { row: indexRows()[6] })))
+check(!finmindChart.includes(CLOSE_ONLY_NOTE) && !isCloseOnlySeries(finmindRows), `FinMind chart: candles, no close-only note: ${finmindChart.slice(0, 300)}`)
+check(finmindChart.includes('來源 FinMind') && finmindChart.includes(US_ATTRIBUTION) && finmindChart.includes('Copyright © 2016, NASDAQ OMX Group, Inc.'),`FinMind chart: FinMind named, the attribution and copyright under it: ${finmindChart.slice(-400)}`)
 const theme = readChartTheme(() => 'black')
 const layout = chartLayout(320)
 const fredOption = buildBarsChartOption(fredBars, { panel: 'macd', panelState: { kind: 'chart' } as never, visibleMa: new Set(), theme, layout, zoom: { start: 0, end: 100 }, digits: 2 })
@@ -276,7 +283,7 @@ check(!mixedChart.includes(CLOSE_ONLY_NOTE) && mixedChart.includes('來源 臺�
 for (const item of INDEX_SPECS) {
   const emptyBars = render(`/market ${item.key}`, chart(item.key, taiexBars([])))
   check(text(emptyBars).includes(chartTitle(item)) && text(emptyBars).includes('無資料') && text(emptyBars).includes('來源未提供日線') && text(emptyBars).includes('資料日期未提供') && !emptyBars.includes('chart-data-table'), `沒有日線（${item.key}）: 無資料＋來源未提供日線, no table: ${text(emptyBars)}`)
-  check(text(emptyBars).includes(TAIFEX_ATTRIBUTION) === (item.key === 'tx') && text(emptyBars).includes(FRED_ATTRIBUTION) === (item.group === 'us'), `沒有日線（${item.key}）: the TX / FRED attribution stays, only on its own chart`)
+  check(text(emptyBars).includes(TAIFEX_ATTRIBUTION) === (item.key === 'tx') && text(emptyBars).includes(US_ATTRIBUTION) === (item.group === 'us'), `沒有日線（${item.key}）: the TX / FRED attribution stays, only on its own chart`)
 }
 const failedBars = render('/market', chart('tpex', undefined, { interval: 'week', error: new Error('HTTP 502') }))
 check(text(failedBars).includes('資料暫時無法載入') && text(failedBars).includes('HTTP 502'), `載入失敗: 資料暫時無法載入: ${text(failedBars)}`)

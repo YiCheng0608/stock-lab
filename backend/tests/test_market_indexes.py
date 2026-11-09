@@ -169,7 +169,9 @@ def _seed(factory, *, tx_months=None, tpex_summary_day=AS_OF, run=True):
             open_interest=lambda i: 100000 + i,
             settlement_price=lambda i: TX_CLOSES[i],
         )
-        _bars(db, _instrument(db, "US", "SPX"), DAYS[:-1], SPX_CLOSES, "fred_close")
+        _bars(
+            db, _instrument(db, "US", "SPX"), DAYS[:-1], SPX_CLOSES, "finmind_us_index"
+        )
         _summary(
             db,
             "TWSE",
@@ -289,7 +291,7 @@ def test_too_few_closes_is_insufficient_and_no_series_is_unavailable(factory):
         assert rows[key]["status"] == "unavailable", key
         assert rows[key]["reason"] == "not_collected", key
         assert rows[key]["ma60"] is None, key
-        assert rows[key]["source"]["label"] == "FRED"
+        assert rows[key]["source"]["label"] == "FinMind"
 
 
 # ---- dates: 非最新 and the US session ----
@@ -322,7 +324,10 @@ def test_us_rows_are_foreign_indices(factory):
         spx["close"] == foreign["SPX"]["close"]
         and spx["change"] == foreign["SPX"]["change"]
     )
-    assert spx["source"]["detail"] == "FRED SP500" and spx["source"]["copyright"]
+    assert (
+        spx["source"]["detail"] == "FinMind USStockPrice ^GSPC"
+        and spx["source"]["copyright"]
+    )
 
 
 def test_without_a_session_the_taiwan_rows_say_so(factory):

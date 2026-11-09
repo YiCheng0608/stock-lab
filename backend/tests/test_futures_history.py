@@ -529,7 +529,7 @@ def test_the_backfill_refuses_a_month_after_the_current_one(factory):
         )
 
 
-@pytest.mark.parametrize("command", ["backfill", "us-history", "futures-history"])
+@pytest.mark.parametrize("command", ["backfill", "futures-history"])
 def test_the_history_commands_hold_maintenance_mode(command):
     from argparse import Namespace
 
@@ -538,3 +538,14 @@ def test_the_history_commands_hold_maintenance_mode(command):
     args = Namespace(command="index-bars", index_bars_command=command)
 
     assert maintenance_guarded(args) == f"index-bars {command}"
+
+
+def test_us_collect_runs_without_maintenance_mode():
+    # It writes the four US indexes only and is idempotent (#568): no maintenance.
+    from argparse import Namespace
+
+    from worker.cli import maintenance_guarded
+
+    args = Namespace(command="index-bars", index_bars_command="us-collect")
+
+    assert maintenance_guarded(args) is None

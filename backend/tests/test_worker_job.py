@@ -381,7 +381,8 @@ def test_news_llm_can_be_switched_off(tree):
     "job_name, option, message",
     [
         ("daily", "--skip-news-llm", "--skip-news-llm applies only to the news job"),
-        ("news", "--force", "--force applies only to the daily job"),
+        ("news", "--force", "--force applies only to the daily and us jobs"),
+        ("us", "--skip-news-llm", "--skip-news-llm applies only to the news job"),
     ],
 )
 def test_options_of_the_other_job_are_refused(tree, job_name, option, message):
@@ -1022,7 +1023,7 @@ def maintenance_marker(
     return path
 
 
-@pytest.mark.parametrize("job_name", ["daily", "news"])
+@pytest.mark.parametrize("job_name", ["daily", "news", "us"])
 def test_in_maintenance_a_job_only_logs_the_skip_and_starts_no_worker(tree, job_name):
     """AC-1: no worker, so not even the skipped row a daily records for other skips."""
 
@@ -1074,3 +1075,66 @@ def test_once_maintenance_is_off_the_jobs_run_again(tree):
     assert result.code == 0
     assert tree.steps() == ["daily"]
     assert tree.calls()[0]["argv"] == ["daily", "--trigger", "scheduler"]
+
+
+# The us job: index-bars us-collect (#568 AC-3) --------------------------------------
+
+
+def test_the_us_job_runs_us_collect_with_its_own_log_and_lock(tree):
+    result = tree.run("us", "--date", "2026-11-10")
+    assert result.code == 0, result.stderr
+    call = tree.calls()[0]
+    assert call["argv"] == [
+        "index-bars",
+        "us-collect",
+        "--trigger",
+        "scheduler",
+        "--date",
+        "2026-11-10",
+    ]
+    # Its own lock (one us job at a time), handed to the worker as daily's is.
+    assert call["env"]["STOCK_JOB_LOCK"] == str(tree.data / "locks" / "us.lock")
+    assert " start job=us trigger=scheduler" in result.log
+    assert [groups[1:] for groups in end_line(result.log)] == [("0", "")]
+    assert list(tree.logs.glob("us-*.log"))
+    assert not list(tree.logs.glob("daily-*.log"))
+
+
+@pytest.mark.parametrize(
+    "option, reason", [("--min-free-memory-gb", "low_memory"), (None, "git_busy")]
+)
+def test_a_skipped_us_job_records_its_reason_as_daily_does(tree, option, reason):
+    """The same checks and threshold option as daily; the worker records the skip."""
+
+    if option is None:
+        (tree.git_dir / "index.lock").touch()
+        args = []
+    else:
+        args = [option, "1024"]
+    result = tree.run("us", *args)
+    assert result.code == 0, result.stderr
+    assert skipped_line(result.log).group(1) == reason
+    assert tree.calls()[0]["argv"] == [
+        "index-bars",
+        "us-collect",
+        "--trigger",
+        "scheduler",
+        "--skip-reason",
+        reason,
+    ]
+
+
+def test_a_manual_or_simulated_us_job_is_a_manual_us_collect(tree):
+    tree.run("us", "--trigger", "simulation", "--force")
+    tree.run("us", "--trigger", "manual")
+    assert [call["argv"] for call in tree.calls()] == [
+        ["index-bars", "us-collect", "--trigger", "manual", "--force"],
+        ["index-bars", "us-collect", "--trigger", "manual"],
+    ]
+
+
+def test_the_us_job_limit_is_twenty_minutes():
+    from worker import job as job_module
+
+    assert job_module.TIME_LIMIT_MINUTES["us"] == 20.0
+    assert job_module.JOB_COMMANDS["us"] == ["index-bars", "us-collect"]

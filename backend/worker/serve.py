@@ -15,6 +15,11 @@ commands those tasks ran.
   the job's own 150).
 - news: every 2 hours on the hour, ``worker.cli job news --min-free-memory-gb
   1`` (news, then news-llm).
+- us: Tuesday to Saturday 06:30 and 09:30 (#568), ``worker.cli job us --trigger
+  scheduler --min-free-memory-gb 2`` (daily's threshold), which runs ``worker.cli
+  index-bars us-collect``: the four US indexes from FinMind up to D - 1. 09:30 is
+  the insurance: after a 06:30 that stored D - 1 it records ``already_complete``
+  and asks nothing.
 - watchdog: at :15 and :45, ``tools/ops/watchdog.sh``.
 - monitor: every minute, one poll of the coordinator's event monitor
   ``tools/ops/monitor.sh --once`` (#338), only with ``--monitor`` (or
@@ -32,7 +37,9 @@ evening would otherwise wait for the next trigger, as the triggers before its st
 run. A holiday is no exception: the daily records ``non_trading_day`` there (a first
 no-session answer is ``non_trading_unconfirmed``, which the 23:00 trigger confirms). After a
 21:30 ``success`` nothing is run at start, so a restart past 23:00 skips that night's
-institutional refetch.
+institutional refetch. The us job is caught up the same way (#568): Tuesday to Saturday
+past 06:30, when the day has no ``us_index_collect`` run that is ``success`` or
+``already_complete``.
 
 Maintenance mode (#468, worker.job.MaintenanceHold and ``worker.cli maintenance
 on|off``): while it is on, the daily and news jobs serve starts only log ``skipped
@@ -90,8 +97,17 @@ from . import job
 
 ROOT = job.ROOT
 TAIPEI = job.TAIPEI
-JOBS = ("daily", "news", "watchdog", "monitor")
+JOBS = ("daily", "news", "us", "watchdog", "monitor")
 DAILY_TIMES = "21:30,23:00"
+# us (#568 decision 6729065016): Taipei Tuesday to Saturday, after the US close
+# (04:00 or 05:00 Taipei); 09:30 asks only when 06:30 did not get D - 1. At :30,
+# away from news on the even hours.
+US_TIMES = "06:30,09:30"
+US_DAYS = "tue-sat"
+US_WEEKDAYS = (1, 2, 3, 4, 5)
+# worker.us_index_bars.RUN_TYPE and the statuses after which no catch-up runs.
+US_RUN_TYPE = "us_index_collect"
+US_COMPLETE_STATUSES = ("success", "already_complete")
 # A scheduled daily's limit: the job ends it before the next daily time (23:00 is 90
 # minutes after 21:30). The longest daily of 10/19-11/04 took 19.7 minutes.
 DAILY_TIME_LIMIT_MINUTES = 80.0
@@ -140,6 +156,11 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "--daily-times",
         default=DAILY_TIMES,
         help=f"daily 的台北時間 HH:MM，逗號分隔（預設 {DAILY_TIMES}，週一至週五）",
+    )
+    parser.add_argument(
+        "--us-times",
+        default=US_TIMES,
+        help=f"美股 us job 的台北時間 HH:MM，逗號分隔（預設 {US_TIMES}，週二至週六）",
     )
     parser.add_argument(
         "--news-interval-hours",
@@ -192,6 +213,15 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help=f"交給 job news（預設 {NEWS_MIN_FREE_MEMORY_GB:g}）",
     )
     parser.add_argument(
+        "--us-min-free-memory-gb",
+        type=float,
+        default=DAILY_MIN_FREE_MEMORY_GB,
+        help=f"交給 job us（預設同 daily 的 {DAILY_MIN_FREE_MEMORY_GB:g}）",
+    )
+    parser.add_argument(
+        "--us-time-limit-minutes", type=float, help="交給 job us（預設 20）"
+    )
+    parser.add_argument(
         "--daily-time-limit-minutes",
         type=float,
         default=DAILY_TIME_LIMIT_MINUTES,
@@ -209,16 +239,20 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _daily_times(value: str) -> list[tuple[int, int]]:
+def _daily_times(value: str, option: str = "--daily-times") -> list[tuple[int, int]]:
     times = []
     for item in value.split(","):
         hour, _, minute = item.strip().partition(":")
         if not (hour.isdigit() and minute.isdigit()):
-            raise ValueError(f"--daily-times: not HH:MM: {item!r}")
+            raise ValueError(f"{option}: not HH:MM: {item!r}")
         if not (0 <= int(hour) <= 23 and 0 <= int(minute) <= 59):
-            raise ValueError(f"--daily-times: not a time of day: {item!r}")
+            raise ValueError(f"{option}: not a time of day: {item!r}")
         times.append((int(hour), int(minute)))
     return times
+
+
+def _us_times(value: str) -> list[tuple[int, int]]:
+    return _daily_times(value, "--us-times")
 
 
 def _injected(value: str | None) -> datetime | None:
@@ -248,6 +282,7 @@ def skip_news_llm(args: argparse.Namespace, environ=os.environ) -> bool:
 def argument_problem(args: argparse.Namespace) -> str | None:
     try:
         _daily_times(args.daily_times)
+        _us_times(args.us_times)
         _injected(args.now)
         skip_news_llm(args)
     except ValueError as exc:
@@ -257,11 +292,19 @@ def argument_problem(args: argparse.Namespace) -> str | None:
         return f"--monitor (STOCK_MONITOR) must be one of {', '.join(MONITOR_MODES)}"
     if not 1 <= args.news_interval_hours <= NEWS_INTERVAL_MAX_HOURS:
         return f"--news-interval-hours must be between 1 and {NEWS_INTERVAL_MAX_HOURS}"
-    for name in ("daily_time_limit_minutes", "news_time_limit_minutes"):
+    for name in (
+        "daily_time_limit_minutes",
+        "news_time_limit_minutes",
+        "us_time_limit_minutes",
+    ):
         value = getattr(args, name)
         if value is not None and value <= 0:
             return f"--{name.replace('_', '-')} must be positive"
-    for name in ("daily_min_free_memory_gb", "news_min_free_memory_gb"):
+    for name in (
+        "daily_min_free_memory_gb",
+        "news_min_free_memory_gb",
+        "us_min_free_memory_gb",
+    ):
         if not 0 <= getattr(args, name) <= 1024:
             return f"--{name.replace('_', '-')} must be between 0 and 1024"
     return None
@@ -286,11 +329,16 @@ def triggers(args: argparse.Namespace) -> dict[str, object]:
         CronTrigger(day_of_week="mon-fri", hour=hour, minute=minute, timezone=TAIPEI)
         for hour, minute in _daily_times(args.daily_times)
     ]
+    us = [
+        CronTrigger(day_of_week=US_DAYS, hour=hour, minute=minute, timezone=TAIPEI)
+        for hour, minute in _us_times(args.us_times)
+    ]
     out = {
         "daily": daily[0] if len(daily) == 1 else OrTrigger(daily),
         "news": CronTrigger(
             hour=_news_hour(args.news_interval_hours), minute=0, timezone=TAIPEI
         ),
+        "us": us[0] if len(us) == 1 else OrTrigger(us),
         "watchdog": CronTrigger(minute=args.watchdog_minutes, timezone=TAIPEI),
     }
     if args.monitor != "off":
@@ -408,9 +456,44 @@ class Serve:
         limit = getattr(args, f"{name}_time_limit_minutes")
         if limit is not None:
             argv += ["--time-limit-minutes", f"{limit:g}"]
-        if self.offset and name == "daily":
+        if self.offset and name in ("daily", "us"):
             argv += ["--date", at.date().isoformat()]
         return argv, environment
+
+    def missed_us(self) -> str | None:
+        """Why serve runs the day's us job as it starts, or None (#568 AC-3).
+
+        Tuesday to Saturday past the first us time, when the day has no
+        ``us_index_collect`` run that is ``success`` or ``already_complete``: a
+        missed 06:30 (container down, maintenance) is caught up once, and the
+        worker itself asks nothing when D - 1 is already stored.
+        """
+
+        now = self.now()
+        if now.weekday() not in US_WEEKDAYS:
+            return None
+        if (now.hour, now.minute) < min(_us_times(self.args.us_times)):
+            return None
+        db = Path(job.data_environment(self.data_dir)["STOCK_DB_PATH"])
+        if not db.is_file():
+            return None
+        try:
+            uri = db.resolve().as_uri() + "?mode=ro"
+            with sqlite3.connect(uri, uri=True, timeout=30) as conn:
+                statuses = {
+                    row[0]
+                    for row in conn.execute(
+                        "SELECT status FROM ingestion_runs WHERE run_type = ? "
+                        "AND run_date = ?",
+                        (US_RUN_TYPE, now.date().isoformat()),
+                    )
+                }
+            conn.close()
+        except sqlite3.Error as exc:
+            return f"unreadable:{type(exc).__name__}"
+        if statuses & set(US_COMPLETE_STATUSES):
+            return None
+        return "not_complete"
 
     def missed_daily(self) -> str | None:
         """Why serve runs the day's daily as it starts, or None (see the module docstring)."""
@@ -454,17 +537,32 @@ class Serve:
             self.say("serve_lock_busy", lock=self._serve_lock.path)
 
     def _catch_up_daily(self, scheduler, missed: str) -> None:
-        self.say("catchup", job="daily", reason=missed)
+        self._catch_up(scheduler, "daily", missed)
+
+    def _catch_up(self, scheduler, name: str, missed: str) -> None:
+        self.say("catchup", job=name, reason=missed)
         # Once, as soon as the scheduler runs it: a date trigger at the real now.
         scheduler.add_job(
             self.fire,
             "date",
             run_date=datetime.now(TAIPEI),
-            args=["daily"],
-            id="daily-catchup",
-            name="daily-catchup",
+            args=[name],
+            id=f"{name}-catchup",
+            name=f"{name}-catchup",
             replace_existing=True,
         )
+
+    def catch_up_missed(self, scheduler) -> None:
+        """At start and at the end of maintenance: the day's missing daily and us."""
+
+        for name, missed in (("daily", self.missed_daily()), ("us", self.missed_us())):
+            if not missed:
+                continue
+            if self._maintenance:
+                # The job would only skip: the end of maintenance catches it up.
+                self.say("catchup_deferred", job=name, reason=missed, maintenance="on")
+            else:
+                self._catch_up(scheduler, name, missed)
 
     def watch_maintenance(self) -> None:
         """Every MAINTENANCE_POLL_SECONDS: the marker's changes, and serve.lock again."""
@@ -490,9 +588,8 @@ class Serve:
             )
         elif was and not state:
             self.say("maintenance_off")
-            missed = self.missed_daily()
-            if missed and self._scheduler is not None:
-                self._catch_up_daily(self._scheduler, missed)
+            if self._scheduler is not None:
+                self.catch_up_missed(self._scheduler)
 
     def backstop(self, name: str) -> float:
         """Seconds after which serve kills a run of NAME that is still going."""
@@ -588,12 +685,7 @@ class Serve:
             name="maintenance-watch",
             max_instances=1,
         )
-        missed = self.missed_daily()
-        if missed and self._maintenance:
-            # The daily would only skip: the end of maintenance catches it up.
-            self.say("catchup_deferred", job="daily", reason=missed, maintenance="on")
-        elif missed:
-            self._catch_up_daily(scheduler, missed)
+        self.catch_up_missed(scheduler)
         self._scheduler = scheduler
         return scheduler
 

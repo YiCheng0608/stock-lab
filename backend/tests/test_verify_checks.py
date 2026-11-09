@@ -764,7 +764,7 @@ def test_t15_without_bars_needs_the_empty_copy(tmp_path):
 
 # ---- T16: the index table (Issue 564) ----
 
-FRED = "資料來源：FRED，Federal Reserve Bank of St. Louis（個人非商業使用）"
+FRED = "資料來源：FinMind（個人非商業使用）"  # page_checks.US_ATTRIBUTION (Issue 568)
 
 
 def _index(key, group, **extra):

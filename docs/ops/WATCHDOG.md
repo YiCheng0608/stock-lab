@@ -27,6 +27,11 @@
 - `maintenance_long`（#468）：[維護模式](SCHEDULING.md#維護模式)的標記檔 `<data>/locks/maintenance` 在時，每輪記 `maintenance_on`（開始時間與時數）；開超過 12 小時（`MAINTENANCE_MAX_HOURS`）就留言請關掉，每台北日一則。開始時間取標記檔記的時間，讀不懂（或找不到 Python）時取檔案的修改時間。維護模式期間 daily、news 照樣寫日誌（skipped），所以 `daily` 的日誌檢查與下一條 `news` 不會因此留言。
 - `maintenance_expired`（#468 AC-5）：`logs/maintenance.log` 24 小時內有 `expired` 紀錄，也就是 serve 解除了一個心跳停了 10 分鐘以上的作業（回補或回測被 SIGKILL 或 OOM 結束，`finally` 沒有執行）的維護模式。留言寫出命令、PID、原因與停了幾分鐘；daily 與 news 已恢復，作業沒有跑完，要查它的輸出並決定是否重跑（回補以相同參數重跑會從 manifest 續做）。每台北日一則。
 - `news`：最新的 `logs/news-*.log` 已超過 6 小時（連續 3 次）沒有更新。
+- `us`（美股四檔，[#568](https://github.com/YiCheng0608/stock-lab/issues/568)；排程是週二至週六 06:30、09:30，見 [scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)）：
+  - `us_no_log`：最新的 `logs/us-*.log` 超過 4 天沒有更新。週六到下週二最長隔 3 天，再多留 1 天。
+  - `us_failed`：所有 `us-*.log` 裡最後 2 個 `end` 列的 exit 都不是 0（`partial` 是 2、`failed` 是 1）。job 被擋下（`skipped`）與 `already_complete` 都是 0，不算失敗。
+  - 每台北日各最多一則；還沒有任何 `us-*.log` 時不判定。
+  - 處置：查該日誌與 `/api/ingestion-runs?q=us_index_collect&include_metadata=true` 的 `series.<代號>.error`。FinMind 回 402（超過每小時上限）時等下一個時段；修好後用 `docker compose -p <P> exec scheduler python -m worker.cli job us --trigger manual` 補跑。
 - `monitor_stale`：事件 monitor 的 `logs/monitor-heartbeat.json`（`--monitor-dir` 給了就讀那個目錄的，scheduler 容器是 `/coordination`，#338）超過 10 分鐘沒有更新，或讀不出輪詢時間（[統籌事件 monitor](MONITOR.md)；monitor 每分鐘寫一次）；檔案不存在（monitor 尚未註冊）時不判定。心跳仍在更新、但記錄 gh 已連續 10 輪失敗（例如登入過期，佇列收不到 PR 與留言）時另以 `monitor_gh_failed` 留言，附第一次失敗的時間與最後的錯誤，請查 `gh auth status` 與 `gh api rate_limit`（帳號共用的 5000 次／小時可能已用完）。
 - `news_llm`：`stock.db` 最近 3 批判讀都是 `pending`；或 24 小時內最近 3 筆 `run_type=news_llm` 都是 `failed`（`running` 超過 90 分鐘也算）；或 news 日誌（今昨兩天的檔）24 小時內最後 3 個 `news_llm_exit=` 都是 `1`／`wrapper_error`（涵蓋表不存在等不寫 run 的失敗）。後兩者合為一則 `news_llm_failed` 留言；限 24 小時是為了 news 停擺後不再每天就舊失敗留言，停擺本身由上一條 `news` 判定。
 - `llm_auth`：24 小時內 news_llm 或 candidate_notes 最近一次 run 有 `claude -p` 認證失敗（`not_logged_in`）的批次，判定與處置見 [容器內的 claude 與 gh 認證（.env）](SETUP.md#容器內的-claude-與-gh-認證env)。

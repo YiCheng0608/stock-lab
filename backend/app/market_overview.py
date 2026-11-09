@@ -4,7 +4,7 @@ Only reads ``market_summaries`` written by collect and ``worker.cli
 market-summary`` (Issue #275).  Each exchange is shown for ``dashboard.as_of``
 alone; a row of another date is never shown in its place.
 
-``foreign_indices`` (Issue #547) reads the FRED closes of the ``US`` index
+``foreign_indices`` (Issues #547, #568) reads the daily bars of the ``US`` index
 instruments (``worker.us_index_bars``) and their ``data_quality`` rows: the
 newest close of each, its change from the stored close before it, and whether
 it is the expected US session (the weekday before the dashboard date).
@@ -347,8 +347,8 @@ def taiex_ma60(db: Session, as_of: str | None) -> dict[str, Any]:
 
 # --- US indexes (Issue #547) ----------------------------------------------------
 
-# Quality rows read for closed (blank) FRED dates; each covers the ten days
-# before its collect's newest stored row onward.
+# Quality rows read for closed US dates (us-collect's closed_dates); each covers the ten days
+# before its run's newest stored row onward.
 _QUALITY_ROWS = 5
 
 
@@ -399,7 +399,7 @@ def _closed_dates(rows: list[DataQuality]) -> set[date]:
 
 
 def _freshness(latest: date, expected: date, closed: set[date]) -> str:
-    """``latest``, ``us_market_closed`` (the expected day is a FRED blank and
+    """``latest``, ``us_market_closed`` (the expected day is a recorded US holiday and
     ``latest`` is the session before it) or ``stale``."""
 
     if latest >= expected:
@@ -467,13 +467,13 @@ def _foreign_index(db: Session, series: UsIndex, expected: date) -> dict[str, An
         "close": latest.close,
         "change": change,
         "change_pct": change_pct,
-        # Against the stored close before it (FRED has no change column).
+        # Against the stored close before it (the source has no change column).
         "change_pct_method": "derived",
         "previous_trading_date": previous.trading_date.isoformat()
         if previous
         else None,
         "source": {
-            "label": f"FRED {series.series_id}",
+            "label": _us_source_detail(latest.source, series),
             "copyright": series.copyright,
             "collected_at": _iso_utc(latest.collected_at),
             "data_as_of": latest.trading_date.isoformat(),
@@ -505,7 +505,22 @@ TW_INDEX_ROWS: tuple[tuple[str, str, str, str, str], ...] = (
     ("tpex", "TPEx", "TPEX", "櫃買指數", "證券櫃檯買賣中心"),
     ("tx", "TAIFEX", "TX", "台指期近月", "臺灣期貨交易所"),
 )
-US_SOURCE_LABEL = "FRED"
+US_SOURCE_LABEL = "FinMind"
+# market_bars.source of the US rows (worker.us_index_bars): FinMind since #568;
+# FRED's close-only rows (#547) where a database still has them.
+US_BAR_SOURCE_LABELS = {"finmind_us_index": "FinMind", "fred_close": "FRED"}
+US_DATASET = "USStockPrice"
+
+
+def _us_source_label(bar_source: str | None) -> str:
+    return US_BAR_SOURCE_LABELS.get(bar_source or "", US_SOURCE_LABEL)
+
+
+def _us_source_detail(bar_source: str | None, series: UsIndex) -> str:
+    label = _us_source_label(bar_source)
+    if label == "FRED":
+        return label
+    return f"{label} {US_DATASET} {series.series_id}"
 
 
 def _instrument(db: Session, exchange: str, symbol: str) -> Instrument | None:
@@ -685,6 +700,10 @@ def index_rows(
     for series in US_INDEXES:
         item = by_symbol.get(series.symbol) or {"status": "unavailable"}
         quote = {field: item[field] for field in _US_ROW_FIELDS if field in item}
+        # The latest row's source when there is one: FinMind, or FRED (#547 rows).
+        detail = (item.get("source") or {}).get("label") or _us_source_detail(
+            None, series
+        )
         rows.append(
             {
                 "key": series.symbol.lower(),
@@ -702,8 +721,8 @@ def index_rows(
                 if quote.get("status") == "available"
                 else None,
                 "source": {
-                    "label": US_SOURCE_LABEL,
-                    "detail": f"FRED {series.series_id}",
+                    "label": detail.split(" ", 1)[0],
+                    "detail": detail,
                     "copyright": series.copyright,
                 },
             }

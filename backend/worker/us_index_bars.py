@@ -1,46 +1,49 @@
-"""US stock index daily closes from FRED (Issue #547).
+"""US stock index daily bars from FinMind (Issues #547, #568).
 
-Source: FRED (Federal Reserve Bank of St. Louis) ``fredgraph.csv``, one GET per
-series with ``cosd``/``coed`` (no key), decided in #547 (comment 6717082903):
-S&P 500 (``SP500``), NASDAQ Composite (``NASDAQCOM``), Dow Jones Industrial
-Average (``DJIA``) and PHLX Semiconductor (``NASDAQSOX``).  FRED's terms allow
-personal, non-commercial use with the copyright notices kept; the series stay
-display-only (never strategy, candidate, group or tracking input).
+Source: FinMind v4 ``USStockPrice`` (``https://api.finmindtrade.com/api/v4/data``,
+anonymous, the Free plan), one GET per index with ``data_id``, ``start_date``
+and ``end_date``, decided in #568 (comments 6728959423, 6729020253): S&P 500
+(``^GSPC``), NASDAQ Composite (``^IXIC``), Dow Jones Industrial Average
+(``^DJI``) and PHLX Semiconductor (``^SOX``).  FinMind's Free plan allows
+personal, non-commercial use with "FinMind" credited and no redistribution of
+the raw; the series stay display-only (never strategy, candidate, group or
+tracking input).  FRED (#547) is no longer asked: its rows, where a database
+has them (``fred_close``), are kept and never overwritten (#568 decision
+6729023767).
 
-Each series is one ``index`` instrument (``US``/``SPX``, ``IXIC``, ``DJI``,
-``SOX``) with one ``market_bars`` row per observation.  FRED publishes the
-close only: open/high/low are NULL with ``price_reason=source_missing_ohlc``,
-volume is NULL and turnover ``unavailable``/``not_published`` (the #552 null
-rules).  A blank observation (``2024-11-28,``) is a US market holiday: no row,
-never a zero; the blank dates of the request are kept in the series'
-``data_quality`` row so the market page can say 美股休市.
+Each index is one ``index`` instrument (``US``/``SPX``, ``IXIC``, ``DJI``,
+``SOX``) with one ``market_bars`` row per US session (the US Eastern date),
+whatever the source: FinMind's open, high, low, close and volume as given,
+turnover ``unavailable``/``not_published``.  An index's volume is the data
+vendor's sum over its members, not a trade of the index; a 0 is no published
+volume, never a zero: an answer whose every volume is 0 (``^SOX`` today) is
+stored NULL, and a single 0 among real volumes is NULL with a warning (#568
+decision 6729139244).  FinMind returns no row for a US
+market holiday; a weekday of the request without a row, before the newest row
+returned, is a holiday and is kept in the series' ``data_quality`` row
+(``closed_dates``) so the market page can say 美股休市.  A missing newest
+weekday is not called a holiday: FinMind may not have published it yet.
 
-A collect of Taipei session D asks for ``cosd`` = 10 days before the newest
-stored row (``HISTORY_START``, 2023-09-01, when there is none) to ``coed`` =
-D − 1: every US session is before D.  A series whose oldest row is later than
-``HISTORY_START`` (it was first collected from 2024-09-30) is extended by
-``backfill_us_index_history``: one request per series, ``HISTORY_START`` to
-the day before its oldest row (Issue #563).  A response that is not that series' CSV, has a
-malformed line or a date outside the request is rejected whole (a
-``us index bars`` non-core warning; the raw is kept).  A stored row keeps its
-close (a different close is a conflict) unless ``force``.
-
-collect fetches in its fetch phase, before it writes anything
-(``us_index_requests`` reads, ``fetch_us_index_series`` has no database
-access), and writes later in one savepoint per series inside one for the step
-(``write_us_index_series``), so a slow FRED never holds the write lock and a
-database error stays non-core (PR #558 review).
+``worker.cli index-bars us-collect`` (``collect_us_indexes``) runs on its own
+(serve's ``us`` job, Taipei Tuesday to Saturday): for Taipei day D it asks
+``start_date`` = 10 days before the newest stored row (``HISTORY_START``,
+2023-09-01, when the series has no row or its oldest row is later than that)
+to ``end_date`` = D − 1.  An answer that is not that index's rows, has a
+malformed row or a date outside the request is rejected whole (a ``us index
+bars`` warning; the raw is kept).  A stored row keeps its values (a different
+value, or another source's row, is a conflict) unless ``force``, which replaces
+FinMind's own rows only.  One ``us_index_collect`` run per call; the indicator
+and feature rows of the series it changed are rebuilt at the end.
 """
 
 from __future__ import annotations
 
 import math
-import re
 import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from decimal import Decimal, InvalidOperation
 from typing import Any, Callable, Iterable
+from urllib.parse import urlencode
 
 from sqlalchemy import func, null, select
 from sqlalchemy.orm import Session
@@ -56,143 +59,215 @@ from app.models import DataQuality, Instrument, MarketBar
 
 from .sources import OfficialDataError, capture_payload
 
-SOURCE = "fred_close"
-RAW_SOURCE = "fred"
+SOURCE = "finmind_us_index"
+RAW_SOURCE = "finmind"
+DATASET = "USStockPrice"
 EXCHANGE = US_INDEX_EXCHANGE
 MARKET = "US"
-ENDPOINT = "https://fred.stlouisfed.org/graph/fredgraph.csv"
-SOURCE_MISSING_OHLC = "source_missing_ohlc"
+ENDPOINT = "https://api.finmindtrade.com/api/v4/data"
 NO_TURNOVER = "not_published"
 WARNING_PREFIX = "us index bars"
 QUALITY_ENTITY = US_INDEX_QUALITY_ENTITY
 # About a year before the stock history (2024-09-30), so the 240-session
 # average exists on the stocks' first day (#1 6723720803, Issue #563).
 HISTORY_START = date(2023, 9, 1)
-BACKFILL_RUN_TYPE = "us_index_backfill"
-# Re-read this many days before the newest stored row, so a blank FRED filled
-# in later (or a late close) is still picked up.
+RUN_TYPE = "us_index_collect"
+# Re-read this many days before the newest stored row, so a late or revised
+# session is still picked up.
 LOOKBACK_DAYS = 10
 RETRY_DELAY_SECONDS = 5.0
-_VALUE = re.compile(r"\d+(?:\.\d+)?")
-_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
-
+# DATA_SOURCES FinMind 補缺口規則: these answers stop the run, never retried.
+REFUSED_STATUSES = frozenset({401, 402, 403})
 
 SERIES = US_INDEXES
 SERIES_BY_SYMBOL = {item.symbol: item for item in SERIES}
 
 
+class FinMindRefused(OfficialDataError):
+    """FinMind answered 401/402/403 (a limit, a login or a paid plan): stop asking."""
+
+
 @dataclass(frozen=True)
 class UsIndexBar:
     trading_date: date
+    open: float
+    high: float
+    low: float
     close: float
+    # None: the source has no volume for the index (^SOX answers 0).
+    volume: int | None
 
 
 @dataclass(frozen=True)
 class ParsedSeries:
     bars: list[UsIndexBar]
-    # Blank observations of the request: US market holidays.
+    # Weekdays of the request without a row, before the newest row: US holidays.
     closed_dates: list[date]
+    # Every volume of the answer was 0: the source publishes none for the index.
+    no_volume: bool = False
+    # Days at 0 among real volumes (stored NULL, warned).
+    zero_volume_dates: list[date] = field(default_factory=list)
 
     @property
     def latest(self) -> date | None:
         return max((bar.trading_date for bar in self.bars), default=None)
 
 
+def data_id(series: UsIndex) -> str:
+    """FinMind's data_id of the index (``app.domain.US_INDEXES``, DATA_SOURCES 美股指數)."""
+
+    return series.series_id
+
+
 def request_url(series: UsIndex, start: date, end: date) -> str:
-    return (
-        f"{ENDPOINT}?id={series.series_id}"
-        f"&cosd={start.isoformat()}&coed={end.isoformat()}"
+    query = urlencode(
+        {
+            "dataset": DATASET,
+            "data_id": data_id(series),
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+        }
     )
+    return f"{ENDPOINT}?{query}"
 
 
-def request_window(latest_stored: date | None, session: date) -> tuple[date, date]:
-    """``cosd``/``coed`` for the collect of Taipei session ``session``."""
+def request_window(
+    earliest_stored: date | None, latest_stored: date | None, session: date
+) -> tuple[date, date]:
+    """``start_date``/``end_date`` of Taipei day ``session``'s request.
+
+    From ``HISTORY_START`` when the series has no row, or its oldest row is
+    more than ``LOOKBACK_DAYS`` after it (one request reaches the whole
+    history); else from ``LOOKBACK_DAYS`` before the newest row.  Always to
+    the day before ``session``: every US session of Taipei day D is before D.
+    """
 
     end = session - timedelta(days=1)
-    if latest_stored is None:
+    if (
+        latest_stored is None
+        or earliest_stored is None
+        or earliest_stored > HISTORY_START + timedelta(days=LOOKBACK_DAYS)
+    ):
         return HISTORY_START, end
     start = max(HISTORY_START, latest_stored - timedelta(days=LOOKBACK_DAYS))
     return min(start, end), end
 
 
-def _close(text: str) -> float | None:
-    if not _VALUE.fullmatch(text):
+def _price(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    try:
-        number = float(Decimal(text))
-    except InvalidOperation:
-        return None
+    number = float(value)
     return number if math.isfinite(number) and number > 0 else None
 
 
-def parse_csv(text: Any, series: UsIndex, *, start: date, end: date) -> ParsedSeries:
-    """The observations of one ``fredgraph.csv`` answer, or OfficialDataError.
+def _volume(value: Any) -> int | None:
+    """A whole volume of 0 or more, or None when unreadable."""
 
-    The header must be ``observation_date,<series id>``; every line one date
-    and one value; every date inside ``start``..``end`` and seen once.  A blank
-    or ``.`` value is a closed day.  An answer without any line is rejected:
-    a ten-day window always has observations.
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if not math.isfinite(float(value)) or value < 0 or float(value) != int(value):
+        return None
+    return int(value)
+
+
+def _closed_weekdays(start: date, latest: date, seen: set[date]) -> list[date]:
+    out = []
+    day = start
+    while day < latest:
+        if day.weekday() < 5 and day not in seen:
+            out.append(day)
+        day += timedelta(days=1)
+    return out
+
+
+def parse_rows(
+    payload: Any, series: UsIndex, *, start: date, end: date
+) -> ParsedSeries:
+    """The sessions of one ``USStockPrice`` answer, or OfficialDataError.
+
+    The answer must be FinMind's ``{"status": 200, "msg": "success", "data":
+    [...]}``; every row this index's ``stock_id``, a date inside
+    ``start``..``end`` seen once, positive open/high/low/close with the high
+    and low around open and close, and a whole volume of 0 or more.  An answer
+    without any row is rejected: a ten-day window always has sessions.
     """
 
-    if not isinstance(text, str):
-        raise OfficialDataError(f"FRED {series.series_id} answer is not text")
-    lines = [line.strip() for line in text.lstrip("﻿").splitlines()]
-    lines = [line for line in lines if line]
-    expected = f"observation_date,{series.series_id}"
-    if not lines or lines[0] != expected:
-        head = lines[0][:60] if lines else ""
+    label = f"FinMind {DATASET} {data_id(series)}"
+    if not isinstance(payload, dict):
+        raise OfficialDataError(f"{label} answer is not a JSON object")
+    status = payload.get("status")
+    if status in REFUSED_STATUSES:
+        raise FinMindRefused(f"{label} answered status {status}: {payload.get('msg')}")
+    if status != 200 or not isinstance(payload.get("data"), list):
         raise OfficialDataError(
-            f"FRED {series.series_id} answer is not its CSV (first line {head!r})"
+            f"{label} answer is not a success (status {status!r}, "
+            f"msg {str(payload.get('msg'))[:80]!r})"
         )
     bars: list[UsIndexBar] = []
-    closed: list[date] = []
     seen: set[date] = set()
-    for line in lines[1:]:
-        parts = line.split(",")
-        if len(parts) != 2 or not _DATE.fullmatch(parts[0]):
+    for row in payload["data"]:
+        if not isinstance(row, dict):
+            raise OfficialDataError(f"{label} has a row that is not an object")
+        if row.get("stock_id") != data_id(series):
             raise OfficialDataError(
-                f"FRED {series.series_id} has a malformed line {line[:60]!r}"
+                f"{label} has a row of {str(row.get('stock_id'))[:20]!r}"
             )
         try:
-            day = date.fromisoformat(parts[0])
+            day = date.fromisoformat(str(row.get("date")))
         except ValueError as exc:
             raise OfficialDataError(
-                f"FRED {series.series_id} has an invalid date {parts[0]!r}"
+                f"{label} has an invalid date {str(row.get('date'))[:20]!r}"
             ) from exc
         if not start <= day <= end:
             raise OfficialDataError(
-                f"FRED {series.series_id} reports {day.isoformat()} outside "
+                f"{label} reports {day.isoformat()} outside "
                 f"{start.isoformat()}..{end.isoformat()}"
             )
         if day in seen:
-            raise OfficialDataError(
-                f"FRED {series.series_id} reports {day.isoformat()} twice"
-            )
+            raise OfficialDataError(f"{label} reports {day.isoformat()} twice")
         seen.add(day)
-        value = parts[1].strip()
-        if value in {"", "."}:
-            closed.append(day)
-            continue
-        close = _close(value)
-        if close is None:
+        prices = [_price(row.get(key)) for key in ("Open", "High", "Low", "Close")]
+        if any(value is None for value in prices):
             raise OfficialDataError(
-                f"FRED {series.series_id} has an unreadable close {value!r} on "
-                f"{day.isoformat()}"
+                f"{label} has an unreadable price on {day.isoformat()}"
             )
-        bars.append(UsIndexBar(day, close))
-    if not seen:
+        opened, high, low, close = prices
+        if low > min(opened, close) or high < max(opened, close):
+            raise OfficialDataError(
+                f"{label} has a high/low outside open/close on {day.isoformat()}"
+            )
+        volume = _volume(row.get("Volume"))
+        if volume is None:
+            raise OfficialDataError(
+                f"{label} has an unreadable volume on {day.isoformat()}"
+            )
+        bars.append(UsIndexBar(day, opened, high, low, close, volume))
+    if not bars:
         raise OfficialDataError(
-            f"FRED {series.series_id} has no observation in "
-            f"{start.isoformat()}..{end.isoformat()}"
+            f"{label} has no row in {start.isoformat()}..{end.isoformat()}"
         )
-    return ParsedSeries(sorted(bars, key=lambda bar: bar.trading_date), sorted(closed))
+    bars.sort(key=lambda bar: bar.trading_date)
+    # A 0 is no published volume, never a zero (#568 decision 6729139244): the
+    # whole answer at 0 is an index without volume (^SOX today), stored NULL; a
+    # 0 among real volumes is NULL too, and named (a warning).
+    zeros = [bar.trading_date for bar in bars if bar.volume == 0]
+    bars = [
+        UsIndexBar(b.trading_date, b.open, b.high, b.low, b.close, b.volume or None)
+        for b in bars
+    ]
+    return ParsedSeries(
+        bars,
+        _closed_weekdays(start, bars[-1].trading_date, seen),
+        no_volume=len(zeros) == len(bars),
+        zero_volume_dates=[] if len(zeros) == len(bars) else zeros,
+    )
 
 
-def fetch_csv(url: str, *, timeout_seconds: float = 30.0) -> str:
-    """GET one FRED CSV over HTTP/1.1 (FRED cut HTTP/2 streams in #547's probe).
+def fetch_json(url: str, *, timeout_seconds: float = 30.0) -> Any:
+    """GET one FinMind answer, anonymously.
 
     One retry after ``RETRY_DELAY_SECONDS`` on a transport error, 429 or 5xx;
-    nothing more (#547 decision: no retry storms).
+    401/402/403 raise ``FinMindRefused`` at once (no retry, DATA_SOURCES).
     """
 
     import httpx
@@ -206,26 +281,33 @@ def fetch_csv(url: str, *, timeout_seconds: float = 30.0) -> str:
             response = httpx.get(url, timeout=timeout_seconds, headers=headers)
         except httpx.TransportError as exc:
             if attempt:
-                raise OfficialDataError(f"FRED transport failed: {url}") from exc
+                raise OfficialDataError(f"FinMind transport failed: {url}") from exc
             time.sleep(RETRY_DELAY_SECONDS)
             continue
+        if response.status_code in REFUSED_STATUSES:
+            raise FinMindRefused(f"FinMind answered {response.status_code}: {url}")
         if response.status_code == 429 or response.status_code >= 500:
             if attempt:
-                raise OfficialDataError(f"FRED answered {response.status_code}: {url}")
+                raise OfficialDataError(
+                    f"FinMind answered {response.status_code}: {url}"
+                )
             time.sleep(RETRY_DELAY_SECONDS)
             continue
         if response.status_code != 200:
-            raise OfficialDataError(f"FRED answered {response.status_code}: {url}")
-        return response.text
-    raise OfficialDataError(f"FRED request failed: {url}")  # pragma: no cover
+            raise OfficialDataError(f"FinMind answered {response.status_code}: {url}")
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise OfficialDataError(f"FinMind answer is not JSON: {url}") from exc
+    raise OfficialDataError(f"FinMind request failed: {url}")  # pragma: no cover
 
 
 def us_index_warning(series: UsIndex, exc: Exception) -> str:
-    """The non-core warning text (pipeline.NONCORE_WARNING_PATTERN)."""
+    """The warning text (pipeline.NONCORE_WARNING_PATTERN's ``us index bars``)."""
 
     return (
         f"{WARNING_PREFIX} unavailable for {EXCHANGE} {series.symbol} "
-        f"({series.series_id}): {type(exc).__name__}: {exc}"
+        f"({data_id(series)}): {type(exc).__name__}: {exc}"
     )
 
 
@@ -255,15 +337,16 @@ def us_index_instrument(db: Session, series: UsIndex) -> Instrument:
     return item
 
 
-def latest_stored(db: Session, series: UsIndex) -> date | None:
+def stored_range(db: Session, series: UsIndex) -> tuple[date | None, date | None]:
     item = find_instrument(db, series)
     if item is None:
-        return None
-    return db.scalar(
-        select(func.max(MarketBar.trading_date)).where(
-            MarketBar.instrument_id == item.id
-        )
-    )
+        return None, None
+    row = db.execute(
+        select(
+            func.min(MarketBar.trading_date), func.max(MarketBar.trading_date)
+        ).where(MarketBar.instrument_id == item.id)
+    ).one()
+    return row[0], row[1]
 
 
 @dataclass
@@ -279,13 +362,28 @@ class SeriesWriteResult:
     conflicts: list[dict[str, Any]] = field(default_factory=list)
 
 
-def _same_close(first: float | None, second: float | None) -> bool:
-    # FRED publishes two or three decimals.
+def _same(first: float | None, second: float | None) -> bool:
+    if first is None or second is None:
+        return first is None and second is None
+    return round(float(first), 4) == round(float(second), 4)
+
+
+def _same_bar(row: MarketBar, bar: UsIndexBar) -> bool:
     return (
-        first is not None
-        and second is not None
-        and round(float(first), 4) == round(float(second), 4)
+        row.source == SOURCE
+        and _same(row.open, bar.open)
+        and _same(row.high, bar.high)
+        and _same(row.low, bar.low)
+        and _same(row.close, bar.close)
+        and _same(row.volume, bar.volume)
     )
+
+
+def _values(row_or_bar: Any) -> dict[str, Any]:
+    return {
+        key: getattr(row_or_bar, key)
+        for key in ("open", "high", "low", "close", "volume")
+    }
 
 
 def store_us_index_bars(
@@ -296,7 +394,12 @@ def store_us_index_bars(
     *,
     force: bool = False,
 ) -> SeriesWriteResult:
-    """Insert new observations; a stored one keeps its close unless ``force``."""
+    """Insert new sessions; a stored one keeps its values.
+
+    ``force`` replaces FinMind's own rows only: a row of another source (a
+    FRED close, #547) is never overwritten and is a conflict (#568 decision
+    6729023767).
+    """
 
     result = SeriesWriteResult()
     bars = list(bars)
@@ -314,36 +417,35 @@ def store_us_index_bars(
     }
     for bar in bars:
         row = stored.get(bar.trading_date)
-        if row is not None and not force:
-            if _same_close(row.close, bar.close) and row.source == SOURCE:
-                result.counts["unchanged"] += 1
-            else:
-                result.counts["conflict"] += 1
-                result.conflicts.append(
-                    {
-                        "symbol": series.symbol,
-                        "trading_date": bar.trading_date.isoformat(),
-                        "stored": {"close": row.close, "source": row.source},
-                        "incoming": {"close": bar.close, "source": SOURCE},
-                        "raw_payload_id": raw_payload_id,
-                    }
-                )
+        if row is not None and _same_bar(row, bar):
+            result.counts["unchanged"] += 1
+            continue
+        if row is not None and (not force or row.source != SOURCE):
+            result.counts["conflict"] += 1
+            result.conflicts.append(
+                {
+                    "symbol": series.symbol,
+                    "trading_date": bar.trading_date.isoformat(),
+                    "stored": {**_values(row), "source": row.source},
+                    "incoming": {**_values(bar), "source": SOURCE},
+                    "raw_payload_id": raw_payload_id,
+                }
+            )
             continue
         outcome = "replaced" if row is not None else "inserted"
         if row is None:
             row = MarketBar(instrument_id=instrument.id, trading_date=bar.trading_date)
             db.add(row)
-        row.open = row.high = row.low = None
-        row.close = bar.close
-        row.adj_close = bar.close
-        # MarketBar.volume defaults to 0 on insert; FRED has no volume.
-        row.volume = null()
+        row.open, row.high, row.low = bar.open, bar.high, bar.low
+        row.close = row.adj_close = bar.close
+        # MarketBar.volume defaults to 0 on insert: NULL is no volume, never a zero.
+        row.volume = null() if bar.volume is None else bar.volume
         row.turnover, row.turnover_status, row.turnover_reason = (
             0.0,
             "unavailable",
             NO_TURNOVER,
         )
-        row.price_reason = SOURCE_MISSING_OHLC
+        row.price_reason = None
         row.is_suspended = False
         row.source = SOURCE
         row.data_as_of = datetime.combine(bar.trading_date, datetime.min.time())
@@ -373,8 +475,8 @@ def _upsert_quality(
         )
         db.add(row)
     row.status = status
-    row.missing_fields_json = (
-        ["open", "high", "low", "volume"] if status == "complete" else ["close"]
+    row.missing_fields_json = checks.pop("_missing", None) or (
+        [] if status == "complete" else ["close"]
     )
     row.checks_json = checks
     row.source = SOURCE
@@ -394,7 +496,7 @@ class SeriesRequest:
 
 @dataclass
 class FetchedSeries:
-    """One series' answer, fetched and parsed before collect writes anything."""
+    """One index's answer, fetched and parsed before anything is written."""
 
     request: SeriesRequest
     # The raw capture (file written, no DB row yet); None when the GET failed.
@@ -404,10 +506,10 @@ class FetchedSeries:
 
 
 def us_index_requests(db: Session, session: date) -> list[SeriesRequest]:
-    """The four requests of the collect of Taipei session ``session`` (reads only)."""
+    """The four requests of Taipei day ``session`` (reads only)."""
 
     return [
-        SeriesRequest(series, *request_window(latest_stored(db, series), session))
+        SeriesRequest(series, *request_window(*stored_range(db, series), session))
         for series in SERIES
     ]
 
@@ -415,40 +517,49 @@ def us_index_requests(db: Session, session: date) -> list[SeriesRequest]:
 def fetch_us_index_series(
     requests: Iterable[SeriesRequest], fetch: Callable[[str], Any]
 ) -> list[FetchedSeries]:
-    """GET and parse every series; no database access (#558 review item 3).
+    """GET and parse every index; no database access.
 
-    collect calls this in its fetch phase, before it writes any row, so a slow
-    FRED never holds the SQLite write lock.  A failed GET or a rejected answer
-    is kept with its error; an answer is captured as a raw file either way.
+    A failed GET or a rejected answer is kept with its error; an answer is
+    captured as a raw file either way.  After a ``FinMindRefused`` the rest is
+    not asked (DATA_SOURCES: stop, no retry within the run).
     """
 
     fetched: list[FetchedSeries] = []
+    refused: Exception | None = None
     for request in requests:
         item = FetchedSeries(request)
-        try:
-            text = fetch(request.url)
-        except Exception as exc:
-            item.error = exc
-            fetched.append(item)
+        fetched.append(item)
+        if refused is not None:
+            item.error = OfficialDataError(f"not asked: {refused}")
             continue
         try:
-            item.parsed = parse_csv(
-                text, request.series, start=request.start, end=request.end
+            payload = fetch(request.url)
+        except FinMindRefused as exc:
+            item.error = refused = exc
+            continue
+        except Exception as exc:
+            item.error = exc
+            continue
+        try:
+            item.parsed = parse_rows(
+                payload, request.series, start=request.start, end=request.end
             )
+        except FinMindRefused as exc:
+            item.error = refused = exc
         except Exception as exc:
             item.error = exc
         item.captured = capture_payload(
             RAW_SOURCE,
             request.url,
             {
-                "series_id": request.series.series_id,
-                "csv": text if isinstance(text, str) else None,
+                "dataset": DATASET,
+                "data_id": data_id(request.series),
+                "answer": payload,
             },
             item.parsed.latest.isoformat()
             if item.parsed and item.parsed.latest
             else None,
         )
-        fetched.append(item)
     return fetched
 
 
@@ -464,7 +575,8 @@ def _write_series(
 ) -> dict[str, Any]:
     series, request = item.request.series, item.request
     checks: dict[str, Any] = {
-        "series_id": series.series_id,
+        "dataset": DATASET,
+        "data_id": data_id(series),
         "endpoint": request.url,
         "requested": [request.start.isoformat(), request.end.isoformat()],
     }
@@ -474,11 +586,20 @@ def _write_series(
         error = item.error or OfficialDataError("no answer")
         warnings.append(us_index_warning(series, error))
         checks["error"] = f"{type(error).__name__}: {error}"
-        _upsert_quality(db, series, session, "failed", checks)
+        _upsert_quality(db, series, session, "failed", dict(checks))
         return {**checks, "status": "failed"}
     parsed = item.parsed
-    checks["latest_observation"] = parsed.latest.isoformat() if parsed.latest else None
+    checks["first_observation"] = parsed.bars[0].trading_date.isoformat()
+    checks["latest_observation"] = parsed.latest.isoformat()
     checks["closed_dates"] = [day.isoformat() for day in parsed.closed_dates]
+    checks["volume"] = "not_published" if parsed.no_volume else "published"
+    if parsed.zero_volume_dates:
+        days = [day.isoformat() for day in parsed.zero_volume_dates]
+        checks["zero_volume_dates"] = days
+        warnings.append(
+            f"{WARNING_PREFIX} stored no volume for {EXCHANGE} {series.symbol} on "
+            f"{len(days)} day(s) FinMind {data_id(series)} gave 0: {', '.join(days[:10])}"
+        )
     try:
         with db.begin_nested():
             written = store_us_index_bars(
@@ -487,15 +608,16 @@ def _write_series(
     except Exception as exc:
         warnings.append(us_index_warning(series, exc))
         checks["error"] = f"{type(exc).__name__}: {exc}"
-        _upsert_quality(db, series, session, "failed", checks)
+        _upsert_quality(db, series, session, "failed", dict(checks))
         return {**checks, "status": "failed"}
     if written.conflicts:
         warnings.append(
             f"{WARNING_PREFIX} kept {len(written.conflicts)} stored {EXCHANGE} "
-            f"{series.symbol} close(s) that differ from FRED {series.series_id}"
+            f"{series.symbol} row(s) that differ from FinMind {data_id(series)}"
         )
     checks["counts"] = dict(written.counts)
-    _upsert_quality(db, series, session, "complete", checks)
+    missing = ["volume"] if parsed.no_volume else []
+    _upsert_quality(db, series, session, "complete", {**checks, "_missing": missing})
     return {**checks, "status": "complete", "conflicts": written.conflicts}
 
 
@@ -509,12 +631,11 @@ def write_us_index_series(
     *,
     force: bool = False,
 ) -> dict[str, Any]:
-    """Write the fetched series: raw rows, bars and data_quality; non-core.
+    """Write the fetched indexes: raw rows, bars and data_quality.
 
-    Each series is one savepoint (#558 review item 2): a database error in
-    its raw, bars or quality row rolls back that series only and becomes a
-    warning, and the session stays usable for the rest of collect.  A rejected
-    or failed series writes no bar and records the reason in its quality row.
+    Each index is one savepoint: a database error in its raw, bars or quality
+    row rolls back that index only and becomes a warning.  A rejected or
+    failed index writes no bar and records the reason in its quality row.
     """
 
     result: dict[str, Any] = {}
@@ -529,7 +650,7 @@ def write_us_index_series(
         except Exception as exc:
             series_warnings = [us_index_warning(series, exc)]
             result[series.symbol] = {
-                "series_id": series.series_id,
+                "data_id": data_id(series),
                 "status": "failed",
                 "error": f"{type(exc).__name__}: {exc}",
             }
@@ -537,73 +658,41 @@ def write_us_index_series(
     return result
 
 
-def collect_us_index_bars(
-    db: Session,
-    run: Any,
-    session: date,
-    fetch: Callable[[str], Any],
-    upsert_raw: Callable[[Session, Any, Any], Any],
-    warnings: list[str],
-    *,
-    force: bool = False,
-) -> dict[str, Any]:
-    """Requests, fetch and write in one call (tests and one-off runs).
+# --- us-collect (Issue #568) ----------------------------------------------------
 
-    collect itself fetches in its fetch phase and writes later
-    (``pipeline.prefetch_us_index_series``, ``store_collect_us_index_bars``).
+
+def expected_session(session: date) -> date:
+    """The US session Taipei day ``session`` waits for: the weekday before it.
+
+    The same rule as the market page's ``expected_date``
+    (``app.market_overview.expected_us_session``).
     """
 
-    fetched = fetch_us_index_series(us_index_requests(db, session), fetch)
-    return write_us_index_series(
-        db, run, session, fetched, upsert_raw, warnings, force=force
-    )
+    day = session - timedelta(days=1)
+    while day.weekday() >= 5:
+        day -= timedelta(days=1)
+    return day
 
 
-# --- history (Issue #563) -----------------------------------------------------
-
-
-def earliest_stored(db: Session, series: UsIndex) -> date | None:
-    item = find_instrument(db, series)
-    if item is None:
-        return None
-    return db.scalar(
-        select(func.min(MarketBar.trading_date)).where(
-            MarketBar.instrument_id == item.id
-        )
-    )
-
-
-def history_window(earliest: date | None, session: date) -> tuple[date, date] | None:
-    """``cosd``/``coed`` that extend a series back to ``HISTORY_START``, or None.
-
-    None when the series has no row yet (the next collect reads from
-    ``HISTORY_START``) or already starts within ``LOOKBACK_DAYS`` of it (US
-    holidays right after the start never make it ask again).  Otherwise
-    ``HISTORY_START`` to the day before the oldest row: one request.
-    """
-
-    if earliest is None or earliest <= HISTORY_START + timedelta(days=LOOKBACK_DAYS):
-        return None
-    end = min(earliest - timedelta(days=1), session - timedelta(days=1))
-    return (HISTORY_START, end) if HISTORY_START <= end else None
-
-
-def backfill_us_index_history(
+def collect_us_indexes(
     db: Session,
     *,
     session: date,
-    fetch: Callable[[str], Any] = fetch_csv,
+    fetch: Callable[[str], Any] = fetch_json,
     force: bool = False,
+    trigger: str = "manual",
+    skip_reason: str | None = None,
 ) -> dict[str, Any]:
-    """Extend every series back to ``HISTORY_START`` (one FRED GET per series).
+    """``index-bars us-collect``: the four indexes to Taipei day ``session`` − 1.
 
-    One ``us_index_backfill`` run.  Each series is fetched (``history_window``)
-    and written in its own savepoint like collect: a failed or rejected answer
-    writes no bar and is a warning (the raw is kept); a stored day keeps its
-    close unless ``force``.  The rows are the collect's (``store_us_index_bars``)
-    and point at this run's CSV.  The ``data_quality`` rows stay the collect's:
-    a history request says nothing about the latest session.  The indicator and
-    feature rows of the extended series are rebuilt at the end.
+    One ``us_index_collect`` run.  The request windows are read first and
+    that read transaction is ended before the GETs (no write lock is held
+    while FinMind answers); each index is written in its own savepoint.  The
+    run is ``success`` when every index is complete, ``partial`` when some
+    are, ``failed`` when none is.  With ``skip_reason`` (the job's
+    ``low_memory``/``git_busy``, as daily records its skips) nothing is asked
+    and the run is ``skipped``.  The indicator and feature rows of the
+    indexes whose bars changed are rebuilt at the end.
     """
 
     from app.models import IngestionRun
@@ -612,90 +701,80 @@ def backfill_us_index_history(
     from .pipeline import _upsert_raw_payload
 
     run = IngestionRun(
-        run_type=BACKFILL_RUN_TYPE,
-        source="official",
+        run_type=RUN_TYPE,
+        source=RAW_SOURCE,
         run_date=session,
         status="running",
         started_at=utcnow(),
         metadata_json={
+            "dataset": DATASET,
             "history_start": HISTORY_START.isoformat(),
             "force": force,
-            "trigger": "manual",
+            "trigger": trigger,
         },
     )
     db.add(run)
     db.commit()
-    requests = []
-    skipped: dict[str, str] = {}
-    for series in SERIES:
-        earliest = earliest_stored(db, series)
-        window = history_window(earliest, session)
-        if window is None:
-            skipped[series.symbol] = (
-                "no_rows_yet" if earliest is None else "already_from_history_start"
-            )
-            continue
-        requests.append(SeriesRequest(series, *window))
-    db.commit()  # only reads: end the transaction before the HTTP calls
-    fetched = fetch_us_index_series(requests, fetch)
-    results: dict[str, Any] = {}
-    warnings: list[str] = []
-    changed: list[int] = []
+    if skip_reason:
+        run.status = "skipped"
+        run.records = 0
+        run.finished_at = utcnow()
+        run.metadata_json = {
+            **run.metadata_json,
+            "skip_reason": skip_reason,
+            "requests": 0,
+        }
+        db.commit()
+        return {
+            "status": "skipped",
+            "run_id": run.id,
+            "skip_reason": skip_reason,
+            "requests": 0,
+        }
     try:
-        for item in fetched:
-            series, request = item.request.series, item.request
-            entry: dict[str, Any] = {
-                "series_id": series.series_id,
-                "endpoint": request.url,
-                "requested": [request.start.isoformat(), request.end.isoformat()],
+        expected = expected_session(session)
+        latest = {series.symbol: stored_range(db, series)[1] for series in SERIES}
+        if not force and all(
+            day is not None and day >= expected for day in latest.values()
+        ):
+            # Serve's 09:30 after a 06:30 that got D − 1 (#568 decision 6729065016).
+            run.status = "already_complete"
+            run.records = 0
+            run.finished_at = utcnow()
+            run.metadata_json = {
+                **run.metadata_json,
+                "requests": 0,
+                "latest_stored": {k: v.isoformat() for k, v in latest.items()},
             }
-            if item.captured is not None:
-                # Kept as evidence whether or not the answer is used.
-                entry["raw_payload_id"] = _upsert_raw_payload(db, run, item.captured).id
-            try:
-                if item.parsed is None:
-                    raise item.error or OfficialDataError("no answer")
-                with db.begin_nested():
-                    written = store_us_index_bars(
-                        db,
-                        series,
-                        item.parsed.bars,
-                        entry["raw_payload_id"],
-                        force=force,
-                    )
-            except Exception as exc:
-                warnings.append(us_index_warning(series, exc))
-                entry.update(status="failed", error=f"{type(exc).__name__}: {exc}")
-                results[series.symbol] = entry
-                continue
-            if written.conflicts:
-                warnings.append(
-                    f"{WARNING_PREFIX} kept {len(written.conflicts)} stored "
-                    f"{EXCHANGE} {series.symbol} close(s) that differ from FRED "
-                    f"{series.series_id}"
-                )
-            if written.counts["inserted"] or written.counts["replaced"]:
-                changed.append(find_instrument(db, series).id)
-            entry.update(
-                status="complete",
-                counts=dict(written.counts),
-                conflicts=written.conflicts,
-                first_observation=(
-                    item.parsed.bars[0].trading_date.isoformat()
-                    if item.parsed.bars
-                    else None
-                ),
-                latest_observation=(
-                    item.parsed.latest.isoformat() if item.parsed.latest else None
-                ),
-                closed_dates=len(item.parsed.closed_dates),
-            )
-            results[series.symbol] = entry
-        indicators = rebuild_derived(db, changed)
-        failed = [
-            symbol for symbol, entry in results.items() if entry["status"] != "complete"
+            db.commit()
+            return {
+                "status": "already_complete",
+                "run_id": run.id,
+                "session": session.isoformat(),
+                "requests": 0,
+            }
+        requests = us_index_requests(db, session)
+        db.commit()  # only reads: end the transaction before the HTTP calls
+        fetched = fetch_us_index_series(requests, fetch)
+        warnings: list[str] = []
+        results = write_us_index_series(
+            db, run, session, fetched, _upsert_raw_payload, warnings, force=force
+        )
+        changed = [
+            find_instrument(db, SERIES_BY_SYMBOL[symbol]).id
+            for symbol, entry in results.items()
+            if entry.get("counts", {}).get("inserted")
+            or entry.get("counts", {}).get("replaced")
         ]
-        run.status = "partial" if failed else "success"
+        indicators = rebuild_derived(db, changed)
+        complete = [s for s, e in results.items() if e["status"] == "complete"]
+        run.status = (
+            "success"
+            if len(complete) == len(results)
+            else "partial"
+            if complete
+            else "failed"
+        )
         run.records = sum(
             entry.get("counts", {}).get("inserted", 0)
             + entry.get("counts", {}).get("replaced", 0)
@@ -705,11 +784,16 @@ def backfill_us_index_history(
         run.metadata_json = {
             **run.metadata_json,
             "series": results,
-            "skipped": skipped,
-            "requests": len(requests),
+            "requests": sum(
+                1
+                for item in fetched
+                if not str(item.error or "").startswith("not asked")
+            ),
             "warnings": warnings,
             "indicators": indicators,
         }
+        if run.status == "failed":
+            run.error = "; ".join(warnings)[:2000]
         db.commit()
     except Exception as exc:
         db.rollback()
@@ -723,25 +807,44 @@ def backfill_us_index_history(
     return {
         "status": run.status,
         "run_id": run.id,
-        "requests": len(requests),
+        "session": session.isoformat(),
+        "requests": run.metadata_json["requests"],
         "series": {
             symbol: {
                 key: entry.get(key)
-                for key in ("status", "requested", "counts", "error")
+                for key in (
+                    "status",
+                    "requested",
+                    "counts",
+                    "first_observation",
+                    "latest_observation",
+                    "error",
+                )
                 if key in entry
             }
             for symbol, entry in results.items()
         },
-        "skipped": skipped,
         "indicators": indicators,
         "warnings": warnings,
     }
 
 
-def run_us_index_history(*, force: bool = False) -> dict[str, Any]:
+def run_us_collect(
+    *,
+    session: date | None = None,
+    force: bool = False,
+    trigger: str = "manual",
+    skip_reason: str | None = None,
+) -> dict[str, Any]:
     from app.db import SessionLocal
 
     from .index_bars import taipei_today
 
     with SessionLocal() as db:
-        return backfill_us_index_history(db, session=taipei_today(), force=force)
+        return collect_us_indexes(
+            db,
+            session=session or taipei_today(),
+            force=force,
+            trigger=trigger,
+            skip_reason=skip_reason,
+        )

@@ -68,7 +68,7 @@ export function isCloseOnlyBar(bar: StockBarRow | undefined | null): bar is Stoc
   return !!bar && bar.is_suspended !== true && !isDrawableBar(bar) && !!bar.price_reason && isFiniteNumber(bar.close) && bar.close > 0
 }
 
-// A series whose source publishes the close only (the FRED US indexes, Issue 547): every bar is close-only, so the
+// A series whose source publishes the close only (FRED's US index rows, Issue 547): every bar is close-only, so the
 // chart draws a close line instead of candles and says so.
 export const isCloseOnlySeries = (bars: readonly StockBarRow[]) => bars.length > 0 && bars.every(isCloseOnlyBar)
 export const CLOSE_ONLY_NOTE = '來源只提供收盤價：畫收盤線，不畫 K 棒與成交量；KD 與量均線不計算'
@@ -81,13 +81,15 @@ export function barSources(bar: StockBarRow): string[] {
 // Index and futures daily bars (Issue 552): the TAIEX close-only rows, the monthly index reports and TAIFEX open data.
 export const INDEX_BAR_SOURCES: ReadonlySet<string> = new Set(['twse_index_ohlcv', 'tpex_index_ohlcv'])
 export const FUTURES_BAR_SOURCE = 'taifex_daily_futures'
-// The US index closes (Issue 547): FRED, Federal Reserve Bank of St. Louis.
+// The US index bars: FinMind since Issue 568; FRED's close-only rows (Issue 547), Federal Reserve Bank of St. Louis.
+export const FINMIND_US_INDEX_SOURCE = 'finmind_us_index'
 export const FRED_BAR_SOURCE = 'fred_close'
 
 export function sourceName(source: string): string {
   if (source === 'twse' || source === 'twse_index' || source === 'twse_index_ohlcv') return '臺灣證券交易所'
   if (source === 'tpex' || source === 'tpex_index_ohlcv') return '證券櫃檯買賣中心'
   if (source === FUTURES_BAR_SOURCE) return '臺灣期貨交易所'
+  if (source === FINMIND_US_INDEX_SOURCE) return 'FinMind'
   if (source === FRED_BAR_SOURCE) return 'FRED（聖路易聯邦準備銀行）'
   return '來源待核實'
 }

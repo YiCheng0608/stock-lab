@@ -62,6 +62,10 @@ fi
 
 GH_REPO='YiCheng0608/stock-lab'
 NEWS_INTERVAL_SECONDS=7200
+# The us job (#568): Tuesday to Saturday 06:30 and 09:30, so the longest gap
+# between its logs is Saturday to Tuesday (3 days); one day more is stale.
+US_STALE_SECONDS=$((4 * 86400))
+US_FAILED_RUNS=2
 # The day's daily is judged from 23:10 Taipei (#466): its log, its result and the
 # data check. By then the 23:00 trigger (the retry of a 21:30 that failed or did
 # not run, or the institutional refetch after a 21:30 success) has written its
@@ -474,6 +478,27 @@ for file in "$logs"/news-*.log; do
 done
 if [ "$newest" -gt 0 ] && [ $((now - newest)) -gt $((3 * NEWS_INTERVAL_SECONDS)) ]; then
   anomaly news_no_log "news 排程：最新日誌寫於 $(iso "$newest")，已連續 3 次（每 2 小時一次）沒有新日誌。"
+fi
+
+# us (#568): no new log for 4 days, or the last two runs ended with a non-zero exit
+# (partial 2, failed 1); only once us logs exist.
+newest=0
+us_files=()
+for file in "$logs"/us-*.log; do
+  [ -f "$file" ] || continue
+  us_files+=("$file")
+  mtime="$(stat -c %Y "$file")"
+  [ "$mtime" -gt "$newest" ] && newest="$mtime"
+done
+if [ "$newest" -gt 0 ] && [ $((now - newest)) -gt "$US_STALE_SECONDS" ]; then
+  anomaly us_no_log "美股 us 排程：最新日誌寫於 $(iso "$newest")，已超過 4 天沒有新日誌（週二至週六 06:30、09:30 跑 \`index-bars us-collect\`）。"
+fi
+if [ "${#us_files[@]}" -gt 0 ]; then
+  us_exits="$(cat "${us_files[@]}" | sed -nE 's/^===== [^ ]+ end exit=([0-9]+) .*/\1/p' | tail -n "$US_FAILED_RUNS")"
+  if [ "$(printf '%s\n' "$us_exits" | grep -c .)" = "$US_FAILED_RUNS" ] \
+    && ! printf '%s\n' "$us_exits" | grep -qx 0; then
+    anomaly us_failed "美股 us 排程：最近 $US_FAILED_RUNS 次都沒有成功（exit $(printf '%s' "$us_exits" | tr '\n' ' ')），請查 \`logs/us-*.log\` 與 \`/api/ingestion-runs?q=us_index_collect&include_metadata=true\`；修好後跑 \`worker.cli job us --trigger manual\`。"
+  fi
 fi
 
 # news_llm (read-only database): the last three batches all pending; and

@@ -742,6 +742,8 @@ MULTI_DATE_SOURCES = (
     "twse_index_ohlcv",
     "tpex_index_ohlcv",
     "fred_close",
+    # worker.us_index_bars.SOURCE (Issue #568): one FinMind answer per index and run.
+    "finmind_us_index",
     "taifex_futdatadown",
 )
 MULTI_DATE_SQL = ", ".join(f"'{source}'" for source in MULTI_DATE_SOURCES)
