@@ -1758,16 +1758,24 @@ def parse_tpex_margin_rows(
         )
         if not symbol:
             continue
-        previous = _number_from_row(
-            row,
-            exact_keys=("MarginPurchaseBalancePreviousDay", "前資餘額(張)"),
-            contains=(("marginpurchasebalancepreviousday",), ("前資", "餘額")),
-        )
-        current = _number_from_row(
-            row,
-            exact_keys=("MarginPurchaseBalance", "資餘額"),
-            contains=(("marginpurchasebalance",), ("資餘額",)),
-        )
+        if "MarginPurchaseBalance" in row or "MarginPurchaseBalancePreviousDay" in row:
+            # An OpenAPI ``tpex_mainboard_margin_balance`` row (Issue #579):
+            # exact keys only.  "marginpurchasebalance" is also a prefix of
+            # the previous-day key, so the token match would read a blank
+            # balance as the previous day's.
+            previous = parse_number(row.get("MarginPurchaseBalancePreviousDay"))
+            current = parse_number(row.get("MarginPurchaseBalance"))
+        else:
+            previous = _number_from_row(
+                row,
+                exact_keys=("MarginPurchaseBalancePreviousDay", "前資餘額(張)"),
+                contains=(("marginpurchasebalancepreviousday",), ("前資", "餘額")),
+            )
+            current = _number_from_row(
+                row,
+                exact_keys=("MarginPurchaseBalance", "資餘額"),
+                contains=(("marginpurchasebalance",), ("資餘額",)),
+            )
         result.append(
             ChipRecord(
                 symbol=symbol,

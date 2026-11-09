@@ -18,16 +18,18 @@ from __future__ import annotations
 import copy
 import json
 from dataclasses import replace
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 
 import worker.chip_provenance as chip_provenance
 import worker.chip_revisions as chip_revisions
 import worker.instrument_repair as repair
+import worker.margin_lists as margin_lists
+import worker.no_trade_days as no_trade_days
 import worker.pipeline as pipeline
 import worker.sources as sources
 from app.db import enable_sqlite_foreign_keys
@@ -603,5 +605,92 @@ def test_readers_reject_a_stale_openapi_capture(tmp_path, monkeypatch):
             assert captures[0][1] == {} and "mismatch" in captures[0][2]
             assert captures[1][1]
         result = chip_revisions.revise_institutional(db, DAY, DAY)
+    # The stale OpenAPI table is skipped, not unreadable: no partial run.
+    assert result["status"] == "success"
     assert result["captures_replayed"] == 1
-    assert len(result["unreadable_captures"]) == 1
+    assert result["unreadable_captures"] == []
+    stale = next(item for item in batch.payloads if item.endpoint == OA_INSTI).sha256
+    with factory() as db:
+        stale_id = db.scalar(
+            select(pipeline.RawPayload.id).where(pipeline.RawPayload.sha256 == stale)
+        )
+    assert result["other_session_captures"] == [stale_id]
+
+
+def test_blank_openapi_margin_balance_is_unknown_not_the_previous_day():
+    # "marginpurchasebalance" is a prefix of the previous-day key: a blank
+    # balance must stay blank, as the website table's position read keeps it.
+    rows = fixture("oa_margin_20261109.json")
+    rows[0] = {**rows[0], "MarginPurchaseBalance": ""}
+    parsed = {
+        item.symbol: item
+        for item in sources.parse_tpex_margin_rows(rows, trading_date=DAY)
+    }
+    assert rows[0]["SecuritiesCompanyCode"] == "00411A"
+    assert parsed["00411A"].margin_balance is None
+    assert parsed["00411A"].margin_change is None
+    assert parsed["006201"].margin_balance is not None
+
+
+def _store_capture(factory, endpoint: str, payload, day: date, hour: int) -> int:
+    """A stored raw capture of ``endpoint`` requested for ``day``."""
+
+    captured = sources.capture_payload(
+        "tpex",
+        endpoint,
+        payload,
+        day.isoformat(),
+        collected_at=datetime(day.year, day.month, day.day, hour),
+    )
+    with factory() as db:
+        row = pipeline.RawPayload(
+            source="tpex",
+            endpoint=endpoint,
+            payload_path=str(captured.payload_path),
+            sha256=captured.sha256,
+            data_as_of=day.isoformat(),
+            collected_at=captured.collected_at,
+        )
+        db.add(row)
+        db.commit()
+        return row.id
+
+
+def test_a_newer_stale_openapi_table_does_not_replace_the_websites_evidence(written):
+    # The website collect of DAY, then a later OpenAPI capture requested for
+    # DAY that still reports 11-06: the newest capture, but not DAY's table.
+    _api, web = written
+    _store_capture(web, OA_QUOTES, _stale(fixture("oa_quotes_20261109.json")), DAY, 20)
+    _store_capture(web, OA_MARGIN, fixture("oa_margin_20261106.json"), DAY, 20)
+    with web() as db:
+        no_trade = no_trade_days.store_no_trade_days(db, "TPEx", DAY)
+        margin = margin_lists.store_margin_list(db, "TPEx", DAY)
+        endpoints = set(
+            db.scalars(
+                select(NoTradeDay.endpoint)
+                .join(Instrument, Instrument.id == NoTradeDay.instrument_id)
+                .where(Instrument.exchange == "TPEx")
+            )
+        )
+        listed = db.scalar(select(MarginList).where(MarginList.exchange == "TPEx"))
+    assert no_trade["outcome"] == "unchanged" and endpoints == {WWW_QUOTES}
+    assert margin == "unchanged" and listed.endpoint == WWW_MARGIN
+
+
+def test_an_only_stale_openapi_table_is_no_evidence(written):
+    # 11-10 before TPEx updated: the only capture requested for 11-10 is the
+    # 11-09 table (the website request failed).  It is no answer for 11-10.
+    _api, web = written
+    next_day = date(2026, 11, 10)
+    _store_capture(web, OA_QUOTES, fixture("oa_quotes_20261109.json"), next_day, 13)
+    _store_capture(web, OA_MARGIN, fixture("oa_margin_20261109.json"), next_day, 13)
+    with web() as db:
+        no_trade = no_trade_days.store_no_trade_days(db, "TPEx", next_day)
+        margin = margin_lists.store_margin_list(db, "TPEx", next_day)
+        rows = db.scalar(
+            select(func.count())
+            .select_from(NoTradeDay)
+            .where(NoTradeDay.trading_date == next_day)
+        )
+    assert no_trade == {"outcome": "missing", "rows": 0, "unmatched": []}
+    assert margin == "missing" and rows == 0

@@ -1551,7 +1551,10 @@ def targeted_backfill(
         with pipeline.SessionLocal() as db:
             return backfill_run_dict(db.get(IngestionRun, run_id))
 
-    delegate = adapter or OfficialMarketDataAdapter()
+    # The historical adapter, as chunked_backfill and catch-up use: a range
+    # that contains today does not read today's TPEx OpenAPI tables or other
+    # snapshot feeds (Issue #579, #555 決定 B: backfill reads the website).
+    delegate = adapter or OfficialMarketDataAdapter(snapshot_feeds=False)
     scoped_adapter = _ScopedOfficialAdapter(delegate, filter_keys)
     completed = set(metadata.get("completed_dates", []))
     partial = set(metadata.get("partial_dates", []))
