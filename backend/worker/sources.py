@@ -4104,13 +4104,10 @@ class OfficialMarketDataAdapter:
         mops_fetcher: Callable[..., Any] | None = None,
         us_index_fetcher: Callable[[str], Any] | None = None,
     ) -> None:
-        # The FRED CSV GET of collect's US index step (worker.us_index_bars,
-        # Issue #547).  The production adapter uses fetch_csv; one built from
-        # fixture exchange adapters asks FRED only when given a fetcher.
-        if us_index_fetcher is None and twse is None and tpex is None:
-            from .us_index_bars import fetch_csv
-
-            us_index_fetcher = fetch_csv
+        # The CSV GET of collect's US index step (worker.us_index_bars,
+        # Issue #547).  Since #571 the production adapter has none: the daily
+        # collect is Taiwan only and never asks FRED (US indexes move to their
+        # own job, #568).  Only a caller that passes a fetcher asks.
         self.us_index_fetcher = us_index_fetcher
         self.twse = twse or TwseAdapter(snapshot_feeds=snapshot_feeds)
         self.tpex = tpex or TpexAdapter(snapshot_feeds=snapshot_feeds)

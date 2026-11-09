@@ -298,6 +298,8 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
 
 S&P 500、NASDAQ 綜合指數、道瓊工業指數與費城半導體指數的每日收盤，來源 FRED（[#547](https://github.com/YiCheng0608/stock-lab/issues/547)，決定 [6717082903](https://github.com/YiCheng0608/stock-lab/issues/547#issuecomment-6717082903)；程式 [`worker/us_index_bars.py`](../backend/worker/us_index_bars.py)）。只顯示，不進策略、候選、族群分數、追蹤或回測。
 
+**2026-11-09 起台股 daily 的 collect 不再向 FRED 請求**（[#571](https://github.com/YiCheng0608/stock-lab/issues/571)，使用者決定）：正式 adapter 沒有 FRED fetcher，collect 的美股步驟不發請求、不寫列。美股改用 FinMind，由獨立指令與排程抓取（[#568](https://github.com/YiCheng0608/stock-lab/issues/568)）。下面的請求規則只適用於呼叫端帶入 fetcher 的情況，#568 會整段改寫。
+
 | 代號（`US` 交易所，`index`，`market=US`） | FRED 序列 | 版權標示（照抄序列頁） |
 | --- | --- | --- |
 | `SPX` S&P 500 | `SP500` | Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved. |
