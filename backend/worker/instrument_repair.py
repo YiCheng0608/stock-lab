@@ -29,7 +29,7 @@ from collections import Counter, defaultdict
 from datetime import date, datetime, timezone
 from typing import Any, Callable
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.raw_paths import payload_file
@@ -60,10 +60,13 @@ from worker.pipeline import (
     universe_evidence,
 )
 from worker.sources import (
+    TPEX_CHIP_ENDPOINT,
     TPEX_CHIP_HISTORY_ENDPOINT,
+    TPEX_DAILY_ENDPOINT,
     TPEX_ETF_ENDPOINT,
     TPEX_HISTORY_API,
     TPEX_LISTED_ENDPOINT,
+    TPEX_MARGIN_ENDPOINT,
     TPEX_MARGIN_HISTORY_ENDPOINT,
     TWSE_CHIP_ENDPOINT,
     TWSE_DAILY_ENDPOINT,
@@ -213,7 +216,8 @@ def _quote_bars(raw: RawPayload, payload: Any) -> list[BarRecord]:
         )
     if requested is None:
         raise OfficialDataError(f"capture has no requested date: {endpoint}")
-    if endpoint == TPEX_HISTORY_API:
+    if endpoint in (TPEX_HISTORY_API, TPEX_DAILY_ENDPOINT):
+        # The OpenAPI table (Issue #579) is checked by its rows' one date.
         _require_reported_date(payload, requested, endpoint)
         return parse_tpex_daily_rows(
             payload, data_as_of=requested.isoformat(), payload_sha256=raw.sha256
@@ -231,6 +235,7 @@ def _quote_bars(raw: RawPayload, payload: Any) -> list[BarRecord]:
 
 QUOTE_CONDITION = (
     (RawPayload.endpoint == TPEX_HISTORY_API)
+    | (RawPayload.endpoint == TPEX_DAILY_ENDPOINT)
     | (RawPayload.endpoint == TWSE_DAILY_ENDPOINT)
     | RawPayload.endpoint.startswith(TWSE_DAILY_HISTORY_ENDPOINT + "?")
     | RawPayload.endpoint.startswith(TWSE_LEGACY_DAILY_HISTORY_ENDPOINT + "?")
@@ -245,6 +250,9 @@ CHIP_PARSERS: list[tuple[str, str, str, Callable[..., list[ChipRecord]]]] = [
         parse_tpex_institutional_rows,
     ),
     ("TPEx", "margin", TPEX_MARGIN_HISTORY_ENDPOINT, parse_tpex_margin_rows),
+    # The current session's OpenAPI tables (Issue #579); same parsers.
+    ("TPEx", "institutional", TPEX_CHIP_ENDPOINT, parse_tpex_institutional_rows),
+    ("TPEx", "margin", TPEX_MARGIN_ENDPOINT, parse_tpex_margin_rows),
 ]
 
 
@@ -651,7 +659,7 @@ BACKFILL_VERSION = "unmatched-bar-backfill-v1"
 
 def _is_quote_capture(endpoint: str) -> bool:
     return (
-        endpoint in {TPEX_HISTORY_API, TWSE_DAILY_ENDPOINT}
+        endpoint in {TPEX_HISTORY_API, TPEX_DAILY_ENDPOINT, TWSE_DAILY_ENDPOINT}
         or endpoint.startswith(TWSE_DAILY_HISTORY_ENDPOINT + "?")
         or endpoint.startswith(TWSE_LEGACY_DAILY_HISTORY_ENDPOINT + "?")
     )
@@ -683,12 +691,16 @@ def _stored_quote_bars(
     return cache[raw_id]
 
 
-# The official chip files of a session, by group (Issue #415).
-CHIP_FILES: dict[str, dict[str, tuple[str, Callable[..., list[ChipRecord]]]]] = {
+# The official chip files of a session, by group (Issue #415); a TPEx group
+# has the website report and the OpenAPI table (Issue #579).
+CHIP_FILES: dict[str, dict[str, list[tuple[str, Callable[..., list[ChipRecord]]]]]] = {
     exchange: {
-        kind: (endpoint, parse)
-        for ex, kind, endpoint, parse in CHIP_PARSERS
-        if ex == exchange
+        kind: [
+            (endpoint, parse)
+            for ex, group, endpoint, parse in CHIP_PARSERS
+            if ex == exchange and group == kind
+        ]
+        for kind in ("institutional", "margin")
     }
     for exchange in ("TWSE", "TPEx")
 }
@@ -717,17 +729,25 @@ def _stored_chip_files(
     if key in cache:
         return cache[key]
     result: DayChips = {}
-    for group, (endpoint, parse) in CHIP_FILES[exchange].items():
+    for group, files in CHIP_FILES[exchange].items():
         captures: list[ChipCapture] = []
+        parsers = dict(files)
         for raw in db.scalars(
             select(RawPayload)
             .where(
                 RawPayload.data_as_of == day.isoformat(),
-                (RawPayload.endpoint == endpoint)
-                | RawPayload.endpoint.startswith(endpoint + "?"),
+                or_(
+                    *(
+                        (RawPayload.endpoint == endpoint)
+                        | RawPayload.endpoint.startswith(endpoint + "?")
+                        for endpoint in parsers
+                    )
+                ),
             )
             .order_by(RawPayload.collected_at, RawPayload.id)
         ):
+            endpoint = raw.endpoint.split("?", 1)[0]
+            parse = parsers[endpoint]
             try:
                 payload = _load(raw)
                 _require_reported_date(payload, day, endpoint)

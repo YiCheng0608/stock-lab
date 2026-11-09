@@ -21,7 +21,7 @@ membership 必須在 score date 有效；每個股票榜或 ETF 類別分區至�
 - 五個 component 全部完整才可稱「完整熱門」。四分項 observation 不得產生候選或 action，也不得虛構事件理由。
 
 **法人覆蓋（1.1.0）**：分母是 `eligible_members`，與其他四分項相同；每個合格成員都要有 5 日法人值，法人分項才有值，群組值為成員值總和除以 `eligible_members`。單檔法人值沿用 20 根非停牌日線、成交量皆 > 0 的條件（`worker.pipeline._flow_and_volume_inputs`）。最後 5 根中的某一天，成員沒有籌碼列，或籌碼列只有融資來源時，處理方式如下：
-- 同市場同日有官方法人檔證據時，該日三大法人淨額記 0。證據是至少一列來自官方法人 parser（`twse_t86`／`tpex_3insti`）的籌碼列，`raw_payload_id` 指向該端點（T86／`insti/dailyTrade`）且 raw `data_as_of` 等於該日（`worker.pipeline._official_institutional_file_evidence`）。語意與核對見 [DATA_SOURCES 法人口徑](../DATA_SOURCES.md#法人口徑)。
+- 同市場同日有官方法人檔證據時，該日三大法人淨額記 0。證據是至少一列來自官方法人 parser（`twse_t86`／`tpex_3insti`）的籌碼列，`raw_payload_id` 指向該端點（T86／`insti/dailyTrade`，或當日 collect 讀的 OpenAPI `tpex_3insti_daily_trading`，[#579](https://github.com/YiCheng0608/stock-lab/issues/579)）且 raw `data_as_of` 等於該日（`worker.pipeline._official_institutional_file_evidence`）。語意與核對見 [DATA_SOURCES 法人口徑](../DATA_SOURCES.md#法人口徑)。
 - 沒有證據（檔案沒收到、日期不符、只有另一市場的檔）時，該成員法人值為 null。來自官方檔的籌碼列有任一欄 null 時也是 null。
 
 `details_json.institutional_flow_coverage` 記 available、eligible、`member_count`、`complete`，以及補 0 的成員數、成員日數與日期；`member_returns[].institutional_flow_absent_from_official_file` 逐日記補 0 的日期與證據 raw id。這條規則只用於 hot_group；breakout_v1／pullback_v1 與 candidate_score_v1 的法人輸入仍把缺列視為缺資料。

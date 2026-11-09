@@ -23,12 +23,13 @@ from collections.abc import Iterable
 from datetime import date
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.raw_paths import payload_file
 from app.models import MarginList, RawPayload
 from worker.sources import (
+    TPEX_MARGIN_ENDPOINT,
     TPEX_MARGIN_HISTORY_ENDPOINT,
     TWSE_MARGIN_HISTORY_ENDPOINT,
     OfficialDataError,
@@ -36,10 +37,16 @@ from worker.sources import (
 )
 
 RUN_TYPE = "margin_lists"
-# exchange -> (raw_payloads.source, endpoint without the query, list source)
-CAPTURES: dict[str, tuple[str, str, str]] = {
-    "TWSE": ("twse", TWSE_MARGIN_HISTORY_ENDPOINT, "twse_margin"),
-    "TPEx": ("tpex", TPEX_MARGIN_HISTORY_ENDPOINT, "tpex_margin"),
+# exchange -> (raw_payloads.source, endpoints without the query, list source).
+# The current TPEx session's report may be the OpenAPI table (Issue #579): the
+# same codes and the same 備註 as the website report (``Note``).
+CAPTURES: dict[str, tuple[str, tuple[str, ...], str]] = {
+    "TWSE": ("twse", (TWSE_MARGIN_HISTORY_ENDPOINT,), "twse_margin"),
+    "TPEx": (
+        "tpex",
+        (TPEX_MARGIN_HISTORY_ENDPOINT, TPEX_MARGIN_ENDPOINT),
+        "tpex_margin",
+    ),
 }
 MAX_SAMPLES = 50
 # A list more than this share shorter than the exchange's previous stored list
@@ -75,6 +82,8 @@ def parse_margin_list(payload: Any, exchange: str) -> dict[str, str] | None:
     would make every security "not a margin security".
     """
 
+    if exchange == "TPEx" and isinstance(payload, list):
+        return _openapi_members(payload)
     table = _table(payload, exchange)
     if table is None:
         return None
@@ -86,6 +95,19 @@ def parse_margin_list(payload: Any, exchange: str) -> dict[str, str] | None:
         if not code:
             continue
         members[code] = str(row[-1] or "").strip()
+    return members or None
+
+
+def _openapi_members(payload: list[Any]) -> dict[str, str] | None:
+    """Code -> stripped ``Note`` of a TPEx OpenAPI margin table (Issue #579)."""
+
+    members: dict[str, str] = {}
+    for row in payload:
+        if not isinstance(row, dict) or "Note" not in row:
+            return None
+        code = str(row.get("SecuritiesCompanyCode") or "").strip()
+        if code:
+            members[code] = str(row.get("Note") or "").strip()
     return members or None
 
 
@@ -120,27 +142,30 @@ def _load(capture: RawPayload, trading_date: date) -> Any:
 
 
 def _captures(db: Session, exchange: str, trading_date: date) -> list[RawPayload]:
-    source, endpoint, _list_source = CAPTURES[exchange]
+    """The date's captures of the exchange's margin reports, newest first."""
+
+    source, endpoints, _list_source = CAPTURES[exchange]
     rows = db.scalars(
         select(RawPayload)
         .where(
             RawPayload.source == source,
-            RawPayload.endpoint.like(f"{endpoint}%"),
+            or_(*(RawPayload.endpoint.like(f"{endpoint}%") for endpoint in endpoints)),
             RawPayload.data_as_of.like(f"{trading_date.isoformat()}%"),
         )
         .order_by(RawPayload.collected_at.desc(), RawPayload.id.desc())
     ).all()
-    # ``like`` also matches a longer path; keep the endpoint itself.
-    return [row for row in rows if row.endpoint.split("?")[0] == endpoint]
+    # ``like`` also matches a longer path; keep the endpoints themselves.
+    return [row for row in rows if row.endpoint.split("?")[0] in endpoints]
 
 
 def _session_dates(db: Session, start: date | None, end: date | None) -> list[date]:
     """Sessions with a stored margin capture of either exchange, in order."""
 
     found: set[date] = set()
-    for source, endpoint, _list_source in CAPTURES.values():
+    for source, endpoints, _list_source in CAPTURES.values():
         query = select(RawPayload.data_as_of).where(
-            RawPayload.source == source, RawPayload.endpoint.like(f"{endpoint}%")
+            RawPayload.source == source,
+            or_(*(RawPayload.endpoint.like(f"{endpoint}%") for endpoint in endpoints)),
         )
         for (value,) in db.execute(query).all():
             try:

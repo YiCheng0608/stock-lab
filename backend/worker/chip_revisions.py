@@ -24,6 +24,7 @@ from app.clock import utcnow
 from app.models import IngestionRun, Instrument, RawPayload
 from worker import pipeline
 from worker.sources import (
+    TPEX_CHIP_ENDPOINT,
     TPEX_CHIP_HISTORY_ENDPOINT,
     TWSE_CHIP_ENDPOINT,
     OfficialDataError,
@@ -34,9 +35,12 @@ from worker.sources import (
 
 RUN_TYPE = "chip_revision"
 REVISION_VERSION = "chip_revision_v1"
+# The TPEx OpenAPI table is the current session's file since Issue #579; the
+# same parser reads both shapes.
 PARSERS = {
     TWSE_CHIP_ENDPOINT: parse_twse_institutional_rows,
     TPEX_CHIP_HISTORY_ENDPOINT: parse_tpex_institutional_rows,
+    TPEX_CHIP_ENDPOINT: parse_tpex_institutional_rows,
 }
 
 
@@ -59,7 +63,13 @@ def _captures(db: Session, start: date, end: date) -> list[RawPayload]:
 
 
 def _load(capture: RawPayload) -> Any:
-    """The capture's payload; RevisionError when the file is not that capture."""
+    """The capture's payload; None when it reports another date (as
+    ``chip_provenance._load``); RevisionError when the file is not that capture.
+
+    A file of another session says nothing about its requested date: a TPEx
+    OpenAPI table captured before it was updated (Issue #579) is kept as raw
+    under the requested date while collect read the website report.
+    """
 
     content = payload_file(capture.payload_path).read_bytes()
     if hashlib.sha256(content).hexdigest() != capture.sha256:
@@ -67,11 +77,14 @@ def _load(capture: RawPayload) -> Any:
             f"raw payload {capture.id} does not match its SHA-256: {capture.payload_path}"
         )
     payload = json.loads(content.decode("utf-8"))
-    _require_reported_date(
-        payload,
-        date.fromisoformat((capture.data_as_of or "")[:10]),
-        capture.endpoint.split("?", 1)[0],
-    )
+    try:
+        _require_reported_date(
+            payload,
+            date.fromisoformat((capture.data_as_of or "")[:10]),
+            capture.endpoint.split("?", 1)[0],
+        )
+    except OfficialDataError:
+        return None
     return payload
 
 
@@ -81,18 +94,26 @@ def revise_institutional(
     """Replay the range's captures; write and commit only with ``apply``.
 
     A capture whose file is missing or unreadable is skipped and listed (the
-    result is ``partial``); a file that does not match its SHA-256 stops the
-    whole run before anything is written.
+    result is ``partial``); one that reports another date is skipped and
+    listed in ``other_session_captures`` without making it partial; a file
+    that does not match its SHA-256 stops the whole run before anything is
+    written.
     """
 
     captures = _captures(db, start, end)
     payloads: dict[int, Any] = {}
     unreadable: list[dict[str, Any]] = []
+    other_session: list[int] = []
     for capture in captures:
         try:
-            payloads[capture.id] = _load(capture)
+            payload = _load(capture)
         except (OSError, ValueError, OfficialDataError) as exc:
             unreadable.append({"raw_payload_id": capture.id, "error": str(exc)})
+            continue
+        if payload is None:
+            other_session.append(capture.id)
+        else:
+            payloads[capture.id] = payload
     instruments = {
         (row.exchange, row.symbol): row for row in db.scalars(select(Instrument))
     }
@@ -132,6 +153,7 @@ def revise_institutional(
         "applied": apply,
         "captures_replayed": len(replayed),
         "unreadable_captures": unreadable,
+        "other_session_captures": other_session,
         "revised_rows": len(revisions),
         "revised_dates": sorted({item["trading_date"] for item in revisions}),
         "value_conflicts": len(conflicts),
