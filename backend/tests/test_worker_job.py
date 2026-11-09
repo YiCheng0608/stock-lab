@@ -416,6 +416,72 @@ def test_low_memory_daily_runs_the_cli_to_record_the_skip(tree):
     ]
 
 
+def _run_without_a_memory_option(tmp_path, monkeypatch, name, free_mb):
+    """The job in this process with ``--min-free-memory-gb`` left out.
+
+    The free memory is injected, never the host's (``/proc/meminfo``), and the
+    worker is not started: ``step`` records the arguments it would get.
+    """
+
+    monkeypatch.setattr(job, "free_memory_mb", lambda: free_mb)
+    monkeypatch.setattr(job, "git_dir", lambda root: None)
+    steps: list[list[str]] = []
+
+    def step(self, step_name, step_args):
+        steps.append(step_args)
+        return 0
+
+    monkeypatch.setattr(job._Job, "step", step)
+    parser = argparse.ArgumentParser(prog="worker.cli")
+    job.add_arguments(parser.add_subparsers(dest="command").add_parser("job"))
+    args = parser.parse_args(
+        ["job", name, "--trigger", "manual", "--data-dir", str(tmp_path / "data")]
+    )
+    runner = job._Job(args)
+    code, _ = runner.run()
+    assert code == 0
+    return args, runner.log_path.read_text(encoding="utf-8"), steps
+
+
+def test_the_memory_threshold_defaults_to_2_gb_the_scheduled_daily_one():
+    """#574: 8 GB was above the Docker VM's whole memory (about 8.1 GB), so a manual
+    ``job daily`` without the option was always skipped as ``low_memory``."""
+
+    parser = argparse.ArgumentParser(prog="worker.cli")
+    job_parser = parser.add_subparsers(dest="command").add_parser("job")
+    job.add_arguments(job_parser)
+    args = parser.parse_args(["job", "daily"])
+    assert job.DEFAULT_MIN_FREE_MEMORY_GB == 2.0
+    assert args.min_free_memory_gb == 2.0
+    # argparse wraps the help text at the terminal width: compare without line breaks.
+    assert "（預設 2）" in " ".join(job_parser.format_help().split())
+
+
+@linux_only
+@pytest.mark.parametrize("name", ["daily", "news", "us"])
+def test_without_the_memory_option_1_5_gb_free_is_low_memory(
+    tmp_path, monkeypatch, name
+):
+    _, log, steps = _run_without_a_memory_option(tmp_path, monkeypatch, name, 1536)
+    skipped = skipped_line(log)
+    assert skipped.group(1) == "low_memory"
+    assert "min_free_mb=2048" in skipped.group(2)
+    # daily and us run their worker command to record the skip, news runs nothing.
+    if name == "news":
+        assert steps == []
+    else:
+        assert steps[0][-2:] == ["--skip-reason", "low_memory"]
+
+
+@linux_only
+@pytest.mark.parametrize("name", ["daily", "news", "us"])
+def test_without_the_memory_option_3_gb_free_runs_the_job(tmp_path, monkeypatch, name):
+    _, log, steps = _run_without_a_memory_option(tmp_path, monkeypatch, name, 3072)
+    assert skipped_line(log) is None
+    assert "--skip-reason" not in steps[0]
+    assert steps[0][: len(job.JOB_COMMANDS[name])] == job.JOB_COMMANDS[name]
+
+
 @pytest.mark.parametrize("linked", [False, True], ids=["git-dir", "linked-worktree"])
 @pytest.mark.parametrize("marker", ["MERGE_HEAD", "index.lock"])
 def test_a_git_operation_in_progress_skips_the_job(tree, marker, linked):
