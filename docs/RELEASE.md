@@ -5,7 +5,7 @@
 
 ## 流程
 
-V1 之後的發佈（使用者 2026-10-28 決定，取代 [V1 發佈隔離](#v1-發佈隔離g7-窗口專用)的 `release/*` 雙 PR）：
+V1 之後的發佈（使用者 2026-10-28 決定，取代 [V1 發佈隔離（歷史）](#v1-發佈隔離歷史)的 `release/*` 雙 PR）：
 
 1. **合併**：改動照[任務流程](WORKFLOW.md#任務流程)以 PR 合併進 master，master 上該 merge commit 的 CI 綠。
 2. **打 tag**：要發佈的版本範圍經使用者同意後，統籌在該 merge commit 打 annotated tag 並推上 GitHub。名稱 `v<主>.<次>.<修>`（tag 也是 image 的 tag，只能有英數字、`_`、`.`、`-`）；推上後不移動、不刪，要修正就打下一個。
@@ -137,9 +137,11 @@ bash tools/ops/deploy.sh "$TAG" --operator "<誰，依據的 #1 留言>"
 
 以 `deploy.sh <前一個 tag>` 部署回去，檢查與記錄相同；該 tag 的 image 還在時 build 走快取。資料庫 migration 不會跟著退：升級含 migration 的版本前照 [安全升級與復原順序](ops/SETUP.md#安全升級與復原順序) 先備份，回退時一併處理。DB 升到新 revision 之後，前一個 tag 的 api 會被 readiness 拒絕（它只接受自己的 head），daily 也無法執行（例如 0024 之後退回 `v1.2.0`）。所以要回退到 migration 之前的版本，只能先停 scheduler，用[含 migration 的版本](#含-migration-的版本)第 2 步的備份換回 volume 裡的 `stock.db`，再部署舊 tag；備份之後寫入的資料會遺失，要回補。
 
-## V1 發佈隔離（G7 窗口專用）
+## V1 發佈隔離（歷史）
 
-只用於 V1 的 G7 窗口（使用者 2026-10-26 決定，#288）；窗口結束後不再使用，之後一律照上面的[流程](#流程)。窗口期間工作排程器從發佈 checkout 執行，發佈 checkout 跟著 `release/v1`，排程起跑前 `git pull --ff-only`（#314 前的 job）。
+**已結束，只留作紀錄**：G7 窗口於 2026-11-02 結束（使用者確認 G7 通過，[ROADMAP 的 V1 已完成](ROADMAP.md#v1-已完成)），窗口結束三項記在 [#260](https://github.com/YiCheng0608/stock-lab/issues/260)；現行發佈一律照上面的[流程](#流程)，不再開進 `release/v1` 的 PR。`release/v1` branch、它的 ruleset 與 CI 對 `release/**` 的觸發仍在（[GUARDRAILS](GUARDRAILS.md)），`page_checks.py --g7` 也還在，只供重跑當時的 G7 證據。
+
+以下是當時的做法（使用者 2026-10-26 決定，#288）：窗口期間工作排程器從發佈 checkout 執行，發佈 checkout 跟著 `release/v1`，排程起跑前 `git pull --ff-only`（#314 前的 job）。
 
 - **兩條 branch**：排程窗口期間發佈 checkout 跟發佈 branch `release/v1`（[排程](ops/SCHEDULING.md)），master 照常合併 V1.1。`release/v1` 受 ruleset 保護（禁止刪除與強推、只經 PR 以 merge commit 合併、CI `required` 綠）。
 - **V1 改動兩個 PR**：要進 V1 的改動（V1 milestone 的 Issue，含窗口中的修正）從同一條工作 branch 開兩個 PR，一個進 master、一個進 `release/v1`，兩個都要 CI 綠；工作 branch 只合併 `origin/release/v1`（不合併含 V1.1 的 master），進 master 的衝突在 master 那個 PR 解。`release/v1` 不合回 master，也不拿它當 PR 的 head（合併後會被自動刪 branch 設定刪掉）。每次進 `release/v1` 記在 G7 Issue。
@@ -147,4 +149,4 @@ bash tools/ops/deploy.sh "$TAG" --operator "<誰，依據的 #1 留言>"
 - **每日核對**記發佈 checkout 當時的 branch 與 HEAD（`git -C <發佈 checkout> rev-parse --abbrev-ref HEAD` 與 `--short HEAD`），證明窗口每天跑的是 `release/v1`。
 - **窗口結束**（使用者確認 G7 後）：`git log origin/master..origin/release/v1 --no-merges` 必須為空（V1 改動都已在 master）；在排程閒置時把發佈 checkout 切回 master、依 master 的 lock 檔重裝 venv（下一次 daily 會升 V1.1 的 migration）；`release/v1` 最後一個 commit 打 `v1.0` tag。三項結果記在 G7 Issue。
 
-窗口結束後到 Docker 切換（#342）之前，工作排程器仍從發佈 checkout 執行，發佈 checkout 不能拉到含 #333 的 commit（[scheduler 容器的排程（serve）](ops/SCHEDULING.md#scheduler-容器的排程serve) 的切換前提）。上面的 `deploy.sh` 部署的是 image，只在 scheduler 容器接手之後使用；切換步驟與切換時的第一次部署見 [Docker 切換與回退（cutover.sh）](ops/platform/windows.md#docker-切換與回退cutoversh)（`tools/ops/cutover.sh`，#342）（正式 project 已有 #340 之前的容器在跑時，先停掉它們，見上面 exit 2）。`v1.0` 早於 #340，`deploy.sh` 的版本檢查會拒絕它。
+窗口結束後到 Docker 切換（#342）之前，工作排程器仍從發佈 checkout 執行；之後排程改由 scheduler 容器執行，`deploy.sh` 部署 image。切換、切換時的第一次部署與回退見 [Docker 切換與回退（cutover.sh）](ops/platform/windows.md#docker-切換與回退cutoversh)。`v1.0` 早於 #340，`deploy.sh` 的版本檢查會拒絕它。
