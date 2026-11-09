@@ -497,7 +497,7 @@ if [ "${#us_files[@]}" -gt 0 ]; then
   us_exits="$(cat "${us_files[@]}" | sed -nE 's/^===== [^ ]+ end exit=([0-9]+) .*/\1/p' | tail -n "$US_FAILED_RUNS")"
   if [ "$(printf '%s\n' "$us_exits" | grep -c .)" = "$US_FAILED_RUNS" ] \
     && ! printf '%s\n' "$us_exits" | grep -qx 0; then
-    anomaly us_failed "美股 us 排程：最近 $US_FAILED_RUNS 次都沒有成功（exit $(printf '%s' "$us_exits" | tr '\n' ' ')），請查 \`logs/us-*.log\` 與 \`/api/ingestion-runs?q=us_index_collect&include_metadata=true\`；修好後跑 \`worker.cli job us --trigger manual\`。"
+    anomaly us_failed "美股 us 排程：最近 $US_FAILED_RUNS 次都沒有成功（exit $(printf '%s' "$us_exits" | tr '\n' ' ')），請查 \`logs/us-*.log\` 與 \`/api/ingestion-runs?q=us_index_collect&include_metadata=true\`；修好後跑 \`worker.cli job us --trigger manual --min-free-memory-gb 2\`（job 預設的 8 GB 門檻會擋下）。"
   fi
 fi
 

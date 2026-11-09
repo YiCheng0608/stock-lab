@@ -453,7 +453,7 @@ def main() -> None:
     index_bars_us_parser.add_argument(
         "--force",
         action="store_true",
-        help="已存的 FinMind 列也以新值改寫（FRED 列不改）",
+        help="四檔都已存到前一個平日也照樣請求（FinMind 列的更正不需要它；FRED 列一律不改）",
     )
     index_bars_us_parser.add_argument(
         "--trigger", choices=("scheduler", "manual"), default="manual"

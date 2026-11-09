@@ -208,8 +208,8 @@ period_backfill 步驟呼叫 [`worker.period_backfill.run_period_backfill(目標
   - 美股收盤是台北 04:00（夏令）或 05:00（冬令），所以週二到週六各抓前一個美股交易日。週日、週一沒有新的美股交易日，不排。
   - **06:30** 是本體：四檔各 1 個 FinMind 請求，抓到台北當日的前一天。
   - **09:30** 是保險：四檔都已存到前一個平日時記 `already_complete`、不發請求；06:30 沒拿到（FinMind 還沒更新、請求失敗或沒跑）才再請求一次。
-  - 兩個時間都在 :30，避開每個偶數整點的 news。
-  - 前一個平日是美股休市日時，兩次都拿不到那一天：照 [美股指數](../DATA_SOURCES.md#美股指數) 的休市規則，畫面先標「非最新」，下一個交易日進來後才記成休市。
+  - 兩個時間都在 :30，避開每個偶數整點的 news。每個 job 各用自己的檔案鎖（`daily.lock`、`news.lock`、`us.lock`），不共用；靠排程時間錯開。SQLite 是 WAL，連線有 busy_timeout，us 的寫入又小，偶爾重疊也只是等待（#568 review 第 3 點）。
+  - 前一個平日是美股休市日時，兩次都拿不到那一天，畫面標「非最新」；下一個交易日的列進來時，那天才記成休市，畫面直接變「最新」，不會出現「美股休市」（[美股指數](../DATA_SOURCES.md#美股指數)，#568 review 第 4 點）。
   - 錯過的日子由下一次自動補上：請求從已存最後一列往前 10 天起，不必另外回補。
   - 記憶體門檻同 daily（2 GB）。被 `low_memory`、`git_busy` 或 `already_running` 擋下時，job 照 daily 的做法讓 worker 記一筆 `skipped` 的 `us_index_collect` run，不發請求；維護模式時只記日誌、不寫 DB。
 - **分工**：鎖、起跑前檢查、單次上限、日誌與 exit code 都由 job 負責，與 [daily／news 工作的註冊與管理](platform/windows.md#dailynews-工作的註冊與管理)、[日誌與 run 記錄](#日誌與-run-記錄)相同；serve 自己不加鎖，重疊的觸發照樣啟動 job，由 job 記 `already_running`（同一工作同時最多 3 個，再多的由 APScheduler 擋下並在 stderr 記警告）。不帶 `--git-pull`：程式由 image 決定（部署見 [RELEASE](../RELEASE.md#部署)）。

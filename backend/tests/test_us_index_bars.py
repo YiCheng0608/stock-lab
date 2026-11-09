@@ -7,6 +7,7 @@ temporary SQLite file and sockets are forbidden.
 from __future__ import annotations
 
 import socket
+from pathlib import Path
 from datetime import date, timedelta
 from urllib.parse import parse_qs, urlsplit
 
@@ -397,7 +398,7 @@ def test_a_rerun_without_new_sessions_writes_no_row(factory):
     assert result["status"] == "success"
     assert result["series"]["SPX"]["counts"] == {
         "inserted": 0,
-        "replaced": 0,
+        "revised": 0,
         "unchanged": 4,
         "conflict": 0,
     }
@@ -416,7 +417,7 @@ def test_a_later_run_reads_only_the_recent_window_and_adds_new_dates(factory):
     assert _windows(later)[0] == ("^GSPC", "2026-08-25", "2026-09-08")
     assert result["series"]["SPX"]["counts"] == {
         "inserted": 1,
-        "replaced": 0,
+        "revised": 0,
         "unchanged": 4,
         "conflict": 0,
     }
@@ -434,24 +435,71 @@ def test_a_later_run_reads_only_the_recent_window_and_adds_new_dates(factory):
         assert closed[-1] == "2026-09-07" and "2026-09-04" not in closed
 
 
-def test_a_different_value_for_a_stored_day_is_kept_and_warned(factory):
-    _collect(factory, FinMind())
-    changed = FinMind(closes={date(2026, 9, 4): 9999.0})
+def test_a_later_capture_revises_finmind_rows_and_records_old_and_new(factory):
+    # A first value of 09-04 revised by FinMind within the 10-day re-read
+    # (#568 review item 1): the stored row takes the later capture's values.
+    first = _collect(factory, FinMind())
+    with factory() as db:
+        before = _bars(db, "SPX")[-1]
+        old_raw = before.raw_payload_id
+    changed = FinMind(closes={date(2026, 9, 4): 1010.0})
 
     result = _collect(factory, changed)
 
-    assert result["series"]["SPX"]["counts"]["conflict"] == 1
-    assert result["warnings"][0] == (
-        "us index bars kept 1 stored US SPX row(s) that differ from FinMind ^GSPC"
-    )
-    assert pipeline.NONCORE_WARNING_PATTERN.match(result["warnings"][0])
+    assert result["status"] == "success"
+    # The re-read window (from 08-25) holds 09-01..09-04: three unchanged, 09-04 revised.
+    assert result["series"]["SPX"]["counts"] == {
+        "inserted": 0,
+        "revised": 1,
+        "unchanged": 3,
+        "conflict": 0,
+    }
+    assert result["value_revision_rows"] == 4  # each index's 09-04
+    assert result["warnings"] == []
     with factory() as db:
-        assert _bars(db, "SPX")[-1].close != 9999.0
-    # force replaces FinMind's own row.
-    forced = _collect(factory, changed, force=True)
-    assert forced["series"]["SPX"]["counts"]["replaced"] == 1
+        row = _bars(db, "SPX")[-1]
+        assert (row.close, row.open, row.high, row.low) == (
+            1010.0,
+            1009.0,
+            1012.0,
+            1007.0,
+        )
+        assert row.raw_payload_id != old_raw and row.source == "finmind_us_index"
+        run = db.get(IngestionRun, result["run_id"])
+        spx = next(
+            r for r in run.metadata_json["value_revision_rows"] if r["symbol"] == "SPX"
+        )
+        assert spx["trading_date"] == "2026-09-04"
+        assert (
+            spx["old"]["close"] == before.close
+            and spx["old"]["raw_payload_id"] == old_raw
+        )
+        assert (
+            spx["new"]["close"] == 1010.0
+            and spx["new"]["raw_payload_id"] == row.raw_payload_id
+        )
+        # The indicators of the revised series are rebuilt.
+        assert result["indicators"] != {
+            "status": "skipped",
+            "reason": "no_changed_bars",
+        }
+    assert first["status"] == "success"
+
+
+def test_a_capture_older_than_the_stored_row_does_not_revise_it(factory):
+    _collect(factory, FinMind())
     with factory() as db:
-        assert _bars(db, "SPX")[-1].close == 9999.0
+        stored = _bars(db, "SPX")[-1]
+        result = us.store_us_index_bars(
+            db,
+            SPX,
+            [us.UsIndexBar(stored.trading_date, 1.0, 3.0, 0.5, 2.0, 5)],
+            stored.raw_payload_id,
+            captured_at=stored.collected_at - timedelta(minutes=1),
+        )
+        assert result.counts["conflict"] == 1 and result.revisions == []
+        assert _bars(db, "SPX")[-1].close == stored.close
+        db.rollback()
 
 
 def test_a_stored_fred_row_is_never_overwritten(factory):
@@ -507,6 +555,46 @@ def test_a_single_zero_volume_is_stored_null_with_a_warning(factory):
     with factory() as db:
         assert _bars(db, "SPX")[-1].volume is None
         assert _bars(db, "SPX")[-2].volume is not None
+
+    # FinMind publishes that day's volume later: the NULL is filled (review item 1).
+    later = _collect(factory, FinMind())
+    assert later["series"]["SPX"]["counts"]["revised"] == 1
+    assert later["warnings"] == []
+    with factory() as db:
+        assert _bars(db, "SPX")[-1].volume == 1_000_000 + len(DAYS) - 1
+
+
+def test_an_answer_that_is_not_json_is_rejected_and_kept_as_raw(factory, monkeypatch):
+    # #568 review item 5: a 200 whose body is not JSON (a block page) comes back
+    # as its text, is rejected whole and is still kept as raw.
+    class Response:
+        status_code = 200
+        text = "<html>verify you are human</html>"
+
+        def json(self):
+            raise ValueError("not JSON")
+
+    import httpx
+
+    monkeypatch.setattr(httpx, "get", lambda *args, **kwargs: Response())
+    monkeypatch.setattr(us.time, "sleep", lambda seconds: None)
+    assert us.fetch_json(us.request_url(SPX, date(2026, 9, 1), date(2026, 9, 4))) == (
+        Response.text
+    )
+
+    fetch = FinMind({"^GSPC": Response.text})
+    result = _collect(factory, fetch)
+
+    assert result["series"]["SPX"]["status"] == "failed"
+    assert "not a JSON object" in result["series"]["SPX"]["error"]
+    with factory() as db:
+        assert _bars(db, "SPX") == []
+        quality = db.scalar(
+            select(DataQuality).where(DataQuality.entity_key == "US:SPX")
+        )
+        raw = db.get(RawPayload, quality.checks_json["raw_payload_id"])
+        assert raw.source == "finmind" and raw.endpoint == fetch.calls[0]
+        assert Response.text in Path(raw.payload_path).read_text(encoding="utf-8")
 
 
 def test_a_rejected_or_failed_index_is_partial_and_keeps_its_raw(factory):
@@ -839,7 +927,11 @@ def test_the_newest_missing_weekday_is_stale_not_closed(factory):
 
 
 def test_a_recorded_holiday_makes_the_session_before_it_us_market_closed(factory):
-    # A run whose newest row is 09-08 records Labor Day 09-07 as closed.
+    # The reading side only (#568 review item 4): us-collect records a holiday
+    # once a later session is stored, so the page then shows that later session
+    # as latest; it never stores this state itself.  The 09-08 bar is deleted
+    # below to reach it.  A run whose newest row is 09-08 records Labor Day
+    # 09-07 as closed.
     _collect(
         factory,
         FinMind(days=[date(2026, 9, 3), date(2026, 9, 4), date(2026, 9, 8)]),

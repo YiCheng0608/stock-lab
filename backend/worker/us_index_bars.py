@@ -30,9 +30,10 @@ weekday is not called a holiday: FinMind may not have published it yet.
 2023-09-01, when the series has no row or its oldest row is later than that)
 to ``end_date`` = D − 1.  An answer that is not that index's rows, has a
 malformed row or a date outside the request is rejected whole (a ``us index
-bars`` warning; the raw is kept).  A stored row keeps its values (a different
-value, or another source's row, is a conflict) unless ``force``, which replaces
-FinMind's own rows only.  One ``us_index_collect`` run per call; the indicator
+bars`` warning; the raw is kept).  A stored FinMind row takes the values of a
+later capture (``revised``, old and new in the run's ``value_revision_rows``);
+another source's row (FRED) is never overwritten (a conflict).  When every index
+already has D − 1 the run asks nothing (``already_complete``) unless ``force``.  One ``us_index_collect`` run per call; the indicator
 and feature rows of the series it changed are rebuilt at the end.
 """
 
@@ -268,6 +269,8 @@ def fetch_json(url: str, *, timeout_seconds: float = 30.0) -> Any:
 
     One retry after ``RETRY_DELAY_SECONDS`` on a transport error, 429 or 5xx;
     401/402/403 raise ``FinMindRefused`` at once (no retry, DATA_SOURCES).
+    A 200 whose body is not JSON comes back as its text: ``parse_rows``
+    rejects it and the caller keeps it as raw.
     """
 
     import httpx
@@ -297,8 +300,10 @@ def fetch_json(url: str, *, timeout_seconds: float = 30.0) -> Any:
             raise OfficialDataError(f"FinMind answered {response.status_code}: {url}")
         try:
             return response.json()
-        except ValueError as exc:
-            raise OfficialDataError(f"FinMind answer is not JSON: {url}") from exc
+        except ValueError:
+            # Not JSON (a block page, an HTML error): the text itself, so the
+            # caller rejects it and still keeps it as raw (#568 review item 5).
+            return response.text
     raise OfficialDataError(f"FinMind request failed: {url}")  # pragma: no cover
 
 
@@ -354,12 +359,14 @@ class SeriesWriteResult:
     counts: dict[str, int] = field(
         default_factory=lambda: {
             "inserted": 0,
-            "replaced": 0,
+            "revised": 0,
             "unchanged": 0,
             "conflict": 0,
         }
     )
     conflicts: list[dict[str, Any]] = field(default_factory=list)
+    # FinMind's own rows whose values a later capture changed (#568 review item 1).
+    revisions: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _same(first: float | None, second: float | None) -> bool:
@@ -386,19 +393,31 @@ def _values(row_or_bar: Any) -> dict[str, Any]:
     }
 
 
+def _is_later(row: MarketBar, captured_at: datetime | None) -> bool:
+    """Whether a capture at ``captured_at`` is newer than the stored row's."""
+
+    if captured_at is None or row.collected_at is None:
+        return True
+    return row.collected_at <= captured_at
+
+
 def store_us_index_bars(
     db: Session,
     series: UsIndex,
     bars: Iterable[UsIndexBar],
     raw_payload_id: int,
     *,
-    force: bool = False,
+    captured_at: datetime | None = None,
 ) -> SeriesWriteResult:
-    """Insert new sessions; a stored one keeps its values.
+    """Insert new sessions and take FinMind's later values of its own rows.
 
-    ``force`` replaces FinMind's own rows only: a row of another source (a
-    FRED close, #547) is never overwritten and is a conflict (#568 decision
-    6729023767).
+    As the institutional revisions of the Taiwan chips: a stored FinMind row
+    (``finmind_us_index``) whose values differ from a capture taken after it
+    gets the new values (``revised``; old and new values in ``revisions``),
+    so a first value of D − 1 revised within the 10-day re-read, or a single
+    day's volume first published as 0 (NULL) and later given, is picked up
+    (#568 review item 1).  A row of another source (a FRED close, #547) is
+    never overwritten and is a conflict (#568 decision 6729023767).
     """
 
     result = SeriesWriteResult()
@@ -420,7 +439,9 @@ def store_us_index_bars(
         if row is not None and _same_bar(row, bar):
             result.counts["unchanged"] += 1
             continue
-        if row is not None and (not force or row.source != SOURCE):
+        if row is not None and (
+            row.source != SOURCE or not _is_later(row, captured_at)
+        ):
             result.counts["conflict"] += 1
             result.conflicts.append(
                 {
@@ -432,10 +453,26 @@ def store_us_index_bars(
                 }
             )
             continue
-        outcome = "replaced" if row is not None else "inserted"
         if row is None:
+            outcome = "inserted"
             row = MarketBar(instrument_id=instrument.id, trading_date=bar.trading_date)
             db.add(row)
+        else:
+            outcome = "revised"
+            result.revisions.append(
+                {
+                    "symbol": series.symbol,
+                    "trading_date": bar.trading_date.isoformat(),
+                    "old": {
+                        **_values(row),
+                        "raw_payload_id": row.raw_payload_id,
+                        "collected_at": row.collected_at.isoformat()
+                        if row.collected_at
+                        else None,
+                    },
+                    "new": {**_values(bar), "raw_payload_id": raw_payload_id},
+                }
+            )
         row.open, row.high, row.low = bar.open, bar.high, bar.low
         row.close = row.adj_close = bar.close
         # MarketBar.volume defaults to 0 on insert: NULL is no volume, never a zero.
@@ -449,7 +486,7 @@ def store_us_index_bars(
         row.is_suspended = False
         row.source = SOURCE
         row.data_as_of = datetime.combine(bar.trading_date, datetime.min.time())
-        row.collected_at = utcnow()
+        row.collected_at = captured_at or utcnow()
         row.raw_payload_id = raw_payload_id
         row.volume_raw_payload_id = None
         row.contract_month = row.open_interest = row.settlement_price = None
@@ -570,8 +607,6 @@ def _write_series(
     item: FetchedSeries,
     upsert_raw: Callable[[Session, Any, Any], Any],
     warnings: list[str],
-    *,
-    force: bool,
 ) -> dict[str, Any]:
     series, request = item.request.series, item.request
     checks: dict[str, Any] = {
@@ -603,7 +638,11 @@ def _write_series(
     try:
         with db.begin_nested():
             written = store_us_index_bars(
-                db, series, parsed.bars, checks["raw_payload_id"], force=force
+                db,
+                series,
+                parsed.bars,
+                checks["raw_payload_id"],
+                captured_at=item.captured.collected_at,
             )
     except Exception as exc:
         warnings.append(us_index_warning(series, exc))
@@ -616,6 +655,8 @@ def _write_series(
             f"{series.symbol} row(s) that differ from FinMind {data_id(series)}"
         )
     checks["counts"] = dict(written.counts)
+    if written.revisions:
+        checks["value_revision_rows"] = written.revisions
     missing = ["volume"] if parsed.no_volume else []
     _upsert_quality(db, series, session, "complete", {**checks, "_missing": missing})
     return {**checks, "status": "complete", "conflicts": written.conflicts}
@@ -628,8 +669,6 @@ def write_us_index_series(
     fetched: Iterable[FetchedSeries],
     upsert_raw: Callable[[Session, Any, Any], Any],
     warnings: list[str],
-    *,
-    force: bool = False,
 ) -> dict[str, Any]:
     """Write the fetched indexes: raw rows, bars and data_quality.
 
@@ -645,7 +684,7 @@ def write_us_index_series(
         try:
             with db.begin_nested():
                 result[series.symbol] = _write_series(
-                    db, run, session, item, upsert_raw, series_warnings, force=force
+                    db, run, session, item, upsert_raw, series_warnings
                 )
         except Exception as exc:
             series_warnings = [us_index_warning(series, exc)]
@@ -758,13 +797,13 @@ def collect_us_indexes(
         fetched = fetch_us_index_series(requests, fetch)
         warnings: list[str] = []
         results = write_us_index_series(
-            db, run, session, fetched, _upsert_raw_payload, warnings, force=force
+            db, run, session, fetched, _upsert_raw_payload, warnings
         )
         changed = [
             find_instrument(db, SERIES_BY_SYMBOL[symbol]).id
             for symbol, entry in results.items()
             if entry.get("counts", {}).get("inserted")
-            or entry.get("counts", {}).get("replaced")
+            or entry.get("counts", {}).get("revised")
         ]
         indicators = rebuild_derived(db, changed)
         complete = [s for s, e in results.items() if e["status"] == "complete"]
@@ -777,7 +816,7 @@ def collect_us_indexes(
         )
         run.records = sum(
             entry.get("counts", {}).get("inserted", 0)
-            + entry.get("counts", {}).get("replaced", 0)
+            + entry.get("counts", {}).get("revised", 0)
             for entry in results.values()
         )
         run.finished_at = utcnow()
@@ -791,6 +830,12 @@ def collect_us_indexes(
             ),
             "warnings": warnings,
             "indicators": indicators,
+            # FinMind's own rows a later capture changed: old and new values.
+            "value_revision_rows": [
+                revision
+                for entry in results.values()
+                for revision in entry.get("value_revision_rows", [])
+            ],
         }
         if run.status == "failed":
             run.error = "; ".join(warnings)[:2000]
@@ -825,6 +870,7 @@ def collect_us_indexes(
             for symbol, entry in results.items()
         },
         "indicators": indicators,
+        "value_revision_rows": len(run.metadata_json["value_revision_rows"]),
         "warnings": warnings,
     }
 
