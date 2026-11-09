@@ -131,3 +131,11 @@ LLM 批次的實作（`worker.news_llm`，執行方式見 [現有 worker CLI](op
 - items/meta 明示 cursor、has_more 與 sort。response 有 `product_time` 時前端只用它，角色 unknown 就顯示待核實；完全沒有 `product_time` 的 response 才可格式化其中合法的日期欄。
 - 時間以 UTC 保存、API 輸出 aware：`news_items` 的 `published_at`、`event_at`、`collected_at` 在 DB 是無時區的 UTC（不改儲存格式）；`/api/news` 與 `/api/news/{id}` 把它們輸出為 `+00:00` 結尾的 ISO 字串，頂層 `published_at`／`event_at`／`collected_at` 與 `product_time` 同值，`product_time` 對應角色因此為 known（`time_basis`／`time_precision`／`time_consistency` 的規則不變，conflict 仍為 unknown）。`display_time` 在 `time_precision=datetime` 時同為 aware UTC；`time_precision=date`（官方公告只有 `event_date`）的 `display_time` 是日期的午夜占位，不是時刻，維持無時區輸出，`event_date` 與 `product_time` 的 date 角色不做時區轉換。沒有 `published_at` 時照 §4 依序退到 `event_at`、`event_date`。前端以台北時間顯示 aware 時刻。
 - 官方事件的時間換算：`events.details_json` 的 `published_at`（含 `PublishedAt`、`publication_time`、`publish_time`）與 `event_at`（含 `event_time`、`EventTime`）投影成 `news_items` 時，帶 offset（`Z`、`+08:00`）的值先換算成 UTC 再存成無時區 UTC，同一瞬間不因來源 offset 不同而存成不同值；沒有 offset 的值視為已是 UTC（與上述 DB 契約一致），所以來源給當地時間時 collector 必須先附 offset 再寫入 `details_json`，不得寫無 offset 的當地時間。只有日期、無法解析或超出日期範圍的值不是時刻：不補午夜，該角色留空並依 §4 退到下一個時間角色。`event_date` 是官方日曆日，不隨換算位移。媒體 feed 的來源時間換算見 [DATA_SOURCES](DATA_SOURCES.md)。
+
+### 首頁重點新聞
+
+[#581](https://github.com/YiCheng0608/stock-lab/issues/581)：`/api/dashboard` 的 `news`（今日可買頁「重點新聞」，[UI 文案](UI_COPY_SPEC.md)）只收下列新聞，排序與 `/news` 相同（§4），最多 6 則；其餘只在 `/news`。條件寫在 `app.api.home_news_eligible`。
+
+- **國內**（`domestic` 與官方事件投影 `company`／`taiwan`）：有規則核實標的（`symbols_json` 不為空），或目前提示版本的 `done` 結果方向是 `positive`／`negative`／`mixed`（不是 `unknown`）。
+- **國際**（`international`）：要關聯到台股標的：有規則核實標的，或目前提示版本的 `done` 結果有 AI 標的候選（`ai_symbol_candidates_json` 不為空；候選未核實，首頁列不顯示它，只用來決定能不能進首頁）。只有方向、沒有標的的國際新聞不進首頁。
+- 符合的不足時照實際數量顯示，不拿其他新聞補。正式 DB 11/09 的例子：CNBC「Home listings pile up」與 MarketWatch 心臟藥試驗（無標的、方向 unknown）原本是前兩則，現在不進首頁。

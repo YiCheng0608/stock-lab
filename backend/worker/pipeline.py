@@ -6187,6 +6187,13 @@ def summarize_backtest(db: Session, run_id: int | None = None) -> dict[str, Any]
     return _summarize_backtest_run(db, run)
 
 
+def _utc_iso(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    aware = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return aware.astimezone(timezone.utc).isoformat()
+
+
 def _backtest_summary(
     run: IngestionRun,
     grouped: dict[tuple[str, str, str, int], dict[str, Any]],
@@ -6215,6 +6222,9 @@ def _backtest_summary(
             "tracking_version": backtest_tracking_version(run.request_key),
             "run_date": run.run_date.isoformat() if run.run_date else None,
             "data_as_of": run.data_as_of,
+            # Stored naive UTC; the research page shows when a running run began (#581).
+            "started_at": _utc_iso(run.started_at),
+            "finished_at": _utc_iso(run.finished_at),
             "metadata": metadata,
             "assessment": assessment,
             "zero_actionable_count": zero_actionable_count,
@@ -6304,15 +6314,30 @@ def _summarize_backtest_run(db: Session, run: IngestionRun) -> dict[str, Any]:
     return _backtest_summary(run, grouped, zero_actionable)
 
 
-def close_abandoned_backtests(db: Session) -> list[int]:
+ABANDONED_AT_BACKTEST_START = (
+    "abandoned: still running when the next canonical backtest started,"
+    " which holds maintenance mode alone"
+)
+ABANDONED_AT_DAILY_START = (
+    "abandoned: still running when a daily started with no maintenance hold;"
+    " a canonical backtest runs only holding it"
+)
+
+
+def close_abandoned_backtests(
+    db: Session, reason: str = ABANDONED_AT_BACKTEST_START
+) -> list[int]:
     """Close the canonical backtest runs a dead process left ``running`` (#484).
 
     A canonical backtest runs only through ``worker.cli backtest``, which holds
     maintenance mode (``worker.job.MaintenanceHold``: one backfill or backtest at
-    a time), so a canonical run still ``running`` when another one starts has no
-    process left; run 2286 was ended by the OOM killer.  It is closed as the
-    other jobs close theirs: ``failed`` with an ``abandoned:`` error.  Research
-    runs (``:research:`` keys) run on copies outside that hold and are left alone.
+    a time), so a canonical run still ``running`` when another one starts, or
+    when a daily starts with no maintenance marker (#581,
+    ``schedule_runs.close_abandoned_backtests_at_daily_start``), has no process
+    left; run 2286 was ended by the OOM killer.  It is closed as the other jobs
+    close theirs: ``failed`` with an ``abandoned:`` error (``reason`` says which
+    start found it).  Research runs (``:research:`` keys) run on copies outside
+    that hold and are never closed here.
     """
 
     now = utcnow()
@@ -6328,10 +6353,7 @@ def close_abandoned_backtests(db: Session) -> list[int]:
     ).all()
     for row in rows:
         row.status = "failed"
-        row.error = (
-            "abandoned: still running when the next canonical backtest started,"
-            " which holds maintenance mode alone"
-        )
+        row.error = reason
         row.finished_at = now
     if rows:
         db.commit()

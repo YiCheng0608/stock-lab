@@ -56,7 +56,7 @@ const hasTermId = (markup: string, id: string) => markup.includes(`data-term="${
 const IN_PLACE_TERMS: Record<string, string> = {
   candidate_score: '候選總分',
   entry_zone: '進場區',
-  support: '停損／條件失效價',
+  support: '停損',
   target: '目標價',
   rr: '風險報酬比 RR',
   percentile: '百分位',
@@ -114,7 +114,7 @@ const action = {
 } as unknown as ActionSummary
 const ActionDetailPanel = component('ActionDetailPanel')
 const research = render('ActionDetailPanel', () => <ActionDetailPanel {...{ action }} />)
-check(hasTermId(research, 'support'), `研究條件: the invalidation／stop level opens 停損／條件失效價 (found ${termLabels(research).join('、') || 'none'})`)
+check(hasTermId(research, 'support'), `研究條件: the invalidation／stop level opens 停損 (found ${termLabels(research).join('、') || 'none'})`)
 check(hasTermId(research, 'target'), '研究條件: the target level opens 目標價')
 check(hasTerm(research, '風險報酬比'), '研究條件: 風險報酬比 stays a term')
 

@@ -8,6 +8,8 @@ process left (run 2286 was killed by the OOM killer) and is closed as abandoned:
 close theirs.
 """
 
+import json
+import sys
 from datetime import date, datetime
 
 import pytest
@@ -240,3 +242,124 @@ def test_a_running_run_has_its_session_count_in_the_database(factory, monkeypatc
     monkeypatch.setattr(pipeline, "_generate_signals", spy)
     assert pipeline.backtest(SCORE_DATE, SCORE_DATE)["run"]["status"] == "success"
     assert seen == [1]
+
+
+# ---- #581: a daily that starts with no maintenance marker closes them too ----
+# Run 2286 stayed running from 11/04 because no canonical backtest started after it.
+
+
+def _marker(data_dir, **state):
+    from worker import job
+
+    path = job.maintenance_path(data_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state), encoding="utf-8")
+
+
+def _statuses(factory, *run_ids):
+    with factory() as db:
+        return [db.get(IngestionRun, run_id).status for run_id in run_ids]
+
+
+def test_a_daily_without_a_maintenance_marker_closes_a_canonical_run(
+    factory, tmp_path, frozen_utcnow
+):
+    from worker import schedule_runs
+
+    with factory() as db:
+        killed = _run(db, "technical-backtest:v2:2025-11-04:2026-11-03", "running")
+        research = _run(
+            db,
+            "technical-backtest:v2:2026-01-01:2026-02-27:research:breakout_v3",
+            "running",
+        )
+        done = _run(db, "technical-backtest:v2:2026-06-01:2026-08-31", "success")
+    result = schedule_runs.close_abandoned_backtests_at_daily_start(tmp_path)
+    assert result == {"status": "checked", "runs": [killed]}
+    assert _statuses(factory, killed, research, done) == [
+        "failed",
+        "running",
+        "success",
+    ]
+    with factory() as db:
+        row = db.get(IngestionRun, killed)
+        assert row.error == pipeline.ABANDONED_AT_DAILY_START
+        assert row.error.startswith("abandoned: ")
+        assert row.finished_at == frozen_utcnow.at
+    # Nothing left: a second daily finds nothing to close.
+    assert schedule_runs.close_abandoned_backtests_at_daily_start(tmp_path) == {
+        "status": "checked",
+        "runs": [],
+    }
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        # A backtest holding it, beating.
+        {"since_epoch": 1.0, "reason": "backtest", "command": "backtest"},
+        # On by hand (a deploy).
+        {"since_epoch": 1.0, "reason": "deploy"},
+        # Unreadable: it still holds the jobs back.
+        None,
+    ],
+)
+def test_a_maintenance_marker_leaves_running_backtests_alone(factory, tmp_path, state):
+    from worker import job, schedule_runs
+
+    with factory() as db:
+        live = _run(db, "technical-backtest:v2:2025-11-04:2026-11-03", "running")
+    if state is None:
+        path = job.maintenance_path(tmp_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{not json", encoding="utf-8")
+    else:
+        _marker(tmp_path, **state)
+    result = schedule_runs.close_abandoned_backtests_at_daily_start(tmp_path)
+    assert result["status"] == "skipped" and result["reason"] == "maintenance"
+    assert _statuses(factory, live) == ["running"]
+
+
+def test_a_failure_to_close_is_reported_and_does_not_raise(
+    factory, tmp_path, monkeypatch
+):
+    from worker import schedule_runs
+
+    def broken(*_args, **_kwargs):
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(pipeline, "close_abandoned_backtests", broken)
+    result = schedule_runs.close_abandoned_backtests_at_daily_start(tmp_path)
+    assert result == {
+        "status": "failed",
+        "error": "RuntimeError: database is locked",
+    }
+
+
+def test_the_summary_names_when_a_run_started(factory):
+    # The research page shows a running run's start (#581); stored naive UTC.
+    with factory() as db:
+        killed = _run(db, "technical-backtest:v2:2025-11-04:2026-11-03", "running")
+        summary = pipeline.summarize_backtest(db, killed)
+    assert summary["run"]["started_at"] == "2026-11-04T13:54:00+00:00"
+    assert summary["run"]["finished_at"] is None
+
+
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux"), reason="_MarkerLock is a no-op off Linux"
+)
+def test_a_marker_lock_held_elsewhere_reports_failed_and_leaves_the_rows(
+    factory, tmp_path, monkeypatch
+):
+    # Another holder keeps the marker lock past the timeout: nothing is closed, the
+    # daily goes on and the next one tries again (review 6745932189).
+    from worker import job, schedule_runs
+
+    with factory() as db:
+        live = _run(db, "technical-backtest:v2:2025-11-04:2026-11-03", "running")
+    monkeypatch.setattr(job, "MAINTENANCE_LOCK_TIMEOUT_SECONDS", 0.2)
+    with job._MarkerLock(tmp_path):
+        result = schedule_runs.close_abandoned_backtests_at_daily_start(tmp_path)
+    assert result["status"] == "failed"
+    assert result["error"].startswith("TimeoutError: ")
+    assert _statuses(factory, live) == ["running"]

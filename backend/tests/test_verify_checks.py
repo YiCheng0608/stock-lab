@@ -1606,11 +1606,11 @@ def test_s11_passes_on_the_candidate_verdict(tmp_path):
         "candidate": {"rank": 1, "total_score": 0.814, "strategy": "pullback_v1"},
         "strategies": [OBSERVED_ROW, PASSED_ROW],
     }
-    page = _summary_page("可買", "每日候選第 1 名 · 總分 81 · 回踩條件")
+    page = _summary_page("條件成立", "每日候選第 1 名 · 總分 81 · 回踩條件")
     result = _s11(
         tmp_path, _stock_payload(board, {"action_state": "conditional_entry"}), page
     )
-    assert "摘要卡 `可買`：`每日候選第 1 名 · 總分 81 · 回踩條件`" in result
+    assert "摘要卡 `條件成立`：`每日候選第 1 名 · 總分 81 · 回踩條件`" in result
 
 
 def test_s11_reads_the_gap_reasons_and_the_primary_reason(tmp_path):

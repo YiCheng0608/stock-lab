@@ -109,6 +109,12 @@ export function backtestTrackingLabel(version: string | null | undefined): strin
   return `追蹤口徑 ${version || '未記錄'}`
 }
 
+// Issue 581: a running backtest names when it began, so one that has run for a day reads as such; no guess that it stopped.
+export function backtestStartedText(run: { status: string; started_at?: string | null }): string | null {
+  if (run.status !== 'running') return null
+  return `開始於 ${(run.started_at && formatTaipeiMinute(run.started_at)) || '未提供'}`
+}
+
 export function productTimeRoleLabel(role: string): string {
   return PRODUCT_TIME_ROLE_LABELS[role] ?? '時間'
 }

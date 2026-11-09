@@ -2274,7 +2274,11 @@ def summary_verdict(payload: dict) -> tuple[str, str | None]:
     if candidate:
         strategy = CANDIDATE_STRATEGY.get(candidate.get("strategy"), "策略條件")
         score = round(candidate["total_score"] * 100)
-        return "可買", f"每日候選第 {candidate['rank']} 名 · 總分 {score} · {strategy}"
+        # 條件成立, not 可買: 今日可買 is not a recommendation (#581).
+        return (
+            "條件成立",
+            f"每日候選第 {candidate['rank']} 名 · 總分 {score} · {strategy}",
+        )
     if state == "hold_observe":
         return "持倉觀察", None
     if state == "manual_review":
