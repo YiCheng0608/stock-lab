@@ -97,7 +97,9 @@ JOB_COMMANDS = {
 # Jobs that record a skip (low_memory, git_busy, already_running) in the database:
 # daily in schedule_runs, us as a skipped us_index_collect run (#568 AC-3).
 RECORDS_SKIPS = ("daily", "us")
-DEFAULT_MIN_FREE_MEMORY_GB = 8.0
+# The scheduled daily's threshold (serve passes 2, news 1): a manual run without the
+# option has to start on the Docker VM, whose total memory is about 8.1 GB (#574).
+DEFAULT_MIN_FREE_MEMORY_GB = 2.0
 DEFAULT_LOG_RETENTION_DAYS = 90
 LOCK_SKIP_REASON = "already_running"
 # `lock`: exit code when another process holds the lock (EX_TEMPFAIL).
@@ -769,7 +771,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "--min-free-memory-gb",
         type=float,
         default=DEFAULT_MIN_FREE_MEMORY_GB,
-        help="可用實體記憶體低於此值記 low_memory（預設 8）",
+        help="可用實體記憶體低於此值記 low_memory（預設 2）",
     )
     parser.add_argument(
         "--time-limit-minutes",
