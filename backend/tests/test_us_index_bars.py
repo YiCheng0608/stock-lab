@@ -336,6 +336,23 @@ def test_a_fixture_adapter_without_a_fred_fetcher_asks_nothing(collect_db):
         assert run.metadata_json["us_index_daily_bars"] == {}
 
 
+def test_the_production_adapter_never_asks_fred(monkeypatch):
+    # #571: the daily collect is Taiwan only; US indexes have their own job (#568).
+    asked: list[str] = []
+    monkeypatch.setattr(us, "fetch_csv", lambda url: asked.append(url))
+
+    adapter = sources.OfficialMarketDataAdapter()
+
+    assert adapter.us_index_fetcher is None
+    assert (
+        pipeline.prefetch_us_index_series(
+            None, COLLECT_DAY, adapter.us_index_fetcher, None, [], no_data=False
+        )
+        is None
+    )
+    assert asked == []
+
+
 def test_a_database_error_in_the_us_step_leaves_the_collect_committed(
     collect_db, monkeypatch
 ):
