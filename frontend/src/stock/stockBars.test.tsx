@@ -61,6 +61,9 @@ check(nullReasonText('missing_ohlc', { interval: 'day' }) === '來源有一天�
 // Volume units (Issue 552, PR 553 review): stocks in 張, an index in 億股, TX in 口; the close-only TAIEX rows unverified.
 check(volumeKind(['twse']) === 'lots' && volumeKind(['twse_index_ohlcv', 'tpex_index_ohlcv']) === 'index_shares' && volumeKind(['taifex_daily_futures']) === 'contracts' && volumeKind(['twse_index']) === 'unverified' && volumeKind(['twse', 'twse_index_ohlcv']) === 'unverified', 'volumeKind by source')
 check(formatBarVolume({ ...tradedBar('2026-11-06', 39701.64, 1), volume: 19_339_729_647, source: 'twse_index_ohlcv' }) === '193.40' && formatBarVolume({ ...tradedBar('2026-11-06', 39786, 1), volume: 143277, source: 'taifex_daily_futures' }) === '143,277' && formatBarVolume({ ...tradedBar('2026-11-06', 304, 1), volume: null, source: 'tpex_index_ohlcv' }) === '', 'formatBarVolume: 億股, 口, empty without a volume')
+// FinMind's US indexes (Issue 568): member shares in 億股 like the Taiwan indexes; SOX has no volume (NULL), so empty.
+check(volumeKind(['finmind_us_index']) === 'index_shares' && volumeKind(['fred_close']) === 'unverified' && volumeKind(['finmind_us_index', 'twse']) === 'unverified', 'volumeKind: FinMind US indexes in 億股')
+check(formatBarVolume({ ...tradedBar('2026-11-06', 7376.86, 1), volume: 5_701_900_000, source: 'finmind_us_index' }) === '57.02' && formatBarVolume({ ...tradedBar('2026-11-06', 9390.25, 1), volume: null, source: 'finmind_us_index' }) === '', 'formatBarVolume: S&P 500 in 億股, SOX empty')
 check(compactCount(9999) === '9,999' && compactCount(52_000) === '5.2萬' && compactCount(1_234_567) === '123.5萬' && compactCount(320_000_000) === '3.2億', 'volume axis labels fit the gutter (萬／億)')
 check(priceDigits(39786, 'futures') === 0, 'TX is in whole points')
 const allMa = new Set<MaField>(MA_LINES.map((line) => line.field))

@@ -84,6 +84,9 @@ export const FUTURES_BAR_SOURCE = 'taifex_daily_futures'
 // The US index bars: FinMind since Issue 568; FRED's close-only rows (Issue 547), Federal Reserve Bank of St. Louis.
 export const FINMIND_US_INDEX_SOURCE = 'finmind_us_index'
 export const FRED_BAR_SOURCE = 'fred_close'
+// Sources whose volume is an index's member shares (億股): the Taiwan index reports and FinMind's US indexes
+// (Issue 568 decision 6729561612; a vendor's sum over the members, not comparable across indexes).
+export const INDEX_SHARE_SOURCES: ReadonlySet<string> = new Set([...INDEX_BAR_SOURCES, FINMIND_US_INDEX_SOURCE])
 
 export function sourceName(source: string): string {
   if (source === 'twse' || source === 'twse_index' || source === 'twse_index_ohlcv') return '臺灣證券交易所'
@@ -320,7 +323,7 @@ export const VOLUME_UNITS: Record<VolumeKind, string> = { lots: '張', index_sha
 export function volumeKind(sources: readonly string[]): VolumeKind {
   if (!sources.length) return 'unverified'
   if (sources.every(isVerifiedShareSource)) return 'lots'
-  if (sources.every((source) => INDEX_BAR_SOURCES.has(source))) return 'index_shares'
+  if (sources.every((source) => INDEX_SHARE_SOURCES.has(source))) return 'index_shares'
   if (sources.every((source) => source === FUTURES_BAR_SOURCE)) return 'contracts'
   return 'unverified'
 }
