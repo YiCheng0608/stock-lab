@@ -2447,8 +2447,8 @@ def test_the_last_two_us_runs_failing_are_reported_once_a_day(wd):
     result = wd.run("--dry-run")
     assert "anomaly_planned key=us_failed " in result.stdout
     assert "最近 2 次都沒有成功（exit 1 2）" in result.stdout
-    # The manual rerun it suggests passes the memory threshold, or the job's 8 GB
-    # default skips it (#568 review item 2).
+    # The manual rerun it suggests names the memory threshold of the scheduled us
+    # job (2 GB) instead of leaning on the job's default (#568 review item 2, #574).
     assert "job us --trigger manual --min-free-memory-gb 2" in result.stdout
     wd.run()
     wd.run(now=NIGHT + 15 * 60)
