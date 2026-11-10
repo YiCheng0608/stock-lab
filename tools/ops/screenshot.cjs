@@ -25,9 +25,10 @@ const USAGE = `usage: node tools/ops/screenshot.cjs --url <page> --out <dir> [op
 
 Writes <out>/<name>-<width>.png and <out>/<name>-<width>.txt and prints one JSON line per
 width: {"url","finalUrl","width","ready","png","txt","scrollWidth","clientWidth","overflow",
-"candidateRows","consoleErrors","httpErrors","missingClicks"} (candidateRows: per shown today-list
-row, its rank, the number block's scroll and client width, and the number cells the AI button
-covers or the row's edge cuts). Exit 0 when every width became ready, 1 otherwise, 2 on usage.`
+"candidateRows","consoleErrors","httpErrors","httpErrorCount","missingClicks"} (candidateRows: per
+shown today-list row, its rank, the number block's scroll and client width, and the number cells the
+AI button covers or the row's edge cuts; null when that probe throws. httpErrors lists the first 50
+failed responses, httpErrorCount counts all of them). Exit 0 when every width became ready, 1 otherwise, 2 on usage.`
 
 // Phone widths use mobile emulation; heights are the viewport before the full-page capture.
 const MOBILE_MAX_WIDTH = 600
@@ -41,6 +42,7 @@ const STABLE_POLLS = 3
 const LOADING_SELECTOR = '.skeleton, [aria-busy="true"]'
 // The app ships no favicon; its 404 is not a page failure.
 const IGNORED_HTTP = /\/favicon\.ico(\?|$)/
+const HTTP_ERRORS_SHOWN = 50
 
 function parseArgs(argv) {
   const options = { widths: [1280, 390], timeoutMs: 60000, clicks: [] }
@@ -198,8 +200,9 @@ const READY_PROBE = (waitFor) => `(() => {
 // The today list's rows (Issue 608): a clipped or covered number leaves the page width alone (the list's
 // overflow: hidden cuts it), so T1's overflow cannot see it. Per shown row: the number block's scroll and client
 // width, the number labels and values the AI button covers, and the ones past the row's left or right edge.
-// Empty when the page has no candidate row.
-const CANDIDATE_ROWS_PROBE = `(() => {
+// Empty when the page has no candidate row; null when the probe throws (Issue 609), so one bad row cannot fail
+// the whole capture: T17 judges a missing measurement as a failure.
+const CANDIDATE_ROWS_PROBE = `(() => { try {
   const box = (el) => el.getBoundingClientRect()
   const label = (el) => (el.tagName === 'DT' ? 'dt ' : 'dd ') + el.textContent.replace(/\\s+/g, ' ').trim()
   return Array.from(document.querySelectorAll('.candidate-row')).filter((row) => !row.hidden).map((row) => {
@@ -221,7 +224,7 @@ const CANDIDATE_ROWS_PROBE = `(() => {
       clipped: clipped.map(label),
     }
   })
-})()`
+} catch (error) { return null } })()`
 
 // Ready: no loading marker, no request in flight (the navbar date badge has no skeleton).
 async function waitReady(cdp, watch, waitFor, timeoutMs) {
@@ -284,7 +287,9 @@ async function captureWidth(cdp, options, width, watch) {
     overflow: metrics.scrollWidth > metrics.clientWidth,
     candidateRows: metrics.candidateRows,
     consoleErrors: watch.consoleErrors.slice(0, 10),
-    httpErrors: watch.httpErrors.slice(0, 10),
+    // The list is capped; the count tells page_checks.py whether it saw every failed response (Issue 609).
+    httpErrors: watch.httpErrors.slice(0, HTTP_ERRORS_SHOWN),
+    httpErrorCount: watch.httpErrors.length,
     missingClicks,
   }
 }
@@ -385,4 +390,4 @@ if (require.main === module) {
   main(process.argv.slice(2)).then((code) => { process.exitCode = code })
 }
 
-module.exports = { parseArgs, defaultName, findBrowser, browserArgs, viewport, USAGE }
+module.exports = { parseArgs, defaultName, findBrowser, browserArgs, viewport, CANDIDATE_ROWS_PROBE, USAGE }

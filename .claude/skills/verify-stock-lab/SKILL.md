@@ -126,7 +126,9 @@ dc run --rm --no-deps -v "$(git rev-parse --git-common-dir):/repo.git:ro" -v "$V
   --api "http://127.0.0.1:$API_PORT" --web "http://127.0.0.1:$WEB_PORT" > "$V/logs/checks.log" 2>&1
 ```
 
-約 3～5 分鐘。exit 0 沒有失敗（可能有無法判定）、1 有失敗、2 是 features 檔與程式不一致（加了 `--g7` 而前置不符也是 2；不跑檢查；features 不一致時五個導覽判無法判定並附 stderr）。輸出：`summary.md`（開頭是程式版本、個股 `E`／`S` 的來源、三態計數與人工檢查樣本，接著每頁每條檢查的三態結果與證據）、`results.json`、`api/`、`shots/`、`manual/`（人工檢查樣本）。
+約 3～5 分鐘。exit 0 沒有失敗（可能有無法判定）、1 有失敗、2 是 features 檔與程式不一致（加了 `--g7` 而前置不符也是 2；不跑檢查；features 不一致時五個導覽判無法判定並附 stderr）。輸出：`summary.md`（開頭是程式版本、個股 `E`／`S` 的來源、截圖並行數、三態計數、API 有 5xx 時的環境段落與人工檢查樣本，接著每頁每條檢查的三態結果與證據）、`results.json`、`environment.json`、`api/`、`shots/`、`manual/`（人工檢查樣本）。
+
+真資料模式不加 `--jobs` 時一次只開 1 個瀏覽器（`--fixture` 是 4）。**有其他長時間容器在跑時**（回測、另一個任務的 rebuild 等，先 `docker stats --no-stream` 看 CPU）不要加大 `--jobs`：#606 在另一個容器占滿一顆 CPU 時用 `--jobs 4`，API 連線池逾時 35 次、G1／S1／A1 失敗，同一份副本 `--jobs 1` 311 秒全過。API 仍回 5xx 時程式會重截並直接 GET 確認，記成「無法判定（環境）」而不是失敗（[三態與上游](features/README.md#三態與上游)）；summary 開頭的環境段落有 URL 與次數，原因類別選工具缺口，等主機空下來再跑一次。
 
 ### 3. 人工檢查與判讀
 
@@ -140,7 +142,7 @@ dc run --rm --no-deps -v "$(git rev-parse --git-common-dir):/repo.git:ro" -v "$V
 
 - 比對 API 字串與頁面文字前，兩邊都把空白正規化：換行（`\r`、`\n`）、全形空白（U+3000）、不換行空白（U+00A0）等 Unicode 空白與連續半形空白換成一個半形空白、去頭尾空白（瀏覽器的頁面文字會改寫空白）。tab 不動：表格列以 tab 分欄，檢查裡的 `\t` 就是 tab。
 - 「下一行」指下一個非空白行（頁面文字有很多空行）。
-- 截圖 JSON 的 `ready` 為 false、`missingClicks` 非空，或該頁依賴的 API 非 200 → 依賴它的檢查判「無法判定」（不是失敗），原因寫哪個 URL。
+- 截圖 JSON 的 `ready` 為 false、`missingClicks` 非空，或該頁依賴的 API 非 200 → 依賴它的檢查判「無法判定」（不是失敗），原因寫哪個 URL；API 5xx 是否算環境見[三態與上游](features/README.md#三態與上游)。
 - 頁面文字與 API／DB 不一致 → 失敗，證據寫兩邊的值。
 - 無資料時檢查的是空狀態文案，不是無法判定。
 - 日期寫法：`D` 為 `YYYY-MM-DD`，`D/` 為同一天的 `YYYY/MM/DD`。
