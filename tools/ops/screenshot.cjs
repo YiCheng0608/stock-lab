@@ -25,7 +25,9 @@ const USAGE = `usage: node tools/ops/screenshot.cjs --url <page> --out <dir> [op
 
 Writes <out>/<name>-<width>.png and <out>/<name>-<width>.txt and prints one JSON line per
 width: {"url","finalUrl","width","ready","png","txt","scrollWidth","clientWidth","overflow",
-"consoleErrors","httpErrors","missingClicks"}. Exit 0 when every width became ready, 1 otherwise, 2 on usage.`
+"candidateRows","consoleErrors","httpErrors","missingClicks"} (candidateRows: per shown today-list
+row, its rank, the number block's scroll and client width, and the number cells the AI button
+covers or the row's edge cuts). Exit 0 when every width became ready, 1 otherwise, 2 on usage.`
 
 // Phone widths use mobile emulation; heights are the viewport before the full-page capture.
 const MOBILE_MAX_WIDTH = 600
@@ -193,6 +195,34 @@ const READY_PROBE = (waitFor) => `(() => {
   return true
 })()`
 
+// The today list's rows (Issue 608): a clipped or covered number leaves the page width alone (the list's
+// overflow: hidden cuts it), so T1's overflow cannot see it. Per shown row: the number block's scroll and client
+// width, the number labels and values the AI button covers, and the ones past the row's left or right edge.
+// Empty when the page has no candidate row.
+const CANDIDATE_ROWS_PROBE = `(() => {
+  const box = (el) => el.getBoundingClientRect()
+  const label = (el) => (el.tagName === 'DT' ? 'dt ' : 'dd ') + el.textContent.replace(/\\s+/g, ' ').trim()
+  return Array.from(document.querySelectorAll('.candidate-row')).filter((row) => !row.hidden).map((row) => {
+    const nums = row.querySelector('.candidate-row-nums')
+    const toggle = row.querySelector('.candidate-ai-toggle')
+    const cells = nums ? Array.from(nums.querySelectorAll(':scope > div > dt, :scope > div > dd')) : []
+    const edge = box(row)
+    const t = toggle ? box(toggle) : null
+    const covered = t ? cells.filter((cell) => {
+      const c = box(cell)
+      return Math.min(c.right, t.right) - Math.max(c.left, t.left) > 0.5 && Math.min(c.bottom, t.bottom) - Math.max(c.top, t.top) > 0.5
+    }) : []
+    const clipped = cells.filter((cell) => { const c = box(cell); return c.right > edge.right + 0.5 || c.left < edge.left - 0.5 })
+    return {
+      rank: Number(row.dataset.candidateRank),
+      numsScrollWidth: nums ? nums.scrollWidth : null,
+      numsClientWidth: nums ? nums.clientWidth : null,
+      covered: covered.map(label),
+      clipped: clipped.map(label),
+    }
+  })
+})()`
+
 // Ready: no loading marker, no request in flight (the navbar date badge has no skeleton).
 async function waitReady(cdp, watch, waitFor, timeoutMs) {
   const deadline = Date.now() + timeoutMs
@@ -230,6 +260,7 @@ async function captureWidth(cdp, options, width, watch) {
     scrollHeight: document.documentElement.scrollHeight,
     text: document.body ? document.body.innerText : '',
     finalUrl: location.href,
+    candidateRows: ${CANDIDATE_ROWS_PROBE},
   })`)
   const shot = await cdp.send('Page.captureScreenshot', {
     format: 'png',
@@ -251,6 +282,7 @@ async function captureWidth(cdp, options, width, watch) {
     scrollWidth: metrics.scrollWidth,
     clientWidth: metrics.clientWidth,
     overflow: metrics.scrollWidth > metrics.clientWidth,
+    candidateRows: metrics.candidateRows,
     consoleErrors: watch.consoleErrors.slice(0, 10),
     httpErrors: watch.httpErrors.slice(0, 10),
     missingClicks,

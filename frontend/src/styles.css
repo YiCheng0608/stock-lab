@@ -1007,18 +1007,25 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .candidates-head .badge { padding: 2px 8px; font-size: var(--text-xs); }
   .candidate-notes { order: 9; flex: 1 1 100%; line-height: 1.5; }
   .candidates-strategy-link { margin-left: auto; font-size: var(--text-sm); }
-  /* A row on phones (#510): the body takes the whole width, the title stays one line (market · group cut first); the close,
-     RR and total go under the sentence with the close and its change side by side, the AI entry at the right of that line. */
-  .candidate-row-main { grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2) var(--space-3); padding: var(--space-row) var(--space-3); }
+  /* A row on phones (#510): the title stays one line (market · group cut first) with the AI entry at its right
+     (Issue 608: beside the numbers it covered the total), the sentence takes the whole width; the close, RR and
+     total go under it from the row's left edge with the close and its change side by side, and on a row too narrow
+     for them the RR's basis wraps inside its column rather than push the total past the row. The body's children
+     sit in the row's grid; the DOM order (and the page text) is unchanged. */
+  .candidate-row-main { grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1) var(--space-3); padding: var(--space-row) var(--space-3); }
   .candidate-row .candidate-entry, .candidate-row-levels { margin-left: 42px; }
   .candidate-row .entry-plan-line { line-height: 1.45; }
-  .candidate-row-body { grid-column: 1 / -1; }
+  .candidate-row-body { display: contents; }
+  .candidate-row-title { grid-column: 1; grid-row: 1; }
+  .candidate-row-body > :not(.candidate-row-title), .candidate-row-nums { grid-column: 1 / -1; }
   .candidate-row-title .candidate-rank { width: 34px; margin-right: var(--space-2); font-size: var(--text-sm); }
   .candidate-row-name { font-size: var(--text-base); }
-  .candidate-row-nums { gap: var(--space-4); padding-left: 42px; }
-  .candidate-row-nums > div { justify-items: start; }
+  .candidate-row-nums { gap: var(--space-3); margin-top: var(--space-1); }
+  .candidate-row-nums > div { flex: none; justify-items: start; }
+  .candidate-row-nums > .candidate-row-rr { flex: 0 1 auto; min-width: 0; }
+  .candidate-row-nums .candidate-rr-basis { white-space: normal; text-wrap: balance; }
   .candidate-row-close dd { display: flex; align-items: baseline; gap: var(--space-2); }
-  .candidate-ai-toggle { align-self: end; }
+  .candidate-ai-toggle { grid-column: 2; grid-row: 1; align-self: center; }
   .candidate-detail[open] { padding: var(--space-3); }
   .candidate-detail-body > .candidate-note { padding-left: var(--space-3); }
   .candidate-mini-levels { gap: var(--space-1) var(--space-2); margin-top: var(--space-1); }

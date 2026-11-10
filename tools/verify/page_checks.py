@@ -1254,6 +1254,42 @@ def t13(run: Run) -> str:
     return f"{len(items)} 張卡：`{ADD_PLAN}` {add}、`{TRACKED_PLAN}` {tracked} = open_plan_id 非 null"
 
 
+# Issue 608: at 390 the row's close, RR and total sat in a column narrower than they were, ran under the AI
+# button and past the list's overflow: hidden, with no page scroll for T1 to see. screenshot.cjs measures each
+# shown row (candidateRows, after every <details> is open, so the rest of the list too).
+@check("today", "T17")
+def t17(run: Run) -> str:
+    meta = run.shoot(TODAY)[390]
+    if not meta.get("ready"):
+        raise Undetermined(f"{TODAY.name}-390 未 ready {meta.get('error', '')}".strip())
+    payload = candidates(run)
+    items = (
+        [] if payload.get("status") == "not_computed" else payload.get("items") or []
+    )
+    rows = meta.get("candidateRows")
+    expect(rows is not None, f"{TODAY.name}-390 沒有 candidateRows 量測")
+    ranks = [row["rank"] for row in rows]
+    want = [item["rank"] for item in items]
+    expect(ranks == want, f"量到的候選列 {ranks}，預期依 items {want}")
+    problems = []
+    for row in rows:
+        where = f"#{row['rank']}"
+        if row["numsScrollWidth"] is None:
+            problems.append(f"{where} 沒有 .candidate-row-nums")
+        elif row["numsScrollWidth"] > row["numsClientWidth"]:
+            problems.append(
+                f"{where} 數字區 scrollWidth {row['numsScrollWidth']} > clientWidth {row['numsClientWidth']}"
+            )
+        if row["covered"]:
+            problems.append(f"{where} 被 AI 按鈕蓋住：{'、'.join(row['covered'])}")
+        if row["clipped"]:
+            problems.append(f"{where} 超出列邊被切：{'、'.join(row['clipped'])}")
+    expect(not problems, "；".join(problems))
+    if not rows:
+        return "沒有候選列"
+    return f"390：{len(rows)} 列數字區不溢出、不被 AI 按鈕蓋住、沒有超出列邊"
+
+
 # ---- T14 / T15: the today summary line and the market page's daily chart (Issue 549, UI_COPY_SPEC §11) ----
 
 SUMMARY_NAMES = (
