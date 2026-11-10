@@ -7,14 +7,14 @@ export const GLOSSARY: GlossaryTerm[] = [
     term_id: 'breakout', name: '突破', aliases: ['breakout'], category: 'strategy',
     plain_definition: '價格有效越過近期壓力或高點的條件式型態。',
     use: '描述可能在下一交易日執行的條件，不代表已成交。',
-    how_to_read: '同時看觸發價、失效價、目標與資料完整度。',
+    how_to_read: '同時看觸發價、停損、目標與資料完整度。',
     limitations: '資料不足時不會形成可執行結論。', related: ['rr', 't_plus_1'], version: '1.0.0',
   },
   {
     term_id: 'pullback', name: '回踩', aliases: ['pullback'], category: 'strategy',
     plain_definition: '價格回到預定支撐區、等待重新轉強的條件。',
     use: '標示回踩區間與重新站回的觀察條件。',
-    how_to_read: '區分回踩區、觸發價與失效價。',
+    how_to_read: '區分回踩區、觸發價與停損。',
     limitations: '不是價格一定反彈，也不是立即進場。', related: ['ma20', 'ma60'], version: '1.0.0',
   },
   // The two entry types a candidate's first line names (#491).
@@ -31,6 +31,14 @@ export const GLOSSARY: GlossaryTerm[] = [
     use: '適合趨勢向上、不想追高的股票；候選第一行寫明天收盤要落在的區間與量縮範圍。',
     how_to_read: '收盤落在區間內、成交量在範圍內（沒有爆量），才算成立；跌破停損價代表支撐失守。',
     limitations: '風險是趨勢轉弱：拉回可能變成下跌，跌破停損就出場；不保證會反彈。', related: ['pullback', 'breakout_entry', 'ma20', 'support'], version: '1.3.0',
+  },
+  // The strategy behind 今日可買 (#577); its name is defined once in strategy/strategyName.ts and this term spells it out for the API copy.
+  {
+    term_id: 'trend_chips', name: '順勢籌碼型', aliases: ['順勢籌碼', 'trend chips'], category: 'strategy',
+    plain_definition: '目前今日可買名單用的策略：只做多頭趨勢的股票，而且要族群強、法人不賣、融資不過熱。',
+    use: '說明名單怎麼從資料得到：突破型或回踩型的價量條件成立，再通過族群、法人、融資三個確認條件，最後依評分排序；策略說明頁逐項列出門檻與權重。',
+    how_to_read: '名單裡的股票都通過這套固定規則；規則只看價量、族群、法人與融資，大盤好壞目前不影響判斷。',
+    limitations: '只是篩選與排序的規則，不代表勝率或預期報酬；資料不足的股票不列入，不以 0 補。', related: ['breakout_entry', 'pullback_entry', 'candidate_score'], version: '1.0.0',
   },
   {
     term_id: 'ma20', name: 'MA20', aliases: ['20 日均線'], category: 'technical',
@@ -63,16 +71,16 @@ export const GLOSSARY: GlossaryTerm[] = [
   {
     term_id: 'target', name: '目標價', aliases: ['target_1', 'target_2', '目標一', '目標二'], category: 'strategy',
     plain_definition: '規則先算好的兩個價格目標：目標一較近，RR 與追蹤的「達標」都以它計算；目標二較遠，是延伸參考。',
-    use: '和失效價一起檢查風險報酬，不是保證價格。',
+    use: '和停損一起檢查風險報酬，不是保證價格。',
     how_to_read: '只有價位與基準完整且 RR 達門檻時才顯示為有效。',
     limitations: '不代表一定會到達，也不包含交易成本以外的所有風險。', related: ['support', 'rr'], version: '1.2.0',
   },
   {
-    term_id: 'support', name: '停損／條件失效價', aliases: ['support', 'invalid_price', 'stop_price', '支撐', '失效價', '條件失效'], category: 'strategy',
-    plain_definition: '價格跌破後，原本的研究條件（突破或回踩）不再成立的界線，也就是條件失效；候選卡的「停損」就是這個價。',
+    term_id: 'support', name: '停損', aliases: ['support', 'invalid_price', 'stop_price', '支撐', '條件失效價', '失效價', '條件失效'], category: 'strategy',
+    plain_definition: '價格跌破後，原本的研究條件（突破或回踩）不再成立的界線，所以也叫條件失效價；候選卡與追蹤回看卡的「停損」就是這個價。',
     use: '用來界定策略失效與持倉風險。',
-    how_to_read: '規則算出的失效價和庫存自己設定的停損價是不同欄位，前者是策略條件，後者是持倉設定。',
-    limitations: '遇停牌、除權息或無法比價時不能硬算觸發。', related: ['target', 'rr', 'incomparable'], version: '1.1.0',
+    how_to_read: '規則算出的停損（條件失效價）和庫存自己設定的停損價是不同欄位，前者是策略條件，後者是持倉設定。',
+    limitations: '遇停牌、除權息或無法比價時不能硬算觸發。', related: ['target', 'rr', 'incomparable'], version: '1.2.0',
   },
   {
     term_id: 'entry_zone', name: '進場區', aliases: ['entry_zone', 'entry'], category: 'strategy',

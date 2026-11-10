@@ -5,7 +5,7 @@
 
 ## 目標
 
-用最少的角色與步驟把 ROADMAP 的 V1 做出來：每個任務一個 Issue、一個 worktree、一個 PR，CI 通過並經 review 後合併。流程服務產品，不反過來。
+用最少的角色與步驟推進 ROADMAP 與 GitHub milestone 上的現行工作（V1 已完成，見 [ROADMAP](docs/ROADMAP.md#v1-已完成)）：每個任務一個 Issue、一個 worktree、一個 PR，CI 通過並經 review 後合併。流程服務產品，不反過來。
 
 ## 工具
 
@@ -19,8 +19,8 @@
 
 | 角色 | 預設模型／effort | 做什麼 |
 | --- | --- | --- |
-| 統籌 | `claude-opus-5-5`／`medium`，`--autocompact 400k` | 同時只有一個，一律由 agent 依 [COORDINATOR](docs/COORDINATOR.md#統籌-session)以 Orca 開啟：現任統籌自行換手；沒有統籌時使用者對任一 Claude session 說「開統籌」，由它開。拆任務、建 Issue、派工、review、合併、更新 ROADMAP 與文件、回報進度；使用者不在時依[無人值守運作](docs/COORDINATOR.md#無人值守運作)持續推進。 |
-| 工程師 | `claude-opus-5-5`／`high`（簡單任務可用 `claude-sonnet-5-5`／`xhigh`） | 每個任務一個 session，在自己的 worktree 實作、自測、寫文件、開 PR、處理 review 與 CI。 |
+| 統籌 | `claude-fable-5-2`／`medium`，`--autocompact 400k` | 同時只有一個，一律由 agent 依 [COORDINATOR](docs/COORDINATOR.md#統籌-session)以 Orca 開啟：現任統籌自行換手；沒有統籌時使用者對任一 Claude session 說「開統籌」，由它開。拆任務、建 Issue、派工、review、合併、更新 ROADMAP 與文件、回報進度；使用者不在時依[無人值守運作](docs/COORDINATOR.md#無人值守運作)持續推進。 |
+| 工程師 | `claude-opus-5-5`／`medium` | 每個任務一個 session，在自己的 worktree 實作、自測、寫文件、開 PR、處理 review 與 CI。 |
 
 - 不設常駐 QA、文件、索引／Git 角色。需要獨立驗證時由統籌在 PR 上跑 `/code-review` 或另開一個 review session，見[工作手冊](docs/WORKFLOW.md#review-與合併)。
 - 統籌可以自己當工程師做小任務；大任務或可並行的任務派給工程師 session。
@@ -28,14 +28,14 @@
 
 ## 任務生命週期
 
-1. **建 Issue**：目標、範圍與不做事項、3～5 條可驗收的 AC、依賴、對應 ROADMAP 里程碑；套 V1 milestone。要不要建 Issue 依工作手冊的[分流](docs/WORKFLOW.md#分流)。
+1. **建 Issue**：目標、範圍與不做事項、3～5 條可驗收的 AC、依賴、對應里程碑與依據；套對應的 milestone。要不要建 Issue 依工作手冊的[分流](docs/WORKFLOW.md#分流)。
 2. **開 worktree**：以 Orca 從最新 `origin/master` 建 `task/<issue>-<slug>`，啟動工程師 session 並送任務全文。
 3. **實作與自測**：工程師在 worktree 完成程式、測試與文件；跑後端 `pytest`、`ruff`、前端測試與 build（見[工作手冊](docs/WORKFLOW.md#本機檢查)）。
 4. **PR**：描述做了什麼、怎麼驗、未做什麼；`Closes #<issue>`。CI 必須綠。
 5. **Review 與合併**：統籌 review（必要時獨立 review），以 merge commit 合併；不 squash／rebase、不直接 push master。
 6. **結案**：合併後 master CI 綠即關 Issue、移除 worktree；遠端 branch 由 GitHub 自動刪。master CI 紅就先修，不開新功能。
 
-並行以不互改同一組檔案為原則，建議同時進行的任務不超過 3 個；「做完、只等合併」的任務（PR CI 綠、review 完、工程師不再改）不算在內（使用者 2026-10-26 決定）。衝突由後合併者在自己的 branch 解決，不全選一方。
+並行以不互改同一組檔案為原則，同時進行的任務以 3 個為上限（並行名額，統籌有空額就派下一張）；「做完、只等合併」的任務（PR CI 綠、review 完、工程師不再改）不算在內（使用者 2026-10-26 決定）；只剩等外部時點的實測或抽樣、工程師不再改程式的任務也不算（使用者 2026-11-09 決定，#1 [6728938283](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6728938283)）。衝突由後合併者在自己的 branch 解決，不全選一方。
 
 ## 工程原則
 

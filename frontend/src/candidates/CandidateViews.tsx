@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom'
 import { Term } from '../components/Term'
 import { Badge, Card, DataTable, DateBadge, EmptyState, Skeleton, cx, type Column } from '../components/ui'
 import { AiBadge } from '../news/NewsViews'
+import { STRATEGY_LINK_LABEL } from '../strategy/strategyName'
 import { AddPlanButton } from '../tracking/TrackingViews'
 import type { CandidateComponent, CandidateComponentKey, CandidateItem, CandidateSubItem, CandidatesResponse } from '../types'
 import {
@@ -301,14 +302,14 @@ export function CandidatesSection({ data, loading, error }: { data: CandidatesRe
   const t1 = state?.kind === 'list' ? candidateT1Text(data?.trading_date) : null
   return (
     <section className="candidates-section" aria-labelledby="candidates-title">
-      {/* One head line (#510): title, date and count, the T+1 sentence and the disclaimer, 策略說明. */}
+      {/* One head line (#510): title, date and count, the T+1 sentence and the disclaimer, then the strategy name and 策略說明 (#577). */}
       <div className="candidates-head">
         <h2 id="candidates-title">今日可買</h2>
         {data && data.status !== 'not_computed' && (
           <span className="board-dates"><DateBadge date={formatDate(data.trading_date)} />{state?.kind === 'list' && <Badge>{data.candidate_count} 檔</Badge>}</span>
         )}
         <p className="small-note candidate-notes">{t1 && <span className="candidate-t1">{t1}</span>}<span className="candidate-disclaimer">{CANDIDATE_DISCLAIMER}。</span></p>
-        <Link className="text-link candidates-strategy-link" to="/strategy">策略說明 →</Link>
+        <Link className="text-link candidates-strategy-link" to="/strategy">{STRATEGY_LINK_LABEL}</Link>
       </div>
       {loading
         ? <Skeleton lines={4} label="今日可買載入中…" />

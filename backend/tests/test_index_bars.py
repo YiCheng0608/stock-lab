@@ -1032,13 +1032,13 @@ def test_the_near_month_rolls_on_the_third_wednesday(day, contract):
 def test_the_near_month_regular_row_is_read_around_the_roll():
     from worker.futures_bars import parse_near_month
 
-    before = parse_near_month(
-        payloads.taifex_report(date(2026, 10, 20)), requested_date=date(2026, 10, 20)
-    )
-    on = parse_near_month(
-        payloads.taifex_report(date(2026, 10, 21)), requested_date=date(2026, 10, 21)
-    )
+    before = parse_near_month(payloads.taifex_report(date(2026, 10, 20)))
+    on = parse_near_month(payloads.taifex_report(date(2026, 10, 21)))
 
+    assert (before.trading_date, on.trading_date) == (
+        date(2026, 10, 20),
+        date(2026, 10, 21),
+    )
     assert (before.contract_month, on.contract_month) == ("202610", "202611")
     # The regular-session row, not the after-hours one, the spread or MTX.
     assert (on.open, on.high, on.low, on.close, on.volume) == (
@@ -1051,13 +1051,14 @@ def test_the_near_month_regular_row_is_read_around_the_roll():
     assert (on.settlement_price, on.open_interest) == (24040.0, 80000)
 
 
-def test_a_report_of_another_session_is_rejected():
+def test_a_report_of_rows_of_two_sessions_is_rejected():
     from worker.futures_bars import parse_near_month
 
-    with pytest.raises(OfficialDataError, match="instead of 2026-11-09"):
-        parse_near_month(
-            payloads.taifex_report(date(2026, 11, 6)), requested_date=date(2026, 11, 9)
-        )
+    report = payloads.taifex_report(date(2026, 11, 6))
+    report[0]["Date"] = "20261109"
+
+    with pytest.raises(OfficialDataError, match="do not share one readable date"):
+        parse_near_month(report)
 
 
 def test_a_missing_tx_open_is_left_empty():
@@ -1066,7 +1067,7 @@ def test_a_missing_tx_open_is_left_empty():
     report = payloads.taifex_report(date(2026, 11, 6))
     report[0]["Open"] = "-"
 
-    bar = parse_near_month(report, requested_date=date(2026, 11, 6))
+    bar = parse_near_month(report)
 
     assert (bar.open, bar.high, bar.low, bar.close) == (None, None, None, 24050.0)
     assert bar.price_reason == "source_missing_ohlc"
@@ -1156,7 +1157,44 @@ def test_collect_upgrades_the_day_and_writes_the_tpex_index(collect_db):
         assert run.metadata_json["futures_daily_bars"]["counts"]["inserted"] == 1
 
 
+@pytest.mark.parametrize("snapshot", [True, False], ids=["snapshot", "historical"])
+def test_only_a_snapshot_collect_fills_the_tx_gaps(collect_db, snapshot):
+    """PR #589 review: catchup and backfill collect with snapshot_feeds=False and must not ask the site."""
+    with collect_db() as db:
+        # 09/03: a verified session before the collect day, without a TX row.
+        _seed_taiex(db, [date(2026, 9, 3)])
+        db.commit()
+    asked: list[str] = []
+
+    def get(request):
+        asked.append(request.month.label)
+        raise OfficialDataError("fixture: no site")
+
+    fetcher = IndexReportFetcher()
+    adapter = sources.OfficialMarketDataAdapter(
+        sources.TwseAdapter(fetcher, snapshot_feeds=snapshot),
+        sources.TpexAdapter(fetcher, snapshot_feeds=snapshot),
+        futures_history_get=get,
+    )
+
+    result = pipeline.collect(COLLECT_DAY, adapter=adapter)
+
+    assert result["status"] in ("success", "partial"), result
+    if snapshot:
+        assert asked == ["2026-09"]
+        assert result["futures_gap_fill"]["missing_dates"] == ["2026-09-03"]
+    else:
+        assert asked == [] and result["futures_gap_fill"] == {}
+    # Without a getter, a historical adapter never gets the site's default.
+    assert (
+        sources.OfficialMarketDataAdapter(snapshot_feeds=False).futures_history_get
+        is None
+    )
+
+
 def test_a_futures_report_of_another_day_is_a_noncore_warning(collect_db):
+    """Issue #586: the report's own session, when verified; 09/03 is not one here."""
+
     class Stale(IndexReportFetcher):
         def __call__(self, url, **kwargs):
             if url == sources.TAIFEX_DAILY_FUTURES_ENDPOINT:
@@ -1168,8 +1206,12 @@ def test_a_futures_report_of_another_day_is_a_noncore_warning(collect_db):
 
     assert result["status"] == "success", result
     assert [w.split(":")[0] for w in result["noncore_warnings"]] == [
-        "futures bars unavailable for TAIFEX TX"
+        "futures bars not yet published for TAIFEX TX 2026-09-04",
+        "futures bars skipped TAIFEX TX 2026-09-03",
     ]
+    # Fixture feeds: no gap fill, no request to the site.
+    assert result["futures_gap_fill"] == {}
+    assert result["futures_daily_bars"]["unverified_dates"] == ["2026-09-03"]
     with collect_db() as db:
         assert (
             db.scalar(

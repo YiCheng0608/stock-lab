@@ -28,7 +28,8 @@ export function stockVerdict(board: StrategyBoard | null | undefined, action: Ac
   if (action && state === 'reduce_exit') return { label: '持倉風險', tone: 'warning', reason: instruction(action) }
   if (board?.candidate) {
     const { rank, total_score: score, strategy } = board.candidate
-    return { label: '可買', tone: 'success', reason: `每日候選第 ${rank} 名 · 總分 ${formatCandidateScore(score)} · ${candidateStrategyLabel(strategy)}` }
+    // 條件成立, as the strategy board's 成立 and the conditional row below: 今日可買 is not a recommendation (Issue 581).
+    return { label: '條件成立', tone: 'success', reason: `每日候選第 ${rank} 名 · 總分 ${formatCandidateScore(score)} · ${candidateStrategyLabel(strategy)}` }
   }
   if (action && state === 'hold_observe') return { label: '持倉觀察', tone: 'primary', reason: instruction(action) }
   if (action && state === 'manual_review') return { label: '需人工判讀', tone: 'warning', reason: primaryReason(action) ?? instruction(action) }

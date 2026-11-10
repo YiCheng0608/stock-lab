@@ -7,7 +7,7 @@ import { isFiniteNumber } from '../stock/stockBars'
 import { StockBarsChart } from '../stock/StockBarsChart'
 import {
   EXCHANGES,
-  FRED_ATTRIBUTION,
+  US_ATTRIBUTION,
   INDEX_CHART_ID,
   INDEX_CHART_TITLE_ID,
   INDEX_SELECT_HINT,
@@ -188,7 +188,7 @@ function indexColumns(selected: string): ReadonlyArray<Column<TableRow>> {
     { key: 'pct', header: '漲跌幅', num: true, cellClassName: 'market-index-pct', cell: (item) => <PercentCell {...item} /> },
     { key: 'date', header: '資料日', cellClassName: 'market-index-date', cell: (item) => <DateCell {...item} /> },
     { key: 'ma60', header: '相對季線（MA60）', cellClassName: 'market-index-ma60', cell: (item) => <Ma60Cell {...item} /> },
-    { key: 'source', header: '來源', wideOnly: true, cellClassName: 'market-index-source', cell: ({ row, spec }) => row?.source?.label ?? (spec.group === 'us' ? 'FRED' : '—') },
+    { key: 'source', header: '來源', wideOnly: true, cellClassName: 'market-index-source', cell: ({ row, spec }) => row?.source?.label ?? (spec.group === 'us' ? 'FinMind' : '—') },
   ]
 }
 
@@ -252,11 +252,11 @@ function FuturesFooter({ data }: { data: StockBarsResponse | undefined }) {
   )
 }
 
-// A US chart: the FRED attribution and the series' copyright notice (FRED terms: keep the notices intact).
+// A US chart: the FinMind attribution and the index owner's copyright notice.
 export function UsChartFooter({ row }: { row: IndexRow | null }) {
   return (
     <div className="market-chart-footer" data-exchange="US">
-      <p>{FRED_ATTRIBUTION}</p>
+      <p>{US_ATTRIBUTION}</p>
       {row?.source?.copyright && <p>{row.source.copyright}</p>}
     </div>
   )

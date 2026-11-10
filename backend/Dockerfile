@@ -46,8 +46,10 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && npm install --global --no-fund --no-audit "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
     && npm cache clean --force
 
+# The release host fails now and then (HTTP error, curl exit 22: CI runs 42580184938 and
+# 42582891910 on 2026-11-09); retry before failing the whole build.
 RUN arch="$(dpkg --print-architecture)" \
-    && curl -fsSL -o /tmp/gh.tar.gz \
+    && curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o /tmp/gh.tar.gz \
         "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${arch}.tar.gz" \
     && tar -xzf /tmp/gh.tar.gz -C /tmp \
     && mv "/tmp/gh_${GH_VERSION}_linux_${arch}/bin/gh" /usr/local/bin/gh \

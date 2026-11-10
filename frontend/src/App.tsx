@@ -69,7 +69,7 @@ import { formatDay, formatTaipeiDay, formatTaipeiMinute } from './dates'
 import { noPreviousCloseText } from './marketChange'
 import { formatPortfolioValue, formatPositionValuation, formatLocalPositionValuation, formatPortfolioClose, formatQuoteRecord, portfolioValueFromText } from './portfolioValues'
 import { formatFixed, formatTableNumber, formatTableVolume, formatTableVolumeShares, formatTableChip,formatShareQuantity, formatPositionShares, positionQuantityFromText, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, type ShareUnit } from './units'
-import { backtestTrackingLabel, officialEventDisplayTitle, formatProductTimeRole, PRODUCT_TIME_NOTE, levelFieldLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, gapNotApplicable, incompleteActionLabel, staleCloseDateLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stockGroupLabel, type ProductQualityKind } from './presentation'
+import { backtestStartedText, backtestTrackingLabel, officialEventDisplayTitle, formatProductTimeRole, PRODUCT_TIME_NOTE, levelFieldLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, gapNotApplicable, incompleteActionLabel, staleCloseDateLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stockGroupLabel, type ProductQualityKind } from './presentation'
 import { Shell } from './components/Shell'
 import { Term } from './components/Term'
 import { Card, CardList, DataTable, EmptyState, Skeleton, Tabs, cx, tabId, tabPanelId, type Column } from './components/ui'
@@ -978,7 +978,7 @@ export function PortfolioSubsection() {
 
 function ResearchBacktestPage() {
   const query = useQuery<BacktestSummary>({ queryKey: ['backtest-summary'], queryFn: () => getBacktestSummary() })
-  return <QueryState loading={query.isLoading} error={query.error}>{query.data && <div className="page"><PageTitle eyebrow="研究詳細" title="技術回測" description="此頁只呈現固定規則的技術驗證；樣本不足時不輸出勝率或採用結論。" />{query.data.run ? <><div className="source-banner"><strong>{statusLabel(query.data.run.status)}</strong><span>資料截至 {formatTaiwanDateTime(query.data.run.data_as_of, true)}</span><QualityBadge status={query.data.run.assessment} /><span>可行動樣本 {query.data.run.zero_actionable_count}</span><span>{backtestTrackingLabel(query.data.run.tracking_version)}</span></div><BacktestTable groups={query.data.groups} /></> : <div className="empty panel">尚無回測紀錄。</div>}</div>}</QueryState>
+  return <QueryState loading={query.isLoading} error={query.error}>{query.data && <div className="page"><PageTitle eyebrow="研究詳細" title="技術回測" description="此頁只呈現固定規則的技術驗證；樣本不足時不輸出勝率或採用結論。" />{query.data.run ? <><div className="source-banner"><strong>{statusLabel(query.data.run.status)}</strong>{backtestStartedText(query.data.run) && <span>{backtestStartedText(query.data.run)}</span>}<span>資料截至 {formatTaiwanDateTime(query.data.run.data_as_of, true)}</span><QualityBadge status={query.data.run.assessment} /><span>可行動樣本 {query.data.run.zero_actionable_count}</span><span>{backtestTrackingLabel(query.data.run.tracking_version)}</span></div><BacktestTable groups={query.data.groups} /></> : <div className="empty panel">尚無回測紀錄。</div>}</div>}</QueryState>
 }
 
 function readMetadataRecord(value: unknown): Record<string, unknown> {

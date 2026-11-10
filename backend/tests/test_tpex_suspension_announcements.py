@@ -156,7 +156,7 @@ def test_independent_flags_and_multiple_dates_are_preserved(monkeypatch):
     adapter = sources.TpexAdapter(NoticeFetcher([{"SecuritiesCompanyCode": "7001"}]))
     real_fetch_bars = adapter.fetch_bars
 
-    def supplied_bars(symbols, start, end):
+    def supplied_bars(symbols, start, end, **_kwargs):
         bars, payloads = real_fetch_bars(symbols, DAY, DAY)
         # Represents a separately supported bar flag, not notice inference.
         return [replace(bar, is_suspended=bar.symbol == "00679B") for bar in bars] + [
@@ -164,7 +164,7 @@ def test_independent_flags_and_multiple_dates_are_preserved(monkeypatch):
         ], payloads
 
     monkeypatch.setattr(adapter, "fetch_bars", supplied_bars)
-    monkeypatch.setattr(adapter, "fetch_chips", lambda *args: ([], [], []))
+    monkeypatch.setattr(adapter, "fetch_chips", lambda *args, **_kwargs: ([], [], []))
     batch = adapter.fetch(date(2026, 9, 3), DAY)
     assert {
         (b.symbol, b.trading_date): b.is_suspended for b in _listed_bars(batch)

@@ -1515,3 +1515,34 @@ def test_collect_states_reads_the_catchup_rule_without_whole_metadata(backfill_e
         days[3]: "missing",  # never collected
         days[4]: "missing",  # one same-day no-data, unconfirmed
     }
+
+
+def test_targeted_backfill_defaults_to_the_historical_adapter(
+    backfill_env, monkeypatch
+):
+    """Issue #579: a backfill range that contains today reads the website reports.
+
+    The snapshot adapter would read today's TPEx OpenAPI tables (and the other
+    current-only feeds); backfill uses the historical one, like chunked_backfill
+    and catch-up.
+    """
+
+    built: list[dict] = []
+
+    class Recorder:
+        def __init__(self, **kwargs):
+            built.append(kwargs)
+            self.tpex = sources.TpexAdapter(
+                snapshot_feeds=kwargs.get("snapshot_feeds", True),
+                today=lambda: date(2026, 9, 8),
+            )
+
+        def fetch(self, start, end):
+            assert self.tpex.current_session(start, end) is None
+            return _batch_for(start)
+
+    monkeypatch.setattr(backfill, "OfficialMarketDataAdapter", Recorder)
+    day = date(2026, 9, 8)
+    result = backfill.targeted_backfill(day, day)
+    assert built == [{"snapshot_feeds": False}]
+    assert result["status"] in {"success", "partial"}

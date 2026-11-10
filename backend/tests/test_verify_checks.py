@@ -764,7 +764,7 @@ def test_t15_without_bars_needs_the_empty_copy(tmp_path):
 
 # ---- T16: the index table (Issue 564) ----
 
-FRED = "資料來源：FRED，Federal Reserve Bank of St. Louis（個人非商業使用）"
+FRED = "資料來源：FinMind（個人非商業使用）"  # page_checks.US_ATTRIBUTION (Issue 568)
 
 
 def _index(key, group, **extra):
@@ -1606,11 +1606,11 @@ def test_s11_passes_on_the_candidate_verdict(tmp_path):
         "candidate": {"rank": 1, "total_score": 0.814, "strategy": "pullback_v1"},
         "strategies": [OBSERVED_ROW, PASSED_ROW],
     }
-    page = _summary_page("可買", "每日候選第 1 名 · 總分 81 · 回踩條件")
+    page = _summary_page("條件成立", "每日候選第 1 名 · 總分 81 · 回踩條件")
     result = _s11(
         tmp_path, _stock_payload(board, {"action_state": "conditional_entry"}), page
     )
-    assert "摘要卡 `可買`：`每日候選第 1 名 · 總分 81 · 回踩條件`" in result
+    assert "摘要卡 `條件成立`：`每日候選第 1 名 · 總分 81 · 回踩條件`" in result
 
 
 def test_s11_reads_the_gap_reasons_and_the_primary_reason(tmp_path):

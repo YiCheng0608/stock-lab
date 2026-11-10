@@ -1426,8 +1426,8 @@ OVERVIEW_TITLE = "大盤概況"
 TW_GROUP_TITLE = "台股"
 US_GROUP_TITLE = "美股"
 US_TITLE = "美股（前一交易日）"  # US_SECTION_TITLE in market/marketOverview.ts
-# FRED_ATTRIBUTION in market/marketOverview.ts (FRED terms: personal, non-commercial use).
-FRED_ATTRIBUTION = "資料來源：FRED，Federal Reserve Bank of St. Louis（個人非商業使用）"
+# US_ATTRIBUTION in market/marketOverview.ts (FinMind, Issue 568: personal, non-commercial use).
+US_ATTRIBUTION = "資料來源：FinMind（個人非商業使用）"
 # INDEX_SPECS in market/marketOverview.ts: the row key -> (name shown, price decimals), in table order.
 INDEX_SPECS = {
     "taiex": ("加權指數", 2),
@@ -1560,7 +1560,7 @@ def t16(run: Run) -> str:
         )
         at = k
         found.append(f"`{line}`")
-    for line in (TAIFEX_ATTRIBUTION, FRED_ATTRIBUTION):
+    for line in (TAIFEX_ATTRIBUTION, US_ATTRIBUTION):
         expect(
             text.find(line, start) >= 0,
             f"`{INDEX_TABLE_TITLE}` 之後缺整行 `{line}`（資料說明）",
@@ -2274,7 +2274,11 @@ def summary_verdict(payload: dict) -> tuple[str, str | None]:
     if candidate:
         strategy = CANDIDATE_STRATEGY.get(candidate.get("strategy"), "策略條件")
         score = round(candidate["total_score"] * 100)
-        return "可買", f"每日候選第 {candidate['rank']} 名 · 總分 {score} · {strategy}"
+        # 條件成立, not 可買: 今日可買 is not a recommendation (#581).
+        return (
+            "條件成立",
+            f"每日候選第 {candidate['rank']} 名 · 總分 {score} · {strategy}",
+        )
     if state == "hold_observe":
         return "持倉觀察", None
     if state == "manual_review":

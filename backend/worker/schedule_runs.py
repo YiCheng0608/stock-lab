@@ -753,6 +753,45 @@ def _insert_skip(target: date, reason: str, trigger: str) -> dict[str, Any]:
         }
 
 
+def close_abandoned_backtests_at_daily_start(
+    data_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Close the canonical backtest runs no process holds any more (#581).
+
+    A canonical backtest runs only through ``worker.cli backtest`` holding
+    maintenance mode, and a daily skips while it is on; so with no maintenance
+    marker no canonical backtest is alive, and one still ``running`` was killed
+    (run 2286, OOM, stayed ``running`` until the next backtest, which never came).
+    The marker is read under its lock (``worker.job._MarkerLock``) and the rows
+    closed before it is let go, so no backtest can take the hold in between.
+    A marker (a backfill or backtest holding it, or on by hand) leaves them alone,
+    and research runs (``:research:`` keys) are never closed
+    (``pipeline.close_abandoned_backtests``).  A failure here never fails the
+    daily: it is reported in the result and the next daily tries again.
+    """
+
+    from app.config import DATA_DIR
+    from worker import job
+
+    folder = job.resolve_data_dir(str(data_dir or DATA_DIR))
+    try:
+        with job._MarkerLock(folder):
+            marker = job.maintenance_state(folder)
+            if marker:
+                return {
+                    "status": "skipped",
+                    "reason": "maintenance",
+                    "maintenance": marker.get("command") or marker.get("reason"),
+                }
+            with pipeline.SessionLocal() as db:
+                runs = pipeline.close_abandoned_backtests(
+                    db, pipeline.ABANDONED_AT_DAILY_START
+                )
+    except Exception as exc:  # noqa: BLE001 - reported, the daily goes on
+        return {"status": "failed", "error": f"{type(exc).__name__}: {exc}"}
+    return {"status": "checked", "runs": runs}
+
+
 def run_daily_job(
     end_date: date | None = None,
     *,
@@ -775,6 +814,8 @@ def run_daily_job(
         "schedule_run_id": run_id,
         "date": target.isoformat(),
         "trigger": trigger,
+        # Before any step: a backtest a dead process left running (#581).
+        "abandoned_backtests": close_abandoned_backtests_at_daily_start(),
     }
     summary_steps: dict[str, str] = {}
     if catchup_sessions > 0:

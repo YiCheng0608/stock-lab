@@ -1,7 +1,7 @@
 <!-- owns: 排程看門狗 -->
 # 排程看門狗
 
-`tools/ops/watchdog.sh`（bash）在 scheduler 容器由 serve 每小時 :15、:45 執行（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)；切換前是工作排程器的 `\stock-lab\watchdog`，每 15 分鐘），只檢查排程與資料不變量：以檔案與唯讀 DB 判定異常並在 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 留言「待使用者」，每個異常每台北日最多一則。不判定統籌是否在線、不開或喚醒統籌（統籌開啟見[統籌手冊](../COORDINATOR.md#統籌-session)，喚醒由 [統籌事件 monitor](MONITOR.md) 的事件 monitor 負責）。
+`tools/ops/watchdog.sh`（bash）在 scheduler 容器由 serve 每小時 :15、:45 執行（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)），只檢查排程與資料不變量：以檔案與唯讀 DB 判定異常並在 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 留言「待使用者」，每個異常每台北日最多一則。不判定統籌是否在線、不開或喚醒統籌（統籌開啟見[統籌手冊](../COORDINATOR.md#統籌-session)，喚醒由 [統籌事件 monitor](MONITOR.md) 的事件 monitor 負責）。
 
 - 判定時點（#466）：daily 每個交易日跑 21:30 與 23:00 兩次（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)），23:00 是 21:30 失敗或沒跑時的重試。以下三項 daily 檢查都從台北 23:10 起判定（23:00 那次已寫入日誌與 run 列），當晚只有 23:15、23:45 兩輪：21:30 失敗而 23:00 還會重試時不提早留言；23:15 時 23:00 的重試仍在跑，就留到 23:45 判定。
 - `daily`：週一至週五台北 23:10 後，當日 `logs/daily-YYYYMMDD.log` 不存在或沒有 `end` 列。21:30 那次在排程上限 80 分鐘內結束並寫 `end` 列；23:00 遇上仍在跑的 run 時，自己記 `already_running` 也寫 `end` 列。只有 23:00 的重試（或 serve 重啟時的補跑）是當天唯一一次、23:15 仍在跑時，這一項會在 23:15 留言。
@@ -27,6 +27,11 @@
 - `maintenance_long`（#468）：[維護模式](SCHEDULING.md#維護模式)的標記檔 `<data>/locks/maintenance` 在時，每輪記 `maintenance_on`（開始時間與時數）；開超過 12 小時（`MAINTENANCE_MAX_HOURS`）就留言請關掉，每台北日一則。開始時間取標記檔記的時間，讀不懂（或找不到 Python）時取檔案的修改時間。維護模式期間 daily、news 照樣寫日誌（skipped），所以 `daily` 的日誌檢查與下一條 `news` 不會因此留言。
 - `maintenance_expired`（#468 AC-5）：`logs/maintenance.log` 24 小時內有 `expired` 紀錄，也就是 serve 解除了一個心跳停了 10 分鐘以上的作業（回補或回測被 SIGKILL 或 OOM 結束，`finally` 沒有執行）的維護模式。留言寫出命令、PID、原因與停了幾分鐘；daily 與 news 已恢復，作業沒有跑完，要查它的輸出並決定是否重跑（回補以相同參數重跑會從 manifest 續做）。每台北日一則。
 - `news`：最新的 `logs/news-*.log` 已超過 6 小時（連續 3 次）沒有更新。
+- `us`（美股四檔，[#568](https://github.com/YiCheng0608/stock-lab/issues/568)；排程是週二至週六 06:30、09:30，見 [scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)）：
+  - `us_no_log`：最新的 `logs/us-*.log` 超過 4 天沒有更新。週六到下週二最長隔 3 天，再多留 1 天。
+  - `us_failed`：所有 `us-*.log` 裡最後 2 個 `end` 列的 exit 都不是 0（`partial` 是 2、`failed` 是 1）。job 被擋下（`skipped`）與 `already_complete` 都是 0，不算失敗。
+  - 每台北日各最多一則；還沒有任何 `us-*.log` 時不判定。
+  - 處置：查該日誌與 `/api/ingestion-runs?q=us_index_collect&include_metadata=true` 的 `series.<代號>.error`。FinMind 回 402（超過每小時上限）時等下一個時段；修好後用 `docker compose -p <P> exec scheduler python -m worker.cli job us --trigger manual --min-free-memory-gb 2` 補跑。
 - `monitor_stale`：事件 monitor 的 `logs/monitor-heartbeat.json`（`--monitor-dir` 給了就讀那個目錄的，scheduler 容器是 `/coordination`，#338）超過 10 分鐘沒有更新，或讀不出輪詢時間（[統籌事件 monitor](MONITOR.md)；monitor 每分鐘寫一次）；檔案不存在（monitor 尚未註冊）時不判定。心跳仍在更新、但記錄 gh 已連續 10 輪失敗（例如登入過期，佇列收不到 PR 與留言）時另以 `monitor_gh_failed` 留言，附第一次失敗的時間與最後的錯誤，請查 `gh auth status` 與 `gh api rate_limit`（帳號共用的 5000 次／小時可能已用完）。
 - `news_llm`：`stock.db` 最近 3 批判讀都是 `pending`；或 24 小時內最近 3 筆 `run_type=news_llm` 都是 `failed`（`running` 超過 90 分鐘也算）；或 news 日誌（今昨兩天的檔）24 小時內最後 3 個 `news_llm_exit=` 都是 `1`／`wrapper_error`（涵蓋表不存在等不寫 run 的失敗）。後兩者合為一則 `news_llm_failed` 留言；限 24 小時是為了 news 停擺後不再每天就舊失敗留言，停擺本身由上一條 `news` 判定。
 - `llm_auth`：24 小時內 news_llm 或 candidate_notes 最近一次 run 有 `claude -p` 認證失敗（`not_logged_in`）的批次，判定與處置見 [容器內的 claude 與 gh 認證（.env）](SETUP.md#容器內的-claude-與-gh-認證env)。
@@ -57,16 +62,6 @@ scheduler 容器的命令（在發佈 checkout 執行；`<P>` 是正式 compose 
 | 日誌 | `docker compose -p <P> exec scheduler tail -n 50 /data/logs/watchdog.log`；serve 的輸出是 `docker compose -p <P> logs scheduler` |
 | 停用／啟用 | 看門狗由 serve 排程：`docker compose -p <P> stop scheduler`／`start scheduler`（daily、news、monitor 一起停）；回補、回測起跑時自己開[維護模式](SCHEDULING.md#維護模式)，看門狗照常跑，不必停 |
 
-以下是工作排程器（切換前）的命令，在發佈 checkout 執行：
+工作排程器（切換前）的註冊與管理命令見 [Windows 工作排程器的看門狗](platform/windows.md#看門狗stock-labwatchdog)。
 
-| 動作 | 命令 |
-| --- | --- |
-| 預覽 | `powershell -ExecutionPolicy Bypass -File tools/ops/Register-Watchdog.ps1 -WhatIf` |
-| 註冊或更新 | `powershell -ExecutionPolicy Bypass -File tools/ops/Register-Watchdog.ps1`（`-DataDir`、`-PythonPath` 預設 `STOCK_DATA_DIR`、`.venv`；`-DryRun` 註冊只判定不留言的版本，用來以 `Start-ScheduledTask -TaskPath \stock-lab\ -TaskName watchdog` 驗證排程環境） |
-| 查詢 | `schtasks /query /tn "\stock-lab\watchdog" /v /fo list` |
-| 停用／啟用 | `Disable-ScheduledTask -TaskPath \stock-lab\ -TaskName watchdog`／`Enable-ScheduledTask ...` |
-| 移除 | `powershell -ExecutionPolicy Bypass -File tools/ops/Register-Watchdog.ps1 -Unregister` |
-| 手動判定 | `bash tools/ops/watchdog.sh --dry-run` |
-| 手動核對某交易日 | `python tools/ops/watchdog_helper.py data-check <stock.db> <YYYY-MM-DD> [--offline] [--all]`（唯讀，不記日誌、不留言） |
-
-看門狗一輪超過 10 分鐘時，serve 結束它（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)）；工作排程器（切換前）的工作以目前使用者、Interactive logon、隱藏執行，登入時才跑，同時只跑一個（`IgnoreNew`），同樣 10 分鐘逾時。日誌 `<資料目錄>/logs/watchdog.log`，每列為 UTC 時間、事件、`key=value` 與說明，沒有異常時記 `schedules_ok`；異常留言（每日一則）的頻率限制以此日誌判斷。同一時間只跑一個：Python 以 job 的同一套檔案鎖（`python -m worker.job lock`）持有 `<資料目錄>/locks/watchdog.lock` 並把腳本當子程序再跑一次，鎖由作業系統在 Python 結束時釋放（被強制終止也一樣，子程序一起結束），下一輪不必等；另一輪仍在跑時記 `locked` 並略過。找不到 Python 時不取鎖：serve 的兩輪相隔 30 分鐘、一輪超過 10 分鐘就被結束，所以不會重疊（工作排程器則由工作的「前一次未結束不另起」擋重疊）。持鎖的那一輪另清掉被強制終止的看門狗留在 `logs/` 的 `.watchdog.XXXXXX` 工作目錄（記 `stale_work_removed`；`--dry-run` 只記 `stale_work_planned`）；「持鎖」看的是上層程序確實是持有 `watchdog.lock` 的 `worker.job lock`（讀 `/proc`，#448），不看環境變數：手動帶 `WATCHDOG_LOCK_HELD=1` 不取鎖、記 `lock_unverified`、也不清理。舊版的 `logs/watchdog.lock/` 目錄不再使用；DB 檢查因缺 Python 或讀 DB 失敗而沒跑時記 `python_missing`／`daily_check_failed`／`news_llm_check_failed`／`llm_auth_check_failed`／`invariants_check_failed`／`data_check_failed`，不記 `schedules_ok`；gh 被拒時記 `gh_auth_failed`、沒能留的異常記 `anomaly_not_commented`，讀 repo 因其他原因失敗記 `gh_probe_failed`（照常嘗試留言）。工作排程器（切換前）的腳本路徑寫在工作參數裡，腳本改名或搬移後要在發佈 checkout 重跑「註冊或更新」。舊版（含開統籌）的日誌 `logs/ensure_coordinator.log` 不再寫入。
+看門狗一輪超過 10 分鐘時，serve 結束它（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)）。日誌 `<資料目錄>/logs/watchdog.log`，每列為 UTC 時間、事件、`key=value` 與說明，沒有異常時記 `schedules_ok`；異常留言（每日一則）的頻率限制以此日誌判斷。同一時間只跑一個：Python 以 job 的同一套檔案鎖（`python -m worker.job lock`）持有 `<資料目錄>/locks/watchdog.lock` 並把腳本當子程序再跑一次，鎖由作業系統在 Python 結束時釋放（被強制終止也一樣，子程序一起結束），下一輪不必等；另一輪仍在跑時記 `locked` 並略過。找不到 Python 時不取鎖：serve 的兩輪相隔 30 分鐘、一輪超過 10 分鐘就被結束，所以不會重疊。持鎖的那一輪另清掉被強制終止的看門狗留在 `logs/` 的 `.watchdog.XXXXXX` 工作目錄（記 `stale_work_removed`；`--dry-run` 只記 `stale_work_planned`）；「持鎖」看的是上層程序確實是持有 `watchdog.lock` 的 `worker.job lock`（讀 `/proc`，#448），不看環境變數：手動帶 `WATCHDOG_LOCK_HELD=1` 不取鎖、記 `lock_unverified`、也不清理。舊版的 `logs/watchdog.lock/` 目錄不再使用；DB 檢查因缺 Python 或讀 DB 失敗而沒跑時記 `python_missing`／`daily_check_failed`／`news_llm_check_failed`／`llm_auth_check_failed`／`invariants_check_failed`／`data_check_failed`，不記 `schedules_ok`；gh 被拒時記 `gh_auth_failed`、沒能留的異常記 `anomaly_not_commented`，讀 repo 因其他原因失敗記 `gh_probe_failed`（照常嘗試留言）。舊版（含開統籌）的日誌 `logs/ensure_coordinator.log` 不再寫入。

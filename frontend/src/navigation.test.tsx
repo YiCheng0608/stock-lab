@@ -59,6 +59,46 @@ check(strategy.includes('<h1>策略說明</h1>'), '/strategy 的頁面標題是�
 for (const heading of ['今日可買怎麼來', '突破型', '回踩型', '怎麼照著做', '觀察中在做什麼']) {
   check(text(strategy).includes(heading), `/strategy 缺「${heading}」`)
 }
+// 策略說明 names the strategy, then writes its thresholds and weights (#577; UI_COPY_SPEC §13; the numbers restate
+// backend/app/strategies/base.py COMMON_CONFIRMATIONS, breakout_v1.py, pullback_v1.py and domain.py CANDIDATE_SCORE_V6).
+const strategyText = text(strategy)
+const block = strategy.slice(strategy.indexOf('data-strategy="trend_chips"'), strategy.indexOf('aria-labelledby="strategy-follow-title"'))
+const blockText = text(block)
+check(strategy.includes('data-strategy="trend_chips"') && count(strategy, 'data-strategy=') === 1, '/strategy 有一個以策略名稱為標題的區塊（data-strategy），沒有切換或第二個策略區塊')
+check(strategyText.includes('目前策略：順勢籌碼型'), `/strategy 頁首寫「目前策略：順勢籌碼型」: ${strategyText.slice(0, 200)}`)
+check(/<h2 id="strategy-current-title"><button[^>]*data-term="trend_chips"[^>]*>順勢籌碼型<\/button><\/h2>/.test(block), '/strategy 的策略區塊標題是「順勢籌碼型」詞彙按鈕')
+// text() puts a space where a tag was (a term button, <code>); the paragraph is compared without spaces.
+const flat = (markup: string) => text(markup).replace(/\s+/g, '')
+const firstParagraph = flat(/<\/h2><p>([\s\S]*?)<\/p>/.exec(block)?.[1] ?? '')
+for (const part of ['順勢籌碼型', '只做多頭趨勢', '所屬族群比大盤強', '三大法人沒有明顯賣超', '融資沒有過熱', '大盤好壞目前不影響判斷', '突破型（breakout_v3）', '回踩型（pullback_v3）', '候選總分（candidate_score_v6）']) {
+  check(firstParagraph.includes(part.replace(/\s+/g, '')), `/strategy 策略區塊第一段缺「${part}」: ${firstParagraph}`)
+}
+check(strategyText.indexOf('順勢籌碼型') < strategyText.indexOf('今日可買怎麼來') && strategy.indexOf('data-strategy="trend_chips"') < strategy.indexOf('aria-labelledby="strategy-follow-title"'), '/strategy 先寫策略名稱與區塊，再寫「怎麼照著做」')
+// The three confirmations, each with its threshold, in a table.
+const tables = [...block.matchAll(/<table[\s\S]*?<\/table>/g)].map((match) => match[0])
+check(tables.length === 2 && tables.every((table) => table.includes('class="action-table"')), `/strategy 策略區塊有兩張表（確認條件、評分權重），got ${tables.length}`)
+// Phones show both tables: styles.css hides strategy-table-wrap at 640px (the strategy board shows cards there), so the
+// tables sit in the plain table-wrap.
+check(count(block, '<div class="table-wrap">') === 2 && !block.includes('strategy-table-wrap'), '/strategy 的兩張表在 640px 以下仍顯示（不放進被隱藏的 strategy-table-wrap）')
+const confirmations = text(tables[0] ?? '')
+for (const part of ['確認條件', '族群', '所屬族群近 20 日報酬高於加權指數', '法人', '三大法人 5 日淨買賣超 ≥ 20 日均量的 −0.3%', '融資', '融資餘額 5 日增幅 ≤ 5%（非融資標的不適用這一條）']) {
+  check(confirmations.includes(part), `/strategy 確認條件表缺「${part}」: ${confirmations}`)
+}
+check(count(tables[0] ?? '', '<tr>') === 4, '/strategy 確認條件表是表頭加三列')
+// The four score weights: 35 + 30 + 20 + 15, one row each, in this order.
+const weightRows = [...(tables[1] ?? '').matchAll(/<tr><td[^>]*>([\s\S]*?)<\/td><td[^>]*>([\s\S]*?)<\/td><td[^>]*>([\s\S]*?)<\/td><\/tr>/g)].map((match) => [text(match[1]).trim(), text(match[2]).trim(), text(match[3]).trim()])
+check(JSON.stringify(weightRows.map(([name, weight]) => [name, weight])) === JSON.stringify([['技術', '35%'], ['籌碼', '30%'], ['族群', '20%'], ['新聞情緒（推論）', '15%']]),
+  `/strategy 評分權重表：技術 35%、籌碼 30%、族群 20%、新聞情緒（推論）15%，got ${JSON.stringify(weightRows.map(([name, weight]) => [name, weight]))}`)
+check(weightRows.reduce((sum, [, weight]) => sum + Number.parseInt(weight, 10), 0) === 100 && weightRows.every(([, , looks]) => looks.length > 10), '/strategy 權重合計 100%，每個分項都寫了看什麼')
+check(text(tables[1] ?? '').includes('權重') && text(tables[1] ?? '').includes('看什麼'), '/strategy 評分權重表表頭是「分項、權重、看什麼」')
+// Kept: the liquidity floor, the 20-name cap and the two rules' own numbers.
+for (const part of ['20 日平均成交量至少 1,000 張', '最多列 20 檔', '當天成交量至少是前 20 日均量的 1.2 倍', '約 −3%～+2%', '前 20 日均量的 0.6～1.2 倍', '有資料的分項權重合計要達 65%']) {
+  check(blockText.includes(part), `/strategy 策略區塊缺「${part}」`)
+}
+// Every term on the page opens a glossary entry; the page has no switch, "other strategies" or "coming soon" block.
+const strategyTerms = [...strategy.matchAll(/data-term="([^"]+)"/g)].map((match) => match[1])
+for (const id of ['trend_chips', 'candidate_score', 'percentile', 'breakout', 'pullback', 't_plus_1', 'entry_zone', 'support', 'target', 'rr']) check(strategyTerms.includes(id), `/strategy 的詞彙按鈕 ${id} 要開得了詞條（found ${strategyTerms.join('、')}）`)
+check(!/即將推出|敬請期待|其他策略|切換策略|稍後推出/.test(strategyText), '/strategy 不放切換、「其他策略」或「即將推出」')
 check(!render('/actions', <App />).includes('找不到此頁'), '/actions 不是 404')
 const redirect = (AppModule as Record<string, unknown>).watchRedirectPath as ((search: string, hash: string) => string) | undefined
 check(typeof redirect === 'function' && redirect('?q=2330', '#plan-7') === '/watch?q=2330#plan-7' && redirect('', '') === '/watch',

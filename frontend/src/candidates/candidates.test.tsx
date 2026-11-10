@@ -90,6 +90,9 @@ check(candidateSourceText(completeItem()).includes('新聞方向 LLM 判讀 news
 
 // ---- detail content under each today row (the table's levels and total are checked in today/today.test.tsx) ----
 const list = render(<CandidatesSection data={listResponse()} loading={false} error={null} />)
+// The head names the strategy behind the list and links to /strategy (#577; UI_COPY_SPEC §10).
+const STRATEGY_LINK = /<a class="text-link candidates-strategy-link" href="\/strategy">([^<]*)<\/a>/
+check(STRATEGY_LINK.exec(slice(list, 'class="candidates-head"', '<ol'))?.[1] === '順勢籌碼型 · 策略說明 →', `今日可買頁首的連結寫「順勢籌碼型 · 策略說明 →」並連到 /strategy, got ${STRATEGY_LINK.exec(list)?.[1]}`)
 const first = detailOf(rowOf(list, 1))
 check(count(list, '<details class="candidate-detail"') === 2, 'one detail per candidate')
 check(!first.includes(PARTIAL_NOTE) && !first.includes('candidate-null-notes'), 'complete row has no partial note')
@@ -150,6 +153,7 @@ for (const reason of ['no_actionable_signals', 'all_excluded'] as const) {
   check(candidatesState({ ...data, zero_reason_text: null }).kind === 'zero' && (candidatesState({ ...data, zero_reason_text: null }) as { text: string }).text === data.zero_reason_text, `zero ${reason} falls back to the §10 copy`)
 }
 const notComputed = render(<CandidatesSection data={notComputedResponse()} loading={false} error={null} />)
+check(STRATEGY_LINK.exec(notComputed)?.[1] === '順勢籌碼型 · 策略說明 →', `尚無候選清單時頁首仍標出策略名稱, got ${STRATEGY_LINK.exec(notComputed)?.[1]}`)
 check(notComputed.includes(NOT_COMPUTED_TEXT) && notComputed.includes('尚無候選清單') && !notComputed.includes('date-badge'), 'not_computed copy without a date badge')
 check(notComputed.includes(CANDIDATE_DISCLAIMER), 'disclaimer stays on top for every state')
 

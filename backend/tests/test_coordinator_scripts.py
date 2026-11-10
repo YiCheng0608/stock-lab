@@ -537,7 +537,7 @@ def test_dispatch_sends_only_after_tui_idle_is_satisfied(dispatch: Harness) -> N
     terminal = next(c for c in orca if c.startswith("terminal create"))
     assert terminal.endswith(
         "--shell git-bash --command COMPOSE_PROJECT_NAME=task-282 claude"
-        " --model claude-opus-5-5 --effort high"
+        " --model claude-opus-5-5 --effort medium"
         f' --add-dir "{dispatch.root.as_posix()}" --json'
     )
     assert "branch -m YiCheng0608/task-282-dryrun task/282-dryrun" in " ".join(
@@ -571,7 +571,7 @@ def test_dispatch_starts_claude_with_the_task_compose_project(
     assert result.returncode == 0, result.stdout + result.stderr
     ran = (dispatch.fake / "claude.txt").read_text(encoding="utf-8")
     assert ran == (
-        "task-282|--model claude-opus-5-5 --effort high"
+        "task-282|--model claude-opus-5-5 --effort medium"
         f" --add-dir {dispatch.task.parent.as_posix()}"
     )
     # The prefix is POSIX syntax: the terminal's shell is Git Bash whatever Orca's default.

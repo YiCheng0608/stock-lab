@@ -47,7 +47,14 @@ from test_worker_job import (
 ROOT = Path(__file__).resolve().parents[2]
 TAIPEI = job.TAIPEI
 # Free memory is not these tests' subject (the job's tests cover low_memory).
-NO_MEMORY_CHECK = ("--daily-min-free-memory-gb", "0", "--news-min-free-memory-gb", "0")
+NO_MEMORY_CHECK = (
+    "--daily-min-free-memory-gb",
+    "0",
+    "--news-min-free-memory-gb",
+    "0",
+    "--us-min-free-memory-gb",
+    "0",
+)
 
 SERVE_CLI = JOB_FAKE_CLI.replace(
     "\n\nmain()\n",
@@ -270,6 +277,7 @@ def test_every_allowed_news_interval_makes_a_job(tmp_path, hours):
     assert {scheduled.id for scheduled in runner.scheduler().get_jobs()} == {
         "daily",
         "news",
+        "us",
         "watchdog",
         # #468: serve's own read of the maintenance marker, not a job it starts.
         "maintenance-watch",
@@ -530,6 +538,9 @@ def test_the_monitor_command_is_one_poll_of_monitor_sh(tmp_path):
             "--news-interval-hours must be between 1 and 24",
         ),
         (["--daily-time-limit-minutes", "0"], "--daily-time-limit-minutes"),
+        (["--us-times", "6:3x"], "--us-times: not HH:MM"),
+        (["--us-time-limit-minutes", "0"], "--us-time-limit-minutes"),
+        (["--us-min-free-memory-gb", "-1"], "--us-min-free-memory-gb"),
         (["--news-min-free-memory-gb", "-1"], "--news-min-free-memory-gb"),
         (["--now", "yesterday"], "isoformat"),
     ],
@@ -783,7 +794,8 @@ def test_a_killed_serve_leaves_no_lock_and_the_next_daily_closes_its_run_at_once
         "FAKE_REAL_DAILY": str(Path(__file__).with_name("job_daily_child.py")),
         "FAKE_REAL_BACKEND": str(ROOT / "backend"),
     }
-    claude = ("--claude-cli", str(tree.root / "no-claude"))
+    # The us job's first time after both clocks: no us catch-up (#568) joins the daily.
+    claude = ("--claude-cli", str(tree.root / "no-claude"), "--us-times", "23:59")
     # Friday 2026-10-16 21:30 on the injected clock; collect then waits for a file
     # that never comes, so the run row stays running.
     killed = tree.start_serve(
@@ -1600,3 +1612,166 @@ def test_a_maintenance_mode_turned_on_by_hand_never_expires(tmp_path):
     runner, _, _ = _deferred(data, f"{MONDAY}T10:00")
     runner.watch_maintenance()
     assert marker.exists()
+
+
+# The us job: index-bars us-collect, Tuesday to Saturday 06:30 and 09:30 (#568 AC-3) ------
+
+
+def test_the_us_job_fires_tuesday_to_saturday_at_0630_and_0930():
+    triggers = serve.triggers(serve_args())
+    monday = datetime(2026, 11, 9, tzinfo=TAIPEI)
+    times = fire_times(triggers["us"], monday, monday + timedelta(days=7))
+    assert [moment.strftime("%a %H:%M") for moment in times] == [
+        f"{day} {hm}"
+        for day in ("Tue", "Wed", "Thu", "Fri", "Sat")
+        for hm in ("06:30", "09:30")
+    ]
+    # Away from news, which runs on the even hours.
+    news = set(fire_times(triggers["news"], monday, monday + timedelta(days=7)))
+    assert not news & set(times)
+    other = serve.triggers(serve_args("--us-times", "07:15"))
+    assert [
+        t.strftime("%H:%M")
+        for t in fire_times(other["us"], monday, monday + timedelta(days=2))
+    ] == ["07:15"]
+
+
+def test_the_us_command_is_job_us_with_dailys_memory_threshold(tmp_path):
+    data = tmp_path / "data"
+    runner = serve.Serve(serve_args("--data-dir", str(data)))
+    command, environment = runner.command("us", runner.now())
+    assert command == [
+        sys.executable,
+        "-X",
+        "utf8",
+        "-m",
+        "worker.cli",
+        "job",
+        "us",
+        "--trigger",
+        "scheduler",
+        "--data-dir",
+        str(data),
+        "--log-dir",
+        str(data / "logs"),
+        # The low-memory rule is daily's: the same 2 GB.
+        "--min-free-memory-gb",
+        f"{serve.DAILY_MIN_FREE_MEMORY_GB:g}",
+    ]
+    assert serve.DAILY_MIN_FREE_MEMORY_GB == 2.0
+    assert environment["STOCK_DB_PATH"] == str(data / "stock.db")
+    switched = serve.Serve(
+        serve_args(
+            "--data-dir",
+            str(data),
+            "--us-time-limit-minutes",
+            "7",
+            "--us-min-free-memory-gb",
+            "3",
+            "--now",
+            "2026-11-10T06:29:50",
+        )
+    )
+    argv = switched.command("us", switched.now())[0]
+    assert argv[argv.index("--min-free-memory-gb") + 1] == "3"
+    assert argv[-4:] == ["--time-limit-minutes", "7", "--date", "2026-11-10"]
+    # The backstop is past the job's own limit, as for daily and news.
+    assert runner.backstop("us") == (job.TIME_LIMIT_MINUTES["us"] + 5) * 60
+
+
+TUESDAY = "2026-11-10"
+
+
+def _us_runs_db(data: Path, *rows: tuple[str, str]) -> None:
+    _runs_db(data)
+    with sqlite3.connect(data / "stock.db") as conn:
+        conn.execute(
+            "CREATE TABLE ingestion_runs (id INTEGER PRIMARY KEY, run_type TEXT, "
+            "run_date DATE, status TEXT)"
+        )
+        conn.executemany(
+            "INSERT INTO ingestion_runs (run_type, run_date, status) "
+            "VALUES ('us_index_collect', ?, ?)",
+            rows,
+        )
+        # Another run type of the day does not count.
+        conn.execute(
+            "INSERT INTO ingestion_runs (run_type, run_date, status) "
+            "VALUES ('collect', ?, 'success')",
+            (TUESDAY,),
+        )
+    conn.close()
+
+
+def _us_catchup(data: Path, now: str):
+    runner = serve.Serve(serve_args("--data-dir", str(data), "--now", now))
+    jobs = {job.id: job for job in runner.scheduler().get_jobs()}
+    return runner.missed_us(), jobs.get("us-catchup")
+
+
+@pytest.mark.parametrize(
+    "rows, now, reason",
+    [
+        # A missed 06:30 (container down at the time): run once at start.
+        ((), f"{TUESDAY}T07:10", "not_complete"),
+        (((TUESDAY, "failed"),), f"{TUESDAY}T08:00", "not_complete"),
+        (((TUESDAY, "partial"),), f"{TUESDAY}T10:00", "not_complete"),
+        (((TUESDAY, "skipped"),), f"{TUESDAY}T10:00", "not_complete"),
+        (((TUESDAY, "running"),), f"{TUESDAY}T10:00", "not_complete"),
+        (((SATURDAY, "failed"),), f"{SATURDAY}T21:35", "not_complete"),
+        # The day before does not count.
+        ((("2026-11-09", "success"),), f"{TUESDAY}T07:10", "not_complete"),
+        # Complete, too early, or Sunday and Monday (no US session to fetch).
+        (((TUESDAY, "failed"), (TUESDAY, "success")), f"{TUESDAY}T07:10", None),
+        (((TUESDAY, "already_complete"),), f"{TUESDAY}T10:00", None),
+        ((), f"{TUESDAY}T06:29", None),
+        ((), "2026-11-08T10:00", None),
+        ((), f"{MONDAY}T10:00", None),
+    ],
+)
+def test_serve_runs_the_missed_us_job_of_the_day_once_at_start(
+    tmp_path, rows, now, reason
+):
+    _us_runs_db(tmp_path / "data", *rows)
+    missed, catchup = _us_catchup(tmp_path / "data", now)
+    assert missed == reason
+    if reason is None:
+        assert catchup is None
+    else:
+        assert catchup is not None and catchup.args == ("us",)
+        assert type(catchup.trigger).__name__ == "DateTrigger"
+        wait = catchup.trigger.run_date - datetime.now(TAIPEI)
+        assert abs(wait.total_seconds()) < 60
+
+
+def test_the_us_catchup_follows_the_first_us_time_and_its_statuses(tmp_path):
+    _us_runs_db(tmp_path / "data")
+    runner = serve.Serve(
+        serve_args(
+            "--data-dir",
+            str(tmp_path / "data"),
+            "--us-times",
+            "09:30,05:45",
+            "--now",
+            f"{TUESDAY}T05:50",
+        )
+    )
+    assert runner.missed_us() == "not_complete"
+    from worker import us_index_bars
+
+    assert serve.US_RUN_TYPE == us_index_bars.RUN_TYPE
+
+
+def test_the_end_of_maintenance_runs_the_missed_us_job_once(tmp_path, capsys):
+    data = tmp_path / "data"
+    _us_runs_db(data, (TUESDAY, "skipped"))
+    marker = _maintenance_on(data)
+    runner, scheduler, jobs = _deferred(data, f"{TUESDAY}T09:40")
+    assert "us-catchup" not in jobs
+    assert " serve catchup_deferred job=us reason=not_complete maintenance=on" in (
+        capsys.readouterr().out
+    )
+    marker.unlink()
+    runner.watch_maintenance()
+    assert " serve catchup job=us reason=not_complete" in capsys.readouterr().out
+    assert {s.id: s for s in scheduler.get_jobs()}["us-catchup"].args == ("us",)

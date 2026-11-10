@@ -187,7 +187,7 @@ export type MarketOverviewExchange = {
   source?: { label: string | null; collected_at: string | null; data_as_of?: string | null; raw_payload_id?: number | null }
 }
 
-// market_overview.foreign_indices (#547): the FRED closes of the US indexes, each on its own.
+// market_overview.foreign_indices (#547, Issue 568): the latest bars of the US indexes (FinMind), each on its own.
 export type ForeignIndex = {
   exchange: 'US' | string
   symbol: string
@@ -933,6 +933,8 @@ export type BacktestSummary = {
     tracking_version?: string | null
     run_date: string | null
     data_as_of: string | null
+    started_at?: string | null
+    finished_at?: string | null
     metadata: Record<string, unknown>
     assessment: string
     zero_actionable_count: number

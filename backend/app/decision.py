@@ -1754,7 +1754,7 @@ def build_decision_summary(
         display_instruction = "等待回到觀察區間後，再重新核對趨勢、量能與籌碼。"
     elif action_state == "hold_observe":
         display_instruction = (
-            "目前未見已核實的減碼／退場條件；持續留意失效價、使用者停損與資料更新。"
+            "目前未見已核實的減碼／退場條件；持續留意規則停損、使用者停損與資料更新。"
         )
     elif action_state == "reduce_exit":
         display_instruction = (

@@ -381,7 +381,8 @@ def test_news_llm_can_be_switched_off(tree):
     "job_name, option, message",
     [
         ("daily", "--skip-news-llm", "--skip-news-llm applies only to the news job"),
-        ("news", "--force", "--force applies only to the daily job"),
+        ("news", "--force", "--force applies only to the daily and us jobs"),
+        ("us", "--skip-news-llm", "--skip-news-llm applies only to the news job"),
     ],
 )
 def test_options_of_the_other_job_are_refused(tree, job_name, option, message):
@@ -413,6 +414,72 @@ def test_low_memory_daily_runs_the_cli_to_record_the_skip(tree):
         "--skip-reason",
         "low_memory",
     ]
+
+
+def _run_without_a_memory_option(tmp_path, monkeypatch, name, free_mb):
+    """The job in this process with ``--min-free-memory-gb`` left out.
+
+    The free memory is injected, never the host's (``/proc/meminfo``), and the
+    worker is not started: ``step`` records the arguments it would get.
+    """
+
+    monkeypatch.setattr(job, "free_memory_mb", lambda: free_mb)
+    monkeypatch.setattr(job, "git_dir", lambda root: None)
+    steps: list[list[str]] = []
+
+    def step(self, step_name, step_args):
+        steps.append(step_args)
+        return 0
+
+    monkeypatch.setattr(job._Job, "step", step)
+    parser = argparse.ArgumentParser(prog="worker.cli")
+    job.add_arguments(parser.add_subparsers(dest="command").add_parser("job"))
+    args = parser.parse_args(
+        ["job", name, "--trigger", "manual", "--data-dir", str(tmp_path / "data")]
+    )
+    runner = job._Job(args)
+    code, _ = runner.run()
+    assert code == 0
+    return args, runner.log_path.read_text(encoding="utf-8"), steps
+
+
+def test_the_memory_threshold_defaults_to_2_gb_the_scheduled_daily_one():
+    """#574: 8 GB was above the Docker VM's whole memory (about 8.1 GB), so a manual
+    ``job daily`` without the option was always skipped as ``low_memory``."""
+
+    parser = argparse.ArgumentParser(prog="worker.cli")
+    job_parser = parser.add_subparsers(dest="command").add_parser("job")
+    job.add_arguments(job_parser)
+    args = parser.parse_args(["job", "daily"])
+    assert job.DEFAULT_MIN_FREE_MEMORY_GB == 2.0
+    assert args.min_free_memory_gb == 2.0
+    # argparse wraps the help text at the terminal width: compare without line breaks.
+    assert "（預設 2）" in " ".join(job_parser.format_help().split())
+
+
+@linux_only
+@pytest.mark.parametrize("name", ["daily", "news", "us"])
+def test_without_the_memory_option_1_5_gb_free_is_low_memory(
+    tmp_path, monkeypatch, name
+):
+    _, log, steps = _run_without_a_memory_option(tmp_path, monkeypatch, name, 1536)
+    skipped = skipped_line(log)
+    assert skipped.group(1) == "low_memory"
+    assert "min_free_mb=2048" in skipped.group(2)
+    # daily and us run their worker command to record the skip, news runs nothing.
+    if name == "news":
+        assert steps == []
+    else:
+        assert steps[0][-2:] == ["--skip-reason", "low_memory"]
+
+
+@linux_only
+@pytest.mark.parametrize("name", ["daily", "news", "us"])
+def test_without_the_memory_option_3_gb_free_runs_the_job(tmp_path, monkeypatch, name):
+    _, log, steps = _run_without_a_memory_option(tmp_path, monkeypatch, name, 3072)
+    assert skipped_line(log) is None
+    assert "--skip-reason" not in steps[0]
+    assert steps[0][: len(job.JOB_COMMANDS[name])] == job.JOB_COMMANDS[name]
 
 
 @pytest.mark.parametrize("linked", [False, True], ids=["git-dir", "linked-worktree"])
@@ -1022,7 +1089,7 @@ def maintenance_marker(
     return path
 
 
-@pytest.mark.parametrize("job_name", ["daily", "news"])
+@pytest.mark.parametrize("job_name", ["daily", "news", "us"])
 def test_in_maintenance_a_job_only_logs_the_skip_and_starts_no_worker(tree, job_name):
     """AC-1: no worker, so not even the skipped row a daily records for other skips."""
 
@@ -1074,3 +1141,66 @@ def test_once_maintenance_is_off_the_jobs_run_again(tree):
     assert result.code == 0
     assert tree.steps() == ["daily"]
     assert tree.calls()[0]["argv"] == ["daily", "--trigger", "scheduler"]
+
+
+# The us job: index-bars us-collect (#568 AC-3) --------------------------------------
+
+
+def test_the_us_job_runs_us_collect_with_its_own_log_and_lock(tree):
+    result = tree.run("us", "--date", "2026-11-10")
+    assert result.code == 0, result.stderr
+    call = tree.calls()[0]
+    assert call["argv"] == [
+        "index-bars",
+        "us-collect",
+        "--trigger",
+        "scheduler",
+        "--date",
+        "2026-11-10",
+    ]
+    # Its own lock (one us job at a time), handed to the worker as daily's is.
+    assert call["env"]["STOCK_JOB_LOCK"] == str(tree.data / "locks" / "us.lock")
+    assert " start job=us trigger=scheduler" in result.log
+    assert [groups[1:] for groups in end_line(result.log)] == [("0", "")]
+    assert list(tree.logs.glob("us-*.log"))
+    assert not list(tree.logs.glob("daily-*.log"))
+
+
+@pytest.mark.parametrize(
+    "option, reason", [("--min-free-memory-gb", "low_memory"), (None, "git_busy")]
+)
+def test_a_skipped_us_job_records_its_reason_as_daily_does(tree, option, reason):
+    """The same checks and threshold option as daily; the worker records the skip."""
+
+    if option is None:
+        (tree.git_dir / "index.lock").touch()
+        args = []
+    else:
+        args = [option, "1024"]
+    result = tree.run("us", *args)
+    assert result.code == 0, result.stderr
+    assert skipped_line(result.log).group(1) == reason
+    assert tree.calls()[0]["argv"] == [
+        "index-bars",
+        "us-collect",
+        "--trigger",
+        "scheduler",
+        "--skip-reason",
+        reason,
+    ]
+
+
+def test_a_manual_or_simulated_us_job_is_a_manual_us_collect(tree):
+    tree.run("us", "--trigger", "simulation", "--force")
+    tree.run("us", "--trigger", "manual")
+    assert [call["argv"] for call in tree.calls()] == [
+        ["index-bars", "us-collect", "--trigger", "manual", "--force"],
+        ["index-bars", "us-collect", "--trigger", "manual"],
+    ]
+
+
+def test_the_us_job_limit_is_twenty_minutes():
+    from worker import job as job_module
+
+    assert job_module.TIME_LIMIT_MINUTES["us"] == 20.0
+    assert job_module.JOB_COMMANDS["us"] == ["index-bars", "us-collect"]
