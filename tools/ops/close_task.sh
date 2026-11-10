@@ -211,10 +211,15 @@ session_state_cleanup() {
   local sid file
   [ "$set_board" = 1 ] || { steps+=("session_state_skipped:no_board"); return 0; }
   task_session_ids || { steps+=("session_state_skipped:comments_unreadable"); return 0; }
+  local tmps=()
   for sid in "${task_sids[@]+"${task_sids[@]}"}"; do
     file="$data_dir/logs/sessions/$sid.json"
-    [ -f "$file" ] || continue
-    if rm -f -- "$file" && [ ! -e "$file" ]; then
+    # A write the hook did not finish leaves .<id>.json.tmp.<pid> beside it.
+    shopt -s nullglob
+    tmps=("$data_dir/logs/sessions/.$sid.json.tmp."*)
+    shopt -u nullglob
+    [ -f "$file" ] || [ ${#tmps[@]} -gt 0 ] || continue
+    if rm -f -- "$file" "${tmps[@]+"${tmps[@]}"}" && [ ! -e "$file" ]; then
       steps+=("session_state_removed:$sid")
     else
       steps+=("session_state_skipped:delete_failed:$sid")

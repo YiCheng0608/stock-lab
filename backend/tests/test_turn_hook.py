@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -33,18 +34,33 @@ def _prompt(text: str) -> dict:
     }
 
 
-def _call(id_: str, command: str, text: str = "") -> dict:
+def _ts(minutes_ago: float) -> str:
+    """The transcript's timestamp form, MINUTES_AGO before NOW."""
+    seconds = NOW - int(minutes_ago * 60)
+    return datetime.fromtimestamp(seconds, tz=timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%S.000Z"
+    )
+
+
+def _call(
+    id_: str, command: str, text: str = "", ago: float = 1, tool: str = "Bash"
+) -> dict:
     content = [
-        {"type": "tool_use", "id": id_, "name": "Bash", "input": {"command": command}}
+        {"type": "tool_use", "id": id_, "name": tool, "input": {"command": command}}
     ]
     if text:
         content.insert(0, {"type": "text", "text": text})
-    return {"type": "assistant", "message": {"role": "assistant", "content": content}}
+    return {
+        "type": "assistant",
+        "timestamp": _ts(ago),
+        "message": {"role": "assistant", "content": content},
+    }
 
 
-def _result(id_: str, error: bool = False, out: str = "ok") -> dict:
+def _result(id_: str, error: bool = False, out: str = "ok", ago: float = 1) -> dict:
     return {
         "type": "user",
+        "timestamp": _ts(ago),
         "toolUseResult": {"stdout": out, "stderr": "", "interrupted": False},
         "message": {
             "role": "user",
@@ -112,6 +128,8 @@ class Hook:
         }
         if event == "Stop":
             payload.setdefault("stop_hook_active", False)
+        # A field passed as None is left out of the input altogether.
+        payload = {k: v for k, v in payload.items() if v is not None}
         base = {
             k: v
             for k, v in os.environ.items()
@@ -166,14 +184,16 @@ def _reason() -> str:
 
 
 def test_a_turn_that_commented_is_not_blocked(tmp_path) -> None:
-    """AC-3 evidence 1: a turn with a successful gh issue comment stops; commented true."""
+    """AC-3 evidence 1: a turn that ends right after a successful gh issue comment (within
+    10 minutes of it) stops; commented true."""
     h = Hook(tmp_path)
     h.lines(
         _prompt("請用 Read 工具讀取任務檔"),
-        _call("t1", COMMENT, text="留開工"),
+        _call("t1", COMMENT, text="留開工", ago=10),
         _result(
             "t1",
             out="https://github.com/YiCheng0608/stock-lab/issues/595#issuecomment-1",
+            ago=10,
         ),
         _say("開工留言已貼。"),
     )
@@ -188,9 +208,36 @@ def test_a_turn_that_commented_is_not_blocked(tmp_path) -> None:
         "state": "stopped",
         "ended_at": "2026-10-30T12:00:00Z",
         "commented": True,
+        "commented_at": "2026-10-30T11:50:00Z",
         "last_message": "開工留言已貼。",
         "background_tasks": 0,
     }
+
+
+def test_a_comment_long_before_the_turn_ended_does_not_count(tmp_path) -> None:
+    """#595 review must-fix 2: 開工 comment, two hours of work, then "要你決定" in the
+    terminal: the comment is more than 10 minutes before the stop, so it is blocked."""
+    h = Hook(tmp_path)
+    h.lines(
+        _prompt("請用 Read 工具讀取任務檔"),
+        _call("t1", COMMENT, ago=120),
+        _result("t1", ago=120),
+        _call("t2", "docker compose -p task-595 run --rm api pytest -q", ago=11),
+        _result("t2", ago=11),
+        _say("要你決定下一步"),
+    )
+    assert _blocked(h.run(last_assistant_message="要你決定下一步"))
+    state = h.state()
+    assert state["commented"] is False
+    assert state["commented_at"] == "2026-10-30T10:00:00Z"
+    # A comment with no timestamp at all does not count either.
+    h.lines(
+        _prompt("go"),
+        {**_call("t3", COMMENT), "timestamp": None},
+        {**_result("t3"), "timestamp": None},
+        _say("x"),
+    )
+    assert _blocked(h.run())
 
 
 def test_a_turn_without_a_comment_is_blocked_once(tmp_path) -> None:
@@ -349,13 +396,102 @@ def test_prompt_and_session_end_update_the_state(tmp_path) -> None:
     assert ended["issue"] == 595 and ended["last_message"] == "x" * 500
 
 
-def test_settings_run_the_hook_on_its_three_events() -> None:
+def test_settings_run_the_hook_on_its_four_events() -> None:
     settings = json.loads(
         (ROOT / ".claude" / "settings.json").read_text(encoding="utf-8")
     )
-    for event in ("Stop", "UserPromptSubmit", "SessionEnd"):
+    for event in ("Stop", "StopFailure", "UserPromptSubmit", "SessionEnd"):
         (group,) = settings["hooks"][event]
         (hook,) = group["hooks"]
         assert hook["command"] == 'node "$CLAUDE_PROJECT_DIR/tools/ops/turn_hook.cjs"'
         # SessionEnd's default budget is 1.5 seconds; a timeout raises it.
         assert hook["timeout"] >= 10
+
+
+def test_a_turn_ended_on_an_api_error_is_failed(tmp_path) -> None:
+    """#595 review must-fix 3: an API error ends the turn with StopFailure, not Stop, and
+    no UserPromptSubmit follows: the state is failed with the hook's error fields (input
+    as code.claude.com/docs/en/hooks describes StopFailure), so it does not stay working."""
+    h = Hook(tmp_path)
+    h.lines(_prompt("go"), _say("working"))
+    assert h.run("UserPromptSubmit", prompt="go").returncode == 0
+    result = h.run(
+        "StopFailure",
+        at=NOW + 60,
+        error="rate_limit",
+        error_details="429 Too Many Requests",
+        last_assistant_message="API Error: Rate limit reached",
+    )
+    assert result.returncode == 0 and result.stdout == ""
+    state = h.state()
+    assert state["state"] == "failed" and state["ended_at"] == "2026-10-30T12:01:00Z"
+    assert state["error"] == "rate_limit"
+    assert state["error_details"] == "429 Too Many Requests"
+    assert state["last_message"] == "API Error: Rate limit reached"
+    # The next prompt clears the error fields.
+    h.run("UserPromptSubmit", at=NOW + 120, prompt="retry")
+    assert h.state()["state"] == "working" and "error" not in h.state()
+
+
+def test_detached_head_and_no_git_are_left_alone(tmp_path) -> None:
+    h = Hook(tmp_path)
+    h.lines(_prompt("go"), _say("x"))
+    (h.project / ".git" / "HEAD").write_text("a" * 40 + "\n", encoding="utf-8")
+    assert h.run().stdout == ""
+    shutil.rmtree(h.project / ".git")
+    outside = tmp_path / "plain"
+    outside.mkdir()
+    assert h.run(env={"CLAUDE_PROJECT_DIR": outside.as_posix()}).stdout == ""
+    assert not (h.data / "logs" / "sessions").exists()
+
+
+def test_stop_hook_active_missing_counts_as_false(tmp_path) -> None:
+    h = Hook(tmp_path)
+    h.lines(_prompt("go"), _say("x"))
+    assert _blocked(h.run(stop_hook_active=None))
+
+
+def test_a_partial_last_line_and_hook_feedback_keep_the_turn(tmp_path) -> None:
+    """Stop hook feedback is an isMeta user entry (seen in this session's transcript):
+    not a new turn, so a comment made just before the block still counts; a partial last
+    line (the transcript being written) is skipped."""
+    h = Hook(tmp_path)
+    h.lines(
+        _prompt("go"),
+        _call("t1", COMMENT, ago=2),
+        _result("t1", ago=2),
+        {
+            "type": "user",
+            "isMeta": True,
+            "message": {"role": "user", "content": "Stop hook feedback:\n..."},
+        },
+        _say("ok"),
+    )
+    with open(h.transcript, "a", encoding="utf-8") as handle:
+        handle.write('{"type": "assistant", "message": {"con')
+    assert not _blocked(h.run())
+    assert h.state()["commented"] is True
+
+
+def test_a_comment_from_the_powershell_tool_counts(tmp_path) -> None:
+    h = Hook(tmp_path)
+    h.lines(
+        _prompt("go"),
+        _call("t1", "gh issue comment 595 --body-file c.md", tool="PowerShell"),
+        _result("t1"),
+        _say("ok"),
+    )
+    assert not _blocked(h.run())
+
+
+def test_a_failed_write_leaves_no_temporary_file(tmp_path) -> None:
+    """The state path is a directory: the rename fails, the hook does not block, logs the
+    error and removes its temporary file."""
+    h = Hook(tmp_path)
+    h.lines(_prompt("go"), _say("x"))
+    h.state_file.mkdir(parents=True)
+    result = h.run()
+    assert result.returncode == 0 and result.stdout == ""
+    assert [p.name for p in h.state_file.parent.iterdir()] == [h.state_file.name]
+    log = (h.data / "logs" / "turn-hook.log").read_text(encoding="utf-8")
+    assert "error:" in log

@@ -1350,7 +1350,7 @@ def _engineer_events(h: Harness) -> list[dict]:
     return [
         e
         for e in _records(h, "event")
-        if e["kind"] in ("engineer_waiting", "engineer_ended")
+        if e["kind"] in ("engineer_waiting", "engineer_ended", "engineer_failed")
     ]
 
 
@@ -1425,4 +1425,64 @@ def test_a_session_ended_while_its_worktree_is_there_is_an_event(mon: Harness) -
     assert "已結束（other），worktree 還在" in event["summary"]
     assert "wake=sent" in out
     _monitor(mon, at=NOW + 180)
+    assert len(_engineer_events(mon)) == 1
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        {
+            "session_id": ENG,
+            "state": "ended",
+            "branch": ["x"],
+            "ended_at": "2026-10-25T11:00:00Z",
+        },
+        {"session_id": ["x"], "state": "stopped", "ended_at": "2026-10-25T11:00:00Z"},
+        {"session_id": ENG, "state": "stopped", "ended_at": 5, "issue": "316"},
+        ["not", "an", "object"],
+        "{ partial",
+    ],
+)
+def test_a_bad_state_file_is_skipped_alone(mon: Harness, content) -> None:
+    """#595 review must-fix 1: a state file with a wrong type (a list for branch made
+    record fail: no events, no heartbeat) is skipped alone; the same poll still records
+    the PR and comment events, writes the heartbeat and logs session_skipped."""
+    folder = mon.data / "logs" / "sessions"
+    folder.mkdir(parents=True)
+    text = content if isinstance(content, str) else json.dumps(content)
+    (folder / "bad.json").write_text(text, encoding="utf-8")
+    _session_state(mon, 45)  # a good one beside it still makes its event
+    out = _monitor(mon).stdout
+    kinds = {e["kind"] for e in _records(mon, "event")}
+    assert {"pr_opened", "ci", "comment", "engineer_waiting"} <= kinds
+    assert "poll_failed" not in out
+    beat = json.loads((mon.data / "logs" / "monitor-heartbeat.json").read_text("utf-8"))
+    assert beat["written_at"] == "2026-10-25T12:00:00Z"
+    assert len(_engineer_events(mon)) == 1  # the good file's; the bad one makes none
+    log = (mon.data / "logs" / "monitor.log").read_text(encoding="utf-8")
+    # A file that is no JSON object is logged; a wrong field type just makes no event.
+    unreadable = not isinstance(content, dict)
+    assert ("session_skipped bad.json" in log) is unreadable
+
+
+def test_a_turn_ended_on_an_api_error_wakes_at_once(mon: Harness) -> None:
+    """#595 review must-fix 3: state failed (StopFailure): an engineer_failed event at
+    once, with the error, keyed by session and ended_at."""
+    doc = _session_state(
+        mon,
+        1,
+        state="failed",
+        error="rate_limit",
+        error_details="429 Too Many Requests",
+        last_message="API Error: Rate limit reached",
+    )
+    out = _monitor(mon).stdout
+    (event,) = _engineer_events(mon)
+    assert event["id"] == f"engineer_failed:{ENG}:{doc['ended_at']}"
+    assert event["ref"] == "#316"
+    assert (
+        "回合因 API 錯誤中斷（rate_limit：429 Too Many Requests）" in event["summary"]
+    )
+    assert "wake=sent" in out
+    _monitor(mon, at=NOW + 60)
     assert len(_engineer_events(mon)) == 1

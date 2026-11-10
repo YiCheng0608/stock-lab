@@ -35,11 +35,12 @@ host directory at /coordination, #338), each with a single writer:
                           last line of each job log (patrol.sh prints them)
   sessions/<id>.json      read only; written on the host by the turn hook of engineer
                           sessions (tools/ops/turn_hook.cjs, #595): state working,
-                          stopped (with commented, last_message) or ended. A turn stopped
-                          without a comment for more than 30 minutes is an
-                          engineer_waiting event, a session ended while its task worktree
-                          is still there an engineer_ended one; both are keyed by session
-                          and ended_at.
+                          stopped (with commented, last_message), failed (an API
+                          error) or ended. A turn stopped without a comment for more than
+                          30 minutes is an engineer_waiting event, a failed turn an
+                          engineer_failed one, a session ended while its task worktree is
+                          still there an engineer_ended one; all keyed by session and
+                          ended_at. A file that fails is skipped alone (session_skipped).
   monitor-heartbeat.json  monitor.sh, every poll: {"written_at", "pid", "mode", "gh_calls",
                           "gh_failed_polls", "gh_failed_since", "gh_error"}: polls in a
                           row with a failed gh call, since when, the last gh error
@@ -492,56 +493,93 @@ def task_branches(worktrees) -> set[str] | None:
     }
 
 
-def session_events(logs: Path, now: float, branches: set[str] | None) -> list[dict]:
-    """The turn hook's state files (#595): a turn that stopped without a comment more
-    than WAITING_AFTER ago (engineer_waiting), and a session that ended while its task
-    worktree is still there (engineer_ended; not in a poll without the listing). commented
-    null (the hook could not read the transcript) counts as no comment."""
-    out = []
-    for path in sorted((logs / SESSIONS).glob("*.json")):
-        doc = _read_json(path)
-        if not isinstance(doc, dict):
-            continue
-        sid = doc.get("session_id")
-        ended = doc.get("ended_at")
-        at = epoch(ended)
-        if not isinstance(sid, str) or not sid or at is None:
-            continue
-        issue = doc.get("issue")
-        ref = f"#{issue}" if isinstance(issue, int) else "工程師"
-        url = ISSUE_URL.format(issue) if isinstance(issue, int) else ""
-        message = (
-            doc.get("last_message") if isinstance(doc.get("last_message"), str) else ""
+def _str(doc: dict, key: str) -> str:
+    value = doc.get(key)
+    return value if isinstance(value, str) else ""
+
+
+def _session_event(doc, now: float, branches: set[str] | None) -> dict | None:
+    """One state file's event, or None; every field checked for its type (#595 review:
+    a list for a branch made the whole record fail)."""
+    if not isinstance(doc, dict):
+        raise ValueError("not a JSON object")
+    sid, ended, state = (
+        _str(doc, "session_id"),
+        _str(doc, "ended_at"),
+        _str(doc, "state"),
+    )
+    at = epoch(ended) if ended else None
+    if not sid or at is None:
+        return None
+    issue = doc.get("issue")
+    issue = issue if isinstance(issue, int) and not isinstance(issue, bool) else None
+    ref = f"#{issue}" if issue is not None else "工程師"
+    url = ISSUE_URL.format(issue) if issue is not None else ""
+    message = _str(doc, "last_message")
+    head = one_line(message, 120) or "（沒有訊息）"
+    if state == "stopped" and doc.get("commented") is not True:
+        if now - at <= WAITING_AFTER:
+            return None
+        tasks = doc.get("background_tasks")
+        bg = (
+            f"，背景工作 {tasks} 個"
+            if isinstance(tasks, int) and not isinstance(tasks, bool) and tasks > 0
+            else ""
         )
-        head = one_line(message, 120) or "（沒有訊息）"
-        state = doc.get("state")
-        if state == "stopped" and doc.get("commented") is not True:
-            if now - at <= WAITING_AFTER:
-                continue
-            tasks = doc.get("background_tasks")
-            bg = (
-                f"，背景工作 {tasks} 個" if isinstance(tasks, int) and tasks > 0 else ""
+        kind = "engineer_waiting"
+        summary = (
+            f"工程師 session {sid[:8]} 回合結束 {int((now - at) // 60)} 分鐘未在"
+            f" Issue／PR 留言{bg}：{head}"
+        )
+    elif state == "failed":
+        kind = "engineer_failed"
+        details = one_line(_str(doc, "error_details"), 120)
+        summary = (
+            f"工程師 session {sid[:8]} 回合因 API 錯誤中斷"
+            f"（{_str(doc, 'error') or 'unknown'}{'：' + details if details else ''}）：{head}"
+        )
+    elif state == "ended" and branches is not None and _str(doc, "branch") in branches:
+        kind = "engineer_ended"
+        summary = (
+            f"工程師 session {sid[:8]} 已結束（{_str(doc, 'end_reason') or '?'}），"
+            f"worktree 還在：{head}"
+        )
+    else:
+        return None
+    event = _event(f"{kind}:{sid}:{ended}", kind, ref, summary, url, at=ended)
+    if message:
+        event["detail"] = message
+    return event
+
+
+def session_events(
+    logs: Path, now: float, branches: set[str] | None
+) -> tuple[list[dict], list[str]]:
+    """The turn hook's state files (#595) and the ones skipped ("<file> <reason>"):
+    a turn stopped without a comment more than WAITING_AFTER ago (engineer_waiting;
+    commented null, the hook could not read the transcript, counts as no comment), a turn
+    ended on an API error (engineer_failed, at once), a session ended while its task
+    worktree is still there (engineer_ended; not in a poll without the listing). A file
+    that cannot be read or makes this code fail is skipped alone: the poll's other events
+    are recorded as ever."""
+    out: list[dict] = []
+    skipped: list[str] = []
+    try:
+        paths = sorted((logs / SESSIONS).glob("*.json"))
+    except OSError as error:
+        return out, [f"{SESSIONS}/ {one_line(str(error), 120)}"]
+    for path in paths:
+        try:
+            doc = json.loads(path.read_text(encoding="utf-8"))
+            event = _session_event(doc, now, branches)
+        except Exception as error:  # any bad file is skipped alone
+            skipped.append(
+                f"{path.name} {type(error).__name__}: {one_line(str(error), 120)}"
             )
-            summary = (
-                f"工程師 session {sid[:8]} 回合結束 {int((now - at) // 60)} 分鐘未在"
-                f" Issue／PR 留言{bg}：{head}"
-            )
-            kind = "engineer_waiting"
-        elif (
-            state == "ended" and branches is not None and doc.get("branch") in branches
-        ):
-            summary = (
-                f"工程師 session {sid[:8]} 已結束（{doc.get('end_reason') or '?'}），"
-                f"worktree 還在：{head}"
-            )
-            kind = "engineer_ended"
-        else:
             continue
-        event = _event(f"{kind}:{sid}:{ended}", kind, ref, summary, url, at=ended)
-        if message:
-            event["detail"] = message
-        out.append(event)
-    return out
+        if event:
+            out.append(event)
+    return out, skipped
 
 
 def _event(
@@ -612,7 +650,8 @@ def record(
     found += gh_auth_events(job_logs, epoch(origin) or 0, now, gh_refused)
     if isinstance(worktrees, dict) and worktrees.get("ok") is True:
         found += slot_events(worktrees)
-    found += session_events(logs, now, task_branches(worktrees))
+    sessions, skipped = session_events(logs, now, task_branches(worktrees))
+    found += sessions
     new = []
     seq = q.seq
     for item in found:
@@ -638,6 +677,9 @@ def record(
     loud = [e for e in new if not e.get("quiet")]
     wake = bool(unnotified) and (bool(loud) or retry_due)
     handle, _, _ = _heartbeat(logs)
+    for line in skipped:
+        # monitor.sh logs them (session_skipped); the poll goes on.
+        print(f"session_skipped {line}")
     for item in new:
         quiet = f" quiet={item['quiet']}" if item.get("quiet") else ""
         print(

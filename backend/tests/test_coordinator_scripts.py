@@ -2674,6 +2674,9 @@ def test_close_task_removes_the_turn_hook_state_of_its_sessions(
     sessions.mkdir(parents=True)
     for sid in (S_ENG, S_HANDOVER, S_OTHER, S_SELF):
         (sessions / f"{sid}.json").write_text("{}", encoding="utf-8")
+    # A write the hook did not finish: removed with its session's file.
+    (sessions / f".{S_ENG}.json.tmp.4242").write_text("{", encoding="utf-8")
+    (sessions / f".{S_OTHER}.json.tmp.4243").write_text("{", encoding="utf-8")
     dry = scratch.run(
         "close_task.sh", "282", "--no-board", "--extra-dir", scratch.extra.as_posix()
     )
@@ -2686,7 +2689,9 @@ def test_close_task_removes_the_turn_hook_state_of_its_sessions(
     assert sorted(steps) == sorted(
         f"session_state_removed:{sid}" for sid in (S_ENG, S_HANDOVER, S_SELF)
     )
-    assert sorted(p.stem for p in sessions.glob("*.json")) == [S_OTHER]
+    assert sorted(p.name for p in sessions.iterdir()) == sorted(
+        [f"{S_OTHER}.json", f".{S_OTHER}.json.tmp.4243"]
+    )
     assert len([c for c in scratch.calls("gh") if "/comments" in c]) == 1
 
 
