@@ -14,7 +14,7 @@
 #
 # Usage: dispatch.sh <issue> <slug> --task-file <path> [options]
 #   --model M         default claude-opus-5-5
-#   --effort E        default high
+#   --effort E        default medium
 #   --base REF        origin/<branch> to start from, default origin/master; fetched first,
 #                     and the new worktree's HEAD must be its tip
 #   --repo-id ID      Orca repo id; default: the repo whose remote is YiCheng0608/stock-lab
@@ -32,7 +32,7 @@ set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
 
-issue="" slug="" task_file="" model="claude-opus-5-5" effort="high" repo_id=""
+issue="" slug="" task_file="" model="claude-opus-5-5" effort="medium" repo_id=""
 base_ref="origin/master"
 wait_ms=60000 submit_wait=30 set_board=1
 while [ $# -gt 0 ]; do
