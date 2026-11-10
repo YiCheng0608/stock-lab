@@ -32,6 +32,7 @@ from .models import (
     MarketBar,
     Signal,
 )
+from .strategies import risk_reward_basis
 from .tracking_plans import open_plan_for_signal
 
 DEFAULT_LIMIT = 20
@@ -125,7 +126,7 @@ def _components(stored: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _levels(signal: Signal) -> dict[str, Any]:
+def _levels(signal: Signal, strategy: str | None = None) -> dict[str, Any]:
     if signal.entry_type == "breakout":
         entry = signal.breakout_price
         zone = {"low": signal.breakout_price, "high": signal.breakout_price}
@@ -150,6 +151,9 @@ def _levels(signal: Signal) -> dict[str, Any]:
         "target_1": signal.target_1,
         "target_2": signal.target_2,
         "risk_reward": risk_reward,
+        # What ``entry`` is (#580): the zone midpoint for pullback_v4, T's
+        # close for an earlier pullback, the trigger for a breakout.
+        "risk_reward_basis": risk_reward_basis(strategy),
         "earliest_execution_date": signal.earliest_execution_date.isoformat()
         if signal.earliest_execution_date
         else None,
@@ -233,7 +237,7 @@ def candidate_item(
         "signal_id": row.signal_id,
         "signal_status": signal.status,
         "open_plan_id": plan.id if plan else None,
-        "levels": _levels(signal),
+        "levels": _levels(signal, row.strategy),
         # The signal's strategy_levels row for its 「完整條件」 (#491); display only.
         "entry_plan": entry_plan(db, signal),
         "total_score": row.total_score,

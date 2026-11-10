@@ -29,7 +29,7 @@ from app.strategies import levels
 from worker import pipeline
 from worker.candidates import compute_daily_candidates
 
-BREAKOUT, PULLBACK = REGISTRY["breakout_v3"], REGISTRY["pullback_v3"]
+BREAKOUT, PULLBACK = REGISTRY["breakout_v3"], REGISTRY["pullback_v4"]
 
 
 @pytest.fixture
@@ -124,7 +124,7 @@ def test_a_candidate_reads_signal_levels_and_its_observation_reads_the_table(
 ):
     alpha = stock(db, "1101")
     breakout = signal(db, alpha)
-    pullback = signal(db, alpha, "pullback_v3", status="observation")
+    pullback = signal(db, alpha, "pullback_v4", status="observation")
     for row in (breakout, pullback):
         row.pullback_low = row.pullback_high = row.reference_entry = None
     pullback.breakout_price = pullback.invalid_price = None
@@ -209,6 +209,7 @@ def test_a_candidate_reads_signal_levels_and_its_observation_reads_the_table(
         "target_1": 103.2,
         "target_2": 106.0,
         "risk_reward": 1.6,
+        "risk_reward_basis": "entry_price",
     }
     assert [item["code"] for item in actionable["conditions"]][:3] == [
         "eligibility",
@@ -216,7 +217,7 @@ def test_a_candidate_reads_signal_levels_and_its_observation_reads_the_table(
         "breakout_price",
     ]
 
-    observation = by_key["pullback_v3"]
+    observation = by_key["pullback_v4"]
     assert observation["status"] == "observation"
     assert observation["levels"]["kind"] == "observation"
     assert observation["levels"]["display_label"] == "條件未成立・觀察價位"
@@ -236,7 +237,7 @@ def test_a_candidate_reads_signal_levels_and_its_observation_reads_the_table(
 
 def test_trend_unreachable_has_no_price_levels(db, client):
     beta = stock(db, "1102")
-    pullback = signal(db, beta, "pullback_v3", status="observation")
+    pullback = signal(db, beta, "pullback_v4", status="observation")
     level_row(
         db,
         pullback,
@@ -246,7 +247,7 @@ def test_trend_unreachable_has_no_price_levels(db, client):
         evaluation={"reasons": ["ma20_not_above_ma60"]},
     )
     db.commit()
-    row = rows(board(client, "1102"))["pullback_v3"]
+    row = rows(board(client, "1102"))["pullback_v4"]
     assert row["status"] == "observation"
     levels_ = row["levels"]
     assert levels_["availability"] == "trend_unreachable"
@@ -281,7 +282,7 @@ def test_incomplete_data_lists_what_is_missing(db, client):
         )
         row.breakout_price = row.invalid_price = row.target_1 = None
     db.commit()
-    row = rows(board(client, "1103"))["pullback_v3"]
+    row = rows(board(client, "1103"))["pullback_v4"]
     assert row["status"] == "data_incomplete"
     assert row["missing"] == [
         "history_under_60_bars",
@@ -374,7 +375,7 @@ def test_only_the_as_of_day_candidate_is_on_the_board(db, client):
 def test_the_board_changes_no_other_field_or_page(db, client):
     eta = stock(db, "1107")
     breakout = signal(db, eta)
-    pullback = signal(db, eta, "pullback_v3", status="observation")
+    pullback = signal(db, eta, "pullback_v4", status="observation")
     db.commit()
     compute_daily_candidates(db, T)
     before = {

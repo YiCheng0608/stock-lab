@@ -64,7 +64,7 @@ def _parser() -> argparse.ArgumentParser:
         nargs="*",
         default=[],
         metavar="STRATEGY:FILTER",
-        help="regime strategies to add, e.g. pullback_v3:r3; 'all' for every one",
+        help="regime strategies to add, e.g. pullback_v4:r3; 'all' for every one",
     )
     parser.add_argument(
         "--slim",

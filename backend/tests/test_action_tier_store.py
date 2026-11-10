@@ -193,7 +193,7 @@ def analyze_writes_a_new_signal(db):
     signal = _signal(db, "D0")
     db.add(
         Signal(
-            signal_key="analysis-D0-pullback_v3",
+            signal_key="analysis-D0-pullback_v4",
             signal_date=AS_OF,
             instrument_id=signal.instrument_id,
             strategy_version_id=signal.strategy_version_id,

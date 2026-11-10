@@ -636,14 +636,14 @@ def test_the_pages_read_v1_on_its_days_and_never_both_versions(
     # The registered key each v1 strategy is read as.
     assert {name: SUCCESSOR[name] for name in V1} == {
         "breakout_v1": "breakout_v3",
-        "pullback_v1": "pullback_v3",
+        "pullback_v1": "pullback_v4",
     }
 
     # Only v1 so far: the pages show it, keyed by its successor.
     shown = decision._latest_strategy_signals(db, instrument.id, T)
     assert {key: signal.id for key, signal in shown.items()} == {
         "breakout_v3": v1["breakout_v1"].id,
-        "pullback_v3": v1["pullback_v1"].id,
+        "pullback_v4": v1["pullback_v1"].id,
     }
 
     # v2 runs on T; a later v1 row of T itself (a stale writer) is not shown.
@@ -658,13 +658,13 @@ def test_the_pages_read_v1_on_its_days_and_never_both_versions(
         key: db.get(StrategyVersion, signal.strategy_version_id).name
         for key, signal in shown.items()
     }
-    assert versions == {"breakout_v3": "breakout_v3", "pullback_v3": "pullback_v3"}
+    assert versions == {"breakout_v3": "breakout_v3", "pullback_v4": "pullback_v4"}
     assert {signal.signal_date for signal in shown.values()} == {T}
     # As of the earlier day the pages still show v1.
     shown = decision._latest_strategy_signals(db, instrument.id, earlier)
     assert {key: signal.id for key, signal in shown.items()} == {
         "breakout_v3": v1["breakout_v1"].id,
-        "pullback_v3": v1["pullback_v1"].id,
+        "pullback_v4": v1["pullback_v1"].id,
     }
 
 

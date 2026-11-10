@@ -257,7 +257,7 @@ def _add_signal_pair(
         canonical_config_snapshot={},
     )
     pullback = StrategyVersion(
-        name="pullback_v3",
+        name="pullback_v4",
         version="3.0.0",
         kind="technical",
         config_json={},
@@ -1666,7 +1666,7 @@ def test_complete_conditional_wins_over_observation_without_level_pollution(
     assert summary["primary_reason"]["scope"] == "breakout"
     assert summary["primary_levels"]["kind"] == "trigger_invalid"
     assert summary["primary_strategy"] == "breakout_v3"
-    assert summary["alternative_strategies"] == ["pullback_v3"]
+    assert summary["alternative_strategies"] == ["pullback_v4"]
     assert summary["trigger_price"] == pytest.approx(21.05)
     assert summary["invalid_price"] == pytest.approx(20.47)
     assert summary["target_1"] == pytest.approx(21.98)
@@ -1725,7 +1725,7 @@ def test_incomplete_primary_strategy_fails_closed_but_exposes_alternative(produc
     assert "data_incomplete" in summary["blocking_reasons"]
     assert {item["strategy"] for item in summary["strategies"]} == {
         "breakout_v3",
-        "pullback_v3",
+        "pullback_v4",
     }
 
 
@@ -1753,7 +1753,7 @@ def test_complete_observations_without_wait_levels_are_no_condition(product_api)
     )
     assert {item["strategy"] for item in summary["strategies"]} == {
         "breakout_v3",
-        "pullback_v3",
+        "pullback_v4",
     }
     assert all(item["data_quality"] == "complete" for item in summary["strategies"])
 
@@ -1910,7 +1910,7 @@ def test_action_summary_preserves_two_strategy_conflict(product_api):
             canonical_config_snapshot={},
         )
         pullback = StrategyVersion(
-            name="pullback_v3",
+            name="pullback_v4",
             version="3.0.0",
             kind="technical",
             config_json={},
@@ -1963,7 +1963,7 @@ def test_action_summary_preserves_two_strategy_conflict(product_api):
     assert summary["action_state"] == "manual_review"
     assert set(summary["alternative_strategies"] + [summary["primary_strategy"]]) == {
         "breakout_v3",
-        "pullback_v3",
+        "pullback_v4",
     }
     assert summary["conflicts"]
 

@@ -13,6 +13,7 @@ from .base import (
     COMMON_EXECUTION,
     COMMON_RISK_MANAGEMENT,
     COMMON_UNIVERSE,
+    RISK_REWARD_SIGNAL_CLOSE,
     Condition,
     NextSessionInputs,
     ObservationLevels,
@@ -155,6 +156,7 @@ class PullbackV1(Strategy):
     entry_type = "pullback"
     label_zh = "回踩條件"
     research_label_zh = "回踩研究條件"
+    risk_reward_basis = RISK_REWARD_SIGNAL_CLOSE
     condition_short_labels_zh = {
         "pullback_history": "日線",
         "pullback_trend": "趨勢",
