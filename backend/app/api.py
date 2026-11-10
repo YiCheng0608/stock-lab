@@ -3775,9 +3775,7 @@ def signals(
     term = _search_term(q)
     if term:
         query = query.where(
-            _contains_text(
-                term, Signal.signal_key, Instrument.symbol, Instrument.name
-            )
+            _contains_text(term, Signal.signal_key, Instrument.symbol, Instrument.name)
         )
     rows, total = _paginate_query(
         db,
