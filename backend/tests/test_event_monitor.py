@@ -9,6 +9,7 @@ poll by a freshly started monitor: two runs in a row are a restart (AC-1).
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -1487,3 +1488,34 @@ def test_a_turn_ended_on_an_api_error_wakes_at_once(mon: Harness) -> None:
     assert "wake=sent" in out
     _monitor(mon, at=NOW + 60)
     assert len(_engineer_events(mon)) == 1
+
+
+def test_a_failure_without_details_has_no_empty_brackets(mon: Harness) -> None:
+    _session_state(mon, 1, state="failed", error="overloaded", error_details="")
+    _monitor(mon)
+    (event,) = _engineer_events(mon)
+    assert "回合因 API 錯誤中斷（overloaded）：" in event["summary"]
+
+
+def test_a_bad_state_file_is_logged_once_until_it_changes(mon: Harness) -> None:
+    """#595 review: session_skipped is logged once per file and mtime, not every poll."""
+    folder = mon.data / "logs" / "sessions"
+    folder.mkdir(parents=True)
+    bad = folder / "bad.json"
+    bad.write_text("{ partial", encoding="utf-8")
+    log = mon.data / "logs" / "monitor.log"
+
+    def count() -> int:
+        return log.read_text(encoding="utf-8").count(" session_skipped ")
+
+    _monitor(mon)
+    _monitor(mon, at=NOW + 60)
+    _monitor(mon, at=NOW + 120)
+    assert count() == 1
+    stat = bad.stat()
+    os.utime(bad, ns=(stat.st_atime_ns, stat.st_mtime_ns + 5_000_000_000))
+    _monitor(mon, at=NOW + 180)
+    assert count() == 2
+    bad.unlink()
+    _monitor(mon, at=NOW + 240)
+    assert count() == 2

@@ -306,8 +306,13 @@ function main() {
         state: "failed",
         ended_at: iso(now),
         error: typeof input.error === "string" ? input.error : "unknown",
+        // Optional in the input: "" when it is missing, not the JSON text of "".
         error_details: clip(
-          typeof input.error_details === "string" ? input.error_details : JSON.stringify(input.error_details ?? ""),
+          input.error_details === undefined || input.error_details === null
+            ? ""
+            : typeof input.error_details === "string"
+              ? input.error_details
+              : JSON.stringify(input.error_details),
           MESSAGE_LIMIT,
         ),
         last_message: clip(input.last_assistant_message, MESSAGE_LIMIT),

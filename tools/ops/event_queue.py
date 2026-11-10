@@ -554,8 +554,9 @@ def _session_event(doc, now: float, branches: set[str] | None) -> dict | None:
 
 def session_events(
     logs: Path, now: float, branches: set[str] | None
-) -> tuple[list[dict], list[str]]:
-    """The turn hook's state files (#595) and the ones skipped ("<file> <reason>"):
+) -> tuple[list[dict], dict[str, str]]:
+    """The turn hook's state files (#595) and the ones skipped, {"<file>:<mtime ns>":
+    "<file> <reason>"}:
     a turn stopped without a comment more than WAITING_AFTER ago (engineer_waiting;
     commented null, the hook could not read the transcript, counts as no comment), a turn
     ended on an API error (engineer_failed, at once), a session ended while its task
@@ -563,17 +564,21 @@ def session_events(
     that cannot be read or makes this code fail is skipped alone: the poll's other events
     are recorded as ever."""
     out: list[dict] = []
-    skipped: list[str] = []
+    skipped: dict[str, str] = {}
     try:
         paths = sorted((logs / SESSIONS).glob("*.json"))
     except OSError as error:
-        return out, [f"{SESSIONS}/ {one_line(str(error), 120)}"]
+        return out, {f"{SESSIONS}/": f"{SESSIONS}/ {one_line(str(error), 120)}"}
     for path in paths:
         try:
             doc = json.loads(path.read_text(encoding="utf-8"))
             event = _session_event(doc, now, branches)
         except Exception as error:  # any bad file is skipped alone
-            skipped.append(
+            try:
+                key = f"{path.name}:{path.stat().st_mtime_ns}"
+            except OSError:
+                key = f"{path.name}:?"
+            skipped[key] = (
                 f"{path.name} {type(error).__name__}: {one_line(str(error), 120)}"
             )
             continue
@@ -677,9 +682,14 @@ def record(
     loud = [e for e in new if not e.get("quiet")]
     wake = bool(unnotified) and (bool(loud) or retry_due)
     handle, _, _ = _heartbeat(logs)
-    for line in skipped:
-        # monitor.sh logs them (session_skipped); the poll goes on.
-        print(f"session_skipped {line}")
+    # monitor.sh logs them (session_skipped), each file once until it changes (by its
+    # mtime), not on every poll; the poll goes on.
+    logged = q.state.get("sessions_skipped")
+    logged = {k for k in logged if isinstance(k, str)} if isinstance(logged, list) else set()
+    for key, line in skipped.items():
+        if key not in logged:
+            print(f"session_skipped {line}")
+    q.save_state(sessions_skipped=sorted(skipped))
     for item in new:
         quiet = f" quiet={item['quiet']}" if item.get("quiet") else ""
         print(

@@ -495,3 +495,13 @@ def test_a_failed_write_leaves_no_temporary_file(tmp_path) -> None:
     assert [p.name for p in h.state_file.parent.iterdir()] == [h.state_file.name]
     log = (h.data / "logs" / "turn-hook.log").read_text(encoding="utf-8")
     assert "error:" in log
+
+
+def test_a_failure_without_details_records_an_empty_string(tmp_path) -> None:
+    """error_details is optional: missing, it is "" in the state file, not '""'."""
+    h = Hook(tmp_path)
+    h.lines(_prompt("go"))
+    h.run("StopFailure", error="overloaded", last_assistant_message="API Error")
+    assert h.state()["error_details"] == ""
+    h.run("StopFailure", error="unknown", error_details={"code": 529})
+    assert h.state()["error_details"] == '{"code":529}'
