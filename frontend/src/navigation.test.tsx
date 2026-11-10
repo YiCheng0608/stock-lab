@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import * as AppModule from './App'
 import { MAIN_NAV } from './components/Navbar'
+import { Shell } from './components/Shell'
 import { listResponse } from './candidates/candidates.fixtures'
 import { CandidatesSection } from './candidates/CandidateViews'
 import { noPreviousCloseText } from './marketChange'
@@ -173,6 +174,30 @@ check(count(list, 'aria-label="進場方式"') === listResponse().items.length, 
 
 // ---- first_trading_day reads 掛牌首日: a market transfer also starts a new listing row (#475 review) ----
 check(noPreviousCloseText('first_trading_day') === '掛牌首日', `first_trading_day: ${noPreviousCloseText('first_trading_day')}`)
+
+// ---- the navbar date on every page comes from /api/data-date, not the whole dashboard (Issue 601) ----
+{
+  // Server rendering registers the shell's queries without running them; run each queryFn against a fetch that
+  // only records the URL (get() calls fetch before its first await) and never settles.
+  const shellClient = new QueryClient()
+  render('/strategy', <Shell><p>page</p></Shell>, shellClient)
+  const requested: string[] = []
+  const realFetch = globalThis.fetch
+  globalThis.fetch = ((input: RequestInfo | URL) => { requested.push(String(input)); return new Promise<Response>(() => undefined) }) as typeof fetch
+  try {
+    for (const query of shellClient.getQueryCache().getAll()) {
+      const queryFn = query.options.queryFn
+      if (typeof queryFn === 'function') void (queryFn as (context: unknown) => Promise<unknown>)({ queryKey: query.queryKey, signal: new AbortController().signal, meta: undefined, client: shellClient })
+    }
+  } finally {
+    globalThis.fetch = realFetch
+  }
+  check(requested.some((url) => url.endsWith('/data-date')), `Shell 的導覽列日期打 /data-date: ${JSON.stringify(requested)}`)
+  check(!requested.some((url) => url.includes('/dashboard')), `Shell 不請求 /dashboard: ${JSON.stringify(requested)}`)
+  const dated = new QueryClient()
+  dated.setQueryData(['data-date'], { as_of: '2026-11-09' })
+  check(text(render('/strategy', <Shell><p>page</p></Shell>, dated)).includes('2026/11/09'), '導覽列顯示 /data-date 的 as_of')
+}
 
 // ---- layout rules the static markup cannot show ----
 const css = fs.readFileSync(path.join(__dirname, 'styles.css'), 'utf8')
