@@ -820,6 +820,15 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8">
 <body><div class="skeleton">loading</div>
 <details><summary>more</summary><p>hidden detail</p></details>
 <div style="width:600px">wide row</div>
+<ol style="overflow:hidden;width:300px;margin:0;padding:0;list-style:none">
+<li class="candidate-row" data-candidate-rank="1" style="display:flex;width:300px">
+<dl class="candidate-row-nums" style="display:flex;width:200px;margin:0"><div><dt>收盤</dt><dd style="margin:0">10</dd></div><div><dt>總分</dt><dd style="margin:0">70</dd></div></dl>
+<button class="candidate-ai-toggle">AI</button></li>
+<li class="candidate-row" data-candidate-rank="2" style="position:relative;width:300px">
+<dl class="candidate-row-nums" style="display:flex;width:200px;margin:0"><div style="flex:none;width:150px"><dt>收盤</dt><dd style="margin:0">10</dd></div><div style="flex:none;width:200px"><dt>總分（0–100）</dt><dd style="margin:0">70</dd></div></dl>
+<button class="candidate-ai-toggle" style="position:absolute;left:160px;top:0;width:120px;height:60px">AI</button></li>
+<li class="candidate-row" data-candidate-rank="3" hidden><dl class="candidate-row-nums"></dl></li>
+</ol>
 <button id="tab" onclick="fetch('/slow').then(() => document.body.insertAdjacentHTML('beforeend', '<p>tab opened</p>'))">tab</button>
 <script>
 fetch('/slow').then((r) => r.text()).then((text) => {
@@ -904,6 +913,24 @@ def test_screenshot_waits_for_data_and_reports_overflow(tmp_path: Path) -> None:
         assert "loading" not in text
         assert line["consoleErrors"] == ["boom"]
         assert line["httpErrors"] == []
+        # Issue 608: the shown today-list rows; #2's total runs under the button and past the row.
+        total = ["dt 總分（0–100）", "dd 70"]
+        assert line["candidateRows"] == [
+            {
+                "rank": 1,
+                "numsScrollWidth": 200,
+                "numsClientWidth": 200,
+                "covered": [],
+                "clipped": [],
+            },
+            {
+                "rank": 2,
+                "numsScrollWidth": 350,
+                "numsClientWidth": 200,
+                "covered": total,
+                "clipped": total,
+            },
+        ]
     assert [line["overflow"] for line in lines] == [False, True]
     assert lines[1]["scrollWidth"] > lines[1]["clientWidth"] == 390
     assert sorted(p.name for p in out.iterdir()) == [

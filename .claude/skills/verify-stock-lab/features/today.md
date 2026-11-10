@@ -83,6 +83,7 @@
 | T14 | CI | 今日可買的大盤摘要列 | `today-1280.txt` 有相連的四行：`加權 <收盤，兩位小數> <±漲跌幅，兩位小數>%`（`change_pct` 為 null 時 `—`；`unavailable` 或收盤為 null 時整行 `加權 未取得`）、同格式的 `櫃買 …`、`資料 <market_overview.trading_date 換成 YYYY/MM/DD>`（null 時 `資料日期未提供`）、`看大盤 →`；四行在標題 `今日可買`（同 T7 的定位）之前；頁面沒有整行 `漲跌家數（股票）`、`括號為漲停／跌停`（四格大盤概況已移到大盤頁） |
 | T15 | CI | 大盤頁的共用日 K | 依序讀 `market-1280.txt`＋`taiex-bars.json`（預設）、`market-tpex-1280.txt`＋`tpex-bars.json`、`market-tx-1280.txt`＋`tx-bars.json`（`?index=` 選的列，#564）。每張截圖：有整行該列的圖標題（`加權指數日線`、`櫃買指數日線`、`台指期近月日線`），其他 6 檔的 `<名稱>日線` 都不出現（只有一張圖、網址選擇有效），標題在整行 `指數總表` 之後；台指期標題之後有整行 `資料來源：臺灣期貨交易所（政府資料開放平臺，政府資料開放授權條款第1版）`。API `bars` 非空時至少一根可畫（同前端 `isDrawableBar`：未停牌、開高低收都是正數且高、低包住開收；收盤-only 的列開＝高＝低＝收也算），標題的下一行是 `資料 <data_as_of 換成 YYYY/MM/DD>`，其後有整行 `最近 <count> 根日線；缺日不補、停牌不畫 K 線`，資料表（截圖展開）有一行以 `<最新一根可畫的日期 YYYY/MM/DD>`、tab、開、高、低、收（指數兩位小數、台指期整數，以 tab 分隔）開頭；`bars` 空時其後有整行 `來源未提供日線`。CI 假資料庫有三者的日線（台指期只有最後 10 個交易日、整數點，`fixture_data.TX_SESSIONS`） |
 | T16 | CI | 大盤頁的指數總表 | 讀 `market-1280.txt` 與 `dashboard.json` 的 `market_overview.indexes`（7 列，`key` 依序 `taiex`、`tpex`、`tx`、`spx`、`ixic`、`dji`、`sox`）。整行 `指數總表` 在整行 `大盤概況` 之後、`加權指數日線` 之前；其後整行 `台股`，再後整行美股分組標題（每個有資料的美股列 `freshness` 為 `latest` 或 `us_market_closed` 且 `trading_date` 早於 `market_overview.trading_date` 時 `美股（前一交易日）`，否則 `美股`）。每列依序是一整行（儲存格以 tab 分隔）：名稱（台指期有 `contract_month` 時接 ` 合約 YYYY/MM`）、收盤（千分位，指數兩位小數、台指期整數）、漲跌（同位數、正數帶 `+`）、漲跌幅（兩位小數加 `%`、正數帶 `+`；`change_status=contract_roll` 時這兩格都是 `換月`；null 寫 `—`）、資料日（`stale` 接 ` 非最新`，`us_market_closed` 接 ` <expected_date> 美股休市`）、相對季線（`ma60.status=available` 時 `<之上／之下／持平> 季線 <ma60，同收盤位數>`；`insufficient` 時 `資料不足（<close_count>／<required_closes> 日）`；`unavailable` 時 `無資料：日線未收集`／`無資料：日線最新為 <日期>`／`無資料：季線尚未計算`，其他 `無資料`）、`source.label`；`unavailable` 的列是 `<名稱>\t—\t—\t—\t<原因>\t—\t<來源>`，原因 `無資料：尚未收集`、`no_verified_session` 為 `無資料：尚無已驗證的資料日`、`fetch_failed` 為 `無資料：最近一次擷取失敗（<last_attempt_date>）`。台股三列在美股分組標題之前、美股四列在它之後。`指數總表` 之後有整行臺灣期貨交易所顯名與 `資料來源：FRED，Federal Reserve Bank of St. Louis（個人非商業使用）`（資料說明，截圖展開）。CI 假資料庫 7 列都有資料（`fixture_data.EXPECTED`） |
+| T17 | CI | 手機候選列數字區 | 讀 `today-390` 截圖 JSON 的 `candidateRows`（`screenshot.cjs` 在展開所有 `<details>` 後量每個顯示中的 `.candidate-row`，含其餘幾檔；#608）。量到的名次依序等於 `items[].rank`（`not_computed` 或 `items` 空時沒有列）；每列 `.candidate-row-nums` 的 `scrollWidth ≤ clientWidth`、`covered` 空（收盤、RR、總分的 `dt`／`dd` 都不與 `.candidate-ai-toggle` 重疊）、`clipped` 空（沒有 `dt`／`dd` 超出列的左右邊；外框 `overflow: hidden` 會靜默切掉，頁面不會橫向捲動，T1 抓不到） |
 
 ## 陷阱
 
@@ -92,7 +93,7 @@
 
 ## 判定
 
-- 通過：T1～T9、T11～T16 全部通過；T10 由人工判讀另記。
+- 通過：T1～T9、T11～T17 全部通過；T10 由人工判讀另記。
 - 失敗：任一條失敗，列出編號、預期與實際。
 - 無法判定：沒有失敗，但有檢查無法判定（API 非 200、截圖未 ready，或上游沒通過，見 [README 三態與上游](README.md#三態與上游)）；列出 URL 或上游編號。
 
