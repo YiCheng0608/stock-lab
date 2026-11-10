@@ -1,14 +1,11 @@
 import type { ReactNode } from 'react'
 
 import { Badge, DateBadge, Skeleton } from '../components/ui'
+import { exchangeLabel } from '../presentation'
 import type { CandidateMarket, StockBarRow } from '../types'
 import { formatPrice, formatSignedPercent, formatSignedPrice, sourcesLabel, stockQuote } from './stockBars'
 
-export function exchangeLabel(exchange: string | null | undefined): string {
-  if (exchange === 'TWSE') return '上市'
-  if (exchange === 'TPEx') return '上櫃'
-  return '市場待核實'
-}
+export { exchangeLabel }
 
 // Page header: symbol, name, market, latest close (mono large), change in up/down color with explicit sign,
 // data-date badge and source. Without a trusted value the price or change reads 「待核實」 (UI_COPY_SPEC §10.2).

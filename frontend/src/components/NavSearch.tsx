@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { getInstrumentSuggestions } from '../api'
 import { createSuggestController, INITIAL_SUGGEST_STATE, stockSearchPath } from '../search'
 import type { SuggestController, SuggestState } from '../search'
-import { exchangeLabel } from '../stock/StockHeader'
+import { exchangeLabel } from '../presentation'
 
 // Navbar stock search (DESIGN_SYSTEM §5 導覽列搜尋建議, UI_COPY_SPEC §15; Issue 599): a combobox whose debounced
 // suggestions come from /api/instruments only. Picking one opens the stock page; Enter without one opens /stocks?q=.

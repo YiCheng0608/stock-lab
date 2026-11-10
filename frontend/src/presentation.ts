@@ -411,3 +411,10 @@ export function officialEventDisplayTitle(title: string | null | undefined, type
   if (title === 'TPEx suspension interval' || type === 'TPEx suspension interval') return '上櫃股票暫停交易期間'
   return title || type || '官方事件'
 }
+
+// Market of a listing by its exchange; one rule for the stock header, candidate rows and navbar suggestions (Issue 599).
+export function exchangeLabel(exchange: string | null | undefined): string {
+  if (exchange === 'TWSE') return '上市'
+  if (exchange === 'TPEx') return '上櫃'
+  return '市場待核實'
+}
