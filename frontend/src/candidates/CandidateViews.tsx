@@ -263,7 +263,7 @@ function CandidateRow({ item, hidden, open, onOpen }: { item: CandidateItem; hid
         </div>
         <dl className="candidate-row-nums">
           <div className="candidate-row-close"><dt>收盤（元）</dt><dd><CloseValue item={item} /></dd></div>
-          <div><dt><Term id="rr">RR</Term></dt><dd><RiskRewardValue levels={item.levels} /></dd></div>
+          <div className="candidate-row-rr"><dt><Term id="rr">RR</Term></dt><dd><RiskRewardValue levels={item.levels} /></dd></div>
           <div><dt><Term id="candidate_score">總分</Term>（0–100）</dt><dd>{formatCandidateScore(item.total_score)}</dd></div>
         </dl>
         <button type="button" className="badge badge-accent badge-compact candidate-ai-toggle" aria-expanded={open} aria-controls={detailId} onClick={() => onOpen(!open)}>

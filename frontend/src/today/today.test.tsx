@@ -182,6 +182,15 @@ check(/white-space:\s*nowrap/.test(ruleOf('.home-news-title')) && /text-overflow
 check(/white-space:\s*nowrap/.test(ruleOf('.home-news-meta, .home-news-impact')) && /white-space:\s*nowrap/.test(ruleOf('.hot-group-returns')), 'Issue 510: line two of news and groups never wraps')
 check(/white-space:\s*nowrap/.test(ruleOf('.hot-group-line h3')), 'Issue 510: a group name is one line')
 check(!/var\(--text-|--space-row|--space-block/.test(styles.replace(/var\(--text-(xs|sm|md|base|lg|xl|2xl)\)|var\(--space-(row|block)\)/g, '')), 'Issue 510: only the defined type and spacing tokens are used')
+// Issue 608: on phones the AI entry left the numbers' line (it covered the total at 390) for the title line's right,
+// the numbers take the whole width, and the RR's basis may wrap inside its column. page_checks T17 measures it.
+const phoneAt = styles.indexOf('@media (max-width: 640px)')
+const phoneRuleOf = (selector: string) => { const at = styles.indexOf('\n  ' + selector + ' {', phoneAt); return phoneAt < 0 || at < 0 ? '' : styles.slice(at, styles.indexOf('}', at)) }
+check(/display:\s*contents/.test(phoneRuleOf('.candidate-row-body')) && /grid-row:\s*1/.test(phoneRuleOf('.candidate-row-title')), 'Issue 608: the row body\'s children sit in the row grid, the title on line one')
+check(/grid-column:\s*2/.test(phoneRuleOf('.candidate-ai-toggle')) && /grid-row:\s*1/.test(phoneRuleOf('.candidate-ai-toggle')), 'Issue 608: the AI entry is at the right of the title line on phones')
+check(/grid-column:\s*1 \/ -1/.test(phoneRuleOf('.candidate-row-body > :not(.candidate-row-title), .candidate-row-nums')), 'Issue 608: the sentence and the numbers take the whole row')
+check(/min-width:\s*0/.test(phoneRuleOf('.candidate-row-nums > .candidate-row-rr')) && /white-space:\s*normal/.test(phoneRuleOf('.candidate-row-nums .candidate-rr-basis')), 'Issue 608: the RR column may narrow and its basis wrap')
+check(nums1.includes('<div class="candidate-row-rr"><dt>'), 'Issue 608: the RR cell carries the class the phone rule narrows')
 const tokenCss = fs.readFileSync(path.join(__dirname, '..', 'styles', 'tokens.css'), 'utf8')
 for (const token of ['--text-xs', '--text-sm', '--text-md', '--text-base', '--text-lg', '--text-xl', '--text-2xl', '--space-row', '--space-block']) check(tokenCss.includes(token + ':'), `tokens.css defines ${token} (DESIGN_SYSTEM §2)`)
 

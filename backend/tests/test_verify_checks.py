@@ -1195,6 +1195,66 @@ def test_page_usable_reports_errors_and_overflow(tmp_path):
     )
 
 
+# ---- T17: the today list's number block at 390 (Issue 608) ----
+
+
+def _row(rank, scroll=300, client=300, covered=(), clipped=()):
+    return {
+        "rank": rank,
+        "numsScrollWidth": scroll,
+        "numsClientWidth": client,
+        "covered": list(covered),
+        "clipped": list(clipped),
+    }
+
+
+def _t17_run(tmp_path, rows, payload=None, ready=True):
+    metas = {"today": {390: {"width": 390, "ready": ready, "candidateRows": rows}}}
+    payloads = {"candidates": _candidates() if payload is None else payload}
+    return FakeRun(tmp_path, payloads, {}, metas=metas)
+
+
+def test_t17_passes_when_every_row_fits(tmp_path):
+    run = _t17_run(tmp_path, [_row(1), _row(2)])
+    assert page_checks.t17(run) == (
+        "390：2 列數字區不溢出、不被 AI 按鈕蓋住、沒有超出列邊"
+    )
+
+
+def test_t17_fails_on_the_issue_608_row(tmp_path):
+    # The #606 measurement: the block wider than its column, the total under the button, its label cut.
+    rows = [
+        _row(1, 349, 246, ["dd 76"], ["dt 總分（0–100）"]),
+        _row(2, 342, 246, ["dd 74"]),
+    ]
+    with pytest.raises(page_checks.Fail) as error:
+        page_checks.t17(_t17_run(tmp_path, rows))
+    assert str(error.value) == (
+        "#1 數字區 scrollWidth 349 > clientWidth 246；#1 被 AI 按鈕蓋住：dd 76；"
+        "#1 超出列邊被切：dt 總分（0–100）；"
+        "#2 數字區 scrollWidth 342 > clientWidth 246；#2 被 AI 按鈕蓋住：dd 74"
+    )
+
+
+def test_t17_needs_every_candidate_measured(tmp_path):
+    # The rest of the list is measured too (the screenshot opens its <details>).
+    with pytest.raises(
+        page_checks.Fail, match=r"量到的候選列 \[1\]，預期依 items \[1, 2\]"
+    ):
+        page_checks.t17(_t17_run(tmp_path, [_row(1)]))
+    old_tool = {"today": {390: {"width": 390, "ready": True}}}
+    run = FakeRun(tmp_path, {"candidates": _candidates()}, {}, metas=old_tool)
+    with pytest.raises(page_checks.Fail, match="沒有 candidateRows"):
+        page_checks.t17(run)
+
+
+def test_t17_without_candidates_or_a_ready_shot(tmp_path):
+    empty = {"status": "success", "trading_date": "2026-10-16", "items": []}
+    assert page_checks.t17(_t17_run(tmp_path, [], empty)) == "沒有候選列"
+    with pytest.raises(page_checks.Undetermined, match="today-390 未 ready"):
+        page_checks.t17(_t17_run(tmp_path, [_row(1), _row(2)], ready=False))
+
+
 def test_known_failures_do_not_fail_the_run_until_they_pass(tmp_path, monkeypatch):
     monkeypatch.setitem(
         page_checks.KNOWN_FAILURES,
