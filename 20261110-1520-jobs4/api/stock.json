@@ -1,0 +1,3545 @@
+{
+  "instrument": {
+    "id": 13,
+    "market": "TW",
+    "exchange": "TWSE",
+    "symbol": "1216",
+    "name": "統一",
+    "industry": "02",
+    "instrument_type": "stock",
+    "etf_category": null,
+    "listing_date": "1987-12-28",
+    "is_watchlisted": false,
+    "status": "active"
+  },
+  "bars": [
+    {
+      "date": "2026-09-22",
+      "open": 75.2,
+      "high": 75.3,
+      "low": 74.4,
+      "close": 74.6,
+      "adj_close": 74.6,
+      "volume": 6519421,
+      "volume_exact": "6519421",
+      "turnover": 486599631.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-09-22T00:00:00",
+      "collected_at": "2026-10-17T12:13:38.222034+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-09-23",
+      "open": 74.9,
+      "high": 75.4,
+      "low": 74.5,
+      "close": 75.4,
+      "adj_close": 75.4,
+      "volume": 7665870,
+      "volume_exact": "7665870",
+      "turnover": 575713856.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-09-23T00:00:00",
+      "collected_at": "2026-10-17T12:13:52.862999+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-09-24",
+      "open": 74.8,
+      "high": 75.0,
+      "low": 74.4,
+      "close": 74.5,
+      "adj_close": 74.5,
+      "volume": 4863384,
+      "volume_exact": "4863384",
+      "turnover": 362929412.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-09-24T00:00:00",
+      "collected_at": "2026-10-17T12:14:09.339955+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-09-29",
+      "open": 74.9,
+      "high": 74.9,
+      "low": 73.9,
+      "close": 73.9,
+      "adj_close": 73.9,
+      "volume": 6515894,
+      "volume_exact": "6515894",
+      "turnover": 483127352.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-09-29T00:00:00",
+      "collected_at": "2026-10-17T12:14:30.980445+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-09-30",
+      "open": 74.5,
+      "high": 74.5,
+      "low": 73.7,
+      "close": 74.2,
+      "adj_close": 74.2,
+      "volume": 6953647,
+      "volume_exact": "6953647",
+      "turnover": 515613194.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-09-30T00:00:00",
+      "collected_at": "2026-10-17T12:14:45.399365+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-10-01",
+      "open": 73.9,
+      "high": 74.2,
+      "low": 73.7,
+      "close": 73.9,
+      "adj_close": 73.9,
+      "volume": 5933943,
+      "volume_exact": "5933943",
+      "turnover": 438809204.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-10-01T00:00:00",
+      "collected_at": "2026-10-17T12:15:01.369012+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-10-02",
+      "open": 73.7,
+      "high": 73.8,
+      "low": 72.6,
+      "close": 72.7,
+      "adj_close": 72.7,
+      "volume": 19541612,
+      "volume_exact": "19541612",
+      "turnover": 1424602116.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-10-02T00:00:00",
+      "collected_at": "2026-10-17T12:15:19.391671+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-10-05",
+      "open": 73.3,
+      "high": 73.3,
+      "low": 72.6,
+      "close": 72.7,
+      "adj_close": 72.7,
+      "volume": 9833552,
+      "volume_exact": "9833552",
+      "turnover": 716074706.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-10-05T00:00:00",
+      "collected_at": "2026-10-17T12:15:37.735664+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-10-06",
+      "open": 72.8,
+      "high": 73.9,
+      "low": 72.8,
+      "close": 73.7,
+      "adj_close": 73.7,
+      "volume": 12823194,
+      "volume_exact": "12823194",
+      "turnover": 942958172.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-10-06T00:00:00",
+      "collected_at": "2026-10-17T12:15:54.901406+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-10-07",
+      "open": 73.7,
+      "high": 75.5,
+      "low": 73.7,
+      "close": 75.5,
+      "adj_close": 75.5,
+      "volume": 15650434,
+      "volume_exact": "15650434",
+      "turnover": 1172593425.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-10-07T00:00:00",
+      "collected_at": "2026-10-17T12:16:11.385100+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-10-08",
+      "open": 75.0,
+      "high": 76.2,
+      "low": 75.0,
+      "close": 75.6,
+      "adj_close": 75.6,
+      "volume": 10217453,
+      "volume_exact": "10217453",
+      "turnover": 773678335.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-10-08T00:00:00",
+      "collected_at": "2026-10-17T12:16:27.257057+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-10-12",
+      "open": 75.6,
+      "high": 76.5,
+      "low": 75.6,
+      "close": 76.0,
+      "adj_close": 76.0,
+      "volume": 9899429,
+      "volume_exact": "9899429",
+      "turnover": 753666049.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-10-12T00:00:00",
+      "collected_at": "2026-10-17T12:16:54.191342+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-10-13",
+      "open": 75.3,
+      "high": 77.1,
+      "low": 75.3,
+      "close": 77.1,
+      "adj_close": 77.1,
+      "volume": 17150369,
+      "volume_exact": "17150369",
+      "turnover": 1312629839.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-10-13T00:00:00",
+      "collected_at": "2026-10-17T12:17:11.589468+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-10-14",
+      "open": 77.1,
+      "high": 78.2,
+      "low": 76.6,
+      "close": 78.2,
+      "adj_close": 78.2,
+      "volume": 15514611,
+      "volume_exact": "15514611",
+      "turnover": 1204956117.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-10-14T00:00:00",
+      "collected_at": "2026-10-17T12:17:26.113611+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-10-15",
+      "open": 78.4,
+      "high": 80.1,
+      "low": 78.2,
+      "close": 79.5,
+      "adj_close": 79.5,
+      "volume": 38693256,
+      "volume_exact": "38693256",
+      "turnover": 3077993331.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-10-15T00:00:00",
+      "collected_at": "2026-10-17T12:17:40.837775+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-10-16",
+      "open": 79.9,
+      "high": 80.4,
+      "low": 78.7,
+      "close": 79.6,
+      "adj_close": 79.6,
+      "volume": 15818268,
+      "volume_exact": "15818268",
+      "turnover": 1255133909.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-10-16T00:00:00",
+      "collected_at": "2026-10-17T09:51:29.193273+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-10-19",
+      "open": 80.0,
+      "high": 80.0,
+      "low": 78.5,
+      "close": 79.6,
+      "adj_close": 79.6,
+      "volume": 16684332,
+      "volume_exact": "16684332",
+      "turnover": 1326068127.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-10-19T00:00:00",
+      "collected_at": "2026-10-19T10:31:50.013276+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-10-20",
+      "open": 78.5,
+      "high": 79.4,
+      "low": 77.6,
+      "close": 78.4,
+      "adj_close": 78.4,
+      "volume": 10341652,
+      "volume_exact": "10341652",
+      "turnover": 808040877.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-10-20T00:00:00",
+      "collected_at": "2026-10-20T10:30:37.772418+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-10-21",
+      "open": 78.8,
+      "high": 78.8,
+      "low": 77.7,
+      "close": 78.5,
+      "adj_close": 78.5,
+      "volume": 11137420,
+      "volume_exact": "11137420",
+      "turnover": 871039551.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-10-21T00:00:00",
+      "collected_at": "2026-10-21T10:30:24.691276+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-10-22",
+      "open": 77.6,
+      "high": 79.6,
+      "low": 77.6,
+      "close": 79.6,
+      "adj_close": 79.6,
+      "volume": 10089033,
+      "volume_exact": "10089033",
+      "turnover": 796402426.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-10-22T00:00:00",
+      "collected_at": "2026-10-22T10:30:43.297105+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-10-27",
+      "open": 81.5,
+      "high": 83.0,
+      "low": 79.7,
+      "close": 80.2,
+      "adj_close": 80.2,
+      "volume": 16749192,
+      "volume_exact": "16749192",
+      "turnover": 1352487268.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-10-27T00:00:00",
+      "collected_at": "2026-10-27T10:30:57.124285+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-10-28",
+      "open": 79.7,
+      "high": 79.8,
+      "low": 78.2,
+      "close": 78.7,
+      "adj_close": 78.7,
+      "volume": 6267352,
+      "volume_exact": "6267352",
+      "turnover": 493263804.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-10-28T00:00:00",
+      "collected_at": "2026-10-28T10:30:34.503474+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-10-29",
+      "open": 78.1,
+      "high": 79.2,
+      "low": 77.8,
+      "close": 79.0,
+      "adj_close": 79.0,
+      "volume": 6769506,
+      "volume_exact": "6769506",
+      "turnover": 532202964.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-10-29T00:00:00",
+      "collected_at": "2026-10-29T10:30:33.599937+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-10-30",
+      "open": 78.8,
+      "high": 80.2,
+      "low": 78.5,
+      "close": 80.2,
+      "adj_close": 80.2,
+      "volume": 15312438,
+      "volume_exact": "15312438",
+      "turnover": 1222450237.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-10-30T00:00:00",
+      "collected_at": "2026-10-30T10:30:25.228703+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-11-02",
+      "open": 81.9,
+      "high": 81.9,
+      "low": 80.1,
+      "close": 80.6,
+      "adj_close": 80.6,
+      "volume": 11896389,
+      "volume_exact": "11896389",
+      "turnover": 962901928.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-11-02T00:00:00",
+      "collected_at": "2026-11-02T10:30:29.614357+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-11-03",
+      "open": 81.0,
+      "high": 82.7,
+      "low": 80.5,
+      "close": 81.1,
+      "adj_close": 81.1,
+      "volume": 15826388,
+      "volume_exact": "15826388",
+      "turnover": 1287046380.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-11-03T00:00:00",
+      "collected_at": "2026-11-03T10:31:09.699108+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-11-04",
+      "open": 80.3,
+      "high": 82.5,
+      "low": 79.9,
+      "close": 80.9,
+      "adj_close": 80.9,
+      "volume": 10511571,
+      "volume_exact": "10511571",
+      "turnover": 849368746.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-11-04T00:00:00",
+      "collected_at": "2026-11-04T10:31:54.464800+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-11-05",
+      "open": 81.2,
+      "high": 82.6,
+      "low": 80.5,
+      "close": 80.9,
+      "adj_close": 80.9,
+      "volume": 13101956,
+      "volume_exact": "13101956",
+      "turnover": 1064235452.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-11-05T00:00:00",
+      "collected_at": "2026-11-05T13:30:25.869311+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-11-06",
+      "open": 78.3,
+      "high": 80.3,
+      "low": 76.8,
+      "close": 76.8,
+      "adj_close": 76.8,
+      "volume": 18019042,
+      "volume_exact": "18019042",
+      "turnover": 1411442456.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-11-06T00:00:00",
+      "collected_at": "2026-11-06T13:30:35.426447+00:00",
+      "is_suspended": false
+    },
+    {
+      "date": "2026-11-09",
+      "open": 77.3,
+      "high": 78.0,
+      "low": 76.3,
+      "close": 76.7,
+      "adj_close": 76.7,
+      "volume": 17522945,
+      "volume_exact": "17522945",
+      "turnover": 1347701255.0,
+      "turnover_status": "available",
+      "turnover_reason": null,
+      "source": "twse",
+      "data_as_of": "2026-11-09T00:00:00",
+      "collected_at": "2026-11-09T13:31:16.010745+00:00",
+      "is_suspended": false
+    }
+  ],
+  "groups": [
+    {
+      "id": "official-industry-206d1b19286222a7",
+      "name": "Industry · Food",
+      "display_name": "食品",
+      "verified": true,
+      "valid_from": "1987-12-28",
+      "valid_to": null
+    }
+  ],
+  "chips": [
+    {
+      "date": "2026-09-22",
+      "foreign_buy": -181703.0,
+      "trust_buy": 199411.0,
+      "dealer_buy": 155857.0,
+      "margin_balance": 885.0,
+      "margin_change": 27.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-09-22T00:00:00",
+      "collected_at": "2026-10-17T12:13:39.178180+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-09-22T00:00:00",
+        "collected_at": "2026-10-17T12:13:39.178180+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-09-22T00:00:00",
+        "collected_at": "2026-10-17T12:13:39.178180+00:00"
+      }
+    },
+    {
+      "date": "2026-09-23",
+      "foreign_buy": 2806606.0,
+      "trust_buy": 22000.0,
+      "dealer_buy": 382316.0,
+      "margin_balance": 792.0,
+      "margin_change": -93.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-09-23T00:00:00",
+      "collected_at": "2026-10-17T12:13:53.743183+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-09-23T00:00:00",
+        "collected_at": "2026-10-17T12:13:53.743183+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-09-23T00:00:00",
+        "collected_at": "2026-10-17T12:13:53.743183+00:00"
+      }
+    },
+    {
+      "date": "2026-09-24",
+      "foreign_buy": -2559976.0,
+      "trust_buy": 103000.0,
+      "dealer_buy": 262906.0,
+      "margin_balance": 839.0,
+      "margin_change": 47.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-09-24T00:00:00",
+      "collected_at": "2026-10-17T12:14:10.730968+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-09-24T00:00:00",
+        "collected_at": "2026-10-17T12:14:10.730968+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-09-24T00:00:00",
+        "collected_at": "2026-10-17T12:14:10.730968+00:00"
+      }
+    },
+    {
+      "date": "2026-09-29",
+      "foreign_buy": -1719729.0,
+      "trust_buy": -69000.0,
+      "dealer_buy": 494144.0,
+      "margin_balance": 981.0,
+      "margin_change": 142.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-09-29T00:00:00",
+      "collected_at": "2026-10-17T12:14:32.734419+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-09-29T00:00:00",
+        "collected_at": "2026-10-17T12:14:32.734419+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-09-29T00:00:00",
+        "collected_at": "2026-10-17T12:14:32.734419+00:00"
+      }
+    },
+    {
+      "date": "2026-09-30",
+      "foreign_buy": -12538.0,
+      "trust_buy": -12000.0,
+      "dealer_buy": 300562.0,
+      "margin_balance": 1010.0,
+      "margin_change": 29.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-09-30T00:00:00",
+      "collected_at": "2026-10-17T12:14:46.491405+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-09-30T00:00:00",
+        "collected_at": "2026-10-17T12:14:46.491405+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-09-30T00:00:00",
+        "collected_at": "2026-10-17T12:14:46.491405+00:00"
+      }
+    },
+    {
+      "date": "2026-10-01",
+      "foreign_buy": -1294219.0,
+      "trust_buy": 137000.0,
+      "dealer_buy": 322626.0,
+      "margin_balance": 1225.0,
+      "margin_change": 215.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-10-01T00:00:00",
+      "collected_at": "2026-10-17T12:15:02.821249+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-10-01T00:00:00",
+        "collected_at": "2026-10-17T12:15:02.821249+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-10-01T00:00:00",
+        "collected_at": "2026-10-17T12:15:02.821249+00:00"
+      }
+    },
+    {
+      "date": "2026-10-02",
+      "foreign_buy": -10074303.0,
+      "trust_buy": -2684000.0,
+      "dealer_buy": 769211.0,
+      "margin_balance": 1355.0,
+      "margin_change": 130.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-10-02T00:00:00",
+      "collected_at": "2026-10-17T12:15:20.774249+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-10-02T00:00:00",
+        "collected_at": "2026-10-17T12:15:20.774249+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-10-02T00:00:00",
+        "collected_at": "2026-10-17T12:15:20.774249+00:00"
+      }
+    },
+    {
+      "date": "2026-10-05",
+      "foreign_buy": -1415677.0,
+      "trust_buy": -670812.0,
+      "dealer_buy": -71185.0,
+      "margin_balance": 1442.0,
+      "margin_change": 87.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-10-05T00:00:00",
+      "collected_at": "2026-10-17T12:15:39.132219+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-10-05T00:00:00",
+        "collected_at": "2026-10-17T12:15:39.132219+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-10-05T00:00:00",
+        "collected_at": "2026-10-17T12:15:39.132219+00:00"
+      }
+    },
+    {
+      "date": "2026-10-06",
+      "foreign_buy": -943777.0,
+      "trust_buy": 1681000.0,
+      "dealer_buy": 277280.0,
+      "margin_balance": 1413.0,
+      "margin_change": -29.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-10-06T00:00:00",
+      "collected_at": "2026-10-17T12:15:56.042273+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-10-06T00:00:00",
+        "collected_at": "2026-10-17T12:15:56.042273+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-10-06T00:00:00",
+        "collected_at": "2026-10-17T12:15:56.042273+00:00"
+      }
+    },
+    {
+      "date": "2026-10-07",
+      "foreign_buy": 8871216.0,
+      "trust_buy": 1186410.0,
+      "dealer_buy": 77788.0,
+      "margin_balance": 1104.0,
+      "margin_change": -309.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-10-07T00:00:00",
+      "collected_at": "2026-10-17T12:16:12.417693+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-10-07T00:00:00",
+        "collected_at": "2026-10-17T12:16:12.417693+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-10-07T00:00:00",
+        "collected_at": "2026-10-17T12:16:12.417693+00:00"
+      }
+    },
+    {
+      "date": "2026-10-08",
+      "foreign_buy": 4818307.0,
+      "trust_buy": 1911188.0,
+      "dealer_buy": 387151.0,
+      "margin_balance": 761.0,
+      "margin_change": -343.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-10-08T00:00:00",
+      "collected_at": "2026-10-17T12:16:28.282867+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-10-08T00:00:00",
+        "collected_at": "2026-10-17T12:16:28.282867+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-10-08T00:00:00",
+        "collected_at": "2026-10-17T12:16:28.282867+00:00"
+      }
+    },
+    {
+      "date": "2026-10-12",
+      "foreign_buy": 3432016.0,
+      "trust_buy": 1705000.0,
+      "dealer_buy": 461306.0,
+      "margin_balance": 702.0,
+      "margin_change": -59.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-10-12T00:00:00",
+      "collected_at": "2026-10-17T12:16:55.235274+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-10-12T00:00:00",
+        "collected_at": "2026-10-17T12:16:55.235274+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-10-12T00:00:00",
+        "collected_at": "2026-10-17T12:16:55.235274+00:00"
+      }
+    },
+    {
+      "date": "2026-10-13",
+      "foreign_buy": 6146310.0,
+      "trust_buy": 2562000.0,
+      "dealer_buy": 979337.0,
+      "margin_balance": 670.0,
+      "margin_change": -32.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-10-13T00:00:00",
+      "collected_at": "2026-10-17T12:17:12.603498+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-10-13T00:00:00",
+        "collected_at": "2026-10-17T12:17:12.603498+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-10-13T00:00:00",
+        "collected_at": "2026-10-17T12:17:12.603498+00:00"
+      }
+    },
+    {
+      "date": "2026-10-14",
+      "foreign_buy": 9401159.0,
+      "trust_buy": 1227103.0,
+      "dealer_buy": 145696.0,
+      "margin_balance": 473.0,
+      "margin_change": -197.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-10-14T00:00:00",
+      "collected_at": "2026-10-17T12:17:27.009669+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-10-14T00:00:00",
+        "collected_at": "2026-10-17T12:17:27.009669+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-10-14T00:00:00",
+        "collected_at": "2026-10-17T12:17:27.009669+00:00"
+      }
+    },
+    {
+      "date": "2026-10-15",
+      "foreign_buy": 26401872.0,
+      "trust_buy": 2525000.0,
+      "dealer_buy": 3439682.0,
+      "margin_balance": 388.0,
+      "margin_change": -85.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-10-15T00:00:00",
+      "collected_at": "2026-10-17T12:17:41.690820+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-10-15T00:00:00",
+        "collected_at": "2026-10-17T12:17:41.690820+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-10-15T00:00:00",
+        "collected_at": "2026-10-17T12:17:41.690820+00:00"
+      }
+    },
+    {
+      "date": "2026-10-16",
+      "foreign_buy": 2656850.0,
+      "trust_buy": 2127000.0,
+      "dealer_buy": 455646.0,
+      "margin_balance": 407.0,
+      "margin_change": 19.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-10-16T00:00:00",
+      "collected_at": "2026-10-17T09:51:29.912614+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-10-16T00:00:00",
+        "collected_at": "2026-10-17T09:51:29.912614+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-10-16T00:00:00",
+        "collected_at": "2026-10-17T09:51:29.912614+00:00"
+      }
+    },
+    {
+      "date": "2026-10-19",
+      "foreign_buy": 6665078.0,
+      "trust_buy": -2039207.0,
+      "dealer_buy": 1980016.0,
+      "margin_balance": 406.0,
+      "margin_change": -1.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-10-19T00:00:00",
+      "collected_at": "2026-11-02T18:02:13.869784+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-10-19T00:00:00",
+        "collected_at": "2026-11-02T18:02:13.869784+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-10-19T00:00:00",
+        "collected_at": "2026-11-02T18:02:13.869784+00:00"
+      }
+    },
+    {
+      "date": "2026-10-20",
+      "foreign_buy": 3902156.0,
+      "trust_buy": -3720891.0,
+      "dealer_buy": 1102996.0,
+      "margin_balance": 369.0,
+      "margin_change": -37.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-10-20T00:00:00",
+      "collected_at": "2026-10-20T13:30:10.563682+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-10-20T00:00:00",
+        "collected_at": "2026-10-20T10:30:38.726968+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-10-20T00:00:00",
+        "collected_at": "2026-10-20T13:30:10.563682+00:00"
+      }
+    },
+    {
+      "date": "2026-10-21",
+      "foreign_buy": 4514335.0,
+      "trust_buy": -1736000.0,
+      "dealer_buy": 444728.0,
+      "margin_balance": 372.0,
+      "margin_change": 3.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-10-21T00:00:00",
+      "collected_at": "2026-10-21T13:30:12.612500+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-10-21T00:00:00",
+        "collected_at": "2026-10-21T10:30:25.529852+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-10-21T00:00:00",
+        "collected_at": "2026-10-21T13:30:12.612500+00:00"
+      }
+    },
+    {
+      "date": "2026-10-22",
+      "foreign_buy": 3718157.0,
+      "trust_buy": -1775653.0,
+      "dealer_buy": 1890317.0,
+      "margin_balance": 360.0,
+      "margin_change": -12.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-10-22T00:00:00",
+      "collected_at": "2026-10-23T10:30:12.459056+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-10-22T00:00:00",
+        "collected_at": "2026-10-22T10:30:43.694502+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-10-22T00:00:00",
+        "collected_at": "2026-10-23T10:30:12.459056+00:00"
+      }
+    },
+    {
+      "date": "2026-10-27",
+      "foreign_buy": 5177550.0,
+      "trust_buy": 213000.0,
+      "dealer_buy": 632650.0,
+      "margin_balance": 471.0,
+      "margin_change": 111.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-10-27T00:00:00",
+      "collected_at": "2026-10-27T13:30:11.645369+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-10-27T00:00:00",
+        "collected_at": "2026-10-27T10:30:57.512121+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-10-27T00:00:00",
+        "collected_at": "2026-10-27T13:30:11.645369+00:00"
+      }
+    },
+    {
+      "date": "2026-10-28",
+      "foreign_buy": -409004.0,
+      "trust_buy": 6000.0,
+      "dealer_buy": 153483.0,
+      "margin_balance": 462.0,
+      "margin_change": -9.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-10-28T00:00:00",
+      "collected_at": "2026-10-28T13:30:17.129630+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-10-28T00:00:00",
+        "collected_at": "2026-10-28T10:30:35.416609+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-10-28T00:00:00",
+        "collected_at": "2026-10-28T13:30:17.129630+00:00"
+      }
+    },
+    {
+      "date": "2026-10-29",
+      "foreign_buy": 2310448.0,
+      "trust_buy": -1030139.0,
+      "dealer_buy": 86440.0,
+      "margin_balance": 512.0,
+      "margin_change": 50.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-10-29T00:00:00",
+      "collected_at": "2026-10-29T13:30:13.374746+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-10-29T00:00:00",
+        "collected_at": "2026-10-29T10:30:34.455666+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-10-29T00:00:00",
+        "collected_at": "2026-10-29T13:30:13.374746+00:00"
+      }
+    },
+    {
+      "date": "2026-10-30",
+      "foreign_buy": 6527377.0,
+      "trust_buy": -1094000.0,
+      "dealer_buy": 1310840.0,
+      "margin_balance": 524.0,
+      "margin_change": 12.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-10-30T00:00:00",
+      "collected_at": "2026-10-30T13:30:14.723792+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-10-30T00:00:00",
+        "collected_at": "2026-10-30T10:30:26.046809+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-10-30T00:00:00",
+        "collected_at": "2026-10-30T13:30:14.723792+00:00"
+      }
+    },
+    {
+      "date": "2026-11-02",
+      "foreign_buy": 2587008.0,
+      "trust_buy": 1004824.0,
+      "dealer_buy": 667162.0,
+      "margin_balance": 598.0,
+      "margin_change": 74.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-11-02T00:00:00",
+      "collected_at": "2026-11-02T13:30:21.526798+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-11-02T00:00:00",
+        "collected_at": "2026-11-02T10:30:30.513265+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-11-02T00:00:00",
+        "collected_at": "2026-11-02T13:30:21.526798+00:00"
+      }
+    },
+    {
+      "date": "2026-11-03",
+      "foreign_buy": 4657046.0,
+      "trust_buy": -212000.0,
+      "dealer_buy": 1792583.0,
+      "margin_balance": 451.0,
+      "margin_change": -147.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-11-03T00:00:00",
+      "collected_at": "2026-11-03T13:30:35.594239+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-11-03T00:00:00",
+        "collected_at": "2026-11-03T10:31:10.662008+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-11-03T00:00:00",
+        "collected_at": "2026-11-03T13:30:35.594239+00:00"
+      }
+    },
+    {
+      "date": "2026-11-04",
+      "foreign_buy": 1914509.0,
+      "trust_buy": 131941.0,
+      "dealer_buy": 1571916.0,
+      "margin_balance": 411.0,
+      "margin_change": -40.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-11-04T00:00:00",
+      "collected_at": "2026-11-04T13:31:08.793473+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-11-04T00:00:00",
+        "collected_at": "2026-11-04T10:31:55.555246+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-11-04T00:00:00",
+        "collected_at": "2026-11-04T13:31:08.793473+00:00"
+      }
+    },
+    {
+      "date": "2026-11-05",
+      "foreign_buy": 2186492.0,
+      "trust_buy": 183810.0,
+      "dealer_buy": 2362685.0,
+      "margin_balance": 536.0,
+      "margin_change": 125.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-11-05T00:00:00",
+      "collected_at": "2026-11-05T13:30:27.173204+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-11-05T00:00:00",
+        "collected_at": "2026-11-05T13:30:27.173204+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-11-05T00:00:00",
+        "collected_at": "2026-11-05T13:30:27.173197+00:00"
+      }
+    },
+    {
+      "date": "2026-11-06",
+      "foreign_buy": -2353257.0,
+      "trust_buy": 457820.0,
+      "dealer_buy": 3789261.0,
+      "margin_balance": 595.0,
+      "margin_change": 59.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-11-06T00:00:00",
+      "collected_at": "2026-11-06T13:30:36.498073+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-11-06T00:00:00",
+        "collected_at": "2026-11-06T13:30:36.498073+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-11-06T00:00:00",
+        "collected_at": "2026-11-06T13:30:36.498069+00:00"
+      }
+    },
+    {
+      "date": "2026-11-09",
+      "foreign_buy": 2827318.0,
+      "trust_buy": -4302506.0,
+      "dealer_buy": 621157.0,
+      "margin_balance": 751.0,
+      "margin_change": 156.0,
+      "short_balance": null,
+      "borrowed_sell": null,
+      "day_trade_ratio": null,
+      "source": "twse_t86+twse_margin",
+      "data_as_of": "2026-11-09T00:00:00",
+      "collected_at": "2026-11-09T13:31:17.622444+00:00",
+      "institutional": {
+        "source": "twse_t86",
+        "data_as_of": "2026-11-09T00:00:00",
+        "collected_at": "2026-11-09T13:31:17.622444+00:00"
+      },
+      "margin": {
+        "source": "twse_margin",
+        "data_as_of": "2026-11-09T00:00:00",
+        "collected_at": "2026-11-09T13:31:17.622439+00:00"
+      }
+    }
+  ],
+  "fundamentals": [
+    {
+      "period_end": "2026-09-30",
+      "fiscal_period": "Q3",
+      "announcement_date": "2026-11-06",
+      "revenue": 537005013.0,
+      "eps": 3.7,
+      "roe": null,
+      "source": "mops_fundamental",
+      "data_as_of": "2026-09-30"
+    },
+    {
+      "period_end": "2026-06-30",
+      "fiscal_period": "Q2",
+      "announcement_date": "2026-08-14",
+      "revenue": 349938252.0,
+      "eps": 2.56,
+      "roe": null,
+      "source": "mops_fundamental",
+      "data_as_of": "2026-06-30"
+    },
+    {
+      "period_end": "2026-03-31",
+      "fiscal_period": "Q1",
+      "announcement_date": "2026-05-15",
+      "revenue": 175017371.0,
+      "eps": 1.15,
+      "roe": null,
+      "source": "mops_t163sb04",
+      "data_as_of": "2026-03-31"
+    },
+    {
+      "period_end": "2025-12-31",
+      "fiscal_period": "Q4",
+      "announcement_date": "2026-03-31",
+      "revenue": 672863578.0,
+      "eps": 3.45,
+      "roe": null,
+      "source": "mops_t163sb04",
+      "data_as_of": "2025-12-31"
+    },
+    {
+      "period_end": "2025-09-30",
+      "fiscal_period": "Q3",
+      "announcement_date": "2025-11-14",
+      "revenue": 515163655.0,
+      "eps": 2.93,
+      "roe": null,
+      "source": "mops_t163sb04",
+      "data_as_of": "2025-09-30"
+    },
+    {
+      "period_end": "2025-06-30",
+      "fiscal_period": "Q2",
+      "announcement_date": "2025-08-14",
+      "revenue": 338837523.0,
+      "eps": 1.88,
+      "roe": null,
+      "source": "mops_t163sb04",
+      "data_as_of": "2025-06-30"
+    },
+    {
+      "period_end": "2025-03-31",
+      "fiscal_period": "Q1",
+      "announcement_date": "2025-05-15",
+      "revenue": 169265026.0,
+      "eps": 0.91,
+      "roe": null,
+      "source": "mops_t163sb04",
+      "data_as_of": "2025-03-31"
+    },
+    {
+      "period_end": "2024-12-31",
+      "fiscal_period": "Q4",
+      "announcement_date": "2025-03-31",
+      "revenue": 657636534.0,
+      "eps": 3.64,
+      "roe": null,
+      "source": "mops_t163sb04",
+      "data_as_of": "2024-12-31"
+    }
+  ],
+  "monthly_revenues": [
+    {
+      "revenue_month": "2026-09",
+      "revenue": 61805124.0,
+      "prior_year_revenue": 58415036.0,
+      "yoy": 5.80345101559126,
+      "cumulative_revenue": 537052993.0,
+      "announcement_date": "2026-10-12",
+      "announcement_basis": "statutory_deadline",
+      "source": "mops_t187ap05",
+      "data_as_of": "2026-09-30",
+      "corrected": false,
+      "superseded_snapshot": null
+    },
+    {
+      "revenue_month": "2026-08",
+      "revenue": 63101242.0,
+      "prior_year_revenue": 60796560.0,
+      "yoy": 3.79,
+      "cumulative_revenue": 475247869.0,
+      "announcement_date": "2026-09-10",
+      "announcement_basis": "statutory_deadline",
+      "source": "mops_t21sc03",
+      "data_as_of": "2026-08-31",
+      "corrected": false,
+      "superseded_snapshot": null
+    },
+    {
+      "revenue_month": "2026-07",
+      "revenue": 62168637.0,
+      "prior_year_revenue": 57114520.0,
+      "yoy": 8.84,
+      "cumulative_revenue": 412146627.0,
+      "announcement_date": "2026-08-10",
+      "announcement_basis": "statutory_deadline",
+      "source": "mops_t21sc03",
+      "data_as_of": "2026-07-31",
+      "corrected": false,
+      "superseded_snapshot": null
+    },
+    {
+      "revenue_month": "2026-06",
+      "revenue": 58301112.0,
+      "prior_year_revenue": 55738019.0,
+      "yoy": 4.59,
+      "cumulative_revenue": 349977990.0,
+      "announcement_date": "2026-07-10",
+      "announcement_basis": "statutory_deadline",
+      "source": "mops_t21sc03",
+      "data_as_of": "2026-06-30",
+      "corrected": false,
+      "superseded_snapshot": null
+    },
+    {
+      "revenue_month": "2026-05",
+      "revenue": 59180335.0,
+      "prior_year_revenue": 57625519.0,
+      "yoy": 2.69,
+      "cumulative_revenue": 291676878.0,
+      "announcement_date": "2026-06-10",
+      "announcement_basis": "statutory_deadline",
+      "source": "mops_t21sc03",
+      "data_as_of": "2026-05-31",
+      "corrected": false,
+      "superseded_snapshot": null
+    },
+    {
+      "revenue_month": "2026-04",
+      "revenue": 57480106.0,
+      "prior_year_revenue": 56208747.0,
+      "yoy": 2.26,
+      "cumulative_revenue": 232496543.0,
+      "announcement_date": "2026-05-11",
+      "announcement_basis": "statutory_deadline",
+      "source": "mops_t21sc03",
+      "data_as_of": "2026-04-30",
+      "corrected": false,
+      "superseded_snapshot": null
+    },
+    {
+      "revenue_month": "2026-03",
+      "revenue": 57379159.0,
+      "prior_year_revenue": 55935541.0,
+      "yoy": 2.58,
+      "cumulative_revenue": 175016437.0,
+      "announcement_date": "2026-04-10",
+      "announcement_basis": "statutory_deadline",
+      "source": "mops_t21sc03",
+      "data_as_of": "2026-03-31",
+      "corrected": false,
+      "superseded_snapshot": null
+    },
+    {
+      "revenue_month": "2026-02",
+      "revenue": 51532816.0,
+      "prior_year_revenue": 47574945.0,
+      "yoy": 8.31,
+      "cumulative_revenue": 117637278.0,
+      "announcement_date": "2026-03-10",
+      "announcement_basis": "statutory_deadline",
+      "source": "mops_t21sc03",
+      "data_as_of": "2026-02-28",
+      "corrected": false,
+      "superseded_snapshot": null
+    },
+    {
+      "revenue_month": "2026-01",
+      "revenue": 66104462.0,
+      "prior_year_revenue": 65755516.0,
+      "yoy": 0.53,
+      "cumulative_revenue": 66104462.0,
+      "announcement_date": "2026-02-10",
+      "announcement_basis": "statutory_deadline",
+      "source": "mops_t21sc03",
+      "data_as_of": "2026-01-31",
+      "corrected": false,
+      "superseded_snapshot": null
+    },
+    {
+      "revenue_month": "2025-12",
+      "revenue": 52311321.0,
+      "prior_year_revenue": 51439480.0,
+      "yoy": 1.69,
+      "cumulative_revenue": 672863647.0,
+      "announcement_date": "2026-01-12",
+      "announcement_basis": "statutory_deadline",
+      "source": "mops_t21sc03",
+      "data_as_of": "2025-12-31",
+      "corrected": false,
+      "superseded_snapshot": null
+    },
+    {
+      "revenue_month": "2025-11",
+      "revenue": 51161260.0,
+      "prior_year_revenue": 51741861.0,
+      "yoy": -1.12,
+      "cumulative_revenue": 620552326.0,
+      "announcement_date": "2025-12-10",
+      "announcement_basis": "statutory_deadline",
+      "source": "mops_t21sc03",
+      "data_as_of": "2025-11-30",
+      "corrected": false,
+      "superseded_snapshot": null
+    },
+    {
+      "revenue_month": "2025-10",
+      "revenue": 54226663.0,
+      "prior_year_revenue": 54649449.0,
+      "yoy": -0.77,
+      "cumulative_revenue": 569391066.0,
+      "announcement_date": "2025-11-10",
+      "announcement_basis": "statutory_deadline",
+      "source": "mops_t21sc03",
+      "data_as_of": "2025-10-31",
+      "corrected": false,
+      "superseded_snapshot": null
+    }
+  ],
+  "events": [
+    {
+      "date": "2026-11-05",
+      "type": "material_information",
+      "title": "公告本公司董事會通過解除本公司經理人競業禁止限制事宜",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-11-05"
+    },
+    {
+      "date": "2026-11-05",
+      "type": "material_information",
+      "title": "代重要子公司Cayman President Holdings LTD.公告\r\n董事會決議發放股利",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-11-05"
+    },
+    {
+      "date": "2026-11-05",
+      "type": "material_information",
+      "title": "公告本公司董事會通過115年第3季合併財務報告",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-11-05"
+    },
+    {
+      "date": "2026-11-03",
+      "type": "material_information",
+      "title": "公告本公司於高雄市路竹區三埤段土地自地委建",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-11-03"
+    },
+    {
+      "date": "2026-10-19",
+      "type": "material_information",
+      "title": "代重要子公司Cayman President Holdings LTD.公告\r\n董事會決議發放股利",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-10-19"
+    },
+    {
+      "date": "2026-10-16",
+      "type": "material_information",
+      "title": "代子公司統一企業(中國)投資有限公司公告取得理財產品",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-10-16"
+    },
+    {
+      "date": "2026-10-14",
+      "type": "material_information",
+      "title": "補充說明本公司於114年11月6日公告發行無擔保普通公司債\r\n之主要發行條件",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-10-14"
+    },
+    {
+      "date": "2026-09-30",
+      "type": "material_information",
+      "title": "代子公司統一企業(中國)投資有限公司公告取得理財產品",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-09-30"
+    },
+    {
+      "date": "2026-09-29",
+      "type": "material_information",
+      "title": "代子公司統一企業(中國)投資有限公司公告處分理財產品",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-09-29"
+    },
+    {
+      "date": "2026-09-29",
+      "type": "material_information",
+      "title": "代子公司統一企業(中國)投資有限公司公告取得理財產品",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-09-29"
+    },
+    {
+      "date": "2026-09-23",
+      "type": "material_information",
+      "title": "代子公司統一企業(中國)投資有限公司公告取得理財產品（發言時間 15:48:48）",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-09-23"
+    },
+    {
+      "date": "2026-09-23",
+      "type": "material_information",
+      "title": "代子公司統一企業(中國)投資有限公司公告取得理財產品",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-09-23"
+    },
+    {
+      "date": "2026-09-22",
+      "type": "material_information",
+      "title": "代子公司統一企業(中國)投資有限公司公告取得理財產品",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-09-22"
+    },
+    {
+      "date": "2026-09-18",
+      "type": "material_information",
+      "title": "代重要子公司UNI-PRESIDENT ASIA HOLDINGS LTD.\r\n公告董事會決議發放股利",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-09-18"
+    },
+    {
+      "date": "2026-09-18",
+      "type": "material_information",
+      "title": "代子公司President (BVI) International Investment Holdings Ltd.\r\n公告處分有價證券",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-09-18"
+    },
+    {
+      "date": "2026-09-18",
+      "type": "material_information",
+      "title": "代重要子公司統一企業香港控股有限公司公告董事會決議\r\n發放股利",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-09-18"
+    },
+    {
+      "date": "2026-09-18",
+      "type": "material_information",
+      "title": "代重要子公司統一企業(中國)投資有限公司公告董事會決議\r\n發放股利",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-09-18"
+    },
+    {
+      "date": "2026-09-18",
+      "type": "material_information",
+      "title": "代子公司統一企業(中國)投資有限公司公告處分理財產品",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-09-18"
+    },
+    {
+      "date": "2026-09-16",
+      "type": "material_information",
+      "title": "代重要子公司康達盛通生活事業股份有限公司\r\n公告董事會通過解除經理人競業禁止限制事宜",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-09-16"
+    },
+    {
+      "date": "2026-09-09",
+      "type": "material_information",
+      "title": "代子公司上海易統食品貿易有限公司公告取得使用權資產",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-09-09"
+    },
+    {
+      "date": "2026-08-10",
+      "type": "material_information",
+      "title": "本公司受邀參加麥格理證券舉辦之投資人說明會",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-08-10"
+    },
+    {
+      "date": "2026-08-06",
+      "type": "material_information",
+      "title": "公告本公司董事會通過115年第2季合併財務報告",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-08-06"
+    },
+    {
+      "date": "2026-08-06",
+      "type": "material_information",
+      "title": "公告本公司董事會通過解除本公司經理人競業禁止限制事宜",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-08-06"
+    },
+    {
+      "date": "2026-08-05",
+      "type": "material_information",
+      "title": "代重要子公司統一企業香港控股有限公司公告董事成員發生異動",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-08-05"
+    },
+    {
+      "date": "2026-08-05",
+      "type": "material_information",
+      "title": "代重要子公司Uni-President Asia Holdings Ltd.\r\n公告董事成員發生異動",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-08-05"
+    },
+    {
+      "date": "2026-08-05",
+      "type": "material_information",
+      "title": "代重要子公司統一企業中國控股有限公司公告董事會決議\r\n不分派中期股息",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-08-05"
+    },
+    {
+      "date": "2026-08-04",
+      "type": "material_information",
+      "title": "公告本公司增資統上開發建設(股)公司",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-08-04"
+    },
+    {
+      "date": "2026-08-04",
+      "type": "material_information",
+      "title": "公告本公司取得不動產使用權資產",
+      "description": null,
+      "source": "mops_material_information",
+      "data_as_of": "2026-08-04"
+    }
+  ],
+  "data_quality": [
+    {
+      "entity_type": "instrument",
+      "entity_key": "TWSE:1216",
+      "as_of_date": "2026-11-09",
+      "status": "complete",
+      "missing_fields": [],
+      "checks": {
+        "source": "TWSE",
+        "backfill_start": "2026-11-09"
+      },
+      "source": "twse",
+      "checked_at": "2026-11-09T13:31:34.365586+00:00"
+    },
+    {
+      "entity_type": "instrument",
+      "entity_key": "TWSE:1216",
+      "as_of_date": "2026-11-06",
+      "status": "complete",
+      "missing_fields": [],
+      "checks": {
+        "source": "TWSE",
+        "backfill_start": "2026-11-06"
+      },
+      "source": "twse",
+      "checked_at": "2026-11-06T13:30:54.440459+00:00"
+    },
+    {
+      "entity_type": "instrument",
+      "entity_key": "TWSE:1216",
+      "as_of_date": "2026-11-05",
+      "status": "complete",
+      "missing_fields": [],
+      "checks": {
+        "source": "TWSE",
+        "backfill_start": "2026-11-05"
+      },
+      "source": "twse",
+      "checked_at": "2026-11-05T13:30:48.174460+00:00"
+    },
+    {
+      "entity_type": "instrument",
+      "entity_key": "TWSE:1216",
+      "as_of_date": "2026-11-04",
+      "status": "complete",
+      "missing_fields": [],
+      "checks": {
+        "source": "TWSE",
+        "backfill_start": "2026-11-04"
+      },
+      "source": "twse",
+      "checked_at": "2026-11-04T13:31:20.807226+00:00"
+    },
+    {
+      "entity_type": "instrument",
+      "entity_key": "TWSE:1216",
+      "as_of_date": "2026-11-03",
+      "status": "complete",
+      "missing_fields": [],
+      "checks": {
+        "source": "TWSE",
+        "backfill_start": "2026-11-03"
+      },
+      "source": "twse",
+      "checked_at": "2026-11-03T13:30:46.886832+00:00"
+    },
+    {
+      "entity_type": "instrument",
+      "entity_key": "TWSE:1216",
+      "as_of_date": "2026-11-02",
+      "status": "complete",
+      "missing_fields": [],
+      "checks": {
+        "source": "TWSE",
+        "backfill_start": "2026-11-02"
+      },
+      "source": "twse",
+      "checked_at": "2026-11-02T13:31:56.306885+00:00"
+    },
+    {
+      "entity_type": "instrument",
+      "entity_key": "TWSE:1216",
+      "as_of_date": "2026-10-30",
+      "status": "complete",
+      "missing_fields": [],
+      "checks": {
+        "source": "TWSE",
+        "backfill_start": "2026-10-30"
+      },
+      "source": "twse",
+      "checked_at": "2026-10-30T13:31:04.161988+00:00"
+    },
+    {
+      "entity_type": "instrument",
+      "entity_key": "TWSE:1216",
+      "as_of_date": "2026-10-29",
+      "status": "complete",
+      "missing_fields": [],
+      "checks": {
+        "source": "TWSE",
+        "backfill_start": "2026-10-29"
+      },
+      "source": "twse",
+      "checked_at": "2026-10-29T13:30:44.654803+00:00"
+    },
+    {
+      "entity_type": "instrument",
+      "entity_key": "TWSE:1216",
+      "as_of_date": "2026-10-28",
+      "status": "complete",
+      "missing_fields": [],
+      "checks": {
+        "source": "TWSE",
+        "backfill_start": "2026-10-28"
+      },
+      "source": "twse",
+      "checked_at": "2026-10-28T13:30:59.137869+00:00"
+    },
+    {
+      "entity_type": "instrument",
+      "entity_key": "TWSE:1216",
+      "as_of_date": "2026-10-27",
+      "status": "complete",
+      "missing_fields": [],
+      "checks": {
+        "source": "TWSE",
+        "backfill_start": "2026-10-27"
+      },
+      "source": "twse",
+      "checked_at": "2026-10-27T13:30:46.252517+00:00"
+    }
+  ],
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "action_summary",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "known",
+        "precision": "date",
+        "value": "2026-11-09",
+        "utc": null,
+        "date": "2026-11-09",
+        "source": "market_bar.trading_date",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "calendar_date_no_timezone_conversion"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "decision.events",
+        "evidence": null,
+        "ref": null,
+        "reason": "action_event_date_not_unique",
+        "timezone_policy": "not_applicable"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "decision",
+        "evidence": null,
+        "ref": null,
+        "reason": "action_event_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "decision",
+        "evidence": null,
+        "ref": null,
+        "reason": "action_published_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "decision",
+        "evidence": null,
+        "ref": null,
+        "reason": "action_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "decision",
+        "evidence": null,
+        "ref": null,
+        "reason": "action_collected_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "decision",
+        "evidence": null,
+        "ref": null,
+        "reason": "action_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "decision",
+        "evidence": null,
+        "ref": null,
+        "reason": "legacy_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "decision",
+        "evidence": null,
+        "ref": null,
+        "reason": "legacy_generated_at_not_persisted_with_timezone",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "signal.earliest_execution_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "action_earliest_execution_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "signal.earliest_execution_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "action_earliest_execution_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-11-10T07:22:02.059855+00:00",
+    "legacy": {
+      "as_of": "2026-11-09",
+      "data_cutoff": "2026-11-09",
+      "price_as_of": "2026-11-09",
+      "earliest_execution_date": null,
+      "generated_at": "2026-11-10T07:22:02.059855+00:00",
+      "generated_at_role": "legacy_response_assembly_time",
+      "run_finished_at": "2026-11-09T13:31:35.211995"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "Decision data_cutoff/as_of and earliest_execution_date are calendar dates; they do not establish an instant.",
+      "earliest_execution_at remains unknown until an actual timezone-aware execution instant is persisted.",
+      "A unique related event is required before an action can expose an event date; multiple events fail closed.",
+      "An ingestion run finished_at is retained as a legacy run timestamp and is not promoted to collected_at for an action.",
+      "Historical decision and generation times are not persisted by the legacy action projection.",
+      "The legacy generated_at field is retained as a response-assembly compatibility value; response_generated_at is not historical generated_at."
+    ]
+  },
+  "response_generated_at": "2026-11-10T07:22:02.059855+00:00",
+  "quality_summary": {
+    "market": {
+      "status": "complete",
+      "label": "當日行情來源完整",
+      "as_of": "2026-11-09",
+      "missing_fields": [],
+      "source": "official"
+    },
+    "research": {
+      "status": "complete",
+      "label": "策略判斷資料完整",
+      "as_of": "2026-11-09",
+      "missing_fields": [],
+      "action_state": "no_condition"
+    },
+    "instrument": "TWSE:1216"
+  },
+  "decision_summary": {
+    "instrument": {
+      "id": 13,
+      "exchange": "TWSE",
+      "symbol": "1216",
+      "name": "統一",
+      "instrument_type": "stock",
+      "etf_category": null
+    },
+    "as_of": "2026-11-09",
+    "generated_at": "2026-11-10T07:22:02.059855+00:00",
+    "product_time": {
+      "version": "product-time/v1",
+      "scope": "action_summary",
+      "availability_truth": "not_asserted",
+      "timezone_policy": {
+        "display_timezone": "Asia/Taipei",
+        "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+        "date_only": "calendar_date_without_timezone_conversion",
+        "naive_or_missing": "unknown_with_reason"
+      },
+      "roles": {
+        "market_date": {
+          "role": "market_date",
+          "status": "known",
+          "precision": "date",
+          "value": "2026-11-09",
+          "utc": null,
+          "date": "2026-11-09",
+          "source": "market_bar.trading_date",
+          "evidence": null,
+          "ref": null,
+          "reason": null,
+          "timezone_policy": "calendar_date_no_timezone_conversion"
+        },
+        "event_date": {
+          "role": "event_date",
+          "status": "unknown",
+          "precision": "none",
+          "value": null,
+          "utc": null,
+          "date": null,
+          "source": "decision.events",
+          "evidence": null,
+          "ref": null,
+          "reason": "action_event_date_not_unique",
+          "timezone_policy": "not_applicable"
+        },
+        "event_at": {
+          "role": "event_at",
+          "status": "unknown",
+          "precision": "none",
+          "value": null,
+          "utc": null,
+          "date": null,
+          "source": "decision",
+          "evidence": null,
+          "ref": null,
+          "reason": "action_event_at_not_persisted",
+          "timezone_policy": "not_applicable"
+        },
+        "published_at": {
+          "role": "published_at",
+          "status": "unknown",
+          "precision": "none",
+          "value": null,
+          "utc": null,
+          "date": null,
+          "source": "decision",
+          "evidence": null,
+          "ref": null,
+          "reason": "action_published_at_not_persisted",
+          "timezone_policy": "not_applicable"
+        },
+        "first_available_at": {
+          "role": "first_available_at",
+          "status": "unknown",
+          "precision": "none",
+          "value": null,
+          "utc": null,
+          "date": null,
+          "source": "decision",
+          "evidence": null,
+          "ref": null,
+          "reason": "action_first_available_at_not_persisted",
+          "timezone_policy": "not_applicable"
+        },
+        "collected_at": {
+          "role": "collected_at",
+          "status": "unknown",
+          "precision": "none",
+          "value": null,
+          "utc": null,
+          "date": null,
+          "source": "decision",
+          "evidence": null,
+          "ref": null,
+          "reason": "action_collected_at_not_persisted",
+          "timezone_policy": "not_applicable"
+        },
+        "revision_available_at": {
+          "role": "revision_available_at",
+          "status": "unknown",
+          "precision": "none",
+          "value": null,
+          "utc": null,
+          "date": null,
+          "source": "decision",
+          "evidence": null,
+          "ref": null,
+          "reason": "action_revision_available_at_not_persisted",
+          "timezone_policy": "not_applicable"
+        },
+        "decision_at": {
+          "role": "decision_at",
+          "status": "unknown",
+          "precision": "none",
+          "value": null,
+          "utc": null,
+          "date": null,
+          "source": "decision",
+          "evidence": null,
+          "ref": null,
+          "reason": "legacy_decision_at_not_persisted",
+          "timezone_policy": "not_applicable"
+        },
+        "generated_at": {
+          "role": "generated_at",
+          "status": "unknown",
+          "precision": "none",
+          "value": null,
+          "utc": null,
+          "date": null,
+          "source": "decision",
+          "evidence": null,
+          "ref": null,
+          "reason": "legacy_generated_at_not_persisted_with_timezone",
+          "timezone_policy": "not_applicable"
+        },
+        "earliest_execution_at": {
+          "role": "earliest_execution_at",
+          "status": "unknown",
+          "precision": "none",
+          "value": null,
+          "utc": null,
+          "date": null,
+          "source": "signal.earliest_execution_date",
+          "evidence": null,
+          "ref": null,
+          "reason": "action_earliest_execution_at_not_persisted",
+          "timezone_policy": "not_applicable"
+        },
+        "earliest_execution_date": {
+          "role": "earliest_execution_date",
+          "status": "unknown",
+          "precision": "none",
+          "value": null,
+          "utc": null,
+          "date": null,
+          "source": "signal.earliest_execution_date",
+          "evidence": null,
+          "ref": null,
+          "reason": "action_earliest_execution_date_not_persisted",
+          "timezone_policy": "not_applicable"
+        }
+      },
+      "response_generated_at": "2026-11-10T07:22:02.059855+00:00",
+      "legacy": {
+        "as_of": "2026-11-09",
+        "data_cutoff": "2026-11-09",
+        "price_as_of": "2026-11-09",
+        "earliest_execution_date": null,
+        "generated_at": "2026-11-10T07:22:02.059855+00:00",
+        "generated_at_role": "legacy_response_assembly_time",
+        "run_finished_at": "2026-11-09T13:31:35.211995"
+      },
+      "limitations": [
+        "This is a read-time product projection; it does not assert source availability truth.",
+        "Decision data_cutoff/as_of and earliest_execution_date are calendar dates; they do not establish an instant.",
+        "earliest_execution_at remains unknown until an actual timezone-aware execution instant is persisted.",
+        "A unique related event is required before an action can expose an event date; multiple events fail closed.",
+        "An ingestion run finished_at is retained as a legacy run timestamp and is not promoted to collected_at for an action.",
+        "Historical decision and generation times are not persisted by the legacy action projection.",
+        "The legacy generated_at field is retained as a response-assembly compatibility value; response_generated_at is not historical generated_at."
+      ]
+    },
+    "response_generated_at": "2026-11-10T07:22:02.059855+00:00",
+    "level_semantics": {
+      "version": "signal-level-semantics/v1",
+      "kind": "unknown",
+      "reason": "strategy_or_version_not_allowlisted",
+      "strategy": {
+        "name": null,
+        "version": null
+      },
+      "formula": {
+        "version": null,
+        "source": null,
+        "reason": "strategy_or_version_not_allowlisted"
+      },
+      "fields": {
+        "trigger_price": {
+          "role": "unknown",
+          "label_zh": "價位（語意未確認）",
+          "source_field": "trigger_price",
+          "reason": "strategy_or_version_not_allowlisted"
+        },
+        "entry_low": {
+          "role": "unknown",
+          "label_zh": "價位（語意未確認）",
+          "source_field": "pullback_low",
+          "reason": "strategy_or_version_not_allowlisted"
+        },
+        "entry_high": {
+          "role": "unknown",
+          "label_zh": "價位（語意未確認）",
+          "source_field": "pullback_high",
+          "reason": "strategy_or_version_not_allowlisted"
+        },
+        "invalid_price": {
+          "role": "unknown",
+          "label_zh": "價位（語意未確認）",
+          "source_field": "invalid_price",
+          "reason": "strategy_or_version_not_allowlisted"
+        },
+        "target_1": {
+          "role": "unknown",
+          "label_zh": "價位（語意未確認）",
+          "source_field": "target_1",
+          "reason": "strategy_or_version_not_allowlisted"
+        },
+        "target_2": {
+          "role": "unknown",
+          "label_zh": "價位（語意未確認）",
+          "source_field": "target_2",
+          "reason": "strategy_or_version_not_allowlisted"
+        }
+      },
+      "price_basis": {
+        "value": null,
+        "reason": "strategy_or_version_not_allowlisted"
+      },
+      "cost_included": {
+        "value": null,
+        "reason": "strategy_or_version_not_allowlisted"
+      },
+      "decision_at": {
+        "value": null,
+        "reason": "strategy_or_version_not_allowlisted"
+      },
+      "generated_at": {
+        "value": null,
+        "reason": "strategy_or_version_not_allowlisted"
+      },
+      "response_generated_at": "2026-11-10T07:22:02.059855+00:00"
+    },
+    "action_state": "no_condition",
+    "action_label_zh": "暫無條件",
+    "action_instruction": "現在：先觀察，尚無成立條件。",
+    "display_action": "暫無研究條件",
+    "display_instruction": "資料足夠，但目前尚未符合研究條件；持續觀察。",
+    "display_reasons": [
+      "至少一個有效族群具備 TAIEX 相對強弱與成員門檻"
+    ],
+    "primary_reason": {
+      "label": "突破條件差 2 項：價格、融資",
+      "scope": "breakout"
+    },
+    "primary_levels": {},
+    "data_status": {
+      "source": "official_snapshot",
+      "market": "complete",
+      "strategy": "complete"
+    },
+    "context_badges": [
+      "已核實個股公告",
+      "族群觀察"
+    ],
+    "detail_url": "/stocks/TWSE/1216",
+    "data_gap": null,
+    "gap_reasons": [],
+    "priority": 5,
+    "held": false,
+    "position_quantity_status": "absent",
+    "watchlisted": false,
+    "current_price": 76.7,
+    "market_read": {
+      "status": "known",
+      "invalid_fields": []
+    },
+    "price_as_of": "2026-11-09",
+    "previous_close": 76.8,
+    "price_change": -0.09999999999999432,
+    "price_change_pct": -0.0013020833333332593,
+    "price_change_status": "known",
+    "trigger_kind": null,
+    "trigger_price": null,
+    "entry_low": null,
+    "entry_high": null,
+    "invalid_price": null,
+    "stop_price": null,
+    "target_1": null,
+    "target_2": null,
+    "risk_reward": null,
+    "earliest_execution_date": null,
+    "primary_strategy": null,
+    "alternative_strategies": [
+      "breakout_v3",
+      "pullback_v4"
+    ],
+    "strategies": [
+      {
+        "strategy": "breakout_v3",
+        "signal_id": 70373,
+        "signal_key": "analysis-TWSE-1216-2026-11-09-breakout_v3-3.0.0",
+        "signal_date": "2026-11-09",
+        "status": "observation",
+        "data_quality": "complete",
+        "rationale": "breakout=rejected:close_not_above_prior_20_day_high,margin_financing_increase_abnormal; pullback=rejected:pullback_volume_ratio_outside_range,margin_financing_increase_abnormal; group=official-industry-206d1b19286222a7; required inputs complete",
+        "levels": {
+          "trigger_price": null,
+          "entry_low": null,
+          "entry_high": null,
+          "invalid_price": null,
+          "target_1": null,
+          "target_2": null
+        },
+        "risk_reward": null,
+        "confidence_semantics": {
+          "version": "signal-confidence/v2",
+          "kind": "not_calibrated",
+          "is_calibrated": false,
+          "is_probability": false,
+          "display_label_zh": "未校準；非預測勝率"
+        },
+        "level_semantics": {
+          "version": "signal-level-semantics/v1",
+          "kind": "rule_reference",
+          "reason": "canonical_v1_allowlist",
+          "strategy": {
+            "name": "breakout_v3",
+            "version": "3.0.0"
+          },
+          "formula": {
+            "version": "legacy-risk-levels/v1",
+            "source": "backend.app.strategies.base.risk_levels",
+            "reason": null,
+            "expression": "risk=max(atr if truthy else entry*0.02, entry*0.01); invalid=max(0.01, entry-risk); target_1=entry+1.6*risk; target_2=entry+3*risk",
+            "rounding": "round each returned level to 2 decimal places"
+          },
+          "fields": {
+            "trigger_price": {
+              "role": "rule_trigger",
+              "label_zh": "規則觸發價",
+              "source_field": "breakout_price"
+            },
+            "invalid_price": {
+              "role": "rule_invalidation_reference",
+              "label_zh": "規則失效參考價",
+              "source_field": "invalid_price"
+            },
+            "target_1": {
+              "role": "rule_reference_target",
+              "label_zh": "規則參考目標一",
+              "source_field": "target_1"
+            },
+            "target_2": {
+              "role": "rule_reference_target",
+              "label_zh": "規則參考目標二",
+              "source_field": "target_2"
+            }
+          },
+          "price_basis": {
+            "value": null,
+            "reason": "legacy_price_basis_not_persisted"
+          },
+          "cost_included": {
+            "value": false,
+            "reason": "legacy_level_formula_excludes_costs"
+          },
+          "decision_at": {
+            "value": null,
+            "reason": "legacy_decision_at_not_persisted"
+          },
+          "generated_at": {
+            "value": null,
+            "reason": "legacy_generated_at_not_persisted_with_timezone"
+          },
+          "response_generated_at": "2026-11-10T07:22:02.059855+00:00"
+        },
+        "product_time": {
+          "version": "product-time/v1",
+          "scope": "signal",
+          "availability_truth": "not_asserted",
+          "timezone_policy": {
+            "display_timezone": "Asia/Taipei",
+            "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+            "date_only": "calendar_date_without_timezone_conversion",
+            "naive_or_missing": "unknown_with_reason"
+          },
+          "roles": {
+            "market_date": {
+              "role": "market_date",
+              "status": "known",
+              "precision": "date",
+              "value": "2026-11-09",
+              "utc": null,
+              "date": "2026-11-09",
+              "source": "signal.signal_date",
+              "evidence": null,
+              "ref": null,
+              "reason": null,
+              "timezone_policy": "calendar_date_no_timezone_conversion"
+            },
+            "event_date": {
+              "role": "event_date",
+              "status": "unknown",
+              "precision": "none",
+              "value": null,
+              "utc": null,
+              "date": null,
+              "source": "signal",
+              "evidence": null,
+              "ref": null,
+              "reason": "signal_event_date_not_persisted",
+              "timezone_policy": "not_applicable"
+            },
+            "event_at": {
+              "role": "event_at",
+              "status": "unknown",
+              "precision": "none",
+              "value": null,
+              "utc": null,
+              "date": null,
+              "source": "signal",
+              "evidence": null,
+              "ref": null,
+              "reason": "signal_event_at_not_persisted",
+              "timezone_policy": "not_applicable"
+            },
+            "published_at": {
+              "role": "published_at",
+              "status": "unknown",
+              "precision": "none",
+              "value": null,
+              "utc": null,
+              "date": null,
+              "source": "signal",
+              "evidence": null,
+              "ref": null,
+              "reason": "signal_published_at_not_persisted",
+              "timezone_policy": "not_applicable"
+            },
+            "first_available_at": {
+              "role": "first_available_at",
+              "status": "unknown",
+              "precision": "none",
+              "value": null,
+              "utc": null,
+              "date": null,
+              "source": "signal",
+              "evidence": null,
+              "ref": null,
+              "reason": "signal_first_available_at_not_persisted",
+              "timezone_policy": "not_applicable"
+            },
+            "collected_at": {
+              "role": "collected_at",
+              "status": "unknown",
+              "precision": "none",
+              "value": null,
+              "utc": null,
+              "date": null,
+              "source": "signal",
+              "evidence": null,
+              "ref": null,
+              "reason": "signal_collected_at_not_persisted",
+              "timezone_policy": "not_applicable"
+            },
+            "revision_available_at": {
+              "role": "revision_available_at",
+              "status": "unknown",
+              "precision": "none",
+              "value": null,
+              "utc": null,
+              "date": null,
+              "source": "signal",
+              "evidence": null,
+              "ref": null,
+              "reason": "signal_revision_available_at_not_persisted",
+              "timezone_policy": "not_applicable"
+            },
+            "decision_at": {
+              "role": "decision_at",
+              "status": "unknown",
+              "precision": "none",
+              "value": null,
+              "utc": null,
+              "date": null,
+              "source": "signal",
+              "evidence": null,
+              "ref": null,
+              "reason": "legacy_decision_at_not_persisted",
+              "timezone_policy": "not_applicable"
+            },
+            "generated_at": {
+              "role": "generated_at",
+              "status": "unknown",
+              "precision": "none",
+              "value": null,
+              "utc": null,
+              "date": null,
+              "source": "signal",
+              "evidence": null,
+              "ref": null,
+              "reason": "legacy_generated_at_not_persisted_with_timezone",
+              "timezone_policy": "not_applicable"
+            },
+            "earliest_execution_at": {
+              "role": "earliest_execution_at",
+              "status": "unknown",
+              "precision": "none",
+              "value": null,
+              "utc": null,
+              "date": null,
+              "source": "signal.earliest_execution_date",
+              "evidence": null,
+              "ref": null,
+              "reason": "legacy_earliest_execution_date_is_date_only",
+              "timezone_policy": "not_applicable"
+            },
+            "earliest_execution_date": {
+              "role": "earliest_execution_date",
+              "status": "known",
+              "precision": "date",
+              "value": "2026-11-10",
+              "utc": null,
+              "date": "2026-11-10",
+              "source": "signal.earliest_execution_date",
+              "evidence": null,
+              "ref": null,
+              "reason": null,
+              "timezone_policy": "calendar_date_no_timezone_conversion"
+            }
+          },
+          "response_generated_at": "2026-11-10T07:22:02.059855+00:00",
+          "legacy": {
+            "signal_date": "2026-11-09",
+            "data_cutoff": "2026-11-09 13:30 Asia/Taipei",
+            "earliest_execution_date": "2026-11-10",
+            "execution_date": null,
+            "created_at": "2026-11-09T13:33:30.787571"
+          },
+          "limitations": [
+            "This is a read-time product projection; it does not assert source availability truth.",
+            "signal_date and earliest_execution_date are calendar dates only; neither is an instant.",
+            "earliest_execution_at remains unknown until an actual timezone-aware execution instant is persisted.",
+            "Legacy data_cutoff and naive created_at are preserved but cannot establish historical decision or generation time.",
+            "Arbitrary rule_evidence markers are not accepted as time evidence."
+          ]
+        },
+        "response_generated_at": "2026-11-10T07:22:02.059855+00:00",
+        "earliest_execution_date": "2026-11-10",
+        "missing": [],
+        "wait_missing": [
+          "trigger_price",
+          "invalid_price",
+          "target_1",
+          "risk_reward"
+        ],
+        "evidence": {
+          "strategy": "breakout_v3",
+          "strategy_version": "3.0.0",
+          "group_member_return_lookup": {
+            "version": "group-member-return-lookup/v1",
+            "member_return_identity_version": "instrument-id-v1",
+            "group_id": "official-industry-206d1b19286222a7",
+            "group_score_date": "2026-11-09",
+            "requested": {
+              "instrument_id": 13,
+              "exchange": "TWSE",
+              "symbol": "1216"
+            },
+            "matched": {
+              "instrument_id": 13,
+              "exchange": "TWSE",
+              "symbol": "1216"
+            },
+            "mode": "instrument_id",
+            "reason": "matched"
+          },
+          "confidence_semantics": {
+            "version": "signal-confidence/v2",
+            "kind": "not_calibrated",
+            "is_calibrated": false,
+            "is_probability": false,
+            "display_label_zh": "未校準；非預測勝率"
+          },
+          "actionable": false,
+          "breakout": {
+            "state": "rejected",
+            "reasons": [
+              "close_not_above_prior_20_day_high",
+              "margin_financing_increase_abnormal"
+            ]
+          },
+          "pullback": {
+            "state": "rejected",
+            "reasons": [
+              "pullback_volume_ratio_outside_range",
+              "margin_financing_increase_abnormal"
+            ]
+          },
+          "inputs": {
+            "prior_20_highs": [
+              75.5,
+              76.2,
+              76.5,
+              77.1,
+              78.2,
+              80.1,
+              80.4,
+              80.0,
+              79.4,
+              78.8,
+              79.6,
+              83.0,
+              79.8,
+              79.2,
+              80.2,
+              81.9,
+              82.7,
+              82.5,
+              82.6,
+              80.3
+            ],
+            "prior_20_volumes": [
+              15650434,
+              10217453,
+              9899429,
+              17150369,
+              15514611,
+              38693256,
+              15818268,
+              16684332,
+              10341652,
+              11137420,
+              10089033,
+              16749192,
+              6267352,
+              6769506,
+              15312438,
+              11896389,
+              15826388,
+              10511571,
+              13101956,
+              18019042
+            ],
+            "group_excess_return_20d": 0.17942071313049035,
+            "institutional_flow_to_turnover_ratio_5d": 1.087133664712731,
+            "strategy_institutional_flow_to_average_volume_ratio_5d": 1.087133664712731,
+            "institutional_flow_ratio_denominator": "average_daily_volume_20d",
+            "institutional_flow_formula_version": "institutional-flow/v2-shares-per-share-volume",
+            "margin_balance_change_ratio_5d": 0.25585284280936454,
+            "margin_eligibility": "applicable",
+            "margin_zero_base": null,
+            "bar_count_60d": 510,
+            "ma20": 78.86,
+            "ma60": 76.675
+          },
+          "risk_validation": {
+            "valid": false,
+            "errors": [
+              "entry_price_must_be_finite_and_positive",
+              "invalid_price_must_be_finite_and_positive",
+              "target_1_must_be_finite_and_positive"
+            ]
+          },
+          "execution": {
+            "signal_time": "T_close",
+            "earliest": "2026-11-10",
+            "calendar": {
+              "source": "twse_holiday_schedule",
+              "raw_payload_ids": [
+                9123
+              ],
+              "missing_reason": null
+            },
+            "fill_policy": "next_session_open_or_better_plus_adverse_slippage",
+            "execution_slippage_bps": 5.0,
+            "round_trip_transaction_cost_bps": 30.0,
+            "return_measure": "adjusted_close_divided_by_filled_entry_minus_one_minus_round_trip_cost"
+          }
+        },
+        "open_plan_id": null
+      },
+      {
+        "strategy": "pullback_v4",
+        "signal_id": 70374,
+        "signal_key": "analysis-TWSE-1216-2026-11-09-pullback_v3-3.0.0",
+        "signal_date": "2026-11-09",
+        "status": "observation",
+        "data_quality": "complete",
+        "rationale": "breakout=rejected:close_not_above_prior_20_day_high,margin_financing_increase_abnormal; pullback=rejected:pullback_volume_ratio_outside_range,margin_financing_increase_abnormal; group=official-industry-206d1b19286222a7; required inputs complete",
+        "levels": {
+          "trigger_price": null,
+          "entry_low": null,
+          "entry_high": null,
+          "invalid_price": null,
+          "target_1": null,
+          "target_2": null
+        },
+        "risk_reward": null,
+        "confidence_semantics": {
+          "version": "signal-confidence/v2",
+          "kind": "not_calibrated",
+          "is_calibrated": false,
+          "is_probability": false,
+          "display_label_zh": "未校準；非預測勝率"
+        },
+        "level_semantics": {
+          "version": "signal-level-semantics/v1",
+          "kind": "rule_reference",
+          "reason": "canonical_v1_allowlist",
+          "strategy": {
+            "name": "pullback_v3",
+            "version": "3.0.0"
+          },
+          "formula": {
+            "version": "legacy-risk-levels/v1",
+            "source": "backend.app.strategies.base.risk_levels",
+            "reason": null,
+            "expression": "risk=max(atr if truthy else entry*0.02, entry*0.01); invalid=max(0.01, entry-risk); target_1=entry+1.6*risk; target_2=entry+3*risk",
+            "rounding": "round each returned level to 2 decimal places"
+          },
+          "fields": {
+            "trigger_price": {
+              "role": "rule_calculation_reference",
+              "label_zh": "規則計算參考價",
+              "source_field": "reference_entry"
+            },
+            "entry_low": {
+              "role": "rule_observation_zone",
+              "label_zh": "規則回踩觀察區下緣",
+              "source_field": "pullback_low"
+            },
+            "entry_high": {
+              "role": "rule_observation_zone",
+              "label_zh": "規則回踩觀察區上緣",
+              "source_field": "pullback_high"
+            },
+            "invalid_price": {
+              "role": "rule_invalidation_reference",
+              "label_zh": "規則失效參考價",
+              "source_field": "invalid_price"
+            },
+            "target_1": {
+              "role": "rule_reference_target",
+              "label_zh": "規則參考目標一",
+              "source_field": "target_1"
+            },
+            "target_2": {
+              "role": "rule_reference_target",
+              "label_zh": "規則參考目標二",
+              "source_field": "target_2"
+            }
+          },
+          "price_basis": {
+            "value": null,
+            "reason": "legacy_price_basis_not_persisted"
+          },
+          "cost_included": {
+            "value": false,
+            "reason": "legacy_level_formula_excludes_costs"
+          },
+          "decision_at": {
+            "value": null,
+            "reason": "legacy_decision_at_not_persisted"
+          },
+          "generated_at": {
+            "value": null,
+            "reason": "legacy_generated_at_not_persisted_with_timezone"
+          },
+          "response_generated_at": "2026-11-10T07:22:02.059855+00:00"
+        },
+        "product_time": {
+          "version": "product-time/v1",
+          "scope": "signal",
+          "availability_truth": "not_asserted",
+          "timezone_policy": {
+            "display_timezone": "Asia/Taipei",
+            "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+            "date_only": "calendar_date_without_timezone_conversion",
+            "naive_or_missing": "unknown_with_reason"
+          },
+          "roles": {
+            "market_date": {
+              "role": "market_date",
+              "status": "known",
+              "precision": "date",
+              "value": "2026-11-09",
+              "utc": null,
+              "date": "2026-11-09",
+              "source": "signal.signal_date",
+              "evidence": null,
+              "ref": null,
+              "reason": null,
+              "timezone_policy": "calendar_date_no_timezone_conversion"
+            },
+            "event_date": {
+              "role": "event_date",
+              "status": "unknown",
+              "precision": "none",
+              "value": null,
+              "utc": null,
+              "date": null,
+              "source": "signal",
+              "evidence": null,
+              "ref": null,
+              "reason": "signal_event_date_not_persisted",
+              "timezone_policy": "not_applicable"
+            },
+            "event_at": {
+              "role": "event_at",
+              "status": "unknown",
+              "precision": "none",
+              "value": null,
+              "utc": null,
+              "date": null,
+              "source": "signal",
+              "evidence": null,
+              "ref": null,
+              "reason": "signal_event_at_not_persisted",
+              "timezone_policy": "not_applicable"
+            },
+            "published_at": {
+              "role": "published_at",
+              "status": "unknown",
+              "precision": "none",
+              "value": null,
+              "utc": null,
+              "date": null,
+              "source": "signal",
+              "evidence": null,
+              "ref": null,
+              "reason": "signal_published_at_not_persisted",
+              "timezone_policy": "not_applicable"
+            },
+            "first_available_at": {
+              "role": "first_available_at",
+              "status": "unknown",
+              "precision": "none",
+              "value": null,
+              "utc": null,
+              "date": null,
+              "source": "signal",
+              "evidence": null,
+              "ref": null,
+              "reason": "signal_first_available_at_not_persisted",
+              "timezone_policy": "not_applicable"
+            },
+            "collected_at": {
+              "role": "collected_at",
+              "status": "unknown",
+              "precision": "none",
+              "value": null,
+              "utc": null,
+              "date": null,
+              "source": "signal",
+              "evidence": null,
+              "ref": null,
+              "reason": "signal_collected_at_not_persisted",
+              "timezone_policy": "not_applicable"
+            },
+            "revision_available_at": {
+              "role": "revision_available_at",
+              "status": "unknown",
+              "precision": "none",
+              "value": null,
+              "utc": null,
+              "date": null,
+              "source": "signal",
+              "evidence": null,
+              "ref": null,
+              "reason": "signal_revision_available_at_not_persisted",
+              "timezone_policy": "not_applicable"
+            },
+            "decision_at": {
+              "role": "decision_at",
+              "status": "unknown",
+              "precision": "none",
+              "value": null,
+              "utc": null,
+              "date": null,
+              "source": "signal",
+              "evidence": null,
+              "ref": null,
+              "reason": "legacy_decision_at_not_persisted",
+              "timezone_policy": "not_applicable"
+            },
+            "generated_at": {
+              "role": "generated_at",
+              "status": "unknown",
+              "precision": "none",
+              "value": null,
+              "utc": null,
+              "date": null,
+              "source": "signal",
+              "evidence": null,
+              "ref": null,
+              "reason": "legacy_generated_at_not_persisted_with_timezone",
+              "timezone_policy": "not_applicable"
+            },
+            "earliest_execution_at": {
+              "role": "earliest_execution_at",
+              "status": "unknown",
+              "precision": "none",
+              "value": null,
+              "utc": null,
+              "date": null,
+              "source": "signal.earliest_execution_date",
+              "evidence": null,
+              "ref": null,
+              "reason": "legacy_earliest_execution_date_is_date_only",
+              "timezone_policy": "not_applicable"
+            },
+            "earliest_execution_date": {
+              "role": "earliest_execution_date",
+              "status": "known",
+              "precision": "date",
+              "value": "2026-11-10",
+              "utc": null,
+              "date": "2026-11-10",
+              "source": "signal.earliest_execution_date",
+              "evidence": null,
+              "ref": null,
+              "reason": null,
+              "timezone_policy": "calendar_date_no_timezone_conversion"
+            }
+          },
+          "response_generated_at": "2026-11-10T07:22:02.059855+00:00",
+          "legacy": {
+            "signal_date": "2026-11-09",
+            "data_cutoff": "2026-11-09 13:30 Asia/Taipei",
+            "earliest_execution_date": "2026-11-10",
+            "execution_date": null,
+            "created_at": "2026-11-09T13:33:30.787572"
+          },
+          "limitations": [
+            "This is a read-time product projection; it does not assert source availability truth.",
+            "signal_date and earliest_execution_date are calendar dates only; neither is an instant.",
+            "earliest_execution_at remains unknown until an actual timezone-aware execution instant is persisted.",
+            "Legacy data_cutoff and naive created_at are preserved but cannot establish historical decision or generation time.",
+            "Arbitrary rule_evidence markers are not accepted as time evidence."
+          ]
+        },
+        "response_generated_at": "2026-11-10T07:22:02.059855+00:00",
+        "earliest_execution_date": "2026-11-10",
+        "missing": [],
+        "wait_missing": [
+          "entry_low",
+          "entry_high",
+          "invalid_price",
+          "target_1",
+          "risk_reward"
+        ],
+        "evidence": {
+          "strategy": "pullback_v3",
+          "strategy_version": "3.0.0",
+          "group_member_return_lookup": {
+            "version": "group-member-return-lookup/v1",
+            "member_return_identity_version": "instrument-id-v1",
+            "group_id": "official-industry-206d1b19286222a7",
+            "group_score_date": "2026-11-09",
+            "requested": {
+              "instrument_id": 13,
+              "exchange": "TWSE",
+              "symbol": "1216"
+            },
+            "matched": {
+              "instrument_id": 13,
+              "exchange": "TWSE",
+              "symbol": "1216"
+            },
+            "mode": "instrument_id",
+            "reason": "matched"
+          },
+          "confidence_semantics": {
+            "version": "signal-confidence/v2",
+            "kind": "not_calibrated",
+            "is_calibrated": false,
+            "is_probability": false,
+            "display_label_zh": "未校準；非預測勝率"
+          },
+          "actionable": false,
+          "breakout": {
+            "state": "rejected",
+            "reasons": [
+              "close_not_above_prior_20_day_high",
+              "margin_financing_increase_abnormal"
+            ]
+          },
+          "pullback": {
+            "state": "rejected",
+            "reasons": [
+              "pullback_volume_ratio_outside_range",
+              "margin_financing_increase_abnormal"
+            ]
+          },
+          "inputs": {
+            "prior_20_highs": [
+              75.5,
+              76.2,
+              76.5,
+              77.1,
+              78.2,
+              80.1,
+              80.4,
+              80.0,
+              79.4,
+              78.8,
+              79.6,
+              83.0,
+              79.8,
+              79.2,
+              80.2,
+              81.9,
+              82.7,
+              82.5,
+              82.6,
+              80.3
+            ],
+            "prior_20_volumes": [
+              15650434,
+              10217453,
+              9899429,
+              17150369,
+              15514611,
+              38693256,
+              15818268,
+              16684332,
+              10341652,
+              11137420,
+              10089033,
+              16749192,
+              6267352,
+              6769506,
+              15312438,
+              11896389,
+              15826388,
+              10511571,
+              13101956,
+              18019042
+            ],
+            "group_excess_return_20d": 0.17942071313049035,
+            "institutional_flow_to_turnover_ratio_5d": 1.087133664712731,
+            "strategy_institutional_flow_to_average_volume_ratio_5d": 1.087133664712731,
+            "institutional_flow_ratio_denominator": "average_daily_volume_20d",
+            "institutional_flow_formula_version": "institutional-flow/v2-shares-per-share-volume",
+            "margin_balance_change_ratio_5d": 0.25585284280936454,
+            "margin_eligibility": "applicable",
+            "margin_zero_base": null,
+            "bar_count_60d": 510,
+            "ma20": 78.86,
+            "ma60": 76.675
+          },
+          "risk_validation": {
+            "valid": false,
+            "errors": [
+              "entry_price_must_be_finite_and_positive",
+              "invalid_price_must_be_finite_and_positive",
+              "target_1_must_be_finite_and_positive"
+            ]
+          },
+          "execution": {
+            "signal_time": "T_close",
+            "earliest": "2026-11-10",
+            "calendar": {
+              "source": "twse_holiday_schedule",
+              "raw_payload_ids": [
+                9123
+              ],
+              "missing_reason": null
+            },
+            "fill_policy": "next_session_open_or_better_plus_adverse_slippage",
+            "execution_slippage_bps": 5.0,
+            "round_trip_transaction_cost_bps": 30.0,
+            "return_measure": "adjusted_close_divided_by_filled_entry_minus_one_minus_round_trip_cost"
+          }
+        },
+        "open_plan_id": null
+      }
+    ],
+    "reasons": [
+      "至少一個有效族群具備 TAIEX 相對強弱與成員門檻"
+    ],
+    "conflicts": [],
+    "evidence_refs": [
+      "ingestion_run:2745",
+      "market_bar:1133196",
+      "raw_payload:10962",
+      "raw_payload:9534",
+      "raw_payload:9711",
+      "raw_payload:9954",
+      "raw_payload:10266",
+      "raw_payload:10963",
+      "signal:70373",
+      "signal:70374",
+      "theme:official-industry-206d1b19286222a7"
+    ],
+    "data_quality": "complete",
+    "blocking_reasons": [],
+    "missing_data_priority": [],
+    "theme_ids": [
+      "official-industry-206d1b19286222a7"
+    ],
+    "event_ids": [
+      15823,
+      15821,
+      15812,
+      15127,
+      13767
+    ],
+    "data_cutoff": "2026-11-09",
+    "coverage": {
+      "coverage_status": "verified",
+      "verified_taiex_sessions": 120,
+      "eligible_sessions": 120,
+      "effective_bar_sessions": 120,
+      "effective_chip_sessions": 120,
+      "missing_bars_to_20": 0,
+      "missing_bars_to_60": 0,
+      "missing_chips_to_20": 0,
+      "missing_chips_to_60": 0,
+      "missing_bar_dates_to_20": [],
+      "missing_bar_dates_to_60": [],
+      "missing_chip_dates_to_20": [],
+      "missing_chip_dates_to_60": [],
+      "no_trade_dates_to_20": [],
+      "no_trade_dates_to_60": [],
+      "suspended_dates_to_60": [],
+      "quote_not_listed_dates_to_60": [],
+      "invalid_bar_dates_to_60": [],
+      "halted_dates_to_60": [],
+      "halt_periods_to_60": [],
+      "coverage_reasons": [],
+      "ipo_stage": null
+    },
+    "stop_price_semantics": {
+      "kind": "unknown",
+      "label": "價位（語意未確認）",
+      "origin": null,
+      "source_field": null,
+      "is_rule_reference": false,
+      "reason": "no_rule_or_position_stop"
+    }
+  },
+  "coverage": {
+    "coverage_status": "verified",
+    "verified_taiex_sessions": 120,
+    "eligible_sessions": 120,
+    "effective_bar_sessions": 120,
+    "effective_chip_sessions": 120,
+    "missing_bars_to_20": 0,
+    "missing_bars_to_60": 0,
+    "missing_chips_to_20": 0,
+    "missing_chips_to_60": 0,
+    "missing_bar_dates_to_20": [],
+    "missing_bar_dates_to_60": [],
+    "missing_chip_dates_to_20": [],
+    "missing_chip_dates_to_60": [],
+    "no_trade_dates_to_20": [],
+    "no_trade_dates_to_60": [],
+    "suspended_dates_to_60": [],
+    "quote_not_listed_dates_to_60": [],
+    "invalid_bar_dates_to_60": [],
+    "halted_dates_to_60": [],
+    "halt_periods_to_60": [],
+    "coverage_reasons": [],
+    "ipo_stage": null
+  },
+  "trading_halt": null,
+  "news_cutoff": {
+    "as_of": "2026-11-09",
+    "filter": "verified_publication_or_event",
+    "limit": 20
+  },
+  "candidate": null,
+  "strategy_board": {
+    "as_of": "2026-11-09",
+    "levels_version": "strategy_levels_v1",
+    "candidate": null,
+    "liquidity": {
+      "average_volume_lots_20d": 14376.13,
+      "state": "ok",
+      "unit": "lots",
+      "data_as_of": "2026-11-09",
+      "minimum_lots": 1000,
+      "below_minimum": false,
+      "candidate_exclusion": null,
+      "score_version": "candidate_score_v6"
+    },
+    "strategies": [
+      {
+        "strategy": "breakout_v3",
+        "label": "突破條件",
+        "version": "3.0.0",
+        "entry_type": "breakout",
+        "status": "observation",
+        "signal_id": 70373,
+        "signal_date": "2026-11-09",
+        "earliest_execution_date": "2026-11-10",
+        "levels": {
+          "kind": "observation",
+          "display_label": "條件未成立・觀察價位",
+          "availability": "levels",
+          "next_session_date": "2026-11-10",
+          "trigger_price": 83.1,
+          "zone_low": null,
+          "zone_high": null,
+          "min_volume": 17251357,
+          "max_volume": null,
+          "reference_entry": 83.1,
+          "entry_low": null,
+          "entry_high": null,
+          "invalid_price": 81.08,
+          "target_1": 86.33,
+          "target_2": 89.16,
+          "risk_reward": 1.6,
+          "reachable_next_session": true,
+          "price_basis": "score_date_raw_basis",
+          "missing_inputs": [],
+          "missing_labels": []
+        },
+        "levels_missing": false,
+        "risk_reward_shortfall": null,
+        "unmet": [
+          "breakout_price",
+          "margin_financing"
+        ],
+        "missing": [],
+        "missing_labels": [],
+        "conditions": [
+          {
+            "code": "eligibility",
+            "kind": "eligibility",
+            "satisfied": true,
+            "actual": null,
+            "threshold": null,
+            "threshold_high": null,
+            "operator": null,
+            "reasons": [],
+            "next_session": null
+          },
+          {
+            "code": "required_inputs",
+            "kind": "data",
+            "satisfied": true,
+            "actual": null,
+            "threshold": null,
+            "threshold_high": null,
+            "operator": null,
+            "reasons": [],
+            "next_session": null
+          },
+          {
+            "code": "breakout_price",
+            "kind": "price",
+            "satisfied": false,
+            "actual": 76.7,
+            "threshold": 83.0,
+            "threshold_high": null,
+            "operator": "gt",
+            "reasons": [],
+            "next_session": {
+              "min_close": 83.1,
+              "gap": 0.083442
+            }
+          },
+          {
+            "code": "breakout_volume",
+            "kind": "volume",
+            "satisfied": true,
+            "actual": 1.226882,
+            "threshold": 1.2,
+            "threshold_high": null,
+            "operator": "gte",
+            "reasons": [],
+            "next_session": {
+              "min_volume": 17251357
+            }
+          },
+          {
+            "code": "group_relative_strength",
+            "kind": "confirmation",
+            "satisfied": true,
+            "actual": 0.17942071313049035,
+            "threshold": 0.0,
+            "threshold_high": null,
+            "operator": "gt",
+            "reasons": [],
+            "next_session": null
+          },
+          {
+            "code": "institutional_flow",
+            "kind": "confirmation",
+            "satisfied": true,
+            "actual": 1.087133664712731,
+            "threshold": -0.003,
+            "threshold_high": null,
+            "operator": "gte",
+            "reasons": [],
+            "next_session": null
+          },
+          {
+            "code": "margin_financing",
+            "kind": "confirmation",
+            "satisfied": false,
+            "actual": 0.25585284280936454,
+            "threshold": 0.05,
+            "threshold_high": null,
+            "operator": "lte",
+            "reasons": [],
+            "next_session": null
+          }
+        ]
+      },
+      {
+        "strategy": "pullback_v3",
+        "label": "回踩條件",
+        "version": "3.0.0",
+        "entry_type": "pullback",
+        "status": "observation",
+        "signal_id": 70374,
+        "signal_date": "2026-11-09",
+        "earliest_execution_date": "2026-11-10",
+        "levels": {
+          "kind": "observation",
+          "display_label": "條件未成立・觀察價位",
+          "availability": "levels",
+          "next_session_date": "2026-11-10",
+          "trigger_price": null,
+          "zone_low": 76.7,
+          "zone_high": 80.6,
+          "min_volume": 8625679,
+          "max_volume": 17251356,
+          "reference_entry": 76.7,
+          "entry_low": 77.9,
+          "entry_high": 79.93,
+          "invalid_price": 74.68,
+          "target_1": 79.93,
+          "target_2": 82.76,
+          "risk_reward": 1.6,
+          "reachable_next_session": true,
+          "price_basis": "score_date_raw_basis",
+          "missing_inputs": [],
+          "missing_labels": []
+        },
+        "levels_missing": false,
+        "risk_reward_shortfall": null,
+        "unmet": [
+          "pullback_volume",
+          "margin_financing"
+        ],
+        "missing": [],
+        "missing_labels": [],
+        "conditions": [
+          {
+            "code": "eligibility",
+            "kind": "eligibility",
+            "satisfied": true,
+            "actual": null,
+            "threshold": null,
+            "threshold_high": null,
+            "operator": null,
+            "reasons": [],
+            "next_session": null
+          },
+          {
+            "code": "required_inputs",
+            "kind": "data",
+            "satisfied": true,
+            "actual": null,
+            "threshold": null,
+            "threshold_high": null,
+            "operator": null,
+            "reasons": [],
+            "next_session": null
+          },
+          {
+            "code": "pullback_history",
+            "kind": "data",
+            "satisfied": true,
+            "actual": 510,
+            "threshold": 60,
+            "threshold_high": null,
+            "operator": "gte",
+            "reasons": [],
+            "next_session": {
+              "bar_count": 511
+            }
+          },
+          {
+            "code": "pullback_trend",
+            "kind": "trend",
+            "satisfied": true,
+            "actual": 78.86,
+            "threshold": 76.675,
+            "threshold_high": null,
+            "operator": "gt",
+            "reasons": [],
+            "next_session": {
+              "min_close": 9.91
+            }
+          },
+          {
+            "code": "pullback_above_ma60",
+            "kind": "trend",
+            "satisfied": true,
+            "actual": 76.7,
+            "threshold": 76.675,
+            "threshold_high": null,
+            "operator": "gte",
+            "reasons": [],
+            "next_session": {
+              "min_close": 76.7
+            }
+          },
+          {
+            "code": "pullback_support_zone",
+            "kind": "price",
+            "satisfied": true,
+            "actual": 76.7,
+            "threshold": 76.4942,
+            "threshold_high": 80.4372,
+            "operator": "between",
+            "reasons": [],
+            "next_session": {
+              "min_close": 76.7,
+              "max_close": 80.6,
+              "position": "inside",
+              "gap": 0.0
+            }
+          },
+          {
+            "code": "pullback_volume",
+            "kind": "volume",
+            "satisfied": false,
+            "actual": 1.226882,
+            "threshold": 0.6,
+            "threshold_high": 1.2,
+            "operator": "between",
+            "reasons": [],
+            "next_session": {
+              "min_volume": 8625679,
+              "max_volume": 17251356
+            }
+          },
+          {
+            "code": "group_relative_strength",
+            "kind": "confirmation",
+            "satisfied": true,
+            "actual": 0.17942071313049035,
+            "threshold": 0.0,
+            "threshold_high": null,
+            "operator": "gt",
+            "reasons": [],
+            "next_session": null
+          },
+          {
+            "code": "institutional_flow",
+            "kind": "confirmation",
+            "satisfied": true,
+            "actual": 1.087133664712731,
+            "threshold": -0.003,
+            "threshold_high": null,
+            "operator": "gte",
+            "reasons": [],
+            "next_session": null
+          },
+          {
+            "code": "margin_financing",
+            "kind": "confirmation",
+            "satisfied": false,
+            "actual": 0.25585284280936454,
+            "threshold": 0.05,
+            "threshold_high": null,
+            "operator": "lte",
+            "reasons": [],
+            "next_session": null
+          }
+        ]
+      }
+    ]
+  }
+}
