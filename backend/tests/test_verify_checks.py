@@ -1238,7 +1238,9 @@ def test_t17_fails_on_the_issue_608_row(tmp_path):
 
 def test_t17_needs_every_candidate_measured(tmp_path):
     # The rest of the list is measured too (the screenshot opens its <details>).
-    with pytest.raises(page_checks.Fail, match=r"量到的候選列 \[1\]，預期依 items \[1, 2\]"):
+    with pytest.raises(
+        page_checks.Fail, match=r"量到的候選列 \[1\]，預期依 items \[1, 2\]"
+    ):
         page_checks.t17(_t17_run(tmp_path, [_row(1)]))
     old_tool = {"today": {390: {"width": 390, "ready": True}}}
     run = FakeRun(tmp_path, {"candidates": _candidates()}, {}, metas=old_tool)
