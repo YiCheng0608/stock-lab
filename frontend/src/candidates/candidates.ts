@@ -224,9 +224,7 @@ export function marketSourceLabel(source: string | null | undefined): string {
   return SOURCE_NAMES[exchange] ?? source
 }
 
-export function exchangeLabel(exchange: string): string {
-  return exchange === 'TWSE' ? '上市' : exchange === 'TPEx' ? '上櫃' : '市場待核實'
-}
+export { exchangeLabel } from '../presentation'
 
 // Signal and group sources are rule versions; the news source ends with the LLM prompt version (推論).
 export function candidateSourceText(item: CandidateItem): string {

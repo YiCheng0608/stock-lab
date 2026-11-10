@@ -1,4 +1,4 @@
-<!-- owns: UI 文案共通原則、內部詞對照、資料完整度、新聞卡文案、行動中心分級、行動狀態文字、詞彙原則、壓縮卡與詳情文案、張與零股、表格單位與空白、族群榜文案、題材建議文案、中文原因碼、每日候選文案、個股策略總表文案、候選進場方式文案、今日頁頁首文案、策略說明頁文案、資料覆蓋度頁文案 -->
+<!-- owns: UI 文案共通原則、內部詞對照、資料完整度、新聞卡文案、行動中心分級、行動狀態文字、詞彙原則、壓縮卡與詳情文案、張與零股、表格單位與空白、族群榜文案、題材建議文案、中文原因碼、每日候選文案、個股策略總表文案、候選進場方式文案、今日頁頁首文案、策略說明頁文案、資料覆蓋度頁文案、導覽列搜尋文案 -->
 # UI 文案與資訊層級規格
 
 本文是日常頁的中文、資訊層級、單位、unknown 與 reason code 契約。能力狀態見 [CAPABILITIES](CAPABILITIES.md)，策略合併判定見 [PRODUCT_SPEC](PRODUCT_SPEC.md#action-merge)。
@@ -478,3 +478,14 @@ reason code 的日常文案由 `backend/app/presentation.py`（`REASON_LABELS`�
   - 目標取 run 的 `target_sessions`，N 是 `confirmed_non_trading_dates` 的筆數。規則見[回補目標與確定休市日](DATA_SOURCES.md#回補目標與確定休市日)。
   - 規則改版前的 run 沒有 `target_sessions`，目標寫 `coverage_targets.ohlcv_taiex_sessions`（上限 65），不加後綴。
 - **覆蓋目標**與「回補目標：」那一行：`target_met` 為真寫「已達成」，否則寫「尚未達成」；`/api/coverage` 的 `target_met` 是 null 時寫「尚無回補稽核基準」。頁面在 `frontend/src/App.tsx` 的 `BackfillCoveragePage`；「已驗證交易日」的字串由 `frontend/src/coverage/CoverageSummary.tsx` 的 `backfillSessionsLabel` 組出。
+
+## 15. 導覽列搜尋
+
+導覽列右側的搜尋框（[#599](https://github.com/YiCheng0608/stock-lab/issues/599)；樣式見 [DESIGN_SYSTEM §5](DESIGN_SYSTEM.md#5-元件)「導覽列搜尋建議」）：
+
+- 輸入框 placeholder「代號或名稱」，無障礙名稱「搜尋個股代號或名稱」。
+- 輸入後約 250 ms 列出最多 8 檔符合的股票，每檔一列「代號 名稱 上市／上櫃」（市場依交易所，未知寫「市場待核實」）；清單的無障礙名稱「符合的股票」。來源是 `GET /api/instruments?q=&securities_only=true&page_size=8`：只列正常交易的證券與 ETF（不含指數、期貨、下市），代號完全相符排第一，其次代號開頭、名稱相符、名稱開頭，其餘依交易所與代號。查詢中不顯示清單。
+- 點選一檔或用上下鍵選取後按 Enter，進該股個股頁 `/stocks/:exchange/:symbol`；Esc 關閉清單、保留輸入；沒有選取時按 Enter 照舊到個股清單 `/stocks?q=`。逐鍵只查這支建議 API，`/api/stocks` 只在送出時查。
+- 沒有符合時一行「沒有符合「{輸入}」的股票，按 Enter 到個股清單搜尋。」；請求失敗時一行「建議暫時無法載入，按 Enter 到個股清單搜尋。」，Enter 照常可用。
+- 有清單時螢幕閱讀器念「{N} 檔符合，按上下鍵選取。」；沒有符合與失敗念上面那一行。注音等輸入法組字中不查詢，組完才查。
+- 手機（860px 以下）搜尋框在漢堡選單內，清單與輸入框同寬，選單可捲動到最後一檔。

@@ -2,6 +2,8 @@
 
 入口：主導航「個股」，`StocksPage`（目錄）與 `StockPage`（`/stocks/:exchange/:symbol`，`frontend/src/App.tsx`、`frontend/src/stock/`；六個分頁 `chart`、`chips`、`financials`、`news`、`research`、`data`，按鈕 id 為 `stock-tab-<分頁>`）。路徑：族群詳情第一個成員 → 個股頁（族群榜空時改用明日候選 #1、再改用市場列表第一筆，見 [README 選股](README.md#選股)）。
 
+導覽列搜尋的即時建議（`frontend/src/components/NavSearch.tsx`，#599）不在本頁檢查：建議清單只在輸入時出現，截圖頁面文字不含它，`page_checks.py` 不需更新；建議的請求、鍵盤與滑鼠操作、Esc、Enter 導到 `/stocks?q=` 由前端測試（`search.test.ts`、`components/ui/ui.test.tsx`）涵蓋，`securities_only` 與排序由 `backend/tests/test_api.py` 涵蓋。
+
 ## API
 
 | 檔名 | URL（前綴 `<API>/api`，`<API>` 為 API 的 origin） |
