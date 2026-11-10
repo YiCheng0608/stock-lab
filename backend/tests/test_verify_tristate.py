@@ -616,7 +616,9 @@ def test_a_5xx_that_answers_200_alone_is_undetermined_not_failed(tmp_path, monke
     run = ShotRun(tmp_path, {"today": [_busy(), _busy()]}, pages={})
     results = _today(run, monkeypatch, "T1", "T2")
     t1, t2 = results["T1"], results["T2"]
-    assert (t1.status, t1.environment, t1.failed) == ("無法判定", True, False)
+    # Before #609: T1 失敗 with 「today-1280 未 ready；today-1280 httpErrors [...]」.
+    assert (t1.status, t1.failed) == ("無法判定", False), t1.detail
+    assert t1.environment
     assert t1.detail.startswith("無法判定（環境）：today-1280 未 ready")
     assert BUSY in t1.detail and "直接 GET 回 200" in t1.detail
     assert (t2.status, t2.environment) == ("無法判定", True)
