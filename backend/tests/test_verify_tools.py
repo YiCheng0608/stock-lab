@@ -927,7 +927,7 @@ def test_screenshot_waits_for_data_and_reports_overflow(tmp_path: Path) -> None:
         assert line["url"] == url and line["finalUrl"] == url + "landed?from=old#plan-7"
         assert "loading" not in text
         assert line["consoleErrors"] == ["boom"]
-        assert line["httpErrors"] == []
+        assert line["httpErrors"] == [] and line["httpErrorCount"] == 0
         # Issue 608: the shown today-list rows; #2's total runs under the button and past the row.
         total = ["dt 總分（0–100）", "dd 70"]
         assert line["candidateRows"] == [

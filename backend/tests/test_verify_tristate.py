@@ -587,7 +587,9 @@ class ShotRun(page_checks.Run):
             txt = self.out / "shots" / f"{name}-{width}.txt"
             txt.write_text(self.pages.get(f"{name}-{width}", ""), encoding="utf-8")
             meta = {"width": width, "ready": True, "txt": str(txt), "httpErrors": []}
-            lines.append(json.dumps({**meta, **extra.get(width, extra.get("*", {}))}))
+            meta.update(extra.get(width, extra.get("*", {})))
+            meta.setdefault("httpErrorCount", len(meta["httpErrors"]))
+            lines.append(json.dumps(meta))
         return subprocess.CompletedProcess(command, 0, "\n".join(lines) + "\n", "")
 
     def _fetch(self, path):
@@ -655,13 +657,62 @@ def test_a_busy_shot_with_a_console_error_still_fails(tmp_path, monkeypatch):
     assert BUSY in t1.detail
 
 
-def test_a_non_api_or_4xx_error_on_a_busy_shot_still_fails(tmp_path, monkeypatch):
-    http = [BUSY, "404 http://web:8080/api/stocks/TWSE/0000"]
-    run = ShotRun(tmp_path, {"today": [_busy(httpErrors=http)]})
+@pytest.mark.parametrize(
+    "error",
+    [
+        "404 http://web:8080/api/stocks/TWSE/0000",  # an /api/ 4xx
+        "502 http://web:8080/assets/index.js",  # a 5xx that is not /api/
+    ],
+)
+def test_a_4xx_or_non_api_error_on_a_busy_shot_still_fails(
+    tmp_path, monkeypatch, error
+):
+    run = ShotRun(tmp_path, {"today": [_busy(httpErrors=[BUSY, error])]})
     (t1,) = _today(run, monkeypatch, "T1").values()
-    assert (
-        t1.status == "失敗" and "404 http://web:8080/api/stocks/TWSE/0000" in t1.detail
-    )
+    assert t1.status == "失敗" and not t1.environment
+    assert f"httpErrors ['{error}']" in t1.detail
+
+
+def test_a_cut_http_error_list_is_not_environment(tmp_path, monkeypatch):
+    # #609 review: screenshot.cjs lists at most 50; the 51st could be a 404 or a broken URL.
+    run = ShotRun(tmp_path, {"today": [_busy(httpErrorCount=51)]})
+    (t1,) = _today(run, monkeypatch, "T1").values()
+    assert t1.status == "失敗" and not t1.environment
+    assert "httpErrors 共 51 筆，清單只列 1 筆（截斷，不認定環境）" in t1.detail
+
+
+def test_the_fixture_database_neither_retakes_nor_excuses_a_5xx(tmp_path, monkeypatch):
+    # #609 review: no other container competes in CI, so a 5xx there is a signal.
+    run = ShotRun(tmp_path, {"today": [_busy(), _busy(), {}]})
+    run.env_checks = False
+    results = _today(run, monkeypatch, "T1", "T2")
+    assert results["T1"].status == "失敗" and not results["T1"].environment
+    assert results["T1"].detail.startswith("today-1280 未 ready；today-1280 httpErrors")
+    assert results["T2"].status == "無法判定" and not results["T2"].environment
+    # Only the usual not-ready retry of the parallel pass; no retake, no direct GET.
+    assert run.calls.count("today") == 2 and run.fetched == []
+    assert run.environment(4, list(results.values()))["hits"] == 0
+    run = ShotRun(tmp_path, statuses={"dashboard": 500})
+    run.env_checks = False
+    with pytest.raises(page_checks.Undetermined) as error:
+        run.dashboard()
+    assert not isinstance(error.value, page_checks.Environment)
+
+
+def test_a_recovered_retake_keeps_the_first_takes_other_problems(tmp_path, monkeypatch):
+    console = _busy(consoleErrors=["TypeError: x is null"])
+    run = ShotRun(tmp_path, {"today": [console, console, {}]})
+    results = list(_today(run, monkeypatch, "T1").values())
+    assert results[0].status == "通過"
+    env = run.environment(1, results)
+    assert env["replaced_problems"] == {
+        "today": [
+            "today-1280 consoleErrors ['TypeError: x is null']",
+            "today-390 consoleErrors ['TypeError: x is null']",
+        ]
+    }
+    summary = page_checks.summary_markdown(results, ["today"], "## h", environment=env)
+    assert "- 重截後恢復的 `today` 第一次截圖另有：today-1280 consoleErrors" in summary
 
 
 def test_a_retake_without_5xx_is_judged_as_usual(tmp_path, monkeypatch):

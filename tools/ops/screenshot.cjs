@@ -25,9 +25,10 @@ const USAGE = `usage: node tools/ops/screenshot.cjs --url <page> --out <dir> [op
 
 Writes <out>/<name>-<width>.png and <out>/<name>-<width>.txt and prints one JSON line per
 width: {"url","finalUrl","width","ready","png","txt","scrollWidth","clientWidth","overflow",
-"candidateRows","consoleErrors","httpErrors","missingClicks"} (candidateRows: per shown today-list
-row, its rank, the number block's scroll and client width, and the number cells the AI button
-covers or the row's edge cuts; null when that probe throws). Exit 0 when every width became ready, 1 otherwise, 2 on usage.`
+"candidateRows","consoleErrors","httpErrors","httpErrorCount","missingClicks"} (candidateRows: per
+shown today-list row, its rank, the number block's scroll and client width, and the number cells the
+AI button covers or the row's edge cuts; null when that probe throws. httpErrors lists the first 50
+failed responses, httpErrorCount counts all of them). Exit 0 when every width became ready, 1 otherwise, 2 on usage.`
 
 // Phone widths use mobile emulation; heights are the viewport before the full-page capture.
 const MOBILE_MAX_WIDTH = 600
@@ -41,6 +42,7 @@ const STABLE_POLLS = 3
 const LOADING_SELECTOR = '.skeleton, [aria-busy="true"]'
 // The app ships no favicon; its 404 is not a page failure.
 const IGNORED_HTTP = /\/favicon\.ico(\?|$)/
+const HTTP_ERRORS_SHOWN = 50
 
 function parseArgs(argv) {
   const options = { widths: [1280, 390], timeoutMs: 60000, clicks: [] }
@@ -285,7 +287,9 @@ async function captureWidth(cdp, options, width, watch) {
     overflow: metrics.scrollWidth > metrics.clientWidth,
     candidateRows: metrics.candidateRows,
     consoleErrors: watch.consoleErrors.slice(0, 10),
-    httpErrors: watch.httpErrors.slice(0, 10),
+    // The list is capped; the count tells page_checks.py whether it saw every failed response (Issue 609).
+    httpErrors: watch.httpErrors.slice(0, HTTP_ERRORS_SHOWN),
+    httpErrorCount: watch.httpErrors.length,
     missingClicks,
   }
 }

@@ -361,6 +361,30 @@ def api_5xx(meta: dict) -> list[tuple[int, str]]:
     return hits
 
 
+def http_complete(meta: dict) -> bool:
+    """Whether ``httpErrors`` lists every failed response (screenshot.cjs caps the list
+    and reports ``httpErrorCount``); a cut list may hide a 404 or a broken URL."""
+
+    shown = len(meta.get("httpErrors") or [])
+    return meta.get("httpErrorCount", shown) <= shown
+
+
+def other_problems(meta: dict) -> list[str]:
+    """A width's problems other than /api/ 5xx and not-ready, for the summary of a retake."""
+
+    problems = []
+    other = [e for e in meta.get("httpErrors") or [] if not API_5XX.match(e)]
+    if other:
+        problems.append(f"httpErrors {other}")
+    if not http_complete(meta):
+        problems.append(f"httpErrors 共 {meta['httpErrorCount']} 筆，清單截斷")
+    if meta.get("consoleErrors"):
+        problems.append(f"consoleErrors {meta['consoleErrors']}")
+    if meta.get("overflow"):
+        problems.append("橫向捲動")
+    return problems
+
+
 def slug(path: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "-", path).strip("-")
 
@@ -414,6 +438,11 @@ class Run:
         self.env_hits: list[dict] = []
         self.retaken: dict[str, bool] = {}
         self.rechecked: dict[str, int] = {}
+        # A retaken shot that came back clean: the first take's other problems, for the summary.
+        self.replaced: dict[str, list[str]] = {}
+        # Off with --fixture: no other container competes there, so a 5xx is a signal
+        # and fails as before (#609 review).
+        self.env_checks = True
         for sub in ("api", "shots"):
             (out / sub).mkdir(parents=True, exist_ok=True)
 
@@ -425,7 +454,7 @@ class Run:
         if path not in self.responses:
             self.responses[path] = self._fetch(path)
             status, payload = self.responses[path]
-            if status >= 500 or status == 0:
+            if self.env_checks and (status >= 500 or status == 0):
                 self.env_hits.append(
                     {
                         "source": "api",
@@ -442,7 +471,7 @@ class Run:
                 encoding="utf-8",
             )
         status, payload = self.responses[path]
-        if status >= 500 or status == 0:
+        if self.env_checks and (status >= 500 or status == 0):
             raise Environment(f"/api/{path} 回 {status}")
         if status != 200:
             raise Undetermined(f"/api/{path} 回 {status}")
@@ -544,8 +573,10 @@ class Run:
     def retake(self, shots: list[Shot]) -> None:
         """#609: retake, one at a time and once, each shot that saw an ``/api/`` 5xx;
         then GET each URL still 5xx directly, so ``env_reason`` can tell a busy host
-        (the GET answers 200) from a broken API (it does not)."""
+        (the GET answers 200) from a broken API (it does not).  Not with --fixture."""
 
+        if not self.env_checks:
+            return
         for shot in shots:
             first = self.shoot(shot)
             if not any(api_5xx(meta) for meta in first.values()):
@@ -556,6 +587,13 @@ class Run:
             self._record(shot, again, "重截")
             left = {path for meta in again.values() for _, path in api_5xx(meta)}
             self.retaken[shot.name] = not left
+            other = [
+                f"{shot.name}-{width} {problem}"
+                for width, meta in first.items()
+                for problem in other_problems(meta)
+            ]
+            if not left and other:
+                self.replaced[shot.name] = other
             for path in sorted(left - set(self.rechecked)):
                 self.rechecked[path] = self._fetch(path)[0]
 
@@ -573,9 +611,12 @@ class Run:
 
     def env_reason(self, meta: dict) -> str | None:
         """The /api/ 5xx of a screenshot width when each answered 200 to a direct GET
-        (the host was busy, #609); None when there is none or one is still not 200."""
+        (the host was busy, #609); None when there is none, one is still not 200, the
+        httpErrors list was cut (``http_complete``) or the run is on the fixture database."""
 
         hits = api_5xx(meta)
+        if not self.env_checks or not http_complete(meta):
+            return None
         if not hits or any(self.rechecked.get(path) != 200 for _, path in hits):
             return None
         seen = dict.fromkeys(f"{status} /api/{path}" for status, path in hits)
@@ -595,6 +636,7 @@ class Run:
             "api_hits": sum(h["source"] == "api" for h in self.env_hits),
             "retaken": sorted(self.retaken),
             "recovered": sorted(name for name, ok in self.retaken.items() if ok),
+            "replaced_problems": dict(sorted(self.replaced.items())),
             "rechecked": dict(sorted(self.rechecked.items())),
             "urls": [
                 {"path": path, "status": status, "count": count}
@@ -822,6 +864,9 @@ def usable(run: Run, shots: list[Shot]) -> str:
                 problems.append((f"{where} httpErrors {busy}", True))
             if other:
                 problems.append((f"{where} httpErrors {other}", False))
+            if not http_complete(meta):
+                problem = f"{where} httpErrors 共 {meta['httpErrorCount']} 筆，清單只列 {len(http)} 筆（截斷，不認定環境）"
+                problems.append((problem, False))
             if meta.get("consoleErrors"):
                 problem = f"{where} consoleErrors {meta['consoleErrors']}"
                 problems.append((problem, False))
@@ -3727,6 +3772,10 @@ def environment_markdown(env: dict) -> list[str]:
         f"（記無法判定（環境）），仍非 200 的 {len(rechecked) - len(ok)} 個（照舊判失敗）",
         "- 無法判定（環境）的檢查："
         + ("、".join(f"`{check}`" for check in env["checks"]) or "無"),
+        *(
+            f"- 重截後恢復的 `{name}` 第一次截圖另有：{'；'.join(problems)}"
+            for name, problems in env.get("replaced_problems", {}).items()
+        ),
         "",
         "| URL | 狀態 | 次數 |",
         "| --- | --- | --- |",
@@ -3834,6 +3883,7 @@ def main(argv: list[str] | None = None) -> int:
 
     started = time.monotonic()
     run = Run(args.api, args.web, args.db, args.out, args.browser)
+    run.env_checks = not args.fixture
     fixture = fixture_module() if args.fixture else None
     stocks = stocks_for(run, fixture)
     jobs = default_jobs(args.jobs, args.fixture)
