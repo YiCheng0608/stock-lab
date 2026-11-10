@@ -97,7 +97,7 @@ export function StrategyPage() {
             <li><b><Term id="entry_zone">進場區</Term></b>：突破型是一個價位（在它附近進場），回踩型是一段區間（在區間內進場）；開盤就跳過目標或跌破停損時，這筆不進場。</li>
             <li><b><Term id="support">停損</Term></b>：跌破就代表條件失效，出場，不要攤平。</li>
             <li><b><Term id="target">目標</Term></b>：目標一較近，是主要的獲利出場價；目標二較遠，是延伸參考。</li>
-            <li><b><Term id="rr">RR</Term></b>：可能賺的空間是可能賠的幾倍；規則要求至少 1.5 倍才列入。</li>
+            <li><b><Term id="rr">RR</Term></b>：可能賺的空間是可能賠的幾倍（目標一減進場價，除以進場價減停損；回踩型的進場價取進場區中點）；規則要求至少 1.5 倍才列入。</li>
           </ol>
         </Card>
       </section>

@@ -14,12 +14,31 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 
-from .strategies import LEGACY_RISK_LEVELS_FORMULA, REGISTRY, SUPERSEDED
+from .strategies import (
+    LEGACY_RISK_LEVELS_FORMULA,
+    PULLBACK_ZONE_MIDPOINT_FORMULA,
+    REGISTRY,
+    SUPERSEDED,
+)
 
 
 LEVEL_SEMANTICS_VERSION = "signal-level-semantics/v1"
 KNOWN_FORMULA_VERSION = LEGACY_RISK_LEVELS_FORMULA
 KNOWN_FORMULA_SOURCE = "backend.app.strategies.base.risk_levels"
+_LEGACY_EXPRESSION = "risk=max(atr if truthy else entry*0.02, entry*0.01); invalid=max(0.01, entry-risk); target_1=entry+1.6*risk; target_2=entry+3*risk"
+# The level formulas a strategy may claim, with what the API states for each.
+# pullback_v4 (#580) keeps the legacy invalid price and targets around the
+# close and stores the entry zone's midpoint as the RR's entry.
+KNOWN_FORMULAS: dict[str, dict[str, str]] = {
+    LEGACY_RISK_LEVELS_FORMULA: {
+        "source": KNOWN_FORMULA_SOURCE,
+        "expression": _LEGACY_EXPRESSION,
+    },
+    PULLBACK_ZONE_MIDPOINT_FORMULA: {
+        "source": "backend.app.strategies.base.risk_levels+zone_midpoint",
+        "expression": "risk=max(atr if truthy else close*0.02, close*0.01); invalid=max(0.01, close-risk); target_1=close+1.6*risk; target_2=close+3*risk; reference_entry=round((pullback_low+pullback_high)/2, 2)",
+    },
+}
 
 SIGNAL_FIELD_DEFINITIONS: dict[str, dict[str, str]] = {
     "breakout_price": {
@@ -67,20 +86,25 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _known_strategy(strategy_name: object, strategy_version: object) -> bool:
-    """A registered or superseded strategy, at its version, on the v1 levels."""
+def _known_formula(strategy_name: object, strategy_version: object) -> str | None:
+    """The level formula of a registered or superseded strategy at its version.
+
+    None for another strategy or version, or a formula not in KNOWN_FORMULAS.
+    """
 
     strategy = (
         REGISTRY.get(strategy_name) or SUPERSEDED.get(strategy_name)
         if isinstance(strategy_name, str)
         else None
     )
-    return (
-        strategy is not None
-        and strategy.level_formula_version == KNOWN_FORMULA_VERSION
-        and isinstance(strategy_version, str)
-        and strategy_version == strategy.version
-    )
+    if (
+        strategy is None
+        or strategy.level_formula_version not in KNOWN_FORMULAS
+        or not isinstance(strategy_version, str)
+        or strategy_version != strategy.version
+    ):
+        return None
+    return strategy.level_formula_version
 
 
 def _strategy_value(value: object) -> str | None:
@@ -104,7 +128,8 @@ def build_level_semantics(
 
     name = _strategy_value(strategy_name)
     version = _strategy_value(strategy_version)
-    known = _known_strategy(name, version)
+    known_formula = _known_formula(name, version)
+    known = known_formula is not None
     mapping = dict(field_mapping or {key: key for key in SIGNAL_FIELD_DEFINITIONS})
     if known:
         fields = {
@@ -123,10 +148,10 @@ def build_level_semantics(
         }
         price_basis = {"value": None, "reason": "legacy_price_basis_not_persisted"}
         formula = {
-            "version": KNOWN_FORMULA_VERSION,
-            "source": KNOWN_FORMULA_SOURCE,
+            "version": known_formula,
+            "source": KNOWN_FORMULAS[known_formula]["source"],
             "reason": None,
-            "expression": "risk=max(atr if truthy else entry*0.02, entry*0.01); invalid=max(0.01, entry-risk); target_1=entry+1.6*risk; target_2=entry+3*risk",
+            "expression": KNOWN_FORMULAS[known_formula]["expression"],
             "rounding": "round each returned level to 2 decimal places",
         }
         cost_included: dict[str, Any] = {

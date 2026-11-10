@@ -39,6 +39,10 @@ ALLOWED_NAME_LITERALS = {
         "versioned candidate_score_v5 snapshot: the strategy names it renames "
         "candidate_score_v4's pool to (#404)"
     ),
+    ("app/domain.py", "CANDIDATE_SCORE_V7"): (
+        "versioned candidate_score_v7 snapshot: the strategy names it renames "
+        "candidate_score_v6's pool to (#580)"
+    ),
     ("app/domain.py", "CANDIDATE_SCORE_V1"): (
         "versioned candidate_score snapshot: its pool and per-strategy items are "
         "persisted with every candidate run, and a new strategy enters the pool "
@@ -89,12 +93,13 @@ def _name_literals(
 
 
 def test_strategy_names_are_declared_only_in_the_registry():
-    assert set(REGISTRY) == {"breakout_v3", "pullback_v3"}
+    assert set(REGISTRY) == {"breakout_v3", "pullback_v4"}
     assert set(strategies.SUPERSEDED) == {
         "breakout_v1",
         "pullback_v1",
         "breakout_v2",
         "pullback_v2",
+        "pullback_v3",
     }
     # A superseded name is a strategy name too: its stored signals still read.
     names = set(REGISTRY) | set(strategies.SUPERSEDED)

@@ -28,7 +28,7 @@ ABLATIONS: dict[str, dict[str, tuple[tuple[str, ...], ...]]] = {
         "institutional": (("confirmations", "institutional_flow"),),
         "margin": (("confirmations", "margin_financing"),),
     },
-    "pullback_v3": {
+    "pullback_v4": {
         "trend": (("trend", "ma_alignment"), ("trend", "close_must_be_at_or_above")),
         "support": (("support_zone",),),
         "volume": (("volume",),),

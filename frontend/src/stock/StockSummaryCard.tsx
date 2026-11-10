@@ -43,8 +43,9 @@ export function StockSummaryCard({
               <strong><Term id={row.entry_type === 'breakout' ? 'breakout' : 'pullback'}>{row.label}</Term></strong>
               <Badge tone={STATUS_TONES[row.status] ?? 'default'} className="badge-compact" data-strategy-status={row.status}>{statusLabel(row.status)}</Badge>
             </div>
-            {/* Issue 524: an incomplete or not-applicable row's line already says why (無法判斷：…), so no 差： in front. */}
-            <div className="stock-summary-unmet">{['data_incomplete', 'not_applicable'].includes(row.status) ? '' : '差：'}{unmetText(row, action?.gap_reasons)}</div>
+            {/* Issue 524: an incomplete or not-applicable row's line already says why (無法判斷：…), so no 差： in front; so does a
+                row whose conditions all passed but whose RR is short (#580). */}
+            <div className="stock-summary-unmet">{['data_incomplete', 'not_applicable'].includes(row.status) || row.risk_reward_shortfall ? '' : '差：'}{unmetText(row, action?.gap_reasons)}</div>
           </>
           : <div className="muted">{NO_BOARD_TEXT}</div>}
       </div>

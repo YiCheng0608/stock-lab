@@ -1,4 +1,4 @@
-import { formatPrice } from '../candidates/candidates'
+import { formatPrice, riskRewardBasisEntry, riskRewardBasisNote } from '../candidates/candidates'
 import { productActionReasonLabel } from '../presentation'
 import type { ActionNearnessItem, GapReason, StrategyBoardRow, StrategyBoardStatus, StrategyCondition, StrategyObservationLevels } from '../types'
 import { LOT_SIZE, formatFixed } from '../units'
@@ -165,9 +165,24 @@ function incompleteSentences(row: StrategyBoardRow, gapReasons: ReadonlyArray<Ga
   return unique.length ? unique : row.missing_labels
 }
 
+// Every condition passed but the RR is under the minimum (#580; UI_COPY_SPEC §10.1): the row is an observation whose
+// 差哪個條件 states the RR. Null for any other row.
+export function riskRewardShortfallText(row: StrategyBoardRow): string | null {
+  const shortfall = row.risk_reward_shortfall
+  if (!shortfall) return null
+  const minimum = `${shortfall.minimum} 倍`
+  const note = riskRewardBasisNote(shortfall.risk_reward_basis)
+  if (typeof shortfall.risk_reward === 'number' && Number.isFinite(shortfall.risk_reward)) {
+    return `條件全部達成，但${note ? `${note}的` : ''} RR ${shortfall.risk_reward.toFixed(2)} 倍未達 ${minimum}`
+  }
+  return `條件全部達成，但${riskRewardBasisEntry(shortfall.risk_reward_basis) ?? '進場價'}不在停損與目標一之間，RR 未達 ${minimum}`
+}
+
 // 「差哪個條件」: one line per row. gapReasons are the stock summary's causes (decision_summary.gap_reasons).
 export function unmetText(row: StrategyBoardRow, gapReasons?: ReadonlyArray<GapReason>): string {
   if (row.status === 'conditional') return '全部達成'
+  const shortfall = riskRewardShortfallText(row)
+  if (shortfall) return shortfall
   if (row.status === 'not_applicable') return row.missing_labels.length ? row.missing_labels.join('、') : '原因待核實'
   if (row.status === 'data_incomplete') {
     const lines = incompleteSentences(row, gapReasons)
