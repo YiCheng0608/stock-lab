@@ -1,0 +1,154 @@
+[
+  {
+    "page": "stock-2330",
+    "drift": 0,
+    "dir": -1,
+    "max": 1273,
+    "start": {
+      "x": 195,
+      "y": 326
+    },
+    "before": {
+      "scrollY": 1000,
+      "pressed": "6M"
+    },
+    "after": {
+      "scrollY": 1156,
+      "pressed": "6M"
+    },
+    "scrolled": 156
+  },
+  {
+    "page": "stock-2330",
+    "drift": 6,
+    "dir": -1,
+    "max": 1273,
+    "start": {
+      "x": 195,
+      "y": 326
+    },
+    "before": {
+      "scrollY": 1000,
+      "pressed": "6M"
+    },
+    "after": {
+      "scrollY": 1156,
+      "pressed": "6M"
+    },
+    "scrolled": 156
+  },
+  {
+    "page": "stock-2330",
+    "drift": 0,
+    "dir": 1,
+    "max": 1273,
+    "start": {
+      "x": 195,
+      "y": 326
+    },
+    "before": {
+      "scrollY": 1000,
+      "pressed": "6M"
+    },
+    "after": {
+      "scrollY": 835,
+      "pressed": "6M"
+    },
+    "scrolled": -165
+  },
+  {
+    "page": "stock-2330",
+    "drift": 6,
+    "dir": 1,
+    "max": 1273,
+    "start": {
+      "x": 195,
+      "y": 326
+    },
+    "before": {
+      "scrollY": 1000,
+      "pressed": "6M"
+    },
+    "after": {
+      "scrollY": 835,
+      "pressed": "6M"
+    },
+    "scrolled": -165
+  },
+  {
+    "page": "market-taiex",
+    "drift": 0,
+    "dir": -1,
+    "max": 1752,
+    "start": {
+      "x": 195,
+      "y": 326
+    },
+    "before": {
+      "scrollY": 1549,
+      "pressed": "6M"
+    },
+    "after": {
+      "scrollY": 1683,
+      "pressed": "6M"
+    },
+    "scrolled": 134
+  },
+  {
+    "page": "market-taiex",
+    "drift": 6,
+    "dir": -1,
+    "max": 1752,
+    "start": {
+      "x": 195,
+      "y": 326
+    },
+    "before": {
+      "scrollY": 1549,
+      "pressed": "6M"
+    },
+    "after": {
+      "scrollY": 1674,
+      "pressed": "6M"
+    },
+    "scrolled": 125
+  },
+  {
+    "page": "market-taiex",
+    "drift": 0,
+    "dir": 1,
+    "max": 1752,
+    "start": {
+      "x": 195,
+      "y": 326
+    },
+    "before": {
+      "scrollY": 1549,
+      "pressed": "6M"
+    },
+    "after": {
+      "scrollY": 1353,
+      "pressed": "6M"
+    },
+    "scrolled": -196
+  },
+  {
+    "page": "market-taiex",
+    "drift": 6,
+    "dir": 1,
+    "max": 1752,
+    "start": {
+      "x": 195,
+      "y": 326
+    },
+    "before": {
+      "scrollY": 1549,
+      "pressed": "6M"
+    },
+    "after": {
+      "scrollY": 1353,
+      "pressed": "6M"
+    },
+    "scrolled": -196
+  }
+]

@@ -1,0 +1,802 @@
+[
+  {
+    "page": "stock-2330",
+    "width": 1280,
+    "steps": [
+      {
+        "label": "load (default 6M)",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:true",
+          "1Y:false",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 250 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "stock-2330-1280-6m.png"
+      },
+      {
+        "label": "1M",
+        "hasCard": true,
+        "pressed": [
+          "1M:true",
+          "3M:false",
+          "6M:false",
+          "1Y:false",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 250 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "stock-2330-1280-1m.png"
+      },
+      {
+        "label": "全部",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:false",
+          "全部:true"
+        ],
+        "tab": "日K",
+        "meta": "最近 510 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "stock-2330-1280-all.png",
+        "requests": [
+          {
+            "id": "11640.464",
+            "url": "/api/stocks/TWSE/2330/bars?interval=day&limit=1500",
+            "start": 131628.976773,
+            "ms": 178,
+            "encodedBytes": 305751
+          }
+        ]
+      },
+      {
+        "label": "1Y",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:true",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 510 根日線；缺日不補、停牌不畫 K 線",
+        "notes": []
+      },
+      {
+        "label": "1Y then 週K",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:true",
+          "全部:false"
+        ],
+        "tab": "週K",
+        "meta": "最近 109 根週線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "stock-2330-1280-1y-week.png"
+      },
+      {
+        "label": "back to 日K",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:true",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 510 根日線；缺日不補、停牌不畫 K 線",
+        "notes": []
+      },
+      {
+        "label": "hover crosshair",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:true",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 510 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "point": {
+          "x": 795,
+          "y": 386
+        },
+        "tooltip": [
+          "2026/06/25\n開 2,410　高 2,420\n低 2,390　收 2,390\n成交量（張） 41,100\nMA5 2,438\nMA10 2,391\nMA20 2,363\nMA60 2,201\nMA120 1,984\nDIF 50.97　DEA 49.91　MACD 柱 1.06"
+        ],
+        "shot": "stock-2330-1280-crosshair.png"
+      },
+      {
+        "label": "hover indicator grid",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:true",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 510 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "point": {
+          "x": 755,
+          "y": 743
+        },
+        "tooltip": [
+          "2026/06/11\n開 2,240　高 2,260\n低 2,210　收 2,250\n成交量（張） 46,418\nMA5 2,289\nMA10 2,331\nMA20 2,290\nMA60 2,116\nMA120 1,912\nDIF 33.29　DEA 50.82　MACD 柱 -17.53"
+        ],
+        "shot": "stock-2330-1280-crosshair-indicator.png"
+      },
+      {
+        "label": "mouse drag (manual pan)",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:false",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 510 根日線；缺日不補、停牌不畫 K 線",
+        "notes": []
+      },
+      {
+        "label": "wheel zoom (manual)",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:false",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 510 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "stock-2330-1280-manual.png"
+      },
+      {
+        "label": "manual then 週K",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:false",
+          "全部:false"
+        ],
+        "tab": "週K",
+        "meta": "最近 109 根週線；缺日不補、停牌不畫 K 線",
+        "notes": []
+      },
+      {
+        "label": "3M after manual",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:true",
+          "6M:false",
+          "1Y:false",
+          "全部:false"
+        ],
+        "tab": "週K",
+        "meta": "最近 109 根週線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "stock-2330-1280-3m-week.png"
+      }
+    ],
+    "consoleErrors": [],
+    "httpErrors": []
+  },
+  {
+    "page": "stock-2330",
+    "width": 390,
+    "steps": [
+      {
+        "label": "load (default 6M)",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:true",
+          "1Y:false",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 250 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "stock-2330-390-6m.png"
+      },
+      {
+        "label": "1M",
+        "hasCard": true,
+        "pressed": [
+          "1M:true",
+          "3M:false",
+          "6M:false",
+          "1Y:false",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 250 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "stock-2330-390-1m.png"
+      },
+      {
+        "label": "全部",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:false",
+          "全部:true"
+        ],
+        "tab": "日K",
+        "meta": "最近 510 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "stock-2330-390-all.png",
+        "requests": [
+          {
+            "id": "11640.927",
+            "url": "/api/stocks/TWSE/2330/bars?interval=day&limit=1500",
+            "start": 131661.593796,
+            "ms": 380,
+            "encodedBytes": 305751
+          }
+        ]
+      },
+      {
+        "label": "1Y",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:true",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 510 根日線；缺日不補、停牌不畫 K 線",
+        "notes": []
+      },
+      {
+        "label": "1Y then 週K",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:true",
+          "全部:false"
+        ],
+        "tab": "週K",
+        "meta": "最近 109 根週線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "stock-2330-390-1y-week.png"
+      },
+      {
+        "label": "back to 日K",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:true",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 510 根日線；缺日不補、停牌不畫 K 線",
+        "notes": []
+      },
+      {
+        "label": "tap crosshair",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:true",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 510 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "point": {
+          "x": 248,
+          "y": 425
+        },
+        "tooltip": [
+          "2026/06/25\n開 2,410　高 2,420\n低 2,390　收 2,390\n成交量（張） 41,100\nMA5 2,438\nMA10 2,391\nMA20 2,363\nMA60 2,201\nMA120 1,984\nDIF 50.97　DEA 49.91　MACD 柱 1.06"
+        ],
+        "shot": "stock-2330-390-crosshair.png"
+      },
+      {
+        "label": "tap indicator grid",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:true",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 510 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "point": {
+          "x": 208,
+          "y": 691
+        },
+        "tooltip": [
+          "2026/04/28\n開 2,245　高 2,280\n低 2,215　收 2,215\n成交量（張） 57,336\nMA5 2,159\nMA10 2,107\nMA20 2,004\nMA60 1,897\nMA120 1,701\nDIF 86.28　DEA 64.21　MACD 柱 22.06"
+        ],
+        "shot": "stock-2330-390-crosshair-indicator.png"
+      },
+      {
+        "label": "touch drag (manual pan)",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:false",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 510 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "stock-2330-390-manual.png"
+      },
+      {
+        "label": "manual then 週K",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:false",
+          "全部:false"
+        ],
+        "tab": "週K",
+        "meta": "最近 109 根週線；缺日不補、停牌不畫 K 線",
+        "notes": []
+      },
+      {
+        "label": "3M after manual",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:true",
+          "6M:false",
+          "1Y:false",
+          "全部:false"
+        ],
+        "tab": "週K",
+        "meta": "最近 109 根週線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "stock-2330-390-3m-week.png"
+      }
+    ],
+    "consoleErrors": [],
+    "httpErrors": []
+  },
+  {
+    "page": "market-taiex",
+    "width": 1280,
+    "steps": [
+      {
+        "label": "load (default 6M)",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:true",
+          "1Y:false",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 250 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "market-taiex-1280-6m.png"
+      },
+      {
+        "label": "1M",
+        "hasCard": true,
+        "pressed": [
+          "1M:true",
+          "3M:false",
+          "6M:false",
+          "1Y:false",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 250 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "market-taiex-1280-1m.png"
+      },
+      {
+        "label": "全部",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:false",
+          "全部:true"
+        ],
+        "tab": "日K",
+        "meta": "最近 772 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "market-taiex-1280-all.png",
+        "requests": [
+          {
+            "id": "11640.1390",
+            "url": "/api/stocks/TWSE/TAIEX/bars?interval=day&limit=1500",
+            "start": 131681.03748,
+            "ms": 355,
+            "encodedBytes": 489200
+          }
+        ]
+      },
+      {
+        "label": "1Y",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:true",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 772 根日線；缺日不補、停牌不畫 K 線",
+        "notes": []
+      },
+      {
+        "label": "1Y then 週K",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:true",
+          "全部:false"
+        ],
+        "tab": "週K",
+        "meta": "最近 166 根週線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "market-taiex-1280-1y-week.png"
+      },
+      {
+        "label": "back to 日K",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:true",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 772 根日線；缺日不補、停牌不畫 K 線",
+        "notes": []
+      },
+      {
+        "label": "hover crosshair",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:true",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 772 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "point": {
+          "x": 794,
+          "y": 394
+        },
+        "tooltip": [
+          "2026/06/25\n開 46,339.68　高 46,785.45\n低 46,048.70　收 46,255.26\n成交量（億股） 134.56\nMA5 46,721.24\nMA10 45,800.83\nMA20 45,295.66\nMA60 40,888.83\nMA120 36,470.44\nDIF 1,272.19　DEA 1,306.39　MACD 柱 -34.20"
+        ],
+        "shot": "market-taiex-1280-crosshair.png"
+      },
+      {
+        "label": "hover indicator grid",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:true",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 772 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "point": {
+          "x": 754,
+          "y": 752
+        },
+        "tooltip": [
+          "2026/06/11\n開 43,172.21　高 43,463.03\n低 42,006.39　收 43,149.46\n成交量（億股） 144.33\nMA5 43,930.63\nMA10 44,741.79\nMA20 43,418.88\nMA60 38,985.23\nMA120 35,104.12\nDIF 1,142.64　DEA 1,491.86　MACD 柱 -349.22"
+        ],
+        "shot": "market-taiex-1280-crosshair-indicator.png"
+      },
+      {
+        "label": "mouse drag (manual pan)",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:false",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 772 根日線；缺日不補、停牌不畫 K 線",
+        "notes": []
+      },
+      {
+        "label": "wheel zoom (manual)",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:false",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 772 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "market-taiex-1280-manual.png"
+      },
+      {
+        "label": "manual then 週K",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:false",
+          "全部:false"
+        ],
+        "tab": "週K",
+        "meta": "最近 166 根週線；缺日不補、停牌不畫 K 線",
+        "notes": []
+      },
+      {
+        "label": "3M after manual",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:true",
+          "6M:false",
+          "1Y:false",
+          "全部:false"
+        ],
+        "tab": "週K",
+        "meta": "最近 166 根週線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "market-taiex-1280-3m-week.png"
+      }
+    ],
+    "consoleErrors": [],
+    "httpErrors": []
+  },
+  {
+    "page": "market-taiex",
+    "width": 390,
+    "steps": [
+      {
+        "label": "load (default 6M)",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:true",
+          "1Y:false",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 250 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "market-taiex-390-6m.png"
+      },
+      {
+        "label": "1M",
+        "hasCard": true,
+        "pressed": [
+          "1M:true",
+          "3M:false",
+          "6M:false",
+          "1Y:false",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 250 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "market-taiex-390-1m.png"
+      },
+      {
+        "label": "全部",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:false",
+          "全部:true"
+        ],
+        "tab": "日K",
+        "meta": "最近 772 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "market-taiex-390-all.png",
+        "requests": [
+          {
+            "id": "11640.1852",
+            "url": "/api/stocks/TWSE/TAIEX/bars?interval=day&limit=1500",
+            "start": 131703.214316,
+            "ms": 435,
+            "encodedBytes": 489200
+          }
+        ]
+      },
+      {
+        "label": "1Y",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:true",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 772 根日線；缺日不補、停牌不畫 K 線",
+        "notes": []
+      },
+      {
+        "label": "1Y then 週K",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:true",
+          "全部:false"
+        ],
+        "tab": "週K",
+        "meta": "最近 166 根週線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "market-taiex-390-1y-week.png"
+      },
+      {
+        "label": "back to 日K",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:true",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 772 根日線；缺日不補、停牌不畫 K 線",
+        "notes": []
+      },
+      {
+        "label": "tap crosshair",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:true",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 772 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "point": {
+          "x": 248,
+          "y": 429
+        },
+        "tooltip": [
+          "2026/06/25\n開 46,339.68　高 46,785.45\n低 46,048.70　收 46,255.26\n成交量（億股） 134.56\nMA5 46,721.24\nMA10 45,800.83\nMA20 45,295.66\nMA60 40,888.83\nMA120 36,470.44\nDIF 1,272.19　DEA 1,306.39　MACD 柱 -34.20"
+        ],
+        "shot": "market-taiex-390-crosshair.png"
+      },
+      {
+        "label": "tap indicator grid",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:true",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 772 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "point": {
+          "x": 208,
+          "y": 695
+        },
+        "tooltip": [
+          "2026/04/28\n開 39,531.93　高 40,101.23\n低 39,521.73　收 39,521.73\n成交量（億股） 106.41\nMA5 38,732.68\nMA10 37,888.58\nMA20 35,944.89\nMA60 34,053.34\nMA120 31,247.77\nDIF 1,504.53　DEA 1,159.86　MACD 柱 344.67"
+        ],
+        "shot": "market-taiex-390-crosshair-indicator.png"
+      },
+      {
+        "label": "touch drag (manual pan)",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:false",
+          "全部:false"
+        ],
+        "tab": "日K",
+        "meta": "最近 772 根日線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "market-taiex-390-manual.png"
+      },
+      {
+        "label": "manual then 週K",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:false",
+          "6M:false",
+          "1Y:false",
+          "全部:false"
+        ],
+        "tab": "週K",
+        "meta": "最近 166 根週線；缺日不補、停牌不畫 K 線",
+        "notes": []
+      },
+      {
+        "label": "3M after manual",
+        "hasCard": true,
+        "pressed": [
+          "1M:false",
+          "3M:true",
+          "6M:false",
+          "1Y:false",
+          "全部:false"
+        ],
+        "tab": "週K",
+        "meta": "最近 166 根週線；缺日不補、停牌不畫 K 線",
+        "notes": [],
+        "shot": "market-taiex-390-3m-week.png"
+      }
+    ],
+    "consoleErrors": [],
+    "httpErrors": []
+  }
+]

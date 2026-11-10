@@ -1,0 +1,35 @@
+[
+  [
+    "全部 (request fails)",
+    {
+      "pressed": "全部",
+      "notes": [
+        "更早的日線暫時無法載入，目前顯示最近 250 根"
+      ],
+      "meta": "最近 250 根日線；缺日不補、停牌不畫 K 線"
+    }
+  ],
+  [
+    "全部 again (retry)",
+    {
+      "pressed": "全部",
+      "notes": [],
+      "meta": "最近 510 根日線；缺日不補、停牌不畫 K 線"
+    }
+  ],
+  [
+    "1Y then 全部 (no third request)",
+    {
+      "pressed": "全部",
+      "notes": [],
+      "meta": "最近 510 根日線；缺日不補、停牌不畫 K 線"
+    }
+  ],
+  [
+    "requests",
+    [
+      "FAILED /api/stocks/TWSE/2330/bars?interval=day&limit=1500",
+      "sent /api/stocks/TWSE/2330/bars?interval=day&limit=1500"
+    ]
+  ]
+]
