@@ -1,0 +1,189 @@
+[
+  {
+    "page": "today",
+    "code": "API",
+    "subject": "",
+    "state": "通過",
+    "status": "通過",
+    "failed": false,
+    "detail": "42 項 = fixture_data.EXPECTED",
+    "known": null,
+    "upstream": null
+  },
+  {
+    "page": "today",
+    "code": "T1",
+    "subject": "",
+    "state": "通過",
+    "status": "通過",
+    "failed": false,
+    "detail": "6 張截圖 ready，無錯誤，無橫向捲動",
+    "known": null,
+    "upstream": null
+  },
+  {
+    "page": "today",
+    "code": "T2",
+    "subject": "",
+    "state": "通過",
+    "status": "通過",
+    "failed": false,
+    "detail": "`資料 2026/10/16` = facts 2026-10-16",
+    "known": null,
+    "upstream": null
+  },
+  {
+    "page": "today",
+    "code": "T3",
+    "subject": "",
+    "state": "通過",
+    "status": "通過",
+    "failed": false,
+    "detail": "`資料截至 2026/10/16 · TWSE／TPEx 官方資料 · 官方單日快照`",
+    "known": null,
+    "upstream": null
+  },
+  {
+    "page": "today",
+    "code": "T4",
+    "subject": "",
+    "state": "通過",
+    "status": "通過",
+    "failed": false,
+    "detail": "`資料 2026/10/16`；B = facts 2026-10-16",
+    "known": null,
+    "upstream": null
+  },
+  {
+    "page": "today",
+    "code": "T5",
+    "subject": "",
+    "state": "通過",
+    "status": "通過",
+    "failed": false,
+    "detail": "2 列（`#n` 與名稱）= items 前 2 名；`1／5／20 日為相對加權指數的報酬`",
+    "known": null,
+    "upstream": null
+  },
+  {
+    "page": "today",
+    "code": "T6",
+    "subject": "",
+    "state": "通過",
+    "status": "通過",
+    "failed": false,
+    "detail": "前 4 則標題都在；有 AI 判讀的卡片方向與 AI 相同並標 `AI 推論`：1 `可能正向`、2 `可能正向`",
+    "known": null,
+    "upstream": null
+  },
+  {
+    "page": "today",
+    "code": "T7",
+    "subject": "",
+    "state": "通過",
+    "status": "通過",
+    "failed": false,
+    "detail": "`資料 2026/10/16`、`3 檔`；名次列 3、來源行 3 = items；C = facts",
+    "known": null,
+    "upstream": null
+  },
+  {
+    "page": "today",
+    "code": "T8",
+    "subject": "",
+    "state": "通過",
+    "status": "通過",
+    "failed": false,
+    "detail": "3 檔新聞情緒推論的來源行以 `（推論）` 結尾；`AI 推論` 5 行；免責句 3 行；入口 `AI 推論 ▸` 3、`AI 說明 ▸` 0",
+    "known": null,
+    "upstream": null
+  },
+  {
+    "page": "today",
+    "code": "T9",
+    "subject": "",
+    "state": "通過",
+    "status": "通過",
+    "failed": false,
+    "detail": "首頁沒有 `關注標的`、`明日候選`；沒有持倉風險提示列",
+    "known": null,
+    "upstream": null
+  },
+  {
+    "page": "today",
+    "code": "T11",
+    "subject": "",
+    "state": "通過",
+    "status": "通過",
+    "failed": false,
+    "detail": "2026-10-16：TWSE 24,012.35、TPEx 251.20；範圍 `上市為集中市場總計（含 ETF、權證等）；上櫃為上櫃股票`",
+    "known": null,
+    "upstream": null
+  },
+  {
+    "page": "today",
+    "code": "T12",
+    "subject": "",
+    "state": "通過",
+    "status": "通過",
+    "failed": false,
+    "detail": "`今日可買`（today-1280.txt 第 23 行）→ `熱門族群`（today-1280.txt 第 245 行）、`重點新聞`（today-1280.txt 第 263 行）",
+    "known": null,
+    "upstream": null
+  },
+  {
+    "page": "today",
+    "code": "T13",
+    "subject": "",
+    "state": "通過",
+    "status": "通過",
+    "failed": false,
+    "detail": "3 張卡：`加入追蹤` 2、`已在追蹤` 1 = open_plan_id 非 null",
+    "known": null,
+    "upstream": null
+  },
+  {
+    "page": "today",
+    "code": "T17",
+    "subject": "",
+    "state": "通過",
+    "status": "通過",
+    "failed": false,
+    "detail": "390：3 列數字區不溢出、不被 AI 按鈕蓋住、沒有超出列邊",
+    "known": null,
+    "upstream": null
+  },
+  {
+    "page": "today",
+    "code": "T14",
+    "subject": "",
+    "state": "通過",
+    "status": "通過",
+    "failed": false,
+    "detail": "`加權 24,012.35 -0.49%`、`櫃買 251.20 +0.64%`、`資料 2026/10/16`、`看大盤 →`（today-1280.txt 第 19 行）",
+    "known": null,
+    "upstream": null
+  },
+  {
+    "page": "today",
+    "code": "T15",
+    "subject": "",
+    "state": "通過",
+    "status": "通過",
+    "failed": false,
+    "detail": "`加權指數日線` `資料 2026/10/16`、`最近 130 根日線；缺日不補、停牌不畫 K 線`、最新 `2026/10/16\t23,350.80\t23,658.80\t23,218.80\t23,526.80`；`櫃買指數日線` `資料 2026/10/16`、`最近 130 根日線；缺日不補、停牌不畫 K 線`、最新 `2026/10/16\t272.61\t276.25\t271.05\t274.69`；`台指期近月日線` `資料 2026/10/16`、`最近 10 根日線；缺日不補、停牌不畫 K 線`、最新 `2026/10/16\t23,351\t23,659\t23,219\t23,527`",
+    "known": null,
+    "upstream": null
+  },
+  {
+    "page": "today",
+    "code": "T16",
+    "subject": "",
+    "state": "通過",
+    "status": "通過",
+    "failed": false,
+    "detail": "美股（前一交易日）；`加權指數\t24,012.35\t-118.40\t-0.49%\t2026/10/16\t無資料：季線尚未計算\t臺灣證券交易所`；`櫃買指數\t251.20\t+1.60\t+0.64%\t2026/10/16\t無資料：季線尚未計算\t證券櫃檯買賣中心`；`台指期近月 合約 2026/10\t23,527\t-75\t-0.32%\t2026/10/16\t資料不足（10／60 日）\t臺灣期貨交易所`；`S&P 500\t6,702.08\t-23.04\t-0.34%\t2026/10/15\t無資料：季線尚未計算\tFRED`；`NASDAQ 綜合指數\t22,260.00\t-73.50\t-0.33%\t2026/10/15\t無資料：季線尚未計算\tFRED`；`道瓊工業指數\t47,582.40\t-170.20\t-0.36%\t2026/10/15\t無資料：季線尚未計算\tFRED`；`費城半導體指數\t6,590.40\t-19.20\t-0.29%\t2026/10/15\t無資料：季線尚未計算\tFRED`",
+    "known": null,
+    "upstream": null
+  }
+]

@@ -1,0 +1,7 @@
+== C:/Users/YiCheng/t608/real/post/today.jsonl
+390 ready True overflow False rows 11 bad 0 http [] console []
+360 ready True overflow False rows 11 bad 0 http [] console []
+1280 ready True overflow False rows 11 bad 0 http [] console []
+== C:/Users/YiCheng/t608/real/post/today-midpoint.jsonl
+390 ready True overflow False rows 11 bad 0 http [] console []
+360 ready True overflow False rows 11 bad 0 http [] console []

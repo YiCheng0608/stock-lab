@@ -1,0 +1,51 @@
+== C:/Users/YiCheng/t608/real/pre/today.jsonl
+390 ready True overflow False rows 11 bad 11 http [] console []
+   {'rank': 1, 'numsScrollWidth': 349, 'numsClientWidth': 246, 'covered': ['dd 76'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 2, 'numsScrollWidth': 342, 'numsClientWidth': 246, 'covered': ['dd 74'], 'clipped': []}
+   {'rank': 3, 'numsScrollWidth': 350, 'numsClientWidth': 246, 'covered': ['dd 74'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 4, 'numsScrollWidth': 349, 'numsClientWidth': 246, 'covered': ['dd 67'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 5, 'numsScrollWidth': 349, 'numsClientWidth': 246, 'covered': ['dd 67'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 6, 'numsScrollWidth': 349, 'numsClientWidth': 246, 'covered': ['dd 64'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 7, 'numsScrollWidth': 349, 'numsClientWidth': 246, 'covered': ['dd 61'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 8, 'numsScrollWidth': 349, 'numsClientWidth': 246, 'covered': ['dd 60'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 9, 'numsScrollWidth': 349, 'numsClientWidth': 246, 'covered': ['dd 55'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 10, 'numsScrollWidth': 349, 'numsClientWidth': 246, 'covered': ['dd 55'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 11, 'numsScrollWidth': 349, 'numsClientWidth': 246, 'covered': ['dd 52'], 'clipped': ['dt 總分（0–100）']}
+360 ready True overflow False rows 11 bad 11 http [] console []
+   {'rank': 1, 'numsScrollWidth': 349, 'numsClientWidth': 216, 'covered': ['dd 1.61 倍以資料日收盤計算', 'dd 76'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 2, 'numsScrollWidth': 342, 'numsClientWidth': 216, 'covered': ['dd 1.58 倍以資料日收盤計算', 'dd 74'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 3, 'numsScrollWidth': 350, 'numsClientWidth': 216, 'covered': ['dd 1.60 倍以進場價計算', 'dd 74'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 4, 'numsScrollWidth': 349, 'numsClientWidth': 216, 'covered': ['dd 1.61 倍以資料日收盤計算', 'dd 67'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 5, 'numsScrollWidth': 349, 'numsClientWidth': 216, 'covered': ['dd 1.61 倍以資料日收盤計算', 'dd 67'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 6, 'numsScrollWidth': 349, 'numsClientWidth': 216, 'covered': ['dd 1.57 倍以資料日收盤計算', 'dd 64'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 7, 'numsScrollWidth': 349, 'numsClientWidth': 216, 'covered': ['dd 1.60 倍以資料日收盤計算', 'dd 61'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 8, 'numsScrollWidth': 349, 'numsClientWidth': 216, 'covered': ['dd 1.59 倍以資料日收盤計算', 'dd 60'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 9, 'numsScrollWidth': 349, 'numsClientWidth': 216, 'covered': ['dd 1.61 倍以資料日收盤計算', 'dd 55'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 10, 'numsScrollWidth': 349, 'numsClientWidth': 216, 'covered': ['dd 1.60 倍以資料日收盤計算', 'dd 55'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 11, 'numsScrollWidth': 349, 'numsClientWidth': 216, 'covered': ['dd 1.60 倍以資料日收盤計算', 'dd 52'], 'clipped': ['dt 總分（0–100）']}
+1280 ready True overflow False rows 11 bad 0 http [] console []
+== C:/Users/YiCheng/t608/real/pre/today-midpoint.jsonl
+390 ready True overflow False rows 11 bad 11 http [] console []
+   {'rank': 1, 'numsScrollWidth': 349, 'numsClientWidth': 246, 'covered': ['dd 76'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 2, 'numsScrollWidth': 342, 'numsClientWidth': 246, 'covered': ['dd 74'], 'clipped': []}
+   {'rank': 3, 'numsScrollWidth': 374, 'numsClientWidth': 246, 'covered': ['dd 1.60 倍以進場區中點計算', 'dd 74'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 4, 'numsScrollWidth': 349, 'numsClientWidth': 246, 'covered': ['dd 67'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 5, 'numsScrollWidth': 349, 'numsClientWidth': 246, 'covered': ['dd 67'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 6, 'numsScrollWidth': 349, 'numsClientWidth': 246, 'covered': ['dd 64'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 7, 'numsScrollWidth': 349, 'numsClientWidth': 246, 'covered': ['dd 61'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 8, 'numsScrollWidth': 349, 'numsClientWidth': 246, 'covered': ['dd 60'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 9, 'numsScrollWidth': 349, 'numsClientWidth': 246, 'covered': ['dd 55'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 10, 'numsScrollWidth': 349, 'numsClientWidth': 246, 'covered': ['dd 55'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 11, 'numsScrollWidth': 349, 'numsClientWidth': 246, 'covered': ['dd 52'], 'clipped': ['dt 總分（0–100）']}
+360 ready True overflow False rows 11 bad 11 http [] console []
+   {'rank': 1, 'numsScrollWidth': 349, 'numsClientWidth': 216, 'covered': ['dd 1.61 倍以進場區中點計算', 'dd 76'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 2, 'numsScrollWidth': 342, 'numsClientWidth': 216, 'covered': ['dd 1.58 倍以進場區中點計算', 'dd 74'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 3, 'numsScrollWidth': 374, 'numsClientWidth': 216, 'covered': ['dd 1.60 倍以進場區中點計算', 'dd 74'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 4, 'numsScrollWidth': 349, 'numsClientWidth': 216, 'covered': ['dd 1.61 倍以進場區中點計算', 'dd 67'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 5, 'numsScrollWidth': 349, 'numsClientWidth': 216, 'covered': ['dd 1.61 倍以進場區中點計算', 'dd 67'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 6, 'numsScrollWidth': 349, 'numsClientWidth': 216, 'covered': ['dd 1.57 倍以進場區中點計算', 'dd 64'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 7, 'numsScrollWidth': 349, 'numsClientWidth': 216, 'covered': ['dd 1.60 倍以進場區中點計算', 'dd 61'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 8, 'numsScrollWidth': 349, 'numsClientWidth': 216, 'covered': ['dd 1.59 倍以進場區中點計算', 'dd 60'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 9, 'numsScrollWidth': 349, 'numsClientWidth': 216, 'covered': ['dd 1.61 倍以進場區中點計算', 'dd 55'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 10, 'numsScrollWidth': 349, 'numsClientWidth': 216, 'covered': ['dd 1.60 倍以進場區中點計算', 'dd 55'], 'clipped': ['dt 總分（0–100）']}
+   {'rank': 11, 'numsScrollWidth': 349, 'numsClientWidth': 216, 'covered': ['dd 1.60 倍以進場區中點計算', 'dd 52'], 'clipped': ['dt 總分（0–100）']}
