@@ -33,8 +33,8 @@
         ],
         "llm_prompt_version": "news_v3",
         "news_collection_runs": 1,
-        "news_items_in_window": 6,
-        "llm_scored_items": 4,
+        "news_items_in_window": 7,
+        "llm_scored_items": 5,
         "instruments_with_news": 4
       },
       "groups": {

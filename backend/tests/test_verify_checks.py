@@ -1547,6 +1547,55 @@ def test_t6_reads_the_cleaned_title(tmp_path):
     assert "7 `可能正向`" in page_checks.t6(run)
 
 
+def _t6_twins(tmp_path, second_card):
+    # #613: two sources carry the same wire story; the first has no AI direction.
+    news = [
+        {"id": "26789", "title": "台股漲1050.22點", "ai": None},
+        {"id": "26719", "title": "台股漲1050.22點", "ai": AI_DONE},
+    ]
+    page = (
+        "重點新聞\n台股漲1050.22點\nYahoo奇摩股市\n"
+        f"台股漲1050.22點\n{second_card}中央社\n"
+        f"{page_checks.FOOTER_FIRST_LINE}\n"
+    )
+    return FakeRun(
+        tmp_path,
+        {
+            "dashboard": {"news": news},
+            "news/26789": {"ai": None},
+            "news/26719": {"ai": AI_DONE},
+        },
+        {"today-1280": page},
+    )
+
+
+def test_t6_checks_each_card_of_a_shared_title(tmp_path):
+    run = _t6_twins(tmp_path, "可能正向\nAI 推論\n")
+    assert "26719 `可能正向`" in page_checks.t6(run)
+    # The second card itself lacks 「AI 推論」: still a failure, on that card.
+    run = _t6_twins(tmp_path, "影響尚未判定\n")
+    with pytest.raises(
+        page_checks.Fail, match="id 26719 有 AI 判讀但卡片沒有 `AI 推論`"
+    ):
+        page_checks.t6(run)
+
+
+def test_t6_fails_when_a_shared_title_shows_once(tmp_path):
+    news = [
+        {"id": "1", "title": "同標題", "ai": None},
+        {"id": "2", "title": "同標題", "ai": None},
+    ]
+    run = FakeRun(
+        tmp_path,
+        {"dashboard": {"news": news}, "news/1": {"ai": None}, "news/2": {"ai": None}},
+        {"today-1280": f"重點新聞\n同標題\n{page_checks.FOOTER_FIRST_LINE}\n"},
+    )
+    with pytest.raises(
+        page_checks.Fail, match="缺第 2 則新聞標題整行 `同標題`（id 2）"
+    ):
+        page_checks.t6(run)
+
+
 def test_news_source_label_matches_the_frontend():
     presentation = (ROOT / "frontend" / "src" / "presentation.ts").read_text(
         encoding="utf-8"
