@@ -27,7 +27,7 @@ Writes <out>/<name>-<width>.png and <out>/<name>-<width>.txt and prints one JSON
 width: {"url","finalUrl","width","ready","png","txt","scrollWidth","clientWidth","overflow",
 "candidateRows","consoleErrors","httpErrors","missingClicks"} (candidateRows: per shown today-list
 row, its rank, the number block's scroll and client width, and the number cells the AI button
-covers or the row's edge cuts). Exit 0 when every width became ready, 1 otherwise, 2 on usage.`
+covers or the row's edge cuts; null when that probe throws). Exit 0 when every width became ready, 1 otherwise, 2 on usage.`
 
 // Phone widths use mobile emulation; heights are the viewport before the full-page capture.
 const MOBILE_MAX_WIDTH = 600
@@ -198,8 +198,9 @@ const READY_PROBE = (waitFor) => `(() => {
 // The today list's rows (Issue 608): a clipped or covered number leaves the page width alone (the list's
 // overflow: hidden cuts it), so T1's overflow cannot see it. Per shown row: the number block's scroll and client
 // width, the number labels and values the AI button covers, and the ones past the row's left or right edge.
-// Empty when the page has no candidate row.
-const CANDIDATE_ROWS_PROBE = `(() => {
+// Empty when the page has no candidate row; null when the probe throws (Issue 609), so one bad row cannot fail
+// the whole capture: T17 judges a missing measurement as a failure.
+const CANDIDATE_ROWS_PROBE = `(() => { try {
   const box = (el) => el.getBoundingClientRect()
   const label = (el) => (el.tagName === 'DT' ? 'dt ' : 'dd ') + el.textContent.replace(/\\s+/g, ' ').trim()
   return Array.from(document.querySelectorAll('.candidate-row')).filter((row) => !row.hidden).map((row) => {
@@ -221,7 +222,7 @@ const CANDIDATE_ROWS_PROBE = `(() => {
       clipped: clipped.map(label),
     }
   })
-})()`
+} catch (error) { return null } })()`
 
 // Ready: no loading marker, no request in flight (the navbar date badge has no skeleton).
 async function waitReady(cdp, watch, waitFor, timeoutMs) {
@@ -385,4 +386,4 @@ if (require.main === module) {
   main(process.argv.slice(2)).then((code) => { process.exitCode = code })
 }
 
-module.exports = { parseArgs, defaultName, findBrowser, browserArgs, viewport, USAGE }
+module.exports = { parseArgs, defaultName, findBrowser, browserArgs, viewport, CANDIDATE_ROWS_PROBE, USAGE }

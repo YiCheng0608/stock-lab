@@ -792,6 +792,21 @@ console.log(JSON.stringify({
 
 
 @needs_node
+def test_screenshot_candidate_rows_probe_returns_null_when_it_throws() -> None:
+    # Issue 609: a probe that throws must not fail the whole capture; T17 judges null.
+    out = _node_eval(
+        """
+const run = (document) => { globalThis.document = document; return eval(m.CANDIDATE_ROWS_PROBE) }
+console.log(JSON.stringify({
+  thrown: run({ querySelectorAll() { throw new Error('probe broke') } }),
+  empty: run({ querySelectorAll() { return [] } }),
+}))
+"""
+    )
+    assert out == {"thrown": None, "empty": []}
+
+
+@needs_node
 def test_screenshot_reports_a_browser_that_exits_before_listening(
     tmp_path: Path,
 ) -> None:

@@ -123,6 +123,11 @@ API_ATTEMPTS = 3
 API_TIMEOUT_S = 30
 SHOT_ATTEMPTS = 2
 SHOT_TIMEOUT_S = 240
+# Screenshots taken at once when --jobs is not given (#609): the fixture database answers
+# fast, but four browsers on a real-data copy can exhaust the API's connection pool when
+# another long container shares the host (#606: 35 pool timeouts, G1/S1/A1 failed).
+FIXTURE_JOBS = 4
+REAL_JOBS = 1
 
 
 # ---- features labels ----
@@ -268,6 +273,17 @@ class Undetermined(CheckError):
         return f"無法判定：{super().__str__()}"
 
 
+class Environment(Undetermined):
+    """A check that could not run because the API answered 5xx or timed out (#609).
+
+    For a screenshot: the shot still had an ``/api/`` 5xx after one serial retake and
+    a direct GET of each such URL then answered 200, so the page was not at fault.
+    """
+
+    def __str__(self) -> str:
+        return f"無法判定（環境）：{self.args[0]}"
+
+
 class Upstream(Undetermined):
     """A check that could not run because its upstream check did not pass or has no value."""
 
@@ -293,6 +309,7 @@ class Result:
     subject: str = ""
     known: str | None = None  # the Issue of the matching KNOWN_FAILURES entry
     upstream: str | None = None  # the upstream check an undetermined result waits on
+    environment: bool = False  # undetermined: the API answered 5xx or timed out (#609)
 
     @property
     def status(self) -> str:
@@ -326,6 +343,22 @@ def _load(path: Path, name: str):
 
 
 db_facts = _load(SKILL / "db_facts.py", "db_facts")
+
+
+# A failed /api/ response a screenshot saw, as screenshot.cjs reports it:
+# "504 http://web:8080/api/dashboard" -> status 504, path "dashboard".
+API_5XX = re.compile(r"^(5\d\d) \S*?/api/(\S+)$")
+
+
+def api_5xx(meta: dict) -> list[tuple[int, str]]:
+    """The ``/api/`` 5xx responses of one screenshot width, as (status, path)."""
+
+    hits = []
+    for entry in meta.get("httpErrors") or []:
+        match = API_5XX.match(entry)
+        if match:
+            hits.append((int(match[1]), match[2]))
+    return hits
 
 
 def slug(path: str) -> str:
@@ -376,6 +409,11 @@ class Run:
         self.done: dict[tuple[str, str, str], Result] = {}
         self._stock: Stock | CheckError | None = None
         self.picked = ""  # where E/S came from, for the summary
+        # #609: the API's 5xx/timeouts seen during the run, the shots retaken for them
+        # (name -> no /api/ 5xx left) and the direct GETs of the URLs still 5xx (path -> status).
+        self.env_hits: list[dict] = []
+        self.retaken: dict[str, bool] = {}
+        self.rechecked: dict[str, int] = {}
         for sub in ("api", "shots"):
             (out / sub).mkdir(parents=True, exist_ok=True)
 
@@ -387,6 +425,15 @@ class Run:
         if path not in self.responses:
             self.responses[path] = self._fetch(path)
             status, payload = self.responses[path]
+            if status >= 500 or status == 0:
+                self.env_hits.append(
+                    {
+                        "source": "api",
+                        "where": "run.get",
+                        "status": status,
+                        "path": path,
+                    }
+                )
             target = self.out / "api" / (name or f"{slug(path)}.json")
             target.write_text(
                 json.dumps(payload, ensure_ascii=False, indent=2)
@@ -395,6 +442,8 @@ class Run:
                 encoding="utf-8",
             )
         status, payload = self.responses[path]
+        if status >= 500 or status == 0:
+            raise Environment(f"/api/{path} 回 {status}")
         if status != 200:
             raise Undetermined(f"/api/{path} 回 {status}")
         return payload
@@ -428,7 +477,7 @@ class Run:
 
     # -- screenshots --
 
-    def shoot(self, shot: Shot) -> dict[int, dict]:
+    def shoot(self, shot: Shot, attempts: int = SHOT_ATTEMPTS) -> dict[int, dict]:
         """Run screenshot.cjs once per shot (retried when a width is not ready)."""
 
         if shot.name in self.shots:
@@ -451,20 +500,8 @@ class Run:
         if self.browser:
             command += ["--browser", self.browser]
         results: dict[int, dict] = {}
-        for attempt in range(1, SHOT_ATTEMPTS + 1):
-            try:
-                completed = subprocess.run(
-                    command,
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    timeout=SHOT_TIMEOUT_S,
-                )
-                stdout, stderr = completed.stdout, completed.stderr
-            except subprocess.TimeoutExpired as error:
-                stdout = error.stdout or ""
-                stderr = f"screenshot.cjs timed out after {SHOT_TIMEOUT_S} s"
-                stdout = stdout.decode() if isinstance(stdout, bytes) else stdout
+        for attempt in range(1, attempts + 1):
+            stdout, stderr = self._screenshot(command)
             with open(shots_dir / f"{shot.name}.jsonl", "a", encoding="utf-8") as log:
                 log.write(stdout)
             results = {}
@@ -479,7 +516,7 @@ class Run:
                 )
             if all(meta.get("ready") for meta in results.values()):
                 break
-            if attempt < SHOT_ATTEMPTS:
+            if attempt < attempts:
                 print(
                     f"screenshot {shot.name}: not ready, retrying ({stderr.strip()[-200:]})",
                     file=sys.stderr,
@@ -487,9 +524,94 @@ class Run:
         self.shots[shot.name] = results
         return results
 
+    def _screenshot(self, command: list[str]) -> tuple[str, str]:
+        """One screenshot.cjs run: its stdout (JSON lines) and stderr."""
+
+        try:
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=SHOT_TIMEOUT_S,
+            )
+            return completed.stdout, completed.stderr
+        except subprocess.TimeoutExpired as error:
+            stdout = error.stdout or ""
+            stdout = stdout.decode() if isinstance(stdout, bytes) else stdout
+            return stdout, f"screenshot.cjs timed out after {SHOT_TIMEOUT_S} s"
+
+    def retake(self, shots: list[Shot]) -> None:
+        """#609: retake, one at a time and once, each shot that saw an ``/api/`` 5xx;
+        then GET each URL still 5xx directly, so ``env_reason`` can tell a busy host
+        (the GET answers 200) from a broken API (it does not)."""
+
+        for shot in shots:
+            first = self.shoot(shot)
+            if not any(api_5xx(meta) for meta in first.values()):
+                continue
+            self._record(shot, first, "截圖")
+            self.shots.pop(shot.name, None)
+            again = self.shoot(shot, attempts=1)
+            self._record(shot, again, "重截")
+            left = {path for meta in again.values() for _, path in api_5xx(meta)}
+            self.retaken[shot.name] = not left
+            for path in sorted(left - set(self.rechecked)):
+                self.rechecked[path] = self._fetch(path)[0]
+
+    def _record(self, shot: Shot, metas: dict[int, dict], source: str) -> None:
+        for width, meta in metas.items():
+            for status, path in api_5xx(meta):
+                self.env_hits.append(
+                    {
+                        "source": source,
+                        "where": f"{shot.name}-{width}",
+                        "status": status,
+                        "path": path,
+                    }
+                )
+
+    def env_reason(self, meta: dict) -> str | None:
+        """The /api/ 5xx of a screenshot width when each answered 200 to a direct GET
+        (the host was busy, #609); None when there is none or one is still not 200."""
+
+        hits = api_5xx(meta)
+        if not hits or any(self.rechecked.get(path) != 200 for _, path in hits):
+            return None
+        seen = dict.fromkeys(f"{status} /api/{path}" for status, path in hits)
+        return f"截圖時 API {'、'.join(seen)}，直接 GET 回 200"
+
+    def environment(self, jobs: int, results: list[Result]) -> dict:
+        """What summary.md opens with and environment.json holds (#609)."""
+
+        counts: dict[tuple[str, int], int] = {}
+        for hit in self.env_hits:
+            key = (hit["path"], hit["status"])
+            counts[key] = counts.get(key, 0) + 1
+        return {
+            "jobs": jobs,
+            "hits": len(self.env_hits),
+            "screenshot_hits": sum(h["source"] != "api" for h in self.env_hits),
+            "api_hits": sum(h["source"] == "api" for h in self.env_hits),
+            "retaken": sorted(self.retaken),
+            "recovered": sorted(name for name, ok in self.retaken.items() if ok),
+            "rechecked": dict(sorted(self.rechecked.items())),
+            "urls": [
+                {"path": path, "status": status, "count": count}
+                for (path, status), count in sorted(
+                    counts.items(), key=lambda item: (-item[1], item[0])
+                )
+            ],
+            "checks": [f"{r.page} {r.label}" for r in results if r.environment],
+            "events": self.env_hits,
+        }
+
     def text(self, shot: Shot, width: int = 1280) -> Text:
         meta = self.shoot(shot)[width]
         if not meta.get("ready"):
+            reason = self.env_reason(meta)
+            if reason:
+                raise Environment(f"{shot.name}-{width} 未 ready，{reason}")
             raise Undetermined(
                 f"{shot.name}-{width} 未 ready"
                 + (f"（{meta['error']}）" if meta.get("error") else "")
@@ -674,23 +796,42 @@ def actions_shots(run: Run) -> list[Shot]:
 
 
 def usable(run: Run, shots: list[Shot]) -> str:
-    """T1/N1/G1/S1/A1: every width ready, no failed /api/, console error or overflow."""
+    """T1/N1/G1/S1/A1: every width ready, no failed /api/, console error or overflow.
 
-    problems, count = [], 0
+    #609: a width whose only problems are /api/ 5xx that answered 200 to a direct GET
+    (``Run.env_reason``) and the not-ready / missing clicks they caused is
+    無法判定（環境）; any other problem on any width still fails the check.
+    """
+
+    problems: list[tuple[str, bool]] = []  # (problem, explained by the environment)
+    count = 0
     for shot in shots:
         for width, meta in run.shoot(shot).items():
             count += 1
             where = f"{shot.name}-{width}"
+            env = run.env_reason(meta) is not None
             if not meta.get("ready"):
-                problems.append(f"{where} 未 ready {meta.get('error', '')}".strip())
-            for key in ("missingClicks", "httpErrors", "consoleErrors"):
-                if meta.get(key):
-                    problems.append(f"{where} {key} {meta[key]}")
+                problem = f"{where} 未 ready {meta.get('error', '')}".strip()
+                problems.append((problem, env))
+            if meta.get("missingClicks"):
+                problems.append((f"{where} missingClicks {meta['missingClicks']}", env))
+            http = meta.get("httpErrors") or []
+            busy = [entry for entry in http if env and API_5XX.match(entry)]
+            other = [entry for entry in http if entry not in busy]
+            if busy:
+                problems.append((f"{where} httpErrors {busy}", True))
+            if other:
+                problems.append((f"{where} httpErrors {other}", False))
+            if meta.get("consoleErrors"):
+                problem = f"{where} consoleErrors {meta['consoleErrors']}"
+                problems.append((problem, False))
             if meta.get("overflow"):
-                problems.append(
-                    f"{where} 橫向捲動 scrollWidth {meta['scrollWidth']} > clientWidth {meta['clientWidth']}"
-                )
-    expect(not problems, "；".join(problems))
+                problem = f"{where} 橫向捲動 scrollWidth {meta['scrollWidth']} > clientWidth {meta['clientWidth']}"
+                problems.append((problem, False))
+    message = "；".join(problem for problem, _ in problems)
+    expect(all(env for _, env in problems), message)
+    if problems:
+        raise Environment(f"{message}（這些 /api/ 直接 GET 回 200）")
     return f"{count} 張截圖 ready，無錯誤，無橫向捲動"
 
 
@@ -3444,7 +3585,7 @@ def run_order(page: str) -> list[str]:
 def judge(run: Run, page: str, code: str, stock: Stock | None, label: str) -> Result:
     """Run one check; a failure after an upstream that did not pass is 無法判定（上游 X）."""
 
-    fn, upstream = CHECKS[page][code], None
+    fn, upstream, environment = CHECKS[page][code], None, False
     try:
         if stock is None and code in NEEDS_STOCK:
             run.stock()  # raises why no E/S was picked
@@ -3455,6 +3596,7 @@ def judge(run: Run, page: str, code: str, stock: Stock | None, label: str) -> Re
     except Undetermined as error:
         detail, state = str(error), UNDETERMINED
         upstream = getattr(error, "upstream", None)
+        environment = isinstance(error, Environment)
     subject = stock.label if stock else ""
     for up in AFTER.get((page, code), ()) if state == FAIL else ():
         owner = run.done.get((page, up, subject)) or run.done.get((page, up, ""))
@@ -3476,7 +3618,7 @@ def judge(run: Run, page: str, code: str, stock: Stock | None, label: str) -> Re
         detail += f"；修好了就從 KNOWN_FAILURES 移除 {page} {code}"
     elif known and state == FAIL:
         detail += f"（不是已知失敗 {known.issue}：訊息沒有 `{known.match}`）"
-    result = Result(page, code, state, detail, label, issue, upstream)
+    result = Result(page, code, state, detail, label, issue, upstream, environment)
     run.done[(page, code, subject)] = result
     return result
 
@@ -3526,6 +3668,13 @@ def prefetch(run: Run, pages: list[str], stocks: list[Stock], jobs: int) -> None
     }
     with ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
         list(pool.map(run.shoot, shots.values()))
+    run.retake(list(shots.values()))
+
+
+def default_jobs(jobs: int | None, fixture: bool) -> int:
+    """``--jobs`` as given, else FIXTURE_JOBS on the fixture database and REAL_JOBS on real data (#609)."""
+
+    return jobs or (FIXTURE_JOBS if fixture else REAL_JOBS)
 
 
 def blocking(results: list[Result], fixture: bool) -> list[Result]:
@@ -3544,16 +3693,51 @@ def verdict(rows: list[Result]) -> str:
     return "失敗（已知）" if any(r.known for r in rows) else PASS
 
 
+ENV_URL_ROWS = 20
+
+
+def environment_markdown(env: dict) -> list[str]:
+    """The summary's environment section (#609); nothing when the API never answered 5xx."""
+
+    if not env or not env.get("hits"):
+        return []
+    rechecked = env["rechecked"]
+    ok = [path for path, status in rechecked.items() if status == 200]
+    recovered = env["recovered"]
+    lines = [
+        f"### 環境：API 5xx／逾時 {env['hits']} 次"
+        f"（截圖 {env['screenshot_hits']}、API 呼叫 {env['api_hits']}；截圖並行 {env['jobs']}）",
+        "",
+        f"- 重截 {len(env['retaken'])} 張（串列、各一次），恢復 {len(recovered)} 張"
+        + (f"：{'、'.join(recovered)}" if recovered else ""),
+        f"- 重截後仍 5xx 的 URL {len(rechecked)} 個：直接 GET 回 200 的 {len(ok)} 個"
+        f"（記無法判定（環境）），仍非 200 的 {len(rechecked) - len(ok)} 個（照舊判失敗）",
+        "- 無法判定（環境）的檢查："
+        + ("、".join(f"`{check}`" for check in env["checks"]) or "無"),
+        "",
+        "| URL | 狀態 | 次數 |",
+        "| --- | --- | --- |",
+    ]
+    for row in env["urls"][:ENV_URL_ROWS]:
+        status = row["status"] or "逾時／連線失敗"
+        path = row["path"].replace("|", "%7C")
+        lines.append(f"| `/api/{path}` | {status} | {row['count']} |")
+    if len(env["urls"]) > ENV_URL_ROWS:
+        lines.append(f"| 另 {len(env['urls']) - ENV_URL_ROWS} 個 | | |")
+    return lines + [""]
+
+
 def summary_markdown(
     results: list[Result],
     pages: list[str],
     head: str,
     evidence: bool = True,
     samples: list[tuple[str, str, str]] = (),
+    environment: dict | None = None,
 ) -> str:
     """Per page tables; without ``evidence`` only each check's result (no page text)."""
 
-    lines = [head, ""]
+    lines = [head, "", *environment_markdown(environment or {})]
     names = {
         "today": "今日可買 `/`",
         "news": "新聞 `/news`",
@@ -3606,7 +3790,11 @@ def main(argv: list[str] | None = None) -> int:
         "--pages", default=",".join(PAGES), help="comma separated pages"
     )
     parser.add_argument("--browser", help="browser executable for screenshot.cjs")
-    parser.add_argument("--jobs", type=int, default=4, help="screenshots taken at once")
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        help=f"screenshots taken at once; default {FIXTURE_JOBS} with --fixture, else {REAL_JOBS}",
+    )
     parser.add_argument(
         "--g7",
         action="store_true",
@@ -3635,7 +3823,8 @@ def main(argv: list[str] | None = None) -> int:
     run = Run(args.api, args.web, args.db, args.out, args.browser)
     fixture = fixture_module() if args.fixture else None
     stocks = stocks_for(run, fixture)
-    prefetch(run, pages, stocks, args.jobs)
+    jobs = default_jobs(args.jobs, args.fixture)
+    prefetch(run, pages, stocks, jobs)
     print(f"screenshots: {time.monotonic() - started:.1f} s", file=sys.stderr)
     results: list[Result] = []
     for page in pages:
@@ -3664,16 +3853,24 @@ def main(argv: list[str] | None = None) -> int:
         f"- API `{args.api}`、前端 `{args.web}`、DB `{args.db.name}`"
         f"{'（假資料庫）' if fixture else ''}\n"
         f"- 個股 E／S：{picked}\n"
+        f"- 截圖並行 {jobs}{'' if args.jobs else '（預設）'}\n"
         f"- {len(results)} 項：通過 {sum(r.state == PASS and not r.known for r in results)}、"
         f"失敗 {sum(r.failed for r in results)}、無法判定 {undetermined}、"
         f"已知失敗 {sum(r.state == FAIL and bool(r.known) for r in results)}；"
         f"耗時 {time.monotonic() - started:.0f} 秒"
     )
+    env = run.environment(jobs, results)
+    (args.out / "environment.json").write_text(
+        json.dumps(env, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     (args.out / "summary.md").write_text(
-        summary_markdown(results, pages, head, samples=samples), encoding="utf-8"
+        summary_markdown(results, pages, head, samples=samples, environment=env),
+        encoding="utf-8",
     )
     (args.out / "status.md").write_text(
-        summary_markdown(results, pages, head, evidence=False, samples=samples),
+        summary_markdown(
+            results, pages, head, evidence=False, samples=samples, environment=env
+        ),
         encoding="utf-8",
     )
     (args.out / "results.json").write_text(
@@ -3689,6 +3886,7 @@ def main(argv: list[str] | None = None) -> int:
                     "detail": r.detail,
                     "known": r.known,
                     "upstream": r.upstream,
+                    "environment": r.environment,
                 }
                 for r in results
             ],
@@ -3700,7 +3898,12 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"{len(results)} checks, {len(failed)} failed"
         + (": " + ", ".join(f"{r.page} {r.label}" for r in failed) if failed else "")
-        + f", {undetermined} undetermined",
+        + f", {undetermined} undetermined"
+        + (
+            f", {env['hits']} API 5xx/timeouts (environment.json)"
+            if env["hits"]
+            else ""
+        ),
     )
     return 1 if failed else 0
 

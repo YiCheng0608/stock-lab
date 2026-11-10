@@ -542,3 +542,184 @@ def test_a_tier_without_rows_on_the_first_page_shows_its_first_rows(tmp_path):
     empty = page.replace("顯示 5／50 檔", "顯示 0／50 檔")
     with pytest.raises(page_checks.Fail, match="顯示 5／50 檔"):
         page_checks.a3(_run(tmp_path, payloads, {"actions-1280": empty}))
+
+
+# ---- #609: the API's 5xx on a busy host is 無法判定（環境）, not a page failure ----
+
+# #606 (pr-assets/606/20261110-1304): four browsers next to a container at 100% CPU
+# exhausted the API's pool; the shots saw 500/504 and G1/S1/A1 failed, although every
+# URL answered 200 when called alone and a --jobs 1 rerun passed all 60 checks.
+BUSY = "504 http://web:8080/api/dashboard"
+TODAY_DATED = "今日\n資料 2026/10/22\n今日可買\n"
+
+
+class ShotRun(page_checks.Run):
+    """The real screenshot and API logic, with screenshot.cjs and HTTP replaced.
+
+    ``shots[name]`` lists, per screenshot.cjs call, the extra fields of each width's
+    JSON line (default: ready, no errors); ``statuses[path]`` is what a direct GET gets.
+    """
+
+    def __init__(self, tmp_path, shots=None, statuses=None, pages=None):
+        super().__init__(
+            "http://api",
+            "http://web:8080",
+            tmp_path / "db",
+            tmp_path / "out",
+            now=page_checks.datetime(2026, 10, 24, 12, tzinfo=page_checks.TAIPEI),
+        )
+        self.script = {name: list(calls) for name, calls in (shots or {}).items()}
+        self.statuses = statuses or {}
+        self.pages = pages or {}
+        self.calls: list[str] = []
+        self.fetched: list[str] = []
+
+    def screenshot_cjs(self, command, **_kwargs):
+        """Stands in for ``subprocess.run`` of screenshot.cjs."""
+
+        name = command[command.index("--name") + 1]
+        widths = [int(w) for w in command[command.index("--widths") + 1].split(",")]
+        self.calls.append(name)
+        calls = self.script.get(name) or [{}]
+        extra = calls.pop(0) if len(calls) > 1 else calls[0]
+        lines = []
+        for width in widths:
+            txt = self.out / "shots" / f"{name}-{width}.txt"
+            txt.write_text(self.pages.get(f"{name}-{width}", ""), encoding="utf-8")
+            meta = {"width": width, "ready": True, "txt": str(txt), "httpErrors": []}
+            lines.append(json.dumps({**meta, **extra.get(width, extra.get("*", {}))}))
+        return subprocess.CompletedProcess(command, 0, "\n".join(lines) + "\n", "")
+
+    def _fetch(self, path):
+        self.fetched.append(path)
+        status = self.statuses.get(path, 200)
+        payload = {"as_of": "2026-10-22T18:00:00+08:00"} if path == "dashboard" else {}
+        return status, payload if status == 200 else "Internal Server Error"
+
+    def facts(self, stock=None):
+        return {"market_latest_trading_date": "2026-10-22"}
+
+
+def _busy(**more):
+    return {"*": {"ready": False, "httpErrors": [BUSY], **more}}
+
+
+def _today(run, monkeypatch, *codes):
+    _only(monkeypatch, "today", *codes)
+    monkeypatch.setattr(page_checks.subprocess, "run", run.screenshot_cjs)
+    page_checks.prefetch(run, ["today"], [], jobs=1)
+    return {r.code: r for r in page_checks.run_page(run, "today", [])}
+
+
+def test_a_5xx_that_answers_200_alone_is_undetermined_not_failed(tmp_path, monkeypatch):
+    # AC-2: still 504 after the serial retake, 200 to a direct GET -> the host was busy.
+    run = ShotRun(tmp_path, {"today": [_busy(), _busy()]}, pages={})
+    results = _today(run, monkeypatch, "T1", "T2")
+    t1, t2 = results["T1"], results["T2"]
+    assert (t1.status, t1.environment, t1.failed) == ("無法判定", True, False)
+    assert t1.detail.startswith("無法判定（環境）：today-1280 未 ready")
+    assert BUSY in t1.detail and "直接 GET 回 200" in t1.detail
+    assert (t2.status, t2.environment) == ("無法判定", True)
+    assert "504 /api/dashboard，直接 GET 回 200" in t2.detail
+    # The parallel pass (its usual not-ready retry) and one serial retake, then one direct GET.
+    assert run.calls.count("today") == 3 and run.fetched == ["dashboard"]
+    env = run.environment(1, list(results.values()))
+    assert (env["hits"], env["screenshot_hits"], env["api_hits"]) == (4, 4, 0)
+    assert env["retaken"] == ["today"] and env["recovered"] == []
+    assert env["rechecked"] == {"dashboard": 200}
+    assert env["urls"] == [{"path": "dashboard", "status": 504, "count": 4}]
+    assert env["checks"] == ["today T1", "today T2"]
+    # The overall result keeps the 無法判定 behaviour: a fixture run still fails on it.
+    assert page_checks.blocking(list(results.values()), fixture=False) == []
+    assert page_checks.blocking(list(results.values()), fixture=True) == [t1, t2]
+
+
+def test_a_5xx_that_stays_5xx_alone_still_fails(tmp_path, monkeypatch):
+    # AC-2 counter-example: the direct GET is 500 too, so the API is broken.
+    run = ShotRun(tmp_path, {"today": [_busy()]}, {"dashboard": 500})
+    results = _today(run, monkeypatch, "T1", "T2")
+    assert results["T1"].status == "失敗" and not results["T1"].environment
+    assert results["T1"].detail.startswith("today-1280 未 ready")
+    assert (results["T2"].status, results["T2"].environment) == ("無法判定", False)
+    assert run.environment(1, list(results.values()))["rechecked"] == {"dashboard": 500}
+
+
+def test_a_busy_shot_with_a_console_error_still_fails(tmp_path, monkeypatch):
+    # AC-2 counter-example: another problem on the same shot is the page's own.
+    run = ShotRun(tmp_path, {"today": [_busy(consoleErrors=["TypeError: x is null"])]})
+    (t1,) = _today(run, monkeypatch, "T1").values()
+    assert t1.status == "失敗" and not t1.environment
+    assert "consoleErrors ['TypeError: x is null']" in t1.detail
+    assert BUSY in t1.detail
+
+
+def test_a_non_api_or_4xx_error_on_a_busy_shot_still_fails(tmp_path, monkeypatch):
+    http = [BUSY, "404 http://web:8080/api/stocks/TWSE/0000"]
+    run = ShotRun(tmp_path, {"today": [_busy(httpErrors=http)]})
+    (t1,) = _today(run, monkeypatch, "T1").values()
+    assert (
+        t1.status == "失敗" and "404 http://web:8080/api/stocks/TWSE/0000" in t1.detail
+    )
+
+
+def test_a_retake_without_5xx_is_judged_as_usual(tmp_path, monkeypatch):
+    # Retaken serially once: the clean shot is used, so the page's own text decides.
+    run = ShotRun(
+        tmp_path,
+        {"today": [_busy(), _busy(), {}]},
+        pages={"today-1280": TODAY_DATED},
+    )
+    results = _today(run, monkeypatch, "T1", "T2")
+    assert (results["T1"].status, results["T2"].status) == ("通過", "通過")
+    assert run.fetched == ["dashboard"]  # T2's run.get only; no recheck was needed
+    env = run.environment(1, list(results.values()))
+    assert env["recovered"] == ["today"] and env["rechecked"] == {}
+    assert env["checks"] == []
+
+
+def test_a_page_whose_api_answers_200_still_fails_on_wrong_text(tmp_path, monkeypatch):
+    # AC-2: no 5xx at all, the API is 200 and the page shows another date -> 失敗.
+    run = ShotRun(tmp_path, pages={"today-1280": "今日\n資料 2026/10/21\n"})
+    results = _today(run, monkeypatch, "T1", "T2")
+    assert results["T1"].status == "通過"
+    assert results["T2"].status == "失敗" and not results["T2"].environment
+    assert "缺整行 `資料 2026/10/22`" in results["T2"].detail
+    assert run.calls.count("today") == 1  # no retake without an /api/ 5xx
+    assert run.environment(1, list(results.values()))["hits"] == 0
+
+
+def test_an_api_call_that_times_out_is_environment(tmp_path, monkeypatch):
+    run = ShotRun(tmp_path, statuses={"dashboard": 0})
+    with pytest.raises(page_checks.Environment, match="/api/dashboard 回 0"):
+        run.dashboard()
+    run = ShotRun(tmp_path, statuses={"dashboard": 404})
+    with pytest.raises(page_checks.Undetermined) as error:
+        run.dashboard()
+    assert not isinstance(error.value, page_checks.Environment)
+
+
+def test_the_summary_opens_with_the_5xx_urls(tmp_path, monkeypatch):
+    run = ShotRun(tmp_path, {"today": [_busy(), _busy()]})
+    results = list(_today(run, monkeypatch, "T1").values())
+    env = run.environment(1, results)
+    summary = page_checks.summary_markdown(
+        results, ["today"], "## head", environment=env
+    )
+    head, section, bullets = summary.split("\n\n")[:3]
+    assert head == "## head"
+    assert section == "### 環境：API 5xx／逾時 4 次（截圖 4、API 呼叫 0；截圖並行 1）"
+    assert "重截 1 張（串列、各一次），恢復 0 張" in bullets
+    assert "直接 GET 回 200 的 1 個" in bullets and "`today T1`" in bullets
+    assert "| `/api/dashboard` | 504 | 4 |" in summary
+    assert summary.index("### 環境") < summary.index("### 今日可買")
+    quiet = page_checks.summary_markdown(
+        results, ["today"], "## head", environment=ShotRun(tmp_path).environment(1, [])
+    )
+    assert "### 環境" not in quiet
+
+
+def test_the_default_jobs_are_one_on_real_data_only():
+    assert page_checks.default_jobs(None, fixture=True) == 4
+    assert page_checks.default_jobs(None, fixture=False) == 1
+    assert page_checks.default_jobs(3, fixture=False) == 3
+    assert page_checks.default_jobs(2, fixture=True) == 2
