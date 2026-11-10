@@ -9,6 +9,7 @@ poll by a freshly started monitor: two runs in a row are a restart (AC-1).
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -1315,3 +1316,206 @@ def test_a_message_that_points_to_the_setup_heading_names_it_word_for_word() -> 
                 "is not followed by a heading of docs/ops/SETUP.md"
             )
     assert mentions >= 2, "the mentions of docs/ops/SETUP.md were not found"
+
+
+# Engineer sessions: the turn hook's state files (#595) --------------------------------
+
+ENG = "bbbbbbbb-2222-4222-8222-222222222222"
+
+
+def _session_state(h: Harness, minutes_ago: float, **fields) -> dict:
+    """A state file as tools/ops/turn_hook.cjs writes it, ended MINUTES_AGO before NOW."""
+    folder = h.data / "logs" / "sessions"
+    folder.mkdir(parents=True, exist_ok=True)
+    doc = {
+        "session_id": ENG,
+        "issue": 316,
+        "branch": "task/316-a",
+        "cwd": "C:/wt/task/316-a",
+        "state": "stopped",
+        "ended_at": datetime.fromtimestamp(
+            NOW - int(minutes_ago * 60), tz=timezone.utc
+        ).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "commented": False,
+        "last_message": "照規則我不會自己重開，要你決定。" + "背景 shell 被收掉。" * 30,
+        "background_tasks": 0,
+        **fields,
+    }
+    (folder / f"{ENG}.json").write_text(
+        json.dumps(doc, ensure_ascii=False), encoding="utf-8"
+    )
+    return doc
+
+
+def _engineer_events(h: Harness) -> list[dict]:
+    return [
+        e
+        for e in _records(h, "event")
+        if e["kind"] in ("engineer_waiting", "engineer_ended", "engineer_failed")
+    ]
+
+
+def test_a_turn_stopped_without_a_comment_for_31_minutes_wakes_the_coordinator(
+    mon: Harness,
+) -> None:
+    """AC-3 evidence 2 (#595): stopped, no comment: 29 minutes later no event; 31 minutes
+    later one engineer_waiting event that wakes the coordinator; the same ended_at polled
+    again is not recorded twice; working after it: nothing new."""
+    _monitor(mon)  # the PR and comment events of the fixture, handled first
+    _done(mon, str(len(_records(mon, "event"))))
+    sends = len(_sends(mon))
+    doc = _session_state(mon, 29)
+    _monitor(mon, at=NOW)
+    assert _engineer_events(mon) == []
+    out = _monitor(mon, at=NOW + 120).stdout  # 31 minutes after ended_at
+    (event,) = _engineer_events(mon)
+    assert event["id"] == f"engineer_waiting:{ENG}:{doc['ended_at']}"
+    assert event["kind"] == "engineer_waiting" and event["ref"] == "#316"
+    assert event["at"] == doc["ended_at"]
+    assert event["url"] == "https://github.com/YiCheng0608/stock-lab/issues/316"
+    assert "31 分鐘未在 Issue／PR 留言" in event["summary"]
+    head = event["summary"].split("留言：", 1)[1]
+    assert head.startswith("照規則我不會自己重開") and len(head) <= 120
+    assert event["detail"] == doc["last_message"]
+    assert "wake=sent" in out and len(_sends(mon)) == sends + 1
+    _monitor(mon, at=NOW + 180)
+    assert len(_engineer_events(mon)) == 1
+    # patrol.sh lists it with the whole message.
+    listing = _patrol_here(mon, at=NOW + 240)
+    assert "engineer_waiting #316" in listing
+    assert "最後一則訊息：" in listing and doc["last_message"] in listing
+    # The next turn started: nothing new while it works.
+    _session_state(mon, 40, state="working")
+    _monitor(mon, at=NOW + 300)
+    assert len(_engineer_events(mon)) == 1
+
+
+@pytest.mark.parametrize(
+    "fields", [{"commented": True}, {"state": "working"}, {"ended_at": "bad"}]
+)
+def test_a_commented_or_working_session_is_no_event(mon: Harness, fields) -> None:
+    _session_state(mon, 90, **fields)
+    _monitor(mon)
+    assert _engineer_events(mon) == []
+
+
+def test_commented_unknown_counts_as_no_comment(mon: Harness) -> None:
+    """The hook could not read the transcript (commented null): waited on as no comment;
+    background tasks in flight are named in the summary."""
+    _session_state(mon, 45, commented=None, background_tasks=2)
+    _monitor(mon)
+    (event,) = _engineer_events(mon)
+    assert event["kind"] == "engineer_waiting" and "背景工作 2 個" in event["summary"]
+
+
+def test_a_session_ended_while_its_worktree_is_there_is_an_event(mon: Harness) -> None:
+    """AC-3 evidence 2 (#595): ended, and task/316-a is still a worktree: engineer_ended,
+    keyed by session and ended_at; its worktree gone, or no listing that poll: none."""
+    doc = _session_state(mon, 1, state="ended", end_reason="other")
+    mon.answer("orca_worktree_list", _worktrees("task/313-b"))
+    _monitor(mon)
+    assert _engineer_events(mon) == []
+    mon.answer("orca_worktree_list", {"ok": False, "error": {"message": "down"}})
+    out = _monitor(mon, at=NOW + 60).stdout
+    assert "worktrees=failed" in out and _engineer_events(mon) == []
+    mon.answer("orca_worktree_list", _worktrees("task/316-a", "task/313-b"))
+    out = _monitor(mon, at=NOW + 120).stdout
+    (event,) = _engineer_events(mon)
+    assert event["id"] == f"engineer_ended:{ENG}:{doc['ended_at']}"
+    assert event["kind"] == "engineer_ended" and event["ref"] == "#316"
+    assert "已結束（other），worktree 還在" in event["summary"]
+    assert "wake=sent" in out
+    _monitor(mon, at=NOW + 180)
+    assert len(_engineer_events(mon)) == 1
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        {
+            "session_id": ENG,
+            "state": "ended",
+            "branch": ["x"],
+            "ended_at": "2026-10-25T11:00:00Z",
+        },
+        {"session_id": ["x"], "state": "stopped", "ended_at": "2026-10-25T11:00:00Z"},
+        {"session_id": ENG, "state": "stopped", "ended_at": 5, "issue": "316"},
+        ["not", "an", "object"],
+        "{ partial",
+    ],
+)
+def test_a_bad_state_file_is_skipped_alone(mon: Harness, content) -> None:
+    """#595 review must-fix 1: a state file with a wrong type (a list for branch made
+    record fail: no events, no heartbeat) is skipped alone; the same poll still records
+    the PR and comment events, writes the heartbeat and logs session_skipped."""
+    folder = mon.data / "logs" / "sessions"
+    folder.mkdir(parents=True)
+    text = content if isinstance(content, str) else json.dumps(content)
+    (folder / "bad.json").write_text(text, encoding="utf-8")
+    _session_state(mon, 45)  # a good one beside it still makes its event
+    out = _monitor(mon).stdout
+    kinds = {e["kind"] for e in _records(mon, "event")}
+    assert {"pr_opened", "ci", "comment", "engineer_waiting"} <= kinds
+    assert "poll_failed" not in out
+    beat = json.loads((mon.data / "logs" / "monitor-heartbeat.json").read_text("utf-8"))
+    assert beat["written_at"] == "2026-10-25T12:00:00Z"
+    assert len(_engineer_events(mon)) == 1  # the good file's; the bad one makes none
+    log = (mon.data / "logs" / "monitor.log").read_text(encoding="utf-8")
+    # A file that is no JSON object is logged; a wrong field type just makes no event.
+    unreadable = not isinstance(content, dict)
+    skipped = re.search(r" session_skipped mode=\S+ bad\.json ", log)
+    assert (skipped is not None) is unreadable
+
+
+def test_a_turn_ended_on_an_api_error_wakes_at_once(mon: Harness) -> None:
+    """#595 review must-fix 3: state failed (StopFailure): an engineer_failed event at
+    once, with the error, keyed by session and ended_at."""
+    doc = _session_state(
+        mon,
+        1,
+        state="failed",
+        error="rate_limit",
+        error_details="429 Too Many Requests",
+        last_message="API Error: Rate limit reached",
+    )
+    out = _monitor(mon).stdout
+    (event,) = _engineer_events(mon)
+    assert event["id"] == f"engineer_failed:{ENG}:{doc['ended_at']}"
+    assert event["ref"] == "#316"
+    assert (
+        "回合因 API 錯誤中斷（rate_limit：429 Too Many Requests）" in event["summary"]
+    )
+    assert "wake=sent" in out
+    _monitor(mon, at=NOW + 60)
+    assert len(_engineer_events(mon)) == 1
+
+
+def test_a_failure_without_details_has_no_empty_brackets(mon: Harness) -> None:
+    _session_state(mon, 1, state="failed", error="overloaded", error_details="")
+    _monitor(mon)
+    (event,) = _engineer_events(mon)
+    assert "回合因 API 錯誤中斷（overloaded）：" in event["summary"]
+
+
+def test_a_bad_state_file_is_logged_once_until_it_changes(mon: Harness) -> None:
+    """#595 review: session_skipped is logged once per file and mtime, not every poll."""
+    folder = mon.data / "logs" / "sessions"
+    folder.mkdir(parents=True)
+    bad = folder / "bad.json"
+    bad.write_text("{ partial", encoding="utf-8")
+    log = mon.data / "logs" / "monitor.log"
+
+    def count() -> int:
+        return log.read_text(encoding="utf-8").count(" session_skipped ")
+
+    _monitor(mon)
+    _monitor(mon, at=NOW + 60)
+    _monitor(mon, at=NOW + 120)
+    assert count() == 1
+    stat = bad.stat()
+    os.utime(bad, ns=(stat.st_atime_ns, stat.st_mtime_ns + 5_000_000_000))
+    _monitor(mon, at=NOW + 180)
+    assert count() == 2
+    bad.unlink()
+    _monitor(mon, at=NOW + 240)
+    assert count() == 2

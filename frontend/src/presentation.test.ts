@@ -1,4 +1,7 @@
 import { backtestStartedText, backtestTrackingLabel, groupDisplayName, staleCloseDateLabel, stockGroupLabel, researchRequirementLabel, stockDirectoryActionLabel, formatProductTimeRole, PRODUCT_TIME_NOTE, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productTimeRoleDateTime, productTimeRoleKnown, productTimeRoleLabel, stopPriceFieldLabel } from './presentation'
+import { exchangeLabel } from './presentation'
+import { exchangeLabel as candidateExchangeLabel } from './candidates/candidates'
+import { exchangeLabel as headerExchangeLabel } from './stock/StockHeader'
 
 function expect(condition: boolean, message: string): void {
   if (!condition) throw new Error(message)
@@ -88,3 +91,7 @@ expect(backtestTrackingLabel(null) === '追蹤口徑 未記錄', 'a run without 
 expect(backtestStartedText({ status: 'running', started_at: '2026-11-04T13:54:00+00:00' }) === '開始於 2026/11/04 21:54', 'a running backtest names its Taipei start')
 expect(backtestStartedText({ status: 'running', started_at: null }) === '開始於 未提供', 'a running backtest without a start says so')
 expect(backtestStartedText({ status: 'failed', started_at: '2026-11-04T13:54:00+00:00' }) === null && backtestStartedText({ status: 'success' }) === null, 'a finished backtest shows no start line')
+
+// Issue 599: one market rule for the stock header, candidate rows and navbar suggestions.
+expect(candidateExchangeLabel === exchangeLabel && headerExchangeLabel === exchangeLabel, 'StockHeader and candidates re-export presentation exchangeLabel')
+expect(exchangeLabel('TWSE') === '上市' && exchangeLabel('TPEx') === '上櫃' && exchangeLabel('TAIFEX') === '市場待核實' && exchangeLabel(null) === '市場待核實', 'exchangeLabel maps the exchange to its market')

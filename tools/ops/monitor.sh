@@ -255,6 +255,10 @@ poll() {
   out="$(eq record "$logs" "$now" "${args[@]}")" || { log poll_failed "gh_calls=$gh_calls$notes"; return; }
   summary="$(printf '%s\n' "$out" | tail -n 1)"
   printf '%s\n' "$out" | grep '^event ' | sed 's/^/  /'
+  # A turn hook state file record could not use (#595 review): skipped alone, logged.
+  while IFS= read -r skipped; do
+    log session_skipped "${skipped#session_skipped }" >/dev/null
+  done < <(printf '%s\n' "$out" | grep '^session_skipped ')
   read -r new pending _ wake terminal <<<"$summary"
   new="${new#new=}" pending="${pending#pending=}" wake="${wake#wake=}" terminal="${terminal#terminal=}"
   if [ "$wake" = 1 ] && [ "$record_only" = 1 ]; then

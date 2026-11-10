@@ -30,7 +30,7 @@
 
 1. **建 Issue**：目標、範圍與不做事項、3～5 條可驗收的 AC、依賴、對應里程碑與依據；套對應的 milestone。要不要建 Issue 依工作手冊的[分流](docs/WORKFLOW.md#分流)。
 2. **開 worktree**：以 Orca 從最新 `origin/master` 建 `task/<issue>-<slug>`，啟動工程師 session 並送任務全文。
-3. **實作與自測**：工程師在 worktree 完成程式、測試與文件；跑後端 `pytest`、`ruff`、前端測試與 build（見[工作手冊](docs/WORKFLOW.md#本機檢查)）。
+3. **實作與自測**：工程師在 worktree 完成程式、測試與文件；跑改動相關的後端測試檔與 `ruff`（全套後端 `pytest` 由 PR CI 跑）、前端測試與 build（見[工作手冊](docs/WORKFLOW.md#本機檢查)）。
 4. **PR**：描述做了什麼、怎麼驗、未做什麼；`Closes #<issue>`。CI 必須綠。
 5. **Review 與合併**：統籌 review（必要時獨立 review），以 merge commit 合併；不 squash／rebase、不直接 push master。
 6. **結案**：合併後 master CI 綠即關 Issue、移除 worktree；遠端 branch 由 GitHub 自動刪。master CI 紅就先修，不開新功能。

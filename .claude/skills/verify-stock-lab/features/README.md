@@ -100,7 +100,7 @@ CI `verify` job 先跑 [`tools/verify/verify_plan.py`](../../../../tools/verify/
 | `GET /glossary` | 名詞頁，不在主導航（頁內名詞說明用前端 `glossary.ts`） |
 | `GET /groups` | 舊族群 API，前端未使用 |
 | `GET /groups/{group_id}` | 舊族群 API，前端未使用 |
-| `GET /instruments` | 舊標的 API，前端未使用 |
+| `GET /instruments` | 只給導覽列搜尋建議（`securities_only=true`，#599）：清單只在輸入時出現、不在截圖的頁面文字裡，由前端測試與 `backend/tests/test_api.py` 涵蓋 |
 | `GET /instruments/{symbol}` | 舊標的 API，前端未使用 |
 | `GET /signals` | 訊號 API，前端未使用 |
 | `GET /signals/{signal_id}` | 訊號 API，前端未使用 |

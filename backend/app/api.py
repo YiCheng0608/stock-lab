@@ -18,7 +18,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from sqlalchemy import String, and_, cast, desc, func, or_, select
+from sqlalchemy import String, and_, case, cast, desc, func, or_, select
 from sqlalchemy.orm import Session, defer
 
 from .action_tier_store import read_action_tier_rows
@@ -3238,6 +3238,7 @@ def instruments(
     instrument_type: str | None = None,
     exchange: str | None = None,
     watchlist_only: bool = False,
+    securities_only: bool = False,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     limit: int | None = Query(
@@ -3245,13 +3246,29 @@ def instruments(
     ),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
+    # Also the navbar search suggestions (Issue 599): securities_only drops the index and
+    # futures rows that have no stock page, and a query ranks the exact symbol first.
     page_size = _effective_page_size(page_size, limit)
     query = select(Instrument).where(Instrument.status == "active")
+    if securities_only:
+        query = query.where(Instrument.instrument_type.not_in(NON_SECURITY_TYPES))
+    order_by: tuple[Any, ...] = (Instrument.exchange, Instrument.symbol, Instrument.id)
     if q and q.strip():
-        needle = f"%{q.strip()}%"
+        term = q.strip()
+        needle = f"%{term}%"
         query = query.where(
             or_(Instrument.symbol.ilike(needle), Instrument.name.ilike(needle))
         )
+        symbol = func.upper(Instrument.symbol)
+        upper = term.upper()
+        rank = case(
+            (symbol == upper, 0),
+            (symbol.startswith(upper, autoescape=True), 1),
+            (Instrument.name == term, 2),
+            (Instrument.name.startswith(term, autoescape=True), 3),
+            else_=4,
+        )
+        order_by = (rank, *order_by)
     if instrument_type:
         query = query.where(Instrument.instrument_type == instrument_type)
     if exchange:
@@ -3263,7 +3280,7 @@ def instruments(
         query,
         page=page,
         page_size=page_size,
-        order_by=(Instrument.exchange, Instrument.symbol, Instrument.id),
+        order_by=order_by,
     )
     return _page_response(
         [instrument_dict(item) for item in rows],

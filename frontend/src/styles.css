@@ -38,6 +38,16 @@ pre { max-height: 300px; overflow: auto; margin: var(--space-4) 0 0; padding: va
 .navbar-links a.active { color: var(--color-text); border-bottom-color: var(--color-primary); }
 .navbar-tools { display: flex; align-items: center; gap: var(--space-3); }
 .navbar-search .input { width: 200px; padding: var(--space-2) var(--space-3); font-size: 14px; }
+/* Navbar search suggestions (DESIGN_SYSTEM §5 導覽列搜尋建議, Issue 599). */
+.navbar-search { position: relative; }
+.nav-suggest { position: absolute; top: calc(100% + var(--space-2)); right: 0; z-index: 25; width: 320px; padding: var(--space-1) 0; background: var(--color-bg-card); border: 1px solid var(--color-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-hover); }
+.nav-suggest-list { margin: 0; padding: 0; list-style: none; }
+.nav-suggest-option { display: flex; align-items: baseline; gap: var(--space-3); padding: var(--space-2) var(--space-4); cursor: pointer; font-size: var(--text-md); }
+.nav-suggest-option-active { background: var(--color-bg-elevated); }
+.nav-suggest-symbol { flex: none; font-family: var(--font-mono); font-weight: 600; }
+.nav-suggest-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-suggest-market { flex: none; color: var(--color-text-muted); font-size: var(--text-md); }
+.nav-suggest-note { margin: 0; padding: var(--space-2) var(--space-4); color: var(--color-text-muted); font-size: var(--text-md); }
 .site-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-16); padding-top: var(--space-5); padding-bottom: var(--space-8); border-top: 1px solid var(--color-border); color: var(--color-text-subtle); font-size: 12px; }
 .secondary-nav { display: flex; flex-wrap: wrap; gap: var(--space-3); color: var(--color-text-muted); font-size: 12px; }
 .secondary-nav a:hover { color: var(--color-text); }
@@ -884,6 +894,10 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .navbar-tools { flex-wrap: wrap; }
   .navbar-search { flex: 1 1 100%; }
   .navbar-search .input { width: 100%; }
+  /* Issue 599 review: the open menu scrolls within the visible viewport (NavSearch sets --visual-viewport-height
+     from window.visualViewport, which shrinks with the soft keyboard), and the suggestions sit in its flow, so all eight stay reachable. */
+  .navbar-menu-open { max-height: calc(var(--visual-viewport-height, 100dvh) - var(--nav-height)); overflow-y: auto; overscroll-behavior: contain; }
+  .nav-suggest { position: static; width: auto; margin-top: var(--space-2); box-shadow: none; }
   .hero, .detail-grid, .two-panels, .theme-detail-grid { grid-template-columns: 1fr; }
   .theme-news-list li { grid-template-columns: 1fr; gap: var(--space-1); }
   .theme-news-title { white-space: normal; }

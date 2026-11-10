@@ -23,6 +23,8 @@ host directory at /coordination, #338), each with a single writer:
         listed by patrol.sh and marked done like any other, but it is not pending: it
         wakes nobody and does not count for the hour before the #1 comment. Lines
         written before #440 have no ``quiet`` and are read as they were.
+        An engineer session's event (#595) may have one more field, ``detail``: the
+        session's whole last message (500 characters at most), printed by patrol.sh.
     {"type": "wake", "at", "ok", "terminal", "upto", "detail"}
         the coordinator terminal was sent "有 N 個事件…" (ok) or the send failed; a
         successful wake covers every event up to seq ``upto``.
@@ -31,6 +33,14 @@ host directory at /coordination, #338), each with a single writer:
   events-done.jsonl       patrol.sh --done: {"type": "done", "at", "session_id", "ids"}
   monitor-state.json      monitor.sh: comment cursor, last poll, open PR snapshot, the
                           last line of each job log (patrol.sh prints them)
+  sessions/<id>.json      read only; written on the host by the turn hook of engineer
+                          sessions (tools/ops/turn_hook.cjs, #595): state working,
+                          stopped (with commented, last_message), failed (an API
+                          error) or ended. A turn stopped without a comment for more than
+                          30 minutes is an engineer_waiting event, a failed turn an
+                          engineer_failed one, a session ended while its task worktree is
+                          still there an engineer_ended one; all keyed by session and
+                          ended_at. A file that fails is skipped alone (session_skipped).
   monitor-heartbeat.json  monitor.sh, every poll: {"written_at", "pid", "mode", "gh_calls",
                           "gh_failed_polls", "gh_failed_since", "gh_error"}: polls in a
                           row with a failed gh call, since when, the last gh error
@@ -82,6 +92,11 @@ WAKE_RETRY = 600
 # (the handbook's 60-minute liveness window; the monitor never opens a session).
 STALE_AFTER = 3600
 SLOTS = 3
+# The turn hook's state files (#595) and how long a turn may end without a comment
+# before the coordinator is woken for it.
+SESSIONS = "sessions"
+WAITING_AFTER = 1800
+ISSUE_URL = "https://github.com/YiCheng0608/stock-lab/issues/{}"
 MERGE_STATES = ("CLEAN", "DIRTY", "BEHIND", "UNSTABLE")
 # Mergeable states that add nothing to the CI result they come with (#440); DIRTY and
 # BEHIND need work, and a state that changes after the CI result is news.
@@ -466,6 +481,112 @@ def slot_events(worktrees: dict) -> list[dict]:
     ]
 
 
+def task_branches(worktrees) -> set[str] | None:
+    """The task/* branches of an Orca worktree listing; None when it was not read."""
+    if not isinstance(worktrees, dict) or worktrees.get("ok") is not True:
+        return None
+    return {
+        (w.get("branch") or "")[len("refs/heads/") :]
+        for w in ((worktrees.get("result") or {}).get("worktrees") or [])
+        if isinstance(w, dict)
+        and (w.get("branch") or "").startswith("refs/heads/task/")
+    }
+
+
+def _str(doc: dict, key: str) -> str:
+    value = doc.get(key)
+    return value if isinstance(value, str) else ""
+
+
+def _session_event(doc, now: float, branches: set[str] | None) -> dict | None:
+    """One state file's event, or None; every field checked for its type (#595 review:
+    a list for a branch made the whole record fail)."""
+    if not isinstance(doc, dict):
+        raise ValueError("not a JSON object")
+    sid, ended, state = (
+        _str(doc, "session_id"),
+        _str(doc, "ended_at"),
+        _str(doc, "state"),
+    )
+    at = epoch(ended) if ended else None
+    if not sid or at is None:
+        return None
+    issue = doc.get("issue")
+    issue = issue if isinstance(issue, int) and not isinstance(issue, bool) else None
+    ref = f"#{issue}" if issue is not None else "工程師"
+    url = ISSUE_URL.format(issue) if issue is not None else ""
+    message = _str(doc, "last_message")
+    head = one_line(message, 120) or "（沒有訊息）"
+    if state == "stopped" and doc.get("commented") is not True:
+        if now - at <= WAITING_AFTER:
+            return None
+        tasks = doc.get("background_tasks")
+        bg = (
+            f"，背景工作 {tasks} 個"
+            if isinstance(tasks, int) and not isinstance(tasks, bool) and tasks > 0
+            else ""
+        )
+        kind = "engineer_waiting"
+        summary = (
+            f"工程師 session {sid[:8]} 回合結束 {int((now - at) // 60)} 分鐘未在"
+            f" Issue／PR 留言{bg}：{head}"
+        )
+    elif state == "failed":
+        kind = "engineer_failed"
+        details = one_line(_str(doc, "error_details"), 120)
+        summary = (
+            f"工程師 session {sid[:8]} 回合因 API 錯誤中斷"
+            f"（{_str(doc, 'error') or 'unknown'}{'：' + details if details else ''}）：{head}"
+        )
+    elif state == "ended" and branches is not None and _str(doc, "branch") in branches:
+        kind = "engineer_ended"
+        summary = (
+            f"工程師 session {sid[:8]} 已結束（{_str(doc, 'end_reason') or '?'}），"
+            f"worktree 還在：{head}"
+        )
+    else:
+        return None
+    event = _event(f"{kind}:{sid}:{ended}", kind, ref, summary, url, at=ended)
+    if message:
+        event["detail"] = message
+    return event
+
+
+def session_events(
+    logs: Path, now: float, branches: set[str] | None
+) -> tuple[list[dict], dict[str, str]]:
+    """The turn hook's state files (#595) and the ones skipped, {"<file>:<mtime ns>":
+    "<file> <reason>"}:
+    a turn stopped without a comment more than WAITING_AFTER ago (engineer_waiting;
+    commented null, the hook could not read the transcript, counts as no comment), a turn
+    ended on an API error (engineer_failed, at once), a session ended while its task
+    worktree is still there (engineer_ended; not in a poll without the listing). A file
+    that cannot be read or makes this code fail is skipped alone: the poll's other events
+    are recorded as ever."""
+    out: list[dict] = []
+    skipped: dict[str, str] = {}
+    try:
+        paths = sorted((logs / SESSIONS).glob("*.json"))
+    except OSError as error:
+        return out, {f"{SESSIONS}/": f"{SESSIONS}/ {one_line(str(error), 120)}"}
+    for path in paths:
+        try:
+            doc = json.loads(path.read_text(encoding="utf-8"))
+            event = _session_event(doc, now, branches)
+        except Exception as error:  # any bad file is skipped alone
+            try:
+                key = f"{path.name}:{path.stat().st_mtime_ns}"
+            except OSError:
+                key = f"{path.name}:?"
+            skipped[key] = (
+                f"{path.name} {type(error).__name__}: {one_line(str(error), 120)}"
+            )
+            continue
+        if event:
+            out.append(event)
+    return out, skipped
+
+
 def _event(
     id_: str, kind: str, ref: str, summary: str, url: str, at=None, quiet=None
 ) -> dict:
@@ -534,6 +655,8 @@ def record(
     found += gh_auth_events(job_logs, epoch(origin) or 0, now, gh_refused)
     if isinstance(worktrees, dict) and worktrees.get("ok") is True:
         found += slot_events(worktrees)
+    sessions, skipped = session_events(logs, now, task_branches(worktrees))
+    found += sessions
     new = []
     seq = q.seq
     for item in found:
@@ -559,6 +682,16 @@ def record(
     loud = [e for e in new if not e.get("quiet")]
     wake = bool(unnotified) and (bool(loud) or retry_due)
     handle, _, _ = _heartbeat(logs)
+    # monitor.sh logs them (session_skipped), each file once until it changes (by its
+    # mtime), not on every poll; the poll goes on.
+    logged = q.state.get("sessions_skipped")
+    logged = (
+        {k for k in logged if isinstance(k, str)} if isinstance(logged, list) else set()
+    )
+    for key, line in skipped.items():
+        if key not in logged:
+            print(f"session_skipped {line}")
+    q.save_state(sessions_skipped=sorted(skipped))
     for item in new:
         quiet = f" quiet={item['quiet']}" if item.get("quiet") else ""
         print(
@@ -657,6 +790,10 @@ def _event_lines(events: list[dict]) -> list[str]:
         )
         if e.get("url"):
             out.append(f"      {e['url']}")
+        if e.get("detail"):
+            # The engineer's whole last message (#595), one line per line of it.
+            out.append("      最後一則訊息：")
+            out += [f"        {line}" for line in str(e["detail"]).splitlines()]
     return out
 
 
