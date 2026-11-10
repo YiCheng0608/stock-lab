@@ -1,0 +1,102 @@
+api-1  | INFO:     172.21.0.2:53710 - "GET /api/dashboard HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:39422 - "GET /api/stocks/TWSE/1216 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:39438 - "GET /api/stocks/TWSE/1216/bars?interval=day&limit=250 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:39440 - "GET /api/dashboard HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:52326 - "GET /api/stocks/TWSE/1216 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:52342 - "GET /api/stocks/TWSE/1216/bars?interval=day&limit=250 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:52354 - "GET /api/dashboard HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:60124 - "GET /api/stocks/TWSE/1216 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:60138 - "GET /api/stocks/TWSE/1216/bars?interval=day&limit=250 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:60076 - "GET /api/stocks/TWSE/1216 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:57402 - "GET /api/actions?view=focus&limit=20 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:57396 - "GET /api/tracking?status=closed&page=1&page_size=20 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:57390 - "GET /api/tracking?status=open&page=1&page_size=20 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:45052 - "GET /api/dashboard HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:49988 - "GET /api/dashboard HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:50002 - "GET /api/stocks/TWSE/1216 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:50016 - "GET /api/dashboard HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:50008 - "GET /api/stocks/TWSE/1216/bars?interval=day&limit=250 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:54632 - "GET /api/tracking?status=open&page=1&page_size=20 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:54650 - "GET /api/dashboard HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:54640 - "GET /api/tracking?status=closed&page=1&page_size=20 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:54594 - "GET /api/stocks/TWSE/1216/bars?interval=day&limit=250 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:37478 - "GET /api/tracking?status=open&page=1&page_size=20 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:37474 - "GET /api/portfolio?page=1&page_size=20 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:37476 - "GET /api/tracking?status=closed&page=1&page_size=20 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | INFO:     172.21.0.2:37494 - "GET /api/actions?view=focus&limit=20 HTTP/1.1" 500 Internal Server Error
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:53858 - "GET /api/stocks/TWSE/1216 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:56798 - "GET /api/portfolio?page=1&page_size=20 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:56808 - "GET /api/tracking?status=open&page=1&page_size=20 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:56812 - "GET /api/tracking?status=closed&page=1&page_size=20 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:56826 - "GET /api/actions?view=focus&limit=20 HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
+api-1  | INFO:     172.21.0.2:56840 - "GET /api/dashboard HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  | sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00 (Background on this error at: https://sqlalche.me/e/20/3o7r)
