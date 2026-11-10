@@ -947,6 +947,8 @@ export type BacktestSummary = {
     tracking_version?: string | null
     run_date: string | null
     data_as_of: string | null
+    started_at?: string | null
+    finished_at?: string | null
     metadata: Record<string, unknown>
     assessment: string
     zero_actionable_count: number

@@ -23,6 +23,7 @@ import {
   LEVELS_MISSING_TEXT,
   OBSERVATION_LABEL,
   STATUS_TONES,
+  conditionDetailsTitle,
   conditionViews,
   levelsVersionLabel,
   observationLines,
@@ -106,7 +107,7 @@ function ConditionDetails({ row }: { row: StrategyBoardRow }) {
   const views = conditionViews(row, productActionReasonLabel)
   return (
     <details className="details strategy-conditions">
-      <summary>{row.label}條件明細</summary>
+      <summary>{conditionDetailsTitle(row.label)}</summary>
       {views.length
         ? <ul className="strategy-condition-list">{views.map((view) => (
           <li key={view.code} data-condition={view.code} data-condition-state={view.state}>

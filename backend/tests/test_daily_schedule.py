@@ -2299,3 +2299,39 @@ def test_a_declined_start_is_logged_at_the_clock(database, frozen_utcnow):
         frozen_utcnow.at,
         frozen_utcnow.at,
     )
+
+
+def test_a_daily_closes_a_backtest_left_running_before_its_steps(
+    database, monkeypatch, tmp_path
+):
+    # #581: run 2286 (OOM-killed 11/05) stayed running until the next canonical
+    # backtest, which never came; a daily starts only with no maintenance hold.
+    import app.config as app_config
+
+    monkeypatch.setattr(app_config, "DATA_DIR", tmp_path)
+    with database() as db:
+        killed = IngestionRun(
+            run_type="backtest",
+            source="technical_backtest",
+            run_date=date(2026, 11, 3),
+            status="running",
+            request_key="technical-backtest:v2:2025-11-04:2026-11-03",
+            started_at=datetime(2026, 11, 4, 13, 54),
+        )
+        db.add(killed)
+        db.commit()
+        killed_id = killed.id
+    seen = []
+    steps = Steps(monkeypatch)
+    original = pipeline.collect
+
+    def collect(*args, **kwargs):
+        with database() as db:
+            seen.append(db.get(IngestionRun, killed_id).status)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(pipeline, "collect", collect)
+    result = pipeline.run_daily(DAY, trigger="scheduler")
+    assert result["status"] == "success" and steps.calls[0] == "collect"
+    assert result["abandoned_backtests"] == {"status": "checked", "runs": [killed_id]}
+    assert seen == ["failed"]

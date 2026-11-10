@@ -12,6 +12,8 @@ export const OBSERVATION_LABEL = '條件未成立・觀察價位'
 // #519: the candidate row's fold for the reasons and the AI note (UI_COPY_SPEC §10 個股頁候選列).
 export const CANDIDATE_MORE_LABEL = '理由與 AI 進出點說明'
 export const LEVELS_MISSING_TEXT = '觀察價位未產生：這個資料日的條件價位尚未計算或計算失敗。'
+// Issue 581: the row's condition fold. Labels already end in 條件 (突破條件, 回踩條件), so only 明細 is added to them.
+export const conditionDetailsTitle = (label: string) => `${label.endsWith('條件') ? label : `${label}條件`}明細`
 
 export const STATUS_LABELS: Record<StrategyBoardStatus, string> = {
   conditional: '成立',

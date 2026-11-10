@@ -85,8 +85,9 @@ const tpexBars: StockBarsResponse = {
   ...taiexBars(days.map((row, i) => ({ ...row, open: 300 + i, high: 302 + i, low: 299 + i, close: 301 + i, volume: 1_069_692_000, source: 'tpex_index_ohlcv' }))),
   instrument: { id: 10, exchange: 'TPEx', symbol: 'TPEX', name: '櫃買指數', instrument_type: 'index' },
 }
-// TX from the first collect only: 12 sessions, so fewer than the limit (UI_COPY_SPEC §11 「自 … 起收集」).
-const txRows = Array.from({ length: 12 }, (_, i) => bar(dateOf(28 + i), 46000 + i * 10, { open: 45990 + i * 10, high: 46100 + i * 10, low: 45900 + i * 10, volume: 143277, source: 'taifex_daily_futures', contract_month: i < 6 ? '202609' : '202610', open_interest: 125000 + i, settlement_price: 45995 + i * 10 }))
+// TX from the first collects only: 12 sessions, so fewer than the limit (UI_COPY_SPEC §11 「自 … 起收集」); futDataDown
+// rows before the OpenAPI ones (Issue 590), as in the production DB.
+const txRows = Array.from({ length: 12 }, (_, i) => bar(dateOf(28 + i), 46000 + i * 10, { open: 45990 + i * 10, high: 46100 + i * 10, low: 45900 + i * 10, volume: 143277, source: i < 6 ? 'taifex_futdatadown' : 'taifex_daily_futures', contract_month: i < 6 ? '202609' : '202610', open_interest: 125000 + i, settlement_price: 45995 + i * 10 }))
 const txBars: StockBarsResponse = { ...taiexBars(txRows), instrument: { id: 11, exchange: 'TAIFEX', symbol: 'TX', name: '臺股期貨近月', instrument_type: 'futures' } }
 // A FRED series: closes only (Issue 547).
 const fredRows = days.map((row) => ({ ...row, open: null, high: null, low: null, volume: null, source: 'fred_close', price_reason: 'source_missing_ohlc' }))

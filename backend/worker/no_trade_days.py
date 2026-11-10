@@ -25,12 +25,13 @@ from collections.abc import Iterable
 from datetime import date
 from typing import Any, Callable
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import Instrument, MarketBar, NoTradeDay, RawPayload
 from app.raw_paths import payload_file
 from worker.sources import (
+    TPEX_DAILY_ENDPOINT,
     TPEX_HISTORY_API,
     TWSE_DAILY_HISTORY_ENDPOINT,
     NoTradeRecord,
@@ -67,12 +68,15 @@ def _parse_tpex(payload: Any, trading_date: date) -> list[NoTradeRecord] | None:
     return parse_tpex_no_trade_rows(payload, data_as_of=as_of)
 
 
-# exchange -> (raw_payloads.source, endpoint without the query, parser)
+# exchange -> (raw_payloads.source, endpoints without the query, parser).
+# The current TPEx session's table may be the OpenAPI one (Issue #579): the
+# same rows, with ``---`` prices on a no-trade row.
 CAPTURES: dict[
-    str, tuple[str, str, Callable[[Any, date], list[NoTradeRecord] | None]]
+    str,
+    tuple[str, tuple[str, ...], Callable[[Any, date], list[NoTradeRecord] | None]],
 ] = {
-    "TWSE": ("twse", TWSE_DAILY_HISTORY_ENDPOINT, _parse_twse),
-    "TPEx": ("tpex", TPEX_HISTORY_API, _parse_tpex),
+    "TWSE": ("twse", (TWSE_DAILY_HISTORY_ENDPOINT,), _parse_twse),
+    "TPEx": ("tpex", (TPEX_HISTORY_API, TPEX_DAILY_ENDPOINT), _parse_tpex),
 }
 
 
@@ -99,9 +103,14 @@ def _load(capture: RawPayload, trading_date: date) -> Any:
         raise NoTradeDayError(
             f"raw payload {capture.id} is not JSON: {capture.payload_path}: {exc}"
         ) from exc
+    if isinstance(payload, list):
+        # A TPEx OpenAPI table (Issue #579) names its session on every row; an
+        # empty one is no answer for any date.
+        if not payload:
+            return None
     # A date-less no-match answer (a TWSE holiday) or an empty table (a TPEx
     # holiday) has no rows to read: no evidence, and not a missing report.
-    if not isinstance(payload, dict) or not _has_tabular_rows(payload):
+    elif not isinstance(payload, dict) or not _has_tabular_rows(payload):
         return NO_ROWS
     try:
         _require_reported_date(payload, trading_date, capture.endpoint.split("?")[0])
@@ -111,27 +120,30 @@ def _load(capture: RawPayload, trading_date: date) -> Any:
 
 
 def _captures(db: Session, exchange: str, trading_date: date) -> list[RawPayload]:
-    source, endpoint, _parse = CAPTURES[exchange]
+    """The date's captures of the exchange's quote tables, newest first."""
+
+    source, endpoints, _parse = CAPTURES[exchange]
     rows = db.scalars(
         select(RawPayload)
         .where(
             RawPayload.source == source,
-            RawPayload.endpoint.like(f"{endpoint}%"),
+            or_(*(RawPayload.endpoint.like(f"{endpoint}%") for endpoint in endpoints)),
             RawPayload.data_as_of.like(f"{trading_date.isoformat()}%"),
         )
         .order_by(RawPayload.collected_at.desc(), RawPayload.id.desc())
     ).all()
-    # ``like`` also matches a longer path; keep the endpoint itself.
-    return [row for row in rows if row.endpoint.split("?")[0] == endpoint]
+    # ``like`` also matches a longer path; keep the endpoints themselves.
+    return [row for row in rows if row.endpoint.split("?")[0] in endpoints]
 
 
 def _session_dates(db: Session, start: date | None, end: date | None) -> list[date]:
     """Sessions with a stored daily quote capture of either exchange, in order."""
 
     found: set[date] = set()
-    for source, endpoint, _parse in CAPTURES.values():
+    for source, endpoints, _parse in CAPTURES.values():
         query = select(RawPayload.data_as_of).where(
-            RawPayload.source == source, RawPayload.endpoint.like(f"{endpoint}%")
+            RawPayload.source == source,
+            or_(*(RawPayload.endpoint.like(f"{endpoint}%") for endpoint in endpoints)),
         )
         for (value,) in db.execute(query).all():
             try:

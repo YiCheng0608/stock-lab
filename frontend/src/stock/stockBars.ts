@@ -80,7 +80,8 @@ export function barSources(bar: StockBarRow): string[] {
 
 // Index and futures daily bars (Issue 552): the TAIEX close-only rows, the monthly index reports and TAIFEX open data.
 export const INDEX_BAR_SOURCES: ReadonlySet<string> = new Set(['twse_index_ohlcv', 'tpex_index_ohlcv'])
-export const FUTURES_BAR_SOURCE = 'taifex_daily_futures'
+// TX near-month bars (Issue 590): the OpenAPI daily collect and the website futDataDown history (#563, gap fill #586).
+export const FUTURES_BAR_SOURCES: ReadonlySet<string> = new Set(['taifex_daily_futures', 'taifex_futdatadown'])
 // The US index bars: FinMind since Issue 568; FRED's close-only rows (Issue 547), Federal Reserve Bank of St. Louis.
 export const FINMIND_US_INDEX_SOURCE = 'finmind_us_index'
 export const FRED_BAR_SOURCE = 'fred_close'
@@ -91,7 +92,7 @@ export const INDEX_SHARE_SOURCES: ReadonlySet<string> = new Set([...INDEX_BAR_SO
 export function sourceName(source: string): string {
   if (source === 'twse' || source === 'twse_index' || source === 'twse_index_ohlcv') return '臺灣證券交易所'
   if (source === 'tpex' || source === 'tpex_index_ohlcv') return '證券櫃檯買賣中心'
-  if (source === FUTURES_BAR_SOURCE) return '臺灣期貨交易所'
+  if (FUTURES_BAR_SOURCES.has(source)) return '臺灣期貨交易所'
   if (source === FINMIND_US_INDEX_SOURCE) return 'FinMind'
   if (source === FRED_BAR_SOURCE) return 'FRED（聖路易聯邦準備銀行）'
   return '來源待核實'
@@ -324,7 +325,7 @@ export function volumeKind(sources: readonly string[]): VolumeKind {
   if (!sources.length) return 'unverified'
   if (sources.every(isVerifiedShareSource)) return 'lots'
   if (sources.every((source) => INDEX_SHARE_SOURCES.has(source))) return 'index_shares'
-  if (sources.every((source) => source === FUTURES_BAR_SOURCE)) return 'contracts'
+  if (sources.every((source) => FUTURES_BAR_SOURCES.has(source))) return 'contracts'
   return 'unverified'
 }
 

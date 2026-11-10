@@ -100,7 +100,7 @@ from app.tracking import (
 from app.trading_calendar import NextSession, next_session
 from worker import mops_events
 from app.indicators import is_synthetic_bar
-from app.coverage import SESSION_BASIS_START
+from app.coverage import SESSION_BASIS_START, verified_taiex_sessions
 from worker.emerging_issuers import store_emerging_issuers
 from worker.futures_bars import store_futures_bars
 from worker.index_bars import INDEX_BAR_SOURCES, store_index_bars, warnings_for
@@ -120,7 +120,9 @@ from worker.sources import (
     TWSE_CHIP_ENDPOINT,
     TWSE_LISTED_ENDPOINT,
     TWSE_NEW_LISTING_ENDPOINT,
+    TPEX_CHIP_ENDPOINT,
     TPEX_CHIP_HISTORY_ENDPOINT,
+    TPEX_DAILY_ENDPOINT,
     TPEX_LISTED_ENDPOINT,
     TWSE_ETF_ENDPOINT,
     TPEX_ETF_ENDPOINT,
@@ -751,7 +753,11 @@ def _official_institutional_file_evidence(
     chip row linked to a raw payload of that endpoint and date is the evidence.
     """
 
-    endpoints = {"TWSE": TWSE_CHIP_ENDPOINT, "TPEx": TPEX_CHIP_HISTORY_ENDPOINT}
+    # The current TPEx session's file may be the OpenAPI table (Issue #579).
+    endpoints = {
+        "TWSE": {TWSE_CHIP_ENDPOINT},
+        "TPEx": {TPEX_CHIP_HISTORY_ENDPOINT, TPEX_CHIP_ENDPOINT},
+    }
     rows = db.execute(
         select(
             Instrument.exchange,
@@ -771,7 +777,7 @@ def _official_institutional_file_evidence(
             exchange in OFFICIAL_INSTITUTIONAL_CHIP_SOURCES
             and (source or "").split("+")[0]
             == OFFICIAL_INSTITUTIONAL_CHIP_SOURCES[exchange]
-            and (endpoint or "").split("?", 1)[0] == endpoints[exchange]
+            and (endpoint or "").split("?", 1)[0] in endpoints[exchange]
             and data_as_of == trading_date.isoformat()
         ):
             evidence[exchange] = min(raw_id, evidence.get(exchange, raw_id))
@@ -3876,7 +3882,9 @@ DORMANT_SESSIONS = 60
 # The pre-rwd TWSE all-security report, still present in older captures.
 TWSE_LEGACY_DAILY_HISTORY_ENDPOINT = "https://www.twse.com.tw/exchangeReport/MI_INDEX"
 QUOTE_TABLE_ENDPOINTS = {
-    "TPEx": RawPayload.endpoint == TPEX_HISTORY_API,
+    # The current session's table is the OpenAPI one (Issue #579); every row
+    # of either table is a listed code, traded or not.
+    "TPEx": RawPayload.endpoint.in_((TPEX_HISTORY_API, TPEX_DAILY_ENDPOINT)),
     "TWSE": RawPayload.endpoint.startswith(TWSE_DAILY_HISTORY_ENDPOINT + "?")
     | RawPayload.endpoint.startswith(TWSE_LEGACY_DAILY_HISTORY_ENDPOINT + "?"),
 }
@@ -4473,8 +4481,10 @@ def _json_safe(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # only; they never set bar flags), the display-only market summaries (the
 # TWSE MI_INDEX summary tables and the TPEx highlight, Issue #275), the TPEx
 # emerging roster (names for AI news candidates only, Issue #512), the
-# display-only monthly revenue snapshots (Issue #530), and a skipped
-# instrument status sync (the watchdog reports it).  Every other warning,
+# display-only monthly revenue snapshots (Issue #530), a skipped instrument
+# status sync (the watchdog reports it), and a TPEx OpenAPI table that was not
+# used or lacks a 管理股票 (Issue #579: the website report was read instead,
+# or the source is kept and the gap is only reported).  Every other warning,
 # including any not matched here, concerns OHLCV, the TAIEX baseline, the
 # holiday calendar or chips, and keeps the collect partial.
 NONCORE_WARNING_PATTERN = re.compile(
@@ -4484,7 +4494,8 @@ NONCORE_WARNING_PATTERN = re.compile(
     r"|index bars "
     r"|futures bars "
     r"|us index bars "
-    r"|instrument status sync skipped)"
+    r"|instrument status sync skipped"
+    r"|TPEx OpenAPI )"
 )
 
 
@@ -4525,24 +4536,95 @@ def store_collect_futures_bars(
     warnings: list[str],
     *,
     force: bool = False,
+    current_sessions: Iterable[date] = (),
 ) -> dict[str, Any]:
-    """collect's TX near-month step (worker.futures_bars, Issue #552); non-core."""
+    """collect's TX near-month step (worker.futures_bars, #552, #586); non-core.
+
+    A bar is of the session the report holds, which may be before the collect
+    day.  It is written only for a verified session
+    (``app.coverage.verified_taiex_sessions``, plus ``current_sessions``: the
+    TAIEX days this collect itself wrote, whose run is still running); a
+    session another source already stored is kept (``store_futures_bars``).
+    """
 
     if not bars:
         return {}
+    days = sorted({bar.trading_date for bar in bars})
     try:
-        with db.begin_nested():
-            result = store_futures_bars(db, bars, raw_id, force=force)
+        verified = set(verified_taiex_sessions(db, days[0], days[-1]))
     except Exception as exc:
         warnings.append(
             f"futures bars unavailable for collect: {type(exc).__name__}: {exc}"
         )
         return {"failed": len(bars)}
-    if result.conflicts:
-        warnings.append(
-            f"futures bars kept {len(result.conflicts)} stored TX session(s) that differ from the report"
-        )
-    return result.metadata()
+    verified.update(current_sessions)
+    unverified = sorted(
+        bar.trading_date.isoformat() for bar in bars if bar.trading_date not in verified
+    )
+    for day in unverified:
+        warnings.append(f"futures bars skipped TAIFEX TX {day}: not a verified session")
+    usable = [bar for bar in bars if bar.trading_date in verified]
+    result = None
+    if usable:
+        try:
+            with db.begin_nested():
+                result = store_futures_bars(db, usable, raw_id, force=force)
+        except Exception as exc:
+            warnings.append(
+                f"futures bars unavailable for collect: {type(exc).__name__}: {exc}"
+            )
+            return {"failed": len(usable), "unverified_dates": unverified}
+        if result.conflicts:
+            warnings.append(
+                f"futures bars kept {len(result.conflicts)} stored TX session(s) that differ from the report"
+            )
+    metadata = result.metadata() if result is not None else {}
+    return {
+        **metadata,
+        "report_dates": [day.isoformat() for day in days],
+        "unverified_dates": unverified,
+    }
+
+
+def fill_collect_futures_gaps(
+    db: Session,
+    run: IngestionRun,
+    get: Callable[..., Any] | None,
+    score_date: date,
+    *,
+    enabled: bool,
+) -> dict[str, Any]:
+    """After a snapshot collect: fill the recent TX gaps (worker.futures_history, #586).
+
+    Runs once the collect is committed, as its own ``futures_bar_backfill``
+    run; its summary is added to the collect run's metadata
+    (``futures_gap_fill``).  Non-core: a failure is recorded there and never
+    changes the collect's status.  No getter (an adapter on fixture feeds) or
+    a collect that is not of a session asks nothing.
+    """
+
+    if not enabled or get is None:
+        return {}
+    from worker.futures_history import fill_recent_gaps
+
+    try:
+        result = fill_recent_gaps(db, before=score_date, get=get, trigger="collect")
+    except Exception as exc:
+        db.rollback()
+        result = {"status": "failed", "error": f"{type(exc).__name__}: {exc}"}
+    try:
+        stored = db.get(IngestionRun, run.id)
+        if stored is not None:
+            stored.metadata_json = {
+                **(stored.metadata_json or {}),
+                # Strings, numbers and lists of them only.
+                "futures_gap_fill": result,
+            }
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        result = {**result, "metadata_error": f"{type(exc).__name__}: {exc}"}
+    return result
 
 
 def taiwan_bar_dates(
@@ -4765,6 +4847,8 @@ def collect(
             normalized_bars = 0
             normalized_non_index_bars = 0
             normalized_index_bars = 0
+            # This collect's TAIEX days: sessions for the TX step (Issue #586).
+            taiex_dates: set[date] = set()
             normalized_chips = 0
             normalized_dates: list[date] = []
             normalized_instruments: set[tuple[str, str]] = set()
@@ -4808,6 +4892,11 @@ def collect(
                     normalized_non_index_bars += 1
                 else:
                     normalized_index_bars += 1
+                    if record.exchange == "TWSE" and record.symbol in {
+                        "TAIEX",
+                        "TWII",
+                    }:
+                        taiex_dates.add(record.trading_date)
             normalized_date_set = set(normalized_dates)
             verified_no_data_dates = sorted(
                 item for item in batch_no_data_dates if item not in normalized_date_set
@@ -4894,6 +4983,7 @@ def collect(
                 lambda digest: _raw_id_for_digest(raw_ids, digest),
                 batch.warnings,
                 force=force,
+                current_sessions=taiex_dates,
             )
             event_coverage = dict(batch.event_coverage or {})
             if not event_coverage:
@@ -5219,6 +5309,8 @@ def collect(
                 "index_daily_bars": index_daily_bars,
                 "futures_daily_bars": futures_daily_bars,
                 "raw_payloads": raw_payload_count,
+                # Issue #579: the endpoint each TPEx core feed was read from.
+                "feed_sources": dict(getattr(batch, "feed_sources", {}) or {}),
                 "warnings": list(batch.warnings),
                 "core_warnings": core_warnings,
                 "noncore_warnings": noncore_warnings,
@@ -5307,12 +5399,22 @@ def collect(
             # (#476).  Idempotent; it keeps Event/raw provenance.
             project_news(db)
             db.commit()
+            futures_gap_fill = fill_collect_futures_gaps(
+                db,
+                run,
+                getattr(active_adapter, "futures_history_get", None),
+                score_date,
+                enabled=bool(batch.snapshot_feeds)
+                and run.status != "skipped"
+                and score_date not in verified_no_data_dates,
+            )
             return {
                 "status": run.status,
                 "date": score_date.isoformat(),
                 "start_date": start_date.isoformat(),
                 "data_as_of": run.data_as_of,
                 "requested_data_as_of": batch.data_as_of or score_date.isoformat(),
+                "futures_gap_fill": futures_gap_fill,
                 "records": normalized_bars,
                 "taiex_records": normalized_index_bars,
                 "chips": normalized_chips,
@@ -5333,6 +5435,7 @@ def collect(
                 },
                 "run_id": run.id,
                 "industry_membership_observations": industry_result,
+                "feed_sources": dict(getattr(batch, "feed_sources", {}) or {}),
                 "warnings": batch.warnings,
                 "core_warnings": core_warnings,
                 "noncore_warnings": noncore_warnings,
@@ -6173,6 +6276,13 @@ def summarize_backtest(db: Session, run_id: int | None = None) -> dict[str, Any]
     return _summarize_backtest_run(db, run)
 
 
+def _utc_iso(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    aware = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return aware.astimezone(timezone.utc).isoformat()
+
+
 def _backtest_summary(
     run: IngestionRun,
     grouped: dict[tuple[str, str, str, int], dict[str, Any]],
@@ -6201,6 +6311,9 @@ def _backtest_summary(
             "tracking_version": backtest_tracking_version(run.request_key),
             "run_date": run.run_date.isoformat() if run.run_date else None,
             "data_as_of": run.data_as_of,
+            # Stored naive UTC; the research page shows when a running run began (#581).
+            "started_at": _utc_iso(run.started_at),
+            "finished_at": _utc_iso(run.finished_at),
             "metadata": metadata,
             "assessment": assessment,
             "zero_actionable_count": zero_actionable_count,
@@ -6290,15 +6403,30 @@ def _summarize_backtest_run(db: Session, run: IngestionRun) -> dict[str, Any]:
     return _backtest_summary(run, grouped, zero_actionable)
 
 
-def close_abandoned_backtests(db: Session) -> list[int]:
+ABANDONED_AT_BACKTEST_START = (
+    "abandoned: still running when the next canonical backtest started,"
+    " which holds maintenance mode alone"
+)
+ABANDONED_AT_DAILY_START = (
+    "abandoned: still running when a daily started with no maintenance hold;"
+    " a canonical backtest runs only holding it"
+)
+
+
+def close_abandoned_backtests(
+    db: Session, reason: str = ABANDONED_AT_BACKTEST_START
+) -> list[int]:
     """Close the canonical backtest runs a dead process left ``running`` (#484).
 
     A canonical backtest runs only through ``worker.cli backtest``, which holds
     maintenance mode (``worker.job.MaintenanceHold``: one backfill or backtest at
-    a time), so a canonical run still ``running`` when another one starts has no
-    process left; run 2286 was ended by the OOM killer.  It is closed as the
-    other jobs close theirs: ``failed`` with an ``abandoned:`` error.  Research
-    runs (``:research:`` keys) run on copies outside that hold and are left alone.
+    a time), so a canonical run still ``running`` when another one starts, or
+    when a daily starts with no maintenance marker (#581,
+    ``schedule_runs.close_abandoned_backtests_at_daily_start``), has no process
+    left; run 2286 was ended by the OOM killer.  It is closed as the other jobs
+    close theirs: ``failed`` with an ``abandoned:`` error (``reason`` says which
+    start found it).  Research runs (``:research:`` keys) run on copies outside
+    that hold and are never closed here.
     """
 
     now = utcnow()
@@ -6314,10 +6442,7 @@ def close_abandoned_backtests(db: Session) -> list[int]:
     ).all()
     for row in rows:
         row.status = "failed"
-        row.error = (
-            "abandoned: still running when the next canonical backtest started,"
-            " which holds maintenance mode alone"
-        )
+        row.error = reason
         row.finished_at = now
     if rows:
         db.commit()

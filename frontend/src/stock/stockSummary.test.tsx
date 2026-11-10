@@ -41,7 +41,7 @@ const conditionalPullback = (): StrategyBoardRow => ({ ...conditionalBreakout(),
 
 // ---- the verdict: the first rule that holds (UI_COPY_SPEC §8.2 目前判斷) ----
 const buy = stockVerdict(board([observationBreakout(), conditionalPullback()], candidateSummary), action({ action_state: 'conditional_entry' }))
-check(buy.label === '可買' && buy.tone === 'success' && buy.reason === '每日候選第 3 名 · 總分 78 · 回踩條件', `candidate: 可買 with its rank, got ${JSON.stringify(buy)}`)
+check(buy.label === '條件成立' && buy.tone === 'success' && buy.reason === '每日候選第 3 名 · 總分 78 · 回踩條件', `candidate (Issue 581): 條件成立, not 可買, with its rank, got ${JSON.stringify(buy)}`)
 const exit = stockVerdict(board([conditionalBreakout()], candidateSummary), action({ action_state: 'reduce_exit', held: true, display_instruction: '已碰到既定風險條件，重新研究處置。' }))
 check(exit.label === '持倉風險' && exit.tone === 'warning' && exit.reason === '已碰到既定風險條件，重新研究處置。', `a holding risk wins over the candidate, got ${JSON.stringify(exit)}`)
 const gaps = [{ code: 'listed_under_threshold', label: '上市（櫃）後只有 41 個交易日，未滿 60 個交易日' }, { code: 'official_no_trade', label: '近 60 個交易日有 3 天官方行情無成交' }]
@@ -75,7 +75,7 @@ check(closestStrategy(board([])) === null && closestStrategy(null) === null, 'no
 const card = render(<StockSummaryCard board={board([observationBreakout(), conditionalPullback()], candidateSummary)} action={action({ action_state: 'conditional_entry' })} researchHref="?tab=research" />)
 for (const label of ['目前判斷', '最接近成立', '規則價位']) check(card.includes(`>${label}<`), `summary card: the ${label} column`)
 check(card.indexOf('目前判斷') < card.indexOf('最接近成立') && card.indexOf('最接近成立') < card.indexOf('規則價位'), 'summary card: the three columns in order')
-check(card.includes('資料 2026/10/22') && text(card).includes('可買 每日候選第 3 名 · 總分 78 · 回踩條件'), `summary card: date, verdict and reason: ${text(card).slice(0, 200)}`)
+check(card.includes('資料 2026/10/22') && text(card).includes('條件成立 每日候選第 3 名 · 總分 78 · 回踩條件'), `summary card: date, verdict and reason: ${text(card).slice(0, 200)}`)
 check(text(card).includes('回踩條件') && text(card).includes('成立') && text(card).includes('差：全部達成'), 'summary card: the closest strategy, its status and 差：全部達成')
 check(card.includes('class="level-entry">2,400.00') && card.includes('class="level-stop">2,364.00') && card.includes('class="level-target">2,458.00／2,508.00'), 'summary card: the actionable levels with the level classes')
 check(card.includes('href="/stocks/TWSE/2884?tab=research"') && card.includes('完整條件 →'), 'summary card: 完整條件 → opens the research tab')
