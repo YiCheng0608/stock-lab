@@ -1,4 +1,8 @@
-"""Research backtest on a copy of stock.db: canonical strategies, ablations (#318), regime filters (#546), index conditions (#567).
+"""Research backtest on a copy of stock.db: canonical strategies, ablations (#318), regime filters (#546), index conditions (#567), aggressive versions (#598).
+
+``--aggressive`` (``app.strategies.aggressive``) runs alone: its fixed bases
+(``breakout_v3``, ``pullback_v4``) are the baselines, followed by the versions
+it names; combining it with the other research flags is refused.
 
 Runs ``worker.pipeline.backtest(registry=...)`` once over ``--start``..``--end``
 on the database given by ``--db`` (a ``tools/ops/copy_db.py`` copy or another
@@ -77,6 +81,13 @@ def _parser() -> argparse.ArgumentParser:
         default=[],
         metavar="STRATEGY:CONDITION",
         help="index-condition strategies to add, e.g. pullback_v3:c1; 'all' for every one",
+    )
+    parser.add_argument(
+        "--aggressive",
+        nargs="*",
+        default=[],
+        metavar="STRATEGY:VARIANT",
+        help="aggressive versions to add, e.g. breakout_v3:a1; 'all' for every one",
     )
     parser.add_argument(
         "--slim",
@@ -396,6 +407,21 @@ NOT_ACTIONABLE = ("observation", "data_incomplete", "invalid_levels")
 SLIM_MARK = "tools/research/backtest_research.py --slim (#546)"
 
 
+def aggressive_items(names: list[str]) -> list[tuple[str, str]]:
+    from app.strategies.aggressive import all_variants
+
+    if names == ["all"]:
+        return all_variants()
+    known = set(all_variants())
+    items = []
+    for name in names:
+        key, _, code = name.partition(":")
+        if (key, code) not in known:
+            raise Refused(f"unknown aggressive version {name!r}")
+        items.append((key, code))
+    return items
+
+
 def slim_pending(db, prefix: str, kinds: dict[int, str]) -> int:
     """Cut down the session's unflushed non-actionable signals of ``prefix``.
 
@@ -547,6 +573,7 @@ def main(argv: list[str] | None = None) -> int:
     sys.path.insert(0, str(ROOT / "backend"))
     from app.db import init_db
     from app.strategies import REGISTRY
+    from app.strategies import aggressive
     from app.strategies.ablation import research_registry
     from app.strategies.index_conditions import BASES, with_conditions
     from app.strategies.regime import with_regimes
@@ -556,7 +583,20 @@ def main(argv: list[str] | None = None) -> int:
         items = ablation_items(args.ablate)
         regimes = regime_items(args.regime)
         conditions = condition_items(args.index_condition)
-        if items or not (regimes or conditions):
+        variants = aggressive_items(args.aggressive)
+        if variants and (items or regimes or conditions):
+            # Each family has its own fixed baselines; one run measures one.
+            raise Refused(
+                "--aggressive cannot be combined with --ablate, --regime "
+                "or --index-condition"
+            )
+        if variants:
+            # Their fixed bases are the baselines, whatever REGISTRY holds
+            # (app.strategies.aggressive.BASES).
+            registry = aggressive.with_variants(
+                {} if args.no_canonical else dict(aggressive.BASES), variants
+            )
+        elif items or not (regimes or conditions):
             registry = research_registry(items, canonical=not args.no_canonical)
         elif regimes:
             registry = {} if args.no_canonical else dict(REGISTRY)
