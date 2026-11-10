@@ -1289,9 +1289,8 @@ export type StockDirectoryRow = {
   action_state?: string
   action_label_zh?: string
   data_quality?: string
+  // /api/stocks sends the first missing item only (Issue 602).
   missing_data_priority?: MissingDataPriority[]
-  product_time?: ProductTime
-  response_generated_at?: string
 }
 
 export type GapReason = {

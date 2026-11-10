@@ -1927,3 +1927,41 @@ def test_s13_reads_the_empty_reason_by_instrument_type(tmp_path):
         _s13(tmp_path, stock, page)
     with pytest.raises(page_checks.Fail, match="卻有月份列"):
         _s13(tmp_path, etf, page + MONTHLY_TEXT)
+
+
+def _s2(tmp_path, rows):
+    payload = {
+        "items": [
+            {"instrument": {"symbol": symbol, "instrument_type": kind}}
+            for symbol, kind in rows
+        ],
+        "meta": {"total": len(rows)},
+    }
+    page = (
+        "代號\t名稱\t交易所\t類型\t最近收盤（元）\t目前研究動作\n"
+        + "".join(f"{symbol}\t名稱\n" for symbol, _ in rows)
+        + f"第 1／1 頁 · 共 {len(rows)} 筆\n"
+    )
+    run = FakeRun(
+        tmp_path, {"stocks?page=1&page_size=30": payload}, {"stocks-1280": page}
+    )
+    return page_checks.s2(run, None)
+
+
+def test_s2_passes_on_the_type_then_symbol_order(tmp_path):
+    # #602: stocks first, then ETFs and new listings, each by symbol.
+    rows = [("1101", "stock"), ("3105", "stock"), ("0050", "etf"), ("7795", "ipo")]
+    assert "類型→代號順序" in _s2(tmp_path, rows)
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        # The old exchange-then-symbol order put a TPEx bond ETF first.
+        [("00679B", "etf"), ("1101", "stock")],
+        [("2330", "stock"), ("1101", "stock")],
+    ],
+)
+def test_s2_fails_on_another_order(tmp_path, rows):
+    with pytest.raises(page_checks.Fail, match="類型→代號"):
+        _s2(tmp_path, rows)

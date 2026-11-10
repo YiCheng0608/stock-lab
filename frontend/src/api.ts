@@ -238,7 +238,11 @@ export const getTheme = (id: string) => get<ThemeDetail>(`/themes/${encodeURICom
 export const getThemeMembers = (id: string, params: PageParams & { sort?: string } = {}) =>
   get<ThemeMembersResponse>(`/themes/${encodeURIComponent(id)}/members${queryString(params)}`)
 
-export const getStocks = (params: PageParams & { exchange?: string; instrument_type?: string; theme_id?: string; watchlist_only?: boolean } = {}) =>
+// The q of /stocks, /instruments and /signals is at most this long; longer is a 422 (Issue 602).
+export const SEARCH_MAX_LENGTH = 100
+// /api/stocks sort values (Issue 602); the API answers any other value with a 422.
+export type StockSort = 'type' | 'symbol' | 'name' | 'close_desc' | 'close_asc'
+export const getStocks = (params: PageParams & { exchange?: string; instrument_type?: string; theme_id?: string; watchlist_only?: boolean; sort?: StockSort } = {}) =>
   get<{ items: StockDirectoryRow[]; meta: Record<string, unknown> }>(`/stocks${queryString(params)}`)
 
 export const getStock = (exchange: string, symbol: string, asOf?: string) =>

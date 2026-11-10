@@ -311,6 +311,14 @@
 - **其他**：`meta.matched_total` > 0 時寫「另有 {N} 個建議與既有產業或題材同名，不另列出。」；列表被 `limit` 截斷時寫「依關聯新聞則數顯示前 {顯示數} 個，共 {total} 個。」
 - **空狀態**：標題「目前沒有新聞題材建議」，原因「新聞 AI 判讀尚未提出與既有族群不同名的題材」。
 
+### 8.7 個股清單
+
+個股頁 `/stocks` 的標的目錄（[#602](https://github.com/YiCheng0608/stock-lab/issues/602)）。
+
+- **欄位**：代號、名稱、交易所、類型、最近收盤（元）、目前研究動作。「目前研究動作」是行動摘要的動作標籤（`action_state`／`action_label_zh`，資料不足寫「暫不行動」）；資料不足時下一行 12px muted 小字寫第一個缺項（`missing_data_priority[0].field` 經 §9 的原因碼對照，例如「缺少 20 日有效行情」），其他動作只寫標籤。不另列「策略判斷資料」：它與研究動作同向（`data_quality=partial` 就是資料不足，2026-11-09 全量 2,357 檔無例外，[#602 交叉表](https://github.com/YiCheng0608/stock-lab/issues/602#issuecomment-6760088832)）；`data_quality` 是 `partial` 而動作不是資料不足時（例如持倉的需人工判讀），照樣只寫動作標籤。手機卡片同一格。
+- **排序**：篩選列最後一個「排序」下拉（`filter-select`，無障礙名稱「個股排序」）：「類型（股票在前）」（預設：股票、ETF、新上市依序，同類型內依代號，同代號再依交易所）、「代號」、「名稱」、「最近收盤高到低」、「最近收盤低到高」（沒有收盤的排最後）。換排序、搜尋、類型或自選都回到第 1 頁。不提供依研究動作排序（即時算全量約 81 秒，[決定](https://github.com/YiCheng0608/stock-lab/issues/602#issuecomment-6760099353)）。
+- **搜尋**：比對代號或名稱的字面（`%`、`_` 不當萬用字元），最多 100 字；導覽列搜尋框（§15）同一上限。
+
 ## 9. 中文原因碼對照
 
 reason code 的日常文案由 `backend/app/presentation.py`（`REASON_LABELS`、`display_reason`）與 `frontend/src/presentation.ts` 提供，下表只列原則與代表列。未知 code 一律顯示「研究條件需要人工核對」，原值只留稽核層；不同策略的 code 保留各自範圍。

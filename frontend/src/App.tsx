@@ -22,6 +22,7 @@ import {
   getStock,
   getStockBars,
   getStocks,
+  SEARCH_MAX_LENGTH,
   getStrategies,
   getTheme,
   getThemeMembers,
@@ -35,6 +36,7 @@ import {
   getPortfolio,
   upsertPortfolio,
 } from './api'
+import type { StockSort } from './api'
 import type {
   ChipGroupSource,
   ActionSummary,
@@ -69,7 +71,7 @@ import { formatDay, formatTaipeiDay, formatTaipeiMinute } from './dates'
 import { noPreviousCloseText } from './marketChange'
 import { formatPortfolioValue, formatPositionValuation, formatLocalPositionValuation, formatPortfolioClose, formatQuoteRecord, portfolioValueFromText } from './portfolioValues'
 import { formatFixed, formatTableNumber, formatTableVolume, formatTableVolumeShares, formatTableChip,formatShareQuantity, formatPositionShares, positionQuantityFromText, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, type ShareUnit } from './units'
-import { backtestStartedText, backtestTrackingLabel, officialEventDisplayTitle, formatProductTimeRole, PRODUCT_TIME_NOTE, levelFieldLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, gapNotApplicable, incompleteActionLabel, staleCloseDateLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stockGroupLabel, type ProductQualityKind } from './presentation'
+import { backtestStartedText, backtestTrackingLabel, officialEventDisplayTitle, formatProductTimeRole, PRODUCT_TIME_NOTE, levelFieldLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, gapNotApplicable, incompleteActionLabel, staleCloseDateLabel, stockDirectoryActionLabel, stockGroupLabel, type ProductQualityKind } from './presentation'
 import { Shell } from './components/Shell'
 import { Term } from './components/Term'
 import { Card, CardList, DataTable, EmptyState, Skeleton, Tabs, cx, tabId, tabPanelId, type Column } from './components/ui'
@@ -387,6 +389,7 @@ function SearchBox({
         onKeyDown={onKeyDown}
         placeholder={placeholder}
         aria-label="搜尋"
+        maxLength={SEARCH_MAX_LENGTH}
       />
       <button type="button" className="secondary-button" onClick={() => onSubmit()}>搜尋</button>
       {(draft || query) && <button type="button" className="secondary-button" onClick={onClear}>清除</button>}
@@ -583,9 +586,60 @@ function stockDirectoryColumns(dataAsOf: string | null): ReadonlyArray<Column<St
         return <>{formatTableNumber(row.latest_price ?? row.latest_bar?.close, 2)}{closeDate && <div className="small-note">{closeDate}</div>}</>
       },
     },
-    { key: 'action', header: '目前研究動作', cell: (row) => stockDirectoryActionLabel(row.action_state, row.action_label_zh) },
-    { key: 'quality', header: '策略判斷資料', cell: (row) => <span className="pill">{stockDirectoryQualityLabel(row.data_quality)}</span> },
+    { key: 'action', header: '目前研究動作', cell: (row) => <StockDirectoryAction row={row} /> },
   ]
+}
+
+// One column for the research action (Issue 602): data_quality only ever said the same thing (partial ⇔ 資料不足).
+// Short of data, the first missing item goes under the label; any other action shows its label alone, whatever data_quality says.
+export function stockDirectoryGap(row: Pick<StockDirectoryRow, 'action_state' | 'missing_data_priority'>): string | null {
+  if (row.action_state !== 'data_insufficient') return null
+  const field = row.missing_data_priority?.[0]?.field?.trim()
+  return field ? productActionReasonLabel(field) : null
+}
+
+function StockDirectoryAction({ row }: { row: StockDirectoryRow }) {
+  const gap = stockDirectoryGap(row)
+  return <>{stockDirectoryActionLabel(row.action_state, row.action_label_zh)}{gap && <div className="small-note">{gap}</div>}</>
+}
+
+export const STOCK_SORTS: ReadonlyArray<{ id: StockSort; label: string }> = [
+  { id: 'type', label: '類型（股票在前）' },
+  { id: 'symbol', label: '代號' },
+  { id: 'name', label: '名稱' },
+  { id: 'close_desc', label: '最近收盤高到低' },
+  { id: 'close_asc', label: '最近收盤低到高' },
+]
+export const DEFAULT_STOCK_SORT: StockSort = 'type'
+
+export type StockDirectoryState = { search: string; page: number; type: string; watchlist: boolean; sort: StockSort }
+
+// Any change but the page itself starts again from page 1.
+export function changeStockDirectory(state: StockDirectoryState, change: Partial<Omit<StockDirectoryState, 'page'>>): StockDirectoryState {
+  return { ...state, ...change, page: 1 }
+}
+
+// The default order sends no sort, so the first page is the same request (and cache) as before a sort was picked.
+export function stockDirectoryParams(state: StockDirectoryState) {
+  return {
+    q: state.search || undefined,
+    page: state.page,
+    page_size: 30,
+    instrument_type: state.type || undefined,
+    watchlist_only: state.watchlist || undefined,
+    sort: state.sort === DEFAULT_STOCK_SORT ? undefined : state.sort,
+  }
+}
+
+export function StockSortSelect({ value, onChange }: { value: StockSort; onChange: (sort: StockSort) => void }) {
+  return (
+    <label className="member-sort">
+      <span>排序</span>
+      <select className="filter-select" aria-label="個股排序" value={value} onChange={(event) => onChange(event.target.value as StockSort)}>
+        {STOCK_SORTS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+      </select>
+    </label>
+  )
 }
 
 const STOCK_DIRECTORY_NOTE = '單位：價格為各標的報價幣別的元，指數為點。空白表示未提供資料或數值待核實；最近收盤早於最新交易日時，下方括號標出它的日期。'
@@ -602,7 +656,7 @@ function StockDirectoryCard({ row, dataAsOf }: { row: StockDirectoryRow; dataAsO
         <div className="stock-card-price">{formatTableNumber(row.latest_price ?? row.latest_bar?.close, 2)}{closeDate && <span className="small-note">{closeDate}</span>}</div>
       </div>
       <div className="stock-card-meta">{marketDisplayLabel(instrument.exchange)} · {instrumentTypeLabel(instrument.instrument_type)}</div>
-      <div className="stock-card-action"><span>{stockDirectoryActionLabel(row.action_state, row.action_label_zh)}</span><span className="pill">{stockDirectoryQualityLabel(row.data_quality)}</span></div>
+      <div className="stock-card-action"><StockDirectoryAction row={row} /></div>
     </div>
   )
 }
@@ -624,19 +678,20 @@ export function StockTable({ rows, dataAsOf }: { rows: StockDirectoryRow[]; data
 function StocksPage() {
   // The navbar search lands here as /stocks?q=...
   const [searchParams] = useSearchParams()
-  const navQuery = searchParams.get('q') ?? ''
+  // A hand-typed URL can be longer than the API takes (Issue 602).
+  const navQuery = (searchParams.get('q') ?? '').slice(0, SEARCH_MAX_LENGTH)
   const [draft, setDraft] = useState(navQuery)
-  const [search, setSearch] = useState(navQuery)
-  const [page, setPage] = useState(1)
-  useEffect(() => { setDraft(navQuery); setSearch(navQuery); setPage(1) }, [navQuery])
-  const [type, setType] = useState('')
-  const [watchlist, setWatchlist] = useState(false)
-  const query = useQuery({ queryKey: ['stocks', { search, page, type, watchlist }], queryFn: () => getStocks({ q: search || undefined, page, page_size: 30, instrument_type: type || undefined, watchlist_only: watchlist || undefined }) })
-  const submit = (value = draft.trim()) => { setSearch(value); setPage(1) }
-  const clear = () => { setDraft(''); setSearch(''); setPage(1) }
+  const [state, setState] = useState<StockDirectoryState>({ search: navQuery, page: 1, type: '', watchlist: false, sort: DEFAULT_STOCK_SORT })
+  const change = (next: Partial<Omit<StockDirectoryState, 'page'>>) => setState((current) => changeStockDirectory(current, next))
+  useEffect(() => { setDraft(navQuery); change({ search: navQuery }) }, [navQuery])
+  const { search, type, watchlist, sort } = state
+  const setPage = (page: number) => setState((current) => ({ ...current, page }))
+  const query = useQuery({ queryKey: ['stocks', state], queryFn: () => getStocks(stockDirectoryParams(state)) })
+  const submit = (value = draft.trim()) => change({ search: value })
+  const clear = () => { setDraft(''); change({ search: '' }) }
   return <QueryState loading={query.isLoading} error={query.error}>{query.data && <div className="page">
     <PageTitle eyebrow="市場標的目錄" title="個股" description="股票、ETF 與新上市標的分開標示；行動與缺資料優先級只來自已驗證官方快照。">
-      <div className="filter-row"><SearchBox draft={draft} query={search} placeholder="搜尋代號或名稱" onDraftChange={setDraft} onSubmit={submit} onClear={clear} /><select className="filter-select" value={type} onChange={(event) => { setType(event.target.value); setPage(1) }}><option value="">全部類型</option><option value="stock">股票</option><option value="etf">ETF</option><option value="ipo">新上市</option></select><label className="check-label"><input type="checkbox" checked={watchlist} onChange={(event) => { setWatchlist(event.target.checked); setPage(1) }} /> 我的自選</label></div>
+      <div className="filter-row"><SearchBox draft={draft} query={search} placeholder="搜尋代號或名稱" onDraftChange={setDraft} onSubmit={submit} onClear={clear} /><select className="filter-select" value={type} onChange={(event) => change({ type: event.target.value })}><option value="">全部類型</option><option value="stock">股票</option><option value="etf">ETF</option><option value="ipo">新上市</option></select><label className="check-label"><input type="checkbox" checked={watchlist} onChange={(event) => change({ watchlist: event.target.checked })} /> 我的自選</label><StockSortSelect value={sort} onChange={(next) => change({ sort: next })} /></div>
     </PageTitle>
     {query.data.items.length ? <StockTable rows={query.data.items} dataAsOf={typeof query.data.meta.data_as_of === 'string' ? query.data.meta.data_as_of : null} /> : <div className="empty panel">沒有符合條件的標的。</div>}
     <DirectoryPagination meta={query.data.meta} onPageChange={setPage} />
