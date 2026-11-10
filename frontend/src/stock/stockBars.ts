@@ -9,10 +9,10 @@ import { formatTableVolume, isVerifiedShareSource } from '../units'
 // Pure helpers for the stock page K-line, indicator panels and header quote (bars API, docs/spec/indicators.md).
 
 export const STOCK_BARS_LIMIT = 250
+// The bars API's largest `limit` (backend app.stock_bars.MAX_LIMIT): 「全部」 asks for it when 250 bars do not reach back.
+export const STOCK_BARS_MAX_LIMIT = 1500
 // The bars API price basis this page explains (backend app.indicators.PRICE_BASIS; v2 since Issue 394).
 export const PRICE_BASIS = 'as_of_date_raw_basis/v2'
-// Bars visible when a series first renders; the rest of the 250 stay reachable through dataZoom.
-export const DEFAULT_VISIBLE_BARS = 120
 
 export function stockBarsPath(exchange: string, symbol: string, interval: StockBarsInterval, limit = STOCK_BARS_LIMIT): string {
   const query = new URLSearchParams({ interval, limit: String(limit) })
@@ -265,6 +265,18 @@ export type ChartTheme = {
   ma5: string; ma10: string; ma20: string; ma60: string; ma120: string
 }
 
+// zrender 5.6 (under ECharts) reads Chromium Edge's "Edg/" as the old EdgeHTML Edge: it then listens to pointer events
+// only and drops every touch pointermove, so on a touch screen the crosshair does not follow the finger and a drag does
+// not pan (Issue 600, headless Edge with touch). This puts Chromium Edge on Chrome's path (touch events when the screen
+// has touch, mouse events otherwise). It changes the shared detection object before any chart is created.
+export type InputDetection = { browser: { newEdge: boolean }; touchEventsSupported: boolean; pointerEventsSupported: boolean }
+export function preferChromeInputPath(detected: InputDetection, hasTouch: boolean): boolean {
+  if (!detected.browser.newEdge || !detected.pointerEventsSupported) return false
+  detected.touchEventsSupported = hasTouch
+  detected.pointerEventsSupported = false
+  return true
+}
+
 // ECharts draws on canvas and cannot resolve var(); the component reads these tokens at runtime (DESIGN_SYSTEM §6).
 export const CHART_THEME_TOKENS: Record<keyof ChartTheme, string> = {
   up: '--color-up', down: '--color-down', flat: '--color-flat',
@@ -302,20 +314,143 @@ export function chartLayout(mainHeight: number): ChartLayout {
   return { main, volume, tabsTop, indicator, sliderTop, height: sliderTop + 28, left: 64, right: 16 }
 }
 
-export type ChartZoom = { start: number; end: number }
+// The dataZoom window: a range button sets bar indexes (startValue/endValue), a manual zoom keeps ECharts' own percents
+// so dragging the slider is not snapped back to whole bars.
+export type ChartZoom = { startValue: number; endValue: number } | { start: number; end: number }
 
-export function defaultZoom(count: number): ChartZoom {
-  return { start: count > DEFAULT_VISIBLE_BARS ? (1 - DEFAULT_VISIBLE_BARS / count) * 100 : 0, end: 100 }
+// ---- display range (Issue 600) ------------------------------------------------------------------
+
+export type BarsRange = '1m' | '3m' | '6m' | '1y' | 'all'
+export const BAR_RANGES: ReadonlyArray<{ id: BarsRange; label: string; months: number | null }> = [
+  { id: '1m', label: '1M', months: 1 },
+  { id: '3m', label: '3M', months: 3 },
+  { id: '6m', label: '6M', months: 6 },
+  { id: '1y', label: '1Y', months: 12 },
+  { id: 'all', label: '全部', months: null },
+]
+export const DEFAULT_BARS_RANGE: BarsRange = '6m'
+
+// A range button (kept across 日K／週K and across series) or a manual zoom: its percents on the bars it was made on
+// (`basis`), and the dates they cover, which carry the window over to another interval or series.
+export type BarsView =
+  | { range: BarsRange }
+  | { range: null; start: number; end: number; from: string; to: string; basis: string }
+
+export function barsBasis(response: Pick<StockBarsResponse, 'interval' | 'bars'>): string {
+  const bars = response.bars
+  return `${response.interval}:${bars.length}:${bars[0]?.date ?? ''}:${bars[bars.length - 1]?.date ?? ''}`
 }
 
-export function dataZoomPercent(event: unknown): ChartZoom | null {
+// The first day a range shows: the latest bar's date moved back whole calendar months (month end clamps, 03/31 − 1M =
+// 02/28); null for 全部 or a date that does not parse.
+export function rangeCutoff(latest: string | undefined, range: BarsRange): string | null {
+  const months = BAR_RANGES.find((item) => item.id === range)?.months ?? null
+  const match = latest ? /^(\d{4})-(\d{2})-(\d{2})/.exec(latest) : null
+  if (months == null || !match) return null
+  const [year, month, day] = [Number(match[1]), Number(match[2]) - 1, Number(match[3])]
+  const target = new Date(Date.UTC(year, month - months, 1))
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate()
+  target.setUTCDate(Math.min(day, lastDay))
+  return target.toISOString().slice(0, 10)
+}
+
+const barStart = (bar: StockBarRow) => bar.week_start ?? bar.date
+
+// Bar indexes of a view on these bars. A range starts at the first bar on or after its cutoff and ends at the latest
+// bar; when the bars do not reach back that far it shows them all. A manual zoom on the same bars keeps its percents;
+// on other bars (the other interval, another series) it maps its dates, and falls back to the default range when the
+// other bars have none of those dates (加權「全部」 dragged to 2023, then S&P 500 with its 250 bars from 2025).
+export function zoomForView(response: Pick<StockBarsResponse, 'interval' | 'bars'>, view: BarsView): ChartZoom {
+  const bars = response.bars
+  const last = Math.max(0, bars.length - 1)
+  if (view.range === null) {
+    if (view.basis === barsBasis(response)) return { start: view.start, end: view.end }
+    const first = bars.findIndex((bar) => bar.date >= view.from)
+    if (first < 0 || barStart(bars[first]) > view.to) return zoomForView(response, { range: DEFAULT_BARS_RANGE })
+    let end = last
+    while (end > first && barStart(bars[end]) > view.to) end--
+    return { startValue: first, endValue: end }
+  }
+  const cutoff = rangeCutoff(bars[last]?.date, view.range)
+  const first = cutoff == null ? 0 : bars.findIndex((bar) => bar.date >= cutoff)
+  return { startValue: Math.max(0, first), endValue: last }
+}
+
+// The first and last bar index a window shows (ECharts maps percents onto the category extent [0, count − 1]).
+export function zoomBars(count: number, zoom: ChartZoom): [number, number] {
+  const span = Math.max(0, count - 1)
+  if ('startValue' in zoom) return [zoom.startValue, zoom.endValue]
+  const first = Math.min(span, Math.ceil(zoom.start / 100 * span - 1e-6))
+  return [first, Math.max(first, Math.floor(zoom.end / 100 * span + 1e-6))]
+}
+
+// The view a dataZoom event leaves (a drag, wheel or pinch): no range is selected any more. An event that leaves the
+// same bars in view (`current`) changes nothing: ECharts also reports a vertical swipe over the chart, whose sideways
+// wobble moves the window by less than a bar, and that must not clear the range (#600 review).
+export function viewFromZoomEvent(response: Pick<StockBarsResponse, 'interval' | 'bars'>, event: unknown, current?: ChartZoom): BarsView | null {
   const payload = event && typeof event === 'object' ? event as Record<string, unknown> : null
   const batch = Array.isArray(payload?.batch) ? payload.batch[0] as Record<string, unknown> | undefined : undefined
   const source = batch ?? payload
-  if (!source || !isFiniteNumber(source.start) || !isFiniteNumber(source.end)) return null
-  return { start: Math.max(0, Math.min(100, source.start)), end: Math.max(0, Math.min(100, source.end)) }
+  const bars = response.bars
+  if (!source || !bars.length || !isFiniteNumber(source.start) || !isFiniteNumber(source.end)) return null
+  const start = Math.max(0, Math.min(100, source.start))
+  const end = Math.max(start, Math.min(100, source.end))
+  const [first, lastIndex] = zoomBars(bars.length, { start, end })
+  if (current) {
+    const [shownFirst, shownLast] = zoomBars(bars.length, current)
+    if (shownFirst === first && shownLast === lastIndex) return null
+  }
+  return { range: null, start, end, from: barStart(bars[first]), to: bars[lastIndex].date, basis: barsBasis(response) }
 }
 
+// Direction lock for a touch on the chart (#600 review): once the finger has moved SWIPE_LOCK_PX, a mostly vertical
+// gesture is a page scroll, and the dataZoom events it causes (a few px of sideways wobble pan the chart) are ignored.
+export const SWIPE_LOCK_PX = 8
+export function swipeAxis(dx: number, dy: number): 'vertical' | 'horizontal' | null {
+  if (Math.hypot(dx, dy) < SWIPE_LOCK_PX) return null
+  return Math.abs(dy) > Math.abs(dx) ? 'vertical' : 'horizontal'
+}
+
+// Whether a range reaches before the loaded bars while the API may hold older ones (the response is a full page under
+// the API maximum): 全部 always, a range only when its cutoff is earlier than the first loaded bar.
+export function needsMoreBars(response: Pick<StockBarsResponse, 'bars' | 'count' | 'limit'>, view: BarsView): boolean {
+  if (view.range === null || response.limit >= STOCK_BARS_MAX_LIMIT || response.count < response.limit) return false
+  const bars = response.bars
+  if (!bars.length) return false
+  const cutoff = rangeCutoff(bars[bars.length - 1].date, view.range)
+  return cutoff == null || bars[0].date > cutoff
+}
+
+
+// ---- the longer request of 全部 (Issue 600) -----------------------------------------------------
+// State of the one `limit=1500` request per series: pending (key only), loaded (data) or failed (error).
+
+export type LongerBars = { key: string; data?: StockBarsResponse; error?: unknown }
+
+export function longerBarsKey(response: Pick<StockBarsResponse, 'instrument' | 'interval' | 'data_as_of'>): string {
+  return `${response.instrument.exchange}/${response.instrument.symbol}/${response.interval}/${response.data_as_of ?? ''}`
+}
+
+// Send it when wanted and this series has no request yet (pending, loaded or failed all block a second one).
+export const shouldFetchLonger = (state: LongerBars | null, key: string, wanted: boolean) => wanted && state?.key !== key
+
+// A reply lands only on its own series while that request is still pending; anything else is dropped.
+export function settleLonger(state: LongerBars | null, key: string, result: { data: StockBarsResponse } | { error: unknown }): LongerBars | null {
+  if (!state || state.key !== key || state.data || state.error !== undefined) return state
+  return 'data' in result ? { key, data: result.data } : { key, error: result.error ?? new Error('load failed') }
+}
+
+// Pressing a range button after a failure clears it, so the request is sent again (#600 review).
+export const retryLonger = (state: LongerBars | null): LongerBars | null => state && state.error !== undefined ? null : state
+
+export function longerStatus(state: LongerBars | null, key: string, wanted: boolean): { data?: StockBarsResponse; loading: boolean; failed: boolean } {
+  const current = state && state.key === key ? state : null
+  return {
+    data: current?.data,
+    loading: wanted && !!current && !current.data && current.error === undefined,
+    failed: wanted && current?.error !== undefined,
+  }
+}
 // How a volume is shown (Issue 552): stocks in lots (張); an index's whole-market shares in 億股; TX in contracts (口).
 // A source whose unit is not verified (the close-only TAIEX rows, volume 0) shows nothing.
 export type VolumeKind = 'lots' | 'index_shares' | 'contracts' | 'unverified'
@@ -502,6 +637,8 @@ export function buildBarsChartOption(response: StockBarsResponse, options: BarsC
       borderWidth: 1,
       textStyle: { color: theme.text, fontFamily: theme.fontMono, fontSize: 12 },
       extraCssText: 'border-radius: 8px;',
+      // Inside the chart: on a phone the box beside the finger otherwise runs off the screen edge (Issue 600).
+      confine: true,
       formatter: (params: unknown) => {
         const entries = Array.isArray(params) ? params : [params]
         const first = entries.find((entry) => entry && typeof entry === 'object' && isFiniteNumber((entry as { dataIndex?: unknown }).dataIndex)) as { dataIndex: number } | undefined
@@ -520,9 +657,10 @@ export function buildBarsChartOption(response: StockBarsResponse, options: BarsC
         : { type: 'value', gridIndex: 2, scale: true, splitNumber: 2, axisLabel: { ...axisLabel, formatter: (value: number) => indicatorNumber(value, Math.abs(value) >= 1000 ? 0 : options.panel === 'boll' ? digits : 2) }, splitLine },
     ],
     dataZoom: [
-      { type: 'inside', xAxisIndex: [0, 1, 2], filterMode: 'filter', start: zoom.start, end: zoom.end },
+      // preventDefaultMouseMove off: a vertical swipe over the chart scrolls the page on phones (touch-action pan-y, #600).
+      { type: 'inside', xAxisIndex: [0, 1, 2], filterMode: 'filter', preventDefaultMouseMove: false, ...zoom },
       {
-        type: 'slider', xAxisIndex: [0, 1, 2], filterMode: 'filter', start: zoom.start, end: zoom.end,
+        type: 'slider', xAxisIndex: [0, 1, 2], filterMode: 'filter', ...zoom,
         top: layout.sliderTop, height: 18, left: layout.left, right: layout.right,
         borderColor: theme.border, fillerColor: theme.grid, backgroundColor: 'transparent',
         dataBackground: { lineStyle: { color: theme.subtle }, areaStyle: { color: theme.grid } },
