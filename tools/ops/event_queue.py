@@ -685,7 +685,9 @@ def record(
     # monitor.sh logs them (session_skipped), each file once until it changes (by its
     # mtime), not on every poll; the poll goes on.
     logged = q.state.get("sessions_skipped")
-    logged = {k for k in logged if isinstance(k, str)} if isinstance(logged, list) else set()
+    logged = (
+        {k for k in logged if isinstance(k, str)} if isinstance(logged, list) else set()
+    )
     for key, line in skipped.items():
         if key not in logged:
             print(f"session_skipped {line}")
