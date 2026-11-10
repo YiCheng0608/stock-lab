@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 
 import { ResearchGapLine, stockCoverageReasonLabels } from '../App'
+import { coverageReasonLabels } from '../coverage/CoverageSummary'
 
 // Standalone regression module (no browser, no server, no network): the stock page's research tab says why the
 // strategy judgement is short of data (Issue 511, UI_COPY_SPEC §6.1), and no field code falls back to 「其他研究資料」.
@@ -37,3 +38,11 @@ check(!every.includes('其他研究資料'), 'every blocking code has a field la
 check(!stockCoverageReasonLabels.official_no_trade.includes('不算缺資料'), 'stock coverage: a no-trade day is still a missing session')
 check(stockCoverageReasonLabels.bar_invalid === '已收到行情但數值不完整', 'stock coverage: an unusable stored bar has its own label')
 check(stockCoverageReasonLabels.quote_not_listed === '官方行情表當日未列此股', 'stock coverage keeps the shared labels')
+
+// Issue 582: a session an official stop of trading covers is still one of the 60 the strategy misses on the stock
+// page, so its label names the stop without 「不算缺資料」; the market coverage page says it is not missing data.
+check(stockCoverageReasonLabels.capital_reduction_halt === '減資換發新股停止買賣（依規則仍算缺一日）', 'stock coverage: a stopped session keeps counting')
+check(coverageReasonLabels.capital_reduction_halt === '減資換發新股停止買賣（不算缺資料）', 'market coverage: a stopped session is not a gap')
+const haltReason = [{ code: 'capital_reduction_halt', label: '近 60 個交易日有 3 天減資換發新股停止買賣（2026/11/05 起，2026/11/16 恢復）' }]
+const haltLine = renderToStaticMarkup(<ResearchGapLine reasons={haltReason} missingFields={['bars_60d']} />)
+check(haltLine.includes('目前不能判斷的原因：近 60 個交易日有 3 天減資換發新股停止買賣（2026/11/05 起，2026/11/16 恢復）。'), `the stop is the cause: ${haltLine}`)

@@ -7,6 +7,8 @@ export const coverageReasonLabels: Record<string, string> = {
   missing_bar_dates: '部分有效交易日缺少行情',
   suspended_or_no_trade: '停牌或當日無交易',
   official_no_trade: '官方行情表列出但當日無成交（不算缺資料）',
+  // An official stop of trading (Issue 582): the quote tables have no row on those days; not missing data.
+  capital_reduction_halt: '減資換發新股停止買賣（不算缺資料）',
   missing_taiex: '缺少 加權指數 交易日基準',
   missing_chips: '部分有效交易日缺少籌碼',
   etf_not_general_action_eligible: '此 ETF 類型不套用一般股票進出場判斷',

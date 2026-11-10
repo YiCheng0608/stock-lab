@@ -684,7 +684,7 @@ function StockPage() {
   }
   return <div className="page stock-page">
     <Link to="/stocks" className="back-link">← 回到個股</Link>
-    <StockHeader symbol={data.instrument.symbol} name={data.instrument.name} exchange={data.instrument.exchange} typeLabel={instrumentTypeLabel(data.instrument.instrument_type)} instrumentType={data.instrument.instrument_type} dailyBars={dayBars.data?.bars} latestChange={dayBars.data?.latest_change} loading={dayBars.isLoading}>
+    <StockHeader symbol={data.instrument.symbol} name={data.instrument.name} exchange={data.instrument.exchange} typeLabel={instrumentTypeLabel(data.instrument.instrument_type)} instrumentType={data.instrument.instrument_type} dailyBars={dayBars.data?.bars} latestChange={dayBars.data?.latest_change} halt={data.trading_halt} loading={dayBars.isLoading}>
       <StockCutoffControl asOf={asOf} effectiveDate={asOf ? null : data.news_cutoff?.as_of ?? data.decision_summary?.data_cutoff ?? null} onApply={(submitted) => { const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }} />
     </StockHeader>
     <StockSummaryCard board={data.strategy_board} action={data.decision_summary ?? null} researchHref={`?${stockTabSearch(searchParams, 'research').toString()}`} onResearch={() => document.getElementById(tabId('stock', 'research'))?.scrollIntoView({ block: 'start' })} />
@@ -796,6 +796,7 @@ export const stockCoverageReasonLabels: Record<string, string> = {
   ...coverageReasonLabels,
   official_no_trade: '官方行情表列出但當日無成交（依規則仍算缺一日）',
   bar_invalid: '已收到行情但數值不完整',
+  capital_reduction_halt: '減資換發新股停止買賣（依規則仍算缺一日）',
 }
 
 function CoveragePanel({ coverage }: { coverage: InstrumentDetail['coverage'] }) {

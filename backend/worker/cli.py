@@ -57,6 +57,7 @@ from .theme_suggestions import run_theme_suggestions
 from .themes import sync_themes
 from .margin_lists import run_margin_lists
 from .no_trade_days import run_no_trade_days
+from .trading_halts import run_trading_halts
 from .trading_calendar import run_trading_calendar
 
 
@@ -281,6 +282,14 @@ def main() -> None:
     )
     no_trade_parser.add_argument("--start", help="YYYY-MM-DD；未指定為最早的 raw")
     no_trade_parser.add_argument("--end", help="YYYY-MM-DD；未指定為最新的 raw")
+    halts_parser = subparsers.add_parser(
+        "trading-halts",
+        help="抓 TWSE TWTAUU、TPEx revivt 的減資停止買賣存入 trading_halts（collect 會抓當日前 10 天到後 60 天恢復的；每個交易所 1 個請求，內容沒變不改寫）",
+    )
+    halts_parser.add_argument(
+        "--start", required=True, help="YYYY-MM-DD，恢復買賣日的起日"
+    )
+    halts_parser.add_argument("--end", help="YYYY-MM-DD；未指定為今天後 60 天")
     calendar_parser = subparsers.add_parser(
         "trading-calendar",
         help="抓 TWSE 官方休市表存入 trading_calendar_days（daily 的 trading_calendar 步驟；預設今年與明年，內容沒變不改寫）",
@@ -665,6 +674,11 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
         result = run_trading_calendar(years=args.years)
     elif args.command == "no-trade-days":
         result = run_no_trade_days(parse_date(args.start), parse_date(args.end))
+    elif args.command == "trading-halts":
+        result = run_trading_halts(
+            date.fromisoformat(args.start),
+            date.fromisoformat(args.end) if args.end else None,
+        )
     elif args.command == "margin-lists":
         result = run_margin_lists(parse_date(args.start), parse_date(args.end))
     elif args.command == "candidate-notes":
@@ -787,7 +801,7 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
     }:
         raise SystemExit(1)
     if (
-        args.command in {"margin-lists", "no-trade-days"}
+        args.command in {"margin-lists", "no-trade-days", "trading-halts"}
         and result.get("status") != "success"
     ):
         raise SystemExit(2 if result.get("status") == "partial" else 1)
