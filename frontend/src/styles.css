@@ -1010,8 +1010,8 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   /* A row on phones (#510): the title stays one line (market · group cut first) with the AI entry at its right
      (Issue 608: beside the numbers it covered the total), the sentence takes the whole width; the close, RR and
      total go under it from the row's left edge with the close and its change side by side, and on a row too narrow
-     for them the RR's basis wraps inside its column rather than push the total past the row. The body's children sit in the row's grid; the DOM order (and the
-     page text) is unchanged. */
+     for them the RR's basis wraps inside its column rather than push the total past the row. The body's children
+     sit in the row's grid; the DOM order (and the page text) is unchanged. */
   .candidate-row-main { grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1) var(--space-3); padding: var(--space-row) var(--space-3); }
   .candidate-row .candidate-entry, .candidate-row-levels { margin-left: 42px; }
   .candidate-row .entry-plan-line { line-height: 1.45; }
