@@ -1,0 +1,673 @@
+{
+  "items": [
+    {
+      "instrument": {
+        "id": 1,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1101",
+        "name": "台泥",
+        "industry": "01",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1962-02-09",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 26.8,
+      "price_as_of": "2026-11-09",
+      "action_state": "conditional_entry",
+      "action_label_zh": "條件進場",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 2,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1102",
+        "name": "亞泥",
+        "industry": "01",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1962-06-08",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 36.85,
+      "price_as_of": "2026-11-09",
+      "action_state": "conditional_entry",
+      "action_label_zh": "條件進場",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 3,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1103",
+        "name": "嘉泥",
+        "industry": "01",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1969-11-14",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 13.4,
+      "price_as_of": "2026-11-09",
+      "action_state": "conditional_entry",
+      "action_label_zh": "條件進場",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 4,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1104",
+        "name": "環泥",
+        "industry": "01",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1971-02-01",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 26.25,
+      "price_as_of": "2026-11-09",
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 5,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1108",
+        "name": "幸福",
+        "industry": "01",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1990-06-06",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 10.75,
+      "price_as_of": "2026-11-09",
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 6,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1109",
+        "name": "信大",
+        "industry": "01",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1991-12-05",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 13.0,
+      "price_as_of": "2026-11-09",
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 7,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1110",
+        "name": "東泥",
+        "industry": "01",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1994-10-22",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 13.75,
+      "price_as_of": "2026-11-09",
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 8,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1201",
+        "name": "味全",
+        "industry": "02",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1962-02-09",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 12.3,
+      "price_as_of": "2026-11-09",
+      "action_state": "conditional_entry",
+      "action_label_zh": "條件進場",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 9,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1203",
+        "name": "味王",
+        "industry": "02",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1964-08-24",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 44.9,
+      "price_as_of": "2026-11-09",
+      "action_state": "conditional_entry",
+      "action_label_zh": "條件進場",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 10,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1210",
+        "name": "大成",
+        "industry": "02",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1978-05-20",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 49.95,
+      "price_as_of": "2026-11-09",
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 11,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1213",
+        "name": "大飲",
+        "industry": "02",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1981-04-10",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 7.4,
+      "price_as_of": "2026-11-09",
+      "action_state": "data_insufficient",
+      "action_label_zh": "資料不足",
+      "data_quality": "partial",
+      "missing_data_priority": [
+        {
+          "field": "bars_20d",
+          "priority": "market_base",
+          "priority_label": "市場基礎層",
+          "reason": "尚未取得足以支持此用途的完整資料"
+        }
+      ]
+    },
+    {
+      "instrument": {
+        "id": 12,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1215",
+        "name": "卜蜂",
+        "industry": "02",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1987-07-27",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 103.0,
+      "price_as_of": "2026-11-09",
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 13,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1216",
+        "name": "統一",
+        "industry": "02",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1987-12-28",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 76.7,
+      "price_as_of": "2026-11-09",
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 14,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1217",
+        "name": "愛之味",
+        "industry": "02",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1989-10-28",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 9.44,
+      "price_as_of": "2026-11-09",
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 15,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1218",
+        "name": "泰山",
+        "industry": "02",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1989-11-11",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 12.95,
+      "price_as_of": "2026-11-09",
+      "action_state": "data_insufficient",
+      "action_label_zh": "資料不足",
+      "data_quality": "partial",
+      "missing_data_priority": [
+        {
+          "field": "bars_60d",
+          "priority": "market_base",
+          "priority_label": "市場基礎層",
+          "reason": "尚未取得足以支持此用途的完整資料"
+        }
+      ]
+    },
+    {
+      "instrument": {
+        "id": 16,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1219",
+        "name": "福壽",
+        "industry": "02",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1990-12-01",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 11.3,
+      "price_as_of": "2026-11-09",
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 17,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1220",
+        "name": "台榮",
+        "industry": "02",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1991-11-20",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 10.35,
+      "price_as_of": "2026-11-09",
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 18,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1225",
+        "name": "福懋油",
+        "industry": "02",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1993-09-27",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 23.75,
+      "price_as_of": "2026-11-09",
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 19,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1227",
+        "name": "佳格",
+        "industry": "02",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1994-04-09",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 26.2,
+      "price_as_of": "2026-11-09",
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 20,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1229",
+        "name": "聯華",
+        "industry": "02",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1976-07-19",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 38.1,
+      "price_as_of": "2026-11-09",
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 21,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1231",
+        "name": "聯華食",
+        "industry": "02",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1995-11-02",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 72.0,
+      "price_as_of": "2026-11-09",
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 22,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1232",
+        "name": "大統益",
+        "industry": "02",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1996-02-09",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 158.0,
+      "price_as_of": "2026-11-09",
+      "action_state": "conditional_entry",
+      "action_label_zh": "條件進場",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 23,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1233",
+        "name": "天仁",
+        "industry": "02",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1999-01-20",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 29.1,
+      "price_as_of": "2026-11-09",
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 24,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1234",
+        "name": "黑松",
+        "industry": "02",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "1999-03-12",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 31.85,
+      "price_as_of": "2026-11-09",
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 25,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1235",
+        "name": "興泰",
+        "industry": "02",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "2000-09-11",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 34.45,
+      "price_as_of": "2026-11-09",
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 26,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1236",
+        "name": "宏亞",
+        "industry": "02",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "2001-09-17",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 26.8,
+      "price_as_of": "2026-11-09",
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 1392,
+        "market": "TW",
+        "exchange": "TPEx",
+        "symbol": "1240",
+        "name": "茂生農經",
+        "industry": "33",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "2018-08-08",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 53.6,
+      "price_as_of": "2026-11-09",
+      "action_state": "data_insufficient",
+      "action_label_zh": "資料不足",
+      "data_quality": "partial",
+      "missing_data_priority": [
+        {
+          "field": "bars_60d",
+          "priority": "market_base",
+          "priority_label": "市場基礎層",
+          "reason": "尚未取得足以支持此用途的完整資料"
+        }
+      ]
+    },
+    {
+      "instrument": {
+        "id": 27,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "1256",
+        "name": "鮮活果汁-KY",
+        "industry": "02",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "2016-03-17",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 165.0,
+      "price_as_of": "2026-11-09",
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    },
+    {
+      "instrument": {
+        "id": 1393,
+        "market": "TW",
+        "exchange": "TPEx",
+        "symbol": "1259",
+        "name": "安心",
+        "industry": "16",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "2011-12-15",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 64.1,
+      "price_as_of": "2026-11-09",
+      "action_state": "data_insufficient",
+      "action_label_zh": "資料不足",
+      "data_quality": "partial",
+      "missing_data_priority": [
+        {
+          "field": "bars_60d",
+          "priority": "market_base",
+          "priority_label": "市場基礎層",
+          "reason": "尚未取得足以支持此用途的完整資料"
+        }
+      ]
+    },
+    {
+      "instrument": {
+        "id": 1394,
+        "market": "TW",
+        "exchange": "TPEx",
+        "symbol": "1264",
+        "name": "德麥",
+        "industry": "02",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "2015-04-09",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "latest_price": 240.5,
+      "price_as_of": "2026-11-09",
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "data_quality": "complete",
+      "missing_data_priority": []
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "page_size": 30,
+    "total": 2357,
+    "total_pages": 79,
+    "has_previous": false,
+    "has_next": true,
+    "q": "",
+    "sort": "type",
+    "data_as_of": "2026-11-09"
+  }
+}

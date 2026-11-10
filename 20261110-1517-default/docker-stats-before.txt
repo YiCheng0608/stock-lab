@@ -1,0 +1,8 @@
+task-609-api-1 0.13%
+task-609-web-1 0.00%
+task-602-web-1 0.00%
+stock-lab-scheduler-1 0.00%
+stock-lab-api-1 0.16%
+stock-lab-web-1 0.00%
+task-602-api-1 0.14%
+task-598-run 89.75%

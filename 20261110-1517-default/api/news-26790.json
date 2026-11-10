@@ -1,0 +1,252 @@
+{
+  "id": "26790",
+  "canonical_key": "news:yahoo_tw:39dd25a9ff9011e56d173cd2b52fac6c53a59c7b2f8c914f2a1e4b895892fd76",
+  "dedupe_cluster_id": "news-title:af0c35d58050bf9944008000f1f67ad6",
+  "category": "domestic",
+  "source_kind": "media",
+  "source_name": "Yahoo奇摩股市",
+  "source": {
+    "name": "Yahoo奇摩股市",
+    "url": "https://tw.stock.yahoo.com/news/%E5%8F%B0%E8%82%A1%E5%BF%AB%E9%80%9F%E4%B8%8A%E6%BC%B2%E6%8C%91%E6%88%B0%E8%B7%8C%E5%B9%851-2-%E5%AE%9C%E6%B3%A8%E6%84%8F%E6%AC%8A%E5%80%BC%E8%82%A1%E6%8B%89%E5%9B%9E%E5%81%9A%E7%AC%AC%E4%BA%8C%E9%9A%BB%E8%85%B3-054544010.html",
+    "url_kind": "item"
+  },
+  "source_item_id": null,
+  "title": "台股快速上漲挑戰跌幅1/2，宜注意權值股拉回做第二隻腳",
+  "summary": "【財訊快報／方亞申】美國股市持續反彈，雖有輝達CEO桃色事件，但超微、博通等順勢遞補，加上光纖、設備、記憶體、火箭相關族群次族群全面上漲，亞洲股市週二持續反彈，除了台灣已經填補最後一格跳空缺口，日本亦",
+  "description": "【財訊快報／方亞申】美國股市持續反彈，雖有輝達CEO桃色事件，但超微、博通等順勢遞補，加上光纖、設備、記憶體、火箭相關族群次族群全面上漲，亞洲股市週二持續反彈，除了台灣已經填補最後一格跳空缺口，日本亦",
+  "summary_preview": "【財訊快報／方亞申】美國股市持續反彈，雖有輝達CEO桃色事件，但超微、博通等順勢遞補，加上光纖、設備、記憶體、火箭相關族群次族群全面上漲，亞洲股市週二持續反彈，除了台灣已經填補最後一格跳空缺口，日本亦",
+  "language": "zh-Hant",
+  "published_at": "2026-11-10T05:45:44+00:00",
+  "event_at": null,
+  "event_date": null,
+  "display_time": "2026-11-10T05:45:44+00:00",
+  "time_basis": "published",
+  "time_precision": "datetime",
+  "time_consistency": "verified",
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "news_item",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_market_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "event.event_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.event_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-11-10T05:45:44+00:00",
+        "utc": "2026-11-10T05:45:44+00:00",
+        "date": null,
+        "source": "news_item.published_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-11-10T06:00:09.818993+00:00",
+        "utc": "2026-11-10T06:00:09.818993+00:00",
+        "date": null,
+        "source": "news_item.collected_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_generated_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_at_not_applicable",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_date_not_applicable",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-11-10T07:20:15.989938+00:00",
+    "legacy": {
+      "published_at": "2026-11-10T05:45:44+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-11-10T05:45:44",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "collected_at": "2026-11-10T06:00:09.818993+00:00"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+      "A collection timestamp does not prove when the source first became available.",
+      "Historical decision and generation times are not persisted by the NewsItem projection."
+    ]
+  },
+  "response_generated_at": "2026-11-10T07:20:15.989938+00:00",
+  "collected_at": "2026-11-10T06:00:09.818993+00:00",
+  "symbols": [],
+  "instruments": [],
+  "themes": [],
+  "theme_ids": [],
+  "impact": {
+    "scope": "unknown",
+    "direction": "unknown",
+    "rationale": null,
+    "method": "rule:exact-name-code/v3",
+    "confidence": "unknown"
+  },
+  "impact_scope": "unknown",
+  "impact_direction": "unknown",
+  "confidence": "unknown",
+  "status": "active",
+  "content_hash": "ae5627929f7e7e17c40fba1b50e475e71a31db6787d7b6a6d407d8224a7a83f0",
+  "detail_url": "/news/26790",
+  "ai": {
+    "inference": true,
+    "status": "done",
+    "summary": "美國股市持續反彈，光纖、設備、記憶體、火箭相關族群全面上漲；標題稱台股快速上漲挑戰跌幅1/2，宜注意權值股拉回。",
+    "symbol_candidates": [],
+    "hidden_symbol_candidates": [],
+    "candidate_check_version": "ai-candidate-source/v2",
+    "theme_candidates": [
+      {
+        "theme": "記憶體",
+        "reason": "原文寫記憶體相關族群全面上漲",
+        "evidence": "光纖、設備、記憶體、火箭相關族群次族群全面上漲"
+      },
+      {
+        "theme": "光纖",
+        "reason": "原文寫光纖相關族群全面上漲",
+        "evidence": "光纖、設備、記憶體、火箭相關族群次族群全面上漲"
+      }
+    ],
+    "impact_direction": "mixed",
+    "impact_scope": "market",
+    "impact_rationale": "美股反彈、台股上漲，但標題提醒權值股可能拉回。",
+    "unsupported": false,
+    "model": "claude-sonnet-5-5",
+    "prompt_version": "news_v3",
+    "input_hash": "a6dc9c6380e60682e9ef97d24e3283486f02645c37b447cc18059a6538229c46",
+    "generated_at": "2026-11-10T06:01:27.809074+00:00"
+  },
+  "provenance": {
+    "event_id": null,
+    "raw_payload_id": 11108,
+    "endpoint": "https://tw.stock.yahoo.com/rss?category=tw-market",
+    "data_as_of": "2026-11-10T06:00:09.818993"
+  }
+}
