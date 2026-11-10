@@ -230,7 +230,7 @@
 - 單線圖（熱度走勢、淨值）：主色線寬 2px，下方用主色漸層填充（頂部 25% 透明到底部 0）。指數（大盤頁）不用單線圖，用個股頁同一套 K 線與指標面板（§4 大盤頁）。
 - 只有收盤的序列（#547）：整個序列的每一根都沒有開高低（FRED 的美股指數列，#547；#568 起美股改用 FinMind，有開高低）時，主圖畫一條收盤線（`--color-text`、1.5px、無點），不畫 K 棒與成交量柱，圖下 `chart-note` 註明「來源只提供收盤價…」；指標面板照常（KD、量均線為 null 時照既有空狀態）。只有部分日子缺開高低的序列（台股指數、個股）不畫這條線，那些日子照舊留空、資料表照列收盤。
 - 區間按鈕（#600）：K 線卡工具列在日K／週K 分頁籤之後放一列篩選膠囊（§5）「1M」「3M」「6M」「1Y」「全部」，預設「6M」，窄版與均線開關各自換行。按鈕只設定 x 軸 dataZoom（inside＋slider 同步）的起訖，選中變體表示目前的顯示範圍；拖動、滾輪或雙指縮放後沒有按鈕是選中。文案與「全部」何時另取資料見 [UI_COPY_SPEC §8.2](UI_COPY_SPEC.md#82-個股詳情的第一屏)。
-- Tooltip：底 `--color-bg-card`、1px 邊、圓角 8px、mono 數字；滑鼠十字線 `--color-text-subtle`。tooltip 限制在圖表範圍內（`confine`），手機上點一下顯示同一個十字線與提示，不超出螢幕邊。圖表區 `touch-action: pan-y`：直向滑動捲頁，橫向單指拖動平移圖表；Chromium Edge 被 zrender 5.6 當成舊版 Edge 時，元件改用與 Chrome 相同的觸控事件路徑（#600）。
+- Tooltip：底 `--color-bg-card`、1px 邊、圓角 8px、mono 數字；滑鼠十字線 `--color-text-subtle`。tooltip 限制在圖表範圍內（`confine`），手機上點一下顯示同一個十字線與提示，不超出螢幕邊。圖表區 `touch-action: pan-y`、inside dataZoom `preventDefaultMouseMove: false`：直向滑動捲頁，橫向單指拖動平移圖表；一次觸控移動 8px 後判定方向，以直向為主的滑動不改顯示範圍（期間的 dataZoom 事件忽略，手指放開時還原），也不取消區間選取；只改動不到一根 K 棒的事件同樣不算手動縮放。Chromium Edge 被 zrender 5.6 當成舊版 Edge 時，元件改用與 Chrome 相同的觸控事件路徑（#600）。
 - 資料日期一律顯示在圖右上角 badge。
 
 ## 7. 資料與狀態的視覺語言

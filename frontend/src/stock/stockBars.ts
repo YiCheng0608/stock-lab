@@ -358,25 +358,36 @@ const barStart = (bar: StockBarRow) => bar.week_start ?? bar.date
 
 // Bar indexes of a view on these bars. A range starts at the first bar on or after its cutoff and ends at the latest
 // bar; when the bars do not reach back that far it shows them all. A manual zoom on the same bars keeps its percents;
-// on other bars (the other interval, another series) it maps its dates.
+// on other bars (the other interval, another series) it maps its dates, and falls back to the default range when the
+// other bars have none of those dates (加權「全部」 dragged to 2023, then S&P 500 with its 250 bars from 2025).
 export function zoomForView(response: Pick<StockBarsResponse, 'interval' | 'bars'>, view: BarsView): ChartZoom {
   const bars = response.bars
   const last = Math.max(0, bars.length - 1)
   if (view.range === null) {
     if (view.basis === barsBasis(response)) return { start: view.start, end: view.end }
     const first = bars.findIndex((bar) => bar.date >= view.from)
+    if (first < 0 || barStart(bars[first]) > view.to) return zoomForView(response, { range: DEFAULT_BARS_RANGE })
     let end = last
-    while (end > 0 && barStart(bars[end]) > view.to) end--
-    const start = first < 0 ? last : Math.min(first, end)
-    return { startValue: start, endValue: end }
+    while (end > first && barStart(bars[end]) > view.to) end--
+    return { startValue: first, endValue: end }
   }
   const cutoff = rangeCutoff(bars[last]?.date, view.range)
   const first = cutoff == null ? 0 : bars.findIndex((bar) => bar.date >= cutoff)
   return { startValue: Math.max(0, first), endValue: last }
 }
 
-// The view a dataZoom event leaves (a drag, wheel or pinch): no range is selected any more.
-export function viewFromZoomEvent(response: Pick<StockBarsResponse, 'interval' | 'bars'>, event: unknown): BarsView | null {
+// The first and last bar index a window shows (ECharts maps percents onto the category extent [0, count − 1]).
+export function zoomBars(count: number, zoom: ChartZoom): [number, number] {
+  const span = Math.max(0, count - 1)
+  if ('startValue' in zoom) return [zoom.startValue, zoom.endValue]
+  const first = Math.min(span, Math.ceil(zoom.start / 100 * span - 1e-6))
+  return [first, Math.max(first, Math.floor(zoom.end / 100 * span + 1e-6))]
+}
+
+// The view a dataZoom event leaves (a drag, wheel or pinch): no range is selected any more. An event that leaves the
+// same bars in view (`current`) changes nothing: ECharts also reports a vertical swipe over the chart, whose sideways
+// wobble moves the window by less than a bar, and that must not clear the range (#600 review).
+export function viewFromZoomEvent(response: Pick<StockBarsResponse, 'interval' | 'bars'>, event: unknown, current?: ChartZoom): BarsView | null {
   const payload = event && typeof event === 'object' ? event as Record<string, unknown> : null
   const batch = Array.isArray(payload?.batch) ? payload.batch[0] as Record<string, unknown> | undefined : undefined
   const source = batch ?? payload
@@ -384,11 +395,20 @@ export function viewFromZoomEvent(response: Pick<StockBarsResponse, 'interval' |
   if (!source || !bars.length || !isFiniteNumber(source.start) || !isFiniteNumber(source.end)) return null
   const start = Math.max(0, Math.min(100, source.start))
   const end = Math.max(start, Math.min(100, source.end))
-  // ECharts maps percents onto the category extent [0, count − 1]; the window shows the bars inside it.
-  const span = bars.length - 1
-  const first = Math.min(span, Math.ceil(start / 100 * span - 1e-6))
-  const lastIndex = Math.max(first, Math.floor(end / 100 * span + 1e-6))
+  const [first, lastIndex] = zoomBars(bars.length, { start, end })
+  if (current) {
+    const [shownFirst, shownLast] = zoomBars(bars.length, current)
+    if (shownFirst === first && shownLast === lastIndex) return null
+  }
   return { range: null, start, end, from: barStart(bars[first]), to: bars[lastIndex].date, basis: barsBasis(response) }
+}
+
+// Direction lock for a touch on the chart (#600 review): once the finger has moved SWIPE_LOCK_PX, a mostly vertical
+// gesture is a page scroll, and the dataZoom events it causes (a few px of sideways wobble pan the chart) are ignored.
+export const SWIPE_LOCK_PX = 8
+export function swipeAxis(dx: number, dy: number): 'vertical' | 'horizontal' | null {
+  if (Math.hypot(dx, dy) < SWIPE_LOCK_PX) return null
+  return Math.abs(dy) > Math.abs(dx) ? 'vertical' : 'horizontal'
 }
 
 // Whether a range reaches before the loaded bars while the API may hold older ones (the response is a full page under
@@ -401,6 +421,36 @@ export function needsMoreBars(response: Pick<StockBarsResponse, 'bars' | 'count'
   return cutoff == null || bars[0].date > cutoff
 }
 
+
+// ---- the longer request of 全部 (Issue 600) -----------------------------------------------------
+// State of the one `limit=1500` request per series: pending (key only), loaded (data) or failed (error).
+
+export type LongerBars = { key: string; data?: StockBarsResponse; error?: unknown }
+
+export function longerBarsKey(response: Pick<StockBarsResponse, 'instrument' | 'interval' | 'data_as_of'>): string {
+  return `${response.instrument.exchange}/${response.instrument.symbol}/${response.interval}/${response.data_as_of ?? ''}`
+}
+
+// Send it when wanted and this series has no request yet (pending, loaded or failed all block a second one).
+export const shouldFetchLonger = (state: LongerBars | null, key: string, wanted: boolean) => wanted && state?.key !== key
+
+// A reply lands only on its own series while that request is still pending; anything else is dropped.
+export function settleLonger(state: LongerBars | null, key: string, result: { data: StockBarsResponse } | { error: unknown }): LongerBars | null {
+  if (!state || state.key !== key || state.data || state.error !== undefined) return state
+  return 'data' in result ? { key, data: result.data } : { key, error: result.error ?? new Error('load failed') }
+}
+
+// Pressing a range button after a failure clears it, so the request is sent again (#600 review).
+export const retryLonger = (state: LongerBars | null): LongerBars | null => state && state.error !== undefined ? null : state
+
+export function longerStatus(state: LongerBars | null, key: string, wanted: boolean): { data?: StockBarsResponse; loading: boolean; failed: boolean } {
+  const current = state && state.key === key ? state : null
+  return {
+    data: current?.data,
+    loading: wanted && !!current && !current.data && current.error === undefined,
+    failed: wanted && current?.error !== undefined,
+  }
+}
 // How a volume is shown (Issue 552): stocks in lots (張); an index's whole-market shares in 億股; TX in contracts (口).
 // A source whose unit is not verified (the close-only TAIEX rows, volume 0) shows nothing.
 export type VolumeKind = 'lots' | 'index_shares' | 'contracts' | 'unverified'
@@ -607,7 +657,8 @@ export function buildBarsChartOption(response: StockBarsResponse, options: BarsC
         : { type: 'value', gridIndex: 2, scale: true, splitNumber: 2, axisLabel: { ...axisLabel, formatter: (value: number) => indicatorNumber(value, Math.abs(value) >= 1000 ? 0 : options.panel === 'boll' ? digits : 2) }, splitLine },
     ],
     dataZoom: [
-      { type: 'inside', xAxisIndex: [0, 1, 2], filterMode: 'filter', ...zoom },
+      // preventDefaultMouseMove off: a vertical swipe over the chart scrolls the page on phones (touch-action pan-y, #600).
+      { type: 'inside', xAxisIndex: [0, 1, 2], filterMode: 'filter', preventDefaultMouseMove: false, ...zoom },
       {
         type: 'slider', xAxisIndex: [0, 1, 2], filterMode: 'filter', ...zoom,
         top: layout.sliderTop, height: 18, left: layout.left, right: layout.right,

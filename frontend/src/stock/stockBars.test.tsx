@@ -21,6 +21,14 @@ import {
   barsBasis,
   needsMoreBars,
   preferChromeInputPath,
+  SWIPE_LOCK_PX,
+  longerBarsKey,
+  longerStatus,
+  retryLonger,
+  settleLonger,
+  shouldFetchLonger,
+  swipeAxis,
+  zoomBars,
   rangeCutoff,
   viewFromZoomEvent,
   zoomForView,
@@ -351,3 +359,43 @@ const chrome = { browser: { newEdge: false }, touchEventsSupported: true, pointe
 check(!preferChromeInputPath(chrome, true) && chrome.touchEventsSupported && !chrome.pointerEventsSupported, 'Chrome is not changed')
 const oldIe = { browser: { newEdge: false }, touchEventsSupported: false, pointerEventsSupported: true }
 check(!preferChromeInputPath(oldIe, true) && oldIe.pointerEventsSupported, 'IE11 and EdgeHTML keep pointer events')
+
+// ---- #600 review: zoom events that move nothing, series without the manual dates, the longer request, swipes ----
+const oneMonth = zoomForView(fullPage, { range: '1m' }) as { startValue: number; endValue: number }
+check(JSON.stringify(zoomBars(fullPage.bars.length, oneMonth)) === JSON.stringify([oneMonth.startValue, LAST]), 'a bar window maps to itself')
+const asPercent = { start: oneMonth.startValue / LAST * 100, end: 100 }
+check(JSON.stringify(zoomBars(fullPage.bars.length, asPercent)) === JSON.stringify([oneMonth.startValue, LAST]), 'the same window in percents shows the same bars')
+check(viewFromZoomEvent(fullPage, asPercent, oneMonth) === null, 'a zoom event that leaves the same bars in view keeps the range selected')
+const moved = viewFromZoomEvent(fullPage, { start: asPercent.start - 100 / LAST, end: 100 - 100 / LAST }, oneMonth)
+check(moved !== null && moved.range === null, 'a zoom event that moves the window by one bar clears the range')
+check(viewFromZoomEvent(fullPage, asPercent) !== null, 'without the current window every event is a manual view (old behaviour kept for callers)')
+
+// A manual window on a series that has none of its dates falls back to the default range instead of one bar.
+const old = viewFromZoomEvent(dailyOf(weekdays(800), 800), { start: 0, end: 10 })
+check(old !== null && old.range === null && old.to < fullPage.bars[0].date, `a manual window before the 262-bar page: ${old && old.range === null ? old.from + '～' + old.to : ''}`)
+if (old) check(JSON.stringify(zoomForView(fullPage, old)) === JSON.stringify(zoomForView(fullPage, { range: DEFAULT_BARS_RANGE })), 'no shared dates → the default range')
+const future = { range: null, start: 0, end: 100, from: '2027-01-01', to: '2027-02-01', basis: 'x' } as const
+check(JSON.stringify(zoomForView(fullPage, future)) === JSON.stringify(zoomForView(fullPage, { range: DEFAULT_BARS_RANGE })), 'a manual window after the last bar → the default range')
+
+// The longer request: once per series, replies only on their own pending series, a failure is retried on the next press.
+const key = longerBarsKey(fullPage)
+check(key === 'TWSE/2330/day/2026-11-10', `longer key: ${key}`)
+check(shouldFetchLonger(null, key, true) && !shouldFetchLonger(null, key, false), 'sent only when wanted')
+check(!shouldFetchLonger({ key }, key, true) && !shouldFetchLonger({ key, data: fullPage }, key, true) && !shouldFetchLonger({ key, error: new Error('x') }, key, true), 'pending, loaded or failed: no second request for the same series')
+check(shouldFetchLonger({ key: 'TWSE/2330/week/2026-11-10' }, key, true), 'another series asks again')
+const longerPage = dailyOf(weekdays(510), 1500)
+const loadedState = settleLonger({ key }, key, { data: longerPage })
+check(loadedState?.data === longerPage && longerStatus(loadedState, key, true).data === longerPage && !longerStatus(loadedState, key, true).loading, 'a reply lands on its pending series')
+check(settleLonger({ key: 'other' }, key, { data: longerPage })?.data === undefined, 'a reply for a series no longer shown is dropped')
+check(settleLonger(loadedState, key, { error: new Error('late') })?.data === longerPage, 'a late failure does not replace loaded bars')
+check(settleLonger(null, key, { data: longerPage }) === null, 'a reply after a retry cleared the state is dropped')
+const failedState = settleLonger({ key }, key, { error: undefined })
+check(failedState?.error instanceof Error && longerStatus(failedState, key, true).failed && !longerStatus(failedState, key, true).loading, 'a failure without an error object still counts as failed')
+check(longerStatus({ key }, key, true).loading && !longerStatus({ key }, key, false).loading, 'pending shows loading only while wanted')
+check(retryLonger(failedState) === null && shouldFetchLonger(retryLonger(failedState), key, true), 'pressing a range after a failure sends the request again')
+check(retryLonger(loadedState) === loadedState && retryLonger({ key }) !== null, 'pressing a range keeps loaded or pending state')
+
+// Swipe direction lock and the inside dataZoom leaving vertical moves to the page.
+check(swipeAxis(3, 4) === null && SWIPE_LOCK_PX === 8, 'under 8 px the direction is not decided yet')
+check(swipeAxis(6, -180) === 'vertical' && swipeAxis(-120, 20) === 'horizontal' && swipeAxis(10, 10) === 'horizontal', 'mostly vertical is a page scroll; a tie pans the chart')
+check((option1m.dataZoom as Array<Record<string, unknown>>)[0].preventDefaultMouseMove === false, 'the inside dataZoom does not block the page scroll')

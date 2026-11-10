@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode, type TouchEvent } from 'react'
 import { env as echartsEnv } from 'echarts'
 import ReactEChartsModule from 'echarts-for-react'
 
@@ -17,7 +17,13 @@ import {
   STOCK_BARS_MAX_LIMIT,
   buildBarsChartOption,
   chartLayout,
+  longerBarsKey,
+  longerStatus,
   needsMoreBars,
+  retryLonger,
+  settleLonger,
+  shouldFetchLonger,
+  swipeAxis,
   preferChromeInputPath,
   viewFromZoomEvent,
   zoomForView,
@@ -35,6 +41,7 @@ import {
   volumeKind,
   type ChartTheme,
   type BarsView,
+  type LongerBars,
   type IndicatorPanelId,
   type MaField,
 } from './stockBars'
@@ -105,32 +112,22 @@ function tableNote(instrumentType: string | null | undefined, volumeUnit: string
 
 // 全部 (or a range reaching before the loaded page) asks the bars API once more with its maximum limit (Issue 600):
 // the page's own query stays at 250, so the header, cache and the other tab read what they read before.
-type LongerBars = { key: string; data?: StockBarsResponse; error?: unknown }
-
-function longerKey(response: StockBarsResponse): string {
-  return `${response.instrument.exchange}/${response.instrument.symbol}/${response.interval}/${response.data_as_of ?? ''}`
-}
-
-function useLongerBars(loaded: StockBarsResponse | undefined, view: BarsView): { data?: StockBarsResponse; loading: boolean; failed: boolean } {
+// The state transitions are the pure longer* helpers in stockBars.ts (tested there).
+function useLongerBars(loaded: StockBarsResponse | undefined, view: BarsView) {
   const [longer, setLonger] = useState<LongerBars | null>(null)
-  const key = loaded ? longerKey(loaded) : ''
+  const key = loaded ? longerBarsKey(loaded) : ''
   const wanted = !!loaded && needsMoreBars(loaded, view)
   useEffect(() => {
-    if (!loaded || !wanted || longer?.key === key) return
+    if (!loaded || !shouldFetchLonger(longer, key, wanted)) return
     setLonger({ key })
     const { exchange, symbol } = loaded.instrument
-    // No cancel on cleanup: a reply only lands while its series is still the one shown.
+    // No cancel on cleanup: settleLonger drops a reply whose series is no longer pending.
     getStockBars(exchange, symbol, loaded.interval, STOCK_BARS_MAX_LIMIT).then(
-      (response) => setLonger((current) => current?.key === key ? { key, data: response } : current),
-      (error: unknown) => setLonger((current) => current?.key === key ? { key, error: error ?? new Error('load failed') } : current),
+      (response) => setLonger((current) => settleLonger(current, key, { data: response })),
+      (error: unknown) => setLonger((current) => settleLonger(current, key, { error })),
     )
-  }, [key, wanted, loaded, longer?.key])
-  const current = longer && longer.key === key ? longer : null
-  return {
-    data: current?.data,
-    loading: wanted && !!current && !current.data && current.error === undefined,
-    failed: wanted && current?.error !== undefined,
-  }
+  }, [key, wanted, loaded, longer])
+  return { ...longerStatus(longer, key, wanted), retry: () => setLonger(retryLonger) }
 }
 
 export function StockBarsChart({
@@ -164,7 +161,32 @@ export function StockBarsChart({
   const longer = useLongerBars(loaded, view)
   // The longer series 全部 fetched, once it is here; otherwise the series the page loaded.
   const data = longer.data ?? loaded
-  const zoom = useMemo(() => data ? zoomForView(data, view) : null, [data, view])
+  // A redraw re-applies the view (notMerge) after a vertical swipe left the chart a few px panned.
+  const [redraw, setRedraw] = useState(0)
+  const zoom = useMemo(() => data ? zoomForView(data, view) : null, [data, view, redraw])
+  const swipe = useRef<{ x: number; y: number; axis: 'vertical' | 'horizontal' | null; ignored: boolean } | null>(null)
+  const onTouchStart = (event: TouchEvent) => {
+    const touch = event.touches[0]
+    // Two fingers are a pinch: never a page scroll.
+    swipe.current = touch ? { x: touch.clientX, y: touch.clientY, axis: event.touches.length > 1 ? 'horizontal' : null, ignored: false } : null
+  }
+  const onTouchMove = (event: TouchEvent) => {
+    const touch = event.touches[0]
+    const current = swipe.current
+    if (!touch || !current) return
+    if (event.touches.length > 1) current.axis = 'horizontal'
+    else if (current.axis === null) current.axis = swipeAxis(touch.clientX - current.x, touch.clientY - current.y)
+  }
+  const onTouchEnd = () => {
+    if (swipe.current?.ignored) setRedraw((count) => count + 1)
+    swipe.current = null
+  }
+  const onDataZoom = (event: unknown) => {
+    if (!data) return
+    if (swipe.current?.axis === 'vertical') { swipe.current.ignored = true; return }
+    const next = viewFromZoomEvent(data, event, zoom ?? undefined)
+    if (next) setView(next)
+  }
   const theme = useMemo(documentTheme, [])
   const layout = useMemo(() => chartLayout(narrow ? 220 : 320), [narrow])
   const latestClose = data ? [...data.bars].reverse().find(isDrawableBar)?.close : undefined
@@ -198,7 +220,7 @@ export function StockBarsChart({
           <Tabs items={INTERVALS} value={interval} onChange={onIntervalChange} label="K 線週期" idPrefix="bars-interval" className="tabs-compact" />
           <div className="filter-chips bars-range" role="group" aria-label="顯示區間">
             {BAR_RANGES.map((item) => (
-              <button key={item.id} type="button" className={cx('badge filter-chip', item.id === view.range && 'filter-chip-selected')} aria-pressed={item.id === view.range} onClick={() => setView({ range: item.id })}>
+              <button key={item.id} type="button" className={cx('badge filter-chip', item.id === view.range && 'filter-chip-selected')} aria-pressed={item.id === view.range} onClick={() => { longer.retry(); setView({ range: item.id }) }}>
                 {item.label}
               </button>
             ))}
@@ -223,7 +245,8 @@ export function StockBarsChart({
           <EmptyState reason={`來源未提供${unit}`} />
         ) : (
           <>
-            <div className="chart-stage" id={tabPanelId('indicator', panel)} role="tabpanel" aria-labelledby={`indicator-tab-${panel}`} style={{ height: layout.height }}>
+            <div className="chart-stage" id={tabPanelId('indicator', panel)} role="tabpanel" aria-labelledby={`indicator-tab-${panel}`} style={{ height: layout.height }}
+              onTouchStartCapture={onTouchStart} onTouchMoveCapture={onTouchMove} onTouchEndCapture={onTouchEnd} onTouchCancelCapture={onTouchEnd}>
               <ReactECharts
                 option={option}
                 notMerge
@@ -233,7 +256,7 @@ export function StockBarsChart({
                 style={{ width: '100%', height: layout.height }}
                 role="img"
                 aria-label={`${unit} K 線、成交量與 ${INDICATOR_PANELS.find((item) => item.id === panel)?.label} 指標圖；數值見下方資料表`}
-                onEvents={{ datazoom: (event: unknown) => { const next = viewFromZoomEvent(data, event); if (next) setView(next) } }}
+                onEvents={{ datazoom: onDataZoom }}
               />
               <div className="indicator-tabs" style={{ top: layout.tabsTop, left: layout.left, right: layout.right }}>
                 <Tabs items={INDICATOR_PANELS} value={panel} onChange={setPanel} label="指標面板" idPrefix="indicator" className="tabs-compact" />
