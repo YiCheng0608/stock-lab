@@ -16,6 +16,7 @@ export const SUGGEST_COPY = {
   listLabel: '符合的股票',
   empty: (query: string) => `沒有符合「${query.trim()}」的股票，按 Enter 到個股清單搜尋。`,
   error: '建議暫時無法載入，按 Enter 到個股清單搜尋。',
+  count: (count: number) => `${count} 檔符合，按上下鍵選取。`,
 }
 
 export const suggestOptionId = (listId: string, index: number) => `${listId}-option-${index}`
@@ -25,6 +26,19 @@ export function suggestExpanded(state: SuggestState): boolean {
   return state.open && (state.status === 'ready' || state.status === 'error')
 }
 
+// The visible line under the box when there is no list: no match or the request failed.
+export function suggestNote(state: SuggestState): string | null {
+  if (!suggestExpanded(state)) return null
+  if (state.status === 'error') return SUGGEST_COPY.error
+  return state.items.length ? null : SUGGEST_COPY.empty(state.query)
+}
+
+// What the always-present live region reads (Issue 599 review): only its text changes, so screen readers announce it.
+export function suggestAnnouncement(state: SuggestState): string {
+  if (!suggestExpanded(state)) return ''
+  return suggestNote(state) ?? SUGGEST_COPY.count(state.items.length)
+}
+
 export function SuggestPopup({ state, listId, onChoose, onHighlight }: {
   state: SuggestState
   listId: string
@@ -32,11 +46,11 @@ export function SuggestPopup({ state, listId, onChoose, onHighlight }: {
   onHighlight?: (index: number) => void
 }) {
   if (!suggestExpanded(state)) return null
-  const note = state.status === 'error' ? SUGGEST_COPY.error : state.items.length ? null : SUGGEST_COPY.empty(state.query)
+  const note = suggestNote(state)
   return (
     <div className="nav-suggest">
       {note
-        ? <p className="nav-suggest-note" role="status">{note}</p>
+        ? <p className="nav-suggest-note" aria-hidden="true">{note}</p>
         : (
           <ul className="nav-suggest-list" id={listId} role="listbox" aria-label={SUGGEST_COPY.listLabel}>
             {state.items.map((item, index) => (
@@ -69,7 +83,26 @@ export function NavSearch() {
   if (!controller.current) {
     controller.current = createSuggestController({ fetchSuggestions: getInstrumentSuggestions, onChange: setState })
   }
+  const composing = useRef(false)
   useEffect(() => () => controller.current?.dispose(), [])
+  // Phones: the open menu is capped at the visible height, which shrinks with the soft keyboard (styles.css ≤860px).
+  useEffect(() => {
+    const viewport = typeof window === 'undefined' ? undefined : window.visualViewport
+    if (!viewport) return undefined
+    const root = document.documentElement
+    const update = () => root.style.setProperty('--visual-viewport-height', `${Math.round(viewport.height)}px`)
+    update()
+    viewport.addEventListener('resize', update)
+    return () => {
+      viewport.removeEventListener('resize', update)
+      root.style.removeProperty('--visual-viewport-height')
+    }
+  }, [])
+  // Keep the highlighted option visible when the list scrolls with the menu.
+  useEffect(() => {
+    if (state.active < 0 || typeof document === 'undefined') return
+    document.getElementById(suggestOptionId(listId, state.active))?.scrollIntoView({ block: 'nearest' })
+  }, [listId, state.active])
   const go = (path: string) => {
     controller.current?.input('')
     navigate(path)
@@ -80,7 +113,8 @@ export function NavSearch() {
     if (path) navigate(path)
   }
   const keyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.nativeEvent.isComposing) return // IME candidate selection, not a search key
+    // IME candidate selection, not a search key; Safari confirms with Enter after isComposing is false (keyCode 229).
+    if (event.nativeEvent.isComposing || event.keyCode === 229 || composing.current) return
     const wasOpen = suggestExpanded(state)
     const command = controller.current?.key(event.key)
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') event.preventDefault()
@@ -100,7 +134,12 @@ export function NavSearch() {
       <input
         className="input"
         value={state.query}
-        onChange={(event) => controller.current?.input(event.target.value)}
+        onChange={(event) => (composing.current ? controller.current?.compose(event.target.value) : controller.current?.input(event.target.value))}
+        onCompositionStart={() => { composing.current = true }}
+        onCompositionEnd={(event) => {
+          composing.current = false
+          controller.current?.input(event.currentTarget.value)
+        }}
         onKeyDown={keyDown}
         onBlur={() => controller.current?.close()}
         onFocus={() => controller.current?.focus()}
@@ -109,12 +148,13 @@ export function NavSearch() {
         role="combobox"
         aria-autocomplete="list"
         aria-expanded={expanded}
-        aria-controls={listId}
+        aria-controls={expanded ? listId : undefined}
         aria-activedescendant={expanded && state.active >= 0 ? suggestOptionId(listId, state.active) : undefined}
         autoComplete="off"
         spellCheck={false}
       />
       <SuggestPopup state={state} listId={listId} onChoose={choose} onHighlight={(index) => controller.current?.highlight(index)} />
+      <p className="sr-only" role="status">{suggestAnnouncement(state)}</p>
     </form>
   )
 }

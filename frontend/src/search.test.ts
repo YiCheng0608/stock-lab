@@ -145,6 +145,30 @@ async function run() {
   state = slow.controller.state()
   check(state.items.length === 1 && state.items[0].symbol === '2303', `the older answer is ignored: ${JSON.stringify(state.items)}`)
 
+  // IME composition (注音): intermediate text is shown but not asked; the composed text is.
+  const ime = harness()
+  ime.controller.compose('ㄊ')
+  ime.flushTimers()
+  await settle()
+  check(ime.asked.length === 0 && ime.controller.state().query === 'ㄊ' && !ime.controller.state().open, 'composing text asks nothing and shows no 沒有符合 line')
+  await typeAndLoad(ime, '台')
+  check(ime.asked.length === 1 && ime.controller.state().open, 'the composed text is asked')
+
+  // After dispose (unmount) a late answer changes nothing.
+  let resolveLate: (value: Suggestion[]) => void = () => {}
+  let changes = 0
+  const late = search.createSuggestController({
+    timer: { set: (callback) => { callback(); return 0 }, clear: () => {} },
+    onChange: () => { changes++ },
+    fetchSuggestions: () => new Promise((resolve) => { resolveLate = resolve }),
+  })
+  late.input('23')
+  const before = changes
+  late.dispose()
+  resolveLate(items)
+  await settle()
+  check(changes === before && late.state().status === 'loading', `no state change after dispose (${changes - before})`)
+
   // At most eight suggestions.
   const many = harness(() => Promise.resolve(Array.from({ length: 12 }, (_, index) => ({ exchange: 'TWSE', symbol: String(1000 + index), name: `股${index}` }))))
   await typeAndLoad(many, '1')

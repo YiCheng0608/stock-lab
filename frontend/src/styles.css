@@ -890,7 +890,10 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .navbar-tools { flex-wrap: wrap; }
   .navbar-search { flex: 1 1 100%; }
   .navbar-search .input { width: 100%; }
-  .nav-suggest { left: 0; width: auto; }
+  /* Issue 599 review: the open menu scrolls within the visible viewport (NavSearch sets --visual-viewport-height
+     from window.visualViewport, which shrinks with the soft keyboard), and the suggestions sit in its flow, so all eight stay reachable. */
+  .navbar-menu-open { max-height: calc(var(--visual-viewport-height, 100dvh) - var(--nav-height)); overflow-y: auto; overscroll-behavior: contain; }
+  .nav-suggest { position: static; width: auto; margin-top: var(--space-2); box-shadow: none; }
   .hero, .detail-grid, .two-panels, .theme-detail-grid { grid-template-columns: 1fr; }
   .theme-news-list li { grid-template-columns: 1fr; gap: var(--space-1); }
   .theme-news-title { white-space: normal; }

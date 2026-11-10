@@ -58,6 +58,8 @@ export type SuggestTimer = {
 
 export type SuggestController = {
   input: (value: string) => void
+  // Text changed during IME composition (注音 between keys): shown in the box, not asked.
+  compose: (value: string) => void
   key: (key: string) => SuggestCommand
   choose: (index: number) => SuggestCommand
   highlight: (index: number) => void
@@ -136,6 +138,11 @@ export function createSuggestController({
         ask(query, path)
       }, delayMs)
     },
+    compose(value) {
+      cancel()
+      sequence++
+      set({ query: value, status: 'idle', items: [], active: -1, open: false })
+    },
     key(key) {
       const count = state.status === 'ready' ? state.items.length : 0
       if (key === 'ArrowDown' || key === 'ArrowUp') {
@@ -169,7 +176,10 @@ export function createSuggestController({
     focus() {
       if (!state.open && suggestionPath(state.query) && state.status !== 'idle') set({ open: true })
     },
-    dispose: cancel,
+    dispose() {
+      cancel()
+      sequence++ // an answer arriving after unmount sets nothing
+    },
     state: () => state,
   }
 }
