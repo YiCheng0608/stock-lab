@@ -1,0 +1,114 @@
+{
+  "rule": "candidates.json 依名次前 3 檔",
+  "trading_date": "2026-11-09",
+  "items": [
+    {
+      "rank": 1,
+      "instrument": {
+        "id": 1,
+        "exchange": "TWSE",
+        "symbol": "1101",
+        "name": "台泥",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v3",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 26.8,
+        "entry_zone": {
+          "low": 26.85,
+          "high": 27.69
+        },
+        "invalid_price": 25.96,
+        "target_1": 28.15,
+        "target_2": 29.33,
+        "risk_reward": 1.6071,
+        "risk_reward_basis": "signal_close",
+        "earliest_execution_date": "2026-11-10"
+      },
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "回踩條件入選：回測20日均線、距均線1.7%，三大法人5日淨買超；新聞情緒95、族群91（水泥熱度第4）為高分項。",
+        "levels": "規則的進場區26.85～27.69，條件失效的停損25.96，位於進場區下緣下方；第一目標28.15、第二目標29.33，第一目標RR約1.61。",
+        "risks": "技術分項僅61，量比0.6偏低；新聞情緒來自僅1則偏多新聞的AI推論，可靠度有限。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-11-09T13:58:35.115791+00:00",
+        "input_hash": "db937d82f5696b91d6a1390c6424d0fe84135361aec11e71add970f41e18c18e"
+      }
+    },
+    {
+      "rank": 2,
+      "instrument": {
+        "id": 1059,
+        "exchange": "TWSE",
+        "symbol": "9904",
+        "name": "寶成",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v3",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 25.7,
+        "entry_zone": {
+          "low": 25.61,
+          "high": 26.21
+        },
+        "invalid_price": 25.1,
+        "target_1": 26.65,
+        "target_2": 27.49,
+        "risk_reward": 1.5833,
+        "risk_reward_basis": "signal_close",
+        "earliest_execution_date": "2026-11-10"
+      },
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "回測20日均線、距均線0.8%，技術83、籌碼81較高；三大法人5日與20日皆淨買超。",
+        "levels": "規則的進場區25.61～26.21，條件失效的停損25.1，距進場區下緣較近；第一目標26.65、第二目標27.49，第一目標RR約1.58。",
+        "risks": "近3日無關聯新聞，新聞情緒分項僅46；所屬運動休閒產業熱度第11，相對居中。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-11-09T13:58:35.115791+00:00",
+        "input_hash": "e75f7798b440912c5812c91d1ea3a6fdf1107efbe3d32b9c8b899afdc470deaa"
+      }
+    },
+    {
+      "rank": 3,
+      "instrument": {
+        "id": 841,
+        "exchange": "TWSE",
+        "symbol": "6446",
+        "name": "藥華藥",
+        "instrument_type": "stock"
+      },
+      "strategy": "breakout_v3",
+      "levels": {
+        "entry_type": "breakout",
+        "entry": 1370.0,
+        "entry_zone": {
+          "low": 1370.0,
+          "high": 1370.0
+        },
+        "invalid_price": 1300.36,
+        "target_1": 1481.43,
+        "target_2": 1578.93,
+        "risk_reward": 1.6001,
+        "risk_reward_basis": "entry_price",
+        "earliest_execution_date": "2026-11-10"
+      },
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "突破20日高點、量比2.4，外資與投信5日淨買超；題材生技製藥熱度第1，族群100、新聞情緒99。",
+        "levels": "規則的進場區為單一價1370.0，條件失效的停損1300.36；第一目標1481.43、第二目標1578.93，第一目標RR約1.60。",
+        "risks": "技術分項僅50；新聞多為公司公告，無AI方向判讀，偏多的新聞情緒僅屬推論；生技醫療產業榜排名16。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-11-09T13:58:35.115791+00:00",
+        "input_hash": "5f91d3ec462d0f8989f25ff14474720c8ce1794a37b01b0d413ac06fd48540ca"
+      }
+    }
+  ]
+}

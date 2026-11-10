@@ -1,0 +1,74 @@
+ Container task-609-api-run-5a7a99d22be7 Creating 
+ Container task-609-api-run-5a7a99d22be7 Created 
+screenshot theme-detail: not ready, retrying ()
+screenshot actions-legacy: not ready, retrying ()
+screenshot actions: not ready, retrying ()
+screenshots: 628.2 s
+today T1 通過 6 張截圖 ready，無錯誤，無橫向捲動
+today T2 無法判定 無法判定（環境）：/api/dashboard 回 0
+today T3 無法判定 無法判定（環境）：/api/dashboard 回 0
+today T4 通過 `資料 2026/11/09`；B = facts 2026-11-09
+today T5 通過 5 列（`#n` 與名稱）= items 前 5 名；`1／5／20 日為相對加權指數的報酬`
+today T6 無法判定 無法判定（環境）：/api/dashboard 回 0
+today T7 通過 `資料 2026/11/09`、`11 檔`；名次列 11、來源行 11 = items；C = facts
+today T8 通過 11 檔新聞情緒推論的來源行以 `（推論）` 結尾；`AI 推論` 16 行；免責句 11 行；入口 `AI 推論 ▸` 11、`AI 說明 ▸` 0
+today T9 通過 首頁沒有 `關注標的`、`明日候選`；沒有持倉風險提示列
+today T11 無法判定 無法判定（環境）：/api/dashboard 回 0
+today T12 通過 `今日可買`（today-1280.txt 第 23 行）→ `熱門族群`（today-1280.txt 第 905 行）、`重點新聞`（today-1280.txt 第 941 行）
+today T13 通過 11 張卡：`加入追蹤` 11、`已在追蹤` 0 = open_plan_id 非 null
+today T17 通過 390：11 列數字區不溢出、不被 AI 按鈕蓋住、沒有超出列邊
+today T14 無法判定 無法判定（環境）：/api/dashboard 回 0
+today T15 通過 `加權指數日線` `資料 2026/11/09`、`最近 250 根日線；缺日不補、停牌不畫 K 線`、最新 `2026/11/09	40,347.28	42,349.36	40,347.28	41,661.70`；`櫃買指數日線` `資料 2026/11/09`、`最近 250 根日線；缺日不補、停牌不畫 K 線`、最新 `2026/11/09	305.51	323.84	305.51	321.97`；`台指期近月日線` `資料 2026/11/06`、`最近 250 根日線；缺日不補、停牌不畫 K 線`、最新 `2026/11/06	38,888	40,690	37,694	39,786`
+today T16 無法判定 無法判定（環境）：/api/dashboard 回 0
+today: 153.6 s
+news: 105.0 s
+news N1 通過 6 張截圖 ready，無錯誤，無橫向捲動
+news N2 通過 domestic 前 3 則、international 前 3 則、official 前 3 則依序出現
+news N3 通過 時間行 domestic 20／20、international 20／20、official 20／20
+news N4 通過 `AI 推論`／AI 判讀 domestic 20／20、international 20／20、official 10／10
+news N5 通過 最新新聞 2026-11-10 13:53（台北）≤ 現在；國內第一則 `發布於 2026/11/10 13:53`
+news N6 通過 id 26736：來源事實／AI 摘要與判讀分欄，`模型 claude-sonnet-5-5 · 提示版本 news_v3 · 產生時間 2026/11/10 14:01`
+themes: 1.8 s
+themes G1 失敗 theme-detail-1280 未 ready；theme-detail-1280 httpErrors ['504 http://web:8080/api/news?theme_id=official-industry-206d1b19286222a7&limit=10']；theme-detail-390 未 ready；theme-detail-390 httpErrors ['504 http://web:8080/api/news?theme_id=official-industry-206d1b19286222a7&limit=10']
+themes G2 通過 `產業榜 · 共 34 個族群` → `資料 2026/11/09`、`題材榜 · 共 12 個族群` → `資料 2026/11/09`；= facts 2026-11-09
+themes G3 通過 1280 與 390：`#1` → `食品`…`#34` → `電子零組件`，五分項與成員數同 API
+themes G4 通過 20 個建議：`AI 推論` 20 行、沒有 `待核實`，`459 個建議`
+themes G5 無法判定 無法判定：theme-detail-1280 未 ready
+themes G6 無法判定 無法判定：theme-detail-1280 未 ready
+themes G7 無法判定 無法判定：theme-detail-1280 未 ready
+themes G8 無法判定 無法判定：theme-detail-1280 未 ready
+stocks S1 通過 9 張截圖 ready，無錯誤，無橫向捲動
+stocks S2 通過 表頭、第一列、類型→代號順序、`第 1／79 頁 · 共 2,357 筆`
+stocks S3 無法判定 無法判定（環境）：/api/dashboard 回 0
+stocks S4 通過 K 線卡 `資料 2026/11/09`、來源與批次時間
+stocks S5 通過 `資料日期：2026/11/09`、`資料日：2026/11/09 · 價位語意：`
+stocks S10 通過 `策略總表` 資料 2026-11-09；突破條件 觀察、回踩條件 觀察；觀察價位 2 列；非候選
+stocks S11 通過 摘要卡 `觀察`：`突破條件差 2 項：價格、融資`；目前判斷、最接近成立、規則價位、`完整條件 →`
+stocks S6 通過 31 則相符新聞，時間行 59
+stocks S7 通過 K 線資料日期 2026/11/09、行情來源 `臺灣證券交易所`、`…資料日 2026/11/09`
+stocks S8 通過 facts I 2026-11-09 = API；source `twse`
+stocks S9 通過 最新一列 2026/11/09；來源行 法人 30、融資 30 = min(30, 30)
+stocks S12 通過 8 列與 API 相同（第一列 `2026 年第 3 季	5,370.05	3.70	來源未提供	2026/11/06`）；資料 2026/09/30
+stocks S13 通過 12 個月與 API 相同（第一列 `2026 年 9 月	618.05	+5.8	2026/10/12`）；資料 2026/09/30
+stocks: 5.4 s
+actions A1 失敗 actions-1280 未 ready；actions-390 未 ready；actions-legacy-1280 未 ready
+actions A2 無法判定 無法判定：actions-1280 未 ready
+actions A3 無法判定 無法判定：actions-1280 未 ready
+actions A4 無法判定 無法判定：actions-1280 未 ready
+actions A5 無法判定 無法判定：actions-1280 未 ready
+actions A6 通過 TWSE 1216：`資料日：2026/11/09` = data_cutoff
+actions A7 通過 頁首 `1216`／`統一` = stock.json
+actions A8 無法判定 無法判定：actions-1280 未 ready
+actions A9 無法判定 無法判定：actions-1280 未 ready
+actions A10 無法判定 無法判定：actions-1280 未 ready
+actions A11 無法判定 無法判定：actions-1280 未 ready
+actions A12 無法判定 無法判定：actions-1280 未 ready
+actions A13 無法判定 無法判定：actions-1280 未 ready
+actions A14 無法判定 無法判定：actions-1280 未 ready
+actions A15 無法判定 無法判定：actions-1280 未 ready
+actions A16 無法判定 無法判定：actions-1280 未 ready
+actions A17 無法判定 無法判定：actions-1280 未 ready
+actions A18 無法判定 無法判定：actions-1280 未 ready
+actions: 2.1 s
+61 checks, 2 failed: themes G1, actions A1, 26 undetermined, 5 API 5xx/timeouts (environment.json)
+

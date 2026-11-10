@@ -1,0 +1,1214 @@
+{
+  "items": [
+    {
+      "id": 1070,
+      "theme_key": "ai",
+      "display_name": "AI",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 349,
+      "first_news_date": "2026-11-01",
+      "last_news_date": "2026-11-09",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v3",
+      "aggregation_version": "theme_suggestions_v2",
+      "llm_models": [
+        "claude-sonnet-5-5"
+      ],
+      "computed_at": "2026-11-09T13:58:16.775426+00:00",
+      "news": [
+        {
+          "news_id": 25901,
+          "title": "Until AI sentiment improves, Citi tells investors it’s better to sit out the global tech trade",
+          "source_name": "MarketWatch",
+          "news_date": "2026-11-09",
+          "theme_text": "AI",
+          "reason": "標題提到AI情緒"
+        },
+        {
+          "news_id": 25831,
+          "title": "〈進出口統計〉AI商機助攻36紅！10月進出口、出超皆創單月新高",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-09",
+          "theme_text": "AI",
+          "reason": "原文稱出口受AI、高效能運算與雲端需求帶動"
+        },
+        {
+          "news_id": 25830,
+          "title": "〈佳世達法說〉董座陳其宏卸任CEO啟動接班布局 未來聚焦集團策略及新品發展",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-09",
+          "theme_text": "AI",
+          "reason": "原文提到協助布局AI新產品"
+        },
+        {
+          "news_id": 25813,
+          "title": "科技股收復部分失土市場關注輝達　亞股走勢不一",
+          "source_name": "中央社",
+          "news_date": "2026-11-09",
+          "theme_text": "AI",
+          "reason": "原文提到AI監管疑慮拖累科技股"
+        },
+        {
+          "news_id": 25670,
+          "title": "收盤／台積電大漲100元、聯發科漲停！領軍台股暴力反彈　狂飆1960點",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-09",
+          "theme_text": "AI",
+          "reason": "原文寫電子與AI族群全面大漲"
+        }
+      ]
+    },
+    {
+      "id": 1082,
+      "theme_key": "ai資料中心",
+      "display_name": "AI資料中心",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 82,
+      "first_news_date": "2026-11-01",
+      "last_news_date": "2026-11-09",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v3",
+      "aggregation_version": "theme_suggestions_v2",
+      "llm_models": [
+        "claude-sonnet-5-5"
+      ],
+      "computed_at": "2026-11-09T13:58:16.775426+00:00",
+      "news": [
+        {
+          "news_id": 25829,
+          "title": "聯鈞自結9月獲利爆增逾14倍 看好訂單能見度至2027年底",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-09",
+          "theme_text": "AI資料中心",
+          "reason": "原文提到AI資料中心接單動能強勁"
+        },
+        {
+          "news_id": 25602,
+          "title": "11／9盤中熱門焦點股",
+          "source_name": "工商時報",
+          "news_date": "2026-11-09",
+          "theme_text": "AI資料中心",
+          "reason": "原文提到市場憂心AI資料中心政策可能調整"
+        },
+        {
+          "news_id": 25411,
+          "title": "台股一週慘跌5510點！AI多頭結束？ 投信揭本週3大關鍵",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-09",
+          "theme_text": "AI資料中心",
+          "reason": "摘要提到AI資料中心監管疑慮"
+        },
+        {
+          "news_id": 25358,
+          "title": "供應鏈缺料　「這大廠」市值慘遭鴻海超車！法人喊買：目標價上看2140元",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-09",
+          "theme_text": "AI資料中心",
+          "reason": "投顧看好AI資料中心長期需求"
+        },
+        {
+          "news_id": 25320,
+          "title": "台股週一有望迎強彈！法人籲「別盲目搶短」緊盯1事",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-08",
+          "theme_text": "AI 資料中心",
+          "reason": "原文提到美政壇擬收緊AI資料中心建設"
+        }
+      ]
+    },
+    {
+      "id": 1107,
+      "theme_key": "光通訊",
+      "display_name": "光通訊",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 35,
+      "first_news_date": "2026-11-02",
+      "last_news_date": "2026-11-09",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v3",
+      "aggregation_version": "theme_suggestions_v2",
+      "llm_models": [
+        "claude-sonnet-5-5"
+      ],
+      "computed_at": "2026-11-09T13:58:16.775426+00:00",
+      "news": [
+        {
+          "news_id": 25884,
+          "title": "台股同時爆3檔違約交割！光通訊、載板、玻纖布全中標「合計金額破億元」　富喬慘遭18家券商通報",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-09",
+          "theme_text": "光通訊",
+          "reason": "標題提到光通訊違約交割"
+        },
+        {
+          "news_id": 25829,
+          "title": "聯鈞自結9月獲利爆增逾14倍 看好訂單能見度至2027年底",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-09",
+          "theme_text": "光通訊",
+          "reason": "原文稱聯鈞為光通訊廠"
+        },
+        {
+          "news_id": 25816,
+          "title": "業成：高功率雷射封裝產線最快明年第2季底放量",
+          "source_name": "中央社",
+          "news_date": "2026-11-09",
+          "theme_text": "光通訊",
+          "reason": "原文提到委外光通訊業務"
+        },
+        {
+          "news_id": 25611,
+          "title": "〈焦點股〉台股逆襲大反攻！ 光通訊族群臉紅超過10檔亮燈衝上漲停板",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-09",
+          "theme_text": "光通訊",
+          "reason": "標題寫光通訊族群漲停"
+        },
+        {
+          "news_id": 25594,
+          "title": "Coherent飆漲！光通訊放閃 聯亞、光聖等逾10檔飆漲停",
+          "source_name": "工商時報",
+          "news_date": "2026-11-09",
+          "theme_text": "光通訊",
+          "reason": "標題與摘要寫台股光通訊族群上攻"
+        }
+      ]
+    },
+    {
+      "id": 1089,
+      "theme_key": "etf",
+      "display_name": "ETF",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 33,
+      "first_news_date": "2026-11-02",
+      "last_news_date": "2026-11-08",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v3",
+      "aggregation_version": "theme_suggestions_v2",
+      "llm_models": [
+        "claude-sonnet-5-5"
+      ],
+      "computed_at": "2026-11-09T13:58:16.775426+00:00",
+      "news": [
+        {
+          "news_id": 25230,
+          "title": "台股10大ETF最新排名！7檔規模縮水　它週增1.6%最亮眼",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-08",
+          "theme_text": "ETF",
+          "reason": "原文討論台股ETF規模變化"
+        },
+        {
+          "news_id": 25123,
+          "title": "來高雄金融展抽東京機票！公股銀搶進高資產專區 各家專屬優惠一表看",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-07",
+          "theme_text": "ETF",
+          "reason": "展會聚焦ETF投資"
+        },
+        {
+          "news_id": 25091,
+          "title": "ETF撿便宜2／台股暴跌逾2成！手握50萬想進場　前操盤手教戰3步驟",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-07",
+          "theme_text": "ETF",
+          "reason": "標題為ETF撿便宜系列"
+        },
+        {
+          "news_id": 25090,
+          "title": "ETF撿便宜1／台股跌深怎麼買？AI系統揪出2檔績優ETF　3檔高股息也入列",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-07",
+          "theme_text": "ETF",
+          "reason": "標題與摘要談ETF布局"
+        },
+        {
+          "news_id": 24157,
+          "title": "台積跌105元台股跌幅收斂失守4萬點　ETF族群愈跌成交爆巨量",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-06",
+          "theme_text": "ETF",
+          "reason": "標題提到ETF族群成交爆巨量"
+        }
+      ]
+    },
+    {
+      "id": 1159,
+      "theme_key": "資安",
+      "display_name": "資安",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 32,
+      "first_news_date": "2026-11-02",
+      "last_news_date": "2026-11-06",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v3",
+      "aggregation_version": "theme_suggestions_v2",
+      "llm_models": [
+        "claude-sonnet-5-5"
+      ],
+      "computed_at": "2026-11-09T13:58:16.775426+00:00",
+      "news": [
+        {
+          "news_id": 24898,
+          "title": "叡揚：預期第4季維持旺季表現　估資安商機持續擴大",
+          "source_name": "中央社",
+          "news_date": "2026-11-06",
+          "theme_text": "資安",
+          "reason": "原文提到資安相關產品營收成長與商機擴大。"
+        },
+        {
+          "news_id": 24293,
+          "title": "說明本公司線上平台委外服務廠商91APP\r\n發生網路資安事件",
+          "source_name": "MOPS",
+          "news_date": "2026-11-06",
+          "theme_text": "資安",
+          "reason": "標題寫到委外服務廠商發生網路資安事件。"
+        },
+        {
+          "news_id": 24136,
+          "title": "《資服股》叡揚資訊前3季每股賺4.86元 AI訂單占比明年挑戰30％",
+          "source_name": "工商時報",
+          "news_date": "2026-11-06",
+          "theme_text": "資安",
+          "reason": "原文提到搶攻資安商機"
+        },
+        {
+          "news_id": 24049,
+          "title": "宏碁智新：委外廠商傳資安事件　線上商店暫停營運",
+          "source_name": "中央社",
+          "news_date": "2026-11-06",
+          "theme_text": "資安",
+          "reason": "原文提到委外廠商發生資訊安全事件"
+        },
+        {
+          "news_id": 22416,
+          "title": "王品萬鮮網站遭異常資料存取　已啟動資安應變機制",
+          "source_name": "中央社",
+          "news_date": "2026-11-05",
+          "theme_text": "資安",
+          "reason": "原文提到資安事件應變與調查機制"
+        }
+      ]
+    },
+    {
+      "id": 1160,
+      "theme_key": "資料中心",
+      "display_name": "資料中心",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 28,
+      "first_news_date": "2026-11-02",
+      "last_news_date": "2026-11-09",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v3",
+      "aggregation_version": "theme_suggestions_v2",
+      "llm_models": [
+        "claude-sonnet-5-5"
+      ],
+      "computed_at": "2026-11-09T13:58:16.775426+00:00",
+      "news": [
+        {
+          "news_id": 25534,
+          "title": "德州新州長軟化、國安基金護盤 台股盤中強漲逾2500點",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-09",
+          "theme_text": "資料中心",
+          "reason": "原文提到德州資料中心允許完成建設"
+        },
+        {
+          "news_id": 25407,
+          "title": "恐慌殺盤有撐 量價支持有望落底",
+          "source_name": "工商時報",
+          "news_date": "2026-11-09",
+          "theme_text": "資料中心",
+          "reason": "提到資料中心建設監管"
+        },
+        {
+          "news_id": 25359,
+          "title": "美國選後台股崩跌！郭正亮轟賴清德「斷了右臂」：股市是他唯一政績",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-08",
+          "theme_text": "資料中心",
+          "reason": "摘要提到民主黨拿下資料中心興建重鎮"
+        },
+        {
+          "news_id": 25316,
+          "title": "全球股市慘遭血洗！台股暴跌3700點　外媒揭真正元凶",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-08",
+          "theme_text": "資料中心",
+          "reason": "原文提到資料中心基礎建設恐面臨限制"
+        },
+        {
+          "news_id": 24013,
+          "title": "台股暴跌近3800點！路透揭財政部召集公股銀行　官方回應",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-06",
+          "theme_text": "資料中心",
+          "reason": "原文提到資料中心擴建計畫可能受限"
+        }
+      ]
+    },
+    {
+      "id": 1105,
+      "theme_key": "先進封裝",
+      "display_name": "先進封裝",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 26,
+      "first_news_date": "2026-11-02",
+      "last_news_date": "2026-11-09",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v3",
+      "aggregation_version": "theme_suggestions_v2",
+      "llm_models": [
+        "claude-sonnet-5-5"
+      ],
+      "computed_at": "2026-11-09T13:58:16.775426+00:00",
+      "news": [
+        {
+          "news_id": 25490,
+          "title": "台經院看台灣經濟維持強勁成長 估明年GDP仍達6.45%",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-09",
+          "theme_text": "先進封裝",
+          "reason": "原文寫帶動先進封裝需求"
+        },
+        {
+          "news_id": 24930,
+          "title": "AI資料中心若延後建置　台股影響一次看",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-06",
+          "theme_text": "先進封裝",
+          "reason": "摘要提到先進封裝能見度佳。"
+        },
+        {
+          "news_id": 23857,
+          "title": "費半暴跌台股承壓！AIDC建設恐遞延？野村點名3大指標逢低加碼AI",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-06",
+          "theme_text": "先進封裝",
+          "reason": "原文點名先進封裝具長線布局機會"
+        },
+        {
+          "news_id": 23761,
+          "title": "盤中速報 - 櫃買市場加權指數下跌-20.04點至301.43點，跌幅6.23%",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-06",
+          "theme_text": "先進封裝",
+          "reason": "原文寫先進封裝概念領跌。"
+        },
+        {
+          "news_id": 23760,
+          "title": "盤中速報 - 集中市場加權指數下跌-2005.69點至39569.03點，跌幅4.82%",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-06",
+          "theme_text": "先進封裝",
+          "reason": "原文寫先進封裝概念領跌。"
+        }
+      ]
+    },
+    {
+      "id": 1075,
+      "theme_key": "ai供應鏈",
+      "display_name": "AI供應鏈",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 25,
+      "first_news_date": "2026-11-02",
+      "last_news_date": "2026-11-09",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v3",
+      "aggregation_version": "theme_suggestions_v2",
+      "llm_models": [
+        "claude-sonnet-5-5"
+      ],
+      "computed_at": "2026-11-09T13:58:16.775426+00:00",
+      "news": [
+        {
+          "news_id": 25654,
+          "title": "三大法人賣超台股945億！權值股火力全開　237檔個股亮燈飆漲停",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-09",
+          "theme_text": "AI 供應鏈",
+          "reason": "原文寫電子權值股與AI供應鏈集體發威"
+        },
+        {
+          "news_id": 25441,
+          "title": "台股開盤強彈千點重返40K 台積電飆75元、AI供應鏈全面點火",
+          "source_name": "工商時報",
+          "news_date": "2026-11-09",
+          "theme_text": "AI供應鏈",
+          "reason": "標題稱AI供應鏈全面點火"
+        },
+        {
+          "news_id": 25380,
+          "title": "台股崩跌破4萬點！專家周代運曝台韓差異：永遠別賭台灣會輸",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-09",
+          "theme_text": "AI供應鏈",
+          "reason": "摘要提到AI供應鏈基本面強韌"
+        },
+        {
+          "news_id": 25251,
+          "title": "美國AI監管疑慮升高　投信：亞洲科技股面臨估值壓力",
+          "source_name": "中央社",
+          "news_date": "2026-11-08",
+          "theme_text": "AI供應鏈",
+          "reason": "原文提到衝擊恐擴散至亞洲AI供應鏈"
+        },
+        {
+          "news_id": 25073,
+          "title": "期中選舉落幕 留意價值投資機會",
+          "source_name": "工商時報",
+          "news_date": "2026-11-07",
+          "theme_text": "AI供應鏈",
+          "reason": "原文建議以訂單能見度高的AI供應鏈為中長線核心"
+        }
+      ]
+    },
+    {
+      "id": 1398,
+      "theme_key": "3ddram",
+      "display_name": "3D DRAM",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 23,
+      "first_news_date": "2026-11-06",
+      "last_news_date": "2026-11-08",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v3",
+      "aggregation_version": "theme_suggestions_v2",
+      "llm_models": [
+        "claude-sonnet-5-5"
+      ],
+      "computed_at": "2026-11-09T13:58:16.775426+00:00",
+      "news": [
+        {
+          "news_id": 25347,
+          "title": "台積電傳搶攻3D DRAM！華邦電董座潑冷水「點出2大難關」：晶片一哥不做半吊子",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-08",
+          "theme_text": "3D DRAM",
+          "reason": "標題提到台積電搶攻3D DRAM。"
+        },
+        {
+          "news_id": 25343,
+          "title": "韓國嚇壞！台積電驚傳跨領域進軍「生產高階記憶體」　台積正式回應了",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-08",
+          "theme_text": "3D DRAM",
+          "reason": "原文提到台積電擬生產3D DRAM。"
+        },
+        {
+          "news_id": 25328,
+          "title": "3D DRAM也要台積電「一條龍」？　外媒爆料1內幕「韓廠憂心」官方回應了",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-08",
+          "theme_text": "3D DRAM",
+          "reason": "原文提到台積電評估3D DRAM可能性。"
+        },
+        {
+          "news_id": 25242,
+          "title": "AI新賽道 台積電跨足先進記憶體",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-08",
+          "theme_text": "3D DRAM",
+          "reason": "原文寫台積電研擬3D DRAM生產計畫。"
+        },
+        {
+          "news_id": 25240,
+          "title": "台積電進軍3D DRAM? 焦佑鈞：台積電若要做 不會半吊子",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-08",
+          "theme_text": "3D DRAM",
+          "reason": "原文寫台積電傳將生產3D DRAM。"
+        }
+      ]
+    },
+    {
+      "id": 1214,
+      "theme_key": "pcb",
+      "display_name": "PCB",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 21,
+      "first_news_date": "2026-11-02",
+      "last_news_date": "2026-11-09",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v3",
+      "aggregation_version": "theme_suggestions_v2",
+      "llm_models": [
+        "claude-sonnet-5-5"
+      ],
+      "computed_at": "2026-11-09T13:58:16.775426+00:00",
+      "news": [
+        {
+          "news_id": 25583,
+          "title": "國安基金進場助台股盤中強彈逾2600點　權值股千金股大反攻",
+          "source_name": "中央社",
+          "news_date": "2026-11-09",
+          "theme_text": "PCB",
+          "reason": "原文寫PCB族群反攻"
+        },
+        {
+          "news_id": 23961,
+          "title": "〈尖點法說〉看營運正向擴張 今、明年資本支出各達36億元 泰國廠將獲改善",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-06",
+          "theme_text": "PCB",
+          "reason": "原文提到高階PCB需求"
+        },
+        {
+          "news_id": 23862,
+          "title": "金居啟動百億大馬建廠計畫 將在台發70億元CB籌資",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-06",
+          "theme_text": "PCB",
+          "reason": "原文稱金居為PCB上游銅箔廠"
+        },
+        {
+          "news_id": 23858,
+          "title": "〈尖點法說〉前3季稅後純益8.99億元年增2.75倍 EPS達6.18元",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-06",
+          "theme_text": "PCB",
+          "reason": "原文稱尖點為PCB鑽針及代鑽服務廠"
+        },
+        {
+          "news_id": 23779,
+          "title": "《熱門族群》mSAP供給吃緊報價揚 PCB廠臻鼎擁潛在利多 外資續喊買",
+          "source_name": "工商時報",
+          "news_date": "2026-11-06",
+          "theme_text": "PCB",
+          "reason": "原文提到PCB廠獲外資維持買進。"
+        }
+      ]
+    },
+    {
+      "id": 1444,
+      "theme_key": "國安基金護盤",
+      "display_name": "國安基金護盤",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 17,
+      "first_news_date": "2026-11-06",
+      "last_news_date": "2026-11-09",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v3",
+      "aggregation_version": "theme_suggestions_v2",
+      "llm_models": [
+        "claude-sonnet-5-5"
+      ],
+      "computed_at": "2026-11-09T13:58:16.775426+00:00",
+      "news": [
+        {
+          "news_id": 25549,
+          "title": "台股吃糖漿2500點大爆發！聯發科、台達電登頂「13檔千金漲停」　0050一口氣反攻6％",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-09",
+          "theme_text": "國安基金護盤",
+          "reason": "原文寫國安基金5千億銀彈救場"
+        },
+        {
+          "news_id": 25546,
+          "title": "台股盤中強彈逾2600點　權值股千金股大反攻",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-09",
+          "theme_text": "國安基金護盤",
+          "reason": "原文寫國安基金宣布史上第10次護盤"
+        },
+        {
+          "news_id": 25544,
+          "title": "國安基金5000億銀彈出鞘！台股狂飆逾2500點　「這8檔股票」前次護盤全數獲利",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-09",
+          "theme_text": "國安基金護盤",
+          "reason": "原文寫國安基金第10次護盤啟動"
+        },
+        {
+          "news_id": 25543,
+          "title": "【台股盤中】台股強彈逾2600點　跌深權值股、千金股大反攻",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-09",
+          "theme_text": "國安基金護盤",
+          "reason": "原文寫國安基金宣布史上第10次護盤"
+        },
+        {
+          "news_id": 25396,
+          "title": "台股救市組合拳來了！國安基金第十度進場 金管會5大措施同步啟動",
+          "source_name": "工商時報",
+          "news_date": "2026-11-09",
+          "theme_text": "國安基金護盤",
+          "reason": "原文寫國安基金決議自9日起進場護盤"
+        }
+      ]
+    },
+    {
+      "id": 1099,
+      "theme_key": "人工智慧",
+      "display_name": "人工智慧",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 17,
+      "first_news_date": "2026-11-01",
+      "last_news_date": "2026-11-07",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v3",
+      "aggregation_version": "theme_suggestions_v2",
+      "llm_models": [
+        "claude-sonnet-5-5"
+      ],
+      "computed_at": "2026-11-09T13:58:16.775426+00:00",
+      "news": [
+        {
+          "news_id": 25092,
+          "title": "美股收盤／晶片股反彈「費半漲4.21%」　AMD勁揚逾11%、台積電ADR漲6.33%",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-07",
+          "theme_text": "人工智慧",
+          "reason": "摘要提到人工智慧投資疑慮未歇"
+        },
+        {
+          "news_id": 25016,
+          "title": "傳微軟逐步終止租用甲骨文AI算力　重新評估雲端合作",
+          "source_name": "中央社",
+          "news_date": "2026-11-07",
+          "theme_text": "人工智慧",
+          "reason": "原文提到AI運算資源租用"
+        },
+        {
+          "news_id": 24984,
+          "title": "傳台積電進軍3D DRAM　應輝達要求規劃製造、評估建廠",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-07",
+          "theme_text": "人工智慧",
+          "reason": "原文提到AI硬體市場"
+        },
+        {
+          "news_id": 24156,
+          "title": "台股史詩級暴跌！盤中狂殺逾3,700點創史上最大跌點　外媒爆財政部致電公股銀行護盤",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-06",
+          "theme_text": "人工智慧",
+          "reason": "原文提到人工智慧產業前景疑慮衝擊台股"
+        },
+        {
+          "news_id": 23926,
+          "title": "史上第四慘！台股收盤下殺1873點 上市櫃18檔逆勢漲停",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-06",
+          "theme_text": "人工智慧",
+          "reason": "原文稱民主黨打算加強控制人工智慧產業發展"
+        }
+      ]
+    },
+    {
+      "id": 1254,
+      "theme_key": "測試介面",
+      "display_name": "測試介面",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 17,
+      "first_news_date": "2026-11-05",
+      "last_news_date": "2026-11-06",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v3",
+      "aggregation_version": "theme_suggestions_v2",
+      "llm_models": [
+        "claude-sonnet-5-5"
+      ],
+      "computed_at": "2026-11-09T13:58:16.775426+00:00",
+      "news": [
+        {
+          "news_id": 23690,
+          "title": "盤中速報 - 櫃買市場加權指數下跌-25.22點至296.25點，跌幅7.85%",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-06",
+          "theme_text": "測試介面",
+          "reason": "原文列測試介面概念領跌。"
+        },
+        {
+          "news_id": 23689,
+          "title": "盤中速報 - 集中市場加權指數下跌-2561.92點至39012.8點，跌幅6.16%",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-06",
+          "theme_text": "測試介面",
+          "reason": "原文列測試介面概念領跌。"
+        },
+        {
+          "news_id": 23688,
+          "title": "盤中速報 - 櫃買市場加權指數下跌-22.17點至299.3點，跌幅6.9%",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-06",
+          "theme_text": "測試介面",
+          "reason": "原文列測試介面概念領跌。"
+        },
+        {
+          "news_id": 23686,
+          "title": "盤中速報 - 集中市場加權指數下跌-1908.42點至39666.3點，跌幅4.59%",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-06",
+          "theme_text": "測試介面",
+          "reason": "原文寫測試介面概念領跌"
+        },
+        {
+          "news_id": 23685,
+          "title": "盤中速報 - 櫃買市場加權指數下跌-17.38點至304.09點，跌幅5.41%",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-06",
+          "theme_text": "測試介面",
+          "reason": "原文寫測試介面概念領跌"
+        }
+      ]
+    },
+    {
+      "id": 1143,
+      "theme_key": "矽光子",
+      "display_name": "矽光子",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 16,
+      "first_news_date": "2026-11-02",
+      "last_news_date": "2026-11-09",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v3",
+      "aggregation_version": "theme_suggestions_v2",
+      "llm_models": [
+        "claude-sonnet-5-5"
+      ],
+      "computed_at": "2026-11-09T13:58:16.775426+00:00",
+      "news": [
+        {
+          "news_id": 25659,
+          "title": "台股噴漲1960點 外資仍砍900億 三大法人賣超945.26億元",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-09",
+          "theme_text": "矽光子",
+          "reason": "原文寫矽光子強勢上攻"
+        },
+        {
+          "news_id": 25650,
+          "title": "統一期貨：台股大幅反彈，惟新台幣續貶，仍需觀察後續",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-09",
+          "theme_text": "矽光子",
+          "reason": "原文寫矽光子族群走揚"
+        },
+        {
+          "news_id": 25637,
+          "title": "台股噴漲1960點 外資仍砍900億 三大法人賣超945.26億元",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-09",
+          "theme_text": "矽光子",
+          "reason": "原文寫矽光子強勢上攻"
+        },
+        {
+          "news_id": 25586,
+          "title": "〈焦點股〉台股逆襲大反攻！ 光通訊族群臉紅超過10檔亮燈衝上漲停板",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-09",
+          "theme_text": "矽光子",
+          "reason": "摘要提到法人看好矽光子"
+        },
+        {
+          "news_id": 22674,
+          "title": "聯嘉投控：墨西哥新廠本季量產　明年推矽光子模組樣品",
+          "source_name": "中央社",
+          "news_date": "2026-11-05",
+          "theme_text": "矽光子",
+          "reason": "原文提到規劃推出矽光子光通訊模組樣品"
+        }
+      ]
+    },
+    {
+      "id": 1086,
+      "theme_key": "asic",
+      "display_name": "ASIC",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 14,
+      "first_news_date": "2026-11-02",
+      "last_news_date": "2026-11-09",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v3",
+      "aggregation_version": "theme_suggestions_v2",
+      "llm_models": [
+        "claude-sonnet-5-5"
+      ],
+      "computed_at": "2026-11-09T13:58:16.775426+00:00",
+      "news": [
+        {
+          "news_id": 25535,
+          "title": "焦點股：聯發科AI ASIC放量，股價回測年線後彈升",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-09",
+          "theme_text": "ASIC",
+          "reason": "原文提到雲端ASIC營收預估"
+        },
+        {
+          "news_id": 25403,
+          "title": "外資連賣21日、股價回檔2成不影響 台積電獲調升目標價 因為有「額外訂單」！",
+          "source_name": "工商時報",
+          "news_date": "2026-11-09",
+          "theme_text": "ASIC",
+          "reason": "提到自研ASIC CPU"
+        },
+        {
+          "news_id": 25166,
+          "title": "宏致前三季EPS 3.31元 看好AI營收逐季增擬斥14億元購地擴產",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-07",
+          "theme_text": "ASIC",
+          "reason": "摘要提到ASIC需求強勁"
+        },
+        {
+          "news_id": 25036,
+          "title": "AI需求旺 哪些公司能賺得更多？從ASIC、ABF到CCL 拆解「ABC」選股邏輯",
+          "source_name": "工商時報",
+          "news_date": "2026-11-07",
+          "theme_text": "ASIC",
+          "reason": "標題提到ASIC選股邏輯"
+        },
+        {
+          "news_id": 23772,
+          "title": "《半導體》AI CPU大單接不完？創意獲外資力挺、目標價衝8000",
+          "source_name": "工商時報",
+          "news_date": "2026-11-06",
+          "theme_text": "ASIC",
+          "reason": "原文提到汽車及機器人ASIC業務。"
+        }
+      ]
+    },
+    {
+      "id": 1088,
+      "theme_key": "cpo",
+      "display_name": "CPO",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 14,
+      "first_news_date": "2026-11-02",
+      "last_news_date": "2026-11-09",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v3",
+      "aggregation_version": "theme_suggestions_v2",
+      "llm_models": [
+        "claude-sonnet-5-5"
+      ],
+      "computed_at": "2026-11-09T13:58:16.775426+00:00",
+      "news": [
+        {
+          "news_id": 25594,
+          "title": "Coherent飆漲！光通訊放閃 聯亞、光聖等逾10檔飆漲停",
+          "source_name": "工商時報",
+          "news_date": "2026-11-09",
+          "theme_text": "CPO",
+          "reason": "摘要提到TrendForce預估2028年CPO大幅放量"
+        },
+        {
+          "news_id": 25586,
+          "title": "〈焦點股〉台股逆襲大反攻！ 光通訊族群臉紅超過10檔亮燈衝上漲停板",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-09",
+          "theme_text": "CPO",
+          "reason": "摘要提到CPO需求"
+        },
+        {
+          "news_id": 23386,
+          "title": "上詮自結Q3每股虧0.06元 新增21.9億元資本支出擴充FAU產線",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-05",
+          "theme_text": "CPO",
+          "reason": "原文提到上詮強化CPO量產布局。"
+        },
+        {
+          "news_id": 7011,
+          "title": "《電零組》亞洲光學Q3獲利創同期新高 加速掌握實體AI關鍵商機",
+          "source_name": "工商時報",
+          "news_date": "2026-11-04",
+          "theme_text": "CPO",
+          "reason": "原文提到跨入CPO領域"
+        },
+        {
+          "news_id": 6998,
+          "title": "亞光Q3純益8.39億元EPS達3元創高 前3季每股賺5.98元",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-04",
+          "theme_text": "CPO",
+          "reason": "原文提到拓展CPO"
+        }
+      ]
+    },
+    {
+      "id": 1121,
+      "theme_key": "微波通訊元件",
+      "display_name": "微波通訊元件",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 14,
+      "first_news_date": "2026-11-04",
+      "last_news_date": "2026-11-05",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v3",
+      "aggregation_version": "theme_suggestions_v2",
+      "llm_models": [
+        "claude-sonnet-5-5"
+      ],
+      "computed_at": "2026-11-06T13:51:03.707527+00:00",
+      "news": [
+        {
+          "news_id": 22289,
+          "title": "盤中速報 - 櫃買市場加權指數下跌-6.99點至336.51點，跌幅2.03%",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-05",
+          "theme_text": "微波通訊元件",
+          "reason": "原文寫微波通訊元件概念領跌"
+        },
+        {
+          "news_id": 6921,
+          "title": "盤中速報 - 櫃買市場加權指數下跌-18.02點至327.5點，跌幅5.22%",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-04",
+          "theme_text": "微波通訊元件",
+          "reason": "原文寫微波通訊元件概念領跌。"
+        },
+        {
+          "news_id": 6920,
+          "title": "盤中速報 - 集中市場加權指數下跌-1433.1點至41874.44點，跌幅3.31%",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-04",
+          "theme_text": "微波通訊元件",
+          "reason": "原文寫微波通訊元件概念領跌。"
+        },
+        {
+          "news_id": 6914,
+          "title": "盤中速報 - 集中市場加權指數下跌-1132.97點至42174.57點，跌幅2.62%",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-04",
+          "theme_text": "微波通訊元件",
+          "reason": "原文列為領跌概念"
+        },
+        {
+          "news_id": 6913,
+          "title": "盤中速報 - 櫃買市場加權指數下跌-13.5點至332.02點，跌幅3.91%",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-04",
+          "theme_text": "微波通訊元件",
+          "reason": "原文列為領跌概念"
+        }
+      ]
+    },
+    {
+      "id": 1313,
+      "theme_key": "cpo封裝概念",
+      "display_name": "CPO封裝概念",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 14,
+      "first_news_date": "2026-11-03",
+      "last_news_date": "2026-11-03",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v3",
+      "aggregation_version": "theme_suggestions_v2",
+      "llm_models": [
+        "claude-sonnet-5-5"
+      ],
+      "computed_at": "2026-11-06T13:51:03.707527+00:00",
+      "news": [
+        {
+          "news_id": 6293,
+          "title": "盤中速報 - 櫃買市場加權指數下跌-23.95點至345.29點，跌幅6.49%",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-03",
+          "theme_text": "CPO封裝概念",
+          "reason": "原文寫CPO封裝概念領跌"
+        },
+        {
+          "news_id": 6292,
+          "title": "盤中速報 - 集中市場加權指數下跌-1575.62點至43344.52點，跌幅3.51%",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-03",
+          "theme_text": "CPO封裝概念",
+          "reason": "原文寫CPO封裝概念領跌"
+        },
+        {
+          "news_id": 6291,
+          "title": "盤中速報 - 櫃買市場加權指數下跌-22.28點至346.96點，跌幅6.03%",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-03",
+          "theme_text": "CPO封裝概念",
+          "reason": "原文寫CPO封裝概念領跌"
+        },
+        {
+          "news_id": 6290,
+          "title": "盤中速報 - 集中市場加權指數下跌-1479.27點至43440.87點，跌幅3.29%",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-03",
+          "theme_text": "CPO封裝概念",
+          "reason": "原文寫CPO封裝概念領跌"
+        },
+        {
+          "news_id": 6289,
+          "title": "盤中速報 - 櫃買市場加權指數下跌-22.3點至346.94點，跌幅6.04%",
+          "source_name": "鉅亨網",
+          "news_date": "2026-11-03",
+          "theme_text": "CPO封裝概念",
+          "reason": "原文寫CPO封裝概念領跌"
+        }
+      ]
+    },
+    {
+      "id": 1092,
+      "theme_key": "ic設計",
+      "display_name": "IC設計",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 13,
+      "first_news_date": "2026-11-02",
+      "last_news_date": "2026-11-09",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v3",
+      "aggregation_version": "theme_suggestions_v2",
+      "llm_models": [
+        "claude-sonnet-5-5"
+      ],
+      "computed_at": "2026-11-09T13:58:16.775426+00:00",
+      "news": [
+        {
+          "news_id": 25547,
+          "title": "聯發科亮燈漲停！5萬多人上周勇敢抄底 帳上最高賺61萬元",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-09",
+          "theme_text": "IC設計",
+          "reason": "原文稱聯發科為IC設計龍頭"
+        },
+        {
+          "news_id": 25450,
+          "title": "焦點股》聯發科：國安基金首選股！買盤先卡位",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-09",
+          "theme_text": "IC設計",
+          "reason": "摘要稱聯發科為IC設計龍頭"
+        },
+        {
+          "news_id": 23872,
+          "title": "《半導體》AI投資踩煞車未必壞事！致新Q3每股賺5.67元、吳錦川揭原因",
+          "source_name": "工商時報",
+          "news_date": "2026-11-06",
+          "theme_text": "IC設計",
+          "reason": "原文提到非AI相關IC設計業者"
+        },
+        {
+          "news_id": 22449,
+          "title": "《熱門族群》AI股遭錯殺？法人喊免驚！點名聯發科、創意等3檔",
+          "source_name": "工商時報",
+          "news_date": "2026-11-05",
+          "theme_text": "IC設計",
+          "reason": "原文提到台灣IC設計產業"
+        },
+        {
+          "news_id": 22197,
+          "title": "聯發科延攬英特爾前主管　深化供應鏈夥伴合作",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-04",
+          "theme_text": "IC設計",
+          "reason": "原文稱聯發科技為IC設計廠"
+        }
+      ]
+    },
+    {
+      "id": 1193,
+      "theme_key": "ai概念股",
+      "display_name": "AI概念股",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 12,
+      "first_news_date": "2026-11-02",
+      "last_news_date": "2026-11-09",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v3",
+      "aggregation_version": "theme_suggestions_v2",
+      "llm_models": [
+        "claude-sonnet-5-5"
+      ],
+      "computed_at": "2026-11-09T13:58:16.775426+00:00",
+      "news": [
+        {
+          "news_id": 25643,
+          "title": "台股狂飆1,960點創史上第二大漲點！外資卻狂倒逾900億 分析師：還不能喊落底",
+          "source_name": "工商時報",
+          "news_date": "2026-11-09",
+          "theme_text": "AI 概念股",
+          "reason": "原文寫AI概念股全面強攻"
+        },
+        {
+          "news_id": 25614,
+          "title": "台股盤中飆漲逾2600點 15檔千金股衝漲停",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-09",
+          "theme_text": "AI概念股",
+          "reason": "摘要提到AI概念股回神"
+        },
+        {
+          "news_id": 25287,
+          "title": "台股能翻身？緊盯「3大指標」、台積電10月營收這天揭曉",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-08",
+          "theme_text": "AI概念股",
+          "reason": "原文稱台股受美股AI概念股拖累"
+        },
+        {
+          "news_id": 25146,
+          "title": "台股血崩投資人難眠！命理師示警「1時間」再爆股災",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-07",
+          "theme_text": "AI 概念股",
+          "reason": "原文寫美國AI概念股重挫"
+        },
+        {
+          "news_id": 25020,
+          "title": "台股盤中狂拉2千點 未守住4萬大關",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-11-07",
+          "theme_text": "AI概念股",
+          "reason": "原文提到AI概念股遭殺"
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "total": 459,
+    "limit": 20,
+    "include_matched": false,
+    "matched_total": 24,
+    "news_per_suggestion": 5,
+    "aggregation_version": "theme_suggestions_v2",
+    "updated_at": "2026-11-09T13:58:16.775426+00:00",
+    "sort": "news_count desc, last_news_date desc, theme_key asc"
+  }
+}

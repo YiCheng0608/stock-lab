@@ -1,0 +1,67 @@
+{
+  "jobs": 4,
+  "hits": 5,
+  "screenshot_hits": 4,
+  "api_hits": 1,
+  "retaken": [
+    "theme-detail"
+  ],
+  "recovered": [],
+  "replaced_problems": {},
+  "rechecked": {
+    "news?theme_id=official-industry-206d1b19286222a7&limit=10": 0
+  },
+  "urls": [
+    {
+      "path": "news?theme_id=official-industry-206d1b19286222a7&limit=10",
+      "status": 504,
+      "count": 4
+    },
+    {
+      "path": "dashboard",
+      "status": 0,
+      "count": 1
+    }
+  ],
+  "checks": [
+    "today T2",
+    "today T3",
+    "today T6",
+    "today T11",
+    "today T14",
+    "today T16",
+    "stocks S3"
+  ],
+  "events": [
+    {
+      "source": "截圖",
+      "where": "theme-detail-1280",
+      "status": 504,
+      "path": "news?theme_id=official-industry-206d1b19286222a7&limit=10"
+    },
+    {
+      "source": "截圖",
+      "where": "theme-detail-390",
+      "status": 504,
+      "path": "news?theme_id=official-industry-206d1b19286222a7&limit=10"
+    },
+    {
+      "source": "重截",
+      "where": "theme-detail-1280",
+      "status": 504,
+      "path": "news?theme_id=official-industry-206d1b19286222a7&limit=10"
+    },
+    {
+      "source": "重截",
+      "where": "theme-detail-390",
+      "status": 504,
+      "path": "news?theme_id=official-industry-206d1b19286222a7&limit=10"
+    },
+    {
+      "source": "api",
+      "where": "run.get",
+      "status": 0,
+      "path": "dashboard"
+    }
+  ]
+}
