@@ -65,8 +65,8 @@ export class ApiError extends Error {
   }
 }
 
-async function get<T>(path: string): Promise<T> {
-  const response = await fetch(API_BASE + path)
+async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(API_BASE + path, signal ? { signal } : undefined)
   if (!response.ok) {
     throw new ApiError(response.status, await response.text())
   }
@@ -112,6 +112,9 @@ export const getGroups = (params: PageParams = {}) =>
 export const getGroup = (id: string) => get<GroupDetail>(`/groups/${encodeURIComponent(id)}`)
 export const getInstruments = (params: PageParams = {}) =>
   get<Paginated<Instrument>>(`/instruments${queryString(params)}`)
+// Navbar suggestions (Issue 599): path from search.ts suggestionPath, the only request made while typing.
+export const getInstrumentSuggestions = (path: string, signal: AbortSignal) =>
+  get<Paginated<Instrument>>(path, signal).then((page) => page.items)
 export const getInstrument = (symbol: string, exchange?: string) =>
   get<InstrumentDetail>(
     `/instruments/${encodeURIComponent(symbol)}${exchange ? `?exchange=${encodeURIComponent(exchange)}` : ''}`,

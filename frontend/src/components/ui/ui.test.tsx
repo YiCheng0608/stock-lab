@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom/server'
 
 import { Navbar, stockSearchPath } from '../Navbar'
+import { SuggestPopup } from '../NavSearch'
 import { Badge, Button, Card, DataTable, DateBadge, EmptyState, MarketWidget, Skeleton, Stat, Tabs } from '.'
 
 // Standalone regression module (no browser, no server): one minimal render check per ui component
@@ -59,4 +60,16 @@ check(!html(<StaticRouter location="/"><Navbar dataDate={null} dataDateLoading /
 // #465: a failed /api/dashboard (500/504 on the production copy under load) read 資料日期待核實.
 const navbarError = html(<StaticRouter location="/actions"><Navbar dataDate={null} dataDateError /></StaticRouter>)
 check(navbarError.includes('資料日期暫時無法載入') && !navbarError.includes('待核實'), `Navbar says the date could not load: ${navbarError}`)
+// Issue 599: the navbar box is a combobox whose suggestions list code, name and market.
+check(/<input[^>]*role="combobox"[^>]*aria-autocomplete="list"[^>]*aria-expanded="false"[^>]*aria-controls="nav-suggest-[^"]+"/.test(navbar) && navbar.includes('aria-label="搜尋個股代號或名稱"') && navbar.includes('placeholder="代號或名稱"'), `Navbar search is a combobox: ${navbar}`)
+const suggestState = { query: '23', status: 'ready' as const, active: 1, open: true, items: [{ exchange: 'TWSE', symbol: '2330', name: '台積電' }, { exchange: 'TPEx', symbol: '00723B', name: '群益投資級科技債' }] }
+const popup = html(<SuggestPopup state={suggestState} listId="s" />)
+check(popup.includes('<ul class="nav-suggest-list" id="s" role="listbox" aria-label="符合的股票">'), `SuggestPopup listbox: ${popup}`)
+check(popup.split('role="option"').length - 1 === 2 && popup.includes('id="s-option-1" role="option" aria-selected="true"') && popup.includes('id="s-option-0" role="option" aria-selected="false"'), `SuggestPopup options and highlighted one: ${popup}`)
+check(['2330', '台積電', '上市', '00723B', '群益投資級科技債', '上櫃'].every((value) => popup.includes(`>${value}</span>`)), `SuggestPopup shows code, name and market: ${popup}`)
+const noMatch = html(<SuggestPopup state={{ ...suggestState, items: [] }} listId="s" />)
+check(noMatch.includes('role="status"') && noMatch.includes('沒有符合「23」的股票，按 Enter 到個股清單搜尋。') && !noMatch.includes('role="listbox"'), `SuggestPopup no match: ${noMatch}`)
+const failed = html(<SuggestPopup state={{ ...suggestState, status: 'error', items: [] }} listId="s" />)
+check(failed.includes('建議暫時無法載入，按 Enter 到個股清單搜尋。'), `SuggestPopup failure: ${failed}`)
+check(html(<SuggestPopup state={{ ...suggestState, status: 'loading' }} listId="s" />) === '' && html(<SuggestPopup state={{ ...suggestState, open: false }} listId="s" />) === '', 'SuggestPopup shows nothing while loading or closed')
 check(stockSearchPath(' 2330 ') === '/stocks?q=2330' && stockSearchPath('台積 電') === '/stocks?q=%E5%8F%B0%E7%A9%8D%20%E9%9B%BB' && stockSearchPath('  ') === null, 'Navbar search path')
