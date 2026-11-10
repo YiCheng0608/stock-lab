@@ -196,9 +196,16 @@ def rank(
 
 
 def overlap(first: Sequence[int], second: Sequence[int], size: int = TOP_N) -> float:
-    """|first[:size] ∩ second[:size]| ÷ size."""
+    """|first[:size] ∩ second[:size]| ÷ the larger of the two tops.
 
-    return len(set(first[:size]) & set(second[:size])) / size
+    A day whose pool holds fewer than ``size`` actionable stocks has short
+    tops; dividing by ``size`` would score v7 against itself below 100%.
+    Two empty tops count as 0.
+    """
+
+    a, b = set(first[:size]), set(second[:size])
+    larger = max(len(a), len(b))
+    return len(a & b) / larger if larger else 0.0
 
 
 # ---- the rule a ranking passes to be proposed (fixed before any result) ----

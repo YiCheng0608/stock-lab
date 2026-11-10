@@ -440,11 +440,22 @@ def build(
                 for day in chosen
                 for signal_id in per_day[day]["tops"][code]
             ]
+            compared = [day for day in chosen if per_day[day]["tops"]["v7"]]
             overlaps = [
                 cr.overlap(per_day[day]["tops"][code], per_day[day]["tops"]["v7"], top)
-                for day in chosen
-                if per_day[day]["tops"]["v7"]
+                for day in compared
             ]
+            # 交集檔數／該日 v7 前 N 檔的檔數（不足 N 檔的日子照實記）。
+            shared = Counter(
+                (
+                    len(
+                        set(per_day[day]["tops"][code])
+                        & set(per_day[day]["tops"]["v7"])
+                    ),
+                    len(per_day[day]["tops"]["v7"]),
+                )
+                for day in compared
+            )
             replaced = sum(
                 len(set(per_day[day]["tops"][code]) - set(per_day[day]["tops"]["v7"]))
                 for day in chosen
@@ -462,8 +473,8 @@ def build(
                     "days": len(overlaps),
                     "mean": statistics.fmean(overlaps) if overlaps else None,
                     "histogram": {
-                        f"{round(k * top)}/{top}": v
-                        for k, v in sorted(Counter(overlaps).items())
+                        f"{inter}/{size}": v
+                        for (inter, size), v in sorted(shared.items())
                     },
                 },
                 **summarize(signals, settled),
@@ -636,9 +647,9 @@ def markdown(result: dict[str, Any], command: str) -> str:
             )
     lines += [
         "",
-        f"### 重疊率分佈（每日與 v7 前 {top} 檔的交集數，{tag}）",
+        f"### 重疊率分佈（每日與 v7 前 {top} 檔的交集檔數／v7 當日檔數：日數；平均重疊率的分母取兩邊前 {top} 檔較多的一邊，{tag}）",
         "",
-        "| 排序 | 段 | 分佈（交集／日數） |",
+        "| 排序 | 段 | 分佈（交集／v7 檔數：日數） |",
         "| --- | --- | --- |",
     ]
     for code, item in result["rankings"].items():

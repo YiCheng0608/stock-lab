@@ -231,6 +231,15 @@ def test_overlap_counts_the_first_slots_only():
     assert cr.overlap([1, 2, 3], [3, 4, 1], size=3) == pytest.approx(2 / 3)
     assert cr.overlap(list(range(12)), list(range(10)) + [20, 21]) == 1.0
     assert cr.overlap([], [1, 2]) == 0.0
+    assert cr.overlap([], []) == 0.0
+
+
+def test_overlap_divides_by_the_larger_short_top():
+    # A day with fewer than TOP_N actionable stocks: v7 against itself is 100%.
+    assert cr.overlap([1, 2, 3], [1, 2, 3]) == 1.0
+    # A filtered ranking (K3) with a shorter top: shared ÷ v7's size.
+    assert cr.overlap([2], [1, 2, 3]) == pytest.approx(1 / 3)
+    assert cr.overlap([1, 2, 3, 4], [1, 2]) == pytest.approx(2 / 4)
 
 
 def test_the_proposal_rule():
@@ -387,6 +396,13 @@ def test_the_tool_ranks_a_research_run_and_writes_nothing(
         tables["rankings"]["v7"]["scopes"][q]["slots"] for q in tables["quarters"]
     )
     assert tables["rankings"]["v7"]["scopes"]["all"]["replaced"] == 0
+    v7_overlap = tables["rankings"]["v7"]["scopes"]["all"]["overlap"]
+    if v7_overlap["days"]:
+        # Short tops (fewer than TOP_N actionable) still overlap v7 fully.
+        assert v7_overlap["mean"] == 1.0
+        assert all(
+            key.split("/")[0] == key.split("/")[1] for key in v7_overlap["histogram"]
+        )
     summary = (out / "summary.md").read_text(encoding="utf-8")
     assert run["request_key"] in summary and "段別判定" in summary
     header = (out / "rankings.csv").read_text(encoding="utf-8").splitlines()[0]
