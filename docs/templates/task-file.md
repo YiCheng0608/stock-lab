@@ -27,14 +27,15 @@
 ## 驗證
 
 - 每條 AC 的驗法：<單元測試（記憶體 DB、小 fixture，舊程式紅新程式綠）、正式 DB 唯讀副本實測、截圖等>
-- 本機檢查：容器（compose project `task-<issue>`）跑後端 `pytest`、`ruff check`、`ruff format --check`，以及前端 test 與 build；改檔後 `compose run` 加 `--build`。
+- 本機檢查：容器（compose project `task-<issue>`）跑改動相關的後端測試檔（<檔名>）、`ruff check`、`ruff format --check`，以及前端 test 與 build；全套後端 pytest 由 PR CI 跑，本機不跑（docs/WORKFLOW.md「本機檢查」）。改檔後 `compose run` 加 `--build`。
 - 正式 DB 唯讀副本（需要時）：docs/ops/LOCAL.md「取正式 DB 的唯讀副本」，放進 `task-<issue>_` 開頭的 Docker volume，新 volume 先 chown 1000。
-- 台北 21:30～23:30 是 daily 時段：不跑全套 pytest、不做吃記憶體的 `docker build`。
+- 台北 21:30～23:30 是 daily 時段：不做吃記憶體的 `docker build`。
 - 部署後才能驗的 AC：PR 標「待部署」，由統籌做。
 
 ## 回報
 
 - 開工後在 Issue 留一則 `回報：開工`：session、branch、HEAD、任務檔路徑，以及本檔的 Issue 連結與 AC 數（<N>）。
 - 之後的提問與回報照 docs/WORKFLOW.md「留言類型」寫在 Issue／PR 留言（第一行是 `提問：`／`回報：`），不送到統籌 terminal。
+- 背景工作被系統停掉、或任何要等統籌才能繼續的情況，以 `提問：` 留在 Issue，不在 terminal 等。
 - PR 本文照抄 `docs/templates/pull-request.md`，要有 `Closes #<issue>`；worktree 外暫存目錄寫 `C:/Users/YiCheng/t<issue>`。
 - pytest 的 `--basetemp` 用 `C:/Users/YiCheng/t<issue>/b1` 這類路徑，不要放在 `task/` 底下。

@@ -31,7 +31,8 @@
 # CLAUDE_CODE_SESSION_ID, stays, and without that id none is deleted) and the old-format
 # $TEMP/claude/<worktree path, "-" for every character but A-Z a-z 0-9>; whatever cannot
 # be found or deleted only adds a scratchpad_skipped step, and a dry run (--no-board)
-# touches none. Then delete the
+# touches none. Then the turn hook's state files of the same sessions,
+# <data>/logs/sessions/<id>.json (#595; session_state_cleanup, same rules). Then delete the
 # task's Docker resources (docker_cleanup in coordinator_lib.sh, #360: images, stopped
 # containers, volumes and networks named t<issue>/task-<issue>; none while one of them runs;
 # then dangling images and build cache once no other Docker task is in progress; no docker or
@@ -187,17 +188,54 @@ scratch_remove() {
 # search under Temp. Then the task's old-format project directory, the worktree path in
 # that spelling, exactly: its session directories, then the directory once empty. Without
 # the worktree path the old format is not looked for (whose it is cannot be told).
+# task_session_ids: fill task_sids once with the session ids of the Issue's 回報：開工
+# comments; returns 1 when the comments cannot be read. Shared by the scratchpads and
+# the turn hook's state files (#595), so the comments are read once.
+task_sids=() task_sids_read=""
+task_session_ids() {
+  local out
+  if [ -z "$task_sids_read" ]; then
+    task_sids_read=failed
+    out="$(gh api "repos/$GH_REPO/issues/$issue/comments?per_page=100" --paginate)" \
+      && out="$(printf '%s' "$out" | cj start-sessions)" || return 1
+    mapfile -t task_sids < <(printf '%s\n' "$out" | tr -d '\r' | grep -E "$uuid_re")
+    task_sids_read=ok
+  fi
+  [ "$task_sids_read" = ok ]
+}
+
+# session_state_cleanup: the turn hook's state files of the task's sessions (#595),
+# <data>/logs/sessions/<id>.json, found by the same session ids as the scratchpads. Never
+# fails the close; a dry run (--no-board) touches none.
+session_state_cleanup() {
+  local sid file
+  [ "$set_board" = 1 ] || { steps+=("session_state_skipped:no_board"); return 0; }
+  task_session_ids || { steps+=("session_state_skipped:comments_unreadable"); return 0; }
+  local tmps=()
+  for sid in "${task_sids[@]+"${task_sids[@]}"}"; do
+    file="$data_dir/logs/sessions/$sid.json"
+    # A write the hook did not finish leaves .<id>.json.tmp.<pid> beside it.
+    shopt -s nullglob
+    tmps=("$data_dir/logs/sessions/.$sid.json.tmp."*)
+    shopt -u nullglob
+    [ -f "$file" ] || [ ${#tmps[@]} -gt 0 ] || continue
+    if rm -f -- "$file" "${tmps[@]+"${tmps[@]}"}" && [ ! -e "$file" ]; then
+      steps+=("session_state_removed:$sid")
+    else
+      steps+=("session_state_skipped:delete_failed:$sid")
+    fi
+  done
+}
+
 scratchpad_cleanup() {
-  local temp claude out sid dir old found sids=() dirs=()
+  local temp claude sid dir old found sids=() dirs=()
   [ "$set_board" = 1 ] || { steps+=("scratchpad_skipped:no_board"); return 0; }
   # Without it this session's own directory cannot be told apart (a shell outside Claude).
   [[ "${CLAUDE_CODE_SESSION_ID:-}" =~ $uuid_re ]] || { steps+=("scratchpad_skipped:no_own_session_id"); return 0; }
   temp="$(native "${TEMP:-}")" || { steps+=("scratchpad_skipped:no_temp"); return 0; }
   claude="${temp%/}/claude"
-  out="$(gh api "repos/$GH_REPO/issues/$issue/comments?per_page=100" --paginate)" \
-    && out="$(printf '%s' "$out" | cj start-sessions)" \
-    || { steps+=("scratchpad_skipped:comments_unreadable"); return 0; }
-  mapfile -t sids < <(printf '%s\n' "$out" | tr -d '\r' | grep -E "$uuid_re")
+  task_session_ids || { steps+=("scratchpad_skipped:comments_unreadable"); return 0; }
+  sids=("${task_sids[@]+"${task_sids[@]}"}")
   [ ${#sids[@]} -gt 0 ] || steps+=("scratchpad_skipped:no_session_id")
   shopt -s nullglob
   for sid in "${sids[@]+"${sids[@]}"}"; do
@@ -393,6 +431,7 @@ for dir in "${extra_live[@]+"${extra_live[@]}"}"; do
   steps+=("extra_removed:$dir")
 done
 scratchpad_cleanup
+session_state_cleanup
 # Docker resources named for the task (docker_cleanup in coordinator_lib.sh, #360): never
 # fails the close; a dry run (--no-board) does not prune what other tasks share.
 docker_prune=if-found
