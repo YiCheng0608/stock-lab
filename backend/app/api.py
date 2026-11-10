@@ -2674,7 +2674,9 @@ def _stock_trading_halt(
 
     The day is the requested cutoff, or else the latest TAIEX session: the
     default cutoff is the stock's own last bar, which a stop leaves behind, so
-    the header says why the price is older than the market.
+    the header says why the price is older than the market.  A day the stock
+    has a bar is a trading day whatever the stop says (TWSE's stated start can
+    be a session early until a collect corrects it), so it has no stop.
     """
 
     day = requested or db.scalar(
@@ -2690,6 +2692,16 @@ def _stock_trading_halt(
         return None
     row = halt_on(db, instrument.id, day)
     if row is None:
+        return None
+    traded = db.scalar(
+        select(MarketBar.id)
+        .where(
+            MarketBar.instrument_id == instrument.id,
+            MarketBar.trading_date == day,
+        )
+        .limit(1)
+    )
+    if traded is not None:
         return None
     return {**halt_dict(row), "as_of": day.isoformat()}
 

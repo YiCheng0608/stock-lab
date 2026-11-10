@@ -395,6 +395,7 @@ TWSE 的年度市場開休市日期，上市與上櫃共用（同 [TAIEX 交易�
 - **保存**：`trading_halts` 每個標的、每個來源、每個恢復日一列，記 `exchange`、`halt_start`、`resume_date`、`last_trade_date`、`reason`（`capital_reduction`）、`reason_detail`（減資原因，如「退還股款」「彌補虧損」）、`source`（`twse_twtauu`／`tpex_revivt`）、`endpoint`（含查詢區間）、`data_as_of`（查詢那天：collect 的收集日或 CLI 的執行日）、`collected_at`、`raw_payload_id` 與官方原列 `details_json`。
 - **重建**：每份可讀的回應對它的區間是完整的。同一來源、恢復日落在該區間的已存列都用它重建：
   - 回應不再列出的列刪除（例如恢復日延後，舊列刪掉、新列寫入）。
+  - 回應一列都沒有（TWSE「沒有符合條件」、TPEx 空表）而該來源在這個區間已有存列時，不刪任何列，記非核心 warning `<交易所> trading halts empty answer kept N stored rows resuming …`，run metadata 記 `kept_on_empty`：TWSE 的空回應沒有區間與總數可核對，官方誤回一次空表就會刪光區間內的列，若剛好在恢復日後第 10 天就再也查不回來。區間內沒有存列時空回應照常、不記 warning。恢復日不在區間內的已存列不受這次重建影響。
   - 內容改變的列改指向新的 capture；沒變的列保留原 capture。
   - 代號在 `instruments` 找不到的只計入 `outside_universe`，不寫；已下市但主檔還有的標的照寫。
   - run metadata 的 `trading_halts` 依交易所記 `inserted`／`updated`／`unchanged`／`removed`／`outside_universe`／`rejected`／`conflicts`。
@@ -402,7 +403,7 @@ TWSE 的年度市場開休市日期，上市與上櫃共用（同 [TAIEX 交易�
 - **誰讀它**：
   - coverage（`/api/coverage`、回補報表）把期間內沒有 bar 的交易日算進涵蓋，原因是 `capital_reduction_halt`，不列為 `missing_bar_dates`；摘要另計 `halted_to_20`／`halted_to_60`。
   - 個股頁與行動摘要的原因句寫「近 60 個交易日有 N 天減資換發新股停止買賣（… 起，… 恢復）」，取代「官方行情表未列此股」（[UI_COPY_SPEC §6.1](UI_COPY_SPEC.md#61-資料不足的原因句)）。
-  - 個股頁頁首在停止買賣中標「停止買賣中（減資換發新股，預計 YYYY/MM/DD 恢復）」（個股 API `trading_halt`，[UI_COPY_SPEC §8.2](UI_COPY_SPEC.md#82-個股詳情的第一屏)）。
+  - 個股頁頁首在停止買賣中標「停止買賣中（減資換發新股，預計 YYYY/MM/DD 恢復）」（個股 API `trading_halt`，[UI_COPY_SPEC §8.2](UI_COPY_SPEC.md#82-個股詳情的第一屏)）；頁面的日子該股有 bar 時不標（TWSE 起日早一個交易日、當天校正的 collect 又失敗時，那天其實有交易）。
   - 跟[官方無成交日](#官方無成交日)一樣只用來說明原因：指標、策略、追蹤與「20／60 日基準還缺幾日」照舊只數 bar（[#582 決定](https://github.com/YiCheng0608/stock-lab/issues/582#issuecomment-6748789255)）。恢復日起照常交易，區間不向後延長，恢復後的缺日照舊判斷。
 - **限制**：只涵蓋減資；面額變更、合併、分割、終止上市等其他原因的停止買賣仍是「官方行情表未列此股」。TWSE 回應裡尚未算出參考價的列（例如 1808 潤隆的價格欄為 `-`）照樣寫區間。
 

@@ -353,15 +353,43 @@ def test_collect_writes_each_stop_with_its_raw(env):
     assert meta["TPEx"]["inserted"] == 1
 
 
+# A TPEx stop of a code without a stored instrument.
+TPEX_OTHER = [
+    "1151123",
+    "9958",
+    "世紀鋼",
+    "-",
+    "-",
+    "-",
+    "-",
+    "-",
+    "0.00",
+    "彌補虧損",
+    _tpex_detail("9958", "世紀鋼", "115/11/12", "115/11/23"),
+]
+
+
+def _resumptions(db):
+    return sorted(
+        (row.exchange, symbol, row.resume_date)
+        for row, symbol in db.execute(
+            select(TradingHalt, Instrument.symbol).join(
+                Instrument, Instrument.id == TradingHalt.instrument_id
+            )
+        )
+    )
+
+
 def test_a_later_answer_rebuilds_its_range(env):
     _collect([TWSE_3714], [TPEX_4534])
-    # The next day TWSE postpones 3714 by a week and TPEx no longer lists 4534.
+    # The next day TWSE postpones 3714 by a week and TPEx no longer lists 4534
+    # (it lists another stop).
     later = [
         "115/11/23",
         *TWSE_3714[1:-1],
         "3714  ,20261104",
     ]
-    result, _captures = _collect([later], [], day=date(2026, 11, 10))
+    result, _captures = _collect([later], [TPEX_OTHER], day=date(2026, 11, 10))
 
     assert result["status"] == "success", result
     with env() as db:
@@ -371,7 +399,89 @@ def test_a_later_answer_rebuilds_its_range(env):
     assert halts[("TWSE", "3714")].resume_date == date(2026, 11, 23)
     meta = run.metadata_json["trading_halts"]
     assert (meta["TWSE"]["inserted"], meta["TWSE"]["removed"]) == (1, 1)
-    assert meta["TPEx"]["removed"] == 1
+    assert (meta["TPEx"]["removed"], meta["TPEx"]["outside_universe"]) == (1, 1)
+
+
+def test_an_empty_answer_keeps_the_stored_stops(env):
+    # TWSE's empty answer has no range or count to check: a wrong one must not
+    # lose the stops (on D = resumption + 10 they would never come back).
+    _collect([TWSE_3714], [TPEX_4534])
+    result, _captures = _collect([], [], day=date(2026, 11, 10))
+
+    assert result["status"] == "success", result
+    assert result["core_warnings"] == []
+    window = "2026-10-31..2027-01-09"
+    assert [item for item in result["noncore_warnings"] if "trading halts" in item] == [
+        f"TWSE trading halts empty answer kept 1 stored rows resuming {window}",
+        f"TPEx trading halts empty answer kept 1 stored rows resuming {window}",
+    ]
+    with env() as db:
+        assert set(_halts(db)) == {("TWSE", "3714"), ("TPEx", "4534")}
+        run = db.get(IngestionRun, result["run_id"])
+    meta = run.metadata_json["trading_halts"]
+    assert (meta["TWSE"]["removed"], meta["TWSE"]["kept_on_empty"]) == (0, 1)
+    assert (meta["TPEx"]["removed"], meta["TPEx"]["kept_on_empty"]) == (0, 1)
+
+
+def test_an_empty_answer_with_nothing_stored_is_quiet(env):
+    result, _captures = _collect([], [])
+
+    assert result["status"] == "success", result
+    assert not [item for item in result["noncore_warnings"] if "trading halts" in item]
+
+
+def test_a_rebuild_leaves_stops_resuming_outside_its_range(env):
+    _collect([TWSE_3714], [TPEX_4534])
+    # Two months on, 3714 reduces again; the 11/16 resumption is outside the
+    # new answer's range (2027-01-01..2027-03-12); TPEx lists nothing there.
+    again = ["116/01/12", *TWSE_3714[1:-1], "3714  ,20270105"]
+    result, _captures = _collect([again], [], day=date(2027, 1, 11))
+
+    assert result["status"] == "success", result
+    with env() as db:
+        assert _resumptions(db) == [
+            ("TPEx", "4534", date(2026, 11, 16)),
+            ("TWSE", "3714", date(2026, 11, 16)),
+            ("TWSE", "3714", date(2027, 1, 12)),
+        ]
+        run = db.get(IngestionRun, result["run_id"])
+    meta = run.metadata_json["trading_halts"]
+    assert (meta["TWSE"]["inserted"], meta["TWSE"]["removed"]) == (1, 0)
+    assert meta["TPEx"]["removed"] == 0
+
+
+def test_a_failed_write_changes_neither_the_stops_nor_the_collect(env):
+    # The TWSE window's capture is not among the collect's payloads, so its
+    # write fails inside its savepoint: TPEx and the bars are still written.
+    quotes, bars = harness._session(DAY, [harness._twse_row("2330", "1000.00")], [])
+    twse = _halt_capture("TWSE", lambda start, end: twse_payload(start, end, TWSE_3714))
+    tpex = _halt_capture("TPEx", lambda start, end: tpex_payload(start, end, TPEX_4534))
+    batch = sources.OfficialBatch(
+        instruments=[harness.INDEX, harness.TSMC, FUCHI, CHINGTENG],
+        bars=bars,
+        chips=[],
+        payloads=quotes + [tpex[0]],
+        data_as_of=DAY.isoformat(),
+        snapshot_feeds=False,
+        trading_halts=twse[1] + tpex[1],
+        trading_halt_windows=[twse[2], tpex[2]],
+    )
+
+    result = pipeline.collect(DAY, months_back=0, adapter=harness.FakeAdapter(batch))
+
+    assert result["status"] == "success", result
+    assert [item for item in result["noncore_warnings"] if "trading halts" in item] == [
+        "TWSE trading halts unavailable: ValueError: no raw payload for the TWSE "
+        "capital reduction table"
+    ]
+    with env() as db:
+        assert set(_halts(db)) == {("TPEx", "4534")}
+        tsmc_bars = db.scalars(
+            select(MarketBar.trading_date)
+            .join(Instrument, Instrument.id == MarketBar.instrument_id)
+            .where(Instrument.symbol == "2330")
+        ).all()
+    assert tsmc_bars == [DAY]
 
 
 def test_an_unchanged_answer_keeps_the_capture_that_brought_it(env):
@@ -716,6 +826,19 @@ def test_the_stock_page_default_day_is_the_latest_market_session(db):
     db.commit()
 
     assert _stock_trading_halt(db, fuchi, None)["as_of"] == "2026-11-09"
+
+
+def test_a_day_the_stock_traded_is_not_called_stopped(db):
+    # TWSE's stated start can be a session early (2101, 4155); until a collect
+    # moves it, the bar says the stock traded that day.
+    _market(db, SESSIONS)
+    fuchi = _instrument(db, "3714")
+    _bars(db, fuchi, [date(2026, 11, 5)])
+    _halt(db, fuchi, date(2026, 11, 5), date(2026, 11, 16), date(2026, 11, 4))
+    db.commit()
+
+    assert _stock_trading_halt(db, fuchi, date(2026, 11, 5)) is None
+    assert _stock_trading_halt(db, fuchi, date(2026, 11, 6))["as_of"] == "2026-11-06"
 
 
 # ---- worker.cli trading-halts ----

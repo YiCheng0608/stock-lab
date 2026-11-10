@@ -12,7 +12,9 @@ to, not including, ``resume_date`` (``app.trading_halts`` reads them).
 Each answer covers a range of resumption days and is complete for it, so the
 exchange's stored rows resuming in that range are rebuilt from it: a row the
 answer no longer lists is removed, one whose content changed points at the new
-capture, an unchanged one keeps the capture that brought it.  A row whose own
+capture, an unchanged one keeps the capture that brought it.  An answer with
+no rows at all removes nothing while rows are stored for its range (a
+warning): it cannot be told from a wrong empty answer.  A row whose own
 dates disagree (sources' parsers) is left out with a warning; so is one whose
 security has a stored bar inside the stop, except a TWSE row whose stated
 last trading day is a session early (``_check_bars``).  A code without a
@@ -169,6 +171,18 @@ def _apply_window(
         "outside_universe": 0,
         "rejected": len(window.rejected),
     }
+    if not records and not window.rejected and stored:
+        # An empty answer cannot be checked (TWSE's 沒有符合條件 has no range or
+        # count), so it does not remove rows: one wrong empty answer would
+        # otherwise lose the range's stops for good.
+        warnings.append(
+            f"{window.exchange} trading halts empty answer kept {len(stored)} "
+            f"stored rows resuming {window.start}..{window.end}"
+        )
+        outcome["kept_on_empty"] = len(stored)
+        outcome["conflicts"] = 0
+        outcome["raw_payload_id"] = raw.id
+        return outcome
     incoming: dict[tuple[int, date], TradingHaltRecord] = {}
     conflicts: list[str] = []
     for record in records:
