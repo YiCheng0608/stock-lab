@@ -523,6 +523,10 @@ export type StrategyCondition = {
   next_session: Record<string, number | string | null> | null
 }
 
+// What the RR's entry is (#580; UI_COPY_SPEC §10): pullback_v4 the entry zone's midpoint, an earlier pullback T's close,
+// a breakout its entry price. Missing or null on responses that do not know the strategy.
+export type RiskRewardBasis = 'entry_zone_midpoint' | 'signal_close' | 'entry_price'
+
 // Levels never mix: actionable reads the signal, observation reads strategy_levels.
 export type StrategyActionableLevels = {
   kind: 'actionable'
@@ -535,6 +539,7 @@ export type StrategyActionableLevels = {
   target_1: number | null
   target_2: number | null
   risk_reward: number | null
+  risk_reward_basis?: RiskRewardBasis | null
 }
 
 export type StrategyObservationLevels = {
@@ -571,6 +576,15 @@ export type StrategyBoardRow = {
   earliest_execution_date: string | null
   levels: StrategyActionableLevels | StrategyObservationLevels | null
   levels_missing: boolean
+  // Every condition passed but the RR is under the minimum (#580): the row reads as an observation. risk_reward is null
+  // when the entry is not between the stop and the first target. Missing on responses from before #580.
+  risk_reward_shortfall?: {
+    risk_reward: number | null
+    minimum: number
+    risk_reward_basis: RiskRewardBasis | null
+    entry: number | null
+    errors: string[]
+  } | null
   unmet: string[]
   missing: string[]
   missing_labels: string[]
@@ -1593,6 +1607,8 @@ export type CandidateLevels = {
   target_1: number | null
   target_2: number | null
   risk_reward: number | null
+  // Missing on responses from before #580; null on a tracking plan's levels.
+  risk_reward_basis?: RiskRewardBasis | null
   earliest_execution_date: string | null
 }
 

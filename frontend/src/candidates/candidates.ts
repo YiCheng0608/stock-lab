@@ -1,6 +1,6 @@
 import { noPreviousCloseText } from '../marketChange'
 import { formatTaipeiInstant } from '../news/newsView'
-import type { CandidateComponentKey, CandidateGroup, CandidateItem, CandidateLevels, CandidateLlmNote, CandidateMarket, CandidatesResponse } from '../types'
+import type { CandidateComponentKey, CandidateGroup, CandidateItem, CandidateLevels, CandidateLlmNote, CandidateMarket, CandidatesResponse, RiskRewardBasis } from '../types'
 
 // Pure helpers for the daily candidate list (candidate_score_v1, #215); copy follows UI_COPY_SPEC §10.
 
@@ -54,7 +54,7 @@ export function liquidityExclusionText(
   return null
 }
 
-// Every version reads the same (#392, #404): the UI never shows a version suffix.
+// Every version reads the same (#392, #404, #580): the UI never shows a version suffix.
 const STRATEGY_LABELS: Record<string, string> = {
   breakout_v1: '突破條件',
   pullback_v1: '回踩條件',
@@ -62,6 +62,7 @@ const STRATEGY_LABELS: Record<string, string> = {
   pullback_v2: '回踩條件',
   breakout_v3: '突破條件',
   pullback_v3: '回踩條件',
+  pullback_v4: '回踩條件',
 }
 
 export function candidateStrategyLabel(strategy: string): string {
@@ -118,6 +119,39 @@ export function candidateAiEntry(note: CandidateLlmNote | null | undefined): str
 // RR reads as a multiple (UI_COPY_SPEC §10): 「1.60 倍」.
 export function formatRiskReward(value: number | null | undefined): string {
   return isFiniteNumber(value) ? `${value.toFixed(2)} 倍` : '—'
+}
+
+// What the RR's entry is (#580; UI_COPY_SPEC §10): the short note under the today list's RR, and the entry it names.
+const RISK_REWARD_BASIS: Record<RiskRewardBasis, { note: string; entry: string }> = {
+  entry_zone_midpoint: { note: '以進場區中點計算', entry: '進場區中點' },
+  entry_price: { note: '以進場價計算', entry: '進場價' },
+  signal_close: { note: '以資料日收盤計算', entry: '資料日收盤' },
+}
+
+function basisOf(basis: string | null | undefined) {
+  return basis && Object.hasOwn(RISK_REWARD_BASIS, basis) ? RISK_REWARD_BASIS[basis as RiskRewardBasis] : null
+}
+
+// 「以進場區中點計算」; null for an unknown or missing basis (responses from before #580), which shows no note.
+export function riskRewardBasisNote(basis: string | null | undefined): string | null {
+  return basisOf(basis)?.note ?? null
+}
+
+// The entry the RR is read from: 「進場區中點」; null for an unknown or missing basis.
+export function riskRewardBasisEntry(basis: string | null | undefined): string | null {
+  return basisOf(basis)?.entry ?? null
+}
+
+// What follows an RR: 「（以進場區中點 27.27 元計算）」; null without an RR, a known basis or the entry price.
+export function riskRewardBasisSuffix(value: number | null | undefined, basis: string | null | undefined, entry: number | null | undefined): string | null {
+  const known = basisOf(basis)
+  if (!isFiniteNumber(value) || !known || !isFiniteNumber(entry)) return null
+  return `（以${known.entry} ${formatPrice(entry)} 元計算）`
+}
+
+// The RR with its basis and entry price: 「1.62 倍（以進場區中點 27.27 元計算）」; without a known basis or entry, the RR only.
+export function formatRiskRewardWithBasis(value: number | null | undefined, basis: string | null | undefined, entry: number | null | undefined): string {
+  return `${formatRiskReward(value)}${riskRewardBasisSuffix(value, basis, entry) ?? ''}`
 }
 
 export function formatDate(value: string | null | undefined): string | null {

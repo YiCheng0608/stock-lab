@@ -34,8 +34,10 @@ import {
   formatEntryZone,
   formatPrice,
   formatRiskReward,
+  formatRiskRewardWithBasis,
   formatSubItemValue,
   groupBoardLabel,
+  riskRewardBasisNote,
   stockPath,
   subItemLabel,
 } from './candidates'
@@ -176,6 +178,12 @@ function CloseValue({ item }: { item: CandidateItem }) {
   return <><div>{formatCandidateClose(item.market)}</div><div className={cx('candidate-change', change.tone && `tone-${change.tone}`)}>{change.text}</div></>
 }
 
+// The row's RR and, under it, what its entry is (#580; UI_COPY_SPEC §10): 「以進場區中點計算」 for pullback_v4.
+function RiskRewardValue({ levels }: { levels: CandidateItem['levels'] }) {
+  const note = riskRewardBasisNote(levels.risk_reward_basis)
+  return <><div>{formatRiskReward(levels.risk_reward)}</div>{note && <div className="small-note candidate-rr-basis">{note}</div>}</>
+}
+
 // The rule levels as labelled cells: in the detail beside the AI note, and on the row when the sentence states a reason
 // instead of the prices (decision 6647903049). Facts, so outside the AI block (DESIGN_SYSTEM §7).
 function LevelCells({ item, className, rr = false }: { item: CandidateItem; className: string; rr?: boolean }) {
@@ -185,7 +193,7 @@ function LevelCells({ item, className, rr = false }: { item: CandidateItem; clas
       <div><dt><Term id="entry_zone">進場區</Term>（元）</dt><dd className="level-entry">{formatEntryZone(levels)}</dd></div>
       <div><dt><Term id="support">停損</Term>（元）</dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
       <div><dt><Term id="target">{levels.target_2 != null ? '目標一／二' : '目標一'}</Term>（元）</dt><dd className="level-target"><Targets levels={levels} /></dd></div>
-      {rr && <div><dt><Term id="rr">RR</Term></dt><dd>{formatRiskReward(levels.risk_reward)}</dd></div>}
+      {rr && <div><dt><Term id="rr">RR</Term></dt><dd className="candidate-rr">{formatRiskRewardWithBasis(levels.risk_reward, levels.risk_reward_basis, levels.entry)}</dd></div>}
     </dl>
   )
 }
@@ -255,7 +263,7 @@ function CandidateRow({ item, hidden, open, onOpen }: { item: CandidateItem; hid
         </div>
         <dl className="candidate-row-nums">
           <div className="candidate-row-close"><dt>收盤（元）</dt><dd><CloseValue item={item} /></dd></div>
-          <div><dt><Term id="rr">RR</Term></dt><dd>{formatRiskReward(item.levels.risk_reward)}</dd></div>
+          <div><dt><Term id="rr">RR</Term></dt><dd><RiskRewardValue levels={item.levels} /></dd></div>
           <div><dt><Term id="candidate_score">總分</Term>（0–100）</dt><dd>{formatCandidateScore(item.total_score)}</dd></div>
         </dl>
         <button type="button" className="badge badge-accent badge-compact candidate-ai-toggle" aria-expanded={open} aria-controls={detailId} onClick={() => onOpen(!open)}>

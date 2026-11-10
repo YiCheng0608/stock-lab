@@ -733,7 +733,7 @@ def test_ensure_strategies_creates_current_rows_and_never_touches_older_ones(mig
         first = pipeline._ensure_strategies(db)
         db.commit()
         ids = {key: row.id for key, row in first.items()}
-        assert set(first) == {"breakout_v3", "pullback_v3", "hot_group_v1"}
+        assert set(first) == {"breakout_v3", "pullback_v4", "hot_group_v1"}
         assert all(
             row.formula_version == V2 and row.active is True for row in first.values()
         )

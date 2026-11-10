@@ -44,7 +44,7 @@ spec.loader.exec_module(research)
 RISING = [100.0 + day for day in range(LOOKBACK)]
 FALLING = [200.0 - day for day in range(LOOKBACK)]
 FLAT = [100.0] * LOOKBACK
-# Draws of v3 inputs per test: enough for pullback_v3 to pass at least once.
+# Draws of v3 inputs per test: enough for pullback_v4 to pass at least once.
 DRAWS = 30000
 
 
@@ -254,7 +254,7 @@ def test_regime_strategies_leave_the_registry_and_canonical_snapshot_alone():
     before = canonical_config_snapshot()
     registry = with_regimes(dict(REGISTRY), all_regimes(), TaiexCloses({}))
 
-    assert list(REGISTRY) == ["breakout_v3", "pullback_v3"]
+    assert list(REGISTRY) == ["breakout_v3", "pullback_v4"]
     assert canonical_config_snapshot() == before
     assert list(registry)[:2] == list(REGISTRY)
     assert len(registry) == 2 + 2 * len(FILTERS)
@@ -450,7 +450,7 @@ def test_the_research_cli_runs_regime_strategies_on_the_fixture(fixture_db, tmp_
     result = subprocess.run(
         [sys.executable, "-B", str(SCRIPT), "--db", str(tmp_path / "stock.db")]
         + ["--start", end, "--end", end, "--min-free-gb", "0"]
-        + ["--regime", "breakout_v3:r2", "pullback_v3:r5"],
+        + ["--regime", "breakout_v3:r2", "pullback_v4:r5"],
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -463,9 +463,9 @@ def test_the_research_cli_runs_regime_strategies_on_the_fixture(fixture_db, tmp_
     report = json.loads(result.stdout)
     assert report["registry"] == [
         "breakout_v3",
-        "pullback_v3",
+        "pullback_v4",
         "breakout_v3_regime_r2",
-        "pullback_v3_regime_r5",
+        "pullback_v4_regime_r5",
     ]
     assert report["status"] == "success" and report["score_sessions"] == 1
     assert report["taiex_last"] == end and report["taiex_closes"] > 20

@@ -116,7 +116,7 @@ CANDIDATE_NOTES_GRACE = timedelta(minutes=30)
 # (app.domain.CANDIDATE_SCORE_VERSION; backend/tests/test_watchdog.py keeps
 # them equal).  Lists of other versions are never given notes, so they are
 # not judged.
-CANDIDATE_SCORE_VERSION = "candidate_score_v6"
+CANDIDATE_SCORE_VERSION = "candidate_score_v7"
 # daily's period_backfill (#536) reported after this many runs in a row that
 # did not succeed (#539): usually three trading days, which leaves a month's
 # window (the 1st to the 20th) time for a fix and a manual backfill, and one
