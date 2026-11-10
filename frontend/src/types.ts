@@ -286,6 +286,9 @@ export type MarketOverview = {
   indexes?: IndexRow[]
 }
 
+// GET /api/data-date: the navbar's data date, the same as_of as the dashboard (Issue 601).
+export type DataDate = { as_of: string | null }
+
 export type Dashboard = {
   as_of: string | null
   mode: string
@@ -307,8 +310,9 @@ export type Dashboard = {
     error: string | null
     updated_at: string | null
   }
-  groups: GroupRow[]
-  signals: Signal[]
+  // Only with include=groups / include=signals (Issue 601); the home page reads neither.
+  groups?: GroupRow[]
+  signals?: Signal[]
   signal_status_counts: Record<string, number>
   news?: NewsItem[]
   candidates?: ActionSummary[]
@@ -480,12 +484,15 @@ export type RawPayload = {
 
 export type InstrumentDetail = {
   instrument: Instrument
+  // The stock page gets the newest 30 bars and chips; /instruments/{symbol} keeps 120 (Issue 601).
   bars: StockDetailBar[]
-  features: Record<string, unknown>
+  // features, feature_snapshot, corporate_actions, strategy_conditions, signals and news: on the
+  // stock page only with include=<name> (Issue 601); /instruments/{symbol} still returns all but news.
+  features?: Record<string, unknown>
   feature_snapshot?: StockFeatureSnapshot | null
   groups: Array<{ id: string; name: string | null; display_name: string | null; verified: boolean; valid_from: string; valid_to: string | null }>
   chips: StockDetailChip[]
-  corporate_actions: CorporateAction[]
+  corporate_actions?: CorporateAction[]
   fundamentals: FundamentalSnapshot[]
   monthly_revenues?: MonthlyRevenue[]
   events: EventRow[]
@@ -501,8 +508,8 @@ export type InstrumentDetail = {
   product_time?: ProductTime
   response_generated_at?: string
   news_cutoff?: { as_of: string | null; filter: string; limit: number }
-  strategy_conditions: Record<string, { label?: string; requires: string[]; source: string; technical?: Record<string, string> }>
-  signals: Signal[]
+  strategy_conditions?: Record<string, { label?: string; requires: string[]; source: string; technical?: Record<string, string> }>
+  signals?: Signal[]
   // The stock's row in the latest candidate run on or before the cutoff; null when it is not a candidate.
   candidate?: CandidateItem | null
   // One row per registered strategy on the latest signal date (#274).
@@ -897,7 +904,8 @@ export type CoverageReport = {
   requested_calendar_dates: string[]
   expected_dates: string[]
   date_coverage: Array<Record<string, unknown>>
-  instrument_coverage: InstrumentCoverage[]
+  // Only with include=instrument_coverage (Issue 601); the coverage page reads summary and baseline.
+  instrument_coverage?: InstrumentCoverage[]
   event_coverage: {
     status: string
     denominator: string

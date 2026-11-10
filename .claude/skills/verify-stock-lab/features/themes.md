@@ -22,6 +22,7 @@
 | 前端檔 | `frontend/src/themes/ThemeViews.tsx` |
 | 前端檔 | `frontend/src/themes/ThemeSuggestionViews.tsx` |
 | API route | `GET /dashboard` |
+| API route | `GET /data-date` |
 | API route | `GET /themes` |
 | API route | `GET /themes/{theme_id}` |
 | API route | `GET /themes/{theme_id}/members` |

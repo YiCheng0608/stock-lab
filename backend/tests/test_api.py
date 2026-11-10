@@ -162,7 +162,7 @@ def test_signal_api_exposes_non_probability_semantics_for_new_and_legacy_rows(
 
     with TestClient(app) as client:
         signals = client.get("/api/signals?instrument_symbol=SEM&page_size=10")
-        dashboard = client.get("/api/dashboard")
+        dashboard = client.get("/api/dashboard?include=signals")
         detail = client.get(f"/api/signals/{signal_ids['legacy-sem']}")
         tracking = client.get("/api/tracking/legacy-sem")
         stock = client.get("/api/instruments/SEM?exchange=TWSE")

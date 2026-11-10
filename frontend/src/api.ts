@@ -4,6 +4,7 @@ import type {
   CandidatesResponse,
   CoverageReport,
   Dashboard,
+  DataDate,
   ActionSummary,
   ActionsResponse,
   ActionView,
@@ -105,6 +106,8 @@ function queryString(params: Record<string, string | number | boolean | undefine
 }
 
 export const getDashboard = () => get<Dashboard>('/dashboard')
+// The navbar's data date alone, the same as_of as /dashboard (Issue 601): pages other than home no longer load the dashboard for it.
+export const getDataDate = () => get<DataDate>('/data-date')
 // Without a date the API returns the latest candidate run; limit is 1–20 (default 20).
 export const getCandidates = (date?: string, limit?: number) => get<CandidatesResponse>(candidatesPath(date, limit))
 export const getGroups = (params: PageParams = {}) =>
@@ -236,7 +239,7 @@ export const getStocks = (params: PageParams & { exchange?: string; instrument_t
   get<{ items: StockDirectoryRow[]; meta: Record<string, unknown> }>(`/stocks${queryString(params)}`)
 
 export const getStock = (exchange: string, symbol: string, asOf?: string) =>
-  get<InstrumentDetail & { decision_summary: ActionSummary | null; news: NewsItem[] }>(
+  get<InstrumentDetail & { decision_summary: ActionSummary | null; news?: NewsItem[] }>(
     `/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}${queryString({ as_of: asOf })}`,
   )
 

@@ -33,6 +33,7 @@
 | 前端檔 | `frontend/src/stock/StockFundamentalsPanel.tsx` |
 | 前端檔 | `frontend/src/stock/stockFundamentals.ts` |
 | API route | `GET /dashboard` |
+| API route | `GET /data-date` |
 | API route | `GET /stocks` |
 | API route | `GET /stocks/{exchange}/{symbol}` |
 | API route | `GET /stocks/{exchange}/{symbol}/bars` |
@@ -58,7 +59,7 @@
 | 頁首 | `stock-bars.json`（日線） | `資料 <I/>` badge 與 `來源 <交易所名稱>`；`stock.json` 的 `trading_halt` 有值時（減資停止買賣中，#582），`來源` 之後一行 `停止買賣中（<reason_label>，預計 <resume_date> 恢復）` | — | `資料日期未提供`、`尚無已核對的價格來源` |
 | 摘要卡（#519） | `stock.json` 的 `strategy_board`、`decision_summary` | 第一欄 `目前判斷` 旁的 `資料 <strategy_board.as_of/>` badge | 不放 AI 內容 | `此股尚無策略判定資料。`、`尚無行動摘要。` |
 | K 線與技術指標 | `stock-bars.json`（`limit=250`；按「全部」或區間起日早於第一根時，圖表另取 `limit=1500`，#600） | 卡片標題下 `資料 <I/>`、`來源 …`、`日線批次計算於 …`；工具列日K／週K 之後的區間按鈕 `1M` `3M` `6M` `1Y` `全部`（預設 `6M`） | — | 無日線時的 EmptyState |
-| 法人籌碼 | `stock.json` 的 `chips`（日期由舊到新，表格只列最近 30 筆、由新到舊） | 卡片 `法人與融資`；每筆來源說明分兩行 `法人：…（<source>） · 資料截至：… · 收集：…` 與 `融資：…`，該筆沒有那份官方檔時是 `法人：無資料`／`融資：無資料`（#395）；`券商／分點` 區塊 | — | `尚無可核實的籌碼資料。` |
+| 法人籌碼 | `stock.json` 的 `chips`（API 只回最近 30 筆、日期由舊到新，#601；表格由新到舊） | 卡片 `法人與融資`；每筆來源說明分兩行 `法人：…（<source>） · 資料截至：… · 收集：…` 與 `融資：…`，該筆沒有那份官方檔時是 `法人：無資料`／`融資：無資料`（#395）；`券商／分點` 區塊 | — | `尚無可核實的籌碼資料。` |
 | 研究條件 | `stock.json` 的 `strategy_board`、`decision_summary`、`candidate` | 策略總表 `資料 <strategy_board.as_of/>`；`資料日期：<I/>`（時間摘要）、`資料日：<I/> · 價位語意：…` | 策略總表有候選列（`strategy_board.candidate` 非 null）時，候選列的 `AI 推論` 與來源行 `（推論）`（同今日 T8）；觀察價位在 `條件未成立・觀察價位` 標籤之下，不是推論 | `此股尚無策略判定資料。`、`尚無行動摘要。` |
 | 財務（#528） | `stock.json` 的 `fundamentals`（API 已依截止日篩掉可得日較晚的列，期別由新到舊） | 卡片 `季報營收與 EPS` 之後的 `資料 <最新一列 data_as_of/>` badge；每列的可得日與來源，表格下 `來源：…` | — | ETF `ETF 沒有公司財報，不適用。`；新上市與其他股票各一句（UI_COPY_SPEC §8.2 財務分頁） |
 | 月營收（#530） | `stock.json` 的 `monthly_revenues`（API 已依截止日篩掉可得日較晚的月份，由新到舊，最多 12 個月） | 季報卡之下的卡片 `月營收` 之後的 `資料 <最新月份 data_as_of/>` badge；每列的可得日與來源，表格下 `來源：…`；`corrected: true` 的月份（#543）在可得日之後的「更正」欄寫 `已更正`（只有這種月份存在時才有這一欄），`來源：…` 之後每個更正月一行 `<YYYY 年 N 月>已更正：原快照營收 …` | — | ETF `ETF 不申報月營收，不適用。`；新上市與其他股票各一句（UI_COPY_SPEC §8.2 財務分頁） |

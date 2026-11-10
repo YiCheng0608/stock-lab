@@ -19,6 +19,7 @@
 | --- | --- |
 | 前端檔 | `frontend/src/news/NewsViews.tsx` |
 | API route | `GET /dashboard` |
+| API route | `GET /data-date` |
 | API route | `GET /news` |
 | API route | `GET /news/{news_id}` |
 

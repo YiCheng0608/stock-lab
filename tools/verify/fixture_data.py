@@ -2025,6 +2025,9 @@ TARGET_PLAN = next(row for row in TABLES["tracking_plans"] if row["id"] == 3)
 EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
     "today": [
         ("dashboard", "as_of", D),
+        # The navbar date (#601) is the dashboard as_of; groups ship on include only.
+        ("data-date", "as_of", D),
+        ("dashboard?include=groups", "groups", len(GROUPS)),
         ("dashboard", "market.instruments", 8),  # 7 stocks + 1 ETF, not TAIEX
         # Only linked or judged news reaches the home page (#581, NEWS_SPEC 首頁重點新聞).
         ("dashboard", "news", 4),
@@ -2208,7 +2211,8 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         ),
         (f"stocks/{E}/{S}", "monthly_revenues[].yoy", [15.578, -3.255, None]),
         ("stocks/{}/{}".format(*NO_DATA_STOCK), "monthly_revenues", 0),
-        (f"stocks/{E}/{S}", "news", 1),
+        # News rows ship on include=news only; the page reads /news (#601).
+        (f"stocks/{E}/{S}?include=news", "news", 1),
         (f"stocks/{E}/{S}", "candidate.rank", 1),
         (f"stocks/{E}/{S}", "candidate.open_plan_id", 1),
         # The strategy board (#274): signal levels for the breakout, strategy_levels for the pullback.

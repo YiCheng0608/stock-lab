@@ -84,7 +84,7 @@ def _keys(items) -> list[str]:
 
 def test_the_dashboard_lists_and_counts_no_backtest_signal(factory):
     with TestClient(app) as client:
-        payload = client.get("/api/dashboard").json()
+        payload = client.get("/api/dashboard?include=signals").json()
     assert _keys(payload["signals"]) == [ANALYSIS_KEY]
     assert payload["signal_status_counts"] == {"conditional": 1}
 

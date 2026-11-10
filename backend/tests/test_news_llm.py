@@ -1469,7 +1469,8 @@ def test_only_the_current_prompt_version_result_reaches_any_page(db, client):
     dashboard = client.get(f"{router.prefix}/dashboard").json()
     assert summaries(dashboard["news"]) == expected
     stock = client.get(
-        f"{router.prefix}/stocks/TWSE/2409", params={"as_of": "2026-10-17"}
+        f"{router.prefix}/stocks/TWSE/2409",
+        params={"as_of": "2026-10-17", "include": "news"},
     ).json()
     assert summaries(stock["news"]) == expected
 

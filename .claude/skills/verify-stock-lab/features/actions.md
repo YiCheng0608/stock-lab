@@ -32,6 +32,7 @@
 | 前端檔 | `frontend/src/stock/strategyBoard.ts` |
 | 前端檔 | `frontend/src/stock/stockTabs.ts` |
 | API route | `GET /dashboard` |
+| API route | `GET /data-date` |
 | API route | `GET /actions` |
 | API route | `GET /actions/{exchange}/{symbol}` |
 | API route | `GET /portfolio` |

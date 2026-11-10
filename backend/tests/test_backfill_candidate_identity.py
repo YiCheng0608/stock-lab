@@ -126,6 +126,7 @@ class BackfillCandidateIdentityTest(unittest.TestCase):
                 scope=scope,
                 exchange=None,
                 symbol=None,
+                include=["instrument_coverage"],
                 db=self.db,
             )
             self.assertEqual(report["scope"], scope)
