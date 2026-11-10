@@ -1072,6 +1072,14 @@ def test_historical_adapter_skips_current_feeds_and_reuses_the_universe(
         sources.TPEX_MONTHLY_REVENUE_ENDPOINT,
     }
     assert not current_only.intersection(fetcher.calls)
+    # The capital reduction tables are asked by range, with a query (Issue #582).
+    assert not [
+        url
+        for url in fetcher.calls
+        if url.startswith(
+            (sources.TWSE_REDUCTION_ENDPOINT, sources.TPEX_REDUCTION_ENDPOINT)
+        )
+    ]
     for endpoint in (sources.TWSE_LISTED_ENDPOINT, sources.TPEX_LISTED_ENDPOINT):
         assert fetcher.calls.count(endpoint) == 1
     for batch in (first, second):
@@ -1967,15 +1975,18 @@ def test_noncore_source_warnings_keep_the_collect_successful(database):
         # The display-only monthly revenue snapshots (Issue #530).
         sources.TWSE_MONTHLY_REVENUE_ENDPOINT,
         sources.TPEX_MONTHLY_REVENUE_ENDPOINT,
+        # The capital reduction stops of trading (Issue #582).
+        sources.TWSE_REDUCTION_ENDPOINT,
+        sources.TPEX_REDUCTION_ENDPOINT,
     )
     result = pipeline.collect(DAY, adapter=combined(OutageFetcher(failing)))
     assert result["status"] == "success", result
-    assert result["core_warnings"] == [] and len(result["noncore_warnings"]) == 10
+    assert result["core_warnings"] == [] and len(result["noncore_warnings"]) == 12
     assert result["warnings"] == result["noncore_warnings"]
     with database() as db:
         run = db.get(IngestionRun, result["run_id"])
         assert (
-            run.status == "success" and len(run.metadata_json["noncore_warnings"]) == 10
+            run.status == "success" and len(run.metadata_json["noncore_warnings"]) == 12
         )
 
 

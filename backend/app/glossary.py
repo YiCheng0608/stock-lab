@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 
-GLOSSARY_VERSION = "1.4.0"
+GLOSSARY_VERSION = "1.5.0"
 
 
 _TERMS: tuple[dict[str, Any], ...] = (
@@ -24,7 +24,13 @@ _TERMS: tuple[dict[str, Any], ...] = (
     {
         "term_id": "pullback",
         "name": "回踩",
-        "aliases": ["pullback", "pullback_v1", "pullback_v2", "pullback_v3"],
+        "aliases": [
+            "pullback",
+            "pullback_v1",
+            "pullback_v2",
+            "pullback_v3",
+            "pullback_v4",
+        ],
         "category": "strategy",
         "plain_definition": "上升結構中價格回到預定支撐區，等待重新轉強的條件。",
         "use": "用來標示回踩區間與重新站回的觀察條件。",
@@ -224,7 +230,7 @@ _TERMS: tuple[dict[str, Any], ...] = (
         "plain_definition": "可能賺的空間是可能賠的幾倍。",
         "use": "固定規則的價位驗證至少要求 RR ≥ 1.5。",
         "how_to_read": (
-            "RR =（目標一 − 進場價）÷（進場價 − 停損）；"
+            "RR =（目標一 − 進場價）÷（進場價 − 停損）；回踩型的進場價取進場區中點；"
             "低於門檻時是無效價位，不應包裝成可執行訊號。"
         ),
         "limitations": "比例不會消除跳空、流動性或執行風險。",

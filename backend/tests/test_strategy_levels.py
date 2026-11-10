@@ -32,6 +32,7 @@ from worker.strategy_levels import compute_strategy_levels
 
 BREAKOUT = next(s for s in REGISTRY.values() if s.entry_type == "breakout")
 PULLBACK = next(s for s in REGISTRY.values() if s.entry_type == "pullback")
+PULLBACK_V3 = SUPERSEDED["pullback_v3"]
 BACKEND = Path(__file__).resolve().parents[1]
 
 # ---- version and tick ladder are pinned ----
@@ -182,7 +183,9 @@ def test_an_etf_reachability_is_not_judged():
 def test_pullback_close_range_and_reference_entry(
     closes, close, low, high, position, entry
 ):
-    result = PULLBACK.observation_levels(next_inputs(closes=closes, close=close))
+    # pullback_v3's reference entry is the close clamped into [L, U]; v4 keeps
+    # every other level and reads its RR at the entry zone's midpoint (#580).
+    result = PULLBACK_V3.observation_levels(next_inputs(closes=closes, close=close))
     assert result.availability == "levels"
     assert (result.zone_low, result.zone_high) == (low, high)
     assert result.next_session["pullback_support_zone"]["position"] == position
@@ -205,6 +208,41 @@ def test_pullback_close_range_and_reference_entry(
             "above": round(102.5 / 110 - 1, 6),
             "below": round(96.6 / 94 - 1, 6),
         }[position]
+    )
+
+
+@pytest.mark.parametrize(
+    "closes, close",
+    [
+        ((90.0,) * 40 + (100.0,) * 19, 100.0),
+        ((90.0,) * 40 + (100.0,) * 18 + (110.0,), 110.0),
+        ((90.0,) * 40 + (100.0,) * 18 + (94.0,), 94.0),
+    ],
+)
+def test_pullback_v4_reads_the_observation_rr_at_the_entry_zone_midpoint(closes, close):
+    inputs = next_inputs(closes=closes, close=close)
+    old = PULLBACK_V3.observation_levels(inputs)
+    new = PULLBACK.observation_levels(inputs)
+    assert PULLBACK.key == "pullback_v4"
+    midpoint = round((old.entry_low + old.entry_high) / 2, 2)
+    assert new.reference_entry == midpoint
+    # The zone, the volumes, the stop and the targets are v3's.
+    for field in (
+        "zone_low",
+        "zone_high",
+        "min_volume",
+        "max_volume",
+        "entry_low",
+        "entry_high",
+        "invalid_price",
+        "target_1",
+        "target_2",
+        "next_session",
+        "reachable_next_session",
+    ):
+        assert getattr(new, field) == getattr(old, field), field
+    assert new.risk_reward == round(
+        (old.target_1 - midpoint) / (midpoint - old.invalid_price), 2
     )
 
 
@@ -630,14 +668,13 @@ PINNED_CONDITION_DEFAULTS = {
         },
     },
 }
-# breakout_v2／pullback_v2 (#392) and breakout_v3／pullback_v3 (#404) list
+# breakout_v2／pullback_v2 (#392), breakout_v3／pullback_v3 (#404) and pullback_v4 (#580) list
 # the same conditions with the same defaults; only a non-margin security's or a
 # zero base's margin row differs, and it is stored.
-for _name in ("breakout", "pullback"):
-    for _version in ("v2", "v3"):
-        PINNED_CONDITION_DEFAULTS["strategy_levels_v1"][f"{_name}_{_version}"] = (
-            PINNED_CONDITION_DEFAULTS["strategy_levels_v1"][f"{_name}_v1"]
-        )
+for _key in ("breakout_v2", "pullback_v2", "breakout_v3", "pullback_v3", "pullback_v4"):
+    PINNED_CONDITION_DEFAULTS["strategy_levels_v1"][_key] = PINNED_CONDITION_DEFAULTS[
+        "strategy_levels_v1"
+    ][_key.rsplit("_", 1)[0] + "_v1"]
 
 
 def test_the_condition_defaults_are_pinned_to_the_levels_version():

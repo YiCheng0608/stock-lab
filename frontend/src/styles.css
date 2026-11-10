@@ -377,6 +377,8 @@ a.symbol-link:hover { color: var(--color-primary); }
 .stock-header-close { font: 700 36px/1.1 var(--font-mono); font-variant-numeric: tabular-nums; }
 .stock-header-change { font: 600 18px var(--font-mono); font-variant-numeric: tabular-nums; }
 .stock-header-meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); color: var(--color-text-muted); font-size: 14px; }
+/* An official stop of trading (Issue 582): a long sentence, so it wraps inside the phone width. */
+.stock-header-halt { max-width: 100%; white-space: normal; }
 .stock-header-skeleton { margin-top: var(--space-5); padding: var(--space-4); }
 .stock-tabs { margin-bottom: var(--space-4); }
 .stock-tab-content { min-width: 0; }
@@ -720,6 +722,9 @@ a.symbol-link:hover { color: var(--color-primary); }
 .candidate-detail [data-note-part="selection"] dd { color: var(--color-text); font-size: var(--text-base); line-height: 1.7; }
 .candidate-detail-side { display: grid; grid-area: side; gap: var(--space-3); justify-items: start; }
 .candidate-detail-levels { display: grid; grid-template-columns: repeat(2, auto); gap: var(--space-3) var(--space-6); margin: 0; }
+/* The RR carries its basis (#580,「3.56 倍（以進場區中點 12.11 元計算）」): it wraps instead of running past a phone's edge. */
+.candidate-detail-levels > div { min-width: 0; }
+.candidate-detail-levels dd.candidate-rr { white-space: normal; overflow-wrap: anywhere; }
 .candidate-detail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
 .candidate-detail-actions .plan-add { margin-top: 0; }
 .candidate-detail-folds { display: flex; flex-wrap: wrap; grid-area: folds; align-items: flex-start; gap: var(--space-2) var(--space-6); padding-top: var(--space-2); border-top: 1px solid var(--color-border); }

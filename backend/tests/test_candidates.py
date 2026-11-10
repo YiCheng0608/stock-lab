@@ -24,6 +24,7 @@ from app.domain import (
     CANDIDATE_SCORE_V4,
     CANDIDATE_SCORE_V5,
     CANDIDATE_SCORE_V6,
+    CANDIDATE_SCORE_V7,
     CANDIDATE_SCORE_VERSION,
     weighted_available_mean,
 )
@@ -289,6 +290,7 @@ V3_SHA256 = "2995cb22b87ff998ace16c66174aaf6b4cc4850a8d1764898eb252a688cc244e"
 V4_SHA256 = "3a9eaf719381644a8cd465b23933007df73226cfb2f03ca4371d78a3727496f1"
 V5_SHA256 = "8ca355cd2eb7a93a0051b7c3e5ca7ac9683e8267e151eb58e623d44c9d5104b0"
 V6_SHA256 = "e67b016648af677ed44f5ccd79f738046c83fe44f48ebe409af9101dcfd9b725"
+V7_SHA256 = "4feff2bf7ca87ab689ce9125da9bb6b728757808e3113ebb86b88423680823f5"
 
 
 def _snapshot_sha256(config):
@@ -382,8 +384,6 @@ def test_v5_differs_from_v4_only_in_its_name_and_strategy_names():
 def test_v6_differs_from_v5_only_in_its_name_and_liquidity_floor():
     """Changing candidate_score_v6 without a new version must fail here (#490)."""
 
-    assert CANDIDATE_SCORE is CANDIDATE_SCORE_V6
-    assert CANDIDATE_SCORE["name"] == CANDIDATE_SCORE_VERSION == "candidate_score_v6"
     assert _snapshot_sha256(CANDIDATE_SCORE_V6) == V6_SHA256
     expected = copy.deepcopy(CANDIDATE_SCORE_V5)
     expected["name"] = "candidate_score_v6"
@@ -399,12 +399,37 @@ def test_v6_differs_from_v5_only_in_its_name_and_liquidity_floor():
         "below_minimum": "excluded_low_volume",
     }
     assert CANDIDATE_SCORE_V6 == expected
-    # The pool is the registry: every registered strategy, nothing else.
-    assert CANDIDATE_SCORE_V6["pool"]["strategies"] == list(REGISTRY)
+    # The pool was the registry of its day (#404, #580 replaced pullback_v3).
+    assert CANDIDATE_SCORE_V6["pool"]["strategies"] == ["breakout_v3", "pullback_v3"]
     # The rule's constants are the configuration's.
     floor = CANDIDATE_SCORE_V6["pool"]["liquidity"]
     assert floor["shares_per_lot"] == SHARES_PER_LOT
     assert floor["window_sessions"] == LIQUIDITY_WINDOW_SESSIONS
+
+
+def test_v7_differs_from_v6_only_in_its_name_and_pullback_strategy():
+    """Changing candidate_score_v7 without a new version must fail here (#580)."""
+
+    assert CANDIDATE_SCORE is CANDIDATE_SCORE_V7
+    assert CANDIDATE_SCORE["name"] == CANDIDATE_SCORE_VERSION == "candidate_score_v7"
+    assert _snapshot_sha256(CANDIDATE_SCORE_V7) == V7_SHA256
+    expected = copy.deepcopy(CANDIDATE_SCORE_V6)
+    expected["name"] = "candidate_score_v7"
+    expected["pool"]["strategies"] = ["breakout_v3", "pullback_v4"]
+    technical = expected["components"]["technical"]["items"]
+    technical["volume_ratio"]["better"] = {
+        "breakout_v3": "higher",
+        "pullback_v4": "lower",
+    }
+    technical["distance"]["formula"] = {
+        "breakout_v3": "close[T]/max(high[T-20:T-1])-1",
+        "pullback_v4": "abs(close[T]/MA20[T]-1)",
+    }
+    # The RR item still carries no weight (#580 decision 6745091777).
+    assert technical["risk_reward"]["weight"] == 0.0
+    assert CANDIDATE_SCORE_V7 == expected
+    # The pool is the registry: every registered strategy, nothing else.
+    assert CANDIDATE_SCORE_V7["pool"]["strategies"] == list(REGISTRY)
 
 
 def test_score_reads_the_news_prompt_version_the_news_llm_writes():
@@ -669,7 +694,7 @@ def test_one_row_per_stock_keeps_the_higher_scored_strategy(db):
     b = stock(db, "1102")
     signal(db, a, "breakout_v3", volume_ratio=1.3, distance=0.05)
     signal(db, b, "breakout_v3", volume_ratio=2.0, distance=0.01)
-    pullback = signal(db, a, "pullback_v3", volume_ratio=0.8, distance=0.01)
+    pullback = signal(db, a, "pullback_v4", volume_ratio=0.8, distance=0.01)
     db.commit()
     result = compute_daily_candidates(db, T)
     by_instrument = {row.instrument_id: row for row in rows(db)}
@@ -677,7 +702,7 @@ def test_one_row_per_stock_keeps_the_higher_scored_strategy(db):
         "same_instrument_lower_scored_strategy": 1
     }
     kept = by_instrument[a.id]
-    assert kept.strategy == "pullback_v3" and kept.signal_id == pullback.id
+    assert kept.strategy == "pullback_v4" and kept.signal_id == pullback.id
     assert [item["strategy"] for item in kept.components_json["alternatives"]] == [
         "breakout_v3"
     ]
@@ -783,7 +808,7 @@ def test_api_returns_ranked_fields_inference_and_null_explanations(db, client):
     a = stock(db, "1101", flow=(30.0, 20.0, 0.0))
     b = stock(db, "1102")
     signal(db, a, volume_ratio=2.0)
-    signal(db, b, "pullback_v3", volume_ratio=0.8)
+    signal(db, b, "pullback_v4", volume_ratio=0.8)
     group(db, "ind-1", [a], rank=1)
     db.commit()
     compute_daily_candidates(db, T)
@@ -814,6 +839,7 @@ def test_api_returns_ranked_fields_inference_and_null_explanations(db, client):
         "target_1": 103.2,
         "target_2": 106.0,
         "risk_reward": 1.6,
+        "risk_reward_basis": "entry_price",
         "earliest_execution_date": None,
     }
     assert set(top["components"]) == {"technical", "chips", "group", "news_sentiment"}
@@ -1057,7 +1083,7 @@ def test_recomputing_a_tracked_date_sees_the_same_pool(db):
     b = stock(db, "1102")
     c = stock(db, "1103")
     first = signal(db, a, volume_ratio=2.0)
-    second = signal(db, b, "pullback_v3", volume_ratio=0.8)
+    second = signal(db, b, "pullback_v4", volume_ratio=0.8)
     third = signal(db, c)
     db.commit()
     on_the_day = compute_daily_candidates(db, T)
@@ -1101,7 +1127,7 @@ def test_rows_without_the_flag_fall_back_to_post_conditional_statuses(db):
 def test_equal_totals_for_both_strategies_keep_breakout(db):
     a = stock(db, "1101")
     breakout = signal(db, a, "breakout_v3")
-    pullback = signal(db, a, "pullback_v3")
+    pullback = signal(db, a, "pullback_v4")
     db.commit()
     result = compute_daily_candidates(db, T)
     (row,) = rows(db)
@@ -1110,7 +1136,7 @@ def test_equal_totals_for_both_strategies_keep_breakout(db):
     assert alternative["total_score"] == row.total_score
     assert row.strategy == "breakout_v3" and row.signal_id == breakout.id
     assert (
-        alternative["strategy"] == "pullback_v3"
+        alternative["strategy"] == "pullback_v4"
         and alternative["signal_id"] == pullback.id
     )
     assert result["exclusions"] == {"same_instrument_lower_scored_strategy": 1}
@@ -1128,10 +1154,11 @@ def test_a_candidate_run_is_computed_at_the_clock(db, frozen_utcnow):
     assert db.scalar(select(CandidateRun.computed_at)) == frozen_utcnow.at
 
 
-def test_the_read_versions_fall_back_from_v6_to_v5_to_v4_to_v3_to_v2():
+def test_the_read_versions_fall_back_from_v7_to_v6_to_v5_to_v4_to_v3_to_v2():
     from app.domain import CANDIDATE_SCORE_READ_VERSIONS
 
     assert CANDIDATE_SCORE_READ_VERSIONS == (
+        "candidate_score_v7",
         "candidate_score_v6",
         "candidate_score_v5",
         "candidate_score_v4",
@@ -1143,6 +1170,9 @@ def test_the_read_versions_fall_back_from_v6_to_v5_to_v4_to_v3_to_v2():
 @pytest.mark.parametrize(
     ("previous", "newer"),
     [
+        ("candidate_score_v6", "candidate_score_v7"),
+        ("candidate_score_v5", "candidate_score_v7"),
+        # #580: a date with v6 and v5 runs and no v7 reads v6.
         ("candidate_score_v5", "candidate_score_v6"),
         ("candidate_score_v4", "candidate_score_v6"),
         # #490: a date with v5 and v4 runs and no v6 reads v5.
@@ -1158,10 +1188,10 @@ def test_the_read_versions_fall_back_from_v6_to_v5_to_v4_to_v3_to_v2():
 def test_a_date_with_only_a_previous_version_run_still_shows_its_candidates(
     db, previous, newer
 ):
-    """#392／#407 review M3, #413, #404: past dates keep their earlier lists.
+    """#392／#407 review M3, #413, #404, #490, #580: past dates keep their earlier lists.
 
     Runs are not recomputed when the score version changes, so a date without
-    a current-version run (candidate_score_v6) shows its candidate_score_v5
+    a current-version run (candidate_score_v7) shows its candidate_score_v6
     run, or the version before it, in /api/candidates, the
     action list's tier 1 and the theme member table; a date with two versions
     shows only the one earlier in CANDIDATE_SCORE_READ_VERSIONS.
@@ -1418,12 +1448,12 @@ def test_the_pool_percentiles_rank_the_liquid_signals_only(db):
 def test_a_stock_with_two_low_volume_signals_is_listed_once(db):
     a = stock(db, "1101", volume=_lots(10))
     signal(db, a, "breakout_v3")
-    signal(db, a, "pullback_v3")
+    signal(db, a, "pullback_v4")
     result, run = _floor_run(db)
 
     assert result["exclusions"]["low_volume"] == 2  # one per signal
     [row] = run.summary_json["liquidity"]["low_volume"]
-    assert row["strategies"] == ["breakout_v3", "pullback_v3"]
+    assert row["strategies"] == ["breakout_v3", "pullback_v4"]
 
 
 def test_v5_has_no_floor(db):
@@ -1471,7 +1501,7 @@ def test_pages_show_the_average_volume_and_the_floor_note(db, client):
         "minimum_lots": 1000,
         "below_minimum": True,
         "candidate_exclusion": "low_volume",
-        "score_version": "candidate_score_v6",
+        "score_version": "candidate_score_v7",
     }
     board = client.get("/api/stocks/TWSE/1101").json()["strategy_board"]
     assert board["liquidity"]["average_volume_lots_20d"] == 1500.0
@@ -1497,7 +1527,7 @@ def test_the_action_row_of_an_excluded_stock_carries_the_floor_note(db, client):
         "below_minimum": True,
         "exclusion": "low_volume",
         "data_as_of": T.isoformat(),
-        "score_version": "candidate_score_v6",
+        "score_version": "candidate_score_v7",
         "unit": "lots",
     }
     # A run of a version without the floor has no note.

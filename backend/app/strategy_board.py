@@ -22,7 +22,11 @@ from sqlalchemy.orm import Session
 
 from .candidate_runs import read_run
 from .candidate_view import liquidity_exclusions
-from .domain import CANDIDATE_SCORE, STRATEGY_LEVELS_VERSION
+from .domain import (
+    CANDIDATE_SCORE,
+    MINIMUM_FIRST_TARGET_RISK_REWARD,
+    STRATEGY_LEVELS_VERSION,
+)
 from .entry_plan import level_fields
 from .liquidity import average_volumes
 from .models import Instrument, Signal, StrategyLevel, StrategyVersion
@@ -60,10 +64,70 @@ def _missing(signal: Signal) -> list[str]:
     return []
 
 
-def _status(signal: Signal) -> tuple[str, list[str]]:
+# Level-validation errors that only say the entry, the invalid price and the
+# first target do not give the minimum RR (#580): the rule passed with
+# complete data, so the board reads the row as an observation with its RR,
+# not as missing data.
+RISK_REWARD_ERRORS = frozenset(
+    {
+        "target_1_risk_reward_below_minimum",
+        "target_1_must_exceed_entry",
+        "invalid_price_must_be_below_entry",
+    }
+)
+
+
+def _entry(strategy: Strategy, signal: Signal) -> float | None:
+    """The stored entry the RR is read from (breakout trigger or reference entry)."""
+
+    return (
+        signal.breakout_price
+        if strategy.entry_type == "breakout"
+        else signal.reference_entry
+    )
+
+
+def risk_reward_shortfall(strategy: Strategy, signal: Signal) -> dict[str, Any] | None:
+    """Why a passed rule with complete data is not conditional: its RR (#580).
+
+    Only an ``invalid_levels`` signal without missing inputs whose level
+    errors are all RR errors; ``risk_reward`` is null when the entry is not
+    between the invalid price and the first target (there is no RR to state).
+    """
+
+    if signal.status != "invalid_levels" or _missing(signal):
+        return None
+    evidence = (
+        signal.rule_evidence_json if isinstance(signal.rule_evidence_json, dict) else {}
+    )
+    validation = evidence.get("risk_validation")
+    errors = validation.get("errors") if isinstance(validation, dict) else None
+    if not errors or not set(errors) <= RISK_REWARD_ERRORS:
+        return None
+    entry = _entry(strategy, signal)
+    invalid = signal.invalid_price
+    target = signal.target_1
+    risk_reward = (
+        round((target - entry) / (entry - invalid), 4)
+        if entry is not None
+        and invalid is not None
+        and target is not None
+        and invalid < entry < target
+        else None
+    )
+    return {
+        "risk_reward": risk_reward,
+        "minimum": MINIMUM_FIRST_TARGET_RISK_REWARD,
+        "risk_reward_basis": strategy.risk_reward_basis,
+        "entry": entry,
+        "errors": list(errors),
+    }
+
+
+def _status(signal: Signal, strategy: Strategy) -> tuple[str, list[str]]:
     if _actionable(signal):
         return "conditional", []
-    if signal.status == "observation":
+    if signal.status == "observation" or risk_reward_shortfall(strategy, signal):
         return "observation", []
     missing = _missing(signal)
     if signal.status == "invalid_levels":
@@ -74,11 +138,7 @@ def _status(signal: Signal) -> tuple[str, list[str]]:
 
 
 def _actionable_levels(strategy: Strategy, signal: Signal) -> dict[str, Any]:
-    entry = (
-        signal.breakout_price
-        if strategy.entry_type == "breakout"
-        else signal.reference_entry
-    )
+    entry = _entry(strategy, signal)
     risk_reward = None
     if (
         entry is not None
@@ -100,6 +160,7 @@ def _actionable_levels(strategy: Strategy, signal: Signal) -> dict[str, Any]:
         "target_1": signal.target_1,
         "target_2": signal.target_2,
         "risk_reward": risk_reward,
+        "risk_reward_basis": strategy.risk_reward_basis,
     }
 
 
@@ -134,7 +195,7 @@ def _row(
             "missing_labels": [display_reason("signal_not_computed")],
             "conditions": [],
         }
-    status, missing = _status(signal)
+    status, missing = _status(signal, strategy)
     stored = db.scalar(
         select(StrategyLevel).where(
             StrategyLevel.signal_id == signal.id,
@@ -163,6 +224,8 @@ def _row(
         # An observation without its row: the levels step did not run for
         # this date (before the table existed, or it failed).  Not filled.
         "levels_missing": status == "observation" and stored is None,
+        # Every condition passed but the RR is under the minimum (#580).
+        "risk_reward_shortfall": risk_reward_shortfall(strategy, signal),
         "unmet": [item["code"] for item in conditions if item["satisfied"] is False],
         "missing": missing,
         "missing_labels": list(dict.fromkeys(display_reason(item) for item in missing)),

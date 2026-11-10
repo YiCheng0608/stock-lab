@@ -33,7 +33,7 @@ from app.strategies.ablation import (
     research_registry,
 )
 from app.strategies.breakout_v3 import CONFIG as BREAKOUT_CONFIG
-from app.strategies.pullback_v3 import CONFIG as PULLBACK_CONFIG
+from app.strategies.pullback_v4 import CONFIG as PULLBACK_CONFIG
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -41,12 +41,12 @@ ROOT = Path(__file__).resolve().parents[2]
 REMOVED_REASONS = {
     ("breakout_v3", "breakout"): {"close_not_above_prior_20_day_high"},
     ("breakout_v3", "volume"): {"volume_ratio_below_1_20"},
-    ("pullback_v3", "trend"): {"ma20_not_above_ma60", "close_below_ma60"},
-    ("pullback_v3", "support"): {"close_outside_ma20_support_zone"},
-    ("pullback_v3", "volume"): {"pullback_volume_ratio_outside_range"},
+    ("pullback_v4", "trend"): {"ma20_not_above_ma60", "close_below_ma60"},
+    ("pullback_v4", "support"): {"close_outside_ma20_support_zone"},
+    ("pullback_v4", "volume"): {"pullback_volume_ratio_outside_range"},
     **{
         (key, condition): {reason}
-        for key in ("breakout_v3", "pullback_v3")
+        for key in ("breakout_v3", "pullback_v4")
         for condition, reason in (
             ("group", "group_relative_strength_not_positive"),
             ("institutional", "institutional_flow_materially_adverse"),
@@ -68,7 +68,7 @@ ALL_FAIL = {
         margin_financing="applicable",
         margin_zero_base=None,
     ),
-    "pullback_v3": dict(
+    "pullback_v4": dict(
         bar_count=60,
         close=80.0,
         ma20=100.0,
@@ -120,7 +120,7 @@ def _random_arguments(key: str, rng: random.Random) -> dict:
 
 @pytest.mark.parametrize(
     ("key", "config"),
-    [("breakout_v3", BREAKOUT_CONFIG), ("pullback_v3", PULLBACK_CONFIG)],
+    [("breakout_v3", BREAKOUT_CONFIG), ("pullback_v4", PULLBACK_CONFIG)],
 )
 def test_an_evaluator_without_config_is_the_evaluator_with_the_canonical_config(
     key, config
@@ -175,7 +175,7 @@ def test_ablations_leave_the_registry_and_canonical_snapshot_alone():
     before = canonical_config_snapshot()
     registry = research_registry(all_ablations())
 
-    assert list(REGISTRY) == ["breakout_v3", "pullback_v3"]
+    assert list(REGISTRY) == ["breakout_v3", "pullback_v4"]
     assert canonical_config_snapshot() == before
     assert list(registry)[:2] == list(REGISTRY)
     assert len(registry) == 2 + sum(len(item) for item in ABLATIONS.values())
@@ -510,7 +510,7 @@ def _whole_result(factory, registry, start, end, **kwargs):
 
 def _registry(kind: str):
     return (
-        None if kind == "canonical" else research_registry([("pullback_v3", "volume")])
+        None if kind == "canonical" else research_registry([("pullback_v4", "volume")])
     )
 
 

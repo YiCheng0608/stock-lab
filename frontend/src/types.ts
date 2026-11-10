@@ -491,6 +491,8 @@ export type InstrumentDetail = {
   events: EventRow[]
   data_quality: DataQualityRow[]
   coverage?: InstrumentCoverage | null
+  // The official stop of trading on the page's day (Issue 582): the requested cutoff, else the latest market session.
+  trading_halt?: TradingHalt | null
   quality_summary?: {
     market: { status: string; label: string; as_of: string | null; missing_fields: string[]; source: string | null }
     research: { status: string; label: string; as_of: string | null; missing_fields: string[]; action_state: string | null }
@@ -521,6 +523,10 @@ export type StrategyCondition = {
   next_session: Record<string, number | string | null> | null
 }
 
+// What the RR's entry is (#580; UI_COPY_SPEC §10): pullback_v4 the entry zone's midpoint, an earlier pullback T's close,
+// a breakout its entry price. Missing or null on responses that do not know the strategy.
+export type RiskRewardBasis = 'entry_zone_midpoint' | 'signal_close' | 'entry_price'
+
 // Levels never mix: actionable reads the signal, observation reads strategy_levels.
 export type StrategyActionableLevels = {
   kind: 'actionable'
@@ -533,6 +539,7 @@ export type StrategyActionableLevels = {
   target_1: number | null
   target_2: number | null
   risk_reward: number | null
+  risk_reward_basis?: RiskRewardBasis | null
 }
 
 export type StrategyObservationLevels = {
@@ -569,6 +576,15 @@ export type StrategyBoardRow = {
   earliest_execution_date: string | null
   levels: StrategyActionableLevels | StrategyObservationLevels | null
   levels_missing: boolean
+  // Every condition passed but the RR is under the minimum (#580): the row reads as an observation. risk_reward is null
+  // when the entry is not between the stop and the first target. Missing on responses from before #580.
+  risk_reward_shortfall?: {
+    risk_reward: number | null
+    minimum: number
+    risk_reward_basis: RiskRewardBasis | null
+    entry: number | null
+    errors: string[]
+  } | null
   unmet: string[]
   missing: string[]
   missing_labels: string[]
@@ -583,6 +599,23 @@ export type StrategyBoard = {
   liquidity?: StrategyBoardLiquidity | null
   strategies: StrategyBoardRow[]
 }
+
+// An official stop of trading (Issue 582): the sessions from halt_start up to, not including, resume_date.
+export type TradingHalt = {
+  reason: string
+  reason_label: string
+  reason_detail: string | null
+  halt_start: string
+  resume_date: string
+  last_trade_date: string | null
+  exchange: string
+  source: string
+  endpoint: string
+  data_as_of: string
+  as_of?: string
+}
+
+export type TradingHaltPeriod = TradingHalt & { first_session: string; last_session: string }
 
 export type InstrumentCoverage = {
   coverage_status?: 'unknown' | 'verified' | string
@@ -611,6 +644,9 @@ export type InstrumentCoverage = {
   suspended_dates_to_60?: string[]
   quote_not_listed_dates_to_60?: string[]
   invalid_bar_dates_to_60?: string[]
+  // Sessions of an official stop of trading (Issue 582) and the stops behind them; absent from an older API.
+  halted_dates_to_60?: string[]
+  halt_periods_to_60?: TradingHaltPeriod[]
   coverage_reasons: string[]
   ipo_stage: string | null
   windows: Record<string, Record<string, unknown>>
@@ -892,6 +928,9 @@ export type CoverageReport = {
     // Instruments with an official no-trade day in the window (#454); absent from an older API.
     no_trade_to_20?: number
     no_trade_to_60?: number
+    // Instruments with a session of an official stop of trading in the window (Issue 582).
+    halted_to_20?: number
+    halted_to_60?: number
     incomplete_chips_to_20: number
     incomplete_chips_to_60: number
     coverage_reason_counts: Record<string, number>
@@ -1568,6 +1607,8 @@ export type CandidateLevels = {
   target_1: number | null
   target_2: number | null
   risk_reward: number | null
+  // Missing on responses from before #580; null on a tracking plan's levels.
+  risk_reward_basis?: RiskRewardBasis | null
   earliest_execution_date: string | null
 }
 

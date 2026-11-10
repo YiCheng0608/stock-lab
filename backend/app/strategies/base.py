@@ -99,6 +99,17 @@ COMMON_RISK_MANAGEMENT = {
 
 # Identity of the level arithmetic in :func:`risk_levels` (level_semantics).
 LEGACY_RISK_LEVELS_FORMULA = "legacy-risk-levels/v1"
+# pullback_v4 (Issue #580): the invalid price and the targets of
+# ``legacy-risk-levels/v1`` around the close, with the entry the RR is read
+# from (``reference_entry``) at the midpoint of the entry zone.
+PULLBACK_ZONE_MIDPOINT_FORMULA = "pullback-zone-midpoint/v1"
+
+# What a strategy's stored entry (the RR basis, ``trigger_price``) is
+# (UI_COPY_SPEC §10): a breakout's trigger is T's close; a pullback before
+# v4 stored T's close, v4 the midpoint of the entry zone.
+RISK_REWARD_ENTRY_PRICE = "entry_price"
+RISK_REWARD_SIGNAL_CLOSE = "signal_close"
+RISK_REWARD_ZONE_MIDPOINT = "entry_zone_midpoint"
 
 
 @dataclass(frozen=True)
@@ -340,6 +351,8 @@ class Strategy:
     research_label_zh: str
     requires_zh: tuple[str, ...]
     level_formula_version: str = LEGACY_RISK_LEVELS_FORMULA
+    # What the entry the RR is computed from is (RISK_REWARD_*).
+    risk_reward_basis: str = RISK_REWARD_ENTRY_PRICE
     # REASON_TEMPLATES code (worker.candidates) for the technical reason.
     candidate_reason: str | None = None
     # Short names of this strategy's own conditions (UI_COPY_SPEC §10.1).

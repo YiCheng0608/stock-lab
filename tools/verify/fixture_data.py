@@ -684,7 +684,7 @@ def _score_rows() -> list[dict[str, Any]]:
 
 # ---- strategies and signals ----
 
-STRATEGY_IDS = {"breakout_v3": 1, "pullback_v3": 2, "hot_group_v1": 3}
+STRATEGY_IDS = {"breakout_v3": 1, "pullback_v4": 2, "hot_group_v1": 3}
 
 
 def _strategy_rows() -> list[dict[str, Any]]:
@@ -736,7 +736,7 @@ def _signal_rows() -> list[dict[str, Any]]:
         closes = [bar["close"] for bar in bars]
         ma20 = round(sum(closes[-20:]) / 20, 4)
         ma60 = round(sum(closes[-60:]) / 60, 4)
-        for strategy, status in zip(("breakout_v3", "pullback_v3"), statuses):
+        for strategy, status in zip(("breakout_v3", "pullback_v4"), statuses):
             breakout = strategy == "breakout_v3"
             conditional = status == "conditional"
             entry = close
@@ -1502,7 +1502,7 @@ _PLANS = (
     (
         3,
         "9201",
-        "pullback_v3",
+        "pullback_v4",
         SESSIONS[-12],
         "target_hit",
         {
@@ -1998,6 +1998,10 @@ OMITTED_TABLES: dict[str, str] = {
     "trading_calendar_days": (
         "休市表只給 analyze 推算規則最早執行日；API 不讀，"
         "假資料的訊號直接寫好 earliest_execution_date"
+    ),
+    "trading_halts": (
+        "減資停止買賣區間（#582）；假資料的標的每個交易日都有行情，沒有停止買賣。"
+        "個股頁頁首的停止買賣 badge 與原因句由後端 test_trading_halts 與前端測試驗"
     ),
 }
 

@@ -21,6 +21,8 @@
 
 收盤區間 `zone_low`＝L（前三個下界取整後的最大值）、`zone_high`＝U（支撐區上界取整）。L > U 時記 `trend_unreachable`，不給任何價位與量，`conditions_json` 的趨勢條件與支撐區條件仍列出兩個數字。否則參考 `reference_entry`＝T 收盤夾在 [L, U] 內最近的點（收盤在區間內／上方／下方分別記 `position` inside／above／below），停損與目標＝`risk_levels(entry, ATR14[T])`，參考進場區 `entry_low`／`entry_high`＝MA20' ± max(0.5·ATR14, 0.5%·entry)，MA20'＝(S19+entry)/20（同成立價位的算法）。
 
+**pullback_v4**（[#580](https://github.com/YiCheng0608/stock-lab/issues/580)）：收盤區間、量、可達性、參考進場區與停損目標都同上（停損與目標仍是 `risk_levels(夾進 [L, U] 的收盤, ATR14[T])`），只把參考 `reference_entry` 換成參考進場區中點 `round((entry_low + entry_high) / 2, 2)`，`risk_reward` 以這個中點重算；中點不在停損與目標一之間時 `risk_reward` 為 null。和成立價位同一條規則（[pullback_v4](breakout_pullback.md#pullback_v4)）。`levels_version` 不升：v3 的列不動，只有 v4 的新列套用。
+
 **可達性** `reachable_next_session`：股票與 IPO 以 T 收盤（下一交易日基準）±10% 依升降單位取整為漲跌停；breakout 為 trigger ≤ 漲停，pullback 為 L ≤ 漲停且 U ≥ 跌停。ETF 的漲跌幅因商品而異（例：00967B 官方 LimitUp 9999.95），一律 null。
 
 **availability**：
