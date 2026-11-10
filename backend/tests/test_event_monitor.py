@@ -1462,7 +1462,8 @@ def test_a_bad_state_file_is_skipped_alone(mon: Harness, content) -> None:
     log = (mon.data / "logs" / "monitor.log").read_text(encoding="utf-8")
     # A file that is no JSON object is logged; a wrong field type just makes no event.
     unreadable = not isinstance(content, dict)
-    assert ("session_skipped bad.json" in log) is unreadable
+    skipped = re.search(r" session_skipped mode=\S+ bad\.json ", log)
+    assert (skipped is not None) is unreadable
 
 
 def test_a_turn_ended_on_an_api_error_wakes_at_once(mon: Harness) -> None:
