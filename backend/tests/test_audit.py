@@ -1695,7 +1695,7 @@ def test_candidates_written_by_the_worker_pass_and_a_changed_total_fails(fx):
         market["2330"].id,
     )
     fx.db.expire_all()
-    for name, entry_type in (("breakout_v3", "breakout"), ("pullback_v3", "pullback")):
+    for name, entry_type in (("breakout_v3", "breakout"), ("pullback_v4", "pullback")):
         for symbol in ("1101", "2330", "1102"):
             instrument = market[symbol]
             bars = (

@@ -229,10 +229,10 @@ class GroupMemberIdentityTest(unittest.TestCase):
                     ]
                     self.assertEqual(
                         actual[stock.id],
-                        observer.inputs["pullback_v3"]["group_excess_return_20d"],
+                        observer.inputs["pullback_v4"]["group_excess_return_20d"],
                     )
                     self.assertEqual(
-                        set(observer.results), {"breakout_v3", "pullback_v3"}
+                        set(observer.results), {"breakout_v3", "pullback_v4"}
                     )
                     signal = db.scalar(
                         select(Signal).where(Signal.instrument_id == stock.id)

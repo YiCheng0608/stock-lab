@@ -22,6 +22,8 @@ import {
   formatCandidateScore,
   formatEntryZone,
   formatLots,
+  formatRiskRewardWithBasis,
+  riskRewardBasisNote,
   liquidityExclusionText,
   formatSubItemValue,
   marketSourceLabel,
@@ -193,3 +195,23 @@ const liquidList = render(<CandidatesSection data={{ ...listResponse(), items: [
 // Issue 510: the average volume moved off the row into the detail's 資料日期與來源, with its date and the floor.
 check(count(liquidList, '20 日均量 1,682 張') === 1 && slice(liquidList, 'candidate-detail-sources', '</details>').includes('20 日均量 1,682 張（資料日期 2026/10/16，候選門檻 1,000 張）'), `the detail shows the lots with the date and the floor, the row none, got ${count(liquidList, '20 日均量 1,682 張')}`)
 check(!render(<CandidatesSection data={listResponse()} loading={false} error={null} />).includes('candidate-liquidity'), 'a run before candidate_score_v6 shows no average volume')
+
+// ---- RR basis (#580; UI_COPY_SPEC §10): the today row names what the RR's entry is, the detail names its price ----
+check(riskRewardBasisNote('entry_zone_midpoint') === '以進場區中點計算' && riskRewardBasisNote('entry_price') === '以進場價計算' && riskRewardBasisNote('signal_close') === '以資料日收盤計算', 'the three basis notes')
+check(riskRewardBasisNote(null) === null && riskRewardBasisNote(undefined) === null && riskRewardBasisNote('other') === null, 'an unknown or missing basis has no note')
+check(formatRiskRewardWithBasis(1.6234, 'entry_zone_midpoint', 27.27) === '1.62 倍（以進場區中點 27.27 元計算）', 'the RR with its basis and entry price')
+check(formatRiskRewardWithBasis(1.6, null, 27.27) === '1.60 倍' && formatRiskRewardWithBasis(1.6, 'entry_price', null) === '1.60 倍' && formatRiskRewardWithBasis(null, 'entry_price', 10) === '—', 'no basis, no price or no RR: the RR alone')
+const midpointItem = {
+  ...completeItem(), strategy: 'pullback_v4',
+  levels: {
+    entry_type: 'pullback', entry: 27.27, entry_zone: { low: 26.85, high: 27.69 }, invalid_price: 26.5, target_1: 28.52, target_2: 29.4,
+    risk_reward: 1.6234, risk_reward_basis: 'entry_zone_midpoint' as const, earliest_execution_date: null,
+  },
+}
+const midpointList = render(<CandidatesSection data={{ ...listResponse(), items: [midpointItem] }} loading={false} error={null} />)
+const midpointRow = slice(rowOf(midpointList, 1), 'candidate-row-nums', '</dl>')
+check(midpointRow.includes('1.62 倍') && midpointRow.includes('class="small-note candidate-rr-basis">以進場區中點計算</div>'), `the row's RR names its basis, got ${midpointRow}`)
+check(detailOf(rowOf(midpointList, 1)).includes('1.62 倍（以進場區中點 27.27 元計算）'), 'the detail names the midpoint price')
+const breakoutList = render(<CandidatesSection data={{ ...listResponse(), items: [{ ...completeItem(), levels: { ...completeItem().levels, risk_reward_basis: 'entry_price' as const } }] }} loading={false} error={null} />)
+check(breakoutList.includes('>以進場價計算</div>') && breakoutList.includes('1.60 倍（以進場價 161.50 元計算）'), 'a breakout reads at its entry price')
+check(!render(<CandidatesSection data={listResponse()} loading={false} error={null} />).includes('candidate-rr-basis'), 'a response without the basis shows no note')

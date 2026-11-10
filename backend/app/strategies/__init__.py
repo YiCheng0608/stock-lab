@@ -20,6 +20,7 @@ from .base import (
     ENTRY_LEVEL_FIELDS,
     ENTRY_REQUIRED_LEVELS,
     LEGACY_RISK_LEVELS_FORMULA,
+    PULLBACK_ZONE_MIDPOINT_FORMULA,
     Condition,
     NextSessionInputs,
     ObservationLevels,
@@ -35,23 +36,24 @@ from .breakout_v3 import BREAKOUT_V3, evaluate_breakout_v3
 from .pullback_v1 import PULLBACK_V1, evaluate_pullback_v1
 from .pullback_v2 import PULLBACK_V2, evaluate_pullback_v2
 from .pullback_v3 import PULLBACK_V3, evaluate_pullback_v3
+from .pullback_v4 import PULLBACK_V4
 
 # Declaration order is the product order: the decision summary takes the
 # first conditional strategy in this order, and every signal's rationale and
 # evidence list the strategies in it.
 REGISTRY: dict[str, Strategy] = {
-    strategy.key: strategy for strategy in (BREAKOUT_V3, PULLBACK_V3)
+    strategy.key: strategy for strategy in (BREAKOUT_V3, PULLBACK_V4)
 }
 
 # Strategies analyze no longer writes, kept so their stored signals still
-# read (Issue #392, #404).  Each strategy's config names the version it took
+# read (Issue #392, #404, #580).  Each strategy's config names the version it took
 # the place of (``supersedes``), so the versions of one kind form a chain
 # ending at a registered strategy: readers show, for each instrument-day,
 # only the newest version that has a signal there, keyed by the registered
 # strategy (``app.signal_versions``; the levels step applies the same rule).
 SUPERSEDED: dict[str, Strategy] = {
     strategy.key: strategy
-    for strategy in (BREAKOUT_V1, PULLBACK_V1, BREAKOUT_V2, PULLBACK_V2)
+    for strategy in (BREAKOUT_V1, PULLBACK_V1, BREAKOUT_V2, PULLBACK_V2, PULLBACK_V3)
 }
 
 
@@ -140,6 +142,13 @@ def registry_problems(registry: Mapping[str, Strategy]) -> list[str]:
     return problems
 
 
+def risk_reward_basis(name: str | None) -> str | None:
+    """What the stored entry of a ``name`` signal's RR is (#580); None if unknown."""
+
+    strategy = (REGISTRY.get(name) or SUPERSEDED.get(name)) if name else None
+    return strategy.risk_reward_basis if strategy is not None else None
+
+
 def strategy_by_kind(kind: str) -> Strategy | None:
     return next(
         (strategy for strategy in REGISTRY.values() if strategy.kind == kind), None
@@ -197,6 +206,7 @@ __all__ = [
     "ENTRY_LEVEL_FIELDS",
     "ENTRY_REQUIRED_LEVELS",
     "LEGACY_RISK_LEVELS_FORMULA",
+    "PULLBACK_ZONE_MIDPOINT_FORMULA",
     "NEWER_VERSIONS",
     "Condition",
     "NextSessionInputs",
@@ -221,6 +231,7 @@ __all__ = [
     "registry_problems",
     "newest_versions",
     "registry_key",
+    "risk_reward_basis",
     "risk_levels",
     "strategy_by_kind",
     "strategy_configs",
