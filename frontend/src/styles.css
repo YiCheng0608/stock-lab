@@ -647,7 +647,8 @@ a.symbol-link:hover { color: var(--color-primary); }
 .member-card .board-card-grid { margin-top: var(--space-2); }
 .member-card-evidence { margin-top: var(--space-2); font-size: 14px; }
 .stock-card-meta { margin-top: var(--space-1); color: var(--color-text-muted); font-size: 14px; }
-.stock-card-action { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); margin-top: var(--space-2); font-size: 14px; }
+/* One research-action cell (Issue 602): the label, then the first missing item on its own line. */
+.stock-card-action { margin-top: var(--space-2); font-size: 14px; }
 .stock-cards .table-note { padding: 0; }
 /* DESIGN_SYSTEM §5.1: the cards past the first ten fold into <details>; open, they keep the list's gap. */
 .card-list-rest-items { display: grid; gap: var(--space-3); margin-top: var(--space-3); }

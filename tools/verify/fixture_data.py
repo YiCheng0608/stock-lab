@@ -2185,6 +2185,17 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
     "stocks": [
         ("stocks?page=1&page_size=30", "meta.total", 8),
         ("stocks?page=1&page_size=30", "items", 8),
+        # Stocks before the ETF, each by symbol whatever the exchange (#602).
+        (
+            "stocks?page=1&page_size=30",
+            "items[].instrument.symbol",
+            ["9101", "9102", "9103", "9201", "9202", "9203", "9204", "00990"],
+        ),
+        (
+            "stocks?page=1&page_size=30&sort=symbol",
+            "items[].instrument.symbol",
+            ["00990", "9101", "9102", "9103", "9201", "9202", "9203", "9204"],
+        ),
         # Neither lifecycle stock is a current instrument; their history stays.
         (
             "stocks?q=920&page=1&page_size=30",

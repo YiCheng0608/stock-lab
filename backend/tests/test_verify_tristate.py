@@ -335,7 +335,7 @@ def test_the_stock_comes_from_the_list_without_candidates(tmp_path):
 
 def test_stocks_checks_that_need_no_stock_run_without_one(tmp_path, monkeypatch):
     listed = {"items": [], "meta": {"total": 0}}
-    header = "代號\t名稱\t交易所\t類型\t最近收盤（元）\t目前研究動作\t策略判斷資料"
+    header = "代號\t名稱\t交易所\t類型\t最近收盤（元）\t目前研究動作"
     run = _run(
         tmp_path,
         {

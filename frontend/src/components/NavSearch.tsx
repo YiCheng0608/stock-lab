@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-import { getInstrumentSuggestions } from '../api'
+import { getInstrumentSuggestions, SEARCH_MAX_LENGTH } from '../api'
 import { createSuggestController, INITIAL_SUGGEST_STATE, stockSearchPath } from '../search'
 import type { SuggestController, SuggestState } from '../search'
 import { exchangeLabel } from '../presentation'
@@ -151,6 +151,7 @@ export function NavSearch() {
         aria-controls={expanded ? listId : undefined}
         aria-activedescendant={expanded && state.active >= 0 ? suggestOptionId(listId, state.active) : undefined}
         autoComplete="off"
+        maxLength={SEARCH_MAX_LENGTH}
         spellCheck={false}
       />
       <SuggestPopup state={state} listId={listId} onChoose={choose} onHighlight={(index) => controller.current?.highlight(index)} />

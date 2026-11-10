@@ -2241,6 +2241,8 @@ def stock_text(run: Run, stock: Stock, tab: str = "main", width: int = 1280) -> 
 
 
 STOCKS = Shot("stocks", "/stocks")
+# backend/app/api.py STOCK_TYPE_ORDER, mirrored: verify does not import the app.
+STOCK_TYPE_RANK = {"stock": 0, "etf": 1, "ipo": 2}
 
 
 # The directory /stocks needs no E/S (#251); without one only the stock pages go unchecked.
@@ -2259,7 +2261,7 @@ def s1(run: Run, stock: Stock | None) -> str:
 def s2(run: Run, stock: Stock | None) -> str:
     payload = run.get("stocks?page=1&page_size=30", "stocks.json")
     text = run.text(STOCKS)
-    header = "代號\t名稱\t交易所\t類型\t最近收盤（元）\t目前研究動作\t策略判斷資料"
+    header = "代號\t名稱\t交易所\t類型\t最近收盤（元）\t目前研究動作"
     expect(text.has(header), "缺目錄表頭整行")
     items = payload.get("items") or []
     total = (payload.get("meta") or {}).get("total") or 0
@@ -2269,11 +2271,22 @@ def s2(run: Run, stock: Stock | None) -> str:
             text.find_where(lambda line: line.startswith(symbol)) >= 0,
             f"缺 `{symbol}` 開頭的列",
         )
+        # The default order (#602): stocks, then ETFs, then new listings, each by symbol.
+        keys = [
+            (
+                STOCK_TYPE_RANK.get(
+                    item["instrument"]["instrument_type"], len(STOCK_TYPE_RANK)
+                ),
+                item["instrument"]["symbol"],
+            )
+            for item in items
+        ]
+        expect(keys == sorted(keys), f"預設順序不是類型→代號：{keys[:5]}…")
     else:
         expect(text.has("沒有符合條件的標的。"), "items 空，缺空資料文案")
     pager = f"第 1／{max(1, math.ceil(total / 30))} 頁 · 共 {total:,} 筆"
     expect(text.has(pager), f"缺整行 `{pager}`")
-    return f"表頭、第一列、`{pager}`"
+    return f"表頭、第一列、類型→代號順序、`{pager}`"
 
 
 @check("stocks", "S3", per_stock=True)
