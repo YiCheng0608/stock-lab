@@ -942,7 +942,7 @@ def _ingestion_rows() -> list[dict[str, Any]]:
             2,
             "news",
             "news",
-            5,
+            6,
             f"{T.isoformat()}T10:00:00+08:00",
             {"feeds": 2},
             _at(T, 2),
@@ -951,9 +951,9 @@ def _ingestion_rows() -> list[dict[str, Any]]:
             3,
             "news_llm",
             "claude",
-            4,
+            5,
             None,
-            {"prompt_version": NEWS_PROMPT_VERSION, "calls": 4},
+            {"prompt_version": NEWS_PROMPT_VERSION, "calls": 5},
             _at(T, 3),
         ),
         run(
@@ -1091,6 +1091,7 @@ def _market_summary_rows() -> list[dict[str, Any]]:
 
 DOMESTIC_SOURCE = "示範財經社"
 INTERNATIONAL_SOURCE = "Demo Wire"
+WIRE_SOURCE = "示範通訊社"
 
 
 def _news(
@@ -1186,6 +1187,19 @@ def _news_rows() -> list[dict[str, Any]]:
             summary="虛構新聞：示範散熱新廠設備進駐時程延後，尚未產生 AI 判讀。",
             published_at=_at(yesterday, 3, 0),
             symbols=["TPEx:9203"],
+            raw_payload_id=3,
+        ),
+        # The same wire story from a second source, with an AI direction (#613): the
+        # home page lists both cards under one title, T6 checks each its own.
+        _news(
+            7,
+            category="domestic",
+            source_kind="media",
+            source_name=WIRE_SOURCE,
+            title="示範散熱新廠擴產進度延後一季",
+            summary="虛構新聞：通訊社轉載示範散熱新廠設備進駐延後一事。",
+            published_at=_at(yesterday, 2, 30),
+            symbols=[],
             raw_payload_id=3,
         ),
         _news(
@@ -1302,6 +1316,16 @@ def _llm_rows() -> list[dict[str, Any]]:
             "negative",
             "market",
             "資本支出下修可能壓抑伺服器需求。",
+        ),
+        result(
+            5,
+            7,
+            "示範散熱擴產延後，短期出貨可能受影響。",
+            [],
+            [],
+            "negative",
+            "instrument",
+            "新廠延後一季可能壓抑出貨成長。",
         ),
     ]
 
@@ -2030,13 +2054,14 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         ("dashboard?include=groups", "groups", len(GROUPS)),
         ("dashboard", "market.instruments", 8),  # 7 stocks + 1 ETF, not TAIEX
         # Only linked or judged news reaches the home page (#581, NEWS_SPEC 首頁重點新聞).
-        ("dashboard", "news", 4),
-        ("dashboard", "news[].id", ["1", "6", "2", "3"]),
+        # 3 and 7 share a title, 7 alone with an AI direction (#613).
+        ("dashboard", "news", 5),
+        ("dashboard", "news[].id", ["1", "6", "2", "3", "7"]),
         # The today card carries the detail's ai block (#233).
         (
             "dashboard",
             "news[].ai.status",
-            ["done", None, "done", None],
+            ["done", None, "done", None, "done"],
         ),
         ("dashboard", "themes", 5),
         (
@@ -2115,11 +2140,11 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         ("news/6", "ai", None),
     ],
     "news": [
-        ("news?category=domestic&limit=20", "items", 3),
+        ("news?category=domestic&limit=20", "items", 4),
         (
             "news?category=domestic&limit=20",
             "items[].ai.status",
-            ["done", "done", None],
+            ["done", "done", None, "done"],
         ),
         ("news?category=international&limit=20", "items", 2),
         ("news?category=international&limit=20", "items[].ai.status", ["done", "done"]),

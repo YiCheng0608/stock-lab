@@ -176,7 +176,7 @@ def test_a_column_removed_from_the_fixture_fails(tmp_path):
     for row in tables["news_items"]:
         del row["source_name"]
     assert _problems(_head_columns(tmp_path / "head.db"), tables) == [
-        "news_items.source_name: head column missing from 6 fixture row(s) "
+        f"news_items.source_name: head column missing from {len(tables['news_items'])} fixture row(s) "
         "and not in INTENTIONALLY_EMPTY"
     ]
 

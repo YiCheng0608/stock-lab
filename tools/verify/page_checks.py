@@ -1081,11 +1081,18 @@ def t6(run: Run) -> str:
         message = "市場新聞區尚無可顯示內容。"
         expect(text.has(message), f"dashboard.news 空，缺 `{message}`")
         return f"dashboard.news 空，顯示 `{message}`"
-    starts = []
+    starts, seen = [], {}
     for item in news:
         title = display_title(item["title"])
-        i = text.find(title)
-        expect(i >= 0, f"缺新聞標題整行 `{title}`（id {item['id']}）")
+        # Two sources often carry one wire story (#613): the n-th item with a title
+        # is the n-th line that reads it, in API order.
+        nth = seen.get(title, [])
+        i = text.find(title, nth[-1] + 1 if nth else 0)
+        expect(
+            i >= 0,
+            f"缺{f'第 {len(nth) + 1} 則' if nth else ''}新聞標題整行 `{title}`（id {item['id']}）",
+        )
+        seen[title] = nth + [i]
         starts.append(i)
     # The news card is the last block of the page (#493); the footer ends the last card.
     end = text.find(FOOTER_FIRST_LINE, max(starts))
