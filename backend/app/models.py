@@ -348,6 +348,49 @@ class NoTradeDay(Base):
     )
 
 
+class TradingHalt(Base):
+    """An official stop of trading of one security, as an interval (Issue #582).
+
+    The exchanges' capital reduction tables (TWSE 股票減資恢復買賣參考價格
+    ``TWTAUU``, TPEx 減資恢復買賣 ``revivt``) name the resumption day and the
+    last trading day or the first stopped day of the old shares.  The stopped
+    sessions are those from ``halt_start`` up to, not including,
+    ``resume_date``; ``halt_start`` is the TPEx 停止買賣日期 or the calendar day
+    after the TWSE last trading day.  The row explains why the official quote
+    tables have no row for the security on those sessions; it is never a
+    price, and a session with a bar outranks it.  Written by
+    ``worker.trading_halts`` (collect and ``worker.cli trading-halts``).
+    """
+
+    __tablename__ = "trading_halts"
+    __table_args__ = (
+        UniqueConstraint(
+            "instrument_id", "source", "resume_date", name="uq_trading_halt"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"))
+    exchange: Mapped[str] = mapped_column(String(20))
+    halt_start: Mapped[date] = mapped_column(Date, index=True)
+    resume_date: Mapped[date] = mapped_column(Date, index=True)
+    # The TWSE table's 最後交易日; TPEx states the first stopped day instead.
+    last_trade_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # ``capital_reduction`` (the only kind so far) and the source's 減資原因.
+    reason: Mapped[str] = mapped_column(String(40))
+    reason_detail: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    source: Mapped[str] = mapped_column(String(40))
+    endpoint: Mapped[str] = mapped_column(String(500))
+    data_as_of: Mapped[str] = mapped_column(String(40))
+    # The capture time of the raw payload the row came from.
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+    # The official row as published.
+    details_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
 class TechnicalFeature(Base):
     __tablename__ = "technical_features"
     __table_args__ = (
