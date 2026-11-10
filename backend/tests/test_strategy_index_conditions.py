@@ -23,7 +23,10 @@ from app.db import enable_sqlite_foreign_keys
 from app.domain import RuleEvaluation
 from app.models import Instrument, MarketBar
 from app.strategies import REGISTRY, StrategyInputs, canonical_config_snapshot
+from app.strategies.breakout_v3 import BREAKOUT_V3
+from app.strategies.pullback_v3 import PULLBACK_V3
 from app.strategies.index_conditions import (
+    BASES,
     CONDITIONS,
     EXPLORATION,
     MARKET_INDEX_UNKNOWN,
@@ -348,7 +351,7 @@ def test_us_rows_never_reach_the_taiwan_conditions():
 
 @pytest.mark.parametrize(("key", "code"), all_conditions())
 def test_a_holding_condition_returns_the_v3_result_unchanged(key, code):
-    rule = REGISTRY[key].rule
+    rule = BASES[key].rule
     up, session = _scenario("up", 300)
     down, _ = _scenario("down", 300)
     short, _ = _scenario("up", NEEDED[code] - 1)
@@ -407,7 +410,7 @@ def test_combine_keeps_the_three_outcomes():
 
 @pytest.mark.parametrize(("key", "code"), all_conditions())
 def test_a_condition_config_differs_only_by_name_kind_and_its_condition(key, code):
-    canonical = json.loads(json.dumps(REGISTRY[key].config))
+    canonical = json.loads(json.dumps(BASES[key].config))
     strategy = condition_strategy(key, code, IndexHistory({}))
     config = json.loads(json.dumps(strategy.config))
 
@@ -415,7 +418,7 @@ def test_a_condition_config_differs_only_by_name_kind_and_its_condition(key, cod
     assert config.pop("kind") == f"{canonical['kind']}_index_{code}"
     snapshot = config.pop("index_condition")
     assert snapshot["base_strategy"] == key
-    assert snapshot["base_version"] == REGISTRY[key].version
+    assert snapshot["base_version"] == BASES[key].version
     assert snapshot["condition"] == code and snapshot["issue"] == 567
     assert snapshot["missing_policy"] == "data_incomplete"
     assert snapshot["series"] == list(CONDITIONS[code].series)
@@ -423,13 +426,23 @@ def test_a_condition_config_differs_only_by_name_kind_and_its_condition(key, cod
     assert config == canonical
 
 
+def test_the_bases_are_the_v3_modules_whatever_the_registry_holds():
+    # Run 2759 measured these two; a newer registered version must not move
+    # the research versions (or their baselines) onto itself.
+    assert BASES == {"breakout_v3": BREAKOUT_V3, "pullback_v3": PULLBACK_V3}
+    assert [key for key, _ in all_conditions()][:: len(CONDITIONS)] == list(BASES)
+    assert research.condition_items(["pullback_v3:c1"]) == [("pullback_v3", "c1")]
+
+
 def test_condition_strategies_leave_the_registry_and_canonical_snapshot_alone():
     before = canonical_config_snapshot()
-    registry = with_conditions(dict(REGISTRY), all_conditions(), IndexHistory({}))
+    registered = dict(REGISTRY)
+    registry = with_conditions(dict(BASES), all_conditions(), IndexHistory({}))
 
-    assert list(REGISTRY) == ["breakout_v3", "pullback_v3"]
+    assert REGISTRY == registered
+    assert not any("_index_" in key for key in REGISTRY)
     assert canonical_config_snapshot() == before
-    assert list(registry)[:2] == list(REGISTRY)
+    assert list(registry)[:2] == list(BASES)
     assert len(registry) == 2 + 2 * len(CONDITIONS)
     assert len({strategy.kind for strategy in registry.values()}) == len(registry)
     with pytest.raises(ValueError, match="already in the registry"):
@@ -453,8 +466,8 @@ def test_a_condition_strategy_needs_a_score_date_and_an_instrument():
         margin_change_ratio_5d=0.0,
         margin_financing="applicable",
     )
-    for key in REGISTRY:
-        base = REGISTRY[key].evaluate(inputs)
+    for key in BASES:
+        base = BASES[key].evaluate(inputs)
         held = condition_strategy(key, "c2", history)
         failed = condition_strategy(key, "c2", down)
         with pytest.raises(RuntimeError, match="without a score date"):
@@ -467,11 +480,11 @@ def test_a_condition_strategy_needs_a_score_date_and_an_instrument():
         down.set_instrument("TWSE")
         assert held.evaluate(inputs) == base
         assert failed.evaluate(inputs).reasons[-1] == "index_condition_c2_not_met"
-        assert held.actionable_levels(inputs) == REGISTRY[key].actionable_levels(inputs)
+        assert held.actionable_levels(inputs) == BASES[key].actionable_levels(inputs)
         history.set_instrument(None, active=False)
         history.set_session(None)
         down.set_session(None)
-    assert REGISTRY["breakout_v3"].evaluate(inputs).passed
+    assert BASES["breakout_v3"].evaluate(inputs).passed
 
 
 def test_the_view_of_a_score_date_is_shared_by_one_market():
@@ -599,8 +612,8 @@ def test_a_research_backtest_keeps_v3_where_the_condition_holds(backtest_db):
         markets = dict(db.execute(select(Instrument.id, Instrument.exchange)).all())
     start, end = days[-45], days[-1]
     history = _synthetic(days[days.index(start) :])
-    items = [(key, code) for key in REGISTRY for code in ("c2", "c3a")]
-    registry = with_conditions(dict(REGISTRY), items, history)
+    items = [(key, code) for key in BASES for code in ("c2", "c3a")]
+    registry = with_conditions(dict(BASES), items, history)
     with (
         research.score_dates(research.SessionTargets(history), pipeline),
         research.instruments(history, pipeline),
@@ -615,8 +628,8 @@ def test_a_research_backtest_keeps_v3_where_the_condition_holds(backtest_db):
     rows = _rows(factory, result["run"]["id"])
     compared = {"passed": 0, "rejected": 0, "data_incomplete": 0}
     by_market = {"TWSE": set(), "TPEx": set()}
-    for key in REGISTRY:
-        base_kind = REGISTRY[key].kind
+    for key in BASES:
+        base_kind = BASES[key].kind
         for code in ("c2", "c3a"):
             strategy = registry[f"{key}_index_{code}"]
             for (name, instrument_id, day), row in rows.items():
@@ -670,8 +683,8 @@ def test_a_report_of_the_run_matches_its_baseline_where_the_condition_holds(
     with closing(sqlite3.connect(path)) as connection:
         history = IndexHistory(report.series_rows(connection, SERIES))
     assert history.series("TAIEX")[0] and history.series("TPEX")[0]
-    items = [(key, "c2") for key in REGISTRY]
-    registry = with_conditions(dict(REGISTRY), items, history)
+    items = [(key, "c2") for key in BASES]
+    registry = with_conditions(dict(BASES), items, history)
     with (
         research.score_dates(research.SessionTargets(history), pipeline),
         research.instruments(history, pipeline),

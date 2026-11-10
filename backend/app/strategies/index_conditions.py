@@ -44,6 +44,11 @@ filters, these strategies never enter ``REGISTRY``: only a research
 backtest on a copy of the database or an isolated one evaluates them.  The US
 series are display-only (#547); reading them here is research, not an input of
 any registered strategy.
+
+The base strategies are fixed (``BASES``: ``breakout_v3`` and ``pullback_v3``),
+not whatever ``REGISTRY`` holds, so a newer registered version does not change
+what run 2759 measured; a run of index conditions alone replays both bases
+as its baselines (``tools/research/backtest_research.py``).
 """
 
 from __future__ import annotations
@@ -57,8 +62,15 @@ from typing import Any
 
 from app.domain import RuleEvaluation, _finite, moving_average
 
-from . import REGISTRY, registry_problems
+from . import registry_problems
 from .base import Strategy, StrategyInputs
+from .breakout_v3 import BREAKOUT_V3
+from .pullback_v3 import PULLBACK_V3
+
+# The versions #567 measured (run 2759); see the module docstring.
+BASES: dict[str, Strategy] = {
+    strategy.key: strategy for strategy in (BREAKOUT_V3, PULLBACK_V3)
+}
 
 # Series key -> (instruments.exchange, instruments.symbol, instrument_type).
 SERIES: dict[str, tuple[str, str, str]] = {
@@ -473,9 +485,9 @@ def evaluate_with_condition(
 
 
 def condition_strategy(strategy_key: str, code: str, history: IndexHistory) -> Strategy:
-    """``REGISTRY[strategy_key]`` plus the condition ``code``, under its own name and kind."""
+    """``BASES[strategy_key]`` plus the condition ``code``, under its own name and kind."""
 
-    base = REGISTRY[strategy_key]
+    base = BASES[strategy_key]
     item = CONDITIONS[code]
     config: dict[str, Any] = copy.deepcopy(dict(base.config))
     config["name"] = f"{strategy_key}_index_{code}"
@@ -522,7 +534,7 @@ def with_conditions(
 
 
 def all_conditions() -> list[tuple[str, str]]:
-    return [(strategy_key, code) for strategy_key in REGISTRY for code in CONDITIONS]
+    return [(strategy_key, code) for strategy_key in BASES for code in CONDITIONS]
 
 
 # ---- the rule a condition passes to be proposed (fixed before any result) ----

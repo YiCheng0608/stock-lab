@@ -255,15 +255,14 @@ def regime_items(names: list[str]) -> list[tuple[str, str]]:
 
 
 def condition_items(names: list[str]) -> list[tuple[str, str]]:
-    from app.strategies import REGISTRY
-    from app.strategies.index_conditions import CONDITIONS, all_conditions
+    from app.strategies.index_conditions import BASES, CONDITIONS, all_conditions
 
     if names == ["all"]:
         return all_conditions()
     items = []
     for name in names:
         key, _, code = name.partition(":")
-        if key not in REGISTRY or code not in CONDITIONS:
+        if key not in BASES or code not in CONDITIONS:
             raise Refused(f"unknown index-condition strategy {name!r}")
         items.append((key, code))
     return items
@@ -549,7 +548,7 @@ def main(argv: list[str] | None = None) -> int:
     from app.db import init_db
     from app.strategies import REGISTRY
     from app.strategies.ablation import research_registry
-    from app.strategies.index_conditions import with_conditions
+    from app.strategies.index_conditions import BASES, with_conditions
     from app.strategies.regime import with_regimes
     from worker import pipeline
 
@@ -559,8 +558,12 @@ def main(argv: list[str] | None = None) -> int:
         conditions = condition_items(args.index_condition)
         if items or not (regimes or conditions):
             registry = research_registry(items, canonical=not args.no_canonical)
-        else:
+        elif regimes:
             registry = {} if args.no_canonical else dict(REGISTRY)
+        else:
+            # Index conditions alone: their fixed v3 bases are the baselines,
+            # whatever REGISTRY holds (app.strategies.index_conditions.BASES).
+            registry = {} if args.no_canonical else dict(BASES)
     except (Refused, ValueError) as exc:
         print(json.dumps({"refused": [str(exc)]}, ensure_ascii=False))
         return 2
