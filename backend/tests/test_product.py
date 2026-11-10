@@ -481,7 +481,7 @@ def test_dashboard_news_and_group_rows_use_compact_projections(product_api):
         db.commit()
 
     with TestClient(app) as client:
-        response = client.get("/api/dashboard")
+        response = client.get("/api/dashboard?include=groups")
 
     assert response.status_code == 200
     item = next(
@@ -1230,7 +1230,10 @@ def test_stock_quality_explains_market_and_research_as_separate_purposes(product
         _as_of, alpha, _beta, _etf = _add_base_fixture(db)
 
     with TestClient(app) as client:
-        response = client.get(f"/api/stocks/{alpha.exchange}/{alpha.symbol}")
+        response = client.get(
+            f"/api/stocks/{alpha.exchange}/{alpha.symbol}",
+            params={"include": "strategy_conditions"},
+        )
 
     assert response.status_code == 200
     quality = response.json()["quality_summary"]

@@ -870,7 +870,7 @@ def test_stock_page_lists_feed_news_by_exchange_and_symbol(db, client):
     def titles(exchange, symbol):
         body = client.get(
             f"{router.prefix}/stocks/{exchange}/{symbol}",
-            params={"as_of": "2026-10-18"},
+            params={"as_of": "2026-10-18", "include": "news"},
         ).json()
         return {item["title"] for item in body["news"]}
 

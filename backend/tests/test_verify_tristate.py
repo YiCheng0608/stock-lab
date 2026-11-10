@@ -65,6 +65,7 @@ TODAY_PAGE = (
 def _run(tmp_path, payloads=None, pages=None, facts=None):
     base = {
         "dashboard": DASHBOARD,
+        "dashboard?include=groups": DASHBOARD,
         "themes?board=industry&limit=5": EMPTY_BOARD,
         "themes?board=industry&limit=100": EMPTY_BOARD,
         "candidates": CANDIDATES,
@@ -211,7 +212,7 @@ def test_an_empty_board_fails_when_the_db_has_scores(tmp_path):
 def test_an_empty_board_passes_when_nothing_has_scores(tmp_path):
     run = _run(
         tmp_path,
-        {"dashboard": {**DASHBOARD, "groups": []}},
+        {"dashboard?include=groups": {**DASHBOARD, "groups": []}},
         {
             "themes-1280": f"產業榜 · 共 0 個族群\n{NO_RUN}\n",
             "themes-390": f"{NO_RUN}\n",

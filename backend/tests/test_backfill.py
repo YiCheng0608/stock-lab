@@ -969,6 +969,7 @@ def test_backfill_status_and_coverage_api(backfill_env, monkeypatch):
                 runs = client.get("/api/backfill-runs?page=1&page_size=10")
                 coverage = client.get(
                     "/api/coverage?start_date=2026-09-04&end_date=2026-09-04&symbol=AAA"
+                    "&include=instrument_coverage"
                 )
         finally:
             app.dependency_overrides.pop(api_module.get_db, None)
@@ -1175,7 +1176,7 @@ def test_coverage_without_verified_baseline_is_unknown_and_compact(
     assert report["date_coverage"] == []
     assert response.status_code == 200
     assert response.json()["summary"]["coverage_status"] == "unknown"
-    assert response.json()["instrument_coverage"] == []
+    assert "instrument_coverage" not in response.json()
     assert response.json()["date_coverage"] == []
 
 

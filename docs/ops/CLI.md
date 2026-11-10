@@ -62,7 +62,7 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 - 逐用途檢查交易所、標的、日期與欄位；行情 success 不代表 chips、events、actions 完整。無資料、錯日與 incomparable 的判定見 [共通原則](../spec/README.md#共通原則)。
 - entry、breakout、pullback、invalid、targets 是規則參考價，不是持倉成本、委託或成交；`cost_included=false` 只表示價位公式未扣成本。
 - `data_cutoff`、`signal_date`、`earliest_execution_date`、naive `created_at` 都不能證明 `decision_at`。unknown time／basis 必須連同 reason 保留。
-- `/api/ingestion-runs`、`/api/backfill-runs`、`/api/data-quality`、`/api/backtest/summary` 提供稽核摘要，`/api/coverage` 提供 coverage。`/api/ingestion-runs` 的列表預設不含各 run 的 `metadata`（官方 collect 一筆約 300 KB、最大 10 MB，一頁 50 筆曾達 24 MB），加 `include_metadata=true` 才回傳（[#462](https://github.com/YiCheng0608/stock-lab/issues/462)）。前端入口為 `/research/backtest`、`/research/coverage`、`/system/data-quality`。
+- `/api/ingestion-runs`、`/api/backfill-runs`、`/api/data-quality`、`/api/backtest/summary` 提供稽核摘要，`/api/coverage` 提供 coverage；它預設只回彙總（`summary`、`baseline`、日期表等），逐檔的 `instrument_coverage` 要加 `include=instrument_coverage` 才回傳（[#601](https://github.com/YiCheng0608/stock-lab/issues/601)，回補報表頁不讀；`worker.backfill` 直接呼叫 `coverage_report`，不受影響）。`/api/ingestion-runs` 的列表預設不含各 run 的 `metadata`（官方 collect 一筆約 300 KB、最大 10 MB，一頁 50 筆曾達 24 MB），加 `include_metadata=true` 才回傳（[#462](https://github.com/YiCheng0608/stock-lab/issues/462)）。前端入口為 `/research/backtest`、`/research/coverage`、`/system/data-quality`。
 - 產業分類 run 與 ordinary、ETF、新上市 receipt 分開讀，其中一個 success 不代表全分類已核實（[產業分類](../INDUSTRY_CLASSIFICATION.md)）。
 
 ## 測試與驗證

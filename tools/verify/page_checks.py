@@ -819,9 +819,11 @@ def empty_board(run: Run, board: dict, text: Text, name: str) -> str:
     elsewhere = []
     if latest and day in (None, latest):
         elsewhere.append(f"DB group_daily_scores {latest} 有名次")
+    # The home page does not read groups; the dashboard ships them on request (#601).
+    groups = run.get("dashboard?include=groups", "dashboard-groups.json")
     ranked = [
         group
-        for group in run.dashboard().get("groups") or []
+        for group in groups.get("groups") or []
         if group.get("rank") is not None
         and group.get("trading_date") in {day or latest} - {None}
     ]
