@@ -129,15 +129,16 @@
 
 ### 6.1 資料不足的原因句
 
-`data_insufficient` 不只列缺項，還要說為什麼缺（[#511](https://github.com/YiCheng0608/stock-lab/issues/511)）。行動摘要的 `gap_reasons` 是 `{code, label}` 的清單，每個原因一句；`primary_reason` 取第一句（行動列表的說明欄與個股頁共用），個股頁「研究條件」分頁的缺資料列寫「目前不能判斷的原因：{各句以「；」連接}。」，精確缺項（`blocking_reasons` 經欄位對照表）收在「查看缺少的欄位」。舊回應沒有 `gap_reasons` 時寫「研究資料不足：{缺項}」。原因只解釋，哪些標的是 `data_insufficient` 與策略規則都不變（60 日基準照舊只數有 bar 的交易日）。各原因的日期在個股 API `coverage` 的 `no_trade_dates_to_20`／`no_trade_dates_to_60`、`suspended_dates_to_60`、`quote_not_listed_dates_to_60`、`invalid_bar_dates_to_60`，個股頁「資料說明」的缺口明細照列；那裡的原因標籤用個股頁自己的寫法，官方無成交日寫「官方行情表列出但當日無成交（依規則仍算缺一日）」，不沿用市場覆蓋頁的「不算缺資料」。
+`data_insufficient` 不只列缺項，還要說為什麼缺（[#511](https://github.com/YiCheng0608/stock-lab/issues/511)）。行動摘要的 `gap_reasons` 是 `{code, label}` 的清單，每個原因一句；`primary_reason` 取第一句（行動列表的說明欄與個股頁共用），個股頁「研究條件」分頁的缺資料列寫「目前不能判斷的原因：{各句以「；」連接}。」，精確缺項（`blocking_reasons` 經欄位對照表）收在「查看缺少的欄位」。舊回應沒有 `gap_reasons` 時寫「研究資料不足：{缺項}」。原因只解釋，哪些標的是 `data_insufficient` 與策略規則都不變（60 日基準照舊只數有 bar 的交易日）。各原因的日期在個股 API `coverage` 的 `no_trade_dates_to_20`／`no_trade_dates_to_60`、`suspended_dates_to_60`、`quote_not_listed_dates_to_60`、`invalid_bar_dates_to_60`、`halted_dates_to_60`（停止買賣的區間在 `halt_periods_to_60`），個股頁「資料說明」的缺口明細照列；那裡的原因標籤用個股頁自己的寫法，官方無成交日寫「官方行情表列出但當日無成交（依規則仍算缺一日）」，減資停止買賣寫「減資換發新股停止買賣（依規則仍算缺一日）」，不沿用市場覆蓋頁的「不算缺資料」。
 
 | code | 句子（{} 為數字） | 依據 |
 | --- | --- | --- |
 | `listed_under_threshold` | 上市（櫃）後只有 {N} 個交易日，未滿 60 個交易日 | 上市日在 60 個已核實交易日的窗口內，不分股票、ETF、新上市類型 |
 | `suspended_or_no_trade` | 近 60 個交易日有 {N} 天停牌 | 官方 `suspension` 事件到下一個 `resumption` 事件之間的交易日 |
+| `capital_reduction_halt` | 近 60 個交易日有 {N} 天減資換發新股停止買賣（YYYY/MM/DD 起，YYYY/MM/DD 恢復） | `trading_halts`（[DATA_SOURCES 減資停止買賣](DATA_SOURCES.md#減資停止買賣)，[#582](https://github.com/YiCheng0608/stock-lab/issues/582)）涵蓋、沒有 bar 的交易日；括號內每段停止買賣一組「{窗口內第一個停止買賣的交易日} 起，{恢復買賣日} 恢復」，多段以「；」連接。同一天先算停牌，再算這一條 |
 | `official_no_trade` | 近 60 個交易日有 {N} 天官方行情無成交 | `no_trade_days`（[DATA_SOURCES 官方無成交日](DATA_SOURCES.md#官方無成交日)） |
 | `bar_invalid` | 近 60 個交易日有 {N} 天已收到行情但數值不完整（開高低收或來源無法使用） | 該日有存 bar，但收盤、來源等核心欄位無法使用（`core_valid` 為否）：官方表有列，是存下的值不能用 |
-| `quote_not_listed` | 近 60 個交易日有 {N} 天官方行情表未列此股（可能是停止買賣，官方未提供停牌資料） | 該日同交易所已有其他股票的 bar，但這檔沒有 bar、也沒有無成交列；不推定原因 |
+| `quote_not_listed` | 近 60 個交易日有 {N} 天官方行情表未列此股（可能是停止買賣，官方未提供停牌資料） | 該日同交易所已有其他股票的 bar，但這檔沒有 bar、也沒有無成交列、也不在減資停止買賣區間內；不推定原因 |
 | `missing_bar_dates` | 近 60 個交易日有 {N} 天行情尚未收錄（待回補） | 該日同交易所沒有任何股票的 bar：是收集缺口，可回補 |
 | `institutional_not_listed` | 近 5 個交易日有 {N} 天官方三大法人表未列此股（官方只列當天有法人買賣的股票） | [法人口徑](DATA_SOURCES.md#法人口徑)；策略照舊把缺列當缺資料 |
 | `margin_not_listed` | 近 6 個交易日有 {N} 天官方融資餘額表未列此股 | 融資變化率讀 T−5～T 六個交易日 |
@@ -189,7 +190,7 @@
 
 ### 8.2 個股詳情的第一屏
 
-第一屏是頁首、摘要卡（下段）與「圖表與指標」。頁首依序為代號、名稱、市場（上市／上櫃）與類型、最近收盤（報價幣別元）、漲跌與漲跌幅（漲紅跌綠、正數帶 `+`）、資料日期 badge 與來源。頁尾固定附註：「此為研究工具與資料摘要，不構成投資建議、報酬保證或自動下單指令。」
+第一屏是頁首、摘要卡（下段）與「圖表與指標」。頁首依序為代號、名稱、市場（上市／上櫃）與類型、最近收盤（報價幣別元）、漲跌與漲跌幅（漲紅跌綠、正數帶 `+`）、資料日期 badge 與來源。頁面的日子（指定研究截止日期時是該日，否則是最新的加權指數交易日）在減資停止買賣區間內時（個股 API `trading_halt`，[#582](https://github.com/YiCheng0608/stock-lab/issues/582)），來源之後接 warning badge「停止買賣中（{原因}，預計 YYYY/MM/DD 恢復）」，原因目前只有「減資換發新股」；說明最近收盤為什麼停在最後交易日。恢復買賣日起不再顯示；該股在頁面的日子有日線時也不顯示（以 bar 為準）。頁尾固定附註：「此為研究工具與資料摘要，不構成投資建議、報酬保證或自動下單指令。」
 
 **摘要卡**（#519，頁首下方、分頁籤上方，每個分頁都在；視覺見 [DESIGN_SYSTEM §5 個股摘要卡](DESIGN_SYSTEM.md#5-元件)）：回答「現在能不能買、差哪個條件、價位在哪」，只重排既有的判定與文字，不另算、不放 AI 內容。三欄的標籤依序為「目前判斷」「最接近成立」「規則價位」，第一欄標籤右側是資料日期 badge（`strategy_board.as_of`，沒有時用 `decision_summary.data_cutoff`）；卡的右下角「完整條件 →」切到「研究條件」分頁。
 
@@ -381,7 +382,7 @@ reason code 的日常文案由 `backend/app/presentation.py`（`REASON_LABELS`�
   | `margin_financing` | 融資 | 融資增加超過上限 | 融資 5 日變動 {門檻}% | — |
 
   「接近成立的差：句」只用於能接近的條件（價格、量能，§5）；其他條件未達成時不會判接近。{門檻} 的寫法見下方條件明細；{價格差距} 讀 `nearness` 的 `gap`（下一交易日距離，§5），v1 例：「差：收盤站上前 20 日高點（還差 2.10%）」「差：量能 ≥ 1.20 倍（今日 0.80 倍）」「差：量能 0.60～1.20 倍（今日 1.32 倍）」。
-- **差哪個條件**：成立寫「全部達成」；條件全部達成、只有 RR 未達門檻的列（`risk_reward_shortfall`，下方）寫「條件全部達成，但以進場區中點計算的 RR {x} 倍未達 1.5 倍」（基準依 `risk_reward_basis`：「以進場價計算的」「以資料日收盤計算的」；未知時省略「以…計算的」），中點不在停損與目標一之間（`risk_reward` 為 null）時寫「條件全部達成，但進場區中點不在停損與目標一之間，RR 未達 1.5 倍」；研究條件摘要卡這一行不加「差：」；觀察列出 `unmet` 的「差哪個條件」短句（條件表），以「、」連接；資料不足寫「無法判斷：{句子，以「；」連接}」：每個缺項（`missing`）依主題取同一檔行動摘要 `gap_reasons` 的句子（§6.1；法人取 `institutional_not_listed`／`institutional_not_collected`，融資取 `margin_not_listed`／`margin_not_collected`／`margin_zero_base`，行情與均線取 `listed_under_threshold`、`suspended_or_no_trade`、`official_no_trade`、`bar_invalid`、`quote_not_listed`、`missing_bar_dates`、`coverage_baseline_unknown`，族群報酬取 `group_return_unavailable`；上市未滿 20 個交易日時族群報酬與法人、融資比率也取 `listed_under_threshold`），同一句只寫一次；找不到同主題的句子時用該缺項的 `missing_labels`（#524）；不適用直接寫 `missing_labels`（例：「債券、槓桿或反向 ETF 不適用一般突破／回踩研究條件」）。
+- **差哪個條件**：成立寫「全部達成」；條件全部達成、只有 RR 未達門檻的列（`risk_reward_shortfall`，下方）寫「條件全部達成，但以進場區中點計算的 RR {x} 倍未達 1.5 倍」（基準依 `risk_reward_basis`：「以進場價計算的」「以資料日收盤計算的」；未知時省略「以…計算的」），中點不在停損與目標一之間（`risk_reward` 為 null）時寫「條件全部達成，但進場區中點不在停損與目標一之間，RR 未達 1.5 倍」；研究條件摘要卡這一行不加「差：」；觀察列出 `unmet` 的「差哪個條件」短句（條件表），以「、」連接；資料不足寫「無法判斷：{句子，以「；」連接}」：每個缺項（`missing`）依主題取同一檔行動摘要 `gap_reasons` 的句子（§6.1；法人取 `institutional_not_listed`／`institutional_not_collected`，融資取 `margin_not_listed`／`margin_not_collected`／`margin_zero_base`，行情與均線取 `listed_under_threshold`、`suspended_or_no_trade`、`capital_reduction_halt`、`official_no_trade`、`bar_invalid`、`quote_not_listed`、`missing_bar_dates`、`coverage_baseline_unknown`，族群報酬取 `group_return_unavailable`；上市未滿 20 個交易日時族群報酬與法人、融資比率也取 `listed_under_threshold`），同一句只寫一次；找不到同主題的句子時用該缺項的 `missing_labels`（#524）；不適用直接寫 `missing_labels`（例：「債券、槓桿或反向 ETF 不適用一般突破／回踩研究條件」）。
 - **成立價位**（`levels.kind=actionable`，讀訊號）：突破「觸發（元）」、回踩「進場區（元） {低}～{高}」，接「停損（元）」「目標一／目標二（元）」（值「{目標一}／{目標二}」；沒有目標二時標籤與值都只寫目標一）「RR」（值後接「倍」，badge 之後寫「（以{基準} {價} 元計算）」，同 [§10](#10-每日候選) 展開內容；價是突破的觸發、回踩的 `reference_entry`）；價位兩位小數，標籤與今日候選相同（詞彙按鈕）。
 - **觀察價位**（`levels.kind=observation`，讀條件價位）：一律在「條件未成立・觀察價位」標籤之下；策略總表內整塊收合，標籤就是收合列的文字（#519），摘要卡內不收合。`availability=levels`：突破「收盤（元） ≥ {觸發}」「成交量 ≥ {最小量} 張」；回踩「收盤（元） {低}～{高}」「成交量 {最小}～{最大} 張」；兩者都接「參考停損（元）」「參考目標一／目標二（元） {目標一}／{目標二}」（沒有目標二時寫「參考目標一（元）」），再一句「對象：下一交易日 {YYYY/MM/DD} 收盤；價位為參考，成立當天依實際資料重算。」`reachable_next_session=false` 加一句「超出下一交易日漲跌停範圍，下一交易日無法達到。」`trend_unreachable`：「下一交易日趨勢條件無法成立：收盤需高於 {趨勢下界} 才能讓 20 日均線站上 60 日均線，但支撐區上緣只有 {支撐區上緣}，不產生觀察價位。」其他 availability：「不產生觀察價位：{原因}」。觀察訊號沒有條件價位列（較早的日期、或條件價位步驟失敗）時寫「觀察價位未產生：這個資料日的條件價位尚未計算或計算失敗。」，不補任何價位。
 - **量的單位**：觀察價位與條件明細的成交量依 [§8.3](#83-張零股) 換成整數張，但這裡是條件的門檻：下限（最小量）無條件進位、上限（最大量）無條件捨去，顯示的門檻不會比實際條件寬鬆（例：15,110,400 股寫「≥ 15,111 張」）；API 保留原始股數。

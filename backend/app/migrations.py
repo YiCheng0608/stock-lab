@@ -777,6 +777,13 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0029_market_bar_ohlc_nullable', CURRENT_TIMESTAMP)"
         )
     )
+    # 0030 only adds trading_halts (#582), made by create_all with its indexes.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0030_trading_halts', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:

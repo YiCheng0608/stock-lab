@@ -140,7 +140,7 @@ const GAP_TOPICS: ReadonlyArray<{ reasons: ReadonlySet<string>; causes: Readonly
     reasons: new Set(['history_under_60_bars', 'ipo_history_under_20_bars', 'ipo_observation_only_under_60_bars', 'bar_count_missing_or_invalid',
       'prior_20_highs_missing_or_invalid', 'prior_20_volumes_missing_or_invalid', 'close_missing_or_non_finite', 'volume_missing_or_non_finite',
       'ma20_missing_or_non_finite', 'ma60_missing_or_non_finite']),
-    causes: new Set(['coverage_baseline_unknown', 'listed_under_threshold', 'suspended_or_no_trade', 'official_no_trade', 'bar_invalid', 'quote_not_listed', 'missing_bar_dates']),
+    causes: new Set(['coverage_baseline_unknown', 'listed_under_threshold', 'suspended_or_no_trade', 'capital_reduction_halt', 'official_no_trade', 'bar_invalid', 'quote_not_listed', 'missing_bar_dates']),
   },
   { reasons: new Set(['group_excess_return_20d_missing_or_non_finite']), causes: new Set(['group_return_unavailable']) },
 ]

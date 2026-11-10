@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import inspect
 import json
 import math
@@ -240,6 +241,47 @@ class MonthlyRevenueRecord:
     payload_sha256: str | None = None
 
 
+@dataclass(frozen=True)
+class TradingHaltRecord:
+    """One official capital-reduction stop of trading (Issue #582).
+
+    The stopped sessions run from ``halt_start`` up to, not including,
+    ``resume_date``.  TWSE names the last trading day (``halt_start`` is the
+    calendar day after it); TPEx names the first stopped day and no last
+    trading day.  ``details`` is the official row as published.
+    """
+
+    symbol: str
+    exchange: str
+    halt_start: date
+    resume_date: date
+    last_trade_date: date | None
+    reason_detail: str | None
+    endpoint: str
+    source: str
+    reason: str = "capital_reduction"
+    details: dict[str, Any] = field(default_factory=dict)
+    payload_sha256: str | None = None
+
+
+@dataclass(frozen=True)
+class TradingHaltWindow:
+    """A readable answer for one exchange's range of resumption days.
+
+    The answer is complete for the range: worker.trading_halts rebuilds that
+    exchange's stored rows whose resumption day falls in it.  ``rejected``
+    lists the rows left out because their own dates disagree.
+    """
+
+    exchange: str
+    source: str
+    endpoint: str
+    start: date
+    end: date
+    payload_sha256: str | None
+    rejected: tuple[str, ...] = ()
+
+
 @dataclass
 class OfficialBatch:
     instruments: list[InstrumentRecord] = field(default_factory=list)
@@ -278,6 +320,11 @@ class OfficialBatch:
     # The latest month of the monthly revenue snapshots (display only, Issue
     # #530); a failure is a non-core warning.
     monthly_revenues: list[MonthlyRevenueRecord] = field(default_factory=list)
+    # The capital reduction stops of trading around the collect day and the
+    # ranges answered (worker.trading_halts, Issue #582); a failure is a
+    # non-core warning.
+    trading_halts: list[TradingHaltRecord] = field(default_factory=list)
+    trading_halt_windows: list[TradingHaltWindow] = field(default_factory=list)
     # Real index daily K bars of the collect month (worker.index_bars, Issue
     # #552); a failure is a non-core warning.
     index_daily_bars: list[Any] = field(default_factory=list)
@@ -447,6 +494,12 @@ TWSE_ACTION_DETAIL_ENDPOINT = "https://www.twse.com.tw/rwd/zh/exRight/TWT49UDeta
 TPEX_ACTION_HISTORY_ENDPOINT = "https://www.tpex.org.tw/www/zh-tw/bulletin/exDailyQ"
 TPEX_SUSPEND_ENDPOINT = f"{TPEX_API}/tpex_spendi_today"
 TPEX_SUSPEND_HISTORY_ENDPOINT = f"{TPEX_API}/tpex_spendi_history"
+# Capital reduction stops of trading (Issue #582): 股票減資恢復買賣參考價格 and
+# 減資恢復買賣, website reports queried by a range of resumption days; each
+# row names a resumption day and the last trading day (TWSE) or the first
+# stopped day (TPEx), published before the stop begins (worker.trading_halts).
+TWSE_REDUCTION_ENDPOINT = "https://www.twse.com.tw/rwd/zh/reducation/TWTAUU"
+TPEX_REDUCTION_ENDPOINT = "https://www.tpex.org.tw/www/zh-tw/bulletin/revivt"
 TPEX_EVENT_ENDPOINT = f"{TPEX_API}/mopsfin_t187ap04_O"
 TPEX_FUNDAMENTAL_ENDPOINT = f"{TPEX_API}/mopsfin_t187ap14_O"
 # 上櫃公司每月營業收入彙總表, same fields as t187ap05_L (Issue #530).
@@ -1950,6 +2003,316 @@ def parse_tpex_suspension_history_rows(
                 )
             )
     return result
+
+
+# ---- capital reduction stops of trading (Issue #582) ----
+
+TRADING_HALT_SOURCES = {"TWSE": "twse_twtauu", "TPEx": "tpex_revivt"}
+# Days before and after the collect day whose resumptions the daily query
+# covers: a stop of a few sessions that began before the day, and one
+# published ahead of it.
+TRADING_HALT_DAYS_BEFORE = 10
+TRADING_HALT_DAYS_AFTER = 60
+_REDUCTION_FIELDS = ("恢復買賣日期", "股票代號", "減資原因", "詳細資料")
+_TWSE_REDUCTION_DETAIL = re.compile(r"\s*([0-9A-Z]+)\s*,\s*(\d{8})\s*")
+_TPEX_DETAIL_DATE = r"\s*:?\s*(\d{2,3}/\d{1,2}/\d{1,2})"
+
+
+def trading_halt_warning(exchange: str, exc: Exception) -> str:
+    """The non-core warning for a table that could not be fetched, read or stored."""
+
+    return f"{exchange} trading halts unavailable: {type(exc).__name__}: {exc}"
+
+
+def reduction_query(exchange: str, start: date, end: date) -> str:
+    """The endpoint with its range of resumption days."""
+
+    if exchange == "TWSE":
+        query = urlencode(
+            {
+                "startDate": start.strftime("%Y%m%d"),
+                "endDate": end.strftime("%Y%m%d"),
+                "response": "json",
+            }
+        )
+        return f"{TWSE_REDUCTION_ENDPOINT}?{query}"
+    query = urlencode(
+        {
+            "startDate": start.strftime("%Y/%m/%d"),
+            "endDate": end.strftime("%Y/%m/%d"),
+            "response": "json",
+        }
+    )
+    return f"{TPEX_REDUCTION_ENDPOINT}?{query}"
+
+
+def _reduction_columns(fields: Any, exchange: str) -> dict[str, int]:
+    if not isinstance(fields, list):
+        raise OfficialDataError(f"{exchange} capital reduction table has no fields")
+    names = [str(item).strip() for item in fields]
+    missing = [name for name in _REDUCTION_FIELDS if name not in names]
+    if missing:
+        raise OfficialDataError(
+            f"{exchange} capital reduction table lacks {missing}: {names!r}"
+        )
+    return {name: names.index(name) for name in _REDUCTION_FIELDS}
+
+
+def _reduction_row(row: Any, columns: dict[str, int], exchange: str) -> list[Any]:
+    if not isinstance(row, list) or len(row) <= max(columns.values()):
+        raise OfficialDataError(
+            f"{exchange} capital reduction row is malformed: {row!r}"
+        )
+    return row
+
+
+def parse_twse_reduction_payload(
+    payload: Any,
+    *,
+    start: date,
+    end: date,
+    endpoint: str = TWSE_REDUCTION_ENDPOINT,
+    payload_sha256: str | None = None,
+) -> tuple[list[TradingHaltRecord], list[str]]:
+    """Read TWSE ``TWTAUU`` (股票減資恢復買賣參考價格) for ``start``..``end``.
+
+    ``stat`` 很抱歉，沒有符合條件的資料 is an empty range.  Each row's 詳細資料
+    is ``<code>  ,<YYYYMMDD>``, the last trading day of the old shares; the
+    stop begins the calendar day after it.  A row whose 詳細資料 names another
+    code or no date, or whose last trading day is not before the resumption,
+    is left out and named in the second list.  A table with other columns,
+    another range or a resumption outside the range is rejected whole.
+    """
+
+    if not isinstance(payload, dict):
+        raise OfficialDataError("TWSE capital reduction answer is not an object")
+    stat = str(payload.get("stat") or "").strip()
+    if stat != "OK":
+        if "沒有符合條件" in stat:
+            return [], []
+        raise OfficialDataError(f"TWSE capital reduction stat {stat!r}")
+    reported = (str(payload.get("strDate") or ""), str(payload.get("endDate") or ""))
+    if reported != (start.strftime("%Y%m%d"), end.strftime("%Y%m%d")):
+        raise OfficialDataError(
+            f"TWSE capital reduction answered {reported} for {start}..{end}"
+        )
+    columns = _reduction_columns(payload.get("fields"), "TWSE")
+    fields = [str(item).strip() for item in payload["fields"]]
+    rows = payload.get("data")
+    if not isinstance(rows, list):
+        raise OfficialDataError("TWSE capital reduction table has no data list")
+    records: dict[tuple[str, date], TradingHaltRecord] = {}
+    rejected: list[str] = []
+    for raw in rows:
+        row = _reduction_row(raw, columns, "TWSE")
+        symbol = str(row[columns["股票代號"]] or "").strip()
+        resume = parse_roc_date(row[columns["恢復買賣日期"]])
+        if resume is None or not start <= resume <= end:
+            raise OfficialDataError(
+                f"TWSE capital reduction row {symbol} resumes "
+                f"{row[columns['恢復買賣日期']]!r}, outside {start}..{end}"
+            )
+        detail = _TWSE_REDUCTION_DETAIL.fullmatch(str(row[columns["詳細資料"]] or ""))
+        last_trade = parse_roc_date(detail.group(2)) if detail else None
+        if (
+            detail is None
+            or detail.group(1) != symbol
+            or last_trade is None
+            or last_trade >= resume
+        ):
+            rejected.append(
+                f"{symbol} resuming {resume}: 詳細資料 "
+                f"{row[columns['詳細資料']]!r} names no earlier last trading day"
+            )
+            continue
+        record = TradingHaltRecord(
+            symbol=symbol,
+            exchange="TWSE",
+            halt_start=last_trade + timedelta(days=1),
+            resume_date=resume,
+            last_trade_date=last_trade,
+            reason_detail=str(row[columns["減資原因"]] or "").strip() or None,
+            endpoint=endpoint,
+            source=TRADING_HALT_SOURCES["TWSE"],
+            details=dict(zip(fields, row)),
+            payload_sha256=payload_sha256,
+        )
+        previous = records.get((symbol, resume))
+        if previous is not None and previous.halt_start != record.halt_start:
+            raise OfficialDataError(
+                f"TWSE capital reduction lists {symbol} resuming {resume} twice"
+            )
+        records[(symbol, resume)] = record
+    return list(records.values()), rejected
+
+
+def parse_tpex_reduction_payload(
+    payload: Any,
+    *,
+    start: date,
+    end: date,
+    endpoint: str = TPEX_REDUCTION_ENDPOINT,
+    payload_sha256: str | None = None,
+) -> tuple[list[TradingHaltRecord], list[str]]:
+    """Read TPEx ``revivt`` (減資恢復買賣) for ``start``..``end``.
+
+    The 詳細資料 HTML names the code, 停止買賣日期 and 恢復買賣日期: the first
+    and the resumption must be readable, the code and the resumption must
+    match the row, and the stop must begin before the resumption, or the row
+    is left out and named in the second list.  ``totalCount`` above the rows
+    (a truncated answer), another range, other columns or a resumption
+    outside the range reject the table whole.
+    """
+
+    if not isinstance(payload, dict) or not isinstance(payload.get("tables"), list):
+        raise OfficialDataError("TPEx capital reduction answer has no tables")
+    reported = str(payload.get("date") or "")
+    if reported != f"{start:%Y%m%d}~{end:%Y%m%d}":
+        raise OfficialDataError(
+            f"TPEx capital reduction answered {reported!r} for {start}..{end}"
+        )
+    if len(payload["tables"]) != 1 or not isinstance(payload["tables"][0], dict):
+        raise OfficialDataError("TPEx capital reduction answer is not one table")
+    table = payload["tables"][0]
+    columns = _reduction_columns(table.get("fields"), "TPEx")
+    fields = [str(item).strip() for item in table["fields"]]
+    rows = table.get("data")
+    if not isinstance(rows, list):
+        raise OfficialDataError("TPEx capital reduction table has no data list")
+    total = table.get("totalCount")
+    if total is not None and int(total) != len(rows):
+        raise OfficialDataError(
+            f"TPEx capital reduction totalCount {total} but {len(rows)} rows"
+        )
+    records: dict[tuple[str, date], TradingHaltRecord] = {}
+    rejected: list[str] = []
+    for raw in rows:
+        row = _reduction_row(raw, columns, "TPEx")
+        symbol = str(row[columns["股票代號"]] or "").strip()
+        resume = parse_roc_date(row[columns["恢復買賣日期"]])
+        if resume is None or not start <= resume <= end:
+            raise OfficialDataError(
+                f"TPEx capital reduction row {symbol} resumes "
+                f"{row[columns['恢復買賣日期']]!r}, outside {start}..{end}"
+            )
+        text = html.unescape(
+            re.sub(r"<[^>]+>", " ", str(row[columns["詳細資料"]] or ""))
+        )
+        text = text.replace("&nbsp", " ").replace("\xa0", " ")
+        code = re.search(r"股票代號/股票名稱\s*:?\s*([0-9A-Z]+)", text)
+        stopped = re.search("停止買賣日期" + _TPEX_DETAIL_DATE, text)
+        resumed = re.search("恢復買賣日期" + _TPEX_DETAIL_DATE, text)
+        halt_start = parse_roc_date(stopped.group(1)) if stopped else None
+        detail_resume = parse_roc_date(resumed.group(1)) if resumed else None
+        if (
+            code is None
+            or code.group(1) != symbol
+            or halt_start is None
+            or detail_resume != resume
+            or halt_start >= resume
+        ):
+            rejected.append(
+                f"{symbol} resuming {resume}: 詳細資料 names "
+                f"code {code.group(1) if code else None}, 停止買賣日期 {halt_start}, "
+                f"恢復買賣日期 {detail_resume}"
+            )
+            continue
+        record = TradingHaltRecord(
+            symbol=symbol,
+            exchange="TPEx",
+            halt_start=halt_start,
+            resume_date=resume,
+            last_trade_date=None,
+            reason_detail=str(row[columns["減資原因"]] or "").strip() or None,
+            endpoint=endpoint,
+            source=TRADING_HALT_SOURCES["TPEx"],
+            details=dict(zip(fields, row)),
+            payload_sha256=payload_sha256,
+        )
+        previous = records.get((symbol, resume))
+        if previous is not None and previous.halt_start != record.halt_start:
+            raise OfficialDataError(
+                f"TPEx capital reduction lists {symbol} resuming {resume} twice"
+            )
+        records[(symbol, resume)] = record
+    return list(records.values()), rejected
+
+
+def parse_reduction_payload(
+    exchange: str,
+    payload: Any,
+    *,
+    start: date,
+    end: date,
+    endpoint: str,
+    payload_sha256: str | None = None,
+) -> tuple[list[TradingHaltRecord], list[str]]:
+    parse = (
+        parse_twse_reduction_payload
+        if exchange == "TWSE"
+        else parse_tpex_reduction_payload
+    )
+    return parse(
+        payload, start=start, end=end, endpoint=endpoint, payload_sha256=payload_sha256
+    )
+
+
+def fetch_reduction_window(
+    fetch: Callable[[str, str | None], FetchedPayload],
+    exchange: str,
+    start: date,
+    end: date,
+    *,
+    data_as_of: str,
+) -> tuple[list[TradingHaltRecord], TradingHaltWindow, FetchedPayload]:
+    """One request for the stops resuming ``start``..``end`` on ``exchange``.
+
+    ``fetch(endpoint, data_as_of)`` captures the payload (an adapter's
+    ``_fetch``); a failure to fetch or read it raises.
+    """
+
+    endpoint = reduction_query(exchange, start, end)
+    captured = fetch(endpoint, data_as_of)
+    records, rejected = parse_reduction_payload(
+        exchange,
+        captured.payload,
+        start=start,
+        end=end,
+        endpoint=endpoint,
+        payload_sha256=captured.sha256,
+    )
+    window = TradingHaltWindow(
+        exchange=exchange,
+        source=TRADING_HALT_SOURCES[exchange],
+        endpoint=endpoint,
+        start=start,
+        end=end,
+        payload_sha256=captured.sha256,
+        rejected=tuple(rejected),
+    )
+    return records, window, captured
+
+
+def collect_reduction_window(
+    fetch: Callable[[str, str | None], FetchedPayload],
+    exchange: str,
+    day: date,
+    warnings: list[str],
+) -> tuple[list[TradingHaltRecord], list[TradingHaltWindow], list[FetchedPayload]]:
+    """collect's request around ``day``; a failure is a non-core warning."""
+
+    try:
+        records, window, captured = fetch_reduction_window(
+            fetch,
+            exchange,
+            day - timedelta(days=TRADING_HALT_DAYS_BEFORE),
+            day + timedelta(days=TRADING_HALT_DAYS_AFTER),
+            data_as_of=day.isoformat(),
+        )
+    except Exception as exc:
+        warnings.append(trading_halt_warning(exchange, exc))
+        return [], [], []
+    return records, [window], [captured]
 
 
 def parse_twse_historical_payload(
@@ -3648,6 +4011,10 @@ class TwseAdapter:
             )
         except Exception as exc:
             warnings.append(monthly_revenue_warning("TWSE", exc))
+        trading_halts, trading_halt_windows, halt_payloads = collect_reduction_window(
+            self._fetch, "TWSE", end, warnings
+        )
+        mops_payloads.extend(halt_payloads)
         index_daily_bars: list[Any] = []
         index_daily_payloads: list[FetchedPayload] = []
         if end not in self.no_data_dates:
@@ -3689,6 +4056,8 @@ class TwseAdapter:
             event_coverage=event_coverage,
             market_summaries=list(self.market_summaries),
             monthly_revenues=monthly_revenues,
+            trading_halts=trading_halts,
+            trading_halt_windows=trading_halt_windows,
             index_daily_bars=index_daily_bars,
         )
 
@@ -4345,6 +4714,10 @@ class TpexAdapter:
             )
         except Exception as exc:
             warnings.append(monthly_revenue_warning("TPEx", exc))
+        trading_halts, trading_halt_windows, halt_payloads = collect_reduction_window(
+            self._fetch, "TPEx", end, warnings
+        )
+        mops_payloads.extend(halt_payloads)
         event_coverage = {
             "status": "unsupported",
             "denominator": "date_scoped_event_queries",
@@ -4381,6 +4754,8 @@ class TpexAdapter:
             market_summaries=market_summaries,
             emerging_issuers=emerging_issuers,
             monthly_revenues=monthly_revenues,
+            trading_halts=trading_halts,
+            trading_halt_windows=trading_halt_windows,
             index_daily_bars=index_daily_bars,
             feed_sources=feed_sources,
         )
@@ -4520,6 +4895,9 @@ class OfficialMarketDataAdapter:
             market_summaries=twse_batch.market_summaries + tpex_batch.market_summaries,
             emerging_issuers=twse_batch.emerging_issuers + tpex_batch.emerging_issuers,
             monthly_revenues=twse_batch.monthly_revenues + tpex_batch.monthly_revenues,
+            trading_halts=twse_batch.trading_halts + tpex_batch.trading_halts,
+            trading_halt_windows=twse_batch.trading_halt_windows
+            + tpex_batch.trading_halt_windows,
             index_daily_bars=twse_batch.index_daily_bars + tpex_batch.index_daily_bars,
             futures_bars=futures_bars,
             feed_sources={**twse_batch.feed_sources, **tpex_batch.feed_sources},

@@ -48,6 +48,7 @@ from .signal_versions import readable_signal
 from .strategies import REGISTRY, current_strategy, registry_key
 from .strategies import levels as level_rules
 from .units import position_held
+from .trading_halts import halt_dict, halted_sessions, load_halts
 from .models import (
     ChipSnapshot,
     DailyCandidate,
@@ -450,6 +451,13 @@ def _prepare_decision_context(
             )
         for instrument_id, trading_date in db.execute(no_trade_query).all():
             no_trade_by_instrument[instrument_id].add(trading_date)
+    # Official stops of trading (Issue #582) overlapping the same lookback.
+    halts_by_instrument = load_halts(
+        db,
+        ids,
+        as_of - timedelta(days=NO_TRADE_LOOKBACK_DAYS) if as_of else None,
+        as_of,
+    )
 
     context = {
         "instrument_ids": ids,
@@ -463,6 +471,7 @@ def _prepare_decision_context(
         "positions_by_instrument": positions_by_instrument,
         "events_by_instrument": events_by_instrument,
         "no_trade_by_instrument": no_trade_by_instrument,
+        "halts_by_instrument": halts_by_instrument,
         "instruments": {row.id: row for row in instrument_rows},
     }
     contexts[key] = context
@@ -537,6 +546,8 @@ def _instrument_coverage(
             "suspended_dates_to_60": [],
             "quote_not_listed_dates_to_60": [],
             "invalid_bar_dates_to_60": [],
+            "halted_dates_to_60": [],
+            "halt_periods_to_60": [],
             "coverage_reasons": ["coverage_baseline_unknown"],
             "ipo_stage": None,
         }
@@ -628,6 +639,20 @@ def _instrument_coverage(
     # A day with a bar outranks a no-trade row (#454); the row only explains a
     # missing bar, it never counts as one.
     no_trade_days = (no_trade_days & set(eligible_sessions)) - bar_dates
+    # Sessions an official stop of trading covers (Issue #582); a bar of the
+    # day outranks it.  A reason only: the bar counts below do not change.
+    if context and instrument.id in context["instrument_ids"]:
+        halt_rows = context["halts_by_instrument"].get(instrument.id, [])
+    else:
+        halt_rows = load_halts(db, [instrument.id], sessions[0], as_of).get(
+            instrument.id, []
+        )
+    halt_by_day = {
+        day: row
+        for day, row in halted_sessions(halt_rows, eligible_sessions).items()
+        if day not in bar_dates
+    }
+    halt_days = set(halt_by_day)
     missing_bars: dict[str, int] = {}
     missing_chips: dict[str, int] = {}
     missing_bar_dates: dict[str, list[str]] = {}
@@ -671,13 +696,22 @@ def _instrument_coverage(
             reasons.append("listed_under_threshold")
         if missing_days & suspension_dates:
             reasons.append("suspended_or_no_trade")
+        if missing_days & halt_days:
+            # An official stop of trading (Issue #582), not a gap.
+            reasons.append("capital_reduction_halt")
         if missing_days & no_trade_days:
             reasons.append("official_no_trade")
         if missing_days & invalid_bar_days:
             # A stored bar the decision cannot use (core_valid false): the
             # official table listed the stock, the stored values are unusable.
             reasons.append("bar_invalid")
-        unexplained = missing_days - suspension_dates - no_trade_days - invalid_bar_days
+        unexplained = (
+            missing_days
+            - suspension_dates
+            - halt_days
+            - no_trade_days
+            - invalid_bar_days
+        )
         unlisted = {
             day
             for day in unexplained
@@ -738,9 +772,32 @@ def _instrument_coverage(
             for item in missing_bar_dates[60]
             if date.fromisoformat(item) in invalid_bar_days
         ),
+        "halted_dates_to_60": sorted(
+            item
+            for item in missing_bar_dates[60]
+            if date.fromisoformat(item) in halt_days
+        ),
+        "halt_periods_to_60": _halt_periods(
+            halt_by_day, {date.fromisoformat(item) for item in missing_bar_dates[60]}
+        ),
         "coverage_reasons": list(dict.fromkeys(reasons)),
         "ipo_stage": ipo_stage,
     }
+
+
+def _halt_periods(
+    halt_by_day: dict[date, Any], days: set[date]
+) -> list[dict[str, Any]]:
+    """The stops behind ``days``, oldest first, with their first and last session."""
+
+    periods: dict[int, dict[str, Any]] = {}
+    for day in sorted(set(halt_by_day) & days):
+        row = halt_by_day[day]
+        period = periods.setdefault(
+            row.id, {**halt_dict(row), "first_session": day.isoformat()}
+        )
+        period["last_session"] = day.isoformat()
+    return list(periods.values())
 
 
 def _suspended_sessions(events: Iterable[Event], sessions: list[date]) -> set[date]:

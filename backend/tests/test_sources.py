@@ -1,5 +1,6 @@
 import json
 from datetime import date
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 import pytest
@@ -8,6 +9,32 @@ import index_bar_payloads
 import worker.sources as sources
 from app.indicators import is_synthetic_bar
 from worker.mops_events import MOPS_EVENT_LIST_ENDPOINT
+
+
+def empty_reduction_report(url):
+    """An empty answer of TWSE TWTAUU or TPEx revivt for the range in ``url`` (#582)."""
+
+    query = parse_qs(urlsplit(url).query)
+    if url.startswith(sources.TWSE_REDUCTION_ENDPOINT):
+        return {"stat": "很抱歉，沒有符合條件的資料!"}
+    start, end = (query[key][0].replace("/", "") for key in ("startDate", "endDate"))
+    return {
+        "date": f"{start}~{end}",
+        "tables": [
+            {
+                "totalCount": 0,
+                "fields": [
+                    "恢復買賣日期",
+                    "股票代號",
+                    "名稱",
+                    "減資原因",
+                    "詳細資料",
+                ],
+                "data": [],
+            }
+        ],
+        "stat": "ok",
+    }
 
 
 def mops_event_list_payload(rows):
@@ -488,6 +515,11 @@ class FixtureFetcher:
                     "累計營業收入-當月累計營收": "8000",
                 }
             ]
+        if url.startswith(
+            (sources.TWSE_REDUCTION_ENDPOINT, sources.TPEX_REDUCTION_ENDPOINT)
+        ):
+            # The capital reduction tables (Issue #582): no stop in the range.
+            return empty_reduction_report(url)
         if index_bar_payloads.is_index_report(url):
             # The monthly index reports (Issue #552): no session yet, so the
             # collect keeps the close-only TAIEX row these tests expect.
