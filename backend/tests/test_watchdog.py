@@ -1530,7 +1530,7 @@ def test_only_the_current_score_version_is_judged(wd):
     db = wd.data / "stock.db"
     _candidate_list(db, 3, 3, 120)
     _candidate_list(db, 2, 0, 45, version="candidate_score_v5")
-    _candidate_list(db, 4, 0, 40, day="2026-10-20", version="candidate_score_v7")
+    _candidate_list(db, 4, 0, 40, day="2026-10-20", version="candidate_score_v8")
     result = wd.run()
     assert (
         "invariant candidate_notes ok trading_date=2026-10-19 candidate_run_id=1"
