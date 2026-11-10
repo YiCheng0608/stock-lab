@@ -68,6 +68,28 @@ def _finite(value: Any) -> bool:
     )
 
 
+def _slash_date(value: Any) -> str:
+    return str(value or "")[:10].replace("-", "/")
+
+
+def halt_reason_label(days: Sequence[str], periods: Sequence[Mapping[str, Any]]) -> str:
+    """「近 60 個交易日有 N 天減資換發新股停止買賣（YYYY/MM/DD 起，YYYY/MM/DD 恢復）」.
+
+    One 起／恢復 pair per stop behind the days (UI_COPY_SPEC §6.1), oldest first.
+    """
+
+    kinds = list(dict.fromkeys(str(item.get("reason_label") or "") for item in periods))
+    kind = "、".join(item for item in kinds if item) or "官方"
+    spans = "；".join(
+        f"{_slash_date(item.get('first_session'))} 起，"
+        f"{_slash_date(item.get('resume_date'))} 恢復"
+        for item in periods
+        if item.get("first_session") and item.get("resume_date")
+    )
+    label = f"近 60 個交易日有 {len(days)} 天{kind}停止買賣"
+    return f"{label}（{spans}）" if spans else label
+
+
 def coverage_gap_reasons(coverage: Mapping[str, Any]) -> list[dict[str, str]]:
     """Reasons for the 20/60-session bar gaps of ``decision._instrument_coverage``."""
 
@@ -96,6 +118,9 @@ def coverage_gap_reasons(coverage: Mapping[str, Any]) -> list[dict[str, str]]:
         )
     counted = (
         ("suspended_or_no_trade", "suspended_dates_to_60", "天停牌"),
+        # An official stop of trading (Issue #582): the quote tables have no
+        # row for the stock on those days; the sentence names the stop.
+        ("capital_reduction_halt", "halted_dates_to_60", ""),
         ("official_no_trade", "no_trade_dates_to_60", "天官方行情無成交"),
         (
             "bar_invalid",
@@ -116,7 +141,14 @@ def coverage_gap_reasons(coverage: Mapping[str, Any]) -> list[dict[str, str]]:
         explained.update(days)
         if code in codes and days:
             reasons.append(
-                {"code": code, "label": f"近 60 個交易日有 {len(days)} {text}"}
+                {
+                    "code": code,
+                    "label": halt_reason_label(
+                        days, coverage.get("halt_periods_to_60") or []
+                    )
+                    if code == "capital_reduction_halt"
+                    else f"近 60 個交易日有 {len(days)} {text}",
+                }
             )
     if "missing_bar_dates" in codes:
         days = [

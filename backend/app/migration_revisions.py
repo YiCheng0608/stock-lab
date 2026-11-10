@@ -35,6 +35,7 @@ REVISIONS = (
     "0027_emerging_issuers",
     "0028_monthly_revenues",
     "0029_market_bar_ohlc_nullable",
+    "0030_trading_halts",
 )
 # The instrument identity gates match 0002 onward and never 0001.
 INSTRUMENT_IDENTITY_REVISIONS = REVISIONS[1:]

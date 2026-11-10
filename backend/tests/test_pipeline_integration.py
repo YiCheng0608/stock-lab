@@ -1471,7 +1471,7 @@ def test_signal_results_are_distinct_per_strategy_and_rejected_rules_are_observa
         assert len(signals) == 2
         assert {item.strategy_version_id for item in signals} == {
             strategies["breakout_v3"].id,
-            strategies["pullback_v3"].id,
+            strategies["pullback_v4"].id,
         }
         assert {item.entry_type for item in signals} == {"breakout", "pullback"}
         assert all(item.status == "observation" for item in signals)
@@ -2321,14 +2321,14 @@ def test_backtest_cutoff_and_summary_exclude_future_bars_and_non_actionable_rows
             rule_evidence_json={"strategy": "breakout_v3", "actionable": True},
         )
         observation = Signal(
-            signal_key=f"{namespace}-TWSE-BT-{start_date.isoformat()}-pullback_v3-2.0.0",
+            signal_key=f"{namespace}-TWSE-BT-{start_date.isoformat()}-pullback_v4-2.0.0",
             signal_date=start_date,
             instrument_id=actionable.instrument_id,
             strategy_version_id=strategy.id,
             status="observation",
             entry_type="pullback",
             data_quality="incomplete",
-            rule_evidence_json={"strategy": "pullback_v3", "actionable": False},
+            rule_evidence_json={"strategy": "pullback_v4", "actionable": False},
         )
         db.add_all([actionable, observation])
         db.flush()
@@ -2354,7 +2354,7 @@ def test_backtest_cutoff_and_summary_exclude_future_bars_and_non_actionable_rows
             select(Signal).where(Signal.signal_key.like("backtest-%breakout_v3%"))
         )
         observation = db.scalar(
-            select(Signal).where(Signal.signal_key.like("backtest-%pullback_v3%"))
+            select(Signal).where(Signal.signal_key.like("backtest-%pullback_v4%"))
         )
         assert actionable and observation
         evaluations = db.scalars(
