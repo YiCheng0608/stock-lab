@@ -18,7 +18,8 @@
 //                     after the last prompt a person (or a terminal notice) typed, posted
 //                     on an Issue or PR; see commentCommand() for what counts. When it is
 //                     false and stop_hook_active is not true, the stop is blocked once with
-//                     REASON; with stop_hook_active true it never blocks (no loop).
+//                     REASON and the state is "working" (the session goes on); with
+//                     stop_hook_active true it never blocks (no loop).
 //   SessionEnd        state "ended", ended_at, end_reason (the hook's reason).
 // <data> is found as compact_hook.sh finds it: $STOCK_DATA_DIR, then $HOME/stock-lab-data.
 // Any error of its own (no transcript, no data directory, a bad input) never blocks:
@@ -279,12 +280,19 @@ function main() {
       background_tasks: Array.isArray(input.background_tasks) ? input.background_tasks.length : 0,
     });
     delete state.end_reason;
+    const block = !error && !scan.commented && input.stop_hook_active !== true;
+    if (block) {
+      // Blocked, the session goes on working (no UserPromptSubmit follows): not stopped,
+      // or a continuation longer than 30 minutes would read as waiting. Its next stop
+      // (stop_hook_active) writes stopped again.
+      Object.assign(state, { state: "working", started_at: nowIso() });
+    }
     writeJson(file, state);
     if (error) {
       logError(error);
       return 0;
     }
-    if (!scan.commented && input.stop_hook_active !== true) {
+    if (block) {
       process.stdout.write(JSON.stringify({ decision: "block", reason: REASON }) + "\n");
     }
     return 0;

@@ -209,10 +209,13 @@ def test_a_turn_without_a_comment_is_blocked_once(tmp_path) -> None:
     )
     assert _blocked(h.run(last_assistant_message="照規則我不會自己重開，要你決定"))
     state = h.state()
-    assert state["commented"] is False and state["state"] == "stopped"
+    # Blocked, the session goes on: working until its next stop.
+    assert state["commented"] is False and state["state"] == "working"
     assert state["last_message"] == "照規則我不會自己重開，要你決定"
     assert not _blocked(h.run(stop_hook_active=True, at=NOW + 30))
-    assert h.state()["ended_at"] == "2026-10-30T12:00:30Z"
+    again = h.state()
+    assert again["state"] == "stopped" and again["commented"] is False
+    assert again["ended_at"] == "2026-10-30T12:00:30Z"
 
 
 @pytest.mark.parametrize(
