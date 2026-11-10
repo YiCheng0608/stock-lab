@@ -1,0 +1,60 @@
+{
+  "market_latest_trading_date": "2026-11-09",
+  "group_scores_latest_trading_date": "2026-11-09",
+  "candidate_run_latest_trading_date": "2026-11-09",
+  "candidate_count_latest": 11,
+  "news_items": 26718,
+  "news_latest_published_at": "2026-11-10 01:50:57.000000",
+  "news_llm_done": 12938,
+  "theme_suggestions": 483,
+  "tracking_plans_open": 0,
+  "tracking_plans_closed": 1,
+  "portfolio_positions": 0,
+  "alembic_version": "0030_trading_halts",
+  "market_summary_latest": {
+    "TPEx": {
+      "trading_date": "2026-11-09",
+      "index_close": 321.97,
+      "index_change": 17.95,
+      "index_change_pct": 0.059042,
+      "change_pct_method": "derived",
+      "turnover": 130678000000,
+      "turnover_scope": "tpex_stocks",
+      "advancers": 727,
+      "decliners": 122,
+      "unchanged": 34,
+      "limit_up": 116,
+      "limit_down": 2,
+      "unmatched": 14,
+      "not_comparable": null,
+      "breadth_scope": "tpex_stocks",
+      "source": "tpex_mainborad_highlight",
+      "raw_payload_id": 10977
+    },
+    "TWSE": {
+      "trading_date": "2026-11-09",
+      "index_close": 41661.7,
+      "index_change": 1960.06,
+      "index_change_pct": 0.0494,
+      "change_pct_method": "official",
+      "turnover": 877025617232,
+      "turnover_scope": "twse_all_securities",
+      "advancers": 804,
+      "decliners": 229,
+      "unchanged": 52,
+      "limit_up": 121,
+      "limit_down": 2,
+      "unmatched": 0,
+      "not_comparable": 2,
+      "breadth_scope": "twse_stocks",
+      "source": "twse_mi_index",
+      "raw_payload_id": 10962
+    }
+  },
+  "instrument": {
+    "exchange": "TWSE",
+    "symbol": "1216",
+    "latest_trading_date": "2026-11-09",
+    "source": "twse"
+  }
+}

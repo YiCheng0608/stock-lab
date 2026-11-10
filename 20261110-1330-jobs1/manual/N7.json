@@ -1,0 +1,184 @@
+{
+  "rule": "/news?category=domestic&limit=100（依 next_cursor 往後最多 5 頁）中台北發布日 = D（2026-11-09）且有 AI 判讀的前 5 則，API 順序",
+  "items": [
+    {
+      "id": "26557",
+      "title": "金融時報：新加坡超越愛爾蘭　成為蘋果最大避稅地",
+      "source": {
+        "name": "中央社",
+        "url": "https://www.cna.com.tw/news/aopl/202611090293.aspx",
+        "url_kind": "item"
+      },
+      "published_at": "2026-11-09T15:31:18+00:00",
+      "summary": "（中央社新加坡9日綜合外電報導）據新曝光資料，美商蘋果（Apple）今年透過將獲利轉入新加坡少繳27億美元（約新台幣887億元）稅，超過透過其歐洲總部地點愛爾蘭少繳26億美元，顯示星國已成其最大避稅地。",
+      "description": "（中央社新加坡9日綜合外電報導）據新曝光資料，美商蘋果（Apple）今年透過將獲利轉入新加坡少繳27億美元（約新台幣887億元）稅，超過透過其歐洲總部地點愛爾蘭少繳26億美元，顯示星國已成其最大避稅地。",
+      "instruments": [],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "據金融時報報導，蘋果今年透過將獲利轉入新加坡少繳27億美元稅，超過愛爾蘭的26億美元。",
+        "symbol_candidates": [],
+        "hidden_symbol_candidates": [],
+        "candidate_check_version": "ai-candidate-source/v2",
+        "theme_candidates": [],
+        "impact_direction": "unknown",
+        "impact_scope": "instrument",
+        "impact_rationale": "屬蘋果避稅議題，與台股關聯無法判斷。",
+        "unsupported": true,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v3",
+        "input_hash": "16e202bfff61b2054c26f1faadaaf78c46c112cda6a2ada50d4e438b33ea1b7f",
+        "generated_at": "2026-11-09T18:00:52.409891+00:00"
+      }
+    },
+    {
+      "id": "26543",
+      "title": "台股終於落底了？分析師嘆「如果沒有黃仁勳事件的話」：反攻5萬點機會不大",
+      "source": {
+        "name": "Yahoo奇摩股市",
+        "url": "https://tw.news.yahoo.com/%E5%8F%B0%E8%82%A1%E7%B5%82%E6%96%BC%E8%90%BD%E5%BA%95%E4%BA%86-%E5%88%86%E6%9E%90%E5%B8%AB%E5%98%86-%E5%A6%82%E6%9E%9C%E6%B2%92%E6%9C%89%E9%BB%83%E4%BB%81%E5%8B%B3%E4%BA%8B%E4%BB%B6%E7%9A%84%E8%A9%B1-%E5%8F%8D%E6%94%BB5%E8%90%AC%E9%BB%9E%E6%A9%9F%E6%9C%83%E4%B8%8D%E5%A4%A7-153100491.html",
+        "url_kind": "item"
+      },
+      "published_at": "2026-11-09T15:31:00+00:00",
+      "summary": "台股在上周經歷重挫、國安基金宣布進場，加權指數今（9）日反彈回漲，一口氣勁揚1960點，創史上第2大漲點紀錄，收在4萬1661點，許多投資人也關心這波跌勢究竟是否已經落底。對此，統一期貨分析師盧昱衡直",
+      "description": "台股在上周經歷重挫、國安基金宣布進場，加權指數今（9）日反彈回漲，一口氣勁揚1960點，創史上第2大漲點紀錄，收在4萬1661點，許多投資人也關心這波跌勢究竟是否已經落底。對此，統一期貨分析師盧昱衡直",
+      "instruments": [],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "台股9日反彈1960點，創史上第2大漲點，收4萬1661點；統一期貨分析師盧昱衡就是否落底表達看法。",
+        "symbol_candidates": [],
+        "hidden_symbol_candidates": [],
+        "candidate_check_version": "ai-candidate-source/v2",
+        "theme_candidates": [],
+        "impact_direction": "positive",
+        "impact_scope": "market",
+        "impact_rationale": "加權指數大幅反彈，國安基金進場，但摘要未完整寫出分析師看法。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v3",
+        "input_hash": "3b2e94d5cf1c59c71180dc18c668019911236eb1a67f36c703c4661848d34ec5",
+        "generated_at": "2026-11-09T16:00:56.030388+00:00"
+      }
+    },
+    {
+      "id": "26544",
+      "title": "黃仁勳婚外情拖累！Google、超微、Meta、台積電ADR齊揚　惟輝達重挫8.4%",
+      "source": {
+        "name": "Yahoo奇摩股市",
+        "url": "https://tw.stock.yahoo.com/news/%E9%BB%83%E4%BB%81%E5%8B%B3%E5%A9%9A%E5%A4%96%E6%83%85%E6%8B%96%E7%B4%AF-google-%E8%B6%85%E5%BE%AE-meta-%E5%8F%B0%E7%A9%8D%E9%9B%BBadr%E9%BD%8A%E6%8F%9A-150800385.html",
+        "url_kind": "item"
+      },
+      "published_at": "2026-11-09T15:08:00+00:00",
+      "summary": "[FTNN新聞網]記者陳献朋／綜合報導受累於執行長黃仁勳與疑為中國間諜的女子黃樂發生婚外情，輝達（NVIDIA）9日盤中一度重挫8.4%，創下今年3月以來最低紀錄，...",
+      "description": "[FTNN新聞網]記者陳献朋／綜合報導受累於執行長黃仁勳與疑為中國間諜的女子黃樂發生婚外情，輝達（NVIDIA）9日盤中一度重挫8.4%，創下今年3月以來最低紀錄，...",
+      "instruments": [
+        {
+          "exchange": "TWSE",
+          "symbol": "2330",
+          "name": "台積電"
+        }
+      ],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "輝達執行長黃仁勳婚外情，輝達9日盤中一度重挫8.4%；Google、超微、Meta、台積電ADR齊揚。",
+        "symbol_candidates": [
+          {
+            "exchange": "TWSE",
+            "symbol": "2330",
+            "name": "台積電",
+            "listing": "listed",
+            "exchange_corrected": false,
+            "reason": "標題點名台積電ADR齊揚。",
+            "confidence": "high",
+            "verified": false,
+            "source_check": "mentioned"
+          }
+        ],
+        "hidden_symbol_candidates": [],
+        "candidate_check_version": "ai-candidate-source/v2",
+        "theme_candidates": [],
+        "impact_direction": "mixed",
+        "impact_scope": "instrument",
+        "impact_rationale": "輝達重挫，但台積電ADR等多檔上漲，正負並存。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v3",
+        "input_hash": "06927c5fb785235cd8009b30bca69812103059b21482144e84c0d83c100b6544",
+        "generated_at": "2026-11-09T16:00:56.030388+00:00"
+      }
+    },
+    {
+      "id": "26535",
+      "title": "黃仁勳認婚外情　輝達開盤股價大跌逾8%",
+      "source": {
+        "name": "中央社",
+        "url": "https://www.cna.com.tw/news/afe/202611090291.aspx",
+        "url_kind": "item"
+      },
+      "published_at": "2026-11-09T14:46:10+00:00",
+      "summary": "（中央社紐約9日綜合外電報導）美國人工智慧（AI）晶片巨擘輝達執行長黃仁勳承認婚外情，對象是遭美國情報機構懷疑與中國有關聯的女商界人士，該公司董事會已展開獨立調查。輝達今天開盤股價大跌逾8%。",
+      "description": "（中央社紐約9日綜合外電報導）美國人工智慧（AI）晶片巨擘輝達執行長黃仁勳承認婚外情，對象是遭美國情報機構懷疑與中國有關聯的女商界人士，該公司董事會已展開獨立調查。輝達今天開盤股價大跌逾8%。",
+      "instruments": [],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "輝達執行長黃仁勳承認婚外情，對象被美國情報機構懷疑與中國有關聯，董事會展開獨立調查，輝達開盤股價大跌逾8%。",
+        "symbol_candidates": [],
+        "hidden_symbol_candidates": [],
+        "candidate_check_version": "ai-candidate-source/v2",
+        "theme_candidates": [
+          {
+            "theme": "人工智慧",
+            "reason": "原文稱輝達為AI晶片巨擘。",
+            "evidence": "美國人工智慧（AI）晶片巨擘輝達執行長黃仁勳"
+          }
+        ],
+        "impact_direction": "negative",
+        "impact_scope": "theme",
+        "impact_rationale": "輝達開盤股價大跌逾8%，且董事會展開調查。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v3",
+        "input_hash": "a75ed53fba87234cfa94c4107be9edd6ccaaa007f2fdbc6eba732700cfdbc9ce",
+        "generated_at": "2026-11-09T16:00:56.030388+00:00"
+      }
+    },
+    {
+      "id": "26536",
+      "title": "核一、核二廠採購案遭調查　台電：若查證屬實將嚴懲",
+      "source": {
+        "name": "中央社",
+        "url": "https://www.cna.com.tw/news/afe/202611090287.aspx",
+        "url_kind": "item"
+      },
+      "published_at": "2026-11-09T14:25:01+00:00",
+      "summary": "（中央社記者梁家柔台北9日電）有關台北地檢署指揮法務部廉政署今天至台電核一廠及核二廠，針對101年至113年間採購案進行搜索清查。台電表示，已與檢廉單位緊密聯繫與合作，將秉持勿枉勿縱及絕不護短的原則，配合司法偵查機關偵辦，本案已進入司法程序，如查證屬實，將依規定嚴懲不貸。",
+      "description": "（中央社記者梁家柔台北9日電）有關台北地檢署指揮法務部廉政署今天至台電核一廠及核二廠，針對101年至113年間採購案進行搜索清查。台電表示，已與檢廉單位緊密聯繫與合作，將秉持勿枉勿縱及絕不護短的原則，配合司法偵查機關偵辦，本案已進入司法程序，如查證屬實，將依規定嚴懲不貸。",
+      "instruments": [],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "台北地檢署指揮廉政署搜索台電核一、核二廠101年至113年間採購案，台電表示配合偵辦，如查證屬實將嚴懲。",
+        "symbol_candidates": [],
+        "hidden_symbol_candidates": [],
+        "candidate_check_version": "ai-candidate-source/v2",
+        "theme_candidates": [],
+        "impact_direction": "unknown",
+        "impact_scope": "instrument",
+        "impact_rationale": "台電非上市櫃公司，對台股影響無法判斷。",
+        "unsupported": true,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v3",
+        "input_hash": "164e022f8d15d3d02d2652d83856aee20cd28d09eed89eef4a9b189702916212",
+        "generated_at": "2026-11-09T16:00:56.030388+00:00"
+      }
+    }
+  ]
+}

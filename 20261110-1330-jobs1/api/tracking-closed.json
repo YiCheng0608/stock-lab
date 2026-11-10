@@ -1,0 +1,75 @@
+{
+  "items": [
+    {
+      "id": 1,
+      "instrument": {
+        "id": 155,
+        "exchange": "TWSE",
+        "symbol": "1626",
+        "name": "艾美特-KY"
+      },
+      "source_kind": "stock",
+      "signal_id": 56646,
+      "daily_candidate_id": null,
+      "strategy": "pullback_v3",
+      "versions": {
+        "strategy_version_id": 11,
+        "formula_version": "institutional-flow/v2-shares-per-share-volume",
+        "score_version": null,
+        "tracking_version": "plan_tracking_v2"
+      },
+      "plan_date": "2026-11-04",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 9.81,
+        "entry_zone": {
+          "low": 9.67,
+          "high": 9.81
+        },
+        "invalid_price": 9.67,
+        "target_1": 10.04,
+        "target_2": 10.24,
+        "risk_reward": 1.6429,
+        "risk_reward_basis": null,
+        "earliest_execution_date": "2026-11-05"
+      },
+      "window_sessions": 20,
+      "status": "cancelled",
+      "status_reason": "cancelled_while_pending",
+      "open": false,
+      "sessions_observed": 0,
+      "last_session_date": null,
+      "execution_date": null,
+      "execution_price": null,
+      "outcome_date": null,
+      "outcome_price": null,
+      "result_return": null,
+      "result_comparable": null,
+      "incomparable_reason": null,
+      "data_quality": "complete",
+      "simulated": true,
+      "created_at": "2026-11-04T23:47:55.986982+00:00",
+      "updated_at": "2026-11-04T23:48:18.757017+00:00",
+      "cancelled_at": "2026-11-04T23:48:18.757017+00:00"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "page_size": 20,
+    "total": 1,
+    "total_pages": 1,
+    "has_previous": false,
+    "has_next": false
+  },
+  "summary": {
+    "open": 0,
+    "closed": 1
+  },
+  "meta": {
+    "tracking_version": "plan_tracking_v2",
+    "window_sessions": 20,
+    "slippage_bps": 5.0,
+    "round_trip_cost_bps": 30.0,
+    "simulated": true
+  }
+}

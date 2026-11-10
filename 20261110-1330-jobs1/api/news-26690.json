@@ -1,0 +1,267 @@
+{
+  "id": "26690",
+  "canonical_key": "news:yahoo_tw:4d159fe41d738e958caed078ea5c0b99fb326ddaa46b8630ca2f7f3237f2e9d5",
+  "dedupe_cluster_id": "news-title:bb20dbfe79e028e527da6af2d2f7cebc",
+  "category": "domestic",
+  "source_kind": "media",
+  "source_name": "Yahoo奇摩股市",
+  "source": {
+    "name": "Yahoo奇摩股市",
+    "url": "https://tw.stock.yahoo.com/news/%E5%8F%B0%E7%A9%8D%E9%9B%BB%E7%87%9F%E6%94%B6%E5%87%BA%E7%88%90%E5%89%8D%E8%82%A1%E5%83%B9%E6%BC%B245%E5%85%83%E3%80%8C%E5%B8%82%E5%80%BC%E9%87%8D%E8%BF%9459%E5%85%86%E5%85%83%E5%A4%A7%E9%97%9C%E3%80%8D-1%E5%A4%A9%E5%A2%9E%E5%8A%A0%E4%B8%80%E5%AE%B6%E5%8D%97%E4%BA%9E%E7%A7%91-013859641.html",
+    "url_kind": "item"
+  },
+  "source_item_id": null,
+  "title": "台積電營收出爐前...股價漲45元「市值重返59兆元大關」 1天增加一家南亞科",
+  "summary": "台積電（2330）10月營收於今（10）日下午出爐！在市場買盤與卡位資金強勢湧入下，台積電今日盤中強勢衝上 2,280元，上漲45元，漲幅超過2%，伴隨股價走揚，台積電整體市值也從 57.95 兆元直",
+  "description": "台積電（2330）10月營收於今（10）日下午出爐！在市場買盤與卡位資金強勢湧入下，台積電今日盤中強勢衝上 2,280元，上漲45元，漲幅超過2%，伴隨股價走揚，台積電整體市值也從 57.95 兆元直",
+  "summary_preview": "台積電（2330）10月營收於今（10）日下午出爐！在市場買盤與卡位資金強勢湧入下，台積電今日盤中強勢衝上 2,280元，上漲45元，漲幅超過2%，伴隨股價走揚，台積電整體市值也從 57.95 兆元直",
+  "language": "zh-Hant",
+  "published_at": "2026-11-10T01:37:55+00:00",
+  "event_at": null,
+  "event_date": null,
+  "display_time": "2026-11-10T01:37:55+00:00",
+  "time_basis": "published",
+  "time_precision": "datetime",
+  "time_consistency": "verified",
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "news_item",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_market_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "event.event_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.event_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-11-10T01:37:55+00:00",
+        "utc": "2026-11-10T01:37:55+00:00",
+        "date": null,
+        "source": "news_item.published_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-11-10T02:00:12.331524+00:00",
+        "utc": "2026-11-10T02:00:12.331524+00:00",
+        "date": null,
+        "source": "news_item.collected_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_generated_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_at_not_applicable",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_date_not_applicable",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-11-10T05:35:26.778847+00:00",
+    "legacy": {
+      "published_at": "2026-11-10T01:37:55+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-11-10T01:37:55",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "collected_at": "2026-11-10T02:00:12.331524+00:00"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+      "A collection timestamp does not prove when the source first became available.",
+      "Historical decision and generation times are not persisted by the NewsItem projection."
+    ]
+  },
+  "response_generated_at": "2026-11-10T05:35:26.778847+00:00",
+  "collected_at": "2026-11-10T02:00:12.331524+00:00",
+  "symbols": [
+    "TWSE:2330",
+    "TWSE:2408"
+  ],
+  "instruments": [
+    {
+      "exchange": "TWSE",
+      "symbol": "2330",
+      "name": "台積電"
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "2408",
+      "name": "南亞科"
+    }
+  ],
+  "themes": [],
+  "theme_ids": [],
+  "impact": {
+    "scope": "instrument",
+    "direction": "unknown",
+    "rationale": null,
+    "method": "rule:exact-name-code/v3",
+    "confidence": "unknown"
+  },
+  "impact_scope": "instrument",
+  "impact_direction": "unknown",
+  "confidence": "unknown",
+  "status": "active",
+  "content_hash": "c9b86e598380288954ea875df3e0cb0bf2b4aba8533479084318585999b2db6b",
+  "detail_url": "/news/26690",
+  "ai": {
+    "inference": true,
+    "status": "done",
+    "summary": "台積電10月營收將於今日下午公布，盤中衝上2,280元、上漲45元，漲幅超過2%，市值從57.95兆元直逼59兆元。",
+    "symbol_candidates": [
+      {
+        "exchange": "TWSE",
+        "symbol": "2330",
+        "name": "台積電",
+        "listing": "listed",
+        "exchange_corrected": false,
+        "reason": "新聞直接點名台積電股價與市值上升",
+        "confidence": "high",
+        "verified": false,
+        "source_check": "mentioned"
+      }
+    ],
+    "hidden_symbol_candidates": [],
+    "candidate_check_version": "ai-candidate-source/v2",
+    "theme_candidates": [],
+    "impact_direction": "positive",
+    "impact_scope": "instrument",
+    "impact_rationale": "台積電盤中股價上漲、市值增加。",
+    "unsupported": false,
+    "model": "claude-sonnet-5-5",
+    "prompt_version": "news_v3",
+    "input_hash": "e6f54d40d4a52b12a835dd356700cbaa515a0f19a221e98d449ed2ceca1a86e4",
+    "generated_at": "2026-11-10T02:01:33.690651+00:00"
+  },
+  "provenance": {
+    "event_id": null,
+    "raw_payload_id": 11095,
+    "endpoint": "https://tw.stock.yahoo.com/rss?category=tw-market",
+    "data_as_of": "2026-11-10T02:00:12.331524"
+  }
+}
