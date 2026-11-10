@@ -39,10 +39,12 @@ def changed_paths(base: str, cwd: Path = ROOT, worktree: bool = False) -> list[s
 # Keep in step with backend/tests. test_database_readiness reads the Alembic head stated in
 # docs/ops/SETUP.md; test_condition_copy_source reads the frontend condition table (#279);
 # test_event_monitor reads 統籌 session and 無人值守運作 of docs/COORDINATOR.md (#316);
-# test_coordinator_scripts reads the dispatch notice in 任務流程第 2 步 of docs/WORKFLOW.md (#315).
+# test_coordinator_scripts reads the dispatch notice in 任務流程第 2 步 of docs/WORKFLOW.md (#315);
+# test_turn_hook reads the hooks of .claude/settings.json (#595).
 BACKEND_READ_DIRS: tuple[str, ...] = ()
 BACKEND_READ_FILES: frozenset[str] = frozenset(
     {
+        ".claude/settings.json",
         "docs/COORDINATOR.md",
         "docs/WORKFLOW.md",
         "docs/ops/SETUP.md",

@@ -2,7 +2,10 @@
 # Start an engineer session on an Issue (Issue #282; docs/WORKFLOW.md 任務流程第 2 步):
 # Orca worktree from the latest base (origin/master, or --base: a long-lived integration
 # branch listed in close_task.sh, origin/<branch>, #332), branch task/<issue>-<slug>, a visible
-# terminal running claude with COMPOSE_PROJECT_NAME=task-<issue> (#339), and, only after
+# terminal running claude with COMPOSE_PROJECT_NAME=task-<issue> (#339) and
+# CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 (#595: Claude Code would otherwise kill the
+# session's background shells when the host runs low on memory and tell the engineer to
+# wait for a person; a shell holds little memory, the containers' memory is the VM's), and, only after
 # `orca terminal wait --for tui-idle` reports satisfied:true, one line pointing at the
 # UTF-8 task file outside the worktree (#315):
 #   請用 Read 工具讀取任務檔 <path>（UTF-8），依其內容開工；開工留言回貼任務檔裡的 Issue 連結與 AC 數。
@@ -128,7 +131,7 @@ fi
 # terminal's shell is pinned to Git Bash (#339 review S3); Orca refuses the create on a host
 # that cannot give it, and nothing is sent.
 out="$(orca terminal create --worktree "id:$repo_id::$path" --title "#$issue $slug" --shell git-bash \
-  --command "COMPOSE_PROJECT_NAME=task-$issue claude --model $model --effort $effort --add-dir \"$task_dir\"" --json)" \
+  --command "COMPOSE_PROJECT_NAME=task-$issue CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude --model $model --effort $effort --add-dir \"$task_dir\"" --json)" \
   || report 1 "orca terminal create 失敗"
 handle="$(printf '%s' "$out" | cj get result.terminal.handle)" || report 1 "orca terminal create 沒有回傳 handle"
 
