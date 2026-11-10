@@ -34,7 +34,9 @@ def _prompt(text: str) -> dict:
 
 
 def _call(id_: str, command: str, text: str = "") -> dict:
-    content = [{"type": "tool_use", "id": id_, "name": "Bash", "input": {"command": command}}]
+    content = [
+        {"type": "tool_use", "id": id_, "name": "Bash", "input": {"command": command}}
+    ]
     if text:
         content.insert(0, {"type": "text", "text": text})
     return {"type": "assistant", "message": {"role": "assistant", "content": content}}
@@ -47,7 +49,12 @@ def _result(id_: str, error: bool = False, out: str = "ok") -> dict:
         "message": {
             "role": "user",
             "content": [
-                {"type": "tool_result", "tool_use_id": id_, "content": out, "is_error": error}
+                {
+                    "type": "tool_result",
+                    "tool_use_id": id_,
+                    "content": out,
+                    "is_error": error,
+                }
             ],
         },
     }
@@ -64,7 +71,9 @@ COMMENT = "gh issue comment 595 --repo YiCheng0608/stock-lab --body-file /c/t595
 
 
 class Hook:
-    def __init__(self, root: Path, branch: str = "task/595-engineer-stop-events") -> None:
+    def __init__(
+        self, root: Path, branch: str = "task/595-engineer-stop-events"
+    ) -> None:
         self.root = root
         self.project = root / "wt"
         self.data = root / "data"
@@ -143,7 +152,12 @@ def _blocked(result) -> bool:
 
 def _reason() -> str:
     return subprocess.run(
-        [NODE, "-e", "process.stdout.write(require(process.argv[1]).REASON)", HOOK.as_posix()],
+        [
+            NODE,
+            "-e",
+            "process.stdout.write(require(process.argv[1]).REASON)",
+            HOOK.as_posix(),
+        ],
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -157,7 +171,10 @@ def test_a_turn_that_commented_is_not_blocked(tmp_path) -> None:
     h.lines(
         _prompt("請用 Read 工具讀取任務檔"),
         _call("t1", COMMENT, text="留開工"),
-        _result("t1", out="https://github.com/YiCheng0608/stock-lab/issues/595#issuecomment-1"),
+        _result(
+            "t1",
+            out="https://github.com/YiCheng0608/stock-lab/issues/595#issuecomment-1",
+        ),
         _say("開工留言已貼。"),
     )
     result = h.run(last_assistant_message="開工留言已貼。")
@@ -317,7 +334,10 @@ def test_prompt_and_session_end_update_the_state(tmp_path) -> None:
     result = h.run("UserPromptSubmit", at=NOW + 60, prompt="繼續")
     assert result.returncode == 0 and result.stdout == "" and result.stderr == ""
     working = h.state()
-    assert working["state"] == "working" and working["started_at"] == "2026-10-30T12:01:00Z"
+    assert (
+        working["state"] == "working"
+        and working["started_at"] == "2026-10-30T12:01:00Z"
+    )
     result = h.run("SessionEnd", at=NOW + 120, reason="prompt_input_exit")
     assert result.returncode == 0 and result.stdout == ""
     ended = h.state()
@@ -327,7 +347,9 @@ def test_prompt_and_session_end_update_the_state(tmp_path) -> None:
 
 
 def test_settings_run_the_hook_on_its_three_events() -> None:
-    settings = json.loads((ROOT / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    settings = json.loads(
+        (ROOT / ".claude" / "settings.json").read_text(encoding="utf-8")
+    )
     for event in ("Stop", "UserPromptSubmit", "SessionEnd"):
         (group,) = settings["hooks"][event]
         (hook,) = group["hooks"]

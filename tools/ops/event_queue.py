@@ -510,20 +510,26 @@ def session_events(logs: Path, now: float, branches: set[str] | None) -> list[di
         issue = doc.get("issue")
         ref = f"#{issue}" if isinstance(issue, int) else "工程師"
         url = ISSUE_URL.format(issue) if isinstance(issue, int) else ""
-        message = doc.get("last_message") if isinstance(doc.get("last_message"), str) else ""
+        message = (
+            doc.get("last_message") if isinstance(doc.get("last_message"), str) else ""
+        )
         head = one_line(message, 120) or "（沒有訊息）"
         state = doc.get("state")
         if state == "stopped" and doc.get("commented") is not True:
             if now - at <= WAITING_AFTER:
                 continue
             tasks = doc.get("background_tasks")
-            bg = f"，背景工作 {tasks} 個" if isinstance(tasks, int) and tasks > 0 else ""
+            bg = (
+                f"，背景工作 {tasks} 個" if isinstance(tasks, int) and tasks > 0 else ""
+            )
             summary = (
                 f"工程師 session {sid[:8]} 回合結束 {int((now - at) // 60)} 分鐘未在"
                 f" Issue／PR 留言{bg}：{head}"
             )
             kind = "engineer_waiting"
-        elif state == "ended" and branches is not None and doc.get("branch") in branches:
+        elif (
+            state == "ended" and branches is not None and doc.get("branch") in branches
+        ):
             summary = (
                 f"工程師 session {sid[:8]} 已結束（{doc.get('end_reason') or '?'}），"
                 f"worktree 還在：{head}"
