@@ -161,6 +161,20 @@ MAX_PAGE_SIZE = 100
 # ``include=<section>`` (repeatable): optional sections a GET builds only on
 # request (#601).  A plain Python default keeps direct calls working.
 IncludeQuery = Annotated[list[str] | None, Query()]
+# Free-text ``q`` of /stocks, /instruments and /signals (#602): matched as
+# literal text, so ``%`` and ``_`` are not wildcards; longer is a 422.
+SEARCH_MAX_LENGTH = 100
+SearchQuery = Annotated[str | None, Query(max_length=SEARCH_MAX_LENGTH)]
+
+
+def _search_term(q: str | None) -> str | None:
+    return q.strip() if q and q.strip() else None
+
+
+def _contains_text(term: str, *columns: Any) -> Any:
+    """Case-insensitive substring match with LIKE wildcards escaped."""
+
+    return or_(*(column.icontains(term, autoescape=True) for column in columns))
 
 
 def _effective_page_size(page_size: int, limit: int | None) -> int:
@@ -2581,13 +2595,73 @@ def theme_members(
     }
 
 
+# Directory order (#602): ordinary stocks first, then ETFs and new listings.
+STOCK_TYPE_ORDER = ("stock", "etf", "ipo")
+StockSort = Literal["type", "symbol", "name", "close_desc", "close_asc"]
+
+
+def _latest_close_key(as_of: date | None) -> Any:
+    """The close of each instrument's newest bar on or before ``as_of``.
+
+    One index seek per instrument (``ix_market_bar_instrument_date``).  A
+    newest bar the decision cannot read (no positive close, no source or an
+    unknown suspension flag) has no price on the page, so it has no key here
+    either rather than falling back to an older bar.
+    """
+
+    bar = select(
+        case(
+            (
+                and_(
+                    MarketBar.close > 0,
+                    MarketBar.source.is_not(None),
+                    MarketBar.is_suspended.in_((0, 1)),
+                ),
+                MarketBar.close,
+            ),
+            else_=None,
+        )
+    ).where(MarketBar.instrument_id == Instrument.id)
+    if as_of is not None:
+        bar = bar.where(MarketBar.trading_date <= as_of)
+    return (
+        bar.order_by(desc(MarketBar.trading_date), desc(MarketBar.id))
+        .limit(1)
+        .correlate(Instrument)
+        .scalar_subquery()
+    )
+
+
+def _stock_order(sort: str, as_of: date | None) -> tuple[Any, ...]:
+    """Every order ends with exchange and id, so pages never repeat or skip."""
+
+    unique = (Instrument.exchange, Instrument.id)
+    if sort == "symbol":
+        return (Instrument.symbol, *unique)
+    if sort == "name":
+        return (Instrument.name, Instrument.symbol, *unique)
+    if sort in {"close_desc", "close_asc"}:
+        close = _latest_close_key(as_of)
+        value = desc(close) if sort == "close_desc" else close
+        return (close.is_(None), value, Instrument.symbol, *unique)
+    type_rank = case(
+        *(
+            (Instrument.instrument_type == name, rank)
+            for rank, name in enumerate(STOCK_TYPE_ORDER)
+        ),
+        else_=len(STOCK_TYPE_ORDER),
+    )
+    return (type_rank, Instrument.symbol, *unique)
+
+
 @router.get("/stocks")
 def stocks(
-    q: str | None = Query(default=None),
+    q: SearchQuery = None,
     exchange: str | None = None,
     instrument_type: str | None = None,
     theme_id: str | None = None,
     watchlist_only: bool = False,
+    sort: StockSort = "type",
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     db: Session = Depends(get_db),
@@ -2597,11 +2671,9 @@ def stocks(
         Instrument.status == "active",
         Instrument.instrument_type.not_in(NON_SECURITY_TYPES),
     )
-    if q and q.strip():
-        needle = f"%{q.strip()}%"
-        query = query.where(
-            or_(Instrument.symbol.ilike(needle), Instrument.name.ilike(needle))
-        )
+    term = _search_term(q)
+    if term:
+        query = query.where(_contains_text(term, Instrument.symbol, Instrument.name))
     if exchange:
         query = query.where(Instrument.exchange == exchange)
     if instrument_type:
@@ -2610,24 +2682,25 @@ def stocks(
         query = query.where(Instrument.is_watchlisted.is_(True))
     if theme_id:
         effective_date = as_of or date.today()
-        query = (
-            query.join(GroupMembership, GroupMembership.instrument_id == Instrument.id)
-            .where(
-                GroupMembership.group_id == theme_id,
-                GroupMembership.valid_from <= effective_date,
-                (
-                    GroupMembership.valid_to.is_(None)
-                    | (GroupMembership.valid_to >= effective_date)
-                ),
+        # IN rather than a join: no DISTINCT next to the sort expressions.
+        query = query.where(
+            Instrument.id.in_(
+                select(GroupMembership.instrument_id).where(
+                    GroupMembership.group_id == theme_id,
+                    GroupMembership.valid_from <= effective_date,
+                    (
+                        GroupMembership.valid_to.is_(None)
+                        | (GroupMembership.valid_to >= effective_date)
+                    ),
+                )
             )
-            .distinct()
         )
     rows, total = _paginate_query(
         db,
         query,
         page=page,
         page_size=page_size,
-        order_by=(Instrument.exchange, Instrument.symbol, Instrument.id),
+        order_by=_stock_order(sort, as_of),
     )
     items = []
     for instrument in rows:
@@ -2640,9 +2713,9 @@ def stocks(
                 "action_state": summary.get("action_state"),
                 "action_label_zh": summary.get("action_label_zh"),
                 "data_quality": summary.get("data_quality"),
-                "missing_data_priority": summary.get("missing_data_priority", []),
-                "product_time": summary.get("product_time"),
-                "response_generated_at": summary.get("response_generated_at"),
+                # The first gap only: the directory shows it under 資料不足
+                # (#602); the stock page reads the full list from its own GET.
+                "missing_data_priority": summary.get("missing_data_priority", [])[:1],
             }
         )
     return _directory_response(
@@ -2652,7 +2725,7 @@ def stocks(
         total=total,
         q=q,
         data_as_of=run.data_as_of if run else (as_of.isoformat() if as_of else None),
-        sort="exchange asc, symbol asc",
+        sort=sort,
     )
 
 
@@ -3234,7 +3307,7 @@ def group_detail(group_id: str, db: Session = Depends(get_db)) -> dict[str, Any]
 
 @router.get("/instruments")
 def instruments(
-    q: str | None = Query(default=None),
+    q: SearchQuery = None,
     instrument_type: str | None = None,
     exchange: str | None = None,
     watchlist_only: bool = False,
@@ -3253,12 +3326,9 @@ def instruments(
     if securities_only:
         query = query.where(Instrument.instrument_type.not_in(NON_SECURITY_TYPES))
     order_by: tuple[Any, ...] = (Instrument.exchange, Instrument.symbol, Instrument.id)
-    if q and q.strip():
-        term = q.strip()
-        needle = f"%{term}%"
-        query = query.where(
-            or_(Instrument.symbol.ilike(needle), Instrument.name.ilike(needle))
-        )
+    term = _search_term(q)
+    if term:
+        query = query.where(_contains_text(term, Instrument.symbol, Instrument.name))
         symbol = func.upper(Instrument.symbol)
         upper = term.upper()
         rank = case(
@@ -3684,7 +3754,7 @@ def _instrument_payload(
 def signals(
     status: str | None = None,
     instrument_symbol: str | None = None,
-    q: str | None = Query(default=None),
+    q: SearchQuery = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     limit: int | None = Query(
@@ -3702,13 +3772,11 @@ def signals(
         query = query.where(Signal.status == status)
     if instrument_symbol:
         query = query.where(Instrument.symbol == instrument_symbol)
-    if q and q.strip():
-        needle = f"%{q.strip()}%"
+    term = _search_term(q)
+    if term:
         query = query.where(
-            or_(
-                Signal.signal_key.ilike(needle),
-                Instrument.symbol.ilike(needle),
-                Instrument.name.ilike(needle),
+            _contains_text(
+                term, Signal.signal_key, Instrument.symbol, Instrument.name
             )
         )
     rows, total = _paginate_query(
