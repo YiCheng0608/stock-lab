@@ -46,7 +46,7 @@ V1 以 ROADMAP V1 基線的七個 gate（V1-G1～G7）承接，每個 gate 由�
    bash tools/ops/dispatch.sh <issue> <slug> --task-file <任務全文檔> [--model <model> --effort <effort>] [--base origin/<branch>]
    ```
 
-   [`dispatch.sh`](../tools/ops/dispatch.sh) 先 fetch 再從最新 `origin/master` 建 worktree；子單的 PR 目標是[長期整合分支](#長期整合分支)時加 `--base origin/<該分支>`，fetch 與「新 worktree 的 HEAD 等於最新 base」的核對都改用它。依序等於下列手動命令（模型預設 `claude-opus-5-5`／`high`；`--base-branch` 只在 `--base` 不等於 `origin/master` 時加）：
+   [`dispatch.sh`](../tools/ops/dispatch.sh) 先 fetch 再從最新 `origin/master` 建 worktree；子單的 PR 目標是[長期整合分支](#長期整合分支)時加 `--base origin/<該分支>`，fetch 與「新 worktree 的 HEAD 等於最新 base」的核對都改用它。依序等於下列手動命令（模型預設 `claude-opus-5-5`／`medium`；`--base-branch` 只在 `--base` 不等於 `origin/master` 時加）：
 
    ```text
    orca worktree create --repo id:<repoId> --name task-<issue>-<slug> --no-parent --setup skip [--base-branch origin/<branch>] --json
