@@ -15,7 +15,15 @@ import {
   sourceName,
   sourcesLabel,
   chartLayout,
-  defaultZoom,
+  BAR_RANGES,
+  DEFAULT_BARS_RANGE,
+  STOCK_BARS_MAX_LIMIT,
+  barsBasis,
+  needsMoreBars,
+  preferChromeInputPath,
+  rangeCutoff,
+  viewFromZoomEvent,
+  zoomForView,
   fieldsState,
   formatBarsTooltip,
   formatSignedPercent,
@@ -138,7 +146,7 @@ check(stockQuote(weekly.bars).sources.join() === 'twse', 'weekly rows read their
 const layout = chartLayout(320)
 check(layout.indicator.height === Math.round(layout.main.height * 0.35), 'indicator panel is 35% of the main chart')
 const series = (response: StockBarsResponse, panel: IndicatorPanelId, visible: ReadonlySet<MaField> = allMa) => {
-  const option = buildBarsChartOption(response, { panel, panelState: indicatorPanelState(response, panel), visibleMa: visible, theme, layout, zoom: defaultZoom(response.bars.length), digits: 2 })
+  const option = buildBarsChartOption(response, { panel, panelState: indicatorPanelState(response, panel), visibleMa: visible, theme, layout, zoom: zoomForView(response, { range: DEFAULT_BARS_RANGE }), digits: 2 })
   return { option, list: option.series as Array<{ name: string; type: string; xAxisIndex: number; data: unknown[]; lineStyle?: { color: string }; itemStyle?: Record<string, unknown> }> }
 }
 const longDaily = barsResponse(Array.from({ length: 130 }, (_, index) => tradedBar(`2026-${String(1 + Math.floor(index / 28)).padStart(2, '0')}-${String(1 + (index % 28)).padStart(2, '0')}`, 100 + (index % 7), index + 1)))
@@ -168,8 +176,6 @@ check(series(insufficient, 'macd').list.every((item) => item.xAxisIndex !== 2), 
 const gapCandles = series(suspended, 'rsi').list[0].data as unknown[]
 check(JSON.stringify(gapCandles[30]) === '["-","-","-","-"]' && JSON.stringify(gapCandles[39]) === '["-","-","-","-"]', 'suspended days draw no candle')
 check(series(weekly, 'kd').list[0].name === '週K', 'weekly series is labelled 週K')
-const zoomDefault = defaultZoom(250)
-check(Math.abs(zoomDefault.start - 52) < 1e-9 && zoomDefault.end === 100, 'first view shows the latest 120 of 250 bars')
 
 // ---- rendered panel states ----
 const render = (data: StockBarsResponse, interval: 'day' | 'week' = 'day') => renderToStaticMarkup(<StockBarsChart interval={interval} onIntervalChange={() => undefined} data={data} loading={false} error={null} />)
@@ -219,3 +225,121 @@ check(cutoffInput(latestCutoff).includes('value=""') && !cutoffInput(latestCutof
 check(cutoffSubmission('2026-11-03', '2026-11-03') === '', 'applying the unchanged latest day keeps 最新資料 (no as_of)')
 check(cutoffSubmission('2026-10-31', '2026-11-03') === '2026-10-31', 'applying a changed day sets it as the cutoff')
 check(cutoffSubmission('', '2026-11-03') === '' && cutoffSubmission('2026-10-20', null) === '2026-10-20', 'a cleared field is 最新資料; without a known latest day the value is applied as typed')
+
+// ---- #600 display range: 1M／3M／6M／1Y／全部 set the dataZoom window, kept across 日K／週K, cleared by a manual zoom ----
+const isoDay = (time: number) => new Date(time).toISOString().slice(0, 10)
+// Weekdays up to 2026-11-10 (a Tuesday), as the API returns the latest `limit` of them.
+const weekdays = (count: number, last = '2026-11-10') => {
+  const days: string[] = []
+  for (let time = Date.parse(`${last}T00:00:00Z`); days.length < count; time -= 86_400_000) {
+    const weekday = new Date(time).getUTCDay()
+    if (weekday !== 0 && weekday !== 6) days.unshift(isoDay(time))
+  }
+  return days
+}
+const dailyOf = (days: readonly string[], limit = 250) => ({ ...barsResponse(days.map((day, index) => tradedBar(day, 100 + (index % 9), index + 1))), limit })
+// A year of weekdays and a little more (the real 250 trading days reach back about a year and two weeks).
+const fullPage = dailyOf(weekdays(262), 262)
+const LAST = fullPage.bars.length - 1
+const weeklyOf = (count: number) => {
+  // Week rows end on the Friday (the last week ends 2026-11-10, its latest trading day so far).
+  const bars = Array.from({ length: count }, (_, index) => {
+    const weekStart = isoDay(Date.parse('2026-11-09T00:00:00Z') - (count - 1 - index) * 7 * 86_400_000)
+    const weekEnd = index === count - 1 ? '2026-11-10' : isoDay(Date.parse(`${weekStart}T00:00:00Z`) + 4 * 86_400_000)
+    return tradedBar(weekEnd, 600 + index, index + 1, { week_start: weekStart, week_end: weekEnd, trading_days: 5 })
+  })
+  return barsResponse(bars, 'week')
+}
+const weeklyPage = weeklyOf(110)
+const firstOnOrAfter = (response: StockBarsResponse, day: string) => response.bars.findIndex((bar) => bar.date >= day)
+const windowOf = (response: StockBarsResponse, view: Parameters<typeof zoomForView>[1]) => zoomForView(response, view) as { startValue: number; endValue: number }
+
+check(BAR_RANGES.map((item) => item.label).join() === '1M,3M,6M,1Y,全部' && DEFAULT_BARS_RANGE === '6m', 'five range buttons, 6M by default')
+check(rangeCutoff('2026-11-10', '1m') === '2026-10-10' && rangeCutoff('2026-11-10', '3m') === '2026-08-10' && rangeCutoff('2026-11-10', '6m') === '2026-05-10' && rangeCutoff('2026-11-10', '1y') === '2025-11-10', 'range cutoffs move back whole calendar months')
+check(rangeCutoff('2026-03-31', '1m') === '2026-02-28' && rangeCutoff('2024-02-29', '1y') === '2023-02-28', 'a cutoff clamps to the month end')
+check(rangeCutoff('2026-11-10', 'all') === null && rangeCutoff(undefined, '1m') === null && rangeCutoff('not a date', '3m') === null, '全部 and an unknown latest day have no cutoff')
+
+// Each range on a full daily page: from the first bar on or after the cutoff to the latest bar.
+const expectedStart: Record<string, string> = { '1m': '2026-10-12', '3m': '2026-08-10', '6m': '2026-05-11', '1y': '2025-11-10' }
+for (const item of BAR_RANGES) {
+  const zoom = windowOf(fullPage, { range: item.id })
+  const cutoff = rangeCutoff('2026-11-10', item.id)
+  const expected = cutoff == null ? 0 : firstOnOrAfter(fullPage, cutoff)
+  check(zoom.startValue === expected && zoom.endValue === LAST, `${item.label}: window ${JSON.stringify(zoom)}, expected start ${expected}`)
+  if (cutoff) check(fullPage.bars[zoom.startValue].date === expectedStart[item.id] && (zoom.startValue === 0 || fullPage.bars[zoom.startValue - 1].date < cutoff), `${item.label}: starts at ${fullPage.bars[zoom.startValue].date}`)
+}
+check(windowOf(fullPage, { range: '1m' }).endValue - windowOf(fullPage, { range: '1m' }).startValue + 1 === 22, '1M on daily bars is about a month of trading days')
+const option1m = buildBarsChartOption(fullPage, { panel: 'macd', panelState: indicatorPanelState(fullPage, 'macd'), visibleMa: allMa, theme, layout, zoom: zoomForView(fullPage, { range: '1m' }), digits: 2 })
+const optionZoom = option1m.dataZoom as Array<Record<string, unknown>>
+check(optionZoom.length === 2 && optionZoom.every((item) => item.startValue === firstOnOrAfter(fullPage, '2026-10-10') && item.endValue === LAST && item.start === undefined), `both dataZoom components take the bar window: ${JSON.stringify(optionZoom.map((item) => [item.startValue, item.endValue]))}`)
+
+// Fewer bars than the range: everything is shown, nothing throws.
+const short = dailyOf(weekdays(20))
+for (const item of BAR_RANGES.filter((range) => range.id !== '1m')) {
+  const zoom = windowOf(short, { range: item.id })
+  check(zoom.startValue === 0 && zoom.endValue === 19, `${item.label} on 20 bars shows all of them: ${JSON.stringify(zoom)}`)
+}
+check(JSON.stringify(zoomForView(barsResponse([]), { range: '1y' })) === '{"startValue":0,"endValue":0}', 'no bars: an empty window, no error')
+const someManual = viewFromZoomEvent(fullPage, { start: 10, end: 20 })
+check(someManual !== null && JSON.stringify(zoomForView(barsResponse([]), someManual)) === '{"startValue":0,"endValue":0}', 'a manual window on no bars: empty, no error')
+check(render(short).includes('最近 20 根日線'), 'a short series renders with the range selected')
+
+// 日K → 週K keeps the range: the same cutoff picks the week that holds it.
+for (const item of BAR_RANGES) {
+  const zoom = windowOf(weeklyPage, { range: item.id })
+  const cutoff = rangeCutoff('2026-11-10', item.id)
+  check(zoom.endValue === 109 && zoom.startValue === (cutoff == null ? 0 : firstOnOrAfter(weeklyPage, cutoff)), `weekly ${item.label}: ${JSON.stringify(zoom)}`)
+  if (cutoff) {
+    const week = weeklyPage.bars[zoom.startValue]
+    check((week.week_start ?? '') <= cutoff || week.date >= cutoff, `weekly ${item.label}: the first week (${week.week_start}～${week.date}) holds or follows ${cutoff}`)
+  }
+}
+check(windowOf(weeklyPage, { range: '3m' }).endValue - windowOf(weeklyPage, { range: '3m' }).startValue + 1 === 14, '3M on weekly bars is 14 weeks')
+
+// A manual zoom: no button is selected; on the same bars ECharts' percents stay, on the other interval its dates map.
+const manual = viewFromZoomEvent(fullPage, { batch: [{ start: 50, end: 80 }] })
+check(manual !== null && manual.range === null, 'a dataZoom event clears the selected range')
+if (manual && manual.range === null) {
+  check(manual.basis === barsBasis(fullPage) && manual.from === fullPage.bars[Math.ceil(LAST * 0.5)].date && manual.to === fullPage.bars[Math.floor(LAST * 0.8)].date, `manual window dates: ${manual.from}～${manual.to}`)
+  check(JSON.stringify(zoomForView(fullPage, manual)) === '{"start":50,"end":80}', 'the same bars keep the dragged percents (no snapping while dragging)')
+  const onWeekly = windowOf(weeklyPage, manual)
+  const firstWeek = weeklyPage.bars[onWeekly.startValue]
+  const lastWeek = weeklyPage.bars[onWeekly.endValue]
+  check((firstWeek.week_start ?? '') <= manual.from && firstWeek.date >= manual.from, `the manual start lands in its week: ${firstWeek.week_start}～${firstWeek.date} holds ${manual.from}`)
+  check((lastWeek.week_start ?? '') <= manual.to && lastWeek.date >= manual.to, `the manual end lands in its week: ${lastWeek.week_start}～${lastWeek.date} holds ${manual.to}`)
+  const weeklyAll = viewFromZoomEvent(weeklyPage, { start: 0, end: 100 })
+  check(weeklyAll !== null, 'a weekly zoom event gives a manual view')
+  if (weeklyAll) {
+    const back = windowOf(fullPage, weeklyAll)
+    check(back.startValue === Math.max(0, firstOnOrAfter(fullPage, weeklyPage.bars[0].week_start ?? '')) && back.endValue === LAST, `週K → 日K maps the weekly window back by its first week start: ${JSON.stringify(back)}`)
+  }
+  check(!needsMoreBars(fullPage, manual), 'a manual zoom asks for nothing')
+}
+check(viewFromZoomEvent(fullPage, { start: 'x' }) === null && viewFromZoomEvent(fullPage, null) === null, 'an event without percents changes nothing')
+const pressed = (markup: string) => [...markup.matchAll(/<button type="button" class="badge filter-chip( filter-chip-selected)?" aria-pressed="(true|false)">([^<]+)<\/button>/g)].map((match) => `${match[3]}:${match[2]}`)
+check(pressed(render(fullPage)).join() === '1M:false,3M:false,6M:true,1Y:false,全部:false', `range buttons render with 6M pressed: ${pressed(render(fullPage)).join()}`)
+check(pressed(render(weeklyPage, 'week')).join() === '1M:false,3M:false,6M:true,1Y:false,全部:false', 'the weekly chart has the same buttons')
+
+// 全部 (or a range before the first loaded bar) asks for more only when the page is full and under the API maximum.
+check(STOCK_BARS_MAX_LIMIT === 1500, 'the longer request uses the bars API maximum (backend app.stock_bars.MAX_LIMIT)')
+check(needsMoreBars(fullPage, { range: 'all' }) && !needsMoreBars(fullPage, { range: '1y' }) && !needsMoreBars(fullPage, { range: '6m' }), '全部 asks for more; 1Y fits in a page that reaches back a year')
+check(needsMoreBars(dailyOf(weekdays(200), 200), { range: '1y' }), 'a range reaching before a full page asks for more')
+check(!needsMoreBars(short, { range: 'all' }) && !needsMoreBars(weeklyPage, { range: 'all' }), 'a page shorter than its limit is the whole history')
+check(!needsMoreBars({ ...fullPage, limit: STOCK_BARS_MAX_LIMIT, count: STOCK_BARS_MAX_LIMIT }, { range: 'all' }), 'the API maximum is not asked again')
+
+// Crosshair on touch (#600 headless Edge check): the tooltip stays inside the chart, and a sideways drag reaches the chart.
+declare const require: (id: string) => unknown
+declare const __dirname: string
+const chartCss = (require('node:fs') as { readFileSync(file: string, encoding: 'utf8'): string }).readFileSync((require('node:path') as { join(...parts: string[]): string }).join(__dirname, '..', 'styles.css'), 'utf8')
+const tooltip = option1m.tooltip as { confine?: boolean; trigger?: string; axisPointer?: { type?: string } }
+check(tooltip.confine === true && tooltip.trigger === 'axis' && tooltip.axisPointer?.type === 'cross', 'the crosshair tooltip is confined to the chart')
+check(/\.chart-stage \{[^}]*touch-action: pan-y/.test(chartCss), 'the chart takes sideways drags (touch-action: pan-y)')
+// Chromium Edge ("Edg/", which zrender takes for old Edge) gets Chrome's input path; other browsers are left alone.
+const edgeTouch = { browser: { newEdge: true }, touchEventsSupported: false, pointerEventsSupported: true }
+check(preferChromeInputPath(edgeTouch, true) && edgeTouch.touchEventsSupported && !edgeTouch.pointerEventsSupported, 'Chromium Edge with touch listens to touch events')
+const edgeMouse = { browser: { newEdge: true }, touchEventsSupported: false, pointerEventsSupported: true }
+check(preferChromeInputPath(edgeMouse, false) && !edgeMouse.touchEventsSupported && !edgeMouse.pointerEventsSupported, 'Chromium Edge without touch listens to mouse events, as Chrome')
+const chrome = { browser: { newEdge: false }, touchEventsSupported: true, pointerEventsSupported: false }
+check(!preferChromeInputPath(chrome, true) && chrome.touchEventsSupported && !chrome.pointerEventsSupported, 'Chrome is not changed')
+const oldIe = { browser: { newEdge: false }, touchEventsSupported: false, pointerEventsSupported: true }
+check(!preferChromeInputPath(oldIe, true) && oldIe.pointerEventsSupported, 'IE11 and EdgeHTML keep pointer events')
