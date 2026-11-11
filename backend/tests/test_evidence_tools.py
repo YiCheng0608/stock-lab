@@ -21,6 +21,7 @@ from app.models import (
     ChipSnapshot,
     CorporateAction,
     DailyCandidate,
+    FundamentalSnapshot,
     Instrument,
     MarketBar,
     MonthlyRevenue,
@@ -187,6 +188,25 @@ def copy_db(tmp_path_factory) -> Path:
                     source="test",
                     raw_payload_id=1,
                     data_as_of="x",
+                )
+            )
+        # Stock 2's statements carry the year's cumulative EPS.  The third
+        # quarter of 2025 counts from session 55; the others from before.
+        for period_end, announced, eps in (
+            (date(2024, 6, 30), date(2024, 8, 14), 2.0),
+            (date(2024, 9, 30), date(2024, 11, 14), 3.0),
+            (date(2025, 3, 31), date(2025, 5, 15), 1.2),
+            (date(2025, 6, 30), date(2025, 8, 14), 2.6),
+            (date(2025, 9, 30), days[55], 4.2),
+        ):
+            db.add(
+                FundamentalSnapshot(
+                    instrument_id=2,
+                    period_end=period_end,
+                    fiscal_period=f"Q{period_end.month // 3}",
+                    announcement_date=announced,
+                    eps=eps,
+                    source="test",
                 )
             )
         # Candidates of session 100: v7 ranks the fastest stocks first; the v6
@@ -357,6 +377,19 @@ def test_revenue_counts_from_its_announcement(panel):
     assert feature("revenue_high_12")(item, 70) is None  # fewer than 12 months known
     assert yoy(item, 130) is None  # November is stale by then
     assert yoy(panel.series[2], 70) is None
+
+
+def test_quarterly_eps_is_the_quarters_own_and_counts_from_its_date(panel):
+    item, prices = panel.series[2], closes(2)
+    # Session 54: the second quarter is the latest known, 2.6 - 1.2 on its own;
+    # a year before needs the first quarter of 2024, which is not stored.
+    assert feature("eps_yield")(item, 54) == pytest.approx(1.4 * 4 / prices[54])
+    assert feature("eps_growth_yield")(item, 54) is None
+    # Session 55: the third quarter, 4.2 - 2.6, against 3.0 - 2.0 a year before.
+    assert feature("eps_yield")(item, 55) == pytest.approx(1.6 * 4 / prices[55])
+    assert feature("eps_growth_yield")(item, 55) == pytest.approx(0.6 / prices[55])
+    assert feature("eps_yield")(item, 199) is None  # stale by then
+    assert feature("eps_yield")(panel.series[3], 55) is None  # no statement
 
 
 def test_the_rules_conditions(panel):

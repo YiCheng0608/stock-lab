@@ -63,6 +63,9 @@ CHIP_FIELDS = (
 )
 # A revenue month older than this many calendar days at T is not "the latest".
 REVENUE_STALE_DAYS = 80
+# The same for a quarter's end: the next quarter is due within about 135 days,
+# the annual report within about 180.
+QUARTER_STALE_DAYS = 200
 
 
 def _load(name: str):
@@ -111,6 +114,9 @@ class Series:
         default_factory=list
     )
 
+    # (announcement_date, period_end, cumulative basic EPS of the year), by announcement.
+    quarters: list[tuple[date, date, float]] = field(default_factory=list)
+
     def is_suspended(self, at: int) -> bool:
         return self.suspended[at + 1] != self.suspended[at]
 
@@ -145,6 +151,7 @@ def load_panel(db: Path, start: date, raw_dir: Path) -> Panel:
         }
         _load_chips(con, series, start)
         _load_revenues(con, series)
+        _load_quarters(con, series)
         symbols = {
             row[0]: (row[1], row[2], row[3])
             for row in con.execute("select id, exchange, symbol, name from instruments")
@@ -225,6 +232,27 @@ def _load_revenues(con: sqlite3.Connection, series: dict[int, Series]) -> None:
                     revenue,
                     prior,
                 )
+            )
+
+
+def _load_quarters(con: sqlite3.Connection, series: dict[int, Series]) -> None:
+    """Quarterly statements with a known availability date and an EPS.
+
+    ``eps`` is the year's cumulative figure to the quarter's end
+    (docs/DATA_SOURCES.md 季度財報回補); ``announcement_date`` is the day the
+    row counts from (the filing deadline for a backfilled quarter).
+    """
+
+    rows = con.execute(
+        "select instrument_id, announcement_date, period_end, eps "
+        "from fundamental_snapshots where announcement_date is not null "
+        "and eps is not null order by announcement_date, period_end"
+    )
+    for instrument_id, announced, period_end, eps in rows:
+        item = series.get(instrument_id)
+        if item is not None:
+            item.quarters.append(
+                (date.fromisoformat(announced), date.fromisoformat(period_end), eps)
             )
 
 

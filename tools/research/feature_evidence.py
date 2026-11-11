@@ -40,7 +40,8 @@ times two horizons are compared at once: a few pass by chance, which the
 report says.
 
 Every feature uses rows dated T or earlier.  A monthly revenue counts from
-its ``announcement_date``.  Chips of T are taken as known at T's close, the
+its ``announcement_date``, a quarterly statement from its own (the filing
+deadline for a backfilled quarter).  Chips of T are taken as known at T's close, the
 live rules' assumption (docs/spec/README.md).
 """
 
@@ -232,6 +233,58 @@ def revenue_high_12(item: lib.Series, at: int) -> float | None:
     return 1.0 if last[-1] >= max(last) else 0.0
 
 
+def _quarter_eps(item: lib.Series, at: int) -> tuple[float, float | None] | None:
+    """(the latest quarter's own EPS, the same quarter's a year before) known at T.
+
+    Statements carry the year's cumulative EPS, so a quarter's own is the
+    difference from the quarter before in the same year (the first quarter's
+    is the cumulative figure).  None when the latest known quarter is stale or
+    the quarter before it is not known.
+    """
+
+    day = item.dates[at]
+    known = bisect_right(item.quarters, day, key=lambda row: row[0])
+    cumulative = {end: eps for _announced, end, eps in item.quarters[:known]}
+    if not cumulative:
+        return None
+    latest = max(cumulative)
+    if (day - latest).days > lib.QUARTER_STALE_DAYS:
+        return None
+
+    def own(end: date) -> float | None:
+        if end not in cumulative:
+            return None
+        if end.month == 3:
+            return cumulative[end]
+        before = date(end.year, end.month - 3, 31 if end.month == 6 else 30)
+        return cumulative[end] - cumulative[before] if before in cumulative else None
+
+    now = own(latest)
+    if now is None:
+        return None
+    return now, own(date(latest.year - 1, latest.month, latest.day))
+
+
+def eps_yield(item: lib.Series, at: int) -> float | None:
+    """The latest quarter's EPS, annualised, over T's close."""
+
+    eps, close = _quarter_eps(item, at), item.close[at]
+    return eps[0] * 4.0 / close if eps and close > 0 else None
+
+
+def eps_growth_yield(item: lib.Series, at: int) -> float | None:
+    """The quarter's EPS less the same quarter's a year before, over T's close.
+
+    Over the price, not over last year's EPS: a ratio of EPS breaks down
+    when last year's was near zero or negative.
+    """
+
+    eps, close = _quarter_eps(item, at), item.close[at]
+    if not eps or eps[1] is None or not close > 0:
+        return None
+    return (eps[0] - eps[1]) / close
+
+
 # (key, label, group, function).  Adding one adds a comparison: say so in the report.
 FEATURES: tuple[
     tuple[str, str, str, Callable[[lib.Series, int], float | None]], ...
@@ -269,6 +322,8 @@ FEATURES: tuple[
     ("revenue_yoy", "最新月營收年增率", "營收", revenue_yoy),
     ("revenue_yoy_change", "月營收年增率較前月變化", "營收", revenue_yoy_change),
     ("revenue_high_12", "月營收創近 12 個月新高", "營收", revenue_high_12),
+    ("eps_yield", "最新一季 EPS 年化 ÷ 股價", "財報", eps_yield),
+    ("eps_growth_yield", "單季 EPS 年增額 ÷ 股價", "財報", eps_growth_yield),
 )
 
 
