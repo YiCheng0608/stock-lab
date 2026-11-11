@@ -782,8 +782,16 @@ def _fallback_upgrade_on_connection(connection) -> None:
     )
     # 0031 (#629) drops the theme suggestion tables of an older database; their
     # rows were an aggregate of news_llm_results.  The child table goes first.
-    for table in ("theme_suggestion_news", "theme_suggestions"):
-        connection.execute(text(f"DROP TABLE IF EXISTS {table}"))
+    # Like the Alembic revision, this runs once: not again after the marker is written.
+    dropped = connection.execute(
+        text(
+            "SELECT 1 FROM schema_migrations "
+            "WHERE version = '0031_drop_theme_suggestions'"
+        )
+    ).first()
+    if dropped is None:
+        for table in ("theme_suggestion_news", "theme_suggestions"):
+            connection.execute(text(f"DROP TABLE IF EXISTS {table}"))
     connection.execute(
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "

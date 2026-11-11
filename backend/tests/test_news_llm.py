@@ -1813,9 +1813,7 @@ def test_themes_the_source_writes_or_directly_gives_are_kept(db, fake, monkeypat
     assert db.scalars(select(DataQuality)).all() == []
 
 
-def test_a_dropped_theme_is_recorded_and_never_shown_or_suggested(
-    db, fake, client, monkeypatch
-):
+def test_a_dropped_theme_is_recorded_and_never_shown(db, fake, client, monkeypatch):
     # AC-3
     items = _add_theme_cases(db, 5942, 5943, 5961)
     monkeypatch.setenv("FAKE_CLAUDE_MODES", "theme_cases")
