@@ -19,7 +19,7 @@ const panel = (rows: FundamentalSnapshot[], instrumentType = 'stock', asOf: stri
   renderToStaticMarkup(<StockFundamentalsPanel rows={rows} instrumentType={instrumentType} asOf={asOf} sourceLabel={label} />)
 
 // ---- the tab ----
-check(STOCK_TABS.map((tab) => tab.label).join('／') === '圖表與指標／法人籌碼／財務／新聞與公告／研究條件／資料說明', `財務 sits after 法人籌碼, got ${STOCK_TABS.map((tab) => tab.label).join('／')}`)
+check(STOCK_TABS.map((tab) => tab.label).join('／') === '走勢／籌碼／財務／新聞與公告／進出場／資料來源', `財務 sits after 籌碼, got ${STOCK_TABS.map((tab) => tab.label).join('／')}`)
 check(parseStockTab('financials') === 'financials', '?tab=financials opens 財務')
 
 // ---- rows: period, 億元, EPS, ROE, 可得日, source ----

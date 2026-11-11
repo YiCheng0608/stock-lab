@@ -1605,7 +1605,7 @@ def _summary_page(
         "2884\n玉山金\n資料 2026/11/05\n來源 臺灣證券交易所\n"
         f"目前判斷\n資料 2026/11/05\n{verdict}\n{reason}\n{closest}"
         "規則價位\n條件未成立・觀察價位\n收盤（元） ≥\n50.20\n完整條件 →\n"
-        "圖表與指標\n法人籌碼\n"
+        "走勢\n籌碼\n"
     )
 
 
@@ -1658,7 +1658,7 @@ def test_s11_fails_on_a_wrong_verdict_or_the_old_page(tmp_path):
         _s11(tmp_path, payload, _summary_page("觀察", "x"))
     # Before #519 the header was followed by the cutoff form and the tabs.
     old = (
-        "2884\n玉山金\n資料 2026/11/05\n來源 臺灣證券交易所\n研究截止日期\n圖表與指標\n"
+        "2884\n玉山金\n資料 2026/11/05\n來源 臺灣證券交易所\n研究截止日期\n走勢\n"
     )
     with pytest.raises(page_checks.Fail, match="缺整行 `目前判斷`"):
         _s11(tmp_path, payload, old)
@@ -1681,7 +1681,7 @@ def _board_page(summary_label: bool) -> str:
         "目前判斷\n觀察\n規則價位\n條件未成立・觀察價位\n" if summary_label else ""
     )
     return (
-        f"{summary}圖表與指標\n研究條件\n策略總表\n資料 2026/11/05\n價位規則 v1\n"
+        f"{summary}走勢\n進出場\n策略總表\n資料 2026/11/05\n價位規則 v1\n"
         "突破條件\t\n觀察\t收盤未突破前 20 日高點\n條件未成立・觀察價位\n"
         "回踩條件\t\n成立\t全部達成\n"
     )
@@ -1730,7 +1730,7 @@ FUNDAMENTAL_ROWS = [
 def _financials_page(rows_text: str, badge: str = "資料 2026/09/30\n") -> str:
     # StockFundamentalsPanel as innerText: eyebrow, title, badge, 說明, table, source line.
     return (
-        "圖表與指標\n法人籌碼\n財務\n新聞與公告\n財務資料\n季報營收與 EPS\n"
+        "走勢\n籌碼\n財務\n新聞與公告\n財務資料\n季報營收與 EPS\n"
         f"{badge}說明\n期別\t年初至季底累計營收（億元）\t年初至季底累計 EPS（元）\t"
         f"ROE（%）\t可得日\t來源\n{rows_text}來源：公開資訊觀測站 季報\n"
     )
@@ -1778,7 +1778,7 @@ def test_s12_fails_on_a_wrong_value_order_or_badge(tmp_path):
 def test_s12_fails_on_the_old_page_without_the_tab(tmp_path):
     payload = {"fundamentals": [], "instrument": {"instrument_type": "stock"}}
     with pytest.raises(page_checks.Fail, match="缺整行 `季報營收與 EPS`"):
-        _s12(tmp_path, payload, "圖表與指標\n法人籌碼\n新聞與公告\n")
+        _s12(tmp_path, payload, "走勢\n籌碼\n新聞與公告\n")
 
 
 def test_s12_reads_the_empty_reason_by_instrument_type(tmp_path):

@@ -2445,8 +2445,8 @@ def s11(run: Run, stock: Stock) -> str:
     verdict, reason = summary_verdict(payload)
     k = text.find(SUMMARY_COLUMNS[0])
     expect(k >= 0, f"缺整行 `{SUMMARY_COLUMNS[0]}`（摘要卡）")
-    tabs = text.find("圖表與指標", k)
-    expect(tabs > k, "摘要卡之後缺分頁籤 `圖表與指標`")
+    tabs = text.find("走勢", k)
+    expect(tabs > k, "摘要卡之後缺分頁籤 `走勢`")
     card = text.lines[k:tabs]
     expect(
         verdict in card[1:4],

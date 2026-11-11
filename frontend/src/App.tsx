@@ -744,7 +744,7 @@ function StockPage() {
       {tab === 'financials' && <StockFundamentalsPanel rows={data.fundamentals} monthlyRows={data.monthly_revenues ?? []} instrumentType={data.instrument.instrument_type} asOf={asOf || null} sourceLabel={sourceLabel} />}
       {tab === 'news' && <><StockNewsTimeline exchange={data.instrument.exchange} symbol={data.instrument.symbol} query={{ data: stockNews.data, loading: stockNews.isLoading, error: stockNews.error }} /><StockEventList events={data.events} /></>}
       {tab === 'research' && <><StrategyBoardPanel board={data.strategy_board} candidate={data.candidate} gapReasons={data.decision_summary?.gap_reasons} /><ActionDetailPanel action={data.decision_summary ?? null} gap={fallbackResearchIncomplete ? { reasons: data.decision_summary?.gap_reasons, missingFields: qualitySummary.research.missing_fields } : null}><StockPlanPanel strategies={data.decision_summary?.strategies} embedded /></ActionDetailPanel><GroupPanel groups={data.groups} /></>}
-      {tab === 'data' && <><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><Card className="stock-source-panel" eyebrow="資料說明" title="原始時間、來源與技術指標"><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div><IndicatorMetaRows bars={dayBars.data} /><details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} instrumentType={data.instrument.instrument_type} /></details></Card></>}
+      {tab === 'data' && <><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><Card className="stock-source-panel" eyebrow="資料來源" title="原始時間、來源與技術指標"><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div><IndicatorMetaRows bars={dayBars.data} /><details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} instrumentType={data.instrument.instrument_type} /></details></Card></>}
     </div>
     <p className="disclaimer">此為研究工具與資料摘要，不構成投資建議、報酬保證或自動下單指令。</p>
   </div>
@@ -890,7 +890,7 @@ export function ActionDetailPanel({ action, gap, children }: { action: ActionSum
       </div>}
       {detailReasons.length > 0 && <ul className="reason-list">{detailReasons.map((reason) => <li key={reason}>{action.display_reasons ? reason : productActionReasonLabel(reason)}</li>)}</ul>}
       {action.conflicts.length > 0 && <div className="warning-box">{action.conflicts.join('；')}</div>}
-      <div className="small-note">資料日：{formatTaiwanDateTime(action.data_cutoff, true)} · 價位語意：{levelSemanticsLabel(action.level_semantics)} · 規則與官方資料詳見資料說明。</div>
+      <div className="small-note">資料日：{formatTaiwanDateTime(action.data_cutoff, true)} · 價位語意：{levelSemanticsLabel(action.level_semantics)} · 規則與官方資料詳見「資料來源」分頁。</div>
     </details>
     {children && <div className="action-detail-plan">{children}</div>}
   </section>

@@ -13,8 +13,8 @@ export function cutoffSubmission(value: string, latestDay: string | null): strin
   return value && value !== latestDay ? value : ''
 }
 
-// 研究截止日期 in the stock page header. Above 640px the form is always shown; at 640px and below it folds behind
-// a one-line toggle so the header and tabs fit the first screen, and starts open when a cutoff is applied
+// 研究截止日期 in the stock page header. At every width the form folds behind
+// a one-line toggle so the header, summary card and chart fit the first screen, and starts open when a cutoff is applied
 // (DESIGN_SYSTEM §4 手機第一屏). `effectiveDate` is the cutoff the API actually used, so 「最新資料」 names its day,
 // the date field starts on it and cannot go past it, and the form says what a cutoff does (UI_COPY_SPEC §8.2
 // 研究截止日期, #463, #492).

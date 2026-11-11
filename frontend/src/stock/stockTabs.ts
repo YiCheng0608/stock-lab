@@ -2,12 +2,12 @@
 export type StockTab = 'chart' | 'chips' | 'financials' | 'news' | 'research' | 'data'
 
 export const STOCK_TABS: ReadonlyArray<{ id: StockTab; label: string }> = [
-  { id: 'chart', label: '圖表與指標' },
-  { id: 'chips', label: '法人籌碼' },
+  { id: 'chart', label: '走勢' },
+  { id: 'chips', label: '籌碼' },
   { id: 'financials', label: '財務' },
   { id: 'news', label: '新聞與公告' },
-  { id: 'research', label: '研究條件' },
-  { id: 'data', label: '資料說明' },
+  { id: 'research', label: '進出場' },
+  { id: 'data', label: '資料來源' },
 ]
 
 export const DEFAULT_STOCK_TAB: StockTab = 'chart'

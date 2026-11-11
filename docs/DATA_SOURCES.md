@@ -133,7 +133,7 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 - 該列沒有那份檔時，那一組四欄都是 null，值也是 null（只有融資、只有法人的列照樣保存，見[法人口徑](#法人口徑)）。
 - 列層級的 `source`、`raw_payload_id`、`data_as_of`、`collected_at` 是兩組的摘要（`app.chip_provenance.summarize`）：`source` 依法人、融資的順序以 `+` 連接兩組來源；`raw_payload_id` 與 `data_as_of` 取法人組，沒有法人組時取融資組；`collected_at` 取兩組中較晚的。
 - 寫入規則見 [重跑與回補](ops/SCHEDULING.md#重跑與回補)；0021 以前寫入的列由 [`chips provenance`](ops/CLI.md#現有-worker-cli) 依已存的 raw 補寫。補寫前，讀取端依列層級欄位推出兩組（`app.chip_provenance.legacy_groups`）；這時融資組沒有 raw 參照，10/19 起由 21:30 補上融資的列看不出融資來源。
-- API `GET /api/stocks/<exchange>/<symbol>` 的 `chips[]` 帶 `institutional`、`margin`（各含 `source`、`data_as_of`、`collected_at`，沒有該組為 null）；個股頁「法人籌碼」的表格欄位依各自那一組判斷單位，來源說明分 `法人：`、`融資：` 兩行。
+- API `GET /api/stocks/<exchange>/<symbol>` 的 `chips[]` 帶 `institutional`、`margin`（各含 `source`、`data_as_of`、`collected_at`，沒有該組為 null）；個股頁「籌碼」的表格欄位依各自那一組判斷單位，來源說明分 `法人：`、`融資：` 兩行。
 
 ### TPEx 當日 OpenAPI
 
