@@ -878,21 +878,6 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
 .plan-strategy-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg-alt); }
 .plan-strategy-list .plan-add { margin-top: 0; }
 
-/* ---- news theme suggestions (#216, DESIGN_SYSTEM §7: LLM output with the accent bar) ------------- */
-.theme-suggestions { margin-top: var(--space-10); }
-.theme-suggestions .section-head { flex-wrap: wrap; }
-.theme-suggestion-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: var(--space-4); margin-top: var(--space-3); }
-.theme-suggestion { min-width: 0; padding: var(--space-5); }
-.theme-suggestion .ai-inference-head { flex-wrap: wrap; margin-bottom: var(--space-2); }
-.theme-suggestion h3 { margin: 0; font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
-.theme-suggestion-badges { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); }
-.theme-suggestion-stats { margin: 0; color: var(--color-text-muted); font-size: 14px; }
-.theme-suggestion-stats b { color: var(--color-text); font: 600 16px var(--font-mono); font-variant-numeric: tabular-nums; }
-.theme-suggestion-news { margin-top: var(--space-3); }
-.theme-suggestion-news summary { cursor: pointer; color: var(--color-primary); font-size: 14px; }
-.suggestion-news { margin-top: var(--space-2); }
-.suggestion-news a { color: var(--color-text); font-weight: 600; overflow-wrap: anywhere; }
-.suggestion-news a:hover { color: var(--color-primary); }
 
 /* ---- responsive --------------------------------------------------------------------------------- */
 /* The market overview clips its turnover and breadth rows when four widgets share one row below 1200px, and the two
@@ -931,7 +916,7 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .theme-news-title { white-space: normal; }
   .stat-grid, .three-stats { grid-template-columns: repeat(2, 1fr); margin-bottom: var(--space-10); }
   .position-list, .news-grid, .glossary-grid, .inline-form { grid-template-columns: 1fr; }
-  .theme-suggestion-grid, .plan-grid { grid-template-columns: 1fr; }
+  .plan-grid { grid-template-columns: 1fr; }
   .home-columns { grid-template-columns: 1fr; }
   .candidate-detail-body { grid-template-areas: "note" "side" "folds"; grid-template-columns: minmax(0, 1fr); }
   .news-cards, .news-detail-grid { grid-template-columns: 1fr; }
