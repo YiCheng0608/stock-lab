@@ -1137,27 +1137,13 @@ def test_g3_fails_when_a_component_differs_from_the_api(tmp_path):
         page_checks.g3(_g3_run(tmp_path, page, page))
 
 
-def _g4_run(tmp_path, card):
-    payload = {"items": [{"id": 1}, {"id": 2}], "meta": {"total": 2}}
-    page = (
-        "族群榜\n新聞聚合 · AI 推論\n新聞題材建議\n2 個建議 · 最近更新 2026/11/04 20:00\n"
-        f"AI\n{card}\n3 則新聞\n資安\n{card}\n2 則新聞\n"
-    )
-    return FakeRun(
-        tmp_path,
-        {"theme-suggestions?limit=20": payload},
-        {"themes-1280": page},
-    )
-
-
-def test_g4_passes_when_every_suggestion_is_ai_inference(tmp_path):
-    assert "沒有 `待核實`" in page_checks.g4(_g4_run(tmp_path, "AI 推論"))
-
-
-def test_g4_fails_on_a_suggestion_marked_pending(tmp_path):
-    # #465: before the fix each card carried 「待核實」 next to 「AI 推論」.
-    run = _g4_run(tmp_path, "待核實\nAI 推論")
-    with pytest.raises(page_checks.Fail, match="2 行含 `待核實`"):
+def test_g4_fails_when_the_suggestions_are_back(tmp_path):
+    # Issue 627: the themes page dropped the news theme suggestions.
+    run = FakeRun(tmp_path, {}, {"themes-1280": "族群榜\n產業榜 · 共 2 個族群\n"})
+    assert "沒有新聞題材建議區" in page_checks.g4(run)
+    page = "族群榜\n新聞聚合 · AI 推論\n新聞題材建議\n2 個建議\n"
+    run = FakeRun(tmp_path, {}, {"themes-1280": page})
+    with pytest.raises(page_checks.Fail, match="族群頁仍有 `新聞題材建議`"):
         page_checks.g4(run)
 
 

@@ -43,7 +43,6 @@ TREE = {
     "main.tsx": "import App from './App'\nimport './styles.css'\n",
     "App.tsx": (
         "import { Card } from './components/ui'\n"
-        "import { ThemeSuggestionsSection } from './themes/ThemeSuggestionViews'\n"
         "import { HotGroupsSection } from './themes/ThemeViews'\n"
         "import { StockBarsChart } from './stock/StockBarsChart'\n"
         "import { NewsCard } from './news/NewsViews'\n"
@@ -53,12 +52,8 @@ TREE = {
     "styles.css": "body {}\n",
     "components/ui/index.ts": "export { Card } from './Card'\n",
     "components/ui/Card.tsx": "export const Card = 1\n",
-    "themes/ThemeSuggestionViews.tsx": (
-        "import { AiBadge } from '../news/NewsViews'\n"
-        "import { Card } from '../components/ui'\n"
-    ),
     "themes/ThemeViews.tsx": "import { readChartTheme } from '../stock/stockBars'\n",
-    "themes/themeSuggestions.test.tsx": "import { X } from './ThemeSuggestionViews'\n",
+    "themes/themeBoards.test.tsx": "import { X } from './ThemeViews'\n",
     "stock/StockBarsChart.tsx": "import { bars } from './stockBars'\n",
     "stock/StockHeader.tsx": "import { quote } from './stockBars'\n",
     "stock/stockBars.ts": "export const bars = 1\n",
@@ -130,8 +125,8 @@ def route_lines(route: str, source: str = API_SOURCE) -> set[int]:
 
 
 def test_single_frontend_page_verifies_only_that_page(importers):
-    result = plan(FE + "themes/ThemeSuggestionViews.tsx", importers=importers)
-    assert result.pages == ["themes"]
+    result = plan(FE + "today/TodayViews.tsx", importers=importers)
+    assert result.pages == ["today"]
 
 
 def test_frontend_file_shared_by_some_pages_verifies_those_pages(importers):
@@ -146,7 +141,7 @@ def test_frontend_file_shared_by_some_pages_verifies_those_pages(importers):
 def test_api_endpoint_verifies_the_pages_that_use_it():
     lines = route_lines("GET /candidates")
     assert plan("backend/app/api.py", api_lines=lines).pages == ["today"]
-    lines = route_lines("GET /theme-suggestions")
+    lines = route_lines("GET /themes/{theme_id}/members")
     assert plan("backend/app/api.py", api_lines=lines).pages == ["themes"]
     # The market page's TAIEX chart reads it too (Issue 549).
     lines = route_lines("GET /stocks/{exchange}/{symbol}/bars")
@@ -297,7 +292,7 @@ def test_docs_and_tests_only_are_not_verified(importers):
         "docs/WORKFLOW.md",
         "AGENTS.md",
         "backend/tests/test_api.py",
-        FE + "themes/themeSuggestions.test.tsx",
+        FE + "themes/themeBoards.test.tsx",
         FE + "news/news.fixtures.ts",
         "tools/ci/checks.py",
         "docs/templates/pull-request.md",
@@ -309,15 +304,16 @@ def test_docs_and_tests_only_are_not_verified(importers):
 
 def test_plan_names_a_reason_for_each_page(importers):
     result = plan(
-        FE + "themes/ThemeSuggestionViews.tsx",
+        FE + "today/TodayViews.tsx",
         "backend/app/api.py",
         importers=importers,
-        api_lines=route_lines("GET /candidates"),
+        api_lines=route_lines("GET /themes/{theme_id}/members"),
     )
     assert result.pages == ["today", "themes"]
     text = verify_plan.markdown(result, "- head")
-    assert "| 今日可買 `/` | `backend/app/api.py` `GET /candidates` |" in text
-    assert "| 族群 `/themes` | `" + FE + "themes/ThemeSuggestionViews.tsx` |" in text
+    assert "| 今日可買 `/` | `" + FE + "today/TodayViews.tsx` |" in text
+    route = "`backend/app/api.py` `GET /themes/{theme_id}/members`"
+    assert "| 族群 `/themes` | " + route + " |" in text
     assert "- 範圍：不驗" in verify_plan.markdown(plan("docs/a.md"), "- head")
 
 
@@ -374,6 +370,6 @@ def test_frontend_problems_name_a_missing_page_and_a_missing_file(importers, tmp
     problems = verify_plan.frontend_problems(rules, importers, tmp_path)
     assert f"驗證範圍列了前端檔 `{FE}gone.tsx`，檔案不存在" in problems
     assert (
-        f"前端檔 `{FE}news/NewsViews.tsx` 被 `{FE}themes/ThemeSuggestionViews.tsx` "
-        "import，驗證範圍少了 themes"
+        f"前端檔 `{FE}news/NewsViews.tsx` 被 `{FE}candidates/CandidateViews.tsx` "
+        "import，驗證範圍少了 today、stocks、actions"
     ) in problems

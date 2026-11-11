@@ -27,8 +27,6 @@ import {
   getTheme,
   getThemeMembers,
   getThemeBoard,
-  getThemeSuggestion,
-  getThemeSuggestions,
   addTrackingPlan,
   cancelTrackingPlan,
   getTrackingPlan,
@@ -85,8 +83,6 @@ import { StrategyBoardPanel } from './stock/StrategyBoardPanel'
 import { StrategyVersionList, backtestGroupKey } from './components/StrategyVersionCard'
 import { CoverageSummaryMetrics, backfillSessionsLabel, coverageReasonLabels } from './coverage/CoverageSummary'
 import { HotGroupsSection, ThemeDetailView, ThemesBoardView } from './themes/ThemeViews'
-import { ThemeSuggestionsSection, type SuggestionNewsState } from './themes/ThemeSuggestionViews'
-import { THEME_SUGGESTION_LIMIT } from './themes/themeSuggestions'
 import { CandidatesSection } from './candidates/CandidateViews'
 import { StockPlanPanel, TrackingClientProvider, TrackingSection, type TrackingClient } from './tracking/TrackingViews'
 import { DEFAULT_MEMBER_SORT, THEME_BOARD_LIMIT, THEME_NEWS_LIMIT, TODAY_BOARD_LIMIT, memberQuery, parseBoard } from './themes/themeBoards'
@@ -537,13 +533,7 @@ function ThemesPage() {
   // 今日可買 N 檔 on each row (Issue 522): the same latest list (and cache) as the today page.
   const candidates = useQuery({ queryKey: ['candidates', 'latest'], queryFn: () => getCandidates() })
   const changeBoard = (next: ThemeBoard) => setSearchParams(next === 'industry' ? {} : { board: next }, { replace: true })
-  const suggestions = useQuery({ queryKey: ['theme-suggestions', THEME_SUGGESTION_LIMIT], queryFn: () => getThemeSuggestions(THEME_SUGGESTION_LIMIT) })
-  const [expanded, setExpanded] = useState<number[]>([])
-  const fullNews = useQueries({ queries: expanded.map((id) => ({ queryKey: ['theme-suggestion', id], queryFn: () => getThemeSuggestion(id) })) })
-  const full: Record<number, SuggestionNewsState> = Object.fromEntries(expanded.map((id, index) => [id, { data: fullNews[index].data, loading: fullNews[index].isLoading, error: fullNews[index].error }]))
-  const loadAll = (id: number) => setExpanded((current) => current.includes(id) ? current : [...current, id])
-  return <ThemesBoardView board={board} onBoardChange={changeBoard} search={search} onSearchChange={setSearch} data={query.data} loading={query.isLoading} error={query.error} candidates={candidates.data}
-    suggestions={<ThemeSuggestionsSection data={suggestions.data} loading={suggestions.isLoading} error={suggestions.error} full={full} onLoadAll={loadAll} />} />
+  return <ThemesBoardView board={board} onBoardChange={changeBoard} search={search} onSearchChange={setSearch} data={query.data} loading={query.isLoading} error={query.error} candidates={candidates.data} />
 }
 
 function ThemePage() {

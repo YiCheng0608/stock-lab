@@ -203,7 +203,6 @@ export function ThemesBoardView({
   loading,
   error,
   candidates,
-  suggestions,
 }: {
   board: ThemeBoard
   onBoardChange: (board: ThemeBoard) => void
@@ -214,8 +213,6 @@ export function ThemesBoardView({
   error: unknown
   // The latest 今日可買 list, counted per group on the rows (Issue 522); missing or of another day, the rows say nothing.
   candidates?: CandidatesResponse
-  // News theme suggestions (#216), kept outside the ranked boards.
-  suggestions?: ReactNode
 }) {
   // The page explanation moved into the board's 說明 fold (Issue 522), so the title is only the eyebrow and the heading.
   return (
@@ -242,7 +239,6 @@ export function ThemesBoardView({
             ? <Card><EmptyState title="資料暫時無法載入" reason={errorReason(error)} /></Card>
             : data && <ThemeBoardPanel board={board} data={data} search={search} candidates={candidates} />}
       </div>
-      {suggestions}
     </div>
   )
 }
