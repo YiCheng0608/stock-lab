@@ -293,3 +293,39 @@ export function candidatesState(data: CandidatesResponse): CandidatesState {
 export function stockPath(item: Pick<CandidateItem, 'instrument'>): string {
   return '/stocks/' + encodeURIComponent(item.instrument.exchange) + '/' + encodeURIComponent(item.instrument.symbol)
 }
+
+// ---- terminal layout (DESIGN_SYSTEM §5 候選列表：價位尺與走勢圖) ----
+
+// The three rule prices the chart draws for a candidate: its entry (the zone midpoint when the API gives none), the
+// stop and the first target; null unless all three are there and in order.
+export function candidateChartLevels(levels: CandidateLevels): { entry: number; stop: number; target: number } | null {
+  const { low, high } = levels.entry_zone ?? { low: null, high: null }
+  const zone = isFiniteNumber(low) && isFiniteNumber(high) ? (low + high) / 2 : null
+  const entry = levels.entry ?? zone
+  const stop = levels.invalid_price
+  const target = levels.target_1
+  if (!isFiniteNumber(entry) || !isFiniteNumber(stop) || !isFiniteNumber(target)) return null
+  return stop > 0 && stop < entry && entry < target ? { entry, stop, target } : null
+}
+
+// Where the entry and the close sit between the stop (0) and the first target (100) on the price ladder. The close is
+// clamped to the ladder; `outside` says which end it ran past. null without a full set of levels or a close.
+export type LadderView = { entry: number; close: number; outside: 'below_stop' | 'above_target' | null }
+export function priceLadder(levels: CandidateLevels, close: number | null | undefined): LadderView | null {
+  const chart = candidateChartLevels(levels)
+  if (!chart || !isFiniteNumber(close)) return null
+  const span = chart.target - chart.stop
+  const at = (value: number) => ((value - chart.stop) / span) * 100
+  const position = at(close)
+  return {
+    entry: at(chart.entry),
+    close: Math.min(100, Math.max(0, position)),
+    outside: position < 0 ? 'below_stop' : position > 100 ? 'above_target' : null,
+  }
+}
+
+export function ladderLabel(view: LadderView): string {
+  if (view.outside === 'below_stop') return '收盤已低於停損'
+  if (view.outside === 'above_target') return '收盤已高於目標'
+  return view.close < view.entry ? '收盤在停損與進場之間' : '收盤在進場與目標之間'
+}
