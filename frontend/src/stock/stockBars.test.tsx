@@ -9,6 +9,9 @@ import {
   MA_LINES,
   STOCK_BARS_LIMIT,
   buildBarsChartOption,
+  chartLevels,
+  levelsNote,
+  CHART_LEVEL_LABELS,
   compactCount,
   formatBarVolume,
   volumeKind,
@@ -47,6 +50,7 @@ import {
   type IndicatorPanelId,
   type MaField,
 } from './stockBars'
+import { conditionalBreakout, incompleteRow, observationPullback } from './strategyBoard.fixtures'
 import { barsResponse, insufficientDaily, notComputedDaily, suspendedWithGapDaily, tradedBar, weeklySeries } from './stockBars.fixtures'
 import type { StockBarsResponse, TradingHalt } from '../types'
 
@@ -399,3 +403,34 @@ check(retryLonger(loadedState) === loadedState && retryLonger({ key }) !== null,
 check(swipeAxis(3, 4) === null && SWIPE_LOCK_PX === 8, 'under 8 px the direction is not decided yet')
 check(swipeAxis(6, -180) === 'vertical' && swipeAxis(-120, 20) === 'horizontal' && swipeAxis(10, 10) === 'horizontal', 'mostly vertical is a page scroll; a tie pans the chart')
 check((option1m.dataZoom as Array<Record<string, unknown>>)[0].preventDefaultMouseMove === false, 'the inside dataZoom does not block the page scroll')
+
+// ---- rule levels on the price pane (DESIGN_SYSTEM §6 規則價位線) ----
+const breakoutLevels = chartLevels(conditionalBreakout())
+check(JSON.stringify(breakoutLevels) === JSON.stringify({ entry: 2400, stop: 2364, target: 2458 }), `a conditional breakout draws trigger, stop and first target: ${JSON.stringify(breakoutLevels)}`)
+check(chartLevels(observationPullback()) === null && chartLevels(incompleteRow()) === null && chartLevels(null) === null, 'an observation, an incomplete row and no row draw no lines')
+const pullbackRow = { ...conditionalBreakout(), entry_type: 'pullback', levels: { kind: 'actionable' as const, entry_type: 'pullback', trigger_price: null, reference_entry: 27.27, entry_low: 26.85, entry_high: 27.69, invalid_price: 25.96, target_1: 28.15, target_2: null, risk_reward: 0.67 } }
+check(chartLevels(pullbackRow)?.entry === 27.27, 'a pullback enters at the reference entry (the zone midpoint from pullback_v4 on)')
+check(chartLevels({ ...pullbackRow, levels: { ...pullbackRow.levels, reference_entry: null } })?.entry === (26.85 + 27.69) / 2, 'without a reference entry the zone midpoint is the entry')
+check(chartLevels({ ...pullbackRow, levels: { ...pullbackRow.levels, invalid_price: null } }) === null, 'half a set of levels draws nothing')
+check(chartLevels({ ...pullbackRow, levels: { ...pullbackRow.levels, invalid_price: 28 } }) === null, 'levels out of order (stop above entry) draw nothing')
+const withLevels = (levels: ReturnType<typeof chartLevels>) => buildBarsChartOption(longDaily, { panel: 'macd', panelState: indicatorPanelState(longDaily, 'macd'), visibleMa: allMa, theme, layout, zoom: zoomForView(longDaily, { range: DEFAULT_BARS_RANGE }), digits: 2, levels })
+type Marked = { markLine?: { silent: boolean; data: Array<{ name: string; yAxis: number; lineStyle: { color: string; type: string }; label: { formatter: string } }> }; markArea?: { data: Array<Array<{ yAxis: number; itemStyle?: { color: string } }>> } }
+const levelled = withLevels(breakoutLevels)
+const candle = (levelled.series as Marked[])[0]
+check(candle.markLine?.data.map((line) => `${line.name}:${line.yAxis}`).join() === '目標:2458,進場:2400,停損:2364', `three lines on the K series: ${JSON.stringify(candle.markLine?.data)}`)
+check(candle.markLine?.silent === true, 'the lines do not take the pointer from the crosshair')
+const colorOf = (name: string) => candle.markLine?.data.find((line) => line.name === name)?.lineStyle.color
+check(colorOf('停損') === theme.warning && colorOf('目標') === theme.primary && colorOf('進場') === theme.text, 'stop is the warning token, target the primary token: never the up/down colors')
+check(candle.markLine?.data.find((line) => line.name === '進場')?.lineStyle.type === 'dashed', 'the entry line is dashed')
+check(candle.markLine?.data.find((line) => line.name === '停損')?.label.formatter === '停損 2,364.00', `the label carries the price: ${candle.markLine?.data[2].label.formatter}`)
+check(JSON.stringify(candle.markArea?.data.map((band) => band.map((edge) => edge.yAxis))) === '[[2400,2458],[2364,2400]]', 'the bands run entry to target and stop to entry')
+const priceAxis = (levelled.yAxis as Array<{ min?: (extent: { min: number }) => number; max?: (extent: { max: number }) => number }>)[0]
+check(priceAxis.min?.({ min: 2390 }) === 2364 && priceAxis.max?.({ max: 2410 }) === 2458, 'the price axis reaches a stop and a target outside the visible bars')
+check(priceAxis.min?.({ min: 2000 }) === 2000 && priceAxis.max?.({ max: 3000 }) === 3000, 'and keeps the bars when they reach further')
+const plain = withLevels(null)
+check((plain.series as Marked[])[0].markLine === undefined && (plain.yAxis as Array<{ min?: unknown }>)[0].min === undefined, 'no levels: the K series and the axis are as before')
+check(levelsNote(breakoutLevels!, 2) === '規則價位線：進場 2,400.00 元（虛線）、停損 2,364.00 元、目標 2,458.00 元；條件成立當日的價位，不是成交價。', levelsNote(breakoutLevels!, 2))
+check(Object.values(CHART_LEVEL_LABELS).join() === '進場,停損,目標', 'level labels')
+const chartWithLevels = renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => {}} data={longDaily} loading={false} error={null} levels={breakoutLevels} />)
+check(chartWithLevels.includes('data-chart-levels') && chartWithLevels.includes('含規則價位線'), 'the chart card states the levels as text')
+check(!renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => {}} data={longDaily} loading={false} error={null} />).includes('data-chart-levels'), 'no levels: no note')
