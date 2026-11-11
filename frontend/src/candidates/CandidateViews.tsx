@@ -37,6 +37,8 @@ import {
   formatRiskRewardWithBasis,
   formatSubItemValue,
   groupBoardLabel,
+  ladderLabel,
+  priceLadder,
   riskRewardBasisNote,
   stockPath,
   subItemLabel,
@@ -241,25 +243,44 @@ function groupShortText(item: CandidateItem): ReactNode {
   return `${group.name}（${board}，未排名）`
 }
 
+// The price ladder (DESIGN_SYSTEM §5 候選列表): the stop at the left end, the first target at the right, a tick at the
+// entry and a dot at the close. A drawing of numbers the row already states, so it carries a label and no text.
+export function PriceLadder({ item }: { item: CandidateItem }) {
+  const view = priceLadder(item.levels, item.market?.close)
+  if (!view) return null
+  return (
+    <div className="price-ladder" role="img" aria-label={ladderLabel(view)} data-ladder-outside={view.outside ?? undefined}>
+      <i className="price-ladder-risk" style={{ width: `${view.entry}%` }} />
+      <i className="price-ladder-reward" style={{ left: `${view.entry}%`, width: `${100 - view.entry}%` }} />
+      <i className="price-ladder-entry" style={{ left: `${view.entry}%` }} />
+      <i className="price-ladder-close" style={{ left: `${view.close}%` }} />
+    </div>
+  )
+}
+
 // One candidate (#510): who (rank, name, market · group) and how to enter (the #491 sentence) on two lines, the close,
 // RR and total on the right, then the AI entry. The detail is a <details> under the row the button opens, so every
 // detail stays in the DOM and the screenshot tool can open them all (DESIGN_SYSTEM §5 候選列表).
-function CandidateRow({ item, hidden, open, onOpen }: { item: CandidateItem; hidden: boolean; open: boolean; onOpen: (open: boolean) => void }) {
+function CandidateRow({ item, hidden, open, onOpen, selected, onSelect }: { item: CandidateItem; hidden: boolean; open: boolean; onOpen: (open: boolean) => void; selected: boolean; onSelect?: () => void }) {
   const { instrument } = item
   const levelsInSentence = entryPlanView(item).kind === 'levels'
   const detailId = `candidate-detail-${item.rank}`
   return (
-    <li className={cx('candidate-row', open && 'candidate-row-open')} data-candidate-rank={item.rank} hidden={hidden}>
+    <li className={cx('candidate-row', open && 'candidate-row-open', selected && 'candidate-row-selected')} data-candidate-rank={item.rank} hidden={hidden}>
       <div className="candidate-row-main">
         <div className="candidate-row-body">
           {/* One line of inline runs: 「#1 2377 微星 上市 · 族群」 reads as one line of page text too (page_checks T7). */}
           <p className="candidate-row-title">
-            <span className="candidate-rank" aria-label={`第 ${item.rank} 名`}>#{item.rank}</span>{' '}
+            {/* With a chart beside the list the rank is the button that picks the row's chart; its text stays 「#1」. */}
+            {onSelect
+              ? <button type="button" className="candidate-rank candidate-rank-button" aria-label={`第 ${item.rank} 名，顯示走勢圖`} aria-pressed={selected} onClick={onSelect}>#{item.rank}</button>
+              : <span className="candidate-rank" aria-label={`第 ${item.rank} 名`}>#{item.rank}</span>}{' '}
             <Link className="symbol-link candidate-row-name" to={stockPath(item)}><strong>{instrument.symbol}</strong> {instrument.name}</Link>{' '}
             <span className="candidate-row-meta" title={item.groups[0] ? candidateGroupText(item.groups[0]) : undefined}>{exchangeLabel(instrument.exchange)} · {groupShortText(item)}</span>
           </p>
           <EntryPlanCard item={item} className="candidate-entry" conditions={false} />
           {!levelsInSentence && <LevelCells item={item} className="candidate-row-levels" />}
+          <PriceLadder item={item} />
         </div>
         <dl className="candidate-row-nums">
           <div className="candidate-row-close"><dt>收盤（元）</dt><dd><CloseValue item={item} /></dd></div>
@@ -278,7 +299,7 @@ function CandidateRow({ item, hidden, open, onOpen }: { item: CandidateItem; hid
   )
 }
 
-function TodayCandidateList({ items }: { items: CandidateItem[] }) {
+function TodayCandidateList({ items, renderChart }: { items: CandidateItem[]; renderChart?: (item: CandidateItem) => ReactNode }) {
   const [open, setOpen] = useState<ReadonlySet<number>>(() => new Set())
   const [showAll, setShowAll] = useState(false)
   const setRank = (rank: number, value: boolean) => setOpen((current) => {
@@ -289,11 +310,15 @@ function TodayCandidateList({ items }: { items: CandidateItem[] }) {
     return next
   })
   const rest = Math.max(0, items.length - TODAY_VISIBLE)
-  return (
+  // The chart beside the list shows one candidate: the first until another row's rank is pressed.
+  const [picked, setPicked] = useState<number | null>(null)
+  const selected = items.find((item) => item.rank === picked) ?? items[0]
+  const list = (
     <>
       <ol className="candidate-list">
         {items.map((item, index) => (
-          <CandidateRow key={item.instrument.exchange + item.instrument.symbol} item={item} hidden={!showAll && index >= TODAY_VISIBLE} open={open.has(item.rank)} onOpen={(value) => setRank(item.rank, value)} />
+          <CandidateRow key={item.instrument.exchange + item.instrument.symbol} item={item} hidden={!showAll && index >= TODAY_VISIBLE} open={open.has(item.rank)} onOpen={(value) => setRank(item.rank, value)}
+            selected={!!renderChart && item === selected} onSelect={renderChart ? () => setPicked(item.rank) : undefined} />
         ))}
       </ol>
       {rest > 0 && (
@@ -303,9 +328,17 @@ function TodayCandidateList({ items }: { items: CandidateItem[] }) {
       )}
     </>
   )
+  if (!renderChart || !selected) return list
+  // 盤後終端 (DESIGN_SYSTEM §5 候選列表): the list on the left, the picked candidate's chart on the right from 1280px up.
+  return (
+    <div className="candidates-terminal">
+      <div className="candidates-terminal-list">{list}</div>
+      <aside className="candidates-terminal-chart" aria-label={`${selected.instrument.symbol} ${selected.instrument.name} 走勢圖`} data-chart-rank={selected.rank}>{renderChart(selected)}</aside>
+    </div>
+  )
 }
 
-export function CandidatesSection({ data, loading, error }: { data: CandidatesResponse | undefined; loading: boolean; error: unknown }) {
+export function CandidatesSection({ data, loading, error, renderChart }: { data: CandidatesResponse | undefined; loading: boolean; error: unknown; renderChart?: (item: CandidateItem) => ReactNode }) {
   const state = data ? candidatesState(data) : null
   const t1 = state?.kind === 'list' ? candidateT1Text(data?.trading_date) : null
   return (
@@ -326,7 +359,7 @@ export function CandidatesSection({ data, loading, error }: { data: CandidatesRe
           : !state
             ? null
             : state.kind === 'list'
-              ? <TodayCandidateList items={state.items} />
+              ? <TodayCandidateList items={state.items} renderChart={renderChart} />
               : <Card><EmptyState title={state.kind === 'zero' ? '當日零候選' : '尚無候選清單'} reason={state.text} /></Card>}
     </section>
   )
