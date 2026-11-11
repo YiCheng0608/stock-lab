@@ -13,10 +13,11 @@ export const EXCHANGES = [
 export type ExchangeSpec = (typeof EXCHANGES)[number]
 
 export const MARKET_PATH = '/market'
-export const MARKET_PAGE_LEAD = '上市、上櫃的收盤概況，以及加權、櫃買、台指期與美股共 7 檔指數的總表；點一列看它的日 K。'
+export const MARKET_PAGE_LEAD = '上市、上櫃的收盤概況，以及加權、櫃買、台指期近月三檔指數的總表；點一列看它的日 K。'
 
 // ---- 指數總表與共用 K 線圖, Issue 564 ---------------------------------------------------------------
-// The seven rows of market_overview.indexes, in table order; the shared chart below is the stock page's StockBarsChart
+// The Taiwan rows of market_overview.indexes, in table order (Issue 633: the four US rows left the page; the API still
+// returns them); the shared chart below is the stock page's StockBarsChart
 // on /api/stocks/<exchange>/<symbol>/bars for the selected row (TAIEX by default, kept in ?index=).
 
 export type IndexSpec = {
@@ -33,10 +34,6 @@ export const INDEX_SPECS: readonly IndexSpec[] = [
   { key: 'taiex', group: 'tw', exchange: 'TWSE', symbol: 'TAIEX', name: '加權指數', instrumentType: 'index', digits: 2 },
   { key: 'tpex', group: 'tw', exchange: 'TPEx', symbol: 'TPEX', name: '櫃買指數', instrumentType: 'index', digits: 2 },
   { key: 'tx', group: 'tw', exchange: 'TAIFEX', symbol: 'TX', name: '台指期近月', instrumentType: 'futures', digits: 0 },
-  { key: 'spx', group: 'us', exchange: 'US', symbol: 'SPX', name: 'S&P 500', instrumentType: 'index', digits: 2 },
-  { key: 'ixic', group: 'us', exchange: 'US', symbol: 'IXIC', name: 'NASDAQ 綜合指數', instrumentType: 'index', digits: 2 },
-  { key: 'dji', group: 'us', exchange: 'US', symbol: 'DJI', name: '道瓊工業指數', instrumentType: 'index', digits: 2 },
-  { key: 'sox', group: 'us', exchange: 'US', symbol: 'SOX', name: '費城半導體指數', instrumentType: 'index', digits: 2 },
 ]
 export const TAIEX = INDEX_SPECS[0]
 export const INDEX_PARAM = 'index'
@@ -44,8 +41,6 @@ export const INDEX_TABLE_TITLE = '指數總表'
 export const INDEX_CHART_ID = 'market-index-chart'
 export const INDEX_CHART_TITLE_ID = 'market-chart-title'
 export const INDEX_SELECT_HINT = '點一列，下方圖表切換為該指數的日 K'
-export const TW_GROUP_TITLE = '台股'
-export const US_GROUP_TITLE = '美股'
 
 // The selected row from ?index= (unknown or missing → 加權指數), and the search that selects another one.
 export function selectedIndex(search: URLSearchParams): IndexSpec {
@@ -91,11 +86,10 @@ export function indexMissingText(row: IndexRow | null): string {
   return '無資料：尚未收集'
 }
 
-// The 資料日 cell: 「YYYY/MM/DD」 plus 非最新, or 「YYYY/MM/DD 美股休市」 when the expected US day is a recorded US holiday.
+// The 資料日 cell: 「YYYY/MM/DD」, plus 非最新 when the row is not of the Taiwan data date.
 export function indexDateText(row: IndexRow & { trading_date: string }): { date: string; flag: string | null } {
   const date = day(row.trading_date)
   if (row.freshness === 'stale') return { date, flag: STALE_LABEL }
-  if (row.freshness === 'us_market_closed') return { date, flag: `${day(row.expected_date)} 美股休市` }
   return { date, flag: null }
 }
 
@@ -125,34 +119,19 @@ export function indexMa60Cell(row: IndexRow | null, digits: number): IndexMa60Ce
   return { kind: 'text', text: reason ? `無資料：${reason}` : '無資料' }
 }
 
-// 「美股（前一交易日）」 only when every US row with data is the US session before the Taiwan data date (#547's
-// freshness: latest or us_market_closed, and dated before market_overview.trading_date); otherwise 「美股」.
-export function usGroupTitle(overview: MarketOverview | undefined): string {
-  const rows = (overview?.indexes ?? []).filter((row) => row.group === 'us').filter(indexAvailable)
-  const twDate = overview?.trading_date ?? null
-  const previous = rows.length > 0 && rows.every((row) =>
-    (row.freshness === 'latest' || row.freshness === 'us_market_closed') && (twDate === null || row.trading_date < twDate))
-  return previous ? US_SECTION_TITLE : US_GROUP_TITLE
-}
-
 // 「來源：…」 under the table at every width (the 來源 column is hidden at 640px and below, DESIGN_SYSTEM §5.1).
-export const INDEX_SOURCE_NOTE = '來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所；美股 FinMind'
-export const INDEX_CHANGE_NOTE = '漲跌：加權、櫃買為交易所公布的收盤概況（同大盤概況）；台指期近月與美股依前一筆收盤計算，台指期換月日不計漲跌'
-export const INDEX_STALE_NOTE = '「非最新」：資料日不是預期的資料日（台股為台股資料日，美股為台股資料日的前一個平日）'
+export const INDEX_SOURCE_NOTE = '來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所'
+export const INDEX_CHANGE_NOTE = '漲跌：加權、櫃買為交易所公布的收盤概況（同大盤概況）；台指期近月依前一筆收盤計算，換月日不計漲跌'
+export const INDEX_STALE_NOTE = '「非最新」：資料日不是台股資料日'
 export const INDEX_MA60_NOTE = '季線：各指數最近 60 個交易日收盤的平均（indicators/v1），以該列資料日的收盤判定，高於季線為「之上」、等於季線不算高於；不足 60 個交易日寫「資料不足」'
 
 // 資料說明 of the index table: sources and their notices (the index owners' copyright notices kept), how dates,
 // changes and the MA60 position are read.
 export function indexTableNotes(overview: MarketOverview | undefined): string[] {
-  const rows = (overview?.indexes ?? []).filter(indexAvailable)
-  const copyrights = [...new Set(rows.flatMap((row) => row.group === 'us' && row.source?.copyright ? [row.source.copyright] : []))]
   return [
     INDEX_SOURCE_NOTE,
     TAIFEX_ATTRIBUTION,
-    US_ATTRIBUTION,
-    ...copyrights,
     INDEX_STALE_NOTE,
-    US_EXPECTED_NOTE,
     INDEX_CHANGE_NOTE,
     ...(isDerived(overview) ? [DERIVED_NOTE] : []),
     UP_DOWN_NOTE,
@@ -301,11 +280,4 @@ export function ma60SegmentsText(item: TaiexMa60): string | null {
 
 export const isDerived = (overview: MarketOverview | undefined) => available(overview, 'TPEx')?.index?.change_pct_method === 'derived'
 
-// ---- 美股, Issue 547 --------------------------------------------------------------------------------
-// Daily bars of four US indexes from FinMind (Issue 568; market_overview.foreign_indices, the index table's US rows,
-// Issue 564). FRED's close-only rows (Issue 547), where a database has them, still chart as a close line.
-
-export const US_SECTION_TITLE = '美股（前一交易日）'
-export const US_ATTRIBUTION = '資料來源：FinMind（個人非商業使用）'
-export const US_EXPECTED_NOTE = '預期資料日為台股資料日的前一個平日（週一為上週五）'
 export const STALE_LABEL = '非最新'

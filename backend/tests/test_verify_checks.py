@@ -765,7 +765,7 @@ def test_t15_without_bars_needs_the_empty_copy(tmp_path):
 
 # ---- T16: the index table (Issue 564) ----
 
-FRED = "資料來源：FinMind（個人非商業使用）"  # page_checks.US_ATTRIBUTION (Issue 568)
+FRED = "資料來源：FinMind（個人非商業使用）"  # the US attribution, gone from the page (Issue 633)
 
 
 def _index(key, group, **extra):
@@ -868,19 +868,17 @@ def _indexes(**changes):
     }
 
 
+US_PAGE_ROW = (
+    "S&P 500\t7,353.73\t-334.89\t-4.36%\t2026/10/21\t之上 季線 44,012.50\tFRED\n"
+)
+# Issue 633: the page lists the three Taiwan rows; the API (_indexes) still has the US rows.
 INDEX_PAGE = (
     "大盤概況\n資料 2026/10/22\n指數總表\n資料 2026/10/22\n資料說明\n"
-    f"{ATTRIBUTION}\n{FRED}\n"
+    f"{ATTRIBUTION}\n"
     "指數\t收盤（點）\t漲跌\t漲跌幅\t資料日\t相對季線（MA60）\t來源\n"
-    "台股\n"
     "加權指數\t46,041.43\t-846.34\t-1.81%\t2026/10/22\t之上 季線 44,012.50\t臺灣證券交易所\n"
     "櫃買指數\t395.42\t+2.10\t+0.53%\t2026/10/21 非最新\t資料不足（42／60 日）\t證券櫃檯買賣中心\n"
     "台指期近月 合約 2026/11\t46,110\t換月\t換月\t2026/10/22\t之下 季線 46,502\t臺灣期貨交易所\n"
-    "美股（前一交易日）\n"
-    "S&P 500\t7,353.73\t-334.89\t-4.36%\t2026/10/21\t之上 季線 44,012.50\tFRED\n"
-    "NASDAQ 綜合指數\t24,579.42\t+264.42\t+1.09%\t2026/10/21\t無資料：季線尚未計算\tFRED\n"
-    "道瓊工業指數\t51,285.73\t-40.25\t-0.08%\t2026/10/20 2026/10/21 美股休市\t持平 季線 51,285.73\tFRED\n"
-    "費城半導體指數\t—\t—\t—\t無資料：最近一次擷取失敗（2026/10/22）\t—\tFRED\n"
     "台指期近月 2026/10/22 換月（2026/10 → 2026/11），與前一筆是不同合約，不計漲跌\n"
     "技術指標 indicators/v1\n加權指數日線\n"
 )
@@ -889,18 +887,15 @@ INDEX_PAGE = (
 def test_t16_passes_on_the_index_table(tmp_path):
     run = FakeRun(tmp_path, _indexes(), {"market-1280": INDEX_PAGE})
     summary = page_checks.t16(run)
-    assert summary.startswith("美股（前一交易日）；")
+    assert summary.endswith("；沒有美股列")
     assert (
         "`台指期近月 合約 2026/11\t46,110\t換月\t換月\t2026/10/22\t之下 季線 46,502\t臺灣期貨交易所`"
         in summary
     )
-    assert (
-        "`費城半導體指數\t—\t—\t—\t無資料：最近一次擷取失敗（2026/10/22）\t—\tFRED`"
-        in summary
-    )
+    assert "費城半導體指數" not in summary
 
 
-def test_t16_fails_on_a_wrong_cell_order_or_group(tmp_path):
+def test_t16_fails_on_a_wrong_cell_order_or_a_us_row(tmp_path):
     # MA60 from another value than the API's (AC-3: the page shows the stored ma60).
     page = INDEX_PAGE.replace("之上 季線 44,012.50\t臺灣", "之上 季線 44,012.49\t臺灣")
     run = FakeRun(tmp_path, _indexes(), {"market-1280": page})
@@ -911,20 +906,15 @@ def test_t16_fails_on_a_wrong_cell_order_or_group(tmp_path):
     run = FakeRun(tmp_path, _indexes(), {"market-1280": page})
     with pytest.raises(page_checks.Fail, match="tx：缺整行"):
         page_checks.t16(run)
-    # One US row 非最新: the group is 美股 only (decision 6725073156).
-    stale = _indexes(spx={"freshness": "stale"})
-    page = INDEX_PAGE.replace(
-        "2026/10/21\t之上 季線 44,012.50\tFRED",
-        "2026/10/21 非最新\t之上 季線 44,012.50\tFRED",
+    # Rows out of order.
+    tx = "台指期近月 合約 2026/11\t46,110\t換月\t換月\t2026/10/22\t之下 季線 46,502\t臺灣期貨交易所\n"
+    page = INDEX_PAGE.replace(tx, "").replace(
+        "加權指數\t46,041.43", tx + "加權指數\t46,041.43"
     )
-    run = FakeRun(tmp_path, stale, {"market-1280": page})
-    with pytest.raises(page_checks.Fail, match="缺分組 `台股`、`美股`"):
+    run = FakeRun(tmp_path, _indexes(), {"market-1280": page})
+    with pytest.raises(page_checks.Fail, match="tx：缺整行 .*或不在前一列之後"):
         page_checks.t16(run)
-    run = FakeRun(
-        tmp_path, stale, {"market-1280": page.replace("美股（前一交易日）\n", "美股\n")}
-    )
-    assert page_checks.t16(run).startswith("美股；")
-    # The table after the chart, or without the attributions in 資料說明.
+    # The table after the chart, or without the attribution in 資料說明.
     page = INDEX_PAGE.replace("技術指標 indicators/v1\n加權指數日線\n", "").replace(
         "大盤概況\n", "大盤概況\n加權指數日線\n"
     )
@@ -934,24 +924,31 @@ def test_t16_fails_on_a_wrong_cell_order_or_group(tmp_path):
     ):
         page_checks.t16(run)
     run = FakeRun(
-        tmp_path, _indexes(), {"market-1280": INDEX_PAGE.replace(f"{FRED}\n", "")}
+        tmp_path,
+        _indexes(),
+        {"market-1280": INDEX_PAGE.replace(f"{ATTRIBUTION}\n", "")},
     )
     with pytest.raises(page_checks.Fail, match="資料說明"):
         page_checks.t16(run)
-    # A Taiwan row listed under the US group.
-    page = INDEX_PAGE.replace(
-        "台指期近月 合約 2026/11\t46,110\t換月\t換月\t2026/10/22\t之下 季線 46,502\t臺灣期貨交易所\n美股（前一交易日）\n",
-        "美股（前一交易日）\n台指期近月 合約 2026/11\t46,110\t換月\t換月\t2026/10/22\t之下 季線 46,502\t臺灣期貨交易所\n",
-    )
-    run = FakeRun(tmp_path, _indexes(), {"market-1280": page})
-    with pytest.raises(page_checks.Fail, match="tx：不在 `台股` 分組內"):
-        page_checks.t16(run)
+    # Issue 633: a US row, its group title or its attribution is back on the page.
+    for line, shown in (
+        (US_PAGE_ROW, "S&P 500"),
+        ("美股（前一交易日）\n", "美股（前一交易日）"),
+        (f"{FRED}\n", FRED),
+    ):
+        page = INDEX_PAGE.replace(
+            "台指期近月 2026/10/22 換月", line + "台指期近月 2026/10/22 換月"
+        )
+        run = FakeRun(tmp_path, _indexes(), {"market-1280": page})
+        with pytest.raises(page_checks.Fail, match="大盤頁仍有美股的") as error:
+            page_checks.t16(run)
+        assert f"`{shown}`" in str(error.value)
     run = FakeRun(
         tmp_path,
         {"dashboard": {"market_overview": {"indexes": []}}},
         {"market-1280": INDEX_PAGE},
     )
-    with pytest.raises(page_checks.Fail, match="indexes 的列是"):
+    with pytest.raises(page_checks.Fail, match="indexes 的台股列是"):
         page_checks.t16(run)
 
 

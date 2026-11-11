@@ -8,13 +8,13 @@ import { MAIN_NAV } from '../components/Navbar'
 import type { Dashboard, IndexRow, MarketOverview, StockBarRow, StockBarsResponse, TaiexMa60 } from '../types'
 import { overviewBoth, overviewNone, overviewTwseOnly } from '../today/today.fixtures'
 import { CLOSE_ONLY_NOTE, STOCK_BARS_LIMIT, axisDigits, buildBarsChartOption, chartLayout, isCloseOnlySeries, priceDigits, readChartTheme } from '../stock/stockBars'
-import { IndexTablePanel, IndexTableView, MarketChartView, MarketOverviewPanel, MarketOverviewView, UsChartFooter } from './MarketViews'
+import { IndexTablePanel, IndexTableView, MarketChartView, MarketOverviewPanel, MarketOverviewView } from './MarketViews'
 import { MarketPage } from './MarketPage'
 import { indexRows, overviewWithIndexes } from './market.fixtures'
 import {
-  US_ATTRIBUTION, INDEX_MA60_NOTE, INDEX_SPECS, MA60_BACKGROUND_NOTE, MA60_NOTE, TAIEX, TAIFEX_ATTRIBUTION, US_SECTION_TITLE,
+  INDEX_MA60_NOTE, INDEX_SPECS, MA60_BACKGROUND_NOTE, MA60_NOTE, TAIEX, TAIFEX_ATTRIBUTION,
   chartTitle, collectedSinceText, futuresLatestText, indexMa60Cell, indexSearch, indexTableNotes, marketOverviewNotes, selectedIndex,
-  summaryItems, usGroupTitle,
+  summaryItems,
 } from './marketOverview'
 
 // The frontend ships no Node typings; scripts/ci-test.cjs runs this module under Node, so declare what it uses.
@@ -89,12 +89,10 @@ const tpexBars: StockBarsResponse = {
 // rows before the OpenAPI ones (Issue 590), as in the production DB.
 const txRows = Array.from({ length: 12 }, (_, i) => bar(dateOf(28 + i), 46000 + i * 10, { open: 45990 + i * 10, high: 46100 + i * 10, low: 45900 + i * 10, volume: 143277, source: i < 6 ? 'taifex_futdatadown' : 'taifex_daily_futures', contract_month: i < 6 ? '202609' : '202610', open_interest: 125000 + i, settlement_price: 45995 + i * 10 }))
 const txBars: StockBarsResponse = { ...taiexBars(txRows), instrument: { id: 11, exchange: 'TAIFEX', symbol: 'TX', name: '臺股期貨近月', instrument_type: 'futures' } }
-// A FRED series: closes only (Issue 547).
+// A close-only series (the chart's close line, DESIGN_SYSTEM §6); the page no longer shows one (Issue 633), the chart
+// still supports it.
 const fredRows = days.map((row) => ({ ...row, open: null, high: null, low: null, volume: null, source: 'fred_close', price_reason: 'source_missing_ohlc' }))
 const fredBars: StockBarsResponse = { ...taiexBars(fredRows), instrument: { id: 14, exchange: 'US', symbol: 'SPX', name: 'S&P 500', instrument_type: 'index' } }
-// A FinMind series (Issue 568): open, high, low and close; SOX has no volume (NULL).
-const finmindRows = days.map((row) => ({ ...row, volume: null, source: 'finmind_us_index', price_reason: null }))
-const finmindBars: StockBarsResponse = { ...taiexBars(finmindRows), instrument: { id: 17, exchange: 'US', symbol: 'SOX', name: '費城半導體指數', instrument_type: 'index' } }
 
 const spec = (key: string) => INDEX_SPECS.find((item) => item.key === key) ?? TAIEX
 const chart = (key: string, data: StockBarsResponse | undefined, extra: { loading?: boolean; error?: unknown; row?: IndexRow | null; interval?: 'day' | 'week' } = {}) =>
@@ -118,16 +116,15 @@ client.setQueryData(['dashboard'], dashboard)
 client.setQueryData(['stock-bars', 'TWSE', 'TAIEX', 'day'], fullBars)
 client.setQueryData(['stock-bars', 'TPEx', 'TPEX', 'day'], tpexBars)
 client.setQueryData(['stock-bars', 'TAIFEX', 'TX', 'day'], txBars)
-client.setQueryData(['stock-bars', 'US', 'SOX', 'day'], fredBars)
 const page = render('/market', <MarketPage />, client)
 const pageText = text(page)
-check(JSON.stringify(INDEX_SPECS.map((item) => `${item.exchange}/${item.symbol}`)) === '["TWSE/TAIEX","TPEx/TPEX","TAIFEX/TX","US/SPX","US/IXIC","US/DJI","US/SOX"]', 'the seven rows read the bars API of TAIEX, TPEX, TX and the four US indexes')
+check(JSON.stringify(INDEX_SPECS.map((item) => `${item.exchange}/${item.symbol}`)) === '["TWSE/TAIEX","TPEx/TPEX","TAIFEX/TX"]', 'Issue 633: the three Taiwan rows read the bars API of TAIEX, TPEX and TX; no US rows')
 const order = ['id="market-overview-title"', 'id="market-indexes-title"', 'id="market-chart-title"'].map((id) => page.indexOf(id))
 check(order.every((at, i) => at > 0 && (i === 0 || at > order[i - 1])), `DESIGN_SYSTEM §4: 大盤概況 → 指數總表 → K 線, got ${order}`)
 check(count(page, 'class="card-title"') === 1 && page.includes('>加權指數日線</h3>'), 'one shared chart, 加權指數 by default (Issue 564 replaces the three charts)')
 check(!page.includes('market-us-title') && !page.includes('market-us-chart') && !page.includes('id="market-tpex-chart-title"'), 'no separate US panel or folded US charts, no second chart card')
 check(!/大盤狀態/.test(pageText), 'no placeholder for 大盤狀態 (Issue 546) yet')
-check(pageText.includes('上市、上櫃的收盤概況，以及加權、櫃買、台指期與美股共 7 檔指數的總表；點一列看它的日 K。'), 'the page lead names the table')
+check(pageText.includes('上市、上櫃的收盤概況，以及加權、櫃買、台指期近月三檔指數的總表；點一列看它的日 K。'), 'the page lead names the table')
 const overviewPanel = slice(page, 'id="market-overview-title"', 'id="market-indexes-title"')
 for (const value of ['大盤概況', '資料 2026/10/22', '加權指數', '46,041.43', '-846.34（-1.81%）', '櫃買指數', '381.69', '-13.73（-3.47%）', '上市 9,334.37 集中市場總計', '上櫃 2,255.45 上櫃股票', '上市 上漲 247 · 下跌 756 · 平盤 74（3／5）', '上櫃 上漲 146 · 下跌 659 · 平盤 63（17／11）']) {
   check(text(overviewPanel).includes(value), `大盤概況: shows 「${value}」`)
@@ -139,10 +136,11 @@ for (const line of ['來源：上市為臺灣證券交易所 MI_INDEX；上櫃�
   check(explanation.includes(line), `大盤概況 資料說明: 「${line}」, got ${explanation}`)
 }
 
-// ---- 指數總表 (AC-1): seven rows in two groups, each state of the fixture ----
+// ---- 指數總表 (AC-1; Issue 633: three Taiwan rows, no groups), each state of the fixture ----
 const table = slice(page, 'id="market-indexes-title"', 'id="market-chart-title"')
 const tableText = text(table)
-check(count(table, 'class="market-index-row') === 7 && count(table, 'class="table-group-row"') === 2, `指數總表: seven rows in two groups, got ${count(table, 'class="market-index-row')} / ${count(table, 'class="table-group-row"')}`)
+check(count(table, 'class="market-index-row') === 3 && count(table, 'class="table-group-row"') === 0, `指數總表: three rows, no group titles, got ${count(table, 'class="market-index-row')} / ${count(table, 'class="table-group-row"')}`)
+check(!/美股|S&amp;P|NASDAQ|道瓊|費城|FinMind/.test(table), `Issue 633: nothing about the US indexes in the table: ${tableText.slice(0, 300)}`)
 for (const header of ['指數', '收盤（點）', '漲跌', '漲跌幅', '資料日', '相對季線（MA60）', '來源']) check(table.includes(`>${header}</th>`), `指數總表: the 「${header}」 column`)
 check(/<th class="num">收盤（點）<\/th><th class="num">漲跌<\/th><th class="num">漲跌幅<\/th>/.test(table), '指數總表: close and change columns are numeric (right, mono)')
 const rowOf = (key: string) => slice(table, `data-index="${key}"`, '</tr>')
@@ -155,53 +153,41 @@ expectRow('tx', ['台指期近月', '合約 2026/11', '46,110', '換月', '2026/
 check(!/46,110\.\d/.test(rowText('tx')) && !/46,502\.\d/.test(rowText('tx')), 'tx: whole points for the close and MA60 (DESIGN_SYSTEM §3)')
 check(count(rowOf('tx'), '換月') === 2 && !/tone-(up|down)/.test(rowOf('tx')), 'tx on a roll day: 換月 in both change cells (the reason, not a blank; decision 6725073156), no up/down color')
 check(tableText.includes('台指期近月 2026/10/22 換月（2026/10 → 2026/11），與前一筆是不同合約，不計漲跌'), `tx roll note under the table: ${tableText.slice(-400)}`)
-expectRow('spx', ['S&P 500', '7,353.73', '-334.89', '-4.36%', '2026/10/20 非最新', '之上', '季線 6,900.12', 'FinMind'])
-expectRow('ixic', ['NASDAQ 綜合指數', '24,579.42', '+264.42', '+1.09%', '2026/10/21', '無資料：季線尚未計算'])
-check(!rowText('ixic').includes('非最新') && !rowText('ixic').includes('美股休市'), 'ixic: the expected US session, no flag')
-expectRow('dji', ['道瓊工業指數', '51,285.73', '2026/10/20 2026/10/21 美股休市', '持平', '季線 51,285.73'])
-check(!rowText('dji').includes('非最新'), 'dji: 美股休市 is not 非最新')
-expectRow('sox', ['費城半導體指數', '無資料：最近一次擷取失敗（2026/10/22）', 'FinMind'])
-check(!/\d,\d{3}\.\d{2}/.test(rowText('sox')) && count(rowOf('sox'), '>—<') >= 4, `sox without data: no number, — in the value cells: ${rowText('sox')}`)
-check(count(table, 'market-index-stale') === 2, `非最新 in the warning color on TPEX and SPX, got ${count(table, 'market-index-stale')}`)
-check(/data-index="taiex"(?:(?!<\/tr>)[\s\S])*tone-down/.test(table) && /data-index="ixic"(?:(?!<\/tr>)[\s\S])*tone-up/.test(table) && /data-index="tpex"(?:(?!<\/tr>)[\s\S])*tone-up/.test(table), '漲跌: 台股 colors on the change only, a fall green and a rise red')
+check(count(table, 'market-index-stale') === 1, `非最新 in the warning color on TPEX, got ${count(table, 'market-index-stale')}`)
+check(/data-index="taiex"(?:(?!<\/tr>)[\s\S])*tone-down/.test(table) && /data-index="tpex"(?:(?!<\/tr>)[\s\S])*tone-up/.test(table), '漲跌: 台股 colors on the change only, a fall green and a rise red')
 check(!/market-index-ma60[^>]*>(?:(?!<\/td>)[\s\S])*tone-(up|down)/.test(table), '相對季線: no up/down colors (background, not a signal)')
-const groupTitles = [...table.matchAll(/class="table-group-row"><td colSpan="7">([^<]*)<\/td>/gi)].map((match) => match[1])
-check(groupTitles.join() === '台股,美股', `groups: 台股 and 美股 (one US row is 非最新, so not ${US_SECTION_TITLE}), got ${groupTitles.join()}`)
-check(tableText.includes('來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所；美股 FinMind'), 'the 來源 note under the table (the column is hidden on phones)')
-check(page.indexOf('data-index="taiex"') < page.indexOf('data-index="tpex"') && page.indexOf('data-index="tx"') < page.indexOf('data-index="spx"') && page.indexOf('data-index="dji"') < page.indexOf('data-index="sox"'), 'rows in table order')
+check(tableText.includes('來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所') && !tableText.includes('FinMind'), 'the 來源 note under the table (the column is hidden on phones)')
+check(page.indexOf('data-index="taiex"') < page.indexOf('data-index="tpex"') && page.indexOf('data-index="tpex"') < page.indexOf('data-index="tx"') && !page.includes('data-index="spx"'), 'rows in table order')
 const tableNotes = text(slice(table, '<details class="data-explanation"', '</details>'))
-for (const line of [TAIFEX_ATTRIBUTION, US_ATTRIBUTION, 'Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved.', 'Copyright © 2016, NASDAQ OMX Group, Inc.', '台股資料日的前一個平日', '台指期換月日不計漲跌', INDEX_MA60_NOTE, MA60_BACKGROUND_NOTE, '紅色為上漲、綠色為下跌（台股慣例）']) {
+for (const line of [TAIFEX_ATTRIBUTION, '換月日不計漲跌', INDEX_MA60_NOTE, MA60_BACKGROUND_NOTE, '紅色為上漲、綠色為下跌（台股慣例）']) {
   check(tableNotes.includes(line), `指數總表 資料說明: 「${line}」, got ${tableNotes}`)
 }
-check(count(tableNotes, 'S&P Dow Jones Indices LLC') === 1, '資料說明: a copyright notice shared by two series is listed once')
 
 // ---- selection (AC-2): the selected row, the URL, a click and Enter ----
 check(/data-index="taiex"[^>]*aria-current="true"/.test(page) || /aria-current="true"[^>]*data-index="taiex"/.test(page), 'default: 加權指數 is the selected row')
-check(count(table, 'is-selected') === 1 && count(table, 'aria-pressed="true"') === 1 && count(table, 'aria-pressed="false"') === 6, 'one selected row, its name button pressed')
-for (const [location, key, title] of [['/market?index=tpex', 'tpex', '櫃買指數日線'], ['/market?index=tx', 'tx', '台指期近月日線'], ['/market?index=sox', 'sox', '費城半導體指數日線'], ['/market?index=nope', 'taiex', '加權指數日線'], ['/market?tab=x&index=tx', 'tx', '台指期近月日線']] as const) {
+check(count(table, 'is-selected') === 1 && count(table, 'aria-pressed="true"') === 1 && count(table, 'aria-pressed="false"') === 2, 'one selected row, its name button pressed')
+for (const [location, key, title] of [['/market?index=tpex', 'tpex', '櫃買指數日線'], ['/market?index=tx', 'tx', '台指期近月日線'], ['/market?index=sox', 'taiex', '加權指數日線'], ['/market?index=nope', 'taiex', '加權指數日線'], ['/market?tab=x&index=tx', 'tx', '台指期近月日線']] as const) {
   const markup = render(location, <MarketPage />, client)
   const selectedRow = slice(markup, 'is-selected', '</tr>')
   check(markup.includes(`>${title}</h3>`) && count(markup, 'class="card-title"') === 1, `${location}: the chart is 「${title}」`)
   check(count(markup, 'is-selected') === 1 && markup.indexOf(`data-index="${key}"`) >= 0 && markup.lastIndexOf('<tr', markup.indexOf('is-selected')) === markup.lastIndexOf('<tr', markup.indexOf(`data-index="${key}"`)) && selectedRow.includes('aria-pressed="true"'), `${location}: the ${key} row is selected after a reload`)
 }
-const soxPage = render('/market?index=sox', <MarketPage />, client)
-check(text(soxPage).includes(CLOSE_ONLY_NOTE) && text(soxPage).includes(US_ATTRIBUTION) && text(soxPage).includes('Copyright © 2016, NASDAQ OMX Group, Inc.'), 'a US row: the close line note, the FRED attribution and its copyright under the chart')
 const txPage = render('/market?index=tx', <MarketPage />, client)
 check(text(txPage).includes('2026/10/10 合約 2026/10 · 未平倉 125,011 口 · 結算價 46,105') && text(txPage).includes(TAIFEX_ATTRIBUTION), 'the TX row: contract month, open interest and the attribution under the chart (Issue 552)')
-check(selectedIndex(new URLSearchParams('index=dji')).key === 'dji' && selectedIndex(new URLSearchParams('')).key === 'taiex' && selectedIndex(new URLSearchParams('index=TAIEX')).key === 'taiex', 'selectedIndex: ?index=<key>, 加權指數 otherwise')
+check(selectedIndex(new URLSearchParams('index=tx')).key === 'tx' && selectedIndex(new URLSearchParams('index=dji')).key === 'taiex' && selectedIndex(new URLSearchParams('')).key === 'taiex' && selectedIndex(new URLSearchParams('index=TAIEX')).key === 'taiex', 'selectedIndex: ?index=<key>, 加權指數 otherwise (a US key too, Issue 633)')
 check(indexSearch(new URLSearchParams('tab=x'), 'tx').toString() === 'tab=x&index=tx' && indexSearch(new URLSearchParams('index=tx&tab=x'), 'taiex').toString() === 'tab=x', 'indexSearch: sets ?index= and keeps other parameters; the default drops it')
 // A click anywhere on a row calls onSelect with its key; the name is a native button whose click (Enter or Space on the
 // focused button) bubbles to the row, so Tab reaches every row and Enter switches it.
 const picked: string[] = []
-const tree = hosts(IndexTableView({ overview: overviewWithIndexes(), selected: 'dji', onSelect: (key) => picked.push(key) }))
+const tree = hosts(IndexTableView({ overview: overviewWithIndexes(), selected: 'tx', onSelect: (key) => picked.push(key) }))
 const rows = tree.filter((node) => node.type === 'tr' && typeof node.props['data-index'] === 'string')
-check(rows.map((row) => row.props['data-index']).join() === 'taiex,tpex,tx,spx,ixic,dji,sox', `rows: ${rows.map((row) => row.props['data-index']).join()}`)
+check(rows.map((row) => row.props['data-index']).join() === 'taiex,tpex,tx', `rows: ${rows.map((row) => row.props['data-index']).join()}`)
 for (const row of rows) (row.props.onClick as (() => void) | undefined)?.()
-check(picked.join() === 'taiex,tpex,tx,spx,ixic,dji,sox', `a click on each row selects it, got ${picked.join()}`)
+check(picked.join() === 'taiex,tpex,tx', `a click on each row selects it, got ${picked.join()}`)
 const buttons = tree.filter((node) => node.type === 'button')
-check(buttons.length === 7 && buttons.every((button) => button.props.type === 'button' && button.props.onClick === undefined && button.props.tabIndex === undefined && button.props.disabled === undefined), 'each row has one native button (focusable by Tab, Enter clicks it), no handler of its own to stop the click reaching the row')
-check(buttons.map((button) => button.props['aria-pressed']).join() === 'false,false,false,false,false,true,false' && buttons.every((button) => button.props['aria-controls'] === 'market-index-chart'), 'aria-pressed on the selected row, every button controls the chart')
-check(rows.find((row) => row.props['data-index'] === 'dji')?.props.className === 'market-index-row is-selected', 'the selected row has its class')
+check(buttons.length === 3 && buttons.every((button) => button.props.type === 'button' && button.props.onClick === undefined && button.props.tabIndex === undefined && button.props.disabled === undefined), 'each row has one native button (focusable by Tab, Enter clicks it), no handler of its own to stop the click reaching the row')
+check(buttons.map((button) => button.props['aria-pressed']).join() === 'false,false,true' && buttons.every((button) => button.props['aria-controls'] === 'market-index-chart'), 'aria-pressed on the selected row, every button controls the chart')
+check(rows.find((row) => row.props['data-index'] === 'tx')?.props.className === 'market-index-row is-selected', 'the selected row has its class')
 check(page.includes('id="market-index-chart"'), 'the chart has the id the buttons control')
 
 // ---- AC-3: the MA60 shown is the row's indicators/v1 ma60; TAIEX is the 季線 strip's (#561) ----
@@ -216,15 +202,6 @@ for (const [reason, expected] of [['not_collected', '無資料：日線未收集
   const item = indexMa60Cell({ ...taiexRow, ma60: { trading_date: '2026-10-22', required_closes: 60, status: 'unavailable', reason, latest_trading_date: '2026-10-21' } }, 2)
   check(item.kind === 'text' && item.text === expected, `indexMa60Cell(${reason}): 「${expected}」, got ${JSON.stringify(item)}`)
 }
-
-// ---- the US group title (decision 6725073156): 前一交易日 only when the US data is the session before ----
-const us = (freshness: string, trading_date: string) => indexRows().map((row) => row.group === 'us' && row.status === 'available' ? { ...row, freshness, trading_date } : row)
-check(usGroupTitle(overviewWithIndexes(us('latest', '2026-10-21'))) === '美股（前一交易日）', 'every US row the session before: 美股（前一交易日）')
-check(usGroupTitle(overviewWithIndexes()) === '美股', 'one US row 非最新: just 美股')
-check(usGroupTitle(overviewWithIndexes(us('latest', '2026-10-22'))) === '美股', 'a US row dated the Taiwan data date: just 美股')
-check(usGroupTitle(overviewWithIndexes(indexRows().map((row) => row.group === 'us' ? { ...row, status: 'unavailable', reason: 'not_collected', ma60: null } : row))) === '美股', 'no US data: just 美股')
-check(usGroupTitle(overviewWithIndexes(indexRows().map((row) => row.key === 'spx' ? { ...row, freshness: 'us_market_closed' } : row))) === '美股（前一交易日）', '美股休市 and latest rows: 前一交易日')
-check(text(page).includes('美股') && !text(table).includes('美股（前一交易日）'), 'the page fixture has a 非最新 US row: the group says 美股 only')
 
 // ---- the shared chart: the stock page's StockBarsChart (coordinator decision 6715021190) ----
 const chartPanel = page.slice(page.indexOf('id="market-chart-title"'))
@@ -249,26 +226,19 @@ check(collectedSinceText(fullBars) === '自 2026/09/01 起收集，無更早歷�
 check(futuresLatestText(fullBars) === null, 'futuresLatestText: nothing for an index')
 check(priceDigits(46041.43, 'index') === 2 && priceDigits(46041.43, 'stock') === 0, 'priceDigits: an index has two decimals, a stock above 500 none')
 check(axisDigits(24500, 2) === 0 && axisDigits(8000, 2) === 0 && axisDigits(999, 2) === 2, 'price axis: index labels from 1,000 drop the decimals so 「8,000」 fits the phone gutter (Issue 547)')
-check(INDEX_SPECS.map(chartTitle).join() === '加權指數日線,櫃買指數日線,台指期近月日線,S&P 500日線,NASDAQ 綜合指數日線,道瓊工業指數日線,費城半導體指數日線', 'chart titles: 「{名稱}日線」')
+check(INDEX_SPECS.map(chartTitle).join() === '加權指數日線,櫃買指數日線,台指期近月日線', 'chart titles: 「{名稱}日線」')
 // The close-only TAIEX rows still read as before (synthetic bars, volume unit unverified).
 const closeOnly = taiexBars([bar('2026-10-22', 46041.43, { open: 46041.43, high: 46041.43, low: 46041.43, volume: 0, source: 'twse_index' })])
 const closeOnlyMarkup = text(render('/market close-only', chart('taiex', closeOnly)))
 check(closeOnlyMarkup.includes('2026/10/22 46,041.43 46,041.43 46,041.43 46,041.43') && closeOnlyMarkup.includes('成交量（張）'), `close-only TAIEX rows: 開＝高＝低＝收, no unit change: ${closeOnlyMarkup.slice(-300)}`)
-// A FRED series: closes only, so a close line and the note; the table keeps each close (Issue 552 null rules).
-const fredChart = text(render('/market us chart', chart('spx', fredBars, { row: indexRows()[3] })))
-check(fredChart.includes('S&P 500日線') && fredChart.includes(CLOSE_ONLY_NOTE), `FRED chart: titled, with the close-only note: ${fredChart.slice(0, 300)}`)
-check(fredChart.includes('2026/10/22 46,041.43') && !fredChart.includes('2026/10/22 46,021.43'), 'FRED chart table: the close, no open/high/low')
-check(fredChart.includes('來源 FRED（聖路易聯邦準備銀行）') && fredChart.includes(US_ATTRIBUTION) && fredChart.includes('S&P Dow Jones Indices LLC'), 'FRED chart: FRED named, the attribution and copyright under it')
-check(text(render('UsChartFooter', <UsChartFooter row={null} />)).trim() === US_ATTRIBUTION, 'US footer without a row: the attribution alone')
-// A FinMind series: candles like a Taiwan index, no close-only note, FinMind named (Issue 568).
-const finmindChart = text(render('/market us finmind chart', chart('sox', finmindBars, { row: indexRows()[6] })))
-check(!finmindChart.includes(CLOSE_ONLY_NOTE) && !isCloseOnlySeries(finmindRows), `FinMind chart: candles, no close-only note: ${finmindChart.slice(0, 300)}`)
-check(finmindChart.includes('來源 FinMind') && finmindChart.includes(US_ATTRIBUTION) && finmindChart.includes('Copyright © 2016, NASDAQ OMX Group, Inc.'),`FinMind chart: FinMind named, the attribution and copyright under it: ${finmindChart.slice(-400)}`)
+const fredChart = text(render('/market close-only chart', chart('taiex', fredBars)))
+check(fredChart.includes(CLOSE_ONLY_NOTE), `a close-only series: the close-only note: ${fredChart.slice(0, 300)}`)
+check(fredChart.includes('2026/10/22 46,041.43') && !fredChart.includes('2026/10/22 46,021.43'), 'close-only chart table: the close, no open/high/low')
 const theme = readChartTheme(() => 'black')
 const layout = chartLayout(320)
 const fredOption = buildBarsChartOption(fredBars, { panel: 'macd', panelState: { kind: 'chart' } as never, visibleMa: new Set(), theme, layout, zoom: { start: 0, end: 100 }, digits: 2 })
 const closeLine = (fredOption.series as Array<{ name?: string; xAxisIndex?: number; data?: unknown[] }>).find((series) => series.name === '收盤' && series.xAxisIndex === 0)
-check(closeLine?.data?.length === fredRows.length && closeLine.data[fredRows.length - 1] === 46041.43, 'FRED chart: one close line on the price pane')
+check(closeLine?.data?.length === fredRows.length && closeLine.data[fredRows.length - 1] === 46041.43, 'close-only chart: one close line on the price pane')
 const taiexOption = buildBarsChartOption(fullBars, { panel: 'macd', panelState: { kind: 'chart' } as never, visibleMa: new Set(), theme, layout, zoom: { start: 0, end: 100 }, digits: 2 })
 check(!(taiexOption.series as Array<{ name?: string; xAxisIndex?: number }>).some((series) => series.name === '收盤' && series.xAxisIndex === 0), 'a series with candles has no extra close line')
 check(isCloseOnlySeries(fredRows) && !isCloseOnlySeries(days) && !isCloseOnlySeries([]), 'isCloseOnlySeries: every bar close-only')
@@ -284,7 +254,7 @@ check(!mixedChart.includes(CLOSE_ONLY_NOTE) && mixedChart.includes('來源 臺�
 for (const item of INDEX_SPECS) {
   const emptyBars = render(`/market ${item.key}`, chart(item.key, taiexBars([])))
   check(text(emptyBars).includes(chartTitle(item)) && text(emptyBars).includes('無資料') && text(emptyBars).includes('來源未提供日線') && text(emptyBars).includes('資料日期未提供') && !emptyBars.includes('chart-data-table'), `沒有日線（${item.key}）: 無資料＋來源未提供日線, no table: ${text(emptyBars)}`)
-  check(text(emptyBars).includes(TAIFEX_ATTRIBUTION) === (item.key === 'tx') && text(emptyBars).includes(US_ATTRIBUTION) === (item.group === 'us'), `沒有日線（${item.key}）: the TX / FRED attribution stays, only on its own chart`)
+  check(text(emptyBars).includes(TAIFEX_ATTRIBUTION) === (item.key === 'tx'), `沒有日線（${item.key}）: the TX attribution stays, only on its own chart`)
 }
 const failedBars = render('/market', chart('tpex', undefined, { interval: 'week', error: new Error('HTTP 502') }))
 check(text(failedBars).includes('資料暫時無法載入') && text(failedBars).includes('HTTP 502'), `載入失敗: 資料暫時無法載入: ${text(failedBars)}`)
@@ -295,9 +265,9 @@ for (const [name, overview] of [['只有上市', overviewTwseOnly()], ['都沒�
   check(markup.includes('上櫃大盤資料未取得'), `大盤概況（${name}）: 上櫃大盤資料未取得`)
   check(name === '只有上市' ? markup.includes('46,041.43') && !markup.includes('381.69') && !markup.includes('上櫃為') : markup.includes('上市大盤資料未取得') && !/\d,\d{3}\.\d{2}/.test(markup), `大盤概況（${name}）: the shown exchange as usual, no number for the missing one`)
 }
-// An API without market_overview.indexes (or before the first collect): seven rows that say they have no data.
+// An API without market_overview.indexes (or before the first collect): three rows that say they have no data.
 const noIndexes = render('/market no indexes', <IndexTablePanel overview={overviewBoth()} selected="taiex" onSelect={() => {}} />)
-check(count(noIndexes, 'class="market-index-row') === 7 && count(noIndexes, '無資料：尚未收集') === 7 && !/\d,\d{3}\.\d{2}/.test(text(noIndexes)), `no indexes: seven rows of 無資料：尚未收集, got ${count(noIndexes, '無資料：尚未收集')}`)
+check(count(noIndexes, 'class="market-index-row') === 3 && count(noIndexes, '無資料：尚未收集') === 3 && !/\d,\d{3}\.\d{2}/.test(text(noIndexes)), `no indexes: three rows of 無資料：尚未收集, got ${count(noIndexes, '無資料：尚未收集')}`)
 const noSession = render('/market no session', <IndexTablePanel overview={overviewWithIndexes(indexRows().map((row) => row.group === 'tw' ? { key: row.key, group: 'tw', exchange: row.exchange, symbol: row.symbol, name: row.name, instrument_type: row.instrument_type, status: 'unavailable', reason: 'no_verified_session', ma60: null, source: row.source } : row))} selected="taiex" onSelect={() => {}} />)
 check(count(noSession, '無資料：尚無已驗證的資料日') === 3, 'Taiwan rows without a verified session say so')
 const otherScope = { ...overviewBoth(), exchanges: overviewBoth().exchanges.map((row) => row.exchange === 'TPEx' ? { ...row, turnover: { value: 1e8, scope: 'tpex_all', scope_label: '上櫃全部證券' } } : row) }

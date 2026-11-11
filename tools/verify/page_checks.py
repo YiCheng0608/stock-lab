@@ -1584,21 +1584,16 @@ def t15(run: Run) -> str:
 
 INDEX_TABLE_TITLE = "指數總表"  # INDEX_TABLE_TITLE in market/marketOverview.ts
 OVERVIEW_TITLE = "大盤概況"
-TW_GROUP_TITLE = "台股"
-US_GROUP_TITLE = "美股"
-US_TITLE = "美股（前一交易日）"  # US_SECTION_TITLE in market/marketOverview.ts
-# US_ATTRIBUTION in market/marketOverview.ts (FinMind, Issue 568: personal, non-commercial use).
-US_ATTRIBUTION = "資料來源：FinMind（個人非商業使用）"
 # INDEX_SPECS in market/marketOverview.ts: the row key -> (name shown, price decimals), in table order.
+# Issue 633: the page lists the Taiwan rows only; the API still returns the four US rows after them.
 INDEX_SPECS = {
     "taiex": ("加權指數", 2),
     "tpex": ("櫃買指數", 2),
     "tx": ("台指期近月", 0),
-    "spx": ("S&P 500", 2),
-    "ixic": ("NASDAQ 綜合指數", 2),
-    "dji": ("道瓊工業指數", 2),
-    "sox": ("費城半導體指數", 2),
 }
+# What the US rows and their notes read before Issue 633; none of these is a line of the page now.
+US_LINES = ("美股", "美股（前一交易日）", "資料來源：FinMind（個人非商業使用）")
+US_NAMES = ("S&P 500", "NASDAQ 綜合指數", "道瓊工業指數", "費城半導體指數")
 INDEX_MA60_POSITION = {"above": "之上", "below": "之下", "equal": "持平"}
 
 
@@ -1651,8 +1646,6 @@ def index_row_line(row: dict) -> str:
     date = slash(row["trading_date"])
     if row.get("freshness") == "stale":
         date += " 非最新"
-    elif row.get("freshness") == "us_market_closed":
-        date += f" {slash(row['expected_date'])} 美股休市"
     return "\t".join(
         [
             name,
@@ -1666,35 +1659,18 @@ def index_row_line(row: dict) -> str:
     )
 
 
-def us_group_title(overview: dict) -> str:
-    """usGroupTitle in market/marketOverview.ts: 前一交易日 only when every US row with data is the session before."""
-
-    tw_date = overview.get("trading_date")
-    rows = [
-        row
-        for row in overview.get("indexes") or []
-        if row.get("group") == "us"
-        and row.get("status") == "available"
-        and isinstance(row.get("trading_date"), str)
-    ]
-    previous = bool(rows) and all(
-        row.get("freshness") in ("latest", "us_market_closed")
-        and (tw_date is None or row["trading_date"] < tw_date)
-        for row in rows
-    )
-    return US_TITLE if previous else US_GROUP_TITLE
-
-
 @check("today", "T16")
 def t16(run: Run) -> str:
-    """The index table between 大盤概況 and the chart: two groups, every row's close, change, date, MA60 and source."""
+    """The index table between 大盤概況 and the chart: the three Taiwan rows, no US rows (Issue 633)."""
 
     text = run.text(MARKET)
     overview = run.dashboard().get("market_overview") or {}
-    rows = overview.get("indexes") or []
+    rows = [
+        row for row in overview.get("indexes") or [] if row.get("key") in INDEX_SPECS
+    ]
     expect(
         [row.get("key") for row in rows] == list(INDEX_SPECS),
-        f"dashboard.market_overview.indexes 的列是 {[row.get('key') for row in rows]}，預期 {list(INDEX_SPECS)}",
+        f"dashboard.market_overview.indexes 的台股列是 {[row.get('key') for row in rows]}，預期 {list(INDEX_SPECS)}",
     )
     start, chart = text.find(INDEX_TABLE_TITLE), text.find(CHART_TITLES[0])
     expect(
@@ -1703,30 +1679,24 @@ def t16(run: Run) -> str:
         and (chart < 0 or start < chart),
         f"缺整行 `{INDEX_TABLE_TITLE}`，或不在 `{OVERVIEW_TITLE}` 與 `{CHART_TITLES[0]}` 之間",
     )
-    us_title = us_group_title(overview)
-    tw = text.find(TW_GROUP_TITLE, start)
-    us = text.find(us_title, tw if tw >= 0 else start)
-    expect(
-        tw > start and us > tw,
-        f"`{INDEX_TABLE_TITLE}` 之後缺分組 `{TW_GROUP_TITLE}`、`{us_title}`",
-    )
-    found, at = [], tw
+    found, at = [], start
     for row in rows:
         line = index_row_line(row)
         k = text.find(line, at + 1)
         expect(k > at, f"{row['key']}：缺整行 `{line}`，或不在前一列之後")
-        expect(
-            (k > us) == (row.get("group") == "us"),
-            f"{row['key']}：不在 `{TW_GROUP_TITLE if row.get('group') == 'tw' else us_title}` 分組內",
-        )
         at = k
         found.append(f"`{line}`")
-    for line in (TAIFEX_ATTRIBUTION, US_ATTRIBUTION):
-        expect(
-            text.find(line, start) >= 0,
-            f"`{INDEX_TABLE_TITLE}` 之後缺整行 `{line}`（資料說明）",
-        )
-    return f"{us_title}；" + "；".join(found)
+    expect(
+        text.find(TAIFEX_ATTRIBUTION, start) >= 0,
+        f"`{INDEX_TABLE_TITLE}` 之後缺整行 `{TAIFEX_ATTRIBUTION}`（資料說明）",
+    )
+    shown = [line for line in US_LINES if text.has(line)] + [
+        name
+        for name in US_NAMES
+        if text.find_where(lambda line, name=name: line.startswith(name + "\t")) >= 0
+    ]
+    expect(not shown, "大盤頁仍有美股的 " + "、".join(f"`{line}`" for line in shown))
+    return "；".join(found) + "；沒有美股列"
 
 
 # ---- news ----
