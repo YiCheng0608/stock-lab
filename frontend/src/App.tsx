@@ -975,11 +975,12 @@ export function ActionsPage() {
       {query.data && <ActionFilters summary={query.data.summary} view={view} includeEtf={includeEtf} searching={Boolean(search)} onViewChange={(next) => { setView(next); resetTiers() }} onIncludeEtfChange={(next) => { setIncludeEtf(next); resetTiers() }} />}
     </PageTitle>
     <PortfolioSubsection />
-    <TrackingSection />
+    <TrackingSection part="open" />
     <QueryState loading={query.isLoading} error={query.error}>{query.data && <>
       {(query.data.summary.held_unknown ?? 0) > 0 && <p className="small-note">庫存數量待核實 {query.data.summary.held_unknown?.toLocaleString()} 筆；這些記錄尚未計入已核實持倉。</p>}
       <ActionTierList sections={tierSections(query.data, tierPages)} loadingTiers={loadingTiers} canLoadMore={canLoadMore} onMore={loadMore} />
     </>}</QueryState>
+    <TrackingSection part="closed" />
   </div>
 }
 

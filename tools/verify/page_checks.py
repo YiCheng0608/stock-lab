@@ -3290,10 +3290,14 @@ def a16(run: Run) -> str:
         stock < plan < history,
         f"行序 我的庫存 {stock}、追蹤計畫 {plan}、追蹤回看 {history}",
     )
-    # The action list starts at its first tier heading (A3).
+    # The action list starts at its first tier heading (A3) and sits between the plans in
+    # progress and the ended ones (#637); without a tier heading there is no list to place.
     first_action = text.find_where(lambda line: re.fullmatch(r"第 \d 級", line))
-    end = first_action if first_action >= 0 else len(text.lines)
-    expect(history < end, f"行動列表（{text.at(first_action)}）在 `追蹤回看` 之前")
+    end = first_action if first_action >= 0 else history
+    expect(
+        plan < end <= history,
+        f"行動列表（{text.at(first_action)}）不在 `追蹤計畫` 與 `追蹤回看` 之間",
+    )
     problems = [
         f"`記錄來源` 在庫存區外（{text.at(i)}）"
         for i, line in enumerate(text.lines)
@@ -3301,10 +3305,11 @@ def a16(run: Run) -> str:
     ] + [
         f"`{line[:4]}` 在追蹤區外（{text.at(i)}）"
         for i, line in enumerate(text.lines)
-        if line.startswith(("模擬成交", "模擬出場", "模擬報酬")) and not plan < i < end
+        if line.startswith(("模擬成交", "模擬出場", "模擬報酬"))
+        and not (plan < i < end or i > history)
     ]
     expect(not problems, "；".join(problems))
-    return "我的庫存 < 追蹤計畫 < 追蹤回看 < 行動列表；庫存與模擬的行各在自己的區塊"
+    return "我的庫存 < 追蹤計畫 < 行動列表 < 追蹤回看；庫存與模擬的行各在自己的區塊"
 
 
 @check("actions", "A17", after=("A14",))

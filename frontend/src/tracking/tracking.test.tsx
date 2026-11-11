@@ -124,6 +124,11 @@ check(paged.includes('第 1／2 頁 · 共 25 筆'), 'more than one page shows t
 const empty = render(<TrackingSection />, [[['tracking-plans', 'open', 1], listResponse([])], [['tracking-plans', 'closed', 1], listResponse([])]])
 check(empty.includes(EMPTY_OPEN_TEXT) && empty.includes(EMPTY_CLOSED_TEXT), 'two empty states')
 check(render(<TrackingSection />).includes('追蹤計畫載入中…'), 'loading skeleton')
+// #637: the page renders the two parts apart (the action list sits between them).
+const openOnly = render(<TrackingSection part="open" />, [[['tracking-plans', 'open', 1], opened], [['tracking-plans', 'closed', 1], closed]])
+const closedOnly = render(<TrackingSection part="closed" />, [[['tracking-plans', 'open', 1], opened], [['tracking-plans', 'closed', 1], closed]])
+check(openOnly.includes('>追蹤計畫</h2>') && !openOnly.includes('>追蹤回看</h2>') && count(openOnly, 'class="card plan-card"') === 2, 'part=open: only the plans in progress')
+check(closedOnly.includes('>追蹤回看</h2>') && !closedOnly.includes('>追蹤計畫</h2>') && count(closedOnly, 'class="card plan-card"') === 4, 'part=closed: only the ended plans')
 
 // ---- 加入追蹤 ----
 check(render(<AddPlanButton signalId={1} />).includes('>加入追蹤</button>'), 'untracked signal: secondary button')
