@@ -726,7 +726,7 @@ class Run:
         skipped = []
         for source, pick in (
             ("今日榜", self._pick_from_board),
-            ("今日可買", self._pick_from_candidates),
+            ("今日名單", self._pick_from_candidates),
             ("市場列表", self._pick_from_list),
         ):
             try:
@@ -752,7 +752,7 @@ class Run:
         if not items:
             raise Undetermined("candidates.json 的 items 為空")
         instrument = items[0]["instrument"]
-        return Stock(instrument["exchange"], instrument["symbol"]), "今日可買 #1"
+        return Stock(instrument["exchange"], instrument["symbol"]), "今日名單 #1"
 
     def _pick_from_list(self) -> tuple[Stock, str]:
         items = self.get("stocks?page=1&page_size=30", "stocks.json").get("items") or []
@@ -1137,27 +1137,27 @@ def source_lines(text: Text) -> list[int]:
     return [i for i, line in enumerate(text.lines) if line.startswith("來源：")]
 
 
-# An action-list row (觀察中, tier 1) starts with its rank cell and a tab (#276): `#1<TAB>…`.
+# An action-list row (我的追蹤, tier 1) starts with its rank cell and a tab (#276): `#1<TAB>…`.
 # Cards put `#1` on a line of its own, so the tab tells a table row from a card.
 RANK_ROW = re.compile(r"^#([0-9]+)\t")
-# A 今日可買 row starts with its title line (#493, #510): `#1 2330 台積電 上市 · 族群` (rank,
+# A 今日名單 row starts with its title line (#493, #510): `#1 2330 台積電 上市 · 族群` (rank,
 # symbol, name on one line). The hot group rows put `#1` on a line of its own, so the symbol
 # after the rank tells a candidate row.
 CANDIDATE_ROW = re.compile(r"^#([0-9]+) [0-9A-Z]+ ")
 # CandidatesSection in frontend/src/candidates/CandidateViews.tsx (#510: no eyebrow); the
-# navbar has a 今日可買 link too and comes first, so the title is the last line that reads it.
-CANDIDATES_TITLE = "今日可買"
+# navbar has a 今日名單 link too and comes first, so the title is the last line that reads it.
+CANDIDATES_TITLE = "今日名單"
 
 
 def candidates_title(text: Text) -> int:
-    """The 今日可買 section title, not the navbar link; -1 when it is missing."""
+    """The 今日名單 section title, not the navbar link; -1 when it is missing."""
 
     found = [n for n, line in enumerate(text.lines) if line == CANDIDATES_TITLE]
     return found[-1] if found else -1
 
 
 def candidate_ranks(text: Text) -> list[int]:
-    """Rank cells between 今日可買 and 熱門族群 (the group rows have their own `#n`)."""
+    """Rank cells between 今日名單 and 熱門族群 (the group rows have their own `#n`)."""
 
     start, end = candidates_title(text), text.find("熱門族群")
     end = end if end > start else len(text.lines)
@@ -1255,14 +1255,14 @@ def t8(run: Run) -> str:
 
 @check("today", "T9")
 def t9(run: Run) -> str:
-    """#493: 今日可買 keeps one list; 關注標的 moved to 觀察中 and every home link to it is /watch."""
+    """#493: 今日名單 keeps one list; 關注標的 moved to 我的追蹤 and every home link to it is /watch."""
 
     text = run.text(TODAY)
     for line in ("關注標的", "查看個股詳情 →", "查看行動中心 →", "明日候選"):
         expect(not text.has(line), f"首頁仍有整行 `{line}`")
-    alert = text.has("查看觀察中 →")
+    alert = text.has("查看我的追蹤 →")
     return "首頁沒有 `關注標的`、`明日候選`；" + (
-        "持倉風險提示列連到 `查看觀察中 →`" if alert else "沒有持倉風險提示列"
+        "持倉風險提示列連到 `查看我的追蹤 →`" if alert else "沒有持倉風險提示列"
     )
 
 
@@ -1414,7 +1414,7 @@ def t12(run: Run) -> str:
         )
         + f"，預期 `{CANDIDATES_TITLE}` 在 `熱門族群` 與 `重點新聞` 之前",
     )
-    return "`今日可買`（{0}）→ `熱門族群`（{1}）、`重點新聞`（{2}）".format(
+    return "`今日名單`（{0}）→ `熱門族群`（{1}）、`重點新聞`（{2}）".format(
         *(text.at(i) for i in found.values())
     )
 
@@ -1584,7 +1584,7 @@ def t14(run: Run) -> str:
     # The overview moved to /market: its widgets' own lines are not on the today page.
     old = [line for line in ("漲跌家數（股票）", "括號為漲停／跌停") if text.has(line)]
     expect(
-        not old, "今日可買頁仍有大盤概況的 " + "、".join(f"`{line}`" for line in old)
+        not old, "今日名單頁仍有大盤概況的 " + "、".join(f"`{line}`" for line in old)
     )
     return "、".join(f"`{line}`" for line in lines) + f"（{text.at(start)}）"
 
@@ -2518,7 +2518,7 @@ def summary_verdict(payload: dict) -> tuple[str, str | None]:
     if candidate:
         strategy = CANDIDATE_STRATEGY.get(candidate.get("strategy"), "策略條件")
         score = round(candidate["total_score"] * 100)
-        # 條件成立, not 可買: 今日可買 is not a recommendation (#581).
+        # 條件成立, not 可買: 今日名單 is not a recommendation (#581).
         return (
             "條件成立",
             f"每日候選第 {candidate['rank']} 名 · 總分 {score} · {strategy}",
@@ -2812,7 +2812,7 @@ def s13(run: Run, stock: Stock) -> str:
 
 # ---- actions ----
 
-# The page is 觀察中 at /watch since #493; the old /actions redirects there (A18).
+# The page is 我的追蹤 at /watch since #493; the old /actions redirects there (A18).
 ACTIONS = Shot("actions", "/watch")
 # The old URL with a query and a plan anchor; both must survive the redirect (#493 review).
 LEGACY_QUERY, LEGACY_ANCHOR = "from=legacy", "plan-0"
@@ -2820,7 +2820,7 @@ ACTIONS_LEGACY = Shot(
     "actions-legacy", f"/actions?{LEGACY_QUERY}#{LEGACY_ANCHOR}", (1280,)
 )
 WATCH_TITLE, WATCH_EYEBROW = (
-    "觀察中",
+    "我的追蹤",
     "追蹤與提醒",
 )  # ActionsPage in frontend/src/App.tsx
 
@@ -3455,7 +3455,7 @@ def a17(run: Run) -> str:
 
 
 def watch_title(text: Text) -> int:
-    """The page title line: 觀察中 right after its eyebrow (the navbar also has a 觀察中 link)."""
+    """The page title line: 我的追蹤 right after its eyebrow (the navbar also has a 我的追蹤 link)."""
 
     i = text.find(WATCH_EYEBROW)
     return i + 1 if i >= 0 and text.after(i) == WATCH_TITLE else -1
@@ -3463,7 +3463,7 @@ def watch_title(text: Text) -> int:
 
 @check("actions", "A18")
 def a18(run: Run) -> str:
-    """#493: /watch is 觀察中, and the old /actions redirects there with its query and anchor.
+    """#493: /watch is 我的追蹤, and the old /actions redirects there with its query and anchor.
 
     The page text alone cannot tell a redirect from /actions rendering the page in place, so
     the URL the browser ended on (screenshot.cjs `finalUrl`) must be /watch.
@@ -3808,11 +3808,11 @@ def summary_markdown(
 
     lines = [head, "", *environment_markdown(environment or {})]
     names = {
-        "today": "今日可買 `/`",
+        "today": "今日名單 `/`",
         "news": "新聞 `/news`",
         "themes": "族群 `/themes`",
         "stocks": "個股 `/stocks`",
-        "actions": "觀察中 `/watch`",
+        "actions": "我的追蹤 `/watch`",
     }
     if samples:
         lines += [

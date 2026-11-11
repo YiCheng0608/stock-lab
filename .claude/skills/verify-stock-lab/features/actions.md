@@ -1,6 +1,6 @@
-# 觀察中 `/watch`
+# 我的追蹤 `/watch`
 
-入口：主導航「觀察中」，`ActionsPage`（原行動中心，#493 起在 `/watch`，`frontend/src/App.tsx`；列表在 `frontend/src/actions/`）。舊網址 `/actions` 轉到 `/watch`（保留查詢與 `#plan-<id>`）。列表依 `action_tier_v1` 分級（[UI_COPY_SPEC §5](../../../../docs/UI_COPY_SPEC.md#5-行動中心的分級與預設篩選)）。`/actions/:exchange/:symbol` 轉到 `/stocks/:exchange/:symbol?tab=research`。路徑：個股檔的 `E`、`S`（[README 選股](README.md#選股)）→ 行動詳情（轉址後的個股研究條件分頁）。
+入口：主導航「我的追蹤」，`ActionsPage`（原行動中心，#493 起在 `/watch`，`frontend/src/App.tsx`；列表在 `frontend/src/actions/`）。舊網址 `/actions` 轉到 `/watch`（保留查詢與 `#plan-<id>`）。列表依 `action_tier_v1` 分級（[UI_COPY_SPEC §5](../../../../docs/UI_COPY_SPEC.md#5-行動中心的分級與預設篩選)）。`/actions/:exchange/:symbol` 轉到 `/stocks/:exchange/:symbol?tab=research`。路徑：個股檔的 `E`、`S`（[README 選股](README.md#選股)）→ 行動詳情（轉址後的個股研究條件分頁）。
 
 ## API
 
@@ -82,7 +82,7 @@
 | A15 | CI | 狀態與模擬結果 | 在 A14 之後。每張卡（第 i 個 `計畫資料日` 行對應第 i 筆）往上第一個 `^資料 YYYY/MM/DD$` 行的上一行是狀態標籤（`pending` 待觸發、`triggered` 已觸發、`target_hit` 達標、`invalidated` 失效、`incomparable` 無法比較、`expired` 到期、`closed` 期滿結算、`cancelled` 已取消），兩行之間的行有 `行情有更正，狀態待核對` 若且唯若 `data_quality` 為 `transition_conflict`；往下到 `版本、來源與逐日明細` 之前：進行中的卡沒有 `模擬報酬` 開頭的行，已結束且 `result_comparable` 為 true 的卡有整行 `模擬報酬 ±x.xx%`（`result_return × 100` 四捨五入兩位，正數帶 `+`），其餘已結束的卡有 `模擬報酬：無法比較` 開頭的行。除區塊說明那一行外，全頁沒有含 `勝率` 的行 |
 | A16 | CI | 計畫、模擬與持倉分開 | 整行 `我的庫存` < `追蹤計畫` < `追蹤回看`；`記錄來源 ` 開頭的行都在 `我的庫存` 與 `追蹤計畫` 之間；`模擬成交`、`模擬出場`、`模擬報酬` 開頭的行都在 `追蹤計畫` 之後、第一個整行 `第 <n> 級`（行動列表）之前 |
 | A17 | CI | 回看明細 | 在 A14 之後。逐日明細列（`^YYYY/MM/DD\t第 n 日\t`）的行數 = 兩份 `items` 的 `sessions_observed` 總和；`tracking-plan.json` 的每個 `sessions[]` 有一列 `<session_date 斜線>\t第 <session_no> 日\t<狀態>`（`not_triggered` 未觸發、`active` 已模擬成交、`target_1_hit` 達標、`invalidated` 失效、`ambiguous` 順序不明、`suspended` 停牌），最後一列日期等於該計畫的 `last_session_date` |
-| A18 | CI | 觀察中與舊網址轉址 | `actions`（`/watch`）與 `actions-legacy`（`/actions?from=legacy#plan-0`）兩份 1280 文字都沒有 `找不到此頁。`，而且整行 `追蹤與提醒` 的下一行是 `觀察中`（頁面標題；導覽列也有 `觀察中`，所以以眉標定位）；`actions-legacy` 截圖結果的 `finalUrl`（`screenshot.cjs` 回報瀏覽器最後停在的網址）的路徑、查詢與錨點是 `/watch?from=legacy#plan-0`：只看文字分不出轉址與在 `/actions` 直接渲染（#493 review） |
+| A18 | CI | 我的追蹤與舊網址轉址 | `actions`（`/watch`）與 `actions-legacy`（`/actions?from=legacy#plan-0`）兩份 1280 文字都沒有 `找不到此頁。`，而且整行 `追蹤與提醒` 的下一行是 `我的追蹤`（頁面標題；導覽列也有 `我的追蹤`，所以以眉標定位）；`actions-legacy` 截圖結果的 `finalUrl`（`screenshot.cjs` 回報瀏覽器最後停在的網址）的路徑、查詢與錨點是 `/watch?from=legacy#plan-0`：只看文字分不出轉址與在 `/actions` 直接渲染（#493 review） |
 
 ## 陷阱
 
@@ -102,7 +102,7 @@
 ## 輸出格式
 
 ```markdown
-### 觀察中 `/watch`：通過
+### 我的追蹤 `/watch`：通過
 
 | 檢查 | 結果 | 原因類別 | 證據 |
 | --- | --- | --- | --- |

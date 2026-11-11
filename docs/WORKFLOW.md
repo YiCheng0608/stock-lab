@@ -39,7 +39,7 @@ V1 以 ROADMAP V1 基線的七個 gate（V1-G1～G7）承接，每個 gate 由�
 
 ## 任務流程
 
-1. **建單**：套[任務 Issue 模板](templates/issue-task.md)，填目標、範圍、AC、依賴、對應里程碑與依據；套 milestone；看板設待辦。UI 任務（改 verify 五個頁面組的頁面：今日可買（含大盤）、觀察中、族群、個股、新聞；主導航是七項，策略說明不在 verify）的 AC 固定加一條「更新對應的 [`features/*.md`](../.claude/skills/verify-stock-lab/features) 或寫明不需更新」。
+1. **建單**：套[任務 Issue 模板](templates/issue-task.md)，填目標、範圍、AC、依賴、對應里程碑與依據；套 milestone；看板設待辦。UI 任務（改 verify 五個頁面組的頁面：今日名單（含大盤）、我的追蹤、族群、個股、新聞；主導航是七項，策略說明不在 verify）的 AC 固定加一條「更新對應的 [`features/*.md`](../.claude/skills/verify-stock-lab/features) 或寫明不需更新」。
 2. **開工**：統籌照[任務檔模板](templates/task-file.md)把任務全文（Issue 連結、AC、白名單、驗證方式，以及「提問與回報照[留言類型](#留言類型)寫在 Issue／PR 留言」一點）寫成 UTF-8 檔（不經 PowerShell 管線），放 worktree 外、統籌換手後仍在的目錄（例如 `$HOME/t<issue>/task/task.md`；工程師把 `$HOME/t<issue>/` 列進 PR 本文的 worktree 外暫存目錄，結案時以 `--extra-dir` 刪）。pytest 的 `--basetemp` 要用同一目錄下的另一個子目錄（例如 `$HOME/t<issue>/b1`），因為 pytest 開跑時會清空 basetemp，全綠時也會刪掉它，任務檔不能放在裡面。目錄名不能含 `"`、`$`、反引號、`%`、`!`，dispatch.sh 會拒絕（exit 64）。寫好後跑一行：
 
    ```text

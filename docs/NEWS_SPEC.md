@@ -134,7 +134,7 @@ LLM 批次的實作（`worker.news_llm`，執行方式見 [現有 worker CLI](op
 
 ### 首頁重點新聞
 
-[#581](https://github.com/YiCheng0608/stock-lab/issues/581)：`/api/dashboard` 的 `news`（今日可買頁「重點新聞」，[UI 文案](UI_COPY_SPEC.md)）只收下列新聞，排序與 `/news` 相同（§4），最多 6 則；其餘只在 `/news`。條件寫在 `app.api.home_news_eligible`。
+[#581](https://github.com/YiCheng0608/stock-lab/issues/581)：`/api/dashboard` 的 `news`（今日名單頁「重點新聞」，[UI 文案](UI_COPY_SPEC.md)）只收下列新聞，排序與 `/news` 相同（§4），最多 6 則；其餘只在 `/news`。條件寫在 `app.api.home_news_eligible`。
 
 - **國內**（`domestic` 與官方事件投影 `company`／`taiwan`）：有規則核實標的（`symbols_json` 不為空），或目前提示版本的 `done` 結果方向是 `positive`／`negative`／`mixed`（不是 `unknown`）。
 - **國際**（`international`）：要關聯到台股標的：有規則核實標的，或目前提示版本的 `done` 結果有 AI 標的候選（`ai_symbol_candidates_json` 不為空；候選未核實，首頁列不顯示它，只用來決定能不能進首頁）。只有方向、沒有標的的國際新聞不進首頁。

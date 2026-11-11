@@ -3,7 +3,7 @@ import type { IndexRow, MarketOverview, MarketOverviewExchange, StockBarsRespons
 import { formatFixed } from '../units'
 import { isFiniteNumber } from '../stock/stockBars'
 
-// Pure helpers for the market page (/market, Issue 549) and the 今日可買 one-line summary.
+// Pure helpers for the market page (/market, Issue 549) and the 今日名單 one-line summary.
 // Copy and units follow UI_COPY_SPEC §11; layout DESIGN_SYSTEM §4/§5.
 
 export const EXCHANGES = [
@@ -214,7 +214,7 @@ export function signedPercent(ratio: number | null | undefined): string {
   return isFiniteNumber(ratio) ? `${formatFixed(ratio * 100, 2, true)}%` : '—'
 }
 
-// 今日可買 summary (UI_COPY_SPEC §11): one item per exchange, 「加權 24,012.35 -0.49%」 or 「加權 未取得」.
+// 今日名單 summary (UI_COPY_SPEC §11): one item per exchange, 「加權 24,012.35 -0.49%」 or 「加權 未取得」.
 export type SummaryItem = { spec: ExchangeSpec; close: string | null; pct: string; tone: 'tone-up' | 'tone-down' | null }
 
 export function summaryItems(overview: MarketOverview | undefined): SummaryItem[] {
@@ -253,7 +253,7 @@ export function marketOverviewNotes(overview: MarketOverview | undefined): strin
 
 export const MA60_LABEL = '加權指數與季線（MA60）'
 export const MA60_NOTE = '季線：臺灣證券交易所加權指數最近 60 個交易日收盤的平均（indicators/v1）；位置以當日收盤是否高於季線判定，等於季線不算高於'
-export const MA60_BACKGROUND_NOTE = '季線位置只是背景資訊，不是買賣建議，也不影響今日可買名單'
+export const MA60_BACKGROUND_NOTE = '季線位置只是背景資訊，不是買賣建議，也不影響今日名單'
 export const MA60_POSITION: Record<string, string> = { above: '在季線之上', below: '在季線之下', equal: '與季線持平' }
 
 const day = (value: string | null | undefined) => formatDay(value) ?? value ?? '—'

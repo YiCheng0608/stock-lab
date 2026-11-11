@@ -17,7 +17,7 @@ import { overviewBoth, riskActions } from './today/today.fixtures'
 import { planLink } from './tracking/tracking'
 import type { Dashboard } from './types'
 
-// The 觀察中 purpose line for a first-time reader (UI_COPY_SPEC §5, decision 6648288563).
+// The 我的追蹤 purpose line for a first-time reader (UI_COPY_SPEC §5, decision 6648288563).
 const WATCH_PURPOSE = '把有興趣的候選加入追蹤，系統每天收盤後依日線模擬它的進場與出場（不是實際成交）；這裡也會提醒你庫存的風險，和快要成立的股票。'
 
 // The frontend ships no Node typings; scripts/ci-test.cjs runs this module under Node, so declare what it uses.
@@ -27,7 +27,7 @@ const fs = require('node:fs') as { readFileSync(file: string, encoding: 'utf8'):
 const path = require('node:path') as { join(...parts: string[]): string }
 
 // Information architecture (#493, Issue 549; PRODUCT_SPEC §2, DESIGN_SYSTEM §4/§5, UI_COPY_SPEC §5/§10/§11): the seven main
-// links, 觀察中 at /watch with /actions redirecting, the 策略說明 page, the 今日可買 home and its table and columns.
+// links, 我的追蹤 at /watch with /actions redirecting, the 策略說明 page, the 今日名單 home and its table and columns.
 const failures: string[] = []
 let checks = 0
 const count = (html: string, part: string) => html.split(part).length - 1
@@ -44,20 +44,20 @@ function render(location: string, element: ReactElement, client = new QueryClien
   }
 }
 
-// ---- main navigation: 今日可買, 大盤 (Issue 549), 觀察中, three data pages, then the explanation ----
+// ---- main navigation: 今日名單, 大盤 (Issue 549), 我的追蹤, three data pages, then the explanation ----
 const nav = MAIN_NAV.map((item) => `${item.to} ${item.label}`)
-const expectedNav = ['/ 今日可買', '/market 大盤', '/watch 觀察中', '/themes 族群', '/stocks 個股', '/news 新聞', '/strategy 策略說明']
+const expectedNav = ['/ 今日名單', '/market 大盤', '/watch 我的追蹤', '/themes 族群', '/stocks 個股', '/news 新聞', '/strategy 策略說明']
 check(JSON.stringify(nav) === JSON.stringify(expectedNav), `MAIN_NAV: ${JSON.stringify(nav)}，預期 ${JSON.stringify(expectedNav)}`)
 
 // ---- routes: /watch and /strategy render their pages; /actions keeps its query and plan anchor ----
 const App = (AppModule as Record<string, unknown>).default as () => ReactElement
 const watch = render('/watch', <App />)
-check(watch.includes('<h1>觀察中</h1>'), '/watch 的頁面標題是「觀察中」')
+check(watch.includes('<h1>我的追蹤</h1>'), '/watch 的頁面標題是「我的追蹤」')
 check(text(watch).includes(WATCH_PURPOSE), `/watch 有用途說明: ${text(watch).slice(0, 300)}`)
 check(!watch.includes('找不到此頁'), '/watch 不是 404')
 const strategy = render('/strategy', <App />)
 check(strategy.includes('<h1>策略說明</h1>'), '/strategy 的頁面標題是「策略說明」')
-for (const heading of ['今日可買怎麼來', '突破型', '回踩型', '怎麼照著做', '觀察中在做什麼']) {
+for (const heading of ['今日名單怎麼來', '突破型', '回踩型', '怎麼照著做', '我的追蹤在做什麼']) {
   check(text(strategy).includes(heading), `/strategy 缺「${heading}」`)
 }
 // 策略說明 names the strategy, then writes its thresholds and weights (#577; UI_COPY_SPEC §13; the numbers restate
@@ -74,7 +74,7 @@ const firstParagraph = flat(/<\/h2><p>([\s\S]*?)<\/p>/.exec(block)?.[1] ?? '')
 for (const part of ['順勢籌碼型', '只做多頭趨勢', '所屬族群比大盤強', '三大法人沒有明顯賣超', '融資沒有過熱', '大盤好壞目前不影響判斷', '突破型（breakout_v3）', '回踩型（pullback_v4）', '候選總分（candidate_score_v7）']) {
   check(firstParagraph.includes(part.replace(/\s+/g, '')), `/strategy 策略區塊第一段缺「${part}」: ${firstParagraph}`)
 }
-check(strategyText.indexOf('順勢籌碼型') < strategyText.indexOf('今日可買怎麼來') && strategy.indexOf('data-strategy="trend_chips"') < strategy.indexOf('aria-labelledby="strategy-follow-title"'), '/strategy 先寫策略名稱與區塊，再寫「怎麼照著做」')
+check(strategyText.indexOf('順勢籌碼型') < strategyText.indexOf('今日名單怎麼來') && strategy.indexOf('data-strategy="trend_chips"') < strategy.indexOf('aria-labelledby="strategy-follow-title"'), '/strategy 先寫策略名稱與區塊，再寫「怎麼照著做」')
 // The three confirmations, each with its threshold, in a table.
 const tables = [...block.matchAll(/<table[\s\S]*?<\/table>/g)].map((match) => match[0])
 check(tables.length === 2 && tables.every((table) => table.includes('class="action-table"')), `/strategy 策略區塊有兩張表（確認條件、評分權重），got ${tables.length}`)
@@ -110,7 +110,7 @@ const routes = (AppModule as Record<string, unknown>).APP_ROUTES as ReadonlyArra
 const WatchRedirect = (AppModule as Record<string, unknown>).WatchRedirect as (() => ReactElement) | undefined
 const legacy = routes?.find((route) => route.path === '/actions')
 check(Boolean(legacy && WatchRedirect && legacy.element.type === WatchRedirect), `/actions 的 Route 是 WatchRedirect: ${legacy ? String((legacy.element.type as { name?: string }).name) : 'APP_ROUTES 沒有 /actions'}`)
-check(routes?.find((route) => route.path === '/watch')?.element.type === AppModule.ActionsPage, '/watch 的 Route 是觀察中頁 (ActionsPage)')
+check(routes?.find((route) => route.path === '/watch')?.element.type === AppModule.ActionsPage, '/watch 的 Route 是我的追蹤頁 (ActionsPage)')
 let landed: unknown = null
 function LandingProbe() {
   // Calls the redirect in this component's render, so its hooks read the StaticRouter location below.
@@ -122,9 +122,9 @@ render('/actions?q=2330#plan-7', <LandingProbe />)
 check(landed === '/watch?q=2330#plan-7', `/actions?q=2330#plan-7 轉到: ${String(landed)}，預期 /watch?q=2330#plan-7`)
 check(planLink(7) === '/watch#plan-7', `已在追蹤的連結: ${planLink(7)}`)
 const alert = render('/', <HoldingAlert actions={riskActions()} />)
-check(alert.includes('href="/watch"') && text(alert).includes('查看觀察中 →'), `持倉風險提示列連到 /watch: ${text(alert)}`)
+check(alert.includes('href="/watch"') && text(alert).includes('查看我的追蹤 →'), `持倉風險提示列連到 /watch: ${text(alert)}`)
 
-// ---- 今日可買 home: the list first, no 關注標的, hot groups and news as two equal cards ----
+// ---- 今日名單 home: the list first, no 關注標的, hot groups and news as two equal cards ----
 const dashboard = {
   as_of: '2026-10-16', mode: 'official', scan_scope: 'official',
   market: { instruments: 1900, bars: 1900, groups: 40, source: 'twse', source_label: 'TWSE／TPEx 官方資料' },
@@ -139,10 +139,10 @@ homeClient.setQueryData(['theme-board', 'industry', TODAY_BOARD_LIMIT], industry
 homeClient.setQueryData(['candidates', 'latest'], listResponse())
 const TodayPage = AppModule.TodayPage as () => ReactElement
 const home = render('/', <TodayPage />, homeClient)
-check(home.includes('id="candidates-title">今日可買</h2>'), '首頁名單標題是「今日可買」')
+check(home.includes('id="candidates-title">今日名單</h2>'), '首頁名單標題是「今日名單」')
 // Issue 549: one market line linking to /market sits above the list; the four-widget overview moved there.
 check(home.includes('class="market-summary"') && home.includes('href="/market"') && !home.includes('market-overview-grid'), '首頁大盤只留一行摘要，連到 /market')
-check(home.indexOf('class="market-summary"') < home.indexOf('id="candidates-title"'), '大盤摘要在今日可買名單之前')
+check(home.indexOf('class="market-summary"') < home.indexOf('id="candidates-title"'), '大盤摘要在今日名單之前')
 check(!text(home).includes('明日候選') && !text(home).includes('關注標的'), '首頁不再有「明日候選」與「關注標的」')
 const columns = home.slice(home.indexOf('home-columns'))
 const panels = columns.match(/class="[^"]*\bhome-panel\b[^"]*"/g) ?? []
@@ -160,9 +160,9 @@ check(/<h3 class="home-news-title"><a [^>]*title="[^"]+"/.test(newsRow) && newsR
 check(!newsRow.includes('news-chips') && !newsRow.includes('news-card-summary') && !newsRow.includes('news-card-meta') && !newsRow.includes('news-ai-candidates'), '新聞列不放已核實標的 tag、摘要、分類與 AI 候選行（在 /news）')
 check((newsRow.match(/<(h3|div) class="home-news-/g) ?? []).length === 3, '新聞列只有標題、來源時間、方向三塊（排成兩行）')
 
-// ---- 今日可買 (Issue 510): one list at every width, the group on one line, the #491 sentence under the name ----
+// ---- 今日名單 (Issue 510): one list at every width, the group on one line, the #491 sentence under the name ----
 const list = render('/', <CandidatesSection data={listResponse()} loading={false} error={null} />)
-check(!list.includes('<table') && list.includes('<ol class="candidate-list"'), `今日可買是同一份清單，不是表格: ${list.slice(0, 200)}`)
+check(!list.includes('<table') && list.includes('<ol class="candidate-list"'), `今日名單是同一份清單，不是表格: ${list.slice(0, 200)}`)
 const firstRow = list.slice(list.indexOf('data-candidate-rank="1"'), list.indexOf('data-candidate-rank="2"'))
 const titleLine = firstRow.slice(firstRow.indexOf('<p class="candidate-row-title"'), firstRow.indexOf('</p>'))
 check(text(titleLine).trim() === '#1 2377 微星 上市 · AI 伺服器（題材 #2）', `標題列是「#名次 代號 名稱 市場 · 族群（榜 #名次）」一行: ${text(titleLine)}`)

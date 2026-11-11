@@ -224,11 +224,11 @@ def _candidates(count=2, inference=True):
     }
 
 
-# The 1280 list (#510): the navbar's 今日可買 link, the section title (no eyebrow), then rows
+# The 1280 list (#510): the navbar's 今日名單 link, the section title (no eyebrow), then rows
 # whose title line starts `#<rank> <symbol> <name>`, then the opened detail.
 TODAY_CANDIDATES = (
-    "今日可買\n觀察中\n"
-    "今日可買\n資料 2026/10/16\n2 檔\n2026/10/16 收盤後條件成立\n策略說明 →\n"
+    "今日名單\n我的追蹤\n"
+    "今日名單\n資料 2026/10/16\n2 檔\n2026/10/16 收盤後條件成立\n策略說明 →\n"
     "#1 9100 示範一 上市 · 半導體（產業 #1）\n突破型\n2026/10/16 收盤已突破 21.10 元\n"
     "收盤（元）\n21.10\n+0.48%\nRR\n1.60 倍\nAI 推論 ▸\n"
     "AI 進出點說明\nAI 推論\n"
@@ -257,7 +257,7 @@ def test_t7_and_t8_pass_on_matching_text(tmp_path):
 
 def test_t7_fails_on_the_old_candidate_rows(tmp_path):
     # Before #493 the rank was a cell of its own (`#1<TAB>9100 …`), and before #276 a card
-    # (`#1` on a line of its own); neither is a 今日可買 row.
+    # (`#1` on a line of its own); neither is a 今日名單 row.
     for old in ("\t", "\n"):
         page = TODAY_CANDIDATES.replace("#1 ", "#1" + old).replace("#2 ", "#2" + old)
         run = FakeRun(
@@ -273,15 +273,15 @@ def test_t7_fails_on_the_old_candidate_rows(tmp_path):
 
 
 def test_t7_reads_the_section_title_not_the_navbar_link(tmp_path):
-    # #493: the navbar 今日可買 comes first; the date must follow the section title.
-    page = TODAY_CANDIDATES.replace("觀察中\n今日可買\n", "觀察中\n", 1)
+    # #493: the navbar 今日名單 comes first; the date must follow the section title.
+    page = TODAY_CANDIDATES.replace("我的追蹤\n今日名單\n", "我的追蹤\n", 1)
     run = FakeRun(
         tmp_path,
         {"candidates": _candidates()},
         {"today-1280": page},
         {"candidate_run_latest_trading_date": "2026-10-16"},
     )
-    with pytest.raises(page_checks.Fail, match="`今日可買` 下一行是 '觀察中'"):
+    with pytest.raises(page_checks.Fail, match="`今日名單` 下一行是 '我的追蹤'"):
         page_checks.t7(run)
 
 
@@ -356,7 +356,7 @@ def test_t7_fails_when_the_page_drops_the_candidates(tmp_path):
     run = FakeRun(
         tmp_path,
         {"candidates": _candidates()},
-        {"today-1280": "今日可買\n資料 2026/10/16\n2 檔\n"},
+        {"today-1280": "今日名單\n資料 2026/10/16\n2 檔\n"},
         {"candidate_run_latest_trading_date": "2026-10-16"},
     )
     with pytest.raises(page_checks.Fail, match=r"`#n` 名次列 \[\]，預期依 items"):
@@ -578,9 +578,9 @@ def test_today_shots_include_the_market_page():
 
 # The today page's one market line (Issue 549): the two indexes, the date, the link.
 SUMMARY_PAGE = (
-    "今日可買\n資料 2026/10/22\n資料截至 2026/10/22 · TWSE／TPEx 官方資料 · 官方單日快照\n"
+    "今日名單\n資料 2026/10/22\n資料截至 2026/10/22 · TWSE／TPEx 官方資料 · 官方單日快照\n"
     "大盤\n加權 46,041.43 -1.81%\n櫃買 381.69 -3.47%\n資料 2026/10/22\n看大盤 →\n"
-    "條件已成立 · 依評分排序\n今日可買\n資料 2026/10/16\n2 檔\n"
+    "條件已成立 · 依評分排序\n今日名單\n資料 2026/10/16\n2 檔\n"
 )
 
 
@@ -955,16 +955,16 @@ def test_t16_fails_on_a_wrong_cell_order_or_group(tmp_path):
 
 
 def test_t12_needs_the_candidates_before_groups_and_news(tmp_path):
-    page = "今日可買\n資料 2026/10/16\n熱門族群\n資料 2026/10/16\n重點新聞\n"
+    page = "今日名單\n資料 2026/10/16\n熱門族群\n資料 2026/10/16\n重點新聞\n"
     run = FakeRun(tmp_path, {}, {"today-1280": page})
-    assert "`今日可買`" in page_checks.t12(run)
-    old = "今日市場／重大事件\n熱門族群\n今日可買\n關注標的\n"
+    assert "`今日名單`" in page_checks.t12(run)
+    old = "今日市場／重大事件\n熱門族群\n今日名單\n關注標的\n"
     run = FakeRun(tmp_path, {}, {"today-1280": old})
     with pytest.raises(page_checks.Fail, match="缺整行 `重點新聞`"):
         page_checks.t12(run)
-    swapped = "熱門族群\n重點新聞\n今日可買\n"
+    swapped = "熱門族群\n重點新聞\n今日名單\n"
     run = FakeRun(tmp_path, {}, {"today-1280": swapped})
-    with pytest.raises(page_checks.Fail, match="熱門族群 → 重點新聞 → 今日可買"):
+    with pytest.raises(page_checks.Fail, match="熱門族群 → 重點新聞 → 今日名單"):
         page_checks.t12(run)
 
 
@@ -1622,13 +1622,13 @@ def test_status_summary_leaves_out_the_evidence():
     status = page_checks.summary_markdown(results, ["actions"], "## head", False)
     assert "台積電" in full and "預期 X" in full
     assert "台積電" not in status and "預期 X" not in status
-    assert "### 觀察中 `/watch`：失敗" in status
+    assert "### 我的追蹤 `/watch`：失敗" in status
     assert "| A2 | 通過 |" in status and "| A3 | 失敗 |" in status
 
 
-# ---- A18: /watch is 觀察中 and /actions redirects there (#493) ----
+# ---- A18: /watch is 我的追蹤 and /actions redirects there (#493) ----
 
-WATCH_PAGE = "今日可買\n觀察中\n族群\n追蹤與提醒\n觀察中\n我的庫存\n"
+WATCH_PAGE = "今日名單\n我的追蹤\n族群\n追蹤與提醒\n我的追蹤\n我的庫存\n"
 
 
 def _a18_run(tmp_path, final_url, legacy_page=WATCH_PAGE):
@@ -1669,7 +1669,7 @@ def test_a18_fails_without_the_landing_url_or_on_a_404(tmp_path):
         page_checks.a18(_a18_run(tmp_path, None))
     with pytest.raises(page_checks.Fail, match="`/actions` 是找不到此頁"):
         page_checks.a18(
-            _a18_run(tmp_path, "http://x/watch", "找不到此頁。\n回到今日可買\n")
+            _a18_run(tmp_path, "http://x/watch", "找不到此頁。\n回到今日名單\n")
         )
 
 

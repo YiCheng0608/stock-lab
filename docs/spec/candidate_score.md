@@ -83,7 +83,7 @@
 
 目前的評分版本（`CANDIDATE_SCORE_VERSION`，[#580](https://github.com/YiCheng0608/stock-lab/issues/580)）。與 [candidate_score_v6](#candidate_score_v6) 只差策略名稱：`name` 為 `candidate_score_v7`，候選池與技術分項（量比方向、距離公式）的 `pullback_v3` 換成 [`pullback_v4`](breakout_pullback.md#pullback_v4)（RR 以進場區中點計算），`breakout_v3` 不變；流動性門檻、權重、子項、窗口、新聞提示（`news_v3`）、名單、理由與保存規則都照 v6。設定是 `domain.py` 的 `CANDIDATE_SCORE_V7`（快照與「只差策略名稱」由 `test_candidates.py` 釘住），`CANDIDATE_SCORE` 指向它；v6 的 run 與列保留不改。
 
-- **入池的 RR**：入池仍要求通過 `validate_signal_levels`（RR ≥ 1.5）與 analyze 判定可行動。v4 的 RR 以進場區中點計算，不足 1.5 的回踩訊號在 analyze 就記 `invalid_levels`、不是可行動訊號，所以不入池（不算可行動訊號，只出現在 run 摘要的訊號狀態分佈 `invalid_levels`，不計入 `exclusions_json`）。今日可買的回踩型因此可能變少（使用者接受，[#1 6744852194](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6744852194)）。
+- **入池的 RR**：入池仍要求通過 `validate_signal_levels`（RR ≥ 1.5）與 analyze 判定可行動。v4 的 RR 以進場區中點計算，不足 1.5 的回踩訊號在 analyze 就記 `invalid_levels`、不是可行動訊號，所以不入池（不算可行動訊號，只出現在 run 摘要的訊號狀態分佈 `invalid_levels`，不計入 `exclusions_json`）。今日名單的回踩型因此可能變少（使用者接受，[#1 6744852194](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6744852194)）。
 - **RR 子項**：權重仍是 0（只顯示、不計分）。v4 起回踩型的 RR 會隨收盤在進場區的位置變動，不再固定約 1.6；要不要計分另議，改權重要再升版。
 - **API**：`/api/candidates` 與個股 `candidate` 的 `levels` 多 `risk_reward_basis`（`entry_zone_midpoint`／`signal_close`／`entry_price`，依訊號的策略版本；畫面據此標明 RR 的計算基準，[UI_COPY_SPEC §10](../UI_COPY_SPEC.md#10-每日候選)），其餘欄位不變。
 

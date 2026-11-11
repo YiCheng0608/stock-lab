@@ -6,13 +6,13 @@ import { DateBadge } from './ui'
 
 export { stockSearchPath } from '../search'
 
-// Fixed 64px top bar (DESIGN_SYSTEM §4): logo, seven main links (#493; Issue 549 added 大盤 after 今日可買: the pages that ask for action, the data
+// Fixed 64px top bar (DESIGN_SYSTEM §4): logo, seven main links (#493; Issue 549 added 大盤 after 今日名單: the pages that ask for action, the data
 // pages, the explanation), stock search with suggestions (NavSearch, Issue 599), data-date badge, hamburger on narrow screens.
 
 export const MAIN_NAV: ReadonlyArray<{ to: string; label: string; end?: boolean }> = [
-  { to: '/', label: '今日可買', end: true },
+  { to: '/', label: '今日名單', end: true },
   { to: '/market', label: '大盤' },
-  { to: '/watch', label: '觀察中' },
+  { to: '/watch', label: '我的追蹤' },
   { to: '/themes', label: '族群' },
   { to: '/stocks', label: '個股' },
   { to: '/news', label: '新聞' },

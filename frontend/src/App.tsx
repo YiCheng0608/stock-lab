@@ -476,8 +476,8 @@ export function TodayPage() {
       .map((action) => [`${action.instrument.exchange}:${action.instrument.symbol}:${action.as_of ?? ''}`, action] as const),
   ).values())
   const modeLabel = !data ? '' : data.mode === 'official' ? '官方單日快照' : data.mode === 'official_partial' ? '官方單日快照（資料仍待補）' : '尚無官方快照'
-  // PRODUCT_SPEC §2 (#493, Issue 549): header line → one-line market summary (the overview is on /market) → holding-risk alert → 今日可買 → hot groups and news, two
-  // cards of one height. The watched stocks moved to 觀察中 (/watch).
+  // PRODUCT_SPEC §2 (#493, Issue 549): header line → one-line market summary (the overview is on /market) → holding-risk alert → 今日名單 → hot groups and news, two
+  // cards of one height. The watched stocks moved to 我的追蹤 (/watch).
   return (
     <div className="page home-page">
       <TodayHeader
@@ -534,7 +534,7 @@ function ThemesPage() {
   const board = parseBoard(searchParams.get('board'))
   const [search, setSearch] = useState('')
   const query = useQuery({ queryKey: ['theme-board', board, THEME_BOARD_LIMIT], queryFn: () => getThemeBoard(board) })
-  // 今日可買 N 檔 on each row (Issue 522): the same latest list (and cache) as the today page.
+  // 今日名單 N 檔 on each row (Issue 522): the same latest list (and cache) as the today page.
   const candidates = useQuery({ queryKey: ['candidates', 'latest'], queryFn: () => getCandidates() })
   const changeBoard = (next: ThemeBoard) => setSearchParams(next === 'industry' ? {} : { board: next }, { replace: true })
   const suggestions = useQuery({ queryKey: ['theme-suggestions', THEME_SUGGESTION_LIMIT], queryFn: () => getThemeSuggestions(THEME_SUGGESTION_LIMIT) })
@@ -933,7 +933,7 @@ type ActionFilterState = { q?: string; view: ActionView; include_etf?: boolean }
 // For a first-time reader (UI_COPY_SPEC §5, decision 6648288563).
 const WATCH_PURPOSE = '把有興趣的候選加入追蹤，系統每天收盤後依日線模擬它的進場與出場（不是實際成交）；這裡也會提醒你庫存的風險，和快要成立的股票。'
 
-// 觀察中 (/watch, formerly the action centre; action_tier_v1, UI_COPY_SPEC §5): one first-page request for the counts
+// 我的追蹤 (/watch, formerly the action centre; action_tier_v1, UI_COPY_SPEC §5): one first-page request for the counts
 // and the top rows; each tier's 顯示更多 pages that tier only.
 export function ActionsPage() {
   const [draft, setDraft] = useState('')
@@ -976,7 +976,7 @@ export function ActionsPage() {
     return next && !cursors.includes(next) ? { ...current, [tier]: [...cursors, next] } : current
   })
   return <div className="page actions-page">
-    <PageTitle eyebrow="追蹤與提醒" title="觀察中" description={WATCH_PURPOSE}>
+    <PageTitle eyebrow="追蹤與提醒" title="我的追蹤" description={WATCH_PURPOSE}>
       <div className="filter-row"><SearchBox draft={draft} query={search} placeholder="搜尋代號或名稱" onDraftChange={setDraft} onSubmit={submit} onClear={clear} /></div>
       {query.data && <ActionFilters summary={query.data.summary} view={view} includeEtf={includeEtf} searching={Boolean(search)} onViewChange={(next) => { setView(next); resetTiers() }} onIncludeEtfChange={(next) => { setIncludeEtf(next); resetTiers() }} />}
     </PageTitle>
@@ -1152,7 +1152,7 @@ function GlossaryPage() {
 }
 
 function NotFound() {
-  return <div className="page"><div className="empty panel">找不到此頁。<Link className="text-link" to="/">回到今日可買</Link></div></div>
+  return <div className="page"><div className="empty panel">找不到此頁。<Link className="text-link" to="/">回到今日名單</Link></div></div>
 }
 
 const trackingClient: TrackingClient = { plans: getTrackingPlans, plan: getTrackingPlan, add: addTrackingPlan, cancel: cancelTrackingPlan }

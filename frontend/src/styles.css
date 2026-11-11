@@ -602,7 +602,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .board-row-extremes { flex: 0 1000 auto; min-width: 0; overflow: hidden; color: var(--color-text-muted); font-size: var(--text-sm); text-overflow: ellipsis; }
 .board-row-extremes b, .board-row-meta b { color: var(--color-text); font: 500 var(--text-sm) var(--font-mono); font-variant-numeric: tabular-nums; }
 .board-row-meta { display: flex; grid-area: meta; align-items: center; gap: var(--space-4); min-width: 0; max-width: none; margin: 0; overflow: hidden; color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1.4; white-space: nowrap; }
-/* 今日可買 N 檔 keeps to the line height, so a row with it is as tall as one without. */
+/* 今日名單 N 檔 keeps to the line height, so a row with it is as tall as one without. */
 .board-row-meta .badge { flex: none; padding: 0 var(--space-2); line-height: 1.4; white-space: nowrap; }
 .board-row-score { grid-area: score; white-space: nowrap; }
 .board-row-score span { color: var(--color-text-muted); font-size: var(--text-xs); }
@@ -696,7 +696,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .candidate-mini-levels dt { color: var(--color-text-muted); font-size: 12px; }
 .candidate-mini-levels dd { margin: var(--space-label) 0 0; font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-/* ---- 今日可買 (#510, DESIGN_SYSTEM §5 候選列表): one list at every width; two lines a candidate, the detail below ---- */
+/* ---- 今日名單 (#510, DESIGN_SYSTEM §5 候選列表): one list at every width; two lines a candidate, the detail below ---- */
 .candidates-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin: var(--space-4) 0 var(--space-3); }
 .candidates-head h2 { margin: 0; font-size: var(--text-2xl); }
 .candidates-head .badge { padding: 2px 10px; font-size: var(--text-sm); }
@@ -933,7 +933,7 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   /* Phones (Issue 522): the rank stays on line one, so the returns and the 五分項 button get the whole width of line two. */
   .board-row-main { grid-template-areas: "rank title score" "meta meta toggle"; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2px var(--space-2); padding: var(--space-2) var(--space-3); }
   .board-rank { min-width: 32px; padding: 0 var(--space-1); font-size: var(--text-sm); }
-  /* The returns keep one line at 390px in the small size; 今日可買 N 檔 wraps under them rather than being cut. */
+  /* The returns keep one line at 390px in the small size; 今日名單 N 檔 wraps under them rather than being cut. */
   .board-row-meta { flex-wrap: wrap; gap: 2px var(--space-2); font-size: var(--text-xs); }
   .board-row-toggle { align-self: start; padding: var(--space-1) 0; font-size: var(--text-xs); }
   .board-row-meta b { font-size: var(--text-xs); }

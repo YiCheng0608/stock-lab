@@ -53,7 +53,7 @@ check(skeleton.includes('aria-busy="true"') && skeleton.split('skeleton-bar').le
 
 // Navbar: five main links, search, data-date badge, hamburger toggle.
 const navbar = html(<StaticRouter location="/stocks/TWSE/2330"><Navbar dataDate="2026-10-16" /></StaticRouter>)
-check(['今日可買', '觀察中', '族群', '個股', '新聞', '策略說明'].every((label) => navbar.includes(`>${label}</a>`)), 'Navbar has the six main links (Issue 493)')
+check(['今日名單', '我的追蹤', '族群', '個股', '新聞', '策略說明'].every((label) => navbar.includes(`>${label}</a>`)), 'Navbar has the six main links (Issue 493)')
 check(navbar.includes('class="active" href="/stocks"') || navbar.includes('href="/stocks" class="active"') || /<a[^>]*aria-current="page"[^>]*href="\/stocks"/.test(navbar), `Navbar marks the current section: ${navbar}`)
 check(navbar.includes('role="search"') && navbar.includes('資料 2026/10/16') && navbar.includes('aria-expanded="false"'), 'Navbar search, data date and menu toggle')
 check(!html(<StaticRouter location="/"><Navbar dataDate={null} dataDateLoading /></StaticRouter>).includes('date-badge'), 'Navbar hides the badge while loading')

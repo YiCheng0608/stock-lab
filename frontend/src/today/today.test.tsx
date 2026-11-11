@@ -87,7 +87,7 @@ check(failed.endsWith('資料截至 未提供') && !failed.includes('·'), `head
 // ---- holding-risk alert row: only verified holding risks, linked to the action centre ----
 const alert = render('HoldingAlert', () => <HoldingAlert actions={riskActions()} />)
 check(text(alert).includes('持倉風險 4 檔：2330 台積電：減碼／退場條件；1101 台泥：持倉風險資料不足；2882 國泰金：庫存數量待核實 等 4 檔'), `持倉提示列: count, first three holdings and reasons, got ${text(alert)}`)
-check(alert.includes('href="/watch"') && text(alert).includes('查看觀察中 →'), '持倉提示列: links to /watch (Issue 493)')
+check(alert.includes('href="/watch"') && text(alert).includes('查看我的追蹤 →'), '持倉提示列: links to /watch (Issue 493)')
 check(!text(alert).includes('長榮') && !text(alert).includes('鴻海'), '持倉提示列: not-held rows are no holding risk')
 const noRisk = render('HoldingAlert none', () => <HoldingAlert actions={riskActions().filter((item: ActionSummary) => !item.held)} />)
 check(noRisk === '', `持倉提示列: nothing when no holding is at risk, got ${text(noRisk)}`)
@@ -111,8 +111,8 @@ check(text(slice(long, 'class="candidate-more"', '</details>')).includes('顯示
 check(text(long).includes('2026/10/16 收盤後條件成立，最早下一個交易日（T+1）才可研究進場。') && text(long).includes(CANDIDATE_DISCLAIMER), 'list: the T+1 sentence and the disclaimer')
 // The head is one line (Issue 510): no eyebrow; title, date badge, count, the notes and 策略說明 in one flex row.
 const head = slice(long, 'class="candidates-head"', '<ol')
-check(!head.includes('eyebrow') && head.includes('id="candidates-title">今日可買</h2>') && head.includes('href="/strategy"'), 'Issue 510: the head has no eyebrow, the title and 策略說明 are in it')
-check(head.indexOf('今日可買</h2>') < head.indexOf('資料 2026/10/16') && head.indexOf('資料 2026/10/16') < head.indexOf('12 檔') && head.indexOf('12 檔') < head.indexOf('收盤後條件成立'), 'Issue 510: title → date → count → notes in the head')
+check(!head.includes('eyebrow') && head.includes('id="candidates-title">今日名單</h2>') && head.includes('href="/strategy"'), 'Issue 510: the head has no eyebrow, the title and 策略說明 are in it')
+check(head.indexOf('今日名單</h2>') < head.indexOf('資料 2026/10/16') && head.indexOf('資料 2026/10/16') < head.indexOf('12 檔') && head.indexOf('12 檔') < head.indexOf('收盤後條件成立'), 'Issue 510: title → date → count → notes in the head')
 // AC-2: each row shows the name, the entry sentence (with its stop and target) and the levels' classes; the reason and
 // the average volume moved into the detail.
 const main1 = mainOf(rowOf(list, 1))

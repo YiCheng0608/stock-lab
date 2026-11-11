@@ -312,7 +312,7 @@ export function CandidatesSection({ data, loading, error }: { data: CandidatesRe
     <section className="candidates-section" aria-labelledby="candidates-title">
       {/* One head line (#510): title, date and count, the T+1 sentence and the disclaimer, then the strategy name and 策略說明 (#577). */}
       <div className="candidates-head">
-        <h2 id="candidates-title">今日可買</h2>
+        <h2 id="candidates-title">今日名單</h2>
         {data && data.status !== 'not_computed' && (
           <span className="board-dates"><DateBadge date={formatDate(data.trading_date)} />{state?.kind === 'list' && <Badge>{data.candidate_count} 檔</Badge>}</span>
         )}
@@ -320,7 +320,7 @@ export function CandidatesSection({ data, loading, error }: { data: CandidatesRe
         <Link className="text-link candidates-strategy-link" to="/strategy">{STRATEGY_LINK_LABEL}</Link>
       </div>
       {loading
-        ? <Skeleton lines={4} label="今日可買載入中…" />
+        ? <Skeleton lines={4} label="今日名單載入中…" />
         : error
           ? <Card><EmptyState title="資料暫時無法載入" reason={errorReason(error)} /></Card>
           : !state

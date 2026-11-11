@@ -100,9 +100,9 @@ const spec = (key: string) => INDEX_SPECS.find((item) => item.key === key) ?? TA
 const chart = (key: string, data: StockBarsResponse | undefined, extra: { loading?: boolean; error?: unknown; row?: IndexRow | null; interval?: 'day' | 'week' } = {}) =>
   <MarketChartView spec={spec(key)} row={extra.row ?? null} interval={extra.interval ?? 'day'} onIntervalChange={() => {}} data={data} loading={extra.loading ?? false} error={extra.error ?? null} />
 
-// ---- navigation: 大盤 right after 今日可買, the /market route renders this page ----
+// ---- navigation: 大盤 right after 今日名單, the /market route renders this page ----
 const nav = MAIN_NAV.map((item) => `${item.to} ${item.label}`)
-check(nav[0] === '/ 今日可買' && nav[1] === '/market 大盤' && nav.length === 7, `MAIN_NAV: 大盤 is second of seven, got ${JSON.stringify(nav)}`)
+check(nav[0] === '/ 今日名單' && nav[1] === '/market 大盤' && nav.length === 7, `MAIN_NAV: 大盤 is second of seven, got ${JSON.stringify(nav)}`)
 const routes = (AppModule as Record<string, unknown>).APP_ROUTES as ReadonlyArray<{ path: string; element: ReactElement }> | undefined
 check(routes?.find((route) => route.path === '/market')?.element.type === MarketPage, '/market route renders MarketPage')
 const App = (AppModule as Record<string, unknown>).default as () => ReactElement
