@@ -2031,24 +2031,13 @@ def board_row(text: Text, item: dict) -> None:
 
 @check("themes", "G4")
 def g4(run: Run) -> str:
-    payload = run.get("theme-suggestions?limit=20", "theme-suggestions.json")
-    items, text = payload.get("items") or [], run.text(THEMES)
-    if not items:
-        expect(text.has("目前沒有新聞題材建議"), "items 空，缺 `目前沒有新聞題材建議`")
-        return "items 空，顯示 `目前沒有新聞題材建議`"
-    # #465: a suggestion is inference, marked 「AI 推論」 and never 「待核實」.
-    start = text.find("新聞聚合 · AI 推論")
-    expect(start >= 0, "缺整行 `新聞聚合 · AI 推論`")
-    pending = sum(1 for line in text.lines[start:] if "待核實" in line)
-    marks = text.count(lambda line: line == "AI 推論")
-    expect(pending == 0, f"題材建議區有 {pending} 行含 `待核實`")
-    expect(marks >= len(items), f"`AI 推論` {marks} 行 < items {len(items)}")
-    total = f"{(payload.get('meta') or {}).get('total')} 個建議"
-    expect(
-        text.find_where(lambda line: line.startswith(total)) >= 0,
-        f"缺 `{total}` 開頭的行",
-    )
-    return f"{len(items)} 個建議：`AI 推論` {marks} 行、沒有 `待核實`，`{total}`"
+    """Issue 627: the page no longer lists the news theme suggestions."""
+
+    text = run.text(THEMES)
+    gone = ["新聞題材建議", "新聞聚合 · AI 推論", "目前沒有新聞題材建議"]
+    shown = [line for line in gone if text.has(line)]
+    expect(not shown, "族群頁仍有 " + "、".join(f"`{line}`" for line in shown))
+    return "族群頁沒有新聞題材建議區"
 
 
 def members(run: Run) -> dict:
