@@ -32,7 +32,7 @@ import {
   unmetText,
 } from './strategyBoard'
 
-// Stock strategy board (#274): one row per registered strategy at the top of the 研究條件 tab, replacing the
+// Stock strategy board (#274): one row per registered strategy at the top of the 進出場 tab, replacing the
 // candidate panel and the static condition list. Desktop is a table, 640px and below one card per strategy
 // (DESIGN_SYSTEM §5 策略總表). Actionable levels come from the signal, observation levels from strategy_levels;
 // the two never share a block (DESIGN_SYSTEM §7). The AI note appears only on the candidate row.

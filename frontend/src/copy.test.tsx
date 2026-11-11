@@ -66,7 +66,7 @@ const IN_PLACE_TERMS: Record<string, string> = {
   // The entry type badge on a candidate's first line (#491).
   breakout_entry: '突破型',
   pullback_entry: '回踩型',
-  // The strategy behind 今日可買 (#577): the 策略說明 title and the 今日可買 head name it.
+  // The strategy behind 今日名單 (#577): the 策略說明 title and the 今日名單 head name it.
   trend_chips: '順勢籌碼型',
 }
 for (const [id, name] of Object.entries(IN_PLACE_TERMS)) {
@@ -153,7 +153,7 @@ const intlUsers = sources(srcRoot)
   .map((file) => path.relative(srcRoot, file).split(path.sep).join('/'))
 check(intlUsers.length === 1 && intlUsers[0] === 'dates.ts', `dates: only dates.ts uses Intl.DateTimeFormat, found ${intlUsers.join('、') || 'none'}`)
 // The strategy's name is one constant (#577 AC-2): only strategy/strategyName.ts and the glossary term spell it out; the
-// 策略說明 page and the 今日可買 head read the constant.
+// 策略說明 page and the 今日名單 head read the constant.
 const nameWriters = sources(srcRoot)
   .filter((file) => fs.readFileSync(file, 'utf8').includes('順勢籌碼型'))
   .map((file) => path.relative(srcRoot, file).split(path.sep).join('/'))

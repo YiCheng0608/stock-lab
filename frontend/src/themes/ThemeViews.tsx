@@ -107,7 +107,7 @@ function BoardHelp() {
         <p>產業與題材各自成榜，依相對報酬、廣度、量能、法人與催化劑五分項計分；只有五分項完整的族群稱為熱門族群，熱門族群不另標，其他族群在名稱後標出資料完整度。</p>
         <p><Term id="heat_rank">分數</Term> 0–100，依分數<Term id="heat_rank">排名</Term>；五分項為<Term id="percentile">同榜百分位</Term>（0–100）；1／5／20 日為相對加權指數的報酬（%）；成員為有效／總數（檔）；「—」表示該項無資料。</p>
         <p>名稱後的兩個分項是五分項中最高與最低的一項。</p>
-        <p>今日可買 N 檔是當日今日可買名單中屬於這個族群的檔數，沒有時不顯示。</p>
+        <p>今日名單 N 檔是當日今日名單中屬於這個族群的檔數，沒有時不顯示。</p>
       </div>
     </details>
   )
@@ -125,7 +125,7 @@ function ComponentExtremes({ item }: { item: ThemeBoardItem }) {
 }
 
 // One group (Issue 522): rank, name, quality (only when it is not 熱門族群) and the highest and lowest components, then the
-// three relative returns and 今日可買 N 檔; the score at the right, then the 五分項 button. The five components are a
+// three relative returns and 今日名單 N 檔; the score at the right, then the 五分項 button. The five components are a
 // <details> under the row the button opens, so every row's components stay in the DOM (the screenshot tool opens them).
 function BoardRow({ item, picks, open, onOpen }: { item: ThemeBoardItem; picks: number | null; open: boolean; onOpen: (open: boolean) => void }) {
   const detailId = `board-detail-${item.theme_id}`
@@ -140,7 +140,7 @@ function BoardRow({ item, picks, open, onOpen }: { item: ThemeBoardItem; picks: 
         </p>
         <p className="board-row-meta">
           {RETURN_WINDOWS.map((window) => <span key={window.key}>{window.label} <b><ReturnValue value={item.relative_returns[window.key]} unit="%" /></b></span>)}
-          {picks !== null && picks > 0 && <Badge tone="primary" className="badge-compact board-row-picks">今日可買 {picks} 檔</Badge>}
+          {picks !== null && picks > 0 && <Badge tone="primary" className="badge-compact board-row-picks">今日名單 {picks} 檔</Badge>}
         </p>
         <span className="board-row-score"><span>分數</span> <b>{formatScore(item.score)}</b></span>
         <button type="button" className="btn btn-ghost board-row-toggle" aria-expanded={open} aria-controls={detailId} onClick={() => onOpen(!open)}>五分項 {open ? '▾' : '▸'}</button>
@@ -211,7 +211,7 @@ export function ThemesBoardView({
   data: ThemeBoardResponse | undefined
   loading: boolean
   error: unknown
-  // The latest 今日可買 list, counted per group on the rows (Issue 522); missing or of another day, the rows say nothing.
+  // The latest 今日名單 list, counted per group on the rows (Issue 522); missing or of another day, the rows say nothing.
   candidates?: CandidatesResponse
 }) {
   // The page explanation moved into the board's 說明 fold (Issue 522), so the title is only the eyebrow and the heading.

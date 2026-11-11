@@ -95,7 +95,7 @@ check(candidateSourceText(completeItem()).includes('新聞方向 LLM 判讀 news
 const list = render(<CandidatesSection data={listResponse()} loading={false} error={null} />)
 // The head names the strategy behind the list and links to /strategy (#577; UI_COPY_SPEC §10).
 const STRATEGY_LINK = /<a class="text-link candidates-strategy-link" href="\/strategy">([^<]*)<\/a>/
-check(STRATEGY_LINK.exec(slice(list, 'class="candidates-head"', '<ol'))?.[1] === '順勢籌碼型 · 策略說明 →', `今日可買頁首的連結寫「順勢籌碼型 · 策略說明 →」並連到 /strategy, got ${STRATEGY_LINK.exec(list)?.[1]}`)
+check(STRATEGY_LINK.exec(slice(list, 'class="candidates-head"', '<ol'))?.[1] === '順勢籌碼型 · 策略說明 →', `今日名單頁首的連結寫「順勢籌碼型 · 策略說明 →」並連到 /strategy, got ${STRATEGY_LINK.exec(list)?.[1]}`)
 const first = detailOf(rowOf(list, 1))
 check(count(list, '<details class="candidate-detail"') === 2, 'one detail per candidate')
 check(!first.includes(PARTIAL_NOTE) && !first.includes('candidate-null-notes'), 'complete row has no partial note')
@@ -161,7 +161,7 @@ check(notComputed.includes(NOT_COMPUTED_TEXT) && notComputed.includes('尚無候
 check(notComputed.includes(CANDIDATE_DISCLAIMER), 'disclaimer stays on top for every state')
 
 // ---- loading and error ----
-check(render(<CandidatesSection data={undefined} loading error={null} />).includes('今日可買載入中…'), 'loading skeleton')
+check(render(<CandidatesSection data={undefined} loading error={null} />).includes('今日名單載入中…'), 'loading skeleton')
 check(render(<CandidatesSection data={undefined} loading={false} error={new Error('API 500: boom')} />).includes('API 500: boom'), 'error reason shown')
 
 // ---- stock page: the strategy board's candidate row reuses the score details (stock/strategyBoard.test.tsx) ----

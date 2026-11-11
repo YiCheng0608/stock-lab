@@ -97,10 +97,10 @@ def page(cards_open, cards_closed, *, before="", after="第 1 級\n今日候選"
             "追蹤計畫",
             NOTE,
             *cards_open,
+            after,
             "模擬追蹤 · 已結束",
             "追蹤回看",
             *cards_closed,
-            after,
         ]
     )
 
@@ -145,7 +145,7 @@ def test_the_tracking_checks_pass_on_matching_text(tmp_path):
     run = actions_run(tmp_path)
     assert "進行中 2＋已結束 2 張卡" in page_checks.a14(run)
     assert "沒有 `勝率`" in page_checks.a15(run)
-    assert "我的庫存 < 追蹤計畫 < 追蹤回看 < 行動列表" in page_checks.a16(run)
+    assert "我的庫存 < 追蹤計畫 < 行動列表 < 追蹤回看" in page_checks.a16(run)
     assert "計畫 3 的 2 列 = tracking-plan.json" in page_checks.a17(run)
 
 
@@ -237,9 +237,16 @@ def test_a16_keeps_positions_plans_and_actions_apart(tmp_path):
     )
     with pytest.raises(page_checks.Fail, match="行序"):
         page_checks.a16(actions_run(tmp_path, reordered))
-    # The action list starts at its first tier heading.
+    # The action list starts at its first tier heading and sits before the look-back (Issue 637).
     with pytest.raises(page_checks.Fail, match="`模擬報酬` 在追蹤區外"):
-        page_checks.a16(actions_run(tmp_path, GOOD + "\n模擬報酬 +1.00%"))
+        page_checks.a16(
+            actions_run(
+                tmp_path, GOOD.replace("今日候選\n", "今日候選\n模擬報酬 +1.00%\n", 1)
+            )
+        )
+    after_history = GOOD.replace("第 1 級\n今日候選\n", "", 1) + "\n第 1 級\n今日候選"
+    with pytest.raises(page_checks.Fail, match="不在 `追蹤計畫` 與 `追蹤回看` 之間"):
+        page_checks.a16(actions_run(tmp_path, after_history))
 
 
 def test_a17_counts_the_history_rows_of_every_card(tmp_path):
@@ -255,7 +262,7 @@ def test_t13_counts_one_add_or_tracked_line_per_candidate(tmp_path):
     payload = _candidates()
     payload["items"][0]["open_plan_id"] = 1
     payload["items"][1]["open_plan_id"] = None
-    good = "今日可買\n已在追蹤\n加入追蹤\n"
+    good = "今日名單\n已在追蹤\n加入追蹤\n"
     run = FakeRun(tmp_path, {"candidates": payload}, {"today-1280": good})
     assert "`已在追蹤` 1 = open_plan_id" in page_checks.t13(run)
     run = FakeRun(

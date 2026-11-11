@@ -25,7 +25,7 @@
 `E`、`S` 依序取第一個有的來源，整次 run 只選一次；`summary.md` 開頭的「個股 E／S」寫明用了哪個來源、前面的來源為什麼略過：
 
 1. 今日榜：`today-board.json` #1 族群（`T`）的 `theme-members.json` 第一個成員（今日 → 族群 → 個股的路徑）；
-2. 今日可買：`candidates.json` 的 `items[0].instrument`；
+2. 今日名單：`candidates.json` 的 `items[0].instrument`；
 3. 市場列表：`stocks.json`（`/stocks?page=1&page_size=30`）的 `items[0].instrument`。
 
 三個都沒有時，需要特定個股的檢查（S3～S9、A6、A7）判「無法判定」並寫三個來源各缺什麼；不需要特定個股的 S1（只驗 `/stocks`）與 S2 照常判。

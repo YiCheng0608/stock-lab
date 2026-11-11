@@ -42,11 +42,11 @@ API = "backend/app/api.py"
 FRONTEND = "frontend/src/"
 PAGES = ("today", "news", "themes", "stocks", "actions")
 NAMES = {
-    "today": "今日可買 `/`",
+    "today": "今日名單 `/`",
     "news": "新聞 `/news`",
     "themes": "族群 `/themes`",
     "stocks": "個股 `/stocks`",
-    "actions": "觀察中 `/watch`",
+    "actions": "我的追蹤 `/watch`",
 }
 # Frontend files every page goes through: a file only they import affects every page.
 SHELL = ("frontend/src/App.tsx", "frontend/src/main.tsx")

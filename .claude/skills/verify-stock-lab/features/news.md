@@ -1,6 +1,6 @@
 # 新聞 `/news`
 
-入口：主導航「新聞」，`NewsPage` → `NewsListView`（`frontend/src/news/NewsViews.tsx`）；詳情 `/news/:id` → `NewsDetailView`。
+入口：頁尾「系統」頁（`/system`）的「新聞」連結（#631 起不在主導航；verify 直接開 `/news`），`NewsPage` → `NewsListView`（`frontend/src/news/NewsViews.tsx`）；詳情 `/news/:id` → `NewsDetailView`。
 
 ## API
 
@@ -55,7 +55,7 @@
 
 ## 陷阱
 
-- 「有 AI 判讀」與前端 `usableAi` 相同：`ai.status` 為 `done` 且 `ai.inference` 為 true（方向欄位是 `ai.impact_direction`）。今日 T6 與個股「新聞與公告」也用這個定義。
+- 「有 AI 判讀」與前端 `usableAi` 相同：`ai.status` 為 `done` 且 `ai.inference` 為 true（方向欄位是 `ai.impact_direction`）。個股「新聞與公告」也用這個定義。
 - DB 與 API 裡沒有時區的時間（例如 `news_items.published_at`、`ai.generated_at`）是 UTC，與台北時間比較前加 8 小時（N5）。
 - `ai.symbol_candidates` 的 `exchange`／`name` 已依主檔更正（`exchange_corrected`，[NEWS_SPEC §5](../../../../docs/NEWS_SPEC.md#5-ai-摘要與推論)）；每項都有名稱，`listing` 是 `listed`、`delisted`（標「已下市」、不連結）或 `emerging`（名稱取自 TPEx 興櫃名冊，標「興櫃」、不連結，#512）。主檔與最新興櫃名冊都叫不出名稱的代號不在 `symbol_candidates`，改列在 `ai.hidden_symbol_candidates`（主檔與名冊都沒有為 `reason=code_unknown`，主檔同代號有多列、都不在模型寫的交易所為 `code_ambiguous`），頁面不顯示；N8 判讀時，這些代號不算模型提出的候選。
 - `news_v3` 起 `ai.theme_candidates` 每項有 `evidence`（模型引用的原文片段），寫入前已由程式核對它逐字在原文、題材名與原文有字面或群組上的關聯，沒過的不會出現（[NEWS_SPEC §5](../../../../docs/NEWS_SPEC.md#5-ai-摘要與推論) 題材核對，#413）。N8 的判準不變：仍要判題材能否由原文推得，有 `evidence` 不代表有依據；判失敗時證據附上 `evidence`，供調整規則。

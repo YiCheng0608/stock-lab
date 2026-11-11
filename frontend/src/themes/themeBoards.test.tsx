@@ -59,7 +59,7 @@ check(dates.trading === '2026/09/08' && dates.dataAsOf === '2026/09/09', 'offici
 check(boardDates(industryBoard().meta).dataAsOf === null, 'same-day data date is not repeated')
 check(filterBoardItems(industryBoard().items, '電子').map((item) => item.theme_id).join() === 'industry-28', 'search filters the board by name')
 
-// ---- Issue 522 the highest and lowest components, and 今日可買 per group (UI_COPY_SPEC §8.5 族群頁) ----
+// ---- Issue 522 the highest and lowest components, and 今日名單 per group (UI_COPY_SPEC §8.5 族群頁) ----
 const extremesOf = (components: Parameters<typeof componentExtremes>[0]) => componentExtremes(components).map((entry) => `${entry.label} ${formatComponent(entry.value)}`).join('・')
 check(extremesOf(boardItem().components) === '催化劑 100・法人 25', `highest and lowest of five: ${extremesOf(boardItem().components)}`)
 check(extremesOf(industryBoard().items[1].components) === '量能 80・法人 40', 'null components are left out, never read as 0')
@@ -87,10 +87,10 @@ for (const text of ['第 1 名', '#1', '半導體業', '81.25', '催化劑 <b>10
   check(industryMain.includes(text), `industry row shows ${text}: ${industryMain}`)
 }
 check(industryMain.includes('href="/themes/industry-24"'), 'the name links to the detail page')
-// Two lines: the title (name, quality, extremes) and the meta (returns, 今日可買); the score and the 五分項 button beside them.
+// Two lines: the title (name, quality, extremes) and the meta (returns, 今日名單); the score and the 五分項 button beside them.
 check(/^<div class="board-row-main"><span class="board-rank"[^>]*>#1<\/span><p class="board-row-title">.*<\/p><p class="board-row-meta">.*<\/p><span class="board-row-score">.*<\/span><button[^>]*>五分項 ▸<\/button><\/div>$/.test(industryMain), `Issue 522: a row is a title line and a meta line: ${industryMain}`)
 check(!industryMain.includes('熱門族群') && !industryMain.includes('badge-success'), 'Issue 522: a complete group (熱門族群) carries no quality badge')
-check(!industryMain.includes('今日可買') && !industryMarkup.includes('board-row-picks'), 'without a candidate list no row says 今日可買')
+check(!industryMain.includes('今日名單') && !industryMarkup.includes('board-row-picks'), 'without a candidate list no row says 今日名單')
 // AC-2: the five components and the members stay on the page, folded under the row.
 const industryFold = detailOf(industryRow)
 for (const [label, value] of [['相對報酬', '90'], ['廣度', '75'], ['量能', '50'], ['法人', '25'], ['催化劑', '100'], ['成員（檔）', '12／14']]) {
@@ -106,16 +106,16 @@ check(!industryMarkup.includes('待重新核實') && !industryMarkup.includes('c
 // The page explanation and the units moved into the closed 說明 fold beside the board line.
 const help = industryMarkup.slice(industryMarkup.indexOf('<details class="details board-help">'), industryMarkup.indexOf('</details>', industryMarkup.indexOf('board-help')))
 check(help.includes('<summary>說明</summary>') && !help.includes('open=""'), 'Issue 522: 說明 is a closed fold')
-for (const sentence of ['只有五分項完整的族群稱為熱門族群', '1／5／20 日為相對加權指數的報酬（%）', '「—」表示該項無資料。', '名稱後的兩個分項是五分項中最高與最低的一項。', '今日可買 N 檔是當日今日可買名單中屬於這個族群的檔數，沒有時不顯示。']) {
+for (const sentence of ['只有五分項完整的族群稱為熱門族群', '1／5／20 日為相對加權指數的報酬（%）', '「—」表示該項無資料。', '名稱後的兩個分項是五分項中最高與最低的一項。', '今日名單 N 檔是當日今日名單中屬於這個族群的檔數，沒有時不顯示。']) {
   check(help.replace(/<[^>]+>/g, '').includes(sentence), `說明 says ${sentence}`)
 }
 const pageTitle = industryMarkup.slice(industryMarkup.indexOf('<section class="page-title">'), industryMarkup.indexOf('</section>'))
 check(!pageTitle.includes('<p>'), 'Issue 522: the title holds no explanation paragraph')
-// 今日可買 N 檔 only from a list of the board's own date, and only for a group with candidates.
+// 今日名單 N 檔 only from a list of the board's own date, and only for a group with candidates.
 const withPicks = render(<ThemesBoardView board="industry" onBoardChange={noop} search="" onSearchChange={noop} data={industryBoard()} loading={false} error={null} candidates={picksRun('2026-09-08', [['industry-24'], ['industry-24', 'theme-cowos']])} />)
-check(mainOf(boardRowOf(withPicks, 'industry-24')).includes('今日可買 2 檔') && !boardRowOf(withPicks, 'industry-28').includes('今日可買'), 'Issue 522: 今日可買 2 檔 on the group with two candidates, nothing on a group with none')
+check(mainOf(boardRowOf(withPicks, 'industry-24')).includes('今日名單 2 檔') && !boardRowOf(withPicks, 'industry-28').includes('今日名單'), 'Issue 522: 今日名單 2 檔 on the group with two candidates, nothing on a group with none')
 const stalePicks = render(<ThemesBoardView board="industry" onBoardChange={noop} search="" onSearchChange={noop} data={industryBoard()} loading={false} error={null} candidates={picksRun('2026-09-07', [['industry-24']])} />)
-check(!stalePicks.includes('board-row-picks') && !mainOf(boardRowOf(stalePicks, 'industry-24')).includes('今日可買'), 'Issue 522: a candidate list of another day is not counted')
+check(!stalePicks.includes('board-row-picks') && !mainOf(boardRowOf(stalePicks, 'industry-24')).includes('今日名單'), 'Issue 522: a candidate list of another day is not counted')
 
 const themeMarkup = render(<ThemesBoardView board="theme" onBoardChange={noop} search="" onSearchChange={noop} data={themeBoard()} loading={false} error={null} />)
 check(themeMarkup.includes('id="board-tab-theme" aria-selected="true"') && themeMarkup.includes('id="board-tab-industry" aria-selected="false"') && themeMarkup.includes('id="board-panel-theme"'), 'theme tab selected')

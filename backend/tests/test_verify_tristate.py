@@ -58,7 +58,7 @@ CANDIDATES = {
 TODAY_PAGE = (
     "資料日期未提供\n今日\n資料截至\n資料日期未提供\n"
     f"熱門族群\n產業榜\n資料日期未提供\n{NO_RUN}\n"
-    "今日可買\n資料 2026/10/22\n20 檔\n"
+    "今日名單\n資料 2026/10/22\n20 檔\n"
 )
 
 
@@ -142,7 +142,7 @@ def test_a_failure_after_a_failed_check_of_the_same_rows_is_undetermined(
         }
     }
     # The row is there (#276 table) but its detail lost the 來源 line.
-    pages = {"today-1280": "今日可買\n資料 2026/10/22\n1 檔\n#1 2301 光寶科\n"}
+    pages = {"today-1280": "今日名單\n資料 2026/10/22\n1 檔\n#1 2301 光寶科\n"}
     _only(monkeypatch, "today", "T7", "T8")
     t7, t8 = page_checks.run_page(_run(tmp_path, payloads, pages), "today", [])
     assert (t7.status, t8.status) == ("失敗", "無法判定")
@@ -152,14 +152,12 @@ def test_a_failure_after_a_failed_check_of_the_same_rows_is_undetermined(
 # ---- KNOWN_FAILURES matches the message ----
 
 
-def _t6_run(tmp_path):
-    news = {
-        "id": "2845",
-        "title": "颱風假台股該不該開盤？政大教授點出交易真相\xa0 網友反問",
-    }
-    page = "今日市場／重大事件\n颱風假台股該不該開盤？政大教授點出交易真相\n熱門族群\n"
+def _t12_run(tmp_path):
+    # The home page lost its hot groups card: a failure other than the registered one.
     return _run(
-        tmp_path, {"dashboard": {**DASHBOARD, "news": [news]}}, {"today-1280": page}
+        tmp_path,
+        {"dashboard": DASHBOARD},
+        {"today-1280": "今日名單\n資料 2026/10/22\n"},
     )
 
 
@@ -167,26 +165,26 @@ def test_a_different_failure_of_a_known_check_fails(tmp_path, monkeypatch):
     issue = "https://github.com/YiCheng0608/stock-lab/issues/233"
     monkeypatch.setitem(
         page_checks.KNOWN_FAILURES,
-        ("today", "T6"),
-        page_checks.Known(issue, "卡片沒有 `AI 推論`", "2026-11-20"),
+        ("today", "T12"),
+        page_checks.Known(issue, "首頁仍有整行 `重點新聞`", "2026-11-20"),
     )
-    _only(monkeypatch, "today", "T6")
-    (t6,) = page_checks.run_page(_t6_run(tmp_path), "today", [])
+    _only(monkeypatch, "today", "T12")
+    (t12,) = page_checks.run_page(_t12_run(tmp_path), "today", [])
     # Before #251 this was 失敗（已知） and did not fail the run.
-    assert (t6.status, t6.failed, t6.known) == ("失敗", True, None)
-    assert "缺新聞標題整行" in t6.detail
-    assert "不是已知失敗" in t6.detail and issue in t6.detail
+    assert (t12.status, t12.failed, t12.known) == ("失敗", True, None)
+    assert "缺整行 `熱門族群`" in t12.detail
+    assert "不是已知失敗" in t12.detail and issue in t12.detail
 
 
 def test_the_known_failure_itself_stays_known(tmp_path, monkeypatch):
     monkeypatch.setitem(
         page_checks.KNOWN_FAILURES,
-        ("today", "T6"),
-        page_checks.Known("#233", "缺新聞標題整行", "2026-11-20"),
+        ("today", "T12"),
+        page_checks.Known("#233", "缺整行 `熱門族群`", "2026-11-20"),
     )
-    _only(monkeypatch, "today", "T6")
-    (t6,) = page_checks.run_page(_t6_run(tmp_path), "today", [])
-    assert (t6.status, t6.failed, t6.known) == ("失敗（已知）", False, "#233")
+    _only(monkeypatch, "today", "T12")
+    (t12,) = page_checks.run_page(_t12_run(tmp_path), "today", [])
+    assert (t12.status, t12.failed, t12.known) == ("失敗（已知）", False, "#233")
 
 
 # ---- an empty state is checked against the DB and the other APIs ----
@@ -223,7 +221,7 @@ def test_an_empty_board_passes_when_nothing_has_scores(tmp_path):
 
 
 def test_the_home_page_keeps_one_list(tmp_path):
-    # #493: 關注標的 moved to 觀察中; the home page passes without it.
+    # #493: 關注標的 moved to 我的追蹤; the home page passes without it.
     assert "首頁沒有 `關注標的`" in page_checks.t9(_run(tmp_path))
 
 
@@ -239,7 +237,7 @@ def test_the_home_page_fails_when_the_old_sections_come_back(tmp_path, line):
 
 def test_zero_candidates_fail_when_the_db_has_them(tmp_path):
     payloads = {"candidates": {**CANDIDATES, "candidate_count": 0, "items": []}}
-    run = _run(tmp_path, payloads, {"today-1280": "今日可買\n當日零候選\n"})
+    run = _run(tmp_path, payloads, {"today-1280": "今日名單\n當日零候選\n"})
     with pytest.raises(page_checks.Fail, match="DB candidate_runs 2026-10-22 有 20 檔"):
         page_checks.t7(run)
 
@@ -273,7 +271,7 @@ def test_a_copy_without_a_current_version_run_runs_to_the_end(tmp_path, monkeypa
         "actions?tier=0&limit=100": {"items": []},
     }
     pages = {
-        "today-1280": "今日可買\n尚無候選清單\n",
+        "today-1280": "今日名單\n尚無候選清單\n",
         "actions-1280": "第 1 級\n今日候選\n顯示 0／0 檔\n",
     }
     run = CopyRun(tmp_path, payloads, pages)
@@ -316,7 +314,7 @@ def test_the_stock_comes_from_the_candidates_when_the_board_is_empty(tmp_path):
     run = _run(tmp_path)
     # Before #251 there was no stock and all of S1～S9 were 無法判定 (counted 失敗).
     assert page_checks.stocks_for(run, None) == [page_checks.Stock("TWSE", "2301")]
-    assert run.picked.startswith("今日可買 #1（略過 今日榜：")
+    assert run.picked.startswith("今日名單 #1（略過 今日榜：")
 
 
 def test_the_stock_comes_from_the_list_without_candidates(tmp_path):
@@ -330,7 +328,7 @@ def test_the_stock_comes_from_the_list_without_candidates(tmp_path):
     )
     assert run.stock() == page_checks.Stock("TWSE", "0050")
     assert run.picked.startswith("市場列表第一筆（略過 今日榜：")
-    assert "今日可買：candidates.json 的 items 為空" in run.picked
+    assert "今日名單：candidates.json 的 items 為空" in run.picked
 
 
 def test_stocks_checks_that_need_no_stock_run_without_one(tmp_path, monkeypatch):
@@ -550,7 +548,7 @@ def test_a_tier_without_rows_on_the_first_page_shows_its_first_rows(tmp_path):
 # exhausted the API's pool; the shots saw 500/504 and G1/S1/A1 failed, although every
 # URL answered 200 when called alone and a --jobs 1 rerun passed all 60 checks.
 BUSY = "504 http://web:8080/api/dashboard"
-TODAY_DATED = "今日\n資料 2026/10/22\n今日可買\n"
+TODAY_DATED = "今日\n資料 2026/10/22\n今日名單\n"
 
 
 class ShotRun(page_checks.Run):
@@ -764,7 +762,7 @@ def test_the_summary_opens_with_the_5xx_urls(tmp_path, monkeypatch):
     assert "重截 1 張（串列、各一次），恢復 0 張" in bullets
     assert "直接 GET 回 200 的 1 個" in bullets and "`today T1`" in bullets
     assert "| `/api/dashboard` | 504 | 4 |" in summary
-    assert summary.index("### 環境") < summary.index("### 今日可買")
+    assert summary.index("### 環境") < summary.index("### 今日名單")
     quiet = page_checks.summary_markdown(
         results, ["today"], "## head", environment=ShotRun(tmp_path).environment(1, [])
     )

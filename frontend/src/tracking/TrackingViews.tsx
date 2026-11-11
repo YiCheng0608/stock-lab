@@ -252,22 +252,24 @@ function PlanList({ scope, eyebrow, title, empty }: { scope: 'open' | 'closed'; 
   )
 }
 
-// Actions page: after 我的庫存 (real positions), before the action cards; the three never mix.
-export function TrackingSection() {
+// 我的追蹤 (#637): the plans in progress sit after 我的庫存 (real positions) and before the action list; the ended ones
+// (追蹤回看) come after the action list, so what needs handling today is not below the look-back. Without `part`
+// both render together. The `#plan-<id>` scroll lives in the part that renders the open plans.
+export function TrackingSection({ part }: { part?: 'open' | 'closed' }) {
   const location = useLocation()
   useEffect(() => {
-    if (!location.hash.startsWith('#plan-')) return
+    if (part === 'closed' || !location.hash.startsWith('#plan-')) return
     const timer = window.setInterval(() => {
       const target = document.getElementById(location.hash.slice(1))
       if (target) { target.scrollIntoView({ block: 'start' }); window.clearInterval(timer) }
     }, 200)
     const stop = window.setTimeout(() => window.clearInterval(timer), 5000)
     return () => { window.clearInterval(timer); window.clearTimeout(stop) }
-  }, [location.hash])
+  }, [location.hash, part])
   return (
     <>
-      <PlanList scope="open" eyebrow="模擬追蹤 · 進行中" title={TRACKING_TITLE} empty={EMPTY_OPEN_TEXT} />
-      <PlanList scope="closed" eyebrow="模擬追蹤 · 已結束" title={HISTORY_TITLE} empty={EMPTY_CLOSED_TEXT} />
+      {part !== 'closed' && <PlanList scope="open" eyebrow="模擬追蹤 · 進行中" title={TRACKING_TITLE} empty={EMPTY_OPEN_TEXT} />}
+      {part !== 'open' && <PlanList scope="closed" eyebrow="模擬追蹤 · 已結束" title={HISTORY_TITLE} empty={EMPTY_CLOSED_TEXT} />}
     </>
   )
 }

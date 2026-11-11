@@ -136,7 +136,7 @@ export function componentExtremes(components: ThemeBoardItem['components']): Com
 
 type CandidateRun = { status: string; trading_date: string | null; items: ReadonlyArray<{ groups: ReadonlyArray<{ group_id: string }> }> }
 
-// 今日可買 per group: the latest candidate list counted by group, only when it is of the board's own date. null when
+// 今日名單 per group: the latest candidate list counted by group, only when it is of the board's own date. null when
 // there is nothing to say (no list, a list of another day); a group without a candidate is simply absent.
 export function candidateCountsByGroup(run: CandidateRun | undefined, boardDate: string | null | undefined): ReadonlyMap<string, number> | null {
   if (!run || run.status !== 'success' || !boardDate || run.trading_date !== boardDate) return null
