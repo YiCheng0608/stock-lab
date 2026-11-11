@@ -3,7 +3,7 @@ import type { EChartsOption } from 'echarts'
 import type { ChangeTone } from '../components/ui/Stat'
 import { formatDay, formatTaipeiMinute } from '../dates'
 import { noPreviousCloseText } from '../marketChange'
-import type { CandidateMarket, IndicatorField, StockBarRow, StockBarsInterval, StockBarsResponse } from '../types'
+import type { CandidateMarket, IndicatorField, StockBarRow, StockBarsInterval, StockBarsResponse, StrategyBoardRow } from '../types'
 import { formatTableVolume, isVerifiedShareSource } from '../units'
 
 // Pure helpers for the stock page K-line, indicator panels and header quote (bars API, docs/spec/indicators.md).
@@ -258,7 +258,7 @@ export function stockQuote(bars: readonly StockBarRow[], instrumentType?: string
 
 export type ChartTheme = {
   up: string; down: string; flat: string
-  primary: string; accent: string
+  primary: string; accent: string; warning: string
   text: string; muted: string; subtle: string
   grid: string; border: string; cardBg: string
   fontMono: string
@@ -280,7 +280,7 @@ export function preferChromeInputPath(detected: InputDetection, hasTouch: boolea
 // ECharts draws on canvas and cannot resolve var(); the component reads these tokens at runtime (DESIGN_SYSTEM §6).
 export const CHART_THEME_TOKENS: Record<keyof ChartTheme, string> = {
   up: '--color-up', down: '--color-down', flat: '--color-flat',
-  primary: '--color-primary', accent: '--color-accent',
+  primary: '--color-primary', accent: '--color-accent', warning: '--color-warning',
   text: '--color-text', muted: '--color-text-muted', subtle: '--color-text-subtle',
   grid: '--chart-grid', border: '--color-border', cardBg: '--color-bg-card',
   fontMono: '--font-mono',
@@ -590,6 +590,50 @@ function indicatorSeries(bars: readonly StockBarRow[], panelId: IndicatorPanelId
   ]
 }
 
+// The rule levels of the strategy that holds on the data day, drawn on the price pane (DESIGN_SYSTEM §6 規則價位線):
+// where to enter, where the condition fails, where the first target is. Prices are the signal's own, on the chart's raw basis.
+export type ChartLevels = { entry: number; stop: number; target: number }
+export const CHART_LEVEL_LABELS = { entry: '進場', stop: '停損', target: '目標' } as const
+
+// Only a conditional row with a complete, ordered set of levels draws lines: an observation's 觀察價位 are not levels to
+// act on (PRODUCT_SPEC §2), and a line from half a set would read as a level that is not there.
+export function chartLevels(row: StrategyBoardRow | null | undefined): ChartLevels | null {
+  if (!row || row.status !== 'conditional' || row.levels?.kind !== 'actionable') return null
+  const levels = row.levels
+  const zone = isFiniteNumber(levels.entry_low) && isFiniteNumber(levels.entry_high) ? (levels.entry_low + levels.entry_high) / 2 : null
+  const entry = levels.entry_type === 'breakout' ? levels.trigger_price : levels.reference_entry ?? zone
+  const stop = levels.invalid_price
+  const target = levels.target_1
+  if (!isFiniteNumber(entry) || !isFiniteNumber(stop) || !isFiniteNumber(target)) return null
+  return stop > 0 && stop < entry && entry < target ? { entry, stop, target } : null
+}
+
+// The line under the chart: the three prices again as text, for a reader who cannot see the canvas.
+export function levelsNote(levels: ChartLevels, digits: number): string {
+  const price = (value: number) => formatPrice(value, digits)
+  return `規則價位線：${CHART_LEVEL_LABELS.entry} ${price(levels.entry)} 元（虛線）、${CHART_LEVEL_LABELS.stop} ${price(levels.stop)} 元、${CHART_LEVEL_LABELS.target} ${price(levels.target)} 元；條件成立當日的價位，不是成交價。`
+}
+
+function levelMarks(levels: ChartLevels, theme: ChartTheme, digits: number) {
+  const line = (key: keyof ChartLevels, color: string, type: 'solid' | 'dashed') => ({
+    name: CHART_LEVEL_LABELS[key],
+    yAxis: levels[key],
+    lineStyle: { color, type, width: 1.5 },
+    label: { formatter: `${CHART_LEVEL_LABELS[key]} ${formatPrice(levels[key], digits)}`, color, position: 'insideStartTop' as const, fontFamily: theme.fontMono, fontSize: 12, fontWeight: 600 },
+  })
+  const band = (name: string, from: number, to: number, color: string) => [{ name, yAxis: from, itemStyle: { color, opacity: 0.1 } }, { yAxis: to }]
+  return {
+    markLine: {
+      silent: true, symbol: 'none', animation: false,
+      data: [line('target', theme.primary, 'solid'), line('entry', theme.text, 'dashed'), line('stop', theme.warning, 'solid')],
+    },
+    markArea: {
+      silent: true, animation: false, label: { show: false },
+      data: [band('目標區間', levels.entry, levels.target, theme.primary), band('風險區間', levels.stop, levels.entry, theme.warning)],
+    },
+  }
+}
+
 export type BarsChartOptions = {
   panel: IndicatorPanelId
   panelState: PanelState
@@ -598,6 +642,7 @@ export type BarsChartOptions = {
   layout: ChartLayout
   zoom: ChartZoom
   digits: number
+  levels?: ChartLevels | null
 }
 
 export function buildBarsChartOption(response: StockBarsResponse, options: BarsChartOptions): EChartsOption {
@@ -619,6 +664,11 @@ export function buildBarsChartOption(response: StockBarsResponse, options: BarsC
     splitLine: { show: false },
   }))
   const bounded = options.panel === 'rsi' || options.panel === 'kd'
+  const levels = options.levels ?? null
+  // The price axis reaches the stop and the target, so a line outside the visible bars is still on the pane.
+  const priceRange = levels
+    ? { min: (extent: { min: number }) => Math.min(extent.min, levels.stop), max: (extent: { max: number }) => Math.max(extent.max, levels.target) }
+    : {}
   return {
     animation: false,
     backgroundColor: 'transparent',
@@ -649,7 +699,7 @@ export function buildBarsChartOption(response: StockBarsResponse, options: BarsC
     yAxis: [
       // Axis labels of 1,000 and up (an index in points, Issue 549/547) drop the decimals so they fit the 64px gutter;
       // the tooltip and the data table keep them.
-      { type: 'value', gridIndex: 0, scale: true, axisLabel: { ...axisLabel, showMinLabel: false, formatter: (value: number) => formatPrice(value, axisDigits(value, digits)) }, splitLine },
+      { type: 'value', gridIndex: 0, scale: true, ...priceRange, axisLabel: { ...axisLabel, showMinLabel: false, formatter: (value: number) => formatPrice(value, axisDigits(value, digits)) }, splitLine },
       { type: 'value', gridIndex: 1, scale: false, splitNumber: 2, axisLabel: { ...axisLabel, showMaxLabel: false, formatter: (value: number) => volumeAxisLabel(kind, value) }, splitLine },
       bounded
         ? { type: 'value', gridIndex: 2, min: 0, max: 100, interval: 50, axisLabel, splitLine }
@@ -677,6 +727,7 @@ export function buildBarsChartOption(response: StockBarsResponse, options: BarsC
         yAxisIndex: 0,
         data: bars.map((bar) => isDrawableBar(bar) ? [bar.open, bar.close, bar.low, bar.high] : ['-', '-', '-', '-']),
         itemStyle: { color: theme.up, color0: theme.down, borderColor: theme.up, borderColor0: theme.down },
+        ...(levels ? levelMarks(levels, theme, digits) : {}),
       },
       // A close-only series (Issue 547) has no candle to draw: its closes are one neutral line on the price pane.
       ...(isCloseOnlySeries(bars) ? [{
