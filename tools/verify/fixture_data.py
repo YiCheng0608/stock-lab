@@ -2052,16 +2052,6 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         ("data-date", "as_of", D),
         ("dashboard?include=groups", "groups", len(GROUPS)),
         ("dashboard", "market.instruments", 8),  # 7 stocks + 1 ETF, not TAIEX
-        # Only linked or judged news reaches the home page (#581, NEWS_SPEC 首頁重點新聞).
-        # 3 and 7 share a title, 7 alone with an AI direction (#613).
-        ("dashboard", "news", 5),
-        ("dashboard", "news[].id", ["1", "6", "2", "3", "7"]),
-        # The today card carries the detail's ai block (#233).
-        (
-            "dashboard",
-            "news[].ai.status",
-            ["done", None, "done", None, "done"],
-        ),
         ("dashboard", "themes", 5),
         (
             "dashboard",

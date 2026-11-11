@@ -9,7 +9,6 @@ import { Shell } from './components/Shell'
 import { listResponse } from './candidates/candidates.fixtures'
 import { CandidatesSection } from './candidates/CandidateViews'
 import { noPreviousCloseText } from './marketChange'
-import { newsItem } from './news/news.fixtures'
 import { industryBoard } from './themes/themeBoards.fixtures'
 import { TODAY_BOARD_LIMIT } from './themes/themeBoards'
 import { HoldingAlert } from './today/TodayViews'
@@ -130,7 +129,6 @@ const dashboard = {
   market: { instruments: 1900, bars: 1900, groups: 40, source: 'twse', source_label: 'TWSE／TPEx 官方資料' },
   data_quality: { latest_run: 'success', latest_run_source: 'twse', latest_run_date: '2026-10-16', latest_run_records: 1900, data_as_of: '2026-10-16', error: null, updated_at: null },
   groups: [], signals: [], signal_status_counts: {},
-  news: [newsItem({ id: '1' }), newsItem({ id: '2' }), newsItem({ id: '3' }), newsItem({ id: '4' }), newsItem({ id: '5' }), newsItem({ id: '6' })],
   candidates: [], actions: [], holding_actions: [], market_overview: overviewBoth(),
 } as unknown as Dashboard
 const homeClient = new QueryClient()

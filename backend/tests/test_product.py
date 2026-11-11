@@ -463,7 +463,8 @@ def test_news_projection_persists_once_and_hides_unverified_theme(product_api):
         )
 
 
-def test_dashboard_news_and_group_rows_use_compact_projections(product_api):
+def test_dashboard_has_no_news_and_groups_come_on_include(product_api):
+    # Issue 625: the home page lists no news, so the dashboard carries none.
     with product_api() as db:
         as_of, alpha, _beta, _etf = _add_base_fixture(db)
         db.add(
@@ -484,14 +485,8 @@ def test_dashboard_news_and_group_rows_use_compact_projections(product_api):
         response = client.get("/api/dashboard?include=groups")
 
     assert response.status_code == 200
-    item = next(
-        row
-        for row in response.json()["news"]
-        if row["title"] == "Compact dashboard notice"
-    )
-    assert "summary" not in item
-    assert "provenance" not in item
-    assert len(item["summary_preview"]) <= 120
+    assert "news" not in response.json()
+    assert "news" not in response.json()["empty_states"]
     assert response.json()["groups"]
     assert all("methodology" not in row for row in response.json()["groups"])
 
