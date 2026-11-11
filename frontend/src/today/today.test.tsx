@@ -174,12 +174,11 @@ for (const reason of ['no_actionable_signals', 'all_excluded'] as const) {
 const notComputed = render('CandidatesSection not computed', () => <CandidatesSection data={notComputedResponse()} loading={false} error={null} />)
 check(text(notComputed).includes(NOT_COMPUTED_TEXT) && text(notComputed).includes('尚無候選清單') && !notComputed.includes('date-badge') && !text(notComputed).includes('T+1'), 'not_computed: copy without a date badge or T+1 sentence')
 
-// ---- Issue 510 layout rules the static markup cannot show (DESIGN_SYSTEM §5 候選列表, 熱門族群與重點新聞) ----
+// ---- Issue 510 layout rules the static markup cannot show (DESIGN_SYSTEM §5 候選列表, 熱門族群) ----
 const styles = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8')
 const ruleOf = (selector: string) => { const at = styles.indexOf('\n' + selector + ' {'); return at < 0 ? '' : styles.slice(at, styles.indexOf('}', at)) }
 check(/white-space:\s*nowrap/.test(ruleOf('.candidate-row-title')) && /text-overflow:\s*ellipsis/.test(ruleOf('.candidate-row-title')), 'Issue 510: the title line never wraps; market · group is cut with an ellipsis')
-check(/white-space:\s*nowrap/.test(ruleOf('.home-news-title')) && /text-overflow:\s*ellipsis/.test(ruleOf('.home-news-title')), 'Issue 510: a news title is one line')
-check(/white-space:\s*nowrap/.test(ruleOf('.home-news-meta, .home-news-impact')) && /white-space:\s*nowrap/.test(ruleOf('.hot-group-returns')), 'Issue 510: line two of news and groups never wraps')
+check(/white-space:\s*nowrap/.test(ruleOf('.hot-group-returns')), 'Issue 510: line two of a group never wraps')
 check(/white-space:\s*nowrap/.test(ruleOf('.hot-group-line h3')), 'Issue 510: a group name is one line')
 check(!/var\(--text-|--space-row|--space-block/.test(styles.replace(/var\(--text-(xs|sm|md|base|lg|xl|2xl)\)|var\(--space-(row|block)\)/g, '')), 'Issue 510: only the defined type and spacing tokens are used')
 // Issue 608: on phones the AI entry left the numbers' line (it covered the total at 390) for the title line's right,

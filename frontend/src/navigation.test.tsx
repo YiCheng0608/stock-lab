@@ -144,21 +144,13 @@ check(home.includes('id="candidates-title">今日名單</h2>'), '首頁名單標
 check(home.includes('class="market-summary"') && home.includes('href="/market"') && !home.includes('market-overview-grid'), '首頁大盤只留一行摘要，連到 /market')
 check(home.indexOf('class="market-summary"') < home.indexOf('id="candidates-title"'), '大盤摘要在今日名單之前')
 check(!text(home).includes('明日候選') && !text(home).includes('關注標的'), '首頁不再有「明日候選」與「關注標的」')
-const columns = home.slice(home.indexOf('home-columns'))
-const panels = columns.match(/class="[^"]*\bhome-panel\b[^"]*"/g) ?? []
-check(panels.length === 2, `熱門族群與重點新聞各是一張 home-panel 卡: ${panels.length}`)
-// Issue 510: each card head is one line (no eyebrow): title, the board tabs and 完整排行 →, or 全部新聞 →.
+// Issue 625: the news card left the home page; hot groups is the one card under the list.
+const panels = home.match(/class="[^"]*\bhome-panel\b[^"]*"/g) ?? []
+check(panels.length === 1 && !home.includes('home-news') && !text(home).includes('重點新聞') && !home.includes('href="/news"'), `首頁名單下方只有熱門族群一張卡，沒有重點新聞: ${panels.length}`)
+check(home.indexOf('id="candidates-title"') < home.indexOf('id="hot-groups-title"'), '熱門族群在今日名單之後')
+// Issue 510: the card head is one line (no eyebrow): title, the board tabs and 完整排行 →.
 const hotHead = home.slice(home.indexOf('<div class="panel-head"><h2 id="hot-groups-title"'), home.indexOf('class="hot-groups-dates"'))
 check(hotHead.includes('role="tablist"') && hotHead.includes('>完整排行 →</a>') && !hotHead.includes('eyebrow'), `熱門族群標題列：標題、產業／題材 tab、「完整排行 →」，不放眉標: ${text(hotHead)}`)
-const newsHead = home.slice(home.indexOf('<div class="panel-head"><h2 id="home-news-title"'), home.indexOf('class="home-news-list"'))
-check(newsHead.includes('href="/news">全部新聞 →</a>') && !newsHead.includes('eyebrow'), `重點新聞標題列：標題與「全部新聞 →」: ${text(newsHead)}`)
-const newsCount = count(columns, 'class="home-news-row"')
-check(newsCount === 5, `重點新聞列 5 則（dashboard 有 6 則）: ${newsCount}`)
-// Issue 510 AC-3: a news row is two lines: the title, then source · time and the direction; no tags, category or summary.
-const newsRow = columns.slice(columns.indexOf('class="home-news-row"'), columns.indexOf('</article>', columns.indexOf('class="home-news-row"')))
-check(/<h3 class="home-news-title"><a [^>]*title="[^"]+"/.test(newsRow) && newsRow.includes('class="home-news-meta"') && newsRow.includes('class="home-news-impact"'), `新聞列：標題（全文在 title）、來源與時間、方向: ${newsRow.slice(0, 300)}`)
-check(!newsRow.includes('news-chips') && !newsRow.includes('news-card-summary') && !newsRow.includes('news-card-meta') && !newsRow.includes('news-ai-candidates'), '新聞列不放已核實標的 tag、摘要、分類與 AI 候選行（在 /news）')
-check((newsRow.match(/<(h3|div) class="home-news-/g) ?? []).length === 3, '新聞列只有標題、來源時間、方向三塊（排成兩行）')
 
 // ---- 今日名單 (Issue 510): one list at every width, the group on one line, the #491 sentence under the name ----
 const list = render('/', <CandidatesSection data={listResponse()} loading={false} error={null} />)
@@ -202,7 +194,6 @@ check(noPreviousCloseText('first_trading_day') === '掛牌首日', `first_tradin
 // ---- layout rules the static markup cannot show ----
 const css = fs.readFileSync(path.join(__dirname, 'styles.css'), 'utf8')
 const rule = (selector: string) => { const at = css.indexOf(selector + ' {'); return at < 0 ? '' : css.slice(at, css.indexOf('}', at)) }
-check(/align-items:\s*stretch/.test(rule('.home-columns')), `.home-columns 兩欄等高: ${rule('.home-columns')}`)
 check(!css.includes('.candidate-table') && !css.includes('.candidate-cards'), 'Issue 510: no table or card styles left for the today list')
 check(/white-space:\s*nowrap/.test(rule('.entry-plan-sentence b')), '進場句的價位不拆行（長句在價位之間換行，不切字）')
 

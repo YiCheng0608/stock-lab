@@ -1189,8 +1189,7 @@ def _news_rows() -> list[dict[str, Any]]:
             symbols=["TPEx:9203"],
             raw_payload_id=3,
         ),
-        # The same wire story from a second source, with an AI direction (#613): the
-        # home page lists both cards under one title, T6 checks each its own.
+        # The same wire story from a second source, with an AI direction (#613).
         _news(
             7,
             category="domestic",

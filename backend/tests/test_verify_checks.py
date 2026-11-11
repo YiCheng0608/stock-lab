@@ -325,7 +325,8 @@ TODAY_GROUPS = (
         f"#{n}\n族群{n}\n分數 8{n}.00\n1 日 +0.10% 5 日 +1.00% 20 日 +2.00%\n"
         for n in range(1, 6)
     )
-    + "重點新聞\n全部新聞 →\n"
+    + page_checks.FOOTER_FIRST_LINE
+    + "\n"
 )
 
 
@@ -954,17 +955,20 @@ def test_t16_fails_on_a_wrong_cell_order_or_group(tmp_path):
         page_checks.t16(run)
 
 
-def test_t12_needs_the_candidates_before_groups_and_news(tmp_path):
-    page = "今日名單\n資料 2026/10/16\n熱門族群\n資料 2026/10/16\n重點新聞\n"
+def test_t12_needs_the_candidates_before_groups_and_no_news_card(tmp_path):
+    page = "今日名單\n資料 2026/10/16\n熱門族群\n資料 2026/10/16\n"
     run = FakeRun(tmp_path, {}, {"today-1280": page})
     assert "`今日名單`" in page_checks.t12(run)
-    old = "今日市場／重大事件\n熱門族群\n今日名單\n關注標的\n"
-    run = FakeRun(tmp_path, {}, {"today-1280": old})
-    with pytest.raises(page_checks.Fail, match="缺整行 `重點新聞`"):
+    run = FakeRun(tmp_path, {}, {"today-1280": "今日名單\n資料 2026/10/16\n"})
+    with pytest.raises(page_checks.Fail, match="缺整行 `熱門族群`"):
         page_checks.t12(run)
-    swapped = "熱門族群\n重點新聞\n今日名單\n"
+    swapped = "熱門族群\n今日名單\n"
     run = FakeRun(tmp_path, {}, {"today-1280": swapped})
-    with pytest.raises(page_checks.Fail, match="熱門族群 → 重點新聞 → 今日名單"):
+    with pytest.raises(page_checks.Fail, match="區塊順序 `熱門族群` → `今日名單`"):
+        page_checks.t12(run)
+    # Issue 625: the news card left the home page.
+    run = FakeRun(tmp_path, {}, {"today-1280": page + "重點新聞\n"})
+    with pytest.raises(page_checks.Fail, match="首頁仍有整行 `重點新聞`"):
         page_checks.t12(run)
 
 
@@ -1326,7 +1330,7 @@ def test_known_failures_expire_within_30_days_of_the_commit_that_added_them():
 def test_an_entry_is_read_from_the_source_and_dated_today_until_committed():
     text = (
         "KNOWN_FAILURES: dict[tuple[str, str], Known] = {\n"
-        '    ("today", "T6"): Known(\n'
+        '    ("today", "T5"): Known(\n'
         f'        "{ISSUE}", "缺新聞標題整行", "2026-11-20"\n'
         "    ),\n"
         "}\n"
@@ -1345,23 +1349,23 @@ def test_known_requires_expires():
 
 
 def test_known_problems_flag_a_missing_or_late_expires():
-    def problems(entry, key=("today", "T6")):
+    def problems(entry, key=("today", "T5")):
         return page_checks.known_problems({key: entry}, lambda key: date(2026, 10, 28))
 
     assert page_checks.known_problems({}, lambda key: date(2026, 10, 28)) == []
     assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026-11-27")) == []
     assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026-10-28")) == []
     assert problems(SimpleNamespace(issue=ISSUE, match="缺新聞標題整行")) == [
-        "KNOWN_FAILURES today T6：缺 expires 或不是 YYYY-MM-DD（None）"
+        "KNOWN_FAILURES today T5：缺 expires 或不是 YYYY-MM-DD（None）"
     ]
     assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026-11-28")) == [
-        "KNOWN_FAILURES today T6：expires 2026-11-28 要在加入日 2026-10-28 起 30 天內"
+        "KNOWN_FAILURES today T5：expires 2026-11-28 要在加入日 2026-10-28 起 30 天內"
     ]
     assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026-10-27")) == [
-        "KNOWN_FAILURES today T6：expires 2026-10-27 要在加入日 2026-10-28 起 30 天內"
+        "KNOWN_FAILURES today T5：expires 2026-10-27 要在加入日 2026-10-28 起 30 天內"
     ]
     assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026/11/20")) == [
-        "KNOWN_FAILURES today T6：缺 expires 或不是 YYYY-MM-DD（'2026/11/20'）"
+        "KNOWN_FAILURES today T5：缺 expires 或不是 YYYY-MM-DD（'2026/11/20'）"
     ]
     assert problems(page_checks.Known("#233", "", "2026-11-20"), ("today", "T99")) == [
         "KNOWN_FAILURES today T99：不是 CHECKS 裡的檢查",
@@ -1412,44 +1416,7 @@ def test_page_checks_exits_1_on_an_expired_known_failure(tmp_path, monkeypatch):
     assert page_checks.main(argv) == 1
 
 
-def _t6_run(tmp_path, ai, card_ai, card):
-    item = {"id": "7", "title": "新聞甲", "ai": card_ai}
-    return FakeRun(
-        tmp_path,
-        {"dashboard": {"news": [item]}, "news/7": {"ai": ai}},
-        {
-            "today-1280": f"今日市場／重大事件\n新聞甲\n摘要\n{card}未有已核實的標的或族群\n熱門族群\n"
-        },
-    )
-
-
 AI_DONE = {"status": "done", "inference": True, "impact_direction": "positive"}
-
-
-def test_t6_passes_when_the_card_shows_the_ai_direction(tmp_path):
-    run = _t6_run(tmp_path, AI_DONE, AI_DONE, "可能正向\nAI 推論\n")
-    assert "7 `可能正向`" in page_checks.t6(run)
-    # An unsupported item's AI direction is 影響尚未判定, as on the news page.
-    unsupported = {**AI_DONE, "unsupported": True}
-    run = _t6_run(tmp_path, unsupported, unsupported, "影響尚未判定\nAI 推論\n")
-    assert "7 `影響尚未判定`" in page_checks.t6(run)
-
-
-def test_t6_fails_when_the_card_falls_back_to_the_rule_direction(tmp_path):
-    # #233: dashboard.news had no ai block, so the card showed the rule direction.
-    run = _t6_run(tmp_path, AI_DONE, None, "影響尚未判定\n")
-    with pytest.raises(page_checks.Fail) as error:
-        page_checks.t6(run)
-    assert "ai 與 /api/news/<id> 不同" in str(error.value)
-    assert "卡片沒有 `AI 推論`" in str(error.value)
-
-
-def test_t6_fails_when_the_card_direction_differs(tmp_path):
-    run = _t6_run(tmp_path, AI_DONE, AI_DONE, "可能負向\nAI 推論\n")
-    with pytest.raises(
-        page_checks.Fail, match="卡片方向 `可能負向`，AI 方向 `可能正向`"
-    ):
-        page_checks.t6(run)
 
 
 def _n6_run(tmp_path, generated_at, shown):
@@ -1535,65 +1502,6 @@ def test_n2_reads_the_cleaned_title(tmp_path):
     raw = page.replace("台積電狠甩英特爾", "■ 台積電狠甩英特爾")
     with pytest.raises(page_checks.Fail, match="缺 `台積電狠甩英特爾`"):
         page_checks.n2(_n2_run(tmp_path, raw))
-
-
-def test_t6_reads_the_cleaned_title(tmp_path):
-    item = {"id": "7", "title": "● 新聞甲", "ai": AI_DONE}
-    run = FakeRun(
-        tmp_path,
-        {"dashboard": {"news": [item]}, "news/7": {"ai": AI_DONE}},
-        {"today-1280": "重點新聞\n新聞甲\n可能正向\nAI 推論\n熱門族群\n"},
-    )
-    assert "7 `可能正向`" in page_checks.t6(run)
-
-
-def _t6_twins(tmp_path, second_card):
-    # #613: two sources carry the same wire story; the first has no AI direction.
-    news = [
-        {"id": "26789", "title": "台股漲1050.22點", "ai": None},
-        {"id": "26719", "title": "台股漲1050.22點", "ai": AI_DONE},
-    ]
-    page = (
-        "重點新聞\n台股漲1050.22點\nYahoo奇摩股市\n"
-        f"台股漲1050.22點\n{second_card}中央社\n"
-        f"{page_checks.FOOTER_FIRST_LINE}\n"
-    )
-    return FakeRun(
-        tmp_path,
-        {
-            "dashboard": {"news": news},
-            "news/26789": {"ai": None},
-            "news/26719": {"ai": AI_DONE},
-        },
-        {"today-1280": page},
-    )
-
-
-def test_t6_checks_each_card_of_a_shared_title(tmp_path):
-    run = _t6_twins(tmp_path, "可能正向\nAI 推論\n")
-    assert "26719 `可能正向`" in page_checks.t6(run)
-    # The second card itself lacks 「AI 推論」: still a failure, on that card.
-    run = _t6_twins(tmp_path, "影響尚未判定\n")
-    with pytest.raises(
-        page_checks.Fail, match="id 26719 有 AI 判讀但卡片沒有 `AI 推論`"
-    ):
-        page_checks.t6(run)
-
-
-def test_t6_fails_when_a_shared_title_shows_once(tmp_path):
-    news = [
-        {"id": "1", "title": "同標題", "ai": None},
-        {"id": "2", "title": "同標題", "ai": None},
-    ]
-    run = FakeRun(
-        tmp_path,
-        {"dashboard": {"news": news}, "news/1": {"ai": None}, "news/2": {"ai": None}},
-        {"today-1280": f"重點新聞\n同標題\n{page_checks.FOOTER_FIRST_LINE}\n"},
-    )
-    with pytest.raises(
-        page_checks.Fail, match="缺第 2 則新聞標題整行 `同標題`（id 2）"
-    ):
-        page_checks.t6(run)
 
 
 def test_news_source_label_matches_the_frontend():

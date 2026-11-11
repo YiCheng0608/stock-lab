@@ -90,7 +90,7 @@ import { THEME_SUGGESTION_LIMIT } from './themes/themeSuggestions'
 import { CandidatesSection } from './candidates/CandidateViews'
 import { StockPlanPanel, TrackingClientProvider, TrackingSection, type TrackingClient } from './tracking/TrackingViews'
 import { DEFAULT_MEMBER_SORT, THEME_BOARD_LIMIT, THEME_NEWS_LIMIT, TODAY_BOARD_LIMIT, memberQuery, parseBoard } from './themes/themeBoards'
-import { HomeNewsRow, NewsDetailView, NewsListView, StockNewsTimeline } from './news/NewsViews'
+import { NewsDetailView, NewsListView, StockNewsTimeline } from './news/NewsViews'
 import { HoldingAlert, MarketSummaryLine, TodayHeader } from './today/TodayViews'
 import { MarketPage } from './market/MarketPage'
 import { newsFiltersFromSearch, newsListParams, newsPageSearch, stockNewsParams, type NewsFilters } from './news/newsView'
@@ -462,7 +462,6 @@ function NewsDetailPage() {
 }
 
 // Five news beside the five hot groups keep the two home cards close in height (#493).
-const HOME_NEWS_LIMIT = 5
 
 export function TodayPage() {
   const query = useQuery<Dashboard>({ queryKey: ['dashboard'], queryFn: getDashboard })
@@ -476,8 +475,8 @@ export function TodayPage() {
       .map((action) => [`${action.instrument.exchange}:${action.instrument.symbol}:${action.as_of ?? ''}`, action] as const),
   ).values())
   const modeLabel = !data ? '' : data.mode === 'official' ? '官方單日快照' : data.mode === 'official_partial' ? '官方單日快照（資料仍待補）' : '尚無官方快照'
-  // PRODUCT_SPEC §2 (#493, Issue 549): header line → one-line market summary (the overview is on /market) → holding-risk alert → 今日名單 → hot groups and news, two
-  // cards of one height. The watched stocks moved to 我的追蹤 (/watch).
+  // PRODUCT_SPEC §2 (#493, Issue 549): header line → one-line market summary (the overview is on /market) → holding-risk alert → 今日名單 → hot groups (the news card left the home page,
+  // Issue 625; news is in each candidate's reasons and on /news). The watched stocks moved to 我的追蹤 (/watch).
   return (
     <div className="page home-page">
       <TodayHeader
@@ -495,13 +494,7 @@ export function TodayPage() {
           <MarketSummaryLine overview={data.market_overview} />
           <HoldingAlert actions={data.holding_actions ?? data.actions ?? []} />
           <CandidatesSection data={candidates.data} loading={candidates.isLoading} error={candidates.error} />
-          <div className="home-columns">
-            <HotGroupsSection className="home-panel" title={<Term id="hot_group">熱門族群</Term>} board={board} onBoardChange={setBoard} data={hotGroups.data} loading={hotGroups.isLoading} error={hotGroups.error} />
-            <section className="home-news home-panel" aria-labelledby="home-news-title">
-              <div className="panel-head"><h2 id="home-news-title">重點新聞</h2><Link to="/news" className="text-link">全部新聞 →</Link></div>
-              {data.news?.length ? <div className="home-news-list">{data.news.slice(0, HOME_NEWS_LIMIT).map((item) => <HomeNewsRow key={item.id} item={item} />)}</div> : <div className="empty">市場新聞區尚無可顯示內容。</div>}
-            </section>
-          </div>
+          <HotGroupsSection className="home-panel" title={<Term id="hot_group">熱門族群</Term>} board={board} onBoardChange={setBoard} data={hotGroups.data} loading={hotGroups.isLoading} error={hotGroups.error} />
           {data.data_quality.error && <div className="warning-box">官方擷取警告：{data.data_quality.error}</div>}
         </>
       )}

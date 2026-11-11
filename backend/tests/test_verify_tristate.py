@@ -152,14 +152,12 @@ def test_a_failure_after_a_failed_check_of_the_same_rows_is_undetermined(
 # ---- KNOWN_FAILURES matches the message ----
 
 
-def _t6_run(tmp_path):
-    news = {
-        "id": "2845",
-        "title": "颱風假台股該不該開盤？政大教授點出交易真相\xa0 網友反問",
-    }
-    page = "今日市場／重大事件\n颱風假台股該不該開盤？政大教授點出交易真相\n熱門族群\n"
+def _t12_run(tmp_path):
+    # The home page lost its hot groups card: a failure other than the registered one.
     return _run(
-        tmp_path, {"dashboard": {**DASHBOARD, "news": [news]}}, {"today-1280": page}
+        tmp_path,
+        {"dashboard": DASHBOARD},
+        {"today-1280": "今日名單\n資料 2026/10/22\n"},
     )
 
 
@@ -167,26 +165,26 @@ def test_a_different_failure_of_a_known_check_fails(tmp_path, monkeypatch):
     issue = "https://github.com/YiCheng0608/stock-lab/issues/233"
     monkeypatch.setitem(
         page_checks.KNOWN_FAILURES,
-        ("today", "T6"),
-        page_checks.Known(issue, "卡片沒有 `AI 推論`", "2026-11-20"),
+        ("today", "T12"),
+        page_checks.Known(issue, "首頁仍有整行 `重點新聞`", "2026-11-20"),
     )
-    _only(monkeypatch, "today", "T6")
-    (t6,) = page_checks.run_page(_t6_run(tmp_path), "today", [])
+    _only(monkeypatch, "today", "T12")
+    (t12,) = page_checks.run_page(_t12_run(tmp_path), "today", [])
     # Before #251 this was 失敗（已知） and did not fail the run.
-    assert (t6.status, t6.failed, t6.known) == ("失敗", True, None)
-    assert "缺新聞標題整行" in t6.detail
-    assert "不是已知失敗" in t6.detail and issue in t6.detail
+    assert (t12.status, t12.failed, t12.known) == ("失敗", True, None)
+    assert "缺整行 `熱門族群`" in t12.detail
+    assert "不是已知失敗" in t12.detail and issue in t12.detail
 
 
 def test_the_known_failure_itself_stays_known(tmp_path, monkeypatch):
     monkeypatch.setitem(
         page_checks.KNOWN_FAILURES,
-        ("today", "T6"),
-        page_checks.Known("#233", "缺新聞標題整行", "2026-11-20"),
+        ("today", "T12"),
+        page_checks.Known("#233", "缺整行 `熱門族群`", "2026-11-20"),
     )
-    _only(monkeypatch, "today", "T6")
-    (t6,) = page_checks.run_page(_t6_run(tmp_path), "today", [])
-    assert (t6.status, t6.failed, t6.known) == ("失敗（已知）", False, "#233")
+    _only(monkeypatch, "today", "T12")
+    (t12,) = page_checks.run_page(_t12_run(tmp_path), "today", [])
+    assert (t12.status, t12.failed, t12.known) == ("失敗（已知）", False, "#233")
 
 
 # ---- an empty state is checked against the DB and the other APIs ----

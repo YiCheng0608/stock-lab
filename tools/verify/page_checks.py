@@ -1039,7 +1039,9 @@ def t5(run: Run) -> str:
     # #510: the card says once what the returns are relative to; each row starts with its
     # own `#n` line, then the name line (HotGroupRow in frontend/src/themes/ThemeViews.tsx).
     expect(text.has(GROUP_RETURNS_NOTE), f"缺整行 `{GROUP_RETURNS_NOTE}`")
-    start, end = text.find("熱門族群"), text.find("重點新聞")
+    # Hot groups is the last card of the page (Issue 625); the footer ends it.
+    start = text.find("熱門族群")
+    end = text.find(FOOTER_FIRST_LINE, start)
     end = end if end > start else len(text.lines)
     rows = [i for i in range(start + 1, end) if re.fullmatch(r"#[0-9]+", text.lines[i])]
     want = [item["display_name"] for item in items[:TODAY_GROUPS]]
@@ -1058,75 +1060,8 @@ def usable_ai(ai: Any) -> bool:
     )
 
 
-DIRECTION_LABELS = {"positive": "可能正向", "negative": "可能負向", "mixed": "正負互見"}
-
-
-def ai_direction_label(ai: dict) -> str:
-    """directionView(aiDirection(ai)) in frontend/src/news/newsView.ts."""
-
-    direction = None if ai.get("unsupported") else ai.get("impact_direction")
-    return DIRECTION_LABELS.get(direction, "影響尚未判定")
-
-
-# HOME_NEWS_LIMIT in frontend/src/App.tsx (#493); the first line of the Shell footer.
-HOME_NEWS = 5
+# The first line of the Shell footer: the end of the last card of a page.
 FOOTER_FIRST_LINE = "T 日收盤訊號 · 最早 T+1 執行 · T+5／T+20 追蹤"
-
-
-@check("today", "T6")
-def t6(run: Run) -> str:
-    text = run.text(TODAY)
-    news = (run.dashboard().get("news") or [])[:HOME_NEWS]
-    if not news:
-        message = "市場新聞區尚無可顯示內容。"
-        expect(text.has(message), f"dashboard.news 空，缺 `{message}`")
-        return f"dashboard.news 空，顯示 `{message}`"
-    starts, seen = [], {}
-    for item in news:
-        title = display_title(item["title"])
-        # Two sources often carry one wire story (#613): the n-th item with a title
-        # is the n-th line that reads it, in API order.
-        nth = seen.get(title, [])
-        i = text.find(title, nth[-1] + 1 if nth else 0)
-        expect(
-            i >= 0,
-            f"缺{f'第 {len(nth) + 1} 則' if nth else ''}新聞標題整行 `{title}`（id {item['id']}）",
-        )
-        seen[title] = nth + [i]
-        starts.append(i)
-    # The news card is the last block of the page (#493); the footer ends the last card.
-    end = text.find(FOOTER_FIRST_LINE, max(starts))
-    bounds = sorted(starts) + [end if end >= 0 else len(text.lines)]
-    problems, marked = [], []
-    for item, start in zip(news, starts):
-        detail = run.get(f"news/{item['id']}", f"news-{item['id']}.json")
-        ai = detail.get("ai")
-        if not usable_ai(ai):
-            continue
-        if item.get("ai") != ai:
-            problems.append(
-                f"id {item['id']} 的 dashboard.news ai 與 /api/news/<id> 不同"
-            )
-        stop = bounds[bounds.index(start) + 1]
-        card = text.lines[start:stop]
-        want = ai_direction_label(ai)
-        if "AI 推論" not in card:
-            problems.append(
-                f"id {item['id']} 有 AI 判讀但卡片沒有 `AI 推論`（{text.at(start)}）"
-            )
-            continue
-        shown = card[card.index("AI 推論") - 1]
-        if shown != want:
-            problems.append(
-                f"id {item['id']} 卡片方向 `{shown}`，AI 方向 `{want}`（{text.at(start)}）"
-            )
-        else:
-            marked.append(f"{item['id']} `{want}`")
-    expect(not problems, "；".join(problems))
-    return (
-        f"前 {len(news)} 則標題都在；有 AI 判讀的卡片方向與 AI 相同並標 `AI 推論`："
-        + ("、".join(marked) or "無")
-    )
 
 
 def candidates(run: Run) -> dict:
@@ -1395,26 +1330,21 @@ def t11(run: Run) -> str:
 
 @check("today", "T12")
 def t12(run: Run) -> str:
-    """#276: candidates come before the groups and the news (PRODUCT_SPEC §2)."""
+    """#276: candidates come before the groups; the news card is gone (Issue 625)."""
 
     text = run.text(TODAY)
     found = {
         CANDIDATES_TITLE: candidates_title(text),
         "熱門族群": text.find("熱門族群"),
-        "重點新聞": text.find("重點新聞"),
     }
     missing = [title for title, i in found.items() if i < 0]
     expect(not missing, "缺整行 " + "、".join(f"`{title}`" for title in missing))
-    first = found[CANDIDATES_TITLE]
     expect(
-        first < found["熱門族群"] and first < found["重點新聞"],
-        "區塊順序 "
-        + " → ".join(
-            title for title, _ in sorted(found.items(), key=lambda item: item[1])
-        )
-        + f"，預期 `{CANDIDATES_TITLE}` 在 `熱門族群` 與 `重點新聞` 之前",
+        found[CANDIDATES_TITLE] < found["熱門族群"],
+        f"區塊順序 `熱門族群` → `{CANDIDATES_TITLE}`，預期 `{CANDIDATES_TITLE}` 在前",
     )
-    return "`今日名單`（{0}）→ `熱門族群`（{1}）、`重點新聞`（{2}）".format(
+    expect(not text.has("重點新聞"), "首頁仍有整行 `重點新聞`（#625 已移除）")
+    return "`今日名單`（{0}）→ `熱門族群`（{1}）；沒有 `重點新聞`".format(
         *(text.at(i) for i in found.values())
     )
 

@@ -537,17 +537,16 @@ a.symbol-link:hover { color: var(--color-primary); }
 .market-index-source { color: var(--color-text-muted); }
 .market-index-note { margin: var(--space-2) 0 0; }
 .alert-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-left: 4px solid var(--color-warning); border-radius: var(--radius-lg); background: var(--color-bg-card); color: var(--color-text); font-size: 14px; }
-/* Hot groups and news (#493, DESIGN_SYSTEM §5 熱門族群與重點新聞): two cards in one grid row; stretch makes them one height,
-   so their top and bottom edges line up whatever each holds. #510: one head line, at most five items of two lines. */
-.home-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-6); align-items: stretch; margin-top: var(--space-block); }
-.home-panel { display: flex; flex-direction: column; min-width: 0; padding: var(--space-4) var(--space-5); border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-bg-card); }
+/* Hot groups on the home page (#493, DESIGN_SYSTEM §5 熱門族群): one card under the list (the news card left with Issue 625).
+   #510: one head line, at most five items of two lines. */
+.home-panel { margin-top: var(--space-block); display: flex; flex-direction: column; min-width: 0; padding: var(--space-4) var(--space-5); border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-bg-card); }
 .panel-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); min-height: 40px; }
 .panel-head h2 { flex: 1 1 auto; margin: 0; font-size: var(--text-xl); }
 .panel-head .text-link { white-space: nowrap; }
 .hot-groups-dates { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); margin: var(--space-1) 0 var(--space-1); }
-.home-panel .hot-group-list, .home-news-list { display: grid; margin-top: var(--space-1); }
-.home-panel .hot-group-row, .home-news-row { display: grid; gap: 2px; min-width: 0; padding: var(--space-2) 0; border-top: 1px solid var(--color-border); color: var(--color-text); }
-.home-panel .hot-group-row:hover h3, .home-news-row:hover .home-news-title a { color: var(--color-primary); }
+.home-panel .hot-group-list { display: grid; margin-top: var(--space-1); }
+.home-panel .hot-group-row { display: grid; gap: 2px; min-width: 0; padding: var(--space-2) 0; border-top: 1px solid var(--color-border); color: var(--color-text); }
+.home-panel .hot-group-row:hover h3 { color: var(--color-primary); }
 .hot-group-line { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .hot-group-line .hot-group-rank { flex: none; min-width: 28px; font-size: var(--text-md); font-weight: 700; }
 .hot-group-line h3 { flex: 0 1 auto; min-width: 0; margin: 0; overflow: hidden; font-size: var(--text-base); text-overflow: ellipsis; white-space: nowrap; }
@@ -557,19 +556,6 @@ a.symbol-link:hover { color: var(--color-primary); }
 .hot-group-score b { font: 600 var(--text-base) var(--font-mono); font-variant-numeric: tabular-nums; }
 .hot-group-returns { display: flex; gap: var(--space-4); padding-left: calc(28px + var(--space-2)); overflow: hidden; color: var(--color-text-muted); font-size: var(--text-sm); white-space: nowrap; }
 .hot-group-returns b { font: 500 var(--text-sm) var(--font-mono); font-variant-numeric: tabular-nums; }
-.home-news-row { grid-template-areas: "title title" "meta impact"; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--space-2); }
-.home-news-title { grid-area: title; min-width: 0; margin: 0; overflow: hidden; font-size: var(--text-base); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.home-news-title a { color: var(--color-text); }
-/* Line two never wraps: source and time, then the direction and 「AI 推論」; the source is cut first. */
-.home-news-meta, .home-news-impact { display: flex; align-items: center; gap: var(--space-2); min-width: 0; overflow: hidden; color: var(--color-text-muted); font-size: var(--text-sm); white-space: nowrap; }
-.home-news-meta { grid-area: meta; }
-.home-news-meta > * { flex: none; }
-.home-news-meta > .home-news-source { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.home-news-meta time { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-.home-news-impact { grid-area: impact; }
-.home-news-impact::before { content: "·"; }
-.home-news-impact .news-direction { display: inline-flex; flex: none; align-items: center; gap: var(--space-1); color: var(--color-text); }
-.home-news-impact .badge { flex: none; white-space: nowrap; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* ---- group boards: /themes, today Top 5, /themes/:id ------------------------------------------------------ */
@@ -905,7 +891,6 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .stat-grid, .three-stats { grid-template-columns: repeat(2, 1fr); margin-bottom: var(--space-10); }
   .position-list, .news-grid, .glossary-grid, .inline-form { grid-template-columns: 1fr; }
   .theme-suggestion-grid, .plan-grid { grid-template-columns: 1fr; }
-  .home-columns { grid-template-columns: 1fr; }
   .candidate-detail-body { grid-template-areas: "note" "side" "folds"; grid-template-columns: minmax(0, 1fr); }
   .news-cards, .news-detail-grid { grid-template-columns: 1fr; }
   .data-explanation { margin-left: 0; }
@@ -1033,11 +1018,7 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .candidate-mini-levels dd { font-size: 12px; }
   .home-page { padding-top: var(--space-3); }
   .alert-row { gap: 2px var(--space-3); margin-bottom: var(--space-2); padding: var(--space-2) var(--space-3); font-size: 13px; line-height: 1.5; }
-  .home-columns { margin-top: var(--space-6); }
-  .home-panel { padding: var(--space-3) var(--space-4); }
-  /* Phones (#510): the direction and 「AI 推論」 sit beside the title, so source and time keep line two to themselves. */
-  .home-news-row { grid-template-areas: "title impact" "meta meta"; grid-template-columns: minmax(0, 1fr) auto; }
-  .home-news-impact::before { content: none; }
+  .home-panel { margin-top: var(--space-6); padding: var(--space-3) var(--space-4); }
   .tab { padding: var(--space-2) var(--space-3); font-size: 14px; }
   .filter-row .search-controls, .filter-row .filter-select { flex: 1 1 100%; max-width: none; }
   .news-filters { flex-wrap: wrap; }
