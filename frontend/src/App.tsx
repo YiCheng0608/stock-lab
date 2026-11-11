@@ -76,6 +76,7 @@ import { Shell } from './components/Shell'
 import { Term } from './components/Term'
 import { Card, CardList, DataTable, EmptyState, Skeleton, Tabs, cx, tabId, tabPanelId, type Column } from './components/ui'
 import { StockBarsChart } from './stock/StockBarsChart'
+import { CandidateChart } from './today/CandidateChart'
 import { PRICE_BASIS, chartLevels, priceDigits } from './stock/stockBars'
 import { closestStrategy } from './stock/stockSummary'
 import { StockCutoffControl } from './stock/StockCutoffControl'
@@ -495,7 +496,7 @@ export function TodayPage() {
         <>
           <MarketSummaryLine overview={data.market_overview} />
           <HoldingAlert actions={data.holding_actions ?? data.actions ?? []} />
-          <CandidatesSection data={candidates.data} loading={candidates.isLoading} error={candidates.error} />
+          <CandidatesSection data={candidates.data} loading={candidates.isLoading} error={candidates.error} renderChart={(item) => <CandidateChart item={item} />} />
           <div className="home-columns">
             <HotGroupsSection className="home-panel" title={<Term id="hot_group">熱門族群</Term>} board={board} onBoardChange={setBoard} data={hotGroups.data} loading={hotGroups.isLoading} error={hotGroups.error} />
             <section className="home-news home-panel" aria-labelledby="home-news-title">
