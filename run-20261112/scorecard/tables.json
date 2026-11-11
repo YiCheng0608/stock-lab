@@ -1,0 +1,810 @@
+{
+  "candidates": 279,
+  "days": 16,
+  "range": [
+    "2026-10-19",
+    "2026-11-11"
+  ],
+  "min_lots": 1000.0,
+  "cost_bps": 58.5,
+  "horizons": {
+    "5": {
+      "all": {
+        "candidates": 279,
+        "pending": 62,
+        "comparable": 216,
+        "days": 11,
+        "gross": {
+          "n": 216,
+          "mean": -0.03316932663592156,
+          "median": -0.029735707479784712,
+          "positive": 0.2037037037037037
+        },
+        "net": {
+          "n": 216,
+          "mean": -0.03901932663592156,
+          "median": -0.03558570747978471,
+          "positive": 0.1527777777777778
+        },
+        "excess_universe": {
+          "n": 216,
+          "mean": 0.02716504673804854,
+          "median": 0.030151707715104382,
+          "positive": 0.7083333333333334
+        },
+        "daily_excess": {
+          "days": 11,
+          "mean": 0.02654565864560413,
+          "positive": 0.7272727272727273,
+          "t": 1.4615694077658514,
+          "t_naive": 3.2681685495985526
+        },
+        "excess_index": {
+          "n": 216,
+          "mean": 0.011752909870718786,
+          "median": 0.01149136056119282,
+          "positive": 0.5879629629629629
+        }
+      },
+      "ranking": {
+        "total": {
+          "days": 11,
+          "ic": -0.017526436411885327,
+          "positive": 0.5454545454545454,
+          "t": -0.08214654923276368
+        },
+        "technical": {
+          "days": 11,
+          "ic": 0.043036010602705496,
+          "positive": 0.5454545454545454,
+          "t": 0.22975443075047342
+        },
+        "chips": {
+          "days": 11,
+          "ic": 0.09135974964148338,
+          "positive": 0.7272727272727273,
+          "t": 0.5020258977495272
+        },
+        "group": {
+          "days": 11,
+          "ic": -0.015167406547122954,
+          "positive": 0.5454545454545454,
+          "t": -0.06551909063672899
+        },
+        "news_sentiment": {
+          "days": 11,
+          "ic": -0.12987233089792571,
+          "positive": 0.18181818181818182,
+          "t": -1.1022267607556342
+        }
+      },
+      "rank": {
+        "第 1～5 名": {
+          "candidates": 79,
+          "pending": 24,
+          "comparable": 55,
+          "days": 11,
+          "gross": {
+            "n": 55,
+            "mean": -0.02971048552079781,
+            "median": -0.029056900121367746,
+            "positive": 0.21818181818181817
+          },
+          "net": {
+            "n": 55,
+            "mean": -0.03556048552079781,
+            "median": -0.03490690012136775,
+            "positive": 0.14545454545454545
+          },
+          "excess_universe": {
+            "n": 55,
+            "mean": 0.029781350275504215,
+            "median": 0.03019650320344762,
+            "positive": 0.7090909090909091
+          },
+          "daily_excess": {
+            "days": 11,
+            "mean": 0.029781350275504215,
+            "positive": 0.7272727272727273,
+            "t": 1.4884774531682687,
+            "t_naive": 3.3283367682600087
+          },
+          "excess_index": {
+            "n": 55,
+            "mean": 0.01414208540148842,
+            "median": 0.01582551520833686,
+            "positive": 0.5818181818181818
+          }
+        },
+        "第 6～10 名": {
+          "candidates": 75,
+          "pending": 20,
+          "comparable": 55,
+          "days": 11,
+          "gross": {
+            "n": 55,
+            "mean": -0.0308943457868686,
+            "median": -0.03137234471567296,
+            "positive": 0.12727272727272726
+          },
+          "net": {
+            "n": 55,
+            "mean": -0.036744345786868596,
+            "median": -0.03722234471567296,
+            "positive": 0.10909090909090909
+          },
+          "excess_universe": {
+            "n": 55,
+            "mean": 0.028597490009433426,
+            "median": 0.03049926871363877,
+            "positive": 0.7090909090909091
+          },
+          "daily_excess": {
+            "days": 11,
+            "mean": 0.028597490009433423,
+            "positive": 0.8181818181818182,
+            "t": 1.0212384000251127,
+            "t_naive": 2.2835584836892746
+          },
+          "excess_index": {
+            "n": 55,
+            "mean": 0.012958225135417627,
+            "median": 0.012028635406426513,
+            "positive": 0.5818181818181818
+          }
+        },
+        "第 11～20 名": {
+          "candidates": 125,
+          "pending": 18,
+          "comparable": 106,
+          "days": 11,
+          "gross": {
+            "n": 106,
+            "mean": -0.03614442293808872,
+            "median": -0.03088198113617724,
+            "positive": 0.2358490566037736
+          },
+          "net": {
+            "n": 106,
+            "mean": -0.041994422938088714,
+            "median": -0.03673198113617724,
+            "positive": 0.1792452830188679
+          },
+          "excess_universe": {
+            "n": 106,
+            "mean": 0.025064281884404856,
+            "median": 0.030003876417097407,
+            "positive": 0.7075471698113207
+          },
+          "daily_excess": {
+            "days": 11,
+            "mean": 0.024183728318564024,
+            "positive": 0.8181818181818182,
+            "t": 1.3404177554160797,
+            "t_naive": 2.9972652193580407
+          },
+          "excess_index": {
+            "n": 106,
+            "mean": 0.009887843891937973,
+            "median": 0.009119973118227043,
+            "positive": 0.5943396226415094
+          }
+        }
+      },
+      "strategy": {
+        "pullback_v1": {
+          "candidates": 135,
+          "pending": 0,
+          "comparable": 134,
+          "days": 9,
+          "gross": {
+            "n": 134,
+            "mean": -0.0321234030022477,
+            "median": -0.023064306692830272,
+            "positive": 0.1791044776119403
+          },
+          "net": {
+            "n": 134,
+            "mean": -0.03797340300224769,
+            "median": -0.028914306692830273,
+            "positive": 0.13432835820895522
+          },
+          "excess_universe": {
+            "n": 134,
+            "mean": 0.03578813146120064,
+            "median": 0.03688237139934618,
+            "positive": 0.7686567164179104
+          },
+          "daily_excess": {
+            "days": 9,
+            "mean": 0.03693952991361871,
+            "positive": 0.8888888888888888,
+            "t": null,
+            "t_naive": 4.492167309251561
+          },
+          "excess_index": {
+            "n": 134,
+            "mean": 0.023216274634083454,
+            "median": 0.018169929745508517,
+            "positive": 0.6492537313432836
+          }
+        },
+        "breakout_v1": {
+          "candidates": 45,
+          "pending": 0,
+          "comparable": 45,
+          "days": 9,
+          "gross": {
+            "n": 45,
+            "mean": -0.05582705923733091,
+            "median": -0.05535037359369077,
+            "positive": 0.1111111111111111
+          },
+          "net": {
+            "n": 45,
+            "mean": -0.061677059237330904,
+            "median": -0.06120037359369077,
+            "positive": 0.08888888888888889
+          },
+          "excess_universe": {
+            "n": 45,
+            "mean": 0.019178983036373297,
+            "median": 0.02999776180763679,
+            "positive": 0.6444444444444445
+          },
+          "daily_excess": {
+            "days": 9,
+            "mean": 0.010508057375009492,
+            "positive": 0.6666666666666666,
+            "t": null,
+            "t_naive": 0.6585867520322986
+          },
+          "excess_index": {
+            "n": 45,
+            "mean": 0.0004051058564168529,
+            "median": 0.009826111333195331,
+            "positive": 0.5777777777777777
+          }
+        },
+        "pullback_v2": {
+          "candidates": 19,
+          "pending": 0,
+          "comparable": 19,
+          "days": 1,
+          "gross": {
+            "n": 19,
+            "mean": -0.015996784415587967,
+            "median": -0.005604450073226852,
+            "positive": 0.3157894736842105
+          },
+          "net": {
+            "n": 19,
+            "mean": -0.02184678441558797,
+            "median": -0.011454450073226853,
+            "positive": 0.15789473684210525
+          },
+          "excess_universe": {
+            "n": 19,
+            "mean": 0.01622711218018792,
+            "median": 0.026619446522549037,
+            "positive": 0.6842105263157895
+          },
+          "daily_excess": {
+            "days": 1,
+            "mean": 0.01622711218018792,
+            "positive": 1.0,
+            "t": null,
+            "t_naive": null
+          },
+          "excess_index": {
+            "n": 19,
+            "mean": -0.002243521127024335,
+            "median": 0.008148813215336781,
+            "positive": 0.5789473684210527
+          }
+        },
+        "breakout_v2": {
+          "candidates": 1,
+          "pending": 0,
+          "comparable": 1,
+          "days": 1,
+          "gross": {
+            "n": 1,
+            "mean": 0.19238626300884665,
+            "median": 0.19238626300884665,
+            "positive": 1.0
+          },
+          "net": {
+            "n": 1,
+            "mean": 0.18653626300884665,
+            "median": 0.18653626300884665,
+            "positive": 1.0
+          },
+          "excess_universe": {
+            "n": 1,
+            "mean": 0.22461015960462255,
+            "median": 0.22461015960462255,
+            "positive": 1.0
+          },
+          "daily_excess": {
+            "days": 1,
+            "mean": 0.22461015960462255,
+            "positive": 1.0,
+            "t": null,
+            "t_naive": null
+          },
+          "excess_index": {
+            "n": 1,
+            "mean": 0.20613952629741028,
+            "median": 0.20613952629741028,
+            "positive": 1.0
+          }
+        },
+        "pullback_v3": {
+          "candidates": 42,
+          "pending": 26,
+          "comparable": 16,
+          "days": 1,
+          "gross": {
+            "n": 16,
+            "mean": -0.01125625787614002,
+            "median": -0.012057362555434714,
+            "positive": 0.5
+          },
+          "net": {
+            "n": 16,
+            "mean": -0.017106257876140018,
+            "median": -0.017907362555434715,
+            "positive": 0.4375
+          },
+          "excess_universe": {
+            "n": 16,
+            "mean": -0.016413363967713084,
+            "median": -0.017214468647007777,
+            "positive": 0.4375
+          },
+          "daily_excess": {
+            "days": 1,
+            "mean": -0.016413363967713084,
+            "positive": 0.0,
+            "t": null,
+            "t_naive": null
+          },
+          "excess_index": {
+            "n": 16,
+            "mean": -0.041716635101080125,
+            "median": -0.04251773978037482,
+            "positive": 0.125
+          }
+        },
+        "breakout_v3": {
+          "candidates": 19,
+          "pending": 18,
+          "comparable": 1,
+          "days": 1,
+          "gross": {
+            "n": 1,
+            "mean": -0.05616811847240932,
+            "median": -0.05616811847240932,
+            "positive": 0.0
+          },
+          "net": {
+            "n": 1,
+            "mean": -0.062018118472409324,
+            "median": -0.062018118472409324,
+            "positive": 0.0
+          },
+          "excess_universe": {
+            "n": 1,
+            "mean": -0.061325224563982386,
+            "median": -0.061325224563982386,
+            "positive": 0.0
+          },
+          "daily_excess": {
+            "days": 1,
+            "mean": -0.061325224563982386,
+            "positive": 0.0,
+            "t": null,
+            "t_naive": null
+          },
+          "excess_index": {
+            "n": 1,
+            "mean": -0.08662849569734943,
+            "median": -0.08662849569734943,
+            "positive": 0.0
+          }
+        },
+        "pullback_v4": {
+          "candidates": 18,
+          "pending": 18,
+          "comparable": 0,
+          "days": 0
+        }
+      },
+      "score_version": {
+        "candidate_score_v1": {
+          "candidates": 80,
+          "pending": 0,
+          "comparable": 79,
+          "days": 4,
+          "gross": {
+            "n": 79,
+            "mean": -0.021121431222947868,
+            "median": -0.013925872884453239,
+            "positive": 0.20253164556962025
+          },
+          "net": {
+            "n": 79,
+            "mean": -0.02697143122294787,
+            "median": -0.01977587288445324,
+            "positive": 0.17721518987341772
+          },
+          "excess_universe": {
+            "n": 79,
+            "mean": 0.01276546555945375,
+            "median": 0.013845201812127055,
+            "positive": 0.6075949367088608
+          },
+          "daily_excess": {
+            "days": 4,
+            "mean": 0.01297540375215717,
+            "positive": 0.5,
+            "t": null,
+            "t_naive": 1.3022642566475997
+          },
+          "excess_index": {
+            "n": 79,
+            "mean": -0.007926031506049756,
+            "median": -0.010124510554221033,
+            "positive": 0.4050632911392405
+          }
+        },
+        "candidate_score_v2": {
+          "candidates": 100,
+          "pending": 0,
+          "comparable": 100,
+          "days": 5,
+          "gross": {
+            "n": 100,
+            "mean": -0.051481606013682006,
+            "median": -0.04518151237112111,
+            "positive": 0.13
+          },
+          "net": {
+            "n": 100,
+            "mean": -0.05733160601368201,
+            "median": -0.051031512371121114,
+            "positive": 0.08
+          },
+          "excess_universe": {
+            "n": 100,
+            "mean": 0.04650192073240837,
+            "median": 0.051910939769837114,
+            "positive": 0.84
+          },
+          "daily_excess": {
+            "days": 5,
+            "mean": 0.04650192073240837,
+            "positive": 1.0,
+            "t": null,
+            "t_naive": 5.861954695804312
+          },
+          "excess_index": {
+            "n": 100,
+            "mean": 0.03755367053483872,
+            "median": 0.04235939190601207,
+            "positive": 0.81
+          }
+        },
+        "candidate_score_v3": {
+          "candidates": 20,
+          "pending": 0,
+          "comparable": 20,
+          "days": 1,
+          "gross": {
+            "n": 20,
+            "mean": -0.005577632044366237,
+            "median": -0.004638608432217195,
+            "positive": 0.35
+          },
+          "net": {
+            "n": 20,
+            "mean": -0.011427632044366236,
+            "median": -0.010488608432217196,
+            "positive": 0.2
+          },
+          "excess_universe": {
+            "n": 20,
+            "mean": 0.026646264551409653,
+            "median": 0.027585288163558694,
+            "positive": 0.7
+          },
+          "daily_excess": {
+            "days": 1,
+            "mean": 0.026646264551409653,
+            "positive": 1.0,
+            "t": null,
+            "t_naive": null
+          },
+          "excess_index": {
+            "n": 20,
+            "mean": 0.008175631244197396,
+            "median": 0.009114654856346438,
+            "positive": 0.6
+          }
+        },
+        "candidate_score_v6": {
+          "candidates": 49,
+          "pending": 32,
+          "comparable": 17,
+          "days": 1,
+          "gross": {
+            "n": 17,
+            "mean": -0.013898132028861743,
+            "median": -0.029056900121367746,
+            "positive": 0.47058823529411764
+          },
+          "net": {
+            "n": 17,
+            "mean": -0.019748132028861744,
+            "median": -0.03490690012136775,
+            "positive": 0.4117647058823529
+          },
+          "excess_universe": {
+            "n": 17,
+            "mean": -0.019055238120434807,
+            "median": -0.03421400621294081,
+            "positive": 0.4117647058823529
+          },
+          "daily_excess": {
+            "days": 1,
+            "mean": -0.019055238120434807,
+            "positive": 0.0,
+            "t": null,
+            "t_naive": null
+          },
+          "excess_index": {
+            "n": 17,
+            "mean": -0.04435850925380185,
+            "median": -0.05951727734630785,
+            "positive": 0.11764705882352941
+          }
+        },
+        "candidate_score_v7": {
+          "candidates": 30,
+          "pending": 30,
+          "comparable": 0,
+          "days": 0
+        }
+      },
+      "month": {
+        "2026-10": {
+          "candidates": 160,
+          "pending": 0,
+          "comparable": 159,
+          "days": 8,
+          "gross": {
+            "n": 159,
+            "mean": -0.037380388947677604,
+            "median": -0.03432898935147799,
+            "positive": 0.15723270440251572
+          },
+          "net": {
+            "n": 159,
+            "mean": -0.043230388947677605,
+            "median": -0.04017898935147799,
+            "positive": 0.11320754716981132
+          },
+          "excess_universe": {
+            "n": 159,
+            "mean": 0.03150576095471057,
+            "median": 0.03146581603021957,
+            "positive": 0.7295597484276729
+          },
+          "daily_excess": {
+            "days": 8,
+            "mean": 0.03149360320484192,
+            "positive": 0.75,
+            "t": null,
+            "t_naive": 3.350806008746861
+          },
+          "excess_index": {
+            "n": 159,
+            "mean": 0.016048504407265574,
+            "median": 0.013188836497246226,
+            "positive": 0.610062893081761
+          }
+        },
+        "2026-11": {
+          "candidates": 119,
+          "pending": 62,
+          "comparable": 57,
+          "days": 3,
+          "gross": {
+            "n": 57,
+            "mean": -0.02142267913470733,
+            "median": -0.023909633777815742,
+            "positive": 0.3333333333333333
+          },
+          "net": {
+            "n": 57,
+            "mean": -0.02727267913470733,
+            "median": -0.029759633777815743,
+            "positive": 0.2631578947368421
+          },
+          "excess_universe": {
+            "n": 57,
+            "mean": 0.015056738659991308,
+            "median": 0.02174023720460598,
+            "positive": 0.6491228070175439
+          },
+          "daily_excess": {
+            "days": 3,
+            "mean": 0.013351139820970003,
+            "positive": 0.6666666666666666,
+            "t": null,
+            "t_naive": 0.8195939618433129
+          },
+          "excess_index": {
+            "n": 57,
+            "mean": -0.0002295380470169945,
+            "median": 0.0032696038973937247,
+            "positive": 0.5263157894736842
+          }
+        }
+      }
+    },
+    "20": {
+      "all": {
+        "candidates": 279,
+        "pending": 279,
+        "comparable": 0,
+        "days": 0
+      },
+      "ranking": {
+        "total": {
+          "days": 0,
+          "ic": null,
+          "positive": null,
+          "t": null
+        },
+        "technical": {
+          "days": 0,
+          "ic": null,
+          "positive": null,
+          "t": null
+        },
+        "chips": {
+          "days": 0,
+          "ic": null,
+          "positive": null,
+          "t": null
+        },
+        "group": {
+          "days": 0,
+          "ic": null,
+          "positive": null,
+          "t": null
+        },
+        "news_sentiment": {
+          "days": 0,
+          "ic": null,
+          "positive": null,
+          "t": null
+        }
+      },
+      "rank": {
+        "第 1～5 名": {
+          "candidates": 79,
+          "pending": 79,
+          "comparable": 0,
+          "days": 0
+        },
+        "第 6～10 名": {
+          "candidates": 75,
+          "pending": 75,
+          "comparable": 0,
+          "days": 0
+        },
+        "第 11～20 名": {
+          "candidates": 125,
+          "pending": 125,
+          "comparable": 0,
+          "days": 0
+        }
+      },
+      "strategy": {
+        "pullback_v1": {
+          "candidates": 135,
+          "pending": 135,
+          "comparable": 0,
+          "days": 0
+        },
+        "breakout_v1": {
+          "candidates": 45,
+          "pending": 45,
+          "comparable": 0,
+          "days": 0
+        },
+        "pullback_v2": {
+          "candidates": 19,
+          "pending": 19,
+          "comparable": 0,
+          "days": 0
+        },
+        "breakout_v2": {
+          "candidates": 1,
+          "pending": 1,
+          "comparable": 0,
+          "days": 0
+        },
+        "pullback_v3": {
+          "candidates": 42,
+          "pending": 42,
+          "comparable": 0,
+          "days": 0
+        },
+        "breakout_v3": {
+          "candidates": 19,
+          "pending": 19,
+          "comparable": 0,
+          "days": 0
+        },
+        "pullback_v4": {
+          "candidates": 18,
+          "pending": 18,
+          "comparable": 0,
+          "days": 0
+        }
+      },
+      "score_version": {
+        "candidate_score_v1": {
+          "candidates": 80,
+          "pending": 80,
+          "comparable": 0,
+          "days": 0
+        },
+        "candidate_score_v2": {
+          "candidates": 100,
+          "pending": 100,
+          "comparable": 0,
+          "days": 0
+        },
+        "candidate_score_v3": {
+          "candidates": 20,
+          "pending": 20,
+          "comparable": 0,
+          "days": 0
+        },
+        "candidate_score_v6": {
+          "candidates": 49,
+          "pending": 49,
+          "comparable": 0,
+          "days": 0
+        },
+        "candidate_score_v7": {
+          "candidates": 30,
+          "pending": 30,
+          "comparable": 0,
+          "days": 0
+        }
+      },
+      "month": {
+        "2026-10": {
+          "candidates": 160,
+          "pending": 160,
+          "comparable": 0,
+          "days": 0
+        },
+        "2026-11": {
+          "candidates": 119,
+          "pending": 119,
+          "comparable": 0,
+          "days": 0
+        }
+      }
+    }
+  },
+  "last_session": "2026-11-11",
+  "command": "python tools/research/candidate_scorecard.py --db /db/stock.db --out /out/scorecard"
+}
