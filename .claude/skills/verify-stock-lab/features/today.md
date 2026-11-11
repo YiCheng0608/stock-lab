@@ -26,6 +26,7 @@
 | --- | --- |
 | 前端檔 | `frontend/src/candidates/CandidateViews.tsx` |
 | 前端檔 | `frontend/src/today/TodayViews.tsx` |
+| 前端檔 | `frontend/src/today/CandidateChart.tsx` |
 | 前端檔 | `frontend/src/market/MarketPage.tsx` |
 | 前端檔 | `frontend/src/market/MarketViews.tsx` |
 | 前端檔 | `frontend/src/market/marketOverview.ts` |

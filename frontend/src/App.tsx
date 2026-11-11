@@ -76,7 +76,9 @@ import { Shell } from './components/Shell'
 import { Term } from './components/Term'
 import { Card, CardList, DataTable, EmptyState, Skeleton, Tabs, cx, tabId, tabPanelId, type Column } from './components/ui'
 import { StockBarsChart } from './stock/StockBarsChart'
-import { PRICE_BASIS, priceDigits } from './stock/stockBars'
+import { CandidateChart } from './today/CandidateChart'
+import { PRICE_BASIS, chartLevels, priceDigits } from './stock/stockBars'
+import { closestStrategy } from './stock/stockSummary'
 import { StockCutoffControl } from './stock/StockCutoffControl'
 import { StockHeader } from './stock/StockHeader'
 import { StockFundamentalsPanel } from './stock/StockFundamentalsPanel'
@@ -494,7 +496,7 @@ export function TodayPage() {
         <>
           <MarketSummaryLine overview={data.market_overview} />
           <HoldingAlert actions={data.holding_actions ?? data.actions ?? []} />
-          <CandidatesSection data={candidates.data} loading={candidates.isLoading} error={candidates.error} />
+          <CandidatesSection data={candidates.data} loading={candidates.isLoading} error={candidates.error} renderChart={(item) => <CandidateChart item={item} />} />
           <div className="home-columns">
             <HotGroupsSection className="home-panel" title={<Term id="hot_group">熱門族群</Term>} board={board} onBoardChange={setBoard} data={hotGroups.data} loading={hotGroups.isLoading} error={hotGroups.error} />
             <section className="home-news home-panel" aria-labelledby="home-news-title">
@@ -745,7 +747,7 @@ function StockPage() {
     <StockSummaryCard board={data.strategy_board} action={data.decision_summary ?? null} researchHref={`?${stockTabSearch(searchParams, 'research').toString()}`} onResearch={() => document.getElementById(tabId('stock', 'research'))?.scrollIntoView({ block: 'start' })} />
     <Tabs items={STOCK_TABS} value={tab} onChange={setTab} label="個股詳情分頁" idPrefix="stock" className="stock-tabs" />
     <div className="stock-tab-content" id={tabPanelId('stock', tab)} role="tabpanel" aria-labelledby={tabId('stock', tab)}>
-      {tab === 'chart' && <StockBarsChart interval={barsInterval} onIntervalChange={setBarsInterval} data={chartBars.data} loading={chartBars.isLoading} error={chartBars.error} instrumentType={data.instrument.instrument_type} />}
+      {tab === 'chart' && <StockBarsChart interval={barsInterval} onIntervalChange={setBarsInterval} data={chartBars.data} loading={chartBars.isLoading} error={chartBars.error} instrumentType={data.instrument.instrument_type} levels={chartLevels(closestStrategy(data.strategy_board))} />}
       {tab === 'chips' && <Card eyebrow="籌碼資料" title="法人與融資">{data.chips.length ? <ChipTable rows={data.chips.slice(-30).reverse()} /> : <EmptyState reason="尚無可核實的籌碼資料。" />}<BrokerBranchEntry exchange={data.instrument.exchange} /></Card>}
       {tab === 'financials' && <StockFundamentalsPanel rows={data.fundamentals} monthlyRows={data.monthly_revenues ?? []} instrumentType={data.instrument.instrument_type} asOf={asOf || null} sourceLabel={sourceLabel} />}
       {tab === 'news' && <><StockNewsTimeline exchange={data.instrument.exchange} symbol={data.instrument.symbol} query={{ data: stockNews.data, loading: stockNews.isLoading, error: stockNews.error }} /><StockEventList events={data.events} /></>}
