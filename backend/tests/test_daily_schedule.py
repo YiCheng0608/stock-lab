@@ -2196,7 +2196,7 @@ def test_a_daily_run_and_its_steps_are_stamped_with_the_clock(
     rows, by_run = runs(database)
     assert (rows[0].started_at, rows[0].finished_at) == (first, first)
     logged = by_run[rows[0].id]
-    assert len(logged) == 13
+    assert len(logged) == len(schedule_runs.DAILY_STEPS) == 12
     assert {(step.started_at, step.finished_at) for step in logged.values()} == {
         (first, first)
     }
