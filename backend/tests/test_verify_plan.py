@@ -48,6 +48,7 @@ TREE = {
         "import { StockBarsChart } from './stock/StockBarsChart'\n"
         "import { NewsCard } from './news/NewsViews'\n"
         "import { TodayHeader } from './today/TodayViews'\n"
+        "import { CandidateChart } from './today/CandidateChart'\n"
         "import { MarketPage } from './market/MarketPage'\n"
     ),
     "styles.css": "body {}\n",
@@ -60,6 +61,9 @@ TREE = {
     "themes/ThemeViews.tsx": "import { readChartTheme } from '../stock/stockBars'\n",
     "themes/themeSuggestions.test.tsx": "import { X } from './ThemeSuggestionViews'\n",
     "stock/StockBarsChart.tsx": "import { bars } from './stockBars'\n",
+    "today/CandidateChart.tsx": (
+        "import { StockBarsChart } from '../stock/StockBarsChart'\n"
+    ),
     "stock/StockHeader.tsx": "import { quote } from './stockBars'\n",
     "stock/stockBars.ts": "export const bars = 1\n",
     "stock/StrategyBoardPanel.tsx": (
