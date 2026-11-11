@@ -88,13 +88,14 @@ import { HotGroupsSection, ThemeDetailView, ThemesBoardView } from './themes/The
 import { CandidatesSection } from './candidates/CandidateViews'
 import { StockPlanPanel, TrackingClientProvider, TrackingSection, type TrackingClient } from './tracking/TrackingViews'
 import { DEFAULT_MEMBER_SORT, THEME_BOARD_LIMIT, THEME_NEWS_LIMIT, TODAY_BOARD_LIMIT, memberQuery, parseBoard } from './themes/themeBoards'
-import { HomeNewsRow, NewsDetailView, NewsListView, StockNewsTimeline } from './news/NewsViews'
+import { NewsDetailView, NewsListView, StockNewsTimeline } from './news/NewsViews'
 import { HoldingAlert, MarketSummaryLine, TodayHeader } from './today/TodayViews'
 import { MarketPage } from './market/MarketPage'
 import { newsFiltersFromSearch, newsListParams, newsPageSearch, stockNewsParams, type NewsFilters } from './news/newsView'
 import { ACTIONS_PAGE_LIMIT, ACTION_STATE_LABELS, ACTION_TIER_PREVIEW, DEFAULT_ACTION_VIEW, previewTiers, stockResearchPath, tierSections } from './actions/actionTiers'
 import { ActionFilters, ActionTierList } from './actions/ActionViews'
 import { StrategyPage } from './strategy/StrategyPage'
+import { SystemPage } from './system/SystemPage'
 import { STOCK_TABS, parseStockTab, stockTabSearch, type StockTab } from './stock/stockTabs'
 
 // Fixed decimals (DESIGN_SYSTEM §3): rule levels and ratios 2, counts 0, a stock's own price by its tick.
@@ -459,9 +460,6 @@ function NewsDetailPage() {
   return <QueryState loading={query.isLoading} error={query.error}>{query.data && <NewsDetailView item={query.data} />}</QueryState>
 }
 
-// Five news beside the five hot groups keep the two home cards close in height (#493).
-const HOME_NEWS_LIMIT = 5
-
 export function TodayPage() {
   const query = useQuery<Dashboard>({ queryKey: ['dashboard'], queryFn: getDashboard })
   const [board, setBoard] = useState<ThemeBoard>('industry')
@@ -474,8 +472,8 @@ export function TodayPage() {
       .map((action) => [`${action.instrument.exchange}:${action.instrument.symbol}:${action.as_of ?? ''}`, action] as const),
   ).values())
   const modeLabel = !data ? '' : data.mode === 'official' ? '官方單日快照' : data.mode === 'official_partial' ? '官方單日快照（資料仍待補）' : '尚無官方快照'
-  // PRODUCT_SPEC §2 (#493, Issue 549): header line → one-line market summary (the overview is on /market) → holding-risk alert → 今日可買 → hot groups and news, two
-  // cards of one height. The watched stocks moved to 觀察中 (/watch).
+  // PRODUCT_SPEC §2 (#493, Issue 549): header line → one-line market summary (the overview is on /market) → holding-risk alert → 今日名單 → hot groups (the news card left the home page,
+  // Issue 625; news is in each candidate's reasons and on /news). The watched stocks moved to 我的追蹤 (/watch).
   return (
     <div className="page home-page">
       <TodayHeader
@@ -493,13 +491,7 @@ export function TodayPage() {
           <MarketSummaryLine overview={data.market_overview} />
           <HoldingAlert actions={data.holding_actions ?? data.actions ?? []} />
           <CandidatesSection data={candidates.data} loading={candidates.isLoading} error={candidates.error} renderChart={(item) => <CandidateChart item={item} />} />
-          <div className="home-columns">
-            <HotGroupsSection className="home-panel" title={<Term id="hot_group">熱門族群</Term>} board={board} onBoardChange={setBoard} data={hotGroups.data} loading={hotGroups.isLoading} error={hotGroups.error} />
-            <section className="home-news home-panel" aria-labelledby="home-news-title">
-              <div className="panel-head"><h2 id="home-news-title">重點新聞</h2><Link to="/news" className="text-link">全部新聞 →</Link></div>
-              {data.news?.length ? <div className="home-news-list">{data.news.slice(0, HOME_NEWS_LIMIT).map((item) => <HomeNewsRow key={item.id} item={item} />)}</div> : <div className="empty">市場新聞區尚無可顯示內容。</div>}
-            </section>
-          </div>
+          <HotGroupsSection className="home-panel" title={<Term id="hot_group">熱門族群</Term>} board={board} onBoardChange={setBoard} data={hotGroups.data} loading={hotGroups.isLoading} error={hotGroups.error} />
           {data.data_quality.error && <div className="warning-box">官方擷取警告：{data.data_quality.error}</div>}
         </>
       )}
@@ -532,7 +524,7 @@ function ThemesPage() {
   const board = parseBoard(searchParams.get('board'))
   const [search, setSearch] = useState('')
   const query = useQuery({ queryKey: ['theme-board', board, THEME_BOARD_LIMIT], queryFn: () => getThemeBoard(board) })
-  // 今日可買 N 檔 on each row (Issue 522): the same latest list (and cache) as the today page.
+  // 今日名單 N 檔 on each row (Issue 522): the same latest list (and cache) as the today page.
   const candidates = useQuery({ queryKey: ['candidates', 'latest'], queryFn: () => getCandidates() })
   const changeBoard = (next: ThemeBoard) => setSearchParams(next === 'industry' ? {} : { board: next }, { replace: true })
   return <ThemesBoardView board={board} onBoardChange={changeBoard} search={search} onSearchChange={setSearch} data={query.data} loading={query.isLoading} error={query.error} candidates={candidates.data} />
@@ -742,7 +734,7 @@ function StockPage() {
       {tab === 'financials' && <StockFundamentalsPanel rows={data.fundamentals} monthlyRows={data.monthly_revenues ?? []} instrumentType={data.instrument.instrument_type} asOf={asOf || null} sourceLabel={sourceLabel} />}
       {tab === 'news' && <><StockNewsTimeline exchange={data.instrument.exchange} symbol={data.instrument.symbol} query={{ data: stockNews.data, loading: stockNews.isLoading, error: stockNews.error }} /><StockEventList events={data.events} /></>}
       {tab === 'research' && <><StrategyBoardPanel board={data.strategy_board} candidate={data.candidate} gapReasons={data.decision_summary?.gap_reasons} /><ActionDetailPanel action={data.decision_summary ?? null} gap={fallbackResearchIncomplete ? { reasons: data.decision_summary?.gap_reasons, missingFields: qualitySummary.research.missing_fields } : null}><StockPlanPanel strategies={data.decision_summary?.strategies} embedded /></ActionDetailPanel><GroupPanel groups={data.groups} /></>}
-      {tab === 'data' && <><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><Card className="stock-source-panel" eyebrow="資料說明" title="原始時間、來源與技術指標"><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div><IndicatorMetaRows bars={dayBars.data} /><details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} instrumentType={data.instrument.instrument_type} /></details></Card></>}
+      {tab === 'data' && <><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><Card className="stock-source-panel" eyebrow="資料來源" title="原始時間、來源與技術指標"><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div><IndicatorMetaRows bars={dayBars.data} /><details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} instrumentType={data.instrument.instrument_type} /></details></Card></>}
     </div>
     <p className="disclaimer">此為研究工具與資料摘要，不構成投資建議、報酬保證或自動下單指令。</p>
   </div>
@@ -888,7 +880,7 @@ export function ActionDetailPanel({ action, gap, children }: { action: ActionSum
       </div>}
       {detailReasons.length > 0 && <ul className="reason-list">{detailReasons.map((reason) => <li key={reason}>{action.display_reasons ? reason : productActionReasonLabel(reason)}</li>)}</ul>}
       {action.conflicts.length > 0 && <div className="warning-box">{action.conflicts.join('；')}</div>}
-      <div className="small-note">資料日：{formatTaiwanDateTime(action.data_cutoff, true)} · 價位語意：{levelSemanticsLabel(action.level_semantics)} · 規則與官方資料詳見資料說明。</div>
+      <div className="small-note">資料日：{formatTaiwanDateTime(action.data_cutoff, true)} · 價位語意：{levelSemanticsLabel(action.level_semantics)} · 規則與官方資料詳見「資料來源」分頁。</div>
     </details>
     {children && <div className="action-detail-plan">{children}</div>}
   </section>
@@ -925,7 +917,7 @@ type ActionFilterState = { q?: string; view: ActionView; include_etf?: boolean }
 // For a first-time reader (UI_COPY_SPEC §5, decision 6648288563).
 const WATCH_PURPOSE = '把有興趣的候選加入追蹤，系統每天收盤後依日線模擬它的進場與出場（不是實際成交）；這裡也會提醒你庫存的風險，和快要成立的股票。'
 
-// 觀察中 (/watch, formerly the action centre; action_tier_v1, UI_COPY_SPEC §5): one first-page request for the counts
+// 我的追蹤 (/watch, formerly the action centre; action_tier_v1, UI_COPY_SPEC §5): one first-page request for the counts
 // and the top rows; each tier's 顯示更多 pages that tier only.
 export function ActionsPage() {
   const [draft, setDraft] = useState('')
@@ -968,16 +960,17 @@ export function ActionsPage() {
     return next && !cursors.includes(next) ? { ...current, [tier]: [...cursors, next] } : current
   })
   return <div className="page actions-page">
-    <PageTitle eyebrow="追蹤與提醒" title="觀察中" description={WATCH_PURPOSE}>
+    <PageTitle eyebrow="追蹤與提醒" title="我的追蹤" description={WATCH_PURPOSE}>
       <div className="filter-row"><SearchBox draft={draft} query={search} placeholder="搜尋代號或名稱" onDraftChange={setDraft} onSubmit={submit} onClear={clear} /></div>
       {query.data && <ActionFilters summary={query.data.summary} view={view} includeEtf={includeEtf} searching={Boolean(search)} onViewChange={(next) => { setView(next); resetTiers() }} onIncludeEtfChange={(next) => { setIncludeEtf(next); resetTiers() }} />}
     </PageTitle>
     <PortfolioSubsection />
-    <TrackingSection />
+    <TrackingSection part="open" />
     <QueryState loading={query.isLoading} error={query.error}>{query.data && <>
       {(query.data.summary.held_unknown ?? 0) > 0 && <p className="small-note">庫存數量待核實 {query.data.summary.held_unknown?.toLocaleString()} 筆；這些記錄尚未計入已核實持倉。</p>}
       <ActionTierList sections={tierSections(query.data, tierPages)} loadingTiers={loadingTiers} canLoadMore={canLoadMore} onMore={loadMore} />
     </>}</QueryState>
+    <TrackingSection part="closed" />
   </div>
 }
 
@@ -1144,7 +1137,7 @@ function GlossaryPage() {
 }
 
 function NotFound() {
-  return <div className="page"><div className="empty panel">找不到此頁。<Link className="text-link" to="/">回到今日可買</Link></div></div>
+  return <div className="page"><div className="empty panel">找不到此頁。<Link className="text-link" to="/">回到今日名單</Link></div></div>
 }
 
 const trackingClient: TrackingClient = { plans: getTrackingPlans, plan: getTrackingPlan, add: addTrackingPlan, cancel: cancelTrackingPlan }
@@ -1163,6 +1156,7 @@ export const APP_ROUTES: ReadonlyArray<{ path: string; element: ReactElement }> 
   { path: '/actions', element: <WatchRedirect /> },
   { path: '/actions/:exchange/:symbol', element: <ActionDetailRedirect /> },
   { path: '/strategy', element: <StrategyPage /> },
+  { path: '/system', element: <SystemPage /> },
   { path: '/system/data-quality', element: <SystemDataPage /> },
   { path: '/research/backtest', element: <ResearchBacktestPage /> },
   { path: '/research/coverage', element: <BackfillCoveragePage /> },

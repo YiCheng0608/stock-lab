@@ -1233,57 +1233,6 @@ def _latest_emerging_names(db: Session, codes: set[str]) -> dict[str, str]:
     )
 
 
-HOME_NEWS_KNOWN_DIRECTIONS = ("positive", "negative", "mixed")
-
-
-def home_news_eligible() -> Any:
-    """Which news the home page's 重點新聞 may list (#581, NEWS_SPEC 首頁重點新聞).
-
-    A domestic item (feed ``domestic`` and the official ``company``／``taiwan``
-    projections) needs a rule-verified symbol or a current-prompt AI direction
-    other than ``unknown``; an international item needs a Taiwan symbol, rule
-    verified or an AI candidate (the home row shows neither, it only lets the
-    item in).  Others stay on /news.  Fewer than the row count are shown as
-    they are, never filled with the rest.
-    """
-
-    def symbols(column: Any) -> Any:
-        # JSON null and [] are both no symbol; json_array_length of null is 0.
-        return func.coalesce(func.json_array_length(column), 0) > 0
-
-    def current_ai(*conditions: Any) -> Any:
-        return (
-            select(NewsLlmResult.id)
-            .where(
-                NewsLlmResult.news_item_id == NewsItem.id,
-                NewsLlmResult.prompt_version == NEWS_PROMPT_VERSION,
-                NewsLlmResult.llm_status == "done",
-                *conditions,
-            )
-            .exists()
-        )
-
-    verified = symbols(NewsItem.symbols_json)
-    return or_(
-        and_(
-            NewsItem.category != "international",
-            or_(
-                verified,
-                current_ai(
-                    NewsLlmResult.ai_impact_direction.in_(HOME_NEWS_KNOWN_DIRECTIONS)
-                ),
-            ),
-        ),
-        and_(
-            NewsItem.category == "international",
-            or_(
-                verified,
-                current_ai(symbols(NewsLlmResult.ai_symbol_candidates_json)),
-            ),
-        ),
-    )
-
-
 def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, Any]]:
     """Done LLM result of the current prompt per news item, in two queries.
 
@@ -1692,51 +1641,6 @@ def compact_theme_summary(
     return payload
 
 
-def compact_news_dict(
-    db: Session, item: NewsItem, ai: dict[int, dict[str, Any]]
-) -> dict[str, Any]:
-    """Return the small dashboard/news-list projection.
-
-    The detail endpoint remains the only product surface that needs full
-    summary/provenance payloads; list rows carry only the event metadata,
-    linked instruments and the same ``ai`` block as the detail, so a card and
-    ``/news/<id>`` give one reading.  Pass ``ai`` from news_ai_map.
-    """
-
-    payload = news_dict(db, item, ai)
-    return {
-        key: payload[key]
-        for key in (
-            "id",
-            "category",
-            "source_kind",
-            "source_name",
-            "source",
-            "title",
-            "summary_preview",
-            "published_at",
-            "event_at",
-            "event_date",
-            "display_time",
-            "time_basis",
-            "time_precision",
-            "time_consistency",
-            "product_time",
-            "response_generated_at",
-            "collected_at",
-            "symbols",
-            "instruments",
-            "themes",
-            "theme_ids",
-            "impact_direction",
-            "confidence",
-            "status",
-            "detail_url",
-            "ai",
-        )
-    }
-
-
 def action_list_rows(
     db: Session,
     as_of: date | None,
@@ -1989,21 +1893,6 @@ def dashboard(
     action_rows = summaries_in_order(
         db, official_as_of, [row.instrument_id for row in tier_rows[:8]], holdings
     )
-    product_news = db.scalars(
-        select(NewsItem)
-        .outerjoin(Event, NewsItem.event_id == Event.id)
-        .where(
-            NewsItem.status == "active",
-            or_(
-                NewsItem.time_consistency.is_(None),
-                NewsItem.time_consistency != "conflict",
-            ),
-            home_news_eligible(),
-        )
-        .order_by(*_news_order_by())
-        .limit(6)
-    ).all()
-    news_ai = news_ai_map(db, product_news)
     actionable = [
         item
         for item in action_rows
@@ -2043,7 +1932,6 @@ def dashboard(
         "signal_status_counts": {status: count for status, count in status_rows},
         # Product IA read model.  Legacy fields above remain for compatibility
         # with the Phase 1 research surface.
-        "news": [compact_news_dict(db, item, news_ai) for item in product_news],
         "themes": product_themes,
         "candidates": [compact_action_summary(item) for item in actionable[:8]],
         "actions": [compact_action_summary(item) for item in display_actions[:8]],
@@ -2068,7 +1956,6 @@ def dashboard(
         # Stored daily tiers or a live computation, and why (#476).
         "action_tier_source": tier_source,
         "empty_states": {
-            "news": "尚未接入核准的國際／媒體新聞" if not product_news else None,
             "themes": "目前沒有同時達到完整資料與至少 3 檔成員的熱門族群"
             if not any(item["qualified"] for item in product_themes)
             else None,

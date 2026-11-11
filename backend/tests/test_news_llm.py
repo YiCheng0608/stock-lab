@@ -744,74 +744,6 @@ def _statements(db, call):
         event.remove(engine, "before_cursor_execute", record)
 
 
-def test_dashboard_news_has_the_same_ai_block_as_the_detail(db, fake, client):
-    # #233: the today card and /news/<id> must give one reading of the same item.
-    items = _add_news(db, 3)
-    _run(db)
-    # A rule-verified symbol keeps an item without an AI result on the home page (#581).
-    pending = _add_news(db, 1, start=3, symbols_json=["TWSE:2330"])[0]
-    news, statements = _statements(
-        db, lambda: client.get(f"{router.prefix}/dashboard").json()["news"]
-    )
-    assert [row["id"] for row in news] == [str(item.id) for item in items] + [
-        str(pending.id)
-    ]
-    for row in news[:3]:
-        detail = client.get(f"{router.prefix}/news/{row['id']}").json()
-        assert row["ai"]["inference"] is True and row["ai"]["status"] == "done"
-        assert row["ai"] == detail["ai"]
-    assert news[3]["ai"] is None
-    # One query for the AI blocks; the home news query reads the table only in its
-    # eligibility EXISTS (#581), once.
-    reads = [statement for statement in statements if "news_llm_results" in statement]
-    selection = [statement for statement in reads if "FROM news_items" in statement]
-    assert len(selection) == 1 and len(reads) - len(selection) == 1
-
-
-def test_home_news_lists_linked_or_judged_items_only(db, client):
-    # #581: on 11/09 CNBC's "Home listings pile up" and a heart drug trial (no
-    # symbol, direction unknown) were the first two home rows.
-    def ai(item, direction, candidates=(), prompt_version=PROMPT_VERSION):
-        row = _done(item, prompt_version, "摘要")
-        row.ai_impact_direction = direction
-        row.ai_symbol_candidates_json = [
-            {"symbol": symbol, "reason": "原文提到", "confidence": "high"}
-            for symbol in candidates
-        ]
-        return row
-
-    intl = {"category": "international", "source_name": "CNBC", "language": "en"}
-    (unlinked_intl,) = _add_news(db, 1, start=0, **intl)
-    (judged_intl,) = _add_news(db, 1, start=1, **intl)
-    (candidate_intl,) = _add_news(db, 1, start=2, **intl)
-    (verified_intl,) = _add_news(db, 1, start=3, symbols_json=["TWSE:2330"], **intl)
-    unknown, judged, verified, old_prompt, unjudged_null = _add_news(db, 5, start=4)
-    unjudged_null.symbols_json = None
-    verified.symbols_json = ["TPEx:8299"]
-    db.add_all(
-        [
-            ai(unlinked_intl, "unknown"),
-            # A direction alone does not let an international item in.
-            ai(judged_intl, "negative"),
-            ai(candidate_intl, "unknown", ["TWSE:2330"]),
-            ai(unknown, "unknown"),
-            ai(judged, "mixed"),
-            # Only the current prompt's result counts (#308).
-            ai(old_prompt, "positive", prompt_version="news_v1"),
-        ]
-    )
-    db.commit()
-
-    news = client.get(f"{router.prefix}/dashboard").json()["news"]
-
-    assert [row["id"] for row in news] == [
-        str(item.id) for item in (candidate_intl, verified_intl, judged, verified)
-    ]
-    # /news still lists every item.
-    listed = client.get(f"{router.prefix}/news").json()["items"]
-    assert str(unlinked_intl.id) in {row["id"] for row in listed}
-
-
 def _utc_instant(value):
     parsed = datetime.fromisoformat(value)
     assert parsed.utcoffset() == timedelta(0), value
@@ -1464,8 +1396,6 @@ def test_only_the_current_prompt_version_result_reaches_any_page(db, client):
         if detail["ai"]
     )
     assert summaries(client.get(f"{router.prefix}/news").json()["items"]) == expected
-    dashboard = client.get(f"{router.prefix}/dashboard").json()
-    assert summaries(dashboard["news"]) == expected
     stock = client.get(
         f"{router.prefix}/stocks/TWSE/2409",
         params={"as_of": "2026-10-17", "include": "news"},

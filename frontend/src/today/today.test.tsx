@@ -87,7 +87,7 @@ check(failed.endsWith('資料截至 未提供') && !failed.includes('·'), `head
 // ---- holding-risk alert row: only verified holding risks, linked to the action centre ----
 const alert = render('HoldingAlert', () => <HoldingAlert actions={riskActions()} />)
 check(text(alert).includes('持倉風險 4 檔：2330 台積電：減碼／退場條件；1101 台泥：持倉風險資料不足；2882 國泰金：庫存數量待核實 等 4 檔'), `持倉提示列: count, first three holdings and reasons, got ${text(alert)}`)
-check(alert.includes('href="/watch"') && text(alert).includes('查看觀察中 →'), '持倉提示列: links to /watch (Issue 493)')
+check(alert.includes('href="/watch"') && text(alert).includes('查看我的追蹤 →'), '持倉提示列: links to /watch (Issue 493)')
 check(!text(alert).includes('長榮') && !text(alert).includes('鴻海'), '持倉提示列: not-held rows are no holding risk')
 const noRisk = render('HoldingAlert none', () => <HoldingAlert actions={riskActions().filter((item: ActionSummary) => !item.held)} />)
 check(noRisk === '', `持倉提示列: nothing when no holding is at risk, got ${text(noRisk)}`)
@@ -111,8 +111,8 @@ check(text(slice(long, 'class="candidate-more"', '</details>')).includes('顯示
 check(text(long).includes('2026/10/16 收盤後條件成立，最早下一個交易日（T+1）才可研究進場。') && text(long).includes(CANDIDATE_DISCLAIMER), 'list: the T+1 sentence and the disclaimer')
 // The head is one line (Issue 510): no eyebrow; title, date badge, count, the notes and 策略說明 in one flex row.
 const head = slice(long, 'class="candidates-head"', '<ol')
-check(!head.includes('eyebrow') && head.includes('id="candidates-title">今日可買</h2>') && head.includes('href="/strategy"'), 'Issue 510: the head has no eyebrow, the title and 策略說明 are in it')
-check(head.indexOf('今日可買</h2>') < head.indexOf('資料 2026/10/16') && head.indexOf('資料 2026/10/16') < head.indexOf('12 檔') && head.indexOf('12 檔') < head.indexOf('收盤後條件成立'), 'Issue 510: title → date → count → notes in the head')
+check(!head.includes('eyebrow') && head.includes('id="candidates-title">今日名單</h2>') && head.includes('href="/strategy"'), 'Issue 510: the head has no eyebrow, the title and 策略說明 are in it')
+check(head.indexOf('今日名單</h2>') < head.indexOf('資料 2026/10/16') && head.indexOf('資料 2026/10/16') < head.indexOf('12 檔') && head.indexOf('12 檔') < head.indexOf('收盤後條件成立'), 'Issue 510: title → date → count → notes in the head')
 // AC-2: each row shows the name, the entry sentence (with its stop and target) and the levels' classes; the reason and
 // the average volume moved into the detail.
 const main1 = mainOf(rowOf(list, 1))
@@ -174,12 +174,11 @@ for (const reason of ['no_actionable_signals', 'all_excluded'] as const) {
 const notComputed = render('CandidatesSection not computed', () => <CandidatesSection data={notComputedResponse()} loading={false} error={null} />)
 check(text(notComputed).includes(NOT_COMPUTED_TEXT) && text(notComputed).includes('尚無候選清單') && !notComputed.includes('date-badge') && !text(notComputed).includes('T+1'), 'not_computed: copy without a date badge or T+1 sentence')
 
-// ---- Issue 510 layout rules the static markup cannot show (DESIGN_SYSTEM §5 候選列表, 熱門族群與重點新聞) ----
+// ---- Issue 510 layout rules the static markup cannot show (DESIGN_SYSTEM §5 候選列表, 熱門族群) ----
 const styles = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8')
 const ruleOf = (selector: string) => { const at = styles.indexOf('\n' + selector + ' {'); return at < 0 ? '' : styles.slice(at, styles.indexOf('}', at)) }
 check(/white-space:\s*nowrap/.test(ruleOf('.candidate-row-title')) && /text-overflow:\s*ellipsis/.test(ruleOf('.candidate-row-title')), 'Issue 510: the title line never wraps; market · group is cut with an ellipsis')
-check(/white-space:\s*nowrap/.test(ruleOf('.home-news-title')) && /text-overflow:\s*ellipsis/.test(ruleOf('.home-news-title')), 'Issue 510: a news title is one line')
-check(/white-space:\s*nowrap/.test(ruleOf('.home-news-meta, .home-news-impact')) && /white-space:\s*nowrap/.test(ruleOf('.hot-group-returns')), 'Issue 510: line two of news and groups never wraps')
+check(/white-space:\s*nowrap/.test(ruleOf('.hot-group-returns')), 'Issue 510: line two of a group never wraps')
 check(/white-space:\s*nowrap/.test(ruleOf('.hot-group-line h3')), 'Issue 510: a group name is one line')
 check(!/var\(--text-|--space-row|--space-block/.test(styles.replace(/var\(--text-(xs|sm|md|base|lg|xl|2xl)\)|var\(--space-(row|block)\)/g, '')), 'Issue 510: only the defined type and spacing tokens are used')
 // Issue 608: on phones the AI entry left the numbers' line (it covered the total at 390) for the title line's right,

@@ -315,7 +315,7 @@ def test_plan_names_a_reason_for_each_page(importers):
     )
     assert result.pages == ["today", "themes"]
     text = verify_plan.markdown(result, "- head")
-    assert "| 今日可買 `/` | `" + FE + "today/TodayViews.tsx` |" in text
+    assert "| 今日名單 `/` | `" + FE + "today/TodayViews.tsx` |" in text
     route = "`backend/app/api.py` `GET /themes/{theme_id}/members`"
     assert "| 族群 `/themes` | " + route + " |" in text
     assert "- 範圍：不驗" in verify_plan.markdown(plan("docs/a.md"), "- head")

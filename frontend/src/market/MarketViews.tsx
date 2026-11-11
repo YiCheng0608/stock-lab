@@ -7,7 +7,6 @@ import { isFiniteNumber } from '../stock/stockBars'
 import { StockBarsChart } from '../stock/StockBarsChart'
 import {
   EXCHANGES,
-  US_ATTRIBUTION,
   INDEX_CHART_ID,
   INDEX_CHART_TITLE_ID,
   INDEX_SELECT_HINT,
@@ -18,7 +17,6 @@ import {
   ROLL_LABEL,
   SHORT_SCOPE_LABELS,
   TAIFEX_ATTRIBUTION,
-  TW_GROUP_TITLE,
   TX_ROLL_NOTE,
   available,
   changeTone,
@@ -40,7 +38,6 @@ import {
   missingText,
   rollNote,
   signedPercent,
-  usGroupTitle,
   type ExchangeSpec,
   type IndexSpec,
 } from './marketOverview'
@@ -188,15 +185,14 @@ function indexColumns(selected: string): ReadonlyArray<Column<TableRow>> {
     { key: 'pct', header: '漲跌幅', num: true, cellClassName: 'market-index-pct', cell: (item) => <PercentCell {...item} /> },
     { key: 'date', header: '資料日', cellClassName: 'market-index-date', cell: (item) => <DateCell {...item} /> },
     { key: 'ma60', header: '相對季線（MA60）', cellClassName: 'market-index-ma60', cell: (item) => <Ma60Cell {...item} /> },
-    { key: 'source', header: '來源', wideOnly: true, cellClassName: 'market-index-source', cell: ({ row, spec }) => row?.source?.label ?? (spec.group === 'us' ? 'FinMind' : '—') },
+    { key: 'source', header: '來源', wideOnly: true, cellClassName: 'market-index-source', cell: ({ row }) => row?.source?.label ?? '—' },
   ]
 }
 
-// The seven rows in two groups (台股, 美股), one table at every width (DESIGN_SYSTEM §4 大盤頁: 640px and below each row
+// The three Taiwan rows (Issue 633: no US rows, so no group titles), one table at every width (DESIGN_SYSTEM §4 大盤頁: 640px and below each row
 // is two lines, no horizontal scroll). A click anywhere on a row, or Enter on its name button, selects it.
 export function IndexTableView({ overview, selected, onSelect }: { overview: MarketOverview | undefined; selected: string; onSelect: (key: string) => void }) {
   const rows: TableRow[] = INDEX_SPECS.map((spec) => ({ spec, row: indexRow(overview, spec.key) }))
-  const usTitle = usGroupTitle(overview)
   const roll = rollNote(indexRow(overview, 'tx'))
   return (
     <>
@@ -205,7 +201,6 @@ export function IndexTableView({ overview, selected, onSelect }: { overview: Mar
         columns={indexColumns(selected)}
         rows={rows}
         rowKey={({ spec }) => spec.key}
-        groupTitle={({ spec }, index) => index === 0 || rows[index - 1].spec.group !== spec.group ? (spec.group === 'tw' ? TW_GROUP_TITLE : usTitle) : null}
         rowProps={({ spec }) => ({
           className: cx('market-index-row', spec.key === selected && 'is-selected'),
           'data-index': spec.key,
@@ -252,18 +247,8 @@ function FuturesFooter({ data }: { data: StockBarsResponse | undefined }) {
   )
 }
 
-// A US chart: the FinMind attribution and the index owner's copyright notice.
-export function UsChartFooter({ row }: { row: IndexRow | null }) {
-  return (
-    <div className="market-chart-footer" data-exchange="US">
-      <p>{US_ATTRIBUTION}</p>
-      {row?.source?.copyright && <p>{row.source.copyright}</p>}
-    </div>
-  )
-}
-
 // The selected row's chart: the stock page's StockBarsChart (same period switch, indicators and empty states), titled
-// 「{名稱}日線」; a US index is a close line with the chart's own note (DESIGN_SYSTEM §4 大盤頁, §6).
+// 「{名稱}日線」 (DESIGN_SYSTEM §4 大盤頁, §6).
 export function MarketChartView({ spec, row, interval, onIntervalChange, data, loading, error }: {
   spec: IndexSpec
   row: IndexRow | null
@@ -273,7 +258,7 @@ export function MarketChartView({ spec, row, interval, onIntervalChange, data, l
   loading: boolean
   error: unknown
 }) {
-  const footer = spec.instrumentType === 'futures' ? <FuturesFooter data={data} /> : spec.group === 'us' ? <UsChartFooter row={row} /> : undefined
+  const footer = spec.instrumentType === 'futures' ? <FuturesFooter data={data} /> : undefined
   return (
     <div className="market-chart" id={INDEX_CHART_ID} data-chart={spec.key}>
       <StockBarsChart interval={interval} onIntervalChange={onIntervalChange} data={data} loading={loading} error={error}

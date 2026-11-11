@@ -16,12 +16,9 @@ export function Shell({ children }: { children: ReactNode }) {
       <footer className="container site-footer">
         <span>T 日收盤訊號 · 最早 T+1 執行 · T+5／T+20 追蹤</span>
         <span>僅使用官方資料 · 詳細來源見各頁資料說明</span>
+        {/* One entry (Issue 631): news, the research pages and the glossary are listed on /system. */}
         <nav className="secondary-nav" aria-label="次要工具">
-          <Link to="/research/backtest">技術回測</Link>
-          <Link to="/research/coverage">資料覆蓋度</Link>
-          <Link to="/research/strategies">策略版本</Link>
-          <Link to="/system/data-quality">資料品質</Link>
-          <Link to="/glossary">用語表</Link>
+          <Link to="/system">系統</Link>
         </nav>
       </footer>
     </div>

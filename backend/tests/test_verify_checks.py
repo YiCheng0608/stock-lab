@@ -224,11 +224,11 @@ def _candidates(count=2, inference=True):
     }
 
 
-# The 1280 list (#510): the navbar's 今日可買 link, the section title (no eyebrow), then rows
+# The 1280 list (#510): the navbar's 今日名單 link, the section title (no eyebrow), then rows
 # whose title line starts `#<rank> <symbol> <name>`, then the opened detail.
 TODAY_CANDIDATES = (
-    "今日可買\n觀察中\n"
-    "今日可買\n資料 2026/10/16\n2 檔\n2026/10/16 收盤後條件成立\n策略說明 →\n"
+    "今日名單\n我的追蹤\n"
+    "今日名單\n資料 2026/10/16\n2 檔\n2026/10/16 收盤後條件成立\n策略說明 →\n"
     "#1 9100 示範一 上市 · 半導體（產業 #1）\n突破型\n2026/10/16 收盤已突破 21.10 元\n"
     "收盤（元）\n21.10\n+0.48%\nRR\n1.60 倍\nAI 推論 ▸\n"
     "AI 進出點說明\nAI 推論\n"
@@ -257,7 +257,7 @@ def test_t7_and_t8_pass_on_matching_text(tmp_path):
 
 def test_t7_fails_on_the_old_candidate_rows(tmp_path):
     # Before #493 the rank was a cell of its own (`#1<TAB>9100 …`), and before #276 a card
-    # (`#1` on a line of its own); neither is a 今日可買 row.
+    # (`#1` on a line of its own); neither is a 今日名單 row.
     for old in ("\t", "\n"):
         page = TODAY_CANDIDATES.replace("#1 ", "#1" + old).replace("#2 ", "#2" + old)
         run = FakeRun(
@@ -273,15 +273,15 @@ def test_t7_fails_on_the_old_candidate_rows(tmp_path):
 
 
 def test_t7_reads_the_section_title_not_the_navbar_link(tmp_path):
-    # #493: the navbar 今日可買 comes first; the date must follow the section title.
-    page = TODAY_CANDIDATES.replace("觀察中\n今日可買\n", "觀察中\n", 1)
+    # #493: the navbar 今日名單 comes first; the date must follow the section title.
+    page = TODAY_CANDIDATES.replace("我的追蹤\n今日名單\n", "我的追蹤\n", 1)
     run = FakeRun(
         tmp_path,
         {"candidates": _candidates()},
         {"today-1280": page},
         {"candidate_run_latest_trading_date": "2026-10-16"},
     )
-    with pytest.raises(page_checks.Fail, match="`今日可買` 下一行是 '觀察中'"):
+    with pytest.raises(page_checks.Fail, match="`今日名單` 下一行是 '我的追蹤'"):
         page_checks.t7(run)
 
 
@@ -325,7 +325,8 @@ TODAY_GROUPS = (
         f"#{n}\n族群{n}\n分數 8{n}.00\n1 日 +0.10% 5 日 +1.00% 20 日 +2.00%\n"
         for n in range(1, 6)
     )
-    + "重點新聞\n全部新聞 →\n"
+    + page_checks.FOOTER_FIRST_LINE
+    + "\n"
 )
 
 
@@ -356,7 +357,7 @@ def test_t7_fails_when_the_page_drops_the_candidates(tmp_path):
     run = FakeRun(
         tmp_path,
         {"candidates": _candidates()},
-        {"today-1280": "今日可買\n資料 2026/10/16\n2 檔\n"},
+        {"today-1280": "今日名單\n資料 2026/10/16\n2 檔\n"},
         {"candidate_run_latest_trading_date": "2026-10-16"},
     )
     with pytest.raises(page_checks.Fail, match=r"`#n` 名次列 \[\]，預期依 items"):
@@ -578,9 +579,9 @@ def test_today_shots_include_the_market_page():
 
 # The today page's one market line (Issue 549): the two indexes, the date, the link.
 SUMMARY_PAGE = (
-    "今日可買\n資料 2026/10/22\n資料截至 2026/10/22 · TWSE／TPEx 官方資料 · 官方單日快照\n"
+    "今日名單\n資料 2026/10/22\n資料截至 2026/10/22 · TWSE／TPEx 官方資料 · 官方單日快照\n"
     "大盤\n加權 46,041.43 -1.81%\n櫃買 381.69 -3.47%\n資料 2026/10/22\n看大盤 →\n"
-    "條件已成立 · 依評分排序\n今日可買\n資料 2026/10/16\n2 檔\n"
+    "條件已成立 · 依評分排序\n今日名單\n資料 2026/10/16\n2 檔\n"
 )
 
 
@@ -764,7 +765,7 @@ def test_t15_without_bars_needs_the_empty_copy(tmp_path):
 
 # ---- T16: the index table (Issue 564) ----
 
-FRED = "資料來源：FinMind（個人非商業使用）"  # page_checks.US_ATTRIBUTION (Issue 568)
+FRED = "資料來源：FinMind（個人非商業使用）"  # the US attribution, gone from the page (Issue 633)
 
 
 def _index(key, group, **extra):
@@ -867,19 +868,17 @@ def _indexes(**changes):
     }
 
 
+US_PAGE_ROW = (
+    "S&P 500\t7,353.73\t-334.89\t-4.36%\t2026/10/21\t之上 季線 44,012.50\tFRED\n"
+)
+# Issue 633: the page lists the three Taiwan rows; the API (_indexes) still has the US rows.
 INDEX_PAGE = (
     "大盤概況\n資料 2026/10/22\n指數總表\n資料 2026/10/22\n資料說明\n"
-    f"{ATTRIBUTION}\n{FRED}\n"
+    f"{ATTRIBUTION}\n"
     "指數\t收盤（點）\t漲跌\t漲跌幅\t資料日\t相對季線（MA60）\t來源\n"
-    "台股\n"
     "加權指數\t46,041.43\t-846.34\t-1.81%\t2026/10/22\t之上 季線 44,012.50\t臺灣證券交易所\n"
     "櫃買指數\t395.42\t+2.10\t+0.53%\t2026/10/21 非最新\t資料不足（42／60 日）\t證券櫃檯買賣中心\n"
     "台指期近月 合約 2026/11\t46,110\t換月\t換月\t2026/10/22\t之下 季線 46,502\t臺灣期貨交易所\n"
-    "美股（前一交易日）\n"
-    "S&P 500\t7,353.73\t-334.89\t-4.36%\t2026/10/21\t之上 季線 44,012.50\tFRED\n"
-    "NASDAQ 綜合指數\t24,579.42\t+264.42\t+1.09%\t2026/10/21\t無資料：季線尚未計算\tFRED\n"
-    "道瓊工業指數\t51,285.73\t-40.25\t-0.08%\t2026/10/20 2026/10/21 美股休市\t持平 季線 51,285.73\tFRED\n"
-    "費城半導體指數\t—\t—\t—\t無資料：最近一次擷取失敗（2026/10/22）\t—\tFRED\n"
     "台指期近月 2026/10/22 換月（2026/10 → 2026/11），與前一筆是不同合約，不計漲跌\n"
     "技術指標 indicators/v1\n加權指數日線\n"
 )
@@ -888,18 +887,15 @@ INDEX_PAGE = (
 def test_t16_passes_on_the_index_table(tmp_path):
     run = FakeRun(tmp_path, _indexes(), {"market-1280": INDEX_PAGE})
     summary = page_checks.t16(run)
-    assert summary.startswith("美股（前一交易日）；")
+    assert summary.endswith("；沒有美股列")
     assert (
         "`台指期近月 合約 2026/11\t46,110\t換月\t換月\t2026/10/22\t之下 季線 46,502\t臺灣期貨交易所`"
         in summary
     )
-    assert (
-        "`費城半導體指數\t—\t—\t—\t無資料：最近一次擷取失敗（2026/10/22）\t—\tFRED`"
-        in summary
-    )
+    assert "費城半導體指數" not in summary
 
 
-def test_t16_fails_on_a_wrong_cell_order_or_group(tmp_path):
+def test_t16_fails_on_a_wrong_cell_order_or_a_us_row(tmp_path):
     # MA60 from another value than the API's (AC-3: the page shows the stored ma60).
     page = INDEX_PAGE.replace("之上 季線 44,012.50\t臺灣", "之上 季線 44,012.49\t臺灣")
     run = FakeRun(tmp_path, _indexes(), {"market-1280": page})
@@ -910,20 +906,15 @@ def test_t16_fails_on_a_wrong_cell_order_or_group(tmp_path):
     run = FakeRun(tmp_path, _indexes(), {"market-1280": page})
     with pytest.raises(page_checks.Fail, match="tx：缺整行"):
         page_checks.t16(run)
-    # One US row 非最新: the group is 美股 only (decision 6725073156).
-    stale = _indexes(spx={"freshness": "stale"})
-    page = INDEX_PAGE.replace(
-        "2026/10/21\t之上 季線 44,012.50\tFRED",
-        "2026/10/21 非最新\t之上 季線 44,012.50\tFRED",
+    # Rows out of order.
+    tx = "台指期近月 合約 2026/11\t46,110\t換月\t換月\t2026/10/22\t之下 季線 46,502\t臺灣期貨交易所\n"
+    page = INDEX_PAGE.replace(tx, "").replace(
+        "加權指數\t46,041.43", tx + "加權指數\t46,041.43"
     )
-    run = FakeRun(tmp_path, stale, {"market-1280": page})
-    with pytest.raises(page_checks.Fail, match="缺分組 `台股`、`美股`"):
+    run = FakeRun(tmp_path, _indexes(), {"market-1280": page})
+    with pytest.raises(page_checks.Fail, match="tx：缺整行 .*或不在前一列之後"):
         page_checks.t16(run)
-    run = FakeRun(
-        tmp_path, stale, {"market-1280": page.replace("美股（前一交易日）\n", "美股\n")}
-    )
-    assert page_checks.t16(run).startswith("美股；")
-    # The table after the chart, or without the attributions in 資料說明.
+    # The table after the chart, or without the attribution in 資料說明.
     page = INDEX_PAGE.replace("技術指標 indicators/v1\n加權指數日線\n", "").replace(
         "大盤概況\n", "大盤概況\n加權指數日線\n"
     )
@@ -933,38 +924,48 @@ def test_t16_fails_on_a_wrong_cell_order_or_group(tmp_path):
     ):
         page_checks.t16(run)
     run = FakeRun(
-        tmp_path, _indexes(), {"market-1280": INDEX_PAGE.replace(f"{FRED}\n", "")}
+        tmp_path,
+        _indexes(),
+        {"market-1280": INDEX_PAGE.replace(f"{ATTRIBUTION}\n", "")},
     )
     with pytest.raises(page_checks.Fail, match="資料說明"):
         page_checks.t16(run)
-    # A Taiwan row listed under the US group.
-    page = INDEX_PAGE.replace(
-        "台指期近月 合約 2026/11\t46,110\t換月\t換月\t2026/10/22\t之下 季線 46,502\t臺灣期貨交易所\n美股（前一交易日）\n",
-        "美股（前一交易日）\n台指期近月 合約 2026/11\t46,110\t換月\t換月\t2026/10/22\t之下 季線 46,502\t臺灣期貨交易所\n",
-    )
-    run = FakeRun(tmp_path, _indexes(), {"market-1280": page})
-    with pytest.raises(page_checks.Fail, match="tx：不在 `台股` 分組內"):
-        page_checks.t16(run)
+    # Issue 633: a US row, its group title or its attribution is back on the page.
+    for line, shown in (
+        (US_PAGE_ROW, "S&P 500"),
+        ("美股（前一交易日）\n", "美股（前一交易日）"),
+        (f"{FRED}\n", FRED),
+    ):
+        page = INDEX_PAGE.replace(
+            "台指期近月 2026/10/22 換月", line + "台指期近月 2026/10/22 換月"
+        )
+        run = FakeRun(tmp_path, _indexes(), {"market-1280": page})
+        with pytest.raises(page_checks.Fail, match="大盤頁仍有美股的") as error:
+            page_checks.t16(run)
+        assert f"`{shown}`" in str(error.value)
     run = FakeRun(
         tmp_path,
         {"dashboard": {"market_overview": {"indexes": []}}},
         {"market-1280": INDEX_PAGE},
     )
-    with pytest.raises(page_checks.Fail, match="indexes 的列是"):
+    with pytest.raises(page_checks.Fail, match="indexes 的台股列是"):
         page_checks.t16(run)
 
 
-def test_t12_needs_the_candidates_before_groups_and_news(tmp_path):
-    page = "今日可買\n資料 2026/10/16\n熱門族群\n資料 2026/10/16\n重點新聞\n"
+def test_t12_needs_the_candidates_before_groups_and_no_news_card(tmp_path):
+    page = "今日名單\n資料 2026/10/16\n熱門族群\n資料 2026/10/16\n"
     run = FakeRun(tmp_path, {}, {"today-1280": page})
-    assert "`今日可買`" in page_checks.t12(run)
-    old = "今日市場／重大事件\n熱門族群\n今日可買\n關注標的\n"
-    run = FakeRun(tmp_path, {}, {"today-1280": old})
-    with pytest.raises(page_checks.Fail, match="缺整行 `重點新聞`"):
+    assert "`今日名單`" in page_checks.t12(run)
+    run = FakeRun(tmp_path, {}, {"today-1280": "今日名單\n資料 2026/10/16\n"})
+    with pytest.raises(page_checks.Fail, match="缺整行 `熱門族群`"):
         page_checks.t12(run)
-    swapped = "熱門族群\n重點新聞\n今日可買\n"
+    swapped = "熱門族群\n今日名單\n"
     run = FakeRun(tmp_path, {}, {"today-1280": swapped})
-    with pytest.raises(page_checks.Fail, match="熱門族群 → 重點新聞 → 今日可買"):
+    with pytest.raises(page_checks.Fail, match="區塊順序 `熱門族群` → `今日名單`"):
+        page_checks.t12(run)
+    # Issue 625: the news card left the home page.
+    run = FakeRun(tmp_path, {}, {"today-1280": page + "重點新聞\n"})
+    with pytest.raises(page_checks.Fail, match="首頁仍有整行 `重點新聞`"):
         page_checks.t12(run)
 
 
@@ -1312,7 +1313,7 @@ def test_known_failures_expire_within_30_days_of_the_commit_that_added_them():
 def test_an_entry_is_read_from_the_source_and_dated_today_until_committed():
     text = (
         "KNOWN_FAILURES: dict[tuple[str, str], Known] = {\n"
-        '    ("today", "T6"): Known(\n'
+        '    ("today", "T5"): Known(\n'
         f'        "{ISSUE}", "缺新聞標題整行", "2026-11-20"\n'
         "    ),\n"
         "}\n"
@@ -1331,23 +1332,23 @@ def test_known_requires_expires():
 
 
 def test_known_problems_flag_a_missing_or_late_expires():
-    def problems(entry, key=("today", "T6")):
+    def problems(entry, key=("today", "T5")):
         return page_checks.known_problems({key: entry}, lambda key: date(2026, 10, 28))
 
     assert page_checks.known_problems({}, lambda key: date(2026, 10, 28)) == []
     assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026-11-27")) == []
     assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026-10-28")) == []
     assert problems(SimpleNamespace(issue=ISSUE, match="缺新聞標題整行")) == [
-        "KNOWN_FAILURES today T6：缺 expires 或不是 YYYY-MM-DD（None）"
+        "KNOWN_FAILURES today T5：缺 expires 或不是 YYYY-MM-DD（None）"
     ]
     assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026-11-28")) == [
-        "KNOWN_FAILURES today T6：expires 2026-11-28 要在加入日 2026-10-28 起 30 天內"
+        "KNOWN_FAILURES today T5：expires 2026-11-28 要在加入日 2026-10-28 起 30 天內"
     ]
     assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026-10-27")) == [
-        "KNOWN_FAILURES today T6：expires 2026-10-27 要在加入日 2026-10-28 起 30 天內"
+        "KNOWN_FAILURES today T5：expires 2026-10-27 要在加入日 2026-10-28 起 30 天內"
     ]
     assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026/11/20")) == [
-        "KNOWN_FAILURES today T6：缺 expires 或不是 YYYY-MM-DD（'2026/11/20'）"
+        "KNOWN_FAILURES today T5：缺 expires 或不是 YYYY-MM-DD（'2026/11/20'）"
     ]
     assert problems(page_checks.Known("#233", "", "2026-11-20"), ("today", "T99")) == [
         "KNOWN_FAILURES today T99：不是 CHECKS 裡的檢查",
@@ -1398,44 +1399,7 @@ def test_page_checks_exits_1_on_an_expired_known_failure(tmp_path, monkeypatch):
     assert page_checks.main(argv) == 1
 
 
-def _t6_run(tmp_path, ai, card_ai, card):
-    item = {"id": "7", "title": "新聞甲", "ai": card_ai}
-    return FakeRun(
-        tmp_path,
-        {"dashboard": {"news": [item]}, "news/7": {"ai": ai}},
-        {
-            "today-1280": f"今日市場／重大事件\n新聞甲\n摘要\n{card}未有已核實的標的或族群\n熱門族群\n"
-        },
-    )
-
-
 AI_DONE = {"status": "done", "inference": True, "impact_direction": "positive"}
-
-
-def test_t6_passes_when_the_card_shows_the_ai_direction(tmp_path):
-    run = _t6_run(tmp_path, AI_DONE, AI_DONE, "可能正向\nAI 推論\n")
-    assert "7 `可能正向`" in page_checks.t6(run)
-    # An unsupported item's AI direction is 影響尚未判定, as on the news page.
-    unsupported = {**AI_DONE, "unsupported": True}
-    run = _t6_run(tmp_path, unsupported, unsupported, "影響尚未判定\nAI 推論\n")
-    assert "7 `影響尚未判定`" in page_checks.t6(run)
-
-
-def test_t6_fails_when_the_card_falls_back_to_the_rule_direction(tmp_path):
-    # #233: dashboard.news had no ai block, so the card showed the rule direction.
-    run = _t6_run(tmp_path, AI_DONE, None, "影響尚未判定\n")
-    with pytest.raises(page_checks.Fail) as error:
-        page_checks.t6(run)
-    assert "ai 與 /api/news/<id> 不同" in str(error.value)
-    assert "卡片沒有 `AI 推論`" in str(error.value)
-
-
-def test_t6_fails_when_the_card_direction_differs(tmp_path):
-    run = _t6_run(tmp_path, AI_DONE, AI_DONE, "可能負向\nAI 推論\n")
-    with pytest.raises(
-        page_checks.Fail, match="卡片方向 `可能負向`，AI 方向 `可能正向`"
-    ):
-        page_checks.t6(run)
 
 
 def _n6_run(tmp_path, generated_at, shown):
@@ -1523,65 +1487,6 @@ def test_n2_reads_the_cleaned_title(tmp_path):
         page_checks.n2(_n2_run(tmp_path, raw))
 
 
-def test_t6_reads_the_cleaned_title(tmp_path):
-    item = {"id": "7", "title": "● 新聞甲", "ai": AI_DONE}
-    run = FakeRun(
-        tmp_path,
-        {"dashboard": {"news": [item]}, "news/7": {"ai": AI_DONE}},
-        {"today-1280": "重點新聞\n新聞甲\n可能正向\nAI 推論\n熱門族群\n"},
-    )
-    assert "7 `可能正向`" in page_checks.t6(run)
-
-
-def _t6_twins(tmp_path, second_card):
-    # #613: two sources carry the same wire story; the first has no AI direction.
-    news = [
-        {"id": "26789", "title": "台股漲1050.22點", "ai": None},
-        {"id": "26719", "title": "台股漲1050.22點", "ai": AI_DONE},
-    ]
-    page = (
-        "重點新聞\n台股漲1050.22點\nYahoo奇摩股市\n"
-        f"台股漲1050.22點\n{second_card}中央社\n"
-        f"{page_checks.FOOTER_FIRST_LINE}\n"
-    )
-    return FakeRun(
-        tmp_path,
-        {
-            "dashboard": {"news": news},
-            "news/26789": {"ai": None},
-            "news/26719": {"ai": AI_DONE},
-        },
-        {"today-1280": page},
-    )
-
-
-def test_t6_checks_each_card_of_a_shared_title(tmp_path):
-    run = _t6_twins(tmp_path, "可能正向\nAI 推論\n")
-    assert "26719 `可能正向`" in page_checks.t6(run)
-    # The second card itself lacks 「AI 推論」: still a failure, on that card.
-    run = _t6_twins(tmp_path, "影響尚未判定\n")
-    with pytest.raises(
-        page_checks.Fail, match="id 26719 有 AI 判讀但卡片沒有 `AI 推論`"
-    ):
-        page_checks.t6(run)
-
-
-def test_t6_fails_when_a_shared_title_shows_once(tmp_path):
-    news = [
-        {"id": "1", "title": "同標題", "ai": None},
-        {"id": "2", "title": "同標題", "ai": None},
-    ]
-    run = FakeRun(
-        tmp_path,
-        {"dashboard": {"news": news}, "news/1": {"ai": None}, "news/2": {"ai": None}},
-        {"today-1280": f"重點新聞\n同標題\n{page_checks.FOOTER_FIRST_LINE}\n"},
-    )
-    with pytest.raises(
-        page_checks.Fail, match="缺第 2 則新聞標題整行 `同標題`（id 2）"
-    ):
-        page_checks.t6(run)
-
-
 def test_news_source_label_matches_the_frontend():
     presentation = (ROOT / "frontend" / "src" / "presentation.ts").read_text(
         encoding="utf-8"
@@ -1608,13 +1513,13 @@ def test_status_summary_leaves_out_the_evidence():
     status = page_checks.summary_markdown(results, ["actions"], "## head", False)
     assert "台積電" in full and "預期 X" in full
     assert "台積電" not in status and "預期 X" not in status
-    assert "### 觀察中 `/watch`：失敗" in status
+    assert "### 我的追蹤 `/watch`：失敗" in status
     assert "| A2 | 通過 |" in status and "| A3 | 失敗 |" in status
 
 
-# ---- A18: /watch is 觀察中 and /actions redirects there (#493) ----
+# ---- A18: /watch is 我的追蹤 and /actions redirects there (#493) ----
 
-WATCH_PAGE = "今日可買\n觀察中\n族群\n追蹤與提醒\n觀察中\n我的庫存\n"
+WATCH_PAGE = "今日名單\n我的追蹤\n族群\n追蹤與提醒\n我的追蹤\n我的庫存\n"
 
 
 def _a18_run(tmp_path, final_url, legacy_page=WATCH_PAGE):
@@ -1655,7 +1560,7 @@ def test_a18_fails_without_the_landing_url_or_on_a_404(tmp_path):
         page_checks.a18(_a18_run(tmp_path, None))
     with pytest.raises(page_checks.Fail, match="`/actions` 是找不到此頁"):
         page_checks.a18(
-            _a18_run(tmp_path, "http://x/watch", "找不到此頁。\n回到今日可買\n")
+            _a18_run(tmp_path, "http://x/watch", "找不到此頁。\n回到今日名單\n")
         )
 
 
@@ -1686,7 +1591,7 @@ def _summary_page(
         "2884\n玉山金\n資料 2026/11/05\n來源 臺灣證券交易所\n"
         f"目前判斷\n資料 2026/11/05\n{verdict}\n{reason}\n{closest}"
         "規則價位\n條件未成立・觀察價位\n收盤（元） ≥\n50.20\n完整條件 →\n"
-        "圖表與指標\n法人籌碼\n"
+        "走勢\n籌碼\n"
     )
 
 
@@ -1738,9 +1643,7 @@ def test_s11_fails_on_a_wrong_verdict_or_the_old_page(tmp_path):
     with pytest.raises(page_checks.Fail, match="預期判斷 `條件成立`"):
         _s11(tmp_path, payload, _summary_page("觀察", "x"))
     # Before #519 the header was followed by the cutoff form and the tabs.
-    old = (
-        "2884\n玉山金\n資料 2026/11/05\n來源 臺灣證券交易所\n研究截止日期\n圖表與指標\n"
-    )
+    old = "2884\n玉山金\n資料 2026/11/05\n來源 臺灣證券交易所\n研究截止日期\n走勢\n"
     with pytest.raises(page_checks.Fail, match="缺整行 `目前判斷`"):
         _s11(tmp_path, payload, old)
     no_link = _summary_page("條件成立", "不在這個資料日的每日候選名單").replace(
@@ -1762,7 +1665,7 @@ def _board_page(summary_label: bool) -> str:
         "目前判斷\n觀察\n規則價位\n條件未成立・觀察價位\n" if summary_label else ""
     )
     return (
-        f"{summary}圖表與指標\n研究條件\n策略總表\n資料 2026/11/05\n價位規則 v1\n"
+        f"{summary}走勢\n進出場\n策略總表\n資料 2026/11/05\n價位規則 v1\n"
         "突破條件\t\n觀察\t收盤未突破前 20 日高點\n條件未成立・觀察價位\n"
         "回踩條件\t\n成立\t全部達成\n"
     )
@@ -1811,7 +1714,7 @@ FUNDAMENTAL_ROWS = [
 def _financials_page(rows_text: str, badge: str = "資料 2026/09/30\n") -> str:
     # StockFundamentalsPanel as innerText: eyebrow, title, badge, 說明, table, source line.
     return (
-        "圖表與指標\n法人籌碼\n財務\n新聞與公告\n財務資料\n季報營收與 EPS\n"
+        "走勢\n籌碼\n財務\n新聞與公告\n財務資料\n季報營收與 EPS\n"
         f"{badge}說明\n期別\t年初至季底累計營收（億元）\t年初至季底累計 EPS（元）\t"
         f"ROE（%）\t可得日\t來源\n{rows_text}來源：公開資訊觀測站 季報\n"
     )
@@ -1859,7 +1762,7 @@ def test_s12_fails_on_a_wrong_value_order_or_badge(tmp_path):
 def test_s12_fails_on_the_old_page_without_the_tab(tmp_path):
     payload = {"fundamentals": [], "instrument": {"instrument_type": "stock"}}
     with pytest.raises(page_checks.Fail, match="缺整行 `季報營收與 EPS`"):
-        _s12(tmp_path, payload, "圖表與指標\n法人籌碼\n新聞與公告\n")
+        _s12(tmp_path, payload, "走勢\n籌碼\n新聞與公告\n")
 
 
 def test_s12_reads_the_empty_reason_by_instrument_type(tmp_path):

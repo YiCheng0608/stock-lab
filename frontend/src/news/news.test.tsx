@@ -4,7 +4,7 @@ import { StaticRouter } from 'react-router-dom/server'
 
 import type { NewsItem } from '../types'
 import { aiResult, internationalItem, naiveTimeItem, newsItem, newsPage, officialItem, productTime } from './news.fixtures'
-import { AiInferencePanel, HomeNewsRow, NewsCard, NewsDetailView, NewsListView, StockNewsTimeline } from './NewsViews'
+import { AiInferencePanel, NewsCard, NewsDetailView, NewsListView, StockNewsTimeline } from './NewsViews'
 import {
   NEWS_PAGE_SIZE,
   STOCK_NEWS_LIMIT,
@@ -112,20 +112,6 @@ check(card.includes('href="/stocks/TWSE/2330"') && card.includes('2330 台積電
 const longSummary = '字'.repeat(130)
 check(summaryPreview({ summary_preview: longSummary, summary: null }) === '字'.repeat(119) + '…' && summaryPreview({ summary_preview: null, summary: null, description: null }) === null, 'preview is cut at 120 characters')
 check(render(<NewsCard item={internationalItem()} />).includes('來源未提供摘要'), 'missing summary says so')
-// Today page row (Issue 510, UI_COPY_SPEC §4): two lines, the title then source · time and the direction; the tags,
-// category, summary, AI candidates and source link stay on the cards.
-const homeRow = render(<HomeNewsRow item={newsItem()} />)
-const homeOrder = ['class="home-news-title"', 'class="home-news-source"', '<time', 'class="home-news-impact"']
-check(homeOrder.every((name, index) => homeRow.includes(name) && (index === 0 || homeRow.indexOf(name) > homeRow.indexOf(homeOrder[index - 1]))), `home row order: ${homeRow}`)
-check(!/news-card-summary|class="news-source"|news-chips|news-card-meta|規則核實|news-ai-candidates/.test(homeRow), 'the home row drops the summary, source link, tags, category and AI candidates')
-check(homeRow.includes('title="台積電宣布臺南再蓋新廠 南市府：積極協助行政程序"'), 'the full title is the link title (the line is cut with an ellipsis)')
-const aiRow = render(<HomeNewsRow item={newsItem({ ai: aiResult({ impact_direction: 'positive' }) })} />)
-check(aiRow.includes('class="news-direction"') && aiRow.includes('可能正向') && aiRow.indexOf('news-direction') < aiRow.indexOf('>AI 推論<'), 'an AI direction is followed by 「AI 推論」 (page_checks T6 reads the line before it)')
-check(!render(<HomeNewsRow item={newsItem({ ai: undefined })} />).includes('>AI 推論<'), 'a rule direction has no 「AI 推論」')
-// Issue 512: the home row names no stock, so an emerging, delisted or hidden candidate never reaches it as a bare code;
-// its link goes to /news/:id, which reads 「7808 訊聯智藥（興櫃）」.
-const homeEmerging = render(<HomeNewsRow item={newsItem({ ai: aiResult({ symbol_candidates: [{ exchange: 'TWSE', symbol: '7808', name: '訊聯智藥', listing: 'emerging', reason: null, confidence: 'low', verified: false, source_check: 'mentioned' }, { exchange: 'TWSE', symbol: '2888', name: '新光金', listing: 'delisted', reason: null, confidence: 'low', verified: false, source_check: 'mentioned' }] }) })} />)
-check(!/7808|2888|4152|代號未對應/.test(homeEmerging) && homeEmerging.includes('href="/news/'), `the home row shows no candidate code and links to the detail: ${homeEmerging}`)
 check(render(<NewsCard item={officialItem()} />).includes('<span class="tag">3666</span>'), 'bare official code is a plain chip')
 // Issue 451 (NEWS_SPEC §2): verified relations name their source and the rule version from impact.method.
 check(card.includes('<span class="small-note news-relation-source">規則核實 · v2</span>') && card.indexOf('規則核實 · v2') < card.indexOf('2330 台積電'), 'rule relations are labelled 規則核實 with the rule version before the chips')
@@ -305,8 +291,6 @@ check(timeline.includes('class="card news-card"') && !timeline.includes('news-ro
 const cleanedDetail = render(<NewsDetailView item={squareTitle} />)
 check(cleanedDetail.includes('<h1 class="news-detail-title">台積電狠甩英特爾</h1>') && cleanedDetail.includes('原始標題：■ 台積電狠甩英特爾'), `detail: cleaned h1, source title under 技術資訊: ${cleanedDetail}`)
 check(!render(<NewsDetailView item={newsItem()} />).includes('原始標題：'), 'an unchanged title (only whitespace) has no 原始標題 line')
-const homeSquare = render(<HomeNewsRow item={squareTitle} />)
-check(homeSquare.includes('title="台積電狠甩英特爾"') && homeSquare.includes('>台積電狠甩英特爾</a>') && !homeSquare.includes('■'), `the today page row shows the same cleaned title: ${homeSquare}`)
 
 // ---- Issue 523 relation filters: verified_only／watchlist_only go to the API and the URL ----
 const bothFilters = { tab: 'domestic' as const, q: '', symbol: '', verified: true, watchlist: true }

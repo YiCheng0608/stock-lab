@@ -7,8 +7,8 @@ import { STRATEGY_NAME, STRATEGY_TERM_ID } from './strategyName'
 import { COMPOSITION, CONFIRMATIONS, SCORE_COMPONENTS } from './trendChips'
 import type { ConfirmationRow, ScoreRow } from './trendChips'
 
-// 策略說明 (/strategy, #493, #577; PRODUCT_SPEC §2, UI_COPY_SPEC §13): the strategy behind the 今日可買 list, by name, with the
-// thresholds and score weights it uses, then how to follow a row, what 觀察中 does and what the product does not do. Static
+// 策略說明 (/strategy, #493, #577; PRODUCT_SPEC §2, UI_COPY_SPEC §13): the strategy behind the 今日名單 list, by name, with the
+// thresholds and score weights it uses, then how to follow a row, what 我的追蹤 does and what the product does not do. Static
 // copy; the numbers are in ./trendChips.ts, the formulas in docs/spec/breakout_pullback.md and docs/spec/candidate_score.md,
 // the terms in the glossary. A strategy is one <section data-strategy> titled by its name, so another strategy is another
 // section beside it, not a change to this one.
@@ -54,14 +54,14 @@ export function StrategyPage() {
       <section className="page-title">
         <div className="eyebrow">目前策略：{STRATEGY_NAME}</div>
         <h1>策略說明</h1>
-        <p>「今日可買」不是推薦，而是固定規則篩出來、條件已經成立的研究名單；照著做之前，先看懂它怎麼選、什麼時候算失效。</p>
+        <p>「今日名單」不是推薦，而是固定規則篩出來、條件已經成立的研究名單；照著做之前，先看懂它怎麼選、什麼時候算失效。</p>
       </section>
 
       <section className="strategy-section" data-strategy={STRATEGY_TERM_ID} aria-labelledby="strategy-current-title">
         <h2 id="strategy-current-title"><Term id={STRATEGY_TERM_ID}>{STRATEGY_NAME}</Term></h2>
-        <p>目前「今日可買」用的是{STRATEGY_NAME}：只做多頭趨勢的股票，除了價量條件成立，還要所屬族群比大盤強、三大法人沒有明顯賣超、融資沒有過熱；大盤好壞目前不影響判斷。它由兩條規則——突破型（<code>{COMPOSITION.breakout}</code>）與回踩型（<code>{COMPOSITION.pullback}</code>）——和一個評分——<Term id="candidate_score">候選總分</Term>（<code>{COMPOSITION.score}</code>）組成。</p>
+        <p>目前「今日名單」用的是{STRATEGY_NAME}：只做多頭趨勢的股票，除了價量條件成立，還要所屬族群比大盤強、三大法人沒有明顯賣超、融資沒有過熱；大盤好壞目前不影響判斷。它由兩條規則——突破型（<code>{COMPOSITION.breakout}</code>）與回踩型（<code>{COMPOSITION.pullback}</code>）——和一個評分——<Term id="candidate_score">候選總分</Term>（<code>{COMPOSITION.score}</code>）組成。</p>
 
-        <h3>今日可買怎麼來</h3>
+        <h3>今日名單怎麼來</h3>
         <div className="strategy-grid strategy-grid-3">
           {STEPS.map((step) => <Card key={step.title} as="article" title={step.title}><p>{step.text}</p></Card>)}
         </div>
@@ -103,10 +103,10 @@ export function StrategyPage() {
       </section>
 
       <section className="strategy-section" aria-labelledby="strategy-watch-title">
-        <h2 id="strategy-watch-title">觀察中在做什麼</h2>
+        <h2 id="strategy-watch-title">我的追蹤在做什麼</h2>
         <Card as="article">
-          <p>在「今日可買」或個股頁按「加入追蹤」，系統會從下一個交易日起、每天收盤後依日線模擬這筆的進場與出場（最多 20 個交易日），結果放在 <Link className="text-link" to="/watch">觀察中</Link> 的「追蹤計畫」與「追蹤回看」。模擬已扣固定的手續費與滑價假設，不是實際成交，也不寫進你的庫存。</p>
-          <p>「觀察中」也會提醒你庫存的風險，並列出差一點就成立的股票。</p>
+          <p>在「今日名單」或個股頁按「加入追蹤」，系統會從下一個交易日起、每天收盤後依日線模擬這筆的進場與出場（最多 20 個交易日），結果放在 <Link className="text-link" to="/watch">我的追蹤</Link> 的「追蹤計畫」與「追蹤回看」。模擬已扣固定的手續費與滑價假設，不是實際成交，也不寫進你的庫存。</p>
+          <p>「我的追蹤」也會提醒你庫存的風險，並列出差一點就成立的股票。</p>
         </Card>
       </section>
 

@@ -314,7 +314,6 @@ export type Dashboard = {
   groups?: GroupRow[]
   signals?: Signal[]
   signal_status_counts: Record<string, number>
-  news?: NewsItem[]
   candidates?: ActionSummary[]
   actions?: ActionSummary[]
   // Every holding's summary, ordered by risk (#297 review L1); actions has the first 8 rows only.

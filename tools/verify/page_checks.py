@@ -726,7 +726,7 @@ class Run:
         skipped = []
         for source, pick in (
             ("今日榜", self._pick_from_board),
-            ("今日可買", self._pick_from_candidates),
+            ("今日名單", self._pick_from_candidates),
             ("市場列表", self._pick_from_list),
         ):
             try:
@@ -752,7 +752,7 @@ class Run:
         if not items:
             raise Undetermined("candidates.json 的 items 為空")
         instrument = items[0]["instrument"]
-        return Stock(instrument["exchange"], instrument["symbol"]), "今日可買 #1"
+        return Stock(instrument["exchange"], instrument["symbol"]), "今日名單 #1"
 
     def _pick_from_list(self) -> tuple[Stock, str]:
         items = self.get("stocks?page=1&page_size=30", "stocks.json").get("items") or []
@@ -1039,7 +1039,9 @@ def t5(run: Run) -> str:
     # #510: the card says once what the returns are relative to; each row starts with its
     # own `#n` line, then the name line (HotGroupRow in frontend/src/themes/ThemeViews.tsx).
     expect(text.has(GROUP_RETURNS_NOTE), f"缺整行 `{GROUP_RETURNS_NOTE}`")
-    start, end = text.find("熱門族群"), text.find("重點新聞")
+    # Hot groups is the last card of the page (Issue 625); the footer ends it.
+    start = text.find("熱門族群")
+    end = text.find(FOOTER_FIRST_LINE, start)
     end = end if end > start else len(text.lines)
     rows = [i for i in range(start + 1, end) if re.fullmatch(r"#[0-9]+", text.lines[i])]
     want = [item["display_name"] for item in items[:TODAY_GROUPS]]
@@ -1058,75 +1060,8 @@ def usable_ai(ai: Any) -> bool:
     )
 
 
-DIRECTION_LABELS = {"positive": "可能正向", "negative": "可能負向", "mixed": "正負互見"}
-
-
-def ai_direction_label(ai: dict) -> str:
-    """directionView(aiDirection(ai)) in frontend/src/news/newsView.ts."""
-
-    direction = None if ai.get("unsupported") else ai.get("impact_direction")
-    return DIRECTION_LABELS.get(direction, "影響尚未判定")
-
-
-# HOME_NEWS_LIMIT in frontend/src/App.tsx (#493); the first line of the Shell footer.
-HOME_NEWS = 5
+# The first line of the Shell footer: the end of the last card of a page.
 FOOTER_FIRST_LINE = "T 日收盤訊號 · 最早 T+1 執行 · T+5／T+20 追蹤"
-
-
-@check("today", "T6")
-def t6(run: Run) -> str:
-    text = run.text(TODAY)
-    news = (run.dashboard().get("news") or [])[:HOME_NEWS]
-    if not news:
-        message = "市場新聞區尚無可顯示內容。"
-        expect(text.has(message), f"dashboard.news 空，缺 `{message}`")
-        return f"dashboard.news 空，顯示 `{message}`"
-    starts, seen = [], {}
-    for item in news:
-        title = display_title(item["title"])
-        # Two sources often carry one wire story (#613): the n-th item with a title
-        # is the n-th line that reads it, in API order.
-        nth = seen.get(title, [])
-        i = text.find(title, nth[-1] + 1 if nth else 0)
-        expect(
-            i >= 0,
-            f"缺{f'第 {len(nth) + 1} 則' if nth else ''}新聞標題整行 `{title}`（id {item['id']}）",
-        )
-        seen[title] = nth + [i]
-        starts.append(i)
-    # The news card is the last block of the page (#493); the footer ends the last card.
-    end = text.find(FOOTER_FIRST_LINE, max(starts))
-    bounds = sorted(starts) + [end if end >= 0 else len(text.lines)]
-    problems, marked = [], []
-    for item, start in zip(news, starts):
-        detail = run.get(f"news/{item['id']}", f"news-{item['id']}.json")
-        ai = detail.get("ai")
-        if not usable_ai(ai):
-            continue
-        if item.get("ai") != ai:
-            problems.append(
-                f"id {item['id']} 的 dashboard.news ai 與 /api/news/<id> 不同"
-            )
-        stop = bounds[bounds.index(start) + 1]
-        card = text.lines[start:stop]
-        want = ai_direction_label(ai)
-        if "AI 推論" not in card:
-            problems.append(
-                f"id {item['id']} 有 AI 判讀但卡片沒有 `AI 推論`（{text.at(start)}）"
-            )
-            continue
-        shown = card[card.index("AI 推論") - 1]
-        if shown != want:
-            problems.append(
-                f"id {item['id']} 卡片方向 `{shown}`，AI 方向 `{want}`（{text.at(start)}）"
-            )
-        else:
-            marked.append(f"{item['id']} `{want}`")
-    expect(not problems, "；".join(problems))
-    return (
-        f"前 {len(news)} 則標題都在；有 AI 判讀的卡片方向與 AI 相同並標 `AI 推論`："
-        + ("、".join(marked) or "無")
-    )
 
 
 def candidates(run: Run) -> dict:
@@ -1137,27 +1072,27 @@ def source_lines(text: Text) -> list[int]:
     return [i for i, line in enumerate(text.lines) if line.startswith("來源：")]
 
 
-# An action-list row (觀察中, tier 1) starts with its rank cell and a tab (#276): `#1<TAB>…`.
+# An action-list row (我的追蹤, tier 1) starts with its rank cell and a tab (#276): `#1<TAB>…`.
 # Cards put `#1` on a line of its own, so the tab tells a table row from a card.
 RANK_ROW = re.compile(r"^#([0-9]+)\t")
-# A 今日可買 row starts with its title line (#493, #510): `#1 2330 台積電 上市 · 族群` (rank,
+# A 今日名單 row starts with its title line (#493, #510): `#1 2330 台積電 上市 · 族群` (rank,
 # symbol, name on one line). The hot group rows put `#1` on a line of its own, so the symbol
 # after the rank tells a candidate row.
 CANDIDATE_ROW = re.compile(r"^#([0-9]+) [0-9A-Z]+ ")
 # CandidatesSection in frontend/src/candidates/CandidateViews.tsx (#510: no eyebrow); the
-# navbar has a 今日可買 link too and comes first, so the title is the last line that reads it.
-CANDIDATES_TITLE = "今日可買"
+# navbar has a 今日名單 link too and comes first, so the title is the last line that reads it.
+CANDIDATES_TITLE = "今日名單"
 
 
 def candidates_title(text: Text) -> int:
-    """The 今日可買 section title, not the navbar link; -1 when it is missing."""
+    """The 今日名單 section title, not the navbar link; -1 when it is missing."""
 
     found = [n for n, line in enumerate(text.lines) if line == CANDIDATES_TITLE]
     return found[-1] if found else -1
 
 
 def candidate_ranks(text: Text) -> list[int]:
-    """Rank cells between 今日可買 and 熱門族群 (the group rows have their own `#n`)."""
+    """Rank cells between 今日名單 and 熱門族群 (the group rows have their own `#n`)."""
 
     start, end = candidates_title(text), text.find("熱門族群")
     end = end if end > start else len(text.lines)
@@ -1255,14 +1190,14 @@ def t8(run: Run) -> str:
 
 @check("today", "T9")
 def t9(run: Run) -> str:
-    """#493: 今日可買 keeps one list; 關注標的 moved to 觀察中 and every home link to it is /watch."""
+    """#493: 今日名單 keeps one list; 關注標的 moved to 我的追蹤 and every home link to it is /watch."""
 
     text = run.text(TODAY)
     for line in ("關注標的", "查看個股詳情 →", "查看行動中心 →", "明日候選"):
         expect(not text.has(line), f"首頁仍有整行 `{line}`")
-    alert = text.has("查看觀察中 →")
+    alert = text.has("查看我的追蹤 →")
     return "首頁沒有 `關注標的`、`明日候選`；" + (
-        "持倉風險提示列連到 `查看觀察中 →`" if alert else "沒有持倉風險提示列"
+        "持倉風險提示列連到 `查看我的追蹤 →`" if alert else "沒有持倉風險提示列"
     )
 
 
@@ -1395,26 +1330,21 @@ def t11(run: Run) -> str:
 
 @check("today", "T12")
 def t12(run: Run) -> str:
-    """#276: candidates come before the groups and the news (PRODUCT_SPEC §2)."""
+    """#276: candidates come before the groups; the news card is gone (Issue 625)."""
 
     text = run.text(TODAY)
     found = {
         CANDIDATES_TITLE: candidates_title(text),
         "熱門族群": text.find("熱門族群"),
-        "重點新聞": text.find("重點新聞"),
     }
     missing = [title for title, i in found.items() if i < 0]
     expect(not missing, "缺整行 " + "、".join(f"`{title}`" for title in missing))
-    first = found[CANDIDATES_TITLE]
     expect(
-        first < found["熱門族群"] and first < found["重點新聞"],
-        "區塊順序 "
-        + " → ".join(
-            title for title, _ in sorted(found.items(), key=lambda item: item[1])
-        )
-        + f"，預期 `{CANDIDATES_TITLE}` 在 `熱門族群` 與 `重點新聞` 之前",
+        found[CANDIDATES_TITLE] < found["熱門族群"],
+        f"區塊順序 `熱門族群` → `{CANDIDATES_TITLE}`，預期 `{CANDIDATES_TITLE}` 在前",
     )
-    return "`今日可買`（{0}）→ `熱門族群`（{1}）、`重點新聞`（{2}）".format(
+    expect(not text.has("重點新聞"), "首頁仍有整行 `重點新聞`（#625 已移除）")
+    return "`今日名單`（{0}）→ `熱門族群`（{1}）；沒有 `重點新聞`".format(
         *(text.at(i) for i in found.values())
     )
 
@@ -1584,7 +1514,7 @@ def t14(run: Run) -> str:
     # The overview moved to /market: its widgets' own lines are not on the today page.
     old = [line for line in ("漲跌家數（股票）", "括號為漲停／跌停") if text.has(line)]
     expect(
-        not old, "今日可買頁仍有大盤概況的 " + "、".join(f"`{line}`" for line in old)
+        not old, "今日名單頁仍有大盤概況的 " + "、".join(f"`{line}`" for line in old)
     )
     return "、".join(f"`{line}`" for line in lines) + f"（{text.at(start)}）"
 
@@ -1654,21 +1584,16 @@ def t15(run: Run) -> str:
 
 INDEX_TABLE_TITLE = "指數總表"  # INDEX_TABLE_TITLE in market/marketOverview.ts
 OVERVIEW_TITLE = "大盤概況"
-TW_GROUP_TITLE = "台股"
-US_GROUP_TITLE = "美股"
-US_TITLE = "美股（前一交易日）"  # US_SECTION_TITLE in market/marketOverview.ts
-# US_ATTRIBUTION in market/marketOverview.ts (FinMind, Issue 568: personal, non-commercial use).
-US_ATTRIBUTION = "資料來源：FinMind（個人非商業使用）"
 # INDEX_SPECS in market/marketOverview.ts: the row key -> (name shown, price decimals), in table order.
+# Issue 633: the page lists the Taiwan rows only; the API still returns the four US rows after them.
 INDEX_SPECS = {
     "taiex": ("加權指數", 2),
     "tpex": ("櫃買指數", 2),
     "tx": ("台指期近月", 0),
-    "spx": ("S&P 500", 2),
-    "ixic": ("NASDAQ 綜合指數", 2),
-    "dji": ("道瓊工業指數", 2),
-    "sox": ("費城半導體指數", 2),
 }
+# What the US rows and their notes read before Issue 633; none of these is a line of the page now.
+US_LINES = ("美股", "美股（前一交易日）", "資料來源：FinMind（個人非商業使用）")
+US_NAMES = ("S&P 500", "NASDAQ 綜合指數", "道瓊工業指數", "費城半導體指數")
 INDEX_MA60_POSITION = {"above": "之上", "below": "之下", "equal": "持平"}
 
 
@@ -1721,8 +1646,6 @@ def index_row_line(row: dict) -> str:
     date = slash(row["trading_date"])
     if row.get("freshness") == "stale":
         date += " 非最新"
-    elif row.get("freshness") == "us_market_closed":
-        date += f" {slash(row['expected_date'])} 美股休市"
     return "\t".join(
         [
             name,
@@ -1736,35 +1659,18 @@ def index_row_line(row: dict) -> str:
     )
 
 
-def us_group_title(overview: dict) -> str:
-    """usGroupTitle in market/marketOverview.ts: 前一交易日 only when every US row with data is the session before."""
-
-    tw_date = overview.get("trading_date")
-    rows = [
-        row
-        for row in overview.get("indexes") or []
-        if row.get("group") == "us"
-        and row.get("status") == "available"
-        and isinstance(row.get("trading_date"), str)
-    ]
-    previous = bool(rows) and all(
-        row.get("freshness") in ("latest", "us_market_closed")
-        and (tw_date is None or row["trading_date"] < tw_date)
-        for row in rows
-    )
-    return US_TITLE if previous else US_GROUP_TITLE
-
-
 @check("today", "T16")
 def t16(run: Run) -> str:
-    """The index table between 大盤概況 and the chart: two groups, every row's close, change, date, MA60 and source."""
+    """The index table between 大盤概況 and the chart: the three Taiwan rows, no US rows (Issue 633)."""
 
     text = run.text(MARKET)
     overview = run.dashboard().get("market_overview") or {}
-    rows = overview.get("indexes") or []
+    rows = [
+        row for row in overview.get("indexes") or [] if row.get("key") in INDEX_SPECS
+    ]
     expect(
         [row.get("key") for row in rows] == list(INDEX_SPECS),
-        f"dashboard.market_overview.indexes 的列是 {[row.get('key') for row in rows]}，預期 {list(INDEX_SPECS)}",
+        f"dashboard.market_overview.indexes 的台股列是 {[row.get('key') for row in rows]}，預期 {list(INDEX_SPECS)}",
     )
     start, chart = text.find(INDEX_TABLE_TITLE), text.find(CHART_TITLES[0])
     expect(
@@ -1773,30 +1679,24 @@ def t16(run: Run) -> str:
         and (chart < 0 or start < chart),
         f"缺整行 `{INDEX_TABLE_TITLE}`，或不在 `{OVERVIEW_TITLE}` 與 `{CHART_TITLES[0]}` 之間",
     )
-    us_title = us_group_title(overview)
-    tw = text.find(TW_GROUP_TITLE, start)
-    us = text.find(us_title, tw if tw >= 0 else start)
-    expect(
-        tw > start and us > tw,
-        f"`{INDEX_TABLE_TITLE}` 之後缺分組 `{TW_GROUP_TITLE}`、`{us_title}`",
-    )
-    found, at = [], tw
+    found, at = [], start
     for row in rows:
         line = index_row_line(row)
         k = text.find(line, at + 1)
         expect(k > at, f"{row['key']}：缺整行 `{line}`，或不在前一列之後")
-        expect(
-            (k > us) == (row.get("group") == "us"),
-            f"{row['key']}：不在 `{TW_GROUP_TITLE if row.get('group') == 'tw' else us_title}` 分組內",
-        )
         at = k
         found.append(f"`{line}`")
-    for line in (TAIFEX_ATTRIBUTION, US_ATTRIBUTION):
-        expect(
-            text.find(line, start) >= 0,
-            f"`{INDEX_TABLE_TITLE}` 之後缺整行 `{line}`（資料說明）",
-        )
-    return f"{us_title}；" + "；".join(found)
+    expect(
+        text.find(TAIFEX_ATTRIBUTION, start) >= 0,
+        f"`{INDEX_TABLE_TITLE}` 之後缺整行 `{TAIFEX_ATTRIBUTION}`（資料說明）",
+    )
+    shown = [line for line in US_LINES if text.has(line)] + [
+        name
+        for name in US_NAMES
+        if text.find_where(lambda line, name=name: line.startswith(name + "\t")) >= 0
+    ]
+    expect(not shown, "大盤頁仍有美股的 " + "、".join(f"`{line}`" for line in shown))
+    return "；".join(found) + "；沒有美股列"
 
 
 # ---- news ----
@@ -2507,7 +2407,7 @@ def summary_verdict(payload: dict) -> tuple[str, str | None]:
     if candidate:
         strategy = CANDIDATE_STRATEGY.get(candidate.get("strategy"), "策略條件")
         score = round(candidate["total_score"] * 100)
-        # 條件成立, not 可買: 今日可買 is not a recommendation (#581).
+        # 條件成立, not 可買: 今日名單 is not a recommendation (#581).
         return (
             "條件成立",
             f"每日候選第 {candidate['rank']} 名 · 總分 {score} · {strategy}",
@@ -2534,8 +2434,8 @@ def s11(run: Run, stock: Stock) -> str:
     verdict, reason = summary_verdict(payload)
     k = text.find(SUMMARY_COLUMNS[0])
     expect(k >= 0, f"缺整行 `{SUMMARY_COLUMNS[0]}`（摘要卡）")
-    tabs = text.find("圖表與指標", k)
-    expect(tabs > k, "摘要卡之後缺分頁籤 `圖表與指標`")
+    tabs = text.find("走勢", k)
+    expect(tabs > k, "摘要卡之後缺分頁籤 `走勢`")
     card = text.lines[k:tabs]
     expect(
         verdict in card[1:4],
@@ -2801,7 +2701,7 @@ def s13(run: Run, stock: Stock) -> str:
 
 # ---- actions ----
 
-# The page is 觀察中 at /watch since #493; the old /actions redirects there (A18).
+# The page is 我的追蹤 at /watch since #493; the old /actions redirects there (A18).
 ACTIONS = Shot("actions", "/watch")
 # The old URL with a query and a plan anchor; both must survive the redirect (#493 review).
 LEGACY_QUERY, LEGACY_ANCHOR = "from=legacy", "plan-0"
@@ -2809,7 +2709,7 @@ ACTIONS_LEGACY = Shot(
     "actions-legacy", f"/actions?{LEGACY_QUERY}#{LEGACY_ANCHOR}", (1280,)
 )
 WATCH_TITLE, WATCH_EYEBROW = (
-    "觀察中",
+    "我的追蹤",
     "追蹤與提醒",
 )  # ActionsPage in frontend/src/App.tsx
 
@@ -3379,10 +3279,14 @@ def a16(run: Run) -> str:
         stock < plan < history,
         f"行序 我的庫存 {stock}、追蹤計畫 {plan}、追蹤回看 {history}",
     )
-    # The action list starts at its first tier heading (A3).
+    # The action list starts at its first tier heading (A3) and sits between the plans in
+    # progress and the ended ones (#637); without a tier heading there is no list to place.
     first_action = text.find_where(lambda line: re.fullmatch(r"第 \d 級", line))
-    end = first_action if first_action >= 0 else len(text.lines)
-    expect(history < end, f"行動列表（{text.at(first_action)}）在 `追蹤回看` 之前")
+    end = first_action if first_action >= 0 else history
+    expect(
+        plan < end <= history,
+        f"行動列表（{text.at(first_action)}）不在 `追蹤計畫` 與 `追蹤回看` 之間",
+    )
     problems = [
         f"`記錄來源` 在庫存區外（{text.at(i)}）"
         for i, line in enumerate(text.lines)
@@ -3390,10 +3294,11 @@ def a16(run: Run) -> str:
     ] + [
         f"`{line[:4]}` 在追蹤區外（{text.at(i)}）"
         for i, line in enumerate(text.lines)
-        if line.startswith(("模擬成交", "模擬出場", "模擬報酬")) and not plan < i < end
+        if line.startswith(("模擬成交", "模擬出場", "模擬報酬"))
+        and not (plan < i < end or i > history)
     ]
     expect(not problems, "；".join(problems))
-    return "我的庫存 < 追蹤計畫 < 追蹤回看 < 行動列表；庫存與模擬的行各在自己的區塊"
+    return "我的庫存 < 追蹤計畫 < 行動列表 < 追蹤回看；庫存與模擬的行各在自己的區塊"
 
 
 @check("actions", "A17", after=("A14",))
@@ -3444,7 +3349,7 @@ def a17(run: Run) -> str:
 
 
 def watch_title(text: Text) -> int:
-    """The page title line: 觀察中 right after its eyebrow (the navbar also has a 觀察中 link)."""
+    """The page title line: 我的追蹤 right after its eyebrow (the navbar also has a 我的追蹤 link)."""
 
     i = text.find(WATCH_EYEBROW)
     return i + 1 if i >= 0 and text.after(i) == WATCH_TITLE else -1
@@ -3452,7 +3357,7 @@ def watch_title(text: Text) -> int:
 
 @check("actions", "A18")
 def a18(run: Run) -> str:
-    """#493: /watch is 觀察中, and the old /actions redirects there with its query and anchor.
+    """#493: /watch is 我的追蹤, and the old /actions redirects there with its query and anchor.
 
     The page text alone cannot tell a redirect from /actions rendering the page in place, so
     the URL the browser ended on (screenshot.cjs `finalUrl`) must be /watch.
@@ -3797,11 +3702,11 @@ def summary_markdown(
 
     lines = [head, "", *environment_markdown(environment or {})]
     names = {
-        "today": "今日可買 `/`",
+        "today": "今日名單 `/`",
         "news": "新聞 `/news`",
         "themes": "族群 `/themes`",
         "stocks": "個股 `/stocks`",
-        "actions": "觀察中 `/watch`",
+        "actions": "我的追蹤 `/watch`",
     }
     if samples:
         lines += [
