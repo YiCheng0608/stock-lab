@@ -432,13 +432,9 @@ def _fallback_upgrade_on_connection(connection) -> None:
     if connection.dialect.name == "sqlite":
         preflight_instrument_identity(connection)
         preflight_settlement_identity(connection)
-    # news_llm_results (0012) and the theme suggestion tables (0014) reference
-    # news_items, and the 0006 repair below refuses to rebuild a referenced
-    # news_items; create them after that repair.
-    after_news_repair = [
-        Base.metadata.tables[name]
-        for name in ("news_llm_results", "theme_suggestions", "theme_suggestion_news")
-    ]
+    # news_llm_results (0012) references news_items, and the 0006 repair below
+    # refuses to rebuild a referenced news_items; create it after that repair.
+    after_news_repair = [Base.metadata.tables["news_llm_results"]]
     Base.metadata.create_all(
         bind=connection,
         tables=[
@@ -597,8 +593,8 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0013_candidates', CURRENT_TIMESTAMP)"
         )
     )
-    # 0014 only adds theme_suggestions/theme_suggestion_news, created above
-    # after the news repair.
+    # 0014 added theme_suggestions/theme_suggestion_news, which 0031 drops;
+    # this path no longer creates them.
     connection.execute(
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
@@ -782,6 +778,16 @@ def _fallback_upgrade_on_connection(connection) -> None:
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
             "VALUES ('0030_trading_halts', CURRENT_TIMESTAMP)"
+        )
+    )
+    # 0031 (#629) drops the theme suggestion tables of an older database; their
+    # rows were an aggregate of news_llm_results.  The child table goes first.
+    for table in ("theme_suggestion_news", "theme_suggestions"):
+        connection.execute(text(f"DROP TABLE IF EXISTS {table}"))
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0031_drop_theme_suggestions', CURRENT_TIMESTAMP)"
         )
     )
 

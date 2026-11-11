@@ -79,7 +79,6 @@ class Steps:
             },
             "candidates": {"status": "success", "records": 2},
             "indicators": {"status": "not_configured", "reason": "fixture"},
-            "theme_suggestions": {"status": "success", "records": 4},
             "plan_tracking": {"status": "success", "records": 0},
             "strategy_levels": {"status": "success", "records": 6},
             "action_tiers": {"status": "success", "records": 5},
@@ -119,9 +118,6 @@ class Steps:
         monkeypatch.setattr(pipeline, "evaluate", make("evaluate"))
         monkeypatch.setattr(schedule_runs, "_candidate_step", make("candidates"))
         monkeypatch.setattr(schedule_runs, "_indicator_step", make("indicators"))
-        monkeypatch.setattr(
-            schedule_runs, "_theme_suggestion_step", make("theme_suggestions")
-        )
         monkeypatch.setattr(schedule_runs, "_plan_tracking_step", make("plan_tracking"))
         monkeypatch.setattr(
             schedule_runs, "_strategy_levels_step", make("strategy_levels")
@@ -176,7 +172,6 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "evaluate",
         "candidates",
         "indicators",
-        "theme_suggestions",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
@@ -196,7 +191,6 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "evaluate": ("success", 5),
         "candidates": ("success", 2),
         "indicators": ("not_configured", None),
-        "theme_suggestions": ("success", 4),
         "plan_tracking": ("success", 0),
         "strategy_levels": ("success", 6),
         "action_tiers": ("success", 5),
@@ -217,7 +211,6 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "evaluate",
         "candidates",
         "indicators",
-        "theme_suggestions",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
@@ -259,7 +252,6 @@ def test_partial_collect_stops_later_steps_and_keeps_the_warning(database, monke
         "evaluate": "skipped",
         "candidates": "skipped",
         "indicators": "skipped",
-        "theme_suggestions": "skipped",
         "plan_tracking": "skipped",
         "strategy_levels": "skipped",
         "action_tiers": "skipped",
@@ -277,7 +269,6 @@ def test_partial_collect_stops_later_steps_and_keeps_the_warning(database, monke
         "evaluate",
         "candidates",
         "indicators",
-        "theme_suggestions",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
@@ -313,7 +304,6 @@ def test_step_exception_is_recorded_and_dependent_steps_are_skipped(
         "trading_calendar",
         "analyze",
         "indicators",
-        "theme_suggestions",
         "plan_tracking",
         "period_backfill",
     ]
@@ -333,7 +323,6 @@ def test_step_exception_is_recorded_and_dependent_steps_are_skipped(
         and logged["candidates"].error == "analyze_not_successful"
     )
     assert logged["indicators"].status == "not_configured"
-    assert logged["theme_suggestions"].status == "success"
     assert (
         logged["strategy_levels"].status == "skipped"
         and logged["strategy_levels"].error == "analyze_not_successful"
@@ -358,7 +347,6 @@ def test_failed_evaluate_still_runs_candidates_and_indicators(database, monkeypa
         "evaluate",
         "candidates",
         "indicators",
-        "theme_suggestions",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
@@ -383,7 +371,6 @@ def test_failed_candidates_fail_the_run_without_blocking_indicators(
         "evaluate",
         "candidates",
         "indicators",
-        "theme_suggestions",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
@@ -564,35 +551,6 @@ def test_failed_indicator_batch_fails_the_run(database, monkeypatch):
     assert pipeline.run_daily(DAY)["status"] == "failed"
     rows, _ = runs(database)
     assert rows[0].error == "indicators: fixture indicator failure"
-
-
-def test_failed_theme_suggestions_fail_the_run_after_every_other_step(
-    database, monkeypatch
-):
-    steps = Steps(
-        monkeypatch, theme_suggestions=RuntimeError("fixture suggestion crash")
-    )
-    result = pipeline.run_daily(DAY)
-    assert result["status"] == "failed"
-    assert steps.calls == [
-        "collect",
-        "trading_calendar",
-        "analyze",
-        "evaluate",
-        "candidates",
-        "indicators",
-        "theme_suggestions",
-        "plan_tracking",
-        "strategy_levels",
-        "action_tiers",
-        "candidate_notes",
-        "period_backfill",
-    ]
-    rows, by_run = runs(database)
-    logged = by_run[rows[0].id]
-    assert "fixture suggestion crash" in rows[0].error
-    assert logged["theme_suggestions"].status == "failed"
-    assert logged["candidates"].status == "success"
 
 
 def test_failed_plan_tracking_fails_the_run_but_the_notes_still_run(
@@ -830,18 +788,6 @@ def test_plan_tracking_without_any_plan_is_a_successful_empty_step(
     assert step.details_json["date"] == DAY.isoformat()
 
 
-def test_theme_suggestion_step_refreshes_with_the_daily_session(database, monkeypatch):
-    seen = []
-    monkeypatch.setattr(
-        schedule_runs.theme_suggestions,
-        "run_theme_suggestions",
-        lambda factory=None: seen.append(factory)
-        or {"status": "success", "records": 0},
-    )
-    assert schedule_runs._theme_suggestion_step()["status"] == "success"
-    assert seen == [database]
-
-
 def test_running_rows_block_until_stale_then_are_marked_abandoned(
     database, monkeypatch
 ):
@@ -893,7 +839,6 @@ def test_list_schedule_runs_reports_steps(database, monkeypatch):
         "evaluate",
         "candidates",
         "indicators",
-        "theme_suggestions",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
@@ -1393,7 +1338,6 @@ def test_running_row_whose_process_is_gone_is_abandoned_at_once(database, monkey
         "evaluate",
         "candidates",
         "indicators",
-        "theme_suggestions",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
@@ -1787,7 +1731,6 @@ def test_daily_collects_missed_sessions_oldest_first_then_the_target(
         "evaluate",
         "candidates",
         "indicators",
-        "theme_suggestions",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",

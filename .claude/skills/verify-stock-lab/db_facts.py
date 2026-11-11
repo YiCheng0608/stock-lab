@@ -71,10 +71,6 @@ QUERIES = {
         "news_llm_results",
         "SELECT count(*) FROM news_llm_results WHERE llm_status = 'done'",
     ),
-    "theme_suggestions": (
-        "theme_suggestions",
-        "SELECT count(*) FROM theme_suggestions",
-    ),
     # User tracking plans: the actions page's 追蹤計畫 and 追蹤回看 (A8).
     "tracking_plans_open": (
         "tracking_plans",

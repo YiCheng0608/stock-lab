@@ -2,7 +2,7 @@
 
 Every ``worker.cli daily`` invocation writes one ``schedule_runs`` row and one
 ``schedule_run_steps`` row per step (catchup -> collect -> trading_calendar ->
-analyze -> evaluate -> candidates -> indicators -> theme_suggestions ->
+analyze -> evaluate -> candidates -> indicators ->
 plan_tracking -> strategy_levels -> action_tiers -> candidate_notes ->
 period_backfill).  catchup
 first collects recent official
@@ -12,8 +12,7 @@ analyze, evaluate and candidates run only after a
 successful collect; evaluate and candidates only after a successful analyze
 (candidates read the trading date's signals, not the tracking that evaluate
 updates); indicators depend on stored bars alone, so they run after every
-successful collect, and so does theme_suggestions, which only regroups stored
-news LLM results, and plan_tracking, which tracks the user plans' own copy of
+successful collect, and so does plan_tracking, which tracks the user plans' own copy of
 their levels on the stored bars.  A failure keeps its error text and the
 dependent steps are recorded as skipped.  strategy_levels (the observation
 price levels of the day's signals) runs after a successful analyze, and
@@ -75,7 +74,6 @@ from worker import (
     institutional_refetch,
     period_backfill,
     pipeline,
-    theme_suggestions,
 )
 from worker.sources import OfficialMarketDataAdapter
 
@@ -87,7 +85,6 @@ DAILY_STEPS = (
     "evaluate",
     "candidates",
     "indicators",
-    "theme_suggestions",
     "plan_tracking",
     "strategy_levels",
     "action_tiers",
@@ -101,7 +98,6 @@ STEP_REQUIRES = {
     "evaluate": ("analyze",),
     "candidates": ("analyze",),
     "indicators": (),
-    "theme_suggestions": (),
     "plan_tracking": (),
     "strategy_levels": ("analyze",),
     "action_tiers": ("analyze",),
@@ -276,10 +272,6 @@ def _period_backfill_step(target: date) -> dict[str, Any]:
 
 def _institutional_refetch_step(target: date) -> dict[str, Any]:
     return institutional_refetch.refetch_institutional(target)
-
-
-def _theme_suggestion_step() -> dict[str, Any]:
-    return theme_suggestions.run_theme_suggestions(pipeline.SessionLocal)
 
 
 def _catchup_adapter() -> OfficialMarketDataAdapter:
@@ -847,7 +839,6 @@ def run_daily_job(
         ("evaluate", 4, lambda: pipeline.evaluate(init_schema=False)),
         ("candidates", 5, lambda: _candidate_step(target)),
         ("indicators", 6, lambda: _indicator_step(target)),
-        ("theme_suggestions", 7, _theme_suggestion_step),
         # Before the LLM notes, which can take long; the sequence only orders
         # the step rows (rows are found by step name).
         ("plan_tracking", 8, lambda: _plan_tracking_step(target)),
@@ -896,7 +887,7 @@ def run_daily_job(
     for step, sequence, action in later:
         # evaluate and candidates need a successful analyze; indicators only
         # need the bars collect just stored, so an analyze failure does not
-        # block them; theme_suggestions and plan_tracking need neither.  An
+        # block them; plan_tracking needs neither.  An
         # analyze failure also skips strategy_levels, and a candidates failure
         # candidate_notes; their own results never fail the run.
         blocked_by = next((name for name in failed if name in STEP_REQUIRES[step]), "")

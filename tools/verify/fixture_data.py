@@ -1330,63 +1330,6 @@ def _llm_rows() -> list[dict[str, Any]]:
     ]
 
 
-def _suggestion_rows() -> list[dict[str, Any]]:
-    yesterday = SESSIONS[-2]
-
-    def suggestion(item_id, name, count, first, last):
-        return {
-            "id": item_id,
-            "theme_key": name,  # theme_key(): NFKC, no whitespace, casefold
-            "display_name": name,
-            "prompt_version": NEWS_PROMPT_VERSION,
-            "aggregation_version": "theme_suggestions_v1",
-            "llm_models_json": [LLM_MODEL],
-            "news_count": count,
-            "first_news_date": first,
-            "last_news_date": last,
-            "status": "pending_verification",
-            "computed_at": _at(T, 4),
-        }
-
-    return [
-        suggestion(1, "示範液冷散熱", 2, yesterday, yesterday),
-        suggestion(2, "示範車用晶片", 1, T, T),
-    ]
-
-
-def _suggestion_news_rows() -> list[dict[str, Any]]:
-    yesterday = SESSIONS[-2]
-    return [
-        {
-            "id": 1,
-            "suggestion_id": 1,
-            "news_item_id": 2,
-            "news_llm_result_id": 2,
-            "theme_text": "示範液冷散熱",
-            "reason": "液冷機櫃需求",
-            "news_date": yesterday,
-        },
-        {
-            "id": 2,
-            "suggestion_id": 1,
-            "news_item_id": 4,
-            "news_llm_result_id": 3,
-            "theme_text": "示範液冷散熱",
-            "reason": "資料中心擴建帶動",
-            "news_date": yesterday,
-        },
-        {
-            "id": 3,
-            "suggestion_id": 2,
-            "news_item_id": 1,
-            "news_llm_result_id": 1,
-            "theme_text": "示範車用晶片",
-            "reason": "先進製程需求來自車用",
-            "news_date": T,
-        },
-    ]
-
-
 # ---- daily candidates ----
 
 # The scoring output of worker.candidates.compute_daily_candidates on these rows,
@@ -1940,8 +1883,6 @@ TABLES: dict[str, list[dict[str, Any]]] = {
     "strategy_levels": _strategy_level_rows(),
     "news_items": _news_rows(),
     "news_llm_results": _llm_rows(),
-    "theme_suggestions": _suggestion_rows(),
-    "theme_suggestion_news": _suggestion_news_rows(),
     "candidate_runs": _candidate_run_rows(),
     "daily_candidates": _daily_candidate_rows(),
     "candidate_llm_notes": _candidate_note_rows(),
@@ -1984,7 +1925,6 @@ INTENTIONALLY_EMPTY: dict[str, dict[str, str]] = {
         "execution_date": "最早可成交日 2026-10-19 休市（ingestion_runs id 5 skipped），還沒有成交",
         "execution_price": "同 execution_date",
     },
-    "theme_suggestions": {"matched_group_id": "兩個建議都是新題材，未對應既有族群"},
     "tracking_plans": {
         "incomparable_reason": "結束的計畫都可比較；「無法比較」的文案由到期與已取消的計畫驗"
     },
@@ -2177,8 +2117,6 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
             "items[].display_name",
             ["示範 AI 伺服器", "示範先進封裝"],
         ),
-        ("theme-suggestions?limit=20", "meta.total", 2),
-        ("theme-suggestions?limit=20", "items[].news_count", [2, 1]),
         (f"themes/{TOP_THEME}", "members_total", 3),
         # The delisted 9205 and the moved 9206 left these groups (LIFECYCLE).
         (f"themes/{BIOTECH_ID}", "members_total", 1),
