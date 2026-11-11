@@ -29,7 +29,8 @@ import {
   marketSourceLabel,
 } from './candidates'
 import { completeItem, doneNote, listResponse, notComputedResponse, partialItem, zeroResponse } from './candidates.fixtures'
-import { CandidatesSection, ScoreDetails } from './CandidateViews'
+import { CandidatesSection, PriceLadder, ScoreDetails } from './CandidateViews'
+import { candidateChartLevels, ladderLabel, priceLadder } from './candidates'
 
 // Standalone regression module (no browser, no server, no network) for the daily candidate list (#215):
 // the detail content under each today row (components, reasons, AI note), partial components, the score details
@@ -215,3 +216,33 @@ check(detailOf(rowOf(midpointList, 1)).includes('1.62 倍（以進場區中點 2
 const breakoutList = render(<CandidatesSection data={{ ...listResponse(), items: [{ ...completeItem(), levels: { ...completeItem().levels, risk_reward_basis: 'entry_price' as const } }] }} loading={false} error={null} />)
 check(breakoutList.includes('>以進場價計算</div>') && breakoutList.includes('1.60 倍（以進場價 161.50 元計算）'), 'a breakout reads at its entry price')
 check(!render(<CandidatesSection data={listResponse()} loading={false} error={null} />).includes('candidate-rr-basis'), 'a response without the basis shows no note')
+
+// ---- 盤後終端: the price ladder and the chart beside the list (DESIGN_SYSTEM §5 候選列表) ----
+const breakoutItem = completeItem()
+check(JSON.stringify(candidateChartLevels(breakoutItem.levels)) === JSON.stringify({ entry: 161.5, stop: 157.82, target: 167.39 }), 'the chart draws the entry, the stop and the first target')
+const zoneLevels = { ...breakoutItem.levels, entry_type: 'pullback', entry: null, entry_zone: { low: 160, high: 162 } }
+check(candidateChartLevels(zoneLevels)?.entry === 161, 'without an entry the zone midpoint is the entry')
+check(candidateChartLevels({ ...breakoutItem.levels, invalid_price: null }) === null, 'a missing stop draws nothing')
+check(candidateChartLevels({ ...breakoutItem.levels, invalid_price: 170 }) === null, 'a stop above the entry draws nothing')
+const ladder = priceLadder(breakoutItem.levels, 161.5)
+const entryAt = ((161.5 - 157.82) / (167.39 - 157.82)) * 100
+check(ladder !== null && Math.abs(ladder.entry - entryAt) < 1e-9 && Math.abs(ladder.close - entryAt) < 1e-9 && ladder.outside === null, `a close at the entry sits on the entry tick: ${JSON.stringify(ladder)}`)
+check(priceLadder(breakoutItem.levels, 150)?.close === 0 && priceLadder(breakoutItem.levels, 150)?.outside === 'below_stop', 'a close under the stop is clamped to the left end and says so')
+check(priceLadder(breakoutItem.levels, 180)?.close === 100 && priceLadder(breakoutItem.levels, 180)?.outside === 'above_target', 'a close over the target is clamped to the right end and says so')
+check(priceLadder(breakoutItem.levels, null) === null && priceLadder({ ...breakoutItem.levels, target_1: null }, 161.5) === null, 'no close or no full set of levels: no ladder')
+check(ladderLabel(priceLadder(breakoutItem.levels, 159)!) === '收盤在停損與進場之間' && ladderLabel(priceLadder(breakoutItem.levels, 165)!) === '收盤在進場與目標之間', 'the ladder label says which side of the entry the close is')
+check(ladderLabel(priceLadder(breakoutItem.levels, 150)!) === '收盤已低於停損' && ladderLabel(priceLadder(breakoutItem.levels, 180)!) === '收盤已高於目標', 'and when it ran past an end')
+const ladderMarkup = renderToStaticMarkup(<PriceLadder item={breakoutItem} />)
+check(ladderMarkup.includes('role="img"') && ladderMarkup.includes('price-ladder-entry') && ladderMarkup.includes('price-ladder-close'), 'the ladder is an image with an entry tick and a close dot')
+check(ladderMarkup.replace(/<[^>]+>/g, '') === '', 'the ladder adds no page text (the row already states the prices)')
+check(renderToStaticMarkup(<PriceLadder item={{ ...breakoutItem, levels: { ...breakoutItem.levels, target_1: null } }} />) === '', 'no ladder without a full set of levels')
+
+const plainList = render(<CandidatesSection data={listResponse()} loading={false} error={null} />)
+check(!plainList.includes('candidates-terminal') && !plainList.includes('candidate-rank-button'), 'without a chart the list is the list alone and the rank is not a button')
+const charted = render(<CandidatesSection data={listResponse()} loading={false} error={null} renderChart={(item) => <div data-test-chart={item.instrument.symbol} />} />)
+check(charted.includes('class="candidates-terminal"') && charted.includes('data-chart-rank="1"') && charted.includes('data-test-chart="2377"'), 'with a chart the first candidate is the one shown')
+check((charted.match(/candidate-rank-button/g) ?? []).length === 2 && (charted.match(/aria-pressed="true"/g) ?? []).length === 1, 'every rank is a button and only the shown one is pressed')
+check(charted.includes('aria-label="第 1 名，顯示走勢圖"') && charted.includes('>#1</button>'), 'the rank button keeps its text and says what it does')
+check(charted.indexOf('candidates-terminal-list') < charted.indexOf('candidates-terminal-chart'), 'the list comes before the chart in the document')
+const text = (markup: string) => markup.replace(/<[^>]+>/g, '')
+check(text(charted) === text(plainList), 'the chart slot and the ladder change no page text of the list')
