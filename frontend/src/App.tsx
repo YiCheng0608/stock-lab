@@ -97,6 +97,7 @@ import { newsFiltersFromSearch, newsListParams, newsPageSearch, stockNewsParams,
 import { ACTIONS_PAGE_LIMIT, ACTION_STATE_LABELS, ACTION_TIER_PREVIEW, DEFAULT_ACTION_VIEW, previewTiers, stockResearchPath, tierSections } from './actions/actionTiers'
 import { ActionFilters, ActionTierList } from './actions/ActionViews'
 import { StrategyPage } from './strategy/StrategyPage'
+import { SystemPage } from './system/SystemPage'
 import { STOCK_TABS, parseStockTab, stockTabSearch, type StockTab } from './stock/stockTabs'
 
 // Fixed decimals (DESIGN_SYSTEM §3): rule levels and ratios 2, counts 0, a stock's own price by its tick.
@@ -1164,6 +1165,7 @@ export const APP_ROUTES: ReadonlyArray<{ path: string; element: ReactElement }> 
   { path: '/actions', element: <WatchRedirect /> },
   { path: '/actions/:exchange/:symbol', element: <ActionDetailRedirect /> },
   { path: '/strategy', element: <StrategyPage /> },
+  { path: '/system', element: <SystemPage /> },
   { path: '/system/data-quality', element: <SystemDataPage /> },
   { path: '/research/backtest', element: <ResearchBacktestPage /> },
   { path: '/research/coverage', element: <BackfillCoveragePage /> },

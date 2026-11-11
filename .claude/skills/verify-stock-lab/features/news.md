@@ -1,6 +1,6 @@
 # 新聞 `/news`
 
-入口：主導航「新聞」，`NewsPage` → `NewsListView`（`frontend/src/news/NewsViews.tsx`）；詳情 `/news/:id` → `NewsDetailView`。
+入口：頁尾「系統」頁（`/system`）的「新聞」連結（#631 起不在主導航；verify 直接開 `/news`），`NewsPage` → `NewsListView`（`frontend/src/news/NewsViews.tsx`）；詳情 `/news/:id` → `NewsDetailView`。
 
 ## API
 

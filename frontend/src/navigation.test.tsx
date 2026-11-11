@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import * as AppModule from './App'
 import { MAIN_NAV } from './components/Navbar'
 import { Shell } from './components/Shell'
+import { SYSTEM_LINKS, SystemPage } from './system/SystemPage'
 import { listResponse } from './candidates/candidates.fixtures'
 import { CandidatesSection } from './candidates/CandidateViews'
 import { noPreviousCloseText } from './marketChange'
@@ -25,7 +26,7 @@ declare const __dirname: string
 const fs = require('node:fs') as { readFileSync(file: string, encoding: 'utf8'): string }
 const path = require('node:path') as { join(...parts: string[]): string }
 
-// Information architecture (#493, Issue 549; PRODUCT_SPEC §2, DESIGN_SYSTEM §4/§5, UI_COPY_SPEC §5/§10/§11): the seven main
+// Information architecture (#493, Issue 549; PRODUCT_SPEC §2, DESIGN_SYSTEM §4/§5, UI_COPY_SPEC §5/§10/§11): the six main
 // links, 我的追蹤 at /watch with /actions redirecting, the 策略說明 page, the 今日名單 home and its table and columns.
 const failures: string[] = []
 let checks = 0
@@ -45,8 +46,21 @@ function render(location: string, element: ReactElement, client = new QueryClien
 
 // ---- main navigation: 今日名單, 大盤 (Issue 549), 我的追蹤, three data pages, then the explanation ----
 const nav = MAIN_NAV.map((item) => `${item.to} ${item.label}`)
-const expectedNav = ['/ 今日名單', '/market 大盤', '/watch 我的追蹤', '/themes 族群', '/stocks 個股', '/news 新聞', '/strategy 策略說明']
+const expectedNav = ['/ 今日名單', '/market 大盤', '/watch 我的追蹤', '/themes 族群', '/stocks 個股', '/strategy 策略說明']
 check(JSON.stringify(nav) === JSON.stringify(expectedNav), `MAIN_NAV: ${JSON.stringify(nav)}，預期 ${JSON.stringify(expectedNav)}`)
+// Issue 631: 新聞 left the main navigation; the footer has one entry, 系統, and /system lists the six pages.
+{
+  const shell = render('/', <Shell><p>page</p></Shell>)
+  const footer = shell.slice(shell.indexOf('<footer'))
+  const footerLinks = [...footer.matchAll(/<a [^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>/g)].map((match) => `${match[1]} ${match[2]}`)
+  check(JSON.stringify(footerLinks) === JSON.stringify(['/system 系統']), `頁尾只有一個連結「系統」: ${JSON.stringify(footerLinks)}`)
+  const system = render('/system', <SystemPage />)
+  check(system.includes('<h1>系統</h1>'), '/system 的頁面標題是「系統」')
+  const listed = [...system.matchAll(/<a [^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>/g)].map((match) => `${match[1]} ${match[2]}`)
+  const expectedSystem = ['/news 新聞', '/research/backtest 技術回測', '/research/coverage 資料覆蓋度', '/research/strategies 策略版本', '/system/data-quality 資料品質', '/glossary 用語表']
+  check(JSON.stringify(listed) === JSON.stringify(expectedSystem), `/system 列出六個連結: ${JSON.stringify(listed)}`)
+  check(SYSTEM_LINKS.every((item) => item.description.length > 5), '/system 每個連結都有一行說明')
+}
 
 // ---- routes: /watch and /strategy render their pages; /actions keeps its query and plan anchor ----
 const App = (AppModule as Record<string, unknown>).default as () => ReactElement

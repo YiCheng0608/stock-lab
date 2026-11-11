@@ -102,7 +102,7 @@ const chart = (key: string, data: StockBarsResponse | undefined, extra: { loadin
 
 // ---- navigation: 大盤 right after 今日名單, the /market route renders this page ----
 const nav = MAIN_NAV.map((item) => `${item.to} ${item.label}`)
-check(nav[0] === '/ 今日名單' && nav[1] === '/market 大盤' && nav.length === 7, `MAIN_NAV: 大盤 is second of seven, got ${JSON.stringify(nav)}`)
+check(nav[0] === '/ 今日名單' && nav[1] === '/market 大盤' && nav.length === 6, `MAIN_NAV: 大盤 is second of six, got ${JSON.stringify(nav)}`)
 const routes = (AppModule as Record<string, unknown>).APP_ROUTES as ReadonlyArray<{ path: string; element: ReactElement }> | undefined
 check(routes?.find((route) => route.path === '/market')?.element.type === MarketPage, '/market route renders MarketPage')
 const App = (AppModule as Record<string, unknown>).default as () => ReactElement
