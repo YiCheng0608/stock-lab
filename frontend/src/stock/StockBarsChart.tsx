@@ -16,6 +16,8 @@ import {
   PRICE_BASIS,
   STOCK_BARS_MAX_LIMIT,
   buildBarsChartOption,
+  levelsNote,
+  type ChartLevels,
   chartLayout,
   longerBarsKey,
   longerStatus,
@@ -140,6 +142,7 @@ export function StockBarsChart({
   title = 'K 線與技術指標',
   titleId = 'stock-chart-title',
   footer,
+  levels = null,
 }: {
   interval: StockBarsInterval
   onIntervalChange: (interval: StockBarsInterval) => void
@@ -152,6 +155,8 @@ export function StockBarsChart({
   titleId?: string
   // Lines under the chart (the market page's TX contract and attribution, Issue 552), shown in every state.
   footer?: ReactNode
+  // The rule levels of the strategy that holds on the data day (the stock page); the market page passes none.
+  levels?: ChartLevels | null
 }) {
   const narrow = useNarrow()
   const [panel, setPanel] = useState<IndicatorPanelId>('macd')
@@ -193,8 +198,8 @@ export function StockBarsChart({
   const digits = priceDigits(latestClose, instrumentType)
   const panelState = data ? indicatorPanelState(data, panel) : null
   const option = useMemo(
-    () => data && panelState && zoom ? buildBarsChartOption(data, { panel, panelState, visibleMa, theme, layout, zoom, digits }) : null,
-    [data, panel, panelState?.kind, visibleMa, theme, layout, zoom, digits],
+    () => data && panelState && zoom ? buildBarsChartOption(data, { panel, panelState, visibleMa, theme, layout, zoom, digits, levels }) : null,
+    [data, panel, panelState?.kind, visibleMa, theme, layout, zoom, digits, levels?.entry, levels?.stop, levels?.target],
   )
   const toggleMa = (field: MaField) => setVisibleMa((current) => {
     const next = new Set(current)
@@ -255,7 +260,7 @@ export function StockBarsChart({
                 opts={{ renderer: 'canvas' }}
                 style={{ width: '100%', height: layout.height }}
                 role="img"
-                aria-label={`${unit} K 線、成交量與 ${INDICATOR_PANELS.find((item) => item.id === panel)?.label} 指標圖；數值見下方資料表`}
+                aria-label={`${unit} K 線、成交量與 ${INDICATOR_PANELS.find((item) => item.id === panel)?.label} 指標圖${levels ? '，含規則價位線' : ''}；數值見下方資料表`}
                 onEvents={{ datazoom: onDataZoom }}
               />
               <div className="indicator-tabs" style={{ top: layout.tabsTop, left: layout.left, right: layout.right }}>
@@ -267,6 +272,7 @@ export function StockBarsChart({
                 </div>
               )}
             </div>
+            {levels && <p className="chart-note chart-levels-note" data-chart-levels>{levelsNote(levels, digits)}</p>}
             {longer.loading && <p className="chart-note" role="status">正在載入更早的{unit}…</p>}
             {longer.failed && <p className="chart-note" role="status">更早的{unit}暫時無法載入，目前顯示最近 {data.count} 根</p>}
             {isCloseOnlySeries(data.bars) && <p className="chart-note">{CLOSE_ONLY_NOTE}</p>}
