@@ -1657,9 +1657,7 @@ def test_s11_fails_on_a_wrong_verdict_or_the_old_page(tmp_path):
     with pytest.raises(page_checks.Fail, match="預期判斷 `條件成立`"):
         _s11(tmp_path, payload, _summary_page("觀察", "x"))
     # Before #519 the header was followed by the cutoff form and the tabs.
-    old = (
-        "2884\n玉山金\n資料 2026/11/05\n來源 臺灣證券交易所\n研究截止日期\n走勢\n"
-    )
+    old = "2884\n玉山金\n資料 2026/11/05\n來源 臺灣證券交易所\n研究截止日期\n走勢\n"
     with pytest.raises(page_checks.Fail, match="缺整行 `目前判斷`"):
         _s11(tmp_path, payload, old)
     no_link = _summary_page("條件成立", "不在這個資料日的每日候選名單").replace(
