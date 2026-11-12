@@ -475,24 +475,129 @@ def test_conditions_are_measured_against_the_days_universe(evidence_result):
     assert conditions["breakout_rule"]["verdict"] == "cannot_tell"
 
 
-def test_judge():
-    passing = {"days": 100, "ic": 0.05, "t": 3.0, "spread": 0.01}
-    assert evidence.judge(passing, passing, "ic") == "evidence"
-    assert evidence.judge({**passing, "days": 59}, passing, "ic") == "cannot_tell"
-    assert evidence.judge(passing, {**passing, "days": 59}, "ic") == "cannot_tell"
-    assert evidence.judge({**passing, "t": 1.9}, passing, "ic") == "not_selected"
-    assert evidence.judge({**passing, "ic": 0.019}, passing, "ic") == "not_selected"
-    assert evidence.judge(passing, {**passing, "ic": -0.01}, "ic") == "reversed"
-    assert evidence.judge(passing, {**passing, "t": 1.9}, "ic") == "weak"
-    assert evidence.judge(passing, {**passing, "t": None}, "ic") == "weak"
-    assert evidence.judge(passing, {**passing, "spread": -0.01}, "ic") == "not_selected"
+PASSING = {"days": 100, "ic": 0.05, "t": 3.0, "spread": 0.01}
+
+
+# One case per row of evidence.md's verdict table, in its order (AC-1 of #643).
+@pytest.mark.parametrize(
+    ("row", "exploration", "validation", "verdict"),
+    [
+        ("探索段不足 60 日", {"days": 59}, {}, "cannot_tell"),
+        ("探索段 |IC| < 0.02", {"ic": 0.019}, {}, "not_selected"),
+        ("探索段 |t| < 2", {"t": 1.9}, {}, "not_selected"),
+        ("探索段 t 缺值", {"t": None}, {}, "not_selected"),
+        ("探索段五分位差缺值", {"spread": None}, {}, "cannot_tell"),
+        ("探索段五分位差異號", {"spread": -0.01}, {}, "not_selected"),
+        ("探索段五分位差為 0", {"spread": 0.0}, {}, "not_selected"),
+        ("驗證段不足 60 日", {}, {"days": 59}, "cannot_tell"),
+        ("驗證段 IC 異號", {}, {"ic": -0.01, "spread": -0.01}, "reversed"),
+        ("驗證段 IC 為 0", {}, {"ic": 0.0}, "not_selected"),
+        ("驗證段五分位差缺值", {}, {"spread": None}, "cannot_tell"),
+        ("驗證段五分位差異號", {}, {"spread": -0.01}, "weak"),
+        ("驗證段 |t| < 2", {}, {"t": 1.9}, "weak"),
+        ("驗證段 t 缺值", {}, {"t": None}, "weak"),
+        ("其餘", {}, {}, "evidence"),
+    ],
+)
+def test_judge_follows_the_table(row, exploration, validation, verdict):
+    assert (
+        evidence.judge({**PASSING, **exploration}, {**PASSING, **validation}, "ic")
+        == verdict
+    ), row
+
+
+def test_judge_signs_and_conditions():
     negative = {"days": 100, "ic": -0.05, "t": -3.0, "spread": -0.01}
     assert evidence.judge(negative, negative, "ic") == "evidence"
+    assert evidence.judge(negative, {**negative, "spread": 0.01}, "ic") == "weak"
+    # A condition has no spread: the spread rows do not apply.
     condition = {"days": 100, "mean": 0.004, "t": 2.5}
     assert evidence.judge(condition, condition, "mean") == "evidence"
     assert (
         evidence.judge(condition, {**condition, "mean": -0.001}, "mean") == "reversed"
     )
+    assert evidence.judge(condition, {**condition, "t": 1.0}, "mean") == "weak"
+    assert evidence.judge({**condition, "days": 10}, condition, "mean") == "cannot_tell"
+
+
+# --- discrete features (#643) -------------------------------------------------
+
+
+def discrete_day(monkeypatch, values: list[float], excess: list[float]):
+    """``day_rows`` for one day where every feature has ``values``."""
+
+    members = [(index, 0) for index in range(len(values))]
+    monkeypatch.setattr(
+        evidence.lib, "forward_return", lambda item, _at, _horizon: excess[item]
+    )
+    day = {key: list(values) for key, *_rest in evidence.FEATURES}
+    day.update({key: [None] * len(values) for key, *_rest in evidence.CONDITIONS})
+    return evidence.day_rows(members, day, 5, 30)
+
+
+@pytest.mark.parametrize(
+    ("values", "low", "high"),
+    [
+        # A 0～5 count, most names at 0 (trust_buy_days_5): 0 against 1～5.
+        ([0.0] * 24 + [1.0] * 6 + [2.0] * 4 + [3.0] * 3 + [4.0] * 2 + [5.0], 24, 16),
+        # A 0／1 flag (revenue_high_12).
+        ([0.0] * 30 + [1.0] * 10, 30, 10),
+    ],
+)
+def test_a_discrete_feature_has_a_spread(monkeypatch, values, low, high):
+    # Higher values do better: excess is the value itself, in percent.
+    excess = [value / 100 for value in values]
+    mean = statistics.fmean(excess)
+    excess = [value - mean for value in excess]
+    row = discrete_day(monkeypatch, values, excess)
+    day = row["features"]["trust_buy_days_5"]
+    assert None in day["q"]  # ties leave a fifth empty
+    table = evidence.feature_table([day] * 3, 5)
+    expected = statistics.fmean(
+        value / 100 for value in values[low:]
+    ) - statistics.fmean(value / 100 for value in values[:low])
+    assert len(values) - low == high
+    assert table["spread"] == pytest.approx(expected)
+    assert table["spread"] > 0
+    assert table["two_group_days"] == 3
+
+
+def test_two_groups_cut_between_values():
+    # Sides nearest in size; equal values stay together; the lower cut on a tie.
+    assert evidence.two_groups([0.0, 0.0, 1.0, 2.0], [0.0, 0.0, 0.1, 0.3]) == (
+        pytest.approx([0.0, 0.2])
+    )
+    assert evidence.two_groups([0.0, 1.0, 2.0], [0.0, 0.3, 0.6]) == pytest.approx(
+        [0.0, 0.45]
+    )
+    assert evidence.two_groups([1.0, 1.0], [0.1, 0.2]) is None
+
+
+def test_an_empty_middle_fifth_keeps_the_five_groups():
+    # A flow with most names at 0: the zeros fill the middle fifth only, so
+    # the top and the bottom are there and the spread is version 1's.
+    values = [-4.0, -3.0, -2.0, -1.0] + [0.0] * 32 + [1.0, 2.0, 3.0, 4.0]
+    excess = [value / 100 for value in values]
+    day = evidence.day_spread(values, excess)
+    assert day["q"][1] is None and day["q"][3] is None
+    assert day["groups"] == 5
+    assert day["spread"] == pytest.approx(day["q"][-1] - day["q"][0])
+    assert day["spread"] == pytest.approx(0.05)
+
+
+def test_a_continuous_feature_keeps_its_five_groups(evidence_result):
+    for horizon in ("5", "20"):
+        for key in ("momentum_20", "foreign_flow_5"):
+            for segment in ("exploration", "validation"):
+                part = evidence_result["horizons"][horizon]["features"][key][segment]
+                assert part["two_group_days"] == 0
+
+
+def test_the_report_names_its_version(evidence_result):
+    assert evidence.VERSION == 2 and evidence_result["version"] == 2
+    title, _blank, version = evidence.markdown(evidence_result, "x").splitlines()[:3]
+    assert title == "# 特徵證據（feature_evidence 第 2 版）"
+    assert "看完第一輪（#619）結果後提出" in version
 
 
 # --- candidate_scorecard ---------------------------------------------------

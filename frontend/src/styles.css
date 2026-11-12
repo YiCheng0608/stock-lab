@@ -656,7 +656,17 @@ a.symbol-link:hover { color: var(--color-primary); }
 .theme-news-title:hover { color: var(--color-primary); }
 
 /* ---- action centre tiers (DESIGN_SYSTEM §5 行動列表、篩選膠囊) ------------------------------------- */
-.action-filters { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
+/* #649: the title line carries a 說明 fold (the purpose and why rows are hidden); the chips, 含 ETF and the hidden
+   counts are one row that wraps on phones. */
+.actions-page .page-title { padding-bottom: var(--space-3); }
+.watch-title-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-4); margin: var(--space-1) 0 var(--space-3); }
+.watch-title-row h1 { margin: 0; }
+.watch-help { margin-left: auto; }
+.watch-help > summary { font-size: var(--text-sm); }
+.watch-help[open] { flex: 1 1 100%; margin-left: 0; }
+.watch-help[open] > summary { margin-bottom: 0; }
+.watch-help-body p, .page-title .watch-help-body p { max-width: 760px; margin: var(--space-1) 0 0; color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1.7; }
+.action-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-top: var(--space-3); }
 .filter-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .filter-chip { cursor: pointer; font-variant-numeric: tabular-nums; }
 .filter-chip:hover { border-color: var(--color-border-hover); color: var(--color-text); }
@@ -680,6 +690,10 @@ a.symbol-link:hover { color: var(--color-primary); }
 .action-card-price { display: flex; flex-direction: column; align-items: flex-end; font: 600 16px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .action-card-price .action-change { font-family: var(--font-mono); font-weight: 400; }
 .action-card-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-3); }
+/* The phone card's 更多 (#649): market · type and the secondary lines; open, it takes the foot's last line. */
+.action-card-more { margin-left: auto; }
+.action-card-more > summary { color: var(--color-primary); cursor: pointer; font-size: var(--text-sm); }
+.action-card-more[open] { flex: 1 1 100%; order: 9; margin-left: 0; }
 .action-more { margin-top: var(--space-3); }
 /* Tier 3 接近成立: text only, no level (DESIGN_SYSTEM §7). */
 .action-near { display: grid; gap: 2px; }
@@ -856,6 +870,15 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
 .plan-add { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-3); }
 .plan-error { flex: 1 1 100%; color: var(--color-warning); }
 .tracking-section .section-head { flex-wrap: wrap; }
+/* 追蹤回看 starts folded (#649): the summary is the section head, with 展開／收合 after the count. */
+.tracking-look-back > summary { display: block; cursor: pointer; list-style: none; }
+.tracking-look-back > summary::-webkit-details-marker { display: none; }
+.tracking-look-back > summary .section-head::after { content: "展開 ▸"; color: var(--color-primary); font-size: var(--text-sm); }
+.tracking-look-back[open] > summary .section-head::after { content: "收合 ▾"; }
+.tracking-look-back > summary .section-head > .small-note { margin-left: auto; }
+.tracking-section > .tracking-empty { margin: 0; color: var(--color-text); }
+/* The plan card's phone fold (#649): only at 640px and below, where the wide-only parts hide. */
+.plan-card-more { display: none; }
 .tracking-section > .small-note { margin: 0 0 var(--space-3); }
 .plan-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
 .plan-card { min-width: 0; padding: var(--space-5); }
@@ -931,6 +954,9 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .stat-grid, .three-stats, .level-grid { grid-template-columns: 1fr; }
   .plan-card { padding: var(--space-4); }
   .plan-card .card-head { flex-wrap: wrap; }
+  .plan-card .plan-wide-only { display: none; }
+  .plan-card .candidate-levels { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .plan-card-more { display: block; margin-top: var(--space-2); }
   .candidate-levels, .candidate-components { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   th, td { height: 44px; padding: 0 var(--space-2); }
   .table-wrap th:first-child, .table-wrap td:first-child { position: sticky; left: 0; z-index: 1; background: var(--color-bg-card); }

@@ -54,14 +54,15 @@ export const actionKey = (action: ActionSummary) => `${action.instrument.exchang
 
 const count = (value: number) => value.toLocaleString()
 
-export function viewChipLabel(view: ActionView, summary: ActionTierSummary): string {
+// Only the selected chip carries its count (#649): the other two are names, so the filter row stays one short line.
+export function viewChipLabel(view: ActionView, summary: ActionTierSummary, selected: boolean): string {
   const label = ACTION_VIEWS.find((item) => item.id === view)?.label ?? view
-  return `${label} ${count(summary.views[view] ?? 0)}`
+  return selected ? `${label} ${count(summary.views[view] ?? 0)}` : label
 }
 
-export function etfLabel(summary: ActionTierSummary): string {
-  return `含 ETF（${count(summary.etf)}）`
-}
+export const ETF_LABEL = '含 ETF'
+// What the hidden line leaves out (#649): in the page's 說明 fold, not under the chips.
+export const HIDDEN_NOTE = '自選標的一律顯示；隱藏不刪資料，切換上方篩選即可看到。'
 
 // 預設隱藏：… — each hidden row once, ETFs first (summary.hidden); zero parts are left out.
 export function hiddenSentence(summary: ActionTierSummary): string | null {
@@ -73,7 +74,7 @@ export function hiddenSentence(summary: ActionTierSummary): string | null {
   const listed = parts.filter(([, value]) => value > 0).map(([label, value]) => `${label} ${count(value)} 檔`)
   if (!listed.length) return null
   const isDefault = summary.view === DEFAULT_ACTION_VIEW && !summary.include_etf
-  return `${isDefault ? '預設隱藏' : '目前隱藏'}：${listed.join('、')}；自選標的一律顯示。隱藏不刪資料，切換上方篩選即可看到。`
+  return `${isDefault ? '預設隱藏' : '目前隱藏'}：${listed.join('、')}`
 }
 
 export const shownText = (loaded: number, shown: number) => `顯示 ${count(loaded)}／${count(shown)} 檔`

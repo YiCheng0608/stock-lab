@@ -20,7 +20,7 @@ import {
   actionStateLabel,
   conditionalNote,
   conditionsPending,
-  etfLabel,
+  ETF_LABEL,
   hiddenSentence,
   moreText,
   nearCopy,
@@ -52,19 +52,18 @@ export function ActionFilters({ summary, view, includeEtf, searching, onViewChan
   onIncludeEtfChange: (value: boolean) => void
 }) {
   const hidden = searching ? SEARCH_NOTE : hiddenSentence(summary)
+  // One row (#649): the chips, 含 ETF and the hidden counts; why rows are hidden is in the page's 說明 fold.
   return (
     <div className="action-filters">
-      <div className="filter-row">
-        <div className="filter-chips" role="group" aria-label="篩選">
-          {ACTION_VIEWS.map((item) => (
-            <button key={item.id} type="button" className={cx('badge filter-chip', item.id === view && 'filter-chip-selected')} aria-pressed={item.id === view} onClick={() => onViewChange(item.id)}>
-              {viewChipLabel(item.id, summary)}
-            </button>
-          ))}
-        </div>
-        <label className="check-label"><input type="checkbox" checked={includeEtf} onChange={(event) => onIncludeEtfChange(event.target.checked)} /> {etfLabel(summary)}</label>
+      <div className="filter-chips" role="group" aria-label="篩選">
+        {ACTION_VIEWS.map((item) => (
+          <button key={item.id} type="button" className={cx('badge filter-chip', item.id === view && 'filter-chip-selected')} aria-pressed={item.id === view} onClick={() => onViewChange(item.id)}>
+            {viewChipLabel(item.id, summary, item.id === view)}
+          </button>
+        ))}
       </div>
-      {hidden && <p className="small-note action-hidden-note">{hidden}</p>}
+      <label className="check-label"><input type="checkbox" checked={includeEtf} onChange={(event) => onIncludeEtfChange(event.target.checked)} /> {ETF_LABEL}</label>
+      {hidden && <span className="small-note action-hidden-note">{hidden}</span>}
     </div>
   )
 }
@@ -92,12 +91,13 @@ function StatusCell({ action, context, withNote = true }: { action: ActionSummar
 }
 
 // Tier 3's 差哪個條件: one 「差：」 line per unmet condition, then the met short names; never a level.
-function NearLines({ action }: { action: ActionSummary }) {
+// The phone card leaves the met line to its 更多 fold (#649); the desktop cell keeps it.
+function NearLines({ action, withMet = true }: { action: ActionSummary; withMet?: boolean }) {
   const near = nearCopy(action.nearness)
   if (!near) return null
   return <div className="action-near" data-near-lines="">
     {near.lines.map((line) => <div key={line} className="action-near-line">{line}</div>)}
-    {near.met && <div className="small-note">{near.met}</div>}
+    {withMet && near.met && <div className="small-note">{near.met}</div>}
   </div>
 }
 
@@ -147,8 +147,10 @@ function ActionCard({ action, context }: { action: ActionSummary; context: RowCo
   const close = actionClose(action)
   // Tier 3 never shows a level (DESIGN_SYSTEM §7 接近成立).
   const levels = tier <= 2 ? actionLevels(action) : null
+  const met = tier === 3 ? nearCopy(action.nearness)?.met : null
   return (
-    // DESIGN_SYSTEM §5.1: ① name and badge, the close on the right → ② market · type → ③ levels → ④ text → ⑤ day and link.
+    // DESIGN_SYSTEM §5 行動列表 (#649): ① name and badge, the close on the right → ③ levels (tier 3: the 差 lines; tiers
+    // 4–5: the note) → ⑤ day, 更多 and link. ② market · type, tier 2's line and tier 3's met line are in 更多.
     <article className="card action-card-mini" data-action-card={actionKey(action)}>
       <div className="action-card-head">
         <div className="action-card-title">
@@ -157,7 +159,6 @@ function ActionCard({ action, context }: { action: ActionSummary; context: RowCo
         </div>
         {close.close !== null && <div className="action-card-price">{close.close}<span className={cx('action-change', close.tone)}>{close.change}</span></div>}
       </div>
-      <div className="small-note">{action.candidate ? `#${action.candidate.rank} · ` : ''}{marketLabel(action.instrument.exchange)} · {typeLabel(action.instrument.instrument_type)}</div>
       {close.close === null && <div className="small-note">價格資料尚未完整，暫不顯示最近收盤</div>}
       {levels && (
         // Only the levels the row has; a blank level is left out, not shown as 0 or a dash (UI_COPY_SPEC §5).
@@ -167,10 +168,18 @@ function ActionCard({ action, context }: { action: ActionSummary; context: RowCo
           {levels.target && <div><dt>目標一（元）</dt><dd className="level-target">{levels.target}</dd></div>}
         </dl>
       )}
-      {tier === 2 && <div className="small-note">{conditionalNote(action, context.candidateListSize)}</div>}
-      {tier === 3 && <NearLines action={action} />}
+      {tier === 3 && <NearLines action={action} withMet={false} />}
       {tier >= 4 && <div className="small-note action-card-note"><NoteLines action={action} tier={tier} /></div>}
-      <div className="action-card-foot"><span className="small-note">資料日 {actionDataDay(action)}</span><Link className="text-link" to={researchPath(action)}>{tier === 3 ? NEAR_RESEARCH_LINK : RESEARCH_LINK}</Link></div>
+      <div className="action-card-foot">
+        <span className="small-note">資料日 {actionDataDay(action)}</span>
+        <details className="action-card-more">
+          <summary>更多</summary>
+          <div className="small-note">{action.candidate ? `#${action.candidate.rank} · ` : ''}{marketLabel(action.instrument.exchange)} · {typeLabel(action.instrument.instrument_type)}</div>
+          {tier === 2 && <div className="small-note">{conditionalNote(action, context.candidateListSize)}</div>}
+          {met && <div className="small-note">{met}</div>}
+        </details>
+        <Link className="text-link" to={researchPath(action)}>{tier === 3 ? NEAR_RESEARCH_LINK : RESEARCH_LINK}</Link>
+      </div>
     </article>
   )
 }

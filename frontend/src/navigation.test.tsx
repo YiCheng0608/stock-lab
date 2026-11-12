@@ -71,6 +71,10 @@ const App = (AppModule as Record<string, unknown>).default as () => ReactElement
 const watch = render('/watch', <App />)
 check(watch.includes('<h1>我的追蹤</h1>'), '/watch 的頁面標題是「我的追蹤」')
 check(text(watch).includes(WATCH_PURPOSE), `/watch 有用途說明: ${text(watch).slice(0, 300)}`)
+// Issue 649: the purpose and why rows are hidden sit in a closed 說明 fold on the title line, not under the title.
+const watchHelp = /<div class="watch-title-row"><h1>我的追蹤<\/h1><details class="details watch-help"><summary>說明<\/summary>([^]*?)<\/details><\/div>/.exec(watch)?.[1] ?? ''
+check(text(watchHelp).includes(WATCH_PURPOSE) && text(watchHelp).includes('自選標的一律顯示；隱藏不刪資料，切換上方篩選即可看到。'), `/watch 的用途說明與隱藏說明收在標題列的「說明」: ${watchHelp.slice(0, 200)}`)
+check(text(watch).split(WATCH_PURPOSE).length === 2 && !/<details class="details watch-help" open/.test(watch), '/watch 的用途說明只出現一次、「說明」預設收合')
 check(!watch.includes('找不到此頁'), '/watch 不是 404')
 const strategy = render('/strategy', <App />)
 check(strategy.includes('<h1>策略說明</h1>'), '/strategy 的頁面標題是「策略說明」')

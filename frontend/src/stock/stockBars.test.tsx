@@ -12,6 +12,7 @@ import {
   chartLevels,
   levelsNote,
   CHART_LEVEL_LABELS,
+  LEVEL_LABEL_PX,
   compactCount,
   formatBarVolume,
   volumeKind,
@@ -424,12 +425,39 @@ check(colorOf('停損') === theme.warning && colorOf('目標') === theme.primary
 check(candle.markLine?.data.find((line) => line.name === '進場')?.lineStyle.type === 'dashed', 'the entry line is dashed')
 check(candle.markLine?.data.find((line) => line.name === '停損')?.label.formatter === '停損 2,364.00', `the label carries the price: ${candle.markLine?.data[2].label.formatter}`)
 check(JSON.stringify(candle.markArea?.data.map((band) => band.map((edge) => edge.yAxis))) === '[[2400,2458],[2364,2400]]', 'the bands run entry to target and stop to entry')
-const priceAxis = (levelled.yAxis as Array<{ min?: (extent: { min: number }) => number; max?: (extent: { max: number }) => number }>)[0]
-check(priceAxis.min?.({ min: 2390 }) === 2364 && priceAxis.max?.({ max: 2410 }) === 2458, 'the price axis reaches a stop and a target outside the visible bars')
-check(priceAxis.min?.({ min: 2000 }) === 2000 && priceAxis.max?.({ max: 3000 }) === 3000, 'and keeps the bars when they reach further')
+type Extent = { min: number; max: number }
+type PriceAxis = { min?: (extent: Extent) => number; max?: (extent: Extent) => number }
+const priceAxis = (levelled.yAxis as PriceAxis[])[0]
+const reached = { min: priceAxis.min!({ min: 2390, max: 2410 }), max: priceAxis.max!({ min: 2390, max: 2410 }) }
+check(reached.min < 2364 && reached.max > 2458, `the price axis reaches a stop and a target outside the visible bars: ${JSON.stringify(reached)}`)
+check(priceAxis.min?.({ min: 2000, max: 3000 }) === 2000 && priceAxis.max?.({ min: 2000, max: 3000 }) === 3000, 'and keeps the bars when they reach further')
 const plain = withLevels(null)
 check((plain.series as Marked[])[0].markLine === undefined && (plain.yAxis as Array<{ min?: unknown }>)[0].min === undefined, 'no levels: the K series and the axis are as before')
-check(levelsNote(breakoutLevels!, 2) === '規則價位線：進場 2,400.00 元（虛線）、停損 2,364.00 元、目標 2,458.00 元；條件成立當日的價位，不是成交價。', levelsNote(breakoutLevels!, 2))
+check(levelsNote(breakoutLevels!) === '規則價位線：進場 2,400.00 元（虛線）、停損 2,364.00 元、目標 2,458.00 元；條件成立當日的價位，不是成交價。', levelsNote(breakoutLevels!))
+
+// Issue 647 (#620, 3147 on 2026-11-11): a 50–500 stock draws candles and axis at one decimal, but the levels read as
+// the strategy board writes them (335.71, not 335.7), and a target at the range high keeps its label inside the pane.
+const midLevels = { entry: 341.2, stop: 335.71, target: 352.37 }
+const midDaily = barsResponse(Array.from({ length: 30 }, (_, index) => tradedBar(`2026-10-${String(1 + index).padStart(2, '0')}`, 337 + (index % 15), index + 1)))
+const midOption = (mainHeight: number) => buildBarsChartOption(midDaily, { panel: 'macd', panelState: indicatorPanelState(midDaily, 'macd'), visibleMa: allMa, theme, layout: chartLayout(mainHeight), zoom: { start: 0, end: 100 }, digits: priceDigits(352, 'stock'), levels: midLevels })
+const midLabels = ((midOption(320).series as Marked[])[0].markLine?.data ?? []).map((line) => line.label.formatter)
+check(priceDigits(352, 'stock') === 1, 'a 352 yuan stock keeps one decimal on the candles and the axis')
+check(midLabels.join() === '目標 352.37,進場 341.20,停損 335.71', `line labels use the board's two decimals: ${midLabels.join()}`)
+check(levelsNote(midLevels).includes('停損 335.71 元') && levelsNote(midLevels).includes('目標 352.37 元'), levelsNote(midLevels))
+const midChart = renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => {}} data={midDaily} loading={false} error={null} instrumentType="stock" levels={midLevels} />)
+check(midChart.includes('停損 335.71 元') && midChart.includes('進場 341.20 元') && !midChart.includes('335.7 元'), 'the note under the chart reads 335.71')
+for (const mainHeight of [320, 220]) {
+  const axis = (midOption(mainHeight).yAxis as PriceAxis[])[0]
+  // The bars span exactly stop..target: the target is the range high and the stop the range low.
+  const extent = { min: midLevels.stop, max: midLevels.target }
+  const top = axis.max!(extent)
+  const bottom = axis.min!(extent)
+  const px = (value: number) => value / (top - bottom) * mainHeight
+  check(top > midLevels.target && px(top - midLevels.target) >= LEVEL_LABEL_PX - 1e-9, `${mainHeight}px: a target at the range high leaves a label height above it: ${top}`)
+  check(bottom < midLevels.stop && px(midLevels.stop - bottom) >= LEVEL_LABEL_PX - 1e-9, `${mainHeight}px: a stop at the range low leaves a label height below it: ${bottom}`)
+}
+const axisLabelOf = (option: ReturnType<typeof buildBarsChartOption>) => (option.yAxis as Array<{ axisLabel: { showMaxLabel?: boolean } }>)[0].axisLabel
+check(axisLabelOf(midOption(220)).showMaxLabel === false && axisLabelOf(plain).showMaxLabel === undefined, 'with levels the padded, unround axis top has no label')
 check(Object.values(CHART_LEVEL_LABELS).join() === '進場,停損,目標', 'level labels')
 const chartWithLevels = renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => {}} data={longDaily} loading={false} error={null} levels={breakoutLevels} />)
 check(chartWithLevels.includes('data-chart-levels') && chartWithLevels.includes('含規則價位線'), 'the chart card states the levels as text')

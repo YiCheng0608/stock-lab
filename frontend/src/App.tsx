@@ -94,7 +94,7 @@ import { NewsDetailView, NewsListView, StockNewsTimeline } from './news/NewsView
 import { HoldingAlert, MarketSummaryLine, TodayHeader } from './today/TodayViews'
 import { MarketPage } from './market/MarketPage'
 import { newsFiltersFromSearch, newsListParams, newsPageSearch, stockNewsParams, type NewsFilters } from './news/newsView'
-import { ACTIONS_PAGE_LIMIT, ACTION_STATE_LABELS, ACTION_TIER_PREVIEW, DEFAULT_ACTION_VIEW, previewTiers, stockResearchPath, tierSections } from './actions/actionTiers'
+import { ACTIONS_PAGE_LIMIT, ACTION_STATE_LABELS, ACTION_TIER_PREVIEW, DEFAULT_ACTION_VIEW, HIDDEN_NOTE, previewTiers, stockResearchPath, tierSections } from './actions/actionTiers'
 import { ActionFilters, ActionTierList } from './actions/ActionViews'
 import { StrategyPage } from './strategy/StrategyPage'
 import { SystemPage } from './system/SystemPage'
@@ -986,10 +986,16 @@ export function ActionsPage() {
     return next && !cursors.includes(next) ? { ...current, [tier]: [...cursors, next] } : current
   })
   return <div className="page actions-page">
-    <PageTitle eyebrow="追蹤與提醒" title="我的追蹤" description={WATCH_PURPOSE}>
+    {/* #649: the purpose and why rows are hidden fold into 說明 on the title line, so the list starts sooner. */}
+    <section className="page-title">
+      <div className="eyebrow">追蹤與提醒</div>
+      <div className="watch-title-row">
+        <h1>我的追蹤</h1>
+        <details className="details watch-help"><summary>說明</summary><div className="watch-help-body"><p>{WATCH_PURPOSE}</p><p>{HIDDEN_NOTE}</p></div></details>
+      </div>
       <div className="filter-row"><SearchBox draft={draft} query={search} placeholder="搜尋代號或名稱" onDraftChange={setDraft} onSubmit={submit} onClear={clear} /></div>
       {query.data && <ActionFilters summary={query.data.summary} view={view} includeEtf={includeEtf} searching={Boolean(search)} onViewChange={(next) => { setView(next); resetTiers() }} onIncludeEtfChange={(next) => { setIncludeEtf(next); resetTiers() }} />}
-    </PageTitle>
+    </section>
     <PortfolioSubsection />
     <TrackingSection part="open" />
     <QueryState loading={query.isLoading} error={query.error}>{query.data && <>

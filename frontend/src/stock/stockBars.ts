@@ -1,5 +1,6 @@
 import type { EChartsOption } from 'echarts'
 
+import { formatPrice as formatLevelPrice } from '../candidates/candidates'
 import type { ChangeTone } from '../components/ui/Stat'
 import { formatDay, formatTaipeiMinute } from '../dates'
 import { noPreviousCloseText } from '../marketChange'
@@ -608,18 +609,36 @@ export function chartLevels(row: StrategyBoardRow | null | undefined): ChartLeve
   return stop > 0 && stop < entry && entry < target ? { entry, stop, target } : null
 }
 
-// The line under the chart: the three prices again as text, for a reader who cannot see the canvas.
-export function levelsNote(levels: ChartLevels, digits: number): string {
-  const price = (value: number) => formatPrice(value, digits)
+// The line under the chart: the three prices again as text, for a reader who cannot see the canvas. Prices use the
+// strategy board's formatter (two decimals, Issue 647), so 335.71 reads the same here, on the lines and in the board;
+// priceDigits stays with the candles and the axis.
+export function levelsNote(levels: ChartLevels): string {
+  const price = formatLevelPrice
   return `規則價位線：${CHART_LEVEL_LABELS.entry} ${price(levels.entry)} 元（虛線）、${CHART_LEVEL_LABELS.stop} ${price(levels.stop)} 元、${CHART_LEVEL_LABELS.target} ${price(levels.target)} 元；條件成立當日的價位，不是成交價。`
 }
 
-function levelMarks(levels: ChartLevels, theme: ChartTheme, digits: number) {
+// A line label sits above its line (insideStartTop): 12px text plus ECharts' gap, rounded up.
+export const LEVEL_LABEL_PX = 20
+
+// The price axis reaches the stop and the target, so a line outside the visible bars is still on the pane, and leaves
+// one label height above the highest line and below the lowest (Issue 647): a target at the range high keeps its label
+// inside the pane. With pad = span·s/(1−2s) on both ends, pad is s of the axis, i.e. LEVEL_LABEL_PX of the plot height.
+export function levelsPriceRange(levels: ChartLevels, plotHeight: number) {
+  const share = Math.min(LEVEL_LABEL_PX / Math.max(plotHeight, 1), 0.25)
+  const pad = (extent: { min: number; max: number }) =>
+    (Math.max(extent.max, levels.target) - Math.min(extent.min, levels.stop)) * share / (1 - 2 * share)
+  return {
+    min: (extent: { min: number; max: number }) => Math.max(0, Math.min(extent.min, levels.stop - pad(extent))),
+    max: (extent: { min: number; max: number }) => Math.max(extent.max, levels.target + pad(extent)),
+  }
+}
+
+function levelMarks(levels: ChartLevels, theme: ChartTheme) {
   const line = (key: keyof ChartLevels, color: string, type: 'solid' | 'dashed') => ({
     name: CHART_LEVEL_LABELS[key],
     yAxis: levels[key],
     lineStyle: { color, type, width: 1.5 },
-    label: { formatter: `${CHART_LEVEL_LABELS[key]} ${formatPrice(levels[key], digits)}`, color, position: 'insideStartTop' as const, fontFamily: theme.fontMono, fontSize: 12, fontWeight: 600 },
+    label: { formatter: `${CHART_LEVEL_LABELS[key]} ${formatLevelPrice(levels[key])}`, color, position: 'insideStartTop' as const, fontFamily: theme.fontMono, fontSize: 12, fontWeight: 600 },
   })
   const band = (name: string, from: number, to: number, color: string) => [{ name, yAxis: from, itemStyle: { color, opacity: 0.1 } }, { yAxis: to }]
   return {
@@ -665,10 +684,7 @@ export function buildBarsChartOption(response: StockBarsResponse, options: BarsC
   }))
   const bounded = options.panel === 'rsi' || options.panel === 'kd'
   const levels = options.levels ?? null
-  // The price axis reaches the stop and the target, so a line outside the visible bars is still on the pane.
-  const priceRange = levels
-    ? { min: (extent: { min: number }) => Math.min(extent.min, levels.stop), max: (extent: { max: number }) => Math.max(extent.max, levels.target) }
-    : {}
+  const priceRange = levels ? levelsPriceRange(levels, layout.main.height) : {}
   return {
     animation: false,
     backgroundColor: 'transparent',
@@ -698,8 +714,9 @@ export function buildBarsChartOption(response: StockBarsResponse, options: BarsC
     xAxis,
     yAxis: [
       // Axis labels of 1,000 and up (an index in points, Issue 549/547) drop the decimals so they fit the 64px gutter;
-      // the tooltip and the data table keep them.
-      { type: 'value', gridIndex: 0, scale: true, ...priceRange, axisLabel: { ...axisLabel, showMinLabel: false, formatter: (value: number) => formatPrice(value, axisDigits(value, digits)) }, splitLine },
+      // the tooltip and the data table keep them. With levels the padded top is not a round tick (406.4 above 390.0 on a
+      // phone, Issue 647), so its label is left out as the bottom one is.
+      { type: 'value', gridIndex: 0, scale: true, ...priceRange, axisLabel: { ...axisLabel, showMinLabel: false, ...(levels ? { showMaxLabel: false } : {}), formatter: (value: number) => formatPrice(value, axisDigits(value, digits)) }, splitLine },
       { type: 'value', gridIndex: 1, scale: false, splitNumber: 2, axisLabel: { ...axisLabel, showMaxLabel: false, formatter: (value: number) => volumeAxisLabel(kind, value) }, splitLine },
       bounded
         ? { type: 'value', gridIndex: 2, min: 0, max: 100, interval: 50, axisLabel, splitLine }
@@ -727,7 +744,7 @@ export function buildBarsChartOption(response: StockBarsResponse, options: BarsC
         yAxisIndex: 0,
         data: bars.map((bar) => isDrawableBar(bar) ? [bar.open, bar.close, bar.low, bar.high] : ['-', '-', '-', '-']),
         itemStyle: { color: theme.up, color0: theme.down, borderColor: theme.up, borderColor0: theme.down },
-        ...(levels ? levelMarks(levels, theme, digits) : {}),
+        ...(levels ? levelMarks(levels, theme) : {}),
       },
       // A close-only series (Issue 547) has no candle to draw: its closes are one neutral line on the price pane.
       ...(isCloseOnlySeries(bars) ? [{

@@ -15,7 +15,9 @@ stock／ipo, a bar that is not suspended, 20-session mean volume of at least
   (``evidence_lib.forward_return``), over the instruments that have both;
 - **quintiles**: the mean excess return (the forward return less the mean of
   the day's universe) of each fifth of the feature's ranks, and the spread of
-  the top fifth over the bottom one.
+  the top fifth over the bottom one; when ties leave the top or the bottom
+  fifth empty (a discrete feature), the spread of the high side over the low side of one
+  cut between values instead (``day_spread``).
 
 A day counts only with ``--min-names`` instruments.  ``CONDITIONS`` are the
 yes／no parts of the live rules (breakout, pullback, the institutional and
@@ -23,18 +25,19 @@ margin confirmations; the group confirmation needs the scored boards and is
 not here): per day the mean excess return of the instruments that meet one.
 
 The days are then averaged per segment and per quarter.  ``judge`` is the rule
-a report may quote and is fixed here, before any result was read:
+a report may quote and is fixed here (version ``VERSION``; version 2 came after
+reading #619's results, which the report says):
 
 - **selected in exploration**: at least ``MIN_DAYS`` days, ``|mean IC|`` at
-  least ``MIN_IC``, and ``|t|`` at least ``MIN_T`` with the days counted as
-  ``days / horizon`` (``evidence_lib.t_stat``);
+  least ``MIN_IC``, ``|t|`` at least ``MIN_T`` with the days counted as
+  ``days / horizon`` (``evidence_lib.t_stat``), and a spread of the IC's sign;
 - **confirmed in validation**: at least ``MIN_DAYS`` days, the mean IC and the
-  quintile spread both of the exploration's sign, and ``|t|`` at least
-  ``MIN_T`` there too.  The same sign with a smaller ``|t|`` is "same
-  direction, not significant" (``weak``): worth watching, not a basis.
+  spread both of the exploration's sign, and ``|t|`` at least ``MIN_T`` there
+  too.  The same IC sign with a smaller ``|t|`` or a spread of the other sign
+  is "same direction, not significant" (``weak``): worth watching, not a basis.
 
 Anything else is "no evidence", "reversed" (the validation IC has the other
-sign) or "cannot tell" (too few days).  A condition is judged the same way on
+sign) or "cannot tell" (too few days, or a missing spread).  A condition is judged the same way on
 its daily mean excess return instead of the IC.  ``len(FEATURES)`` features
 times two horizons are compared at once: a few pass by chance, which the
 report says.
@@ -53,6 +56,7 @@ import os
 import statistics
 import sys
 from bisect import bisect_right
+from collections import Counter
 from collections.abc import Callable
 from datetime import date
 from pathlib import Path
@@ -62,6 +66,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import evidence_lib as lib  # noqa: E402
 
+# Version 1 is #616's (#619 read it).  Version 2 (#643) was put forward after
+# reading #619's results: the two-group fallback of ``day_spread`` and the
+# rows of ``judge`` for a missing or opposite spread.  Bump it with any change
+# to the rule or the grouping, and say why in the report (evidence.md rule 3).
+VERSION = 2
+VERSION_NOTE = (
+    "本版是看完第一輪（#619）結果後提出（#643）：最高或最低一組因同值整段為空時（離散值特徵）"
+    "改用高低兩組算五分位差；"
+    "判定表補上五分位差缺值與異號"
+)
 MIN_DAYS = 60
 MIN_IC = 0.02
 MIN_T = 2.0
@@ -421,6 +435,45 @@ def quintile_means(values: list[float], excess: list[float]) -> list[float | Non
     return [statistics.fmean(bucket) if bucket else None for bucket in buckets]
 
 
+def two_groups(values: list[float], excess: list[float]) -> list[float] | None:
+    """Mean excess return of the low and the high side of one cut between values.
+
+    The cut lies between two neighbouring distinct values, so equal values
+    stay on one side; of the possible cuts, the one whose sides are nearest
+    in size (the lower cut on a tie).  None with fewer than two distinct values.
+    """
+
+    counts = Counter(values)
+    if len(counts) < 2:
+        return None
+    best, gap, below = None, None, 0
+    for cut in sorted(counts)[:-1]:
+        below += counts[cut]
+        if gap is None or abs(2 * below - len(values)) < gap:
+            best, gap = cut, abs(2 * below - len(values))
+    low = [r for value, r in zip(values, excess) if value <= best]
+    high = [r for value, r in zip(values, excess) if value > best]
+    return [statistics.fmean(low), statistics.fmean(high)]
+
+
+def day_spread(values: list[float], excess: list[float]) -> dict[str, Any]:
+    """The day's quintiles and spread (top group less bottom group).
+
+    With the top and the bottom fifth filled, the spread is the top less the
+    bottom (an empty middle fifth does not matter), as in version 1.  When
+    ties leave either end empty (a discrete feature such as a 0～5 count or a
+    0／1 flag), it is the high side less the low side of ``two_groups``
+    instead, and ``groups`` says 2.
+    """
+
+    quintiles = quintile_means(values, excess)
+    if quintiles[0] is not None and quintiles[-1] is not None:
+        return {"q": quintiles, "spread": quintiles[-1] - quintiles[0], "groups": 5}
+    sides = two_groups(values, excess)
+    spread = None if sides is None else sides[1] - sides[0]
+    return {"q": quintiles, "spread": spread, "groups": 2}
+
+
 def day_values(members: list[tuple[lib.Series, int]]) -> dict[str, list[Any]]:
     """Each feature's and condition's value per member (None when not known)."""
 
@@ -459,7 +512,7 @@ def day_rows(
         ic = lib.spearman(xs, excess)
         if ic is None:
             continue
-        features[key] = {"ic": ic, "n": len(xs), "q": quintile_means(xs, excess)}
+        features[key] = {"ic": ic, "n": len(xs), **day_spread(xs, excess)}
     conditions: dict[str, Any] = {}
     for key, _label, _function in CONDITIONS:
         met = [
@@ -485,17 +538,14 @@ def _mean(values) -> float | None:
 
 
 def feature_table(rows: list[dict[str, Any]], horizon: int) -> dict[str, Any]:
-    """Averages of one feature's daily rows (``ic``, ``n``, ``q``)."""
+    """Averages of one feature's daily rows (``day_rows``: ``ic``, ``n``, ``q``,
+    ``spread``, ``groups``); ``two_group_days`` counts the days of two groups."""
 
     if not rows:
         return {"days": 0}
     ics = [row["ic"] for row in rows]
     quintiles = [_mean(row["q"][k] for row in rows) for k in range(QUINTILES)]
-    spreads = [
-        row["q"][-1] - row["q"][0]
-        for row in rows
-        if row["q"][-1] is not None and row["q"][0] is not None
-    ]
+    spreads = [row["spread"] for row in rows if row["spread"] is not None]
     return {
         "days": len(rows),
         "names": statistics.fmean(row["n"] for row in rows),
@@ -505,6 +555,7 @@ def feature_table(rows: list[dict[str, Any]], horizon: int) -> dict[str, Any]:
         "t_naive": lib.t_stat(ics),
         "quintiles": quintiles,
         "spread": statistics.fmean(spreads) if spreads else None,
+        "two_group_days": sum(1 for row in rows if row["groups"] == 2),
     }
 
 
@@ -528,7 +579,8 @@ def judge(exploration: dict[str, Any], validation: dict[str, Any], key: str) -> 
     """``evidence``／``weak``／``not_selected``／``reversed``／``cannot_tell``.
 
     ``key`` is the averaged value the rule reads: ``ic`` for a feature,
-    ``mean`` for a condition.
+    ``mean`` for a condition.  Each return is one row of evidence.md's table,
+    in its order; a condition has no spread, so the spread rows skip it.
     """
 
     if exploration.get("days", 0) < MIN_DAYS:
@@ -537,17 +589,25 @@ def judge(exploration: dict[str, Any], validation: dict[str, Any], key: str) -> 
     floor = MIN_IC if key == "ic" else 0.0
     if t is None or abs(t) < MIN_T or abs(value) < floor or value == 0:
         return "not_selected"
+    sign = 1 if value > 0 else -1
+    if key == "ic":
+        spread = exploration.get("spread")
+        if spread is None:
+            return "cannot_tell"
+        if spread * sign <= 0:
+            return "not_selected"
     if validation.get("days", 0) < MIN_DAYS:
         return "cannot_tell"
-    sign = 1 if value > 0 else -1
     if validation[key] * sign < 0:
         return "reversed"
-    if key == "ic":
-        spreads = (exploration.get("spread"), validation.get("spread"))
-        if any(spread is None or spread * sign <= 0 for spread in spreads):
-            return "not_selected"
     if validation[key] == 0:
         return "not_selected"
+    if key == "ic":
+        spread = validation.get("spread")
+        if spread is None:
+            return "cannot_tell"
+        if spread * sign <= 0:
+            return "weak"
     confirmed = validation.get("t")
     return "evidence" if confirmed is not None and abs(confirmed) >= MIN_T else "weak"
 
@@ -584,6 +644,7 @@ def build(
         if count % 50 == 0:
             progress(f"{count}/{len(days)} sessions")
     result: dict[str, Any] = {
+        "version": VERSION,
         "range": [
             days[0].isoformat() if days else None,
             days[-1].isoformat() if days else None,
@@ -653,9 +714,16 @@ def _feature_line(label: str, table: dict[str, Any]) -> str:
             str(part["days"]),
             lib.num(part["ic"]),
             lib.num(part["t"], 2),
-            lib.pct(part["spread"]),
+            lib.pct(part["spread"]) + _two_groups_mark(part),
         ]
     return f"| {label} | {' | '.join(cells)} | {VERDICTS[table['verdict']]} |"
+
+
+def _two_groups_mark(part: dict[str, Any]) -> str:
+    two = part.get("two_group_days", 0)
+    if not two:
+        return ""
+    return "（兩組）" if two == part["days"] else f"（{two} 日兩組）"
 
 
 def _condition_line(label: str, table: dict[str, Any]) -> str:
@@ -676,15 +744,17 @@ def _condition_line(label: str, table: dict[str, Any]) -> str:
 
 def markdown(result: dict[str, Any], command: str) -> str:
     lines = [
-        "# 特徵證據（feature_evidence）",
+        f"# 特徵證據（feature_evidence 第 {result['version']} 版）",
         "",
+        f"- 版本：第 {result['version']} 版。{VERSION_NOTE}",
         f"- 範圍：{result['range'][0]}～{result['range'][1]}，{result['sessions']} 個交易日",
         f"- 每日母體：股票與 IPO、當日有成交、20 日均量 ≥ {result['min_lots']:g} 張；"
         f"少於 {result['min_names']} 檔的日子不計",
         "- 報酬：T+1 開盤買（含 5 bps 滑價）、T+N 收盤計價；超額報酬＝減去當日母體平均，與成本無關",
         f"- 判定規則（寫死在程式）：探索段至少 {MIN_DAYS} 日、|IC| ≥ {MIN_IC}、"
-        f"|t| ≥ {MIN_T}（天數以「日數 ÷ N」計）才算選出；"
-        f"驗證段 IC 與五分位差同號且 |t| ≥ {MIN_T} 才算有證據，同號但不到的記「方向一致但不顯著」",
+        f"|t| ≥ {MIN_T}（天數以「日數 ÷ N」計）且五分位差和 IC 同號才算選出；"
+        f"驗證段 IC 與五分位差同號且 |t| ≥ {MIN_T} 才算有證據，IC 同號但 |t| 不到或五分位差異號的記"
+        "「方向一致但不顯著」；五分位差缺值記「無法判定」（docs/spec/evidence.md 判定表）",
         f"- 同時比較了 {result['comparisons']} 組（特徵 × 期間）：其中幾組碰巧通過並不意外",
         f"- 重現：`{command}`",
         "",
@@ -694,7 +764,8 @@ def markdown(result: dict[str, Any], command: str) -> str:
         lines += [
             f"## T+{horizon}：特徵",
             "",
-            "IC 是每日排序相關的平均；五分位差是特徵最高一組減最低一組的平均超額報酬。",
+            "IC 是每日排序相關的平均；五分位差是特徵最高一組減最低一組的平均超額報酬。"
+            "標「兩組」的是同值讓最高或最低一組整段為空的日子，改以一個切點分成高低兩組相減（離散值特徵）。",
             "",
             "| 特徵 | 探索段日數 | IC | t | 五分位差 | 驗證段日數 | IC | t | 五分位差 | 判定 |",
             "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
