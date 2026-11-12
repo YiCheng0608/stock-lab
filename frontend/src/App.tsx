@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { FormEvent, KeyboardEvent, ReactElement, ReactNode } from 'react'
+import type { FormEvent, KeyboardEvent, MouseEvent, ReactElement, ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link, Navigate, Route, Routes, useLocation, useParams, useSearchParams } from 'react-router-dom'
 
@@ -59,6 +59,7 @@ import type {
   StockDirectoryRow,
   StockBarsInterval,
   StockBarsResponse,
+  StrategyBoard,
   ThemeBoard,
   ThemeMemberSort,
   ProductTime,
@@ -77,6 +78,7 @@ import { StockBarsChart } from './stock/StockBarsChart'
 import { CandidateChart } from './today/CandidateChart'
 import { PRICE_BASIS, chartLevels, priceDigits } from './stock/stockBars'
 import { closestStrategy } from './stock/stockSummary'
+import { LEVELS_IN_BOARD_TEXT, boardLevelsRow } from './stock/strategyBoard'
 import { StockCutoffControl } from './stock/StockCutoffControl'
 import { StockHeader } from './stock/StockHeader'
 import { StockFundamentalsPanel } from './stock/StockFundamentalsPanel'
@@ -726,18 +728,39 @@ function StockPage() {
     <StockHeader symbol={data.instrument.symbol} name={data.instrument.name} exchange={data.instrument.exchange} typeLabel={instrumentTypeLabel(data.instrument.instrument_type)} instrumentType={data.instrument.instrument_type} dailyBars={dayBars.data?.bars} latestChange={dayBars.data?.latest_change} halt={data.trading_halt} loading={dayBars.isLoading}>
       <StockCutoffControl asOf={asOf} effectiveDate={asOf ? null : data.news_cutoff?.as_of ?? data.decision_summary?.data_cutoff ?? null} onApply={(submitted) => { const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }} />
     </StockHeader>
+    {/* #648 圖優先: the chart card sits above the summary card and the tabs, on every tab, and is drawn only here. */}
+    <StockBarsChart interval={barsInterval} onIntervalChange={setBarsInterval} data={chartBars.data} loading={chartBars.isLoading} error={chartBars.error} instrumentType={data.instrument.instrument_type} levels={chartLevels(closestStrategy(data.strategy_board))} />
     <StockSummaryCard board={data.strategy_board} action={data.decision_summary ?? null} researchHref={`?${stockTabSearch(searchParams, 'research').toString()}`} onResearch={() => document.getElementById(tabId('stock', 'research'))?.scrollIntoView({ block: 'start' })} />
     <Tabs items={STOCK_TABS} value={tab} onChange={setTab} label="個股詳情分頁" idPrefix="stock" className="stock-tabs" />
     <div className="stock-tab-content" id={tabPanelId('stock', tab)} role="tabpanel" aria-labelledby={tabId('stock', tab)}>
-      {tab === 'chart' && <StockBarsChart interval={barsInterval} onIntervalChange={setBarsInterval} data={chartBars.data} loading={chartBars.isLoading} error={chartBars.error} instrumentType={data.instrument.instrument_type} levels={chartLevels(closestStrategy(data.strategy_board))} />}
+      {tab === 'chart' && <StockChartTabNote />}
       {tab === 'chips' && <Card eyebrow="籌碼資料" title="法人與融資">{data.chips.length ? <ChipTable rows={data.chips.slice(-30).reverse()} /> : <EmptyState reason="尚無可核實的籌碼資料。" />}<BrokerBranchEntry exchange={data.instrument.exchange} /></Card>}
       {tab === 'financials' && <StockFundamentalsPanel rows={data.fundamentals} monthlyRows={data.monthly_revenues ?? []} instrumentType={data.instrument.instrument_type} asOf={asOf || null} sourceLabel={sourceLabel} />}
       {tab === 'news' && <><StockNewsTimeline exchange={data.instrument.exchange} symbol={data.instrument.symbol} query={{ data: stockNews.data, loading: stockNews.isLoading, error: stockNews.error }} /><StockEventList events={data.events} /></>}
-      {tab === 'research' && <><StrategyBoardPanel board={data.strategy_board} candidate={data.candidate} gapReasons={data.decision_summary?.gap_reasons} /><ActionDetailPanel action={data.decision_summary ?? null} gap={fallbackResearchIncomplete ? { reasons: data.decision_summary?.gap_reasons, missingFields: qualitySummary.research.missing_fields } : null}><StockPlanPanel strategies={data.decision_summary?.strategies} embedded /></ActionDetailPanel><GroupPanel groups={data.groups} /></>}
+      {tab === 'research' && <><StrategyBoardPanel board={data.strategy_board} candidate={data.candidate} gapReasons={data.decision_summary?.gap_reasons} /><ActionDetailPanel action={data.decision_summary ?? null} board={data.strategy_board} gap={fallbackResearchIncomplete ? { reasons: data.decision_summary?.gap_reasons, missingFields: qualitySummary.research.missing_fields } : null}><StockPlanPanel strategies={data.decision_summary?.strategies} embedded /></ActionDetailPanel><GroupPanel groups={data.groups} /></>}
       {tab === 'data' && <><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><Card className="stock-source-panel" eyebrow="資料來源" title="原始時間、來源與技術指標"><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div><IndicatorMetaRows bars={dayBars.data} /><details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} instrumentType={data.instrument.instrument_type} /></details></Card></>}
     </div>
     <p className="disclaimer">此為研究工具與資料摘要，不構成投資建議、報酬保證或自動下單指令。</p>
   </div>
+}
+
+// #648: the 走勢 tab under the chart card: one line on where the chart is and a link back to it; no second chart, no data
+// (UI_COPY_SPEC §8.2). The link scrolls to the chart card and moves focus to its title.
+export const CHART_TAB_NOTE = '日 K／週 K、成交量、均線與 MACD／RSI／KD／布林指標面板都在上方的 K 線卡。'
+export const CHART_TAB_LINK = '回到 K 線圖 ↑'
+export function StockChartTabNote() {
+  const toChart = (event: MouseEvent<HTMLAnchorElement>) => {
+    const title = document.getElementById('stock-chart-title')
+    if (!title) return
+    event.preventDefault()
+    title.closest('.stock-chart-card')?.scrollIntoView({ block: 'start' })
+    title.setAttribute('tabindex', '-1')
+    title.focus({ preventScroll: true })
+  }
+  return <section className="panel stock-chart-tab-note" aria-label="走勢">
+    <p>{CHART_TAB_NOTE}</p>
+    <a className="text-link" href="#stock-chart-title" onClick={toChart}>{CHART_TAB_LINK}</a>
+  </section>
 }
 
 // Indicator provenance from the daily bars API (docs/spec/indicators.md): version, price basis and batch time.
@@ -850,7 +873,7 @@ function CoveragePanel({ coverage }: { coverage: InstrumentDetail['coverage'] })
 }
 
 // #519: one panel for the research action, its risk and time fold, and the tracking rows passed as children (DESIGN_SYSTEM §5 研究動作區).
-export function ActionDetailPanel({ action, gap, children }: { action: ActionSummary | null; gap?: { reasons: GapReason[] | undefined; missingFields: string[] } | null; children?: ReactNode }) {
+export function ActionDetailPanel({ action, board, gap, children }: { action: ActionSummary | null; board?: StrategyBoard | null; gap?: { reasons: GapReason[] | undefined; missingFields: string[] } | null; children?: ReactNode }) {
   if (!action) return <section className="panel stock-action-detail"><div className="panel-head"><h2>研究動作</h2></div>{gap && <ResearchGapLine reasons={gap.reasons} missingFields={gap.missingFields} />}<div className="empty">尚無行動摘要。</div></section>
   const incomplete = ['data_insufficient', 'data_incomplete', 'insufficient_data'].includes(action.action_state)
   const instruction = action.display_instruction ?? action.action_instruction ?? actionLabel(action.action_state)
@@ -863,14 +886,17 @@ export function ActionDetailPanel({ action, gap, children }: { action: ActionSum
   const actionTitle = incomplete ? incompleteActionLabel(action.gap_reasons) : action.display_action ?? actionLabel(action.action_state)
   const detailReasons = action.display_reasons ?? action.reasons
   const showLevels = ['conditional_entry', 'wait_breakout', 'wait_pullback', 'hold_observe', 'reduce_exit'].includes(action.action_state)
+  // #648: the same set as a strategy board row is written once, in the board; a pointer replaces the grid here.
+  const levelsInBoard = showLevels && boardLevelsRow(board, action) !== null
   return <section className="panel stock-action-detail" aria-labelledby="stock-action-title">
     <div className="panel-head"><h2 id="stock-action-title">研究動作</h2><QualityBadge kind="research" status={action.data_quality} notApplicable={incomplete && gapNotApplicable(action.gap_reasons)} /></div>
     <div className="action-detail-summary"><strong>{actionTitle}</strong><span className="action-detail-instruction">{instruction}</span>{showPrimary && <span>{primary}</span>}</div>
     {action.position_quantity_status === 'unknown' && <div className="small-note"><span className="pill ambiguous">庫存數量待核實</span> 請先核對原記錄，再確認持倉狀態。</div>}
     {gap ? <ResearchGapLine reasons={gap.reasons} missingFields={gap.missingFields} note={gapNote} /> : gapNote && <div className="data-gap">{gapNote}</div>}
-    <details className="technical-details"><summary>查看風險提醒、時間與價位</summary>
+    <details className="technical-details"><summary>{levelsInBoard ? '查看風險提醒與時間' : '查看風險提醒、時間與價位'}</summary>
       <ProductTimeSummary time={action.product_time} fallbackDate={action.data_cutoff} fallbackEarliestDate={action.earliest_execution_date} />
-      {showLevels && <div className="level-grid stock-detail-levels">
+      {levelsInBoard && <div className="small-note stock-detail-levels-ref" data-levels-ref>{LEVELS_IN_BOARD_TEXT}</div>}
+      {showLevels && !levelsInBoard && <div className="level-grid stock-detail-levels">
         {action.trigger_price != null && <div><span>{levelFieldLabel('trigger_price', action.level_semantics)}</span><b className="level-entry">{formatNumber(action.trigger_price)}</b></div>}
         {action.entry_low != null && <div><span>{levelFieldLabel('entry_low', action.level_semantics)}</span><b className="level-entry">{formatNumber(action.entry_low)}</b></div>}
         {action.entry_high != null && <div><span>{levelFieldLabel('entry_high', action.level_semantics)}</span><b className="level-entry">{formatNumber(action.entry_high)}</b></div>}

@@ -2747,6 +2747,66 @@ def s13(run: Run, stock: Stock) -> str:
     return f"{len(rows)} 個月與 API 相同（第一列 `{monthly_row_prefix(rows[0])}`）；{badge}"
 
 
+# #648 圖優先 (UI_COPY_SPEC §8.2, DESIGN_SYSTEM §4 個股頁頁首與摘要卡): header → K-line card → summary card → tabs
+# on every tab, the chart drawn once, and in the research tab one complete set of levels: the strategy board's.
+CHART_TITLE = "K 線與技術指標"
+CHART_TAB_NOTE = "日 K／週 K、成交量、均線與 MACD／RSI／KD／布林指標面板都在上方的 K 線卡。"  # App.tsx
+
+
+def stock_chart_order(text: Text) -> str:
+    charts = text.count(lambda line: line == CHART_TITLE)
+    expect(charts == 1, f"整行 `{CHART_TITLE}` 有 {charts} 行，預期 1（日 K 只畫一次）")
+    chart, summary = text.find(CHART_TITLE), text.find(SUMMARY_COLUMNS[0])
+    s = text.find_where(lambda line: line.startswith("來源 "))
+    expect(
+        0 <= s < chart, f"`{CHART_TITLE}`（{text.at(chart)}）要在頁首 `來源 ` 行之後"
+    )
+    expect(
+        0 <= chart < summary,
+        f"`{CHART_TITLE}` 要在摘要卡 `目前判斷`（{text.at(summary)}）之前",
+    )
+    tabs = text.find("走勢", summary)
+    expect(tabs > summary, "摘要卡之後缺分頁籤 `走勢`")
+    return f"頁首 → `{CHART_TITLE}`（{text.at(chart)}）→ `目前判斷` → 分頁籤"
+
+
+def price_text(value: float) -> str:
+    return f"{value:,.2f}"  # formatPrice: two decimals with thousands separators
+
+
+@check("stocks", "S14", per_stock=True)
+def s14(run: Run, stock: Stock) -> str:
+    main, research = stock_text(run, stock), stock_text(run, stock, "research")
+    note = "走勢 " + stock_chart_order(main)
+    expect(main.has(CHART_TAB_NOTE), f"走勢分頁缺整行 `{CHART_TAB_NOTE}`")
+    note += "；進出場 " + stock_chart_order(research)
+    board = stock_payload(run, stock).get("strategy_board") or {}
+    sets = [
+        row["levels"]
+        for row in board.get("strategies") or []
+        if row.get("status") == "conditional"
+        and (row.get("levels") or {}).get("kind") == "actionable"
+        and isinstance(row["levels"].get("invalid_price"), (int, float))
+        and isinstance(row["levels"].get("target_1"), (int, float))
+    ]
+    if not sets:
+        return note + "；無成立價位，不計次"
+    start = research.find("策略總表")
+    expect(start >= 0, "缺整行 `策略總表`")
+    tab = research.lines[start:]
+    counts = []
+    for levels in sets:
+        for key in ("invalid_price", "target_1"):
+            needle = price_text(levels[key])
+            seen = sum(line.count(needle) for line in tab)
+            expect(
+                seen == 1,
+                f"進出場分頁 `{needle}`（{key}）出現 {seen} 次，預期只在策略總表 1 次",
+            )
+            counts.append(f"`{needle}` 1 次")
+    return note + "；進出場分頁 " + "、".join(counts)
+
+
 # ---- actions ----
 
 # The page is 我的追蹤 at /watch since #493; the old /actions redirects there (A18).
