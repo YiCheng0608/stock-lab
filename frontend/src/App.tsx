@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { FormEvent, KeyboardEvent, MouseEvent, ReactElement, ReactNode } from 'react'
+import type { FormEvent, KeyboardEvent, ReactElement, ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link, Navigate, Route, Routes, useLocation, useParams, useSearchParams } from 'react-router-dom'
 
@@ -74,7 +74,7 @@ import { backtestStartedText, backtestTrackingLabel, officialEventDisplayTitle, 
 import { Shell } from './components/Shell'
 import { Term } from './components/Term'
 import { Card, CardList, DataTable, EmptyState, Skeleton, Tabs, cx, tabId, tabPanelId, type Column } from './components/ui'
-import { StockBarsChart } from './stock/StockBarsChart'
+import { StockBarsChart, StockIndicatorCard, useBarsView } from './stock/StockBarsChart'
 import { CandidateChart } from './today/CandidateChart'
 import { PRICE_BASIS, chartLevels, priceDigits } from './stock/stockBars'
 import { closestStrategy } from './stock/stockSummary'
@@ -694,6 +694,8 @@ function StockPage() {
   // The header always reads the daily series; the chart reads the selected interval (same cache entry for 'day').
   const dayBars = useQuery({ queryKey: ['stock-bars', exchange, symbol, 'day'], queryFn: () => getStockBars(exchange, symbol, 'day'), enabled })
   const chartBars = useQuery({ queryKey: ['stock-bars', exchange, symbol, barsInterval], queryFn: () => getStockBars(exchange, symbol, barsInterval), enabled })
+  // #656: one window (range or zoom) for the K-line card and the 走勢 tab's indicator chart; it outlives the tab.
+  const barsView = useBarsView(chartBars.data)
   const tab = parseStockTab(searchParams.get('tab'))
   const setTab = (next: StockTab) => setSearchParams(stockTabSearch(searchParams, next), { replace: true })
   const stockNews = useQuery({ queryKey: ['stock-news', exchange, symbol], queryFn: () => getNews(stockNewsParams(symbol)), enabled: enabled && tab === 'news' })
@@ -728,12 +730,13 @@ function StockPage() {
     <StockHeader symbol={data.instrument.symbol} name={data.instrument.name} exchange={data.instrument.exchange} typeLabel={instrumentTypeLabel(data.instrument.instrument_type)} instrumentType={data.instrument.instrument_type} dailyBars={dayBars.data?.bars} latestChange={dayBars.data?.latest_change} halt={data.trading_halt} loading={dayBars.isLoading}>
       <StockCutoffControl asOf={asOf} effectiveDate={asOf ? null : data.news_cutoff?.as_of ?? data.decision_summary?.data_cutoff ?? null} onApply={(submitted) => { const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }} />
     </StockHeader>
-    {/* #648 圖優先: the chart card sits above the summary card and the tabs, on every tab, and is drawn only here. */}
-    <StockBarsChart interval={barsInterval} onIntervalChange={setBarsInterval} data={chartBars.data} loading={chartBars.isLoading} error={chartBars.error} instrumentType={data.instrument.instrument_type} levels={chartLevels(closestStrategy(data.strategy_board))} />
+    {/* #648 圖優先: the chart card sits above the summary card and the tabs, on every tab, and is drawn only here.
+        #656: price and volume only; the indicator panels and the data table are in the 走勢 tab, same window. */}
+    <StockBarsChart split bars={barsView} title="K 線" interval={barsInterval} onIntervalChange={setBarsInterval} data={chartBars.data} loading={chartBars.isLoading} error={chartBars.error} instrumentType={data.instrument.instrument_type} levels={chartLevels(closestStrategy(data.strategy_board))} />
     <StockSummaryCard board={data.strategy_board} action={data.decision_summary ?? null} researchHref={`?${stockTabSearch(searchParams, 'research').toString()}`} onResearch={() => document.getElementById(tabId('stock', 'research'))?.scrollIntoView({ block: 'start' })} />
     <Tabs items={STOCK_TABS} value={tab} onChange={setTab} label="個股詳情分頁" idPrefix="stock" className="stock-tabs" />
     <div className="stock-tab-content" id={tabPanelId('stock', tab)} role="tabpanel" aria-labelledby={tabId('stock', tab)}>
-      {tab === 'chart' && <StockChartTabNote />}
+      {tab === 'chart' && <StockIndicatorCard bars={barsView} interval={barsInterval} loading={chartBars.isLoading} error={chartBars.error} instrumentType={data.instrument.instrument_type} />}
       {tab === 'chips' && <Card eyebrow="籌碼資料" title="法人與融資">{data.chips.length ? <ChipTable rows={data.chips.slice(-30).reverse()} /> : <EmptyState reason="尚無可核實的籌碼資料。" />}<BrokerBranchEntry exchange={data.instrument.exchange} /></Card>}
       {tab === 'financials' && <StockFundamentalsPanel rows={data.fundamentals} monthlyRows={data.monthly_revenues ?? []} instrumentType={data.instrument.instrument_type} asOf={asOf || null} sourceLabel={sourceLabel} />}
       {tab === 'news' && <><StockNewsTimeline exchange={data.instrument.exchange} symbol={data.instrument.symbol} query={{ data: stockNews.data, loading: stockNews.isLoading, error: stockNews.error }} /><StockEventList events={data.events} /></>}
@@ -744,24 +747,6 @@ function StockPage() {
   </div>
 }
 
-// #648: the 走勢 tab under the chart card: one line on where the chart is and a link back to it; no second chart, no data
-// (UI_COPY_SPEC §8.2). The link scrolls to the chart card and moves focus to its title.
-export const CHART_TAB_NOTE = '日 K／週 K、成交量、均線與 MACD／RSI／KD／布林指標面板都在上方的 K 線卡。'
-export const CHART_TAB_LINK = '回到 K 線圖 ↑'
-export function StockChartTabNote() {
-  const toChart = (event: MouseEvent<HTMLAnchorElement>) => {
-    const title = document.getElementById('stock-chart-title')
-    if (!title) return
-    event.preventDefault()
-    title.closest('.stock-chart-card')?.scrollIntoView({ block: 'start' })
-    title.setAttribute('tabindex', '-1')
-    title.focus({ preventScroll: true })
-  }
-  return <section className="panel stock-chart-tab-note" aria-label="走勢">
-    <p>{CHART_TAB_NOTE}</p>
-    <a className="text-link" href="#stock-chart-title" onClick={toChart}>{CHART_TAB_LINK}</a>
-  </section>
-}
 
 // Indicator provenance from the daily bars API (docs/spec/indicators.md): version, price basis and batch time.
 export function IndicatorMetaRows({ bars }: { bars: StockBarsResponse | undefined }) {

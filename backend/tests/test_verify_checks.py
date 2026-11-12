@@ -1752,7 +1752,7 @@ LEVELS_ROW = {
     "levels": {"kind": "actionable", "invalid_price": 2364.0, "target_1": 2458.0},
 }
 HEADER = "2884\n玉山金\n資料 2026/11/05\n來源 臺灣證券交易所\n"
-CHART = "K 線與技術指標\n資料 2026/11/05\n"
+CHART = "K 線\n資料 2026/11/05\n日K\n週K\nMA5\n"
 SUMMARY = "目前判斷\n條件成立\n規則價位\n停損（元）\n2,364.00\n2,458.00／2,508.00\n"
 TABS = "走勢\n籌碼\n財務\n新聞與公告\n進出場\n資料來源\n"
 BOARD = (
@@ -1761,7 +1761,12 @@ BOARD = (
     "突破條件\t\n成立\t全部達成\t2,400.00\t2,364.00\t2,458.00／2,508.00\n"
     "研究動作\n查看風險提醒與時間\n價位見上方策略總表。\n"
 )
-MAIN = HEADER + CHART + SUMMARY + TABS + page_checks.CHART_TAB_NOTE + "\n"
+# #656: the 走勢 tab's 技術指標 card holds the indicator panels and the chart data table.
+INDICATORS = (
+    "技術指標 indicators/v1\n技術指標\n資料 2026/11/05\nMACD\nRSI\nKD\n布林\n"
+    "日線批次計算於 2026/11/05 17:30（台灣時間）\n查看圖表資料表（最近 30 根）\n"
+)
+MAIN = HEADER + CHART + SUMMARY + TABS + INDICATORS
 
 
 def _s14(tmp_path, main, research, board=None):
@@ -1784,15 +1789,24 @@ def test_s14_fails_on_the_old_order_and_the_chart_in_the_tab(tmp_path):
     old_main = HEADER + SUMMARY + TABS + CHART
     with pytest.raises(page_checks.Fail, match="要在摘要卡 `目前判斷`"):
         _s14(tmp_path, old_main, HEADER + SUMMARY + TABS + BOARD)
-    twice = HEADER + CHART + SUMMARY + TABS + CHART + page_checks.CHART_TAB_NOTE
+    twice = HEADER + CHART + SUMMARY + TABS + CHART + INDICATORS
     with pytest.raises(page_checks.Fail, match="有 2 行，預期 1"):
         _s14(tmp_path, twice, HEADER + CHART + SUMMARY + TABS + BOARD)
-    with pytest.raises(page_checks.Fail, match="走勢分頁缺整行"):
-        _s14(
-            tmp_path,
-            HEADER + CHART + SUMMARY + TABS,
-            HEADER + CHART + SUMMARY + TABS + BOARD,
-        )
+
+
+def test_s14_fails_when_the_indicators_stay_in_the_chart_card(tmp_path):
+    # #648 left the panels and the data table in the K-line card above the tabs; #656 moves them into 走勢.
+    old_chart = CHART + "MACD\nRSI\nKD\n布林\n查看圖表資料表（最近 30 根）\n"
+    research = HEADER + CHART + SUMMARY + TABS + BOARD
+    with pytest.raises(page_checks.Fail, match="K 線卡內不該有指標面板或資料表"):
+        _s14(tmp_path, HEADER + old_chart + SUMMARY + TABS, research)
+    with pytest.raises(page_checks.Fail, match="整行 `技術指標` 有 0 行，預期 1"):
+        _s14(tmp_path, HEADER + CHART + SUMMARY + TABS, research)
+    no_table = INDICATORS.replace("查看圖表資料表（最近 30 根）\n", "")
+    with pytest.raises(page_checks.Fail, match="卡缺：\\['查看圖表資料表"):
+        _s14(tmp_path, HEADER + CHART + SUMMARY + TABS + no_table, research)
+    with pytest.raises(page_checks.Fail, match="預期只在走勢分頁"):
+        _s14(tmp_path, MAIN, research + INDICATORS)
 
 
 def test_s14_fails_when_the_research_tab_repeats_the_levels(tmp_path):

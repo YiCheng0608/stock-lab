@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 
-import { StockBarsChart } from './StockBarsChart'
+import { StockBarsChart, StockIndicatorCard, barsWindow, type BarsViewState } from './StockBarsChart'
 import { StockCutoffControl, cutoffSubmission } from './StockCutoffControl'
 import { StockQuoteLine, tradingHaltLabel } from './StockHeader'
 import {
@@ -48,6 +48,11 @@ import {
   readChartTheme,
   stockBarsPath,
   stockQuote,
+  INDICATOR_CHART_HEIGHT,
+  SPLIT_MAIN_HEIGHT,
+  indicatorChartLayout,
+  priceChartLayout,
+  type BarsView,
   type IndicatorPanelId,
   type MaField,
 } from './stockBars'
@@ -462,3 +467,66 @@ check(Object.values(CHART_LEVEL_LABELS).join() === '進場,停損,目標', 'leve
 const chartWithLevels = renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => {}} data={longDaily} loading={false} error={null} levels={breakoutLevels} />)
 check(chartWithLevels.includes('data-chart-levels') && chartWithLevels.includes('含規則價位線'), 'the chart card states the levels as text')
 check(!renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => {}} data={longDaily} loading={false} error={null} />).includes('data-chart-levels'), 'no levels: no note')
+
+// ---- #656: the stock page splits the card — price and volume above, the indicator panel and the data table in 走勢 ----
+const splitZoom = zoomForView(longDaily, { range: '1m' })
+const optionOf = (parts: 'price' | 'indicator') => buildBarsChartOption(longDaily, {
+  panel: 'macd', panelState: indicatorPanelState(longDaily, 'macd'), visibleMa: allMa, theme, zoom: splitZoom, digits: 2, parts,
+  layout: parts === 'price' ? priceChartLayout(SPLIT_MAIN_HEIGHT.desktop) : indicatorChartLayout(INDICATOR_CHART_HEIGHT.desktop),
+  levels: parts === 'price' ? breakoutLevels : null,
+})
+type SplitSeries = { name: string; type: string; xAxisIndex: number }
+type SplitZoom = { id: string; type: string; xAxisIndex: number[]; startValue?: number; endValue?: number }
+const priceOption = optionOf('price')
+const indicatorOption = optionOf('indicator')
+const priceSeries = priceOption.series as SplitSeries[]
+const indicatorOnly = indicatorOption.series as SplitSeries[]
+check((priceOption.grid as unknown[]).length === 2 && priceSeries.every((item) => item.xAxisIndex <= 1), 'price chart: the main and volume panes only')
+check(priceSeries[0].type === 'candlestick' && priceSeries.some((item) => item.name === '成交量') && !priceSeries.some((item) => ['DIF', 'DEA', 'MACD 柱'].includes(item.name)), `price chart: K, MAs and volume, no indicator series: ${priceSeries.map((item) => item.name).join()}`)
+check(JSON.stringify((priceSeries[0] as unknown as Marked).markLine?.data.map((line) => line.name)) === '["目標","進場","停損"]', 'price chart: the rule levels stay on the price pane')
+check((indicatorOption.grid as unknown[]).length === 1 && indicatorOnly.length === 3 && indicatorOnly.every((item) => item.xAxisIndex === 0) && !indicatorOnly.some((item) => item.type === 'candlestick'), `indicator chart: one pane with the MACD series only: ${indicatorOnly.map((item) => item.name).join()}`)
+const priceZooms = priceOption.dataZoom as SplitZoom[]
+const indicatorZooms = indicatorOption.dataZoom as SplitZoom[]
+check(priceZooms.map((item) => item.type).join() === 'inside,slider' && indicatorZooms.map((item) => item.type).join() === 'inside', 'the slider is on the K-line card only')
+check(priceZooms.every((item) => item.startValue === indicatorZooms[0].startValue && item.endValue === indicatorZooms[0].endValue) && indicatorZooms[0].startValue === (splitZoom as { startValue: number }).startValue, 'same view → both charts zoom to the same bars')
+check(priceZooms[0].id === indicatorZooms[0].id && priceZooms[0].xAxisIndex.join() === '0,1' && indicatorZooms[0].xAxisIndex.join() === '0', 'the inside zooms share an id, so a connected inside zoom moves both')
+check(priceChartLayout(SPLIT_MAIN_HEIGHT.desktop).height < chartLayout(320).height && SPLIT_MAIN_HEIGHT.desktop > 320 && SPLIT_MAIN_HEIGHT.narrow > 220, 'the split card has a taller main pane and is still shorter than the whole card')
+const splitTip = formatBarsTooltip(longDaily, 120, 'macd', allMa, 2, 'price')
+const indicatorTip = formatBarsTooltip(longDaily, 120, 'macd', allMa, 2, 'indicator')
+check(splitTip.includes('開 ') && splitTip.includes('MA5 ') && !splitTip.includes('DIF '), `price tooltip: prices and MAs: ${splitTip}`)
+check(!indicatorTip.includes('開 ') && !indicatorTip.includes('MA5 ') && indicatorTip.includes('DIF '), `indicator tooltip: the panel values only: ${indicatorTip}`)
+
+// The page's shared state as the two cards receive it (useBarsView in StockPage); setView/redraw are the page's.
+const sharedState = (data: StockBarsResponse, view: BarsView): BarsViewState => ({
+  data, zoom: zoomForView(data, view), view, setView: () => undefined, redraw: () => undefined,
+  longer: { loading: false, failed: false, retry: () => undefined },
+})
+const windowsOf = (markup: string) => [...markup.matchAll(/data-bars-window="([^"]+)"/g)].map((match) => match[1])
+const pagePair = (state: BarsViewState, interval: 'day' | 'week' = 'day') => {
+  const top = renderToStaticMarkup(<StockBarsChart split bars={state} title="K 線" interval={interval} onIntervalChange={() => undefined} data={state.data} loading={false} error={null} levels={breakoutLevels} />)
+  const tab = renderToStaticMarkup(<StockIndicatorCard bars={state} interval={interval} loading={false} error={null} />)
+  return { top, tab, windows: [...windowsOf(top), ...windowsOf(tab)] }
+}
+const pair = pagePair(sharedState(longDaily, { range: DEFAULT_BARS_RANGE }))
+check(pair.top.includes('>K 線</h') && !pair.top.includes('indicators/v1') && !pair.top.includes('技術指標'), `K-line card: titled K 線, no eyebrow: ${pair.top.slice(0, 300)}`)
+check(!pair.top.includes('indicator-tab-') && !pair.top.includes('查看圖表資料表') && !pair.top.includes('日線批次計算於'), 'K-line card: no indicator panel, data table or batch time')
+check(pair.top.indexOf('class="chart-stage"') < pair.top.indexOf('class="chart-ma-row"') && pair.top.indexOf('chart-ma-row') < pair.top.indexOf('data-chart-levels') && !pair.top.slice(0, pair.top.indexOf('chart-stage')).includes('ma-toggle'), 'K-line card: the MA toggles are the first line under the chart')
+check(pair.top.includes('bars-range') && pair.top.includes('bars-interval-tab-week'), 'K-line card: keeps 日K／週K and the range buttons')
+check(['MACD', 'RSI', 'KD', '布林'].every((label) => pair.tab.includes(`>${label}</button>`)) && pair.tab.includes('查看圖表資料表（最近 30 根）') && pair.tab.includes('日線批次計算於') && pair.tab.includes('技術指標 indicators/v1') && pair.tab.includes('>技術指標</h'), 'indicator card: the four panels, the data table, the batch time and the formula version')
+check(!pair.tab.includes('bars-range') && !pair.tab.includes('ma-toggle'), 'indicator card: no window controls of its own')
+check(pair.windows.length === 2 && pair.windows[0] === pair.windows[1], `default range: both charts show the same bars: ${pair.windows.join(' / ')}`)
+const pairOneMonth = pagePair(sharedState(longDaily, { range: '1m' }))
+check(pairOneMonth.windows[0] === pairOneMonth.windows[1] && pairOneMonth.windows[0] !== pair.windows[0] && pairOneMonth.windows[0] === barsWindow(longDaily, zoomForView(longDaily, { range: '1m' })), `range button: both charts move to 1M: ${pairOneMonth.windows.join(' / ')}`)
+check(pairOneMonth.top.includes('aria-pressed="true">1M</button>'), 'range button: 1M is selected above')
+const weeklyPair = pagePair(sharedState(weekly, { range: '1m' }), 'week')
+check(weeklyPair.windows.every((window) => window.startsWith('week:')) && weeklyPair.windows[0] === weeklyPair.windows[1] && weeklyPair.tab.includes('週線'), `週K: both charts switch to the weekly bars: ${weeklyPair.windows.join(' / ')}`)
+// A drag or wheel on either chart reports the same ECharts payload; the view it leaves redraws both.
+for (const [chart, event] of [['K-line card', { start: 40, end: 80 }], ['indicator chart', { batch: [{ dataZoomId: 'bars-inside', start: 40, end: 80 }] }]] as const) {
+  const zoomed = viewFromZoomEvent(longDaily, event, splitZoom)
+  check(zoomed !== null && zoomed.range === null, `${chart}: a zoom clears the range`)
+  const after = pagePair(sharedState(longDaily, zoomed!))
+  check(after.windows[0] === after.windows[1] && after.windows[0] === barsWindow(longDaily, { start: 40, end: 80 }) && !after.top.includes('aria-pressed="true"'), `${chart}: a zoom moves both charts: ${after.windows.join(' / ')}`)
+}
+// Today list and market page: the whole card as before (no split): indicator tabs, data table and MA toggles above.
+const whole = renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => undefined} data={longDaily} loading={false} error={null} />)
+check(whole.includes('indicator-tab-macd') && whole.includes('查看圖表資料表') && whole.includes('技術指標 indicators/v1') && !whole.includes('chart-ma-row') && whole.indexOf('ma-toggle') < whole.indexOf('chart-stage'), 'without split the card is unchanged')
