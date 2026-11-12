@@ -15,8 +15,8 @@ stock／ipo, a bar that is not suspended, 20-session mean volume of at least
   (``evidence_lib.forward_return``), over the instruments that have both;
 - **quintiles**: the mean excess return (the forward return less the mean of
   the day's universe) of each fifth of the feature's ranks, and the spread of
-  the top fifth over the bottom one; when ties leave a fifth empty (a
-  discrete feature), the spread of the high side over the low side of one
+  the top fifth over the bottom one; when ties leave the top or the bottom
+  fifth empty (a discrete feature), the spread of the high side over the low side of one
   cut between values instead (``day_spread``).
 
 A day counts only with ``--min-names`` instruments.  ``CONDITIONS`` are the
@@ -72,7 +72,8 @@ import evidence_lib as lib  # noqa: E402
 # to the rule or the grouping, and say why in the report (evidence.md rule 3).
 VERSION = 2
 VERSION_NOTE = (
-    "本版是看完第一輪（#619）結果後提出（#643）：離散值特徵某一分位整段為空時改用高低兩組算五分位差；"
+    "本版是看完第一輪（#619）結果後提出（#643）：最高或最低一組因同值整段為空時（離散值特徵）"
+    "改用高低兩組算五分位差；"
     "判定表補上五分位差缺值與異號"
 )
 MIN_DAYS = 60
@@ -458,14 +459,15 @@ def two_groups(values: list[float], excess: list[float]) -> list[float] | None:
 def day_spread(values: list[float], excess: list[float]) -> dict[str, Any]:
     """The day's quintiles and spread (top group less bottom group).
 
-    With every fifth filled, the spread is the top fifth less the bottom one.
-    When ties leave a fifth empty (a discrete feature such as a 0～5 count or
-    a 0／1 flag), it is the high side less the low side of ``two_groups``
+    With the top and the bottom fifth filled, the spread is the top less the
+    bottom (an empty middle fifth does not matter), as in version 1.  When
+    ties leave either end empty (a discrete feature such as a 0～5 count or a
+    0／1 flag), it is the high side less the low side of ``two_groups``
     instead, and ``groups`` says 2.
     """
 
     quintiles = quintile_means(values, excess)
-    if all(value is not None for value in quintiles):
+    if quintiles[0] is not None and quintiles[-1] is not None:
         return {"q": quintiles, "spread": quintiles[-1] - quintiles[0], "groups": 5}
     sides = two_groups(values, excess)
     spread = None if sides is None else sides[1] - sides[0]
@@ -763,7 +765,7 @@ def markdown(result: dict[str, Any], command: str) -> str:
             f"## T+{horizon}：特徵",
             "",
             "IC 是每日排序相關的平均；五分位差是特徵最高一組減最低一組的平均超額報酬。"
-            "標「兩組」的是同值讓某一分位整段為空的日子，改以一個切點分成高低兩組相減（離散值特徵）。",
+            "標「兩組」的是同值讓最高或最低一組整段為空的日子，改以一個切點分成高低兩組相減（離散值特徵）。",
             "",
             "| 特徵 | 探索段日數 | IC | t | 五分位差 | 驗證段日數 | IC | t | 五分位差 | 判定 |",
             "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",

@@ -573,6 +573,18 @@ def test_two_groups_cut_between_values():
     assert evidence.two_groups([1.0, 1.0], [0.1, 0.2]) is None
 
 
+def test_an_empty_middle_fifth_keeps_the_five_groups():
+    # A flow with most names at 0: the zeros fill the middle fifth only, so
+    # the top and the bottom are there and the spread is version 1's.
+    values = [-4.0, -3.0, -2.0, -1.0] + [0.0] * 32 + [1.0, 2.0, 3.0, 4.0]
+    excess = [value / 100 for value in values]
+    day = evidence.day_spread(values, excess)
+    assert day["q"][1] is None and day["q"][3] is None
+    assert day["groups"] == 5
+    assert day["spread"] == pytest.approx(day["q"][-1] - day["q"][0])
+    assert day["spread"] == pytest.approx(0.05)
+
+
 def test_a_continuous_feature_keeps_its_five_groups(evidence_result):
     for horizon in ("5", "20"):
         for key in ("momentum_20", "foreign_flow_5"):
