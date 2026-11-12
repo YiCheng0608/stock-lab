@@ -28,10 +28,10 @@ const slice = (markup: string, start: string, end: string) => {
   const from = markup.indexOf(start)
   return from < 0 ? '' : markup.slice(from, markup.indexOf(end, from + start.length))
 }
-function render(element: ReactElement, cache: Array<[readonly unknown[], unknown]> = []) {
+function render(element: ReactElement, cache: Array<[readonly unknown[], unknown]> = [], location = '/actions') {
   const client = new QueryClient()
   for (const [key, data] of cache) client.setQueryData(key, data)
-  return renderToStaticMarkup(<QueryClientProvider client={client}><StaticRouter location="/actions">{element}</StaticRouter></QueryClientProvider>)
+  return renderToStaticMarkup(<QueryClientProvider client={client}><StaticRouter location={location}>{element}</StaticRouter></QueryClientProvider>)
 }
 
 // ---- formatting ----
@@ -91,6 +91,25 @@ const corrected = render(<PlanCard plan={conflict()} />)
 check(corrected.includes(CONFLICT_TEXT) && corrected.includes('>已觸發</span>'), 'transition conflict keeps the stored status and adds the note')
 check(!render(<PlanCard plan={cancelled()} />).includes('取消追蹤'), 'a cancelled plan has no cancel button')
 
+// ---- phone card (Issue 649): strategy, status, the three levels, progress and result; the rest in 更多 ----
+const moreOf = (markup: string) => markup.slice(markup.indexOf('<details class="details plan-card-more">'), markup.lastIndexOf('</details>'))
+const wideOf = (markup: string) => markup.slice(0, markup.indexOf('<details class="details plan-card-more">'))
+const wideOnly = (markup: string) => [...markup.matchAll(/class="(?:small-note )?plan-wide-only">([^]*?)<\/div>/g)].map((match) => match[1])
+for (const [name, markup] of [['pending', pending], ['triggered', filled], ['ended', hit]] as const) {
+  const more = moreOf(markup)
+  const wide = wideOf(markup)
+  check(count(markup, '<details class="details plan-card-more"><summary>更多</summary>') === 1, `${name} card: one 更多 fold`)
+  // The progress line, the result and the three levels are not wide-only, so the phone shows them.
+  check(!wideOnly(wide).some((part) => /個交易日|模擬報酬|進場區|停損|目標一/.test(part)), `${name} card: progress, result and levels stay on the phone`)
+  check(/<div class="plan-wide-only"><dt>RR<\/dt>/.test(wide) && more.includes('RR <span class="badge badge-primary badge-compact">'), `${name} card: RR is wide-only, its phone copy is in 更多`)
+  check(wide.includes('class="small-note plan-wide-only">計畫資料日') && more.includes('計畫資料日'), `${name} card: the plan and creation dates are in 更多 on a phone`)
+  check(more.includes('<details class="details plan-history">') && !more.includes('id="plan-'), `${name} card: the phone copy of the history has no id (the anchor stays on the wide one)`)
+  check(count(markup, 'id="plan-') === 2, `${name} card: one card anchor and one history anchor`)
+}
+check(wideOf(filled).includes('class="small-note plan-wide-only">模擬成交 2026/10/20 161.58') && moreOf(filled).includes('模擬成交 2026/10/20 161.58'), 'triggered card: the fill line is wide-only, in 更多 on a phone')
+check(wideOf(hit).includes('class="small-note plan-wide-only">模擬出場') && moreOf(hit).includes('模擬出場') && !moreOf(hit).includes('模擬報酬') && count(hit, '模擬報酬 +9.39%') === 1, 'ended card: the exit is in 更多; the result shows once, at every width')
+check(count(pending, '>取消追蹤</button>') === 2 && moreOf(pending).includes('>取消追蹤</button>') && /<div class="plan-wide-only"><div class="plan-cancel">/.test(pending), 'open card: cancel is wide-only, its phone copy is in 更多')
+
 // ---- history table ----
 const detail = detailResponse()
 const history = render(<PlanHistory plan={detail.plan} initiallyOpen />, [[['tracking-plan', detail.plan.id, detail.plan.updated_at], detail]])
@@ -123,12 +142,23 @@ const paged = render(<TrackingSection />, [[['tracking-plans', 'open', 1], listR
 check(paged.includes('第 1／2 頁 · 共 25 筆'), 'more than one page shows the pager')
 const empty = render(<TrackingSection />, [[['tracking-plans', 'open', 1], listResponse([])], [['tracking-plans', 'closed', 1], listResponse([])]])
 check(empty.includes(EMPTY_OPEN_TEXT) && empty.includes(EMPTY_CLOSED_TEXT), 'two empty states')
+// Issue 649: no plan in progress is one line, not an empty panel, so the action list starts on the first screen.
+check(empty.includes(`<p class="small-note tracking-empty">${EMPTY_OPEN_TEXT}</p>`) && empty.includes(`<div class="empty panel">${EMPTY_CLOSED_TEXT}</div>`), 'empty 追蹤計畫 is one line; empty 追蹤回看 keeps its panel inside the fold')
 check(render(<TrackingSection />).includes('追蹤計畫載入中…'), 'loading skeleton')
 // #637: the page renders the two parts apart (the action list sits between them).
 const openOnly = render(<TrackingSection part="open" />, [[['tracking-plans', 'open', 1], opened], [['tracking-plans', 'closed', 1], closed]])
 const closedOnly = render(<TrackingSection part="closed" />, [[['tracking-plans', 'open', 1], opened], [['tracking-plans', 'closed', 1], closed]])
 check(openOnly.includes('>追蹤計畫</h2>') && !openOnly.includes('>追蹤回看</h2>') && count(openOnly, 'class="card plan-card"') === 2, 'part=open: only the plans in progress')
 check(closedOnly.includes('>追蹤回看</h2>') && !closedOnly.includes('>追蹤計畫</h2>') && count(closedOnly, 'class="card plan-card"') === 4, 'part=closed: only the ended plans')
+// Issue 649: 追蹤回看 starts folded, its head (title and count) is the summary; the plans in progress are not folded.
+check(/data-plan-scope="closed"><details class="tracking-look-back"><summary><div class="section-head">[^]*?>追蹤回看<\/h2><\/div><span class="small-note">4 筆<\/span><\/div><\/summary>/.test(closedOnly), `追蹤回看: a closed fold whose summary is the title and 4 筆: ${closedOnly.slice(0, 400)}`)
+check(!openOnly.includes('tracking-look-back') && !openOnly.includes('<summary><div class="section-head">'), '追蹤計畫: not folded')
+const closedAt = (location: string) => render(<TrackingSection part="closed" />, [[['tracking-plans', 'closed', 1], closed]], location)
+const endedId = closed.items[1].id
+check(/<details class="tracking-look-back" open="">/.test(closedAt(`/watch#plan-${endedId}`)), `追蹤回看: a link to an ended plan (#plan-${endedId}) opens the fold`)
+check(!closedAt(`/watch#plan-${opened.items[0].id}`).includes('open=""') && !closedAt('/watch').includes('open=""'), '追蹤回看: no link, or a link to a plan in progress, keeps it folded')
+const emptyClosed = render(<TrackingSection part="closed" />, [[['tracking-plans', 'closed', 1], listResponse([])]])
+check(emptyClosed.includes('<details class="tracking-look-back">') && emptyClosed.includes('>0 筆<') && emptyClosed.includes(EMPTY_CLOSED_TEXT), '追蹤回看: empty, the fold says 0 筆 and holds the empty state')
 
 // ---- 加入追蹤 ----
 check(render(<AddPlanButton signalId={1} />).includes('>加入追蹤</button>'), 'untracked signal: secondary button')

@@ -46,7 +46,7 @@
 
 | 名稱 | 參數 |
 | --- | --- |
-| `actions` | `--url <WEB>/watch --name actions`（1280 與 390）；`screenshot.cjs` 會展開所有 `<details>`，每張計畫卡的逐日明細因此載入並出現在 `actions-1280.txt` |
+| `actions` | `--url <WEB>/watch --name actions`（1280 與 390）；`screenshot.cjs` 會展開所有 `<details>`：頁首「說明」、預設收合的「追蹤回看」（#649）與每張計畫卡的逐日明細（因此載入並出現在 `actions-1280.txt`）。640px 以下才顯示的「更多」（計畫卡與行動列表卡片）在 1280 是 `display: none`，不進 `actions-1280.txt`，不會重複計數 |
 | `actions-legacy` | `--url "<WEB>/actions?from=legacy#plan-0" --name actions-legacy --widths 1280`（舊網址，A18 讀它的 `finalUrl`） |
 | `action-detail` | `--url <WEB>/actions/<E>/<S> --name action-detail --widths 1280`（不點分頁：轉址後應已在進出場分頁） |
 
@@ -57,7 +57,7 @@
 | 我的庫存 | `portfolio.json` | 每筆 `記錄來源 … · 記錄日期 …`（本地記錄，標「來源／日期待核實」） | — | `尚未建立庫存。` |
 | 追蹤計畫（進行中） | `tracking-open.json` | 每張卡 `計畫資料日 YYYY/MM/DD · 建立 YYYY/MM/DD`、右上 `資料 YYYY/MM/DD`（追蹤到的日期）；區塊說明寫明成交與結果是「模擬」 | 不是 LLM 產出，標「模擬」不標「推論」 | `尚未建立追蹤計畫。可從今日候選或個股研究條件加入。` |
 | 追蹤回看（已結束） | `tracking-closed.json`、`tracking-plan.json` | 同上；逐日明細每列 `YYYY/MM/DD`（交易日）與來源日線 | 同上 | `尚無已結束的計畫。` |
-| 篩選與隱藏句 | `actions.json` 的 `summary` | — | — | `summary.hidden` 都是 0 時沒有隱藏句 |
+| 篩選與隱藏數 | `actions.json` 的 `summary`（只有選中的膠囊寫檔數，#649） | — | — | `summary.hidden` 都是 0 時沒有隱藏數 |
 | 各級區塊與列 | `actions.json` 的 `items`、`summary.tiers` | 每列的 `資料日` 格 `YYYY/MM/DD` | 本頁沒有 LLM 產出，不應出現 `推論` | `目前沒有符合篩選的標的。` |
 | 行動詳情（轉址後的進出場分頁） | `action-detail.json` 的 `decision_summary` | `資料日期：…`、`資料日：… · 價位語意：…` | 同個股 S5 | `尚無行動摘要。` |
 
@@ -74,7 +74,7 @@
 | A7 | CI | 路徑一致 | 轉址後的 `action-detail` 頁首代號與名稱等於個股頁（`stock.json` 的 `instrument.symbol`、`name`） |
 | A8 | CI | 今日候選 | `第 1 級`／`今日候選` 區塊內 `#<n><TAB>` 開頭的名次列依序等於頁面載入的第 1 級各列的 `candidate.rank`；`candidates.json` 的 `trading_date` 等於 `meta.data_as_of` 且第 1 級已全部載入（`shown` = 第 1 級列數）時，名次列等於 `candidates.json` 的 `items[].rank` 去掉持倉中的候選（`actions-holdings.json` 的標的歸第 0 級），列數等於 `candidate_count` 減去持倉中的候選數；持倉占掉第一頁時，名次列是它的前段；`trading_date` 不同日時不該有今日候選列 |
 | A9 | CI | 預設清單沒有 ETF | `actions.json` 的 `summary.view` 為 `focus`、`include_etf` 為 false；頁面載入的列中，ETF 都是持倉（`tier` 0）或自選；頁面 `上市 · ETF`（或 `上櫃`、`市場待核實`）開頭的列數等於這些 ETF 數 |
-| A10 | CI | 頁首隱藏數 | 有整行 `預設隱藏：ETF <etf> 檔、其他觀察 <observation> 檔、策略判斷資料待補 <data_insufficient> 檔；自選標的一律顯示。隱藏不刪資料，切換上方篩選即可看到。`（數字取自 `summary.hidden`，千分位，為 0 的項目不寫）；三項都是 0 時沒有 `預設隱藏：` 開頭的行 |
+| A10 | CI | 頁首隱藏數 | 有整行 `預設隱藏：ETF <etf> 檔、其他觀察 <observation> 檔、資料不足 <data_insufficient> 檔`（膠囊列上的隱藏數，#649；數字取自 `summary.hidden`，千分位，為 0 的項目不寫），也有整行 `自選標的一律顯示；隱藏不刪資料，切換上方篩選即可看到。`（頁首「說明」裡，截圖會展開）；三項都是 0 時沒有 `預設隱藏：` 開頭的行 |
 | A11 | CI | 接近成立卡數 | `第 3 級`／`接近成立` 區塊內以 A4 的資料日格與連結格結尾的列數等於頁面載入的第 3 級列數（`actions.json` 或 `actions-tier3.json`），每列的連結是 `價位見策略總表 →`，這些列的 `nearness.near` 都是 true。`summary.tiers` 第 3 級 `shown` 為 0 時判無法判定：沒有接近卡可查 |
 | A12 | CI | 每張接近卡有「差：」 | 第 3 級每列（區塊內兩個列尾之間的行）至少一行以 `差：` 開頭（或在 tab 後接 `差：`）；上游 A11 |
 | A13 | CI | 接近卡沒有價位 | 第 3 級每列去掉倍數（`1.20 倍`、`0.60～1.20 倍`）與百分比（`2.10%`、`+0.50%`）後，兩位小數的數字只能是該級列的最近收盤（`current_price` 千分位兩位小數）；有其他價格數字（進場、停損、目標、觀察價位）判失敗並列出；上游 A11 |

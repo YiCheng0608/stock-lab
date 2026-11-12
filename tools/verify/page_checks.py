@@ -2998,7 +2998,7 @@ def a9(run: Run) -> str:
 
 
 def hidden_line(summary: dict) -> str | None:
-    """The hidden-rows line of UI_COPY_SPEC §5 for the default filter."""
+    """The hidden-counts line of UI_COPY_SPEC §5 for the default filter (on the chip row)."""
 
     hidden = summary.get("hidden") or {}
     parts = [
@@ -3012,7 +3012,11 @@ def hidden_line(summary: dict) -> str | None:
     ]
     if not parts:
         return None
-    return f"預設隱藏：{'、'.join(parts)}；自選標的一律顯示。隱藏不刪資料，切換上方篩選即可看到。"
+    return f"預設隱藏：{'、'.join(parts)}"
+
+
+# Why rows are hidden: one line in the page's 說明 fold (#649), which the screenshot opens.
+HIDDEN_NOTE = "自選標的一律顯示；隱藏不刪資料，切換上方篩選即可看到。"
 
 
 @check("actions", "A10")
@@ -3032,7 +3036,8 @@ def a10(run: Run) -> str:
         )
         return "summary.hidden 都是 0，沒有隱藏句"
     expect(text.has(line), f"缺整行 `{line}`")
-    return f"`{line}`"
+    expect(text.has(HIDDEN_NOTE), f"「說明」裡缺整行 `{HIDDEN_NOTE}`")
+    return f"`{line}`；「說明」有隱藏說明"
 
 
 # ---- tier 3 接近成立 (#277-B) ----
