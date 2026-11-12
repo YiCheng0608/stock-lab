@@ -2064,6 +2064,21 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         ("candidates", "items[].instrument.symbol", ["9101", "9103", "9201"]),
         ("candidates", "items[].llm_note.status", ["done", "done", "done"]),
         ("candidates", "items[].open_plan_id", [1, None, None]),  # plan 1
+        # The rows' sparklines (Issue 653): the last 30 TAIEX sessions to D, old
+        # to new, and each stock's stored close on them (no fixture gap).
+        (
+            "candidates",
+            "items.0.recent_closes.dates",
+            [row["day"].isoformat() for row in SERIES["TAIEX"][-30:]],
+        ),
+        (
+            "candidates",
+            "items[].recent_closes.closes",
+            [
+                [row["close"] for row in SERIES[symbol][-30:]]
+                for symbol in ("9101", "9103", "9201")
+            ],
+        ),
         ("news/1", "ai.status", "done"),
         ("news/5", "ai.status", "done"),
         ("news/6", "ai", None),

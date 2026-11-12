@@ -96,6 +96,8 @@ export function completeItem(): CandidateItem {
     sources,
     market: { trading_date: '2026-10-16', close: 162, change: 3.5, change_pct: 0.022082, change_status: 'known', source: 'twse' },
     entry_plan: breakoutPlan(),
+    // #653: four sessions to the list's date, one without a close.
+    recent_closes: { dates: ['2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16'], closes: [150, null, 158.5, 162] },
   }
 }
 

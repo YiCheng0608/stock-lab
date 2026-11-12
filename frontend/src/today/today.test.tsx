@@ -199,6 +199,9 @@ const rule = (selector: string) => new RegExp(`(^|\\n)\\${selector}\\s*\\{([^}]*
 check(/color:\s*var\(--color-warning\)/.test(rule('.level-stop')), `.level-stop uses --color-warning, got 「${rule('.level-stop').trim()}」`)
 check(/color:\s*var\(--color-primary\)/.test(rule('.level-target')), `.level-target uses --color-primary, got 「${rule('.level-target').trim()}」`)
 check(!/--color-(error|success)/.test(rule('.level-stop') + rule('.level-target')), 'levels: no --color-error／--color-success')
+// The sparkline (Issue 653): red for a span that rose, green for one that fell (台股紅漲綠跌), muted when unchanged.
+check(/stroke:\s*var\(--color-up\)/.test(rule('.sparkline-up path')) && /stroke:\s*var\(--color-down\)/.test(rule('.sparkline-down path')), `sparkline: up uses --color-up and down --color-down, got 「${rule('.sparkline-up path').trim()}」「${rule('.sparkline-down path').trim()}」`)
+check(/stroke:\s*var\(--color-text-muted\)/.test(rule('.sparkline path')) && /fill:\s*none/.test(rule('.sparkline path')), 'sparkline: an unchanged span is muted and the line has no fill')
 const boardPanel = render('StrategyBoardPanel', () => <StrategyBoardPanel board={board([conditionalBreakout(), observationPullback()])} candidate={null} />)
 check(boardPanel.includes('class="level-stop">2,364.00') && boardPanel.includes('class="level-target">2,458.00／2,508.00'), '個股頁策略總表: stop and target carry the level classes')
 check(boardPanel.includes('class="level-stop">2,399.64') && boardPanel.includes('class="level-target">2,478.57／2,521.07'), '個股頁觀察價位: reference stop and target carry the level classes')

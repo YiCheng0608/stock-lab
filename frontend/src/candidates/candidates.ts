@@ -1,6 +1,6 @@
 import { noPreviousCloseText } from '../marketChange'
 import { formatTaipeiInstant } from '../news/newsView'
-import type { CandidateComponentKey, CandidateGroup, CandidateItem, CandidateLevels, CandidateLlmNote, CandidateMarket, CandidatesResponse, RiskRewardBasis } from '../types'
+import type { CandidateComponentKey, CandidateGroup, CandidateItem, CandidateLevels, CandidateLlmNote, CandidateMarket, CandidateRecentCloses, CandidatesResponse, RiskRewardBasis } from '../types'
 
 // Pure helpers for the daily candidate list (candidate_score_v1, #215); copy follows UI_COPY_SPEC §10.
 
@@ -328,4 +328,43 @@ export function ladderLabel(view: LadderView): string {
   if (view.outside === 'below_stop') return '收盤已低於停損'
   if (view.outside === 'above_target') return '收盤已高於目標'
   return view.close < view.entry ? '收盤在停損與進場之間' : '收盤在進場與目標之間'
+}
+
+// ---- sparkline (#653; DESIGN_SYSTEM §5 候選列表) ----
+
+// The SVG box the row's sparkline is drawn in (CSS pixels; the stroke keeps 1.5px at any size).
+export const SPARKLINE_WIDTH = 96
+export const SPARKLINE_HEIGHT = 24
+
+// The row's line of the last 30 sessions' closes: one path in the box above, a gap where a session has no close (no
+// value is filled in), red when the last close is above the first and green when below (台股紅漲綠跌), and the label
+// that states the span and its change. null with fewer than 2 closes.
+export type SparklineView = { path: string; tone: 'up' | 'down' | 'flat'; label: string }
+export function sparkline(recent: CandidateRecentCloses | null | undefined, width = SPARKLINE_WIDTH, height = SPARKLINE_HEIGHT): SparklineView | null {
+  if (!recent || recent.dates.length !== recent.closes.length) return null
+  const known = recent.closes.flatMap((close, index) => (isFiniteNumber(close) && close > 0 ? [{ close, index }] : []))
+  if (known.length < 2) return null
+  const values = known.map(({ close }) => close)
+  const low = Math.min(...values)
+  const span = Math.max(...values) - low
+  // Half the stroke width inside each edge so the line is never cut by the box.
+  const pad = 1
+  const step = (width - 2 * pad) / Math.max(1, recent.closes.length - 1)
+  const x = (index: number) => pad + index * step
+  const y = (close: number) => (span > 0 ? pad + (1 - (close - low) / span) * (height - 2 * pad) : height / 2)
+  const round = (value: number) => Number(value.toFixed(2))
+  let path = ''
+  let previous = -2
+  for (const { close, index } of known) {
+    path += `${index === previous + 1 ? 'L' : 'M'}${round(x(index))} ${round(y(close))}`
+    previous = index
+  }
+  const first = known[0]
+  const last = known[known.length - 1]
+  const percent = ((last.close - first.close) / first.close) * 100
+  const rounded = Number(percent.toFixed(2))
+  const tone = rounded > 0 ? 'up' : rounded < 0 ? 'down' : 'flat'
+  const from = formatDate(recent.dates[first.index])
+  const to = formatDate(recent.dates[last.index])
+  return { path, tone, label: `近 ${recent.dates.length} 個交易日收盤走勢：${from}–${to} ${rounded > 0 ? '+' : ''}${percent.toFixed(2)}%` }
 }

@@ -1052,11 +1052,86 @@ def test_candidate_market_keeps_every_existing_field(db, client):
     db.commit()
     db.info.pop("_decision_taiex_dates", None)
     item = client.get("/api/candidates").json()["items"][0]
-    assert set(item) == ITEM_KEYS | {"market"}
+    # The list's items also carry the sparkline's closes (#653); without
+    # verified sessions there are none.
+    assert set(item) == ITEM_KEYS | {"market", "recent_closes"}
+    assert item["recent_closes"] == {"dates": [], "closes": []}
     assert item["market"]["close"] == CLOSE
     assert item["market"]["change_status"] == "unverified"
     detail = client.get("/api/stocks/TWSE/1101").json()["candidate"]
     assert set(detail) == ITEM_KEYS | {"market"}
+
+
+def _weekdays_before(day: date, count: int) -> list[date]:
+    return _weekdays(day - timedelta(days=1), count)
+
+
+def test_list_items_carry_the_closes_of_the_last_30_sessions(db, client):
+    """#653: old to new, the stored close the K-line draws, a gap left empty."""
+
+    earlier = _weekdays_before(DAYS[0], 10)
+    a = stock(db, "1101")
+    signal(db, a)
+    index = taiex(db)
+    for day in earlier:
+        db.add(
+            MarketBar(
+                instrument_id=index.id,
+                trading_date=day,
+                open=20000.0,
+                high=20000.0,
+                low=20000.0,
+                close=20000.0,
+                adj_close=20000.0,
+                source="twse_fixture",
+            )
+        )
+    db.commit()
+    compute_daily_candidates(db, T)
+    for offset, day in enumerate(DAYS):
+        current = bar(db, a, day)
+        # The adjusted close differs: the list reads the stored close.
+        current.close, current.adj_close = CLOSE + offset, CLOSE
+    # No traded bar on three sessions: none stored, suspended, a zero close.
+    db.delete(bar(db, a, DAYS[3]))
+    bar(db, a, DAYS[4]).is_suspended = True
+    bar(db, a, DAYS[5]).close = 0.0
+    # A weekday the TAIEX has no session is not a day of the line, though the
+    # stock has a bar on it.
+    db.delete(bar(db, index, DAYS[6]))
+    # A bar after the list's date is not read.
+    db.add(
+        MarketBar(
+            instrument_id=a.id,
+            trading_date=T + timedelta(days=3),
+            open=1.0,
+            high=1.0,
+            low=1.0,
+            close=1.0,
+            adj_close=1.0,
+            source="fixture-bars",
+        )
+    )
+    db.commit()
+
+    item = client.get("/api/candidates").json()["items"][0]
+    sessions = [day for day in [*earlier, *DAYS] if day != DAYS[6]][-30:]
+    expected = []
+    for day in sessions:
+        if day in (DAYS[3], DAYS[4], DAYS[5]) or day not in DAYS:
+            expected.append(None)
+        else:
+            expected.append(CLOSE + DAYS.index(day))
+    assert item["recent_closes"] == {
+        "dates": [day.isoformat() for day in sessions],
+        "closes": expected,
+    }
+    assert len(sessions) == 30 and sessions[-1] == T
+    # The earliest sessions of the line are before the stock's first bar.
+    assert expected[:4] == [None] * 4 and expected[-1] == CLOSE + len(DAYS) - 1
+    # The change still reads the previous session of the same calendar.
+    assert item["market"]["change_status"] == "known"
+    assert item["market"]["change"] == 1.0
 
 
 def _snapshot(db):
