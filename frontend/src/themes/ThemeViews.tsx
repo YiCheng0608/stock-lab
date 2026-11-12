@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import ReactEChartsModule from 'echarts-for-react'
 
 import { Term } from '../components/Term'
-import { Badge, Card, CardList, DataTable, DateBadge, EmptyState, Skeleton, Stat, Tabs, cx, tabId, tabPanelId, type Column } from '../components/ui'
+import { Badge, Card, CardList, DataTable, DateBadge, EmptyState, ScoreBar, Skeleton, Stat, StrengthChip, Tabs, cx, tabId, tabPanelId, type Column } from '../components/ui'
 import { newsSourceName, newsTime } from '../news/newsView'
 import { officialEventDisplayTitle } from '../presentation'
 import { isFiniteNumber, readChartTheme, type ChartTheme } from '../stock/stockBars'
@@ -86,6 +86,16 @@ function ReturnValue({ value, unit = '' }: { value: number | null | undefined; u
   return <span className={`tone-${tone}`}>{text}</span>
 }
 
+// A group's 1／5／20 日 relative return as a strength block (#654, DESIGN_SYSTEM §5 強弱色塊); the value is a fraction.
+function GroupReturn({ label, value }: { label: string; value: number | null | undefined }) {
+  return <StrengthChip label={`${label}相對加權指數`} percent={isFiniteNumber(value) ? value * 100 : null} />
+}
+
+// A same-board percentile (0–1) as a 0–100 score bar (#654); no data stays 「—」.
+function ComponentBar({ label, value }: { label: string; value: number | null | undefined }) {
+  return <ScoreBar label={label} value={isFiniteNumber(value) ? value * 100 : null} />
+}
+
 export function BoardDateBadges({ meta }: { meta: Pick<ThemeBoardMeta, 'trading_date' | 'data_as_of'> }) {
   const { trading, dataAsOf } = boardDates(meta)
   return (
@@ -139,7 +149,7 @@ function BoardRow({ item, picks, open, onOpen }: { item: ThemeBoardItem; picks: 
           <ComponentExtremes item={item} />
         </p>
         <p className="board-row-meta">
-          {RETURN_WINDOWS.map((window) => <span key={window.key}>{window.label} <b><ReturnValue value={item.relative_returns[window.key]} unit="%" /></b></span>)}
+          {RETURN_WINDOWS.map((period) => <span key={period.key}>{period.label} <GroupReturn label={period.label} value={item.relative_returns[period.key]} /></span>)}
           {picks !== null && picks > 0 && <Badge tone="primary" className="badge-compact board-row-picks">今日名單 {picks} 檔</Badge>}
         </p>
         <span className="board-row-score"><span>分數</span> <b>{formatScore(item.score)}</b></span>
@@ -149,7 +159,7 @@ function BoardRow({ item, picks, open, onOpen }: { item: ThemeBoardItem; picks: 
         <summary>{item.display_name} 五分項</summary>
         <div className="board-row-detail-body">
           <dl className="board-components">
-            {BOARD_COMPONENTS.map((component) => <div key={component.key}><dt>{component.label}</dt><dd>{formatComponent(item.components[component.key])}</dd></div>)}
+            {BOARD_COMPONENTS.map((component) => <div key={component.key}><dt>{component.label}</dt><dd><ComponentBar label={component.label} value={item.components[component.key]} /></dd></div>)}
             <div><dt>成員（檔）</dt><dd>{formatMembers(item.eligible_members, item.member_count)}</dd></div>
           </dl>
           <Link className="text-link" to={themeDetailPath(item.theme_id)}>族群詳情 →</Link>
@@ -257,7 +267,7 @@ function HotGroupRow({ item }: { item: ThemeBoardItem }) {
         <span className="hot-group-score"><span>分數</span> <b>{formatScore(item.score)}</b></span>
       </span>
       <span className="hot-group-returns">
-        {RETURN_WINDOWS.map((window) => <span key={window.key}>{window.label} <b><ReturnValue value={item.relative_returns[window.key]} unit="%" /></b></span>)}
+        {RETURN_WINDOWS.map((period) => <span key={period.key}>{period.label} <GroupReturn label={period.label} value={item.relative_returns[period.key]} /></span>)}
       </span>
     </Link>
   )
@@ -357,10 +367,10 @@ function ComponentsCard({ detail, item, state, error }: { detail: ThemeDetail; i
       {state === 'loading'
         ? <Skeleton lines={BOARD_COMPONENTS.length} className="inline-skeleton" label="五分項載入中…" />
         : <div className="metric-list">
-          {BOARD_COMPONENTS.map((component) => <div className="metric-row" key={component.key}><span>{component.label}</span><b>{formatComponent(item?.components[component.key])}</b></div>)}
+          {BOARD_COMPONENTS.map((component) => <div className="metric-row" key={component.key}><span>{component.label}</span><ComponentBar label={component.label} value={item?.components[component.key]} /></div>)}
         </div>}
       <div className="metric-list components-returns">
-        {RETURN_WINDOWS.map((window) => <div className="metric-row" key={window.key}><span>{window.label}相對加權指數</span><b><ReturnValue value={returns[window.key]} unit="%" /></b></div>)}
+        {RETURN_WINDOWS.map((period) => <div className="metric-row" key={period.key}><span>{period.label}相對加權指數</span><GroupReturn label={period.label} value={returns[period.key]} /></div>)}
       </div>
     </Card>
   )
