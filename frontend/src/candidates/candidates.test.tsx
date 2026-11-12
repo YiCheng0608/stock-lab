@@ -29,8 +29,8 @@ import {
   marketSourceLabel,
 } from './candidates'
 import { completeItem, doneNote, listResponse, notComputedResponse, partialItem, zeroResponse } from './candidates.fixtures'
-import { CandidatesSection, PriceLadder, ScoreDetails } from './CandidateViews'
-import { candidateChartLevels, ladderLabel, priceLadder } from './candidates'
+import { CandidatesSection, PriceLadder, ScoreDetails, Sparkline } from './CandidateViews'
+import { SPARKLINE_HEIGHT, SPARKLINE_WIDTH, candidateChartLevels, ladderLabel, priceLadder, sparkline } from './candidates'
 
 // Standalone regression module (no browser, no server, no network) for the daily candidate list (#215):
 // the detail content under each today row (components, reasons, AI note), partial components, the score details
@@ -237,6 +237,26 @@ check(ladderMarkup.includes('role="img"') && ladderMarkup.includes('price-ladder
 check(ladderMarkup.replace(/<[^>]+>/g, '') === '', 'the ladder adds no page text (the row already states the prices)')
 check(renderToStaticMarkup(<PriceLadder item={{ ...breakoutItem, levels: { ...breakoutItem.levels, target_1: null } }} />) === '', 'no ladder without a full set of levels')
 
+// ---- the sparkline (Issue 653; DESIGN_SYSTEM §5 候選列表): 30 sessions' closes, red up and green down, a labelled image ----
+const closes = (values: Array<number | null>) => ({ dates: values.map((_, index) => `2026-10-${String(index + 1).padStart(2, '0')}`), closes: values })
+const rising = sparkline(closes([100, 104, 102, 110]))
+check(rising?.tone === 'up' && rising.label === '近 4 個交易日收盤走勢：2026/10/01–2026/10/04 +10.00%', `a span that rose is up and its label states the span and change: ${JSON.stringify(rising)}`)
+const falling = sparkline(closes([50, 48, 49, 45]))
+check(falling?.tone === 'down' && falling.label.endsWith(' -10.00%'), `a span that fell is down: ${JSON.stringify(falling)}`)
+check(sparkline(closes([20, 21, 20]))?.tone === 'flat' && sparkline(closes([20, 21, 20]))!.label.endsWith(' 0.00%'), 'an unchanged span is flat')
+check(rising?.path === 'M1 23L32.33 14.2L63.67 18.6L95 1', `the line spans the box, the high at the top and the low at the bottom: ${rising?.path}`)
+const gapped = sparkline(closes([null, 100, null, 101, 102]))
+check(gapped !== null && (gapped.path.match(/M/g) ?? []).length === 2 && gapped.label.includes('2026/10/02–2026/10/05'), `a session without a close leaves a gap, and the span runs from the first close to the last: ${JSON.stringify(gapped)}`)
+check(sparkline(closes([null, 100, null])) === null && sparkline(closes([])) === null && sparkline(undefined) === null, 'fewer than 2 closes: no line')
+check(sparkline({ dates: ['2026-10-01'], closes: [1, 2] }) === null, 'dates and closes of different lengths: no line')
+const flatLine = sparkline(closes([30, 30]))
+check(flatLine?.path === `M1 ${SPARKLINE_HEIGHT / 2}L95 ${SPARKLINE_HEIGHT / 2}`, `an unchanged price is a level line in the middle: ${flatLine?.path}`)
+const sparkMarkup = renderToStaticMarkup(<Sparkline item={{ recent_closes: closes([100, 104, 102, 110]) }} />)
+check(sparkMarkup.startsWith('<svg class="sparkline sparkline-up" role="img" aria-label="近 4 個交易日收盤走勢：2026/10/01–2026/10/04 +10.00%"'), `the sparkline is an image whose class carries the tone: ${sparkMarkup}`)
+check(sparkMarkup.includes(`viewBox="0 0 ${SPARKLINE_WIDTH} ${SPARKLINE_HEIGHT}"`) && sparkMarkup.replace(/<[^>]+>/g, '') === '' && !/<(text|line|g)b/.test(sparkMarkup), 'no axis or text: one path in the box')
+check(renderToStaticMarkup(<Sparkline item={{ recent_closes: closes([50, 45]) }} />).includes('class="sparkline sparkline-down"'), 'a span that fell carries the down class')
+check(renderToStaticMarkup(<Sparkline item={{ recent_closes: closes([50]) }} />) === '' && renderToStaticMarkup(<Sparkline item={{}} />) === '', 'no sparkline with one close or none (responses from before Issue 653)')
+
 const plainList = render(<CandidatesSection data={listResponse()} loading={false} error={null} />)
 check(!plainList.includes('candidates-terminal') && !plainList.includes('candidate-rank-button'), 'without a chart the list is the list alone and the rank is not a button')
 const charted = render(<CandidatesSection data={listResponse()} loading={false} error={null} renderChart={(item) => <div data-test-chart={item.instrument.symbol} />} />)
@@ -246,3 +266,5 @@ check(charted.includes('aria-label="第 1 名，顯示走勢圖"') && charted.in
 check(charted.indexOf('candidates-terminal-list') < charted.indexOf('candidates-terminal-chart'), 'the list comes before the chart in the document')
 const text = (markup: string) => markup.replace(/<[^>]+>/g, '')
 check(text(charted) === text(plainList), 'the chart slot and the ladder change no page text of the list')
+check(/<div class="candidate-row-figures"><svg class="sparkline sparkline-up"[^>]*><path d="[^"]+"><\/path><\/svg><div class="price-ladder"/.test(plainList), 'a row draws the sparkline, then the ladder, on one line under the sentence (Issue 653)')
+check((plainList.match(/class="sparkline /g) ?? []).length === 1, 'only the row with closes has a sparkline')

@@ -32,7 +32,7 @@
 
 **時點一致性**：只保證 `daily` 當日計算的時點一致。重算舊日期時（`worker.cli candidates --date <舊日>`，或在沒有 run 的日期跑 `daily --force`），入池與評分輸入都以 T 為資料日期，但標的與群組的 active 狀態、LLM 判讀，以及 T 之後才收錄的 T 日新聞，可能用到 T 之後才有的資訊。
 
-**API**：`GET /api/candidates?date=&limit=`（`limit` 1～20，預設 20；不帶 `date` 取最新一次 run）回傳 run 摘要、`zero_reason`／`zero_reason_text`、方法說明（權重、各分項 `inference`、null 說明）與每列的排名、標的、策略、進場區／停損／目標／RR、總分、`weight_coverage`、`partial_components`、四分項（子項值、percentile、`null_reason`／`null_explanation`）、理由、族群、資料日期與來源；該日未計算時 `status=not_computed`。`GET /api/stocks/{exchange}/{symbol}` 的 `candidate` 為該股在 cutoff 當日或之前最新一次 run 中的列，沒有則為 null。兩者的每列另有 `llm_note`（[候選 AI 進出點說明](#候選-ai-進出點說明)），既有欄位不變。
+**API**：`GET /api/candidates?date=&limit=`（`limit` 1～20，預設 20；不帶 `date` 取最新一次 run）回傳 run 摘要、`zero_reason`／`zero_reason_text`、方法說明（權重、各分項 `inference`、null 說明）與每列的排名、標的、策略、進場區／停損／目標／RR、總分、`weight_coverage`、`partial_components`、四分項（子項值、percentile、`null_reason`／`null_explanation`）、理由、族群、資料日期與來源；該日未計算時 `status=not_computed`。`GET /api/stocks/{exchange}/{symbol}` 的 `candidate` 為該股在 cutoff 當日或之前最新一次 run 中的列，沒有則為 null。兩者的每列另有 `llm_note`（[候選 AI 進出點說明](#候選-ai-進出點說明)），既有欄位不變。`/api/candidates` 的每列另有 `recent_closes`（[#653](https://github.com/YiCheng0608/stock-lab/issues/653)，今日名單的走勢線；個股 `candidate` 沒有）：`{"dates": [...], "closes": [...]}`，`dates` 是到 run 交易日為止最近 30 個已核實的 TAIEX 交易日（與 `market` 漲跌同一份日曆，由舊到新，整份名單共用），`closes` 是該股在各日已存日線的收盤（與個股頁 K 線同一筆、不還原），沒有成交的日子（沒有日線、停牌或沒有收盤）為 null，不以其他收盤補；整份名單一次查詢、只讀這 30 日的欄位，正式 DB 副本上回應約 +12 KB、耗時不變（#653 PR）。
 
 ### 候選 AI 進出點說明
 
