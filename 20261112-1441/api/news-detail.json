@@ -1,0 +1,261 @@
+{
+  "id": "29424",
+  "canonical_key": "news:yahoo_tw:9ce66ad765f433a7ab8e70a6f6a89ae6fdbb40e4acaec0c53c6d084bde054848",
+  "dedupe_cluster_id": "news-title:1cf935eb272b39b9c46bd4041bc9d273",
+  "category": "domestic",
+  "source_kind": "media",
+  "source_name": "Yahoo奇摩股市",
+  "source": {
+    "name": "Yahoo奇摩股市",
+    "url": "https://tw.news.yahoo.com/%E5%8F%B0%E8%82%A1%E6%94%B6%E7%9B%A4-%E5%8F%B0%E7%A9%8D%E9%9B%BB%E8%B7%8C55%E5%85%83-%E5%8F%B0%E8%82%A1%E6%85%98%E8%B7%8C1165%E9%BB%9E-%E9%A1%9E%E8%82%A1%E5%8F%88-%E7%89%87%E6%85%98%E7%B6%A0-055000048.html",
+    "url_kind": "item"
+  },
+  "source_item_id": null,
+  "title": "台股收盤／台積電跌55元！台股慘跌1165點　類股又一片慘綠",
+  "summary": "美股週三（11日）四大指數全面收紅，AI概念股強勢反彈，未料台股今（12）日不漲反跌，盤中賣壓持續擴大，尾盤更出現明顯殺盤。加權指數終場收在43,091.87點，大跌1,165.28點，跌幅2.63%",
+  "description": "美股週三（11日）四大指數全面收紅，AI概念股強勢反彈，未料台股今（12）日不漲反跌，盤中賣壓持續擴大，尾盤更出現明顯殺盤。加權指數終場收在43,091.87點，大跌1,165.28點，跌幅2.63%",
+  "summary_preview": "美股週三（11日）四大指數全面收紅，AI概念股強勢反彈，未料台股今（12）日不漲反跌，盤中賣壓持續擴大，尾盤更出現明顯殺盤。加權指數終場收在43,091.87點，大跌1,165.28點，跌幅2.63%",
+  "language": "zh-Hant",
+  "published_at": "2026-11-12T05:50:00+00:00",
+  "event_at": null,
+  "event_date": null,
+  "display_time": "2026-11-12T05:50:00+00:00",
+  "time_basis": "published",
+  "time_precision": "datetime",
+  "time_consistency": "verified",
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "news_item",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_market_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "event.event_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.event_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-11-12T05:50:00+00:00",
+        "utc": "2026-11-12T05:50:00+00:00",
+        "date": null,
+        "source": "news_item.published_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-11-12T06:00:09.085589+00:00",
+        "utc": "2026-11-12T06:00:09.085589+00:00",
+        "date": null,
+        "source": "news_item.collected_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_generated_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_at_not_applicable",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_date_not_applicable",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-11-12T07:03:22.001752+00:00",
+    "legacy": {
+      "published_at": "2026-11-12T05:50:00+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-11-12T05:50:00",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "collected_at": "2026-11-12T06:00:09.085589+00:00"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+      "A collection timestamp does not prove when the source first became available.",
+      "Historical decision and generation times are not persisted by the NewsItem projection."
+    ]
+  },
+  "response_generated_at": "2026-11-12T07:03:22.001752+00:00",
+  "collected_at": "2026-11-12T06:00:09.085589+00:00",
+  "symbols": [
+    "TWSE:2330"
+  ],
+  "instruments": [
+    {
+      "exchange": "TWSE",
+      "symbol": "2330",
+      "name": "台積電"
+    }
+  ],
+  "themes": [],
+  "theme_ids": [],
+  "impact": {
+    "scope": "instrument",
+    "direction": "unknown",
+    "rationale": null,
+    "method": "rule:exact-name-code/v3",
+    "confidence": "unknown"
+  },
+  "impact_scope": "instrument",
+  "impact_direction": "unknown",
+  "confidence": "unknown",
+  "status": "active",
+  "content_hash": "0c9fcf20238ad46129b9b89b9093de3e4bc0b7fd8d78abec7c631ff3f87a1fc3",
+  "detail_url": "/news/29424",
+  "ai": {
+    "inference": true,
+    "status": "done",
+    "summary": "台股12日收盤，加權指數收在43,091.87點，大跌1,165.28點，跌幅2.63%，台積電跌55元，類股一片慘綠。",
+    "symbol_candidates": [
+      {
+        "exchange": "TWSE",
+        "symbol": "2330",
+        "name": "台積電",
+        "listing": "listed",
+        "exchange_corrected": false,
+        "reason": "標題點名台積電跌55元",
+        "confidence": "high",
+        "verified": false,
+        "source_check": "mentioned"
+      }
+    ],
+    "hidden_symbol_candidates": [],
+    "candidate_check_version": "ai-candidate-source/v2",
+    "theme_candidates": [],
+    "impact_direction": "negative",
+    "impact_scope": "market",
+    "impact_rationale": "加權指數大跌2.63%，台積電下跌且類股走弱。",
+    "unsupported": false,
+    "model": "claude-sonnet-5-5",
+    "prompt_version": "news_v3",
+    "input_hash": "6b643cc59bf87fb219d7a0a022db6eb5094d0bcc4b8f256ae55e252784a3efd6",
+    "generated_at": "2026-11-12T06:00:56.423086+00:00"
+  },
+  "provenance": {
+    "event_id": null,
+    "raw_payload_id": 11327,
+    "endpoint": "https://tw.stock.yahoo.com/rss?category=tw-market",
+    "data_as_of": "2026-11-12T06:00:09.085589"
+  }
+}

@@ -1,0 +1,114 @@
+{
+  "rule": "candidates.json 依名次前 3 檔",
+  "trading_date": "2026-11-11",
+  "items": [
+    {
+      "rank": 1,
+      "instrument": {
+        "id": 493,
+        "exchange": "TWSE",
+        "symbol": "2892",
+        "name": "第一金",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v4",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 42.04,
+        "entry_zone": {
+          "low": 41.35,
+          "high": 42.73
+        },
+        "invalid_price": 40.77,
+        "target_1": 44.35,
+        "target_2": 46.27,
+        "risk_reward": 1.8189,
+        "risk_reward_basis": "entry_zone_midpoint",
+        "earliest_execution_date": "2026-11-12"
+      },
+      "llm_note": {
+        "status": "pending",
+        "inference": true,
+        "selection": null,
+        "levels": null,
+        "risks": null,
+        "model": null,
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-11-11T15:54:45.543887+00:00",
+        "input_hash": "f65e9dfbaf248a79b96eda1ba71dfcb9cd5ca70d7b6820f0554733a34370b221"
+      }
+    },
+    {
+      "rank": 2,
+      "instrument": {
+        "id": 195,
+        "exchange": "TWSE",
+        "symbol": "1809",
+        "name": "中釉",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v4",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 44.24,
+        "entry_zone": {
+          "low": 42.64,
+          "high": 45.84
+        },
+        "invalid_price": 41.29,
+        "target_1": 49.63,
+        "target_2": 54.12,
+        "risk_reward": 1.8271,
+        "risk_reward_basis": "entry_zone_midpoint",
+        "earliest_execution_date": "2026-11-12"
+      },
+      "llm_note": {
+        "status": "pending",
+        "inference": true,
+        "selection": null,
+        "levels": null,
+        "risks": null,
+        "model": null,
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-11-11T15:54:45.543887+00:00",
+        "input_hash": "66c6f79189877df4e90144d492e3e189e8b8db8e8ccf25fa7154169b911eff49"
+      }
+    },
+    {
+      "rank": 3,
+      "instrument": {
+        "id": 1481,
+        "exchange": "TPEx",
+        "symbol": "3147",
+        "name": "大綜",
+        "instrument_type": "stock"
+      },
+      "strategy": "breakout_v3",
+      "levels": {
+        "entry_type": "breakout",
+        "entry": 356.0,
+        "entry_zone": {
+          "low": 356.0,
+          "high": 356.0
+        },
+        "invalid_price": 335.71,
+        "target_1": 388.46,
+        "target_2": 416.86,
+        "risk_reward": 1.5998,
+        "risk_reward_basis": "entry_price",
+        "earliest_execution_date": "2026-11-12"
+      },
+      "llm_note": {
+        "status": "pending",
+        "inference": true,
+        "selection": null,
+        "levels": null,
+        "risks": null,
+        "model": null,
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-11-11T15:54:45.543887+00:00",
+        "input_hash": "cc65893956acb1127d622c77d775bd5bbd21baeeeb5dd32356b4a3b2f5bfff4e"
+      }
+    }
+  ]
+}

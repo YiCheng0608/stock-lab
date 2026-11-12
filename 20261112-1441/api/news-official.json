@@ -1,0 +1,4812 @@
+{
+  "items": [
+    {
+      "id": "28713",
+      "canonical_key": "official-event:fffe7c0fa5d3c890f6924682b8c85aeb016424ea0390be72a13d83ba485b39df",
+      "dedupe_cluster_id": "official-event:fffe7c0fa5d3c890f6924682b8c85aeb016424ea0390be72a13d83ba485b39df",
+      "category": "company",
+      "source_kind": "official_disclosure",
+      "source_name": "MOPS",
+      "source": {
+        "name": "MOPS",
+        "url": "https://mops.twse.com.tw/mops/api/t05st02",
+        "url_kind": "feed"
+      },
+      "source_item_id": null,
+      "title": "公告本公司董事會通過115年第三季合併財報",
+      "summary": null,
+      "description": null,
+      "summary_preview": null,
+      "language": "zh-Hant",
+      "published_at": null,
+      "event_at": null,
+      "event_date": "2026-11-11",
+      "display_time": "2026-11-11T00:00:00",
+      "time_basis": "event_date",
+      "time_precision": "date",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-11-11",
+            "utc": null,
+            "date": "2026-11-11",
+            "source": "news_item.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_published_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-11-11T13:33:35.316104+00:00",
+            "utc": "2026-11-11T13:33:35.316104+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-11-12T07:03:21.870563+00:00",
+        "legacy": {
+          "published_at": null,
+          "event_at": null,
+          "event_date": "2026-11-11",
+          "display_time": "2026-11-11T00:00:00",
+          "time_basis": "event_date",
+          "time_precision": "date",
+          "time_consistency": "verified",
+          "collected_at": "2026-11-11T13:33:35.316104+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-11-12T07:03:21.870563+00:00",
+      "collected_at": "2026-11-11T13:33:35.316104+00:00",
+      "symbols": [
+        "3287"
+      ],
+      "instruments": [
+        {
+          "exchange": "TPEx",
+          "symbol": "3287",
+          "name": "廣寰科"
+        }
+      ],
+      "themes": [
+        {
+          "theme_id": "official-industry-d60be8febbae1cd6",
+          "display_name": "電腦及週邊"
+        }
+      ],
+      "theme_ids": [
+        "official-industry-d60be8febbae1cd6"
+      ],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "default_unknown",
+        "confidence": "high"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "high",
+      "status": "active",
+      "content_hash": "e55eabcf943402aee1483be56a92fd6794201b011a6e1180780fd557e61d807e",
+      "detail_url": "/news/28713",
+      "ai": null,
+      "provenance": {
+        "event_id": 19014,
+        "raw_payload_id": 11204,
+        "endpoint": "https://mops.twse.com.tw/mops/api/t05st02",
+        "data_as_of": "2026-11-11"
+      }
+    },
+    {
+      "id": "28639",
+      "canonical_key": "official-event:ffed334a03c5780a1316a1de430e0402544e39b24601c9eb814f00edd04e4d51",
+      "dedupe_cluster_id": "official-event:ffed334a03c5780a1316a1de430e0402544e39b24601c9eb814f00edd04e4d51",
+      "category": "company",
+      "source_kind": "official_disclosure",
+      "source_name": "MOPS",
+      "source": {
+        "name": "MOPS",
+        "url": "https://mops.twse.com.tw/mops/api/t05st02",
+        "url_kind": "feed"
+      },
+      "source_item_id": null,
+      "title": "代子公司環豐有限公司依「公開發行公司資金貸與及背書保證處\r\n理準則」第二十二條第一項三款之標準",
+      "summary": null,
+      "description": null,
+      "summary_preview": null,
+      "language": "zh-Hant",
+      "published_at": null,
+      "event_at": null,
+      "event_date": "2026-11-11",
+      "display_time": "2026-11-11T00:00:00",
+      "time_basis": "event_date",
+      "time_precision": "date",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-11-11",
+            "utc": null,
+            "date": "2026-11-11",
+            "source": "news_item.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_published_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-11-11T13:33:35.254755+00:00",
+            "utc": "2026-11-11T13:33:35.254755+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-11-12T07:03:21.872227+00:00",
+        "legacy": {
+          "published_at": null,
+          "event_at": null,
+          "event_date": "2026-11-11",
+          "display_time": "2026-11-11T00:00:00",
+          "time_basis": "event_date",
+          "time_precision": "date",
+          "time_consistency": "verified",
+          "collected_at": "2026-11-11T13:33:35.254755+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-11-12T07:03:21.872227+00:00",
+      "collected_at": "2026-11-11T13:33:35.254755+00:00",
+      "symbols": [
+        "6127"
+      ],
+      "instruments": [
+        {
+          "exchange": "TPEx",
+          "symbol": "6127",
+          "name": "九豪"
+        }
+      ],
+      "themes": [
+        {
+          "theme_id": "official-industry-619f4b496b333d8f",
+          "display_name": "電子零組件"
+        }
+      ],
+      "theme_ids": [
+        "official-industry-619f4b496b333d8f"
+      ],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "default_unknown",
+        "confidence": "high"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "high",
+      "status": "active",
+      "content_hash": "5991401adf853618797c12ed78a790defdcac810fe6bd43bb6658bf5572add13",
+      "detail_url": "/news/28639",
+      "ai": null,
+      "provenance": {
+        "event_id": 18940,
+        "raw_payload_id": 11204,
+        "endpoint": "https://mops.twse.com.tw/mops/api/t05st02",
+        "data_as_of": "2026-11-11"
+      }
+    },
+    {
+      "id": "28871",
+      "canonical_key": "official-event:ff72f2267a60ba3a5900f7636a1bab4ea1e0dbbdaa84bbbc0baa5a9a134fb63d",
+      "dedupe_cluster_id": "official-event:ff72f2267a60ba3a5900f7636a1bab4ea1e0dbbdaa84bbbc0baa5a9a134fb63d",
+      "category": "company",
+      "source_kind": "official_disclosure",
+      "source_name": "MOPS",
+      "source": {
+        "name": "MOPS",
+        "url": "https://mops.twse.com.tw/mops/api/t05st02",
+        "url_kind": "feed"
+      },
+      "source_item_id": null,
+      "title": "公告本公司董事會決議通過對泰國子公司增資案",
+      "summary": null,
+      "description": null,
+      "summary_preview": null,
+      "language": "zh-Hant",
+      "published_at": null,
+      "event_at": null,
+      "event_date": "2026-11-11",
+      "display_time": "2026-11-11T00:00:00",
+      "time_basis": "event_date",
+      "time_precision": "date",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-11-11",
+            "utc": null,
+            "date": "2026-11-11",
+            "source": "news_item.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_published_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-11-11T13:33:35.431297+00:00",
+            "utc": "2026-11-11T13:33:35.431297+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-11-12T07:03:21.873611+00:00",
+        "legacy": {
+          "published_at": null,
+          "event_at": null,
+          "event_date": "2026-11-11",
+          "display_time": "2026-11-11T00:00:00",
+          "time_basis": "event_date",
+          "time_precision": "date",
+          "time_consistency": "verified",
+          "collected_at": "2026-11-11T13:33:35.431297+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-11-12T07:03:21.873611+00:00",
+      "collected_at": "2026-11-11T13:33:35.431297+00:00",
+      "symbols": [
+        "4721"
+      ],
+      "instruments": [
+        {
+          "exchange": "TPEx",
+          "symbol": "4721",
+          "name": "美琪瑪"
+        }
+      ],
+      "themes": [
+        {
+          "theme_id": "official-industry-630bc61b2b964225",
+          "display_name": "化學"
+        }
+      ],
+      "theme_ids": [
+        "official-industry-630bc61b2b964225"
+      ],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "default_unknown",
+        "confidence": "high"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "high",
+      "status": "active",
+      "content_hash": "dec18583f84724d9e0e3396d6d5d2ada3e6736defc4d53c020b22113152f0063",
+      "detail_url": "/news/28871",
+      "ai": null,
+      "provenance": {
+        "event_id": 19172,
+        "raw_payload_id": 11204,
+        "endpoint": "https://mops.twse.com.tw/mops/api/t05st02",
+        "data_as_of": "2026-11-11"
+      }
+    },
+    {
+      "id": "28451",
+      "canonical_key": "official-event:ff6a0563629c0f111a62b134385f8cf02bc8e6c87d3d3a396067344e540a0dd7",
+      "dedupe_cluster_id": "official-event:ff6a0563629c0f111a62b134385f8cf02bc8e6c87d3d3a396067344e540a0dd7",
+      "category": "company",
+      "source_kind": "official_disclosure",
+      "source_name": "MOPS",
+      "source": {
+        "name": "MOPS",
+        "url": "https://mops.twse.com.tw/mops/api/t05st02",
+        "url_kind": "feed"
+      },
+      "source_item_id": null,
+      "title": "公告本公司115年10月份合併自結損益",
+      "summary": null,
+      "description": null,
+      "summary_preview": null,
+      "language": "zh-Hant",
+      "published_at": null,
+      "event_at": null,
+      "event_date": "2026-11-11",
+      "display_time": "2026-11-11T00:00:00",
+      "time_basis": "event_date",
+      "time_precision": "date",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-11-11",
+            "utc": null,
+            "date": "2026-11-11",
+            "source": "news_item.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_published_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-11-11T13:33:35.064668+00:00",
+            "utc": "2026-11-11T13:33:35.064668+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-11-12T07:03:21.875381+00:00",
+        "legacy": {
+          "published_at": null,
+          "event_at": null,
+          "event_date": "2026-11-11",
+          "display_time": "2026-11-11T00:00:00",
+          "time_basis": "event_date",
+          "time_precision": "date",
+          "time_consistency": "verified",
+          "collected_at": "2026-11-11T13:33:35.064668+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-11-12T07:03:21.875381+00:00",
+      "collected_at": "2026-11-11T13:33:35.064668+00:00",
+      "symbols": [
+        "6164"
+      ],
+      "instruments": [
+        {
+          "exchange": "TWSE",
+          "symbol": "6164",
+          "name": "華興"
+        }
+      ],
+      "themes": [
+        {
+          "theme_id": "official-industry-427c8d2e58996415",
+          "display_name": "光電"
+        }
+      ],
+      "theme_ids": [
+        "official-industry-427c8d2e58996415"
+      ],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "default_unknown",
+        "confidence": "high"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "high",
+      "status": "active",
+      "content_hash": "66d58dff80756dac2be75528d55431dc3b8e1fb83e8a041b5beeccbbe74cf48c",
+      "detail_url": "/news/28451",
+      "ai": null,
+      "provenance": {
+        "event_id": 18752,
+        "raw_payload_id": 11204,
+        "endpoint": "https://mops.twse.com.tw/mops/api/t05st02",
+        "data_as_of": "2026-11-11"
+      }
+    },
+    {
+      "id": "28488",
+      "canonical_key": "official-event:ff5832b07a0ddf4fd2a30cf41db6c929faa8a06aa1f15086b1c01e717f39df12",
+      "dedupe_cluster_id": "official-event:ff5832b07a0ddf4fd2a30cf41db6c929faa8a06aa1f15086b1c01e717f39df12",
+      "category": "company",
+      "source_kind": "official_disclosure",
+      "source_name": "MOPS",
+      "source": {
+        "name": "MOPS",
+        "url": "https://mops.twse.com.tw/mops/api/t05st02",
+        "url_kind": "feed"
+      },
+      "source_item_id": null,
+      "title": "公告本公司董事會通過115年第三季財務報告",
+      "summary": null,
+      "description": null,
+      "summary_preview": null,
+      "language": "zh-Hant",
+      "published_at": null,
+      "event_at": null,
+      "event_date": "2026-11-11",
+      "display_time": "2026-11-11T00:00:00",
+      "time_basis": "event_date",
+      "time_precision": "date",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-11-11",
+            "utc": null,
+            "date": "2026-11-11",
+            "source": "news_item.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_published_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-11-11T13:33:35.092172+00:00",
+            "utc": "2026-11-11T13:33:35.092172+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-11-12T07:03:21.876836+00:00",
+        "legacy": {
+          "published_at": null,
+          "event_at": null,
+          "event_date": "2026-11-11",
+          "display_time": "2026-11-11T00:00:00",
+          "time_basis": "event_date",
+          "time_precision": "date",
+          "time_consistency": "verified",
+          "collected_at": "2026-11-11T13:33:35.092172+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-11-12T07:03:21.876836+00:00",
+      "collected_at": "2026-11-11T13:33:35.092172+00:00",
+      "symbols": [
+        "7760"
+      ],
+      "instruments": [
+        {
+          "exchange": "TWSE",
+          "symbol": "7760",
+          "name": "享溫馨"
+        }
+      ],
+      "themes": [
+        {
+          "theme_id": "official-industry-d88d011b051a09df",
+          "display_name": "觀光餐旅"
+        }
+      ],
+      "theme_ids": [
+        "official-industry-d88d011b051a09df"
+      ],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "default_unknown",
+        "confidence": "high"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "high",
+      "status": "active",
+      "content_hash": "75475b117d941e4a3e5c9d762fccc85b9096c7ecab3d6fcaf1d94c93bd35bcb1",
+      "detail_url": "/news/28488",
+      "ai": null,
+      "provenance": {
+        "event_id": 18789,
+        "raw_payload_id": 11204,
+        "endpoint": "https://mops.twse.com.tw/mops/api/t05st02",
+        "data_as_of": "2026-11-11"
+      }
+    },
+    {
+      "id": "28149",
+      "canonical_key": "official-event:ff35f9bcb9335ee6524c07d9e65c654dc3460f4c91b4ba5db15670f3040f1aa3",
+      "dedupe_cluster_id": "official-event:ff35f9bcb9335ee6524c07d9e65c654dc3460f4c91b4ba5db15670f3040f1aa3",
+      "category": "company",
+      "source_kind": "official_disclosure",
+      "source_name": "MOPS",
+      "source": {
+        "name": "MOPS",
+        "url": "https://mops.twse.com.tw/mops/api/t05st02",
+        "url_kind": "feed"
+      },
+      "source_item_id": null,
+      "title": "代重要子公司AMAX Engineering Corporation依\r\n「公開發行公司資金貸與及背書保證處理準則」\r\n第二十二條第一項第一款公告申報",
+      "summary": null,
+      "description": null,
+      "summary_preview": null,
+      "language": "zh-Hant",
+      "published_at": null,
+      "event_at": null,
+      "event_date": "2026-11-11",
+      "display_time": "2026-11-11T00:00:00",
+      "time_basis": "event_date",
+      "time_precision": "date",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-11-11",
+            "utc": null,
+            "date": "2026-11-11",
+            "source": "news_item.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_published_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-11-11T13:33:34.800082+00:00",
+            "utc": "2026-11-11T13:33:34.800082+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-11-12T07:03:21.878206+00:00",
+        "legacy": {
+          "published_at": null,
+          "event_at": null,
+          "event_date": "2026-11-11",
+          "display_time": "2026-11-11T00:00:00",
+          "time_basis": "event_date",
+          "time_precision": "date",
+          "time_consistency": "verified",
+          "collected_at": "2026-11-11T13:33:34.800082+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-11-12T07:03:21.878206+00:00",
+      "collected_at": "2026-11-11T13:33:34.800082+00:00",
+      "symbols": [
+        "6933"
+      ],
+      "instruments": [
+        {
+          "exchange": "TWSE",
+          "symbol": "6933",
+          "name": "AMAX-KY"
+        }
+      ],
+      "themes": [
+        {
+          "theme_id": "official-industry-d60be8febbae1cd6",
+          "display_name": "電腦及週邊"
+        }
+      ],
+      "theme_ids": [
+        "official-industry-d60be8febbae1cd6"
+      ],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "default_unknown",
+        "confidence": "high"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "high",
+      "status": "active",
+      "content_hash": "990d9fb00611e1ae8f4bc2d69d5d3b8b5b11f2b2c4a4f503fd5b8ef80428b4ae",
+      "detail_url": "/news/28149",
+      "ai": null,
+      "provenance": {
+        "event_id": 18450,
+        "raw_payload_id": 11204,
+        "endpoint": "https://mops.twse.com.tw/mops/api/t05st02",
+        "data_as_of": "2026-11-11"
+      }
+    },
+    {
+      "id": "28598",
+      "canonical_key": "official-event:febed4fb4906ea9c65fb53654bc24d25c96cbbfd09a11c99da7f1ccc24749b79",
+      "dedupe_cluster_id": "official-event:febed4fb4906ea9c65fb53654bc24d25c96cbbfd09a11c99da7f1ccc24749b79",
+      "category": "company",
+      "source_kind": "official_disclosure",
+      "source_name": "MOPS",
+      "source": {
+        "name": "MOPS",
+        "url": "https://mops.twse.com.tw/mops/api/t05st02",
+        "url_kind": "feed"
+      },
+      "source_item_id": null,
+      "title": "公告本公司公司治理主管異動",
+      "summary": null,
+      "description": null,
+      "summary_preview": null,
+      "language": "zh-Hant",
+      "published_at": null,
+      "event_at": null,
+      "event_date": "2026-11-11",
+      "display_time": "2026-11-11T00:00:00",
+      "time_basis": "event_date",
+      "time_precision": "date",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-11-11",
+            "utc": null,
+            "date": "2026-11-11",
+            "source": "news_item.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_published_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-11-11T13:33:35.222568+00:00",
+            "utc": "2026-11-11T13:33:35.222568+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-11-12T07:03:21.879707+00:00",
+        "legacy": {
+          "published_at": null,
+          "event_at": null,
+          "event_date": "2026-11-11",
+          "display_time": "2026-11-11T00:00:00",
+          "time_basis": "event_date",
+          "time_precision": "date",
+          "time_consistency": "verified",
+          "collected_at": "2026-11-11T13:33:35.222568+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-11-12T07:03:21.879707+00:00",
+      "collected_at": "2026-11-11T13:33:35.222568+00:00",
+      "symbols": [
+        "3489"
+      ],
+      "instruments": [
+        {
+          "exchange": "TPEx",
+          "symbol": "3489",
+          "name": "長耀地產"
+        }
+      ],
+      "themes": [
+        {
+          "theme_id": "official-industry-a2c05fab456a3948",
+          "display_name": "建材營造"
+        }
+      ],
+      "theme_ids": [
+        "official-industry-a2c05fab456a3948"
+      ],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "default_unknown",
+        "confidence": "high"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "high",
+      "status": "active",
+      "content_hash": "494b699bc83530cdeaf515d5ac47b3f7bdf5174799cf93b44d71c73ad596bd8a",
+      "detail_url": "/news/28598",
+      "ai": null,
+      "provenance": {
+        "event_id": 18899,
+        "raw_payload_id": 11204,
+        "endpoint": "https://mops.twse.com.tw/mops/api/t05st02",
+        "data_as_of": "2026-11-11"
+      }
+    },
+    {
+      "id": "28339",
+      "canonical_key": "official-event:fe6913cbf2d5310fe447d9c6910b8d3eaeaf28562b031a6cd2e8943561ef85aa",
+      "dedupe_cluster_id": "official-event:fe6913cbf2d5310fe447d9c6910b8d3eaeaf28562b031a6cd2e8943561ef85aa",
+      "category": "company",
+      "source_kind": "official_disclosure",
+      "source_name": "MOPS",
+      "source": {
+        "name": "MOPS",
+        "url": "https://mops.twse.com.tw/mops/api/t05st02",
+        "url_kind": "feed"
+      },
+      "source_item_id": null,
+      "title": "代子公司聯德精密工業股份有限公司公告取得聯德動能股份有限公司100%股權",
+      "summary": null,
+      "description": null,
+      "summary_preview": null,
+      "language": "zh-Hant",
+      "published_at": null,
+      "event_at": null,
+      "event_date": "2026-11-11",
+      "display_time": "2026-11-11T00:00:00",
+      "time_basis": "event_date",
+      "time_precision": "date",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-11-11",
+            "utc": null,
+            "date": "2026-11-11",
+            "source": "news_item.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_published_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-11-11T13:33:34.971793+00:00",
+            "utc": "2026-11-11T13:33:34.971793+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-11-12T07:03:21.881107+00:00",
+        "legacy": {
+          "published_at": null,
+          "event_at": null,
+          "event_date": "2026-11-11",
+          "display_time": "2026-11-11T00:00:00",
+          "time_basis": "event_date",
+          "time_precision": "date",
+          "time_consistency": "verified",
+          "collected_at": "2026-11-11T13:33:34.971793+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-11-12T07:03:21.881107+00:00",
+      "collected_at": "2026-11-11T13:33:34.971793+00:00",
+      "symbols": [
+        "4912"
+      ],
+      "instruments": [
+        {
+          "exchange": "TWSE",
+          "symbol": "4912",
+          "name": "聯德控股-KY"
+        }
+      ],
+      "themes": [
+        {
+          "theme_id": "official-industry-619f4b496b333d8f",
+          "display_name": "電子零組件"
+        }
+      ],
+      "theme_ids": [
+        "official-industry-619f4b496b333d8f"
+      ],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "default_unknown",
+        "confidence": "high"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "high",
+      "status": "active",
+      "content_hash": "fc3faaf2b37b517ee66d60b2abb91ad136d751ca2532e733027ce04ad4cd7d7a",
+      "detail_url": "/news/28339",
+      "ai": null,
+      "provenance": {
+        "event_id": 18640,
+        "raw_payload_id": 11204,
+        "endpoint": "https://mops.twse.com.tw/mops/api/t05st02",
+        "data_as_of": "2026-11-11"
+      }
+    },
+    {
+      "id": "28584",
+      "canonical_key": "official-event:fd935ccedf1128e20573bbac3e3f95c0103a5c8036c1141bccd2856422bb2d25",
+      "dedupe_cluster_id": "official-event:fd935ccedf1128e20573bbac3e3f95c0103a5c8036c1141bccd2856422bb2d25",
+      "category": "company",
+      "source_kind": "official_disclosure",
+      "source_name": "MOPS",
+      "source": {
+        "name": "MOPS",
+        "url": "https://mops.twse.com.tw/mops/api/t05st02",
+        "url_kind": "feed"
+      },
+      "source_item_id": null,
+      "title": "公告本公司董事會通過115年第三季合併財務報告",
+      "summary": null,
+      "description": null,
+      "summary_preview": null,
+      "language": "zh-Hant",
+      "published_at": null,
+      "event_at": null,
+      "event_date": "2026-11-11",
+      "display_time": "2026-11-11T00:00:00",
+      "time_basis": "event_date",
+      "time_precision": "date",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-11-11",
+            "utc": null,
+            "date": "2026-11-11",
+            "source": "news_item.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_published_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-11-11T13:33:35.212349+00:00",
+            "utc": "2026-11-11T13:33:35.212349+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-11-12T07:03:21.882498+00:00",
+        "legacy": {
+          "published_at": null,
+          "event_at": null,
+          "event_date": "2026-11-11",
+          "display_time": "2026-11-11T00:00:00",
+          "time_basis": "event_date",
+          "time_precision": "date",
+          "time_consistency": "verified",
+          "collected_at": "2026-11-11T13:33:35.212349+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-11-12T07:03:21.882498+00:00",
+      "collected_at": "2026-11-11T13:33:35.212349+00:00",
+      "symbols": [
+        "3489"
+      ],
+      "instruments": [
+        {
+          "exchange": "TPEx",
+          "symbol": "3489",
+          "name": "長耀地產"
+        }
+      ],
+      "themes": [
+        {
+          "theme_id": "official-industry-a2c05fab456a3948",
+          "display_name": "建材營造"
+        }
+      ],
+      "theme_ids": [
+        "official-industry-a2c05fab456a3948"
+      ],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "default_unknown",
+        "confidence": "high"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "high",
+      "status": "active",
+      "content_hash": "003cb48b659de13cf1d8d8141d937034fc537b286f99eab7127bf56b74e42cec",
+      "detail_url": "/news/28584",
+      "ai": null,
+      "provenance": {
+        "event_id": 18885,
+        "raw_payload_id": 11204,
+        "endpoint": "https://mops.twse.com.tw/mops/api/t05st02",
+        "data_as_of": "2026-11-11"
+      }
+    },
+    {
+      "id": "28930",
+      "canonical_key": "official-event:fd6827eaf36032a647d739a94d4860ce34cb90bdea85836a180a47b1a055ccb2",
+      "dedupe_cluster_id": "official-event:fd6827eaf36032a647d739a94d4860ce34cb90bdea85836a180a47b1a055ccb2",
+      "category": "company",
+      "source_kind": "official_disclosure",
+      "source_name": "MOPS",
+      "source": {
+        "name": "MOPS",
+        "url": "https://mops.twse.com.tw/mops/api/t05st02",
+        "url_kind": "feed"
+      },
+      "source_item_id": null,
+      "title": "公告本公司董事會通過115年第3季合併財務報表",
+      "summary": null,
+      "description": null,
+      "summary_preview": null,
+      "language": "zh-Hant",
+      "published_at": null,
+      "event_at": null,
+      "event_date": "2026-11-11",
+      "display_time": "2026-11-11T00:00:00",
+      "time_basis": "event_date",
+      "time_precision": "date",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-11-11",
+            "utc": null,
+            "date": "2026-11-11",
+            "source": "news_item.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_published_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-11-11T13:33:35.472950+00:00",
+            "utc": "2026-11-11T13:33:35.472950+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-11-12T07:03:21.883774+00:00",
+        "legacy": {
+          "published_at": null,
+          "event_at": null,
+          "event_date": "2026-11-11",
+          "display_time": "2026-11-11T00:00:00",
+          "time_basis": "event_date",
+          "time_precision": "date",
+          "time_consistency": "verified",
+          "collected_at": "2026-11-11T13:33:35.472950+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-11-12T07:03:21.883774+00:00",
+      "collected_at": "2026-11-11T13:33:35.472950+00:00",
+      "symbols": [
+        "6725"
+      ],
+      "instruments": [
+        {
+          "exchange": "TPEx",
+          "symbol": "6725",
+          "name": "矽科宏晟"
+        }
+      ],
+      "themes": [
+        {
+          "theme_id": "official-industry-5cb7c92a21d967ab",
+          "display_name": "其他電子"
+        }
+      ],
+      "theme_ids": [
+        "official-industry-5cb7c92a21d967ab"
+      ],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "default_unknown",
+        "confidence": "high"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "high",
+      "status": "active",
+      "content_hash": "8bdced4031539a869600cb4d5f35796abdb6fe1f490253ef628a1d73e3eb6335",
+      "detail_url": "/news/28930",
+      "ai": null,
+      "provenance": {
+        "event_id": 19231,
+        "raw_payload_id": 11204,
+        "endpoint": "https://mops.twse.com.tw/mops/api/t05st02",
+        "data_as_of": "2026-11-11"
+      }
+    },
+    {
+      "id": "28425",
+      "canonical_key": "official-event:fd3d852d959011b8909128eee3d0d1973b7588a4b5955d034c5c23173cd713a6",
+      "dedupe_cluster_id": "official-event:fd3d852d959011b8909128eee3d0d1973b7588a4b5955d034c5c23173cd713a6",
+      "category": "company",
+      "source_kind": "official_disclosure",
+      "source_name": "MOPS",
+      "source": {
+        "name": "MOPS",
+        "url": "https://mops.twse.com.tw/mops/api/t05st02",
+        "url_kind": "feed"
+      },
+      "source_item_id": null,
+      "title": "本公司受邀參加永豐證券匯立分公司舉辦之投資人說明會",
+      "summary": null,
+      "description": null,
+      "summary_preview": null,
+      "language": "zh-Hant",
+      "published_at": null,
+      "event_at": null,
+      "event_date": "2026-11-11",
+      "display_time": "2026-11-11T00:00:00",
+      "time_basis": "event_date",
+      "time_precision": "date",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-11-11",
+            "utc": null,
+            "date": "2026-11-11",
+            "source": "news_item.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_published_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-11-11T13:33:35.041748+00:00",
+            "utc": "2026-11-11T13:33:35.041748+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-11-12T07:03:21.885091+00:00",
+        "legacy": {
+          "published_at": null,
+          "event_at": null,
+          "event_date": "2026-11-11",
+          "display_time": "2026-11-11T00:00:00",
+          "time_basis": "event_date",
+          "time_precision": "date",
+          "time_consistency": "verified",
+          "collected_at": "2026-11-11T13:33:35.041748+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-11-12T07:03:21.885091+00:00",
+      "collected_at": "2026-11-11T13:33:35.041748+00:00",
+      "symbols": [
+        "2351"
+      ],
+      "instruments": [
+        {
+          "exchange": "TWSE",
+          "symbol": "2351",
+          "name": "順德"
+        }
+      ],
+      "themes": [
+        {
+          "theme_id": "official-industry-1858340d045a575f",
+          "display_name": "半導體"
+        }
+      ],
+      "theme_ids": [
+        "official-industry-1858340d045a575f"
+      ],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "default_unknown",
+        "confidence": "high"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "high",
+      "status": "active",
+      "content_hash": "12f000258e253a456f1fa16b436cee8c5e03f0f55b4bbff368863d9583fdf2fe",
+      "detail_url": "/news/28425",
+      "ai": null,
+      "provenance": {
+        "event_id": 18726,
+        "raw_payload_id": 11204,
+        "endpoint": "https://mops.twse.com.tw/mops/api/t05st02",
+        "data_as_of": "2026-11-11"
+      }
+    },
+    {
+      "id": "28484",
+      "canonical_key": "official-event:fd3b3af9eb07c44215912678f75818794d16f545119a8e7524bd124a5f7ff5c5",
+      "dedupe_cluster_id": "official-event:fd3b3af9eb07c44215912678f75818794d16f545119a8e7524bd124a5f7ff5c5",
+      "category": "company",
+      "source_kind": "official_disclosure",
+      "source_name": "MOPS",
+      "source": {
+        "name": "MOPS",
+        "url": "https://mops.twse.com.tw/mops/api/t05st02",
+        "url_kind": "feed"
+      },
+      "source_item_id": null,
+      "title": "公告本公司董事會通過115年度第三季合併財務報告",
+      "summary": null,
+      "description": null,
+      "summary_preview": null,
+      "language": "zh-Hant",
+      "published_at": null,
+      "event_at": null,
+      "event_date": "2026-11-11",
+      "display_time": "2026-11-11T00:00:00",
+      "time_basis": "event_date",
+      "time_precision": "date",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-11-11",
+            "utc": null,
+            "date": "2026-11-11",
+            "source": "news_item.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_published_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-11-11T13:33:35.089774+00:00",
+            "utc": "2026-11-11T13:33:35.089774+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-11-12T07:03:21.886413+00:00",
+        "legacy": {
+          "published_at": null,
+          "event_at": null,
+          "event_date": "2026-11-11",
+          "display_time": "2026-11-11T00:00:00",
+          "time_basis": "event_date",
+          "time_precision": "date",
+          "time_consistency": "verified",
+          "collected_at": "2026-11-11T13:33:35.089774+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-11-12T07:03:21.886413+00:00",
+      "collected_at": "2026-11-11T13:33:35.089774+00:00",
+      "symbols": [
+        "4989"
+      ],
+      "instruments": [
+        {
+          "exchange": "TWSE",
+          "symbol": "4989",
+          "name": "榮科"
+        }
+      ],
+      "themes": [
+        {
+          "theme_id": "official-industry-619f4b496b333d8f",
+          "display_name": "電子零組件"
+        }
+      ],
+      "theme_ids": [
+        "official-industry-619f4b496b333d8f"
+      ],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "default_unknown",
+        "confidence": "high"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "high",
+      "status": "active",
+      "content_hash": "dc3a0c5a979e494e8b51e939939eca6cd0d5303ea321ef84abf68545e31f33a7",
+      "detail_url": "/news/28484",
+      "ai": null,
+      "provenance": {
+        "event_id": 18785,
+        "raw_payload_id": 11204,
+        "endpoint": "https://mops.twse.com.tw/mops/api/t05st02",
+        "data_as_of": "2026-11-11"
+      }
+    },
+    {
+      "id": "28690",
+      "canonical_key": "official-event:fcbe10324449a9ded9fbf39ee9f3d5bba5dcd0be8bb6ead3c2028d02f6bdd4e3",
+      "dedupe_cluster_id": "official-event:fcbe10324449a9ded9fbf39ee9f3d5bba5dcd0be8bb6ead3c2028d02f6bdd4e3",
+      "category": "company",
+      "source_kind": "official_disclosure",
+      "source_name": "MOPS",
+      "source": {
+        "name": "MOPS",
+        "url": "https://mops.twse.com.tw/mops/api/t05st02",
+        "url_kind": "feed"
+      },
+      "source_item_id": null,
+      "title": "子公司新增資金貸與符合\r\n資金貸與及背書保證處理準則第22條第1項第3款情事",
+      "summary": null,
+      "description": null,
+      "summary_preview": null,
+      "language": "zh-Hant",
+      "published_at": null,
+      "event_at": null,
+      "event_date": "2026-11-11",
+      "display_time": "2026-11-11T00:00:00",
+      "time_basis": "event_date",
+      "time_precision": "date",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-11-11",
+            "utc": null,
+            "date": "2026-11-11",
+            "source": "news_item.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_published_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-11-11T13:33:35.297296+00:00",
+            "utc": "2026-11-11T13:33:35.297296+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-11-12T07:03:21.887807+00:00",
+        "legacy": {
+          "published_at": null,
+          "event_at": null,
+          "event_date": "2026-11-11",
+          "display_time": "2026-11-11T00:00:00",
+          "time_basis": "event_date",
+          "time_precision": "date",
+          "time_consistency": "verified",
+          "collected_at": "2026-11-11T13:33:35.297296+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-11-12T07:03:21.887807+00:00",
+      "collected_at": "2026-11-11T13:33:35.297296+00:00",
+      "symbols": [
+        "6612"
+      ],
+      "instruments": [
+        {
+          "exchange": "TPEx",
+          "symbol": "6612",
+          "name": "奈米醫材"
+        }
+      ],
+      "themes": [
+        {
+          "theme_id": "official-industry-17661791d0d765c5",
+          "display_name": "生技醫療"
+        }
+      ],
+      "theme_ids": [
+        "official-industry-17661791d0d765c5"
+      ],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "default_unknown",
+        "confidence": "high"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "high",
+      "status": "active",
+      "content_hash": "a2fade98f7d660e4f3f602a9c8ad9a87aae83cb20ebe3f358a3b84816e9dd279",
+      "detail_url": "/news/28690",
+      "ai": null,
+      "provenance": {
+        "event_id": 18991,
+        "raw_payload_id": 11204,
+        "endpoint": "https://mops.twse.com.tw/mops/api/t05st02",
+        "data_as_of": "2026-11-11"
+      }
+    },
+    {
+      "id": "28840",
+      "canonical_key": "official-event:fc65fbea0344a18e74757574ea0fc60b681fed1394dbf5cc2ea887c0af4742f6",
+      "dedupe_cluster_id": "official-event:fc65fbea0344a18e74757574ea0fc60b681fed1394dbf5cc2ea887c0af4742f6",
+      "category": "company",
+      "source_kind": "official_disclosure",
+      "source_name": "MOPS",
+      "source": {
+        "name": "MOPS",
+        "url": "https://mops.twse.com.tw/mops/api/t05st02",
+        "url_kind": "feed"
+      },
+      "source_item_id": null,
+      "title": "公告本公司董事會通過115年度第三季財務報表",
+      "summary": null,
+      "description": null,
+      "summary_preview": null,
+      "language": "zh-Hant",
+      "published_at": null,
+      "event_at": null,
+      "event_date": "2026-11-11",
+      "display_time": "2026-11-11T00:00:00",
+      "time_basis": "event_date",
+      "time_precision": "date",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-11-11",
+            "utc": null,
+            "date": "2026-11-11",
+            "source": "news_item.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_published_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-11-11T13:33:35.409579+00:00",
+            "utc": "2026-11-11T13:33:35.409579+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-11-12T07:03:21.889098+00:00",
+        "legacy": {
+          "published_at": null,
+          "event_at": null,
+          "event_date": "2026-11-11",
+          "display_time": "2026-11-11T00:00:00",
+          "time_basis": "event_date",
+          "time_precision": "date",
+          "time_consistency": "verified",
+          "collected_at": "2026-11-11T13:33:35.409579+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-11-12T07:03:21.889098+00:00",
+      "collected_at": "2026-11-11T13:33:35.409579+00:00",
+      "symbols": [
+        "3499"
+      ],
+      "instruments": [
+        {
+          "exchange": "TPEx",
+          "symbol": "3499",
+          "name": "環天科"
+        }
+      ],
+      "themes": [
+        {
+          "theme_id": "official-industry-657bfca32dacb091",
+          "display_name": "通信網路"
+        }
+      ],
+      "theme_ids": [
+        "official-industry-657bfca32dacb091"
+      ],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "default_unknown",
+        "confidence": "high"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "high",
+      "status": "active",
+      "content_hash": "b07a4961bfe3ea06070a505750f0b00168b4d5560aaff40d81a6f6f8cdfc67aa",
+      "detail_url": "/news/28840",
+      "ai": null,
+      "provenance": {
+        "event_id": 19141,
+        "raw_payload_id": 11204,
+        "endpoint": "https://mops.twse.com.tw/mops/api/t05st02",
+        "data_as_of": "2026-11-11"
+      }
+    },
+    {
+      "id": "28665",
+      "canonical_key": "official-event:fc48aa06840cb21084cbcd89e5692acdcaa673818ae0407895fcd42877a896a0",
+      "dedupe_cluster_id": "official-event:fc48aa06840cb21084cbcd89e5692acdcaa673818ae0407895fcd42877a896a0",
+      "category": "company",
+      "source_kind": "official_disclosure",
+      "source_name": "MOPS",
+      "source": {
+        "name": "MOPS",
+        "url": "https://mops.twse.com.tw/mops/api/t05st02",
+        "url_kind": "feed"
+      },
+      "source_item_id": null,
+      "title": "代子公司台灣立凱電能科技股份有限公司「公開發行公司資金貸與\r\n及背書保證處理準則」第二十二條第一項第二款及三款之規定辦理\r\n公告",
+      "summary": null,
+      "description": null,
+      "summary_preview": null,
+      "language": "zh-Hant",
+      "published_at": null,
+      "event_at": null,
+      "event_date": "2026-11-11",
+      "display_time": "2026-11-11T00:00:00",
+      "time_basis": "event_date",
+      "time_precision": "date",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-11-11",
+            "utc": null,
+            "date": "2026-11-11",
+            "source": "news_item.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_published_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-11-11T13:33:35.276611+00:00",
+            "utc": "2026-11-11T13:33:35.276611+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-11-12T07:03:21.890410+00:00",
+        "legacy": {
+          "published_at": null,
+          "event_at": null,
+          "event_date": "2026-11-11",
+          "display_time": "2026-11-11T00:00:00",
+          "time_basis": "event_date",
+          "time_precision": "date",
+          "time_consistency": "verified",
+          "collected_at": "2026-11-11T13:33:35.276611+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-11-12T07:03:21.890410+00:00",
+      "collected_at": "2026-11-11T13:33:35.276611+00:00",
+      "symbols": [
+        "5227"
+      ],
+      "instruments": [
+        {
+          "exchange": "TPEx",
+          "symbol": "5227",
+          "name": "立凱-KY"
+        }
+      ],
+      "themes": [
+        {
+          "theme_id": "official-industry-619f4b496b333d8f",
+          "display_name": "電子零組件"
+        }
+      ],
+      "theme_ids": [
+        "official-industry-619f4b496b333d8f"
+      ],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "default_unknown",
+        "confidence": "high"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "high",
+      "status": "active",
+      "content_hash": "ff5066f650ff260a85c3f4332a888bc445180f6c96c4f4bbe5ce9d69b8395649",
+      "detail_url": "/news/28665",
+      "ai": null,
+      "provenance": {
+        "event_id": 18966,
+        "raw_payload_id": 11204,
+        "endpoint": "https://mops.twse.com.tw/mops/api/t05st02",
+        "data_as_of": "2026-11-11"
+      }
+    },
+    {
+      "id": "28815",
+      "canonical_key": "official-event:fc0b22a9acde698dbdf3f19a3b6d2b5c5d8b560b053b9fd587cedf3fe7b0a072",
+      "dedupe_cluster_id": "official-event:fc0b22a9acde698dbdf3f19a3b6d2b5c5d8b560b053b9fd587cedf3fe7b0a072",
+      "category": "company",
+      "source_kind": "official_disclosure",
+      "source_name": "MOPS",
+      "source": {
+        "name": "MOPS",
+        "url": "https://mops.twse.com.tw/mops/api/t05st02",
+        "url_kind": "feed"
+      },
+      "source_item_id": null,
+      "title": "公告本公司董事會通過115年第3季合併財務報告",
+      "summary": null,
+      "description": null,
+      "summary_preview": null,
+      "language": "zh-Hant",
+      "published_at": null,
+      "event_at": null,
+      "event_date": "2026-11-11",
+      "display_time": "2026-11-11T00:00:00",
+      "time_basis": "event_date",
+      "time_precision": "date",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-11-11",
+            "utc": null,
+            "date": "2026-11-11",
+            "source": "news_item.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_published_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-11-11T13:33:35.392848+00:00",
+            "utc": "2026-11-11T13:33:35.392848+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-11-12T07:03:21.891735+00:00",
+        "legacy": {
+          "published_at": null,
+          "event_at": null,
+          "event_date": "2026-11-11",
+          "display_time": "2026-11-11T00:00:00",
+          "time_basis": "event_date",
+          "time_precision": "date",
+          "time_consistency": "verified",
+          "collected_at": "2026-11-11T13:33:35.392848+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-11-12T07:03:21.891735+00:00",
+      "collected_at": "2026-11-11T13:33:35.392848+00:00",
+      "symbols": [
+        "6246"
+      ],
+      "instruments": [
+        {
+          "exchange": "TPEx",
+          "symbol": "6246",
+          "name": "臺龍"
+        }
+      ],
+      "themes": [
+        {
+          "theme_id": "official-industry-427c8d2e58996415",
+          "display_name": "光電"
+        }
+      ],
+      "theme_ids": [
+        "official-industry-427c8d2e58996415"
+      ],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "default_unknown",
+        "confidence": "high"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "high",
+      "status": "active",
+      "content_hash": "683c8534733e43a6401001681e9112a9e8449f9a6c6b2aa41f4932204b466e69",
+      "detail_url": "/news/28815",
+      "ai": null,
+      "provenance": {
+        "event_id": 19116,
+        "raw_payload_id": 11204,
+        "endpoint": "https://mops.twse.com.tw/mops/api/t05st02",
+        "data_as_of": "2026-11-11"
+      }
+    },
+    {
+      "id": "28710",
+      "canonical_key": "official-event:fbe1beec0ff9189eb613e53afd37b0ec4c528e09e2122bdb5597cfb4995f701d",
+      "dedupe_cluster_id": "official-event:fbe1beec0ff9189eb613e53afd37b0ec4c528e09e2122bdb5597cfb4995f701d",
+      "category": "company",
+      "source_kind": "official_disclosure",
+      "source_name": "MOPS",
+      "source": {
+        "name": "MOPS",
+        "url": "https://mops.twse.com.tw/mops/api/t05st02",
+        "url_kind": "feed"
+      },
+      "source_item_id": null,
+      "title": "代重要子公司大霹靂(上海)文化傳播有限公司公告決議\r\n減資退回股款",
+      "summary": null,
+      "description": null,
+      "summary_preview": null,
+      "language": "zh-Hant",
+      "published_at": null,
+      "event_at": null,
+      "event_date": "2026-11-11",
+      "display_time": "2026-11-11T00:00:00",
+      "time_basis": "event_date",
+      "time_precision": "date",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-11-11",
+            "utc": null,
+            "date": "2026-11-11",
+            "source": "news_item.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_published_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-11-11T13:33:35.313943+00:00",
+            "utc": "2026-11-11T13:33:35.313943+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-11-12T07:03:21.893053+00:00",
+        "legacy": {
+          "published_at": null,
+          "event_at": null,
+          "event_date": "2026-11-11",
+          "display_time": "2026-11-11T00:00:00",
+          "time_basis": "event_date",
+          "time_precision": "date",
+          "time_consistency": "verified",
+          "collected_at": "2026-11-11T13:33:35.313943+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-11-12T07:03:21.893053+00:00",
+      "collected_at": "2026-11-11T13:33:35.313943+00:00",
+      "symbols": [
+        "8450"
+      ],
+      "instruments": [
+        {
+          "exchange": "TPEx",
+          "symbol": "8450",
+          "name": "霹靂"
+        }
+      ],
+      "themes": [
+        {
+          "theme_id": "official-industry-35423f5368e5eefd",
+          "display_name": "文化創意"
+        }
+      ],
+      "theme_ids": [
+        "official-industry-35423f5368e5eefd"
+      ],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "default_unknown",
+        "confidence": "high"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "high",
+      "status": "active",
+      "content_hash": "ebaba66bd02d2c677ba8a25eacc5d89571024929e160deef8ebbaa9bdb364bde",
+      "detail_url": "/news/28710",
+      "ai": null,
+      "provenance": {
+        "event_id": 19011,
+        "raw_payload_id": 11204,
+        "endpoint": "https://mops.twse.com.tw/mops/api/t05st02",
+        "data_as_of": "2026-11-11"
+      }
+    },
+    {
+      "id": "28702",
+      "canonical_key": "official-event:fba91ff058f04d88da297a75cad4802777f3e5598e6879961c0c101b9c6d4dab",
+      "dedupe_cluster_id": "official-event:fba91ff058f04d88da297a75cad4802777f3e5598e6879961c0c101b9c6d4dab",
+      "category": "company",
+      "source_kind": "official_disclosure",
+      "source_name": "MOPS",
+      "source": {
+        "name": "MOPS",
+        "url": "https://mops.twse.com.tw/mops/api/t05st02",
+        "url_kind": "feed"
+      },
+      "source_item_id": null,
+      "title": "本公司新增背書保證達「公開發行公司資金貸與及\r\n背書保證處理準則」第25條第一項第四款公告",
+      "summary": null,
+      "description": null,
+      "summary_preview": null,
+      "language": "zh-Hant",
+      "published_at": null,
+      "event_at": null,
+      "event_date": "2026-11-11",
+      "display_time": "2026-11-11T00:00:00",
+      "time_basis": "event_date",
+      "time_precision": "date",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-11-11",
+            "utc": null,
+            "date": "2026-11-11",
+            "source": "news_item.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_published_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-11-11T13:33:35.306261+00:00",
+            "utc": "2026-11-11T13:33:35.306261+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-11-12T07:03:21.894386+00:00",
+        "legacy": {
+          "published_at": null,
+          "event_at": null,
+          "event_date": "2026-11-11",
+          "display_time": "2026-11-11T00:00:00",
+          "time_basis": "event_date",
+          "time_precision": "date",
+          "time_consistency": "verified",
+          "collected_at": "2026-11-11T13:33:35.306261+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-11-12T07:03:21.894386+00:00",
+      "collected_at": "2026-11-11T13:33:35.306261+00:00",
+      "symbols": [
+        "7751"
+      ],
+      "instruments": [
+        {
+          "exchange": "TPEx",
+          "symbol": "7751",
+          "name": "竑騰"
+        }
+      ],
+      "themes": [
+        {
+          "theme_id": "official-industry-1858340d045a575f",
+          "display_name": "半導體"
+        }
+      ],
+      "theme_ids": [
+        "official-industry-1858340d045a575f"
+      ],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "default_unknown",
+        "confidence": "high"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "high",
+      "status": "active",
+      "content_hash": "a8d6de091416961e5e3db8122b10382a11f25ae88974b61c4d21e9be935dbae2",
+      "detail_url": "/news/28702",
+      "ai": null,
+      "provenance": {
+        "event_id": 19003,
+        "raw_payload_id": 11204,
+        "endpoint": "https://mops.twse.com.tw/mops/api/t05st02",
+        "data_as_of": "2026-11-11"
+      }
+    },
+    {
+      "id": "28934",
+      "canonical_key": "official-event:fb772f505ee8ee10f1d4ec69ae690122f4370b8775b57a146d5c29a31a019978",
+      "dedupe_cluster_id": "official-event:fb772f505ee8ee10f1d4ec69ae690122f4370b8775b57a146d5c29a31a019978",
+      "category": "company",
+      "source_kind": "official_disclosure",
+      "source_name": "MOPS",
+      "source": {
+        "name": "MOPS",
+        "url": "https://mops.twse.com.tw/mops/api/t05st02",
+        "url_kind": "feed"
+      },
+      "source_item_id": null,
+      "title": "公告本公司董事會通過內部稽核主管任命",
+      "summary": null,
+      "description": null,
+      "summary_preview": null,
+      "language": "zh-Hant",
+      "published_at": null,
+      "event_at": null,
+      "event_date": "2026-11-11",
+      "display_time": "2026-11-11T00:00:00",
+      "time_basis": "event_date",
+      "time_precision": "date",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-11-11",
+            "utc": null,
+            "date": "2026-11-11",
+            "source": "news_item.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_published_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-11-11T13:33:35.475467+00:00",
+            "utc": "2026-11-11T13:33:35.475467+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-11-12T07:03:21.895714+00:00",
+        "legacy": {
+          "published_at": null,
+          "event_at": null,
+          "event_date": "2026-11-11",
+          "display_time": "2026-11-11T00:00:00",
+          "time_basis": "event_date",
+          "time_precision": "date",
+          "time_consistency": "verified",
+          "collected_at": "2026-11-11T13:33:35.475467+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-11-12T07:03:21.895714+00:00",
+      "collected_at": "2026-11-11T13:33:35.475467+00:00",
+      "symbols": [
+        "5439"
+      ],
+      "instruments": [
+        {
+          "exchange": "TPEx",
+          "symbol": "5439",
+          "name": "高技"
+        }
+      ],
+      "themes": [
+        {
+          "theme_id": "official-industry-619f4b496b333d8f",
+          "display_name": "電子零組件"
+        }
+      ],
+      "theme_ids": [
+        "official-industry-619f4b496b333d8f"
+      ],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "default_unknown",
+        "confidence": "high"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "high",
+      "status": "active",
+      "content_hash": "804086dd1ae50e097c908091ea14663aaec94446ed63d25ab350437777dd3eae",
+      "detail_url": "/news/28934",
+      "ai": null,
+      "provenance": {
+        "event_id": 19235,
+        "raw_payload_id": 11204,
+        "endpoint": "https://mops.twse.com.tw/mops/api/t05st02",
+        "data_as_of": "2026-11-11"
+      }
+    },
+    {
+      "id": "28842",
+      "canonical_key": "official-event:fb76fa674057156d5abbaa3696b84f36966a44cc1432b50e43508fe4a3f3a82b",
+      "dedupe_cluster_id": "official-event:fb76fa674057156d5abbaa3696b84f36966a44cc1432b50e43508fe4a3f3a82b",
+      "category": "company",
+      "source_kind": "official_disclosure",
+      "source_name": "MOPS",
+      "source": {
+        "name": "MOPS",
+        "url": "https://mops.twse.com.tw/mops/api/t05st02",
+        "url_kind": "feed"
+      },
+      "source_item_id": null,
+      "title": "本公司董事會決議115年第3季不分派股利",
+      "summary": null,
+      "description": null,
+      "summary_preview": null,
+      "language": "zh-Hant",
+      "published_at": null,
+      "event_at": null,
+      "event_date": "2026-11-11",
+      "display_time": "2026-11-11T00:00:00",
+      "time_basis": "event_date",
+      "time_precision": "date",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-11-11",
+            "utc": null,
+            "date": "2026-11-11",
+            "source": "news_item.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_published_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-11-11T13:33:35.411217+00:00",
+            "utc": "2026-11-11T13:33:35.411217+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-11-12T07:03:21.896995+00:00",
+        "legacy": {
+          "published_at": null,
+          "event_at": null,
+          "event_date": "2026-11-11",
+          "display_time": "2026-11-11T00:00:00",
+          "time_basis": "event_date",
+          "time_precision": "date",
+          "time_consistency": "verified",
+          "collected_at": "2026-11-11T13:33:35.411217+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-11-12T07:03:21.896995+00:00",
+      "collected_at": "2026-11-11T13:33:35.411217+00:00",
+      "symbols": [
+        "6219"
+      ],
+      "instruments": [
+        {
+          "exchange": "TPEx",
+          "symbol": "6219",
+          "name": "富旺"
+        }
+      ],
+      "themes": [
+        {
+          "theme_id": "official-industry-a2c05fab456a3948",
+          "display_name": "建材營造"
+        }
+      ],
+      "theme_ids": [
+        "official-industry-a2c05fab456a3948"
+      ],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "default_unknown",
+        "confidence": "high"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "high",
+      "status": "active",
+      "content_hash": "4c73f17a52971f18be5bf8ddddc6aa6f91afa9c0fc56d281623ad318c7db24fb",
+      "detail_url": "/news/28842",
+      "ai": null,
+      "provenance": {
+        "event_id": 19143,
+        "raw_payload_id": 11204,
+        "endpoint": "https://mops.twse.com.tw/mops/api/t05st02",
+        "data_as_of": "2026-11-11"
+      }
+    }
+  ],
+  "meta": {
+    "limit": 20,
+    "next_cursor": "eyJkaXNwbGF5X3RpbWUiOiIyMDI2LTExLTExVDAwOjAwOjAwIiwidGltZV9iYXNpcyI6ImV2ZW50X2RhdGUiLCJ0aW1lX3ByZWNpc2lvbiI6ImRhdGUiLCJjYW5vbmljYWxfa2V5Ijoib2ZmaWNpYWwtZXZlbnQ6ZmI3NmZhNjc0MDU3MTU2ZDVhYmJhYTM2OTZiODRmMzY5NjZhNDRjYzE0MzJiNTBlNDM1MDhmZTRhM2YzYTgyYiIsImlkIjoyODg0Mn0",
+    "has_more": true,
+    "sort": "display_time_desc,time_basis_desc,time_precision_desc,canonical_key_desc,id_desc",
+    "data_as_of": "2026-11-11",
+    "total": 18323
+  }
+}
