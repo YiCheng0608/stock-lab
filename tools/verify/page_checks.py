@@ -1413,6 +1413,54 @@ def t17(run: Run) -> str:
     return f"390：{len(rows)} 列數字區不溢出、不被 AI 按鈕蓋住、沒有超出列邊"
 
 
+# Issue 653: each row's sparkline draws items[].recent_closes, the last 30 sessions to the list's date and the stock's
+# stored close on each (the K-line's), a missing one null. The drawing itself (tone, label, no text) is locked by the
+# frontend tests; this checks the data it is drawn from, so a real copy shows a gap or a close that is not the K-line's.
+SPARKLINE_SESSIONS = 30  # RECENT_CLOSE_SESSIONS in backend/app/candidate_view.py
+
+
+@check("today", "T18")
+def t18(run: Run) -> str:
+    payload = candidates(run)
+    items = (
+        [] if payload.get("status") == "not_computed" else payload.get("items") or []
+    )
+    day = payload.get("trading_date")
+    problems, drawn, gaps = [], 0, 0
+    for item in items:
+        where = f"#{item.get('rank')} {(item.get('instrument') or {}).get('symbol')}"
+        recent = item.get("recent_closes")
+        if not isinstance(recent, dict):
+            problems.append(f"{where} 沒有 recent_closes")
+            continue
+        dates, closes = recent.get("dates") or [], recent.get("closes") or []
+        if len(dates) != len(closes):
+            problems.append(f"{where} dates {len(dates)} 筆、closes {len(closes)} 筆")
+            continue
+        if len(dates) > SPARKLINE_SESSIONS:
+            problems.append(f"{where} {len(dates)} 個交易日，超過 {SPARKLINE_SESSIONS}")
+        if dates != sorted(set(dates)):
+            problems.append(f"{where} 日期不是由舊到新、不重複")
+        if dates and day and dates[-1] > day:
+            problems.append(f"{where} 最後一日 {dates[-1]} 晚於名單日 {day}")
+        bad = [c for c in closes if c is not None and not (isinstance(c, (int, float)) and c > 0)]
+        if bad:
+            problems.append(f"{where} 收盤不是正數或 null：{bad[:3]}")
+        close = (item.get("market") or {}).get("close")
+        if dates and dates[-1] == day and closes[-1] != close:
+            problems.append(f"{where} 名單日收盤 {closes[-1]} ≠ market.close {close}")
+        known = sum(c is not None for c in closes)
+        drawn += known >= 2
+        gaps += len(closes) - known
+    expect(not problems, "；".join(problems))
+    if not items:
+        return "沒有候選列"
+    return (
+        f"{len(items)} 列 recent_closes：≤ {SPARKLINE_SESSIONS} 個交易日、由舊到新、止於 {day}、名單日收盤 = market.close；"
+        f"{drawn} 列有 2 個以上收盤（畫線），缺日 {gaps} 個（留空）"
+    )
+
+
 # ---- T14 / T15: the today summary line and the market page's daily chart (Issue 549, UI_COPY_SPEC §11) ----
 
 SUMMARY_NAMES = (

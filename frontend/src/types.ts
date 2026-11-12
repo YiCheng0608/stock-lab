@@ -1618,9 +1618,15 @@ export type CandidateItem = {
   // The signal's strategy_levels row: next-session close and volume to pass again (#491). null without a row of the
   // current levels version; missing on responses from before #491.
   entry_plan?: CandidateEntryPlan | null
+  // The closes the row's sparkline draws (#653): only on /api/candidates items, missing on responses from before #653.
+  recent_closes?: CandidateRecentCloses
 }
 
-export type CandidateEntryPlan = Omit<StrategyObservationLevels, 'kind' | 'display_label'> & {
+// The last 30 verified sessions to the list's date, old to new, and the stock's close on each: the stored daily bar's
+// close the K-line draws; null where it has no traded bar (no earlier close stands in).
+export type CandidateRecentCloses = { dates: string[]; closes: Array<number | null> }
+
+export type CandidateEntryPlan =Omit<StrategyObservationLevels, 'kind' | 'display_label'> & {
   levels_version: string
   entry_type: string
   conditions: StrategyCondition[]

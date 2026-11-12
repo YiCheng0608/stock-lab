@@ -586,3 +586,41 @@ def test_run_orderings_use_the_indexes_not_a_sort_of_whole_rows(db):
         )
         found = plan(db, compiled)
         assert index in found and "TEMP B-TREE" not in found, found
+
+
+# ---- today list sparkline (#653): 30 sessions of closes in one projected read ----
+
+
+def test_the_sparkline_closes_read_30_sessions_of_the_list_in_one_query(db, engine):
+    from app.candidate_view import (
+        RECENT_CLOSE_SESSIONS,
+        recent_closes,
+        recent_sessions,
+    )
+
+    days = [D0 + timedelta(days=offset) for offset in range(-400, 1)]
+    days = [day for day in days if day.weekday() < 5]
+    index = instrument(db, "TAIEX", kind="index")
+    stocks = [instrument(db, symbol) for symbol in ("1101", "2330", "2454")]
+    for day in days:
+        bar(db, index, day)
+        for item in stocks:
+            bar(db, item, day)
+    db.commit()
+
+    sessions = recent_sessions(db, D0)
+    assert sessions == days[-RECENT_CLOSE_SESSIONS:]
+    ids = [item.id for item in stocks]
+    with orm_loads() as loads, statements(engine) as sent:
+        closes = recent_closes(db, ids, sessions)
+    # The whole list in one statement over the 30 sessions' dates, and no
+    # MarketBar hydrated (the ~285 older bars per stock are never read).
+    bar_reads = [sql for sql in sent if "market_bars" in sql]
+    assert len(bar_reads) == 1, bar_reads
+    assert "trading_date >=" in bar_reads[0] and "trading_date <=" in bar_reads[0]
+    assert loads["MarketBar"] == 0
+    assert set(closes) == set(ids)
+    assert all(
+        len(value["closes"]) == RECENT_CLOSE_SESSIONS == len(value["dates"])
+        for value in closes.values()
+    )

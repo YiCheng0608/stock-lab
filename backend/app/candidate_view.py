@@ -9,20 +9,23 @@ Each item's ``market`` is the stored close of its trading date (#276).
 #491); the page shows its condition list's signal-day judgement under the
 plain-language entry sentence, which reads the signal's own levels.  It
 never feeds the score or the tracking plans.
+The list's items also carry ``recent_closes`` (#653), the closes of the last
+30 sessions the row's sparkline draws; the stock detail's item does not.
 """
 
 from __future__ import annotations
 
-from datetime import date, timezone
+from datetime import date, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .candidate_runs import read_run
+from .coverage import verified_taiex_sessions
 from .domain import CANDIDATE_NOTE_PROMPT_VERSION, CANDIDATE_SCORE_VERSION
 from .entry_plan import entry_plan
-from .market_change import adjacent_change
+from .market_change import adjacent_change, traded_close
 from .models import (
     CandidateLlmNote,
     CandidateRun,
@@ -37,6 +40,11 @@ from .tracking_plans import open_plan_for_signal
 
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 20
+# The today list's sparkline (#653): the last 30 sessions to the list's date.
+RECENT_CLOSE_SESSIONS = 30
+# Calendar days that hold 30 sessions with room for the longest market closure
+# (Lunar New Year); it only bounds the TAIEX session read.
+RECENT_CLOSE_LOOKBACK_DAYS = 75
 
 COMPONENT_LABELS = {
     "technical": "技術",
@@ -270,6 +278,58 @@ def candidate_item(
     }
 
 
+def recent_sessions(db: Session, trading_date: date) -> list[date]:
+    """The last 30 verified TAIEX sessions to ``trading_date``, old to new (#653).
+
+    The same calendar as the ``market`` change: its last two are the two
+    sessions ``adjacent_change`` reads, so the list reads the sessions once.
+    """
+
+    return verified_taiex_sessions(
+        db,
+        start_date=trading_date - timedelta(days=RECENT_CLOSE_LOOKBACK_DAYS),
+        end_date=trading_date,
+        limit=RECENT_CLOSE_SESSIONS,
+    )
+
+
+def recent_closes(
+    db: Session, instrument_ids: list[int], days: list[date]
+) -> dict[int, dict[str, list[Any]]]:
+    """Each stock's close on ``days`` (``recent_sessions``; #653).
+
+    The sessions are shared by every stock of the list, old to new.  A close
+    is the stored daily bar's close, the one the stock page's K-line draws (no
+    adjustment); a session without a traded bar (none stored, suspended, no
+    close) is null, and no other close stands in for it.  One read of the
+    projected columns for the whole list.
+    """
+
+    closes: dict[tuple[int, date], float | None] = {}
+    if days and instrument_ids:
+        for row in db.execute(
+            select(
+                MarketBar.instrument_id,
+                MarketBar.trading_date,
+                MarketBar.close,
+                MarketBar.is_suspended,
+            ).where(
+                MarketBar.instrument_id.in_(instrument_ids),
+                MarketBar.trading_date >= days[0],
+                MarketBar.trading_date <= days[-1],
+            )
+        ):
+            closes[(row.instrument_id, row.trading_date)] = traded_close(row)
+    dates = [day.isoformat() for day in days]
+    return {
+        instrument_id: {
+            "dates": dates,
+            "closes": [closes.get((instrument_id, day)) for day in days],
+        }
+        for instrument_id in instrument_ids
+    }
+
+
 def _run_for(
     db: Session, trading_date: date | None, *, on_or_before: bool = False
 ) -> CandidateRun | None:
@@ -316,13 +376,19 @@ def candidate_list(
             "methodology": _methodology(None),
             "items": [],
         }
-    sessions: dict[date, list[date]] = {}
     rows = db.scalars(
         select(DailyCandidate)
         .where(DailyCandidate.candidate_run_id == run.id)
         .order_by(DailyCandidate.rank)
         .limit(limit)
     ).all()
+    days = recent_sessions(db, run.trading_date)
+    closes = recent_closes(
+        db, list(dict.fromkeys(row.instrument_id for row in rows)), days
+    )
+    # adjacent_change's TAIEX lookup (the last two sessions to the date), from
+    # the same read; every row of a run has the run's trading date.
+    sessions: dict[date, list[date]] = {run.trading_date: days[-2:]}
     return {
         "status": run.status,
         "trading_date": run.trading_date.isoformat(),
@@ -343,7 +409,13 @@ def candidate_list(
         "news_coverage": (run.summary_json or {}).get("news"),
         "methodology": _methodology(run),
         # One TAIEX session lookup for the whole list.
-        "items": [candidate_item(db, row, run, sessions) for row in rows],
+        "items": [
+            {
+                **candidate_item(db, row, run, sessions),
+                "recent_closes": closes[row.instrument_id],
+            }
+            for row in rows
+        ],
     }
 
 
