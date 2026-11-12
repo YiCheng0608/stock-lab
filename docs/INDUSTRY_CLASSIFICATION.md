@@ -135,9 +135,6 @@ Baseline（2026-09-14）之前匯入的 1984 筆一般產業 membership 用了�
 **初版**：`2026.10.17` 收 12 個題材、77 筆成員。生效日統一為 2026-01-01，是人工回溯判定的起日；表版本日（2026-10-17）之前算出的題材榜含後見之明，不代表當時就能取得這份分類。
 
 **維護流程**：先改 JSON（附證據），再執行 `python -m worker.cli themes sync`（[現有 worker CLI](ops/CLI.md#現有-worker-cli)）。驗證失敗時 exit 1 且不寫入；成功後由下一次 analyze／daily 計分。
-
-**新聞題材建議**：新聞 AI 判讀（`news_llm_results.ai_theme_candidates_json`）提出的題材，由 daily 的 `theme_suggestions` 步驟彙整進 `theme_suggestions`／`theme_suggestion_news`（規則見 [新聞題材建議](spec/theme_suggestions.md)），狀態一律 `pending_verification`；不寫 `theme_groups`、`group_memberships` 或題材表檔，不計分、不進榜；畫面不顯示（#627），以 `GET /api/theme-suggestions` 查看。名稱與現有 active 題材或官方產業相同的建議記 `matched_group_id`，不當新題材列出。要把建議納入題材表，照上面的維護流程補齊附證據的成員後改 JSON 再 sync；建議本身不是證據。
-
 **候選題材群組（保留）**：`group_type="theme_candidate"`（`active=false`、`name_status="pending_verification"`、成員 `role="candidate"`）保留給日後的人工核實流程，目前沒有程式產生；這類群組即使誤設為 active 也不計分、不進榜。
 
 **欄位值域（現行）**
