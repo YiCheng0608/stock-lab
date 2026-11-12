@@ -272,7 +272,7 @@ export function StockBarsChart({
                 </div>
               )}
             </div>
-            {levels && <p className="chart-note chart-levels-note" data-chart-levels>{levelsNote(levels, digits)}</p>}
+            {levels && <p className="chart-note chart-levels-note" data-chart-levels>{levelsNote(levels)}</p>}
             {longer.loading && <p className="chart-note" role="status">正在載入更早的{unit}…</p>}
             {longer.failed && <p className="chart-note" role="status">更早的{unit}暫時無法載入，目前顯示最近 {data.count} 根</p>}
             {isCloseOnlySeries(data.bars) && <p className="chart-note">{CLOSE_ONLY_NOTE}</p>}
