@@ -1257,7 +1257,10 @@ def _with_closes(tmp_path, *recents, closes_on_day=(21.1, 13.2)):
 def test_t18_passes_on_closes_that_end_at_the_list_date(tmp_path):
     run = _with_closes(
         tmp_path,
-        {"dates": ["2026-10-14", "2026-10-15", "2026-10-16"], "closes": [20.0, None, 21.1]},
+        {
+            "dates": ["2026-10-14", "2026-10-15", "2026-10-16"],
+            "closes": [20.0, None, 21.1],
+        },
         {"dates": ["2026-10-15", "2026-10-16"], "closes": [None, 13.2]},
     )
     assert page_checks.t18(run) == (
@@ -1270,7 +1273,10 @@ def test_t18_fails_on_closes_the_line_cannot_draw(tmp_path):
     run = _with_closes(
         tmp_path,
         None,
-        {"dates": ["2026-10-16", "2026-10-15", "2026-10-17"], "closes": [13.0, 0, 13.2]},
+        {
+            "dates": ["2026-10-16", "2026-10-15", "2026-10-17"],
+            "closes": [13.0, 0, 13.2],
+        },
     )
     with pytest.raises(page_checks.Fail) as error:
         page_checks.t18(run)

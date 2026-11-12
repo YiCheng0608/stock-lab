@@ -1443,7 +1443,11 @@ def t18(run: Run) -> str:
             problems.append(f"{where} 日期不是由舊到新、不重複")
         if dates and day and dates[-1] > day:
             problems.append(f"{where} 最後一日 {dates[-1]} 晚於名單日 {day}")
-        bad = [c for c in closes if c is not None and not (isinstance(c, (int, float)) and c > 0)]
+        bad = [
+            c
+            for c in closes
+            if c is not None and not (isinstance(c, (int, float)) and c > 0)
+        ]
         if bad:
             problems.append(f"{where} 收盤不是正數或 null：{bad[:3]}")
         close = (item.get("market") or {}).get("close")
