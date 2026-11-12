@@ -103,8 +103,6 @@ CI `verify` job 先跑 [`tools/verify/verify_plan.py`](../../../../tools/verify/
 | `GET /groups/{group_id}` | 舊族群 API，前端未使用 |
 | `GET /instruments` | 只給導覽列搜尋建議（`securities_only=true`，#599）：清單只在輸入時出現、不在截圖的頁面文字裡，由前端測試與 `backend/tests/test_api.py` 涵蓋 |
 | `GET /instruments/{symbol}` | 舊標的 API，前端未使用 |
-| `GET /theme-suggestions` | 新聞題材建議 API，族群頁的那一區已移除（#627），前端未使用 |
-| `GET /theme-suggestions/{suggestion_id}` | 同上 |
 | `GET /signals` | 訊號 API，前端未使用 |
 | `GET /signals/{signal_id}` | 訊號 API，前端未使用 |
 | `GET /events` | 事件 API，前端未使用 |

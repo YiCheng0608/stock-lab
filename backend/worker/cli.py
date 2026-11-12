@@ -53,7 +53,6 @@ from .schedule_runs import (
     record_preflight_skip,
 )
 from .strategy_levels import run_strategy_levels
-from .theme_suggestions import run_theme_suggestions
 from .themes import sync_themes
 from .margin_lists import run_margin_lists
 from .no_trade_days import run_no_trade_days
@@ -325,10 +324,6 @@ def main() -> None:
     )
     themes_sync_parser.add_argument(
         "--file", help="題材表 JSON；未指定使用 backend/data/themes/themes_v1.json"
-    )
-    subparsers.add_parser(
-        "theme-suggestions",
-        help="由新聞 AI 判讀的題材候選重算待核實題材建議（不進榜、不寫題材表，重跑冪等）",
     )
     industry_parser = subparsers.add_parser("industry", help="官方產業群組")
     industry_subparsers = industry_parser.add_subparsers(
@@ -689,8 +684,6 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
         )
     elif args.command == "themes":
         result = sync_themes(args.file)
-    elif args.command == "theme-suggestions":
-        result = run_theme_suggestions()
     elif args.command == "industry":
         if args.rescore_days < 0 or (args.rescore_days and not args.apply):
             parser.error("--rescore-days needs --apply and must not be negative")
@@ -815,7 +808,7 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
     if args.command == "chips" and result.get("status") != "success":
         raise SystemExit(2 if result.get("status") == "partial" else 1)
     if (
-        args.command in {"themes", "industry", "instruments", "theme-suggestions"}
+        args.command in {"themes", "industry", "instruments"}
         and isinstance(result, dict)
         and result.get("status") == "failed"
     ):
