@@ -6147,6 +6147,13 @@ def _evaluate_signal_tracking(
     return len(evaluations), settlement_count
 
 
+# The daily evaluate tracks and commits this many signals at a time (#640).
+# The session does not autoflush, so until a commit it holds every signal,
+# evaluation and settlement it wrote; one transaction over all open signals
+# outgrew the 2 GB scheduler container.
+EVALUATE_TRACKING_BATCH = 2000
+
+
 def evaluate(*, init_schema: bool = True) -> dict[str, Any]:
     if init_schema:
         init_db()
@@ -6165,8 +6172,14 @@ def evaluate(*, init_schema: bool = True) -> dict[str, Any]:
             SignalSettlement.tracking_rules == TRACKING_RULES_V1,
             SignalSettlement.signal_id.in_(complete_windows),
         )
-        signals = db.scalars(
-            select(Signal).where(
+        # Only the ids are selected up front (the same selection as before);
+        # the signals are loaded, tracked and committed one batch at a time.
+        # Tracking a signal writes only its own rows and reads market data,
+        # so a batch does not change what a later one tracks to: the result
+        # equals one transaction over all of them.
+        signal_ids = db.scalars(
+            select(Signal.id)
+            .where(
                 Signal.signal_key.not_like(f"{BACKTEST_SIGNAL_PREFIX}%"),
                 Signal.id.not_in(finished_v1),
                 Signal.status.in_(
@@ -6180,28 +6193,39 @@ def evaluate(*, init_schema: bool = True) -> dict[str, Any]:
                     }
                 ),
             )
+            .order_by(Signal.id)
         ).all()
-        if not signals:
+        evaluations = 0
+        settlements = 0
+        for start in range(0, len(signal_ids), EVALUATE_TRACKING_BATCH):
+            batch = db.scalars(
+                select(Signal)
+                .where(
+                    Signal.id.in_(signal_ids[start : start + EVALUATE_TRACKING_BATCH])
+                )
+                .order_by(Signal.id)
+            ).all()
+            for signal in batch:
+                current_evaluations, current_settlements = _evaluate_signal_tracking(
+                    db, signal
+                )
+                evaluations += current_evaluations
+                settlements += current_settlements
+            db.commit()
+            # Release the committed objects before the next batch is loaded.
+            del batch
+        if not signal_ids:
             return {
                 "status": "no_data",
                 "signals_checked": 0,
                 "evaluations_written": 0,
                 "settlements_written": 0,
             }
-        evaluations = 0
-        settlements = 0
-        for signal in signals:
-            current_evaluations, current_settlements = _evaluate_signal_tracking(
-                db, signal
-            )
-            evaluations += current_evaluations
-            settlements += current_settlements
-        db.commit()
         latest_date = db.scalar(select(func.max(MarketBar.trading_date)))
         return {
             "status": "success",
             "date": latest_date.isoformat() if latest_date else None,
-            "signals_checked": len(signals),
+            "signals_checked": len(signal_ids),
             "evaluations_written": evaluations,
             "settlements_written": settlements,
         }
