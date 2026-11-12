@@ -1465,6 +1465,169 @@ def t18(run: Run) -> str:
     )
 
 
+# ---- Issue 654: score bars and strength blocks (DESIGN_SYSTEM §5 分數橫條、強弱色塊) ----
+# screenshot.cjs measures every .score-bar and .strength-chip (graphics): the page text keeps the numbers, so only
+# this tells whether the fill share, the hue and the step match the API.
+
+CANDIDATE_COMPONENTS = (
+    ("technical", "技術"),
+    ("chips", "籌碼"),
+    ("news_sentiment", "新聞情緒"),
+    ("group", "族群"),
+)
+STRENGTH_STEPS = (1, 3, 6)  # STRENGTH_STEPS in frontend/src/components/ui/ScoreBar.tsx
+STRENGTH_OPACITY = {
+    1: 0.16,
+    2: 0.3,
+    3: 0.5,
+    4: 1.0,
+}  # .strength-l1…l4 in frontend/src/styles.css
+RETURN_LABELS = (("1d", "1 日"), ("5d", "5 日"), ("20d", "20 日"))
+FILL_TOLERANCE = 0.02
+
+
+def want_bar(label: str, value: float | None) -> dict:
+    """ScoreBar for a 0–1 score: data-score, aria-label and the fill share (None: no fill)."""
+
+    if value is None:
+        return {"label": f"{label} 無資料", "score": "none", "fill": None}
+    score = fixed(value * 100, 0)
+    return {
+        "label": f"{label} {score}（0–100）",
+        "score": score,
+        "fill": min(1.0, max(0.0, value)),
+    }
+
+
+def want_chip(label: str, value: float | None) -> dict:
+    """strengthOf for a relative return given as a fraction: text, tone and step."""
+
+    window = f"{label}相對加權指數"
+    if value is None:
+        return {"label": f"{window} 無資料", "strength": "none-0", "text": "—"}
+    percent = value * 100
+    # toFixed(2): no thousands separators (fixed() adds them, and 1,050.00 is not a float).
+    magnitude = str(Decimal(abs(percent)).quantize(Decimal("0.01"), ROUND_HALF_UP))
+    if magnitude == "0.00":
+        return {"label": f"{window} 0.00%", "strength": "flat-0", "text": "0.00%"}
+    level = 1 + sum(float(magnitude) >= step for step in STRENGTH_STEPS)
+    tone, sign = ("up", "+") if percent > 0 else ("down", "-")
+    text = f"{sign}{magnitude}%"
+    return {"label": f"{window} {text}", "strength": f"{tone}-{level}", "text": text}
+
+
+def graphics_of(meta: dict, name: str) -> tuple[dict, list[dict], list[dict]]:
+    if not meta.get("ready"):
+        raise Undetermined(f"{name} 未 ready {meta.get('error', '')}".strip())
+    graphics = meta.get("graphics")
+    expect(isinstance(graphics, dict), f"{name} 沒有 graphics 量測")
+    items = graphics.get("items") or []
+    bars = [item for item in items if item.get("kind") == "bar"]
+    chips = [item for item in items if item.get("kind") == "chip"]
+    return graphics.get("tokens") or {}, bars, chips
+
+
+def bar_problems(name: str, got: list[dict], want: list[dict]) -> list[str]:
+    if len(got) != len(want):
+        return [f"{name} 有 {len(got)} 條分數橫條，預期 {len(want)} 條"]
+    problems = []
+    for index, (bar, expected) in enumerate(zip(got, want), 1):
+        where = f"{name} 第 {index} 條（{expected['label']}）"
+        if (
+            bar.get("label") != expected["label"]
+            or bar.get("score") != expected["score"]
+        ):
+            problems.append(
+                f"{where} 是 `{bar.get('label')}` data-score={bar.get('score')}"
+            )
+        elif expected["fill"] is None:
+            if bar.get("hasFill"):
+                problems.append(f"{where} 無資料卻畫了填色")
+        elif not bar.get("hasFill"):
+            problems.append(f"{where} 沒有填色")
+        elif not bar.get("visible", True):
+            continue  # a row hidden on purpose (today list past its first 10): nothing drawn to measure
+        elif not (bar.get("trackWidth") or 0) > 0:
+            problems.append(f"{where} 看得到但底軌寬度 0，量不到填色")
+        elif (
+            bar.get("fill") is None
+            or abs(bar["fill"] - expected["fill"]) > FILL_TOLERANCE
+        ):
+            problems.append(
+                f"{where} 填色比例 {bar.get('fill')}，預期 {expected['fill']:.3f}"
+            )
+    return problems
+
+
+def chip_problems(
+    name: str, tokens: dict, got: list[dict], want: list[dict]
+) -> list[str]:
+    if len(got) != len(want):
+        return [f"{name} 有 {len(got)} 個強弱色塊，預期 {len(want)} 個"]
+    problems = []
+    for index, (chip, expected) in enumerate(zip(got, want), 1):
+        where = f"{name} 第 {index} 個色塊（{expected['label']}）"
+        if (
+            chip.get("label") != expected["label"]
+            or chip.get("strength") != expected["strength"]
+            or chip.get("text") != expected["text"]
+        ):
+            problems.append(
+                f"{where} 是 `{chip.get('label')}` {chip.get('strength')} `{chip.get('text')}`"
+            )
+            continue
+        tone, level = expected["strength"].split("-")
+        background = chip.get("background")
+        if tone in ("up", "down"):
+            if background != tokens.get(tone):
+                problems.append(
+                    f"{where} 底色 {background}，預期 --color-{tone} {tokens.get(tone)}"
+                )
+            opacity = chip.get("opacity")
+            if opacity is None or abs(opacity - STRENGTH_OPACITY[int(level)]) > 0.01:
+                problems.append(
+                    f"{where} 不透明度 {opacity}，預期第 {level} 級 {STRENGTH_OPACITY[int(level)]}"
+                )
+        elif background in (tokens.get("up"), tokens.get("down")):
+            problems.append(f"{where} 平盤或無資料卻用了漲跌色 {background}")
+    return problems
+
+
+def board_bars(item: dict | None) -> list[dict]:
+    components = (item or {}).get("components") or {}
+    return [want_bar(label, components.get(key)) for key, label in BOARD_COMPONENTS]
+
+
+def return_chips(returns: dict) -> list[dict]:
+    return [want_chip(label, returns.get(key)) for key, label in RETURN_LABELS]
+
+
+@check("today", "T19")
+def t19(run: Run) -> str:
+    """Issue 654: the detail's four component bars and the hot groups' return blocks."""
+
+    tokens, bars, chips = graphics_of(run.shoot(TODAY)[1280], f"{TODAY.name}-1280")
+    payload = candidates(run)
+    items = (
+        [] if payload.get("status") == "not_computed" else payload.get("items") or []
+    )
+    want_bars = [
+        want_bar(label, ((item.get("components") or {}).get(key) or {}).get("score"))
+        for item in items
+        for key, label in CANDIDATE_COMPONENTS
+    ]
+    groups = (run.today_board().get("items") or [])[:TODAY_GROUPS]
+    want_chips = [
+        chip
+        for item in groups
+        for chip in return_chips(item.get("relative_returns") or {})
+    ]
+    problems = bar_problems("今日名單明細", bars, want_bars)
+    problems += chip_problems("熱門族群", tokens, chips, want_chips)
+    expect(not problems, "；".join(problems))
+    return f"{len(bars)} 條分項橫條（{len(items)} 檔×4）與 {len(chips)} 個報酬色塊（{len(groups)} 族群×3）= API"
+
+
 # ---- T14 / T15: the today summary line and the market page's daily chart (Issue 549, UI_COPY_SPEC §11) ----
 
 SUMMARY_NAMES = (
@@ -2199,6 +2362,54 @@ def g8(run: Run) -> str:
     return f"成員依成交金額：{'、'.join(symbols) or '（無成員）'}"
 
 
+@check("themes", "G9", after=("G2",))
+def g9(run: Run) -> str:
+    """Issue 654: each board row's three return blocks and five component bars, then the detail's five bars and
+    three blocks (T, upstream today T5), against the board API (graphics, T19 has the helpers)."""
+
+    problems, counted = [], []
+    for kind, shot in (("industry", THEMES), ("theme", THEMES_THEME)):
+        items = board(run, kind).get("items") or []
+        tokens, bars, chips = graphics_of(run.shoot(shot)[1280], f"{shot.name}-1280")
+        want_chips = [
+            chip
+            for item in items
+            for chip in return_chips(item.get("relative_returns") or {})
+        ]
+        problems += bar_problems(
+            f"{shot.name}-1280",
+            bars,
+            [bar for item in items for bar in board_bars(item)],
+        )
+        problems += chip_problems(f"{shot.name}-1280", tokens, chips, want_chips)
+        counted.append(f"{kind} {len(items)} 列")
+    theme_id, _ = run.T()
+    payload = run.get(f"themes/{theme_id}", "theme-detail.json")
+    kind = payload.get("board") or "industry"
+    item = next(
+        (
+            row
+            for row in board(run, kind).get("items") or []
+            if row.get("theme_id") == theme_id
+        ),
+        None,
+    )
+    metrics = (payload.get("theme") or {}).get("metrics") or {}
+    returns = (item or {}).get("relative_returns") or {
+        key: metrics.get(f"relative_return_{key}") for key, _label in RETURN_LABELS
+    }
+    detail = Shot("theme-detail", f"/themes/{theme_id}")
+    tokens, bars, chips = graphics_of(run.shoot(detail)[1280], f"{detail.name}-1280")
+    problems += bar_problems(f"{detail.name}-1280", bars, board_bars(item))
+    problems += chip_problems(
+        f"{detail.name}-1280", tokens, chips, return_chips(returns)
+    )
+    expect(not problems, "；".join(problems))
+    return (
+        f"{'、'.join(counted)}與詳情 `{theme_id}`：五分項橫條與 1／5／20 日色塊 = API"
+    )
+
+
 # ---- stocks ----
 
 
@@ -2840,6 +3051,28 @@ def s14(run: Run, stock: Stock) -> str:
             )
             counts.append(f"`{needle}` 1 次")
     return note + "；進出場分頁 " + "、".join(counts)
+
+
+@check("stocks", "S15", per_stock=True)
+def s15(run: Run, stock: Stock) -> str:
+    """Issue 654: the score details' component titles are bars equal to stock.json's candidate; a component
+    without sub-items has no title row (ScoreDetails groupTitle), and a non-candidate draws none."""
+
+    shot = stock_shots(stock)["research"]
+    tokens, bars, chips = graphics_of(run.shoot(shot)[1280], f"{shot.name}-1280")
+    candidate = stock_payload(run, stock).get("candidate")
+    components = (candidate or {}).get("components") or {}
+    want = [
+        want_bar(label, (components.get(key) or {}).get("score"))
+        for key, label in CANDIDATE_COMPONENTS
+        if (components.get(key) or {}).get("items")
+    ]
+    problems = bar_problems(f"{shot.name}-1280", bars, want)
+    problems += chip_problems(f"{shot.name}-1280", tokens, chips, [])
+    expect(not problems, "；".join(problems))
+    if candidate is None:
+        return "不是每日候選：研究條件分頁沒有分數橫條"
+    return f"評分細節 {len(bars)} 個分項橫條 = stock.json candidate"
 
 
 # ---- actions ----
