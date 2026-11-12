@@ -29,7 +29,6 @@ from app.models import (
     NewsLlmResult,
     RawPayload,
     ThemeGroup,
-    ThemeSuggestion,
 )
 from worker import news_llm
 from worker.news_llm import (
@@ -42,7 +41,6 @@ from worker.news_llm import (
     run_news_llm,
     validate_output,
 )
-from worker.theme_suggestions import refresh_theme_suggestions
 
 FAKE_CLI = Path(__file__).parent / "fixtures" / "news_llm" / "fake_claude.py"
 RUN_DATE = date(2026, 10, 17)
@@ -1745,9 +1743,7 @@ def test_themes_the_source_writes_or_directly_gives_are_kept(db, fake, monkeypat
     assert db.scalars(select(DataQuality)).all() == []
 
 
-def test_a_dropped_theme_is_recorded_and_never_shown_or_suggested(
-    db, fake, client, monkeypatch
-):
+def test_a_dropped_theme_is_recorded_and_never_shown(db, fake, client, monkeypatch):
     # AC-3
     items = _add_theme_cases(db, 5942, 5943, 5961)
     monkeypatch.setenv("FAKE_CLAUDE_MODES", "theme_cases")
@@ -1807,18 +1803,6 @@ def test_a_dropped_theme_is_recorded_and_never_shown_or_suggested(
     detail = client.get(f"{router.prefix}/news/{item.id}").json()
     assert detail["ai"]["theme_candidates"] == []
     assert detail["ai"]["impact_direction"] == "positive"
-    refresh_theme_suggestions(db, now=NOW)
-    assert {row.theme_key for row in db.scalars(select(ThemeSuggestion))} == {
-        "ai網通",
-        "光通訊",
-        "雲端服務",
-    }
-    listed = client.get(
-        f"{router.prefix}/theme-suggestions", params={"include_matched": "true"}
-    ).json()
-    assert sorted(entry["display_name"] for entry in listed["items"]) == sorted(
-        ["AI 網通", "光通訊", "雲端服務"]
-    )
 
 
 def _case_payload(news_id):

@@ -43,7 +43,6 @@ LATER_STEPS = (
     "evaluate",
     "candidates",
     "indicators",
-    "theme_suggestions",
     "plan_tracking",
     "strategy_levels",
     "candidate_notes",
@@ -112,7 +111,6 @@ class Daily:
             "_period_backfill_step",
         ):
             monkeypatch.setattr(schedule_runs, name, lambda *_: done)
-        monkeypatch.setattr(schedule_runs, "_theme_suggestion_step", lambda: done)
 
     def run(self, when, t86=INITIAL, **fetcher):
         self.fetcher = Fetcher(t86, **fetcher)
