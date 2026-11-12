@@ -290,3 +290,18 @@ export function observationLines(levels: StrategyObservationLevels): LevelLine[]
   if (isNumber(levels.target_1)) lines.push({ key: 'target', label: isNumber(levels.target_2) ? '參考目標一／目標二（元）' : '參考目標一（元）', value: formatPrice(levels.target_1) + (isNumber(levels.target_2) ? `／${formatPrice(levels.target_2)}` : ''), className: 'level-target' })
   return lines
 }
+
+// #648: the 進出場 tab shows one complete set of levels, the strategy board's. Another block on the tab (the candidate
+// row's entry sentence, the research action's fold) points to the board instead of repeating a set that is the same as a
+// board row's actionable levels (same stop and target one); a set that differs, such as a holding's own levels, stays.
+export const LEVELS_IN_BOARD_TEXT = '價位見上方策略總表。'
+export const candidateLevelsInBoardText = (label: string) => `進場、停損與目標價見下方策略總表「${label}」列。`
+
+export function boardLevelsRow(
+  board: { strategies: readonly StrategyBoardRow[] } | null | undefined,
+  levels: { invalid_price?: number | null; target_1?: number | null } | null | undefined,
+): StrategyBoardRow | null {
+  if (!board || levels?.invalid_price == null || levels.target_1 == null) return null
+  return board.strategies.find((row) => row.status === 'conditional' && row.levels?.kind === 'actionable'
+    && row.levels.invalid_price === levels.invalid_price && row.levels.target_1 === levels.target_1) ?? null
+}

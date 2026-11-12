@@ -1242,7 +1242,7 @@ def test_t17_without_candidates_or_a_ready_shot(tmp_path):
         page_checks.t17(_t17_run(tmp_path, [_row(1), _row(2)], ready=False))
 
 
-# ---- T18 / G9 / S14: score bars and strength blocks (Issue 654) ----
+# ---- T18 / G9 / S15: score bars and strength blocks (Issue 654) ----
 
 UP, DOWN = "rgb(239, 68, 68)", "rgb(34, 197, 94)"
 TOKENS = {"up": UP, "down": DOWN}
@@ -1384,7 +1384,7 @@ def test_g9_checks_both_boards_and_the_detail(tmp_path):
         page_checks.g9(FakeRun(tmp_path, payloads, {}, metas=metas))
 
 
-def test_s14_bars_follow_the_candidate_components(tmp_path):
+def test_s15_bars_follow_the_candidate_components(tmp_path):
     stock = page_checks.Stock("TWSE", "9101")
     components = _scored([0.75, 0.44, 0.92, None])
     components["group"]["items"] = {}  # no sub-items: ScoreDetails draws no title row for it
@@ -1394,11 +1394,11 @@ def test_s14_bars_follow_the_candidate_components(tmp_path):
         metas = {"stock-research": {1280: {"width": 1280, "ready": True, "graphics": {"tokens": TOKENS, "items": items}}}}
         return FakeRun(tmp_path, payloads, {}, metas=metas)
 
-    assert page_checks.s14(run([_bar("技術", 75), _bar("籌碼", 44), _bar("新聞情緒", 92)]), stock) == "評分細節 3 個分項橫條 = stock.json candidate"
+    assert page_checks.s15(run([_bar("技術", 75), _bar("籌碼", 44), _bar("新聞情緒", 92)]), stock) == "評分細節 3 個分項橫條 = stock.json candidate"
     with pytest.raises(page_checks.Fail, match="有 4 條分數橫條，預期 3 條"):
-        page_checks.s14(run([_bar("技術", 75), _bar("籌碼", 44), _bar("新聞情緒", 92), _bar("族群", None)]), stock)
+        page_checks.s15(run([_bar("技術", 75), _bar("籌碼", 44), _bar("新聞情緒", 92), _bar("族群", None)]), stock)
     payloads["stocks/TWSE/9101"] = {"candidate": None}
-    assert page_checks.s14(run([]), stock) == "不是每日候選：研究條件分頁沒有分數橫條"
+    assert page_checks.s15(run([]), stock) == "不是每日候選：研究條件分頁沒有分數橫條"
 
 
 def test_known_failures_do_not_fail_the_run_until_they_pass(tmp_path, monkeypatch):
@@ -1842,6 +1842,72 @@ def test_s10_counts_only_the_board_observation_labels(tmp_path):
         {"stock-research-1280": _board_page(summary_label=True)},
     )
     assert "觀察價位 1 列" in page_checks.s10(run, STOCK)
+
+
+# ---- stock page 圖優先 and one set of levels (#648) ----
+
+LEVELS_ROW = {
+    "label": "突破條件",
+    "status": "conditional",
+    "levels": {"kind": "actionable", "invalid_price": 2364.0, "target_1": 2458.0},
+}
+HEADER = "2884\n玉山金\n資料 2026/11/05\n來源 臺灣證券交易所\n"
+CHART = "K 線與技術指標\n資料 2026/11/05\n"
+SUMMARY = "目前判斷\n條件成立\n規則價位\n停損（元）\n2,364.00\n2,458.00／2,508.00\n"
+TABS = "走勢\n籌碼\n財務\n新聞與公告\n進出場\n資料來源\n"
+BOARD = (
+    "策略總表\n資料 2026/11/05\n突破型\n"
+    "進場、停損與目標價見下方策略總表「突破條件」列。\n"
+    "突破條件\t\n成立\t全部達成\t2,400.00\t2,364.00\t2,458.00／2,508.00\n"
+    "研究動作\n查看風險提醒與時間\n價位見上方策略總表。\n"
+)
+MAIN = HEADER + CHART + SUMMARY + TABS + page_checks.CHART_TAB_NOTE + "\n"
+
+
+def _s14(tmp_path, main, research, board=None):
+    payload = {"strategy_board": board or {"strategies": [LEVELS_ROW]}}
+    run = FakeRun(
+        tmp_path,
+        {"stocks/TWSE/2884": payload},
+        {"stock-1280": main, "stock-research-1280": research},
+    )
+    return page_checks.s14(run, STOCK)
+
+
+def test_s14_passes_on_chart_first_and_one_set_of_levels(tmp_path):
+    result = _s14(tmp_path, MAIN, HEADER + CHART + SUMMARY + TABS + BOARD)
+    assert "`2,364.00` 1 次" in result and "`2,458.00` 1 次" in result
+
+
+def test_s14_fails_on_the_old_order_and_the_chart_in_the_tab(tmp_path):
+    # Before #648: header, summary card, tabs, then the chart card inside the 走勢 tab.
+    old_main = HEADER + SUMMARY + TABS + CHART
+    with pytest.raises(page_checks.Fail, match="要在摘要卡 `目前判斷`"):
+        _s14(tmp_path, old_main, HEADER + SUMMARY + TABS + BOARD)
+    twice = HEADER + CHART + SUMMARY + TABS + CHART + page_checks.CHART_TAB_NOTE
+    with pytest.raises(page_checks.Fail, match="有 2 行，預期 1"):
+        _s14(tmp_path, twice, HEADER + CHART + SUMMARY + TABS + BOARD)
+    with pytest.raises(page_checks.Fail, match="走勢分頁缺整行"):
+        _s14(
+            tmp_path,
+            HEADER + CHART + SUMMARY + TABS,
+            HEADER + CHART + SUMMARY + TABS + BOARD,
+        )
+
+
+def test_s14_fails_when_the_research_tab_repeats_the_levels(tmp_path):
+    # Before #648: the candidate sentence and the research action's grid repeated the board's set.
+    repeated = BOARD.replace(
+        "進場、停損與目標價見下方策略總表「突破條件」列。",
+        "明天起在 2,400.00 元附近可進場；跌破 2,364.00 元停損，目標 2,458.00 元",
+    ).replace("價位見上方策略總表。", "停損（元）\n2,364.00\n目標一（元）\n2,458.00")
+    with pytest.raises(page_checks.Fail, match="`2,364.00`（invalid_price）出現 3 次"):
+        _s14(tmp_path, MAIN, HEADER + CHART + SUMMARY + TABS + repeated)
+
+
+def test_s14_without_actionable_levels_checks_the_order_only(tmp_path):
+    board = {"strategies": [OBSERVED_ROW]}
+    assert "不計次" in _s14(tmp_path, MAIN, HEADER + CHART + SUMMARY + TABS, board)
 
 
 # ---- stock page 財務 tab (#528) ----

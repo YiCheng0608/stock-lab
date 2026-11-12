@@ -1,5 +1,6 @@
 import { CandidateNote, ReasonList, ScoreDetails } from '../candidates/CandidateViews'
-import { EntryPlanCard } from '../candidates/EntryPlanCard'
+import { EntryConditions, EntryPlanCard } from '../candidates/EntryPlanCard'
+import { ENTRY_TYPES } from '../candidates/entryPlan'
 import {
   CANDIDATE_DISCLAIMER,
   averageVolumeText,
@@ -23,6 +24,8 @@ import {
   LEVELS_MISSING_TEXT,
   OBSERVATION_LABEL,
   STATUS_TONES,
+  boardLevelsRow,
+  candidateLevelsInBoardText,
   conditionDetailsTitle,
   conditionViews,
   levelsVersionLabel,
@@ -145,6 +148,8 @@ function StrategyCard({ row, floorNote, gapReasons }: { row: StrategyBoardRow; f
 function CandidateRow({ board, candidate }: { board: Board; candidate: CandidateItem | null | undefined }) {
   const summary = board.candidate
   if (!summary) return null
+  const levelsRow = candidate ? boardLevelsRow(board, candidate.levels) : null
+  const entryType = levelsRow && (levelsRow.entry_type === 'breakout' || levelsRow.entry_type === 'pullback') ? ENTRY_TYPES[levelsRow.entry_type] : null
   return (
     <div className="strategy-candidate" data-strategy-candidate={summary.rank}>
       <div className="strategy-candidate-head">
@@ -152,8 +157,17 @@ function CandidateRow({ board, candidate }: { board: Board; candidate: Candidate
         <strong>第 {summary.rank} 名 · <Term id="candidate_score">總分</Term> {formatCandidateScore(summary.total_score)} · {candidateStrategyLabel(summary.strategy)}</strong>
         <span className="small-note strategy-candidate-disclaimer">{CANDIDATE_DISCLAIMER}</span>
       </div>
-      {/* #491: how to enter, before the reasons. */}
-      {candidate && <EntryPlanCard item={candidate} onStockPage />}
+      {/* #491: how to enter, before the reasons. #648: when the board row below carries the same levels, the entry type
+          and a pointer to that row replace the sentence, so the tab writes the set once; the signal-day conditions stay. */}
+      {candidate && (levelsRow
+        ? <section className="entry-plan" aria-label="進場方式" data-entry-plan="levels-in-board" data-entry-type={levelsRow.entry_type}>
+          <p className="entry-plan-line">
+            <span className="entry-plan-type">{entryType ? <Term id={entryType.term}>{entryType.label}</Term> : '進場方式'}</span>
+            <span className="entry-plan-sentence" data-levels-ref>{candidateLevelsInBoardText(levelsRow.label)}</span>
+          </p>
+          <EntryConditions item={candidate} onStockPage />
+        </section>
+        : <EntryPlanCard item={candidate} onStockPage />)}
       {/* #519: the reasons and the AI note fold behind one line; the score details stay their own fold. */}
       {candidate && <details className="details strategy-candidate-more">
         <summary>{CANDIDATE_MORE_LABEL}</summary>
