@@ -25,10 +25,11 @@ const USAGE = `usage: node tools/ops/screenshot.cjs --url <page> --out <dir> [op
 
 Writes <out>/<name>-<width>.png and <out>/<name>-<width>.txt and prints one JSON line per
 width: {"url","finalUrl","width","ready","png","txt","scrollWidth","clientWidth","overflow",
-"candidateRows","consoleErrors","httpErrors","httpErrorCount","missingClicks"} (candidateRows: per
+"candidateRows","graphics","consoleErrors","httpErrors","httpErrorCount","missingClicks"} (candidateRows: per
 shown today-list row, its rank, the number block's scroll and client width, and the number cells the
 AI button covers or the row's edge cuts; null when that probe throws. httpErrors lists the first 50
-failed responses, httpErrorCount counts all of them). Exit 0 when every width became ready, 1 otherwise, 2 on usage.`
+failed responses, httpErrorCount counts all of them; graphics: every score bar and strength block with its
+label, value, fill share and colour, Issue 654). Exit 0 when every width became ready, 1 otherwise, 2 on usage.`
 
 // Phone widths use mobile emulation; heights are the viewport before the full-page capture.
 const MOBILE_MAX_WIDTH = 600
@@ -226,6 +227,47 @@ const CANDIDATE_ROWS_PROBE = `(() => { try {
   })
 } catch (error) { return null } })()`
 
+// Issue 654: every score bar (.score-bar) and strength block (.strength-chip) in document order, after every
+// <details> is open: its aria-label and data value, the fill's share of the track (null without a fill, or when the
+// track has no width, e.g. a hidden row), and for a block the rendered ::before colour and opacity next to the
+// --color-up / --color-down tokens resolved the same way, so page_checks.py can tell the hue and step.
+const GRAPHICS_PROBE = `(() => { try {
+  const resolve = (token) => {
+    const probe = document.createElement('span')
+    probe.style.color = 'var(' + token + ')'
+    document.body.appendChild(probe)
+    const value = getComputedStyle(probe).color
+    probe.remove()
+    return value
+  }
+  const tokens = { up: resolve('--color-up'), down: resolve('--color-down') }
+  const items = Array.from(document.querySelectorAll('.score-bar, .strength-chip')).map((el) => {
+    if (el.classList.contains('score-bar')) {
+      const track = el.querySelector('.score-bar-track')
+      const fill = el.querySelector('.score-bar-fill')
+      const width = track ? track.getBoundingClientRect().width : 0
+      return {
+        kind: 'bar',
+        label: el.getAttribute('aria-label'),
+        score: el.dataset.score ?? null,
+        fill: fill && width > 0 ? Math.round((fill.getBoundingClientRect().width / width) * 1000) / 1000 : null,
+        hasFill: Boolean(fill),
+        trackWidth: Math.round(width * 10) / 10,
+      }
+    }
+    const before = getComputedStyle(el, '::before')
+    return {
+      kind: 'chip',
+      label: el.getAttribute('aria-label'),
+      strength: el.dataset.strength ?? null,
+      text: el.textContent,
+      background: before.backgroundColor,
+      opacity: Number(before.opacity),
+    }
+  })
+  return { tokens, items }
+} catch (error) { return null } })()`
+
 // Ready: no loading marker, no request in flight (the navbar date badge has no skeleton).
 async function waitReady(cdp, watch, waitFor, timeoutMs) {
   const deadline = Date.now() + timeoutMs
@@ -264,6 +306,7 @@ async function captureWidth(cdp, options, width, watch) {
     text: document.body ? document.body.innerText : '',
     finalUrl: location.href,
     candidateRows: ${CANDIDATE_ROWS_PROBE},
+    graphics: ${GRAPHICS_PROBE},
   })`)
   const shot = await cdp.send('Page.captureScreenshot', {
     format: 'png',
@@ -286,6 +329,7 @@ async function captureWidth(cdp, options, width, watch) {
     clientWidth: metrics.clientWidth,
     overflow: metrics.scrollWidth > metrics.clientWidth,
     candidateRows: metrics.candidateRows,
+    graphics: metrics.graphics,
     consoleErrors: watch.consoleErrors.slice(0, 10),
     // The list is capped; the count tells page_checks.py whether it saw every failed response (Issue 609).
     httpErrors: watch.httpErrors.slice(0, HTTP_ERRORS_SHOWN),

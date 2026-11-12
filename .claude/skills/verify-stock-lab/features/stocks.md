@@ -85,6 +85,7 @@
 | S11 | CI | 摘要卡（#519） | `stock-1280.txt` 有整行 `目前判斷`，它之後、分頁籤 `走勢` 之前是摘要卡：`目前判斷` 後三行內有判斷 badge，依 [UI_COPY_SPEC §8.2 摘要卡](../../../../docs/UI_COPY_SPEC.md#82-個股詳情的第一屏) 的順序由 `stock.json` 推得（沒有行動摘要也沒有策略總表 `無資料`；`reduce_exit` 持倉風險；`strategy_board.candidate` 非 null 條件成立（#581 前寫「可買」）；`hold_observe` 持倉觀察；`manual_review` 需人工判讀；每列 `not_applicable` 不適用；行動摘要資料不足 資料不足；有 `conditional` 列 條件成立；其他 觀察）；候選的下一行是 `每日候選第 <rank> 名 · 總分 <round(total_score×100)> · <策略>`，資料不足且有 `gap_reasons` 時下一行是各 `label` 以 `；` 連接，觀察且有 `primary_reason` 時下一行是它的 `label`，無資料的下一行是 `尚無行動摘要。`；之後有整行 `最接近成立`、`規則價位`（`strategies` 空時不查 `規則價位`）與 `完整條件 →` |
 | S12 | CI | 財務（#528） | `stock-financials-1280.txt` 有整行 `季報營收與 EPS`。`stock.json` 的 `fundamentals` 空時：依 `instrument.instrument_type` 有整行原因句（`etf` 為 `ETF 沒有公司財報，不適用。`，`ipo` 與其他各一句，見 [UI_COPY_SPEC §8.2 財務分頁](../../../../docs/UI_COPY_SPEC.md#82-個股詳情的第一屏)），且沒有期別列。不空時：標題之後有 `資料 <最新一列 data_as_of 的 YYYY/MM/DD>`；每一列有以 `<期別>\t<營收÷100,000，兩位小數>\t<EPS 兩位小數>\t<ROE 兩位小數>\t<可得日>\t` 開頭的行（沒有值的格是 `來源未提供`，期別 `Q<n>` 寫 `YYYY 年第 n 季`），順序與 API 相同；表格下有 `來源：` 開頭的行 |
 | S13 | CI | 月營收（#530） | `stock-financials-1280.txt` 有整行 `月營收`，以下都從這一行起找。`stock.json` 的 `monthly_revenues` 空時：依 `instrument.instrument_type` 有整行原因句（`etf` 為 `ETF 不申報月營收，不適用。`，`ipo` 與其他各一句），且沒有月份列。不空時：有 `資料 <最新月份 data_as_of 的 YYYY/MM/DD>`；每個月有以 `<YYYY 年 M 月>\t<營收÷100,000，兩位小數>\t<年增率一位小數，正數帶 +>\t<可得日>\t` 開頭的行（沒有值的格是 `來源未提供`），順序與 API 相同（已更正月份的 `已更正` 在可得日之後那格，不在比對的開頭內，#543）；表格下有 `來源：` 開頭的行 |
+| S14 | CI | 評分細節分項橫條（#654） | 讀 `stock-research-1280` 截圖 JSON 的 `graphics`。`stock.json` 的 `candidate` 非 null 時，依技術、籌碼、新聞情緒、族群的順序，`components.<分項>.items` 非空的每個分項各一條分數橫條（判法同 today T18）；`candidate` null 時沒有分數橫條；這一頁沒有報酬色塊 |
 
 ## 陷阱
 
@@ -97,6 +98,7 @@
 - 個股清單在 640px 以下改成每檔一張卡（表格 `display:none`，超過 10 張的其餘收在「顯示其餘 N 檔」`<details>`，#300），`stocks-390.txt` 沒有以 tab 分欄的表格列；目前沒有檢查讀它的文字，只有 S1 看版面。
 - 個股頁頁首的研究截止日期在所有寬度都收成「研究截止日期：…」開關（手機 #300、桌面 #635），沒套用截止日時頁面文字只有這一行。
 - 策略總表在 640px 以下改成每策略一張卡（表格 `display:none`），所以 S10 只讀 1280 的文字；`screenshot.cjs` 展開的 `<details>`（條件明細、評分細節）也在文字裡，S10 只比對表格列、狀態行與觀察價位標籤。
+- 評分細節表的分項標題列（#654）由「技術（75，權重 35%）」改為分數橫條＋「權重 35%」：頁面文字是 `技術`、`75`、`權重 35%` 各一段（同一列內以空白或換行分開），子項「百分位」欄仍是數字；橫條由 S14 讀 `graphics` 檢查。
 
 ## 判定
 

@@ -842,6 +842,11 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8">
 <button class="candidate-ai-toggle" style="position:absolute;left:160px;top:0;width:120px;height:60px">AI</button></li>
 <li class="candidate-row" data-candidate-rank="3" hidden><dl class="candidate-row-nums"></dl></li>
 </ol>
+<style>:root{--color-up:rgb(239, 68, 68);--color-down:rgb(34, 197, 94)}
+.strength-chip{position:relative}.strength-chip::before{content:"";position:absolute;inset:0;background:var(--color-down);opacity:.3}</style>
+<details><summary>bars</summary><span class="score-bar" aria-label="技術 75（0–100）" data-score="75"><span class="score-bar-track" style="display:inline-block;position:relative;width:200px;height:6px"><span class="score-bar-fill" style="position:absolute;left:0;top:0;bottom:0;width:75%"></span></span></span>
+<span class="score-bar score-bar-empty" aria-label="族群 無資料" data-score="none"><span class="score-bar-track" style="display:inline-block;width:200px;height:6px"></span></span></details>
+<b class="strength-chip strength-down strength-l2" aria-label="1 日相對加權指數 -1.20%" data-strength="down-2">-1.20%</b>
 <button id="tab" onclick="fetch('/slow').then(() => document.body.insertAdjacentHTML('beforeend', '<p>tab opened</p>'))">tab</button>
 <script>
 fetch('/slow').then((r) => r.text()).then((text) => {
@@ -944,6 +949,15 @@ def test_screenshot_waits_for_data_and_reports_overflow(tmp_path: Path) -> None:
                 "clipped": total,
             },
         ]
+        # Issue 654: the bars inside the opened <details> and the block, with the resolved tokens.
+        assert line["graphics"] == {
+            "tokens": {"up": "rgb(239, 68, 68)", "down": "rgb(34, 197, 94)"},
+            "items": [
+                {"kind": "bar", "label": "技術 75（0–100）", "score": "75", "fill": 0.75, "hasFill": True, "trackWidth": 200},
+                {"kind": "bar", "label": "族群 無資料", "score": "none", "fill": None, "hasFill": False, "trackWidth": 200},
+                {"kind": "chip", "label": "1 日相對加權指數 -1.20%", "strength": "down-2", "text": "-1.20%", "background": "rgb(34, 197, 94)", "opacity": 0.3},
+            ],
+        }
     assert [line["overflow"] for line in lines] == [False, True]
     assert lines[1]["scrollWidth"] > lines[1]["clientWidth"] == 390
     assert sorted(p.name for p in out.iterdir()) == [

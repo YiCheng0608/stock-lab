@@ -116,11 +116,11 @@ def test_a_sampler_without_a_manual_label_fails(tmp_path):
 
 
 def test_a_check_without_a_type_fails(tmp_path):
-    features = _features_with(tmp_path, "themes", "| G9 | 新檢查 | 某條件 |")
+    features = _features_with(tmp_path, "themes", "| G99 | 新檢查 | 某條件 |")
     problems = page_checks.registry_problems(
         page_checks.feature_checks(features), page_checks.CHECKS
     )
-    assert problems == ["themes.md G9: 類型 is '新檢查', not CI or 人工"]
+    assert problems == ["themes.md G99: 類型 is '新檢查', not CI or 人工"]
 
 
 def test_code_that_features_label_manual_fails(tmp_path):
@@ -1240,6 +1240,165 @@ def test_t17_without_candidates_or_a_ready_shot(tmp_path):
     assert page_checks.t17(_t17_run(tmp_path, [], empty)) == "沒有候選列"
     with pytest.raises(page_checks.Undetermined, match="today-390 未 ready"):
         page_checks.t17(_t17_run(tmp_path, [_row(1), _row(2)], ready=False))
+
+
+# ---- T18 / G9 / S14: score bars and strength blocks (Issue 654) ----
+
+UP, DOWN = "rgb(239, 68, 68)", "rgb(34, 197, 94)"
+TOKENS = {"up": UP, "down": DOWN}
+
+
+def _bar(label, value, fill=None):
+    if value is None:
+        return {"kind": "bar", "label": f"{label} 無資料", "score": "none", "fill": None, "hasFill": False, "trackWidth": 72}
+    share = value / 100 if fill is None else fill
+    return {"kind": "bar", "label": f"{label} {value}（0–100）", "score": str(value), "fill": share, "hasFill": True, "trackWidth": 72}
+
+
+def _chip(window, text, strength, background=None, opacity=None):
+    tone, level = strength.split("-")
+    label = f"{window} 日相對加權指數 " + ("無資料" if tone == "none" else text)
+    default = {"up": UP, "down": DOWN}.get(tone, "rgb(55, 65, 81)")
+    return {
+        "kind": "chip",
+        "label": label,
+        "strength": strength,
+        "text": text,
+        "background": background or default,
+        "opacity": opacity if opacity is not None else page_checks.STRENGTH_OPACITY.get(int(level), 1.0),
+    }
+
+
+def _component(score, items=True):
+    return {"score": score, "items": {"x": {}} if items else {}}
+
+
+def _scored(scores):
+    keys = ("technical", "chips", "news_sentiment", "group")
+    return {key: _component(score) for key, score in zip(keys, scores)}
+
+
+def _t18_run(tmp_path, items, ready=True):
+    candidates = {"status": "success", "trading_date": "2026-10-16", "items": [{"rank": 1, "components": _scored([0.75, 0.44, None, 1])}]}
+    board = {"items": [{"theme_id": "i-1", "display_name": "半導體", "relative_returns": {"1d": 0.012, "5d": -0.0045, "20d": None}}]}
+    metas = {"today": {1280: {"width": 1280, "ready": ready, "graphics": {"tokens": TOKENS, "items": items}}}}
+    payloads = {"candidates": candidates, "themes?board=industry&limit=5": board}
+    return FakeRun(tmp_path, payloads, {}, metas=metas)
+
+
+T18_ITEMS = [
+    _bar("技術", 75),
+    _bar("籌碼", 44),
+    _bar("新聞情緒", None),
+    _bar("族群", 100),
+    _chip(1, "+1.20%", "up-2"),
+    _chip(5, "-0.45%", "down-1"),
+    _chip(20, "—", "none-0", background="rgba(0, 0, 0, 0)"),
+]
+
+
+def test_want_chip_steps_follow_the_shown_two_decimals():
+    cases = [
+        (0.004, "+0.40%", "up-1"),
+        (0.00999, "+1.00%", "up-2"),
+        (-0.0299, "-2.99%", "down-2"),
+        (0.03, "+3.00%", "up-3"),
+        (-0.06, "-6.00%", "down-4"),
+        (0.00004, "0.00%", "flat-0"),
+        (-0.00004, "0.00%", "flat-0"),
+        (None, "—", "none-0"),
+    ]
+    for value, text, strength in cases:
+        chip = page_checks.want_chip("1 日", value)
+        assert (chip["text"], chip["strength"]) == (text, strength), value
+    assert page_checks.want_bar("技術", 0.746) == {"label": "技術 75（0–100）", "score": "75", "fill": 0.746}
+    assert page_checks.want_bar("族群", None)["fill"] is None
+
+
+def test_t18_passes_when_bars_and_blocks_match_the_api(tmp_path):
+    assert page_checks.t18(_t18_run(tmp_path, T18_ITEMS)) == (
+        "4 條分項橫條（1 檔×4）與 3 個報酬色塊（1 族群×3）= API"
+    )
+
+
+@pytest.mark.parametrize(
+    ("index", "change", "message"),
+    [
+        (0, {"fill": 0.375}, "今日名單明細 第 1 條（技術 75（0–100）） 填色比例 0.375，預期 0.750"),
+        (2, {"hasFill": True}, "今日名單明細 第 3 條（新聞情緒 無資料） 無資料卻畫了填色"),
+        (1, {"score": "0", "label": "籌碼 0（0–100）"}, "今日名單明細 第 2 條（籌碼 44（0–100）） 是 `籌碼 0（0–100）` data-score=0"),
+        (4, {"background": DOWN}, f"熱門族群 第 1 個色塊（1 日相對加權指數 +1.20%） 底色 {DOWN}，預期 --color-up {UP}"),
+        (5, {"opacity": 0.5}, "熱門族群 第 2 個色塊（5 日相對加權指數 -0.45%） 不透明度 0.5，預期第 1 級 0.16"),
+        (4, {"strength": "up-1"}, "熱門族群 第 1 個色塊（1 日相對加權指數 +1.20%） 是 `1 日相對加權指數 +1.20%` up-1 `+1.20%`"),
+        (6, {"background": UP}, f"熱門族群 第 3 個色塊（20 日相對加權指數 無資料） 平盤或無資料卻用了漲跌色 {UP}"),
+    ],
+)
+def test_t18_fails_on_a_wrong_fill_hue_or_step(tmp_path, index, change, message):
+    items = [dict(item) for item in T18_ITEMS]
+    items[index].update(change)
+    with pytest.raises(page_checks.Fail) as error:
+        page_checks.t18(_t18_run(tmp_path, items))
+    assert str(error.value) == message
+
+
+def test_t18_needs_the_measurement_and_every_graphic(tmp_path):
+    with pytest.raises(page_checks.Fail, match="今日名單明細 有 3 條分數橫條，預期 4 條"):
+        page_checks.t18(_t18_run(tmp_path, T18_ITEMS[1:]))
+    run = _t18_run(tmp_path, T18_ITEMS)
+    run.metas = {"today": {1280: {"width": 1280, "ready": True}}}
+    with pytest.raises(page_checks.Fail, match="today-1280 沒有 graphics 量測"):
+        page_checks.t18(run)
+    with pytest.raises(page_checks.Undetermined, match="today-1280 未 ready"):
+        page_checks.t18(_t18_run(tmp_path, T18_ITEMS, ready=False))
+
+
+def _board_item(theme_id, components, returns):
+    keys = ("relative_return", "breadth", "volume_strength", "institutional_flow", "catalyst")
+    return {"theme_id": theme_id, "display_name": theme_id, "components": dict(zip(keys, components)), "relative_returns": dict(zip(("1d", "5d", "20d"), returns))}
+
+
+def test_g9_checks_both_boards_and_the_detail(tmp_path):
+    industry = _board_item("i-1", (0.9, 0.75, None, 0.25, 1), (0.012, 0, 0.08))
+    theme = _board_item("t-1", (0.4, 0.25, 0.1, 0.9, None), (-0.031, 0.051, None))
+    row_bars = [_bar("相對報酬", 90), _bar("廣度", 75), _bar("量能", None), _bar("法人", 25), _bar("催化劑", 100)]
+    row_chips = [_chip(1, "+1.20%", "up-2"), _chip(5, "0.00%", "flat-0"), _chip(20, "+8.00%", "up-4")]
+    theme_items = [
+        _chip(1, "-3.10%", "down-3"), _chip(5, "+5.10%", "up-3"), _chip(20, "—", "none-0", background="rgba(0, 0, 0, 0)"),
+        _bar("相對報酬", 40), _bar("廣度", 25), _bar("量能", 10), _bar("法人", 90), _bar("催化劑", None),
+    ]
+
+    def meta(items):
+        return {1280: {"width": 1280, "ready": True, "graphics": {"tokens": TOKENS, "items": items}}}
+
+    payloads = {
+        "themes?board=industry&limit=5": {"items": [industry]},
+        "themes?board=industry&limit=100": {"items": [industry]},
+        "themes?board=theme&limit=100": {"items": [theme]},
+        "themes/i-1": {"board": "industry", "theme": {"metrics": {}}},
+    }
+    metas = {"themes": meta(row_chips + row_bars), "themes-theme": meta(theme_items), "theme-detail": meta(row_bars + row_chips)}
+    run = FakeRun(tmp_path, payloads, {}, metas=metas)
+    assert page_checks.g9(run) == "industry 1 列、theme 1 列與詳情 `i-1`：五分項橫條與 1／5／20 日色塊 = API"
+    metas["theme-detail"] = meta(row_bars[:4] + [_bar("催化劑", 100, fill=0.5)] + row_chips)
+    with pytest.raises(page_checks.Fail, match=r"theme-detail-1280 第 5 條（催化劑 100（0–100）） 填色比例 0.5，預期 1.000"):
+        page_checks.g9(FakeRun(tmp_path, payloads, {}, metas=metas))
+
+
+def test_s14_bars_follow_the_candidate_components(tmp_path):
+    stock = page_checks.Stock("TWSE", "9101")
+    components = _scored([0.75, 0.44, 0.92, None])
+    components["group"]["items"] = {}  # no sub-items: ScoreDetails draws no title row for it
+    payloads = {"stocks/TWSE/9101": {"candidate": {"components": components}}}
+
+    def run(items):
+        metas = {"stock-research": {1280: {"width": 1280, "ready": True, "graphics": {"tokens": TOKENS, "items": items}}}}
+        return FakeRun(tmp_path, payloads, {}, metas=metas)
+
+    assert page_checks.s14(run([_bar("技術", 75), _bar("籌碼", 44), _bar("新聞情緒", 92)]), stock) == "評分細節 3 個分項橫條 = stock.json candidate"
+    with pytest.raises(page_checks.Fail, match="有 4 條分數橫條，預期 3 條"):
+        page_checks.s14(run([_bar("技術", 75), _bar("籌碼", 44), _bar("新聞情緒", 92), _bar("族群", None)]), stock)
+    payloads["stocks/TWSE/9101"] = {"candidate": None}
+    assert page_checks.s14(run([]), stock) == "不是每日候選：研究條件分頁沒有分數橫條"
 
 
 def test_known_failures_do_not_fail_the_run_until_they_pass(tmp_path, monkeypatch):

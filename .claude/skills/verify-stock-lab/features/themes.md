@@ -54,6 +54,7 @@
 | G6 | CI | 詳情成員（用 `T`，上游 today T5） | 表頭以 `代號\t名稱\t市場\t收盤（元）\t漲跌幅（%）\t成交金額（億元）\t5 日相對（%）\t20 日相對（%）` 開頭的行存在（題材榜後接 `\t證據`）；`theme-members.json` 第一個成員的 `symbol` 與 `name` 出現在同一行；`第 1／<total_pages> 頁 · 共 <meta.total> 檔` 存在（`total_pages` 以每頁 30 檔計；只有 1 頁時 `MemberPager` 只顯示 `共 <meta.total> 檔`） |
 | G7 | CI | 今日到族群一致（用 `T`，上游 today T5） | 今日頁 `#1` 的族群名稱 = 本頁產業榜 `items[0].display_name` = `theme-detail.json` 的 `theme.display_name`，且這個名稱在 `theme-detail-1280.txt` 的 `← 回到…榜` 之後、`排名` 之前為整行出現 |
 | G8 | CI | 成員依成交金額排序（用 `T`，上游 today T5） | 頁面預設排序：`theme-members.json`（`sort=turnover`）的 `items` 依 `turnover` 由大到小、null 在最後、同值依代號；`theme-detail-1280.txt` 以 `<symbol>\t` 開頭的成員列，代號順序等於 `items` 的 `symbol` 順序 |
+| G9 | CI | 五分項橫條與報酬色塊（#654；詳情用 `T`，上游 today T5） | 在 G2 之後。讀 `themes-1280`、`themes-theme-1280`、`theme-detail-1280` 截圖 JSON 的 `graphics`。兩個榜：每列三個報酬色塊（1／5／20 日）與五條五分項橫條（相對報酬、廣度、量能、法人、催化劑），依 `items` 順序；詳情：`theme-detail.json` 的 `board` 榜上 `theme_id` = `T` 那一列的五分項（不在榜上時五條都是無資料）與 `relative_returns`（不在榜上時用 `theme.metrics.relative_return_1d／5d／20d`）。橫條與色塊的判法同 today T18 |
 
 ## 陷阱
 
@@ -61,6 +62,7 @@
 - 390 的成員卡超過 10 張時，其餘收在「顯示其餘 N 檔」`<details>` 裡（#300）；`screenshot.cjs` 會展開它們，`theme-detail-390.txt` 仍有每一張卡。
 - 「說明」`<details>` 在榜名那一行的右側，展開後的四句在 `資料 <B/>` 之後，不影響 G2。
 - 產業榜是 `/themes` 預設分頁，題材榜要帶 `?board=theme`；兩榜的 `B` 各自取該榜的 `meta.trading_date`。
+- 分數橫條與強弱色塊（#654）保留數字：族群榜明細五分項的值行與族群詳情「五分項」卡的值仍是 0–100 整數或 `—`（G3 照舊比對）；1／5／20 日相對報酬在色塊內，文字仍是 `±N.NN%`。列標題後的最高、最低分項與族群成員表的 5／20 日相對維持純數字。圖形由 G9 讀 `graphics` 檢查。
 
 ## 判定
 
