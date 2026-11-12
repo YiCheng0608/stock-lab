@@ -1,0 +1,102 @@
+{
+ "openDetails": 0,
+ "innerHeight": 800,
+ "blocks": [
+  {
+   "depth": 0,
+   "label": "section.page-title",
+   "top": 96,
+   "bottom": 295,
+   "height": 199,
+   "text": "追蹤與提醒"
+  },
+  {
+   "depth": 1,
+   "label": "div.eyebrow",
+   "top": 104,
+   "bottom": 122,
+   "height": 18,
+   "text": "追蹤與提醒"
+  },
+  {
+   "depth": 1,
+   "label": "div.watch-title-row",
+   "top": 126,
+   "bottom": 167,
+   "height": 41,
+   "text": "我的追蹤"
+  },
+  {
+   "depth": 1,
+   "label": "div.filter-row",
+   "top": 179,
+   "bottom": 231,
+   "height": 52,
+   "text": "搜尋"
+  },
+  {
+   "depth": 1,
+   "label": "div.action-filters",
+   "top": 243,
+   "bottom": 283,
+   "height": 40,
+   "text": "重點 6"
+  },
+  {
+   "depth": 0,
+   "label": "section.card.portfolio-line",
+   "top": 311,
+   "bottom": 359,
+   "height": 48,
+   "text": "我的庫存"
+  },
+  {
+   "depth": 0,
+   "label": "section.tracking-section[open]",
+   "top": 383,
+   "bottom": 524,
+   "height": 141,
+   "text": "模擬追蹤 · 進行中"
+  },
+  {
+   "depth": 0,
+   "label": "section.action-tier[tier 1]",
+   "top": 548,
+   "bottom": 875,
+   "height": 327,
+   "text": "第 1 級"
+  },
+  {
+   "depth": 0,
+   "label": "section.action-tier[tier 3]",
+   "top": 899,
+   "bottom": 1245,
+   "height": 346,
+   "text": "第 3 級"
+  },
+  {
+   "depth": 0,
+   "label": "section.tracking-section[closed]",
+   "top": 1269,
+   "bottom": 1338,
+   "height": 69,
+   "text": "模擬追蹤 · 已結束"
+  }
+ ],
+ "firstItem": {
+  "kind": "row",
+  "key": "TWSE:9101",
+  "top": 703,
+  "bottom": 760,
+  "height": 57
+ },
+ "cards": [],
+ "closed": {
+  "top": 1269,
+  "bottom": 1338,
+  "height": 69,
+  "cards": 4,
+  "visibleCards": 4
+ },
+ "scrollHeight": 1506
+}
