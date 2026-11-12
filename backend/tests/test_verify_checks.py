@@ -1400,6 +1400,65 @@ def test_s15_bars_follow_the_candidate_components(tmp_path):
     payloads["stocks/TWSE/9101"] = {"candidate": None}
     assert page_checks.s15(run([]), stock) == "不是每日候選：研究條件分頁沒有分數橫條"
 
+# ---- T18: the rows' sparkline closes (Issue 653) ----
+
+
+def _with_closes(tmp_path, *recents, closes_on_day=(21.1, 13.2)):
+    payload = _candidates(len(recents))
+    for item, recent, close in zip(payload["items"], recents, closes_on_day):
+        item["market"] = {"close": close}
+        if recent is not None:
+            item["recent_closes"] = recent
+    return FakeRun(tmp_path, {"candidates": payload}, {})
+
+
+def test_t18_passes_on_closes_that_end_at_the_list_date(tmp_path):
+    run = _with_closes(
+        tmp_path,
+        {
+            "dates": ["2026-10-14", "2026-10-15", "2026-10-16"],
+            "closes": [20.0, None, 21.1],
+        },
+        {"dates": ["2026-10-15", "2026-10-16"], "closes": [None, 13.2]},
+    )
+    assert page_checks.t18(run) == (
+        "2 列 recent_closes：≤ 30 個交易日、由舊到新、止於 2026-10-16、名單日收盤 = market.close；"
+        "1 列有 2 個以上收盤（畫線），缺日 2 個（留空）"
+    )
+
+
+def test_t18_fails_on_closes_the_line_cannot_draw(tmp_path):
+    run = _with_closes(
+        tmp_path,
+        None,
+        {
+            "dates": ["2026-10-16", "2026-10-15", "2026-10-17"],
+            "closes": [13.0, 0, 13.2],
+        },
+    )
+    with pytest.raises(page_checks.Fail) as error:
+        page_checks.t18(run)
+    assert str(error.value) == (
+        "#1 9100 沒有 recent_closes；#2 9101 日期不是由舊到新、不重複；"
+        "#2 9101 最後一日 2026-10-17 晚於名單日 2026-10-16；#2 9101 收盤不是正數或 null：[0]"
+    )
+    wrong = _with_closes(
+        tmp_path,
+        {"dates": ["2026-10-15", "2026-10-16"], "closes": [20.0, 20.5]},
+        {"dates": ["2026-10-16"], "closes": [13.2, 13.3]},
+    )
+    with pytest.raises(page_checks.Fail) as error:
+        page_checks.t18(wrong)
+    assert str(error.value) == (
+        "#1 9100 名單日收盤 20.5 ≠ market.close 21.1；#2 9101 dates 1 筆、closes 2 筆"
+    )
+
+
+def test_t18_without_candidates(tmp_path):
+    empty = {"status": "success", "trading_date": "2026-10-16", "items": []}
+    assert page_checks.t18(FakeRun(tmp_path, {"candidates": empty}, {})) == "沒有候選列"
+
+
 
 def test_known_failures_do_not_fail_the_run_until_they_pass(tmp_path, monkeypatch):
     monkeypatch.setitem(

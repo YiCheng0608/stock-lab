@@ -743,7 +743,13 @@ a.symbol-link:hover { color: var(--color-primary); }
 /* 盤後終端 (DESIGN_SYSTEM §5 候選列表): from 1280px up the list sits beside the picked candidate's chart; below that the
    chart is not shown and the list takes the width. In the narrower list a row uses the phone arrangement. */
 .candidates-terminal-chart { display: none; }
-.price-ladder { position: relative; height: 14px; max-width: 320px; margin: var(--space-1) 0 0 52px; }
+/* The sparkline (#653) and the price ladder share one line under the sentence, the sparkline first. */
+.candidate-row-figures { display: flex; align-items: center; gap: var(--space-3); max-width: 432px; margin: var(--space-1) 0 0 52px; }
+.sparkline { display: block; flex: none; overflow: visible; }
+.sparkline path { fill: none; stroke: var(--color-text-muted); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.sparkline-up path { stroke: var(--color-up); }
+.sparkline-down path { stroke: var(--color-down); }
+.price-ladder { position: relative; flex: 1 1 auto; min-width: 0; height: 14px; max-width: 320px; }
 .price-ladder i { position: absolute; top: 5px; height: 4px; }
 .price-ladder-risk { left: 0; background: var(--color-warning); opacity: 0.55; }
 .price-ladder-reward { background: var(--color-primary); opacity: 0.55; }
@@ -761,7 +767,10 @@ a.symbol-link:hover { color: var(--color-primary); }
   .candidates-terminal .candidate-row-title { grid-column: 1 / 3; grid-row: 1; }
   .candidates-terminal .candidate-row-body > :not(.candidate-row-title) { grid-column: 1 / -1; }
   /* The ladder and the numbers share the row's last line: the ladder under the rank and name, the numbers to its right. */
-  .candidates-terminal .candidate-row-body > .price-ladder { grid-column: 1; align-self: center; max-width: none; margin-top: 0; }
+  .candidates-terminal .candidate-row-body > .candidate-row-figures { grid-column: 1; flex-direction: column; align-items: stretch; align-self: center; gap: var(--space-1); max-width: none; margin-top: 0; }
+  /* Beside the 64px numbers the column has room: the sparkline sits over the ladder at the column's width. */
+  .candidates-terminal .sparkline { width: 100%; }
+  .candidates-terminal .price-ladder { flex: none; max-width: none; }
   .candidates-terminal .candidate-row-nums { grid-column: 2 / -1; gap: var(--space-4); margin: 0; justify-content: flex-end; }
   .candidates-terminal .candidate-row-nums > div { justify-items: start; }
   .candidates-terminal .candidate-row-close dd { display: flex; align-items: baseline; gap: var(--space-2); }
@@ -1067,7 +1076,7 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
      for them the RR's basis wraps inside its column rather than push the total past the row. The body's children
      sit in the row's grid; the DOM order (and the page text) is unchanged. */
   .candidate-row-main { grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1) var(--space-3); padding: var(--space-row) var(--space-3); }
-  .candidate-row .candidate-entry, .candidate-row-levels, .price-ladder { margin-left: 42px; }
+  .candidate-row .candidate-entry, .candidate-row-levels, .candidate-row-figures { margin-left: 42px; }
   .candidate-row .entry-plan-line { line-height: 1.45; }
   .candidate-row-body { display: contents; }
   .candidate-row-title { grid-column: 1; grid-row: 1; }

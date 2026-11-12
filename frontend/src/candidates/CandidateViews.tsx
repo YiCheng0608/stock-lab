@@ -39,6 +39,9 @@ import {
   groupBoardLabel,
   ladderLabel,
   priceLadder,
+  sparkline,
+  SPARKLINE_HEIGHT,
+  SPARKLINE_WIDTH,
   riskRewardBasisNote,
   stockPath,
   subItemLabel,
@@ -261,6 +264,25 @@ export function PriceLadder({ item }: { item: CandidateItem }) {
   )
 }
 
+// The last 30 sessions' closes as one line (#653; DESIGN_SYSTEM §5 候選列表): red when the span rose, green when it fell,
+// a gap where a session has no close. Like the ladder it carries a label (the span and its change) and no text.
+export function Sparkline({ item }: { item: Pick<CandidateItem, 'recent_closes'> }) {
+  const view = sparkline(item.recent_closes)
+  if (!view) return null
+  return (
+    <svg className={cx('sparkline', `sparkline-${view.tone}`)} role="img" aria-label={view.label} data-sparkline-tone={view.tone}
+      width={SPARKLINE_WIDTH} height={SPARKLINE_HEIGHT} viewBox={`0 0 ${SPARKLINE_WIDTH} ${SPARKLINE_HEIGHT}`} preserveAspectRatio="none">
+      <path d={view.path} />
+    </svg>
+  )
+}
+
+// The row's two drawings on one line under the sentence: the sparkline, then the price ladder (DESIGN_SYSTEM §5).
+function RowFigures({ item }: { item: CandidateItem }) {
+  if (!sparkline(item.recent_closes) && !priceLadder(item.levels, item.market?.close)) return null
+  return <div className="candidate-row-figures"><Sparkline item={item} /><PriceLadder item={item} /></div>
+}
+
 // One candidate (#510): who (rank, name, market · group) and how to enter (the #491 sentence) on two lines, the close,
 // RR and total on the right, then the AI entry. The detail is a <details> under the row the button opens, so every
 // detail stays in the DOM and the screenshot tool can open them all (DESIGN_SYSTEM §5 候選列表).
@@ -283,7 +305,7 @@ function CandidateRow({ item, hidden, open, onOpen, selected, onSelect }: { item
           </p>
           <EntryPlanCard item={item} className="candidate-entry" conditions={false} />
           {!levelsInSentence && <LevelCells item={item} className="candidate-row-levels" />}
-          <PriceLadder item={item} />
+          <RowFigures item={item} />
         </div>
         <dl className="candidate-row-nums">
           <div className="candidate-row-close"><dt>收盤（元）</dt><dd><CloseValue item={item} /></dd></div>
