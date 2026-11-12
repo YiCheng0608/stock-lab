@@ -54,6 +54,10 @@ check(JSON.stringify(nav) === JSON.stringify(expectedNav), `MAIN_NAV: ${JSON.str
   const footer = shell.slice(shell.indexOf('<footer'))
   const footerLinks = [...footer.matchAll(/<a [^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>/g)].map((match) => `${match[1]} ${match[2]}`)
   check(JSON.stringify(footerLinks) === JSON.stringify(['/system 系統']), `頁尾只有一個連結「系統」: ${JSON.stringify(footerLinks)}`)
+  // Issue 644: the footer names entries a reader can find (UI_COPY_SPEC §16), not the old 各頁資料說明.
+  const footerText = text(footer)
+  check(footerText.includes('僅使用官方資料 · 詳細來源見個股頁「資料來源」分頁、今日名單與大盤頁的「資料說明」'), `頁尾來源句: ${footerText}`)
+  check(!footerText.includes('各頁資料說明'), `頁尾不再寫「各頁資料說明」: ${footerText}`)
   const system = render('/system', <SystemPage />)
   check(system.includes('<h1>系統</h1>'), '/system 的頁面標題是「系統」')
   const listed = [...system.matchAll(/<a [^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>/g)].map((match) => `${match[1]} ${match[2]}`)
