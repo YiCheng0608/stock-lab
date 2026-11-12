@@ -87,8 +87,8 @@ function ReturnValue({ value, unit = '' }: { value: number | null | undefined; u
 }
 
 // A group's 1／5／20 日 relative return as a strength block (#654, DESIGN_SYSTEM §5 強弱色塊); the value is a fraction.
-function GroupReturn({ window, value }: { window: { label: string }; value: number | null | undefined }) {
-  return <StrengthChip label={`${window.label}相對加權指數`} percent={isFiniteNumber(value) ? value * 100 : null} />
+function GroupReturn({ label, value }: { label: string; value: number | null | undefined }) {
+  return <StrengthChip label={`${label}相對加權指數`} percent={isFiniteNumber(value) ? value * 100 : null} />
 }
 
 // A same-board percentile (0–1) as a 0–100 score bar (#654); no data stays 「—」.
@@ -149,7 +149,7 @@ function BoardRow({ item, picks, open, onOpen }: { item: ThemeBoardItem; picks: 
           <ComponentExtremes item={item} />
         </p>
         <p className="board-row-meta">
-          {RETURN_WINDOWS.map((window) => <span key={window.key}>{window.label} <GroupReturn window={window} value={item.relative_returns[window.key]} /></span>)}
+          {RETURN_WINDOWS.map((period) => <span key={period.key}>{period.label} <GroupReturn label={period.label} value={item.relative_returns[period.key]} /></span>)}
           {picks !== null && picks > 0 && <Badge tone="primary" className="badge-compact board-row-picks">今日名單 {picks} 檔</Badge>}
         </p>
         <span className="board-row-score"><span>分數</span> <b>{formatScore(item.score)}</b></span>
@@ -267,7 +267,7 @@ function HotGroupRow({ item }: { item: ThemeBoardItem }) {
         <span className="hot-group-score"><span>分數</span> <b>{formatScore(item.score)}</b></span>
       </span>
       <span className="hot-group-returns">
-        {RETURN_WINDOWS.map((window) => <span key={window.key}>{window.label} <GroupReturn window={window} value={item.relative_returns[window.key]} /></span>)}
+        {RETURN_WINDOWS.map((period) => <span key={period.key}>{period.label} <GroupReturn label={period.label} value={item.relative_returns[period.key]} /></span>)}
       </span>
     </Link>
   )
@@ -370,7 +370,7 @@ function ComponentsCard({ detail, item, state, error }: { detail: ThemeDetail; i
           {BOARD_COMPONENTS.map((component) => <div className="metric-row" key={component.key}><span>{component.label}</span><ComponentBar label={component.label} value={item?.components[component.key]} /></div>)}
         </div>}
       <div className="metric-list components-returns">
-        {RETURN_WINDOWS.map((window) => <div className="metric-row" key={window.key}><span>{window.label}相對加權指數</span><GroupReturn window={window} value={returns[window.key]} /></div>)}
+        {RETURN_WINDOWS.map((period) => <div className="metric-row" key={period.key}><span>{period.label}相對加權指數</span><GroupReturn label={period.label} value={returns[period.key]} /></div>)}
       </div>
     </Card>
   )

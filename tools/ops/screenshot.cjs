@@ -253,6 +253,8 @@ const GRAPHICS_PROBE = `(() => { try {
         fill: fill && width > 0 ? Math.round((fill.getBoundingClientRect().width / width) * 1000) / 1000 : null,
         hasFill: Boolean(fill),
         trackWidth: Math.round(width * 10) / 10,
+        // A row hidden on purpose (the today list past its first 10) has no box; a shown one always does.
+        visible: el.getClientRects().length > 0,
       }
     }
     const before = getComputedStyle(el, '::before')

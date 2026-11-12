@@ -840,7 +840,7 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8">
 <li class="candidate-row" data-candidate-rank="2" style="position:relative;width:300px">
 <dl class="candidate-row-nums" style="display:flex;width:200px;margin:0"><div style="flex:none;width:150px"><dt>收盤</dt><dd style="margin:0">10</dd></div><div style="flex:none;width:200px"><dt>總分（0–100）</dt><dd style="margin:0">70</dd></div></dl>
 <button class="candidate-ai-toggle" style="position:absolute;left:160px;top:0;width:120px;height:60px">AI</button></li>
-<li class="candidate-row" data-candidate-rank="3" hidden><dl class="candidate-row-nums"></dl></li>
+<li class="candidate-row" data-candidate-rank="3" hidden><dl class="candidate-row-nums"></dl><span class="score-bar" aria-label="籌碼 40（0–100）" data-score="40"><span class="score-bar-track"><span class="score-bar-fill"></span></span></span></li>
 </ol>
 <style>:root{--color-up:rgb(239, 68, 68);--color-down:rgb(34, 197, 94)}
 .strength-chip{position:relative}.strength-chip::before{content:"";position:absolute;inset:0;background:var(--color-down);opacity:.3}</style>
@@ -953,6 +953,16 @@ def test_screenshot_waits_for_data_and_reports_overflow(tmp_path: Path) -> None:
         assert line["graphics"] == {
             "tokens": {"up": "rgb(239, 68, 68)", "down": "rgb(34, 197, 94)"},
             "items": [
+                # The hidden row (the today list past its first 10): no box, so no fill share.
+                {
+                    "kind": "bar",
+                    "label": "籌碼 40（0–100）",
+                    "score": "40",
+                    "fill": None,
+                    "hasFill": True,
+                    "trackWidth": 0,
+                    "visible": False,
+                },
                 {
                     "kind": "bar",
                     "label": "技術 75（0–100）",
@@ -960,6 +970,7 @@ def test_screenshot_waits_for_data_and_reports_overflow(tmp_path: Path) -> None:
                     "fill": 0.75,
                     "hasFill": True,
                     "trackWidth": 200,
+                    "visible": True,
                 },
                 {
                     "kind": "bar",
@@ -968,6 +979,7 @@ def test_screenshot_waits_for_data_and_reports_overflow(tmp_path: Path) -> None:
                     "fill": None,
                     "hasFill": False,
                     "trackWidth": 200,
+                    "visible": True,
                 },
                 {
                     "kind": "chip",

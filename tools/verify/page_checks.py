@@ -1506,7 +1506,8 @@ def want_chip(label: str, value: float | None) -> dict:
     if value is None:
         return {"label": f"{window} 無資料", "strength": "none-0", "text": "—"}
     percent = value * 100
-    magnitude = fixed(abs(percent), 2)
+    # toFixed(2): no thousands separators (fixed() adds them, and 1,050.00 is not a float).
+    magnitude = str(Decimal(abs(percent)).quantize(Decimal("0.01"), ROUND_HALF_UP))
     if magnitude == "0.00":
         return {"label": f"{window} 0.00%", "strength": "flat-0", "text": "0.00%"}
     level = 1 + sum(float(magnitude) >= step for step in STRENGTH_STEPS)
@@ -1544,7 +1545,11 @@ def bar_problems(name: str, got: list[dict], want: list[dict]) -> list[str]:
                 problems.append(f"{where} 無資料卻畫了填色")
         elif not bar.get("hasFill"):
             problems.append(f"{where} 沒有填色")
-        elif (bar.get("trackWidth") or 0) > 0 and (
+        elif not bar.get("visible", True):
+            continue  # a row hidden on purpose (today list past its first 10): nothing drawn to measure
+        elif not (bar.get("trackWidth") or 0) > 0:
+            problems.append(f"{where} 看得到但底軌寬度 0，量不到填色")
+        elif (
             bar.get("fill") is None
             or abs(bar["fill"] - expected["fill"]) > FILL_TOLERANCE
         ):

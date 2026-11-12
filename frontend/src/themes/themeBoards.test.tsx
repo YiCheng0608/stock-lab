@@ -87,7 +87,12 @@ for (const text of ['第 1 名', '#1', '半導體業', '81.25', '催化劑 <b>10
   check(industryMain.includes(text), `industry row shows ${text}: ${industryMain}`)
 }
 // Issue 654 AC-3: the three relative returns are strength blocks (hue by sign, depth by step), the number kept inside.
-const chipOf = (markup: string, label: string) => /<b class="strength-chip[^"]*" role="img" aria-label="([^"]*)" data-strength="([^"]*)">([^<]*)<\/b>/.exec(markup.slice(markup.indexOf(`aria-label="${label}`) - 80))
+// The block whose aria-label starts with `label`; null when there is none (never a slice from the string's end).
+const chipOf = (markup: string, label: string) => {
+  const at = markup.indexOf(`aria-label="${label}`)
+  return at < 0 ? null : /<b class="strength-chip[^"]*" role="img" aria-label="([^"]*)" data-strength="([^"]*)">([^<]*)<\/b>/.exec(markup.slice(Math.max(0, at - 80)))
+}
+check(chipOf('<p>none</p>', '1 日相對加權指數') === null, 'chipOf: no block is null')
 const chipsOf = (markup: string) => [...markup.matchAll(/<b class="strength-chip[^"]*" role="img" aria-label="([^"]*)" data-strength="([^"]*)">([^<]*)<\/b>/g)].map((match) => match.slice(1).join('|'))
 const boardChips = ['1 日相對加權指數 +1.23%|up-2|+1.23%', '5 日相對加權指數 -0.45%|down-1|-0.45%', '20 日相對加權指數 0.00%|flat-0|0.00%']
 check(JSON.stringify(chipsOf(industryMain)) === JSON.stringify(boardChips), `Issue 654: board row returns are strength blocks: ${JSON.stringify(chipsOf(industryMain))}`)

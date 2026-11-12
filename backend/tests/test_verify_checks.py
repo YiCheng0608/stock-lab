@@ -11,6 +11,7 @@ from __future__ import annotations
 import ast
 import importlib.util
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -1257,6 +1258,7 @@ def _bar(label, value, fill=None):
             "fill": None,
             "hasFill": False,
             "trackWidth": 72,
+            "visible": True,
         }
     share = value / 100 if fill is None else fill
     return {
@@ -1266,6 +1268,7 @@ def _bar(label, value, fill=None):
         "fill": share,
         "hasFill": True,
         "trackWidth": 72,
+        "visible": True,
     }
 
 
@@ -1343,6 +1346,9 @@ def test_want_chip_steps_follow_the_shown_two_decimals():
         (0.00004, "0.00%", "flat-0"),
         (-0.00004, "0.00%", "flat-0"),
         (None, "—", "none-0"),
+        # toFixed(2) has no thousands separators (PR 658 review): 1,050.00 would not parse.
+        (10.5, "+1050.00%", "up-4"),
+        (-12.345, "-1234.50%", "down-4"),
     ]
     for value, text, strength in cases:
         chip = page_checks.want_chip("1 日", value)
@@ -1353,6 +1359,44 @@ def test_want_chip_steps_follow_the_shown_two_decimals():
         "fill": 0.746,
     }
     assert page_checks.want_bar("族群", None)["fill"] is None
+
+
+def test_bar_fill_needs_a_track_unless_the_row_is_hidden():
+    # PR 658 review: a shown bar whose track lost its width (CSS 0 wide) must fail, not be skipped.
+    want = [page_checks.want_bar("技術", 0.75)]
+    flat = dict(_bar("技術", 75), trackWidth=0, fill=None)
+    assert page_checks.bar_problems("x", [flat], want) == [
+        "x 第 1 條（技術 75（0–100）） 看得到但底軌寬度 0，量不到填色"
+    ]
+    # The today list's rows past the first 10 are hidden on purpose: nothing drawn, nothing to measure.
+    assert page_checks.bar_problems("x", [dict(flat, visible=False)], want) == []
+    # Hidden rows still need their value right.
+    wrong = dict(flat, visible=False, score="74", label="技術 74（0–100）")
+    assert page_checks.bar_problems("x", [wrong], want) == [
+        "x 第 1 條（技術 75（0–100）） 是 `技術 74（0–100）` data-score=74"
+    ]
+
+
+def test_strength_steps_and_opacity_mirror_the_frontend():
+    # page_checks.py mirrors STRENGTH_STEPS (ScoreBar.tsx) and .strength-l1…l4 (styles.css) (PR 658 review).
+    source = (ROOT / "frontend/src/components/ui/ScoreBar.tsx").read_text(
+        encoding="utf-8"
+    )
+    steps = re.search(r"STRENGTH_STEPS: readonly number\[\] = \[([^\]]*)\]", source)
+    assert steps, "STRENGTH_STEPS not found in ScoreBar.tsx"
+    assert (
+        tuple(int(step) for step in steps[1].split(",")) == page_checks.STRENGTH_STEPS
+    )
+    styles = (ROOT / "frontend/src/styles.css").read_text(encoding="utf-8")
+    opacity = {
+        int(level): float(value)
+        for level, value in re.findall(
+            r"^\.strength-l(\d)::before \{ opacity: ([0-9.]+); \}", styles, re.M
+        )
+    }
+    # Level 4 is the solid colour: no opacity rule, so 1.
+    assert "strength-l4::before" not in styles
+    assert {**opacity, 4: 1.0} == page_checks.STRENGTH_OPACITY
 
 
 def test_t19_passes_when_bars_and_blocks_match_the_api(tmp_path):
