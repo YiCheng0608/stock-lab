@@ -18,7 +18,7 @@
 | 交易日曆 | `daily` 的 trading_calendar 步驟保存官方休市表 | — | [交易日曆](DATA_SOURCES.md#交易日曆) |
 | 指數日 K | 加權、櫃買兩個指數比照個股存真實開高低收與量值，2023-09-01 起回補（比個股的 2024-09-30 早約一年，個股第一天就有指數的季線、半年線與年線；2024-09-30 前的指數列不是交易日基準，不讓個股看起來缺資料）、daily 每日補，加權的收盤列原地升級、交易日基準不變 | [#563](https://github.com/YiCheng0608/stock-lab/issues/563)、[#552](https://github.com/YiCheng0608/stock-lab/issues/552) | [指數日 K](DATA_SOURCES.md#指數日-k) |
 | 台指期 | 每日用期交所開放資料，2023-09-01 起到開放資料第一天之前以期交所網站下載 `futDataDown` 回補（另一個來源名稱，限本機個人研究，#563），存合約月份、未平倉與結算價 | [#552](https://github.com/YiCheng0608/stock-lab/issues/552) | [台指期](DATA_SOURCES.md#台指期) |
-| 美股指數 | S&P 500、NASDAQ 綜合、道瓊工業與費城半導體指數的 FinMind 日線，收集後存在資料庫與 API（#633 起大盤頁不顯示）；獨立的 `index-bars us-collect`，scheduler 容器週二至週六 06:30、09:30 抓，2023-09-01 起；開高低收與量照存，費半來源沒有量；台股 daily 不再抓美股；標資料日、「非最新」與「美股休市」；只顯示、不進策略或回測 | [#568](https://github.com/YiCheng0608/stock-lab/issues/568)、[#547](https://github.com/YiCheng0608/stock-lab/issues/547) | [美股指數](DATA_SOURCES.md#美股指數) |
+| 美股指數 | S&P 500、NASDAQ 綜合、道瓊工業與費城半導體指數的 FinMind 日線，收集後存在資料庫與 API（#633 起大盤頁不顯示）；獨立的 `index-bars us-collect`，scheduler 容器週二至週六 06:30、09:30 抓，2023-09-01 起；開高低收與量照存，費半來源沒有量；台股 daily 不再抓美股；API 的新鮮度仍帶資料日、「非最新」與「美股休市」判定；不進策略或回測 | [#568](https://github.com/YiCheng0608/stock-lab/issues/568)、[#547](https://github.com/YiCheng0608/stock-lab/issues/547) | [美股指數](DATA_SOURCES.md#美股指數) |
 
 ## 分析與策略
 
