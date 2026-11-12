@@ -1,0 +1,239 @@
+{
+ "openDetails": 0,
+ "innerHeight": 844,
+ "blocks": [
+  {
+   "depth": 0,
+   "label": "section.page-title",
+   "top": 88,
+   "bottom": 514,
+   "height": 426,
+   "text": "追蹤與提醒"
+  },
+  {
+   "depth": 1,
+   "label": "div.eyebrow",
+   "top": 96,
+   "bottom": 114,
+   "height": 18,
+   "text": "追蹤與提醒"
+  },
+  {
+   "depth": 1,
+   "label": "h1",
+   "top": 122,
+   "bottom": 152,
+   "height": 30,
+   "text": "我的追蹤"
+  },
+  {
+   "depth": 1,
+   "label": "p",
+   "top": 164,
+   "bottom": 290,
+   "height": 126,
+   "text": "把有興趣的候選加入追蹤，系統每天收盤後依日線模擬它的進場與出場（不是實際成交）；"
+  },
+  {
+   "depth": 1,
+   "label": "div.filter-row",
+   "top": 290,
+   "bottom": 341,
+   "height": 52,
+   "text": "搜尋"
+  },
+  {
+   "depth": 1,
+   "label": "div.action-filters",
+   "top": 353,
+   "bottom": 490,
+   "height": 137,
+   "text": "重點 6"
+  },
+  {
+   "depth": 0,
+   "label": "section.panel.portfolio-subsection",
+   "top": 530,
+   "bottom": 935,
+   "height": 405,
+   "text": "行動優先級"
+  },
+  {
+   "depth": 0,
+   "label": "section.tracking-section[open]",
+   "top": 959,
+   "bottom": 1987,
+   "height": 1028,
+   "text": "模擬追蹤 · 進行中"
+  },
+  {
+   "depth": 0,
+   "label": "section.action-tier[tier 0]",
+   "top": 2011,
+   "bottom": 2201,
+   "height": 190,
+   "text": "第 0 級"
+  },
+  {
+   "depth": 0,
+   "label": "section.action-tier[tier 1]",
+   "top": 2225,
+   "bottom": 2838,
+   "height": 613,
+   "text": "第 1 級"
+  },
+  {
+   "depth": 0,
+   "label": "section.action-tier[tier 3]",
+   "top": 2862,
+   "bottom": 3343,
+   "height": 482,
+   "text": "第 3 級"
+  },
+  {
+   "depth": 0,
+   "label": "section.tracking-section[closed]",
+   "top": 3367,
+   "bottom": 5185,
+   "height": 1818,
+   "text": "模擬追蹤 · 已結束"
+  }
+ ],
+ "firstItem": {
+  "kind": "card",
+  "key": "TWSE:9102",
+  "top": 2080,
+  "bottom": 2201,
+  "height": 121
+ },
+ "cards": [
+  {
+   "key": "TWSE:9102",
+   "tier": "0",
+   "top": 2080,
+   "bottom": 2201,
+   "height": 121,
+   "lines": [
+    "9102 示範封測",
+    "持有觀察",
+    "172.02",
+    "-0.24%",
+    "上市 · 股票",
+    "資料日 2026/10/16",
+    "策略總表 →"
+   ]
+  },
+  {
+   "key": "TWSE:9101",
+   "tier": "1",
+   "top": 2294,
+   "bottom": 2463,
+   "height": 168,
+   "lines": [
+    "9101 示範晶圓",
+    "符合條件後可研究進場",
+    "389.23",
+    "+3.63%",
+    "#1 · 上市 · 股票",
+    "進場區（元）",
+    "389.23",
+    "停損（元）",
+    "369.77",
+    "目標一（元）",
+    "420.37",
+    "資料日 2026/10/16",
+    "策略總表 →"
+   ]
+  },
+  {
+   "key": "TWSE:9103",
+   "tier": "1",
+   "top": 2475,
+   "bottom": 2657,
+   "height": 183,
+   "lines": [
+    "9103 示範電腦",
+    "符合條件後可研究進場",
+    "101.76",
+    "+3.72%",
+    "#2 · 上市 · 股票",
+    "進場區（元）",
+    "101.76",
+    "停損（元）",
+    "96.67",
+    "目標一（元）",
+    "109.90",
+    "資料日 2026/10/16",
+    "策略總表 →"
+   ]
+  },
+  {
+   "key": "TPEx:9201",
+   "tier": "1",
+   "top": 2669,
+   "bottom": 2838,
+   "height": 168,
+   "lines": [
+    "9201 示範矽材",
+    "符合條件後可研究進場",
+    "74.79",
+    "+3.80%",
+    "#3 · 上櫃 · 股票",
+    "進場區（元）",
+    "74.79",
+    "停損（元）",
+    "71.05",
+    "目標一（元）",
+    "80.77",
+    "資料日 2026/10/16",
+    "策略總表 →"
+   ]
+  },
+  {
+   "key": "TPEx:9202",
+   "tier": "3",
+   "top": 2931,
+   "bottom": 3131,
+   "height": 200,
+   "lines": [
+    "9202 示範板卡",
+    "接近突破條件",
+    "50.45",
+    "-0.26%",
+    "上櫃 · 股票",
+    "差：收盤站上前 20 日高點（還差 2.48%）",
+    "差：量能 ≥ 1.20 倍（今日 1.00 倍）",
+    "族群、法人、融資已達成",
+    "資料日 2026/10/16",
+    "價位見策略總表 →"
+   ]
+  },
+  {
+   "key": "TPEx:9203",
+   "tier": "3",
+   "top": 3143,
+   "bottom": 3343,
+   "height": 200,
+   "lines": [
+    "9203 示範散熱",
+    "接近突破條件",
+    "116.22",
+    "-0.33%",
+    "上櫃 · 股票",
+    "差：收盤站上前 20 日高點（還差 2.82%）",
+    "差：量能 ≥ 1.20 倍（今日 1.00 倍）",
+    "族群、法人、融資已達成",
+    "資料日 2026/10/16",
+    "價位見策略總表 →"
+   ]
+  }
+ ],
+ "closed": {
+  "top": 3367,
+  "bottom": 5185,
+  "height": 1818,
+  "cards": 4,
+  "visibleCards": 4
+ },
+ "scrollHeight": 5383
+}
