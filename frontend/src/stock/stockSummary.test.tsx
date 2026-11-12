@@ -155,7 +155,8 @@ for (const [tab, location] of [['走勢', '/stocks/TWSE/2884'], ['進出場', '/
     // The phone cards repeat the board's table for 640px and below (display:none on a desktop), so they are left out.
     const cards = content.indexOf('<div class="strategy-cards">')
     const shown = content.slice(0, cards) + content.slice(content.indexOf('<section class="panel stock-action-detail"'))
-    check(count(page.slice(0, at('class="stock-tab-content"')), STOP) === 1, '進出場: the summary card keeps its levels above the tabs')
+    // Above the tabs: the summary card's levels and, since #647, the chart note in the same format (decision 6820250353).
+    check(count(page.slice(at('class="card stock-summary"'), at('stock-tabs')), STOP) === 1, '進出場: the summary card keeps its levels above the tabs')
     check(count(shown, STOP) === 1 && count(shown, '2,458.00') === 1, `進出場: one complete set of levels in the tab, the board's (stop ${count(shown, STOP)}, target ${count(shown, '2,458.00')})`)
     check(content.includes(candidateLevelsInBoardText('突破條件')) && content.includes(LEVELS_IN_BOARD_TEXT), '進出場: the candidate row and the research action point to the board')
   }
