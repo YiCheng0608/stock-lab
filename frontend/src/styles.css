@@ -621,6 +621,30 @@ a.symbol-link:hover { color: var(--color-primary); }
 .theme-detail-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--space-4); }
 .trend-stage { width: 100%; height: 240px; }
 .components-returns { margin-top: var(--space-3); border-top: 1px solid var(--color-border); }
+
+/* Score bar (#654, DESIGN_SYSTEM §5 分數橫條): a 0–100 value as the fill share of a track, the number beside it. */
+.score-bar { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; vertical-align: middle; }
+.score-bar-track { position: relative; flex: 1 1 auto; width: 72px; min-width: 40px; height: 6px; overflow: hidden; border-radius: 999px; background: var(--color-bg-elevated); }
+.score-bar-fill { position: absolute; top: 0; bottom: 0; left: 0; border-radius: inherit; background: var(--color-primary); }
+.score-bar-value { flex: none; min-width: 3ch; color: var(--color-text); font: 600 var(--text-md) var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.score-bar-empty .score-bar-value { color: var(--color-text-muted); }
+.candidate-components dd .score-bar, .board-components dd .score-bar { display: flex; }
+.metric-row .score-bar { flex: 0 1 200px; }
+.score-group-title { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); }
+.score-group-title .score-bar { width: 140px; }
+.score-group-weight { color: var(--color-text-muted); font-size: var(--text-sm); font-weight: 400; }
+
+/* Strength block (#654, DESIGN_SYSTEM §5 強弱色塊): a relative return on a tint of its sign's colour, deeper per step. */
+.strength-chip { position: relative; z-index: 0; display: inline-block; padding: 0 3px; border-radius: 4px; color: var(--color-text); font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.strength-chip::before { position: absolute; z-index: -1; inset: 0; border-radius: inherit; background: var(--color-bg-elevated); content: ""; }
+.strength-up::before { background: var(--color-up); }
+.strength-down::before { background: var(--color-down); }
+.strength-l1::before { opacity: 0.16; }
+.strength-l2::before { opacity: 0.3; }
+.strength-l3::before { opacity: 0.5; }
+.strength-chip.strength-l4 { color: var(--color-bg); }
+.strength-chip.strength-none { color: var(--color-text-muted); }
+.strength-none::before { background: transparent; }
 .evidence-cell { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); }
 /* Member table (#280, DESIGN_SYSTEM §5): sort select, badges after the name, a stale bar's date under its close. */
 .member-sort { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--color-text-muted); font-size: 14px; white-space: nowrap; }

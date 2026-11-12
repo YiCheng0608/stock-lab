@@ -83,9 +83,16 @@ const mainOf = (row: string) => row.slice(row.indexOf('<div class="board-row-mai
 const detailOf = (row: string) => row.slice(row.indexOf('<details'), row.indexOf('</details>'))
 const industryRow = boardRowOf(industryMarkup, 'industry-24')
 const industryMain = mainOf(industryRow)
-for (const text of ['第 1 名', '#1', '半導體業', '81.25', '催化劑 <b>100</b>', '法人 <b>25</b>', 'tone-up">+1.23%<', 'tone-down">-0.45%<', 'tone-flat">0.00%<']) {
+for (const text of ['第 1 名', '#1', '半導體業', '81.25', '催化劑 <b>100</b>', '法人 <b>25</b>']) {
   check(industryMain.includes(text), `industry row shows ${text}: ${industryMain}`)
 }
+// Issue 654 AC-3: the three relative returns are strength blocks (hue by sign, depth by step), the number kept inside.
+const chipOf = (markup: string, label: string) => /<b class="strength-chip[^"]*" role="img" aria-label="([^"]*)" data-strength="([^"]*)">([^<]*)<\/b>/.exec(markup.slice(markup.indexOf(`aria-label="${label}`) - 80))
+const chipsOf = (markup: string) => [...markup.matchAll(/<b class="strength-chip[^"]*" role="img" aria-label="([^"]*)" data-strength="([^"]*)">([^<]*)<\/b>/g)].map((match) => match.slice(1).join('|'))
+const boardChips = ['1 日相對加權指數 +1.23%|up-2|+1.23%', '5 日相對加權指數 -0.45%|down-1|-0.45%', '20 日相對加權指數 0.00%|flat-0|0.00%']
+check(JSON.stringify(chipsOf(industryMain)) === JSON.stringify(boardChips), `Issue 654: board row returns are strength blocks: ${JSON.stringify(chipsOf(industryMain))}`)
+check(industryMain.includes('1 日 <b class="strength-chip') && !/tone-(?:up|down|flat)/.test(industryMain), 'Issue 654: the window label stays beside the block and no bare up/down text colour is left on the row')
+check(chipOf(industryMain, '1 日相對加權指數')?.[2] === 'up-2', 'Issue 654: chip lookup')
 check(industryMain.includes('href="/themes/industry-24"'), 'the name links to the detail page')
 // Two lines: the title (name, quality, extremes) and the meta (returns, 今日名單); the score and the 五分項 button beside them.
 check(/^<div class="board-row-main"><span class="board-rank"[^>]*>#1<\/span><p class="board-row-title">.*<\/p><p class="board-row-meta">.*<\/p><span class="board-row-score">.*<\/span><button[^>]*>五分項 ▸<\/button><\/div>$/.test(industryMain), `Issue 522: a row is a title line and a meta line: ${industryMain}`)
@@ -93,14 +100,18 @@ check(!industryMain.includes('熱門族群') && !industryMain.includes('badge-su
 check(!industryMain.includes('今日名單') && !industryMarkup.includes('board-row-picks'), 'without a candidate list no row says 今日名單')
 // AC-2: the five components and the members stay on the page, folded under the row.
 const industryFold = detailOf(industryRow)
-for (const [label, value] of [['相對報酬', '90'], ['廣度', '75'], ['量能', '50'], ['法人', '25'], ['催化劑', '100'], ['成員（檔）', '12／14']]) {
-  check(industryFold.includes(`<dt>${label}</dt><dd>${value}</dd>`), `AC-2: the fold shows ${label} ${value}: ${industryFold}`)
+// Issue 654 AC-2: each component is a 0–100 score bar (fill share = the percentile), its number beside the bar.
+for (const [label, value] of [['相對報酬', '90'], ['廣度', '75'], ['量能', '50'], ['法人', '25'], ['催化劑', '100']]) {
+  check(industryFold.includes(`<dt>${label}</dt><dd><span class="score-bar" role="img" aria-label="${label} ${value}（0–100）" data-score="${value}">`) && industryFold.includes(`style="width:${value}%"`), `AC-2: the fold shows ${label} ${value} as a bar: ${industryFold}`)
 }
+check(industryFold.includes('<dt>成員（檔）</dt><dd>12／14</dd>'), 'the fold shows 成員（檔） 12／14 as a number')
+const partialFold = detailOf(boardRowOf(industryMarkup, industryBoard().items[1].theme_id))
+check(partialFold.includes('aria-label="廣度 無資料" data-score="none"') && partialFold.includes('aria-label="催化劑 無資料" data-score="none"') && !/aria-label="(?:廣度|催化劑) 無資料"[^>]*><span class="score-bar-track" aria-hidden="true"><span class="score-bar-fill"/.test(partialFold), `Issue 654: a missing component draws no fill and reads 「—」: ${partialFold}`)
 check(industryFold.startsWith('<details class="board-row-detail" id="board-detail-industry-24">') && industryRow.includes('aria-controls="board-detail-industry-24"') && industryRow.includes('aria-expanded="false"'), 'the fold is closed by default and the button controls it')
 check(industryFold.includes('href="/themes/industry-24">族群詳情 →'), 'the fold links to the detail page')
 const partialRow = boardRowOf(industryMarkup, 'industry-28')
 check(mainOf(partialRow).replace(/<[^>]+>/g, '').includes('技術與籌碼觀察（事件資料待補）'), 'a partial group shows its quality badge on the title line')
-check(count(detailOf(partialRow), '<dd>—</dd>') === 2 && count(mainOf(partialRow), '>—<') === 1, `null breadth and catalyst show 「—」 in the fold, the null 20d return on the row: ${partialRow}`)
+check(count(detailOf(partialRow), '>—<') === 2 && count(mainOf(partialRow), '>—<') === 1, `null breadth and catalyst show 「—」 in the fold, the null 20d return on the row: ${partialRow}`)
 check(industryMarkup.includes('資料 2026/09/08') && !industryMarkup.includes('官方資料 '), 'board date badge')
 check(!industryMarkup.includes('待重新核實') && !industryMarkup.includes('class="data-gap"'), 'industry board shows no temporary verification notice')
 // The page explanation and the units moved into the closed 說明 fold beside the board line.
@@ -153,7 +164,9 @@ check(detailMarkup.includes('<h1>CoWoS 先進封裝</h1>') && detailMarkup.inclu
 check(detailMarkup.includes('題材表版本 themes_v1:2026.10.17'), 'theme table version comes from member evidence')
 check(detailMarkup.includes('熱度走勢') && !detailMarkup.includes('走勢資料不足') && detailMarkup.includes('查看走勢資料表'), '20-day trend draws the chart')
 const components = detailMarkup.slice(detailMarkup.indexOf('五分項'))
-check(['相對報酬', '廣度', '量能', '法人', '催化劑'].every((label) => components.includes(label)) && components.includes('<b>100</b>') && components.includes('<b>—</b>'), 'five components with null as 「—」')
+check(['相對報酬', '廣度', '量能', '法人', '催化劑'].every((label) => components.includes(label)) && components.includes('aria-label="相對報酬 100（0–100）" data-score="100"') && components.includes('aria-label="催化劑 無資料" data-score="none"'), 'Issue 654: five components as score bars with null as 「—」')
+check((components.slice(0, components.indexOf('components-returns')).match(/class="score-bar(?: score-bar-empty)?" role="img"/g) ?? []).length === 5, 'Issue 654: the components card draws one bar per component')
+check(JSON.stringify(chipsOf(components.slice(components.indexOf('components-returns')))) === JSON.stringify(['1 日相對加權指數 +3.02%|up-3|+3.02%', '5 日相對加權指數 +7.11%|up-4|+7.11%', '20 日相對加權指數 +12.04%|up-4|+12.04%']), `Issue 654: the card's relative returns are strength blocks: ${JSON.stringify(chipsOf(components))}`)
 check(detailMarkup.includes('台積電') && detailMarkup.includes('1,085') && detailMarkup.includes('萬潤'), 'member table reads the paginated page')
 check(detailMarkup.includes('<th>證據</th>') && detailMarkup.includes('主要業務 · 關聯度高') && detailMarkup.includes('產品線 · 關聯度低'), 'theme members carry an evidence column')
 check(detailMarkup.includes('href="https://example.test/cowos" target="_blank" rel="noopener noreferrer"'), 'evidence link opens a new tab')
@@ -305,6 +318,7 @@ check(today.includes('資料 2026/09/08') && today.includes('1／5／20 日為�
 const rowOfGroup = (id: string) => today.slice(today.indexOf(`data-theme-id="${id}"`), today.indexOf('</a>', today.indexOf(`data-theme-id="${id}"`)))
 const firstCard = rowOfGroup('industry-1')
 for (const text of ['第 1 名', '產業 1', '81.25', '+1.23%', '-0.45%', '0.00%']) check(firstCard.includes(text), `today row shows ${text}: ${firstCard}`)
+check(JSON.stringify(chipsOf(firstCard)) === JSON.stringify(boardChips), `Issue 654: today group returns are strength blocks: ${JSON.stringify(chipsOf(firstCard))}`)
 // Two lines: the line with rank, name, quality and score; the line with the three returns. Nothing else.
 check(/^data-theme-id="industry-1"[^>]*><span class="hot-group-line">.*<\/span><span class="hot-group-returns">.*<\/span>$/.test(firstCard), `Issue 510: a row is the head line and the returns line: ${firstCard}`)
 check(!firstCard.includes('badge-success') && !firstCard.includes('熱門族群'), 'Issue 510: a complete group (熱門族群) carries no quality badge')

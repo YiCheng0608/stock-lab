@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 import { Term } from '../components/Term'
-import { Badge, Card, DataTable, DateBadge, EmptyState, Skeleton, cx, type Column } from '../components/ui'
+import { Badge, Card, DataTable, DateBadge, EmptyState, ScoreBar, Skeleton, cx, type Column } from '../components/ui'
 import { AiBadge } from '../news/NewsViews'
 import { STRATEGY_LINK_LABEL } from '../strategy/strategyName'
 import { AddPlanButton } from '../tracking/TrackingViews'
@@ -59,6 +59,9 @@ function InferenceBadge() {
   return <Badge tone="accent" dot className="badge-compact">推論</Badge>
 }
 
+// A 0–1 component score on the bar's 0–100 scale (#654); null stays null so the bar reads 「—」.
+const scoreOf = (value: number | null | undefined) => (typeof value === 'number' && Number.isFinite(value) ? value * 100 : null)
+
 function ComponentScores({ item }: { item: CandidateItem }) {
   const missing = CANDIDATE_COMPONENTS.filter(({ key }) => item.components[key]?.score == null)
   return (
@@ -69,7 +72,7 @@ function ComponentScores({ item }: { item: CandidateItem }) {
           return (
             <div key={key} data-component={key}>
               <dt>{label}{component?.inference && <> <InferenceBadge /></>}</dt>
-              <dd title={component?.score == null ? component?.null_explanation ?? undefined : undefined}>{formatCandidateScore(component?.score)}</dd>
+              <dd title={component?.score == null ? component?.null_explanation ?? undefined : undefined}><ScoreBar label={label} value={scoreOf(component?.score)} /></dd>
             </div>
           )
         })}
@@ -108,7 +111,7 @@ export function ScoreDetails({ item, open }: { item: CandidateItem; open: boolea
         rowKey={(row) => row.key + row.name}
         rowProps={(row) => ({ 'data-sub-item': row.name })}
         groupTitle={({ first, label, component }) => first
-          ? <>{label}（{formatCandidateScore(component?.score)}，權重 {Math.round((component?.weight ?? 0) * 100)}%）{component?.inference && <> <InferenceBadge /></>}</>
+          ? <span className="score-group-title">{label}<ScoreBar label={label} value={scoreOf(component?.score)} /><span className="score-group-weight">權重 {Math.round((component?.weight ?? 0) * 100)}%</span>{component?.inference && <InferenceBadge />}</span>
           : null}
       />
       {item.alternatives.length > 0 && (

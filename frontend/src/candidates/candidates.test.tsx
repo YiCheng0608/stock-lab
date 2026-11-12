@@ -102,6 +102,11 @@ check(!first.includes(PARTIAL_NOTE) && !first.includes('candidate-null-notes'), 
 for (const [component, score] of [['technical', '74'], ['chips', '92'], ['news_sentiment', '81'], ['group', '90']]) {
   check(slice(first, `data-component="${component}"`, '</div>').includes(`>${score}<`), `component ${component} shows ${score}`)
 }
+// Issue 654 AC-2: each of the four components is a 0–100 score bar, its number beside it.
+for (const [component, label, score] of [['technical', '技術', '74'], ['chips', '籌碼', '92'], ['news_sentiment', '新聞情緒', '81'], ['group', '族群', '90']]) {
+  const cell = slice(first, `data-component="${component}"`, '</div>')
+  check(cell.includes(`<span class="score-bar" role="img" aria-label="${label} ${score}（0–100）" data-score="${score}">`) && cell.includes('class="score-bar-fill" style="width:'), `Issue 654: component ${component} is a bar at ${score}: ${cell}`)
+}
 check(slice(first, 'data-component="news_sentiment"', '</div>').includes('badge-accent') && !slice(first, 'data-component="chips"', '</div>').includes('badge-accent'), 'only news sentiment is marked 推論')
 check(count(first, 'data-reason=') === 4, 'all four API reasons are shown')
 check(first.indexOf('institutional_net_buy_5d') < first.indexOf('breakout_20d_high'), 'reasons keep the API order')
@@ -117,6 +122,10 @@ const second = detailOf(rowOf(list, 2))
 check(second.includes(PARTIAL_NOTE), 'partial row explains the renormalised score')
 check(slice(second, 'data-component="group"', '</div>').includes('>—<') && slice(second, 'data-component="news_sentiment"', '</div>').includes('>—<'), 'null components show 「—」')
 check(!slice(second, 'data-component="group"', '</div>').includes('>0<'), 'null component is never 0')
+for (const [component, label] of [['group', '族群'], ['news_sentiment', '新聞情緒']]) {
+  const cell = slice(second, `data-component="${component}"`, '</div>')
+  check(cell.includes(`aria-label="${label} 無資料" data-score="none"`) && !cell.includes('score-bar-fill'), `Issue 654: a null ${component} draws no fill: ${cell}`)
+}
 check(second.includes('族群：當日沒有已排名且資料完整的所屬產業或題材') && second.includes('新聞情緒：近 3 日沒有成功的新聞收集，新聞分項無資料'), 'null_explanation shown next to the scores')
 const row2 = rowOf(list, 2)
 check(row2.includes('13.05～13.35') && row2.includes('上櫃') && row2.includes('回踩型'), 'pullback zone, TPEx label and the entry type (Issue 493)')
@@ -173,6 +182,12 @@ check(render(<ScoreDetails item={partialItem()} open />).includes('<details clas
 const completeDetails = render(<ScoreDetails item={completeItem()} open={false} />)
 check(completeDetails.includes('同檔另一策略：回踩條件 總分 61') && completeDetails.includes('規則最早執行日 2026/10/19'), 'alternatives and earliest execution date in details')
 check(completeDetails.includes('資料日期 2026/10/16') && completeDetails.includes('臺灣證券交易所'), 'data date and sources in details')
+// Issue 654 AC-2: the table's component titles carry the score bar and the weight (the sub-item 百分位 column stays a number).
+const groupTitles = [...completeDetails.matchAll(/<span class="score-group-title">(.*?)<span class="score-group-weight">權重 (\d+)%<\/span>/g)].map((match) => /data-score="([^"]*)"/.exec(match[1])?.[1])
+check(JSON.stringify(groupTitles) === JSON.stringify(['74', '92', '81', '90']), `Issue 654: every component title in the score details is a bar: ${JSON.stringify(groupTitles)}`)
+check(!/（\d+，權重/.test(completeDetails), 'Issue 654: the old 「技術（74，權重 35%）」 text title is gone')
+const partialDetails = render(<ScoreDetails item={partialItem()} open />)
+check(partialDetails.includes('aria-label="族群 無資料" data-score="none"'), `Issue 654: a null component title draws an empty bar: ${partialDetails}`)
 
 // ---- 加入追蹤 (#253): one button or link per candidate ----
 check(count(list, '>加入追蹤</button>') === 2 && !list.includes('已在追蹤'), 'every untracked candidate has the add button once, in its detail')

@@ -51,8 +51,12 @@ TREE = {
         "import { MarketPage } from './market/MarketPage'\n"
     ),
     "styles.css": "body {}\n",
-    "components/ui/index.ts": "export { Card } from './Card'\n",
+    "components/ui/index.ts": (
+        "export { Card } from './Card'\nexport { ScoreBar } from './ScoreBar'\n"
+    ),
     "components/ui/Card.tsx": "export const Card = 1\n",
+    # Issue 654: the score bar and strength block, used by the today, themes and stocks pages.
+    "components/ui/ScoreBar.tsx": "export const ScoreBar = 1\n",
     "themes/ThemeViews.tsx": "import { readChartTheme } from '../stock/stockBars'\n",
     "themes/themeBoards.test.tsx": "import { X } from './ThemeViews'\n",
     "stock/StockBarsChart.tsx": "import { bars } from './stockBars'\n",
@@ -238,6 +242,7 @@ def test_style_and_shared_component_verify_every_page(importers):
     for name in (
         "styles.css",
         "components/ui/Card.tsx",
+        "components/ui/ScoreBar.tsx",
         "components/ui/index.ts",
         "App.tsx",
         "main.tsx",
