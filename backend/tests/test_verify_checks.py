@@ -1242,7 +1242,7 @@ def test_t17_without_candidates_or_a_ready_shot(tmp_path):
         page_checks.t17(_t17_run(tmp_path, [_row(1), _row(2)], ready=False))
 
 
-# ---- T18 / G9 / S15: score bars and strength blocks (Issue 654) ----
+# ---- T19 / G9 / S15: score bars and strength blocks (Issue 654) ----
 
 UP, DOWN = "rgb(239, 68, 68)", "rgb(34, 197, 94)"
 TOKENS = {"up": UP, "down": DOWN}
@@ -1278,7 +1278,7 @@ def _scored(scores):
     return {key: _component(score) for key, score in zip(keys, scores)}
 
 
-def _t18_run(tmp_path, items, ready=True):
+def _t19_run(tmp_path, items, ready=True):
     candidates = {"status": "success", "trading_date": "2026-10-16", "items": [{"rank": 1, "components": _scored([0.75, 0.44, None, 1])}]}
     board = {"items": [{"theme_id": "i-1", "display_name": "半導體", "relative_returns": {"1d": 0.012, "5d": -0.0045, "20d": None}}]}
     metas = {"today": {1280: {"width": 1280, "ready": ready, "graphics": {"tokens": TOKENS, "items": items}}}}
@@ -1286,7 +1286,7 @@ def _t18_run(tmp_path, items, ready=True):
     return FakeRun(tmp_path, payloads, {}, metas=metas)
 
 
-T18_ITEMS = [
+T19_ITEMS = [
     _bar("技術", 75),
     _bar("籌碼", 44),
     _bar("新聞情緒", None),
@@ -1315,8 +1315,8 @@ def test_want_chip_steps_follow_the_shown_two_decimals():
     assert page_checks.want_bar("族群", None)["fill"] is None
 
 
-def test_t18_passes_when_bars_and_blocks_match_the_api(tmp_path):
-    assert page_checks.t18(_t18_run(tmp_path, T18_ITEMS)) == (
+def test_t19_passes_when_bars_and_blocks_match_the_api(tmp_path):
+    assert page_checks.t19(_t19_run(tmp_path, T19_ITEMS)) == (
         "4 條分項橫條（1 檔×4）與 3 個報酬色塊（1 族群×3）= API"
     )
 
@@ -1333,23 +1333,23 @@ def test_t18_passes_when_bars_and_blocks_match_the_api(tmp_path):
         (6, {"background": UP}, f"熱門族群 第 3 個色塊（20 日相對加權指數 無資料） 平盤或無資料卻用了漲跌色 {UP}"),
     ],
 )
-def test_t18_fails_on_a_wrong_fill_hue_or_step(tmp_path, index, change, message):
-    items = [dict(item) for item in T18_ITEMS]
+def test_t19_fails_on_a_wrong_fill_hue_or_step(tmp_path, index, change, message):
+    items = [dict(item) for item in T19_ITEMS]
     items[index].update(change)
     with pytest.raises(page_checks.Fail) as error:
-        page_checks.t18(_t18_run(tmp_path, items))
+        page_checks.t19(_t19_run(tmp_path, items))
     assert str(error.value) == message
 
 
-def test_t18_needs_the_measurement_and_every_graphic(tmp_path):
+def test_t19_needs_the_measurement_and_every_graphic(tmp_path):
     with pytest.raises(page_checks.Fail, match="今日名單明細 有 3 條分數橫條，預期 4 條"):
-        page_checks.t18(_t18_run(tmp_path, T18_ITEMS[1:]))
-    run = _t18_run(tmp_path, T18_ITEMS)
+        page_checks.t19(_t19_run(tmp_path, T19_ITEMS[1:]))
+    run = _t19_run(tmp_path, T19_ITEMS)
     run.metas = {"today": {1280: {"width": 1280, "ready": True}}}
     with pytest.raises(page_checks.Fail, match="today-1280 沒有 graphics 量測"):
-        page_checks.t18(run)
+        page_checks.t19(run)
     with pytest.raises(page_checks.Undetermined, match="today-1280 未 ready"):
-        page_checks.t18(_t18_run(tmp_path, T18_ITEMS, ready=False))
+        page_checks.t19(_t19_run(tmp_path, T19_ITEMS, ready=False))
 
 
 def _board_item(theme_id, components, returns):

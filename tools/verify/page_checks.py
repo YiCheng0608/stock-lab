@@ -1535,8 +1535,8 @@ def return_chips(returns: dict) -> list[dict]:
     return [want_chip(label, returns.get(key)) for key, label in RETURN_LABELS]
 
 
-@check("today", "T18")
-def t18(run: Run) -> str:
+@check("today", "T19")
+def t19(run: Run) -> str:
     """Issue 654: the detail's four component bars and the hot groups' return blocks."""
 
     tokens, bars, chips = graphics_of(run.shoot(TODAY)[1280], f"{TODAY.name}-1280")
@@ -2296,7 +2296,7 @@ def g8(run: Run) -> str:
 @check("themes", "G9", after=("G2",))
 def g9(run: Run) -> str:
     """Issue 654: each board row's three return blocks and five component bars, then the detail's five bars and
-    three blocks (T, upstream today T5), against the board API (graphics, T18 has the helpers)."""
+    three blocks (T, upstream today T5), against the board API (graphics, T19 has the helpers)."""
 
     problems, counted = [], []
     for kind, shot in (("industry", THEMES), ("theme", THEMES_THEME)):
