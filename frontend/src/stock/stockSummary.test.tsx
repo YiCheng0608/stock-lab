@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom/server'
 
 import * as AppModule from '../App'
-import { ActionDetailPanel, CHART_TAB_LINK, CHART_TAB_NOTE } from '../App'
+import { ActionDetailPanel } from '../App'
 import { completeItem } from '../candidates/candidates.fixtures'
 import { NO_CONDITION_TEXT } from '../tracking/tracking'
 import { StockPlanPanel } from '../tracking/TrackingViews'
@@ -149,7 +149,16 @@ for (const [tab, location] of [['走勢', '/stocks/TWSE/2884'], ['進出場', '/
     `${tab}: header → chart card → summary card → tabs (${[at('class="card stock-header"'), at('stock-chart-card'), at('class="card stock-summary"'), at('stock-tabs')].join(', ')})`)
   check(count(page, 'id="stock-chart-title"') === 1 && count(page, 'stock-chart-card') === 1, `${tab}: the daily chart is drawn once on the page`)
   check(at('stock-chart-card') < at('class="stock-tab-content"') && !page.slice(at('class="stock-tab-content"')).includes('stock-chart-card'), `${tab}: no chart inside the tab content`)
-  if (tab === '走勢') check(page.includes(CHART_TAB_NOTE) && page.includes(`href="#stock-chart-title">${CHART_TAB_LINK}</a>`), '走勢: the tab says where the chart is and links back to it')
+  // #656: the K-line card above draws price and volume only; the indicator panels and the data table are in 走勢.
+  const chartCard = page.slice(at('stock-chart-card'), at('class="card stock-summary"'))
+  check(chartCard.includes('>K 線</h') && !chartCard.includes('indicator-tab-') && !chartCard.includes('查看圖表資料表') && chartCard.includes('chart-ma-row'), `${tab}: the K-line card has no indicator panel or data table`)
+  const indicatorCards = count(page, 'stock-indicator-card')
+  if (tab === '走勢') {
+    const content = page.slice(at('class="stock-tab-content"'))
+    check(indicatorCards === 1 && content.includes('stock-indicator-card') && ['MACD', 'RSI', 'KD', '布林'].every((label) => content.includes(`>${label}</button>`)) && content.includes('查看圖表資料表（最近 30 根）'), `走勢: the tab holds the indicator panels and the data table (${indicatorCards})`)
+    const windows = [...page.matchAll(/data-bars-window="([^"]+)"/g)].map((match) => match[1])
+    check(windows.length === 2 && windows[0] === windows[1], `走勢: the K-line card and the indicator chart show the same bars: ${windows.join(' / ')}`)
+  } else check(indicatorCards === 0, `${tab}: the indicator card is only in 走勢`)
   if (tab === '進出場') {
     const content = page.slice(at('class="stock-tab-content"'))
     // The phone cards repeat the board's table for 640px and below (display:none on a desktop), so they are left out.
