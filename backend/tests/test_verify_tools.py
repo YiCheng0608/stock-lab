@@ -953,9 +953,30 @@ def test_screenshot_waits_for_data_and_reports_overflow(tmp_path: Path) -> None:
         assert line["graphics"] == {
             "tokens": {"up": "rgb(239, 68, 68)", "down": "rgb(34, 197, 94)"},
             "items": [
-                {"kind": "bar", "label": "技術 75（0–100）", "score": "75", "fill": 0.75, "hasFill": True, "trackWidth": 200},
-                {"kind": "bar", "label": "族群 無資料", "score": "none", "fill": None, "hasFill": False, "trackWidth": 200},
-                {"kind": "chip", "label": "1 日相對加權指數 -1.20%", "strength": "down-2", "text": "-1.20%", "background": "rgb(34, 197, 94)", "opacity": 0.3},
+                {
+                    "kind": "bar",
+                    "label": "技術 75（0–100）",
+                    "score": "75",
+                    "fill": 0.75,
+                    "hasFill": True,
+                    "trackWidth": 200,
+                },
+                {
+                    "kind": "bar",
+                    "label": "族群 無資料",
+                    "score": "none",
+                    "fill": None,
+                    "hasFill": False,
+                    "trackWidth": 200,
+                },
+                {
+                    "kind": "chip",
+                    "label": "1 日相對加權指數 -1.20%",
+                    "strength": "down-2",
+                    "text": "-1.20%",
+                    "background": "rgb(34, 197, 94)",
+                    "opacity": 0.3,
+                },
             ],
         }
     assert [line["overflow"] for line in lines] == [False, True]

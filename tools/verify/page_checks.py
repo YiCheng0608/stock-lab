@@ -1476,7 +1476,12 @@ CANDIDATE_COMPONENTS = (
     ("group", "族群"),
 )
 STRENGTH_STEPS = (1, 3, 6)  # STRENGTH_STEPS in frontend/src/components/ui/ScoreBar.tsx
-STRENGTH_OPACITY = {1: 0.16, 2: 0.3, 3: 0.5, 4: 1.0}  # .strength-l1…l4 in frontend/src/styles.css
+STRENGTH_OPACITY = {
+    1: 0.16,
+    2: 0.3,
+    3: 0.5,
+    4: 1.0,
+}  # .strength-l1…l4 in frontend/src/styles.css
 RETURN_LABELS = (("1d", "1 日"), ("5d", "5 日"), ("20d", "20 日"))
 FILL_TOLERANCE = 0.02
 
@@ -1527,8 +1532,13 @@ def bar_problems(name: str, got: list[dict], want: list[dict]) -> list[str]:
     problems = []
     for index, (bar, expected) in enumerate(zip(got, want), 1):
         where = f"{name} 第 {index} 條（{expected['label']}）"
-        if bar.get("label") != expected["label"] or bar.get("score") != expected["score"]:
-            problems.append(f"{where} 是 `{bar.get('label')}` data-score={bar.get('score')}")
+        if (
+            bar.get("label") != expected["label"]
+            or bar.get("score") != expected["score"]
+        ):
+            problems.append(
+                f"{where} 是 `{bar.get('label')}` data-score={bar.get('score')}"
+            )
         elif expected["fill"] is None:
             if bar.get("hasFill"):
                 problems.append(f"{where} 無資料卻畫了填色")
@@ -1603,7 +1613,9 @@ def t19(run: Run) -> str:
     ]
     groups = (run.today_board().get("items") or [])[:TODAY_GROUPS]
     want_chips = [
-        chip for item in groups for chip in return_chips(item.get("relative_returns") or {})
+        chip
+        for item in groups
+        for chip in return_chips(item.get("relative_returns") or {})
     ]
     problems = bar_problems("今日名單明細", bars, want_bars)
     problems += chip_problems("熱門族群", tokens, chips, want_chips)
@@ -2355,16 +2367,26 @@ def g9(run: Run) -> str:
         items = board(run, kind).get("items") or []
         tokens, bars, chips = graphics_of(run.shoot(shot)[1280], f"{shot.name}-1280")
         want_chips = [
-            chip for item in items for chip in return_chips(item.get("relative_returns") or {})
+            chip
+            for item in items
+            for chip in return_chips(item.get("relative_returns") or {})
         ]
-        problems += bar_problems(f"{shot.name}-1280", bars, [bar for item in items for bar in board_bars(item)])
+        problems += bar_problems(
+            f"{shot.name}-1280",
+            bars,
+            [bar for item in items for bar in board_bars(item)],
+        )
         problems += chip_problems(f"{shot.name}-1280", tokens, chips, want_chips)
         counted.append(f"{kind} {len(items)} 列")
     theme_id, _ = run.T()
     payload = run.get(f"themes/{theme_id}", "theme-detail.json")
     kind = payload.get("board") or "industry"
     item = next(
-        (row for row in board(run, kind).get("items") or [] if row.get("theme_id") == theme_id),
+        (
+            row
+            for row in board(run, kind).get("items") or []
+            if row.get("theme_id") == theme_id
+        ),
         None,
     )
     metrics = (payload.get("theme") or {}).get("metrics") or {}
@@ -2374,9 +2396,13 @@ def g9(run: Run) -> str:
     detail = Shot("theme-detail", f"/themes/{theme_id}")
     tokens, bars, chips = graphics_of(run.shoot(detail)[1280], f"{detail.name}-1280")
     problems += bar_problems(f"{detail.name}-1280", bars, board_bars(item))
-    problems += chip_problems(f"{detail.name}-1280", tokens, chips, return_chips(returns))
+    problems += chip_problems(
+        f"{detail.name}-1280", tokens, chips, return_chips(returns)
+    )
     expect(not problems, "；".join(problems))
-    return f"{'、'.join(counted)}與詳情 `{theme_id}`：五分項橫條與 1／5／20 日色塊 = API"
+    return (
+        f"{'、'.join(counted)}與詳情 `{theme_id}`：五分項橫條與 1／5／20 日色塊 = API"
+    )
 
 
 # ---- stocks ----
