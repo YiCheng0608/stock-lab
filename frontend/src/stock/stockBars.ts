@@ -315,6 +315,31 @@ export function chartLayout(mainHeight: number): ChartLayout {
   return { main, volume, tabsTop, indicator, sliderTop, height: sliderTop + 28, left: 64, right: 16 }
 }
 
+// The stock page splits the card (Issue 656, DESIGN_SYSTEM §6): the K-line card draws the price and volume panes with the
+// slider under the volume, and the 走勢 tab draws the indicator panel on its own. The main pane is taller there because
+// the indicator panel left the card: 400px on desktop, 280px under 640px.
+export const SPLIT_MAIN_HEIGHT = { desktop: 400, narrow: 280 } as const
+export function priceChartLayout(mainHeight: number): ChartLayout {
+  const main = { top: 16, height: mainHeight }
+  const volume = { top: main.top + main.height + 20, height: Math.round(mainHeight * 0.24) }
+  const sliderTop = volume.top + volume.height + 30
+  // No indicator pane: it sits at the bottom, zero high, so nothing reads it.
+  return { main, volume, tabsTop: sliderTop, indicator: { top: sliderTop, height: 0 }, sliderTop, height: sliderTop + 28, left: 64, right: 16 }
+}
+
+// The 走勢 tab's indicator chart: one pane with the date axis under it, no slider (the K-line card's slider drives it).
+export const INDICATOR_CHART_HEIGHT = { desktop: 200, narrow: 150 } as const
+export function indicatorChartLayout(height: number): ChartLayout {
+  const indicator = { top: 12, height }
+  const bottom = indicator.top + indicator.height + 30
+  return { main: { top: 0, height: 0 }, volume: { top: 0, height: 0 }, tabsTop: 0, indicator, sliderTop: bottom, height: bottom, left: 64, right: 16 }
+}
+
+// Which panes one chart draws: all three (the today list and the market page), or the stock page's two halves.
+export type ChartParts = 'all' | 'price' | 'indicator'
+// The stock page's two charts share one ECharts group (echarts.connect): the crosshair follows across them.
+export const BARS_CHART_GROUP = 'stock-bars'
+
 // The dataZoom window: a range button sets bar indexes (startValue/endValue), a manual zoom keeps ECharts' own percents
 // so dragging the slider is not snapped back to whole bars.
 export type ChartZoom = { startValue: number; endValue: number } | { start: number; end: number }
@@ -498,14 +523,18 @@ function indicatorNumber(value: number | null | undefined, digits = 2): string {
   return isFiniteNumber(value) ? value.toLocaleString('zh-TW', { minimumFractionDigits: digits, maximumFractionDigits: digits }) : '—'
 }
 
-export function formatBarsTooltip(response: StockBarsResponse, index: number, panelId: IndicatorPanelId, visibleMa: ReadonlySet<MaField>, digits: number): string {
+export function formatBarsTooltip(response: StockBarsResponse, index: number, panelId: IndicatorPanelId, visibleMa: ReadonlySet<MaField>, digits: number, parts: ChartParts = 'all'): string {
   const bar = response.bars[index]
   if (!bar) return ''
   const heading = response.interval === 'week' && bar.week_start
     ? `${formatDay(bar.week_start) ?? bar.week_start}～${formatDay(bar.week_end ?? bar.date) ?? bar.week_end ?? bar.date}（${bar.trading_days ?? '—'} 個交易日）`
     : formatDay(bar.date) ?? bar.date
   const lines = [`<strong>${escapeHtml(heading)}</strong>`]
-  if (isCloseOnlyBar(bar)) {
+  // The indicator chart's box (parts 'indicator'): the date and the panel's values only; prices are in the K-line card's.
+  const withPrice = parts !== 'indicator'
+  if (!withPrice) {
+    lines.push(`${response.interval === 'week' ? '週線' : '日線'}指標`)
+  } else if (isCloseOnlyBar(bar)) {
     lines.push(`收 ${escapeHtml(formatPrice(bar.close, digits))}（來源未提供開高低）`)
   } else if (!isDrawableBar(bar)) {
     lines.push(bar.is_suspended ? '停牌，無 K 線' : '此根行情不完整，不繪製')
@@ -517,10 +546,10 @@ export function formatBarsTooltip(response: StockBarsResponse, index: number, pa
     )
   }
   for (const line of MA_LINES) {
-    if (visibleMa.has(line.field)) lines.push(`${line.label} ${escapeHtml(indicatorNumber(bar[line.field], digits))}`)
+    if (withPrice && visibleMa.has(line.field)) lines.push(`${line.label} ${escapeHtml(indicatorNumber(bar[line.field], digits))}`)
   }
   const panel = INDICATOR_PANELS.find((item) => item.id === panelId) ?? INDICATOR_PANELS[0]
-  lines.push(panel.fields.map((field) => `${FIELD_LABELS[field]} ${escapeHtml(indicatorNumber(bar[field]))}`).join('　'))
+  if (parts !== 'price') lines.push(panel.fields.map((field) => `${FIELD_LABELS[field]} ${escapeHtml(indicatorNumber(bar[field]))}`).join('　'))
   // Only these fixed tags are emitted; every dynamic value above is escaped.
   return lines.join('<br/>')
 }
@@ -557,37 +586,37 @@ function referenceLines(values: readonly number[], theme: ChartTheme) {
   }
 }
 
-function indicatorSeries(bars: readonly StockBarRow[], panelId: IndicatorPanelId, theme: ChartTheme): unknown[] {
+function indicatorSeries(bars: readonly StockBarRow[], panelId: IndicatorPanelId, theme: ChartTheme, axis = 2): unknown[] {
   if (panelId === 'macd') {
     return [
       {
-        name: 'MACD 柱', type: 'bar', xAxisIndex: 2, yAxisIndex: 2, barMaxWidth: 6,
+        name: 'MACD 柱', type: 'bar', xAxisIndex: axis, yAxisIndex: axis, barMaxWidth: 6,
         data: bars.map((bar) => isFiniteNumber(bar.macd_hist) ? { value: bar.macd_hist, itemStyle: { color: bar.macd_hist >= 0 ? theme.up : theme.down } } : '-'),
       },
-      lineSeries(bars, 2, { name: 'DIF', field: 'macd_dif', color: theme.primary }),
-      lineSeries(bars, 2, { name: 'DEA', field: 'macd_signal', color: theme.accent }),
+      lineSeries(bars, axis, { name: 'DIF', field: 'macd_dif', color: theme.primary }),
+      lineSeries(bars, axis, { name: 'DEA', field: 'macd_signal', color: theme.accent }),
     ]
   }
   if (panelId === 'rsi') {
     return [
-      lineSeries(bars, 2, { name: 'RSI6', field: 'rsi6', color: theme.primary }, { markLine: referenceLines([30, 70], theme) }),
-      lineSeries(bars, 2, { name: 'RSI12', field: 'rsi12', color: theme.accent }),
+      lineSeries(bars, axis, { name: 'RSI6', field: 'rsi6', color: theme.primary }, { markLine: referenceLines([30, 70], theme) }),
+      lineSeries(bars, axis, { name: 'RSI12', field: 'rsi12', color: theme.accent }),
     ]
   }
   if (panelId === 'kd') {
     return [
-      lineSeries(bars, 2, { name: 'K', field: 'kd_k', color: theme.primary }, { markLine: referenceLines([20, 80], theme) }),
-      lineSeries(bars, 2, { name: 'D', field: 'kd_d', color: theme.accent }),
+      lineSeries(bars, axis, { name: 'K', field: 'kd_k', color: theme.primary }, { markLine: referenceLines([20, 80], theme) }),
+      lineSeries(bars, axis, { name: 'D', field: 'kd_d', color: theme.accent }),
     ]
   }
   return [
     {
-      name: '收盤', type: 'line', xAxisIndex: 2, yAxisIndex: 2, showSymbol: false, connectNulls: false, emphasis: { disabled: true },
+      name: '收盤', type: 'line', xAxisIndex: axis, yAxisIndex: axis, showSymbol: false, connectNulls: false, emphasis: { disabled: true },
       data: bars.map((bar) => isDrawableBar(bar) || isCloseOnlyBar(bar) ? bar.close : '-'), lineStyle: { color: theme.flat, width: 1 }, itemStyle: { color: theme.flat },
     },
-    lineSeries(bars, 2, { name: '中軌', field: 'boll_mid', color: theme.primary }),
-    lineSeries(bars, 2, { name: '上軌', field: 'boll_upper', color: theme.accent }),
-    lineSeries(bars, 2, { name: '下軌', field: 'boll_lower', color: theme.accent }),
+    lineSeries(bars, axis, { name: '中軌', field: 'boll_mid', color: theme.primary }),
+    lineSeries(bars, axis, { name: '上軌', field: 'boll_upper', color: theme.accent }),
+    lineSeries(bars, axis, { name: '下軌', field: 'boll_lower', color: theme.accent }),
   ]
 }
 
@@ -662,39 +691,87 @@ export type BarsChartOptions = {
   zoom: ChartZoom
   digits: number
   levels?: ChartLevels | null
+  // Default 'all': price, volume and indicator panes in one chart. The stock page draws 'price' in its K-line card and
+  // 'indicator' in the 走勢 tab (Issue 656), both from the same bars and the same zoom.
+  parts?: ChartParts
 }
+
+type Pane = 'main' | 'volume' | 'indicator'
 
 export function buildBarsChartOption(response: StockBarsResponse, options: BarsChartOptions): EChartsOption {
   const { theme, layout, zoom, digits } = options
+  const parts = options.parts ?? 'all'
+  const withPrice = parts !== 'indicator'
+  const withIndicator = parts !== 'price'
+  const panes: Pane[] = [...(withPrice ? ['main', 'volume'] as const : []), ...(withIndicator ? ['indicator'] as const : [])]
+  const axes = panes.map((_, index) => index)
+  const lastAxis = panes.length - 1
+  const indicatorAxis = panes.indexOf('indicator')
   const bars = response.bars
   const dates = bars.map((bar) => formatDay(bar.date) ?? bar.date)
   const axisLabel = { color: theme.muted, fontSize: 12, fontFamily: theme.fontMono }
   const splitLine = { lineStyle: { color: theme.grid } }
   const gridBase = { left: layout.left, right: layout.right }
   const kind = volumeKind(response.sources)
-  const xAxis = [0, 1, 2].map((gridIndex) => ({
+  const xAxis = axes.map((gridIndex) => ({
     type: 'category' as const,
     gridIndex,
     data: dates,
     boundaryGap: true,
     axisLine: { lineStyle: { color: theme.grid } },
     axisTick: { show: false },
-    axisLabel: gridIndex === 2 ? { ...axisLabel, hideOverlap: true } : { show: false },
+    axisLabel: gridIndex === lastAxis ? { ...axisLabel, hideOverlap: true } : { show: false },
     splitLine: { show: false },
   }))
   const bounded = options.panel === 'rsi' || options.panel === 'kd'
-  const levels = options.levels ?? null
+  const levels = withPrice ? options.levels ?? null : null
   const priceRange = levels ? levelsPriceRange(levels, layout.main.height) : {}
+  const yAxis: Record<Pane, unknown> = {
+    // Axis labels of 1,000 and up (an index in points, Issue 549/547) drop the decimals so they fit the 64px gutter;
+    // the tooltip and the data table keep them. With levels the padded top is not a round tick (406.4 above 390.0 on a
+    // phone, Issue 647), so its label is left out as the bottom one is.
+    main: { type: 'value', gridIndex: panes.indexOf('main'), scale: true, ...priceRange, axisLabel: { ...axisLabel, showMinLabel: false, ...(levels ? { showMaxLabel: false } : {}), formatter: (value: number) => formatPrice(value, axisDigits(value, digits)) }, splitLine },
+    volume: { type: 'value', gridIndex: panes.indexOf('volume'), scale: false, splitNumber: 2, axisLabel: { ...axisLabel, showMaxLabel: false, formatter: (value: number) => volumeAxisLabel(kind, value) }, splitLine },
+    indicator: bounded
+      ? { type: 'value', gridIndex: indicatorAxis, min: 0, max: 100, interval: 50, axisLabel, splitLine }
+      // MACD of an index runs into the thousands: no decimals from 1,000 up, so「-2,000」fits the 64px gutter.
+      : { type: 'value', gridIndex: indicatorAxis, scale: true, splitNumber: 2, axisLabel: { ...axisLabel, formatter: (value: number) => indicatorNumber(value, Math.abs(value) >= 1000 ? 0 : options.panel === 'boll' ? digits : 2) }, splitLine },
+  }
+  const priceSeries = withPrice ? [
+    {
+      name: response.interval === 'week' ? '週K' : '日K',
+      type: 'candlestick',
+      xAxisIndex: 0,
+      barMaxWidth: 14,
+      yAxisIndex: 0,
+      data: bars.map((bar) => isDrawableBar(bar) ? [bar.open, bar.close, bar.low, bar.high] : ['-', '-', '-', '-']),
+      itemStyle: { color: theme.up, color0: theme.down, borderColor: theme.up, borderColor0: theme.down },
+      ...(levels ? levelMarks(levels, theme) : {}),
+    },
+    // A close-only series (Issue 547) has no candle to draw: its closes are one neutral line on the price pane.
+    ...(isCloseOnlySeries(bars) ? [{
+      name: '收盤', type: 'line' as const, xAxisIndex: 0, yAxisIndex: 0, showSymbol: false, connectNulls: false, emphasis: { disabled: true },
+      data: bars.map((bar) => bar.close), lineStyle: { color: theme.text, width: 1.5 }, itemStyle: { color: theme.text },
+    }] : []),
+    ...MA_LINES.filter((line) => options.visibleMa.has(line.field)).map((line) => lineSeries(bars, 0, { name: line.label, field: line.field, color: theme[line.color], width: 1.2 })),
+    {
+      name: '成交量',
+      type: 'bar',
+      xAxisIndex: 1,
+      yAxisIndex: 1,
+      barMaxWidth: 10,
+      // Same up/down color as the candle at 60% transparency (DESIGN_SYSTEM §6).
+      data: bars.map((bar) => isDrawableBar(bar) && isFiniteNumber(bar.volume) && bar.volume >= 0
+        ? { value: bar.volume, itemStyle: { color: bar.close >= bar.open ? theme.up : theme.down, opacity: 0.4 } }
+        : '-'),
+    },
+  ] : []
   return {
     animation: false,
     backgroundColor: 'transparent',
     textStyle: { fontFamily: theme.fontMono },
     axisPointer: { link: [{ xAxisIndex: 'all' }], lineStyle: { color: theme.subtle } },
-    grid: [
-      { ...gridBase, top: layout.main.top, height: layout.main.height },
-      { ...gridBase, top: layout.volume.top, height: layout.volume.height },
-      { ...gridBase, top: layout.indicator.top, height: layout.indicator.height },
-    ],
+    grid: panes.map((pane) => ({ ...gridBase, top: layout[pane].top, height: layout[pane].height })),
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'cross', lineStyle: { color: theme.subtle }, crossStyle: { color: theme.subtle }, label: { backgroundColor: theme.cardBg, color: theme.text, fontFamily: theme.fontMono } },
@@ -708,62 +785,27 @@ export function buildBarsChartOption(response: StockBarsResponse, options: BarsC
       formatter: (params: unknown) => {
         const entries = Array.isArray(params) ? params : [params]
         const first = entries.find((entry) => entry && typeof entry === 'object' && isFiniteNumber((entry as { dataIndex?: unknown }).dataIndex)) as { dataIndex: number } | undefined
-        return first ? formatBarsTooltip(response, first.dataIndex, options.panel, options.visibleMa, digits) : ''
+        return first ? formatBarsTooltip(response, first.dataIndex, options.panel, options.visibleMa, digits, parts) : ''
       },
     },
     xAxis,
-    yAxis: [
-      // Axis labels of 1,000 and up (an index in points, Issue 549/547) drop the decimals so they fit the 64px gutter;
-      // the tooltip and the data table keep them. With levels the padded top is not a round tick (406.4 above 390.0 on a
-      // phone, Issue 647), so its label is left out as the bottom one is.
-      { type: 'value', gridIndex: 0, scale: true, ...priceRange, axisLabel: { ...axisLabel, showMinLabel: false, ...(levels ? { showMaxLabel: false } : {}), formatter: (value: number) => formatPrice(value, axisDigits(value, digits)) }, splitLine },
-      { type: 'value', gridIndex: 1, scale: false, splitNumber: 2, axisLabel: { ...axisLabel, showMaxLabel: false, formatter: (value: number) => volumeAxisLabel(kind, value) }, splitLine },
-      bounded
-        ? { type: 'value', gridIndex: 2, min: 0, max: 100, interval: 50, axisLabel, splitLine }
-        // MACD of an index runs into the thousands: no decimals from 1,000 up, so「-2,000」fits the 64px gutter.
-        : { type: 'value', gridIndex: 2, scale: true, splitNumber: 2, axisLabel: { ...axisLabel, formatter: (value: number) => indicatorNumber(value, Math.abs(value) >= 1000 ? 0 : options.panel === 'boll' ? digits : 2) }, splitLine },
-    ],
+    yAxis: panes.map((pane) => yAxis[pane]) as EChartsOption['yAxis'],
     dataZoom: [
       // preventDefaultMouseMove off: a vertical swipe over the chart scrolls the page on phones (touch-action pan-y, #600).
-      { type: 'inside', xAxisIndex: [0, 1, 2], filterMode: 'filter', preventDefaultMouseMove: false, ...zoom },
-      {
-        type: 'slider', xAxisIndex: [0, 1, 2], filterMode: 'filter', ...zoom,
+      { id: 'bars-inside', type: 'inside', xAxisIndex: axes, filterMode: 'filter', preventDefaultMouseMove: false, ...zoom },
+      // The indicator chart has no slider of its own: the K-line card's slider (and the shared view) moves it.
+      ...(withPrice ? [{
+        id: 'bars-slider', type: 'slider' as const, xAxisIndex: axes, filterMode: 'filter' as const, ...zoom,
         top: layout.sliderTop, height: 18, left: layout.left, right: layout.right,
         borderColor: theme.border, fillerColor: theme.grid, backgroundColor: 'transparent',
         dataBackground: { lineStyle: { color: theme.subtle }, areaStyle: { color: theme.grid } },
         handleStyle: { color: theme.muted, borderColor: theme.border },
         textStyle: { color: theme.muted, fontFamily: theme.fontMono, fontSize: 12 },
-      },
+      }] : []),
     ],
     series: [
-      {
-        name: response.interval === 'week' ? '週K' : '日K',
-        type: 'candlestick',
-        xAxisIndex: 0,
-        barMaxWidth: 14,
-        yAxisIndex: 0,
-        data: bars.map((bar) => isDrawableBar(bar) ? [bar.open, bar.close, bar.low, bar.high] : ['-', '-', '-', '-']),
-        itemStyle: { color: theme.up, color0: theme.down, borderColor: theme.up, borderColor0: theme.down },
-        ...(levels ? levelMarks(levels, theme) : {}),
-      },
-      // A close-only series (Issue 547) has no candle to draw: its closes are one neutral line on the price pane.
-      ...(isCloseOnlySeries(bars) ? [{
-        name: '收盤', type: 'line' as const, xAxisIndex: 0, yAxisIndex: 0, showSymbol: false, connectNulls: false, emphasis: { disabled: true },
-        data: bars.map((bar) => bar.close), lineStyle: { color: theme.text, width: 1.5 }, itemStyle: { color: theme.text },
-      }] : []),
-      ...MA_LINES.filter((line) => options.visibleMa.has(line.field)).map((line) => lineSeries(bars, 0, { name: line.label, field: line.field, color: theme[line.color], width: 1.2 })),
-      {
-        name: '成交量',
-        type: 'bar',
-        xAxisIndex: 1,
-        yAxisIndex: 1,
-        barMaxWidth: 10,
-        // Same up/down color as the candle at 60% transparency (DESIGN_SYSTEM §6).
-        data: bars.map((bar) => isDrawableBar(bar) && isFiniteNumber(bar.volume) && bar.volume >= 0
-          ? { value: bar.volume, itemStyle: { color: bar.close >= bar.open ? theme.up : theme.down, opacity: 0.4 } }
-          : '-'),
-      },
-      ...(options.panelState.kind === 'chart' ? indicatorSeries(bars, options.panel, theme) : []),
+      ...priceSeries,
+      ...(withIndicator && options.panelState.kind === 'chart' ? indicatorSeries(bars, options.panel, theme, indicatorAxis) : []),
     ] as EChartsOption['series'],
   }
 }

@@ -2521,18 +2521,20 @@ def s3(run: Run, stock: Stock) -> str:
 @check("stocks", "S4", per_stock=True)
 def s4(run: Run, stock: Stock) -> str:
     text, i = stock_text(run, stock), stock_I(run, stock)
-    k = text.find("K 線與技術指標")
-    expect(k >= 0, "缺整行 `K 線與技術指標`")
-    expect(
-        text.after(k) == f"資料 {slash(i)}",
-        f"`K 線與技術指標` 下一行是 {text.after(k)!r}，預期 `資料 {slash(i)}`",
-    )
+    # #656: the K-line card (price and volume) and the 走勢 tab's indicator card each carry the data date.
+    for title in (CHART_TITLE, INDICATOR_TITLE):
+        k = text.find(title)
+        expect(k >= 0, f"缺整行 `{title}`")
+        expect(
+            text.after(k) == f"資料 {slash(i)}",
+            f"`{title}` 下一行是 {text.after(k)!r}，預期 `資料 {slash(i)}`",
+        )
     for prefix in ("來源 ", "日線批次計算於"):
         expect(
             text.find_where(lambda line: line.startswith(prefix)) >= 0,
             f"缺 `{prefix}` 開頭的行",
         )
-    return f"K 線卡 `資料 {slash(i)}`、來源與批次時間"
+    return f"K 線卡與技術指標卡 `資料 {slash(i)}`、來源與批次時間"
 
 
 @check("stocks", "S5", per_stock=True)
@@ -2964,8 +2966,12 @@ def s13(run: Run, stock: Stock) -> str:
 
 # #648 圖優先 (UI_COPY_SPEC §8.2, DESIGN_SYSTEM §4 個股頁頁首與摘要卡): header → K-line card → summary card → tabs
 # on every tab, the chart drawn once, and in the research tab one complete set of levels: the strategy board's.
-CHART_TITLE = "K 線與技術指標"
-CHART_TAB_NOTE = "日 K／週 K、成交量、均線與 MACD／RSI／KD／布林指標面板都在上方的 K 線卡。"  # App.tsx
+# #656: the K-line card draws price and volume only; the indicator panels and the chart data table are the 走勢 tab's
+# 技術指標 card (DESIGN_SYSTEM §6, UI_COPY_SPEC §8.2).
+CHART_TITLE = "K 線"  # App.tsx StockPage
+INDICATOR_TITLE = "技術指標"  # StockIndicatorCard
+INDICATOR_TABS = ("MACD", "RSI", "KD", "布林")
+CHART_DATA_TABLE = "查看圖表資料表（最近 30 根）"
 
 
 def stock_chart_order(text: Text) -> str:
@@ -2980,9 +2986,30 @@ def stock_chart_order(text: Text) -> str:
         0 <= chart < summary,
         f"`{CHART_TITLE}` 要在摘要卡 `目前判斷`（{text.at(summary)}）之前",
     )
+    card = text.lines[chart:summary]
+    extra = [line for line in (*INDICATOR_TABS, CHART_DATA_TABLE) if line in card]
+    expect(not extra, f"K 線卡內不該有指標面板或資料表：{extra}")
     tabs = text.find("走勢", summary)
     expect(tabs > summary, "摘要卡之後缺分頁籤 `走勢`")
     return f"頁首 → `{CHART_TITLE}`（{text.at(chart)}）→ `目前判斷` → 分頁籤"
+
+
+def stock_indicator_tab(text: Text, chart_tab: bool) -> str:
+    cards = text.count(lambda line: line == INDICATOR_TITLE)
+    if not chart_tab:
+        expect(cards == 0, f"整行 `{INDICATOR_TITLE}` 有 {cards} 行，預期只在走勢分頁")
+        return "無技術指標卡"
+    expect(cards == 1, f"整行 `{INDICATOR_TITLE}` 有 {cards} 行，預期 1")
+    tabs = text.find("走勢", text.find(SUMMARY_COLUMNS[0]))
+    card = text.find(INDICATOR_TITLE)
+    expect(card > tabs, f"`{INDICATOR_TITLE}`（{text.at(card)}）要在分頁籤 `走勢` 之後")
+    missing = [
+        line
+        for line in (*INDICATOR_TABS, CHART_DATA_TABLE)
+        if text.find(line, card) < 0
+    ]
+    expect(not missing, f"走勢分頁的 `{INDICATOR_TITLE}` 卡缺：{missing}")
+    return f"`{INDICATOR_TITLE}`（{text.at(card)}）有四個指標面板與資料表"
 
 
 def price_text(value: float) -> str:
@@ -2992,9 +3019,13 @@ def price_text(value: float) -> str:
 @check("stocks", "S14", per_stock=True)
 def s14(run: Run, stock: Stock) -> str:
     main, research = stock_text(run, stock), stock_text(run, stock, "research")
-    note = "走勢 " + stock_chart_order(main)
-    expect(main.has(CHART_TAB_NOTE), f"走勢分頁缺整行 `{CHART_TAB_NOTE}`")
-    note += "；進出場 " + stock_chart_order(research)
+    note = "走勢 " + stock_chart_order(main) + "、" + stock_indicator_tab(main, True)
+    note += (
+        "；進出場 "
+        + stock_chart_order(research)
+        + "、"
+        + stock_indicator_tab(research, False)
+    )
     board = stock_payload(run, stock).get("strategy_board") or {}
     sets = [
         row["levels"]
