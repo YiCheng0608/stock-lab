@@ -1660,8 +1660,8 @@ def chip_problems(
             problems.append(
                 f"{where} 是 `{chip.get('label')}` {chip.get('strength')} `{chip.get('text')}`"
             )
-            continue
-        # Issue 675: no background at all, whatever the sign (the text colour is locked by the frontend tests).
+        # Issue 675: no background at all, whatever the sign and even when the value is off (the text colour is
+        # locked by the frontend tests).
         background, opacity = chip.get("background"), chip.get("opacity")
         if not is_transparent(background, opacity):
             named = next(
