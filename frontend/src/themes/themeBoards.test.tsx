@@ -86,7 +86,7 @@ const industryMain = mainOf(industryRow)
 for (const text of ['第 1 名', '#1', '半導體業', '81.25', '催化劑 <b>100</b>', '法人 <b>25</b>']) {
   check(industryMain.includes(text), `industry row shows ${text}: ${industryMain}`)
 }
-// Issue 654 AC-3: the three relative returns are strength blocks (hue by sign, depth by step), the number kept inside.
+// Issue 675 (was Issue 654 AC-3): the three relative returns are plain text coloured by sign, no block; the number kept.
 // The block whose aria-label starts with `label`; null when there is none (never a slice from the string's end).
 const chipOf = (markup: string, label: string) => {
   const at = markup.indexOf(`aria-label="${label}`)
@@ -94,10 +94,10 @@ const chipOf = (markup: string, label: string) => {
 }
 check(chipOf('<p>none</p>', '1 日相對加權指數') === null, 'chipOf: no block is null')
 const chipsOf = (markup: string) => [...markup.matchAll(/<b class="strength-chip[^"]*" role="img" aria-label="([^"]*)" data-strength="([^"]*)">([^<]*)<\/b>/g)].map((match) => match.slice(1).join('|'))
-const boardChips = ['1 日相對加權指數 +1.23%|up-2|+1.23%', '5 日相對加權指數 -0.45%|down-1|-0.45%', '20 日相對加權指數 0.00%|flat-0|0.00%']
-check(JSON.stringify(chipsOf(industryMain)) === JSON.stringify(boardChips), `Issue 654: board row returns are strength blocks: ${JSON.stringify(chipsOf(industryMain))}`)
-check(industryMain.includes('1 日 <b class="strength-chip') && !/tone-(?:up|down|flat)/.test(industryMain), 'Issue 654: the window label stays beside the block and no bare up/down text colour is left on the row')
-check(chipOf(industryMain, '1 日相對加權指數')?.[2] === 'up-2', 'Issue 654: chip lookup')
+const boardChips = ['1 日相對加權指數 +1.23%|up|+1.23%', '5 日相對加權指數 -0.45%|down|-0.45%', '20 日相對加權指數 0.00%|flat|0.00%']
+check(JSON.stringify(chipsOf(industryMain)) === JSON.stringify(boardChips), `Issue 654: board row returns are sign-coloured text: ${JSON.stringify(chipsOf(industryMain))}`)
+check(industryMain.includes('1 日 <b class="strength-chip') && !/tone-(?:up|down|flat)/.test(industryMain), 'Issue 654: the window label stays beside the number and no tone-up/down class is left on the row')
+check(chipOf(industryMain, '1 日相對加權指數')?.[2] === 'up', 'Issue 654: chip lookup')
 check(industryMain.includes('href="/themes/industry-24"'), 'the name links to the detail page')
 // Two lines: the title (name, quality, extremes) and the meta (returns, 今日名單); the score and the 五分項 button beside them.
 check(/^<div class="board-row-main"><span class="board-rank"[^>]*>#1<\/span><p class="board-row-title">.*<\/p><p class="board-row-meta">.*<\/p><span class="board-row-score">.*<\/span><button[^>]*>五分項 ▸<\/button><\/div>$/.test(industryMain), `Issue 522: a row is a title line and a meta line: ${industryMain}`)
@@ -184,7 +184,7 @@ check(detailMarkup.includes('熱度走勢') && !detailMarkup.includes('走勢資
 const components = detailMarkup.slice(detailMarkup.indexOf('五分項'))
 check(['相對報酬', '廣度', '量能', '法人', '催化劑'].every((label) => components.includes(label)) && components.includes('aria-label="相對報酬 100（0–100）" data-score="100"') && components.includes('aria-label="催化劑 無資料" data-score="none"'), 'Issue 654: five components as score bars with null as 「—」')
 check((components.slice(0, components.indexOf('components-returns')).match(/class="score-bar(?: score-bar-empty)?" role="img"/g) ?? []).length === 5, 'Issue 654: the components card draws one bar per component')
-check(JSON.stringify(chipsOf(components.slice(components.indexOf('components-returns')))) === JSON.stringify(['1 日相對加權指數 +3.02%|up-3|+3.02%', '5 日相對加權指數 +7.11%|up-4|+7.11%', '20 日相對加權指數 +12.04%|up-4|+12.04%']), `Issue 654: the card's relative returns are strength blocks: ${JSON.stringify(chipsOf(components))}`)
+check(JSON.stringify(chipsOf(components.slice(components.indexOf('components-returns')))) === JSON.stringify(['1 日相對加權指數 +3.02%|up|+3.02%', '5 日相對加權指數 +7.11%|up|+7.11%', '20 日相對加權指數 +12.04%|up|+12.04%']), `Issue 654: the card's relative returns are sign-coloured text: ${JSON.stringify(chipsOf(components))}`)
 check(detailMarkup.includes('台積電') && detailMarkup.includes('1,085') && detailMarkup.includes('萬潤'), 'member table reads the paginated page')
 check(detailMarkup.includes('<th>證據</th>') && detailMarkup.includes('主要業務 · 關聯度高') && detailMarkup.includes('產品線 · 關聯度低'), 'theme members carry an evidence column')
 check(detailMarkup.includes('href="https://example.test/cowos" target="_blank" rel="noopener noreferrer"'), 'evidence link opens a new tab')
@@ -345,7 +345,7 @@ check(today.includes('資料 2026/09/08') && today.includes('1／5／20 日為�
 const rowOfGroup = (id: string) => today.slice(today.indexOf(`data-theme-id="${id}"`), today.indexOf('</a>', today.indexOf(`data-theme-id="${id}"`)))
 const firstCard = rowOfGroup('industry-1')
 for (const text of ['第 1 名', '產業 1', '81.25', '+1.23%', '-0.45%', '0.00%']) check(firstCard.includes(text), `today row shows ${text}: ${firstCard}`)
-check(JSON.stringify(chipsOf(firstCard)) === JSON.stringify(boardChips), `Issue 654: today group returns are strength blocks: ${JSON.stringify(chipsOf(firstCard))}`)
+check(JSON.stringify(chipsOf(firstCard)) === JSON.stringify(boardChips), `Issue 654: today group returns are sign-coloured text: ${JSON.stringify(chipsOf(firstCard))}`)
 // Two lines: the line with rank, name, quality and score; the line with the three returns. Nothing else.
 check(/^data-theme-id="industry-1"[^>]*><span class="hot-group-line">.*<\/span><span class="hot-group-returns">.*<\/span>$/.test(firstCard), `Issue 510: a row is the head line and the returns line: ${firstCard}`)
 check(!firstCard.includes('badge-success') && !firstCard.includes('熱門族群'), 'Issue 510: a complete group (熱門族群) carries no quality badge')

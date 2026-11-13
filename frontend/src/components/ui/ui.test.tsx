@@ -5,7 +5,7 @@ import { StaticRouter } from 'react-router-dom/server'
 import { Navbar, stockSearchPath } from '../Navbar'
 import { PageDateContext, sameDay } from '../pageDate'
 import { SuggestPopup, suggestAnnouncement } from '../NavSearch'
-import { Badge, Button, Card, DataTable, DateBadge, EmptyState, MarketWidget, STRENGTH_STEPS, ScoreBar, Skeleton, Stat, StrengthChip, Tabs, strengthOf } from '.'
+import { Badge, Button, Card, DataTable, DateBadge, EmptyState, MarketWidget, ScoreBar, Skeleton, Stat, StrengthChip, Tabs, strengthOf } from '.'
 
 // Standalone regression module (no browser, no server): one minimal render check per ui component
 // (DESIGN_SYSTEM §5) and the navbar (§4).
@@ -105,22 +105,22 @@ for (const missing of [null, undefined, Number.NaN]) {
   check(!empty.includes('score-bar-fill') && empty.includes('score-bar-empty') && empty.includes('>—</span>') && !empty.includes('>0<') && empty.includes('aria-label="族群 無資料"') && empty.includes('data-score="none"'), `ScoreBar without data: no fill, 「—」, never 0: ${empty}`)
 }
 
-// StrengthChip (Issue 654, DESIGN_SYSTEM §5 強弱色塊): hue by sign, depth by the step of |%|, the number kept, an aria-label with the window.
-check(STRENGTH_STEPS.join(',') === '1,3,6', 'strength steps are 1／3／6 %')
-const steps: Array<[number | null, string, string]> = [
-  [0.4, '+0.40%', 'up-1'], [0.999, '+1.00%', 'up-2'], [1.2, '+1.20%', 'up-2'], [3.5, '+3.50%', 'up-3'], [6, '+6.00%', 'up-4'], [12.3, '+12.30%', 'up-4'],
-  [-0.45, '-0.45%', 'down-1'], [-2.99, '-2.99%', 'down-2'], [-3, '-3.00%', 'down-3'], [-8, '-8.00%', 'down-4'],
-  [0.001, '0.00%', 'flat-0'], [-0.004, '0.00%', 'flat-0'], [null, '—', 'none-0'],
+// StrengthChip (Issue 675, DESIGN_SYSTEM §5 漲跌文字): plain text in the sign's colour, no block and no steps; the
+// number and the aria-label with the window kept (Issue 654 drew a tinted block per step).
+const signs: Array<[number | null, string, string]> = [
+  [0.4, '+0.40%', 'up'], [0.999, '+1.00%', 'up'], [12.3, '+12.30%', 'up'],
+  [-0.45, '-0.45%', 'down'], [-8, '-8.00%', 'down'],
+  [0.001, '0.00%', 'flat'], [-0.004, '0.00%', 'flat'], [null, '—', 'none'], [Number.NaN, '—', 'none'],
 ]
-for (const [percent, text, state] of steps) {
+for (const [percent, text, tone] of signs) {
   const view = strengthOf(percent)
-  check(view.text === text && `${view.tone}-${view.level}` === state, `strengthOf(${percent}) = ${JSON.stringify(view)}, want ${text} ${state}`)
+  check(JSON.stringify(view) === JSON.stringify({ text, tone }), `strengthOf(${percent}) = ${JSON.stringify(view)}, want ${text} ${tone}`)
 }
 const upChip = html(<StrengthChip label="5 日相對加權指數" percent={3.5} />)
-check(upChip === '<b class="strength-chip strength-up strength-l3" role="img" aria-label="5 日相對加權指數 +3.50%" data-strength="up-3">+3.50%</b>', `StrengthChip up: ${upChip}`)
+check(upChip === '<b class="strength-chip strength-up" role="img" aria-label="5 日相對加權指數 +3.50%" data-strength="up">+3.50%</b>', `StrengthChip up: ${upChip}`)
 const downChip = html(<StrengthChip label="1 日相對加權指數" percent={-0.45} />)
-check(downChip.includes('strength-down strength-l1') && downChip.includes('>-0.45%</b>') && !downChip.includes('strength-up'), `StrengthChip down: ${downChip}`)
+check(downChip === '<b class="strength-chip strength-down" role="img" aria-label="1 日相對加權指數 -0.45%" data-strength="down">-0.45%</b>', `StrengthChip down: ${downChip}`)
 const flatChip = html(<StrengthChip label="1 日相對加權指數" percent={0} />)
-check(flatChip.includes('strength-flat') && !/strength-l\d/.test(flatChip) && flatChip.includes('>0.00%</b>'), `StrengthChip flat: ${flatChip}`)
+check(flatChip === '<b class="strength-chip strength-flat" role="img" aria-label="1 日相對加權指數 0.00%" data-strength="flat">0.00%</b>', `StrengthChip flat: ${flatChip}`)
 const noneChip = html(<StrengthChip label="20 日相對加權指數" percent={null} />)
-check(noneChip.includes('strength-none') && noneChip.includes('aria-label="20 日相對加權指數 無資料"') && noneChip.includes('>—</b>'), `StrengthChip without data: ${noneChip}`)
+check(noneChip === '<b class="strength-chip strength-none" role="img" aria-label="20 日相對加權指數 無資料" data-strength="none">—</b>', `StrengthChip without data: ${noneChip}`)
