@@ -786,6 +786,9 @@ a.symbol-link:hover { color: var(--color-primary); }
   .candidates-terminal .candidate-row-nums > div { justify-items: start; }
   .candidates-terminal .candidate-row-close dd { display: flex; align-items: baseline; gap: var(--space-2); }
   .candidates-terminal .candidate-ai-toggle { grid-column: 3; grid-row: 1; align-self: center; }
+  /* #668: the list column is about 5/11 of the page here, too narrow for the note beside the levels (the auto side
+     column took its full width and squeezed the note to about 30px), so the detail stacks as below 860px. */
+  .candidates-terminal .candidate-detail-body { grid-template-areas: "note" "side" "folds"; grid-template-columns: minmax(0, 1fr); }
 }
 .candidate-row[hidden] { display: none; }
 .candidate-row-main { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--space-5); align-items: center; padding: var(--space-row) var(--space-5); transition: var(--transition); }

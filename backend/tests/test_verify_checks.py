@@ -1413,6 +1413,103 @@ def test_t20_without_candidates_or_a_ready_shot(tmp_path):
         page_checks.t20(_t20_run(tmp_path, meta={"ready": False}))
 
 
+# ---- T21: from 1280px the open detail in the list column (Issue 668) ----
+
+
+def _detail(rank, text=431.6, size=16, overlaps=(), badge=True):
+    return {
+        "rank": rank,
+        "noteState": "done",
+        "textWidth": text,
+        "fontSize": size,
+        "badge": {"left": 477.6, "right": 554.6} if badge else None,
+        "badgeOverlaps": list(overlaps),
+    }
+
+
+def _t21_run(tmp_path, wide=None, normal=None, payload=None, ready=True):
+    def meta(width, details):
+        return {width: {"width": width, "ready": ready, "candidateDetails": details}}
+
+    default = [_detail(1), _detail(2)]
+    metas = {
+        "today": meta(1280, default if normal is None else normal),
+        "today-wide": meta(1440, default if wide is None else wide),
+    }
+    payloads = {"candidates": _candidates() if payload is None else payload}
+    return FakeRun(tmp_path, payloads, {}, metas=metas)
+
+
+def test_t21_wide_shot_is_today_at_1440():
+    assert (page_checks.TODAY_WIDE.path, page_checks.TODAY_WIDE.widths) == (
+        "/",
+        (1440,),
+    )
+
+
+def test_t21_passes_when_the_note_has_room(tmp_path):
+    # The Issue 668 fix on the fixture: the note 431.6px of 16px text, the 14px empty-state line 30.8 characters.
+    run = _t21_run(tmp_path, normal=[_detail(1, 431.6, 14), _detail(2)])
+    assert page_checks.t21(run) == (
+        "today-1280、today-wide-1440：2 列明細的 AI 進出點說明每行至少 20 字、"
+        "AI 推論 badge 不與其他元素重疊"
+    )
+
+
+def test_t21_fails_on_the_issue_668_detail(tmp_path):
+    # The measurement before the fix: the note 24px wide, the badge over 「目標一／二」.
+    squeezed = [
+        _detail(1, 24, 16, ["button.term-button 目標一／二"]),
+        _detail(2, 34.8, 16, ["button.term-button 目標一／二"]),
+    ]
+    with pytest.raises(page_checks.Fail) as error:
+        page_checks.t21(_t21_run(tmp_path, normal=squeezed))
+    assert str(error.value) == (
+        "today-1280 #1 AI 進出點說明內文寬 24px（字級 16px，約 1.5 字）< 20 字；"
+        "today-1280 #1 AI 推論 badge 與其他元素重疊：button.term-button 目標一／二；"
+        "today-1280 #2 AI 進出點說明內文寬 34.8px（字級 16px，約 2.2 字）< 20 字；"
+        "today-1280 #2 AI 推論 badge 與其他元素重疊：button.term-button 目標一／二"
+    )
+
+
+@pytest.mark.parametrize(
+    ("wide", "message"),
+    [
+        ([_detail(1, 300), _detail(2)], r"today-wide-1440 #1 .*約 18\.8 字）< 20 字"),
+        ([_detail(1, None), _detail(2)], "today-wide-1440 #1 沒有 AI 進出點說明的內文"),
+        (
+            [_detail(1), _detail(2, badge=False)],
+            "today-wide-1440 #2 沒有 AI 推論 badge",
+        ),
+        ([_detail(1)], r"today-wide-1440 量到的明細 \[1\]，預期依 items \[1, 2\]"),
+    ],
+)
+def test_t21_fails(tmp_path, wide, message):
+    with pytest.raises(page_checks.Fail, match=message):
+        page_checks.t21(_t21_run(tmp_path, wide=wide))
+
+
+def test_t21_undetermined_without_a_measurement(tmp_path):
+    # A probe that throws reports null (Issue 609); an older screenshot.cjs has no field at all.
+    with pytest.raises(
+        page_checks.Undetermined, match="today-1280 沒有 candidateDetails 量測"
+    ):
+        page_checks.t21(_t21_null(tmp_path))
+    with pytest.raises(page_checks.Undetermined, match="today-1280 未 ready"):
+        page_checks.t21(_t21_run(tmp_path, ready=False))
+
+
+def _t21_null(tmp_path):
+    run = _t21_run(tmp_path)
+    run.metas["today"][1280]["candidateDetails"] = None
+    return run
+
+
+def test_t21_without_candidates(tmp_path):
+    empty = {"status": "success", "trading_date": "2026-10-16", "items": []}
+    assert page_checks.t21(_t21_run(tmp_path, [], [], empty)) == "沒有候選列"
+
+
 # ---- T19 / G9 / S15: score bars and strength blocks (Issue 654) ----
 
 UP, DOWN = "rgb(239, 68, 68)", "rgb(34, 197, 94)"

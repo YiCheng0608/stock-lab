@@ -1840,6 +1840,58 @@ def t20(run: Run) -> str:
     )
 
 
+# ---- T21: from 1280px the open detail in the list column (Issue 668, DESIGN_SYSTEM §5 候選列表) ----
+# The list column is about 5/11 of the page there; before Issue 668 the detail kept the note beside the levels, the
+# levels took their full width and the note was squeezed to about 30px, with the AI badge over 「目標一／二」. The text
+# reads the same however narrow the column is, so screenshot.cjs measures each open detail (candidateDetails).
+TODAY_WIDE = Shot("today-wide", "/", (1440,))
+NOTE_MIN_CHARS = 20  # the note's text fits at least this many CJK characters a line (text width ÷ font size)
+
+
+@check("today", "T21")
+def t21(run: Run) -> str:
+    payload = candidates(run)
+    items = (
+        [] if payload.get("status") == "not_computed" else payload.get("items") or []
+    )
+    want = [item["rank"] for item in items]
+    problems, seen = [], []
+    for shot, width in ((TODAY, 1280), (TODAY_WIDE, 1440)):
+        meta = run.shoot(shot)[width]
+        where = f"{shot.name}-{width}"
+        if not meta.get("ready"):
+            raise Undetermined(f"{where} 未 ready {meta.get('error', '')}".strip())
+        details = meta.get("candidateDetails")
+        if details is None:
+            raise Undetermined(f"{where} 沒有 candidateDetails 量測")
+        ranks = [detail["rank"] for detail in details]
+        expect(ranks == want, f"{where} 量到的明細 {ranks}，預期依 items {want}")
+        for detail in details:
+            at = f"{where} #{detail['rank']}"
+            text, size = detail.get("textWidth"), detail.get("fontSize")
+            if not text or not size:
+                problems.append(f"{at} 沒有 AI 進出點說明的內文")
+            elif text / size < NOTE_MIN_CHARS:
+                problems.append(
+                    f"{at} AI 進出點說明內文寬 {text}px（字級 {size}px，"
+                    f"約 {text / size:.1f} 字）< {NOTE_MIN_CHARS} 字"
+                )
+            if detail.get("badge") is None:
+                problems.append(f"{at} 沒有 AI 推論 badge")
+            elif detail.get("badgeOverlaps"):
+                problems.append(
+                    f"{at} AI 推論 badge 與其他元素重疊：{'、'.join(detail['badgeOverlaps'])}"
+                )
+        seen.append(where)
+    expect(not problems, "；".join(problems))
+    if not items:
+        return "沒有候選列"
+    return (
+        f"{'、'.join(seen)}：{len(items)} 列明細的 AI 進出點說明每行至少 {NOTE_MIN_CHARS} 字、"
+        "AI 推論 badge 不與其他元素重疊"
+    )
+
+
 @check("today", "T14")
 def t14(run: Run) -> str:
     """The today page keeps one market line (加權, 櫃買, the date when not the page date, 看大盤 →), not the four widgets."""
