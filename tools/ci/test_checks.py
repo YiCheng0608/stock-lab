@@ -835,7 +835,7 @@ class WindowsRuntime(unittest.TestCase):
     """The Windows execution layer does not come back (#331, #341).
 
     What runs in the containers (RUNTIME_PATHS) has no Windows logic in its code, and no
-    Windows script is added beside the four Task Scheduler ones the cutover (#342) removes.
+    Windows script is added beside the four the disabled Task Scheduler tasks name (#677).
     """
 
     def check(self, files: dict[str, str]) -> list[str]:
@@ -940,7 +940,7 @@ class WindowsRuntime(unittest.TestCase):
         )
 
     def test_every_windows_script_left_exists(self):
-        # #342 removes them with the cutover; then this list goes too.
+        # They go when the user removes the disabled Task Scheduler tasks (#677); then this list too.
         for name in WINDOWS_SCRIPTS_LEFT:
             self.assertTrue((ROOT / name).is_file(), name)
 

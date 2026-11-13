@@ -1,9 +1,11 @@
-<!-- owns: 排程註冊與管理、Docker 切換與回退 -->
-# Windows 工作排程器（只供回退）
+<!-- owns: 排程註冊與管理 -->
+# Windows 工作排程器（已停用，不再當回退）
 
-本文只供回退：正式排程是 scheduler 容器的 `worker.cli serve`（[排程](../SCHEDULING.md)），Windows 工作排程器在 Docker 切換後停用、留作回退；切換與回退的步驟見 [Docker 切換與回退（cutover.sh）](#docker-切換與回退cutoversh)。其他文件提到工作排程器（切換前）的做法時，只留一句連到本文。
+正式排程只有 scheduler 容器的 `worker.cli serve`（[排程](../SCHEDULING.md)）。Windows 工作排程器在 Docker 切換（#342，2026-11-03）後停用，**不再當回退**（#677）：本文只記它的註冊方式與現況。其他文件提到工作排程器（切換前）的做法時，只留一句連到本文。
 
-**工作排程器的現況**：跑的是發佈 checkout 上 #333 以前的 commit，用發佈 checkout 的 `.venv`。工作帶 `-GitPull`，每次起跑把發佈 checkout 拉到最新 master（#387 期間 `09b2646`→`98179c9`）；`feat/docker`（含 #333）已由 PR #420 合併進 master，工作一啟用，下一次起跑就拉到 #333、以 exit 69 結束（見下面的切換前提）。切換後工作維持停用，`cutover.sh rollback` 重新啟用；移除工作與 `tools/*.ps1`、`tools/ops/Register-*.ps1` 等使用者決定不再回退後另開 Issue。資料在主機的資料目錄：切換時複製進 volume，原檔當時保留；`stock.db` 與 `raw/` 已於 2026-11-05 刪除（[LOCAL](../LOCAL.md#正式位置使用者決定)）。
+**工作排程器的現況**（2026-11-14 以 `Get-ScheduledTask -TaskPath \stock-lab\` 讀回）：`daily`、`news`、`watchdog` 三個工作都是 `Disabled`，最後一次執行在 2026-11-02～03。它們的動作指向發佈 checkout 的 `.venv` 並帶 `-GitPull`；發佈 checkout 現在停在 `deploy.sh` 部署的 tag，含 #333（job 只在 Linux 執行），工作一啟用就會以 exit 69 結束，所以**不要啟用**。要不要從主機移除這些工作與 `tools/*.ps1`、`tools/ops/Register-*.ps1`，由使用者決定後另開 Issue。資料在 volume `stock-data`；主機資料目錄的 `stock.db` 與 `raw/` 已於 2026-11-05 刪除（[LOCAL](../LOCAL.md#正式位置使用者決定)）。
+
+**為什麼不能回退**（#677 AC-1，[查證](https://github.com/YiCheng0608/stock-lab/issues/677#issuecomment-6862287753)）：切換時的回退腳本 `tools/ops/cutover.sh rollback` 會把發佈 checkout 切回 `pre-docker`（`0f99fea`，alembic head `0022_margin_lists`）並啟用工作；正式 DB 之後已升到 `0031` 以上，舊程式的 `init_db` 對它是 `Can't locate revision`，主機也已沒有切換前的 DB。腳本與它的文件已刪除，歷史版本見 [`ac08b1bb` 的本文「Docker 切換與回退（cutover.sh）」](https://github.com/YiCheng0608/stock-lab/blob/ac08b1bb786fa52fae3ef8334abbe75cb5930b89/docs/ops/platform/windows.md#docker-切換與回退cutoversh)與 [`tools/ops/cutover.sh`](https://github.com/YiCheng0608/stock-lab/blob/ac08b1bb786fa52fae3ef8334abbe75cb5930b89/tools/ops/cutover.sh)；它只適用 schema 不超過 `0022` 的 DB。
 
 ## daily／news 工作的註冊與管理
 
@@ -48,7 +50,7 @@
 
 ## 看門狗與事件 monitor 的工作
 
-正式的看門狗與事件 monitor 由 scheduler 容器的 serve 執行（[排程看門狗](../WATCHDOG.md)、[統籌事件 monitor](../MONITOR.md)），判定、日誌與鎖兩邊相同；以下是工作排程器的版本，只在回退時使用。
+正式的看門狗與事件 monitor 由 scheduler 容器的 serve 執行（[排程看門狗](../WATCHDOG.md)、[統籌事件 monitor](../MONITOR.md)），判定、日誌與鎖兩邊相同；以下是工作排程器的版本（切換前），已停用。
 
 ### 事件 monitor（`\stock-lab\monitor`）
 
@@ -87,76 +89,3 @@
 | 手動核對某交易日 | `python tools/ops/watchdog_helper.py data-check <stock.db> <YYYY-MM-DD> [--offline] [--all]`（唯讀，不記日誌、不留言） |
 
 工作以目前使用者、Interactive logon、隱藏執行，登入時才跑，同時只跑一個（`IgnoreNew`），10 分鐘逾時；找不到 Python、不取鎖的那一輪由工作的「前一次未結束不另起」擋重疊。腳本路徑寫在工作參數裡，腳本改名或搬移後要在發佈 checkout 重跑「註冊或更新」。
-
-## Docker 切換與回退（cutover.sh）
-
-[`tools/ops/cutover.sh`](../../../tools/ops/cutover.sh)（#342，決定 [6588843632](https://github.com/YiCheng0608/stock-lab/issues/342#issuecomment-6588843632)）把排程從工作排程器一次切到 scheduler 容器，`cutover.sh rollback` 切回。統籌在台北白天、避開偶數整點的 news 與 18:30～21:30 執行（[#1 6582767651](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6582767651) 第 7 點），在 master 管理 checkout 以 Git Bash 跑（腳本在發佈 checkout 裡就拒絕）。每一步先印它執行的命令，最後印一列 JSON：`status` 是 `done`、`dry-run`、`refused` 或 `failed`，`steps` 是做完的步驟。`--dry-run` 只做檢查並列出全部步驟，不改工作排程器、checkout、資料目錄與 volume。結束碼：0 完成（或乾跑沒有問題）；1 拒絕，什麼都沒改；3 中途失敗，`steps` 列出已做的，以 `rollback` 復原；2／64 環境或參數錯誤。
-
-**切換前提**（#342，PR #346 review S1）：#333 起 job 只在 Linux 執行，工作排程器跑到含 #333 的 commit 時 daily、news、看門狗都以 69 結束，不寫日誌也不留言，排程會無聲停擺。工作排程器的工作帶 `-GitPull` 跟著 master，而 master 自 `feat/docker` 合併（PR #420）起已含 #333，所以工作要維持停用；`cutover.sh` 在發佈 checkout 已含 #333 而仍有工作啟用時拒絕。
-
-**順序**（切換時段）：
-
-1. 停用工作排程器的三個工作（工作帶 `-GitPull`，`feat/docker` 一進 master 就會被拉到 #333）：`Disable-ScheduledTask -TaskPath \stock-lab\ -TaskName daily`（news、watchdog 同），讀回 `Get-ScheduledTask -TaskPath \stock-lab\` 都是 `Disabled`、沒有 `Running`。
-2. 合併 `feat/docker` 進 master（#420），等 merge commit 的 push CI（約 25 分），在它上面打 tag。
-3. 開始前量正式 `raw/` 的大小（`du -sh <資料目錄>/raw`）並確認 Docker Desktop 的磁碟夠放 DB 快照與 `raw/` 兩份：#342 演練只搬了 73 MB，正式的 `docker cp` 與 `chown -R` 會久得多，時段要留足。也確認沒有從發佈 checkout `.venv` 常駐的程序（有的話 disable 那一步會等到逾時）。
-4. `bash tools/ops/cutover.sh --dry-run --tag <tag>` 看檢查與步驟，再去掉 `--dry-run` 執行。失敗時（exit 3）照下面的「回退」以**同一組選項**（尤其 `--work-dir`）跑 `cutover.sh rollback`，不要只手動啟用工作：發佈 checkout 還在 master，下一個 job 的 `git pull` 會拉到 #333 並以 69 結束。切換的輸出（JSON 的 `steps`）留著：有沒有 `verify` 決定回退是 early 還是 full。
-5. 第一次 daily 之後，把它的 `schedule_runs.summary_json.runtime` 與看門狗 `invariant_deploy_image` 貼在 #342 與 #331（#342 AC-4）。
-
-**切換的檢查**（不符就拒絕，什麼都不改）：
-
-- env file（`--env-file`，預設發佈 checkout 根目錄的 `.env`）這些 key 有值：`CLAUDE_CODE_OAUTH_TOKEN`、`GH_TOKEN`、`STOCK_WAKE_TOKEN`、`STOCK_MONITOR`、`STOCK_COORDINATION_DIR`（`--require-keys` 可改）；沒有 `ANTHROPIC_API_KEY`／`ANTHROPIC_AUTH_TOKEN`（[容器內的 claude 與 gh 認證（.env）](../SETUP.md#容器內的-claude-與-gh-認證env)）。以 `grep -q` 比對 key 那一行（`KEY=""` 這類空引號算沒有值），值不讀進腳本也不印出。
-- 發佈 checkout 沒有未 commit 的改動；已含 #333（`d408ae7`）而仍有工作啟用時拒絕：那些工作會以 69 結束，排程已無聲停擺，先查原因（決定第 9 點）。
-- `pre-docker` 要停的 commit（`--pre-docker`，預設發佈 checkout 的 HEAD）不能含 #333；工作在停用前已拉到 #333 時，以 `--pre-docker 0f99fea` 指定。
-- 沒有工作在執行；project 的 `stock-data` volume 還不存在（volume 由 compose 在 volume 那一步建立，不用 `docker volume create`）；project 沒有容器在跑；資料目錄有 `stock.db`、`raw/`、`logs/`，`logs/` 裡沒有 `cutover.json`（它會被搬進 volume，回退會誤判切換已做完 verify）；Docker 能用。
-
-**切換的步驟**：
-
-| 步驟 | 做什麼 |
-| --- | --- |
-| pre-docker | 發佈 checkout 建本機 branch `pre-docker`（不 checkout），upstream 設成它自己（`branch.pre-docker.remote=.`、`branch.pre-docker.merge=refs/heads/pre-docker`），回退後 `git pull --ff-only` 回 up to date，不會被拉到 master（PR #420 review H1） |
-| disable | 每個工作 `Disable-ScheduledTask`（已停用的照樣讀回），等到沒有工作在跑、也沒有發佈 checkout `.venv` 的程序（`stock.db` 沒有 writer），最多 `--wait-timeout` 秒（預設 900） |
-| snapshot | `copy_db.py` 以 SQLite backup API 把 `stock.db` 複製到 `--work-dir`（預設 `<資料目錄>-cutover`，不能在資料目錄裡）的 `db/`，記各表列數；不裸複製有 WAL 的主檔（[安全升級與復原順序](../SETUP.md#安全升級與復原順序)） |
-| volume | 以 master 管理 checkout 的 compose 檔 `compose run -d` 一個輔助容器（api 服務、root、`sleep`），compose 因此建立 `<project>_stock-data` 與它的 label；image `<project>-backend:cutover`，沒有就先 build（`compose run` 沒有 `--no-build`，image 已在就不會 build） |
-| copy | `docker cp`：快照到 `/data/stock.db`、`raw/` 到 `/data/raw`、`logs/` 到 `/data/logs`；主機原檔保留 |
-| chown | `chown -R 1000:1000 /data`：`docker cp` 寫入的是 root 的檔，image 以 uid 1000 執行（review M1） |
-| verify | 以 uid 1000：`integrity_check` 是 ok、各表列數與快照相同（[`cutover_db.py`](../../../tools/ops/cutover_db.py)，結果的表數與總列數印在日誌）、`raw/` 的檔數與主機相同（`logs/` 不同只警告：統籌的心跳與壓縮紀錄在主機持續寫入）、`/data`、`stock.db`、`raw`、`logs` 都是 `1000:1000`；寫入 `/data/logs/cutover.json`（時間、來源、HEAD），回退以它為界取回新檔 |
-| helper | 刪掉輔助容器，volume 留著 |
-| start | `deploy.sh <tag>`（[RELEASE](../../RELEASE.md#部署)：checkout tag、build、部署記錄、`up -d --wait`、讀回、#1 留言；`--env-file`、`--web-port`、`--api-port`、`--no-comment` 傳給它），之後刪掉 `<project>-backend:cutover`。演練用 `--no-deploy`：以 master 管理 checkout 的 compose 檔與輔助 image 只起 api 與 scheduler |
-| readback | `docker compose ls`、容器與 image、scheduler 日誌的 `serve ready`；在 scheduler 以 uid 1000 跑一次 `job news --trigger manual --skip-news-llm --min-free-memory-gb 1`（真的寫一次 DB 與日誌；`--no-write-check` 不跑），印出新檔的擁有者 |
-
-**舊 raw 的路徑**（決定第 1 點，review H2）：`raw_payloads.payload_path` 是 capture 當時的絕對路徑，切換前是 `C:\Users\YiCheng\stock-lab-data\raw\...`。切換不改寫 DB，回退到 Windows 時舊路徑仍然有效。容器內讀 raw 的程式都經 [`app.raw_paths.payload_file`](../../../backend/app/raw_paths.py)：路徑存在就照用；不存在、且在舊資料目錄的 `raw` 底下（`\` 或 `/`，大小寫不拘）就讀 `STOCK_RAW_DIR`（compose 固定 `/data/raw`）下的同一相對路徑。看門狗的 data-check 把 `STOCK_RAW_DIR` 指到暫存目錄，舊路徑仍對應到真正的 raw（`STOCK_STORED_RAW_DIR`）。標的狀態同步讀不到行情 raw 時，記在該交易所 summary 的 `unreadable_quote_tables`（前 20 個 id 在 `unreadable_raw_payload_ids`），dormancy 記 `unverifiable`、原因 `unreadable quote table`，不再靜默略過。
-
-**回退**（`cutover.sh rollback`，決定第 2 點；PR #424 review）：不論切換停在哪一步，最後都是發佈 checkout 在 `pre-docker`、`git pull --ff-only` exit 0、三個工作啟用。`pre-docker` 不存在時建在 `--pre-docker`（預設 HEAD，不能含 #333），upstream 設成它自己；已存在的不能含 #333，upstream 要是它自己（沒設就設）。對 DB 怎麼做，由一個唯讀掛 volume、跑完即刪的容器讀 `/data/stock.db` 與 `/data/logs/cutover.json` 決定；Docker 不能用時改看主機側的切換紀錄（見表下）：
-
-| 方式 | 條件 | 步驟 |
-| --- | --- | --- |
-| early | 沒有 volume，或 volume 沒有 `cutover.json`（切換停在 verify 做完之前：停用後等待逾時、`copy_db.py`、image build、`compose run`、`docker cp` 失敗），serve 從沒在它上面跑過 | 主機 `stock.db` 不動，仍是正式 DB：helper（`docker rm -f` 輔助容器）、checkout、enable。手動停用工作後、還沒跑 cutover.sh 就放棄時也用這條（`pre-docker` 由它建立）。project 有 one-off 以外的容器卻沒有 `cutover.json` 時拒絕（狀態不明，人工確認） |
-| full | volume 有 `cutover.json`：serve 可能寫過 volume | 下表 stop～enable。拒絕：有工作不是 `Disabled`（含 `Running`）；volume 沒有 `/data/stock.db`；主機 `stock.db` 或 `-wal` 在 `cutover.json` 的時間之後改過（有人寫過主機 DB，不以 volume 的取代） |
-| resume | `<work>/rollback/installed.json` 記的是這次切換的 `cutover.json` 時間：前一次回退已裝回 DB、之後失敗（例如 `--start-news` 的 news 不是 0）；或 `installing.json` 記的是這次切換、主機 `stock.db` 與 `<work>/rollback/stock.db` 逐位元組相同（上一次回退在裝回之後、寫 `installed.json` 之前中斷，先補寫它） | 工作已啟用、Windows 可能已寫入主機 DB，不再取代：stop、checkout、enable。`installing.json` 記的是這次切換、但主機 `stock.db` 不同且在切換後改過時拒絕，訊息寫出原檔所在的 `backups/pre-rollback-*`，由人工判斷哪一份是正式 DB |
-
-full 的步驟：
-
-| 步驟 | 做什麼 |
-| --- | --- |
-| stop | `docker stop` project 所有在跑的容器（不 `down`，volume 留著） |
-| snapshot | 以那個 image 起一個 uid 1000 的容器掛 volume，容器內 `copy_db.py` 取 `/data/stock.db` 的快照，`docker cp` 到 `<work>/rollback/stock.db`；比 `/data/logs/cutover.json` 新的 raw 取回主機的 `raw/`（已有的檔不覆寫），新的日誌取回 `<work>/rollback/logs/` |
-| paths | 快照裡容器寫的 `payload_path`（`/data/raw/...`）改成主機 `raw/` 的同一檔（Windows 寫法），`pre-docker` 的程式照原路徑讀；`integrity_check` 要是 ok |
-| install | 先寫 `<work>/rollback/installing.json`（這次切換的時間與備份目錄），再把資料目錄的 `stock.db`、`-wal`、`-shm` 搬到 `backups/pre-rollback-<UTC 時間>/`，快照成為 `stock.db`，記 `<work>/rollback/installed.json`（之後重跑就是 resume） |
-| checkout | 發佈 checkout 的 `pre-docker`（見上），`git checkout pre-docker`，`git pull --ff-only` 必須 exit 0 |
-| enable | 每個工作 `Enable-ScheduledTask` 並讀回；`--start-news` 另以 `Start-ScheduledTask` 跑一次 news、等它結束，`LastTaskResult` 要是 0 |
-
-**Docker 不能用時**（找不到 docker、`docker compose` 不能執行，或 daemon 60 秒內沒有回應：切換常因 Docker Desktop／WSL 掛掉而失敗）：讀不到 volume，改看切換開始時與每做完一步就寫的主機側紀錄 `<work>/cutover-steps.json`（project、時間、`steps`）。紀錄的 `steps` 沒有 `verify`（serve 沒跑過）就走 early、完全不碰 Docker：checkout、enable，輔助容器與 volume 等 Docker 回來再處理。紀錄有 `verify`（serve 可能寫過 volume）或沒有紀錄（這個 `--work-dir` 沒跑過切換，或選項不同）時拒絕：先讓 Docker 回來再跑 rollback。Docker 正常時若紀錄有 `verify`、volume 卻沒有 `cutover.json`，也拒絕（狀態不明）。切換本身在 Docker 不能用時 exit 2，什麼都不改。
-
-- **紀錄只算一次**：回退（任一方式）做完時，把紀錄改名歸檔為 `<work>/cutover-steps.rolled-back-<UTC>.json`。Docker 不能用時，回退只接受還沒歸檔的紀錄；只有歸檔過的就拒絕，因為之後的切換可能用了別的 `--work-dir`，serve 可能寫過它的 volume。切換開始時，若 `--work-dir` 裡有還沒歸檔的紀錄也拒絕：先回退那次切換；確定已處理完時，手動改名歸檔。
-- **Docker 不能用而走 early 之後**：Docker 回來時，用同一組選項再跑一次 `cutover.sh rollback`。
-  - volume 沒有 `cutover.json`：照 early 刪掉輔助容器（checkout、enable 照做，結果不變）。
-  - volume 已有 `cutover.json`：切換在寫完它、還沒記 `verify` 時中斷。這時 full 會因工作已啟用而拒絕，但 serve 沒跑過，主機 DB 才是正式的。
-  - 兩種情況下 volume 都留著；要再切換時，由使用者確認後執行 `docker volume rm <project>_stock-data`。
-- **已裝回（有 `installed.json`）之後 Docker 才掛掉**：紀錄有 `verify`，回退會拒絕。等 Docker 回來，用同一組選項再跑，就是 resume（stop、checkout、enable）。容器先前已 `docker stop`，`restart: unless-stopped` 不會自己起來，等待期間不會有兩邊同時寫 DB。
-- **install 中斷**：重跑時，若 `installing.json` 記的是這次切換，回退先印一行「比對中」，再逐位元組比對主機 `stock.db` 與快照（數 GB 要幾分鐘）。若主檔已搬進備份、`-wal`／`-shm` 還在主機，就沿用 `installing.json` 的備份目錄，讓原 DB 的檔留在同一處。備份目錄已有同名檔時拒絕，不覆寫。
-
-回退後 volume、image 與停止的容器都留著，刪不刪由使用者決定。**volume 建立之後失敗就不能重跑切換**：切換只寫入 compose 新建的 volume，舊的在就拒絕；`docker volume rm <project>_stock-data` 會被 hook 擋（[GUARDRAILS](../../GUARDRAILS.md)），由使用者確認裡面沒有要留的資料後自己刪，再從頭切換。
-
-切換在 start 之後失敗（讀回：`serve ready` 沒出現、news job 不是 0）時，部署本身已完成，腳本會這樣提示：先查原因（偶數整點 serve 自己的 news、記憶體），不要直接回退。
-
-**演練**：用正式 DB 的副本（`copy_db.py`）、只含幾個交易日 raw 的測試資料目錄、發佈 checkout 的 clone、測試用的工作排程器資料夾（例如 `\t342\`，工作的動作是無害的命令）與 `t<issue>` 開頭的 project，以 `--checkout`、`--data-dir`、`--work-dir`、`--task-path`、`--project`、`--env-file <替身>`、`--no-deploy` 指定。正式的 `\stock-lab\` 只跑 `--dry-run`。檢查、乾跑、切換在各步失敗後的回退與三種回退方式的測試是 `backend/tests/test_cutover.py`（假 docker、假 PowerShell）。

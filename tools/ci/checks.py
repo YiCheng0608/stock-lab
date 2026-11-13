@@ -247,7 +247,7 @@ RUNTIME_PATHS: tuple[str, ...] = (
     "tools/ops/http_orca.sh",
 )
 # Windows scripts anywhere in the repository; only the Task Scheduler registration the
-# production schedule still runs on until the cutover (#342), which removes them and this list.
+# disabled tasks still name (#342, #677). Removing them and this list waits for the user.
 WINDOWS_SCRIPT = re.compile(r"\.(?:ps1|psm1|psd1|bat|cmd|vbs)$", re.I)
 WINDOWS_SCRIPTS_LEFT: tuple[str, ...] = (
     "tools/Invoke-WorkerJob.ps1",
