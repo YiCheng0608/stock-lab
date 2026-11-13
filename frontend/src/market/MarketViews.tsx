@@ -11,7 +11,6 @@ import {
   INDEX_CHART_ID,
   INDEX_CHART_TITLE_ID,
   INDEX_SELECT_HINT,
-  INDEX_SOURCE_NOTE,
   INDEX_SPECS,
   INDEX_TABLE_TITLE,
   MA60_LABEL,
@@ -219,7 +218,6 @@ export function IndexTableView({ overview, selected, onSelect }: { overview: Mar
         })}
       />
       {roll && <p className="small-note market-index-note">{roll}</p>}
-      <p className="small-note market-index-note">{INDEX_SOURCE_NOTE}</p>
       <p className="small-note market-index-note">{INDEX_SELECT_HINT}</p>
     </>
   )
