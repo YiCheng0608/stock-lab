@@ -181,15 +181,20 @@ const StockTable = component('StockTable')
 const directory = render('StockTable', () => <StockTable {...{ rows: directoryRows, dataAsOf: '2026-10-22' }} />)
 checkAligned('個股清單', directory, ['最近收盤（元）'])
 check(bodyText(directory).includes('21.10') && bodyText(directory).includes('2,510.00'), '個股清單: a column across stocks keeps two decimals')
-// #300 phone cards (DESIGN_SYSTEM §5 個股清單, §5.1): name and close → 市場 · 類型 → action and quality; no table to scroll.
+// #300 phone cards (DESIGN_SYSTEM §5 個股清單, §5.1): name and close, then (#666) the action with 市場 · 類型 in small type at
+// its right; no table to scroll.
 const count = (markup: string, needle: string) => markup.split(needle).length - 1
 const plain = (markup: string) => markup.replace(/<!-- -->/g, '').replace(/<[^>]+>/g, '\n').split('\n').map((line) => line.trim()).filter(Boolean)
 const directoryCards = directory.slice(directory.indexOf('class="card-list stock-cards"'))
 const stockCards = directoryCards.split('<div class="stock-card">').slice(1)
 check(stockCards.length === 2 && !/<table/.test(directoryCards), `個股清單手機卡: one card per row and no table, got ${stockCards.length}`)
-check(plain(stockCards[0]).join('|') === '1742 台蠟|21.10|上市 · 股票|尚無研究動作', `個股清單手機卡: field order, got ${plain(stockCards[0]).join('|')}`)
+check(plain(stockCards[0]).join('|') === '1742 台蠟|21.10|尚無研究動作|上市 · 股票', `個股清單手機卡: field order, got ${plain(stockCards[0]).join('|')}`)
 check(plain(stockCards[1]).slice(0, 2).join('|') === '2330 台積電|2,510.00', `個股清單手機卡: two decimals with thousands, got ${plain(stockCards[1]).join('|')}`)
-check(/<div class="stock-card-price">[^<]*<\/div>/.test(stockCards[0]) && directoryCards.indexOf('class="table-note"') < directoryCards.indexOf('class="stock-card"'), '個股清單手機卡: the close is one text run and the unit note leads the cards')
+check(/<div class="stock-card-price">[^<]*<\/div>/.test(stockCards[0]), '個股清單手機卡: the close is one text run')
+// #666: two lines; the second is the action, then 市場 · 類型 (the same text as before, in small type).
+check(/<div class="stock-card-foot"><div class="stock-card-action">尚無研究動作<\/div><div class="stock-card-meta">上市 · 股票<\/div><\/div>/.test(stockCards[0]), `個股清單手機卡: action then 市場 · 類型 on one line, got ${stockCards[0]}`)
+// #666: the unit note left the table and the cards for the title's 說明 fold.
+check(!directory.includes('class="table-note"') && !plain(directory).some((line) => line.startsWith('單位：')), '個股清單: no unit note over the table or the cards (it is in 說明)')
 const staleDirectory = render('StockTable stale', () => <StockTable {...{ rows: [{ ...directoryRows[0], price_as_of: '2026-10-20' }], dataAsOf: '2026-10-22' }} />)
 const staleCard = staleDirectory.slice(staleDirectory.indexOf('<div class="stock-card">'))
 check(plain(staleCard).slice(0, 3).join('|') === '1742 台蠟|21.10|（2026/10/20）', `個股清單手機卡: an older close carries its date under it, got ${plain(staleCard).join('|')}`)
@@ -214,9 +219,16 @@ check(gapTableRows[1]?.endsWith('|需人工判讀') && !gapTableRows[1].includes
 check(gapTableRows[2]?.endsWith('|暫無條件'), `個股清單: a complete row shows its label alone, got ${gapTableRows[2]}`)
 check(!gapDirectory.includes('class="pill"'), '個股清單: no separate 策略判斷資料 pill on the table or the cards')
 const gapCards = gapDirectory.slice(gapDirectory.indexOf('class="card-list stock-cards"')).split('<div class="stock-card">').slice(1)
-check(plain(gapCards[0] ?? '').slice(-2).join('|') === '暫不行動|缺少 20 日有效行情' && plain(gapCards[1] ?? '').slice(-1)[0] === '需人工判讀', `個股清單手機卡: the same action cell, got ${plain(gapCards[0] ?? '').join('|')} / ${plain(gapCards[1] ?? '').join('|')}`)
+check(plain(gapCards[0] ?? '').slice(-3).join('|') === '暫不行動|缺少 20 日有效行情|上市 · 股票' && plain(gapCards[1] ?? '').slice(-2)[0] === '需人工判讀', `個股清單手機卡: the same action cell, got ${plain(gapCards[0] ?? '').join('|')} / ${plain(gapCards[1] ?? '').join('|')}`)
 const stockDirectoryGap = AppModule.stockDirectoryGap
 check(stockDirectoryGap({ action_state: 'data_insufficient', missing_data_priority: [] }) === null && stockDirectoryGap({ action_state: 'data_insufficient' }) === null, '個股清單: no missing item, no note')
+// #666: the old eyebrow, lead and unit note are one 說明 fold on the title line, closed, with the same sentences.
+const StockDirectoryHelp = component('StockDirectoryHelp')
+const directoryHelp = render('StockDirectoryHelp', () => <StockDirectoryHelp />)
+check(directoryHelp.startsWith('<details class="details page-help"><summary>說明</summary>'), `個股清單說明: a closed 說明 fold, got ${directoryHelp.slice(0, 80)}`)
+check(plain(directoryHelp).join('|') === '說明|市場標的目錄：股票、ETF 與新上市標的分開標示；行動與缺資料優先級只來自已驗證官方快照。|單位：價格為各標的報價幣別的元，指數為點。空白表示未提供資料或數值待核實；最近收盤早於最新交易日時，下方括號標出它的日期。', `個股清單說明: the same sentences as before, got ${plain(directoryHelp).join('|')}`)
+const stockDirectoryCountText = (AppModule as unknown as { stockDirectoryCountText?: (meta: Record<string, unknown>) => string }).stockDirectoryCountText
+check(stockDirectoryCountText?.({ total: 1234 }) === '共 1,234 筆' && stockDirectoryCountText?.({}) === '共 0 筆', '個股清單: the filter row ends with 「共 N 筆」')
 
 // Issue 602: sorting is the API's sort parameter, and changing it (or any filter) starts again from page 1.
 const { changeStockDirectory, stockDirectoryParams, STOCK_SORTS, DEFAULT_STOCK_SORT } = AppModule

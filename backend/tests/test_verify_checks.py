@@ -915,17 +915,20 @@ US_PAGE_ROW = (
 # Issue 633: the page lists the three Taiwan rows; the API (_indexes) still has the US rows.
 # #661 (decision 6835320079 D-c): no 資料日 column; a row of another day than the page date
 # (2026/10/22) has its 「資料 …」 line under the name, so the cells follow on that line.
+# #666: the 來源 sentence is the first line of the table's 資料說明, not under the table.
 INDEX_PAGE = (
     "大盤概況\n指數總表\n資料說明\n"
+    f"{page_checks.INDEX_SOURCE_NOTE}\n"
     f"{ATTRIBUTION}\n"
     "指數\t收盤（點）\t漲跌\t漲跌幅\t相對季線（MA60）\t來源\n"
     "加權指數\t46,041.43\t-846.34\t-1.81%\t之上 季線 44,012.50\t臺灣證券交易所\n"
     "櫃買指數\n資料 2026/10/21 非最新\t395.42\t+2.10\t+0.53%\t資料不足（42／60 日）\t證券櫃檯買賣中心\n"
     "台指期近月 合約 2026/11\t46,110\t換月\t換月\t之下 季線 46,502\t臺灣期貨交易所\n"
     "台指期近月 2026/10/22 換月（2026/10 → 2026/11），與前一筆是不同合約，不計漲跌\n"
-    f"{page_checks.INDEX_SOURCE_NOTE}\n"
+    "點一列，下方圖表切換為該指數的日 K\n"
     "技術指標 indicators/v1\n加權指數日線\n"
 )
+INDEX_HINT = "點一列，下方圖表切換為該指數的日 K\n"
 TX_ROW = (
     "台指期近月 合約 2026/11\t46,110\t換月\t換月\t之下 季線 46,502\t臺灣期貨交易所\n"
 )
@@ -962,9 +965,18 @@ def test_t16_states_only_a_row_of_another_day(tmp_path):
     with pytest.raises(page_checks.Fail, match="仍有 `資料日` 欄"):
         page_checks.t16(FakeRun(tmp_path, _indexes(), {"market-1280": page}))
     page = INDEX_PAGE.replace(
-        f"{ATTRIBUTION}\n", f"{page_checks.INDEX_SOURCE_NOTE}\n{ATTRIBUTION}\n"
+        INDEX_HINT, f"{page_checks.INDEX_SOURCE_NOTE}\n{INDEX_HINT}"
     )
     with pytest.raises(page_checks.Fail, match="2 行，預期 1 行"):
+        page_checks.t16(FakeRun(tmp_path, _indexes(), {"market-1280": page}))
+
+
+def test_t16_needs_the_source_in_the_table_explanation(tmp_path):
+    # #666: the 來源 sentence under the table (the layout before) fails; it belongs in 資料說明.
+    page = INDEX_PAGE.replace(f"{page_checks.INDEX_SOURCE_NOTE}\n", "").replace(
+        INDEX_HINT, f"{page_checks.INDEX_SOURCE_NOTE}\n{INDEX_HINT}"
+    )
+    with pytest.raises(page_checks.Fail, match="不在 `指數總表` 的資料說明內"):
         page_checks.t16(FakeRun(tmp_path, _indexes(), {"market-1280": page}))
 
 
@@ -1166,7 +1178,8 @@ G3_ROWS = {
     2: "#2\n半導體\n催化劑 94・法人 0\n1 日 -0.12%\n5 日 +1.00%\n20 日 —\n分數 40.10\n五分項 ▾\n"
     "相對報酬\n13\n廣度\n—\n量能\n50\n法人\n0\n催化劑\n94\n成員（檔）\n70／82\n族群詳情 →\n",
 }
-G3_HEAD = "族群排行\n族群\n產業\n題材\n產業榜 · 共 2 個族群\n資料 2026/11/05\n說明\n"
+# #666: the board line is 「共 N 個」 (the tab names the board).
+G3_HEAD = "族群排行\n族群\n產業\n題材\n共 2 個\n資料 2026/11/05\n說明\n"
 # Before Issue 522: the 12-column table at 1280 and one card per group at 390.
 G3_OLD_WIDE = (
     "產業榜 · 共 2 個族群\n資料 2026/11/05\n"
@@ -1213,7 +1226,7 @@ def test_g3_fails_when_a_component_differs_from_the_api(tmp_path):
 
 def test_g4_fails_when_the_suggestions_are_back(tmp_path):
     # Issue 627: the themes page dropped the news theme suggestions.
-    run = FakeRun(tmp_path, {}, {"themes-1280": "族群榜\n產業榜 · 共 2 個族群\n"})
+    run = FakeRun(tmp_path, {}, {"themes-1280": "族群榜\n共 2 個\n"})
     assert "沒有新聞題材建議區" in page_checks.g4(run)
     page = "族群榜\n新聞聚合 · AI 推論\n新聞題材建議\n2 個建議\n"
     run = FakeRun(tmp_path, {}, {"themes-1280": page})

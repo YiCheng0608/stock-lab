@@ -126,6 +126,9 @@ check(count(page, 'class="card-title"') === 1 && page.includes('>加權指數日
 check(!page.includes('market-us-title') && !page.includes('market-us-chart') && !page.includes('id="market-tpex-chart-title"'), 'no separate US panel or folded US charts, no second chart card')
 check(!/大盤狀態/.test(pageText), 'no placeholder for 大盤狀態 (Issue 546) yet')
 check(pageText.includes('上市、上櫃的收盤概況，以及加權、櫃買、台指期近月三檔指數的總表；點一列看它的日 K。'), 'the page lead names the table')
+// #666: the lead is in a closed 說明 fold beside the title, not a paragraph under it.
+const pageTitle = slice(page, '<section class="page-title news-page-title">', '</section>')
+check(/^<section class="page-title news-page-title"><h1>大盤<\/h1><details class="details page-help"><summary>說明<\/summary><div class="page-help-body"><p>上市、上櫃的收盤概況，以及加權、櫃買、台指期近月三檔指數的總表；點一列看它的日 K。<\/p><\/div><\/details>$/.test(pageTitle), `大盤頁首: h1 then the closed 說明 holding the lead, got ${pageTitle}`)
 const overviewPanel = slice(page, 'id="market-overview-title"', 'id="market-indexes-title"')
 for (const value of ['大盤概況', '資料 2026/10/22', '加權指數', '46,041.43', '-846.34（-1.81%）', '櫃買指數', '381.69', '-13.73（-3.47%）', '上市 9,334.37 集中市場總計', '上櫃 2,255.45 上櫃股票', '上市 上漲 247 · 下跌 756 · 平盤 74（3／5）', '上櫃 上漲 146 · 下跌 659 · 平盤 63（17／11）']) {
   check(text(overviewPanel).includes(value), `大盤概況: shows 「${value}」`)
@@ -156,8 +159,10 @@ const lateTx = indexRows().map((row) => row.key === 'tx' ? { ...row, trading_dat
 check(rowIn(tableOn('2026-10-22', lateTx), 'tx').includes('資料 2026/10/21 非最新'), `TX a day late: 「資料 2026/10/21 非最新」 under its name: ${rowIn(tableOn('2026-10-22', lateTx), 'tx')}`)
 const noData = indexRows().map((row): IndexRow => row.key === 'tx' ? { ...row, status: 'unavailable', trading_date: undefined, reason: 'fetch_failed', last_attempt_date: '2026-10-22' } : row)
 check(rowIn(tableOn('2026-10-22', noData), 'tx').includes('無資料：最近一次擷取失敗（2026/10/22）'), 'a row without data still says why, page date or not')
-// S-a: the 來源 sentence once, under the table (not again in 資料說明).
+// S-a: the 來源 sentence once; #666 moved it from under the table into the table's 資料說明 (390 has no 來源 column).
 check(count(text(tableOn('2026-10-22')), INDEX_SOURCE_NOTE) === 1, '指數總表: the 來源 sentence once')
+check(text(slice(table, '<details class="data-explanation"', '</details>')).includes(INDEX_SOURCE_NOTE) && !text(slice(table, '</table>', 'id="market-chart-title"')).includes(INDEX_SOURCE_NOTE) && !/<details class="data-explanation" open/.test(table), '指數總表: the 來源 sentence is in the closed 資料說明, not under the table')
+check(indexTableNotes(overviewBoth())[0] === INDEX_SOURCE_NOTE, '指數總表 資料說明: the 來源 sentence first')
 check(/<th class="num">收盤（點）<\/th><th class="num">漲跌<\/th><th class="num">漲跌幅<\/th>/.test(table), '指數總表: close and change columns are numeric (right, mono)')
 const rowOf = (key: string) => slice(table, `data-index="${key}"`, '</tr>')
 const rowText = (key: string) => text(rowOf(key)).trim()
