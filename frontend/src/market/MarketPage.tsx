@@ -38,7 +38,8 @@ export function MarketPage() {
     <div className="page market-page">
       <section className="page-title news-page-title">
         <h1>大盤</h1>
-        <p>{MARKET_PAGE_LEAD}</p>
+        {/* #666: the lead folds into 說明 beside the title (closed by default). */}
+        <details className="details page-help"><summary>說明</summary><div className="page-help-body"><p>{MARKET_PAGE_LEAD}</p></div></details>
       </section>
       {dashboard.isLoading
         ? <Skeleton height={140} label="大盤概況載入中…" />

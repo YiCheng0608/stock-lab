@@ -128,8 +128,10 @@ export const INDEX_MA60_NOTE = '季線：各指數最近 60 個交易日收盤�
 
 // 資料說明 of the index table: the TAIFEX notice (the index owners' copyright notices kept), how dates,
 // changes and the MA60 position are read.
+// 資料說明 of 指數總表: the 來源 sentence first (#666: moved in from under the table; 1280 also has the 來源 column).
 export function indexTableNotes(overview: MarketOverview | undefined): string[] {
   return [
+    INDEX_SOURCE_NOTE,
     TAIFEX_ATTRIBUTION,
     INDEX_STALE_NOTE,
     INDEX_CHANGE_NOTE,

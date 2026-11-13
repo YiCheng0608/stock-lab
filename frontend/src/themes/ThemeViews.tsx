@@ -186,13 +186,19 @@ function BoardList({ items, picks }: { items: readonly ThemeBoardItem[]; picks: 
   )
 }
 
+// The board line's count (#666, UI_COPY_SPEC §8.5).
+export function boardCountText(total: number, matched: number | null): string {
+  return matched === null ? `共 ${total} 個` : `符合 ${matched}／共 ${total} 個`
+}
+
 export function ThemeBoardPanel({ board, data, search, candidates }: { board: ThemeBoard; data: ThemeBoardResponse; search: string; candidates?: CandidatesResponse }) {
   const filtered = filterBoardItems(data.items, search)
   const picks = candidateCountsByGroup(candidates, data.meta.trading_date)
   return (
     <>
       <div className="board-toolbar">
-        <span className="small-note">{boardLabel(board)}榜 · 共 {data.meta.total} 個族群{search.trim() ? ` · 符合搜尋 ${filtered.length} 個` : ''}</span>
+        {/* #666: the tab already names the board, so the count is short; a search reads 「符合 n／共 N 個」. */}
+        <span className="small-note board-count">{boardCountText(data.meta.total, search.trim() ? filtered.length : null)}</span>
         <BoardDateBadges meta={data.meta} />
         <BoardHelp />
       </div>
@@ -450,7 +456,8 @@ export function ThemeMemberTable({ rows, withEvidence, membersAsOf = null }: { r
   />
 }
 
-// 640px and below: one card per member, title row with close and change, then turnover and the two returns; the first ten open (DESIGN_SYSTEM §5, §5.1).
+// 640px and below: one card per member, title row with close and change, then the two returns; turnover and the theme
+// evidence in 更多 (#666); the first ten open (DESIGN_SYSTEM §5, §5.1).
 function ThemeMemberCards({ rows, withEvidence, membersAsOf }: { rows: ReadonlyArray<MemberRow>; withEvidence: boolean; membersAsOf: string | null }) {
   return (
     <CardList className="member-cards" items={rows} itemKey={(row) => row.exchange + row.symbol} renderCard={(row) => (
@@ -462,12 +469,16 @@ function ThemeMemberCards({ rows, withEvidence, membersAsOf }: { rows: ReadonlyA
               <MemberPercent value={values(row).change_status === 'known' ? values(row).change_pct : null} unit="%" />
             </div>
           </div>
-          <dl className="board-card-grid">
-            <div><dt>成交金額（億元）</dt><dd>{turnoverText(row)}</dd></div>
-            <div><dt>5 日相對</dt><dd><MemberPercent value={values(row).excess_return_5d} unit="%" /></dd></div>
-            <div><dt>20 日相對</dt><dd><MemberPercent value={values(row).excess_return_20d} unit="%" /></dd></div>
-          </dl>
-          {withEvidence && <div className="member-card-evidence"><EvidenceCell evidence={row.theme_evidence} /></div>}
+          {/* One short phrase, as on the board rows (DESIGN_SYSTEM §5 標籤與值). */}
+          <p className="member-card-returns">5 日相對 <b><MemberPercent value={values(row).excess_return_5d} unit="%" /></b> · 20 日相對 <b><MemberPercent value={values(row).excess_return_20d} unit="%" /></b></p>
+          {/* #666: the turnover and the theme evidence fold into 更多; the card shows what the call rests on. */}
+          <details className="member-card-more">
+            <summary>更多</summary>
+            <dl className="board-card-grid">
+              <div><dt>成交金額（億元）</dt><dd>{turnoverText(row)}</dd></div>
+            </dl>
+            {withEvidence && <div className="member-card-evidence"><EvidenceCell evidence={row.theme_evidence} /></div>}
+          </details>
         </div>
     )} />
   )
@@ -566,20 +577,28 @@ export function ThemeDetailView({
         </div>
         <h1>{detail.theme.display_name}</h1>
         <p>{detail.theme.description}</p>
-        <div className="theme-stats">
+        {/* #666: one line of three stats instead of three cards; on a phone it wraps between stats, never cutting a number. */}
+        <div className="theme-stats theme-stat-line">
           <Stat label={<Term id="heat_rank">排名</Term>} value={state === 'loading' ? <Skeleton lines={1} className="inline-skeleton" label="排名載入中…" /> : formatRank(item?.rank)} detail={rankDetail} />
           <Stat label={<><Term id="heat_rank">分數</Term>（0–100）</>} value={formatScore(item?.score ?? detail.theme.score)} />
           <Stat label="有效成員／成員" value={formatMembers(item?.eligible_members ?? detail.theme.eligible_members, item?.member_count ?? detail.members_total)} detail="檔" />
         </div>
-        {version && <div className="small-note">題材表版本 {version}</div>}
       </section>
       <div className="theme-detail-grid">
         <TrendCard trend={detail.trend} dataDate={formatDate(detail.trend.at(-1)?.trading_date ?? detail.data_as_of)} />
         <ComponentsCard detail={detail} item={item} state={state} error={board.error} />
       </div>
-      <section className="section-head">
+      <section className="section-head member-section-head">
         <div><UnlessPageDate date={detail.members_as_of}><div className="eyebrow">成員資料截至 {formatDate(detail.members_as_of) ?? '日期未提供'}</div></UnlessPageDate><h2>族群成員</h2></div>
         <MemberSortSelect value={memberSort} onChange={onMemberSortChange} />
+        {/* #666: the theme table version and the member note fold into 說明 (closed by default); opened, it takes the next line. */}
+        {(version || (rows && rows.length > 0)) && <details className="details member-help">
+          <summary>說明</summary>
+          <div className="member-help-body">
+            {version && <p className="small-note">題材表版本 {version}</p>}
+            {rows && rows.length > 0 && <p className="table-note member-note">{memberTableNote(rows.map(values), membersAsOf)}</p>}
+          </div>
+        </details>}
       </section>
       {members.error
         ? <Card><EmptyState title="成員資料暫時無法載入" reason={errorReason(members.error)} /></Card>
@@ -588,7 +607,6 @@ export function ThemeDetailView({
           : rows.length === 0
             ? <Card><EmptyState reason="此日期沒有有效成員" /></Card>
             : <>
-              <p className="table-note member-note">{memberTableNote(rows.map(values), membersAsOf)}</p>
               <ThemeMemberTable rows={rows} withEvidence={isTheme} membersAsOf={membersAsOf} />
               <ThemeMemberCards rows={rows} withEvidence={isTheme} membersAsOf={membersAsOf} />
             </>}

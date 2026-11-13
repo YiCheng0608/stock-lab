@@ -196,7 +196,7 @@ def test_an_empty_board_fails_when_the_db_has_scores(tmp_path):
         tmp_path,
         {"themes?board=industry&limit=100": board},
         {
-            "themes-1280": f"產業榜 · 共 0 個族群\n資料 2026/10/22\n{NO_RUN}\n",
+            "themes-1280": f"共 0 個\n資料 2026/10/22\n{NO_RUN}\n",
             "themes-390": f"{NO_RUN}\n",
         },
     )
@@ -212,7 +212,7 @@ def test_an_empty_board_passes_when_nothing_has_scores(tmp_path):
         tmp_path,
         {"dashboard?include=groups": {**DASHBOARD, "groups": []}},
         {
-            "themes-1280": f"產業榜 · 共 0 個族群\n{NO_RUN}\n",
+            "themes-1280": f"共 0 個\n{NO_RUN}\n",
             "themes-390": f"{NO_RUN}\n",
         },
         {"group_scores_latest_trading_date": None},

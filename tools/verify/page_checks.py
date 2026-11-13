@@ -1867,7 +1867,7 @@ def t15(run: Run) -> str:
 # ---- T16: the market page's index table (Issue 564; 547's dates, 561's MA60; UI_COPY_SPEC §11) ----
 
 INDEX_TABLE_TITLE = "指數總表"  # INDEX_TABLE_TITLE in market/marketOverview.ts
-# INDEX_SOURCE_NOTE in market/marketOverview.ts: once, under the table (#661).
+# INDEX_SOURCE_NOTE in market/marketOverview.ts: once (#661), in the table's 資料說明 (#666).
 INDEX_SOURCE_NOTE = "來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所"
 OVERVIEW_TITLE = "大盤概況"
 # INDEX_SPECS in market/marketOverview.ts: the row key -> (name shown, price decimals), in table order.
@@ -1985,14 +1985,20 @@ def t16(run: Run) -> str:
             )
         at = k + len(rest)
         found.append(f"`{line.replace(chr(10), ' ⏎ ')}`")
-    # #661: no 資料日 column, and the 來源 sentence once (under the table, not again in 資料說明).
+    # #661: no 資料日 column, and the 來源 sentence once; #666 moved it from under the table
+    # into the table's 資料說明 (the screenshot opens it), so it comes before the header.
     header = text.find_where(lambda line: line.startswith("指數\t"), start)
     expect(
         header < 0 or "資料日" not in text.lines[header].split("\t"),
         f"指數總表仍有 `資料日` 欄（{text.at(header)}）",
     )
     sources = text.count(lambda line: line == INDEX_SOURCE_NOTE)
-    expect(sources == 1, f"`{INDEX_SOURCE_NOTE}` {sources} 行，預期 1 行（表下）")
+    expect(sources == 1, f"`{INDEX_SOURCE_NOTE}` {sources} 行，預期 1 行（資料說明內）")
+    source = text.find(INDEX_SOURCE_NOTE, start)
+    expect(
+        start < source and (header < 0 or source < header),
+        f"`{INDEX_SOURCE_NOTE}` 不在 `{INDEX_TABLE_TITLE}` 的資料說明內（表頭之前）：{text.at(source)}",
+    )
     expect(
         text.find(TAIFEX_ATTRIBUTION, start) >= 0,
         f"`{INDEX_TABLE_TITLE}` 之後缺整行 `{TAIFEX_ATTRIBUTION}`（資料說明）",
@@ -2253,10 +2259,11 @@ def g2(run: Run) -> str:
         payload, text = board(run, kind), run.text(shot)
         meta = payload.get("meta") or {}
         b = meta.get("trading_date")
-        heading = f"{title} · 共 {meta.get('total')} 個族群"
+        # #666: the tab names the board, so the board line is 「共 N 個」 (UI_COPY_SPEC §8.5).
+        heading = f"共 {meta.get('total')} 個"
         i = text.find(heading)
         if i < 0:
-            problems.append(f"缺整行 `{heading}`（{text.name}）")
+            problems.append(f"{title}：缺整行 `{heading}`（{text.name}）")
             continue
         try:
             notes.append(card_badge(run, text, i, b, heading))

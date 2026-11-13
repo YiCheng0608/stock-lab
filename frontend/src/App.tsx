@@ -630,10 +630,13 @@ export function StockSortSelect({ value, onChange }: { value: StockSort; onChang
   )
 }
 
-const STOCK_DIRECTORY_NOTE = '單位：價格為各標的報價幣別的元，指數為點。空白表示未提供資料或數值待核實；最近收盤早於最新交易日時，下方括號標出它的日期。'
+export const STOCK_DIRECTORY_EYEBROW = '市場標的目錄'
+export const STOCK_DIRECTORY_LEAD = '股票、ETF 與新上市標的分開標示；行動與缺資料優先級只來自已驗證官方快照。'
+export const STOCK_DIRECTORY_NOTE = '單位：價格為各標的報價幣別的元，指數為點。空白表示未提供資料或數值待核實；最近收盤早於最新交易日時，下方括號標出它的日期。'
 const stockDirectoryKey = (row: StockDirectoryRow) => (row.instrument ?? row).exchange + (row.instrument ?? row).symbol
 
-// 640px and below (DESIGN_SYSTEM §5 個股清單, §5.1): symbol and name with the close → 市場 · 類型 → research action and data quality.
+// 640px and below (DESIGN_SYSTEM §5 個股清單, §5.1; #666): symbol and name with the close, then the research action with
+// 市場 · 類型 in small type at its right (the data gap, when short of data, under the action).
 function StockDirectoryCard({ row, dataAsOf }: { row: StockDirectoryRow; dataAsOf: string | null }) {
   const instrument = row.instrument ?? row
   const closeDate = row.latest_price != null ? staleCloseDateLabel(row.price_as_of, dataAsOf) : null
@@ -643,8 +646,10 @@ function StockDirectoryCard({ row, dataAsOf }: { row: StockDirectoryRow; dataAsO
         <Link className="symbol-link stock-card-name" to={'/stocks/' + encodeURIComponent(instrument.exchange) + '/' + encodeURIComponent(instrument.symbol)}>{instrument.symbol} {instrument.name}</Link>
         <div className="stock-card-price">{formatTableNumber(row.latest_price ?? row.latest_bar?.close, 2)}{closeDate && <span className="small-note">{closeDate}</span>}</div>
       </div>
-      <div className="stock-card-meta">{marketDisplayLabel(instrument.exchange)} · {instrumentTypeLabel(instrument.instrument_type)}</div>
-      <div className="stock-card-action"><StockDirectoryAction row={row} /></div>
+      <div className="stock-card-foot">
+        <div className="stock-card-action"><StockDirectoryAction row={row} /></div>
+        <div className="stock-card-meta">{marketDisplayLabel(instrument.exchange)} · {instrumentTypeLabel(instrument.instrument_type)}</div>
+      </div>
     </div>
   )
 }
@@ -652,15 +657,32 @@ function StockDirectoryCard({ row, dataAsOf }: { row: StockDirectoryRow; dataAsO
 export function StockTable({ rows, dataAsOf }: { rows: StockDirectoryRow[]; dataAsOf: string | null }) {
   if (!rows.length) return <div className="empty panel">沒有符合條件的股票。</div>
   return <>
+    {/* The unit note is in the page title's 說明 (#666). */}
     <DataTable
       wrapClassName="stock-table-wrap"
-      note={STOCK_DIRECTORY_NOTE}
       columns={stockDirectoryColumns(dataAsOf)}
       rows={rows}
       rowKey={stockDirectoryKey}
     />
-    <CardList className="stock-cards" note={<p className="table-note">{STOCK_DIRECTORY_NOTE}</p>} items={rows} itemKey={stockDirectoryKey} renderCard={(row) => <StockDirectoryCard row={row} dataAsOf={dataAsOf} />} />
+    <CardList className="stock-cards" items={rows} itemKey={stockDirectoryKey} renderCard={(row) => <StockDirectoryCard row={row} dataAsOf={dataAsOf} />} />
   </>
+}
+
+// The 說明 fold of /stocks (#666): the old eyebrow and lead, then the unit note, as they read before.
+export function StockDirectoryHelp() {
+  return (
+    <details className="details page-help">
+      <summary>說明</summary>
+      <div className="page-help-body">
+        <p>{STOCK_DIRECTORY_EYEBROW}：{STOCK_DIRECTORY_LEAD}</p>
+        <p>{STOCK_DIRECTORY_NOTE}</p>
+      </div>
+    </details>
+  )
+}
+
+export function stockDirectoryCountText(meta: Record<string, unknown>): string {
+  return `共 ${Number(meta.total ?? 0).toLocaleString()} 筆`
 }
 
 function StocksPage() {
@@ -678,9 +700,14 @@ function StocksPage() {
   const submit = (value = draft.trim()) => change({ search: value })
   const clear = () => { setDraft(''); change({ search: '' }) }
   return <QueryState loading={query.isLoading} error={query.error}>{query.data && <div className="page">
-    <PageTitle eyebrow="市場標的目錄" title="個股" description="股票、ETF 與新上市標的分開標示；行動與缺資料優先級只來自已驗證官方快照。">
-      <div className="filter-row"><SearchBox draft={draft} query={search} placeholder="搜尋代號或名稱" onDraftChange={setDraft} onSubmit={submit} onClear={clear} /><select className="filter-select" value={type} onChange={(event) => change({ type: event.target.value })}><option value="">全部類型</option><option value="stock">股票</option><option value="etf">ETF</option><option value="ipo">新上市</option></select><label className="check-label"><input type="checkbox" checked={watchlist} onChange={(event) => change({ watchlist: event.target.checked })} /> 我的自選</label><StockSortSelect value={sort} onChange={(next) => change({ sort: next })} /></div>
-    </PageTitle>
+    {/* #666: the eyebrow, the lead and the unit note fold into 說明 on the title line; the filters end with a short count. */}
+    <section className="page-title stocks-title">
+      <div className="page-title-row">
+        <h1>個股</h1>
+        <StockDirectoryHelp />
+      </div>
+      <div className="filter-row stocks-filter-row"><SearchBox draft={draft} query={search} placeholder="搜尋代號或名稱" onDraftChange={setDraft} onSubmit={submit} onClear={clear} /><div className="stocks-filter-tools"><select className="filter-select" value={type} onChange={(event) => change({ type: event.target.value })}><option value="">全部類型</option><option value="stock">股票</option><option value="etf">ETF</option><option value="ipo">新上市</option></select><label className="check-label"><input type="checkbox" checked={watchlist} onChange={(event) => change({ watchlist: event.target.checked })} /> 我的自選</label><StockSortSelect value={sort} onChange={(next) => change({ sort: next })} /><span className="small-note stocks-count">{stockDirectoryCountText(query.data.meta)}</span></div></div>
+    </section>
     {query.data.items.length ? <StockTable rows={query.data.items} dataAsOf={typeof query.data.meta.data_as_of === 'string' ? query.data.meta.data_as_of : null} /> : <div className="empty panel">沒有符合條件的標的。</div>}
     <DirectoryPagination meta={query.data.meta} onPageChange={setPage} />
   </div>}</QueryState>
