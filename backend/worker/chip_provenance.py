@@ -150,9 +150,11 @@ def _fill_runs(db: Session) -> dict[tuple[str, str, str], list[int]]:
         )
     ):
         for fill in (metadata or {}).get("value_fill_groups") or []:
+            # A fill of the short balance alone did not write the margin
+            # values (Issue #662), so it does not say which capture did.
             if fill.get("table") != "chip_snapshots" or not set(
                 fill.get("fields") or []
-            ) & set(groups_of.GROUP_FIELDS[MARGIN]):
+            ) & (set(groups_of.GROUP_FIELDS[MARGIN]) - {"short_balance"}):
                 continue
             run_id = raw_run.get(fill.get("raw_payload_id"))
             if run_id is None:

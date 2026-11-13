@@ -129,9 +129,11 @@ def maintenance_guarded(args: argparse.Namespace) -> str | None:
     return None
 
 
-# Taipei hours of the scheduled daily (docs/ops/SCHEDULING.md): a command in
-# DAILY_WINDOW_REFUSED does not start then, so it never makes a daily skip.
-DAILY_WINDOW = (time(21, 30), time(23, 30))
+# Taipei hours of the scheduled daily (docs/ops/SCHEDULING.md), from 15 minutes
+# before 21:30: a command in DAILY_WINDOW_REFUSED does not start then, so the
+# maintenance mode it holds never makes a daily skip.  ``chips short-balance``
+# also stops between captures from 21:25 (chip_revisions).
+DAILY_WINDOW = (time(21, 15), time(23, 30))
 DAILY_WINDOW_REFUSED = {"chips short-balance --apply"}
 
 
@@ -624,7 +626,7 @@ def main() -> None:
     guarded = maintenance_guarded(args)
     if guarded in DAILY_WINDOW_REFUSED and in_daily_window():
         print(
-            f"{guarded}: 台北 21:30～23:30 是 daily 時段，不起跑；請在 23:30 後再跑。",
+            f"{guarded}: 台北 21:15～23:30 接近或在 daily 時段，不起跑；請在 23:30 後再跑。",
             file=sys.stderr,
         )
         sys.exit(scheduled_job.MAINTENANCE_REFUSED_EXIT)

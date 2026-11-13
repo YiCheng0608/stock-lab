@@ -1786,6 +1786,25 @@ def parse_tpex_institutional_rows(
     return result
 
 
+def _tpex_short_balance(row: dict[str, Any]) -> float | None:
+    """The 券餘額 of a TPEx website margin row given as a dict (Issue #662).
+
+    Its header may read ``券餘額`` or ``券餘額(張)``; ``前券餘額(張)`` (the
+    previous day) contains the same text, so a key naming 前 is never read.
+    """
+
+    value = _number_from_row(row, exact_keys=("ShortSaleBalance", "券餘額"))
+    if value is not None:
+        return value
+    for key, cell in row.items():
+        name = _normalized_field_name(key)
+        if "券餘額" in name and "前" not in name:
+            parsed = parse_number(cell)
+            if parsed is not None:
+                return parsed
+    return None
+
+
 def parse_tpex_margin_rows(
     payload: Any,
     *,
@@ -1856,8 +1875,7 @@ def parse_tpex_margin_rows(
                 exact_keys=("MarginPurchaseBalance", "資餘額"),
                 contains=(("marginpurchasebalance",), ("資餘額",)),
             )
-            # Exact keys only: 券餘額 is also part of 前券餘額(張).
-            short = _number_from_row(row, exact_keys=("ShortSaleBalance", "券餘額"))
+            short = _tpex_short_balance(row)
         result.append(
             ChipRecord(
                 symbol=symbol,

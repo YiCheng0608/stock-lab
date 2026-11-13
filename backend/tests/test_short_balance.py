@@ -11,6 +11,7 @@ at position 14 (``券餘額``; ``前券餘額(張)`` contains that text too).
 
 import json
 import socket
+import sqlite3
 from datetime import date, datetime, timezone
 
 import pytest
@@ -191,6 +192,24 @@ def test_tpex_website_file_gives_the_short_balance_not_the_previous_day():
     assert row.short_balance is None
 
 
+@pytest.mark.parametrize("header", ["券餘額", "券餘額(張)"])
+def test_tpex_website_rows_as_dicts_read_the_short_balance_not_the_previous_day(
+    header,
+):
+    # Review 6840422442 (7): a fields/data payload without ``tables`` goes
+    # through the dict path; 前券餘額(張) must never be read.
+    fields = [header if name == "券餘額" else name for name in TPEX_FIELDS]
+    payload = {"fields": fields, "data": [tpex_row("00679B")]}
+    (row,) = sources.parse_tpex_margin_rows(payload, trading_date=DAY)
+    assert (row.margin_balance, row.short_balance) == (2994, 22)
+    only_previous = {
+        "fields": [name for name in fields if name != header],
+        "data": [[cell for i, cell in enumerate(tpex_row("00679B")) if i != 14]],
+    }
+    (row,) = sources.parse_tpex_margin_rows(only_previous, trading_date=DAY)
+    assert row.short_balance is None
+
+
 def test_tpex_openapi_row_gives_the_short_balance_by_its_exact_key():
     rows = sources.parse_tpex_margin_rows(
         [
@@ -249,6 +268,8 @@ def database(tmp_path, monkeypatch):
     monkeypatch.setattr(pipeline, "init_db", lambda: None)
     monkeypatch.setattr(sources, "RAW_DIR", tmp_path / "raw")
     monkeypatch.setattr(sources, "utcnow", lambda: NOW)
+    # 12:00 Taipei: outside the fill's stop window whenever the tests run.
+    monkeypatch.setattr(chip_revisions, "utcnow", lambda: datetime(2026, 9, 5, 4))
     yield factory
     engine.dispose()
 
@@ -333,19 +354,55 @@ def test_collect_leaves_a_dash_short_balance_empty_not_zero(database):
         assert chip(db, "7001").margin_balance == 110
 
 
-def test_a_later_collect_fills_an_empty_short_balance_as_a_margin_fill(database):
+def test_a_later_capture_does_not_fill_the_short_balance_of_another_captures_row(
+    database,
+):
+    # Review 6840422442 (3): the row's margin group stays on capture A, so a
+    # later capture B must not give it B's short balance.
     collect(Fetcher(twse_short="--"))
     with database() as db:
         db.execute(update(IngestionRun).values(status="partial"))
         db.commit()
-        before = chip(db, "1101")
-        group = groups_of.explicit_groups(before)[groups_of.MARGIN]
+        group = groups_of.explicit_groups(chip(db, "1101"))[groups_of.MARGIN]
     collect(Fetcher(twse_short="88"))
     with database() as db:
         row = chip(db, "1101")
-        assert row.short_balance == 88
-        # Filling an empty field keeps the group's provenance (fill-only rule).
+        assert row.margin_raw_payload_id != margin_capture_latest(
+            db, sources.TWSE_MARGIN_HISTORY_ENDPOINT
+        )
+        assert row.short_balance is None
         assert groups_of.explicit_groups(row)[groups_of.MARGIN] == group
+        # chips short-balance reads A, which has no value: skipped, partial.
+        result = chip_revisions.fill_short_balance(db, apply=True)
+    assert result["status"] == "partial"
+    assert result["rows_no_short_value"] == 1
+    assert result["rows_skipped"] == 1
+
+
+def test_a_forced_collect_writes_the_short_balance_with_its_own_capture(database):
+    collect(Fetcher(twse_short="--"))
+    pipeline.collect(
+        DAY,
+        adapter=sources.OfficialMarketDataAdapter(
+            sources.TwseAdapter(Fetcher(twse_short="88")),
+            sources.TpexAdapter(Fetcher(twse_short="88")),
+        ),
+        force=True,
+    )
+    with database() as db:
+        row = chip(db, "1101")
+        assert row.short_balance == 88
+        assert row.margin_raw_payload_id == margin_capture_latest(
+            db, sources.TWSE_MARGIN_HISTORY_ENDPOINT
+        )
+
+
+def margin_capture_latest(db, endpoint):
+    return db.scalar(
+        select(RawPayload.id)
+        .where(RawPayload.endpoint.like(f"{endpoint}%"))
+        .order_by(RawPayload.id.desc())
+    )
 
 
 # ---- chips provenance: rows written before #662 still match ------------------
@@ -391,9 +448,30 @@ def before_662(database):
         return snapshot(db)
 
 
-def test_short_balance_fill_dry_run_writes_nothing(database, before_662):
+def db_file(database):
+    return database.kw["bind"].url.database
+
+
+def test_short_balance_fill_dry_run_writes_nothing(database, before_662, monkeypatch):
+    # Review 6840422442 (1): the dry run takes no write lock, so another
+    # connection writes while it reads each capture.
+    load = chip_revisions._load
+    writes = []
+
+    def load_and_write(capture):
+        other = sqlite3.connect(db_file(database), timeout=0)
+        try:
+            other.execute("update instruments set name = name || '' where id = 1")
+            other.commit()
+            writes.append(capture.id)
+        finally:
+            other.close()
+        return load(capture)
+
+    monkeypatch.setattr(chip_revisions, "_load", load_and_write)
     with database() as db:
         result = chip_revisions.fill_short_balance(db)
+    assert len(writes) == 2
     assert result["status"] == "success", result
     assert result["applied"] is False
     assert result["rows_filled"] == 2
@@ -477,6 +555,107 @@ def test_short_balance_fill_lists_an_unreadable_capture_as_partial(
         assert chip(db, "1101").short_balance == 88
 
 
+def test_short_balance_fill_lists_a_missing_raw_row_as_partial(database, before_662):
+    # Review 6840422442 (6): a cited raw_payloads row that is gone.
+    with database() as db:
+        raw_id = margin_capture(db, sources.TPEX_MARGIN_HISTORY_ENDPOINT)
+    plain = sqlite3.connect(db_file(database))  # foreign keys off
+    plain.execute("delete from raw_payloads where id = ?", (raw_id,))
+    plain.commit()
+    plain.close()
+    with database() as db:
+        result = chip_revisions.fill_short_balance(db, apply=True)
+    assert result["status"] == "partial"
+    assert result["unreadable_captures"] == [
+        {"raw_payload_id": raw_id, "error": "raw_payloads row not found"}
+    ]
+    assert (result["rows_capture_skipped"], result["rows_filled"]) == (1, 1)
+    with database() as db:
+        assert chip(db, "1101").short_balance == 88
+        assert chip(db, "7001").short_balance is None
+
+
+@pytest.mark.parametrize(
+    ("taipei", "inside"),
+    [((21, 24), False), ((21, 25), True), ((23, 29), True), ((23, 30), False)],
+)
+def test_the_fill_stop_window_is_21_25_to_23_30_taipei(taipei, inside):
+    moment = datetime(2026, 11, 13, *taipei, tzinfo=pipeline.TAIPEI)
+    naive_utc = moment.astimezone(timezone.utc).replace(tzinfo=None)
+    assert chip_revisions.in_short_balance_stop_window(naive_utc) is inside
+
+
+def test_the_apply_stops_before_a_capture_once_21_25_comes(database, before_662):
+    # Review 6840422442 (2): the first capture is written at 21:24, the
+    # second is left for a rerun.
+    times = iter(
+        [
+            datetime(2026, 11, 13, 13, 24),
+            datetime(2026, 11, 13, 13, 25),
+            datetime(2026, 11, 13, 13, 25),
+        ]
+    )
+    with database() as db:
+        result = chip_revisions.fill_short_balance(
+            db, apply=True, clock=lambda: next(times)
+        )
+    assert result["status"] == "partial"
+    assert result["stopped_at"] == "2026-11-13T13:25:00"
+    assert result["rows_filled"] == 1
+    with database() as db:
+        again = chip_revisions.fill_short_balance(db, apply=True)
+    assert (again["status"], again["rows_filled"]) == ("success", 1)
+
+
+def test_a_fill_of_only_the_short_balance_names_no_margin_capture(database):
+    # Review 6840422442 (4).
+    with database() as db:
+        run = IngestionRun(
+            run_type="collect",
+            source="official",
+            run_date=DAY,
+            status="success",
+            records=0,
+            metadata_json={},
+            started_at=NOW,
+            finished_at=NOW,
+        )
+        db.add(run)
+        db.flush()
+        raw = RawPayload(
+            source="twse",
+            endpoint=sources.TWSE_MARGIN_HISTORY_ENDPOINT,
+            data_as_of=DAY.isoformat(),
+            payload_path="x.json",
+            sha256="0" * 64,
+            ingestion_run_id=run.id,
+            collected_at=NOW,
+        )
+        db.add(raw)
+        db.flush()
+
+        def fill(fields, symbol):
+            return {
+                "table": "chip_snapshots",
+                "exchange": "TWSE",
+                "trading_date": DAY.isoformat(),
+                "symbols": [symbol],
+                "fields": fields,
+                "raw_payload_id": raw.id,
+            }
+
+        run.metadata_json = {
+            "value_fill_groups": [
+                fill(["short_balance"], "1101"),
+                fill(["margin_balance", "short_balance"], "2330"),
+            ]
+        }
+        db.flush()
+        runs = chip_provenance._fill_runs(db)
+    assert ("TWSE", DAY.isoformat(), "1101") not in runs
+    assert runs[("TWSE", DAY.isoformat(), "2330")] == [run.id]
+
+
 def test_short_balance_fill_keeps_to_its_dates(database, before_662):
     with database() as db:
         result = chip_revisions.fill_short_balance(
@@ -500,14 +679,15 @@ def test_the_apply_holds_maintenance_mode_and_the_dry_run_does_not():
 @pytest.mark.parametrize(
     ("taipei", "inside"),
     [
-        ((21, 29), False),
+        ((21, 14), False),
+        ((21, 15), True),
         ((21, 30), True),
         ((23, 29), True),
         ((23, 30), False),
         ((4, 0), False),
     ],
 )
-def test_the_daily_window_is_21_30_to_23_30_taipei(taipei, inside):
+def test_the_start_is_refused_from_21_15_to_23_30_taipei(taipei, inside):
     hour, minute = taipei
     moment = datetime(2026, 11, 13, hour, minute, tzinfo=pipeline.TAIPEI)
     assert cli.in_daily_window(moment.astimezone(timezone.utc)) is inside
@@ -524,4 +704,4 @@ def test_the_apply_is_refused_in_the_daily_window(monkeypatch, capsys):
         cli.main()
     assert stopped.value.code == cli.scheduled_job.MAINTENANCE_REFUSED_EXIT
     assert called == []
-    assert "21:30" in capsys.readouterr().err
+    assert "21:15" in capsys.readouterr().err

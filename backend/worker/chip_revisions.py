@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import date, timezone
-from typing import Any
+from datetime import date, datetime, time, timezone
+from typing import Any, Callable
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -213,30 +213,31 @@ MARGIN_PARSERS = {
     TPEX_MARGIN_ENDPOINT: parse_tpex_margin_rows,
 }
 MAX_SHORT_BALANCE_SAMPLES = 50
+# An ``apply`` stops before the next capture from this Taipei time until the
+# end of the daily window (docs/ops/SCHEDULING.md), so the maintenance mode it
+# holds never makes the 21:30 daily skip; the rest is left for a rerun.
+SHORT_BALANCE_STOP_WINDOW = (time(21, 25), time(23, 30))
 
 
-def _short_balance_rows(
-    db: Session, raw_payload_id: int, start: date | None, end: date | None
-) -> list[Any]:
-    query = (
-        select(
-            ChipSnapshot.id,
-            ChipSnapshot.trading_date,
-            Instrument.symbol,
-            ChipSnapshot.margin_balance,
-            ChipSnapshot.margin_change,
-        )
-        .join(Instrument, Instrument.id == ChipSnapshot.instrument_id)
-        .where(
-            ChipSnapshot.margin_raw_payload_id == raw_payload_id,
-            ChipSnapshot.short_balance.is_(None),
-        )
+def in_short_balance_stop_window(moment: datetime) -> bool:
+    now = moment.replace(tzinfo=moment.tzinfo or timezone.utc).astimezone(
+        pipeline.TAIPEI
     )
+    return SHORT_BALANCE_STOP_WINDOW[0] <= now.time() < SHORT_BALANCE_STOP_WINDOW[1]
+
+
+def _short_balance_filter(start: date | None, end: date | None) -> list[Any]:
+    """Rows with an empty short balance and a margin capture, within the dates."""
+
+    conditions = [
+        ChipSnapshot.short_balance.is_(None),
+        ChipSnapshot.margin_raw_payload_id.is_not(None),
+    ]
     if start is not None:
-        query = query.where(ChipSnapshot.trading_date >= start)
+        conditions.append(ChipSnapshot.trading_date >= start)
     if end is not None:
-        query = query.where(ChipSnapshot.trading_date <= end)
-    return list(db.execute(query).all())
+        conditions.append(ChipSnapshot.trading_date <= end)
+    return conditions
 
 
 def fill_short_balance(
@@ -245,6 +246,7 @@ def fill_short_balance(
     end: date | None = None,
     *,
     apply: bool = False,
+    clock: Callable[[], datetime] | None = None,
 ) -> dict[str, Any]:
     """Fill empty ``short_balance`` from each row's own margin capture (Issue #662).
 
@@ -255,25 +257,42 @@ def fill_short_balance(
     balance (融券今日餘額, 張).  Nothing is fetched and nothing else changes:
     a row whose stored margin values differ from that capture's, or whose
     capture has no short-sale value for it, is skipped and counted.  A capture
-    that cannot be read or does not match its SHA-256 is skipped and listed,
-    and the result is ``partial``; one that reports another date is listed in
-    ``other_session_captures``.  With ``apply`` each capture is committed on its
-    own and one ``short_balance_fill`` ingestion run is recorded; a rerun only
-    reads rows that are still empty.
+    whose raw row is missing, whose file cannot be read or does not match its
+    SHA-256 is skipped and listed in ``unreadable_captures``; one that reports
+    another date is listed in ``other_session_captures``.  Any skipped row or
+    capture makes the result ``partial``.
+
+    The dry run only reads: it counts the rows it would fill and writes
+    nothing, so it holds no write lock.  With ``apply`` each capture is
+    committed on its own, the run stops before the next capture once ``clock``
+    is in ``SHORT_BALANCE_STOP_WINDOW`` (``stopped_at``, ``partial``), and one
+    ``short_balance_fill`` ingestion run is recorded; a rerun only reads rows
+    that are still empty.
     """
 
-    query = select(ChipSnapshot.margin_raw_payload_id).where(
-        ChipSnapshot.short_balance.is_(None),
-        ChipSnapshot.margin_raw_payload_id.is_not(None),
+    clock = clock or utcnow
+    conditions = _short_balance_filter(start, end)
+    raw_ids = sorted(
+        set(
+            db.scalars(
+                select(ChipSnapshot.margin_raw_payload_id).where(*conditions).distinct()
+            )
+        )
     )
-    if start is not None:
-        query = query.where(ChipSnapshot.trading_date >= start)
-    if end is not None:
-        query = query.where(ChipSnapshot.trading_date <= end)
-    raw_ids = set(db.scalars(query.distinct()))
+    stored = {raw_id: db.get(RawPayload, raw_id) for raw_id in raw_ids}
     captures = sorted(
-        (db.get(RawPayload, raw_id) for raw_id in raw_ids),
-        key=lambda capture: (capture.data_as_of or "", capture.id),
+        raw_ids,
+        key=lambda raw_id: (
+            (stored[raw_id].data_as_of or "") if stored[raw_id] else "",
+            raw_id,
+        ),
+    )
+    row_columns = (
+        ChipSnapshot.id,
+        ChipSnapshot.trading_date,
+        Instrument.symbol,
+        ChipSnapshot.margin_balance,
+        ChipSnapshot.margin_change,
     )
     counts = {
         "rows_filled": 0,
@@ -287,9 +306,24 @@ def fill_short_balance(
     other_endpoint: list[int] = []
     samples: list[dict[str, Any]] = []
     filled_dates: set[str] = set()
+    stopped_at: str | None = None
     started = utcnow()
-    for capture in captures:
-        rows = _short_balance_rows(db, capture.id, start, end)
+    for raw_id in captures:
+        if apply and in_short_balance_stop_window(clock()):
+            stopped_at = clock().isoformat()
+            break
+        rows = db.execute(
+            select(*row_columns)
+            .join(Instrument, Instrument.id == ChipSnapshot.instrument_id)
+            .where(*conditions, ChipSnapshot.margin_raw_payload_id == raw_id)
+        ).all()
+        capture = stored[raw_id]
+        if capture is None:
+            unreadable.append(
+                {"raw_payload_id": raw_id, "error": "raw_payloads row not found"}
+            )
+            counts["rows_capture_skipped"] += len(rows)
+            continue
         parser = MARGIN_PARSERS.get((capture.endpoint or "").split("?", 1)[0])
         payload = None
         if parser is None:
@@ -350,22 +384,24 @@ def fill_short_balance(
                     }
                 )
         if updates:
-            db.execute(update(ChipSnapshot), updates)
             counts["rows_filled"] += len(updates)
             filled_dates.add(trading_date.isoformat())
-        if apply:
-            db.commit()
+            if apply:
+                db.execute(update(ChipSnapshot), updates)
+                db.commit()
+    rows_skipped = sum(counts.values()) - counts["rows_filled"]
     result: dict[str, Any] = {
         "status": "partial"
-        if unreadable or counts["rows_margin_mismatch"]
+        if rows_skipped or unreadable or other_session or other_endpoint or stopped_at
         else "success",
         "version": SHORT_BALANCE_VERSION,
         "start_date": start.isoformat() if start else None,
         "end_date": end.isoformat() if end else None,
         "applied": apply,
         "captures": len(captures),
+        "stopped_at": stopped_at,
         **counts,
-        "rows_skipped": sum(counts.values()) - counts["rows_filled"],
+        "rows_skipped": rows_skipped,
         "filled_dates": len(filled_dates),
         "first_filled_date": min(filled_dates, default=None),
         "last_filled_date": max(filled_dates, default=None),
@@ -388,7 +424,7 @@ def fill_short_balance(
         data_as_of=result["last_filled_date"],
         metadata_json={
             **result,
-            "raw_payload_ids": [capture.id for capture in captures],
+            "raw_payload_ids": captures,
         },
         started_at=started,
         finished_at=utcnow(),
