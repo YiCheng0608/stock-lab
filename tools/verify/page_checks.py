@@ -1769,6 +1769,77 @@ def summary_line(exchange: dict, name: str) -> str:
     return f"{name} {fixed(index['close'], 2)} {shown}"
 
 
+# ---- T20: below 1280px a row opens its own K-line card (Issue 665, DESIGN_SYSTEM §5 候選列表) ----
+# The rank of row 1 is the toggle (aria-expanded) only below 1280px; before Issue 665 it was the aria-pressed picker
+# of a hidden chart, so this click finds nothing there and the shot is not ready.
+CHART_TOGGLE = '.candidate-row[data-candidate-rank="1"] .candidate-chart-toggle'
+TODAY_CHART = Shot("today-chart", "/", (390,), (CHART_TOGGLE,))
+CHART_LEVELS_LINE = "規則價位線："  # StockBarsChart levelsNote
+
+
+@check("today", "T20")
+def t20(run: Run) -> str:
+    payload = candidates(run)
+    items = (
+        [] if payload.get("status") == "not_computed" else payload.get("items") or []
+    )
+    if not items:
+        return "沒有候選列，沒有可開的 K 線卡"
+    titles = [
+        f"{item['instrument']['symbol']} {item['instrument'].get('name', '')}".rstrip()
+        for item in items
+    ]
+    # Closed: no candidate's card title or levels line anywhere in the 390 page (the #665 row card is unmounted).
+    closed = run.text(TODAY, 390)
+    shown = [title for title in titles if closed.has(title)]
+    expect(not shown, f"390 初次載入就有 K 線卡標題 {shown}（窄版應點列才開圖）")
+    expect(
+        closed.find_where(lambda line: line.startswith(CHART_LEVELS_LINE)) < 0,
+        f"390 初次載入就有 `{CHART_LEVELS_LINE}` 行",
+    )
+    meta = run.shoot(TODAY_CHART)[390]
+    where = f"{TODAY_CHART.name}-390"
+    expect(
+        not meta.get("missingClicks"),
+        f"{where} 找不到第 1 列的開圖按鈕 `{CHART_TOGGLE}`",
+    )
+    if not meta.get("ready"):
+        raise Undetermined(f"{where} 未 ready {meta.get('error', '')}".strip())
+    expect(not meta.get("overflow"), f"{where} 橫向捲動")
+    expect(
+        not meta.get("consoleErrors"),
+        f"{where} consoleErrors {meta.get('consoleErrors')}",
+    )
+    text = run.text(TODAY_CHART, 390)
+    # The card sits under row 1 and before row 2 (or 熱門族群 when there is one row): its title once, then the levels.
+    first, title = (
+        text.find_where(lambda line: CANDIDATE_ROW.match(line) is not None),
+        titles[0],
+    )
+    expect(
+        first >= 0 and text.lines[first].startswith(f"#{items[0]['rank']} {title} "),
+        f"找不到第 1 列 `#{items[0]['rank']} {title}`",
+    )
+    end = text.find_where(lambda line: CANDIDATE_ROW.match(line) is not None, first + 1)
+    end = end if end > first else text.find("熱門族群", first + 1)
+    end = end if end > first else len(text.lines)
+    count = text.count(lambda line: line == title)
+    expect(count == 1, f"整行 `{title}`（K 線卡標題）有 {count} 行，預期 1")
+    at = text.find(title)
+    expect(first < at < end, f"K 線卡標題（{text.at(at)}）不在第 1 列與下一列之間")
+    levels = text.find_where(lambda line: line.startswith(CHART_LEVELS_LINE), at)
+    expect(
+        at < levels < end,
+        f"K 線卡（{text.at(at)}）之後、下一列之前沒有 `{CHART_LEVELS_LINE}` 行（規則價位線）",
+    )
+    others = [other for other in titles[1:] if text.has(other)]
+    expect(not others, f"點第 1 列後其他列也有 K 線卡 {others}（一次一檔）")
+    return (
+        f"390 初次沒有 K 線卡；點 `#{items[0]['rank']}` 後 `{title}` 在第 1 列下方一次，"
+        f"含 `{CHART_LEVELS_LINE}`（{text.at(levels)}），其他列沒有"
+    )
+
+
 @check("today", "T14")
 def t14(run: Run) -> str:
     """The today page keeps one market line (加權, 櫃買, the date when not the page date, 看大盤 →), not the four widgets."""

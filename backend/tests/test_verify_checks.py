@@ -1315,6 +1315,104 @@ def test_t17_without_candidates_or_a_ready_shot(tmp_path):
         page_checks.t17(_t17_run(tmp_path, [_row(1), _row(2)], ready=False))
 
 
+# ---- T20: below 1280px a row opens its own K-line card (Issue 665) ----
+
+
+def _t20_items():
+    payload = _candidates()
+    for item in payload["items"]:
+        item["instrument"]["name"] = f"示範{item['rank']}"
+    return payload
+
+
+T20_ROW_1 = (
+    "#1 9100 示範1 上市 · 半導體（產業 #1）\n突破型\n收盤（元）\n21.10\nAI 推論 ▸\n"
+)
+T20_ROW_2 = "#2 9101 示範2 上櫃 · 無所屬族群\n回踩型\n收盤（元）\n13.20\nAI 說明 ▸\n"
+T20_CARD = (
+    "技術指標 indicators/v1\n9100 示範1\n日K\n週K\n"
+    "規則價位線：進場 21.10 元（虛線）、停損 20.00 元、目標 23.00 元；條件成立當日的價位，不是成交價。\n"
+    "最近 130 根日線；缺日不補、停牌不畫 K 線\n"
+)
+T20_CLOSED = "今日名單\n2 檔\n" + T20_ROW_1 + T20_ROW_2 + "熱門族群\n#1\n半導體\n"
+T20_OPEN = (
+    "今日名單\n2 檔\n" + T20_ROW_1 + T20_CARD + T20_ROW_2 + "熱門族群\n#1\n半導體\n"
+)
+
+
+def _t20_run(tmp_path, closed=T20_CLOSED, opened=T20_OPEN, meta=None, payload=None):
+    metas = {
+        "today-chart": {390: {"width": 390, "ready": True, **(meta or {})}},
+    }
+    pages = {"today-390": closed}
+    if opened is not None:
+        pages["today-chart-390"] = opened
+    payloads = {"candidates": _t20_items() if payload is None else payload}
+    return FakeRun(tmp_path, payloads, pages, metas=metas)
+
+
+def test_t20_shot_clicks_row_1s_chart_toggle_at_390():
+    shot = page_checks.TODAY_CHART
+    assert (shot.path, shot.widths) == ("/", (390,))
+    assert shot.clicks == (
+        '.candidate-row[data-candidate-rank="1"] .candidate-chart-toggle',
+    )
+
+
+def test_t20_passes_when_the_card_opens_under_row_1_only(tmp_path):
+    assert page_checks.t20(_t20_run(tmp_path)) == (
+        "390 初次沒有 K 線卡；點 `#1` 後 `9100 示範1` 在第 1 列下方一次，"
+        "含 `規則價位線：`（today-chart-390.txt 第 12 行），其他列沒有"
+    )
+
+
+def test_t20_fails_before_issue_665_when_the_toggle_is_missing(tmp_path):
+    # Before #665 the rank was the aria-pressed picker of a hidden chart: no .candidate-chart-toggle to click.
+    run = _t20_run(
+        tmp_path,
+        opened=T20_CLOSED,
+        meta={"ready": False, "missingClicks": [page_checks.CHART_TOGGLE]},
+    )
+    with pytest.raises(page_checks.Fail, match="找不到第 1 列的開圖按鈕"):
+        page_checks.t20(run)
+
+
+@pytest.mark.parametrize(
+    ("closed", "opened", "message"),
+    [
+        (T20_OPEN, T20_OPEN, r"390 初次載入就有 K 線卡標題 \['9100 示範1'\]"),
+        (
+            T20_CLOSED,
+            "今日名單\n" + T20_ROW_1 + T20_ROW_2 + T20_CARD + "熱門族群\n",
+            "不在第 1 列與下一列之間",
+        ),
+        (
+            T20_CLOSED,
+            T20_OPEN.replace("規則價位線：", "價位："),
+            "沒有 `規則價位線：` 行",
+        ),
+        (
+            T20_CLOSED,
+            T20_OPEN + "9101 示範2\n",
+            r"其他列也有 K 線卡 \['9101 示範2'\]",
+        ),
+        (T20_CLOSED, T20_OPEN + "9100 示範1\n", "有 2 行，預期 1"),
+    ],
+)
+def test_t20_fails(tmp_path, closed, opened, message):
+    with pytest.raises(page_checks.Fail, match=message):
+        page_checks.t20(_t20_run(tmp_path, closed, opened))
+
+
+def test_t20_without_candidates_or_a_ready_shot(tmp_path):
+    empty = {"status": "success", "trading_date": "2026-10-16", "items": []}
+    assert page_checks.t20(_t20_run(tmp_path, payload=empty)) == (
+        "沒有候選列，沒有可開的 K 線卡"
+    )
+    with pytest.raises(page_checks.Undetermined, match="today-chart-390 未 ready"):
+        page_checks.t20(_t20_run(tmp_path, meta={"ready": False}))
+
+
 # ---- T19 / G9 / S15: score bars and strength blocks (Issue 654) ----
 
 UP, DOWN = "rgb(239, 68, 68)", "rgb(34, 197, 94)"

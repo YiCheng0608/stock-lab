@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react'
-import type { CandidateLiquidity } from '../types'
+import type { CandidateItem, CandidateLiquidity } from '../types'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom/server'
@@ -31,8 +31,8 @@ import {
 } from './candidates'
 import { completeItem, doneNote, listResponse, notComputedResponse, partialItem, zeroResponse } from './candidates.fixtures'
 import { PageDateContext } from '../components/pageDate'
-import { CandidatesSection, PriceLadder, ScoreDetails, Sparkline } from './CandidateViews'
-import { SPARKLINE_HEIGHT, SPARKLINE_WIDTH, candidateChartLevels, ladderLabel, priceLadder, sparkline } from './candidates'
+import { CandidatesSection, PriceLadder, ScoreDetails, Sparkline, TodayCandidateList } from './CandidateViews'
+import { ROW_CLICK_IGNORED, SPARKLINE_HEIGHT, SPARKLINE_WIDTH, TERMINAL_MIN_WIDTH, candidateChartLevels, chartToggleLabel, ladderLabel, nextChartRank, priceLadder, rowClickToggles, sparkline } from './candidates'
 
 // Standalone regression module (no browser, no server, no network) for the daily candidate list (#215):
 // the detail content under each today row (components, reasons, AI note), partial components, the score details
@@ -299,12 +299,57 @@ check(renderToStaticMarkup(<Sparkline item={{ recent_closes: closes([50]) }} />)
 
 const plainList = render(<CandidatesSection data={listResponse()} loading={false} error={null} />)
 check(!plainList.includes('candidates-terminal') && !plainList.includes('candidate-rank-button'), 'without a chart the list is the list alone and the rank is not a button')
-const charted = render(<CandidatesSection data={listResponse()} loading={false} error={null} renderChart={(item) => <div data-test-chart={item.instrument.symbol} />} />)
+const charted = render(<CandidatesSection data={listResponse()} loading={false} error={null} wide renderChart={(item) => <div data-test-chart={item.instrument.symbol} />} />)
 check(charted.includes('class="candidates-terminal"') && charted.includes('data-chart-rank="1"') && charted.includes('data-test-chart="2377"'), 'with a chart the first candidate is the one shown')
 check((charted.match(/candidate-rank-button/g) ?? []).length === 2 && (charted.match(/aria-pressed="true"/g) ?? []).length === 1, 'every rank is a button and only the shown one is pressed')
 check(charted.includes('aria-label="第 1 名，顯示走勢圖"') && charted.includes('>#1</button>'), 'the rank button keeps its text and says what it does')
 check(charted.indexOf('candidates-terminal-list') < charted.indexOf('candidates-terminal-chart'), 'the list comes before the chart in the document')
 const text = (markup: string) => markup.replace(/<[^>]+>/g, '')
 check(text(charted) === text(plainList), 'the chart slot and the ladder change no page text of the list')
+
+// ---- below 1280px a row opens its own K-line card (Issue 665; DESIGN_SYSTEM §5 候選列表, decision 6841170465) ----
+// No DOM here: renderChart is what mounts CandidateChart (its /bars query and ECharts), so a call count of 0 means no
+// card, no /bars fetch and no chart initialised. A click is the pure transition plus a render in the next state.
+check(TERMINAL_MIN_WIDTH === 1280, 'the chart sits beside the list from 1280px, the width styles.css uses')
+const chartCalls: string[] = []
+const spyChart = (item: CandidateItem) => { chartCalls.push(item.instrument.symbol); return <div className="stock-chart-card" data-test-chart={item.instrument.symbol} /> }
+const narrow = render(<CandidatesSection data={listResponse()} loading={false} error={null} renderChart={spyChart} />)
+check(chartCalls.length === 0, `below 1280px the first render mounts no chart (no /bars, no ECharts): ${chartCalls.join(',')}`)
+check(!narrow.includes('candidates-terminal') && !narrow.includes('stock-chart-card') && !narrow.includes('data-test-chart'), 'below 1280px there is no chart beside the list, hidden or not')
+check(!narrow.includes('aria-pressed'), 'below 1280px no rank claims to be the shown chart')
+const toggles = narrow.match(/<button type="button" class="candidate-rank candidate-rank-button candidate-chart-toggle"[^>]*>#\d+<\/button>/g) ?? []
+check(toggles.length === 2 && toggles.every((button) => button.includes('aria-expanded="false"')), `every rank is a closed disclosure button (Enter and Space are a button's own): ${toggles.join(' ')}`)
+check(toggles[0]!.includes('aria-controls="candidate-chart-1"') && toggles[0]!.includes(`aria-label="${chartToggleLabel(1, false)}"`) && chartToggleLabel(1, false) === '第 1 名，展開 K 線圖' && chartToggleLabel(1, true) === '第 1 名，收起 K 線圖', `the rank names the card it controls and says what it does: ${toggles[0]}`)
+check(narrow.includes('<div class="candidate-chart" id="candidate-chart-1" hidden="">') && narrow.includes('<div class="candidate-chart" id="candidate-chart-2" hidden="">'), 'each closed row keeps an empty, hidden slot, so aria-controls always names an element')
+check(text(narrow) === text(plainList), 'the closed slots and the rank buttons change no page text (page_checks T5–T8, T13)')
+const rowMarkup = (markup: string, rank: number) => markup.slice(markup.indexOf(`data-candidate-rank="${rank}"`), rank === 1 ? markup.indexOf('data-candidate-rank="2"') : undefined)
+const row1 = rowMarkup(narrow, 1)
+check(row1.indexOf('candidate-chart-toggle') < row1.indexOf('candidate-row-name') && row1.indexOf('candidate-row-name') < row1.indexOf('candidate-ai-toggle'), 'focus order: the rank, then the name link, then 「AI 推論」')
+check(row1.indexOf('candidate-ai-toggle') < row1.indexOf('id="candidate-chart-1"') && row1.indexOf('id="candidate-chart-1"') < row1.indexOf('id="candidate-detail-1"'), 'the card slot sits between the row and its AI detail')
+check(!/<details[^>]*>(?:(?!<\/details>)[\s\S])*candidate-chart-toggle/.test(narrow) && !/<details[^>]*class="candidate-chart/.test(narrow), 'the card is not inside a <details>, so the screenshot tool opening every <details> mounts no chart')
+
+chartCalls.length = 0
+const opened = render(<TodayCandidateList items={listResponse().items} renderChart={spyChart} initialChartRank={1} />)
+check(chartCalls.join(',') === '2377', `an open row mounts its own card once, and only that row's (one /bars): ${chartCalls.join(',')}`)
+const openRow = rowMarkup(opened, 1)
+check(openRow.includes('aria-expanded="true"') && openRow.includes(`aria-label="${chartToggleLabel(1, true)}"`) && opened.includes('candidate-row-charted" data-candidate-rank="1"'), 'the open row\'s rank is expanded and says it closes the card')
+check(openRow.includes('<div class="candidate-chart" id="candidate-chart-1" role="region" aria-label="2377 微星 走勢圖"><div class="stock-chart-card" data-test-chart="2377"></div></div>'), `the open card is a labelled region under the row: ${openRow.slice(openRow.indexOf('id="candidate-chart-1"') - 30, openRow.indexOf('id="candidate-detail-1"'))}`)
+check(openRow.includes('aria-controls="candidate-detail-1" aria-expanded') === false && openRow.includes('class="badge badge-accent badge-compact candidate-ai-toggle" aria-expanded="false"') && !/<details class="candidate-detail"[^>]*open/.test(opened), 'opening the card leaves the AI detail closed')
+check(rowMarkup(opened, 2).includes('aria-expanded="false"') && rowMarkup(opened, 2).includes('id="candidate-chart-2" hidden=""'), 'the other row stays closed')
+check(nextChartRank(null, 1) === 1 && nextChartRank(1, 1) === null && nextChartRank(1, 2) === 2, 'pressing a closed row opens it, the open row closes it, another row moves the card there (one at a time)')
+chartCalls.length = 0
+render(<TodayCandidateList items={listResponse().items} renderChart={spyChart} initialChartRank={nextChartRank(1, 2)} />)
+check(chartCalls.join(',') === partialItem().instrument.symbol, `after moving to another row only that row's card is mounted (the first one unmounts): ${chartCalls.join(',')}`)
+chartCalls.length = 0
+render(<TodayCandidateList items={listResponse().items} renderChart={spyChart} initialChartRank={nextChartRank(1, 1)} />)
+check(chartCalls.length === 0, 'a closed card is unmounted, not hidden')
+chartCalls.length = 0
+const both = render(<TodayCandidateList items={listResponse().items} renderChart={spyChart} initialChartRank={1} wide />)
+check(chartCalls.join(',') === '2377' && both.includes('class="candidates-terminal"') && !both.includes('candidate-chart-toggle') && !both.includes('id="candidate-chart-1"'), 'from 1280px the list is unchanged: one chart beside it, the rank picks it, no card under a row')
+
+// A tap on the row's free space toggles; a link, a button (rank, term, AI), a summary, or a text selection does not.
+const target = (ignored: boolean) => ({ closest: (selector: string) => (selector === ROW_CLICK_IGNORED && ignored ? {} : null) })
+check(rowClickToggles(target(false), '') && !rowClickToggles(target(true), '') && !rowClickToggles(target(false), '389.23') && !rowClickToggles(null, ''), 'row taps: free space toggles; controls, a selection or no target do not')
+check(['a', 'button', 'summary', '[role="button"]'].every((part) => ROW_CLICK_IGNORED.includes(part)), `ignored targets cover links, buttons (rank, terms, AI) and summaries: ${ROW_CLICK_IGNORED}`)
 check(/<div class="candidate-row-figures"><svg class="sparkline sparkline-up"[^>]*><path d="[^"]+"><\/path><\/svg><div class="price-ladder"/.test(plainList), 'a row draws the sparkline, then the ladder, on one line under the sentence (Issue 653)')
 check((plainList.match(/class="sparkline /g) ?? []).length === 1, 'only the row with closes has a sparkline')

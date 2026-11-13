@@ -74,6 +74,8 @@ import { backtestStartedText, backtestTrackingLabel, officialEventDisplayTitle, 
 import { Shell } from './components/Shell'
 import { Term } from './components/Term'
 import { UnlessPageDate } from './components/pageDate'
+import { useMinWidth } from './components/useMinWidth'
+import { TERMINAL_MIN_WIDTH } from './candidates/candidates'
 import { Card, CardList, DataTable, EmptyState, Skeleton, Tabs, cx, tabId, tabPanelId, type Column } from './components/ui'
 import { StockBarsChart, StockIndicatorCard, useBarsView } from './stock/StockBarsChart'
 import { CandidateChart } from './today/CandidateChart'
@@ -467,6 +469,8 @@ function NewsDetailPage() {
 export function TodayPage() {
   const query = useQuery<Dashboard>({ queryKey: ['dashboard'], queryFn: getDashboard })
   const [board, setBoard] = useState<ThemeBoard>('industry')
+  // The chart beside the list from 1280px; below that a row opens its own card (#665, DESIGN_SYSTEM §5 候選列表).
+  const wide = useMinWidth(TERMINAL_MIN_WIDTH)
   const hotGroups = useQuery({ queryKey: ['theme-board', board, TODAY_BOARD_LIMIT], queryFn: () => getThemeBoard(board, TODAY_BOARD_LIMIT) })
   const candidates = useQuery({ queryKey: ['candidates', 'latest'], queryFn: () => getCandidates() })
   const data = query.data
@@ -494,7 +498,7 @@ export function TodayPage() {
         <>
           <MarketSummaryLine overview={data.market_overview} />
           <HoldingAlert actions={data.holding_actions ?? data.actions ?? []} />
-          <CandidatesSection data={candidates.data} loading={candidates.isLoading} error={candidates.error} renderChart={(item) => <CandidateChart item={item} />} />
+          <CandidatesSection data={candidates.data} loading={candidates.isLoading} error={candidates.error} renderChart={(item) => <CandidateChart item={item} />} wide={wide} />
           <HotGroupsSection className="home-panel" title={<Term id="hot_group">熱門族群</Term>} board={board} onBoardChange={setBoard} data={hotGroups.data} loading={hotGroups.isLoading} error={hotGroups.error} />
           {data.data_quality.error && <div className="warning-box">官方擷取警告：{data.data_quality.error}</div>}
         </>
