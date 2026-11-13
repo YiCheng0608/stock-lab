@@ -7,8 +7,9 @@ import * as AppModule from '../App'
 import type { ActionNearness, ActionNearnessItem, ActionSummary, ActionTierSummary, ActionsResponse, Dashboard, Position } from '../types'
 import { action } from '../today/today.fixtures'
 import { parseStockTab, stockTabSearch } from '../stock/stockTabs'
+import { PageDateContext } from '../components/pageDate'
 import { ActionFilters, ActionTierList, ActionTierSectionView } from './ActionViews'
-import { ACTION_TIER_PREVIEW, actionClose, CONDITIONS_PENDING_TEXT, EMPTY_TEXT, NEAR_RESEARCH_LINK, SEARCH_NOTE, hiddenSentence, nearCopy, previewTiers, tierSections } from './actionTiers'
+import { ACTION_TIER_PREVIEW, actionClose, CONDITIONS_PENDING_TEXT, EMPTY_TEXT, HIDDEN_NOTE, LEVELS_NOTE, NEAR_RESEARCH_LINK, SEARCH_NOTE, hiddenSentence, nearCopy, previewTiers, tierSections } from './actionTiers'
 
 // Action centre tiers (#278, UI_COPY_SPEC §5, DESIGN_SYSTEM §5 行動列表／篩選膠囊／庫存一行), the tier 3 接近成立 cards
 // and the tier 2／4 lines (#277-B, UI_COPY_SPEC §6, DESIGN_SYSTEM §7), and the today page's holding line reading every
@@ -66,12 +67,19 @@ const firstPage = () => page([candidate('1712', 1), candidate('6416', 2), row('2
 
 // ---- counts and the hidden line come from summary (UI_COPY_SPEC §5) ----
 const filters = render('ActionFilters', () => <ActionFilters summary={summary()} view="focus" includeEtf={false} searching={false} onViewChange={() => {}} onIncludeEtfChange={() => {}} />)
-for (const label of ['重點 54', '含其他觀察 1,362', '全部 1,491', '含 ETF（8）']) check(text(filters).includes(label), `篩選膠囊: shows 「${label}」 from summary, got ${text(filters)}`)
+// Issue 649: only the selected chip carries its count; the other chips and 含 ETF are names.
+const chipTexts = [...filters.matchAll(/<button [^>]*>([^<]*)<\/button>/g)].map((match) => match[1])
+check(JSON.stringify(chipTexts) === JSON.stringify(['重點 54', '含其他觀察', '全部']), `篩選膠囊: the selected chip's count from summary, the others names only, got ${JSON.stringify(chipTexts)}`)
+check(text(filters).includes('含 ETF') && !text(filters).includes('含 ETF（') && !text(filters).includes('1,362') && !text(filters).includes('1,491'), `篩選膠囊: no count on 含 ETF or the other chips, got ${text(filters)}`)
+const allView = render('ActionFilters all', () => <ActionFilters summary={summary({ view: 'all' })} view="all" includeEtf={false} searching={false} onViewChange={() => {}} onIncludeEtfChange={() => {}} />)
+check(/aria-pressed="true"[^>]*>全部 1,491</.test(allView) && text(allView).includes('重點') && !text(allView).includes('重點 54'), `篩選膠囊: the count follows the selected chip, got ${text(allView)}`)
 check(count(filters, 'aria-pressed="true"') === 1 && /aria-pressed="true"[^>]*>重點 54/.test(filters), '篩選膠囊: only 重點 is selected by default')
 check(filters.includes('filter-chip-selected') && count(filters, 'class="badge filter-chip') === 3, '篩選膠囊: three badge chips, the selected variant on one')
-const sentence = '預設隱藏：ETF 186 檔、其他觀察 1,308 檔、資料不足 129 檔；自選標的一律顯示。隱藏不刪資料，切換上方篩選即可看到。'
-check(text(filters).includes(sentence), `預設隱藏句: from summary.hidden, got ${text(filters)}`)
-check(hiddenSentence(summary({ hidden: { etf: 0, observation: 3, data_insufficient: 0 }, view: 'all' })) === '目前隱藏：其他觀察 3 檔；自選標的一律顯示。隱藏不刪資料，切換上方篩選即可看到。', '隱藏句: a zero part is left out and a non-default filter says 目前隱藏')
+// Issue 649: the counts stay on the chip row; why rows are hidden (HIDDEN_NOTE) is in the page's 說明 fold.
+const sentence = '預設隱藏：ETF 186 檔、其他觀察 1,308 檔、資料不足 129 檔'
+check(filters.includes(`<span class="small-note action-hidden-note">${sentence}</span>`) && !text(filters).includes(HIDDEN_NOTE), `預設隱藏句: the counts from summary.hidden, without the note, got ${text(filters)}`)
+check(/^<div class="action-filters"><div class="filter-chips"[^]*<\/div><label class="check-label">[^]*<\/label><span class="small-note action-hidden-note">[^<]*<\/span><\/div>$/.test(filters), `篩選列: chips, 含 ETF and the hidden counts in one row, got ${filters}`)
+check(hiddenSentence(summary({ hidden: { etf: 0, observation: 3, data_insufficient: 0 }, view: 'all' })) === '目前隱藏：其他觀察 3 檔', '隱藏句: a zero part is left out and a non-default filter says 目前隱藏')
 check(hiddenSentence(summary({ hidden: { etf: 0, observation: 0, data_insufficient: 0 }, view: 'all', include_etf: true })) === null, '隱藏句: nothing hidden, no line')
 const searching = render('ActionFilters search', () => <ActionFilters summary={summary()} view="focus" includeEtf={false} searching onViewChange={() => {}} onIncludeEtfChange={() => {}} />)
 check(text(searching).includes(SEARCH_NOTE) && !text(searching).includes('預設隱藏'), '搜尋: the line says the search ignores the filters')
@@ -93,7 +101,18 @@ check(/<dt>目標一（元）<\/dt>/.test(list) && !/<dt>目標<\/dt>/.test(list
 check(count(list, 'data-action-row=') === 4 && count(list, 'data-action-card=') === 4, '區塊: one table row and one phone card per loaded row')
 check(/<td><span class="candidate-rank"[^>]*>#1<\/span><\/td>/.test(list), '今日候選: the first cell is the rank')
 check(count(list, 'href="/stocks/TWSE/1712?tab=research"') >= 2, '每列: links to the stock research tab')
-check(count(list, '>2026/10/22</td>') === 4, '每列: a 資料日 cell YYYY/MM/DD')
+// #661 (decision 6835320079 D-c): no 資料日 column; without a known page date every row still states its day under the name.
+check(!actionHeaders.includes('資料日'), '行動列表表頭: no 資料日 column')
+check(count(list, '<div class="small-note action-row-date">資料 2026/10/22</div>') === 4, `每列: without a page date, 「資料 2026/10/22」 under each name, got ${count(list, 'action-row-date')}`)
+const onPage = (day: string) => render(`ActionTierList page ${day}`, () => <PageDateContext.Provider value={day}><ActionTierList sections={sections} loadingTiers={new Set()} canLoadMore={() => true} onMore={() => {}} /></PageDateContext.Provider>)
+const samePage = onPage('2026-10-22')
+check(!samePage.includes('action-row-date') && !samePage.includes('action-card-date') && !text(samePage).includes('資料 2026/10/22'), '每列: a row of the page date says no date (the navbar has it)')
+const laterPage = onPage('2026-10-23')
+check(count(laterPage, '<div class="small-note action-row-date">資料 2026/10/22</div>') === 4 && count(laterPage, 'action-card-date') === 4, '每列: a row of another day than the page still says 「資料 2026/10/22」 (table and card)')
+// U-a: 「單位：…元」 once, above the first levels table with rows (tier 1 here: this list has no tier 0).
+check(count(list, LEVELS_NOTE) === 1 && list.indexOf(LEVELS_NOTE) < list.indexOf('data-tier="2"'), `單位: one units line, on the first drawn levels table, got ${count(list, LEVELS_NOTE)}`)
+const noFirst = render('ActionTierList without tier 1 rows', () => <ActionTierList sections={sections.filter((section) => section.tier !== 1)} loadingTiers={new Set()} canLoadMore={() => true} onMore={() => {}} />)
+check(count(noFirst, LEVELS_NOTE) === 1 && noFirst.indexOf(LEVELS_NOTE) > noFirst.indexOf('data-tier="2"'), '單位: with no tier 1 table the line moves to the next drawn levels table')
 check(text(list).includes('突破條件差 3 項'), '其他觀察: the 說明 column has the main reason')
 check(render('ActionTierList empty', () => <ActionTierList sections={[]} loadingTiers={new Set()} canLoadMore={() => true} onMore={() => {}} />).includes(EMPTY_TEXT), '區塊: no rows, the empty line')
 const loadedAll = render('ActionTierSectionView loaded', () => <ActionTierSectionView section={{ ...sections[1], shown: 1 }} canLoadMore onMore={() => {}} />)
@@ -196,6 +215,21 @@ const twelvePage = page(twelve, { tiers: summary().tiers.map((tier) => ({ ...tie
 const phone = render('ActionTierList phone', () => <ActionTierList sections={tierSections(twelvePage)} loadingTiers={new Set()} canLoadMore={() => true} onMore={() => {}} />)
 check(phone.includes('class="card-list action-cards"') && count(phone, 'data-action-card=') === 12 && !phone.includes('card-list-rest'), '手機卡片: CardList, every loaded row a card, no 顯示其餘 fold (the tier pages instead)')
 check(/<div class="action-card-head"><div class="action-card-title">.*?<\/div><div class="action-card-price">21\.10<span class="action-change positive">\+2\.43%<\/span><\/div><\/div>/.test(phone), '手機卡片: name and badge on the left, the close and change on the right of the title row')
+// Issue 649: a phone card shows the name and status, the close, the levels (tier 3: the 差 lines; tiers 4–5: the note), the
+// day and the link; market · type (with the candidate rank), tier 2's line and tier 3's met line are in its 更多 fold.
+const FOLD = '<details class="action-card-more">'
+const cardsOf = (markup: string) => markup.split('data-action-card=').slice(1).map((card) => card.slice(0, card.indexOf('</article>')))
+const shown = (card: string) => card.slice(0, card.indexOf(FOLD)) + card.slice(card.indexOf('</details>'))
+const folded = (card: string) => card.slice(card.indexOf(FOLD), card.indexOf('</details>'))
+const nearCards = cardsOf(near), conditionalCards = cardsOf(conditional), observationCards = cardsOf(observation), candidateCards = cardsOf(list)
+const allCards = [...nearCards, ...conditionalCards, ...observationCards, ...candidateCards]
+check(allCards.length === 10 && allCards.every((card) => count(card, `${FOLD}<summary>更多</summary>`) === 1), `手機卡片: every card has one 更多 fold, got ${allCards.length}`)
+check(allCards.every((card) => !/上市 · |上櫃 · /.test(text(shown(card))) && /上市 · |上櫃 · /.test(text(folded(card)))), '手機卡片: market · type only in 更多')
+check(candidateCards.some((card) => text(folded(card)).includes('#1 · ')) && candidateCards.every((card) => !/#\d+ · /.test(text(shown(card)))), '手機卡片: the candidate rank is in 更多 with market · type')
+check(nearCards.every((card) => !text(shown(card)).includes('已達成') && text(folded(card)).includes('已達成') && text(shown(card)).includes('差：')), '手機卡片: tier 3 shows the 差 lines, the met line is in 更多')
+check(conditionalCards.every((card) => !text(shown(card)).includes('條件成立，') && text(folded(card)).includes('條件成立，') && card.includes('candidate-mini-levels')), '手機卡片: tier 2 shows the levels, why it is not a candidate is in 更多')
+check(observationCards.every((card) => text(shown(card)).includes('差 ') && !text(folded(card)).includes('差 ')), '手機卡片: tiers 4–5 keep their note in view')
+check(allCards.every((card) => /資料 2026\/10\/22<\/div><details class="action-card-more">[^]*<\/details><a [^>]*class="text-link"/.test(card)), '手機卡片: the foot is the day (no page date known), 更多, then the link')
 
 // ---- 我的庫存: one line without holdings, the full section with them ----
 const PortfolioSubsection = appComponent('PortfolioSubsection')

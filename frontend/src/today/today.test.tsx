@@ -87,7 +87,7 @@ check(failed.endsWith('資料截至 未提供') && !failed.includes('·'), `head
 // ---- holding-risk alert row: only verified holding risks, linked to the action centre ----
 const alert = render('HoldingAlert', () => <HoldingAlert actions={riskActions()} />)
 check(text(alert).includes('持倉風險 4 檔：2330 台積電：減碼／退場條件；1101 台泥：持倉風險資料不足；2882 國泰金：庫存數量待核實 等 4 檔'), `持倉提示列: count, first three holdings and reasons, got ${text(alert)}`)
-check(alert.includes('href="/watch"') && text(alert).includes('查看觀察中 →'), '持倉提示列: links to /watch (Issue 493)')
+check(alert.includes('href="/watch"') && text(alert).includes('查看我的追蹤 →'), '持倉提示列: links to /watch (Issue 493)')
 check(!text(alert).includes('長榮') && !text(alert).includes('鴻海'), '持倉提示列: not-held rows are no holding risk')
 const noRisk = render('HoldingAlert none', () => <HoldingAlert actions={riskActions().filter((item: ActionSummary) => !item.held)} />)
 check(noRisk === '', `持倉提示列: nothing when no holding is at risk, got ${text(noRisk)}`)
@@ -111,8 +111,8 @@ check(text(slice(long, 'class="candidate-more"', '</details>')).includes('顯示
 check(text(long).includes('2026/10/16 收盤後條件成立，最早下一個交易日（T+1）才可研究進場。') && text(long).includes(CANDIDATE_DISCLAIMER), 'list: the T+1 sentence and the disclaimer')
 // The head is one line (Issue 510): no eyebrow; title, date badge, count, the notes and 策略說明 in one flex row.
 const head = slice(long, 'class="candidates-head"', '<ol')
-check(!head.includes('eyebrow') && head.includes('id="candidates-title">今日可買</h2>') && head.includes('href="/strategy"'), 'Issue 510: the head has no eyebrow, the title and 策略說明 are in it')
-check(head.indexOf('今日可買</h2>') < head.indexOf('資料 2026/10/16') && head.indexOf('資料 2026/10/16') < head.indexOf('12 檔') && head.indexOf('12 檔') < head.indexOf('收盤後條件成立'), 'Issue 510: title → date → count → notes in the head')
+check(!head.includes('eyebrow') && head.includes('id="candidates-title">今日名單</h2>') && head.includes('href="/strategy"'), 'Issue 510: the head has no eyebrow, the title and 策略說明 are in it')
+check(head.indexOf('今日名單</h2>') < head.indexOf('資料 2026/10/16') && head.indexOf('資料 2026/10/16') < head.indexOf('12 檔') && head.indexOf('12 檔') < head.indexOf('收盤後條件成立'), 'Issue 510: title → date → count → notes in the head')
 // AC-2: each row shows the name, the entry sentence (with its stop and target) and the levels' classes; the reason and
 // the average volume moved into the detail.
 const main1 = mainOf(rowOf(list, 1))
@@ -174,14 +174,29 @@ for (const reason of ['no_actionable_signals', 'all_excluded'] as const) {
 const notComputed = render('CandidatesSection not computed', () => <CandidatesSection data={notComputedResponse()} loading={false} error={null} />)
 check(text(notComputed).includes(NOT_COMPUTED_TEXT) && text(notComputed).includes('尚無候選清單') && !notComputed.includes('date-badge') && !text(notComputed).includes('T+1'), 'not_computed: copy without a date badge or T+1 sentence')
 
-// ---- Issue 510 layout rules the static markup cannot show (DESIGN_SYSTEM §5 候選列表, 熱門族群與重點新聞) ----
+// ---- Issue 510 layout rules the static markup cannot show (DESIGN_SYSTEM §5 候選列表, 熱門族群) ----
 const styles = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8')
 const ruleOf = (selector: string) => { const at = styles.indexOf('\n' + selector + ' {'); return at < 0 ? '' : styles.slice(at, styles.indexOf('}', at)) }
 check(/white-space:\s*nowrap/.test(ruleOf('.candidate-row-title')) && /text-overflow:\s*ellipsis/.test(ruleOf('.candidate-row-title')), 'Issue 510: the title line never wraps; market · group is cut with an ellipsis')
-check(/white-space:\s*nowrap/.test(ruleOf('.home-news-title')) && /text-overflow:\s*ellipsis/.test(ruleOf('.home-news-title')), 'Issue 510: a news title is one line')
-check(/white-space:\s*nowrap/.test(ruleOf('.home-news-meta, .home-news-impact')) && /white-space:\s*nowrap/.test(ruleOf('.hot-group-returns')), 'Issue 510: line two of news and groups never wraps')
+check(/white-space:\s*nowrap/.test(ruleOf('.hot-group-returns')), 'Issue 510: line two of a group never wraps')
 check(/white-space:\s*nowrap/.test(ruleOf('.hot-group-line h3')), 'Issue 510: a group name is one line')
 check(!/var\(--text-|--space-row|--space-block/.test(styles.replace(/var\(--text-(xs|sm|md|base|lg|xl|2xl)\)|var\(--space-(row|block)\)/g, '')), 'Issue 510: only the defined type and spacing tokens are used')
+// Issue 608: on phones the AI entry left the numbers' line (it covered the total at 390) for the title line's right,
+// the numbers take the whole width, and the RR's basis may wrap inside its column. page_checks T17 measures it.
+const phoneAt = styles.indexOf('@media (max-width: 640px)')
+const phoneRuleOf = (selector: string) => { const at = styles.indexOf('\n  ' + selector + ' {', phoneAt); return phoneAt < 0 || at < 0 ? '' : styles.slice(at, styles.indexOf('}', at)) }
+check(/display:\s*contents/.test(phoneRuleOf('.candidate-row-body')) && /grid-row:\s*1/.test(phoneRuleOf('.candidate-row-title')), 'Issue 608: the row body\'s children sit in the row grid, the title on line one')
+check(/grid-column:\s*2/.test(phoneRuleOf('.candidate-ai-toggle')) && /grid-row:\s*1/.test(phoneRuleOf('.candidate-ai-toggle')), 'Issue 608: the AI entry is at the right of the title line on phones')
+check(/grid-column:\s*1 \/ -1/.test(phoneRuleOf('.candidate-row-body > :not(.candidate-row-title), .candidate-row-nums')), 'Issue 608: the sentence and the numbers take the whole row')
+check(/min-width:\s*0/.test(phoneRuleOf('.candidate-row-nums > .candidate-row-rr')) && /white-space:\s*normal/.test(phoneRuleOf('.candidate-row-nums .candidate-rr-basis')), 'Issue 608: the RR column may narrow and its basis wrap')
+check(nums1.includes('<div class="candidate-row-rr"><dt>'), 'Issue 608: the RR cell carries the class the phone rule narrows')
+// Issue 668: beside the chart (from 1280px) the list column is too narrow for the note beside the levels, so the detail
+// stacks there as below 860px; from 861 to 1279px it stays side by side. page_checks T21 measures the note's width.
+const wideAt = styles.indexOf('@media (min-width: 1280px)')
+const wideRuleOf = (selector: string) => { const at = styles.indexOf('\n  ' + selector + ' {', wideAt); const end = styles.indexOf('\n}', wideAt); return wideAt < 0 || at < 0 || at > end ? '' : styles.slice(at, styles.indexOf('}', at)) }
+const stacked = wideRuleOf('.candidates-terminal .candidate-detail-body')
+check(/grid-template-areas:\s*"note" "side" "folds"/.test(stacked) && /grid-template-columns:\s*minmax\(0, 1fr\);/.test(stacked), `Issue 668: from 1280px the detail in the list column stacks, got 「${stacked.trim()}」`)
+check(/grid-template-areas:\s*"note side"/.test(ruleOf('.candidate-detail-body')), 'Issue 668: below 1280px (above 860px) the note and the levels stay side by side')
 const tokenCss = fs.readFileSync(path.join(__dirname, '..', 'styles', 'tokens.css'), 'utf8')
 for (const token of ['--text-xs', '--text-sm', '--text-md', '--text-base', '--text-lg', '--text-xl', '--text-2xl', '--space-row', '--space-block']) check(tokenCss.includes(token + ':'), `tokens.css defines ${token} (DESIGN_SYSTEM §2)`)
 
@@ -191,6 +206,9 @@ const rule = (selector: string) => new RegExp(`(^|\\n)\\${selector}\\s*\\{([^}]*
 check(/color:\s*var\(--color-warning\)/.test(rule('.level-stop')), `.level-stop uses --color-warning, got 「${rule('.level-stop').trim()}」`)
 check(/color:\s*var\(--color-primary\)/.test(rule('.level-target')), `.level-target uses --color-primary, got 「${rule('.level-target').trim()}」`)
 check(!/--color-(error|success)/.test(rule('.level-stop') + rule('.level-target')), 'levels: no --color-error／--color-success')
+// The sparkline (Issue 653): red for a span that rose, green for one that fell (台股紅漲綠跌), muted when unchanged.
+check(/stroke:\s*var\(--color-up\)/.test(rule('.sparkline-up path')) && /stroke:\s*var\(--color-down\)/.test(rule('.sparkline-down path')), `sparkline: up uses --color-up and down --color-down, got 「${rule('.sparkline-up path').trim()}」「${rule('.sparkline-down path').trim()}」`)
+check(/stroke:\s*var\(--color-text-muted\)/.test(rule('.sparkline path')) && /fill:\s*none/.test(rule('.sparkline path')), 'sparkline: an unchanged span is muted and the line has no fill')
 const boardPanel = render('StrategyBoardPanel', () => <StrategyBoardPanel board={board([conditionalBreakout(), observationPullback()])} candidate={null} />)
 check(boardPanel.includes('class="level-stop">2,364.00') && boardPanel.includes('class="level-target">2,458.00／2,508.00'), '個股頁策略總表: stop and target carry the level classes')
 check(boardPanel.includes('class="level-stop">2,399.64') && boardPanel.includes('class="level-target">2,478.57／2,521.07'), '個股頁觀察價位: reference stop and target carry the level classes')

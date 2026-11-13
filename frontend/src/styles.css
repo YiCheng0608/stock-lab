@@ -37,7 +37,18 @@ pre { max-height: 300px; overflow: auto; margin: var(--space-4) 0 0; padding: va
 .navbar-links a:hover { color: var(--color-text); }
 .navbar-links a.active { color: var(--color-text); border-bottom-color: var(--color-primary); }
 .navbar-tools { display: flex; align-items: center; gap: var(--space-3); }
+.navbar-date { display: flex; flex: none; align-items: center; margin-left: calc(var(--space-3) - var(--space-6)); }
 .navbar-search .input { width: 200px; padding: var(--space-2) var(--space-3); font-size: 14px; }
+/* Navbar search suggestions (DESIGN_SYSTEM §5 導覽列搜尋建議, Issue 599). */
+.navbar-search { position: relative; }
+.nav-suggest { position: absolute; top: calc(100% + var(--space-2)); right: 0; z-index: 25; width: 320px; padding: var(--space-1) 0; background: var(--color-bg-card); border: 1px solid var(--color-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-hover); }
+.nav-suggest-list { margin: 0; padding: 0; list-style: none; }
+.nav-suggest-option { display: flex; align-items: baseline; gap: var(--space-3); padding: var(--space-2) var(--space-4); cursor: pointer; font-size: var(--text-md); }
+.nav-suggest-option-active { background: var(--color-bg-elevated); }
+.nav-suggest-symbol { flex: none; font-family: var(--font-mono); font-weight: 600; }
+.nav-suggest-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-suggest-market { flex: none; color: var(--color-text-muted); font-size: var(--text-md); }
+.nav-suggest-note { margin: 0; padding: var(--space-2) var(--space-4); color: var(--color-text-muted); font-size: var(--text-md); }
 .site-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-16); padding-top: var(--space-5); padding-bottom: var(--space-8); border-top: 1px solid var(--color-border); color: var(--color-text-subtle); font-size: 12px; }
 .secondary-nav { display: flex; flex-wrap: wrap; gap: var(--space-3); color: var(--color-text-muted); font-size: 12px; }
 .secondary-nav a:hover { color: var(--color-text); }
@@ -360,7 +371,11 @@ a.symbol-link:hover { color: var(--color-primary); }
 .overview-cutoff-control { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--color-border); }
 .overview-cutoff-control label { color: var(--color-text-muted); font-size: var(--text-md); }
 .overview-cutoff-control input { width: auto; padding: var(--space-2) var(--space-3); }
-.cutoff-toggle { display: none; }
+/* 研究截止日期 folds behind a one-line toggle at every width: it is a look-back tool, not part of the daily read (DESIGN_SYSTEM §4). */
+.cutoff-panel { margin-top: var(--space-3); padding-top: var(--space-2); border-top: 1px solid var(--color-border); }
+.cutoff-toggle { display: inline-flex; padding: var(--space-1) 0; }
+.cutoff-panel:not(.open) .overview-cutoff-control { display: none; }
+.cutoff-panel .overview-cutoff-control { margin-top: var(--space-2); padding-top: 0; border-top: 0; }
 /* 說明 ends the form row; opened, its sentence takes the next line (#519, DESIGN_SYSTEM §4 個股頁頁首與摘要卡). */
 .cutoff-help > summary { color: var(--color-primary); cursor: pointer; font-size: var(--text-sm); }
 .cutoff-help[open] { flex-basis: 100%; }
@@ -377,12 +392,21 @@ a.symbol-link:hover { color: var(--color-primary); }
 .stock-header-close { font: 700 36px/1.1 var(--font-mono); font-variant-numeric: tabular-nums; }
 .stock-header-change { font: 600 18px var(--font-mono); font-variant-numeric: tabular-nums; }
 .stock-header-meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); color: var(--color-text-muted); font-size: 14px; }
+/* An official stop of trading (Issue 582): a long sentence, so it wraps inside the phone width. */
+.stock-header-halt { max-width: 100%; white-space: normal; }
 .stock-header-skeleton { margin-top: var(--space-5); padding: var(--space-4); }
 .stock-tabs { margin-bottom: var(--space-4); }
 .stock-tab-content { min-width: 0; }
 .stock-data-gap { margin-top: 0; }
 .stock-action-detail { margin-bottom: 0; }
 .stock-detail-levels { margin-top: var(--space-3); }
+/* #648 圖優先: the chart card between the header and the summary keeps the tab cards' padding and title scale. */
+.stock-page > .stock-chart-card { margin-bottom: var(--space-4); padding: var(--space-4) var(--space-5); }
+.stock-page > .stock-chart-card .card-title { font-size: var(--text-xl); font-weight: 700; }
+/* #656: the stock page card draws price and volume only; its MA toggles are the first line under the chart (a legend that
+   switches), so the toolbar above the chart is one row shorter on phones. */
+.chart-ma-row { margin-top: var(--space-2); }
+.stock-detail-levels-ref { margin-top: var(--space-3); }
 /* Summary card under the header (#519, DESIGN_SYSTEM §5 個股摘要卡): verdict, closest strategy, rule levels. */
 .stock-summary { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 3fr) minmax(0, 4fr); gap: var(--space-3) var(--space-6); margin-bottom: var(--space-4); padding: var(--space-5); }
 .stock-summary-col { display: grid; align-content: start; gap: var(--space-2); min-width: 0; }
@@ -426,6 +450,8 @@ a.symbol-link:hover { color: var(--color-primary); }
 .stock-group-periods .research-list { margin-top: var(--space-2); }
 
 .chart-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-3); }
+.chart-toolbar-start { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2) var(--space-3); }
+.bars-range .filter-chip { padding: var(--space-1) var(--space-3); font-size: var(--text-sm); }
 .ma-toggles { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
 .ma-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--color-text-muted); font: 500 13px var(--font-mono); cursor: pointer; }
 .ma-swatch { display: inline-block; width: 14px; height: 3px; border-radius: 2px; }
@@ -434,7 +460,9 @@ a.symbol-link:hover { color: var(--color-primary); }
 .ma-swatch-ma20 { background: var(--chart-ma20); }
 .ma-swatch-ma60 { background: var(--chart-ma60); }
 .ma-swatch-ma120 { background: var(--chart-ma120); }
-.chart-stage { position: relative; width: 100%; }
+/* pan-y (Issue 600): the page still scrolls vertically, a sideways drag pans the chart. zrender 5.6 takes Chromium Edge
+   ("Edg/") for old Edge and listens to pointer events only, which the browser cancels under touch-action auto. */
+.chart-stage { position: relative; width: 100%; touch-action: pan-y; }
 .indicator-tabs { position: absolute; z-index: 1; }
 .indicator-empty { position: absolute; display: flex; align-items: center; justify-content: center; border: 1px dashed var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); }
 .indicator-empty .empty-state { min-height: 0; padding: var(--space-2); }
@@ -495,28 +523,42 @@ a.symbol-link:hover { color: var(--color-primary); }
 .market-chart-footer { display: grid; gap: var(--space-1); margin-top: var(--space-3); color: var(--color-text-muted); font-size: 12px; line-height: 1.65; }
 .market-chart-footer p { margin: 0; font-size: 12px; line-height: 1.65; }
 .market-chart-contract { color: var(--color-text); font: 500 var(--text-sm) var(--font-mono); }
-/* 美股（前一交易日） (Issue 547): four equal index widgets in the overview's bar, each with a muted date line (非最新 in
-   the warning color, 美股休市 muted), then one folded row per index whose daily K mounts when opened. */
-.market-us { margin-top: var(--space-4); }
-.market-us-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.market-us .market-us-date { flex: 1 1 100%; margin-top: 2px; color: var(--color-text-muted); font-size: 12px; }
-.market-us-flag { margin-left: var(--space-1); }
-.market-us-stale { color: var(--color-warning); font-weight: 600; }
-.market-us-charts { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
-.market-us-chart > summary { font-size: var(--text-sm); }
-.market-us-chart .market-chart { margin-top: var(--space-2); }
+/* 指數總表 (Issue 564): one table of the seven indexes in two groups; rows are 44px, the selected row has the selection
+   background and a 3px primary bar on its left edge; a click anywhere on a row selects it (the name is its button).
+   非最新 in the warning color, 美股休市, 換月 and the MA60 value muted; up/down colors only on the change. */
+.market-indexes { margin-top: var(--space-4); }
+.market-index-table th, .market-index-table td { height: 44px; padding: 0 var(--space-3); }
+.market-index-table .table-group-row td { height: 32px; font-size: var(--text-sm); }
+.market-index-row { cursor: pointer; }
+.market-index-row.is-selected { background: var(--color-primary-soft); }
+.market-index-row.is-selected:hover { background: var(--color-primary-soft); }
+.market-index-row.is-selected td:first-child { box-shadow: inset 3px 0 0 var(--color-primary); }
+.market-index-select { padding: 0; border: 0; background: transparent; color: var(--color-text); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
+.market-index-row.is-selected .market-index-select { color: var(--color-primary); }
+.market-index-sub { margin-left: var(--space-1); color: var(--color-text-muted); font: 500 var(--text-xs) var(--font-mono); white-space: nowrap; }
+.market-index-muted, .market-index-flag, .market-index-missing { color: var(--color-text-muted); }
+.market-index-stale { color: var(--color-warning); font-weight: 600; }
+.market-index-position { color: var(--color-text); font-weight: 600; }
+.market-index-asof { margin-top: 2px; color: var(--color-text-muted); font: 400 var(--text-xs) var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.market-index-missing, .market-index-flag { font-family: var(--font-body); }
+/* A flag wraps as a whole on phones (「非最新」, 「2026/11/07 美股休市」), never inside a word. */
+.market-index-flag { white-space: nowrap; }
+.market-index-missing { white-space: normal; }
+.market-index-ma60 { font-variant-numeric: tabular-nums; }
+.market-index-ma60 .market-index-muted { font-family: var(--font-mono); }
+.market-index-source { color: var(--color-text-muted); }
+.market-index-note { margin: var(--space-2) 0 0; }
 .alert-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-left: 4px solid var(--color-warning); border-radius: var(--radius-lg); background: var(--color-bg-card); color: var(--color-text); font-size: 14px; }
-/* Hot groups and news (#493, DESIGN_SYSTEM §5 熱門族群與重點新聞): two cards in one grid row; stretch makes them one height,
-   so their top and bottom edges line up whatever each holds. #510: one head line, at most five items of two lines. */
-.home-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-6); align-items: stretch; margin-top: var(--space-block); }
-.home-panel { display: flex; flex-direction: column; min-width: 0; padding: var(--space-4) var(--space-5); border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-bg-card); }
+/* Hot groups on the home page (#493, DESIGN_SYSTEM §5 熱門族群): one card under the list (the news card left with Issue 625).
+   #510: one head line, at most five items of two lines. */
+.home-panel { margin-top: var(--space-block); display: flex; flex-direction: column; min-width: 0; padding: var(--space-4) var(--space-5); border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-bg-card); }
 .panel-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); min-height: 40px; }
 .panel-head h2 { flex: 1 1 auto; margin: 0; font-size: var(--text-xl); }
 .panel-head .text-link { white-space: nowrap; }
 .hot-groups-dates { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); margin: var(--space-1) 0 var(--space-1); }
-.home-panel .hot-group-list, .home-news-list { display: grid; margin-top: var(--space-1); }
-.home-panel .hot-group-row, .home-news-row { display: grid; gap: 2px; min-width: 0; padding: var(--space-2) 0; border-top: 1px solid var(--color-border); color: var(--color-text); }
-.home-panel .hot-group-row:hover h3, .home-news-row:hover .home-news-title a { color: var(--color-primary); }
+.home-panel .hot-group-list { display: grid; margin-top: var(--space-1); }
+.home-panel .hot-group-row { display: grid; gap: 2px; min-width: 0; padding: var(--space-2) 0; border-top: 1px solid var(--color-border); color: var(--color-text); }
+.home-panel .hot-group-row:hover h3 { color: var(--color-primary); }
 .hot-group-line { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .hot-group-line .hot-group-rank { flex: none; min-width: 28px; font-size: var(--text-md); font-weight: 700; }
 .hot-group-line h3 { flex: 0 1 auto; min-width: 0; margin: 0; overflow: hidden; font-size: var(--text-base); text-overflow: ellipsis; white-space: nowrap; }
@@ -526,19 +568,6 @@ a.symbol-link:hover { color: var(--color-primary); }
 .hot-group-score b { font: 600 var(--text-base) var(--font-mono); font-variant-numeric: tabular-nums; }
 .hot-group-returns { display: flex; gap: var(--space-4); padding-left: calc(28px + var(--space-2)); overflow: hidden; color: var(--color-text-muted); font-size: var(--text-sm); white-space: nowrap; }
 .hot-group-returns b { font: 500 var(--text-sm) var(--font-mono); font-variant-numeric: tabular-nums; }
-.home-news-row { grid-template-areas: "title title" "meta impact"; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--space-2); }
-.home-news-title { grid-area: title; min-width: 0; margin: 0; overflow: hidden; font-size: var(--text-base); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.home-news-title a { color: var(--color-text); }
-/* Line two never wraps: source and time, then the direction and 「AI 推論」; the source is cut first. */
-.home-news-meta, .home-news-impact { display: flex; align-items: center; gap: var(--space-2); min-width: 0; overflow: hidden; color: var(--color-text-muted); font-size: var(--text-sm); white-space: nowrap; }
-.home-news-meta { grid-area: meta; }
-.home-news-meta > * { flex: none; }
-.home-news-meta > .home-news-source { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.home-news-meta time { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-.home-news-impact { grid-area: impact; }
-.home-news-impact::before { content: "·"; }
-.home-news-impact .news-direction { display: inline-flex; flex: none; align-items: center; gap: var(--space-1); color: var(--color-text); }
-.home-news-impact .badge { flex: none; white-space: nowrap; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* ---- group boards: /themes, today Top 5, /themes/:id ------------------------------------------------------ */
@@ -552,6 +581,17 @@ a.symbol-link:hover { color: var(--color-primary); }
 .board-dates { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); }
 .badge-compact { padding: 2px 10px; font-size: 12px; white-space: normal; }
 /* 說明 sits at the right of the board line; opened, the four sentences take the next line (Issue 522). */
+/* Page-title 說明 (#666, as on /watch): the lead folds beside the heading; opened, it takes the next line. */
+.page-title-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-4); margin: var(--space-1) 0 var(--space-3); }
+.page-title-row h1 { margin: 0; }
+.page-help { margin-left: auto; }
+.page-help > summary { font-size: var(--text-sm); }
+.page-help[open] { flex: 1 1 100%; margin-left: 0; }
+.page-help-body p, .page-title .page-help-body p { max-width: 760px; margin: var(--space-1) 0 0; color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1.7; }
+.stocks-title { padding-bottom: var(--space-3); }
+.stocks-filter-tools { display: flex; flex: 0 1 auto; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); min-width: 0; }
+.stocks-filter-tools .filter-select { width: auto; }
+.stocks-count { white-space: nowrap; }
 .board-help { margin-left: auto; }
 .board-help > summary { font-size: var(--text-sm); }
 .board-help[open] { flex: 1 1 100%; margin-left: 0; }
@@ -571,7 +611,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .board-row-extremes { flex: 0 1000 auto; min-width: 0; overflow: hidden; color: var(--color-text-muted); font-size: var(--text-sm); text-overflow: ellipsis; }
 .board-row-extremes b, .board-row-meta b { color: var(--color-text); font: 500 var(--text-sm) var(--font-mono); font-variant-numeric: tabular-nums; }
 .board-row-meta { display: flex; grid-area: meta; align-items: center; gap: var(--space-4); min-width: 0; max-width: none; margin: 0; overflow: hidden; color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1.4; white-space: nowrap; }
-/* 今日可買 N 檔 keeps to the line height, so a row with it is as tall as one without. */
+/* 今日名單 N 檔 keeps to the line height, so a row with it is as tall as one without. */
 .board-row-meta .badge { flex: none; padding: 0 var(--space-2); line-height: 1.4; white-space: nowrap; }
 .board-row-score { grid-area: score; white-space: nowrap; }
 .board-row-score span { color: var(--color-text-muted); font-size: var(--text-xs); }
@@ -597,9 +637,38 @@ a.symbol-link:hover { color: var(--color-primary); }
 .theme-header p { margin: 0 0 var(--space-4); }
 .theme-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 220px)); gap: var(--space-4); margin-bottom: var(--space-3); }
 .theme-stats .stat { padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); }
+/* #666: one line of three stats (label, number, detail inline); it wraps between and inside stats, never cutting a number. */
+.theme-stat-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-6); margin-bottom: 0; }
+.theme-stat-line .stat { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-3); padding: 0; border: 0; background: none; }
+.theme-stat-line .stat-value { margin: var(--space-label) 0 0; font-size: 20px; white-space: nowrap; }
+.theme-header .theme-stat-line + * { margin-top: var(--space-2); }
 .theme-detail-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--space-4); }
 .trend-stage { width: 100%; height: 240px; }
 .components-returns { margin-top: var(--space-3); border-top: 1px solid var(--color-border); }
+
+/* Score bar (#654, DESIGN_SYSTEM §5 分數橫條): a 0–100 value as the fill share of a track, the number beside it. */
+.score-bar { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; vertical-align: middle; }
+.score-bar-track { position: relative; flex: 1 1 auto; width: 72px; min-width: 40px; height: 6px; overflow: hidden; border-radius: 999px; background: var(--color-bg-elevated); }
+.score-bar-fill { position: absolute; top: 0; bottom: 0; left: 0; border-radius: inherit; background: var(--color-primary); }
+.score-bar-value { flex: none; min-width: 3ch; color: var(--color-text); font: 600 var(--text-md) var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.score-bar-empty .score-bar-value { color: var(--color-text-muted); }
+.candidate-components dd .score-bar, .board-components dd .score-bar { display: flex; }
+.metric-row .score-bar { flex: 0 1 200px; }
+.score-group-title { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); }
+.score-group-title .score-bar { width: 140px; }
+.score-group-weight { color: var(--color-text-muted); font-size: var(--text-sm); font-weight: 400; }
+
+/* Strength block (#654, DESIGN_SYSTEM §5 強弱色塊): a relative return on a tint of its sign's colour, deeper per step. */
+.strength-chip { position: relative; z-index: 0; display: inline-block; padding: 0 3px; border-radius: 4px; color: var(--color-text); font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.strength-chip::before { position: absolute; z-index: -1; inset: 0; border-radius: inherit; background: var(--color-bg-elevated); content: ""; }
+.strength-up::before { background: var(--color-up); }
+.strength-down::before { background: var(--color-down); }
+.strength-l1::before { opacity: 0.16; }
+.strength-l2::before { opacity: 0.3; }
+.strength-l3::before { opacity: 0.5; }
+.strength-chip.strength-l4 { color: var(--color-bg); }
+.strength-chip.strength-none { color: var(--color-text-muted); }
+.strength-none::before { background: transparent; }
 .evidence-cell { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); }
 /* Member table (#280, DESIGN_SYSTEM §5): sort select, badges after the name, a stale bar's date under its close. */
 .member-sort { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--color-text-muted); font-size: 14px; white-space: nowrap; }
@@ -615,8 +684,26 @@ a.symbol-link:hover { color: var(--color-primary); }
 .member-card-price, .stock-card-price { display: flex; flex-direction: column; align-items: flex-end; font: 600 16px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .member-card .board-card-grid { margin-top: var(--space-2); }
 .member-card-evidence { margin-top: var(--space-2); font-size: 14px; }
-.stock-card-meta { margin-top: var(--space-1); color: var(--color-text-muted); font-size: 14px; }
-.stock-card-action { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); margin-top: var(--space-2); font-size: 14px; }
+/* #666: the two returns and 更多 share the card's second line; opened, 更多 (turnover, evidence) takes the next one. */
+.member-card { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-3); }
+.member-card > .member-card-head { flex: 1 1 100%; }
+.member-card-returns { flex: 1 1 auto; margin: var(--space-1) 0 0; color: var(--color-text-muted); font-size: var(--text-sm); }
+.member-card-returns b { color: var(--color-text); font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; }
+.member-card-more { margin-left: auto; }
+.member-card-more > summary { color: var(--color-primary); cursor: pointer; font-size: var(--text-sm); }
+.member-card-more[open] { flex: 1 1 100%; margin-left: 0; }
+.member-card-more .board-card-grid { margin-top: var(--space-1); }
+/* 族群成員 head (#666): title, sort, then 說明 (the theme table version and the member note); opened, it takes the next line. */
+.member-section-head { flex-wrap: wrap; align-items: center; }
+.member-section-head .member-sort { margin-left: auto; }
+.member-help > summary { font-size: var(--text-sm); }
+.member-help[open] { flex: 1 1 100%; }
+.member-help-body p { max-width: 760px; margin: var(--space-1) 0 0; padding: 0; color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1.7; }
+/* #666: the card's second line is the research action, with 市場 · 類型 in small type at its right. */
+.stock-card-foot { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-3); margin-top: var(--space-1); }
+.stock-card-meta { flex: none; color: var(--color-text-muted); font-size: 12px; }
+/* One research-action cell (Issue 602): the label, then the first missing item on its own line. */
+.stock-card-action { min-width: 0; font-size: 14px; }
 .stock-cards .table-note { padding: 0; }
 /* DESIGN_SYSTEM §5.1: the cards past the first ten fold into <details>; open, they keep the list's gap. */
 .card-list-rest-items { display: grid; gap: var(--space-3); margin-top: var(--space-3); }
@@ -627,7 +714,17 @@ a.symbol-link:hover { color: var(--color-primary); }
 .theme-news-title:hover { color: var(--color-primary); }
 
 /* ---- action centre tiers (DESIGN_SYSTEM §5 行動列表、篩選膠囊) ------------------------------------- */
-.action-filters { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
+/* #649: the title line carries a 說明 fold (the purpose and why rows are hidden); the chips, 含 ETF and the hidden
+   counts are one row that wraps on phones. */
+.actions-page .page-title { padding-bottom: var(--space-3); }
+.watch-title-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-4); margin: var(--space-1) 0 var(--space-3); }
+.watch-title-row h1 { margin: 0; }
+.watch-help { margin-left: auto; }
+.watch-help > summary { font-size: var(--text-sm); }
+.watch-help[open] { flex: 1 1 100%; margin-left: 0; }
+.watch-help[open] > summary { margin-bottom: 0; }
+.watch-help-body p, .page-title .watch-help-body p { max-width: 760px; margin: var(--space-1) 0 0; color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1.7; }
+.action-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-top: var(--space-3); }
 .filter-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .filter-chip { cursor: pointer; font-variant-numeric: tabular-nums; }
 .filter-chip:hover { border-color: var(--color-border-hover); color: var(--color-text); }
@@ -651,6 +748,10 @@ a.symbol-link:hover { color: var(--color-primary); }
 .action-card-price { display: flex; flex-direction: column; align-items: flex-end; font: 600 16px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .action-card-price .action-change { font-family: var(--font-mono); font-weight: 400; }
 .action-card-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-3); }
+/* The phone card's 更多 (#649): market · type and the secondary lines; open, it takes the foot's last line. */
+.action-card-more { margin-left: auto; }
+.action-card-more > summary { color: var(--color-primary); cursor: pointer; font-size: var(--text-sm); }
+.action-card-more[open] { flex: 1 1 100%; order: 9; margin-left: 0; }
 .action-more { margin-top: var(--space-3); }
 /* Tier 3 接近成立: text only, no level (DESIGN_SYSTEM §7). */
 .action-near { display: grid; gap: 2px; }
@@ -664,7 +765,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .candidate-mini-levels dt { color: var(--color-text-muted); font-size: 12px; }
 .candidate-mini-levels dd { margin: var(--space-label) 0 0; font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-/* ---- 今日可買 (#510, DESIGN_SYSTEM §5 候選列表): one list at every width; two lines a candidate, the detail below ---- */
+/* ---- 今日名單 (#510, DESIGN_SYSTEM §5 候選列表): one list at every width; two lines a candidate, the detail below ---- */
 .candidates-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin: var(--space-4) 0 var(--space-3); }
 .candidates-head h2 { margin: 0; font-size: var(--text-2xl); }
 .candidates-head .badge { padding: 2px 10px; font-size: var(--text-sm); }
@@ -673,6 +774,55 @@ a.symbol-link:hover { color: var(--color-primary); }
 .candidates-strategy-link { white-space: nowrap; }
 .candidate-list { margin: 0; padding: 0; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-bg-card); list-style: none; }
 .candidate-row + .candidate-row { border-top: 1px solid var(--color-border); }
+/* 盤後終端 (DESIGN_SYSTEM §5 候選列表): from 1280px up the list sits beside the picked candidate's chart; below that the
+   chart is not shown and the list takes the width. In the narrower list a row uses the phone arrangement. */
+.candidates-terminal-chart { display: none; }
+/* The sparkline (#653) and the price ladder share one line under the sentence, the sparkline first. */
+.candidate-row-figures { display: flex; align-items: center; gap: var(--space-3); max-width: 432px; margin: var(--space-1) 0 0 52px; }
+.sparkline { display: block; flex: none; overflow: visible; }
+.sparkline path { fill: none; stroke: var(--color-text-muted); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.sparkline-up path { stroke: var(--color-up); }
+.sparkline-down path { stroke: var(--color-down); }
+.price-ladder { position: relative; flex: 1 1 auto; min-width: 0; height: 14px; max-width: 320px; }
+.price-ladder i { position: absolute; top: 5px; height: 4px; }
+.price-ladder-risk { left: 0; background: var(--color-warning); opacity: 0.55; }
+.price-ladder-reward { background: var(--color-primary); opacity: 0.55; }
+.price-ladder .price-ladder-entry { top: 0; width: 2px; height: 14px; background: var(--color-text); }
+.price-ladder .price-ladder-close { top: 2px; width: 10px; height: 10px; margin-left: -5px; border: 2px solid var(--color-text); border-radius: 50%; background: var(--color-bg-card); }
+.candidate-rank-button { border: 0; color: inherit; cursor: pointer; }
+.candidate-rank-button[aria-pressed="true"] { background: var(--color-primary); color: var(--color-text); }
+/* Below 1280px (#665): the rank opens the row's own K-line card between the row and its detail. A tap on the row's free
+   space does too, so the row reads as clickable; a small caret in the rank's corner points down when closed, up when open. */
+.candidate-row-chartable > .candidate-row-main { cursor: pointer; }
+.candidate-chart-toggle { position: relative; }
+.candidate-chart-toggle::after { content: ""; position: absolute; right: 3px; bottom: 3px; border: 3px solid transparent; border-top-color: currentColor; border-bottom-width: 0; opacity: 0.7; }
+.candidate-chart-toggle[aria-expanded="true"] { background: var(--color-primary); color: var(--color-text); }
+.candidate-chart-toggle[aria-expanded="true"]::after { border-top-width: 0; border-bottom: 3px solid currentColor; }
+.candidate-chart { padding: 0 var(--space-5) var(--space-row); }
+.candidate-chart[hidden] { display: none; }
+.candidate-chart .stock-chart-card { margin: 0; }
+@media (min-width: 1280px) {
+  .candidates-terminal { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: var(--space-5); align-items: start; }
+  .candidates-terminal-chart { display: block; position: sticky; top: calc(var(--navbar-height, 64px) + var(--space-3)); min-width: 0; }
+  .candidates-terminal-chart .stock-chart-card { margin: 0; }
+  .candidate-row-selected > .candidate-row-main { box-shadow: inset 3px 0 0 var(--color-primary); background: var(--color-bg-alt); }
+  .candidates-terminal .candidate-row-main { grid-template-columns: 200px minmax(0, 1fr) auto; gap: var(--space-1) var(--space-3); padding: var(--space-row) var(--space-4); }
+  .candidates-terminal .candidate-row-body { display: contents; }
+  .candidates-terminal .candidate-row-title { grid-column: 1 / 3; grid-row: 1; }
+  .candidates-terminal .candidate-row-body > :not(.candidate-row-title) { grid-column: 1 / -1; }
+  /* The ladder and the numbers share the row's last line: the ladder under the rank and name, the numbers to its right. */
+  .candidates-terminal .candidate-row-body > .candidate-row-figures { grid-column: 1; flex-direction: column; align-items: stretch; align-self: center; gap: var(--space-1); max-width: none; margin-top: 0; }
+  /* Beside the 64px numbers the column has room: the sparkline sits over the ladder at the column's width. */
+  .candidates-terminal .sparkline { width: 100%; }
+  .candidates-terminal .price-ladder { flex: none; max-width: none; }
+  .candidates-terminal .candidate-row-nums { grid-column: 2 / -1; gap: var(--space-4); margin: 0; justify-content: flex-end; }
+  .candidates-terminal .candidate-row-nums > div { justify-items: start; }
+  .candidates-terminal .candidate-row-close dd { display: flex; align-items: baseline; gap: var(--space-2); }
+  .candidates-terminal .candidate-ai-toggle { grid-column: 3; grid-row: 1; align-self: center; }
+  /* #668: the list column is about 5/11 of the page here, too narrow for the note beside the levels (the auto side
+     column took its full width and squeezed the note to about 30px), so the detail stacks as below 860px. */
+  .candidates-terminal .candidate-detail-body { grid-template-areas: "note" "side" "folds"; grid-template-columns: minmax(0, 1fr); }
+}
 .candidate-row[hidden] { display: none; }
 .candidate-row-main { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--space-5); align-items: center; padding: var(--space-row) var(--space-5); transition: var(--transition); }
 .candidate-row-main:hover { background: var(--color-bg-elevated); }
@@ -705,6 +855,9 @@ a.symbol-link:hover { color: var(--color-primary); }
 .candidate-detail [data-note-part="selection"] dd { color: var(--color-text); font-size: var(--text-base); line-height: 1.7; }
 .candidate-detail-side { display: grid; grid-area: side; gap: var(--space-3); justify-items: start; }
 .candidate-detail-levels { display: grid; grid-template-columns: repeat(2, auto); gap: var(--space-3) var(--space-6); margin: 0; }
+/* The RR carries its basis (#580,「3.56 倍（以進場區中點 12.11 元計算）」): it wraps instead of running past a phone's edge. */
+.candidate-detail-levels > div { min-width: 0; }
+.candidate-detail-levels dd.candidate-rr { white-space: normal; overflow-wrap: anywhere; }
 .candidate-detail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
 .candidate-detail-actions .plan-add { margin-top: 0; }
 .candidate-detail-folds { display: flex; flex-wrap: wrap; grid-area: folds; align-items: flex-start; gap: var(--space-2) var(--space-6); padding-top: var(--space-2); border-top: 1px solid var(--color-border); }
@@ -797,6 +950,15 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
 .plan-add { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-3); }
 .plan-error { flex: 1 1 100%; color: var(--color-warning); }
 .tracking-section .section-head { flex-wrap: wrap; }
+/* 追蹤回看 starts folded (#649): the summary is the section head, with 展開／收合 after the count. */
+.tracking-look-back > summary { display: block; cursor: pointer; list-style: none; }
+.tracking-look-back > summary::-webkit-details-marker { display: none; }
+.tracking-look-back > summary .section-head::after { content: "展開 ▸"; color: var(--color-primary); font-size: var(--text-sm); }
+.tracking-look-back[open] > summary .section-head::after { content: "收合 ▾"; }
+.tracking-look-back > summary .section-head > .small-note { margin-left: auto; }
+.tracking-section > .tracking-empty { margin: 0; color: var(--color-text); }
+/* The plan card's phone fold (#649): only at 640px and below, where the wide-only parts hide. */
+.plan-card-more { display: none; }
 .tracking-section > .small-note { margin: 0 0 var(--space-3); }
 .plan-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
 .plan-card { min-width: 0; padding: var(--space-5); }
@@ -816,28 +978,13 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
 .plan-strategy-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg-alt); }
 .plan-strategy-list .plan-add { margin-top: 0; }
 
-/* ---- news theme suggestions (#216, DESIGN_SYSTEM §7: LLM output with the accent bar) ------------- */
-.theme-suggestions { margin-top: var(--space-10); }
-.theme-suggestions .section-head { flex-wrap: wrap; }
-.theme-suggestion-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: var(--space-4); margin-top: var(--space-3); }
-.theme-suggestion { min-width: 0; padding: var(--space-5); }
-.theme-suggestion .ai-inference-head { flex-wrap: wrap; margin-bottom: var(--space-2); }
-.theme-suggestion h3 { margin: 0; font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
-.theme-suggestion-badges { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); }
-.theme-suggestion-stats { margin: 0; color: var(--color-text-muted); font-size: 14px; }
-.theme-suggestion-stats b { color: var(--color-text); font: 600 16px var(--font-mono); font-variant-numeric: tabular-nums; }
-.theme-suggestion-news { margin-top: var(--space-3); }
-.theme-suggestion-news summary { cursor: pointer; color: var(--color-primary); font-size: 14px; }
-.suggestion-news { margin-top: var(--space-2); }
-.suggestion-news a { color: var(--color-text); font-weight: 600; overflow-wrap: anywhere; }
-.suggestion-news a:hover { color: var(--color-primary); }
 
 /* ---- responsive --------------------------------------------------------------------------------- */
 /* The market overview clips its turnover and breadth rows when four widgets share one row below 1200px, and the two
    dual widgets need a whole row at 800px and below (#493 review); on the market page phones keep all four (Issue 549). Inside
    the one bar (#510) a cell starting a row has no left divider, and the second row has a top one. */
 @media (max-width: 1199px) {
-  .market-overview-grid, .market-us-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .market-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .market-overview-grid > .market-widget:nth-child(3) { border-left: 0; }
   .market-overview-grid > .market-widget:nth-child(n+3) { border-top: 1px solid var(--color-border); }
 }
@@ -851,7 +998,9 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .inline-form { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 860px) {
-  .navbar .navbar-toggle { display: inline-flex; }
+  .navbar .navbar-toggle { display: inline-flex; order: 2; margin-left: 0; }
+  /* #661: the page date stays on the bar between the brand and the menu button. */
+  .navbar-date { order: 1; margin-left: auto; }
   .navbar-menu { display: none; position: absolute; top: var(--nav-height); left: 0; right: 0; flex-direction: column; align-items: stretch; height: auto; padding: var(--space-4) var(--space-6) var(--space-6); background: var(--color-bg-alt); border-bottom: 1px solid var(--color-border); }
   .navbar-menu-open { display: flex; }
   .navbar-links { flex-direction: column; gap: 0; height: auto; }
@@ -860,13 +1009,16 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .navbar-tools { flex-wrap: wrap; }
   .navbar-search { flex: 1 1 100%; }
   .navbar-search .input { width: 100%; }
+  /* Issue 599 review: the open menu scrolls within the visible viewport (NavSearch sets --visual-viewport-height
+     from window.visualViewport, which shrinks with the soft keyboard), and the suggestions sit in its flow, so all eight stay reachable. */
+  .navbar-menu-open { max-height: calc(var(--visual-viewport-height, 100dvh) - var(--nav-height)); overflow-y: auto; overscroll-behavior: contain; }
+  .nav-suggest { position: static; width: auto; margin-top: var(--space-2); box-shadow: none; }
   .hero, .detail-grid, .two-panels, .theme-detail-grid { grid-template-columns: 1fr; }
   .theme-news-list li { grid-template-columns: 1fr; gap: var(--space-1); }
   .theme-news-title { white-space: normal; }
   .stat-grid, .three-stats { grid-template-columns: repeat(2, 1fr); margin-bottom: var(--space-10); }
   .position-list, .news-grid, .glossary-grid, .inline-form { grid-template-columns: 1fr; }
-  .theme-suggestion-grid, .plan-grid { grid-template-columns: 1fr; }
-  .home-columns { grid-template-columns: 1fr; }
+  .plan-grid { grid-template-columns: 1fr; }
   .candidate-detail-body { grid-template-areas: "note" "side" "folds"; grid-template-columns: minmax(0, 1fr); }
   .news-cards, .news-detail-grid { grid-template-columns: 1fr; }
   .data-explanation { margin-left: 0; }
@@ -876,6 +1028,10 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
 }
 @media (max-width: 640px) {
   .container, .navbar-inner { padding: 0 var(--space-4); }
+  /* #661: brand, page date and menu button on one bar at 390px without clipping the button. */
+  .navbar-inner { gap: var(--space-3); }
+  .navbar-brand { gap: var(--space-2); font-size: 16px; }
+  .navbar-brand .logo-mark { width: 32px; height: 32px; }
   .page { padding: var(--space-6) 0; }
   .card, .panel { padding: var(--space-4); }
   .stock-header, .stock-summary, .stock-tab-content .card, .stock-tab-content .panel { padding: var(--space-4); }
@@ -884,6 +1040,9 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .stat-grid, .three-stats, .level-grid { grid-template-columns: 1fr; }
   .plan-card { padding: var(--space-4); }
   .plan-card .card-head { flex-wrap: wrap; }
+  .plan-card .plan-wide-only { display: none; }
+  .plan-card .candidate-levels { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .plan-card-more { display: block; margin-top: var(--space-2); }
   .candidate-levels, .candidate-components { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   th, td { height: 44px; padding: 0 var(--space-2); }
   .table-wrap th:first-child, .table-wrap td:first-child { position: sticky; left: 0; z-index: 1; background: var(--color-bg-card); }
@@ -894,7 +1053,7 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   /* Phones (Issue 522): the rank stays on line one, so the returns and the 五分項 button get the whole width of line two. */
   .board-row-main { grid-template-areas: "rank title score" "meta meta toggle"; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2px var(--space-2); padding: var(--space-2) var(--space-3); }
   .board-rank { min-width: 32px; padding: 0 var(--space-1); font-size: var(--text-sm); }
-  /* The returns keep one line at 390px in the small size; 今日可買 N 檔 wraps under them rather than being cut. */
+  /* The returns keep one line at 390px in the small size; 今日名單 N 檔 wraps under them rather than being cut. */
   .board-row-meta { flex-wrap: wrap; gap: 2px var(--space-2); font-size: var(--text-xs); }
   .board-row-toggle { align-self: start; padding: var(--space-1) 0; font-size: var(--text-xs); }
   .board-row-meta b { font-size: var(--text-xs); }
@@ -906,16 +1065,17 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .member-table-wrap { display: none; }
   .member-cards { display: grid; }
   .stock-table-wrap { display: none; }
-  /* 研究截止日期 folds behind a one-line toggle so the stock header and tabs fit the first screen (DESIGN_SYSTEM §4). */
-  .cutoff-panel { margin-top: var(--space-3); padding-top: var(--space-2); border-top: 1px solid var(--color-border); }
-  .cutoff-toggle { display: inline-flex; padding: var(--space-1) 0; }
-  .cutoff-panel:not(.open) .overview-cutoff-control { display: none; }
-  .cutoff-panel .overview-cutoff-control { margin-top: var(--space-2); padding-top: 0; border-top: 0; }
   .stock-cards { display: grid; }
-  .board-controls .board-search { flex: 1 1 100%; max-width: none; }
-  .theme-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
-  .theme-stats .stat { padding: var(--space-3); }
-  .theme-stats .stat-value { font-size: 18px; }
+  /* #666: the two board tabs and the name filter share one line. */
+  .board-controls { flex-wrap: nowrap; align-items: center; }
+  .board-controls .tabs { flex: none; border-bottom: 0; }
+  .board-controls .board-search { flex: 1 1 0; min-width: 0; max-width: none; }
+  .theme-stat-line { gap: var(--space-1) var(--space-4); }
+  .theme-stat-line .stat-value { font-size: 18px; }
+  /* /stocks (#666): the search on its line, then type, 我的自選, sort and the count on one line. */
+  .stocks-filter-row .stocks-filter-tools { flex: 1 1 100%; gap: var(--space-1) var(--space-2); }
+  .stocks-filter-row .stocks-filter-tools .filter-select { flex: 0 1 auto; width: auto; max-width: none; padding: var(--space-2) var(--space-3); }
+  .stocks-filter-row .check-label { min-height: 36px; }
   /* The market page keeps all four widgets on phones (Issue 549): a row wraps rather than being cut. */
   .market-row { font-size: var(--text-sm); white-space: normal; }
   .action-table-wrap { display: none; }
@@ -931,7 +1091,7 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .strategy-card > * { flex-basis: 100%; }
   .strategy-card > .muted, .strategy-card > .muted + .strategy-conditions:not([open]) { flex-basis: auto; margin-top: 0; }
   .stock-tab-content .panel-head .badge { padding: 2px 8px; font-size: var(--text-xs); }
-  .stock-tab-content .card, .stock-tab-content .panel { padding: var(--space-3) var(--space-4); }
+  .stock-tab-content .card, .stock-tab-content .panel, .stock-page > .stock-chart-card { padding: var(--space-3) var(--space-4); }
   /* Phones keep at least two candidates on the first screen (DESIGN_SYSTEM §4): the header text takes its own line
      with the badge and 資料說明 sharing the next, the run badges and 策略說明 sit beside the title. */
   .home-dataline { display: contents; }
@@ -942,8 +1102,25 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .market-overview .market-widget-value { font-size: 16px; }
   .market-ma60 { padding: var(--space-2) var(--space-3); }
   .market-ma60-line { font-size: var(--text-sm); }
-  /* A US index falls by four digits and two-digit percents (費半 -1,257.51（-12.25%）): the percent wraps, not cut. */
-  .market-us .market-widget-change { white-space: normal; }
+  /* 指數總表 on phones (Issue 564): the same table, each row two lines without horizontal scroll — the name, close,
+     change and percent (a row of another day has its 資料 line under the name, #661), then the MA60 position; the 來源
+     column goes (the 來源 note stays). */
+  .market-index-table table, .market-index-table tbody { display: block; }
+  .market-index-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .market-index-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 2px var(--space-2); align-items: baseline; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--color-border); }
+  .market-index-table tr:last-child { border-bottom: 0; }
+  .market-index-table .table-group-row { display: block; padding: 0; }
+  .market-index-table .table-group-row td, .market-index-table .table-group-row td:first-child { display: block; height: auto; padding: var(--space-1) var(--space-3); }
+  .market-index-table td, .market-index-table td:first-child { position: static; height: auto; padding: 0; border-bottom: 0; background: transparent; }
+  .market-index-table tbody tr:hover td:first-child { background: transparent; }
+  .market-index-row.is-selected { box-shadow: inset 3px 0 0 var(--color-primary); }
+  .market-index-row.is-selected td:first-child { box-shadow: none; }
+  .market-index-table .market-index-name { grid-column: 1; grid-row: 1; white-space: normal; }
+  .market-index-table .market-index-close { grid-column: 2; grid-row: 1; }
+  .market-index-table .market-index-change { grid-column: 3; grid-row: 1; }
+  .market-index-table .market-index-pct { grid-column: 4; grid-row: 1; }
+  .market-index-asof { white-space: normal; }
+  .market-index-table .market-index-ma60 { grid-column: 2 / -1; grid-row: 2; font-size: var(--text-xs); text-align: right; }
   /* Phones: the two indexes on line one, the date and 看大盤 → on line two; the link names the block, so the label goes. */
   .market-summary { gap: var(--space-1) var(--space-3); padding: var(--space-2) var(--space-3); }
   .market-summary-label { display: none; }
@@ -953,29 +1130,33 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .candidates-head .badge { padding: 2px 8px; font-size: var(--text-xs); }
   .candidate-notes { order: 9; flex: 1 1 100%; line-height: 1.5; }
   .candidates-strategy-link { margin-left: auto; font-size: var(--text-sm); }
-  /* A row on phones (#510): the body takes the whole width, the title stays one line (market · group cut first); the close,
-     RR and total go under the sentence with the close and its change side by side, the AI entry at the right of that line. */
-  .candidate-row-main { grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2) var(--space-3); padding: var(--space-row) var(--space-3); }
-  .candidate-row .candidate-entry, .candidate-row-levels { margin-left: 42px; }
+  /* A row on phones (#510): the title stays one line (market · group cut first) with the AI entry at its right
+     (Issue 608: beside the numbers it covered the total), the sentence takes the whole width; the close, RR and
+     total go under it from the row's left edge with the close and its change side by side, and on a row too narrow
+     for them the RR's basis wraps inside its column rather than push the total past the row. The body's children
+     sit in the row's grid; the DOM order (and the page text) is unchanged. */
+  .candidate-row-main { grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1) var(--space-3); padding: var(--space-row) var(--space-3); }
+  .candidate-row .candidate-entry, .candidate-row-levels, .candidate-row-figures { margin-left: 42px; }
   .candidate-row .entry-plan-line { line-height: 1.45; }
-  .candidate-row-body { grid-column: 1 / -1; }
+  .candidate-row-body { display: contents; }
+  .candidate-row-title { grid-column: 1; grid-row: 1; }
+  .candidate-row-body > :not(.candidate-row-title), .candidate-row-nums { grid-column: 1 / -1; }
   .candidate-row-title .candidate-rank { width: 34px; margin-right: var(--space-2); font-size: var(--text-sm); }
   .candidate-row-name { font-size: var(--text-base); }
-  .candidate-row-nums { gap: var(--space-4); padding-left: 42px; }
-  .candidate-row-nums > div { justify-items: start; }
+  .candidate-row-nums { gap: var(--space-3); margin-top: var(--space-1); }
+  .candidate-row-nums > div { flex: none; justify-items: start; }
+  .candidate-row-nums > .candidate-row-rr { flex: 0 1 auto; min-width: 0; }
+  .candidate-row-nums .candidate-rr-basis { white-space: normal; text-wrap: balance; }
   .candidate-row-close dd { display: flex; align-items: baseline; gap: var(--space-2); }
-  .candidate-ai-toggle { align-self: end; }
+  .candidate-ai-toggle { grid-column: 2; grid-row: 1; align-self: center; }
   .candidate-detail[open] { padding: var(--space-3); }
+  .candidate-chart { padding: 0 var(--space-3) var(--space-row); }
   .candidate-detail-body > .candidate-note { padding-left: var(--space-3); }
   .candidate-mini-levels { gap: var(--space-1) var(--space-2); margin-top: var(--space-1); }
   .candidate-mini-levels dd { font-size: 12px; }
   .home-page { padding-top: var(--space-3); }
   .alert-row { gap: 2px var(--space-3); margin-bottom: var(--space-2); padding: var(--space-2) var(--space-3); font-size: 13px; line-height: 1.5; }
-  .home-columns { margin-top: var(--space-6); }
-  .home-panel { padding: var(--space-3) var(--space-4); }
-  /* Phones (#510): the direction and 「AI 推論」 sit beside the title, so source and time keep line two to themselves. */
-  .home-news-row { grid-template-areas: "title impact" "meta meta"; grid-template-columns: minmax(0, 1fr) auto; }
-  .home-news-impact::before { content: none; }
+  .home-panel { margin-top: var(--space-6); padding: var(--space-3) var(--space-4); }
   .tab { padding: var(--space-2) var(--space-3); font-size: 14px; }
   .filter-row .search-controls, .filter-row .filter-select { flex: 1 1 100%; max-width: none; }
   .news-filters { flex-wrap: wrap; }

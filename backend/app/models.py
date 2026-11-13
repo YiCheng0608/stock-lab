@@ -348,6 +348,49 @@ class NoTradeDay(Base):
     )
 
 
+class TradingHalt(Base):
+    """An official stop of trading of one security, as an interval (Issue #582).
+
+    The exchanges' capital reduction tables (TWSE 股票減資恢復買賣參考價格
+    ``TWTAUU``, TPEx 減資恢復買賣 ``revivt``) name the resumption day and the
+    last trading day or the first stopped day of the old shares.  The stopped
+    sessions are those from ``halt_start`` up to, not including,
+    ``resume_date``; ``halt_start`` is the TPEx 停止買賣日期 or the calendar day
+    after the TWSE last trading day.  The row explains why the official quote
+    tables have no row for the security on those sessions; it is never a
+    price, and a session with a bar outranks it.  Written by
+    ``worker.trading_halts`` (collect and ``worker.cli trading-halts``).
+    """
+
+    __tablename__ = "trading_halts"
+    __table_args__ = (
+        UniqueConstraint(
+            "instrument_id", "source", "resume_date", name="uq_trading_halt"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"))
+    exchange: Mapped[str] = mapped_column(String(20))
+    halt_start: Mapped[date] = mapped_column(Date, index=True)
+    resume_date: Mapped[date] = mapped_column(Date, index=True)
+    # The TWSE table's 最後交易日; TPEx states the first stopped day instead.
+    last_trade_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # ``capital_reduction`` (the only kind so far) and the source's 減資原因.
+    reason: Mapped[str] = mapped_column(String(40))
+    reason_detail: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    source: Mapped[str] = mapped_column(String(40))
+    endpoint: Mapped[str] = mapped_column(String(500))
+    data_as_of: Mapped[str] = mapped_column(String(40))
+    # The capture time of the raw payload the row came from.
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+    # The official row as published.
+    details_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
 class TechnicalFeature(Base):
     __tablename__ = "technical_features"
     __table_args__ = (
@@ -1118,58 +1161,6 @@ class CandidateLlmNote(Base):
     raw_payload_id: Mapped[int | None] = mapped_column(
         ForeignKey("raw_payloads.id"), nullable=True
     )
-
-
-class ThemeSuggestion(Base):
-    """A news theme suggestion awaiting human review (worker.theme_suggestions).
-
-    Aggregated from the ``theme_candidates`` of done news_llm_results, one row
-    per prompt version and normalized theme name.  Never scored or ranked and
-    never written to theme_groups; ``status`` stays ``pending_verification``.
-    ``matched_group_id`` names an existing theme or official industry with the
-    same normalized name (then it is not a new theme).
-    """
-
-    __tablename__ = "theme_suggestions"
-    __table_args__ = (
-        UniqueConstraint(
-            "prompt_version", "theme_key", name="uq_theme_suggestion_prompt_key"
-        ),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    theme_key: Mapped[str] = mapped_column(String(80))
-    display_name: Mapped[str] = mapped_column(String(80))
-    prompt_version: Mapped[str] = mapped_column(String(40))
-    aggregation_version: Mapped[str] = mapped_column(String(40))
-    llm_models_json: Mapped[list[str]] = mapped_column(JSON, default=list)
-    news_count: Mapped[int] = mapped_column(Integer)
-    first_news_date: Mapped[date] = mapped_column(Date)
-    last_news_date: Mapped[date] = mapped_column(Date, index=True)
-    matched_group_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    status: Mapped[str] = mapped_column(String(30), default="pending_verification")
-    computed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
-
-
-class ThemeSuggestionNews(Base):
-    """One news item behind a theme suggestion, with the LLM's own wording."""
-
-    __tablename__ = "theme_suggestion_news"
-    __table_args__ = (
-        UniqueConstraint(
-            "suggestion_id", "news_item_id", name="uq_theme_suggestion_news_item"
-        ),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    suggestion_id: Mapped[int] = mapped_column(
-        ForeignKey("theme_suggestions.id"), index=True
-    )
-    news_item_id: Mapped[int] = mapped_column(ForeignKey("news_items.id"), index=True)
-    news_llm_result_id: Mapped[int] = mapped_column(ForeignKey("news_llm_results.id"))
-    theme_text: Mapped[str] = mapped_column(String(80))
-    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    news_date: Mapped[date] = mapped_column(Date)
 
 
 class TrackingPlan(Base):

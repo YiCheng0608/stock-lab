@@ -6,7 +6,7 @@ import json
 import math
 from collections.abc import Iterable, Mapping
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,7 +18,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from sqlalchemy import String, and_, cast, desc, func, or_, select
+from sqlalchemy import String, and_, case, cast, desc, func, or_, select
 from sqlalchemy.orm import Session, defer
 
 from .action_tier_store import read_action_tier_rows
@@ -104,11 +104,6 @@ from .glossary import GLOSSARY_VERSION, glossary_terms
 from .market_overview import market_overview
 from .theme_member_view import member_columns, member_context, sort_members
 from .theme_table import parse_membership_source
-from .theme_suggestions import (
-    DEFAULT_LIMIT as THEME_SUGGESTIONS_DEFAULT_LIMIT,
-    MAX_LIMIT as THEME_SUGGESTIONS_MAX_LIMIT,
-)
-from .theme_suggestions import suggestion_detail, suggestion_list
 from .news import (
     _is_verified_theme_for_instrument,
     _theme_ids_for_event,
@@ -127,6 +122,7 @@ from .product_time import (
 )
 from .portfolio_values import read_portfolio_value
 from .portfolio_quotes import portfolio_quote
+from .trading_halts import halt_dict, halt_on
 from .units import (
     MAX_SAFE_SHARES,
     share_quantity_dict,
@@ -157,6 +153,23 @@ router = APIRouter(prefix=API_PREFIX)
 
 DEFAULT_PAGE_SIZE = 50
 MAX_PAGE_SIZE = 100
+# ``include=<section>`` (repeatable): optional sections a GET builds only on
+# request (#601).  A plain Python default keeps direct calls working.
+IncludeQuery = Annotated[list[str] | None, Query()]
+# Free-text ``q`` of /stocks, /instruments and /signals (#602): matched as
+# literal text, so ``%`` and ``_`` are not wildcards; longer is a 422.
+SEARCH_MAX_LENGTH = 100
+SearchQuery = Annotated[str | None, Query(max_length=SEARCH_MAX_LENGTH)]
+
+
+def _search_term(q: str | None) -> str | None:
+    return q.strip() if q and q.strip() else None
+
+
+def _contains_text(term: str, *columns: Any) -> Any:
+    """Case-insensitive substring match with LIKE wildcards escaped."""
+
+    return or_(*(column.icontains(term, autoescape=True) for column in columns))
 
 
 def _effective_page_size(page_size: int, limit: int | None) -> int:
@@ -1628,51 +1641,6 @@ def compact_theme_summary(
     return payload
 
 
-def compact_news_dict(
-    db: Session, item: NewsItem, ai: dict[int, dict[str, Any]]
-) -> dict[str, Any]:
-    """Return the small dashboard/news-list projection.
-
-    The detail endpoint remains the only product surface that needs full
-    summary/provenance payloads; list rows carry only the event metadata,
-    linked instruments and the same ``ai`` block as the detail, so a card and
-    ``/news/<id>`` give one reading.  Pass ``ai`` from news_ai_map.
-    """
-
-    payload = news_dict(db, item, ai)
-    return {
-        key: payload[key]
-        for key in (
-            "id",
-            "category",
-            "source_kind",
-            "source_name",
-            "source",
-            "title",
-            "summary_preview",
-            "published_at",
-            "event_at",
-            "event_date",
-            "display_time",
-            "time_basis",
-            "time_precision",
-            "time_consistency",
-            "product_time",
-            "response_generated_at",
-            "collected_at",
-            "symbols",
-            "instruments",
-            "themes",
-            "theme_ids",
-            "impact_direction",
-            "confidence",
-            "status",
-            "detail_url",
-            "ai",
-        )
-    }
-
-
 def action_list_rows(
     db: Session,
     as_of: date | None,
@@ -1825,20 +1793,42 @@ def health() -> dict[str, str]:
     return {"status": "ok", "service": "taiwan-stock-research"}
 
 
+def _dashboard_run(db: Session) -> tuple[Any, date | None, Any, str | None]:
+    """The run behind the market data date, shared by /dashboard and /data-date.
+
+    Returns (latest successful official run, its as_of, the run shown — that
+    run or else the newest attempt, verified as_of string or None).
+    """
+    # The latest successful run (Issue #249: a newer holiday "skipped" run must
+    # not blank as_of); the newest attempt only when none has succeeded.
+    official_run, official_as_of = latest_official_as_of(db)
+    run = official_run or latest_official_attempt(db)
+    # A failed official run has no verified market date.  Do not surface an
+    # older bar as though it belonged to this run.
+    verified_as_of = run.data_as_of[:10] if run and run.data_as_of else None
+    return official_run, official_as_of, run, verified_as_of
+
+
+@router.get("/data-date")
+def data_date(db: Session = Depends(get_db)) -> dict[str, Any]:
+    """The navbar's data date alone: the same ``as_of`` as /dashboard (#601)."""
+    return {"as_of": _dashboard_run(db)[3]}
+
+
+# Dashboard sections the home page does not read (#601).
+DASHBOARD_INCLUDES = frozenset({"groups", "signals"})
+
+
 @router.get("/dashboard")
-def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
+def dashboard(
+    db: Session = Depends(get_db), include: IncludeQuery = None
+) -> dict[str, Any]:
+    sections = _include_set(include or [], DASHBOARD_INCLUDES)
     # Keep the read model current for existing official Events.  This is an
     # idempotent projection only; it does not introduce any non-official feed.
     if ensure_news_projection(db):
         db.commit()
     groups = db.scalars(select(ThemeGroup).where(ThemeGroup.active.is_(True))).all()
-    scores = latest_scores(db)
-    group_rows = [
-        compact_group_summary(group, scores.get(group.id), db) for group in groups
-    ]
-    group_rows.sort(
-        key=lambda item: (item["rank"] is None, item["rank"] or 999, item["name"])
-    )
 
     # Current instruments only: a delisted or moved one keeps its history but
     # is not part of today's market (Issue #212).
@@ -1852,12 +1842,6 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
         or 0
     )
     bars_count = db.scalar(select(func.count(MarketBar.id))) or 0
-    signal_rows = db.scalars(
-        select(Signal)
-        .where(product_signal())
-        .order_by(desc(Signal.signal_date), desc(Signal.id))
-        .limit(8)
-    ).all()
     status_rows = db.execute(
         select(Signal.status, func.count(Signal.id))
         # The ids from the signal_key index, then the status index alone: a
@@ -1865,10 +1849,7 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
         .where(Signal.id.in_(product_signal_ids()))
         .group_by(Signal.status)
     ).all()
-    # The latest successful run (Issue #249: a newer holiday "skipped" run must
-    # not blank as_of); the newest attempt only when none has succeeded.
-    official_run, official_as_of = latest_official_as_of(db)
-    run = official_run or latest_official_attempt(db)
+    official_run, official_as_of, run, verified_as_of = _dashboard_run(db)
     if run:
         mode = "official" if run.status == "success" else "official_partial"
         source_label = "TWSE/TPEx official feeds"
@@ -1883,13 +1864,6 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
         scan_scope = "no market scan has completed"
         source_label_zh = "尚無已驗證的官方資料"
         scan_scope_label = "尚無已完成的官方市場資料擷取"
-
-    if run and run.data_as_of:
-        verified_as_of = run.data_as_of[:10]
-    else:
-        # A failed official run has no verified market date.  Do not surface
-        # an older bar as though it belonged to this run.
-        verified_as_of = None
 
     product_scores = (
         scores_as_of(db, official_as_of)
@@ -1919,20 +1893,6 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
     action_rows = summaries_in_order(
         db, official_as_of, [row.instrument_id for row in tier_rows[:8]], holdings
     )
-    product_news = db.scalars(
-        select(NewsItem)
-        .outerjoin(Event, NewsItem.event_id == Event.id)
-        .where(
-            NewsItem.status == "active",
-            or_(
-                NewsItem.time_consistency.is_(None),
-                NewsItem.time_consistency != "conflict",
-            ),
-        )
-        .order_by(*_news_order_by())
-        .limit(6)
-    ).all()
-    news_ai = news_ai_map(db, product_news)
     actionable = [
         item
         for item in action_rows
@@ -1945,7 +1905,7 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
         or item.get("held") is True
         or item.get("position_quantity_status") == "unknown"
     ]
-    return {
+    payload: dict[str, Any] = {
         # An older row with a newer date must not make an official run
         # appear current.  Prefer the run's verified data_as_of when present.
         "as_of": verified_as_of,
@@ -1969,14 +1929,9 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
             "updated_at": as_utc_datetime(run.updated_at) if run else None,
         },
         "market_overview": market_overview(db, verified_as_of),
-        "groups": group_rows,
-        "signals": [
-            signal_dict(db, item, include_evidence=False) for item in signal_rows
-        ],
         "signal_status_counts": {status: count for status, count in status_rows},
         # Product IA read model.  Legacy fields above remain for compatibility
         # with the Phase 1 research surface.
-        "news": [compact_news_dict(db, item, news_ai) for item in product_news],
         "themes": product_themes,
         "candidates": [compact_action_summary(item) for item in actionable[:8]],
         "actions": [compact_action_summary(item) for item in display_actions[:8]],
@@ -2001,7 +1956,6 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
         # Stored daily tiers or a live computation, and why (#476).
         "action_tier_source": tier_source,
         "empty_states": {
-            "news": "尚未接入核准的國際／媒體新聞" if not product_news else None,
             "themes": "目前沒有同時達到完整資料與至少 3 檔成員的熱門族群"
             if not any(item["qualified"] for item in product_themes)
             else None,
@@ -2010,6 +1964,26 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
             else None,
         },
     }
+    if "groups" in sections:
+        scores = latest_scores(db)
+        group_rows = [
+            compact_group_summary(group, scores.get(group.id), db) for group in groups
+        ]
+        group_rows.sort(
+            key=lambda item: (item["rank"] is None, item["rank"] or 999, item["name"])
+        )
+        payload["groups"] = group_rows
+    if "signals" in sections:
+        signal_rows = db.scalars(
+            select(Signal)
+            .where(product_signal())
+            .order_by(desc(Signal.signal_date), desc(Signal.id))
+            .limit(8)
+        ).all()
+        payload["signals"] = [
+            signal_dict(db, item, include_evidence=False) for item in signal_rows
+        ]
+    return payload
 
 
 @router.get("/news")
@@ -2503,13 +2477,73 @@ def theme_members(
     }
 
 
+# Directory order (#602): ordinary stocks first, then ETFs and new listings.
+STOCK_TYPE_ORDER = ("stock", "etf", "ipo")
+StockSort = Literal["type", "symbol", "name", "close_desc", "close_asc"]
+
+
+def _latest_close_key(as_of: date | None) -> Any:
+    """The close of each instrument's newest bar on or before ``as_of``.
+
+    One index seek per instrument (``ix_market_bar_instrument_date``).  A
+    newest bar the decision cannot read (no positive close, no source or an
+    unknown suspension flag) has no price on the page, so it has no key here
+    either rather than falling back to an older bar.
+    """
+
+    bar = select(
+        case(
+            (
+                and_(
+                    MarketBar.close > 0,
+                    MarketBar.source.is_not(None),
+                    MarketBar.is_suspended.in_((0, 1)),
+                ),
+                MarketBar.close,
+            ),
+            else_=None,
+        )
+    ).where(MarketBar.instrument_id == Instrument.id)
+    if as_of is not None:
+        bar = bar.where(MarketBar.trading_date <= as_of)
+    return (
+        bar.order_by(desc(MarketBar.trading_date), desc(MarketBar.id))
+        .limit(1)
+        .correlate(Instrument)
+        .scalar_subquery()
+    )
+
+
+def _stock_order(sort: str, as_of: date | None) -> tuple[Any, ...]:
+    """Every order ends with exchange and id, so pages never repeat or skip."""
+
+    unique = (Instrument.exchange, Instrument.id)
+    if sort == "symbol":
+        return (Instrument.symbol, *unique)
+    if sort == "name":
+        return (Instrument.name, Instrument.symbol, *unique)
+    if sort in {"close_desc", "close_asc"}:
+        close = _latest_close_key(as_of)
+        value = desc(close) if sort == "close_desc" else close
+        return (close.is_(None), value, Instrument.symbol, *unique)
+    type_rank = case(
+        *(
+            (Instrument.instrument_type == name, rank)
+            for rank, name in enumerate(STOCK_TYPE_ORDER)
+        ),
+        else_=len(STOCK_TYPE_ORDER),
+    )
+    return (type_rank, Instrument.symbol, *unique)
+
+
 @router.get("/stocks")
 def stocks(
-    q: str | None = Query(default=None),
+    q: SearchQuery = None,
     exchange: str | None = None,
     instrument_type: str | None = None,
     theme_id: str | None = None,
     watchlist_only: bool = False,
+    sort: StockSort = "type",
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     db: Session = Depends(get_db),
@@ -2519,11 +2553,9 @@ def stocks(
         Instrument.status == "active",
         Instrument.instrument_type.not_in(NON_SECURITY_TYPES),
     )
-    if q and q.strip():
-        needle = f"%{q.strip()}%"
-        query = query.where(
-            or_(Instrument.symbol.ilike(needle), Instrument.name.ilike(needle))
-        )
+    term = _search_term(q)
+    if term:
+        query = query.where(_contains_text(term, Instrument.symbol, Instrument.name))
     if exchange:
         query = query.where(Instrument.exchange == exchange)
     if instrument_type:
@@ -2532,24 +2564,25 @@ def stocks(
         query = query.where(Instrument.is_watchlisted.is_(True))
     if theme_id:
         effective_date = as_of or date.today()
-        query = (
-            query.join(GroupMembership, GroupMembership.instrument_id == Instrument.id)
-            .where(
-                GroupMembership.group_id == theme_id,
-                GroupMembership.valid_from <= effective_date,
-                (
-                    GroupMembership.valid_to.is_(None)
-                    | (GroupMembership.valid_to >= effective_date)
-                ),
+        # IN rather than a join: no DISTINCT next to the sort expressions.
+        query = query.where(
+            Instrument.id.in_(
+                select(GroupMembership.instrument_id).where(
+                    GroupMembership.group_id == theme_id,
+                    GroupMembership.valid_from <= effective_date,
+                    (
+                        GroupMembership.valid_to.is_(None)
+                        | (GroupMembership.valid_to >= effective_date)
+                    ),
+                )
             )
-            .distinct()
         )
     rows, total = _paginate_query(
         db,
         query,
         page=page,
         page_size=page_size,
-        order_by=(Instrument.exchange, Instrument.symbol, Instrument.id),
+        order_by=_stock_order(sort, as_of),
     )
     items = []
     for instrument in rows:
@@ -2562,9 +2595,9 @@ def stocks(
                 "action_state": summary.get("action_state"),
                 "action_label_zh": summary.get("action_label_zh"),
                 "data_quality": summary.get("data_quality"),
-                "missing_data_priority": summary.get("missing_data_priority", []),
-                "product_time": summary.get("product_time"),
-                "response_generated_at": summary.get("response_generated_at"),
+                # The first gap only: the directory shows it under 資料不足
+                # (#602); the stock page reads the full list from its own GET.
+                "missing_data_priority": summary.get("missing_data_priority", [])[:1],
             }
         )
     return _directory_response(
@@ -2574,7 +2607,7 @@ def stocks(
         total=total,
         q=q,
         data_as_of=run.data_as_of if run else (as_of.isoformat() if as_of else None),
-        sort="exchange asc, symbol asc",
+        sort=sort,
     )
 
 
@@ -2614,24 +2647,101 @@ def _stock_cutoff(
     return max((day for day in observed if day is not None), default=None)
 
 
+def _stock_trading_halt(
+    db: Session, instrument: Instrument, requested: date | None
+) -> dict[str, Any] | None:
+    """The official stop of trading on the page's day (Issue #582).
+
+    The day is the requested cutoff, or else the latest TAIEX session: the
+    default cutoff is the stock's own last bar, which a stop leaves behind, so
+    the header says why the price is older than the market.  A day the stock
+    has a bar is a trading day whatever the stop says (TWSE's stated start can
+    be a session early until a collect corrects it), so it has no stop.
+    """
+
+    day = requested or db.scalar(
+        select(func.max(MarketBar.trading_date))
+        .join(Instrument, Instrument.id == MarketBar.instrument_id)
+        .where(
+            Instrument.exchange == "TWSE",
+            Instrument.instrument_type == "index",
+            Instrument.symbol.in_({"TAIEX", "TWII"}),
+        )
+    )
+    if day is None:
+        return None
+    row = halt_on(db, instrument.id, day)
+    if row is None:
+        return None
+    traded = db.scalar(
+        select(MarketBar.id)
+        .where(
+            MarketBar.instrument_id == instrument.id,
+            MarketBar.trading_date == day,
+        )
+        .limit(1)
+    )
+    if traded is not None:
+        return None
+    return {**halt_dict(row), "as_of": day.isoformat()}
+
+
+# Optional sections of the detail payloads (#601).  The stock page reads none
+# of them, so GET /stocks/{exchange}/{symbol} builds one only when ``include``
+# names it; /instruments/{symbol} keeps building all of its own.
+STOCK_DETAIL_INCLUDES = frozenset(
+    {"signals", "news", "features", "strategy_conditions", "corporate_actions"}
+)
+INSTRUMENT_DETAIL_INCLUDES = STOCK_DETAIL_INCLUDES - {"news"}
+# Bars and chips rows: the stock page shows the newest 30 of each.
+STOCK_DETAIL_ROWS = 30
+INSTRUMENT_DETAIL_ROWS = 120
+
+
+def _include_set(values: list[str], allowed: frozenset[str]) -> frozenset[str]:
+    """``include=a&include=b`` or ``include=a,b``; an unknown name is a 422."""
+    names = frozenset(
+        part.strip() for value in values for part in value.split(",") if part.strip()
+    )
+    unknown = sorted(names - allowed)
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=f"unsupported include: {', '.join(unknown)}; "
+            f"allowed: {', '.join(sorted(allowed))}",
+        )
+    return names
+
+
 @router.get("/stocks/{exchange}/{symbol}")
 def stock_detail(
-    exchange: str, symbol: str, db: Session = Depends(get_db), as_of: date | None = None
+    exchange: str,
+    symbol: str,
+    db: Session = Depends(get_db),
+    as_of: date | None = None,
+    include: IncludeQuery = None,
 ) -> dict[str, Any]:
+    sections = _include_set(include or [], STOCK_DETAIL_INCLUDES)
     instrument_row = _find_instrument(db, symbol, exchange)
     if not instrument_row:
         raise HTTPException(status_code=404, detail="instrument not found")
     cutoff = _stock_cutoff(db, instrument_row, as_of)
     # No dated records means no shared cutoff can be established. Keep this
     # explicit; date.min prevents current feature/decision fallback from leaking in.
-    payload = instrument_detail(symbol, exchange, db, cutoff or date.min)
-    instrument = payload["instrument"]
-    instrument_row = db.get(Instrument, instrument["id"])
-    payload["decision_summary"] = (
+    decision_summary = (
         build_decision_summary(db, instrument_row, cutoff)
-        if instrument_row and cutoff and cutoff >= date(1, 1, 8)
+        if cutoff and cutoff >= date(1, 1, 8)
         else None
     )
+    payload = _instrument_payload(
+        db,
+        instrument_row,
+        cutoff or date.min,
+        decision=decision_summary or {},
+        include=sections,
+        rows=STOCK_DETAIL_ROWS,
+    )
+    payload["decision_summary"] = decision_summary
     if payload["decision_summary"]:
         # The stock page's "加入追蹤" needs to know which strategy rows are tracked.
         strategies = payload["decision_summary"].get("strategies") or []
@@ -2647,9 +2757,15 @@ def stock_detail(
         if payload.get("decision_summary")
         else None
     )
-    # News remains a sub-section of the stock detail; the main product feed is
-    # still /news and its cursor contract.
-    if instrument_row:
+    payload["trading_halt"] = _stock_trading_halt(db, instrument_row, as_of)
+    # The page reads news_cutoff.as_of for its cutoff control; the news rows
+    # themselves come from /news, so they are built only on include=news.
+    payload["news_cutoff"] = {
+        "as_of": cutoff.isoformat() if cutoff else None,
+        "filter": "verified_publication_or_event",
+        "limit": 20,
+    }
+    if "news" in sections:
         news_rows = db.scalars(
             select(NewsItem)
             .where(
@@ -2667,24 +2783,11 @@ def stock_detail(
         ).all()
         news_ai = news_ai_map(db, news_rows)
         payload["news"] = [news_dict(db, item, news_ai) for item in news_rows]
-        payload["news_cutoff"] = {
-            "as_of": cutoff.isoformat() if cutoff else None,
-            "filter": "verified_publication_or_event",
-            "limit": 20,
-        }
-    else:
-        payload["news"] = []
     # The stock's row in the latest daily candidate list on or before the cutoff.
-    payload["candidate"] = (
-        candidate_for_instrument(db, instrument_row.id, cutoff)
-        if instrument_row
-        else None
-    )
+    payload["candidate"] = candidate_for_instrument(db, instrument_row.id, cutoff)
     # One row per registered strategy on the latest signal date (#274).
-    payload["strategy_board"] = (
-        strategy_board(db, instrument_row, cutoff, payload["candidate"])
-        if instrument_row
-        else None
+    payload["strategy_board"] = strategy_board(
+        db, instrument_row, cutoff, payload["candidate"]
     )
     return payload
 
@@ -2697,28 +2800,6 @@ def candidates(
 ) -> dict[str, Any]:
     """Stored daily candidates (candidate_score_v1); default is the latest list."""
     return candidate_list(db, date_, limit)
-
-
-@router.get("/theme-suggestions")
-def theme_suggestions(
-    include_matched: bool = False,
-    limit: int = Query(
-        THEME_SUGGESTIONS_DEFAULT_LIMIT, ge=1, le=THEME_SUGGESTIONS_MAX_LIMIT
-    ),
-    db: Session = Depends(get_db),
-) -> dict[str, Any]:
-    """News theme suggestions awaiting review (LLM inference, never ranked)."""
-    return suggestion_list(db, include_matched=include_matched, limit=limit)
-
-
-@router.get("/theme-suggestions/{suggestion_id}")
-def theme_suggestion(
-    suggestion_id: int, db: Session = Depends(get_db)
-) -> dict[str, Any]:
-    item = suggestion_detail(db, suggestion_id)
-    if item is None:
-        raise HTTPException(status_code=404, detail="theme suggestion not found")
-    return item
 
 
 def _news_symbol_filter(instrument: Instrument):
@@ -3086,10 +3167,11 @@ def group_detail(group_id: str, db: Session = Depends(get_db)) -> dict[str, Any]
 
 @router.get("/instruments")
 def instruments(
-    q: str | None = Query(default=None),
+    q: SearchQuery = None,
     instrument_type: str | None = None,
     exchange: str | None = None,
     watchlist_only: bool = False,
+    securities_only: bool = False,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     limit: int | None = Query(
@@ -3097,13 +3179,26 @@ def instruments(
     ),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
+    # Also the navbar search suggestions (Issue 599): securities_only drops the index and
+    # futures rows that have no stock page, and a query ranks the exact symbol first.
     page_size = _effective_page_size(page_size, limit)
     query = select(Instrument).where(Instrument.status == "active")
-    if q and q.strip():
-        needle = f"%{q.strip()}%"
-        query = query.where(
-            or_(Instrument.symbol.ilike(needle), Instrument.name.ilike(needle))
+    if securities_only:
+        query = query.where(Instrument.instrument_type.not_in(NON_SECURITY_TYPES))
+    order_by: tuple[Any, ...] = (Instrument.exchange, Instrument.symbol, Instrument.id)
+    term = _search_term(q)
+    if term:
+        query = query.where(_contains_text(term, Instrument.symbol, Instrument.name))
+        symbol = func.upper(Instrument.symbol)
+        upper = term.upper()
+        rank = case(
+            (symbol == upper, 0),
+            (symbol.startswith(upper, autoescape=True), 1),
+            (Instrument.name == term, 2),
+            (Instrument.name.startswith(term, autoescape=True), 3),
+            else_=4,
         )
+        order_by = (rank, *order_by)
     if instrument_type:
         query = query.where(Instrument.instrument_type == instrument_type)
     if exchange:
@@ -3115,7 +3210,7 @@ def instruments(
         query,
         page=page,
         page_size=page_size,
-        order_by=(Instrument.exchange, Instrument.symbol, Instrument.id),
+        order_by=order_by,
     )
     return _page_response(
         [instrument_dict(item) for item in rows],
@@ -3281,6 +3376,36 @@ def instrument_detail(
     instrument = _find_instrument(db, symbol, exchange)
     if not instrument:
         raise HTTPException(status_code=404, detail="instrument not found")
+    decision = (
+        build_decision_summary(db, instrument, as_of)
+        if as_of is None or as_of >= date(1, 1, 8)
+        else {}
+    )
+    return _instrument_payload(
+        db,
+        instrument,
+        as_of,
+        decision=decision,
+        include=INSTRUMENT_DETAIL_INCLUDES,
+        rows=INSTRUMENT_DETAIL_ROWS,
+    )
+
+
+def _instrument_payload(
+    db: Session,
+    instrument: Instrument,
+    as_of: date | None,
+    *,
+    decision: dict[str, Any],
+    include: frozenset[str],
+    rows: int,
+) -> dict[str, Any]:
+    """The detail payload shared by /instruments/{symbol} and the stock page.
+
+    ``include`` names the optional sections to build; a section that is not
+    requested is neither queried nor returned (#601).  ``rows`` caps bars and
+    chips.  ``decision`` is the caller's decision summary for ``as_of``.
+    """
     bars = db.scalars(
         select(MarketBar)
         .where(
@@ -3288,16 +3413,20 @@ def instrument_detail(
             MarketBar.trading_date <= (as_of or date.max),
         )
         .order_by(desc(MarketBar.trading_date), desc(MarketBar.id))
-        .limit(120)
+        .limit(rows)
     ).all()
-    feature = db.scalar(
-        select(TechnicalFeature)
-        .where(
-            TechnicalFeature.instrument_id == instrument.id,
-            TechnicalFeature.trading_date <= (as_of or date.max),
+    feature = (
+        db.scalar(
+            select(TechnicalFeature)
+            .where(
+                TechnicalFeature.instrument_id == instrument.id,
+                TechnicalFeature.trading_date <= (as_of or date.max),
+            )
+            .order_by(desc(TechnicalFeature.trading_date), desc(TechnicalFeature.id))
+            .limit(1)
         )
-        .order_by(desc(TechnicalFeature.trading_date), desc(TechnicalFeature.id))
-        .limit(1)
+        if "features" in include
+        else None
     )
     memberships = db.scalars(
         select(GroupMembership)
@@ -3310,16 +3439,6 @@ def instrument_detail(
         )
         .order_by(GroupMembership.valid_from)
     ).all()
-    signals = db.scalars(
-        select(Signal)
-        .where(
-            Signal.instrument_id == instrument.id,
-            product_signal(),
-            Signal.signal_date <= (as_of or date.max),
-        )
-        .order_by(desc(Signal.signal_date), desc(Signal.id))
-        .limit(20)
-    ).all()
     chips = db.scalars(
         select(ChipSnapshot)
         .where(
@@ -3327,16 +3446,7 @@ def instrument_detail(
             ChipSnapshot.trading_date <= (as_of or date.max),
         )
         .order_by(desc(ChipSnapshot.trading_date), desc(ChipSnapshot.id))
-        .limit(120)
-    ).all()
-    actions = db.scalars(
-        select(CorporateAction)
-        .where(
-            CorporateAction.instrument_id == instrument.id,
-            CorporateAction.action_date <= (as_of or date.max),
-        )
-        .order_by(desc(CorporateAction.action_date))
-        .limit(50)
+        .limit(rows)
     ).all()
     fundamentals = db.scalars(
         select(FundamentalSnapshot)
@@ -3379,45 +3489,14 @@ def instrument_detail(
         .order_by(desc(DataQuality.as_of_date), desc(DataQuality.id))
         .limit(10)
     ).all()
-    decision = (
-        build_decision_summary(db, instrument, as_of)
-        if as_of is None or as_of >= date(1, 1, 8)
-        else {}
-    )
-    return {
+    payload: dict[str, Any] = {
         "instrument": instrument_dict(instrument),
         "bars": [bar_dict(item) for item in reversed(bars)],
-        "features": feature.features_json
-        if feature and feature.features_json is not None
-        else {},
-        "feature_snapshot": {
-            "trading_date": as_date(feature.trading_date),
-            "source": feature.source,
-            "created_at": as_utc_datetime(feature.created_at),
-        }
-        if feature
-        else None,
         "groups": [
             _stock_group_row(db, membership, instrument, as_of)
             for membership in memberships
         ],
         "chips": [chip_dict(item) for item in reversed(chips)],
-        "corporate_actions": [
-            {
-                "date": as_date(item.action_date),
-                "type": item.action_type,
-                "source_action_classification": _source_action_classification(
-                    item, instrument
-                ),
-                "cash_dividend": item.cash_dividend,
-                "stock_dividend_ratio": item.stock_dividend_ratio,
-                "split_ratio": item.split_ratio,
-                "reference_price": item.reference_price,
-                "source": item.source,
-                "data_as_of": item.data_as_of,
-            }
-            for item in actions
-        ],
         "fundamentals": [
             {
                 "period_end": as_date(item.period_end),
@@ -3461,7 +3540,50 @@ def instrument_detail(
         "product_time": decision.get("product_time"),
         "response_generated_at": decision.get("response_generated_at"),
         "quality_summary": _instrument_quality_summary(db, instrument, bars, decision),
-        "strategy_conditions": {
+    }
+    if "features" in include:
+        payload["features"] = (
+            feature.features_json
+            if feature and feature.features_json is not None
+            else {}
+        )
+        payload["feature_snapshot"] = (
+            {
+                "trading_date": as_date(feature.trading_date),
+                "source": feature.source,
+                "created_at": as_utc_datetime(feature.created_at),
+            }
+            if feature
+            else None
+        )
+    if "corporate_actions" in include:
+        actions = db.scalars(
+            select(CorporateAction)
+            .where(
+                CorporateAction.instrument_id == instrument.id,
+                CorporateAction.action_date <= (as_of or date.max),
+            )
+            .order_by(desc(CorporateAction.action_date))
+            .limit(50)
+        ).all()
+        payload["corporate_actions"] = [
+            {
+                "date": as_date(item.action_date),
+                "type": item.action_type,
+                "source_action_classification": _source_action_classification(
+                    item, instrument
+                ),
+                "cash_dividend": item.cash_dividend,
+                "stock_dividend_ratio": item.stock_dividend_ratio,
+                "split_ratio": item.split_ratio,
+                "reference_price": item.reference_price,
+                "source": item.source,
+                "data_as_of": item.data_as_of,
+            }
+            for item in actions
+        ]
+    if "strategy_conditions" in include:
+        payload["strategy_conditions"] = {
             strategy.kind: {
                 "label": strategy.label_zh,
                 "requires": list(strategy.requires_zh),
@@ -3472,16 +3594,27 @@ def instrument_detail(
                 },
             }
             for strategy in REGISTRY.values()
-        },
-        "signals": [signal_dict(db, item) for item in signals],
-    }
+        }
+    if "signals" in include:
+        signals = db.scalars(
+            select(Signal)
+            .where(
+                Signal.instrument_id == instrument.id,
+                product_signal(),
+                Signal.signal_date <= (as_of or date.max),
+            )
+            .order_by(desc(Signal.signal_date), desc(Signal.id))
+            .limit(20)
+        ).all()
+        payload["signals"] = [signal_dict(db, item) for item in signals]
+    return payload
 
 
 @router.get("/signals")
 def signals(
     status: str | None = None,
     instrument_symbol: str | None = None,
-    q: str | None = Query(default=None),
+    q: SearchQuery = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     limit: int | None = Query(
@@ -3499,14 +3632,10 @@ def signals(
         query = query.where(Signal.status == status)
     if instrument_symbol:
         query = query.where(Instrument.symbol == instrument_symbol)
-    if q and q.strip():
-        needle = f"%{q.strip()}%"
+    term = _search_term(q)
+    if term:
         query = query.where(
-            or_(
-                Signal.signal_key.ilike(needle),
-                Instrument.symbol.ilike(needle),
-                Instrument.name.ilike(needle),
-            )
+            _contains_text(term, Signal.signal_key, Instrument.symbol, Instrument.name)
         )
     rows, total = _paginate_query(
         db,
@@ -4117,6 +4246,9 @@ def backfill_run_detail(run_id: int, db: Session = Depends(get_db)) -> dict[str,
     return result
 
 
+COVERAGE_INCLUDES = frozenset({"instrument_coverage"})
+
+
 @router.get("/coverage")
 def coverage(
     start_date: date | None = None,
@@ -4124,8 +4256,10 @@ def coverage(
     scope: str | None = Query(default=None),
     exchange: str | None = None,
     symbol: str | None = None,
+    include: IncludeQuery = None,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
+    sections = _include_set(include or [], COVERAGE_INCLUDES)
     has_manifest = has_backfill_manifest(db)
     explicit_range = start_date is not None or end_date is not None
     latest = db.scalar(select(func.max(MarketBar.trading_date)))
@@ -4179,6 +4313,10 @@ def coverage(
         if scope_info
         else ("instrument_filter" if target_keys is not None else "market")
     )
+    if "instrument_coverage" not in sections:
+        # The summary is built from these rows; the page reads only the summary
+        # and baseline, so the 2,000+ per-instrument rows ship on request (#601).
+        del report["instrument_coverage"]
     return report
 
 

@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react'
+import type { CandidateItem, CandidateLiquidity } from '../types'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom/server'
@@ -22,12 +23,16 @@ import {
   formatCandidateScore,
   formatEntryZone,
   formatLots,
+  formatRiskRewardWithBasis,
+  riskRewardBasisNote,
   liquidityExclusionText,
   formatSubItemValue,
   marketSourceLabel,
 } from './candidates'
 import { completeItem, doneNote, listResponse, notComputedResponse, partialItem, zeroResponse } from './candidates.fixtures'
-import { CandidatesSection, ScoreDetails } from './CandidateViews'
+import { PageDateContext } from '../components/pageDate'
+import { CandidatesSection, PriceLadder, ScoreDetails, Sparkline, TodayCandidateList } from './CandidateViews'
+import { ROW_CLICK_IGNORED, SPARKLINE_HEIGHT, SPARKLINE_WIDTH, TERMINAL_MIN_WIDTH, candidateChartLevels, chartToggleLabel, ladderLabel, nextChartRank, priceLadder, rowClickToggles, sparkline } from './candidates'
 
 // Standalone regression module (no browser, no server, no network) for the daily candidate list (#215):
 // the detail content under each today row (components, reasons, AI note), partial components, the score details
@@ -86,15 +91,24 @@ for (const quality of ['insufficient_members', 'insufficient_data', null]) {
   check(/<button[^>]*>事件資料待補<\/button>/.test(meta), 'row: 「事件資料待補」 opens its glossary term')
   check(!meta.includes('當日未排名'), 'row: partial group is not called unranked')
 }
-check(candidateSourceText(completeItem()).includes('新聞方向 LLM 判讀 news_v1（推論）'), 'news source names the prompt version and is inference')
+// #661 (P-a): the source line is a fact; the news component and its reason carry the one 推論 mark.
+check(candidateSourceText(completeItem()).endsWith('新聞方向 LLM 判讀 news_v1') && !candidateSourceText(completeItem()).includes('推論'), 'news source names the prompt version, without 推論')
 
 // ---- detail content under each today row (the table's levels and total are checked in today/today.test.tsx) ----
 const list = render(<CandidatesSection data={listResponse()} loading={false} error={null} />)
+// The head names the strategy behind the list and links to /strategy (#577; UI_COPY_SPEC §10).
+const STRATEGY_LINK = /<a class="text-link candidates-strategy-link" href="\/strategy">([^<]*)<\/a>/
+check(STRATEGY_LINK.exec(slice(list, 'class="candidates-head"', '<ol'))?.[1] === '順勢籌碼型 · 策略說明 →', `今日名單頁首的連結寫「順勢籌碼型 · 策略說明 →」並連到 /strategy, got ${STRATEGY_LINK.exec(list)?.[1]}`)
 const first = detailOf(rowOf(list, 1))
 check(count(list, '<details class="candidate-detail"') === 2, 'one detail per candidate')
 check(!first.includes(PARTIAL_NOTE) && !first.includes('candidate-null-notes'), 'complete row has no partial note')
 for (const [component, score] of [['technical', '74'], ['chips', '92'], ['news_sentiment', '81'], ['group', '90']]) {
   check(slice(first, `data-component="${component}"`, '</div>').includes(`>${score}<`), `component ${component} shows ${score}`)
+}
+// Issue 654 AC-2: each of the four components is a 0–100 score bar, its number beside it.
+for (const [component, label, score] of [['technical', '技術', '74'], ['chips', '籌碼', '92'], ['news_sentiment', '新聞情緒', '81'], ['group', '族群', '90']]) {
+  const cell = slice(first, `data-component="${component}"`, '</div>')
+  check(cell.includes(`<span class="score-bar" role="img" aria-label="${label} ${score}（0–100）" data-score="${score}">`) && cell.includes('class="score-bar-fill" style="width:'), `Issue 654: component ${component} is a bar at ${score}: ${cell}`)
 }
 check(slice(first, 'data-component="news_sentiment"', '</div>').includes('badge-accent') && !slice(first, 'data-component="chips"', '</div>').includes('badge-accent'), 'only news sentiment is marked 推論')
 check(count(first, 'data-reason=') === 4, 'all four API reasons are shown')
@@ -102,15 +116,41 @@ check(first.indexOf('institutional_net_buy_5d') < first.indexOf('breakout_20d_hi
 for (const [code, dot] of [['breakout_20d_high', 'technical'], ['institutional_net_buy_5d', 'chips'], ['news_positive_3d', 'news_sentiment'], ['hot_group_rank', 'group']]) {
   check(slice(first, `data-reason="${code}"`, '</li>').includes(`reason-dot-${dot}`), `${code} has the ${dot} dot`)
 }
-check(slice(first, 'data-reason="news_positive_3d"', '</li>').includes('badge-accent'), 'inference reason carries the 推論 badge on its row')
-check(!slice(first, 'data-reason="breakout_20d_high"', '</li>').includes('badge-accent'), 'fact reasons carry no 推論 badge')
-check(first.includes('資料日期 2026/10/16') && first.includes('臺灣證券交易所'), 'data date and sources in the detail')
+// #661 AC-2: one 推論 mark an inferred item. The API reason text already ends 「（推論）」, so no badge after it.
+const inferredReason = slice(first, 'data-reason="news_positive_3d"', '</li>')
+check(count(inferredReason, '推論') === 1 && !inferredReason.includes('badge-accent'), `inference reason: its own 「（推論）」 and no second badge: ${inferredReason}`)
+const unmarked = render(<CandidatesSection data={{ ...listResponse(), items: [{ ...completeItem(), reasons: [{ code: 'news_positive_3d', component: 'news_sentiment', text: '近 3 日 2 則偏多新聞', params: {}, inference: true }] }] }} loading={false} error={null} />)
+check(count(slice(unmarked, 'data-reason="news_positive_3d"', '</li>'), '推論') === 1 && slice(unmarked, 'data-reason="news_positive_3d"', '</li>').includes('badge-accent'), 'an inferred reason whose text does not say 推論 gets the one badge')
+check(!slice(first, 'data-reason="breakout_20d_high"', '</li>').includes('推論'), 'fact reasons carry no 推論')
+check(count(slice(first, 'data-component="news_sentiment"', '</div>'), '推論') === 1, 'news sentiment component: one 推論 badge')
+for (const component of ['technical', 'chips', 'group']) check(!slice(first, `data-component="${component}"`, '</div>').includes('推論'), `fact component ${component}: no 推論`)
+// The AI note block: one 「AI 推論」 badge in its head, no badge inside the parts (their text is the model's own).
+const firstNote = slice(first, 'class="ai-inference candidate-note"', '</section>')
+check(count(firstNote, 'AI 推論') === 1 && count(firstNote, 'badge-accent') === 1 && !slice(firstNote, '<dl class="candidate-note-parts">', '</dl>').includes('badge'), `AI 進出點說明: one AI 推論 badge, none inside: ${firstNote}`)
+// Sources are facts (P-a): no 推論 in the 資料日期與來源 fold.
+check(!slice(first, '<details class="details candidate-detail-sources">', '</details>').includes('推論'), '資料日期與來源: no 推論')
+check(first.includes('資料日期 2026/10/16') && first.includes('臺灣證券交易所'), 'data date and sources in the detail (no page date known)')
+// #661 AC-3 (D-b): with the navbar's page date the same day, the detail writes no date; another day still writes it.
+const plain = (markup: string) => markup.replace(/<[^>]+>/g, "")
+const onPage = (day: string, data = listResponse()) => detailOf(rowOf(render(<PageDateContext.Provider value={day}><CandidatesSection data={data} loading={false} error={null} /></PageDateContext.Provider>), 1))
+const sameDayDetail = onPage('2026-10-16')
+check(!sameDayDetail.includes('資料日期') || !/資料日期 \d/.test(plain(sameDayDetail)), `page date 2026/10/16: no 「資料日期 2026/10/16」 in the detail: ${plain(sameDayDetail).match(/資料日期[^<]{0,20}/g)}`)
+check(sameDayDetail.includes('臺灣證券交易所'), 'page date: the sources stay')
+check(/資料日期 2026\/10\/16/.test(plain(onPage('2026-10-19'))), 'another page date: the detail still writes 資料日期 2026/10/16')
+const olderLiquidity = listResponse()
+olderLiquidity.items[0] = { ...olderLiquidity.items[0], liquidity: { state: 'eligible', average_volume_lots_20d: 1682, minimum_lots: 1000, ...olderLiquidity.items[0].liquidity, data_as_of: '2026-10-15' } as CandidateLiquidity }
+const liquidityLine = slice(onPage('2026-10-16', olderLiquidity), 'candidate-liquidity', '</div>')
+check(liquidityLine.includes('資料日期 2026/10/15'), `a liquidity of another day than the page keeps its date: ${liquidityLine}`)
 
 // ---- partial components ----
 const second = detailOf(rowOf(list, 2))
 check(second.includes(PARTIAL_NOTE), 'partial row explains the renormalised score')
 check(slice(second, 'data-component="group"', '</div>').includes('>—<') && slice(second, 'data-component="news_sentiment"', '</div>').includes('>—<'), 'null components show 「—」')
 check(!slice(second, 'data-component="group"', '</div>').includes('>0<'), 'null component is never 0')
+for (const [component, label] of [['group', '族群'], ['news_sentiment', '新聞情緒']]) {
+  const cell = slice(second, `data-component="${component}"`, '</div>')
+  check(cell.includes(`aria-label="${label} 無資料" data-score="none"`) && !cell.includes('score-bar-fill'), `Issue 654: a null ${component} draws no fill: ${cell}`)
+}
 check(second.includes('族群：當日沒有已排名且資料完整的所屬產業或題材') && second.includes('新聞情緒：近 3 日沒有成功的新聞收集，新聞分項無資料'), 'null_explanation shown next to the scores')
 const row2 = rowOf(list, 2)
 check(row2.includes('13.05～13.35') && row2.includes('上櫃') && row2.includes('回踩型'), 'pullback zone, TPEx label and the entry type (Issue 493)')
@@ -150,11 +190,12 @@ for (const reason of ['no_actionable_signals', 'all_excluded'] as const) {
   check(candidatesState({ ...data, zero_reason_text: null }).kind === 'zero' && (candidatesState({ ...data, zero_reason_text: null }) as { text: string }).text === data.zero_reason_text, `zero ${reason} falls back to the §10 copy`)
 }
 const notComputed = render(<CandidatesSection data={notComputedResponse()} loading={false} error={null} />)
+check(STRATEGY_LINK.exec(notComputed)?.[1] === '順勢籌碼型 · 策略說明 →', `尚無候選清單時頁首仍標出策略名稱, got ${STRATEGY_LINK.exec(notComputed)?.[1]}`)
 check(notComputed.includes(NOT_COMPUTED_TEXT) && notComputed.includes('尚無候選清單') && !notComputed.includes('date-badge'), 'not_computed copy without a date badge')
 check(notComputed.includes(CANDIDATE_DISCLAIMER), 'disclaimer stays on top for every state')
 
 // ---- loading and error ----
-check(render(<CandidatesSection data={undefined} loading error={null} />).includes('今日可買載入中…'), 'loading skeleton')
+check(render(<CandidatesSection data={undefined} loading error={null} />).includes('今日名單載入中…'), 'loading skeleton')
 check(render(<CandidatesSection data={undefined} loading={false} error={new Error('API 500: boom')} />).includes('API 500: boom'), 'error reason shown')
 
 // ---- stock page: the strategy board's candidate row reuses the score details (stock/strategyBoard.test.tsx) ----
@@ -166,6 +207,12 @@ check(render(<ScoreDetails item={partialItem()} open />).includes('<details clas
 const completeDetails = render(<ScoreDetails item={completeItem()} open={false} />)
 check(completeDetails.includes('同檔另一策略：回踩條件 總分 61') && completeDetails.includes('規則最早執行日 2026/10/19'), 'alternatives and earliest execution date in details')
 check(completeDetails.includes('資料日期 2026/10/16') && completeDetails.includes('臺灣證券交易所'), 'data date and sources in details')
+// Issue 654 AC-2: the table's component titles carry the score bar and the weight (the sub-item 百分位 column stays a number).
+const groupTitles = [...completeDetails.matchAll(/<span class="score-group-title">(.*?)<span class="score-group-weight">權重 (\d+)%<\/span>/g)].map((match) => /data-score="([^"]*)"/.exec(match[1])?.[1])
+check(JSON.stringify(groupTitles) === JSON.stringify(['74', '92', '81', '90']), `Issue 654: every component title in the score details is a bar: ${JSON.stringify(groupTitles)}`)
+check(!/（\d+，權重/.test(completeDetails), 'Issue 654: the old 「技術（74，權重 35%）」 text title is gone')
+const partialDetails = render(<ScoreDetails item={partialItem()} open />)
+check(partialDetails.includes('aria-label="族群 無資料" data-score="none"'), `Issue 654: a null component title draws an empty bar: ${partialDetails}`)
 
 // ---- 加入追蹤 (#253): one button or link per candidate ----
 check(count(list, '>加入追蹤</button>') === 2 && !list.includes('已在追蹤'), 'every untracked candidate has the add button once, in its detail')
@@ -189,3 +236,120 @@ const liquidList = render(<CandidatesSection data={{ ...listResponse(), items: [
 // Issue 510: the average volume moved off the row into the detail's 資料日期與來源, with its date and the floor.
 check(count(liquidList, '20 日均量 1,682 張') === 1 && slice(liquidList, 'candidate-detail-sources', '</details>').includes('20 日均量 1,682 張（資料日期 2026/10/16，候選門檻 1,000 張）'), `the detail shows the lots with the date and the floor, the row none, got ${count(liquidList, '20 日均量 1,682 張')}`)
 check(!render(<CandidatesSection data={listResponse()} loading={false} error={null} />).includes('candidate-liquidity'), 'a run before candidate_score_v6 shows no average volume')
+
+// ---- RR basis (#580; UI_COPY_SPEC §10): the today row names what the RR's entry is, the detail names its price ----
+check(riskRewardBasisNote('entry_zone_midpoint') === '以進場區中點計算' && riskRewardBasisNote('entry_price') === '以進場價計算' && riskRewardBasisNote('signal_close') === '以資料日收盤計算', 'the three basis notes')
+check(riskRewardBasisNote(null) === null && riskRewardBasisNote(undefined) === null && riskRewardBasisNote('other') === null, 'an unknown or missing basis has no note')
+check(formatRiskRewardWithBasis(1.6234, 'entry_zone_midpoint', 27.27) === '1.62 倍（以進場區中點 27.27 元計算）', 'the RR with its basis and entry price')
+check(formatRiskRewardWithBasis(1.6, null, 27.27) === '1.60 倍' && formatRiskRewardWithBasis(1.6, 'entry_price', null) === '1.60 倍' && formatRiskRewardWithBasis(null, 'entry_price', 10) === '—', 'no basis, no price or no RR: the RR alone')
+const midpointItem = {
+  ...completeItem(), strategy: 'pullback_v4',
+  levels: {
+    entry_type: 'pullback', entry: 27.27, entry_zone: { low: 26.85, high: 27.69 }, invalid_price: 26.5, target_1: 28.52, target_2: 29.4,
+    risk_reward: 1.6234, risk_reward_basis: 'entry_zone_midpoint' as const, earliest_execution_date: null,
+  },
+}
+const midpointList = render(<CandidatesSection data={{ ...listResponse(), items: [midpointItem] }} loading={false} error={null} />)
+const midpointRow = slice(rowOf(midpointList, 1), 'candidate-row-nums', '</dl>')
+check(midpointRow.includes('1.62 倍') && midpointRow.includes('class="small-note candidate-rr-basis">以進場區中點計算</div>'), `the row's RR names its basis, got ${midpointRow}`)
+check(detailOf(rowOf(midpointList, 1)).includes('1.62 倍（以進場區中點 27.27 元計算）'), 'the detail names the midpoint price')
+const breakoutList = render(<CandidatesSection data={{ ...listResponse(), items: [{ ...completeItem(), levels: { ...completeItem().levels, risk_reward_basis: 'entry_price' as const } }] }} loading={false} error={null} />)
+check(breakoutList.includes('>以進場價計算</div>') && breakoutList.includes('1.60 倍（以進場價 161.50 元計算）'), 'a breakout reads at its entry price')
+check(!render(<CandidatesSection data={listResponse()} loading={false} error={null} />).includes('candidate-rr-basis'), 'a response without the basis shows no note')
+
+// ---- 盤後終端: the price ladder and the chart beside the list (DESIGN_SYSTEM §5 候選列表) ----
+const breakoutItem = completeItem()
+check(JSON.stringify(candidateChartLevels(breakoutItem.levels)) === JSON.stringify({ entry: 161.5, stop: 157.82, target: 167.39 }), 'the chart draws the entry, the stop and the first target')
+const zoneLevels = { ...breakoutItem.levels, entry_type: 'pullback', entry: null, entry_zone: { low: 160, high: 162 } }
+check(candidateChartLevels(zoneLevels)?.entry === 161, 'without an entry the zone midpoint is the entry')
+check(candidateChartLevels({ ...breakoutItem.levels, invalid_price: null }) === null, 'a missing stop draws nothing')
+check(candidateChartLevels({ ...breakoutItem.levels, invalid_price: 170 }) === null, 'a stop above the entry draws nothing')
+const ladder = priceLadder(breakoutItem.levels, 161.5)
+const entryAt = ((161.5 - 157.82) / (167.39 - 157.82)) * 100
+check(ladder !== null && Math.abs(ladder.entry - entryAt) < 1e-9 && Math.abs(ladder.close - entryAt) < 1e-9 && ladder.outside === null, `a close at the entry sits on the entry tick: ${JSON.stringify(ladder)}`)
+check(priceLadder(breakoutItem.levels, 150)?.close === 0 && priceLadder(breakoutItem.levels, 150)?.outside === 'below_stop', 'a close under the stop is clamped to the left end and says so')
+check(priceLadder(breakoutItem.levels, 180)?.close === 100 && priceLadder(breakoutItem.levels, 180)?.outside === 'above_target', 'a close over the target is clamped to the right end and says so')
+check(priceLadder(breakoutItem.levels, null) === null && priceLadder({ ...breakoutItem.levels, target_1: null }, 161.5) === null, 'no close or no full set of levels: no ladder')
+check(ladderLabel(priceLadder(breakoutItem.levels, 159)!) === '收盤在停損與進場之間' && ladderLabel(priceLadder(breakoutItem.levels, 165)!) === '收盤在進場與目標之間', 'the ladder label says which side of the entry the close is')
+check(ladderLabel(priceLadder(breakoutItem.levels, 150)!) === '收盤已低於停損' && ladderLabel(priceLadder(breakoutItem.levels, 180)!) === '收盤已高於目標', 'and when it ran past an end')
+const ladderMarkup = renderToStaticMarkup(<PriceLadder item={breakoutItem} />)
+check(ladderMarkup.includes('role="img"') && ladderMarkup.includes('price-ladder-entry') && ladderMarkup.includes('price-ladder-close'), 'the ladder is an image with an entry tick and a close dot')
+check(ladderMarkup.replace(/<[^>]+>/g, '') === '', 'the ladder adds no page text (the row already states the prices)')
+check(renderToStaticMarkup(<PriceLadder item={{ ...breakoutItem, levels: { ...breakoutItem.levels, target_1: null } }} />) === '', 'no ladder without a full set of levels')
+
+// ---- the sparkline (Issue 653; DESIGN_SYSTEM §5 候選列表): 30 sessions' closes, red up and green down, a labelled image ----
+const closes = (values: Array<number | null>) => ({ dates: values.map((_, index) => `2026-10-${String(index + 1).padStart(2, '0')}`), closes: values })
+const rising = sparkline(closes([100, 104, 102, 110]))
+check(rising?.tone === 'up' && rising.label === '近 4 個交易日收盤走勢：2026/10/01–2026/10/04 +10.00%', `a span that rose is up and its label states the span and change: ${JSON.stringify(rising)}`)
+const falling = sparkline(closes([50, 48, 49, 45]))
+check(falling?.tone === 'down' && falling.label.endsWith(' -10.00%'), `a span that fell is down: ${JSON.stringify(falling)}`)
+check(sparkline(closes([20, 21, 20]))?.tone === 'flat' && sparkline(closes([20, 21, 20]))!.label.endsWith(' 0.00%'), 'an unchanged span is flat')
+check(rising?.path === 'M1 23L32.33 14.2L63.67 18.6L95 1', `the line spans the box, the high at the top and the low at the bottom: ${rising?.path}`)
+const gapped = sparkline(closes([null, 100, null, 101, 102]))
+check(gapped !== null && (gapped.path.match(/M/g) ?? []).length === 2 && gapped.label.includes('2026/10/02–2026/10/05'), `a session without a close leaves a gap, and the span runs from the first close to the last: ${JSON.stringify(gapped)}`)
+check(sparkline(closes([null, 100, null])) === null && sparkline(closes([])) === null && sparkline(undefined) === null, 'fewer than 2 closes: no line')
+check(sparkline({ dates: ['2026-10-01'], closes: [1, 2] }) === null, 'dates and closes of different lengths: no line')
+const flatLine = sparkline(closes([30, 30]))
+check(flatLine?.path === `M1 ${SPARKLINE_HEIGHT / 2}L95 ${SPARKLINE_HEIGHT / 2}`, `an unchanged price is a level line in the middle: ${flatLine?.path}`)
+const sparkMarkup = renderToStaticMarkup(<Sparkline item={{ recent_closes: closes([100, 104, 102, 110]) }} />)
+check(sparkMarkup.startsWith('<svg class="sparkline sparkline-up" role="img" aria-label="近 4 個交易日收盤走勢：2026/10/01–2026/10/04 +10.00%"'), `the sparkline is an image whose class carries the tone: ${sparkMarkup}`)
+check(sparkMarkup.includes(`viewBox="0 0 ${SPARKLINE_WIDTH} ${SPARKLINE_HEIGHT}"`) && sparkMarkup.replace(/<[^>]+>/g, '') === '' && !/<(text|line|g)b/.test(sparkMarkup), 'no axis or text: one path in the box')
+check(renderToStaticMarkup(<Sparkline item={{ recent_closes: closes([50, 45]) }} />).includes('class="sparkline sparkline-down"'), 'a span that fell carries the down class')
+check(renderToStaticMarkup(<Sparkline item={{ recent_closes: closes([50]) }} />) === '' && renderToStaticMarkup(<Sparkline item={{}} />) === '', 'no sparkline with one close or none (responses from before Issue 653)')
+
+const plainList = render(<CandidatesSection data={listResponse()} loading={false} error={null} />)
+check(!plainList.includes('candidates-terminal') && !plainList.includes('candidate-rank-button'), 'without a chart the list is the list alone and the rank is not a button')
+const charted = render(<CandidatesSection data={listResponse()} loading={false} error={null} wide renderChart={(item) => <div data-test-chart={item.instrument.symbol} />} />)
+check(charted.includes('class="candidates-terminal"') && charted.includes('data-chart-rank="1"') && charted.includes('data-test-chart="2377"'), 'with a chart the first candidate is the one shown')
+check((charted.match(/candidate-rank-button/g) ?? []).length === 2 && (charted.match(/aria-pressed="true"/g) ?? []).length === 1, 'every rank is a button and only the shown one is pressed')
+check(charted.includes('aria-label="第 1 名，顯示走勢圖"') && charted.includes('>#1</button>'), 'the rank button keeps its text and says what it does')
+check(charted.indexOf('candidates-terminal-list') < charted.indexOf('candidates-terminal-chart'), 'the list comes before the chart in the document')
+const text = (markup: string) => markup.replace(/<[^>]+>/g, '')
+check(text(charted) === text(plainList), 'the chart slot and the ladder change no page text of the list')
+
+// ---- below 1280px a row opens its own K-line card (Issue 665; DESIGN_SYSTEM §5 候選列表, decision 6841170465) ----
+// No DOM here: renderChart is what mounts CandidateChart (its /bars query and ECharts), so a call count of 0 means no
+// card, no /bars fetch and no chart initialised. A click is the pure transition plus a render in the next state.
+check(TERMINAL_MIN_WIDTH === 1280, 'the chart sits beside the list from 1280px, the width styles.css uses')
+const chartCalls: string[] = []
+const spyChart = (item: CandidateItem) => { chartCalls.push(item.instrument.symbol); return <div className="stock-chart-card" data-test-chart={item.instrument.symbol} /> }
+const narrow = render(<CandidatesSection data={listResponse()} loading={false} error={null} renderChart={spyChart} />)
+check(chartCalls.length === 0, `below 1280px the first render mounts no chart (no /bars, no ECharts): ${chartCalls.join(',')}`)
+check(!narrow.includes('candidates-terminal') && !narrow.includes('stock-chart-card') && !narrow.includes('data-test-chart'), 'below 1280px there is no chart beside the list, hidden or not')
+check(!narrow.includes('aria-pressed'), 'below 1280px no rank claims to be the shown chart')
+const toggles = narrow.match(/<button type="button" class="candidate-rank candidate-rank-button candidate-chart-toggle"[^>]*>#\d+<\/button>/g) ?? []
+check(toggles.length === 2 && toggles.every((button) => button.includes('aria-expanded="false"')), `every rank is a closed disclosure button (Enter and Space are a button's own): ${toggles.join(' ')}`)
+check(toggles[0]!.includes('aria-controls="candidate-chart-1"') && toggles[0]!.includes(`aria-label="${chartToggleLabel(1, false)}"`) && chartToggleLabel(1, false) === '第 1 名，展開 K 線圖' && chartToggleLabel(1, true) === '第 1 名，收起 K 線圖', `the rank names the card it controls and says what it does: ${toggles[0]}`)
+check(narrow.includes('<div class="candidate-chart" id="candidate-chart-1" hidden="">') && narrow.includes('<div class="candidate-chart" id="candidate-chart-2" hidden="">'), 'each closed row keeps an empty, hidden slot, so aria-controls always names an element')
+check(text(narrow) === text(plainList), 'the closed slots and the rank buttons change no page text (page_checks T5–T8, T13)')
+const rowMarkup = (markup: string, rank: number) => markup.slice(markup.indexOf(`data-candidate-rank="${rank}"`), rank === 1 ? markup.indexOf('data-candidate-rank="2"') : undefined)
+const row1 = rowMarkup(narrow, 1)
+check(row1.indexOf('candidate-chart-toggle') < row1.indexOf('candidate-row-name') && row1.indexOf('candidate-row-name') < row1.indexOf('candidate-ai-toggle'), 'focus order: the rank, then the name link, then 「AI 推論」')
+check(row1.indexOf('candidate-ai-toggle') < row1.indexOf('id="candidate-chart-1"') && row1.indexOf('id="candidate-chart-1"') < row1.indexOf('id="candidate-detail-1"'), 'the card slot sits between the row and its AI detail')
+check(!/<details[^>]*>(?:(?!<\/details>)[\s\S])*candidate-chart-toggle/.test(narrow) && !/<details[^>]*class="candidate-chart/.test(narrow), 'the card is not inside a <details>, so the screenshot tool opening every <details> mounts no chart')
+
+chartCalls.length = 0
+const opened = render(<TodayCandidateList items={listResponse().items} renderChart={spyChart} initialChartRank={1} />)
+check(chartCalls.join(',') === '2377', `an open row mounts its own card once, and only that row's (one /bars): ${chartCalls.join(',')}`)
+const openRow = rowMarkup(opened, 1)
+check(openRow.includes('aria-expanded="true"') && openRow.includes(`aria-label="${chartToggleLabel(1, true)}"`) && opened.includes('candidate-row-charted" data-candidate-rank="1"'), 'the open row\'s rank is expanded and says it closes the card')
+check(openRow.includes('<div class="candidate-chart" id="candidate-chart-1" role="region" aria-label="2377 微星 走勢圖"><div class="stock-chart-card" data-test-chart="2377"></div></div>'), `the open card is a labelled region under the row: ${openRow.slice(openRow.indexOf('id="candidate-chart-1"') - 30, openRow.indexOf('id="candidate-detail-1"'))}`)
+check(openRow.includes('aria-controls="candidate-detail-1" aria-expanded') === false && openRow.includes('class="badge badge-accent badge-compact candidate-ai-toggle" aria-expanded="false"') && !/<details class="candidate-detail"[^>]*open/.test(opened), 'opening the card leaves the AI detail closed')
+check(rowMarkup(opened, 2).includes('aria-expanded="false"') && rowMarkup(opened, 2).includes('id="candidate-chart-2" hidden=""'), 'the other row stays closed')
+check(nextChartRank(null, 1) === 1 && nextChartRank(1, 1) === null && nextChartRank(1, 2) === 2, 'pressing a closed row opens it, the open row closes it, another row moves the card there (one at a time)')
+chartCalls.length = 0
+render(<TodayCandidateList items={listResponse().items} renderChart={spyChart} initialChartRank={nextChartRank(1, 2)} />)
+check(chartCalls.join(',') === partialItem().instrument.symbol, `after moving to another row only that row's card is mounted (the first one unmounts): ${chartCalls.join(',')}`)
+chartCalls.length = 0
+render(<TodayCandidateList items={listResponse().items} renderChart={spyChart} initialChartRank={nextChartRank(1, 1)} />)
+check(chartCalls.length === 0, 'a closed card is unmounted, not hidden')
+chartCalls.length = 0
+const both = render(<TodayCandidateList items={listResponse().items} renderChart={spyChart} initialChartRank={1} wide />)
+check(chartCalls.join(',') === '2377' && both.includes('class="candidates-terminal"') && !both.includes('candidate-chart-toggle') && !both.includes('id="candidate-chart-1"'), 'from 1280px the list is unchanged: one chart beside it, the rank picks it, no card under a row')
+
+// A tap on the row's free space toggles; a link, a button (rank, term, AI), a summary, or a text selection does not.
+const target = (ignored: boolean) => ({ closest: (selector: string) => (selector === ROW_CLICK_IGNORED && ignored ? {} : null) })
+check(rowClickToggles(target(false), '') && !rowClickToggles(target(true), '') && !rowClickToggles(target(false), '389.23') && !rowClickToggles(null, ''), 'row taps: free space toggles; controls, a selection or no target do not')
+check(['a', 'button', 'summary', '[role="button"]'].every((part) => ROW_CLICK_IGNORED.includes(part)), `ignored targets cover links, buttons (rank, terms, AI) and summaries: ${ROW_CLICK_IGNORED}`)
+check(/<div class="candidate-row-figures"><svg class="sparkline sparkline-up"[^>]*><path d="[^"]+"><\/path><\/svg><div class="price-ladder"/.test(plainList), 'a row draws the sparkline, then the ladder, on one line under the sentence (Issue 653)')
+check((plainList.match(/class="sparkline /g) ?? []).length === 1, 'only the row with closes has a sparkline')

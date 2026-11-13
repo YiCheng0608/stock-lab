@@ -39,7 +39,7 @@ check(productQualityLabel('complete', 'research') === '策略判斷資料完整'
 
 // A4: the hidden-rows line.
 const summary = { view: 'focus', include_etf: false, hidden: { etf: 2, observation: 0, data_insufficient: 3 } } as unknown as ActionTierSummary
-check((hiddenSentence(summary) ?? '').includes('、資料不足 3 檔；'), 'A4 hidden line: ' + hiddenSentence(summary))
+check(hiddenSentence(summary) === '預設隱藏：ETF 2 檔、資料不足 3 檔', 'A4 hidden line (its note moved to 說明, Issue 649): ' + hiddenSentence(summary))
 
 // B1: the list's note is the primary reason when the summary has causes, else the data-gap sentence.
 check(actionNote(insufficient([NO_TRADE, INSTITUTIONAL])) === NO_TRADE.label, 'B1 note is the primary reason: ' + actionNote(insufficient([NO_TRADE])))

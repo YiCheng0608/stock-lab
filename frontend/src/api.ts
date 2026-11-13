@@ -4,6 +4,7 @@ import type {
   CandidatesResponse,
   CoverageReport,
   Dashboard,
+  DataDate,
   ActionSummary,
   ActionsResponse,
   ActionView,
@@ -24,8 +25,6 @@ import type {
   ThemeBoardResponse,
   ThemeDetail,
   ThemeMembersResponse,
-  ThemeSuggestion,
-  ThemeSuggestionsResponse,
   Paginated,
   Position,
   PositionInput,
@@ -42,7 +41,6 @@ import { candidatesPath } from './candidates/candidates'
 import { assertPortfolioValue } from './portfolioValues'
 import { STOCK_BARS_LIMIT, stockBarsPath } from './stock/stockBars'
 import { THEME_BOARD_LIMIT, themeBoardPath } from './themes/themeBoards'
-import { themeSuggestionsPath } from './themes/themeSuggestions'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000/api'
 
@@ -65,8 +63,8 @@ export class ApiError extends Error {
   }
 }
 
-async function get<T>(path: string): Promise<T> {
-  const response = await fetch(API_BASE + path)
+async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(API_BASE + path, signal ? { signal } : undefined)
   if (!response.ok) {
     throw new ApiError(response.status, await response.text())
   }
@@ -105,6 +103,8 @@ function queryString(params: Record<string, string | number | boolean | undefine
 }
 
 export const getDashboard = () => get<Dashboard>('/dashboard')
+// The navbar's data date alone, the same as_of as /dashboard (Issue 601): pages other than home no longer load the dashboard for it.
+export const getDataDate = () => get<DataDate>('/data-date')
 // Without a date the API returns the latest candidate run; limit is 1–20 (default 20).
 export const getCandidates = (date?: string, limit?: number) => get<CandidatesResponse>(candidatesPath(date, limit))
 export const getGroups = (params: PageParams = {}) =>
@@ -112,6 +112,9 @@ export const getGroups = (params: PageParams = {}) =>
 export const getGroup = (id: string) => get<GroupDetail>(`/groups/${encodeURIComponent(id)}`)
 export const getInstruments = (params: PageParams = {}) =>
   get<Paginated<Instrument>>(`/instruments${queryString(params)}`)
+// Navbar suggestions (Issue 599): path from search.ts suggestionPath, the only request made while typing.
+export const getInstrumentSuggestions = (path: string, signal: AbortSignal) =>
+  get<Paginated<Instrument>>(path, signal).then((page) => page.items)
 export const getInstrument = (symbol: string, exchange?: string) =>
   get<InstrumentDetail>(
     `/instruments/${encodeURIComponent(symbol)}${exchange ? `?exchange=${encodeURIComponent(exchange)}` : ''}`,
@@ -225,18 +228,20 @@ export const getNewsDetail = (newsId: string) =>
 export const getThemeBoard = (board: ThemeBoard, limit = THEME_BOARD_LIMIT) =>
   get<ThemeBoardResponse>(themeBoardPath(board, limit))
 
-export const getThemeSuggestions = (limit?: number) => get<ThemeSuggestionsResponse>(themeSuggestionsPath(limit))
-export const getThemeSuggestion = (id: number) => get<ThemeSuggestion>(`/theme-suggestions/${id}`)
 
 export const getTheme = (id: string) => get<ThemeDetail>(`/themes/${encodeURIComponent(id)}`)
 export const getThemeMembers = (id: string, params: PageParams & { sort?: string } = {}) =>
   get<ThemeMembersResponse>(`/themes/${encodeURIComponent(id)}/members${queryString(params)}`)
 
-export const getStocks = (params: PageParams & { exchange?: string; instrument_type?: string; theme_id?: string; watchlist_only?: boolean } = {}) =>
+// The q of /stocks, /instruments and /signals is at most this long; longer is a 422 (Issue 602).
+export const SEARCH_MAX_LENGTH = 100
+// /api/stocks sort values (Issue 602); the API answers any other value with a 422.
+export type StockSort = 'type' | 'symbol' | 'name' | 'close_desc' | 'close_asc'
+export const getStocks = (params: PageParams & { exchange?: string; instrument_type?: string; theme_id?: string; watchlist_only?: boolean; sort?: StockSort } = {}) =>
   get<{ items: StockDirectoryRow[]; meta: Record<string, unknown> }>(`/stocks${queryString(params)}`)
 
 export const getStock = (exchange: string, symbol: string, asOf?: string) =>
-  get<InstrumentDetail & { decision_summary: ActionSummary | null; news: NewsItem[] }>(
+  get<InstrumentDetail & { decision_summary: ActionSummary | null; news?: NewsItem[] }>(
     `/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}${queryString({ as_of: asOf })}`,
   )
 

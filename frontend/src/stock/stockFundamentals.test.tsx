@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 
 import type { FundamentalSnapshot, MonthlyRevenue } from '../types'
+import { PageDateContext } from '../components/pageDate'
 import { StockFundamentalsPanel } from './StockFundamentalsPanel'
 import { CORRECTED, CORRECTION_HEADER, FUNDAMENTALS_TITLE, MONTHLY_NOTE, MONTHLY_TITLE, NOT_PROVIDED, correctionNote, fundamentalPeriodLabel, fundamentalsEmptyReason, isCorrected, monthlyEmptyReason, revenueMonthLabel, revenueText, yoyText } from './stockFundamentals'
 import { STOCK_TABS, parseStockTab } from './stockTabs'
@@ -19,7 +20,7 @@ const panel = (rows: FundamentalSnapshot[], instrumentType = 'stock', asOf: stri
   renderToStaticMarkup(<StockFundamentalsPanel rows={rows} instrumentType={instrumentType} asOf={asOf} sourceLabel={label} />)
 
 // ---- the tab ----
-check(STOCK_TABS.map((tab) => tab.label).join('／') === '圖表與指標／法人籌碼／財務／新聞與公告／研究條件／資料說明', `財務 sits after 法人籌碼, got ${STOCK_TABS.map((tab) => tab.label).join('／')}`)
+check(STOCK_TABS.map((tab) => tab.label).join('／') === '走勢／籌碼／財務／新聞與公告／進出場／資料來源', `財務 sits after 籌碼, got ${STOCK_TABS.map((tab) => tab.label).join('／')}`)
 check(parseStockTab('financials') === 'financials', '?tab=financials opens 財務')
 
 // ---- rows: period, 億元, EPS, ROE, 可得日, source ----
@@ -28,6 +29,8 @@ const filled = panel([q3, row()])
 const filledText = text(filled)
 check(filledText.includes(FUNDAMENTALS_TITLE), 'the card title')
 check(filled.includes('資料 2026/09/30'), `the data badge is the newest period end, got ${filledText}`)
+// #661 (D14 stays): the period date is not the page date, so the card keeps it under the navbar's 2026/10/16.
+check(renderToStaticMarkup(<PageDateContext.Provider value="2026-10-16"><StockFundamentalsPanel rows={[q3, row()]} instrumentType="stock" asOf={null} sourceLabel={label} /></PageDateContext.Provider>).includes('資料 2026/09/30'), 'financials badge of another day than the page still shows')
 check(filledText.includes('2026 年第 3 季 3.85 -0.52 來源未提供 2026/11/05 公開資訊觀測站 季報'), `Q3: NT$ thousands to 億元, signed EPS, ROE 來源未提供, 可得日, source; got ${filledText}`)
 check(filledText.includes('2026 年第 2 季 24,044.84 49.33 來源未提供 2026/10/30'), `Q2 after Q3 in API order; got ${filledText}`)
 check(filled.indexOf('2026 年第 3 季') < filled.indexOf('2026 年第 2 季'), 'rows keep the API order, newest period first')

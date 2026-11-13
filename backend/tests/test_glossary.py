@@ -14,7 +14,7 @@ FRONTEND_GLOSSARY = (
 IN_PLACE = {
     "candidate_score": "候選總分",
     "entry_zone": "進場區",
-    "support": "停損／條件失效價",
+    "support": "停損",
     "target": "目標價",
     "rr": "風險報酬比 RR",
     "percentile": "百分位",
@@ -24,6 +24,8 @@ IN_PLACE = {
     # The entry type badge on a candidate's first line (#491).
     "breakout_entry": "突破型",
     "pullback_entry": "回踩型",
+    # The strategy behind 今日名單, named on the 策略說明 page and the 今日名單 head (#577).
+    "trend_chips": "順勢籌碼型",
 }
 FIELDS = ("plain_definition", "use", "how_to_read", "limitations")
 
@@ -56,4 +58,6 @@ def test_the_frontend_copy_matches_the_api_for_in_place_terms():
 
 def test_search_finds_a_term_by_its_chinese_alias():
     assert [term["term_id"] for term in glossary_terms(q="條件失效")] == ["support"]
+    # The screens say 停損; the old name still finds it (#581).
+    assert [term["term_id"] for term in glossary_terms(q="條件失效價")] == ["support"]
     assert "percentile" in [term["term_id"] for term in glossary_terms(q="同榜百分位")]

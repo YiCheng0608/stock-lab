@@ -912,6 +912,19 @@ def test_dashboard_overview_without_a_verified_session(api_db):
         ("DJI", "not_collected"),
         ("SOX", "not_collected"),
     ]
+    # The index table (Issue #564): no Taiwan row without a session, the US rows as foreign_indices.
+    assert [
+        (item["key"], item["status"], item["reason"], item["ma60"])
+        for item in overview.pop("indexes")
+    ] == [
+        ("taiex", "unavailable", "no_verified_session", None),
+        ("tpex", "unavailable", "no_verified_session", None),
+        ("tx", "unavailable", "no_verified_session", None),
+        ("spx", "unavailable", "not_collected", None),
+        ("ixic", "unavailable", "not_collected", None),
+        ("dji", "unavailable", "not_collected", None),
+        ("sox", "unavailable", "not_collected", None),
+    ]
     assert overview == {
         "trading_date": None,
         "exchanges": [

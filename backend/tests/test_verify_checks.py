@@ -11,6 +11,7 @@ from __future__ import annotations
 import ast
 import importlib.util
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -116,11 +117,11 @@ def test_a_sampler_without_a_manual_label_fails(tmp_path):
 
 
 def test_a_check_without_a_type_fails(tmp_path):
-    features = _features_with(tmp_path, "themes", "| G9 | 新檢查 | 某條件 |")
+    features = _features_with(tmp_path, "themes", "| G99 | 新檢查 | 某條件 |")
     problems = page_checks.registry_problems(
         page_checks.feature_checks(features), page_checks.CHECKS
     )
-    assert problems == ["themes.md G9: 類型 is '新檢查', not CI or 人工"]
+    assert problems == ["themes.md G99: 類型 is '新檢查', not CI or 人工"]
 
 
 def test_code_that_features_label_manual_fails(tmp_path):
@@ -224,21 +225,17 @@ def _candidates(count=2, inference=True):
     }
 
 
-# The 1280 list (#510): the navbar's 今日可買 link, the section title (no eyebrow), then rows
+# The 1280 list (#510): the navbar's 今日名單 link, the section title (no eyebrow), then rows
 # whose title line starts `#<rank> <symbol> <name>`, then the opened detail.
 TODAY_CANDIDATES = (
-    "今日可買\n觀察中\n"
-    "今日可買\n資料 2026/10/16\n2 檔\n2026/10/16 收盤後條件成立\n策略說明 →\n"
+    "今日名單\n我的追蹤\n"
+    "今日名單\n資料 2026/10/16\n2 檔\n2026/10/16 收盤後條件成立\n策略說明 →\n"
     "#1 9100 示範一 上市 · 半導體（產業 #1）\n突破型\n2026/10/16 收盤已突破 21.10 元\n"
     "收盤（元）\n21.10\n+0.48%\nRR\n1.60 倍\nAI 推論 ▸\n"
-    "AI 進出點說明\nAI 推論\n"
-    + page_checks.CANDIDATE_DISCLAIMER
-    + "\n來源：訊號 a（推論）\n"
+    "AI 進出點說明\nAI 推論\n" + page_checks.CANDIDATE_DISCLAIMER + "\n來源：訊號 a\n"
     "#2 9101 示範二 上櫃 · 無所屬族群\n回踩型\n2026/10/16 已拉回到支撐區\n"
     "收盤（元）\n13.20\n漲跌待核實\nRR\n1.60 倍\nAI 說明 ▸\n"
-    "AI 進出點說明\nAI 推論\n"
-    + page_checks.CANDIDATE_DISCLAIMER
-    + "\n來源：訊號 b（推論）\n"
+    "AI 進出點說明\nAI 推論\n" + page_checks.CANDIDATE_DISCLAIMER + "\n來源：訊號 b\n"
     "熱門族群\n#1\n半導體\n"
 )
 
@@ -257,7 +254,7 @@ def test_t7_and_t8_pass_on_matching_text(tmp_path):
 
 def test_t7_fails_on_the_old_candidate_rows(tmp_path):
     # Before #493 the rank was a cell of its own (`#1<TAB>9100 …`), and before #276 a card
-    # (`#1` on a line of its own); neither is a 今日可買 row.
+    # (`#1` on a line of its own); neither is a 今日名單 row.
     for old in ("\t", "\n"):
         page = TODAY_CANDIDATES.replace("#1 ", "#1" + old).replace("#2 ", "#2" + old)
         run = FakeRun(
@@ -273,15 +270,15 @@ def test_t7_fails_on_the_old_candidate_rows(tmp_path):
 
 
 def test_t7_reads_the_section_title_not_the_navbar_link(tmp_path):
-    # #493: the navbar 今日可買 comes first; the date must follow the section title.
-    page = TODAY_CANDIDATES.replace("觀察中\n今日可買\n", "觀察中\n", 1)
+    # #493: the navbar 今日名單 comes first; the date must follow the section title.
+    page = TODAY_CANDIDATES.replace("我的追蹤\n今日名單\n", "我的追蹤\n", 1)
     run = FakeRun(
         tmp_path,
         {"candidates": _candidates()},
         {"today-1280": page},
         {"candidate_run_latest_trading_date": "2026-10-16"},
     )
-    with pytest.raises(page_checks.Fail, match="`今日可買` 下一行是 '觀察中'"):
+    with pytest.raises(page_checks.Fail, match="`今日名單` 下一行是 '我的追蹤'"):
         page_checks.t7(run)
 
 
@@ -325,7 +322,8 @@ TODAY_GROUPS = (
         f"#{n}\n族群{n}\n分數 8{n}.00\n1 日 +0.10% 5 日 +1.00% 20 日 +2.00%\n"
         for n in range(1, 6)
     )
-    + "重點新聞\n全部新聞 →\n"
+    + page_checks.FOOTER_FIRST_LINE
+    + "\n"
 )
 
 
@@ -356,18 +354,38 @@ def test_t7_fails_when_the_page_drops_the_candidates(tmp_path):
     run = FakeRun(
         tmp_path,
         {"candidates": _candidates()},
-        {"today-1280": "今日可買\n資料 2026/10/16\n2 檔\n"},
+        {"today-1280": "今日名單\n資料 2026/10/16\n2 檔\n"},
         {"candidate_run_latest_trading_date": "2026-10-16"},
     )
     with pytest.raises(page_checks.Fail, match=r"`#n` 名次列 \[\]，預期依 items"):
         page_checks.t7(run)
 
 
-def test_t8_fails_without_the_inference_mark(tmp_path):
-    page = TODAY_CANDIDATES.replace("來源：訊號 b（推論）", "來源：訊號 b")
-    run = FakeRun(tmp_path, {"candidates": _candidates()}, {"today-1280": page})
-    with pytest.raises(page_checks.Fail, match="#2 9101 來源行沒有以 `（推論）` 結尾"):
-        page_checks.t8(run)
+def test_t8_fails_on_inference_marks_on_facts_or_repeated(tmp_path):
+    # #661 AC-2: the 來源 line is a fact (no 推論), one 「AI 推論」 per AI note block, and an
+    # inferred reason that already says 「（推論）」 has no second 推論 badge.
+    cases = [
+        (
+            TODAY_CANDIDATES.replace("來源：訊號 b", "來源：訊號 b（推論）"),
+            "#2 9101 來源行帶推論字樣",
+        ),
+        (
+            TODAY_CANDIDATES.replace(
+                "AI 進出點說明\nAI 推論\n", "AI 進出點說明\nAI 推論\nAI 推論\n", 1
+            ),
+            "`AI 推論` 3 行，預期每個 AI 進出點說明區塊一個",
+        ),
+        (
+            TODAY_CANDIDATES.replace(
+                "來源：訊號 a\n", "來源：訊號 a\n近 3 日 1 則偏多新聞（推論）\n推論\n"
+            ),
+            "推論理由後又有 `推論` badge",
+        ),
+    ]
+    for page, message in cases:
+        run = FakeRun(tmp_path, {"candidates": _candidates()}, {"today-1280": page})
+        with pytest.raises(page_checks.Fail, match=message):
+            page_checks.t8(run)
 
 
 # ---- T11 market overview, T12 block order (#276) ----
@@ -561,23 +579,48 @@ def test_t11_reads_the_market_page_and_its_date_badge(tmp_path):
         "大盤概況\n資料 2026/10/22", "大盤概況\n資料 2026/10/21"
     )
     run = FakeRun(tmp_path, {"dashboard": _overview()}, {"market-1280": page}, facts)
-    with pytest.raises(page_checks.Fail, match="預期日期 badge `資料 2026/10/22`"):
+    with pytest.raises(
+        page_checks.Fail, match="下一行是 '資料 2026/10/21'，預期 `資料 2026/10/22`"
+    ):
         page_checks.t11(run)
+    # #661: with the page date (the navbar's) the same day, the card has no badge of its own.
+    same_day = {**_overview(), "as_of": "2026-10-22T09:00:00"}
+    run = FakeRun(
+        tmp_path, {"dashboard": same_day}, {"market-1280": OVERVIEW_PAGE}, facts
+    )
+    with pytest.raises(
+        page_checks.Fail, match="`大盤概況` 與頁面同日 2026/10/22，不應再有日期 badge"
+    ):
+        page_checks.t11(run)
+    run = FakeRun(
+        tmp_path,
+        {"dashboard": same_day},
+        {
+            "market-1280": OVERVIEW_PAGE.replace(
+                "大盤概況\n資料 2026/10/22\n", "大盤概況\n"
+            )
+        },
+        facts,
+    )
+    page_checks.t11(run)
 
 
 def test_today_shots_include_the_market_page():
     shots = page_checks.today_shots(None)
-    assert [(shot.name, shot.path) for shot in shots] == [
-        ("today", "/"),
-        ("market", "/market"),
+    # The shared chart of another row is selected through ?index= (Issue 564), at 1280 only.
+    assert [(shot.name, shot.path, shot.widths) for shot in shots] == [
+        ("today", "/", (1280, 390)),
+        ("market", "/market", (1280, 390)),
+        ("market-tpex", "/market?index=tpex", (1280,)),
+        ("market-tx", "/market?index=tx", (1280,)),
     ]
 
 
 # The today page's one market line (Issue 549): the two indexes, the date, the link.
 SUMMARY_PAGE = (
-    "今日可買\n資料 2026/10/22\n資料截至 2026/10/22 · TWSE／TPEx 官方資料 · 官方單日快照\n"
+    "今日名單\n資料 2026/10/22\n資料截至 2026/10/22 · TWSE／TPEx 官方資料 · 官方單日快照\n"
     "大盤\n加權 46,041.43 -1.81%\n櫃買 381.69 -3.47%\n資料 2026/10/22\n看大盤 →\n"
-    "條件已成立 · 依評分排序\n今日可買\n資料 2026/10/16\n2 檔\n"
+    "條件已成立 · 依評分排序\n今日名單\n資料 2026/10/16\n2 檔\n"
 )
 
 
@@ -636,15 +679,21 @@ TAIEX_PATH = "stocks/TWSE/TAIEX/bars?interval=day&limit=250"
 TPEX_PATH = "stocks/TPEx/TPEX/bars?interval=day&limit=250"
 TX_PATH = "stocks/TAIFEX/TX/bars?interval=day&limit=250"
 ATTRIBUTION = "資料來源：臺灣期貨交易所（政府資料開放平臺，政府資料開放授權條款第1版）"
-# The three stock-page K-line cards (decision 6715021190, Issue 552): TAIEX close-only rows, the TPEx index with no
-# bars (no instrument yet: 404), TX with one real bar in whole points, then its footer.
-CHART_PAGE = (
+# One stock-page K-line card per page (decision 6715021190, Issue 552/564): 加權指數 by default with close-only
+# rows, the TPEx index selected through ?index= with no bars (no instrument yet: 404), TX with one real bar in whole
+# points, then its footer. Each page has the index table before the chart.
+TABLE_HEAD = "大盤概況\n資料 2026/10/22\n指數總表\n資料 2026/10/22\n"
+TAIEX_PAGE = TABLE_HEAD + (
     "技術指標 indicators/v1\n加權指數日線\n資料 2026/10/22\n日K\n週K\nMA5\n"
     "來源 臺灣證券交易所\n最近 2 根日線；缺日不補、停牌不畫 K 線\n查看圖表資料表（最近 30 根）\n"
     "日期\t開（點）\t高（點）\t低（點）\t收（點）\t成交量（張）\tMA5（點）\n"
     "2026/10/22\t46,041.43\t46,041.43\t46,041.43\t46,041.43\t\t\n"
     "2026/10/21\t46,887.77\t46,887.77\t46,887.77\t46,887.77\t\t\n"
+)
+TPEX_PAGE = TABLE_HEAD + (
     "技術指標\n櫃買指數日線\n資料日期未提供\n日K\n週K\n無資料\n來源未提供日線\n"
+)
+TX_PAGE = TABLE_HEAD + (
     "技術指標 indicators/v1\n台指期近月日線\n資料 2026/10/22\n日K\n週K\n"
     "來源 臺灣期貨交易所\n最近 1 根日線；缺日不補、停牌不畫 K 線\n查看圖表資料表（最近 30 根）\n"
     "日期\t開（點）\t高（點）\t低（點）\t收（點）\t成交量（口）\tMA5（點）\n"
@@ -652,6 +701,10 @@ CHART_PAGE = (
     "2026/10/22 合約 2026/11 · 未平倉 115,258 口 · 結算價 46,234\n"
     f"自 2026/10/22 起收集，無更早歷史；近月合約：每月第三個週三（到期日）起改用次月，換月不做價差調整；只含一般交易時段\n{ATTRIBUTION}\n"
 )
+
+
+def _chart_pages(taiex=TAIEX_PAGE, tpex=TPEX_PAGE, tx=TX_PAGE):
+    return {"market-1280": taiex, "market-tpex-1280": tpex, "market-tx-1280": tx}
 
 
 def _payloads(taiex_close=46041.43):
@@ -668,8 +721,8 @@ def _payloads(taiex_close=46041.43):
     }
 
 
-def test_t15_passes_on_the_three_charts(tmp_path):
-    run = FakeRun(tmp_path, _payloads(), {"market-1280": CHART_PAGE})
+def test_t15_passes_on_the_shared_chart_of_each_selection(tmp_path):
+    run = FakeRun(tmp_path, _payloads(), _chart_pages())
     summary = page_checks.t15(run)
     assert "`2026/10/22\t46,041.43\t46,041.43\t46,041.43\t46,041.43`" in summary
     assert "`櫃買指數日線` `來源未提供日線`" in summary
@@ -677,30 +730,50 @@ def test_t15_passes_on_the_three_charts(tmp_path):
 
 
 def test_t15_fails_on_a_wrong_close_a_missing_chart_or_attribution(tmp_path):
-    run = FakeRun(tmp_path, _payloads(46041.44), {"market-1280": CHART_PAGE})
+    run = FakeRun(tmp_path, _payloads(46041.44), _chart_pages())
     with pytest.raises(page_checks.Fail, match="資料表缺最新一根"):
         page_checks.t15(run)
-    page = CHART_PAGE.replace("櫃買指數日線\n", "")
-    run = FakeRun(tmp_path, _payloads(), {"market-1280": page})
+    run = FakeRun(
+        tmp_path,
+        _payloads(),
+        _chart_pages(tpex=TPEX_PAGE.replace("櫃買指數日線\n", "")),
+    )
     with pytest.raises(page_checks.Fail, match="缺整行 `櫃買指數日線`"):
         page_checks.t15(run)
-    page = CHART_PAGE.replace(ATTRIBUTION, "資料來源：臺灣期貨交易所")
-    run = FakeRun(tmp_path, _payloads(), {"market-1280": page})
+    page = TX_PAGE.replace(ATTRIBUTION, "資料來源：臺灣期貨交易所")
+    run = FakeRun(tmp_path, _payloads(), _chart_pages(tx=page))
     with pytest.raises(page_checks.Fail, match="台指期之後缺整行"):
         page_checks.t15(run)
     # TX in two decimals (an index's format) is not the futures card.
-    page = CHART_PAGE.replace(
+    page = TX_PAGE.replace(
         "46,100\t46,330\t45,900\t46,272", "46,100.00\t46,330.00\t45,900.00\t46,272.00"
     )
-    run = FakeRun(tmp_path, _payloads(), {"market-1280": page})
+    run = FakeRun(tmp_path, _payloads(), _chart_pages(tx=page))
     with pytest.raises(page_checks.Fail, match="`台指期近月日線`：資料表缺最新一根"):
         page_checks.t15(run)
     # The old close-line chart (before the decision) has no stock-page meta line.
-    old = CHART_PAGE.replace(
+    old = TAIEX_PAGE.replace(
         "最近 2 根日線；缺日不補、停牌不畫 K 線", "最近 2 根日線；缺日不補"
     )
-    run = FakeRun(tmp_path, _payloads(), {"market-1280": old})
+    run = FakeRun(tmp_path, _payloads(), _chart_pages(taiex=old))
     with pytest.raises(page_checks.Fail, match="缺整行 `最近 2 根日線"):
+        page_checks.t15(run)
+
+
+def test_t15_fails_on_more_than_one_chart_or_a_chart_before_the_table(tmp_path):
+    # The page before Issue 564: three charts on /market.
+    page = TAIEX_PAGE + "櫃買指數日線\n台指期近月日線\n"
+    run = FakeRun(tmp_path, _payloads(), _chart_pages(taiex=page))
+    with pytest.raises(page_checks.Fail, match="只該有 `加權指數日線` 一張圖"):
+        page_checks.t15(run)
+    # ?index=tx still drawing 加權指數 is a selection the URL did not keep.
+    page = TX_PAGE.replace("台指期近月日線", "加權指數日線")
+    run = FakeRun(tmp_path, _payloads(), _chart_pages(tx=page))
+    with pytest.raises(page_checks.Fail, match="缺整行 `台指期近月日線`"):
+        page_checks.t15(run)
+    page = TAIEX_PAGE.replace("指數總表\n", "") + "指數總表\n"
+    run = FakeRun(tmp_path, _payloads(), _chart_pages(taiex=page))
+    with pytest.raises(page_checks.Fail, match="不在 `指數總表` 之後"):
         page_checks.t15(run)
 
 
@@ -709,37 +782,275 @@ def test_t15_newest_row_skips_a_suspended_day(tmp_path):
         **_payloads(),
         TAIEX_PATH: _taiex_bars([(21, 46887.77), (22, 46041.43), (23, None)]),
     }
-    page = CHART_PAGE.replace("資料 2026/10/22", "資料 2026/10/23", 1).replace(
-        "最近 2 根", "最近 3 根"
-    )
-    run = FakeRun(tmp_path, payloads, {"market-1280": page})
+    page = TAIEX_PAGE.replace(
+        "加權指數日線\n資料 2026/10/22", "加權指數日線\n資料 2026/10/23"
+    ).replace("最近 2 根", "最近 3 根")
+    run = FakeRun(tmp_path, payloads, _chart_pages(taiex=page))
     assert "`2026/10/22\t46,041.43" in page_checks.t15(run)
 
 
 def test_t15_without_bars_needs_the_empty_copy(tmp_path):
     empty = "\n資料日期未提供\n日K\n週K\n無資料\n來源未提供日線\n"
-    page = (
-        f"技術指標\n加權指數日線{empty}技術指標\n櫃買指數日線{empty}"
-        f"技術指標\n台指期近月日線{empty}{ATTRIBUTION}\n"
+    pages = _chart_pages(
+        taiex=f"{TABLE_HEAD}技術指標\n加權指數日線{empty}",
+        tx=f"{TABLE_HEAD}技術指標\n台指期近月日線{empty}{ATTRIBUTION}\n",
     )
-    run = FakeRun(tmp_path, {TAIEX_PATH: _taiex_bars([])}, {"market-1280": page})
+    run = FakeRun(tmp_path, {TAIEX_PATH: _taiex_bars([])}, pages)
     assert "`加權指數日線` `來源未提供日線`" in page_checks.t15(run)
-    run = FakeRun(tmp_path, {TAIEX_PATH: _taiex_bars([])}, {"market-1280": CHART_PAGE})
+    run = FakeRun(tmp_path, {TAIEX_PATH: _taiex_bars([])}, _chart_pages())
     with pytest.raises(page_checks.Fail, match="缺整行 `來源未提供日線`"):
         page_checks.t15(run)
 
 
-def test_t12_needs_the_candidates_before_groups_and_news(tmp_path):
-    page = "今日可買\n資料 2026/10/16\n熱門族群\n資料 2026/10/16\n重點新聞\n"
+# ---- T16: the index table (Issue 564) ----
+
+FRED = "資料來源：FinMind（個人非商業使用）"  # the US attribution, gone from the page (Issue 633)
+
+
+def _index(key, group, **extra):
+    row = {
+        "key": key,
+        "group": group,
+        "status": "available",
+        "trading_date": "2026-10-22" if group == "tw" else "2026-10-21",
+        "expected_date": "2026-10-22" if group == "tw" else "2026-10-21",
+        "freshness": "latest",
+        "close": 46041.43,
+        "change": -846.34,
+        "change_pct": -0.0181,
+        "ma60": {
+            "status": "available",
+            "required_closes": 60,
+            "ma60": 44012.5,
+            "position": "above",
+        },
+        "source": {"label": "FRED" if group == "us" else "臺灣證券交易所"},
+    }
+    row.update(extra)
+    return row
+
+
+def _indexes(**changes):
+    rows = [
+        _index("taiex", "tw"),
+        _index(
+            "tpex",
+            "tw",
+            close=395.42,
+            change=2.1,
+            change_pct=0.005339,
+            trading_date="2026-10-21",
+            freshness="stale",
+            ma60={"status": "insufficient", "required_closes": 60, "close_count": 42},
+            source={"label": "證券櫃檯買賣中心"},
+        ),
+        _index(
+            "tx",
+            "tw",
+            close=46110,
+            change=None,
+            change_pct=None,
+            change_status="contract_roll",
+            contract_month="202611",
+            ma60={
+                "status": "available",
+                "required_closes": 60,
+                "ma60": 46502.4,
+                "position": "below",
+            },
+            source={"label": "臺灣期貨交易所"},
+        ),
+        _index("spx", "us", close=7353.73, change=-334.89, change_pct=-0.043557),
+        _index(
+            "ixic",
+            "us",
+            close=24579.42,
+            change=264.42,
+            change_pct=0.010875,
+            ma60={
+                "status": "unavailable",
+                "required_closes": 60,
+                "reason": "indicator_not_computed",
+            },
+        ),
+        _index(
+            "dji",
+            "us",
+            close=51285.73,
+            change=-40.25,
+            change_pct=-0.000784,
+            trading_date="2026-10-20",
+            freshness="us_market_closed",
+            ma60={
+                "status": "available",
+                "required_closes": 60,
+                "ma60": 51285.73,
+                "position": "equal",
+            },
+        ),
+        {
+            "key": "sox",
+            "group": "us",
+            "status": "unavailable",
+            "reason": "fetch_failed",
+            "last_attempt_date": "2026-10-22",
+            "ma60": None,
+            "source": {"label": "FRED"},
+        },
+    ]
+    for key, extra in changes.items():
+        rows = [{**row, **extra} if row["key"] == key else row for row in rows]
+    return {
+        "dashboard": {
+            # #661: the page date the navbar states; a row of that day writes no date.
+            "as_of": "2026-10-22T09:00:00",
+            "market_overview": {"trading_date": "2026-10-22", "indexes": rows},
+        }
+    }
+
+
+US_PAGE_ROW = (
+    "S&P 500\t7,353.73\t-334.89\t-4.36%\t2026/10/21\t之上 季線 44,012.50\tFRED\n"
+)
+# Issue 633: the page lists the three Taiwan rows; the API (_indexes) still has the US rows.
+# #661 (decision 6835320079 D-c): no 資料日 column; a row of another day than the page date
+# (2026/10/22) has its 「資料 …」 line under the name, so the cells follow on that line.
+# #666: the 來源 sentence is the first line of the table's 資料說明, not under the table.
+INDEX_PAGE = (
+    "大盤概況\n指數總表\n資料說明\n"
+    f"{page_checks.INDEX_SOURCE_NOTE}\n"
+    f"{ATTRIBUTION}\n"
+    "指數\t收盤（點）\t漲跌\t漲跌幅\t相對季線（MA60）\t來源\n"
+    "加權指數\t46,041.43\t-846.34\t-1.81%\t之上 季線 44,012.50\t臺灣證券交易所\n"
+    "櫃買指數\n資料 2026/10/21 非最新\t395.42\t+2.10\t+0.53%\t資料不足（42／60 日）\t證券櫃檯買賣中心\n"
+    "台指期近月 合約 2026/11\t46,110\t換月\t換月\t之下 季線 46,502\t臺灣期貨交易所\n"
+    "台指期近月 2026/10/22 換月（2026/10 → 2026/11），與前一筆是不同合約，不計漲跌\n"
+    "點一列，下方圖表切換為該指數的日 K\n"
+    "技術指標 indicators/v1\n加權指數日線\n"
+)
+INDEX_HINT = "點一列，下方圖表切換為該指數的日 K\n"
+TX_ROW = (
+    "台指期近月 合約 2026/11\t46,110\t換月\t換月\t之下 季線 46,502\t臺灣期貨交易所\n"
+)
+
+
+def test_t16_passes_on_the_index_table(tmp_path):
+    run = FakeRun(tmp_path, _indexes(), {"market-1280": INDEX_PAGE})
+    summary = page_checks.t16(run)
+    assert summary.endswith("；沒有美股列")
+    assert f"`{TX_ROW.strip()}`" in summary
+    assert "`櫃買指數 ⏎ 資料 2026/10/21 非最新\t395.42" in summary
+    assert "費城半導體指數" not in summary
+
+
+def test_t16_states_only_a_row_of_another_day(tmp_path):
+    # #661 AC-3: a row of the page date that still writes its date, a row of another day
+    # without its line, the 資料日 column back, or the 來源 sentence twice all fail.
+    late_tx = _indexes(tx={"trading_date": "2026-10-21", "freshness": "stale"})
+    page = INDEX_PAGE.replace(
+        TX_ROW,
+        TX_ROW.replace("合約 2026/11\t", "合約 2026/11\n資料 2026/10/21 非最新\t"),
+    )
+    assert "台指期近月 合約 2026/11 ⏎ 資料 2026/10/21 非最新" in page_checks.t16(
+        FakeRun(tmp_path, late_tx, {"market-1280": page})
+    )
+    with pytest.raises(page_checks.Fail, match="tx：缺整行"):
+        page_checks.t16(FakeRun(tmp_path, late_tx, {"market-1280": INDEX_PAGE}))
+    page = INDEX_PAGE.replace(
+        "加權指數\t46,041.43", "加權指數\n資料 2026/10/22\t46,041.43"
+    )
+    with pytest.raises(page_checks.Fail, match="taiex：缺整行"):
+        page_checks.t16(FakeRun(tmp_path, _indexes(), {"market-1280": page}))
+    page = INDEX_PAGE.replace("漲跌幅\t相對季線", "漲跌幅\t資料日\t相對季線")
+    with pytest.raises(page_checks.Fail, match="仍有 `資料日` 欄"):
+        page_checks.t16(FakeRun(tmp_path, _indexes(), {"market-1280": page}))
+    page = INDEX_PAGE.replace(
+        INDEX_HINT, f"{page_checks.INDEX_SOURCE_NOTE}\n{INDEX_HINT}"
+    )
+    with pytest.raises(page_checks.Fail, match="2 行，預期 1 行"):
+        page_checks.t16(FakeRun(tmp_path, _indexes(), {"market-1280": page}))
+
+
+def test_t16_needs_the_source_in_the_table_explanation(tmp_path):
+    # #666: the 來源 sentence under the table (the layout before) fails; it belongs in 資料說明.
+    page = INDEX_PAGE.replace(f"{page_checks.INDEX_SOURCE_NOTE}\n", "").replace(
+        INDEX_HINT, f"{page_checks.INDEX_SOURCE_NOTE}\n{INDEX_HINT}"
+    )
+    with pytest.raises(page_checks.Fail, match="不在 `指數總表` 的資料說明內"):
+        page_checks.t16(FakeRun(tmp_path, _indexes(), {"market-1280": page}))
+
+
+def test_t16_fails_on_a_wrong_cell_order_or_a_us_row(tmp_path):
+    # MA60 from another value than the API's (AC-3: the page shows the stored ma60).
+    page = INDEX_PAGE.replace("之上 季線 44,012.50\t臺灣", "之上 季線 44,012.49\t臺灣")
+    run = FakeRun(tmp_path, _indexes(), {"market-1280": page})
+    with pytest.raises(page_checks.Fail, match="taiex：缺整行"):
+        page_checks.t16(run)
+    # A roll day with a blank change instead of its reason (decision 6725073156).
+    page = INDEX_PAGE.replace("46,110\t換月\t換月", "46,110\t—\t—")
+    run = FakeRun(tmp_path, _indexes(), {"market-1280": page})
+    with pytest.raises(page_checks.Fail, match="tx：缺整行"):
+        page_checks.t16(run)
+    # Rows out of order.
+    tx = TX_ROW
+    page = INDEX_PAGE.replace(tx, "").replace(
+        "加權指數\t46,041.43", tx + "加權指數\t46,041.43"
+    )
+    run = FakeRun(tmp_path, _indexes(), {"market-1280": page})
+    with pytest.raises(page_checks.Fail, match="tx：缺整行 .*或不在前一列之後"):
+        page_checks.t16(run)
+    # The table after the chart, or without the attribution in 資料說明.
+    page = INDEX_PAGE.replace("技術指標 indicators/v1\n加權指數日線\n", "").replace(
+        "大盤概況\n", "大盤概況\n加權指數日線\n"
+    )
+    run = FakeRun(tmp_path, _indexes(), {"market-1280": page})
+    with pytest.raises(
+        page_checks.Fail, match="不在 `大盤概況` 與 `加權指數日線` 之間"
+    ):
+        page_checks.t16(run)
+    run = FakeRun(
+        tmp_path,
+        _indexes(),
+        {"market-1280": INDEX_PAGE.replace(f"{ATTRIBUTION}\n", "")},
+    )
+    with pytest.raises(page_checks.Fail, match="資料說明"):
+        page_checks.t16(run)
+    # Issue 633: a US row, its group title or its attribution is back on the page.
+    for line, shown in (
+        (US_PAGE_ROW, "S&P 500"),
+        ("美股（前一交易日）\n", "美股（前一交易日）"),
+        (f"{FRED}\n", FRED),
+    ):
+        page = INDEX_PAGE.replace(
+            "台指期近月 2026/10/22 換月", line + "台指期近月 2026/10/22 換月"
+        )
+        run = FakeRun(tmp_path, _indexes(), {"market-1280": page})
+        with pytest.raises(page_checks.Fail, match="大盤頁仍有美股的") as error:
+            page_checks.t16(run)
+        assert f"`{shown}`" in str(error.value)
+    run = FakeRun(
+        tmp_path,
+        {"dashboard": {"market_overview": {"indexes": []}}},
+        {"market-1280": INDEX_PAGE},
+    )
+    with pytest.raises(page_checks.Fail, match="indexes 的台股列是"):
+        page_checks.t16(run)
+
+
+def test_t12_needs_the_candidates_before_groups_and_no_news_card(tmp_path):
+    page = "今日名單\n資料 2026/10/16\n熱門族群\n資料 2026/10/16\n"
     run = FakeRun(tmp_path, {}, {"today-1280": page})
-    assert "`今日可買`" in page_checks.t12(run)
-    old = "今日市場／重大事件\n熱門族群\n今日可買\n關注標的\n"
-    run = FakeRun(tmp_path, {}, {"today-1280": old})
-    with pytest.raises(page_checks.Fail, match="缺整行 `重點新聞`"):
+    assert "`今日名單`" in page_checks.t12(run)
+    run = FakeRun(tmp_path, {}, {"today-1280": "今日名單\n資料 2026/10/16\n"})
+    with pytest.raises(page_checks.Fail, match="缺整行 `熱門族群`"):
         page_checks.t12(run)
-    swapped = "熱門族群\n重點新聞\n今日可買\n"
+    swapped = "熱門族群\n今日名單\n"
     run = FakeRun(tmp_path, {}, {"today-1280": swapped})
-    with pytest.raises(page_checks.Fail, match="熱門族群 → 重點新聞 → 今日可買"):
+    with pytest.raises(page_checks.Fail, match="區塊順序 `熱門族群` → `今日名單`"):
+        page_checks.t12(run)
+    # Issue 625: the news card left the home page.
+    run = FakeRun(tmp_path, {}, {"today-1280": page + "重點新聞\n"})
+    with pytest.raises(page_checks.Fail, match="首頁仍有整行 `重點新聞`"):
         page_checks.t12(run)
 
 
@@ -867,7 +1178,8 @@ G3_ROWS = {
     2: "#2\n半導體\n催化劑 94・法人 0\n1 日 -0.12%\n5 日 +1.00%\n20 日 —\n分數 40.10\n五分項 ▾\n"
     "相對報酬\n13\n廣度\n—\n量能\n50\n法人\n0\n催化劑\n94\n成員（檔）\n70／82\n族群詳情 →\n",
 }
-G3_HEAD = "族群排行\n族群\n產業\n題材\n產業榜 · 共 2 個族群\n資料 2026/11/05\n說明\n"
+# #666: the board line is 「共 N 個」 (the tab names the board).
+G3_HEAD = "族群排行\n族群\n產業\n題材\n共 2 個\n資料 2026/11/05\n說明\n"
 # Before Issue 522: the 12-column table at 1280 and one card per group at 390.
 G3_OLD_WIDE = (
     "產業榜 · 共 2 個族群\n資料 2026/11/05\n"
@@ -912,27 +1224,13 @@ def test_g3_fails_when_a_component_differs_from_the_api(tmp_path):
         page_checks.g3(_g3_run(tmp_path, page, page))
 
 
-def _g4_run(tmp_path, card):
-    payload = {"items": [{"id": 1}, {"id": 2}], "meta": {"total": 2}}
-    page = (
-        "族群榜\n新聞聚合 · AI 推論\n新聞題材建議\n2 個建議 · 最近更新 2026/11/04 20:00\n"
-        f"AI\n{card}\n3 則新聞\n資安\n{card}\n2 則新聞\n"
-    )
-    return FakeRun(
-        tmp_path,
-        {"theme-suggestions?limit=20": payload},
-        {"themes-1280": page},
-    )
-
-
-def test_g4_passes_when_every_suggestion_is_ai_inference(tmp_path):
-    assert "沒有 `待核實`" in page_checks.g4(_g4_run(tmp_path, "AI 推論"))
-
-
-def test_g4_fails_on_a_suggestion_marked_pending(tmp_path):
-    # #465: before the fix each card carried 「待核實」 next to 「AI 推論」.
-    run = _g4_run(tmp_path, "待核實\nAI 推論")
-    with pytest.raises(page_checks.Fail, match="2 行含 `待核實`"):
+def test_g4_fails_when_the_suggestions_are_back(tmp_path):
+    # Issue 627: the themes page dropped the news theme suggestions.
+    run = FakeRun(tmp_path, {}, {"themes-1280": "族群榜\n共 2 個\n"})
+    assert "沒有新聞題材建議區" in page_checks.g4(run)
+    page = "族群榜\n新聞聚合 · AI 推論\n新聞題材建議\n2 個建議\n"
+    run = FakeRun(tmp_path, {}, {"themes-1280": page})
+    with pytest.raises(page_checks.Fail, match="族群頁仍有 `新聞題材建議`"):
         page_checks.g4(run)
 
 
@@ -968,6 +1266,662 @@ def test_page_usable_reports_errors_and_overflow(tmp_path):
         "today-1280 consoleErrors ['boom']；"
         "today-390 橫向捲動 scrollWidth 420 > clientWidth 390"
     )
+
+
+# ---- T17: the today list's number block at 390 (Issue 608) ----
+
+
+def _row(rank, scroll=300, client=300, covered=(), clipped=()):
+    return {
+        "rank": rank,
+        "numsScrollWidth": scroll,
+        "numsClientWidth": client,
+        "covered": list(covered),
+        "clipped": list(clipped),
+    }
+
+
+def _t17_run(tmp_path, rows, payload=None, ready=True):
+    metas = {"today": {390: {"width": 390, "ready": ready, "candidateRows": rows}}}
+    payloads = {"candidates": _candidates() if payload is None else payload}
+    return FakeRun(tmp_path, payloads, {}, metas=metas)
+
+
+def test_t17_passes_when_every_row_fits(tmp_path):
+    run = _t17_run(tmp_path, [_row(1), _row(2)])
+    assert page_checks.t17(run) == (
+        "390：2 列數字區不溢出、不被 AI 按鈕蓋住、沒有超出列邊"
+    )
+
+
+def test_t17_fails_on_the_issue_608_row(tmp_path):
+    # The #606 measurement: the block wider than its column, the total under the button, its label cut.
+    rows = [
+        _row(1, 349, 246, ["dd 76"], ["dt 總分（0–100）"]),
+        _row(2, 342, 246, ["dd 74"]),
+    ]
+    with pytest.raises(page_checks.Fail) as error:
+        page_checks.t17(_t17_run(tmp_path, rows))
+    assert str(error.value) == (
+        "#1 數字區 scrollWidth 349 > clientWidth 246；#1 被 AI 按鈕蓋住：dd 76；"
+        "#1 超出列邊被切：dt 總分（0–100）；"
+        "#2 數字區 scrollWidth 342 > clientWidth 246；#2 被 AI 按鈕蓋住：dd 74"
+    )
+
+
+def test_t17_needs_every_candidate_measured(tmp_path):
+    # The rest of the list is measured too (the screenshot opens its <details>).
+    with pytest.raises(
+        page_checks.Fail, match=r"量到的候選列 \[1\]，預期依 items \[1, 2\]"
+    ):
+        page_checks.t17(_t17_run(tmp_path, [_row(1)]))
+    old_tool = {"today": {390: {"width": 390, "ready": True}}}
+    run = FakeRun(tmp_path, {"candidates": _candidates()}, {}, metas=old_tool)
+    with pytest.raises(page_checks.Fail, match="沒有 candidateRows"):
+        page_checks.t17(run)
+
+
+def test_t17_without_candidates_or_a_ready_shot(tmp_path):
+    empty = {"status": "success", "trading_date": "2026-10-16", "items": []}
+    assert page_checks.t17(_t17_run(tmp_path, [], empty)) == "沒有候選列"
+    with pytest.raises(page_checks.Undetermined, match="today-390 未 ready"):
+        page_checks.t17(_t17_run(tmp_path, [_row(1), _row(2)], ready=False))
+
+
+# ---- T20: below 1280px a row opens its own K-line card (Issue 665) ----
+
+
+def _t20_items():
+    payload = _candidates()
+    for item in payload["items"]:
+        item["instrument"]["name"] = f"示範{item['rank']}"
+    return payload
+
+
+T20_ROW_1 = (
+    "#1 9100 示範1 上市 · 半導體（產業 #1）\n突破型\n收盤（元）\n21.10\nAI 推論 ▸\n"
+)
+T20_ROW_2 = "#2 9101 示範2 上櫃 · 無所屬族群\n回踩型\n收盤（元）\n13.20\nAI 說明 ▸\n"
+T20_CARD = (
+    "技術指標 indicators/v1\n9100 示範1\n日K\n週K\n"
+    "規則價位線：進場 21.10 元（虛線）、停損 20.00 元、目標 23.00 元；條件成立當日的價位，不是成交價。\n"
+    "最近 130 根日線；缺日不補、停牌不畫 K 線\n"
+)
+T20_CLOSED = "今日名單\n2 檔\n" + T20_ROW_1 + T20_ROW_2 + "熱門族群\n#1\n半導體\n"
+T20_OPEN = (
+    "今日名單\n2 檔\n" + T20_ROW_1 + T20_CARD + T20_ROW_2 + "熱門族群\n#1\n半導體\n"
+)
+
+
+def _t20_run(tmp_path, closed=T20_CLOSED, opened=T20_OPEN, meta=None, payload=None):
+    metas = {
+        "today-chart": {390: {"width": 390, "ready": True, **(meta or {})}},
+    }
+    pages = {"today-390": closed}
+    if opened is not None:
+        pages["today-chart-390"] = opened
+    payloads = {"candidates": _t20_items() if payload is None else payload}
+    return FakeRun(tmp_path, payloads, pages, metas=metas)
+
+
+def test_t20_shot_clicks_row_1s_chart_toggle_at_390():
+    shot = page_checks.TODAY_CHART
+    assert (shot.path, shot.widths) == ("/", (390,))
+    assert shot.clicks == (
+        '.candidate-row[data-candidate-rank="1"] .candidate-chart-toggle',
+    )
+
+
+def test_t20_passes_when_the_card_opens_under_row_1_only(tmp_path):
+    assert page_checks.t20(_t20_run(tmp_path)) == (
+        "390 初次沒有 K 線卡；點 `#1` 後 `9100 示範1` 在第 1 列下方一次，"
+        "含 `規則價位線：`（today-chart-390.txt 第 12 行），其他列沒有"
+    )
+
+
+def test_t20_fails_before_issue_665_when_the_toggle_is_missing(tmp_path):
+    # Before #665 the rank was the aria-pressed picker of a hidden chart: no .candidate-chart-toggle to click.
+    run = _t20_run(
+        tmp_path,
+        opened=T20_CLOSED,
+        meta={"ready": False, "missingClicks": [page_checks.CHART_TOGGLE]},
+    )
+    with pytest.raises(page_checks.Fail, match="找不到第 1 列的開圖按鈕"):
+        page_checks.t20(run)
+
+
+@pytest.mark.parametrize(
+    ("closed", "opened", "message"),
+    [
+        (T20_OPEN, T20_OPEN, r"390 初次載入就有 K 線卡標題 \['9100 示範1'\]"),
+        (
+            T20_CLOSED,
+            "今日名單\n" + T20_ROW_1 + T20_ROW_2 + T20_CARD + "熱門族群\n",
+            "不在第 1 列與下一列之間",
+        ),
+        (
+            T20_CLOSED,
+            T20_OPEN.replace("規則價位線：", "價位："),
+            "沒有 `規則價位線：` 行",
+        ),
+        (
+            T20_CLOSED,
+            T20_OPEN + "9101 示範2\n",
+            r"其他列也有 K 線卡 \['9101 示範2'\]",
+        ),
+        (T20_CLOSED, T20_OPEN + "9100 示範1\n", "有 2 行，預期 1"),
+    ],
+)
+def test_t20_fails(tmp_path, closed, opened, message):
+    with pytest.raises(page_checks.Fail, match=message):
+        page_checks.t20(_t20_run(tmp_path, closed, opened))
+
+
+def test_t20_without_candidates_or_a_ready_shot(tmp_path):
+    empty = {"status": "success", "trading_date": "2026-10-16", "items": []}
+    assert page_checks.t20(_t20_run(tmp_path, payload=empty)) == (
+        "沒有候選列，沒有可開的 K 線卡"
+    )
+    with pytest.raises(page_checks.Undetermined, match="today-chart-390 未 ready"):
+        page_checks.t20(_t20_run(tmp_path, meta={"ready": False}))
+
+
+# ---- T21: from 1280px the open detail in the list column (Issue 668) ----
+
+
+def _detail(rank, text=431.6, size=16, overlaps=(), badge=True):
+    return {
+        "rank": rank,
+        "noteState": "done",
+        "textWidth": text,
+        "fontSize": size,
+        "badge": {"left": 477.6, "right": 554.6} if badge else None,
+        "badgeOverlaps": list(overlaps),
+    }
+
+
+def _t21_run(tmp_path, wide=None, normal=None, payload=None, ready=True):
+    def meta(width, details):
+        return {width: {"width": width, "ready": ready, "candidateDetails": details}}
+
+    default = [_detail(1), _detail(2)]
+    metas = {
+        "today": meta(1280, default if normal is None else normal),
+        "today-wide": meta(1440, default if wide is None else wide),
+    }
+    payloads = {"candidates": _candidates() if payload is None else payload}
+    return FakeRun(tmp_path, payloads, {}, metas=metas)
+
+
+def test_t21_wide_shot_is_today_at_1440():
+    assert (page_checks.TODAY_WIDE.path, page_checks.TODAY_WIDE.widths) == (
+        "/",
+        (1440,),
+    )
+
+
+def test_t21_passes_when_the_note_has_room(tmp_path):
+    # The Issue 668 fix on the fixture: the note 431.6px of 16px text, the 14px empty-state line 30.8 characters.
+    run = _t21_run(tmp_path, normal=[_detail(1, 431.6, 14), _detail(2)])
+    assert page_checks.t21(run) == (
+        "today-1280、today-wide-1440：2 列明細的 AI 進出點說明每行至少 20 字、"
+        "AI 推論 badge 不與其他元素重疊"
+    )
+
+
+def test_t21_fails_on_the_issue_668_detail(tmp_path):
+    # The measurement before the fix: the note 24px wide, the badge over 「目標一／二」.
+    squeezed = [
+        _detail(1, 24, 16, ["button.term-button 目標一／二"]),
+        _detail(2, 34.8, 16, ["button.term-button 目標一／二"]),
+    ]
+    with pytest.raises(page_checks.Fail) as error:
+        page_checks.t21(_t21_run(tmp_path, normal=squeezed))
+    assert str(error.value) == (
+        "today-1280 #1 AI 進出點說明內文寬 24px（字級 16px，約 1.5 字）< 20 字；"
+        "today-1280 #1 AI 推論 badge 與其他元素重疊：button.term-button 目標一／二；"
+        "today-1280 #2 AI 進出點說明內文寬 34.8px（字級 16px，約 2.2 字）< 20 字；"
+        "today-1280 #2 AI 推論 badge 與其他元素重疊：button.term-button 目標一／二"
+    )
+
+
+@pytest.mark.parametrize(
+    ("wide", "message"),
+    [
+        ([_detail(1, 300), _detail(2)], r"today-wide-1440 #1 .*約 18\.8 字）< 20 字"),
+        ([_detail(1, None), _detail(2)], "today-wide-1440 #1 沒有 AI 進出點說明的內文"),
+        (
+            [_detail(1), _detail(2, badge=False)],
+            "today-wide-1440 #2 沒有 AI 推論 badge",
+        ),
+        ([_detail(1)], r"today-wide-1440 量到的明細 \[1\]，預期依 items \[1, 2\]"),
+    ],
+)
+def test_t21_fails(tmp_path, wide, message):
+    with pytest.raises(page_checks.Fail, match=message):
+        page_checks.t21(_t21_run(tmp_path, wide=wide))
+
+
+def test_t21_undetermined_without_a_measurement(tmp_path):
+    # A probe that throws reports null (Issue 609); an older screenshot.cjs has no field at all.
+    with pytest.raises(
+        page_checks.Undetermined, match="today-1280 沒有 candidateDetails 量測"
+    ):
+        page_checks.t21(_t21_null(tmp_path))
+    with pytest.raises(page_checks.Undetermined, match="today-1280 未 ready"):
+        page_checks.t21(_t21_run(tmp_path, ready=False))
+
+
+def _t21_null(tmp_path):
+    run = _t21_run(tmp_path)
+    run.metas["today"][1280]["candidateDetails"] = None
+    return run
+
+
+def test_t21_without_candidates(tmp_path):
+    empty = {"status": "success", "trading_date": "2026-10-16", "items": []}
+    assert page_checks.t21(_t21_run(tmp_path, [], [], empty)) == "沒有候選列"
+
+
+# ---- T19 / G9 / S15: score bars and strength blocks (Issue 654) ----
+
+UP, DOWN = "rgb(239, 68, 68)", "rgb(34, 197, 94)"
+TOKENS = {"up": UP, "down": DOWN}
+
+
+def _bar(label, value, fill=None):
+    if value is None:
+        return {
+            "kind": "bar",
+            "label": f"{label} 無資料",
+            "score": "none",
+            "fill": None,
+            "hasFill": False,
+            "trackWidth": 72,
+            "visible": True,
+        }
+    share = value / 100 if fill is None else fill
+    return {
+        "kind": "bar",
+        "label": f"{label} {value}（0–100）",
+        "score": str(value),
+        "fill": share,
+        "hasFill": True,
+        "trackWidth": 72,
+        "visible": True,
+    }
+
+
+def _chip(window, text, strength, background=None, opacity=None):
+    tone, level = strength.split("-")
+    label = f"{window} 日相對加權指數 " + ("無資料" if tone == "none" else text)
+    default = {"up": UP, "down": DOWN}.get(tone, "rgb(55, 65, 81)")
+    return {
+        "kind": "chip",
+        "label": label,
+        "strength": strength,
+        "text": text,
+        "background": background or default,
+        "opacity": opacity
+        if opacity is not None
+        else page_checks.STRENGTH_OPACITY.get(int(level), 1.0),
+    }
+
+
+def _component(score, items=True):
+    return {"score": score, "items": {"x": {}} if items else {}}
+
+
+def _scored(scores):
+    keys = ("technical", "chips", "news_sentiment", "group")
+    return {key: _component(score) for key, score in zip(keys, scores)}
+
+
+def _t19_run(tmp_path, items, ready=True):
+    candidates = {
+        "status": "success",
+        "trading_date": "2026-10-16",
+        "items": [{"rank": 1, "components": _scored([0.75, 0.44, None, 1])}],
+    }
+    board = {
+        "items": [
+            {
+                "theme_id": "i-1",
+                "display_name": "半導體",
+                "relative_returns": {"1d": 0.012, "5d": -0.0045, "20d": None},
+            }
+        ]
+    }
+    metas = {
+        "today": {
+            1280: {
+                "width": 1280,
+                "ready": ready,
+                "graphics": {"tokens": TOKENS, "items": items},
+            }
+        }
+    }
+    payloads = {"candidates": candidates, "themes?board=industry&limit=5": board}
+    return FakeRun(tmp_path, payloads, {}, metas=metas)
+
+
+T19_ITEMS = [
+    _bar("技術", 75),
+    _bar("籌碼", 44),
+    _bar("新聞情緒", None),
+    _bar("族群", 100),
+    _chip(1, "+1.20%", "up-2"),
+    _chip(5, "-0.45%", "down-1"),
+    _chip(20, "—", "none-0", background="rgba(0, 0, 0, 0)"),
+]
+
+
+def test_want_chip_steps_follow_the_shown_two_decimals():
+    cases = [
+        (0.004, "+0.40%", "up-1"),
+        (0.00999, "+1.00%", "up-2"),
+        (-0.0299, "-2.99%", "down-2"),
+        (0.03, "+3.00%", "up-3"),
+        (-0.06, "-6.00%", "down-4"),
+        (0.00004, "0.00%", "flat-0"),
+        (-0.00004, "0.00%", "flat-0"),
+        (None, "—", "none-0"),
+        # toFixed(2) has no thousands separators (PR 658 review): 1,050.00 would not parse.
+        (10.5, "+1050.00%", "up-4"),
+        (-12.345, "-1234.50%", "down-4"),
+    ]
+    for value, text, strength in cases:
+        chip = page_checks.want_chip("1 日", value)
+        assert (chip["text"], chip["strength"]) == (text, strength), value
+    assert page_checks.want_bar("技術", 0.746) == {
+        "label": "技術 75（0–100）",
+        "score": "75",
+        "fill": 0.746,
+    }
+    assert page_checks.want_bar("族群", None)["fill"] is None
+
+
+def test_bar_fill_needs_a_track_unless_the_row_is_hidden():
+    # PR 658 review: a shown bar whose track lost its width (CSS 0 wide) must fail, not be skipped.
+    want = [page_checks.want_bar("技術", 0.75)]
+    flat = dict(_bar("技術", 75), trackWidth=0, fill=None)
+    assert page_checks.bar_problems("x", [flat], want) == [
+        "x 第 1 條（技術 75（0–100）） 看得到但底軌寬度 0，量不到填色"
+    ]
+    # The today list's rows past the first 10 are hidden on purpose: nothing drawn, nothing to measure.
+    assert page_checks.bar_problems("x", [dict(flat, visible=False)], want) == []
+    # Hidden rows still need their value right.
+    wrong = dict(flat, visible=False, score="74", label="技術 74（0–100）")
+    assert page_checks.bar_problems("x", [wrong], want) == [
+        "x 第 1 條（技術 75（0–100）） 是 `技術 74（0–100）` data-score=74"
+    ]
+
+
+def test_strength_steps_and_opacity_mirror_the_frontend():
+    # page_checks.py mirrors STRENGTH_STEPS (ScoreBar.tsx) and .strength-l1…l4 (styles.css) (PR 658 review).
+    source = (ROOT / "frontend/src/components/ui/ScoreBar.tsx").read_text(
+        encoding="utf-8"
+    )
+    steps = re.search(r"STRENGTH_STEPS: readonly number\[\] = \[([^\]]*)\]", source)
+    assert steps, "STRENGTH_STEPS not found in ScoreBar.tsx"
+    assert (
+        tuple(int(step) for step in steps[1].split(",")) == page_checks.STRENGTH_STEPS
+    )
+    styles = (ROOT / "frontend/src/styles.css").read_text(encoding="utf-8")
+    opacity = {
+        int(level): float(value)
+        for level, value in re.findall(
+            r"^\.strength-l(\d)::before \{ opacity: ([0-9.]+); \}", styles, re.M
+        )
+    }
+    # Level 4 is the solid colour: no opacity rule, so 1.
+    assert "strength-l4::before" not in styles
+    assert {**opacity, 4: 1.0} == page_checks.STRENGTH_OPACITY
+
+
+def test_t19_passes_when_bars_and_blocks_match_the_api(tmp_path):
+    assert page_checks.t19(_t19_run(tmp_path, T19_ITEMS)) == (
+        "4 條分項橫條（1 檔×4）與 3 個報酬色塊（1 族群×3）= API"
+    )
+
+
+@pytest.mark.parametrize(
+    ("index", "change", "message"),
+    [
+        (
+            0,
+            {"fill": 0.375},
+            "今日名單明細 第 1 條（技術 75（0–100）） 填色比例 0.375，預期 0.750",
+        ),
+        (
+            2,
+            {"hasFill": True},
+            "今日名單明細 第 3 條（新聞情緒 無資料） 無資料卻畫了填色",
+        ),
+        (
+            1,
+            {"score": "0", "label": "籌碼 0（0–100）"},
+            "今日名單明細 第 2 條（籌碼 44（0–100）） 是 `籌碼 0（0–100）` data-score=0",
+        ),
+        (
+            4,
+            {"background": DOWN},
+            f"熱門族群 第 1 個色塊（1 日相對加權指數 +1.20%） 底色 {DOWN}，預期 --color-up {UP}",
+        ),
+        (
+            5,
+            {"opacity": 0.5},
+            "熱門族群 第 2 個色塊（5 日相對加權指數 -0.45%） 不透明度 0.5，預期第 1 級 0.16",
+        ),
+        (
+            4,
+            {"strength": "up-1"},
+            "熱門族群 第 1 個色塊（1 日相對加權指數 +1.20%） 是 `1 日相對加權指數 +1.20%` up-1 `+1.20%`",
+        ),
+        (
+            6,
+            {"background": UP},
+            f"熱門族群 第 3 個色塊（20 日相對加權指數 無資料） 平盤或無資料卻用了漲跌色 {UP}",
+        ),
+    ],
+)
+def test_t19_fails_on_a_wrong_fill_hue_or_step(tmp_path, index, change, message):
+    items = [dict(item) for item in T19_ITEMS]
+    items[index].update(change)
+    with pytest.raises(page_checks.Fail) as error:
+        page_checks.t19(_t19_run(tmp_path, items))
+    assert str(error.value) == message
+
+
+def test_t19_needs_the_measurement_and_every_graphic(tmp_path):
+    with pytest.raises(
+        page_checks.Fail, match="今日名單明細 有 3 條分數橫條，預期 4 條"
+    ):
+        page_checks.t19(_t19_run(tmp_path, T19_ITEMS[1:]))
+    run = _t19_run(tmp_path, T19_ITEMS)
+    run.metas = {"today": {1280: {"width": 1280, "ready": True}}}
+    with pytest.raises(page_checks.Fail, match="today-1280 沒有 graphics 量測"):
+        page_checks.t19(run)
+    with pytest.raises(page_checks.Undetermined, match="today-1280 未 ready"):
+        page_checks.t19(_t19_run(tmp_path, T19_ITEMS, ready=False))
+
+
+def _board_item(theme_id, components, returns):
+    keys = (
+        "relative_return",
+        "breadth",
+        "volume_strength",
+        "institutional_flow",
+        "catalyst",
+    )
+    return {
+        "theme_id": theme_id,
+        "display_name": theme_id,
+        "components": dict(zip(keys, components)),
+        "relative_returns": dict(zip(("1d", "5d", "20d"), returns)),
+    }
+
+
+def test_g9_checks_both_boards_and_the_detail(tmp_path):
+    industry = _board_item("i-1", (0.9, 0.75, None, 0.25, 1), (0.012, 0, 0.08))
+    theme = _board_item("t-1", (0.4, 0.25, 0.1, 0.9, None), (-0.031, 0.051, None))
+    row_bars = [
+        _bar("相對報酬", 90),
+        _bar("廣度", 75),
+        _bar("量能", None),
+        _bar("法人", 25),
+        _bar("催化劑", 100),
+    ]
+    row_chips = [
+        _chip(1, "+1.20%", "up-2"),
+        _chip(5, "0.00%", "flat-0"),
+        _chip(20, "+8.00%", "up-4"),
+    ]
+    theme_items = [
+        _chip(1, "-3.10%", "down-3"),
+        _chip(5, "+5.10%", "up-3"),
+        _chip(20, "—", "none-0", background="rgba(0, 0, 0, 0)"),
+        _bar("相對報酬", 40),
+        _bar("廣度", 25),
+        _bar("量能", 10),
+        _bar("法人", 90),
+        _bar("催化劑", None),
+    ]
+
+    def meta(items):
+        return {
+            1280: {
+                "width": 1280,
+                "ready": True,
+                "graphics": {"tokens": TOKENS, "items": items},
+            }
+        }
+
+    payloads = {
+        "themes?board=industry&limit=5": {"items": [industry]},
+        "themes?board=industry&limit=100": {"items": [industry]},
+        "themes?board=theme&limit=100": {"items": [theme]},
+        "themes/i-1": {"board": "industry", "theme": {"metrics": {}}},
+    }
+    metas = {
+        "themes": meta(row_chips + row_bars),
+        "themes-theme": meta(theme_items),
+        "theme-detail": meta(row_bars + row_chips),
+    }
+    run = FakeRun(tmp_path, payloads, {}, metas=metas)
+    assert (
+        page_checks.g9(run)
+        == "industry 1 列、theme 1 列與詳情 `i-1`：五分項橫條與 1／5／20 日色塊 = API"
+    )
+    metas["theme-detail"] = meta(
+        row_bars[:4] + [_bar("催化劑", 100, fill=0.5)] + row_chips
+    )
+    with pytest.raises(
+        page_checks.Fail,
+        match=r"theme-detail-1280 第 5 條（催化劑 100（0–100）） 填色比例 0.5，預期 1.000",
+    ):
+        page_checks.g9(FakeRun(tmp_path, payloads, {}, metas=metas))
+
+
+def test_s15_bars_follow_the_candidate_components(tmp_path):
+    stock = page_checks.Stock("TWSE", "9101")
+    components = _scored([0.75, 0.44, 0.92, None])
+    components["group"][
+        "items"
+    ] = {}  # no sub-items: ScoreDetails draws no title row for it
+    payloads = {"stocks/TWSE/9101": {"candidate": {"components": components}}}
+
+    def run(items):
+        metas = {
+            "stock-research": {
+                1280: {
+                    "width": 1280,
+                    "ready": True,
+                    "graphics": {"tokens": TOKENS, "items": items},
+                }
+            }
+        }
+        return FakeRun(tmp_path, payloads, {}, metas=metas)
+
+    assert (
+        page_checks.s15(
+            run([_bar("技術", 75), _bar("籌碼", 44), _bar("新聞情緒", 92)]), stock
+        )
+        == "評分細節 3 個分項橫條 = stock.json candidate"
+    )
+    with pytest.raises(page_checks.Fail, match="有 4 條分數橫條，預期 3 條"):
+        page_checks.s15(
+            run(
+                [
+                    _bar("技術", 75),
+                    _bar("籌碼", 44),
+                    _bar("新聞情緒", 92),
+                    _bar("族群", None),
+                ]
+            ),
+            stock,
+        )
+    payloads["stocks/TWSE/9101"] = {"candidate": None}
+    assert page_checks.s15(run([]), stock) == "不是每日候選：研究條件分頁沒有分數橫條"
+
+
+# ---- T18: the rows' sparkline closes (Issue 653) ----
+
+
+def _with_closes(tmp_path, *recents, closes_on_day=(21.1, 13.2)):
+    payload = _candidates(len(recents))
+    for item, recent, close in zip(payload["items"], recents, closes_on_day):
+        item["market"] = {"close": close}
+        if recent is not None:
+            item["recent_closes"] = recent
+    return FakeRun(tmp_path, {"candidates": payload}, {})
+
+
+def test_t18_passes_on_closes_that_end_at_the_list_date(tmp_path):
+    run = _with_closes(
+        tmp_path,
+        {
+            "dates": ["2026-10-14", "2026-10-15", "2026-10-16"],
+            "closes": [20.0, None, 21.1],
+        },
+        {"dates": ["2026-10-15", "2026-10-16"], "closes": [None, 13.2]},
+    )
+    assert page_checks.t18(run) == (
+        "2 列 recent_closes：≤ 30 個交易日、由舊到新、止於 2026-10-16、名單日收盤 = market.close；"
+        "1 列有 2 個以上收盤（畫線），缺日 2 個（留空）"
+    )
+
+
+def test_t18_fails_on_closes_the_line_cannot_draw(tmp_path):
+    run = _with_closes(
+        tmp_path,
+        None,
+        {
+            "dates": ["2026-10-16", "2026-10-15", "2026-10-17"],
+            "closes": [13.0, 0, 13.2],
+        },
+    )
+    with pytest.raises(page_checks.Fail) as error:
+        page_checks.t18(run)
+    assert str(error.value) == (
+        "#1 9100 沒有 recent_closes；#2 9101 日期不是由舊到新、不重複；"
+        "#2 9101 最後一日 2026-10-17 晚於名單日 2026-10-16；#2 9101 收盤不是正數或 null：[0]"
+    )
+    wrong = _with_closes(
+        tmp_path,
+        {"dates": ["2026-10-15", "2026-10-16"], "closes": [20.0, 20.5]},
+        {"dates": ["2026-10-16"], "closes": [13.2, 13.3]},
+    )
+    with pytest.raises(page_checks.Fail) as error:
+        page_checks.t18(wrong)
+    assert str(error.value) == (
+        "#1 9100 名單日收盤 20.5 ≠ market.close 21.1；#2 9101 dates 1 筆、closes 2 筆"
+    )
+
+
+def test_t18_without_candidates(tmp_path):
+    empty = {"status": "success", "trading_date": "2026-10-16", "items": []}
+    assert page_checks.t18(FakeRun(tmp_path, {"candidates": empty}, {})) == "沒有候選列"
 
 
 def test_known_failures_do_not_fail_the_run_until_they_pass(tmp_path, monkeypatch):
@@ -1041,7 +1995,7 @@ def test_known_failures_expire_within_30_days_of_the_commit_that_added_them():
 def test_an_entry_is_read_from_the_source_and_dated_today_until_committed():
     text = (
         "KNOWN_FAILURES: dict[tuple[str, str], Known] = {\n"
-        '    ("today", "T6"): Known(\n'
+        '    ("today", "T5"): Known(\n'
         f'        "{ISSUE}", "缺新聞標題整行", "2026-11-20"\n'
         "    ),\n"
         "}\n"
@@ -1060,23 +2014,23 @@ def test_known_requires_expires():
 
 
 def test_known_problems_flag_a_missing_or_late_expires():
-    def problems(entry, key=("today", "T6")):
+    def problems(entry, key=("today", "T5")):
         return page_checks.known_problems({key: entry}, lambda key: date(2026, 10, 28))
 
     assert page_checks.known_problems({}, lambda key: date(2026, 10, 28)) == []
     assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026-11-27")) == []
     assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026-10-28")) == []
     assert problems(SimpleNamespace(issue=ISSUE, match="缺新聞標題整行")) == [
-        "KNOWN_FAILURES today T6：缺 expires 或不是 YYYY-MM-DD（None）"
+        "KNOWN_FAILURES today T5：缺 expires 或不是 YYYY-MM-DD（None）"
     ]
     assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026-11-28")) == [
-        "KNOWN_FAILURES today T6：expires 2026-11-28 要在加入日 2026-10-28 起 30 天內"
+        "KNOWN_FAILURES today T5：expires 2026-11-28 要在加入日 2026-10-28 起 30 天內"
     ]
     assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026-10-27")) == [
-        "KNOWN_FAILURES today T6：expires 2026-10-27 要在加入日 2026-10-28 起 30 天內"
+        "KNOWN_FAILURES today T5：expires 2026-10-27 要在加入日 2026-10-28 起 30 天內"
     ]
     assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026/11/20")) == [
-        "KNOWN_FAILURES today T6：缺 expires 或不是 YYYY-MM-DD（'2026/11/20'）"
+        "KNOWN_FAILURES today T5：缺 expires 或不是 YYYY-MM-DD（'2026/11/20'）"
     ]
     assert problems(page_checks.Known("#233", "", "2026-11-20"), ("today", "T99")) == [
         "KNOWN_FAILURES today T99：不是 CHECKS 裡的檢查",
@@ -1127,44 +2081,7 @@ def test_page_checks_exits_1_on_an_expired_known_failure(tmp_path, monkeypatch):
     assert page_checks.main(argv) == 1
 
 
-def _t6_run(tmp_path, ai, card_ai, card):
-    item = {"id": "7", "title": "新聞甲", "ai": card_ai}
-    return FakeRun(
-        tmp_path,
-        {"dashboard": {"news": [item]}, "news/7": {"ai": ai}},
-        {
-            "today-1280": f"今日市場／重大事件\n新聞甲\n摘要\n{card}未有已核實的標的或族群\n熱門族群\n"
-        },
-    )
-
-
 AI_DONE = {"status": "done", "inference": True, "impact_direction": "positive"}
-
-
-def test_t6_passes_when_the_card_shows_the_ai_direction(tmp_path):
-    run = _t6_run(tmp_path, AI_DONE, AI_DONE, "可能正向\nAI 推論\n")
-    assert "7 `可能正向`" in page_checks.t6(run)
-    # An unsupported item's AI direction is 影響尚未判定, as on the news page.
-    unsupported = {**AI_DONE, "unsupported": True}
-    run = _t6_run(tmp_path, unsupported, unsupported, "影響尚未判定\nAI 推論\n")
-    assert "7 `影響尚未判定`" in page_checks.t6(run)
-
-
-def test_t6_fails_when_the_card_falls_back_to_the_rule_direction(tmp_path):
-    # #233: dashboard.news had no ai block, so the card showed the rule direction.
-    run = _t6_run(tmp_path, AI_DONE, None, "影響尚未判定\n")
-    with pytest.raises(page_checks.Fail) as error:
-        page_checks.t6(run)
-    assert "ai 與 /api/news/<id> 不同" in str(error.value)
-    assert "卡片沒有 `AI 推論`" in str(error.value)
-
-
-def test_t6_fails_when_the_card_direction_differs(tmp_path):
-    run = _t6_run(tmp_path, AI_DONE, AI_DONE, "可能負向\nAI 推論\n")
-    with pytest.raises(
-        page_checks.Fail, match="卡片方向 `可能負向`，AI 方向 `可能正向`"
-    ):
-        page_checks.t6(run)
 
 
 def _n6_run(tmp_path, generated_at, shown):
@@ -1252,16 +2169,6 @@ def test_n2_reads_the_cleaned_title(tmp_path):
         page_checks.n2(_n2_run(tmp_path, raw))
 
 
-def test_t6_reads_the_cleaned_title(tmp_path):
-    item = {"id": "7", "title": "● 新聞甲", "ai": AI_DONE}
-    run = FakeRun(
-        tmp_path,
-        {"dashboard": {"news": [item]}, "news/7": {"ai": AI_DONE}},
-        {"today-1280": "重點新聞\n新聞甲\n可能正向\nAI 推論\n熱門族群\n"},
-    )
-    assert "7 `可能正向`" in page_checks.t6(run)
-
-
 def test_news_source_label_matches_the_frontend():
     presentation = (ROOT / "frontend" / "src" / "presentation.ts").read_text(
         encoding="utf-8"
@@ -1288,13 +2195,13 @@ def test_status_summary_leaves_out_the_evidence():
     status = page_checks.summary_markdown(results, ["actions"], "## head", False)
     assert "台積電" in full and "預期 X" in full
     assert "台積電" not in status and "預期 X" not in status
-    assert "### 觀察中 `/watch`：失敗" in status
+    assert "### 我的追蹤 `/watch`：失敗" in status
     assert "| A2 | 通過 |" in status and "| A3 | 失敗 |" in status
 
 
-# ---- A18: /watch is 觀察中 and /actions redirects there (#493) ----
+# ---- A18: /watch is 我的追蹤 and /actions redirects there (#493) ----
 
-WATCH_PAGE = "今日可買\n觀察中\n族群\n追蹤與提醒\n觀察中\n我的庫存\n"
+WATCH_PAGE = "今日名單\n我的追蹤\n族群\n追蹤與提醒\n我的追蹤\n我的庫存\n"
 
 
 def _a18_run(tmp_path, final_url, legacy_page=WATCH_PAGE):
@@ -1335,7 +2242,7 @@ def test_a18_fails_without_the_landing_url_or_on_a_404(tmp_path):
         page_checks.a18(_a18_run(tmp_path, None))
     with pytest.raises(page_checks.Fail, match="`/actions` 是找不到此頁"):
         page_checks.a18(
-            _a18_run(tmp_path, "http://x/watch", "找不到此頁。\n回到今日可買\n")
+            _a18_run(tmp_path, "http://x/watch", "找不到此頁。\n回到今日名單\n")
         )
 
 
@@ -1366,7 +2273,7 @@ def _summary_page(
         "2884\n玉山金\n資料 2026/11/05\n來源 臺灣證券交易所\n"
         f"目前判斷\n資料 2026/11/05\n{verdict}\n{reason}\n{closest}"
         "規則價位\n條件未成立・觀察價位\n收盤（元） ≥\n50.20\n完整條件 →\n"
-        "圖表與指標\n法人籌碼\n"
+        "走勢\n籌碼\n"
     )
 
 
@@ -1381,11 +2288,11 @@ def test_s11_passes_on_the_candidate_verdict(tmp_path):
         "candidate": {"rank": 1, "total_score": 0.814, "strategy": "pullback_v1"},
         "strategies": [OBSERVED_ROW, PASSED_ROW],
     }
-    page = _summary_page("可買", "每日候選第 1 名 · 總分 81 · 回踩條件")
+    page = _summary_page("條件成立", "每日候選第 1 名 · 總分 81 · 回踩條件")
     result = _s11(
         tmp_path, _stock_payload(board, {"action_state": "conditional_entry"}), page
     )
-    assert "摘要卡 `可買`：`每日候選第 1 名 · 總分 81 · 回踩條件`" in result
+    assert "摘要卡 `條件成立`：`每日候選第 1 名 · 總分 81 · 回踩條件`" in result
 
 
 def test_s11_reads_the_gap_reasons_and_the_primary_reason(tmp_path):
@@ -1418,9 +2325,7 @@ def test_s11_fails_on_a_wrong_verdict_or_the_old_page(tmp_path):
     with pytest.raises(page_checks.Fail, match="預期判斷 `條件成立`"):
         _s11(tmp_path, payload, _summary_page("觀察", "x"))
     # Before #519 the header was followed by the cutoff form and the tabs.
-    old = (
-        "2884\n玉山金\n資料 2026/11/05\n來源 臺灣證券交易所\n研究截止日期\n圖表與指標\n"
-    )
+    old = "2884\n玉山金\n資料 2026/11/05\n來源 臺灣證券交易所\n研究截止日期\n走勢\n"
     with pytest.raises(page_checks.Fail, match="缺整行 `目前判斷`"):
         _s11(tmp_path, payload, old)
     no_link = _summary_page("條件成立", "不在這個資料日的每日候選名單").replace(
@@ -1442,7 +2347,7 @@ def _board_page(summary_label: bool) -> str:
         "目前判斷\n觀察\n規則價位\n條件未成立・觀察價位\n" if summary_label else ""
     )
     return (
-        f"{summary}圖表與指標\n研究條件\n策略總表\n資料 2026/11/05\n價位規則 v1\n"
+        f"{summary}走勢\n進出場\n策略總表\n資料 2026/11/05\n價位規則 v1\n"
         "突破條件\t\n觀察\t收盤未突破前 20 日高點\n條件未成立・觀察價位\n"
         "回踩條件\t\n成立\t全部達成\n"
     )
@@ -1460,6 +2365,86 @@ def test_s10_counts_only_the_board_observation_labels(tmp_path):
         {"stock-research-1280": _board_page(summary_label=True)},
     )
     assert "觀察價位 1 列" in page_checks.s10(run, STOCK)
+
+
+# ---- stock page 圖優先 and one set of levels (#648) ----
+
+LEVELS_ROW = {
+    "label": "突破條件",
+    "status": "conditional",
+    "levels": {"kind": "actionable", "invalid_price": 2364.0, "target_1": 2458.0},
+}
+HEADER = "2884\n玉山金\n資料 2026/11/05\n來源 臺灣證券交易所\n"
+CHART = "K 線\n資料 2026/11/05\n日K\n週K\nMA5\n"
+SUMMARY = "目前判斷\n條件成立\n規則價位\n停損（元）\n2,364.00\n2,458.00／2,508.00\n"
+TABS = "走勢\n籌碼\n財務\n新聞與公告\n進出場\n資料來源\n"
+BOARD = (
+    "策略總表\n資料 2026/11/05\n突破型\n"
+    "進場、停損與目標價見下方策略總表「突破條件」列。\n"
+    "突破條件\t\n成立\t全部達成\t2,400.00\t2,364.00\t2,458.00／2,508.00\n"
+    "研究動作\n查看風險提醒與時間\n價位見上方策略總表。\n"
+)
+# #656: the 走勢 tab's 技術指標 card holds the indicator panels and the chart data table.
+INDICATORS = (
+    "技術指標 indicators/v1\n技術指標\n資料 2026/11/05\nMACD\nRSI\nKD\n布林\n"
+    "日線批次計算於 2026/11/05 17:30（台灣時間）\n查看圖表資料表（最近 30 根）\n"
+)
+MAIN = HEADER + CHART + SUMMARY + TABS + INDICATORS
+
+
+def _s14(tmp_path, main, research, board=None):
+    payload = {"strategy_board": board or {"strategies": [LEVELS_ROW]}}
+    run = FakeRun(
+        tmp_path,
+        {"stocks/TWSE/2884": payload},
+        {"stock-1280": main, "stock-research-1280": research},
+    )
+    return page_checks.s14(run, STOCK)
+
+
+def test_s14_passes_on_chart_first_and_one_set_of_levels(tmp_path):
+    result = _s14(tmp_path, MAIN, HEADER + CHART + SUMMARY + TABS + BOARD)
+    assert "`2,364.00` 1 次" in result and "`2,458.00` 1 次" in result
+
+
+def test_s14_fails_on_the_old_order_and_the_chart_in_the_tab(tmp_path):
+    # Before #648: header, summary card, tabs, then the chart card inside the 走勢 tab.
+    old_main = HEADER + SUMMARY + TABS + CHART
+    with pytest.raises(page_checks.Fail, match="要在摘要卡 `目前判斷`"):
+        _s14(tmp_path, old_main, HEADER + SUMMARY + TABS + BOARD)
+    twice = HEADER + CHART + SUMMARY + TABS + CHART + INDICATORS
+    with pytest.raises(page_checks.Fail, match="有 2 行，預期 1"):
+        _s14(tmp_path, twice, HEADER + CHART + SUMMARY + TABS + BOARD)
+
+
+def test_s14_fails_when_the_indicators_stay_in_the_chart_card(tmp_path):
+    # #648 left the panels and the data table in the K-line card above the tabs; #656 moves them into 走勢.
+    old_chart = CHART + "MACD\nRSI\nKD\n布林\n查看圖表資料表（最近 30 根）\n"
+    research = HEADER + CHART + SUMMARY + TABS + BOARD
+    with pytest.raises(page_checks.Fail, match="K 線卡內不該有指標面板或資料表"):
+        _s14(tmp_path, HEADER + old_chart + SUMMARY + TABS, research)
+    with pytest.raises(page_checks.Fail, match="整行 `技術指標` 有 0 行，預期 1"):
+        _s14(tmp_path, HEADER + CHART + SUMMARY + TABS, research)
+    no_table = INDICATORS.replace("查看圖表資料表（最近 30 根）\n", "")
+    with pytest.raises(page_checks.Fail, match="卡缺：\\['查看圖表資料表"):
+        _s14(tmp_path, HEADER + CHART + SUMMARY + TABS + no_table, research)
+    with pytest.raises(page_checks.Fail, match="預期只在走勢分頁"):
+        _s14(tmp_path, MAIN, research + INDICATORS)
+
+
+def test_s14_fails_when_the_research_tab_repeats_the_levels(tmp_path):
+    # Before #648: the candidate sentence and the research action's grid repeated the board's set.
+    repeated = BOARD.replace(
+        "進場、停損與目標價見下方策略總表「突破條件」列。",
+        "明天起在 2,400.00 元附近可進場；跌破 2,364.00 元停損，目標 2,458.00 元",
+    ).replace("價位見上方策略總表。", "停損（元）\n2,364.00\n目標一（元）\n2,458.00")
+    with pytest.raises(page_checks.Fail, match="`2,364.00`（invalid_price）出現 3 次"):
+        _s14(tmp_path, MAIN, HEADER + CHART + SUMMARY + TABS + repeated)
+
+
+def test_s14_without_actionable_levels_checks_the_order_only(tmp_path):
+    board = {"strategies": [OBSERVED_ROW]}
+    assert "不計次" in _s14(tmp_path, MAIN, HEADER + CHART + SUMMARY + TABS, board)
 
 
 # ---- stock page 財務 tab (#528) ----
@@ -1491,7 +2476,7 @@ FUNDAMENTAL_ROWS = [
 def _financials_page(rows_text: str, badge: str = "資料 2026/09/30\n") -> str:
     # StockFundamentalsPanel as innerText: eyebrow, title, badge, 說明, table, source line.
     return (
-        "圖表與指標\n法人籌碼\n財務\n新聞與公告\n財務資料\n季報營收與 EPS\n"
+        "走勢\n籌碼\n財務\n新聞與公告\n財務資料\n季報營收與 EPS\n"
         f"{badge}說明\n期別\t年初至季底累計營收（億元）\t年初至季底累計 EPS（元）\t"
         f"ROE（%）\t可得日\t來源\n{rows_text}來源：公開資訊觀測站 季報\n"
     )
@@ -1539,7 +2524,7 @@ def test_s12_fails_on_a_wrong_value_order_or_badge(tmp_path):
 def test_s12_fails_on_the_old_page_without_the_tab(tmp_path):
     payload = {"fundamentals": [], "instrument": {"instrument_type": "stock"}}
     with pytest.raises(page_checks.Fail, match="缺整行 `季報營收與 EPS`"):
-        _s12(tmp_path, payload, "圖表與指標\n法人籌碼\n新聞與公告\n")
+        _s12(tmp_path, payload, "走勢\n籌碼\n新聞與公告\n")
 
 
 def test_s12_reads_the_empty_reason_by_instrument_type(tmp_path):
@@ -1642,3 +2627,41 @@ def test_s13_reads_the_empty_reason_by_instrument_type(tmp_path):
         _s13(tmp_path, stock, page)
     with pytest.raises(page_checks.Fail, match="卻有月份列"):
         _s13(tmp_path, etf, page + MONTHLY_TEXT)
+
+
+def _s2(tmp_path, rows):
+    payload = {
+        "items": [
+            {"instrument": {"symbol": symbol, "instrument_type": kind}}
+            for symbol, kind in rows
+        ],
+        "meta": {"total": len(rows)},
+    }
+    page = (
+        "代號\t名稱\t交易所\t類型\t最近收盤（元）\t目前研究動作\n"
+        + "".join(f"{symbol}\t名稱\n" for symbol, _ in rows)
+        + f"第 1／1 頁 · 共 {len(rows)} 筆\n"
+    )
+    run = FakeRun(
+        tmp_path, {"stocks?page=1&page_size=30": payload}, {"stocks-1280": page}
+    )
+    return page_checks.s2(run, None)
+
+
+def test_s2_passes_on_the_type_then_symbol_order(tmp_path):
+    # #602: stocks first, then ETFs and new listings, each by symbol.
+    rows = [("1101", "stock"), ("3105", "stock"), ("0050", "etf"), ("7795", "ipo")]
+    assert "類型→代號順序" in _s2(tmp_path, rows)
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        # The old exchange-then-symbol order put a TPEx bond ETF first.
+        [("00679B", "etf"), ("1101", "stock")],
+        [("2330", "stock"), ("1101", "stock")],
+    ],
+)
+def test_s2_fails_on_another_order(tmp_path, rows):
+    with pytest.raises(page_checks.Fail, match="類型→代號"):
+        _s2(tmp_path, rows)

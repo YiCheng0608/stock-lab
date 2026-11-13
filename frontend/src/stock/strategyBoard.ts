@@ -1,4 +1,4 @@
-import { formatPrice } from '../candidates/candidates'
+import { formatPrice, riskRewardBasisEntry, riskRewardBasisNote } from '../candidates/candidates'
 import { productActionReasonLabel } from '../presentation'
 import type { ActionNearnessItem, GapReason, StrategyBoardRow, StrategyBoardStatus, StrategyCondition, StrategyObservationLevels } from '../types'
 import { LOT_SIZE, formatFixed } from '../units'
@@ -12,6 +12,8 @@ export const OBSERVATION_LABEL = '條件未成立・觀察價位'
 // #519: the candidate row's fold for the reasons and the AI note (UI_COPY_SPEC §10 個股頁候選列).
 export const CANDIDATE_MORE_LABEL = '理由與 AI 進出點說明'
 export const LEVELS_MISSING_TEXT = '觀察價位未產生：這個資料日的條件價位尚未計算或計算失敗。'
+// Issue 581: the row's condition fold. Labels already end in 條件 (突破條件, 回踩條件), so only 明細 is added to them.
+export const conditionDetailsTitle = (label: string) => `${label.endsWith('條件') ? label : `${label}條件`}明細`
 
 export const STATUS_LABELS: Record<StrategyBoardStatus, string> = {
   conditional: '成立',
@@ -138,7 +140,7 @@ const GAP_TOPICS: ReadonlyArray<{ reasons: ReadonlySet<string>; causes: Readonly
     reasons: new Set(['history_under_60_bars', 'ipo_history_under_20_bars', 'ipo_observation_only_under_60_bars', 'bar_count_missing_or_invalid',
       'prior_20_highs_missing_or_invalid', 'prior_20_volumes_missing_or_invalid', 'close_missing_or_non_finite', 'volume_missing_or_non_finite',
       'ma20_missing_or_non_finite', 'ma60_missing_or_non_finite']),
-    causes: new Set(['coverage_baseline_unknown', 'listed_under_threshold', 'suspended_or_no_trade', 'official_no_trade', 'bar_invalid', 'quote_not_listed', 'missing_bar_dates']),
+    causes: new Set(['coverage_baseline_unknown', 'listed_under_threshold', 'suspended_or_no_trade', 'capital_reduction_halt', 'official_no_trade', 'bar_invalid', 'quote_not_listed', 'missing_bar_dates']),
   },
   { reasons: new Set(['group_excess_return_20d_missing_or_non_finite']), causes: new Set(['group_return_unavailable']) },
 ]
@@ -163,9 +165,24 @@ function incompleteSentences(row: StrategyBoardRow, gapReasons: ReadonlyArray<Ga
   return unique.length ? unique : row.missing_labels
 }
 
+// Every condition passed but the RR is under the minimum (#580; UI_COPY_SPEC §10.1): the row is an observation whose
+// 差哪個條件 states the RR. Null for any other row.
+export function riskRewardShortfallText(row: StrategyBoardRow): string | null {
+  const shortfall = row.risk_reward_shortfall
+  if (!shortfall) return null
+  const minimum = `${shortfall.minimum} 倍`
+  const note = riskRewardBasisNote(shortfall.risk_reward_basis)
+  if (typeof shortfall.risk_reward === 'number' && Number.isFinite(shortfall.risk_reward)) {
+    return `條件全部達成，但${note ? `${note}的` : ''} RR ${shortfall.risk_reward.toFixed(2)} 倍未達 ${minimum}`
+  }
+  return `條件全部達成，但${riskRewardBasisEntry(shortfall.risk_reward_basis) ?? '進場價'}不在停損與目標一之間，RR 未達 ${minimum}`
+}
+
 // 「差哪個條件」: one line per row. gapReasons are the stock summary's causes (decision_summary.gap_reasons).
 export function unmetText(row: StrategyBoardRow, gapReasons?: ReadonlyArray<GapReason>): string {
   if (row.status === 'conditional') return '全部達成'
+  const shortfall = riskRewardShortfallText(row)
+  if (shortfall) return shortfall
   if (row.status === 'not_applicable') return row.missing_labels.length ? row.missing_labels.join('、') : '原因待核實'
   if (row.status === 'data_incomplete') {
     const lines = incompleteSentences(row, gapReasons)
@@ -272,4 +289,19 @@ export function observationLines(levels: StrategyObservationLevels): LevelLine[]
   if (isNumber(levels.invalid_price)) lines.push({ key: 'stop', label: '參考停損（元）', value: formatPrice(levels.invalid_price), className: 'level-stop' })
   if (isNumber(levels.target_1)) lines.push({ key: 'target', label: isNumber(levels.target_2) ? '參考目標一／目標二（元）' : '參考目標一（元）', value: formatPrice(levels.target_1) + (isNumber(levels.target_2) ? `／${formatPrice(levels.target_2)}` : ''), className: 'level-target' })
   return lines
+}
+
+// #648: the 進出場 tab shows one complete set of levels, the strategy board's. Another block on the tab (the candidate
+// row's entry sentence, the research action's fold) points to the board instead of repeating a set that is the same as a
+// board row's actionable levels (same stop and target one); a set that differs, such as a holding's own levels, stays.
+export const LEVELS_IN_BOARD_TEXT = '價位見上方策略總表。'
+export const candidateLevelsInBoardText = (label: string) => `進場、停損與目標價見下方策略總表「${label}」列。`
+
+export function boardLevelsRow(
+  board: { strategies: readonly StrategyBoardRow[] } | null | undefined,
+  levels: { invalid_price?: number | null; target_1?: number | null } | null | undefined,
+): StrategyBoardRow | null {
+  if (!board || levels?.invalid_price == null || levels.target_1 == null) return null
+  return board.strategies.find((row) => row.status === 'conditional' && row.levels?.kind === 'actionable'
+    && row.levels.invalid_price === levels.invalid_price && row.levels.target_1 === levels.target_1) ?? null
 }

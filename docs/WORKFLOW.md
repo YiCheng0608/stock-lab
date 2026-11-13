@@ -12,7 +12,7 @@
 | 已完成能力 | [CAPABILITIES](CAPABILITIES.md) |
 | 前端視覺與互動 | [DESIGN_SYSTEM](DESIGN_SYSTEM.md) |
 | 任務目標、範圍、AC、決策、結果 | Issue 本文與留言 |
-| 版本任務集合 | [V1 milestone](https://github.com/YiCheng0608/stock-lab/milestone/1) |
+| 版本任務集合 | [GitHub milestones](https://github.com/YiCheng0608/stock-lab/milestones)（V1 已關閉；之後的任務在 V1.1 體驗與策略等 milestone） |
 | 狀態 | [產品開發看板](https://github.com/users/YiCheng0608/projects/1) Status：待辦／開發中／待整合／完成（「測試中」不使用） |
 | 使用者層級決策 | [治理 Issue #1](https://github.com/YiCheng0608/stock-lab/issues/1) 留言 |
 | 發佈與部署 | [RELEASE](RELEASE.md)；部署記錄在正式 compose project 的 volume 的 `/data/logs/deploy.json` |
@@ -21,7 +21,7 @@ Issue 標題前綴：`[任務]` 可直接開工的工作、`[功能]` 多任務�
 
 ## 版本範圍與完成判定
 
-ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到數張任務 Issue 承接，統籌在建單時於本文寫明對應 gate。V1 完成的判定是 G7 發布驗收通過，不是 Issue 關閉數。
+V1 以 ROADMAP V1 基線的七個 gate（V1-G1～G7）承接，每個 gate 由一到數張任務 Issue 承接；完成的判定是 G7 發布驗收通過，不是 Issue 關閉數，已於 2026-11-02 通過（[V1 已完成](ROADMAP.md#v1-已完成)）。之後的任務在建單時於本文寫明對應的 milestone 與依據（#1 決策留言、ROADMAP 段落或母單）。
 
 ## 資料與功能拆線
 
@@ -39,42 +39,31 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
 
 ## 任務流程
 
-1. **建單**：套[任務 Issue 模板](templates/issue-task.md)，填目標、範圍、AC、依賴、對應 gate；套 milestone；看板設待辦。UI 任務（改五個主導航的頁面）的 AC 固定加一條「更新對應的 [`features/*.md`](../.claude/skills/verify-stock-lab/features) 或寫明不需更新」。
+1. **建單**：套[任務 Issue 模板](templates/issue-task.md)，填目標、範圍、AC、依賴、對應里程碑與依據；套 milestone；看板設待辦。UI 任務（改 verify 五個頁面組的頁面：今日名單（含大盤）、我的追蹤、族群、個股、新聞；主導航是七項，策略說明不在 verify）的 AC 固定加一條「更新對應的 [`features/*.md`](../.claude/skills/verify-stock-lab/features) 或寫明不需更新」。
 2. **開工**：統籌照[任務檔模板](templates/task-file.md)把任務全文（Issue 連結、AC、白名單、驗證方式，以及「提問與回報照[留言類型](#留言類型)寫在 Issue／PR 留言」一點）寫成 UTF-8 檔（不經 PowerShell 管線），放 worktree 外、統籌換手後仍在的目錄（例如 `$HOME/t<issue>/task/task.md`；工程師把 `$HOME/t<issue>/` 列進 PR 本文的 worktree 外暫存目錄，結案時以 `--extra-dir` 刪）。pytest 的 `--basetemp` 要用同一目錄下的另一個子目錄（例如 `$HOME/t<issue>/b1`），因為 pytest 開跑時會清空 basetemp，全綠時也會刪掉它，任務檔不能放在裡面。目錄名不能含 `"`、`$`、反引號、`%`、`!`，dispatch.sh 會拒絕（exit 64）。寫好後跑一行：
 
    ```text
    bash tools/ops/dispatch.sh <issue> <slug> --task-file <任務全文檔> [--model <model> --effort <effort>] [--base origin/<branch>]
    ```
 
-   [`dispatch.sh`](../tools/ops/dispatch.sh) 先 fetch 再從最新 `origin/master` 建 worktree；子單的 PR 目標是[長期整合分支](#長期整合分支)時加 `--base origin/<該分支>`，fetch 與「新 worktree 的 HEAD 等於最新 base」的核對都改用它。依序等於下列手動命令（模型預設 `claude-opus-5-5`／`high`；`--base-branch` 只在 `--base` 不等於 `origin/master` 時加）：
+   [`dispatch.sh`](../tools/ops/dispatch.sh) 先 fetch 再從最新 `origin/master` 建 worktree；子單的 PR 目標是[長期整合分支](#長期整合分支)時加 `--base origin/<該分支>`，fetch 與「新 worktree 的 HEAD 等於最新 base」的核對都改用它。依序等於下列手動命令（模型預設 `claude-opus-5-5`／`medium`；`--base-branch` 只在 `--base` 不等於 `origin/master` 時加）：
 
    ```text
    orca worktree create --repo id:<repoId> --name task-<issue>-<slug> --no-parent --setup skip [--base-branch origin/<branch>] --json
    git -C <path> branch -m <orca-branch> task/<issue>-<slug>
-   orca terminal create --worktree id:<repoId>::<path> --title "#<issue> <slug>" --shell git-bash --command 'COMPOSE_PROJECT_NAME=task-<issue> claude --model <model> --effort <effort> --add-dir "<任務檔目錄>"' --json
+   orca terminal create --worktree id:<repoId>::<path> --title "#<issue> <slug>" --shell git-bash --command 'COMPOSE_PROJECT_NAME=task-<issue> CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude --model <model> --effort <effort> --add-dir "<任務檔目錄>"' --json
    orca terminal wait --terminal <handle> --for tui-idle --timeout-ms 60000 --json
    orca terminal send --terminal <handle> --text "請用 Read 工具讀取任務檔 <path>（UTF-8），依其內容開工；開工留言回貼任務檔裡的 Issue 連結與 AC 數。" --enter --wait-submit 30 --json
    ```
 
-   terminal 只收到這一句，`<path>` 是任務檔的絕對路徑（Windows 寫成 `C:/…`）；任務全文不經 terminal，沒有長度上限，引號、`$`、反引號與換行都不必跳脫（#315）。`--add-dir` 讓 session 不管在哪種權限模式下，讀任務檔都不會跳詢問。wait 回 `satisfied:true` 才送，送出後看 `turn_started` 並讀回 terminal，最後看板設開發中；輸出一行 JSON（worktree、branch、HEAD、terminal、任務檔路徑、是否已送出）。exit 1 是未送出；exit 3 是已送出但未見開始，先 `orca terminal read`，不要重送。工程師接手後在 Issue 留一則 `回報：開工` 留言（session、branch、HEAD、任務檔路徑、任務檔裡的 Issue 連結與 AC 數）；統籌拿 Issue 連結與 AC 數對照任務檔，對不上就是沒讀到完整檔案，在 Issue 留言後通知工程師重讀。五個主導航的端到端驗證由 CI `verify` job 負責（[verify-stock-lab CI 模式](../.claude/skills/verify-stock-lab/SKILL.md#ci-模式)，依改動範圍只驗受影響的頁），工程師不必在自己的 branch 另跑；UI 任務的截圖仍依規則 c 附在 PR。
+   terminal 只收到這一句，`<path>` 是任務檔的絕對路徑（Windows 寫成 `C:/…`）；任務全文不經 terminal，沒有長度上限，引號、`$`、反引號與換行都不必跳脫（#315）。`--add-dir` 讓 session 不管在哪種權限模式下，讀任務檔都不會跳詢問。wait 回 `satisfied:true` 才送，送出後看 `turn_started` 並讀回 terminal，最後看板設開發中；輸出一行 JSON（worktree、branch、HEAD、terminal、任務檔路徑、是否已送出）。exit 1 是未送出；exit 3 是已送出但未見開始，先 `orca terminal read`，不要重送。工程師接手後在 Issue 留一則 `回報：開工` 留言（session、branch、HEAD、任務檔路徑、任務檔裡的 Issue 連結與 AC 數）；統籌拿 Issue 連結與 AC 數對照任務檔，對不上就是沒讀到完整檔案，在 Issue 留言後通知工程師重讀。verify 五個頁面組的端到端驗證由 CI `verify` job 負責（[verify-stock-lab CI 模式](../.claude/skills/verify-stock-lab/SKILL.md#ci-模式)，依改動範圍只驗受影響的頁），工程師不必在自己的 branch 另跑；UI 任務的截圖仍依規則 c 附在 PR。
    派工後的新 PR 與新留言由常駐的事件 monitor 發現並喚醒統籌（[無人值守運作](COORDINATOR.md#無人值守運作)），統籌 session 不必自己輪詢。工程師的提問與回報照[留言類型](#留言類型)寫在 Issue／PR 留言，不依賴口頭通知。反方向：工程師 session 不會自己查 GitHub，統籌在 Issue／PR 留言給工程師（`review：`、`決定：`）後，必須對該工程師 terminal 送一句短通知並附留言連結，再讀回確認已開始處理；內容以留言為準，terminal 只用來喚醒。
-3. **實作**：只改任務需要的檔案；共用檔案（如 `frontend/src/App.tsx`、`backend/app/api.py`）改動前先看是否有其他進行中的任務也在改，有就在 Issue 協調。放 token 的 `.env` 由使用者自己建，agent 只看 `.env.example`（key 與說明寫在那裡）；`.env` 不讀、不搜、不複製、不改，要它的值時請使用者執行。這個 hook 防的是 agent 不小心讀到，防不了刻意繞過（例如先寫一支會讀 `.env` 的腳本再執行），真 token 放進 `.env` 前要知道這點。hook 對 Bash／PowerShell 從寬擋：命令字串提到 `.env` 路徑就擋，連 commit 訊息與 heredoc 裡的字也算，要搜這段文字改用 Grep 工具（pattern 不檢查）、commit 訊息改用 `-F <檔案>`。compose 會把 env file 的值展開進容器的環境變數，所以 hook 也擋會印出它們的 docker 命令（#360）：
-   - `docker compose config` 只放行 `-q`／`--quiet`、`--no-interpolate`、`--services` 三種寫法。旗標要直接寫在 `config` 後面，不能是前一個選項的值（`--profile -q` 不算）。另外不能加 `-o`／`--output`、`--environment`、`--variables`，也不能寫帶 `=` 的安全旗標或 `=false` 之類的值（`--quiet=false` 會把它關掉）。
-   - `docker inspect`（含 `container`／`image`／`service inspect`）要加 `--format`／`-f`，而且 format 不能取 `Env`、整個 `.Config`、`.` 或 `$`。`network`、`volume inspect` 不擋。
-   - `docker run`／`exec`、`docker compose run`／`exec` 的參數裡有 `env`、`printenv` 或 `environ` 時擋下。
-
-   以變數名印出（`sh -c 'echo $TOKEN'`）的寫法擋不到。任務自己 build 的 image 用 `t<issue>` tag，compose project 名稱用 `t<issue>` 或 `task-<issue>` 開頭，結案時才會被清掉（第 6 步）。工程師與 review session 不跑 `docker image prune`、`docker builder prune`、`docker volume prune`、`docker system prune`：dangling image 與 build cache 是所有任務共用的，只由 `close_task.sh` 清。
+3. **實作**：只改任務需要的檔案；共用檔案（如 `frontend/src/App.tsx`、`backend/app/api.py`）改動前先看是否有其他進行中的任務也在改，有就在 Issue 協調。放 token 的 `.env` 由使用者自己建，agent 只看 `.env.example`（key 與說明寫在那裡）；`.env` 不讀、不搜、不複製、不改，要它的值時請使用者執行。這個 hook 防的是 agent 不小心讀到，防不了刻意繞過（例如先寫一支會讀 `.env` 的腳本再執行），真 token 放進 `.env` 前要知道這點。hook 對 Bash／PowerShell 從寬擋：命令字串提到 `.env` 路徑就擋，連 commit 訊息與 heredoc 裡的字也算，要搜這段文字改用 Grep 工具（pattern 不檢查）、commit 訊息改用 `-F <檔案>`。compose 會把 env file 的值展開進容器的環境變數，所以 hook 也擋會印出它們的 docker 命令（`docker compose config`、`docker inspect`、`docker run`／`exec` 等；放行與擋下的旗標只寫在 [GUARDRAILS](GUARDRAILS.md) 不讀 `.env` 那一列，#360）。以變數名印出（`sh -c 'echo $TOKEN'`）的寫法擋不到。任務自己 build 的 image 用 `t<issue>` tag，compose project 名稱用 `t<issue>` 或 `task-<issue>` 開頭，結案時才會被清掉（第 6 步）。工程師與 review session 不跑 `docker image prune`、`docker builder prune`、`docker volume prune`、`docker system prune`：dangling image 與 build cache 是所有任務共用的，只由 `close_task.sh` 清。
 4. **本機檢查**：見下節；全部通過才開 PR。
 5. **PR**：套 [PR 模板](templates/pull-request.md)（`gh pr create --body-file` 不會自動帶入模板，先複製模板再填），`Closes #<issue>`，附驗證結果與截圖（前端）。看板設待整合。
-6. **Review 與合併**：見下節。合併後 master CI 綠 → Issue 自動關閉、看板完成（PR 進[長期整合分支](#長期整合分支)時 GitHub 不自動關，由 `close_task.sh` 關）；遠端 branch 由 GitHub 自動刪（repo 設定 `delete_branch_on_merge`）；統籌在 `master` 管理 checkout 跑 `bash tools/ops/close_task.sh <issue> [--extra-dir <PR 本文寫的 worktree 外暫存目錄>]...`（同一 Issue 有多個 `task/<issue>-*` worktree 時加 `--slug <slug>`），再刷新程式索引。[`close_task.sh`](../tools/ops/close_task.sh) 先確認 PR 已合併、PR 目標分支（`baseRefName`：master 或[長期整合分支](#長期整合分支)）上它的 merge commit CI 綠（該分支最新一次也不是紅）、本地 branch 已在 `origin/<目標分支>` 裡、worktree 沒有未 commit 的改動、terminal 都閒置，才關 terminal、`orca worktree rm --force`＋`git worktree prune`（殘留目錄一併刪）、刪本地 branch、刪暫存目錄（裡面的 junction／symlink 先拆，不跟隨）、並刪該任務各工程師 session 的 Claude Code scratchpad（#472，規則見 `close_task.sh` 開頭與 GUARDRAILS）、清該任務的 Docker 資源、看板設完成並讀回；任一前提不符就不刪任何東西並非 0 結束。repo 與各 worktree、`$HOME`、磁碟根、`stock-lab-data` 與 `STOCK_DATA_DIR` 不能當 `--extra-dir`；路徑中間經過 junction／symlink 或用了 8.3 短檔名也拒絕，請給實際路徑。Issue 有 `統籌承諾：` 留言時依承諾的順序與時點清理。Docker 資源的清法如下（#360）：
-   - **刪除範圍**：tag 是 `t<issue>`／`t<issue>-*` 的 image，repository 以 `t<issue>-`／`task-<issue>-` 開頭的 image（compose 的 `<project>-<service>`），以及名稱以 `t<issue>`／`task-<issue>` 開頭的已停止容器、volume、network。名稱的數字後面要接 `-`、`_`、`.` 或結尾，所以 `t36` 不會刪到 `t360` 的資源。image 一律以 `repository:tag` 刪，不用 id、不加 `-f`，同一個 image 的其他 tag 會留著。
-   - **有容器在跑時**：容器名稱屬於這個任務，或用到上述 image／volume／network 時，這個任務的資源一個都不刪，JSON 的 steps 列出 `docker_running:<容器>` 與每個留下的 `docker_kept:<種類>:<名稱>`。
-   - **prune**：上述資源清完後，以下條件都成立才跑 `docker image prune -f` 與 `docker builder prune -f`：這個任務是 Docker 子單（PR 進長期整合分支），或剛剛刪了它的資源；沒有任何容器在跑；其他 `task/<n>-*` worktree 都不是 Docker 任務。worktree 有 `t<n>`／`task-<n>` 資源，或 HEAD 含有長期整合分支自己的 commit，就算 Docker 任務；git 讀不出來也算。不成立時記 `docker_prune_skipped:<原因>`，留給最後一個結案的任務。`--no-board` 的試跑不 prune。
-   - **不碰的東西**：base image（`python`、`node`、`nginx`、`alpine` 等）與其他專案的 image。
-   - **docker 無回應時**：沒有 docker、daemon 沒回應，或任一次呼叫超過 30 秒（`CLOSE_TASK_DOCKER_TIMEOUT`），只記 `docker_skipped:<原因>`，不刪 Docker 資源，結案照常完成。刪不掉的資源記 `docker_failed:<種類>:<名稱>`，不讓結案失敗。
-   - **steps**：JSON 的 steps 逐一列出刪掉的資源，格式是 `docker_removed:<種類>:<名稱>`。
+6. **Review 與合併**：見下節。合併後 master CI 綠 → Issue 自動關閉、看板完成（PR 進[長期整合分支](#長期整合分支)時 GitHub 不自動關，由 `close_task.sh` 關）；遠端 branch 由 GitHub 自動刪（repo 設定 `delete_branch_on_merge`）；統籌在 `master` 管理 checkout 跑 `bash tools/ops/close_task.sh <issue> [--extra-dir <PR 本文寫的 worktree 外暫存目錄>]...`（同一 Issue 有多個 `task/<issue>-*` worktree 時加 `--slug <slug>`），再刷新程式索引。[`close_task.sh`](../tools/ops/close_task.sh) 先確認 PR 已合併、PR 目標分支（`baseRefName`：master 或[長期整合分支](#長期整合分支)）上它的 merge commit CI 綠（該分支最新一次也不是紅）、本地 branch 已在 `origin/<目標分支>` 裡、worktree 沒有未 commit 的改動、terminal 都閒置，才關 terminal、`orca worktree rm --force`＋`git worktree prune`（殘留目錄一併刪）、刪本地 branch、刪暫存目錄（裡面的 junction／symlink 先拆，不跟隨）、並刪該任務各工程師 session 的 Claude Code scratchpad（#472，規則見 `close_task.sh` 開頭與 GUARDRAILS）、清該任務的 Docker 資源、看板設完成並讀回；任一前提不符就不刪任何東西並非 0 結束。repo 與各 worktree、`$HOME`、磁碟根、`stock-lab-data` 與 `STOCK_DATA_DIR` 不能當 `--extra-dir`；路徑中間經過 junction／symlink 或用了 8.3 短檔名也拒絕，請給實際路徑。Issue 有 `統籌承諾：` 留言時依承諾的順序與時點清理。Docker 資源只刪名稱屬於這個任務（`t<issue>`／`task-<issue>`）的，刪除範圍、有容器在跑時、`prune` 與 docker 無回應時的處理見 [GUARDRAILS](GUARDRAILS.md) 的「結案腳本刪任務的 Docker 資源」列與 [`coordinator_lib.sh`](../tools/ops/coordinator_lib.sh) 的 `docker_cleanup`（#360）。
    結案時對照本次 review 留言、CI 失敗與使用者糾正，用一次 `gh search issues "<關鍵字>" --repo YiCheng0608/stock-lab --match comments` 查同關鍵字的「第一次」留言（留言格式見 [encode-lesson skill](../.claude/skills/encode-lesson/SKILL.md) 第 1 步），不用 `--paginate` 翻全部留言；有重複就是第二次，另建一張 `[任務]` 把它編成會失敗的檢查（[#228](https://github.com/YiCheng0608/stock-lab/issues/228)），並更新 [GUARDRAILS](GUARDRAILS.md) 對照表。
-   每個 gate 收尾、或每合併約 3 個 PR 後，統籌在以最新 `origin/master` 為底的 worktree 跑一次 [verify-stock-lab 真資料模式](../.claude/skills/verify-stock-lab/SKILL.md#真資料模式)（五頁全套，正式 DB 唯讀副本），結果貼在該 gate 的 Issue。verify（CI 或真資料）抓到的 bug，修的同一個 PR 要加一條會先失敗的檢查（測試或 verify 檢查項），不能只修不加。worktree 的 branch 命名 `task/<貼結果的 Issue>-...`（否則 Evidence 不推 `pr-assets`），並在該 worktree 另開 session 執行（skill 拒絕在 `master` 分支跑）。發佈與部署（tag、`deploy.sh`）見 [RELEASE](RELEASE.md)；V1 G7 窗口的五點（兩條 branch、V1 改動兩個 PR、真資料 verify、每日核對、窗口結束）見 [RELEASE 的 V1 發佈隔離](RELEASE.md#v1-發佈隔離g7-窗口專用)。
+   每個 gate 收尾、或每合併約 3 個 PR 後，統籌在以最新 `origin/master` 為底的 worktree 跑一次 [verify-stock-lab 真資料模式](../.claude/skills/verify-stock-lab/SKILL.md#真資料模式)（五頁全套，正式 DB 唯讀副本），結果貼在該 gate 的 Issue。verify（CI 或真資料）抓到的 bug，修的同一個 PR 要加一條會先失敗的檢查（測試或 verify 檢查項），不能只修不加。worktree 的 branch 命名 `task/<貼結果的 Issue>-...`（否則 Evidence 不推 `pr-assets`），並在該 worktree 另開 session 執行（skill 拒絕在 `master` 分支跑）。發佈與部署（tag、`deploy.sh`）見 [RELEASE](RELEASE.md)；V1 G7 窗口用過的發佈隔離已結束，見 [RELEASE 的 V1 發佈隔離（歷史）](RELEASE.md#v1-發佈隔離歷史)。
    每個 gate 收尾時，統籌另跑一次 DB 深度審查（[#391](https://github.com/YiCheng0608/stock-lab/issues/391)）：先照 [LOCAL](ops/LOCAL.md#取正式-db-的唯讀副本) 的標準命令（`tools/ops/copy_db.py`）取正式 DB 的唯讀副本，在以最新 `origin/master` 為底的 worktree 跑 `python tools/audit/audit.py --db <副本> --out <目錄>`，把 `<目錄>/summary.md` 貼在該 gate 的 Issue。
    - **審什麼**：工具不 import 產品的計算函式，依 [Canonical v1 規格](spec/README.md) 獨立重算全歷史，比對日線、raw、除權息欄位與缺漏、來源與日期欄位、技術指標、訊號的法人與融資比率、候選分數與族群分數。項目清單與各項範圍寫在 [`audit.py`](../tools/audit/audit.py) 開頭。
    - **只讀**：DB 用唯讀連線，raw 依副本的 `payload_path` 經 `app.raw_paths.payload_file` 找檔（舊 Windows 路徑在容器內讀 `STOCK_RAW_DIR` 底下），只以 `rb` 開啟；兩處都沒有時，`--raw-dir` 可改指 raw 副本。主機的 `raw/` 已刪，在主機直接跑讀不到 raw，要在容器內跑或給 `--raw-dir`（[LOCAL](ops/LOCAL.md#讀-raw-的工具)）。拒絕正式 DB（含 hard link）、`--out` 指到正式資料目錄底下（字面與解析連結後都比）、台北 21:30～23:30 與可用記憶體不足（`--min-free-gb`，預設 5）。跑到 21:30 就停在下一項之前，其餘記無法判定，exit 3；23:30 後用 `--only` 補跑剩下的項目。
@@ -93,7 +82,7 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
 | `review：` | 統籌、獨立 review | 有必修時工程師修 | head、結論（可合併／有必修）、必修清單 |
 | `統籌承諾：` | 統籌 | 統籌日後兌現 | 還沒做的事、時點、保留的資源 |
 
-- 提問只寫在 Issue／PR 留言，不寫在 terminal，也不在 terminal 等口頭回覆。統籌只看 Issue／PR 留言，terminal 的通知只用來喚醒（[任務流程](#任務流程)第 2 步）。
+- 提問只寫在 Issue／PR 留言，不寫在 terminal，也不在 terminal 等口頭回覆。背景工作被系統停掉、或任何要等統籌才能繼續的情況也一樣，以 `提問：` 留在 Issue。工程師 session 的回合結束時，[turn hook](COORDINATOR.md#無人值守運作)會檢查這一回合有沒有在 Issue／PR 留言，沒有就擋一次並提醒（#595）。統籌只看 Issue／PR 留言，terminal 的通知只用來喚醒（[任務流程](#任務流程)第 2 步）。
 - 統籌的留言經 [`comment.sh`](../tools/ops/comment.sh) 發，本文最後一行會帶不顯示的統籌標記，事件 monitor 不為它喚醒統籌（[統籌留言](COORDINATOR.md#無人值守運作)）。只有統籌用它：工程師與獨立 review 用了，留言就不會喚醒統籌。
 - 一則留言只放一種類型；一次問好幾件事就分成好幾則 `提問：`，各自等 `決定：`。
 - `決定：` 要附它回覆的提問留言連結（`…#issuecomment-<id>`，只寫 ID 不算）。`決定：` 寫在提問所在的 Issue／PR；PR 可能先關時（改開新 PR、Docker 子單），寫在 Issue：`patrol.sh` 只讀 open Issue 與 open PR，寫在已關的 PR 上的決定讀不到，提問會變回未回覆。
@@ -103,7 +92,7 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
 
 ## 本機檢查
 
-在容器內跑，用 CI 同一套 image 與依賴（[Docker compose](ops/SETUP.md#docker-compose)；需要 Docker Compose 2.24 以上）。Git Bash、worktree 根目錄執行。`-p task-<issue>` 是任務的 compose project，image、容器與 volume 都以它開頭，各 worktree 互不影響；`dispatch.sh` 以 Git Bash（`--shell git-bash`，前綴是 POSIX 寫法）開 terminal，並用 `COMPOSE_PROJECT_NAME=task-<issue> claude …` 啟動，漏了 `-p` 也落在同一個 project。這個變數只跟著那一次 `claude`：resume 工程師 session 時寫成 `COMPOSE_PROJECT_NAME=task-<issue> claude --resume <ID> --effort <原 level>`；Orca 自己 resume 的 session 沒有它，只靠命令裡的 `-p`。`--build` 從工作樹（含未 commit 的改動）重建 image，沒改的層走快取。
+在容器內跑，用 CI 同一套 image 與依賴（[Docker compose](ops/SETUP.md#docker-compose)；需要 Docker Compose 2.24 以上）。Git Bash、worktree 根目錄執行。`-p task-<issue>` 是任務的 compose project，image、容器與 volume 都以它開頭，各 worktree 互不影響；`dispatch.sh` 以 Git Bash（`--shell git-bash`，前綴是 POSIX 寫法）開 terminal，並用 `COMPOSE_PROJECT_NAME=task-<issue> CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude …` 啟動，漏了 `-p` 也落在同一個 project。第二個變數關掉 Claude Code 在主機記憶體吃緊時收掉背景 shell 的機制（#595：被收的是主機上的 docker CLI，幾乎不釋放記憶體，容器的記憶體由 WSL VM 的上限管，收掉只讓結果收不回來，通知又叫工程師停下來等人）。這兩個變數只跟著那一次 `claude`：resume 工程師 session 時寫成 `COMPOSE_PROJECT_NAME=task-<issue> CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude --resume <ID> --effort <原 level>`；Orca 自己 resume 的 session 沒有它們，只靠命令裡的 `-p`。`--build` 從工作樹（含未 commit 的改動）重建 image，沒改的層走快取。
 
 測試與 `checks.py` 讀 git，而 image 不含 `.git`；worktree 的 `.git` 是指向 Windows 路徑的檔案，容器裡讀不到。所以唯讀掛進共用的 git 目錄，再掛一個指向其中 `worktrees/<worktree 名>` 的 `.git` 檔，容器裡的 git 讀到的就是這個 worktree 的 branch、HEAD 與 index。每個新 shell 先跑（`$T` 是 worktree 外暫存目錄，路徑見 [LOCAL](ops/LOCAL.md#工具)，寫進 PR）：
 
@@ -117,17 +106,18 @@ export MSYS_NO_PATHCONV=1   # 否則 Git Bash 會把 -v 的容器路徑改寫成
 
 | 範圍 | 命令 |
 | --- | --- |
-| 後端 | `docker compose -p task-<issue> run --rm --build "${GIT_RO[@]}" api python -B -m pytest -p no:cacheprovider -q backend/tests`；`docker compose -p task-<issue> run --rm --build api ruff check --no-cache backend tools`；`docker compose -p task-<issue> run --rm --build api ruff format --check --no-cache backend tools`（設定在 [`ruff.toml`](../ruff.toml)，ruff 版本與 CI 相同） |
+| 後端 | `docker compose -p task-<issue> run --rm --build "${GIT_RO[@]}" api python -B -m pytest -p no:cacheprovider -q <改動相關的測試檔>`；`docker compose -p task-<issue> run --rm --build api ruff check --no-cache backend tools`；`docker compose -p task-<issue> run --rm --build api ruff format --check --no-cache backend tools`（設定在 [`ruff.toml`](../ruff.toml)，ruff 版本與 CI 相同） |
 | 前端 | `docker compose -p task-<issue> -f docker-compose.yml -f docker-compose.dev.yml run --rm --build web pnpm run test:ci`；同樣的前綴接 `web pnpm run build`（dev image，`frontend/` bind mount 進容器，`dist/` 寫回工作樹） |
 | 文件／repo | `docker compose -p task-<issue> run --rm --build "${GIT_RO[@]}" api python -B tools/ci/checks.py repository --base <PR 目標分支的完整 SHA>`（比 base 與工作樹，`--no-commit` 合併時檢的是合併結果）；`docker compose -p task-<issue> run --rm --build "${GIT_RO[@]}" api python -B -m unittest discover -s tools/ci -p 'test_*.py'` |
 
+- 後端只跑改動相關的測試檔（改到的模組與腳本自己的測試，以及讀它們的測試），不跑全套：全套後端 pytest 由 PR CI 的 `backend` job 跑（每個 PR 都跑，[CI 後端測試分流](#review-與合併)）。PR 本文的驗證寫本機跑了哪些測試檔（#595：本機全套要 52～68 分鐘，是同時最吃資源的工作，又沒有比 CI 多驗到東西）。
 - 有真 env file 時，哪些輸出會帶 token、不能貼到 GitHub，見 [Docker compose](ops/SETUP.md#docker-compose) 的 `STOCK_ENV_FILE`。
 - 台北 21:30～23:30 不跑全套 pytest 與 `docker build`（[無人值守運作](COORDINATOR.md#無人值守運作)）。
 - 結案時（[任務流程](#任務流程)第 6 步）統籌在 `close_task.sh` 之前跑 `docker compose -p task-<issue> -f docker-compose.yml -f docker-compose.dev.yml down --volumes --rmi all`，刪掉這個 project 的容器、網路、volume 與 image；`$T` 以 `--extra-dir` 交給 `close_task.sh`。
 
 每個 checkout 設一次 `git config blame.ignoreRevsFile .git-blame-ignore-revs`，`git blame` 會略過 [`.git-blame-ignore-revs`](../.git-blame-ignore-revs) 列出的全檔格式化 commit。
 
-容器外的工具（`tools/ops/*.sh`、`tools/verify/*.py` 的 G7 真資料 verify）用的 Python 是[容器外的 Python](ops/LOCAL.md#工具)（PATH 上的 python 是 Store stub）。資料路徑見 [LOCAL](ops/LOCAL.md#正式位置使用者決定)。
+容器外的工具（`tools/ops/*.sh`、在本機跑的 `tools/verify/*.py`）用的 Python 是[容器外的 Python](ops/LOCAL.md#工具)（PATH 上的 python 是 Store stub）。資料路徑見 [LOCAL](ops/LOCAL.md#正式位置使用者決定)。
 
 ## Review 與合併
 
@@ -137,7 +127,7 @@ export MSYS_NO_PATHCONV=1   # 否則 Git Bash 會把 -v 的容器路徑改寫成
   - c. 改到 `frontend/src/` 的非測試檔，本文要有圖片或 `pr-assets` 連結。
   - d. 改到 `HIGH_RISK_PATHS`，PR 要有 `independent-review` label。
   - e. commit 訊息不得有 closing keyword（`Fix #N`、`Closes #N`、`Resolves #N` 等）：commit 一進 master 就會關 Issue，早於結案步驟。
-- 後端測試在 CI 分兩個 job，不重跑全套（#378）：`backend` 在 runner 上以 pytest-xdist 平行跑 `backend/tests` 全套（#442；本機檢查照舊序列跑）；`docker` 在 image 內建置、import `app`／`worker` 全部模組、截圖，並只跑 [`docker_suite.json`](../tools/ci/docker_suite.json) 的 `docker` 列出的測試——結果會隨 image 的執行環境（tini 當 PID 1、非 root、image 內的 node 與 chromium）改變的那些。`suite` job 以 [`suite_split.py`](../tools/ci/suite_split.py) 比對兩個 job 的報告：全套每個測試都要在其中一個 job **實際執行**（不是 skipped），否則 CI 紅並列出 test id；比的是執行而不是收集，因為 `backend` 收集全套，只比收集永遠成立。`docker` 列出的測試在 image 內被 skip 也紅（它們在 runner 上也會通過，不另外檢查就會漏掉 image 退化）。新增只在 runner 上跳過的測試（缺 image 才有的工具、`skipif`）時，把它或它的檔案加進 `docker`；Windows 專屬、CI 哪裡都不會跑的測試寫進同一檔的 `skipped_everywhere` 並附原因，已能執行的項目留在裡面也會紅。本機檢查照舊在容器內跑全套（[本機檢查](#本機檢查)）。
+- 後端測試在 CI 分兩個 job，不重跑全套（#378）：`backend` 在 runner 上以 pytest-xdist 平行跑 `backend/tests` 全套（#442；本機只跑相關測試檔，#595）；`docker` 在 image 內建置、import `app`／`worker` 全部模組、截圖，並只跑 [`docker_suite.json`](../tools/ci/docker_suite.json) 的 `docker` 列出的測試——結果會隨 image 的執行環境（tini 當 PID 1、非 root、image 內的 node 與 chromium）改變的那些。`suite` job 以 [`suite_split.py`](../tools/ci/suite_split.py) 比對兩個 job 的報告：全套每個測試都要在其中一個 job **實際執行**（不是 skipped），否則 CI 紅並列出 test id；比的是執行而不是收集，因為 `backend` 收集全套，只比收集永遠成立。`docker` 列出的測試在 image 內被 skip 也紅（它們在 runner 上也會通過，不另外檢查就會漏掉 image 退化）。新增只在 runner 上跳過的測試（缺 image 才有的工具、`skipif`）時，把它或它的檔案加進 `docker`；Windows 專屬、CI 哪裡都不會跑的測試寫進同一檔的 `skipped_everywhere` 並附原因，已能執行的項目留在裡面也會紅。本機檢查在容器內只跑相關測試檔（[本機檢查](#本機檢查)）。
 - 統籌 review 重點：AC 是否逐條有驗證、文件是否同步、是否遵守 DESIGN_SYSTEM、有沒有寫死色碼／路徑／金鑰、測試是否覆蓋邊界。AC 證據必須是命令與輸出、查詢結果或截圖連結，只寫「通過」不算。
 - 改到 [`HIGH_RISK_PATHS`](../tools/ci/checks.py) 的 PR 加一次獨立 review（`/code-review` 或另開 session）並加 `independent-review` label。獨立 review 要寫出「這個變更安全是因為哪一個事實」，以及證明它的方式（命令與輸出、查詢或測試名稱）。另開的 review session 在本機 build 或起 compose 時，image tag 與 compose project 用 `t<pr>-review` 開頭（結案腳本只清 `t<issue>`，PR 的資源不會被它刪），結束前自己 `docker compose -p t<pr>-review down --volumes --rmi all`；與工程師一樣不跑任何 `prune`（[任務流程](#任務流程)第 3 步；PR #349 第一次 review 曾刪掉別人的 image）。派 review session 的任務文要寫進這兩點。
 - 合併用 merge commit，不 squash／rebase；衝突由 PR 作者在自己 branch 解決。主線規則要求 PR 分支跟上 master：master 前進後統籌以 `gh api -X PUT repos/YiCheng0608/stock-lab/pulls/<n>/update-branch -f expected_head_sha=<head>` 把 master 併入（merge commit），CI 重跑綠再合併。

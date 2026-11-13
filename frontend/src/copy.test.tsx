@@ -56,7 +56,7 @@ const hasTermId = (markup: string, id: string) => markup.includes(`data-term="${
 const IN_PLACE_TERMS: Record<string, string> = {
   candidate_score: '候選總分',
   entry_zone: '進場區',
-  support: '停損／條件失效價',
+  support: '停損',
   target: '目標價',
   rr: '風險報酬比 RR',
   percentile: '百分位',
@@ -66,6 +66,8 @@ const IN_PLACE_TERMS: Record<string, string> = {
   // The entry type badge on a candidate's first line (#491).
   breakout_entry: '突破型',
   pullback_entry: '回踩型',
+  // The strategy behind 今日名單 (#577): the 策略說明 title and the 今日名單 head name it.
+  trend_chips: '順勢籌碼型',
 }
 for (const [id, name] of Object.entries(IN_PLACE_TERMS)) {
   const term = GLOSSARY.find((item) => item.term_id === id)
@@ -112,7 +114,7 @@ const action = {
 } as unknown as ActionSummary
 const ActionDetailPanel = component('ActionDetailPanel')
 const research = render('ActionDetailPanel', () => <ActionDetailPanel {...{ action }} />)
-check(hasTermId(research, 'support'), `研究條件: the invalidation／stop level opens 停損／條件失效價 (found ${termLabels(research).join('、') || 'none'})`)
+check(hasTermId(research, 'support'), `研究條件: the invalidation／stop level opens 停損 (found ${termLabels(research).join('、') || 'none'})`)
 check(hasTermId(research, 'target'), '研究條件: the target level opens 目標價')
 check(hasTerm(research, '風險報酬比'), '研究條件: 風險報酬比 stays a term')
 
@@ -150,6 +152,15 @@ const intlUsers = sources(srcRoot)
   .filter((file) => fs.readFileSync(file, 'utf8').includes('Intl.DateTimeFormat'))
   .map((file) => path.relative(srcRoot, file).split(path.sep).join('/'))
 check(intlUsers.length === 1 && intlUsers[0] === 'dates.ts', `dates: only dates.ts uses Intl.DateTimeFormat, found ${intlUsers.join('、') || 'none'}`)
+// The strategy's name is one constant (#577 AC-2): only strategy/strategyName.ts and the glossary term spell it out; the
+// 策略說明 page and the 今日名單 head read the constant.
+const nameWriters = sources(srcRoot)
+  .filter((file) => fs.readFileSync(file, 'utf8').includes('順勢籌碼型'))
+  .map((file) => path.relative(srcRoot, file).split(path.sep).join('/'))
+  .sort()
+check(JSON.stringify(nameWriters) === JSON.stringify(['glossary.ts', 'strategy/strategyName.ts']), `strategy name: only strategy/strategyName.ts and glossary.ts write 「順勢籌碼型」, found ${nameWriters.join('、') || 'none'}`)
+const nameDefinitions = (nameWriters.includes('strategy/strategyName.ts') ? fs.readFileSync(path.join(srcRoot, 'strategy', 'strategyName.ts'), 'utf8') : '').match(/=\s*'順勢籌碼型'/g) ?? []
+check(nameDefinitions.length === 1, `strategy name: STRATEGY_NAME is defined once, found ${nameDefinitions.length}`)
 // One condition table (#277-B AC-B3, UI_COPY_SPEC §10.1): a condition code is quoted or used as a key only in
 // stock/strategyBoard.ts, so the action list's 「差：」 lines and every other copy read that table. Codes that also
 // name something else are left out of the scan.

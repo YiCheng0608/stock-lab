@@ -3,13 +3,16 @@ import type { ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom/server'
 
+import * as AppModule from '../App'
 import { ActionDetailPanel } from '../App'
+import { completeItem } from '../candidates/candidates.fixtures'
 import { NO_CONDITION_TEXT } from '../tracking/tracking'
 import { StockPlanPanel } from '../tracking/TrackingViews'
-import type { ActionSummary, StrategyBoardRow, StrategyDecision } from '../types'
+import type { ActionSummary, CandidateItem, StrategyBoardRow, StrategyDecision } from '../types'
+import { barsResponse, tradedBar } from './stockBars.fixtures'
 import { StockCutoffControl } from './StockCutoffControl'
 import { StockSummaryCard } from './StockSummaryCard'
-import { BOARD_NOTE, OBSERVATION_LABEL } from './strategyBoard'
+import { BOARD_NOTE, LEVELS_IN_BOARD_TEXT, OBSERVATION_LABEL, boardLevelsRow, candidateLevelsInBoardText } from './strategyBoard'
 import {
   board,
   conditionalBreakout,
@@ -41,7 +44,7 @@ const conditionalPullback = (): StrategyBoardRow => ({ ...conditionalBreakout(),
 
 // ---- the verdict: the first rule that holds (UI_COPY_SPEC §8.2 目前判斷) ----
 const buy = stockVerdict(board([observationBreakout(), conditionalPullback()], candidateSummary), action({ action_state: 'conditional_entry' }))
-check(buy.label === '可買' && buy.tone === 'success' && buy.reason === '每日候選第 3 名 · 總分 78 · 回踩條件', `candidate: 可買 with its rank, got ${JSON.stringify(buy)}`)
+check(buy.label === '條件成立' && buy.tone === 'success' && buy.reason === '每日候選第 3 名 · 總分 78 · 回踩條件', `candidate (Issue 581): 條件成立, not 可買, with its rank, got ${JSON.stringify(buy)}`)
 const exit = stockVerdict(board([conditionalBreakout()], candidateSummary), action({ action_state: 'reduce_exit', held: true, display_instruction: '已碰到既定風險條件，重新研究處置。' }))
 check(exit.label === '持倉風險' && exit.tone === 'warning' && exit.reason === '已碰到既定風險條件，重新研究處置。', `a holding risk wins over the candidate, got ${JSON.stringify(exit)}`)
 const gaps = [{ code: 'listed_under_threshold', label: '上市（櫃）後只有 41 個交易日，未滿 60 個交易日' }, { code: 'official_no_trade', label: '近 60 個交易日有 3 天官方行情無成交' }]
@@ -75,7 +78,7 @@ check(closestStrategy(board([])) === null && closestStrategy(null) === null, 'no
 const card = render(<StockSummaryCard board={board([observationBreakout(), conditionalPullback()], candidateSummary)} action={action({ action_state: 'conditional_entry' })} researchHref="?tab=research" />)
 for (const label of ['目前判斷', '最接近成立', '規則價位']) check(card.includes(`>${label}<`), `summary card: the ${label} column`)
 check(card.indexOf('目前判斷') < card.indexOf('最接近成立') && card.indexOf('最接近成立') < card.indexOf('規則價位'), 'summary card: the three columns in order')
-check(card.includes('資料 2026/10/22') && text(card).includes('可買 每日候選第 3 名 · 總分 78 · 回踩條件'), `summary card: date, verdict and reason: ${text(card).slice(0, 200)}`)
+check(card.includes('資料 2026/10/22') && text(card).includes('條件成立 每日候選第 3 名 · 總分 78 · 回踩條件'), `summary card: date, verdict and reason: ${text(card).slice(0, 200)}`)
 check(text(card).includes('回踩條件') && text(card).includes('成立') && text(card).includes('差：全部達成'), 'summary card: the closest strategy, its status and 差：全部達成')
 check(card.includes('class="level-entry">2,400.00') && card.includes('class="level-stop">2,364.00') && card.includes('class="level-target">2,458.00／2,508.00'), 'summary card: the actionable levels with the level classes')
 check(card.includes('href="/stocks/TWSE/2884?tab=research"') && card.includes('完整條件 →'), 'summary card: 完整條件 → opens the research tab')
@@ -118,3 +121,61 @@ const ownGap = render(<ActionDetailPanel action={action({ action_state: 'data_in
 check(text(ownGap).includes(gapSentence), 'research action: a data-gap sentence the instruction lacks is still shown')
 const watchPanel = render(<ActionDetailPanel action={action()} />)
 check(text(watchPanel).includes('暫無研究條件 條件未成立，暫不研究進場。 回踩條件差 1 項：支撐區'), `research action: the name, instruction and primary reason on one line: ${text(watchPanel).slice(0, 200)}`)
+
+// ---- #648 圖優先: header → chart card → summary card → tabs, the chart drawn once, the levels written once ----
+const renderAt = (location: string, element: ReactElement, client: QueryClient) => renderToStaticMarkup(<QueryClientProvider client={client}><StaticRouter location={location}>{element}</StaticRouter></QueryClientProvider>)
+const App = (AppModule as Record<string, unknown>).default as () => ReactElement
+const breakoutCandidate = (): CandidateItem => ({
+  ...completeItem(), instrument: { id: 1, exchange: 'TWSE', symbol: '2884', name: '玉山金', instrument_type: 'stock' }, strategy: 'breakout_v1', signal_id: 11,
+  levels: { entry_type: 'breakout', entry: 2400, entry_zone: { low: 2400, high: 2400 }, invalid_price: 2364, target_1: 2458, target_2: 2508, risk_reward: 1.6, earliest_execution_date: '2026-10-23' },
+}) as CandidateItem
+const levelsAction = (extra: Partial<ActionSummary> = {}) => action({ action_state: 'conditional_entry', trigger_price: 2400, entry_low: null, entry_high: null, invalid_price: 2364, target_1: 2458, risk_reward: 1.6, ...extra } as Partial<ActionSummary>)
+const pageBoard = () => board([conditionalBreakout(), observationPullback()], { ...candidateSummary, strategy: 'breakout_v1' })
+const stockClient = () => {
+  const client = new QueryClient()
+  client.setQueryData(['stock', 'TWSE', '2884', ''], {
+    instrument: { id: 1, exchange: 'TWSE', symbol: '2884', name: '玉山金', instrument_type: 'stock', etf_category: null },
+    bars: [], groups: [], chips: [], fundamentals: [], monthly_revenues: [], events: [], data_quality: [], coverage: null,
+    strategy_board: pageBoard(), candidate: breakoutCandidate(), decision_summary: levelsAction(),
+  })
+  client.setQueryData(['stock-bars', 'TWSE', '2884', 'day'], barsResponse([tradedBar('2026-10-21', 2380, 70), tradedBar('2026-10-22', 2405, 71)]))
+  return client
+}
+const STOP = '2,364.00'
+for (const [tab, location] of [['走勢', '/stocks/TWSE/2884'], ['進出場', '/stocks/TWSE/2884?tab=research']] as const) {
+  const page = renderAt(location, <App />, stockClient())
+  const at = (needle: string) => page.indexOf(needle)
+  check(at('class="card stock-header"') >= 0 && at('class="card stock-header"') < at('stock-chart-card') && at('stock-chart-card') < at('class="card stock-summary"') && at('class="card stock-summary"') < at('stock-tabs'),
+    `${tab}: header → chart card → summary card → tabs (${[at('class="card stock-header"'), at('stock-chart-card'), at('class="card stock-summary"'), at('stock-tabs')].join(', ')})`)
+  check(count(page, 'id="stock-chart-title"') === 1 && count(page, 'stock-chart-card') === 1, `${tab}: the daily chart is drawn once on the page`)
+  check(at('stock-chart-card') < at('class="stock-tab-content"') && !page.slice(at('class="stock-tab-content"')).includes('stock-chart-card'), `${tab}: no chart inside the tab content`)
+  // #656: the K-line card above draws price and volume only; the indicator panels and the data table are in 走勢.
+  const chartCard = page.slice(at('stock-chart-card'), at('class="card stock-summary"'))
+  check(chartCard.includes('>K 線</h') && !chartCard.includes('indicator-tab-') && !chartCard.includes('查看圖表資料表') && chartCard.includes('chart-ma-row'), `${tab}: the K-line card has no indicator panel or data table`)
+  const indicatorCards = count(page, 'stock-indicator-card')
+  if (tab === '走勢') {
+    const content = page.slice(at('class="stock-tab-content"'))
+    check(indicatorCards === 1 && content.includes('stock-indicator-card') && ['MACD', 'RSI', 'KD', '布林'].every((label) => content.includes(`>${label}</button>`)) && content.includes('查看圖表資料表（最近 30 根）'), `走勢: the tab holds the indicator panels and the data table (${indicatorCards})`)
+    const windows = [...page.matchAll(/data-bars-window="([^"]+)"/g)].map((match) => match[1])
+    check(windows.length === 2 && windows[0] === windows[1], `走勢: the K-line card and the indicator chart show the same bars: ${windows.join(' / ')}`)
+  } else check(indicatorCards === 0, `${tab}: the indicator card is only in 走勢`)
+  if (tab === '進出場') {
+    const content = page.slice(at('class="stock-tab-content"'))
+    // The phone cards repeat the board's table for 640px and below (display:none on a desktop), so they are left out.
+    const cards = content.indexOf('<div class="strategy-cards">')
+    const shown = content.slice(0, cards) + content.slice(content.indexOf('<section class="panel stock-action-detail"'))
+    // Above the tabs: the summary card's levels and, since #647, the chart note in the same format (decision 6820250353).
+    check(count(page.slice(at('class="card stock-summary"'), at('stock-tabs')), STOP) === 1, '進出場: the summary card keeps its levels above the tabs')
+    check(count(shown, STOP) === 1 && count(shown, '2,458.00') === 1, `進出場: one complete set of levels in the tab, the board's (stop ${count(shown, STOP)}, target ${count(shown, '2,458.00')})`)
+    check(content.includes(candidateLevelsInBoardText('突破條件')) && content.includes(LEVELS_IN_BOARD_TEXT), '進出場: the candidate row and the research action point to the board')
+  }
+}
+// The candidate row keeps its entry sentence when the board has no row with the same levels.
+const lone = render(<StrategyBoardPanel board={board([observationBreakout(), observationPullback()], { ...candidateSummary, strategy: 'breakout_v1' })} candidate={breakoutCandidate()} />)
+check(!lone.includes('data-entry-plan="levels-in-board"') && lone.includes(STOP),`candidate row without the same board levels keeps its sentence: ${text(lone).slice(0, 300)}`)
+// A holding whose levels differ from the board keeps its own grid in the research action.
+const holding = render(<ActionDetailPanel action={levelsAction({ action_state: 'hold_observe', invalid_price: 2300, target_1: 2500 })} board={pageBoard()} />)
+check(holding.includes('stock-detail-levels') && holding.includes('2,300.00') && !holding.includes(LEVELS_IN_BOARD_TEXT) && holding.includes('查看風險提醒、時間與價位'), 'research action: levels that differ from the board stay')
+const same = render(<ActionDetailPanel action={levelsAction()} board={pageBoard()} />)
+check(!same.includes(STOP) && same.includes(LEVELS_IN_BOARD_TEXT) && same.includes('查看風險提醒與時間'), 'research action: the board\'s levels are pointed to, not repeated')
+check(boardLevelsRow(pageBoard(), { invalid_price: 2364, target_1: 2458 })?.strategy === 'breakout_v1' && boardLevelsRow(pageBoard(), { invalid_price: 2364, target_1: null }) === null && boardLevelsRow(null, { invalid_price: 2364, target_1: 2458 }) === null, 'boardLevelsRow: stop and target one must both match a conditional row')

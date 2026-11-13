@@ -25,7 +25,11 @@ const USAGE = `usage: node tools/ops/screenshot.cjs --url <page> --out <dir> [op
 
 Writes <out>/<name>-<width>.png and <out>/<name>-<width>.txt and prints one JSON line per
 width: {"url","finalUrl","width","ready","png","txt","scrollWidth","clientWidth","overflow",
-"consoleErrors","httpErrors","missingClicks"}. Exit 0 when every width became ready, 1 otherwise, 2 on usage.`
+"candidateRows","graphics","consoleErrors","httpErrors","httpErrorCount","missingClicks"} (candidateRows: per
+shown today-list row, its rank, the number block's scroll and client width, and the number cells the
+AI button covers or the row's edge cuts; null when that probe throws. httpErrors lists the first 50
+failed responses, httpErrorCount counts all of them; graphics: every score bar and strength block with its
+label, value, fill share and colour, Issue 654). Exit 0 when every width became ready, 1 otherwise, 2 on usage.`
 
 // Phone widths use mobile emulation; heights are the viewport before the full-page capture.
 const MOBILE_MAX_WIDTH = 600
@@ -39,6 +43,7 @@ const STABLE_POLLS = 3
 const LOADING_SELECTOR = '.skeleton, [aria-busy="true"]'
 // The app ships no favicon; its 404 is not a page failure.
 const IGNORED_HTTP = /\/favicon\.ico(\?|$)/
+const HTTP_ERRORS_SHOWN = 50
 
 function parseArgs(argv) {
   const options = { widths: [1280, 390], timeoutMs: 60000, clicks: [] }
@@ -193,6 +198,107 @@ const READY_PROBE = (waitFor) => `(() => {
   return true
 })()`
 
+// The today list's rows (Issue 608): a clipped or covered number leaves the page width alone (the list's
+// overflow: hidden cuts it), so T1's overflow cannot see it. Per shown row: the number block's scroll and client
+// width, the number labels and values the AI button covers, and the ones past the row's left or right edge.
+// Empty when the page has no candidate row; null when the probe throws (Issue 609), so one bad row cannot fail
+// the whole capture: T17 judges a missing measurement as a failure.
+const CANDIDATE_ROWS_PROBE = `(() => { try {
+  const box = (el) => el.getBoundingClientRect()
+  const label = (el) => (el.tagName === 'DT' ? 'dt ' : 'dd ') + el.textContent.replace(/\\s+/g, ' ').trim()
+  return Array.from(document.querySelectorAll('.candidate-row')).filter((row) => !row.hidden).map((row) => {
+    const nums = row.querySelector('.candidate-row-nums')
+    const toggle = row.querySelector('.candidate-ai-toggle')
+    const cells = nums ? Array.from(nums.querySelectorAll(':scope > div > dt, :scope > div > dd')) : []
+    const edge = box(row)
+    const t = toggle ? box(toggle) : null
+    const covered = t ? cells.filter((cell) => {
+      const c = box(cell)
+      return Math.min(c.right, t.right) - Math.max(c.left, t.left) > 0.5 && Math.min(c.bottom, t.bottom) - Math.max(c.top, t.top) > 0.5
+    }) : []
+    const clipped = cells.filter((cell) => { const c = box(cell); return c.right > edge.right + 0.5 || c.left < edge.left - 0.5 })
+    return {
+      rank: Number(row.dataset.candidateRank),
+      numsScrollWidth: nums ? nums.scrollWidth : null,
+      numsClientWidth: nums ? nums.clientWidth : null,
+      covered: covered.map(label),
+      clipped: clipped.map(label),
+    }
+  })
+} catch (error) { return null } })()`
+
+// Issue 654: every score bar (.score-bar) and strength block (.strength-chip) in document order, after every
+// <details> is open: its aria-label and data value, the fill's share of the track (null without a fill, or when the
+// track has no width, e.g. a hidden row), and for a block the rendered ::before colour and opacity next to the
+// --color-up / --color-down tokens resolved the same way, so page_checks.py can tell the hue and step.
+const GRAPHICS_PROBE = `(() => { try {
+  const resolve = (token) => {
+    const probe = document.createElement('span')
+    probe.style.color = 'var(' + token + ')'
+    document.body.appendChild(probe)
+    const value = getComputedStyle(probe).color
+    probe.remove()
+    return value
+  }
+  const tokens = { up: resolve('--color-up'), down: resolve('--color-down') }
+  const items = Array.from(document.querySelectorAll('.score-bar, .strength-chip')).map((el) => {
+    if (el.classList.contains('score-bar')) {
+      const track = el.querySelector('.score-bar-track')
+      const fill = el.querySelector('.score-bar-fill')
+      const width = track ? track.getBoundingClientRect().width : 0
+      return {
+        kind: 'bar',
+        label: el.getAttribute('aria-label'),
+        score: el.dataset.score ?? null,
+        fill: fill && width > 0 ? Math.round((fill.getBoundingClientRect().width / width) * 1000) / 1000 : null,
+        hasFill: Boolean(fill),
+        trackWidth: Math.round(width * 10) / 10,
+        // A row hidden on purpose (the today list past its first 10) has no box; a shown one always does.
+        visible: el.getClientRects().length > 0,
+      }
+    }
+    const before = getComputedStyle(el, '::before')
+    return {
+      kind: 'chip',
+      label: el.getAttribute('aria-label'),
+      strength: el.dataset.strength ?? null,
+      text: el.textContent,
+      background: before.backgroundColor,
+      opacity: Number(before.opacity),
+    }
+  })
+  return { tokens, items }
+} catch (error) { return null } })()`
+
+// Issue 668: each shown row's open detail, after every <details> is open. Squeezing the AI note into a narrow
+// column leaves innerText alone, so page_checks.py reads the boxes: the note's text width and font size (the text is
+// the first part's <dd>, or the empty-state line), the side block's box, and the AI badge's box with the detail's
+// leaf elements it intersects (not its own text). Empty when the page has no open detail; null when the probe throws
+// (Issue 609): T21 judges a missing measurement as undetermined.
+const CANDIDATE_DETAILS_PROBE = `(() => { try {
+  const rect = (el) => { const b = el.getBoundingClientRect(); return { left: Math.round(b.left * 10) / 10, right: Math.round(b.right * 10) / 10, top: Math.round(b.top * 10) / 10, bottom: Math.round(b.bottom * 10) / 10, width: Math.round(b.width * 10) / 10 } }
+  const meets = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5
+  const label = (el) => el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\\s+/).join('.') : '') + ' ' + el.textContent.replace(/\\s+/g, ' ').trim().slice(0, 30)
+  return Array.from(document.querySelectorAll('.candidate-row > .candidate-detail[open]')).filter((detail) => !detail.closest('.candidate-row').hidden && detail.getClientRects().length > 0).map((detail) => {
+    const note = detail.querySelector('.candidate-note')
+    const text = note ? note.querySelector('.candidate-note-parts dd, .candidate-note-empty') : null
+    const side = detail.querySelector('.candidate-detail-side')
+    const badge = note ? note.querySelector('.ai-inference-head .badge') : null
+    const b = badge ? badge.getBoundingClientRect() : null
+    const overlaps = b ? Array.from(detail.querySelectorAll('*')).filter((el) => el.children.length === 0 && el !== badge && !badge.contains(el) && el.getClientRects().length > 0 && meets(el.getBoundingClientRect(), b)).map(label) : []
+    return {
+      rank: Number(detail.closest('.candidate-row').dataset.candidateRank),
+      noteState: note ? note.dataset.noteState ?? null : null,
+      note: note ? rect(note) : null,
+      textWidth: text ? Math.round(text.getBoundingClientRect().width * 10) / 10 : null,
+      fontSize: text ? parseFloat(getComputedStyle(text).fontSize) : null,
+      side: side ? rect(side) : null,
+      badge: badge ? rect(badge) : null,
+      badgeOverlaps: overlaps,
+    }
+  })
+} catch (error) { return null } })()`
+
 // Ready: no loading marker, no request in flight (the navbar date badge has no skeleton).
 async function waitReady(cdp, watch, waitFor, timeoutMs) {
   const deadline = Date.now() + timeoutMs
@@ -230,6 +336,9 @@ async function captureWidth(cdp, options, width, watch) {
     scrollHeight: document.documentElement.scrollHeight,
     text: document.body ? document.body.innerText : '',
     finalUrl: location.href,
+    candidateRows: ${CANDIDATE_ROWS_PROBE},
+    graphics: ${GRAPHICS_PROBE},
+    candidateDetails: ${CANDIDATE_DETAILS_PROBE},
   })`)
   const shot = await cdp.send('Page.captureScreenshot', {
     format: 'png',
@@ -251,8 +360,13 @@ async function captureWidth(cdp, options, width, watch) {
     scrollWidth: metrics.scrollWidth,
     clientWidth: metrics.clientWidth,
     overflow: metrics.scrollWidth > metrics.clientWidth,
+    candidateRows: metrics.candidateRows,
+    graphics: metrics.graphics,
+    candidateDetails: metrics.candidateDetails,
     consoleErrors: watch.consoleErrors.slice(0, 10),
-    httpErrors: watch.httpErrors.slice(0, 10),
+    // The list is capped; the count tells page_checks.py whether it saw every failed response (Issue 609).
+    httpErrors: watch.httpErrors.slice(0, HTTP_ERRORS_SHOWN),
+    httpErrorCount: watch.httpErrors.length,
     missingClicks,
   }
 }
@@ -353,4 +467,4 @@ if (require.main === module) {
   main(process.argv.slice(2)).then((code) => { process.exitCode = code })
 }
 
-module.exports = { parseArgs, defaultName, findBrowser, browserArgs, viewport, USAGE }
+module.exports = { parseArgs, defaultName, findBrowser, browserArgs, viewport, CANDIDATE_ROWS_PROBE, CANDIDATE_DETAILS_PROBE, USAGE }

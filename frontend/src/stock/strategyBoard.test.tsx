@@ -5,12 +5,14 @@ import { StaticRouter } from 'react-router-dom/server'
 import { CANDIDATE_DISCLAIMER } from '../candidates/candidates'
 import { completeItem, doneNote } from '../candidates/candidates.fixtures'
 import { GLOSSARY } from '../glossary'
-import type { StrategyBoardRow } from '../types'
+import type { StrategyActionableLevels, StrategyBoardRow } from '../types'
 import {
   LEVELS_MISSING_TEXT,
   OBSERVATION_LABEL,
+  conditionDetailsTitle,
   conditionViews,
   levelsVersionLabel,
+  riskRewardShortfallText,
   statusLabel,
   trendUnreachableText,
   unmetText,
@@ -128,6 +130,9 @@ for (const markup of [both.split(CANDIDATE_DISCLAIMER).join('').split(scoreHint)
 check(count(both, 'class="card strategy-card"') === 2, 'one phone card per strategy')
 check(card(both, 'pullback_v1').includes(OBSERVATION_LABEL) && card(both, 'breakout_v1').includes('class="level-stop">2,364.00'), 'cards keep the two kinds of levels apart')
 check(count(both, 'strategy-conditions') === 4, 'condition details under each row and each card')
+// Issue 581: the fold reads 突破條件明細, not 突破條件條件明細.
+check(count(both, '<summary>突破條件明細</summary>') === 2 && count(both, '<summary>回踩條件明細</summary>') === 2 && !both.includes('條件條件'), 'condition folds name the strategy once')
+check(conditionDetailsTitle('突破條件') === '突破條件明細' && conditionDetailsTitle('自訂') === '自訂條件明細', 'a label without 條件 gets it once')
 
 // ---- not a candidate: no candidate row, no AI note ----
 const plain = render(<StrategyBoardPanel board={board([observationBreakout(), unreachablePullback()])} candidate={null} />)
@@ -167,3 +172,22 @@ const liquid = render(<StrategyBoardPanel board={{ ...thinBoard, liquidity: { ..
 check(liquid.includes('20 日均量 1,682 張') && !liquid.includes('不列候選'), 'a liquid stock shows its lots and no note')
 const before = render(<StrategyBoardPanel board={{ ...thinBoard, liquidity: { ...thinBoard.liquidity, minimum_lots: null, candidate_exclusion: null } }} candidate={null} />)
 check(before.includes('20 日均量 32 張') && !before.includes('候選門檻') && !before.includes('不列候選'), 'a day scored without the floor shows no floor')
+
+// ---- RR basis and the RR shortfall (#580; UI_COPY_SPEC §10.1) ----
+const based = conditionalBreakout()
+based.levels = { ...(based.levels as StrategyActionableLevels), risk_reward_basis: 'entry_price' }
+const basedMarkup = render(<StrategyBoardPanel board={board([based])} candidate={null} />)
+check(tableRow(basedMarkup, 'breakout_v1').includes('1.60 倍') && tableRow(basedMarkup, 'breakout_v1').includes('（以進場價 2,400.00 元計算）'), 'the 成立 RR names its basis and price')
+check(!render(<StrategyBoardPanel board={board([conditionalBreakout()])} candidate={null} />).includes('strategy-rr-basis'), 'no basis, no note')
+const shortfall: StrategyBoardRow = {
+  ...observationPullback(), strategy: 'pullback_v4', unmet: [],
+  risk_reward_shortfall: { risk_reward: 0.6718, minimum: 1.5, risk_reward_basis: 'entry_zone_midpoint', entry: 27.27, errors: ['target_1_risk_reward_below_minimum'] },
+}
+const shortfallText = '條件全部達成，但以進場區中點計算的 RR 0.67 倍未達 1.5 倍'
+check(unmetText(shortfall) === shortfallText, `the shortfall sentence, got ${unmetText(shortfall)}`)
+check(riskRewardShortfallText({ ...shortfall, risk_reward_shortfall: { ...shortfall.risk_reward_shortfall!, risk_reward: null, errors: ['target_1_must_exceed_entry'] } }) === '條件全部達成，但進場區中點不在停損與目標一之間，RR 未達 1.5 倍', 'no RR to state')
+check(riskRewardShortfallText({ ...shortfall, risk_reward_shortfall: { ...shortfall.risk_reward_shortfall!, risk_reward_basis: null } }) === '條件全部達成，但 RR 0.67 倍未達 1.5 倍', 'an unknown basis drops its words')
+check(riskRewardShortfallText(observationPullback()) === null, 'an ordinary observation has no shortfall')
+const shortfallMarkup = render(<StrategyBoardPanel board={board([conditionalBreakout(), shortfall])} candidate={null} />)
+check(tableRow(shortfallMarkup, 'pullback_v4').includes(shortfallText) && card(shortfallMarkup, 'pullback_v4').includes(shortfallText), 'the row and the card state the RR')
+check(tableRow(shortfallMarkup, 'pullback_v4').includes('觀察'), 'the shortfall row reads as an observation')

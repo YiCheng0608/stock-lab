@@ -1,14 +1,20 @@
 import type { ReactNode } from 'react'
 
 import { Badge, DateBadge, Skeleton } from '../components/ui'
-import type { CandidateMarket, StockBarRow } from '../types'
+import { formatDay } from '../dates'
+import { exchangeLabel } from '../presentation'
+import type { CandidateMarket, StockBarRow, TradingHalt } from '../types'
 import { formatPrice, formatSignedPercent, formatSignedPrice, sourcesLabel, stockQuote } from './stockBars'
 
-export function exchangeLabel(exchange: string | null | undefined): string {
-  if (exchange === 'TWSE') return '上市'
-  if (exchange === 'TPEx') return '上櫃'
-  return '市場待核實'
+// An official stop of trading on the page's day (Issue 582, UI_COPY_SPEC §8.2): why the close is older than the market.
+export function tradingHaltLabel(halt: TradingHalt | null | undefined): string | null {
+  if (!halt) return null
+  const resume = formatDay(halt.resume_date)
+  const reason = halt.reason_label || '官方公告'
+  return resume ? `停止買賣中（${reason}，預計 ${resume} 恢復）` : `停止買賣中（${reason}）`
 }
+
+export { exchangeLabel }
 
 // Page header: symbol, name, market, latest close (mono large), change in up/down color with explicit sign,
 // data-date badge and source. Without a trusted value the price or change reads 「待核實」 (UI_COPY_SPEC §10.2).
@@ -21,6 +27,7 @@ export function StockHeader({
   latestChange,
   loading = false,
   instrumentType,
+  halt,
   children,
 }: {
   symbol: string
@@ -31,6 +38,7 @@ export function StockHeader({
   latestChange?: CandidateMarket | null
   loading?: boolean
   instrumentType?: string | null
+  halt?: TradingHalt | null
   children?: ReactNode
 }) {
   return (
@@ -41,14 +49,15 @@ export function StockHeader({
         <Badge>{exchangeLabel(exchange)}</Badge>
         <Badge>{typeLabel}</Badge>
       </div>
-      {loading ? <Skeleton lines={2} className="stock-header-skeleton" label="最近收盤載入中…" /> : <StockQuoteLine bars={dailyBars ?? []} instrumentType={instrumentType} latestChange={latestChange} />}
+      {loading ? <Skeleton lines={2} className="stock-header-skeleton" label="最近收盤載入中…" /> : <StockQuoteLine bars={dailyBars ?? []} instrumentType={instrumentType} latestChange={latestChange} halt={halt} />}
       {children}
     </section>
   )
 }
 
-export function StockQuoteLine({ bars, instrumentType, latestChange }: { bars: readonly StockBarRow[]; instrumentType?: string | null; latestChange?: CandidateMarket | null }) {
+export function StockQuoteLine({ bars, instrumentType, latestChange, halt }: { bars: readonly StockBarRow[]; instrumentType?: string | null; latestChange?: CandidateMarket | null; halt?: TradingHalt | null }) {
   const quote = stockQuote(bars, instrumentType, latestChange)
+  const haltLabel = tradingHaltLabel(halt)
   const change = quote.change == null
     ? quote.noChange ?? '漲跌待核實'
     : `${formatSignedPrice(quote.change, quote.digits)}（${formatSignedPercent(quote.changePct)}）`
@@ -62,7 +71,14 @@ export function StockQuoteLine({ bars, instrumentType, latestChange }: { bars: r
       <div className="stock-header-meta">
         <DateBadge date={quote.date} />
         <span>來源 {quote.date ? sourcesLabel(quote.sources) : '尚無已核對的價格來源'}</span>
+        {haltLabel && <Badge tone="warning" className="stock-header-halt">{haltLabel}</Badge>}
       </div>
     </div>
   )
+}
+
+/** The source label the header shows for these bars, or null when it shows none (#661: the chart leaves it out). */
+export function headerSourceLabel(bars: readonly StockBarRow[] | undefined, instrumentType?: string | null, latestChange?: CandidateMarket | null): string | null {
+  const quote = stockQuote(bars ?? [], instrumentType, latestChange)
+  return quote.date ? sourcesLabel(quote.sources) : null
 }

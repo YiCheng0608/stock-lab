@@ -26,7 +26,8 @@ MARGIN = "margin"
 GROUPS = (INSTITUTIONAL, MARGIN)
 GROUP_FIELDS: dict[str, tuple[str, ...]] = {
     INSTITUTIONAL: ("foreign_buy", "trust_buy", "dealer_buy"),
-    MARGIN: ("margin_balance", "margin_change"),
+    # The short-sale balance is in the same official margin file (Issue #662).
+    MARGIN: ("margin_balance", "margin_change", "short_balance"),
 }
 INSTITUTIONAL_SOURCES = frozenset(OFFICIAL_INSTITUTIONAL_CHIP_SOURCES.values())
 MARGIN_SOURCES = frozenset(OFFICIAL_MARGIN_CHIP_SOURCES.values())

@@ -187,7 +187,7 @@ export type MarketOverviewExchange = {
   source?: { label: string | null; collected_at: string | null; data_as_of?: string | null; raw_payload_id?: number | null }
 }
 
-// market_overview.foreign_indices (#547): the FRED closes of the US indexes, each on its own.
+// market_overview.foreign_indices (#547, Issue 568): the latest bars of the US indexes (FinMind), each on its own.
 export type ForeignIndex = {
   exchange: 'US' | string
   symbol: string
@@ -232,12 +232,62 @@ export type TaiexMa60 = {
   source?: { label: string | null; bar_source: string | null; formula_version: string; computed_at: string | null; data_as_of: string | null }
 }
 
+// One row's close against its stored MA60 (indicators/v1) on the row's own data date (#564), judged as taiex_ma60.
+export type IndexMa60 = {
+  trading_date: string
+  required_closes: number
+  // insufficient: insufficient_closes; unavailable: not_collected | row_date_mismatch | indicator_not_computed |
+  // ma60_unavailable
+  status: 'available' | 'insufficient' | 'unavailable' | string
+  reason?: string
+  latest_trading_date?: string | null
+  null_reason?: string | null
+  close?: number | null
+  ma60?: number | null
+  above?: boolean
+  position?: 'above' | 'below' | 'equal' | string
+  close_count?: number | null
+}
+
+// market_overview.indexes (#564): the market page's index table, in table order (TAIEX, TPEX, TX, then the four US).
+export type IndexRow = {
+  key: string
+  group: 'tw' | 'us' | string
+  exchange: string
+  symbol: string
+  name: string
+  instrument_type: 'index' | 'futures' | string
+  status: 'available' | 'unavailable' | string
+  // unavailable: no_verified_session | not_collected | fetch_failed (US)
+  reason?: string
+  last_attempt_date?: string | null
+  trading_date?: string
+  expected_date?: string
+  // latest | stale | us_market_closed (US only)
+  freshness?: 'latest' | 'stale' | 'us_market_closed' | string
+  close?: number | null
+  change?: number | null
+  change_pct?: number | null
+  change_pct_method?: 'official' | 'derived' | string | null
+  // TX only: known | contract_roll | unverified | no_previous_close | missing
+  change_status?: string
+  contract_month?: string | null
+  previous_contract_month?: string | null
+  open_interest?: number | null
+  ma60: IndexMa60 | null
+  source: { label: string; detail?: string | null; copyright?: string | null }
+}
+
 export type MarketOverview = {
   trading_date: string | null
   exchanges: MarketOverviewExchange[]
   taiex_ma60?: TaiexMa60
   foreign_indices?: ForeignIndex[]
+  indexes?: IndexRow[]
 }
+
+// GET /api/data-date: the navbar's data date, the same as_of as the dashboard (Issue 601).
+export type DataDate = { as_of: string | null }
 
 export type Dashboard = {
   as_of: string | null
@@ -260,10 +310,10 @@ export type Dashboard = {
     error: string | null
     updated_at: string | null
   }
-  groups: GroupRow[]
-  signals: Signal[]
+  // Only with include=groups / include=signals (Issue 601); the home page reads neither.
+  groups?: GroupRow[]
+  signals?: Signal[]
   signal_status_counts: Record<string, number>
-  news?: NewsItem[]
   candidates?: ActionSummary[]
   actions?: ActionSummary[]
   // Every holding's summary, ordered by risk (#297 review L1); actions has the first 8 rows only.
@@ -433,17 +483,22 @@ export type RawPayload = {
 
 export type InstrumentDetail = {
   instrument: Instrument
+  // The stock page gets the newest 30 bars and chips; /instruments/{symbol} keeps 120 (Issue 601).
   bars: StockDetailBar[]
-  features: Record<string, unknown>
+  // features, feature_snapshot, corporate_actions, strategy_conditions, signals and news: on the
+  // stock page only with include=<name> (Issue 601); /instruments/{symbol} still returns all but news.
+  features?: Record<string, unknown>
   feature_snapshot?: StockFeatureSnapshot | null
   groups: Array<{ id: string; name: string | null; display_name: string | null; verified: boolean; valid_from: string; valid_to: string | null }>
   chips: StockDetailChip[]
-  corporate_actions: CorporateAction[]
+  corporate_actions?: CorporateAction[]
   fundamentals: FundamentalSnapshot[]
   monthly_revenues?: MonthlyRevenue[]
   events: EventRow[]
   data_quality: DataQualityRow[]
   coverage?: InstrumentCoverage | null
+  // The official stop of trading on the page's day (Issue 582): the requested cutoff, else the latest market session.
+  trading_halt?: TradingHalt | null
   quality_summary?: {
     market: { status: string; label: string; as_of: string | null; missing_fields: string[]; source: string | null }
     research: { status: string; label: string; as_of: string | null; missing_fields: string[]; action_state: string | null }
@@ -452,8 +507,8 @@ export type InstrumentDetail = {
   product_time?: ProductTime
   response_generated_at?: string
   news_cutoff?: { as_of: string | null; filter: string; limit: number }
-  strategy_conditions: Record<string, { label?: string; requires: string[]; source: string; technical?: Record<string, string> }>
-  signals: Signal[]
+  strategy_conditions?: Record<string, { label?: string; requires: string[]; source: string; technical?: Record<string, string> }>
+  signals?: Signal[]
   // The stock's row in the latest candidate run on or before the cutoff; null when it is not a candidate.
   candidate?: CandidateItem | null
   // One row per registered strategy on the latest signal date (#274).
@@ -474,6 +529,10 @@ export type StrategyCondition = {
   next_session: Record<string, number | string | null> | null
 }
 
+// What the RR's entry is (#580; UI_COPY_SPEC §10): pullback_v4 the entry zone's midpoint, an earlier pullback T's close,
+// a breakout its entry price. Missing or null on responses that do not know the strategy.
+export type RiskRewardBasis = 'entry_zone_midpoint' | 'signal_close' | 'entry_price'
+
 // Levels never mix: actionable reads the signal, observation reads strategy_levels.
 export type StrategyActionableLevels = {
   kind: 'actionable'
@@ -486,6 +545,7 @@ export type StrategyActionableLevels = {
   target_1: number | null
   target_2: number | null
   risk_reward: number | null
+  risk_reward_basis?: RiskRewardBasis | null
 }
 
 export type StrategyObservationLevels = {
@@ -522,6 +582,15 @@ export type StrategyBoardRow = {
   earliest_execution_date: string | null
   levels: StrategyActionableLevels | StrategyObservationLevels | null
   levels_missing: boolean
+  // Every condition passed but the RR is under the minimum (#580): the row reads as an observation. risk_reward is null
+  // when the entry is not between the stop and the first target. Missing on responses from before #580.
+  risk_reward_shortfall?: {
+    risk_reward: number | null
+    minimum: number
+    risk_reward_basis: RiskRewardBasis | null
+    entry: number | null
+    errors: string[]
+  } | null
   unmet: string[]
   missing: string[]
   missing_labels: string[]
@@ -536,6 +605,23 @@ export type StrategyBoard = {
   liquidity?: StrategyBoardLiquidity | null
   strategies: StrategyBoardRow[]
 }
+
+// An official stop of trading (Issue 582): the sessions from halt_start up to, not including, resume_date.
+export type TradingHalt = {
+  reason: string
+  reason_label: string
+  reason_detail: string | null
+  halt_start: string
+  resume_date: string
+  last_trade_date: string | null
+  exchange: string
+  source: string
+  endpoint: string
+  data_as_of: string
+  as_of?: string
+}
+
+export type TradingHaltPeriod = TradingHalt & { first_session: string; last_session: string }
 
 export type InstrumentCoverage = {
   coverage_status?: 'unknown' | 'verified' | string
@@ -564,6 +650,9 @@ export type InstrumentCoverage = {
   suspended_dates_to_60?: string[]
   quote_not_listed_dates_to_60?: string[]
   invalid_bar_dates_to_60?: string[]
+  // Sessions of an official stop of trading (Issue 582) and the stops behind them; absent from an older API.
+  halted_dates_to_60?: string[]
+  halt_periods_to_60?: TradingHaltPeriod[]
   coverage_reasons: string[]
   ipo_stage: string | null
   windows: Record<string, Record<string, unknown>>
@@ -814,7 +903,8 @@ export type CoverageReport = {
   requested_calendar_dates: string[]
   expected_dates: string[]
   date_coverage: Array<Record<string, unknown>>
-  instrument_coverage: InstrumentCoverage[]
+  // Only with include=instrument_coverage (Issue 601); the coverage page reads summary and baseline.
+  instrument_coverage?: InstrumentCoverage[]
   event_coverage: {
     status: string
     denominator: string
@@ -845,6 +935,9 @@ export type CoverageReport = {
     // Instruments with an official no-trade day in the window (#454); absent from an older API.
     no_trade_to_20?: number
     no_trade_to_60?: number
+    // Instruments with a session of an official stop of trading in the window (Issue 582).
+    halted_to_20?: number
+    halted_to_60?: number
     incomplete_chips_to_20: number
     incomplete_chips_to_60: number
     coverage_reason_counts: Record<string, number>
@@ -886,6 +979,8 @@ export type BacktestSummary = {
     tracking_version?: string | null
     run_date: string | null
     data_as_of: string | null
+    started_at?: string | null
+    finished_at?: string | null
     metadata: Record<string, unknown>
     assessment: string
     zero_actionable_count: number
@@ -1041,49 +1136,6 @@ export type ThemeBoardMeta = {
 
 export type ThemeBoardResponse = { items: ThemeBoardItem[]; meta: ThemeBoardMeta }
 
-// News theme suggestions awaiting review (/api/theme-suggestions, #216): LLM inference, never scored or ranked.
-export type ThemeSuggestionNews = {
-  news_id: number
-  title: string
-  source_name: string
-  news_date: string
-  theme_text: string
-  reason: string | null
-}
-
-export type ThemeSuggestion = {
-  id: number
-  theme_key: string
-  display_name: string
-  status: string
-  inference: true
-  news_count: number
-  first_news_date: string
-  last_news_date: string
-  // news_v1 theme candidates carry no confidence.
-  confidence: 'not_provided' | string
-  matched_group: { group_id: string; name: string; group_type: string } | null
-  prompt_version: string
-  aggregation_version: string
-  llm_models: string[]
-  computed_at: string | null
-  news: ThemeSuggestionNews[]
-}
-
-export type ThemeSuggestionsResponse = {
-  items: ThemeSuggestion[]
-  meta: {
-    total: number
-    limit: number
-    include_matched: boolean
-    matched_total: number
-    news_per_suggestion: number
-    aggregation_version: string
-    updated_at: string | null
-    sort: string
-  }
-}
-
 // Membership source of a theme-table member (docs/INDUSTRY_CLASSIFICATION.md §7); null for other groups.
 export type ThemeEvidence = {
   kind?: string | null
@@ -1193,9 +1245,8 @@ export type StockDirectoryRow = {
   action_state?: string
   action_label_zh?: string
   data_quality?: string
+  // /api/stocks sends the first missing item only (Issue 602).
   missing_data_priority?: MissingDataPriority[]
-  product_time?: ProductTime
-  response_generated_at?: string
 }
 
 export type GapReason = {
@@ -1519,6 +1570,8 @@ export type CandidateLevels = {
   target_1: number | null
   target_2: number | null
   risk_reward: number | null
+  // Missing on responses from before #580; null on a tracking plan's levels.
+  risk_reward_basis?: RiskRewardBasis | null
   earliest_execution_date: string | null
 }
 
@@ -1565,9 +1618,15 @@ export type CandidateItem = {
   // The signal's strategy_levels row: next-session close and volume to pass again (#491). null without a row of the
   // current levels version; missing on responses from before #491.
   entry_plan?: CandidateEntryPlan | null
+  // The closes the row's sparkline draws (#653): only on /api/candidates items, missing on responses from before #653.
+  recent_closes?: CandidateRecentCloses
 }
 
-export type CandidateEntryPlan = Omit<StrategyObservationLevels, 'kind' | 'display_label'> & {
+// The last 30 verified sessions to the list's date, old to new, and the stock's close on each: the stored daily bar's
+// close the K-line draws; null where it has no traded bar (no earlier close stands in).
+export type CandidateRecentCloses = { dates: string[]; closes: Array<number | null> }
+
+export type CandidateEntryPlan =Omit<StrategyObservationLevels, 'kind' | 'display_label'> & {
   levels_version: string
   entry_type: string
   conditions: StrategyCondition[]

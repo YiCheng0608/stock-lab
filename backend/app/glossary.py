@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 
-GLOSSARY_VERSION = "1.4.0"
+GLOSSARY_VERSION = "1.5.0"
 
 
 _TERMS: tuple[dict[str, Any], ...] = (
@@ -16,7 +16,7 @@ _TERMS: tuple[dict[str, Any], ...] = (
         "category": "strategy",
         "plain_definition": "價格有效越過前方壓力或近期高點的條件式型態。",
         "use": "用來描述可能在下一個交易日執行的突破條件，不代表已成交。",
-        "how_to_read": "同時查看觸發價、失效價、目標與資料完整度。",
+        "how_to_read": "同時查看觸發價、停損、目標與資料完整度。",
         "limitations": "若前 20 日價格、量能、族群或籌碼資料不完整，系統會採資料不足或觀察。",
         "related": ["pullback", "rr", "t_plus_1", "data_incomplete"],
         "version": GLOSSARY_VERSION,
@@ -24,7 +24,13 @@ _TERMS: tuple[dict[str, Any], ...] = (
     {
         "term_id": "pullback",
         "name": "回踩",
-        "aliases": ["pullback", "pullback_v1", "pullback_v2", "pullback_v3"],
+        "aliases": [
+            "pullback",
+            "pullback_v1",
+            "pullback_v2",
+            "pullback_v3",
+            "pullback_v4",
+        ],
         "category": "strategy",
         "plain_definition": "上升結構中價格回到預定支撐區，等待重新轉強的條件。",
         "use": "用來標示回踩區間與重新站回的觀察條件。",
@@ -62,6 +68,20 @@ _TERMS: tuple[dict[str, Any], ...] = (
         ),
         "limitations": "風險是趨勢轉弱：拉回可能變成下跌，跌破停損就出場；不保證會反彈。",
         "related": ["pullback", "breakout_entry", "ma20", "support"],
+        "version": GLOSSARY_VERSION,
+    },
+    # The strategy behind 今日名單 (#577); the frontend copy is compared by
+    # backend/tests/test_glossary.py.
+    {
+        "term_id": "trend_chips",
+        "name": "順勢籌碼型",
+        "aliases": ["順勢籌碼", "trend chips"],
+        "category": "strategy",
+        "plain_definition": "目前今日名單用的策略：只做多頭趨勢的股票，而且要族群強、法人不賣、融資不過熱。",
+        "use": "說明名單怎麼從資料得到：突破型或回踩型的價量條件成立，再通過族群、法人、融資三個確認條件，最後依評分排序；策略說明頁逐項列出門檻與權重。",
+        "how_to_read": "名單裡的股票都通過這套固定規則；規則只看價量、族群、法人與融資，大盤好壞目前不影響判斷。",
+        "limitations": "只是篩選與排序的規則，不代表勝率或預期報酬；資料不足的股票不列入，不以 0 補。",
+        "related": ["breakout_entry", "pullback_entry", "candidate_score"],
         "version": GLOSSARY_VERSION,
     },
     {
@@ -102,23 +122,25 @@ _TERMS: tuple[dict[str, Any], ...] = (
     },
     {
         "term_id": "support",
-        "name": "停損／條件失效價",
+        # The screens name it 停損 everywhere; 條件失效價 stays an alias (#581).
+        "name": "停損",
         "aliases": [
             "support",
             "invalid_price",
             "stop_price",
             "支撐",
+            "條件失效價",
             "失效價",
             "條件失效",
         ],
         "category": "strategy",
         "plain_definition": (
-            "價格跌破後，原本的研究條件（突破或回踩）不再成立的界線，也就是條件失效；"
-            "候選卡的「停損」就是這個價。"
+            "價格跌破後，原本的研究條件（突破或回踩）不再成立的界線，所以也叫條件失效價；"
+            "候選卡與追蹤回看卡的「停損」就是這個價。"
         ),
         "use": "用來界定策略失效與持倉風險。",
         "how_to_read": (
-            "規則算出的失效價和庫存自己設定的停損價是不同欄位，"
+            "規則算出的停損（條件失效價）和庫存自己設定的停損價是不同欄位，"
             "前者是策略條件，後者是持倉設定。"
         ),
         "limitations": "遇停牌、除權息或無法比價時不能硬算觸發。",
@@ -194,7 +216,7 @@ _TERMS: tuple[dict[str, Any], ...] = (
             "規則先算好的兩個價格目標：目標一較近，RR 與追蹤的「達標」都以它計算；"
             "目標二較遠，是延伸參考。"
         ),
-        "use": "和失效價一起檢查風險報酬，不是保證價格。",
+        "use": "和停損一起檢查風險報酬，不是保證價格。",
         "how_to_read": "只有價位與基準完整且 RR 達門檻時才顯示為有效。",
         "limitations": "不代表一定會到達，也不包含交易成本以外的所有風險。",
         "related": ["support", "rr"],
@@ -208,7 +230,7 @@ _TERMS: tuple[dict[str, Any], ...] = (
         "plain_definition": "可能賺的空間是可能賠的幾倍。",
         "use": "固定規則的價位驗證至少要求 RR ≥ 1.5。",
         "how_to_read": (
-            "RR =（目標一 − 進場價）÷（進場價 − 停損）；"
+            "RR =（目標一 − 進場價）÷（進場價 − 停損）；回踩型的進場價取進場區中點；"
             "低於門檻時是無效價位，不應包裝成可執行訊號。"
         ),
         "limitations": "比例不會消除跳空、流動性或執行風險。",

@@ -536,8 +536,9 @@ def test_dispatch_sends_only_after_tui_idle_is_satisfied(dispatch: Harness) -> N
     assert line["task_file"] == dispatch.task.as_posix()
     terminal = next(c for c in orca if c.startswith("terminal create"))
     assert terminal.endswith(
-        "--shell git-bash --command COMPOSE_PROJECT_NAME=task-282 claude"
-        " --model claude-opus-5-5 --effort high"
+        "--shell git-bash --command COMPOSE_PROJECT_NAME=task-282"
+        " CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude"
+        " --model claude-opus-5-5 --effort medium"
         f' --add-dir "{dispatch.root.as_posix()}" --json'
     )
     assert "branch -m YiCheng0608/task-282-dryrun task/282-dryrun" in " ".join(
@@ -551,10 +552,13 @@ def test_dispatch_starts_claude_with_the_task_compose_project(
     dispatch: Harness,
 ) -> None:
     """AC-3 (#339): the terminal's claude runs with COMPOSE_PROJECT_NAME=task-<issue>, not
-    the coordinator's."""
+    the coordinator's, and (#595) with Claude Code's reaping of background shells under
+    memory pressure turned off."""
     claude = dispatch.bin / "claude"
     claude.write_text(
-        '#!/usr/bin/env bash\nprintf "%s|%s" "$COMPOSE_PROJECT_NAME" "$*" >"$FAKE_DIR/claude.txt"\n',
+        "#!/usr/bin/env bash\n"
+        'printf "%s|%s|%s" "$COMPOSE_PROJECT_NAME"'
+        ' "${CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP:-}" "$*" >"$FAKE_DIR/claude.txt"\n',
         encoding="utf-8",
         newline="\n",
     )
@@ -571,7 +575,7 @@ def test_dispatch_starts_claude_with_the_task_compose_project(
     assert result.returncode == 0, result.stdout + result.stderr
     ran = (dispatch.fake / "claude.txt").read_text(encoding="utf-8")
     assert ran == (
-        "task-282|--model claude-opus-5-5 --effort high"
+        "task-282|1|--model claude-opus-5-5 --effort medium"
         f" --add-dir {dispatch.task.parent.as_posix()}"
     )
     # The prefix is POSIX syntax: the terminal's shell is Git Bash whatever Orca's default.
@@ -2658,6 +2662,37 @@ def test_close_task_dry_run_leaves_the_scratchpads_alone(scratch: Harness) -> No
     assert not [c for c in scratch.calls("gh") if "/comments" in c]
     assert (scratch.hashed / S_ENG / "scratchpad" / "note.txt").is_file()
     assert (scratch.old / S_OLD / "scratchpad" / "note.txt").is_file()
+
+
+def test_close_task_removes_the_turn_hook_state_of_its_sessions(
+    scratch: Harness,
+) -> None:
+    """#595: the turn hook's state files of the sessions the 回報：開工 comments name go
+    with the scratchpads (one read of the comments); another session's stays, and a dry
+    run touches none."""
+    sessions = scratch.data / "logs" / "sessions"
+    sessions.mkdir(parents=True)
+    for sid in (S_ENG, S_HANDOVER, S_OTHER, S_SELF):
+        (sessions / f"{sid}.json").write_text("{}", encoding="utf-8")
+    # A write the hook did not finish: removed with its session's file.
+    (sessions / f".{S_ENG}.json.tmp.4242").write_text("{", encoding="utf-8")
+    (sessions / f".{S_OTHER}.json.tmp.4243").write_text("{", encoding="utf-8")
+    dry = scratch.run(
+        "close_task.sh", "282", "--no-board", "--extra-dir", scratch.extra.as_posix()
+    )
+    assert dry.returncode == 0, dry.stdout + dry.stderr
+    assert "session_state_skipped:no_board" in _json_line(dry)["steps"]
+    assert len(list(sessions.glob("*.json"))) == 4
+    result = scratch.close_task(scratch.extra, CLAUDE_CODE_SESSION_ID=S_SELF)
+    assert result.returncode == 0, result.stdout + result.stderr
+    steps = [s for s in _json_line(result)["steps"] if s.startswith("session_state_")]
+    assert sorted(steps) == sorted(
+        f"session_state_removed:{sid}" for sid in (S_ENG, S_HANDOVER, S_SELF)
+    )
+    assert sorted(p.name for p in sessions.iterdir()) == sorted(
+        [f"{S_OTHER}.json", f".{S_OTHER}.json.tmp.4243"]
+    )
+    assert len([c for c in scratch.calls("gh") if "/comments" in c]) == 1
 
 
 def test_close_task_refused_leaves_the_scratchpads_alone(scratch: Harness) -> None:

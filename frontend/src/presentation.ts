@@ -109,6 +109,12 @@ export function backtestTrackingLabel(version: string | null | undefined): strin
   return `追蹤口徑 ${version || '未記錄'}`
 }
 
+// Issue 581: a running backtest names when it began, so one that has run for a day reads as such; no guess that it stopped.
+export function backtestStartedText(run: { status: string; started_at?: string | null }): string | null {
+  if (run.status !== 'running') return null
+  return `開始於 ${(run.started_at && formatTaipeiMinute(run.started_at)) || '未提供'}`
+}
+
 export function productTimeRoleLabel(role: string): string {
   return PRODUCT_TIME_ROLE_LABELS[role] ?? '時間'
 }
@@ -404,4 +410,11 @@ export function officialEventDisplayTitle(title: string | null | undefined, type
   if (title === 'TPEx resumption' || type === 'TPEx resumption') return '上櫃股票恢復交易'
   if (title === 'TPEx suspension interval' || type === 'TPEx suspension interval') return '上櫃股票暫停交易期間'
   return title || type || '官方事件'
+}
+
+// Market of a listing by its exchange; one rule for the stock header, candidate rows and navbar suggestions (Issue 599).
+export function exchangeLabel(exchange: string | null | undefined): string {
+  if (exchange === 'TWSE') return '上市'
+  if (exchange === 'TPEx') return '上櫃'
+  return '市場待核實'
 }

@@ -1,9 +1,13 @@
 """The TX (臺股期貨) near-month daily bar from the TAIFEX open-data report (Issue #552).
 
 Source: TAIFEX OpenAPI ``DailyMarketReportFut`` (data.gov.tw 11319, 政府資料開放
-授權條款第1版).  It only has the latest session of every futures contract and
-takes no date, so the bars accumulate from the first collect on: a session the
-collect missed cannot be fetched later (DATA_SOURCES 台指期).
+授權條款第1版).  It only has the latest published session of every futures
+contract and takes no date.  It answers a UTF-8 CSV with Chinese headers
+(since 2026-11, Issue #586) or, as before, a JSON list; both are read.  The
+report changes to a session late in the evening or the next day, so the daily
+collect stores the session the report holds (``report_date``), when that is a
+verified session the database has no TX row of; a session the report has
+moved past is filled from the website history (``worker.futures_history``).
 
 One row per session of the ``TAIFEX``/``TX`` futures instrument: the regular
 session (``TradingSession`` 一般; the after-hours session is not stored) of the
@@ -18,6 +22,10 @@ roll.
 
 from __future__ import annotations
 
+import base64
+import csv
+import io
+import json
 import math
 import re
 from dataclasses import dataclass, field
@@ -42,6 +50,44 @@ REGULAR_SESSION = "一般"
 SOURCE_MISSING_OHLC = "source_missing_ohlc"
 NO_TURNOVER = "not_published"
 WARNING_PREFIX = "futures bars"
+CSV_ENCODING = "utf-8"
+# The CSV answer's headers and the JSON keys they carry (2026-11-09 answer,
+# Issue #586): the CSV rows are read as the JSON rows are.
+CSV_FIELDS = {
+    "日期": "Date",
+    "契約代號": "Contract",
+    "到期月份(週別)": "ContractMonth(Week)",
+    "開盤價": "Open",
+    "最高價": "High",
+    "最低價": "Low",
+    "最後成交價": "Last",
+    "漲跌價": "Change",
+    "漲跌%": "%",
+    "合計成交量": "Volume",
+    "結算價": "SettlementPrice",
+    "未沖銷契約數": "OpenInterest",
+    "最後最佳買價": "BestBid",
+    "最後最佳賣價": "BestAsk",
+    "歷史最高價": "HistoricalHigh",
+    "歷史最低價": "HistoricalLow",
+    "是否因訊息面暫停交易": "TradingHalt",
+    "交易時段": "TradingSession",
+    "價差對單式委託成交量": "Volume(ExecutionsAmongSpreadOrderAndSingleOrderOnly)",
+}
+# The columns the near-month bar is read from: a CSV without one is refused.
+CSV_REQUIRED = (
+    "日期",
+    "契約代號",
+    "到期月份(週別)",
+    "開盤價",
+    "最高價",
+    "最低價",
+    "最後成交價",
+    "合計成交量",
+    "結算價",
+    "未沖銷契約數",
+    "交易時段",
+)
 _MONTH = re.compile(r"\d{6}")
 _DECIMAL = re.compile(r"[+-]?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?")
 _INTEGER = re.compile(r"(?:\d+|\d{1,3}(?:,\d{3})+)")
@@ -101,14 +147,91 @@ def _count(value: Any) -> int | None:
     return int(text.replace(",", "")) if _INTEGER.fullmatch(text) else None
 
 
-def report_date(payload: Any) -> date | None:
-    """The one ``Date`` every row shares, or None."""
+def capture_form(answer: Any) -> Any:
+    """The answer as its raw capture stores it.
 
-    if not isinstance(payload, list):
-        return None
-    values = {
-        str(row.get("Date", "")).strip() for row in payload if isinstance(row, dict)
-    }
+    A JSON list stays as it is; a CSV (bytes or text, UTF-8 with or without a
+    byte-order mark) becomes ``{"format": "csv", "encoding": "utf-8", "csv":
+    <text>}``; bytes that are not UTF-8 are kept as base64 so the raw still
+    records the answer (``report_rows`` then refuses it).
+    """
+
+    if isinstance(answer, (bytes, bytearray)):
+        data = bytes(answer)
+        try:
+            answer = data.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            return {
+                "format": "binary",
+                "base64": base64.b64encode(data).decode("ascii"),
+            }
+    if isinstance(answer, str):
+        text = answer.lstrip(chr(0xFEFF))
+        if text.lstrip().startswith(("[", "{")):
+            try:
+                return json.loads(text)
+            except ValueError:
+                pass
+        return {"format": "csv", "encoding": CSV_ENCODING, "csv": text}
+    return answer
+
+
+def _csv_rows(text: Any) -> list[dict[str, Any]]:
+    if not isinstance(text, str):
+        raise OfficialDataError("TAIFEX DailyMarketReportFut CSV is not text")
+    body = text.lstrip(chr(0xFEFF))
+    if body.lstrip().startswith("<"):
+        raise OfficialDataError("TAIFEX DailyMarketReportFut answered an HTML page")
+    lines = [line for line in body.splitlines() if line.strip()]
+    if not lines:
+        raise OfficialDataError("TAIFEX DailyMarketReportFut answered nothing")
+    reader = csv.reader(io.StringIO("\n".join(lines)))
+    header = [cell.strip() for cell in next(reader)]
+    missing = [name for name in CSV_REQUIRED if name not in header]
+    if missing:
+        raise OfficialDataError(
+            f"TAIFEX DailyMarketReportFut CSV has no {', '.join(missing[:3])} "
+            f"column: {header[:5]}"
+        )
+    needed = max(header.index(name) for name in CSV_REQUIRED) + 1
+    rows: list[dict[str, Any]] = []
+    for cells in reader:
+        if len(cells) < needed:
+            raise OfficialDataError(
+                f"TAIFEX DailyMarketReportFut CSV row has {len(cells)} columns: "
+                f"{cells[:3]}"
+            )
+        rows.append(
+            {
+                CSV_FIELDS.get(name, name): cells[i].strip()
+                for i, name in enumerate(header)
+                if name and i < len(cells)
+            }
+        )
+    return rows
+
+
+def report_rows(payload: Any) -> list[dict[str, Any]]:
+    """The report's rows under the JSON keys, from either answer format.
+
+    ``payload`` is the JSON list, the CSV capture (``capture_form``) or the
+    CSV itself.  OfficialDataError for anything else, an HTML page, a CSV
+    without the near-month columns or with a row shorter than them.
+    """
+
+    if isinstance(payload, list):
+        return [row for row in payload if isinstance(row, dict)]
+    if isinstance(payload, (bytes, bytearray, str)):
+        return report_rows(capture_form(payload))
+    if isinstance(payload, dict) and payload.get("format") == "csv":
+        return _csv_rows(payload.get("csv"))
+    raise OfficialDataError(
+        "TAIFEX DailyMarketReportFut is neither a JSON list nor a UTF-8 CSV"
+    )
+
+
+def _rows_date(rows: list[dict[str, Any]]) -> date | None:
+    values = {str(row.get("Date", "")).strip() for row in rows}
     if len(values) != 1:
         return None
     value = values.pop()
@@ -118,29 +241,37 @@ def report_date(payload: Any) -> date | None:
         return None
 
 
-def parse_near_month(
-    payload: Any, *, requested_date: date, payload_sha256: str | None = None
-) -> FuturesBar:
-    """The TX near-month regular-session row of ``requested_date``.
+def report_date(payload: Any) -> date | None:
+    """The one ``Date`` every row shares (the session the report holds), or None."""
 
-    Raises OfficialDataError when the report is not that session (not updated
-    yet, or a later one), or has no single readable near-month row.
+    try:
+        return _rows_date(report_rows(payload))
+    except OfficialDataError:
+        return None
+
+
+def parse_near_month(payload: Any, *, payload_sha256: str | None = None) -> FuturesBar:
+    """The TX near-month regular-session row of the session the report holds.
+
+    The session is the report's own ``Date`` (``report_date``), whatever day
+    the collect is for: the caller decides whether that session is stored.
+    Raises OfficialDataError for an unreadable answer, rows of more than one
+    date, or no single readable near-month row.
     """
 
-    if not isinstance(payload, list) or not payload:
-        raise OfficialDataError("TAIFEX DailyMarketReportFut is not a non-empty list")
-    reported = report_date(payload)
-    if reported != requested_date:
+    rows_all = report_rows(payload)
+    if not rows_all:
+        raise OfficialDataError("TAIFEX DailyMarketReportFut has no rows")
+    reported = _rows_date(rows_all)
+    if reported is None:
         raise OfficialDataError(
-            f"TAIFEX DailyMarketReportFut reports {reported} instead of "
-            f"{requested_date.isoformat()}"
+            "TAIFEX DailyMarketReportFut rows do not share one readable date"
         )
-    contract = near_month(requested_date)
+    contract = near_month(reported)
     rows = [
         row
-        for row in payload
-        if isinstance(row, dict)
-        and str(row.get("Contract", "")).strip() == CONTRACT
+        for row in rows_all
+        if str(row.get("Contract", "")).strip() == CONTRACT
         and str(row.get("TradingSession", "")).strip() == REGULAR_SESSION
         and str(row.get("ContractMonth(Week)", "")).strip() == contract
     ]
@@ -165,7 +296,7 @@ def parse_near_month(
         open_ = high = low = None
         reason = SOURCE_MISSING_OHLC
     return FuturesBar(
-        trading_date=requested_date,
+        trading_date=reported,
         contract_month=contract,
         open=open_,
         high=high,
@@ -183,6 +314,15 @@ def futures_warning(exc: Exception) -> str:
     """The non-core warning text (pipeline.NONCORE_WARNING_PATTERN)."""
 
     return f"{WARNING_PREFIX} unavailable for TAIFEX TX: {type(exc).__name__}: {exc}"
+
+
+def not_published_warning(day: date, reported: date) -> str:
+    """The report still holds an earlier session than ``day`` (non-core)."""
+
+    return (
+        f"{WARNING_PREFIX} not yet published for TAIFEX TX {day.isoformat()}: "
+        f"DailyMarketReportFut reports {reported.isoformat()}"
+    )
 
 
 def futures_instrument(db: Session) -> Instrument:
@@ -227,6 +367,7 @@ class FuturesWriteResult:
             "inserted": 0,
             "replaced": 0,
             "unchanged": 0,
+            "kept_other_source": 0,
             "conflict": 0,
         }
     )
@@ -250,7 +391,8 @@ def store_futures_bars(
     ``source`` names the report the rows come from: the OpenAPI daily report
     (``SOURCE``) or the website history (``worker.futures_history``, Issue
     #563).  A stored row of another source is never replaced, even with
-    ``force``: it is a conflict.
+    ``force``: with the same values it is ``kept_other_source`` (the two
+    reports of one session, Issue #586), with other values a conflict.
     """
 
     result = FuturesWriteResult()
@@ -269,8 +411,10 @@ def store_futures_bars(
         incoming = {name: getattr(bar, name) for name in _FIELDS}
         if row is not None and (not force or row.source != source):
             stored = {name: getattr(row, name) for name in _FIELDS}
-            if stored == incoming and row.source == source:
-                result.counts["unchanged"] += 1
+            if stored == incoming:
+                result.counts[
+                    "unchanged" if row.source == source else "kept_other_source"
+                ] += 1
             else:
                 result.counts["conflict"] += 1
                 result.conflicts.append(

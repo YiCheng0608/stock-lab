@@ -45,7 +45,9 @@ from app.domain import OFFICIAL_MARGIN_CHIP_SOURCES
 from app.models import ChipSnapshot, IngestionRun, Instrument, RawPayload
 from worker import pipeline
 from worker.sources import (
+    TPEX_CHIP_ENDPOINT,
     TPEX_CHIP_HISTORY_ENDPOINT,
+    TPEX_MARGIN_ENDPOINT,
     TPEX_MARGIN_HISTORY_ENDPOINT,
     TWSE_CHIP_ENDPOINT,
     TWSE_MARGIN_HISTORY_ENDPOINT,
@@ -75,6 +77,10 @@ ENDPOINT_GROUP = {
     endpoint: (exchange, group)
     for (exchange, group), (endpoint, _parser) in CAPTURES.items()
 }
+# The current TPEx session's files may be the OpenAPI tables (Issue #579); the
+# group's parser reads both shapes.
+ENDPOINT_GROUP[TPEX_CHIP_ENDPOINT] = ("TPEx", INSTITUTIONAL)
+ENDPOINT_GROUP[TPEX_MARGIN_ENDPOINT] = ("TPEx", MARGIN)
 
 
 class ProvenanceError(Exception):
@@ -144,9 +150,11 @@ def _fill_runs(db: Session) -> dict[tuple[str, str, str], list[int]]:
         )
     ):
         for fill in (metadata or {}).get("value_fill_groups") or []:
+            # A fill of the short balance alone did not write the margin
+            # values (Issue #662), so it does not say which capture did.
             if fill.get("table") != "chip_snapshots" or not set(
                 fill.get("fields") or []
-            ) & set(groups_of.GROUP_FIELDS[MARGIN]):
+            ) & (set(groups_of.GROUP_FIELDS[MARGIN]) - {"short_balance"}):
                 continue
             run_id = raw_run.get(fill.get("raw_payload_id"))
             if run_id is None:
@@ -203,11 +211,18 @@ class _Captures:
 
 
 def _equal(row: ChipSnapshot, record: ChipRecord | None, group: str) -> bool:
+    """The row holds the record's values of the group.
+
+    An empty ``short_balance`` is not compared: rows written before Issue #662
+    never stored it, though their margin capture has it.
+    """
+
     if record is None:
         return False
     return all(
         getattr(row, name) == pipeline._safe_float(getattr(record, name))
         for name in groups_of.GROUP_FIELDS[group]
+        if not (name == "short_balance" and row.short_balance is None)
     )
 
 

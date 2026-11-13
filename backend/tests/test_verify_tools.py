@@ -682,7 +682,6 @@ def test_db_facts_without_a_current_version_run_gives_null(
         "news_items": None,
         "news_latest_published_at": None,
         "news_llm_done": None,
-        "theme_suggestions": None,
         "tracking_plans_open": None,
         "tracking_plans_closed": None,
         "portfolio_positions": 0,
@@ -716,7 +715,6 @@ def test_db_facts_every_query_on_an_empty_table(tmp_path: Path) -> None:
         "news_items": 0,
         "news_latest_published_at": None,
         "news_llm_done": 0,
-        "theme_suggestions": 0,
         "tracking_plans_open": 0,
         "tracking_plans_closed": 0,
         "portfolio_positions": 0,
@@ -792,6 +790,31 @@ console.log(JSON.stringify({
 
 
 @needs_node
+def test_screenshot_candidate_rows_probe_returns_null_when_it_throws() -> None:
+    # Issue 609: a probe that throws must not fail the whole capture; T17 judges null.
+    out = _node_eval(
+        """
+const run = (document, probe) => { globalThis.document = document; return eval(m[probe]) }
+const broken = { querySelectorAll() { throw new Error('probe broke') } }
+const none = { querySelectorAll() { return [] } }
+console.log(JSON.stringify({
+  thrown: run(broken, 'CANDIDATE_ROWS_PROBE'),
+  empty: run(none, 'CANDIDATE_ROWS_PROBE'),
+  detailsThrown: run(broken, 'CANDIDATE_DETAILS_PROBE'),
+  detailsEmpty: run(none, 'CANDIDATE_DETAILS_PROBE'),
+}))
+"""
+    )
+    # Issue 668: the open-detail probe does the same; T21 judges null as undetermined.
+    assert out == {
+        "thrown": None,
+        "empty": [],
+        "detailsThrown": None,
+        "detailsEmpty": [],
+    }
+
+
+@needs_node
 def test_screenshot_reports_a_browser_that_exits_before_listening(
     tmp_path: Path,
 ) -> None:
@@ -820,6 +843,21 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8">
 <body><div class="skeleton">loading</div>
 <details><summary>more</summary><p>hidden detail</p></details>
 <div style="width:600px">wide row</div>
+<ol style="overflow:hidden;width:300px;margin:0;padding:0;list-style:none">
+<li class="candidate-row" data-candidate-rank="1" style="display:flex;width:300px">
+<dl class="candidate-row-nums" style="display:flex;width:200px;margin:0"><div><dt>收盤</dt><dd style="margin:0">10</dd></div><div><dt>總分</dt><dd style="margin:0">70</dd></div></dl>
+<button class="candidate-ai-toggle">AI</button></li>
+<li class="candidate-row" data-candidate-rank="2" style="position:relative;width:300px">
+<dl class="candidate-row-nums" style="display:flex;width:200px;margin:0"><div style="flex:none;width:150px"><dt>收盤</dt><dd style="margin:0">10</dd></div><div style="flex:none;width:200px"><dt>總分（0–100）</dt><dd style="margin:0">70</dd></div></dl>
+<button class="candidate-ai-toggle" style="position:absolute;left:160px;top:0;width:120px;height:60px">AI</button>
+<details class="candidate-detail" open><summary>s</summary><div style="display:flex"><section class="candidate-note" data-note-state="done" style="flex:none;width:100px"><div class="ai-inference-head" style="display:flex;height:20px"><h3 style="flex:none;width:40px;margin:0;font-size:12px">說明</h3><span class="badge" style="position:relative;left:40px;flex:none;width:50px">AI 推論</span></div><dl class="candidate-note-parts" style="margin:0"><div><dt>為何入選</dt><dd style="margin:0;font-size:16px">放量突破</dd></div></dl></section><div class="candidate-detail-side" style="flex:none;width:120px"><b style="display:block;height:20px">目標</b></div></div></details></li>
+<li class="candidate-row" data-candidate-rank="3" hidden><dl class="candidate-row-nums"></dl><details class="candidate-detail" open><section class="candidate-note"></section></details><span class="score-bar" aria-label="籌碼 40（0–100）" data-score="40"><span class="score-bar-track"><span class="score-bar-fill"></span></span></span></li>
+</ol>
+<style>:root{--color-up:rgb(239, 68, 68);--color-down:rgb(34, 197, 94)}
+.strength-chip{position:relative}.strength-chip::before{content:"";position:absolute;inset:0;background:var(--color-down);opacity:.3}</style>
+<details><summary>bars</summary><span class="score-bar" aria-label="技術 75（0–100）" data-score="75"><span class="score-bar-track" style="display:inline-block;position:relative;width:200px;height:6px"><span class="score-bar-fill" style="position:absolute;left:0;top:0;bottom:0;width:75%"></span></span></span>
+<span class="score-bar score-bar-empty" aria-label="族群 無資料" data-score="none"><span class="score-bar-track" style="display:inline-block;width:200px;height:6px"></span></span></details>
+<b class="strength-chip strength-down strength-l2" aria-label="1 日相對加權指數 -1.20%" data-strength="down-2">-1.20%</b>
 <button id="tab" onclick="fetch('/slow').then(() => document.body.insertAdjacentHTML('beforeend', '<p>tab opened</p>'))">tab</button>
 <script>
 fetch('/slow').then((r) => r.text()).then((text) => {
@@ -903,7 +941,84 @@ def test_screenshot_waits_for_data_and_reports_overflow(tmp_path: Path) -> None:
         assert line["url"] == url and line["finalUrl"] == url + "landed?from=old#plan-7"
         assert "loading" not in text
         assert line["consoleErrors"] == ["boom"]
-        assert line["httpErrors"] == []
+        assert line["httpErrors"] == [] and line["httpErrorCount"] == 0
+        # Issue 608: the shown today-list rows; #2's total runs under the button and past the row.
+        total = ["dt 總分（0–100）", "dd 70"]
+        assert line["candidateRows"] == [
+            {
+                "rank": 1,
+                "numsScrollWidth": 200,
+                "numsClientWidth": 200,
+                "covered": [],
+                "clipped": [],
+            },
+            {
+                "rank": 2,
+                "numsScrollWidth": 350,
+                "numsClientWidth": 200,
+                "covered": total,
+                "clipped": total,
+            },
+        ]
+        # Issue 668: the shown row's open detail (the hidden row's is left out); the badge, moved past the 100px
+        # note, sits on the side block's first line.
+        details = line["candidateDetails"]
+        assert [
+            (
+                d["rank"],
+                d["noteState"],
+                d["textWidth"],
+                d["fontSize"],
+                d["badgeOverlaps"],
+            )
+            for d in details
+        ] == [(2, "done", 100, 16, ["b 目標"])]
+        assert details[0]["note"]["width"] == 100
+        assert details[0]["side"]["width"] == 120
+        assert details[0]["side"]["left"] == details[0]["note"]["right"]
+        assert details[0]["badge"]["width"] == 50
+        # Issue 654: the bars inside the opened <details> and the block, with the resolved tokens.
+        assert line["graphics"] == {
+            "tokens": {"up": "rgb(239, 68, 68)", "down": "rgb(34, 197, 94)"},
+            "items": [
+                # The hidden row (the today list past its first 10): no box, so no fill share.
+                {
+                    "kind": "bar",
+                    "label": "籌碼 40（0–100）",
+                    "score": "40",
+                    "fill": None,
+                    "hasFill": True,
+                    "trackWidth": 0,
+                    "visible": False,
+                },
+                {
+                    "kind": "bar",
+                    "label": "技術 75（0–100）",
+                    "score": "75",
+                    "fill": 0.75,
+                    "hasFill": True,
+                    "trackWidth": 200,
+                    "visible": True,
+                },
+                {
+                    "kind": "bar",
+                    "label": "族群 無資料",
+                    "score": "none",
+                    "fill": None,
+                    "hasFill": False,
+                    "trackWidth": 200,
+                    "visible": True,
+                },
+                {
+                    "kind": "chip",
+                    "label": "1 日相對加權指數 -1.20%",
+                    "strength": "down-2",
+                    "text": "-1.20%",
+                    "background": "rgb(34, 197, 94)",
+                    "opacity": 0.3,
+                },
+            ],
+        }
     assert [line["overflow"] for line in lines] == [False, True]
     assert lines[1]["scrollWidth"] > lines[1]["clientWidth"] == 390
     assert sorted(p.name for p in out.iterdir()) == [

@@ -162,7 +162,7 @@ def test_signal_api_exposes_non_probability_semantics_for_new_and_legacy_rows(
 
     with TestClient(app) as client:
         signals = client.get("/api/signals?instrument_symbol=SEM&page_size=10")
-        dashboard = client.get("/api/dashboard")
+        dashboard = client.get("/api/dashboard?include=signals")
         detail = client.get(f"/api/signals/{signal_ids['legacy-sem']}")
         tracking = client.get("/api/tracking/legacy-sem")
         stock = client.get("/api/instruments/SEM?exchange=TWSE")
@@ -781,6 +781,61 @@ def test_paginated_collections_support_search_and_boundaries(isolated_api):
         assert client.get("/api/instruments?page_size=101").status_code == 422
         assert client.get("/api/instruments?page_size=0").status_code == 422
         assert client.get("/api/instruments?page=0").status_code == 422
+
+
+def test_instrument_suggestions_rank_exact_symbol_first(isolated_api):
+    # Issue 599: the navbar suggestions read /api/instruments?q=&securities_only=true.
+    # TPEx sorts before TWSE, so without the rank 2330 would come after 00723B and 2303.
+    rows = [
+        ("TPEx", "00723B", "群益投資級科技債", "etf", "active"),
+        ("TPEx", "1233", "名稱含23", "stock", "active"),
+        ("TWSE", "2303", "聯電", "stock", "active"),
+        ("TWSE", "2330", "台積電", "stock", "active"),
+        ("TWSE", "23", "名稱相符", "stock", "active"),
+        ("TWSE", "2399", "下市股", "stock", "delisted"),
+        ("TWSE", "TAIEX", "加權指數23", "index", "active"),
+        ("TAIFEX", "TX23", "臺股期貨", "futures", "active"),
+    ]
+    with isolated_api() as db:
+        db.add_all(
+            Instrument(
+                market="TW",
+                exchange=exchange,
+                symbol=symbol,
+                name=name,
+                instrument_type=instrument_type,
+                status=status,
+            )
+            for exchange, symbol, name, instrument_type, status in rows
+        )
+        db.commit()
+
+    def symbols(path: str) -> list[str]:
+        with TestClient(app) as client:
+            response = client.get(path)
+        assert response.status_code == 200
+        return [item["symbol"] for item in response.json()["items"]]
+
+    suggest = "/api/instruments?securities_only=true&page_size=8&q="
+    # Exact symbol, then symbol prefix (by exchange, symbol), then the rest.
+    assert symbols(suggest + "23") == ["23", "2303", "2330", "00723B", "1233"]
+    assert symbols(suggest + "2330")[0] == "2330"
+    # Name: exact then prefix before a name that only contains the text.
+    assert symbols(suggest + "台積電") == ["2330"]
+    # Delisted rows never appear; index and futures only without securities_only.
+    assert "2399" not in symbols("/api/instruments?q=23")
+    assert {"TAIEX", "TX23"} <= set(symbols("/api/instruments?q=23"))
+    assert not {"TAIEX", "TX23"} & set(symbols(suggest + "23"))
+    # Lower-case input still ranks an upper-case symbol as exact.
+    assert symbols(suggest + "00723b")[0] == "00723B"
+    # Without q the order stays exchange, symbol.
+    assert symbols("/api/instruments?securities_only=true") == [
+        "00723B",
+        "1233",
+        "23",
+        "2303",
+        "2330",
+    ]
 
 
 def test_portfolio_delete_is_idempotently_reported(isolated_api):

@@ -1,19 +1,43 @@
+import type { ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
-import { StockBarsChart } from './StockBarsChart'
+import { StockBarsChart, StockIndicatorCard, barsWindow, type BarsViewState } from './StockBarsChart'
 import { StockCutoffControl, cutoffSubmission } from './StockCutoffControl'
-import { StockQuoteLine } from './StockHeader'
+import { PageDateContext } from '../components/pageDate'
+import { StockQuoteLine, tradingHaltLabel } from './StockHeader'
 import {
   CHART_THEME_TOKENS,
   INDICATOR_PANELS,
   MA_LINES,
   STOCK_BARS_LIMIT,
   buildBarsChartOption,
+  chartLevels,
+  levelsNote,
+  CHART_LEVEL_LABELS,
+  LEVEL_LABEL_PX,
   compactCount,
   formatBarVolume,
   volumeKind,
+  sourceName,
+  sourcesLabel,
   chartLayout,
-  defaultZoom,
+  BAR_RANGES,
+  DEFAULT_BARS_RANGE,
+  STOCK_BARS_MAX_LIMIT,
+  barsBasis,
+  needsMoreBars,
+  preferChromeInputPath,
+  SWIPE_LOCK_PX,
+  longerBarsKey,
+  longerStatus,
+  retryLonger,
+  settleLonger,
+  shouldFetchLonger,
+  swipeAxis,
+  zoomBars,
+  rangeCutoff,
+  viewFromZoomEvent,
+  zoomForView,
   fieldsState,
   formatBarsTooltip,
   formatSignedPercent,
@@ -26,11 +50,17 @@ import {
   readChartTheme,
   stockBarsPath,
   stockQuote,
+  INDICATOR_CHART_HEIGHT,
+  SPLIT_MAIN_HEIGHT,
+  indicatorChartLayout,
+  priceChartLayout,
+  type BarsView,
   type IndicatorPanelId,
   type MaField,
 } from './stockBars'
+import { conditionalBreakout, incompleteRow, observationPullback } from './strategyBoard.fixtures'
 import { barsResponse, insufficientDaily, notComputedDaily, suspendedWithGapDaily, tradedBar, weeklySeries } from './stockBars.fixtures'
-import type { StockBarsResponse } from '../types'
+import type { StockBarsResponse, TradingHalt } from '../types'
 
 // Standalone regression module (no browser, no server, no network) for the stock page K-line, indicator
 // panels and header quote, on bars-API fixtures (PR #155 shape).
@@ -61,6 +91,13 @@ check(nullReasonText('missing_ohlc', { interval: 'day' }) === '來源有一天�
 // Volume units (Issue 552, PR 553 review): stocks in 張, an index in 億股, TX in 口; the close-only TAIEX rows unverified.
 check(volumeKind(['twse']) === 'lots' && volumeKind(['twse_index_ohlcv', 'tpex_index_ohlcv']) === 'index_shares' && volumeKind(['taifex_daily_futures']) === 'contracts' && volumeKind(['twse_index']) === 'unverified' && volumeKind(['twse', 'twse_index_ohlcv']) === 'unverified', 'volumeKind by source')
 check(formatBarVolume({ ...tradedBar('2026-11-06', 39701.64, 1), volume: 19_339_729_647, source: 'twse_index_ohlcv' }) === '193.40' && formatBarVolume({ ...tradedBar('2026-11-06', 39786, 1), volume: 143277, source: 'taifex_daily_futures' }) === '143,277' && formatBarVolume({ ...tradedBar('2026-11-06', 304, 1), volume: null, source: 'tpex_index_ohlcv' }) === '', 'formatBarVolume: 億股, 口, empty without a volume')
+// TX from the website futDataDown history (Issue 590; every production TX row since #563): 臺灣期貨交易所 and 口, alone or mixed with the OpenAPI rows.
+check(sourceName('taifex_futdatadown') === '臺灣期貨交易所' && sourceName('taifex_daily_futures') === '臺灣期貨交易所' && sourcesLabel(['taifex_futdatadown', 'taifex_daily_futures']) === '臺灣期貨交易所', 'sourceName: both TX sources are TAIFEX')
+check(volumeKind(['taifex_futdatadown']) === 'contracts' && volumeKind(['taifex_futdatadown', 'taifex_daily_futures']) === 'contracts' && volumeKind(['taifex_futdatadown', 'twse']) === 'unverified', 'volumeKind: futDataDown TX in 口, mixed TX sources too')
+check(formatBarVolume({ ...tradedBar('2026-11-06', 39786, 1), volume: 143277, source: 'taifex_futdatadown' }) === '143,277' && formatBarVolume({ ...tradedBar('2026-11-06', 39786, 1), volume: 98765, source: null, sources: ['taifex_futdatadown', 'taifex_daily_futures'] }) === '98,765', 'formatBarVolume: futDataDown TX in 口')
+// FinMind's US indexes (Issue 568): member shares in 億股 like the Taiwan indexes; SOX has no volume (NULL), so empty.
+check(volumeKind(['finmind_us_index']) === 'index_shares' && volumeKind(['fred_close']) === 'unverified' && volumeKind(['finmind_us_index', 'twse']) === 'unverified', 'volumeKind: FinMind US indexes in 億股')
+check(formatBarVolume({ ...tradedBar('2026-11-06', 7376.86, 1), volume: 5_701_900_000, source: 'finmind_us_index' }) === '57.02' && formatBarVolume({ ...tradedBar('2026-11-06', 9390.25, 1), volume: null, source: 'finmind_us_index' }) === '', 'formatBarVolume: S&P 500 in 億股, SOX empty')
 check(compactCount(9999) === '9,999' && compactCount(52_000) === '5.2萬' && compactCount(1_234_567) === '123.5萬' && compactCount(320_000_000) === '3.2億', 'volume axis labels fit the gutter (萬／億)')
 check(priceDigits(39786, 'futures') === 0, 'TX is in whole points')
 const allMa = new Set<MaField>(MA_LINES.map((line) => line.field))
@@ -117,6 +154,14 @@ check(firstDayMarkup.includes('掛牌首日') && !firstDayMarkup.includes('前�
 check(stockQuote(gapBars, 'stock', latestChange('no_previous_close', '2026-10-15')).change === 1.5, 'a status for another day does not apply')
 check(stockQuote(gapBars, 'stock', latestChange('unverified')).change === 1.5 && stockQuote(gapBars, 'stock', latestChange('known')).noChange === null, 'unverified and known keep the bars rule')
 
+// Issue 582: on a session an official stop of trading covers, the header says why the close is older than the market.
+const halt: TradingHalt = { reason: 'capital_reduction', reason_label: '減資換發新股', reason_detail: '退還股款', halt_start: '2026-11-05', resume_date: '2026-11-16', last_trade_date: '2026-11-04', exchange: 'TWSE', source: 'twse_twtauu', endpoint: 'TWTAUU', data_as_of: '2026-11-09', as_of: '2026-11-09' }
+check(tradingHaltLabel(halt) === '停止買賣中（減資換發新股，預計 2026/11/16 恢復）', `halt label: ${tradingHaltLabel(halt)}`)
+check(tradingHaltLabel(null) === null && tradingHaltLabel(undefined) === null, 'no stop, no label')
+const haltMarkup = renderToStaticMarkup(<StockQuoteLine bars={[tradedBar('2026-11-03', 57.3, 1), tradedBar('2026-11-04', 56.7, 2)]} halt={halt} />)
+check(haltMarkup.includes('badge-warning stock-header-halt') && haltMarkup.includes('停止買賣中（減資換發新股，預計 2026/11/16 恢復）') && haltMarkup.includes('資料 2026/11/04'), `halt markup: ${haltMarkup}`)
+check(!upMarkup.includes('停止買賣中'), 'a stock that trades has no stop badge')
+
 // ---- weekly series ----
 const weekly = weeklySeries()
 const weeklyMacd = indicatorPanelState(weekly, 'macd')
@@ -129,7 +174,7 @@ check(stockQuote(weekly.bars).sources.join() === 'twse', 'weekly rows read their
 const layout = chartLayout(320)
 check(layout.indicator.height === Math.round(layout.main.height * 0.35), 'indicator panel is 35% of the main chart')
 const series = (response: StockBarsResponse, panel: IndicatorPanelId, visible: ReadonlySet<MaField> = allMa) => {
-  const option = buildBarsChartOption(response, { panel, panelState: indicatorPanelState(response, panel), visibleMa: visible, theme, layout, zoom: defaultZoom(response.bars.length), digits: 2 })
+  const option = buildBarsChartOption(response, { panel, panelState: indicatorPanelState(response, panel), visibleMa: visible, theme, layout, zoom: zoomForView(response, { range: DEFAULT_BARS_RANGE }), digits: 2 })
   return { option, list: option.series as Array<{ name: string; type: string; xAxisIndex: number; data: unknown[]; lineStyle?: { color: string }; itemStyle?: Record<string, unknown> }> }
 }
 const longDaily = barsResponse(Array.from({ length: 130 }, (_, index) => tradedBar(`2026-${String(1 + Math.floor(index / 28)).padStart(2, '0')}-${String(1 + (index % 28)).padStart(2, '0')}`, 100 + (index % 7), index + 1)))
@@ -159,8 +204,6 @@ check(series(insufficient, 'macd').list.every((item) => item.xAxisIndex !== 2), 
 const gapCandles = series(suspended, 'rsi').list[0].data as unknown[]
 check(JSON.stringify(gapCandles[30]) === '["-","-","-","-"]' && JSON.stringify(gapCandles[39]) === '["-","-","-","-"]', 'suspended days draw no candle')
 check(series(weekly, 'kd').list[0].name === '週K', 'weekly series is labelled 週K')
-const zoomDefault = defaultZoom(250)
-check(Math.abs(zoomDefault.start - 52) < 1e-9 && zoomDefault.end === 100, 'first view shows the latest 120 of 250 bars')
 
 // ---- rendered panel states ----
 const render = (data: StockBarsResponse, interval: 'day' | 'week' = 'day') => renderToStaticMarkup(<StockBarsChart interval={interval} onIntervalChange={() => undefined} data={data} loading={false} error={null} />)
@@ -182,6 +225,23 @@ check(weeklyMarkup.includes('aria-selected="true"') && weeklyMarkup.includes('�
 const loadingMarkup = renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => undefined} data={undefined} loading error={null} />)
 check(loadingMarkup.includes('aria-busy="true"') && loadingMarkup.includes('skeleton'), 'loading shows a skeleton')
 const emptyChart = renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => undefined} data={barsResponse([])} loading={false} error={null} />)
+
+// ---- #661 AC-3: the page date is the navbar's; a header or chart of that day says no date, another day still does ----
+const sliceOf = (markup: string, start: string, end: string) => { const from = markup.indexOf(start); return from < 0 ? "" : markup.slice(from, markup.indexOf(end, from + start.length)) }
+const onPage = (day: string, node: ReactElement) => renderToStaticMarkup(<PageDateContext.Provider value={day}>{node}</PageDateContext.Provider>)
+const latestBars = [tradedBar('2026-10-15', 98.5, 1), tradedBar('2026-10-16', 100, 2)]
+check(!onPage('2026-10-16', <StockQuoteLine bars={latestBars} />).includes('date-badge'), 'header of the page date: no date badge (the navbar has it)')
+check(onPage('2026-10-16', <StockQuoteLine bars={latestBars} />).includes('來源 臺灣證券交易所'), 'header of the page date: the source stays')
+// 研究截止日 (?as_of): the stock page shows an earlier day than the navbar, so the header states it.
+const cutoffBars = [tradedBar('2026-10-09', 97, 1), tradedBar('2026-10-12', 98, 2)]
+check(onPage('2026-10-16', <StockQuoteLine bars={cutoffBars} />).includes('資料 2026/10/12'), 'a research cutoff earlier than the page date: the header keeps 「資料 2026/10/12」')
+check(onPage('2026-10-16', <StockBarsChart interval="day" onIntervalChange={() => undefined} data={{ ...insufficient, data_as_of: '2026-10-12' }} loading={false} error={null} />).includes('資料 2026/10/12'), 'a chart of another day than the page keeps its date badge')
+check(!onPage('2026-09-20', <StockBarsChart interval="day" onIntervalChange={() => undefined} data={insufficient} loading={false} error={null} />).includes('date-badge'), 'a chart of the page date has no date badge')
+// Status badges never hide with the date (decision 6835320079 condition 2): the halt badge stays on a page-date header.
+check(onPage('2026-11-04', <StockQuoteLine bars={[tradedBar('2026-11-03', 57.3, 1), tradedBar('2026-11-04', 56.7, 2)]} halt={halt} />).includes('stock-header-halt'), 'the halt badge stays when the date is the page date')
+// S-a: the chart leaves out a source the header already states; a different one stays.
+const chartSource = (pageSource: string | null) => sliceOf(renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => undefined} data={insufficient} loading={false} error={null} pageSource={pageSource} />), 'class="chart-meta"', '</div>')
+check(!chartSource(sourcesLabel(insufficient.sources)).includes('來源 ') && chartSource('證券櫃檯買賣中心').includes(`來源 ${sourcesLabel(insufficient.sources)}`) && chartSource(null).includes('來源 '), `chart source: left out when the header states the same, kept otherwise: ${chartSource(null)}`)
 check(emptyChart.includes('來源未提供日線') && emptyChart.includes('資料日期未提供'), 'no bars → empty state and no-date badge')
 
 // ---- #300 研究截止日期 (DESIGN_SYSTEM §4 手機第一屏): one toggle line on phones, open when a cutoff is applied ----
@@ -210,3 +270,282 @@ check(cutoffInput(latestCutoff).includes('value=""') && !cutoffInput(latestCutof
 check(cutoffSubmission('2026-11-03', '2026-11-03') === '', 'applying the unchanged latest day keeps 最新資料 (no as_of)')
 check(cutoffSubmission('2026-10-31', '2026-11-03') === '2026-10-31', 'applying a changed day sets it as the cutoff')
 check(cutoffSubmission('', '2026-11-03') === '' && cutoffSubmission('2026-10-20', null) === '2026-10-20', 'a cleared field is 最新資料; without a known latest day the value is applied as typed')
+
+// ---- #600 display range: 1M／3M／6M／1Y／全部 set the dataZoom window, kept across 日K／週K, cleared by a manual zoom ----
+const isoDay = (time: number) => new Date(time).toISOString().slice(0, 10)
+// Weekdays up to 2026-11-10 (a Tuesday), as the API returns the latest `limit` of them.
+const weekdays = (count: number, last = '2026-11-10') => {
+  const days: string[] = []
+  for (let time = Date.parse(`${last}T00:00:00Z`); days.length < count; time -= 86_400_000) {
+    const weekday = new Date(time).getUTCDay()
+    if (weekday !== 0 && weekday !== 6) days.unshift(isoDay(time))
+  }
+  return days
+}
+const dailyOf = (days: readonly string[], limit = 250) => ({ ...barsResponse(days.map((day, index) => tradedBar(day, 100 + (index % 9), index + 1))), limit })
+// A year of weekdays and a little more (the real 250 trading days reach back about a year and two weeks).
+const fullPage = dailyOf(weekdays(262), 262)
+const LAST = fullPage.bars.length - 1
+const weeklyOf = (count: number) => {
+  // Week rows end on the Friday (the last week ends 2026-11-10, its latest trading day so far).
+  const bars = Array.from({ length: count }, (_, index) => {
+    const weekStart = isoDay(Date.parse('2026-11-09T00:00:00Z') - (count - 1 - index) * 7 * 86_400_000)
+    const weekEnd = index === count - 1 ? '2026-11-10' : isoDay(Date.parse(`${weekStart}T00:00:00Z`) + 4 * 86_400_000)
+    return tradedBar(weekEnd, 600 + index, index + 1, { week_start: weekStart, week_end: weekEnd, trading_days: 5 })
+  })
+  return barsResponse(bars, 'week')
+}
+const weeklyPage = weeklyOf(110)
+const firstOnOrAfter = (response: StockBarsResponse, day: string) => response.bars.findIndex((bar) => bar.date >= day)
+const windowOf = (response: StockBarsResponse, view: Parameters<typeof zoomForView>[1]) => zoomForView(response, view) as { startValue: number; endValue: number }
+
+check(BAR_RANGES.map((item) => item.label).join() === '1M,3M,6M,1Y,全部' && DEFAULT_BARS_RANGE === '6m', 'five range buttons, 6M by default')
+check(rangeCutoff('2026-11-10', '1m') === '2026-10-10' && rangeCutoff('2026-11-10', '3m') === '2026-08-10' && rangeCutoff('2026-11-10', '6m') === '2026-05-10' && rangeCutoff('2026-11-10', '1y') === '2025-11-10', 'range cutoffs move back whole calendar months')
+check(rangeCutoff('2026-03-31', '1m') === '2026-02-28' && rangeCutoff('2024-02-29', '1y') === '2023-02-28', 'a cutoff clamps to the month end')
+check(rangeCutoff('2026-11-10', 'all') === null && rangeCutoff(undefined, '1m') === null && rangeCutoff('not a date', '3m') === null, '全部 and an unknown latest day have no cutoff')
+
+// Each range on a full daily page: from the first bar on or after the cutoff to the latest bar.
+const expectedStart: Record<string, string> = { '1m': '2026-10-12', '3m': '2026-08-10', '6m': '2026-05-11', '1y': '2025-11-10' }
+for (const item of BAR_RANGES) {
+  const zoom = windowOf(fullPage, { range: item.id })
+  const cutoff = rangeCutoff('2026-11-10', item.id)
+  const expected = cutoff == null ? 0 : firstOnOrAfter(fullPage, cutoff)
+  check(zoom.startValue === expected && zoom.endValue === LAST, `${item.label}: window ${JSON.stringify(zoom)}, expected start ${expected}`)
+  if (cutoff) check(fullPage.bars[zoom.startValue].date === expectedStart[item.id] && (zoom.startValue === 0 || fullPage.bars[zoom.startValue - 1].date < cutoff), `${item.label}: starts at ${fullPage.bars[zoom.startValue].date}`)
+}
+check(windowOf(fullPage, { range: '1m' }).endValue - windowOf(fullPage, { range: '1m' }).startValue + 1 === 22, '1M on daily bars is about a month of trading days')
+const option1m = buildBarsChartOption(fullPage, { panel: 'macd', panelState: indicatorPanelState(fullPage, 'macd'), visibleMa: allMa, theme, layout, zoom: zoomForView(fullPage, { range: '1m' }), digits: 2 })
+const optionZoom = option1m.dataZoom as Array<Record<string, unknown>>
+check(optionZoom.length === 2 && optionZoom.every((item) => item.startValue === firstOnOrAfter(fullPage, '2026-10-10') && item.endValue === LAST && item.start === undefined), `both dataZoom components take the bar window: ${JSON.stringify(optionZoom.map((item) => [item.startValue, item.endValue]))}`)
+
+// Fewer bars than the range: everything is shown, nothing throws.
+const short = dailyOf(weekdays(20))
+for (const item of BAR_RANGES.filter((range) => range.id !== '1m')) {
+  const zoom = windowOf(short, { range: item.id })
+  check(zoom.startValue === 0 && zoom.endValue === 19, `${item.label} on 20 bars shows all of them: ${JSON.stringify(zoom)}`)
+}
+check(JSON.stringify(zoomForView(barsResponse([]), { range: '1y' })) === '{"startValue":0,"endValue":0}', 'no bars: an empty window, no error')
+const someManual = viewFromZoomEvent(fullPage, { start: 10, end: 20 })
+check(someManual !== null && JSON.stringify(zoomForView(barsResponse([]), someManual)) === '{"startValue":0,"endValue":0}', 'a manual window on no bars: empty, no error')
+check(render(short).includes('最近 20 根日線'), 'a short series renders with the range selected')
+
+// 日K → 週K keeps the range: the same cutoff picks the week that holds it.
+for (const item of BAR_RANGES) {
+  const zoom = windowOf(weeklyPage, { range: item.id })
+  const cutoff = rangeCutoff('2026-11-10', item.id)
+  check(zoom.endValue === 109 && zoom.startValue === (cutoff == null ? 0 : firstOnOrAfter(weeklyPage, cutoff)), `weekly ${item.label}: ${JSON.stringify(zoom)}`)
+  if (cutoff) {
+    const week = weeklyPage.bars[zoom.startValue]
+    check((week.week_start ?? '') <= cutoff || week.date >= cutoff, `weekly ${item.label}: the first week (${week.week_start}～${week.date}) holds or follows ${cutoff}`)
+  }
+}
+check(windowOf(weeklyPage, { range: '3m' }).endValue - windowOf(weeklyPage, { range: '3m' }).startValue + 1 === 14, '3M on weekly bars is 14 weeks')
+
+// A manual zoom: no button is selected; on the same bars ECharts' percents stay, on the other interval its dates map.
+const manual = viewFromZoomEvent(fullPage, { batch: [{ start: 50, end: 80 }] })
+check(manual !== null && manual.range === null, 'a dataZoom event clears the selected range')
+if (manual && manual.range === null) {
+  check(manual.basis === barsBasis(fullPage) && manual.from === fullPage.bars[Math.ceil(LAST * 0.5)].date && manual.to === fullPage.bars[Math.floor(LAST * 0.8)].date, `manual window dates: ${manual.from}～${manual.to}`)
+  check(JSON.stringify(zoomForView(fullPage, manual)) === '{"start":50,"end":80}', 'the same bars keep the dragged percents (no snapping while dragging)')
+  const onWeekly = windowOf(weeklyPage, manual)
+  const firstWeek = weeklyPage.bars[onWeekly.startValue]
+  const lastWeek = weeklyPage.bars[onWeekly.endValue]
+  check((firstWeek.week_start ?? '') <= manual.from && firstWeek.date >= manual.from, `the manual start lands in its week: ${firstWeek.week_start}～${firstWeek.date} holds ${manual.from}`)
+  check((lastWeek.week_start ?? '') <= manual.to && lastWeek.date >= manual.to, `the manual end lands in its week: ${lastWeek.week_start}～${lastWeek.date} holds ${manual.to}`)
+  const weeklyAll = viewFromZoomEvent(weeklyPage, { start: 0, end: 100 })
+  check(weeklyAll !== null, 'a weekly zoom event gives a manual view')
+  if (weeklyAll) {
+    const back = windowOf(fullPage, weeklyAll)
+    check(back.startValue === Math.max(0, firstOnOrAfter(fullPage, weeklyPage.bars[0].week_start ?? '')) && back.endValue === LAST, `週K → 日K maps the weekly window back by its first week start: ${JSON.stringify(back)}`)
+  }
+  check(!needsMoreBars(fullPage, manual), 'a manual zoom asks for nothing')
+}
+check(viewFromZoomEvent(fullPage, { start: 'x' }) === null && viewFromZoomEvent(fullPage, null) === null, 'an event without percents changes nothing')
+const pressed = (markup: string) => [...markup.matchAll(/<button type="button" class="badge filter-chip( filter-chip-selected)?" aria-pressed="(true|false)">([^<]+)<\/button>/g)].map((match) => `${match[3]}:${match[2]}`)
+check(pressed(render(fullPage)).join() === '1M:false,3M:false,6M:true,1Y:false,全部:false', `range buttons render with 6M pressed: ${pressed(render(fullPage)).join()}`)
+check(pressed(render(weeklyPage, 'week')).join() === '1M:false,3M:false,6M:true,1Y:false,全部:false', 'the weekly chart has the same buttons')
+
+// 全部 (or a range before the first loaded bar) asks for more only when the page is full and under the API maximum.
+check(STOCK_BARS_MAX_LIMIT === 1500, 'the longer request uses the bars API maximum (backend app.stock_bars.MAX_LIMIT)')
+check(needsMoreBars(fullPage, { range: 'all' }) && !needsMoreBars(fullPage, { range: '1y' }) && !needsMoreBars(fullPage, { range: '6m' }), '全部 asks for more; 1Y fits in a page that reaches back a year')
+check(needsMoreBars(dailyOf(weekdays(200), 200), { range: '1y' }), 'a range reaching before a full page asks for more')
+check(!needsMoreBars(short, { range: 'all' }) && !needsMoreBars(weeklyPage, { range: 'all' }), 'a page shorter than its limit is the whole history')
+check(!needsMoreBars({ ...fullPage, limit: STOCK_BARS_MAX_LIMIT, count: STOCK_BARS_MAX_LIMIT }, { range: 'all' }), 'the API maximum is not asked again')
+
+// Crosshair on touch (#600 headless Edge check): the tooltip stays inside the chart, and a sideways drag reaches the chart.
+declare const require: (id: string) => unknown
+declare const __dirname: string
+const chartCss = (require('node:fs') as { readFileSync(file: string, encoding: 'utf8'): string }).readFileSync((require('node:path') as { join(...parts: string[]): string }).join(__dirname, '..', 'styles.css'), 'utf8')
+const tooltip = option1m.tooltip as { confine?: boolean; trigger?: string; axisPointer?: { type?: string } }
+check(tooltip.confine === true && tooltip.trigger === 'axis' && tooltip.axisPointer?.type === 'cross', 'the crosshair tooltip is confined to the chart')
+check(/\.chart-stage \{[^}]*touch-action: pan-y/.test(chartCss), 'the chart takes sideways drags (touch-action: pan-y)')
+// Chromium Edge ("Edg/", which zrender takes for old Edge) gets Chrome's input path; other browsers are left alone.
+const edgeTouch = { browser: { newEdge: true }, touchEventsSupported: false, pointerEventsSupported: true }
+check(preferChromeInputPath(edgeTouch, true) && edgeTouch.touchEventsSupported && !edgeTouch.pointerEventsSupported, 'Chromium Edge with touch listens to touch events')
+const edgeMouse = { browser: { newEdge: true }, touchEventsSupported: false, pointerEventsSupported: true }
+check(preferChromeInputPath(edgeMouse, false) && !edgeMouse.touchEventsSupported && !edgeMouse.pointerEventsSupported, 'Chromium Edge without touch listens to mouse events, as Chrome')
+const chrome = { browser: { newEdge: false }, touchEventsSupported: true, pointerEventsSupported: false }
+check(!preferChromeInputPath(chrome, true) && chrome.touchEventsSupported && !chrome.pointerEventsSupported, 'Chrome is not changed')
+const oldIe = { browser: { newEdge: false }, touchEventsSupported: false, pointerEventsSupported: true }
+check(!preferChromeInputPath(oldIe, true) && oldIe.pointerEventsSupported, 'IE11 and EdgeHTML keep pointer events')
+
+// ---- #600 review: zoom events that move nothing, series without the manual dates, the longer request, swipes ----
+const oneMonth = zoomForView(fullPage, { range: '1m' }) as { startValue: number; endValue: number }
+check(JSON.stringify(zoomBars(fullPage.bars.length, oneMonth)) === JSON.stringify([oneMonth.startValue, LAST]), 'a bar window maps to itself')
+const asPercent = { start: oneMonth.startValue / LAST * 100, end: 100 }
+check(JSON.stringify(zoomBars(fullPage.bars.length, asPercent)) === JSON.stringify([oneMonth.startValue, LAST]), 'the same window in percents shows the same bars')
+check(viewFromZoomEvent(fullPage, asPercent, oneMonth) === null, 'a zoom event that leaves the same bars in view keeps the range selected')
+const moved = viewFromZoomEvent(fullPage, { start: asPercent.start - 100 / LAST, end: 100 - 100 / LAST }, oneMonth)
+check(moved !== null && moved.range === null, 'a zoom event that moves the window by one bar clears the range')
+check(viewFromZoomEvent(fullPage, asPercent) !== null, 'without the current window every event is a manual view (old behaviour kept for callers)')
+
+// A manual window on a series that has none of its dates falls back to the default range instead of one bar.
+const old = viewFromZoomEvent(dailyOf(weekdays(800), 800), { start: 0, end: 10 })
+check(old !== null && old.range === null && old.to < fullPage.bars[0].date, `a manual window before the 262-bar page: ${old && old.range === null ? old.from + '～' + old.to : ''}`)
+if (old) check(JSON.stringify(zoomForView(fullPage, old)) === JSON.stringify(zoomForView(fullPage, { range: DEFAULT_BARS_RANGE })), 'no shared dates → the default range')
+const future = { range: null, start: 0, end: 100, from: '2027-01-01', to: '2027-02-01', basis: 'x' } as const
+check(JSON.stringify(zoomForView(fullPage, future)) === JSON.stringify(zoomForView(fullPage, { range: DEFAULT_BARS_RANGE })), 'a manual window after the last bar → the default range')
+
+// The longer request: once per series, replies only on their own pending series, a failure is retried on the next press.
+const key = longerBarsKey(fullPage)
+check(key === 'TWSE/2330/day/2026-11-10', `longer key: ${key}`)
+check(shouldFetchLonger(null, key, true) && !shouldFetchLonger(null, key, false), 'sent only when wanted')
+check(!shouldFetchLonger({ key }, key, true) && !shouldFetchLonger({ key, data: fullPage }, key, true) && !shouldFetchLonger({ key, error: new Error('x') }, key, true), 'pending, loaded or failed: no second request for the same series')
+check(shouldFetchLonger({ key: 'TWSE/2330/week/2026-11-10' }, key, true), 'another series asks again')
+const longerPage = dailyOf(weekdays(510), 1500)
+const loadedState = settleLonger({ key }, key, { data: longerPage })
+check(loadedState?.data === longerPage && longerStatus(loadedState, key, true).data === longerPage && !longerStatus(loadedState, key, true).loading, 'a reply lands on its pending series')
+check(settleLonger({ key: 'other' }, key, { data: longerPage })?.data === undefined, 'a reply for a series no longer shown is dropped')
+check(settleLonger(loadedState, key, { error: new Error('late') })?.data === longerPage, 'a late failure does not replace loaded bars')
+check(settleLonger(null, key, { data: longerPage }) === null, 'a reply after a retry cleared the state is dropped')
+const failedState = settleLonger({ key }, key, { error: undefined })
+check(failedState?.error instanceof Error && longerStatus(failedState, key, true).failed && !longerStatus(failedState, key, true).loading, 'a failure without an error object still counts as failed')
+check(longerStatus({ key }, key, true).loading && !longerStatus({ key }, key, false).loading, 'pending shows loading only while wanted')
+check(retryLonger(failedState) === null && shouldFetchLonger(retryLonger(failedState), key, true), 'pressing a range after a failure sends the request again')
+check(retryLonger(loadedState) === loadedState && retryLonger({ key }) !== null, 'pressing a range keeps loaded or pending state')
+
+// Swipe direction lock and the inside dataZoom leaving vertical moves to the page.
+check(swipeAxis(3, 4) === null && SWIPE_LOCK_PX === 8, 'under 8 px the direction is not decided yet')
+check(swipeAxis(6, -180) === 'vertical' && swipeAxis(-120, 20) === 'horizontal' && swipeAxis(10, 10) === 'horizontal', 'mostly vertical is a page scroll; a tie pans the chart')
+check((option1m.dataZoom as Array<Record<string, unknown>>)[0].preventDefaultMouseMove === false, 'the inside dataZoom does not block the page scroll')
+
+// ---- rule levels on the price pane (DESIGN_SYSTEM §6 規則價位線) ----
+const breakoutLevels = chartLevels(conditionalBreakout())
+check(JSON.stringify(breakoutLevels) === JSON.stringify({ entry: 2400, stop: 2364, target: 2458 }), `a conditional breakout draws trigger, stop and first target: ${JSON.stringify(breakoutLevels)}`)
+check(chartLevels(observationPullback()) === null && chartLevels(incompleteRow()) === null && chartLevels(null) === null, 'an observation, an incomplete row and no row draw no lines')
+const pullbackRow = { ...conditionalBreakout(), entry_type: 'pullback', levels: { kind: 'actionable' as const, entry_type: 'pullback', trigger_price: null, reference_entry: 27.27, entry_low: 26.85, entry_high: 27.69, invalid_price: 25.96, target_1: 28.15, target_2: null, risk_reward: 0.67 } }
+check(chartLevels(pullbackRow)?.entry === 27.27, 'a pullback enters at the reference entry (the zone midpoint from pullback_v4 on)')
+check(chartLevels({ ...pullbackRow, levels: { ...pullbackRow.levels, reference_entry: null } })?.entry === (26.85 + 27.69) / 2, 'without a reference entry the zone midpoint is the entry')
+check(chartLevels({ ...pullbackRow, levels: { ...pullbackRow.levels, invalid_price: null } }) === null, 'half a set of levels draws nothing')
+check(chartLevels({ ...pullbackRow, levels: { ...pullbackRow.levels, invalid_price: 28 } }) === null, 'levels out of order (stop above entry) draw nothing')
+const withLevels = (levels: ReturnType<typeof chartLevels>) => buildBarsChartOption(longDaily, { panel: 'macd', panelState: indicatorPanelState(longDaily, 'macd'), visibleMa: allMa, theme, layout, zoom: zoomForView(longDaily, { range: DEFAULT_BARS_RANGE }), digits: 2, levels })
+type Marked = { markLine?: { silent: boolean; data: Array<{ name: string; yAxis: number; lineStyle: { color: string; type: string }; label: { formatter: string } }> }; markArea?: { data: Array<Array<{ yAxis: number; itemStyle?: { color: string } }>> } }
+const levelled = withLevels(breakoutLevels)
+const candle = (levelled.series as Marked[])[0]
+check(candle.markLine?.data.map((line) => `${line.name}:${line.yAxis}`).join() === '目標:2458,進場:2400,停損:2364', `three lines on the K series: ${JSON.stringify(candle.markLine?.data)}`)
+check(candle.markLine?.silent === true, 'the lines do not take the pointer from the crosshair')
+const colorOf = (name: string) => candle.markLine?.data.find((line) => line.name === name)?.lineStyle.color
+check(colorOf('停損') === theme.warning && colorOf('目標') === theme.primary && colorOf('進場') === theme.text, 'stop is the warning token, target the primary token: never the up/down colors')
+check(candle.markLine?.data.find((line) => line.name === '進場')?.lineStyle.type === 'dashed', 'the entry line is dashed')
+check(candle.markLine?.data.find((line) => line.name === '停損')?.label.formatter === '停損 2,364.00', `the label carries the price: ${candle.markLine?.data[2].label.formatter}`)
+check(JSON.stringify(candle.markArea?.data.map((band) => band.map((edge) => edge.yAxis))) === '[[2400,2458],[2364,2400]]', 'the bands run entry to target and stop to entry')
+type Extent = { min: number; max: number }
+type PriceAxis = { min?: (extent: Extent) => number; max?: (extent: Extent) => number }
+const priceAxis = (levelled.yAxis as PriceAxis[])[0]
+const reached = { min: priceAxis.min!({ min: 2390, max: 2410 }), max: priceAxis.max!({ min: 2390, max: 2410 }) }
+check(reached.min < 2364 && reached.max > 2458, `the price axis reaches a stop and a target outside the visible bars: ${JSON.stringify(reached)}`)
+check(priceAxis.min?.({ min: 2000, max: 3000 }) === 2000 && priceAxis.max?.({ min: 2000, max: 3000 }) === 3000, 'and keeps the bars when they reach further')
+const plain = withLevels(null)
+check((plain.series as Marked[])[0].markLine === undefined && (plain.yAxis as Array<{ min?: unknown }>)[0].min === undefined, 'no levels: the K series and the axis are as before')
+check(levelsNote(breakoutLevels!) === '規則價位線：進場 2,400.00 元（虛線）、停損 2,364.00 元、目標 2,458.00 元；條件成立當日的價位，不是成交價。', levelsNote(breakoutLevels!))
+
+// Issue 647 (#620, 3147 on 2026-11-11): a 50–500 stock draws candles and axis at one decimal, but the levels read as
+// the strategy board writes them (335.71, not 335.7), and a target at the range high keeps its label inside the pane.
+const midLevels = { entry: 341.2, stop: 335.71, target: 352.37 }
+const midDaily = barsResponse(Array.from({ length: 30 }, (_, index) => tradedBar(`2026-10-${String(1 + index).padStart(2, '0')}`, 337 + (index % 15), index + 1)))
+const midOption = (mainHeight: number) => buildBarsChartOption(midDaily, { panel: 'macd', panelState: indicatorPanelState(midDaily, 'macd'), visibleMa: allMa, theme, layout: chartLayout(mainHeight), zoom: { start: 0, end: 100 }, digits: priceDigits(352, 'stock'), levels: midLevels })
+const midLabels = ((midOption(320).series as Marked[])[0].markLine?.data ?? []).map((line) => line.label.formatter)
+check(priceDigits(352, 'stock') === 1, 'a 352 yuan stock keeps one decimal on the candles and the axis')
+check(midLabels.join() === '目標 352.37,進場 341.20,停損 335.71', `line labels use the board's two decimals: ${midLabels.join()}`)
+check(levelsNote(midLevels).includes('停損 335.71 元') && levelsNote(midLevels).includes('目標 352.37 元'), levelsNote(midLevels))
+const midChart = renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => {}} data={midDaily} loading={false} error={null} instrumentType="stock" levels={midLevels} />)
+check(midChart.includes('停損 335.71 元') && midChart.includes('進場 341.20 元') && !midChart.includes('335.7 元'), 'the note under the chart reads 335.71')
+for (const mainHeight of [320, 220]) {
+  const axis = (midOption(mainHeight).yAxis as PriceAxis[])[0]
+  // The bars span exactly stop..target: the target is the range high and the stop the range low.
+  const extent = { min: midLevels.stop, max: midLevels.target }
+  const top = axis.max!(extent)
+  const bottom = axis.min!(extent)
+  const px = (value: number) => value / (top - bottom) * mainHeight
+  check(top > midLevels.target && px(top - midLevels.target) >= LEVEL_LABEL_PX - 1e-9, `${mainHeight}px: a target at the range high leaves a label height above it: ${top}`)
+  check(bottom < midLevels.stop && px(midLevels.stop - bottom) >= LEVEL_LABEL_PX - 1e-9, `${mainHeight}px: a stop at the range low leaves a label height below it: ${bottom}`)
+}
+const axisLabelOf = (option: ReturnType<typeof buildBarsChartOption>) => (option.yAxis as Array<{ axisLabel: { showMaxLabel?: boolean } }>)[0].axisLabel
+check(axisLabelOf(midOption(220)).showMaxLabel === false && axisLabelOf(plain).showMaxLabel === undefined, 'with levels the padded, unround axis top has no label')
+check(Object.values(CHART_LEVEL_LABELS).join() === '進場,停損,目標', 'level labels')
+const chartWithLevels = renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => {}} data={longDaily} loading={false} error={null} levels={breakoutLevels} />)
+check(chartWithLevels.includes('data-chart-levels') && chartWithLevels.includes('含規則價位線'), 'the chart card states the levels as text')
+check(!renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => {}} data={longDaily} loading={false} error={null} />).includes('data-chart-levels'), 'no levels: no note')
+
+// ---- #656: the stock page splits the card — price and volume above, the indicator panel and the data table in 走勢 ----
+const splitZoom = zoomForView(longDaily, { range: '1m' })
+const optionOf = (parts: 'price' | 'indicator') => buildBarsChartOption(longDaily, {
+  panel: 'macd', panelState: indicatorPanelState(longDaily, 'macd'), visibleMa: allMa, theme, zoom: splitZoom, digits: 2, parts,
+  layout: parts === 'price' ? priceChartLayout(SPLIT_MAIN_HEIGHT.desktop) : indicatorChartLayout(INDICATOR_CHART_HEIGHT.desktop),
+  levels: parts === 'price' ? breakoutLevels : null,
+})
+type SplitSeries = { name: string; type: string; xAxisIndex: number }
+type SplitZoom = { id: string; type: string; xAxisIndex: number[]; startValue?: number; endValue?: number }
+const priceOption = optionOf('price')
+const indicatorOption = optionOf('indicator')
+const priceSeries = priceOption.series as SplitSeries[]
+const indicatorOnly = indicatorOption.series as SplitSeries[]
+check((priceOption.grid as unknown[]).length === 2 && priceSeries.every((item) => item.xAxisIndex <= 1), 'price chart: the main and volume panes only')
+check(priceSeries[0].type === 'candlestick' && priceSeries.some((item) => item.name === '成交量') && !priceSeries.some((item) => ['DIF', 'DEA', 'MACD 柱'].includes(item.name)), `price chart: K, MAs and volume, no indicator series: ${priceSeries.map((item) => item.name).join()}`)
+check(JSON.stringify((priceSeries[0] as unknown as Marked).markLine?.data.map((line) => line.name)) === '["目標","進場","停損"]', 'price chart: the rule levels stay on the price pane')
+check((indicatorOption.grid as unknown[]).length === 1 && indicatorOnly.length === 3 && indicatorOnly.every((item) => item.xAxisIndex === 0) && !indicatorOnly.some((item) => item.type === 'candlestick'), `indicator chart: one pane with the MACD series only: ${indicatorOnly.map((item) => item.name).join()}`)
+const priceZooms = priceOption.dataZoom as SplitZoom[]
+const indicatorZooms = indicatorOption.dataZoom as SplitZoom[]
+check(priceZooms.map((item) => item.type).join() === 'inside,slider' && indicatorZooms.map((item) => item.type).join() === 'inside', 'the slider is on the K-line card only')
+check(priceZooms.every((item) => item.startValue === indicatorZooms[0].startValue && item.endValue === indicatorZooms[0].endValue) && indicatorZooms[0].startValue === (splitZoom as { startValue: number }).startValue, 'same view → both charts zoom to the same bars')
+check(priceZooms[0].id === indicatorZooms[0].id && priceZooms[0].xAxisIndex.join() === '0,1' && indicatorZooms[0].xAxisIndex.join() === '0', 'the inside zooms share an id, so a connected inside zoom moves both')
+check(priceChartLayout(SPLIT_MAIN_HEIGHT.desktop).height < chartLayout(320).height && SPLIT_MAIN_HEIGHT.desktop > 320 && SPLIT_MAIN_HEIGHT.narrow > 220, 'the split card has a taller main pane and is still shorter than the whole card')
+const splitTip = formatBarsTooltip(longDaily, 120, 'macd', allMa, 2, 'price')
+const indicatorTip = formatBarsTooltip(longDaily, 120, 'macd', allMa, 2, 'indicator')
+check(splitTip.includes('開 ') && splitTip.includes('MA5 ') && !splitTip.includes('DIF '), `price tooltip: prices and MAs: ${splitTip}`)
+check(!indicatorTip.includes('開 ') && !indicatorTip.includes('MA5 ') && indicatorTip.includes('DIF '), `indicator tooltip: the panel values only: ${indicatorTip}`)
+
+// The page's shared state as the two cards receive it (useBarsView in StockPage); setView/redraw are the page's.
+const sharedState = (data: StockBarsResponse, view: BarsView): BarsViewState => ({
+  data, zoom: zoomForView(data, view), view, setView: () => undefined, redraw: () => undefined,
+  longer: { loading: false, failed: false, retry: () => undefined },
+})
+const windowsOf = (markup: string) => [...markup.matchAll(/data-bars-window="([^"]+)"/g)].map((match) => match[1])
+const pagePair = (state: BarsViewState, interval: 'day' | 'week' = 'day') => {
+  const top = renderToStaticMarkup(<StockBarsChart split bars={state} title="K 線" interval={interval} onIntervalChange={() => undefined} data={state.data} loading={false} error={null} levels={breakoutLevels} />)
+  const tab = renderToStaticMarkup(<StockIndicatorCard bars={state} interval={interval} loading={false} error={null} />)
+  return { top, tab, windows: [...windowsOf(top), ...windowsOf(tab)] }
+}
+const pair = pagePair(sharedState(longDaily, { range: DEFAULT_BARS_RANGE }))
+check(pair.top.includes('>K 線</h') && !pair.top.includes('indicators/v1') && !pair.top.includes('技術指標'), `K-line card: titled K 線, no eyebrow: ${pair.top.slice(0, 300)}`)
+check(!pair.top.includes('indicator-tab-') && !pair.top.includes('查看圖表資料表') && !pair.top.includes('日線批次計算於'), 'K-line card: no indicator panel, data table or batch time')
+check(pair.top.indexOf('class="chart-stage"') < pair.top.indexOf('class="chart-ma-row"') && pair.top.indexOf('chart-ma-row') < pair.top.indexOf('data-chart-levels') && !pair.top.slice(0, pair.top.indexOf('chart-stage')).includes('ma-toggle'), 'K-line card: the MA toggles are the first line under the chart')
+check(pair.top.includes('bars-range') && pair.top.includes('bars-interval-tab-week'), 'K-line card: keeps 日K／週K and the range buttons')
+check(['MACD', 'RSI', 'KD', '布林'].every((label) => pair.tab.includes(`>${label}</button>`)) && pair.tab.includes('查看圖表資料表（最近 30 根）') && pair.tab.includes('日線批次計算於') && pair.tab.includes('技術指標 indicators/v1') && pair.tab.includes('>技術指標</h'), 'indicator card: the four panels, the data table, the batch time and the formula version')
+check(!pair.tab.includes('bars-range') && !pair.tab.includes('ma-toggle'), 'indicator card: no window controls of its own')
+check(pair.windows.length === 2 && pair.windows[0] === pair.windows[1], `default range: both charts show the same bars: ${pair.windows.join(' / ')}`)
+const pairOneMonth = pagePair(sharedState(longDaily, { range: '1m' }))
+check(pairOneMonth.windows[0] === pairOneMonth.windows[1] && pairOneMonth.windows[0] !== pair.windows[0] && pairOneMonth.windows[0] === barsWindow(longDaily, zoomForView(longDaily, { range: '1m' })), `range button: both charts move to 1M: ${pairOneMonth.windows.join(' / ')}`)
+check(pairOneMonth.top.includes('aria-pressed="true">1M</button>'), 'range button: 1M is selected above')
+const weeklyPair = pagePair(sharedState(weekly, { range: '1m' }), 'week')
+check(weeklyPair.windows.every((window) => window.startsWith('week:')) && weeklyPair.windows[0] === weeklyPair.windows[1] && weeklyPair.tab.includes('週線'), `週K: both charts switch to the weekly bars: ${weeklyPair.windows.join(' / ')}`)
+// A drag or wheel on either chart reports the same ECharts payload; the view it leaves redraws both.
+for (const [chart, event] of [['K-line card', { start: 40, end: 80 }], ['indicator chart', { batch: [{ dataZoomId: 'bars-inside', start: 40, end: 80 }] }]] as const) {
+  const zoomed = viewFromZoomEvent(longDaily, event, splitZoom)
+  check(zoomed !== null && zoomed.range === null, `${chart}: a zoom clears the range`)
+  const after = pagePair(sharedState(longDaily, zoomed!))
+  check(after.windows[0] === after.windows[1] && after.windows[0] === barsWindow(longDaily, { start: 40, end: 80 }) && !after.top.includes('aria-pressed="true"'), `${chart}: a zoom moves both charts: ${after.windows.join(' / ')}`)
+}
+// Today list and market page: the whole card as before (no split): indicator tabs, data table and MA toggles above.
+const whole = renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => undefined} data={longDaily} loading={false} error={null} />)
+check(whole.includes('indicator-tab-macd') && whole.includes('查看圖表資料表') && whole.includes('技術指標 indicators/v1') && !whole.includes('chart-ma-row') && whole.indexOf('ma-toggle') < whole.indexOf('chart-stage'), 'without split the card is unchanged')

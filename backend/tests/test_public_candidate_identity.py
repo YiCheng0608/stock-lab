@@ -152,7 +152,7 @@ class PublicCandidateIdentityTest(unittest.TestCase):
             api.theme_members(
                 "g", q=None, sort="symbol", page=1, page_size=1, db=self.db
             )["theme"],
-            api.dashboard(db=self.db)["groups"][0],
+            api.dashboard(db=self.db, include=["groups"])["groups"][0],
             api.dashboard(db=self.db)["themes"][0],
         ]
 
@@ -270,7 +270,7 @@ class PublicCandidateIdentityTest(unittest.TestCase):
                     ("/api/themes/g", lambda p: p["theme"]),
                     ("/api/themes/g/members?page=2&page_size=1", lambda p: p["theme"]),
                     ("/api/dashboard", lambda p: p["themes"][0]),
-                    ("/api/dashboard", lambda p: p["groups"][0]),
+                    ("/api/dashboard?include=groups", lambda p: p["groups"][0]),
                 ]
                 for path, select in routes:
                     response = await client.get(path)

@@ -684,7 +684,7 @@ def _score_rows() -> list[dict[str, Any]]:
 
 # ---- strategies and signals ----
 
-STRATEGY_IDS = {"breakout_v3": 1, "pullback_v3": 2, "hot_group_v1": 3}
+STRATEGY_IDS = {"breakout_v3": 1, "pullback_v4": 2, "hot_group_v1": 3}
 
 
 def _strategy_rows() -> list[dict[str, Any]]:
@@ -736,7 +736,7 @@ def _signal_rows() -> list[dict[str, Any]]:
         closes = [bar["close"] for bar in bars]
         ma20 = round(sum(closes[-20:]) / 20, 4)
         ma60 = round(sum(closes[-60:]) / 60, 4)
-        for strategy, status in zip(("breakout_v3", "pullback_v3"), statuses):
+        for strategy, status in zip(("breakout_v3", "pullback_v4"), statuses):
             breakout = strategy == "breakout_v3"
             conditional = status == "conditional"
             entry = close
@@ -942,7 +942,7 @@ def _ingestion_rows() -> list[dict[str, Any]]:
             2,
             "news",
             "news",
-            5,
+            6,
             f"{T.isoformat()}T10:00:00+08:00",
             {"feeds": 2},
             _at(T, 2),
@@ -951,9 +951,9 @@ def _ingestion_rows() -> list[dict[str, Any]]:
             3,
             "news_llm",
             "claude",
-            4,
+            5,
             None,
-            {"prompt_version": NEWS_PROMPT_VERSION, "calls": 4},
+            {"prompt_version": NEWS_PROMPT_VERSION, "calls": 5},
             _at(T, 3),
         ),
         run(
@@ -1091,6 +1091,7 @@ def _market_summary_rows() -> list[dict[str, Any]]:
 
 DOMESTIC_SOURCE = "示範財經社"
 INTERNATIONAL_SOURCE = "Demo Wire"
+WIRE_SOURCE = "示範通訊社"
 
 
 def _news(
@@ -1186,6 +1187,18 @@ def _news_rows() -> list[dict[str, Any]]:
             summary="虛構新聞：示範散熱新廠設備進駐時程延後，尚未產生 AI 判讀。",
             published_at=_at(yesterday, 3, 0),
             symbols=["TPEx:9203"],
+            raw_payload_id=3,
+        ),
+        # The same wire story from a second source, with an AI direction (#613).
+        _news(
+            7,
+            category="domestic",
+            source_kind="media",
+            source_name=WIRE_SOURCE,
+            title="示範散熱新廠擴產進度延後一季",
+            summary="虛構新聞：通訊社轉載示範散熱新廠設備進駐延後一事。",
+            published_at=_at(yesterday, 2, 30),
+            symbols=[],
             raw_payload_id=3,
         ),
         _news(
@@ -1303,63 +1316,16 @@ def _llm_rows() -> list[dict[str, Any]]:
             "market",
             "資本支出下修可能壓抑伺服器需求。",
         ),
-    ]
-
-
-def _suggestion_rows() -> list[dict[str, Any]]:
-    yesterday = SESSIONS[-2]
-
-    def suggestion(item_id, name, count, first, last):
-        return {
-            "id": item_id,
-            "theme_key": name,  # theme_key(): NFKC, no whitespace, casefold
-            "display_name": name,
-            "prompt_version": NEWS_PROMPT_VERSION,
-            "aggregation_version": "theme_suggestions_v1",
-            "llm_models_json": [LLM_MODEL],
-            "news_count": count,
-            "first_news_date": first,
-            "last_news_date": last,
-            "status": "pending_verification",
-            "computed_at": _at(T, 4),
-        }
-
-    return [
-        suggestion(1, "示範液冷散熱", 2, yesterday, yesterday),
-        suggestion(2, "示範車用晶片", 1, T, T),
-    ]
-
-
-def _suggestion_news_rows() -> list[dict[str, Any]]:
-    yesterday = SESSIONS[-2]
-    return [
-        {
-            "id": 1,
-            "suggestion_id": 1,
-            "news_item_id": 2,
-            "news_llm_result_id": 2,
-            "theme_text": "示範液冷散熱",
-            "reason": "液冷機櫃需求",
-            "news_date": yesterday,
-        },
-        {
-            "id": 2,
-            "suggestion_id": 1,
-            "news_item_id": 4,
-            "news_llm_result_id": 3,
-            "theme_text": "示範液冷散熱",
-            "reason": "資料中心擴建帶動",
-            "news_date": yesterday,
-        },
-        {
-            "id": 3,
-            "suggestion_id": 2,
-            "news_item_id": 1,
-            "news_llm_result_id": 1,
-            "theme_text": "示範車用晶片",
-            "reason": "先進製程需求來自車用",
-            "news_date": T,
-        },
+        result(
+            5,
+            7,
+            "示範散熱擴產延後，短期出貨可能受影響。",
+            [],
+            [],
+            "negative",
+            "instrument",
+            "新廠延後一季可能壓抑出貨成長。",
+        ),
     ]
 
 
@@ -1502,7 +1468,7 @@ _PLANS = (
     (
         3,
         "9201",
-        "pullback_v3",
+        "pullback_v4",
         SESSIONS[-12],
         "target_hit",
         {
@@ -1916,8 +1882,6 @@ TABLES: dict[str, list[dict[str, Any]]] = {
     "strategy_levels": _strategy_level_rows(),
     "news_items": _news_rows(),
     "news_llm_results": _llm_rows(),
-    "theme_suggestions": _suggestion_rows(),
-    "theme_suggestion_news": _suggestion_news_rows(),
     "candidate_runs": _candidate_run_rows(),
     "daily_candidates": _daily_candidate_rows(),
     "candidate_llm_notes": _candidate_note_rows(),
@@ -1960,7 +1924,6 @@ INTENTIONALLY_EMPTY: dict[str, dict[str, str]] = {
         "execution_date": "最早可成交日 2026-10-19 休市（ingestion_runs id 5 skipped），還沒有成交",
         "execution_price": "同 execution_date",
     },
-    "theme_suggestions": {"matched_group_id": "兩個建議都是新題材，未對應既有族群"},
     "tracking_plans": {
         "incomparable_reason": "結束的計畫都可比較；「無法比較」的文案由到期與已取消的計畫驗"
     },
@@ -1999,6 +1962,10 @@ OMITTED_TABLES: dict[str, str] = {
         "休市表只給 analyze 推算規則最早執行日；API 不讀，"
         "假資料的訊號直接寫好 earliest_execution_date"
     ),
+    "trading_halts": (
+        "減資停止買賣區間（#582）；假資料的標的每個交易日都有行情，沒有停止買賣。"
+        "個股頁頁首的停止買賣 badge 與原因句由後端 test_trading_halts 與前端測試驗"
+    ),
 }
 
 # ---- expected API results per main page ----
@@ -2021,15 +1988,10 @@ TARGET_PLAN = next(row for row in TABLES["tracking_plans"] if row["id"] == 3)
 EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
     "today": [
         ("dashboard", "as_of", D),
+        # The navbar date (#601) is the dashboard as_of; groups ship on include only.
+        ("data-date", "as_of", D),
+        ("dashboard?include=groups", "groups", len(GROUPS)),
         ("dashboard", "market.instruments", 8),  # 7 stocks + 1 ETF, not TAIEX
-        ("dashboard", "news", 6),
-        ("dashboard", "news[].id", ["1", "5", "6", "4", "2", "3"]),
-        # The today card carries the detail's ai block (#233).
-        (
-            "dashboard",
-            "news[].ai.status",
-            ["done", "done", None, "done", "done", None],
-        ),
         ("dashboard", "themes", 5),
         (
             "dashboard",
@@ -2083,6 +2045,13 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
             "market_overview.foreign_indices.0.trading_date",
             SERIES["SPX"][-1]["day"].isoformat(),
         ),
+        # The market page's index table (Issue #564): seven rows in table order, all with data.
+        (
+            "dashboard",
+            "market_overview.indexes[].key",
+            ["taiex", "tpex", "tx", "spx", "ixic", "dji", "sox"],
+        ),
+        ("dashboard", "market_overview.indexes[].status", ["available"] * 7),
         ("stocks/US/SPX/bars?interval=day&limit=250", "bars", len(SERIES["SPX"])),
         ("stocks/US/SPX/bars?interval=day&limit=250", "sources", ["fred_close"]),
         ("themes?board=industry&limit=5", "meta.trading_date", D),
@@ -2095,16 +2064,31 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         ("candidates", "items[].instrument.symbol", ["9101", "9103", "9201"]),
         ("candidates", "items[].llm_note.status", ["done", "done", "done"]),
         ("candidates", "items[].open_plan_id", [1, None, None]),  # plan 1
+        # The rows' sparklines (Issue 653): the last 30 TAIEX sessions to D, old
+        # to new, and each stock's stored close on them (no fixture gap).
+        (
+            "candidates",
+            "items.0.recent_closes.dates",
+            [row["day"].isoformat() for row in SERIES["TAIEX"][-30:]],
+        ),
+        (
+            "candidates",
+            "items[].recent_closes.closes",
+            [
+                [row["close"] for row in SERIES[symbol][-30:]]
+                for symbol in ("9101", "9103", "9201")
+            ],
+        ),
         ("news/1", "ai.status", "done"),
         ("news/5", "ai.status", "done"),
         ("news/6", "ai", None),
     ],
     "news": [
-        ("news?category=domestic&limit=20", "items", 3),
+        ("news?category=domestic&limit=20", "items", 4),
         (
             "news?category=domestic&limit=20",
             "items[].ai.status",
-            ["done", "done", None],
+            ["done", "done", None, "done"],
         ),
         ("news?category=international&limit=20", "items", 2),
         ("news?category=international&limit=20", "items[].ai.status", ["done", "done"]),
@@ -2137,8 +2121,6 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
             "items[].display_name",
             ["示範 AI 伺服器", "示範先進封裝"],
         ),
-        ("theme-suggestions?limit=20", "meta.total", 2),
-        ("theme-suggestions?limit=20", "items[].news_count", [2, 1]),
         (f"themes/{TOP_THEME}", "members_total", 3),
         # The delisted 9205 and the moved 9206 left these groups (LIFECYCLE).
         (f"themes/{BIOTECH_ID}", "members_total", 1),
@@ -2170,6 +2152,17 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
     "stocks": [
         ("stocks?page=1&page_size=30", "meta.total", 8),
         ("stocks?page=1&page_size=30", "items", 8),
+        # Stocks before the ETF, each by symbol whatever the exchange (#602).
+        (
+            "stocks?page=1&page_size=30",
+            "items[].instrument.symbol",
+            ["9101", "9102", "9103", "9201", "9202", "9203", "9204", "00990"],
+        ),
+        (
+            "stocks?page=1&page_size=30&sort=symbol",
+            "items[].instrument.symbol",
+            ["00990", "9101", "9102", "9103", "9201", "9202", "9203", "9204"],
+        ),
         # Neither lifecycle stock is a current instrument; their history stays.
         (
             "stocks?q=920&page=1&page_size=30",
@@ -2196,7 +2189,8 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         ),
         (f"stocks/{E}/{S}", "monthly_revenues[].yoy", [15.578, -3.255, None]),
         ("stocks/{}/{}".format(*NO_DATA_STOCK), "monthly_revenues", 0),
-        (f"stocks/{E}/{S}", "news", 1),
+        # News rows ship on include=news only; the page reads /news (#601).
+        (f"stocks/{E}/{S}?include=news", "news", 1),
         (f"stocks/{E}/{S}", "candidate.rank", 1),
         (f"stocks/{E}/{S}", "candidate.open_plan_id", 1),
         # The strategy board (#274): signal levels for the breakout, strategy_levels for the pullback.

@@ -62,7 +62,7 @@
   --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px;
   --space-12: 48px; --space-16: 64px; --space-24: 96px;
   --space-label: var(--space-1); /* 標籤與值的間距（DESIGN_SYSTEM §5「標籤與值」） */
-  --space-row: var(--space-3);   /* 清單列上下 padding（今日可買列） */
+  --space-row: var(--space-3);   /* 清單列上下 padding（今日名單列） */
   --space-block: var(--space-8); /* 今日頁區塊間距 */
 
   /* 版面 */

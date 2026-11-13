@@ -257,7 +257,7 @@ def _add_signal_pair(
         canonical_config_snapshot={},
     )
     pullback = StrategyVersion(
-        name="pullback_v3",
+        name="pullback_v4",
         version="3.0.0",
         kind="technical",
         config_json={},
@@ -463,7 +463,8 @@ def test_news_projection_persists_once_and_hides_unverified_theme(product_api):
         )
 
 
-def test_dashboard_news_and_group_rows_use_compact_projections(product_api):
+def test_dashboard_has_no_news_and_groups_come_on_include(product_api):
+    # Issue 625: the home page lists no news, so the dashboard carries none.
     with product_api() as db:
         as_of, alpha, _beta, _etf = _add_base_fixture(db)
         db.add(
@@ -481,17 +482,11 @@ def test_dashboard_news_and_group_rows_use_compact_projections(product_api):
         db.commit()
 
     with TestClient(app) as client:
-        response = client.get("/api/dashboard")
+        response = client.get("/api/dashboard?include=groups")
 
     assert response.status_code == 200
-    item = next(
-        row
-        for row in response.json()["news"]
-        if row["title"] == "Compact dashboard notice"
-    )
-    assert "summary" not in item
-    assert "provenance" not in item
-    assert len(item["summary_preview"]) <= 120
+    assert "news" not in response.json()
+    assert "news" not in response.json()["empty_states"]
     assert response.json()["groups"]
     assert all("methodology" not in row for row in response.json()["groups"])
 
@@ -1230,7 +1225,10 @@ def test_stock_quality_explains_market_and_research_as_separate_purposes(product
         _as_of, alpha, _beta, _etf = _add_base_fixture(db)
 
     with TestClient(app) as client:
-        response = client.get(f"/api/stocks/{alpha.exchange}/{alpha.symbol}")
+        response = client.get(
+            f"/api/stocks/{alpha.exchange}/{alpha.symbol}",
+            params={"include": "strategy_conditions"},
+        )
 
     assert response.status_code == 200
     quality = response.json()["quality_summary"]
@@ -1666,7 +1664,7 @@ def test_complete_conditional_wins_over_observation_without_level_pollution(
     assert summary["primary_reason"]["scope"] == "breakout"
     assert summary["primary_levels"]["kind"] == "trigger_invalid"
     assert summary["primary_strategy"] == "breakout_v3"
-    assert summary["alternative_strategies"] == ["pullback_v3"]
+    assert summary["alternative_strategies"] == ["pullback_v4"]
     assert summary["trigger_price"] == pytest.approx(21.05)
     assert summary["invalid_price"] == pytest.approx(20.47)
     assert summary["target_1"] == pytest.approx(21.98)
@@ -1725,7 +1723,7 @@ def test_incomplete_primary_strategy_fails_closed_but_exposes_alternative(produc
     assert "data_incomplete" in summary["blocking_reasons"]
     assert {item["strategy"] for item in summary["strategies"]} == {
         "breakout_v3",
-        "pullback_v3",
+        "pullback_v4",
     }
 
 
@@ -1753,7 +1751,7 @@ def test_complete_observations_without_wait_levels_are_no_condition(product_api)
     )
     assert {item["strategy"] for item in summary["strategies"]} == {
         "breakout_v3",
-        "pullback_v3",
+        "pullback_v4",
     }
     assert all(item["data_quality"] == "complete" for item in summary["strategies"])
 
@@ -1910,7 +1908,7 @@ def test_action_summary_preserves_two_strategy_conflict(product_api):
             canonical_config_snapshot={},
         )
         pullback = StrategyVersion(
-            name="pullback_v3",
+            name="pullback_v4",
             version="3.0.0",
             kind="technical",
             config_json={},
@@ -1963,7 +1961,7 @@ def test_action_summary_preserves_two_strategy_conflict(product_api):
     assert summary["action_state"] == "manual_review"
     assert set(summary["alternative_strategies"] + [summary["primary_strategy"]]) == {
         "breakout_v3",
-        "pullback_v3",
+        "pullback_v4",
     }
     assert summary["conflicts"]
 

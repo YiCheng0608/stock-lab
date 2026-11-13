@@ -1,36 +1,18 @@
 <!-- owns: 統籌事件 monitor -->
 # 統籌事件 monitor
 
-`tools/ops/monitor.sh`（bash，不用 LLM）在 scheduler 容器由 serve 每分鐘跑一輪（`STOCK_MONITOR`，見本節的「scheduler 容器裡的 monitor」；切換前由工作排程器的 `\stock-lab\monitor` 常駐執行）（[#316](https://github.com/YiCheng0608/stock-lab/issues/316)；使用者同意新增，算在 #1 [6235419623](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6235419623) 之內），替統籌輪詢 GitHub 與排程，統籌怎麼處理佇列見[統籌手冊「無人值守運作」](../COORDINATOR.md#無人值守運作)。每 60 秒（`--interval`，至少 60）一輪：
+`tools/ops/monitor.sh`（bash，不用 LLM）在 scheduler 容器由 serve 每分鐘跑一輪（`STOCK_MONITOR`，見本節的「scheduler 容器裡的 monitor」）（[#316](https://github.com/YiCheng0608/stock-lab/issues/316)；使用者同意新增，算在 #1 [6235419623](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6235419623) 之內），替統籌輪詢 GitHub 與排程，統籌怎麼處理佇列見[統籌手冊「無人值守運作」](../COORDINATOR.md#無人值守運作)。每 60 秒（`--interval`，至少 60）一輪：
 
 - **gh**：每輪最多 2 次，`gh pr list`（open PR 的 CI 與 `mergeStateStatus`）與 repo 層級 `issues/comments?since=`（游標存在 `logs/monitor-state.json`，第一輪往回 1 小時）；要在 #1 留言的那一輪以留言取代查留言。約 120 次／小時，帳號的 5000 次／小時由所有 session 共用。每次 gh 與 orca 呼叫最多 120 秒，逾時就當這一項失敗，照常寫心跳，不重試。已知限制：monitor 自己的 Python（`event_queue.py`）與時鐘呼叫沒有逾時，卡住時要等心跳超過 10 分鐘，由下一次排程觸發接手。
-- **其他來源**：`orca worktree list`（task worktree 少於 3 個時記並行名額事件）、daily 每一個 `end` 列、news 的 news 或 news-llm 失敗的 `end` 列（各讀最新兩個日誌檔）、看門狗的 `gh_auth_failed` 列（`watchdog.log`）。
+- **其他來源**：`orca worktree list`（task worktree 少於 3 個時記並行名額事件；worktree 數含只等合併或只等外部時點的任務，所以 3 個以上時名額仍可能有空，以 [AGENTS](../../AGENTS.md#任務生命週期) 的算法為準）、daily 每一個 `end` 列、news 的 news 或 news-llm 失敗的 `end` 列（各讀最新兩個日誌檔）、看門狗的 `gh_auth_failed` 列（`watchdog.log`），以及佇列目錄的 `sessions/*.json`（工程師 session 的 turn hook 寫的狀態檔，#595；hook 怎麼寫、統籌怎麼處理見[工程師 session 的狀態](../COORDINATOR.md#無人值守運作)；只讀，不呼叫 gh 或 orca）：`stopped` 而 `commented` 不是 true、`ended_at` 超過 30 分鐘記 `engineer_waiting`；`failed` 立即記 `engineer_failed`；`ended` 而該任務的 branch 仍在這一輪的 task worktree 清單裡記 `engineer_ended`（清單取不到的那一輪不記）。都照常喚醒；事件文字帶 Issue 號與最後一則訊息的前 120 字，事件另帶 `detail`（完整的最後一則訊息，500 字內），`patrol.sh` 印出來。欄位型別不對的檔不產生事件；讀不了的檔只略過它自己，在 `monitor.log` 記一列 `session_skipped`，同一輪的其他事件與心跳照常。
 - **gh 被拒**（#338）：看門狗記 `gh_auth_failed`，或 monitor 自己的 gh 呼叫被 GitHub 拒絕（判定與看門狗相同：[`gh_auth.sh`](../../tools/ops/gh_auth.sh)，[容器內的 claude 與 gh 認證（.env）](SETUP.md#容器內的-claude-與-gh-認證env)），就記 `gh_auth` 事件，每台北日一個（`gh_auth:<台北日>`，兩個來源同一天只記一次）。這時看門狗與 monitor 都無法在 #1 留言（同一個 `GH_TOKEN`），由被喚醒的統籌用本機 gh 在 #1 留言請使用者換 token。網路錯誤不算。
-- **事件**：去重後附加到 `logs/events.jsonl`（格式寫在 [`event_queue.py`](../../tools/ops/event_queue.py) 開頭）。去重鍵：PR 的 CI 結果以 PR、head commit、最新 workflow run 的 run id 與其 `required` 檢查的結論為鍵（同一 run 不重記，re-run 是新事件；被新 run 取消的舊 run 不算，最新 run 的 `required` 跑完才記）；`mergeStateStatus` 為 `CLEAN`／`DIRTY`／`BEHIND`／`UNSTABLE` 時以 PR、commit 與狀態為鍵；留言以留言 id 為鍵（編輯不重記，monitor 第一輪之前建立的留言不記）；新 PR、PR 離開 open 清單、名額以 task worktree 組合為鍵；gh 被拒以台北日為鍵。重啟後以 `events.jsonl` 去重，已記過與已標記處理（`logs/events-done.jsonl`，統籌以 `patrol.sh --done` 寫入）的事件都不會再出現。
+- **事件**：去重後附加到 `logs/events.jsonl`（格式寫在 [`event_queue.py`](../../tools/ops/event_queue.py) 開頭）。去重鍵：PR 的 CI 結果以 PR、head commit、最新 workflow run 的 run id 與其 `required` 檢查的結論為鍵（同一 run 不重記，re-run 是新事件；被新 run 取消的舊 run 不算，最新 run 的 `required` 跑完才記）；`mergeStateStatus` 為 `CLEAN`／`DIRTY`／`BEHIND`／`UNSTABLE` 時以 PR、commit 與狀態為鍵；留言以留言 id 為鍵（編輯不重記，monitor 第一輪之前建立的留言不記）；新 PR、PR 離開 open 清單、名額以 task worktree 組合為鍵；gh 被拒以台北日為鍵；`engineer_waiting`、`engineer_failed`、`engineer_ended` 以 session id 與狀態檔的 `ended_at` 為鍵（同一個回合不重記，下一個回合結束是新事件）。重啟後以 `events.jsonl` 去重，已記過與已標記處理（`logs/events-done.jsonl`，統籌以 `patrol.sh --done` 寫入）的事件都不會再出現。
 - **不喚醒的事件**（#440）：以下事件照樣寫進 `events.jsonl`，另帶 `quiet` 欄位記原因，`patrol.sh` 在「不喚醒的事件」下列出到被 `--done` 標記為止，但不算未處理（wake listener 回報的 N 也不算）、不喚醒、不讓失敗的喚醒提前重試，也不計入「請開統籌」的 60 分鐘：最後一行是統籌標記的留言（`coordinator_comment`，[`comment.sh`](../../tools/ops/comment.sh) 加上，[統籌留言](../COORDINATOR.md#無人值守運作)）；`pr_gone`；`CLEAN`／`UNSTABLE` 而且同一輪有同 PR 同 head 的新 CI 結果的 merge 狀態（`merge_with_ci`）。`DIRTY`、`BEHIND` 與 CI 結果記過之後才變的 merge 狀態照常喚醒。舊的事件列沒有 `quiet`，照原樣讀，不重算。已知限制：PR 沒有合併就關閉、也沒有人留言時，只剩不喚醒的 `pr_gone`，統籌不會被叫醒，要等下次 `patrol.sh` 才看得到。
 - **喚醒**：由 waker 執行（`--waker <命令>`，以 `<命令> <terminal> <文字>` 呼叫，exit 0 已送、3 未閒置、其他為失敗；`none` 表示不喚醒、只記 `wake=deferred`，#338）。預設的 [`orca_wake.sh`](../../tools/ops/orca_wake.sh) 做法如下：有新事件時，對心跳檔（`logs/coordinator-heartbeat.json`）記的 terminal 先 `orca terminal wait --for tui-idle --timeout-ms 15000`，回 `satisfied:true` 才 `orca terminal send` 一句「有 N 個事件，請處理佇列：bash tools/ops/patrol.sh」（與派工同一規則，GUARDRAILS 規則表 #282），結果記成 `events.jsonl` 的 `wake` 列；同一事件只在第一次成功送出時喚醒。沒等到閒置（`not_idle`，terminal 不存在或 wait 逾時也算）或送出失敗（沒有心跳、Orca 拒收）每 10 分鐘再試。已知限制：權限詢問畫面也會讓 `tui-idle` 回 `satisfied:true`（#315 實測），這時送出的文字仍可能落在那個畫面上。
 - **請開統籌**：佇列有事件已 60 分鐘、期間統籌心跳都沒更新時，在 #1 留言「待使用者：請開統籌」，同一心跳只留一則（`stale` 列）；不開 session。
 - **自身狀態**：每輪寫 `logs/monitor-heartbeat.json`、把 daily／news 最新日誌的 `end` 列與 `watchdog.log` 最後一列記進 `logs/monitor-state.json`（`patrol.sh` 印這份，不自己讀日誌，#338），並在 `logs/monitor.log` 記一列（UTC 時間、`poll`、`gh_calls`、新事件與未處理數、喚醒結果）；心跳另記 gh 連續失敗的輪數、從何時起與最後的錯誤（失敗那次呼叫自己的 stderr 最後一行；逾時記 `timeout`；沒有輸出記 `exit <碼>`；`patrol.sh` 也印出）。看門狗在心跳超過 10 分鐘或 gh 連續失敗 10 輪時留言（[排程看門狗](WATCHDOG.md)）。同時只跑一個（`logs/monitor.lock/`，內容是持有者的 pid、token 與主機名稱；同一主機時 pid 已不在或心跳超過 10 分鐘就視為殘留接手；鎖是別的主機或容器的（另一個 PID namespace，pid 無從判斷）時，心跳超過 3 分鐘才接手，#338）。每輪開頭、在 #1 留言前與寫佇列前都檢查鎖：被接手的舊 monitor 一發現鎖已不是自己的，就記 `lock_lost` 結束，不再呼叫 gh、留言或寫佇列，也不刪新持有者的鎖與工作目錄（各 monitor 的工作目錄是 `monitor.lock/work.<pid>`）。
 
-`--record-only` 只記事件，不喚醒也不留言（gh 照樣讀），用來在註冊前以真的 GitHub 驗證。執行環境：Git Bash、PATH 上有已登入的 `gh`、Orca CLI（排程的 PATH 沒有 orca，註冊時寫入 `orca.exe` 完整路徑）。以下是工作排程器（切換前）的命令，在發佈 checkout 執行：
-
-| 動作 | 命令 |
-| --- | --- |
-| 預覽 | `powershell -ExecutionPolicy Bypass -File tools/ops/Register-Monitor.ps1 -WhatIf` |
-| 註冊或更新 | `powershell -ExecutionPolicy Bypass -File tools/ops/Register-Monitor.ps1`（`-DataDir`、`-PythonPath`、`-OrcaPath` 預設 `STOCK_DATA_DIR`、`.venv`、`%LOCALAPPDATA%\Programs\orca\resources\bin\orca.exe`；`-RecordOnly` 註冊只記事件的版本） |
-| 查詢 | `schtasks /query /tn "\stock-lab\monitor" /v /fo list`；`tail logs/monitor.log` |
-| 停止 | 建立 `<資料目錄>/logs/monitor.stop`：monitor 做完這一輪就刪掉它並結束（停工作排程可能只結束承載 bash 的 PowerShell）；要停久一點先 `Disable-ScheduledTask -TaskPath \stock-lab\ -TaskName monitor` |
-| 移除 | `powershell -ExecutionPolicy Bypass -File tools/ops/Register-Monitor.ps1 -Unregister`（同時建立 `monitor.stop`） |
-| 手動一輪 | `bash tools/ops/monitor.sh --once --record-only` |
-
-工作以目前使用者、Interactive logon、隱藏執行，登入時啟動，之後每 5 分鐘再觸發一次：執行中就忽略（`IgnoreNew`），已結束就重新啟動，所以 monitor 掛掉最多停 5 分鐘；沒有執行時限。啟動時留著的 `monitor.stop` 屬於先前的 monitor，會刪掉並記 `stop_file_removed`。
-
-上線（第一次以喚醒模式註冊，或從 `-RecordOnly` 改成喚醒模式）：佇列裡已有的事件都還沒喚醒過，註冊後第一輪會一次喚醒全部；放了 60 分鐘以上的事件，如果統籌心跳比它們舊，還會馬上在 #1 留「請開統籌」。所以註冊前先做以下其中一項：
-
-1. 統籌跑 `bash tools/ops/patrol.sh --done <最後 seq>`，把既有事件都標成已處理（最後 seq 是 `patrol.sh` 印的「未處理事件」範圍的最大值）。
-2. 用沒有 `events.jsonl` 的全新資料目錄（`-DataDir`）。
-
-之後再執行「註冊或更新」，並以 `tail logs/monitor.log` 確認第一輪是 `new=0`，或喚醒的只有新事件。
+`--record-only` 只記事件，不喚醒也不留言（gh 照樣讀）；scheduler 容器以 `STOCK_MONITOR=record-only` 使用它（見下）。工作排程器（切換前）的註冊、停止與上線步驟見 [Windows 工作排程器的事件 monitor](platform/windows.md#事件-monitorstock-labmonitor)。
 
 **scheduler 容器裡的 monitor**（#338）：`worker.cli serve` 在 `STOCK_MONITOR` 為 `on`（或 `record-only`）時每分鐘跑一次 `monitor.sh --once`（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)），每一輪都是新啟動的 monitor，所以「重啟後不重複喚醒」就是每一輪的常態；兩輪間隔由觸發保證（每分鐘一次）。檔案分兩處：
 
@@ -38,6 +20,7 @@
 | --- | --- | --- |
 | 佇列目錄：主機的 `STOCK_COORDINATION_DIR`，容器內 `/coordination`（`--queue-dir`） | `events.jsonl`、`monitor-state.json`、`monitor-heartbeat.json`、`monitor.log`、`monitor.lock/`、`monitor.stop` | 容器內的 monitor |
 | 同上 | `coordinator-heartbeat.json`、`events-done.jsonl`、`compactions/`、`handoff-*.json` | 主機上的 `patrol.sh`、`compact_hook.sh` 與統籌 |
+| 同上 | `sessions/<session id>.json`（工程師 session 的狀態，#595） | 主機上工程師 session 的 turn hook（[`turn_hook.cjs`](../../tools/ops/turn_hook.cjs)）；monitor 只讀，`close_task.sh` 結案時刪該任務的 |
 | volume `stock-data` 的 `/data/logs` | daily、news、看門狗的日誌 | 各 job |
 
 compose 的預設佇列目錄是 checkout 內的 `.coordination/`，任務 worktree 以 `--profile scheduler` 起的 scheduler 不會寫進正式佇列，也不會跟正式 monitor 搶鎖。正式 scheduler（發佈 checkout）要設兩個值，放在發佈 checkout 根目錄的 `.env`（compose 以它展開變數，[Docker compose](SETUP.md#docker-compose)）；[`deploy.sh`](../RELEASE.md#部署) 不帶呼叫它的 shell 裡的這兩個值，免得殘留的沙盒設定把正式佇列指走：

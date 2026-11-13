@@ -29,7 +29,6 @@ from app.models import (
     NewsLlmResult,
     RawPayload,
     ThemeGroup,
-    ThemeSuggestion,
 )
 from worker import news_llm
 from worker.news_llm import (
@@ -42,7 +41,6 @@ from worker.news_llm import (
     run_news_llm,
     validate_output,
 )
-from worker.theme_suggestions import refresh_theme_suggestions
 
 FAKE_CLI = Path(__file__).parent / "fixtures" / "news_llm" / "fake_claude.py"
 RUN_DATE = date(2026, 10, 17)
@@ -746,25 +744,6 @@ def _statements(db, call):
         event.remove(engine, "before_cursor_execute", record)
 
 
-def test_dashboard_news_has_the_same_ai_block_as_the_detail(db, fake, client):
-    # #233: the today card and /news/<id> must give one reading of the same item.
-    items = _add_news(db, 3)
-    _run(db)
-    pending = _add_news(db, 1, start=3)[0]
-    news, statements = _statements(
-        db, lambda: client.get(f"{router.prefix}/dashboard").json()["news"]
-    )
-    assert [row["id"] for row in news] == [str(item.id) for item in items] + [
-        str(pending.id)
-    ]
-    for row in news[:3]:
-        detail = client.get(f"{router.prefix}/news/{row['id']}").json()
-        assert row["ai"]["inference"] is True and row["ai"]["status"] == "done"
-        assert row["ai"] == detail["ai"]
-    assert news[3]["ai"] is None
-    assert sum("news_llm_results" in statement for statement in statements) == 1
-
-
 def _utc_instant(value):
     parsed = datetime.fromisoformat(value)
     assert parsed.utcoffset() == timedelta(0), value
@@ -1417,10 +1396,9 @@ def test_only_the_current_prompt_version_result_reaches_any_page(db, client):
         if detail["ai"]
     )
     assert summaries(client.get(f"{router.prefix}/news").json()["items"]) == expected
-    dashboard = client.get(f"{router.prefix}/dashboard").json()
-    assert summaries(dashboard["news"]) == expected
     stock = client.get(
-        f"{router.prefix}/stocks/TWSE/2409", params={"as_of": "2026-10-17"}
+        f"{router.prefix}/stocks/TWSE/2409",
+        params={"as_of": "2026-10-17", "include": "news"},
     ).json()
     assert summaries(stock["news"]) == expected
 
@@ -1765,9 +1743,7 @@ def test_themes_the_source_writes_or_directly_gives_are_kept(db, fake, monkeypat
     assert db.scalars(select(DataQuality)).all() == []
 
 
-def test_a_dropped_theme_is_recorded_and_never_shown_or_suggested(
-    db, fake, client, monkeypatch
-):
+def test_a_dropped_theme_is_recorded_and_never_shown(db, fake, client, monkeypatch):
     # AC-3
     items = _add_theme_cases(db, 5942, 5943, 5961)
     monkeypatch.setenv("FAKE_CLAUDE_MODES", "theme_cases")
@@ -1827,18 +1803,6 @@ def test_a_dropped_theme_is_recorded_and_never_shown_or_suggested(
     detail = client.get(f"{router.prefix}/news/{item.id}").json()
     assert detail["ai"]["theme_candidates"] == []
     assert detail["ai"]["impact_direction"] == "positive"
-    refresh_theme_suggestions(db, now=NOW)
-    assert {row.theme_key for row in db.scalars(select(ThemeSuggestion))} == {
-        "ai網通",
-        "光通訊",
-        "雲端服務",
-    }
-    listed = client.get(
-        f"{router.prefix}/theme-suggestions", params={"include_matched": "true"}
-    ).json()
-    assert sorted(entry["display_name"] for entry in listed["items"]) == sorted(
-        ["AI 網通", "光通訊", "雲端服務"]
-    )
 
 
 def _case_payload(news_id):

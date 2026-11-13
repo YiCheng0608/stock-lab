@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation } from 'react-router-dom'
 
+import { UnlessPageDate } from '../components/pageDate'
 import { Badge, Button, Card, DataTable, DateBadge, EmptyState, Skeleton, type Column } from '../components/ui'
 import { candidateStrategyLabel, exchangeLabel, formatDate, formatEntryZone, formatPrice, formatRiskReward } from '../candidates/candidates'
 import type { AddPlanResponse, StrategyDecision, TrackingPlan, TrackingPlanDetail, TrackingPlanSession, TrackingPlansResponse } from '../types'
@@ -96,7 +97,7 @@ export function StockPlanPanel({ strategies, embedded = false }: { strategies: S
           <ul className="plan-strategy-list">
             {conditional.map((row) => (
               <li key={row.signal_id}>
-                <div><strong>{candidateStrategyLabel(row.strategy)}成立</strong><div className="small-note">條件資料日 {formatDate(row.signal_date) ?? '待核實'}</div></div>
+                <div><strong>{candidateStrategyLabel(row.strategy)}成立</strong><UnlessPageDate date={row.signal_date}><div className="small-note">條件資料日 {formatDate(row.signal_date) ?? '待核實'}</div></UnlessPageDate></div>
                 <AddPlanButton signalId={row.signal_id} openPlanId={row.open_plan_id} />
               </li>
             ))}
@@ -151,12 +152,13 @@ const SESSION_COLUMNS: ReadonlyArray<Column<TrackingPlanSession>> = [
 ]
 
 // The sessions are fetched when the details first open (verify's screenshot opens every <details>).
-export function PlanHistory({ plan, initiallyOpen = false }: { plan: TrackingPlan; initiallyOpen?: boolean }) {
+// `anchor={false}` is the phone copy in the card's 更多 fold (#649): the id stays on the wide one only.
+export function PlanHistory({ plan, initiallyOpen = false, anchor = true }: { plan: TrackingPlan; initiallyOpen?: boolean; anchor?: boolean }) {
   const client = useContext(TrackingClientContext)
   const [open, setOpen] = useState(initiallyOpen)
   const detail = useQuery({ queryKey: ['tracking-plan', plan.id, plan.updated_at], queryFn: () => client.plan(plan.id), enabled: open })
   return (
-    <details className="details plan-history" id={`${planAnchor(plan.id)}-history`} open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
+    <details className="details plan-history" id={anchor ? `${planAnchor(plan.id)}-history` : undefined} open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary>版本、來源與逐日明細</summary>
       <p className="small-note">{planVersionText(plan)}</p>
       {!open
@@ -198,21 +200,40 @@ export function PlanCard({ plan }: { plan: TrackingPlan }) {
       {hasTransitionConflict(plan) && <div className="warning-box plan-conflict">{CONFLICT_TEXT}</div>}
       <dl className="candidate-levels">
         <div><dt>進場區（元）</dt><dd className="level-entry">{formatEntryZone(levels)}</dd></div>
-        <div><dt>失效價（元）</dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
+        <div><dt>停損（元）</dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
         <div><dt>目標一（元）</dt><dd className="level-target">{formatPrice(levels.target_1)}</dd></div>
-        <div><dt>RR</dt><dd><Badge tone="primary" className="badge-compact">{formatRiskReward(levels.risk_reward)}</Badge></dd></div>
+        <div className="plan-wide-only"><dt>RR</dt><dd><RiskReward plan={plan} /></dd></div>
       </dl>
       <div className="plan-lines">
-        <div className="small-note">{planDateLine(plan)}</div>
+        <div className="small-note plan-wide-only">{planDateLine(plan)}</div>
         <div className="small-note">{planProgressLine(plan)}</div>
-        <div className="small-note">{planExecutionLine(plan)}</div>
-        {exit && <div className="small-note">{exit}</div>}
+        <div className="small-note plan-wide-only">{planExecutionLine(plan)}</div>
+        {exit && <div className="small-note plan-wide-only">{exit}</div>}
         {result && <div className="plan-result">{result}</div>}
       </div>
-      {plan.open && <CancelPlan plan={plan} />}
-      <PlanHistory plan={plan} />
+      <div className="plan-wide-only">
+        {plan.open && <CancelPlan plan={plan} />}
+        <PlanHistory plan={plan} />
+      </div>
+      {/* 640px and below (#649): the card keeps the strategy, status, levels, progress and result; the rest is here.
+          It is a second copy of the wide-only parts, shown only on phones (display: none above 640px). */}
+      <details className="details plan-card-more">
+        <summary>更多</summary>
+        <div className="plan-lines">
+          <div className="small-note">RR <RiskReward plan={plan} /></div>
+          <div className="small-note">{planDateLine(plan)}</div>
+          <div className="small-note">{planExecutionLine(plan)}</div>
+          {exit && <div className="small-note">{exit}</div>}
+        </div>
+        {plan.open && <CancelPlan plan={plan} />}
+        <PlanHistory plan={plan} anchor={false} />
+      </details>
     </Card>
   )
+}
+
+function RiskReward({ plan }: { plan: TrackingPlan }) {
+  return <Badge tone="primary" className="badge-compact">{formatRiskReward(plan.levels.risk_reward)}</Badge>
 }
 
 function PlanPager({ data, page, onPage }: { data: TrackingPlansResponse; page: number; onPage: (page: number) => void }) {
@@ -233,41 +254,65 @@ function PlanList({ scope, eyebrow, title, empty }: { scope: 'open' | 'closed'; 
   const client = useContext(TrackingClientContext)
   const [page, setPage] = useState(1)
   const query = useQuery({ queryKey: ['tracking-plans', scope, page], queryFn: () => client.plans({ status: scope, page, page_size: PLAN_PAGE_SIZE }) })
+  const location = useLocation()
   const titleId = `tracking-${scope}-title`
+  const items = query.data?.items
+  // 追蹤回看 starts folded (#649); a `#plan-<id>` link to one of its plans opens it, so the scroll finds the card.
+  const linked = scope === 'closed' && Boolean(items?.some((plan) => `#${planAnchor(plan.id)}` === location.hash))
+  const [lookBackOpen, setLookBackOpen] = useState(linked)
+  useEffect(() => { if (linked) setLookBackOpen(true) }, [linked])
+  const head = (
+    <div className="section-head">
+      <div><div className="eyebrow">{eyebrow}</div><h2 id={titleId}>{title}</h2></div>
+      {query.data && <span className="small-note">{query.data.pagination.total} 筆</span>}
+    </div>
+  )
+  const body = query.isLoading
+    ? <Skeleton lines={3} label={`${title}載入中…`} />
+    : query.error
+      ? <Card><EmptyState title="資料暫時無法載入" reason="請稍後重新整理" /></Card>
+      : query.data && (query.data.items.length
+        ? <><div className="plan-grid">{query.data.items.map((plan) => <PlanCard key={plan.id} plan={plan} />)}</div><PlanPager data={query.data} page={page} onPage={setPage} /></>
+        // No plan in progress is one line (#649), as 我的庫存 without holdings, so the action list starts sooner.
+        : scope === 'open' ? <p className="small-note tracking-empty">{empty}</p> : <div className="empty panel">{empty}</div>)
+  if (scope === 'closed') {
+    return (
+      <section className="tracking-section" aria-labelledby={titleId} data-plan-scope={scope}>
+        <details className="tracking-look-back" open={lookBackOpen} onToggle={(event) => setLookBackOpen(event.currentTarget.open)}>
+          <summary>{head}</summary>
+          {body}
+        </details>
+      </section>
+    )
+  }
   return (
     <section className="tracking-section" aria-labelledby={titleId} data-plan-scope={scope}>
-      <div className="section-head">
-        <div><div className="eyebrow">{eyebrow}</div><h2 id={titleId}>{title}</h2></div>
-        {query.data && <span className="small-note">{query.data.pagination.total} 筆</span>}
-      </div>
-      {scope === 'open' && <p className="small-note">{trackingNote(query.data?.meta)}</p>}
-      {query.isLoading
-        ? <Skeleton lines={3} label={`${title}載入中…`} />
-        : query.error
-          ? <Card><EmptyState title="資料暫時無法載入" reason="請稍後重新整理" /></Card>
-          : query.data && (query.data.items.length
-            ? <><div className="plan-grid">{query.data.items.map((plan) => <PlanCard key={plan.id} plan={plan} />)}</div><PlanPager data={query.data} page={page} onPage={setPage} /></>
-            : <div className="empty panel">{empty}</div>)}
+      {head}
+      <p className="small-note">{trackingNote(query.data?.meta)}</p>
+      {body}
     </section>
   )
 }
 
-// Actions page: after 我的庫存 (real positions), before the action cards; the three never mix.
-export function TrackingSection() {
+// 我的追蹤 (#637): the plans in progress sit after 我的庫存 (real positions) and before the action list; the ended ones
+// (追蹤回看) come after the action list, so what needs handling today is not below the look-back. Without `part`
+// both render together. The `#plan-<id>` scroll lives in the part that renders the open plans; it waits until the card
+// is shown, as an ended plan's card is in the 追蹤回看 fold until that opens (#649).
+export function TrackingSection({ part }: { part?: 'open' | 'closed' }) {
   const location = useLocation()
   useEffect(() => {
-    if (!location.hash.startsWith('#plan-')) return
+    if (part === 'closed' || !location.hash.startsWith('#plan-')) return
     const timer = window.setInterval(() => {
       const target = document.getElementById(location.hash.slice(1))
-      if (target) { target.scrollIntoView({ block: 'start' }); window.clearInterval(timer) }
+      if (target && !target.closest('details:not([open])')) { target.scrollIntoView({ block: 'start' }); window.clearInterval(timer) }
     }, 200)
     const stop = window.setTimeout(() => window.clearInterval(timer), 5000)
     return () => { window.clearInterval(timer); window.clearTimeout(stop) }
-  }, [location.hash])
+  }, [location.hash, part])
   return (
     <>
-      <PlanList scope="open" eyebrow="模擬追蹤 · 進行中" title={TRACKING_TITLE} empty={EMPTY_OPEN_TEXT} />
-      <PlanList scope="closed" eyebrow="模擬追蹤 · 已結束" title={HISTORY_TITLE} empty={EMPTY_CLOSED_TEXT} />
+      {part !== 'closed' && <PlanList scope="open" eyebrow="模擬追蹤 · 進行中" title={TRACKING_TITLE} empty={EMPTY_OPEN_TEXT} />}
+      {part !== 'open' && <PlanList scope="closed" eyebrow="模擬追蹤 · 已結束" title={HISTORY_TITLE} empty={EMPTY_CLOSED_TEXT} />}
     </>
   )
 }

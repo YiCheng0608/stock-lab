@@ -4,7 +4,8 @@ import { Link } from 'react-router-dom'
 import ReactEChartsModule from 'echarts-for-react'
 
 import { Term } from '../components/Term'
-import { Badge, Card, CardList, DataTable, DateBadge, EmptyState, Skeleton, Stat, Tabs, cx, tabId, tabPanelId, type Column } from '../components/ui'
+import { UnlessPageDate } from '../components/pageDate'
+import { Badge, Card, CardList, DataTable, DateBadge, EmptyState, ScoreBar, Skeleton, Stat, StrengthChip, Tabs, cx, tabId, tabPanelId, type Column } from '../components/ui'
 import { newsSourceName, newsTime } from '../news/newsView'
 import { officialEventDisplayTitle } from '../presentation'
 import { isFiniteNumber, readChartTheme, type ChartTheme } from '../stock/stockBars'
@@ -86,6 +87,16 @@ function ReturnValue({ value, unit = '' }: { value: number | null | undefined; u
   return <span className={`tone-${tone}`}>{text}</span>
 }
 
+// A group's 1／5／20 日 relative return as a strength block (#654, DESIGN_SYSTEM §5 強弱色塊); the value is a fraction.
+function GroupReturn({ label, value }: { label: string; value: number | null | undefined }) {
+  return <StrengthChip label={`${label}相對加權指數`} percent={isFiniteNumber(value) ? value * 100 : null} />
+}
+
+// A same-board percentile (0–1) as a 0–100 score bar (#654); no data stays 「—」.
+function ComponentBar({ label, value }: { label: string; value: number | null | undefined }) {
+  return <ScoreBar label={label} value={isFiniteNumber(value) ? value * 100 : null} />
+}
+
 export function BoardDateBadges({ meta }: { meta: Pick<ThemeBoardMeta, 'trading_date' | 'data_as_of'> }) {
   const { trading, dataAsOf } = boardDates(meta)
   return (
@@ -107,7 +118,7 @@ function BoardHelp() {
         <p>產業與題材各自成榜，依相對報酬、廣度、量能、法人與催化劑五分項計分；只有五分項完整的族群稱為熱門族群，熱門族群不另標，其他族群在名稱後標出資料完整度。</p>
         <p><Term id="heat_rank">分數</Term> 0–100，依分數<Term id="heat_rank">排名</Term>；五分項為<Term id="percentile">同榜百分位</Term>（0–100）；1／5／20 日為相對加權指數的報酬（%）；成員為有效／總數（檔）；「—」表示該項無資料。</p>
         <p>名稱後的兩個分項是五分項中最高與最低的一項。</p>
-        <p>今日可買 N 檔是當日今日可買名單中屬於這個族群的檔數，沒有時不顯示。</p>
+        <p>今日名單 N 檔是當日今日名單中屬於這個族群的檔數，沒有時不顯示。</p>
       </div>
     </details>
   )
@@ -125,7 +136,7 @@ function ComponentExtremes({ item }: { item: ThemeBoardItem }) {
 }
 
 // One group (Issue 522): rank, name, quality (only when it is not 熱門族群) and the highest and lowest components, then the
-// three relative returns and 今日可買 N 檔; the score at the right, then the 五分項 button. The five components are a
+// three relative returns and 今日名單 N 檔; the score at the right, then the 五分項 button. The five components are a
 // <details> under the row the button opens, so every row's components stay in the DOM (the screenshot tool opens them).
 function BoardRow({ item, picks, open, onOpen }: { item: ThemeBoardItem; picks: number | null; open: boolean; onOpen: (open: boolean) => void }) {
   const detailId = `board-detail-${item.theme_id}`
@@ -139,8 +150,8 @@ function BoardRow({ item, picks, open, onOpen }: { item: ThemeBoardItem; picks: 
           <ComponentExtremes item={item} />
         </p>
         <p className="board-row-meta">
-          {RETURN_WINDOWS.map((window) => <span key={window.key}>{window.label} <b><ReturnValue value={item.relative_returns[window.key]} unit="%" /></b></span>)}
-          {picks !== null && picks > 0 && <Badge tone="primary" className="badge-compact board-row-picks">今日可買 {picks} 檔</Badge>}
+          {RETURN_WINDOWS.map((period) => <span key={period.key}>{period.label} <GroupReturn label={period.label} value={item.relative_returns[period.key]} /></span>)}
+          {picks !== null && picks > 0 && <Badge tone="primary" className="badge-compact board-row-picks">今日名單 {picks} 檔</Badge>}
         </p>
         <span className="board-row-score"><span>分數</span> <b>{formatScore(item.score)}</b></span>
         <button type="button" className="btn btn-ghost board-row-toggle" aria-expanded={open} aria-controls={detailId} onClick={() => onOpen(!open)}>五分項 {open ? '▾' : '▸'}</button>
@@ -149,7 +160,7 @@ function BoardRow({ item, picks, open, onOpen }: { item: ThemeBoardItem; picks: 
         <summary>{item.display_name} 五分項</summary>
         <div className="board-row-detail-body">
           <dl className="board-components">
-            {BOARD_COMPONENTS.map((component) => <div key={component.key}><dt>{component.label}</dt><dd>{formatComponent(item.components[component.key])}</dd></div>)}
+            {BOARD_COMPONENTS.map((component) => <div key={component.key}><dt>{component.label}</dt><dd><ComponentBar label={component.label} value={item.components[component.key]} /></dd></div>)}
             <div><dt>成員（檔）</dt><dd>{formatMembers(item.eligible_members, item.member_count)}</dd></div>
           </dl>
           <Link className="text-link" to={themeDetailPath(item.theme_id)}>族群詳情 →</Link>
@@ -175,13 +186,19 @@ function BoardList({ items, picks }: { items: readonly ThemeBoardItem[]; picks: 
   )
 }
 
+// The board line's count (#666, UI_COPY_SPEC §8.5).
+export function boardCountText(total: number, matched: number | null): string {
+  return matched === null ? `共 ${total} 個` : `符合 ${matched}／共 ${total} 個`
+}
+
 export function ThemeBoardPanel({ board, data, search, candidates }: { board: ThemeBoard; data: ThemeBoardResponse; search: string; candidates?: CandidatesResponse }) {
   const filtered = filterBoardItems(data.items, search)
   const picks = candidateCountsByGroup(candidates, data.meta.trading_date)
   return (
     <>
       <div className="board-toolbar">
-        <span className="small-note">{boardLabel(board)}榜 · 共 {data.meta.total} 個族群{search.trim() ? ` · 符合搜尋 ${filtered.length} 個` : ''}</span>
+        {/* #666: the tab already names the board, so the count is short; a search reads 「符合 n／共 N 個」. */}
+        <span className="small-note board-count">{boardCountText(data.meta.total, search.trim() ? filtered.length : null)}</span>
         <BoardDateBadges meta={data.meta} />
         <BoardHelp />
       </div>
@@ -203,7 +220,6 @@ export function ThemesBoardView({
   loading,
   error,
   candidates,
-  suggestions,
 }: {
   board: ThemeBoard
   onBoardChange: (board: ThemeBoard) => void
@@ -212,10 +228,8 @@ export function ThemesBoardView({
   data: ThemeBoardResponse | undefined
   loading: boolean
   error: unknown
-  // The latest 今日可買 list, counted per group on the rows (Issue 522); missing or of another day, the rows say nothing.
+  // The latest 今日名單 list, counted per group on the rows (Issue 522); missing or of another day, the rows say nothing.
   candidates?: CandidatesResponse
-  // News theme suggestions (#216), kept outside the ranked boards.
-  suggestions?: ReactNode
 }) {
   // The page explanation moved into the board's 說明 fold (Issue 522), so the title is only the eyebrow and the heading.
   return (
@@ -242,7 +256,6 @@ export function ThemesBoardView({
             ? <Card><EmptyState title="資料暫時無法載入" reason={errorReason(error)} /></Card>
             : data && <ThemeBoardPanel board={board} data={data} search={search} candidates={candidates} />}
       </div>
-      {suggestions}
     </div>
   )
 }
@@ -261,7 +274,7 @@ function HotGroupRow({ item }: { item: ThemeBoardItem }) {
         <span className="hot-group-score"><span>分數</span> <b>{formatScore(item.score)}</b></span>
       </span>
       <span className="hot-group-returns">
-        {RETURN_WINDOWS.map((window) => <span key={window.key}>{window.label} <b><ReturnValue value={item.relative_returns[window.key]} unit="%" /></b></span>)}
+        {RETURN_WINDOWS.map((period) => <span key={period.key}>{period.label} <GroupReturn label={period.label} value={item.relative_returns[period.key]} /></span>)}
       </span>
     </Link>
   )
@@ -361,10 +374,10 @@ function ComponentsCard({ detail, item, state, error }: { detail: ThemeDetail; i
       {state === 'loading'
         ? <Skeleton lines={BOARD_COMPONENTS.length} className="inline-skeleton" label="五分項載入中…" />
         : <div className="metric-list">
-          {BOARD_COMPONENTS.map((component) => <div className="metric-row" key={component.key}><span>{component.label}</span><b>{formatComponent(item?.components[component.key])}</b></div>)}
+          {BOARD_COMPONENTS.map((component) => <div className="metric-row" key={component.key}><span>{component.label}</span><ComponentBar label={component.label} value={item?.components[component.key]} /></div>)}
         </div>}
       <div className="metric-list components-returns">
-        {RETURN_WINDOWS.map((window) => <div className="metric-row" key={window.key}><span>{window.label}相對加權指數</span><b><ReturnValue value={returns[window.key]} unit="%" /></b></div>)}
+        {RETURN_WINDOWS.map((period) => <div className="metric-row" key={period.key}><span>{period.label}相對加權指數</span><GroupReturn label={period.label} value={returns[period.key]} /></div>)}
       </div>
     </Card>
   )
@@ -443,7 +456,8 @@ export function ThemeMemberTable({ rows, withEvidence, membersAsOf = null }: { r
   />
 }
 
-// 640px and below: one card per member, title row with close and change, then turnover and the two returns; the first ten open (DESIGN_SYSTEM §5, §5.1).
+// 640px and below: one card per member, title row with close and change, then the two returns; turnover and the theme
+// evidence in 更多 (#666); the first ten open (DESIGN_SYSTEM §5, §5.1).
 function ThemeMemberCards({ rows, withEvidence, membersAsOf }: { rows: ReadonlyArray<MemberRow>; withEvidence: boolean; membersAsOf: string | null }) {
   return (
     <CardList className="member-cards" items={rows} itemKey={(row) => row.exchange + row.symbol} renderCard={(row) => (
@@ -455,12 +469,16 @@ function ThemeMemberCards({ rows, withEvidence, membersAsOf }: { rows: ReadonlyA
               <MemberPercent value={values(row).change_status === 'known' ? values(row).change_pct : null} unit="%" />
             </div>
           </div>
-          <dl className="board-card-grid">
-            <div><dt>成交金額（億元）</dt><dd>{turnoverText(row)}</dd></div>
-            <div><dt>5 日相對</dt><dd><MemberPercent value={values(row).excess_return_5d} unit="%" /></dd></div>
-            <div><dt>20 日相對</dt><dd><MemberPercent value={values(row).excess_return_20d} unit="%" /></dd></div>
-          </dl>
-          {withEvidence && <div className="member-card-evidence"><EvidenceCell evidence={row.theme_evidence} /></div>}
+          {/* One short phrase, as on the board rows (DESIGN_SYSTEM §5 標籤與值). */}
+          <p className="member-card-returns">5 日相對 <b><MemberPercent value={values(row).excess_return_5d} unit="%" /></b> · 20 日相對 <b><MemberPercent value={values(row).excess_return_20d} unit="%" /></b></p>
+          {/* #666: the turnover and the theme evidence fold into 更多; the card shows what the call rests on. */}
+          <details className="member-card-more">
+            <summary>更多</summary>
+            <dl className="board-card-grid">
+              <div><dt>成交金額（億元）</dt><dd>{turnoverText(row)}</dd></div>
+            </dl>
+            {withEvidence && <div className="member-card-evidence"><EvidenceCell evidence={row.theme_evidence} /></div>}
+          </details>
         </div>
     )} />
   )
@@ -559,20 +577,28 @@ export function ThemeDetailView({
         </div>
         <h1>{detail.theme.display_name}</h1>
         <p>{detail.theme.description}</p>
-        <div className="theme-stats">
+        {/* #666: one line of three stats instead of three cards; on a phone it wraps between stats, never cutting a number. */}
+        <div className="theme-stats theme-stat-line">
           <Stat label={<Term id="heat_rank">排名</Term>} value={state === 'loading' ? <Skeleton lines={1} className="inline-skeleton" label="排名載入中…" /> : formatRank(item?.rank)} detail={rankDetail} />
           <Stat label={<><Term id="heat_rank">分數</Term>（0–100）</>} value={formatScore(item?.score ?? detail.theme.score)} />
           <Stat label="有效成員／成員" value={formatMembers(item?.eligible_members ?? detail.theme.eligible_members, item?.member_count ?? detail.members_total)} detail="檔" />
         </div>
-        {version && <div className="small-note">題材表版本 {version}</div>}
       </section>
       <div className="theme-detail-grid">
         <TrendCard trend={detail.trend} dataDate={formatDate(detail.trend.at(-1)?.trading_date ?? detail.data_as_of)} />
         <ComponentsCard detail={detail} item={item} state={state} error={board.error} />
       </div>
-      <section className="section-head">
-        <div><div className="eyebrow">成員資料截至 {formatDate(detail.members_as_of) ?? '日期未提供'}</div><h2>族群成員</h2></div>
+      <section className="section-head member-section-head">
+        <div><UnlessPageDate date={detail.members_as_of}><div className="eyebrow">成員資料截至 {formatDate(detail.members_as_of) ?? '日期未提供'}</div></UnlessPageDate><h2>族群成員</h2></div>
         <MemberSortSelect value={memberSort} onChange={onMemberSortChange} />
+        {/* #666: the theme table version and the member note fold into 說明 (closed by default); opened, it takes the next line. */}
+        {(version || (rows && rows.length > 0)) && <details className="details member-help">
+          <summary>說明</summary>
+          <div className="member-help-body">
+            {version && <p className="small-note">題材表版本 {version}</p>}
+            {rows && rows.length > 0 && <p className="table-note member-note">{memberTableNote(rows.map(values), membersAsOf)}</p>}
+          </div>
+        </details>}
       </section>
       {members.error
         ? <Card><EmptyState title="成員資料暫時無法載入" reason={errorReason(members.error)} /></Card>
@@ -581,7 +607,6 @@ export function ThemeDetailView({
           : rows.length === 0
             ? <Card><EmptyState reason="此日期沒有有效成員" /></Card>
             : <>
-              <p className="table-note member-note">{memberTableNote(rows.map(values), membersAsOf)}</p>
               <ThemeMemberTable rows={rows} withEvidence={isTheme} membersAsOf={membersAsOf} />
               <ThemeMemberCards rows={rows} withEvidence={isTheme} membersAsOf={membersAsOf} />
             </>}

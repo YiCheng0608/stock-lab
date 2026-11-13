@@ -448,9 +448,13 @@ def load_series(
 def evidence_lookup(con: sqlite3.Connection) -> dict[tuple[str, str], int]:
     """(exchange, day) -> raw id proving the official institutional file was received (hot_group 1.1.0)."""
 
+    # The current TPEx session's file may be the OpenAPI table (Issue #579).
     endpoints = {
-        "TWSE": "https://www.twse.com.tw/rwd/zh/fund/T86",
-        "TPEx": "https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade",
+        "TWSE": {"https://www.twse.com.tw/rwd/zh/fund/T86"},
+        "TPEx": {
+            "https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade",
+            "https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading",
+        },
     }
     sources = {"TWSE": "twse_t86", "TPEx": "tpex_3insti"}
     found: dict[tuple[str, str], int] = {}
@@ -462,7 +466,7 @@ def evidence_lookup(con: sqlite3.Connection) -> dict[tuple[str, str], int]:
     for exchange, day, source, raw_id, endpoint, data_as_of in con.execute(query):
         if exchange not in sources or (source or "").split("+")[0] != sources[exchange]:
             continue
-        if (endpoint or "").split("?", 1)[0] != endpoints[
+        if (endpoint or "").split("?", 1)[0] not in endpoints[
             exchange
         ] or data_as_of != day:
             continue

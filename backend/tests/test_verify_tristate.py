@@ -58,13 +58,14 @@ CANDIDATES = {
 TODAY_PAGE = (
     "資料日期未提供\n今日\n資料截至\n資料日期未提供\n"
     f"熱門族群\n產業榜\n資料日期未提供\n{NO_RUN}\n"
-    "今日可買\n資料 2026/10/22\n20 檔\n"
+    "今日名單\n資料 2026/10/22\n20 檔\n"
 )
 
 
 def _run(tmp_path, payloads=None, pages=None, facts=None):
     base = {
         "dashboard": DASHBOARD,
+        "dashboard?include=groups": DASHBOARD,
         "themes?board=industry&limit=5": EMPTY_BOARD,
         "themes?board=industry&limit=100": EMPTY_BOARD,
         "candidates": CANDIDATES,
@@ -141,7 +142,7 @@ def test_a_failure_after_a_failed_check_of_the_same_rows_is_undetermined(
         }
     }
     # The row is there (#276 table) but its detail lost the 來源 line.
-    pages = {"today-1280": "今日可買\n資料 2026/10/22\n1 檔\n#1 2301 光寶科\n"}
+    pages = {"today-1280": "今日名單\n資料 2026/10/22\n1 檔\n#1 2301 光寶科\n"}
     _only(monkeypatch, "today", "T7", "T8")
     t7, t8 = page_checks.run_page(_run(tmp_path, payloads, pages), "today", [])
     assert (t7.status, t8.status) == ("失敗", "無法判定")
@@ -151,14 +152,12 @@ def test_a_failure_after_a_failed_check_of_the_same_rows_is_undetermined(
 # ---- KNOWN_FAILURES matches the message ----
 
 
-def _t6_run(tmp_path):
-    news = {
-        "id": "2845",
-        "title": "颱風假台股該不該開盤？政大教授點出交易真相\xa0 網友反問",
-    }
-    page = "今日市場／重大事件\n颱風假台股該不該開盤？政大教授點出交易真相\n熱門族群\n"
+def _t12_run(tmp_path):
+    # The home page lost its hot groups card: a failure other than the registered one.
     return _run(
-        tmp_path, {"dashboard": {**DASHBOARD, "news": [news]}}, {"today-1280": page}
+        tmp_path,
+        {"dashboard": DASHBOARD},
+        {"today-1280": "今日名單\n資料 2026/10/22\n"},
     )
 
 
@@ -166,26 +165,26 @@ def test_a_different_failure_of_a_known_check_fails(tmp_path, monkeypatch):
     issue = "https://github.com/YiCheng0608/stock-lab/issues/233"
     monkeypatch.setitem(
         page_checks.KNOWN_FAILURES,
-        ("today", "T6"),
-        page_checks.Known(issue, "卡片沒有 `AI 推論`", "2026-11-20"),
+        ("today", "T12"),
+        page_checks.Known(issue, "首頁仍有整行 `重點新聞`", "2026-11-20"),
     )
-    _only(monkeypatch, "today", "T6")
-    (t6,) = page_checks.run_page(_t6_run(tmp_path), "today", [])
+    _only(monkeypatch, "today", "T12")
+    (t12,) = page_checks.run_page(_t12_run(tmp_path), "today", [])
     # Before #251 this was 失敗（已知） and did not fail the run.
-    assert (t6.status, t6.failed, t6.known) == ("失敗", True, None)
-    assert "缺新聞標題整行" in t6.detail
-    assert "不是已知失敗" in t6.detail and issue in t6.detail
+    assert (t12.status, t12.failed, t12.known) == ("失敗", True, None)
+    assert "缺整行 `熱門族群`" in t12.detail
+    assert "不是已知失敗" in t12.detail and issue in t12.detail
 
 
 def test_the_known_failure_itself_stays_known(tmp_path, monkeypatch):
     monkeypatch.setitem(
         page_checks.KNOWN_FAILURES,
-        ("today", "T6"),
-        page_checks.Known("#233", "缺新聞標題整行", "2026-11-20"),
+        ("today", "T12"),
+        page_checks.Known("#233", "缺整行 `熱門族群`", "2026-11-20"),
     )
-    _only(monkeypatch, "today", "T6")
-    (t6,) = page_checks.run_page(_t6_run(tmp_path), "today", [])
-    assert (t6.status, t6.failed, t6.known) == ("失敗（已知）", False, "#233")
+    _only(monkeypatch, "today", "T12")
+    (t12,) = page_checks.run_page(_t12_run(tmp_path), "today", [])
+    assert (t12.status, t12.failed, t12.known) == ("失敗（已知）", False, "#233")
 
 
 # ---- an empty state is checked against the DB and the other APIs ----
@@ -197,7 +196,7 @@ def test_an_empty_board_fails_when_the_db_has_scores(tmp_path):
         tmp_path,
         {"themes?board=industry&limit=100": board},
         {
-            "themes-1280": f"產業榜 · 共 0 個族群\n資料 2026/10/22\n{NO_RUN}\n",
+            "themes-1280": f"共 0 個\n資料 2026/10/22\n{NO_RUN}\n",
             "themes-390": f"{NO_RUN}\n",
         },
     )
@@ -211,9 +210,9 @@ def test_an_empty_board_fails_when_the_db_has_scores(tmp_path):
 def test_an_empty_board_passes_when_nothing_has_scores(tmp_path):
     run = _run(
         tmp_path,
-        {"dashboard": {**DASHBOARD, "groups": []}},
+        {"dashboard?include=groups": {**DASHBOARD, "groups": []}},
         {
-            "themes-1280": f"產業榜 · 共 0 個族群\n{NO_RUN}\n",
+            "themes-1280": f"共 0 個\n{NO_RUN}\n",
             "themes-390": f"{NO_RUN}\n",
         },
         {"group_scores_latest_trading_date": None},
@@ -222,7 +221,7 @@ def test_an_empty_board_passes_when_nothing_has_scores(tmp_path):
 
 
 def test_the_home_page_keeps_one_list(tmp_path):
-    # #493: 關注標的 moved to 觀察中; the home page passes without it.
+    # #493: 關注標的 moved to 我的追蹤; the home page passes without it.
     assert "首頁沒有 `關注標的`" in page_checks.t9(_run(tmp_path))
 
 
@@ -238,7 +237,7 @@ def test_the_home_page_fails_when_the_old_sections_come_back(tmp_path, line):
 
 def test_zero_candidates_fail_when_the_db_has_them(tmp_path):
     payloads = {"candidates": {**CANDIDATES, "candidate_count": 0, "items": []}}
-    run = _run(tmp_path, payloads, {"today-1280": "今日可買\n當日零候選\n"})
+    run = _run(tmp_path, payloads, {"today-1280": "今日名單\n當日零候選\n"})
     with pytest.raises(page_checks.Fail, match="DB candidate_runs 2026-10-22 有 20 檔"):
         page_checks.t7(run)
 
@@ -272,7 +271,7 @@ def test_a_copy_without_a_current_version_run_runs_to_the_end(tmp_path, monkeypa
         "actions?tier=0&limit=100": {"items": []},
     }
     pages = {
-        "today-1280": "今日可買\n尚無候選清單\n",
+        "today-1280": "今日名單\n尚無候選清單\n",
         "actions-1280": "第 1 級\n今日候選\n顯示 0／0 檔\n",
     }
     run = CopyRun(tmp_path, payloads, pages)
@@ -315,7 +314,7 @@ def test_the_stock_comes_from_the_candidates_when_the_board_is_empty(tmp_path):
     run = _run(tmp_path)
     # Before #251 there was no stock and all of S1～S9 were 無法判定 (counted 失敗).
     assert page_checks.stocks_for(run, None) == [page_checks.Stock("TWSE", "2301")]
-    assert run.picked.startswith("今日可買 #1（略過 今日榜：")
+    assert run.picked.startswith("今日名單 #1（略過 今日榜：")
 
 
 def test_the_stock_comes_from_the_list_without_candidates(tmp_path):
@@ -329,12 +328,12 @@ def test_the_stock_comes_from_the_list_without_candidates(tmp_path):
     )
     assert run.stock() == page_checks.Stock("TWSE", "0050")
     assert run.picked.startswith("市場列表第一筆（略過 今日榜：")
-    assert "今日可買：candidates.json 的 items 為空" in run.picked
+    assert "今日名單：candidates.json 的 items 為空" in run.picked
 
 
 def test_stocks_checks_that_need_no_stock_run_without_one(tmp_path, monkeypatch):
     listed = {"items": [], "meta": {"total": 0}}
-    header = "代號\t名稱\t交易所\t類型\t最近收盤（元）\t目前研究動作\t策略判斷資料"
+    header = "代號\t名稱\t交易所\t類型\t最近收盤（元）\t目前研究動作"
     run = _run(
         tmp_path,
         {
@@ -541,3 +540,237 @@ def test_a_tier_without_rows_on_the_first_page_shows_its_first_rows(tmp_path):
     empty = page.replace("顯示 5／50 檔", "顯示 0／50 檔")
     with pytest.raises(page_checks.Fail, match="顯示 5／50 檔"):
         page_checks.a3(_run(tmp_path, payloads, {"actions-1280": empty}))
+
+
+# ---- #609: the API's 5xx on a busy host is 無法判定（環境）, not a page failure ----
+
+# #606 (pr-assets/606/20261110-1304): four browsers next to a container at 100% CPU
+# exhausted the API's pool; the shots saw 500/504 and G1/S1/A1 failed, although every
+# URL answered 200 when called alone and a --jobs 1 rerun passed all 60 checks.
+BUSY = "504 http://web:8080/api/dashboard"
+TODAY_DATED = "今日\n資料 2026/10/22\n今日名單\n"
+
+
+class ShotRun(page_checks.Run):
+    """The real screenshot and API logic, with screenshot.cjs and HTTP replaced.
+
+    ``shots[name]`` lists, per screenshot.cjs call, the extra fields of each width's
+    JSON line (default: ready, no errors); ``statuses[path]`` is what a direct GET gets.
+    """
+
+    def __init__(self, tmp_path, shots=None, statuses=None, pages=None):
+        super().__init__(
+            "http://api",
+            "http://web:8080",
+            tmp_path / "db",
+            tmp_path / "out",
+            now=page_checks.datetime(2026, 10, 24, 12, tzinfo=page_checks.TAIPEI),
+        )
+        self.script = {name: list(calls) for name, calls in (shots or {}).items()}
+        self.statuses = statuses or {}
+        self.pages = pages or {}
+        self.calls: list[str] = []
+        self.fetched: list[str] = []
+
+    def screenshot_cjs(self, command, **_kwargs):
+        """Stands in for ``subprocess.run`` of screenshot.cjs."""
+
+        name = command[command.index("--name") + 1]
+        widths = [int(w) for w in command[command.index("--widths") + 1].split(",")]
+        self.calls.append(name)
+        calls = self.script.get(name) or [{}]
+        extra = calls.pop(0) if len(calls) > 1 else calls[0]
+        lines = []
+        for width in widths:
+            txt = self.out / "shots" / f"{name}-{width}.txt"
+            txt.write_text(self.pages.get(f"{name}-{width}", ""), encoding="utf-8")
+            meta = {"width": width, "ready": True, "txt": str(txt), "httpErrors": []}
+            meta.update(extra.get(width, extra.get("*", {})))
+            meta.setdefault("httpErrorCount", len(meta["httpErrors"]))
+            lines.append(json.dumps(meta))
+        return subprocess.CompletedProcess(command, 0, "\n".join(lines) + "\n", "")
+
+    def _fetch(self, path):
+        self.fetched.append(path)
+        status = self.statuses.get(path, 200)
+        payload = {"as_of": "2026-10-22T18:00:00+08:00"} if path == "dashboard" else {}
+        return status, payload if status == 200 else "Internal Server Error"
+
+    def facts(self, stock=None):
+        return {"market_latest_trading_date": "2026-10-22"}
+
+
+def _busy(**more):
+    return {"*": {"ready": False, "httpErrors": [BUSY], **more}}
+
+
+def _today(run, monkeypatch, *codes):
+    _only(monkeypatch, "today", *codes)
+    monkeypatch.setattr(page_checks.subprocess, "run", run.screenshot_cjs)
+    page_checks.prefetch(run, ["today"], [], jobs=1)
+    return {r.code: r for r in page_checks.run_page(run, "today", [])}
+
+
+def test_a_5xx_that_answers_200_alone_is_undetermined_not_failed(tmp_path, monkeypatch):
+    # AC-2: still 504 after the serial retake, 200 to a direct GET -> the host was busy.
+    run = ShotRun(tmp_path, {"today": [_busy(), _busy()]}, pages={})
+    results = _today(run, monkeypatch, "T1", "T2")
+    t1, t2 = results["T1"], results["T2"]
+    # Before #609: T1 失敗 with 「today-1280 未 ready；today-1280 httpErrors [...]」.
+    assert (t1.status, t1.failed) == ("無法判定", False), t1.detail
+    assert t1.environment
+    assert t1.detail.startswith("無法判定（環境）：today-1280 未 ready")
+    assert BUSY in t1.detail and "直接 GET 回 200" in t1.detail
+    assert (t2.status, t2.environment) == ("無法判定", True)
+    assert "504 /api/dashboard，直接 GET 回 200" in t2.detail
+    # The parallel pass (its usual not-ready retry) and one serial retake, then one direct GET.
+    assert run.calls.count("today") == 3 and run.fetched == ["dashboard"]
+    env = run.environment(1, list(results.values()))
+    assert (env["hits"], env["screenshot_hits"], env["api_hits"]) == (4, 4, 0)
+    assert env["retaken"] == ["today"] and env["recovered"] == []
+    assert env["rechecked"] == {"dashboard": 200}
+    assert env["urls"] == [{"path": "dashboard", "status": 504, "count": 4}]
+    assert env["checks"] == ["today T1", "today T2"]
+    # The overall result keeps the 無法判定 behaviour: a fixture run still fails on it.
+    assert page_checks.blocking(list(results.values()), fixture=False) == []
+    assert page_checks.blocking(list(results.values()), fixture=True) == [t1, t2]
+
+
+def test_a_5xx_that_stays_5xx_alone_still_fails(tmp_path, monkeypatch):
+    # AC-2 counter-example: the direct GET is 500 too, so the API is broken.
+    run = ShotRun(tmp_path, {"today": [_busy()]}, {"dashboard": 500})
+    results = _today(run, monkeypatch, "T1", "T2")
+    assert results["T1"].status == "失敗" and not results["T1"].environment
+    assert results["T1"].detail.startswith("today-1280 未 ready")
+    assert (results["T2"].status, results["T2"].environment) == ("無法判定", False)
+    assert run.environment(1, list(results.values()))["rechecked"] == {"dashboard": 500}
+
+
+def test_a_busy_shot_with_a_console_error_still_fails(tmp_path, monkeypatch):
+    # AC-2 counter-example: another problem on the same shot is the page's own.
+    run = ShotRun(tmp_path, {"today": [_busy(consoleErrors=["TypeError: x is null"])]})
+    (t1,) = _today(run, monkeypatch, "T1").values()
+    assert t1.status == "失敗" and not t1.environment
+    assert "consoleErrors ['TypeError: x is null']" in t1.detail
+    assert BUSY in t1.detail
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        "404 http://web:8080/api/stocks/TWSE/0000",  # an /api/ 4xx
+        "502 http://web:8080/assets/index.js",  # a 5xx that is not /api/
+    ],
+)
+def test_a_4xx_or_non_api_error_on_a_busy_shot_still_fails(
+    tmp_path, monkeypatch, error
+):
+    run = ShotRun(tmp_path, {"today": [_busy(httpErrors=[BUSY, error])]})
+    (t1,) = _today(run, monkeypatch, "T1").values()
+    assert t1.status == "失敗" and not t1.environment
+    assert f"httpErrors ['{error}']" in t1.detail
+
+
+def test_a_cut_http_error_list_is_not_environment(tmp_path, monkeypatch):
+    # #609 review: screenshot.cjs lists at most 50; the 51st could be a 404 or a broken URL.
+    run = ShotRun(tmp_path, {"today": [_busy(httpErrorCount=51)]})
+    (t1,) = _today(run, monkeypatch, "T1").values()
+    assert t1.status == "失敗" and not t1.environment
+    assert "httpErrors 共 51 筆，清單只列 1 筆（截斷，不認定環境）" in t1.detail
+
+
+def test_the_fixture_database_neither_retakes_nor_excuses_a_5xx(tmp_path, monkeypatch):
+    # #609 review: no other container competes in CI, so a 5xx there is a signal.
+    run = ShotRun(tmp_path, {"today": [_busy(), _busy(), {}]})
+    run.env_checks = False
+    results = _today(run, monkeypatch, "T1", "T2")
+    assert results["T1"].status == "失敗" and not results["T1"].environment
+    assert results["T1"].detail.startswith("today-1280 未 ready；today-1280 httpErrors")
+    assert results["T2"].status == "無法判定" and not results["T2"].environment
+    # Only the usual not-ready retry of the parallel pass; no retake, no direct GET.
+    assert run.calls.count("today") == 2 and run.fetched == []
+    assert run.environment(4, list(results.values()))["hits"] == 0
+    run = ShotRun(tmp_path, statuses={"dashboard": 500})
+    run.env_checks = False
+    with pytest.raises(page_checks.Undetermined) as error:
+        run.dashboard()
+    assert not isinstance(error.value, page_checks.Environment)
+
+
+def test_a_recovered_retake_keeps_the_first_takes_other_problems(tmp_path, monkeypatch):
+    console = _busy(consoleErrors=["TypeError: x is null"])
+    run = ShotRun(tmp_path, {"today": [console, console, {}]})
+    results = list(_today(run, monkeypatch, "T1").values())
+    assert results[0].status == "通過"
+    env = run.environment(1, results)
+    assert env["replaced_problems"] == {
+        "today": [
+            "today-1280 consoleErrors ['TypeError: x is null']",
+            "today-390 consoleErrors ['TypeError: x is null']",
+        ]
+    }
+    summary = page_checks.summary_markdown(results, ["today"], "## h", environment=env)
+    assert "- 重截後恢復的 `today` 第一次截圖另有：today-1280 consoleErrors" in summary
+
+
+def test_a_retake_without_5xx_is_judged_as_usual(tmp_path, monkeypatch):
+    # Retaken serially once: the clean shot is used, so the page's own text decides.
+    run = ShotRun(
+        tmp_path,
+        {"today": [_busy(), _busy(), {}]},
+        pages={"today-1280": TODAY_DATED, "today-390": TODAY_DATED},
+    )
+    results = _today(run, monkeypatch, "T1", "T2")
+    assert (results["T1"].status, results["T2"].status) == ("通過", "通過")
+    assert run.fetched == ["dashboard"]  # T2's run.get only; no recheck was needed
+    env = run.environment(1, list(results.values()))
+    assert env["recovered"] == ["today"] and env["rechecked"] == {}
+    assert env["checks"] == []
+
+
+def test_a_page_whose_api_answers_200_still_fails_on_wrong_text(tmp_path, monkeypatch):
+    # AC-2: no 5xx at all, the API is 200 and the page shows another date -> 失敗.
+    run = ShotRun(tmp_path, pages={"today-1280": "今日\n資料 2026/10/21\n"})
+    results = _today(run, monkeypatch, "T1", "T2")
+    assert results["T1"].status == "通過"
+    assert results["T2"].status == "失敗" and not results["T2"].environment
+    assert "缺整行 `資料 2026/10/22`" in results["T2"].detail
+    assert run.calls.count("today") == 1  # no retake without an /api/ 5xx
+    assert run.environment(1, list(results.values()))["hits"] == 0
+
+
+def test_an_api_call_that_times_out_is_environment(tmp_path, monkeypatch):
+    run = ShotRun(tmp_path, statuses={"dashboard": 0})
+    with pytest.raises(page_checks.Environment, match="/api/dashboard 回 0"):
+        run.dashboard()
+    run = ShotRun(tmp_path, statuses={"dashboard": 404})
+    with pytest.raises(page_checks.Undetermined) as error:
+        run.dashboard()
+    assert not isinstance(error.value, page_checks.Environment)
+
+
+def test_the_summary_opens_with_the_5xx_urls(tmp_path, monkeypatch):
+    run = ShotRun(tmp_path, {"today": [_busy(), _busy()]})
+    results = list(_today(run, monkeypatch, "T1").values())
+    env = run.environment(1, results)
+    summary = page_checks.summary_markdown(
+        results, ["today"], "## head", environment=env
+    )
+    head, section, bullets = summary.split("\n\n")[:3]
+    assert head == "## head"
+    assert section == "### 環境：API 5xx／逾時 4 次（截圖 4、API 呼叫 0；截圖並行 1）"
+    assert "重截 1 張（串列、各一次），恢復 0 張" in bullets
+    assert "直接 GET 回 200 的 1 個" in bullets and "`today T1`" in bullets
+    assert "| `/api/dashboard` | 504 | 4 |" in summary
+    assert summary.index("### 環境") < summary.index("### 今日名單")
+    quiet = page_checks.summary_markdown(
+        results, ["today"], "## head", environment=ShotRun(tmp_path).environment(1, [])
+    )
+    assert "### 環境" not in quiet
+
+
+def test_the_default_jobs_are_one_on_real_data_only():
+    assert page_checks.default_jobs(None, fixture=True) == 4
+    assert page_checks.default_jobs(None, fixture=False) == 1
+    assert page_checks.default_jobs(3, fixture=False) == 3
+    assert page_checks.default_jobs(2, fixture=True) == 2

@@ -9,7 +9,7 @@
 | 產品方向與版本範圍 | [開發路線](docs/ROADMAP.md)、[目前產品能力](docs/CAPABILITIES.md)、[產品規格](docs/PRODUCT_SPEC.md) |
 | 前端設計 | [設計規範](docs/DESIGN_SYSTEM.md)、[文案、單位與詞彙](docs/UI_COPY_SPEC.md) |
 | 資料與來源 | [資料來源](docs/DATA_SOURCES.md)、[產業分類](docs/INDUSTRY_CLASSIFICATION.md)、[新聞](docs/NEWS_SPEC.md) |
-| 策略與指標 | [v1 公式與口徑](docs/spec/README.md)（[breakout／pullback](docs/spec/breakout_pullback.md)、[hot_group](docs/spec/hot_group.md)、[candidate_score](docs/spec/candidate_score.md)、[strategy_levels](docs/spec/strategy_levels.md)、[技術指標](docs/spec/indicators.md)、[tracking](docs/spec/tracking.md)、[題材建議](docs/spec/theme_suggestions.md)） |
+| 策略與指標 | [v1 公式與口徑](docs/spec/README.md)（[breakout／pullback](docs/spec/breakout_pullback.md)、[hot_group](docs/spec/hot_group.md)、[candidate_score](docs/spec/candidate_score.md)、[strategy_levels](docs/spec/strategy_levels.md)、[技術指標](docs/spec/indicators.md)、[tracking](docs/spec/tracking.md)） |
 | 啟動、收集、回補與排程 | [環境、啟停與資料庫](docs/ops/SETUP.md)、[worker CLI](docs/ops/CLI.md)、[排程](docs/ops/SCHEDULING.md)、[看門狗](docs/ops/WATCHDOG.md)、[事件 monitor](docs/ops/MONITOR.md)、[Windows 回退](docs/ops/platform/windows.md)、[本機路徑](docs/ops/LOCAL.md) |
 | 協作與流程 | [協作規則](AGENTS.md)、[GitHub 工作手冊](docs/WORKFLOW.md)（含[本機檢查](docs/WORKFLOW.md#本機檢查)）、[統籌手冊](docs/COORDINATOR.md)、[規則與強制手段](docs/GUARDRAILS.md)、[發佈與部署](docs/RELEASE.md) |
 

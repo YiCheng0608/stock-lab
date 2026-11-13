@@ -1,5 +1,6 @@
 import { CandidateNote, ReasonList, ScoreDetails } from '../candidates/CandidateViews'
-import { EntryPlanCard } from '../candidates/EntryPlanCard'
+import { EntryConditions, EntryPlanCard } from '../candidates/EntryPlanCard'
+import { ENTRY_TYPES } from '../candidates/entryPlan'
 import {
   CANDIDATE_DISCLAIMER,
   averageVolumeText,
@@ -10,8 +11,10 @@ import {
   formatPrice,
   formatRiskReward,
   liquidityExclusionText,
+  riskRewardBasisSuffix,
 } from '../candidates/candidates'
 import { Term } from '../components/Term'
+import { UnlessPageDate } from '../components/pageDate'
 import { Badge, DataTable, DateBadge, EmptyState, type Column } from '../components/ui'
 import { productActionReasonLabel } from '../presentation'
 import type { CandidateItem, GapReason, StrategyActionableLevels, StrategyBoard as Board, StrategyBoardRow } from '../types'
@@ -22,6 +25,9 @@ import {
   LEVELS_MISSING_TEXT,
   OBSERVATION_LABEL,
   STATUS_TONES,
+  boardLevelsRow,
+  candidateLevelsInBoardText,
+  conditionDetailsTitle,
   conditionViews,
   levelsVersionLabel,
   observationLines,
@@ -30,7 +36,7 @@ import {
   unmetText,
 } from './strategyBoard'
 
-// Stock strategy board (#274): one row per registered strategy at the top of the 研究條件 tab, replacing the
+// Stock strategy board (#274): one row per registered strategy at the top of the 進出場 tab, replacing the
 // candidate panel and the static condition list. Desktop is a table, 640px and below one card per strategy
 // (DESIGN_SYSTEM §5 策略總表). Actionable levels come from the signal, observation levels from strategy_levels;
 // the two never share a block (DESIGN_SYSTEM §7). The AI note appears only on the candidate row.
@@ -45,6 +51,8 @@ function StatusCell({ row, floorNote }: { row: StrategyBoardRow; floorNote: stri
 
 export function ActionableLevels({ levels }: { levels: StrategyActionableLevels }) {
   const breakout = levels.entry_type === 'breakout'
+  // #580: the RR's entry, 「（以進場區中點 27.27 元計算）」 (UI_COPY_SPEC §10.1).
+  const basis = riskRewardBasisSuffix(levels.risk_reward, levels.risk_reward_basis, breakout ? levels.trigger_price : levels.reference_entry)
   return (
     <dl className="strategy-levels strategy-levels-actionable">
       {breakout
@@ -52,7 +60,7 @@ export function ActionableLevels({ levels }: { levels: StrategyActionableLevels 
         : <div><dt><Term id="entry_zone">進場區</Term>（元）</dt><dd className="level-entry">{formatPrice(levels.entry_low)}～{formatPrice(levels.entry_high)}</dd></div>}
       <div><dt><Term id="support">停損</Term>（元）</dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
       <div><dt><Term id="target">{levels.target_2 != null ? '目標一／目標二' : '目標一'}</Term>（元）</dt><dd className="level-target">{formatPrice(levels.target_1)}{levels.target_2 != null && <>／{formatPrice(levels.target_2)}</>}</dd></div>
-      <div><dt><Term id="rr">RR</Term></dt><dd><Badge tone="primary" className="badge-compact">{formatRiskReward(levels.risk_reward)}</Badge></dd></div>
+      <div><dt><Term id="rr">RR</Term></dt><dd><Badge tone="primary" className="badge-compact">{formatRiskReward(levels.risk_reward)}</Badge>{basis && <span className="small-note strategy-rr-basis">{basis}</span>}</dd></div>
     </dl>
   )
 }
@@ -103,7 +111,7 @@ function ConditionDetails({ row }: { row: StrategyBoardRow }) {
   const views = conditionViews(row, productActionReasonLabel)
   return (
     <details className="details strategy-conditions">
-      <summary>{row.label}條件明細</summary>
+      <summary>{conditionDetailsTitle(row.label)}</summary>
       {views.length
         ? <ul className="strategy-condition-list">{views.map((view) => (
           <li key={view.code} data-condition={view.code} data-condition-state={view.state}>
@@ -141,6 +149,8 @@ function StrategyCard({ row, floorNote, gapReasons }: { row: StrategyBoardRow; f
 function CandidateRow({ board, candidate }: { board: Board; candidate: CandidateItem | null | undefined }) {
   const summary = board.candidate
   if (!summary) return null
+  const levelsRow = candidate ? boardLevelsRow(board, candidate.levels) : null
+  const entryType = levelsRow && (levelsRow.entry_type === 'breakout' || levelsRow.entry_type === 'pullback') ? ENTRY_TYPES[levelsRow.entry_type] : null
   return (
     <div className="strategy-candidate" data-strategy-candidate={summary.rank}>
       <div className="strategy-candidate-head">
@@ -148,8 +158,17 @@ function CandidateRow({ board, candidate }: { board: Board; candidate: Candidate
         <strong>第 {summary.rank} 名 · <Term id="candidate_score">總分</Term> {formatCandidateScore(summary.total_score)} · {candidateStrategyLabel(summary.strategy)}</strong>
         <span className="small-note strategy-candidate-disclaimer">{CANDIDATE_DISCLAIMER}</span>
       </div>
-      {/* #491: how to enter, before the reasons. */}
-      {candidate && <EntryPlanCard item={candidate} onStockPage />}
+      {/* #491: how to enter, before the reasons. #648: when the board row below carries the same levels, the entry type
+          and a pointer to that row replace the sentence, so the tab writes the set once; the signal-day conditions stay. */}
+      {candidate && (levelsRow
+        ? <section className="entry-plan" aria-label="進場方式" data-entry-plan="levels-in-board" data-entry-type={levelsRow.entry_type}>
+          <p className="entry-plan-line">
+            <span className="entry-plan-type">{entryType ? <Term id={entryType.term}>{entryType.label}</Term> : '進場方式'}</span>
+            <span className="entry-plan-sentence" data-levels-ref>{candidateLevelsInBoardText(levelsRow.label)}</span>
+          </p>
+          <EntryConditions item={candidate} onStockPage />
+        </section>
+        : <EntryPlanCard item={candidate} onStockPage />)}
       {/* #519: the reasons and the AI note fold behind one line; the score details stay their own fold. */}
       {candidate && <details className="details strategy-candidate-more">
         <summary>{CANDIDATE_MORE_LABEL}</summary>
@@ -176,7 +195,7 @@ export function StrategyBoardPanel({ board, candidate, gapReasons }: { board: Bo
       <div className="board-meta">
         {board.liquidity && (
           <p className="small-note strategy-liquidity" data-liquidity={board.liquidity.state ?? undefined}>
-            {averageVolumeText(board.liquidity.average_volume_lots_20d)} · 資料日期 {formatDate(board.liquidity.data_as_of)}
+            {averageVolumeText(board.liquidity.average_volume_lots_20d)}<UnlessPageDate date={board.liquidity.data_as_of}> · 資料日期 {formatDate(board.liquidity.data_as_of)}</UnlessPageDate>
             {board.liquidity.minimum_lots != null && `（候選門檻 ${formatLots(board.liquidity.minimum_lots)}）`}
           </p>
         )}

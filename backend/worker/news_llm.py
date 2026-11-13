@@ -55,11 +55,13 @@ from app.models import (
     NewsLlmResult,
     ThemeGroup,
 )
-from app.theme_suggestions import MATCHED_GROUP_TYPES
 
 from . import sources
 from .news_sources import TAIPEI
 from .pipeline import _upsert_quality, _upsert_raw_payload
+
+# Group types a theme candidate may match by name: a curated theme, then an official industry.
+MATCHED_GROUP_TYPES = ("theme", "official_industry")
 
 PROMPT_VERSION = "news_v3"
 PROMPT_PATH = Path(__file__).with_name("prompts") / f"{PROMPT_VERSION}.md"

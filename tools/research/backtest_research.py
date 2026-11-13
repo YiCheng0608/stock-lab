@@ -1,15 +1,20 @@
-"""Research backtest on a copy of stock.db: canonical strategies, ablations (#318), regime filters (#546).
+"""Research backtest on a copy of stock.db: canonical strategies, ablations (#318), regime filters (#546), index conditions (#567).
 
 Runs ``worker.pipeline.backtest(registry=...)`` once over ``--start``..``--end``
 on the database given by ``--db`` (a ``tools/ops/copy_db.py`` copy or another
 isolated database; the backtest writes signals, settlements and a
 ``run_type=backtest`` run).  The registry is the canonical strategies (unless
 ``--no-canonical``) followed by the ablations ``--ablate`` names
-(``app.strategies.ablation``) and the regime strategies ``--regime`` names
-(``app.strategies.regime``); every strategy shares one replay, so the inputs
-of each instrument and session are built once.  Regime strategies read
-TAIEX's ``market_bars`` closes, loaded once before the replay and pointed at
-each score date while its signals are written (``score_dates``).
+(``app.strategies.ablation``), the regime strategies ``--regime`` names
+(``app.strategies.regime``) and the index-condition strategies
+``--index-condition`` names (``app.strategies.index_conditions``); every
+strategy shares one replay, so the inputs of each instrument and session are
+built once.  Regime strategies read TAIEX's ``market_bars`` closes, and
+index-condition strategies the rows of their indexes, loaded once before the
+replay and pointed at each score date while its signals are written
+(``score_dates``); index conditions are also pointed at each instrument's
+exchange while its signals are written (``instruments``).  A run refuses an
+index condition whose series has no rows in the database.
 
 Refuses before importing the app when ``--db`` is the production database
 (inside ``stock-lab-data`` or ``STOCK_DATA_DIR``, or the same file as its
@@ -64,7 +69,14 @@ def _parser() -> argparse.ArgumentParser:
         nargs="*",
         default=[],
         metavar="STRATEGY:FILTER",
-        help="regime strategies to add, e.g. pullback_v3:r3; 'all' for every one",
+        help="regime strategies to add, e.g. pullback_v4:r3; 'all' for every one",
+    )
+    parser.add_argument(
+        "--index-condition",
+        nargs="*",
+        default=[],
+        metavar="STRATEGY:CONDITION",
+        help="index-condition strategies to add, e.g. pullback_v3:c1; 'all' for every one",
     )
     parser.add_argument(
         "--slim",
@@ -74,7 +86,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-canonical",
         action="store_true",
-        help="evaluate only the ablations and regime strategies, not the registered ones",
+        help="evaluate only the research strategies, not the registered ones",
     )
     parser.add_argument("--min-free-gb", type=float, default=10.0)
     parser.add_argument("--force", action="store_true", help="rerun a finished run")
@@ -240,6 +252,120 @@ def regime_items(names: list[str]) -> list[tuple[str, str]]:
             raise Refused(f"unknown regime strategy {name!r}")
         items.append((key, code))
     return items
+
+
+def condition_items(names: list[str]) -> list[tuple[str, str]]:
+    from app.strategies.index_conditions import BASES, CONDITIONS, all_conditions
+
+    if names == ["all"]:
+        return all_conditions()
+    items = []
+    for name in names:
+        key, _, code = name.partition(":")
+        if key not in BASES or code not in CONDITIONS:
+            raise Refused(f"unknown index-condition strategy {name!r}")
+        items.append((key, code))
+    return items
+
+
+def index_history():
+    """Every ``market_bars`` row of the ``SERIES`` indexes, as an ``IndexHistory``."""
+
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import Instrument, MarketBar
+    from app.strategies.index_conditions import SERIES, IndexHistory
+
+    rows = {}
+    with SessionLocal() as db:
+        for key, (exchange, symbol, instrument_type) in SERIES.items():
+            instrument = db.scalar(
+                select(Instrument).where(
+                    Instrument.exchange == exchange,
+                    Instrument.symbol == symbol,
+                    Instrument.instrument_type == instrument_type,
+                )
+            )
+            if instrument is None:
+                continue
+            rows[key] = {
+                day: (close, month)
+                for day, close, month in db.execute(
+                    select(
+                        MarketBar.trading_date,
+                        MarketBar.close,
+                        MarketBar.contract_month,
+                    ).where(MarketBar.instrument_id == instrument.id)
+                )
+            }
+    return IndexHistory(rows)
+
+
+def missing_series(history, items: list[tuple[str, str]]) -> list[str]:
+    """The series the conditions of ``items`` read that have no rows at all."""
+
+    from app.strategies.index_conditions import CONDITIONS
+
+    needed = sorted({key for _, code in items for key in CONDITIONS[code].series})
+    return [key for key in needed if not history.series(key)[0]]
+
+
+def series_summary(history) -> dict[str, dict]:
+    from app.strategies.index_conditions import SERIES
+
+    result = {}
+    for key in SERIES:
+        dates = history.series(key)[0]
+        result[key] = (
+            {
+                "rows": len(dates),
+                "first": dates[0].isoformat(),
+                "last": dates[-1].isoformat(),
+            }
+            if dates
+            else {"rows": 0}
+        )
+    return result
+
+
+class SessionTargets:
+    """Several score-date trackers (``TaiexCloses``, ``IndexHistory``) set as one."""
+
+    def __init__(self, *targets) -> None:
+        self.targets = [target for target in targets if target is not None]
+
+    def __bool__(self) -> bool:
+        return bool(self.targets)
+
+    def set_session(self, day) -> None:
+        for target in self.targets:
+            target.set_session(day)
+
+
+@contextmanager
+def instruments(history, pipeline_module):
+    """Wrap the replay's per-instrument ``_upsert_signal(db, instrument=..., ...)``.
+
+    ``history`` (an ``IndexHistory``) is pointed at the instrument's exchange
+    around that call, where every strategy is evaluated for it, and cleared
+    after it (an index-condition strategy evaluated outside it raises).
+    """
+
+    original = pipeline_module._upsert_signal
+
+    def upsert(db, *args, instrument, **kwargs):
+        history.set_instrument(instrument.exchange)
+        try:
+            return original(db, *args, instrument=instrument, **kwargs)
+        finally:
+            history.set_instrument(None, active=False)
+
+    pipeline_module._upsert_signal = upsert
+    try:
+        yield
+    finally:
+        pipeline_module._upsert_signal = original
 
 
 def taiex_closes():
@@ -422,16 +548,22 @@ def main(argv: list[str] | None = None) -> int:
     from app.db import init_db
     from app.strategies import REGISTRY
     from app.strategies.ablation import research_registry
+    from app.strategies.index_conditions import BASES, with_conditions
     from app.strategies.regime import with_regimes
     from worker import pipeline
 
     try:
         items = ablation_items(args.ablate)
         regimes = regime_items(args.regime)
-        if items or not regimes:
+        conditions = condition_items(args.index_condition)
+        if items or not (regimes or conditions):
             registry = research_registry(items, canonical=not args.no_canonical)
-        else:
+        elif regimes:
             registry = {} if args.no_canonical else dict(REGISTRY)
+        else:
+            # Index conditions alone: their fixed v3 bases are the baselines,
+            # whatever REGISTRY holds (app.strategies.index_conditions.BASES).
+            registry = {} if args.no_canonical else dict(BASES)
     except (Refused, ValueError) as exc:
         print(json.dumps({"refused": [str(exc)]}, ensure_ascii=False))
         return 2
@@ -440,19 +572,27 @@ def main(argv: list[str] | None = None) -> int:
     started = time.perf_counter()
     init_db()
     migrated = time.perf_counter()
-    closes = None
-    if regimes:
-        try:
+    closes = history = None
+    try:
+        if regimes:
             closes = taiex_closes()
             registry = with_regimes(registry, regimes, closes)
-        except (Refused, ValueError) as exc:
-            wal.stop()
-            print(json.dumps({"refused": [str(exc)]}, ensure_ascii=False))
-            return 2
+        if conditions:
+            history = index_history()
+            empty = missing_series(history, conditions)
+            if empty:
+                raise Refused(f"no market_bars rows for {', '.join(empty)}")
+            registry = with_conditions(registry, conditions, history)
+    except (Refused, ValueError) as exc:
+        wal.stop()
+        print(json.dumps({"refused": [str(exc)]}, ensure_ascii=False))
+        return 2
+    sessions = SessionTargets(closes, history)
     with (
-        score_dates(closes, pipeline, slim=args.slim)
-        if closes or args.slim
-        else nullcontext()
+        score_dates(sessions or None, pipeline, slim=args.slim)
+        if sessions or args.slim
+        else nullcontext(),
+        instruments(history, pipeline) if history is not None else nullcontext(),
     ):
         result = pipeline.backtest(
             args.start,
@@ -482,6 +622,7 @@ def main(argv: list[str] | None = None) -> int:
                     if closes and closes.dates
                     else {}
                 ),
+                **({"index_series": series_summary(history)} if history else {}),
                 "run_id": run["id"],
                 "status": run["status"],
                 "request_key": run["request_key"],

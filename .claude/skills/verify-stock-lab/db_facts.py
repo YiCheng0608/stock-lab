@@ -23,10 +23,11 @@ from pathlib import Path
 # Same value as backend/app/domain.py; backend/tests/test_verify_tools.py keeps
 # them equal. This script runs on the stdlib-only tool Python, so it cannot
 # import the backend (#237).
-CANDIDATE_SCORE_VERSION = "candidate_score_v6"
+CANDIDATE_SCORE_VERSION = "candidate_score_v7"
 # Same as backend/app/domain.py CANDIDATE_SCORE_READ_VERSIONS: a date without a
-# run of a version shows its run of the next one in the list (#392, #413, #404, #490).
+# run of a version shows its run of the next one in the list (#392, #413, #404, #490, #580).
 CANDIDATE_SCORE_READ_VERSIONS = (
+    "candidate_score_v7",
     "candidate_score_v6",
     "candidate_score_v5",
     "candidate_score_v4",
@@ -69,10 +70,6 @@ QUERIES = {
     "news_llm_done": (
         "news_llm_results",
         "SELECT count(*) FROM news_llm_results WHERE llm_status = 'done'",
-    ),
-    "theme_suggestions": (
-        "theme_suggestions",
-        "SELECT count(*) FROM theme_suggestions",
     ),
     # User tracking plans: the actions page's 追蹤計畫 and 追蹤回看 (A8).
     "tracking_plans_open": (

@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 
 import { formatCandidateScore } from '../candidates/candidates'
 import { Term } from '../components/Term'
+import { useSameAsPage } from '../components/pageDate'
 import { Badge, CardList, DataTable, Skeleton, cx, type Column } from '../components/ui'
 import type { ActionSummary, ActionTierSummary, ActionView } from '../types'
 import {
@@ -20,7 +21,7 @@ import {
   actionStateLabel,
   conditionalNote,
   conditionsPending,
-  etfLabel,
+  ETF_LABEL,
   hiddenSentence,
   moreText,
   nearCopy,
@@ -52,21 +53,27 @@ export function ActionFilters({ summary, view, includeEtf, searching, onViewChan
   onIncludeEtfChange: (value: boolean) => void
 }) {
   const hidden = searching ? SEARCH_NOTE : hiddenSentence(summary)
+  // One row (#649): the chips, 含 ETF and the hidden counts; why rows are hidden is in the page's 說明 fold.
   return (
     <div className="action-filters">
-      <div className="filter-row">
-        <div className="filter-chips" role="group" aria-label="篩選">
-          {ACTION_VIEWS.map((item) => (
-            <button key={item.id} type="button" className={cx('badge filter-chip', item.id === view && 'filter-chip-selected')} aria-pressed={item.id === view} onClick={() => onViewChange(item.id)}>
-              {viewChipLabel(item.id, summary)}
-            </button>
-          ))}
-        </div>
-        <label className="check-label"><input type="checkbox" checked={includeEtf} onChange={(event) => onIncludeEtfChange(event.target.checked)} /> {etfLabel(summary)}</label>
+      <div className="filter-chips" role="group" aria-label="篩選">
+        {ACTION_VIEWS.map((item) => (
+          <button key={item.id} type="button" className={cx('badge filter-chip', item.id === view && 'filter-chip-selected')} aria-pressed={item.id === view} onClick={() => onViewChange(item.id)}>
+            {viewChipLabel(item.id, summary, item.id === view)}
+          </button>
+        ))}
       </div>
-      {hidden && <p className="small-note action-hidden-note">{hidden}</p>}
+      <label className="check-label"><input type="checkbox" checked={includeEtf} onChange={(event) => onIncludeEtfChange(event.target.checked)} /> {ETF_LABEL}</label>
+      {hidden && <span className="small-note action-hidden-note">{hidden}</span>}
     </div>
   )
+}
+
+// 「資料 YYYY/MM/DD」 for a row whose day is not the page date (#661, decision 6835320079: no 資料日 column); a
+// row without a day reads 資料 待核實.
+function RowDateLine({ action, className = 'small-note action-row-date' }: { action: ActionSummary; className?: string }) {
+  const sameDate = useSameAsPage(action.data_cutoff ?? action.price_as_of)
+  return sameDate ? null : <div className={className}>資料 {actionDataDay(action)}</div>
 }
 
 function StockCell({ action }: { action: ActionSummary }) {
@@ -74,6 +81,7 @@ function StockCell({ action }: { action: ActionSummary }) {
   return <>
     <Link className="symbol-link" to={researchPath(action)}><strong>{instrument.symbol}</strong> {instrument.name}</Link>
     <div className="small-note">{marketLabel(instrument.exchange)} · {typeLabel(instrument.instrument_type)}</div>
+    <RowDateLine action={action} />
   </>
 }
 
@@ -92,12 +100,13 @@ function StatusCell({ action, context, withNote = true }: { action: ActionSummar
 }
 
 // Tier 3's 差哪個條件: one 「差：」 line per unmet condition, then the met short names; never a level.
-function NearLines({ action }: { action: ActionSummary }) {
+// The phone card leaves the met line to its 更多 fold (#649); the desktop cell keeps it.
+function NearLines({ action, withMet = true }: { action: ActionSummary; withMet?: boolean }) {
   const near = nearCopy(action.nearness)
   if (!near) return null
   return <div className="action-near" data-near-lines="">
     {near.lines.map((line) => <div key={line} className="action-near-line">{line}</div>)}
-    {near.met && <div className="small-note">{near.met}</div>}
+    {withMet && near.met && <div className="small-note">{near.met}</div>}
   </div>
 }
 
@@ -127,19 +136,18 @@ function tierColumns(context: RowContext): ReadonlyArray<Column<ActionSummary>> 
     { key: 'stop', header: <><Term id="support">停損</Term>（元）</>, num: true, cellClassName: 'level-stop', cell: (action) => actionLevels(action)?.stop ?? '' },
     { key: 'target', header: <><Term id="target">目標一</Term>（元）</>, num: true, cellClassName: 'level-target', cell: (action) => actionLevels(action)?.target ?? '' },
   ]
-  const day: Column<ActionSummary> = { key: 'day', header: '資料日', num: true, cell: actionDataDay }
   const link: Column<ActionSummary> = { key: 'link', header: <span className="sr-only">策略總表</span>, cell: (action) => <Link className="text-link" to={researchPath(action)}>{tier === 3 ? NEAR_RESEARCH_LINK : RESEARCH_LINK}</Link> }
   if (tier === 1) {
     return [
       { key: 'rank', header: '名次', cell: (action) => <span className="candidate-rank" aria-label={`第 ${action.candidate?.rank ?? ''} 名`}>{rankLabel(action)}</span> },
       stock, status, close, ...levels,
       { key: 'total', header: <><Term id="candidate_score">總分</Term>（0–100）</>, num: true, cell: (action) => action.candidate ? formatCandidateScore(action.candidate.total_score) : '' },
-      day, link,
+      link,
     ]
   }
-  if (tier === 3) return [stock, status, close, { key: 'near', header: '差哪個條件', wrap: true, cellClassName: 'action-note-cell', cell: (action) => <NearLines action={action} /> }, day, link]
-  if (tier >= 4) return [stock, status, close, { key: 'note', header: '說明', wrap: true, cellClassName: 'action-note-cell', cell: (action) => <NoteLines action={action} tier={tier} /> }, day, link]
-  return [stock, status, close, ...levels, day, link]
+  if (tier === 3) return [stock, status, close, { key: 'near', header: '差哪個條件', wrap: true, cellClassName: 'action-note-cell', cell: (action) => <NearLines action={action} /> }, link]
+  if (tier >= 4) return [stock, status, close, { key: 'note', header: '說明', wrap: true, cellClassName: 'action-note-cell', cell: (action) => <NoteLines action={action} tier={tier} /> }, link]
+  return [stock, status, close, ...levels, link]
 }
 
 function ActionCard({ action, context }: { action: ActionSummary; context: RowContext }) {
@@ -147,8 +155,10 @@ function ActionCard({ action, context }: { action: ActionSummary; context: RowCo
   const close = actionClose(action)
   // Tier 3 never shows a level (DESIGN_SYSTEM §7 接近成立).
   const levels = tier <= 2 ? actionLevels(action) : null
+  const met = tier === 3 ? nearCopy(action.nearness)?.met : null
   return (
-    // DESIGN_SYSTEM §5.1: ① name and badge, the close on the right → ② market · type → ③ levels → ④ text → ⑤ day and link.
+    // DESIGN_SYSTEM §5 行動列表 (#649): ① name and badge, the close on the right → ③ levels (tier 3: the 差 lines; tiers
+    // 4–5: the note) → ⑤ day, 更多 and link. ② market · type, tier 2's line and tier 3's met line are in 更多.
     <article className="card action-card-mini" data-action-card={actionKey(action)}>
       <div className="action-card-head">
         <div className="action-card-title">
@@ -157,7 +167,6 @@ function ActionCard({ action, context }: { action: ActionSummary; context: RowCo
         </div>
         {close.close !== null && <div className="action-card-price">{close.close}<span className={cx('action-change', close.tone)}>{close.change}</span></div>}
       </div>
-      <div className="small-note">{action.candidate ? `#${action.candidate.rank} · ` : ''}{marketLabel(action.instrument.exchange)} · {typeLabel(action.instrument.instrument_type)}</div>
       {close.close === null && <div className="small-note">價格資料尚未完整，暫不顯示最近收盤</div>}
       {levels && (
         // Only the levels the row has; a blank level is left out, not shown as 0 or a dash (UI_COPY_SPEC §5).
@@ -167,19 +176,29 @@ function ActionCard({ action, context }: { action: ActionSummary; context: RowCo
           {levels.target && <div><dt>目標一（元）</dt><dd className="level-target">{levels.target}</dd></div>}
         </dl>
       )}
-      {tier === 2 && <div className="small-note">{conditionalNote(action, context.candidateListSize)}</div>}
-      {tier === 3 && <NearLines action={action} />}
+      {tier === 3 && <NearLines action={action} withMet={false} />}
       {tier >= 4 && <div className="small-note action-card-note"><NoteLines action={action} tier={tier} /></div>}
-      <div className="action-card-foot"><span className="small-note">資料日 {actionDataDay(action)}</span><Link className="text-link" to={researchPath(action)}>{tier === 3 ? NEAR_RESEARCH_LINK : RESEARCH_LINK}</Link></div>
+      <div className="action-card-foot">
+        <RowDateLine action={action} className="small-note action-card-date" />
+        <details className="action-card-more">
+          <summary>更多</summary>
+          <div className="small-note">{action.candidate ? `#${action.candidate.rank} · ` : ''}{marketLabel(action.instrument.exchange)} · {typeLabel(action.instrument.instrument_type)}</div>
+          {tier === 2 && <div className="small-note">{conditionalNote(action, context.candidateListSize)}</div>}
+          {met && <div className="small-note">{met}</div>}
+        </details>
+        <Link className="text-link" to={researchPath(action)}>{tier === 3 ? NEAR_RESEARCH_LINK : RESEARCH_LINK}</Link>
+      </div>
     </article>
   )
 }
 
-export function ActionTierSectionView({ section, loading, canLoadMore, onMore }: {
+export function ActionTierSectionView({ section, loading, canLoadMore, onMore, levelsNote = section.tier <= 2 }: {
   section: TierSection
   loading?: boolean
   canLoadMore: boolean
   onMore: () => void
+  // The units line, on the first drawn levels table of the page only (#661, decision 6835320079 U-a).
+  levelsNote?: boolean
 }) {
   const remaining = Math.max(0, section.shown - section.items.length)
   const titleId = `action-tier-${section.tier}`
@@ -196,7 +215,7 @@ export function ActionTierSectionView({ section, loading, canLoadMore, onMore }:
         <DataTable
           wrapClassName="action-table-wrap"
           className="action-table"
-          note={section.tier <= 2 ? LEVELS_NOTE : undefined}
+          note={levelsNote && section.tier <= 2 ? LEVELS_NOTE : undefined}
           columns={tierColumns(context)}
           rows={section.items}
           rowKey={actionKey}
@@ -219,5 +238,7 @@ export function ActionTierList({ sections, loadingTiers, canLoadMore, onMore }: 
   onMore: (tier: number) => void
 }) {
   if (!sections.length) return <div className="empty panel">{EMPTY_TEXT}</div>
-  return <>{sections.map((section) => <ActionTierSectionView key={section.tier} section={section} loading={loadingTiers.has(section.tier)} canLoadMore={canLoadMore(section.tier)} onMore={() => onMore(section.tier)} />)}</>
+  // U-a: the units line goes on the first levels table that has rows, not always tier 0.
+  const noteTier = sections.find((section) => section.tier <= 2 && section.items.length > 0)?.tier
+  return <>{sections.map((section) => <ActionTierSectionView key={section.tier} section={section} loading={loadingTiers.has(section.tier)} canLoadMore={canLoadMore(section.tier)} onMore={() => onMore(section.tier)} levelsNote={section.tier === noteTier} />)}</>
 }

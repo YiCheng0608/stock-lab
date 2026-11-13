@@ -7,6 +7,7 @@ import * as AppModule from './App'
 import { ScoreDetails } from './candidates/CandidateViews'
 import { completeItem } from './candidates/candidates.fixtures'
 import * as ui from './components/ui'
+import { NavSearch } from './components/NavSearch'
 import { StockBarsChart } from './stock/StockBarsChart'
 import { barsResponse, tradedBar } from './stock/stockBars.fixtures'
 import { ThemeMemberTable } from './themes/ThemeViews'
@@ -180,15 +181,20 @@ const StockTable = component('StockTable')
 const directory = render('StockTable', () => <StockTable {...{ rows: directoryRows, dataAsOf: '2026-10-22' }} />)
 checkAligned('個股清單', directory, ['最近收盤（元）'])
 check(bodyText(directory).includes('21.10') && bodyText(directory).includes('2,510.00'), '個股清單: a column across stocks keeps two decimals')
-// #300 phone cards (DESIGN_SYSTEM §5 個股清單, §5.1): name and close → 市場 · 類型 → action and quality; no table to scroll.
+// #300 phone cards (DESIGN_SYSTEM §5 個股清單, §5.1): name and close, then (#666) the action with 市場 · 類型 in small type at
+// its right; no table to scroll.
 const count = (markup: string, needle: string) => markup.split(needle).length - 1
 const plain = (markup: string) => markup.replace(/<!-- -->/g, '').replace(/<[^>]+>/g, '\n').split('\n').map((line) => line.trim()).filter(Boolean)
 const directoryCards = directory.slice(directory.indexOf('class="card-list stock-cards"'))
 const stockCards = directoryCards.split('<div class="stock-card">').slice(1)
 check(stockCards.length === 2 && !/<table/.test(directoryCards), `個股清單手機卡: one card per row and no table, got ${stockCards.length}`)
-check(plain(stockCards[0]).join('|') === '1742 台蠟|21.10|上市 · 股票|尚無研究動作|不足', `個股清單手機卡: field order, got ${plain(stockCards[0]).join('|')}`)
+check(plain(stockCards[0]).join('|') === '1742 台蠟|21.10|尚無研究動作|上市 · 股票', `個股清單手機卡: field order, got ${plain(stockCards[0]).join('|')}`)
 check(plain(stockCards[1]).slice(0, 2).join('|') === '2330 台積電|2,510.00', `個股清單手機卡: two decimals with thousands, got ${plain(stockCards[1]).join('|')}`)
-check(/<div class="stock-card-price">[^<]*<\/div>/.test(stockCards[0]) && directoryCards.indexOf('class="table-note"') < directoryCards.indexOf('class="stock-card"'), '個股清單手機卡: the close is one text run and the unit note leads the cards')
+check(/<div class="stock-card-price">[^<]*<\/div>/.test(stockCards[0]), '個股清單手機卡: the close is one text run')
+// #666: two lines; the second is the action, then 市場 · 類型 (the same text as before, in small type).
+check(/<div class="stock-card-foot"><div class="stock-card-action">尚無研究動作<\/div><div class="stock-card-meta">上市 · 股票<\/div><\/div>/.test(stockCards[0]), `個股清單手機卡: action then 市場 · 類型 on one line, got ${stockCards[0]}`)
+// #666: the unit note left the table and the cards for the title's 說明 fold.
+check(!directory.includes('class="table-note"') && !plain(directory).some((line) => line.startsWith('單位：')), '個股清單: no unit note over the table or the cards (it is in 說明)')
 const staleDirectory = render('StockTable stale', () => <StockTable {...{ rows: [{ ...directoryRows[0], price_as_of: '2026-10-20' }], dataAsOf: '2026-10-22' }} />)
 const staleCard = staleDirectory.slice(staleDirectory.indexOf('<div class="stock-card">'))
 check(plain(staleCard).slice(0, 3).join('|') === '1742 台蠟|21.10|（2026/10/20）', `個股清單手機卡: an older close carries its date under it, got ${plain(staleCard).join('|')}`)
@@ -197,6 +203,47 @@ const manyDirectory = render('StockTable 12', () => <StockTable {...{ rows: many
 const manyCards = manyDirectory.slice(manyDirectory.indexOf('class="card-list stock-cards"'))
 const foldedCards = manyCards.slice(manyCards.indexOf('<details class="details card-list-rest">'))
 check(count(manyCards, '<div class="stock-card">') === 12 && count(foldedCards, '<div class="stock-card">') === 2 && foldedCards.includes('<summary>顯示其餘 2 檔</summary>') && count(manyDirectory, '<tr') === 13, '個股清單: the table keeps 12 rows, the phone shows 10 cards and folds 2')
+// Issue 602: one research-action column (data_quality only repeated it); short of data, the first missing item under it.
+const directoryHeaders = (/<thead>([\s\S]*?)<\/thead>/.exec(directory)?.[1] ?? '').replace(/<[^>]+>/g, '|').split('|').filter(Boolean)
+check(directoryHeaders.join('|') === '代號|名稱|交易所|類型|最近收盤（元）|目前研究動作', `個股清單: one action column, got ${directoryHeaders.join('|')}`)
+const gapRows = [
+  { ...directoryRows[0], action_state: 'data_insufficient', action_label_zh: '資料不足', data_quality: 'partial', missing_data_priority: [{ field: 'bars_20d', priority: 'market_base', priority_label: '市場基礎層', reason: '' }] },
+  // An action that is not 資料不足 keeps its own label even when data_quality is partial (a holding's manual review).
+  { ...directoryRows[1], action_state: 'manual_review', action_label_zh: '需人工判讀', data_quality: 'partial', missing_data_priority: [{ field: 'bars_20d', priority: 'market_base', priority_label: '市場基礎層', reason: '' }] },
+  { ...directoryRows[1], symbol: '2002', name: '中鋼', action_state: 'no_condition', action_label_zh: '暫無條件', data_quality: 'complete', missing_data_priority: [] },
+] as unknown as StockDirectoryRow[]
+const gapDirectory = render('StockTable gaps', () => <StockTable {...{ rows: gapRows, dataAsOf: '2026-10-22' }} />)
+const gapTableRows = (/<tbody>([\s\S]*?)<\/tbody>/.exec(gapDirectory)?.[1] ?? '').split('<tr').slice(1).map((row) => plain('<tr' + row).join('|'))
+check(gapTableRows[0]?.endsWith('|暫不行動|缺少 20 日有效行情'), `個股清單: 資料不足 shows the first missing item under the label, got ${gapTableRows[0]}`)
+check(gapTableRows[1]?.endsWith('|需人工判讀') && !gapTableRows[1].includes('缺少') && !gapTableRows[1].includes('不足'), `個股清單: a partial row with another action shows only its label, got ${gapTableRows[1]}`)
+check(gapTableRows[2]?.endsWith('|暫無條件'), `個股清單: a complete row shows its label alone, got ${gapTableRows[2]}`)
+check(!gapDirectory.includes('class="pill"'), '個股清單: no separate 策略判斷資料 pill on the table or the cards')
+const gapCards = gapDirectory.slice(gapDirectory.indexOf('class="card-list stock-cards"')).split('<div class="stock-card">').slice(1)
+check(plain(gapCards[0] ?? '').slice(-3).join('|') === '暫不行動|缺少 20 日有效行情|上市 · 股票' && plain(gapCards[1] ?? '').slice(-2)[0] === '需人工判讀', `個股清單手機卡: the same action cell, got ${plain(gapCards[0] ?? '').join('|')} / ${plain(gapCards[1] ?? '').join('|')}`)
+const stockDirectoryGap = AppModule.stockDirectoryGap
+check(stockDirectoryGap({ action_state: 'data_insufficient', missing_data_priority: [] }) === null && stockDirectoryGap({ action_state: 'data_insufficient' }) === null, '個股清單: no missing item, no note')
+// #666: the old eyebrow, lead and unit note are one 說明 fold on the title line, closed, with the same sentences.
+const StockDirectoryHelp = component('StockDirectoryHelp')
+const directoryHelp = render('StockDirectoryHelp', () => <StockDirectoryHelp />)
+check(directoryHelp.startsWith('<details class="details page-help"><summary>說明</summary>'), `個股清單說明: a closed 說明 fold, got ${directoryHelp.slice(0, 80)}`)
+check(plain(directoryHelp).join('|') === '說明|市場標的目錄：股票、ETF 與新上市標的分開標示；行動與缺資料優先級只來自已驗證官方快照。|單位：價格為各標的報價幣別的元，指數為點。空白表示未提供資料或數值待核實；最近收盤早於最新交易日時，下方括號標出它的日期。', `個股清單說明: the same sentences as before, got ${plain(directoryHelp).join('|')}`)
+const stockDirectoryCountText = (AppModule as unknown as { stockDirectoryCountText?: (meta: Record<string, unknown>) => string }).stockDirectoryCountText
+check(stockDirectoryCountText?.({ total: 1234 }) === '共 1,234 筆' && stockDirectoryCountText?.({}) === '共 0 筆', '個股清單: the filter row ends with 「共 N 筆」')
+
+// Issue 602: sorting is the API's sort parameter, and changing it (or any filter) starts again from page 1.
+const { changeStockDirectory, stockDirectoryParams, STOCK_SORTS, DEFAULT_STOCK_SORT } = AppModule
+const onPage3 = { search: '台', page: 3, type: 'stock', watchlist: true, sort: DEFAULT_STOCK_SORT }
+const sorted = changeStockDirectory(onPage3, { sort: 'close_desc' })
+check(sorted.page === 1 && sorted.sort === 'close_desc' && sorted.search === '台' && sorted.type === 'stock' && sorted.watchlist, `個股清單排序: a new sort keeps the filters and goes to page 1, got ${JSON.stringify(sorted)}`)
+check(JSON.stringify(stockDirectoryParams(sorted)) === JSON.stringify({ q: '台', page: 1, page_size: 30, instrument_type: 'stock', watchlist_only: true, sort: 'close_desc' }), `個股清單排序: the request carries sort, got ${JSON.stringify(stockDirectoryParams(sorted))}`)
+check(stockDirectoryParams({ ...onPage3, search: '', type: '', watchlist: false }).sort === undefined, '個股清單排序: the default order sends no sort (same first-page request as before)')
+check(changeStockDirectory(onPage3, { type: 'etf' }).page === 1 && changeStockDirectory(onPage3, { search: '2330' }).page === 1, '個股清單: a filter or search change goes to page 1')
+check(STOCK_SORTS.map((option) => option.id).join(',') === 'type,symbol,name,close_desc,close_asc' && DEFAULT_STOCK_SORT === 'type', `個股清單排序: the API's sort values, got ${STOCK_SORTS.map((option) => option.id).join(',')}`)
+const sortSelect = render('StockSortSelect', () => <AppModule.StockSortSelect value="close_asc" onChange={() => undefined} />)
+check(plain(sortSelect).join('|') === '排序|類型（股票在前）|代號|名稱|最近收盤高到低|最近收盤低到高' && /<option value="close_asc" selected="">/.test(sortSelect) && sortSelect.includes('aria-label="個股排序"'), `個股清單排序: the select lists every sort and shows the current one, got ${sortSelect}`)
+// Issue 602: the API refuses a q over 100 characters; the navbar box cannot hold more.
+const navSearch = render('NavSearch', () => <NavSearch />)
+check(navSearch.includes('maxLength="100"') || navSearch.includes('maxlength="100"'), `導覽列搜尋: input is capped at the API's q length, got ${navSearch}`)
 
 const members = render('ThemeMemberTable', () => <ThemeMemberTable rows={[
   { exchange: 'TWSE', symbol: '1742', name: '台蠟', role: 'member', latest_bar: { date: '2026-10-22', close: 21.1 }, change: 0.1, change_pct: 0.0047619, change_status: 'known', turnover: 1.2e8, turnover_status: 'available', excess_return_5d: 0.01, excess_return_20d: -0.1 },

@@ -1695,7 +1695,7 @@ def test_candidates_written_by_the_worker_pass_and_a_changed_total_fails(fx):
         market["2330"].id,
     )
     fx.db.expire_all()
-    for name, entry_type in (("breakout_v3", "breakout"), ("pullback_v3", "pullback")):
+    for name, entry_type in (("breakout_v3", "breakout"), ("pullback_v4", "pullback")):
         for symbol in ("1101", "2330", "1102"):
             instrument = market[symbol]
             bars = (
@@ -1867,3 +1867,125 @@ def test_main_refuses_an_out_directory_in_stock_lab_data(
     assert audit.main(["--db", str(fx.path), "--out", str(out)]) == 2
     assert "--out" in capsys.readouterr().out
     assert not out.parent.exists()
+
+
+# ---- TPEx OpenAPI tables of the current session (Issue #579) ----------------
+
+OA_QUOTES = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
+OA_INSTI = "https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading"
+OA_MARGIN = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_margin_balance"
+WWW_INSTI = "https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade"
+WWW_MARGIN = "https://www.tpex.org.tw/www/zh-tw/margin/balance"
+TPEX_FIXTURES = ROOT / "backend" / "tests" / "fixtures" / "tpex_openapi"
+
+
+def roc(day: date) -> str:
+    return f"{day.year - 1911}{day.month:02d}{day.day:02d}"
+
+
+def openapi(name: str, day: date, codes=None) -> list[dict]:
+    """A real 2026-11-09 OpenAPI table (#579 fixture) re-dated to ``day``."""
+
+    rows = json.loads((TPEX_FIXTURES / name).read_text(encoding="utf-8"))
+    return [
+        {**row, "Date": roc(day)}
+        for row in rows
+        if codes is None or row["SecuritiesCompanyCode"] in codes
+    ]
+
+
+def test_bars_raw_reads_the_openapi_quote_table(fx):
+    stock = fx.instrument("TPEx", "6488")
+    fx.instrument("TPEx", "3105")
+    raw = fx.raw(OA_QUOTES, T, openapi("oa_quotes_20261109.json", T), query="")
+    # 6488 2026-11-09: open 535, high 563, low 518, close 563.
+    fx.bar(
+        stock,
+        T,
+        563.0,
+        open_=535.0,
+        high=563.0,
+        low=518.0,
+        volume=6430510,
+        turnover=3_525_531_521,
+        raw=raw,
+    )
+    fx.commit()
+    checks = audit_checks.bars_raw(fx.context())
+    assert by_key(checks, "bars_raw_values").result == "pass"
+    # 3105 traded in the table and has no bar: read from the OpenAPI table.
+    missing = by_key(checks, "bars_raw_missing")
+    assert [row[1] for row in missing.examples["raw_row_without_bar"]] == ["3105"]
+
+
+def test_an_openapi_table_of_another_session_is_not_the_days_capture(fx):
+    # The 21:30 collect of T read the website report after the OpenAPI table
+    # still reported the previous session: that table says nothing about T.
+    fx.instrument("TPEx", "3105")
+    previous = DAYS[-2]
+    fx.raw(OA_QUOTES, T, openapi("oa_quotes_20261109.json", previous), query="")
+    fx.commit()
+    ctx = fx.context()
+    assert ctx.captures(*audit_checks.QUOTE_ENDPOINTS["TPEx"]) == {}
+    checks = audit_checks.bars_raw(ctx)
+    assert "raw_row_without_bar" not in by_key(checks, "bars_raw_missing").examples
+
+
+def test_chips_raw_reads_the_openapi_institutional_and_margin_tables(fx):
+    stock = fx.instrument("TPEx", "6488")
+    insti = fx.raw(
+        OA_INSTI, T, openapi("oa_insti_20261109.json", T, {"6488"}), query=""
+    )
+    # The stale margin table first, then the website report collect read.
+    fx.raw(
+        OA_MARGIN, T, openapi("oa_margin_20261106.json", DAYS[-2], {"6488"}), query=""
+    )
+    margin = json.loads((TPEX_FIXTURES / "www_margin_20261109.json").read_text("utf-8"))
+    fx.raw(WWW_MARGIN, T, margin, hour=11)
+    row = next(r for r in margin["tables"][0]["data"] if r[0] == "6488")
+    previous, current = (float(row[i].replace(",", "")) for i in (2, 6))
+    flow = next(
+        r
+        for r in openapi("oa_insti_20261109.json", T)
+        if r["SecuritiesCompanyCode"] == "6488"
+    )
+    values = tuple(float(flow[key]) for key in audit_lib.TPEX_OPENAPI_INSTITUTIONAL)
+    chip = fx.chip(stock, T, values, margin=current, raw=insti)
+    chip.margin_change = current - previous
+    fx.commit()
+    checks = audit_checks.chips_raw(fx.context())
+    assert results(checks) == {
+        "chips_raw_institutional": "pass",
+        "chips_raw_margin": "pass",
+    }
+    fx.sql("update chip_snapshots set dealer_buy = dealer_buy + 1")
+    check = by_key(audit_checks.chips_raw(fx.context()), "chips_raw_institutional")
+    assert check.result == "fail" and list(check.failures) == ["value"]
+
+
+def test_first_captures_group_the_two_endpoints_of_a_file(fx):
+    collected = fx.raw(
+        OA_INSTI, T, openapi("oa_insti_20261109.json", T), query="", hour=13
+    )
+    refetch = fx.raw(WWW_INSTI, T, {"tables": []}, hour=15)
+    stale = fx.raw(
+        OA_MARGIN, T, openapi("oa_margin_20261106.json", DAYS[-2]), query="", hour=13
+    )
+    fallback = fx.raw(WWW_MARGIN, T, {"tables": []}, hour=13)
+    fx.commit()
+    first = fx.context().first_captures()
+    # The 23:00 website refetch is a later capture of the same file; the
+    # previous session's OpenAPI margin table is no capture of T.
+    assert collected.id in first and refetch.id not in first
+    assert fallback.id in first and stale.id not in first
+
+
+def test_evidence_lookup_accepts_the_openapi_institutional_file(fx):
+    stock = fx.instrument("TPEx", "6488")
+    raw = fx.raw(OA_INSTI, T, openapi("oa_insti_20261109.json", T), query="")
+    chip = fx.chip(stock, T, raw=raw)
+    chip.source = "tpex_3insti+tpex_margin"
+    fx.commit()
+    assert audit_series.evidence_lookup(audit_lib.connect(fx.path)) == {
+        ("TPEx", T.isoformat()): raw.id
+    }

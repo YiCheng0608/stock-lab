@@ -36,6 +36,7 @@ CHILDREN = [
     "tracking_plans",
     "no_trade_days",
     "monthly_revenues",
+    "trading_halts",
 ]
 HEAD = REVISIONS[-1]
 DDL = """CREATE TABLE instruments (
@@ -252,7 +253,7 @@ def _fixture(tmp_path, fk, variant="plain", *, children=True):
                 if table.name == "daily_candidates":
                     # Integer parents seeded above with id 11.
                     values.update(signal_id=11, candidate_run_id=11)
-                if table.name in {"no_trade_days", "monthly_revenues"}:
+                if table.name in {"no_trade_days", "monthly_revenues", "trading_halts"}:
                     values.update(raw_payload_id=11)
                 if table.name == "tracking_plans":
                     values.update(signal_id=11)

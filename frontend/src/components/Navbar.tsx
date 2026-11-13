@@ -1,26 +1,22 @@
 import { useEffect, useState } from 'react'
-import type { FormEvent } from 'react'
-import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 
+import { NavSearch } from './NavSearch'
 import { DateBadge } from './ui'
 
-// Fixed 64px top bar (DESIGN_SYSTEM §4): logo, seven main links (#493; Issue 549 added 大盤 after 今日可買: the pages that ask for action, the data
-// pages, the explanation), stock search, data-date badge, hamburger on narrow screens.
+export { stockSearchPath } from '../search'
+
+// Fixed 64px top bar (DESIGN_SYSTEM §4): logo, six main links (#493; Issue 549 added 大盤 after 今日名單; Issue 631 moved 新聞 to the
+// 系統 page in the footer: the pages that ask for action, the data pages, the explanation), stock search with suggestions (NavSearch, Issue 599), data-date badge, hamburger on narrow screens.
 
 export const MAIN_NAV: ReadonlyArray<{ to: string; label: string; end?: boolean }> = [
-  { to: '/', label: '今日可買', end: true },
+  { to: '/', label: '今日名單', end: true },
   { to: '/market', label: '大盤' },
-  { to: '/watch', label: '觀察中' },
+  { to: '/watch', label: '我的追蹤' },
   { to: '/themes', label: '族群' },
   { to: '/stocks', label: '個股' },
-  { to: '/news', label: '新聞' },
   { to: '/strategy', label: '策略說明' },
 ]
-
-export function stockSearchPath(value: string): string | null {
-  const query = value.trim()
-  return query ? '/stocks?q=' + encodeURIComponent(query) : null
-}
 
 function Logo() {
   return (
@@ -45,15 +41,8 @@ function MenuIcon({ open }: { open: boolean }) {
 
 export function Navbar({ dataDate, dataDateLoading = false, dataDateError = false }: { dataDate: string | null; dataDateLoading?: boolean; dataDateError?: boolean }) {
   const [open, setOpen] = useState(false)
-  const [draft, setDraft] = useState('')
-  const navigate = useNavigate()
   const location = useLocation()
   useEffect(() => setOpen(false), [location.pathname, location.search])
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const path = stockSearchPath(draft)
-    if (path) navigate(path)
-  }
   return (
     <header className="navbar">
       <div className="navbar-inner">
@@ -66,12 +55,11 @@ export function Navbar({ dataDate, dataDateLoading = false, dataDateError = fals
             {MAIN_NAV.map((item) => <NavLink key={item.to} to={item.to} end={item.end}>{item.label}</NavLink>)}
           </nav>
           <div className="navbar-tools">
-            <form className="navbar-search" role="search" onSubmit={submit}>
-              <input className="input" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="代號或名稱" aria-label="搜尋個股代號或名稱" />
-            </form>
-            {!dataDateLoading && <DateBadge date={dataDate} unavailable={dataDateError && !dataDate} />}
+            <NavSearch />
           </div>
         </div>
+        {/* The page's one data date (#661): outside the menu, so a phone sees it without opening the menu. */}
+        {!dataDateLoading && <span className="navbar-date"><DateBadge date={dataDate} unavailable={dataDateError && !dataDate} always /></span>}
       </div>
     </header>
   )

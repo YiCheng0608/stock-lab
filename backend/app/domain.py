@@ -352,7 +352,7 @@ HOT_GROUP_CONFIG: dict[str, Any] = {
 # which identify strategy rows.  CANDIDATE_SCORE is the current version.
 # The pool lists its strategies by name: a strategy added to the registry
 # enters the candidate list only with a new score version.
-CANDIDATE_SCORE_VERSION = "candidate_score_v6"
+CANDIDATE_SCORE_VERSION = "candidate_score_v7"
 # Prompt version of the candidate LLM notes (worker.candidate_notes); the
 # API shows this version first.
 CANDIDATE_NOTE_PROMPT_VERSION = "candidate_notes_v1"
@@ -532,14 +532,26 @@ CANDIDATE_SCORE_V6["pool"]["liquidity"] = {
     "missing_session_or_volume": "excluded_liquidity_data_missing",
     "below_minimum": "excluded_low_volume",
 }
-CANDIDATE_SCORE = CANDIDATE_SCORE_V6
+# candidate_score_v7 (#580): candidate_score_v6 whose pool is breakout_v3 and
+# pullback_v4, the pullback whose RR is read at the entry zone's midpoint, so
+# the pool's RR >= 1.5 (validate_signal_levels) judges that RR.  Only the
+# strategy names change; the RR item keeps no weight.  v6's runs keep their
+# v3 pool.
+CANDIDATE_SCORE_V7: dict[str, Any] = _renamed_strategies(
+    CANDIDATE_SCORE_V6,
+    "candidate_score_v7",
+    {"breakout_v3": "breakout_v3", "pullback_v3": "pullback_v4"},
+)
+CANDIDATE_SCORE = CANDIDATE_SCORE_V7
 # The run versions the pages read, current first (#407 review M3): a date
 # without a run of a version shows its run of the next one in this list, so
-# the dates before #490 show candidate_score_v5, those before #404
+# the dates before #580 show candidate_score_v6, those before #490
+# candidate_score_v5, those before #404
 # candidate_score_v4, those before #413 candidate_score_v3 and those before
 # #392 candidate_score_v2 (as their signals show the strategy versions of
 # their day); one date never reads two versions (app.candidate_runs).
 CANDIDATE_SCORE_READ_VERSIONS: tuple[str, ...] = (
+    CANDIDATE_SCORE_V7["name"],
     CANDIDATE_SCORE_V6["name"],
     CANDIDATE_SCORE_V5["name"],
     CANDIDATE_SCORE_V4["name"],
@@ -648,40 +660,41 @@ TAIWAN_MARKET = "TW"
 
 @dataclass(frozen=True)
 class UsIndex:
-    """One FRED series of a display-only US index (Issue #547)."""
+    """One display-only US index (Issues #547, #568) and its FinMind data_id."""
 
     symbol: str
     series_id: str
     name: str
-    # The series' copyright notice on FRED, kept verbatim (shown on the page).
+    # The index owner's copyright notice, kept verbatim (shown on the page).
     copyright: str
 
 
 # The ``US`` exchange's index instruments, in the market page's order.  The
-# notices are the FRED series pages' (#547 source registration).
+# notices are the index owners' (as FRED's series pages gave them, #547); the
+# series ids are FinMind's USStockPrice data_id (#568 decision 6729065016).
 US_INDEX_EXCHANGE = "US"
 US_INDEXES: tuple[UsIndex, ...] = (
     UsIndex(
         "SPX",
-        "SP500",
+        "^GSPC",
         "S&P 500",
         "Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved.",
     ),
     UsIndex(
         "IXIC",
-        "NASDAQCOM",
+        "^IXIC",
         "NASDAQ 綜合指數",
         "Copyright © 2016, NASDAQ OMX Group, Inc.",
     ),
     UsIndex(
         "DJI",
-        "DJIA",
+        "^DJI",
         "道瓊工業指數",
         "Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved.",
     ),
-    UsIndex("SOX", "NASDAQSOX", "費城半導體指數", "Copyright © 2025, NASDAQ, Inc."),
+    UsIndex("SOX", "^SOX", "費城半導體指數", "Copyright © 2025, NASDAQ, Inc."),
 )
-# The data_quality rows collect writes per series and Taipei session.
+# The data_quality rows index-bars us-collect writes per series and Taipei day.
 US_INDEX_QUALITY_ENTITY = "us_index_series"
 
 

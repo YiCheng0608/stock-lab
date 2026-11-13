@@ -1,8 +1,10 @@
 """TX near-month history from the TAIFEX website download ``futDataDown`` (Issue #563).
 
 The daily TX bar comes from the open-data ``DailyMarketReportFut`` (#552,
-``worker.futures_bars``), which has the latest session only.  The sessions
-before it were collected come from the website's 期貨每日交易行情下載:
+``worker.futures_bars``), which has the latest published session only.  The
+sessions it does not give (before it was collected, or passed over: the
+report changes to a session late, Issue #586) come from the website's
+期貨每日交易行情下載:
 ``POST https://www.taifex.com.tw/cht/3/futDataDown`` with ``down_type=1``,
 ``commodity_id=TX`` and ``queryStartDate``/``queryEndDate`` (``YYYY/MM/DD``),
 one calendar month per request (a longer range answers an HTML error page).
@@ -15,8 +17,13 @@ The near-month rule, fields and null rules are ``worker.futures_bars``':
 ``契約=TX``, ``交易時段=一般``, ``到期月份(週別)`` equal to the session's near
 month; spreads (``202410/202411``) and the after-hours rows are never taken.
 The rows are written with their own ``source`` (``taifex_futdatadown``) and
-raw source (``taifex_web``), and only for days before the first OpenAPI row,
-so the two never overlap: the open-data report stays the daily source.
+raw source (``taifex_web``), only for sessions without a TX row of the other
+source (``store_futures_bars``), so the two never overlap, and never for
+today (Taipei): the open-data report gives that session to a later collect,
+and the gap fill takes it only when that one passes it over.  After every
+snapshot collect, ``fill_recent_gaps`` asks for the month (at most two) of
+a missing session among the ``GAP_SESSIONS`` verified sessions before the
+collect day (Issue #586).
 """
 
 from __future__ import annotations
@@ -25,10 +32,10 @@ import csv
 import io
 import time
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Callable
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.clock import utcnow
@@ -38,7 +45,6 @@ from .futures_bars import (
     CONTRACT,
     EXCHANGE,
     REGULAR_SESSION,
-    SOURCE as OPENAPI_SOURCE,
     SOURCE_MISSING_OHLC,
     SYMBOL,
     FuturesBar,
@@ -57,6 +63,12 @@ RUN_TYPE = "futures_bar_backfill"
 # The index history start (worker.index_bars.HISTORY_START, Issue #563).
 HISTORY_START = date(2023, 9, 1)
 DEFAULT_FIRST_MONTH = "2023-09"
+# The gap fill after a snapshot collect (Issue #586): the verified sessions
+# before the collect day it checks, the months it may ask for, and how far
+# back it reads (ten sessions fit in 45 days even across Lunar New Year).
+GAP_SESSIONS = 10
+GAP_MAX_MONTHS = 2
+GAP_LOOKBACK_DAYS = 45
 ENCODING = "cp950"
 WARNING_PREFIX = "futures history"
 FIELDS = (
@@ -276,18 +288,20 @@ def fetch_month(request: Request, *, timeout_seconds: float = 30.0) -> bytes:
     raise OfficialDataError("TAIFEX futDataDown request failed")  # pragma: no cover
 
 
-def first_openapi_day(db: Session) -> date | None:
-    """The oldest TX row of the open-data report: the history stops before it."""
+def tx_dates(db: Session, start: date, end: date) -> dict[date, str]:
+    """The stored TX sessions ``start``..``end`` and each one's source."""
 
-    return db.scalar(
-        select(func.min(MarketBar.trading_date))
+    rows = db.execute(
+        select(MarketBar.trading_date, MarketBar.source)
         .join(Instrument, Instrument.id == MarketBar.instrument_id)
         .where(
             Instrument.exchange == EXCHANGE,
             Instrument.symbol == SYMBOL,
-            MarketBar.source == OPENAPI_SOURCE,
+            MarketBar.trading_date >= start,
+            MarketBar.trading_date <= end,
         )
-    )
+    ).all()
+    return {day: source for day, source in rows}
 
 
 @dataclass
@@ -316,6 +330,7 @@ def backfill_futures_history(
     interval_seconds: float = 3.0,
     force: bool = False,
     today: date | None = None,
+    trigger: str = "manual",
 ) -> dict[str, Any]:
     """Fetch ``first``..``last`` from ``futDataDown`` and write the TX history.
 
@@ -323,10 +338,12 @@ def backfill_futures_history(
     month is fetched first (oldest first, ``interval_seconds`` apart), then
     the raws, bars, rebuilt indicators and features and the run's status are
     committed together, so a run stopped midway changes no row.  Only days
-    from ``HISTORY_START`` up to the day before the first OpenAPI row (the
-    day before ``today`` without one: today's session is the daily's, from
-    the OpenAPI) are written.  A month after the current Taipei
-    month or more than ``MAX_MONTHS`` months are refused before any request.
+    from ``HISTORY_START`` up to the day before ``today`` are written (today's
+    session is left to a later read), and a session the open-data report
+    already stored is kept (``kept_other_source``, Issue #586).  A month
+    after the current Taipei month or more than ``MAX_MONTHS`` months are
+    refused before any request.  ``trigger`` is ``manual`` (the CLI) or
+    ``collect`` (``fill_recent_gaps``).
     """
 
     from app.models import IngestionRun
@@ -342,10 +359,9 @@ def backfill_futures_history(
         raise ValueError(f"{last.label} is after the current month {today:%Y-%m}")
     if len(months) > MAX_MONTHS:
         raise ValueError(f"at most {MAX_MONTHS} months per run")
-    cutoff = first_openapi_day(db)
-    # Written days are before ``stop``: the first OpenAPI row, or today, whose
-    # session the daily's OpenAPI read writes (PR #565 review item 5).
-    stop = min(cutoff, today) if cutoff is not None else today
+    # Written days are before today, whose session a later read gives (PR
+    # #565 review item 5).
+    stop = today
     run = IngestionRun(
         run_type=RUN_TYPE,
         source="official",
@@ -357,8 +373,7 @@ def backfill_futures_history(
             "first_month": first.label,
             "last_month": last.label,
             "force": force,
-            "trigger": "manual",
-            "openapi_first_day": cutoff.isoformat() if cutoff else None,
+            "trigger": trigger,
         },
     )
     db.add(run)
@@ -396,11 +411,18 @@ def backfill_futures_history(
                 latest.isoformat(),
             )
             fetched.append(item)
-        db.commit()  # the cutoff read above: the writes start a new transaction
-        total_counts = {"inserted": 0, "replaced": 0, "unchanged": 0, "conflict": 0}
+        db.commit()  # no read is held open while the writes run
+        total_counts = {
+            "inserted": 0,
+            "replaced": 0,
+            "unchanged": 0,
+            "kept_other_source": 0,
+            "conflict": 0,
+        }
         conflicts: list[dict[str, Any]] = []
         warnings: list[str] = []
         changed: set[int] = set()
+        written_dates: list[str] = []
         for item in fetched:
             month = item.request.month
             entry: dict[str, Any] = {"endpoint": item.request.endpoint}
@@ -425,6 +447,7 @@ def backfill_futures_history(
                 total_counts[name] += value
             conflicts.extend(written.conflicts)
             changed.update(instrument_id for instrument_id, _ in written.written)
+            written_dates.extend(day.isoformat() for _, day in written.written)
             entry.update(
                 status="complete",
                 sessions=len(item.parsed.bars),
@@ -435,10 +458,6 @@ def backfill_futures_history(
                     ]
                     if bars
                     else None
-                ),
-                from_openapi_day=sum(
-                    cutoff is not None and bar.trading_date >= cutoff
-                    for bar in item.parsed.bars
                 ),
                 unusable_dates=item.parsed.unusable_dates,
                 after_hours_only_dates=item.parsed.after_hours_only_dates,
@@ -489,12 +508,188 @@ def backfill_futures_history(
         "run_id": run.id,
         "months": [month.label for month in months],
         "requests": requests_made,
-        "openapi_first_day": cutoff.isoformat() if cutoff else None,
         "counts": total_counts,
+        "written_dates": sorted(written_dates),
         "conflicts": len(conflicts),
         "indicators": indicators,
         "warnings": warnings,
     }
+
+
+def recent_gaps(
+    db: Session, before: date, *, sessions: int = GAP_SESSIONS
+) -> tuple[list[date], list[date]]:
+    """The last ``sessions`` verified sessions before ``before``, and those without a TX row.
+
+    Sessions are ``app.coverage.verified_taiex_sessions`` (the TAIEX session
+    baseline), from ``HISTORY_START`` on.
+    """
+
+    from app.coverage import verified_taiex_sessions
+
+    start = max(HISTORY_START, before - timedelta(days=GAP_LOOKBACK_DAYS))
+    end = before - timedelta(days=1)
+    if end < start:
+        return [], []
+    recent = verified_taiex_sessions(db, start, end)[-sessions:]
+    stored = tx_dates(db, recent[0], recent[-1]) if recent else {}
+    return recent, [day for day in recent if day not in stored]
+
+
+def gap_months(missing: list[date]) -> list[Month]:
+    """The month of the newest gap, and the month before it when that has a gap too.
+
+    At most ``GAP_MAX_MONTHS`` (2) months, oldest first: an older gap waits
+    for a later collect or the manual ``index-bars futures-history``.
+    """
+
+    if not missing:
+        return []
+    newest = Month.of(max(missing))
+    months = [newest]
+    previous = newest.previous()
+    if any(previous.contains(day) for day in missing):
+        months.insert(0, previous)
+    return months[-GAP_MAX_MONTHS:]
+
+
+def fill_recent_gaps(
+    db: Session,
+    *,
+    before: date,
+    get: Callable[[Request], Any] = fetch_month,
+    sleep: Callable[[float], None] | None = None,
+    today: date | None = None,
+    trigger: str = "collect",
+) -> dict[str, Any]:
+    """Fill the TX gaps among the ``GAP_SESSIONS`` verified sessions before ``before`` (#586).
+
+    No gap, no request.  Otherwise one ``backfill_futures_history`` run over
+    ``gap_months`` (one request a month, at most two): it writes every
+    session of those months the database has no TX row of, never today.
+    """
+
+    today = today or taipei_today()
+    recent, missing = recent_gaps(db, before)
+    db.commit()  # end the read before the run starts
+    summary: dict[str, Any] = {
+        "sessions_checked": len(recent),
+        "window": [recent[0].isoformat(), recent[-1].isoformat()] if recent else None,
+        "missing_dates": [day.isoformat() for day in missing],
+    }
+    if not missing:
+        return {"status": "complete", **summary, "requests": 0}
+    months = gap_months(missing)
+    result = backfill_futures_history(
+        db,
+        first=months[0],
+        last=months[-1],
+        get=get,
+        sleep=sleep,
+        today=today,
+        trigger=trigger,
+    )
+    _, still_missing = recent_gaps(db, before)
+    db.commit()
+    return {
+        "status": result["status"],
+        **summary,
+        "run_id": result["run_id"],
+        "months": result["months"],
+        "requests": result["requests"],
+        "written_dates": result["written_dates"],
+        "still_missing": [day.isoformat() for day in still_missing],
+        "warnings": result["warnings"],
+    }
+
+
+def collect_latest(
+    db: Session,
+    *,
+    fetcher: Callable[..., Any] | None = None,
+    get: Callable[[Request], Any] = fetch_month,
+    sleep: Callable[[float], None] | None = None,
+    today: date | None = None,
+) -> dict[str, Any]:
+    """collect's TX part on its own (``index-bars futures-collect``, Issue #586).
+
+    One ``DailyMarketReportFut`` read in a ``futures_bar_backfill`` run
+    (``trigger=futures-collect``), stored by collect's rule
+    (``pipeline.store_collect_futures_bars``: the report's session, when it
+    is verified and has no TX row), then ``fill_recent_gaps`` before today.
+    """
+
+    from app.models import IngestionRun
+
+    from .futures_bars import futures_instrument
+    from .pipeline import _upsert_raw_payload, store_collect_futures_bars
+    from .sources import fetch_json, fetch_latest_futures
+
+    today = today or taipei_today()
+    run = IngestionRun(
+        run_type=RUN_TYPE,
+        source="official",
+        run_date=today,
+        status="running",
+        started_at=utcnow(),
+        data_as_of=today.isoformat(),
+        metadata_json={"trigger": "futures-collect"},
+    )
+    db.add(run)
+    db.commit()
+    try:
+        bars, payloads, warnings = fetch_latest_futures(fetcher or fetch_json, today)
+        raw_ids = {
+            payload.sha256: _upsert_raw_payload(db, run, payload).id
+            for payload in payloads
+        }
+        stored = store_collect_futures_bars(
+            db, bars, lambda digest: raw_ids.get(digest or ""), warnings
+        )
+        counts = stored.get("counts", {})
+        indicators = (
+            rebuild_derived(db, {futures_instrument(db).id})
+            if counts.get("inserted") or counts.get("replaced")
+            else {}
+        )
+        run.status = "success"
+        run.records = int(counts.get("inserted", 0)) + int(counts.get("replaced", 0))
+        run.finished_at = utcnow()
+        run.metadata_json = {
+            **run.metadata_json,
+            "futures_daily_bars": stored,
+            "warnings": warnings,
+            "requests": 1,
+            "indicators": indicators,
+        }
+        db.commit()
+    except BaseException as exc:
+        db.rollback()
+        failed_run = db.get(IngestionRun, run.id)
+        if failed_run is not None and isinstance(exc, Exception):
+            failed_run.status = "failed"
+            failed_run.error = f"{type(exc).__name__}: {exc}"
+            failed_run.finished_at = utcnow()
+            db.commit()
+        raise
+    gap_fill = fill_recent_gaps(
+        db, before=today, get=get, sleep=sleep, today=today, trigger="futures-collect"
+    )
+    return {
+        # A month the gap fill could not read makes the command partial (exit 2).
+        "status": "partial" if gap_fill.get("status") == "partial" else run.status,
+        "run_id": run.id,
+        "futures_daily_bars": stored,
+        "warnings": warnings,
+        "gap_fill": gap_fill,
+    }
+
+
+def run_futures_collect() -> dict[str, Any]:
+    from app.db import SessionLocal
+
+    with SessionLocal() as db:
+        return collect_latest(db)
 
 
 def run_futures_history(

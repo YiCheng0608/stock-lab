@@ -4,7 +4,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import date
+from datetime import date, datetime, time, timezone
 
 from . import job as scheduled_job, serve as scheduler
 
@@ -20,7 +20,7 @@ from .backfill import BACKFILL_SCOPES, chunked_backfill
 from .candidate_notes import notes_after_candidates, run_candidate_notes_batch
 from .candidates import run_candidates
 from .chip_provenance import run_fill_provenance
-from .chip_revisions import run_revise_institutional
+from .chip_revisions import run_fill_short_balance, run_revise_institutional
 from .corporate_action_sync import (
     run_corporate_action_check,
     run_corporate_action_rebuild,
@@ -30,8 +30,8 @@ from .corporate_action_sync import (
 from .index_bars import DEFAULT_FIRST_MONTH as INDEX_BARS_FIRST_MONTH
 from .index_bars import run_index_bar_backfill
 from .futures_history import DEFAULT_FIRST_MONTH as FUTURES_HISTORY_FIRST_MONTH
-from .futures_history import run_futures_history
-from .us_index_bars import run_us_index_history
+from .futures_history import run_futures_collect, run_futures_history
+from .us_index_bars import run_us_collect
 from .indicator_batch import run_indicator_batch
 from .industry_repair import run_industry_repair
 from .instrument_repair import run_instrument_repair, run_unmatched_backfill
@@ -53,10 +53,10 @@ from .schedule_runs import (
     record_preflight_skip,
 )
 from .strategy_levels import run_strategy_levels
-from .theme_suggestions import run_theme_suggestions
 from .themes import sync_themes
 from .margin_lists import run_margin_lists
 from .no_trade_days import run_no_trade_days
+from .trading_halts import run_trading_halts
 from .trading_calendar import run_trading_calendar
 
 
@@ -66,6 +66,13 @@ DAILY_EXIT_CODES = {
     "skipped": 0,
     "non_trading_day": 0,
     "non_trading_unconfirmed": 0,
+    "partial": 2,
+}
+# index-bars us-collect (#568): a skip and a run that found D − 1 stored are no failure.
+US_COLLECT_EXIT_CODES = {
+    "success": 0,
+    "already_complete": 0,
+    "skipped": 0,
     "partial": 2,
 }
 # news-llm (and candidate-notes): the schedule wrapper logs this next to news's own
@@ -108,7 +115,6 @@ def maintenance_guarded(args: argparse.Namespace) -> str | None:
         return "revenue backfill"
     if args.command == "index-bars" and args.index_bars_command in {
         "backfill",
-        "us-history",
         "futures-history",
     }:
         return f"index-bars {args.index_bars_command}"
@@ -118,7 +124,22 @@ def maintenance_guarded(args: argparse.Namespace) -> str | None:
         and args.apply
     ):
         return "instruments repair --apply"
+    if args.command == "chips" and args.chips_command == "short-balance" and args.apply:
+        return "chips short-balance --apply"
     return None
+
+
+# Taipei hours of the scheduled daily (docs/ops/SCHEDULING.md), from 15 minutes
+# before 21:30: a command in DAILY_WINDOW_REFUSED does not start then, so the
+# maintenance mode it holds never makes a daily skip.  ``chips short-balance``
+# also stops between captures from 21:25 (chip_revisions).
+DAILY_WINDOW = (time(21, 15), time(23, 30))
+DAILY_WINDOW_REFUSED = {"chips short-balance --apply"}
+
+
+def in_daily_window(moment: datetime | None = None) -> bool:
+    now = (moment or datetime.now(timezone.utc)).astimezone(scheduled_job.TAIPEI)
+    return DAILY_WINDOW[0] <= now.time() < DAILY_WINDOW[1]
 
 
 def main() -> None:
@@ -275,6 +296,14 @@ def main() -> None:
     )
     no_trade_parser.add_argument("--start", help="YYYY-MM-DD；未指定為最早的 raw")
     no_trade_parser.add_argument("--end", help="YYYY-MM-DD；未指定為最新的 raw")
+    halts_parser = subparsers.add_parser(
+        "trading-halts",
+        help="抓 TWSE TWTAUU、TPEx revivt 的減資停止買賣存入 trading_halts（collect 會抓當日前 10 天到後 60 天恢復的；每個交易所 1 個請求，內容沒變不改寫）",
+    )
+    halts_parser.add_argument(
+        "--start", required=True, help="YYYY-MM-DD，恢復買賣日的起日"
+    )
+    halts_parser.add_argument("--end", help="YYYY-MM-DD；未指定為今天後 60 天")
     calendar_parser = subparsers.add_parser(
         "trading-calendar",
         help="抓 TWSE 官方休市表存入 trading_calendar_days（daily 的 trading_calendar 步驟；預設今年與明年，內容沒變不改寫）",
@@ -310,10 +339,6 @@ def main() -> None:
     )
     themes_sync_parser.add_argument(
         "--file", help="題材表 JSON；未指定使用 backend/data/themes/themes_v1.json"
-    )
-    subparsers.add_parser(
-        "theme-suggestions",
-        help="由新聞 AI 判讀的題材候選重算待核實題材建議（不進榜、不寫題材表，重跑冪等）",
     )
     industry_parser = subparsers.add_parser("industry", help="官方產業群組")
     industry_subparsers = industry_parser.add_subparsers(
@@ -435,15 +460,27 @@ def main() -> None:
         "--force", action="store_true", help="同來源已存的列也以報表值改寫"
     )
     index_bars_us_parser = index_bars_subparsers.add_parser(
-        "us-history",
-        help="美股四檔從 2023-09-01 補到已存最早一列之前：每序列 1 個 FRED 請求（#563）",
+        "us-collect",
+        help=(
+            "美股四檔抓到台北前一天：每檔 1 個 FinMind 請求；沒有列時從 2023-09-01 起，"
+            "有列時從最後一列往前 10 天（#568）"
+        ),
     )
     index_bars_us_parser.add_argument(
-        "--force", action="store_true", help="已存的收盤也以 FRED 值改寫"
+        "--date", help="台北日期 YYYY-MM-DD，抓到它的前一天；預設今天（台北）"
     )
+    index_bars_us_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="四檔都已存到前一個平日也照樣請求（FinMind 列的更正不需要它；FRED 列一律不改）",
+    )
+    index_bars_us_parser.add_argument(
+        "--trigger", choices=("scheduler", "manual"), default="manual"
+    )
+    index_bars_us_parser.add_argument("--skip-reason", help=argparse.SUPPRESS)
     index_bars_futures_parser = index_bars_subparsers.add_parser(
         "futures-history",
-        help="台指期近月從期交所網站 futDataDown 回補到 OpenAPI 第一列之前：每月 1 個請求、間隔 3 秒（#563）",
+        help="台指期近月從期交所網站 futDataDown 回補 DB 沒有的日子（不含今天）：每月 1 個請求、間隔 3 秒（#563、#586）",
     )
     index_bars_futures_parser.add_argument(
         "--from-month",
@@ -455,6 +492,13 @@ def main() -> None:
     )
     index_bars_futures_parser.add_argument(
         "--force", action="store_true", help="同來源已存的列也以報表值改寫"
+    )
+    index_bars_subparsers.add_parser(
+        "futures-collect",
+        help=(
+            "只跑 collect 的台指期這段：OpenAPI 1 個請求、存檔內那天，"
+            "再補今天之前 10 個交易日的缺日（futDataDown 最多 2 個請求，#586）"
+        ),
     )
     instruments_parser = subparsers.add_parser("instruments", help="標的狀態與歷史")
     instruments_subparsers = instruments_parser.add_subparsers(
@@ -502,6 +546,15 @@ def main() -> None:
         "--end-date", help="預設與 --start-date 同日；YYYY-MM-DD"
     )
     chips_revise_parser.add_argument(
+        "--apply", action="store_true", help="寫入 DB；未指定只列出預計變更"
+    )
+    chips_short_parser = chips_subparsers.add_parser(
+        "short-balance",
+        help="依各列融資組引用的已保存融資 raw，補寫空的融券餘額 short_balance（預設 dry-run，不發網路，只補空值，重跑冪等）",
+    )
+    chips_short_parser.add_argument("--start-date", help="YYYY-MM-DD；預設不限")
+    chips_short_parser.add_argument("--end-date", help="YYYY-MM-DD；預設不限")
+    chips_short_parser.add_argument(
         "--apply", action="store_true", help="寫入 DB；未指定只列出預計變更"
     )
     chips_provenance_parser = chips_subparsers.add_parser(
@@ -571,6 +624,12 @@ def main() -> None:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
     guarded = maintenance_guarded(args)
+    if guarded in DAILY_WINDOW_REFUSED and in_daily_window():
+        print(
+            f"{guarded}: 台北 21:15～23:30 接近或在 daily 時段，不起跑；請在 23:30 後再跑。",
+            file=sys.stderr,
+        )
+        sys.exit(scheduled_job.MAINTENANCE_REFUSED_EXIT)
     if not guarded:
         run_command(args, parser)
         return
@@ -640,6 +699,11 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
         result = run_trading_calendar(years=args.years)
     elif args.command == "no-trade-days":
         result = run_no_trade_days(parse_date(args.start), parse_date(args.end))
+    elif args.command == "trading-halts":
+        result = run_trading_halts(
+            date.fromisoformat(args.start),
+            date.fromisoformat(args.end) if args.end else None,
+        )
     elif args.command == "margin-lists":
         result = run_margin_lists(parse_date(args.start), parse_date(args.end))
     elif args.command == "candidate-notes":
@@ -650,8 +714,6 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
         )
     elif args.command == "themes":
         result = sync_themes(args.file)
-    elif args.command == "theme-suggestions":
-        result = run_theme_suggestions()
     elif args.command == "industry":
         if args.rescore_days < 0 or (args.rescore_days and not args.apply):
             parser.error("--rescore-days needs --apply and must not be negative")
@@ -673,10 +735,17 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
         result = run_index_bar_backfill(
             args.from_month, args.to_month, force=args.force
         )
-    elif args.command == "index-bars" and args.index_bars_command == "us-history":
-        result = run_us_index_history(force=args.force)
+    elif args.command == "index-bars" and args.index_bars_command == "us-collect":
+        result = run_us_collect(
+            session=date.fromisoformat(args.date) if args.date else None,
+            force=args.force,
+            trigger=args.trigger,
+            skip_reason=args.skip_reason,
+        )
     elif args.command == "index-bars" and args.index_bars_command == "futures-history":
         result = run_futures_history(args.from_month, args.to_month, force=args.force)
+    elif args.command == "index-bars" and args.index_bars_command == "futures-collect":
+        result = run_futures_collect()
     elif args.command == "corporate-actions":
         if args.actions_command == "sync":
             result = run_corporate_action_sync(
@@ -707,6 +776,12 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
         )
     elif args.command == "chips" and args.chips_command == "provenance":
         result = run_fill_provenance(apply=args.apply)
+    elif args.command == "chips" and args.chips_command == "short-balance":
+        start = parse_date(args.start_date)
+        end = parse_date(args.end_date)
+        if start and end and end < start:
+            parser.error("--end-date must not be before --start-date")
+        result = run_fill_short_balance(start, end, apply=args.apply)
     elif args.command == "chips":
         start = date.fromisoformat(args.start_date)
         end = date.fromisoformat(args.end_date) if args.end_date else start
@@ -755,10 +830,12 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
     }:
         raise SystemExit(1)
     if (
-        args.command in {"margin-lists", "no-trade-days"}
+        args.command in {"margin-lists", "no-trade-days", "trading-halts"}
         and result.get("status") != "success"
     ):
         raise SystemExit(2 if result.get("status") == "partial" else 1)
+    if args.command == "index-bars" and args.index_bars_command == "us-collect":
+        sys.exit(US_COLLECT_EXIT_CODES.get(str(result.get("status")), 1))
     if (
         args.command in {"fundamentals", "revenue", "index-bars"}
         and result.get("status") != "success"
@@ -767,7 +844,7 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
     if args.command == "chips" and result.get("status") != "success":
         raise SystemExit(2 if result.get("status") == "partial" else 1)
     if (
-        args.command in {"themes", "industry", "instruments", "theme-suggestions"}
+        args.command in {"themes", "industry", "instruments"}
         and isinstance(result, dict)
         and result.get("status") == "failed"
     ):

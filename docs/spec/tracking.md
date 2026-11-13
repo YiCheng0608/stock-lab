@@ -7,7 +7,7 @@
 2. 每筆訊號最多追蹤 20 個交易日；T+5、T+20 各寫一筆 settlement。公司行動需可追溯調整因子；停牌、缺可判定價格或同日 stop／target 皆觸及且順序未知時標 incomparable。
 3. replay 固定 canonical version，保存日期範圍、cutoff、設定快照與執行數；相同成功 request key 可重用既有 run。研究用的策略覆寫（`backtest(registry=...)`，逐一移除條件的 ablation 見 `app.strategies.ablation`）只在正式 DB 的副本或隔離 DB 執行：覆寫的策略以自己的名稱與 kind 寫 `strategy_versions`，request key 加 `:research:<策略名稱>`，不重用 canonical run，也不進 `REGISTRY`。
    - **分段 commit**：canonical 與研究 run 都一樣（研究 [#318](https://github.com/YiCheng0608/stock-lab/issues/318)，canonical [#484](https://github.com/YiCheng0608/stock-lab/issues/484)）。features 算完 commit，每個交易日的訊號寫完 commit，追蹤每批 2,000 個訊號 commit 一次。
-   - **摘要**：以 SQL 彙總，不載入訊號；範圍是該 run 的 `backtest-<id>-` namespace。還沒成功的 run（`running`、`failed`）已經有部分列，但不算樣本：摘要的 `groups` 是空的，`assessment` 是它的狀態，技術回測頁顯示「執行中」或「失敗」。
+   - **摘要**：以 SQL 彙總，不載入訊號；範圍是該 run 的 `backtest-<id>-` namespace。還沒成功的 run（`running`、`failed`）已經有部分列，但不算樣本：摘要的 `groups` 是空的，`assessment` 是它的狀態，技術回測頁顯示「執行中」或「失敗」。`run` 另有 `started_at`／`finished_at`（UTC）；`running` 時頁面在狀態後寫「開始於 YYYY/MM/DD HH:MM」（台北時間，[#581](https://github.com/YiCheng0608/stock-lab/issues/581)），不推測是否已中斷；被殺的 run 由下一次 daily 或 canonical backtest 收成 `failed`（[排程](../ops/SCHEDULING.md)）。
    - **中途失敗**：已 commit 的訊號、evaluation 與 settlement 留在同一個 namespace，run 記 `failed`。以相同起訖重跑會覆寫成與一次跑完相同的結果。
      - **成功的 run 再跑**：`worker.cli backtest` 沒有 `--force`，以相同起訖再跑會直接重用（回傳 `idempotent_reuse`）。只有研究腳本 `backtest_research.py` 有 `--force`，對應 `backtest(force=True)`。
      - **前提**：兩次之間資料沒有更正。重跑只覆寫同 key 的列；資料更正後（例如某檔不再是 active），前一次寫過、這次不再產生的列會留下。
@@ -18,6 +18,7 @@
 5. 三個月或更短一律標 `insufficient_sample`；更長也不等於參數最佳化、walk-forward、獨立 OOS 或策略有效。勝率不能單獨決定採用。
 6. 逐日成交與出場規則只寫在 `app.tracking.track_path`（T+N 結果為 `settle`），系統訊號追蹤（`worker.pipeline._evaluate_signal_tracking`）與[使用者追蹤計畫](#使用者追蹤計畫)共用；規則有版本，見[口徑版本](#口徑版本)；`track_path` 的 `rules` 是必填參數，每個呼叫端都寫明版本。現行版本只定義在 `app.tracking.TRACKING_RULES`，backtest key 版本（`worker.pipeline.BACKTEST_TRACKING_RULES`）與計畫版本（`app.domain.PLAN_TRACKING_RULES`）都由它推導。
 7. daily 的 `evaluate` 只重算 `analysis-*` 訊號；`backtest-*` 訊號只由它所屬的 backtest run 依該 run 的 cutoff 追蹤，daily 不重算、不改寫。20 根視窗已完整（已有 20 筆 evaluation）、且 settlement 是 `tracking_v1` 的訊號也不重算，不論狀態是 `target_1_hit`、`invalidated`、`incomparable` 或 `active`，歷史列保留 v1（[#444](https://github.com/YiCheng0608/stock-lab/issues/444)）。
+   - **分批 commit**：先依上面的條件取出要重算的訊號 id，再每 2,000 個訊號載入、追蹤、commit 一次（`EVALUATE_TRACKING_BATCH`，[#640](https://github.com/YiCheng0608/stock-lab/issues/640)）。追蹤一個訊號只寫它自己的 evaluation、settlement 與狀態，只讀行情，所以結果與一次跑完相同。中途失敗時已 commit 的批次留下；重跑 evaluate 會重算仍在追蹤中的訊號，寫出相同的列。#640 以前整個 evaluate 是一個 transaction，6 萬多個訊號一次載入，連同寫出的列都留在 session 直到結束。
 
 ### 口徑版本
 
