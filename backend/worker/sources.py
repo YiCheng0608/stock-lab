@@ -120,6 +120,7 @@ class ChipRecord:
     total_buy_sell: float | None = None
     margin_balance: float | None = None
     margin_change: float | None = None
+    short_balance: float | None = None
     exchange: str = "TWSE"
     source: str = "official"
     data_as_of: str | None = None
@@ -1593,7 +1594,8 @@ def parse_twse_margin_rows(
         tables = payload["tables"]
         # MI_MARGN's first table is a summary; the individual security table
         # is table[1].  Its headers repeat for margin/short positions, so the
-        # array positions (previous=5, current=6) are the stable contract.
+        # array positions are the stable contract: margin previous=5,
+        # current=6; short current=12 (Issue #662, 張).
         table = tables[1] if len(tables) > 1 else tables[0]
         table_rows = _table_arrays({"tables": [table]})
         margin_headers = {
@@ -1629,6 +1631,9 @@ def parse_twse_margin_rows(
                         margin_change=(current - previous)
                         if current is not None and previous is not None
                         else None,
+                        short_balance=parse_number(values[12])
+                        if len(values) > 12
+                        else None,
                         exchange="TWSE",
                         source="twse_margin",
                         data_as_of=data_as_of or trading_date.isoformat(),
@@ -1654,6 +1659,11 @@ def parse_twse_margin_rows(
             exact_keys=("MarginPurchaseBalance", "融資今日餘額"),
             contains=(("marginpurchasebalance",), ("融資", "今日", "餘額")),
         )
+        short = _number_from_row(
+            row,
+            exact_keys=("ShortSaleBalance", "融券今日餘額"),
+            contains=(("融券", "今日", "餘額"),),
+        )
         result.append(
             ChipRecord(
                 symbol=symbol,
@@ -1662,6 +1672,7 @@ def parse_twse_margin_rows(
                 margin_change=(current - previous)
                 if current is not None and previous is not None
                 else None,
+                short_balance=short,
                 exchange="TWSE",
                 source="twse_margin",
                 data_as_of=data_as_of or trading_date.isoformat(),
@@ -1775,6 +1786,25 @@ def parse_tpex_institutional_rows(
     return result
 
 
+def _tpex_short_balance(row: dict[str, Any]) -> float | None:
+    """The 券餘額 of a TPEx website margin row given as a dict (Issue #662).
+
+    Its header may read ``券餘額`` or ``券餘額(張)``; ``前券餘額(張)`` (the
+    previous day) contains the same text, so a key naming 前 is never read.
+    """
+
+    value = _number_from_row(row, exact_keys=("ShortSaleBalance", "券餘額"))
+    if value is not None:
+        return value
+    for key, cell in row.items():
+        name = _normalized_field_name(key)
+        if "券餘額" in name and "前" not in name:
+            parsed = parse_number(cell)
+            if parsed is not None:
+                return parsed
+    return None
+
+
 def parse_tpex_margin_rows(
     payload: Any,
     *,
@@ -1784,7 +1814,8 @@ def parse_tpex_margin_rows(
 ) -> list[ChipRecord]:
     # The historical TPEx margin report has a stable array layout.  Do not
     # turn the repeated/translated headers into a dict: the first and second
-    # margin-balance values are positions 2 and 6 respectively.
+    # margin-balance values are positions 2 and 6 respectively, and the
+    # short-sale balance (券餘額, 張) is position 14 (Issue #662).
     if isinstance(payload, dict) and isinstance(payload.get("tables"), list):
         table_rows = _table_arrays({"tables": payload["tables"][:1]})
         if table_rows:
@@ -1804,6 +1835,9 @@ def parse_tpex_margin_rows(
                         margin_balance=current,
                         margin_change=(current - previous)
                         if current is not None and previous is not None
+                        else None,
+                        short_balance=parse_number(values[14])
+                        if len(values) > 14
                         else None,
                         exchange="TPEx",
                         source="tpex_margin",
@@ -1829,6 +1863,7 @@ def parse_tpex_margin_rows(
             # balance as the previous day's.
             previous = parse_number(row.get("MarginPurchaseBalancePreviousDay"))
             current = parse_number(row.get("MarginPurchaseBalance"))
+            short = parse_number(row.get("ShortSaleBalance"))
         else:
             previous = _number_from_row(
                 row,
@@ -1840,6 +1875,7 @@ def parse_tpex_margin_rows(
                 exact_keys=("MarginPurchaseBalance", "資餘額"),
                 contains=(("marginpurchasebalance",), ("資餘額",)),
             )
+            short = _tpex_short_balance(row)
         result.append(
             ChipRecord(
                 symbol=symbol,
@@ -1848,6 +1884,7 @@ def parse_tpex_margin_rows(
                 margin_change=(current - previous)
                 if current is not None and previous is not None
                 else None,
+                short_balance=short,
                 exchange="TPEx",
                 source="tpex_margin",
                 data_as_of=data_as_of or trading_date.isoformat(),
@@ -1888,6 +1925,7 @@ def merge_chip_records(
                 existing,
                 margin_balance=record.margin_balance,
                 margin_change=record.margin_change,
+                short_balance=record.short_balance,
                 source=f"{existing.source}+{record.source}",
                 margin_source=record.margin_source or record.source,
                 margin_data_as_of=record.margin_data_as_of or record.data_as_of,

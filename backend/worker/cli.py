@@ -4,7 +4,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import date
+from datetime import date, datetime, time, timezone
 
 from . import job as scheduled_job, serve as scheduler
 
@@ -20,7 +20,7 @@ from .backfill import BACKFILL_SCOPES, chunked_backfill
 from .candidate_notes import notes_after_candidates, run_candidate_notes_batch
 from .candidates import run_candidates
 from .chip_provenance import run_fill_provenance
-from .chip_revisions import run_revise_institutional
+from .chip_revisions import run_fill_short_balance, run_revise_institutional
 from .corporate_action_sync import (
     run_corporate_action_check,
     run_corporate_action_rebuild,
@@ -124,7 +124,22 @@ def maintenance_guarded(args: argparse.Namespace) -> str | None:
         and args.apply
     ):
         return "instruments repair --apply"
+    if args.command == "chips" and args.chips_command == "short-balance" and args.apply:
+        return "chips short-balance --apply"
     return None
+
+
+# Taipei hours of the scheduled daily (docs/ops/SCHEDULING.md), from 15 minutes
+# before 21:30: a command in DAILY_WINDOW_REFUSED does not start then, so the
+# maintenance mode it holds never makes a daily skip.  ``chips short-balance``
+# also stops between captures from 21:25 (chip_revisions).
+DAILY_WINDOW = (time(21, 15), time(23, 30))
+DAILY_WINDOW_REFUSED = {"chips short-balance --apply"}
+
+
+def in_daily_window(moment: datetime | None = None) -> bool:
+    now = (moment or datetime.now(timezone.utc)).astimezone(scheduled_job.TAIPEI)
+    return DAILY_WINDOW[0] <= now.time() < DAILY_WINDOW[1]
 
 
 def main() -> None:
@@ -533,6 +548,15 @@ def main() -> None:
     chips_revise_parser.add_argument(
         "--apply", action="store_true", help="寫入 DB；未指定只列出預計變更"
     )
+    chips_short_parser = chips_subparsers.add_parser(
+        "short-balance",
+        help="依各列融資組引用的已保存融資 raw，補寫空的融券餘額 short_balance（預設 dry-run，不發網路，只補空值，重跑冪等）",
+    )
+    chips_short_parser.add_argument("--start-date", help="YYYY-MM-DD；預設不限")
+    chips_short_parser.add_argument("--end-date", help="YYYY-MM-DD；預設不限")
+    chips_short_parser.add_argument(
+        "--apply", action="store_true", help="寫入 DB；未指定只列出預計變更"
+    )
     chips_provenance_parser = chips_subparsers.add_parser(
         "provenance",
         help="依已保存的 raw 與 value_fill_groups，補寫既有籌碼列法人／融資各自的來源（預設 dry-run，不發網路，重跑冪等）",
@@ -600,6 +624,12 @@ def main() -> None:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
     guarded = maintenance_guarded(args)
+    if guarded in DAILY_WINDOW_REFUSED and in_daily_window():
+        print(
+            f"{guarded}: 台北 21:15～23:30 接近或在 daily 時段，不起跑；請在 23:30 後再跑。",
+            file=sys.stderr,
+        )
+        sys.exit(scheduled_job.MAINTENANCE_REFUSED_EXIT)
     if not guarded:
         run_command(args, parser)
         return
@@ -746,6 +776,12 @@ def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> No
         )
     elif args.command == "chips" and args.chips_command == "provenance":
         result = run_fill_provenance(apply=args.apply)
+    elif args.command == "chips" and args.chips_command == "short-balance":
+        start = parse_date(args.start_date)
+        end = parse_date(args.end_date)
+        if start and end and end < start:
+            parser.error("--end-date must not be before --start-date")
+        result = run_fill_short_balance(start, end, apply=args.apply)
     elif args.command == "chips":
         start = date.fromisoformat(args.start_date)
         end = date.fromisoformat(args.end_date) if args.end_date else start

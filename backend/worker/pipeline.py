@@ -2701,6 +2701,7 @@ def _chip_record_groups(record: Any) -> dict[str, tuple[str, str | None]]:
     if margin_source is None and (
         record.margin_balance is not None
         or record.margin_change is not None
+        or record.short_balance is not None
         or parts[0] in chip_provenance.MARGIN_SOURCES
     ):
         margin_source = next(
@@ -2793,6 +2794,18 @@ def _upsert_official_chip(
         )
     )
     revised: dict[str, dict[str, Any]] = {}
+    stored_margin = stored[chip_provenance.MARGIN]
+    # The short balance comes only from the capture the row's margin group
+    # cites (Issue #662): a row written before #662 keeps its margin group on
+    # capture A, so a later capture B does not fill it (``chips short-balance``
+    # fills it from A).  A new row, ``overwrite`` and a row without a margin
+    # group point the group at this capture.
+    other_margin_capture = (
+        not is_new
+        and not overwrite
+        and stored_margin is not None
+        and stored_margin.raw_payload_id != raw_ids[chip_provenance.MARGIN]
+    )
     changed = _apply_official_values(
         row,
         {
@@ -2801,6 +2814,9 @@ def _upsert_official_chip(
             "dealer_buy": _safe_float(record.dealer_buy),
             "margin_balance": _safe_float(record.margin_balance),
             "margin_change": _safe_float(record.margin_change),
+            "short_balance": None
+            if other_margin_capture
+            else _safe_float(record.short_balance),
         },
         is_new=is_new,
         overwrite=overwrite,
