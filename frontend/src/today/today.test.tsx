@@ -179,6 +179,12 @@ const styles = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8')
 const ruleOf = (selector: string) => { const at = styles.indexOf('\n' + selector + ' {'); return at < 0 ? '' : styles.slice(at, styles.indexOf('}', at)) }
 check(/white-space:\s*nowrap/.test(ruleOf('.candidate-row-title')) && /text-overflow:\s*ellipsis/.test(ruleOf('.candidate-row-title')), 'Issue 510: the title line never wraps; market · group is cut with an ellipsis')
 check(/white-space:\s*nowrap/.test(ruleOf('.hot-group-returns')), 'Issue 510: line two of a group never wraps')
+// Issue 675 (DESIGN_SYSTEM §5 漲跌文字): the 1／5／20 日 returns are plain text, red up and green down; no rule draws a
+// background or a ::before block on them (Issue 654 drew one per step).
+const strengthRules = styles.split('\n').filter((line) => /^\.strength-/.test(line))
+check(strengthRules.length > 0 && strengthRules.every((line) => !/::before|background|opacity|strength-l\d/.test(line)), `Issue 675: no background on the group returns: ${strengthRules.join(' ')}`)
+check(/color:\s*var\(--color-up\)/.test(ruleOf('.strength-chip.strength-up')) && /color:\s*var\(--color-down\)/.test(ruleOf('.strength-chip.strength-down')), 'Issue 675: up returns are --color-up text, down returns --color-down')
+check(/color:\s*var\(--color-text\)/.test(ruleOf('.strength-chip')) && /color:\s*var\(--color-text-muted\)/.test(ruleOf('.strength-chip.strength-none')) && ruleOf('.strength-chip.strength-flat') === '', 'Issue 675: 0.00% stays the body text colour, no data muted')
 check(/white-space:\s*nowrap/.test(ruleOf('.hot-group-line h3')), 'Issue 510: a group name is one line')
 check(!/var\(--text-|--space-row|--space-block/.test(styles.replace(/var\(--text-(xs|sm|md|base|lg|xl|2xl)\)|var\(--space-(row|block)\)/g, '')), 'Issue 510: only the defined type and spacing tokens are used')
 // Issue 608: on phones the AI entry left the numbers' line (it covered the total at 390) for the title line's right,

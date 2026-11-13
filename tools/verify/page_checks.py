@@ -1533,9 +1533,10 @@ def t18(run: Run) -> str:
     )
 
 
-# ---- Issue 654: score bars and strength blocks (DESIGN_SYSTEM §5 分數橫條、強弱色塊) ----
+# ---- Issue 654 / 675: score bars and return text (DESIGN_SYSTEM §5 分數橫條、漲跌文字) ----
 # screenshot.cjs measures every .score-bar and .strength-chip (graphics): the page text keeps the numbers, so only
-# this tells whether the fill share, the hue and the step match the API.
+# this tells whether the fill share matches the API and that the 1／5／20 日 returns draw no background (#675 took
+# away #654's tinted block; the probe reads the chip's ::before, where that block was drawn).
 
 CANDIDATE_COMPONENTS = (
     ("technical", "技術"),
@@ -1543,13 +1544,7 @@ CANDIDATE_COMPONENTS = (
     ("news_sentiment", "新聞情緒"),
     ("group", "族群"),
 )
-STRENGTH_STEPS = (1, 3, 6)  # STRENGTH_STEPS in frontend/src/components/ui/ScoreBar.tsx
-STRENGTH_OPACITY = {
-    1: 0.16,
-    2: 0.3,
-    3: 0.5,
-    4: 1.0,
-}  # .strength-l1…l4 in frontend/src/styles.css
+STRENGTH_TONES = ("up", "down", "flat", "none")  # StrengthTone in ScoreBar.tsx
 RETURN_LABELS = (("1d", "1 日"), ("5d", "5 日"), ("20d", "20 日"))
 FILL_TOLERANCE = 0.02
 
@@ -1568,20 +1563,42 @@ def want_bar(label: str, value: float | None) -> dict:
 
 
 def want_chip(label: str, value: float | None) -> dict:
-    """strengthOf for a relative return given as a fraction: text, tone and step."""
+    """strengthOf for a relative return given as a fraction: text and tone (the sign)."""
 
     window = f"{label}相對加權指數"
     if value is None:
-        return {"label": f"{window} 無資料", "strength": "none-0", "text": "—"}
+        return {"label": f"{window} 無資料", "strength": "none", "text": "—"}
     percent = value * 100
     # toFixed(2): no thousands separators (fixed() adds them, and 1,050.00 is not a float).
     magnitude = str(Decimal(abs(percent)).quantize(Decimal("0.01"), ROUND_HALF_UP))
     if magnitude == "0.00":
-        return {"label": f"{window} 0.00%", "strength": "flat-0", "text": "0.00%"}
-    level = 1 + sum(float(magnitude) >= step for step in STRENGTH_STEPS)
+        return {"label": f"{window} 0.00%", "strength": "flat", "text": "0.00%"}
     tone, sign = ("up", "+") if percent > 0 else ("down", "-")
     text = f"{sign}{magnitude}%"
-    return {"label": f"{window} {text}", "strength": f"{tone}-{level}", "text": text}
+    return {"label": f"{window} {text}", "strength": tone, "text": text}
+
+
+def is_transparent(color: str | None, opacity: float | None = 1.0) -> bool:
+    """A computed colour that paints nothing: `transparent`, alpha 0, or drawn at opacity 0."""
+
+    if opacity is not None and opacity <= 0:
+        return True
+    if color is None:
+        return False
+    text = color.strip().lower()
+    if text == "transparent":
+        return True
+    match = re.fullmatch(r"rgba?\(([^)]*)\)", text)
+    if not match:
+        return False
+    parts = [part for part in re.split(r"[\s,/]+", match[1]) if part]
+    if len(parts) != 4:
+        return False
+    alpha = parts[3]
+    try:
+        return (float(alpha[:-1]) / 100 if alpha.endswith("%") else float(alpha)) == 0
+    except ValueError:
+        return False
 
 
 def graphics_of(meta: dict, name: str) -> tuple[dict, list[dict], list[dict]]:
@@ -1631,10 +1648,10 @@ def chip_problems(
     name: str, tokens: dict, got: list[dict], want: list[dict]
 ) -> list[str]:
     if len(got) != len(want):
-        return [f"{name} 有 {len(got)} 個強弱色塊，預期 {len(want)} 個"]
+        return [f"{name} 有 {len(got)} 個漲跌文字，預期 {len(want)} 個"]
     problems = []
     for index, (chip, expected) in enumerate(zip(got, want), 1):
-        where = f"{name} 第 {index} 個色塊（{expected['label']}）"
+        where = f"{name} 第 {index} 個漲跌文字（{expected['label']}）"
         if (
             chip.get("label") != expected["label"]
             or chip.get("strength") != expected["strength"]
@@ -1644,20 +1661,20 @@ def chip_problems(
                 f"{where} 是 `{chip.get('label')}` {chip.get('strength')} `{chip.get('text')}`"
             )
             continue
-        tone, level = expected["strength"].split("-")
-        background = chip.get("background")
-        if tone in ("up", "down"):
-            if background != tokens.get(tone):
-                problems.append(
-                    f"{where} 底色 {background}，預期 --color-{tone} {tokens.get(tone)}"
-                )
-            opacity = chip.get("opacity")
-            if opacity is None or abs(opacity - STRENGTH_OPACITY[int(level)]) > 0.01:
-                problems.append(
-                    f"{where} 不透明度 {opacity}，預期第 {level} 級 {STRENGTH_OPACITY[int(level)]}"
-                )
-        elif background in (tokens.get("up"), tokens.get("down")):
-            problems.append(f"{where} 平盤或無資料卻用了漲跌色 {background}")
+        # Issue 675: no background at all, whatever the sign (the text colour is locked by the frontend tests).
+        background, opacity = chip.get("background"), chip.get("opacity")
+        if not is_transparent(background, opacity):
+            named = next(
+                (
+                    f"（--color-{tone}）"
+                    for tone in ("up", "down")
+                    if tokens.get(tone) == background
+                ),
+                "",
+            )
+            problems.append(
+                f"{where} 有底色 {background}{named}、不透明度 {opacity}，預期沒有底色"
+            )
     return problems
 
 
@@ -1672,7 +1689,7 @@ def return_chips(returns: dict) -> list[dict]:
 
 @check("today", "T19")
 def t19(run: Run) -> str:
-    """Issue 654: the detail's four component bars and the hot groups' return blocks."""
+    """Issue 654: the detail's four component bars and the hot groups' return text (no background, Issue 675)."""
 
     tokens, bars, chips = graphics_of(run.shoot(TODAY)[1280], f"{TODAY.name}-1280")
     payload = candidates(run)
@@ -1693,7 +1710,7 @@ def t19(run: Run) -> str:
     problems = bar_problems("今日名單明細", bars, want_bars)
     problems += chip_problems("熱門族群", tokens, chips, want_chips)
     expect(not problems, "；".join(problems))
-    return f"{len(bars)} 條分項橫條（{len(items)} 檔×4）與 {len(chips)} 個報酬色塊（{len(groups)} 族群×3）= API"
+    return f"{len(bars)} 條分項橫條（{len(items)} 檔×4）與 {len(chips)} 個漲跌文字無底色（{len(groups)} 族群×3）= API"
 
 
 # ---- T14 / T15: the today summary line and the market page's daily chart (Issue 549, UI_COPY_SPEC §11) ----
@@ -2590,8 +2607,8 @@ def g8(run: Run) -> str:
 
 @check("themes", "G9", after=("G2",))
 def g9(run: Run) -> str:
-    """Issue 654: each board row's three return blocks and five component bars, then the detail's five bars and
-    three blocks (T, upstream today T5), against the board API (graphics, T19 has the helpers)."""
+    """Issue 654 / 675: each board row's three returns (text, no background) and five component bars, then the
+    detail's five bars and three returns (T, upstream today T5), against the board API (graphics, T19 has the helpers)."""
 
     problems, counted = [], []
     for kind, shot in (("industry", THEMES), ("theme", THEMES_THEME)):
@@ -2631,9 +2648,7 @@ def g9(run: Run) -> str:
         f"{detail.name}-1280", tokens, chips, return_chips(returns)
     )
     expect(not problems, "；".join(problems))
-    return (
-        f"{'、'.join(counted)}與詳情 `{theme_id}`：五分項橫條與 1／5／20 日色塊 = API"
-    )
+    return f"{'、'.join(counted)}與詳情 `{theme_id}`：五分項橫條與 1／5／20 日漲跌文字（無底色）= API"
 
 
 # ---- stocks ----

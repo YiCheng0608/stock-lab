@@ -18,24 +18,22 @@ export function ScoreBar({ label, value, className }: { label: string; value: nu
 
 export type StrengthTone = 'up' | 'down' | 'flat' | 'none'
 
-// Steps of |percent| (DESIGN_SYSTEM §5 強弱色塊): below 1 is level 1, 1 to below 3 level 2, 3 to below 6 level 3,
-// 6 and above level 4. A value that rounds to 0.00% is flat (level 0).
-export const STRENGTH_STEPS: readonly number[] = [1, 3, 6]
-
-export function strengthOf(percent: number | null | undefined): { text: string; tone: StrengthTone; level: number } {
-  if (!isFiniteNumber(percent)) return { text: '—', tone: 'none', level: 0 }
+// A relative return in percent as the shown text and its sign. A value that rounds to 0.00% is flat.
+export function strengthOf(percent: number | null | undefined): { text: string; tone: StrengthTone } {
+  if (!isFiniteNumber(percent)) return { text: '—', tone: 'none' }
   const magnitude = Math.abs(percent).toFixed(2)
-  if (magnitude === '0.00') return { text: '0.00%', tone: 'flat', level: 0 }
-  const level = 1 + STRENGTH_STEPS.filter((step) => Number(magnitude) >= step).length
-  return percent > 0 ? { text: `+${magnitude}%`, tone: 'up', level } : { text: `-${magnitude}%`, tone: 'down', level }
+  if (magnitude === '0.00') return { text: '0.00%', tone: 'flat' }
+  return percent > 0 ? { text: `+${magnitude}%`, tone: 'up' } : { text: `-${magnitude}%`, tone: 'down' }
 }
 
-// A relative return as a coloured block with its number inside (DESIGN_SYSTEM §5 強弱色塊, #654): the hue is the sign
-// (--color-up red, --color-down green), the depth the step of the magnitude. `percent` is already in percent.
+// A relative return as plain coloured text (DESIGN_SYSTEM §5 漲跌文字; #654 drew it as a block, #675 took the
+// block away): --color-up red when up, --color-down green when down, neutral when flat or without data. No
+// background. The class name stays `strength-chip`: tools/ops/screenshot.cjs measures `.strength-chip` and its
+// ::before, so verify can tell no background is drawn. `percent` is already in percent.
 export function StrengthChip({ label, percent, className }: { label: string; percent: number | null | undefined; className?: string }) {
-  const { text, tone, level } = strengthOf(percent)
+  const { text, tone } = strengthOf(percent)
   return (
-    <b className={cx('strength-chip', `strength-${tone}`, level > 0 && `strength-l${level}`, className)} role="img" aria-label={tone === 'none' ? `${label} 無資料` : `${label} ${text}`} data-strength={`${tone}-${level}`}>
+    <b className={cx('strength-chip', `strength-${tone}`, className)} role="img" aria-label={tone === 'none' ? `${label} 無資料` : `${label} ${text}`} data-strength={tone}>
       {text}
     </b>
   )

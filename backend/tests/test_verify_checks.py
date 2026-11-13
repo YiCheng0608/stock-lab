@@ -1552,19 +1552,20 @@ def _bar(label, value, fill=None):
     }
 
 
-def _chip(window, text, strength, background=None, opacity=None):
-    tone, level = strength.split("-")
-    label = f"{window} 日相對加權指數 " + ("無資料" if tone == "none" else text)
-    default = {"up": UP, "down": DOWN}.get(tone, "rgb(55, 65, 81)")
+NO_BACKGROUND = (
+    "rgba(0, 0, 0, 0)"  # Chrome's computed ::before background when no rule sets one
+)
+
+
+def _chip(window, text, strength, background=NO_BACKGROUND, opacity=1.0):
+    label = f"{window} 日相對加權指數 " + ("無資料" if strength == "none" else text)
     return {
         "kind": "chip",
         "label": label,
         "strength": strength,
         "text": text,
-        "background": background or default,
-        "opacity": opacity
-        if opacity is not None
-        else page_checks.STRENGTH_OPACITY.get(int(level), 1.0),
+        "background": background,
+        "opacity": opacity,
     }
 
 
@@ -1610,25 +1611,25 @@ T19_ITEMS = [
     _bar("籌碼", 44),
     _bar("新聞情緒", None),
     _bar("族群", 100),
-    _chip(1, "+1.20%", "up-2"),
-    _chip(5, "-0.45%", "down-1"),
-    _chip(20, "—", "none-0", background="rgba(0, 0, 0, 0)"),
+    _chip(1, "+1.20%", "up"),
+    _chip(5, "-0.45%", "down"),
+    _chip(20, "—", "none"),
 ]
 
 
 def test_want_chip_steps_follow_the_shown_two_decimals():
     cases = [
-        (0.004, "+0.40%", "up-1"),
-        (0.00999, "+1.00%", "up-2"),
-        (-0.0299, "-2.99%", "down-2"),
-        (0.03, "+3.00%", "up-3"),
-        (-0.06, "-6.00%", "down-4"),
-        (0.00004, "0.00%", "flat-0"),
-        (-0.00004, "0.00%", "flat-0"),
-        (None, "—", "none-0"),
+        (0.004, "+0.40%", "up"),
+        (0.00999, "+1.00%", "up"),
+        (-0.0299, "-2.99%", "down"),
+        (0.03, "+3.00%", "up"),
+        (-0.06, "-6.00%", "down"),
+        (0.00004, "0.00%", "flat"),
+        (-0.00004, "0.00%", "flat"),
+        (None, "—", "none"),
         # toFixed(2) has no thousands separators (PR 658 review): 1,050.00 would not parse.
-        (10.5, "+1050.00%", "up-4"),
-        (-12.345, "-1234.50%", "down-4"),
+        (10.5, "+1050.00%", "up"),
+        (-12.345, "-1234.50%", "down"),
     ]
     for value, text, strength in cases:
         chip = page_checks.want_chip("1 日", value)
@@ -1657,31 +1658,61 @@ def test_bar_fill_needs_a_track_unless_the_row_is_hidden():
     ]
 
 
-def test_strength_steps_and_opacity_mirror_the_frontend():
-    # page_checks.py mirrors STRENGTH_STEPS (ScoreBar.tsx) and .strength-l1…l4 (styles.css) (PR 658 review).
+def test_strength_tones_and_no_background_mirror_the_frontend():
+    # page_checks.py mirrors StrengthTone (ScoreBar.tsx); styles.css draws no background or ::before on the
+    # return text (Issue 675; Issue 654's steps and opacities are gone).
     source = (ROOT / "frontend/src/components/ui/ScoreBar.tsx").read_text(
         encoding="utf-8"
     )
-    steps = re.search(r"STRENGTH_STEPS: readonly number\[\] = \[([^\]]*)\]", source)
-    assert steps, "STRENGTH_STEPS not found in ScoreBar.tsx"
-    assert (
-        tuple(int(step) for step in steps[1].split(",")) == page_checks.STRENGTH_STEPS
-    )
+    tones = re.search(r"export type StrengthTone = ([^\n]*)", source)
+    assert tones, "StrengthTone not found in ScoreBar.tsx"
+    assert tuple(re.findall(r"'(\w+)'", tones[1])) == page_checks.STRENGTH_TONES
+    assert "STRENGTH_STEPS" not in source
     styles = (ROOT / "frontend/src/styles.css").read_text(encoding="utf-8")
-    opacity = {
-        int(level): float(value)
-        for level, value in re.findall(
-            r"^\.strength-l(\d)::before \{ opacity: ([0-9.]+); \}", styles, re.M
-        )
-    }
-    # Level 4 is the solid colour: no opacity rule, so 1.
-    assert "strength-l4::before" not in styles
-    assert {**opacity, 4: 1.0} == page_checks.STRENGTH_OPACITY
+    rules = [line for line in styles.splitlines() if line.startswith(".strength-")]
+    assert rules
+    assert not [
+        line
+        for line in rules
+        if re.search(r"::before|background|opacity|strength-l\d", line)
+    ]
+
+
+@pytest.mark.parametrize(
+    ("color", "opacity", "transparent"),
+    [
+        ("rgba(0, 0, 0, 0)", 1.0, True),
+        ("transparent", 1.0, True),
+        ("rgb(0 0 0 / 0%)", 1.0, True),
+        ("rgb(239, 68, 68)", 0.0, True),
+        ("rgb(239, 68, 68)", 0.16, False),
+        ("rgba(239, 68, 68, 0.3)", 1.0, False),
+        ("rgb(55, 65, 81)", 1.0, False),
+        (None, None, False),
+    ],
+)
+def test_is_transparent(color, opacity, transparent):
+    assert page_checks.is_transparent(color, opacity) is transparent
 
 
 def test_t19_passes_when_bars_and_blocks_match_the_api(tmp_path):
     assert page_checks.t19(_t19_run(tmp_path, T19_ITEMS)) == (
-        "4 條分項橫條（1 檔×4）與 3 個報酬色塊（1 族群×3）= API"
+        "4 條分項橫條（1 檔×4）與 3 個漲跌文字無底色（1 族群×3）= API"
+    )
+
+
+def test_t19_fails_on_the_issue_654_blocks(tmp_path):
+    # Issue 675: what the probe measured before (a tinted ::before per step, flat on --color-bg-elevated) fails.
+    old = T19_ITEMS[:4] + [
+        _chip(1, "+1.20%", "up", background=UP, opacity=0.3),
+        _chip(5, "-0.45%", "down", background=DOWN, opacity=0.16),
+        _chip(20, "—", "none"),
+    ]
+    with pytest.raises(page_checks.Fail) as error:
+        page_checks.t19(_t19_run(tmp_path, old))
+    assert str(error.value) == (
+        f"熱門族群 第 1 個漲跌文字（1 日相對加權指數 +1.20%） 有底色 {UP}（--color-up）、不透明度 0.3，預期沒有底色；"
+        f"熱門族群 第 2 個漲跌文字（5 日相對加權指數 -0.45%） 有底色 {DOWN}（--color-down）、不透明度 0.16，預期沒有底色"
     )
 
 
@@ -1706,22 +1737,22 @@ def test_t19_passes_when_bars_and_blocks_match_the_api(tmp_path):
         (
             4,
             {"background": DOWN},
-            f"熱門族群 第 1 個色塊（1 日相對加權指數 +1.20%） 底色 {DOWN}，預期 --color-up {UP}",
+            f"熱門族群 第 1 個漲跌文字（1 日相對加權指數 +1.20%） 有底色 {DOWN}（--color-down）、不透明度 1.0，預期沒有底色",
         ),
         (
             5,
-            {"opacity": 0.5},
-            "熱門族群 第 2 個色塊（5 日相對加權指數 -0.45%） 不透明度 0.5，預期第 1 級 0.16",
+            {"background": "rgb(55, 65, 81)", "opacity": 0.5},
+            "熱門族群 第 2 個漲跌文字（5 日相對加權指數 -0.45%） 有底色 rgb(55, 65, 81)、不透明度 0.5，預期沒有底色",
         ),
         (
             4,
-            {"strength": "up-1"},
-            "熱門族群 第 1 個色塊（1 日相對加權指數 +1.20%） 是 `1 日相對加權指數 +1.20%` up-1 `+1.20%`",
+            {"strength": "down"},
+            "熱門族群 第 1 個漲跌文字（1 日相對加權指數 +1.20%） 是 `1 日相對加權指數 +1.20%` down `+1.20%`",
         ),
         (
             6,
             {"background": UP},
-            f"熱門族群 第 3 個色塊（20 日相對加權指數 無資料） 平盤或無資料卻用了漲跌色 {UP}",
+            f"熱門族群 第 3 個漲跌文字（20 日相對加權指數 無資料） 有底色 {UP}（--color-up）、不透明度 1.0，預期沒有底色",
         ),
     ],
 )
@@ -1773,14 +1804,14 @@ def test_g9_checks_both_boards_and_the_detail(tmp_path):
         _bar("催化劑", 100),
     ]
     row_chips = [
-        _chip(1, "+1.20%", "up-2"),
-        _chip(5, "0.00%", "flat-0"),
-        _chip(20, "+8.00%", "up-4"),
+        _chip(1, "+1.20%", "up"),
+        _chip(5, "0.00%", "flat"),
+        _chip(20, "+8.00%", "up"),
     ]
     theme_items = [
-        _chip(1, "-3.10%", "down-3"),
-        _chip(5, "+5.10%", "up-3"),
-        _chip(20, "—", "none-0", background="rgba(0, 0, 0, 0)"),
+        _chip(1, "-3.10%", "down"),
+        _chip(5, "+5.10%", "up"),
+        _chip(20, "—", "none"),
         _bar("相對報酬", 40),
         _bar("廣度", 25),
         _bar("量能", 10),
@@ -1811,7 +1842,7 @@ def test_g9_checks_both_boards_and_the_detail(tmp_path):
     run = FakeRun(tmp_path, payloads, {}, metas=metas)
     assert (
         page_checks.g9(run)
-        == "industry 1 列、theme 1 列與詳情 `i-1`：五分項橫條與 1／5／20 日色塊 = API"
+        == "industry 1 列、theme 1 列與詳情 `i-1`：五分項橫條與 1／5／20 日漲跌文字（無底色）= API"
     )
     metas["theme-detail"] = meta(
         row_bars[:4] + [_bar("催化劑", 100, fill=0.5)] + row_chips

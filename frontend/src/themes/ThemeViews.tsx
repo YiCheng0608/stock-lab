@@ -87,7 +87,7 @@ function ReturnValue({ value, unit = '' }: { value: number | null | undefined; u
   return <span className={`tone-${tone}`}>{text}</span>
 }
 
-// A group's 1／5／20 日 relative return as a strength block (#654, DESIGN_SYSTEM §5 強弱色塊); the value is a fraction.
+// A group's 1／5／20 日 relative return as sign-coloured text (#675, DESIGN_SYSTEM §5 漲跌文字); the value is a fraction.
 function GroupReturn({ label, value }: { label: string; value: number | null | undefined }) {
   return <StrengthChip label={`${label}相對加權指數`} percent={isFiniteNumber(value) ? value * 100 : null} />
 }
