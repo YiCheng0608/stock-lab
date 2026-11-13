@@ -369,3 +369,22 @@ export function sparkline(recent: CandidateRecentCloses | null | undefined, widt
   const to = formatDate(recent.dates[last.index])
   return { path, tone, label: `近 ${recent.dates.length} 個交易日收盤走勢：${from}–${to} ${rounded > 0 ? '+' : ''}${percent.toFixed(2)}%` }
 }
+
+// ---- the today list below 1280px (#665; DESIGN_SYSTEM §5 候選列表): a row's K-line card opens under it ----
+
+// The width from which the chart sits beside the list; below it a row opens its own card (styles.css uses the same).
+export const TERMINAL_MIN_WIDTH = 1280
+// One card at a time: pressing the open row closes it, pressing another row moves the card there.
+export function nextChartRank(current: number | null, rank: number): number | null {
+  return current === rank ? null : rank
+}
+// A click in a row opens or closes its card unless it lands on something that acts by itself (the name link, a term,
+// the AI button) or ends a text selection (decision 6841170465: copying a price must not open the chart).
+export const ROW_CLICK_IGNORED = 'a, button, summary, input, select, textarea, label, [role="button"]'
+export function rowClickToggles(target: { closest(selector: string): unknown } | null, selection: string): boolean {
+  return !!target && !target.closest(ROW_CLICK_IGNORED) && selection === ''
+}
+// The rank button's label below 1280px (UI_COPY_SPEC §10); its text stays 「#n」.
+export function chartToggleLabel(rank: number, open: boolean): string {
+  return `第 ${rank} 名，${open ? '收起' : '展開'} K 線圖`
+}
