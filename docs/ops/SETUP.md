@@ -5,7 +5,7 @@
 
 ## 工作目錄、環境與啟停
 
-服務、測試與排程都在容器裡執行（#331）：api、web、scheduler 由 compose 啟動（[Docker compose](#docker-compose)），資料在 named volume `stock-data`，排程是 scheduler 容器的 `worker.cli serve`（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)），本機檢查也在容器內跑（[工作手冊](../WORKFLOW.md#本機檢查)）。主機只需要 Docker Desktop（WSL 2 backend）與 Git Bash；Docker Desktop 沒開時的判讀見 [Docker Desktop 沒開](#docker-desktop-沒開)。正式排程已在 Docker 切換（#342）時切到容器；Windows 工作排程器停用、只供回退（[Windows 工作排程器](platform/windows.md)）。
+服務、測試與排程都在容器裡執行（#331）：api、web、scheduler 由 compose 啟動（[Docker compose](#docker-compose)），資料在 named volume `stock-data`，排程是 scheduler 容器的 `worker.cli serve`（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)），本機檢查也在容器內跑（[工作手冊](../WORKFLOW.md#本機檢查)）。主機只需要 Docker Desktop（WSL 2 backend）與 Git Bash；Docker Desktop 沒開時的判讀見 [Docker Desktop 沒開](#docker-desktop-沒開)。正式排程已在 Docker 切換（#342）時切到容器；Windows 工作排程器停用、不再當回退（[Windows 工作排程器](platform/windows.md)）。
 
 容器外（選用）：後端命令也能在主機的 venv 從專案根目錄執行，用在單次的 API 或 worker 命令；`worker.cli job`、`serve` 與 `python -m worker.job lock` 只在 Linux 執行，在 Windows 以 exit 69 拒絕，所以排程與看門狗的鎖不能在主機跑。範例預設使用 workspace 內 `.local` 開發資料；做測試、migration 或可丟棄研究時，先把三個 `STOCK_*` 改成明確的隔離路徑，不指向正式 `data/stock.db`。
 

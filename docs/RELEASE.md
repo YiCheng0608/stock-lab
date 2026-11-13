@@ -149,4 +149,4 @@ bash tools/ops/deploy.sh "$TAG" --operator "<誰，依據的 #1 留言>"
 - **每日核對**記發佈 checkout 當時的 branch 與 HEAD（`git -C <發佈 checkout> rev-parse --abbrev-ref HEAD` 與 `--short HEAD`），證明窗口每天跑的是 `release/v1`。
 - **窗口結束**（使用者確認 G7 後）：`git log origin/master..origin/release/v1 --no-merges` 必須為空（V1 改動都已在 master）；在排程閒置時把發佈 checkout 切回 master、依 master 的 lock 檔重裝 venv（下一次 daily 會升 V1.1 的 migration）；`release/v1` 最後一個 commit 打 `v1.0` tag。三項結果記在 G7 Issue。
 
-窗口結束後到 Docker 切換（#342）之前，工作排程器仍從發佈 checkout 執行；之後排程改由 scheduler 容器執行，`deploy.sh` 部署 image。切換、切換時的第一次部署與回退見 [Docker 切換與回退（cutover.sh）](ops/platform/windows.md#docker-切換與回退cutoversh)。`v1.0` 早於 #340，`deploy.sh` 的版本檢查會拒絕它。
+窗口結束後到 Docker 切換（#342，2026-11-03 完成）之前，工作排程器仍從發佈 checkout 執行；之後排程改由 scheduler 容器執行，`deploy.sh` 部署 image。工作排程器已停用、不再當回退（[Windows 工作排程器](ops/platform/windows.md)，#677）。`v1.0` 早於 #340，`deploy.sh` 的版本檢查會拒絕它。

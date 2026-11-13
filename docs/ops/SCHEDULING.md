@@ -6,9 +6,9 @@
 | 排程器 | 跑的程式 | 資料與 job 日誌 | 本節的操作 |
 | --- | --- | --- | --- |
 | scheduler 容器（`serve`，#336） | 正式 compose project 的 image，由 [`deploy.sh`](../RELEASE.md#部署) 部署（#340） | volume `stock-data` 的 `/data`（`stock.db`、`raw/`、`logs/`、`locks/`） | [scheduler 容器的排程（serve）](#scheduler-容器的排程serve)；daily、news 與看門狗的判定、日誌與 run 記錄同[排程看門狗](WATCHDOG.md)、[daily／news 工作的註冊與管理](platform/windows.md#dailynews-工作的註冊與管理)與本文[日誌與 run 記錄](#日誌與-run-記錄)～[限制](#限制) |
-| Windows 工作排程器（Docker 切換後停用、只供回退） | 見 [Windows 工作排程器](platform/windows.md) | 見 [Windows 工作排程器](platform/windows.md) | [Windows 工作排程器](platform/windows.md)（daily／news、看門狗與 monitor 的工作，切換與回退） |
+| Windows 工作排程器（Docker 切換後停用、不再當回退） | 見 [Windows 工作排程器](platform/windows.md) | 見 [Windows 工作排程器](platform/windows.md) | [Windows 工作排程器](platform/windows.md)（daily／news、看門狗與 monitor 的工作，切換與回退） |
 
-位置（使用者 2026-10-17 決定）：正式資料目錄（[LOCAL](LOCAL.md#正式位置使用者決定)；`stock.db`、`raw/`、`logs/`），以 `STOCK_DATA_DIR` 指向；切換（#342）時 `stock.db`、`raw/` 與 `logs/` 複製進 volume `stock-data`（`raw_payloads.payload_path` 不改寫，見 [Docker 切換與回退（cutover.sh）](platform/windows.md#docker-切換與回退cutoversh)），之後主機的這個目錄只剩統籌的檔案；回退用的原檔 `stock.db` 與 `raw/` 已於 2026-11-05 刪除（使用者決定，[LOCAL](LOCAL.md#正式位置使用者決定)），正式資料現在只在 volume 裡。排程只從發佈 checkout（[LOCAL](LOCAL.md#正式位置使用者決定)；repo 的獨立 clone）執行：它是正式 compose project 的目錄，停在 `tools/ops/deploy.sh` 部署的 tag，排程起跑不 `git pull`（升版見 [RELEASE](../RELEASE.md)）；不從 `master` 管理 checkout。統籌心跳檔、換手標記與壓縮計數檔都在主機資料目錄的 `logs/` 下（[統籌手冊](../COORDINATOR.md#統籌-session)），事件 monitor 的事件佇列與它自己的心跳、日誌也是：scheduler 容器以 `STOCK_COORDINATION_DIR` 把這個目錄 bind mount 到 `/coordination`（[統籌事件 monitor](MONITOR.md)）。
+位置（使用者 2026-10-17 決定）：正式資料目錄（[LOCAL](LOCAL.md#正式位置使用者決定)；`stock.db`、`raw/`、`logs/`），以 `STOCK_DATA_DIR` 指向；切換（#342）時 `stock.db`、`raw/` 與 `logs/` 複製進 volume `stock-data`（`raw_payloads.payload_path` 不改寫，容器內經 [`app.raw_paths.payload_file`](../../backend/app/raw_paths.py) 讀），之後主機的這個目錄只剩統籌的檔案；回退用的原檔 `stock.db` 與 `raw/` 已於 2026-11-05 刪除（使用者決定，[LOCAL](LOCAL.md#正式位置使用者決定)），正式資料現在只在 volume 裡。排程只從發佈 checkout（[LOCAL](LOCAL.md#正式位置使用者決定)；repo 的獨立 clone）執行：它是正式 compose project 的目錄，停在 `tools/ops/deploy.sh` 部署的 tag，排程起跑不 `git pull`（升版見 [RELEASE](../RELEASE.md)）；不從 `master` 管理 checkout。統籌心跳檔、換手標記與壓縮計數檔都在主機資料目錄的 `logs/` 下（[統籌手冊](../COORDINATOR.md#統籌-session)），事件 monitor 的事件佇列與它自己的心跳、日誌也是：scheduler 容器以 `STOCK_COORDINATION_DIR` 把這個目錄 bind mount 到 `/coordination`（[統籌事件 monitor](MONITOR.md)）。
 
 新聞任務與 `daily` 分開排程，不掛在 `daily` 之後：
 
@@ -187,7 +187,7 @@ period_backfill 步驟呼叫 [`worker.period_backfill.run_period_backfill(目標
 
 ## scheduler 容器的排程（serve）
 
-`python -m worker.cli serve`（[`backend/worker/serve.py`](../../backend/worker/serve.py)，#336）是 scheduler 容器的常駐命令，在[後端 image](SETUP.md#工作目錄環境與啟停) 內取代工作排程器：APScheduler 依台北時間啟動與 [daily／news 工作的註冊與管理](platform/windows.md#dailynews-工作的註冊與管理) 註冊相同的命令，每次一個子程序。compose 設定見 [Docker compose](SETUP.md#docker-compose)（#335），`claude`／`gh` 的認證見 [容器內的 claude 與 gh 認證（.env）](SETUP.md#容器內的-claude-與-gh-認證env)（#337）；正式切換與回退見 [Docker 切換與回退（cutover.sh）](platform/windows.md#docker-切換與回退cutoversh)。
+`python -m worker.cli serve`（[`backend/worker/serve.py`](../../backend/worker/serve.py)，#336）是 scheduler 容器的常駐命令，在[後端 image](SETUP.md#工作目錄環境與啟停) 內取代工作排程器：APScheduler 依台北時間啟動與 [daily／news 工作的註冊與管理](platform/windows.md#dailynews-工作的註冊與管理) 註冊相同的命令，每次一個子程序。compose 設定見 [Docker compose](SETUP.md#docker-compose)（#335），`claude`／`gh` 的認證見 [容器內的 claude 與 gh 認證（.env）](SETUP.md#容器內的-claude-與-gh-認證env)（#337）；正式切換（#342）已完成，工作排程器停用、不再當回退（[Windows 工作排程器](platform/windows.md)）。
 
 | 工作 | 觸發（預設） | 命令 |
 | --- | --- | --- |
@@ -221,4 +221,4 @@ period_backfill 步驟呼叫 [`worker.period_backfill.run_period_backfill(目標
 - **run 記錄的 image 與 HEAD**：`schedule_runs` 每列的 `summary_json.runtime` 記 `image`（`STOCK_IMAGE_TAG`）、`head`（`STOCK_GIT_HEAD`，沒有時 `git rev-parse HEAD`，都沒有為 null）與 job 持有的鎖 `job_lock`。build context 不含 `.git`，所以 build 時帶入；正式 project 由 [`deploy.sh`](../RELEASE.md#部署) 以 `STOCK_RELEASE_TAG=<tag> STOCK_GIT_HEAD=<該 commit> docker compose build` 帶入（[Docker compose](SETUP.md#docker-compose)，#340），單獨 build 時：`docker build -f backend/Dockerfile -t stock-lab-backend:<tag> --build-arg STOCK_IMAGE_TAG=stock-lab-backend:<tag> --build-arg STOCK_GIT_HEAD="$(git rev-parse HEAD)" .`。
 - 其他選項：`--data-dir`、`--log-dir`、`--claude-cli`、`--daily-min-free-memory-gb`、`--news-min-free-memory-gb`、`--daily-time-limit-minutes`、`--news-time-limit-minutes`、`--us-min-free-memory-gb`、`--us-time-limit-minutes`（交給 job）；`--monitor-dir`、`--monitor-orca`、`--monitor-waker`（交給 monitor，後兩者預設 `http_orca.sh`、`http_wake.sh`，經主機的 wake listener，[統籌事件 monitor](MONITOR.md)）。只在 Linux 執行，其他系統 exit 69。
 
-工作排程器的工作為什麼要維持停用（切換前提）、切換與回退見 [Docker 切換與回退（cutover.sh）](platform/windows.md#docker-切換與回退cutoversh)。
+工作排程器的工作為什麼要維持停用、為什麼不能回退見 [Windows 工作排程器](platform/windows.md)。
