@@ -1,0 +1,221 @@
+{
+ "openDetails": 0,
+ "innerHeight": 844,
+ "clientWidth": 390,
+ "scrollWidth": 390,
+ "maxRight": 1028,
+ "scrollHeight": 2285,
+ "blocks": [
+  {
+   "depth": 0,
+   "label": "section.page-title.news-page-title",
+   "top": 88,
+   "bottom": 183,
+   "height": 95,
+   "text": "大盤"
+  },
+  {
+   "depth": 1,
+   "label": "h1",
+   "top": 88,
+   "bottom": 118,
+   "height": 30,
+   "text": "大盤"
+  },
+  {
+   "depth": 1,
+   "label": "p",
+   "top": 122,
+   "bottom": 171,
+   "height": 49,
+   "text": "上市、上櫃的收盤概況，以及加權、櫃買、台指期近月三檔指數的總表；點一列看它的日 K。"
+  },
+  {
+   "depth": 0,
+   "label": "section.panel.market-panel.market-overview",
+   "top": 199,
+   "bottom": 610,
+   "height": 411,
+   "text": "大盤概況"
+  },
+  {
+   "depth": 1,
+   "label": "div.panel-head",
+   "top": 216,
+   "bottom": 256,
+   "height": 40,
+   "text": "大盤概況"
+  },
+  {
+   "depth": 2,
+   "label": "h2",
+   "top": 223,
+   "bottom": 249,
+   "height": 26,
+   "text": "大盤概況"
+  },
+  {
+   "depth": 2,
+   "label": "details.data-explanation",
+   "top": 225,
+   "bottom": 247,
+   "height": 22,
+   "text": "資料說明"
+  },
+  {
+   "depth": 1,
+   "label": "div.market-overview-grid",
+   "top": 268,
+   "bottom": 514,
+   "height": 246,
+   "text": "加權指數"
+  },
+  {
+   "depth": 1,
+   "label": "div.market-ma60",
+   "top": 522,
+   "bottom": 593,
+   "height": 71,
+   "text": "加權指數與季線（MA60）"
+  },
+  {
+   "depth": 0,
+   "label": "section.panel.market-panel.market-indexes",
+   "top": 626,
+   "bottom": 995,
+   "height": 370,
+   "text": "指數總表"
+  },
+  {
+   "depth": 1,
+   "label": "div.panel-head",
+   "top": 643,
+   "bottom": 683,
+   "height": 40,
+   "text": "指數總表"
+  },
+  {
+   "depth": 2,
+   "label": "h2",
+   "top": 650,
+   "bottom": 676,
+   "height": 26,
+   "text": "指數總表"
+  },
+  {
+   "depth": 2,
+   "label": "details.data-explanation",
+   "top": 652,
+   "bottom": 674,
+   "height": 22,
+   "text": "資料說明"
+  },
+  {
+   "depth": 1,
+   "label": "div.table-wrap.market-index-table",
+   "top": 695,
+   "bottom": 903,
+   "height": 208,
+   "text": "指數"
+  },
+  {
+   "depth": 1,
+   "label": "p.small-note.market-index-note",
+   "top": 911,
+   "bottom": 951,
+   "height": 40,
+   "text": "來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所"
+  },
+  {
+   "depth": 1,
+   "label": "p.small-note.market-index-note",
+   "top": 959,
+   "bottom": 978,
+   "height": 20,
+   "text": "點一列，下方圖表切換為該指數的日 K"
+  },
+  {
+   "depth": 0,
+   "label": "div.market-chart",
+   "top": 1011,
+   "bottom": 2088,
+   "height": 1076,
+   "text": "技術指標 indicators/v1"
+  }
+ ],
+ "notes": [
+  {
+   "label": "p",
+   "top": 122,
+   "bottom": 171,
+   "height": 49,
+   "chars": 41,
+   "lines": 2,
+   "text": "上市、上櫃的收盤概況，以及加權、櫃買、台指期近月三檔指數的總表；點一列看它的日 K。"
+  },
+  {
+   "label": "summary",
+   "top": 225,
+   "bottom": 247,
+   "height": 22,
+   "chars": 4,
+   "lines": 1,
+   "text": "資料說明"
+  },
+  {
+   "label": "summary",
+   "top": 652,
+   "bottom": 674,
+   "height": 22,
+   "chars": 4,
+   "lines": 1,
+   "text": "資料說明"
+  },
+  {
+   "label": "p.small-note.market-index-note",
+   "top": 911,
+   "bottom": 951,
+   "height": 40,
+   "chars": 40,
+   "lines": 2,
+   "text": "來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所"
+  },
+  {
+   "label": "p.small-note.market-index-note",
+   "top": 959,
+   "bottom": 978,
+   "height": 20,
+   "chars": 17,
+   "lines": 1,
+   "text": "點一列，下方圖表切換為該指數的日 K"
+  },
+  {
+   "label": "summary",
+   "top": 2048,
+   "bottom": 2071,
+   "height": 22,
+   "chars": 14,
+   "lines": 1,
+   "text": "查看圖表資料表（最近 30 根）"
+  }
+ ],
+ "groups": {
+  "table-wrap": {
+   "total": 3,
+   "fullyVisible": 2,
+   "first": {
+    "top": 696,
+    "bottom": 757,
+    "height": 62
+   },
+   "firstLines": [
+    "加權指數",
+    "24,012.35",
+    "-118.40",
+    "-0.49%",
+    "無資料：季線尚未計算"
+   ]
+  }
+ },
+ "clipped": []
+}

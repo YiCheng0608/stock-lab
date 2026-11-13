@@ -1,0 +1,154 @@
+{
+ "openDetails": 0,
+ "innerHeight": 800,
+ "clientWidth": 1280,
+ "scrollWidth": 1280,
+ "maxRight": 1248,
+ "scrollHeight": 800,
+ "blocks": [
+  {
+   "depth": 0,
+   "label": "section.page-title",
+   "top": 96,
+   "bottom": 195,
+   "height": 99,
+   "text": "族群排行"
+  },
+  {
+   "depth": 1,
+   "label": "div.eyebrow",
+   "top": 104,
+   "bottom": 122,
+   "height": 18,
+   "text": "族群排行"
+  },
+  {
+   "depth": 1,
+   "label": "h1",
+   "top": 130,
+   "bottom": 171,
+   "height": 41,
+   "text": "族群"
+  },
+  {
+   "depth": 0,
+   "label": "div.board-controls",
+   "top": 195,
+   "bottom": 247,
+   "height": 52,
+   "text": "產業"
+  },
+  {
+   "depth": 1,
+   "label": "div.tabs",
+   "top": 197,
+   "bottom": 247,
+   "height": 50,
+   "text": "產業"
+  },
+  {
+   "depth": 1,
+   "label": "input.search-input.board-search",
+   "top": 195,
+   "bottom": 247,
+   "height": 52,
+   "text": ""
+  },
+  {
+   "depth": 0,
+   "label": "div.board-panel",
+   "top": 255,
+   "bottom": 409,
+   "height": 154,
+   "text": "產業榜 · 共 2 個族群"
+  }
+ ],
+ "notes": [
+  {
+   "label": "div.eyebrow",
+   "top": 104,
+   "bottom": 122,
+   "height": 18,
+   "chars": 4,
+   "lines": 1,
+   "text": "族群排行"
+  },
+  {
+   "label": "span.small-note",
+   "top": 255,
+   "bottom": 275,
+   "height": 20,
+   "chars": 9,
+   "lines": 1,
+   "text": "產業榜 · 共 2 個族群"
+  },
+  {
+   "label": "summary",
+   "top": 255,
+   "bottom": 276,
+   "height": 21,
+   "chars": 2,
+   "lines": 1,
+   "text": "說明"
+  },
+  {
+   "label": "p.board-row-title",
+   "top": 297,
+   "bottom": 319,
+   "height": 22,
+   "chars": 16,
+   "lines": 1,
+   "text": "半導體 / 相對報酬 100・催化劑 60"
+  },
+  {
+   "label": "p.board-row-meta",
+   "top": 321,
+   "bottom": 340,
+   "height": 19,
+   "chars": 31,
+   "lines": 1,
+   "text": "1 日 +1.20% / 5 日 +3.50% / 20 日 +8.00% / 今日名單 2 檔"
+  },
+  {
+   "label": "p.board-row-title",
+   "top": 357,
+   "bottom": 379,
+   "height": 22,
+   "chars": 13,
+   "lines": 1,
+   "text": "電腦及週邊 / 廣度 60・法人 0"
+  },
+  {
+   "label": "p.board-row-meta",
+   "top": 381,
+   "bottom": 400,
+   "height": 19,
+   "chars": 31,
+   "lines": 1,
+   "text": "1 日 +0.40% / 5 日 +1.50% / 20 日 +3.00% / 今日名單 1 檔"
+  }
+ ],
+ "groups": {
+  "board-list": {
+   "total": 2,
+   "fullyVisible": 2,
+   "first": {
+    "top": 289,
+    "bottom": 348,
+    "height": 59
+   },
+   "firstLines": [
+    "#1",
+    "半導體",
+    "相對報酬 100・催化劑 60",
+    "1 日 +1.20%",
+    "5 日 +3.50%",
+    "20 日 +8.00%",
+    "今日名單 2 檔",
+    "分數 93.50",
+    "五分項 ▸"
+   ]
+  }
+ },
+ "clipped": []
+}

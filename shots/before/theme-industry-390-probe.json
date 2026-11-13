@@ -1,0 +1,215 @@
+{
+ "openDetails": 0,
+ "innerHeight": 844,
+ "clientWidth": 390,
+ "scrollWidth": 390,
+ "maxRight": 444,
+ "scrollHeight": 2304,
+ "blocks": [
+  {
+   "depth": 0,
+   "label": "a.back-link",
+   "top": 90,
+   "bottom": 112,
+   "height": 22,
+   "text": "← 回到產業榜"
+  },
+  {
+   "depth": 0,
+   "label": "section.theme-header",
+   "top": 128,
+   "bottom": 430,
+   "height": 301,
+   "text": "產業"
+  },
+  {
+   "depth": 1,
+   "label": "div.theme-header-badges",
+   "top": 136,
+   "bottom": 169,
+   "height": 32,
+   "text": "產業"
+  },
+  {
+   "depth": 2,
+   "label": "span.badge.badge-primary",
+   "top": 136,
+   "bottom": 169,
+   "height": 32,
+   "text": "產業"
+  },
+  {
+   "depth": 2,
+   "label": "span.badge.badge-success",
+   "top": 136,
+   "bottom": 169,
+   "height": 32,
+   "text": "熱門族群"
+  },
+  {
+   "depth": 1,
+   "label": "h1",
+   "top": 177,
+   "bottom": 206,
+   "height": 30,
+   "text": "半導體"
+  },
+  {
+   "depth": 1,
+   "label": "p",
+   "top": 218,
+   "bottom": 246,
+   "height": 28,
+   "text": "依官方共同產業分類建立的市場族群。"
+  },
+  {
+   "depth": 1,
+   "label": "div.theme-stats",
+   "top": 262,
+   "bottom": 394,
+   "height": 131,
+   "text": "排名"
+  },
+  {
+   "depth": 0,
+   "label": "div.theme-detail-grid",
+   "top": 430,
+   "bottom": 1324,
+   "height": 895,
+   "text": "近 20 個交易日"
+  },
+  {
+   "depth": 0,
+   "label": "section.section-head",
+   "top": 1348,
+   "bottom": 1387,
+   "height": 39,
+   "text": "族群成員"
+  },
+  {
+   "depth": 1,
+   "label": "div",
+   "top": 1348,
+   "bottom": 1387,
+   "height": 39,
+   "text": "族群成員"
+  },
+  {
+   "depth": 1,
+   "label": "label.member-sort",
+   "top": 1350,
+   "bottom": 1387,
+   "height": 37,
+   "text": "排序"
+  },
+  {
+   "depth": 0,
+   "label": "p.table-note.member-note",
+   "top": 1399,
+   "bottom": 1465,
+   "height": 66,
+   "text": "收盤為各標的報價幣別的元；成交金額是當日成交金額；5／20 日相對是相對加權指數的報酬。"
+  },
+  {
+   "depth": 0,
+   "label": "div.card-list.member-cards",
+   "top": 1465,
+   "bottom": 1841,
+   "height": 376,
+   "text": "9101 示範晶圓 候選 #1"
+  },
+  {
+   "depth": 0,
+   "label": "div.pagination-controls",
+   "top": 1857,
+   "bottom": 1875,
+   "height": 18,
+   "text": "共 3 檔"
+  },
+  {
+   "depth": 0,
+   "label": "section.section-head",
+   "top": 1899,
+   "bottom": 1956,
+   "height": 57,
+   "text": "最多 10 則"
+  },
+  {
+   "depth": 1,
+   "label": "div",
+   "top": 1899,
+   "bottom": 1956,
+   "height": 57,
+   "text": "最多 10 則"
+  },
+  {
+   "depth": 0,
+   "label": "section.card",
+   "top": 1972,
+   "bottom": 2106,
+   "height": 134,
+   "text": "無資料"
+  }
+ ],
+ "notes": [
+  {
+   "label": "p",
+   "top": 218,
+   "bottom": 246,
+   "height": 28,
+   "chars": 17,
+   "lines": 1,
+   "text": "依官方共同產業分類建立的市場族群。"
+  },
+  {
+   "label": "summary",
+   "top": 773,
+   "bottom": 795,
+   "height": 22,
+   "chars": 7,
+   "lines": 1,
+   "text": "查看走勢資料表"
+  },
+  {
+   "label": "p.table-note.member-note",
+   "top": 1399,
+   "bottom": 1465,
+   "height": 66,
+   "chars": 43,
+   "lines": 3,
+   "text": "收盤為各標的報價幣別的元；成交金額是當日成交金額；5／20 日相對是相對加權指數的報酬。"
+  },
+  {
+   "label": "div.eyebrow",
+   "top": 1899,
+   "bottom": 1917,
+   "height": 18,
+   "chars": 5,
+   "lines": 1,
+   "text": "最多 10 則"
+  }
+ ],
+ "groups": {
+  "card-list": {
+   "total": 3,
+   "fullyVisible": 0,
+   "first": {
+    "top": 1465,
+    "bottom": 1583,
+    "height": 117
+   },
+   "firstLines": [
+    "9101 示範晶圓 候選 #1",
+    "389.23",
+    "+3.63%",
+    "成交金額（億元）",
+    "64.77",
+    "5 日相對",
+    "+4.50%",
+    "20 日相對",
+    "+10.00%"
+   ]
+  }
+ },
+ "clipped": []
+}

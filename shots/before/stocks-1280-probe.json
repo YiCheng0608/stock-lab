@@ -1,0 +1,151 @@
+{
+ "openDetails": 0,
+ "innerHeight": 800,
+ "clientWidth": 1280,
+ "scrollWidth": 1280,
+ "maxRight": 1248,
+ "scrollHeight": 1105,
+ "blocks": [
+  {
+   "depth": 0,
+   "label": "section.page-title",
+   "top": 96,
+   "bottom": 290,
+   "height": 194,
+   "text": "市場標的目錄"
+  },
+  {
+   "depth": 1,
+   "label": "div.eyebrow",
+   "top": 104,
+   "bottom": 122,
+   "height": 18,
+   "text": "市場標的目錄"
+  },
+  {
+   "depth": 1,
+   "label": "h1",
+   "top": 130,
+   "bottom": 171,
+   "height": 41,
+   "text": "個股"
+  },
+  {
+   "depth": 1,
+   "label": "p",
+   "top": 183,
+   "bottom": 215,
+   "height": 32,
+   "text": "股票、ETF 與新上市標的分開標示；行動與缺資料優先級只來自已驗證官方快照。"
+  },
+  {
+   "depth": 1,
+   "label": "div.filter-row",
+   "top": 215,
+   "bottom": 266,
+   "height": 52,
+   "text": "搜尋"
+  },
+  {
+   "depth": 2,
+   "label": "div.search-controls",
+   "top": 215,
+   "bottom": 266,
+   "height": 52,
+   "text": "搜尋"
+  },
+  {
+   "depth": 2,
+   "label": "select.filter-select",
+   "top": 217,
+   "bottom": 265,
+   "height": 48,
+   "text": "全部類型"
+  },
+  {
+   "depth": 2,
+   "label": "label.check-label",
+   "top": 221,
+   "bottom": 261,
+   "height": 40,
+   "text": "我的自選"
+  },
+  {
+   "depth": 2,
+   "label": "label.member-sort",
+   "top": 222,
+   "bottom": 259,
+   "height": 37,
+   "text": "排序"
+  },
+  {
+   "depth": 0,
+   "label": "div.table-wrap.stock-table-wrap",
+   "top": 290,
+   "bottom": 862,
+   "height": 572,
+   "text": "單位：價格為各標的報價幣別的元，指數為點。空白表示未提供資料或數值待核實；最近收盤早於最新交易日時，"
+  },
+  {
+   "depth": 0,
+   "label": "div.pagination-controls",
+   "top": 878,
+   "bottom": 913,
+   "height": 35,
+   "text": "第 1／1 頁 · 共 8 筆"
+  }
+ ],
+ "notes": [
+  {
+   "label": "div.eyebrow",
+   "top": 104,
+   "bottom": 122,
+   "height": 18,
+   "chars": 6,
+   "lines": 1,
+   "text": "市場標的目錄"
+  },
+  {
+   "label": "p",
+   "top": 183,
+   "bottom": 215,
+   "height": 32,
+   "chars": 37,
+   "lines": 1,
+   "text": "股票、ETF 與新上市標的分開標示；行動與缺資料優先級只來自已驗證官方快照。"
+  },
+  {
+   "label": "p.table-note",
+   "top": 291,
+   "bottom": 357,
+   "height": 66,
+   "chars": 61,
+   "lines": 3,
+   "text": "單位：價格為各標的報價幣別的元，指數為點。空白表示未提供資料或數值待核實；最近收盤早於最新交易日時，下方括號標出它的日期。"
+  },
+  {
+   "label": "div.small-note",
+   "top": 779,
+   "bottom": 799,
+   "height": 20,
+   "chars": 8,
+   "lines": 1,
+   "text": "缺少 5 日法人籌碼"
+  }
+ ],
+ "groups": {
+  "table-wrap": {
+   "total": 8,
+   "fullyVisible": 6,
+   "first": {
+    "top": 413,
+    "bottom": 469,
+    "height": 56
+   },
+   "firstLines": [
+    "9101\t示範晶圓\t上市\t股票\t389.23\t條件進場"
+   ]
+  }
+ },
+ "clipped": []
+}
