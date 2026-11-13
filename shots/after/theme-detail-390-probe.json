@@ -1,0 +1,265 @@
+{
+ "openDetails": 0,
+ "innerHeight": 844,
+ "clientWidth": 390,
+ "scrollWidth": 390,
+ "maxRight": 374,
+ "scrollHeight": 2093,
+ "blocks": [
+  {
+   "depth": 0,
+   "label": "a.back-link",
+   "top": 90,
+   "bottom": 112,
+   "height": 22,
+   "text": "← 回到題材榜"
+  },
+  {
+   "depth": 0,
+   "label": "section.theme-header",
+   "top": 128,
+   "bottom": 352,
+   "height": 224,
+   "text": "題材"
+  },
+  {
+   "depth": 1,
+   "label": "div.theme-header-badges",
+   "top": 136,
+   "bottom": 169,
+   "height": 32,
+   "text": "題材"
+  },
+  {
+   "depth": 2,
+   "label": "span.badge.badge-primary",
+   "top": 136,
+   "bottom": 169,
+   "height": 32,
+   "text": "題材"
+  },
+  {
+   "depth": 2,
+   "label": "span.badge.badge-success",
+   "top": 136,
+   "bottom": 169,
+   "height": 32,
+   "text": "熱門族群"
+  },
+  {
+   "depth": 1,
+   "label": "h1",
+   "top": 177,
+   "bottom": 206,
+   "height": 30,
+   "text": "示範 AI 伺服器"
+  },
+  {
+   "depth": 1,
+   "label": "p",
+   "top": 218,
+   "bottom": 246,
+   "height": 28,
+   "text": "虛構題材：AI 伺服器組裝與板卡供應鏈。"
+  },
+  {
+   "depth": 1,
+   "label": "div.theme-stats.theme-stat-line",
+   "top": 262,
+   "bottom": 328,
+   "height": 66,
+   "text": "排名"
+  },
+  {
+   "depth": 0,
+   "label": "div.theme-detail-grid",
+   "top": 352,
+   "bottom": 1247,
+   "height": 895,
+   "text": "近 20 個交易日"
+  },
+  {
+   "depth": 0,
+   "label": "section.section-head.member-section-head",
+   "top": 1271,
+   "bottom": 1310,
+   "height": 39,
+   "text": "族群成員"
+  },
+  {
+   "depth": 1,
+   "label": "div",
+   "top": 1271,
+   "bottom": 1310,
+   "height": 39,
+   "text": "族群成員"
+  },
+  {
+   "depth": 1,
+   "label": "label.member-sort",
+   "top": 1272,
+   "bottom": 1309,
+   "height": 37,
+   "text": "排序"
+  },
+  {
+   "depth": 1,
+   "label": "details.details.member-help",
+   "top": 1280,
+   "bottom": 1301,
+   "height": 21,
+   "text": "說明"
+  },
+  {
+   "depth": 0,
+   "label": "div.card-list.member-cards",
+   "top": 1322,
+   "bottom": 1630,
+   "height": 308,
+   "text": "9101 示範晶圓 候選 #1"
+  },
+  {
+   "depth": 0,
+   "label": "div.pagination-controls",
+   "top": 1646,
+   "bottom": 1664,
+   "height": 18,
+   "text": "共 3 檔"
+  },
+  {
+   "depth": 0,
+   "label": "section.section-head",
+   "top": 1688,
+   "bottom": 1745,
+   "height": 57,
+   "text": "最多 10 則"
+  },
+  {
+   "depth": 1,
+   "label": "div",
+   "top": 1688,
+   "bottom": 1745,
+   "height": 57,
+   "text": "最多 10 則"
+  },
+  {
+   "depth": 0,
+   "label": "section.card",
+   "top": 1761,
+   "bottom": 1895,
+   "height": 134,
+   "text": "無資料"
+  }
+ ],
+ "notes": [
+  {
+   "label": "p",
+   "top": 218,
+   "bottom": 246,
+   "height": 28,
+   "chars": 19,
+   "lines": 1,
+   "text": "虛構題材：AI 伺服器組裝與板卡供應鏈。"
+  },
+  {
+   "label": "summary",
+   "top": 695,
+   "bottom": 718,
+   "height": 22,
+   "chars": 7,
+   "lines": 1,
+   "text": "查看走勢資料表"
+  },
+  {
+   "label": "summary",
+   "top": 1280,
+   "bottom": 1301,
+   "height": 21,
+   "chars": 2,
+   "lines": 1,
+   "text": "說明"
+  },
+  {
+   "label": "p.member-card-returns",
+   "top": 1381,
+   "bottom": 1404,
+   "height": 23,
+   "chars": 23,
+   "lines": 1,
+   "text": "5 日相對 +4.50% · 20 日相對 +10.00%"
+  },
+  {
+   "label": "summary",
+   "top": 1382,
+   "bottom": 1403,
+   "height": 21,
+   "chars": 2,
+   "lines": 1,
+   "text": "更多"
+  },
+  {
+   "label": "p.member-card-returns",
+   "top": 1488,
+   "bottom": 1510,
+   "height": 23,
+   "chars": 22,
+   "lines": 1,
+   "text": "5 日相對 +3.50% · 20 日相對 +8.00%"
+  },
+  {
+   "label": "summary",
+   "top": 1489,
+   "bottom": 1510,
+   "height": 21,
+   "chars": 2,
+   "lines": 1,
+   "text": "更多"
+  },
+  {
+   "label": "p.member-card-returns",
+   "top": 1594,
+   "bottom": 1617,
+   "height": 23,
+   "chars": 22,
+   "lines": 1,
+   "text": "5 日相對 +2.50% · 20 日相對 +6.00%"
+  },
+  {
+   "label": "summary",
+   "top": 1595,
+   "bottom": 1616,
+   "height": 21,
+   "chars": 2,
+   "lines": 1,
+   "text": "更多"
+  },
+  {
+   "label": "div.eyebrow",
+   "top": 1688,
+   "bottom": 1706,
+   "height": 18,
+   "chars": 5,
+   "lines": 1,
+   "text": "最多 10 則"
+  }
+ ],
+ "groups": {
+  "card-list": {
+   "total": 3,
+   "fullyVisible": 0,
+   "first": {
+    "top": 1322,
+    "bottom": 1417,
+    "height": 95
+   },
+   "firstLines": [
+    "9101 示範晶圓 候選 #1",
+    "389.23",
+    "+3.63%",
+    "5 日相對 +4.50% · 20 日相對 +10.00%",
+    "更多"
+   ]
+  }
+ },
+ "clipped": []
+}

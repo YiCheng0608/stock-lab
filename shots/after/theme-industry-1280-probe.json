@@ -1,0 +1,207 @@
+{
+ "openDetails": 0,
+ "innerHeight": 800,
+ "clientWidth": 1280,
+ "scrollWidth": 1280,
+ "maxRight": 1248,
+ "scrollHeight": 1603,
+ "blocks": [
+  {
+   "depth": 0,
+   "label": "a.back-link",
+   "top": 98,
+   "bottom": 120,
+   "height": 22,
+   "text": "← 回到產業榜"
+  },
+  {
+   "depth": 0,
+   "label": "section.theme-header",
+   "top": 136,
+   "bottom": 340,
+   "height": 204,
+   "text": "產業"
+  },
+  {
+   "depth": 1,
+   "label": "div.theme-header-badges",
+   "top": 144,
+   "bottom": 177,
+   "height": 32,
+   "text": "產業"
+  },
+  {
+   "depth": 2,
+   "label": "span.badge.badge-primary",
+   "top": 144,
+   "bottom": 177,
+   "height": 32,
+   "text": "產業"
+  },
+  {
+   "depth": 2,
+   "label": "span.badge.badge-success",
+   "top": 144,
+   "bottom": 177,
+   "height": 32,
+   "text": "熱門族群"
+  },
+  {
+   "depth": 1,
+   "label": "h1",
+   "top": 185,
+   "bottom": 226,
+   "height": 41,
+   "text": "半導體"
+  },
+  {
+   "depth": 1,
+   "label": "p",
+   "top": 238,
+   "bottom": 266,
+   "height": 28,
+   "text": "依官方共同產業分類建立的市場族群。"
+  },
+  {
+   "depth": 1,
+   "label": "div.theme-stats.theme-stat-line",
+   "top": 282,
+   "bottom": 316,
+   "height": 34,
+   "text": "排名"
+  },
+  {
+   "depth": 0,
+   "label": "div.theme-detail-grid",
+   "top": 340,
+   "bottom": 852,
+   "height": 512,
+   "text": "近 20 個交易日"
+  },
+  {
+   "depth": 0,
+   "label": "section.section-head.member-section-head",
+   "top": 876,
+   "bottom": 916,
+   "height": 39,
+   "text": "族群成員"
+  },
+  {
+   "depth": 1,
+   "label": "div",
+   "top": 876,
+   "bottom": 916,
+   "height": 39,
+   "text": "族群成員"
+  },
+  {
+   "depth": 1,
+   "label": "label.member-sort",
+   "top": 878,
+   "bottom": 915,
+   "height": 37,
+   "text": "排序"
+  },
+  {
+   "depth": 1,
+   "label": "details.details.member-help",
+   "top": 886,
+   "bottom": 906,
+   "height": 21,
+   "text": "說明"
+  },
+  {
+   "depth": 0,
+   "label": "div.table-wrap.member-table-wrap",
+   "top": 928,
+   "bottom": 1154,
+   "height": 226,
+   "text": "代號\t名稱\t市場\t收盤（元）\t漲跌幅（%）\t成交金額（億元）\t5 日相對（%）\t20 日相對（%）"
+  },
+  {
+   "depth": 0,
+   "label": "div.pagination-controls",
+   "top": 1170,
+   "bottom": 1188,
+   "height": 18,
+   "text": "共 3 檔"
+  },
+  {
+   "depth": 0,
+   "label": "section.section-head",
+   "top": 1212,
+   "bottom": 1269,
+   "height": 57,
+   "text": "最多 10 則"
+  },
+  {
+   "depth": 1,
+   "label": "div",
+   "top": 1212,
+   "bottom": 1269,
+   "height": 57,
+   "text": "最多 10 則"
+  },
+  {
+   "depth": 0,
+   "label": "section.card",
+   "top": 1285,
+   "bottom": 1435,
+   "height": 150,
+   "text": "無資料"
+  }
+ ],
+ "notes": [
+  {
+   "label": "p",
+   "top": 238,
+   "bottom": 266,
+   "height": 28,
+   "chars": 17,
+   "lines": 1,
+   "text": "依官方共同產業分類建立的市場族群。"
+  },
+  {
+   "label": "summary",
+   "top": 691,
+   "bottom": 714,
+   "height": 22,
+   "chars": 7,
+   "lines": 1,
+   "text": "查看走勢資料表"
+  },
+  {
+   "label": "summary",
+   "top": 886,
+   "bottom": 906,
+   "height": 21,
+   "chars": 2,
+   "lines": 1,
+   "text": "說明"
+  },
+  {
+   "label": "div.eyebrow",
+   "top": 1212,
+   "bottom": 1230,
+   "height": 18,
+   "chars": 5,
+   "lines": 1,
+   "text": "最多 10 則"
+  }
+ ],
+ "groups": {
+  "table-wrap": {
+   "total": 3,
+   "fullyVisible": 0,
+   "first": {
+    "top": 985,
+    "bottom": 1041,
+    "height": 56
+   },
+   "firstLines": [
+    "9101\t示範晶圓 候選 #1\t上市\t389.23\t+3.63\t64.77\t+4.50\t+10.00"
+   ]
+  }
+ },
+ "clipped": []
+}

@@ -23,7 +23,7 @@
     if (b.bottom + scrollY <= H) g.fullyVisible += 1
     if (!g.first) { g.first = r(el); g.firstLines = (el.innerText || '').split('\n').filter(Boolean) }
   }
-  const clipped = [...document.querySelectorAll('.page td, .page th, .page .stock-card *, .page .member-card *, .page .board-row *')].filter(vis).filter((el) => el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflow !== 'visible').slice(0, 20).map((el) => ({ label: label(el), text: (el.innerText || '').slice(0, 40), sw: el.scrollWidth, cw: el.clientWidth }))
-  const right = Math.max(...[...document.querySelectorAll('.page *')].filter(vis).map((el) => el.getBoundingClientRect().right))
+  const clipped = [...document.querySelectorAll('.page td, .page th, .page .stock-card *, .page .member-card *, .page .board-row *, .page .theme-stat-line *, .page .page-title *, .page .board-controls *, .page .member-section-head *, .page .market-index-table *')].filter(vis).filter((el) => el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflow !== 'visible').slice(0, 20).map((el) => ({ label: label(el), text: (el.innerText || '').slice(0, 40), sw: el.scrollWidth, cw: el.clientWidth }))
+  const right = Math.max(...[...document.querySelectorAll('.page *')].filter(vis).filter((el) => !el.closest('details:not([open]) > :not(summary)')).map((el) => el.getBoundingClientRect().right))
   return { openDetails: document.querySelectorAll('details[open]').length, innerHeight: H, clientWidth: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth, maxRight: Math.round(right), scrollHeight: document.documentElement.scrollHeight, blocks, notes, groups, clipped }
 })()

@@ -1,0 +1,129 @@
+{
+ "openDetails": 0,
+ "innerHeight": 844,
+ "clientWidth": 390,
+ "scrollWidth": 390,
+ "maxRight": 374,
+ "scrollHeight": 1299,
+ "blocks": [
+  {
+   "depth": 0,
+   "label": "section.page-title.stocks-title",
+   "top": 88,
+   "bottom": 298,
+   "height": 210,
+   "text": "個股"
+  },
+  {
+   "depth": 1,
+   "label": "div.page-title-row",
+   "top": 100,
+   "bottom": 130,
+   "height": 30,
+   "text": "個股"
+  },
+  {
+   "depth": 2,
+   "label": "h1",
+   "top": 100,
+   "bottom": 130,
+   "height": 30,
+   "text": "個股"
+  },
+  {
+   "depth": 2,
+   "label": "details.details.page-help",
+   "top": 109,
+   "bottom": 130,
+   "height": 21,
+   "text": "說明"
+  },
+  {
+   "depth": 1,
+   "label": "div.filter-row.stocks-filter-row",
+   "top": 142,
+   "bottom": 286,
+   "height": 145,
+   "text": "搜尋"
+  },
+  {
+   "depth": 2,
+   "label": "div.search-controls",
+   "top": 142,
+   "bottom": 193,
+   "height": 52,
+   "text": "搜尋"
+  },
+  {
+   "depth": 2,
+   "label": "div.stocks-filter-tools",
+   "top": 205,
+   "bottom": 286,
+   "height": 81,
+   "text": "全部類型"
+  },
+  {
+   "depth": 0,
+   "label": "div.card-list.stock-cards",
+   "top": 298,
+   "bottom": 1026,
+   "height": 728,
+   "text": "9101 示範晶圓"
+  },
+  {
+   "depth": 0,
+   "label": "div.pagination-controls",
+   "top": 1042,
+   "bottom": 1077,
+   "height": 35,
+   "text": "第 1／1 頁 · 共 8 筆"
+  }
+ ],
+ "notes": [
+  {
+   "label": "summary",
+   "top": 109,
+   "bottom": 130,
+   "height": 21,
+   "chars": 2,
+   "lines": 1,
+   "text": "說明"
+  },
+  {
+   "label": "span.small-note.stocks-count",
+   "top": 258,
+   "bottom": 278,
+   "height": 20,
+   "chars": 3,
+   "lines": 1,
+   "text": "共 8 筆"
+  },
+  {
+   "label": "div.small-note",
+   "top": 903,
+   "bottom": 923,
+   "height": 20,
+   "chars": 8,
+   "lines": 1,
+   "text": "缺少 5 日法人籌碼"
+  }
+ ],
+ "groups": {
+  "card-list": {
+   "total": 8,
+   "fullyVisible": 6,
+   "first": {
+    "top": 298,
+    "bottom": 376,
+    "height": 78
+   },
+   "firstLines": [
+    "9101 示範晶圓",
+    "389.23",
+    "條件進場",
+    "上市 · 股票"
+   ]
+  }
+ },
+ "clipped": []
+}

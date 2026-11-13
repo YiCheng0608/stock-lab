@@ -1,0 +1,126 @@
+{
+ "openDetails": 0,
+ "innerHeight": 800,
+ "clientWidth": 1280,
+ "scrollWidth": 1280,
+ "maxRight": 1248,
+ "scrollHeight": 974,
+ "blocks": [
+  {
+   "depth": 0,
+   "label": "section.page-title.stocks-title",
+   "top": 96,
+   "bottom": 225,
+   "height": 129,
+   "text": "個股"
+  },
+  {
+   "depth": 1,
+   "label": "div.page-title-row",
+   "top": 108,
+   "bottom": 149,
+   "height": 41,
+   "text": "個股"
+  },
+  {
+   "depth": 2,
+   "label": "h1",
+   "top": 108,
+   "bottom": 149,
+   "height": 41,
+   "text": "個股"
+  },
+  {
+   "depth": 2,
+   "label": "details.details.page-help",
+   "top": 126,
+   "bottom": 147,
+   "height": 21,
+   "text": "說明"
+  },
+  {
+   "depth": 1,
+   "label": "div.filter-row.stocks-filter-row",
+   "top": 161,
+   "bottom": 213,
+   "height": 52,
+   "text": "搜尋"
+  },
+  {
+   "depth": 2,
+   "label": "div.search-controls",
+   "top": 161,
+   "bottom": 213,
+   "height": 52,
+   "text": "搜尋"
+  },
+  {
+   "depth": 2,
+   "label": "div.stocks-filter-tools",
+   "top": 163,
+   "bottom": 211,
+   "height": 48,
+   "text": "全部類型"
+  },
+  {
+   "depth": 0,
+   "label": "div.table-wrap.stock-table-wrap",
+   "top": 225,
+   "bottom": 731,
+   "height": 506,
+   "text": "代號\t名稱\t交易所\t類型\t最近收盤（元）\t目前研究動作"
+  },
+  {
+   "depth": 0,
+   "label": "div.pagination-controls",
+   "top": 747,
+   "bottom": 782,
+   "height": 35,
+   "text": "第 1／1 頁 · 共 8 筆"
+  }
+ ],
+ "notes": [
+  {
+   "label": "summary",
+   "top": 126,
+   "bottom": 147,
+   "height": 21,
+   "chars": 2,
+   "lines": 1,
+   "text": "說明"
+  },
+  {
+   "label": "span.small-note.stocks-count",
+   "top": 177,
+   "bottom": 197,
+   "height": 20,
+   "chars": 3,
+   "lines": 1,
+   "text": "共 8 筆"
+  },
+  {
+   "label": "div.small-note",
+   "top": 647,
+   "bottom": 667,
+   "height": 20,
+   "chars": 8,
+   "lines": 1,
+   "text": "缺少 5 日法人籌碼"
+  }
+ ],
+ "groups": {
+  "table-wrap": {
+   "total": 8,
+   "fullyVisible": 8,
+   "first": {
+    "top": 282,
+    "bottom": 338,
+    "height": 56
+   },
+   "firstLines": [
+    "9101\t示範晶圓\t上市\t股票\t389.23\t條件進場"
+   ]
+  }
+ },
+ "clipped": []
+}
