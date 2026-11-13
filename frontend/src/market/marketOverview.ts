@@ -119,17 +119,17 @@ export function indexMa60Cell(row: IndexRow | null, digits: number): IndexMa60Ce
   return { kind: 'text', text: reason ? `無資料：${reason}` : '無資料' }
 }
 
-// 「來源：…」 under the table at every width (the 來源 column is hidden at 640px and below, DESIGN_SYSTEM §5.1).
+// 「來源：…」 under the table at every width, once (#661: not again in 資料說明; the 來源 column is hidden at 640px
+// and below, DESIGN_SYSTEM §5.1).
 export const INDEX_SOURCE_NOTE = '來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所'
 export const INDEX_CHANGE_NOTE = '漲跌：加權、櫃買為交易所公布的收盤概況（同大盤概況）；台指期近月依前一筆收盤計算，換月日不計漲跌'
 export const INDEX_STALE_NOTE = '「非最新」：資料日不是台股資料日'
 export const INDEX_MA60_NOTE = '季線：各指數最近 60 個交易日收盤的平均（indicators/v1），以該列資料日的收盤判定，高於季線為「之上」、等於季線不算高於；不足 60 個交易日寫「資料不足」'
 
-// 資料說明 of the index table: sources and their notices (the index owners' copyright notices kept), how dates,
+// 資料說明 of the index table: the TAIFEX notice (the index owners' copyright notices kept), how dates,
 // changes and the MA60 position are read.
 export function indexTableNotes(overview: MarketOverview | undefined): string[] {
   return [
-    INDEX_SOURCE_NOTE,
     TAIFEX_ATTRIBUTION,
     INDEX_STALE_NOTE,
     INDEX_CHANGE_NOTE,

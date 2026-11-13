@@ -56,9 +56,10 @@ export function Navbar({ dataDate, dataDateLoading = false, dataDateError = fals
           </nav>
           <div className="navbar-tools">
             <NavSearch />
-            {!dataDateLoading && <DateBadge date={dataDate} unavailable={dataDateError && !dataDate} />}
           </div>
         </div>
+        {/* The page's one data date (#661): outside the menu, so a phone sees it without opening the menu. */}
+        {!dataDateLoading && <span className="navbar-date"><DateBadge date={dataDate} unavailable={dataDateError && !dataDate} always /></span>}
       </div>
     </header>
   )

@@ -37,8 +37,8 @@
 
 | 區塊 | 資料來源 | 必須顯示的來源與資料日期 | 「推論」位置 | 空資料文案 |
 | --- | --- | --- | --- | --- |
-| 產業／題材榜 | `themes-*.json` | `<產業\|題材>榜 · 共 <meta.total> 個族群` 的下一行 `資料 <B/>`；`meta.data_as_of` 與 `trading_date` 不同時再接 `官方資料 <data_as_of>` | — | `meta.empty_message` 或 `此榜目前沒有族群` |
-| 族群詳情 | `theme-detail.json`、`theme-members.json` | 標頭 `資料 <B/>`；`熱度走勢` 與 `五分項` 卡各有 `資料 <B/>`；`成員資料截至 <M/>`；成員最新日線早於 `M` 的列在收盤下寫 `資料 <該根日期/>` | — | `走勢資料不足（需至少 2 個交易日的分數）`、`此日期沒有有效成員`、`此族群尚無已核實關聯的新聞` |
+| 產業／題材榜 | `themes-*.json` | `<產業\|題材>榜 · 共 <meta.total> 個族群` 的下一行 `資料 <B/>`（與頁面日期 `D` 同一天時沒有，#661）；`meta.data_as_of` 與 `trading_date` 不同時再接 `官方資料 <data_as_of>` | — | `meta.empty_message` 或 `此榜目前沒有族群` |
+| 族群詳情 | `theme-detail.json`、`theme-members.json` | 標頭 `資料 <B/>`；`熱度走勢` 與 `五分項` 卡各有 `資料 <B/>`（與頁面日期 `D` 同一天時沒有，#661）；`成員資料截至 <M/>`（`M` 等於 `D` 時沒有）；成員最新日線早於 `M` 的列在收盤下寫 `資料 <該根日期/>` | — | `走勢資料不足（需至少 2 個交易日的分數）`、`此日期沒有有效成員`、`此族群尚無已核實關聯的新聞` |
 
 `B` = 該榜 `meta.trading_date`；`M` = `theme-members.json` 的 `meta.data_as_of`。
 
@@ -47,10 +47,10 @@
 | 編號 | 類型 | 檢查 | 怎麼判 |
 | --- | --- | --- | --- |
 | G1 | CI | 頁面可用 | 每張截圖 `ready` true、`httpErrors` 與 `consoleErrors` 空、`overflow` false |
-| G2 | CI | 榜單資料日期標記 | `themes-1280.txt` 整行 `產業榜 · 共 <total> 個族群` 的下一行是 `資料 <B/>`；`themes-theme-1280.txt` 的 `題材榜 · 共 <total> 個族群` 同樣；`B` 等於 `facts.json` 的 `group_scores_latest_trading_date` |
+| G2 | CI | 榜單資料日期標記 | `themes-1280.txt` 整行 `產業榜 · 共 <total> 個族群` 的下一行是 `資料 <B/>`；`themes-theme-1280.txt` 的 `題材榜 · 共 <total> 個族群` 同樣；`B` 等於 `D` 時下一行不能是 `資料 ` badge（#661）；`B` 等於 `facts.json` 的 `group_scores_latest_trading_date` |
 | G3 | CI | 榜單內容 | 在 G2 之後（G2 沒通過時 G3 的失敗記「無法判定（上游 G2）」）。`items` 空時同 today T5 的[空狀態交叉核對](README.md#空狀態交叉核對)：DB 或 dashboard 有該日名次就失敗，都沒有才查空資料文案。兩行清單（#522）：1280 沒有以 `排名\t族群` 開頭的表頭；1280 與 390 各自對 `items[0]` 與 `items[-1]` 查：`#<rank>` 為整行、下一行為 `display_name`；其後第一個 `分數 ` 開頭的行再隔一行（「五分項」按鈕）起，依序是 `相對報酬`、`廣度`、`量能`、`法人`、`催化劑` 與各自的值（`components` × 100 取整數，進位同 JS `toFixed`；null 為 `—`），再接 `成員（檔）` 與 `<eligible_members>／<member_count>` |
 | G4 | CI | 沒有新聞題材建議區 | `themes-1280.txt` 沒有整行 `新聞題材建議`、`新聞聚合 · AI 推論`、`目前沒有新聞題材建議`（族群頁已移除這一區，#627） |
-| G5 | CI | 詳情日期（用 `T`，上游 today T5） | `theme-detail-1280.txt` 整行 `熱度走勢` 與 `五分項` 的下一行都是 `資料 <B/>`；有 `成員資料截至 <M/>` 這行 |
+| G5 | CI | 詳情日期（用 `T`，上游 today T5） | `theme-detail-1280.txt` 整行 `熱度走勢` 與 `五分項` 的下一行都是 `資料 <B/>`（`B` 等於 `D` 時下一行不能是 `資料 ` badge，#661）；`M` 不等於 `D` 時有 `成員資料截至 <M/>` 這行，等於時沒有以 `成員資料截至` 開頭的行 |
 | G6 | CI | 詳情成員（用 `T`，上游 today T5） | 表頭以 `代號\t名稱\t市場\t收盤（元）\t漲跌幅（%）\t成交金額（億元）\t5 日相對（%）\t20 日相對（%）` 開頭的行存在（題材榜後接 `\t證據`）；`theme-members.json` 第一個成員的 `symbol` 與 `name` 出現在同一行；`第 1／<total_pages> 頁 · 共 <meta.total> 檔` 存在（`total_pages` 以每頁 30 檔計；只有 1 頁時 `MemberPager` 只顯示 `共 <meta.total> 檔`） |
 | G7 | CI | 今日到族群一致（用 `T`，上游 today T5） | 今日頁 `#1` 的族群名稱 = 本頁產業榜 `items[0].display_name` = `theme-detail.json` 的 `theme.display_name`，且這個名稱在 `theme-detail-1280.txt` 的 `← 回到…榜` 之後、`排名` 之前為整行出現 |
 | G8 | CI | 成員依成交金額排序（用 `T`，上游 today T5） | 頁面預設排序：`theme-members.json`（`sort=turnover`）的 `items` 依 `turnover` 由大到小、null 在最後、同值依代號；`theme-detail-1280.txt` 以 `<symbol>\t` 開頭的成員列，代號順序等於 `items` 的 `symbol` 順序 |

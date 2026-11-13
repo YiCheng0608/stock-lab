@@ -239,6 +239,7 @@ export function StockBarsChart({
   levels = null,
   split = false,
   bars: sharedBars,
+  pageSource = null,
 }: {
   interval: StockBarsInterval
   onIntervalChange: (interval: StockBarsInterval) => void
@@ -259,6 +260,8 @@ export function StockBarsChart({
   split?: boolean
   // The page's shared window (useBarsView); without it the card keeps its own.
   bars?: BarsViewState
+  // The source the page already states (the stock header, #661): the same label is not repeated under the chart.
+  pageSource?: string | null
 }) {
   const narrow = useNarrow()
   const [panel, setPanel] = useState<IndicatorPanelId>('macd')
@@ -367,7 +370,7 @@ export function StockBarsChart({
             {!split && panelState?.kind === 'chart' && panelState.note && <p className="chart-note">{panelState.note}</p>}
             {notes.length > 0 && <ul className="chart-note-list">{notes.map((note) => <li key={note}>{note}</li>)}</ul>}
             <div className="chart-meta">
-              <span>來源 {sourcesLabel(data.sources)}</span>
+              {sourcesLabel(data.sources) !== pageSource && <span>來源 {sourcesLabel(data.sources)}</span>}
               <span>{priceBasisLabel(data.indicators.price_basis)}</span>
               {!split && <span>{indicatorSourceLabel(data)}</span>}
               <span>最近 {data.count} 根{unit}；缺日不補、停牌不畫 K 線</span>

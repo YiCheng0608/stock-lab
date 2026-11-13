@@ -14,6 +14,7 @@ import {
   riskRewardBasisSuffix,
 } from '../candidates/candidates'
 import { Term } from '../components/Term'
+import { UnlessPageDate } from '../components/pageDate'
 import { Badge, DataTable, DateBadge, EmptyState, type Column } from '../components/ui'
 import { productActionReasonLabel } from '../presentation'
 import type { CandidateItem, GapReason, StrategyActionableLevels, StrategyBoard as Board, StrategyBoardRow } from '../types'
@@ -194,7 +195,7 @@ export function StrategyBoardPanel({ board, candidate, gapReasons }: { board: Bo
       <div className="board-meta">
         {board.liquidity && (
           <p className="small-note strategy-liquidity" data-liquidity={board.liquidity.state ?? undefined}>
-            {averageVolumeText(board.liquidity.average_volume_lots_20d)} · 資料日期 {formatDate(board.liquidity.data_as_of)}
+            {averageVolumeText(board.liquidity.average_volume_lots_20d)}<UnlessPageDate date={board.liquidity.data_as_of}> · 資料日期 {formatDate(board.liquidity.data_as_of)}</UnlessPageDate>
             {board.liquidity.minimum_lots != null && `（候選門檻 ${formatLots(board.liquidity.minimum_lots)}）`}
           </p>
         )}

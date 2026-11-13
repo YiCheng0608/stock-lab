@@ -76,3 +76,9 @@ export function StockQuoteLine({ bars, instrumentType, latestChange, halt }: { b
     </div>
   )
 }
+
+/** The source label the header shows for these bars, or null when it shows none (#661: the chart leaves it out). */
+export function headerSourceLabel(bars: readonly StockBarRow[] | undefined, instrumentType?: string | null, latestChange?: CandidateMarket | null): string | null {
+  const quote = stockQuote(bars ?? [], instrumentType, latestChange)
+  return quote.date ? sourcesLabel(quote.sources) : null
+}
