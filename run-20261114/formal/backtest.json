@@ -1,0 +1,49 @@
+{
+  "db": "/db/stock.db",
+  "start": "2024-09-30",
+  "end": "2026-11-13",
+  "registry": [
+    "breakout_v3",
+    "pullback_v4"
+  ],
+  "slim": true,
+  "run_id": 3063,
+  "status": "success",
+  "request_key": "technical-backtest:v2:2024-09-30:2026-11-13:research:breakout_v3,pullback_v4",
+  "score_sessions": 514,
+  "idempotent_reuse": false,
+  "error": null,
+  "init_db_seconds": 91.7,
+  "backtest_seconds": 16414.3,
+  "peak_working_set_gb": 0.4,
+  "largest_wal_gb": 0.047,
+  "free_memory_gb_at_start": 0.27,
+  "strategies": {
+    "breakout_v3": {
+      "signals": 1130047,
+      "settlements": 18486,
+      "active": 45,
+      "conditional": 57,
+      "data_incomplete": 435678,
+      "expired": 1036,
+      "incomparable": 125,
+      "invalid_levels": 17,
+      "invalidated": 4261,
+      "observation": 685109,
+      "target_1_hit": 3719
+    },
+    "pullback_v4": {
+      "signals": 1130047,
+      "settlements": 8932,
+      "active": 122,
+      "conditional": 26,
+      "data_incomplete": 490853,
+      "expired": 375,
+      "incomparable": 14,
+      "invalid_levels": 4999,
+      "invalidated": 2736,
+      "observation": 629729,
+      "target_1_hit": 1193
+    }
+  }
+}

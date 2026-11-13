@@ -1,0 +1,1443 @@
+{
+  "version": 1,
+  "command": "python tools/research/exit_research.py --db /db/stock.db --run-id 3063 --out /out/formal/report --min-free-gb 0",
+  "run": {
+    "id": 3063,
+    "status": "success",
+    "request_key": "technical-backtest:v2:2024-09-30:2026-11-13:research:breakout_v3,pullback_v4",
+    "started_at": "2026-11-13 15:46:11.503183",
+    "finished_at": "2026-11-13 20:18:13.486256"
+  },
+  "cutoff": "2026-11-13",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0031_drop_theme_suggestions",
+    "mtime": "2026-11-13T20:18:20.878456+00:00"
+  },
+  "signals": 13709,
+  "reproduction": {
+    "checked": 13709,
+    "mismatches": 0
+  },
+  "rules": [
+    {
+      "key": "E0",
+      "kind": "target",
+      "label": "固定目標一（現行）",
+      "target": "target_1",
+      "k": null,
+      "hold": null
+    },
+    {
+      "key": "E1",
+      "kind": "target",
+      "label": "固定目標二（3R）",
+      "target": "target_2",
+      "k": null,
+      "hold": null
+    },
+    {
+      "key": "T1",
+      "kind": "trail",
+      "label": "移動停利 1.0R",
+      "target": null,
+      "k": 1.0,
+      "hold": null
+    },
+    {
+      "key": "T2",
+      "kind": "trail",
+      "label": "移動停利 1.5R",
+      "target": null,
+      "k": 1.5,
+      "hold": null
+    },
+    {
+      "key": "T3",
+      "kind": "trail",
+      "label": "移動停利 2.0R",
+      "target": null,
+      "k": 2.0,
+      "hold": null
+    },
+    {
+      "key": "H5",
+      "kind": "hold",
+      "label": "時間出場 5 根",
+      "target": null,
+      "k": null,
+      "hold": 5
+    },
+    {
+      "key": "H10",
+      "kind": "hold",
+      "label": "時間出場 10 根",
+      "target": null,
+      "k": null,
+      "hold": 10
+    },
+    {
+      "key": "H20",
+      "kind": "hold",
+      "label": "時間出場 20 根",
+      "target": null,
+      "k": null,
+      "hold": 20
+    }
+  ],
+  "rule": {
+    "min_days": 60,
+    "min_t": 2.0,
+    "overlap": 20,
+    "cost_bps": 58.5
+  },
+  "comparisons": 14,
+  "entries": {
+    "breakout_v3:filled": 8149,
+    "breakout_v3:gap_above_target": 530,
+    "breakout_v3:gap_below_invalid": 206,
+    "breakout_v3:not_triggered": 358,
+    "pullback_v4:filled": 4065,
+    "pullback_v4:gap_above_target": 20,
+    "pullback_v4:gap_below_invalid": 129,
+    "pullback_v4:not_triggered": 252
+  },
+  "strategies": {
+    "breakout_v3": {
+      "signals": 9243,
+      "filled": 8149,
+      "rules": {
+        "E0": {
+          "exploration": {
+            "n": 4794,
+            "mean": -0.010111558123316476,
+            "median": -0.01779232712407878,
+            "win": 0.4399249061326658,
+            "holding": 3.1015853149770547,
+            "max_drawdown": 48.71763068907067,
+            "days": 279,
+            "daily_mean": -0.011925993143714536,
+            "t": -2.452548817638769
+          },
+          "validation": {
+            "n": 3321,
+            "mean": -0.011534999282062695,
+            "median": -0.022115983531634333,
+            "win": 0.4170430593194821,
+            "holding": 2.457693465823547,
+            "max_drawdown": 38.3109845492605,
+            "days": 207,
+            "daily_mean": -0.012010924722223136,
+            "t": -1.8874502130359065
+          },
+          "all": {
+            "n": 8115,
+            "mean": -0.010694090235232212,
+            "median": -0.019055937224313847,
+            "win": 0.43056069008009856,
+            "holding": 2.8380776340110905,
+            "max_drawdown": 86.90336254439795,
+            "days": 486,
+            "daily_mean": -0.011962167704931163,
+            "t": -3.07768234414461
+          },
+          "reasons": {
+            "exploration": {
+              "stop": 2552,
+              "target": 2226,
+              "suspended": 5,
+              "window_end": 16
+            },
+            "validation": {
+              "target": 1491,
+              "stop": 1826,
+              "suspended": 6,
+              "window_end": 4,
+              "not_matured": 23
+            },
+            "all": {
+              "stop": 4378,
+              "target": 3717,
+              "suspended": 11,
+              "window_end": 20,
+              "not_matured": 23
+            }
+          },
+          "both_touched": 124,
+          "gapped": 987,
+          "limit_delayed": 3
+        },
+        "E1": {
+          "exploration": {
+            "n": 4789,
+            "mean": -0.009008207596146098,
+            "median": -0.025046230664267012,
+            "win": 0.3238671956567133,
+            "holding": 4.8983086239298395,
+            "max_drawdown": 44.86700109573071,
+            "days": 279,
+            "daily_mean": -0.011360749326649384,
+            "t": -1.8335653751701215
+          },
+          "validation": {
+            "n": 3309,
+            "mean": -0.00967300277405467,
+            "median": -0.03167902723395575,
+            "win": 0.31429434874584466,
+            "holding": 3.841946207313388,
+            "max_drawdown": 33.30432912584413,
+            "days": 207,
+            "daily_mean": -0.010930484796462081,
+            "t": -1.1795706097733554
+          },
+          "all": {
+            "n": 8098,
+            "mean": -0.009279855810976853,
+            "median": -0.02749405096554195,
+            "win": 0.31995554457890835,
+            "holding": 4.466658434181279,
+            "max_drawdown": 75.22972055667965,
+            "days": 486,
+            "daily_mean": -0.011177488508236274,
+            "t": -2.1060116623306784
+          },
+          "reasons": {
+            "exploration": {
+              "stop": 3183,
+              "target": 1492,
+              "window_end": 114,
+              "suspended": 10
+            },
+            "validation": {
+              "target": 1012,
+              "stop": 2244,
+              "window_end": 53,
+              "suspended": 11,
+              "not_matured": 30
+            },
+            "all": {
+              "stop": 5427,
+              "target": 2504,
+              "window_end": 167,
+              "suspended": 21,
+              "not_matured": 30
+            }
+          },
+          "both_touched": 22,
+          "gapped": 1187,
+          "limit_delayed": 11
+        },
+        "T1": {
+          "exploration": {
+            "n": 4795,
+            "mean": -0.008028304244083097,
+            "median": -0.018223501347297867,
+            "win": 0.28446298227320127,
+            "holding": 4.090302398331596,
+            "max_drawdown": 41.13415098568948,
+            "days": 279,
+            "daily_mean": -0.009738348711973835,
+            "t": -1.6333294420138018
+          },
+          "validation": {
+            "n": 3312,
+            "mean": -0.007121259165272429,
+            "median": -0.024592053836804163,
+            "win": 0.2768719806763285,
+            "holding": 3.3668478260869565,
+            "max_drawdown": 27.515332534626577,
+            "days": 207,
+            "daily_mean": -0.010173201386588334,
+            "t": -1.024804014119538
+          },
+          "all": {
+            "n": 8107,
+            "mean": -0.007657743827033519,
+            "median": -0.02025093334212478,
+            "win": 0.28136178611076845,
+            "holding": 3.794745281855187,
+            "max_drawdown": 62.08132920576113,
+            "days": 486,
+            "daily_mean": -0.009923563740050382,
+            "t": -1.826239182597126
+          },
+          "reasons": {
+            "exploration": {
+              "stop": 1655,
+              "trail": 3109,
+              "window_end": 31,
+              "suspended": 4
+            },
+            "validation": {
+              "trail": 2034,
+              "stop": 1272,
+              "suspended": 10,
+              "window_end": 6,
+              "not_matured": 28
+            },
+            "all": {
+              "stop": 2927,
+              "trail": 5143,
+              "window_end": 37,
+              "suspended": 14,
+              "not_matured": 28
+            }
+          },
+          "both_touched": 0,
+          "gapped": 1079,
+          "limit_delayed": 8
+        },
+        "T2": {
+          "exploration": {
+            "n": 4787,
+            "mean": -0.00793528137604828,
+            "median": -0.021278599121061427,
+            "win": 0.26843534572801336,
+            "holding": 5.381031961562566,
+            "max_drawdown": 41.111002455760605,
+            "days": 279,
+            "daily_mean": -0.010422854439151424,
+            "t": -1.579055192362914
+          },
+          "validation": {
+            "n": 3309,
+            "mean": -0.005541255458087994,
+            "median": -0.028161510911211086,
+            "win": 0.2704744635841644,
+            "holding": 4.266545784224841,
+            "max_drawdown": 25.17971832908588,
+            "days": 207,
+            "daily_mean": -0.004142623189070558,
+            "t": -0.20796360495988725
+          },
+          "all": {
+            "n": 8096,
+            "mean": -0.00695679425122978,
+            "median": -0.02383023484464134,
+            "win": 0.2692687747035573,
+            "holding": 4.925518774703558,
+            "max_drawdown": 56.322206257956395,
+            "days": 486,
+            "daily_mean": -0.007747941128931796,
+            "t": -0.8329687423201467
+          },
+          "reasons": {
+            "exploration": {
+              "stop": 2202,
+              "trail": 2479,
+              "window_end": 106,
+              "suspended": 12
+            },
+            "validation": {
+              "trail": 1661,
+              "stop": 1626,
+              "suspended": 11,
+              "window_end": 22,
+              "not_matured": 30
+            },
+            "all": {
+              "stop": 3828,
+              "trail": 4140,
+              "window_end": 128,
+              "suspended": 23,
+              "not_matured": 30
+            }
+          },
+          "both_touched": 0,
+          "gapped": 1106,
+          "limit_delayed": 11
+        },
+        "T3": {
+          "exploration": {
+            "n": 4784,
+            "mean": -0.007253147740850681,
+            "median": -0.023913631468245412,
+            "win": 0.2516722408026756,
+            "holding": 6.2878344481605355,
+            "max_drawdown": 39.08802857618373,
+            "days": 279,
+            "daily_mean": -0.010358663098004872,
+            "t": -1.3552772111100673
+          },
+          "validation": {
+            "n": 3303,
+            "mean": -0.005581958108450994,
+            "median": -0.030825512243878063,
+            "win": 0.2540115046927036,
+            "holding": 4.937632455343627,
+            "max_drawdown": 29.58070545130453,
+            "days": 207,
+            "daily_mean": -0.005151475717223573,
+            "t": -0.25947517374319623
+          },
+          "all": {
+            "n": 8087,
+            "mean": -0.006570578264429737,
+            "median": -0.026508730267893445,
+            "win": 0.2526276740447632,
+            "holding": 5.736367008779522,
+            "max_drawdown": 54.89266922055746,
+            "days": 486,
+            "daily_mean": -0.0081407869913758,
+            "t": -0.854310208387933
+          },
+          "reasons": {
+            "exploration": {
+              "stop": 2611,
+              "trail": 1907,
+              "window_end": 266,
+              "suspended": 15
+            },
+            "validation": {
+              "trail": 1341,
+              "stop": 1899,
+              "suspended": 14,
+              "window_end": 63,
+              "not_matured": 33
+            },
+            "all": {
+              "stop": 4510,
+              "trail": 3248,
+              "window_end": 329,
+              "suspended": 29,
+              "not_matured": 33
+            }
+          },
+          "both_touched": 0,
+          "gapped": 1076,
+          "limit_delayed": 19
+        },
+        "H5": {
+          "exploration": {
+            "n": 4792,
+            "mean": -0.00900341617269298,
+            "median": -0.02016950691320988,
+            "win": 0.31469115191986646,
+            "holding": 3.6345993322203674,
+            "max_drawdown": 45.2874445070095,
+            "days": 279,
+            "daily_mean": -0.01126156247481009,
+            "t": -1.8126061341326272
+          },
+          "validation": {
+            "n": 3314,
+            "mean": -0.009916171372027854,
+            "median": -0.029253897974361766,
+            "win": 0.29179239589619793,
+            "holding": 3.344296922148461,
+            "max_drawdown": 32.8689036296459,
+            "days": 207,
+            "daily_mean": -0.011406262207144116,
+            "t": -1.100396387560365
+          },
+          "all": {
+            "n": 8106,
+            "mean": -0.009376580585547134,
+            "median": -0.023418114215349485,
+            "win": 0.30532938564026646,
+            "holding": 3.5159141376757956,
+            "max_drawdown": 76.01327392919059,
+            "days": 486,
+            "daily_mean": -0.011323193842285693,
+            "t": -1.9973206534509405
+          },
+          "reasons": {
+            "exploration": {
+              "stop": 2509,
+              "time": 2283,
+              "suspended": 7
+            },
+            "validation": {
+              "time": 1353,
+              "stop": 1961,
+              "suspended": 7,
+              "not_matured": 29
+            },
+            "all": {
+              "stop": 4470,
+              "time": 3636,
+              "suspended": 14,
+              "not_matured": 29
+            }
+          },
+          "both_touched": 0,
+          "gapped": 474,
+          "limit_delayed": 13
+        },
+        "H10": {
+          "exploration": {
+            "n": 4784,
+            "mean": -0.0074349381698273825,
+            "median": -0.02495480356227956,
+            "win": 0.2782190635451505,
+            "holding": 5.745819397993311,
+            "max_drawdown": 40.69924566903561,
+            "days": 279,
+            "daily_mean": -0.010789402960267428,
+            "t": -1.328592098194912
+          },
+          "validation": {
+            "n": 3302,
+            "mean": -0.008574644879563977,
+            "median": -0.03478988687029375,
+            "win": 0.2371290127195639,
+            "holding": 5.091459721380981,
+            "max_drawdown": 33.12316884087103,
+            "days": 207,
+            "daily_mean": -0.009340118328965962,
+            "t": -0.6494052386529008
+          },
+          "all": {
+            "n": 8086,
+            "mean": -0.00790034894840149,
+            "median": -0.02865972639501544,
+            "win": 0.26143952510512,
+            "holding": 5.478604996289884,
+            "max_drawdown": 63.88222159677457,
+            "days": 486,
+            "daily_mean": -0.010172115061750137,
+            "t": -1.3226743800313072
+          },
+          "reasons": {
+            "exploration": {
+              "stop": 3082,
+              "time": 1702,
+              "suspended": 15
+            },
+            "validation": {
+              "time": 947,
+              "stop": 2355,
+              "suspended": 12,
+              "not_matured": 36
+            },
+            "all": {
+              "stop": 5437,
+              "time": 2649,
+              "suspended": 27,
+              "not_matured": 36
+            }
+          },
+          "both_touched": 0,
+          "gapped": 687,
+          "limit_delayed": 21
+        },
+        "H20": {
+          "exploration": {
+            "n": 4778,
+            "mean": -0.0045645251406479645,
+            "median": -0.02889664509125698,
+            "win": 0.2329426538300544,
+            "holding": 8.774173294265383,
+            "max_drawdown": 47.22966648538219,
+            "days": 279,
+            "daily_mean": -0.010264119633261962,
+            "t": -1.0024698383126924
+          },
+          "validation": {
+            "n": 3290,
+            "mean": -0.002003696914705402,
+            "median": -0.0382527000527668,
+            "win": 0.18054711246200608,
+            "holding": 7.449848024316109,
+            "max_drawdown": 40.330839127633254,
+            "days": 207,
+            "daily_mean": -0.0032888134357722193,
+            "t": -0.14624486444957374
+          },
+          "all": {
+            "n": 8068,
+            "mean": -0.0035202607797963246,
+            "median": -0.032197247163079624,
+            "win": 0.2115765989092712,
+            "holding": 8.234134853743184,
+            "max_drawdown": 47.22966648538219,
+            "days": 486,
+            "daily_mean": -0.0072931558824792945,
+            "t": -0.6484983420338852
+          },
+          "reasons": {
+            "exploration": {
+              "stop": 3546,
+              "time": 1232,
+              "suspended": 21
+            },
+            "validation": {
+              "time": 655,
+              "stop": 2635,
+              "suspended": 15,
+              "not_matured": 45
+            },
+            "all": {
+              "stop": 6181,
+              "time": 1887,
+              "suspended": 36,
+              "not_matured": 45
+            }
+          },
+          "both_touched": 0,
+          "gapped": 840,
+          "limit_delayed": 30
+        }
+      },
+      "paired": {
+        "E1": {
+          "exploration": {
+            "n": 4789,
+            "days": 279,
+            "mean": 0.000637065201513094,
+            "t": 0.14851203216509287
+          },
+          "validation": {
+            "n": 3309,
+            "days": 207,
+            "mean": 0.0017847763443936539,
+            "t": 0.3268417205310654
+          },
+          "all": {
+            "n": 8098,
+            "days": 486,
+            "mean": 0.001125905132739999,
+            "t": 0.33254942709948815
+          },
+          "verdict": "no_difference"
+        },
+        "T1": {
+          "exploration": {
+            "n": 4793,
+            "days": 279,
+            "mean": 0.0022055867868117254,
+            "t": 0.5890499171902076
+          },
+          "validation": {
+            "n": 3310,
+            "days": 207,
+            "mean": 0.0024454826134384074,
+            "t": 0.34139249986297365
+          },
+          "all": {
+            "n": 8103,
+            "days": 486,
+            "mean": 0.00230776463889346,
+            "t": 0.6190629684200629
+          },
+          "verdict": "no_difference"
+        },
+        "T2": {
+          "exploration": {
+            "n": 4787,
+            "days": 279,
+            "mean": 0.00159427260397996,
+            "t": 0.3511123265639197
+          },
+          "validation": {
+            "n": 3309,
+            "days": 207,
+            "mean": 0.008518626263348495,
+            "t": 0.5142507590225387
+          },
+          "all": {
+            "n": 8096,
+            "days": 486,
+            "mean": 0.004543534347785077,
+            "t": 0.6022832059082663
+          },
+          "verdict": "no_difference"
+        },
+        "T3": {
+          "exploration": {
+            "n": 4784,
+            "days": 279,
+            "mean": 0.0016827168176392455,
+            "t": 0.2825822026624108
+          },
+          "validation": {
+            "n": 3303,
+            "days": 207,
+            "mean": 0.007836547400842593,
+            "t": 0.4704440356771233
+          },
+          "all": {
+            "n": 8087,
+            "days": 486,
+            "mean": 0.004303792806781412,
+            "t": 0.5454887977857058
+          },
+          "verdict": "no_difference"
+        },
+        "H5": {
+          "exploration": {
+            "n": 4790,
+            "days": 279,
+            "mean": 0.0007257443060417509,
+            "t": 0.17372481973758952
+          },
+          "validation": {
+            "n": 3311,
+            "days": 207,
+            "mean": 0.0012380179859965994,
+            "t": 0.1672880872578391
+          },
+          "all": {
+            "n": 8101,
+            "days": 486,
+            "mean": 0.0009439349475040013,
+            "t": 0.23858304525558385
+          },
+          "verdict": "no_difference"
+        },
+        "H10": {
+          "exploration": {
+            "n": 4782,
+            "days": 279,
+            "mean": 0.0013171208268909702,
+            "t": 0.2136404367225874
+          },
+          "validation": {
+            "n": 3301,
+            "days": 207,
+            "mean": 0.0036133697423603294,
+            "t": 0.30588201710513546
+          },
+          "all": {
+            "n": 8083,
+            "days": 486,
+            "mean": 0.00229515277236866,
+            "t": 0.3732805004266091
+          },
+          "verdict": "no_difference"
+        },
+        "H20": {
+          "exploration": {
+            "n": 4778,
+            "days": 279,
+            "mean": 0.001906337297458269,
+            "t": 0.21939230249994382
+          },
+          "validation": {
+            "n": 3290,
+            "days": 207,
+            "mean": 0.009889777423253816,
+            "t": 0.5078963817682998
+          },
+          "all": {
+            "n": 8068,
+            "days": 486,
+            "mean": 0.005306691425111929,
+            "t": 0.5471094961919104
+          },
+          "verdict": "no_difference"
+        }
+      },
+      "conventions": {
+        "exploration": {
+          "n": 4724,
+          "days": 278,
+          "mean": -0.00015259771802567953,
+          "t": -0.13282766080039826,
+          "research_only": 70,
+          "product_only": 4,
+          "both_touched": 70,
+          "gapped_stop": 280,
+          "gapped_target": 293,
+          "limit_blocked_entries": 27,
+          "limit_delayed_exits": 2
+        },
+        "validation": {
+          "n": 3049,
+          "days": 188,
+          "mean": 0.0005863832161226627,
+          "t": 0.2978183488595656,
+          "research_only": 272,
+          "product_only": 9,
+          "both_touched": 54,
+          "gapped_stop": 199,
+          "gapped_target": 215,
+          "limit_blocked_entries": 76,
+          "limit_delayed_exits": 1
+        },
+        "all": {
+          "n": 7773,
+          "days": 466,
+          "mean": 0.00014553192922729975,
+          "t": 0.13852997954647248,
+          "research_only": 342,
+          "product_only": 13,
+          "both_touched": 124,
+          "gapped_stop": 479,
+          "gapped_target": 508,
+          "limit_blocked_entries": 103,
+          "limit_delayed_exits": 3
+        }
+      }
+    },
+    "pullback_v4": {
+      "signals": 4466,
+      "filled": 4065,
+      "rules": {
+        "E0": {
+          "exploration": {
+            "n": 2168,
+            "mean": -0.011625829325157641,
+            "median": -0.01805175034169996,
+            "win": 0.2915129151291513,
+            "holding": 4.211715867158672,
+            "max_drawdown": 25.23489512675471,
+            "days": 221,
+            "daily_mean": -0.008359259596210816,
+            "t": -1.1539457175989714
+          },
+          "validation": {
+            "n": 1843,
+            "mean": -0.009444352684541293,
+            "median": -0.01885885621303305,
+            "win": 0.31958762886597936,
+            "holding": 4.466087900162778,
+            "max_drawdown": 17.882982696799033,
+            "days": 173,
+            "daily_mean": -0.012637624575925337,
+            "t": -1.2039243497329188
+          },
+          "all": {
+            "n": 4011,
+            "mean": -0.010623470449900614,
+            "median": -0.018415155722329525,
+            "win": 0.3044128646222887,
+            "holding": 4.328596360009972,
+            "max_drawdown": 43.08778067374089,
+            "days": 394,
+            "daily_mean": -0.010237831021313893,
+            "t": -1.6633875159979727
+          },
+          "reasons": {
+            "exploration": {
+              "target": 617,
+              "stop": 1516,
+              "suspended": 18,
+              "window_end": 35
+            },
+            "validation": {
+              "stop": 1219,
+              "target": 571,
+              "window_end": 53,
+              "suspended": 7,
+              "not_matured": 29
+            },
+            "all": {
+              "target": 1188,
+              "stop": 2735,
+              "suspended": 25,
+              "window_end": 88,
+              "not_matured": 29
+            }
+          },
+          "both_touched": 13,
+          "gapped": 551,
+          "limit_delayed": 22
+        },
+        "E1": {
+          "exploration": {
+            "n": 2168,
+            "mean": -0.012090148510901807,
+            "median": -0.0204407812560922,
+            "win": 0.2029520295202952,
+            "holding": 5.656826568265683,
+            "max_drawdown": 26.883248636888798,
+            "days": 221,
+            "daily_mean": -0.0063253065656619775,
+            "t": -0.6391365895750056
+          },
+          "validation": {
+            "n": 1830,
+            "mean": -0.008581256404500196,
+            "median": -0.021614122510619928,
+            "win": 0.226775956284153,
+            "holding": 5.978142076502732,
+            "max_drawdown": 16.54648177224535,
+            "days": 172,
+            "daily_mean": -0.010141440699703854,
+            "t": -0.720596267783894
+          },
+          "all": {
+            "n": 3998,
+            "mean": -0.01048402731162343,
+            "median": -0.02100359268948463,
+            "win": 0.21385692846423213,
+            "holding": 5.8039019509754874,
+            "max_drawdown": 42.45288792779696,
+            "days": 393,
+            "daily_mean": -0.007995472140866057,
+            "t": -0.963180242496794
+          },
+          "reasons": {
+            "exploration": {
+              "stop": 1687,
+              "target": 366,
+              "suspended": 18,
+              "window_end": 115
+            },
+            "validation": {
+              "stop": 1356,
+              "target": 343,
+              "window_end": 131,
+              "suspended": 9,
+              "not_matured": 40
+            },
+            "all": {
+              "stop": 3043,
+              "target": 709,
+              "suspended": 27,
+              "window_end": 246,
+              "not_matured": 40
+            }
+          },
+          "both_touched": 1,
+          "gapped": 565,
+          "limit_delayed": 27
+        },
+        "T1": {
+          "exploration": {
+            "n": 2171,
+            "mean": -0.010310709241915622,
+            "median": -0.016197348701564397,
+            "win": 0.2081989866421004,
+            "holding": 4.515430677107323,
+            "max_drawdown": 23.651646340370977,
+            "days": 222,
+            "daily_mean": -0.007001359403076653,
+            "t": -0.7638192186538888
+          },
+          "validation": {
+            "n": 1831,
+            "mean": -0.007322916240525773,
+            "median": -0.01695134712347677,
+            "win": 0.2255598033861278,
+            "holding": 4.4653194975423265,
+            "max_drawdown": 14.480368130677576,
+            "days": 172,
+            "daily_mean": -0.010421644867404233,
+            "t": -0.8637817787876898
+          },
+          "all": {
+            "n": 4002,
+            "mean": -0.008943730484907923,
+            "median": -0.016566465192671055,
+            "win": 0.21614192903548227,
+            "holding": 4.492503748125937,
+            "max_drawdown": 35.792809400601506,
+            "days": 394,
+            "daily_mean": -0.008494478945879555,
+            "t": -1.151496349159387
+          },
+          "reasons": {
+            "exploration": {
+              "trail": 1219,
+              "stop": 924,
+              "suspended": 15,
+              "window_end": 28
+            },
+            "validation": {
+              "stop": 739,
+              "trail": 1073,
+              "window_end": 19,
+              "suspended": 8,
+              "not_matured": 40
+            },
+            "all": {
+              "trail": 2292,
+              "stop": 1663,
+              "suspended": 23,
+              "window_end": 47,
+              "not_matured": 40
+            }
+          },
+          "both_touched": 0,
+          "gapped": 506,
+          "limit_delayed": 23
+        },
+        "T2": {
+          "exploration": {
+            "n": 2167,
+            "mean": -0.010517054540162557,
+            "median": -0.01811891531009533,
+            "win": 0.19012459621596678,
+            "holding": 5.644208583294878,
+            "max_drawdown": 25.548132566857834,
+            "days": 221,
+            "daily_mean": -0.006083156195200764,
+            "t": -0.5748172504854154
+          },
+          "validation": {
+            "n": 1823,
+            "mean": -0.005877269792442833,
+            "median": -0.019641579819846135,
+            "win": 0.21996708721886998,
+            "holding": 5.853538123971475,
+            "max_drawdown": 11.321543146721854,
+            "days": 172,
+            "daily_mean": -0.009539515772958519,
+            "t": -0.7188245760158953
+          },
+          "all": {
+            "n": 3990,
+            "mean": -0.008397172937382342,
+            "median": -0.01873853927040462,
+            "win": 0.2037593984962406,
+            "holding": 5.739849624060151,
+            "max_drawdown": 33.50472002015551,
+            "days": 393,
+            "daily_mean": -0.007595863185975151,
+            "t": -0.9136415553774792
+          },
+          "reasons": {
+            "exploration": {
+              "trail": 765,
+              "stop": 1312,
+              "window_end": 90,
+              "suspended": 19
+            },
+            "validation": {
+              "stop": 1025,
+              "trail": 709,
+              "window_end": 89,
+              "suspended": 11,
+              "not_matured": 45
+            },
+            "all": {
+              "trail": 1474,
+              "stop": 2337,
+              "window_end": 179,
+              "suspended": 30,
+              "not_matured": 45
+            }
+          },
+          "both_touched": 0,
+          "gapped": 542,
+          "limit_delayed": 25
+        },
+        "T3": {
+          "exploration": {
+            "n": 2167,
+            "mean": -0.011167531170469015,
+            "median": -0.019553552847853296,
+            "win": 0.17812644208583295,
+            "holding": 6.340101522842639,
+            "max_drawdown": 27.234455289993978,
+            "days": 221,
+            "daily_mean": -0.00587957206921499,
+            "t": -0.5000262599492495
+          },
+          "validation": {
+            "n": 1823,
+            "mean": -0.0074636732556339494,
+            "median": -0.020916260872171334,
+            "win": 0.20460778935820076,
+            "holding": 6.597915523861766,
+            "max_drawdown": 13.821134022226863,
+            "days": 172,
+            "daily_mean": -0.012357356660964656,
+            "t": -0.9665273621627781
+          },
+          "all": {
+            "n": 3990,
+            "mean": -0.009475267266021816,
+            "median": -0.020102392959441252,
+            "win": 0.19022556390977444,
+            "holding": 6.457894736842105,
+            "max_drawdown": 37.806316391427046,
+            "days": 393,
+            "daily_mean": -0.00871463301013342,
+            "t": -1.0038006011249938
+          },
+          "reasons": {
+            "exploration": {
+              "trail": 493,
+              "stop": 1496,
+              "window_end": 178,
+              "suspended": 19
+            },
+            "validation": {
+              "stop": 1198,
+              "trail": 471,
+              "window_end": 154,
+              "suspended": 11,
+              "not_matured": 45
+            },
+            "all": {
+              "trail": 964,
+              "stop": 2694,
+              "window_end": 332,
+              "suspended": 30,
+              "not_matured": 45
+            }
+          },
+          "both_touched": 0,
+          "gapped": 504,
+          "limit_delayed": 25
+        },
+        "H5": {
+          "exploration": {
+            "n": 2176,
+            "mean": -0.011121613141242484,
+            "median": -0.016336347518800733,
+            "win": 0.24586397058823528,
+            "holding": 3.5307904411764706,
+            "max_drawdown": 24.256601587909124,
+            "days": 222,
+            "daily_mean": -0.007258871107626835,
+            "t": -0.8116835240147356
+          },
+          "validation": {
+            "n": 1837,
+            "mean": -0.00780604959673534,
+            "median": -0.01670976492273344,
+            "win": 0.27381600435492653,
+            "holding": 3.567773543821448,
+            "max_drawdown": 15.461264714298014,
+            "days": 172,
+            "daily_mean": -0.009615244660301583,
+            "t": -0.7871588539775315
+          },
+          "all": {
+            "n": 4013,
+            "mean": -0.009603873238112749,
+            "median": -0.016525049884258826,
+            "win": 0.25865935708945925,
+            "holding": 3.5477199102915526,
+            "max_drawdown": 38.68836276832191,
+            "days": 394,
+            "daily_mean": -0.008287541795596522,
+            "t": -1.1303857298937336
+          },
+          "reasons": {
+            "exploration": {
+              "time": 910,
+              "stop": 1266,
+              "suspended": 10
+            },
+            "validation": {
+              "stop": 1010,
+              "time": 827,
+              "suspended": 4,
+              "not_matured": 38
+            },
+            "all": {
+              "time": 1737,
+              "stop": 2276,
+              "suspended": 14,
+              "not_matured": 38
+            }
+          },
+          "both_touched": 0,
+          "gapped": 274,
+          "limit_delayed": 20
+        },
+        "H10": {
+          "exploration": {
+            "n": 2169,
+            "mean": -0.01163883768359077,
+            "median": -0.019090848941538653,
+            "win": 0.2074688796680498,
+            "holding": 5.2784693407100045,
+            "max_drawdown": 26.399562762806916,
+            "days": 222,
+            "daily_mean": -0.007033158798930423,
+            "t": -0.6732888264272879
+          },
+          "validation": {
+            "n": 1832,
+            "mean": -0.006950973891767796,
+            "median": -0.020348070832323796,
+            "win": 0.2341703056768559,
+            "holding": 5.5005458515283845,
+            "max_drawdown": 14.98099538575518,
+            "days": 172,
+            "daily_mean": -0.009907498770311043,
+            "t": -0.6835928664751385
+          },
+          "all": {
+            "n": 4001,
+            "mean": -0.009492332693183449,
+            "median": -0.019535220881622496,
+            "win": 0.21969507623094225,
+            "holding": 5.380154961259685,
+            "max_drawdown": 37.97882310542693,
+            "days": 394,
+            "daily_mean": -0.008287946806741251,
+            "t": -0.9597171253229142
+          },
+          "reasons": {
+            "exploration": {
+              "time": 602,
+              "stop": 1567,
+              "suspended": 17
+            },
+            "validation": {
+              "stop": 1255,
+              "time": 577,
+              "suspended": 6,
+              "not_matured": 41
+            },
+            "all": {
+              "time": 1179,
+              "stop": 2822,
+              "suspended": 23,
+              "not_matured": 41
+            }
+          },
+          "both_touched": 0,
+          "gapped": 373,
+          "limit_delayed": 24
+        },
+        "H20": {
+          "exploration": {
+            "n": 2165,
+            "mean": -0.011938375665317639,
+            "median": -0.021587545900096018,
+            "win": 0.16351039260969977,
+            "holding": 7.5316397228637415,
+            "max_drawdown": 31.778095469282857,
+            "days": 221,
+            "daily_mean": -0.003911094220752092,
+            "t": -0.2505394170954203
+          },
+          "validation": {
+            "n": 1814,
+            "mean": -0.006028006179679605,
+            "median": -0.022908552191017763,
+            "win": 0.1802646085997795,
+            "holding": 8.012679162072768,
+            "max_drawdown": 18.34253948652365,
+            "days": 172,
+            "daily_mean": -0.009967811998324387,
+            "t": -0.5896185186438486
+          },
+          "all": {
+            "n": 3979,
+            "mean": -0.009243876985511811,
+            "median": -0.022112007884946362,
+            "win": 0.1711485297813521,
+            "holding": 7.7509424478512186,
+            "max_drawdown": 36.78138652535143,
+            "days": 393,
+            "daily_mean": -0.006561871466916048,
+            "t": -0.5712806199297821
+          },
+          "reasons": {
+            "exploration": {
+              "stop": 1770,
+              "time": 395,
+              "suspended": 21
+            },
+            "validation": {
+              "stop": 1424,
+              "time": 390,
+              "suspended": 13,
+              "not_matured": 52
+            },
+            "all": {
+              "stop": 3194,
+              "time": 785,
+              "suspended": 34,
+              "not_matured": 52
+            }
+          },
+          "both_touched": 0,
+          "gapped": 449,
+          "limit_delayed": 37
+        }
+      },
+      "paired": {
+        "E1": {
+          "exploration": {
+            "n": 2168,
+            "days": 221,
+            "mean": 0.002033953030548839,
+            "t": 0.45656603982890837
+          },
+          "validation": {
+            "n": 1830,
+            "days": 172,
+            "mean": 0.0035378874216412397,
+            "t": 0.4290946964320431
+          },
+          "all": {
+            "n": 3998,
+            "days": 393,
+            "mean": 0.0026921635019684143,
+            "t": 0.6132760178107153
+          },
+          "verdict": "no_difference"
+        },
+        "T1": {
+          "exploration": {
+            "n": 2167,
+            "days": 221,
+            "mean": 0.0013406468882895,
+            "t": 0.25206666271510814
+          },
+          "validation": {
+            "n": 1828,
+            "days": 172,
+            "mean": 0.003954635619548492,
+            "t": 0.4942595189165951
+          },
+          "all": {
+            "n": 3995,
+            "days": 393,
+            "mean": 0.0024846826688914,
+            "t": 0.5391863823431382
+          },
+          "verdict": "no_difference"
+        },
+        "T2": {
+          "exploration": {
+            "n": 2167,
+            "days": 221,
+            "mean": 0.0022850010604732874,
+            "t": 0.34422421522251
+          },
+          "validation": {
+            "n": 1823,
+            "days": 172,
+            "mean": 0.005044945542674611,
+            "t": 0.6352588552933918
+          },
+          "all": {
+            "n": 3990,
+            "days": 393,
+            "mean": 0.0034929156939049097,
+            "t": 0.6844477096842466
+          },
+          "verdict": "no_difference"
+        },
+        "T3": {
+          "exploration": {
+            "n": 2167,
+            "days": 221,
+            "mean": 0.0024885851864590615,
+            "t": 0.3256913293228641
+          },
+          "validation": {
+            "n": 1823,
+            "days": 172,
+            "mean": 0.002227104654668473,
+            "t": 0.27357000442760127
+          },
+          "all": {
+            "n": 3990,
+            "days": 393,
+            "mean": 0.002374145869746641,
+            "t": 0.4258622758934565
+          },
+          "verdict": "no_difference"
+        },
+        "H5": {
+          "exploration": {
+            "n": 2168,
+            "days": 221,
+            "mean": 0.0010975336724319952,
+            "t": 0.1962890555329464
+          },
+          "validation": {
+            "n": 1832,
+            "days": 172,
+            "mean": 0.004427661406336397,
+            "t": 0.4500190686084278
+          },
+          "all": {
+            "n": 4000,
+            "days": 393,
+            "mean": 0.002554994156481759,
+            "t": 0.4786996702037899
+          },
+          "verdict": "no_difference"
+        },
+        "H10": {
+          "exploration": {
+            "n": 2167,
+            "days": 221,
+            "mean": 0.001240713369153531,
+            "t": 0.19085517000065555
+          },
+          "validation": {
+            "n": 1829,
+            "days": 172,
+            "mean": 0.004560139672078847,
+            "t": 0.479005486081077
+          },
+          "all": {
+            "n": 3996,
+            "days": 393,
+            "mean": 0.002693490275268427,
+            "t": 0.4855006964560939
+          },
+          "verdict": "no_difference"
+        },
+        "H20": {
+          "exploration": {
+            "n": 2165,
+            "days": 221,
+            "mean": 0.004515395447536648,
+            "t": 0.3696374965965663
+          },
+          "validation": {
+            "n": 1814,
+            "days": 172,
+            "mean": 0.004807817286466385,
+            "t": 0.3309069964647223
+          },
+          "all": {
+            "n": 3979,
+            "days": 393,
+            "mean": 0.004643376506813785,
+            "t": 0.49668598595366625
+          },
+          "verdict": "no_difference"
+        }
+      },
+      "conventions": {
+        "exploration": {
+          "n": 2164,
+          "days": 221,
+          "mean": -0.000911853999189874,
+          "t": -0.37688220525293453,
+          "research_only": 4,
+          "product_only": 18,
+          "both_touched": 4,
+          "gapped_stop": 224,
+          "gapped_target": 90,
+          "limit_blocked_entries": 0,
+          "limit_delayed_exits": 20
+        },
+        "validation": {
+          "n": 1453,
+          "days": 154,
+          "mean": -0.00043982735875260873,
+          "t": -0.23679839504677155,
+          "research_only": 390,
+          "product_only": 4,
+          "both_touched": 9,
+          "gapped_stop": 142,
+          "gapped_target": 95,
+          "limit_blocked_entries": 0,
+          "limit_delayed_exits": 2
+        },
+        "all": {
+          "n": 3617,
+          "days": 375,
+          "mean": -0.000718008392183637,
+          "t": -0.44428357170630633,
+          "research_only": 394,
+          "product_only": 22,
+          "both_touched": 13,
+          "gapped_stop": 366,
+          "gapped_target": 185,
+          "limit_blocked_entries": 0,
+          "limit_delayed_exits": 22
+        }
+      }
+    }
+  },
+  "elapsed_seconds": 17.984478269005194,
+  "peak_memory_gb": 0.5997085571289062
+}
