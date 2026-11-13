@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { MouseEvent, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 import { Term } from '../components/Term'
@@ -28,6 +28,9 @@ import {
   candidateStrategyLabel,
   candidateT1Text,
   candidatesState,
+  chartToggleLabel,
+  nextChartRank,
+  rowClickToggles,
   exchangeLabel,
   formatCandidateClose,
   formatCandidateScore,
@@ -295,23 +298,39 @@ function RowFigures({ item }: { item: CandidateItem }) {
   return <div className="candidate-row-figures"><Sparkline item={item} /><PriceLadder item={item} /></div>
 }
 
+// Below 1280px a row opens its own K-line card (#665): the card's content and whether it is open.
+type RowChart = { open: boolean; onToggle: () => void; content: ReactNode }
+
 // One candidate (#510): who (rank, name, market · group) and how to enter (the #491 sentence) on two lines, the close,
 // RR and total on the right, then the AI entry. The detail is a <details> under the row the button opens, so every
-// detail stays in the DOM and the screenshot tool can open them all (DESIGN_SYSTEM §5 候選列表).
-function CandidateRow({ item, hidden, open, onOpen, selected, onSelect }: { item: CandidateItem; hidden: boolean; open: boolean; onOpen: (open: boolean) => void; selected: boolean; onSelect?: () => void }) {
+// detail stays in the DOM and the screenshot tool can open them all (DESIGN_SYSTEM §5 候選列表). Below 1280px the
+// row's K-line card sits between the row and the detail; it is not a <details>, so opening every <details> mounts no
+// chart, and a closed row renders an empty slot only (#665).
+function CandidateRow({ item, hidden, open, onOpen, selected, onSelect, chart }: { item: CandidateItem; hidden: boolean; open: boolean; onOpen: (open: boolean) => void; selected: boolean; onSelect?: () => void; chart?: RowChart }) {
   const { instrument } = item
   const levelsInSentence = entryPlanView(item).kind === 'levels'
   const detailId = `candidate-detail-${item.rank}`
+  const chartId = `candidate-chart-${item.rank}`
+  // A tap on the row's free space opens or closes the card too; the keyboard uses the rank button (decision 6841170465).
+  const onRowClick = chart
+    ? (event: MouseEvent<HTMLDivElement>) => {
+      const selection = typeof window === 'undefined' ? '' : window.getSelection()?.toString() ?? ''
+      if (rowClickToggles(event.target instanceof Element ? event.target : null, selection)) chart.onToggle()
+    }
+    : undefined
   return (
-    <li className={cx('candidate-row', open && 'candidate-row-open', selected && 'candidate-row-selected')} data-candidate-rank={item.rank} hidden={hidden}>
-      <div className="candidate-row-main">
+    <li className={cx('candidate-row', open && 'candidate-row-open', selected && 'candidate-row-selected', chart && 'candidate-row-chartable', chart?.open && 'candidate-row-charted')} data-candidate-rank={item.rank} hidden={hidden}>
+      <div className="candidate-row-main" onClick={onRowClick}>
         <div className="candidate-row-body">
           {/* One line of inline runs: 「#1 2377 微星 上市 · 族群」 reads as one line of page text too (page_checks T7). */}
           <p className="candidate-row-title">
-            {/* With a chart beside the list the rank is the button that picks the row's chart; its text stays 「#1」. */}
+            {/* With a chart beside the list the rank is the button that picks the row's chart; below 1280px it opens the
+                row's own card. Its text stays 「#1」 either way. */}
             {onSelect
               ? <button type="button" className="candidate-rank candidate-rank-button" aria-label={`第 ${item.rank} 名，顯示走勢圖`} aria-pressed={selected} onClick={onSelect}>#{item.rank}</button>
-              : <span className="candidate-rank" aria-label={`第 ${item.rank} 名`}>#{item.rank}</span>}{' '}
+              : chart
+                ? <button type="button" className="candidate-rank candidate-rank-button candidate-chart-toggle" aria-label={chartToggleLabel(item.rank, chart.open)} aria-expanded={chart.open} aria-controls={chartId} onClick={chart.onToggle}>#{item.rank}</button>
+                : <span className="candidate-rank" aria-label={`第 ${item.rank} 名`}>#{item.rank}</span>}{' '}
             <Link className="symbol-link candidate-row-name" to={stockPath(item)}><strong>{instrument.symbol}</strong> {instrument.name}</Link>{' '}
             <span className="candidate-row-meta" title={item.groups[0] ? candidateGroupText(item.groups[0]) : undefined}>{exchangeLabel(instrument.exchange)} · {groupShortText(item)}</span>
           </p>
@@ -328,6 +347,12 @@ function CandidateRow({ item, hidden, open, onOpen, selected, onSelect }: { item
           {candidateAiEntry(item.llm_note)}
         </button>
       </div>
+      {chart && (
+        <div className="candidate-chart" id={chartId} hidden={!chart.open} role={chart.open ? 'region' : undefined}
+          aria-label={chart.open ? `${instrument.symbol} ${instrument.name} 走勢圖` : undefined}>
+          {chart.open && chart.content}
+        </div>
+      )}
       <details className="candidate-detail" id={detailId} open={open} onToggle={(event) => onOpen(event.currentTarget.open)}>
         <summary>{instrument.symbol} {instrument.name}</summary>
         <CandidateDetail item={item} />
@@ -336,7 +361,9 @@ function CandidateRow({ item, hidden, open, onOpen, selected, onSelect }: { item
   )
 }
 
-function TodayCandidateList({ items, renderChart }: { items: CandidateItem[]; renderChart?: (item: CandidateItem) => ReactNode }) {
+// wide: the viewport is at least TERMINAL_MIN_WIDTH (the page measures it); initialChartRank: the row whose card is open
+// at first below that width (none on the page; the tests render an open row with it, as they cannot click).
+export function TodayCandidateList({ items, renderChart, wide = false, initialChartRank = null }: { items: CandidateItem[]; renderChart?: (item: CandidateItem) => ReactNode; wide?: boolean; initialChartRank?: number | null }) {
   const [open, setOpen] = useState<ReadonlySet<number>>(() => new Set())
   const [showAll, setShowAll] = useState(false)
   const setRank = (rank: number, value: boolean) => setOpen((current) => {
@@ -349,13 +376,25 @@ function TodayCandidateList({ items, renderChart }: { items: CandidateItem[]; re
   const rest = Math.max(0, items.length - TODAY_VISIBLE)
   // The chart beside the list shows one candidate: the first until another row's rank is pressed.
   const [picked, setPicked] = useState<number | null>(null)
+  // Below 1280px: the one row whose card is open (#665), none at first, so no chart mounts and no /bars is fetched.
+  const [chartRank, setChartRank] = useState<number | null>(initialChartRank)
+  // Crossing 1280px starts each layout from its default: the first row beside the list, no card below (decision 6841170465).
+  const lastWide = useRef(wide)
+  useEffect(() => {
+    if (lastWide.current === wide) return
+    lastWide.current = wide
+    setPicked(null)
+    setChartRank(null)
+  }, [wide])
+  const terminal = !!renderChart && wide
   const selected = items.find((item) => item.rank === picked) ?? items[0]
   const list = (
     <>
       <ol className="candidate-list">
         {items.map((item, index) => (
           <CandidateRow key={item.instrument.exchange + item.instrument.symbol} item={item} hidden={!showAll && index >= TODAY_VISIBLE} open={open.has(item.rank)} onOpen={(value) => setRank(item.rank, value)}
-            selected={!!renderChart && item === selected} onSelect={renderChart ? () => setPicked(item.rank) : undefined} />
+            selected={terminal && item === selected} onSelect={terminal ? () => setPicked(item.rank) : undefined}
+            chart={renderChart && !wide ? { open: chartRank === item.rank, onToggle: () => setChartRank((current) => nextChartRank(current, item.rank)), content: chartRank === item.rank ? renderChart(item) : null } : undefined} />
         ))}
       </ol>
       {rest > 0 && (
@@ -365,8 +404,9 @@ function TodayCandidateList({ items, renderChart }: { items: CandidateItem[]; re
       )}
     </>
   )
-  if (!renderChart || !selected) return list
-  // 盤後終端 (DESIGN_SYSTEM §5 候選列表): the list on the left, the picked candidate's chart on the right from 1280px up.
+  if (!terminal || !selected) return list
+  // 盤後終端 (DESIGN_SYSTEM §5 候選列表): the list on the left, the picked candidate's chart on the right from 1280px up;
+  // below that the aside is not rendered at all (#665), so no chart mounts in a zero-width box.
   return (
     <div className="candidates-terminal">
       <div className="candidates-terminal-list">{list}</div>
@@ -375,7 +415,7 @@ function TodayCandidateList({ items, renderChart }: { items: CandidateItem[]; re
   )
 }
 
-export function CandidatesSection({ data, loading, error, renderChart }: { data: CandidatesResponse | undefined; loading: boolean; error: unknown; renderChart?: (item: CandidateItem) => ReactNode }) {
+export function CandidatesSection({ data, loading, error, renderChart, wide = false }: { data: CandidatesResponse | undefined; loading: boolean; error: unknown; renderChart?: (item: CandidateItem) => ReactNode; wide?: boolean }) {
   const state = data ? candidatesState(data) : null
   const t1 = state?.kind === 'list' ? candidateT1Text(data?.trading_date) : null
   return (
@@ -396,7 +436,7 @@ export function CandidatesSection({ data, loading, error, renderChart }: { data:
           : !state
             ? null
             : state.kind === 'list'
-              ? <TodayCandidateList items={state.items} renderChart={renderChart} />
+              ? <TodayCandidateList items={state.items} renderChart={renderChart} wide={wide} />
               : <Card><EmptyState title={state.kind === 'zero' ? '當日零候選' : '尚無候選清單'} reason={state.text} /></Card>}
     </section>
   )

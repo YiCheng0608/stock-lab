@@ -758,6 +758,16 @@ a.symbol-link:hover { color: var(--color-primary); }
 .price-ladder .price-ladder-close { top: 2px; width: 10px; height: 10px; margin-left: -5px; border: 2px solid var(--color-text); border-radius: 50%; background: var(--color-bg-card); }
 .candidate-rank-button { border: 0; color: inherit; cursor: pointer; }
 .candidate-rank-button[aria-pressed="true"] { background: var(--color-primary); color: var(--color-text); }
+/* Below 1280px (#665): the rank opens the row's own K-line card between the row and its detail. A tap on the row's free
+   space does too, so the row reads as clickable; a small caret in the rank's corner points down when closed, up when open. */
+.candidate-row-chartable > .candidate-row-main { cursor: pointer; }
+.candidate-chart-toggle { position: relative; }
+.candidate-chart-toggle::after { content: ""; position: absolute; right: 3px; bottom: 3px; border: 3px solid transparent; border-top-color: currentColor; border-bottom-width: 0; opacity: 0.7; }
+.candidate-chart-toggle[aria-expanded="true"] { background: var(--color-primary); color: var(--color-text); }
+.candidate-chart-toggle[aria-expanded="true"]::after { border-top-width: 0; border-bottom: 3px solid currentColor; }
+.candidate-chart { padding: 0 var(--space-5) var(--space-row); }
+.candidate-chart[hidden] { display: none; }
+.candidate-chart .stock-chart-card { margin: 0; }
 @media (min-width: 1280px) {
   .candidates-terminal { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: var(--space-5); align-items: start; }
   .candidates-terminal-chart { display: block; position: sticky; top: calc(var(--navbar-height, 64px) + var(--space-3)); min-width: 0; }
@@ -1098,6 +1108,7 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .candidate-row-close dd { display: flex; align-items: baseline; gap: var(--space-2); }
   .candidate-ai-toggle { grid-column: 2; grid-row: 1; align-self: center; }
   .candidate-detail[open] { padding: var(--space-3); }
+  .candidate-chart { padding: 0 var(--space-3) var(--space-row); }
   .candidate-detail-body > .candidate-note { padding-left: var(--space-3); }
   .candidate-mini-levels { gap: var(--space-1) var(--space-2); margin-top: var(--space-1); }
   .candidate-mini-levels dd { font-size: 12px; }
