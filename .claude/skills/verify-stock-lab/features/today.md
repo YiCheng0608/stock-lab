@@ -84,6 +84,7 @@
 | T18 | CI | 今日名單走勢線的收盤 | 讀 `candidates.json`（#653）。`not_computed` 或 `items` 空時沒有列。每個 item 都有 `recent_closes`；`dates` 與 `closes` 等長、不超過 30 個交易日、日期由舊到新不重複、最後一日不晚於 `trading_date`；`closes` 每個值是正數或 null（缺日留空，不補值）；最後一日等於 `trading_date` 時，該日收盤等於 `market.close`（同一筆已存日線，與個股頁 K 線同來源）。線本身（漲紅跌綠、`aria-label`、不帶文字、不到 2 個收盤不畫）由前端測試鎖住，頁面文字看不到 SVG，所以這裡只驗它畫的資料 |
 | T19 | CI | 分數橫條與報酬色塊（#654） | 讀 `today-1280` 截圖 JSON 的 `graphics`（`screenshot.cjs` 展開所有 `<details>` 後量每個 `.score-bar`、`.strength-chip`）。分數橫條依序是每檔候選（`candidates.json` 的 `items`）的技術、籌碼、新聞情緒、族群四條：`aria-label` 為 `<分項> <round(score×100)>（0–100）`、`data-score` 同值，填色寬度÷底軌寬度與 `score` 差不超過 0.02；`score` 為 null 時 `aria-label` 為 `<分項> 無資料`、沒有填色。報酬色塊依序是 `today-board.json` 前 5 名各三個（1／5／20 日）：`aria-label` `<N> 日相對加權指數 <±N.NN%>`、文字與 `data-strength`（正負與 1／3／6% 級距）由 `relative_returns` 算出；漲跌的 `::before` 底色等於 `--color-up`／`--color-down`、不透明度依級距 0.16／0.3／0.5／1；平盤與無資料不用漲跌色 |
 | T20 | CI | 窄版點列開圖（#665） | 讀 `candidates.json`；`not_computed` 或 `items` 空時沒有可開的卡（通過）。`today-390.txt`（初次載入，截圖展開所有 `<details>` 也一樣）沒有任何候選的整行 `<代號> <名稱>`（K 線卡標題）與 `規則價位線：` 開頭的行。`today-chart` 截圖（390，`--click '.candidate-row[data-candidate-rank="1"] .candidate-chart-toggle'`）：點擊有找到元素（`missingClicks` 空；#665 前名次是 `aria-pressed` 的選圖按鈕，沒有這個 class，所以改前失敗）、不橫向捲動、沒有 `consoleErrors`；第一個候選列行以 `#<rank> <代號> <名稱> ` 開頭，整行 `<代號> <名稱>` 恰一行且在這一列與下一列（只有一列時是 `熱門族群`）之間，其後、下一列之前有 `規則價位線：` 開頭的行（含規則價位線）；其他候選的 `<代號> <名稱>` 都不出現（一次一檔）。初次載入不掛載卡、不發 `/bars`、不在寬度 0 的容器初始化 ECharts 由前端測試（`candidates.test.tsx` 的 Issue 665 段）鎖住，頁面文字看不到 |
+| T21 | CI | 寬版明細不並排擠壓（#668） | 讀 `today-1280` 與 `today-wide`（1440，只有這一張）截圖 JSON 的 `candidateDetails`（`screenshot.cjs` 展開所有 `<details>` 後量每個顯示中的列的 `.candidate-detail[open]`）。量到的名次依序等於 `items[].rank`（`not_computed` 或 `items` 空時沒有列）；每個明細「AI 進出點說明」內文（第一段的 `dd`，未完成時是那一句說明）的寬度 ÷ 字級 ≥ `NOTE_MIN_CHARS`（20 字）；`AI 推論` badge 存在，且與明細內其他葉元素（不含 badge 自己的文字）的框不相交（`badgeOverlaps` 空）。量測是 `null`（量測丟例外，#609）或沒有這個欄位時無法判定。#668 前 1280 與 1440 的說明內文只有 24px（約 1.5 字），badge 疊在「目標一／二」上，所以改前失敗；innerText 不隨欄寬改變，T7 等文字檢查看不到 |
 
 ## 陷阱
 
@@ -94,7 +95,7 @@
 
 ## 判定
 
-- 通過：T1～T9、T11～T20 全部通過；T10 由人工判讀另記。
+- 通過：T1～T9、T11～T21 全部通過；T10 由人工判讀另記。
 - 失敗：任一條失敗，列出編號、預期與實際。
 - 無法判定：沒有失敗，但有檢查無法判定（API 非 200、截圖未 ready，或上游沒通過，見 [README 三態與上游](README.md#三態與上游)）；列出 URL 或上游編號。
 

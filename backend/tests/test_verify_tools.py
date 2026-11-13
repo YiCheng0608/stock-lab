@@ -794,14 +794,24 @@ def test_screenshot_candidate_rows_probe_returns_null_when_it_throws() -> None:
     # Issue 609: a probe that throws must not fail the whole capture; T17 judges null.
     out = _node_eval(
         """
-const run = (document) => { globalThis.document = document; return eval(m.CANDIDATE_ROWS_PROBE) }
+const run = (document, probe) => { globalThis.document = document; return eval(m[probe]) }
+const broken = { querySelectorAll() { throw new Error('probe broke') } }
+const none = { querySelectorAll() { return [] } }
 console.log(JSON.stringify({
-  thrown: run({ querySelectorAll() { throw new Error('probe broke') } }),
-  empty: run({ querySelectorAll() { return [] } }),
+  thrown: run(broken, 'CANDIDATE_ROWS_PROBE'),
+  empty: run(none, 'CANDIDATE_ROWS_PROBE'),
+  detailsThrown: run(broken, 'CANDIDATE_DETAILS_PROBE'),
+  detailsEmpty: run(none, 'CANDIDATE_DETAILS_PROBE'),
 }))
 """
     )
-    assert out == {"thrown": None, "empty": []}
+    # Issue 668: the open-detail probe does the same; T21 judges null as undetermined.
+    assert out == {
+        "thrown": None,
+        "empty": [],
+        "detailsThrown": None,
+        "detailsEmpty": [],
+    }
 
 
 @needs_node
@@ -839,8 +849,9 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8">
 <button class="candidate-ai-toggle">AI</button></li>
 <li class="candidate-row" data-candidate-rank="2" style="position:relative;width:300px">
 <dl class="candidate-row-nums" style="display:flex;width:200px;margin:0"><div style="flex:none;width:150px"><dt>收盤</dt><dd style="margin:0">10</dd></div><div style="flex:none;width:200px"><dt>總分（0–100）</dt><dd style="margin:0">70</dd></div></dl>
-<button class="candidate-ai-toggle" style="position:absolute;left:160px;top:0;width:120px;height:60px">AI</button></li>
-<li class="candidate-row" data-candidate-rank="3" hidden><dl class="candidate-row-nums"></dl><span class="score-bar" aria-label="籌碼 40（0–100）" data-score="40"><span class="score-bar-track"><span class="score-bar-fill"></span></span></span></li>
+<button class="candidate-ai-toggle" style="position:absolute;left:160px;top:0;width:120px;height:60px">AI</button>
+<details class="candidate-detail" open><summary>s</summary><div style="display:flex"><section class="candidate-note" data-note-state="done" style="flex:none;width:100px"><div class="ai-inference-head" style="display:flex;height:20px"><h3 style="flex:none;width:40px;margin:0;font-size:12px">說明</h3><span class="badge" style="position:relative;left:40px;flex:none;width:50px">AI 推論</span></div><dl class="candidate-note-parts" style="margin:0"><div><dt>為何入選</dt><dd style="margin:0;font-size:16px">放量突破</dd></div></dl></section><div class="candidate-detail-side" style="flex:none;width:120px"><b style="display:block;height:20px">目標</b></div></div></details></li>
+<li class="candidate-row" data-candidate-rank="3" hidden><dl class="candidate-row-nums"></dl><details class="candidate-detail" open><section class="candidate-note"></section></details><span class="score-bar" aria-label="籌碼 40（0–100）" data-score="40"><span class="score-bar-track"><span class="score-bar-fill"></span></span></span></li>
 </ol>
 <style>:root{--color-up:rgb(239, 68, 68);--color-down:rgb(34, 197, 94)}
 .strength-chip{position:relative}.strength-chip::before{content:"";position:absolute;inset:0;background:var(--color-down);opacity:.3}</style>
@@ -949,6 +960,23 @@ def test_screenshot_waits_for_data_and_reports_overflow(tmp_path: Path) -> None:
                 "clipped": total,
             },
         ]
+        # Issue 668: the shown row's open detail (the hidden row's is left out); the badge, moved past the 100px
+        # note, sits on the side block's first line.
+        details = line["candidateDetails"]
+        assert [
+            (
+                d["rank"],
+                d["noteState"],
+                d["textWidth"],
+                d["fontSize"],
+                d["badgeOverlaps"],
+            )
+            for d in details
+        ] == [(2, "done", 100, 16, ["b 目標"])]
+        assert details[0]["note"]["width"] == 100
+        assert details[0]["side"]["width"] == 120
+        assert details[0]["side"]["left"] == details[0]["note"]["right"]
+        assert details[0]["badge"]["width"] == 50
         # Issue 654: the bars inside the opened <details> and the block, with the resolved tokens.
         assert line["graphics"] == {
             "tokens": {"up": "rgb(239, 68, 68)", "down": "rgb(34, 197, 94)"},

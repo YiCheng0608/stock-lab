@@ -270,6 +270,35 @@ const GRAPHICS_PROBE = `(() => { try {
   return { tokens, items }
 } catch (error) { return null } })()`
 
+// Issue 668: each shown row's open detail, after every <details> is open. Squeezing the AI note into a narrow
+// column leaves innerText alone, so page_checks.py reads the boxes: the note's text width and font size (the text is
+// the first part's <dd>, or the empty-state line), the side block's box, and the AI badge's box with the detail's
+// leaf elements it intersects (not its own text). Empty when the page has no open detail; null when the probe throws
+// (Issue 609): T21 judges a missing measurement as undetermined.
+const CANDIDATE_DETAILS_PROBE = `(() => { try {
+  const rect = (el) => { const b = el.getBoundingClientRect(); return { left: Math.round(b.left * 10) / 10, right: Math.round(b.right * 10) / 10, top: Math.round(b.top * 10) / 10, bottom: Math.round(b.bottom * 10) / 10, width: Math.round(b.width * 10) / 10 } }
+  const meets = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5
+  const label = (el) => el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\\s+/).join('.') : '') + ' ' + el.textContent.replace(/\\s+/g, ' ').trim().slice(0, 30)
+  return Array.from(document.querySelectorAll('.candidate-row > .candidate-detail[open]')).filter((detail) => !detail.closest('.candidate-row').hidden && detail.getClientRects().length > 0).map((detail) => {
+    const note = detail.querySelector('.candidate-note')
+    const text = note ? note.querySelector('.candidate-note-parts dd, .candidate-note-empty') : null
+    const side = detail.querySelector('.candidate-detail-side')
+    const badge = note ? note.querySelector('.ai-inference-head .badge') : null
+    const b = badge ? badge.getBoundingClientRect() : null
+    const overlaps = b ? Array.from(detail.querySelectorAll('*')).filter((el) => el.children.length === 0 && el !== badge && !badge.contains(el) && el.getClientRects().length > 0 && meets(el.getBoundingClientRect(), b)).map(label) : []
+    return {
+      rank: Number(detail.closest('.candidate-row').dataset.candidateRank),
+      noteState: note ? note.dataset.noteState ?? null : null,
+      note: note ? rect(note) : null,
+      textWidth: text ? Math.round(text.getBoundingClientRect().width * 10) / 10 : null,
+      fontSize: text ? parseFloat(getComputedStyle(text).fontSize) : null,
+      side: side ? rect(side) : null,
+      badge: badge ? rect(badge) : null,
+      badgeOverlaps: overlaps,
+    }
+  })
+} catch (error) { return null } })()`
+
 // Ready: no loading marker, no request in flight (the navbar date badge has no skeleton).
 async function waitReady(cdp, watch, waitFor, timeoutMs) {
   const deadline = Date.now() + timeoutMs
@@ -309,6 +338,7 @@ async function captureWidth(cdp, options, width, watch) {
     finalUrl: location.href,
     candidateRows: ${CANDIDATE_ROWS_PROBE},
     graphics: ${GRAPHICS_PROBE},
+    candidateDetails: ${CANDIDATE_DETAILS_PROBE},
   })`)
   const shot = await cdp.send('Page.captureScreenshot', {
     format: 'png',
@@ -332,6 +362,7 @@ async function captureWidth(cdp, options, width, watch) {
     overflow: metrics.scrollWidth > metrics.clientWidth,
     candidateRows: metrics.candidateRows,
     graphics: metrics.graphics,
+    candidateDetails: metrics.candidateDetails,
     consoleErrors: watch.consoleErrors.slice(0, 10),
     // The list is capped; the count tells page_checks.py whether it saw every failed response (Issue 609).
     httpErrors: watch.httpErrors.slice(0, HTTP_ERRORS_SHOWN),
@@ -436,4 +467,4 @@ if (require.main === module) {
   main(process.argv.slice(2)).then((code) => { process.exitCode = code })
 }
 
-module.exports = { parseArgs, defaultName, findBrowser, browserArgs, viewport, CANDIDATE_ROWS_PROBE, USAGE }
+module.exports = { parseArgs, defaultName, findBrowser, browserArgs, viewport, CANDIDATE_ROWS_PROBE, CANDIDATE_DETAILS_PROBE, USAGE }

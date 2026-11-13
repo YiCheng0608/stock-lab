@@ -190,6 +190,13 @@ check(/grid-column:\s*2/.test(phoneRuleOf('.candidate-ai-toggle')) && /grid-row:
 check(/grid-column:\s*1 \/ -1/.test(phoneRuleOf('.candidate-row-body > :not(.candidate-row-title), .candidate-row-nums')), 'Issue 608: the sentence and the numbers take the whole row')
 check(/min-width:\s*0/.test(phoneRuleOf('.candidate-row-nums > .candidate-row-rr')) && /white-space:\s*normal/.test(phoneRuleOf('.candidate-row-nums .candidate-rr-basis')), 'Issue 608: the RR column may narrow and its basis wrap')
 check(nums1.includes('<div class="candidate-row-rr"><dt>'), 'Issue 608: the RR cell carries the class the phone rule narrows')
+// Issue 668: beside the chart (from 1280px) the list column is too narrow for the note beside the levels, so the detail
+// stacks there as below 860px; from 861 to 1279px it stays side by side. page_checks T21 measures the note's width.
+const wideAt = styles.indexOf('@media (min-width: 1280px)')
+const wideRuleOf = (selector: string) => { const at = styles.indexOf('\n  ' + selector + ' {', wideAt); const end = styles.indexOf('\n}', wideAt); return wideAt < 0 || at < 0 || at > end ? '' : styles.slice(at, styles.indexOf('}', at)) }
+const stacked = wideRuleOf('.candidates-terminal .candidate-detail-body')
+check(/grid-template-areas:\s*"note" "side" "folds"/.test(stacked) && /grid-template-columns:\s*minmax\(0, 1fr\);/.test(stacked), `Issue 668: from 1280px the detail in the list column stacks, got 「${stacked.trim()}」`)
+check(/grid-template-areas:\s*"note side"/.test(ruleOf('.candidate-detail-body')), 'Issue 668: below 1280px (above 860px) the note and the levels stay side by side')
 const tokenCss = fs.readFileSync(path.join(__dirname, '..', 'styles', 'tokens.css'), 'utf8')
 for (const token of ['--text-xs', '--text-sm', '--text-md', '--text-base', '--text-lg', '--text-xl', '--text-2xl', '--space-row', '--space-block']) check(tokenCss.includes(token + ':'), `tokens.css defines ${token} (DESIGN_SYSTEM §2)`)
 
