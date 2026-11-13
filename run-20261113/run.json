@@ -1,0 +1,23 @@
+{
+ "scorecard": {
+  "cmd": "python -B tools/research/candidate_scorecard.py --db /db/stock.db --out /out/scorecard",
+  "rc": 0,
+  "start": "2026-11-13T07:00:05+00:00",
+  "end": "2026-11-13T07:00:09+00:00",
+  "seconds": 3.4,
+  "children_maxrss_kib": 147876,
+  "stdout": "{\"out\": \"/out/scorecard\", \"candidates\": 296}\n",
+  "stderr": ""
+ },
+ "evidence": {
+  "cmd": "python -B tools/research/feature_evidence.py --db /db/stock.db --out /out/evidence",
+  "rc": 0,
+  "start": "2026-11-13T07:00:09+00:00",
+  "end": "2026-11-13T07:01:11+00:00",
+  "seconds": 62.2,
+  "children_maxrss_kib": 624872,
+  "stdout": "{\"out\": \"/out/evidence\", \"sessions\": 513}\n",
+  "stderr": "panel: 2018 instruments, 513 sessions\n50/513 sessions\n100/513 sessions\n150/513 sessions\n200/513 sessions\n250/513 sessions\n300/513 sessions\n350/513 sessions\n400/513 sessions\n450/513 sessions\n500/513 sessions\n"
+ },
+ "cgroup_memory_peak": "641449984"
+}
