@@ -8,6 +8,7 @@
 | 能力 | 現況 | 依據 | 規格 |
 |---|---|---|---|
 | 官方日資料 | TWSE／TPEx 整批日行情、法人、融資、官方事件的收集與回補 | — | — |
+| 融券餘額 | 每日從同一份融資融券官方檔收融券今日餘額（張，`short_balance`），缺欄或非數字留空；2024-09-30 起的歷史以 `chips short-balance` 從已存 raw 補寫；不進策略、評分與候選，畫面不顯示 | [#662](https://github.com/YiCheng0608/stock-lab/issues/662) | [籌碼來源](DATA_SOURCES.md#籌碼來源) |
 | 重大訊息 | 以 MOPS 日期查詢記每日已核實查詢日與空日，可單獨回補事件 | [#464](https://github.com/YiCheng0608/stock-lab/issues/464) | [重大訊息日期查詢](DATA_SOURCES.md#重大訊息日期查詢) |
 | 季度財報 | 季度累計營收與基本 EPS 可用 MOPS 彙總報表回補近 8 季，可得日用各產業的法定申報期限，基本面快照保留首見出表日 | [#529](https://github.com/YiCheng0608/stock-lab/issues/529) | [季度財報回補](DATA_SOURCES.md#季度財報回補) |
 | 月營收 | 每日收集官方快照、可回補近 24 個月（上市、上櫃的國內與國外公司），以可得日篩選、不納入策略 | [#530](https://github.com/YiCheng0608/stock-lab/issues/530) | [月營收](DATA_SOURCES.md#月營收) |

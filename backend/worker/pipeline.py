@@ -2701,6 +2701,7 @@ def _chip_record_groups(record: Any) -> dict[str, tuple[str, str | None]]:
     if margin_source is None and (
         record.margin_balance is not None
         or record.margin_change is not None
+        or record.short_balance is not None
         or parts[0] in chip_provenance.MARGIN_SOURCES
     ):
         margin_source = next(
@@ -2801,6 +2802,7 @@ def _upsert_official_chip(
             "dealer_buy": _safe_float(record.dealer_buy),
             "margin_balance": _safe_float(record.margin_balance),
             "margin_change": _safe_float(record.margin_change),
+            "short_balance": _safe_float(record.short_balance),
         },
         is_new=is_new,
         overwrite=overwrite,

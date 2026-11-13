@@ -209,11 +209,18 @@ class _Captures:
 
 
 def _equal(row: ChipSnapshot, record: ChipRecord | None, group: str) -> bool:
+    """The row holds the record's values of the group.
+
+    An empty ``short_balance`` is not compared: rows written before Issue #662
+    never stored it, though their margin capture has it.
+    """
+
     if record is None:
         return False
     return all(
         getattr(row, name) == pipeline._safe_float(getattr(record, name))
         for name in groups_of.GROUP_FIELDS[group]
+        if not (name == "short_balance" and row.short_balance is None)
     )
 
 
