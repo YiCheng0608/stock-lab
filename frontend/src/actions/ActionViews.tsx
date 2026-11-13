@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 
 import { formatCandidateScore } from '../candidates/candidates'
 import { Term } from '../components/Term'
+import { useSameAsPage } from '../components/pageDate'
 import { Badge, CardList, DataTable, Skeleton, cx, type Column } from '../components/ui'
 import type { ActionSummary, ActionTierSummary, ActionView } from '../types'
 import {
@@ -68,11 +69,19 @@ export function ActionFilters({ summary, view, includeEtf, searching, onViewChan
   )
 }
 
+// 「資料 YYYY/MM/DD」 for a row whose day is not the page date (#661, decision 6835320079: no 資料日 column); a
+// row without a day reads 資料 待核實.
+function RowDateLine({ action, className = 'small-note action-row-date' }: { action: ActionSummary; className?: string }) {
+  const sameDate = useSameAsPage(action.data_cutoff ?? action.price_as_of)
+  return sameDate ? null : <div className={className}>資料 {actionDataDay(action)}</div>
+}
+
 function StockCell({ action }: { action: ActionSummary }) {
   const { instrument } = action
   return <>
     <Link className="symbol-link" to={researchPath(action)}><strong>{instrument.symbol}</strong> {instrument.name}</Link>
     <div className="small-note">{marketLabel(instrument.exchange)} · {typeLabel(instrument.instrument_type)}</div>
+    <RowDateLine action={action} />
   </>
 }
 
@@ -127,19 +136,18 @@ function tierColumns(context: RowContext): ReadonlyArray<Column<ActionSummary>> 
     { key: 'stop', header: <><Term id="support">停損</Term>（元）</>, num: true, cellClassName: 'level-stop', cell: (action) => actionLevels(action)?.stop ?? '' },
     { key: 'target', header: <><Term id="target">目標一</Term>（元）</>, num: true, cellClassName: 'level-target', cell: (action) => actionLevels(action)?.target ?? '' },
   ]
-  const day: Column<ActionSummary> = { key: 'day', header: '資料日', num: true, cell: actionDataDay }
   const link: Column<ActionSummary> = { key: 'link', header: <span className="sr-only">策略總表</span>, cell: (action) => <Link className="text-link" to={researchPath(action)}>{tier === 3 ? NEAR_RESEARCH_LINK : RESEARCH_LINK}</Link> }
   if (tier === 1) {
     return [
       { key: 'rank', header: '名次', cell: (action) => <span className="candidate-rank" aria-label={`第 ${action.candidate?.rank ?? ''} 名`}>{rankLabel(action)}</span> },
       stock, status, close, ...levels,
       { key: 'total', header: <><Term id="candidate_score">總分</Term>（0–100）</>, num: true, cell: (action) => action.candidate ? formatCandidateScore(action.candidate.total_score) : '' },
-      day, link,
+      link,
     ]
   }
-  if (tier === 3) return [stock, status, close, { key: 'near', header: '差哪個條件', wrap: true, cellClassName: 'action-note-cell', cell: (action) => <NearLines action={action} /> }, day, link]
-  if (tier >= 4) return [stock, status, close, { key: 'note', header: '說明', wrap: true, cellClassName: 'action-note-cell', cell: (action) => <NoteLines action={action} tier={tier} /> }, day, link]
-  return [stock, status, close, ...levels, day, link]
+  if (tier === 3) return [stock, status, close, { key: 'near', header: '差哪個條件', wrap: true, cellClassName: 'action-note-cell', cell: (action) => <NearLines action={action} /> }, link]
+  if (tier >= 4) return [stock, status, close, { key: 'note', header: '說明', wrap: true, cellClassName: 'action-note-cell', cell: (action) => <NoteLines action={action} tier={tier} /> }, link]
+  return [stock, status, close, ...levels, link]
 }
 
 function ActionCard({ action, context }: { action: ActionSummary; context: RowContext }) {
@@ -171,7 +179,7 @@ function ActionCard({ action, context }: { action: ActionSummary; context: RowCo
       {tier === 3 && <NearLines action={action} withMet={false} />}
       {tier >= 4 && <div className="small-note action-card-note"><NoteLines action={action} tier={tier} /></div>}
       <div className="action-card-foot">
-        <span className="small-note">資料日 {actionDataDay(action)}</span>
+        <RowDateLine action={action} className="small-note action-card-date" />
         <details className="action-card-more">
           <summary>更多</summary>
           <div className="small-note">{action.candidate ? `#${action.candidate.rank} · ` : ''}{marketLabel(action.instrument.exchange)} · {typeLabel(action.instrument.instrument_type)}</div>
@@ -184,11 +192,13 @@ function ActionCard({ action, context }: { action: ActionSummary; context: RowCo
   )
 }
 
-export function ActionTierSectionView({ section, loading, canLoadMore, onMore }: {
+export function ActionTierSectionView({ section, loading, canLoadMore, onMore, levelsNote = section.tier <= 2 }: {
   section: TierSection
   loading?: boolean
   canLoadMore: boolean
   onMore: () => void
+  // The units line, on the first drawn levels table of the page only (#661, decision 6835320079 U-a).
+  levelsNote?: boolean
 }) {
   const remaining = Math.max(0, section.shown - section.items.length)
   const titleId = `action-tier-${section.tier}`
@@ -205,7 +215,7 @@ export function ActionTierSectionView({ section, loading, canLoadMore, onMore }:
         <DataTable
           wrapClassName="action-table-wrap"
           className="action-table"
-          note={section.tier <= 2 ? LEVELS_NOTE : undefined}
+          note={levelsNote && section.tier <= 2 ? LEVELS_NOTE : undefined}
           columns={tierColumns(context)}
           rows={section.items}
           rowKey={actionKey}
@@ -228,5 +238,7 @@ export function ActionTierList({ sections, loadingTiers, canLoadMore, onMore }: 
   onMore: (tier: number) => void
 }) {
   if (!sections.length) return <div className="empty panel">{EMPTY_TEXT}</div>
-  return <>{sections.map((section) => <ActionTierSectionView key={section.tier} section={section} loading={loadingTiers.has(section.tier)} canLoadMore={canLoadMore(section.tier)} onMore={() => onMore(section.tier)} />)}</>
+  // U-a: the units line goes on the first levels table that has rows, not always tier 0.
+  const noteTier = sections.find((section) => section.tier <= 2 && section.items.length > 0)?.tier
+  return <>{sections.map((section) => <ActionTierSectionView key={section.tier} section={section} loading={loadingTiers.has(section.tier)} canLoadMore={canLoadMore(section.tier)} onMore={() => onMore(section.tier)} levelsNote={section.tier === noteTier} />)}</>
 }

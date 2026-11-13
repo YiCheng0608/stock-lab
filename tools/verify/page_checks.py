@@ -942,28 +942,79 @@ def t2(run: Run) -> str:
     # #270: every date badge reads YYYY/MM/DD, the navbar included.
     expect(text.has(f"資料 {slash(d)}"), f"缺整行 `資料 {slash(d)}`（{text.name}）")
     expect(d == latest, f"D {d} ≠ facts market_latest_trading_date {latest}")
-    return f"`資料 {slash(d)}` = facts {latest}"
+    # #661 (decision 6835320079 condition 1): the page's one date sits outside the phone menu, so the
+    # 390 text has it as its first 資料 line, and the bar does not push the page wider.
+    phone = run.text(TODAY, 390)
+    first = phone.find_where(lambda line: line.startswith("資料 "))
+    expect(
+        first >= 0 and phone.lines[first] == f"資料 {slash(d)}",
+        f"390 寬第一個資料行是 {phone.lines[first] if first >= 0 else None!r}，預期導覽列 `資料 {slash(d)}`",
+    )
+    meta = run.shoot(TODAY)[390]
+    expect(
+        not meta.get("overflow") and meta.get("scrollWidth") == meta.get("clientWidth"),
+        f"390 寬頁面溢出：scrollWidth {meta.get('scrollWidth')}、clientWidth {meta.get('clientWidth')}",
+    )
+    return f"`資料 {slash(d)}` = facts {latest}；390 寬導覽列也有，不溢出"
 
 
 @check("today", "T3")
 def t3(run: Run) -> str:
-    """#276: one header line 「資料截至 <D/> · <source_label> · <mode>」 instead of the hero card."""
+    """#276: one header line 「<source_label> · <mode>」 instead of the hero card; #661: 「資料截至 D」 only on another day."""
 
     text, d = run.text(TODAY), run.D()
-    prefix = f"資料截至 {slash(d)} · "
-    i = text.find_where(lambda line: line.startswith("資料截至 "))
-    expect(i >= 0, f"缺 `資料截至 ` 開頭的頁首資料列（{text.name}）")
-    line = text.lines[i]
+    # #661: the navbar states D; the line drops 「資料截至 D」 and keeps the source and mode.
     expect(
-        line.startswith(prefix),
-        f"頁首資料列是 {line!r}，預期以 `{prefix}` 開頭（{text.at(i)}）",
+        text.find_where(lambda line: line.startswith(f"資料截至 {slash(d)}")) < 0,
+        f"頁首資料列仍寫與頁面同日的 `資料截至 {slash(d)}`（導覽列已標）",
     )
-    parts = line[len(prefix) :].split(" · ")
+    title = text.find("今日")
+    expect(title >= 0, f"缺頁首標題 `今日`（{text.name}）")
+    i = title + 1
+    line = text.lines[i] if i < len(text.lines) else ""
+    parts = line.split(" · ")
     label = (run.dashboard().get("market") or {}).get("source_label")
     expect(len(parts) >= 2 and all(parts), f"頁首資料列缺來源或模式：{line!r}")
     if label is not None:
         expect(parts[0] == label, f"來源 {parts[0]!r} ≠ market.source_label {label!r}")
-    return f"`{line}`"
+    return f"`{line}`（`資料截至` 不重複導覽列的 {slash(d)}）"
+
+
+def page_day(run: Run) -> str | None:
+    """The page date the navbar states once on every page (#661, DESIGN_SYSTEM §7): D.
+
+    None when the dashboard cannot be read: the page then has no date to compare with and
+    shows every card's own date (the frontend's PageDateContext is null), so a check expects them.
+    """
+
+    try:
+        return run.raw_D()
+    except Undetermined:
+        return None
+
+
+def card_badge(
+    run: Run, text: Text, i: int, day: str | None, title: str, offset: int = 1
+) -> str:
+    """The date badge on the line after a card title (#661, decision 6835320079).
+
+    A card of the page date has none (the navbar has it), so the line there must not be a
+    `資料 ` badge; a card of another day, or without a date, still shows its badge.
+    """
+
+    line = text.after(i, offset)
+    if day and day[:10] == page_day(run):
+        expect(
+            not (line or "").startswith("資料 "),
+            f"`{title}` 與頁面同日 {slash(day)}，不應再有日期 badge，下一行卻是 {line!r}（{text.at(i)}）",
+        )
+        return f"`{title}` 與頁面同日 {slash(day)}，不另標"
+    want = f"資料 {slash(day)}" if day else PENDING_DATE
+    expect(
+        line == want,
+        f"`{title}` 下一行是 {line!r}，預期 `{want}`（頁面 {page_day(run)}；{text.at(i)}）",
+    )
+    return f"`{title}` → `{want}`（與頁面 {page_day(run)} 不同）"
 
 
 def first_data_line_after(text: Text, title: str) -> tuple[int, str | None]:
@@ -985,11 +1036,18 @@ def t4(run: Run) -> str:
         expect(text.has(PENDING_DATE), f"B 為 null，缺整行 `{PENDING_DATE}`")
         return f"DB 與族群榜都沒有資料日，顯示 `{PENDING_DATE}`"
     j, line = first_data_line_after(text, "熱門族群")
+    expect(b == latest, f"B {b} ≠ facts group_scores_latest_trading_date {latest}")
+    if b == page_day(run):
+        # #661: the card of the page date has no badge (the navbar states it).
+        expect(
+            line is None,
+            f"熱門族群與頁面同日 {slash(b)}，不應有日期 badge，卻有 {line!r}（{text.at(j)}）",
+        )
+        return f"與頁面同日 {slash(b)}，不另標；B = facts {latest}"
     expect(
         line == f"資料 {slash(b)}",
         f"`熱門族群` 後第一個資料行是 {line!r}，預期 `資料 {slash(b)}`（{text.at(j)}）",
     )
-    expect(b == latest, f"B {b} ≠ facts group_scores_latest_trading_date {latest}")
     return f"`{line}`；B = facts {latest}"
 
 
@@ -1129,14 +1187,12 @@ def t7(run: Run) -> str:
     c = payload["trading_date"]
     i = candidates_title(text)
     expect(i >= 0, f"缺整行 `{CANDIDATES_TITLE}`")
-    expect(
-        text.after(i) == f"資料 {slash(c)}",
-        f"`{CANDIDATES_TITLE}` 下一行是 {text.after(i)!r}，預期 `資料 {slash(c)}`（{text.at(i)}）",
-    )
+    badge = card_badge(run, text, i, c, CANDIDATES_TITLE)
     count_line = f"{payload['candidate_count']} 檔"
+    k = 1 if c == page_day(run) else 2
     expect(
-        text.after(i, 2) == count_line,
-        f"再下一行是 {text.after(i, 2)!r}，預期 `{count_line}`",
+        text.after(i, k) == count_line,
+        f"`{CANDIDATES_TITLE}` 後第 {k} 行是 {text.after(i, k)!r}，預期 `{count_line}`",
     )
     ranks = candidate_ranks(text)
     want = [item["rank"] for item in items]
@@ -1145,7 +1201,7 @@ def t7(run: Run) -> str:
     expect(sources == len(items), f"`來源：` 行 {sources}，items {len(items)}")
     latest = run.facts()["candidate_run_latest_trading_date"]
     expect(c == latest, f"C {c} ≠ facts candidate_run_latest_trading_date {latest}")
-    return f"`資料 {slash(c)}`、`{count_line}`；名次列 {len(ranks)}、來源行 {sources} = items；C = facts"
+    return f"{badge}、`{count_line}`；名次列 {len(ranks)}、來源行 {sources} = items；C = facts"
 
 
 def news_inference(item: dict) -> bool:
@@ -1162,14 +1218,26 @@ def t8(run: Run) -> str:
         return "沒有候選，不適用"
     rows = source_lines(text)
     expect(len(rows) == len(items), f"`來源：` 行 {len(rows)}，items {len(items)}")
+    # #661 (decision 6835320079 P-a): the 來源 line is a fact, so it carries no 推論.
     problems = [
-        f"#{n} {item['instrument']['symbol']} 來源行沒有以 `（推論）` 結尾（{text.at(row)}）"
+        f"#{n} {item['instrument']['symbol']} 來源行帶推論字樣（{text.at(row)}）"
         for n, (item, row) in enumerate(zip(items, rows), start=1)
-        if news_inference(item) and not text.lines[row].endswith("（推論）")
+        if "推論" in text.lines[row]
     ]
     expect(not problems, "；".join(problems))
+    # One 「AI 推論」 badge per AI note block, none repeated inside it.
     notes = text.count(lambda line: line == "AI 推論")
-    expect(notes >= len(items), f"`AI 推論` {notes} 行 < items {len(items)}")
+    expect(
+        notes == len(items),
+        f"`AI 推論` {notes} 行，預期每個 AI 進出點說明區塊一個（items {len(items)}）",
+    )
+    # An inferred reason already ends 「（推論）」; a 「推論」 badge line right after it repeats the mark.
+    doubled = [
+        text.at(n)
+        for n, line in enumerate(text.lines)
+        if line.endswith("（推論）") and text.after(n) == "推論"
+    ]
+    expect(not doubled, "推論理由後又有 `推論` badge：" + "、".join(doubled))
     disclaimers = text.count(lambda line: line == CANDIDATE_DISCLAIMER)
     expect(disclaimers == len(items), f"免責句 {disclaimers} 行，items {len(items)}")
     # #276: each row's AI entry says whether a note exists (done or pending) or not.
@@ -1183,7 +1251,7 @@ def t8(run: Run) -> str:
     )
     inferred = sum(news_inference(item) for item in items)
     return (
-        f"{inferred} 檔新聞情緒推論的來源行以 `（推論）` 結尾；`AI 推論` {notes} 行；"
+        f"{inferred} 檔新聞情緒推論；來源行沒有推論字樣；`AI 推論` {notes} 行（每區塊一個）；推論理由不重複標；"
         f"免責句 {disclaimers} 行；入口 `{AI_ENTRY}` {entries}、`{AI_ENTRY_NONE}` {plain}"
     )
 
@@ -1275,15 +1343,15 @@ def t11(run: Run) -> str:
     latest = run.facts().get("market_summary_latest") or {}
     day = overview.get("trading_date")
     problems, shown, scopes = [], [], []
-    # Issue 549: the block has its own title and date badge (DESIGN_SYSTEM §4 大盤頁).
+    # Issue 549: the block has its own title; #661: its date badge only when it is not the page date.
     i = text.find(OVERVIEW_TITLE)
-    want = f"資料 {slash(day)}" if day else PENDING_DATE
     if i < 0:
         problems.append(f"缺整行 `{OVERVIEW_TITLE}`")
-    elif text.after(i) != want:
-        problems.append(
-            f"`{OVERVIEW_TITLE}` 下一行是 {text.after(i)!r}，預期日期 badge `{want}`"
-        )
+    else:
+        try:
+            card_badge(run, text, i, day, OVERVIEW_TITLE)
+        except Fail as exc:
+            problems.append(str(exc))
     for code, label in OVERVIEW_EXCHANGES:
         exchange, stored = rows.get(code) or {}, latest.get(code)
         if exchange.get("status") != "available":
@@ -1703,13 +1771,18 @@ def summary_line(exchange: dict, name: str) -> str:
 
 @check("today", "T14")
 def t14(run: Run) -> str:
-    """The today page keeps one market line (加權, 櫃買, the date, 看大盤 →), not the four widgets."""
+    """The today page keeps one market line (加權, 櫃買, the date when not the page date, 看大盤 →), not the four widgets."""
 
     text, overview = run.text(TODAY), run.dashboard().get("market_overview") or {}
     rows = {item.get("exchange"): item for item in overview.get("exchanges") or []}
     day = overview.get("trading_date")
     lines = [summary_line(rows.get(code) or {}, name) for code, name in SUMMARY_NAMES]
-    lines += [f"資料 {slash(day)}" if day else PENDING_DATE, MARKET_LINK]
+    # #661: the line has its own date only when it is not the page date (the navbar states that).
+    lines += (
+        []
+        if day and day == page_day(run)
+        else [f"資料 {slash(day)}" if day else PENDING_DATE]
+    ) + [MARKET_LINK]
     # One line of the page per part, in order (the navbar has its own 資料 badge, so search from the first item).
     start = text.find(lines[0])
     expect(start >= 0, f"缺整行 `{lines[0]}`（{text.name}）")
@@ -1777,11 +1850,7 @@ def t15(run: Run) -> str:
         bars = [bar for bar in payload["bars"] if drawable(bar)]
         expect(bool(bars), f"`{title}`：API 的日線沒有一根可畫的 K 棒")
         as_of = payload.get("data_as_of")
-        badge = f"資料 {slash(as_of)}" if as_of else PENDING_DATE
-        expect(
-            text.after(i) == badge,
-            f"`{title}` 下一行是 {text.after(i)!r}，預期 `{badge}`",
-        )
+        badge = card_badge(run, text, i, as_of, title)
         count = f"最近 {payload.get('count')} 根日線；缺日不補、停牌不畫 K 線"
         expect(text.find(count, i) >= 0, f"`{title}`：缺整行 `{count}`")
         # The data table (newest first): date, then 開 高 低 收 in 點, tab separated.
@@ -1791,13 +1860,15 @@ def t15(run: Run) -> str:
         )
         k = text.find_where(lambda line: line.startswith(row), i)
         expect(k >= 0, f"`{title}`：資料表缺最新一根 `{row}`")
-        found.append(f"`{title}` `{badge}`、`{count}`、最新 `{row}`")
+        found.append(f"{badge}、`{count}`、最新 `{row}`")
     return "；".join(found)
 
 
 # ---- T16: the market page's index table (Issue 564; 547's dates, 561's MA60; UI_COPY_SPEC §11) ----
 
 INDEX_TABLE_TITLE = "指數總表"  # INDEX_TABLE_TITLE in market/marketOverview.ts
+# INDEX_SOURCE_NOTE in market/marketOverview.ts: once, under the table (#661).
+INDEX_SOURCE_NOTE = "來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所"
 OVERVIEW_TITLE = "大盤概況"
 # INDEX_SPECS in market/marketOverview.ts: the row key -> (name shown, price decimals), in table order.
 # Issue 633: the page lists the Taiwan rows only; the API still returns the four US rows after them.
@@ -1845,8 +1916,13 @@ def index_ma60_text(row: dict, digits: int) -> str:
     return f"無資料：{reason}" if reason else "無資料"
 
 
-def index_row_line(row: dict) -> str:
-    """One table row as the page text has it (cells tab-separated; IndexTableView in market/MarketViews.tsx)."""
+def index_row_line(row: dict, page: str | None = None) -> str:
+    """One table row as the page text has it (cells tab-separated; IndexTableView in market/MarketViews.tsx).
+
+    #661 (decision 6835320079 D-c): no 資料日 column. The name cell ends with a line of its own (the
+    missing-data reason, or 「資料 YYYY/MM/DD」 plus 非最新 for a row not of the page date), so such a
+    row reads `name` and then `<that line><TAB><cells>`; a row of the page date is one line.
+    """
 
     name, digits = INDEX_SPECS[row["key"]]
     month = row.get("contract_month") if row.get("status") == "available" else None
@@ -1855,23 +1931,25 @@ def index_row_line(row: dict) -> str:
         name += f" 合約 {shown}"
     source = (row.get("source") or {}).get("label") or "—"
     if row.get("status") != "available" or not row.get("trading_date"):
-        return "\t".join([name, "—", "—", "—", index_missing_text(row), "—", source])
+        return f"{name}\n" + "\t".join(
+            [index_missing_text(row), "—", "—", "—", "—", source]
+        )
     close, change, pct = row.get("close"), row.get("change"), row.get("change_pct")
     roll = row.get("change_status") == "contract_roll"
-    date = slash(row["trading_date"])
-    if row.get("freshness") == "stale":
-        date += " 非最新"
-    return "\t".join(
+    stale = row.get("freshness") == "stale"
+    date = None
+    if stale or row["trading_date"][:10] != page:
+        date = f"資料 {slash(row['trading_date'])}" + (" 非最新" if stale else "")
+    cells = "\t".join(
         [
-            name,
             "—" if close is None else fixed(close, digits),
             "換月" if roll else "—" if change is None else fixed(change, digits, True),
             "換月" if roll else "—" if pct is None else f"{fixed(pct * 100, 2, True)}%",
-            date,
             index_ma60_text(row, digits),
             source,
         ]
     )
+    return f"{name}\t{cells}" if date is None else f"{name}\n{date}\t{cells}"
 
 
 @check("today", "T16")
@@ -1896,11 +1974,25 @@ def t16(run: Run) -> str:
     )
     found, at = [], start
     for row in rows:
-        line = index_row_line(row)
-        k = text.find(line, at + 1)
-        expect(k > at, f"{row['key']}：缺整行 `{line}`，或不在前一列之後")
-        at = k
-        found.append(f"`{line}`")
+        line = index_row_line(row, page_day(run))
+        first, *rest = line.split("\n")
+        k = text.find(first, at + 1)
+        expect(k > at, f"{row['key']}：缺整行 `{first}`，或不在前一列之後")
+        for n, part in enumerate(rest, start=1):
+            expect(
+                text.after(k, n) == part,
+                f"{row['key']}：`{first}` 下一行是 {text.after(k, n)!r}，預期 `{part}`（{text.at(k)}）",
+            )
+        at = k + len(rest)
+        found.append(f"`{line.replace(chr(10), ' ⏎ ')}`")
+    # #661: no 資料日 column, and the 來源 sentence once (under the table, not again in 資料說明).
+    header = text.find_where(lambda line: line.startswith("指數\t"), start)
+    expect(
+        header < 0 or "資料日" not in text.lines[header].split("\t"),
+        f"指數總表仍有 `資料日` 欄（{text.at(header)}）",
+    )
+    sources = text.count(lambda line: line == INDEX_SOURCE_NOTE)
+    expect(sources == 1, f"`{INDEX_SOURCE_NOTE}` {sources} 行，預期 1 行（表下）")
     expect(
         text.find(TAIFEX_ATTRIBUTION, start) >= 0,
         f"`{INDEX_TABLE_TITLE}` 之後缺整行 `{TAIFEX_ATTRIBUTION}`（資料說明）",
@@ -2166,13 +2258,12 @@ def g2(run: Run) -> str:
         if i < 0:
             problems.append(f"缺整行 `{heading}`（{text.name}）")
             continue
-        if text.after(i) != f"資料 {slash(b or '')}":
-            problems.append(
-                f"`{heading}` 下一行是 {text.after(i)!r}，預期 `資料 {slash(b or '')}`（{text.at(i)}）"
-            )
+        try:
+            notes.append(card_badge(run, text, i, b, heading))
+        except Fail as exc:
+            problems.append(str(exc))
         if b != latest:
             problems.append(f"{title} B {b} ≠ facts {latest}")
-        notes.append(f"`{heading}` → `資料 {slash(b or '')}`")
     expect(not problems, "；".join(problems))
     return "、".join(notes) + f"；= facts {latest}"
 
@@ -2263,20 +2354,25 @@ def members(run: Run) -> dict:
 def g5(run: Run) -> str:
     _payload, text = theme_detail(run)
     b = board(run, "industry")["meta"].get("trading_date") or ""
+    badges = []
     for title in ("熱度走勢", "五分項"):
         i = text.find(title)
         expect(i >= 0, f"缺整行 `{title}`")
-        expect(
-            text.after(i) == f"資料 {slash(b)}",
-            f"`{title}` 下一行是 {text.after(i)!r}，預期 `資料 {slash(b)}`（{text.at(i)}）",
-        )
+        badges.append(card_badge(run, text, i, b or None, title))
     m = (members(run).get("meta") or {}).get("data_as_of")
     expect(m is not None, "theme-members.json 沒有 meta.data_as_of（M）")
+    # #661 (D-b): 「成員資料截至」 only when the members' day is not the page date.
     line = f"成員資料截至 {slash(m)}"
-    expect(
-        text.find_where(lambda value: value.startswith(line)) >= 0, f"缺 `{line}` 這行"
-    )
-    return f"熱度走勢、五分項皆 `資料 {slash(b)}`；`{line}`"
+    shown = text.find_where(lambda value: value.startswith("成員資料截至")) >= 0
+    if m[:10] == page_day(run):
+        expect(not shown, f"成員資料與頁面同日 {slash(m)}，不應再寫 `成員資料截至`")
+        line = f"成員資料與頁面同日 {slash(m)}，不另寫"
+    else:
+        expect(
+            text.find_where(lambda value: value.startswith(line)) >= 0,
+            f"缺 `{line}` 這行",
+        )
+    return "；".join(badges) + f"；`{line}`"
 
 
 @check("themes", "G6")
@@ -2496,45 +2592,59 @@ def s2(run: Run, stock: Stock | None) -> str:
 @check("stocks", "S3", per_stock=True)
 def s3(run: Run, stock: Stock) -> str:
     text, i = stock_text(run, stock), stock_I(run, stock)
-    expect(text.has(stock.symbol), f"缺整行 `{stock.symbol}`")
+    top = text.find(stock.symbol)
+    expect(top >= 0, f"缺整行 `{stock.symbol}`")
     data = [n for n, line in enumerate(text.lines) if line.startswith("資料 ")]
-    expect(len(data) >= 2, f"`資料 ` 開頭的行只有 {len(data)} 行")
     d = run.D()
     expect(
-        text.lines[data[0]] == f"資料 {slash(d)}",
-        f"第一個資料行 {text.lines[data[0]]!r}，預期導覽列 `資料 {slash(d)}`",
+        bool(data) and text.lines[data[0]] == f"資料 {slash(d)}",
+        f"第一個資料行 {text.lines[data[0]] if data else None!r}，預期導覽列 `資料 {slash(d)}`",
     )
-    expect(
-        text.lines[data[1]] == f"資料 {slash(i)}",
-        f"第二個資料行 {text.lines[data[1]]!r}，預期 `資料 {slash(i)}`（{text.at(data[1])}）",
-    )
-    source = text.after(data[1]) or ""
-    expect(
-        source.startswith("來源 ") and source != "來源 尚無已核對的價格來源",
-        f"頁首資料行下一行是 {source!r}",
-    )
+    # The header: its quote, then (#661) its own date only when it is not the page date, then 來源.
+    s = text.find_where(lambda line: line.startswith("來源 "), top)
+    expect(s > top, f"`{stock.symbol}` 之後缺 `來源 ` 開頭的行")
+    source = text.lines[s]
+    expect(source != "來源 尚無已核對的價格來源", f"頁首來源是 {source!r}")
+    header_dates = [n for n in data if top < n < s]
+    if i == d:
+        expect(
+            not header_dates,
+            f"頁首與頁面同日 {slash(i)}，不應再有日期 badge：{[text.lines[n] for n in header_dates]}",
+        )
+        shown = f"與頁面同日 {slash(i)}，不另標"
+    else:
+        expect(
+            [text.lines[n] for n in header_dates] == [f"資料 {slash(i)}"],
+            f"頁首日期 {[text.lines[n] for n in header_dates]}，預期 `資料 {slash(i)}`（與頁面 {slash(d)} 不同）",
+        )
+        shown = f"`資料 {slash(i)}`"
     bars_as_of = stock_bars(run, stock).get("data_as_of")
     expect(i == bars_as_of, f"I {i} ≠ stock-bars data_as_of {bars_as_of}")
-    return f"頁首 `資料 {slash(i)}`、`{source}`；bars data_as_of {bars_as_of}"
+    return f"頁首 {shown}、`{source}`；bars data_as_of {bars_as_of}"
 
 
 @check("stocks", "S4", per_stock=True)
 def s4(run: Run, stock: Stock) -> str:
     text, i = stock_text(run, stock), stock_I(run, stock)
-    # #656: the K-line card (price and volume) and the 走勢 tab's indicator card each carry the data date.
+    # #656: the K-line card (price and volume) and the 走勢 tab's indicator card each carry the data
+    # date; #661: only when it is not the page date.
+    badges = []
     for title in (CHART_TITLE, INDICATOR_TITLE):
         k = text.find(title)
         expect(k >= 0, f"缺整行 `{title}`")
-        expect(
-            text.after(k) == f"資料 {slash(i)}",
-            f"`{title}` 下一行是 {text.after(k)!r}，預期 `資料 {slash(i)}`",
-        )
+        badges.append(card_badge(run, text, k, i, title))
     for prefix in ("來源 ", "日線批次計算於"):
         expect(
             text.find_where(lambda line: line.startswith(prefix)) >= 0,
             f"缺 `{prefix}` 開頭的行",
         )
-    return f"K 線卡與技術指標卡 `資料 {slash(i)}`、來源與批次時間"
+    # S-a: the K-line card leaves out a 來源 the header already states (one line, not two).
+    header = [line for line in text.lines if line.startswith("來源 ")]
+    expect(
+        len(header) == len(set(header)),
+        f"同一個 `來源 ` 行出現 {len(header)} 次：{header}",
+    )
+    return "；".join(badges) + "；來源與批次時間"
 
 
 @check("stocks", "S5", per_stock=True)
@@ -2545,6 +2655,19 @@ def s5(run: Run, stock: Stock) -> str:
     if payload.get("decision_summary") is None:
         expect(text.has("尚無行動摘要。"), "decision_summary null，缺 `尚無行動摘要。`")
         note = "decision_summary null，顯示 `尚無行動摘要。`"
+    elif i == page_day(run):
+        # #661 (D-b): the risk-and-time fold and the action line drop a date equal to the page date.
+        for prefix in (f"資料日期：{slash(i)}", f"資料日：{slash(i)}"):
+            expect(
+                text.find_where(lambda line: line.startswith(prefix)) < 0,
+                f"與頁面同日 {slash(i)}，不應再有 `{prefix}` 開頭的行",
+            )
+        for prefix in ("決策時間：", "價位語意："):
+            expect(
+                text.find_where(lambda line: line.startswith(prefix)) >= 0,
+                f"缺 `{prefix}` 開頭的行",
+            )
+        note = f"與頁面同日 {slash(i)}：`決策時間：…`、`價位語意：…` 不另寫日期"
     else:
         for prefix in (f"資料日期：{slash(i)}", f"資料日：{slash(i)} · 價位語意："):
             expect(
@@ -2555,12 +2678,17 @@ def s5(run: Run, stock: Stock) -> str:
     # The candidate row of the strategy board (#274): only the board's as-of candidate.
     if (payload.get("strategy_board") or {}).get("candidate") is not None:
         expect(text.has("每日候選"), "策略總表有候選，缺整行 `每日候選`")
-        expect(text.has("AI 推論"), "策略總表有候選，缺 `AI 推論`")
+        # #661 AC-2: one 「AI 推論」 for the one AI note block; the 來源 line is a fact, without 推論.
+        marks = text.count(lambda line: line == "AI 推論")
+        expect(
+            marks == 1,
+            f"策略總表有候選，`AI 推論` {marks} 行，預期 1（AI 進出點說明區塊）",
+        )
         rows = source_lines(text)
         expect(rows, "策略總表有候選，缺 `來源：` 行")
-        bad = [text.at(row) for row in rows if not text.lines[row].endswith("（推論）")]
-        expect(not bad, f"`來源：` 行沒有以 `（推論）` 結尾：{'、'.join(bad)}")
-        note += f"；候選 #{payload['candidate'].get('rank')}：`每日候選`、`AI 推論`、`（推論）`"
+        bad = [text.at(row) for row in rows if "推論" in text.lines[row]]
+        expect(not bad, f"`來源：` 行帶推論字樣：{'、'.join(bad)}")
+        note += f"；候選 #{payload['candidate'].get('rank')}：`每日候選`、`AI 推論` 1 行、來源行無推論"
     return note
 
 
@@ -2583,10 +2711,7 @@ def s10(run: Run, stock: Stock) -> str:
     expect(k >= 0, "缺整行 `策略總表`")
     as_of = board.get("as_of")
     if as_of:
-        expect(
-            text.after(k) == f"資料 {slash(as_of)}",
-            f"`策略總表` 下一行是 {text.after(k)!r}，預期 `資料 {slash(as_of)}`",
-        )
+        card_badge(run, text, k, as_of, "策略總表")
     else:
         expect(
             text.has("此股尚無策略判定資料。"),
@@ -3116,10 +3241,40 @@ def a2(run: Run) -> str:
 
 # Each tier section opens with `第 N 級`, its label and `顯示 k／N 檔` (UI_COPY_SPEC §5, #278).
 TIER_HEAD = re.compile(r"^第 ([0-5]) 級$")
-# A table row of the action list ends with its 資料日 cell and the link cell; a
-# tier 3 row's link says 價位見策略總表 → (UI_COPY_SPEC §6, #277-B).
+# A table row of the action list ends with its link cell; a tier 3 row's link says
+# 價位見策略總表 → (UI_COPY_SPEC §6, #277-B). #661 (decision 6835320079 D-c): no 資料日
+# column; a row not of the page date has a 「資料 YYYY/MM/DD」 line in its stock cell.
 NEAR_ROW_LINK = "價位見策略總表 →"
-ACTION_ROW = re.compile(r"\t([0-9]{4}/[0-9]{2}/[0-9]{2})\t(?:價位見)?策略總表 →$")
+ACTION_ROW = re.compile(r"\t(?:價位見)?策略總表 →$")
+ROW_DATE = re.compile(r"^資料 ([0-9]{4}/[0-9]{2}/[0-9]{2}|待核實)$")
+# The table header's last cell (an sr-only 策略總表) opens a tier's rows.
+ROWS_START = "策略總表"
+
+
+def action_row_dates(text: Text) -> list[str | None]:
+    """Each action-list row's own 「資料 …」 line (None for a row of the page date), in page order."""
+
+    dates: list[str | None] = []
+    start = 0
+    for n, line in enumerate(text.lines):
+        if line == ROWS_START:
+            start = n + 1
+        elif ACTION_ROW.search(line):
+            found = [
+                m.group(1) for row in text.lines[start:n] if (m := ROW_DATE.match(row))
+            ]
+            dates.append(found[0] if found else None)
+            start = n + 1
+    return dates
+
+
+def action_day(item: dict) -> str | None:
+    """actionDataDay in actions/actionTiers.ts, as YYYY-MM-DD."""
+
+    day = item.get("data_cutoff") or item.get("price_as_of")
+    return day[:10] if day else None
+
+
 ACTIONS_EMPTY = "目前沒有符合篩選的標的。"
 
 
@@ -3202,7 +3357,7 @@ def a3(run: Run) -> str:
 @check("actions", "A4")
 def a4(run: Run) -> str:
     payload, text = actions_payload(run), run.text(ACTIONS)
-    dates = [m.group(1) for line in text.lines if (m := ACTION_ROW.search(line))]
+    dates = action_row_dates(text)
     k = len(dates)
     items = loaded_actions(run)
     # #251: zero rows against a non-empty API is a page that lost its rows, not a pass.
@@ -3213,14 +3368,29 @@ def a4(run: Run) -> str:
     )
     as_of = ((payload.get("meta") or {}).get("data_as_of") or "")[:10]
     expect(bool(as_of), "actions.json 沒有 meta.data_as_of")
-    late = sorted({day for day in dates if day > slash(as_of)})
+    shown = [day for day in dates if day and day != "待核實"]
+    late = sorted({day for day in shown if day > slash(as_of)})
     expect(not late, f"列的資料日 {late} 晚於 data_as_of {slash(as_of)}")
+    # #661 (D-c): a row of the page date says no date; another day (or none) is stated on the row.
+    page = page_day(run)
+    same = [day for day in shown if page and day == slash(page)]
+    expect(
+        not same,
+        f"{len(same)} 列與頁面同日 {slash(page or '')} 仍寫 `資料 …`（導覽列已標）",
+    )
+    want = sorted(
+        slash(day) if day else "待核實"
+        for item in items
+        if (day := action_day(item)) != page
+    )
+    got = sorted(day for day in dates if day)
+    expect(got == want, f"列上的 `資料 …` {got}，預期與頁面不同日的列 {want}")
     latest = run.facts()["market_latest_trading_date"]
     expect(
         as_of == latest,
         f"data_as_of {as_of} ≠ facts market_latest_trading_date {latest}",
     )
-    return f"{k} 列各有資料日 ≤ {slash(as_of)}；data_as_of = facts"
+    return f"{k} 列；與頁面不同日的 {len(got)} 列寫 `資料 …`、同日不寫；≤ {slash(as_of)}；data_as_of = facts"
 
 
 @check("actions", "A5")
@@ -3257,6 +3427,18 @@ def a6(run: Run) -> str:
         expect(text.has("尚無行動摘要。"), "decision_summary null，缺 `尚無行動摘要。`")
         return f"{stock.label}：顯示 `尚無行動摘要。`"
     i = text.find_where(lambda line: line.startswith("資料日："))
+    cutoff = (summary.get("data_cutoff") or "")[:10]
+    if cutoff and cutoff == page_day(run):
+        # #661 (D-b): the navbar states that day; the line starts at 價位語意.
+        expect(
+            i < 0,
+            f"data_cutoff 與頁面同日 {slash(cutoff)}，不應再有 `資料日：`（{text.at(i)}）",
+        )
+        expect(
+            text.find_where(lambda line: line.startswith("價位語意：")) >= 0,
+            "缺 `價位語意：` 開頭的行",
+        )
+        return f"{stock.label}：data_cutoff 與頁面同日 {slash(cutoff)}，`價位語意：` 行不另寫日期"
     expect(i >= 0, "缺 `資料日：` 開頭的行")
     want = slash(summary.get("data_cutoff") or "")
     got = text.lines[i][len("資料日：") :][:10]
@@ -3603,15 +3785,39 @@ def a15(run: Run) -> str:
     problems = []
     for item, card in zip(items, cards):
         name = f"計畫 {item.get('id')}"
-        badge = next(
-            (i for i in range(card - 1, 0, -1) if BADGE_DATE_LINE.match(text.lines[i])),
+        want = PLAN_STATUS_LABELS.get(item.get("status"), "狀態待核實")
+        # The status badge, then (#661) the date badge only when the card's day is not the page date.
+        labels = set(PLAN_STATUS_LABELS.values()) | {"狀態待核實"}
+        head = next(
+            (
+                i
+                for i in range(card - 1, max(card - 16, 0), -1)
+                if text.lines[i] in labels
+            ),
             -1,
         )
-        status = text.lines[badge - 1] if badge > 0 else None
-        want = PLAN_STATUS_LABELS.get(item.get("status"), "狀態待核實")
+        status = text.lines[head] if head > 0 else None
         if status != want:
             problems.append(
                 f"{name} 狀態標籤 {status!r}，預期 `{want}`（{text.at(card)}）"
+            )
+        day = (item.get("last_session_date") or item.get("plan_date") or "")[
+            :10
+        ] or None
+        badge = (
+            head + 1
+            if head > 0 and BADGE_DATE_LINE.match(text.lines[head + 1] or "")
+            else head
+        )
+        shown = text.lines[badge] if badge != head else None
+        if day and day == page_day(run):
+            if shown is not None:
+                problems.append(
+                    f"{name} 與頁面同日 {slash(day)}，卻有日期 badge {shown!r}（{text.at(badge)}）"
+                )
+        elif shown != (f"資料 {slash(day)}" if day else None):
+            problems.append(
+                f"{name} 日期 badge {shown!r}，預期 `資料 {slash(day or '')}`（與頁面 {page_day(run)} 不同；{text.at(card)}）"
             )
         conflict = CONFLICT_NOTE in text.lines[badge + 1 : card]
         if conflict != (item.get("data_quality") == "transition_conflict"):
@@ -3642,9 +3848,7 @@ def a15(run: Run) -> str:
     if rate:
         problems.append(f"出現 `勝率`：{'、'.join(rate)}")
     expect(not problems, "；".join(problems))
-    return (
-        f"{len(opened) + len(closed)} 張卡的狀態、更正標示與模擬報酬 = API；沒有 `勝率`"
-    )
+    return f"{len(opened) + len(closed)} 張卡的狀態、日期 badge（與頁面不同日才標）、更正標示與模擬報酬 = API；沒有 `勝率`"
 
 
 @check("actions", "A16")

@@ -7,8 +7,9 @@ import * as AppModule from '../App'
 import type { ActionNearness, ActionNearnessItem, ActionSummary, ActionTierSummary, ActionsResponse, Dashboard, Position } from '../types'
 import { action } from '../today/today.fixtures'
 import { parseStockTab, stockTabSearch } from '../stock/stockTabs'
+import { PageDateContext } from '../components/pageDate'
 import { ActionFilters, ActionTierList, ActionTierSectionView } from './ActionViews'
-import { ACTION_TIER_PREVIEW, actionClose, CONDITIONS_PENDING_TEXT, EMPTY_TEXT, HIDDEN_NOTE, NEAR_RESEARCH_LINK, SEARCH_NOTE, hiddenSentence, nearCopy, previewTiers, tierSections } from './actionTiers'
+import { ACTION_TIER_PREVIEW, actionClose, CONDITIONS_PENDING_TEXT, EMPTY_TEXT, HIDDEN_NOTE, LEVELS_NOTE, NEAR_RESEARCH_LINK, SEARCH_NOTE, hiddenSentence, nearCopy, previewTiers, tierSections } from './actionTiers'
 
 // Action centre tiers (#278, UI_COPY_SPEC §5, DESIGN_SYSTEM §5 行動列表／篩選膠囊／庫存一行), the tier 3 接近成立 cards
 // and the tier 2／4 lines (#277-B, UI_COPY_SPEC §6, DESIGN_SYSTEM §7), and the today page's holding line reading every
@@ -100,7 +101,18 @@ check(/<dt>目標一（元）<\/dt>/.test(list) && !/<dt>目標<\/dt>/.test(list
 check(count(list, 'data-action-row=') === 4 && count(list, 'data-action-card=') === 4, '區塊: one table row and one phone card per loaded row')
 check(/<td><span class="candidate-rank"[^>]*>#1<\/span><\/td>/.test(list), '今日候選: the first cell is the rank')
 check(count(list, 'href="/stocks/TWSE/1712?tab=research"') >= 2, '每列: links to the stock research tab')
-check(count(list, '>2026/10/22</td>') === 4, '每列: a 資料日 cell YYYY/MM/DD')
+// #661 (decision 6835320079 D-c): no 資料日 column; without a known page date every row still states its day under the name.
+check(!actionHeaders.includes('資料日'), '行動列表表頭: no 資料日 column')
+check(count(list, '<div class="small-note action-row-date">資料 2026/10/22</div>') === 4, `每列: without a page date, 「資料 2026/10/22」 under each name, got ${count(list, 'action-row-date')}`)
+const onPage = (day: string) => render(`ActionTierList page ${day}`, () => <PageDateContext.Provider value={day}><ActionTierList sections={sections} loadingTiers={new Set()} canLoadMore={() => true} onMore={() => {}} /></PageDateContext.Provider>)
+const samePage = onPage('2026-10-22')
+check(!samePage.includes('action-row-date') && !samePage.includes('action-card-date') && !text(samePage).includes('資料 2026/10/22'), '每列: a row of the page date says no date (the navbar has it)')
+const laterPage = onPage('2026-10-23')
+check(count(laterPage, '<div class="small-note action-row-date">資料 2026/10/22</div>') === 4 && count(laterPage, 'action-card-date') === 4, '每列: a row of another day than the page still says 「資料 2026/10/22」 (table and card)')
+// U-a: 「單位：…元」 once, above the first levels table with rows (tier 1 here: this list has no tier 0).
+check(count(list, LEVELS_NOTE) === 1 && list.indexOf(LEVELS_NOTE) < list.indexOf('data-tier="2"'), `單位: one units line, on the first drawn levels table, got ${count(list, LEVELS_NOTE)}`)
+const noFirst = render('ActionTierList without tier 1 rows', () => <ActionTierList sections={sections.filter((section) => section.tier !== 1)} loadingTiers={new Set()} canLoadMore={() => true} onMore={() => {}} />)
+check(count(noFirst, LEVELS_NOTE) === 1 && noFirst.indexOf(LEVELS_NOTE) > noFirst.indexOf('data-tier="2"'), '單位: with no tier 1 table the line moves to the next drawn levels table')
 check(text(list).includes('突破條件差 3 項'), '其他觀察: the 說明 column has the main reason')
 check(render('ActionTierList empty', () => <ActionTierList sections={[]} loadingTiers={new Set()} canLoadMore={() => true} onMore={() => {}} />).includes(EMPTY_TEXT), '區塊: no rows, the empty line')
 const loadedAll = render('ActionTierSectionView loaded', () => <ActionTierSectionView section={{ ...sections[1], shown: 1 }} canLoadMore onMore={() => {}} />)
@@ -217,7 +229,7 @@ check(candidateCards.some((card) => text(folded(card)).includes('#1 · ')) && ca
 check(nearCards.every((card) => !text(shown(card)).includes('已達成') && text(folded(card)).includes('已達成') && text(shown(card)).includes('差：')), '手機卡片: tier 3 shows the 差 lines, the met line is in 更多')
 check(conditionalCards.every((card) => !text(shown(card)).includes('條件成立，') && text(folded(card)).includes('條件成立，') && card.includes('candidate-mini-levels')), '手機卡片: tier 2 shows the levels, why it is not a candidate is in 更多')
 check(observationCards.every((card) => text(shown(card)).includes('差 ') && !text(folded(card)).includes('差 ')), '手機卡片: tiers 4–5 keep their note in view')
-check(allCards.every((card) => /資料日 2026\/10\/22<\/span><details class="action-card-more">[^]*<\/details><a [^>]*class="text-link"/.test(card)), '手機卡片: the foot is the day, 更多, then the link')
+check(allCards.every((card) => /資料 2026\/10\/22<\/div><details class="action-card-more">[^]*<\/details><a [^>]*class="text-link"/.test(card)), '手機卡片: the foot is the day (no page date known), 更多, then the link')
 
 // ---- 我的庫存: one line without holdings, the full section with them ----
 const PortfolioSubsection = appComponent('PortfolioSubsection')

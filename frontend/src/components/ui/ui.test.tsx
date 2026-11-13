@@ -1,7 +1,9 @@
+import type { ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom/server'
 
 import { Navbar, stockSearchPath } from '../Navbar'
+import { PageDateContext, sameDay } from '../pageDate'
 import { SuggestPopup, suggestAnnouncement } from '../NavSearch'
 import { Badge, Button, Card, DataTable, DateBadge, EmptyState, MarketWidget, STRENGTH_STEPS, ScoreBar, Skeleton, Stat, StrengthChip, Tabs, strengthOf } from '.'
 
@@ -21,6 +23,16 @@ check(html(<Badge tone="warning" dot pulse>更新中</Badge>).includes('class="b
 check(html(<DateBadge date="2026-10-16" />).includes('資料 2026/10/16'), 'DateBadge shows the API date as YYYY/MM/DD')
 check(html(<DateBadge date={null} />).includes('badge-warning') && html(<DateBadge date={null} />).includes('資料日期未提供') && !html(<DateBadge date={null} />).includes('待核實'), 'DateBadge without a date says none was provided instead of inventing one (Issue 465: not 待核實)')
 check(html(<DateBadge date={null} unavailable />).includes('資料日期暫時無法載入'), 'DateBadge whose request failed says so')
+// #661 (DESIGN_SYSTEM §7): the navbar states the page date once; a card badge of that day is left out, another day,
+// a missing date or an unknown page date still shows (decision 6835320079 conditions 1 and 2).
+const onPage = (day: string | null, node: ReactElement) => html(<PageDateContext.Provider value={day}>{node}</PageDateContext.Provider>)
+check(onPage('2026-10-16', <DateBadge date="2026-10-16" />) === '', 'DateBadge of the page date renders nothing')
+check(onPage('2026-10-16', <DateBadge date="2026/10/16" />) === '', 'DateBadge of the page date, already formatted, renders nothing')
+check(onPage('2026-10-16', <DateBadge date="2026-10-13" />).includes('資料 2026/10/13'), 'DateBadge of another day than the page still shows')
+check(onPage(null, <DateBadge date="2026-10-16" />).includes('資料 2026/10/16'), 'DateBadge with no known page date (loading, failed, none) shows as before')
+check(onPage('2026-10-16', <DateBadge date={null} />).includes('資料日期未提供') && onPage('2026-10-16', <DateBadge date={null} unavailable />).includes('資料日期暫時無法載入'), 'a missing or failed date still says so on a page with a date')
+check(onPage('2026-10-16', <DateBadge date="2026-10-16" always />).includes('資料 2026/10/16'), 'the navbar badge (always) shows the page date')
+check(!sameDay('2026-10-16', null) && !sameDay(null, '2026-10-16') && !sameDay('待核實', '2026-10-16') && sameDay('2026-10-16T09:00:00', '2026-10-16'), 'sameDay: only two known days that match')
 
 // Button: variants, size, default type=button.
 check(html(<Button variant="primary">送出</Button>) === '<button type="button" class="btn btn-primary">送出</button>', 'Button primary')
@@ -57,6 +69,11 @@ check(['今日名單', '大盤', '我的追蹤', '族群', '個股', '策略說�
 check(navbar.includes('class="active" href="/stocks"') || navbar.includes('href="/stocks" class="active"') || /<a[^>]*aria-current="page"[^>]*href="\/stocks"/.test(navbar), `Navbar marks the current section: ${navbar}`)
 check(navbar.includes('role="search"') && navbar.includes('資料 2026/10/16') && navbar.includes('aria-expanded="false"'), 'Navbar search, data date and menu toggle')
 check(!html(<StaticRouter location="/"><Navbar dataDate={null} dataDateLoading /></StaticRouter>).includes('date-badge'), 'Navbar hides the badge while loading')
+// #661 (decision 6835320079 condition 1): the page date sits on the bar outside the collapsible menu, so a phone sees it
+// without opening the menu; it is the one badge even when a page date is known (always).
+const menu = navbar.slice(navbar.indexOf('id="navbar-menu"'), navbar.indexOf('<span class="navbar-date">'))
+check(navbar.includes('<span class="navbar-date"><span class="badge date-badge"') && !menu.includes('date-badge'), `Navbar: the date badge is outside the menu: ${navbar.slice(navbar.indexOf('navbar-date') - 40, navbar.indexOf('navbar-date') + 120)}`)
+check(html(<PageDateContext.Provider value="2026-10-16"><StaticRouter location="/"><Navbar dataDate="2026-10-16" /></StaticRouter></PageDateContext.Provider>).includes('資料 2026/10/16'), 'Navbar keeps its badge on a page of that date')
 // #465: a failed /api/dashboard (500/504 on the production copy under load) read 資料日期待核實.
 const navbarError = html(<StaticRouter location="/actions"><Navbar dataDate={null} dataDateError /></StaticRouter>)
 check(navbarError.includes('資料日期暫時無法載入') && !navbarError.includes('待核實'), `Navbar says the date could not load: ${navbarError}`)

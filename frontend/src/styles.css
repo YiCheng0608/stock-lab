@@ -37,6 +37,7 @@ pre { max-height: 300px; overflow: auto; margin: var(--space-4) 0 0; padding: va
 .navbar-links a:hover { color: var(--color-text); }
 .navbar-links a.active { color: var(--color-text); border-bottom-color: var(--color-primary); }
 .navbar-tools { display: flex; align-items: center; gap: var(--space-3); }
+.navbar-date { display: flex; flex: none; align-items: center; margin-left: calc(var(--space-3) - var(--space-6)); }
 .navbar-search .input { width: 200px; padding: var(--space-2) var(--space-3); font-size: 14px; }
 /* Navbar search suggestions (DESIGN_SYSTEM §5 導覽列搜尋建議, Issue 599). */
 .navbar-search { position: relative; }
@@ -538,7 +539,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .market-index-muted, .market-index-flag, .market-index-missing { color: var(--color-text-muted); }
 .market-index-stale { color: var(--color-warning); font-weight: 600; }
 .market-index-position { color: var(--color-text); font-weight: 600; }
-.market-index-date { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.market-index-asof { margin-top: 2px; color: var(--color-text-muted); font: 400 var(--text-xs) var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .market-index-missing, .market-index-flag { font-family: var(--font-body); }
 /* A flag wraps as a whole on phones (「非最新」, 「2026/11/07 美股休市」), never inside a word. */
 .market-index-flag { white-space: nowrap; }
@@ -951,7 +952,9 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .inline-form { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 860px) {
-  .navbar .navbar-toggle { display: inline-flex; }
+  .navbar .navbar-toggle { display: inline-flex; order: 2; margin-left: 0; }
+  /* #661: the page date stays on the bar between the brand and the menu button. */
+  .navbar-date { order: 1; margin-left: auto; }
   .navbar-menu { display: none; position: absolute; top: var(--nav-height); left: 0; right: 0; flex-direction: column; align-items: stretch; height: auto; padding: var(--space-4) var(--space-6) var(--space-6); background: var(--color-bg-alt); border-bottom: 1px solid var(--color-border); }
   .navbar-menu-open { display: flex; }
   .navbar-links { flex-direction: column; gap: 0; height: auto; }
@@ -979,6 +982,10 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
 }
 @media (max-width: 640px) {
   .container, .navbar-inner { padding: 0 var(--space-4); }
+  /* #661: brand, page date and menu button on one bar at 390px without clipping the button. */
+  .navbar-inner { gap: var(--space-3); }
+  .navbar-brand { gap: var(--space-2); font-size: 16px; }
+  .navbar-brand .logo-mark { width: 32px; height: 32px; }
   .page { padding: var(--space-6) 0; }
   .card, .panel { padding: var(--space-4); }
   .stock-header, .stock-summary, .stock-tab-content .card, .stock-tab-content .panel { padding: var(--space-4); }
@@ -1044,7 +1051,8 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .market-ma60 { padding: var(--space-2) var(--space-3); }
   .market-ma60-line { font-size: var(--text-sm); }
   /* 指數總表 on phones (Issue 564): the same table, each row two lines without horizontal scroll — the name, close,
-     change and percent, then the data date and the MA60 position; the 來源 column goes (the 來源 note stays). */
+     change and percent (a row of another day has its 資料 line under the name, #661), then the MA60 position; the 來源
+     column goes (the 來源 note stays). */
   .market-index-table table, .market-index-table tbody { display: block; }
   .market-index-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .market-index-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 2px var(--space-2); align-items: baseline; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--color-border); }
@@ -1059,7 +1067,7 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .market-index-table .market-index-close { grid-column: 2; grid-row: 1; }
   .market-index-table .market-index-change { grid-column: 3; grid-row: 1; }
   .market-index-table .market-index-pct { grid-column: 4; grid-row: 1; }
-  .market-index-table .market-index-date { grid-column: 1; grid-row: 2; font-size: var(--text-xs); white-space: normal; }
+  .market-index-asof { white-space: normal; }
   .market-index-table .market-index-ma60 { grid-column: 2 / -1; grid-row: 2; font-size: var(--text-xs); text-align: right; }
   /* Phones: the two indexes on line one, the date and 看大盤 → on line two; the link names the block, so the label goes. */
   .market-summary { gap: var(--space-1) var(--space-3); padding: var(--space-2) var(--space-3); }

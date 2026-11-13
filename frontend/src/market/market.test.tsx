@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import * as AppModule from '../App'
 import { MAIN_NAV } from '../components/Navbar'
+import { PageDateContext } from '../components/pageDate'
 import type { Dashboard, IndexRow, MarketOverview, StockBarRow, StockBarsResponse, TaiexMa60 } from '../types'
 import { overviewBoth, overviewNone, overviewTwseOnly } from '../today/today.fixtures'
 import { CLOSE_ONLY_NOTE, STOCK_BARS_LIMIT, axisDigits, buildBarsChartOption, chartLayout, isCloseOnlySeries, priceDigits, readChartTheme } from '../stock/stockBars'
@@ -12,7 +13,7 @@ import { IndexTablePanel, IndexTableView, MarketChartView, MarketOverviewPanel, 
 import { MarketPage } from './MarketPage'
 import { indexRows, overviewWithIndexes } from './market.fixtures'
 import {
-  INDEX_MA60_NOTE, INDEX_SPECS, MA60_BACKGROUND_NOTE, MA60_NOTE, TAIEX, TAIFEX_ATTRIBUTION,
+  INDEX_MA60_NOTE, INDEX_SOURCE_NOTE, INDEX_SPECS, MA60_BACKGROUND_NOTE, MA60_NOTE, TAIEX, TAIFEX_ATTRIBUTION,
   chartTitle, collectedSinceText, futuresLatestText, indexMa60Cell, indexSearch, indexTableNotes, marketOverviewNotes, selectedIndex,
   summaryItems,
 } from './marketOverview'
@@ -141,7 +142,22 @@ const table = slice(page, 'id="market-indexes-title"', 'id="market-chart-title"'
 const tableText = text(table)
 check(count(table, 'class="market-index-row') === 3 && count(table, 'class="table-group-row"') === 0, `指數總表: three rows, no group titles, got ${count(table, 'class="market-index-row')} / ${count(table, 'class="table-group-row"')}`)
 check(!/美股|S&amp;P|NASDAQ|道瓊|費城|FinMind/.test(table), `Issue 633: nothing about the US indexes in the table: ${tableText.slice(0, 300)}`)
-for (const header of ['指數', '收盤（點）', '漲跌', '漲跌幅', '資料日', '相對季線（MA60）', '來源']) check(table.includes(`>${header}</th>`), `指數總表: the 「${header}」 column`)
+for (const header of ['指數', '收盤（點）', '漲跌', '漲跌幅', '相對季線（MA60）', '來源']) check(table.includes(`>${header}</th>`), `指數總表: the 「${header}」 column`)
+// #661 (decision 6835320079 D-c): no 資料日 column; a row's day is a 資料 line under its name.
+check(!table.includes('>資料日</th>') && !table.includes('market-index-date'), '指數總表: no 資料日 column')
+check(count(table, 'class="market-index-asof"') === 3, `指數總表: without a known page date every row states its day, got ${count(table, 'market-index-asof')}`)
+const tableOn = (day: string, rows = indexRows()) => render('/market page date', <PageDateContext.Provider value={day}><IndexTablePanel overview={overviewWithIndexes(rows)} selected="taiex" onSelect={() => {}} /></PageDateContext.Provider>)
+const rowIn = (markup: string, key: string) => text(slice(markup, `data-index="${key}"`, '</tr>')).trim()
+const sameDayTable = tableOn('2026-10-22')
+check(!rowIn(sameDayTable, 'taiex').includes('資料 ') && !rowIn(sameDayTable, 'tx').includes('資料 '), `page date 2026/10/22: rows of that day say no date: ${rowIn(sameDayTable, 'taiex')}`)
+check(rowIn(sameDayTable, 'tpex').includes('資料 2026/10/21 非最新') && count(sameDayTable, 'market-index-stale') === 1, `page date 2026/10/22: TPEX of 10/21 keeps 「資料 2026/10/21 非最新」: ${rowIn(sameDayTable, 'tpex')}`)
+// TX is often a day behind (the TAIFEX report may not have turned over by 21:30): the 「different, so stated」 case.
+const lateTx = indexRows().map((row) => row.key === 'tx' ? { ...row, trading_date: '2026-10-21', freshness: 'stale' } : row)
+check(rowIn(tableOn('2026-10-22', lateTx), 'tx').includes('資料 2026/10/21 非最新'), `TX a day late: 「資料 2026/10/21 非最新」 under its name: ${rowIn(tableOn('2026-10-22', lateTx), 'tx')}`)
+const noData = indexRows().map((row): IndexRow => row.key === 'tx' ? { ...row, status: 'unavailable', trading_date: undefined, reason: 'fetch_failed', last_attempt_date: '2026-10-22' } : row)
+check(rowIn(tableOn('2026-10-22', noData), 'tx').includes('無資料：最近一次擷取失敗（2026/10/22）'), 'a row without data still says why, page date or not')
+// S-a: the 來源 sentence once, under the table (not again in 資料說明).
+check(count(text(tableOn('2026-10-22')), INDEX_SOURCE_NOTE) === 1, '指數總表: the 來源 sentence once')
 check(/<th class="num">收盤（點）<\/th><th class="num">漲跌<\/th><th class="num">漲跌幅<\/th>/.test(table), '指數總表: close and change columns are numeric (right, mono)')
 const rowOf = (key: string) => slice(table, `data-index="${key}"`, '</tr>')
 const rowText = (key: string) => text(rowOf(key)).trim()
@@ -332,6 +348,6 @@ check(!css.includes('market-overview-more') && !css.includes('market-us-'), 'Iss
 check(/\.market-summary-item \{[^}]*white-space:\s*nowrap/.test(css), 'summary: an index item never breaks inside')
 check(/\.market-index-row\.is-selected \{[^}]*var\(--color-primary-soft\)/.test(css) && /\.market-index-row\.is-selected td:first-child \{[^}]*inset 3px 0 0 var\(--color-primary\)/.test(css), '指數總表: the selected row has the selection background and a primary bar')
 const phone = css.slice(css.indexOf('/* 指數總表 on phones'))
-check(/\.market-index-table tr \{[^}]*display: grid;[^}]*grid-template-columns: minmax\(0, 1fr\) auto auto auto/.test(phone) && /\.market-index-table \.market-index-date \{[^}]*grid-row: 2/.test(phone) && /\.market-index-table \.market-index-ma60 \{[^}]*grid-row: 2/.test(phone), '指數總表 on phones: each row two lines (name and numbers, then date and MA60), no horizontal scroll')
+check(/\.market-index-table tr \{[^}]*display: grid;[^}]*grid-template-columns: minmax\(0, 1fr\) auto auto auto/.test(phone) && /\.market-index-table \.market-index-ma60 \{[^}]*grid-row: 2/.test(phone) && !css.includes('market-index-date'), '指數總表 on phones: each row two lines (the name with its 資料 line and the numbers, then MA60), no horizontal scroll')
 
 if (failures.length) throw new Error(`${failures.length} of ${checks} market checks failed:\n- ${failures.join('\n- ')}`)

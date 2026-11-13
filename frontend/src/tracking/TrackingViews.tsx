@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation } from 'react-router-dom'
 
+import { UnlessPageDate } from '../components/pageDate'
 import { Badge, Button, Card, DataTable, DateBadge, EmptyState, Skeleton, type Column } from '../components/ui'
 import { candidateStrategyLabel, exchangeLabel, formatDate, formatEntryZone, formatPrice, formatRiskReward } from '../candidates/candidates'
 import type { AddPlanResponse, StrategyDecision, TrackingPlan, TrackingPlanDetail, TrackingPlanSession, TrackingPlansResponse } from '../types'
@@ -96,7 +97,7 @@ export function StockPlanPanel({ strategies, embedded = false }: { strategies: S
           <ul className="plan-strategy-list">
             {conditional.map((row) => (
               <li key={row.signal_id}>
-                <div><strong>{candidateStrategyLabel(row.strategy)}成立</strong><div className="small-note">條件資料日 {formatDate(row.signal_date) ?? '待核實'}</div></div>
+                <div><strong>{candidateStrategyLabel(row.strategy)}成立</strong><UnlessPageDate date={row.signal_date}><div className="small-note">條件資料日 {formatDate(row.signal_date) ?? '待核實'}</div></UnlessPageDate></div>
                 <AddPlanButton signalId={row.signal_id} openPlanId={row.open_plan_id} />
               </li>
             ))}

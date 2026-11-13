@@ -1,7 +1,9 @@
+import type { ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
 import { StockBarsChart, StockIndicatorCard, barsWindow, type BarsViewState } from './StockBarsChart'
 import { StockCutoffControl, cutoffSubmission } from './StockCutoffControl'
+import { PageDateContext } from '../components/pageDate'
 import { StockQuoteLine, tradingHaltLabel } from './StockHeader'
 import {
   CHART_THEME_TOKENS,
@@ -223,6 +225,23 @@ check(weeklyMarkup.includes('aria-selected="true"') && weeklyMarkup.includes('�
 const loadingMarkup = renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => undefined} data={undefined} loading error={null} />)
 check(loadingMarkup.includes('aria-busy="true"') && loadingMarkup.includes('skeleton'), 'loading shows a skeleton')
 const emptyChart = renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => undefined} data={barsResponse([])} loading={false} error={null} />)
+
+// ---- #661 AC-3: the page date is the navbar's; a header or chart of that day says no date, another day still does ----
+const sliceOf = (markup: string, start: string, end: string) => { const from = markup.indexOf(start); return from < 0 ? "" : markup.slice(from, markup.indexOf(end, from + start.length)) }
+const onPage = (day: string, node: ReactElement) => renderToStaticMarkup(<PageDateContext.Provider value={day}>{node}</PageDateContext.Provider>)
+const latestBars = [tradedBar('2026-10-15', 98.5, 1), tradedBar('2026-10-16', 100, 2)]
+check(!onPage('2026-10-16', <StockQuoteLine bars={latestBars} />).includes('date-badge'), 'header of the page date: no date badge (the navbar has it)')
+check(onPage('2026-10-16', <StockQuoteLine bars={latestBars} />).includes('來源 臺灣證券交易所'), 'header of the page date: the source stays')
+// 研究截止日 (?as_of): the stock page shows an earlier day than the navbar, so the header states it.
+const cutoffBars = [tradedBar('2026-10-09', 97, 1), tradedBar('2026-10-12', 98, 2)]
+check(onPage('2026-10-16', <StockQuoteLine bars={cutoffBars} />).includes('資料 2026/10/12'), 'a research cutoff earlier than the page date: the header keeps 「資料 2026/10/12」')
+check(onPage('2026-10-16', <StockBarsChart interval="day" onIntervalChange={() => undefined} data={{ ...insufficient, data_as_of: '2026-10-12' }} loading={false} error={null} />).includes('資料 2026/10/12'), 'a chart of another day than the page keeps its date badge')
+check(!onPage('2026-09-20', <StockBarsChart interval="day" onIntervalChange={() => undefined} data={insufficient} loading={false} error={null} />).includes('date-badge'), 'a chart of the page date has no date badge')
+// Status badges never hide with the date (decision 6835320079 condition 2): the halt badge stays on a page-date header.
+check(onPage('2026-11-04', <StockQuoteLine bars={[tradedBar('2026-11-03', 57.3, 1), tradedBar('2026-11-04', 56.7, 2)]} halt={halt} />).includes('stock-header-halt'), 'the halt badge stays when the date is the page date')
+// S-a: the chart leaves out a source the header already states; a different one stays.
+const chartSource = (pageSource: string | null) => sliceOf(renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => undefined} data={insufficient} loading={false} error={null} pageSource={pageSource} />), 'class="chart-meta"', '</div>')
+check(!chartSource(sourcesLabel(insufficient.sources)).includes('來源 ') && chartSource('證券櫃檯買賣中心').includes(`來源 ${sourcesLabel(insufficient.sources)}`) && chartSource(null).includes('來源 '), `chart source: left out when the header states the same, kept otherwise: ${chartSource(null)}`)
 check(emptyChart.includes('來源未提供日線') && emptyChart.includes('資料日期未提供'), 'no bars → empty state and no-date badge')
 
 // ---- #300 研究截止日期 (DESIGN_SYSTEM §4 手機第一屏): one toggle line on phones, open when a cutoff is applied ----

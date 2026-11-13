@@ -718,7 +718,7 @@ def test_a_retake_without_5xx_is_judged_as_usual(tmp_path, monkeypatch):
     run = ShotRun(
         tmp_path,
         {"today": [_busy(), _busy(), {}]},
-        pages={"today-1280": TODAY_DATED},
+        pages={"today-1280": TODAY_DATED, "today-390": TODAY_DATED},
     )
     results = _today(run, monkeypatch, "T1", "T2")
     assert (results["T1"].status, results["T2"].status) == ("通過", "通過")

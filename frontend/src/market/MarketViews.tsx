@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 
 import { DataTable, DateBadge, cx, type Column } from '../components/ui'
+import { PageDateContext, sameDay } from '../components/pageDate'
 import type { IndexRow, MarketOverview, MarketOverviewExchange, StockBarsInterval, StockBarsResponse, TaiexMa60 } from '../types'
 import { formatFixed } from '../units'
 import { isFiniteNumber } from '../stock/stockBars'
@@ -153,10 +154,19 @@ function PercentCell({ row }: TableRow) {
   return <span className={changeTone(percent) ?? undefined}>{signedPercent(row.change_pct)}</span>
 }
 
-function DateCell({ row }: TableRow) {
-  if (!indexAvailable(row)) return <span className="market-index-missing">{indexMissingText(row)}</span>
+// The line under the index name (#661, decision 6835320079: no 資料日 column): why a row has no data, or 「資料
+// YYYY/MM/DD」 (and 非最新) when its day is not the page date; nothing for a row of the page date.
+// A Consumer, not a hook: the row's cells are also called as plain functions (market.test.tsx).
+function RowDateLine({ row }: TableRow) {
+  if (!indexAvailable(row)) return <div className="market-index-asof market-index-missing">{indexMissingText(row)}</div>
   const { date, flag } = indexDateText(row)
-  return <>{date}{flag && <> <span className={cx('market-index-flag', row.freshness === 'stale' && 'market-index-stale')}>{flag}</span></>}</>
+  return (
+    <PageDateContext.Consumer>
+      {(pageDate) => sameDay(row.trading_date, pageDate) && !flag
+        ? null
+        : <div className="market-index-asof">資料 {date}{flag && <> <span className={cx('market-index-flag', row.freshness === 'stale' && 'market-index-stale')}>{flag}</span></>}</div>}
+    </PageDateContext.Consumer>
+  )
 }
 
 function Ma60Cell({ spec, row }: TableRow) {
@@ -173,6 +183,7 @@ function NameCell({ spec, row, selected }: TableRow & { selected: boolean }) {
       {/* A native button: Tab reaches it and Enter or Space clicks it; the click bubbles to the row's onClick. */}
       <button type="button" className="market-index-select" aria-pressed={selected} aria-controls={INDEX_CHART_ID}>{spec.name}</button>
       {contract && <> <span className="market-index-sub">{contract}</span></>}
+      <RowDateLine spec={spec} row={row} />
     </>
   )
 }
@@ -183,7 +194,6 @@ function indexColumns(selected: string): ReadonlyArray<Column<TableRow>> {
     { key: 'close', header: '收盤（點）', num: true, cellClassName: 'market-index-close', cell: priceCell },
     { key: 'change', header: '漲跌', num: true, cellClassName: 'market-index-change', cell: (item) => <ChangeCell {...item} /> },
     { key: 'pct', header: '漲跌幅', num: true, cellClassName: 'market-index-pct', cell: (item) => <PercentCell {...item} /> },
-    { key: 'date', header: '資料日', cellClassName: 'market-index-date', cell: (item) => <DateCell {...item} /> },
     { key: 'ma60', header: '相對季線（MA60）', cellClassName: 'market-index-ma60', cell: (item) => <Ma60Cell {...item} /> },
     { key: 'source', header: '來源', wideOnly: true, cellClassName: 'market-index-source', cell: ({ row }) => row?.source?.label ?? '—' },
   ]
