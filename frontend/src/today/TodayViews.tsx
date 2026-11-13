@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { formatDay, formatTaipeiDay } from '../dates'
 import type { ActionSummary, MarketOverview } from '../types'
 import { DateBadge, cx } from '../components/ui'
+import { useSameAsPage } from '../components/pageDate'
 import { DERIVED_NOTE, MARKET_PATH, UP_DOWN_NOTE, isDerived, summaryItems } from '../market/marketOverview'
 
 // Today page header line, the one-line market summary and the holding-risk alert (#276; Issue 549 moved the
@@ -42,13 +43,15 @@ export function TodayHeader({ loading = false, asOf, sourceLabel, modeLabel, bad
 }) {
   // A plain trading date is a calendar day; an instant is read in Taipei time (as the navbar badge).
   const day = !asOf ? null : /^\d{4}-\d{2}-\d{2}$/.test(asOf) ? formatDay(asOf) : formatTaipeiDay(asOf) ?? formatDay(asOf)
+  // The navbar already states that day (#661): the line keeps only the source and mode; another day still reads here.
+  const sameDate = useSameAsPage(day)
   return (
     <section className="home-header" aria-label="資料狀態">
       {/* No visible page title (DESIGN_SYSTEM §3); assistive tech still gets one. */}
       <h1 className="sr-only">今日</h1>
       <div className="home-dataline">
         {/* A failed load has no source or mode: the line is only 「資料截至 未提供」. */}
-        <span className="home-dataline-text">{loading ? '資料截至 載入中…' : [`資料截至 ${day ?? '未提供'}`, sourceLabel, modeLabel].filter(Boolean).join(' · ')}</span>
+        <span className="home-dataline-text">{loading ? '資料截至 載入中…' : [sameDate ? '' : `資料截至 ${day ?? '未提供'}`, sourceLabel, modeLabel].filter(Boolean).join(' · ')}</span>
         {badge}
       </div>
       <details className="data-explanation">

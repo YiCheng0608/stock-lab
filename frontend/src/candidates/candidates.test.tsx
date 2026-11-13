@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react'
+import type { CandidateLiquidity } from '../types'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom/server'
@@ -29,6 +30,7 @@ import {
   marketSourceLabel,
 } from './candidates'
 import { completeItem, doneNote, listResponse, notComputedResponse, partialItem, zeroResponse } from './candidates.fixtures'
+import { PageDateContext } from '../components/pageDate'
 import { CandidatesSection, PriceLadder, ScoreDetails, Sparkline } from './CandidateViews'
 import { SPARKLINE_HEIGHT, SPARKLINE_WIDTH, candidateChartLevels, ladderLabel, priceLadder, sparkline } from './candidates'
 
@@ -89,7 +91,8 @@ for (const quality of ['insufficient_members', 'insufficient_data', null]) {
   check(/<button[^>]*>事件資料待補<\/button>/.test(meta), 'row: 「事件資料待補」 opens its glossary term')
   check(!meta.includes('當日未排名'), 'row: partial group is not called unranked')
 }
-check(candidateSourceText(completeItem()).includes('新聞方向 LLM 判讀 news_v1（推論）'), 'news source names the prompt version and is inference')
+// #661 (P-a): the source line is a fact; the news component and its reason carry the one 推論 mark.
+check(candidateSourceText(completeItem()).endsWith('新聞方向 LLM 判讀 news_v1') && !candidateSourceText(completeItem()).includes('推論'), 'news source names the prompt version, without 推論')
 
 // ---- detail content under each today row (the table's levels and total are checked in today/today.test.tsx) ----
 const list = render(<CandidatesSection data={listResponse()} loading={false} error={null} />)
@@ -113,9 +116,31 @@ check(first.indexOf('institutional_net_buy_5d') < first.indexOf('breakout_20d_hi
 for (const [code, dot] of [['breakout_20d_high', 'technical'], ['institutional_net_buy_5d', 'chips'], ['news_positive_3d', 'news_sentiment'], ['hot_group_rank', 'group']]) {
   check(slice(first, `data-reason="${code}"`, '</li>').includes(`reason-dot-${dot}`), `${code} has the ${dot} dot`)
 }
-check(slice(first, 'data-reason="news_positive_3d"', '</li>').includes('badge-accent'), 'inference reason carries the 推論 badge on its row')
-check(!slice(first, 'data-reason="breakout_20d_high"', '</li>').includes('badge-accent'), 'fact reasons carry no 推論 badge')
-check(first.includes('資料日期 2026/10/16') && first.includes('臺灣證券交易所'), 'data date and sources in the detail')
+// #661 AC-2: one 推論 mark an inferred item. The API reason text already ends 「（推論）」, so no badge after it.
+const inferredReason = slice(first, 'data-reason="news_positive_3d"', '</li>')
+check(count(inferredReason, '推論') === 1 && !inferredReason.includes('badge-accent'), `inference reason: its own 「（推論）」 and no second badge: ${inferredReason}`)
+const unmarked = render(<CandidatesSection data={{ ...listResponse(), items: [{ ...completeItem(), reasons: [{ code: 'news_positive_3d', component: 'news_sentiment', text: '近 3 日 2 則偏多新聞', params: {}, inference: true }] }] }} loading={false} error={null} />)
+check(count(slice(unmarked, 'data-reason="news_positive_3d"', '</li>'), '推論') === 1 && slice(unmarked, 'data-reason="news_positive_3d"', '</li>').includes('badge-accent'), 'an inferred reason whose text does not say 推論 gets the one badge')
+check(!slice(first, 'data-reason="breakout_20d_high"', '</li>').includes('推論'), 'fact reasons carry no 推論')
+check(count(slice(first, 'data-component="news_sentiment"', '</div>'), '推論') === 1, 'news sentiment component: one 推論 badge')
+for (const component of ['technical', 'chips', 'group']) check(!slice(first, `data-component="${component}"`, '</div>').includes('推論'), `fact component ${component}: no 推論`)
+// The AI note block: one 「AI 推論」 badge in its head, no badge inside the parts (their text is the model's own).
+const firstNote = slice(first, 'class="ai-inference candidate-note"', '</section>')
+check(count(firstNote, 'AI 推論') === 1 && count(firstNote, 'badge-accent') === 1 && !slice(firstNote, '<dl class="candidate-note-parts">', '</dl>').includes('badge'), `AI 進出點說明: one AI 推論 badge, none inside: ${firstNote}`)
+// Sources are facts (P-a): no 推論 in the 資料日期與來源 fold.
+check(!slice(first, '<details class="details candidate-detail-sources">', '</details>').includes('推論'), '資料日期與來源: no 推論')
+check(first.includes('資料日期 2026/10/16') && first.includes('臺灣證券交易所'), 'data date and sources in the detail (no page date known)')
+// #661 AC-3 (D-b): with the navbar's page date the same day, the detail writes no date; another day still writes it.
+const plain = (markup: string) => markup.replace(/<[^>]+>/g, "")
+const onPage = (day: string, data = listResponse()) => detailOf(rowOf(render(<PageDateContext.Provider value={day}><CandidatesSection data={data} loading={false} error={null} /></PageDateContext.Provider>), 1))
+const sameDayDetail = onPage('2026-10-16')
+check(!sameDayDetail.includes('資料日期') || !/資料日期 \d/.test(plain(sameDayDetail)), `page date 2026/10/16: no 「資料日期 2026/10/16」 in the detail: ${plain(sameDayDetail).match(/資料日期[^<]{0,20}/g)}`)
+check(sameDayDetail.includes('臺灣證券交易所'), 'page date: the sources stay')
+check(/資料日期 2026\/10\/16/.test(plain(onPage('2026-10-19'))), 'another page date: the detail still writes 資料日期 2026/10/16')
+const olderLiquidity = listResponse()
+olderLiquidity.items[0] = { ...olderLiquidity.items[0], liquidity: { state: 'eligible', average_volume_lots_20d: 1682, minimum_lots: 1000, ...olderLiquidity.items[0].liquidity, data_as_of: '2026-10-15' } as CandidateLiquidity }
+const liquidityLine = slice(onPage('2026-10-16', olderLiquidity), 'candidate-liquidity', '</div>')
+check(liquidityLine.includes('資料日期 2026/10/15'), `a liquidity of another day than the page keeps its date: ${liquidityLine}`)
 
 // ---- partial components ----
 const second = detailOf(rowOf(list, 2))

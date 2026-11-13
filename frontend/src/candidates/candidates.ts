@@ -226,7 +226,8 @@ export function marketSourceLabel(source: string | null | undefined): string {
 
 export { exchangeLabel } from '../presentation'
 
-// Signal and group sources are rule versions; the news source ends with the LLM prompt version (推論).
+// Signal and group sources are rule versions; the news source is the LLM prompt version. It is a source, a fact, so
+// it carries no 推論 mark: the news component and its reason say 推論 (#661, DESIGN_SYSTEM §7).
 export function candidateSourceText(item: CandidateItem): string {
   const promptVersion = item.sources.news.split(':').pop()
   const parts = [
@@ -234,7 +235,7 @@ export function candidateSourceText(item: CandidateItem): string {
     `行情 ${marketSourceLabel(item.sources.market_bar)}`,
     `籌碼 ${marketSourceLabel(item.sources.chips)}`,
     `族群 ${item.sources.groups}`,
-    `新聞方向 LLM 判讀 ${promptVersion || '版本未提供'}（推論）`,
+    `新聞方向 LLM 判讀 ${promptVersion || '版本未提供'}`,
   ]
   return parts.join(' · ')
 }

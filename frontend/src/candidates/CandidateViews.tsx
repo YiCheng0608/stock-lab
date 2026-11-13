@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 import { Term } from '../components/Term'
+import { useSameAsPage } from '../components/pageDate'
 import { Badge, Card, DataTable, DateBadge, EmptyState, ScoreBar, Skeleton, cx, type Column } from '../components/ui'
 import { AiBadge } from '../news/NewsViews'
 import { STRATEGY_LINK_LABEL } from '../strategy/strategyName'
@@ -100,6 +101,7 @@ const SUB_ITEM_COLUMNS: ReadonlyArray<Column<SubItemRow>> = [
 ]
 
 export function ScoreDetails({ item, open }: { item: CandidateItem; open: boolean }) {
+  const sameDate = useSameAsPage(item.data_as_of)
   const rows = CANDIDATE_COMPONENTS.flatMap(({ key, label }) => {
     const component = item.components[key]
     return Object.entries(component?.items ?? {}).map(([name, sub], index): SubItemRow => ({ key, label, component, name, sub, first: index === 0 }))
@@ -120,7 +122,7 @@ export function ScoreDetails({ item, open }: { item: CandidateItem; open: boolea
       {item.alternatives.length > 0 && (
         <div className="small-note">同檔另一策略：{item.alternatives.map((alt) => `${candidateStrategyLabel(alt.strategy)} 總分 ${formatCandidateScore(alt.total_score)}`).join('、')}（只留總分高者）</div>
       )}
-      <div className="small-note"><Term id="candidate_score">權重涵蓋</Term> {Math.round(item.weight_coverage * 100)}% · 資料日期 {formatDate(item.data_as_of) ?? '待核實'}{item.levels.earliest_execution_date ? ` · 規則最早執行日 ${formatDate(item.levels.earliest_execution_date)}` : ''}</div>
+      <div className="small-note"><Term id="candidate_score">權重涵蓋</Term> {Math.round(item.weight_coverage * 100)}%{sameDate ? '' : ` · 資料日期 ${formatDate(item.data_as_of) ?? '待核實'}`}{item.levels.earliest_execution_date ? ` · 規則最早執行日 ${formatDate(item.levels.earliest_execution_date)}` : ''}</div>
       <div className="small-note">來源：{candidateSourceText(item)}</div>
     </details>
   )
@@ -155,7 +157,8 @@ export function ReasonList({ reasons }: { reasons: CandidateItem['reasons'] }) {
         <li key={reason.code} data-reason={reason.code}>
           <i className={'reason-dot reason-dot-' + (REASON_COMPONENTS.has(reason.component) ? reason.component : 'other')} aria-hidden="true" />
           <span>{reason.text}</span>
-          {reason.inference && <InferenceBadge />}
+          {/* One 推論 mark an item (#661): the API text already ends 「（推論）」; the badge only when it does not. */}
+          {reason.inference && !reason.text.includes('推論') && <InferenceBadge />}
         </li>
       ))}
     </ul>
@@ -171,14 +174,23 @@ function Targets({ levels }: { levels: CandidateItem['levels'] }) {
 
 // 「20 日均量 1,682 張（資料日期 2026/10/16，候選門檻 1,000 張）」 (#490): the lots the liquidity floor read; nothing on
 // runs scored before candidate_score_v6. The today list shows it in the detail's 「資料日期與來源」 (#510).
+// The date only when it is not the page date (#661); 待核實 always shows.
 export function LiquidityNote({ item }: { item: Pick<CandidateItem, 'liquidity'> }) {
   const liquidity = item.liquidity
+  const sameDate = useSameAsPage(liquidity?.data_as_of)
   if (!liquidity) return null
+  const date = sameDate ? '' : `資料日期 ${formatDate(liquidity.data_as_of) ?? '待核實'}，`
   return (
     <div className="small-note candidate-liquidity" data-liquidity={liquidity.state ?? undefined}>
-      {`${averageVolumeText(liquidity.average_volume_lots_20d)}（資料日期 ${formatDate(liquidity.data_as_of) ?? '待核實'}，候選門檻 ${formatLots(liquidity.minimum_lots)}）`}
+      {`${averageVolumeText(liquidity.average_volume_lots_20d)}（${date}候選門檻 ${formatLots(liquidity.minimum_lots)}）`}
     </div>
   )
+}
+
+// 「資料日期 YYYY/MM/DD」 for a detail line, or nothing when it is the page date (#661, DESIGN_SYSTEM §7).
+function DataDateLine({ date }: { date: string | null | undefined }) {
+  if (useSameAsPage(date)) return null
+  return <div className="small-note candidate-data-date">資料日期 {formatDate(date) ?? '待核實'}</div>
 }
 
 function CloseValue({ item }: { item: CandidateItem }) {
@@ -230,7 +242,7 @@ function CandidateDetail({ item }: { item: CandidateItem }) {
         <details className="details candidate-detail-sources">
           <summary>資料日期與來源</summary>
           <LiquidityNote item={item} />
-          <div className="small-note">資料日期 {formatDate(item.data_as_of) ?? '待核實'}</div>
+          <DataDateLine date={item.data_as_of} />
           <div className="small-note">來源：{candidateSourceText(item)}</div>
         </details>
       </div>

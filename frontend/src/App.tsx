@@ -73,6 +73,7 @@ import { formatFixed, formatTableNumber, formatTableVolume, formatTableVolumeSha
 import { backtestStartedText, backtestTrackingLabel, officialEventDisplayTitle, formatProductTimeRole, PRODUCT_TIME_NOTE, levelFieldLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, gapNotApplicable, incompleteActionLabel, staleCloseDateLabel, stockDirectoryActionLabel, stockGroupLabel, type ProductQualityKind } from './presentation'
 import { Shell } from './components/Shell'
 import { Term } from './components/Term'
+import { UnlessPageDate } from './components/pageDate'
 import { Card, CardList, DataTable, EmptyState, Skeleton, Tabs, cx, tabId, tabPanelId, type Column } from './components/ui'
 import { StockBarsChart, StockIndicatorCard, useBarsView } from './stock/StockBarsChart'
 import { CandidateChart } from './today/CandidateChart'
@@ -80,7 +81,7 @@ import { PRICE_BASIS, chartLevels, priceDigits } from './stock/stockBars'
 import { closestStrategy } from './stock/stockSummary'
 import { LEVELS_IN_BOARD_TEXT, boardLevelsRow } from './stock/strategyBoard'
 import { StockCutoffControl } from './stock/StockCutoffControl'
-import { StockHeader } from './stock/StockHeader'
+import { StockHeader, headerSourceLabel } from './stock/StockHeader'
 import { StockFundamentalsPanel } from './stock/StockFundamentalsPanel'
 import { StockSummaryCard } from './stock/StockSummaryCard'
 import { StrategyBoardPanel } from './stock/StrategyBoardPanel'
@@ -446,8 +447,9 @@ function ProductTimeSummary({
   return (
     <div className="small-note product-time-summary" data-testid="product-time-summary">
       <div>
-        <span>資料日期：{dateValue}</span>
-        <span> · 決策時間：{decision}</span>
+        {/* The page date is in the navbar (#661): only another day is written here. */}
+        <UnlessPageDate date={dateValue}><span>資料日期：{dateValue} · </span></UnlessPageDate>
+        <span>決策時間：{decision}</span>
         <span> · 規則最早執行日：{earliest}</span>
       </div>
       {dateTime && <time dateTime={dateTime} hidden />}
@@ -732,7 +734,7 @@ function StockPage() {
     </StockHeader>
     {/* #648 圖優先: the chart card sits above the summary card and the tabs, on every tab, and is drawn only here.
         #656: price and volume only; the indicator panels and the data table are in the 走勢 tab, same window. */}
-    <StockBarsChart split bars={barsView} title="K 線" interval={barsInterval} onIntervalChange={setBarsInterval} data={chartBars.data} loading={chartBars.isLoading} error={chartBars.error} instrumentType={data.instrument.instrument_type} levels={chartLevels(closestStrategy(data.strategy_board))} />
+    <StockBarsChart split bars={barsView} title="K 線" pageSource={dayBars.isLoading ? null : headerSourceLabel(dayBars.data?.bars, data.instrument.instrument_type, dayBars.data?.latest_change)} interval={barsInterval} onIntervalChange={setBarsInterval} data={chartBars.data} loading={chartBars.isLoading} error={chartBars.error} instrumentType={data.instrument.instrument_type} levels={chartLevels(closestStrategy(data.strategy_board))} />
     <StockSummaryCard board={data.strategy_board} action={data.decision_summary ?? null} researchHref={`?${stockTabSearch(searchParams, 'research').toString()}`} onResearch={() => document.getElementById(tabId('stock', 'research'))?.scrollIntoView({ block: 'start' })} />
     <Tabs items={STOCK_TABS} value={tab} onChange={setTab} label="個股詳情分頁" idPrefix="stock" className="stock-tabs" />
     <div className="stock-tab-content" id={tabPanelId('stock', tab)} role="tabpanel" aria-labelledby={tabId('stock', tab)}>
@@ -891,7 +893,7 @@ export function ActionDetailPanel({ action, board, gap, children }: { action: Ac
       </div>}
       {detailReasons.length > 0 && <ul className="reason-list">{detailReasons.map((reason) => <li key={reason}>{action.display_reasons ? reason : productActionReasonLabel(reason)}</li>)}</ul>}
       {action.conflicts.length > 0 && <div className="warning-box">{action.conflicts.join('；')}</div>}
-      <div className="small-note">資料日：{formatTaiwanDateTime(action.data_cutoff, true)} · 價位語意：{levelSemanticsLabel(action.level_semantics)} · 規則與官方資料詳見「資料來源」分頁。</div>
+      <div className="small-note"><UnlessPageDate date={action.data_cutoff}>資料日：{formatTaiwanDateTime(action.data_cutoff, true)} · </UnlessPageDate>價位語意：{levelSemanticsLabel(action.level_semantics)} · 規則與官方資料詳見「資料來源」分頁。</div>
     </details>
     {children && <div className="action-detail-plan">{children}</div>}
   </section>

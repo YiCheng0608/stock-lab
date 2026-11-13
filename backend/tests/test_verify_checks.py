@@ -232,14 +232,10 @@ TODAY_CANDIDATES = (
     "今日名單\n資料 2026/10/16\n2 檔\n2026/10/16 收盤後條件成立\n策略說明 →\n"
     "#1 9100 示範一 上市 · 半導體（產業 #1）\n突破型\n2026/10/16 收盤已突破 21.10 元\n"
     "收盤（元）\n21.10\n+0.48%\nRR\n1.60 倍\nAI 推論 ▸\n"
-    "AI 進出點說明\nAI 推論\n"
-    + page_checks.CANDIDATE_DISCLAIMER
-    + "\n來源：訊號 a（推論）\n"
+    "AI 進出點說明\nAI 推論\n" + page_checks.CANDIDATE_DISCLAIMER + "\n來源：訊號 a\n"
     "#2 9101 示範二 上櫃 · 無所屬族群\n回踩型\n2026/10/16 已拉回到支撐區\n"
     "收盤（元）\n13.20\n漲跌待核實\nRR\n1.60 倍\nAI 說明 ▸\n"
-    "AI 進出點說明\nAI 推論\n"
-    + page_checks.CANDIDATE_DISCLAIMER
-    + "\n來源：訊號 b（推論）\n"
+    "AI 進出點說明\nAI 推論\n" + page_checks.CANDIDATE_DISCLAIMER + "\n來源：訊號 b\n"
     "熱門族群\n#1\n半導體\n"
 )
 
@@ -365,11 +361,31 @@ def test_t7_fails_when_the_page_drops_the_candidates(tmp_path):
         page_checks.t7(run)
 
 
-def test_t8_fails_without_the_inference_mark(tmp_path):
-    page = TODAY_CANDIDATES.replace("來源：訊號 b（推論）", "來源：訊號 b")
-    run = FakeRun(tmp_path, {"candidates": _candidates()}, {"today-1280": page})
-    with pytest.raises(page_checks.Fail, match="#2 9101 來源行沒有以 `（推論）` 結尾"):
-        page_checks.t8(run)
+def test_t8_fails_on_inference_marks_on_facts_or_repeated(tmp_path):
+    # #661 AC-2: the 來源 line is a fact (no 推論), one 「AI 推論」 per AI note block, and an
+    # inferred reason that already says 「（推論）」 has no second 推論 badge.
+    cases = [
+        (
+            TODAY_CANDIDATES.replace("來源：訊號 b", "來源：訊號 b（推論）"),
+            "#2 9101 來源行帶推論字樣",
+        ),
+        (
+            TODAY_CANDIDATES.replace(
+                "AI 進出點說明\nAI 推論\n", "AI 進出點說明\nAI 推論\nAI 推論\n", 1
+            ),
+            "`AI 推論` 3 行，預期每個 AI 進出點說明區塊一個",
+        ),
+        (
+            TODAY_CANDIDATES.replace(
+                "來源：訊號 a\n", "來源：訊號 a\n近 3 日 1 則偏多新聞（推論）\n推論\n"
+            ),
+            "推論理由後又有 `推論` badge",
+        ),
+    ]
+    for page, message in cases:
+        run = FakeRun(tmp_path, {"candidates": _candidates()}, {"today-1280": page})
+        with pytest.raises(page_checks.Fail, match=message):
+            page_checks.t8(run)
 
 
 # ---- T11 market overview, T12 block order (#276) ----
@@ -563,8 +579,30 @@ def test_t11_reads_the_market_page_and_its_date_badge(tmp_path):
         "大盤概況\n資料 2026/10/22", "大盤概況\n資料 2026/10/21"
     )
     run = FakeRun(tmp_path, {"dashboard": _overview()}, {"market-1280": page}, facts)
-    with pytest.raises(page_checks.Fail, match="預期日期 badge `資料 2026/10/22`"):
+    with pytest.raises(
+        page_checks.Fail, match="下一行是 '資料 2026/10/21'，預期 `資料 2026/10/22`"
+    ):
         page_checks.t11(run)
+    # #661: with the page date (the navbar's) the same day, the card has no badge of its own.
+    same_day = {**_overview(), "as_of": "2026-10-22T09:00:00"}
+    run = FakeRun(
+        tmp_path, {"dashboard": same_day}, {"market-1280": OVERVIEW_PAGE}, facts
+    )
+    with pytest.raises(
+        page_checks.Fail, match="`大盤概況` 與頁面同日 2026/10/22，不應再有日期 badge"
+    ):
+        page_checks.t11(run)
+    run = FakeRun(
+        tmp_path,
+        {"dashboard": same_day},
+        {
+            "market-1280": OVERVIEW_PAGE.replace(
+                "大盤概況\n資料 2026/10/22\n", "大盤概況\n"
+            )
+        },
+        facts,
+    )
+    page_checks.t11(run)
 
 
 def test_today_shots_include_the_market_page():
@@ -864,7 +902,9 @@ def _indexes(**changes):
         rows = [{**row, **extra} if row["key"] == key else row for row in rows]
     return {
         "dashboard": {
-            "market_overview": {"trading_date": "2026-10-22", "indexes": rows}
+            # #661: the page date the navbar states; a row of that day writes no date.
+            "as_of": "2026-10-22T09:00:00",
+            "market_overview": {"trading_date": "2026-10-22", "indexes": rows},
         }
     }
 
@@ -873,15 +913,21 @@ US_PAGE_ROW = (
     "S&P 500\t7,353.73\t-334.89\t-4.36%\t2026/10/21\t之上 季線 44,012.50\tFRED\n"
 )
 # Issue 633: the page lists the three Taiwan rows; the API (_indexes) still has the US rows.
+# #661 (decision 6835320079 D-c): no 資料日 column; a row of another day than the page date
+# (2026/10/22) has its 「資料 …」 line under the name, so the cells follow on that line.
 INDEX_PAGE = (
-    "大盤概況\n資料 2026/10/22\n指數總表\n資料 2026/10/22\n資料說明\n"
+    "大盤概況\n指數總表\n資料說明\n"
     f"{ATTRIBUTION}\n"
-    "指數\t收盤（點）\t漲跌\t漲跌幅\t資料日\t相對季線（MA60）\t來源\n"
-    "加權指數\t46,041.43\t-846.34\t-1.81%\t2026/10/22\t之上 季線 44,012.50\t臺灣證券交易所\n"
-    "櫃買指數\t395.42\t+2.10\t+0.53%\t2026/10/21 非最新\t資料不足（42／60 日）\t證券櫃檯買賣中心\n"
-    "台指期近月 合約 2026/11\t46,110\t換月\t換月\t2026/10/22\t之下 季線 46,502\t臺灣期貨交易所\n"
+    "指數\t收盤（點）\t漲跌\t漲跌幅\t相對季線（MA60）\t來源\n"
+    "加權指數\t46,041.43\t-846.34\t-1.81%\t之上 季線 44,012.50\t臺灣證券交易所\n"
+    "櫃買指數\n資料 2026/10/21 非最新\t395.42\t+2.10\t+0.53%\t資料不足（42／60 日）\t證券櫃檯買賣中心\n"
+    "台指期近月 合約 2026/11\t46,110\t換月\t換月\t之下 季線 46,502\t臺灣期貨交易所\n"
     "台指期近月 2026/10/22 換月（2026/10 → 2026/11），與前一筆是不同合約，不計漲跌\n"
+    f"{page_checks.INDEX_SOURCE_NOTE}\n"
     "技術指標 indicators/v1\n加權指數日線\n"
+)
+TX_ROW = (
+    "台指期近月 合約 2026/11\t46,110\t換月\t換月\t之下 季線 46,502\t臺灣期貨交易所\n"
 )
 
 
@@ -889,11 +935,37 @@ def test_t16_passes_on_the_index_table(tmp_path):
     run = FakeRun(tmp_path, _indexes(), {"market-1280": INDEX_PAGE})
     summary = page_checks.t16(run)
     assert summary.endswith("；沒有美股列")
-    assert (
-        "`台指期近月 合約 2026/11\t46,110\t換月\t換月\t2026/10/22\t之下 季線 46,502\t臺灣期貨交易所`"
-        in summary
-    )
+    assert f"`{TX_ROW.strip()}`" in summary
+    assert "`櫃買指數 ⏎ 資料 2026/10/21 非最新\t395.42" in summary
     assert "費城半導體指數" not in summary
+
+
+def test_t16_states_only_a_row_of_another_day(tmp_path):
+    # #661 AC-3: a row of the page date that still writes its date, a row of another day
+    # without its line, the 資料日 column back, or the 來源 sentence twice all fail.
+    late_tx = _indexes(tx={"trading_date": "2026-10-21", "freshness": "stale"})
+    page = INDEX_PAGE.replace(
+        TX_ROW,
+        TX_ROW.replace("合約 2026/11\t", "合約 2026/11\n資料 2026/10/21 非最新\t"),
+    )
+    assert "台指期近月 合約 2026/11 ⏎ 資料 2026/10/21 非最新" in page_checks.t16(
+        FakeRun(tmp_path, late_tx, {"market-1280": page})
+    )
+    with pytest.raises(page_checks.Fail, match="tx：缺整行"):
+        page_checks.t16(FakeRun(tmp_path, late_tx, {"market-1280": INDEX_PAGE}))
+    page = INDEX_PAGE.replace(
+        "加權指數\t46,041.43", "加權指數\n資料 2026/10/22\t46,041.43"
+    )
+    with pytest.raises(page_checks.Fail, match="taiex：缺整行"):
+        page_checks.t16(FakeRun(tmp_path, _indexes(), {"market-1280": page}))
+    page = INDEX_PAGE.replace("漲跌幅\t相對季線", "漲跌幅\t資料日\t相對季線")
+    with pytest.raises(page_checks.Fail, match="仍有 `資料日` 欄"):
+        page_checks.t16(FakeRun(tmp_path, _indexes(), {"market-1280": page}))
+    page = INDEX_PAGE.replace(
+        f"{ATTRIBUTION}\n", f"{page_checks.INDEX_SOURCE_NOTE}\n{ATTRIBUTION}\n"
+    )
+    with pytest.raises(page_checks.Fail, match="2 行，預期 1 行"):
+        page_checks.t16(FakeRun(tmp_path, _indexes(), {"market-1280": page}))
 
 
 def test_t16_fails_on_a_wrong_cell_order_or_a_us_row(tmp_path):
@@ -908,7 +980,7 @@ def test_t16_fails_on_a_wrong_cell_order_or_a_us_row(tmp_path):
     with pytest.raises(page_checks.Fail, match="tx：缺整行"):
         page_checks.t16(run)
     # Rows out of order.
-    tx = "台指期近月 合約 2026/11\t46,110\t換月\t換月\t2026/10/22\t之下 季線 46,502\t臺灣期貨交易所\n"
+    tx = TX_ROW
     page = INDEX_PAGE.replace(tx, "").replace(
         "加權指數\t46,041.43", tx + "加權指數\t46,041.43"
     )

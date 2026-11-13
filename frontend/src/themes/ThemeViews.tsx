@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import ReactEChartsModule from 'echarts-for-react'
 
 import { Term } from '../components/Term'
+import { UnlessPageDate } from '../components/pageDate'
 import { Badge, Card, CardList, DataTable, DateBadge, EmptyState, ScoreBar, Skeleton, Stat, StrengthChip, Tabs, cx, tabId, tabPanelId, type Column } from '../components/ui'
 import { newsSourceName, newsTime } from '../news/newsView'
 import { officialEventDisplayTitle } from '../presentation'
@@ -577,7 +578,7 @@ export function ThemeDetailView({
         <ComponentsCard detail={detail} item={item} state={state} error={board.error} />
       </div>
       <section className="section-head">
-        <div><div className="eyebrow">成員資料截至 {formatDate(detail.members_as_of) ?? '日期未提供'}</div><h2>族群成員</h2></div>
+        <div><UnlessPageDate date={detail.members_as_of}><div className="eyebrow">成員資料截至 {formatDate(detail.members_as_of) ?? '日期未提供'}</div></UnlessPageDate><h2>族群成員</h2></div>
         <MemberSortSelect value={memberSort} onChange={onMemberSortChange} />
       </section>
       {members.error

@@ -17,6 +17,7 @@ import {
   trackingNote,
 } from './tracking'
 import { ambiguous, cancelled, conflict, detailResponse, expired, invalidated, listResponse, meta, notEntered, plan, suspendedClose, targetHit, triggered } from './tracking.fixtures'
+import { PageDateContext } from '../components/pageDate'
 import { AddPlanButton, PlanCard, PlanHistory, StockPlanPanel, TrackingSection } from './TrackingViews'
 import type { StrategyDecision } from '../types'
 
@@ -58,6 +59,13 @@ for (const item of [plan(), triggered(), targetHit(), invalidated(), expired(), 
   check(markup.includes(`id="plan-${item.id}"`) && markup.includes(`id="plan-${item.id}-history"`), `${item.status} card has its anchors`)
   check(!markup.includes('勝率'), `${item.status} card never says 勝率`)
 }
+// #661 AC-3 (D-a): a plan card of the page date drops its date badge; one whose latest simulated session is earlier
+// keeps 「資料 YYYY/MM/DD」; the status badge stays either way (decision 6835320079 conditions 2 and 5).
+const cardOn = (day: string, item = plan()) => render(<PageDateContext.Provider value={day}><PlanCard plan={item} /></PageDateContext.Provider>)
+const sameDayCard = cardOn('2026-10-16', plan({ last_session_date: '2026-10-16' }))
+check(!sameDayCard.includes('date-badge') && sameDayCard.includes('>待觸發</span>'), `plan card of the page date: no date badge, the status stays: ${sameDayCard.slice(0, 400)}`)
+check(cardOn('2026-10-16', plan({ last_session_date: '2026-10-13' })).includes('資料 2026/10/13'), 'plan card whose last session is earlier than the page: 「資料 2026/10/13」')
+check(render(<PlanCard plan={plan({ last_session_date: '2026-10-16' })} />).includes('資料 2026/10/16'), 'plan card with no known page date keeps its date')
 
 // ---- simulated result lines ----
 check(planResultLine(plan()) === null && planResultLine(triggered()) === null, 'open plans have no result')
