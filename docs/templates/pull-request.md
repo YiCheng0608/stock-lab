@@ -22,5 +22,6 @@ Closes #<issue>
 - 高風險類別（有／無）：<!-- 有：列出碰到的 tools/ci/checks.py HIGH_RISK_PATHS 路徑，並加 independent-review label -->
 - 更新的文件：
 - worktree 外暫存目錄路徑：<!-- 沒有寫「無」；結案時統籌依此刪除 -->
+- 會過期的記憶：<!-- 沒有寫「無」。本任務讓哪幾則 Claude Code 記憶過期（檔案刪除、流程改變、角色改名、坑已編成檢查），每則寫檔名與該怎麼改（改寫成什麼、併入哪則或刪除）；工程師不改記憶，統籌結案時照這裡改（docs/COORDINATOR.md「記憶」） -->
 
 ## 未做／已知限制

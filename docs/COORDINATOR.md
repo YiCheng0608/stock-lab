@@ -1,4 +1,4 @@
-<!-- owns: 統籌 session、接手文、統籌換手、無人值守運作 -->
+<!-- owns: 統籌 session、接手文、統籌換手、無人值守運作、記憶維護 -->
 # 統籌手冊
 
 統籌接手時固定讀 [AGENTS](../AGENTS.md) 與本文（[接手文](#統籌-session)）；其他文件依手上的事再讀：
@@ -22,10 +22,10 @@ orca terminal rename --terminal <handle> --title "統籌" --json
 `--autocompact 400k` 把自動壓縮視窗設在 400K，不等到模型上限才壓縮。新統籌第一次呼叫的 context 門檻是 55K；repo 的 `.claude/settings.json` 關掉了用不到的 plugin、連接器、工具與 skill，每一項的理由、怎麼量、怎麼對單一 session 開回來見 [LOCAL](ops/LOCAL.md#session-起始-context-的專案設定)。標題只是給人看的，存活判定一律用心跳檔。接手文固定如下，開啟者原文送出，`<舊 handle>` 換成心跳記的舊統籌 terminal，它已不存在時換成 `--no-old-terminal`；開啟者若不是統籌本人，開完只回報 handle，不再對 repo 寫入：
 
 ```text
-你是 stock-lab 的統籌。先讀 AGENTS.md、docs/COORDINATOR.md、治理 Issue #1 本文的決策索引與最近 10 則留言、所有 open Issues 與 PR、最近 48 小時內關閉的 Issue 與合併的 PR 的最後一則留言。接著跑 bash tools/ops/take_over.sh <舊 handle>：它寫心跳、啟動 wake listener、在 #1 留「統籌 session 更換」並改 #1 本文的現任統籌、等舊統籌 terminal 閒置後關掉它、列出未兌現的承諾；中途失敗會停下並印出已做的步驟與續跑命令，修好原因後照它續跑，不手動補做。再跑 bash tools/ops/patrol.sh 處理未處理的事件，處理完以 --done 標記（docs/COORDINATOR.md「無人值守運作」）；以 `決定：` 回覆 patrol.sh 列出的每一則未回覆的提問，以及沒有類型的舊格式提問；兌現 take_over.sh 與 patrol.sh 列出的承諾，以及前任 `統籌承諾：` 留言裡承諾檔沒有的事（補寫進承諾檔）；核對前任標「已完成」的事，不只接續；然後依手冊推進。回覆使用者一律繁體中文。
+你是 stock-lab 的統籌。先讀 AGENTS.md、docs/COORDINATOR.md、治理 Issue #1 本文的決策索引與最近 10 則留言、所有 open Issues 與 PR、最近 48 小時內關閉的 Issue 與合併的 PR 的最後一則留言。接著跑 bash tools/ops/take_over.sh <舊 handle>：它寫心跳、啟動 wake listener、在 #1 留「統籌 session 更換」並改 #1 本文的現任統籌、等舊統籌 terminal 閒置後關掉它、列出未兌現的承諾、檢查記憶目錄；中途失敗會停下並印出已做的步驟與續跑命令，修好原因後照它續跑，不手動補做。再跑 bash tools/ops/patrol.sh 處理未處理的事件，處理完以 --done 標記（docs/COORDINATOR.md「無人值守運作」）；以 `決定：` 回覆 patrol.sh 列出的每一則未回覆的提問，以及沒有類型的舊格式提問；兌現 take_over.sh 與 patrol.sh 列出的承諾，以及前任 `統籌承諾：` 留言裡承諾檔沒有的事（補寫進承諾檔）；核對前任標「已完成」的事，不只接續；然後依手冊推進。回覆使用者一律繁體中文。
 ```
 
-[`take_over.sh`](../tools/ops/take_over.sh) 開始前先核對給的舊 handle 就是心跳記的 terminal（空字串、或心跳記的是別的 terminal，就以 64 停下、什麼都不做），所以不會關到工程師的 terminal；心跳會被第一步覆寫，舊 handle 與接手前有沒有 listener 記在 `<資料目錄>/logs/take-over-<session id>.json`，續跑時讀它核對，全部完成後刪掉。步驟依序是：`patrol.sh --heartbeat-only --take-over` 寫心跳並讀回；`wake_listener_start.sh`，之後 `--status` 要說在跑；以 `comment.sh` 在 #1 留「回報：統籌 session 更換：<handle>／<session id>」，附未兌現的承諾；讀 #1 本文、只換掉「## 現任統籌」底下那一列（其他內容逐位元組不變；標題或那一列不是剛好一個就不改並停下），送出後讀回比對；對舊 terminal `orca terminal wait --for tui-idle`，`satisfied:true` 才 `orca terminal close`；接手前就在跑的 listener（舊 terminal 的）要在關掉舊 terminal 後 10 秒內停止回應，再跑一次 `wake_listener_start.sh` 並以 `--status` 確認，逾時就停下（它可能不是舊 terminal 的，或晚點才結束而沒有 listener；查清後以 `--from relisten` 續跑，不再等待），本次接手才啟動的 listener 在新 terminal 裡，保留；最後印出未兌現的承諾。任一步失敗就停下，後面的步驟都不做，stderr 印出已完成的步驟與 `--from <步驟>` 的續跑命令（從改本文起要帶 `--comment-url` 前一次的 #1 留言），最後一行是 JSON。
+[`take_over.sh`](../tools/ops/take_over.sh) 開始前先核對給的舊 handle 就是心跳記的 terminal（空字串、或心跳記的是別的 terminal，就以 64 停下、什麼都不做），所以不會關到工程師的 terminal；心跳會被第一步覆寫，舊 handle 與接手前有沒有 listener 記在 `<資料目錄>/logs/take-over-<session id>.json`，續跑時讀它核對，全部完成後刪掉。步驟依序是：`patrol.sh --heartbeat-only --take-over` 寫心跳並讀回；`wake_listener_start.sh`，之後 `--status` 要說在跑；以 `comment.sh` 在 #1 留「回報：統籌 session 更換：<handle>／<session id>」，附未兌現的承諾；讀 #1 本文、只換掉「## 現任統籌」底下那一列（其他內容逐位元組不變；標題或那一列不是剛好一個就不改並停下），送出後讀回比對；對舊 terminal `orca terminal wait --for tui-idle`，`satisfied:true` 才 `orca terminal close`；接手前就在跑的 listener（舊 terminal 的）要在關掉舊 terminal 後 10 秒內停止回應，再跑一次 `wake_listener_start.sh` 並以 `--status` 確認，逾時就停下（它可能不是舊 terminal 的，或晚點才結束而沒有 listener；查清後以 `--from relisten` 續跑，不再等待），本次接手才啟動的 listener 在新 terminal 裡，保留；印出未兌現的承諾；最後以 `memory_check.py` 唯讀檢查記憶目錄（[記憶](#記憶)），失敗時改好記憶再 `--from memory` 續跑。任一步失敗就停下，後面的步驟都不做，stderr 印出已完成的步驟與 `--from <步驟>` 的續跑命令（從改本文起要帶 `--comment-url` 前一次的 #1 留言），最後一行是 JSON。
 
 **resume 統籌**（#710）：接回原統籌 session（重開機、terminal 被關）時帶回開啟時的旗標：`claude --resume <session id> --model claude-opus-5-5 --effort xhigh --autocompact 400k`。resume 不保證沿用開啟時的旗標（effort 會重置為預設）；前任 `59660bf2` 11/13 重啟後沒有再壓縮，context 到 793,547、該 session 67% 的成本花在 400K 以上（#708，推測是沒帶 `--autocompact`）。沒帶時還有自動換手機制第 1 點的 context 門檻（450K）兜底。
 
@@ -63,3 +63,15 @@ orca terminal rename --terminal <handle> --title "統籌" --json
 - **統籌承諾**：統籌對工程師做出偏離手冊的承諾（例如合併後先不清 worktree），或答應日後在某個時點做某件事（例如隔天的實測、21:30 daily 後的核對）時，同時寫兩處：在該 Issue 留一則 `統籌承諾：` 留言（[留言類型](WORKFLOW.md#留言類型)），再以 `bash tools/ops/commit.sh add --due <時間或 none> --url <那則留言的連結> --text <內容>` 寫進承諾檔 `<資料目錄>/logs/commitments.jsonl`（[`commit.sh`](../tools/ops/commit.sh)；時間寫成 `2026-11-07T09:23+08:00`，沒有固定時點寫 `none`）。兌現後在 Issue 留言並 `commit.sh done <id> --url <留言連結>`。`patrol.sh` 每次列出未兌現的承諾，已到期的標「已到期」；session 內排的一次性定時工作只當提醒，跟著 session 消失，不是唯一記錄。換手後由新統籌兌現（`take_over.sh` 也會列出）。
 - **統籌換手**：觸發條件任一成立就換：同一 session 已自動壓縮兩次以上；最後一次呼叫的 context 超過門檻（預設 450K，#710）；統籌自覺回答對不上 Issue 與文件；使用者要求。偵測與執行步驟見[統籌 session](#統籌-session)的自動換手機制。
 - **前提與限制**：本機與 Orca 保持開機登入（monitor 在容器裡時，喚醒靠統籌 session 啟動的 wake listener，[統籌事件 monitor](ops/MONITOR.md)）；訂閱額度由統籌、工程師與 LLM 批次共用，額度用盡時全部暫停到重置，不視為失敗；合併把關為 CI＋統籌 review＋高風險項獨立 review。
+
+## 記憶
+
+Claude Code 的 project memory（`MEMORY.md` 與它列的記憶檔，每個統籌與工程師 session 開場都載入）在 repo 外，worktree 與管理 checkout 共用同一份。實際位置是 `C:/Users/YiCheng/.claude/projects/<slug>/memory/`，`<slug>` 是管理 checkout 的路徑、英數以外的字元換成 `-`（現在是 `C--Users-YiCheng-Desktop-taiwan-stock-research`）。Orca 開的 session 看到的是 `$CLAUDE_CONFIG_DIR/projects/<slug>/memory/`，那是指向實際位置的 symlink。CI 讀不到它，所以由本機檢查維持（#705）。
+
+- **用實際位置改**：統籌改記憶的 Edit／Write 一律寫實際位置，不要寫 session 開場提示給的 `$CLAUDE_CONFIG_DIR` 底下的 symlink 路徑。經 symlink 寫入會跳確認框（「outside working directory via a symlink」），加 `--add-dir` 也一樣；確認框有時停 100 秒以上，統籌就卡在那裡，佇列和喚醒都停住。寫實際位置不跳框，啟動與 resume 命令不必改（實測 [6880462190](https://github.com/YiCheng0608/stock-lab/issues/705#issuecomment-6880462190)）。
+- **誰改**：只有統籌與使用者改記憶（含新增）。工程師 session 不寫記憶目錄：多個 session 同時寫同一份 `MEMORY.md` 會互相覆蓋。checkout 在 `task/*` branch 的 session 以 Edit／Write／NotebookEdit 寫記憶目錄時，實際位置或 symlink 路徑都會被 [`agent_guard.cjs`](../tools/ops/agent_guard.cjs) 擋下（Bash 擋不到，見 [GUARDRAILS](GUARDRAILS.md)）。工程師把任務讓哪幾則記憶過期（檔案刪除、流程改變、角色改名、坑已編成檢查）寫在 PR 本文「欄位」區的「會過期的記憶」（[PR 模板](templates/pull-request.md)；沒有就寫「無」，空著時 CI `pr` 規則 f 會紅）。
+- **何時改**：結案時，`close_task.sh` 之後（[任務流程](WORKFLOW.md#任務流程)第 6 步）。照 PR 本文「會過期的記憶」改寫或刪掉那幾則：坑已編成檢查的，改成一句「已由 <檢查> 擋」併入相關主題，或直接刪掉（[encode-lesson](../.claude/skills/encode-lesson/SKILL.md) 第 6 步）。同步 `MEMORY.md`，改名或刪除時一併改掉別則的 `[[舊名稱]]`，再跑一次 `memory_check.py` 確認通過。平時讀到與現況不符的記憶，也當下改或刪。
+- **檢查**：[`memory_check.py`](../tools/ops/memory_check.py) 唯讀，會失敗、不是報告。它檢查四項：`MEMORY.md` 每列連到一個存在的檔；目錄裡沒有不在索引的檔；`[[連結]]` 都指得到存在的記憶；反引號裡看起來是 repo 路徑的字串在管理 checkout 的 `origin/master` 上存在。判定規則見檔頭；已刪或改名的路徑要留作歷史時寫成 `<路徑>@<commit>`。失敗時每項印一列「<檔>: <檢查>: <原因>」；找不到記憶目錄時以 2 結束，不會靜默通過。兩支腳本會跑它：
+  - `take_over.sh` 的最後一步 `memory`：失敗時改好記憶，再以 `--from memory` 續跑。
+  - `close_task.sh` 在清理與索引之後、設看板之前：失敗時以 3 結束，看板不動；改好記憶後以 `close_task.sh <issue> --pr <n>` 續跑。
+  - 手動跑：在管理 checkout 執行 `python -X utf8 tools/ops/memory_check.py`。目錄可用 `--memory-dir` 或 `STOCK_MEMORY_DIR` 指定，預設依 `CLAUDE_CONFIG_DIR`（沒有時 `~/.claude`）推出。

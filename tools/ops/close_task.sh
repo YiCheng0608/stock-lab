@@ -43,7 +43,10 @@
 # same-engine CLI and verify the files the merge commit changed (cbm_ensure in
 # coordinator_lib.sh: one forced rebuild when only the mtime rule is left); a missing CLI,
 # a time-out, an answer that cannot be read or an index still stale is exit 3 (rerun with
-# --pr <n>), and the board stays as it was.
+# --pr <n>), and the board stays as it was. Last, the Claude Code memory directory
+# (memory_check.py, read only, #705; $STOCK_MEMORY_DIR or the one Claude Code keeps for
+# this repo): a failure, or no directory, is exit 3 the same way, the memory and check
+# named in "error"; the coordinator fixes the memory, then reruns.
 #
 # Usage: close_task.sh <issue> [--extra-dir <path>]... [options]
 #   --slug S          the task is task/<issue>-S (needed when an issue has several)
@@ -476,6 +479,17 @@ else
     cbm_ensure rebuilt "$index_paths" || { steps+=("${cbm_steps[@]+"${cbm_steps[@]}"}"); report 3 "索引步驟：$cbm_error"; }
     steps+=("${cbm_steps[@]}")
   fi
+fi
+
+# --- the memory directory (#705; memory_check in coordinator_lib.sh) -----------------
+# Read only, after the cleanup and the index: a memory this task made stale fails here,
+# and the coordinator fixes it once the task is closed (docs/COORDINATOR.md 記憶). Exit 3
+# with every step above in "steps", the board as it was; rerun with --pr <n> after.
+if memory_check; then
+  steps+=("memory_ok")
+else
+  printf '%s\n' "$memory_out" >&2
+  report 3 "記憶檢查失敗：${memory_failures:-$memory_out}；改好記憶後續跑 bash tools/ops/close_task.sh $issue${slug:+ --slug $slug} --pr $pr"
 fi
 
 if [ "$set_board" = 1 ]; then
