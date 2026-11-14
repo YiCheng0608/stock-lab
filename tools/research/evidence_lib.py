@@ -105,6 +105,9 @@ class Series:
     low: array = field(default_factory=lambda: array("d"))
     close: array = field(default_factory=lambda: array("d"))
     volume: array = field(default_factory=lambda: array("d"))
+    # scale[k]: the adjusted price of bar k over its raw price (the product of
+    # the factors of the actions after its day); raw = adjusted ÷ scale.
+    scale: array = field(default_factory=lambda: array("d"))
     # suspended[k] counts the suspended bars before position k.
     suspended: array = field(default_factory=lambda: array("i"))
     position: dict[date, int] = field(default_factory=dict)
@@ -191,6 +194,7 @@ def _series(instrument_id: int, instrument, factor_of, session_index) -> Series:
             value = getattr(bar, name)
             getattr(out, name).append(value * scale if value else NAN)
         out.volume.append(float(bar.volume or 0))
+        out.scale.append(scale)
         out.suspended.append(out.suspended[-1] + (1 if bar.suspended else 0))
     return out
 

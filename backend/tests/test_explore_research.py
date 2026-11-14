@@ -1510,3 +1510,43 @@ def test_the_feature_cache_holds_one_signal_date(
     assert (
         0 < len(ctx.cache) <= members * len(tool.used_features(tool.HYPOTHESES[name]))
     )
+
+
+# --- the #726 shared functions -------------------------------------------------
+
+
+def test_the_definitions_of_x1_to_x8_are_unchanged_by_726():
+    """#726 made the gate functions take parameters; X1～X8 stay the same."""
+
+    assert tool.VERSION == 2
+    assert tool.definitions_sha256() == (
+        "600dc942361847eb9591425b4eb97ce4178b477695ff34fc234e45a665ebec63"
+    )
+
+
+def test_the_trade_research_rows_of_the_shared_ledger_do_not_block(
+    explore_db, tmp_path, monkeypatch
+):
+    """#726 condition 4: trade_research's rows leave this tool's checks alone."""
+
+    compressed(monkeypatch, tmp_path)
+    db = copy_of(explore_db, tmp_path)
+    rows = [
+        {"hypothesis": "S1", "tool": "trade_research", "segment": "exploration",
+         "version": tool.VERSION},
+        {"hypothesis": "R1", "tool": "trade_research", "segment": "validation",
+         "version": 1},
+    ]  # fmt: skip
+    tool.write_ledger(db.parent / tool.LEDGER_NAME, rows)
+    tool.write_ledger(tool.REPO_LEDGER, rows)
+    assert tool.exploration_problems(db, "X1,X3") == ([], ["X1", "X3"])
+    out = tmp_path / "exploration"
+    assert explore(db, out, hypotheses="X3,X6") == 0
+    problems, _names = tool.exploration_problems(db, "X3")
+    assert len(problems) == 1 and "X3 already in" in problems[0]  # its own row still
+    report = out / "explore.json"
+    problems, passed, _ = tool.validation_problems(
+        db, str(report), tool.file_sha256(report), URL
+    )
+    assert passed == passed_names(out)
+    assert not [line for line in problems if "already in" in line]
