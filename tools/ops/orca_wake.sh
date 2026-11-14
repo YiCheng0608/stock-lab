@@ -8,8 +8,11 @@
 #   Sends TEXT with Enter into TERMINAL only once `orca terminal wait --for tui-idle`
 #   answers satisfied:true (GUARDRAILS #282): text sent into a busy session or an open
 #   question could answer it.
-# Exit: 0 sent; 3 not idle (no answer, a timeout or a missing terminal included); 1 the
-#   send failed. Environment: ORCA_EXE (default orca on PATH, then
+# Exit: 0 sent; 3 not idle (no answer, a timeout or a missing terminal included); 4 the
+#   coordinator stopped at a permission or trust menu (#720): the wait timed out and
+#   `orca terminal show` names the menu (agentWait), or the send was refused with
+#   agent_prompt_blocked; 1 the send failed. Nothing here answers the menu: that is the
+#   user's decision. Environment: ORCA_EXE (default orca on PATH, then
 #   $LOCALAPPDATA/Programs/orca/resources/bin/orca.exe), WAKE_WAIT_MS (default 15000),
 #   MONITOR_CALL_TIMEOUT (seconds per orca call, default 120).
 set -u
@@ -33,7 +36,21 @@ fi
 call() { timeout -k 10 "${MONITOR_CALL_TIMEOUT:-120}" "$@"; }
 out="$(call "$orca_exe" terminal wait --terminal="$terminal" --for tui-idle \
   --timeout-ms "${WAKE_WAIT_MS:-15000}" --json 2>/dev/null)"
-printf '%s' "$out" | cj satisfied || exit 3
-out="$(call "$orca_exe" terminal send --terminal="$terminal" --text "$text" --enter --json 2>/dev/null)" \
-  && printf '%s' "$out" | cj ok || exit 1
-exit 0
+if ! printf '%s' "$out" | cj satisfied; then
+  # agentWait is not in Orca's CLI docs: `orca terminal show` fills it from the runtime's
+  # getTerminalInteractiveWait (Orca's app.asar, read 2026-11-15): null when the agent
+  # waits on nothing, an object ({"source": "hook"|"title"|"prompt-text", ...}) while it
+  # shows a permission or trust menu, absent when Orca cannot tell. An Orca release may
+  # drop or rename it: anything but an object (absent, null, a failed show, no JSON) is
+  # read as before, not idle.
+  out="$(call "$orca_exe" terminal show --terminal="$terminal" --json 2>/dev/null)"
+  waiting_on="$(printf '%s' "$out" | cj get result.terminal.agentWait 2>/dev/null)"
+  case "$waiting_on" in '{'*) exit 4 ;; esac
+  exit 3
+fi
+out="$(call "$orca_exe" terminal send --terminal="$terminal" --text "$text" --enter --json 2>/dev/null)"
+printf '%s' "$out" | cj ok && exit 0
+# The menu opened between the wait and the send: Orca refuses a text-plus-Enter prompt
+# to an agent at a permission or trust menu (orca skills get orca-cli).
+[ "$(printf '%s' "$out" | cj get error.code 2>/dev/null)" = agent_prompt_blocked ] && exit 4
+exit 1
