@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Claude Code PreToolUse hook (.claude/settings.json): blocks the tool calls AGENTS.md forbids.
 // - Edit/Write: the target file's checkout is on branch master (the management checkout).
+// - Edit/Write/NotebookEdit: the target is in the Claude Code memory directory and this session's
+//   project checkout is on a task/* branch (#705; memoryDenial below).
 // - Bash/PowerShell: git clean -x/-X, bare git stash, git stash pop/clear, git push --force/-f/
 //   --force-with-lease/+refspec, recursive rm of the data directory, docker compose down -v/--volumes
 //   of a project not named as a test project with -p.
@@ -18,6 +20,7 @@
 const ALLOW = [];
 
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
@@ -754,6 +757,62 @@ function fileDenial(file, cwd) {
   return null;
 }
 
+// --- the Claude Code memory directory (#705; docs/COORDINATOR.md「記憶」) -----------------
+// Only the coordinator and the user change the memories: a session whose project checkout is on
+// a task/* branch (an engineer) may not Edit/Write/NotebookEdit into the memory directory, as
+// its real location or through any other path to it (the profile's symlink). The directories:
+// <$CLAUDE_CONFIG_DIR and ~/.claude>/projects/<slug>/memory, the slug the main checkout's path
+// with every character but A-Z a-z 0-9 turned into "-" (as Claude Code and memory_check.py name
+// it), and $STOCK_MEMORY_DIR; each also as it resolves. Bash writes are not caught.
+const MEMORY_REASON = '記憶只由統籌與使用者改；把會過期的記憶寫進 PR 本文「會過期的記憶」（docs/COORDINATOR.md「記憶」）';
+
+function samePathKey(file) {
+  const forward = normalizeTarget(file).replace(/\\/g, '/').replace(/\/+$/, '');
+  return process.platform === 'win32' ? forward.toLowerCase() : forward;
+}
+
+function within(file, dir) {
+  const f = samePathKey(file);
+  const d = samePathKey(dir);
+  return f === d || f.startsWith(`${d}/`);
+}
+
+// `file` as it resolves: its nearest existing directory resolved (links, 8.3 names), the rest as
+// written.
+function resolvedTarget(file) {
+  const dir = existingDir(file);
+  const real = dir && realName(dir);
+  return real ? path.join(real, path.relative(dir, file)) : file;
+}
+
+function memoryDirs(projectDir) {
+  const result = spawnSync('git', ['-C', projectDir, 'rev-parse', '--path-format=absolute', '--git-common-dir'], {
+    encoding: 'utf8',
+    timeout: 10000,
+  });
+  if (result.error) throw result.error;
+  const dirs = [];
+  if (result.status === 0 && result.stdout.trim()) {
+    const main = normalizeTarget(path.dirname(result.stdout.trim())).replace(/\\/g, '/');
+    const slug = main.replace(/[^A-Za-z0-9]/g, '-');
+    for (const base of [process.env.CLAUDE_CONFIG_DIR, path.join(os.homedir(), '.claude')]) {
+      if (base) dirs.push(path.join(normalizeTarget(base), 'projects', slug, 'memory'));
+    }
+  }
+  if (process.env.STOCK_MEMORY_DIR) dirs.push(normalizeTarget(process.env.STOCK_MEMORY_DIR));
+  return [...dirs, ...dirs.map(realName).filter(Boolean)];
+}
+
+function memoryDenial(file, cwd) {
+  if (typeof file !== 'string' || !file) return null;
+  const projectDir = normalizeTarget(process.env.CLAUDE_PROJECT_DIR || cwd || process.cwd());
+  if (!(branchAt(projectDir) || '').startsWith('task/')) return null;
+  const target = path.resolve(normalizeTarget(cwd || process.cwd()), normalizeTarget(file));
+  const forms = [target, resolvedTarget(target)];
+  const dir = memoryDirs(projectDir).find((d) => forms.some((f) => within(f, d)));
+  return dir ? `${file} 在記憶目錄 ${dir}，這個 session 在 task/* branch：${MEMORY_REASON}` : null;
+}
+
 // Tool input fields this script reads as text. Any other type is malformed input, which blocks.
 const TEXT_FIELDS = ['file_path', 'notebook_path', 'path', 'glob', 'type', 'pattern', 'command'];
 // Tools that upload or read local files under keys of their own: every string is checked.
@@ -774,11 +833,15 @@ function denial(input) {
   switch (name) {
     case 'Edit':
     case 'Write':
-      return envFileDenial(tool.file_path, input.cwd) || fileDenial(tool.file_path, input.cwd);
+      return (
+        envFileDenial(tool.file_path, input.cwd) ||
+        fileDenial(tool.file_path, input.cwd) ||
+        memoryDenial(tool.file_path, input.cwd)
+      );
     case 'Read':
       return envFileDenial(tool.file_path, input.cwd);
     case 'NotebookEdit':
-      return envFileDenial(tool.notebook_path, input.cwd);
+      return envFileDenial(tool.notebook_path, input.cwd) || memoryDenial(tool.notebook_path, input.cwd);
     case 'Grep':
       return grepDenial(tool, input.cwd);
     case 'Glob': {

@@ -489,3 +489,20 @@ cbm_ensure() {
   cbm_verify "$paths" || return 1
   cbm_steps+=("index_fresh:$n")
 }
+
+# --- the Claude Code memory directory (#705; docs/COORDINATOR.md 記憶) ------------------
+# memory_check: tools/ops/memory_check.py, read only, on the memory directory every session
+# loads ($STOCK_MEMORY_DIR, else the one Claude Code keeps for this repo under
+# $CLAUDE_CONFIG_DIR or ~/.claude), repo paths checked on origin/master of this checkout.
+# Returns its exit code (0 passed, 1 a check failed, 2 no directory or git failed);
+# memory_out is its output, memory_failures the failures alone joined by "；".
+memory_out="" memory_failures=""
+memory_check() {
+  local rc=0
+  memory_out="$("$python" -X utf8 "$script_dir/memory_check.py" --repo "$repo_root" 2>&1)" || rc=$?
+  memory_out="$(printf '%s' "$memory_out" | tr -d '\r')"
+  memory_failures="$(printf '%s\n' "$memory_out" | awk '
+    /^memory_check: (失敗 [0-9]+ 項|通過)（/ { next }
+    { sub(/^memory_check: /, ""); printf "%s%s", n++ ? "；" : "", $0 }')"
+  return "$rc"
+}

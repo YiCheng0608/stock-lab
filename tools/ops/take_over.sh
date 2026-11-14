@@ -16,6 +16,10 @@
 #               must stop answering within TAKE_OVER_LISTENER_WAIT seconds first, else the
 #               step fails; one this run started is kept (skipped with --no-old-terminal)
 #   commitments the commitments not kept yet (commit.sh list)
+#   memory      memory_check.py on the Claude Code memory directory (read only, #705;
+#               $STOCK_MEMORY_DIR or the one Claude Code keeps for this repo): a failure
+#               names the memory and the check; the coordinator fixes it and goes on
+#               --from memory (docs/COORDINATOR.md 記憶)
 # A step that fails stops the run: nothing after it is done, and the steps already done are
 # printed with the command that goes on from the failed one (--from). The last line is
 # JSON: {"ok", "done": [steps], "failed": step or null, "reason", "comment_url"}.
@@ -30,7 +34,7 @@
 #   OLD_HANDLE         the old coordinator terminal, as the heartbeat names it
 #   --no-old-terminal  it no longer exists: the close step is skipped
 #   --from STEP        start at STEP (heartbeat, listener, comment, row, close, relisten,
-#                      commitments)
+#                      commitments, memory)
 #                      after a run stopped there; from row on, --comment-url is needed
 #   --comment-url URL  the #1 comment an earlier run posted (it printed it)
 #   --session-id ID    default $CLAUDE_CODE_SESSION_ID
@@ -45,7 +49,7 @@ set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
 
-steps_all=(heartbeat listener comment row close relisten commitments)
+steps_all=(heartbeat listener comment row close relisten commitments memory)
 session_id="${CLAUDE_CODE_SESSION_ID:-}" handle="${ORCA_TERMINAL_HANDLE:-}" old="" from=heartbeat comment_url=""
 old_given=0
 while [ $# -gt 0 ]; do
@@ -248,6 +252,13 @@ for step in "${steps_all[@]:$start}"; do
     commitments)
       "$python" -X utf8 "$script_dir/commitments.py" list "$logs" "$now" \
         || fail commitments "讀不了承諾檔"
+      ;;
+    memory)
+      if ! memory_check; then
+        printf '%s\n' "$memory_out" >&2
+        fail memory "記憶檢查失敗：${memory_failures:-$memory_out}；改好記憶再續跑"
+      fi
+      printf '%s\n' "$memory_out"
       ;;
   esac
   done_steps+=("$step")
