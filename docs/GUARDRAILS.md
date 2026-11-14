@@ -3,6 +3,8 @@
 
 會擋下違規的檢查列在這裡；強制手段寫「無」的規則只靠文件與 review。新增檢查時同一個 PR 補一列。hook 有問題時 revert `.claude/settings.json` 即可停用。
 
+強制手段以「無（統籌 review」開頭的列是統籌 review 要逐條核對的清單（行內 review 與[大 PR 的 review 子代理](WORKFLOW.md#review-與合併)都照它；子代理在 PR head 上讀這份，任務文不另抄）。新增只靠 review 的規則時，強制手段照這個字樣寫。
+
 | 規則 | 強制手段 | 檔案／設定 |
 | --- | --- | --- |
 | 改產品或高風險路徑的 PR 要對應 Issue（`Closes #<issue>`） | CI `pr` 規則 a | `tools/ci/checks.py`（`needs_issue`）、`.github/workflows/ci.yml`（`pr` job） |
@@ -31,7 +33,7 @@
 | Python lint 與格式（#225） | CI `repository` job 的 `lint` step | `tools/ci/checks.py`（`LINT_COMMANDS`）、`ruff.toml` |
 | Alembic head 只有一個來源（#225） | 後端測試 `test_operations_doc_names_the_code_head` | `backend/app/migration_revisions.py`、`backend/tests/test_database_readiness.py` |
 | `git blame` 略過全檔格式化 commit（#225） | 無（每個 checkout 手動設 `blame.ignoreRevsFile`） | `.git-blame-ignore-revs` |
-| worktree 外暫存目錄路徑寫進 PR | 無（PR 模板欄位） | `docs/templates/pull-request.md` |
+| worktree 外暫存目錄路徑寫進 PR | 無（統籌 review；PR 模板欄位） | `docs/templates/pull-request.md` |
 | 統籌接手時核對前任標「已完成」的事 | 無 | `docs/COORDINATOR.md`（統籌 session） |
 | 同類錯誤第二次發生就編成檢查 | 無（流程用 encode-lesson skill，#228） | `docs/WORKFLOW.md`（任務流程第 6 步）、`.claude/skills/encode-lesson/SKILL.md` |
 | Claude Code 記憶目錄跟著現況（#705）：`MEMORY.md` 每列連到一個存在的檔、目錄裡沒有不在索引的檔、`[[連結]]` 指得到存在的記憶、反引號裡看起來是 repo 路徑的字串在管理 checkout 的 `origin/master` 上；找不到目錄就失敗 | `take_over.sh` 最後一步 `memory`、`close_task.sh` 設看板前跑 `memory_check.py`，失敗就讓腳本失敗；後端測試 `test_memory_check.py`（四項各有紅綠、找不到目錄、兩支腳本的失敗與續跑） | `tools/ops/memory_check.py`、`tools/ops/coordinator_lib.sh`（`memory_check`）、`tools/ops/take_over.sh`、`tools/ops/close_task.sh`、`backend/tests/test_memory_check.py` |
