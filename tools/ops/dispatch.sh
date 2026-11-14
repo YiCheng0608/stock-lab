@@ -13,7 +13,13 @@
 # into the terminal, so it has no size limit and no character in it needs escaping.
 # claude starts with --add-dir "<the task file's directory>", so reading it needs no
 # permission prompt whatever the session's permission mode.
-# Sets the board to 開發中.
+# Sets the board to 開發中. Before the worktree is made, the codebase-memory master index
+# (#704; cbm_ensure in coordinator_lib.sh): from origin/master this checkout is first
+# fast-forwarded to it (on master, no uncommitted change to a tracked file), then the files
+# the newest merges of its HEAD changed are verified with the same-engine CLI and a stale
+# index rebuilt once; a checkout that cannot be fast-forwarded, an index still stale, or
+# the CLI missing or timing out is exit 1 with nothing created or sent. From another
+# --base the checkout is left as it is and the index matches master only.
 #
 # Usage: dispatch.sh <issue> <slug> --task-file <path> [options]
 #   --model M         default claude-opus-5-5
@@ -25,12 +31,16 @@
 #   --submit-wait S   seconds to watch for turn_started after sending, default 30
 #   --python EXE      default $STOCK_PYTHON, then this checkout's .venv, then python3
 #   --no-board        leave the board alone (a dry run on a throwaway branch)
-# Prints one JSON line (worktree, branch, head, terminal, task_file, sent, turn_started,
-# board, error).
+# Prints one JSON line (worktree, branch, head, terminal, task_file, index: the index steps
+# comma-separated or "failed", sent, turn_started, board, error).
 # Exit 0 when sent and started; 1 before sending (nothing was sent); 3 the text may be
 # in the terminal but the turn was not seen starting, or the send itself failed or was
 # not accepted ("sent": null, read the terminal, do not resend); 4 board update failed;
 # 2/64 bad setup or arguments.
+{
+# The whole script is one brace group: bash reads all of it before running any, so a
+# fast-forward of this checkout that rewrites this file mid-run (#704 review) cannot
+# change what runs next.
 set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
@@ -93,14 +103,14 @@ notice="請用 Read 工具讀取任務檔 $task_path（UTF-8），依其內容�
 
 branch="task/$issue-$slug"
 name="task-$issue-$slug"
-path="" head="" base="" handle="" sent=false started=false board=""
+path="" head="" base="" handle="" sent=false started=false board="" index=""
 
 report() { # report EXIT [ERROR]
   local error=null
   [ -n "${2:-}" ] && error="$(json_str "$2")"
-  printf '{"issue":%s,"worktree":%s,"branch":%s,"head":%s,"base":%s,"terminal":%s,"task_file":%s,"sent":%s,"turn_started":%s,"board":%s,"error":%s}\n' \
+  printf '{"issue":%s,"worktree":%s,"branch":%s,"head":%s,"base":%s,"terminal":%s,"task_file":%s,"index":%s,"sent":%s,"turn_started":%s,"board":%s,"error":%s}\n' \
     "$issue" "$(json_str "$path")" "$(json_str "$branch")" "$(json_str "$head")" "$(json_str "$base")" \
-    "$(json_str "$handle")" "$(json_str "$task_path")" "$sent" "$started" "$(json_str "$board")" "$error"
+    "$(json_str "$handle")" "$(json_str "$task_path")" "$(json_str "$index")" "$sent" "$started" "$(json_str "$board")" "$error"
   [ -n "${2:-}" ] && printf 'dispatch.sh: %s\n' "$2" >&2
   exit "$1"
 }
@@ -109,6 +119,19 @@ git -C "$repo_root" show-ref --verify --quiet "refs/heads/$branch" && report 1 "
 git -C "$repo_root" fetch --quiet origin "$base_branch" || report 1 "git fetch origin $base_branch 失敗"
 base="$(git -C "$repo_root" rev-parse "$base_ref")" || report 1 "讀不到 $base_ref"
 orca_repo_id
+
+# The master index (#704), before anything is created. From origin/master (the default)
+# the management checkout is fast-forwarded to the tip just fetched first, so the index is
+# checked against what the new worktree starts from (#704 review: a merge not yet closed
+# with close_task.sh); from another base it is not, and the index matches only master.
+# A stale index is rebuilt once (and forced once when only the mtime rule is left); still
+# stale, or no answer, stops here.
+if [ "$base_ref" = origin/master ]; then
+  checkout_fast_forward || { index=failed; report 1 "索引驗證：管理 checkout 更新：$cbm_error"; }
+fi
+index_paths="$(cbm_recent_paths)" || report 1 "索引驗證：讀不到最近 $cbm_recent_merges 次合併改到的檔案"
+cbm_ensure check "$index_paths" || { index=failed; report 1 "索引驗證：$cbm_error"; }
+index="$(IFS=,; printf '%s' "${cbm_steps[*]}")"
 
 # Without --base orca uses the repo's default base, as before #332; the HEAD check below
 # holds either way.
@@ -158,3 +181,5 @@ else
   board=skipped
 fi
 report 0
+exit 1 # not reached: report exits
+}

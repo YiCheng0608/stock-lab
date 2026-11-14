@@ -12,14 +12,14 @@
 - **GitHub Issues** 是任務來源：目標、範圍、驗收條件（AC）、決策與結果都記在 Issue。Project 看板只顯示狀態，不另建表。
 - **Repo** 保存程式、文件、可重建測試。一次性命令、實測紀錄、待辦留 Issue。
 - **Orca** 管 worktree 與 terminal；每個任務在自己的 worktree 工作，不在管理 checkout（`master`）改檔。排程只從獨立的發佈 checkout 執行，正式資料目錄在 repo 外（[排程](docs/ops/SCHEDULING.md)）；agent 不得在任何 checkout 跑 `git clean -x`，不得刪資料目錄。
-- **codebase-memory** 先查索引再讀原檔；MCP 斷線改用同引擎 CLI，不重建整份索引。
+- **codebase-memory** 先查索引再讀原檔。只有一份 master 索引（project `C-Users-YiCheng-Desktop-taiwan-stock-research`），由 `close_task.sh` 合併後重建並驗證、`dispatch.sh` 派工前再驗；不對自己的 worktree 跑 `index_repository`，自己改過的檔以 worktree 內實際檔案為準。MCP 斷線改用同引擎 CLI，不重建整份索引（[程式索引](docs/WORKFLOW.md#程式索引)）。
 - 回覆使用者一律繁體中文、台灣用語；程式、指令、路徑維持原樣。
 
 ## 角色
 
 | 角色 | 預設模型／effort | 做什麼 |
 | --- | --- | --- |
-| 統籌 | `claude-fable-5-2`／`medium`，`--autocompact 400k`（使用者 2026-11-14 決定，[#1](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6873486079)） | 同時只有一個，一律由 agent 依 [COORDINATOR](docs/COORDINATOR.md#統籌-session)以 Orca 開啟：現任統籌自行換手；沒有統籌時使用者對任一 Claude session 說「開統籌」，由它開。拆任務、建 Issue、派工、review、合併、更新 ROADMAP 與文件、回報進度；使用者不在時依[無人值守運作](docs/COORDINATOR.md#無人值守運作)持續推進。 |
+| 統籌 | `claude-opus-5-5`／`xhigh`，`--autocompact 400k`（使用者 2026-11-14 決定，[#1](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6875651278)） | 同時只有一個，一律由 agent 依 [COORDINATOR](docs/COORDINATOR.md#統籌-session)以 Orca 開啟：現任統籌自行換手；沒有統籌時使用者對任一 Claude session 說「開統籌」，由它開。拆任務、建 Issue、派工、review、合併、更新 ROADMAP 與文件、回報進度；使用者不在時依[無人值守運作](docs/COORDINATOR.md#無人值守運作)持續推進。 |
 | 工程師 | `claude-opus-5-5`／`medium` | 每個任務一個 session，在自己的 worktree 實作、自測、寫文件、開 PR、處理 review 與 CI。 |
 
 - 不設常駐 QA、文件、索引／Git 角色。需要獨立驗證時由統籌在 PR 上跑 `/code-review` 或另開一個 review session，見[工作手冊](docs/WORKFLOW.md#review-與合併)。

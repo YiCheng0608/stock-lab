@@ -321,3 +321,171 @@ docker_cleanup() {
   if docker_call image prune -f >/dev/null; then steps+=("docker_pruned:images"); else steps+=("docker_prune_failed:images"); fi
   if docker_call builder prune -f >/dev/null; then steps+=("docker_pruned:build_cache"); else steps+=("docker_prune_failed:build_cache"); fi
 }
+
+# --- the codebase-memory master index (#704; docs/WORKFLOW.md 程式索引) ---------------
+# One index, of the master management checkout (this repo_root), kept by close_task.sh
+# (rebuilt and verified after each merge) and checked by dispatch.sh before a dispatch.
+# Only the same-engine CLI is used: a script may run in a shell with no MCP connection.
+# STOCK_CBM_* override the defaults (the tests point STOCK_CBM_CLI at a fake).
+cbm_cli="${STOCK_CBM_CLI:-C:/Users/YiCheng/.local/bin/codebase-memory-mcp.cmd}"
+cbm_project="${STOCK_CBM_PROJECT:-C-Users-YiCheng-Desktop-taiwan-stock-research}"
+# Seconds per CLI call; a full build of the repo takes about 11.
+cbm_timeout="${STOCK_CBM_TIMEOUT:-300}"
+# dispatch.sh checks the files the newest N merges of the checkout's HEAD changed.
+cbm_recent_merges="${STOCK_CBM_RECENT_MERGES:-5}"
+cbm_out="" cbm_error="" cbm_report="" cbm_steps=()
+
+# cbm_call TOOL ARGS_JSON: run `<cli> cli --json TOOL` with ARGS_JSON on stdin; cbm_out is the
+# structured result (cj cbm-result: the daemon's level=/hint: lines dropped). Fails with the
+# reason in cbm_error: no CLI, a time-out, an exit code other than 0, output with no JSON, or
+# an answer with isError. Nothing is ever taken as "not stale".
+cbm_call() {
+  local tool="$1" raw rc=0
+  cbm_out="" cbm_error=""
+  if [ ! -f "$cbm_cli" ] && ! command -v -- "$cbm_cli" >/dev/null 2>&1; then
+    cbm_error="找不到 codebase-memory CLI：$cbm_cli（STOCK_CBM_CLI）"
+    return 1
+  fi
+  raw="$(printf '%s' "$2" | timeout -k 5 "$cbm_timeout" "$cbm_cli" cli --json "$tool" 2>&1)" || rc=$?
+  case "$rc" in
+    0) ;;
+    124 | 137) cbm_error="codebase-memory CLI $tool 逾時（${cbm_timeout} 秒，STOCK_CBM_TIMEOUT）"; return 1 ;;
+    126 | 127) cbm_error="codebase-memory CLI 無法執行（結束碼 $rc）：$cbm_cli"; return 1 ;;
+    *) cbm_error="codebase-memory CLI $tool 結束碼 $rc：$(printf '%s\n' "$raw" | grep -v '^level=' | tail -n 2 | tr '\r\n' '  ')"; return 1 ;;
+  esac
+  cbm_out="$(printf '%s' "$raw" | cj cbm-result 2>&1)" || {
+    cbm_error="codebase-memory CLI $tool 的輸出不能用：$cbm_out"
+    cbm_out=""
+    return 1
+  }
+}
+
+# cbm_root_check: the project, when the engine has it, is this checkout; so a run from
+# another checkout never rebuilds the master project from its files. A project the engine
+# does not have passes (the first build creates it).
+cbm_root_check() {
+  local want root
+  want="$(native "$repo_root")" || { cbm_error="repo_root 不是本機的絕對路徑：$repo_root"; return 1; }
+  if ! cbm_call index_status "{\"project\":$(json_str "$cbm_project")}"; then
+    case "$cbm_error" in *"project not found"*) cbm_error=""; return 0 ;; esac
+    return 1
+  fi
+  root="$(printf '%s' "$cbm_out" | cj get root_path)" || { cbm_error="index_status 沒有 root_path"; return 1; }
+  [ "$(cj within "$root" "$want")" = yes ] && [ "$(cj within "$want" "$root")" = yes ] \
+    || { cbm_error="project $cbm_project 的 root 是 $root，不是這個 checkout（$want）；請從 master 管理 checkout 執行"; return 1; }
+}
+
+# cbm_rebuild [force]: index_repository of this checkout under the project's name; force
+# deletes the project first (delete_project), the one way to make the engine record a file
+# whose mtime alone changed (engine 0.10.8 keeps the old mtime and indexed_at otherwise).
+cbm_rebuild() {
+  local status project
+  cbm_root_check || return 1
+  if [ "${1:-}" = force ]; then
+    cbm_call delete_project "{\"project\":$(json_str "$cbm_project")}" || return 1
+  fi
+  cbm_call index_repository "{\"repo_path\":$(json_str "$(native "$repo_root")"),\"name\":$(json_str "$cbm_project")}" \
+    || return 1
+  status="$(printf '%s' "$cbm_out" | cj get status)"
+  project="$(printf '%s' "$cbm_out" | cj get project)"
+  [ "$status" = indexed ] && [ "$project" = "$cbm_project" ] \
+    || { cbm_error="index_repository 回 status=${status:-無}、project=${project:-無}，不是 indexed／$cbm_project"; return 1; }
+}
+
+# checkout_fast_forward: bring this checkout (repo_root, the management checkout) to
+# origin/master, already fetched, by fast-forward only: it must be on master with no
+# uncommitted change to a tracked file. Fails with the reason in cbm_error, nothing changed.
+# The caller's own script file may be rewritten by it: close_task.sh and dispatch.sh are one
+# brace group each, read whole before they run (#704 review).
+checkout_fast_forward() {
+  local cur dirty
+  cur="$(git -C "$repo_root" symbolic-ref --quiet --short HEAD | tr -d '\r')"
+  [ "$cur" = master ] || { cbm_error="$repo_root 不在 master（${cur:-detached}），未更新、未動索引"; return 1; }
+  dirty="$(git -C "$repo_root" status --porcelain --untracked-files=no)" \
+    || { cbm_error="讀不到 $repo_root 的 git status"; return 1; }
+  [ -z "$(printf '%s' "$dirty" | tr -d '\r')" ] \
+    || { cbm_error="$repo_root 有未 commit 的改動，未更新、未動索引"; return 1; }
+  git -C "$repo_root" merge --ff-only --quiet origin/master \
+    || { cbm_error="$repo_root 無法快轉到 origin/master"; return 1; }
+}
+
+# cbm_merge_paths SHA...: the files each merge commit changed against its first parent,
+# deleted ones left out, once each.
+cbm_merge_paths() {
+  local sha
+  for sha in "$@"; do
+    git -C "$repo_root" -c core.quotepath=false diff --name-only --diff-filter=d "$sha^1" "$sha" || return 1
+  done | tr -d '\r' | sort -u
+}
+
+# cbm_recent_paths: the files the newest cbm_recent_merges merges of HEAD changed.
+cbm_recent_paths() {
+  local shas
+  shas="$(git -C "$repo_root" rev-list --first-parent --merges -n "$cbm_recent_merges" HEAD)" || return 1
+  mapfile -t shas < <(printf '%s\n' "$shas" | tr -d '\r' | grep -E '^[0-9a-f]{7,64}$')
+  [ ${#shas[@]} -gt 0 ] || return 1
+  cbm_merge_paths "${shas[@]}"
+}
+
+# cbm_verify PATHS: ask the engine about PATHS (newline-separated, relative to repo_root):
+# check_index_coverage (128 paths a call) and query_graph's File list, judged by cj
+# cbm-verdict (index_verdict in coordinator_json.py; the rules are in its docstring and in
+# docs/WORKFLOW.md 程式索引). cbm_report is one line per path ("stale|ok|skip<TAB>reason<TAB>
+# freshness<TAB>path"). Returns 0 fresh, 1 stale (cbm_error names the paths), 2 the answer
+# could not be had or read (cbm_error says why).
+cbm_verify() {
+  local paths="$1" args files rc=0 parts=()
+  cbm_report=""
+  [ -n "$paths" ] || { cbm_error="沒有要驗證的路徑"; return 2; }
+  cbm_call query_graph "{\"project\":$(json_str "$cbm_project"),\"query\":\"MATCH (f:File) RETURN f.file_path\"}" \
+    || return 2
+  files="$cbm_out"
+  while IFS= read -r args; do
+    [ -n "$args" ] || continue
+    cbm_call check_index_coverage "$args" || return 2
+    parts+=("$cbm_out")
+  done < <(printf '%s\n' "$paths" | cj cbm-chunks "$cbm_project")
+  [ ${#parts[@]} -gt 0 ] || { cbm_error="cj cbm-chunks 沒有產生 check_index_coverage 參數"; return 2; }
+  cbm_report="$(printf '%s\0' "$paths" "$files" "${parts[@]}" | cj cbm-verdict "$(native "$repo_root")" "$cbm_project" 2>&1)" || rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    1)
+      cbm_error="索引過期：$(printf '%s\n' "$cbm_report" | awk -F '\t' '$1 == "stale" { printf "%s%s（%s）", n++ ? "、" : "", $4, $2 }')"
+      return 1
+      ;;
+    *) cbm_error="判定失敗：$(printf '%s' "$cbm_report" | tail -n 3 | tr '\r\n' '  ')"; return 2 ;;
+  esac
+}
+
+# cbm_only_mtime: every stale line of cbm_report is the mtime rule, the one a forced
+# rebuild can clear.
+cbm_only_mtime() {
+  printf '%s\n' "$cbm_report" | awk -F '\t' '$1 == "stale" { n++; if ($2 != "mtime") bad = 1 } END { exit !(n && !bad) }'
+}
+
+# cbm_ensure WHEN PATHS: WHEN is "rebuilt" (close_task.sh: rebuild first) or "check"
+# (dispatch.sh: verify, rebuild once when stale). After a rebuild that leaves only the mtime
+# rule stale, one forced rebuild (cbm_rebuild force) and a last verify. cbm_steps lists what
+# ran (index_rebuilt, index_forced, index_fresh:<n> paths); fails with cbm_error.
+cbm_ensure() {
+  local when="$1" paths="$2" rc n
+  cbm_steps=()
+  n="$(printf '%s\n' "$paths" | grep -c .)"
+  if [ "$when" = check ]; then
+    rc=0
+    cbm_verify "$paths" || rc=$?
+    [ "$rc" = 0 ] && { cbm_steps+=("index_fresh:$n"); return 0; }
+    [ "$rc" = 1 ] || return 1
+    cbm_steps+=("index_stale")
+  fi
+  cbm_rebuild || return 1
+  cbm_steps+=("index_rebuilt")
+  rc=0
+  cbm_verify "$paths" || rc=$?
+  [ "$rc" = 0 ] && { cbm_steps+=("index_fresh:$n"); return 0; }
+  [ "$rc" = 1 ] && cbm_only_mtime || return 1
+  cbm_rebuild force || return 1
+  cbm_steps+=("index_forced")
+  cbm_verify "$paths" || return 1
+  cbm_steps+=("index_fresh:$n")
+}

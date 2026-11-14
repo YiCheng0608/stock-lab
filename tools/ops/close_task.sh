@@ -37,7 +37,13 @@
 # containers, volumes and networks named t<issue>/task-<issue>; none while one of them runs;
 # then dangling images and build cache once no other Docker task is in progress; no docker or
 # no answer in time only adds a docker_skipped step), set the board to 完成, and read back
-# that all of it is gone.
+# that all of it is gone. Then, for a PR into master and not a dry run (--no-board), the
+# master index (#704): fast-forward this checkout (it must be on master with no uncommitted
+# change to tracked files) to origin/master, rebuild its codebase-memory index with the
+# same-engine CLI and verify the files the merge commit changed (cbm_ensure in
+# coordinator_lib.sh: one forced rebuild when only the mtime rule is left); a missing CLI,
+# a time-out, an answer that cannot be read or an index still stale is exit 3 (rerun with
+# --pr <n>), and the board stays as it was.
 #
 # Usage: close_task.sh <issue> [--extra-dir <path>]... [options]
 #   --slug S          the task is task/<issue>-S (needed when an issue has several)
@@ -50,6 +56,10 @@
 # Prints one JSON line. Exit 0 done; 1 a check failed (nothing deleted); 3 a step failed
 # after deleting started (the JSON says which steps ran); 4 only the board update
 # failed; 2/64 bad setup or arguments.
+{
+# The whole script is one brace group: bash reads all of it before running any, so a
+# fast-forward of this checkout that rewrites this file mid-run (#704 review) cannot
+# change what runs next.
 set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
@@ -446,9 +456,33 @@ for dir in "${extra_live[@]+"${extra_live[@]}"}"; do
   [ ! -e "$dir" ] && [ ! -L "$dir" ] || report 3 "讀回：$dir 仍在"
 done
 
+# --- the master index (#704; cbm_* in coordinator_lib.sh) ---------------------------
+# The management checkout (repo_root) goes to the new origin/master by fast-forward, then
+# its codebase-memory index is rebuilt and the files this merge changed are verified. A
+# failure is exit 3 with the cleanup steps above in "steps"; rerun with --pr <n>.
+if [ "$base_branch" != master ]; then
+  steps+=("index_skipped:base_$base_branch")
+elif [ "$set_board" = 0 ]; then
+  steps+=("index_skipped:no_board")
+else
+  checkout_fast_forward || report 3 "管理 checkout 更新：$cbm_error"
+  steps+=("checkout_updated:$(git -C "$repo_root" rev-parse HEAD | tr -d '\r')")
+  index_paths="$(cbm_merge_paths "$merge_sha")" || report 3 "索引步驟：讀不到 merge commit ${merge_sha:0:9} 改到的檔案"
+  if [ -z "$index_paths" ]; then
+    # A merge that only deleted files: the rebuild still runs, there is nothing to verify.
+    cbm_rebuild || report 3 "索引步驟：$cbm_error"
+    steps+=("index_rebuilt" "index_fresh:0")
+  else
+    cbm_ensure rebuilt "$index_paths" || { steps+=("${cbm_steps[@]+"${cbm_steps[@]}"}"); report 3 "索引步驟：$cbm_error"; }
+    steps+=("${cbm_steps[@]}")
+  fi
+fi
+
 if [ "$set_board" = 1 ]; then
   board="$(board_set "$issue" 完成)" || { board=failed; report 4 "看板未設成完成，請手動設定"; }
 else
   board=skipped
 fi
 report 0
+exit 1 # not reached: report exits
+}
