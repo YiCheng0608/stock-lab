@@ -57,7 +57,16 @@ def _commit(oid: str, merge: bool = False) -> dict:
     }
 
 
-def _pr(number, branch, commits, comments=(), ci="SUCCESS", total=None) -> dict:
+def _pr(
+    number, branch, commits, comments=(), ci="SUCCESS", total=None, runs=None
+) -> dict:
+    # The head's check runs, as QUERY reads them: by default one `required` run with
+    # the conclusion ci (None while it runs).
+    if runs is None:
+        runs = [("required", ci, "2026-11-15T01:00:00Z")]
+    state = (
+        "FAILURE" if any(c not in (None, "SUCCESS") for _, c, _ in runs) else "SUCCESS"
+    )
     return {
         "number": number,
         "state": "OPEN",
@@ -69,7 +78,29 @@ def _pr(number, branch, commits, comments=(), ci="SUCCESS", total=None) -> dict:
             "totalCount": total or len(commits),
             "nodes": list(commits),
         },
-        "tip": {"nodes": [{"commit": {"statusCheckRollup": {"state": ci}}}]},
+        "tip": {
+            "nodes": [
+                {
+                    "commit": {
+                        "statusCheckRollup": {
+                            "state": state,
+                            "contexts": {
+                                "totalCount": len(runs),
+                                "nodes": [
+                                    {
+                                        "__typename": "CheckRun",
+                                        "name": name,
+                                        "conclusion": conclusion,
+                                        "startedAt": at,
+                                    }
+                                    for name, conclusion, at in runs
+                                ],
+                            },
+                        }
+                    }
+                }
+            ]
+        },
     }
 
 
@@ -398,7 +429,7 @@ def test_the_2026_11_15_state_counts_two_of_three() -> None:
                 f"\n\n{MARK}",
             },
         ],
-        ci="PENDING",
+        ci=None,  # the required run still going
     )
     # #702 had no declaration then (the format is #727's); the batch-1 state of 00:36
     # as one, at the head its worktree had (b370713, 2026-11-14 21:53 台北).
@@ -437,3 +468,109 @@ def test_the_2026_11_15_state_counts_two_of_three() -> None:
     assert f"{REPO}/pull/723#issuecomment-6880602626" in lines[2]
     assert lines[-1] == "名額空缺 1 個，請派工：#720"
     assert code == 11
+
+
+# --- PR #737 review 6882741345 ----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("line", "waited"),
+    [
+        # #726 and #728 as they are on the board: #721 is named for reference, and
+        # 「標示後的版本」 is no wait.
+        ("#725（登記）合併後派；#721（規格改版）。", [725]),
+        (
+            "#681 的 `overnight_us`、今日名單頁的用詞（#729 拿掉研究狀態標示後的版本）；"
+            "使用者要先建 bot 並寫好認證檔，第一則才送得出去。",
+            [],
+        ),
+        (
+            "PR #724（#711）合併後派。#713 也改 `docs/COORDINATOR.md`，注意衝突。",
+            [724, 711],
+        ),
+        ("#702 批 1 驗收後再派; #690 結案後", [702, 690]),
+        ("#700 完成之前不派", []),
+    ],
+)
+def test_the_dependency_line_waits_only_for_a_merge_or_finish(line, waited) -> None:
+    assert slots.waited_refs(line) == waited
+
+
+def test_the_real_726_and_728_lines_leave_the_reference_open_issues_out() -> None:
+    issues = [_issue(n) for n in (721, 725, 729)]
+    board = [
+        _todo(726, body="依賴的任務／資料：#725（登記）合併後派；#721（規格改版）。"),
+        _todo(
+            728,
+            body="依賴的任務／資料：#681 的 `overnight_us`、今日名單頁的用詞"
+            "（#729 拿掉研究狀態標示後的版本）；使用者要先建 bot。",
+        ),
+    ]
+    lines, code = slots.report(_answer(issues, board=board), {}, NOW)
+    text = "\n".join(lines)
+    assert "#726 有依賴，等 #725（本文）［" in text
+    assert "#728 可派" in text
+    assert (lines[-1], code) == ("名額空缺 3 個，請派工：#728", 11)
+
+
+def test_every_open_pr_of_the_task_must_only_wait_for_its_merge() -> None:
+    ok = _pr(20, "task/10-x", [_commit(SHA_A)], [_review(20, 5, OK_REVIEW)])
+    other = _pr(21, "task/10-y", [_commit(SHA_B)])
+    tasks = _tasks((10, "x", SHA_A, "clean"), (10, "y", SHA_B, "clean"))
+    v = _one(_answer([_issue(10)], [ok, other]), tasks)
+    assert (v.counted, v.reason) == (True, "review 中（PR #21）")
+
+
+def test_more_open_issues_than_read_keeps_the_reason_found() -> None:
+    review = _review(20, 5, "review：PR #20（head `aaaaaaa`）必修 1 項")
+    answer = _answer([], [_pr(20, "task/10-x", [_commit(SHA_A)], [review])])
+    answer["data"]["repository"]["issues"]["totalCount"] = 150
+    v = _one(answer, _tasks((10, "x", SHA_A, "clean")))
+    assert v.counted
+    assert v.reason.startswith("有必修 1 項（PR #20；")
+    assert "判定不了（open Issue 超過 100 個" in v.reason
+
+
+def test_a_partial_answer_claims_no_dispatchable_task() -> None:
+    """gh exits 1 with data and errors (a project it cannot read): the tasks are judged
+    from the data, no task is called dispatchable."""
+    answer = _answer([_issue(10)], board=[_todo(33)])
+    answer["data"]["user"] = {"projectV2": None}
+    answer["errors"] = [{"type": "NOT_FOUND", "path": ["user", "projectV2"]}]
+    lines, code = slots.report(answer, _tasks((10, "x", SHA_A, "clean")), NOW)
+    assert lines[0] == "名額：已用 1／3（算：#10 開發中）"
+    assert (
+        lines[-1] == "名額空缺 2 個；待辦：未查完（GitHub 回部分錯誤：user.projectV2）"
+    )
+    assert code == 0
+
+
+def test_the_query_holds_every_field_the_questions_read() -> None:
+    """The thread fields come from coordinator_json, so a field unanswered_questions
+    starts to read reaches the query patrol.sh sends."""
+    import coordinator_json
+
+    fields = coordinator_json.THREAD_FIELDS.format(n=coordinator_json.PAGE)
+    assert coordinator_json.QUESTIONS_QUERY.count(fields) == 2
+    assert slots.QUERY.count(fields) == 2
+
+
+def test_a_cancelled_duplicate_run_is_not_a_red_ci() -> None:
+    """Found on the live run of 2026-11-14T19:15Z: PR #737's rollup said FAILURE because
+    a run of the same head was cancelled by a newer one; its `required` was a success and
+    the newer run was still going. The newest `required` decides."""
+    review = _review(20, 5, OK_REVIEW)
+    runs = [
+        ("suite", "CANCELLED", "2026-11-14T19:03:05Z"),
+        ("required", "SUCCESS", "2026-11-14T19:03:08Z"),
+        ("backend", None, "2026-11-14T19:03:34Z"),
+    ]
+    pr = _pr(20, "task/10-x", [_commit(SHA_A)], [review], runs=runs)
+    assert pr["tip"]["nodes"][0]["commit"]["statusCheckRollup"]["state"] == "FAILURE"
+    assert not _one(
+        _answer([_issue(10)], [pr]), _tasks((10, "x", SHA_A, "clean"))
+    ).counted
+    runs.append(("required", "FAILURE", "2026-11-14T19:20:00Z"))
+    pr = _pr(20, "task/10-x", [_commit(SHA_A)], [review], runs=runs)
+    v = _one(_answer([_issue(10)], [pr]), _tasks((10, "x", SHA_A, "clean")))
+    assert (v.counted, v.reason) == (True, "CI 紅（PR #20）")

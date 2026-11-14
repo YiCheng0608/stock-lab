@@ -188,15 +188,30 @@ bash "$script_dir/wake_listener_start.sh" --status 2>&1
 # their comments; coordinator_json.py decides which 提問 has no 決定 linking to it.
 # The same call reads what the slots need (#727): open PRs' heads, commits and CI, the
 # board's 待辦 with blocked-by and body; slots.py decides.
-gh_calls=0 out=""
-if ! query="$("$python" -X utf8 "$script_dir/slots.py" query)" || [ -z "$query" ]; then
-  echo "未回覆的提問：未查完（slots.py query 失敗，沒呼叫 gh）"
-elif [ "$gh_calls" -lt "$max_gh" ]; then
+# The questions come first (PR #737 review 6882741345): when slots.py cannot give its
+# query, the questions' own query is sent instead and the slots are not judged. gh exits 1
+# on a partial answer (data and errors, such as a project it may not read) with the data
+# on stdout: the questions are read from it and slots.py claims no dispatchable task.
+gh_calls=0 out="" slots_query=1
+if ! query="$("$python" -X utf8 "$script_dir/slots.py" query 2>/dev/null)" || [ -z "$query" ]; then
+  slots_query=0
+  query="$(cj questions-query)"
+fi
+if [ "$gh_calls" -lt "$max_gh" ]; then
   gh_calls=$((gh_calls + 1))
-  if out="$(gh api graphql -f owner="${GH_REPO%%/*}" -f name="${GH_REPO#*/}" -f query="$query")" \
-    && lines="$(printf '%s' "$out" | cj questions "$now")"; then
+  out="$(gh api graphql -f owner="${GH_REPO%%/*}" -f name="${GH_REPO#*/}" -f query="$query")"
+  gh_rc=$?
+  partial=""
+  if [ "$gh_rc" != 0 ]; then
+    if printf '%s' "$out" | cj get data.repository >/dev/null 2>&1; then
+      partial="（gh exit $gh_rc，GitHub 回部分錯誤，提問照讀到的判定）"
+    else
+      out=""
+    fi
+  fi
+  if [ -n "$out" ] && lines="$(printf '%s' "$out" | cj questions "$now")"; then
     n="$(printf '%s\n' "$lines" | grep -c '^#')"
-    echo "未回覆的提問：$n 則$(printf '%s\n' "$lines" | grep -q '^未查完' && echo '（未查完）')"
+    echo "未回覆的提問：$n 則$(printf '%s\n' "$lines" | grep -q '^未查完' && echo '（未查完）')$partial"
     [ -n "$lines" ] && printf '%s\n' "$lines" | sed 's/^/  /'
   else
     out=""
@@ -211,7 +226,10 @@ echo "gh 呼叫：$gh_calls／上限 $max_gh"
 # vacancy line is held for the end, so `| tail -1` sees it (exit 11, after the handoff's 10).
 vacancy="" vacancy_rc=0
 slot_dir="$(mktemp -d 2>/dev/null)" || slot_dir=""
-if [ -z "$slot_dir" ]; then
+if [ "$slots_query" = 0 ]; then
+  echo "名額：判定不了（slots.py query 失敗，提問改用 questions-query 讀；名額沒判定）"
+  [ -n "$slot_dir" ] && rmdir "$slot_dir" 2>/dev/null
+elif [ -z "$slot_dir" ]; then
   echo "名額：判定不了（建不了暫存目錄）"
 else
   wt=""
@@ -228,7 +246,7 @@ else
         fi
         printf '%s\t%s\n' "$state" "$path" >>"$slot_dir/status" ;;
       esac
-    done <"$wt"
+    done < <(tr -d '\r' <"$wt")
   fi
   slot_lines="$(printf '%s' "$out" | "$python" -X utf8 "$script_dir/slots.py" report "$now" "$wt" "$slot_dir/status")"
   slot_rc=$?

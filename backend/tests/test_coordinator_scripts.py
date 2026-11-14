@@ -187,9 +187,12 @@ case "$1 $2" in
     case "$*" in
       *addProjectV2ItemById*) echo "ITEM-NEW" ;;
       *updateProjectV2ItemFieldValue*) cat "$d/board_item.txt" 2>/dev/null || echo "ITEM-1" ;;
-      # patrol.sh's open Issues and PRs with their comments (#401)
+      # patrol.sh's open Issues and PRs with their comments (#401); with
+      # gh_questions_partial the answer is printed and the exit is 1, as gh does for a
+      # partial answer (data and errors, #727)
       *OpenQuestions*) [ -f "$d/gh_questions_fails" ] && exit 1
-        cat "$d/gh_questions.json" 2>/dev/null || echo '{}' ;;
+        cat "$d/gh_questions.json" 2>/dev/null || echo '{}'
+        if [ -f "$d/gh_questions_partial" ]; then exit 1; fi ;;
       *) cat "$d/gh_board.json" ;;
     esac ;;
   "api repos/"*) cat "$d/gh_comments.json" 2>/dev/null || echo '[]' ;;
@@ -4469,3 +4472,41 @@ def test_patrol_without_github_counts_the_task_and_claims_no_vacancy(
     assert result.returncode == 0, result.stdout + result.stderr
     assert "名額：已用 1／3（算：#10 判定不了）（未查完" in result.stdout
     assert not any(ln.startswith("名額空缺") for ln in result.stdout.splitlines())
+
+
+def test_patrol_reads_the_questions_when_slots_cannot_give_its_query(
+    slotted: Harness,
+) -> None:
+    """PR #737 review 6882741345 (must-fix 2): the questions do not depend on slots.py;
+    its query failing sends the questions' own query (still one gh call)."""
+    (slotted.ops / "slots.py").write_text("import sys\nsys.exit(1)\n", encoding="utf-8")
+    slotted.answer("gh_questions", _threads([_thread(401, QUESTION)]))
+    result = _patrol(slotted)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "未回覆的提問：1 則" in result.stdout
+    assert QUESTION_URL in result.stdout
+    assert "名額：判定不了（slots.py query 失敗" in result.stdout
+    (call,) = slotted.calls("gh")
+    assert "OpenQuestions" in call and "blockedBy" not in call
+
+
+def test_patrol_reads_the_questions_of_a_partial_answer(slotted: Harness) -> None:
+    """gh exits 1 with data and errors (measured: a project it cannot resolve answers
+    data.user.projectV2 null and an error, exit 1): the questions are read from it, the
+    slots claim no dispatchable task."""
+    answer = _slot_answer()
+    answer["data"]["repository"]["issues"]["nodes"].append(_thread(401, QUESTION))
+    answer["data"]["repository"]["issues"]["totalCount"] += 1
+    answer["data"]["user"] = {"projectV2": None}
+    answer["errors"] = [{"type": "NOT_FOUND", "path": ["user", "projectV2"]}]
+    slotted.answer("gh_questions", answer)
+    slotted.write("gh_questions_partial", "")
+    result = _patrol(slotted)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "未回覆的提問：1 則（gh exit 1，GitHub 回部分錯誤" in result.stdout
+    assert QUESTION_URL in result.stdout
+    assert "待辦：未查完（GitHub 回部分錯誤：user.projectV2）" in result.stdout
+    assert not any(
+        ln.startswith("名額空缺") and "請派工" in ln
+        for ln in result.stdout.splitlines()
+    )

@@ -19,8 +19,9 @@ The rules are the 決定 on #727 (6882324819); docs/COORDINATOR.md 處理佇列 
 
 Candidates, when a slot is free: the board's 待辦 items in board order (project 1,
 POSITION), open `[任務]` Issues with no task worktree. One waits (有依賴) while GitHub's
-blocked-by holds an open Issue, or a sentence (cut at 。) of the body's 依賴的任務／資料
-line has 後 in it and names an open Issue or PR.
+blocked-by holds an open Issue, or the body's 依賴的任務／資料 line waits for an open
+Issue or PR: a #n before a 後 in the same sentence (cut at 。；;) with 合併, 完成, 結案
+or 驗收 between them (waited_refs).
 
 One GraphQL call reads all of it, and the unanswered questions as well (QUERY keeps the
 OpenQuestions name and every field coordinator_json.unanswered_questions reads).
@@ -47,29 +48,37 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-from coordinator_json import PAGE, coordinator_comment, get, one_line
+from coordinator_json import PAGE, THREAD_FIELDS, coordinator_comment, get, one_line
 from event_queue import SLOTS
 
 TAIPEI = timezone(timedelta(hours=8))
 VACANCY_EXIT = 11
 # Commits of a PR read: the reviewed head is looked for among them.
 COMMITS = 100
+# Check runs of the head read: two runs of every job of ci.yml fit (a cancelled duplicate).
+CONTEXTS = 60
 # 待辦 items read and shown.
 BOARD_PAGE = 20
 SHOWN = 3
+# Merged PRs read, newest first: a task's worktree is closed within about an hour of its
+# merge (close_task.sh), and fewer than 30 PRs merge in that time. An older one falls to
+# whether its Issue is closed (Issue 已關，等結案).
 MERGED_PAGE = 30
-_COMMENTS = "comments(last:{n}){{totalCount nodes{{url createdAt body}}}}".format(
-    n=PAGE
-)
+# The thread fields are coordinator_json's (unanswered_questions reads them from the same
+# answer), so the two queries cannot drift apart.
+_THREAD = THREAD_FIELDS.format(n=PAGE)
 QUERY = (
     "query OpenQuestions($owner:String!,$name:String!){"
     "repository(owner:$owner,name:$name){"
-    f"issues(states:OPEN,first:{PAGE}){{totalCount nodes{{number state {_COMMENTS}}}}}"
-    f"pullRequests(states:OPEN,first:{PAGE}){{totalCount nodes{{number state url "
-    f"headRefName headRefOid {_COMMENTS} "
+    f"issues(states:OPEN,first:{PAGE}){{totalCount nodes{{{_THREAD}}}}}"
+    f"pullRequests(states:OPEN,first:{PAGE}){{totalCount nodes{{{_THREAD} url "
+    "headRefName headRefOid "
     f"commits(last:{COMMITS}){{totalCount nodes{{commit{{oid committer{{name email}} "
     "parents{totalCount}}}}"
-    "tip:commits(last:1){nodes{commit{statusCheckRollup{state}}}}}}"
+    # The head's check runs, read once (not for every commit): CI 紅 is its newest
+    # `required` run (ci_red).
+    f"tip:commits(last:1){{nodes{{commit{{statusCheckRollup{{state contexts(first:{CONTEXTS})"
+    "{totalCount nodes{__typename ... on CheckRun{name conclusion startedAt}}}}}}}}}"
     f"merged:pullRequests(states:MERGED,first:{MERGED_PAGE},"
     "orderBy:{field:UPDATED_AT,direction:DESC}){nodes{number url headRefName}}}"
     # status:待辦 as GraphQL escapes: the query stays ASCII on any console code page.
@@ -95,6 +104,8 @@ _EXTERNAL_FULL = re.compile(
 )
 _DEPENDS = re.compile(r"依賴的任務／資料[：:](.*)")
 _REF = re.compile(r"#(\d+)")
+_SENTENCE = re.compile(r"[。；;]")
+_WAIT_WORDS = ("合併", "完成", "結案", "驗收")
 _GITHUB = ("GitHub", "noreply@github.com")
 
 
@@ -151,13 +162,35 @@ def _local_problem(worktrees: list[Worktree], heads) -> str:
     return ""
 
 
+_RED = frozenset(
+    {"FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"}
+)
+
+
+def ci_red(pr: dict) -> bool:
+    """The newest `required` check run of the PR's head failed. The rollup's own state is
+    not used: a run cancelled by a newer one of the same head (concurrency) makes it
+    FAILURE while `required` decides (docs/GUARDRAILS.md, PR #432). With no `required`
+    run yet the CI is not red; with none among the runs read and more left, the rollup
+    state decides."""
+    tip = get(pr, "tip.nodes") or []
+    rollup = (get(tip[0], "commit.statusCheckRollup") or {}) if tip else {}
+    contexts = rollup.get("contexts") or {}
+    nodes = contexts.get("nodes") or []
+    runs = [n for n in nodes if n.get("name") == "required"]
+    if runs:
+        newest = max(runs, key=lambda n: n.get("startedAt") or "")
+        return (newest.get("conclusion") or "").upper() in _RED
+    if (contexts.get("totalCount") or 0) > len(nodes):
+        return (rollup.get("state") or "").upper() in ("FAILURE", "ERROR")
+    return False
+
+
 def merge_only(pr: dict, worktrees: list[Worktree]) -> Verdict | str:
     """A not counted Verdict when the PR only waits to be merged, else the reason it is
     counted."""
     number = pr.get("number")
-    tip = get(pr, "tip.nodes") or []
-    rollup = (get(tip[0], "commit.statusCheckRollup") or {}) if tip else {}
-    if (rollup.get("state") or "").upper() in ("FAILURE", "ERROR"):
+    if ci_red(pr):
         return f"CI 紅（PR #{number}）"
     comments = pr.get("comments") or {}
     reviews = [
@@ -271,10 +304,15 @@ def _decide_one(repo, issue: int, worktrees: list[Worktree], now: int) -> Verdic
     issues_complete = (issues.get("totalCount") or 0) <= len(issues.get("nodes") or [])
     reason = ""
     if open_prs:
-        result = merge_only(open_prs[0], worktrees)
-        if isinstance(result, Verdict):
-            return result
-        reason = result
+        # Every open PR of the task must only wait for its merge, each checked against
+        # the worktrees of its own branch; the first that does not gives the reason.
+        results = [
+            merge_only(pr, [w for w in worktrees if w.branch == pr.get("headRefName")])
+            for pr in open_prs
+        ]
+        reason = next((r for r in results if not isinstance(r, Verdict)), "")
+        if not reason:
+            return results[0]
     elif (prs.get("totalCount") or 0) > len(prs.get("nodes") or []):
         return Verdict(issue, True, f"判定不了（open PR 超過 {PAGE} 個）")
     else:
@@ -296,7 +334,8 @@ def _decide_one(repo, issue: int, worktrees: list[Worktree], now: int) -> Verdic
         if thread is None and issues_complete:
             return Verdict(issue, False, "Issue 已關，等結案")
     if thread is None and not issues_complete:
-        return Verdict(issue, True, f"判定不了（open Issue 超過 {PAGE} 個）")
+        unread = f"判定不了（open Issue 超過 {PAGE} 個，沒讀到等外部宣告）"
+        return Verdict(issue, True, f"{reason}；{unread}" if reason else unread)
     external = waits_external(thread, worktrees, now)
     if isinstance(external, Verdict):
         return external
@@ -318,16 +357,30 @@ def dependencies(item: dict, open_numbers: set[int] | None) -> list[str]:
         match = _DEPENDS.search(line)
         if not match:
             continue
-        for sentence in match.group(1).split("。"):
-            if "後" not in sentence:
-                continue
-            for ref in _REF.findall(sentence):
-                n = int(ref)
-                if open_numbers is None:
-                    waits.append(f"#{n}（本文，open 與否未查完）")
-                elif n in open_numbers and n != item.get("number"):
-                    waits.append(f"#{n}（本文）")
+        for n in waited_refs(match.group(1)):
+            if open_numbers is None:
+                waits.append(f"#{n}（本文，open 與否未查完）")
+            elif n in open_numbers and n != item.get("number"):
+                waits.append(f"#{n}（本文）")
     return list(dict.fromkeys(waits))
+
+
+def waited_refs(text: str) -> list[int]:
+    """The #n the 依賴 line waits for (PR #737 review 6882741345): in a sentence (cut at
+    。, ；, ;), a #n before a 後 with 合併, 完成, 結案 or 驗收 between the two, as in
+    「#725（登記）合併後派」 or 「#702 批 1 驗收後」. A #n named for reference (「#721
+    （規格改版）」) or a 後 that is no wait (「#729 拿掉研究狀態標示後的版本」) is not."""
+    refs = []
+    for sentence in _SENTENCE.split(text):
+        afters = [i for i, ch in enumerate(sentence) if ch == "後"]
+        for ref in _REF.finditer(sentence):
+            if any(
+                any(word in sentence[ref.end() : at] for word in _WAIT_WORDS)
+                for at in afters
+                if at >= ref.end()
+            ):
+                refs.append(int(ref.group(1)))
+    return refs
 
 
 def in_daily(now: int) -> bool:
@@ -366,6 +419,16 @@ def report(doc, tasks: dict[int, list[Worktree]], now: int) -> tuple[list[str], 
     if unread or free == 0:
         return lines, 0
     board = get(doc, "data.user.projectV2.items")
+    if doc.get("errors"):
+        # A partial answer (gh exits 1 with data and errors): which part is missing is
+        # not checked field by field, so no task is claimed dispatchable.
+        paths = "、".join(
+            ".".join(str(p) for p in e.get("path") or []) or "?"
+            for e in doc["errors"]
+            if isinstance(e, dict)
+        )
+        lines.append(f"名額空缺 {free} 個；待辦：未查完（GitHub 回部分錯誤：{paths}）")
+        return lines, 0
     if board is None:
         lines.append(f"名額空缺 {free} 個；待辦：未查完（看板沒讀到）")
         return lines, 0
