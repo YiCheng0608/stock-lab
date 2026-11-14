@@ -46,7 +46,7 @@
 
 | 名稱 | 參數 |
 | --- | --- |
-| `actions` | `--url <WEB>/watch --name actions`（1280 與 390）；`screenshot.cjs` 會展開所有 `<details>`：頁首「說明」、預設收合的「追蹤回看」（#649）與每張計畫卡的逐日明細（因此載入並出現在 `actions-1280.txt`）。640px 以下才顯示的「更多」（計畫卡與行動列表卡片）在 1280 是 `display: none`，不進 `actions-1280.txt`，不會重複計數 |
+| `actions` | `--url <WEB>/watch --name actions`（1280 與 390）；`screenshot.cjs` 會展開所有 `<details>`：預設收合的「追蹤回看」（#649）與每張計畫卡的逐日明細（因此載入並出現在 `actions-1280.txt`）。640px 以下才顯示的「更多」（計畫卡與行動列表卡片）在 1280 是 `display: none`，不進 `actions-1280.txt`，不會重複計數 |
 | `actions-legacy` | `--url "<WEB>/actions?from=legacy#plan-0" --name actions-legacy --widths 1280`（舊網址，A18 讀它的 `finalUrl`） |
 | `action-detail` | `--url <WEB>/actions/<E>/<S> --name action-detail --widths 1280`（不點分頁：轉址後應已在進出場分頁） |
 
@@ -55,7 +55,7 @@
 | 區塊 | 資料來源 | 必須顯示的來源與資料日期 | 「推論」位置 | 空資料文案 |
 | --- | --- | --- | --- | --- |
 | 我的庫存 | `portfolio.json` | 每筆 `記錄來源 … · 記錄日期 …`（本地記錄，標「來源／日期待核實」） | — | `尚未建立庫存。` |
-| 追蹤計畫（進行中） | `tracking-open.json` | 每張卡 `計畫資料日 YYYY/MM/DD · 建立 YYYY/MM/DD`、右上 `資料 YYYY/MM/DD`（追蹤到的日期，與頁面日期 `D` 同一天時沒有、較早的照標，#661）；區塊說明寫明成交與結果是「模擬」 | 不是 LLM 產出，標「模擬」不標「推論」 | `尚未建立追蹤計畫。可從今日候選或個股研究條件加入。` |
+| 追蹤計畫（進行中） | `tracking-open.json` | 每張卡 `計畫資料日 YYYY/MM/DD · 建立 YYYY/MM/DD`、右上 `資料 YYYY/MM/DD`（追蹤到的日期，與頁面日期 `D` 同一天時沒有、較早的照標，#661）；成交與結果寫「模擬成交」「模擬出場」「模擬報酬」（#732 起區塊下沒有說明句） | 不是 LLM 產出，標「模擬」不標「推論」 | `尚未建立追蹤計畫。可從今日候選或個股研究條件加入。` |
 | 追蹤回看（已結束） | `tracking-closed.json`、`tracking-plan.json` | 同上；逐日明細每列 `YYYY/MM/DD`（交易日）與來源日線 | 同上 | `尚無已結束的計畫。` |
 | 篩選與隱藏數 | `actions.json` 的 `summary`（只有選中的膠囊寫檔數，#649） | — | — | `summary.hidden` 都是 0 時沒有隱藏數 |
 | 各級區塊與列 | `actions.json` 的 `items`、`summary.tiers` | 沒有 `資料日` 欄（#661）：與 `D` 不同天的列在股票欄寫一行 `資料 YYYY/MM/DD`，同天不寫；`單位：…` 只在第一張畫出來的價位表上方 | 本頁沒有 LLM 產出，不應出現 `推論` | `目前沒有符合篩選的標的。` |
@@ -74,7 +74,7 @@
 | A7 | CI | 路徑一致 | 轉址後的 `action-detail` 頁首代號與名稱等於個股頁（`stock.json` 的 `instrument.symbol`、`name`） |
 | A8 | CI | 今日候選 | `第 1 級`／`今日候選` 區塊內 `#<n><TAB>` 開頭的名次列依序等於頁面載入的第 1 級各列的 `candidate.rank`；`candidates.json` 的 `trading_date` 等於 `meta.data_as_of` 且第 1 級已全部載入（`shown` = 第 1 級列數）時，名次列等於 `candidates.json` 的 `items[].rank` 去掉持倉中的候選（`actions-holdings.json` 的標的歸第 0 級），列數等於 `candidate_count` 減去持倉中的候選數；持倉占掉第一頁時，名次列是它的前段；`trading_date` 不同日時不該有今日候選列 |
 | A9 | CI | 預設清單沒有 ETF | `actions.json` 的 `summary.view` 為 `focus`、`include_etf` 為 false；頁面載入的列中，ETF 都是持倉（`tier` 0）或自選；頁面 `上市 · ETF`（或 `上櫃`、`市場待核實`）開頭的列數等於這些 ETF 數 |
-| A10 | CI | 頁首隱藏數 | 有整行 `預設隱藏：ETF <etf> 檔、其他觀察 <observation> 檔、資料不足 <data_insufficient> 檔`（膠囊列上的隱藏數，#649；數字取自 `summary.hidden`，千分位，為 0 的項目不寫），也有整行 `自選標的一律顯示；隱藏不刪資料，切換上方篩選即可看到。`（頁首「說明」裡，截圖會展開）；三項都是 0 時沒有 `預設隱藏：` 開頭的行 |
+| A10 | CI | 頁首隱藏數 | 有整行 `預設隱藏：ETF <etf> 檔、其他觀察 <observation> 檔、資料不足 <data_insufficient> 檔`（膠囊列上的隱藏數，#649；數字取自 `summary.hidden`，千分位，為 0 的項目不寫）（#732 起頁首沒有「說明」，隱藏的理由不寫在頁面）；三項都是 0 時沒有 `預設隱藏：` 開頭的行 |
 | A11 | CI | 接近成立卡數 | `第 3 級`／`接近成立` 區塊內以 A4 的連結格結尾的列數等於頁面載入的第 3 級列數（`actions.json` 或 `actions-tier3.json`），每列的連結是 `價位見策略總表 →`，這些列的 `nearness.near` 都是 true。`summary.tiers` 第 3 級 `shown` 為 0 時判無法判定：沒有接近卡可查 |
 | A12 | CI | 每張接近卡有「差：」 | 第 3 級每列（區塊內兩個列尾之間的行）至少一行以 `差：` 開頭（或在 tab 後接 `差：`）；上游 A11 |
 | A13 | CI | 接近卡沒有價位 | 第 3 級每列去掉倍數（`1.20 倍`、`0.60～1.20 倍`）與百分比（`2.10%`、`+0.50%`）後，兩位小數的數字只能是該級列的最近收盤（`current_price` 千分位兩位小數）；有其他價格數字（進場、停損、目標、觀察價位）判失敗並列出；上游 A11 |
@@ -83,6 +83,7 @@
 | A16 | CI | 計畫、模擬與持倉分開 | 整行 `我的庫存` < `追蹤計畫` < 第一個整行 `第 <n> 級`（行動列表，沒有就略過）≤ `追蹤回看`（#637）；`記錄來源 ` 開頭的行都在 `我的庫存` 與 `追蹤計畫` 之間；`模擬成交`、`模擬出場`、`模擬報酬` 開頭的行都在 `追蹤計畫` 與行動列表之間，或在 `追蹤回看` 之後 |
 | A17 | CI | 回看明細 | 在 A14 之後。逐日明細列（`^YYYY/MM/DD\t第 n 日\t`）的行數 = 兩份 `items` 的 `sessions_observed` 總和；`tracking-plan.json` 的每個 `sessions[]` 有一列 `<session_date 斜線>\t第 <session_no> 日\t<狀態>`（`not_triggered` 未觸發、`active` 已模擬成交、`target_1_hit` 達標、`invalidated` 失效、`ambiguous` 順序不明、`suspended` 停牌），最後一列日期等於該計畫的 `last_session_date` |
 | A18 | CI | 我的追蹤與舊網址轉址 | `actions`（`/watch`）與 `actions-legacy`（`/actions?from=legacy#plan-0`）兩份 1280 文字都沒有 `找不到此頁。`，而且整行 `追蹤與提醒` 的下一行是 `我的追蹤`（頁面標題；導覽列也有 `我的追蹤`，所以以眉標定位）；`actions-legacy` 截圖結果的 `finalUrl`（`screenshot.cjs` 回報瀏覽器最後停在的網址）的路徑、查詢與錨點是 `/watch?from=legacy#plan-0`：只看文字分不出轉址與在 `/actions` 直接渲染（#493 review） |
+| A19 | CI | 我的追蹤不出現已拿掉的說明文字（#732） | 讀 `actions-1280.txt`、`actions-390.txt` 與 `actions-legacy-1280.txt`。`REMOVED_COPY`（同今日 T23）任何一句出現就失敗，列出截圖、句子與所在行。#732 前頁首「說明」有用途句與「自選標的一律顯示…」、我的庫存有「持倉風險列在行動列表最上方」「來源稽核原股數」「記錄資料時間 … .000000」與算式標籤、計畫區有「計畫價位來自建立當日…」、每筆展開標題是「版本、來源與逐日明細」且來源行有 `plan_tracking_v2` 等版本、逐日表有「價格為當日原始日線…」，所以改前失敗。展開標題改為 `來源與逐日明細`，A14 以它切每張卡的範圍 |
 
 ## 陷阱
 
@@ -91,7 +92,7 @@
 - `/actions/:exchange/:symbol` 轉址到個股頁，`action-detail` 截圖的是轉址後的個股進出場分頁；分頁按鈕 id 同個股（`#stock-tab-research`）。
 - 桌面表格每列在 innerText 裡可能分成幾行（收盤格有兩行，第 3 級的差哪個條件格每條一行），A4 只認列的最後一行（連結格），列上的 `資料 …` 行（與頁面不同天時）在股票欄、列的前幾行；A11～A13 以列尾切出每一列。390 的手機卡片在 1280 不顯示，不會重複計數。
 - 追蹤計畫每頁 20 筆（`PLAN_PAGE_SIZE`）；超過 20 筆時 A14、A17 只比第一頁，與兩份 `tracking-*.json` 同一頁。
-- 計畫卡的「模擬」不是 LLM 推論，A5 不比；A15 的 `勝率` 例外只有區塊說明那一行（`計畫價位來自建立當日的研究條件` 開頭，句中寫「也不統計勝率」）。
+- 計畫卡的「模擬」不是 LLM 推論，A5 不比；頁面任何一行出現 `勝率` 都讓 A15 失敗（#732 前的例外是區塊說明「計畫價位來自建立當日的研究條件…也不統計勝率」，那句已拿掉）。
 
 ## 判定
 

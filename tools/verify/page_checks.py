@@ -2067,6 +2067,45 @@ REMOVED_COPY = (
     "策略判斷資料已齊備",
     "T 日收盤訊號",
     "詳細來源見",
+    # Issue 732 (the other pages; decisions 6881593041 and 6883315647).
+    "核對規則",
+    "候選標的不作為交易理由",
+    "原始資料識別碼",
+    "事件識別碼",
+    "國內、國際財經新聞與官方公告",
+    "plan_tracking_v",
+    "institutional-flow/",
+    "版本、來源與逐日明細",
+    "來源稽核原股數",
+    "核對庫存原股數",
+    "可展開每筆庫存核對",
+    "記錄日期不表示交易日",
+    "記錄資料時間",
+    "可交易用途尚未核對",
+    "持倉風險列在",
+    "有持倉風險時列在",
+    "股數 × 本地收盤",
+    "平均成本 × 股數",
+    "把有興趣的候選加入追蹤",
+    "自選標的一律顯示",
+    "計畫價位來自建立當日",
+    "價格為當日原始日線",
+    "各自成榜",
+    "名稱後的兩個分項",
+    "檔是當日今日名單中",
+    "市場標的目錄",
+    "缺資料優先級只來自",
+    "每天選股用不到",
+    "三檔指數的總表",
+    "點一列",
+    "季線位置只是背景資訊",
+    "個交易日收盤的平均",
+    "換月日不計漲跌",
+    "換月不做價差調整",
+    "每月第三個週三",
+    "題材表版本",
+    "規則核實 · v",
+    "· 規則版本",
 )
 
 
@@ -2094,6 +2133,58 @@ def t23(run: Run) -> str:
             problems.append(f"today-{width}：" + "、".join(found))
     expect(not problems, "出現已拿掉的說明文字：" + "；".join(problems))
     return f"today-1280／390 沒有 {len(REMOVED_COPY)} 句已拿掉的說明文字"
+
+
+def no_removed_copy(run: Run, shots: list[Shot]) -> str:
+    """Issue 732: none of the shots, at any of their widths, shows the removed copy."""
+
+    problems = []
+    for shot in shots:
+        for width in shot.widths:
+            found = removed_copy(run.text(shot, width))
+            if found:
+                problems.append(f"{shot.name}-{width}：" + "、".join(found))
+    expect(not problems, "出現已拿掉的說明文字：" + "；".join(problems))
+    names = "、".join(
+        f"{shot.name}-{'／'.join(str(width) for width in shot.widths)}"
+        for shot in shots
+    )
+    return f"{names} 沒有 {len(REMOVED_COPY)} 句已拿掉的說明文字"
+
+
+@check("today", "T24")
+def t24(run: Run) -> str:
+    """Issue 732 (4-8, N-4 to N-6): the market page, each index selected, shows none of the removed copy."""
+
+    return no_removed_copy(run, [MARKET, MARKET_TPEX, MARKET_TX])
+
+
+@check("news", "N9")
+def n9(run: Run) -> str:
+    """Issue 732 (3-4 to 3-6, 4-12, N-7): the news tabs and the detail show none of the removed copy."""
+
+    return no_removed_copy(run, news_shots(run))
+
+
+@check("themes", "G10")
+def g10(run: Run) -> str:
+    """Issue 732 (4-10): both boards and the theme detail show none of the removed copy."""
+
+    return no_removed_copy(run, themes_shots(run))
+
+
+@check("stocks", "S17")
+def s17(run: Run, stock: Stock | None) -> str:
+    """Issue 732 (4-11): the stock directory shows none of the removed copy."""
+
+    return no_removed_copy(run, [STOCKS])
+
+
+@check("actions", "A19")
+def a19(run: Run) -> str:
+    """Issue 732 (3-7, 3-8, 4-9, N-1 to N-3): 我的追蹤 (and the old URL) shows none of the removed copy."""
+
+    return no_removed_copy(run, [ACTIONS, ACTIONS_LEGACY])
 
 
 @check("today", "T14")
@@ -2539,20 +2630,15 @@ def n6(run: Run) -> str:
     expect(not shown, f"詳情仍顯示 AI 題材候選：{shown!r}")
     ai = detail.get("ai") or {}
     if ai.get("status") == "done":
-        prefix = f"模型 {ai.get('model')} · 提示版本 {ai.get('prompt_version')}"
-        line = text.find_where(lambda line: line.startswith(prefix))
-        expect(line >= 0, f"缺 `{prefix}` 開頭的行")
         generated = taipei_minute(ai.get("generated_at"))
         expect(
             generated is not None,
             f"ai.generated_at {ai.get('generated_at')!r} 沒有時區",
         )
+        # Issue 732 (3-5): the line is the time only; the model, prompt version and check rule left the page.
         stamp = f"產生時間 {generated}"
-        expect(
-            stamp in text.lines[line],
-            f"{text.at(line)} 沒有 `{stamp}`：{text.lines[line]!r}",
-        )
-        return f"id {news_id}：來源事實／AI 摘要與判讀分欄，`{prefix} · {stamp}`"
+        expect(text.has(stamp), f"缺整行 `{stamp}`")
+        return f"id {news_id}：來源事實／AI 摘要與判讀分欄，`{stamp}`"
     expect(text.has("此則尚未產生 AI 摘要與判讀。"), "ai 未完成，缺空狀態文案")
     return f"id {news_id}：AI 未完成，顯示空狀態"
 
@@ -3567,23 +3653,18 @@ def s15(run: Run, stock: Stock) -> str:
 @check("stocks", "S16", per_stock=True)
 def s16(run: Run, stock: Stock) -> str:
     """Issue 729: no tab of the stock page shows the removed copy. 資料來源 lists sources and versions, so its
-    indicator formula version stays there. The 新聞與公告 tab is left out until Issue 732 (its AI candidate row
-    still writes 模型 … · 提示版本 …, as decided); check it again once 732 is merged."""
+    indicator formula version stays there. The 新聞與公告 tab is checked again since Issue 732 took 模型 … · 提示版本 …
+    off its AI candidate row."""
 
     problems = []
     for tab, shot in stock_shots(stock).items():
-        if tab == "news":
-            continue
         allowed = ("indicators/v1",) if tab == "data" else ()
         for width in shot.widths:
             found = removed_copy(run.text(shot, width), allowed)
             if found:
                 problems.append(f"{shot.name}-{width}：" + "、".join(found))
     expect(not problems, "出現已拿掉的說明文字：" + "；".join(problems))
-    return (
-        f"{stock.label}：五個分頁沒有已拿掉的說明文字"
-        "（資料來源分頁留指標公式版本；新聞與公告分頁等 #732）"
-    )
+    return f"{stock.label}：六個分頁沒有已拿掉的說明文字（資料來源分頁留指標公式版本）"
 
 
 # ---- actions ----
@@ -3963,10 +4044,6 @@ def hidden_line(summary: dict) -> str | None:
     return f"預設隱藏：{'、'.join(parts)}"
 
 
-# Why rows are hidden: one line in the page's 說明 fold (#649), which the screenshot opens.
-HIDDEN_NOTE = "自選標的一律顯示；隱藏不刪資料，切換上方篩選即可看到。"
-
-
 @check("actions", "A10")
 def a10(run: Run) -> str:
     payload, text = actions_payload(run), run.text(ACTIONS)
@@ -3984,8 +4061,7 @@ def a10(run: Run) -> str:
         )
         return "summary.hidden 都是 0，沒有隱藏句"
     expect(text.has(line), f"缺整行 `{line}`")
-    expect(text.has(HIDDEN_NOTE), f"「說明」裡缺整行 `{HIDDEN_NOTE}`")
-    return f"`{line}`；「說明」有隱藏說明"
+    return f"`{line}`"
 
 
 # ---- tier 3 接近成立 (#277-B) ----
@@ -4068,9 +4144,8 @@ def a13(run: Run) -> str:
 TRACKING_TITLE, HISTORY_TITLE = "追蹤計畫", "追蹤回看"
 EMPTY_OPEN_PLANS = "尚未建立追蹤計畫。可從今日候選或個股研究條件加入。"
 EMPTY_CLOSED_PLANS = "尚無已結束的計畫。"
-TRACKING_NOTE_START = "計畫價位來自建立當日的研究條件"
 CONFLICT_NOTE = "行情有更正，狀態待核對"
-HISTORY_SUMMARY = "版本、來源與逐日明細"
+HISTORY_SUMMARY = "來源與逐日明細"
 PLAN_STATUS_LABELS = {
     "pending": "待觸發",
     "triggered": "已觸發",
@@ -4230,11 +4305,7 @@ def a15(run: Run) -> str:
             problems.append(
                 f"{name} 已結束不可比較，缺 `模擬報酬：無法比較`，實際 {results}"
             )
-    rate = [
-        text.at(i)
-        for i, line in enumerate(text.lines)
-        if "勝率" in line and not line.startswith(TRACKING_NOTE_START)
-    ]
+    rate = [text.at(i) for i, line in enumerate(text.lines) if "勝率" in line]
     if rate:
         problems.append(f"出現 `勝率`：{'、'.join(rate)}")
     expect(not problems, "；".join(problems))

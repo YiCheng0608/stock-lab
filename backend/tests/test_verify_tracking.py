@@ -13,10 +13,6 @@ from test_verify_checks import FakeRun, _candidates, page_checks
 
 OPEN = "tracking?status=open&page=1&page_size=20"
 CLOSED = "tracking?status=closed&page=1&page_size=20"
-NOTE = (
-    "計畫價位來自建立當日的研究條件；成交與結果是依日線規則的模擬（買賣各 5 bps 滑價、"
-    "來回 30 bps 成本假設），不是實際成交，也不統計勝率。實際持股請看「我的庫存」。"
-)
 
 
 def plan(plan_id, status, **values):
@@ -94,8 +90,8 @@ def card(item, status_label, created, *body, conflict=False):
         f"計畫資料日 {item['plan_date'].replace('-', '/')} · 建立 {created}",
         f"第 {item['sessions_observed']}／20 個交易日",
         *body,
-        "版本、來源與逐日明細",
-        "來源 個股研究條件 · 追蹤規則 plan_tracking_v1",
+        "來源與逐日明細",
+        "來源 個股研究條件",
         *ROWS[item["id"]],
     ]
     return "\n".join(lines)
@@ -110,7 +106,6 @@ def page(cards_open, cards_closed, *, before="", after="第 1 級\n今日候選"
             before,
             "模擬追蹤 · 進行中",
             "追蹤計畫",
-            NOTE,
             *cards_open,
             after,
             "模擬追蹤 · 已結束",

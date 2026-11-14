@@ -52,7 +52,6 @@ import {
   relationLabel,
   relativeReturn,
   relevanceLabel,
-  themeDefinitionVersion,
   themeDetailPath,
   trendHasEnoughPoints,
 } from './themeBoards'
@@ -109,16 +108,13 @@ export function BoardDateBadges({ meta }: { meta: Pick<ThemeBoardMeta, 'trading_
 
 // ---- /themes: one board as one list of two-line rows (Issue 522, DESIGN_SYSTEM §5 族群榜, UI_COPY_SPEC §8.5 族群頁) ----
 
-// The 說明 fold: what the page ranks, the units and blanks, and what the row's short forms mean.
+// The 說明 fold: the units and blanks only (Issue 732, 4-10: how the board is scored left the page).
 function BoardHelp() {
   return (
     <details className="details board-help">
       <summary>說明</summary>
       <div className="board-help-body">
-        <p>產業與題材各自成榜，依相對報酬、廣度、量能、法人與催化劑五分項計分；只有五分項完整的族群稱為熱門族群，熱門族群不另標，其他族群在名稱後標出資料完整度。</p>
         <p><Term id="heat_rank">分數</Term> 0–100，依分數<Term id="heat_rank">排名</Term>；五分項為<Term id="percentile">同榜百分位</Term>（0–100）；1／5／20 日為相對加權指數的報酬（%）；成員為有效／總數（檔）；「—」表示該項無資料。</p>
-        <p>名稱後的兩個分項是五分項中最高與最低的一項。</p>
-        <p>今日名單 N 檔是當日今日名單中屬於這個族群的檔數，沒有時不顯示。</p>
       </div>
     </details>
   )
@@ -563,7 +559,6 @@ export function ThemeDetailView({
   const isTheme = detail.board === 'theme'
   const rows = memberTableRows(detail, members.data)
   const membersAsOf = members.data?.members_as_of ?? detail.members_as_of
-  const version = isTheme ? themeDefinitionVersion(detail, members.data?.items) : null
   const scoreDate = formatDate(item?.trading_date ?? detail.theme.trading_date)
   const backBoard: ThemeBoard = isTheme ? 'theme' : 'industry'
   return (
@@ -591,12 +586,11 @@ export function ThemeDetailView({
       <section className="section-head member-section-head">
         <div><UnlessPageDate date={detail.members_as_of}><div className="eyebrow">成員資料截至 {formatDate(detail.members_as_of) ?? '日期未提供'}</div></UnlessPageDate><h2>族群成員</h2></div>
         <MemberSortSelect value={memberSort} onChange={onMemberSortChange} />
-        {/* #666: the theme table version and the member note fold into 說明 (closed by default); opened, it takes the next line. */}
-        {(version || (rows && rows.length > 0)) && <details className="details member-help">
+        {/* #666: the member note folds into 說明 (closed by default); opened, it takes the next line. Issue 732 (N-8): no theme table version. */}
+        {rows && rows.length > 0 && <details className="details member-help">
           <summary>說明</summary>
           <div className="member-help-body">
-            {version && <p className="small-note">題材表版本 {version}</p>}
-            {rows && rows.length > 0 && <p className="table-note member-note">{memberTableNote(rows.map(values), membersAsOf)}</p>}
+            <p className="table-note member-note">{memberTableNote(rows.map(values), membersAsOf)}</p>
           </div>
         </details>}
       </section>

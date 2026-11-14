@@ -69,7 +69,7 @@ import { GLOSSARY } from './glossary'
 import { formatDay, formatTaipeiDay, formatTaipeiMinute } from './dates'
 import { noPreviousCloseText } from './marketChange'
 import { formatPortfolioValue, formatPositionValuation, formatLocalPositionValuation, formatPortfolioClose, formatQuoteRecord, portfolioValueFromText } from './portfolioValues'
-import { formatFixed, formatTableNumber, formatTableVolume, formatTableVolumeShares, formatTableChip,formatShareQuantity, formatPositionShares, positionQuantityFromText, isVerifiedShareSource, type ShareUnit } from './units'
+import { formatFixed, formatTableNumber, formatTableVolume, formatTableVolumeShares, formatTableChip,formatShareQuantity, positionQuantityFromText, isVerifiedShareSource, type ShareUnit } from './units'
 import { backtestStartedText, backtestTrackingLabel, officialEventDisplayTitle, formatProductTimeRole, levelFieldLabel, levelSemanticsLabel, isVerifiedLevelSemantics, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, gapNotApplicable, incompleteActionLabel, staleCloseDateLabel, stockDirectoryActionLabel, stockGroupLabel, type ProductQualityKind } from './presentation'
 import { Shell } from './components/Shell'
 import { Term } from './components/Term'
@@ -97,7 +97,7 @@ import { NewsDetailView, NewsListView, StockNewsTimeline } from './news/NewsView
 import { HoldingAlert, MarketSummaryLine, TodayHeader } from './today/TodayViews'
 import { MarketPage } from './market/MarketPage'
 import { newsFiltersFromSearch, newsListParams, newsPageSearch, stockNewsParams, type NewsFilters } from './news/newsView'
-import { ACTIONS_PAGE_LIMIT, ACTION_STATE_LABELS, ACTION_TIER_PREVIEW, DEFAULT_ACTION_VIEW, HIDDEN_NOTE, previewTiers, stockResearchPath, tierSections } from './actions/actionTiers'
+import { ACTIONS_PAGE_LIMIT, ACTION_STATE_LABELS, ACTION_TIER_PREVIEW, DEFAULT_ACTION_VIEW, previewTiers, stockResearchPath, tierSections } from './actions/actionTiers'
 import { ActionFilters, ActionTierList } from './actions/ActionViews'
 import { StrategyPage } from './strategy/StrategyPage'
 import { SystemPage } from './system/SystemPage'
@@ -629,8 +629,6 @@ export function StockSortSelect({ value, onChange }: { value: StockSort; onChang
   )
 }
 
-export const STOCK_DIRECTORY_EYEBROW = '市場標的目錄'
-export const STOCK_DIRECTORY_LEAD = '股票、ETF 與新上市標的分開標示；行動與缺資料優先級只來自已驗證官方快照。'
 export const STOCK_DIRECTORY_NOTE = '單位：價格為各標的報價幣別的元，指數為點。空白表示未提供資料或數值待核實；最近收盤早於最新交易日時，下方括號標出它的日期。'
 const stockDirectoryKey = (row: StockDirectoryRow) => (row.instrument ?? row).exchange + (row.instrument ?? row).symbol
 
@@ -667,13 +665,12 @@ export function StockTable({ rows, dataAsOf }: { rows: StockDirectoryRow[]; data
   </>
 }
 
-// The 說明 fold of /stocks (#666): the old eyebrow and lead, then the unit note, as they read before.
+// The 說明 fold of /stocks (#666): the unit note only; the directory lead left with Issue 732 (4-11).
 export function StockDirectoryHelp() {
   return (
     <details className="details page-help">
       <summary>說明</summary>
       <div className="page-help-body">
-        <p>{STOCK_DIRECTORY_EYEBROW}：{STOCK_DIRECTORY_LEAD}</p>
         <p>{STOCK_DIRECTORY_NOTE}</p>
       </div>
     </details>
@@ -948,8 +945,6 @@ export function WatchRedirect() {
 
 type ActionFilterState = { q?: string; view: ActionView; include_etf?: boolean }
 
-// For a first-time reader (UI_COPY_SPEC §5, decision 6648288563).
-const WATCH_PURPOSE = '把有興趣的候選加入追蹤，系統每天收盤後依日線模擬它的進場與出場（不是實際成交）；這裡也會提醒你庫存的風險，和快要成立的股票。'
 
 // 我的追蹤 (/watch, formerly the action centre; action_tier_v1, UI_COPY_SPEC §5): one first-page request for the counts
 // and the top rows; each tier's 顯示更多 pages that tier only.
@@ -994,12 +989,11 @@ export function ActionsPage() {
     return next && !cursors.includes(next) ? { ...current, [tier]: [...cursors, next] } : current
   })
   return <div className="page actions-page">
-    {/* #649: the purpose and why rows are hidden fold into 說明 on the title line, so the list starts sooner. */}
+    {/* Issue 732 (4-9): the title has no 說明 fold; the purpose and the hidden-row note left the page. */}
     <section className="page-title">
       <div className="eyebrow">追蹤與提醒</div>
       <div className="watch-title-row">
         <h1>我的追蹤</h1>
-        <details className="details watch-help"><summary>說明</summary><div className="watch-help-body"><p>{WATCH_PURPOSE}</p><p>{HIDDEN_NOTE}</p></div></details>
       </div>
       <div className="filter-row"><SearchBox draft={draft} query={search} placeholder="搜尋代號或名稱" onDraftChange={setDraft} onSubmit={submit} onClear={clear} /></div>
       {query.data && <ActionFilters summary={query.data.summary} view={view} includeEtf={includeEtf} searching={Boolean(search)} onViewChange={(next) => { setView(next); resetTiers() }} onIncludeEtfChange={(next) => { setIncludeEtf(next); resetTiers() }} />}
@@ -1044,17 +1038,13 @@ export function PortfolioSubsection() {
   const editor = <details className="portfolio-editor"><summary>新增庫存</summary><p className="small-note">每張為 1,000 股，可輸入整數張或零股股數。</p><form className="inline-form" onSubmit={save}><input aria-label="庫存代號" placeholder="代號" value={draft.symbol} onChange={(event) => setDraft({ ...draft, symbol: event.target.value })} /><select aria-label="交易所" className="filter-select" value={draft.exchange} onChange={(event) => setDraft({ ...draft, exchange: event.target.value })}><option value="">交易所</option><option value="TWSE">上市（TWSE）</option><option value="TPEx">上櫃（TPEx）</option></select><select aria-label="交易單位" className="filter-select" value={draft.unit} onChange={(event) => setDraft({ ...draft, unit: event.target.value as ShareUnit })}><option value="lot">單位：張</option><option value="odd_lot">單位：零股</option></select><input aria-label={draft.unit === 'lot' ? '張數' : '股數'} type="text" inputMode="numeric" placeholder={draft.unit === 'lot' ? '張數' : '股數'} value={draft.quantity} onChange={(event) => setDraft({ ...draft, quantity: event.target.value })} /><input aria-label="平均成本／每股" type="text" inputMode="decimal" placeholder="平均成本／每股" value={draft.average_cost} onChange={(event) => setDraft({ ...draft, average_cost: event.target.value })} /><input aria-label="停損價" type="text" inputMode="decimal" placeholder="停損價" value={draft.stop_price} onChange={(event) => setDraft({ ...draft, stop_price: event.target.value })} /><button type="submit" className="secondary-button" disabled={busy !== null}>{busy === 'save' ? '儲存中…' : '儲存'}</button></form></details>
   const notice = message && <div className="small-note">{message}</div>
   // Without holdings the section is one line (DESIGN_SYSTEM §5 庫存一行), so the tiers start on the first screen.
-  if (!query.data?.items.length) return <section className="card portfolio-line"><div className="portfolio-line-head"><h2>我的庫存</h2><div className="small-note">{query.isLoading ? '庫存載入中…' : query.error ? '庫存暫時無法載入，請稍後重新整理。' : '尚未建立庫存。'}</div><div className="small-note">有持倉風險時列在最上方。</div></div>{editor}{notice}</section>
-  return <section className="panel portfolio-subsection"><div className="section-head"><div><div className="eyebrow">行動優先級</div><h2>我的庫存</h2></div><span className="small-note">持倉風險列在行動列表最上方</span></div><p className="small-note">未核實行情的本地記錄與試算，可展開每筆庫存核對。</p>{editor}{notice}<div className="position-list">{query.data.items.map((position) => <div className="position-card" key={position.id}><div className="position-head"><Link className="symbol-link" to={'/stocks/' + encodeURIComponent(position.instrument?.exchange ?? '') + '/' + encodeURIComponent(position.instrument?.symbol ?? '')}>{position.instrument?.symbol ?? '—'} {position.instrument?.name ?? ''}</Link><button type="button" className="delete-button" disabled={busy !== null} onClick={() => remove(position.id)}>{busy === position.id ? '刪除中…' : '刪除'}</button></div><div className="position-quantity"><div>持有 {formatShareQuantity(position.shares, position.shares_exact)}</div></div><div className="small-note">平均成本（報價幣別元／股） {formatPortfolioValue(position.average_cost, position.portfolio_value_status, 'average_cost')} · 停損價（報價幣別元／股） {formatPortfolioValue(position.stop_price, position.portfolio_value_status, 'stop_price')} · 收盤狀態 {formatPortfolioClose(position.portfolio_quote)} · 市值（報價幣別元） {formatPositionValuation(position.market_value, position.valuation_status, 'market_value')} · 未實現損益（報價幣別元） {formatPositionValuation(position.unrealized_pnl, position.valuation_status, 'unrealized_pnl')}</div>
-        <details className="portfolio-quote-review" style={{ overflowWrap: 'anywhere' }}><summary>核對庫存原股數、本地行情與試算</summary>
-          <div className="small-note">來源稽核原股數 {formatPositionShares(position.shares, position.shares_exact)}</div>
-          <p className="small-note">本地記錄；來源／日期待核實。記錄日期不表示交易日或原件證據已核實。</p>
+  if (!query.data?.items.length) return <section className="card portfolio-line"><div className="portfolio-line-head"><h2>我的庫存</h2><div className="small-note">{query.isLoading ? '庫存載入中…' : query.error ? '庫存暫時無法載入，請稍後重新整理。' : '尚未建立庫存。'}</div></div>{editor}{notice}</section>
+  return <section className="panel portfolio-subsection"><div className="section-head"><div><div className="eyebrow">行動優先級</div><h2>我的庫存</h2></div></div>{editor}{notice}<div className="position-list">{query.data.items.map((position) => <div className="position-card" key={position.id}><div className="position-head"><Link className="symbol-link" to={'/stocks/' + encodeURIComponent(position.instrument?.exchange ?? '') + '/' + encodeURIComponent(position.instrument?.symbol ?? '')}>{position.instrument?.symbol ?? '—'} {position.instrument?.name ?? ''}</Link><button type="button" className="delete-button" disabled={busy !== null} onClick={() => remove(position.id)}>{busy === position.id ? '刪除中…' : '刪除'}</button></div><div className="position-quantity"><div>持有 {formatShareQuantity(position.shares, position.shares_exact)}</div></div><div className="small-note">平均成本（報價幣別元／股） {formatPortfolioValue(position.average_cost, position.portfolio_value_status, 'average_cost')} · 停損價（報價幣別元／股） {formatPortfolioValue(position.stop_price, position.portfolio_value_status, 'stop_price')} · 收盤狀態 {formatPortfolioClose(position.portfolio_quote)} · 市值（報價幣別元） {formatPositionValuation(position.market_value, position.valuation_status, 'market_value')} · 未實現損益（報價幣別元） {formatPositionValuation(position.unrealized_pnl, position.valuation_status, 'unrealized_pnl')}</div>
+        <details className="portfolio-quote-review" style={{ overflowWrap: 'anywhere' }}><summary>本地行情與試算</summary>
           <div className="small-note">本地收盤讀值（報價幣別元／股） {formatPortfolioClose(position.portfolio_quote, true)}</div>
           <div className="small-note">記錄來源 {formatQuoteRecord(position.portfolio_quote, 'source')} · 記錄日期 {formatQuoteRecord(position.portfolio_quote, 'date')}</div>
-          <div className="small-note">記錄資料時間 {formatQuoteRecord(position.portfolio_quote, 'data_as_of')} · 記錄收集時間 {formatQuoteRecord(position.portfolio_quote, 'collected_at')}</div>
-          <p className="small-note">本地試算，行情來源／日期尚未核實。停牌、行情整體一致性與可交易用途尚未核對。</p>
-          <div className="small-note">市值本地試算（股數 × 本地收盤，報價幣別元） {formatLocalPositionValuation(position.market_value, position.valuation_status, 'market_value')}</div>
-          <div className="small-note">未實現損益本地試算（市值 − 平均成本 × 股數，報價幣別元） {formatLocalPositionValuation(position.unrealized_pnl, position.valuation_status, 'unrealized_pnl')}</div>
+          <div className="small-note">市值本地試算（報價幣別元） {formatLocalPositionValuation(position.market_value, position.valuation_status, 'market_value')}</div>
+          <div className="small-note">未實現損益本地試算（報價幣別元） {formatLocalPositionValuation(position.unrealized_pnl, position.valuation_status, 'unrealized_pnl')}</div>
         </details></div>)}</div></section>
 }
 

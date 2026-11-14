@@ -4,6 +4,7 @@ import { StaticRouter } from 'react-router-dom/server'
 
 import { completeItem, listResponse } from '../candidates/candidates.fixtures'
 import { productTime, unknownRole } from '../news/news.fixtures'
+import { removedCopyIn } from '../removedCopy.fixtures'
 import { readChartTheme } from '../stock/stockBars'
 import type { ThemeBoardEmptyReason } from '../types'
 import {
@@ -122,9 +123,11 @@ check(!industryMarkup.includes('待重新核實') && !industryMarkup.includes('c
 // The page explanation and the units moved into the closed 說明 fold beside the board line.
 const help = industryMarkup.slice(industryMarkup.indexOf('<details class="details board-help">'), industryMarkup.indexOf('</details>', industryMarkup.indexOf('board-help')))
 check(help.includes('<summary>說明</summary>') && !help.includes('open=""'), 'Issue 522: 說明 is a closed fold')
-for (const sentence of ['只有五分項完整的族群稱為熱門族群', '1／5／20 日為相對加權指數的報酬（%）', '「—」表示該項無資料。', '名稱後的兩個分項是五分項中最高與最低的一項。', '今日名單 N 檔是當日今日名單中屬於這個族群的檔數，沒有時不顯示。']) {
+for (const sentence of ['1／5／20 日為相對加權指數的報酬（%）', '「—」表示該項無資料。']) {
   check(help.replace(/<[^>]+>/g, '').includes(sentence), `說明 says ${sentence}`)
 }
+// Issue 732 (4-10): how the board is scored, the two items after the name and 今日名單 N 檔 are not explained.
+check(!removedCopyIn(industryMarkup).length && !help.includes('只有五分項完整'), `說明 keeps the units only: ${removedCopyIn(industryMarkup).join('、')}`)
 // #666: the tab names the board, so the board line's count is 「共 N 個」; a search reads 「符合 n／共 N 個」.
 const boardCount = (markup: string) => /<span class="small-note board-count">([^<]*)<\/span>/.exec(markup.replace(/<!-- -->/g, ''))?.[1]
 check(boardCount(industryMarkup) === `共 ${industryBoard().meta.total} 個` && !industryMarkup.includes('產業榜 · '), `board count: ${boardCount(industryMarkup)}`)
@@ -172,13 +175,13 @@ check(tooltip.includes('2026/09/08') && tooltip.includes('排名 #3') && tooltip
 const loaded = <T,>(data: T) => ({ data, loading: false, error: null })
 const detailMarkup = render(<ThemeDetailView detail={themeDetail()} board={loaded(themeBoard())} members={loaded(membersPage())} onMemberPageChange={noop} news={loaded({ items: newsItems(3) })} />)
 check(detailMarkup.includes('<h1>CoWoS 先進封裝</h1>') && detailMarkup.includes('>題材<') && detailMarkup.includes('#1') && detailMarkup.includes('72.50'), 'header: name, board badge, rank and score from the board')
-check(detailMarkup.includes('題材表版本 themes_v1:2026.10.17'), 'theme table version comes from member evidence')
-// #666: the three stats are one line (not three cards) in the header; the version and the member note are in the members'
-// closed 說明 fold, with the same text as before.
+// Issue 732 (N-8): the theme table version (themes_v1:2026.10.17 in the member evidence) is not on the page.
+check(!detailMarkup.includes('themes_v1:2026.10.17') && !removedCopyIn(detailMarkup).length, `no theme table version: ${removedCopyIn(detailMarkup).join('、')}`)
+// #666: the three stats are one line (not three cards) in the header; the member note is in the members' closed 說明 fold.
 const header = detailMarkup.slice(detailMarkup.indexOf('<section class="theme-header">'), detailMarkup.indexOf('</section>', detailMarkup.indexOf('theme-header')))
 check(header.includes('<div class="theme-stats theme-stat-line">') && count(header, 'class="stat"') === 3 && !header.includes('題材表版本'), `header: one stat line of three, no version: ${header.slice(0, 200)}`)
 const memberHelp = detailMarkup.slice(detailMarkup.indexOf('<details class="details member-help">'), detailMarkup.indexOf('</details>', detailMarkup.indexOf('member-help')))
-check(memberHelp.startsWith('<details class="details member-help"><summary>說明</summary>') && memberHelp.includes('<p class="small-note">題材表版本 themes_v1:2026.10.17</p>') && memberHelp.includes('class="table-note member-note"'), `members' 說明: closed, version then the member note: ${memberHelp.slice(0, 200)}`)
+check(memberHelp.startsWith('<details class="details member-help"><summary>說明</summary>') && memberHelp.includes('<div class="member-help-body"><p class="table-note member-note">'), `members' 說明: closed, the member note only: ${memberHelp.slice(0, 200)}`)
 check(detailMarkup.indexOf('member-help') < detailMarkup.indexOf('member-table-wrap') && detailMarkup.indexOf('class="section-head member-section-head"') < detailMarkup.indexOf('member-help'), '說明 sits on the 族群成員 head, before the table')
 check(detailMarkup.includes('熱度走勢') && !detailMarkup.includes('走勢資料不足') && detailMarkup.includes('查看走勢資料表'), '20-day trend draws the chart')
 const components = detailMarkup.slice(detailMarkup.indexOf('五分項'))

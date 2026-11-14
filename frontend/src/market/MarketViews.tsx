@@ -10,7 +10,6 @@ import {
   EXCHANGES,
   INDEX_CHART_ID,
   INDEX_CHART_TITLE_ID,
-  INDEX_SELECT_HINT,
   INDEX_SPECS,
   INDEX_TABLE_TITLE,
   MA60_LABEL,
@@ -218,7 +217,6 @@ export function IndexTableView({ overview, selected, onSelect }: { overview: Mar
         })}
       />
       {roll && <p className="small-note market-index-note">{roll}</p>}
-      <p className="small-note market-index-note">{INDEX_SELECT_HINT}</p>
     </>
   )
 }
@@ -231,7 +229,7 @@ export function IndexTablePanel({ overview, selected, onSelect }: { overview: Ma
         <DateBadge date={overview?.trading_date ?? null} />
         <details className="data-explanation">
           <summary>資料說明</summary>
-          {indexTableNotes(overview).map((line) => <div key={line}>{line}</div>)}
+          {indexTableNotes().map((line) => <div key={line}>{line}</div>)}
         </details>
       </div>
       <IndexTableView overview={overview} selected={selected} onSelect={onSelect} />
@@ -242,7 +240,7 @@ export function IndexTablePanel({ overview, selected, onSelect }: { overview: Ma
 // ---- 共用 K 線圖 ----------------------------------------------------------------------------------------
 
 // The TX chart's lines under the K line: the latest contract month, open interest and settlement price, when the
-// history starts, the roll rule and the open-data attribution (Issue 552; UI_COPY_SPEC §11).
+// history starts, the session scope and the open-data attribution (Issue 552; UI_COPY_SPEC §11).
 function FuturesFooter({ data }: { data: StockBarsResponse | undefined }) {
   const latest = futuresLatestText(data)
   const since = collectedSinceText(data)
