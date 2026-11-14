@@ -819,6 +819,10 @@ def test_screenshot_reports_a_browser_that_exits_before_listening(
     tmp_path: Path,
 ) -> None:
     # node rejects --headless=new and exits at once, like a browser that cannot start.
+    # It leaves no helper behind, so the profile in the temp dir must be gone (Issue 750).
+    temp = tmp_path / "tmp"
+    temp.mkdir()
+    env = {**os.environ, "TMPDIR": str(temp), "TEMP": str(temp), "TMP": str(temp)}
     started = time.monotonic()
     result = _run(
         [
@@ -830,12 +834,89 @@ def test_screenshot_reports_a_browser_that_exits_before_listening(
             str(tmp_path / "shots"),
             "--browser",
             NODE,
-        ]
+        ],
+        env=env,
     )
     assert result.returncode == 1
     assert "browser exited" in result.stderr and "headless" in result.stderr
     assert time.monotonic() - started < 30
     assert list((tmp_path / "shots").iterdir()) == []
+    assert list(temp.iterdir()) == []
+
+
+# A stand-in browser that exits at once and leaves a helper process behind; the helper
+# waits until screenshot.cjs has removed the profile, then writes into it again.
+LATE_WRITER = """
+const { spawn } = require('node:child_process')
+const flag = '--user-data-dir='
+const profile = process.argv.find((arg) => arg.startsWith(flag)).slice(flag.length)
+const helper = `
+const fs = require('node:fs')
+const path = require('node:path')
+const [profile, done] = process.argv.slice(1)
+const deadline = Date.now() + 60000
+const wait = () => {
+  if (fs.existsSync(profile) && Date.now() < deadline) return setTimeout(wait, 50)
+  fs.mkdirSync(profile, { recursive: true })
+  fs.writeFileSync(path.join(profile, 'late-write'), 'x')
+  fs.writeFileSync(done, profile)
+}
+wait()
+`
+spawn(process.execPath, ['-e', helper, profile, process.env.LATE_WRITER_DONE], {
+  detached: true,
+  stdio: 'ignore',
+  windowsHide: true,
+}).unref()
+process.exit(3)
+"""
+
+
+@needs_node
+@pytest.mark.skipif(os.name == "nt", reason="the stand-in browser is a shell script")
+def test_screenshot_keeps_a_late_browser_write_out_of_the_output_dir(
+    tmp_path: Path,
+) -> None:
+    # Issue 750: a browser helper wrote into the removed profile; under <out> it left .browser-*.
+    fake = tmp_path / "fake-browser.cjs"
+    fake.write_text(LATE_WRITER, encoding="utf-8")
+    browser = tmp_path / "fake-browser"
+    browser.write_text(f'#!/bin/sh\nexec "{NODE}" "{fake}" "$@"\n')
+    browser.chmod(0o755)
+    temp = tmp_path / "tmp"
+    temp.mkdir()
+    done = tmp_path / "done"
+    env = {
+        **os.environ,
+        "TMPDIR": str(temp),
+        "TEMP": str(temp),
+        "TMP": str(temp),
+        "LATE_WRITER_DONE": str(done),
+    }
+    out = tmp_path / "shots"
+    result = _run(
+        [
+            NODE,
+            str(SCREENSHOT),
+            "--url",
+            "http://127.0.0.1:9/",
+            "--out",
+            str(out),
+            "--browser",
+            str(browser),
+        ],
+        env=env,
+    )
+    assert result.returncode == 1
+    assert "browser exited (3)" in result.stderr
+    deadline = time.monotonic() + 30
+    while not done.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert done.exists(), "the late writer did not run within 30 s"
+    late = Path(done.read_text(encoding="utf-8"))
+    assert (late / "late-write").exists()
+    assert list(out.iterdir()) == []
+    assert late.parent == temp and late.name.startswith("stock-lab-browser-")
 
 
 PAGE = """<!doctype html><html><head><meta charset="utf-8">
