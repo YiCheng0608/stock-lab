@@ -66,6 +66,9 @@ NEWS_INTERVAL_SECONDS=7200
 # between its logs is Saturday to Tuesday (3 days); one day more is stale.
 US_STALE_SECONDS=$((4 * 86400))
 US_FAILED_RUNS=2
+# notify (#728): Monday to Friday 08:45; judged from 09:10, so the :15 run reports it before
+# the 09:00 open is long past.
+NOTIFY_AFTER_HM=910
 # The day's daily is judged from 23:10 Taipei (#466): its log, its result and the
 # data check. By then the 23:00 trigger (the retry of a 21:30 that failed or did
 # not run, or the institutional refetch after a 21:30 success) has written its
@@ -498,6 +501,38 @@ if [ "${#us_files[@]}" -gt 0 ]; then
   if [ "$(printf '%s\n' "$us_exits" | grep -c .)" = "$US_FAILED_RUNS" ] \
     && ! printf '%s\n' "$us_exits" | grep -qx 0; then
     anomaly us_failed "美股 us 排程：最近 $US_FAILED_RUNS 次都沒有成功（exit $(printf '%s' "$us_exits" | tr '\n' ' ')），請查 \`logs/us-*.log\` 與 \`/api/ingestion-runs?q=us_index_collect&include_metadata=true\`；修好後跑 \`worker.cli job us --trigger manual --min-free-memory-gb 2\`。"
+  fi
+fi
+
+# notify (#728): Monday to Friday from 09:10, the day's notify log has no end line (serve
+# did not run it; a closed day still logs skipped non_trading_day), or its last outcome is
+# failed. not_configured is no failure. Only once notify logs exist.
+notify_log="$logs/notify-$taipei_date.log"
+if compgen -G "$logs/notify-*.log" >/dev/null && [ "$taipei_dow" -le 5 ] \
+  && [ $((10#$taipei_hm)) -ge "$NOTIFY_AFTER_HM" ]; then
+  notify_resend="\`docker compose -p <P> exec scheduler python -m worker.cli notify --send --trigger manual\`"
+  if [ ! -f "$notify_log" ]; then
+    anomaly notify_missing "每日 Telegram 通知：今天（$taipei_iso）沒有 08:45 通知的日誌（\`logs/notify-$taipei_date.log\` 不存在），scheduler 可能沒在跑；確認 scheduler 後以 $notify_resend 補送。"
+  elif ! grep -qE '^===== [^ ]+ end exit=' "$notify_log"; then
+    # Started and never ended (#728 review 6882303076): killed by serve's backstop or stuck.
+    anomaly notify_missing "每日 Telegram 通知：今天（$taipei_iso）的通知開始了但沒有跑完（\`logs/notify-$taipei_date.log\` 有 start、沒有 end 列），可能卡住或被 serve 的保險時間結束；查 \`docker logs\` 的 \`serve killed job=notify\` 與該日誌，再以 $notify_resend 補送。"
+  else
+    notify_last="$(sed -nE 's/^--- result (status=[a-z_]+.*)$/\1/p' "$notify_log" \
+      | grep -v '^status=skipped' | tail -n 1)"
+    case "$notify_last" in
+      status=failed*)
+        anomaly notify_failed "每日 Telegram 通知：今天（$taipei_iso）的通知送失敗（\`${notify_last:0:300}\`），請查 \`logs/notify-$taipei_date.log\`：token 或 chat id 錯誤時更正發佈 checkout 的認證檔並重建 scheduler，網路問題恢復後以 $notify_resend 補送。"
+        ;;
+      "")
+        # Only skips: a scheduled run outside 08:45-13:30 on a trading day (the host
+        # asleep at 08:45, review 6882535482) records too_late and nothing else.
+        notify_late="$(sed -nE 's/^--- result status=skipped reason=too_late at=([0-9:]+).*/\1/p' \
+          "$notify_log" | tail -n 1)"
+        if [ -n "$notify_late" ]; then
+          anomaly notify_missed "每日 Telegram 通知：今天（$taipei_iso）08:45～13:30 scheduler 沒有送出（\`too_late at=$notify_late\`：排程到 $notify_late 才跑，主機可能睡眠或 scheduler 停過），收盤後不補送；請查主機與 \`docker logs\` 的 scheduler 是否在 08:45 前後運作。"
+        fi
+        ;;
+    esac
   fi
 fi
 
