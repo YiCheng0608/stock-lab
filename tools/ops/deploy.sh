@@ -393,7 +393,9 @@ if [ "$comment" = 1 ]; then
 
 （\`tools/ops/deploy.sh\` 自動留言；部署記錄在 volume 的 \`/data/logs/deploy.json\`，看門狗以它核對 scheduler 跑的 image。）
 EOF
-  if ! gh issue comment 1 --repo "$GH_REPO" --body-file "$body" >/dev/null; then
+  # comment.sh adds the coordinator mark: the event monitor queues it without waking the
+  # coordinator, who ran this deploy (#711).
+  if ! bash "$script_dir/comment.sh" 1 --body-file "$body" --python "$python" >/dev/null; then
     printf '{"deployed": true, "tag": %s, "HEAD": "%s", "image": %s, "commented": false}\n' \
       "$(json_str "$tag")" "$sha" "$(json_str "$backend")"
     die "已部署 $tag（$sha），但 #1 留言失敗；請手動補記" 4
