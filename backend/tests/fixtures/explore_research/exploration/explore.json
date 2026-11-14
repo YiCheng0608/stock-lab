@@ -1,12 +1,12 @@
 {
-  "version": 1,
+  "version": 2,
   "design": "703",
   "registration_commit": "0ba48e9",
   "segment": "exploration",
   "round": 1,
   "round_size": 8,
   "cumulative": 8,
-  "definitions_sha256": "2e1362b7cb4d231eba289f58e8ac044f32de0efce8de2968be33461b538bba03",
+  "definitions_sha256": "5c8a4ff0ffaa2d6ba35a795ce4a37af34ead0a9a7d87bba8ff7a5f7b4c3cdcfc",
   "copy": {
     "latest": "2014-04-07",
     "alembic": null
@@ -18,6 +18,12 @@
       "verdict": "探索通過",
       "reason": null,
       "days": 139,
+      "taiex_excess": {
+        "days": 139,
+        "mean": 0.00102194303198595,
+        "annual": 0.25752964406045936,
+        "t": 12.614068431881275
+      },
       "excess": {
         "days": 139,
         "mean": 0.00020844346366221035,
@@ -45,6 +51,12 @@
       "verdict": "沒有通過（探索段）",
       "reason": null,
       "days": 139,
+      "taiex_excess": {
+        "days": 139,
+        "mean": 0.0008224283851375331,
+        "annual": 0.20725195305465835,
+        "t": 11.589812380837165
+      },
       "excess": {
         "days": 139,
         "mean": 8.928816813793635e-06,
@@ -72,6 +84,12 @@
       "verdict": "探索通過",
       "reason": null,
       "days": 139,
+      "taiex_excess": {
+        "days": 139,
+        "mean": 0.0021856476793483187,
+        "annual": 0.5507832151957763,
+        "t": 18.609203128873588
+      },
       "excess": {
         "days": 139,
         "mean": 0.0014143210110802668,
@@ -100,6 +118,12 @@
       "verdict": "沒有通過（探索段）",
       "reason": null,
       "days": 139,
+      "taiex_excess": {
+        "days": 139,
+        "mean": 0.00012937688856069304,
+        "annual": 0.03260297591729465,
+        "t": 2.418909135309629
+      },
       "excess": {
         "days": 139,
         "mean": -0.0006841226797630464,
@@ -129,6 +153,12 @@
       "verdict": "沒有通過（探索段）",
       "reason": null,
       "days": 139,
+      "taiex_excess": {
+        "days": 139,
+        "mean": 0.00027404945247781184,
+        "annual": 0.06906046202440859,
+        "t": 7.511816329141215
+      },
       "excess": {
         "days": 139,
         "mean": -0.0005394501158459276,
@@ -156,6 +186,12 @@
       "verdict": "探索通過",
       "reason": null,
       "days": 139,
+      "taiex_excess": {
+        "days": 139,
+        "mean": 0.002719882571274842,
+        "annual": 0.6854104079612602,
+        "t": 24.538490552991135
+      },
       "excess": {
         "days": 139,
         "mean": 0.00194855590300679,
@@ -184,6 +220,12 @@
       "verdict": "沒有通過（探索段）",
       "reason": null,
       "days": 128,
+      "taiex_excess": {
+        "days": 128,
+        "mean": 7.475314269573576e-05,
+        "annual": 0.01883779195932541,
+        "t": 1.3653838149926762
+      },
       "excess": {
         "days": 128,
         "mean": -0.0008347261045590533,
@@ -213,6 +255,12 @@
       "verdict": "沒有通過（探索段）",
       "reason": null,
       "days": 139,
+      "taiex_excess": {
+        "days": 139,
+        "mean": -0.0003492022604871523,
+        "annual": -0.08799896964276238,
+        "t": -136.679942720522
+      },
       "excess": {
         "days": 139,
         "mean": -0.0011205289287552042,
@@ -235,5 +283,15 @@
         }
       }
     }
-  }
+  },
+  "selected": [
+    "X1",
+    "X2",
+    "X3",
+    "X4",
+    "X5",
+    "X6",
+    "X7",
+    "X8"
+  ]
 }

@@ -1,7 +1,7 @@
 {
-  "version": 1,
+  "version": 2,
   "design": "703",
-  "definitions_sha256": "2e1362b7cb4d231eba289f58e8ac044f32de0efce8de2968be33461b538bba03",
+  "definitions_sha256": "5c8a4ff0ffaa2d6ba35a795ce4a37af34ead0a9a7d87bba8ff7a5f7b4c3cdcfc",
   "label": "事件日（每月 10 日，休市順延）只取最新已知月份是上個月且 `revenue_high_12`＝1，依 `revenue_yoy` 大者先；持有到下一個事件日收盤",
   "direction": "事件：月營收公布",
   "parameters": {
