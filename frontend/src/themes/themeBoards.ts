@@ -179,12 +179,6 @@ export function evidenceUrl(evidence: ThemeEvidence | null | undefined): string 
   return url && /^https?:\/\//i.test(url) ? url : null
 }
 
-export function themeDefinitionVersion(detail: ThemeDetail, rows: ReadonlyArray<{ theme_evidence?: ThemeEvidence | null }> = []): string | null {
-  if (detail.theme.definition_version) return detail.theme.definition_version
-  const fromEvidence = [...detail.members, ...rows].map((member) => member.theme_evidence?.theme_version).find((value) => value)
-  return fromEvidence ?? null
-}
-
 // The member table reads the paginated endpoint (it carries the latest close). Until a page arrives the inline list
 // stands in, unless the detail says it is truncated: then only the paginated endpoint is used.
 export function memberTableRows(detail: ThemeDetail, page: { items: ThemeMemberRow[] } | undefined): Array<ThemeMemberRow | ThemeInlineMember> | null {

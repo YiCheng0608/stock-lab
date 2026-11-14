@@ -16,7 +16,7 @@ import {
   ROLL_LABEL,
   SHORT_SCOPE_LABELS,
   TAIFEX_ATTRIBUTION,
-  TX_ROLL_NOTE,
+  TX_SESSION_NOTE,
   available,
   changeTone,
   chartTitle,
@@ -247,7 +247,7 @@ function FuturesFooter({ data }: { data: StockBarsResponse | undefined }) {
   return (
     <div className="market-chart-footer" data-exchange="TAIFEX">
       {latest && <p className="market-chart-contract">{latest}</p>}
-      <p>{since ? `${since}；` : ''}{TX_ROLL_NOTE}</p>
+      <p>{since ? `${since}；` : ''}{TX_SESSION_NOTE}</p>
       <p>{TAIFEX_ATTRIBUTION}</p>
     </div>
   )

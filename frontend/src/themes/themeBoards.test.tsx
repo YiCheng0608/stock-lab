@@ -29,7 +29,6 @@ import {
   qualityLabel,
   relativeReturn,
   themeBoardPath,
-  themeDefinitionVersion,
   trendHasEnoughPoints,
 } from './themeBoards'
 import { EMPTY_MESSAGES, boardItem, emptyBoard, industryBoard, membersPage, newsItems, themeBoard, themeDetail, trend } from './themeBoards.fixtures'
@@ -334,7 +333,6 @@ const memberRest = memberPhone.slice(memberPhone.indexOf('<details class="detail
 check(count(memberPhone, 'class="member-card"') === 12 && count(memberRest, 'class="member-card"') === 2 && memberRest.includes('<summary>顯示其餘 2 檔</summary>'), 'phone members: 10 cards open, 「顯示其餘 2 檔」 folds the last 2')
 check(memberRest.includes('2410 成員11') && memberRest.includes('2411 成員12'), 'the folded members are the last two in API order')
 
-check(themeDefinitionVersion({ ...themeDetail(), theme: { ...themeDetail().theme, definition_version: 'themes_v1:2026.10.18' } }) === 'themes_v1:2026.10.18', 'theme.definition_version wins when present')
 check(evidenceUrl({ kind: null, url: 'http://x.test', relation: null, relevance: null, theme_version: null }) === 'http://x.test' && evidenceUrl(null) === null, 'evidence url rule')
 
 // ---- today Top 5 rows (Issue 510; UI_COPY_SPEC §8.5): two lines each, the quality badge only when it is not 熱門族群 ----

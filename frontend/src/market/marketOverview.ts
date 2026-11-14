@@ -133,7 +133,8 @@ export const UP_DOWN_NOTE = '紅色為上漲、綠色為下跌（台股慣例）
 export const DERIVED_NOTE = '櫃買指數漲跌幅依前一日收市指數計算'
 // 政府資料開放授權條款第1版 第三條 attribution, on the TX chart (coordinator decision 6715831640).
 export const TAIFEX_ATTRIBUTION = '資料來源：臺灣期貨交易所（政府資料開放平臺，政府資料開放授權條款第1版）'
-export const TX_ROLL_NOTE = '只含一般交易時段'
+// The TX chart's session scope (Issue 732 kept it; the roll rule left the page).
+export const TX_SESSION_NOTE = '只含一般交易時段'
 
 // The TX history starts at the first collect (open data has the latest session only): said when the daily series is
 // shorter than the request, so the first bar is the first collected session.

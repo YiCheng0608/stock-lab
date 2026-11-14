@@ -2107,13 +2107,29 @@ REMOVED_COPY = (
     "規則核實 · v",
     "· 規則版本",
 )
+# Issue 732 review 6884044663: a page that shows third-party news (titles, summaries, AI summaries) is matched
+# against the news UI's own removed copy only. The full list holds plain Chinese ("越高越好", "每月第三個週三",
+# "研究結論") that a real headline can carry; these phrases are the page's own words and no news text writes them.
+NEWS_UI_COPY = (
+    "提示版本",
+    "核對規則",
+    "候選標的不作為交易理由",
+    "原始資料識別碼",
+    "事件識別碼",
+    "國內、國際財經新聞與官方公告",
+    "規則核實 · v",
+    "· 規則版本",
+    "題材表版本",
+)
 
 
-def removed_copy(text: Text, allowed: tuple[str, ...] = ()) -> list[str]:
-    """The REMOVED_COPY phrases on a page, each with the first line that holds it."""
+def removed_copy(
+    text: Text, allowed: tuple[str, ...] = (), phrases: tuple[str, ...] = REMOVED_COPY
+) -> list[str]:
+    """The removed phrases on a page (REMOVED_COPY unless given), each with the first line that holds it."""
 
     found = []
-    for phrase in REMOVED_COPY:
+    for phrase in phrases:
         if phrase in allowed:
             continue
         n = text.find_where(lambda line, phrase=phrase: phrase in line)
@@ -2135,13 +2151,15 @@ def t23(run: Run) -> str:
     return f"today-1280／390 沒有 {len(REMOVED_COPY)} 句已拿掉的說明文字"
 
 
-def no_removed_copy(run: Run, shots: list[Shot]) -> str:
-    """Issue 732: none of the shots, at any of their widths, shows the removed copy."""
+def no_removed_copy(run: Run, shots: list[Shot], news: tuple[str, ...] = ()) -> str:
+    """Issue 732: none of the shots, at any of their widths, shows the removed copy. The shots named in ``news``
+    carry third-party news text, so they are matched against NEWS_UI_COPY only (review 6884044663)."""
 
     problems = []
     for shot in shots:
+        phrases = NEWS_UI_COPY if shot.name in news else REMOVED_COPY
         for width in shot.widths:
-            found = removed_copy(run.text(shot, width))
+            found = removed_copy(run.text(shot, width), phrases=phrases)
             if found:
                 problems.append(f"{shot.name}-{width}：" + "、".join(found))
     expect(not problems, "出現已拿掉的說明文字：" + "；".join(problems))
@@ -2149,7 +2167,10 @@ def no_removed_copy(run: Run, shots: list[Shot]) -> str:
         f"{shot.name}-{'／'.join(str(width) for width in shot.widths)}"
         for shot in shots
     )
-    return f"{names} 沒有 {len(REMOVED_COPY)} 句已拿掉的說明文字"
+    counted = f"{len(REMOVED_COPY)} 句已拿掉的說明文字"
+    if news:
+        counted += f"（有新聞內文的 {'、'.join(news)} 只比 {len(NEWS_UI_COPY)} 句新聞頁自己的字）"
+    return f"{names} 沒有 {counted}"
 
 
 @check("today", "T24")
@@ -2161,16 +2182,19 @@ def t24(run: Run) -> str:
 
 @check("news", "N9")
 def n9(run: Run) -> str:
-    """Issue 732 (3-4 to 3-6, 4-12, N-7): the news tabs and the detail show none of the removed copy."""
+    """Issue 732 (3-4 to 3-6, 4-12, N-7): the news tabs and the detail show none of the news UI's removed copy
+    (every shot carries news text, so NEWS_UI_COPY only)."""
 
-    return no_removed_copy(run, news_shots(run))
+    shots = news_shots(run)
+    return no_removed_copy(run, shots, news=tuple(shot.name for shot in shots))
 
 
 @check("themes", "G10")
 def g10(run: Run) -> str:
-    """Issue 732 (4-10): both boards and the theme detail show none of the removed copy."""
+    """Issue 732 (4-10, N-8): both boards and the theme detail show none of the removed copy; the detail lists
+    related news titles, so it is matched against NEWS_UI_COPY."""
 
-    return no_removed_copy(run, themes_shots(run))
+    return no_removed_copy(run, themes_shots(run), news=("theme-detail",))
 
 
 @check("stocks", "S17")
@@ -3654,17 +3678,19 @@ def s15(run: Run, stock: Stock) -> str:
 def s16(run: Run, stock: Stock) -> str:
     """Issue 729: no tab of the stock page shows the removed copy. 資料來源 lists sources and versions, so its
     indicator formula version stays there. The 新聞與公告 tab is checked again since Issue 732 took 模型 … · 提示版本 …
-    off its AI candidate row."""
+    off its AI candidate row; it shows news titles and summaries, so it is matched against NEWS_UI_COPY only
+    (review 6884044663)."""
 
     problems = []
     for tab, shot in stock_shots(stock).items():
         allowed = ("indicators/v1",) if tab == "data" else ()
+        phrases = NEWS_UI_COPY if tab == "news" else REMOVED_COPY
         for width in shot.widths:
-            found = removed_copy(run.text(shot, width), allowed)
+            found = removed_copy(run.text(shot, width), allowed, phrases)
             if found:
                 problems.append(f"{shot.name}-{width}：" + "、".join(found))
     expect(not problems, "出現已拿掉的說明文字：" + "；".join(problems))
-    return f"{stock.label}：六個分頁沒有已拿掉的說明文字（資料來源分頁留指標公式版本）"
+    return f"{stock.label}：六個分頁沒有已拿掉的說明文字（資料來源分頁留指標公式版本；新聞與公告分頁只比新聞頁自己的字）"
 
 
 # ---- actions ----

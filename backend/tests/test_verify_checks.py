@@ -2864,6 +2864,11 @@ def test_removed_copy_mirrors_the_frontend_list():
 
     source = (ROOT / "frontend/src/removedCopy.fixtures.ts").read_text(encoding="utf-8")
     body = source[source.index("REMOVED_COPY") : source.index("\n]\n")]
+    lines = [line.strip() for line in body.splitlines()[1:]]
+    # Every entry is one `'phrase',` line, so a phrase in another form cannot slip past the comparison.
+    odd = [line for line in lines if line and not line.startswith("//")]
+    odd = [line for line in odd if not re.fullmatch(r"'[^']+',", line)]
+    assert odd == []
     phrases = tuple(re.findall(r"^  '([^']+)',$", body, re.MULTILINE))
     assert phrases == page_checks.REMOVED_COPY
 
@@ -3167,6 +3172,66 @@ def test_a19_fails_on_the_watch_page_before_issue_732(tmp_path):
         "價格為當日原始日線",
     ):
         assert f"`{phrase}`（actions-390.txt" in message
+
+
+# ---- review 6884044663: news text on a page is not the page's own copy ----
+# Real headlines and summaries can carry plain phrases of REMOVED_COPY; the pages that show news are matched
+# against NEWS_UI_COPY only, so these pass, while the news UI's own removed words still fail.
+NEWS_TEXT = (
+    "存股殖利率不是越高越好 法人：留意配息穩定度\n"
+    "虛構新聞：台指期每月第三個週三結算，研究結論指出點一列的價差收斂。\n"
+    "AI 摘要：決策時間拉長，各自成榜的族群輪動。\n"
+)
+
+
+def test_news_ui_copy_is_part_of_the_removed_copy():
+    assert set(page_checks.NEWS_UI_COPY) <= set(page_checks.REMOVED_COPY)
+    for phrase in ("越高越好", "每月第三個週三", "研究結論", "點一列", "決策時間"):
+        assert phrase in page_checks.REMOVED_COPY
+        assert phrase not in page_checks.NEWS_UI_COPY
+
+
+def test_n9_passes_on_news_text_with_plain_removed_phrases(tmp_path):
+    run = _news_run(tmp_path, NEWS_AFTER + NEWS_TEXT, NEWS_DETAIL_AFTER + NEWS_TEXT)
+    assert "只比 9 句新聞頁自己的字" in page_checks.n9(run)
+
+
+def test_n9_still_fails_on_the_news_ui_s_own_words(tmp_path):
+    run = _news_run(
+        tmp_path,
+        NEWS_AFTER + NEWS_TEXT,
+        NEWS_DETAIL_AFTER + "模型 m · 提示版本 news_v4\n",
+    )
+    with pytest.raises(page_checks.Fail, match="news-detail-1280：`提示版本`"):
+        page_checks.n9(run)
+
+
+def test_g10_passes_on_related_news_titles_in_the_detail(tmp_path):
+    pages = _themes_pages(THEMES_AFTER)
+    detail = "族群成員\n相關新聞\n" + NEWS_TEXT
+    pages.update({"theme-detail-1280": detail, "theme-detail-390": detail})
+
+    def run_on(pages):
+        run = FakeRun(tmp_path, {}, pages)
+        run.T = lambda: ("t1", "半導體")  # the detail shot is /themes/<T>
+        return run
+
+    assert "theme-detail-1280／390" in page_checks.g10(run_on(pages))
+    pages["theme-detail-390"] = detail + "題材表版本 themes_v1:2026.10.17\n"
+    with pytest.raises(page_checks.Fail, match="theme-detail-390：`題材表版本`"):
+        page_checks.g10(run_on(pages))
+
+
+def test_s16_passes_on_news_text_in_the_news_tab(tmp_path):
+    pages = _stock_pages({"stock-news-1280": "新聞與公告\n" + NEWS_TEXT})
+    summary = page_checks.s16(
+        FakeRun(tmp_path, {}, pages), page_checks.Stock("TWSE", "9101")
+    )
+    assert "新聞與公告分頁只比新聞頁自己的字" in summary
+    # The same phrase outside the news tab is still the page's own copy.
+    pages["stock-chips-1280"] = "決策時間：未記錄\n"
+    with pytest.raises(page_checks.Fail, match="stock-chips-1280：`決策時間`"):
+        page_checks.s16(FakeRun(tmp_path, {}, pages), page_checks.Stock("TWSE", "9101"))
 
 
 # ---- A6 (Issue 729 review): the same-day branch checks the panel itself ----
