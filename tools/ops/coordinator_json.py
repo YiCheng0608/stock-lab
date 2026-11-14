@@ -342,9 +342,12 @@ def _run_state(run) -> str:
     return run.get("conclusion") or "unknown"
 
 
-_THREAD = (
-    "nodes{{number state comments(last:{n}){{totalCount nodes{{url createdAt body}}}}}}"
+# The fields unanswered_questions reads of each thread; slots.py (#727) builds its query
+# from this too, so a field added here reaches the query patrol.sh sends.
+THREAD_FIELDS = (
+    "number state comments(last:{n}){{totalCount nodes{{url createdAt body}}}}"
 )
+_THREAD = "nodes{{" + THREAD_FIELDS + "}}"
 # One gh call reads every open Issue and PR with its latest comments (patrol.sh). Issues
 # and PRs share the number space, so "#<number>" names either.
 PAGE = 100
