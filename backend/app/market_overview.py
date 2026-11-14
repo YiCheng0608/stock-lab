@@ -7,7 +7,9 @@ alone; a row of another date is never shown in its place.
 ``foreign_indices`` (Issues #547, #568) reads the daily bars of the ``US`` index
 instruments (``worker.us_index_bars``) and their ``data_quality`` rows: the
 newest close of each, its change from the stored close before it, and whether
-it is the expected US session (the weekday before the dashboard date).
+it is the expected US session (the weekday before the reference date).  Since
+#681 the dashboard no longer carries them: ``overnight_us`` gives them to
+``/api/candidates`` (the today page's 隔夜美股 line).
 
 ``taiex_ma60`` (Issue #561) reads TAIEX's ``market_bars`` close and the stored
 ``technical_indicators`` ``ma60`` (``indicators/v1``) of the dashboard date:
@@ -16,9 +18,10 @@ defines it (``app.strategies.regime``: close strictly above MA60, 60 closes
 needed), and the latest runs of sessions above it.  Display only: no strategy,
 candidate or group reads it.
 
-``indexes`` (Issue #564) is the market page's index table: TAIEX, TPEX, the
-TX near month and the four US indexes, each with its close, change, data date
-and its close against its own stored MA60, judged as ``taiex_ma60`` judges it.
+``indexes`` (Issue #564) is the market page's index table: TAIEX, TPEX and the
+TX near month (the four US rows left in #633's page and #681's API), each with
+its close, change, data date and its close against its own stored MA60, judged
+as ``taiex_ma60`` judges it.
 """
 
 from __future__ import annotations
@@ -31,7 +34,13 @@ from sqlalchemy import and_, desc, select
 from sqlalchemy.orm import Session
 
 from .clock import utcnow
-from .domain import US_INDEX_EXCHANGE, US_INDEX_QUALITY_ENTITY, US_INDEXES, UsIndex
+from .domain import (
+    US_INDEX_EXCHANGE,
+    US_INDEX_GROUP_LINKS,
+    US_INDEX_QUALITY_ENTITY,
+    US_INDEXES,
+    UsIndex,
+)
 from .indicators import INDICATOR_VERSION, PRICE_BASIS, REQUIRED_BARS
 from .market_change import adjacent_change
 from .models import (
@@ -141,13 +150,11 @@ def market_overview(db: Session, as_of: str | None) -> dict[str, Any]:
                 "latest_trading_date": latest.isoformat() if latest else None,
             }
         )
-    foreign = foreign_indices(db, as_of)
     return {
         "trading_date": as_of,
         "exchanges": exchanges,
         "taiex_ma60": taiex_ma60(db, as_of),
-        "foreign_indices": foreign,
-        "indexes": index_rows(db, as_of, foreign),
+        "indexes": index_rows(db, as_of),
     }
 
 
@@ -496,10 +503,42 @@ def foreign_indices(db: Session, as_of: str | None) -> list[dict[str, Any]]:
     return [_foreign_index(db, series, expected) for series in US_INDEXES]
 
 
+def next_weekday(day: date) -> date:
+    """The weekday after ``day`` (Friday → Monday)."""
+
+    day += timedelta(days=1)
+    while day.weekday() >= 5:
+        day += timedelta(days=1)
+    return day
+
+
+def overnight_us(db: Session, list_date: date | None) -> dict[str, Any]:
+    """The today page's 隔夜美股 line (#681): the four ``foreign_indices``.
+
+    The reference is the Taipei day the list is read before the open: Taipei
+    today for the latest list (``list_date`` None), else the weekday after the
+    asked list's date.  Its expected US session is the weekday before it, and
+    each index keeps ``foreign_indices``'s freshness (``latest``, ``stale``,
+    ``us_market_closed``) and ``unavailable`` reasons.  ``group_links`` is
+    ``app.domain.US_INDEX_GROUP_LINKS``: the groups a candidate row shows the
+    index's change for.  Display only: nothing scores or ranks on it.
+    """
+
+    reference = next_weekday(list_date) if list_date else _taipei_today()
+    return {
+        "reference_date": reference.isoformat(),
+        "expected_date": expected_us_session(reference).isoformat(),
+        "indexes": foreign_indices(db, reference.isoformat()),
+        "group_links": {
+            symbol: sorted(ids) for symbol, ids in US_INDEX_GROUP_LINKS.items()
+        },
+    }
+
+
 # --- The index table of the market page (Issue #564) ---------------------------
 
-# key, exchange, symbol, name and the short source of the Taiwan rows, in table
-# order; the four US rows follow in US_INDEXES order.
+# key, exchange, symbol, name and the short source of the rows, in table order
+# (no US rows since #681: they are /api/candidates' overnight_us).
 TW_INDEX_ROWS: tuple[tuple[str, str, str, str, str], ...] = (
     ("taiex", "TWSE", "TAIEX", "加權指數", "臺灣證券交易所"),
     ("tpex", "TPEx", "TPEX", "櫃買指數", "證券櫃檯買賣中心"),
@@ -643,32 +682,16 @@ def _futures_row(
     }
 
 
-_US_ROW_FIELDS = (
-    "status",
-    "reason",
-    "last_attempt_date",
-    "trading_date",
-    "expected_date",
-    "freshness",
-    "close",
-    "change",
-    "change_pct",
-    "change_pct_method",
-)
+def index_rows(db: Session, as_of: str | None) -> list[dict[str, Any]]:
+    """The three rows of the market page's index table, in table order.
 
-
-def index_rows(
-    db: Session, as_of: str | None, foreign: list[dict[str, Any]]
-) -> list[dict[str, Any]]:
-    """The seven rows of the market page's index table, in table order.
-
-    Each row has its close, change and data date (``freshness``: ``latest``,
-    ``stale`` or, US only, ``us_market_closed``) and ``ma60``: its close against
-    the stored ``indicators/v1`` MA60 on the row's own data date, judged by the
-    code ``taiex_ma60`` uses (``_ma60_on``), so the TAIEX row of ``as_of`` is
-    ``taiex_ma60``'s judgement.  Taiwan rows read through ``as_of``; the US rows
-    are ``foreign`` (``foreign_indices``: #547's expected session and closures).
-    An ``unavailable`` row has a ``reason`` and ``ma60`` null.
+    Each row has its close, change and data date (``freshness``: ``latest`` or
+    ``stale``) and ``ma60``: its close against the stored ``indicators/v1``
+    MA60 on the row's own data date, judged by the code ``taiex_ma60`` uses
+    (``_ma60_on``), so the TAIEX row of ``as_of`` is ``taiex_ma60``'s
+    judgement.  The rows read through ``as_of``.  An ``unavailable`` row has a
+    ``reason`` and ``ma60`` null.  The US indexes are not here (#633's page,
+    #681's API): ``overnight_us``.
     """
 
     session = date.fromisoformat(as_of) if as_of else None
@@ -694,37 +717,6 @@ def index_rows(
                 if quote["status"] == "available"
                 else None,
                 "source": {"label": source, "detail": detail},
-            }
-        )
-    by_symbol = {item["symbol"]: item for item in foreign}
-    for series in US_INDEXES:
-        item = by_symbol.get(series.symbol) or {"status": "unavailable"}
-        quote = {field: item[field] for field in _US_ROW_FIELDS if field in item}
-        # The latest row's source when there is one: FinMind, or FRED (#547 rows).
-        detail = (item.get("source") or {}).get("label") or _us_source_detail(
-            None, series
-        )
-        rows.append(
-            {
-                "key": series.symbol.lower(),
-                "group": "us",
-                "exchange": US_INDEX_EXCHANGE,
-                "symbol": series.symbol,
-                "name": series.name,
-                "instrument_type": "index",
-                **quote,
-                "ma60": _row_ma60(
-                    db,
-                    _instrument(db, US_INDEX_EXCHANGE, series.symbol),
-                    quote["trading_date"],
-                )
-                if quote.get("status") == "available"
-                else None,
-                "source": {
-                    "label": detail.split(" ", 1)[0],
-                    "detail": detail,
-                    "copyright": series.copyright,
-                },
             }
         )
     return rows

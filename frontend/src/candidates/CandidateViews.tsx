@@ -30,6 +30,11 @@ import {
   candidatesState,
   chartToggleLabel,
   nextChartRank,
+  OVERNIGHT_US_TITLE,
+  candidateOvernightLinks,
+  overnightUsView,
+  type OvernightUsItem,
+  type OvernightUsView,
   rowClickToggles,
   exchangeLabel,
   formatCandidateClose,
@@ -298,6 +303,33 @@ function RowFigures({ item }: { item: CandidateItem }) {
   return <div className="candidate-row-figures"><Sparkline item={item} /><PriceLadder item={item} /></div>
 }
 
+// One US index's change: 「費半 +1.23%」, red up and green down (Taiwan's convention), its own date when the four
+// differ, 「非最新」 when not of the expected night (Issue 681).
+function OvernightChange({ entry, stale }: { entry: OvernightUsItem; stale: boolean }) {
+  return (
+    <span className="overnight-us-item" data-us-index={entry.symbol}>
+      {entry.label} <span className={cx('overnight-us-change', entry.tone && `tone-${entry.tone}`)}>{entry.text}</span>
+      {entry.date && `（${entry.date}）`}{stale && ' 非最新'}
+    </span>
+  )
+}
+
+// The 隔夜美股 line under the list's head (Issue 681; UI_COPY_SPEC §10, DESIGN_SYSTEM §5 候選列表): one line of inline
+// runs, so it reads as one line of page text (page_checks T22): 「隔夜美股 資料 2026/11/13 S&P 500 +0.53% · NASDAQ …」.
+export function OvernightUsLine({ view }: { view: OvernightUsView | null }) {
+  if (!view) return null
+  return (
+    <p className="overnight-us" aria-label={OVERNIGHT_US_TITLE}>
+      <span className="overnight-us-title">{OVERNIGHT_US_TITLE}</span>
+      {view.lead && <> <span className="overnight-us-lead">{view.lead}</span></>}
+      {view.date && <> <span className="overnight-us-date">資料 {view.date}</span></>}
+      {view.items.map((entry, index) => (
+        <span key={entry.symbol}>{index === 0 ? ' ' : ' · '}<OvernightChange entry={entry} stale={entry.stale} /></span>
+      ))}
+    </p>
+  )
+}
+
 // Below 1280px a row opens its own K-line card (#665): the card's content and whether it is open.
 type RowChart = { open: boolean; onToggle: () => void; content: ReactNode }
 
@@ -306,7 +338,7 @@ type RowChart = { open: boolean; onToggle: () => void; content: ReactNode }
 // detail stays in the DOM and the screenshot tool can open them all (DESIGN_SYSTEM §5 候選列表). Below 1280px the
 // row's K-line card sits between the row and the detail; it is not a <details>, so opening every <details> mounts no
 // chart, and a closed row renders an empty slot only (#665).
-function CandidateRow({ item, hidden, open, onOpen, selected, onSelect, chart }: { item: CandidateItem; hidden: boolean; open: boolean; onOpen: (open: boolean) => void; selected: boolean; onSelect?: () => void; chart?: RowChart }) {
+function CandidateRow({ item, hidden, open, onOpen, selected, onSelect, chart, links = [] }: { item: CandidateItem; hidden: boolean; open: boolean; onOpen: (open: boolean) => void; selected: boolean; onSelect?: () => void; chart?: RowChart; links?: OvernightUsItem[] }) {
   const { instrument } = item
   const levelsInSentence = entryPlanView(item).kind === 'levels'
   const detailId = `candidate-detail-${item.rank}`
@@ -332,6 +364,9 @@ function CandidateRow({ item, hidden, open, onOpen, selected, onSelect, chart }:
                 ? <button type="button" className="candidate-rank candidate-rank-button candidate-chart-toggle" aria-label={chartToggleLabel(item.rank, chart.open)} aria-expanded={chart.open} aria-controls={chartId} onClick={chart.onToggle}>#{item.rank}</button>
                 : <span className="candidate-rank" aria-label={`第 ${item.rank} 名`}>#{item.rank}</span>}{' '}
             <Link className="symbol-link candidate-row-name" to={stockPath(item)}><strong>{instrument.symbol}</strong> {instrument.name}</Link>{' '}
+            {/* Issue 681: the semiconductor groups' 費半 change right after the name, so the line's ellipsis cuts the
+                market and group, not it (the title is one line at every width). */}
+            {links.map((entry) => <span key={entry.symbol} className="candidate-row-us"><OvernightChange entry={{ ...entry, date: null }} stale={!entry.current} />{' '}</span>)}
             <span className="candidate-row-meta" title={item.groups[0] ? candidateGroupText(item.groups[0]) : undefined}>{exchangeLabel(instrument.exchange)} · {groupShortText(item)}</span>
           </p>
           <EntryPlanCard item={item} className="candidate-entry" conditions={false} />
@@ -363,7 +398,7 @@ function CandidateRow({ item, hidden, open, onOpen, selected, onSelect, chart }:
 
 // wide: the viewport is at least TERMINAL_MIN_WIDTH (the page measures it); initialChartRank: the row whose card is open
 // at first below that width (none on the page; the tests render an open row with it, as they cannot click).
-export function TodayCandidateList({ items, renderChart, wide = false, initialChartRank = null }: { items: CandidateItem[]; renderChart?: (item: CandidateItem) => ReactNode; wide?: boolean; initialChartRank?: number | null }) {
+export function TodayCandidateList({ items, renderChart, wide = false, initialChartRank = null, overnight = null }: { items: CandidateItem[]; renderChart?: (item: CandidateItem) => ReactNode; wide?: boolean; initialChartRank?: number | null; overnight?: OvernightUsView | null }) {
   const [open, setOpen] = useState<ReadonlySet<number>>(() => new Set())
   const [showAll, setShowAll] = useState(false)
   const setRank = (rank: number, value: boolean) => setOpen((current) => {
@@ -393,7 +428,7 @@ export function TodayCandidateList({ items, renderChart, wide = false, initialCh
       <ol className="candidate-list">
         {items.map((item, index) => (
           <CandidateRow key={item.instrument.exchange + item.instrument.symbol} item={item} hidden={!showAll && index >= TODAY_VISIBLE} open={open.has(item.rank)} onOpen={(value) => setRank(item.rank, value)}
-            selected={terminal && item === selected} onSelect={terminal ? () => setPicked(item.rank) : undefined}
+            selected={terminal && item === selected} onSelect={terminal ? () => setPicked(item.rank) : undefined} links={candidateOvernightLinks(item, overnight)}
             chart={renderChart && !wide ? { open: chartRank === item.rank, onToggle: () => setChartRank((current) => nextChartRank(current, item.rank)), content: chartRank === item.rank ? renderChart(item) : null } : undefined} />
         ))}
       </ol>
@@ -418,6 +453,7 @@ export function TodayCandidateList({ items, renderChart, wide = false, initialCh
 export function CandidatesSection({ data, loading, error, renderChart, wide = false }: { data: CandidatesResponse | undefined; loading: boolean; error: unknown; renderChart?: (item: CandidateItem) => ReactNode; wide?: boolean }) {
   const state = data ? candidatesState(data) : null
   const t1 = state?.kind === 'list' ? candidateT1Text(data?.trading_date) : null
+  const overnight = overnightUsView(data?.overnight_us)
   return (
     <section className="candidates-section" aria-labelledby="candidates-title">
       {/* One head line (#510): title, date and count, the T+1 sentence and the disclaimer, then the strategy name and 策略說明 (#577). */}
@@ -429,6 +465,8 @@ export function CandidatesSection({ data, loading, error, renderChart, wide = fa
         <p className="small-note candidate-notes">{t1 && <span className="candidate-t1">{t1}</span>}<span className="candidate-disclaimer">{CANDIDATE_DISCLAIMER}。</span></p>
         <Link className="text-link candidates-strategy-link" to="/strategy">{STRATEGY_LINK_LABEL}</Link>
       </div>
+      {/* Issue 681: under the head in every state (list, zero, not computed), not while loading or failed. */}
+      {!loading && !error && <OvernightUsLine view={overnight} />}
       {loading
         ? <Skeleton lines={4} label="今日名單載入中…" />
         : error
@@ -436,7 +474,7 @@ export function CandidatesSection({ data, loading, error, renderChart, wide = fa
           : !state
             ? null
             : state.kind === 'list'
-              ? <TodayCandidateList items={state.items} renderChart={renderChart} wide={wide} />
+              ? <TodayCandidateList items={state.items} renderChart={renderChart} wide={wide} overnight={overnight} />
               : <Card><EmptyState title={state.kind === 'zero' ? '當日零候選' : '尚無候選清單'} reason={state.text} /></Card>}
     </section>
   )

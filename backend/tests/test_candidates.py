@@ -1083,12 +1083,54 @@ def test_candidate_market_keeps_every_existing_field(db, client):
     item = client.get("/api/candidates").json()["items"][0]
     # The list's items also carry the sparkline's closes (#653); without
     # verified sessions there are none.
-    assert set(item) == ITEM_KEYS | {"market", "recent_closes"}
+    # And the US indexes linked to its groups (#681), none here.
+    assert set(item) == ITEM_KEYS | {"market", "recent_closes", "overnight_us_links"}
     assert item["recent_closes"] == {"dates": [], "closes": []}
+    assert item["overnight_us_links"] == []
     assert item["market"]["close"] == CLOSE
     assert item["market"]["change_status"] == "unverified"
     detail = client.get("/api/stocks/TWSE/1101").json()["candidate"]
     assert set(detail) == ITEM_KEYS | {"market"}
+
+
+def test_the_list_carries_overnight_us_and_the_sox_link_of_semiconductor_rows(
+    db, client
+):
+    """#681: the 隔夜美股 line and 費半 on the rows of the semiconductor groups;
+    the score, rank and list are those without them."""
+
+    a = stock(db, "1101")
+    signal(db, a)
+    b = stock(db, "2330")
+    signal(db, b)
+    db.commit()
+    compute_daily_candidates(db, T)
+    before = client.get("/api/candidates").json()
+    rows = {row.instrument_id: row for row in db.scalars(select(DailyCandidate)).all()}
+    rows[a.id].groups_json = [{"group_id": "theme-cowos", "name": "CoWoS 先進封裝"}]
+    rows[b.id].groups_json = [{"group_id": "theme-silicon-photonics", "name": "矽光子"}]
+    db.commit()
+
+    body = client.get("/api/candidates").json()
+    links = {
+        item["instrument"]["symbol"]: item["overnight_us_links"]
+        for item in body["items"]
+    }
+    assert links == {"1101": ["SOX"], "2330": []}
+    assert [(i["rank"], i["total_score"]) for i in body["items"]] == [
+        (i["rank"], i["total_score"]) for i in before["items"]
+    ]
+    us = body["overnight_us"]
+    assert [item["symbol"] for item in us["indexes"]] == ["SPX", "IXIC", "DJI", "SOX"]
+    assert {item["reason"] for item in us["indexes"]} == {"not_collected"}
+    # An asked list is read on the weekday after it: Friday 09/04 → Monday 09/07.
+    asked = client.get("/api/candidates", params={"date": T.isoformat()}).json()
+    assert asked["overnight_us"]["reference_date"] == "2026-09-07"
+    assert asked["overnight_us"]["expected_date"] == T.isoformat()
+    # A day without a list still has the line.
+    missing = client.get("/api/candidates", params={"date": "2026-09-03"}).json()
+    assert missing["status"] == "not_computed"
+    assert missing["overnight_us"]["expected_date"] == "2026-09-03"
 
 
 def _weekdays_before(day: date, count: int) -> list[date]:

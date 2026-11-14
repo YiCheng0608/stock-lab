@@ -26,7 +26,7 @@
 | 指數日 K（加權、櫃買） | TWSE [`TAIEX/MI_5MINS_HIST`](https://www.twse.com.tw/rwd/zh/TAIEX/MI_5MINS_HIST?date=20261101&response=json)（發行量加權股價指數歷史資料）＋[`afterTrading/FMTQIK`](https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK?date=20261101&response=json)（市場成交資訊）；TPEx [`indexInfo/inx`](https://www.tpex.org.tw/www/zh-tw/indexInfo/inx)（櫃買指數月查詢，POST）＋[`afterTrading/tradingIndex`](https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingIndex)（日成交量值指數，POST） | 每個指數每月 2 個請求，寫真實開高低收與成交量值（[指數日 K](#指數日-k)，#552）；大盤頁的 K 線與指標讀它。 | 網站報表，同 `MI_INDEX`／`dailyQuotes` 的條款與限流；非核心。 |
 | 台指期近月 | 期交所 OpenAPI [`DailyMarketReportFut`](https://openapi.taifex.com.tw/v1/DailyMarketReportFut)（期貨每日交易行情；[data.gov.tw 11319](https://data.gov.tw/dataset/11319)） | 當日 collect 1 個請求，存檔內那個交易日的 TX 近月一般時段日 K、合約月份、未平倉量與結算價（[台指期](#台指期)，#552、#586）。 | 只有最新發布的一個交易日，沒有日期參數，換日晚（daily 時通常還是前一個交易日）；回 UTF-8 CSV（2026-11 起）或 JSON；非核心。 |
 | 台指期近月歷史 | 期交所網站 `POST https://www.taifex.com.tw/cht/3/futDataDown`（期貨每日交易行情下載，CSV、cp950） | 回補 2023-09-01 起 DB 沒有 TX 列的日子（#563），以及每次快照 collect 後補最近 10 個交易日的缺日（最多 2 個請求，#586）；一個自然月 1 個請求（[台指期](#台指期)）。 | 網站內容依[期交所使用條款](https://www.taifex.com.tw/cht/edu/userTerms)引用或轉載須事前書面同意；使用者接受本機個人研究使用（[#1 6723720803](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6723720803)），**對外公開或分享前要先取得期交所書面同意**，repo 的測試資料只用自編數值。查詢區間超過約一個月回 HTML 錯誤頁。 |
-| 美股指數（S&P 500、NASDAQ、道瓊、費半） | FinMind v4 [`USStockPrice`](https://finmind.github.io/tutor/UnitedStatesMarket/Technical/)（`https://api.finmindtrade.com/api/v4/data`），`data_id` `^GSPC`、`^IXIC`、`^DJI`、`^SOX`；匿名、不用 token | 獨立的 `index-bars us-collect`：每檔 1 個請求，scheduler 容器在台北週二至週六 06:30、09:30 執行（[#568](https://github.com/YiCheng0608/stock-lab/issues/568)），寫開高低收與量的日 K（[美股指數](#美股指數)）；大盤頁的「美股（前一交易日）」與各指數的 K 線讀它。只顯示，不進策略、候選、族群、追蹤或回測。台股 daily 的 collect 不抓美股（[#571](https://github.com/YiCheng0608/stock-lab/issues/571)）。 | FinMind 是服務提供者，不是官方來源。Free 方案每小時 300 次（註冊會員 600 次）。[條款](https://finmind.github.io/Pricing/)限個人、學術等非商業用途，不得再散布 raw 或架鏡像 API，並須標示「FinMind」（[FinMind 補缺口規則](#finmind-補缺口規則)）。費半沒有量。指數所有者的版權標示照舊保留；**對外公開或分享畫面前，要先確認 FinMind 與指數所有者（S&P Dow Jones Indices、Nasdaq）的授權**。非核心。#547 起原用 FRED，已不採用（[美股指數](#美股指數)）。 |
+| 美股指數（S&P 500、NASDAQ、道瓊、費半） | FinMind v4 [`USStockPrice`](https://finmind.github.io/tutor/UnitedStatesMarket/Technical/)（`https://api.finmindtrade.com/api/v4/data`），`data_id` `^GSPC`、`^IXIC`、`^DJI`、`^SOX`；匿名、不用 token | 獨立的 `index-bars us-collect`：每檔 1 個請求，scheduler 容器在台北週二至週六 07:30、08:30、09:30 執行（[#681](https://github.com/YiCheng0608/stock-lab/issues/681)、[#568](https://github.com/YiCheng0608/stock-lab/issues/568)），寫開高低收與量的日 K（[美股指數](#美股指數)）；今日名單的「隔夜美股」一行與費半標示讀它（#681；大盤頁 #633 起不顯示）。只顯示，不進策略、候選、族群、追蹤或回測。台股 daily 的 collect 不抓美股（[#571](https://github.com/YiCheng0608/stock-lab/issues/571)）。 | FinMind 是服務提供者，不是官方來源。Free 方案每小時 300 次（註冊會員 600 次）。[條款](https://finmind.github.io/Pricing/)限個人、學術等非商業用途，不得再散布 raw 或架鏡像 API，並須標示「FinMind」（[FinMind 補缺口規則](#finmind-補缺口規則)）。費半沒有量。指數所有者的版權標示照舊保留；**對外公開或分享畫面前，要先確認 FinMind 與指數所有者（S&P Dow Jones Indices、Nasdaq）的授權**。非核心。#547 起原用 FRED，已不採用（[美股指數](#美股指數)）。 |
 | TPEx 大盤概況 | [`tpex_mainborad_highlight`](https://www.tpex.org.tw/openapi/v1/tpex_mainborad_highlight)（上櫃股票市場現況；官方路徑拼作 `mainborad`） | 當日 collect 每天 1 個請求，寫[大盤概況](#大盤概況)：`CloseIndex`、`IndexChange`、`DailyTradingValue`（**百萬元**，×1,000,000 存成元，只算上櫃股票）與 `PriceRise`／`PriceDecline`／`PriceFlat`／`LimitUp`／`LimitDown` 各 `…CompanyNumbers`、`UnmatchedCompanyNumbersSuspensionStocksIncluded`；`DailyTradingVolume`（**千股**）、`ListedCompanyNumbers`、`MarketCapitalization` 等不保存。 | 只有最新一天，沒有歷史：`Date` 是民國日期（`1151022`），不等於請求的交易日（例如還沒更新）時不寫並記 warning，不映射到其他日期；漏抓的日子不回補，那天沒有上櫃列。 |
 | TPEx 日行情 | 當日 OpenAPI [`tpex_mainboard_daily_close_quotes`](https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes)；備援與歷史 [`dailyQuotes`](https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes)（POST） | 保留股票／ETF allowlist、普通股與 ETF 代號（[標的狀態同步](#標的狀態同步)），讀 OHLC、`TradingShares`（股）、`TransactionAmount`（元）。當日 collect 先讀 OpenAPI，不是當日的表才改讀網站；catchup 與回補逐日讀網站（[TPEx 當日 OpenAPI](#tpex-當日-openapi)）。 | 回報日期須等於請求日期（OpenAPI 每列 `Date` 都要是當日）；非空但全部被拒收的表格不算合法空日。 |
 | TWSE 籌碼 | 法人 [`T86`](https://www.twse.com.tw/rwd/zh/fund/T86)；融資 [`MI_MARGN`](https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN) | 法人依外資及陸資、投信、自營商分類；融資讀餘額與增減，融券讀今日餘額（[籌碼來源](#籌碼來源)）。 | 請求可能被限流、重導或缺可驗證日期。 |
@@ -329,14 +329,14 @@ S&P 500、NASDAQ 綜合指數、道瓊工業指數與費城半導體指數的日
 | `DJI` 道瓊工業指數 | `^DJI` | Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved. |
 | `SOX` 費城半導體指數 | `^SOX` | Copyright © 2025, NASDAQ, Inc. |
 
-- **抓取**：獨立指令 `worker.cli index-bars us-collect`（[CLI](ops/CLI.md#現有-worker-cli)），由 serve 的 `us` job 在台北週二至週六 06:30、09:30 執行（[scheduler 容器的排程（serve）](ops/SCHEDULING.md#scheduler-容器的排程serve)）；台股 daily（collect）不抓美股（#571）。
+- **抓取**：獨立指令 `worker.cli index-bars us-collect`（[CLI](ops/CLI.md#現有-worker-cli)），由 serve 的 `us` job 在台北週二至週六 07:30、08:30、09:30 執行（#681：06:30 時 FinMind 都還沒有前一晚，09:30 都有，所以前兩次排在 09:00 開盤前；[scheduler 容器的排程（serve）](ops/SCHEDULING.md#scheduler-容器的排程serve)）；台股 daily（collect）不抓美股（#571）。
 - **請求**：`GET https://api.finmindtrade.com/api/v4/data?dataset=USStockPrice&data_id=<代號>&start_date=<起>&end_date=<迄>`，不帶 token，每檔 1 個請求，請求之間至少間隔 2 秒；transport 錯誤、429 或 5xx 隔 5 秒重試 1 次。401／402／403（例如超過上限的 `402 Requests reach the upper limit`）不重試，同一次執行後面的指數也不再請求。
   - 台北日 D 的 `end_date` 是 D 的前一天：美股收盤都在 D 之前。
   - `start_date`：該檔沒有任何列，或已存最早一列晚於 2023-09-01 十天以上時，從 2023-09-01 起，一個請求就抓完歷史；否則從已存最後一列往前 10 天。
-  - 四檔都已存到 D 前一個平日時（09:30 那次遇上 06:30 已抓到），不發請求，run 記 `already_complete`；`--force` 照樣請求。
+  - 四檔都已存到 D 前一個平日時（較早那次已抓到），不發請求，run 記 `already_complete`；`--force` 照樣請求。
   - 先讀完區間並結束讀取交易才發請求，FinMind 慢或卡住時不握著 SQLite 寫鎖。每檔寫入各是一個 savepoint，其中的資料庫錯誤只撤回該檔。
 - **回應**：JSON `{"msg": "success", "status": 200, "data": [...]}`，每列 `date, stock_id, Open, High, Low, Close, Adj_Close, Volume`；`date` 是美股交易日（美東日期），價格是指數點數。休市日不回列。
-- **休市日**：請求區間內、比回傳的最新一列早、卻沒有列的平日，記為休市，寫進該檔的 `data_quality`（`entity_type=us_index_series`、`entity_key=US:<代號>`、`as_of_date`＝D）的 `checks_json.closed_dates`。最新那一天之後缺的平日不算休市，因為可能只是 FinMind 還沒更新（決定 [6729065016](https://github.com/YiCheng0608/stock-lab/issues/568#issuecomment-6729065016)）。所以美股休市的隔天畫面標「非最新」；下一個交易日的列進來時，那天同時被記為休市，畫面直接變「最新」。用這個來源時，畫面實際上不會出現「美股休市」（#568 review 第 4 點）。2023-09-01～2026-11-06 實測缺的 32 個平日都是 NYSE 休市日。
+- **休市日**：請求區間內、比回傳的最新一列早、卻沒有列的平日，記為休市，寫進該檔的 `data_quality`（`entity_type=us_index_series`、`entity_key=US:<代號>`、`as_of_date`＝D）的 `checks_json.closed_dates`。最新那一天之後缺的平日不算休市，因為可能只是 FinMind 還沒更新（決定 [6729065016](https://github.com/YiCheng0608/stock-lab/issues/568#issuecomment-6729065016)）。所以美股休市的隔天今日名單的隔夜美股寫「美股尚未更新」；下一個交易日的列進來時，那天同時被記為休市，畫面直接變最新。用這個來源時，畫面實際上不會出現「美股休市」（#568 review 第 4 點）。2023-09-01～2026-11-06 實測缺的 32 個平日都是 NYSE 休市日。
 - **拒收**：回應不是 JSON 物件、`status` 不是 200、某列的 `stock_id` 不是該檔、日期不在 `start_date`～`end_date`、同一天兩列、開高低收讀不出或不是正數、高低不包住開收、量不是 0 以上的整數，或整份沒有任何一列時，該檔整份不寫。`warnings` 記 `us index bars unavailable for US <代號> (<data_id>): …`，`data_quality` 記 `failed` 與原因；raw 照存（`source=finmind`），其他檔照常。
 - **成交量**：指數本身不交易，指數的量是資料商把成分股的量加總後發布的值，不同指數之間不能比較（決定 [6729139244](https://github.com/YiCheng0608/stock-lab/issues/568#issuecomment-6729139244)）。FinMind 的 0 是「沒有發布」，不是量為 0：
   - 整段回應的量都是 0：該檔存 null，`data_quality` 的 `missing_fields_json` 記 `volume`、`checks_json.volume=not_published`。SOX 目前就是這樣（實測 799 列全是 0），K 線的量欄與成交量均線因此不顯示。
@@ -352,23 +352,29 @@ S&P 500、NASDAQ 綜合指數、道瓊工業指數與費城半導體指數的日
 
 #### 美股指數 API 契約
 
-`GET /api/dashboard` 的 `market_overview.foreign_indices` 固定四項，順序同上表，各自判斷：
+`GET /api/candidates` 的 `overnight_us`（#681 起；之前是 `GET /api/dashboard` 的 `market_overview.foreign_indices`，#681 從 dashboard 移除，大盤頁的指數總表也只剩台股三列）：
 
 ```json
-{ "exchange": "US", "symbol": "SPX", "name": "S&P 500", "series_id": "^GSPC", "status": "available",
-  "trading_date": "2026-11-05", "expected_date": "2026-11-06", "freshness": "stale",
-  "close": 7353.73, "change": -334.89, "change_pct": -0.043557, "change_pct_method": "derived",
-  "previous_trading_date": "2026-11-04",
-  "source": { "label": "FinMind USStockPrice ^GSPC", "copyright": "Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved.",
-              "collected_at": "2026-11-09T13:40:05+00:00", "data_as_of": "2026-11-05", "raw_payload_id": 812 } }
+{ "reference_date": "2026-11-14", "expected_date": "2026-11-13",
+  "indexes": [ { "exchange": "US", "symbol": "SPX", "name": "S&P 500", "series_id": "^GSPC", "status": "available",
+    "trading_date": "2026-11-13", "expected_date": "2026-11-13", "freshness": "latest",
+    "close": 7353.73, "change": -334.89, "change_pct": -0.043557, "change_pct_method": "derived",
+    "previous_trading_date": "2026-11-12",
+    "source": { "label": "FinMind USStockPrice ^GSPC", "copyright": "Copyright © 2016, S&P Dow Jones Indices LLC. All rights reserved.",
+                "collected_at": "2026-11-14T01:30:03+00:00", "data_as_of": "2026-11-13", "raw_payload_id": 812 } }, … ],
+  "group_links": { "SOX": ["official-industry-1858340d045a575f", "theme-cowos", "theme-memory", "theme-semiconductor-equipment"] } }
 ```
 
-- `series_id` 是 FinMind 的 `data_id`。`source.label` 依最新一列的來源：FinMind 的列是 `FinMind USStockPrice <data_id>`，FRED 的列（#547）是 `FRED`；市場頁指數總表的 `source.label` 是 `FinMind`／`FRED`，`detail` 同這裡的 `label`。畫面的資料說明另加「資料來源：FinMind（個人非商業使用）」。
-- `expected_date` 是預期的美股交易日：`market_overview.trading_date`（台股資料日；沒有時用台北今天）往前推到最近的平日，週一推到上週五（#547 決定）。
-- `freshness`：`latest`（`trading_date` 不早於 `expected_date`）、`us_market_closed`（`expected_date` 已記為休市日，而 `trading_date` 是它之前最近一個美股交易日）、`stale`（其他較舊的情況，畫面標「非最新」）。休市日讀自該檔最近 5 列 `data_quality` 的 `closed_dates`。
+每個候選列另有 `overnight_us_links`：該檔的 `groups`（`daily_candidates.groups_json`）有 `group_links` 的族群時列出對應指數（目前只有 `["SOX"]`），否則 `[]`。只顯示，不進分數、排序或名單條件。`indexes` 固定四項，順序同上表，各自判斷：
+
+- `reference_date` 是開盤前看這份名單的台北日：沒帶 `date`（最新名單）時是台北今天；帶 `date` 時是那天的下一個平日（週五的名單是下週一）。名單不存在（`not_computed`）也照樣回。
+- `series_id` 是 FinMind 的 `data_id`。`source.label` 依最新一列的來源：FinMind 的列是 `FinMind USStockPrice <data_id>`，FRED 的列（#547）是 `FRED`。
+- `expected_date` 是預期的美股交易日：`reference_date` 往前推到最近的平日，週一推到上週五（#547 決定）。
+- `freshness`：`latest`（`trading_date` 不早於 `expected_date`）、`us_market_closed`（`expected_date` 已記為休市日，而 `trading_date` 是它之前最近一個美股交易日）、`stale`（其他較舊的情況）。休市日讀自該檔最近 5 列 `data_quality` 的 `closed_dates`。
 - `change` 是收盤減去前一筆已存收盤，`change_pct` 是比例，`change_pct_method` 固定 `derived`（來源沒有漲跌欄）。
 - `unavailable` 的 `reason`：`not_collected`（沒有任何列）、`fetch_failed`（沒有任何列，且最近一次 `data_quality` 是 `failed`；附 `last_attempt_date`）。
-- 日 K 走既有的 `GET /api/stocks/US/<代號>/bars`。
+- **費半對應表**（#681 決定 [6869771833](https://github.com/YiCheng0608/stock-lab/issues/681#issuecomment-6869771833)，`app.domain.US_INDEX_GROUP_LINKS`）：`SOX` 對官方產業「半導體」（`official-industry-1858340d045a575f`，即 `canonical_group_id("industry", "Semiconductor")`）與題材「半導體設備」（`theme-semiconductor-equipment`）、「CoWoS 先進封裝」（`theme-cowos`）、「記憶體」（`theme-memory`）。電子零組件、光電、矽光子／光通訊、ABF 載板、AI 伺服器、散熱不對應。其他三檔不對應任何族群。
+- 畫面見 [UI_COPY_SPEC §10](UI_COPY_SPEC.md#10-每日候選) 的「隔夜美股」。日 K 走既有的 `GET /api/stocks/US/<代號>/bars`。
 
 ### 交易日曆
 

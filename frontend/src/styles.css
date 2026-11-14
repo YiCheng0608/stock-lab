@@ -766,6 +766,14 @@ a.symbol-link:hover { color: var(--color-primary); }
 .candidate-notes { flex: 1 1 320px; margin: 0; }
 .candidate-t1 + .candidate-disclaimer::before { content: " "; }
 .candidates-strategy-link { white-space: nowrap; }
+/* 隔夜美股 (Issue 681, DESIGN_SYSTEM §5 候選列表): one line of inline runs under the head (no flex: innerText keeps it one
+   line), wrapping between the four indexes; the changes are mono numbers, red up and green down. */
+.overnight-us { margin: calc(-1 * var(--space-1)) 0 var(--space-3); color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1.6; }
+.overnight-us-title { color: var(--color-text); font-weight: 600; }
+.overnight-us-lead { color: var(--color-text); }
+.overnight-us-item { white-space: nowrap; }
+.overnight-us-change { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.candidate-row-us { margin-left: var(--space-2); color: var(--color-text-muted); font-size: var(--text-sm); white-space: nowrap; }
 .candidate-list { margin: 0; padding: 0; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-bg-card); list-style: none; }
 .candidate-row + .candidate-row { border-top: 1px solid var(--color-border); }
 /* 盤後終端 (DESIGN_SYSTEM §5 候選列表): from 1280px up the list sits beside the picked candidate's chart; below that the

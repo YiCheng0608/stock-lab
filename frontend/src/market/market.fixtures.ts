@@ -3,7 +3,8 @@ import { overviewBoth } from '../today/today.fixtures'
 
 // market_overview.indexes (Issue 564) for the 2026-10-22 overview of today.fixtures: one row per state the table shows —
 // latest and above MA60 (TAIEX, the same close and MA60 as taiex_ma60), 非最新 with too few closes (TPEX), a TX roll day,
-// 非最新 (SPX), MA60 not computed (IXIC), 美股休市 and equal to MA60 (DJI), and a failed FinMind read (SOX).
+// 非最新 (SPX), MA60 not computed (IXIC), 美股休市 and equal to MA60 (DJI), and a failed FinMind read (SOX). The four US
+// rows are the API from before Issue 681 (it returns the three Taiwan rows since): the page lists none of them (Issue 633).
 
 const ma60 = (trading_date: string, extra: Partial<IndexMa60>): IndexMa60 => ({ trading_date, required_closes: 60, status: 'available', ...extra })
 

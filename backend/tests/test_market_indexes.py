@@ -22,7 +22,7 @@ from app import main as main_module
 from app.db import enable_sqlite_foreign_keys
 from app.indicators import INDICATOR_VERSION
 from app.main import app
-from app.market_overview import foreign_indices, index_rows, taiex_ma60
+from app.market_overview import foreign_indices, index_rows, overnight_us, taiex_ma60
 from app.migrations import upgrade_database
 from app.models import (
     IngestionRun,
@@ -34,7 +34,7 @@ from app.models import (
 from worker.indicator_batch import compute_market_indicators
 
 START = date(2026, 1, 5)  # a Monday
-KEYS = ["taiex", "tpex", "tx", "spx", "ixic", "dji", "sox"]
+KEYS = ["taiex", "tpex", "tx"]
 
 
 def _weekdays(count: int, start: date = START) -> list[date]:
@@ -215,22 +215,22 @@ def _stored_ma60(factory, exchange, symbol, day):
 def _rows(factory, as_of=AS_OF):
     with factory() as db:
         value = as_of.isoformat() if as_of else None
-        return {
-            row["key"]: row for row in index_rows(db, value, foreign_indices(db, value))
-        }
+        return {row["key"]: row for row in index_rows(db, value)}
 
 
 # ---- AC-3: the MA60 of each row is the stored indicators/v1 ma60; TAIEX is taiex_ma60 ----
 
 
-def test_the_table_is_seven_rows_in_order_through_the_dashboard(factory, client):
+def test_the_table_is_three_rows_in_order_through_the_dashboard(factory, client):
     _seed(factory)
 
     overview = client.get("/api/dashboard").json()["market_overview"]
     rows = overview["indexes"]
 
     assert [row["key"] for row in rows] == KEYS
-    assert [row["group"] for row in rows] == ["tw"] * 3 + ["us"] * 4
+    # No US row since #681 (the today page's overnight_us), none on the page since #633.
+    assert [row["group"] for row in rows] == ["tw"] * 3
+    assert "foreign_indices" not in overview
     taiex = rows[0]
     assert taiex["status"] == "available" and taiex["freshness"] == "latest"
     assert taiex["trading_date"] == AS_OF.isoformat()
@@ -256,7 +256,6 @@ def test_each_ma60_is_the_stored_indicator_and_the_mean_of_60_closes(factory):
     cases = [
         ("taiex", "TWSE", "TAIEX", AS_OF, TAIEX_CLOSES, "above"),
         ("tx", "TAIFEX", "TX", AS_OF, TX_CLOSES, "below"),
-        ("spx", "US", "SPX", DAYS[-2], SPX_CLOSES, None),
     ]
     for key, exchange, symbol, day, closes, position in cases:
         item = rows[key]["ma60"]
@@ -286,12 +285,8 @@ def test_too_few_closes_is_insufficient_and_no_series_is_unavailable(factory):
         "reason": "insufficient_closes",
         "close_count": 40,
     }
-    # IXIC, DJI and SOX have no instrument or close: unavailable rows, no MA60.
-    for key in ("ixic", "dji", "sox"):
-        assert rows[key]["status"] == "unavailable", key
-        assert rows[key]["reason"] == "not_collected", key
-        assert rows[key]["ma60"] is None, key
-        assert rows[key]["source"]["label"] == "FinMind"
+    # No US row (#681), whether its series is stored (SPX) or not.
+    assert list(rows) == KEYS
 
 
 # ---- dates: 非最新 and the US session ----
@@ -309,25 +304,48 @@ def test_an_older_summary_is_stale_and_its_ma60_is_of_that_day(factory):
     assert tpex["ma60"]["close_count"] == 39
 
 
-def test_us_rows_are_foreign_indices(factory):
-    _seed(factory)
-    with factory() as db:
-        foreign = {
-            item["symbol"]: item for item in foreign_indices(db, AS_OF.isoformat())
-        }
-    spx = _rows(factory)["spx"]
+def test_overnight_us_is_foreign_indices_of_the_day_after_the_list(factory):
+    """#681: the today page's 隔夜美股 reads foreign_indices; a list of day L is
+    read before the open of the weekday after L, whose US session is L's."""
 
-    assert spx["trading_date"] == DAYS[-2].isoformat() == foreign["SPX"]["trading_date"]
-    assert spx["expected_date"] == foreign["SPX"]["expected_date"]
-    assert spx["freshness"] == foreign["SPX"]["freshness"] == "latest"
+    _seed(factory)
+    list_date = DAYS[-2]
+    with factory() as db:
+        foreign = foreign_indices(db, AS_OF.isoformat())
+        us = overnight_us(db, list_date)
+        friday = next(day for day in reversed(DAYS) if day.weekday() == 4)
+        after_friday = overnight_us(db, friday)
+    assert us["reference_date"] == AS_OF.isoformat()
+    assert us["expected_date"] == list_date.isoformat()
+    assert us["indexes"] == foreign
+    spx = us["indexes"][0]
+    assert spx["symbol"] == "SPX" and spx["freshness"] == "latest"
+    assert spx["trading_date"] == list_date.isoformat()
+    assert spx["change"] == pytest.approx(SPX_CLOSES[-1] - SPX_CLOSES[-2], abs=1e-4)
+    assert spx["source"]["label"] == "FinMind USStockPrice ^GSPC"
+    assert [item["symbol"] for item in us["indexes"]] == ["SPX", "IXIC", "DJI", "SOX"]
+    assert [item["reason"] for item in us["indexes"][1:]] == ["not_collected"] * 3
+    assert us["group_links"] == {
+        "SOX": [
+            "official-industry-1858340d045a575f",
+            "theme-cowos",
+            "theme-memory",
+            "theme-semiconductor-equipment",
+        ]
+    }
+    # Friday's list is read on Monday, before which the US session is Friday's.
+    assert after_friday["reference_date"] == (friday + timedelta(days=3)).isoformat()
+    assert after_friday["expected_date"] == friday.isoformat()
+
+
+def test_the_sox_groups_are_the_official_semiconductor_industry_and_three_themes():
+    from app.domain import US_INDEX_GROUP_LINKS
+    from app.taxonomy import canonical_group_id
+
     assert (
-        spx["close"] == foreign["SPX"]["close"]
-        and spx["change"] == foreign["SPX"]["change"]
+        canonical_group_id("industry", "Semiconductor") in US_INDEX_GROUP_LINKS["SOX"]
     )
-    assert (
-        spx["source"]["detail"] == "FinMind USStockPrice ^GSPC"
-        and spx["source"]["copyright"]
-    )
+    assert list(US_INDEX_GROUP_LINKS) == ["SOX"]
 
 
 def test_without_a_session_the_taiwan_rows_say_so(factory):

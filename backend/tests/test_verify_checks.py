@@ -2696,3 +2696,135 @@ def test_s2_passes_on_the_type_then_symbol_order(tmp_path):
 def test_s2_fails_on_another_order(tmp_path, rows):
     with pytest.raises(page_checks.Fail, match="類型→代號"):
         _s2(tmp_path, rows)
+
+
+# ---- T22 (Issue 681): the 隔夜美股 line and 費半 on the semiconductor rows ----
+
+
+def _us_index(symbol, change_pct, freshness="latest", day="2026-11-13", **extra):
+    return {
+        "symbol": symbol,
+        "status": "available",
+        "trading_date": day,
+        "freshness": freshness,
+        "close": 100.0,
+        "change_pct": change_pct,
+        **extra,
+    }
+
+
+def _overnight(indexes=None, links=(["SOX"], [])):
+    us = {
+        "reference_date": "2026-11-14",
+        "expected_date": "2026-11-13",
+        "indexes": indexes
+        or [
+            _us_index("SPX", 0.005362),
+            _us_index("IXIC", -0.004975),
+            _us_index("DJI", 0.0),
+            _us_index("SOX", 0.020408),
+        ],
+        "group_links": {"SOX": ["theme-cowos"]},
+    }
+    items = [
+        {
+            "rank": n,
+            "instrument": {"symbol": symbol, "name": name},
+            "overnight_us_links": list(link),
+        }
+        for n, (symbol, name, link) in enumerate(
+            zip(("2330", "2881"), ("台積電", "富邦金"), links), start=1
+        )
+    ]
+    return {"candidates": {"status": "success", "items": items, "overnight_us": us}}
+
+
+US_LINE = (
+    "隔夜美股 資料 2026/11/13 S&P 500 +0.54% · NASDAQ -0.50% · 道瓊 0.00% · 費半 +2.04%"
+)
+SOX_ROW = "#1 2330 台積電 費半 +2.04% 上市 · 半導體（產業 #1）"
+US_PAGE = (
+    "今日名單\n10 檔\n"
+    f"{US_LINE}\n"
+    f"{SOX_ROW}\n"
+    "#2 2881 富邦金 上市 · 金融（產業，未排名）\n"
+    "熱門族群\n"
+)
+
+
+def test_t22_passes_on_the_line_and_the_sox_row(tmp_path):
+    summary = page_checks.t22(FakeRun(tmp_path, _overnight(), {"today-1280": US_PAGE}))
+    assert f"`{US_LINE}`" in summary and "1／2 列標費半" in summary
+
+
+def test_t22_fails_without_overnight_us_as_before_issue_681(tmp_path):
+    before = _overnight()
+    del before["candidates"]["overnight_us"]
+    page = US_PAGE.replace(f"{US_LINE}\n", "").replace(" 費半 +2.04%", "")
+    with pytest.raises(page_checks.Fail, match="沒有 overnight_us"):
+        page_checks.t22(FakeRun(tmp_path, before, {"today-1280": page}))
+
+
+def test_t22_mirrors_pending_stale_and_failed_indexes(tmp_path):
+    stale = [
+        _us_index(s, p, "stale", "2026-11-12")
+        for s, p in (
+            ("SPX", 0.005362),
+            ("IXIC", -0.00001),
+            ("DJI", None),
+            ("SOX", 0.02),
+        )
+    ]
+    line = "隔夜美股 美股尚未更新 資料 2026/11/12 S&P 500 +0.54% · NASDAQ -0.00% · 道瓊 — · 費半 +2.00%"
+    page = US_PAGE.replace(US_LINE, line).replace(
+        "費半 +2.04% 上市", "費半 +2.00% 非最新 上市"
+    )
+    assert f"`{line}`" in page_checks.t22(
+        FakeRun(tmp_path, _overnight(stale), {"today-1280": page})
+    )
+    # The row's stale 費半 without 非最新 fails.
+    with pytest.raises(page_checks.Fail, match="開頭不是"):
+        page_checks.t22(
+            FakeRun(
+                tmp_path,
+                _overnight(stale),
+                {
+                    "today-1280": US_PAGE.replace(US_LINE, line).replace(
+                        "+2.04%", "+2.00%"
+                    )
+                },
+            )
+        )
+    failed = [
+        _us_index("SPX", 0.005362),
+        {"symbol": "IXIC", "status": "unavailable", "reason": "fetch_failed"},
+        _us_index("DJI", 0.0, "stale", "2026-11-12"),
+        {"symbol": "SOX", "status": "unavailable", "reason": "not_collected"},
+    ]
+    line = (
+        "隔夜美股 S&P 500 +0.54%（2026/11/13） · NASDAQ 未取得 · "
+        "道瓊 0.00%（2026/11/12） 非最新 · 費半 未取得"
+    )
+    page = US_PAGE.replace(US_LINE, line).replace(" 費半 +2.04%", "")
+    assert f"`{line}`" in page_checks.t22(
+        FakeRun(tmp_path, _overnight(failed), {"today-1280": page})
+    )
+
+
+def test_t22_fails_on_a_wrong_or_misplaced_line_or_row(tmp_path):
+    cases = [
+        (US_PAGE.replace("+0.54%", "+0.53%"), "預期恰一行"),
+        (US_PAGE.replace(f"{US_LINE}\n", "") + f"{US_LINE}\n", "不在標題"),
+        # Missing, or after the market and group (where the ellipsis cuts it).
+        (US_PAGE.replace("台積電 費半 +2.04% 上市", "台積電 上市"), "開頭不是"),
+        (
+            US_PAGE.replace(
+                SOX_ROW, "#1 2330 台積電 上市 · 半導體（產業 #1） · 費半 +2.04%"
+            ),
+            "開頭不是",
+        ),
+        (US_PAGE.replace("富邦金 上市", "富邦金 費半 +2.04% 上市"), "卻有美股"),
+    ]
+    for page, message in cases:
+        with pytest.raises(page_checks.Fail, match=message):
+            page_checks.t22(FakeRun(tmp_path, _overnight(), {"today-1280": page}))

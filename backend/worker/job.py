@@ -86,7 +86,7 @@ TRIGGERS = ("scheduler", "manual", "simulation")
 # daily: the abandoned-run limit in worker.schedule_runs; a manual run's limit, as
 # serve passes its scheduled runs 80 minutes, which end before the 23:00 trigger
 # (#466). news: well inside its 2-hour interval. us: four FinMind requests and the
-# four indexes' indicators, well inside the 3 hours between 06:30 and 09:30 (#568).
+# four indexes' indicators, well inside the hour between two us times (#568, #681).
 TIME_LIMIT_MINUTES = {"daily": 150.0, "news": 90.0, "us": 20.0}
 # The worker command of each job (us is ``index-bars us-collect``, #568).
 JOB_COMMANDS = {

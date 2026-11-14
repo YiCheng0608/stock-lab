@@ -15,11 +15,13 @@ commands those tasks ran.
   the job's own 150).
 - news: every 2 hours on the hour, ``worker.cli job news --min-free-memory-gb
   1`` (news, then news-llm).
-- us: Tuesday to Saturday 06:30 and 09:30 (#568), ``worker.cli job us --trigger
-  scheduler --min-free-memory-gb 2`` (daily's threshold), which runs ``worker.cli
-  index-bars us-collect``: the four US indexes from FinMind up to D - 1. 09:30 is
-  the insurance: after a 06:30 that stored D - 1 it records ``already_complete``
-  and asks nothing.
+- us: Tuesday to Saturday 07:30, 08:30 and 09:30 (#568, #681), ``worker.cli job
+  us --trigger scheduler --min-free-memory-gb 2`` (daily's threshold), which runs
+  ``worker.cli index-bars us-collect``: the four US indexes from FinMind up to
+  D - 1. FinMind publishes D - 1 between 06:30 and 09:30 (#681 AC-1: every 06:30
+  got D - 2, every 09:30 D - 1); 07:30 and 08:30 are before the 09:00 open, 09:30
+  is the insurance. A run after one that stored D - 1 records
+  ``already_complete`` and asks nothing.
 - watchdog: at :15 and :45, ``tools/ops/watchdog.sh``.
 - monitor: every minute, one poll of the coordinator's event monitor
   ``tools/ops/monitor.sh --once`` (#338), only with ``--monitor`` (or
@@ -38,7 +40,7 @@ run. A holiday is no exception: the daily records ``non_trading_day`` there (a f
 no-session answer is ``non_trading_unconfirmed``, which the 23:00 trigger confirms). After a
 21:30 ``success`` nothing is run at start, so a restart past 23:00 skips that night's
 institutional refetch. The us job is caught up the same way (#568): Tuesday to Saturday
-past 06:30, when the day has no ``us_index_collect`` run that is ``success`` or
+past the first us time (07:30), when the day has no ``us_index_collect`` run that is ``success`` or
 ``already_complete``.
 
 Maintenance mode (#468, worker.job.MaintenanceHold and ``worker.cli maintenance
@@ -99,10 +101,16 @@ ROOT = job.ROOT
 TAIPEI = job.TAIPEI
 JOBS = ("daily", "news", "us", "watchdog", "monitor")
 DAILY_TIMES = "21:30,23:00"
-# us (#568 decision 6729065016): Taipei Tuesday to Saturday, after the US close
-# (04:00 or 05:00 Taipei); 09:30 asks only when 06:30 did not get D - 1. At :30,
-# away from news on the even hours.
-US_TIMES = "06:30,09:30"
+# us (#568 decision 6729065016, #681 decision 6869771833): Taipei Tuesday to
+# Saturday, after the US close (04:00 Taipei in US summer time, 05:00 in winter).
+# FinMind had D - 1 by 09:30 but never at 06:30 (#681 AC-1), so the first two are
+# before the 09:00 open and 09:30 is the insurance; each asks only while D - 1 is
+# missing. At :30, away from news on the even hours.
+US_TIMES = "07:30,08:30,09:30"
+# The latest US close in Taipei (16:00 New York in winter) and the Taiwan open:
+# every us time is after the first, the first before the second (#681).
+US_LATEST_CLOSE_TAIPEI = (5, 0)
+TW_OPEN_TAIPEI = (9, 0)
 US_DAYS = "tue-sat"
 US_WEEKDAYS = (1, 2, 3, 4, 5)
 # worker.us_index_bars.RUN_TYPE and the statuses after which no catch-up runs.
@@ -465,7 +473,7 @@ class Serve:
 
         Tuesday to Saturday past the first us time, when the day has no
         ``us_index_collect`` run that is ``success`` or ``already_complete``: a
-        missed 06:30 (container down, maintenance) is caught up once, and the
+        missed 07:30 (container down, maintenance) is caught up once, and the
         worker itself asks nothing when D - 1 is already stored.
         """
 

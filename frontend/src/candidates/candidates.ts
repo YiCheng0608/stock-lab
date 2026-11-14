@@ -1,6 +1,6 @@
 import { noPreviousCloseText } from '../marketChange'
 import { formatTaipeiInstant } from '../news/newsView'
-import type { CandidateComponentKey, CandidateGroup, CandidateItem, CandidateLevels, CandidateLlmNote, CandidateMarket, CandidateRecentCloses, CandidatesResponse, RiskRewardBasis } from '../types'
+import type { CandidateComponentKey, CandidateGroup, CandidateItem, CandidateLevels, CandidateLlmNote, CandidateMarket, CandidateRecentCloses, CandidatesResponse, ForeignIndex, OvernightUs, RiskRewardBasis } from '../types'
 
 // Pure helpers for the daily candidate list (candidate_score_v1, #215); copy follows UI_COPY_SPEC §10.
 
@@ -387,4 +387,75 @@ export function rowClickToggles(target: { closest(selector: string): unknown } |
 // The rank button's label below 1280px (UI_COPY_SPEC §10); its text stays 「#n」.
 export function chartToggleLabel(rank: number, open: boolean): string {
   return `第 ${rank} 名，${open ? '收起' : '展開'} K 線圖`
+}
+
+// ---- 隔夜美股 (Issue 681; UI_COPY_SPEC §10): the four US indexes on one line under the list's head ----
+
+export const OVERNIGHT_US_TITLE = '隔夜美股'
+export const OVERNIGHT_US_PENDING = '美股尚未更新'
+export const OVERNIGHT_US_CLOSED = '美股休市'
+// Short names, in the API's order (S&P 500, NASDAQ Composite, Dow Jones Industrial Average, PHLX Semiconductor).
+export const OVERNIGHT_US_LABELS: Record<string, string> = { SPX: 'S&P 500', IXIC: 'NASDAQ', DJI: '道瓊', SOX: '費半' }
+
+export type OvernightUsItem = {
+  symbol: string
+  label: string
+  // 「+0.53%」, 「—」 without a change, 「未取得」 without a close.
+  text: string
+  tone: 'up' | 'down' | 'flat' | null
+  // The item's own date when the four are not of one day.
+  date: string | null
+  stale: boolean
+  // Of the expected night (latest, or the last session before a US holiday); a row says 非最新 otherwise.
+  current: boolean
+}
+
+export type OvernightUsView = {
+  // 美股尚未更新: none has the expected night; 美股休市: the expected night was a US holiday.
+  lead: string | null
+  // The one data date of the shown closes.
+  date: string | null
+  items: OvernightUsItem[]
+}
+
+const FRESH = new Set(['latest', 'us_market_closed'])
+
+export function overnightUsItem(index: ForeignIndex): Omit<OvernightUsItem, 'date' | 'stale' | 'current'> {
+  const label = OVERNIGHT_US_LABELS[index.symbol] ?? index.name
+  if (index.status !== 'available' || !isFiniteNumber(index.close)) return { symbol: index.symbol, label, text: '未取得', tone: null }
+  if (!isFiniteNumber(index.change_pct)) return { symbol: index.symbol, label, text: '—', tone: null }
+  const percent = index.change_pct * 100
+  const rounded = Number(percent.toFixed(2))
+  return { symbol: index.symbol, label, text: `${rounded > 0 ? '+' : ''}${percent.toFixed(2)}%`, tone: rounded > 0 ? 'up' : rounded < 0 ? 'down' : 'flat' }
+}
+
+// null without overnight_us (a response from before Issue 681). Nothing collected at all: the lead only.
+export function overnightUsView(us: OvernightUs | null | undefined): OvernightUsView | null {
+  if (!us) return null
+  const available = us.indexes.filter((index) => index.status === 'available' && isFiniteNumber(index.close))
+  const fresh = available.filter((index) => FRESH.has(index.freshness ?? ''))
+  const lead = fresh.length === 0
+    ? OVERNIGHT_US_PENDING
+    : fresh.every((index) => index.freshness === 'us_market_closed') ? OVERNIGHT_US_CLOSED : null
+  if (available.length === 0) return { lead, date: null, items: [] }
+  const days = [...new Set(available.map((index) => index.trading_date))]
+  const common = days.length === 1 ? formatDate(days[0]) : null
+  return {
+    lead,
+    date: common,
+    items: us.indexes.map((index) => ({
+      ...overnightUsItem(index),
+      date: common || index.status !== 'available' ? null : formatDate(index.trading_date),
+      // With the lead 美股尚未更新 the whole line is not current; it says so once.
+      stale: lead !== OVERNIGHT_US_PENDING && index.status === 'available' && index.freshness === 'stale',
+      current: index.status === 'available' && FRESH.has(index.freshness ?? ''),
+    })),
+  }
+}
+
+// The US indexes a candidate row shows (overnight_us_links, e.g. SOX for the semiconductor groups): those with a close.
+export function candidateOvernightLinks(item: Pick<CandidateItem, 'overnight_us_links'>, view: OvernightUsView | null): OvernightUsItem[] {
+  if (!view) return []
+  const links = item.overnight_us_links ?? []
+  return view.items.filter((entry) => links.includes(entry.symbol) && entry.text !== '未取得')
 }

@@ -1909,6 +1909,126 @@ def t21(run: Run) -> str:
     )
 
 
+# Issue 681: the 隔夜美股 line under the list's head and 費半 on the semiconductor rows (overnightUsView and
+# candidateOvernightLinks in frontend/src/candidates/candidates.ts mirrored here).
+OVERNIGHT_US_TITLE = "隔夜美股"
+OVERNIGHT_US_PENDING = "美股尚未更新"
+OVERNIGHT_US_CLOSED = "美股休市"
+OVERNIGHT_US_LABELS = {"SPX": "S&P 500", "IXIC": "NASDAQ", "DJI": "道瓊", "SOX": "費半"}
+OVERNIGHT_FRESH = ("latest", "us_market_closed")
+
+
+def us_change(index: dict) -> str:
+    """overnightUsItem's text: `+0.54%` (JS toFixed: a negative that rounds to 0 keeps its `-`), `—`, `未取得`."""
+
+    if index.get("status") != "available" or index.get("close") is None:
+        return "未取得"
+    if index.get("change_pct") is None:
+        return "—"
+    percent = index["change_pct"] * 100
+    text = fixed(percent, 2, signed=True)
+    return f"-{text}%" if percent < 0 and not text.startswith("-") else f"{text}%"
+
+
+def overnight_line(us: dict) -> tuple[str, dict[str, str]]:
+    """The line's page text, and each index's row text (`費半 +2.04%`, ` 非最新` when not current)."""
+
+    indexes = us.get("indexes") or []
+    available = [
+        i
+        for i in indexes
+        if i.get("status") == "available" and i.get("close") is not None
+    ]
+    fresh = [i for i in available if i.get("freshness") in OVERNIGHT_FRESH]
+    lead = (
+        OVERNIGHT_US_PENDING
+        if not fresh
+        else OVERNIGHT_US_CLOSED
+        if all(i.get("freshness") == "us_market_closed" for i in fresh)
+        else None
+    )
+    parts = [OVERNIGHT_US_TITLE] + ([lead] if lead else [])
+    rows: dict[str, str] = {}
+    if not available:
+        return " ".join(parts), rows
+    days = {i.get("trading_date") for i in available}
+    common = slash(next(iter(days))) if len(days) == 1 else None
+    if common:
+        parts.append(f"資料 {common}")
+    entries = []
+    for index in indexes:
+        label = OVERNIGHT_US_LABELS.get(index["symbol"], index.get("name"))
+        change, ok = us_change(index), index.get("status") == "available"
+        own = f"（{slash(index['trading_date'])}）" if ok and not common else ""
+        stale = (
+            " 非最新"
+            if lead != OVERNIGHT_US_PENDING and ok and index.get("freshness") == "stale"
+            else ""
+        )
+        entries.append(f"{label} {change}{own}{stale}")
+        if change != "未取得":
+            current = ok and index.get("freshness") in OVERNIGHT_FRESH
+            rows[index["symbol"]] = f"{label} {change}" + ("" if current else " 非最新")
+    return " ".join(parts) + " " + " · ".join(entries), rows
+
+
+@check("today", "T22")
+def t22(run: Run) -> str:
+    """Issue 681: the 隔夜美股 line = candidates.json overnight_us; 費半 on each linked row's title line."""
+
+    text, payload = run.text(TODAY), candidates(run)
+    us = payload.get("overnight_us")
+    expect(
+        isinstance(us, dict) and isinstance(us.get("indexes"), list),
+        "candidates.json 沒有 overnight_us（#681：隔夜美股四檔）",
+    )
+    symbols = [index.get("symbol") for index in us["indexes"]]
+    expect(
+        symbols == list(OVERNIGHT_US_LABELS),
+        f"overnight_us.indexes 是 {symbols}，預期 {list(OVERNIGHT_US_LABELS)}",
+    )
+    line, row_texts = overnight_line(us)
+    found = [
+        n for n, shown in enumerate(text.lines) if shown.startswith(OVERNIGHT_US_TITLE)
+    ]
+    expect(
+        [text.lines[n] for n in found] == [line],
+        f"`{OVERNIGHT_US_TITLE}` 開頭的行是 {[text.lines[n] for n in found]}，預期恰一行 `{line}`",
+    )
+    title, groups = candidates_title(text), text.find("熱門族群")
+    expect(
+        title < found[0] and (groups < 0 or found[0] < groups),
+        f"`{line}` 不在標題 `{CANDIDATES_TITLE}` 與 `熱門族群` 之間（{text.at(found[0])}）",
+    )
+    items = (
+        [] if payload.get("status") == "not_computed" else payload.get("items") or []
+    )
+    problems, marked = [], 0
+    for item in items:
+        prefix = f"#{item['rank']} {item['instrument']['symbol']} "
+        at = text.find_where(lambda shown, p=prefix: shown.startswith(p), title)
+        if at < 0:
+            problems.append(f"缺以 `{prefix}` 開頭的名次列")
+            continue
+        links = item.get("overnight_us_links")
+        if links is None:
+            problems.append(f"{prefix.strip()} 沒有 overnight_us_links")
+            continue
+        want = [row_texts[s] for s in links if s in row_texts]
+        # Right after the name, before the market and group (the line's ellipsis cuts those).
+        head = f"{prefix}{item['instrument'].get('name')} " + "".join(
+            f"{part} " for part in want
+        )
+        row = text.lines[at]
+        if want and not row.startswith(head):
+            problems.append(f"{prefix.strip()} 名次列 {row!r} 開頭不是 `{head}`")
+        if not want and any(label in row for label in ("費半 ", "S&P 500 ", "道瓊 ")):
+            problems.append(f"{prefix.strip()} 沒有對應指數，名次列卻有美股：{row!r}")
+        marked += bool(want)
+    expect(not problems, "；".join(problems))
+    return f"`{line}` 在 `{CANDIDATES_TITLE}` 之後；{marked}／{len(items)} 列標費半（overnight_us_links）"
+
+
 @check("today", "T14")
 def t14(run: Run) -> str:
     """The today page keeps one market line (加權, 櫃買, the date when not the page date, 看大盤 →), not the four widgets."""
