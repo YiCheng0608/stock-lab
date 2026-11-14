@@ -16,6 +16,12 @@ It refuses a run without ``STOCK_SESSION_BASIS_START`` set, and a database
 without the research marker ``research-db.json`` next to it (``_refusal``): a
 backfill before 2024-09-30 belongs in a research database only.  Progress and
 each month's exit code and summary go to ``<data>/logs/history-backfill.jsonl``.
+
+After the last month (also when one failed) it runs ``PRAGMA integrity_check``
+and ``foreign_key_check`` on the database once and writes an ``integrity``
+line; a result other than ``ok`` or any foreign-key row exits 3.  The monthly
+backfills skip that check at the code head (#722), so a database damaged
+midway (a month killed while writing, say) fails here, once per batch.
 """
 
 from __future__ import annotations
@@ -23,6 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 import time as time_module
@@ -39,6 +46,9 @@ PROGRESS_NAME = "history-backfill.jsonl"
 # production volume (docs/ops/RESEARCH_DB.md, #701 review).
 MARKER_NAME = "research-db.json"
 MARKER_PURPOSE = "research_history"
+# The whole-database check after the batch failed (#722 review): exit 3, apart
+# from 1 (a month failed) and 2 (refused).
+INTEGRITY_FAILED_EXIT = 3
 
 
 def months_newest_first(first: date, last: date) -> list[tuple[date, date]]:
@@ -120,7 +130,17 @@ def run(
     backfill: Callable[[date, date], tuple[int, str]],
     now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     sleep: Callable[[float], None] = time_module.sleep,
+    integrity: Callable[[], dict] | None = None,
 ) -> dict[str, int]:
+    """Backfill the months not done yet, then check the whole database once.
+
+    ``integrity`` (``check_database`` in ``main``) runs after the last month,
+    also when a month failed or the loop raised, and its result is one
+    ``integrity`` line of the progress file; ``counts["integrity_ok"]`` is 1
+    or 0.  Each month's backfill skips the migration integrity check at the
+    code head (#722), so this is where a damaged database fails.
+    """
+
     progress = data_dir / "logs" / PROGRESS_NAME
     progress.parent.mkdir(parents=True, exist_ok=True)
     finished = done_months(progress)
@@ -132,28 +152,68 @@ def run(
             handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
     log({"event": "start", "first": first.isoformat(), "last": last.isoformat()})
-    for start, end in months_newest_first(first, last):
-        key = (start.isoformat(), end.isoformat())
-        if key in finished:
-            counts["done_before"] += 1
-            continue
-        wait = pause_seconds(now())
-        if wait:
-            log({"event": "pause", "seconds": round(wait)})
-            sleep(wait)
-        code, tail = backfill(start, end)
-        log(
-            {
-                "event": "month",
-                "start": key[0],
-                "end": key[1],
-                "exit": code,
-                "tail": tail,
-            }
-        )
-        counts["ok" if code == 0 else "failed"] += 1
+    try:
+        for start, end in months_newest_first(first, last):
+            key = (start.isoformat(), end.isoformat())
+            if key in finished:
+                counts["done_before"] += 1
+                continue
+            wait = pause_seconds(now())
+            if wait:
+                log({"event": "pause", "seconds": round(wait)})
+                sleep(wait)
+            code, tail = backfill(start, end)
+            log(
+                {
+                    "event": "month",
+                    "start": key[0],
+                    "end": key[1],
+                    "exit": code,
+                    "tail": tail,
+                }
+            )
+            counts["ok" if code == 0 else "failed"] += 1
+    finally:
+        if integrity is not None:
+            result = integrity()
+            log({"event": "integrity", **result})
+            counts["integrity_ok"] = int(bool(result.get("ok")))
     log({"event": "end", **counts})
     return counts
+
+
+def check_database(db: Path) -> dict:
+    """``PRAGMA integrity_check`` and ``foreign_key_check`` on ``db``, read-only.
+
+    ``ok`` only when integrity_check answers the single row ``ok`` and the
+    foreign-key check returns no row; the first rows of either are kept.  A
+    database that cannot be opened is not ok.
+    """
+
+    started = time_module.monotonic()
+    result: dict = {"ok": False}
+    try:
+        connection = sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True)
+        try:
+            integrity_rows = [
+                str(row[0])
+                for row in connection.execute("PRAGMA integrity_check").fetchmany(5)
+            ]
+            violations = [
+                list(row)
+                for row in connection.execute("PRAGMA foreign_key_check").fetchmany(5)
+            ]
+        finally:
+            connection.close()
+        result.update(
+            integrity_check=integrity_rows,
+            foreign_key_violations=violations,
+            ok=integrity_rows == ["ok"] and not violations,
+        )
+    except sqlite3.Error as error:
+        result["error"] = f"{type(error).__name__}: {error}"
+    result["seconds"] = round(time_module.monotonic() - started, 1)
+    return result
 
 
 def _worker_backfill(start: date, end: date) -> tuple[int, str]:
@@ -200,6 +260,7 @@ def main(
     argv: list[str] | None = None,
     *,
     backfill: Callable[[date, date], tuple[int, str]] | None = None,
+    integrity: Callable[[Path], dict] = check_database,
 ) -> int:
     parser = argparse.ArgumentParser(prog="history_backfill.py", description=__doc__)
     parser.add_argument("--from", dest="first", type=date.fromisoformat, required=True)
@@ -218,8 +279,11 @@ def main(
         data_dir=data_dir,
         environ=environ,
         backfill=backfill or _worker_backfill,
+        integrity=lambda: integrity(db),
     )
     print(json.dumps(counts))
+    if not counts.get("integrity_ok"):
+        return INTEGRITY_FAILED_EXIT
     return 0 if counts["failed"] == 0 else 1
 
 

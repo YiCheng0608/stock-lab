@@ -18,8 +18,8 @@ export function Shell({ children }: { children: ReactNode }) {
       <Navbar dataDate={day} dataDateLoading={dataDate.isLoading} dataDateError={dataDate.isError} />
       <main className="container"><PageDateContext.Provider value={pageDate}>{children}</PageDateContext.Provider></main>
       <footer className="container site-footer">
-        <span>T 日收盤訊號 · 最早 T+1 執行 · T+5／T+20 追蹤</span>
-        <span>僅使用官方資料 · 詳細來源見個股頁「資料來源」分頁、今日名單與大盤頁的「資料說明」</span>
+        {/* Issue 729: data labels only; how to read the pages stays in the Issues. */}
+        <span>僅使用官方資料</span>
         {/* One entry (Issue 631): news, the research pages and the glossary are listed on /system. */}
         <nav className="secondary-nav" aria-label="次要工具">
           <Link to="/system">系統</Link>

@@ -230,7 +230,7 @@ check(page.includes('<h3 class="card-title" id="market-chart-title">加權指數
 check(text(chartPanel).includes('資料 2026/10/22'), `加權指數日線: the last bar's date badge: ${text(chartPanel).slice(0, 160)}`)
 check(chartPanel.includes('id="bars-interval-tab-day"') && chartPanel.includes('id="bars-interval-tab-week"') && text(chartPanel).includes('日K') && text(chartPanel).includes('週K'), '加權指數日線: the stock page period switch (日K／週K)')
 check(chartPanel.includes('class="ma-toggles"') && chartPanel.includes('id="indicator-tab-macd"'), '加權指數日線: the stock page MA toggles and indicator panels')
-check(text(chartPanel).includes('最近 40 根日線；缺日不補、停牌不畫 K 線'), '加權指數日線: the stock page chart meta')
+check(text(chartPanel).includes('最近 40 根日線') && !text(chartPanel).includes('缺日不補'), '加權指數日線: the stock page chart meta, without the how-to-read clause (Issue 729)')
 for (const header of ['開（點）', '收（點）', 'MA5（點）']) check(text(chartPanel).includes(header), `資料表: an index is in 點 (「${header}」)`)
 check(!text(chartPanel).includes('收（元）') && text(chartPanel).includes('單位：指數與均線為點'), '資料表: no 元 for an index')
 check(text(chartPanel).includes('2026/10/22 46,021.43 46,076.93 45,981.18 46,041.43'), '資料表: an index keeps two decimals and its real open, high and low')

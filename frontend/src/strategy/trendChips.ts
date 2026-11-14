@@ -3,9 +3,6 @@
 // breakout_v3 and pullback_v4 inherit) and the score from backend/app/domain.py (CANDIDATE_SCORE_V7). A change to either
 // changes this file and UI_COPY_SPEC §13 in the same PR.
 
-// What the strategy is made of: its two rules and its score, by version id.
-export const COMPOSITION = { breakout: 'breakout_v3', pullback: 'pullback_v4', score: 'candidate_score_v7' } as const
-
 export type ConfirmationRow = { key: 'group' | 'institutional' | 'margin'; name: string; threshold: string; meaning: string }
 
 // The three confirmations both rules share (base.py COMMON_CONFIRMATIONS).

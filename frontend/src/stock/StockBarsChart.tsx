@@ -81,10 +81,10 @@ function useNarrow(query = '(max-width: 640px)'): boolean {
   return narrow
 }
 
-function priceBasisLabel(basis: string): string {
-  return basis === PRICE_BASIS
-    ? 'K 線為原始價；均線與指標以各根資料日的原始價為基準換算前期除權息'
-    : '價格基準待核實'
+// The usual raw price basis is not written out (Issue 729: how the chart is computed stays in the Issues); any other
+// basis is shown as unverified.
+function priceBasisLabel(basis: string): string | null {
+  return basis === PRICE_BASIS ? null : '價格基準待核實'
 }
 
 function indicatorSourceLabel(response: StockBarsResponse): string {
@@ -301,6 +301,7 @@ export function StockBarsChart({
       ))}
     </div>
   )
+  const basisLabel = data ? priceBasisLabel(data.indicators.price_basis) : null
   const chartLabel = split
     ? `${unit} K 線與成交量圖${levels ? '，含規則價位線' : ''}；指標與數值見走勢分頁`
     : `${unit} K 線、成交量與 ${INDICATOR_PANELS.find((item) => item.id === panel)?.label} 指標圖${levels ? '，含規則價位線' : ''}；數值見下方資料表`
@@ -308,7 +309,7 @@ export function StockBarsChart({
   return (
     <Card
       className={cx('stock-chart-card', split && 'chart-card-split')}
-      eyebrow={split ? undefined : data ? `技術指標 ${data.indicators.formula_version}` : '技術指標'}
+      eyebrow={split ? undefined : '技術指標'}
       title={title}
       titleId={titleId}
       aria-labelledby={titleId}
@@ -371,9 +372,9 @@ export function StockBarsChart({
             {notes.length > 0 && <ul className="chart-note-list">{notes.map((note) => <li key={note}>{note}</li>)}</ul>}
             <div className="chart-meta">
               {sourcesLabel(data.sources) !== pageSource && <span>來源 {sourcesLabel(data.sources)}</span>}
-              <span>{priceBasisLabel(data.indicators.price_basis)}</span>
+              {basisLabel && <span>{basisLabel}</span>}
               {!split && <span>{indicatorSourceLabel(data)}</span>}
-              <span>最近 {data.count} 根{unit}；缺日不補、停牌不畫 K 線</span>
+              <span>最近 {data.count} 根{unit}</span>
             </div>
             {!split && <ChartDataTable data={data} digits={digits} instrumentType={instrumentType} />}
           </>
@@ -412,7 +413,6 @@ export function StockIndicatorCard({ interval, loading, error, bars, instrumentT
   return (
     <Card
       className="stock-indicator-card"
-      eyebrow={data ? `技術指標 ${data.indicators.formula_version}` : '技術指標'}
       title="技術指標"
       titleId="stock-indicator-title"
       aria-labelledby="stock-indicator-title"
@@ -452,7 +452,7 @@ export function StockIndicatorCard({ interval, loading, error, bars, instrumentT
             {panelState?.kind === 'chart' && panelState.note && <p className="chart-note">{panelState.note}</p>}
             <div className="chart-meta">
               <span>{indicatorSourceLabel(data)}</span>
-              <span>最近 {data.count} 根{unit}；區間與日K／週K 跟著上方 K 線卡</span>
+              <span>最近 {data.count} 根{unit}</span>
             </div>
             <ChartDataTable data={data} digits={digits} instrumentType={instrumentType} />
           </>

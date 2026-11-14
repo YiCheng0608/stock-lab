@@ -87,6 +87,10 @@ services:
   # record-only. Its queue is the host directory STOCK_COORDINATION_DIR at /coordination,
   # where patrol.sh on Windows reads it; the default is a directory of this checkout, so a
   # development scheduler never touches the coordinator's queue.
+  # The daily Telegram message (#728) reads TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID from the
+  # env file above (env_file of x-backend). No key of theirs under environment: it would win
+  # over env_file and blank the env file's value whenever the shell does not carry it
+  # (backend/tests/test_worker_serve.py checks this).
   scheduler:
     <<: *backend
     command: ["python", "-m", "worker.cli", "serve"]

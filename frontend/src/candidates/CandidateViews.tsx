@@ -6,13 +6,11 @@ import { Term } from '../components/Term'
 import { useSameAsPage } from '../components/pageDate'
 import { Badge, Card, DataTable, DateBadge, EmptyState, ScoreBar, Skeleton, cx, type Column } from '../components/ui'
 import { AiBadge } from '../news/NewsViews'
-import { EVIDENCE_PATH, NO_EVIDENCE_LINK_LABEL, NO_EVIDENCE_TEXT } from '../strategy/evidence'
 import { STRATEGY_LINK_LABEL } from '../strategy/strategyName'
 import { AddPlanButton } from '../tracking/TrackingViews'
 import type { CandidateComponent, CandidateComponentKey, CandidateItem, CandidateSubItem, CandidatesResponse } from '../types'
 import {
   CANDIDATE_COMPONENTS,
-  CANDIDATE_DISCLAIMER,
   GROUP_EVENT_PENDING,
   NOTE_DISCLAIMER,
   NOTE_TITLE,
@@ -119,7 +117,7 @@ export function ScoreDetails({ item, open }: { item: CandidateItem; open: boolea
     <details className="details candidate-details" open={open}>
       <summary>評分細節、資料日期與來源</summary>
       <DataTable
-        note="分數與百分位為 0–100，越高越好（「較低為佳」的子項已反向）；「—」表示無資料，不以 0 計。"
+        note="分數與百分位 0–100；「—」表示無資料。"
         columns={SUB_ITEM_COLUMNS}
         rows={rows}
         rowKey={(row) => row.key + row.name}
@@ -457,17 +455,15 @@ export function CandidatesSection({ data, loading, error, renderChart, wide = fa
   const overnight = overnightUsView(data?.overnight_us)
   return (
     <section className="candidates-section" aria-labelledby="candidates-title">
-      {/* One head line (#510): title, date and count, the T+1 sentence and the disclaimer, then the strategy name and 策略說明 (#577);
-          the 現行規則尚無證據 line (Issue 693) under it. */}
+      {/* One head line (#510): title, date and count, the date the conditions held on, then the strategy name and 策略說明
+          (#577). Issue 729: no how-to-read sentence, disclaimer or research status here. */}
       <div className="candidates-head">
         <h2 id="candidates-title">今日名單</h2>
         {data && data.status !== 'not_computed' && (
           <span className="board-dates"><DateBadge date={formatDate(data.trading_date)} />{state?.kind === 'list' && <Badge>{data.candidate_count} 檔</Badge>}</span>
         )}
-        <p className="small-note candidate-notes">{t1 && <span className="candidate-t1">{t1}</span>}<span className="candidate-disclaimer">{CANDIDATE_DISCLAIMER}。</span></p>
+        {t1 && <p className="small-note candidate-notes"><span className="candidate-t1">{t1}</span></p>}
         <Link className="text-link candidates-strategy-link" to="/strategy">{STRATEGY_LINK_LABEL}</Link>
-        {/* Issue 693: its own line under the head in every state (list, zero, not computed), the warning colour. */}
-        <p className="small-note candidate-evidence">{NO_EVIDENCE_TEXT} <Link className="text-link" to={EVIDENCE_PATH}>{NO_EVIDENCE_LINK_LABEL}</Link></p>
       </div>
       {/* Issue 681: under the head in every state (list, zero, not computed), not while loading or failed. */}
       {!loading && !error && <OvernightUsLine view={overnight} />}

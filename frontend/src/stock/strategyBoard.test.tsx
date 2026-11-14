@@ -2,10 +2,9 @@ import type { ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom/server'
 
-import { CANDIDATE_DISCLAIMER } from '../candidates/candidates'
+import { removedCopyIn } from '../removedCopy.fixtures'
 import { completeItem, doneNote } from '../candidates/candidates.fixtures'
 import { GLOSSARY } from '../glossary'
-import { EVIDENCE_PATH, NO_EVIDENCE_SHORT_LABEL } from '../strategy/evidence'
 import type { StrategyActionableLevels, StrategyBoardRow } from '../types'
 import {
   LEVELS_MISSING_TEXT,
@@ -104,9 +103,9 @@ const summary = { rank: 3, total_score: 0.784, score_version: 'candidate_score_v
 const both = render(<StrategyBoardPanel board={board([conditionalBreakout(), observationPullback()], summary)} candidate={candidate} />)
 check(both.includes('策略總表') && both.includes('資料 2026/10/22') && both.includes('價位規則 v1'), 'title, data date and levels version')
 check(both.includes('data-strategy-candidate="3"') && both.includes('第 3 名'), 'candidate row with rank')
-check(both.includes(`<span class="small-note strategy-candidate-disclaimer">${CANDIDATE_DISCLAIMER}</span>`), 'the ranking disclaimer sits beside the score')
-// Issue 693: the short 現行規則尚無證據 link right after the disclaimer, to the 研究結論 of /strategy.
-check(both.includes(`${CANDIDATE_DISCLAIMER}</span><a class="text-link small-note strategy-candidate-evidence" href="${EVIDENCE_PATH}">${NO_EVIDENCE_SHORT_LABEL}</a>`) && count(both, 'strategy-candidate-evidence') === 1, 'the evidence link follows the ranking disclaimer once')
+// Issue 729: no ranking disclaimer, research-status link or 說明 fold on the board; none of the removed copy comes back.
+check(!both.includes('strategy-candidate-disclaimer') && !both.includes('strategy-candidate-evidence') && !both.includes('board-help'), 'no disclaimer, evidence link or 說明 fold')
+check(!removedCopyIn(both).length, `removed copy is back on the board: ${removedCopyIn(both).join('、')}`)
 check(/第 3 名 · .*總分.* 78 · 突破條件/.test(both), 'candidate row: rank, score and strategy')
 check(count(both, 'class="ai-inference candidate-note"') === 1 && both.includes('AI 推論'), 'the AI note appears once, on the candidate row')
 check(both.indexOf('data-strategy-candidate') < both.indexOf('data-strategy-row="breakout_v1"'), 'the candidate row is above the strategy rows')
@@ -126,9 +125,9 @@ for (const text of ['2,430.00～2,535.00', '16,371～32,741 張', '參考停損'
   check(box.includes(text), `observation box shows ${text}`)
 }
 check(!observation.includes('ai-inference'), 'no AI note on a strategy row')
-// Only the ranking disclaimer and the 總分 hover hint (UI_COPY_SPEC §7) may name a win rate, to say the score is not one.
+// Only the 總分 hover hint (UI_COPY_SPEC §7) may name a win rate, to say the score is not one.
 const scoreHint = `title="${GLOSSARY.find((term) => term.term_id === 'candidate_score')?.plain_definition}"`
-for (const markup of [both.split(CANDIDATE_DISCLAIMER).join('').split(scoreHint).join(''), plainMarkup()]) check(!markup.includes('勝率') && !markup.includes('機率'), 'no win rate or probability')
+for (const markup of [both.split(scoreHint).join(''), plainMarkup()]) check(!markup.includes('勝率') && !markup.includes('機率'), 'no win rate or probability')
 // Phone: one card per strategy with the same content.
 check(count(both, 'class="card strategy-card"') === 2, 'one phone card per strategy')
 check(card(both, 'pullback_v1').includes(OBSERVATION_LABEL) && card(both, 'breakout_v1').includes('class="level-stop">2,364.00'), 'cards keep the two kinds of levels apart')

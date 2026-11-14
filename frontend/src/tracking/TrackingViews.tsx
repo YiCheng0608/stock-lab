@@ -104,7 +104,6 @@ export function StockPlanPanel({ strategies, embedded = false }: { strategies: S
           </ul>
         )
         : <p className="small-note">{NO_CONDITION_TEXT}</p>}
-      <p className="small-note">加入後每日依日線規則模擬成交與出場，結果在行動頁「{TRACKING_TITLE}」與「{HISTORY_TITLE}」；不是實際成交。</p>
   </>
   if (embedded) return <div className="stock-plan-inline" aria-label="追蹤計畫">{body}</div>
   return <Card className="stock-plan-panel" eyebrow="追蹤計畫 · 模擬" title="把研究條件加入追蹤">{body}</Card>
