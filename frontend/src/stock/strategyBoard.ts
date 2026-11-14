@@ -7,7 +7,6 @@ import { LOT_SIZE, formatFixed } from '../units'
 // CONDITIONS is the frontend's one condition table: the action list's 「差：…」 lines read it too (#277-B).
 
 export const BOARD_TITLE = '策略總表'
-export const BOARD_NOTE = '每個研究條件各自判定；「觀察價位」是條件尚未成立時，下一交易日收盤與成交量要達到的參考值，不是建議進出點。'
 export const OBSERVATION_LABEL = '條件未成立・觀察價位'
 // #519: the candidate row's fold for the reasons and the AI note (UI_COPY_SPEC §10 個股頁候選列).
 export const CANDIDATE_MORE_LABEL = '理由與 AI 進出點說明'

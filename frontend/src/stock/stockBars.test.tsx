@@ -61,6 +61,7 @@ import {
 import { conditionalBreakout, incompleteRow, observationPullback } from './strategyBoard.fixtures'
 import { barsResponse, insufficientDaily, notComputedDaily, suspendedWithGapDaily, tradedBar, weeklySeries } from './stockBars.fixtures'
 import type { StockBarsResponse, TradingHalt } from '../types'
+import { removedCopyIn } from '../removedCopy.fixtures'
 
 // Standalone regression module (no browser, no server, no network) for the stock page K-line, indicator
 // panels and header quote, on bars-API fixtures (PR #155 shape).
@@ -209,10 +210,10 @@ check(series(weekly, 'kd').list[0].name === '週K', 'weekly series is labelled �
 const render = (data: StockBarsResponse, interval: 'day' | 'week' = 'day') => renderToStaticMarkup(<StockBarsChart interval={interval} onIntervalChange={() => undefined} data={data} loading={false} error={null} />)
 const insufficientMarkup = render(insufficient)
 check(insufficientMarkup.includes('無資料') && insufficientMarkup.includes('日線不足 34 根，現有 20 根'), 'rendered MACD panel shows 無資料 with the reason')
-check(insufficientMarkup.includes('資料 2026/09/20') && insufficientMarkup.includes('indicators/v1'), 'chart card shows its data date badge and formula version')
+check(insufficientMarkup.includes('資料 2026/09/20') && !insufficientMarkup.includes('indicators/v1'), 'chart card shows its data date badge, without the formula version (Issue 729)')
 check(insufficientMarkup.includes('日線批次計算於 2026/10/16 18:00（台灣時間）'), 'naive UTC computed_at is shown in Taiwan time')
-// The basis label follows the API's current basis; the basis before Issue 394 is not explained as the current one.
-check(insufficientMarkup.includes('K 線為原始價；均線與指標以各根資料日的原始價為基準換算前期除權息'), 'current price basis is explained')
+// The usual basis is not written (Issue 729); the basis before Issue 394 still reads 待核實.
+check(!insufficientMarkup.includes('K 線為原始價') && !insufficientMarkup.includes('價格基準待核實') && !removedCopyIn(insufficientMarkup).length, `the current price basis is not explained on the card (Issue 729): ${removedCopyIn(insufficientMarkup).join('、')}`)
 const oldBasis = render({ ...insufficient, indicators: { ...insufficient.indicators, price_basis: 'as_of_date_raw_basis' } })
 check(oldBasis.includes('價格基準待核實') && !oldBasis.includes('K 線為原始價'), 'an older price basis reads 待核實')
 check(formatTaipeiDateTime('2026-10-17T11:39:37.362391') === '2026/10/17 19:39' && formatTaipeiDateTime('2026-10-17T23:30:00+08:00') === '2026/10/17 23:30', 'computed_at time zone handling')
@@ -457,7 +458,7 @@ check(reached.min < 2364 && reached.max > 2458, `the price axis reaches a stop a
 check(priceAxis.min?.({ min: 2000, max: 3000 }) === 2000 && priceAxis.max?.({ min: 2000, max: 3000 }) === 3000, 'and keeps the bars when they reach further')
 const plain = withLevels(null)
 check((plain.series as Marked[])[0].markLine === undefined && (plain.yAxis as Array<{ min?: unknown }>)[0].min === undefined, 'no levels: the K series and the axis are as before')
-check(levelsNote(breakoutLevels!) === '規則價位線：進場 2,400.00 元（虛線）、停損 2,364.00 元、目標 2,458.00 元；條件成立當日的價位，不是成交價。', levelsNote(breakoutLevels!))
+check(levelsNote(breakoutLevels!) === '規則價位線：進場 2,400.00 元（虛線）、停損 2,364.00 元、目標 2,458.00 元', levelsNote(breakoutLevels!))
 
 // Issue 647 (#620, 3147 on 2026-11-11): a 50–500 stock draws candles and axis at one decimal, but the levels read as
 // the strategy board writes them (335.71, not 335.7), and a target at the range high keeps its label inside the pane.
@@ -531,7 +532,7 @@ check(pair.top.includes('>K 線</h') && !pair.top.includes('indicators/v1') && !
 check(!pair.top.includes('indicator-tab-') && !pair.top.includes('查看圖表資料表') && !pair.top.includes('日線批次計算於'), 'K-line card: no indicator panel, data table or batch time')
 check(pair.top.indexOf('class="chart-stage"') < pair.top.indexOf('class="chart-ma-row"') && pair.top.indexOf('chart-ma-row') < pair.top.indexOf('data-chart-levels') && !pair.top.slice(0, pair.top.indexOf('chart-stage')).includes('ma-toggle'), 'K-line card: the MA toggles are the first line under the chart')
 check(pair.top.includes('bars-range') && pair.top.includes('bars-interval-tab-week'), 'K-line card: keeps 日K／週K and the range buttons')
-check(['MACD', 'RSI', 'KD', '布林'].every((label) => pair.tab.includes(`>${label}</button>`)) && pair.tab.includes('查看圖表資料表（最近 30 根）') && pair.tab.includes('日線批次計算於') && pair.tab.includes('技術指標 indicators/v1') && pair.tab.includes('>技術指標</h'), 'indicator card: the four panels, the data table, the batch time and the formula version')
+check(['MACD', 'RSI', 'KD', '布林'].every((label) => pair.tab.includes(`>${label}</button>`)) && pair.tab.includes('查看圖表資料表（最近 30 根）') && pair.tab.includes('日線批次計算於') && !pair.tab.includes('indicators/v1') && pair.tab.includes('>技術指標</h') && !pair.tab.includes('class="eyebrow"'), 'indicator card: the four panels, the data table and the batch time; no eyebrow or formula version (Issue 729)')
 check(!pair.tab.includes('bars-range') && !pair.tab.includes('ma-toggle'), 'indicator card: no window controls of its own')
 check(pair.windows.length === 2 && pair.windows[0] === pair.windows[1], `default range: both charts show the same bars: ${pair.windows.join(' / ')}`)
 const pairOneMonth = pagePair(sharedState(longDaily, { range: '1m' }))
@@ -548,4 +549,4 @@ for (const [chart, event] of [['K-line card', { start: 40, end: 80 }], ['indicat
 }
 // Today list and market page: the whole card as before (no split): indicator tabs, data table and MA toggles above.
 const whole = renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => undefined} data={longDaily} loading={false} error={null} />)
-check(whole.includes('indicator-tab-macd') && whole.includes('查看圖表資料表') && whole.includes('技術指標 indicators/v1') && !whole.includes('chart-ma-row') && whole.indexOf('ma-toggle') < whole.indexOf('chart-stage'), 'without split the card is unchanged')
+check(whole.includes('indicator-tab-macd') && whole.includes('查看圖表資料表') && whole.includes('>技術指標<') && !whole.includes('indicators/v1') && !whole.includes('chart-ma-row') && whole.indexOf('ma-toggle') < whole.indexOf('chart-stage'), 'without split the card is unchanged')

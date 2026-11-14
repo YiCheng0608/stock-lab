@@ -69,8 +69,8 @@ import { GLOSSARY } from './glossary'
 import { formatDay, formatTaipeiDay, formatTaipeiMinute } from './dates'
 import { noPreviousCloseText } from './marketChange'
 import { formatPortfolioValue, formatPositionValuation, formatLocalPositionValuation, formatPortfolioClose, formatQuoteRecord, portfolioValueFromText } from './portfolioValues'
-import { formatFixed, formatTableNumber, formatTableVolume, formatTableVolumeShares, formatTableChip,formatShareQuantity, formatPositionShares, positionQuantityFromText, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, type ShareUnit } from './units'
-import { backtestStartedText, backtestTrackingLabel, officialEventDisplayTitle, formatProductTimeRole, PRODUCT_TIME_NOTE, levelFieldLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, gapNotApplicable, incompleteActionLabel, staleCloseDateLabel, stockDirectoryActionLabel, stockGroupLabel, type ProductQualityKind } from './presentation'
+import { formatFixed, formatTableNumber, formatTableVolume, formatTableVolumeShares, formatTableChip,formatShareQuantity, formatPositionShares, positionQuantityFromText, isVerifiedShareSource, type ShareUnit } from './units'
+import { backtestStartedText, backtestTrackingLabel, officialEventDisplayTitle, formatProductTimeRole, levelFieldLabel, levelSemanticsLabel, VERIFIED_LEVEL_SEMANTICS, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, gapNotApplicable, incompleteActionLabel, staleCloseDateLabel, stockDirectoryActionLabel, stockGroupLabel, type ProductQualityKind } from './presentation'
 import { Shell } from './components/Shell'
 import { Term } from './components/Term'
 import { UnlessPageDate } from './components/pageDate'
@@ -432,30 +432,25 @@ function DirectoryPagination({ meta, onPageChange }: { meta: Record<string, unkn
 
 function ProductTimeSummary({
   time,
-  compact = false,
   fallbackDate,
   fallbackEarliestDate,
 }: {
   time?: ProductTime
-  compact?: boolean
   fallbackDate?: string | null
   fallbackEarliestDate?: string | null
 }) {
   const dateRole = 'market_date'
   const dateTime = productTimeRoleDateTime(time, dateRole)
-  const decision = formatProductTimeRole(time, 'decision_at')
   const earliest = formatProductTimeRole(time, 'earliest_execution_date', fallbackEarliestDate ?? null)
   const dateValue = formatProductTimeRole(time, dateRole, fallbackDate ?? null)
   return (
     <div className="small-note product-time-summary" data-testid="product-time-summary">
       <div>
-        {/* The page date is in the navbar (#661): only another day is written here. */}
+        {/* The page date is in the navbar (#661): only another day is written here. Issue 729: no 決策時間 or time note. */}
         <UnlessPageDate date={dateValue}><span>資料日期：{dateValue} · </span></UnlessPageDate>
-        <span>決策時間：{decision}</span>
-        <span> · 規則最早執行日：{earliest}</span>
+        <span>規則最早執行日：{earliest}</span>
       </div>
       {dateTime && <time dateTime={dateTime} hidden />}
-      {!compact && <div>{PRODUCT_TIME_NOTE}</div>}
     </div>
   )
 }
@@ -776,7 +771,6 @@ function StockPage() {
       {tab === 'research' && <><StrategyBoardPanel board={data.strategy_board} candidate={data.candidate} gapReasons={data.decision_summary?.gap_reasons} /><ActionDetailPanel action={data.decision_summary ?? null} board={data.strategy_board} gap={fallbackResearchIncomplete ? { reasons: data.decision_summary?.gap_reasons, missingFields: qualitySummary.research.missing_fields } : null}><StockPlanPanel strategies={data.decision_summary?.strategies} embedded /></ActionDetailPanel><GroupPanel groups={data.groups} /></>}
       {tab === 'data' && <><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><Card className="stock-source-panel" eyebrow="資料來源" title="原始時間、來源與技術指標"><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div><IndicatorMetaRows bars={dayBars.data} /><details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} instrumentType={data.instrument.instrument_type} /></details></Card></>}
     </div>
-    <p className="disclaimer">此為研究工具與資料摘要，不構成投資建議、報酬保證或自動下單指令。</p>
   </div>
 }
 
@@ -811,8 +805,6 @@ function BrokerBranchEntry({ exchange }: { exchange: string }) {
   const url = exchange === 'TWSE' ? 'https://bsr.twse.com.tw/bshtm/bsMenu.aspx' : exchange === 'TPEx' ? 'https://www.tpex.org.tw/web/stock/aftertrading/broker_trading/brokerBS.php' : null
   return <section className="broker-branch-entry" aria-labelledby="broker-branch-title">
     <h3 id="broker-branch-title">券商／分點</h3>
-    <p>尚未提供整合的券商分點買賣資料。</p>
-    <p className="small-note">券商分點是交易通道，不能據此認定特定主力；與外資、投信、自營商的三大法人分類不同。</p>
     {url ? <><a className="text-link" href={url} target="_blank" rel="noreferrer">前往{exchange === 'TWSE' ? '證交所' : '櫃買中心'}官方券商買賣查詢</a><p className="small-note">官方查詢需人工輸入驗證碼。{exchange === 'TPEx' ? '櫃買中心僅提供當日資料。' : ''}請在官方頁面輸入股票代號並完成驗證。</p></> : <p className="small-note">市場尚未核實，暫無對應官方查詢入口。</p>}
   </section>
 }
@@ -837,10 +829,6 @@ export function BarTable({ rows, instrumentType }: { rows: InstrumentDetail['bar
   />
 }
 
-function formatRawChipValue(value: number | null): string {
-  return typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString('zh-TW', { maximumFractionDigits: 3 }) : '未提供'
-}
-
 const CHIP_COLUMNS: ReadonlyArray<Column<InstrumentDetail['chips'][number]>> = [
   { key: 'date', header: '日期', cell: (row) => formatTaiwanDateTime(row.date, true) },
   { key: 'foreign', header: <><Term id="foreign_flow">外資買賣超</Term>（張）</>, num: true, cell: (row) => formatTableChip(row.foreign_buy, row.institutional?.source) },
@@ -852,21 +840,21 @@ const CHIP_COLUMNS: ReadonlyArray<Column<InstrumentDetail['chips'][number]>> = [
 /** One line per value group: its official file, data date and collection time (Issue #395). */
 function ChipGroupLine({ label, group }: { label: string; group: ChipGroupSource | null | undefined }) {
   if (!group) return <span>{label}：無資料</span>
-  return <span>{label}：{sourceLabel(group.source)}（{group.source}） · 資料截至：{formatTaiwanDateTime(group.data_as_of, true)} · 收集：{formatTaiwanDateTime(group.collected_at)}</span>
+  return <span>{label}：{sourceLabel(group.source)} · 資料截至：{formatTaiwanDateTime(group.data_as_of, true)} · 收集：{formatTaiwanDateTime(group.collected_at)}</span>
 }
 
 export function ChipTable({ rows }: { rows: InstrumentDetail['chips'] }) {
   return <>
-    <details className="details chip-unit-note"><summary>說明</summary><p className="small-note">單位：張（三大法人為股數 ÷ 1,000 四捨五入，不足 500 股為 0）。三大法人為外資、投信、自營商；正值為買超，負值為賣超。融資正值為餘額增加，負值為減少。三大法人欄空白：官方三大法人表當天未列此股（只列當天有法人買賣的股票）；融資欄空白：當天不是融資標的，或官方融資餘額表未列此股；其他空白表示數值無效或來源單位待核實。原始股數與來源見下方說明。</p></details>
+    <details className="details chip-unit-note"><summary>說明</summary><p className="small-note">單位：張（三大法人為股數 ÷ 1,000 四捨五入，不足 500 股為 0）。三大法人為外資、投信、自營商；正值為買超，負值為賣超。融資正值為餘額增加，負值為減少。三大法人欄空白：官方三大法人表當天未列此股（只列當天有法人買賣的股票）；融資欄空白：當天不是融資標的，或官方融資餘額表未列此股；其他空白表示數值無效或來源單位待核實。</p></details>
     <DataTable wrapClassName="compact-table" columns={CHIP_COLUMNS} rows={rows} rowKey={(row, index) => row.id ?? row.date ?? index} />
-    <details className="technical-details chip-source-details"><summary>資料來源與原始值</summary><div className="chip-source-list">{rows.map((row) => <div className="chip-source-row" key={`${row.date}-${row.source}`}><strong>{formatTaiwanDateTime(row.date, true)}</strong><ChipGroupLine label="法人" group={row.institutional} /><ChipGroupLine label="融資" group={row.margin} /><span>來源稽核原值：外資（{isVerifiedChipFlowSource(row.institutional?.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.foreign_buy)} · 投信（{isVerifiedChipFlowSource(row.institutional?.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.trust_buy)} · 自營商（{isVerifiedChipFlowSource(row.institutional?.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.dealer_buy)} · 融資（{isVerifiedMarginSource(row.margin?.source) ? '張' : '單位待核實'}） {formatRawChipValue(row.margin_change)}</span></div>)}</div></details>
+    <details className="technical-details chip-source-details"><summary>資料來源</summary><div className="chip-source-list">{rows.map((row) => <div className="chip-source-row" key={`${row.date}-${row.source}`}><strong>{formatTaiwanDateTime(row.date, true)}</strong><ChipGroupLine label="法人" group={row.institutional} /><ChipGroupLine label="融資" group={row.margin} /></div>)}</div></details>
   </>
 }
 
 function QualityPanel({ summary, rows }: { summary: InstrumentDetail['quality_summary']; rows: DataQualityRow[] }) {
   if (!summary) return <div className="panel"><h2>資料品質</h2><div className="empty">尚無依用途分開的資料品質摘要。</div></div>
   const researchDescription = productResearchDescription(summary.research.status, summary.research.missing_fields.map(fieldLabel))
-  return <div className="panel"><h2><Term id="data_quality">資料品質</Term>（依用途）</h2><div className="quality-line"><strong>當日行情來源</strong><QualityBadge kind="market" status={summary.market.status} /><span>{productQualityLabel(summary.market.status, 'market')} · 資料日 {formatTaiwanDateTime(summary.market.as_of, true)}</span></div><div className="quality-line"><strong>策略判斷資料</strong><QualityBadge kind="research" status={summary.research.status} /><span>{researchDescription}</span></div>{rows.length > 0 && <details className="technical-details"><summary>查看來源檢查紀錄</summary>{rows.slice(0, 5).map((row) => <div className="quality-line" key={row.entity_key + row.as_of_date}><span>{formatTaiwanDateTime(row.as_of_date, true)}</span><QualityBadge kind="generic" status={row.status} /><span>{row.missing_fields.map(fieldLabel).join('、') || '檢查完成'}</span></div>)}</details>}</div>
+  return <div className="panel"><h2><Term id="data_quality">資料品質</Term>（依用途）</h2><div className="quality-line"><strong>當日行情來源</strong><QualityBadge kind="market" status={summary.market.status} /><span>{productQualityLabel(summary.market.status, 'market')} · 資料日 {formatTaiwanDateTime(summary.market.as_of, true)}</span></div><div className="quality-line"><strong>策略判斷資料</strong><QualityBadge kind="research" status={summary.research.status} />{researchDescription && <span>{researchDescription}</span>}</div>{rows.length > 0 && <details className="technical-details"><summary>查看來源檢查紀錄</summary>{rows.slice(0, 5).map((row) => <div className="quality-line" key={row.entity_key + row.as_of_date}><span>{formatTaiwanDateTime(row.as_of_date, true)}</span><QualityBadge kind="generic" status={row.status} /><span>{row.missing_fields.map(fieldLabel).join('、') || '檢查完成'}</span></div>)}</details>}</div>
 }
 
 
@@ -924,7 +912,9 @@ export function ActionDetailPanel({ action, board, gap, children }: { action: Ac
       </div>}
       {detailReasons.length > 0 && <ul className="reason-list">{detailReasons.map((reason) => <li key={reason}>{action.display_reasons ? reason : productActionReasonLabel(reason)}</li>)}</ul>}
       {action.conflicts.length > 0 && <div className="warning-box">{action.conflicts.join('；')}</div>}
-      <div className="small-note"><UnlessPageDate date={action.data_cutoff}>資料日：{formatTaiwanDateTime(action.data_cutoff, true)} · </UnlessPageDate>價位語意：{levelSemanticsLabel(action.level_semantics)} · 規則與官方資料詳見「資料來源」分頁。</div>
+      {/* Issue 729: only another day and unverified level semantics are written; the pointer to 資料來源 left the page. */}
+      <UnlessPageDate date={action.data_cutoff}><div className="small-note">資料日：{formatTaiwanDateTime(action.data_cutoff, true)}</div></UnlessPageDate>
+      {levelSemanticsLabel(action.level_semantics) !== VERIFIED_LEVEL_SEMANTICS && <div className="small-note">價位語意：{levelSemanticsLabel(action.level_semantics)}</div>}
     </details>
     {children && <div className="action-detail-plan">{children}</div>}
   </section>

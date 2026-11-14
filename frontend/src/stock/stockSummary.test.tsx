@@ -12,7 +12,7 @@ import type { ActionSummary, CandidateItem, StrategyBoardRow, StrategyDecision }
 import { barsResponse, tradedBar } from './stockBars.fixtures'
 import { StockCutoffControl } from './StockCutoffControl'
 import { StockSummaryCard } from './StockSummaryCard'
-import { BOARD_NOTE, LEVELS_IN_BOARD_TEXT, OBSERVATION_LABEL, boardLevelsRow, candidateLevelsInBoardText } from './strategyBoard'
+import { LEVELS_IN_BOARD_TEXT, OBSERVATION_LABEL, boardLevelsRow, candidateLevelsInBoardText } from './strategyBoard'
 import {
   board,
   conditionalBreakout,
@@ -25,6 +25,7 @@ import {
 } from './strategyBoard.fixtures'
 import { StrategyBoardPanel } from './StrategyBoardPanel'
 import { closestStrategy, stockVerdict } from './stockSummary'
+import { removedCopyIn } from '../removedCopy.fixtures'
 
 // Standalone regression module for the stock page layout of Issue 519 (DESIGN_SYSTEM §4 個股頁頁首與摘要卡, §5 個股摘要卡
 // and 策略總表, UI_COPY_SPEC §8.2 摘要卡): the verdict and its reason, the strategy closest to passing with its levels,
@@ -92,7 +93,7 @@ check(text(emptyCard).includes('此股尚無策略判定資料。') && !emptyCar
 
 // ---- the research tab folds to status rows ----
 const panel = render(<StrategyBoardPanel board={board([conditionalBreakout(), observationPullback()], { ...candidateSummary, strategy: 'breakout_v1' })} candidate={null} />)
-check(/<details class="details board-help"><summary>說明<\/summary><p class="small-note">/.test(panel) && panel.includes(BOARD_NOTE), 'strategy board: the fixed note sits in a 說明 details')
+check(!panel.includes('board-help') && !panel.includes('每個研究條件各自判定'), 'strategy board: no 說明 fold (Issue 729)')
 check(!panel.includes('class="eyebrow"'), 'strategy board: no eyebrow')
 check(count(panel, `<details class="strategy-observation" data-strategy-levels="levels"><summary class="strategy-observation-label">${OBSERVATION_LABEL}</summary>`) === 2, 'strategy board: each observation block folds behind its label (table row and phone card)')
 const missingPanel = render(<StrategyBoardPanel board={board([missingLevelsRow()])} candidate={null} />)
@@ -142,6 +143,14 @@ const stockClient = () => {
   return client
 }
 const STOP = '2,364.00'
+// Issue 729: every tab of the stock page, without the copy that left the pages (research status, how-to-read, notes for
+// developers, the disclaimer and the footer's flow note). The 資料來源 tab is where sources and versions are listed, so
+// its indicator formula version stays there.
+for (const tab of ['chart', 'chips', 'financials', 'news', 'research', 'data']) {
+  const page = renderAt(`/stocks/TWSE/2884?tab=${tab}`, <App />, stockClient())
+  const back = removedCopyIn(page).filter((phrase) => !(tab === 'data' && phrase === 'indicators/v1'))
+  check(page.includes('class="stock-tab-content"') && !back.length, `${tab}: removed copy is back on the stock page: ${back.join('、')}`)
+}
 for (const [tab, location] of [['走勢', '/stocks/TWSE/2884'], ['進出場', '/stocks/TWSE/2884?tab=research']] as const) {
   const page = renderAt(location, <App />, stockClient())
   const at = (needle: string) => page.indexOf(needle)

@@ -167,8 +167,6 @@ function formatKnownInstant(value: string): string {
   return (validValue && formatTaipeiMinute(validValue)) ?? '待核實'
 }
 
-// UI_COPY_SPEC §8.2 (#465): a time the system never stored is 未記錄; a value that cannot be confirmed is 待核實.
-export const PRODUCT_TIME_NOTE = '時間以台灣時間顯示；系統沒有記錄的時間寫「未記錄」，有值但尚未確認的寫「待核實」。'
 
 // The backend sends every unknown role with value=null (product_time._unknown); only its reason says whether the time
 // was never stored (*_not_persisted) or failed a check (conflict, missing zone, invalid…).
@@ -205,8 +203,11 @@ export function levelFieldLabel(
   return label || '價位（語意未確認）'
 }
 
+// The verified label; the stock page writes 價位語意 only when the semantics are not this one (Issue 729).
+export const VERIFIED_LEVEL_SEMANTICS = '規則參考價'
+
 export function levelSemanticsLabel(semantics?: { version?: string; kind?: string } | null): string {
-  return semantics?.version === 'signal-level-semantics/v1' && semantics.kind === 'rule_reference' ? '規則參考價' : '未驗證規則參考價'
+  return semantics?.version === 'signal-level-semantics/v1' && semantics.kind === 'rule_reference' ? VERIFIED_LEVEL_SEMANTICS : '未驗證規則參考價'
 }
 
 export function levelObservationZoneLabel(semantics?: { version?: string; kind?: string } | null): string {
@@ -345,11 +346,12 @@ export function productActionReasonLabel(reason: string): string {
   return value
 }
 
-export function productResearchDescription(status?: string, missingFields: string[] = []): string {
+// Complete data needs no sentence beside its badge (Issue 729); only what is missing is written.
+export function productResearchDescription(status?: string, missingFields: string[] = []): string | null {
   const visibleMissing = missingFields.filter(Boolean).slice(0, 4)
   if (visibleMissing.length > 0) return '策略判斷缺少：' + visibleMissing.join('、')
   return status?.trim().toLowerCase() === 'complete'
-    ? '策略判斷資料已齊備；是否有條件成立仍以行動摘要為準。'
+    ? null
     : '策略判斷資料不足；目前沒有可列出的欄位。'
 }
 

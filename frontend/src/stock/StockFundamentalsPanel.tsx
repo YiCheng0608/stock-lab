@@ -6,9 +6,7 @@ import {
   CORRECTION_HEADER,
   CUMULATIVE,
   FUNDAMENTALS_EYEBROW,
-  FUNDAMENTALS_NOTE,
   FUNDAMENTALS_TITLE,
-  MONTHLY_NOTE,
   MONTHLY_TITLE,
   NOT_PROVIDED,
   correctionNote,
@@ -56,7 +54,6 @@ export function StockFundamentalsPanel({
     <Card className="stock-fundamentals" eyebrow={FUNDAMENTALS_EYEBROW} title={FUNDAMENTALS_TITLE} aside={rows.length ? <DateBadge date={date} /> : undefined}>
       {rows.length
         ? <>
-          <details className="details stock-fundamentals-note"><summary>說明</summary><p className="small-note">{FUNDAMENTALS_NOTE}</p></details>
           <DataTable wrapClassName="compact-table" columns={columns} rows={rows} rowKey={(row) => `${row.period_end}-${row.fiscal_period}`} />
           <p className="small-note stock-fundamentals-source">來源：{sources.join('、')}</p>
         </>
@@ -95,7 +92,6 @@ function MonthlyRevenueCard({
     <Card className="stock-fundamentals stock-monthly-revenue" eyebrow={FUNDAMENTALS_EYEBROW} title={MONTHLY_TITLE} aside={rows.length ? <DateBadge date={monthlyDataDate(rows)} /> : undefined}>
       {rows.length
         ? <>
-          <details className="details stock-fundamentals-note"><summary>說明</summary><p className="small-note">{MONTHLY_NOTE}</p></details>
           <DataTable wrapClassName="compact-table" columns={columns} rows={rows} rowKey={(row) => row.revenue_month} />
           <p className="small-note stock-fundamentals-source">來源：{sources.join('、')}</p>
           {notes.map(({ month, note }) => <p key={month} className="small-note stock-fundamentals-source stock-revenue-correction">{note}</p>)}

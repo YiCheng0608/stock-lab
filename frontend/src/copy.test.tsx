@@ -90,7 +90,7 @@ check(rrButton.includes('title="規則目標距離與停損距離的比例。"')
 const scoreDetails = render('ScoreDetails', () => <ScoreDetails item={completeItem()} open />)
 check(hasTerm(scoreDetails, '百分位'), `評分細節: 「百分位」 opens its glossary term (found ${termLabels(scoreDetails).join('、') || 'none'})`)
 check(!/percentile/i.test(text(candidate + scoreDetails)), '候選: 「percentile」 is not shown; the details read 「百分位」')
-check(text(scoreDetails).includes('分數與百分位為 0–100'), '評分細節: the details note reads 「分數與百分位為 0–100」')
+check(text(scoreDetails).includes('分數與百分位 0–100；「—」表示無資料。') && !text(scoreDetails).includes('越高越好'), '評分細節: the details note is the scale and the no-data mark only (Issue 729)')
 
 // ---- themes: rank, score, same-board percentile and 「事件資料待補」 explain themselves; never inside a link ----
 const boardMarkup = render('ThemeBoardPanel', () => <ThemeBoardPanel board="industry" data={industryBoard()} search="" />)

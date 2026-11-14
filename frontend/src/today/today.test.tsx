@@ -6,13 +6,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import * as AppModule from '../App'
 import * as ActionModule from '../actions/ActionViews'
 import * as CandidateModule from '../candidates/CandidateViews'
-import { CANDIDATE_DISCLAIMER, NOTE_DISCLAIMER, NOTE_MISSING_TEXT, NOTE_PENDING_TEXT, NOT_COMPUTED_TEXT, candidateChange, candidateSourceText } from '../candidates/candidates'
+import { NOTE_DISCLAIMER, NOTE_MISSING_TEXT, NOTE_PENDING_TEXT, NOT_COMPUTED_TEXT, candidateChange, candidateSourceText } from '../candidates/candidates'
 import { completeItem, listResponse, longList, notComputedResponse, partialItem, zeroResponse } from '../candidates/candidates.fixtures'
 import type { ActionSummary } from '../types'
 import * as TodayModule from './TodayViews'
 import { overviewBoth, overviewNone, overviewTwseOnly, riskActions } from './today.fixtures'
 import { StrategyBoardPanel } from '../stock/StrategyBoardPanel'
 import { board, conditionalBreakout, observationPullback } from '../stock/strategyBoard.fixtures'
+import { removedCopyIn } from '../removedCopy.fixtures'
 
 // The frontend ships no Node typings; scripts/ci-test.cjs runs this module under Node, so declare what it uses.
 declare const require: (id: string) => unknown
@@ -108,7 +109,8 @@ check(list.length > 0 && !long.includes('<table') && !long.includes('candidate-m
 check(count(list, '<li class="candidate-row') === 12, `list: one row per candidate, got ${count(list, '<li class="candidate-row')}`)
 check(count(list, 'hidden=""') === 2 && rowOf(list, 11).includes('hidden=""') && !rowOf(list, 10).includes('hidden=""'), 'list: the first 10 rows show, the last 2 are folded')
 check(text(slice(long, 'class="candidate-more"', '</details>')).includes('顯示其餘 2 檔'), 'list: 「顯示其餘 2 檔」 folds the rest')
-check(text(long).includes('2026/10/16 收盤後條件成立，最早下一個交易日（T+1）才可研究進場。') && text(long).includes(CANDIDATE_DISCLAIMER), 'list: the T+1 sentence and the disclaimer')
+check(text(long).includes('2026/10/16 收盤後條件成立') && !text(long).includes('才可研究進場') && !text(long).includes('評分只用於排序'), 'list: the day the conditions held, without the T+1 clause or the disclaimer (Issue 729)')
+check(!removedCopyIn(long).length, `list: removed copy is back: ${removedCopyIn(long).join('、')}`)
 // The head is one line (Issue 510): no eyebrow; title, date badge, count, the notes and 策略說明 in one flex row.
 const head = slice(long, 'class="candidates-head"', '<ol')
 check(!head.includes('eyebrow') && head.includes('id="candidates-title">今日名單</h2>') && head.includes('href="/strategy"'), 'Issue 510: the head has no eyebrow, the title and 策略說明 are in it')
