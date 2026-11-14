@@ -246,15 +246,9 @@ RUNTIME_PATHS: tuple[str, ...] = (
     "tools/ops/http_wake.sh",
     "tools/ops/http_orca.sh",
 )
-# Windows scripts anywhere in the repository; only the Task Scheduler registration the
-# disabled tasks still name (#342, #677). Removing them and this list waits for the user.
+# Windows scripts, anywhere in the repository: none. The last four, the Task Scheduler
+# registration, went with the removed tasks (#342, #677, #683).
 WINDOWS_SCRIPT = re.compile(r"\.(?:ps1|psm1|psd1|bat|cmd|vbs)$", re.I)
-WINDOWS_SCRIPTS_LEFT: tuple[str, ...] = (
-    "tools/Invoke-WorkerJob.ps1",
-    "tools/Register-WorkerSchedule.ps1",
-    "tools/ops/Register-Monitor.ps1",
-    "tools/ops/Register-Watchdog.ps1",
-)
 # Windows APIs, WMI, Task Scheduler, windowless or native-.exe processes, PowerShell, cmd and a
 # branch that names Windows (== / != against win32, nt or Windows; any `in` test of sys.platform,
 # os.name or platform.system()), in code (comments and docstrings are left out: they tell the
@@ -307,10 +301,9 @@ def runtime_code(name: str, text: str) -> list[str]:
 def windows_runtime_errors(
     names: list[str] | None = None, root: Path = ROOT
 ) -> list[str]:
-    """Windows scripts outside WINDOWS_SCRIPTS_LEFT and Windows logic in RUNTIME_PATHS.
+    """Windows scripts anywhere and Windows logic in RUNTIME_PATHS.
 
-    Every file of the working tree, not only changed ones, like documentation_errors. That each
-    entry of WINDOWS_SCRIPTS_LEFT still exists is a test of tools/ci/test_checks.py.
+    Every file of the working tree, not only changed ones, like documentation_errors.
     """
     if names is None:
         listed = git(
@@ -321,7 +314,7 @@ def windows_runtime_errors(
     errors = [
         f"{name}: a Windows script; the schedule runs in the Linux containers (#331, #341)"
         for name in names
-        if WINDOWS_SCRIPT.search(name) and name not in WINDOWS_SCRIPTS_LEFT
+        if WINDOWS_SCRIPT.search(name)
     ]
     for name in names:
         if not any(path_matches(name, pattern) for pattern in RUNTIME_PATHS):

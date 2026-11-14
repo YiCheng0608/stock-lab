@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Coordinator event monitor (Issue #316; docs/COORDINATOR.md 無人值守運作,
-# docs/ops/MONITOR.md): resident under Windows Task Scheduler
-# (tools/ops/Register-Monitor.ps1), or one poll a minute (--once) as a job of the
-# scheduler container's `worker.cli serve` (#338). No LLM: every --interval seconds it
+# docs/ops/MONITOR.md): one poll a minute (--once) as a job of the scheduler
+# container's `worker.cli serve` (#338); without --once it stays resident, as it did
+# under Windows Task Scheduler before the cutover (task and script removed, #683).
+# No LLM: every --interval seconds it
 # polls the open PRs (CI, mergeStateStatus), the repository's new Issue/PR comments, the
 # task worktrees and the job logs, appends the events not queued yet to
 # <queue>/events.jsonl (tools/ops/event_queue.py) and has the waker wake the coordinator
@@ -15,12 +16,10 @@
 # shared by every session on the account. A call GitHub refuses for its credentials
 # (gh_auth.sh, as the watchdog judges it, #337) is an event too, once per Taipei day:
 # the coordinator comments with its own gh. Every gh and orca call ends within
-# MONITOR_CALL_TIMEOUT seconds (120): a hung call would stop the polls, and the
-# scheduled task never starts a second run while this one runs. One monitor at a time
-# (<queue>/monitor.lock/).
+# MONITOR_CALL_TIMEOUT seconds (120): a hung call would hold the lock and stop the
+# polls. One monitor at a time (<queue>/monitor.lock/).
 # To stop it, create <queue>/monitor.stop: the monitor removes it and exits after
-# the poll it is in (Register-Monitor.ps1 -Unregister does so; stopping the scheduled
-# task may end only the PowerShell that hosts bash).
+# the poll it is in.
 # Each poll appends a line to <queue>/monitor.log and rewrites
 # <queue>/monitor-heartbeat.json, which the watchdog reads.
 #
