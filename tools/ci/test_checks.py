@@ -1103,12 +1103,15 @@ class WorkflowInlinePython(unittest.TestCase):
     fails in the repository job instead.
     """
 
+    # Interpreter flags before `-` or `-c` (python3 -B - <<'PY') are matched too.
     HEREDOC = re.compile(
-        r"\bpython3? - <<'(\w+)'\n(.*?)\n\1$", re.DOTALL | re.MULTILINE
+        r"\bpython3?(?: -[A-Za-z]+)* - <<'(?P<end>\w+)'\n(?P<source>.*?)\n(?P=end)$",
+        re.DOTALL | re.MULTILINE,
     )
-    DASH_C = re.compile(r'\bpython3? -c "([^"]*)"')
+    DASH_C = re.compile(r'\bpython3?(?: -[A-Za-z]+)* -c "(?P<source>[^"]*)"')
 
-    def scripts(self) -> list[tuple[str, str]]:
+    def scripts(self) -> list[tuple[tuple[str, str, str], str]]:
+        """((workflow file, job, step name), source) of every inline script."""
         import yaml
 
         found = []
@@ -1117,29 +1120,37 @@ class WorkflowInlinePython(unittest.TestCase):
                 path.read_text(encoding="utf-8"), Loader=yaml.BaseLoader
             )
             for job_name, job in workflow["jobs"].items():
-                for n, step in enumerate(job.get("steps", [])):
+                for step in job.get("steps", []):
                     run = step.get("run", "")
-                    where = f"{path.name} {job_name} step {n} ({step.get('name', '')})"
-                    found += [(where, m.group(2)) for m in self.HEREDOC.finditer(run)]
-                    found += [(where, m.group(1)) for m in self.DASH_C.finditer(run)]
+                    where = (path.name, job_name, step.get("name", ""))
+                    for pattern in (self.HEREDOC, self.DASH_C):
+                        found += [(where, m["source"]) for m in pattern.finditer(run)]
         return found
 
     def test_every_inline_script_compiles(self):
         scripts = self.scripts()
-        # The backend Summary, required's check and the docker job's import: not vacuous.
-        self.assertGreaterEqual(len(scripts), 3)
-        for where, source in scripts:
-            with self.subTest(where):
-                compile(source, where, "exec")
+        # Not vacuous: the two steps whose scripts are the longest are found.
+        where = {w for w, _ in scripts}
+        self.assertIn(("ci.yml", "backend", "Summary"), where)
+        self.assertIn(
+            ("ci.yml", "required", "Require every applicable check to succeed"), where
+        )
+        for place, source in scripts:
+            with self.subTest(place):
+                compile(source, " ".join(place), "exec")
 
     def test_a_mismatched_quote_is_caught(self):
         """The mutation of PR #748's run 43643799589."""
-        source = "import os\nout = f\"## backend {os.environ['SHARD']}\\n')\n"
+        source = "import os\nout = f\"## backend {os.environ['SHARD']}\n')\n"
         with self.assertRaises(SyntaxError):
             compile(source, "summary", "exec")
-        run = f"python3 - <<'PY'\n{source}PY\n"
-        (match,) = self.HEREDOC.finditer(run)
-        self.assertEqual(match.group(2) + "\n", source)
+        for command in ("python3 -", "python3 -B -", "python -I -B -"):
+            with self.subTest(command):
+                run = f"{command} <<'PY'\n{source}PY\n"
+                (match,) = self.HEREDOC.finditer(run)
+                self.assertEqual(match["source"] + "\n", source)
+        (match,) = self.DASH_C.finditer('python -B -c "import app" && echo ok')
+        self.assertEqual(match["source"], "import app")
 
 
 class BackendParallel(unittest.TestCase):
