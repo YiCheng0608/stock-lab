@@ -144,7 +144,7 @@ jobs:
           start=$(date +%s)
           trap 'echo "seconds=$(($(date +%s) - start))" >> "$GITHUB_OUTPUT"' EXIT
           python -B -m pytest -p no:cacheprovider -p suite_split --suite-report "$RUNNER_TEMP/suite/backend.json" \
-            -q -rA --durations=30 -n "$(nproc)" --dist loadgroup --junitxml "$RUNNER_TEMP/pytest.xml" tests
+            -v -rA --durations=30 -n "$(nproc)" --dist loadgroup --junitxml "$RUNNER_TEMP/pytest.xml" tests
       # The step summary and one notice annotation carry the time, the worker count and the
       # failed and error test ids, with the same keys whatever happened (#379's comparisons
       # read them). It runs after a red or hung pytest too.
@@ -225,6 +225,12 @@ jobs:
           name: suite-backend
           path: ${{ runner.temp }}/suite/backend.json
           if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: measure-746-junit
+          path: ${{ runner.temp }}/pytest.xml
           retention-days: 14
   # The backend image (backend/Dockerfile, #333): build it, then in a container the tools it
   # must hold, every app and worker module importing (a dependency missing from the image
