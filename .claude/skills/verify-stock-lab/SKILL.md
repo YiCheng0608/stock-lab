@@ -235,5 +235,5 @@ dc run --rm --no-deps -v "$(git rev-parse --git-common-dir):/repo.git:ro" -v "$V
 
 1. `kill $(cat "$V/api.pid") $(cat "$V/web.pid")`，再 `. "$V/ports"; curl -s -o /dev/null -w '%{http_code}\n' "http://127.0.0.1:$API_PORT/api/health" "http://127.0.0.1:$WEB_PORT/api/health"` 確認兩個都印 `000`（連不上；程序約 1 秒後才結束，緊接著查可能還是 200，另起一個命令再查）；背景工作因此回報 failed 屬預期。再查還有回應就是服務沒關到，用 PowerShell `Get-NetTCPConnection -State Listen -LocalPort <埠>` 找出 `OwningProcess` 再 `Stop-Process`。之後刪 `$V/api.pid`、`$V/web.pid`、`$V/ports`。
 2. 刪 `$V/dist`；CI 模式另刪 `$V/db`；真資料模式另刪 `$V/raw`（API 啟動時建的空目錄）與 `$V/stock.db`（含同名 `-wal`、`-shm`、`-journal`、`.partial`），各用一行 `rm -rf` 寫完整路徑。保留 `$V/out/`（證據）與 `$V/logs/`。
-3. `ls -a "$OUT/shots"`（私人模式看 `$OUT/.private/shots`）不應有 `.browser-*`（`screenshot.cjs` 自己會刪；殘留就刪掉並記在 summary 最後一段「清理」）。
+3. `screenshot.cjs` 的瀏覽器 profile 建在系統暫存目錄（`os.tmpdir()` 底下的 `stock-lab-browser-*`），`$OUT/shots` 不會有它；瀏覽器子程序在刪除後又寫回時，會留在暫存目錄的 `stock-lab-browser-*`，不影響證據；印了 `screenshot: warning: could not remove ...` 就照那個路徑刪掉，並記在 summary 最後一段「清理」。
 4. 不刪 `frontend/node_modules`（下次重用）；不碰 `.local/verify` 以外的路徑。
