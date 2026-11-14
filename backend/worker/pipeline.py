@@ -101,6 +101,7 @@ from app.trading_calendar import NextSession, next_session
 from worker import mops_events
 from app.indicators import is_synthetic_bar
 from app.coverage import SESSION_BASIS_START, verified_taiex_sessions
+from app.history_settings import create_unmatched_instruments
 from worker.emerging_issuers import store_emerging_issuers
 from worker.futures_bars import store_futures_bars
 from worker.index_bars import INDEX_BAR_SOURCES, store_index_bars, warnings_for
@@ -3978,6 +3979,98 @@ def record_unmatched_bars(
     return summary
 
 
+def _quote_names(payload: Any) -> dict[str, str]:
+    """Code -> name of an official quote table (instrument_repair._names' rule)."""
+
+    from .sources import _rows, _text
+
+    tables = payload.get("tables") if isinstance(payload, dict) else None
+    rows = (
+        [row for table in tables if isinstance(table, dict) for row in _rows(table)]
+        if isinstance(tables, list)
+        else _rows(payload)
+    )
+    names = {}
+    for row in rows:
+        code = _text(row, "證券代號", "代號", "SecuritiesCompanyCode", "Code")
+        name = _text(row, "證券名稱", "名稱", "CompanyName", "Name")
+        if code and name:
+            names[code] = name
+    return names
+
+
+def create_history_instrument(
+    db: Session,
+    record: BarRecord,
+    payload: Any,
+    raw_payload_id: int | None,
+    created: list[dict[str, Any]],
+) -> Instrument:
+    """The instrument of a quote code a research history has none for (Issue #692).
+
+    Only with ``STOCK_HISTORY_CREATE_UNMATCHED=1`` (app.history_settings): a
+    research database backfilled to 2004 meets the companies that left the
+    lists long before it was built, and recording an ``unmatched_bar`` row per
+    code per batch would add millions of rows while dropping their bars.  The
+    rules are ``instruments repair --include-delisted``'s: the name is the
+    quote table's, the type ``etf`` for an ETF code, else ``stock``; the status
+    ``transferred`` when the other exchange has an instrument of the code
+    (it moved), else ``delisted`` (every currently listed code is already an
+    instrument).  One ``instrument_status`` data_quality row per instrument
+    keeps the evidence.  A recycled code (a later company given the same
+    code) cannot be told apart here; docs/ops/RESEARCH_DB.md says so.
+    """
+
+    from .sources import is_etf_code, normalize_etf_category
+
+    name = _quote_names(payload).get(record.symbol) if payload is not None else None
+    moved = stored_instrument(db, OTHER_EXCHANGE[record.exchange], record.symbol)
+    instrument_type = "etf" if is_etf_code(record.symbol) else "stock"
+    status = "transferred" if moved is not None else "delisted"
+    instrument = Instrument(
+        market="TW",
+        exchange=record.exchange,
+        symbol=record.symbol,
+        name=name or record.symbol,
+        instrument_type=instrument_type,
+        etf_category=normalize_etf_category(None, symbol=record.symbol, name=name or "")
+        if instrument_type == "etf"
+        else None,
+        status=status,
+        is_watchlisted=False,
+    )
+    db.add(instrument)
+    db.flush()
+    item = {
+        "exchange": record.exchange,
+        "symbol": record.symbol,
+        "name": name,
+        "instrument_type": instrument_type,
+        "status": status,
+        "first_quote_date": record.trading_date.isoformat(),
+        "raw_payload_id": raw_payload_id,
+    }
+    _upsert_quality(
+        db,
+        "instrument_status",
+        f"{record.exchange}:{record.symbol}",
+        record.trading_date,
+        status,
+        [],
+        {
+            **item,
+            "previous_status": None,
+            "created_from": "research history quote row (STOCK_HISTORY_CREATE_UNMATCHED)",
+            "reason": "listed_on_other_exchange"
+            if moved is not None
+            else "absent_from_stored_instruments",
+        },
+        source=record.exchange.lower(),
+    )
+    created.append(item)
+    return instrument
+
+
 def universe_evidence(
     captures: Iterable[FetchedPayload],
     raw_payload_id: Callable[[FetchedPayload], int | None],
@@ -4878,6 +4971,15 @@ def collect(
             # one with no instrument at all is recorded, not dropped.
             known: dict[tuple[str, str], Instrument | None] = dict(instruments)
             unmatched: dict[tuple[str, str], dict[str, Any]] = {}
+            # A research history creates the instruments of codes that left
+            # the lists before it was built (Issue #692); unset, never.
+            create_unmatched = create_unmatched_instruments()
+            history_instruments: list[dict[str, Any]] = []
+            payload_by_digest = (
+                {item.sha256: item.payload for item in batch.payloads}
+                if create_unmatched
+                else {}
+            )
             for record in batch.bars:
                 if not start_date <= record.trading_date <= score_date:
                     continue
@@ -4887,6 +4989,14 @@ def collect(
                 instrument = known[key]
                 if instrument is not None and instrument.status == "dormant":
                     reactivate_dormant(db, instrument, record)
+                if not instrument and create_unmatched and record.symbol != "TAIEX":
+                    instrument = known[key] = create_history_instrument(
+                        db,
+                        record,
+                        payload_by_digest.get(record.payload_sha256),
+                        _raw_id_for_digest(raw_ids, record.payload_sha256),
+                        history_instruments,
+                    )
                 if not instrument:
                     note_unmatched_bar(
                         unmatched,
@@ -5347,6 +5457,12 @@ def collect(
                 "notices": notices,
                 "unmatched_bars": unmatched_bars,
                 "unmatched_backfill": unmatched_backfill,
+                # Issue #692: only a research history creates them.
+                **(
+                    {"history_instruments_created": history_instruments}
+                    if history_instruments
+                    else {}
+                ),
                 "margin_lists": margin_list_result,
                 "no_trade_days": no_trade_result,
                 "instrument_status_sync": status_result,
@@ -5473,6 +5589,11 @@ def collect(
                 "notices": notices,
                 "unmatched_bars": unmatched_bars,
                 "unmatched_backfill": unmatched_backfill,
+                **(
+                    {"history_instruments_created": history_instruments}
+                    if history_instruments
+                    else {}
+                ),
                 "margin_lists": margin_list_result,
                 "no_trade_days": no_trade_result,
                 "instrument_status_sync": status_result,

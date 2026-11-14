@@ -57,7 +57,13 @@ from .themes import sync_themes
 from .margin_lists import run_margin_lists
 from .no_trade_days import run_no_trade_days
 from .trading_halts import run_trading_halts
+from .sources import TWSE_QUOTES_FIRST_DATE, set_minimum_host_interval
 from .trading_calendar import run_trading_calendar
+
+# Every backfill command keeps at least this between two requests to one
+# official host (#692 decision D3: a bulk history backfill must not get the
+# sources to block the daily).  The daily's intervals are unchanged.
+BACKFILL_HOST_INTERVAL_SECONDS = 3.0
 
 
 # daily exit codes, so Task Scheduler's "Last Run Result" shows an incomplete day.
@@ -587,6 +593,17 @@ def main() -> None:
         "--dry-run", action="store_true", help="只列出會送出的批次，不呼叫、不寫 DB"
     )
     args = parser.parse_args()
+    if args.command == "backfill":
+        try:
+            backfill_start = date.fromisoformat(args.start_date)
+        except ValueError:
+            parser.error(f"--start-date must be YYYY-MM-DD, got {args.start_date!r}")
+    if args.command == "backfill" and backfill_start < TWSE_QUOTES_FIRST_DATE:
+        # MI_INDEX answers nothing before 2004-02-11 (Issue #692).
+        parser.error(
+            f"--start-date must not be before {TWSE_QUOTES_FIRST_DATE.isoformat()}"
+            "（TWSE MI_INDEX 最早的交易日）"
+        )
     if (
         args.command == "daily"
         and args.catchup_sessions is not None
@@ -649,7 +666,51 @@ def main() -> None:
         sys.exit(scheduled_job.MAINTENANCE_LOST_EXIT)
 
 
+def backfill_command(args: argparse.Namespace) -> str | None:
+    """The name of a command that asks the official hosts for history (Issue #692).
+
+    These keep at least ``BACKFILL_HOST_INTERVAL_SECONDS`` between two requests
+    to any one host; the daily (and its catch-up) keeps the per-host intervals.
+    """
+
+    if args.command in {"backfill", "trading-halts"}:
+        return args.command
+    if args.command == "corporate-actions" and args.actions_command == "sync":
+        return "corporate-actions sync"
+    for command, sub in (
+        ("events", "events_command"),
+        ("fundamentals", "fundamentals_command"),
+        ("revenue", "revenue_command"),
+    ):
+        if args.command == command and getattr(args, sub, None) == "backfill":
+            return f"{command} backfill"
+    if args.command == "index-bars" and args.index_bars_command in {
+        "backfill",
+        "futures-history",
+    }:
+        return f"index-bars {args.index_bars_command}"
+    return None
+
+
 def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    """Run one command; a backfill holds the 3-second floor only while it runs.
+
+    The floor is a process-wide value (sources.set_minimum_host_interval), so
+    it is restored when the command returns or raises (#701 review): nothing
+    after it in the same process (another command, the next test) keeps it.
+    """
+
+    if not backfill_command(args):
+        _run_command(args, parser)
+        return
+    previous = set_minimum_host_interval(BACKFILL_HOST_INTERVAL_SECONDS)
+    try:
+        _run_command(args, parser)
+    finally:
+        set_minimum_host_interval(previous)
+
+
+def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     if args.command == "init-db":
         init_db()
         result = {"status": "success"}

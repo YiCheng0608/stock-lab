@@ -1403,6 +1403,7 @@ def _parser() -> argparse.ArgumentParser:
         "hypothesis's since) or historical (the backfilled history before it was "
         "chosen, to its historical_until)",
     )
+    lib.add_segment_argument(parser)
     return parser
 
 
@@ -1419,6 +1420,13 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--window needs --hypothesis")
     elif args.signals is None:
         parser.error("the following arguments are required: --signals")
+    if args.hypothesis is not None and args.segment:
+        # A frozen hypothesis keeps its own segments (#691).
+        parser.error("--hypothesis takes no --segment")
+    try:
+        lib.use_segments(args.segment)
+    except ValueError as exc:
+        parser.error(str(exc))
     db = Path(args.db)
     problems = lib._load("exit_research").refusals(db, args.min_free_gb)
     if problems:

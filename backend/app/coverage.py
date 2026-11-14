@@ -25,6 +25,7 @@ from typing import Iterable
 from sqlalchemy import literal_column, select
 from sqlalchemy.orm import Session
 
+from .history_settings import session_basis_start
 from .models import IngestionRun, Instrument, MarketBar, RawPayload, ScheduleRun
 from .raw_paths import payload_file
 from .decision_market_reads import read_market_date, read_market_source
@@ -36,8 +37,10 @@ TAIPEI_UTC_OFFSET = timedelta(hours=8)
 # The first session of the stock history (#1 6714433517).  The index history
 # reaches back further (2023-09-01, Issue #563) so its long moving averages
 # exist on this day; a TAIEX row before it only carries index data and is
-# never a session denominator for the stocks (_raw_is_date_verified).
-SESSION_BASIS_START = date(2024, 9, 30)
+# never a session denominator for the stocks (_raw_is_date_verified).  A
+# research database starts earlier (STOCK_SESSION_BASIS_START, Issue #692);
+# unset, this is 2024-09-30.
+SESSION_BASIS_START = session_basis_start()
 # worker.index_bars.TWSE_SOURCE: the TAIEX rows the monthly report backfill
 # writes.  Before SESSION_BASIS_START only that backfill writes TAIEX rows.
 INDEX_HISTORY_SOURCE = "twse_index_ohlcv"

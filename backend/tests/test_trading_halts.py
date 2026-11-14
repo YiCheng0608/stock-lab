@@ -968,3 +968,26 @@ def test_the_upgrade_adds_the_trading_halt_table(tmp_path, monkeypatch, entry):
             else "0030_trading_halts",
         )
     ]
+
+
+def test_the_cli_cuts_a_long_range_to_each_reports_first_day(env):
+    """TWTAUU refuses a start before 2011, revivt is empty before 2013 (#692)."""
+
+    start, end = date(2004, 1, 1), date(2012, 12, 31)
+    calls = []
+
+    def fetcher(url, **_kwargs):
+        calls.append(url)
+        if url.startswith(sources.TWSE_REDUCTION_ENDPOINT):
+            return twse_payload(date(2011, 1, 1), end)
+        raise AssertionError(url)
+
+    result = trading_halts.run_trading_halts(start, end, fetcher=fetcher)
+
+    assert calls == [sources.reduction_query("TWSE", date(2011, 1, 1), end)]
+    assert result["status"] == "success", result
+    assert result["not_published_before"] == {
+        "TWSE": "2011-01-01",
+        "TPEx": "2013-01-01",
+    }
+    assert result["warnings"] == []
