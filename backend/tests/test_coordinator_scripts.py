@@ -63,6 +63,15 @@ SCRIPTS = (
     "take_over.sh",
     # #710: the context of the coordinator's last call, and the cost report
     "session_cost.py",
+    # #705: the Claude Code memory directory, checked by take_over.sh and close_task.sh
+    "memory_check.py",
+)
+# The sandbox memory directory every run gets (STOCK_MEMORY_DIR, #705): one memory, indexed,
+# no backticked path, so memory_check.py passes without asking git.
+MEMORY_INDEX = "- [Sandbox](sandbox-memory.md) — the one memory of the sandbox\n"
+MEMORY_FILE = (
+    "---\nname: sandbox-memory\ndescription: x\nmetadata:\n  type: project\n---\n\n"
+    "The sandbox memory. Related: [[sandbox-memory]].\n"
 )
 REPO_ID = "repo-1"
 
@@ -431,6 +440,8 @@ class Harness:
         # TEMP and TMP of every script run (#472): close_task.sh deletes Claude Code
         # scratchpads under $TEMP/claude, so no run may see the real Temp.
         self.temp = root / "temp"
+        # The Claude Code memory directory the runs check (#705), never the real one.
+        self.memory = root / "memory"
         # The scripts run from a copy, so repo_root is this sandbox, not the checkout.
         self.repo = root / "repo"
         self.ops = self.repo / "tools" / "ops"
@@ -440,10 +451,13 @@ class Harness:
             self.data / "logs" / "compactions",
             self.home,
             self.temp,
+            self.memory,
             self.ops,
             self.repo / ".git",
         ):
             directory.mkdir(parents=True, exist_ok=True)
+        (self.memory / "MEMORY.md").write_text(MEMORY_INDEX, encoding="utf-8")
+        (self.memory / "sandbox-memory.md").write_text(MEMORY_FILE, encoding="utf-8")
         for name in SCRIPTS:
             shutil.copyfile(OPS / name, self.ops / name)
         for name, body in (
@@ -531,6 +545,7 @@ class Harness:
             TEMP=self.temp.as_posix(),
             TMP=self.temp.as_posix(),
             STOCK_DATA_DIR=self.data.as_posix(),
+            STOCK_MEMORY_DIR=self.memory.as_posix(),
             STOCK_PYTHON=Path(sys.executable).as_posix(),
             PATROL_NOW=str(NOW),
             # A port nothing listens on: patrol.sh reports no wake listener, whatever

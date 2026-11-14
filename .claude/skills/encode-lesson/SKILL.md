@@ -5,9 +5,9 @@ description: 同類錯誤第二次發生時，把它編成會失敗的檢查（�
 
 # encode-lesson
 
-用在[工作手冊](../../../docs/WORKFLOW.md#任務流程)第 6 步：同類錯誤第二次發生時另建一張 `[任務]`，照下列五步處理。輸入是一個 Issue／PR 連結與一句錯誤描述，例如「#37：`checks.py repository` 在 `--no-commit` 合併時檢查合併前的 HEAD」。
+用在[工作手冊](../../../docs/WORKFLOW.md#任務流程)第 6 步：同類錯誤第二次發生時另建一張 `[任務]`，照下列六步處理。輸入是一個 Issue／PR 連結與一句錯誤描述，例如「#37：`checks.py repository` 在 `--no-commit` 合併時檢查合併前的 HEAD」。
 
-五步的產出都寫進 PR 本文的「先例」「選層」「紅／綠」三節與 GUARDRAILS 對照表；Issue 只留連結。
+六步的產出都寫進 PR 本文的「先例」「選層」「紅／綠」三節、「欄位」區的「會過期的記憶」與 GUARDRAILS 對照表；Issue 只留連結。
 
 ## 1. 找同類先例
 
@@ -109,6 +109,18 @@ Ran 3 tests ... OK   exit 0
 
 ```markdown
 | `checks.py repository` 檢查工作樹（含未 commit 的合併結果）（#228） | CI `repository` job 的 unittest `RepositoryWorkingTree` | `tools/ci/checks.py`（`repository_checks`、`changed_paths`）、`tools/ci/test_checks.py` |
+```
+
+## 6. 寫出要改的記憶
+
+檢查落地後，第 1 步查到的記憶就過期了：它教人手動避開的坑，現在由檢查擋。在 PR 本文「欄位」區的「會過期的記憶」寫出每一則的檔名與改法：改成一句「已由 <檢查> 擋」併入哪一則相關主題，或直接刪掉。改名或刪除時，也列出要跟著改 `[[連結]]` 的記憶。沒有對應記憶就寫「無」。
+
+工程師 session 不改記憶目錄：多個 session 同時寫同一份 `MEMORY.md` 會互相覆蓋；`task/*` branch 的 Edit／Write 會被 `agent_guard.cjs` 擋下。統籌結案時照這一欄改記憶，寫實際位置 `C:/Users/YiCheng/.claude/projects/<slug>/memory/`，不用 `$CLAUDE_CONFIG_DIR` 底下的 symlink 路徑（經 symlink 會跳確認框）。改完同步 `MEMORY.md`，再跑 `memory_check.py` 確認（[COORDINATOR「記憶」](../../../docs/COORDINATOR.md#記憶)）。
+
+產出：PR 本文的一列。
+
+```markdown
+- 會過期的記憶：`ci-repository-check-uses-head-not-index.md` 第一段改成「已由 `RepositoryWorkingTree` 擋（#228）」，併入 `run-ci-lint-before-pr.md`；`MEMORY.md` 刪掉它那一列
 ```
 
 最後在來源 Issue 留言：PR 連結、選了哪一層，以及沒處理的同類案例（留作下一次的輸入）。
