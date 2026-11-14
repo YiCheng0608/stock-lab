@@ -6,7 +6,8 @@
 # words the line itself, so nothing the container holds reaches the terminal as text.
 #
 # Usage: http_wake.sh TERMINAL TEXT
-# Exit: 0 sent; 3 not idle; 1 anything else (no listener, token refused, no heartbeat on
+# Exit: 0 sent; 3 not idle; 4 the coordinator is at a permission or trust menu
+#   (prompt_blocked, #720); 1 anything else (no listener, token refused, no heartbeat on
 #   the host, throttled...), which monitor.sh records as a failed wake, tried again
 #   after 10 minutes.
 # Environment: STOCK_WAKE_TOKEN (the env file, docs/ops/MONITOR.md), STOCK_WAKE_URL
@@ -20,6 +21,7 @@ status=$?
 case "$status $answer" in
   '0 {"result": "sent"}') exit 0 ;;
   '0 {"result": "not_idle"}') exit 3 ;;
+  '0 {"result": "prompt_blocked"}') exit 4 ;;
 esac
 echo "http_wake.sh: ${answer:-no answer}" >&2
 exit 1

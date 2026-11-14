@@ -365,6 +365,157 @@ def test_a_busy_coordinator_terminal_is_not_woken(mon: Harness) -> None:
     assert [(w["ok"], w["upto"]) for w in _records(mon, "wake")][-1] == (True, 3)
 
 
+# `orca terminal show` of an agent at a permission or trust menu (#720): agentWait, read
+# from Orca's getTerminalInteractiveWait, is an object then.
+AT_MENU = _ok({"terminal": {"handle": "term_coord", "agentWait": {"source": "hook"}}})
+WAIT_TIMEOUT = {"ok": False, "error": {"code": "timeout", "message": "timeout"}}
+REFUSED = {"ok": False, "error": {"code": "agent_prompt_blocked", "message": "x"}}
+
+
+def _at_menu(h: Harness) -> None:
+    h.answer("orca_terminal_wait", WAIT_TIMEOUT)
+    h.answer("orca_terminal_show", AT_MENU)
+
+
+@pytest.mark.parametrize("path", ["wait_timed_out", "send_refused"])
+def test_a_coordinator_at_a_menu_is_prompt_blocked(mon: Harness, path: str) -> None:
+    """#720 AC-2: the wait timed out with agentWait set (seen 2026-11-14 as not_idle),
+    or the send refused with agent_prompt_blocked (was send_failed): prompt_blocked."""
+    if path == "wait_timed_out":
+        _at_menu(mon)
+    else:
+        mon.answer("orca_terminal_send", REFUSED)
+    result = _monitor(mon)
+    assert "wake=failed(prompt_blocked) terminal=term_coord" in result.stdout
+    assert [(w["ok"], w["detail"]) for w in _records(mon, "wake")] == [
+        (False, "prompt_blocked")
+    ]
+    shows = [c for c in mon.calls("orca") if c.startswith("terminal show")]
+    if path == "wait_timed_out":
+        assert _sends(mon) == []  # nothing typed into the menu
+        assert shows == ["terminal show --terminal=term_coord --json"]
+    else:
+        assert shows == []
+
+
+@pytest.mark.parametrize(
+    "show",
+    [
+        _ok({"terminal": {"handle": "term_coord"}}),  # no agentWait (an Orca release)
+        _ok({"terminal": {"handle": "term_coord", "agentWait": None}}),
+        _ok({"terminal": {"handle": "term_coord", "agentWait": "permission"}}),
+        {"ok": False, "error": {"code": "terminal_not_found"}},
+        "not json",
+    ],
+)
+def test_no_readable_agent_wait_is_not_idle_as_before(mon: Harness, show) -> None:
+    """agentWait is not in Orca's docs (#720 決定): without an object there, a wait
+    that timed out is not_idle, never a failed send."""
+    mon.answer("orca_terminal_wait", WAIT_TIMEOUT)
+    if show == "not json":
+        mon.write("orca_terminal_show.json", "not json")
+    else:
+        mon.answer("orca_terminal_show", show)
+    _monitor(mon)
+    assert [w["detail"] for w in _records(mon, "wake")] == ["not_idle"]
+    assert _sends(mon) == []
+
+
+def _issue_comments(h: Harness) -> list[str]:
+    return [c for c in h.calls("gh") if c.startswith("issue comment 1 ")]
+
+
+def test_a_coordinator_at_a_menu_for_ten_minutes_is_reported_once_on_1(
+    mon: Harness,
+) -> None:
+    """#720 AC-3: prompt_blocked wakes spanning 10 minutes, at least two: one #1 comment
+    for that stop, none again while it lasts, and no 請開統籌 meanwhile."""
+    mon.write(
+        "gh_issue_comment.json", "https://github.com/x/issues/1#issuecomment-88\n"
+    )
+    # The body monitor.sh hands gh (--body-file in its work directory).
+    work = (mon.data / "logs" / "monitor.lock").as_posix()
+    body_copy = (mon.fake / "gh_issue_comment_body.txt").as_posix()
+    mon.write(
+        "gh_issue_comment.hook", f"cat '{work}'/work.*/comment.md >'{body_copy}'\n"
+    )
+    _at_menu(mon)
+    for minute in range(10):  # an urgent event: a wake each poll, 9 minutes of them
+        _monitor(mon, at=NOW + 60 * minute)
+    assert _issue_comments(mon) == []
+    _monitor(mon, at=NOW + 600)  # the wake that spans 10 minutes
+    assert _issue_comments(mon) == []
+    out = _monitor(mon, at=NOW + 660).stdout  # the next poll comments
+    assert "stale=commented" in out and len(_issue_comments(mon)) == 1
+    stale = _records(mon, "stale")
+    assert [s["key"] for s in stale] == [
+        "prompt_blocked:term_coord:2026-10-25T12:00:00Z"
+    ]
+    body = (mon.fake / "gh_issue_comment_body.txt").read_text(encoding="utf-8")
+    assert body.startswith("待使用者：統籌停在確認框。統籌 terminal `term_coord`")
+    assert "2026-10-25T12:00:00Z（台北 2026-10-25 20:00）" in body
+    assert "事件 monitor `tools/ops/monitor.sh` 自動留言" in body
+    # Still at the menu past the hour 請開統籌 waits for: nothing more on #1.
+    for at in (NOW + 720, NOW + 3600, NOW + 3720):
+        _monitor(mon, at=at)
+    assert len(_issue_comments(mon)) == 1
+    assert {w["detail"] for w in _records(mon, "wake")} == {"prompt_blocked"}
+
+
+def test_a_stop_after_the_terminal_came_back_is_reported_again(mon: Harness) -> None:
+    """#720 AC-3: back (a sent wake), then at a menu again: one more comment, its own."""
+    mon.write(
+        "gh_issue_comment.json", "https://github.com/x/issues/1#issuecomment-88\n"
+    )
+    _at_menu(mon)
+    for at in (NOW, NOW + 600, NOW + 660):
+        _monitor(mon, at=at)
+    assert len(_issue_comments(mon)) == 1
+    mon.answer("orca_terminal_wait", _ok({"wait": {"satisfied": True}}))
+    assert "wake=sent" in _monitor(mon, at=NOW + 720).stdout
+    _done(mon, "3")
+    # A new urgent event, the terminal at a menu again.
+    _at_menu(mon)
+    mon.answer("gh_comments", [_comment(31, "2026-10-25T12:12:30Z")])
+    for minute in range(13, 25):
+        _monitor(mon, at=NOW + 60 * minute)
+    assert [s["key"] for s in _records(mon, "stale")] == [
+        "prompt_blocked:term_coord:2026-10-25T12:00:00Z",
+        "prompt_blocked:term_coord:2026-10-25T12:13:00Z",
+    ]
+    assert len(_issue_comments(mon)) == 2
+
+
+@pytest.mark.parametrize("stop", ["short", "one_wake", "heartbeat"])
+def test_a_stop_under_the_threshold_is_not_reported(mon: Harness, stop: str) -> None:
+    """#720 AC-3: under 10 minutes; one prompt_blocked wake however long ago (a now
+    event, tried again only 10 minutes later, then sent); a coordinator heartbeat in
+    or after the second of the last prompt_blocked wake (it is back): no comment."""
+    _at_menu(mon)
+    if stop == "short":
+        for minute in range(10):
+            _monitor(mon, at=NOW + 60 * minute)
+        mon.answer("orca_terminal_wait", _ok({"wait": {"satisfied": True}}))
+        _monitor(mon, at=NOW + 600)
+        _monitor(mon, at=NOW + 660)
+    elif stop == "one_wake":
+        mon.answer(
+            "gh_comments", [_comment(9, "2026-10-25T11:50:00Z", body="review：可")]
+        )
+        _monitor(mon)
+        for minute in range(1, 10):
+            _monitor(mon, at=NOW + 60 * minute)
+        assert [w["detail"] for w in _records(mon, "wake")] == ["prompt_blocked"]
+    else:
+        for minute in range(11):
+            _monitor(mon, at=NOW + 60 * minute)
+        # In the second of the last prompt_blocked wake (times are whole seconds).
+        _coordinator(mon, "2026-10-25T12:10:00Z")
+        _monitor(mon, at=NOW + 660)
+    assert _issue_comments(mon) == []
+    assert _records(mon, "stale") == []
+
+
 def test_a_record_after_a_partial_line_is_read_back(mon: Harness) -> None:
     """Review B2: a write cut off in the middle leaves a partial line; the next
     event, wake, stale and done records start on a new line and are read back."""
@@ -1840,10 +1991,12 @@ def test_patrol_labels_the_tiers_and_names_the_latest_wake(mon: Harness) -> None
     assert "  急件 [5] comment #316 " in out
 
 
-def test_the_replay_counts_wakes_and_urgent_delays(tmp_path) -> None:
+@pytest.mark.parametrize("failed", ["not_idle", "prompt_blocked"])
+def test_the_replay_counts_wakes_and_urgent_delays(tmp_path, failed: str) -> None:
     """#711 AC-3: wake_replay.py gives each stored event its tier now, replays a poll a
-    minute with wake_due (busy where the real monitor saw not_idle), and lists each
-    urgent event's real and replayed wake."""
+    minute with wake_due (busy where the real monitor saw not_idle, or since #720
+    prompt_blocked: a terminal at a menu is not idle either), and lists each urgent
+    event's real and replayed wake."""
     eq = _eq()
 
     def at(s: int) -> str:
@@ -1869,7 +2022,7 @@ def test_the_replay_counts_wakes_and_urgent_delays(tmp_path) -> None:
             "ok": ok,
             "terminal": "t",
             "upto": upto,
-            "detail": "sent" if ok else "not_idle",
+            "detail": "sent" if ok else failed,
         }
 
     rows = [

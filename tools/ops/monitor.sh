@@ -10,6 +10,8 @@
 # terminal of the heartbeat with one line "有 N 個事件…" for them. When the queue has
 # waited an hour with no coordinator heartbeat since, it comments on #1 asking the user
 # to open a coordinator; it never opens a session itself (#1 6245309556, 6320448594).
+# When the coordinator terminal has been at a permission or trust menu for 10 minutes
+# (prompt_blocked wakes, #720), that #1 comment says so instead; it never answers the menu.
 #
 # gh: at most 2 calls per poll (open PRs, then comments; the #1 comment takes the
 # comments' turn) and polls at least 60 seconds apart: the 5000/hour API limit is
@@ -40,7 +42,7 @@
 #                     "none" skips the worktrees. Default orca on PATH, then
 #                     $LOCALAPPDATA/Programs/orca/resources/bin/orca.exe
 #   --waker CMD       run as `CMD TERMINAL TEXT` for a due wake; exit 0 sent, 3 not
-#                     idle, else failed. Default tools/ops/orca_wake.sh (http_wake.sh in
+#                     idle, 4 at a permission or trust menu (#720), else failed. Default tools/ops/orca_wake.sh (http_wake.sh in
 #                     the container); "none" leaves the wake out and records nothing
 # Test hooks: MONITOR_NOW (epoch seconds, with --once), MONITOR_CALL_TIMEOUT.
 set -u
@@ -183,7 +185,8 @@ run_waker() { # run_waker TERMINAL TEXT: the waker's exit code (124 when it hung
   local runner=()
   case "$waker" in *.sh) runner=(bash) ;; esac
   [ "$orca_exe" = none ] || export ORCA_EXE="$orca_exe"
-  # Its orca calls end within the call timeout each: a wait, then a send.
+  # Its orca calls end within the call timeout each, two at most: a wait, then a send
+  # (idle) or a show (not idle, to tell a permission or trust menu, #720).
   WAKE_WAIT_MS="$wake_wait_ms" MONITOR_CALL_TIMEOUT="$call_timeout" STOCK_PYTHON="$python" \
     timeout -k 10 $((2 * call_timeout + 30)) "${runner[@]}" "$waker" "$@" >/dev/null 2>&1
 }
@@ -283,6 +286,12 @@ poll() {
       3)
         eq note-wake "$logs" "$now" 0 "$terminal" not_idle
         notes="$notes wake=failed(not_idle) terminal=$terminal"
+        ;;
+      4)
+        # At a permission or trust menu (#720): tried again like not_idle; past
+        # event_queue's PROMPT_BLOCKED_AFTER, stale asks the user on #1.
+        eq note-wake "$logs" "$now" 0 "$terminal" prompt_blocked
+        notes="$notes wake=failed(prompt_blocked) terminal=$terminal"
         ;;
       *)
         eq note-wake "$logs" "$now" 0 "$terminal" send_failed
