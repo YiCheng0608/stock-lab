@@ -25,6 +25,13 @@ value is missing or the condition is false, so a script can test the exit code.
                       not read (more than a page of threads or comments); exit 1 when
                       the answer has no data.repository (a GraphQL error)
   questions-query     the GraphQL query whose answer questions reads (no stdin)
+  closed-query        the GraphQL query whose answer closed-check reads (no stdin)
+  closed-check SINCE WORKTREES BRANCHES
+                      the take_over.sh report on the Issues and PRs closed since SINCE
+                      (closed_check, #713); WORKTREES is a file with `git worktree list
+                      --porcelain`, BRANCHES one with the local branch names, "" for
+                      either when git could not list it; exit 1 when the answer has no
+                      data.search (a GraphQL error)
   utf8 FILE           exit 0 when FILE is non-empty valid UTF-8 (no stdin)
   comment-body FILE   {"body": FILE's text with COORDINATOR_MARK as its last line}, the
                       request comment.sh posts (#440; no stdin); exit 1 when the text is
@@ -424,6 +431,168 @@ def unanswered_questions(doc, now: int) -> list[str]:
     return lines + notes
 
 
+# --- closed Issues and merged PRs of the last 48 hours (take_over.sh closed, #713) -----
+# One search reads both (a merged PR is closed too); an Issue's PRs come with it, so a PR
+# merged before the window is checked as well. Nested lists are read one page deep: a
+# longer one is reported as not read, never taken as complete.
+CLOSED_PAGE = 100
+_CLOSED_LINKS = 10
+_PR_FIELDS = (
+    "number state merged headRefName baseRefName mergeCommit{oid "
+    "checkSuites(first:20){totalCount nodes{status conclusion "
+    "workflowRun{databaseId event workflow{name}}}}}"
+)
+CLOSED_QUERY = (
+    "query ClosedRecently($q:String!){"
+    f"search(query:$q,type:ISSUE,first:{CLOSED_PAGE}){{issueCount nodes{{__typename "
+    "... on Issue{number stateReason "
+    f"closedByPullRequestsReferences(first:{_CLOSED_LINKS},includeClosedPrs:true)"
+    f"{{totalCount nodes{{{_PR_FIELDS}}}}}}}"
+    f"... on PullRequest{{{_PR_FIELDS}}}"
+    "}}}"
+)
+# The CI close_task.sh waits for: the CI workflow's push run on the merge commit.
+CI_WORKFLOW = "CI"
+
+
+def merge_ci(pr: dict) -> str:
+    """success, failure (or another conclusion), pending or missing: the merge commit's
+    newest push run of the CI workflow (highest databaseId, as commit-ci)."""
+    suites = get(pr, "mergeCommit.checkSuites.nodes") or []
+    runs = [
+        s
+        for s in suites
+        if isinstance(s, dict)
+        and get(s, "workflowRun.event") == "push"
+        and get(s, "workflowRun.workflow.name") == CI_WORKFLOW
+    ]
+    if not runs:
+        return "missing"
+    run = max(runs, key=lambda s: get(s, "workflowRun.databaseId") or 0)
+    if run.get("status") != "COMPLETED":
+        return "pending"
+    return (run.get("conclusion") or "unknown").lower()
+
+
+_CI_TEXT = {"missing": "沒有 CI 結果", "pending": "CI 還沒跑完"}
+
+
+def _worktree_branches(text: str) -> dict[str, str]:
+    """branch -> worktree path of `git worktree list --porcelain`."""
+    out, path = {}, ""
+    for line in text.splitlines():
+        if line.startswith("worktree "):
+            path = line[len("worktree ") :]
+        elif line.startswith("branch refs/heads/"):
+            out[line[len("branch refs/heads/") :]] = path
+    return out
+
+
+def closed_check(
+    doc, worktrees: str | None, branches: str | None, since: str
+) -> list[str]:
+    """The take_over.sh report: one line per Issue or PR closed since SINCE with something
+    left (an Issue's PR not merged or still open, red or missing CI on the merge commit, the
+    worktree or local branch still there), one line for the rest, then what was not read.
+
+    An Issue is checked through the PRs linked to it: a merged one must have green CI and
+    no branch or worktree left; when none merged and one is closed, that is reported; one
+    still open too. An Issue with no PR (a research task, one closed by hand, not planned)
+    is fine once no task/<n>-* branch or worktree is left; the summary names them. A PR
+    no closed Issue links is checked on its own; closed without merging is reported.
+    worktrees and branches are None when git could not list them: nothing is said about
+    them then but that they were not read.
+    """
+    search = get(doc, "data.search") or {}
+    nodes = [n for n in search.get("nodes") or [] if isinstance(n, dict)]
+    notes = []
+    total = search.get("issueCount") or 0
+    if total > len(nodes):
+        notes.append(f"未查完：關閉的 Issue／PR 共 {total} 張，只讀了 {len(nodes)} 張")
+    trees = _worktree_branches(worktrees) if worktrees is not None else None
+    local = set(branches.split()) if branches is not None else None
+    if trees is None:
+        notes.append("未查完：讀不到 git worktree list，worktree 沒有核對")
+    if local is None:
+        notes.append("未查完：讀不到本地 branch，branch 沒有核對")
+
+    def leftovers(names: set[str], prefix: str | None = None) -> list[str]:
+        found = []
+        if prefix:
+            for pool in (trees or {}, local or set()):
+                names |= {b for b in pool if b.startswith(prefix)}
+        for name in sorted(names):
+            if trees is not None and name in trees:
+                found.append(f"worktree 還在（{name}：{trees[name]}）")
+            if local is not None and name in local:
+                found.append(f"branch {name} 還在")
+        return found
+
+    def ci_problem(pr: dict) -> list[str]:
+        state = merge_ci(pr)
+        if state == "success":
+            return []
+        oid = (get(pr, "mergeCommit.oid") or "")[:9]
+        what = _CI_TEXT.get(state, f"CI 是 {state}")
+        base = pr.get("baseRefName") or "?"
+        return [f"PR #{pr.get('number')} 的 merge commit {oid}（{base}）{what}"]
+
+    issues = [n for n in nodes if n.get("__typename") == "Issue"]
+    prs = [n for n in nodes if n.get("__typename") == "PullRequest"]
+    covered: set = set()
+    bad, fine_issues, fine_prs, no_pr = [], 0, 0, []
+    for issue in issues:
+        number = issue.get("number")
+        refs = issue.get("closedByPullRequestsReferences") or {}
+        linked = [p for p in refs.get("nodes") or [] if isinstance(p, dict)]
+        if (refs.get("totalCount") or 0) > len(linked):
+            notes.append(
+                f"未查完：#{number} 連到 {refs['totalCount']} 個 PR，只讀了 {len(linked)} 個"
+            )
+        covered |= {p.get("number") for p in linked}
+        merged = [p for p in linked if p.get("merged")]
+        problems = []
+        for p in linked:
+            if p.get("state") == "OPEN":
+                problems.append(f"PR #{p.get('number')} 還是 open")
+        if linked and not merged and not problems:
+            numbers = "、".join(f"#{p.get('number')}" for p in linked)
+            problems.append(f"PR {numbers} 關閉未合併")
+        for p in merged:
+            problems += ci_problem(p)
+        heads = {p.get("headRefName") for p in merged if p.get("headRefName")}
+        problems += leftovers(heads, f"task/{number}-")
+        if problems:
+            bad.append((number, "Issue", problems))
+        else:
+            fine_issues += 1
+            if not linked:
+                no_pr.append(number)
+    for pr in prs:
+        if pr.get("number") in covered:
+            continue
+        problems = [] if pr.get("merged") else ["關閉未合併"]
+        if pr.get("merged"):
+            problems += ci_problem(pr)
+        head = pr.get("headRefName")
+        problems += leftovers({head} if head else set())
+        if problems:
+            bad.append((pr.get("number"), "PR", problems))
+        else:
+            fine_prs += 1
+    lines = [
+        f"關閉單核對（{since} 之後關閉的 Issue {len(issues)} 張、PR {len(prs)} 個）："
+        f"異常 {len(bad)} 張"
+    ]
+    for number, kind, problems in sorted(bad, key=lambda b: -(b[0] or 0)):
+        lines.append(f"  #{number} {kind}：{'；'.join(problems)}")
+    rest = f"  其餘正常：Issue {fine_issues} 張（連同它們的 PR）、沒有連到 Issue 的 PR {fine_prs} 個"
+    if no_pr:
+        rest += "；沒有 PR 的 Issue：" + "、".join(f"#{n}" for n in no_pr)
+    lines.append(rest)
+    return lines + [f"  {n}" for n in notes]
+
+
 # An engineer's 回報：開工 (docs/WORKFLOW.md 任務流程第 2 步) names the session on a line
 # "- session：`<uuid>`", at times with the model after it ("`<uuid>`（claude-opus-5-5）");
 # close_task.sh deletes that session's Claude Code scratchpad (#472). Only a whole UUID is
@@ -711,6 +880,9 @@ def main(argv: list[str]) -> int:
     if command == "questions-query":
         print(QUESTIONS_QUERY)
         return 0
+    if command == "closed-query":
+        print(CLOSED_QUERY)
+        return 0
     doc = _load()
     if doc is None:
         return 1
@@ -798,6 +970,19 @@ def main(argv: list[str]) -> int:
             _options(field),
             issue.get("id", ""),
         )
+        return 0
+    if command == "closed-check":
+        if get(doc, "data.search") is None:
+            return 1
+        local = []
+        for path in args[1:3]:
+            if not path:
+                local.append(None)
+                continue
+            with open(path, encoding="utf-8") as handle:
+                local.append(handle.read())
+        for line in closed_check(doc, *local, args[0]):
+            print(line)
         return 0
     if command == "questions":
         if get(doc, "data.repository") is None:
