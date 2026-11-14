@@ -1,4 +1,4 @@
-import type { CandidateComponent, CandidateEntryPlan, CandidateItem, CandidateLlmNote, CandidatesResponse, CandidateSubItem, StrategyCondition } from '../types'
+import type { CandidateComponent, CandidateEntryPlan, CandidateItem, CandidateLlmNote, CandidatesResponse, CandidateSubItem, ForeignIndex, OvernightUs, StrategyCondition } from '../types'
 
 // Shapes copied from GET /api/candidates on a read-only copy of the production DB (2026-10-16 run, #215),
 // trimmed to two rows: a complete row and a partial row whose group and news components are null.
@@ -256,4 +256,24 @@ export const notComputedResponse = (): CandidatesResponse => ({
   zero_reason_text: null,
   methodology: { ...methodology, weights: null, minimum_weight_coverage: null },
   items: [],
+})
+
+// /api/candidates' overnight_us (Issue 681), in the shape of the production DB copy read on 2026-11-14: the four US
+// indexes of the 11/13 session (expected for Taipei 11/14). The closes are round numbers, not the copy's.
+const usIndex = (symbol: string, name: string, close: number, change: number, previous: number): ForeignIndex => ({
+  exchange: 'US', symbol, name, series_id: `^${symbol}`, status: 'available', expected_date: '2026-11-13', trading_date: '2026-11-13',
+  freshness: 'latest', close, change, change_pct: change / previous, change_pct_method: 'derived', previous_trading_date: '2026-11-12',
+  source: { label: `FinMind USStockPrice ^${symbol}`, copyright: null, collected_at: '2026-11-14T01:30:03+00:00', data_as_of: '2026-11-13', raw_payload_id: 1 },
+})
+export const SOX_GROUP_ID = 'official-industry-1858340d045a575f'
+export const overnightUs = (indexes?: ForeignIndex[]): OvernightUs => ({
+  reference_date: '2026-11-14',
+  expected_date: '2026-11-13',
+  indexes: indexes ?? [
+    usIndex('SPX', 'S&P 500', 7500.0, 40.0, 7460.0),
+    usIndex('IXIC', 'NASDAQ 綜合指數', 25000.0, -125.0, 25125.0),
+    usIndex('DJI', '道瓊工業指數', 52000.0, 0.0, 52000.0),
+    usIndex('SOX', '費城半導體指數', 10500.0, 210.0, 10290.0),
+  ],
+  group_links: { SOX: [SOX_GROUP_ID, 'theme-cowos', 'theme-memory', 'theme-semiconductor-equipment'] },
 })

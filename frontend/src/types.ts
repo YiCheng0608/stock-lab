@@ -187,7 +187,8 @@ export type MarketOverviewExchange = {
   source?: { label: string | null; collected_at: string | null; data_as_of?: string | null; raw_payload_id?: number | null }
 }
 
-// market_overview.foreign_indices (#547, Issue 568): the latest bars of the US indexes (FinMind), each on its own.
+// The latest bars of the US indexes (FinMind; #547, Issue 568), each on its own: /api/candidates' overnight_us.indexes
+// since Issue 681 (the dashboard's market_overview.foreign_indices before).
 export type ForeignIndex = {
   exchange: 'US' | string
   symbol: string
@@ -249,7 +250,8 @@ export type IndexMa60 = {
   close_count?: number | null
 }
 
-// market_overview.indexes (#564): the market page's index table, in table order (TAIEX, TPEX, TX, then the four US).
+// market_overview.indexes (#564): the market page's index table, in table order (TAIEX, TPEX, TX; the four US rows
+// left the page in Issue 633 and the API in Issue 681).
 export type IndexRow = {
   key: string
   group: 'tw' | 'us' | string
@@ -282,7 +284,6 @@ export type MarketOverview = {
   trading_date: string | null
   exchanges: MarketOverviewExchange[]
   taiex_ma60?: TaiexMa60
-  foreign_indices?: ForeignIndex[]
   indexes?: IndexRow[]
 }
 
@@ -1618,6 +1619,9 @@ export type CandidateItem = {
   // The signal's strategy_levels row: next-session close and volume to pass again (#491). null without a row of the
   // current levels version; missing on responses from before #491.
   entry_plan?: CandidateEntryPlan | null
+  // The US indexes whose overnight change the row shows (Issue 681: SOX for the semiconductor groups); only on
+  // /api/candidates items, missing on responses from before Issue 681.
+  overnight_us_links?: string[]
   // The closes the row's sparkline draws (#653): only on /api/candidates items, missing on responses from before #653.
   recent_closes?: CandidateRecentCloses
 }
@@ -1665,5 +1669,17 @@ export type CandidatesResponse = {
     components: Record<CandidateComponentKey, { label: string; weight: number | null; inference: boolean }>
     null_explanations: Record<string, string>
   }
+  // The 隔夜美股 line (Issue 681); missing on responses from before it.
+  overnight_us?: OvernightUs
   items: CandidateItem[]
+}
+
+// /api/candidates' overnight_us (Issue 681): the four US indexes for the today page's 隔夜美股 line. reference_date is
+// the Taipei day the list is read before the open, expected_date the US session it waits for (the weekday before);
+// group_links maps an index to the group ids whose candidate rows show its change (SOX: the semiconductor groups).
+export type OvernightUs = {
+  reference_date: string
+  expected_date: string
+  indexes: ForeignIndex[]
+  group_links: Record<string, string[]>
 }

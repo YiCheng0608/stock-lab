@@ -694,6 +694,21 @@ US_INDEXES: tuple[UsIndex, ...] = (
     ),
     UsIndex("SOX", "^SOX", "費城半導體指數", "Copyright © 2025, NASDAQ, Inc."),
 )
+# The groups whose candidate rows show a US index's overnight change on the
+# today page (#681 decision 6869771833; DATA_SOURCES 美股指數): only the PHLX
+# Semiconductor index, for the official 半導體 industry
+# (``app.taxonomy.canonical_group_id("industry", "Semiconductor")``) and the
+# themes 半導體設備, CoWoS 先進封裝 and 記憶體 (themes_v1).  Display only.
+US_INDEX_GROUP_LINKS: dict[str, frozenset[str]] = {
+    "SOX": frozenset(
+        {
+            "official-industry-1858340d045a575f",
+            "theme-semiconductor-equipment",
+            "theme-cowos",
+            "theme-memory",
+        }
+    ),
+}
 # The data_quality rows index-bars us-collect writes per series and Taipei day.
 US_INDEX_QUALITY_ENTITY = "us_index_series"
 

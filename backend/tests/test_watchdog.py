@@ -2391,7 +2391,7 @@ def test_a_maintenance_mode_serve_expired_is_commented_once(wd):
     assert len(wd.text("gh_calls.log").splitlines()) == 1
 
 
-# The us job (#568): index-bars us-collect, Tuesday to Saturday 06:30 and 09:30 -------------
+# The us job (#568, #681): index-bars us-collect, Tuesday to Saturday 07:30, 08:30, 09:30 ---
 
 
 def _healthy_daily_and_news(wd: Watchdog) -> None:

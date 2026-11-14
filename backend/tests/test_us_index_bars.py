@@ -17,7 +17,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db import enable_sqlite_foreign_keys
 from app.domain import US_INDEXES
-from app.market_overview import expected_us_session, foreign_indices, index_rows
+from app.market_overview import expected_us_session, foreign_indices
 from app.migrations import upgrade_database
 from app.models import (
     DataQuality,
@@ -873,7 +873,6 @@ def test_foreign_indices_give_finmind_bars_in_the_fred_format(factory, tmp_path)
     with factory() as db:
         # Taipei Monday 09/07: the expected US session is Friday 09/04.
         items = foreign_indices(db, "2026-09-07")
-        table = {row["key"]: row for row in index_rows(db, "2026-09-07", items)}
 
     assert [item["symbol"] for item in items] == ["SPX", "IXIC", "DJI", "SOX"]
     spx = items[0]
@@ -891,8 +890,6 @@ def test_foreign_indices_give_finmind_bars_in_the_fred_format(factory, tmp_path)
     assert spx["source"]["label"] == "FinMind USStockPrice ^GSPC"
     assert "S&P Dow Jones Indices" in spx["source"]["copyright"]
     assert spx["source"]["collected_at"].endswith("+00:00")
-    assert table["spx"]["source"]["label"] == "FinMind"
-    assert table["spx"]["source"]["detail"] == "FinMind USStockPrice ^GSPC"
 
     # The same days as FRED rows (#547) in another database: the same fields and
     # values; only the source differs (#568 decision 6729023767).
@@ -900,7 +897,6 @@ def test_foreign_indices_give_finmind_bars_in_the_fred_format(factory, tmp_path)
     with fred_factory() as db:
         _fred_rows(db, sorted(closes.items()))
         fred = foreign_indices(db, "2026-09-07")[0]
-        fred_table = index_rows(db, "2026-09-07", foreign_indices(db, "2026-09-07"))
     fred_factory.kw["bind"].dispose()
     assert fred.keys() == spx.keys()
     assert fred["source"].keys() == spx["source"].keys()
@@ -908,9 +904,6 @@ def test_foreign_indices_give_finmind_bars_in_the_fred_format(factory, tmp_path)
         k: v for k, v in spx.items() if k != "source"
     }
     assert fred["source"]["label"] == "FRED"
-    fred_spx = next(row for row in fred_table if row["key"] == "spx")
-    assert fred_spx.keys() == table["spx"].keys()
-    assert fred_spx["source"]["label"] == "FRED"
 
 
 def test_the_newest_missing_weekday_is_stale_not_closed(factory):

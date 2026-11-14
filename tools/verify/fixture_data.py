@@ -2029,29 +2029,33 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
             "instrument.instrument_type",
             "futures",
         ),
-        # The US indexes (Issue #547): closes up to T - 1, the expected session of T.
+        # The US indexes (Issues #547, #681): /api/candidates' overnight_us, closes
+        # up to T - 1; the dashboard has none since #681.
+        ("dashboard", "market_overview.foreign_indices", None),
         (
-            "dashboard",
-            "market_overview.foreign_indices[].symbol",
+            "candidates",
+            "overnight_us.indexes[].symbol",
             list(US_INDEX_SYMBOLS),
         ),
         (
-            "dashboard",
-            "market_overview.foreign_indices[].freshness",
-            ["latest"] * len(US_INDEX_SYMBOLS),
+            "candidates",
+            "overnight_us.indexes[].trading_date",
+            [SERIES["SPX"][-1]["day"].isoformat()] * len(US_INDEX_SYMBOLS),
         ),
+        # The list of T (Friday) is read before Monday's open: its US session is
+        # T's, which the fixture does not have (the closes end at T - 1).
+        (f"candidates?date={D}", "overnight_us.reference_date", "2026-10-19"),
+        (f"candidates?date={D}", "overnight_us.expected_date", D),
         (
-            "dashboard",
-            "market_overview.foreign_indices.0.trading_date",
-            SERIES["SPX"][-1]["day"].isoformat(),
+            f"candidates?date={D}",
+            "overnight_us.indexes[].freshness",
+            ["stale"] * len(US_INDEX_SYMBOLS),
         ),
-        # The market page's index table (Issue #564): seven rows in table order, all with data.
-        (
-            "dashboard",
-            "market_overview.indexes[].key",
-            ["taiex", "tpex", "tx", "spx", "ixic", "dji", "sox"],
-        ),
-        ("dashboard", "market_overview.indexes[].status", ["available"] * 7),
+        # 費半 on the semiconductor rows (9101, 9201), not on 9103's (computer).
+        ("candidates", "items[].overnight_us_links", [["SOX"], [], ["SOX"]]),
+        # The market page's index table (Issues #564, #681): the three Taiwan rows.
+        ("dashboard", "market_overview.indexes[].key", ["taiex", "tpex", "tx"]),
+        ("dashboard", "market_overview.indexes[].status", ["available"] * 3),
         ("stocks/US/SPX/bars?interval=day&limit=250", "bars", len(SERIES["SPX"])),
         ("stocks/US/SPX/bars?interval=day&limit=250", "sources", ["fred_close"]),
         ("themes?board=industry&limit=5", "meta.trading_date", D),

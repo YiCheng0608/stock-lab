@@ -897,22 +897,16 @@ def test_dashboard_overview_without_a_verified_session(api_db):
         payload = client.get("/api/dashboard").json()
     assert payload["as_of"] is None
     overview = payload["market_overview"]
-    # The US indexes (Issue #547) stand on their own; none is collected here.
-    foreign = overview.pop("foreign_indices")
-    # So does TAIEX against its MA60 (Issue #561).
+    # The US indexes left the dashboard for /api/candidates' overnight_us (#681).
+    assert "foreign_indices" not in overview
+    # TAIEX against its MA60 (Issue #561) stands on its own.
     assert overview.pop("taiex_ma60") == {
         "trading_date": None,
         "required_closes": 60,
         "status": "unavailable",
         "reason": "no_verified_session",
     }
-    assert [(item["symbol"], item["reason"]) for item in foreign] == [
-        ("SPX", "not_collected"),
-        ("IXIC", "not_collected"),
-        ("DJI", "not_collected"),
-        ("SOX", "not_collected"),
-    ]
-    # The index table (Issue #564): no Taiwan row without a session, the US rows as foreign_indices.
+    # The index table (Issue #564): no row without a session, no US row (#681).
     assert [
         (item["key"], item["status"], item["reason"], item["ma60"])
         for item in overview.pop("indexes")
@@ -920,10 +914,6 @@ def test_dashboard_overview_without_a_verified_session(api_db):
         ("taiex", "unavailable", "no_verified_session", None),
         ("tpex", "unavailable", "no_verified_session", None),
         ("tx", "unavailable", "no_verified_session", None),
-        ("spx", "unavailable", "not_collected", None),
-        ("ixic", "unavailable", "not_collected", None),
-        ("dji", "unavailable", "not_collected", None),
-        ("sox", "unavailable", "not_collected", None),
     ]
     assert overview == {
         "trading_date": None,

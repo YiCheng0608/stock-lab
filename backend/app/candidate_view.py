@@ -11,6 +11,11 @@ plain-language entry sentence, which reads the signal's own levels.  It
 never feeds the score or the tracking plans.
 The list's items also carry ``recent_closes`` (#653), the closes of the last
 30 sessions the row's sparkline draws; the stock detail's item does not.
+The list also carries ``overnight_us`` (#681, ``app.market_overview``): the
+four US indexes' latest closes for the page's 隔夜美股 line, and each item its
+``overnight_us_links`` (``app.domain.US_INDEX_GROUP_LINKS``: ``SOX`` for the
+semiconductor groups).  Display only: no score, rank or list condition reads
+them.
 """
 
 from __future__ import annotations
@@ -23,9 +28,14 @@ from sqlalchemy.orm import Session
 
 from .candidate_runs import read_run
 from .coverage import verified_taiex_sessions
-from .domain import CANDIDATE_NOTE_PROMPT_VERSION, CANDIDATE_SCORE_VERSION
+from .domain import (
+    CANDIDATE_NOTE_PROMPT_VERSION,
+    CANDIDATE_SCORE_VERSION,
+    US_INDEX_GROUP_LINKS,
+)
 from .entry_plan import entry_plan
 from .market_change import adjacent_change, traded_close
+from .market_overview import overnight_us
 from .models import (
     CandidateLlmNote,
     CandidateRun,
@@ -365,6 +375,9 @@ def candidate_list(
     db: Session, trading_date: date | None, limit: int = DEFAULT_LIMIT
 ) -> dict[str, Any]:
     run = _run_for(db, trading_date)
+    # The 隔夜美股 line (#681): for the latest list Taipei today's, for an asked
+    # date the weekday after it.
+    us = overnight_us(db, trading_date)
     if run is None:
         return {
             "status": "not_computed",
@@ -374,6 +387,7 @@ def candidate_list(
             "zero_reason": None,
             "zero_reason_text": None,
             "methodology": _methodology(None),
+            "overnight_us": us,
             "items": [],
         }
     rows = db.scalars(
@@ -408,15 +422,25 @@ def candidate_list(
         "data_as_of": run.trading_date.isoformat(),
         "news_coverage": (run.summary_json or {}).get("news"),
         "methodology": _methodology(run),
+        "overnight_us": us,
         # One TAIEX session lookup for the whole list.
         "items": [
             {
                 **candidate_item(db, row, run, sessions),
                 "recent_closes": closes[row.instrument_id],
+                "overnight_us_links": overnight_us_links(row.groups_json),
             }
             for row in rows
         ],
     }
+
+
+def overnight_us_links(groups: list[dict[str, Any]] | None) -> list[str]:
+    """The US indexes whose overnight change the row shows (#681): those of
+    ``US_INDEX_GROUP_LINKS`` one of the candidate's groups is linked to."""
+
+    ids = {str(group.get("group_id")) for group in groups or []}
+    return [symbol for symbol, linked in US_INDEX_GROUP_LINKS.items() if ids & linked]
 
 
 def candidate_for_instrument(

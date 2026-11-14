@@ -27,7 +27,7 @@
 - `maintenance_long`（#468）：[維護模式](SCHEDULING.md#維護模式)的標記檔 `<data>/locks/maintenance` 在時，每輪記 `maintenance_on`（開始時間與時數）；開超過 12 小時（`MAINTENANCE_MAX_HOURS`）就留言請關掉，每台北日一則。開始時間取標記檔記的時間，讀不懂（或找不到 Python）時取檔案的修改時間。維護模式期間 daily、news 照樣寫日誌（skipped），所以 `daily` 的日誌檢查與下一條 `news` 不會因此留言。
 - `maintenance_expired`（#468 AC-5）：`logs/maintenance.log` 24 小時內有 `expired` 紀錄，也就是 serve 解除了一個心跳停了 10 分鐘以上的作業（回補或回測被 SIGKILL 或 OOM 結束，`finally` 沒有執行）的維護模式。留言寫出命令、PID、原因與停了幾分鐘；daily 與 news 已恢復，作業沒有跑完，要查它的輸出並決定是否重跑（回補以相同參數重跑會從 manifest 續做）。每台北日一則。
 - `news`：最新的 `logs/news-*.log` 已超過 6 小時（連續 3 次）沒有更新。
-- `us`（美股四檔，[#568](https://github.com/YiCheng0608/stock-lab/issues/568)；排程是週二至週六 06:30、09:30，見 [scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)）：
+- `us`（美股四檔，[#568](https://github.com/YiCheng0608/stock-lab/issues/568)；排程是週二至週六 07:30、08:30、09:30（#681），見 [scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)）：
   - `us_no_log`：最新的 `logs/us-*.log` 超過 4 天沒有更新。週六到下週二最長隔 3 天，再多留 1 天。
   - `us_failed`：所有 `us-*.log` 裡最後 2 個 `end` 列的 exit 都不是 0（`partial` 是 2、`failed` 是 1）。job 被擋下（`skipped`）與 `already_complete` 都是 0，不算失敗。
   - 每台北日各最多一則；還沒有任何 `us-*.log` 時不判定。

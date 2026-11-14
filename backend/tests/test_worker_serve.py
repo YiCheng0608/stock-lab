@@ -1614,17 +1614,17 @@ def test_a_maintenance_mode_turned_on_by_hand_never_expires(tmp_path):
     assert marker.exists()
 
 
-# The us job: index-bars us-collect, Tuesday to Saturday 06:30 and 09:30 (#568 AC-3) ------
+# The us job: index-bars us-collect, Tuesday to Saturday 07:30, 08:30 and 09:30 (#568, #681) --
 
 
-def test_the_us_job_fires_tuesday_to_saturday_at_0630_and_0930():
+def test_the_us_job_fires_tuesday_to_saturday_at_0730_0830_and_0930():
     triggers = serve.triggers(serve_args())
     monday = datetime(2026, 11, 9, tzinfo=TAIPEI)
     times = fire_times(triggers["us"], monday, monday + timedelta(days=7))
     assert [moment.strftime("%a %H:%M") for moment in times] == [
         f"{day} {hm}"
         for day in ("Tue", "Wed", "Thu", "Fri", "Sat")
-        for hm in ("06:30", "09:30")
+        for hm in ("07:30", "08:30", "09:30")
     ]
     # Away from news, which runs on the even hours.
     news = set(fire_times(triggers["news"], monday, monday + timedelta(days=7)))
@@ -1634,6 +1634,42 @@ def test_the_us_job_fires_tuesday_to_saturday_at_0630_and_0930():
         t.strftime("%H:%M")
         for t in fire_times(other["us"], monday, monday + timedelta(days=2))
     ] == ["07:15"]
+
+
+@pytest.mark.parametrize(
+    "us_session, close_in_taipei",
+    [
+        # US summer time (EDT, UTC-4): the 16:00 close is 04:00 the next Taipei day.
+        ("2026-07-14", "2026-07-15 04:00"),
+        # US winter time (EST, UTC-5): 05:00 (#681 AC-1's four mornings).
+        ("2026-11-12", "2026-11-13 05:00"),
+    ],
+)
+def test_every_us_time_is_after_the_us_close_and_two_before_the_open(
+    us_session, close_in_taipei
+):
+    """#681 decision 6869771833: FinMind never had D - 1 at 06:30 but always by
+    09:30, so the us times are after the close in both US summer and winter
+    time, and the first two before the 09:00 Taiwan open."""
+
+    from zoneinfo import ZoneInfo
+
+    close = datetime.fromisoformat(f"{us_session}T16:00").replace(
+        tzinfo=ZoneInfo("America/New_York")
+    )
+    taipei = close.astimezone(TAIPEI)
+    assert taipei.strftime("%Y-%m-%d %H:%M") == close_in_taipei
+    assert (taipei.hour, taipei.minute) <= serve.US_LATEST_CLOSE_TAIPEI
+    times = serve._us_times(serve.US_TIMES)
+    assert times == [(7, 30), (8, 30), (9, 30)]
+    day = taipei.date()
+    for hour, minute in times:
+        fire = datetime(day.year, day.month, day.day, hour, minute, tzinfo=TAIPEI)
+        # At least two hours after the close: 06:30, 1.5 hours after it, never had it.
+        assert fire - taipei >= timedelta(hours=2)
+    before_open = [t for t in times if t < serve.TW_OPEN_TAIPEI]
+    assert before_open == [(7, 30), (8, 30)]
+    assert min(times) == before_open[0]
 
 
 def test_the_us_command_is_job_us_with_dailys_memory_threshold(tmp_path):
@@ -1669,7 +1705,7 @@ def test_the_us_command_is_job_us_with_dailys_memory_threshold(tmp_path):
             "--us-min-free-memory-gb",
             "3",
             "--now",
-            "2026-11-10T06:29:50",
+            "2026-11-10T07:29:50",
         )
     )
     argv = switched.command("us", switched.now())[0]
@@ -1712,19 +1748,19 @@ def _us_catchup(data: Path, now: str):
 @pytest.mark.parametrize(
     "rows, now, reason",
     [
-        # A missed 06:30 (container down at the time): run once at start.
-        ((), f"{TUESDAY}T07:10", "not_complete"),
+        # A missed 07:30 (container down at the time): run once at start.
+        ((), f"{TUESDAY}T07:40", "not_complete"),
         (((TUESDAY, "failed"),), f"{TUESDAY}T08:00", "not_complete"),
         (((TUESDAY, "partial"),), f"{TUESDAY}T10:00", "not_complete"),
         (((TUESDAY, "skipped"),), f"{TUESDAY}T10:00", "not_complete"),
         (((TUESDAY, "running"),), f"{TUESDAY}T10:00", "not_complete"),
         (((SATURDAY, "failed"),), f"{SATURDAY}T21:35", "not_complete"),
         # The day before does not count.
-        ((("2026-11-09", "success"),), f"{TUESDAY}T07:10", "not_complete"),
+        ((("2026-11-09", "success"),), f"{TUESDAY}T07:40", "not_complete"),
         # Complete, too early, or Sunday and Monday (no US session to fetch).
-        (((TUESDAY, "failed"), (TUESDAY, "success")), f"{TUESDAY}T07:10", None),
+        (((TUESDAY, "failed"), (TUESDAY, "success")), f"{TUESDAY}T07:40", None),
         (((TUESDAY, "already_complete"),), f"{TUESDAY}T10:00", None),
-        ((), f"{TUESDAY}T06:29", None),
+        ((), f"{TUESDAY}T07:29", None),
         ((), "2026-11-08T10:00", None),
         ((), f"{MONDAY}T10:00", None),
     ],

@@ -29,7 +29,8 @@ import {
   formatSubItemValue,
   marketSourceLabel,
 } from './candidates'
-import { completeItem, doneNote, listResponse, notComputedResponse, partialItem, zeroResponse } from './candidates.fixtures'
+import { SOX_GROUP_ID, completeItem, doneNote, listResponse, notComputedResponse, overnightUs, partialItem, zeroResponse } from './candidates.fixtures'
+import { OVERNIGHT_US_CLOSED, OVERNIGHT_US_PENDING, overnightUsView } from './candidates'
 import { PageDateContext } from '../components/pageDate'
 import { CandidatesSection, PriceLadder, ScoreDetails, Sparkline, TodayCandidateList } from './CandidateViews'
 import { ROW_CLICK_IGNORED, SPARKLINE_HEIGHT, SPARKLINE_WIDTH, TERMINAL_MIN_WIDTH, candidateChartLevels, chartToggleLabel, ladderLabel, nextChartRank, priceLadder, rowClickToggles, sparkline } from './candidates'
@@ -353,3 +354,45 @@ check(rowClickToggles(target(false), '') && !rowClickToggles(target(true), '') &
 check(['a', 'button', 'summary', '[role="button"]'].every((part) => ROW_CLICK_IGNORED.includes(part)), `ignored targets cover links, buttons (rank, terms, AI) and summaries: ${ROW_CLICK_IGNORED}`)
 check(/<div class="candidate-row-figures"><svg class="sparkline sparkline-up"[^>]*><path d="[^"]+"><\/path><\/svg><div class="price-ladder"/.test(plainList), 'a row draws the sparkline, then the ladder, on one line under the sentence (Issue 653)')
 check((plainList.match(/class="sparkline /g) ?? []).length === 1, 'only the row with closes has a sparkline')
+
+// ---- Issue 681: the 隔夜美股 line under the head, and 費半 on the semiconductor rows ----
+const lineOf = (markup: string) => plain(slice(markup, '<p class="overnight-us"', '</p>'))
+const withUs = (us = overnightUs(), links: string[][] = [['SOX'], []]) => ({
+  ...listResponse(),
+  overnight_us: us,
+  items: listResponse().items.map((item, index) => ({ ...item, overnight_us_links: links[index] ?? [] })),
+})
+const usPage = render(<CandidatesSection data={withUs()} loading={false} error={null} />)
+const usLine = lineOf(usPage)
+check(usLine.endsWith('隔夜美股 資料 2026/11/13 S&amp;P 500 +0.54% · NASDAQ -0.50% · 道瓊 0.00% · 費半 +2.04%'), `the line: title, the one date, the four changes in order: ${usLine}`)
+check(usPage.indexOf('class="candidates-head"') < usPage.indexOf('class="overnight-us"') && usPage.indexOf('class="overnight-us"') < usPage.indexOf('class="candidate-list"'), 'the line sits under the head, above the list')
+check(!/<p class="overnight-us"[^>]*>(?:(?!<\/p>)[\s\S])*<div/.test(usPage), 'inline runs only: one line of page text (page_checks T22)')
+const usMarkup = slice(usPage, '<p class="overnight-us"', '</p>')
+check(/data-us-index="SPX">S&amp;P 500 <span class="overnight-us-change tone-up">\+0\.54%/.test(usMarkup) && /data-us-index="IXIC">NASDAQ <span class="overnight-us-change tone-down">-0\.50%/.test(usMarkup) && /data-us-index="DJI">道瓊 <span class="overnight-us-change tone-flat">0\.00%/.test(usMarkup), 'red up, green down, flat at 0.00%')
+// The SOX row: the change on the title line right after the name; the other row shows none.
+const soxRow = rowOf(usPage, 1)
+const soxTitle = plain(slice(soxRow, '<p class="candidate-row-title">', '</p>'))
+check(soxTitle.includes('2377 微星 費半 +2.04% 上市 · ') && !soxTitle.includes('非最新') && soxTitle.indexOf('費半') < soxTitle.indexOf('上市'), `the SOX row: 「費半 +2.04%」 right after the name, before the market and group (the ellipsis cuts those): ${soxTitle}`)
+check(!rowOf(usPage, 2).includes('candidate-row-us') && !rowOf(usPage, 2).includes('費半'), 'a row without a link shows no US index')
+check(SOX_GROUP_ID === 'official-industry-1858340d045a575f', 'the fixture links the official 半導體 industry')
+// Not yet updated: every index of an earlier night is stale; the lead says so once and the rows mark theirs 非最新.
+const staleIndexes = overnightUs().indexes.map((index) => ({ ...index, trading_date: '2026-11-12', freshness: 'stale' }))
+const stalePage = render(<CandidatesSection data={withUs(overnightUs(staleIndexes))} loading={false} error={null} />)
+check(lineOf(stalePage).endsWith(`隔夜美股 ${OVERNIGHT_US_PENDING} 資料 2026/11/12 S&amp;P 500 +0.54% · NASDAQ -0.50% · 道瓊 0.00% · 費半 +2.04%`), `not yet updated: 「美股尚未更新」 then the older closes: ${lineOf(stalePage)}`)
+check(plain(slice(rowOf(stalePage, 1), '<p class="candidate-row-title">', '</p>')).includes('2377 微星 費半 +2.04% 非最新 上市'), 'a row\'s stale 費半 says 非最新')
+// Nothing collected: the lead alone, no row mark.
+const none = overnightUs().indexes.map((index) => ({ exchange: 'US', symbol: index.symbol, name: index.name, series_id: index.series_id, status: 'unavailable', reason: 'not_collected', expected_date: '2026-11-13' }))
+const nonePage = render(<CandidatesSection data={withUs(overnightUs(none))} loading={false} error={null} />)
+check(lineOf(nonePage).endsWith(`隔夜美股 ${OVERNIGHT_US_PENDING}`) && !rowOf(nonePage, 1).includes('費半'), `nothing collected: 「隔夜美股 美股尚未更新」 only: ${lineOf(nonePage)}`)
+// One index missing, another a day old among fresh ones: 未取得, and its own 非最新.
+const mixed = overnightUs().indexes.map((index) => index.symbol === 'DJI' ? { ...index, status: 'unavailable', reason: 'fetch_failed', close: null } : index.symbol === 'IXIC' ? { ...index, freshness: 'stale' } : index)
+check(lineOf(render(<CandidatesSection data={withUs(overnightUs(mixed))} loading={false} error={null} />)).endsWith('資料 2026/11/13 S&amp;P 500 +0.54% · NASDAQ -0.50% 非最新 · 道瓊 未取得 · 費半 +2.04%'), 'one index failed, one stale')
+// A US holiday: the session before it is shown, 美股休市 leads.
+const closed = overnightUs().indexes.map((index) => ({ ...index, freshness: 'us_market_closed', trading_date: '2026-11-25' }))
+check(overnightUsView(overnightUs(closed))?.lead === OVERNIGHT_US_CLOSED && lineOf(render(<CandidatesSection data={withUs(overnightUs(closed))} loading={false} error={null} />)).endsWith(`隔夜美股 ${OVERNIGHT_US_CLOSED} 資料 2026/11/25 S&amp;P 500 +0.54% · NASDAQ -0.50% · 道瓊 0.00% · 費半 +2.04%`), 'a US holiday: 美股休市 and the session before it')
+// Different dates: each index carries its own.
+const split = overnightUs().indexes.map((index) => index.symbol === 'SOX' ? { ...index, trading_date: '2026-11-12', freshness: 'stale' } : index)
+check(lineOf(render(<CandidatesSection data={withUs(overnightUs(split))} loading={false} error={null} />)).endsWith('隔夜美股 S&amp;P 500 +0.54%（2026/11/13） · NASDAQ -0.50%（2026/11/13） · 道瓊 0.00%（2026/11/13） · 費半 +2.04%（2026/11/12） 非最新'), 'different dates: no common date, each its own')
+// Every state of the list has the line; loading, a failure, or a response from before Issue 681 has none.
+check(lineOf(render(<CandidatesSection data={{ ...notComputedResponse(), overnight_us: overnightUs() }} loading={false} error={null} />)).startsWith('隔夜美股 資料 2026/11/13'), 'a day without a list still has the line')
+check(!render(<CandidatesSection data={listResponse()} loading={false} error={null} />).includes('overnight-us') && !render(<CandidatesSection data={withUs()} loading error={null} />).includes('overnight-us'), 'no line without overnight_us or while loading')

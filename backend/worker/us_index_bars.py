@@ -776,7 +776,7 @@ def collect_us_indexes(
         if not force and all(
             day is not None and day >= expected for day in latest.values()
         ):
-            # Serve's 09:30 after a 06:30 that got D − 1 (#568 decision 6729065016).
+            # A later us time after one that got D − 1 (#568 decision 6729065016, #681).
             run.status = "already_complete"
             run.records = 0
             run.finished_at = utcnow()

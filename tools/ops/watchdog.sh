@@ -62,7 +62,7 @@ fi
 
 GH_REPO='YiCheng0608/stock-lab'
 NEWS_INTERVAL_SECONDS=7200
-# The us job (#568): Tuesday to Saturday 06:30 and 09:30, so the longest gap
+# The us job (#568, #681): Tuesday to Saturday 07:30, 08:30 and 09:30, so the longest gap
 # between its logs is Saturday to Tuesday (3 days); one day more is stale.
 US_STALE_SECONDS=$((4 * 86400))
 US_FAILED_RUNS=2
@@ -491,7 +491,7 @@ for file in "$logs"/us-*.log; do
   [ "$mtime" -gt "$newest" ] && newest="$mtime"
 done
 if [ "$newest" -gt 0 ] && [ $((now - newest)) -gt "$US_STALE_SECONDS" ]; then
-  anomaly us_no_log "美股 us 排程：最新日誌寫於 $(iso "$newest")，已超過 4 天沒有新日誌（週二至週六 06:30、09:30 跑 \`index-bars us-collect\`）。"
+  anomaly us_no_log "美股 us 排程：最新日誌寫於 $(iso "$newest")，已超過 4 天沒有新日誌（週二至週六 07:30、08:30、09:30 跑 \`index-bars us-collect\`）。"
 fi
 if [ "${#us_files[@]}" -gt 0 ]; then
   us_exits="$(cat "${us_files[@]}" | sed -nE 's/^===== [^ ]+ end exit=([0-9]+) .*/\1/p' | tail -n "$US_FAILED_RUNS")"
