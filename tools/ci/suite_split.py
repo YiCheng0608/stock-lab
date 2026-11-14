@@ -1,20 +1,22 @@
 """Split the backend suite between CI's backend and docker jobs, and check nothing is lost (#378).
 
-The backend job runs the whole of backend/tests on the runner. The docker job runs, inside the
-backend image, only what docker_suite.json lists: tests whose subject is the execution
-environment the image provides. Collecting is no proof of coverage (the backend job collects
-everything, so a union of collected ids is always the whole suite); what counts is that every
-test of the whole suite *ran* (passed) in at least one of the two jobs, and that every listed
-test passed in the docker job (a skip there means the image no longer offers what it tests).
+The backend job runs the whole of backend/tests on the runner, as two shards side by side
+(BACKEND_SHARDS, #746) whose reports together must collect the whole suite with no test in
+both. The docker job runs, inside the backend image, only what docker_suite.json lists: tests
+whose subject is the execution environment the image provides. Collecting is no proof of
+coverage (the backend shards collect everything, so a union of collected ids is always the
+whole suite); what counts is that every test of the whole suite *ran* (passed) in at least one
+job, and that every listed test passed in the docker job (a skip there means the image no
+longer offers what it tests).
 
 Three roles, one file:
 
 * a pytest plugin (`-p suite_split --suite-report FILE`) writing the ids a run collected and what
   each did, with ids relative to backend/ so both jobs name a test the same way; the backend job
   runs it under pytest-xdist (#442), where the controller writes the report;
-* `args`: the docker list as pytest arguments;
-* `verify`: the check that fails CI, from the two reports and a collect-only report of the whole
-  suite made inside the image.
+* `args`: the docker list as pytest arguments, and `shard`: one backend shard's;
+* `verify`: the check that fails CI, from the jobs' reports and a collect-only report of the
+  whole suite made inside the image.
 
 The CLI uses the standard library only (the suite job has no dependencies installed).
 """
@@ -23,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -31,6 +34,32 @@ BACKEND = ROOT / "backend"
 MANIFEST = Path(__file__).with_name("docker_suite.json")
 
 PASSED, SKIPPED, FAILED = "passed", "skipped", "failed"
+
+# The backend job is a matrix of two shards side by side (#746): the whole suite on one runner
+# took 13 to 20 minutes against its 20-minute step limit. "ops" runs the tests of the
+# tools/ops shell scripts, which start a Python fake for every orca, gh or docker call (about
+# half of the suite's time in run 43641113253); "rest" runs every other file, so a new test
+# file lands there without being listed. The suite job checks that the two reports together
+# collect the whole suite and that no test is in both.
+BACKEND_SHARDS = ("ops", "rest")
+OPS_SHARD = (
+    "tests/test_coordinator_scripts.py",
+    "tests/test_event_monitor.py",
+    "tests/test_master_index.py",
+    "tests/test_memory_check.py",
+    "tests/test_take_over.py",
+    "tests/test_wake_listener.py",
+    "tests/test_watchdog.py",
+)
+
+
+def shard_args(shard: str) -> list[str]:
+    """The pytest arguments, relative to backend/, of one backend shard."""
+    if shard == "ops":
+        return list(OPS_SHARD)
+    if shard == "rest":
+        return [f"--ignore={path}" for path in OPS_SHARD] + ["tests"]
+    raise ValueError(f"unknown backend shard {shard!r}; one of {BACKEND_SHARDS}")
 
 
 # ---- the pytest plugin ---------------------------------------------------------------------
@@ -103,6 +132,14 @@ def _is_xdist_worker(config) -> bool:
     return hasattr(config, "workerinput")
 
 
+def pytest_runtest_setup(item) -> None:
+    # Each test's xdist worker as a property in the junit report the backend job uploads
+    # (#746), to measure how evenly the workers are loaded without a verbose log.
+    worker = os.environ.get("PYTEST_XDIST_WORKER")
+    if worker and item.config.getoption("suite_report"):
+        item.user_properties.append(("xdist_worker", worker))
+
+
 def pytest_runtest_logreport(report) -> None:
     key = _ids.get(report.nodeid)
     if key is None:
@@ -168,14 +205,46 @@ def _listed(heading: str, ids) -> list[str]:
     return [heading] + [f"  {t}" for t in shown]
 
 
-def problems(manifest: dict, backend: dict, docker: dict, image: dict) -> list[str]:
-    """Why the two jobs together do not run the whole suite; an empty list means they do.
+def merge_backend(shards: list[dict]) -> tuple[dict, list[str]]:
+    """The backend shards' reports as one run of the suite, and the tests two shards collected.
 
-    `image` is a collect-only report of the whole suite made in the image, `backend` the backend
-    job's run of the whole suite on the runner, `docker` the docker job's run of the list."""
+    A test in two shards would run twice; the merged outcome of such a test is the failed one
+    if either failed."""
+    collected: set[str] = set()
+    twice: set[str] = set()
+    outcomes: dict[str, str] = {}
+    for report in shards:
+        ids = set(report["collected"])
+        twice |= collected & ids
+        collected |= ids
+        for test, outcome in report["outcomes"].items():
+            if outcomes.get(test) != FAILED:
+                outcomes[test] = outcome
+    errors = (
+        _listed("tests collected by more than one backend shard:", twice)
+        if twice
+        else []
+    )
+    return {
+        "collect_only": False,
+        "collected": sorted(collected),
+        "outcomes": outcomes,
+    }, errors
+
+
+def problems(
+    manifest: dict, backend: list[dict], docker: dict, image: dict
+) -> list[str]:
+    """Why the jobs together do not run the whole suite; an empty list means they do.
+
+    `image` is a collect-only report of the whole suite made in the image, `backend` the
+    reports of the backend shards (BACKEND_SHARDS), which together run the whole suite on the
+    runner, `docker` the docker job's run of the list."""
     errors: list[str] = []
+    if not backend:
+        return ["no backend report"]
     for name, report, collect_only in (
-        ("backend", backend, False),
+        *(("backend", shard, False) for shard in backend),
         ("docker", docker, False),
         ("image collect-only", image, True),
     ):
@@ -184,6 +253,7 @@ def problems(manifest: dict, backend: dict, docker: dict, image: dict) -> list[s
             errors.append(f"the {name} report is not {kind}")
     if errors:
         return errors
+    backend, errors = merge_backend(backend)
 
     full = set(image["collected"])
     if not full:
@@ -250,12 +320,26 @@ def problems(manifest: dict, backend: dict, docker: dict, image: dict) -> list[s
     return errors
 
 
-def summary(manifest: dict, backend: dict, docker: dict, image: dict) -> list[str]:
+def summary(
+    manifest: dict,
+    backend: list[dict],
+    docker: dict,
+    image: dict,
+    names: list[str] | None = None,
+) -> list[str]:
+    """`names` labels the backend shards (the CLI's: report file names without `backend-`)."""
     full = set(image["collected"])
-    in_backend, in_docker = _executed(backend), _executed(docker)
+    merged, _ = merge_backend(backend)
+    in_backend, in_docker = _executed(merged), _executed(docker)
+    names = names or [str(n) for n in range(1, len(backend) + 1)]
+    shards = [
+        f"backend shard {name}: collected {len(r['collected'])}, ran {len(_executed(r))}"
+        for name, r in zip(names, backend, strict=True)
+    ]
     return [
         f"whole suite (collected in the image): {len(full)}",
-        f"backend job: collected {len(backend['collected'])}, ran {len(in_backend)}",
+        *shards,
+        f"backend job: collected {len(merged['collected'])}, ran {len(in_backend)}",
         f"docker job: collected {len(docker['collected'])}, ran {len(in_docker)}",
         f"ran only in docker: {len(in_docker - in_backend)}",
         f"ran in neither (skipped_everywhere): {len(full - in_backend - in_docker)} of "
@@ -279,23 +363,36 @@ def main(argv: list[str] | None = None) -> int:
         "args", parents=[common], help="print the docker list as pytest arguments"
     )
     args_command.add_argument("--prefix", default="", help="put before every selector")
-    verify = commands.add_parser(
-        "verify", parents=[common], help="check that the two jobs run the whole suite"
+    shard_command = commands.add_parser(
+        "shard", help="print one backend shard's pytest arguments, one a line"
     )
-    verify.add_argument("--backend", required=True, help="backend job's run report")
+    shard_command.add_argument("shard", choices=BACKEND_SHARDS)
+    verify = commands.add_parser(
+        "verify", parents=[common], help="check that the jobs run the whole suite"
+    )
+    verify.add_argument(
+        "--backend",
+        required=True,
+        action="append",
+        help="a backend shard's run report; once for each shard",
+    )
     verify.add_argument("--docker", required=True, help="docker job's run report")
     verify.add_argument(
         "--image", required=True, help="collect-only report made in the image"
     )
     options = parser.parse_args(argv)
 
+    if options.command == "shard":
+        for arg in shard_args(options.shard):
+            print(arg)
+        return 0
     manifest = load_manifest(Path(options.manifest))
     if options.command == "args":
         for entry in manifest["docker"]:
             print(options.prefix + entry["select"])
         return 0
     backend, docker, image = (
-        _read(options.backend),
+        [_read(path) for path in options.backend],
         _read(options.docker),
         _read(options.image),
     )
@@ -305,7 +402,8 @@ def main(argv: list[str] | None = None) -> int:
             print(line, file=sys.stderr)
         print(f"suite split: {len(errors)} problem line(s)", file=sys.stderr)
         return 1
-    for line in summary(manifest, backend, docker, image):
+    names = [Path(path).stem.removeprefix("backend-") for path in options.backend]
+    for line in summary(manifest, backend, docker, image, names):
         print(line)
     print("suite split: every test of the suite ran in at least one job")
     return 0
