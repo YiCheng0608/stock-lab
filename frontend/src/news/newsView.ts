@@ -208,10 +208,6 @@ export function candidateCheckSummary(candidates: ReadonlyArray<{ source_check?:
   return `AI 候選 · ${candidates.length} 檔（${parts.join('、')}）`
 }
 
-export function candidateCheckNote(ai: Pick<NewsAi, 'candidate_check_version'>): string {
-  return `核對規則 ${ai.candidate_check_version ?? '未記錄'}。規則核實：名稱或代號出現在標題或摘要；推論：原文沒有寫出，由模型推得。候選不計入已核實關聯。`
-}
-
 // The AI block is shown only for a done inference result; unsupported items keep their direction unknown.
 export function usableAi(item: Pick<NewsItem, 'ai'>): NewsAi | null {
   const ai = item.ai

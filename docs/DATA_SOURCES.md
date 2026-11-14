@@ -288,7 +288,7 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
       "index": { "name": "加權指數", "close": 46041.43, "change": -846.34, "change_pct": -0.0181, "change_pct_method": "official" },
       "turnover": { "value": 933437473560, "scope": "twse_all_securities", "scope_label": "集中市場總計（含 ETF、權證等）" },
       "breadth": { "advancers": 247, "decliners": 756, "unchanged": 74, "limit_up": 3, "limit_down": 5, "unmatched": 7, "not_comparable": 0, "scope": "twse_stocks" },
-      "source": { "label": "臺灣證券交易所 MI_INDEX", "collected_at": "2026-10-22T10:30:05+00:00", "data_as_of": "2026-10-22", "raw_payload_id": 1 } },
+      "source": { "label": "臺灣證券交易所", "collected_at": "2026-10-22T10:30:05+00:00", "data_as_of": "2026-10-22", "raw_payload_id": 1 } },
     { "exchange": "TPEx", "status": "unavailable", "reason": "row_date_mismatch", "latest_trading_date": "2026-10-21" }
   ]
 }

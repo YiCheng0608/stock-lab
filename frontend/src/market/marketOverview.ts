@@ -13,7 +13,6 @@ export const EXCHANGES = [
 export type ExchangeSpec = (typeof EXCHANGES)[number]
 
 export const MARKET_PATH = '/market'
-export const MARKET_PAGE_LEAD = '上市、上櫃的收盤概況，以及加權、櫃買、台指期近月三檔指數的總表；點一列看它的日 K。'
 
 // ---- 指數總表與共用 K 線圖, Issue 564 ---------------------------------------------------------------
 // The Taiwan rows of market_overview.indexes, in table order (Issue 633: the four US rows left the page; the API still
@@ -40,7 +39,6 @@ export const INDEX_PARAM = 'index'
 export const INDEX_TABLE_TITLE = '指數總表'
 export const INDEX_CHART_ID = 'market-index-chart'
 export const INDEX_CHART_TITLE_ID = 'market-chart-title'
-export const INDEX_SELECT_HINT = '點一列，下方圖表切換為該指數的日 K'
 
 // The selected row from ?index= (unknown or missing → 加權指數), and the search that selects another one.
 export function selectedIndex(search: URLSearchParams): IndexSpec {
@@ -122,31 +120,21 @@ export function indexMa60Cell(row: IndexRow | null, digits: number): IndexMa60Ce
 // 「來源：…」 under the table at every width, once (#661: not again in 資料說明; the 來源 column is hidden at 640px
 // and below, DESIGN_SYSTEM §5.1).
 export const INDEX_SOURCE_NOTE = '來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所'
-export const INDEX_CHANGE_NOTE = '漲跌：加權、櫃買為交易所公布的收盤概況（同大盤概況）；台指期近月依前一筆收盤計算，換月日不計漲跌'
 export const INDEX_STALE_NOTE = '「非最新」：資料日不是台股資料日'
-export const INDEX_MA60_NOTE = '季線：各指數最近 60 個交易日收盤的平均（indicators/v1），以該列資料日的收盤判定，高於季線為「之上」、等於季線不算高於；不足 60 個交易日寫「資料不足」'
 
-// 資料說明 of the index table: the TAIFEX notice (the index owners' copyright notices kept), how dates,
-// changes and the MA60 position are read.
-// 資料說明 of 指數總表: the 來源 sentence first (#666: moved in from under the table; 1280 also has the 來源 column).
-export function indexTableNotes(overview: MarketOverview | undefined): string[] {
-  return [
-    INDEX_SOURCE_NOTE,
-    TAIFEX_ATTRIBUTION,
-    INDEX_STALE_NOTE,
-    INDEX_CHANGE_NOTE,
-    ...(isDerived(overview) ? [DERIVED_NOTE] : []),
-    UP_DOWN_NOTE,
-    INDEX_MA60_NOTE,
-    MA60_BACKGROUND_NOTE,
-  ]
+// 資料說明 of 指數總表: the 來源 sentence first (#666: moved in from under the table; 1280 also has the 來源 column),
+// the TAIFEX notice, the 非最新 label and the colours. How changes and the MA60 are computed left with Issue 732 (N-5, N-6).
+export function indexTableNotes(): string[] {
+  return [INDEX_SOURCE_NOTE, TAIFEX_ATTRIBUTION, INDEX_STALE_NOTE, UP_DOWN_NOTE]
 }
 
 export const UP_DOWN_NOTE = '紅色為上漲、綠色為下跌（台股慣例）'
+// On the today page's market line only (Issue 729 scope); the market page no longer explains the method (Issue 732, N-6).
 export const DERIVED_NOTE = '櫃買指數漲跌幅依前一日收市指數計算'
 // 政府資料開放授權條款第1版 第三條 attribution, on the TX chart (coordinator decision 6715831640).
 export const TAIFEX_ATTRIBUTION = '資料來源：臺灣期貨交易所（政府資料開放平臺，政府資料開放授權條款第1版）'
-export const TX_ROLL_NOTE = '近月合約：每月第三個週三（到期日）起改用次月，換月不做價差調整；只含一般交易時段'
+// The TX chart's session scope (Issue 732 kept it; the roll rule left the page).
+export const TX_SESSION_NOTE = '只含一般交易時段'
 
 // The TX history starts at the first collect (open data has the latest session only): said when the daily series is
 // shorter than the request, so the first bar is the first collected session.
@@ -208,7 +196,7 @@ export function summaryItems(overview: MarketOverview | undefined): SummaryItem[
   })
 }
 
-// 資料說明 of the market page: sources, turnover scopes (only exchanges shown), how a derived change is computed.
+// 資料說明 of the market page: sources, turnover scopes (only exchanges shown) and the colours.
 export function marketOverviewNotes(overview: MarketOverview | undefined): string[] {
   const shown = EXCHANGES.flatMap((spec) => {
     const row = available(overview, spec.exchange)
@@ -222,10 +210,7 @@ export function marketOverviewNotes(overview: MarketOverview | undefined): strin
   return [
     ...(sources.length ? [`來源：${sources.join('；')}`] : []),
     ...(scopes.length ? [`成交金額範圍：${scopes.join('；')}`] : []),
-    ...(isDerived(overview) ? [DERIVED_NOTE] : []),
     UP_DOWN_NOTE,
-    // The MA60 definition only when the MA60 line has a position or a count to explain (Issue 561).
-    ...(['available', 'insufficient'].includes(overview?.taiex_ma60?.status ?? '') ? [MA60_NOTE, MA60_BACKGROUND_NOTE] : []),
   ]
 }
 
@@ -233,8 +218,6 @@ export function marketOverviewNotes(overview: MarketOverview | undefined): strin
 // market_overview.taiex_ma60: one neutral line under the four widgets (no red/green: it is background, not a signal).
 
 export const MA60_LABEL = '加權指數與季線（MA60）'
-export const MA60_NOTE = '季線：臺灣證券交易所加權指數最近 60 個交易日收盤的平均（indicators/v1）；位置以當日收盤是否高於季線判定，等於季線不算高於'
-export const MA60_BACKGROUND_NOTE = '季線位置只是背景資訊，不是買賣建議，也不影響今日名單'
 export const MA60_POSITION: Record<string, string> = { above: '在季線之上', below: '在季線之下', equal: '與季線持平' }
 
 const day = (value: string | null | undefined) => formatDay(value) ?? value ?? '—'

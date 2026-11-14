@@ -6,7 +6,7 @@ import { ApiError, getDashboard, getStockBars } from '../api'
 import { EmptyState, Skeleton } from '../components/ui'
 import type { Dashboard, MarketOverview, StockBarsInterval } from '../types'
 import { IndexTablePanel, MarketChartView, MarketOverviewPanel } from './MarketViews'
-import { MARKET_PAGE_LEAD, indexRow, indexSearch, selectedIndex, type IndexSpec } from './marketOverview'
+import { indexRow, indexSearch, selectedIndex, type IndexSpec } from './marketOverview'
 
 const notFound = (error: unknown) => error instanceof ApiError && error.status === 404
 
@@ -38,8 +38,6 @@ export function MarketPage() {
     <div className="page market-page">
       <section className="page-title news-page-title">
         <h1>大盤</h1>
-        {/* #666: the lead folds into 說明 beside the title (closed by default). */}
-        <details className="details page-help"><summary>說明</summary><div className="page-help-body"><p>{MARKET_PAGE_LEAD}</p></div></details>
       </section>
       {dashboard.isLoading
         ? <Skeleton height={140} label="大盤概況載入中…" />

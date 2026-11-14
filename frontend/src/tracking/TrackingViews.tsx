@@ -26,11 +26,10 @@ import {
   planLink,
   planProgressLine,
   planResultLine,
+  planSourceText,
   planStatus,
-  planVersionText,
   sessionStatusLabel,
   sessionTriggers,
-  trackingNote,
 } from './tracking'
 
 // User tracking plans (#253): the "加入追蹤" button (today candidates, stock research tab) and the actions page
@@ -158,8 +157,8 @@ export function PlanHistory({ plan, initiallyOpen = false, anchor = true }: { pl
   const detail = useQuery({ queryKey: ['tracking-plan', plan.id, plan.updated_at], queryFn: () => client.plan(plan.id), enabled: open })
   return (
     <details className="details plan-history" id={anchor ? `${planAnchor(plan.id)}-history` : undefined} open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary>版本、來源與逐日明細</summary>
-      <p className="small-note">{planVersionText(plan)}</p>
+      <summary>來源與逐日明細</summary>
+      <p className="small-note">{planSourceText(plan)}</p>
       {!open
         ? null
         : detail.isLoading
@@ -169,7 +168,6 @@ export function PlanHistory({ plan, initiallyOpen = false, anchor = true }: { pl
             : detail.data && (detail.data.sessions.length
               ? (
                 <DataTable
-                  note="價格為當日原始日線（報價幣別元），觸發依計畫價位換算到當日價格基準判定；成交為模擬。"
                   columns={SESSION_COLUMNS}
                   rows={detail.data.sessions}
                   rowKey={(session) => session.session_date}
@@ -287,7 +285,6 @@ function PlanList({ scope, eyebrow, title, empty }: { scope: 'open' | 'closed'; 
   return (
     <section className="tracking-section" aria-labelledby={titleId} data-plan-scope={scope}>
       {head}
-      <p className="small-note">{trackingNote(query.data?.meta)}</p>
       {body}
     </section>
   )

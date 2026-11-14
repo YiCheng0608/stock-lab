@@ -54,8 +54,8 @@ from .models import (
 EXCHANGES = ("TWSE", "TPEx")
 INDEX_LABELS = {"TWSE": "加權指數", "TPEx": "櫃買指數"}
 SOURCE_LABELS = {
-    "twse_mi_index": "臺灣證券交易所 MI_INDEX",
-    "tpex_mainborad_highlight": "櫃買中心 tpex_mainborad_highlight",
+    "twse_mi_index": "臺灣證券交易所",
+    "tpex_mainborad_highlight": "證券櫃檯買賣中心",
 }
 TURNOVER_SCOPE_LABELS = {
     "twse_all_securities": "集中市場總計（含 ETF、權證等）",

@@ -13,7 +13,6 @@ import {
   STOCK_NEWS_LIMIT,
   aiDirection,
   candidateCheckLabel,
-  candidateCheckNote,
   candidateCheckSummary,
   candidateConfidenceLabel,
   candidateHref,
@@ -104,10 +103,11 @@ function RelationChips({ item, hideEmpty = false }: { item: NewsItem; hideEmpty?
   const instruments = verifiedInstruments(item)
   const themes = userFacingNewsThemes(item)
   if (!instruments.length && !themes.length) return hideEmpty ? null : <span className="small-note">未有已核實的標的或族群</span>
-  const version = ruleVersion(item)
+  // Issue 732 (N-9): the label says the relation is rule-matched; the rule version stays in the API.
+  const ruleMatched = ruleVersion(item) !== null
   return (
     <div className="news-chips">
-      {version && <span className="small-note news-relation-source">規則核實 · {version}</span>}
+      {ruleMatched && <span className="small-note news-relation-source">規則核實</span>}
       {instruments.map((instrument) => instrument.href
         ? <Link className="tag symbol-tag" key={instrument.key} to={instrument.href}>{instrument.label}</Link>
         : <span className="tag" key={instrument.key}>{instrument.label}</span>)}
@@ -137,7 +137,6 @@ function AiCandidateRow({ item }: { item: NewsItem }) {
           <span className="news-ai-confidence">{` · ${candidateCheckLabel(candidate.source_check)} · ${candidateConfidenceLabel(candidate.confidence)}`}</span>
         </li>
       ))}</ul>
-      <p className="small-note">{`模型 ${ai.model ?? '未記錄'} · 提示版本 ${ai.prompt_version ?? '未記錄'} · ${candidateCheckNote(ai)}`}</p>
     </details>
   )
 }
@@ -292,7 +291,6 @@ export function NewsListView({
     <div className="page news-page">
       <section className="page-title news-page-title">
         <h1>新聞</h1>
-        <p>國內、國際財經新聞與官方公告；每則標示來源與時間，AI 摘要與判讀另標「AI 推論」。</p>
       </section>
       <div className="news-controls">
         <Tabs items={NEWS_TABS} value={filters.tab} onChange={(tab) => onFiltersChange({ ...filters, tab })} label="新聞分類" idPrefix="news" />
@@ -353,7 +351,7 @@ export function AiInferencePanel({ ai }: { ai: NewsAi | null }) {
           </li>
         ))}</ul>
         : <p className="small-note">{proposedAny ? '模型提出的候選代號都查無對應標的，不列出。' : '模型未提出候選標的。'}</p>}
-      <p className="small-note ai-meta">模型 {ai.model ?? '未記錄'} · 提示版本 {ai.prompt_version ?? '未記錄'} · 產生時間 {generated ?? '待核實'} · {candidateCheckNote(ai)}候選標的不作為交易理由。</p>
+      <p className="small-note ai-meta">產生時間 {generated ?? '待核實'}</p>
     </section>
   )
 }
@@ -388,9 +386,8 @@ export function NewsDetailView({ item }: { item: NewsItem }) {
             <summary>技術資訊</summary>
             <div>來源類型：{sourceKindLabel(item.source_kind)}</div>
             <div>系統收錄時間：{productTimeText(item.product_time, 'collected_at')}</div>
-            {item.impact?.method && <div>關聯方法：{item.impact.method.startsWith('rule:') ? `規則比對（名稱／簡稱／代號）${ruleVersion(item) ? ` · 規則版本 ${ruleVersion(item)}` : ''}` : '來源標示'}</div>}
+            {item.impact?.method && <div>關聯方法：{item.impact.method.startsWith('rule:') ? '規則比對（名稱／簡稱／代號）' : '來源標示'}</div>}
             {item.title && title !== normalizeText(item.title) && <div>原始標題：{item.title}</div>}
-            <div>原始資料識別碼：{item.provenance?.raw_payload_id ?? '—'} · 事件識別碼：{item.provenance?.event_id ?? '—'}</div>
             <div>來源位置：{item.provenance?.endpoint ?? '—'}</div>
           </details>
         </Card>

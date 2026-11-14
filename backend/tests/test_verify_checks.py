@@ -2123,10 +2123,7 @@ def _n6_run(tmp_path, generated_at, shown):
         "prompt_version": "news_v1",
         "generated_at": generated_at,
     }
-    page = (
-        "來源事實\nAI 摘要與判讀\nAI 推論\n"
-        f"模型 m · 提示版本 news_v1 · 產生時間 {shown}。候選未經規則核實。\n"
-    )
+    page = f"來源事實\nAI 摘要與判讀\nAI 推論\n產生時間 {shown}\n"
     return FakeRun(
         tmp_path,
         {
@@ -2146,7 +2143,7 @@ def test_n6_needs_the_taipei_generated_time(tmp_path):
 def test_n6_fails_when_the_generated_time_is_pending(tmp_path):
     # #234: the page wrote 待核實 while the API had a time.
     run = _n6_run(tmp_path, "2026-10-21T16:01:32.746332+00:00", "待核實")
-    with pytest.raises(page_checks.Fail, match="沒有 `產生時間 2026/10/22 00:01`"):
+    with pytest.raises(page_checks.Fail, match="缺整行 `產生時間 2026/10/22 00:01`"):
         page_checks.n6(run)
 
 
@@ -2857,14 +2854,28 @@ def _today_pages(page):
     return {"today-1280": page, "today-390": page}
 
 
-def test_removed_copy_is_32_distinct_phrases():
-    assert len(page_checks.REMOVED_COPY) == len(set(page_checks.REMOVED_COPY)) == 32
+def test_removed_copy_is_70_distinct_phrases():
+    assert len(page_checks.REMOVED_COPY) == len(set(page_checks.REMOVED_COPY)) == 70
     assert page_checks.REMOVED_COPY[:2] == ("現行規則尚無證據", "研究結論")
+
+
+def test_removed_copy_mirrors_the_frontend_list():
+    """Issue 732: verify does not read frontend files, so its REMOVED_COPY is a copy; the two lists stay the same."""
+
+    source = (ROOT / "frontend/src/removedCopy.fixtures.ts").read_text(encoding="utf-8")
+    body = source[source.index("REMOVED_COPY") : source.index("\n]\n")]
+    lines = [line.strip() for line in body.splitlines()[1:]]
+    # Every entry is one `'phrase',` line, so a phrase in another form cannot slip past the comparison.
+    entries = [line for line in lines if line and not line.startswith("//")]
+    matches = [re.fullmatch(r"'([^']+)',", line) for line in entries]
+    assert [line for line, match in zip(entries, matches) if not match] == []
+    phrases = tuple(match.group(1) for match in matches if match)
+    assert phrases == page_checks.REMOVED_COPY
 
 
 def test_t23_passes_without_the_removed_copy(tmp_path):
     summary = page_checks.t23(FakeRun(tmp_path, {}, _today_pages(HEAD_AFTER_729)))
-    assert "沒有 32 句" in summary
+    assert "沒有 70 句" in summary
 
 
 def test_t23_fails_on_the_head_before_issue_729(tmp_path):
@@ -2908,7 +2919,7 @@ def test_s16_passes_and_keeps_the_formula_version_on_the_source_tab(tmp_path):
     summary = page_checks.s16(
         FakeRun(tmp_path, {}, _stock_pages()), page_checks.Stock("TWSE", "9101")
     )
-    assert "五個分頁" in summary and "#732" in summary
+    assert "六個分頁" in summary and "#732" not in summary
 
 
 def test_s16_fails_on_the_stock_page_before_issue_729(tmp_path):
@@ -2940,15 +2951,327 @@ def test_s16_fails_on_the_stock_page_before_issue_729(tmp_path):
     assert "stock-data-1280" not in message
 
 
-def test_s16_skips_the_news_tab_until_issue_732(tmp_path):
-    # The news tab's AI candidate row keeps 模型 … · 提示版本 … until Issue 732.
+def test_s16_checks_the_news_tab_again_since_issue_732(tmp_path):
+    # Before Issue 732 the news tab's AI candidate row wrote 模型 … · 提示版本 … · 核對規則 ….
     pages = _stock_pages(
-        {"stock-news-1280": "模型 m · 提示版本 news_v4 · 核對規則 r\n"}
+        {
+            "stock-news-1280": "AI 候選 · 1 檔（推論 1）\n"
+            "模型 m · 提示版本 news_v4 · 核對規則 ai-candidate-source/v2。規則核實：…\n"
+        }
     )
+    with pytest.raises(page_checks.Fail) as raised:
+        page_checks.s16(FakeRun(tmp_path, {}, pages), page_checks.Stock("TWSE", "9101"))
+    message = str(raised.value)
+    assert "stock-news-1280" in message
+    assert "`提示版本`" in message and "`核對規則`" in message
+
+
+# ---- T24, N9, G10, S17, A19 (Issue 732): the other pages show none of the removed copy ----
+# Each BEFORE is lines of the master page text before Issue 732 (CI verify-1 of PR 734); each AFTER the same page
+# with them taken off. Decisions 6881593041 and 6883315647.
+
+MARKET_BEFORE = (
+    "大盤\n說明\n"
+    "上市、上櫃的收盤概況，以及加權、櫃買、台指期近月三檔指數的總表；點一列看它的日 K。\n"
+    "大盤概況\n資料說明\n"
+    "來源：上市為臺灣證券交易所；上櫃為證券櫃檯買賣中心\n"
+    "漲跌：加權、櫃買為交易所公布的收盤概況（同大盤概況）；台指期近月依前一筆收盤計算，換月日不計漲跌\n"
+    "季線：各指數最近 60 個交易日收盤的平均（indicators/v1），以該列資料日的收盤判定\n"
+    "季線位置只是背景資訊，不是買賣建議，也不影響今日名單\n"
+    "點一列，下方圖表切換為該指數的日 K\n"
+)
+MARKET_AFTER = (
+    "大盤\n大盤概況\n資料說明\n"
+    "來源：上市為臺灣證券交易所；上櫃為證券櫃檯買賣中心\n"
+    "「非最新」：資料日不是台股資料日\n紅色為上漲、綠色為下跌（台股慣例）\n"
+)
+TX_BEFORE = (
+    "近月合約：每月第三個週三（到期日）起改用次月，換月不做價差調整；只含一般交易時段\n"
+)
+TX_AFTER = "自 2026/10/22 起收集，無更早歷史；只含一般交易時段\n"
+
+
+def _market_pages(page, tx):
+    return {
+        "market-1280": page,
+        "market-390": page,
+        "market-tpex-1280": page,
+        "market-tx-1280": page + tx,
+    }
+
+
+def test_t24_passes_on_the_market_page_after_issue_732(tmp_path):
+    run = FakeRun(tmp_path, {}, _market_pages(MARKET_AFTER, TX_AFTER))
+    assert "market-1280／390" in page_checks.t24(run)
+
+
+def test_t24_fails_on_the_market_page_before_issue_732(tmp_path):
+    run = FakeRun(tmp_path, {}, _market_pages(MARKET_BEFORE, TX_BEFORE))
+    with pytest.raises(page_checks.Fail) as raised:
+        page_checks.t24(run)
+    message = str(raised.value)
+    for phrase in (
+        "三檔指數的總表",
+        "點一列",
+        "換月日不計漲跌",
+        "個交易日收盤的平均",
+        "indicators/v1",
+        "季線位置只是背景資訊",
+    ):
+        assert f"`{phrase}`（market-390.txt" in message
+    assert "`換月不做價差調整`（market-tx-1280.txt" in message
+
+
+NEWS_BEFORE = (
+    "新聞\n國內、國際財經新聞與官方公告；每則標示來源與時間，AI 摘要與判讀另標「AI 推論」。\n"
+    "AI 候選 · 1 檔（推論 1）\n9801 示範興櫃（興櫃） · 推論 · 模型把握低\n"
+    "模型 claude-sonnet-5-5 · 提示版本 news_v4 · 核對規則 ai-candidate-source/v2。規則核實：…\n"
+)
+NEWS_AFTER = (
+    "新聞\nAI 候選 · 1 檔（推論 1）\n9801 示範興櫃（興櫃） · 推論 · 模型把握低\n"
+)
+NEWS_DETAIL_BEFORE = (
+    "技術資訊\n來源類型：媒體報導\n原始資料識別碼：3 · 事件識別碼：—\n"
+    "模型 claude-sonnet-5-5 · 提示版本 news_v3 · 產生時間 2026/10/16 11:01 · 核對規則 ai-candidate-source/v2。"
+    "規則核實：…候選不計入已核實關聯。候選標的不作為交易理由。\n"
+)
+NEWS_DETAIL_AFTER = "技術資訊\n來源類型：媒體報導\n產生時間 2026/10/16 11:01\n"
+
+
+def _news_run(tmp_path, page, detail):
+    payloads = {"news?category=domestic&limit=20": {"items": [{"id": "3"}]}}
+    pages = {
+        "news-1280": page,
+        "news-390": page,
+        "news-international-1280": page,
+        "news-official-1280": page,
+        "news-detail-1280": detail,
+        "news-detail-390": detail,
+    }
+    return FakeRun(tmp_path, payloads, pages)
+
+
+def test_n9_passes_on_the_news_pages_after_issue_732(tmp_path):
+    summary = page_checks.n9(_news_run(tmp_path, NEWS_AFTER, NEWS_DETAIL_AFTER))
+    assert "news-detail-1280／390" in summary
+
+
+def test_n9_fails_on_the_news_pages_before_issue_732(tmp_path):
+    with pytest.raises(page_checks.Fail) as raised:
+        page_checks.n9(_news_run(tmp_path, NEWS_BEFORE, NEWS_DETAIL_BEFORE))
+    message = str(raised.value)
+    for phrase in ("國內、國際財經新聞與官方公告", "提示版本", "核對規則"):
+        assert f"`{phrase}`（news-390.txt" in message
+    for phrase in ("原始資料識別碼", "事件識別碼", "候選標的不作為交易理由"):
+        assert f"`{phrase}`（news-detail-1280.txt" in message
+
+
+THEMES_BEFORE = (
+    "族群\n說明\n"
+    "產業與題材各自成榜，依相對報酬、廣度、量能、法人與催化劑五分項計分；只有五分項完整的族群稱為熱門族群。\n"
+    "分數 0–100，依分數排名；「—」表示該項無資料。\n"
+    "名稱後的兩個分項是五分項中最高與最低的一項。\n"
+    "今日名單 N 檔是當日今日名單中屬於這個族群的檔數，沒有時不顯示。\n"
+)
+THEMES_AFTER = "族群\n說明\n分數 0–100，依分數排名；「—」表示該項無資料。\n#1\n半導體\n今日名單 2 檔\n"
+
+
+def _themes_pages(page):
+    return {"themes-1280": page, "themes-390": page, "themes-theme-1280": page}
+
+
+def test_g10_passes_on_the_boards_after_issue_732(tmp_path):
+    summary = page_checks.g10(FakeRun(tmp_path, {}, _themes_pages(THEMES_AFTER)))
+    assert "themes-1280／390" in summary
+
+
+def test_g10_fails_on_the_boards_before_issue_732(tmp_path):
+    with pytest.raises(page_checks.Fail) as raised:
+        page_checks.g10(FakeRun(tmp_path, {}, _themes_pages(THEMES_BEFORE)))
+    message = str(raised.value)
+    for phrase in ("各自成榜", "名稱後的兩個分項", "檔是當日今日名單中"):
+        assert f"`{phrase}`（themes-theme-1280.txt" in message
+
+
+STOCKS_BEFORE = (
+    "個股\n說明\n"
+    "市場標的目錄：股票、ETF 與新上市標的分開標示；行動與缺資料優先級只來自已驗證官方快照。\n"
+    "單位：價格為各標的報價幣別的元，指數為點。\n"
+)
+STOCKS_AFTER = "個股\n說明\n單位：價格為各標的報價幣別的元，指數為點。\n"
+
+
+def test_s17_passes_on_the_directory_after_issue_732(tmp_path):
+    pages = {"stocks-1280": STOCKS_AFTER, "stocks-390": STOCKS_AFTER}
+    assert "stocks-1280／390" in page_checks.s17(FakeRun(tmp_path, {}, pages), None)
+
+
+def test_s17_fails_on_the_directory_before_issue_732(tmp_path):
+    pages = {"stocks-1280": STOCKS_AFTER, "stocks-390": STOCKS_BEFORE}
+    with pytest.raises(page_checks.Fail) as raised:
+        page_checks.s17(FakeRun(tmp_path, {}, pages), None)
+    message = str(raised.value)
+    assert "stocks-390：`市場標的目錄`" in message
+    assert "`缺資料優先級只來自`（stocks-390.txt" in message
+    assert "stocks-1280" not in message
+
+
+WATCH_BEFORE = (
+    "我的追蹤\n說明\n"
+    "把有興趣的候選加入追蹤，系統每天收盤後依日線模擬它的進場與出場（不是實際成交）。\n"
+    "自選標的一律顯示；隱藏不刪資料，切換上方篩選即可看到。\n"
+    "我的庫存\n持倉風險列在行動列表最上方\n"
+    "未核實行情的本地記錄與試算，可展開每筆庫存核對。\n"
+    "核對庫存原股數、本地行情與試算\n來源稽核原股數 2,000 股\n"
+    "本地記錄；來源／日期待核實。記錄日期不表示交易日或原件證據已核實。\n"
+    "記錄資料時間 2026-10-16 06:00:00.000000 · 記錄收集時間 2026-10-16 09:30:00.000000\n"
+    "本地試算，行情來源／日期尚未核實。停牌、行情整體一致性與可交易用途尚未核對。\n"
+    "市值本地試算（股數 × 本地收盤，報價幣別元） 344,040\n"
+    "未實現損益本地試算（市值 − 平均成本 × 股數，報價幣別元） +44,040\n"
+    "追蹤計畫\n"
+    "計畫價位來自建立當日的研究條件；成交與結果是依日線規則的模擬，不是實際成交，也不統計勝率。\n"
+    "版本、來源與逐日明細\n"
+    "來源 今日候選 · 策略版本 1 · 公式 institutional-flow/v2-shares-per-share-volume · 追蹤規則 plan_tracking_v2\n"
+    "價格為當日原始日線（報價幣別元），觸發依計畫價位換算到當日價格基準判定；成交為模擬。\n"
+)
+WATCH_AFTER = (
+    "我的追蹤\n我的庫存\n本地行情與試算\n記錄來源 twse · 記錄日期 2026-10-16\n"
+    "市值本地試算（報價幣別元） 344,040\n追蹤計畫\n來源與逐日明細\n來源 今日候選\n"
+)
+
+
+def _watch_pages(page):
+    return {"actions-1280": page, "actions-390": page, "actions-legacy-1280": page}
+
+
+def test_a19_passes_on_the_watch_page_after_issue_732(tmp_path):
+    summary = page_checks.a19(FakeRun(tmp_path, {}, _watch_pages(WATCH_AFTER)))
+    assert "actions-1280／390" in summary and "actions-legacy-1280" in summary
+
+
+def test_a19_fails_on_the_watch_page_before_issue_732(tmp_path):
+    with pytest.raises(page_checks.Fail) as raised:
+        page_checks.a19(FakeRun(tmp_path, {}, _watch_pages(WATCH_BEFORE)))
+    message = str(raised.value)
+    for phrase in (
+        "把有興趣的候選加入追蹤",
+        "自選標的一律顯示",
+        "持倉風險列在",
+        "可展開每筆庫存核對",
+        "核對庫存原股數",
+        "來源稽核原股數",
+        "記錄日期不表示交易日",
+        "記錄資料時間",
+        "可交易用途尚未核對",
+        "股數 × 本地收盤",
+        "平均成本 × 股數",
+        "計畫價位來自建立當日",
+        "版本、來源與逐日明細",
+        "institutional-flow/",
+        "plan_tracking_v",
+        "價格為當日原始日線",
+    ):
+        assert f"`{phrase}`（actions-390.txt" in message
+
+
+# ---- review 6884044663: news text on a page is not the page's own copy ----
+# Real headlines and summaries can carry plain phrases of REMOVED_COPY; the pages that show news are matched
+# against NEWS_UI_COPY only, so these pass, while the news UI's own removed words still fail.
+NEWS_TEXT = (
+    "存股殖利率不是越高越好 法人：留意配息穩定度\n"
+    "虛構新聞：台指期每月第三個週三結算，研究結論指出點一列的價差收斂。\n"
+    "AI 摘要：決策時間拉長，各自成榜的族群輪動。\n"
+)
+
+
+def test_news_ui_copy_is_part_of_the_removed_copy():
+    assert set(page_checks.NEWS_UI_COPY) <= set(page_checks.REMOVED_COPY)
+    for phrase in ("越高越好", "每月第三個週三", "研究結論", "點一列", "決策時間"):
+        assert phrase in page_checks.REMOVED_COPY
+        assert phrase not in page_checks.NEWS_UI_COPY
+
+
+def test_n9_passes_on_news_text_with_plain_removed_phrases(tmp_path):
+    run = _news_run(tmp_path, NEWS_AFTER + NEWS_TEXT, NEWS_DETAIL_AFTER + NEWS_TEXT)
+    assert "沒有 9 句新聞頁自己的已拿掉文字" in page_checks.n9(run)
+
+
+def test_n9_still_fails_on_the_news_ui_s_own_words(tmp_path):
+    run = _news_run(
+        tmp_path,
+        NEWS_AFTER + NEWS_TEXT,
+        NEWS_DETAIL_AFTER + "模型 m · 提示版本 news_v4\n",
+    )
+    with pytest.raises(page_checks.Fail, match="news-detail-1280：`提示版本`"):
+        page_checks.n9(run)
+
+
+def test_g10_passes_on_related_news_titles_in_the_detail(tmp_path):
+    pages = _themes_pages(THEMES_AFTER)
+    detail = "族群成員\n相關新聞\n" + NEWS_TEXT
+    pages.update({"theme-detail-1280": detail, "theme-detail-390": detail})
+
+    def run_on(pages):
+        run = FakeRun(tmp_path, {}, pages)
+        run.T = lambda: ("t1", "半導體")  # the detail shot is /themes/<T>
+        return run
+
+    assert "theme-detail-1280／390" in page_checks.g10(run_on(pages))
+    pages["theme-detail-390"] = detail + "題材表版本 themes_v1:2026.10.17\n"
+    with pytest.raises(page_checks.Fail, match="theme-detail-390：`題材表版本`"):
+        page_checks.g10(run_on(pages))
+
+
+def test_s16_passes_on_news_text_in_the_news_tab(tmp_path):
+    pages = _stock_pages({"stock-news-1280": "新聞與公告\n" + NEWS_TEXT})
     summary = page_checks.s16(
         FakeRun(tmp_path, {}, pages), page_checks.Stock("TWSE", "9101")
     )
-    assert "新聞與公告分頁等 #732" in summary
+    assert "新聞與公告分頁只比新聞頁自己的字" in summary
+    # The same phrase outside the news tab is still the page's own copy.
+    pages["stock-chips-1280"] = "決策時間：未記錄\n"
+    with pytest.raises(page_checks.Fail, match="stock-chips-1280：`決策時間`"):
+        page_checks.s16(FakeRun(tmp_path, {}, pages), page_checks.Stock("TWSE", "9101"))
+
+
+# ---- review 6884343680: a candidate's AI note (llm_note) is model text, not the page's own copy ----
+# The prompt itself writes 「score（0–100，越高越好…」 and feeds news, so the note may repeat plain phrases.
+LLM_NOTE = {
+    "status": "done",
+    "selection": "總分 73，越高越好；突破 20 日高點且量比 1.6。",
+    "levels": "進場 389.23 元，研究結論是守 369.77 元。\n目標 420.37 元。",
+    "risks": "台指期每月第三個週三結算，波動可能放大。",
+}
+NOTE_PAGE = (
+    "AI 進出點說明\n為何入選\n總分 73，越高越好；突破 20 日高點且量比 1.6。\n"
+    "進場區、停損與目標\n進場 389.23 元，研究結論是守 369.77 元。\n目標 420.37 元。\n"
+    "需留意的風險\n台指期每月第三個週三結算，波動可能放大。\n"
+)
+
+
+def test_t23_passes_on_ai_note_text_with_plain_removed_phrases(tmp_path):
+    payloads = {"candidates": {"items": [{"llm_note": LLM_NOTE}]}}
+    run = FakeRun(tmp_path, payloads, _today_pages(HEAD_AFTER_729 + NOTE_PAGE))
+    assert "沒有 70 句" in page_checks.t23(run)
+
+
+def test_t23_still_fails_when_the_page_itself_writes_the_phrase(tmp_path):
+    payloads = {"candidates": {"items": [{"llm_note": LLM_NOTE}]}}
+    page = HEAD_AFTER_729 + NOTE_PAGE + "分數 0–100，越高越好\n"
+    with pytest.raises(
+        page_checks.Fail, match="today-1280：`越高越好`（today-1280.txt 第 "
+    ):
+        page_checks.t23(FakeRun(tmp_path, payloads, _today_pages(page)))
+
+
+def test_s16_passes_on_ai_note_text_in_the_research_tab(tmp_path):
+    payloads = {"stocks/TWSE/9101": {"candidate": {"llm_note": LLM_NOTE}}}
+    pages = _stock_pages({"stock-research-1280": "研究條件\n" + NOTE_PAGE})
+    stock = page_checks.Stock("TWSE", "9101")
+    assert "六個分頁" in page_checks.s16(FakeRun(tmp_path, payloads, pages), stock)
+    pages["stock-research-1280"] += "分數與百分位 0–100，越高越好\n"
+    with pytest.raises(page_checks.Fail, match="stock-research-1280：`越高越好`"):
+        page_checks.s16(FakeRun(tmp_path, payloads, pages), stock)
 
 
 # ---- A6 (Issue 729 review): the same-day branch checks the panel itself ----
