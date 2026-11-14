@@ -356,8 +356,14 @@ GOOD_BODY = """Closes #12
   - AC-2：[留言](https://github.com/o/r/issues/12#issuecomment-1)
 
 ![desktop](https://example.com/a.png)
+
+## 欄位
+
+- 會過期的記憶：無
 """
 API = ["backend/app/api.py"]
+# The samples were merged before rule f (#705); sample() adds the line they lack.
+STALE_MEMORY_NONE = "\n- 會過期的記憶：無\n"
 
 
 def rules(errors: list[str]) -> list[str]:
@@ -368,10 +374,10 @@ class PrGateTests(unittest.TestCase):
     def check(self, body=GOOD_BODY, paths=(), labels=(), commits=None):
         return pr_errors(body, list(paths), list(labels), commits or {"a" * 40: "x"})
 
-    def sample(self, number, labels=None):
+    def sample(self, number, labels=None, stale_memory=STALE_MEMORY_NONE):
         sample = SAMPLES[number]
         return pr_errors(
-            sample["body"],
+            sample["body"] + stale_memory,
             sample["paths"],
             sample["labels"] if labels is None else labels,
             sample["commits"],
@@ -380,6 +386,41 @@ class PrGateTests(unittest.TestCase):
     def test_pr_209_passes_every_rule(self):
         self.assertEqual(self.sample("209"), [])
 
+    def test_f_a_product_change_names_its_stale_memories(self):
+        self.assertEqual(self.check(paths=API), [])
+        for filled in (
+            "- 會過期的記憶：`memory-upkeep-rule.md` 改成指向 COORDINATOR「記憶」",
+            "- **會過期的記憶**: 無",
+            "- 會過期的記憶：\n  - `a.md` 刪除\n  - `b.md` 併入 `c.md`",
+        ):
+            body = GOOD_BODY.replace("- 會過期的記憶：無", filled)
+            self.assertEqual(self.check(body, API), [], filled)
+        for empty in (
+            "- 會過期的記憶：",
+            "- 會過期的記憶： ／",
+            "- 會過期的記憶：<!-- x -->",
+        ):
+            body = GOOD_BODY.replace("- 會過期的記憶：無", empty)
+            errors = self.check(body, API)
+            self.assertEqual(rules(errors), ["f"], empty)
+            self.assertIn("「會過期的記憶」 is empty", errors[0])
+            self.assertIn("'- 會過期的記憶：無'", errors[0])
+        # Prose naming the field is not the field; a heading is not a list line.
+        for missing in ("", "本文要寫會過期的記憶：無", "## 會過期的記憶：無"):
+            body = GOOD_BODY.replace("- 會過期的記憶：無", missing)
+            errors = self.check(body, API)
+            self.assertEqual(rules(errors), ["f"], missing)
+            self.assertIn("no 「會過期的記憶」 line", errors[0])
+            self.assertIn("'- 會過期的記憶：無'", errors[0])
+
+    def test_f_applies_only_when_a_does(self):
+        body = GOOD_BODY.replace("- 會過期的記憶：無", "")
+        self.assertEqual(self.check(body, ["docs/ROADMAP.md"]), [])
+        self.assertEqual(self.check(body, ["tools/ci/checks.py"]), [])
+        self.assertEqual(
+            rules(self.check(body, ["tools/ops/memory_check.py"])), ["d", "f"]
+        )
+
     def test_pr_223_fails_only_d(self):
         paths = SAMPLES["223"]["paths"]
         self.assertIn("backend/alembic/versions/0016_group_score_archive.py", paths)
@@ -387,6 +428,9 @@ class PrGateTests(unittest.TestCase):
         errors = self.sample("223")
         self.assertEqual(rules(errors), ["d"], errors)
         self.assertEqual(self.sample("223", labels=["independent-review"]), [])
+        # As merged, before rule f (#705): f fails as well.
+        unfilled = self.sample("223", ["independent-review"], stale_memory="")
+        self.assertEqual(rules(unfilled), ["f"])
 
     def test_a_product_change_needs_closes(self):
         self.assertEqual(self.check(paths=API), [])
@@ -449,7 +493,7 @@ class PrGateTests(unittest.TestCase):
         self.assertEqual(len(self.check(body, ["docs/x.md"])), 2)
 
     def test_b_section_required_only_when_a_applies(self):
-        body = "Closes #12\n\n## 做了什麼\n"
+        body = "Closes #12\n\n## 做了什麼\n\n- 會過期的記憶：無\n"
         self.assertEqual(rules(self.check(body, API)), ["b"])
         self.assertEqual(self.check(body, ["docs/ROADMAP.md"]), [])
         listed_nothing = body + "\n- [x] AC 逐條結果：不適用\n"
@@ -459,9 +503,12 @@ class PrGateTests(unittest.TestCase):
     def test_unfilled_template_fails_and_filled_template_passes(self):
         template = (ROOT / "docs/templates/pull-request.md").read_text(encoding="utf-8")
         errors = self.check(template, API)
-        self.assertEqual(rules(errors), ["a", "b"], errors)
-        self.assertEqual(len(errors), 4, errors)  # no Closes, AC-1..3 empty
-        filled = template.replace("#<issue>", "#12")
+        self.assertEqual(rules(errors), ["a", "b", "f"], errors)
+        # no Closes, AC-1..3 empty, 會過期的記憶 empty (#705)
+        self.assertEqual(len(errors), 5, errors)
+        filled = template.replace("#<issue>", "#12").replace(
+            "- 會過期的記憶：", "- 會過期的記憶：無"
+        )
         for n in (1, 2, 3):
             filled = filled.replace(
                 f"  - AC-{n}：\n", f"  - AC-{n}：`pytest -k x`／1 passed／無\n"

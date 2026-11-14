@@ -156,6 +156,7 @@ def test_take_over_runs_every_step_in_order_and_reads_each_back(to: Harness) -> 
             "close",
             "relisten",
             "commitments",
+            "memory",
         ],
         "failed": None,
         "reason": None,
@@ -206,10 +207,12 @@ def test_take_over_runs_every_step_in_order_and_reads_each_back(to: Harness) -> 
     ]
     # No listener ran before: this run starts one in its own terminal and keeps it.
     assert _listener(to) == ["--status", "start", "--status", "start", "--status"]
-    # The commitments are printed last, before the JSON line.
+    # The commitments, then the memory check (#705), are printed last, before the JSON
+    # line.
     out = result.stdout.strip().splitlines()
-    assert out[-4] == "未兌現的承諾：1 則（已到期 1 則）"
-    assert out[-3].startswith("  [c1] [已到期]")
+    assert out[-5] == "未兌現的承諾：1 則（已到期 1 則）"
+    assert out[-4].startswith("  [c1] [已到期]")
+    assert out[-3].startswith("memory_check: 通過（1 則記憶")
     assert out[-2].startswith("take_over：全部完成：")
     assert list(to.temp.iterdir()) == []
     # The run's record goes once every step is done.
@@ -257,7 +260,7 @@ def test_take_over_stops_when_the_old_listener_still_answers(to: Harness) -> Non
         to, "term_old", "--from", "relisten", "--comment-url", COMMENT_URL
     )
     assert again.returncode == 0, again.stdout + again.stderr
-    assert _last(again)["done"] == ["relisten", "commitments"]
+    assert _last(again)["done"] == ["relisten", "commitments", "memory"]
     assert not record.exists()
 
 
@@ -309,6 +312,7 @@ def test_take_over_stops_at_the_failed_step_and_says_what_was_done(
         "close",
         "relisten",
         "commitments",
+        "memory",
     ]
     assert line["ok"] is False
     assert line["failed"] == step
@@ -358,7 +362,13 @@ def test_take_over_goes_on_from_the_failed_step(to: Harness) -> None:
     calls = len(to.calls("gh"))
     result = _take_over(to, "term_old", "--from", "row", "--comment-url", COMMENT_URL)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert _last(result)["done"] == ["row", "close", "relisten", "commitments"]
+    assert _last(result)["done"] == [
+        "row",
+        "close",
+        "relisten",
+        "commitments",
+        "memory",
+    ]
     # No second comment on #1.
     assert not [c for c in to.calls("gh")[calls:] if "comments" in c]
     assert f"（[900]({COMMENT_URL})）。" in _body(to)
@@ -375,6 +385,7 @@ def test_take_over_without_an_old_terminal_touches_no_terminal(to: Harness) -> N
         "close:skipped",
         "relisten:skipped",
         "commitments",
+        "memory",
     ]
     assert _orca(to) == []
     assert _listener(to) == ["--status", "start", "--status"]

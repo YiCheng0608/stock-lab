@@ -412,6 +412,9 @@ AC_ITEM = re.compile(
 # Punctuation that can follow an AC label without being a result.
 AC_FILLER = re.compile(r"[\s*_~`:：/／|、,，.。()（）\-–—]+")
 IMAGE = re.compile(r"!\[[^\]]*\]\([^)]+\)|<img\b|pr-assets", re.I)
+# Rule f (#705): the 欄位 line naming the Claude Code memories the PR makes stale.
+STALE_MEMORY = re.compile(r"^(\s*)[-*+]\s+(?:\*\*)?會過期的記憶(?:\*\*)?\s*[:：](.*)$")
+STALE_MEMORY_LINE = "- 會過期的記憶：無"
 
 
 def path_matches(path: str, pattern: str) -> bool:
@@ -479,10 +482,27 @@ def ac_results(body: str) -> dict[str, str] | None:
     return results
 
 
+def stale_memories(body: str) -> str | None:
+    """The 「會過期的記憶」 text (lines indented under it included), or None without one."""
+    lines = body.splitlines()
+    for i, line in enumerate(lines):
+        found = STALE_MEMORY.match(line)
+        if not found:
+            continue
+        indent = len(found.group(1))
+        text = [found.group(2)]
+        for follow in lines[i + 1 :]:
+            if follow.strip() and len(follow) - len(follow.lstrip()) <= indent:
+                break
+            text.append(follow)
+        return AC_FILLER.sub("", "\n".join(text))
+    return None
+
+
 def pr_errors(
     body: str, paths: list[str], labels: list[str], commits: dict[str, str]
 ) -> list[str]:
-    """Rules a-e of the PR gate; commits maps each non-merge commit to its message."""
+    """Rules a-f of the PR gate; commits maps each non-merge commit to its message."""
     body = re.sub(r"<!--.*?-->", "", body, flags=re.S)  # template guidance
     errors = []
     product = needs_issue(paths)
@@ -521,6 +541,16 @@ def pr_errors(
             errors.append(
                 f"e: commit {sha[:12]} message has closing keyword '{found.group()}'"
             )
+    if product:
+        memories = stale_memories(body)
+        fix = (
+            f"add the line '{STALE_MEMORY_LINE}' under 欄位, or name each memory the PR "
+            "makes stale and how to change it (docs/templates/pull-request.md)"
+        )
+        if memories is None:
+            errors.append(f"f: the body has no 「會過期的記憶」 line; {fix}")
+        elif not memories:
+            errors.append(f"f: 「會過期的記憶」 is empty; {fix}")
     return errors
 
 
