@@ -1875,10 +1875,10 @@ def test_the_notify_command_sends_with_its_own_log_and_no_job_wrapper(tmp_path):
     injected = serve.Serve(
         serve_args("--data-dir", str(data), "--now", "2026-11-16T08:44:50")
     )
-    assert injected.command("notify", injected.now())[0][-2:] == [
-        "--date",
-        "2026-11-16",
-    ]
+    # The injected time itself: the job checks 08:45 to 13:30 on it (review 6882303076).
+    argv = injected.command("notify", injected.now())[0]
+    assert argv[-2] == "--now"
+    assert argv[-1].startswith("2026-11-16T08:44:5") and argv[-1].endswith("+08:00")
     assert runner.backstop("notify") == (5 + 5) * 60
 
 
@@ -1908,13 +1908,14 @@ def _notify_catchup(data: Path, now: str):
         ((), f"{MONDAY}T09:10", "not_sent"),
         (("status=failed reason=http_502",), f"{MONDAY}T10:00", "not_sent"),
         (("status=skipped reason=already_running",), f"{MONDAY}T08:50", "not_sent"),
-        # The day is done: sent, not configured, or a closed day.
-        (("status=sent attempts=1 message_id=7",), f"{MONDAY}T09:10", None),
+        # A token set after 08:45 and a recreated scheduler (review 6882303076 item 5).
         (
             ("status=not_configured missing=TELEGRAM_BOT_TOKEN",),
             f"{MONDAY}T09:10",
-            None,
+            "not_sent",
         ),
+        # The day is done: sent or a closed day.
+        (("status=sent attempts=1 message_id=7",), f"{MONDAY}T09:10", None),
         (("status=skipped reason=non_trading_day",), f"{MONDAY}T09:10", None),
         # Before 08:45, after the close's 13:30, or a weekend.
         ((), f"{MONDAY}T08:44", None),

@@ -33,8 +33,8 @@
   - 每台北日各最多一則；還沒有任何 `us-*.log` 時不判定。
   - 處置：查該日誌與 `/api/ingestion-runs?q=us_index_collect&include_metadata=true` 的 `series.<代號>.error`。FinMind 回 402（超過每小時上限）時等下一個時段；修好後用 `docker compose -p <P> exec scheduler python -m worker.cli job us --trigger manual --min-free-memory-gb 2` 補跑。
 - `notify`（每日 Telegram 通知，[#728](https://github.com/YiCheng0608/stock-lab/issues/728)；週一至週五 08:45，見 [scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)）：
-  - `notify_missing`：週一至週五台北 09:10 以後，當天的 `logs/notify-YYYYMMDD.log` 不存在或沒有 `end` 列，也就是 scheduler 沒跑或還卡著。休市日 job 照樣寫 `skipped reason=non_trading_day` 與 `end` 列，所以看門狗不必查行事曆。
-  - `notify_failed`：當天最後一個不是 `skipped` 的 `--- result` 列是 `status=failed`（兩次都送失敗、`chat_not_private` 等），留言附那一列（token 已遮掉）。之後手動補送成功（`status=sent`）就不再判定。
+  - `notify_missing`：週一至週五台北 09:10 以後，當天的 `logs/notify-YYYYMMDD.log` 不存在（留言寫 scheduler 可能沒在跑），或有 `start` 沒有 `end` 列（留言寫卡住或被 serve 的保險時間結束，請查 `docker logs` 的 `serve killed job=notify`；#728 review 第 6 點）。休市日 job 照樣寫 `skipped reason=non_trading_day` 與 `end` 列，所以看門狗不必查行事曆。
+  - `notify_failed`：當天最後一個不是 `skipped` 的 `--- result` 列是 `status=failed`（重試後仍失敗、401 等不重試的錯誤、`chat_not_private` 等），留言附那一列（token 已遮掉）。之後手動補送成功（`status=sent`）就不再判定。
   - `not_configured`（沒設 `TELEGRAM_BOT_TOKEN`／`TELEGRAM_CHAT_ID`）不算失敗、不留言。每台北日各最多一則；還沒有任何 `notify-*.log` 時不判定。
   - 處置：查該日誌的 `--- result` 列。token 或 chat id 錯時更正發佈 checkout 的認證檔後重建 scheduler（[每日 Telegram 通知](SETUP.md#每日-telegram-通知)）；網路問題恢復後用 `docker compose -p <P> exec scheduler python -m worker.cli notify --send --trigger manual` 補送，當天已送出的不會重送。
 - `monitor_stale`：事件 monitor 的 `logs/monitor-heartbeat.json`（`--monitor-dir` 給了就讀那個目錄的，scheduler 容器是 `/coordination`，#338）超過 10 分鐘沒有更新，或讀不出輪詢時間（[統籌事件 monitor](MONITOR.md)；monitor 每分鐘寫一次）；檔案不存在（monitor 尚未註冊）時不判定。心跳仍在更新、但記錄 gh 已連續 10 輪失敗（例如登入過期，佇列收不到 PR 與留言）時另以 `monitor_gh_failed` 留言，附第一次失敗的時間與最後的錯誤，請查 `gh auth status` 與 `gh api rate_limit`（帳號共用的 5000 次／小時可能已用完）。

@@ -25,9 +25,12 @@ The record is the day's log ``<logs>/notify-YYYYMMDD.log`` (the target day; no t
 ``===== start`` line, one ``--- result status=…`` line (sent, not_configured, failed or
 skipped with a reason) and a ``===== end exit=N`` line. A run that finds ``status=sent`` in
 the day's log skips (``already_sent``), so a restarted scheduler never sends twice; the lock
-``<data>/locks/notify.lock`` keeps two runs apart and is no other job's. A failed send is
-tried once more after 30 seconds; both failing is ``failed`` with exit 1, which the
-watchdog reports (``notify_failed``; ``notify_missing`` when the day has no end line).
+``<data>/locks/notify.lock`` keeps two runs apart and is no other job's. A scheduled run
+(``--trigger scheduler``) sends only between 08:45 and 13:30 Taipei and records
+``skipped reason=too_late`` otherwise, whatever APScheduler does with a missed trigger. A
+network failure, a timeout, a 5xx or a 429 is tried once more (``_attempt``); another 4xx is
+not. A failure is ``failed`` with every attempt's reason and exit 1, which the watchdog
+reports (``notify_failed``; ``notify_missing`` when the day has no end line).
 
 Not through ``worker.job`` (#728 decision 6881879639): the run only reads the database and
 sends one request, so it needs neither the memory threshold nor the git check, and it runs
@@ -39,6 +42,7 @@ Only the standard library at the top: serve imports the log reading here.
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
 import re
@@ -64,6 +68,8 @@ CATCH_UP_END = (13, 30)
 TIMEOUT_SECONDS = 20.0
 RETRY_DELAY_SECONDS = 30.0
 ATTEMPTS = 2
+# A 429 asking to wait longer is not waited for (the run records failed).
+RETRY_AFTER_MAX_SECONDS = 60.0
 # serve's backstop adds its own 5 minutes; two attempts and the pause take about 70 seconds.
 TIME_LIMIT_MINUTES = 5.0
 # Telegram's limit for one message's text.
@@ -76,7 +82,9 @@ NOT_CONFIGURED = "not_configured"
 FAILED = "failed"
 SKIPPED = "skipped"
 # The outcomes after which the day needs no run any more (serve's catch-up).
-DONE_RESULTS = (SENT, NOT_CONFIGURED, "skipped reason=non_trading_day")
+# not_configured is not one (#728 review 6882303076): a token set before 13:30 is caught up
+# the same day.
+DONE_RESULTS = (SENT, "skipped reason=non_trading_day")
 RESULT_LINE = re.compile(r"^--- result status=(\S+)(?: reason=(\S+))?")
 TOKEN_SHAPE = re.compile(r"\d{3,}:[A-Za-z0-9_-]{20,}")
 WEEKDAYS = "一二三四五六日"
@@ -267,8 +275,9 @@ def compose(
     head, rows = list_lines(list_date, listing, daily_status)
     top = [f"stock-lab 今日名單 {day_label(today)}", "", head]
     bottom = ["", *us_lines(indexes)]
-    total = len(rows)
-    shown = total
+    # Past MAX_ITEMS or cut for the length: N is what the list has and the message omits.
+    total = max(len(rows), listing.get("candidate_count") or 0)
+    shown = len(rows)
     while True:
         lines = [*top, *(line for row in rows[:shown] for line in row)]
         if shown < total:
@@ -359,8 +368,16 @@ def private_chat_id(value: str) -> int | None:
     return int(value) if value.isdigit() and int(value) > 0 else None
 
 
-def _attempt(token: str, chat_id: int, text: str) -> tuple[bool, str]:
-    """One sendMessage; (True, message id) or (False, reason). Nothing here holds the URL."""
+def _attempt(token: str, chat_id: int, text: str) -> tuple[bool, str, float | None]:
+    """One sendMessage: (ok, message id or reason, seconds before a retry or None).
+
+    Retried (#728 review 6882303076): a connection or read failure, a timeout, a 5xx, and
+    a 429 within RETRY_AFTER_MAX_SECONDS of its ``retry_after``. A timeout or a cut
+    connection after the request went out may have been delivered already, so the retry
+    can send the message twice; the coordinator prefers a duplicate to a missing one.
+    Not retried: any other 4xx (a wrong token or chat id stays wrong) and a 200 whose body
+    does not say ok (the request was answered). Nothing here holds the URL.
+    """
 
     request = urllib.request.Request(
         f"{API_BASE}/bot{token}/sendMessage",
@@ -374,28 +391,38 @@ def _attempt(token: str, chat_id: int, text: str) -> tuple[bool, str]:
         with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
             body = json.loads(response.read().decode("utf-8") or "{}")
     except urllib.error.HTTPError as exc:
-        description = ""
+        answer: dict[str, Any] = {}
         try:
-            description = str(
-                json.loads(exc.read().decode("utf-8")).get("description") or ""
-            )
+            loaded = json.loads(exc.read().decode("utf-8"))
+            answer = loaded if isinstance(loaded, dict) else {}
         except Exception:  # the status alone is the reason then
             pass
-        reason = f"http_{exc.code}"
-        return False, f"{reason} {description}".strip()
+        reason = f"http_{exc.code} {answer.get('description') or ''}".strip()
+        if exc.code >= 500:
+            return False, reason, RETRY_DELAY_SECONDS
+        if exc.code == 429:
+            wait = (answer.get("parameters") or {}).get("retry_after")
+            wait = (
+                float(wait) if isinstance(wait, (int, float)) else RETRY_DELAY_SECONDS
+            )
+            if wait <= RETRY_AFTER_MAX_SECONDS:
+                return False, reason, max(wait, 0.0)
+            return False, f"{reason} retry_after={wait:g}", None
+        return False, reason, None
     except urllib.error.URLError as exc:
         cause = exc.reason
         name = type(cause).__name__ if isinstance(cause, BaseException) else "URLError"
-        return False, f"network:{name}"
-    except (TimeoutError, OSError) as exc:
-        return False, f"network:{type(exc).__name__}"
+        return False, f"network:{name}", RETRY_DELAY_SECONDS
+    except (TimeoutError, OSError, http.client.HTTPException) as exc:
+        return False, f"network:{type(exc).__name__}", RETRY_DELAY_SECONDS
     except ValueError as exc:
-        return False, f"bad_response:{type(exc).__name__}"
+        return False, f"bad_response:{type(exc).__name__}", None
     if not isinstance(body, dict) or body.get("ok") is not True:
         description = body.get("description") if isinstance(body, dict) else None
-        return False, f"not_ok {description or ''}".strip()
+        return False, f"not_ok {description or ''}".strip(), None
     result = body.get("result") or {}
-    return True, str(result.get("message_id", "")) if isinstance(result, dict) else ""
+    message_id = result.get("message_id", "") if isinstance(result, dict) else ""
+    return True, str(message_id), None
 
 
 def send(
@@ -403,19 +430,20 @@ def send(
     chat_id: int,
     text: str,
     *,
-    sleep: Callable[[float], None] = time.sleep,
+    sleep: Callable[[float], None] | None = None,
 ) -> dict[str, Any]:
-    """Send TEXT; a failure is tried once more after RETRY_DELAY_SECONDS."""
+    """Send TEXT; a retryable failure (``_attempt``) is tried once more."""
 
     reasons = []
     for attempt in range(1, ATTEMPTS + 1):
-        if attempt > 1:
-            sleep(RETRY_DELAY_SECONDS)
-        ok, detail = _attempt(token, chat_id, text)
+        ok, detail, wait = _attempt(token, chat_id, text)
         if ok:
             return {"status": SENT, "attempts": attempt, "message_id": detail}
         reasons.append(mask(detail, token))
-    return {"status": FAILED, "attempts": ATTEMPTS, "reasons": reasons}
+        if wait is None or attempt == ATTEMPTS:
+            break
+        (sleep or time.sleep)(wait)
+    return {"status": FAILED, "attempts": len(reasons), "reasons": reasons}
 
 
 # --- the command ---------------------------------------------------------------------
@@ -429,8 +457,20 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     mode.add_argument(
         "--send", action="store_true", help="送出（鎖、同一天不重送、日誌同排程）"
     )
-    parser.add_argument("--date", help="台北日 YYYY-MM-DD（預設今天）")
-    parser.add_argument("--trigger", choices=job.TRIGGERS, default="manual")
+    parser.add_argument("--date", help="台北日 YYYY-MM-DD（預設 --now 的台北日）")
+    parser.add_argument(
+        "--now",
+        help="時間注入（serve 的 --now）：ISO 8601，沒有時區時為台北時間；預設現在",
+    )
+    parser.add_argument(
+        "--trigger",
+        choices=job.TRIGGERS,
+        default="manual",
+        help=(
+            "scheduler 只在台北 08:45～13:30 送，其他時刻記 skipped reason=too_late"
+            "（預設 manual，任何時刻都送）"
+        ),
+    )
     parser.add_argument("--log-dir", help="日誌目錄；預設 <資料目錄>/logs")
 
 
@@ -440,13 +480,33 @@ def argument_problem(args: argparse.Namespace) -> str | None:
             date.fromisoformat(args.date)
         except ValueError:
             return f"--date must be YYYY-MM-DD, got {args.date!r}"
+    if args.now:
+        try:
+            datetime.fromisoformat(args.now)
+        except ValueError:
+            return f"--now must be an ISO 8601 time, got {args.now!r}"
     return None
 
 
-def _today(args: argparse.Namespace) -> date:
-    return (
-        date.fromisoformat(args.date) if args.date else datetime.now(job.TAIPEI).date()
+def _clock(args: argparse.Namespace) -> datetime:
+    """The Taipei time of the run: --now, else the real clock."""
+
+    if not getattr(args, "now", None):
+        return datetime.now(job.TAIPEI)
+    moment = datetime.fromisoformat(args.now)
+    return (moment if moment.tzinfo else moment.replace(tzinfo=job.TAIPEI)).astimezone(
+        job.TAIPEI
     )
+
+
+def _today(args: argparse.Namespace) -> date:
+    return date.fromisoformat(args.date) if args.date else _clock(args).date()
+
+
+def in_send_window(moment: datetime) -> bool:
+    """Between SEND_TIME and CATCH_UP_END Taipei: when a scheduled run may send."""
+
+    return SEND_TIME <= (moment.hour, moment.minute) < CATCH_UP_END
 
 
 def _session():
@@ -515,6 +575,15 @@ class _Run:
             return 0, f"status={SKIPPED} reason=already_running"
         if SENT in already:
             return 0, f"status={SKIPPED} reason=already_sent"
+        if self.args.trigger == "scheduler":
+            # The job's own rule, whatever APScheduler does with a missed 08:45 (a host
+            # asleep at 08:45 runs it as it wakes, #728 review 6882303076): no message
+            # of the morning after the close.
+            moment = _clock(self.args)
+            if not in_send_window(moment):
+                return 0, (
+                    f"status={SKIPPED} reason=too_late at={moment.strftime('%H:%M')}"
+                )
         with _session() as db:
             if not is_trading_day(db, self.today):
                 return 0, f"status={SKIPPED} reason=non_trading_day"
@@ -536,13 +605,13 @@ class _Run:
                 f"status={SENT} attempts={outcome['attempts']}"
                 f" message_id={outcome['message_id']}"
             )
-        reasons = " | ".join(outcome["reasons"])
-        first = (
-            outcome["reasons"][-1].split(" ", 1)[0] if outcome["reasons"] else "unknown"
-        )
+        # Every attempt's reason, in order (#728 review 6882303076): http_401,network:… .
+        reason = ",".join(item.split(" ", 1)[0] for item in outcome["reasons"])
+        detail = " | ".join(outcome["reasons"])
         return (
             1,
-            f"status={FAILED} reason={first} attempts={outcome['attempts']} detail={reasons}",
+            f"status={FAILED} reason={reason or 'unknown'}"
+            f" attempts={outcome['attempts']} detail={detail}",
         )
 
     def _remove_old_logs(self) -> None:

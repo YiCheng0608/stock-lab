@@ -47,8 +47,10 @@ no-session answer is ``non_trading_unconfirmed``, which the 23:00 trigger confir
 institutional refetch. The us job is caught up the same way (#568): Tuesday to Saturday
 past the first us time (07:30), when the day has no ``us_index_collect`` run that is ``success`` or
 ``already_complete``. So is notify (#728): Monday to Friday between 08:45 and 13:30, when
-the day's ``logs/notify-YYYYMMDD.log`` has no ``sent``, ``not_configured`` or
-``non_trading_day`` result; in maintenance mode too.
+the day's ``logs/notify-YYYYMMDD.log`` has no ``sent`` or ``non_trading_day`` result
+(``not_configured`` too is sent again: a token set later the same morning); in
+maintenance mode too. The 13:30 end is the job's own rule as well: a scheduled notify
+outside 08:45 to 13:30 (a missed 08:45 run as the host wakes) records ``too_late``.
 
 Maintenance mode (#468, worker.job.MaintenanceHold and ``worker.cli maintenance
 on|off``): while it is on, the daily and news jobs serve starts only log ``skipped
@@ -472,7 +474,8 @@ class Serve:
                 str(self.log_dir),
             ]
             if self.offset:
-                argv += ["--date", at.date().isoformat()]
+                # The injected time, not only its day: the job checks 08:45 to 13:30.
+                argv += ["--now", at.isoformat()]
             return argv, environment
         argv = [
             *job.worker_command(["job", name]),
@@ -535,15 +538,15 @@ class Serve:
         """Why serve sends the day's message as it starts, or None (#728).
 
         Monday to Friday between notify.SEND_TIME and notify.CATCH_UP_END, when the
-        day's log has no outcome that ends the day (sent, not_configured,
-        non_trading_day); a failed send is tried again too. The job itself skips a
-        closed day and a day already sent.
+        day's log has no outcome that ends the day (sent, non_trading_day); a failed
+        or not_configured run is tried again too. The job itself skips a closed day, a
+        day already sent and a time outside the window.
         """
 
         now = self.now()
         if now.weekday() >= 5:
             return None
-        if not notify.SEND_TIME <= (now.hour, now.minute) < notify.CATCH_UP_END:
+        if not notify.in_send_window(now):
             return None
         if not Path(job.data_environment(self.data_dir)["STOCK_DB_PATH"]).is_file():
             # An empty volume: the message could only fail on it, as its trigger will.

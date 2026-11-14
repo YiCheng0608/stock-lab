@@ -2505,11 +2505,17 @@ def test_a_day_without_its_notify_log_is_reported_from_0910(wd):
     assert "key=notify_" not in wd.run("--dry-run", now=MORNING - 10 * 60).stdout
     result = wd.run("--dry-run", now=MORNING)
     assert "anomaly_planned key=notify_missing " in result.stdout
-    assert "每日 Telegram 通知：今天（2026-10-19）08:45 的通知沒有跑完" in result.stdout
+    # No log at all: the scheduler may not be running.
+    assert "今天（2026-10-19）沒有 08:45 通知的日誌" in result.stdout
+    assert "scheduler 可能沒在跑" in result.stdout
     assert "worker.cli notify --send --trigger manual" in result.stdout
-    # A run still going (no end line yet) counts as not done.
+    # Started and never ended (review 6882303076 item 6): stuck or killed, another text.
     _notify_log(wd, "20261019", "status=sent attempts=1 message_id=9", end=False)
-    assert "key=notify_missing " in wd.run("--dry-run", now=MORNING).stdout
+    result = wd.run("--dry-run", now=MORNING)
+    assert "key=notify_missing " in result.stdout
+    assert "通知開始了但沒有跑完" in result.stdout
+    assert "serve killed job=notify" in result.stdout
+    assert "scheduler 可能沒在跑" not in result.stdout
     # Saturday: no message is due.
     saturday = MORNING + 5 * 86400
     assert "key=notify_" not in wd.run("--dry-run", now=saturday).stdout

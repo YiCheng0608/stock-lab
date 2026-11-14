@@ -200,6 +200,17 @@ def test_the_us_freshness_follows_the_today_page():
     assert not any("非最新" in line for line in lines)
 
 
+def test_rows_past_the_twenty_shown_are_counted_in_the_last_line():
+    """Review 6882303076 item 7: N is the list's count less the rows shown."""
+
+    items = [_item(rank, f"{rank:04d}", "名", BREAKOUT) for rank in range(1, 21)]
+    listing = {"status": "success", "candidate_count": 25, "items": items}
+    lines = notify.compose(MONDAY, T, listing, US).splitlines()
+    assert lines[2] == "名單：2026/09/04（五）收盤後產生，25 檔"
+    assert sum(1 for line in lines if line.startswith("   規則進場價")) == 20
+    assert "另 5 檔見今日名單頁" in lines
+
+
 def test_a_long_list_is_cut_to_telegrams_limit():
     items = [_item(rank, f"{rank:04d}", "名" * 200, BREAKOUT) for rank in range(1, 21)]
     listing = {"status": "success", "candidate_count": 20, "items": items}
@@ -324,6 +335,9 @@ def test_the_session_before_skips_the_closed_days(db):
 # --- the runs --------------------------------------------------------------------------
 
 
+INCOMPLETE = {"ok": True}
+
+
 class Telegram:
     """The stand-in Bot API: answers each sendMessage with the next scripted reply."""
 
@@ -343,11 +357,15 @@ class Telegram:
                         "result": {"message_id": len(owner.requests)},
                     }
                 data = json.dumps(payload).encode("utf-8")
+                # INCOMPLETE: the connection ends before the body (IncompleteRead).
+                length = len(data) + 100 if payload is INCOMPLETE else len(data)
                 self.send_response(code)
                 self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Content-Length", str(length))
                 self.end_headers()
                 self.wfile.write(data)
+                if payload is INCOMPLETE:
+                    self.close_connection = True
 
             def log_message(self, *_args):
                 pass
@@ -398,12 +416,14 @@ def _args(*argv):
     return parser.parse_args(list(argv))
 
 
-def _send(env, day=MONDAY, trigger="scheduler"):
+def _send(env, day=MONDAY, trigger="scheduler", at="08:45"):
+    """A run of DAY at AT Taipei (serve's --now), as serve starts it."""
+
     return notify.run(
         _args(
             "--send",
-            "--date",
-            day.isoformat(),
+            "--now",
+            f"{day.isoformat()}T{at}",
             "--trigger",
             trigger,
             "--log-dir",
@@ -459,7 +479,8 @@ def test_a_failed_send_is_tried_once_more_then_recorded_as_failed(run_env, capsy
     assert _send(run_env) == 1
     assert len(server.requests) == 2
     log = _log(run_env)
-    assert "--- result status=failed reason=http_502 attempts=2" in log
+    # Both attempts' reasons, in order (review 6882303076 item 4).
+    assert "--- result status=failed reason=http_502,http_502 attempts=2" in log
     assert "end exit=1" in log
     assert not notify.day_done(run_env.logs, MONDAY)
     # The next try (catch-up or by hand) sends.
@@ -476,9 +497,85 @@ def test_a_first_failure_then_success_is_sent(run_env):
 
 
 @linux_only
+@pytest.mark.parametrize("code", [400, 401, 403])
+def test_a_permanent_error_is_not_retried(run_env, code):
+    """A wrong token or chat id stays wrong (review 6882303076 item 3)."""
+
+    server = run_env.telegram((code, {"ok": False, "description": "Unauthorized"}))
+    assert _send(run_env) == 1
+    assert len(server.requests) == 1
+    assert f"--- result status=failed reason=http_{code} attempts=1" in _log(run_env)
+
+
+@linux_only
+def test_a_429_waits_its_retry_after_when_it_is_short(run_env, monkeypatch):
+    waits = []
+    monkeypatch.setattr(notify.time, "sleep", waits.append)
+    server = run_env.telegram(
+        (429, {"ok": False, "parameters": {"retry_after": 7}}),
+    )
+    assert _send(run_env) == 0
+    assert len(server.requests) == 2 and waits == [7.0]
+
+
+@linux_only
+def test_a_429_with_a_long_retry_after_fails_without_waiting(run_env, monkeypatch):
+    waits = []
+    monkeypatch.setattr(notify.time, "sleep", waits.append)
+    server = run_env.telegram(
+        (
+            429,
+            {
+                "ok": False,
+                "description": "Too Many",
+                "parameters": {"retry_after": 3600},
+            },
+        ),
+    )
+    assert _send(run_env) == 1
+    assert len(server.requests) == 1 and waits == []
+    assert "reason=http_429 attempts=1 detail=http_429 Too Many retry_after=3600" in (
+        _log(run_env)
+    )
+
+
+@linux_only
+def test_a_cut_answer_is_retried(run_env):
+    """http.client.IncompleteRead is no OSError: it is a network failure too."""
+
+    server = run_env.telegram((200, INCOMPLETE))
+    assert _send(run_env) == 0
+    assert len(server.requests) == 2
+    assert "--- result status=sent attempts=2" in _log(run_env)
+
+
+@linux_only
+@pytest.mark.parametrize("at", ["20:00", "13:30", "08:44"])
+def test_a_scheduled_run_outside_0845_to_1330_does_not_send(run_env, at):
+    """A missed 08:45 that APScheduler runs as the host wakes at 20:00 (review
+    6882303076 item 1): the job's own rule, not APScheduler's settings."""
+
+    server = run_env.telegram()
+    assert _send(run_env, at=at) == 0
+    assert server.requests == []
+    assert f"--- result status=skipped reason=too_late at={at}" in _log(run_env)
+    assert not notify.day_done(run_env.logs, MONDAY)
+    # 13:29 is still in the window.
+    assert _send(run_env, at="13:29") == 0
+    assert len(server.requests) == 1
+
+
+@linux_only
+def test_a_manual_run_sends_after_the_close(run_env):
+    server = run_env.telegram()
+    assert _send(run_env, trigger="manual", at="20:00") == 0
+    assert len(server.requests) == 1
+
+
+@linux_only
 def test_the_token_is_in_no_log_output_or_error(run_env, monkeypatch, capsys):
     # An answer that echoes the token, then the network gone (a closed port).
-    server = run_env.telegram((401, {"ok": False, "description": f"bad bot{TOKEN}"}))
+    server = run_env.telegram((500, {"ok": False, "description": f"bad bot{TOKEN}"}))
     original = notify._attempt
 
     def then_offline(token, chat_id, text):
@@ -491,7 +588,7 @@ def test_the_token_is_in_no_log_output_or_error(run_env, monkeypatch, capsys):
     out = capsys.readouterr()
     log = _log(run_env)
     assert code == 1
-    assert "reason=network:" in log and "http_401 bad bot<token>" in log
+    assert "reason=http_500,network:" in log and "http_500 bad bot<token>" in log
     for text in (log, out.out, out.err):
         assert TOKEN not in text
         assert TOKEN.split(":")[1] not in text
@@ -510,7 +607,9 @@ def test_without_the_variables_the_run_is_not_configured_and_no_failure(
     assert _send(run_env) == 0
     assert server.requests == []
     assert f"--- result status=not_configured missing={unset}" in _log(run_env)
-    assert notify.day_done(run_env.logs, MONDAY)
+    # Not the end of the day (review 6882303076 item 5): a token set before 13:30 is
+    # caught up.
+    assert not notify.day_done(run_env.logs, MONDAY)
 
 
 @linux_only

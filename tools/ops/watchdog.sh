@@ -511,8 +511,11 @@ notify_log="$logs/notify-$taipei_date.log"
 if compgen -G "$logs/notify-*.log" >/dev/null && [ "$taipei_dow" -le 5 ] \
   && [ $((10#$taipei_hm)) -ge "$NOTIFY_AFTER_HM" ]; then
   notify_resend="\`docker compose -p <P> exec scheduler python -m worker.cli notify --send --trigger manual\`"
-  if ! grep -qE '^===== [^ ]+ end exit=' "$notify_log" 2>/dev/null; then
-    anomaly notify_missing "每日 Telegram 通知：今天（$taipei_iso）08:45 的通知沒有跑完（\`logs/notify-$taipei_date.log\` 沒有 end 列），scheduler 可能沒在跑；確認後以 $notify_resend 補送。"
+  if [ ! -f "$notify_log" ]; then
+    anomaly notify_missing "每日 Telegram 通知：今天（$taipei_iso）沒有 08:45 通知的日誌（\`logs/notify-$taipei_date.log\` 不存在），scheduler 可能沒在跑；確認 scheduler 後以 $notify_resend 補送。"
+  elif ! grep -qE '^===== [^ ]+ end exit=' "$notify_log"; then
+    # Started and never ended (#728 review 6882303076): killed by serve's backstop or stuck.
+    anomaly notify_missing "每日 Telegram 通知：今天（$taipei_iso）的通知開始了但沒有跑完（\`logs/notify-$taipei_date.log\` 有 start、沒有 end 列），可能卡住或被 serve 的保險時間結束；查 \`docker logs\` 的 \`serve killed job=notify\` 與該日誌，再以 $notify_resend 補送。"
   else
     notify_last="$(sed -nE 's/^--- result (status=[a-z_]+.*)$/\1/p' "$notify_log" \
       | grep -v '^status=skipped' | tail -n 1)"
