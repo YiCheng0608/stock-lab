@@ -19,7 +19,7 @@ orca terminal send --terminal <handle> --text "<接手文>" --enter --json
 orca terminal rename --terminal <handle> --title "統籌" --json
 ```
 
-`--autocompact 400k` 把自動壓縮視窗設在 400K，不等到模型上限才壓縮。標題只是給人看的，存活判定一律用心跳檔。接手文固定如下，開啟者原文送出，`<舊 handle>` 換成心跳記的舊統籌 terminal，它已不存在時換成 `--no-old-terminal`；開啟者若不是統籌本人，開完只回報 handle，不再對 repo 寫入：
+`--autocompact 400k` 把自動壓縮視窗設在 400K，不等到模型上限才壓縮。新統籌第一次呼叫的 context 門檻是 55K；repo 的 `.claude/settings.json` 關掉了用不到的 plugin、連接器、工具與 skill，每一項的理由、怎麼量、怎麼對單一 session 開回來見 [LOCAL](ops/LOCAL.md#session-起始-context-的專案設定)。標題只是給人看的，存活判定一律用心跳檔。接手文固定如下，開啟者原文送出，`<舊 handle>` 換成心跳記的舊統籌 terminal，它已不存在時換成 `--no-old-terminal`；開啟者若不是統籌本人，開完只回報 handle，不再對 repo 寫入：
 
 ```text
 你是 stock-lab 的統籌。先讀 AGENTS.md、docs/COORDINATOR.md、治理 Issue #1 本文的決策索引與最近 10 則留言、所有 open Issues 與 PR、最近 48 小時內關閉的 Issue 與合併的 PR 的最後一則留言。接著跑 bash tools/ops/take_over.sh <舊 handle>：它寫心跳、啟動 wake listener、在 #1 留「統籌 session 更換」並改 #1 本文的現任統籌、等舊統籌 terminal 閒置後關掉它、列出未兌現的承諾；中途失敗會停下並印出已做的步驟與續跑命令，修好原因後照它續跑，不手動補做。再跑 bash tools/ops/patrol.sh 處理未處理的事件，處理完以 --done 標記（docs/COORDINATOR.md「無人值守運作」）；以 `決定：` 回覆 patrol.sh 列出的每一則未回覆的提問，以及沒有類型的舊格式提問；兌現 take_over.sh 與 patrol.sh 列出的承諾，以及前任 `統籌承諾：` 留言裡承諾檔沒有的事（補寫進承諾檔）；核對前任標「已完成」的事，不只接續；然後依手冊推進。回覆使用者一律繁體中文。
