@@ -186,6 +186,10 @@ def turns_of(path: Path) -> tuple[list[dict], list[dict]]:
                 compactions.append(
                     {"at": row.get("timestamp"), "pre": meta.get("preTokens")}
                 )
+            # A scheduled task (/loop, cron) starts a turn of its own, not a wake's.
+            if kind == "system" and row.get("subtype") == "scheduled_task_fire":
+                cur = {"wake": False, "calls": [], "commands": []}
+                turns.append(cur)
             if kind == "user":
                 results = isinstance(content, list) and any(
                     isinstance(b, dict) and b.get("type") == "tool_result"

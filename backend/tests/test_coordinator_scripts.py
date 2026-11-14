@@ -3603,6 +3603,10 @@ def test_session_cost_report_counts_cost_wakes_and_actions(h: Harness) -> None:
             "compactMetadata": {"preTokens": 201_010},
         },
         call("side", 900_000) | {"isSidechain": True},
+        # A scheduled task's turn is not the wake's before it.
+        {"type": "system", "subtype": "scheduled_task_fire"},
+        call("m4", 50_000),
+        call("syn", 0) | {"message": {"model": "<synthetic>", "usage": {}}},
     ]
     path = h.root / "t.jsonl"
     path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
@@ -3617,9 +3621,14 @@ def test_session_cost_report_counts_cost_wakes_and_actions(h: Harness) -> None:
     def units(cr: int, out: int) -> float:
         return 10 + 0.1 * cr + 2 * 1_000 + 5 * out
 
-    total = units(60_000, 100) + units(100_000, 100) + units(200_000, 300)
-    assert f"總成本單位：{total:,.0f}（呼叫 3 次" in out
-    assert "第 1 次呼叫 61,010、最大 201,010、最後 201,010" in out
+    total = (
+        units(60_000, 100)
+        + units(100_000, 100)
+        + units(200_000, 300)
+        + units(50_000, 100)
+    )
+    assert f"總成本單位：{total:,.0f}（呼叫 4 次" in out
+    assert "第 1 次呼叫 61,010、最大 201,010、最後 51,010" in out
     wakes = units(100_000, 100) + units(200_000, 300)
     assert f"喚醒：2 次、平均成本 {wakes / 2:,.0f}／次、平均呼叫 1.0 次" in out
     quiet = units(100_000, 100)
