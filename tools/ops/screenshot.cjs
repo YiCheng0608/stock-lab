@@ -8,6 +8,7 @@
 
 const { spawn, spawnSync } = require('node:child_process')
 const fs = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
 
 const USAGE = `usage: node tools/ops/screenshot.cjs --url <page> --out <dir> [options]
@@ -391,7 +392,9 @@ async function run(options) {
   const browser = options.browser ?? findBrowser()
   if (!browser) throw new Error('no Edge or Chrome found; pass --browser or set SCREENSHOT_BROWSER')
   fs.mkdirSync(options.out, { recursive: true })
-  const profileDir = fs.mkdtempSync(path.join(path.resolve(options.out), '.browser-'))
+  // The profile lives in the system temp dir: a browser helper that writes after removeProfile
+  // must not leave it in the output directory (Issue 750).
+  const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stock-lab-browser-'))
   const child = spawn(browser, browserArgs(profileDir), { stdio: ['ignore', 'ignore', 'pipe'] })
   const stderr = stderrTail(child.stderr)
   const exited = new Promise((resolve) => child.once('exit', resolve))

@@ -93,16 +93,27 @@ jobs:
         run: python3 -B tools/ci/checks.py pr --base "$(git rev-parse "refs/remotes/origin/$BASE_REF")"
 
   # The whole backend/tests directory on every core with pytest-xdist (#442), after a week
-  # beside the serial job with the same results (#379). A failing, erroring or hung pytest
-  # fails the job, and required with it.
+  # beside the serial job with the same results (#379), in two shards side by side (#746):
+  # ops, the tests of the tools/ops shell scripts, and rest, every other file
+  # (tools/ci/suite_split.py BACKEND_SHARDS). A failing, erroring or hung pytest fails its
+  # shard, and required with it; fail-fast is off so the other shard still reports.
   backend:
-    name: backend
+    name: backend (${{ matrix.shard }})
     needs: changes
     if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-24.04
-    # The pytest step took 462 seconds at the median and 669 at the slowest in #379's week
-    # (108 runs), 706 in PR #446's first run, and has 20 minutes (about 1.7 times 706), so a
-    # hang still leaves the Summary step time to run;
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [ops, rest]
+    env:
+      SHARD: ${{ matrix.shard }}
+    # The whole suite on one runner took 462 seconds at the median in #379's week and 803 to
+    # about 1220 by 2026-11-14 (run 43641113253 and Issue #746), one PR (run 43638579583)
+    # past this step's 20 minutes. Split, each shard holds about half (1364 and 1395 seconds
+    # of test time in run 43641113253, 4 workers): about 7 minutes on that runner, 10 on one
+    # 1.5 times slower, at most 0.6 of the 20 minutes; a hang still leaves the Summary step
+    # time to run;
     # 10 more for the checkout (5 minutes at its slowest, CheckoutTime), setup and pip
     # (tools/ci/test_checks.py BackendTime).
     timeout-minutes: 30
@@ -124,9 +135,10 @@ jobs:
           nproc
           free -g
       # --durations=30 puts the slowest tests in the log (#374). --dist loadgroup runs the
-      # tests marked with one xdist_group on one worker, one after another. The suite_split
+      # tests marked with one xdist_group on one worker, one after another (none is marked in
+      # #746's measurement). suite_split.py shard prints the shard's files. The suite_split
       # plugin only records what ran (tools/ci/suite_split.py, #378), written by xdist's
-      # controller; the suite job checks it with the docker job's report.
+      # controller; the suite job checks the shards' reports with the docker job's.
       - name: Backend pytest regressions (temp SQLite only, no source GET)
         id: pytest
         timeout-minutes: 20
@@ -143,8 +155,11 @@ jobs:
           echo "workers=$(nproc)" >> "$GITHUB_OUTPUT"
           start=$(date +%s)
           trap 'echo "seconds=$(($(date +%s) - start))" >> "$GITHUB_OUTPUT"' EXIT
-          python -B -m pytest -p no:cacheprovider -p suite_split --suite-report "$RUNNER_TEMP/suite/backend.json" \
-            -q -rA --durations=30 -n "$(nproc)" --dist loadgroup --junitxml "$RUNNER_TEMP/pytest.xml" tests
+          # A failing command substitution fails the step under set -e; mapfile alone would not.
+          args=$(python -B ../tools/ci/suite_split.py shard "$SHARD")
+          mapfile -t selection <<< "$args"
+          python -B -m pytest -p no:cacheprovider -p suite_split --suite-report "$RUNNER_TEMP/suite/backend-$SHARD.json" \
+            -q -rA --durations=30 -n "$(nproc)" --dist loadgroup --junitxml "$RUNNER_TEMP/pytest.xml" "${selection[@]}"
       # The step summary and one notice annotation carry the time, the worker count and the
       # failed and error test ids, with the same keys whatever happened (#379's comparisons
       # read them). It runs after a red or hung pytest too.
@@ -159,6 +174,7 @@ jobs:
           import json, os, time
           import xml.etree.ElementTree as ET
           temp = os.environ['RUNNER_TEMP']
+          shard = os.environ['SHARD']
 
           def number(value):
               try:
@@ -198,7 +214,7 @@ jobs:
                   for kind in ids:
                       if case.find(kind) is not None:
                           ids[kind].append(test_id)
-          result = {'outcome': os.environ['OUTCOME'] or None, 'seconds': seconds,
+          result = {'shard': shard, 'outcome': os.environ['OUTCOME'] or None, 'seconds': seconds,
                     'workers': workers, **counts,
                     'failed': ids['failure'], 'error': ids['error']}
           line = json.dumps(result, ensure_ascii=False)
@@ -207,9 +223,9 @@ jobs:
           # Workflow command escaping of the message: % first, then CR and LF.
           message = json.dumps(short, ensure_ascii=False)
           message = message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-          print(f"::notice title=backend::{message}")
+          print(f'::notice title=backend {shard}::{message}')
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as out:
-              out.write('## backend (#442)\n\n| outcome | seconds | workers | tests | failures | errors | skipped |\n')
+              out.write(f'## backend {shard} (#442, #746)\n\n| outcome | seconds | workers | tests | failures | errors | skipped |\n')
               out.write('| --- | --- | --- | --- | --- | --- | --- |\n')
               cells = [result[k] for k in ('outcome', 'seconds', 'workers', *keys)]
               out.write('| ' + ' | '.join('' if c is None else str(c) for c in cells) + ' |\n\n')
@@ -222,17 +238,27 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: suite-backend
-          path: ${{ runner.temp }}/suite/backend.json
+          name: suite-backend-${{ matrix.shard }}
+          path: ${{ runner.temp }}/suite/backend-${{ matrix.shard }}.json
           if-no-files-found: error
+          retention-days: 14
+      # Every test's time, and its xdist worker as a property (suite_split.py), for measuring
+      # the job without another commit (#746). A pytest killed at its limit may have written
+      # none: only a warning here, as the suite report's upload above fails the job then.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: junit-backend-${{ matrix.shard }}
+          path: ${{ runner.temp }}/pytest.xml
+          if-no-files-found: warn
           retention-days: 14
   # The backend image (backend/Dockerfile, #333): build it, then in a container the tools it
   # must hold, every app and worker module importing (a dependency missing from the image
   # fails here), one screenshot of a local page with tools/ops/screenshot.cjs (its memory peak
   # from the container's cgroup) and the tests that depend on the image's environment (#378).
-  # The backend job runs the whole of backend/tests on the runner; this job runs only what
-  # tools/ci/docker_suite.json lists, and the suite job fails CI if any test of the suite ran
-  # in neither. The tests read git history (KNOWN_FAILURES dates), so the checkout's .git is
+  # The backend job runs the whole of backend/tests on the runner, in two shards; this job
+  # runs only what tools/ci/docker_suite.json lists, and the suite job fails CI if any test of
+  # the suite ran in neither. The tests read git history (KNOWN_FAILURES dates), so the checkout's .git is
   # mounted read-only; the image has none.
   docker:
     name: docker
@@ -310,10 +336,10 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # Every test of backend/tests ran in the backend job or in the docker job, or is listed in
+  # Every test of backend/tests ran in a backend shard or in the docker job, or is listed in
   # tools/ci/docker_suite.json as skipped everywhere (#378). Collecting proves nothing here, as
-  # the backend job collects the whole suite: the check is on what passed. Not run when either
-  # job failed (required is red then anyway).
+  # the backend shards together collect the whole suite: the check is on what passed, and that
+  # no test is in both shards (#746). Not run when a job failed (required is red then anyway).
   suite:
     name: suite
     needs: [changes, backend, docker]
@@ -336,7 +362,8 @@ jobs:
       - name: suite
         run: |
           python3 -B tools/ci/suite_split.py verify \
-            --backend "$RUNNER_TEMP/suite/backend.json" \
+            --backend "$RUNNER_TEMP/suite/backend-ops.json" \
+            --backend "$RUNNER_TEMP/suite/backend-rest.json" \
             --docker "$RUNNER_TEMP/suite/docker.json" \
             --image "$RUNNER_TEMP/suite/image-collect.json" | tee -a "$GITHUB_STEP_SUMMARY"
 
