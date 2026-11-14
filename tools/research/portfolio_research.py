@@ -323,8 +323,10 @@ class Market:
 
     panel: lib.Panel
     raw: dict[int, tuple[list[float], list[float], list[float], list[bool]]]
-    kinds: dict[int, str]  # instrument_type
+    kinds: dict[int, str]  # instrument_type of every instrument (ETFs included)
     levels: Any  # app.strategies.levels (tick_floor, tick_ceil)
+    # symbol of every instrument, for the check of the signals' symbols
+    listings: dict[int, str] = field(default_factory=dict)
 
     def limits(self, instrument_id: int, at: int) -> tuple[float, float] | None:
         """(limit down, limit up) of bar ``at`` on its raw basis; None if unknown.
@@ -490,6 +492,11 @@ def rank_day(
     counts: Counter = Counter()
     pool: list[tuple[Entry, int]] = []
     for signal in signals:
+        kind = market.kinds.get(signal["instrument_id"])
+        if kind not in config["pool"]["instrument_types"]:
+            # v7's pool is stock／ipo only; a run's actionable ETF signals stay out.
+            counts["not_stock_or_ipo"] += 1
+            continue
         item = panel.series.get(signal["instrument_id"])
         at = None if item is None else item.position.get(day)
         if item is None or at is None or item.is_suspended(at):
@@ -647,13 +654,14 @@ def load_market(db: Path, start: date, raw_dir: Path) -> Market:
                 [bool(bar.is_suspended) for bar in kept],
             )
         lib._load_chips(con, series, start)
-        symbols, kinds = {}, {}
+        symbols, kinds, listings = {}, {}, {}
         for instrument_id, exchange, symbol, name, kind in con.execute(
             "select id, exchange, symbol, name, instrument_type from instruments"
         ):
+            kinds[instrument_id] = kind
+            listings[instrument_id] = symbol
             if instrument_id in series:
                 symbols[instrument_id] = (exchange, symbol, name)
-                kinds[instrument_id] = kind
     finally:
         con.close()
     from app.strategies import levels
@@ -663,6 +671,7 @@ def load_market(db: Path, start: date, raw_dir: Path) -> Market:
         raw,
         kinds,
         levels,
+        listings,
     )
 
 
@@ -1104,8 +1113,7 @@ def main(argv: list[str] | None = None) -> int:
     mismatched = [
         signal
         for signal in signals
-        if market.panel.symbols.get(signal["instrument_id"], (None, None))[1]
-        != signal["symbol"]
+        if market.listings.get(signal["instrument_id"]) != signal["symbol"]
     ]
     if mismatched:
         (out / "mismatches.json").write_text(
