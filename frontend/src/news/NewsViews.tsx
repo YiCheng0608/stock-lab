@@ -353,13 +353,7 @@ export function AiInferencePanel({ ai }: { ai: NewsAi | null }) {
           </li>
         ))}</ul>
         : <p className="small-note">{proposedAny ? '模型提出的候選代號都查無對應標的，不列出。' : '模型未提出候選標的。'}</p>}
-      {ai.theme_candidates.length > 0 && <>
-        <h3 className="ai-subtitle">候選題材 <Badge tone="success" className="badge-compact">已通過題材核對</Badge></h3>
-        <ul className="ai-candidates">{ai.theme_candidates.map((candidate) => (
-          <li key={candidate.theme}><span>{candidate.theme}</span>{normalizeText(candidate.reason) && <span className="small-note">{normalizeText(candidate.reason)}</span>}</li>
-        ))}</ul>
-      </>}
-      <p className="small-note ai-meta">模型 {ai.model ?? '未記錄'} · 提示版本 {ai.prompt_version ?? '未記錄'} · 產生時間 {generated ?? '待核實'} · {candidateCheckNote(ai)}候選標的與題材都不作為交易理由。</p>
+      <p className="small-note ai-meta">模型 {ai.model ?? '未記錄'} · 提示版本 {ai.prompt_version ?? '未記錄'} · 產生時間 {generated ?? '待核實'} · {candidateCheckNote(ai)}候選標的不作為交易理由。</p>
     </section>
   )
 }

@@ -209,6 +209,23 @@ def test_input_uses_only_stored_rows_levels_reasons_groups_and_news(db, fake):
     ]
 
 
+def test_news_of_news_v4_is_read_under_the_news_v3_config(db, fake):
+    # #676: the run's config names news_v3; the news LLM now writes news_v4.
+    candidates = _candidates(db, 2)
+    news_id = candidates[0].components_json["news_sentiment"]["news_ids"][0]
+    result = db.scalar(
+        select(NewsLlmResult).where(NewsLlmResult.news_item_id == news_id)
+    )
+    assert result.prompt_version == "news_v3"
+    result.prompt_version = "news_v4"
+    db.commit()
+
+    _run(db)
+
+    (sent,) = fake()[0]["inputs"][0]["news"]
+    assert (sent["summary"], sent["summary_is_ai"]) == ("AI 摘要：接單增加", True)
+
+
 def test_rerun_of_the_same_date_and_version_calls_nothing(db, fake):
     _candidates(db, 3)
     _run(db)

@@ -64,7 +64,6 @@ from .models import (
     MarketBar,
     MonthlyRevenue,
     NewsItem,
-    NewsLlmResult,
     PortfolioPosition,
     RawPayload,
     Signal,
@@ -78,6 +77,7 @@ from .models import (
 from worker.pipeline import _group_board, summarize_backtest
 from worker.monthly_revenue import SUPERSEDED_KEY
 from worker.news_llm import PROMPT_VERSION as NEWS_PROMPT_VERSION
+from worker.news_llm import done_results as news_done_results
 from worker.backfill import (
     BACKFILL_SCOPES,
     backfill_run_dict,
@@ -1243,24 +1243,18 @@ def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, A
     (``emerging``); a code neither names goes to ``hidden_symbol_candidates``
     and is not shown (#512): ``reason=code_ambiguous`` when the master has it on
     several rows and none on the written exchange, ``code_unknown`` otherwise.  Only the prompt version
-    ``worker.news_llm`` writes now counts (#308): older versions never had its
-    summary check, so an item without a done result of that version (none yet,
-    pending, stale, or ``rejected``) has no AI block on any page.
+    ``worker.news_llm`` writes now and the versions equivalent to it count
+    (#308, #676): older versions never had its summary check, so an item
+    without a done result of those versions (none yet, pending, stale, or
+    ``rejected``) has no AI block on any page.  The newest equivalent version
+    wins; ``theme_candidates`` is ``[]`` for news_v4, which asks for none, and
+    the stored list for news_v3 (no page shows it since #676).
     """
 
     ids = [item.id for item in items]
     if not ids:
         return {}
-    latest: dict[int, NewsLlmResult] = {
-        row.news_item_id: row
-        for row in db.scalars(
-            select(NewsLlmResult).where(
-                NewsLlmResult.news_item_id.in_(ids),
-                NewsLlmResult.prompt_version == NEWS_PROMPT_VERSION,
-                NewsLlmResult.llm_status == "done",
-            )
-        )
-    }
+    latest = news_done_results(db, ids, NEWS_PROMPT_VERSION)
     codes = {
         str(candidate.get("symbol", "")).partition(":")[2]
         for row in latest.values()

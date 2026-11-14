@@ -50,7 +50,6 @@ from app.models import (
     Instrument,
     MarketBar,
     NewsItem,
-    NewsLlmResult,
     Signal,
     StrategyVersion,
     ThemeGroup,
@@ -58,6 +57,7 @@ from app.models import (
 from app.strategies import REGISTRY
 
 from . import pipeline
+from .news_llm import done_results
 from .pipeline import _group_board, _percentile, _safe_float
 
 GROUP_BOARD_LABELS = {"industry": "產業", "theme": "題材"}
@@ -303,17 +303,15 @@ def _news_inputs(
         for item in items
         if (day := _taipei_news_date(item)) and window_start <= day <= trading_date
     ]
-    directions: dict[int, str] = {}
-    if items:
-        for row in db.scalars(
-            select(NewsLlmResult).where(
-                NewsLlmResult.news_item_id.in_([item.id for item in items]),
-                NewsLlmResult.prompt_version == news_config["llm_prompt_version"],
-                NewsLlmResult.llm_status == "done",
-            )
-        ):
-            if row.ai_impact_direction:
-                directions[row.news_item_id] = row.ai_impact_direction
+    # The configured prompt and the versions standing for it: news_v3 also
+    # reads news_v4, which only drops the theme candidates (#676).
+    directions = {
+        news_id: row.ai_impact_direction
+        for news_id, row in done_results(
+            db, [item.id for item in items], news_config["llm_prompt_version"]
+        ).items()
+        if row.ai_impact_direction
+    }
     values = news_config["direction_values"]
     stats: dict[int, dict[str, Any]] = {
         instrument.id: {
