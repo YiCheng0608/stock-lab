@@ -4,6 +4,7 @@
 統籌接手時固定讀 [AGENTS](../AGENTS.md) 與本文（[接手文](#統籌-session)）；其他文件依手上的事再讀：
 
 - 建單、派工、本機檢查、review、合併、結案、留言類型、長期整合分支：[WORKFLOW](WORKFLOW.md)。
+- 大 PR（計數 1,500 行以上或估計 3 萬 token 以上）的 review 交子代理，統籌不讀整份 diff；門檻的算法、照抄的派法與收到結果後的核對見 [WORKFLOW「Review 與合併」](WORKFLOW.md#review-與合併)，任務文用 [review 任務文模板](templates/review-task.md)。
 - 排下一張任務、判斷範圍與 gate、更新產品方向：[ROADMAP](ROADMAP.md)；已完成能力：[CAPABILITIES](CAPABILITIES.md)。
 - review 改到檢查、hook 或 CI 的 PR，規則表要補列，或查某條規則由什麼擋：[GUARDRAILS](GUARDRAILS.md)。
 - 發佈與部署：[RELEASE](RELEASE.md)。
