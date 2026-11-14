@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 import { CandidateNote, ReasonList, ScoreDetails } from '../candidates/CandidateViews'
 import { EntryConditions, EntryPlanCard } from '../candidates/EntryPlanCard'
 import { ENTRY_TYPES } from '../candidates/entryPlan'
@@ -17,6 +19,7 @@ import { Term } from '../components/Term'
 import { UnlessPageDate } from '../components/pageDate'
 import { Badge, DataTable, DateBadge, EmptyState, type Column } from '../components/ui'
 import { productActionReasonLabel } from '../presentation'
+import { EVIDENCE_PATH, NO_EVIDENCE_SHORT_LABEL } from '../strategy/evidence'
 import type { CandidateItem, GapReason, StrategyActionableLevels, StrategyBoard as Board, StrategyBoardRow } from '../types'
 import {
   BOARD_NOTE,
@@ -157,6 +160,8 @@ function CandidateRow({ board, candidate }: { board: Board; candidate: Candidate
         <Badge tone="primary" className="badge-compact">每日候選</Badge>
         <strong>第 {summary.rank} 名 · <Term id="candidate_score">總分</Term> {formatCandidateScore(summary.total_score)} · {candidateStrategyLabel(summary.strategy)}</strong>
         <span className="small-note strategy-candidate-disclaimer">{CANDIDATE_DISCLAIMER}</span>
+        {/* Issue 693: the short 現行規則尚無證據 link to the 研究結論 of /strategy. */}
+        <Link className="text-link small-note strategy-candidate-evidence" to={EVIDENCE_PATH}>{NO_EVIDENCE_SHORT_LABEL}</Link>
       </div>
       {/* #491: how to enter, before the reasons. #648: when the board row below carries the same levels, the entry type
           and a pointer to that row replace the sentence, so the tab writes the set once; the signal-day conditions stay. */}

@@ -43,7 +43,7 @@
 | 明日候選排序 | `daily` 在 analyze 之後以 candidate_score_v7（技術＋籌碼＋族群＋新聞情緒，各分項可見、只用於排序）對當日 conditional 普通股排序，保存明日候選至多 20 檔與規則式理由、所屬族群，由 `/api/candidates` 與個股 API 的 `candidate` 提供 | — | [`candidate_score_v7`](spec/candidate_score.md#candidate_score_v7) |
 | 流動性門檻 | 20 日均量未達 1,000 張的股票不列候選，個股頁與我的追蹤在成立旁註明 | [#490](https://github.com/YiCheng0608/stock-lab/issues/490) | — |
 | 候選 AI 進出點說明 | `daily` 以 `claude -p` 產生、標「AI 推論」的進出點說明 | — | [候選 AI 進出點說明](spec/candidate_score.md#候選-ai-進出點說明) |
-| 進場方式 | 每檔候選的第一行以白話寫進場方式：突破型或回踩型、明天起在哪個價位附近可進場、跌破哪裡停損與目標（訊號的成立價位；失效只看停損），收合的完整條件列資料日的判定，缺價位時寫原因 | [#491](https://github.com/YiCheng0608/stock-lab/issues/491) | [UI_COPY_SPEC §10.2](UI_COPY_SPEC.md#102-進場方式) |
+| 進場方式 | 每檔候選的第一行以白話寫進場方式：突破型或回踩型、規則進場價或進場區（T+1 起）、停損與目標（訊號的成立價位；失效只看停損；陳述規則價位，不寫成下單指示，[#693](https://github.com/YiCheng0608/stock-lab/issues/693)），收合的完整條件列資料日的判定，缺價位時寫原因 | [#491](https://github.com/YiCheng0608/stock-lab/issues/491) | [UI_COPY_SPEC §10.2](UI_COPY_SPEC.md#102-進場方式) |
 | 追蹤計畫 | 今日名單的明細與個股研究分頁的成立條件可「加入追蹤」；`daily` 的 `plan_tracking` 步驟每日以日線規則更新計畫的模擬成交與結果；可取消、不統計勝率 | — | [使用者追蹤計畫](spec/tracking.md#使用者追蹤計畫) |
 | 追蹤口徑版本 | 現行 `tracking_v2` 在開盤已越過目標一或失效價時不進場、T+N 只用第 N 根以前的成交；settlement、technical backtest（`technical-backtest:v2`，技術回測頁顯示版本）與計畫（`plan_tracking_v2`）都記版本，舊版本的列不改寫 | — | [口徑版本](spec/tracking.md#口徑版本) |
 | 行動摘要與持倉 | 已有行動摘要與持倉 | — | — |

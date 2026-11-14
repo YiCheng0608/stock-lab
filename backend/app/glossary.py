@@ -49,7 +49,7 @@ _TERMS: tuple[dict[str, Any], ...] = (
         "use": "適合已經走強、想跟上趨勢的股票；候選第一行寫明天收盤要站上的價位與成交量門檻。",
         "how_to_read": (
             "收盤站上價位、而且成交量達門檻，兩項都做到才算成立；"
-            "盤中短暫突破、收盤又跌回不算。成立後照停損與目標規劃。"
+            "盤中短暫突破、收盤又跌回不算。停損與目標是規則算出的價位，不代表會到達。"
         ),
         "limitations": "風險是假突破：站上後很快跌回，所以先定好停損；不保證會續漲。",
         "related": ["breakout", "pullback_entry", "support", "target"],
@@ -153,7 +153,7 @@ _TERMS: tuple[dict[str, Any], ...] = (
         "aliases": ["entry_zone", "entry"],
         "category": "strategy",
         "plain_definition": (
-            "規則算出、條件成立後可研究進場的價格；"
+            "規則算出、條件成立後的進場價位；"
             "突破條件是單一觸發價，回踩條件是「低～高」區間。"
         ),
         "use": "和停損、目標一起看風險報酬。",
@@ -227,13 +227,13 @@ _TERMS: tuple[dict[str, Any], ...] = (
         "name": "風險報酬比 RR",
         "aliases": ["risk/reward", "RR"],
         "category": "strategy",
-        "plain_definition": "可能賺的空間是可能賠的幾倍。",
+        "plain_definition": "規則目標距離與停損距離的比例。",
         "use": "固定規則的價位驗證至少要求 RR ≥ 1.5。",
         "how_to_read": (
             "RR =（目標一 − 進場價）÷（進場價 − 停損）；回踩型的進場價取進場區中點；"
             "低於門檻時是無效價位，不應包裝成可執行訊號。"
         ),
-        "limitations": "比例不會消除跳空、流動性或執行風險。",
+        "limitations": "比例不是預期報酬，也不會消除跳空、流動性或執行風險。",
         "related": ["target", "support"],
         "version": GLOSSARY_VERSION,
     },

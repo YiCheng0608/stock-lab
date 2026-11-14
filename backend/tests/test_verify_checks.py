@@ -2467,7 +2467,7 @@ def test_s14_fails_when_the_research_tab_repeats_the_levels(tmp_path):
     # Before #648: the candidate sentence and the research action's grid repeated the board's set.
     repeated = BOARD.replace(
         "進場、停損與目標價見下方策略總表「突破條件」列。",
-        "明天起在 2,400.00 元附近可進場；跌破 2,364.00 元停損，目標 2,458.00 元",
+        "規則進場價 2,400.00 元（T+1 起），停損 2,364.00 元，目標 2,458.00 元",
     ).replace("價位見上方策略總表。", "停損（元）\n2,364.00\n目標一（元）\n2,458.00")
     with pytest.raises(page_checks.Fail, match="`2,364.00`（invalid_price）出現 3 次"):
         _s14(tmp_path, MAIN, HEADER + CHART + SUMMARY + TABS + repeated)
@@ -2828,3 +2828,44 @@ def test_t22_fails_on_a_wrong_or_misplaced_line_or_row(tmp_path):
     for page, message in cases:
         with pytest.raises(page_checks.Fail, match=message):
             page_checks.t22(FakeRun(tmp_path, _overnight(), {"today-1280": page}))
+
+
+# ---- T23 (Issue 693): the 現行規則尚無證據 line in the 今日名單 head ----
+
+EVIDENCE_PAGE = (
+    "今日名單\n10 檔\n"
+    "2026/11/13 收盤後條件成立，最早下一個交易日（T+1）才可研究進場。評分只用於排序，不代表勝率或預期報酬。\n"
+    "順勢籌碼型 · 策略說明 →\n"
+    f"{page_checks.NO_EVIDENCE_LINE}\n"
+    f"{US_LINE}\n"
+    "#1 2330 台積電 上市 · 半導體（產業 #1）\n"
+    "熱門族群\n"
+)
+
+
+def test_t23_passes_on_one_line_in_the_head(tmp_path):
+    summary = page_checks.t23(FakeRun(tmp_path, {}, {"today-1280": EVIDENCE_PAGE}))
+    assert "恰一行" in summary
+
+
+def test_t23_fails_without_the_line_as_before_issue_693(tmp_path):
+    before = EVIDENCE_PAGE.replace(f"{page_checks.NO_EVIDENCE_LINE}\n", "")
+    with pytest.raises(page_checks.Fail, match="預期恰一行"):
+        page_checks.t23(FakeRun(tmp_path, {}, {"today-1280": before}))
+
+
+def test_t23_fails_on_other_wording_twice_or_outside_the_head(tmp_path):
+    other = EVIDENCE_PAGE.replace(
+        page_checks.NO_EVIDENCE_LINE, "現行規則尚無證據 研究結論 →"
+    )
+    twice = EVIDENCE_PAGE.replace(
+        "熱門族群\n", f"{page_checks.NO_EVIDENCE_LINE}\n熱門族群\n"
+    )
+    for page in (other, twice):
+        with pytest.raises(page_checks.Fail, match="預期恰一行"):
+            page_checks.t23(FakeRun(tmp_path, {}, {"today-1280": page}))
+    moved = EVIDENCE_PAGE.replace(f"{page_checks.NO_EVIDENCE_LINE}\n", "").replace(
+        "熱門族群\n", f"熱門族群\n{page_checks.NO_EVIDENCE_LINE}\n"
+    )
+    with pytest.raises(page_checks.Fail, match="不在標題"):
+        page_checks.t23(FakeRun(tmp_path, {}, {"today-1280": moved}))
