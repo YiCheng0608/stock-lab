@@ -1,12 +1,12 @@
 {
-  "version": 1,
+  "version": 2,
   "design": "703",
   "registration_commit": "0ba48e9",
   "segment": "validation",
   "round": 1,
   "round_size": 8,
   "cumulative": 8,
-  "definitions_sha256": "2e1362b7cb4d231eba289f58e8ac044f32de0efce8de2968be33461b538bba03",
+  "definitions_sha256": "5c8a4ff0ffaa2d6ba35a795ce4a37af34ead0a9a7d87bba8ff7a5f7b4c3cdcfc",
   "copy": {
     "latest": "2014-04-07",
     "alembic": null
@@ -21,6 +21,12 @@
       "verdict": "通過",
       "reason": null,
       "days": 80,
+      "taiex_excess": {
+        "days": 80,
+        "mean": 0.0010536918007749724,
+        "annual": 0.26553033379529306,
+        "t": 8.750163519625348
+      },
       "excess": {
         "days": 80,
         "mean": 0.00038994991748319413,
@@ -39,6 +45,12 @@
       "verdict": "驗證段反轉",
       "reason": null,
       "days": 80,
+      "taiex_excess": {
+        "days": 80,
+        "mean": 0.0005017763685387395,
+        "annual": 0.12644764487176235,
+        "t": 4.068209718717065
+      },
       "excess": {
         "days": 80,
         "mean": -0.00028754198584547697,
@@ -57,6 +69,12 @@
       "verdict": "驗證段反轉",
       "reason": null,
       "days": 80,
+      "taiex_excess": {
+        "days": 80,
+        "mean": -0.0004783456863466526,
+        "annual": -0.12054311295935646,
+        "t": -2.573639438900078
+      },
       "excess": {
         "days": 80,
         "mean": -0.001267664040730869,
@@ -77,6 +95,12 @@
       "verdict": null,
       "reason": null,
       "days": 50,
+      "taiex_excess": {
+        "days": 50,
+        "mean": 0.0004275528254135219,
+        "annual": 0.10774331200420752,
+        "t": 4.16990363312451
+      },
       "excess": {
         "days": 50,
         "mean": 0.0002564753008491172,
