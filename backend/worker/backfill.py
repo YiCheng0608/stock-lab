@@ -26,6 +26,7 @@ from app.coverage import (
     official_snapshot_status,
     verified_taiex_sessions,
 )
+from app.db import ensure_schema
 from app.models import (
     ChipSnapshot,
     CorporateAction,
@@ -1445,7 +1446,9 @@ def targeted_backfill(
         raise ValueError(f"unsupported backfill scope: {scope}")
     request_key = f"official-backfill:v1:{normalized_scope}:{start_date.isoformat()}:{end_date.isoformat()}"
 
-    pipeline.init_db()
+    # A database at the code head skips init_db's whole-database integrity
+    # check, which grew each research-history month by minutes (#722).
+    ensure_schema(session_factory=pipeline.SessionLocal, migrate=pipeline.init_db)
     with pipeline.SessionLocal() as db:
         run = db.scalar(
             select(IngestionRun).where(IngestionRun.request_key == request_key)
