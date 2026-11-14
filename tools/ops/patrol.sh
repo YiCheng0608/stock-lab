@@ -26,9 +26,19 @@
 # a row the context could not be read; removed once it is), and with --done one line in
 # <data>/logs/events-done.jsonl.
 #
+# The slots (#727): after the questions, slots.py prints 名額：已用 N／3 with each task
+# counted or not and the comment it was decided on, read from the same GraphQL answer
+# (so still one gh call) and the local `git worktree list` with `git status` of each task
+# worktree. With a slot free and a 待辦 task to dispatch, the last line is
+# 名額空缺 M 個，請派工：#n and the exit 11; in the daily window (台北 21:30～23:30) or
+# with this session's handoff marker it is printed only (exit 0), and when the handoff
+# condition holds it goes before the handoff line (exit 10). GitHub not read (gh failed,
+# --max-gh 0): every task is counted as 判定不了 and no vacancy is claimed.
+#
 # Exit: 0; 10 the handoff condition holds (whether or not every part of the listing could
 #   be read, such as the questions 未查完); 2 a file could not be written or read back, a
-#   --done failed; 3 another session's heartbeat was kept;
+#   --done failed; 3 another session's heartbeat was kept; 11 a slot is free and a 待辦
+#   task can be dispatched (not in the daily window, no handoff marker);
 #   64 bad arguments.
 #
 # Usage: patrol.sh [options]
@@ -37,7 +47,7 @@
 #   --done X          mark events handled before listing the rest: X is an event id, or
 #                     a seq for every event not done up to it (pending or quiet, #440);
 #                     repeatable
-#   --max-gh N        at most N gh calls, default 1 (the questions); 0 prints the
+#   --max-gh N        at most N gh calls, default 1 (the questions and slots); 0 prints the
 #                     questions as not read (未查完)
 #   --take-over       overwrite another session's heartbeat younger than an hour (a new
 #                     coordinator taking over without the old one's handoff marker)
@@ -176,21 +186,65 @@ eq status "$logs" "$now"
 bash "$script_dir/wake_listener_start.sh" --status 2>&1
 # Questions nobody answered (#401): one GraphQL call reads the open Issues and PRs with
 # their comments; coordinator_json.py decides which 提問 has no 決定 linking to it.
-gh_calls=0
-if [ "$gh_calls" -lt "$max_gh" ]; then
+# The same call reads what the slots need (#727): open PRs' heads, commits and CI, the
+# board's 待辦 with blocked-by and body; slots.py decides.
+gh_calls=0 out=""
+if ! query="$("$python" -X utf8 "$script_dir/slots.py" query)" || [ -z "$query" ]; then
+  echo "未回覆的提問：未查完（slots.py query 失敗，沒呼叫 gh）"
+elif [ "$gh_calls" -lt "$max_gh" ]; then
   gh_calls=$((gh_calls + 1))
-  if out="$(gh api graphql -f owner="${GH_REPO%%/*}" -f name="${GH_REPO#*/}" \
-    -f query="$(cj questions-query)")" && lines="$(printf '%s' "$out" | cj questions "$now")"; then
+  if out="$(gh api graphql -f owner="${GH_REPO%%/*}" -f name="${GH_REPO#*/}" -f query="$query")" \
+    && lines="$(printf '%s' "$out" | cj questions "$now")"; then
     n="$(printf '%s\n' "$lines" | grep -c '^#')"
     echo "未回覆的提問：$n 則$(printf '%s\n' "$lines" | grep -q '^未查完' && echo '（未查完）')"
     [ -n "$lines" ] && printf '%s\n' "$lines" | sed 's/^/  /'
   else
+    out=""
     echo "未回覆的提問：未查完（gh api graphql 失敗）"
   fi
 else
   echo "未回覆的提問：未查完（gh 呼叫已達上限 $max_gh）"
 fi
 echo "gh 呼叫：$gh_calls／上限 $max_gh"
+# The slots (#727): the local task worktrees and whether each is clean, with the answer
+# above (none when gh was not called or failed: every task is 判定不了 and counted). The
+# vacancy line is held for the end, so `| tail -1` sees it (exit 11, after the handoff's 10).
+vacancy="" vacancy_rc=0
+slot_dir="$(mktemp -d 2>/dev/null)" || slot_dir=""
+if [ -z "$slot_dir" ]; then
+  echo "名額：判定不了（建不了暫存目錄）"
+else
+  wt=""
+  : >"$slot_dir/status"
+  if git -C "$repo_root" worktree list --porcelain >"$slot_dir/worktrees" 2>/dev/null; then
+    wt="$slot_dir/worktrees"
+    while IFS= read -r line; do
+      case "$line" in "worktree "*) path="${line#worktree }" ;; esac
+      case "$line" in "branch refs/heads/task/"*)
+        if st="$(git -C "$path" status --porcelain 2>/dev/null)"; then
+          [ -z "$st" ] && state=clean || state=dirty
+        else
+          state=unknown
+        fi
+        printf '%s\t%s\n' "$state" "$path" >>"$slot_dir/status" ;;
+      esac
+    done <"$wt"
+  fi
+  slot_lines="$(printf '%s' "$out" | "$python" -X utf8 "$script_dir/slots.py" report "$now" "$wt" "$slot_dir/status")"
+  slot_rc=$?
+  rm -f "$slot_dir/worktrees" "$slot_dir/status"; rmdir "$slot_dir" 2>/dev/null
+  case "$slot_rc" in
+    0 | 11)
+      last="$(printf '%s\n' "$slot_lines" | tail -n 1)"
+      case "$last" in
+        名額空缺*請派工*)
+          vacancy="$last" vacancy_rc="$slot_rc"
+          printf '%s\n' "$slot_lines" | sed '$d' ;;
+        *) printf '%s\n' "$slot_lines" ;;
+      esac ;;
+    *) echo "名額：判定不了（slots.py exit $slot_rc）" ;;
+  esac
+fi
 eq pending "$logs"
 # Commitments kept across sessions (#534): what the coordinators promised and did not do yet.
 "$python" -X utf8 "$script_dir/commitments.py" list "$logs" "$now" \
@@ -201,6 +255,7 @@ if [ "$misses" -ge 3 ]; then
 fi
 # Last, so no filter of the lines above hides it (#534).
 if [ "$handoff_due" = 1 ] || [ "$context_due" = 1 ]; then
+  [ -n "$vacancy" ] && echo "$vacancy（換手條件成立，不派工，交給新統籌）"
   why=""
   [ "$handoff_due" = 1 ] && why="已壓縮 $count 次（門檻 2 次）"
   [ "$context_due" = 1 ] && why="${why:+$why、}context $context 超過門檻 $context_limit"
@@ -210,4 +265,17 @@ if [ "$handoff_due" = 1 ] || [ "$context_due" = 1 ]; then
     echo "已達換手條件：本 session $why，現在照 docs/COORDINATOR.md「統籌 session」自動換手機制換手（patrol exit 10）"
   fi
   exit 10
+fi
+# A free slot with a task to dispatch (#727): after the handoff, since a coordinator
+# handing off dispatches nothing; a handoff marker or the daily window prints it only.
+if [ -n "$vacancy" ]; then
+  if [ -f "$marker" ]; then
+    echo "$vacancy（換手中，不派工，只印出）"
+    exit 0
+  fi
+  if [ "$vacancy_rc" = 11 ]; then
+    echo "$vacancy（patrol exit 11）"
+    exit 11
+  fi
+  echo "$vacancy"
 fi
