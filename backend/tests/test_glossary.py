@@ -61,3 +61,14 @@ def test_search_finds_a_term_by_its_chinese_alias():
     # The screens say 停損; the old name still finds it (#581).
     assert [term["term_id"] for term in glossary_terms(q="條件失效價")] == ["support"]
     assert "percentile" in [term["term_id"] for term in glossary_terms(q="同榜百分位")]
+
+
+def test_strategy_price_terms_do_not_promise_a_profit():
+    # Issue 693: the rules behind 今日名單 have no evidence of an edge (docs/spec/evidence.md),
+    # so the price terms describe the rule's prices, not a gain or an instruction to follow them.
+    terms = {term["term_id"]: term for term in glossary_terms()}
+    for term_id in ("rr", "target", "entry_zone", "breakout_entry", "pullback_entry"):
+        text = "".join(terms[term_id][field] for field in FIELDS)
+        for phrase in ("可能賺", "獲利", "可研究進場", "照停損與目標規劃"):
+            assert phrase not in text, (term_id, phrase)
+    assert "不是預期報酬" in terms["rr"]["limitations"]

@@ -22,7 +22,7 @@ export const GLOSSARY: GlossaryTerm[] = [
     term_id: 'breakout_entry', name: '突破型', aliases: ['突破型進場', 'breakout entry'], category: 'strategy',
     plain_definition: '等股價帶量站上近期高點才進場，追的是正在轉強的股票。',
     use: '適合已經走強、想跟上趨勢的股票；候選第一行寫明天收盤要站上的價位與成交量門檻。',
-    how_to_read: '收盤站上價位、而且成交量達門檻，兩項都做到才算成立；盤中短暫突破、收盤又跌回不算。成立後照停損與目標規劃。',
+    how_to_read: '收盤站上價位、而且成交量達門檻，兩項都做到才算成立；盤中短暫突破、收盤又跌回不算。停損與目標是規則算出的價位，不代表會到達。',
     limitations: '風險是假突破：站上後很快跌回，所以先定好停損；不保證會續漲。', related: ['breakout', 'pullback_entry', 'support', 'target'], version: '1.3.0',
   },
   {
@@ -63,10 +63,10 @@ export const GLOSSARY: GlossaryTerm[] = [
   },
   {
     term_id: 'rr', name: '風險報酬比 RR', aliases: ['RR'], category: 'strategy',
-    plain_definition: '可能賺的空間是可能賠的幾倍。',
+    plain_definition: '規則目標距離與停損距離的比例。',
     use: '固定規則的價位驗證至少要求 RR ≥ 1.5。',
     how_to_read: 'RR =（目標一 − 進場價）÷（進場價 − 停損）；回踩型的進場價取進場區中點；低於門檻時是無效價位，不應包裝成可執行訊號。',
-    limitations: '比例不會消除跳空、流動性或執行風險。', related: ['target', 'support'], version: '1.5.0',
+    limitations: '比例不是預期報酬，也不會消除跳空、流動性或執行風險。', related: ['target', 'support'], version: '1.5.0',
   },
   {
     term_id: 'target', name: '目標價', aliases: ['target_1', 'target_2', '目標一', '目標二'], category: 'strategy',
@@ -84,7 +84,7 @@ export const GLOSSARY: GlossaryTerm[] = [
   },
   {
     term_id: 'entry_zone', name: '進場區', aliases: ['entry_zone', 'entry'], category: 'strategy',
-    plain_definition: '規則算出、條件成立後可研究進場的價格；突破條件是單一觸發價，回踩條件是「低～高」區間。',
+    plain_definition: '規則算出、條件成立後的進場價位；突破條件是單一觸發價，回踩條件是「低～高」區間。',
     use: '和停損、目標一起看風險報酬。',
     how_to_read: '價格突破或回到此區後，仍要重查量能、族群與籌碼；最早在訊號隔一個交易日（T+1）才可能執行。',
     limitations: '不是成交價或掛單建議，跳空時實際價格可能落在區外。', related: ['support', 'target', 't_plus_1'], version: '1.1.0',
