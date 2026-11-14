@@ -1625,8 +1625,9 @@ def test_the_monitors_own_1_comment_is_known_by_its_url(mon: Harness) -> None:
 
 def test_job_end_tiers(tmp_path) -> None:
     """daily: a success rides on the next wake, a failure is urgent. news: a failure after
-    a success (or the first end line read) wakes now; the same failure again rides on the
-    next wake (#711 決定 6880209185)."""
+    a success (or the first end line read) or after another kind of failure wakes now; the
+    same kind of failure again, (exit not 0, news_llm_exit) alike, rides on the next wake
+    (#711 決定 6880209185, review 6880734119)."""
     (tmp_path / "daily-20261025.log").write_text(
         "===== 2026-10-25T10:00:00Z end exit=0\n===== 2026-10-25T11:00:00Z end exit=1\n",
         encoding="utf-8",
@@ -1638,7 +1639,9 @@ def test_job_end_tiers(tmp_path) -> None:
         "===== 2026-10-25T00:00:00Z end exit=0 news_llm_exit=1\n"
         "===== 2026-10-25T02:00:00Z end exit=0 news_llm_exit=0\n"
         "===== 2026-10-25T04:00:00Z end exit=0 news_llm_exit=wrapper_error\n"
-        "===== 2026-10-25T06:00:00Z end exit=1 news_llm_exit=1\n",
+        "===== 2026-10-25T06:00:00Z end exit=1 news_llm_exit=1\n"
+        "===== 2026-10-25T08:00:00Z end exit=1 news_llm_exit=1\n"
+        "===== 2026-10-25T12:00:00Z end exit=1 news_llm_exit=0\n",
         encoding="utf-8",
     )
     origin = datetime(2026, 10, 24, 23, tzinfo=timezone.utc).timestamp()
@@ -1649,7 +1652,11 @@ def test_job_end_tiers(tmp_path) -> None:
         # The failure at 22:00 is before the origin, yet it makes 00:00 a repeat.
         "2026-10-25T00:00:00Z": "batch",
         "2026-10-25T04:00:00Z": "now",
-        "2026-10-25T06:00:00Z": "batch",
+        # News collection itself failed after news-llm failures: a new kind of failure.
+        "2026-10-25T06:00:00Z": "now",
+        "2026-10-25T08:00:00Z": "batch",
+        # exit=1 again, but news-llm no longer fails: another kind.
+        "2026-10-25T12:00:00Z": "now",
     }
 
 

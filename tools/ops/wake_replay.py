@@ -12,7 +12,8 @@ monitor gives it now (event_queue.py), from what the line holds:
     (coordinator_comment: it goes through comment.sh since #711);
   - CI, merge state, new PR, slots, gh_auth: as event_queue.py records them;
   - job_end: daily by its exit; news: a failure is a repeat (batch) when the news run
-    two hours before it (the job runs every two hours, 10 minutes of slack) failed too,
+    two hours before it (the job runs every two hours, 10 minutes of slack) failed the
+    same way, (exit not 0, news_llm_exit) alike,
     else now. The log lines of the successes are not in the queue, so this stands in for
     "the end line before it";
   - engineer_failed: failed_tier() of the error in its summary;
@@ -83,7 +84,7 @@ def classify(events: list[dict], stale_urls: set[str]) -> list[dict]:
             m = TITLE_ISSUE.search(title)
             if m:
                 issue_pr.setdefault(f"#{m.group(1) or m.group(2)}", e.get("ref"))
-    news_failed: list[float] = []
+    news_failed: list[tuple[float, tuple]] = []
     out = []
     for e in events:
         e = {k: v for k, v in e.items() if k not in ("tier",)}
@@ -112,8 +113,17 @@ def classify(events: list[dict], stale_urls: set[str]) -> list[dict]:
             tier = eq.BATCH if re.search(r"\bexit=0\b", summary) else eq.URGENT
         elif kind == "job_end":
             at = eq.epoch(e.get("at")) or t(e)
-            repeated = any(0 < at - x <= NEWS_EVERY + NEWS_SLACK for x in news_failed)
-            news_failed.append(at)
+            fields = dict(
+                p.split("=", 1)
+                for p in summary.split(" 結束 ", 1)[-1].split()
+                if "=" in p
+            )
+            how = (fields.get("exit") != "0", fields.get("news_llm_exit"))
+            repeated = any(
+                0 < at - x <= NEWS_EVERY + NEWS_SLACK and h == how
+                for x, h in news_failed
+            )
+            news_failed.append((at, how))
             tier = eq.BATCH if repeated else eq.NOW
         elif kind == "engineer_failed":
             m = FAILED_ERROR.search(summary)

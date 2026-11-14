@@ -426,11 +426,12 @@ def _fields(rest: str) -> dict:
 
 def job_events(logs: Path, origin: float) -> list[dict]:
     """daily: every end line (a success is batch, a failure urgent). news: an end line
-    whose news or news-llm part failed; now when the end line before it (in the files
-    read) did not fail, batch when it repeats a failure (#711 決定 6880209185)."""
+    whose news or news-llm part failed; batch when the end line before it (in the files
+    read) failed the same way, (exit not 0, news_llm_exit) alike, else now: a new
+    failure is looked at once (#711 決定 6880209185, review 6880734119)."""
     out = []
     for job in ("daily", "news"):
-        before_failed = False
+        before = None  # the failure of the end line before, None when it did not fail
         for path in sorted(logs.glob(f"{job}-*.log"))[-JOB_FILES:]:
             try:
                 text = path.read_text(encoding="utf-8", errors="replace")
@@ -445,7 +446,9 @@ def job_events(logs: Path, origin: float) -> list[dict]:
                     "1",
                     "wrapper_error",
                 )
-                repeated, before_failed = before_failed, failed
+                kind = (fields.get("exit") != "0", fields.get("news_llm_exit"))
+                kind = kind if failed else None
+                repeated, before = kind is not None and kind == before, kind
                 if (epoch(m.group(1)) or 0) < origin or (job == "news" and not failed):
                     continue
                 if job == "daily":
@@ -623,10 +626,10 @@ def failed_tier(error: str) -> str:
 def _session_event(
     doc, now: float, branches: set[str] | None, gone: set[str] | None = None
 ) -> dict | None:
-    """GONE: the branches whose PR has left the open list; None when not known (then a
-    waiting or ended session is batch, never quiet)."""
     """One state file's event, or None; every field checked for its type (#595 review:
-    a list for a branch made the whole record fail)."""
+    a list for a branch made the whole record fail). GONE: the branches whose PR has
+    left the open list; None when not known (then a waiting or ended session is batch,
+    never quiet)."""
     if not isinstance(doc, dict):
         raise ValueError("not a JSON object")
     sid, ended, state = (

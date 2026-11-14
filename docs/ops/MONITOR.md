@@ -13,8 +13,8 @@
   | 分級 | 事件 | 喚醒 |
   | --- | --- | --- |
   | 急件 `urgent` | `提問：`；沒有類型的留言（第一行不是 `提問：`／`決定：`／`回報：`／`review：`／`統籌承諾：`）；#1 上的留言（統籌標記與 monitor 自己的除外）；CI 非 success；`DIRTY`；daily 失敗；`gh_auth`；`rate_limit` 以外的 `engineer_failed` | 立即；沒等到閒置時每輪重試 |
-  | 立即 `now` | CI success；`BEHIND`；不與 CI 同輪的 `CLEAN`／`UNSTABLE`；其他有類型的留言（`決定：`、`review：`、`統籌承諾：`）；news 失敗而它前一個 `end` 列沒有失敗（第一次失敗） | 立即；失敗的喚醒 10 分鐘後再試 |
-  | 搭下一次 `batch` | `回報：`（開工、收到以外）；新 PR（第一個 CI 結果中位數 14 分鐘後到）；`slots`；`rate_limit` 的 `engineer_failed`（同帳號的統籌也在限額內）；news 重複的失敗；daily 成功；任務 PR 還開著、還沒有 PR 或不知道的 `engineer_waiting`／`engineer_ended` | 跟著下一次喚醒；最舊一個沒被喚醒涵蓋的已記錄 15 分鐘（`BATCH_CAP`）時當「立即」喚醒 |
+  | 立即 `now` | CI success；`BEHIND`；不與 CI 同輪的 `CLEAN`／`UNSTABLE`；其他有類型的留言（`決定：`、`review：`、`統籌承諾：`）；news 失敗而它前一個 `end` 列沒有失敗或失敗的種類不同（種類＝`exit` 是否非 0 與 `news_llm_exit`；新出現的失敗） | 立即；失敗的喚醒 10 分鐘後再試 |
+  | 搭下一次 `batch` | `回報：`（開工、收到以外）；新 PR（第一個 CI 結果中位數 14 分鐘後到）；`slots`；`rate_limit` 的 `engineer_failed`（同帳號的統籌也在限額內）；news 同一種失敗重複（前一個 `end` 列的種類相同）；daily 成功；任務 PR 還開著、還沒有 PR 或不知道的 `engineer_waiting`／`engineer_ended` | 跟著下一次喚醒；最舊一個沒被喚醒涵蓋的已記錄 15 分鐘（`BATCH_CAP`）時當「立即」喚醒 |
 
   「任務 PR 已離開 open」：`gh pr list` 多取 `headRefName`，`monitor-state.json` 記 open PR 的 branch（`pr_branches`）與離開 open 的 PR 的 branch 及時間（`gone_branches`，保留 7 天；同一 branch 又有 open PR 就移除）；工程師狀態檔的 `branch` 在 `gone_branches` 裡才算 quiet。state 讀不到或還沒有 `gone_branches`（#711 部署後第一輪）時照搭下一次，不當 quiet。`patrol.sh` 的未處理事件每行前面標分級，表頭加「搭下一次 N 個，最晚 <UTC> 喚醒」（只算還沒被喚醒涵蓋的）。喚醒前後的效果用 [`wake_replay.py`](../../tools/ops/wake_replay.py) 以佇列的**副本**重放（只讀；老式事件以存下的摘要推分級，近似處寫在它開頭）。
 - **喚醒**：由 waker 執行（`--waker <命令>`，以 `<命令> <terminal> <文字>` 呼叫，exit 0 已送、3 未閒置、其他為失敗；`none` 表示不喚醒、只記 `wake=deferred`，#338）。預設的 [`orca_wake.sh`](../../tools/ops/orca_wake.sh) 做法如下：有新事件時，對心跳檔（`logs/coordinator-heartbeat.json`）記的 terminal 先 `orca terminal wait --for tui-idle --timeout-ms 15000`，回 `satisfied:true` 才 `orca terminal send` 一句「有 N 個事件，請處理佇列：bash tools/ops/patrol.sh」（與派工同一規則，GUARDRAILS 規則表 #282），結果記成 `events.jsonl` 的 `wake` 列；同一事件只在第一次成功送出時喚醒。沒等到閒置（`not_idle`，terminal 不存在或 wait 逾時也算）或送出失敗（沒有心跳、Orca 拒收）每 10 分鐘再試；還有沒喚醒的急件時每輪都試（上面的「喚醒分級」）。已知限制：權限詢問畫面也會讓 `tui-idle` 回 `satisfied:true`（#315 實測），這時送出的文字仍可能落在那個畫面上。
