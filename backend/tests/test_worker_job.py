@@ -546,7 +546,9 @@ def test_a_second_daily_job_records_already_running(tree):
     first = tree.start("daily", daily_until=release, daily_sleep=90)
     try:
         tree.wait_for_call(1)
-        second = tree.run("daily", daily_until=release, daily_sleep=90)
+        # No fake sleep for the second: its worker call is the skip record, which would wait
+        # for the release the finally below makes, 90 seconds in vain (#746).
+        second = tree.run("daily")
         assert second.code == 0, second.stderr
         assert tree.calls()[1]["argv"][-2:] == ["--skip-reason", "already_running"]
         # Only the worker of the job holding the lock is told its path (#336).

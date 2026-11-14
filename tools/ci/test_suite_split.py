@@ -13,6 +13,7 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
+import unittest.mock
 
 import import_modules
 import suite_split
@@ -51,10 +52,66 @@ class Verify(unittest.TestCase):
     def check(self, manifest=MANIFEST, mutate=lambda b, d, i: None):
         backend, docker, image = reports()
         mutate(backend, docker, image)
-        return problems(manifest, backend, docker, image)
+        return problems(manifest, [backend], docker, image)
 
     def test_a_healthy_split_has_no_problem(self):
         self.assertEqual(self.check(), [])
+
+    @staticmethod
+    def shards(backend: dict, *firsts: set[str]) -> list[dict]:
+        """The backend report cut in two: each first shard takes the given ids, the last the
+        rest (an id in two shards when the sets overlap)."""
+        taken = set().union(*firsts)
+        rest = set(backend["collected"]) - taken
+        return [
+            run({t: backend["outcomes"][t] for t in ids}) for ids in (*firsts, rest)
+        ]
+
+    def test_two_shards_that_together_run_the_suite_have_no_problem(self):
+        backend, docker, image = reports()
+        shards = self.shards(backend, {ONE, PARAM_X})
+        self.assertEqual(problems(MANIFEST, shards, docker, image), [])
+        summary = suite_split.summary(MANIFEST, shards, docker, image)
+        self.assertIn("backend shard 1: collected 2, ran 2", summary)
+        self.assertIn("backend shard 2: collected 3, ran 1", summary)
+        self.assertIn("backend job: collected 5, ran 3", summary)
+
+    def test_a_test_in_both_shards_fails(self):
+        """#746: the shards split the suite; a test in both runs twice."""
+        backend, docker, image = reports()
+        ops, rest = self.shards(backend, {ONE, PARAM_X})
+        rest["collected"] = sorted({*rest["collected"], PARAM_X})
+        rest["outcomes"][PARAM_X] = PASSED
+        errors = problems(MANIFEST, [ops, rest], docker, image)
+        self.assertEqual(
+            errors, ["tests collected by more than one backend shard:", f"  {PARAM_X}"]
+        )
+
+    def test_a_test_in_neither_shard_fails(self):
+        """#746: a file both shards leave out (the rest shard ignoring a file that is not in
+        the ops shard) is a test the image collected and no backend shard did."""
+        backend, docker, image = reports()
+        ops, rest = self.shards(backend, {ONE, PARAM_X})
+        rest["collected"].remove(PARAM_Y)
+        del rest["outcomes"][PARAM_Y]
+        errors = problems(MANIFEST, [ops, rest], docker, image)
+        self.assertEqual(
+            errors[:2],
+            ["backend collected fewer tests than the image:", f"  {PARAM_Y}"],
+        )
+
+    def test_a_failure_in_one_shard_fails_whatever_the_other(self):
+        backend, docker, image = reports()
+        ops, rest = self.shards(backend, {ONE, PARAM_X})
+        ops["outcomes"][ONE] = FAILED
+        errors = problems(MANIFEST, [ops, rest], docker, image)
+        self.assertEqual(errors[:2], ["backend tests that failed:", f"  {ONE}"])
+        merged, _ = suite_split.merge_backend([ops, run({ONE: PASSED})])
+        self.assertEqual(merged["outcomes"][ONE], FAILED)
+
+    def test_no_backend_report_fails(self):
+        _, docker, image = reports()
+        self.assertEqual(problems(MANIFEST, [], docker, image), ["no backend report"])
 
     def test_a_test_only_the_image_runs_must_stay_in_the_docker_list(self):
         """The mutation of AC-2: ENV is skipped on the runner and dropped from the list."""
@@ -267,7 +324,9 @@ class TheListInTheRepository(unittest.TestCase):
             if step.get("uses", "").startswith("actions/upload-artifact@")
             and step["with"]["name"].startswith("suite-")
         }
-        self.assertEqual(sorted(uploads), ["suite-backend", "suite-docker"])
+        self.assertEqual(
+            sorted(uploads), ["suite-backend-${{ matrix.shard }}", "suite-docker"]
+        )
         for name, options in uploads.items():
             with self.subTest(name):
                 self.assertEqual(options["if-no-files-found"], "error")
@@ -277,6 +336,102 @@ class TheListInTheRepository(unittest.TestCase):
             if step.get("uses", "").startswith("actions/download-artifact@")
         ]
         self.assertEqual([d["pattern"] for d in downloads], ["suite-*"])
+
+
+def shard_files(shard: str, files: list[str]) -> set[str]:
+    """The test files (relative to backend/) a shard's pytest arguments select."""
+    args = suite_split.shard_args(shard)
+    ignored = {a.removeprefix("--ignore=") for a in args if a.startswith("--ignore=")}
+    selected = [a for a in args if not a.startswith("--")]
+    return {
+        f
+        for f in files
+        if f not in ignored and any(f == s or f.startswith(s + "/") for s in selected)
+    }
+
+
+class Shards(unittest.TestCase):
+    """The two backend shards (#746): the list is in suite_split.py only."""
+
+    def test_every_file_of_the_ops_shard_exists(self):
+        """A renamed test file left in the list would select nothing (and ignore nothing)."""
+        self.assertTrue(suite_split.OPS_SHARD)
+        self.assertEqual(len(set(suite_split.OPS_SHARD)), len(suite_split.OPS_SHARD))
+        for path in suite_split.OPS_SHARD:
+            with self.subTest(path):
+                self.assertRegex(path, r"^tests/test_[^/]+\.py$")
+                self.assertTrue((suite_split.BACKEND / path).is_file(), path)
+
+    def test_every_test_file_is_in_exactly_one_shard(self):
+        files = sorted(
+            p.relative_to(suite_split.BACKEND).as_posix()
+            for p in (suite_split.BACKEND / "tests").rglob("test_*.py")
+        )
+        self.assertTrue(files)
+        picked = {s: shard_files(s, files) for s in suite_split.BACKEND_SHARDS}
+        self.assertEqual(picked["ops"], set(suite_split.OPS_SHARD))
+        for f in files:
+            with self.subTest(f):
+                self.assertEqual(
+                    len([s for s in suite_split.BACKEND_SHARDS if f in picked[s]]), 1
+                )
+
+    def test_shard_prints_the_arguments_one_a_line(self):
+        for shard in suite_split.BACKEND_SHARDS:
+            with self.subTest(shard):
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    self.assertEqual(suite_split.main(["shard", shard]), 0)
+                self.assertEqual(
+                    out.getvalue().splitlines(), suite_split.shard_args(shard)
+                )
+        self.assertEqual(suite_split.shard_args("rest")[-1], "tests")
+        with self.assertRaises(ValueError):
+            suite_split.shard_args("all")
+
+    def test_the_workflow_runs_each_shard_and_verifies_both(self):
+        import yaml
+
+        workflow_text = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        jobs = yaml.load(workflow_text, Loader=yaml.BaseLoader)["jobs"]
+        strategy = jobs["backend"]["strategy"]
+        self.assertEqual(strategy["matrix"]["shard"], list(suite_split.BACKEND_SHARDS))
+        # A red shard must not cancel the other: both report what they ran.
+        self.assertEqual(strategy["fail-fast"], "false")
+        self.assertEqual(jobs["backend"]["env"]["SHARD"], "${{ matrix.shard }}")
+        (pytest,) = [
+            s for s in jobs["backend"]["steps"] if "-m pytest" in s.get("run", "")
+        ]
+        self.assertIn('suite_split.py shard "$SHARD"', pytest["run"])
+        self.assertIn(
+            '--suite-report "$RUNNER_TEMP/suite/backend-$SHARD.json"', pytest["run"]
+        )
+        (verify,) = [
+            s
+            for s in jobs["suite"]["steps"]
+            if "suite_split.py verify" in s.get("run", "")
+        ]
+        self.assertEqual(
+            re.findall(
+                r'--backend "\$RUNNER_TEMP/suite/backend-(\w+)\.json"', verify["run"]
+            ),
+            list(suite_split.BACKEND_SHARDS),
+        )
+        uploads = {
+            s["with"]["name"]: s["with"]
+            for s in jobs["backend"]["steps"]
+            if s.get("uses", "").startswith("actions/upload-artifact@")
+        }
+        self.assertEqual(
+            uploads["suite-backend-${{ matrix.shard }}"]["path"],
+            "${{ runner.temp }}/suite/backend-${{ matrix.shard }}.json",
+        )
+        # Every test's time stays for measuring (#746).
+        junit = uploads["junit-backend-${{ matrix.shard }}"]
+        self.assertEqual(junit["path"], "${{ runner.temp }}/pytest.xml")
+        self.assertEqual(junit["retention-days"], "14")
+        self.assertIn('--junitxml "$RUNNER_TEMP/pytest.xml"', pytest["run"])
+        self.assertIn("--durations=30", pytest["run"])
 
 
 class Plugin(unittest.TestCase):
@@ -415,6 +570,28 @@ class Plugin(unittest.TestCase):
                 )
                 suite_split.pytest_configure(SimpleNamespace(pluginmanager=manager))
                 self.assertEqual(registered, ["suite_split_xdist"] if loaded else [])
+
+    def test_an_xdist_worker_names_itself_in_each_tests_properties(self):
+        """The junit report the backend job uploads then holds each test's worker (#746)."""
+        for worker, report, expected in (
+            ("gw3", "r.json", [("xdist_worker", "gw3")]),
+            (None, "r.json", []),
+            ("gw3", None, []),
+        ):
+            with self.subTest(worker=worker, report=report):
+                options = {"suite_report": report}
+                item = SimpleNamespace(
+                    config=SimpleNamespace(getoption=options.__getitem__),
+                    user_properties=[],
+                )
+                env = {
+                    k: v for k, v in os.environ.items() if k != "PYTEST_XDIST_WORKER"
+                }
+                if worker:
+                    env["PYTEST_XDIST_WORKER"] = worker
+                with unittest.mock.patch.dict(os.environ, env, clear=True):
+                    suite_split.pytest_runtest_setup(item)
+                self.assertEqual(item.user_properties, expected)
 
     def test_without_the_option_nothing_is_written(self):
         options = {"suite_report": None}

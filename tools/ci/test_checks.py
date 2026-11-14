@@ -1058,6 +1058,12 @@ class BackendTime(unittest.TestCase):
     41764869855), past that week's slowest. The pytest step has 20 minutes, about 1.7
     times the slowest seen (706); the job 10 more for the checkout (5 minutes at its slowest, CheckoutTime), setup
     and pip, so a hung pytest stops at its step and the Summary step still runs.
+
+    By 2026-11-14 the whole suite took 803 to about 1220 seconds on one runner, and PR #741's
+    run 43638579583 passed the 20 minutes (#746). It now runs as two shards side by side
+    (suite_split.py BACKEND_SHARDS), each about half the test time (1364 and 1395 seconds in
+    run 43641113253): the 20 minutes stay, with each shard expected at no more than 0.6 of
+    them (12 minutes) on the slowest runner seen.
     """
 
     PYTEST_MINIMUM = 20
@@ -1110,7 +1116,8 @@ class BackendParallel(unittest.TestCase):
         self.assertIn('-n "$(nproc)"', step["run"])
         self.assertIn("--dist loadgroup", step["run"])
         self.assertIn("-p suite_split", step["run"])
-        self.assertRegex(step["run"], r"\btests\s*$")
+        # Each shard's files (suite_split.py BACKEND_SHARDS, #746; test_suite_split.Shards).
+        self.assertRegex(step["run"], r'"\$\{selection\[@\]\}"\s*$')
         (install,) = [s for s in self.job["steps"] if "pip install" in s.get("run", "")]
         self.assertIn("pytest-xdist==", install["run"])
         self.assertIn("execnet==", install["run"])
