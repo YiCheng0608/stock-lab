@@ -1,0 +1,33 @@
+第 1 版輸出與 pr-assets/682@run-20261114/formal 比對（去掉 CR 後 sha256）
+equity.csv 本次 bdd9f3c34880992c763acf85b6e98edbe1b756b004f29405e40d9656212fba87 #682 bdd9f3c34880992c763acf85b6e98edbe1b756b004f29405e40d9656212fba87 相同
+picks.csv 本次 91dbdfd9b388c5e80cc45c380859643cad18d5b61b327fb783bd8c27610e9d59 #682 91dbdfd9b388c5e80cc45c380859643cad18d5b61b327fb783bd8c27610e9d59 相同
+trades.csv 本次 1959d2bb82a6f8d56cf4f65577b8202129157ea205a01a8b2b4ea7540188daae #682 1959d2bb82a6f8d56cf4f65577b8202129157ea205a01a8b2b4ea7540188daae 相同
+summary.md 本次 dd91a6eedaa866dc5b8d45671e331e272938e467cc1fd2473cc4391e8064fad2 #682 05842004ec16f999b595525b704e2c58cb06c07c630a04c8b47022dd29a07077 不同
+
+tables.json 差異（diff）：
+3c3
+<   "command": "python tools/research/portfolio_research.py --db /db/stock.db --signals /in/trades.csv --signals-source pr-assets/673@5a65f4963e4a20ac2845ec37c3aaed8e4e0c933e:run-20261114/formal/report/trades.csv --out /out/formal --min-free-gb 0",
+---
+>   "command": "python tools/research/portfolio_research.py --db /db/stock.db --signals /in/trades.csv --signals-source pr-assets/673@5a65f4963e4a20ac2845ec37c3aaed8e4e0c933e:run-20261114/formal/report/trades.csv --out /out/formal --min-free-gb 0 --rankings 689",
+19c19
+<     "mtime": "2026-11-14T03:47:34.002318+00:00"
+---
+>     "mtime": "2026-11-14T05:16:58.844594+00:00"
+1733,1734c1733,1734
+<   "elapsed_seconds": 248.41899211300188,
+<   "peak_memory_gb": 0.6777610778808594
+---
+>   "elapsed_seconds": 285.95567881999887,
+>   "peak_memory_gb": 0.6986503601074219
+
+summary.md 差異（diff，去掉 CR）：
+5c5
+< - 副本：最新交易日 2026-11-13，alembic `0031_drop_theme_suggestions`，檔案時間 2026-11-14T03:47:34.002318+00:00
+---
+> - 副本：最新交易日 2026-11-13，alembic `0031_drop_theme_suggestions`，檔案時間 2026-11-14T05:16:58.844594+00:00
+13,14c13,14
+< - 耗時 248 秒，峰值記憶體 0.68 GB
+< - 重現：`python tools/research/portfolio_research.py --db /db/stock.db --signals /in/trades.csv --signals-source pr-assets/673@5a65f4963e4a20ac2845ec37c3aaed8e4e0c933e:run-20261114/formal/report/trades.csv --out /out/formal --min-free-gb 0`
+---
+> - 耗時 286 秒，峰值記憶體 0.70 GB
+> - 重現：`python tools/research/portfolio_research.py --db /db/stock.db --signals /in/trades.csv --signals-source pr-assets/673@5a65f4963e4a20ac2845ec37c3aaed8e4e0c933e:run-20261114/formal/report/trades.csv --out /out/formal --min-free-gb 0 --rankings 689`

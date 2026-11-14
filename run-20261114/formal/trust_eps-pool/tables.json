@@ -1,0 +1,1742 @@
+{
+  "version": 1,
+  "command": "python tools/research/portfolio_research.py --db /db/stock.db --signals /in/trades.csv --signals-source pr-assets/673@5a65f4963e4a20ac2845ec37c3aaed8e4e0c933e:run-20261114/formal/report/trades.csv --out /out/formal --min-free-gb 0 --rankings 689",
+  "signals": {
+    "source": "pr-assets/673@5a65f4963e4a20ac2845ec37c3aaed8e4e0c933e:run-20261114/formal/report/trades.csv",
+    "sha256": "b8a7134d550dfae34ebb37a137ea660e831a4017b41eba630c8682090c53c2d0",
+    "rows": 13709,
+    "first": "2024-11-01",
+    "last": "2026-11-13"
+  },
+  "cutoff": "2026-11-13",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0031_drop_theme_suggestions",
+    "mtime": "2026-11-14T05:16:58.844594+00:00"
+  },
+  "rule": {
+    "tops": [
+      5,
+      10,
+      20
+    ],
+    "holds": [
+      5,
+      10,
+      20
+    ],
+    "slippage_bps": 5.0,
+    "fee": 0.001425,
+    "tax": 0.003,
+    "min_days": 60,
+    "min_t": 2.0
+  },
+  "rankings": "689",
+  "label": "#689 研究用排序 `trust_eps`：投信近 5 日買超天數，同分看最新一季 EPS 年化 ÷ 股價；(a) 候選池內重排序：入池同第 1 版，只換排序；同分以 sha256(T:instrument_id) 中性排序，缺值排最後；不是產品評分",
+  "comparisons_total": 108,
+  "ranking": "trust_eps",
+  "universe": "pool",
+  "keys": [
+    "trust_buy_days_5",
+    "eps_yield"
+  ],
+  "first_session": "2024-11-04",
+  "last_session": "2026-11-13",
+  "signal_days": 493,
+  "days_with_signals": 489,
+  "pool_counts": {
+    "days": 489,
+    "members": 5117,
+    "missing_trust_buy_days_5": 0,
+    "missing_revenue_high_12": 7,
+    "missing_eps_yield": 3,
+    "primary_at_most": 550
+  },
+  "variants": {
+    "K5:top5": {
+      "hold": 5,
+      "key": "top5",
+      "segments": {
+        "exploration": {
+          "curve": {
+            "days": 285,
+            "total": -0.4329336937797875,
+            "annual": -0.3944354396335229,
+            "volatility": 0.1802235804127111,
+            "max_drawdown": -0.4354837153644553,
+            "invested": 0.715416703238439,
+            "turnover": 45.350077781222005
+          },
+          "trades": {
+            "bought": 1282,
+            "close": 1278,
+            "delayed": 4
+          },
+          "excess_population": {
+            "days": 285,
+            "mean": -0.00016769868690487015,
+            "annual": -0.042260069100027275,
+            "t": -0.3075046592532932
+          },
+          "excess_taiex": {
+            "days": 285,
+            "mean": -0.0028750854814410453,
+            "annual": -0.7245215413231434,
+            "t": -4.387880663468035
+          },
+          "excess_pool": {
+            "days": 285,
+            "mean": 0.00046618399539218383,
+            "annual": 0.11747836683883033,
+            "t": 1.3590421678856077
+          }
+        },
+        "validation": {
+          "curve": {
+            "days": 208,
+            "total": -0.1471960908617409,
+            "annual": -0.17544216094029086,
+            "volatility": 0.2545256972817513,
+            "max_drawdown": -0.26276401568099783,
+            "invested": 0.7660780577732448,
+            "turnover": 48.290515111558946
+          },
+          "trades": {
+            "bought": 996,
+            "close": 977,
+            "delayed": 2,
+            "unsold": 17
+          },
+          "excess_population": {
+            "days": 208,
+            "mean": 7.291339889155898e-05,
+            "annual": 0.018374176520672865,
+            "t": 0.08935809272839905
+          },
+          "excess_taiex": {
+            "days": 208,
+            "mean": -0.0027980648911102896,
+            "annual": -0.705112352559793,
+            "t": -2.770266421002143
+          },
+          "excess_pool": {
+            "days": 208,
+            "mean": 0.0007185868776105853,
+            "annual": 0.1810838931578675,
+            "t": 1.4952172746761239
+          }
+        },
+        "all": {
+          "curve": {
+            "days": 493,
+            "total": -0.5164036373148106,
+            "annual": -0.3102026102830613,
+            "volatility": 0.21472616185989668,
+            "max_drawdown": -0.5373325912344444,
+            "invested": 0.7367910678291887,
+            "turnover": 46.590667973331705
+          },
+          "trades": {
+            "bought": 2278,
+            "close": 2255,
+            "delayed": 6,
+            "unsold": 17
+          },
+          "excess_population": {
+            "days": 493,
+            "mean": -6.618283731935847e-05,
+            "annual": -0.016678075004478335,
+            "t": -0.14192393767047004
+          },
+          "excess_taiex": {
+            "days": 493,
+            "mean": -0.0028425899788268524,
+            "annual": -0.7163326746643668,
+            "t": -4.9911587649625835
+          },
+          "excess_pool": {
+            "days": 493,
+            "mean": 0.0005726744609123208,
+            "annual": 0.14431396414990486,
+            "t": 2.020988184660294
+          }
+        }
+      },
+      "verdicts": {
+        "population": "沒有差異",
+        "taiex": "輸給基準"
+      },
+      "counts": {
+        "bought": 2278,
+        "limit_down": 6,
+        "not_tradable": 2,
+        "limit_up": 7,
+        "unsold": 17
+      }
+    },
+    "K5:top10": {
+      "hold": 5,
+      "key": "top10",
+      "segments": {
+        "exploration": {
+          "curve": {
+            "days": 285,
+            "total": -0.4062873597179335,
+            "annual": -0.3693421921778903,
+            "volatility": 0.14732218296848304,
+            "max_drawdown": -0.41216596748207235,
+            "invested": 0.5848281209449753,
+            "turnover": 37.073705619966724
+          },
+          "trades": {
+            "bought": 2097,
+            "close": 2087,
+            "delayed": 10
+          },
+          "excess_population": {
+            "days": 285,
+            "mean": -2.859625065068367e-05,
+            "annual": -0.0072062551639722845,
+            "t": -0.057470009369639856
+          },
+          "excess_taiex": {
+            "days": 285,
+            "mean": -0.002735983045186859,
+            "annual": -0.6894677273870885,
+            "t": -4.439116368161806
+          },
+          "excess_pool": {
+            "days": 285,
+            "mean": 0.0006052864316463704,
+            "annual": 0.15253218077488534,
+            "t": 1.6524497398441649
+          }
+        },
+        "validation": {
+          "curve": {
+            "days": 208,
+            "total": -0.23118616097685307,
+            "annual": -0.27277636875563005,
+            "volatility": 0.22349392660169382,
+            "max_drawdown": -0.29231299268741207,
+            "invested": 0.6778145875710321,
+            "turnover": 42.7330594499876
+          },
+          "trades": {
+            "bought": 1764,
+            "close": 1725,
+            "delayed": 7,
+            "unsold": 32
+          },
+          "excess_population": {
+            "days": 208,
+            "mean": -0.000454406449086137,
+            "annual": -0.11451042516970653,
+            "t": -0.6393387818739251
+          },
+          "excess_taiex": {
+            "days": 208,
+            "mean": -0.0033253847390879855,
+            "annual": -0.8379969542501724,
+            "t": -3.321225412024757
+          },
+          "excess_pool": {
+            "days": 208,
+            "mean": 0.0001912670296328894,
+            "annual": 0.04819929146748812,
+            "t": 0.5836031418899725
+          }
+        },
+        "all": {
+          "curve": {
+            "days": 493,
+            "total": -0.5435455057481762,
+            "annual": -0.33027128715763454,
+            "volatility": 0.18321377556859214,
+            "max_drawdown": -0.5563561530341311,
+            "invested": 0.624059733639133,
+            "turnover": 39.46142488293699
+          },
+          "trades": {
+            "bought": 3861,
+            "close": 3812,
+            "delayed": 17,
+            "unsold": 32
+          },
+          "excess_population": {
+            "days": 493,
+            "mean": -0.0002082484236214226,
+            "annual": -0.0524786027525985,
+            "t": -0.5015770801257488
+          },
+          "excess_taiex": {
+            "days": 493,
+            "mean": -0.0029846555651289164,
+            "annual": -0.7521332024124869,
+            "t": -5.405358145081973
+          },
+          "excess_pool": {
+            "days": 493,
+            "mean": 0.00043060887461025664,
+            "annual": 0.10851343640178467,
+            "t": 1.703138311040221
+          }
+        }
+      },
+      "verdicts": {
+        "population": "沒有差異",
+        "taiex": "輸給基準"
+      },
+      "counts": {
+        "bought": 3861,
+        "limit_down": 16,
+        "not_tradable": 2,
+        "limit_up": 14,
+        "sale_held": 1,
+        "unsold": 32
+      }
+    },
+    "K5:top20": {
+      "hold": 5,
+      "key": "top20",
+      "segments": {
+        "exploration": {
+          "curve": {
+            "days": 285,
+            "total": -0.298970580119439,
+            "annual": -0.2695367632785265,
+            "volatility": 0.09754006613924365,
+            "max_drawdown": -0.30316869225027177,
+            "invested": 0.36251333088186094,
+            "turnover": 23.00635025766013
+          },
+          "trades": {
+            "bought": 2605,
+            "close": 2593,
+            "delayed": 12
+          },
+          "excess_population": {
+            "days": 285,
+            "mean": 0.0005290209272567374,
+            "annual": 0.13331327366869783,
+            "t": 0.9228535462462919
+          },
+          "excess_taiex": {
+            "days": 285,
+            "mean": -0.002178365867279438,
+            "annual": -0.5489481985544185,
+            "t": -3.2917979312884778
+          },
+          "excess_pool": {
+            "days": 285,
+            "mean": 0.0011629036095537914,
+            "annual": 0.29305170960755544,
+            "t": 2.3273587155369846
+          }
+        },
+        "validation": {
+          "curve": {
+            "days": 208,
+            "total": -0.22340039554858326,
+            "annual": -0.2638443625882103,
+            "volatility": 0.14943151160018192,
+            "max_drawdown": -0.2566205321019266,
+            "invested": 0.4508216212902647,
+            "turnover": 28.567766259612828
+          },
+          "trades": {
+            "bought": 2355,
+            "close": 2298,
+            "delayed": 8,
+            "unsold": 49
+          },
+          "excess_population": {
+            "days": 208,
+            "mean": -0.0004610273627401654,
+            "annual": -0.11617889541052168,
+            "t": -0.5818119298468907
+          },
+          "excess_taiex": {
+            "days": 208,
+            "mean": -0.003332005652742014,
+            "annual": -0.8396654244909875,
+            "t": -3.1702706682723045
+          },
+          "excess_pool": {
+            "days": 208,
+            "mean": 0.000184646115978861,
+            "annual": 0.04653082122667297,
+            "t": 0.33453631358457214
+          }
+        },
+        "all": {
+          "curve": {
+            "days": 493,
+            "total": -0.4555808298119507,
+            "annual": -0.267140489005245,
+            "volatility": 0.1220118769635217,
+            "max_drawdown": -0.4643142877028289,
+            "invested": 0.3997711897154268,
+            "turnover": 25.352748895400822
+          },
+          "trades": {
+            "bought": 4960,
+            "close": 4891,
+            "delayed": 20,
+            "unsold": 49
+          },
+          "excess_population": {
+            "days": 493,
+            "mean": 0.0001113129266089569,
+            "annual": 0.02805085750545714,
+            "t": 0.2364620403651147
+          },
+          "excess_taiex": {
+            "days": 493,
+            "mean": -0.002665094214898537,
+            "annual": -0.6716037421544313,
+            "t": -4.551393839850015
+          },
+          "excess_pool": {
+            "days": 493,
+            "mean": 0.0007501702248406361,
+            "annual": 0.1890428966598403,
+            "t": 2.0203816467658586
+          }
+        }
+      },
+      "verdicts": {
+        "population": "沒有差異",
+        "taiex": "輸給基準"
+      },
+      "counts": {
+        "bought": 4960,
+        "limit_down": 19,
+        "limit_up": 22,
+        "not_tradable": 2,
+        "sale_held": 1,
+        "unsold": 49
+      }
+    },
+    "K5:pool": {
+      "hold": 5,
+      "key": "pool",
+      "segments": {
+        "exploration": {
+          "curve": {
+            "days": 285,
+            "total": -0.506782240253437,
+            "annual": -0.4647192900379935,
+            "volatility": 0.20914305310750028,
+            "max_drawdown": -0.5218104535817101,
+            "invested": 0.7730626371733882,
+            "turnover": 48.980471471023726
+          },
+          "trades": {
+            "bought": 2654,
+            "close": 2642,
+            "delayed": 12
+          },
+          "excess_population": {
+            "days": 285,
+            "mean": -0.000633882682297054,
+            "annual": -0.15973843593885761,
+            "t": -1.099480879558584
+          },
+          "excess_taiex": {
+            "days": 285,
+            "mean": -0.003341269476833229,
+            "annual": -0.8419999081619738,
+            "t": -4.5817454993225155
+          }
+        },
+        "validation": {
+          "curve": {
+            "days": 208,
+            "total": -0.2663092871823912,
+            "annual": -0.31283053456470444,
+            "volatility": 0.2580575695591132,
+            "max_drawdown": -0.34381824999293864,
+            "invested": 0.7854709133059988,
+            "turnover": 49.41169577244458
+          },
+          "trades": {
+            "bought": 2439,
+            "close": 2379,
+            "delayed": 8,
+            "unsold": 52
+          },
+          "excess_population": {
+            "days": 208,
+            "mean": -0.0006456734787190264,
+            "annual": -0.16270971663719463,
+            "t": -0.9278674756045705
+          },
+          "excess_taiex": {
+            "days": 208,
+            "mean": -0.0035166517687208747,
+            "annual": -0.8861962457176604,
+            "t": -3.395036649016619
+          }
+        },
+        "all": {
+          "curve": {
+            "days": 493,
+            "total": -0.6381307102772402,
+            "annual": -0.4052273569040773,
+            "volatility": 0.23093886143434927,
+            "max_drawdown": -0.6547573498322843,
+            "invested": 0.7782977719311631,
+            "turnover": 49.162407890284456
+          },
+          "trades": {
+            "bought": 5093,
+            "close": 5021,
+            "delayed": 20,
+            "unsold": 52
+          },
+          "excess_population": {
+            "days": 493,
+            "mean": -0.0006388572982316793,
+            "annual": -0.16099203915438318,
+            "t": -1.439832919524347
+          },
+          "excess_taiex": {
+            "days": 493,
+            "mean": -0.0034152644397391733,
+            "annual": -0.8606466388142717,
+            "t": -5.630396593743307
+          }
+        }
+      },
+      "verdicts": {},
+      "counts": {
+        "bought": 5093,
+        "limit_down": 19,
+        "limit_up": 22,
+        "not_tradable": 2,
+        "sale_held": 1,
+        "unsold": 52
+      }
+    },
+    "K5:population": {
+      "hold": 5,
+      "key": "population",
+      "segments": {
+        "exploration": {
+          "curve": {
+            "days": 285,
+            "total": -0.4108955488325462,
+            "annual": -0.3736723041975356,
+            "volatility": 0.22249239068680315,
+            "max_drawdown": -0.44126847336344066,
+            "invested": 0.7949488867351645,
+            "turnover": 50.12414829245505
+          },
+          "trades": {
+            "bought": 159583,
+            "close": 158738,
+            "delayed": 833,
+            "unsold": 12
+          },
+          "excess_taiex": {
+            "days": 285,
+            "mean": -0.0027073867945361756,
+            "annual": -0.6822614722231163,
+            "t": -5.4370374410619915
+          }
+        },
+        "validation": {
+          "curve": {
+            "days": 208,
+            "total": -0.16497482356691684,
+            "annual": -0.19622218082327902,
+            "volatility": 0.28089028460035526,
+            "max_drawdown": -0.31546051648576434,
+            "invested": 0.7987888167619823,
+            "turnover": 49.84818926469541
+          },
+          "trades": {
+            "bought": 136521,
+            "close": 133911,
+            "delayed": 232,
+            "unsold": 2378
+          },
+          "excess_taiex": {
+            "days": 208,
+            "mean": -0.002870978290001848,
+            "annual": -0.7234865290804657,
+            "t": -3.450366503640983
+          }
+        },
+        "all": {
+          "curve": {
+            "days": 493,
+            "total": -0.5080829517263816,
+            "annual": -0.304161225755225,
+            "volatility": 0.2486718773751525,
+            "max_drawdown": -0.5470589699571791,
+            "invested": 0.7965689789168644,
+            "turnover": 50.007719331453
+          },
+          "trades": {
+            "bought": 296104,
+            "close": 292649,
+            "delayed": 1065,
+            "unsold": 2390
+          },
+          "excess_taiex": {
+            "days": 493,
+            "mean": -0.002776407141507494,
+            "annual": -0.6996545996598885,
+            "t": -6.122281101536394
+          }
+        }
+      },
+      "verdicts": {},
+      "counts": {
+        "bought": 296104,
+        "limit_up": 718,
+        "limit_down": 928,
+        "not_tradable": 75,
+        "sale_held": 173,
+        "unsold": 2390
+      }
+    },
+    "K10:top5": {
+      "hold": 10,
+      "key": "top5",
+      "segments": {
+        "exploration": {
+          "curve": {
+            "days": 285,
+            "total": -0.12086805361618014,
+            "annual": -0.10765660646416786,
+            "volatility": 0.1817784221937866,
+            "max_drawdown": -0.2504441672383899,
+            "invested": 0.7978753954412618,
+            "turnover": 22.714350828630245
+          },
+          "trades": {
+            "bought": 1282,
+            "close": 1278,
+            "delayed": 4
+          },
+          "excess_population": {
+            "days": 285,
+            "mean": 0.0003046353737232125,
+            "annual": 0.07676811417824955,
+            "t": 0.6553657995046365
+          },
+          "excess_taiex": {
+            "days": 285,
+            "mean": -0.0013375152771492233,
+            "annual": -0.3370538498416043,
+            "t": -2.5167637488119428
+          },
+          "excess_pool": {
+            "days": 285,
+            "mean": 0.0002733566144519112,
+            "annual": 0.06888586684188162,
+            "t": 1.0395612451545582
+          }
+        },
+        "validation": {
+          "curve": {
+            "days": 208,
+            "total": 0.09095608070902927,
+            "annual": 0.11123256088156164,
+            "volatility": 0.2634324388415276,
+            "max_drawdown": -0.20736218044154253,
+            "invested": 0.8692677651152244,
+            "turnover": 24.1818654130166
+          },
+          "trades": {
+            "bought": 996,
+            "close": 957,
+            "delayed": 2,
+            "unsold": 37
+          },
+          "excess_population": {
+            "days": 208,
+            "mean": 0.0001527513209995225,
+            "annual": 0.03849333289187967,
+            "t": 0.2075678883639251
+          },
+          "excess_taiex": {
+            "days": 208,
+            "mean": -0.0016049271054788144,
+            "annual": -0.40444163058066124,
+            "t": -1.724288653108677
+          },
+          "excess_pool": {
+            "days": 208,
+            "mean": 0.00017663204720203956,
+            "annual": 0.044511275894913965,
+            "t": 0.49652957328355646
+          }
+        },
+        "all": {
+          "curve": {
+            "days": 493,
+            "total": -0.04090565734701035,
+            "annual": -0.021122589955024584,
+            "volatility": 0.21983153554382937,
+            "max_drawdown": -0.2504441672383899,
+            "invested": 0.8279963140866659,
+            "turnover": 23.333505054902787
+          },
+          "trades": {
+            "bought": 2278,
+            "close": 2235,
+            "delayed": 6,
+            "unsold": 37
+          },
+          "excess_population": {
+            "days": 493,
+            "mean": 0.00024055447521098629,
+            "annual": 0.06061972775316855,
+            "t": 0.586464191606248
+          },
+          "excess_taiex": {
+            "days": 493,
+            "mean": -0.0014503381174992332,
+            "annual": -0.3654852056098068,
+            "t": -2.911961243304859
+          },
+          "excess_pool": {
+            "days": 493,
+            "mean": 0.000232547872082797,
+            "annual": 0.05860206376486485,
+            "t": 1.089709171037793
+          }
+        }
+      },
+      "verdicts": {
+        "population": "沒有差異",
+        "taiex": "方向一致但不顯著"
+      },
+      "counts": {
+        "bought": 2278,
+        "limit_down": 5,
+        "sale_held": 1,
+        "not_tradable": 2,
+        "limit_up": 7,
+        "unsold": 37
+      }
+    },
+    "K10:top10": {
+      "hold": 10,
+      "key": "top10",
+      "segments": {
+        "exploration": {
+          "curve": {
+            "days": 285,
+            "total": -0.1587080859491633,
+            "annual": -0.14170398689865915,
+            "volatility": 0.1580595511441419,
+            "max_drawdown": -0.2541261088600285,
+            "invested": 0.6513090681692899,
+            "turnover": 18.577648291213244
+          },
+          "trades": {
+            "bought": 2097,
+            "close": 2088,
+            "delayed": 9
+          },
+          "excess_population": {
+            "days": 285,
+            "mean": 0.0001342368244337819,
+            "annual": 0.033827679757313045,
+            "t": 0.30296085659256217
+          },
+          "excess_taiex": {
+            "days": 285,
+            "mean": -0.0015079138264386539,
+            "annual": -0.3799942842625408,
+            "t": -2.851274438931581
+          },
+          "excess_pool": {
+            "days": 285,
+            "mean": 0.00010295806516248065,
+            "annual": 0.025945432420945123,
+            "t": 0.3933335481468603
+          }
+        },
+        "validation": {
+          "curve": {
+            "days": 208,
+            "total": 0.020267965577196012,
+            "annual": 0.024607782060920957,
+            "volatility": 0.22895041903125182,
+            "max_drawdown": -0.20746351153338183,
+            "invested": 0.7677694793717311,
+            "turnover": 21.367501811305218
+          },
+          "trades": {
+            "bought": 1764,
+            "close": 1700,
+            "delayed": 2,
+            "unsold": 62
+          },
+          "excess_population": {
+            "days": 208,
+            "mean": -0.00020312374349065743,
+            "annual": -0.05118718335964567,
+            "t": -0.32612437687669954
+          },
+          "excess_taiex": {
+            "days": 208,
+            "mean": -0.0019608021699689944,
+            "annual": -0.4941221468321866,
+            "t": -2.189176177436297
+          },
+          "excess_pool": {
+            "days": 208,
+            "mean": -0.00017924301728814034,
+            "annual": -0.045169240356611365,
+            "t": -0.6739300698619117
+          }
+        },
+        "all": {
+          "curve": {
+            "days": 493,
+            "total": -0.14165681039480715,
+            "annual": -0.07510934334879327,
+            "volatility": 0.1910767060830419,
+            "max_drawdown": -0.2541261088600285,
+            "invested": 0.7004444952080481,
+            "turnover": 19.75470616581594
+          },
+          "trades": {
+            "bought": 3861,
+            "close": 3788,
+            "delayed": 11,
+            "unsold": 62
+          },
+          "excess_population": {
+            "days": 493,
+            "mean": -8.097857368009934e-06,
+            "annual": -0.0020406600567385033,
+            "t": -0.022086250373978995
+          },
+          "excess_taiex": {
+            "days": 493,
+            "mean": -0.0016989904500782295,
+            "annual": -0.4281455934197138,
+            "t": -3.4985132188289
+          },
+          "excess_pool": {
+            "days": 493,
+            "mean": -1.61044604961992e-05,
+            "annual": -0.004058324045042199,
+            "t": -0.08552169091025456
+          }
+        }
+      },
+      "verdicts": {
+        "population": "沒有差異",
+        "taiex": "輸給基準"
+      },
+      "counts": {
+        "bought": 3861,
+        "limit_down": 10,
+        "sale_held": 1,
+        "not_tradable": 2,
+        "limit_up": 14,
+        "unsold": 62
+      }
+    },
+    "K10:top20": {
+      "hold": 10,
+      "key": "top20",
+      "segments": {
+        "exploration": {
+          "curve": {
+            "days": 285,
+            "total": -0.1485247914904556,
+            "annual": -0.1325242280040574,
+            "volatility": 0.11040588154101655,
+            "max_drawdown": -0.20642774670771358,
+            "invested": 0.4051041018905978,
+            "turnover": 11.522267990991082
+          },
+          "trades": {
+            "bought": 2605,
+            "close": 2584,
+            "delayed": 21
+          },
+          "excess_population": {
+            "days": 285,
+            "mean": 0.0001507914072196031,
+            "annual": 0.03799943461933998,
+            "t": 0.27830384270846253
+          },
+          "excess_taiex": {
+            "days": 285,
+            "mean": -0.0014913592436528328,
+            "annual": -0.37582252940051386,
+            "t": -2.4854443731361013
+          },
+          "excess_pool": {
+            "days": 285,
+            "mean": 0.00011951264794830181,
+            "annual": 0.030117187282972056,
+            "t": 0.2913924828995329
+          }
+        },
+        "validation": {
+          "curve": {
+            "days": 208,
+            "total": -0.05485398411565223,
+            "annual": -0.06606643349337271,
+            "volatility": 0.15695856332727737,
+            "max_drawdown": -0.18494011177126335,
+            "invested": 0.5103759874454462,
+            "turnover": 14.325552424244119
+          },
+          "trades": {
+            "bought": 2355,
+            "close": 2273,
+            "delayed": 3,
+            "unsold": 79
+          },
+          "excess_population": {
+            "days": 208,
+            "mean": -0.0006261125622923097,
+            "annual": -0.15778036569766204,
+            "t": -0.8323302769508862
+          },
+          "excess_taiex": {
+            "days": 208,
+            "mean": -0.0023837909887706463,
+            "annual": -0.6007153291702029,
+            "t": -2.4773725156318385
+          },
+          "excess_pool": {
+            "days": 208,
+            "mean": -0.0006022318360897926,
+            "annual": -0.15176242269462775,
+            "t": -1.1053131321710588
+          }
+        },
+        "all": {
+          "curve": {
+            "days": 493,
+            "total": -0.1952315990529091,
+            "annual": -0.1050822853304123,
+            "volatility": 0.13193763603901978,
+            "max_drawdown": -0.22208934024419857,
+            "invested": 0.44951901506586855,
+            "turnover": 12.704992457759099
+          },
+          "trades": {
+            "bought": 4960,
+            "close": 4857,
+            "delayed": 24,
+            "unsold": 79
+          },
+          "excess_population": {
+            "days": 493,
+            "mean": -0.00017698957788887126,
+            "annual": -0.04460137362799556,
+            "t": -0.3970436024128307
+          },
+          "excess_taiex": {
+            "days": 493,
+            "mean": -0.0018678821705990908,
+            "annual": -0.4707063069909709,
+            "t": -3.499523959804709
+          },
+          "excess_pool": {
+            "days": 493,
+            "mean": -0.00018499618101706051,
+            "annual": -0.04661903761629925,
+            "t": -0.5601116253668292
+          }
+        }
+      },
+      "verdicts": {
+        "population": "沒有差異",
+        "taiex": "輸給基準"
+      },
+      "counts": {
+        "bought": 4960,
+        "limit_down": 21,
+        "sale_held": 3,
+        "limit_up": 22,
+        "not_tradable": 2,
+        "unsold": 79
+      }
+    },
+    "K10:pool": {
+      "hold": 10,
+      "key": "pool",
+      "segments": {
+        "exploration": {
+          "curve": {
+            "days": 285,
+            "total": -0.1905975519361962,
+            "annual": -0.1705349409465048,
+            "volatility": 0.20325537424285756,
+            "max_drawdown": -0.30904340663498364,
+            "invested": 0.8618768166151377,
+            "turnover": 24.534995853760847
+          },
+          "trades": {
+            "bought": 2654,
+            "close": 2631,
+            "delayed": 23
+          },
+          "excess_population": {
+            "days": 285,
+            "mean": 3.1278759271301276e-05,
+            "annual": 0.007882247336367922,
+            "t": 0.07588077083588256
+          },
+          "excess_taiex": {
+            "days": 285,
+            "mean": -0.0016108718916011346,
+            "annual": -0.4059397166834859,
+            "t": -2.8956777351018714
+          }
+        },
+        "validation": {
+          "curve": {
+            "days": 208,
+            "total": 0.05030928722441619,
+            "annual": 0.06127177613697077,
+            "volatility": 0.2689835768002605,
+            "max_drawdown": -0.23892253210508607,
+            "invested": 0.8846941365566333,
+            "turnover": 24.742427481610342
+          },
+          "trades": {
+            "bought": 2439,
+            "close": 2353,
+            "delayed": 4,
+            "unsold": 82
+          },
+          "excess_population": {
+            "days": 208,
+            "mean": -2.3880726202517085e-05,
+            "annual": -0.006017943003034305,
+            "t": -0.0382922634279611
+          },
+          "excess_taiex": {
+            "days": 208,
+            "mean": -0.001781559152680854,
+            "annual": -0.4489529064755752,
+            "t": -1.8567177907691261
+          }
+        },
+        "all": {
+          "curve": {
+            "days": 493,
+            "total": -0.1498770916964084,
+            "annual": -0.07964760978339636,
+            "volatility": 0.23314063035843954,
+            "max_drawdown": -0.30904340663498364,
+            "invested": 0.8715035966310223,
+            "turnover": 24.622512646038118
+          },
+          "trades": {
+            "bought": 5093,
+            "close": 4984,
+            "delayed": 27,
+            "unsold": 82
+          },
+          "excess_population": {
+            "days": 493,
+            "mean": 8.006603128189267e-06,
+            "annual": 0.0020176639883036952,
+            "t": 0.022579266213662578
+          },
+          "excess_taiex": {
+            "days": 493,
+            "mean": -0.0016828859895820303,
+            "annual": -0.4240872693746716,
+            "t": -3.258608191421163
+          }
+        }
+      },
+      "verdicts": {},
+      "counts": {
+        "bought": 5093,
+        "limit_down": 24,
+        "sale_held": 3,
+        "limit_up": 22,
+        "not_tradable": 2,
+        "unsold": 82
+      }
+    },
+    "K10:population": {
+      "hold": 10,
+      "key": "population",
+      "segments": {
+        "exploration": {
+          "curve": {
+            "days": 285,
+            "total": -0.2036660136596563,
+            "annual": -0.1823877683563132,
+            "volatility": 0.2325195114046296,
+            "max_drawdown": -0.35879421884732743,
+            "invested": 0.885214018089582,
+            "turnover": 25.058537580616566
+          },
+          "trades": {
+            "bought": 159583,
+            "close": 158658,
+            "delayed": 901,
+            "unsold": 24
+          },
+          "excess_taiex": {
+            "days": 285,
+            "mean": -0.0016421506508724358,
+            "annual": -0.4138219640198538,
+            "t": -3.4327368039164834
+          }
+        },
+        "validation": {
+          "curve": {
+            "days": 208,
+            "total": 0.04936344039338891,
+            "annual": 0.0601139961193462,
+            "volatility": 0.2942601904236272,
+            "max_drawdown": -0.2615452809199248,
+            "invested": 0.8974186945162363,
+            "turnover": 24.956154937620322
+          },
+          "trades": {
+            "bought": 136521,
+            "close": 130881,
+            "delayed": 263,
+            "unsold": 5377
+          },
+          "excess_taiex": {
+            "days": 208,
+            "mean": -0.001757678426478337,
+            "annual": -0.4429349634725409,
+            "t": -2.1987724856953297
+          }
+        },
+        "all": {
+          "curve": {
+            "days": 493,
+            "total": -0.16435622839171538,
+            "annual": -0.08769376283467734,
+            "volatility": 0.2602171356205509,
+            "max_drawdown": -0.35879421884732743,
+            "invested": 0.8903632527685761,
+            "turnover": 25.015341658216528
+          },
+          "trades": {
+            "bought": 296104,
+            "close": 289539,
+            "delayed": 1164,
+            "unsold": 5401
+          },
+          "excess_taiex": {
+            "days": 493,
+            "mean": -0.0016908925927102197,
+            "annual": -0.4261049333629754,
+            "t": -3.8811651657401627
+          }
+        }
+      },
+      "verdicts": {},
+      "counts": {
+        "bought": 296104,
+        "limit_up": 718,
+        "limit_down": 958,
+        "not_tradable": 75,
+        "sale_held": 277,
+        "unsold": 5401
+      }
+    },
+    "K20:top5": {
+      "hold": 20,
+      "key": "top5",
+      "segments": {
+        "exploration": {
+          "curve": {
+            "days": 285,
+            "total": -0.0918608055353396,
+            "annual": -0.08167178246443763,
+            "volatility": 0.18894501275729092,
+            "max_drawdown": -0.24327084002874522,
+            "invested": 0.8269324636857162,
+            "turnover": 11.317118990426891
+          },
+          "trades": {
+            "bought": 1282,
+            "close": 1273,
+            "delayed": 9
+          },
+          "excess_population": {
+            "days": 285,
+            "mean": -0.00011137933532731479,
+            "annual": -0.028067592502483328,
+            "t": -0.2526726833952853
+          },
+          "excess_taiex": {
+            "days": 285,
+            "mean": -0.0012182908936389442,
+            "annual": -0.30700930519701397,
+            "t": -2.4355341180849366
+          },
+          "excess_pool": {
+            "days": 285,
+            "mean": 0.00013588813679800665,
+            "annual": 0.03424381047309768,
+            "t": 0.6158928225482111
+          }
+        },
+        "validation": {
+          "curve": {
+            "days": 208,
+            "total": 0.28521825919678334,
+            "annual": 0.35528206133114537,
+            "volatility": 0.2683832274112803,
+            "max_drawdown": -0.17900477522779068,
+            "invested": 0.9225677290255019,
+            "turnover": 12.119286648008783
+          },
+          "trades": {
+            "bought": 996,
+            "close": 907,
+            "delayed": 2,
+            "unsold": 87
+          },
+          "excess_population": {
+            "days": 208,
+            "mean": 0.0003606470576823191,
+            "annual": 0.09088305853594442,
+            "t": 0.5661268786638903
+          },
+          "excess_taiex": {
+            "days": 208,
+            "mean": -0.0008112101950625539,
+            "annual": -0.20442496915576358,
+            "t": -0.9291368842971682
+          },
+          "excess_pool": {
+            "days": 208,
+            "mean": 0.00013496108893689491,
+            "annual": 0.034010194412097516,
+            "t": 0.44576841546148416
+          }
+        },
+        "all": {
+          "curve": {
+            "days": 493,
+            "total": 0.16715707461824114,
+            "annual": 0.08221502821218785,
+            "volatility": 0.22599465463345994,
+            "max_drawdown": -0.24327084002874522,
+            "invested": 0.8672816222874918,
+            "turnover": 11.65555889463994
+          },
+          "trades": {
+            "bought": 2278,
+            "close": 2180,
+            "delayed": 11,
+            "unsold": 87
+          },
+          "excess_population": {
+            "days": 493,
+            "mean": 8.777175949216565e-05,
+            "annual": 0.022118483392025743,
+            "t": 0.2371446596341802
+          },
+          "excess_taiex": {
+            "days": 493,
+            "mean": -0.0010465408220286213,
+            "annual": -0.26372828715121255,
+            "t": -2.236894408662822
+          },
+          "excess_pool": {
+            "days": 493,
+            "mean": 0.00013549700910001224,
+            "annual": 0.034145246293203084,
+            "t": 0.7514214440430796
+          }
+        }
+      },
+      "verdicts": {
+        "population": "沒有差異",
+        "taiex": "方向一致但不顯著"
+      },
+      "counts": {
+        "bought": 2278,
+        "limit_down": 8,
+        "sale_held": 3,
+        "not_tradable": 2,
+        "limit_up": 7,
+        "unsold": 87
+      }
+    },
+    "K20:top10": {
+      "hold": 20,
+      "key": "top10",
+      "segments": {
+        "exploration": {
+          "curve": {
+            "days": 285,
+            "total": -0.1055052353039303,
+            "annual": -0.09388236296754038,
+            "volatility": 0.17191718897545785,
+            "max_drawdown": -0.25088039553150876,
+            "invested": 0.6741922063586744,
+            "turnover": 9.280540326137212
+          },
+          "trades": {
+            "bought": 2097,
+            "close": 2081,
+            "delayed": 16
+          },
+          "excess_population": {
+            "days": 285,
+            "mean": -0.00017677034513161876,
+            "annual": -0.04454612697316793,
+            "t": -0.44658338285068205
+          },
+          "excess_taiex": {
+            "days": 285,
+            "mean": -0.0012836819034432482,
+            "annual": -0.32348783966769856,
+            "t": -2.6256725470021904
+          },
+          "excess_pool": {
+            "days": 285,
+            "mean": 7.049712699370266e-05,
+            "annual": 0.01776527600241307,
+            "t": 0.30643563841459165
+          }
+        },
+        "validation": {
+          "curve": {
+            "days": 208,
+            "total": 0.18994826732692216,
+            "annual": 0.2345400257718473,
+            "volatility": 0.2341053616471361,
+            "max_drawdown": -0.19494716258281986,
+            "invested": 0.8180539940323863,
+            "turnover": 10.738650266489275
+          },
+          "trades": {
+            "bought": 1764,
+            "close": 1599,
+            "delayed": 3,
+            "unsold": 162
+          },
+          "excess_population": {
+            "days": 208,
+            "mean": -4.430259608260402e-05,
+            "annual": -0.011164254212816214,
+            "t": -0.08198390701603002
+          },
+          "excess_taiex": {
+            "days": 208,
+            "mean": -0.0012161598488274771,
+            "annual": -0.30647228190452425,
+            "t": -1.4394905841887264
+          },
+          "excess_pool": {
+            "days": 208,
+            "mean": -0.00026998856482802824,
+            "annual": -0.06803711833666312,
+            "t": -1.1217582549493454
+          }
+        },
+        "all": {
+          "curve": {
+            "days": 493,
+            "total": 0.06440249538308929,
+            "annual": 0.032417459289057815,
+            "volatility": 0.2005475843203604,
+            "max_drawdown": -0.25088039553150876,
+            "invested": 0.7348884575475833,
+            "turnover": 9.895726670139704
+          },
+          "trades": {
+            "bought": 3861,
+            "close": 3680,
+            "delayed": 19,
+            "unsold": 162
+          },
+          "excess_population": {
+            "days": 493,
+            "mean": -0.00012088131510688233,
+            "annual": -0.030462091406934347,
+            "t": -0.3746080489235787
+          },
+          "excess_taiex": {
+            "days": 493,
+            "mean": -0.0012551938966276694,
+            "annual": -0.3163088619501727,
+            "t": -2.762408218808998
+          },
+          "excess_pool": {
+            "days": 493,
+            "mean": -7.315606549903572e-05,
+            "annual": -0.018435328505757003,
+            "t": -0.4371806796097133
+          }
+        }
+      },
+      "verdicts": {
+        "population": "沒有差異",
+        "taiex": "方向一致但不顯著"
+      },
+      "counts": {
+        "bought": 3861,
+        "limit_down": 14,
+        "sale_held": 5,
+        "not_tradable": 2,
+        "limit_up": 14,
+        "unsold": 162
+      }
+    },
+    "K20:top20": {
+      "hold": 20,
+      "key": "top20",
+      "segments": {
+        "exploration": {
+          "curve": {
+            "days": 285,
+            "total": -0.10602630850807337,
+            "annual": -0.09434910385933726,
+            "volatility": 0.1299767164513466,
+            "max_drawdown": -0.21403810519382094,
+            "invested": 0.418885510381444,
+            "turnover": 5.7595920929926105
+          },
+          "trades": {
+            "bought": 2605,
+            "close": 2578,
+            "delayed": 27
+          },
+          "excess_population": {
+            "days": 285,
+            "mean": -0.00020415870744591616,
+            "annual": -0.051447994276370874,
+            "t": -0.42699906777289837
+          },
+          "excess_taiex": {
+            "days": 285,
+            "mean": -0.0013110702657575456,
+            "annual": -0.3303897069709015,
+            "t": -2.3877231906860037
+          },
+          "excess_pool": {
+            "days": 285,
+            "mean": 4.310876467940526e-05,
+            "annual": 0.010863408699210125,
+            "t": 0.11248047884917207
+          }
+        },
+        "validation": {
+          "curve": {
+            "days": 208,
+            "total": 0.07851053919899287,
+            "annual": 0.0958926521982435,
+            "volatility": 0.1617329203543403,
+            "max_drawdown": -0.15931547036445615,
+            "invested": 0.5421849991707961,
+            "turnover": 7.184548316403008
+          },
+          "trades": {
+            "bought": 2355,
+            "close": 2082,
+            "delayed": 7,
+            "unsold": 266
+          },
+          "excess_population": {
+            "days": 208,
+            "mean": -0.00057437732258732,
+            "annual": -0.14474308529200464,
+            "t": -0.8108725790837775
+          },
+          "excess_taiex": {
+            "days": 208,
+            "mean": -0.001746234575332193,
+            "annual": -0.44005111298371263,
+            "t": -1.9035112154352987
+          },
+          "excess_pool": {
+            "days": 208,
+            "mean": -0.0008000632913327441,
+            "annual": -0.2016159494158515,
+            "t": -1.4665221588050672
+          }
+        },
+        "all": {
+          "curve": {
+            "days": 493,
+            "total": -0.03583995195932943,
+            "annual": -0.01848321575638301,
+            "volatility": 0.1442014513118964,
+            "max_drawdown": -0.21403810519382094,
+            "invested": 0.47090639003293533,
+            "turnover": 6.360790661895983
+          },
+          "trades": {
+            "bought": 4960,
+            "close": 4660,
+            "delayed": 34,
+            "unsold": 266
+          },
+          "excess_population": {
+            "days": 493,
+            "mean": -0.0003603564193108492,
+            "annual": -0.090809817666334,
+            "t": -0.8860154181655882
+          },
+          "excess_taiex": {
+            "days": 493,
+            "mean": -0.001494669000831636,
+            "annual": -0.3766565882095723,
+            "t": -2.9887966710370777
+          },
+          "excess_pool": {
+            "days": 493,
+            "mean": -0.0003126311697030026,
+            "annual": -0.07878305476515665,
+            "t": -0.9779334119358013
+          }
+        }
+      },
+      "verdicts": {
+        "population": "沒有差異",
+        "taiex": "方向一致但不顯著"
+      },
+      "counts": {
+        "bought": 4960,
+        "limit_down": 26,
+        "sale_held": 8,
+        "limit_up": 22,
+        "not_tradable": 2,
+        "unsold": 266
+      }
+    },
+    "K20:pool": {
+      "hold": 20,
+      "key": "pool",
+      "segments": {
+        "exploration": {
+          "curve": {
+            "days": 285,
+            "total": -0.13136571739922687,
+            "annual": -0.11708478424976343,
+            "volatility": 0.21399276976099135,
+            "max_drawdown": -0.29919573441456804,
+            "invested": 0.8946737461506001,
+            "turnover": 12.238343945046422
+          },
+          "trades": {
+            "bought": 2654,
+            "close": 2624,
+            "delayed": 30
+          },
+          "excess_population": {
+            "days": 285,
+            "mean": -0.00024726747212532144,
+            "annual": -0.062311402975581,
+            "t": -0.7071359476318853
+          },
+          "excess_taiex": {
+            "days": 285,
+            "mean": -0.0013541790304369508,
+            "annual": -0.3412531156701116,
+            "t": -2.6794182237739514
+          }
+        },
+        "validation": {
+          "curve": {
+            "days": 208,
+            "total": 0.2473742093865079,
+            "annual": 0.3070848092267786,
+            "volatility": 0.2765718745838822,
+            "max_drawdown": -0.20995421390855795,
+            "invested": 0.9351897602158645,
+            "turnover": 12.379705689612736
+          },
+          "trades": {
+            "bought": 2439,
+            "close": 2128,
+            "delayed": 7,
+            "unsold": 304
+          },
+          "excess_population": {
+            "days": 208,
+            "mean": 0.0002256859687454242,
+            "annual": 0.0568728641238469,
+            "t": 0.44282063614939976
+          },
+          "excess_taiex": {
+            "days": 208,
+            "mean": -0.0009461712839994488,
+            "annual": -0.2384351635678611,
+            "t": -1.0554952778647924
+          }
+        },
+        "all": {
+          "curve": {
+            "days": 493,
+            "total": 0.08351200150515314,
+            "annual": 0.04185066823943728,
+            "volatility": 0.242439932975007,
+            "max_drawdown": -0.29919573441456804,
+            "invested": 0.9117677236872633,
+            "turnover": 12.297985411313752
+          },
+          "trades": {
+            "bought": 5093,
+            "close": 4752,
+            "delayed": 37,
+            "unsold": 304
+          },
+          "excess_population": {
+            "days": 493,
+            "mean": -4.77252496078466e-05,
+            "annual": -0.012026762901177343,
+            "t": -0.16178463425701514
+          },
+          "excess_taiex": {
+            "days": 493,
+            "mean": -0.0011820378311286335,
+            "annual": -0.29787353344441564,
+            "t": -2.4757188314799228
+          }
+        }
+      },
+      "verdicts": {},
+      "counts": {
+        "bought": 5093,
+        "limit_down": 29,
+        "sale_held": 8,
+        "limit_up": 22,
+        "not_tradable": 2,
+        "unsold": 304
+      }
+    },
+    "K20:population": {
+      "hold": 20,
+      "key": "population",
+      "segments": {
+        "exploration": {
+          "curve": {
+            "days": 285,
+            "total": -0.07346972642671401,
+            "annual": -0.06524688319092031,
+            "volatility": 0.2369742572626794,
+            "max_drawdown": -0.3252684951388459,
+            "invested": 0.9170284356224827,
+            "turnover": 12.531404157149726
+          },
+          "trades": {
+            "bought": 159583,
+            "close": 158590,
+            "delayed": 949,
+            "unsold": 44
+          },
+          "excess_taiex": {
+            "days": 285,
+            "mean": -0.0011069115583116295,
+            "annual": -0.2789417126945306,
+            "t": -2.349847341044267
+          }
+        },
+        "validation": {
+          "curve": {
+            "days": 208,
+            "total": 0.18327188574856845,
+            "annual": 0.2261532068337806,
+            "volatility": 0.3011473468062447,
+            "max_drawdown": -0.2330054978190721,
+            "invested": 0.9467709804050206,
+            "turnover": 12.50404219616499
+          },
+          "trades": {
+            "bought": 136521,
+            "close": 124888,
+            "delayed": 273,
+            "unsold": 11360
+          },
+          "excess_taiex": {
+            "days": 208,
+            "mean": -0.001171857252744873,
+            "annual": -0.295308027691708,
+            "t": -1.4902952877800861
+          }
+        },
+        "all": {
+          "curve": {
+            "days": 493,
+            "total": 0.09633722401419731,
+            "annual": 0.04813616092879047,
+            "volatility": 0.2658053567151939,
+            "max_drawdown": -0.3252684951388459,
+            "invested": 0.9295770143542633,
+            "turnover": 12.519859962657181
+          },
+          "trades": {
+            "bought": 296104,
+            "close": 283478,
+            "delayed": 1222,
+            "unsold": 11404
+          },
+          "excess_taiex": {
+            "days": 493,
+            "mean": -0.001134312581520787,
+            "annual": -0.2858467705432383,
+            "t": -2.645796845929985
+          }
+        }
+      },
+      "verdicts": {},
+      "counts": {
+        "bought": 296104,
+        "limit_up": 718,
+        "not_tradable": 75,
+        "sale_held": 352,
+        "limit_down": 993,
+        "unsold": 11404
+      }
+    }
+  },
+  "taiex": {
+    "exploration": {
+      "days": 285,
+      "total": 0.2714441740327511,
+      "annual": 0.2365758685623749,
+      "volatility": 0.23389977559828354,
+      "max_drawdown": -0.2671059091244302,
+      "invested": 1.0,
+      "turnover": 0.0
+    },
+    "validation": {
+      "days": 208,
+      "total": 0.5079313345026153,
+      "annual": 0.6448114776025273,
+      "volatility": 0.3063048167119018,
+      "max_drawdown": -0.20313914081073714,
+      "invested": 1.0,
+      "turnover": 0.0
+    },
+    "all": {
+      "days": 493,
+      "total": 0.9172505100947821,
+      "annual": 0.3947393346999979,
+      "volatility": 0.26672900702916136,
+      "max_drawdown": -0.2671059091244302,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "taiex_missing_days": 0,
+  "comparisons": 18,
+  "elapsed_seconds": 68.3974352840014,
+  "peak_memory_gb": 0.9314460754394531
+}
