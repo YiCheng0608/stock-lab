@@ -2866,10 +2866,10 @@ def test_removed_copy_mirrors_the_frontend_list():
     body = source[source.index("REMOVED_COPY") : source.index("\n]\n")]
     lines = [line.strip() for line in body.splitlines()[1:]]
     # Every entry is one `'phrase',` line, so a phrase in another form cannot slip past the comparison.
-    odd = [line for line in lines if line and not line.startswith("//")]
-    odd = [line for line in odd if not re.fullmatch(r"'[^']+',", line)]
-    assert odd == []
-    phrases = tuple(re.findall(r"^  '([^']+)',$", body, re.MULTILINE))
+    entries = [line for line in lines if line and not line.startswith("//")]
+    matches = [re.fullmatch(r"'([^']+)',", line) for line in entries]
+    assert [line for line, match in zip(entries, matches) if not match] == []
+    phrases = tuple(match.group(1) for match in matches if match)
     assert phrases == page_checks.REMOVED_COPY
 
 
@@ -3193,7 +3193,7 @@ def test_news_ui_copy_is_part_of_the_removed_copy():
 
 def test_n9_passes_on_news_text_with_plain_removed_phrases(tmp_path):
     run = _news_run(tmp_path, NEWS_AFTER + NEWS_TEXT, NEWS_DETAIL_AFTER + NEWS_TEXT)
-    assert "只比 9 句新聞頁自己的字" in page_checks.n9(run)
+    assert "沒有 9 句新聞頁自己的已拿掉文字" in page_checks.n9(run)
 
 
 def test_n9_still_fails_on_the_news_ui_s_own_words(tmp_path):
@@ -3232,6 +3232,46 @@ def test_s16_passes_on_news_text_in_the_news_tab(tmp_path):
     pages["stock-chips-1280"] = "決策時間：未記錄\n"
     with pytest.raises(page_checks.Fail, match="stock-chips-1280：`決策時間`"):
         page_checks.s16(FakeRun(tmp_path, {}, pages), page_checks.Stock("TWSE", "9101"))
+
+
+# ---- review 6884343680: a candidate's AI note (llm_note) is model text, not the page's own copy ----
+# The prompt itself writes 「score（0–100，越高越好…」 and feeds news, so the note may repeat plain phrases.
+LLM_NOTE = {
+    "status": "done",
+    "selection": "總分 73，越高越好；突破 20 日高點且量比 1.6。",
+    "levels": "進場 389.23 元，研究結論是守 369.77 元。\n目標 420.37 元。",
+    "risks": "台指期每月第三個週三結算，波動可能放大。",
+}
+NOTE_PAGE = (
+    "AI 進出點說明\n為何入選\n總分 73，越高越好；突破 20 日高點且量比 1.6。\n"
+    "進場區、停損與目標\n進場 389.23 元，研究結論是守 369.77 元。\n目標 420.37 元。\n"
+    "需留意的風險\n台指期每月第三個週三結算，波動可能放大。\n"
+)
+
+
+def test_t23_passes_on_ai_note_text_with_plain_removed_phrases(tmp_path):
+    payloads = {"candidates": {"items": [{"llm_note": LLM_NOTE}]}}
+    run = FakeRun(tmp_path, payloads, _today_pages(HEAD_AFTER_729 + NOTE_PAGE))
+    assert "沒有 70 句" in page_checks.t23(run)
+
+
+def test_t23_still_fails_when_the_page_itself_writes_the_phrase(tmp_path):
+    payloads = {"candidates": {"items": [{"llm_note": LLM_NOTE}]}}
+    page = HEAD_AFTER_729 + NOTE_PAGE + "分數 0–100，越高越好\n"
+    with pytest.raises(
+        page_checks.Fail, match="today-1280：`越高越好`（today-1280.txt 第 "
+    ):
+        page_checks.t23(FakeRun(tmp_path, payloads, _today_pages(page)))
+
+
+def test_s16_passes_on_ai_note_text_in_the_research_tab(tmp_path):
+    payloads = {"stocks/TWSE/9101": {"candidate": {"llm_note": LLM_NOTE}}}
+    pages = _stock_pages({"stock-research-1280": "研究條件\n" + NOTE_PAGE})
+    stock = page_checks.Stock("TWSE", "9101")
+    assert "六個分頁" in page_checks.s16(FakeRun(tmp_path, payloads, pages), stock)
+    pages["stock-research-1280"] += "分數與百分位 0–100，越高越好\n"
+    with pytest.raises(page_checks.Fail, match="stock-research-1280：`越高越好`"):
+        page_checks.s16(FakeRun(tmp_path, payloads, pages), stock)
 
 
 # ---- A6 (Issue 729 review): the same-day branch checks the panel itself ----

@@ -2138,13 +2138,48 @@ def removed_copy(
     return found
 
 
+# The three paragraphs of a candidate's AI note (llm_note): model text, which can repeat its prompt's words
+# ("越高越好") or a news sentence. T23 and S16 drop these lines before matching (review 6884343680).
+LLM_NOTE_FIELDS = ("selection", "levels", "risks")
+
+
+def llm_note_lines(notes: list[Any]) -> set[str]:
+    """The normalized non-blank lines of the given llm_note objects."""
+
+    lines = set()
+    for note in notes:
+        for key in LLM_NOTE_FIELDS:
+            value = note.get(key) if isinstance(note, dict) else None
+            if isinstance(value, str):
+                lines.update(normalize(line) for line in value.splitlines())
+    lines.discard("")
+    return lines
+
+
+def without_lines(text: Text, drop: set[str]) -> Text:
+    """``text`` without the whole lines in ``drop``; the kept lines keep their line numbers."""
+
+    kept = Text(text.name, "")
+    for line, number in zip(text.lines, text.numbers):
+        if line not in drop:
+            kept.lines.append(line)
+            kept.numbers.append(number)
+    return kept
+
+
 @check("today", "T23")
 def t23(run: Run) -> str:
-    """Issue 729: the 今日名單 page, desktop and phone, shows none of the removed copy (Issue 693's line among it)."""
+    """Issue 729: the 今日名單 page, desktop and phone, shows none of the removed copy (Issue 693's line among it).
+    The candidates' AI notes are data, so their lines are dropped first (review 6884343680)."""
 
+    try:
+        items = candidates(run).get("items") or []
+    except CheckError:
+        items = []  # no list: nothing to drop; the page's own words are still matched
+    notes = llm_note_lines([item.get("llm_note") for item in items])
     problems = []
     for width in (1280, 390):
-        found = removed_copy(run.text(TODAY, width))
+        found = removed_copy(without_lines(run.text(TODAY, width), notes))
         if found:
             problems.append(f"today-{width}：" + "、".join(found))
     expect(not problems, "出現已拿掉的說明文字：" + "；".join(problems))
@@ -2168,7 +2203,11 @@ def no_removed_copy(run: Run, shots: list[Shot], news: tuple[str, ...] = ()) -> 
         for shot in shots
     )
     counted = f"{len(REMOVED_COPY)} 句已拿掉的說明文字"
-    if news:
+    if news and all(shot.name in news for shot in shots):
+        counted = (
+            f"{len(NEWS_UI_COPY)} 句新聞頁自己的已拿掉文字（有新聞內文，不比其他句）"
+        )
+    elif news:
         counted += f"（有新聞內文的 {'、'.join(news)} 只比 {len(NEWS_UI_COPY)} 句新聞頁自己的字）"
     return f"{names} 沒有 {counted}"
 
@@ -3679,14 +3718,20 @@ def s16(run: Run, stock: Stock) -> str:
     """Issue 729: no tab of the stock page shows the removed copy. 資料來源 lists sources and versions, so its
     indicator formula version stays there. The 新聞與公告 tab is checked again since Issue 732 took 模型 … · 提示版本 …
     off its AI candidate row; it shows news titles and summaries, so it is matched against NEWS_UI_COPY only
-    (review 6884044663)."""
+    (review 6884044663). The candidate row's AI note is data, so its lines are dropped first (review 6884343680)."""
 
+    try:
+        candidate = stock_payload(run, stock).get("candidate") or {}
+    except CheckError:
+        candidate = {}
+    notes = llm_note_lines([candidate.get("llm_note")])
     problems = []
     for tab, shot in stock_shots(stock).items():
         allowed = ("indicators/v1",) if tab == "data" else ()
         phrases = NEWS_UI_COPY if tab == "news" else REMOVED_COPY
         for width in shot.widths:
-            found = removed_copy(run.text(shot, width), allowed, phrases)
+            text = without_lines(run.text(shot, width), notes)
+            found = removed_copy(text, allowed, phrases)
             if found:
                 problems.append(f"{shot.name}-{width}：" + "、".join(found))
     expect(not problems, "出現已拿掉的說明文字：" + "；".join(problems))
