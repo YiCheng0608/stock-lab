@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "design": "703",
+  "definitions_sha256": "2e1362b7cb4d231eba289f58e8ac044f32de0efce8de2968be33461b538bba03",
+  "label": "董事會決議買回庫藏股（主旨規則），T+1 開盤買、持有 20 日",
+  "direction": "事件：重大訊息",
+  "parameters": {
+    "rule": "buyback",
+    "subset": null,
+    "filters": [],
+    "keys": [],
+    "top": 20,
+    "hold": 20,
+    "start": [
+      "session",
+      "2013-01-01",
+      61
+    ]
+  },
+  "hypothesis": "X8",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2013-03-26",
+    "first_session": "2013-03-27",
+    "last_session": "2013-10-07",
+    "days": 139,
+    "signal_days": 139
+  },
+  "prerequisites": {
+    "days": 139,
+    "min_days": 100,
+    "delisted": 1,
+    "ok": true
+  },
+  "coverage": {
+    "2013": {
+      "announcements": 27,
+      "rolled": 1,
+      "in_population": 26,
+      "picked": 22
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 139,
+      "mean": -0.0011205289287552042,
+      "annual": -0.28237329004631145,
+      "t": -15.970104295210719
+    },
+    "taiex": {
+      "days": 139,
+      "mean": -0.0003492022604871523,
+      "annual": -0.08799896964276238,
+      "t": -136.679942720522
+    }
+  },
+  "absolute": {
+    "days": 139,
+    "mean": 8.567885212043647e-06
+  },
+  "curves": {
+    "X8": {
+      "days": 139,
+      "total": 0.0011915890073395108,
+      "annual": 0.00216133712339861,
+      "volatility": 0.00043292139954288593,
+      "max_drawdown": -6.810103549304003e-05,
+      "invested": 0.007594288432383889,
+      "turnover": 0.09974978961244842
+    },
+    "population": {
+      "days": 139,
+      "total": 0.16977152751500357,
+      "annual": 0.3288126916430052,
+      "volatility": 0.013181385576717866,
+      "max_drawdown": -0.000875605386254863,
+      "invested": 0.8894858190004414,
+      "turnover": 12.321808413314693
+    },
+    "taiex": {
+      "days": 139,
+      "total": 0.05097799511002399,
+      "annual": 0.09432961200980494,
+      "volatility": 8.1828981216209e-05,
+      "max_drawdown": 0.0,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 22,
+    "won": 15,
+    "rate": 0.6818181818181818,
+    "unsold": 20
+  },
+  "counts": {
+    "X8": {
+      "bought": 22,
+      "unsold": 20
+    },
+    "population": {
+      "bought": 3535,
+      "not_tradable": 1,
+      "sale_held": 19,
+      "unsold": 494
+    }
+  },
+  "min_t": 2.0
+}

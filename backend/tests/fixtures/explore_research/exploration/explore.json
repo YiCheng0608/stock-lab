@@ -1,0 +1,239 @@
+{
+  "version": 1,
+  "design": "703",
+  "registration_commit": "0ba48e9",
+  "segment": "exploration",
+  "round": 1,
+  "round_size": 8,
+  "cumulative": 8,
+  "definitions_sha256": "2e1362b7cb4d231eba289f58e8ac044f32de0efce8de2968be33461b538bba03",
+  "copy": {
+    "latest": "2014-04-07",
+    "alembic": null
+  },
+  "read_until": "2013-10-07",
+  "min_t": 2.0,
+  "hypotheses": {
+    "X1": {
+      "verdict": "探索通過",
+      "reason": null,
+      "days": 139,
+      "excess": {
+        "days": 139,
+        "mean": 0.00020844346366221035,
+        "annual": 0.05252775284287701,
+        "t": 7.797561413057029
+      },
+      "absolute_mean": 0.0013797131776851458,
+      "prerequisites": {
+        "days": 139,
+        "min_days": 100,
+        "delisted": 1,
+        "ok": true
+      },
+      "coverage": {
+        "2013": {
+          "days": 139,
+          "members": 3536,
+          "missing": {
+            "momentum_120": 1560
+          }
+        }
+      }
+    },
+    "X2": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 139,
+      "excess": {
+        "days": 139,
+        "mean": 8.928816813793635e-06,
+        "annual": 0.002250061837075996,
+        "t": 1.7114239033197898
+      },
+      "absolute_mean": 0.001180198530836729,
+      "prerequisites": {
+        "days": 139,
+        "min_days": 100,
+        "delisted": 1,
+        "ok": true
+      },
+      "coverage": {
+        "2013": {
+          "days": 139,
+          "members": 3536,
+          "missing": {
+            "high_gap_240": 3536
+          }
+        }
+      }
+    },
+    "X3": {
+      "verdict": "探索通過",
+      "reason": null,
+      "days": 139,
+      "excess": {
+        "days": 139,
+        "mean": 0.0014143210110802668,
+        "annual": 0.3564088947922272,
+        "t": 15.390880164878803
+      },
+      "absolute_mean": 0.0025434178250475148,
+      "prerequisites": {
+        "days": 139,
+        "min_days": 100,
+        "delisted": 1,
+        "ok": true
+      },
+      "coverage": {
+        "2013": {
+          "days": 139,
+          "members": 3536,
+          "missing": {
+            "revenue_yoy": 0,
+            "institutional_flow_20": 0
+          }
+        }
+      }
+    },
+    "X4": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 139,
+      "excess": {
+        "days": 139,
+        "mean": -0.0006841226797630464,
+        "annual": -0.1723989153002877,
+        "t": -12.88235321610423
+      },
+      "absolute_mean": 0.00048714703425988904,
+      "prerequisites": {
+        "days": 139,
+        "min_days": 100,
+        "delisted": 1,
+        "ok": true
+      },
+      "coverage": {
+        "2013": {
+          "days": 139,
+          "members": 3536,
+          "missing": {
+            "revenue_yoy": 0,
+            "eps_growth_yield": 936,
+            "eps_yield_raw": 0
+          }
+        }
+      }
+    },
+    "X5": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 139,
+      "excess": {
+        "days": 139,
+        "mean": -0.0005394501158459276,
+        "annual": -0.13594142919317376,
+        "t": -15.75738990945985
+      },
+      "absolute_mean": 0.0006318195981770079,
+      "prerequisites": {
+        "days": 139,
+        "min_days": 100,
+        "delisted": 1,
+        "ok": true
+      },
+      "coverage": {
+        "2013": {
+          "days": 139,
+          "members": 3536,
+          "missing": {
+            "turnover_60": 99
+          }
+        }
+      }
+    },
+    "X6": {
+      "verdict": "探索通過",
+      "reason": null,
+      "days": 139,
+      "excess": {
+        "days": 139,
+        "mean": 0.00194855590300679,
+        "annual": 0.4910360875577111,
+        "t": 24.296928259845117
+      },
+      "absolute_mean": 0.003077652716974038,
+      "prerequisites": {
+        "days": 139,
+        "min_days": 100,
+        "delisted": 1,
+        "ok": true
+      },
+      "coverage": {
+        "2013": {
+          "days": 139,
+          "members": 3536,
+          "missing": {
+            "turnover_60": 99,
+            "institutional_flow_20": 0
+          }
+        }
+      }
+    },
+    "X7": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 128,
+      "excess": {
+        "days": 128,
+        "mean": -0.0008347261045590533,
+        "annual": -0.21035097834888145,
+        "t": -8.962787210726253
+      },
+      "absolute_mean": 0.00043180938658732987,
+      "prerequisites": {
+        "days": 128,
+        "min_days": 100,
+        "delisted": 1,
+        "ok": true
+      },
+      "coverage": {
+        "2013": {
+          "days": 6,
+          "members": 153,
+          "missing": {
+            "revenue_previous_month": 0,
+            "revenue_high_12": 0,
+            "revenue_yoy": 0
+          }
+        }
+      }
+    },
+    "X8": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 139,
+      "excess": {
+        "days": 139,
+        "mean": -0.0011205289287552042,
+        "annual": -0.28237329004631145,
+        "t": -15.970104295210719
+      },
+      "absolute_mean": 8.567885212043647e-06,
+      "prerequisites": {
+        "days": 139,
+        "min_days": 100,
+        "delisted": 1,
+        "ok": true
+      },
+      "coverage": {
+        "2013": {
+          "announcements": 27,
+          "rolled": 1,
+          "in_population": 26,
+          "picked": 22
+        }
+      }
+    }
+  }
+}
