@@ -62,7 +62,7 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 
 ## 工具版本
 
-`feature_evidence.VERSION` 寫在報告標題與 `tables.json` 的 `version`；分組或判定規則一改就加一，並在報告寫明改了什麼、為什麼（研究規則第 3 條）。`explore_research` 的版本表在[第 2 步的工具](#第-2-步的工具)。
+`feature_evidence.VERSION` 寫在報告標題與 `tables.json` 的 `version`；分組或判定規則一改就加一，並在報告寫明改了什麼、為什麼（研究規則第 3 條）。`explore_research` 與 `trade_research` 的版本表在[第 2 步的工具](#第-2-步的工具)。
 
 | 版本 | 任務 | 改了什麼 |
 | --- | --- | --- |
@@ -465,6 +465,37 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "$IMG" \
 | 1 | #703 | 第一版；沒有人用它對回補資料跑過 |
 | 2 | #721 | 驗證段加「前瞻觀察」；報告把對加權指數的超額放最前面（`summary.md` 的「數字」表、`explore.md` 總表與已用段的表、`explore.json` 的 `taiex_excess`）；探索段必填 `--hypotheses`，同一假設、同一版本的探索段只跑一次。母體、報酬口徑、分段、門檻、成本與 X1～X8 的定義不變；在任何人對回補資料跑工具之前合併 |
 
+**逐筆的假設**（第二輪起，[逐筆評估](#逐筆評估)）：`tools/research/trade_research.py`（#726，設計在統籌決定 [6882515208](https://github.com/YiCheng0608/stock-lab/issues/726#issuecomment-6882515208)）。S1～S3、R1～R2 寫在 `trade_research.HYPOTHESES`，命令列一樣沒有改參數、起日或 cutoff 的旗標。跑法、拒絕的情況（正式 DB、台北 21:30～23:30、可用記憶體不足）、分段、公開檢查與紀錄檔都和上面的 `explore_research` 相同，只把工具換掉：
+
+```bash
+# 換值同上
+MSYS_NO_PATHCONV=1 docker run "${R[@]}" "$IMG" \
+  python -B tools/research/trade_research.py --db /research/stock.db --segment exploration --hypotheses S1,S2,S3 --out /out/exploration
+```
+
+- **探索**：`python tools/research/trade_research.py --db /research/stock.db --segment exploration --hypotheses <代號,代號…> --out <目錄> [--min-free-gb 2]`。讀 DB 時只讀 2019-12-31（含）以前的列；載入從起日往前 730 個日曆日（暖機，不產生訊號）。沒有 `--coverage-only`。
+- **驗證**：`python tools/research/trade_research.py --db /research/stock.db --segment validation --exploration-report <探索的 explore.json> --exploration-sha256 <公開留言裡的雜湊> --exploration-url <公開連結> --out <目錄> [--min-free-gb 2]`。拒絕條件同 `explore_research` 的驗證；報告要是本工具的探索段報告（`design` 是 `726`），`definitions_sha256` 和現在的程式相同。驗證段讀到 2024-09-27，判「通過」的另跑已用段，寫在 `<代號>/used/`。
+- **紀錄檔**：和 `explore_research` 共用 DB 旁的 `explore-ledger.json` 與 repo 的 `tools/research/explore_ledger.json`，每一筆另有 `"tool": "trade_research"`。代號不重疊，兩支工具互不擋；同一代號、同一工具版本的探索段只跑一次，驗證段只跑一次。
+- **算法**：照[逐筆評估](#逐筆評估)與[第二輪](#第二輪s1s3r1r2)，各細節見[第二輪實作釋義](#第二輪實作釋義)。
+  - S 系列的進場是 `trade_research.enter_zone`，R1、R2 是 `exit_research.enter`（E0）。
+  - 出場是 `trade_research.settle`，沒有停牌、下市、不碰段末的筆和 `exit_research.exit_trade` 逐筆相同（測試鎖住）。
+  - 每筆報酬用 `exit_research._closed`，漲跌停價用 `exit_research.price_limits`（經 `portfolio_research.Market.limits`）。
+  - 判定是 `explore_research.explore_judge`，另加「有成交的訊號日 < 60」記無法判定。
+- **輸出**（檔名、雜湊與公開方式同 `explore_research`）：
+  - `explore.md`：第一行是「explore.json 的 sha256：`<雜湊>`」；總表每個假設列段內交易日、有成交的訊號日、對加權指數的超額與 t（第一個列）、對母體的超額與 t、扣成本報酬、成交筆數、放棄比例與判定。
+  - `explore.json`：同上的總表，另有 `tool`、`design`（`726`）、`definitions_sha256`（定義、R1／R2 的策略 config、分段、門檻與成本的雜湊）、工具 commit、副本資訊與先決條件。
+  - `<代號>/summary.md`：「數字」表第一列是對加權指數的超額，接著是判定用的對母體超額與扣成本報酬；「只列出」表是[逐筆評估](#逐筆評估)的只列欄位（訊號數、成交筆數、每筆平均與中位、勝率、賺與賠的筆數與平均、報酬剛好 0 的筆數、平均持有天數、放棄比例與原因、五類出場原因的比例、同根兩邊都碰到、跳空、跌停順延、停牌順延、進場遇漲停鎖死的日子、母體在 e 買不進的檔次；S 系列另列低於下緣成交，S1、S3 另列大盤濾網擋下與缺值的天數）。
+  - `<代號>/tables.json`：同上的數字。
+  - `<代號>/trades.csv`：每個訊號一列，含放棄的。
+  - `<代號>/days.csv`：訊號日序列，每個訊號日的筆數、扣成本報酬、對母體超額、對加權指數超額。
+  - `ledger-entries.json`：本次寫進紀錄檔的幾筆。
+
+**`trade_research` 的版本**：`trade_research.VERSION` 寫在報告標題、`explore.json`／`tables.json` 與紀錄檔，也算進 `definitions_sha256`；規則一樣，判定或報告格式一改就加一。
+
+| 版本 | 任務 | 改了什麼 |
+| --- | --- | --- |
+| 1 | #726 | 第一版；沒有人用它對回補資料跑過 |
+
 #### 實作釋義
 
 文件沒寫、由統籌決定 [6874888073](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874888073)（2026-11-14，回覆設計提問 [6874879471](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874879471)）補上的釋義；在任何人對回補資料跑工具之前決定。登記表與定義細節的原文不動。
@@ -633,6 +664,21 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "$IMG" \
 | 三大法人（含投信） | 全部 | 等回補（上市 2012-05-02、上櫃 2014-12-01 起） |
 | 月營收（含去年同月） | S1～S3 | 等回補（2013-01 起） |
 | 融資餘額與融資名單（`margin_lists`） | R1、R2 | 等回補（MI_MARGN／上櫃融資融券，行情起點就有）；回補要含**融資名單**，沒有的日子照 v3 記 `data_incomplete`，不是訊號 |
+
+#### 第二輪實作釋義
+
+登記表沒寫、由工具單 [#726](https://github.com/YiCheng0608/stock-lab/issues/726) 的統籌決定 [6882515208](https://github.com/YiCheng0608/stock-lab/issues/726#issuecomment-6882515208)（2026-11-15，回覆設計提問 [6882435374](https://github.com/YiCheng0608/stock-lab/issues/726#issuecomment-6882435374)）補上的釋義；在任何人對回補資料跑 `trade_research` 之前決定。上面的登記表與規則原文不動。
+
+- **R1、R2 的訊號在研究 panel 上重算**（D4）：不跑研究回測的 pipeline（要寫入 DB，族群分數缺值又會讓每一筆都變 `data_incomplete`），在探索、驗證各段讀進來的 panel 上，用產品的判斷函式重算同一套規則：`ablated_strategy(...)` 的 `evaluate`、`actionable_levels`、`validate_signal_levels`、`instrument_eligibility`、`margin_lists.margin_financing_state`、`margin_zero_base.zero_base_state`。
+  - 輸入照 `worker.pipeline` 取值：MA20、MA60、ATR14、前 20 根最高價都在 T 的價格基準上算，捨入同 `technical_features`；法人 5 日淨買超 ÷ 20 日均量與融資 6 日變化，都以未停牌的根計。
+  - 點位換到 panel 的還原價基準再成交與出場。
+  - 測試：在同一份 fixture 上和 `worker.pipeline._generate_signals` 逐筆比狀態與點位，fixture 涵蓋融資不適用、零基期、法人缺一天、視窗內停牌、IPO 未滿 60 根、視窗內分割、`pullback_v4` 的 RR 不到 1.5、規則本身缺資料。
+- **Q1 族群分數缺值**：族群條件拿掉後，族群分數缺值也不算缺資料，不加 `effective_group_score_missing_or_under_minimum_members`。規則的必要輸入仍列著族群超額報酬，工具給它一個有限值 0（`GROUP_PLACEHOLDER`）；拿掉的那一項比較不會讀它，所以不影響結果。其餘缺資料原因（適用標的、訊號日停牌、規則自己的 `data_incomplete`）照產品。
+- **Q2 IPO 的 60 根門檻**：照產品的 `instrument_eligibility`；`bar_count` 是該標的在 T（含）以前的全部日線數，載入起日之前的根也算（只讀日期）。
+- **Q3 段長**：同 `explore_research.segment_window`。探索段從起日（第一個訊號日 T）的下一個交易日數到 2019-12-31，驗證段 2020-01-02～2024-09-27，都數全市場交易日。
+- **Q4 各段獨立**：驗證段（與已用段）開始時沒有占用中的股票。panel 從段的第一天往前讀 730 個日曆日當暖機，暖機期間不產生訊號；驗證段第一個訊號日是 2020-01-02 的前一個交易日。
+- **Q5 S 系列的缺值排序**：第一鍵（`trust_buy_days`）缺值的排在所有有第一鍵的後面，之間再比第二鍵（`institutional_flow_20`），最後比雜湊，同 `portfolio_research.ranking_key`。
+- **Q6 放棄日（占用到哪一天）**：S 系列 3 日沒成交是第 3 個交易日。R1、R2 的 `not_triggered` 是訊號日後第 20 個交易日；`gap_above_target`／`gap_below_invalid` 是那一個本來要成交的交易日。段末較早就到段末。
 
 ## 限制
 

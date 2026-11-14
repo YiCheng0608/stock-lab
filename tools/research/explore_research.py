@@ -970,10 +970,23 @@ def ledger_path(db: Path) -> Path:
 
 
 def validation_problems(
-    db: Path, report: str | None, sha256: str | None, url: str | None
+    db: Path,
+    report: str | None,
+    sha256: str | None,
+    url: str | None,
+    hypotheses: dict[str, Any] | None = None,
+    design: str | None = None,
+    definitions: str | None = None,
 ) -> tuple[list[str], list[str], dict[str, Any] | None]:
-    """(refusals, hypotheses to validate, the report) before anything is read."""
+    """(refusals, hypotheses to validate, the report) before anything is read.
 
+    ``hypotheses``, ``design`` and ``definitions`` default to this tool's
+    (X1～X8, ``DESIGN``, ``definitions_sha256()``); ``trade_research`` (#726)
+    passes its own and shares the gate and the ledgers."""
+
+    hypotheses = HYPOTHESES if hypotheses is None else hypotheses
+    design = DESIGN if design is None else design
+    definitions = definitions_sha256() if definitions is None else definitions
     problems: list[str] = []
     if not report or not sha256 or not url:
         return (
@@ -1017,15 +1030,15 @@ def validation_problems(
         data = json.loads(path.read_text(encoding="utf-8"))
     except ValueError:
         return problems + [f"{path} is not JSON"], [], None
-    if data.get("segment") != EXPLORATION or data.get("design") != DESIGN:
+    if data.get("segment") != EXPLORATION or data.get("design") != design:
         problems.append("the report is not an exploration report of this tool")
-    if data.get("definitions_sha256") != definitions_sha256():
+    if data.get("definitions_sha256") != definitions:
         problems.append(
             "the report's definitions_sha256 is not this tool's: run the exploration again"
         )
     passed = [
         name
-        for name in HYPOTHESES
+        for name in hypotheses
         if data.get("hypotheses", {}).get(name, {}).get("verdict") == EXPLORATION_PASSED
     ]
     if not passed:
@@ -1044,15 +1057,26 @@ def validation_problems(
     return problems, passed, data
 
 
-def exploration_problems(db: Path, given: str | None) -> tuple[list[str], list[str]]:
+def exploration_problems(
+    db: Path,
+    given: str | None,
+    hypotheses: dict[str, Any] | None = None,
+    version: int | None = None,
+) -> tuple[list[str], list[str]]:
     """(refusals, hypotheses to explore) before anything is read: each
-    registered hypothesis once per tool version, as its data is accepted (#721)."""
+    registered hypothesis once per tool version, as its data is accepted (#721).
 
+    ``hypotheses`` and ``version`` default to this tool's (X1～X8,
+    ``VERSION``); ``trade_research`` (#726) passes its own."""
+
+    example = "X3,X7" if hypotheses is None else ",".join(list(hypotheses)[:2])
+    hypotheses = HYPOTHESES if hypotheses is None else hypotheses
+    version = VERSION if version is None else version
     names = [name.strip() for name in (given or "").split(",") if name.strip()]
     if not names:
-        return ["--segment exploration needs --hypotheses (e.g. X3,X7)"], []
+        return [f"--segment exploration needs --hypotheses (e.g. {example})"], []
     problems: list[str] = []
-    unknown = [name for name in names if name not in HYPOTHESES]
+    unknown = [name for name in names if name not in hypotheses]
     if unknown:
         problems.append(f"{', '.join(unknown)} not registered in HYPOTHESES")
     twice = sorted({name for name in names if names.count(name) > 1})
@@ -1062,13 +1086,13 @@ def exploration_problems(db: Path, given: str | None) -> tuple[list[str], list[s
         done = {
             entry.get("hypothesis")
             for entry in read_ledger(where)
-            if entry.get("segment") == EXPLORATION and entry.get("version") == VERSION
+            if entry.get("segment") == EXPLORATION and entry.get("version") == version
         }
         again = [name for name in names if name in done]
         if again:
             problems.append(
                 f"{', '.join(again)} already in {where}: the exploration runs once "
-                f"per tool version ({VERSION})"
+                f"per tool version ({version})"
             )
     return problems, names
 
