@@ -1,0 +1,12 @@
+ranked 2024-11-01 (1/493)
+ranked 2025-01-13 (51/493)
+ranked 2025-04-07 (101/493)
+ranked 2025-06-18 (151/493)
+ranked 2025-08-27 (201/493)
+ranked 2025-11-11 (251/493)
+ranked 2026-01-22 (301/493)
+ranked 2026-04-16 (351/493)
+ranked 2026-06-29 (401/493)
+ranked 2026-09-08 (451/493)
+{"out": "/db/out/consistency", "hypothesis": "H1", "window": "forward", "days": 493, "min_days": 250, "verdict": "通過", "elapsed_seconds": 154.1}
+exit=0

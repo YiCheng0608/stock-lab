@@ -1,0 +1,6 @@
+consistency check (#691 AC-3), 2026-11-14
+reference: origin/pr-assets/689 run-20261114/formal/trust_rev-all (LF); ours: run_hypothesis(since=2024-11-01, cutoff=2026-11-13) on a new copy (latest 2026-11-13, alembic 0031), CR stripped
+equity.csv K20:top5: identical, 494 lines, sha256 6d208d32e12aff4d
+equity.csv K20:population: identical, 494 lines, sha256 b0cca73ba6b1d57a
+picks.csv: identical, 9861 lines
+trades.csv K20:top5 rows: identical, 2455 rows

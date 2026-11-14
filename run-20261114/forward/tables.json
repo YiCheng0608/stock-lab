@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "hypothesis": "H1",
+  "design": "691",
+  "label": "H1：全部可交易母體，投信近 5 日買超天數大者先、同分月營收創 12 個月新高先（#689 `trust_rev`-(b)），前 5 名、持有 20 天，只對母體判定",
+  "parameters": {
+    "ranking": "trust_rev",
+    "universe": "all",
+    "keys": [
+      "trust_buy_days_5",
+      "revenue_high_12"
+    ],
+    "top": 5,
+    "hold": 20,
+    "since": "2026-11-14",
+    "min_days": 250,
+    "historical_until": "2024-09-27"
+  },
+  "command": "python tools/research/portfolio_research.py --db /db/stock.db --hypothesis H1 --out /db/out/forward --min-free-gb 0",
+  "copy": {
+    "latest": "2026-11-13",
+    "alembic": "0031_drop_theme_suggestions",
+    "mtime": "2026-11-14T07:13:22.394552+00:00"
+  },
+  "rule": {
+    "slippage_bps": 5.0,
+    "fee": 0.001425,
+    "tax": 0.003,
+    "min_t": 2.0
+  },
+  "window": "forward",
+  "start": "2026-11-14",
+  "cutoff": "2026-11-13",
+  "first_session": null,
+  "last_session": null,
+  "signal_days": 0,
+  "days": 0,
+  "min_days": 250,
+  "judged_days": 0,
+  "verdict": "樣本不足",
+  "comparisons": 1,
+  "pool_counts": {},
+  "curves": {
+    "judged": {
+      "taiex": {
+        "days": 0
+      }
+    },
+    "extension": {
+      "taiex": {
+        "days": 0
+      }
+    },
+    "all": {
+      "taiex": {
+        "days": 0
+      }
+    }
+  },
+  "excess": {
+    "judged": {
+      "population": {
+        "days": 0,
+        "mean": null,
+        "annual": null,
+        "t": null
+      },
+      "taiex": {
+        "days": 0,
+        "mean": null,
+        "annual": null,
+        "t": null
+      }
+    },
+    "extension": {
+      "population": {
+        "days": 0,
+        "mean": null,
+        "annual": null,
+        "t": null
+      },
+      "taiex": {
+        "days": 0,
+        "mean": null,
+        "annual": null,
+        "t": null
+      }
+    },
+    "all": {
+      "population": {
+        "days": 0,
+        "mean": null,
+        "annual": null,
+        "t": null
+      },
+      "taiex": {
+        "days": 0,
+        "mean": null,
+        "annual": null,
+        "t": null
+      }
+    }
+  },
+  "counts": {},
+  "elapsed_seconds": 2.939935552000179,
+  "peak_memory_gb": 0.20055389404296875
+}

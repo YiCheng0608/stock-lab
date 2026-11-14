@@ -1,0 +1,2 @@
+{"out": "/db/out/forward", "hypothesis": "H1", "window": "forward", "days": 0, "min_days": 250, "verdict": "樣本不足", "elapsed_seconds": 2.9}
+exit=0
