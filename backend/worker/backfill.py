@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.clock import utcnow
 from app.config import MAX_GROUP_CANDIDATES, OFFICIAL_MAX_BACKFILL_DAYS
 from app.domain import NON_SECURITY_TYPES, TAIWAN_MARKET
+from app.db import ensure_schema
 from app.coverage import (
     INDEX_HISTORY_SOURCE,
     SESSION_BASIS_START,
@@ -1445,7 +1446,9 @@ def targeted_backfill(
         raise ValueError(f"unsupported backfill scope: {scope}")
     request_key = f"official-backfill:v1:{normalized_scope}:{start_date.isoformat()}:{end_date.isoformat()}"
 
-    pipeline.init_db()
+    # A database at the code head skips init_db's whole-database integrity
+    # check, which grew each research-history month by minutes (#722).
+    ensure_schema(session_factory=pipeline.SessionLocal, migrate=pipeline.init_db)
     with pipeline.SessionLocal() as db:
         run = db.scalar(
             select(IngestionRun).where(IngestionRun.request_key == request_key)

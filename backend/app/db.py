@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from sqlalchemy import Engine, create_engine, event
+from typing import Callable
+
+from sqlalchemy import Engine, create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from .config import DB_PATH
+from .migration_revisions import REVISIONS
 
 
 class Base(DeclarativeBase):
@@ -65,6 +68,41 @@ def init_db() -> None:
     from .migrations import upgrade_database
 
     upgrade_database(engine)
+
+
+def schema_revisions(
+    session_factory: Callable[[], Session] | None = None,
+) -> list[str] | None:
+    """The database's Alembic revisions; None before any migration ran."""
+
+    with (session_factory or SessionLocal)() as db:
+        if not inspect(db.get_bind()).has_table("alembic_version"):
+            return None
+        return list(
+            db.execute(text("SELECT version_num FROM alembic_version")).scalars()
+        )
+
+
+def ensure_schema(
+    *,
+    session_factory: Callable[[], Session] | None = None,
+    migrate: Callable[[], None] | None = None,
+) -> str:
+    """Migrate only when the database is not already at the code head.
+
+    ``init_db`` always runs the whole-database migration integrity check
+    (``PRAGMA integrity_check`` twice, alembic/env.py), which takes minutes on
+    a multi-year market database and grows with it even when no revision is
+    pending (#150 for the daily, #722 for each backfill month), so a database
+    at the head skips it.  Any other state runs ``migrate`` (``init_db``) with
+    its checks.  Callers pass their own factory and migrate function so the
+    ones they look up at call time (``worker.pipeline``'s) are used.
+    """
+
+    if schema_revisions(session_factory) == [REVISIONS[-1]]:
+        return "current"
+    (migrate or init_db)()
+    return "upgraded"
 
 
 def get_session() -> Session:
