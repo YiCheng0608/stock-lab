@@ -5,6 +5,7 @@ import { StaticRouter } from 'react-router-dom/server'
 import { CANDIDATE_DISCLAIMER } from '../candidates/candidates'
 import { completeItem, doneNote } from '../candidates/candidates.fixtures'
 import { GLOSSARY } from '../glossary'
+import { EVIDENCE_PATH, NO_EVIDENCE_SHORT_LABEL } from '../strategy/evidence'
 import type { StrategyActionableLevels, StrategyBoardRow } from '../types'
 import {
   LEVELS_MISSING_TEXT,
@@ -104,6 +105,8 @@ const both = render(<StrategyBoardPanel board={board([conditionalBreakout(), obs
 check(both.includes('策略總表') && both.includes('資料 2026/10/22') && both.includes('價位規則 v1'), 'title, data date and levels version')
 check(both.includes('data-strategy-candidate="3"') && both.includes('第 3 名'), 'candidate row with rank')
 check(both.includes(`<span class="small-note strategy-candidate-disclaimer">${CANDIDATE_DISCLAIMER}</span>`), 'the ranking disclaimer sits beside the score')
+// Issue 693: the short 現行規則尚無證據 link right after the disclaimer, to the 研究結論 of /strategy.
+check(both.includes(`${CANDIDATE_DISCLAIMER}</span><a class="text-link small-note strategy-candidate-evidence" href="${EVIDENCE_PATH}">${NO_EVIDENCE_SHORT_LABEL}</a>`) && count(both, 'strategy-candidate-evidence') === 1, 'the evidence link follows the ranking disclaimer once')
 check(/第 3 名 · .*總分.* 78 · 突破條件/.test(both), 'candidate row: rank, score and strategy')
 check(count(both, 'class="ai-inference candidate-note"') === 1 && both.includes('AI 推論'), 'the AI note appears once, on the candidate row')
 check(both.indexOf('data-strategy-candidate') < both.indexOf('data-strategy-row="breakout_v1"'), 'the candidate row is above the strategy rows')

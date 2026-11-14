@@ -2029,6 +2029,36 @@ def t22(run: Run) -> str:
     return f"`{line}` 在 `{CANDIDATES_TITLE}` 之後；{marked}／{len(items)} 列標費半（overnight_us_links）"
 
 
+# frontend/src/strategy/evidence.ts NO_EVIDENCE_TEXT and NO_EVIDENCE_LINK_LABEL (Issue 693).
+NO_EVIDENCE_LINE = (
+    "現行規則尚無證據：照名單價位進出，回測扣成本後沒有贏過同日母體。 研究結論 →"
+)
+
+
+@check("today", "T23")
+def t23(run: Run) -> str:
+    """Issue 693: the 今日名單 head ends with the 現行規則尚無證據 line, in every state."""
+
+    text = run.text(TODAY)
+    found = [
+        n for n, line in enumerate(text.lines) if line.startswith("現行規則尚無證據")
+    ]
+    expect(
+        [text.lines[n] for n in found] == [NO_EVIDENCE_LINE],
+        f"`現行規則尚無證據` 開頭的行是 {[text.lines[n] for n in found]}，"
+        f"預期恰一行 `{NO_EVIDENCE_LINE}`",
+    )
+    title, groups = candidates_title(text), text.find("熱門族群")
+    us = text.find_where(lambda line: line.startswith(OVERNIGHT_US_TITLE), title)
+    end = us if us > title else groups
+    expect(
+        title < found[0] and (end < 0 or found[0] < end),
+        f"`{NO_EVIDENCE_LINE}` 不在標題 `{CANDIDATES_TITLE}` 與"
+        f" `{OVERNIGHT_US_TITLE}`／`熱門族群` 之間（{text.at(found[0])}）",
+    )
+    return f"`{NO_EVIDENCE_LINE}` 恰一行，在 `{CANDIDATES_TITLE}` 標題列"
+
+
 @check("today", "T14")
 def t14(run: Run) -> str:
     """The today page keeps one market line (加權, 櫃買, the date when not the page date, 看大盤 →), not the four widgets."""

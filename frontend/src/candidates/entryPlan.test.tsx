@@ -23,8 +23,10 @@ const text = (markup: string) => markup.replace(/<[^>]+>/g, '')
 const count = (markup: string, needle: string) => markup.split(needle).length - 1
 const withLevels = (item: CandidateItem, levels: Partial<CandidateLevels>): CandidateItem => ({ ...item, levels: { ...item.levels, ...levels } })
 
-const BREAKOUT = '2026/10/16 收盤已突破 161.50 元。明天起在 161.50 元附近可進場；跌破 157.82 元停損，目標 167.39 元'
-const PULLBACK = '2026/10/16 已拉回到支撐區。明天起在 13.05～13.35 元之間可進場；跌破 12.75 元停損，目標 13.92 元'
+const BREAKOUT = '2026/10/16 收盤已突破 161.50 元。規則進場價 161.50 元（T+1 起），停損 157.82 元，目標 167.39 元'
+const PULLBACK = '2026/10/16 已拉回到支撐區。規則進場區 13.05～13.35 元（T+1 起），停損 12.75 元，目標 13.92 元'
+// Issue 693: the sentence states the rule's prices; no instruction to buy (the rules have no evidence of an edge).
+for (const sentence of [BREAKOUT, PULLBACK]) check(!/可進場|明天起|跌破/.test(sentence), `no instruction in 「${sentence}」`)
 
 // ---- AC-1: the sentence = the signal's levels (and the table columns) ----
 const breakout = entryPlanView(completeItem())

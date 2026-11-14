@@ -77,7 +77,8 @@ for (const [id, name] of Object.entries(IN_PLACE_TERMS)) {
 check(GLOSSARY.every((term) => !/percentile/i.test(term.name)), 'glossary: no term is named in English 「percentile」')
 // #463: the hover hint is the plain definition, one colloquial sentence for RR and the total (UI_COPY_SPEC §7 呈現).
 const plainOf = (id: string) => GLOSSARY.find((item) => item.term_id === id)?.plain_definition ?? ''
-check(plainOf('rr') === '可能賺的空間是可能賠的幾倍。', `glossary rr: one colloquial sentence, got 「${plainOf('rr')}」`)
+// Issue 693: the RR sentence states the ratio of the rule's prices, not a gain.
+check(plainOf('rr') === '規則目標距離與停損距離的比例。', `glossary rr: one colloquial sentence, got 「${plainOf('rr')}」`)
 check(plainOf('candidate_score') === '用來排候選順序的分數，不代表勝率。', `glossary candidate_score: one colloquial sentence, got 「${plainOf('candidate_score')}」`)
 check(plainOf('target').includes('目標一') && plainOf('target').includes('目標二'), `glossary target: tells 目標一 from 目標二, got 「${plainOf('target')}」`)
 
@@ -85,7 +86,7 @@ check(plainOf('target').includes('目標一') && plainOf('target').includes('目
 const candidate = render('CandidatesSection', () => <CandidatesSection data={listResponse()} loading={false} error={null} />)
 for (const label of ['總分', '進場區', '停損', '目標', 'RR']) check(hasTerm(candidate, label), `今日候選: 「${label}」 opens its glossary term (found ${termLabels(candidate).join('、') || 'none'})`)
 const rrButton = /<button[^>]*data-term="rr"[^>]*>/.exec(candidate)?.[0] ?? ''
-check(rrButton.includes('title="可能賺的空間是可能賠的幾倍。"'), `今日候選: hovering RR shows the plain sentence, got ${rrButton}`)
+check(rrButton.includes('title="規則目標距離與停損距離的比例。"'), `今日候選: hovering RR shows the plain sentence, got ${rrButton}`)
 const scoreDetails = render('ScoreDetails', () => <ScoreDetails item={completeItem()} open />)
 check(hasTerm(scoreDetails, '百分位'), `評分細節: 「百分位」 opens its glossary term (found ${termLabels(scoreDetails).join('、') || 'none'})`)
 check(!/percentile/i.test(text(candidate + scoreDetails)), '候選: 「percentile」 is not shown; the details read 「百分位」')
