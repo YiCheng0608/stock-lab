@@ -1,7 +1,7 @@
 """JSON helper for the coordinator scripts dispatch.sh, close_task.sh, patrol.sh and monitor.sh (#282, #316).
 
 Git Bash has no jq, so the scripts pipe orca and gh JSON through this file; event_queue.py
-imports the PR helpers (latest_checks, check_state, pr_line) and the coordinator's comment
+imports the PR helpers (GATE, run_id, newest_ci_run, pr_line) and the coordinator's comment
 mark (coordinator_comment, without_mark; #440). Every
 subcommand reads one JSON document on stdin and prints plain text; it exits 1 when the
 value is missing or the condition is false, so a script can test the exit code.
@@ -293,6 +293,12 @@ def replace_coordinator_row(body: str, row: str) -> str:
     return "".join(lines)
 
 
+# A check's workflow run (detailsUrl) and the merge gate: CI's required check
+# (docs/WORKFLOW.md, 欄位與唯一來源); event_queue imports both.
+RUN_ID = re.compile(r"/actions/runs/(\d+)/")
+GATE = "required"
+
+
 def latest_checks(rollup) -> list[dict]:
     """The newest run of each check in a statusCheckRollup."""
     # A newer run of the same check replaces the older one (a cancelled run or an
@@ -309,7 +315,38 @@ def latest_checks(rollup) -> list[dict]:
     return [c for _, c in latest.values()]
 
 
+def run_id(check: dict) -> int | None:
+    """The workflow run id in a check's detailsUrl, or None (a status context)."""
+    m = RUN_ID.search(check.get("detailsUrl") or "")
+    return int(m.group(1)) if m else None
+
+
+def newest_ci_run(rollup) -> tuple[str, int] | None:
+    """(workflow name, run id) of the newest run of the gate's workflow, or None.
+
+    The gate's workflow is the one of the newest GATE check; its newest run is the
+    highest run id among that workflow's checks, whether or not that run lists GATE
+    yet. A run cancelled by a newer one leaves failed jobs behind, and the newer run
+    lists a job only once it is queued (PR #328, 2026-10-28; PR #735 and #737,
+    2026-11-15). event_queue.ci_result and check_state both read the run from here
+    (#740)."""
+    runs = [(r, c) for c in rollup or [] if (r := run_id(c)) is not None]
+    gates = [(r, c) for r, c in runs if c.get("name") == GATE]
+    if not gates:
+        return None
+    workflow = max(gates, key=lambda g: g[0])[1].get("workflowName")
+    return workflow, max(r for r, c in runs if c.get("workflowName") == workflow)
+
+
 def check_state(rollup) -> str:
+    """ci= of the PR line: only the newest run of the gate's workflow (newest_ci_run)
+    counts for that workflow's checks; other checks by latest_checks (#740)."""
+    newest = newest_ci_run(rollup)
+    if newest is not None:
+        workflow, run = newest
+        rollup = [
+            c for c in rollup if c.get("workflowName") != workflow or run_id(c) == run
+        ]
     states = [
         (c.get("conclusion") or c.get("state") or c.get("status") or "").upper()
         for c in latest_checks(rollup)
