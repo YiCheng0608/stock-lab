@@ -953,7 +953,7 @@ def _ingestion_rows() -> list[dict[str, Any]]:
             "claude",
             5,
             None,
-            {"prompt_version": NEWS_PROMPT_VERSION, "calls": 5},
+            {"prompt_version": NEWS_LLM_VERSION, "calls": 5},
             _at(T, 3),
         ),
         run(
@@ -1241,20 +1241,25 @@ def _news_rows() -> list[dict[str, Any]]:
 
 
 LLM_MODEL = "claude-sonnet-5-5"
-# The news prompt version the current candidate score reads (#262).
+# The news prompt version the current candidate score names (#262): news_v3,
+# which also reads news_v4 (#676).
 NEWS_PROMPT_VERSION = CANDIDATE_SCORE["components"]["news_sentiment"][
     "llm_prompt_version"
 ]
+# The version worker.news_llm writes since #676; news_v3 rows stay and the API
+# shows them (news 1, whose theme candidates no page shows).
+NEWS_LLM_VERSION = "news_v4"
 
 
 def _llm_rows() -> list[dict[str, Any]]:
     def result(item_id, news_id, summary, symbols, themes, direction, scope, rationale):
+        version = NEWS_PROMPT_VERSION if themes else NEWS_LLM_VERSION
         return {
             "id": item_id,
             "news_item_id": news_id,
-            "prompt_version": NEWS_PROMPT_VERSION,
+            "prompt_version": version,
             "llm_model": LLM_MODEL,
-            "llm_input_hash": _sha(f"{NEWS_PROMPT_VERSION}|{news_id}"),
+            "llm_input_hash": _sha(f"{version}|{news_id}"),
             "llm_run_at": _at(T, 3, item_id),
             "llm_status": "done",
             "ai_summary": summary,
@@ -1291,7 +1296,7 @@ def _llm_rows() -> list[dict[str, Any]]:
                 # Not an instrument: named from the emerging roster (Issue #512).
                 {"symbol": "TPEx:9801", "reason": "供應液冷零件", "confidence": "low"},
             ],
-            [{"theme": "示範液冷散熱", "reason": "液冷機櫃需求"}],
+            [],
             "positive",
             "instrument",
             "訂單能見度延長。",
@@ -1301,7 +1306,7 @@ def _llm_rows() -> list[dict[str, Any]]:
             4,
             "全球設備訂單連三月成長。",
             [],
-            [{"theme": "示範液冷散熱", "reason": "資料中心擴建帶動"}],
+            [],
             "positive",
             "market",
             "設備訂單增加反映晶圓廠擴產。",
@@ -2104,6 +2109,11 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         ),
         ("news/1", "ai.model", LLM_MODEL),
         ("news/1", "ai.prompt_version", NEWS_PROMPT_VERSION),
+        # #676: a news_v3 result stands for news_v4 and keeps its stored
+        # themes in the API (no page shows them); news_v4 asks for none.
+        ("news/1", "ai.theme_candidates[].theme", ["示範車用晶片"]),
+        ("news/2", "ai.prompt_version", NEWS_LLM_VERSION),
+        ("news/2", "ai.theme_candidates", []),
         # llm_run_at is stored naive UTC; the API states the zone (#234).
         ("news/1", "ai.generated_at", f"{D}T03:01:00+00:00"),
         # The emerging candidate is named from the roster, never left without a name (#512).

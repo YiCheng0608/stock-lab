@@ -43,7 +43,6 @@ from app.models import (
     IngestionRun,
     Instrument,
     NewsItem,
-    NewsLlmResult,
     Signal,
 )
 from app.strategies import REGISTRY
@@ -59,6 +58,7 @@ from .news_llm import (
     _string,
     _usage,
     cli_arguments,
+    done_results,
     input_hash,
     parse_envelope,
     preflight,
@@ -146,16 +146,8 @@ def _news_inputs(
         .get("news_sentiment", {})
         .get("llm_prompt_version")
     )
-    results = {
-        result.news_item_id: result
-        for result in db.scalars(
-            select(NewsLlmResult).where(
-                NewsLlmResult.news_item_id.in_(ids),
-                NewsLlmResult.prompt_version == prompt_version,
-                NewsLlmResult.llm_status == "done",
-            )
-        )
-    }
+    # news_v3 in the config also reads news_v4 (#676), like the score does.
+    results = done_results(db, ids, prompt_version)
     items = db.scalars(
         select(NewsItem)
         .where(NewsItem.id.in_(ids))

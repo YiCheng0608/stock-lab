@@ -21,14 +21,11 @@ from app.api import get_db, router
 from app.clock import utcnow
 from app.db import Base, enable_sqlite_foreign_keys
 from app.models import (
-    DataQuality,
-    GroupMembership,
     IngestionRun,
     Instrument,
     NewsItem,
     NewsLlmResult,
     RawPayload,
-    ThemeGroup,
 )
 from worker import news_llm
 from worker.news_llm import (
@@ -198,9 +195,7 @@ def test_batches_are_split_and_results_saved(db, fake):
             "confidence": "medium",
         }
     ]
-    assert row.ai_theme_candidates_json == [
-        {"theme": "半導體", "reason": "晶圓代工", "evidence": "晶圓代工"}
-    ]
+    assert row.ai_theme_candidates_json == []
     assert (row.ai_impact_direction, row.ai_impact_scope, row.ai_unsupported) == (
         "positive",
         "instrument",
@@ -423,7 +418,6 @@ def test_validation_rejects_missing_extra_and_bad_fields():
         "id": 1,
         "summary_zh": "摘要",
         "symbol_candidates": [],
-        "theme_candidates": [],
         "impact_direction": "positive",
         "impact_scope": "market",
         "impact_rationale": "理由",
@@ -471,20 +465,6 @@ def test_validation_rejects_missing_extra_and_bad_fields():
         {"items": [dict(good, unsupported="no")]},
         {"items": [dict(good, buy_signal=True)]},
         {"items": [dict(good, impact_rationale="理" * 121)]},
-        {"items": [dict(good, theme_candidates=[{"theme": "題" * 41, "reason": "x"}])]},
-        {"items": [dict(good, theme_candidates=[{"theme": "半導體"}])]},
-        # news_v3 (#413): every theme candidate quotes its evidence.
-        {"items": [dict(good, theme_candidates=[{"theme": "半導體", "reason": "x"}])]},
-        {
-            "items": [
-                dict(
-                    good,
-                    theme_candidates=[
-                        {"theme": "半導體", "reason": "x", "evidence": "字" * 41}
-                    ],
-                )
-            ]
-        },
         {
             "items": [
                 dict(
@@ -525,7 +505,6 @@ def test_unsupported_item_has_unknown_direction():
                     "id": 7,
                     "summary_zh": "摘要",
                     "symbol_candidates": [],
-                    "theme_candidates": [],
                     "impact_direction": "negative",
                     "impact_scope": "market",
                     "impact_rationale": "資訊不足",
@@ -1675,313 +1654,169 @@ def test_a_run_is_abandoned_once_the_clock_is_past_its_limit(db, frozen_utcnow):
     assert (active.status, active.finished_at) == ("running", None)
 
 
-# Issue #413 -------------------------------------------------------------------
-# theme_cases.json: news 5942, 5943 and 5961 of 2026-11-02 with the outputs
-# #260's G7 closing verify judged in N8.
+# Issue #676 -------------------------------------------------------------------
+# news_v4 is news_v3 without the theme candidates section; a news_v3 result
+# stands for a news_v4 one (EQUIVALENT_PROMPT_VERSIONS).
 
-THEME_CASES = {
-    case["news_id"]: case
-    for case in json.loads(
-        (FAKE_CLI.parent / "theme_cases.json").read_text(encoding="utf-8")
-    )["items"]
-}
+PROMPTS = Path(news_llm.__file__).with_name("prompts")
 
 
-def _add_theme_cases(db, *news_ids):
-    items = {}
-    for index, news_id in enumerate(news_ids):
-        case = THEME_CASES[news_id]
-        (items[news_id],) = _add_news(
-            db,
-            1,
-            start=100 + index,
-            source_name=case["source_name"],
-            category=case["category"],
-            title=case["title"],
-            summary=case["summary"],
-            symbols_json=case["symbols_json"],
-        )
-    return items
+def _prompt_lines(version):
+    text = (PROMPTS / f"{version}.md").read_text(encoding="utf-8")
+    return text.replace("\r\n", "\n").split("\n")
 
 
-def test_a_theme_the_source_does_not_name_is_not_written(db, fake, monkeypatch):
-    # AC-1: 5942's source has 德律's revenue and price only; 電子檢測設備 is
-    # neither written there nor directly derived from it (#260 N8).
-    item = _add_theme_cases(db, 5942)[5942]
-    monkeypatch.setenv("FAKE_CLAUDE_MODES", "theme_cases")
-    result = _run(db)
-
-    assert result["status"] == "success" and result["done"] == 1
-    row = _results(db, news_item_id=item.id)[0]
-    output = THEME_CASES[5942]["output"]
-    assert row.llm_status == "done" and row.ai_theme_candidates_json == []
-    # The direction, symbol candidates and summary of the item are kept.
-    assert row.ai_summary == output["summary_zh"]
-    assert row.ai_symbol_candidates_json == output["symbol_candidates"]
-    assert (row.ai_impact_direction, row.ai_impact_scope, row.ai_unsupported) == (
-        "positive",
-        "instrument",
-        False,
+def test_news_v4_is_news_v3_without_the_theme_candidates_section():
+    # The equivalence holds only while the rest stays word for word: a change
+    # to another part of news_v4 is a new version with its own tuple.
+    assert PROMPT_VERSION == "news_v4"
+    assert news_llm.EQUIVALENT_PROMPT_VERSIONS == ("news_v4", "news_v3")
+    v3, v4 = _prompt_lines("news_v3"), _prompt_lines("news_v4")
+    start = next(
+        n for n, line in enumerate(v3) if line.startswith("- `theme_candidates`")
     )
-    assert row.ai_impact_rationale == output["impact_rationale"]
+    end = next(n for n in range(start + 1, len(v3)) if v3[n].startswith("- `"))
+    assert v3[end].startswith("- `impact_direction`")
+    assert v4 == v3[:start] + v3[end:]
+    assert "theme_candidates" not in "\n".join(v4)
+    assert "題材候選" not in "\n".join(v4)
 
 
-def test_themes_the_source_writes_or_directly_gives_are_kept(db, fake, monkeypatch):
-    # AC-2: N8 passed 5943's 光通訊 (from 可插拔光模組) and 5961's 雲端服務.
-    items = _add_theme_cases(db, 5943, 5961)
-    monkeypatch.setenv("FAKE_CLAUDE_MODES", "theme_cases")
-    result = _run(db)
-
-    assert (result["done"], result["themes_dropped"]) == (2, 0)
-    for news_id, item in items.items():
-        row = _results(db, news_item_id=item.id)[0]
-        assert row.llm_status == "done"
-        assert (
-            row.ai_theme_candidates_json
-            == THEME_CASES[news_id]["output"]["theme_candidates"]
-        )
-    assert db.scalars(select(DataQuality)).all() == []
-
-
-def test_a_dropped_theme_is_recorded_and_never_shown(db, fake, client, monkeypatch):
-    # AC-3
-    items = _add_theme_cases(db, 5942, 5943, 5961)
-    monkeypatch.setenv("FAKE_CLAUDE_MODES", "theme_cases")
-    result = _run(db)
-
-    assert (result["done"], result["themes_dropped"]) == (3, 1)
-    item = items[5942]
-    row = _results(db, news_item_id=item.id)[0]
-    assert (row.prompt_version, row.llm_model) == (PROMPT_VERSION, "claude-sonnet-fake")
-    quality = db.scalars(select(DataQuality)).all()
-    assert [
-        (q.entity_type, q.entity_key, q.as_of_date, q.status, q.source) for q in quality
-    ] == [
-        (
-            "news_llm_theme",
-            f"news:{item.id}:{PROMPT_VERSION}",
-            RUN_DATE,
-            "theme_dropped",
-            "news_llm",
-        )
-    ]
-    (theme,) = THEME_CASES[5942]["output"]["theme_candidates"]
-    assert quality[0].checks_json == {
-        "theme_check": {
-            "news_item_id": item.id,
-            "prompt_version": PROMPT_VERSION,
-            "llm_model": "claude-sonnet-fake",
-            "ingestion_run_id": result["run_id"],
-            "raw_payload_id": row.raw_payload_id,
-            "kept": 0,
-            "dropped": [
-                {
-                    **theme,
-                    "cause": "theme_not_in_source",
-                    "source_language": "chinese",
-                }
-            ],
-        }
+def test_the_answer_has_no_theme_candidates():
+    item = news_llm.OUTPUT_SCHEMA["properties"]["items"]["items"]
+    assert "theme_candidates" not in item["properties"]
+    assert "theme_candidates" not in item["required"]
+    good = {
+        "id": 1,
+        "summary_zh": "摘要",
+        "symbol_candidates": [],
+        "impact_direction": "positive",
+        "impact_scope": "market",
+        "impact_rationale": "理由",
+        "unsupported": False,
     }
-    run = db.get(IngestionRun, result["run_id"])
-    assert run.metadata_json["batches"][0]["theme_dropped"] == [
-        {
-            "news_id": item.id,
-            "themes": [
-                {
-                    "theme": "電子檢測設備",
-                    "cause": "theme_not_in_source",
-                    "source_language": "chinese",
-                }
-            ],
-        }
-    ]
-    # The model's output with the dropped candidate stays in the raw payload.
-    raw = db.get(RawPayload, row.raw_payload_id)
-    assert "電子檢測設備" in Path(raw.payload_path).read_text(encoding="utf-8")
-
-    detail = client.get(f"{router.prefix}/news/{item.id}").json()
-    assert detail["ai"]["theme_candidates"] == []
-    assert detail["ai"]["impact_direction"] == "positive"
+    assert "theme_candidates" not in validate_output({"items": [good]}, [1]).outputs[1]
+    # A news_v3 shaped item has a key the schema does not allow.
+    checked = validate_output({"items": [dict(good, theme_candidates=[])]}, [1])
+    assert checked.outputs == {}
+    assert checked.failures[1].startswith("schema_mismatch")
 
 
-def _case_payload(news_id):
-    case = THEME_CASES[news_id]
-    return {"title": case["title"], "summary": case["summary"]}
+def _v3_row(item, status="done", **fields):
+    values = {
+        "news_item_id": item.id,
+        "prompt_version": "news_v3",
+        "llm_model": "claude-sonnet-v3",
+        "llm_input_hash": "3" * 64,
+        "llm_run_at": datetime(2026, 10, 16),
+        "llm_status": status,
+        "ai_summary": "v3 摘要" if status == "done" else None,
+        "ai_symbol_candidates_json": [],
+        "ai_theme_candidates_json": (
+            [{"theme": "半導體", "reason": "晶圓代工", "evidence": "晶圓代工"}]
+            if status == "done"
+            else []
+        ),
+        "ai_impact_direction": "negative" if status == "done" else None,
+        "ai_impact_scope": "instrument" if status == "done" else None,
+        "ai_impact_rationale": "v3 理由" if status == "done" else None,
+        "ai_unsupported": False if status == "done" else None,
+    }
+    values.update(fields)
+    return NewsLlmResult(**values)
 
 
-@pytest.mark.parametrize(
-    ("news_id", "theme", "evidence", "cause"),
-    [
-        # C: 電子 of 其他電子 is two of the six units of 電子檢測設備.
-        (5942, "電子檢測設備", "相關其他電子下跌-2.13%", "theme_not_in_source"),
-        # The reason is a paraphrase, not a run of the source.
-        (5942, "電子檢測設備", "德律10月營收大幅年增", "evidence_not_in_source"),
-        # A run across the title and the summary is not in either.
-        (5942, "其他電子", "71.93％德律", "evidence_not_in_source"),
-        (5942, "其他電子", "", "evidence_not_in_source"),
-        # A: written in the summary.
-        (5942, "其他電子", "相關其他電子", None),
-        # C takes more than half: 電子 is two of four units, not enough.
-        (5942, "電子檢測", "相關其他電子下跌-2.13%", "theme_not_in_source"),
-        (5942, "電子設備", "相關其他電子下跌-2.13%", "theme_not_in_source"),
-        # C: 電子業 has 2 of 3 units in the source.
-        (5942, "電子業", "相關其他電子下跌-2.13%", None),
-        # C: 光 and 通 of 光通訊 are in the source.
-        (5943, "光通訊", "可插拔光模組", None),
-        # Width, case, spaces and the quote marks around the evidence.
-        (5943, "AI 網通", "ai 網通與互連", None),
-        (5961, "雲端服務", "「受惠 AI 及雲端數位轉型持續成長」", None),
-    ],
-)
-def test_theme_check_rules(news_id, theme, evidence, cause):
-    candidate = {"theme": theme, "reason": "理由", "evidence": evidence}
-    assert news_llm.theme_check(_case_payload(news_id), candidate) == cause
-
-
-@pytest.mark.parametrize(
-    ("title", "theme", "cause"),
-    [
-        # A two-unit theme with one unit in the source is dropped (#423 review).
-        ("台積電10月營收年增20%", "電力", "theme_not_in_source"),
-        ("國泰金獲利年增", "金控", "theme_not_in_source"),
-        # AC-4's only C keep (6032): 3 units, 2 written.
-        ("外媒喊抱緊台積電", "AI晶片", None),
-    ],
-)
-def test_a_theme_needs_more_than_half_of_its_units_in_the_source(title, theme, cause):
-    summary = "人工智慧晶片與高階處理器需求強勁" if theme == "AI晶片" else ""
-    payload = {"title": title, "summary": summary}
-    candidate = {"theme": theme, "reason": "x", "evidence": title}
-    assert news_llm.theme_check(payload, candidate) == cause
-
-
-def test_theme_check_by_the_groups_of_the_matched_instruments():
-    payload = {"title": "台積電法說會", "summary": "台積電說明晶圓代工產能"}
-    candidate = {"theme": "半導體", "reason": "台積電", "evidence": "台積電"}
-    assert news_llm.theme_check(payload, candidate) == "theme_not_in_source"
-    assert news_llm.theme_check(payload, candidate, {"半導體"}) is None
-    # Containment either way; the shorter name has two characters or more.
-    names = news_llm.group_name_keys("Industry · Photonics", "矽光子／光通訊")
-    # NFKC writes the full-width slash as /.
-    assert {"矽光子", "光通訊", "矽光子/光通訊"} <= names
-    assert news_llm.theme_check(payload, dict(candidate, theme="光通訊"), names) is None
-    assert news_llm.theme_check(payload, dict(candidate, theme="光"), names) == (
-        "theme_not_in_source"
-    )
-
-
-def test_an_english_source_keeps_only_the_themes_it_writes():
-    # #413 decision: a Chinese theme name has no deterministic match in English
-    # text, so only A and B can pass; the record names the source language.
-    payload = {"title": "TSMC raises its AI server forecast", "summary": ""}
-    kept, dropped = news_llm.split_theme_candidates(
-        payload,
+def test_items_settled_under_news_v3_are_not_sent_again(db, fake):
+    done, rejected, stale, pending, new = _add_news(db, 5)
+    (old_done,) = _add_news(db, 1, start=10_000, published_at=NOW - timedelta(days=5))
+    db.add_all(
         [
-            {"theme": "AI 伺服器", "reason": "x", "evidence": "AI server forecast"},
-            {"theme": "AI", "reason": "x", "evidence": "AI server"},
-        ],
+            _v3_row(done),
+            _v3_row(rejected, "rejected", llm_error="summary_check: numbers 1"),
+            _v3_row(stale, "skipped_stale", llm_error="stale"),
+            _v3_row(pending, "pending", llm_error="item_failed 1/3: missing"),
+            _v3_row(old_done),
+        ]
     )
-    assert [entry["theme"] for entry in kept] == ["AI"]
-    assert [(e["theme"], e["cause"], e["source_language"]) for e in dropped] == [
-        ("AI 伺服器", "theme_not_in_source", "non_chinese")
-    ]
+    db.commit()
+
+    result = _run(db)
+
+    # Only the item never settled under news_v3 and the new one are sent; the
+    # old item done under news_v3 is not marked stale under news_v4 either.
+    assert result["status"] == "success" and result["done"] == 2
+    assert sorted(id_ for call in fake() for id_ in call["ids"]) == sorted(
+        [pending.id, new.id]
+    )
+    v4 = {row.news_item_id: row for row in _results(db, prompt_version="news_v4")}
+    assert set(v4) == {pending.id, new.id}
+    assert v4[new.id].ai_theme_candidates_json == []
+    assert len(_results(db, prompt_version="news_v3")) == 5
+    assert _run(db)["calls"] == 0
 
 
-@pytest.mark.parametrize(
-    ("title", "theme", "cause"),
-    [
-        # An ASCII theme is not found inside a longer word.
-        ("Analysts said chip demand rose again", "AI", "theme_not_in_source"),
-        ("Nvidia AI chips sold out", "AI", None),
-        ("Palantir earnings reveal a major AI turning point", "AI", None),
-        ("corners of the chip sector", "chip sector", None),
-        ("AI-driven demand", "AI", None),
-        ("TSMC 5G orders", "5G", None),
-        ("TSMC 15G orders", "5G", "theme_not_in_source"),
-        # A Chinese end needs no boundary.
-        ("輝達AI伺服器出貨", "AI伺服器", None),
-    ],
-)
-def test_an_ascii_theme_is_matched_as_a_whole_word(title, theme, cause):
-    payload = {"title": title, "summary": ""}
-    candidate = {"theme": theme, "reason": "x", "evidence": title}
-    assert news_llm.theme_check(payload, candidate) == cause
-
-
-def _membership(db, symbol, group_name, *, valid_from, valid_to=None):
-    group_id = f"theme-test-{group_name}"
-    if db.get(ThemeGroup, group_id) is None:
-        db.add(
-            ThemeGroup(
-                id=group_id,
-                name=group_name,
-                display_name_zh=group_name,
-                group_type="official_industry",
-                active=True,
-            )
-        )
-        db.flush()  # no ORM relationship orders the inserts
-    instrument = db.scalar(select(Instrument).where(Instrument.symbol == symbol))
+def test_the_api_shows_the_news_v3_result_until_a_news_v4_one(db, client):
+    first, second = _add_news(db, 2)
+    db.add_all([_v3_row(first), _v3_row(second)])
     db.add(
-        GroupMembership(
-            group_id=group_id,
-            instrument_id=instrument.id,
-            valid_from=valid_from,
-            valid_to=valid_to,
+        _v3_row(
+            second,
+            prompt_version="news_v4",
+            ai_summary="v4 摘要",
+            ai_theme_candidates_json=[],
+            ai_impact_direction="positive",
         )
     )
     db.commit()
 
+    old = client.get(f"{router.prefix}/news/{first.id}").json()["ai"]
+    assert (old["prompt_version"], old["summary"]) == ("news_v3", "v3 摘要")
+    assert old["impact_direction"] == "negative"
+    # A news_v3 row keeps its stored themes in the API; no page shows them.
+    assert [theme["theme"] for theme in old["theme_candidates"]] == ["半導體"]
+    new = client.get(f"{router.prefix}/news/{second.id}").json()["ai"]
+    assert (new["prompt_version"], new["summary"]) == ("news_v4", "v4 摘要")
+    assert (new["impact_direction"], new["theme_candidates"]) == ("positive", [])
 
-def test_a_theme_of_a_group_of_the_matched_instrument_is_kept(db, fake):
-    # B: 台積電 (rule-matched) is in 半導體 on the news date; 友達 no longer is.
-    _membership(db, "2330", "半導體", valid_from=date(2026, 1, 1))
-    _membership(
-        db,
-        "2409",
-        "半導體",
-        valid_from=date(2026, 1, 1),
-        valid_to=date(2026, 10, 16),
-    )
-    tsmc, auo, bare = (
-        _add_news(
-            db,
-            1,
-            start=index,
-            title="法說會",
-            summary="說明晶圓代工產能",
-            symbols_json=symbols,
-        )[0]
-        for index, symbols in enumerate((["TWSE:2330"], ["TWSE:2409"], ["2330"]))
-    )
-    result = _run(db)
 
-    assert result["themes_dropped"] == 1
-    themes = {
-        item.id: _results(db, news_item_id=item.id)[0].ai_theme_candidates_json
-        for item in (tsmc, auo, bare)
+@pytest.mark.parametrize(
+    ("version", "expected"),
+    [
+        ("news_v3", ("news_v4", "news_v3")),
+        ("news_v4", ("news_v4", "news_v3")),
+        ("news_v2", ("news_v2",)),
+        (None, ()),
+    ],
+)
+def test_read_versions(version, expected):
+    assert news_llm.read_versions(version) == expected
+
+
+def test_done_results_prefers_the_newest_equivalent_version(db):
+    v3_only, both, v4_pending, older = _add_news(db, 4)
+    db.add_all(
+        [
+            _v3_row(v3_only),
+            _v3_row(both),
+            _v3_row(both, prompt_version="news_v4", ai_summary="v4"),
+            _v3_row(v4_pending),
+            _v3_row(v4_pending, "pending", prompt_version="news_v4"),
+            _v3_row(older, prompt_version="news_v2"),
+        ]
+    )
+    db.commit()
+    ids = [v3_only.id, both.id, v4_pending.id, older.id]
+
+    current = news_llm.done_results(db, ids, PROMPT_VERSION)
+    assert {key: row.prompt_version for key, row in current.items()} == {
+        v3_only.id: "news_v3",
+        both.id: "news_v4",
+        v4_pending.id: "news_v3",
     }
-    semiconductor = [{"theme": "半導體", "reason": "晶圓代工", "evidence": "晶圓代工"}]
-    # 友達's membership ended the day before the news; a bare code matches.
-    assert themes == {tsmc.id: semiconductor, auo.id: [], bare.id: semiconductor}
-
-
-def test_the_current_prompt_asks_for_evidence_from_the_source():
-    text = news_llm.prompt_text()
-    assert PROMPT_VERSION == "news_v3"
-    for rule in (
-        "只列原文寫出的題材，或能由原文寫出的產品、技術、產業名稱直接推得的題材",
-        "不要替它補上原文沒寫的產品或產業",
-        "英文新聞的題材名稱只能是原文寫出的英文詞",
-        "從該則標題或摘要逐字複製的一段連續文字",
-    ):
-        assert rule in text
-    theme = news_llm.OUTPUT_SCHEMA["properties"]["items"]["items"]["properties"][
-        "theme_candidates"
-    ]["items"]
-    assert theme["required"] == ["theme", "reason", "evidence"]
-    assert theme["properties"]["evidence"]["maxLength"] == news_llm.EVIDENCE_MAX_CHARS
+    assert {
+        key: row.prompt_version
+        for key, row in news_llm.done_results(db, ids, "news_v2").items()
+    } == {older.id: "news_v2"}
 
 
 # Issue #450 -------------------------------------------------------------------

@@ -2467,6 +2467,9 @@ def n6(run: Run) -> str:
         text.after(i) == "AI 推論",
         f"`AI 摘要與判讀` 下一行是 {text.after(i)!r}，預期 `AI 推論`",
     )
+    # #676: no AI theme candidates, even of a news_v3 result that has them.
+    shown = [line for line in text.lines if "候選題材" in line or "題材核對" in line]
+    expect(not shown, f"詳情仍顯示 AI 題材候選：{shown!r}")
     ai = detail.get("ai") or {}
     if ai.get("status") == "done":
         prefix = f"模型 {ai.get('model')} · 提示版本 {ai.get('prompt_version')}"
