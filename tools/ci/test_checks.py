@@ -14,7 +14,6 @@ from checks import (
     LINT_COMMANDS,
     ROOT,
     RUNTIME_PATHS,
-    WINDOWS_SCRIPTS_LEFT,
     ac_results,
     anchors,
     change_flags,
@@ -405,7 +404,6 @@ class PrGateTests(unittest.TestCase):
             "backend/data/x.json",
             "frontend/src/App.tsx",
             "tools/ops/watchdog.sh",
-            "tools/Invoke-WorkerJob.ps1",
         ]:
             self.assertIn("a", rules(self.check(body, [path])), path)
         for path in [
@@ -497,7 +495,6 @@ class PrGateTests(unittest.TestCase):
             "backend/app/indicators.py",
             "backend/worker/pipeline.py",
             "tools/ops/agent_guard.cjs",
-            "tools/Register-WorkerSchedule.ps1",
         ]:
             self.assertEqual(rules(self.check(paths=[path])), ["d"], path)
             labelled = self.check(paths=[path], labels=["independent-review"])
@@ -834,8 +831,8 @@ class ShellLineEndings(unittest.TestCase):
 class WindowsRuntime(unittest.TestCase):
     """The Windows execution layer does not come back (#331, #341).
 
-    What runs in the containers (RUNTIME_PATHS) has no Windows logic in its code, and no
-    Windows script is added beside the four the disabled Task Scheduler tasks name (#677).
+    What runs in the containers (RUNTIME_PATHS) has no Windows logic in its code, and the
+    repository has no Windows script (#683).
     """
 
     def check(self, files: dict[str, str]) -> list[str]:
@@ -927,22 +924,29 @@ class WindowsRuntime(unittest.TestCase):
         self.assertEqual(len(errors), 1, errors)
         self.assertTrue(errors[0].startswith("backend/worker/w.py: not read"), errors)
 
-    def test_a_windows_script_outside_the_list_fails(self):
-        files = {name: "x\n" for name in WINDOWS_SCRIPTS_LEFT}
-        files |= {
+    def test_any_windows_script_fails(self):
+        # The four Task Scheduler scripts had an exception until #683 removed them.
+        files = {
+            "tools/Invoke-WorkerJob.ps1": "x\n",
+            "tools/Register-WorkerSchedule.ps1": "x\n",
+            "tools/ops/Register-Monitor.ps1": "x\n",
+            "tools/ops/Register-Watchdog.ps1": "x\n",
             "tools/ops/Register-Daily.ps1": "x\n",
             "tools/run.CMD": "x\n",
             "a/b.bat": "x\n",
         }
         self.assertEqual(
             [error.split(":")[0] for error in self.check(files)],
-            ["a/b.bat", "tools/ops/Register-Daily.ps1", "tools/run.CMD"],
+            [
+                "a/b.bat",
+                "tools/Invoke-WorkerJob.ps1",
+                "tools/Register-WorkerSchedule.ps1",
+                "tools/ops/Register-Daily.ps1",
+                "tools/ops/Register-Monitor.ps1",
+                "tools/ops/Register-Watchdog.ps1",
+                "tools/run.CMD",
+            ],
         )
-
-    def test_every_windows_script_left_exists(self):
-        # They go when the user removes the disabled Task Scheduler tasks (#677); then this list too.
-        for name in WINDOWS_SCRIPTS_LEFT:
-            self.assertTrue((ROOT / name).is_file(), name)
 
     def test_what_serve_runs_is_runtime_code(self):
         serve = (ROOT / "backend/worker/serve.py").read_text(encoding="utf-8")
