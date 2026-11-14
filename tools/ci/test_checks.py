@@ -14,6 +14,7 @@ from checks import (
     LINT_COMMANDS,
     ROOT,
     RUNTIME_PATHS,
+    WINDOWS_SCRIPT,
     ac_results,
     anchors,
     change_flags,
@@ -404,6 +405,7 @@ class PrGateTests(unittest.TestCase):
             "backend/data/x.json",
             "frontend/src/App.tsx",
             "tools/ops/watchdog.sh",
+            "tools/Invoke-WorkerJob.ps1",
         ]:
             self.assertIn("a", rules(self.check(body, [path])), path)
         for path in [
@@ -495,6 +497,7 @@ class PrGateTests(unittest.TestCase):
             "backend/app/indicators.py",
             "backend/worker/pipeline.py",
             "tools/ops/agent_guard.cjs",
+            "tools/Register-WorkerSchedule.ps1",
         ]:
             self.assertEqual(rules(self.check(paths=[path])), ["d"], path)
             labelled = self.check(paths=[path], labels=["independent-review"])
@@ -509,6 +512,10 @@ class PrGateTests(unittest.TestCase):
 
     def test_high_risk_entries_exist(self):
         for entry in HIGH_RISK_PATHS:
+            if WINDOWS_SCRIPT.search(entry):
+                # tools/*.ps1 stays high risk with no file: a PR that adds one and lets
+                # checks.py pass it still needs an independent review (#683, PR #686 review).
+                continue
             self.assertTrue(list(ROOT.glob(entry.rstrip("/"))), entry)
 
     def test_e_reads_only_commits_since_the_merge_base(self):

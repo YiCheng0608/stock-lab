@@ -387,6 +387,7 @@ HIGH_RISK_PATHS: tuple[str, ...] = (
     "backend/app/indicators.py",  # indicator formulas
     "backend/worker/",  # schedules, collectors, strategy formulas
     "tools/ops/",
+    "tools/*.ps1",
 )
 INDEPENDENT_REVIEW_LABEL = "independent-review"
 PRODUCT_PATHS: tuple[str, ...] = (
