@@ -14,8 +14,11 @@ Two subcommands, both read-only:
       For each session (a session id, an id prefix of 8 or more characters, or a
       transcript path): total cost units (input 1, cache read 0.1, cache write 2,
       output 5), the patrol wakes and their average cost, the wakes with no outward
-      action, the first and the largest context, the compactions. #708's sub-tasks use
-      it to show the numbers before and after a change.
+      action, the first and the largest context, the compactions; the outward actions
+      (ACTION matches, each match in a command counted) and the cost per action, the
+      average cost and context per call, and the context of the first call after each
+      compaction (#711 AC-6). #708's sub-tasks use it to show the numbers before and
+      after a change.
 
 A transcript is found under $CLAUDE_CONFIG_DIR/projects/*/<id>.jsonl first, then
 $HOME/.claude/projects/*/<id>.jsonl; several files for one id: the last modified one.
@@ -170,6 +173,7 @@ def turns_of(path: Path) -> tuple[list[dict], list[dict]]:
     compactions: list[dict] = []
     by_id: dict[str, dict] = {}
     cur = None
+    n_calls = 0
     with open(path, encoding="utf-8") as f:
         for line in f:
             try:
@@ -184,7 +188,11 @@ def turns_of(path: Path) -> tuple[list[dict], list[dict]]:
             if kind == "system" and row.get("subtype") == "compact_boundary":
                 meta = row.get("compactMetadata") or {}
                 compactions.append(
-                    {"at": row.get("timestamp"), "pre": meta.get("preTokens")}
+                    {
+                        "at": row.get("timestamp"),
+                        "pre": meta.get("preTokens"),
+                        "after": n_calls,  # index of the first call after it
+                    }
                 )
             # A scheduled task (/loop, cron) starts a turn of its own, not a wake's.
             if kind == "system" and row.get("subtype") == "scheduled_task_fire":
@@ -223,6 +231,7 @@ def turns_of(path: Path) -> tuple[list[dict], list[dict]]:
                         by_id[mid].update(rec)
                     else:
                         cur["calls"].append(rec)
+                        n_calls += 1
                         if mid:
                             by_id[mid] = rec
     return turns, compactions
@@ -244,6 +253,11 @@ def report(path: Path) -> list[str]:
     wake_cost = sum(cost(c) for t in wakes for c in t["calls"])
     quiet_cost = sum(cost(c) for t in quiet for c in t["calls"])
     tokens = {k: sum(c[k] for c in calls) for k in UNIT}
+    actions = sum(len(ACTION.findall(c)) for t in turns for c in t["commands"])
+    after = [
+        f"{ctx[c['after']]:,}" if c["after"] < len(calls) else "（還沒有呼叫）"
+        for c in compactions
+    ]
 
     def pct(x: float, y: float) -> str:
         return f"{100 * x / y:.1f}%" if y else "—"
@@ -257,6 +271,10 @@ def report(path: Path) -> list[str]:
         f"context：第 1 次呼叫 {ctx[0]:,}、最大 {max(ctx):,}、最後 {ctx[-1]:,}；"
         f"400K 以上的呼叫 {sum(1 for x in ctx if x >= 400_000)} 次、成本 "
         f"{pct(sum(cost(c) for c, x in zip(calls, ctx) if x >= 400_000), total)}",
+        f"每次呼叫：平均成本 {total / len(calls):,.0f}、平均 context "
+        f"{sum(ctx) / len(calls):,.0f}",
+        f"對外動作：{actions} 個、每個動作成本 "
+        + (f"{total / actions:,.0f}" if actions else "—"),
     ]
     if wakes:
         n_calls = sum(len(t["calls"]) for t in wakes)
@@ -276,6 +294,8 @@ def report(path: Path) -> list[str]:
             if isinstance(c.get("pre"), int)
         )
     )
+    if compactions:
+        lines.append("壓縮後第 1 次呼叫 context：" + "、".join(after))
     return lines
 
 

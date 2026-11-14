@@ -18,11 +18,20 @@ host directory at /coordination, #338), each with a single writer:
         own call). ``seq`` counts up from 1. ``at`` is the source's own time (or null).
         A quiet event (#440) has one more field, ``quiet``, the reason it needs nobody:
         ``coordinator_comment`` (the comment ends with comment.sh's mark),
-        ``pr_gone``, or ``merge_with_ci`` (a CLEAN or UNSTABLE merge state first seen
-        in the same poll as a new CI result of the same PR and head). A quiet event is
+        ``pr_gone``, ``merge_with_ci`` (a CLEAN or UNSTABLE merge state first seen
+        in the same poll as a new CI result of the same PR and head), and since #711
+        ``monitor_comment`` (the monitor's own 請開統籌 comment on #1), ``echo``
+        (回報：開工, 回報：收到…) and ``task_pr_gone`` (engineer_waiting or
+        engineer_ended of a branch whose PR has left the open list). A quiet event is
         listed by patrol.sh and marked done like any other, but it is not pending: it
         wakes nobody and does not count for the hour before the #1 comment. Lines
         written before #440 have no ``quiet`` and are read as they were.
+        Any other event has ``tier`` (#711), how soon it wakes the coordinator:
+        ``urgent`` at once, tried again every poll while the terminal is not idle;
+        ``now`` at once, a failed wake tried again after WAKE_RETRY; ``batch`` with
+        the next wake, or once the oldest one not notified has waited BATCH_CAP (then
+        as ``now``). Lines written before #711 have no ``tier`` and are read as
+        ``now``. ``tier_of`` says which events get which.
         An engineer session's event (#595) may have one more field, ``detail``: the
         session's whole last message (500 characters at most), printed by patrol.sh.
     {"type": "wake", "at", "ok", "terminal", "upto", "detail"}
@@ -117,6 +126,20 @@ GH_AUTH_ACTION = "請用本機 gh 在 #1 留言，請使用者換 GH_TOKEN（doc
 # The merge gate: CI's required check (docs/WORKFLOW.md, 欄位與唯一來源).
 GATE = "required"
 
+# Wake tiers (#711; the list decided on #711, comment 6880209185).
+URGENT, NOW, BATCH = "urgent", "now", "batch"
+TIER_LABEL = {URGENT: "急件", NOW: "立即", BATCH: "搭下一次"}
+# A batch event wakes the coordinator at the latest this long after it was recorded.
+BATCH_CAP = 900
+# The branches of PRs that left the open list are kept this long (monitor-state.json).
+GONE_BRANCH_DAYS = 7
+# docs/WORKFLOW.md 留言類型: the first line starts with one of these.
+COMMENT_TYPES = ("提問：", "決定：", "回報：", "review：", "統籌承諾：")
+# 回報 comments that are echoes of what the coordinator just did.
+ECHO_REPORTS = ("回報：開工", "回報：收到")
+# The monitor's own 請開統籌 comment on #1 (stale() below words it).
+MONITOR_COMMENT = "事件 monitor `tools/ops/monitor.sh` 自動留言"
+
 
 def iso(epoch: float) -> str:
     return datetime.fromtimestamp(int(epoch), tz=timezone.utc).strftime(
@@ -191,6 +214,12 @@ class Queue:
         self.events = [r for r in records if r.get("type") == "event"]
         self.wakes = [r for r in records if r.get("type") == "wake"]
         self.stales = {r.get("key") for r in records if r.get("type") == "stale"}
+        # The monitor's own #1 comments: not a reason to wake (#711).
+        self.stale_urls = {
+            r.get("url")
+            for r in records
+            if r.get("type") == "stale" and isinstance(r.get("url"), str)
+        }
         self.ids = {e.get("id") for e in self.events}
         self.done = {
             i
@@ -280,7 +309,11 @@ def pr_events(prs: list, previous: list) -> list[dict]:
         ref, url = f"PR #{n}", pr.get("url") or ""
         sha = (pr.get("headRefOid") or "")[:12] or "-"
         title = one_line(pr.get("title") or "", 50)
-        out.append(_event(f"pr:{n}", "pr_opened", ref, f"open PR：{title}", url))
+        # The first CI result comes about 14 minutes later (median, #711): it rides on
+        # that wake.
+        out.append(
+            _event(f"pr:{n}", "pr_opened", ref, f"open PR：{title}", url, tier=BATCH)
+        )
         result = ci_result(pr.get("statusCheckRollup"))
         if result:
             run, state = result
@@ -291,6 +324,7 @@ def pr_events(prs: list, previous: list) -> list[dict]:
                     ref,
                     f"CI {state}（{sha[:7]}，run {run}）：{title}",
                     url,
+                    tier=NOW if state == "success" else URGENT,
                 )
             )
         merge = pr.get("mergeStateStatus") or ""
@@ -302,6 +336,7 @@ def pr_events(prs: list, previous: list) -> list[dict]:
                     ref,
                     f"mergeStateStatus={merge}（{sha[:7]}）：{title}",
                     url,
+                    tier=URGENT if merge == "DIRTY" else NOW,
                 )
             )
     for n in previous:
@@ -329,9 +364,32 @@ def quiet_merge_states(new: list[dict]) -> None:
         _, number, sha, state = e["id"].split(":", 3)
         if state in QUIET_MERGE_STATES and (number, sha) in heads:
             e["quiet"] = "merge_with_ci"
+            e.pop("tier", None)
 
 
-def comment_events(comments: list, origin: float) -> list[dict]:
+def comment_tier(text: str, number: str, monitor_own: bool) -> tuple[str, str | None]:
+    """(tier, quiet reason) of a comment not marked by comment.sh; TEXT is the body, or
+    its summary (the replay reads that), NUMBER the Issue or PR number."""
+    if monitor_own or MONITOR_COMMENT in text:
+        return NOW, "monitor_comment"
+    if number == "1":
+        return URGENT, None
+    first = text.lstrip()
+    if first.startswith(ECHO_REPORTS):
+        return NOW, "echo"
+    if first.startswith("提問："):
+        return URGENT, None
+    if first.startswith("回報："):
+        return BATCH, None
+    if first.startswith(COMMENT_TYPES):
+        return NOW, None
+    return URGENT, None  # no type: the user, or someone who needs an answer
+
+
+def comment_events(
+    comments: list, origin: float, monitor_urls: set[str] | None = None
+) -> list[dict]:
+    """MONITOR_URLS: the monitor's own #1 comments (its stale lines)."""
     out = []
     for c in comments:
         if not isinstance(c, dict) or c.get("id") is None:
@@ -342,15 +400,21 @@ def comment_events(comments: list, origin: float) -> list[dict]:
             continue
         number = (c.get("issue_url") or "").rsplit("/", 1)[-1]
         body = c.get("body") or ""
+        url = c.get("html_url") or ""
+        if coordinator_comment(body):
+            tier, quiet = NOW, "coordinator_comment"
+        else:
+            tier, quiet = comment_tier(body, number, url in (monitor_urls or set()))
         out.append(
             _event(
                 f"comment:{c['id']}",
                 "comment",
                 f"#{number}",
                 one_line(without_mark(body)),
-                c.get("html_url") or "",
+                url,
                 at=created,
-                quiet="coordinator_comment" if coordinator_comment(body) else None,
+                quiet=quiet,
+                tier=tier,
             )
         )
     return out
@@ -361,9 +425,12 @@ def _fields(rest: str) -> dict:
 
 
 def job_events(logs: Path, origin: float) -> list[dict]:
-    """daily: every end line. news: an end line whose news or news-llm part failed."""
+    """daily: every end line (a success is batch, a failure urgent). news: an end line
+    whose news or news-llm part failed; now when the end line before it (in the files
+    read) did not fail, batch when it repeats a failure (#711 決定 6880209185)."""
     out = []
     for job in ("daily", "news"):
+        before_failed = False
         for path in sorted(logs.glob(f"{job}-*.log"))[-JOB_FILES:]:
             try:
                 text = path.read_text(encoding="utf-8", errors="replace")
@@ -371,15 +438,20 @@ def job_events(logs: Path, origin: float) -> list[dict]:
                 continue
             for line in text.splitlines():
                 m = END_LINE.match(line.strip())
-                if not m or (epoch(m.group(1)) or 0) < origin:
+                if not m:
                     continue
                 fields = _fields(m.group(2))
                 failed = fields.get("exit") != "0" or fields.get("news_llm_exit") in (
                     "1",
                     "wrapper_error",
                 )
-                if job == "news" and not failed:
+                repeated, before_failed = before_failed, failed
+                if (epoch(m.group(1)) or 0) < origin or (job == "news" and not failed):
                     continue
+                if job == "daily":
+                    tier = URGENT if failed else BATCH
+                else:
+                    tier = BATCH if repeated else NOW
                 out.append(
                     _event(
                         f"job:{path.name}:{m.group(1)}",
@@ -388,6 +460,7 @@ def job_events(logs: Path, origin: float) -> list[dict]:
                         f"{path.name} 結束 {m.group(2)}",
                         "",
                         at=m.group(1),
+                        tier=tier,
                     )
                 )
     return out
@@ -411,6 +484,7 @@ def gh_auth_events(
                 f"GitHub 拒絕 monitor 的 gh（{one_line(refused, 120)}）：{GH_AUTH_ACTION}",
                 "",
                 at=iso(now),
+                tier=URGENT,
             )
         )
     try:
@@ -429,6 +503,7 @@ def gh_auth_events(
                 f"看門狗的 gh 被 GitHub 拒絕（{m.group(1)}），無法在 #1 留言：{GH_AUTH_ACTION}",
                 "",
                 at=m.group(1),
+                tier=URGENT,
             )
         )
     return out
@@ -477,8 +552,49 @@ def slot_events(worktrees: dict) -> list[dict]:
             "並行名額",
             f"task worktree {len(branches)} 個（上限 {SLOTS}）：{names}",
             "",
+            tier=BATCH,
         )
     ]
+
+
+def gone_branches(
+    state: dict, prs, now: float
+) -> tuple[dict[str, str] | None, dict[str, str], set[str] | None]:
+    """(open PR branches by number, gone branches with when they left, the gone set for
+    the session events) after this poll (#711). A PR that was open in the last poll and
+    is not now leaves its head branch in the gone map for GONE_BRANCH_DAYS; a branch
+    with an open PR again is taken out. The set is None when the state had no map (a
+    state that cannot be read, or the first poll since #711): then a waiting session
+    stays batch, never quiet."""
+    before = state.get("pr_branches")
+    before = before if isinstance(before, dict) else {}
+    known = isinstance(state.get("gone_branches"), dict)
+    gone = (
+        {
+            b: at
+            for b, at in (state.get("gone_branches") or {}).items()
+            if isinstance(b, str)
+            and isinstance(at, str)
+            and now - (epoch(at) or 0) < GONE_BRANCH_DAYS * 86400
+        }
+        if known
+        else {}
+    )
+    if not isinstance(prs, list):
+        return None, gone, (set(gone) if known else None)
+    current = {
+        str(p["number"]): p.get("headRefName")
+        for p in prs
+        if isinstance(p, dict)
+        and isinstance(p.get("number"), int)
+        and isinstance(p.get("headRefName"), str)
+    }
+    for number, branch in before.items():
+        if number not in current and isinstance(branch, str):
+            gone[branch] = iso(now)
+    for branch in current.values():
+        gone.pop(branch, None)
+    return current, gone, (set(gone) if known else None)
 
 
 def task_branches(worktrees) -> set[str] | None:
@@ -498,7 +614,17 @@ def _str(doc: dict, key: str) -> str:
     return value if isinstance(value, str) else ""
 
 
-def _session_event(doc, now: float, branches: set[str] | None) -> dict | None:
+def failed_tier(error: str) -> str:
+    """A turn ended on an API error: a usage limit (the coordinator shares the account
+    and waits too) rides on the next wake, any other error is urgent (#711)."""
+    return BATCH if error == "rate_limit" else URGENT
+
+
+def _session_event(
+    doc, now: float, branches: set[str] | None, gone: set[str] | None = None
+) -> dict | None:
+    """GONE: the branches whose PR has left the open list; None when not known (then a
+    waiting or ended session is batch, never quiet)."""
     """One state file's event, or None; every field checked for its type (#595 review:
     a list for a branch made the whole record fail)."""
     if not isinstance(doc, dict):
@@ -517,6 +643,7 @@ def _session_event(doc, now: float, branches: set[str] | None) -> dict | None:
     url = ISSUE_URL.format(issue) if issue is not None else ""
     message = _str(doc, "last_message")
     head = one_line(message, 120) or "（沒有訊息）"
+    quiet = None
     if state == "stopped" and doc.get("commented") is not True:
         if now - at <= WAITING_AFTER:
             return None
@@ -533,6 +660,7 @@ def _session_event(doc, now: float, branches: set[str] | None) -> dict | None:
         )
     elif state == "failed":
         kind = "engineer_failed"
+        tier = failed_tier(_str(doc, "error"))
         details = one_line(_str(doc, "error_details"), 120)
         summary = (
             f"工程師 session {sid[:8]} 回合因 API 錯誤中斷"
@@ -546,14 +674,27 @@ def _session_event(doc, now: float, branches: set[str] | None) -> dict | None:
         )
     else:
         return None
-    event = _event(f"{kind}:{sid}:{ended}", kind, ref, summary, url, at=ended)
+    if kind != "engineer_failed":
+        tier = BATCH
+        if gone is not None and _str(doc, "branch") in gone:
+            quiet = "task_pr_gone"
+    event = _event(
+        f"{kind}:{sid}:{ended}",
+        kind,
+        ref,
+        summary,
+        url,
+        at=ended,
+        quiet=quiet,
+        tier=tier,
+    )
     if message:
         event["detail"] = message
     return event
 
 
 def session_events(
-    logs: Path, now: float, branches: set[str] | None
+    logs: Path, now: float, branches: set[str] | None, gone: set[str] | None = None
 ) -> tuple[list[dict], dict[str, str]]:
     """The turn hook's state files (#595) and the ones skipped, {"<file>:<mtime ns>":
     "<file> <reason>"}:
@@ -572,7 +713,7 @@ def session_events(
     for path in paths:
         try:
             doc = json.loads(path.read_text(encoding="utf-8"))
-            event = _session_event(doc, now, branches)
+            event = _session_event(doc, now, branches, gone)
         except Exception as error:  # any bad file is skipped alone
             try:
                 key = f"{path.name}:{path.stat().st_mtime_ns}"
@@ -588,7 +729,14 @@ def session_events(
 
 
 def _event(
-    id_: str, kind: str, ref: str, summary: str, url: str, at=None, quiet=None
+    id_: str,
+    kind: str,
+    ref: str,
+    summary: str,
+    url: str,
+    at=None,
+    quiet=None,
+    tier: str = NOW,
 ) -> dict:
     event = {
         "id": id_,
@@ -600,7 +748,35 @@ def _event(
     }
     if quiet:
         event["quiet"] = quiet
+    else:
+        event["tier"] = tier
     return event
+
+
+def tier_of(event: dict) -> str:
+    """A line written before #711 has no tier: it woke at once, as now."""
+    tier = event.get("tier")
+    return tier if tier in TIER_LABEL else NOW
+
+
+def wake_due(
+    unnotified: list[dict], new: list[dict], now: float, retry_due: bool
+) -> bool:
+    """Whether a poll wakes the coordinator (#711): an urgent event not notified yet, on
+    every poll; a new now event; a now event, or a batch event recorded BATCH_CAP ago,
+    when a failed wake is due again (or none failed). The replay
+    (tools/ops/wake_replay.py) decides with this too."""
+    tiers = [tier_of(e) for e in unnotified]
+    if URGENT in tiers:
+        return True
+    if any(not e.get("quiet") and tier_of(e) == NOW for e in new):
+        return True
+    oldest = min(
+        (epoch(e.get("detected_at")) or now for e in unnotified if tier_of(e) == BATCH),
+        default=None,
+    )
+    capped = oldest is not None and now - oldest >= BATCH_CAP
+    return retry_due and (NOW in tiers or capped)
 
 
 # --- subcommands -------------------------------------------------------------------
@@ -630,6 +806,10 @@ def record(
         "polled_at": iso(now),
         "jobs": job_tails(job_logs),
     }
+    open_branches, gone, gone_set = gone_branches(q.state, prs, now)
+    state["gone_branches"] = gone
+    if open_branches is not None:
+        state["pr_branches"] = open_branches
     if isinstance(prs, list):
         found += pr_events(prs, q.state.get("pr_numbers") or [])
         state["pr_numbers"] = [
@@ -644,7 +824,7 @@ def record(
         ]
         state["prs_at"] = iso(now)
     if isinstance(comments, list):
-        found += comment_events(comments, epoch(origin) or 0)
+        found += comment_events(comments, epoch(origin) or 0, q.stale_urls)
         newest = max(
             (epoch(c.get("updated_at")) or 0 for c in comments if isinstance(c, dict)),
             default=0,
@@ -655,7 +835,7 @@ def record(
     found += gh_auth_events(job_logs, epoch(origin) or 0, now, gh_refused)
     if isinstance(worktrees, dict) and worktrees.get("ok") is True:
         found += slot_events(worktrees)
-    sessions, skipped = session_events(logs, now, task_branches(worktrees))
+    sessions, skipped = session_events(logs, now, task_branches(worktrees), gone_set)
     found += sessions
     new = []
     seq = q.seq
@@ -678,9 +858,9 @@ def record(
         or last.get("ok")
         or now - (epoch(last.get("at")) or 0) >= WAKE_RETRY
     )
-    # A quiet event does not bring a failed wake forward either (#440).
-    loud = [e for e in new if not e.get("quiet")]
-    wake = bool(unnotified) and (bool(loud) or retry_due)
+    # A quiet event does not bring a failed wake forward either (#440); the tiers
+    # decide the rest (#711).
+    wake = bool(unnotified) and wake_due(unnotified, new, now, retry_due)
     handle, _, _ = _heartbeat(logs)
     # monitor.sh logs them (session_skipped), each file once until it changes (by its
     # mtime), not on every poll; the poll goes on.
@@ -781,12 +961,14 @@ def beat(
     _write_json(logs / BEAT, value)
 
 
-def _event_lines(events: list[dict]) -> list[str]:
+def _event_lines(events: list[dict], tiers: bool = False) -> list[str]:
     out = []
     for e in events:
         at = e.get("at") or e.get("detected_at") or ""
+        label = f"{TIER_LABEL[tier_of(e)]} " if tiers else ""
         out.append(
-            f"  [{e.get('seq')}] {e.get('kind')} {e.get('ref')} {at} {e.get('summary')}"
+            f"  {label}[{e.get('seq')}] {e.get('kind')} {e.get('ref')} {at}"
+            f" {e.get('summary')}"
         )
         if e.get("url"):
             out.append(f"      {e['url']}")
@@ -802,8 +984,21 @@ def pending_lines(logs: Path) -> list[str]:
     events, quiet = q.pending(), q.quiet()
     if events:
         seqs = [e.get("seq") for e in events]
-        out = [f"未處理事件：{len(events)} 個（seq {min(seqs)}～{max(seqs)}）"]
-        out += _event_lines(events)
+        head = f"未處理事件：{len(events)} 個（seq {min(seqs)}～{max(seqs)}）"
+        batch = [e for e in events if tier_of(e) == BATCH]
+        if batch:
+            # The batch events no wake has covered yet wake by the oldest one's cap.
+            upto = q.notified_upto()
+            waiting = [
+                epoch(e.get("detected_at"))
+                for e in batch
+                if (e.get("seq") or 0) > upto and epoch(e.get("detected_at"))
+            ]
+            head += f"；搭下一次 {len(batch)} 個" + (
+                f"，最晚 {iso(min(waiting) + BATCH_CAP)} 喚醒" if waiting else ""
+            )
+        out = [head]
+        out += _event_lines(events, tiers=True)
     else:
         out = ["未處理事件：0 個"]
     if quiet:
@@ -811,7 +1006,8 @@ def pending_lines(logs: Path) -> list[str]:
         seqs = [e.get("seq") for e in quiet]
         out.append(
             f"不喚醒的事件：{len(quiet)} 個（seq {min(seqs)}～{max(seqs)}；"
-            "統籌自己的留言、PR 離開 open、與 CI 同輪的 CLEAN／UNSTABLE，不用處理，"
+            "統籌自己的留言、PR 離開 open、與 CI 同輪的 CLEAN／UNSTABLE、monitor 自己的"
+            " #1 留言、回報：開工／收到、PR 已離開 open 的工程師 session，不用處理，"
             "--done 一併標記）"
         )
         out += _event_lines(quiet)

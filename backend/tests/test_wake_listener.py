@@ -298,6 +298,8 @@ def test_an_ended_terminal_is_a_failed_wake_not_a_sent_one(h, listener) -> None:
 
 @needs_exec_orca
 def test_a_missing_listener_is_a_failed_wake_tried_again_after_ten_minutes(h) -> None:
+    # A now event: an urgent one (a comment with no type) is tried every poll (#711).
+    h.answer("gh_comments", [_comment(9, "2026-10-25T11:50:00Z", body="review：可")])
     down = Listener(h)  # not started
     result = _container_monitor(h, down)
     assert "wake=failed terminal=term_coord" in result.stdout

@@ -31,7 +31,13 @@ import worker.job as job
 from app.migration_revisions import REVISIONS
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPTS = ("deploy.sh", "coordinator_lib.sh", "coordinator_json.py", "db_revision.py")
+SCRIPTS = (
+    "deploy.sh",
+    "coordinator_lib.sh",
+    "coordinator_json.py",
+    "db_revision.py",
+    "comment.sh",
+)
 PROJECT = "stock-lab"
 # docker-compose.yml before and after #340: only the second tags the images.
 COMPOSE_BEFORE = "x-backend: &backend\n  image: ${COMPOSE_PROJECT_NAME}-backend\n"
@@ -71,9 +77,18 @@ d="$FAKE_DIR"
 printf '%s\n' "$*" >>"$d/gh_calls.log"
 case "$1 $2" in
   "run list") cat "$d/gh_run_list.json" 2>/dev/null || echo '[]' ;;
-  "issue comment")
-    while [ $# -gt 0 ]; do [ "$1" = --body-file ] && cp "$2" "$d/comment.md"; shift; done
-    [ -f "$d/gh_comment_fails" ] && exit 1 ;;
+  "api repos/YiCheng0608/stock-lab/issues/"*/comments)
+    # comment.sh (#711): the request on stdin; comment.md is the body without the mark.
+    cat >"$d/comment.json"
+    [ -f "$d/gh_comment_fails" ] && exit 1
+    "$FAKE_PYTHON" -X utf8 -c '
+import json, sys
+body = json.load(open(sys.argv[1], encoding="utf-8"))["body"]
+mark = "\n\n<!-- stock-lab:coordinator -->"
+assert body.endswith(mark), body
+open(sys.argv[2], "w", encoding="utf-8", newline="\n").write(body[: -len(mark)] + "\n")
+' "$d/comment.json" "$d/comment.md" || exit 1
+    echo '{"html_url": "https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-1"}' ;;
 esac
 exit 0
 """
@@ -587,8 +602,10 @@ def test_the_comment_on_1_names_the_tag_head_images_and_record(harness):
     assert result.code == 0, result.out
     record = harness.record
     sha = harness.sha["v2"]
-    (call,) = [c for c in harness.calls("gh") if c.startswith("issue comment")]
-    assert call.startswith("issue comment 1 --repo YiCheng0608/stock-lab --body-file ")
+    (call,) = [c for c in harness.calls("gh") if "/comments" in c]
+    assert call == (
+        "api repos/YiCheng0608/stock-lab/issues/1/comments --method POST --input -"
+    )
     comment = (harness.fake / "comment.md").read_text(encoding="utf-8")
     assert comment == (
         "部署：tag `v2` 的 image 已以 `docker compose up -d` 啟動\n"
@@ -604,6 +621,30 @@ def test_the_comment_on_1_names_the_tag_head_images_and_record(harness):
         "（`tools/ops/deploy.sh` 自動留言；部署記錄在 volume 的 `/data/logs/deploy.json`，"
         "看門狗以它核對 scheduler 跑的 image。）\n"
     )
+
+
+def test_the_comment_on_1_has_the_coordinator_mark_and_wakes_nobody(harness):
+    """#711 AC-4: the comment goes through comment.sh, so its last line is the
+    coordinator mark and the event monitor queues it quiet (coordinator_comment)."""
+    assert harness.deploy("v2").code == 0
+    request = json.loads((harness.fake / "comment.json").read_text(encoding="utf-8"))
+    assert request["body"].endswith("\n\n<!-- stock-lab:coordinator -->")
+    sys.path.insert(0, str(ROOT / "tools" / "ops"))
+    try:
+        import event_queue
+    finally:
+        sys.path.remove(str(ROOT / "tools" / "ops"))
+    comment = {
+        "id": 9,
+        "created_at": "2026-11-14T12:00:00Z",
+        "issue_url": "https://api.github.com/repos/YiCheng0608/stock-lab/issues/1",
+        "html_url": "https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-9",
+        "body": request["body"],
+    }
+    (event,) = event_queue.comment_events([comment], 0)
+    assert event["quiet"] == "coordinator_comment"
+    assert event["summary"].startswith("部署：tag `v2` 的 image")
+    assert not [c for c in harness.calls("gh") if c.startswith("issue")]
 
 
 def test_the_first_deploy_comments_that_there_was_no_previous_image(harness):
