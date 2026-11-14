@@ -30,7 +30,8 @@ the day's log skips (``already_sent``), so a restarted scheduler never sends twi
 ``skipped reason=too_late`` otherwise, whatever APScheduler does with a missed trigger. A
 network failure, a timeout, a 5xx or a 429 is tried once more (``_attempt``); another 4xx is
 not. A failure is ``failed`` with every attempt's reason and exit 1, which the watchdog
-reports (``notify_failed``; ``notify_missing`` when the day has no end line).
+reports (``notify_failed``; ``notify_missing`` when the day has no end line;
+``notify_missed`` when a trading day has only ``too_late``).
 
 Not through ``worker.job`` (#728 decision 6881879639): the run only reads the database and
 sends one request, so it needs neither the memory threshold nor the git check, and it runs
@@ -575,18 +576,21 @@ class _Run:
             return 0, f"status={SKIPPED} reason=already_running"
         if SENT in already:
             return 0, f"status={SKIPPED} reason=already_sent"
-        if self.args.trigger == "scheduler":
-            # The job's own rule, whatever APScheduler does with a missed 08:45 (a host
-            # asleep at 08:45 runs it as it wakes, #728 review 6882303076): no message
-            # of the morning after the close.
-            moment = _clock(self.args)
-            if not in_send_window(moment):
-                return 0, (
-                    f"status={SKIPPED} reason=too_late at={moment.strftime('%H:%M')}"
-                )
         with _session() as db:
             if not is_trading_day(db, self.today):
                 return 0, f"status={SKIPPED} reason=non_trading_day"
+            if self.args.trigger == "scheduler":
+                # The job's own rule, whatever APScheduler does with a missed 08:45 (a
+                # host asleep at 08:45 runs it as it wakes, #728 review 6882303076): no
+                # message of the morning after the close. After the trading-day check, so
+                # that too_late marks a missed trading day only, which the watchdog
+                # reports (notify_missed, review 6882535482).
+                moment = _clock(self.args)
+                if not in_send_window(moment):
+                    return 0, (
+                        f"status={SKIPPED} reason=too_late"
+                        f" at={moment.strftime('%H:%M')}"
+                    )
             if not configured():
                 missing = [
                     name

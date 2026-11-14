@@ -523,6 +523,15 @@ if compgen -G "$logs/notify-*.log" >/dev/null && [ "$taipei_dow" -le 5 ] \
       status=failed*)
         anomaly notify_failed "每日 Telegram 通知：今天（$taipei_iso）的通知送失敗（\`${notify_last:0:300}\`），請查 \`logs/notify-$taipei_date.log\`：token 或 chat id 錯誤時更正發佈 checkout 的認證檔並重建 scheduler，網路問題恢復後以 $notify_resend 補送。"
         ;;
+      "")
+        # Only skips: a scheduled run outside 08:45-13:30 on a trading day (the host
+        # asleep at 08:45, review 6882535482) records too_late and nothing else.
+        notify_late="$(sed -nE 's/^--- result status=skipped reason=too_late at=([0-9:]+).*/\1/p' \
+          "$notify_log" | tail -n 1)"
+        if [ -n "$notify_late" ]; then
+          anomaly notify_missed "每日 Telegram 通知：今天（$taipei_iso）08:45～13:30 scheduler 沒有送出（\`too_late at=$notify_late\`：排程到 $notify_late 才跑，主機可能睡眠或 scheduler 停過），收盤後不補送；請查主機與 \`docker logs\` 的 scheduler 是否在 08:45 前後運作。"
+        fi
+        ;;
     esac
   fi
 fi

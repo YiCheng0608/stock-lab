@@ -573,6 +573,21 @@ def test_a_manual_run_sends_after_the_close(run_env):
 
 
 @linux_only
+def test_a_closed_day_after_the_close_is_a_non_trading_day_not_too_late(run_env, db):
+    """too_late marks a missed trading day only (review 6882535482): the watchdog reports
+    it, so a holiday's scheduled run at 20:00 records non_trading_day."""
+
+    server = run_env.telegram()
+    _closed(db, MONDAY)
+    db.commit()
+    assert _send(run_env, at="20:00") == 0
+    assert server.requests == []
+    log = _log(run_env)
+    assert "--- result status=skipped reason=non_trading_day" in log
+    assert "too_late" not in log
+
+
+@linux_only
 def test_the_token_is_in_no_log_output_or_error(run_env, monkeypatch, capsys):
     # An answer that echoes the token, then the network gone (a closed port).
     server = run_env.telegram((500, {"ok": False, "description": f"bad bot{TOKEN}"}))

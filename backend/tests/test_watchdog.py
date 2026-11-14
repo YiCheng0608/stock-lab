@@ -2551,3 +2551,31 @@ def test_a_failure_sent_again_by_hand_is_not_reported(wd):
         "status=sent attempts=1 message_id=10",
     )
     assert "key=notify_" not in wd.run("--dry-run", now=MORNING).stdout
+
+
+def test_a_trading_day_the_scheduler_missed_is_reported(wd):
+    """The host asleep at 08:45, the missed trigger run at 20:00: too_late only (review
+    6882535482). Reported once, without the manual resend: no message after the close."""
+
+    _healthy_daily_and_news(wd)
+    _notify_log(wd, "20261019", "status=skipped reason=too_late at=20:00")
+    evening = MORNING + 11 * 3600  # 20:15
+    result = wd.run("--dry-run", now=evening)
+    assert "anomaly_planned key=notify_missed " in result.stdout
+    assert "08:45～13:30 scheduler 沒有送出（`too_late at=20:00`" in result.stdout
+    assert "收盤後不補送" in result.stdout
+    assert "notify --send --trigger manual" not in result.stdout
+    wd.run(now=evening)
+    wd.run(now=evening + 30 * 60)
+    assert wd.text("gh_bodies.txt").count("scheduler 沒有送出") == 1
+
+
+def test_a_missed_day_sent_by_hand_later_is_not_reported(wd):
+    _healthy_daily_and_news(wd)
+    _notify_log(
+        wd,
+        "20261019",
+        "status=skipped reason=too_late at=20:00",
+        "status=sent attempts=1 message_id=11",
+    )
+    assert "key=notify_" not in wd.run("--dry-run", now=MORNING + 11 * 3600).stdout
