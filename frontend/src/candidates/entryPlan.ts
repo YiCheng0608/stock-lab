@@ -56,22 +56,23 @@ export function entryText(parts: readonly EntryPart[]): string {
   return parts.map((part) => part.text).join('')
 }
 
-// The signal's levels; a breakout's stop < entry < target (risk_levels), a pullback's stop < target.
+// The signal's levels; a breakout's stop < entry < target (risk_levels), a pullback's stop < target. The sentence states the
+// rule's prices, not an instruction to buy (Issue 693: the rules have no evidence of an edge, docs/spec/evidence.md).
 function mainParts(type: EntryType, item: PlanItem): EntryPart[] | null {
   const { levels } = item
   const day = formatDate(item.trading_date)
   const stop = levels?.invalid_price
   const target = levels?.target_1
   if (!day || !isPrice(stop) || !isPrice(target)) return null
-  const tail: EntryPart[] = [{ text: '；跌破 ' }, price(stop, 'level-stop'), { text: '停損', term: 'support' }, { text: '，' }, { text: '目標', term: 'target' }, { text: ' ' }, price(target, 'level-target')]
+  const tail: EntryPart[] = [{ text: '（T+1 起），' }, { text: '停損', term: 'support' }, { text: ' ' }, price(stop, 'level-stop'), { text: '，' }, { text: '目標', term: 'target' }, { text: ' ' }, price(target, 'level-target')]
   if (type === 'breakout') {
     const entry = levels.entry ?? levels.entry_zone?.low
     if (!isPrice(entry) || !(stop < entry && entry < target)) return null
-    return [{ text: `${day} 收盤已突破 ` }, price(entry), { text: '。明天起在 ' }, price(entry, 'level-entry'), { text: '附近可進場' }, ...tail]
+    return [{ text: `${day} 收盤已突破 ` }, price(entry), { text: '。規則進場價 ' }, price(entry, 'level-entry'), ...tail]
   }
   const { low, high } = levels.entry_zone ?? { low: null, high: null }
   if (!isPrice(low) || !isPrice(high) || low > high || !(stop < target)) return null
-  return [{ text: `${day} 已拉回到支撐區。明天起在 ` }, range(low, high, 'level-entry'), { text: '之間可進場' }, ...tail]
+  return [{ text: `${day} 已拉回到支撐區。規則進場區 ` }, range(low, high, 'level-entry'), ...tail]
 }
 
 export function entryPlanView(item: PlanItem, options: { onStockPage?: boolean } = {}): EntryPlanView {

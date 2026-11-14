@@ -766,6 +766,9 @@ a.symbol-link:hover { color: var(--color-primary); }
 .candidate-notes { flex: 1 1 320px; margin: 0; }
 .candidate-t1 + .candidate-disclaimer::before { content: " "; }
 .candidates-strategy-link { white-space: nowrap; }
+/* 現行規則尚無證據 (Issue 693): its own line under the head, the warning colour; the link keeps the link colour. */
+.candidate-evidence { flex: 1 1 100%; margin: 0; color: var(--color-warning); }
+.strategy-candidate-evidence { color: var(--color-warning); }
 /* 隔夜美股 (Issue 681, DESIGN_SYSTEM §5 候選列表): one line of inline runs under the head (no flex: innerText keeps it one
    line), wrapping between the four indexes; the changes are mono numbers, red up and green down. */
 .overnight-us { margin: calc(-1 * var(--space-1)) 0 var(--space-3); color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1.6; }
@@ -1131,6 +1134,7 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .candidates-head .board-dates { flex-wrap: nowrap; gap: var(--space-1); }
   .candidates-head .badge { padding: 2px 8px; font-size: var(--text-xs); }
   .candidate-notes { order: 9; flex: 1 1 100%; line-height: 1.5; }
+  .candidate-evidence { order: 10; line-height: 1.5; }
   .candidates-strategy-link { margin-left: auto; font-size: var(--text-sm); }
   /* A row on phones (#510): the title stays one line (market · group cut first) with the AI entry at its right
      (Issue 608: beside the numbers it covered the total), the sentence takes the whole width; the close, RR and
@@ -1197,3 +1201,5 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
 @media (max-width: 860px) {
   .strategy-grid-3, .strategy-grid-2 { grid-template-columns: 1fr; }
 }
+/* Issue 693: the 現行規則尚無證據 note in the 策略說明 head reads at body size, like the warning boxes elsewhere. */
+.strategy-page .page-title .strategy-evidence-note { max-width: 760px; margin-top: var(--space-3); font-size: 15px; }

@@ -14,6 +14,7 @@ import { industryBoard } from './themes/themeBoards.fixtures'
 import { TODAY_BOARD_LIMIT } from './themes/themeBoards'
 import { HoldingAlert } from './today/TodayViews'
 import { overviewBoth, riskActions } from './today/today.fixtures'
+import { EVIDENCE_CLOSING, EVIDENCE_FINDINGS, EVIDENCE_PATH, EVIDENCE_SECTION_ID, NO_EVIDENCE_LINK_LABEL, NO_EVIDENCE_TEXT, issueLabel } from './strategy/evidence'
 import { planLink } from './tracking/tracking'
 import type { Dashboard } from './types'
 
@@ -78,7 +79,7 @@ check(text(watch).split(WATCH_PURPOSE).length === 2 && !/<details class="details
 check(!watch.includes('找不到此頁'), '/watch 不是 404')
 const strategy = render('/strategy', <App />)
 check(strategy.includes('<h1>策略說明</h1>'), '/strategy 的頁面標題是「策略說明」')
-for (const heading of ['今日名單怎麼來', '突破型', '回踩型', '怎麼照著做', '我的追蹤在做什麼']) {
+for (const heading of ['今日名單怎麼來', '突破型', '回踩型', '研究結論：現行規則尚無證據', '名單上的價位怎麼讀', '我的追蹤在做什麼']) {
   check(text(strategy).includes(heading), `/strategy 缺「${heading}」`)
 }
 // 策略說明 names the strategy, then writes its thresholds and weights (#577; UI_COPY_SPEC §13; the numbers restate
@@ -95,7 +96,7 @@ const firstParagraph = flat(/<\/h2><p>([\s\S]*?)<\/p>/.exec(block)?.[1] ?? '')
 for (const part of ['順勢籌碼型', '只做多頭趨勢', '所屬族群比大盤強', '三大法人沒有明顯賣超', '融資沒有過熱', '大盤好壞目前不影響判斷', '突破型（breakout_v3）', '回踩型（pullback_v4）', '候選總分（candidate_score_v7）']) {
   check(firstParagraph.includes(part.replace(/\s+/g, '')), `/strategy 策略區塊第一段缺「${part}」: ${firstParagraph}`)
 }
-check(strategyText.indexOf('順勢籌碼型') < strategyText.indexOf('今日名單怎麼來') && strategy.indexOf('data-strategy="trend_chips"') < strategy.indexOf('aria-labelledby="strategy-follow-title"'), '/strategy 先寫策略名稱與區塊，再寫「怎麼照著做」')
+check(strategyText.indexOf('順勢籌碼型') < strategyText.indexOf('今日名單怎麼來') && strategy.indexOf('data-strategy="trend_chips"') < strategy.indexOf('aria-labelledby="strategy-follow-title"'), '/strategy 先寫策略名稱與區塊，再寫「名單上的價位怎麼讀」')
 // The three confirmations, each with its threshold, in a table.
 const tables = [...block.matchAll(/<table[\s\S]*?<\/table>/g)].map((match) => match[0])
 check(tables.length === 2 && tables.every((table) => table.includes('class="action-table"')), `/strategy 策略區塊有兩張表（確認條件、評分權重），got ${tables.length}`)
@@ -120,6 +121,19 @@ for (const part of ['20 日平均成交量至少 1,000 張', '最多列 20 檔',
 // Every term on the page opens a glossary entry; the page has no switch, "other strategies" or "coming soon" block.
 const strategyTerms = [...strategy.matchAll(/data-term="([^"]+)"/g)].map((match) => match[1])
 for (const id of ['trend_chips', 'candidate_score', 'percentile', 'breakout', 'pullback', 't_plus_1', 'entry_zone', 'support', 'target', 'rr']) check(strategyTerms.includes(id), `/strategy 的詞彙按鈕 ${id} 要開得了詞條（found ${strategyTerms.join('、')}）`)
+// Issue 693 (decision 6873621771): the head says the rules have no evidence and links to the 研究結論 section, which comes
+// before the strategy block; 名單上的價位怎麼讀 reads the prices without a promise of a gain.
+const evidenceNote = /<p class="warning-box strategy-evidence-note">([\s\S]*?)<\/p>/.exec(strategy)?.[1] ?? ''
+check(text(evidenceNote).trim() === `${NO_EVIDENCE_TEXT} ${NO_EVIDENCE_LINK_LABEL}` && evidenceNote.includes(`href="${EVIDENCE_PATH}"`), `/strategy 頁首有「現行規則尚無證據」標示並連到 ${EVIDENCE_PATH}: ${evidenceNote}`)
+check(strategy.indexOf('class="warning-box strategy-evidence-note"') < strategy.indexOf('</section>'), '/strategy 的標示在頁首區塊內')
+const evidenceSection = strategy.slice(strategy.indexOf(`id="${EVIDENCE_SECTION_ID}"`), strategy.indexOf('data-strategy="trend_chips"'))
+check(strategy.includes(`<section class="strategy-section" id="${EVIDENCE_SECTION_ID}"`) && strategy.indexOf(`id="${EVIDENCE_SECTION_ID}"`) < strategy.indexOf('data-strategy="trend_chips"'), '/strategy 的「研究結論」區塊有錨點、排在策略區塊之前')
+for (const finding of EVIDENCE_FINDINGS) check(text(evidenceSection).includes(`${finding.text}（${finding.issues.map(issueLabel).join('、')}）`), `/strategy 研究結論缺「${finding.text}」`)
+check(text(evidenceSection).includes(EVIDENCE_CLOSING) && text(evidenceSection).includes('前瞻驗證'), '/strategy 研究結論有結語，並寫新策略研究進行中')
+check(issueLabel(671) === '#'.concat('671'), 'issueLabel writes an Issue number')
+const follow = text(strategy.slice(strategy.indexOf('aria-labelledby="strategy-follow-title"'), strategy.indexOf('aria-labelledby="strategy-watch-title"')))
+check(!/照著做|獲利|可能賺|才進場/.test(follow) && follow.includes('不代表會到達') && follow.includes('比例不是預期報酬'), `/strategy 名單上的價位怎麼讀沒有獲利語氣: ${follow}`)
+check(!strategyText.includes('照著做之前') && strategyText.includes('看名單之前'), '/strategy 頁首說明句寫「看名單之前」')
 check(!/即將推出|敬請期待|其他策略|切換策略|稍後推出/.test(strategyText), '/strategy 不放切換、「其他策略」或「即將推出」')
 check(!render('/actions', <App />).includes('找不到此頁'), '/actions 不是 404')
 const redirect = (AppModule as Record<string, unknown>).watchRedirectPath as ((search: string, hash: string) => string) | undefined
