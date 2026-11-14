@@ -214,7 +214,7 @@ period_backfill 步驟呼叫 [`worker.period_backfill.run_period_backfill(目標
   - 錯過的日子由下一次自動補上：請求從已存最後一列往前 10 天起，不必另外回補。
   - 記憶體門檻同 daily（2 GB）。被 `low_memory`、`git_busy` 或 `already_running` 擋下時，job 照 daily 的做法讓 worker 記一筆 `skipped` 的 `us_index_collect` run，不發請求；維護模式時只記日誌、不寫 DB。
 - **notify 的 08:45**（#728 決定 [6881879639](https://github.com/YiCheng0608/stock-lab/issues/728#issuecomment-6881879639)；設定步驟見 [每日 Telegram 通知](SETUP.md#每日-telegram-通知)）：
-  - **內容**：純文字（不用 `parse_mode`，股名與數字不必跳脫）。前一個交易日（往前第一個週間日，跳過 `trading_calendar_days` 標 `closed` 的日子）那一份今日名單，取自 `app.candidate_view.candidate_list`（同 `/api/candidates?date=<該日>`），最多 20 檔，每檔代號、名稱與今日名單頁的「規則進場價」或「規則進場區」、停損、目標；那天沒有名單就寫「無資料（<日期>的名單沒有產生；daily：<當日 schedule_runs 最後一筆狀態>）」，不拿更早的名單頂替。隔夜美股取 `foreign_indices(今天)`（同 `overnight_us`，#681），照今日名單頁的「美股休市」「非最新」「美股尚未更新」判斷，附資料日與來源；缺的一檔寫「無資料（未取得）」。名單超過 20 檔、或超過 Telegram 的 4096 字從名單尾端截短時，最後一行寫「另 N 檔見今日名單頁」（N＝名單檔數 − 列出的檔數）。不加研究狀態或說明文字（[#1 6881297699](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6881297699)）。
+  - **內容**：卡片式版面（#742，使用者選定）：`parse_mode=HTML`，標題、分區標題與每檔的代號名稱用粗體（`<b>`），資料裡的文字（股名、原因、來源）先 `html.escape`。前一個交易日（往前第一個週間日，跳過 `trading_calendar_days` 標 `closed` 的日子）那一份今日名單，取自 `app.candidate_view.candidate_list`（同 `/api/candidates?date=<該日>`），最多 20 檔，依 `entry_type` 分「🚀 突破」「↩️ 回踩」兩區（其他型態放最後的「其他」，空的一區不印），區內照 rank；每檔一行代號名稱、一行「進場 X｜停損 Y｜目標 Z」（照今日名單頁的規則進場價或規則進場區，回踩寫「X～Y」；價位不完整的照樣留在該區）；那天沒有名單就寫「無資料（<日期>的名單沒有產生；daily：<當日 schedule_runs 最後一筆狀態>）」，不拿更早的名單頂替。隔夜美股取 `foreign_indices(今天)`（同 `overnight_us`，#681），照今日名單頁的「美股休市」「非最新」「美股尚未更新」判斷，每檔前面標 🔴 漲／🟢 跌／⚪ 平盤（台股慣例），附收盤日與來源名稱（「來源 FinMind」）；缺的一檔寫「無資料（未取得）」、不加符號。名單超過 20 檔、或超過 Telegram 的 4096 字（連標籤與跳脫後的字一起算，emoji 算兩字）從名單尾端（rank 最後）截短時，最後一行寫「另 N 檔見今日名單頁」（N＝名單檔數 − 列出的檔數）。不加研究狀態或說明文字（[#1 6881297699](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6881297699)）。
   - **判斷與送出**：
     - `--trigger scheduler` 只在台北 08:45～13:30 送，其他時刻記 `skipped reason=too_late at=<HH:MM>`、exit 0。這是 job 自己的規則，不靠 APScheduler：主機 08:45 睡著、晚上才醒時，APScheduler 會補跑錯過的觸發，job 就在這裡擋下，不在收盤後送早上的名單（#728 review [6882303076](https://github.com/YiCheng0608/stock-lab/pull/735#issuecomment-6882303076) 第 1 點）。手動（`--trigger manual`）任何時刻都送。這一項排在交易日判斷之後：休市日照舊記 `non_trading_day`，所以 `too_late` 只出現在錯過的交易日，看門狗以 `notify_missed` 回報（review [6882535482](https://github.com/YiCheng0608/stock-lab/pull/735#issuecomment-6882535482)）。
     - 今天是週末或行事曆標 `closed` 時記 `skipped reason=non_trading_day`；行事曆缺年份或 unknown 時照週間日送。
@@ -222,7 +222,7 @@ period_backfill 步驟呼叫 [`worker.period_backfill.run_period_backfill(目標
     - chat id 不是正整數（群組、頻道）記 `failed reason=chat_not_private`、不送。
     - 送出用 Bot API `sendMessage`，每次逾時 20 秒，最多兩次。
       - **重試**：網路錯誤（連不上、連線中斷、`IncompleteRead`）、逾時與 5xx 等 30 秒重試；429 照回應的 `retry_after` 等，超過 60 秒就不等、直接記失敗。
-      - **不重試**：其他 4xx（400／401／403 等：token 或 chat id 錯了，再送也一樣），以及 200 但回應不是 ok 的。
+      - **不重試**：其他 4xx（400／401／403 等：token 或 chat id 錯了，再送也一樣；400 `can't parse entities` 是 Telegram 解析不了 HTML，記 `parse_error`），以及 200 但回應不是 ok 的。
       - **可能重複送一則**：逾時或連線在送出之後才中斷時，Telegram 可能已經收下，重試會讓使用者收到兩則。統籌的取捨是重複一則比漏送好，所以仍重試。
     - 失敗記 `failed reason=<每次的原因，逗號分隔，例如 http_500,network:TimeoutError> attempts=<次數> detail=…`，exit 1。
 

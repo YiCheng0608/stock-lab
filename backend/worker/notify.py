@@ -1,17 +1,22 @@
 """The daily Telegram message: ``python -m worker.cli notify`` (#728).
 
-Each trading day at 08:45 Taipei, serve runs ``notify --send``. It sends one plain-text
-message (no ``parse_mode``: a stock name or number never needs escaping) to the user's own
-chat with the Telegram Bot API ``sendMessage``:
+Each trading day at 08:45 Taipei, serve runs ``notify --send``. It sends one message to the
+user's own chat with the Telegram Bot API ``sendMessage``, laid out as a card (#742, the
+user's choice): ``parse_mode=HTML`` for the bold title, section heads and row names; every
+text from the data (names, reasons, sources) is ``html.escape``d first, and the 4096
+characters are counted with the tags:
 
 - 今日名單: the list of the session before today (D - 1: the weekday before, skipping the
   days ``trading_calendar_days`` marks closed), as ``/api/candidates?date=D-1`` gives it
-  (``app.candidate_view.candidate_list``): its date and count, each row's code, name and the
-  rule's entry (price or zone), stop and target with the today page's words. No other list
-  stands in for a missing one: it reads 「無資料（…）」 with the day's daily status.
+  (``app.candidate_view.candidate_list``): its date and count, then the rows in the
+  sections 🚀 突破 and ↩️ 回踩 (``entry_type``; any other type under 其他), each in the
+  page's rank order: the code and name, and one line 「進場 X｜停損 Y｜目標 Z」 (a pullback's
+  entry 「X～Y」) by the today page's rules. No other list stands in for a missing one: it
+  reads 「無資料（…）」 with the day's daily status.
 - 隔夜美股: ``app.market_overview.foreign_indices`` for today, the four indexes of the today
-  page's line (``overnight_us``, #681), with its freshness (美股休市, 非最新, 美股尚未更新),
-  the data date and the source.
+  page's line (``overnight_us``, #681), each marked 🔴 up, 🟢 down or ⚪ flat (the Taiwan
+  colours), with its freshness (美股休市, 非最新, 美股尚未更新), the close date and the
+  source's name.
 
 The token and the chat id come from ``TELEGRAM_BOT_TOKEN`` and ``TELEGRAM_CHAT_ID``, which
 reach the scheduler container through compose's ``env_file`` (docs/ops/SETUP.md). Without
@@ -29,7 +34,7 @@ the day's log skips (``already_sent``), so a restarted scheduler never sends twi
 (``--trigger scheduler``) sends only between 08:45 and 13:30 Taipei and records
 ``skipped reason=too_late`` otherwise, whatever APScheduler does with a missed trigger. A
 network failure, a timeout, a 5xx or a 429 is tried once more (``_attempt``); another 4xx is
-not. A failure is ``failed`` with every attempt's reason and exit 1, which the watchdog
+not (a 400 ``can't parse entities`` is ``parse_error``). A failure is ``failed`` with every attempt's reason and exit 1, which the watchdog
 reports (``notify_failed``; ``notify_missing`` when the day has no end line;
 ``notify_missed`` when a trading day has only ``too_late``).
 
@@ -43,6 +48,7 @@ Only the standard library at the top: serve imports the log reading here.
 from __future__ import annotations
 
 import argparse
+import html
 import http.client
 import json
 import os
@@ -93,6 +99,17 @@ WEEKDAYS = "一二三四五六日"
 US_LABELS = {"SPX": "S&P 500", "IXIC": "NASDAQ", "DJI": "道瓊", "SOX": "費半"}
 US_FRESH = ("latest", "us_market_closed")
 US_REASONS = {"not_collected": "未取得", "fetch_failed": "抓取失敗"}
+# The card (#742): the list's sections in order, the indent and the separator (U+3000, a
+# full-width space), the minus sign (U+2212) and the US marks.
+# (entry_type, the mark before the bold head, the head).
+SECTIONS = (("breakout", "🚀 ", "突破"), ("pullback", "↩️ ", "回踩"))
+OTHER_SECTION = (None, "", "其他")
+INDENT = "　"
+MINUS = "−"
+US_UP, US_DOWN, US_FLAT = "🔴", "🟢", "⚪"
+PARSE_MODE = "HTML"
+# Telegram's 400 for a text its HTML parser refuses.
+PARSE_ERROR_TEXT = "can't parse entities"
 
 
 # --- the record --------------------------------------------------------------------
@@ -135,10 +152,22 @@ def mask(text: str, token: str | None) -> str:
 # --- the message --------------------------------------------------------------------
 
 
+def esc(value: Any) -> str:
+    """Data text for Telegram's HTML (``&``, ``<``, ``>``; quotes need none outside tags)."""
+
+    return html.escape(str(value), quote=False)
+
+
+def bold(text: str) -> str:
+    return f"<b>{text}</b>"
+
+
 def day_label(day: date | str) -> str:
+    """「11/16（一）」: the card's date."""
+
     if isinstance(day, str):
         day = date.fromisoformat(day)
-    return f"{day:%Y/%m/%d}（{WEEKDAYS[day.weekday()]}）"
+    return f"{day:%m/%d}（{WEEKDAYS[day.weekday()]}）"
 
 
 def price(value: Any) -> str:
@@ -155,75 +184,101 @@ def _is_price(value: Any) -> bool:
 
 
 def level_text(levels: dict[str, Any]) -> str:
-    """The rule's entry, stop and target in the today page's words (frontend entryPlan.ts)."""
+    """The rule's entry, stop and target on one line (the today page's rules, frontend
+    entryPlan.ts): 「進場 X｜停損 Y｜目標 Z」, a pullback's entry 「X～Y」."""
 
     stop, target = levels.get("invalid_price"), levels.get("target_1")
     if _is_price(stop) and _is_price(target):
-        tail = f"／停損 {price(stop)}／目標 {price(target)}"
+        tail = f"｜停損 {price(stop)}｜目標 {price(target)}"
         if levels.get("entry_type") == "breakout":
             entry = levels.get("entry")
             if entry is None:
                 entry = (levels.get("entry_zone") or {}).get("low")
             if _is_price(entry) and stop < entry < target:
-                return f"規則進場價 {price(entry)}{tail}"
+                return f"進場 {price(entry)}{tail}"
         elif levels.get("entry_type") == "pullback":
             zone = levels.get("entry_zone") or {}
             low, high = zone.get("low"), zone.get("high")
             if _is_price(low) and _is_price(high) and low <= high and stop < target:
-                return f"規則進場區 {price(low)}～{price(high)}{tail}"
+                return f"進場 {price(low)}～{price(high)}{tail}"
     return "價位不完整"
 
 
 def list_lines(
     list_date: date, listing: dict[str, Any], daily_status: str | None
-) -> tuple[str, list[str]]:
-    """The list's head line and its rows (two lines each)."""
+) -> tuple[str, list[tuple[str, list[str]]]]:
+    """The list's head line and its rows in rank order: (entry type, the row's lines)."""
 
     if listing.get("status") == "not_computed":
-        why = f"daily：{daily_status}" if daily_status else "daily 沒有紀錄"
+        why = f"daily：{esc(daily_status)}" if daily_status else "daily 沒有紀錄"
         return f"名單：無資料（{day_label(list_date)}的名單沒有產生；{why}）", []
     count = listing.get("candidate_count") or 0
-    head = f"名單：{day_label(list_date)}收盤後產生，{count} 檔"
+    head = f"{day_label(list_date)}收盤後產生・{count} 檔"
     if not count and listing.get("zero_reason_text"):
-        head += f"（{listing['zero_reason_text']}）"
+        head += f"（{esc(listing['zero_reason_text'])}）"
     rows = []
     for item in (listing.get("items") or [])[:MAX_ITEMS]:
         instrument = item.get("instrument") or {}
+        levels = item.get("levels") or {}
+        name = f"{instrument.get('symbol', '')} {instrument.get('name', '')}".strip()
         rows.append(
-            [
-                f"{item.get('rank')}. {instrument.get('symbol', '')} {instrument.get('name', '')}".rstrip(),
-                f"   {level_text(item.get('levels') or {})}",
-            ]
+            (
+                levels.get("entry_type"),
+                [bold(esc(name)), f"{INDENT}{level_text(levels)}"],
+            )
         )
     return head, rows
 
 
-def _change(index: dict[str, Any]) -> str:
+def section_lines(rows: list[tuple[str, list[str]]]) -> list[str]:
+    """The rows by section (突破, 回踩, then 其他), each in rank order; an empty one is left
+    out."""
+
+    lines = []
+    known = [kind for kind, _, _ in SECTIONS]
+    for kind, mark, title in (*SECTIONS, OTHER_SECTION):
+        members = [
+            row
+            for entry_type, row in rows
+            if (entry_type == kind if kind else entry_type not in known)
+        ]
+        if members:
+            lines += ["", f"{mark}{bold(f'{title}（{len(members)} 檔）')}"]
+            lines += [line for row in members for line in row]
+    return lines
+
+
+def _change(index: dict[str, Any]) -> tuple[str, str]:
+    """The change and its mark: 🔴 up, 🟢 down, ⚪ flat (the Taiwan colours); none when it
+    is unknown."""
+
     value = index.get("change_pct")
     if not isinstance(value, (int, float)) or value != value:
-        return "—"
-    return f"{value * 100:+.2f}%"
+        return "—", ""
+    pct = round(value * 100, 2)
+    if pct > 0:
+        return f"+{pct:.2f}%", US_UP
+    if pct < 0:
+        return f"{MINUS}{-pct:.2f}%", US_DOWN
+    return "0.00%", US_FLAT
+
+
+def _close_label(day: date | str) -> str:
+    if isinstance(day, str):
+        day = date.fromisoformat(day)
+    return f"（{day:%m/%d} 收盤）"
 
 
 def _source(indexes: list[dict[str, Any]]) -> str | None:
-    """「FinMind USStockPrice（^GSPC、^IXIC、^DJI、^SOX）」: each source once, its series."""
+    """「FinMind」: each source's name once (the label's first word, no series)."""
 
-    groups: dict[str, list[str]] = {}
+    names: list[str] = []
     for index in indexes:
         label = ((index.get("source") or {}).get("label") or "").strip()
-        if not label:
-            continue
-        series = index.get("series_id") or ""
-        if series and label.endswith(f" {series}"):
-            groups.setdefault(label[: -len(series) - 1], []).append(series)
-        else:
-            groups.setdefault(label, [])
-    if not groups:
-        return None
-    return "；".join(
-        f"{name}（{'、'.join(series)}）" if series else name
-        for name, series in groups.items()
-    )
+        name = label.split()[0] if label else ""
+        if name and name not in names:
+            names.append(name)
+    return "；".join(esc(name) for name in names) or None
 
 
 def us_lines(indexes: list[dict[str, Any]]) -> list[str]:
@@ -235,33 +290,44 @@ def us_lines(indexes: list[dict[str, Any]]) -> list[str]:
         if index.get("status") == "available" and _is_price(index.get("close"))
     ]
     fresh = [index for index in available if index.get("freshness") in US_FRESH]
+    title = f"🌎 {bold('隔夜美股')}"
     if not available:
-        return ["隔夜美股：無資料（美股尚未更新）"]
+        return [f"{title}：無資料（美股尚未更新）"]
     days = sorted({index["trading_date"] for index in available})
-    head = "隔夜美股"
+    head = title
     if not fresh:
         head += " 美股尚未更新"
     elif all(index.get("freshness") == "us_market_closed" for index in fresh):
         head += " 美股休市"
     if len(days) == 1:
-        head += f"（資料日 {day_label(days[0])}）"
+        head += _close_label(days[0])
     lines = [head]
     for index in indexes:
-        label = US_LABELS.get(index.get("symbol"), index.get("name") or "")
+        label = esc(US_LABELS.get(index.get("symbol"), index.get("name") or ""))
         if index not in available:
             reason = US_REASONS.get(index.get("reason"), "未取得")
-            lines.append(f"{label} 無資料（{reason}）")
+            lines.append(f"{label}{INDENT}無資料（{reason}）")
             continue
-        line = f"{label} {price(index['close'])} {_change(index)}"
+        change, mark = _change(index)
+        line = f"{label}{INDENT}{price(index['close'])}{INDENT}{change}"
+        if mark:
+            line = f"{mark} {line}"
         if len(days) > 1:
-            line += f"（{day_label(index['trading_date'])}）"
+            line += _close_label(index["trading_date"])
         if fresh and index.get("freshness") == "stale":
             line += " 非最新"
         lines.append(line)
     source = _source(available)
     if source:
-        lines.append(f"來源：{source}")
+        lines.append(f"來源 {source}")
     return lines
+
+
+def length(text: str) -> int:
+    """TEXT's length as Telegram counts it at most: UTF-16 code units (an emoji is two),
+    the tags and entities included."""
+
+    return len(text.encode("utf-16-le")) // 2
 
 
 def compose(
@@ -271,20 +337,21 @@ def compose(
     indexes: list[dict[str, Any]],
     daily_status: str | None = None,
 ) -> str:
-    """The message, at most MAX_CHARS: rows are cut from the end with 「另 N 檔」."""
+    """The message (Telegram HTML), at most MAX_CHARS with its tags: rows are cut from the
+    end of the list (the lowest ranks) with 「另 N 檔」."""
 
     head, rows = list_lines(list_date, listing, daily_status)
-    top = [f"stock-lab 今日名單 {day_label(today)}", "", head]
+    top = [f"📋 {bold(f'今日名單｜{day_label(today)}')}", head]
     bottom = ["", *us_lines(indexes)]
     # Past MAX_ITEMS or cut for the length: N is what the list has and the message omits.
     total = max(len(rows), listing.get("candidate_count") or 0)
     shown = len(rows)
     while True:
-        lines = [*top, *(line for row in rows[:shown] for line in row)]
+        lines = [*top, *section_lines(rows[:shown])]
         if shown < total:
             lines.append(f"另 {total - shown} 檔見今日名單頁")
         text = "\n".join([*lines, *bottom])
-        if len(text) <= MAX_CHARS or shown == 0:
+        if length(text) <= MAX_CHARS or shown == 0:
             return text[:MAX_CHARS]
         shown -= 1
 
@@ -376,14 +443,20 @@ def _attempt(token: str, chat_id: int, text: str) -> tuple[bool, str, float | No
     a 429 within RETRY_AFTER_MAX_SECONDS of its ``retry_after``. A timeout or a cut
     connection after the request went out may have been delivered already, so the retry
     can send the message twice; the coordinator prefers a duplicate to a missing one.
-    Not retried: any other 4xx (a wrong token or chat id stays wrong) and a 200 whose body
-    does not say ok (the request was answered). Nothing here holds the URL.
+    Not retried: any other 4xx (a wrong token or chat id stays wrong; a 400 ``can't parse
+    entities`` is ``parse_error``, #742) and a 200 whose body does not say ok (the request
+    was answered). Nothing here holds the URL.
     """
 
     request = urllib.request.Request(
         f"{API_BASE}/bot{token}/sendMessage",
         data=json.dumps(
-            {"chat_id": chat_id, "text": text, "disable_web_page_preview": True}
+            {
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": PARSE_MODE,
+                "disable_web_page_preview": True,
+            }
         ).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
@@ -398,7 +471,11 @@ def _attempt(token: str, chat_id: int, text: str) -> tuple[bool, str, float | No
             answer = loaded if isinstance(loaded, dict) else {}
         except Exception:  # the status alone is the reason then
             pass
-        reason = f"http_{exc.code} {answer.get('description') or ''}".strip()
+        description = str(answer.get("description") or "")
+        reason = f"http_{exc.code} {description}".strip()
+        if exc.code == 400 and PARSE_ERROR_TEXT in description.lower():
+            # The text, not the network (#742): the same text is refused again.
+            return False, f"parse_error {reason}", None
         if exc.code >= 500:
             return False, reason, RETRY_DELAY_SECONDS
         if exc.code == 429:
