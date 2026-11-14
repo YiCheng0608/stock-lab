@@ -129,8 +129,6 @@ export function indexTableNotes(): string[] {
 }
 
 export const UP_DOWN_NOTE = '紅色為上漲、綠色為下跌（台股慣例）'
-// On the today page's market line only (Issue 729 scope); the market page no longer explains the method (Issue 732, N-6).
-export const DERIVED_NOTE = '櫃買指數漲跌幅依前一日收市指數計算'
 // 政府資料開放授權條款第1版 第三條 attribution, on the TX chart (coordinator decision 6715831640).
 export const TAIFEX_ATTRIBUTION = '資料來源：臺灣期貨交易所（政府資料開放平臺，政府資料開放授權條款第1版）'
 // The TX chart's session scope (Issue 732 kept it; the roll rule left the page).
@@ -262,7 +260,5 @@ export function ma60SegmentsText(item: TaiexMa60): string | null {
   })
   return `${scope}在季線之上：${runs.join('；')}`
 }
-
-export const isDerived = (overview: MarketOverview | undefined) => available(overview, 'TPEx')?.index?.change_pct_method === 'derived'
 
 export const STALE_LABEL = '非最新'

@@ -2854,8 +2854,8 @@ def _today_pages(page):
     return {"today-1280": page, "today-390": page}
 
 
-def test_removed_copy_is_70_distinct_phrases():
-    assert len(page_checks.REMOVED_COPY) == len(set(page_checks.REMOVED_COPY)) == 70
+def test_removed_copy_is_71_distinct_phrases():
+    assert len(page_checks.REMOVED_COPY) == len(set(page_checks.REMOVED_COPY)) == 71
     assert page_checks.REMOVED_COPY[:2] == ("現行規則尚無證據", "研究結論")
 
 
@@ -2875,7 +2875,7 @@ def test_removed_copy_mirrors_the_frontend_list():
 
 def test_t23_passes_without_the_removed_copy(tmp_path):
     summary = page_checks.t23(FakeRun(tmp_path, {}, _today_pages(HEAD_AFTER_729)))
-    assert "沒有 70 句" in summary
+    assert "沒有 71 句" in summary
 
 
 def test_t23_fails_on_the_head_before_issue_729(tmp_path):
@@ -2901,6 +2901,19 @@ def test_t23_fails_on_one_phrase_on_the_phone_only(tmp_path):
     }
     with pytest.raises(page_checks.Fail, match="today-390：`此為研究工具與資料摘要`"):
         page_checks.t23(FakeRun(tmp_path, {}, pages))
+
+
+def test_t23_fails_on_the_derived_tpex_note_before_issue_747(tmp_path):
+    # The fixture's TPEx change is derived; before Issue 747 the header's 資料說明 (opened by screenshot.cjs) said how.
+    before = (
+        "TWSE／TPEx 官方資料 · 官方單日快照\n資料說明\n官方標的範圍 · 1,950 檔標的\n"
+        "櫃買指數漲跌幅依前一日收市指數計算\n紅色為上漲、綠色為下跌（台股慣例）\n"
+    )
+    with pytest.raises(
+        page_checks.Fail,
+        match="today-1280：`依前一日收市指數計算`（today-1280.txt 第 4 行",
+    ):
+        page_checks.t23(FakeRun(tmp_path, {}, _today_pages(before + HEAD_AFTER_729)))
 
 
 def _stock_pages(extra=None):
@@ -3252,7 +3265,7 @@ NOTE_PAGE = (
 def test_t23_passes_on_ai_note_text_with_plain_removed_phrases(tmp_path):
     payloads = {"candidates": {"items": [{"llm_note": LLM_NOTE}]}}
     run = FakeRun(tmp_path, payloads, _today_pages(HEAD_AFTER_729 + NOTE_PAGE))
-    assert "沒有 70 句" in page_checks.t23(run)
+    assert "沒有 71 句" in page_checks.t23(run)
 
 
 def test_t23_still_fails_when_the_page_itself_writes_the_phrase(tmp_path):

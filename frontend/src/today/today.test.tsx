@@ -69,20 +69,20 @@ for (const [name, overview] of [['都沒有', overviewNone()], ['欄位不存在
 }
 check(text(render('MarketSummaryLine no field', () => <MarketSummaryLine overview={undefined} />)).includes('資料日期未提供'), '摘要列: no overview → 資料日期未提供')
 
-// ---- header line and 資料說明: derived TPEx change, red/green meaning (the turnover scope moved to /market) ----
+// ---- header line and 資料說明: red/green meaning; no method note (the turnover scope moved to /market) ----
 const headerProps = { asOf: '2026-10-22T10:30:00+00:00', sourceLabel: 'TWSE／TPEx 官方資料', modeLabel: '官方單日快照', badge: <span className="pill complete">行情來源完整</span>, scopeText: '官方標的範圍 · 1,950 檔標的' }
-const header = render('TodayHeader', () => <TodayHeader {...headerProps} overview={overviewBoth()} />)
+const header = render('TodayHeader', () => <TodayHeader {...headerProps} />)
 check(text(slice(header, 'class="home-dataline-text"', '</span>')).includes('資料截至 2026/10/22 · TWSE／TPEx 官方資料 · 官方單日快照'), 'header: one line 「資料截至 2026/10/22 · 來源 · 模式」')
 const explanation = text(slice(header, '<details', '</details>'))
 check(!explanation.includes('成交金額範圍'), `資料說明: the turnover scope is on /market now, got ${explanation}`)
-check(explanation.includes('櫃買指數漲跌幅依前一日收市指數計算'), '資料說明: the derived TPEx change says how it was computed')
+// No method note for a derived TPEx change (Issue 747, #732 N-5); the header no longer reads the overview, and verify
+// T23 checks the fixture page, whose TPEx change is derived.
+check(!removedCopyIn(header).length && !explanation.includes('櫃買指數漲跌幅'), `資料說明: no method note for the derived TPEx change (Issue 747), got ${explanation}`)
 check(explanation.includes('紅色為上漲、綠色為下跌（台股慣例）'), '資料說明: red is up and green is down')
-const headerTwse = text(render('TodayHeader TWSE only', () => <TodayHeader {...headerProps} overview={overviewTwseOnly()} />))
-check(!headerTwse.includes('依前一日收市指數'), '資料說明（只有上市）: no TPEx note')
 check(!/hero|glow/.test(header), 'header: no hero or glow (DESIGN_SYSTEM §1)')
 check(/<h1 class="sr-only">今日<\/h1>/.test(header), 'header: the page still has an h1 for assistive tech')
 // Without a dashboard (load failed) the line has no empty source or mode parts.
-const failed = text(slice(render('TodayHeader failed', () => <TodayHeader asOf={null} sourceLabel="" modeLabel="" overview={undefined} />), 'class="home-dataline-text"', '</span>'))
+const failed = text(slice(render('TodayHeader failed', () => <TodayHeader asOf={null} sourceLabel="" modeLabel="" />), 'class="home-dataline-text"', '</span>'))
 check(failed.endsWith('資料截至 未提供') && !failed.includes('·'), `header: a failed load reads 「資料截至 未提供」, got 「${failed}」`)
 
 // ---- holding-risk alert row: only verified holding risks, linked to the action centre ----
