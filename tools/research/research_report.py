@@ -369,40 +369,60 @@ def day_reasons(
     return reasons, statuses, sum(statuses.values())
 
 
-def market_sessions(con: sqlite3.Connection, start: date) -> list[date]:
+def _until(column: str, end: date | None) -> tuple[str, tuple[str, ...]]:
+    """An ``and <column> <= ?`` clause and its parameter; nothing without ``end``.
+
+    ``end`` keeps every row after it out of the read itself (#703: the
+    exploration segment reads nothing after 2019-12-31).
+    """
+
+    if end is None:
+        return "", ()
+    return f" and {column} <= ?", (end.isoformat(),)
+
+
+def market_sessions(
+    con: sqlite3.Connection, start: date, end: date | None = None
+) -> list[date]:
+    until, extra = _until("mb.trading_date", end)
     rows = con.execute(
         "select distinct mb.trading_date from market_bars mb "
         "join instruments i on i.id = mb.instrument_id "
-        "where i.instrument_type = 'stock' and mb.trading_date >= ? order by 1",
-        (start.isoformat(),),
+        f"where i.instrument_type = 'stock' and mb.trading_date >= ?{until} order by 1",
+        (start.isoformat(), *extra),
     ).fetchall()
     return [date.fromisoformat(row[0]) for row in rows]
 
 
-def index_closes(con: sqlite3.Connection, start: date) -> dict[date, float]:
+def index_closes(
+    con: sqlite3.Connection, start: date, end: date | None = None
+) -> dict[date, float]:
+    until, extra = _until("mb.trading_date", end)
     rows = con.execute(
         "select mb.trading_date, mb.close from market_bars mb "
         "join instruments i on i.id = mb.instrument_id "
-        "where i.instrument_type = 'index' and i.symbol = ? and mb.trading_date >= ?",
-        (INDEX_SYMBOL, start.isoformat()),
+        "where i.instrument_type = 'index' and i.symbol = ? and mb.trading_date >= ?"
+        + until,
+        (INDEX_SYMBOL, start.isoformat(), *extra),
     ).fetchall()
     return {date.fromisoformat(day): close for day, close in rows}
 
 
 def benchmark_universe(
-    con: sqlite3.Connection, start: date
+    con: sqlite3.Connection, start: date, end: date | None = None
 ) -> tuple[dict[int, Instrument], dict[date, list[int]]]:
-    """Bars and actions of stock／ipo instruments from ``start`` on, by id."""
+    """Bars and actions of stock／ipo instruments from ``start`` (to ``end``), by id."""
 
     instruments: dict[int, Instrument] = defaultdict(Instrument)
     listed: dict[date, list[int]] = defaultdict(list)
+    until, extra = _until("mb.trading_date", end)
     for row in con.execute(
         "select mb.instrument_id, mb.trading_date, mb.open, mb.high, mb.low, "
         "mb.close, mb.volume, mb.is_suspended from market_bars mb "
         "join instruments i on i.id = mb.instrument_id "
         f"where i.instrument_type in ({','.join('?' * len(BENCHMARK_TYPES))}) "
-        "and mb.trading_date >= ? order by mb.instrument_id, mb.trading_date",
-        (*BENCHMARK_TYPES, start.isoformat()),
+        f"and mb.trading_date >= ?{until} order by mb.instrument_id, mb.trading_date",
+        (*BENCHMARK_TYPES, start.isoformat(), *extra),
     ):
         instrument_id, day, *prices, volume, suspended = row
         day = date.fromisoformat(day)
@@ -414,9 +434,13 @@ def benchmark_universe(
 
 
 def load_actions(
-    db: Path, instruments: dict[int, Instrument], start: date, raw_dir: Path
+    db: Path,
+    instruments: dict[int, Instrument],
+    start: date,
+    raw_dir: Path,
+    end: date | None = None,
 ):
-    """CorporateAction rows after ``start`` and the product's factor function.
+    """CorporateAction rows after ``start`` (to ``end``) and the product's factor function.
 
     Importing ``app.config`` creates its data and raw directories: the data
     directory is the copy's (it exists), the raw one ``raw_dir`` in the
@@ -438,9 +462,10 @@ def load_actions(
     )
     fallback: dict[tuple[int, date], float] = {}
     with Session(engine) as session:
-        for action in session.scalars(
-            select(CorporateAction).where(CorporateAction.action_date > start)
-        ):
+        query = select(CorporateAction).where(CorporateAction.action_date > start)
+        if end is not None:
+            query = query.where(CorporateAction.action_date <= end)
+        for action in session.scalars(query):
             if action.instrument_id not in instruments:
                 continue
             session.expunge(action)

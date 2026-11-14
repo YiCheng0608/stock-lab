@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "design": "703",
+  "definitions_sha256": "2e1362b7cb4d231eba289f58e8ac044f32de0efce8de2968be33461b538bba03",
+  "label": "事件日（每月 10 日，休市順延）只取最新已知月份是上個月且 `revenue_high_12`＝1，依 `revenue_yoy` 大者先；持有到下一個事件日收盤",
+  "direction": "事件：月營收公布",
+  "parameters": {
+    "rule": "monthly",
+    "subset": null,
+    "filters": [
+      [
+        "revenue_previous_month",
+        "==",
+        1.0
+      ],
+      [
+        "revenue_high_12",
+        "==",
+        1.0
+      ]
+    ],
+    "keys": [
+      "revenue_yoy"
+    ],
+    "top": 20,
+    "hold": "next_event",
+    "start": [
+      "date",
+      "2013-04-10"
+    ]
+  },
+  "hypothesis": "X7",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2013-04-10",
+    "first_session": "2013-04-11",
+    "last_session": "2013-10-07",
+    "days": 128,
+    "signal_days": 6
+  },
+  "prerequisites": {
+    "days": 128,
+    "min_days": 100,
+    "delisted": 1,
+    "ok": true
+  },
+  "coverage": {
+    "2013": {
+      "days": 6,
+      "members": 153,
+      "missing": {
+        "revenue_previous_month": 0,
+        "revenue_high_12": 0,
+        "revenue_yoy": 0
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 128,
+      "mean": -0.0008347261045590533,
+      "annual": -0.21035097834888145,
+      "t": -8.962787210726253
+    },
+    "taiex": {
+      "days": 128,
+      "mean": 7.475314269573576e-05,
+      "annual": 0.01883779195932541,
+      "t": 1.3653838149926762
+    }
+  },
+  "absolute": {
+    "days": 128,
+    "mean": 0.00043180938658732987
+  },
+  "curves": {
+    "X7": {
+      "days": 128,
+      "total": 0.05678928194785171,
+      "annual": 0.11487752992122124,
+      "volatility": 0.009831382517634888,
+      "max_drawdown": -0.0027490355352355333,
+      "invested": 0.2858206005599661,
+      "turnover": 3.169839288240922
+    },
+    "population": {
+      "days": 128,
+      "total": 0.1757618856012626,
+      "annual": 0.3754388110691276,
+      "volatility": 0.01969439635299168,
+      "max_drawdown": -0.00438824192138243,
+      "invested": 0.9618009336860086,
+      "turnover": 11.594914711125766
+    },
+    "taiex": {
+      "days": 128,
+      "total": 0.04675514428345373,
+      "annual": 0.09413282716242954,
+      "volatility": 7.507543427108363e-05,
+      "max_drawdown": 0.0,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 33,
+    "won": 26,
+    "rate": 0.7878787878787878,
+    "unsold": 6
+  },
+  "counts": {
+    "X7": {
+      "bought": 33,
+      "sale_held": 1,
+      "unsold": 6
+    },
+    "population": {
+      "bought": 153,
+      "sale_held": 1,
+      "unsold": 26
+    }
+  },
+  "min_t": 2.0
+}
