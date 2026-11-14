@@ -514,19 +514,29 @@ def _suite(
 APP_SUITE = {"status": "QUEUED", "conclusion": None, "workflowRun": None}
 
 
-def _pr(number: int, head: str, *, merged=True, state=None, suites=None) -> dict:
+def _pr(
+    number: int,
+    head: str,
+    *,
+    merged=True,
+    state=None,
+    suites=None,
+    base="master",
+    total=None,
+) -> dict:
+    nodes = [APP_SUITE, _suite("SUCCESS")] if suites is None else suites
     return {
         "__typename": "PullRequest",
         "number": number,
         "state": state or ("MERGED" if merged else "CLOSED"),
         "merged": merged,
         "headRefName": head,
-        "baseRefName": "master",
+        "baseRefName": base,
         "mergeCommit": {
             "oid": f"{number:0>9}" + "f" * 31,
             "checkSuites": {
-                "totalCount": 2,
-                "nodes": [APP_SUITE, _suite("SUCCESS")] if suites is None else suites,
+                "totalCount": len(nodes) if total is None else total,
+                "nodes": nodes,
             },
         }
         if merged
@@ -553,7 +563,8 @@ def _closed(h: Harness, *nodes: dict, total: int | None = None) -> None:
 
 def _all_fine() -> list[dict]:
     """A task Issue with its merged PR, a research Issue with none, one not planned, a
-    docs PR no Issue links, and an Issue whose second PR replaced a closed one."""
+    docs PR no Issue links, an Issue whose second PR replaced a closed one, and one not
+    planned whose PR was closed unmerged (review 4)."""
     return [
         _pr(901, "task/900-a"),
         _issue(900, _pr(901, "task/900-a")),
@@ -561,6 +572,7 @@ def _all_fine() -> list[dict]:
         _issue(898, reason="NOT_PLANNED"),
         _pr(897, "docs/x"),
         _issue(896, _pr(894, "task/896-old", merged=False), _pr(895, "task/896-b")),
+        _issue(893, _pr(892, "task/893-a", merged=False), reason="NOT_PLANNED"),
     ]
 
 
@@ -583,9 +595,10 @@ def test_closed_step_all_fine_is_one_line(to: Harness) -> None:
     result = _closed_only(to)
     assert result.returncode == 0, result.stdout + result.stderr
     assert _report(result) == [
-        "關閉單核對（2026-10-23T12:00:00Z 之後關閉的 Issue 4 張、PR 2 個）：異常 0 張",
-        "  其餘正常：Issue 4 張（連同它們的 PR）、沒有連到 Issue 的 PR 1 個；"
-        "沒有 PR 的 Issue：#899、#898",
+        "關閉單核對（2026-10-23T12:00:00Z 之後關閉的 Issue 5 張、PR 2 個）："
+        "異常或未查完 0 張",
+        "  其餘正常：Issue 5 張（連同它們的 PR）、沒有連到 Issue 的 PR 1 個；"
+        "沒有 PR 的 Issue：#899、#898；不做（PR 都沒合併）的 Issue：#893",
     ]
     # One gh call, read only: no heartbeat, record, terminal or listener touched.
     assert len(to.calls("gh")) == 1
@@ -703,6 +716,56 @@ CI_LINE = "  #900 Issue：PR #901 的 merge commit 000000901（master）"
             "",
             "  #897 PR：PR #897 的 merge commit 000000897（master）CI 是 failure",
         ),
+        (
+            # Review 1: the CI run is not among the 20 suites read: not read, not
+            # "no result".
+            [
+                _issue(
+                    900,
+                    _pr(901, "task/900-a", suites=[APP_SUITE] * 20, total=21),
+                )
+            ],
+            "",
+            "",
+            CI_LINE + "CI 未查完（check suite 共 21 個，只讀了 20 個）",
+        ),
+        (
+            # Review 5: a PR into another branch than master.
+            [_issue(900, _pr(901, "task/900-a", suites=[APP_SUITE], base="feat/x"))],
+            "",
+            "",
+            "  #900 Issue：PR #901 的 merge commit 000000901（feat/x）"
+            "沒有 CI 結果（目標分支 feat/x 不是 master）",
+        ),
+        (
+            # Review 2: a detached worktree has no branch line; its directory is the
+            # task's (Orca names it task-<n>-<slug>).
+            [_issue(900, _pr(901, "task/900-a"))],
+            "worktree C:/w/task-900-a\nHEAD " + "c" * 40 + "\ndetached\n",
+            "",
+            "  #900 Issue：worktree 還在（detached：C:/w/task-900-a）",
+        ),
+        (
+            [_issue(900)],
+            "worktree /w/task-900-x\nHEAD "
+            + "c" * 40
+            + "\ndetached\nprunable gitdir file points to non-existent location\n",
+            "",
+            "  #900 Issue：worktree 還在（detached、prunable：/w/task-900-x）",
+        ),
+        (
+            # Review 3: the head branch of a linked PR closed unmerged is checked too.
+            [
+                _issue(
+                    900,
+                    _pr(899, "task/900-old", merged=False),
+                    _pr(901, "feature-x"),
+                )
+            ],
+            "",
+            "feature-x",
+            "  #900 Issue：branch feature-x 還在",
+        ),
     ],
     ids=[
         "not-merged",
@@ -716,6 +779,11 @@ CI_LINE = "  #900 Issue：PR #901 的 merge commit 000000901（master）"
         "no-pr-branch-left",
         "lone-pr-not-merged",
         "lone-pr-red",
+        "ci-unread",
+        "ci-not-master",
+        "worktree-detached",
+        "worktree-prunable",
+        "unmerged-pr-branch-left",
     ],
 )
 def test_closed_step_prints_each_kind_of_problem(
@@ -724,12 +792,12 @@ def test_closed_step_prints_each_kind_of_problem(
     """AC-1: each problem gets its own line, the fine ones are counted on one line."""
     fine = [n for n in _all_fine() if n.get("number") not in (900, 901, 897)]
     _closed(to, *fine, *nodes)
-    to.write("git_worktrees.txt", MASTER_WORKTREE + worktrees)
+    to.write("git_worktrees.txt", MASTER_WORKTREE + "\n" + worktrees)
     to.write("branches.txt", "master\n" + branches + "\n")
     result = _closed_only(to)
     assert result.returncode == 0, result.stdout + result.stderr
     lines = _report(result)
-    assert lines[0].endswith("：異常 1 張"), lines
+    assert lines[0].endswith("：異常或未查完 1 張"), lines
     assert lines[1:] == [want, lines[2]]
     assert lines[2].startswith("  其餘正常：Issue ")
 
@@ -748,8 +816,16 @@ def test_closed_step_says_what_it_could_not_read(to: Harness) -> None:
     ]
     _closed(to, *_all_fine(), total=150)
     assert _report(_closed_only(to))[-1] == (
-        "  未查完：關閉的 Issue／PR 共 150 張，只讀了 6 張"
+        "  未查完：關閉的 Issue／PR 共 150 張，只讀了 7 張"
     )
+    # Review 6: closed-check failing otherwise (a Python error) says so, the traceback
+    # on stderr.
+    to.answer("closed", {"data": {"search": {"issueCount": "x", "nodes": []}}})
+    broken = _closed_only(to)
+    assert _report(broken) == [
+        "關閉單核對：未查完（closed-check 失敗，exit 1；gh 呼叫 1 次）"
+    ]
+    assert "Traceback" in broken.stderr
     to.write("fail_graphql", "")
     result = _take_over(to, "term_old")
     assert result.returncode == 0, result.stdout + result.stderr
@@ -774,8 +850,16 @@ def test_closed_check_without_git_listings_says_so() -> None:
 
 @pytest.mark.parametrize(
     "args",
-    [("term_old",), ("--no-old-terminal",), ("--from", "closed")],
-    ids=["handle", "no-old", "from"],
+    [
+        ("term_old",),
+        ("--no-old-terminal",),
+        ("--from", "closed"),
+        ("--from", "heartbeat"),
+        ("--session-id", "sess-new"),
+        ("--terminal", "term_new"),
+        ("--data-dir", "/x"),
+    ],
+    ids=["handle", "no-old", "from", "from-default", "session", "terminal", "data"],
 )
 def test_closed_only_takes_no_take_over_arguments(to: Harness, args: tuple) -> None:
     result = _closed_only(to, *args)

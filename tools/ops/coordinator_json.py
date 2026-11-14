@@ -30,8 +30,9 @@ value is missing or the condition is false, so a script can test the exit code.
                       the take_over.sh report on the Issues and PRs closed since SINCE
                       (closed_check, #713); WORKTREES is a file with `git worktree list
                       --porcelain`, BRANCHES one with the local branch names, "" for
-                      either when git could not list it; exit 1 when the answer has no
-                      data.search (a GraphQL error)
+                      either when git could not list it; exit 3 when the answer has no
+                      data.search (a GraphQL error), so a Python error (exit 1) is
+                      told apart
   utf8 FILE           exit 0 when FILE is non-empty valid UTF-8 (no stdin)
   comment-body FILE   {"body": FILE's text with COORDINATOR_MARK as its last line}, the
                       request comment.sh posts (#440; no stdin); exit 1 when the text is
@@ -453,38 +454,47 @@ CLOSED_QUERY = (
 )
 # The CI close_task.sh waits for: the CI workflow's push run on the merge commit.
 CI_WORKFLOW = "CI"
+# Not planned or a duplicate: the PRs linked to it may all be closed unmerged.
+_DROPPED = frozenset({"NOT_PLANNED", "DUPLICATE"})
 
 
 def merge_ci(pr: dict) -> str:
-    """success, failure (or another conclusion), pending or missing: the merge commit's
-    newest push run of the CI workflow (highest databaseId, as commit-ci)."""
-    suites = get(pr, "mergeCommit.checkSuites.nodes") or []
+    """The merge commit's newest push run of the CI workflow (highest databaseId), in the
+    words of commit-ci (_run_state): success, failure (or another conclusion), pending,
+    missing; or unread when it is not among the suites read and there are more."""
+    suites = get(pr, "mergeCommit.checkSuites") or {}
+    nodes = [s for s in suites.get("nodes") or [] if isinstance(s, dict)]
     runs = [
-        s
-        for s in suites
-        if isinstance(s, dict)
-        and get(s, "workflowRun.event") == "push"
+        {
+            "status": (s.get("status") or "").lower(),
+            "conclusion": (s.get("conclusion") or "").lower() or None,
+            "databaseId": get(s, "workflowRun.databaseId") or 0,
+        }
+        for s in nodes
+        if get(s, "workflowRun.event") == "push"
         and get(s, "workflowRun.workflow.name") == CI_WORKFLOW
     ]
-    if not runs:
-        return "missing"
-    run = max(runs, key=lambda s: get(s, "workflowRun.databaseId") or 0)
-    if run.get("status") != "COMPLETED":
-        return "pending"
-    return (run.get("conclusion") or "unknown").lower()
+    if not runs and (suites.get("totalCount") or 0) > len(nodes):
+        return "unread"
+    return _run_state(max(runs, key=lambda r: r["databaseId"], default=None))
 
 
-_CI_TEXT = {"missing": "沒有 CI 結果", "pending": "CI 還沒跑完"}
-
-
-def _worktree_branches(text: str) -> dict[str, str]:
-    """branch -> worktree path of `git worktree list --porcelain`."""
-    out, path = {}, ""
-    for line in text.splitlines():
-        if line.startswith("worktree "):
-            path = line[len("worktree ") :]
-        elif line.startswith("branch refs/heads/"):
-            out[line[len("branch refs/heads/") :]] = path
+def _worktrees(text: str) -> list[tuple[str, str | None, str]]:
+    """(path, branch or None, its detached/prunable/locked notes) per entry of
+    `git worktree list --porcelain`."""
+    out = []
+    for block in text.replace("\r", "").split("\n\n"):
+        path, branch, notes = "", None, []
+        for line in block.splitlines():
+            word = line.split(" ", 1)[0]
+            if word == "worktree":
+                path = line[len("worktree ") :]
+            elif line.startswith("branch refs/heads/"):
+                branch = line[len("branch refs/heads/") :]
+            elif word in ("detached", "prunable", "locked"):
+                notes.append(word)
+        if path:
+            out.append((path, branch, "、".join(notes)))
     return out
 
 
@@ -492,16 +502,19 @@ def closed_check(
     doc, worktrees: str | None, branches: str | None, since: str
 ) -> list[str]:
     """The take_over.sh report: one line per Issue or PR closed since SINCE with something
-    left (an Issue's PR not merged or still open, red or missing CI on the merge commit, the
-    worktree or local branch still there), one line for the rest, then what was not read.
+    wrong or not read (an Issue's PR not merged or still open, CI on the merge commit not
+    green, the worktree or local branch still there), one line for the rest, then what
+    was not read at all.
 
-    An Issue is checked through the PRs linked to it: a merged one must have green CI and
-    no branch or worktree left; when none merged and one is closed, that is reported; one
-    still open too. An Issue with no PR (a research task, one closed by hand, not planned)
-    is fine once no task/<n>-* branch or worktree is left; the summary names them. A PR
-    no closed Issue links is checked on its own; closed without merging is reported.
-    worktrees and branches are None when git could not list them: nothing is said about
-    them then but that they were not read.
+    An Issue is checked through the PRs linked to it: a merged one must have green CI;
+    when none merged and one is closed, that is reported (not for one not planned or a
+    duplicate); one still open too. No linked PR's head branch and no task/<n>-* branch
+    may be left, nor a worktree on one, nor one whose directory is task-<n>-* (Orca's
+    name for the task's worktree: a detached or prunable one has no branch). An Issue
+    with no PR (a research task, one closed by hand, not planned) is fine once nothing is
+    left; the summary names them. A PR no closed Issue links is checked on its own;
+    closed without merging is reported. worktrees and branches are None when git could
+    not list them: nothing is said about them then but that they were not read.
     """
     search = get(doc, "data.search") or {}
     nodes = [n for n in search.get("nodes") or [] if isinstance(n, dict)]
@@ -509,23 +522,29 @@ def closed_check(
     total = search.get("issueCount") or 0
     if total > len(nodes):
         notes.append(f"未查完：關閉的 Issue／PR 共 {total} 張，只讀了 {len(nodes)} 張")
-    trees = _worktree_branches(worktrees) if worktrees is not None else None
+    trees = _worktrees(worktrees) if worktrees is not None else None
     local = set(branches.split()) if branches is not None else None
     if trees is None:
         notes.append("未查完：讀不到 git worktree list，worktree 沒有核對")
     if local is None:
         notes.append("未查完：讀不到本地 branch，branch 沒有核對")
 
-    def leftovers(names: set[str], prefix: str | None = None) -> list[str]:
+    def leftovers(heads: set[str], issue: int | None = None) -> list[str]:
+        names = set(heads)
+        if issue is not None:
+            prefix = f"task/{issue}-"
+            names |= {b for b in local or () if b.startswith(prefix)}
         found = []
-        if prefix:
-            for pool in (trees or {}, local or set()):
-                names |= {b for b in pool if b.startswith(prefix)}
-        for name in sorted(names):
-            if trees is not None and name in trees:
-                found.append(f"worktree 還在（{name}：{trees[name]}）")
-            if local is not None and name in local:
-                found.append(f"branch {name} 還在")
+        for path, branch, flags in trees or ():
+            folder = path.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+            ours = issue is not None and folder.startswith(f"task-{issue}-")
+            if (
+                branch and (branch in names or branch.startswith(f"task/{issue}-"))
+            ) or ours:
+                found.append(
+                    f"worktree 還在（{branch or flags or '沒有 branch'}：{path}）"
+                )
+        found += [f"branch {name} 還在" for name in sorted(names & (local or set()))]
         return found
 
     def ci_problem(pr: dict) -> list[str]:
@@ -533,14 +552,25 @@ def closed_check(
         if state == "success":
             return []
         oid = (get(pr, "mergeCommit.oid") or "")[:9]
-        what = _CI_TEXT.get(state, f"CI 是 {state}")
         base = pr.get("baseRefName") or "?"
+        suites = get(pr, "mergeCommit.checkSuites") or {}
+        if state == "unread":
+            what = (
+                f"CI 未查完（check suite 共 {suites.get('totalCount')} 個，"
+                f"只讀了 {len(suites.get('nodes') or [])} 個）"
+            )
+        elif state == "missing" and base != "master":
+            what = f"沒有 CI 結果（目標分支 {base} 不是 master）"
+        else:
+            what = {"missing": "沒有 CI 結果", "pending": "CI 還沒跑完"}.get(
+                state, f"CI 是 {state}"
+            )
         return [f"PR #{pr.get('number')} 的 merge commit {oid}（{base}）{what}"]
 
     issues = [n for n in nodes if n.get("__typename") == "Issue"]
     prs = [n for n in nodes if n.get("__typename") == "PullRequest"]
     covered: set = set()
-    bad, fine_issues, fine_prs, no_pr = [], 0, 0, []
+    bad, fine_issues, fine_prs, no_pr, dropped = [], 0, 0, [], []
     for issue in issues:
         number = issue.get("number")
         refs = issue.get("closedByPullRequestsReferences") or {}
@@ -551,29 +581,31 @@ def closed_check(
             )
         covered |= {p.get("number") for p in linked}
         merged = [p for p in linked if p.get("merged")]
-        problems = []
-        for p in linked:
-            if p.get("state") == "OPEN":
-                problems.append(f"PR #{p.get('number')} 還是 open")
-        if linked and not merged and not problems:
+        problems = [
+            f"PR #{p.get('number')} 還是 open"
+            for p in linked
+            if p.get("state") == "OPEN"
+        ]
+        unmerged_ok = issue.get("stateReason") in _DROPPED
+        if linked and not merged and not problems and not unmerged_ok:
             numbers = "、".join(f"#{p.get('number')}" for p in linked)
             problems.append(f"PR {numbers} 關閉未合併")
         for p in merged:
             problems += ci_problem(p)
-        heads = {p.get("headRefName") for p in merged if p.get("headRefName")}
-        problems += leftovers(heads, f"task/{number}-")
+        heads = {p.get("headRefName") for p in linked if p.get("headRefName")}
+        problems += leftovers(heads, number)
         if problems:
             bad.append((number, "Issue", problems))
-        else:
-            fine_issues += 1
-            if not linked:
-                no_pr.append(number)
+            continue
+        fine_issues += 1
+        if not linked:
+            no_pr.append(number)
+        elif not merged:
+            dropped.append(number)
     for pr in prs:
         if pr.get("number") in covered:
             continue
-        problems = [] if pr.get("merged") else ["關閉未合併"]
-        if pr.get("merged"):
-            problems += ci_problem(pr)
+        problems = ci_problem(pr) if pr.get("merged") else ["關閉未合併"]
         head = pr.get("headRefName")
         problems += leftovers({head} if head else set())
         if problems:
@@ -582,13 +614,18 @@ def closed_check(
             fine_prs += 1
     lines = [
         f"關閉單核對（{since} 之後關閉的 Issue {len(issues)} 張、PR {len(prs)} 個）："
-        f"異常 {len(bad)} 張"
+        f"異常或未查完 {len(bad)} 張"
     ]
     for number, kind, problems in sorted(bad, key=lambda b: -(b[0] or 0)):
         lines.append(f"  #{number} {kind}：{'；'.join(problems)}")
-    rest = f"  其餘正常：Issue {fine_issues} 張（連同它們的 PR）、沒有連到 Issue 的 PR {fine_prs} 個"
+    rest = (
+        f"  其餘正常：Issue {fine_issues} 張（連同它們的 PR）、"
+        f"沒有連到 Issue 的 PR {fine_prs} 個"
+    )
     if no_pr:
         rest += "；沒有 PR 的 Issue：" + "、".join(f"#{n}" for n in no_pr)
+    if dropped:
+        rest += "；不做（PR 都沒合併）的 Issue：" + "、".join(f"#{n}" for n in dropped)
     lines.append(rest)
     return lines + [f"  {n}" for n in notes]
 
@@ -973,7 +1010,7 @@ def main(argv: list[str]) -> int:
         return 0
     if command == "closed-check":
         if get(doc, "data.search") is None:
-            return 1
+            return 3
         local = []
         for path in args[1:3]:
             if not path:
