@@ -13,7 +13,7 @@
 同時只有一個統籌，開啟一律由 agent 執行，使用者不手動開：現任統籌觸發換手時自己開；統籌不在時使用者對任一 Claude session 說「開統籌」。開啟者先讀心跳檔 `<資料目錄>/logs/coordinator-heartbeat.json`（`<資料目錄>` 換成 [LOCAL](ops/LOCAL.md#正式位置使用者決定)「正式位置」表的「正式資料目錄」，`<資料目錄>/logs` 就是該表的「統籌的資料目錄的 `logs/`」；本文其他處的 `<資料目錄>` 同）：心跳在 60 分鐘內就不開，改對心跳記的 handle 送一句「請跑 bash tools/ops/patrol.sh 處理事件佇列」；否則在 `master` 管理 checkout 開可見 terminal：
 
 ```text
-orca terminal create --worktree id:<repoId>::<master 路徑> --title "統籌" --command "claude --model claude-opus-5-5 --effort xhigh --autocompact 400k" --json
+orca terminal create --worktree id:<repoId>::<master 路徑> --title "統籌" --command "claude --model claude-fable-5-2 --effort medium --autocompact 400k" --json
 orca terminal wait --terminal <handle> --for tui-idle --timeout-ms 60000 --json
 orca terminal send --terminal <handle> --text "<接手文>" --enter --json
 orca terminal rename --terminal <handle> --title "統籌" --json
