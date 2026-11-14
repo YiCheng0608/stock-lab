@@ -66,5 +66,46 @@
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "financial-analysis@claude-for-financial-services": false,
+    "pitch-agent@claude-for-financial-services": false,
+    "gl-reconciler@claude-for-financial-services": false,
+    "market-researcher@claude-for-financial-services": false
+  },
+  "disableClaudeAiConnectors": true,
+  "permissions": {
+    "deny": [
+      "SendFeedback",
+      "Artifact"
+    ]
+  },
+  "skillOverrides": {
+    "dataviz": "off",
+    "artifact-design": "off",
+    "artifact-diagramming": "off",
+    "artifact-capabilities": "off",
+    "claude-in-chrome": "off",
+    "schedule": "off",
+    "run": "off",
+    "plugin-authoring": "off",
+    "keybindings-help": "off",
+    "claude-api": "off",
+    "fewer-permission-prompts": "off",
+    "find-skills": "off",
+    "init": "off",
+    "anthropic-skills:docs": "off",
+    "anthropic-skills:pptx": "off",
+    "anthropic-skills:google-workspace": "off",
+    "anthropic-skills:xlsx": "off",
+    "anthropic-skills:computer-use": "off",
+    "anthropic-skills:docx": "off",
+    "anthropic-skills:built-in-browser": "off",
+    "anthropic-skills:chrome-browser": "off",
+    "anthropic-skills:deep-research": "off",
+    "anthropic-skills:pdf": "off",
+    "anthropic-skills:morning": "off",
+    "anthropic-skills:skill-creator": "off",
+    "anthropic-skills:import-memory": "off"
   }
 }

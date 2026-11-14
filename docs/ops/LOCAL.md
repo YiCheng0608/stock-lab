@@ -1,4 +1,4 @@
-<!-- owns: 本機路徑、取正式 DB 唯讀副本的標準命令 -->
+<!-- owns: 本機路徑、取正式 DB 唯讀副本的標準命令、session 起始 context 的專案設定 -->
 # 本機路徑
 
 這台主機上的實際路徑只寫在本文；其他文件與 skill 以名稱（例如「正式資料目錄」「發佈 checkout」）引用這裡。
@@ -62,3 +62,37 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none \
 | codebase-memory 同引擎 CLI（`close_task.sh`／`dispatch.sh` 預設用它，`STOCK_CBM_CLI` 可覆寫；[程式索引](../WORKFLOW.md#程式索引)） | `C:/Users/YiCheng/.local/bin/codebase-memory-mcp.cmd` |
 | master 索引的 project | `C-Users-YiCheng-Desktop-taiwan-stock-research`（root 是管理 checkout） |
 | worktree 外暫存目錄 | `C:/Users/YiCheng/t<issue>` |
+
+## session 起始 context 的專案設定
+
+在 repo 開的每個 Claude Code session（統籌、工程師、review，也包括使用者自己開的 session）都會套用 repo 的 `.claude/settings.json`。裡面用下列鍵關掉這個專案用不到的東西，讓新 session 第一次呼叫的 context 從約 54K 降到約 31K（#712；決定見 [#712 留言 6877115861](https://github.com/YiCheng0608/stock-lab/issues/712#issuecomment-6877115861)）。使用者層的設定檔不動，其他專案不受影響。
+
+| 鍵 | 關掉什麼 | 理由與副作用 | 第一次呼叫省下 |
+| --- | --- | --- | --- |
+| `enabledPlugins` 四個 `…@claude-for-financial-services: false` | `financial-analysis`、`pitch-agent`、`gl-reconciler`、`market-researcher`：38 個 skill、3 個 agent 類型，以及連不上的 `mtnewswire` MCP | 專案沒有用到；專案層會蓋過使用者層的啟用 | 約 3.6K |
+| `disableClaudeAiConnectors: true` | claude.ai 連接器（Gmail、Google Calendar、Google Drive、Claude Docs） | 專案沒有用到；連上後每一回合約 1.7K。官方文件寫明任一層設 true 就關，**local 層與 `--settings` 都開不回來**；要用連接器時，照下面「單一 session 開回來」的命令開，或到 repo 以外的目錄開 session | 約 0.7K |
+| `permissions.deny` 的 `"Artifact"` | Artifact 工具，以及系統提示裡對應的段落 | 專案用 GitHub 交付，沒有用到。PreToolUse 守門 matcher 裡的 `Artifact` 留著無害。不要用 `enableArtifact: false`，它會連 session 的 scratchpad 一起關掉（#712） | 約 12.5K（三項合計 16.1K 扣掉另兩項的估計）|
+| `permissions.deny` 的 `"SendFeedback"` | SendFeedback 工具 | 沒有用到。`AskUserQuestion` 保留，使用者直接對話的 session 會用它；`ReportFindings` 保留，`/code-review` 要用它 | 約 1.8K（估：與保留的 AskUserQuestion 同大小，AskUserQuestion 實測 1,772）|
+| `skillOverrides` 26 個 `"off"` | `dataviz`、`artifact-*`、`claude-in-chrome`、`claude-api`、`anthropic-skills:*` 等專案用不到的 skill | 不用 `disableBundledSkills`，因為它會連 `code-review` 一起關 | 約 4.9K |
+
+hooks 與 PreToolUse 守門不屬於這一節，改上面這些鍵時不要動到它們。
+
+**怎麼驗**（改了這些鍵、或升級 Claude Code 之後）：在 repo 用統籌的啟動參數開一個可見 terminal，命令是 `STOCK_TURN_HOOK=off claude --model <統籌模型> --effort <統籌 effort> --autocompact 400k 'Reply with just ok. Do not call any tools.'`。回覆後 `/exit`，讀這個 session 紀錄檔（`<CLAUDE_CONFIG_DIR>/projects/<專案目錄>/<session id>.jsonl`）第一筆 assistant 的 `usage`，加總 `input_tokens`、`cache_read_input_tokens`、`cache_creation_input_tokens`，門檻是 **55K**。
+
+- `STOCK_TURN_HOOK=off` 一定要帶，否則 turn hook 會把這個 session 記成工程師 session。
+- `claude -p` 沒有 Artifact、AskUserQuestion 等互動模式才有的工具，量出來偏低，不能拿來驗門檻。
+- 同時核對工具清單（紀錄檔裡的 `api-request-shape`）沒有 Artifact、SendFeedback；skill 清單裡仍有 `code-review`、`orca-cli`、`encode-lesson`。
+- 第一則訊息的 Environment 區塊（第一筆 assistant 之前的 `api-request-blob`）要有 `Scratchpad directory:` 那一行；沒有就表示有鍵把 scratchpad 關掉了（#712：`enableArtifact: false` 會這樣）。
+- 2026-11-14 用 Claude Code 2.1.325、`claude-opus-5-5`／`xhigh` 量到 30,955／30,951（worktree，有 scratchpad）。
+
+**單一 session 開回來**：`skillOverrides`（以及當時用的 `enableArtifact`）在 local 層（`.claude/settings.local.json`）或 `--settings` 設回去都沒有效果（#712 實測）。`permissions.deny` 的 Artifact 也一樣開不回來：deny 會蓋過其他層的 allow。要用時，在 repo 根目錄這樣開：
+
+```bash
+claude --setting-sources user,local --settings "$(node -e 'console.log(JSON.stringify({hooks: require("./.claude/settings.json").hooks}))')"
+```
+
+- `--setting-sources user,local` 不載入專案設定；`--settings` 只把專案的 hooks 帶回來，所以 `.env` 守門與 turn hook 照常。目前專案設定裡除了 hooks，只有上表這幾個為了省 context 而關的鍵；之後專案設定多了 hooks 以外、跟安全有關的規則（例如 `permissions.deny` 擋危險命令），這條命令的 `--settings` 要把那些鍵一起帶上。
+- 代價是上表各項全部回到使用者層的狀態，第一次呼叫回到約 54K。這種 session 只拿來用 Artifact 或被關的 skill，不要拿來當統籌或工程師。
+- claude.ai 連接器也會一起回來（實測 Claude Docs 有出現）。這是因為整份專案設定都沒有載入，不是 local 層開得回來。
+
+MEMORY.md 索引約佔 7K（`autoMemoryEnabled:false` 量到的差），精簡由統籌處理（#705）。
