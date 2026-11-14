@@ -666,3 +666,124 @@ def test_the_first_version_is_byte_for_byte_unchanged(copy_db, tmp_path, monkeyp
     research = lib._load("backtest_research")
     monkeypatch.setattr(research, "daily_window_problem", lambda now: None)
     assert v1_digests(run_v1(copy_db, tmp_path, [])) == V1_DIGESTS
+
+
+# --- the rankings of evidence (#689) ---------------------------------------------
+
+
+def with_trust(item, days):
+    """Put a trust buy (+1) on the given bars and a sale (−1) on the others."""
+
+    item.chips["trust_buy"] = array(
+        "d", [1.0 if at in days else -1.0 for at in range(len(item.dates))]
+    )
+    return item
+
+
+def test_the_rankings_are_the_decision():
+    assert tool.RANKINGS_DESIGN == "689"
+    assert [(key, keys) for key, _, keys in tool.RANKINGS] == [
+        ("trust", ()),
+        ("trust_rev", ("revenue_high_12",)),
+        ("trust_eps", ("eps_yield",)),
+    ]
+    assert tool.PRIMARY == "trust_buy_days_5"
+    assert [key for key, _ in tool.UNIVERSES] == ["pool", "all"]
+    # By name: other tests load feature_evidence again as a new module object.
+    assert {
+        key: (function.__module__, function.__name__)
+        for key, function in tool.FEATURE_FUNCTIONS.items()
+    } == {
+        "trust_buy_days_5": ("feature_evidence", "trust_buy_days"),
+        "revenue_high_12": ("feature_evidence", "revenue_high_12"),
+        "eps_yield": ("feature_evidence", "eps_yield"),
+    }
+
+
+def test_the_tie_break_is_a_neutral_hash():
+    day = date(2025, 3, 7)
+    assert tool.tie_break(day, 42) == hashlib.sha256(b"2025-03-07:42").hexdigest()
+    assert tool.tie_break(day, 42) != tool.tie_break(day + timedelta(days=1), 42)
+
+
+def test_ranking_keys_go_high_first_missing_last_then_the_hash():
+    values = {
+        1: {"trust_buy_days_5": 3.0, "eps_yield": 0.01},
+        2: {"trust_buy_days_5": 5.0, "eps_yield": None},
+        3: {"trust_buy_days_5": None, "eps_yield": 0.50},
+        4: {"trust_buy_days_5": 5.0, "eps_yield": 0.02},
+        5: {"trust_buy_days_5": 5.0, "eps_yield": -0.03},
+    }
+    ties = {1: "c", 2: "a", 3: "a", 4: "b", 5: "z"}
+
+    def order(keys):
+        return sorted(values, key=lambda i: tool.ranking_key(values[i], keys, ties[i]))
+
+    # The primary key alone: the three 5s by the hash, 3 next, the missing last.
+    assert order(("trust_buy_days_5",)) == [2, 4, 5, 1, 3]
+    # The second key splits the 5s: high first, a negative before a missing one.
+    assert order(("trust_buy_days_5", "eps_yield")) == [4, 5, 2, 1, 3]
+
+
+def test_rank_by_features_keeps_every_name_and_reads_the_bar_of_t():
+    n = 25
+    day = DAY0 + timedelta(days=n - 1)
+    a = with_trust(series(A, [100.0] * n), {n - 1, n - 2})  # 2 days
+    b = with_trust(series(B, [100.0] * n), set(range(n - 5, n)))  # 5 days
+    c = series(C, [100.0] * n)  # no trust rows: missing
+    m = market([a, b, c])
+    cache = {}
+    rows = tool.rank_by_features(m.panel, day, [A, C, B], ("trust_buy_days_5",), cache)
+    assert [row[0] for row in rows] == [B, A, C]
+    assert [row[1]["trust_buy_days_5"] for row in rows] == [5.0, 2.0, None]
+    assert rows[0][2] == tool.tie_break(day, B)
+    assert set(cache) == {(day, A), (day, B), (day, C)}
+
+
+def test_the_rankings_leave_the_first_version_as_it_was(copy_db, tmp_path, monkeypatch):
+    research = lib._load("backtest_research")
+    monkeypatch.setattr(research, "daily_window_problem", lambda now: None)
+    out = run_v1(copy_db, tmp_path, ["--rankings", "689"])
+    assert v1_digests(out) == V1_DIGESTS
+    names = [f"{key}-{u}" for u, _ in tool.UNIVERSES for key, _, _ in tool.RANKINGS]
+    for name in names:
+        tables = json.loads((out / name / "tables.json").read_text(encoding="utf-8"))
+        assert tables["comparisons"] == 18 and tables["comparisons_total"] == 108
+        keys = {variant.split(":")[1] for variant in tables["variants"]}
+        assert keys == {"top5", "top10", "top20", "population"} | (
+            {"pool"} if name.endswith("-pool") else set()
+        )
+        assert all(
+            set(v["verdicts"]) == {"population", "taiex"}
+            for v in tables["variants"].values()
+            if v["key"].startswith("top")
+        )
+        summary = (out / name / "summary.md").read_text(encoding="utf-8")
+        assert tables["label"] in summary and "108" in summary
+        trades = (out / name / "trades.csv").read_text(encoding="utf-8")
+        assert ":pool" not in trades and ":population" not in trades
+    v1 = json.loads((out / "tables.json").read_text(encoding="utf-8"))
+    pool = json.loads((out / "trust-pool" / "tables.json").read_text(encoding="utf-8"))
+    # (a) reuses the first version's pool and population, untouched.
+    for key in ("K5:pool", "K5:population"):
+        assert pool["variants"][key] == v1["variants"][key]
+
+    def names_by_day(path):
+        days = {}
+        with path.open(encoding="utf-8") as handle:
+            for row in csv.DictReader(handle):
+                days.setdefault(row["signal_date"], set()).add(row["symbol"])
+        return days
+
+    # (a) is the same pool reordered: the same names every day.
+    assert names_by_day(out / "trust-pool" / "picks.csv") == names_by_day(
+        out / "picks.csv"
+    )
+    # (b) ranks the population: both stocks every day, the ETF never.
+    population = names_by_day(out / "trust-all" / "picks.csv")
+    assert set(map(frozenset, population.values())) == {frozenset({"S1", "S2"})}
+    combined = json.loads((out / "rankings.json").read_text(encoding="utf-8"))
+    assert combined["comparisons"] == 108 and set(combined["verdicts"]) == set(names)
+    assert 0.05 < combined["chance"]["any"] < 0.06
+    report = (out / "rankings.md").read_text(encoding="utf-8")
+    assert "第 1 版 v7" in report and "`trust_eps`" in report

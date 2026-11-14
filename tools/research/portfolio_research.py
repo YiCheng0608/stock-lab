@@ -36,6 +36,14 @@ entry of the ranked pool, equal shares; a reference line, not judged) and
 benchmark).  TAIEX (price index, no dividends, no costs) is the other
 benchmark.  Each top N is judged against each benchmark by ``judge`` on the
 daily excess return per segment (``evidence_lib.SEGMENTS``, by date).
+
+``--rankings 689`` (#689, decision 6872130373) runs, after the first version
+and without touching its output, ``RANKINGS`` (``trust_buy_days_5`` high
+first, a second key in two of them) over two universes: (a) the first
+version's ranked pool reordered, (b) the whole population; a missing value
+goes last and ties go by ``tie_break``.  The same engine, benchmarks and
+``judge``; each ranking × universe goes to ``<out>/<ranking>-<universe>/``,
+the comparison with the first version to ``rankings.md``／``rankings.json``.
 """
 
 from __future__ import annotations
@@ -56,6 +64,7 @@ from typing import Any, Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import evidence_lib as lib  # noqa: E402
+import feature_evidence as features  # noqa: E402
 
 VERSION = 1
 TOPS = (5, 10, 20)
@@ -82,6 +91,38 @@ VERDICTS = (
     "沒有差異",
     "驗證段反轉",
     "方向一致但不顯著",
+)
+
+
+# The rankings of evidence (#689, decision 6872130373, fixed before any result):
+# the one feature with evidence at T+5 first, high first; each variant's
+# second key is a T+5 "consistent but not significant" one, a control only.
+# A missing value goes last (never dropped); ties go by ``tie_break``.
+RANKINGS_DESIGN = "689"
+PRIMARY = "trust_buy_days_5"
+PRIMARY_MAX = 5.0
+FEATURE_FUNCTIONS = {
+    "trust_buy_days_5": features.trust_buy_days,
+    "revenue_high_12": features.revenue_high_12,
+    "eps_yield": features.eps_yield,
+}
+FEATURE_KEYS = tuple(FEATURE_FUNCTIONS)
+RANKINGS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("trust", "投信近 5 日買超天數", ()),
+    (
+        "trust_rev",
+        "投信近 5 日買超天數，同分看月營收創 12 個月新高",
+        ("revenue_high_12",),
+    ),
+    (
+        "trust_eps",
+        "投信近 5 日買超天數，同分看最新一季 EPS 年化 ÷ 股價",
+        ("eps_yield",),
+    ),
+)
+UNIVERSES = (
+    ("pool", "(a) 候選池內重排序：入池同第 1 版，只換排序"),
+    ("all", "(b) 全部可交易母體：當日母體直接依特徵排序"),
 )
 
 
@@ -629,7 +670,9 @@ def read_signals(path: Path) -> list[dict[str, Any]]:
     return out
 
 
-def load_market(db: Path, start: date, raw_dir: Path) -> Market:
+def load_market(
+    db: Path, start: date, raw_dir: Path, fundamentals: bool = False
+) -> Market:
     report = lib.research_report()
     con = lib.connect_read_only(db)
     try:
@@ -654,6 +697,9 @@ def load_market(db: Path, start: date, raw_dir: Path) -> Market:
                 [bool(bar.is_suspended) for bar in kept],
             )
         lib._load_chips(con, series, start)
+        if fundamentals:  # the rankings of #689 read revenues and EPS
+            lib._load_revenues(con, series)
+            lib._load_quarters(con, series)
         symbols, kinds, listings = {}, {}, {}
         for instrument_id, exchange, symbol, name, kind in con.execute(
             "select id, exchange, symbol, name, instrument_type from instruments"
@@ -768,49 +814,13 @@ def study(
             simulation = simulate(picks, market.quote, first, last, hold, top)
             simulations[(hold, key)] = simulation
             progress(f"K={hold} {key}: {time.monotonic() - started:.1f}s")
-    for hold in HOLDS:
-        returns = {
-            key: daily_returns(simulations[(hold, key)].equity)
-            for key in [top_key(n) for n in TOPS] + [POOL, POPULATION]
-        }
-        for key, series in returns.items():
-            simulation = simulations[(hold, key)]
-            previous = [1.0] + simulation.equity[:-1]
-            turnover = [
-                b / p if p > 0 else 0.0 for b, p in zip(simulation.bought, previous)
-            ]
-            segments = {}
-            for name, rows in _segment_rows(dates).items():
-                block = {
-                    "curve": curve_metrics(
-                        [series[i] for i in rows],
-                        [simulation.invested[i] for i in rows],
-                        [turnover[i] for i in rows],
-                    ),
-                    "trades": _trade_counts(simulation, rows, first),
-                }
-                for benchmark in (POPULATION, TAIEX, POOL):
-                    if benchmark == key or (key == POPULATION and benchmark == POOL):
-                        continue
-                    other = taiex if benchmark == TAIEX else returns[benchmark]
-                    block[f"excess_{benchmark}"] = excess_metrics(
-                        [series[i] - other[i] for i in rows if other[i] is not None]
-                    )
-                segments[name] = block
-            verdicts = {}
-            if key.startswith("top"):
-                for benchmark in (POPULATION, TAIEX):
-                    verdicts[benchmark] = judge(
-                        segments["exploration"][f"excess_{benchmark}"],
-                        segments["validation"][f"excess_{benchmark}"],
-                    )
-            variants[f"K{hold}:{key}"] = {
-                "hold": hold,
-                "key": key,
-                "segments": segments,
-                "verdicts": verdicts,
-                "counts": dict(simulation.counts),
-            }
+    variants = evaluate(
+        dates,
+        taiex,
+        simulations,
+        [top_key(n) for n in TOPS] + [POOL, POPULATION],
+        first,
+    )
     taiex_segments = {
         name: curve_metrics(
             [taiex[i] for i in rows if taiex[i] is not None], [1.0], [0.0]
@@ -831,7 +841,212 @@ def study(
         "_simulations": simulations,
         "_picks": picks_rows,
         "_first": first,
+        "_last": last,
+        "_ranked": ranked,
+        "_population": population,
+        "_taiex": taiex,
     }
+
+
+def evaluate(
+    dates: list[date],
+    taiex: list[float | None],
+    simulations: dict[tuple[int, str], Simulation],
+    keys: list[str],
+    first: int,
+) -> dict[str, dict[str, Any]]:
+    """Curves, excess returns and verdicts of ``keys`` per K (``pool`` optional)."""
+
+    variants: dict[str, dict[str, Any]] = {}
+    for hold in HOLDS:
+        returns = {key: daily_returns(simulations[(hold, key)].equity) for key in keys}
+        for key, series in returns.items():
+            simulation = simulations[(hold, key)]
+            previous = [1.0] + simulation.equity[:-1]
+            turnover = [
+                b / p if p > 0 else 0.0 for b, p in zip(simulation.bought, previous)
+            ]
+            segments = {}
+            for name, rows in _segment_rows(dates).items():
+                block = {
+                    "curve": curve_metrics(
+                        [series[i] for i in rows],
+                        [simulation.invested[i] for i in rows],
+                        [turnover[i] for i in rows],
+                    ),
+                    "trades": _trade_counts(simulation, rows, first),
+                }
+                for benchmark in (POPULATION, TAIEX, POOL):
+                    if (
+                        benchmark == key
+                        or (benchmark == POOL and POOL not in returns)
+                        or (key == POPULATION and benchmark == POOL)
+                    ):
+                        continue
+                    other = taiex if benchmark == TAIEX else returns[benchmark]
+                    block[f"excess_{benchmark}"] = excess_metrics(
+                        [series[i] - other[i] for i in rows if other[i] is not None]
+                    )
+                segments[name] = block
+            verdicts = {}
+            if key.startswith("top"):
+                for benchmark in (POPULATION, TAIEX):
+                    verdicts[benchmark] = judge(
+                        segments["exploration"][f"excess_{benchmark}"],
+                        segments["validation"][f"excess_{benchmark}"],
+                    )
+            variants[f"K{hold}:{key}"] = {
+                "hold": hold,
+                "key": key,
+                "segments": segments,
+                "verdicts": verdicts,
+                "counts": dict(simulation.counts),
+            }
+    return variants
+
+
+# --- the rankings of evidence (#689) --------------------------------------------
+
+
+def tie_break(day: date, instrument_id: int) -> str:
+    """A neutral, fixed order inside ties: no feature in it (#689 decision 2)."""
+
+    return hashlib.sha256(f"{day.isoformat()}:{instrument_id}".encode()).hexdigest()
+
+
+def feature_values(item: lib.Series, at: int) -> dict[str, float | None]:
+    values = {}
+    for name in FEATURE_KEYS:
+        value = FEATURE_FUNCTIONS[name](item, at)
+        values[name] = None if value is None or value != value else float(value)
+    return values
+
+
+def ranking_key(
+    values: dict[str, float | None], keys: tuple[str, ...], tie: str
+) -> tuple:
+    """Each key high first, a missing value last; then the neutral tie-break."""
+
+    out: list[Any] = []
+    for name in keys:
+        value = values[name]
+        out += [value is None, -(value if value is not None else 0.0)]
+    out.append(tie)
+    return tuple(out)
+
+
+def rank_by_features(
+    panel: lib.Panel,
+    day: date,
+    instrument_ids: list[int],
+    keys: tuple[str, ...],
+    cache: dict[tuple[date, int], tuple[dict[str, float | None], str]],
+) -> list[tuple[int, dict[str, float | None], str]]:
+    """``instrument_ids`` (all kept) in the order of ``keys`` on ``day``."""
+
+    rows = []
+    for instrument_id in instrument_ids:
+        known = cache.get((day, instrument_id))
+        if known is None:
+            item = panel.series[instrument_id]
+            known = (
+                feature_values(item, item.position[day]),
+                tie_break(day, instrument_id),
+            )
+            cache[(day, instrument_id)] = known
+        rows.append((instrument_id, *known))
+    rows.sort(key=lambda row: ranking_key(row[1], keys, row[2]))
+    return rows
+
+
+def study_rankings(
+    market: Market,
+    base: dict[str, Any],
+    progress: Callable[[str], None] = lambda text: None,
+) -> dict[str, dict[str, Any]]:
+    """Every ranking of ``RANKINGS`` over both universes, on ``study``'s run.
+
+    ``base`` is ``study``'s result before ``write_outputs``: the pool of (a) is
+    its ranked pool (the same names, reordered), the universe of (b) and the
+    benchmark its population, whose simulations are reused.
+    """
+
+    panel = market.panel
+    sessions = panel.sessions
+    first, last = base["_first"], base["_last"]
+    dates, taiex = base["_dates"], base["_taiex"]
+    cache: dict[tuple[date, int], tuple[dict[str, float | None], str]] = {}
+    sources = {"pool": base["_ranked"], "all": base["_population"]}
+    results: dict[str, dict[str, Any]] = {}
+    for universe, _label in UNIVERSES:
+        for ranking, _ranking_label, secondary in RANKINGS:
+            keys = (PRIMARY, *secondary)
+            started = time.monotonic()
+            picks: dict[int, list[int]] = {}
+            picks_rows: list[dict[str, Any]] = []
+            counts: Counter = Counter()
+            for s, names in sorted(sources[universe].items()):
+                day = sessions[s - 1]
+                rows = rank_by_features(panel, day, names, keys, cache)
+                picks[s] = [row[0] for row in rows]
+                counts["days"] += 1
+                counts["members"] += len(rows)
+                for name in FEATURE_KEYS:
+                    counts[f"missing_{name}"] += sum(
+                        1 for row in rows if row[1][name] is None
+                    )
+                counts["primary_at_most"] += sum(
+                    1 for row in rows if row[1][PRIMARY] == PRIMARY_MAX
+                )
+                for rank, (instrument_id, values, tie) in enumerate(rows, 1):
+                    if universe == "all" and rank > max(TOPS):
+                        break
+                    exchange, symbol, _ = panel.symbols.get(instrument_id, ("", "", ""))
+                    picks_rows.append(
+                        {
+                            "signal_date": day.isoformat(),
+                            "rank": rank,
+                            "exchange": exchange,
+                            "symbol": symbol,
+                            **values,
+                            "tie": tie[:12],
+                        }
+                    )
+            simulations = {
+                (hold, POPULATION): base["_simulations"][(hold, POPULATION)]
+                for hold in HOLDS
+            }
+            keys_out = [top_key(n) for n in TOPS]
+            if universe == "pool":
+                keys_out.append(POOL)
+                for hold in HOLDS:
+                    simulations[(hold, POOL)] = base["_simulations"][(hold, POOL)]
+            keys_out.append(POPULATION)
+            for hold in HOLDS:
+                for n in TOPS:
+                    simulations[(hold, top_key(n))] = simulate(
+                        picks, market.quote, first, last, hold, n
+                    )
+            results[f"{ranking}-{universe}"] = {
+                "ranking": ranking,
+                "universe": universe,
+                "keys": list(keys),
+                "first_session": base["first_session"],
+                "last_session": base["last_session"],
+                "signal_days": base["signal_days"],
+                "days_with_signals": base["days_with_signals"],
+                "pool_counts": dict(counts),
+                "variants": evaluate(dates, taiex, simulations, keys_out, first),
+                "taiex": base["taiex"],
+                "taiex_missing_days": base["taiex_missing_days"],
+                "comparisons": len(TOPS) * len(HOLDS) * 2,
+                "_dates": dates,
+                "_simulations": simulations,
+                "_picks": picks_rows,
+                "_first": first,
+            }
+            progress(f"{ranking}-{universe}: {time.monotonic() - started:.1f}s")
+    return results
 
 
 def _segment_rows(dates: list[date]) -> dict[str, list[int]]:
@@ -875,11 +1090,16 @@ def variant_name(key: str) -> str:
     return NAMES.get(key, f"前 {key[3:]} 名")
 
 
-def markdown(result: dict[str, Any]) -> str:
+def markdown(
+    result: dict[str, Any], label: str = SCORE_LABEL, notes: tuple[str, ...] = ()
+) -> str:
+    def present(keys: list[str]) -> list[str]:
+        return [key for key in keys if f"K{HOLDS[0]}:{key}" in result["variants"]]
+
     lines = [
         f"# 組合層級回測（portfolio_research 第 {result['version']} 版）",
         "",
-        f"- 排序：{SCORE_LABEL}",
+        f"- 排序：{label}",
         f"- 訊號：`{result['signals']['source']}`（sha256 `{result['signals']['sha256'][:16]}…`），"
         f"{result['signals']['rows']:,} 筆可行動訊號，訊號日 {result['signals']['first']}～{result['signals']['last']}",
         f"- 副本：最新交易日 {result['copy']['latest']}，alembic `{result['copy']['alembic']}`，"
@@ -897,10 +1117,11 @@ def markdown(result: dict[str, Any]) -> str:
         f"- 耗時 {result.get('elapsed_seconds', 0):.0f} 秒，峰值記憶體 "
         f"{lib.num(result.get('peak_memory_gb'), 2)} GB",
         f"- 重現：`{result['command']}`",
+        *[f"- {note}" for note in notes],
         "",
         "## 判定",
         "",
-        f"排序：{SCORE_LABEL}",
+        f"排序：{label}",
         "",
         "| K | N | 對母體 | 對加權指數 |",
         "| ---: | ---: | --- | --- |",
@@ -915,13 +1136,13 @@ def markdown(result: dict[str, Any]) -> str:
         "",
         "## 資金曲線",
         "",
-        f"排序：{SCORE_LABEL}",
+        f"排序：{label}",
         "",
         "| K | 組合 | 段 | 日數 | 年化報酬 | 年化波動 | 最大回撤 | 平均投入 | 年化換手 | 買進筆數 |",
         "| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for hold in HOLDS:
-        for key in [top_key(n) for n in TOPS] + [POOL, POPULATION]:
+        for key in present([top_key(n) for n in TOPS] + [POOL, POPULATION]):
             variant = result["variants"][f"K{hold}:{key}"]
             for segment in ("exploration", "validation", "all"):
                 curve = variant["segments"][segment]["curve"]
@@ -949,14 +1170,14 @@ def markdown(result: dict[str, Any]) -> str:
         "",
         "## 超額報酬",
         "",
-        f"排序：{SCORE_LABEL}。日均與年化（日均 × 252）；候選池全部那幾列只列出、不判定。",
+        f"排序：{label}。日均與年化（日均 × 252）；候選池全部那幾列只列出、不判定。",
         "",
         "| K | 組合 | 對 | 段 | 日數 | 日均 | 年化 | t |",
         "| ---: | --- | --- | --- | ---: | ---: | ---: | ---: |",
     ]
     against = {POPULATION: "母體", TAIEX: "加權指數", POOL: "候選池全部"}
     for hold in HOLDS:
-        for key in [top_key(n) for n in TOPS] + [POOL]:
+        for key in present([top_key(n) for n in TOPS] + [POOL]):
             variant = result["variants"][f"K{hold}:{key}"]
             for benchmark in (POPULATION, TAIEX, POOL):
                 if f"excess_{benchmark}" not in variant["segments"]["all"]:
@@ -976,7 +1197,7 @@ def markdown(result: dict[str, Any]) -> str:
         "| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for hold in HOLDS:
-        for key in [top_key(n) for n in TOPS] + [POOL, POPULATION]:
+        for key in present([top_key(n) for n in TOPS] + [POOL, POPULATION]):
             counts = result["variants"][f"K{hold}:{key}"]["counts"]
             lines.append(
                 f"| {hold} | {variant_name(key)} | {counts.get('bought', 0):,} "
@@ -987,15 +1208,46 @@ def markdown(result: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def write_outputs(out: Path, result: dict[str, Any], market: Market) -> None:
-    dates = result.pop("_dates")
-    simulations = result.pop("_simulations")
-    picks = result.pop("_picks")
-    result.pop("_first")
+PICK_FIELDS = [
+    "signal_date",
+    "rank",
+    "exchange",
+    "symbol",
+    "strategy",
+    "signal_id",
+    "total",
+    "technical",
+    "chips",
+]
+RANKING_PICK_FIELDS = [
+    "signal_date",
+    "rank",
+    "exchange",
+    "symbol",
+    *FEATURE_KEYS,
+    "tie",
+]
+
+
+def write_outputs(
+    out: Path,
+    result: dict[str, Any],
+    market: Market,
+    label: str = SCORE_LABEL,
+    notes: tuple[str, ...] = (),
+    pick_fields: list[str] = PICK_FIELDS,
+    no_trades: tuple[str, ...] = (POPULATION,),
+) -> None:
+    dates = result["_dates"]
+    simulations = result["_simulations"]
+    picks = result["_picks"]
+    for key in [key for key in result if key.startswith("_")]:
+        result.pop(key)
+    out.mkdir(parents=True, exist_ok=True)
     (out / "tables.json").write_text(
         json.dumps(result, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
     )
-    (out / "summary.md").write_text(markdown(result), encoding="utf-8")
+    (out / "summary.md").write_text(markdown(result, label, notes), encoding="utf-8")
     keys = sorted(simulations)
     with (out / "equity.csv").open("w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)
@@ -1011,18 +1263,7 @@ def write_outputs(out: Path, result: dict[str, Any], market: Market) -> None:
                 ]
             )
     with (out / "picks.csv").open("w", encoding="utf-8", newline="") as handle:
-        fields = [
-            "signal_date",
-            "rank",
-            "exchange",
-            "symbol",
-            "strategy",
-            "signal_id",
-            "total",
-            "technical",
-            "chips",
-        ]
-        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer = csv.DictWriter(handle, fieldnames=pick_fields)
         writer.writeheader()
         writer.writerows(picks)
     sessions = market.panel.sessions
@@ -1043,8 +1284,10 @@ def write_outputs(out: Path, result: dict[str, Any], market: Market) -> None:
             ]
         )
         for hold, key in keys:
-            if key == POPULATION:
-                continue  # about a million rows; its counts are in tables.json
+            if key in no_trades:
+                # the population: about a million rows, its counts are in
+                # tables.json; a ranking's pool: the first version's trades.csv
+                continue
             for position in simulations[(hold, key)].positions:
                 exchange, symbol, _ = market.panel.symbols.get(
                     position.instrument_id, ("", "", "")
@@ -1088,6 +1331,13 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--out", required=True)
     parser.add_argument("--min-free-gb", type=float, default=2.0)
+    parser.add_argument(
+        "--rankings",
+        choices=[RANKINGS_DESIGN],
+        default=None,
+        help="also run #689's rankings of evidence (the first version's output "
+        "is unchanged; each ranking × universe goes to <out>/<ranking>-<universe>/)",
+    )
     return parser
 
 
@@ -1109,7 +1359,12 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     first = min(signal["signal_date"] for signal in signals)
     cutoff = args.cutoff or max(signal["signal_date"] for signal in signals)
-    market = load_market(db, first - timedelta(days=HISTORY_DAYS), out / RAW_DIR_NAME)
+    market = load_market(
+        db,
+        first - timedelta(days=HISTORY_DAYS),
+        out / RAW_DIR_NAME,
+        fundamentals=args.rankings is not None,
+    )
     mismatched = [
         signal
         for signal in signals
@@ -1164,22 +1419,213 @@ def main(argv: list[str] | None = None) -> int:
     }
     result["elapsed_seconds"] = time.monotonic() - started
     result["peak_memory_gb"] = lib._load("backtest_research").peak_memory_gb()
+    base = dict(result)
     write_outputs(out, result, market)
-    print(
-        json.dumps(
-            {
-                "out": str(out.resolve()),
-                "elapsed_seconds": round(result["elapsed_seconds"], 1),
-                "verdicts": {
-                    key: value["verdicts"]
-                    for key, value in result["variants"].items()
-                    if value["verdicts"]
-                },
-            },
-            ensure_ascii=False,
+    line: dict[str, Any] = {
+        "out": str(out.resolve()),
+        "elapsed_seconds": round(result["elapsed_seconds"], 1),
+        "verdicts": {
+            key: value["verdicts"]
+            for key, value in result["variants"].items()
+            if value["verdicts"]
+        },
+    }
+    if args.rankings is not None:
+        line["rankings"] = run_rankings(
+            out,
+            market,
+            base,
+            {key: value for key, value in result.items() if key in HEADER_KEYS},
+            lambda text: print(text, file=sys.stderr, flush=True),
         )
-    )
+    print(json.dumps(line, ensure_ascii=False))
     return 0
+
+
+HEADER_KEYS = ("version", "command", "signals", "cutoff", "copy", "rule")
+
+
+def ranking_label(ranking: str, universe: str) -> str:
+    names = {key: label for key, label, _ in RANKINGS}
+    universes = dict(UNIVERSES)
+    return (
+        f"#{RANKINGS_DESIGN} 研究用排序 `{ranking}`：{names[ranking]}；"
+        f"{universes[universe]}；同分以 sha256(T:instrument_id) 中性排序，"
+        "缺值排最後；不是產品評分"
+    )
+
+
+def run_rankings(
+    out: Path,
+    market: Market,
+    base: dict[str, Any],
+    header: dict[str, Any],
+    progress: Callable[[str], None] = lambda text: None,
+) -> dict[str, dict[str, dict[str, str]]]:
+    """Write every ranking × universe and the comparison with the first version."""
+
+    started = time.monotonic()
+    sets = study_rankings(market, base, progress)
+    total = len(sets) * len(TOPS) * len(HOLDS) * 2
+    verdicts: dict[str, dict[str, dict[str, str]]] = {}
+    tables: dict[str, dict[str, Any]] = {}
+    for name, block in sets.items():
+        result = {
+            **header,
+            "rankings": RANKINGS_DESIGN,
+            "label": ranking_label(block["ranking"], block["universe"]),
+            "comparisons_total": total,
+            **block,
+        }
+        result["elapsed_seconds"] = time.monotonic() - started
+        result["peak_memory_gb"] = lib._load("backtest_research").peak_memory_gb()
+        notes = (
+            f"本次 #{RANKINGS_DESIGN} 共比較 {total} 組（{len(sets)} 個排序 × 母體 × "
+            f"{len(TOPS) * len(HOLDS)} 組 N×K × 2 個基準），本表是其中 "
+            f"{block['comparisons']} 組；並列見上一層的 `rankings.md`",
+            "上面「候選池計數」在本表是排序對象的計數：days 日數、members 檔次、"
+            "missing_* 特徵缺值、primary_at_most 主鍵＝5 的檔次",
+        )
+        write_outputs(
+            out / name,
+            result,
+            market,
+            label=result["label"],
+            notes=notes,
+            pick_fields=RANKING_PICK_FIELDS,
+            no_trades=(POPULATION, POOL),
+        )
+        tables[name] = result
+        verdicts[name] = {
+            key: value["verdicts"]
+            for key, value in result["variants"].items()
+            if value["verdicts"]
+        }
+    summary = {
+        "rankings": RANKINGS_DESIGN,
+        "comparisons": total,
+        "chance": chance_of_a_win(total),
+        "first_version": {
+            key: value["verdicts"]
+            for key, value in base["variants"].items()
+            if value["verdicts"]
+        },
+        "verdicts": verdicts,
+    }
+    (out / "rankings.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    (out / "rankings.md").write_text(
+        rankings_markdown(base, tables, summary), encoding="utf-8"
+    )
+    return verdicts
+
+
+def chance_of_a_win(groups: int) -> dict[str, float]:
+    """P(one null group reads 贏過基準) and P(any of ``groups``), as independent.
+
+    Each segment's t ≥ 2 by chance is the normal tail beyond 2; both segments
+    are needed.  The groups share a key and a universe, so the true chance of
+    any is lower than the independent figure.
+    """
+
+    tail = 1.0 - statistics.NormalDist().cdf(MIN_T)
+    one = tail * tail
+    return {"one": one, "any": 1.0 - (1.0 - one) ** groups}
+
+
+def _excess_t(variant: dict[str, Any], benchmark: str) -> str:
+    segments = variant["segments"]
+    key = f"excess_{benchmark}"
+    if key not in segments["all"]:
+        return "—"
+    return f"{_t(segments['exploration'][key]['t'])}／{_t(segments['validation'][key]['t'])}"
+
+
+def rankings_markdown(
+    base: dict[str, Any], tables: dict[str, dict[str, Any]], summary: dict[str, Any]
+) -> str:
+    chance = summary["chance"]
+    lines = [
+        f"# 評分改版研究（#{RANKINGS_DESIGN}）：有證據的特徵排序 × 組合層級回測",
+        "",
+        f"- 第 1 版（#682）：{SCORE_LABEL}，輸出在本目錄的 `summary.md`、`tables.json`",
+        f"- 排序變體：{'；'.join(f'`{key}` {label}' for key, label, _ in RANKINGS)}",
+        f"- 母體：{'；'.join(label for _, label in UNIVERSES)}",
+        "- 同分以 sha256(T:instrument_id) 中性排序；特徵缺值排最後、不剔除；"
+        "引擎、成本、漲跌停、基準、判定全部同第 1 版",
+        f"- 比較組數：{summary['comparisons']}；沒有真實效果時單組碰巧「贏過基準」"
+        f"約 {chance['one']:.4%}，{summary['comparisons']} 組視為獨立時至少一組約 "
+        f"{chance['any']:.1%}（各組共用主鍵與母體、高度相關，實際更低）",
+        "- 讀法：以 `trust` 為主；`trust_rev`／`trust_eps` 只在 `trust` 站得住時才看次鍵有沒有加分",
+        "",
+    ]
+    for universe, universe_label in UNIVERSES:
+        lines += [
+            f"## {universe_label}",
+            "",
+            "### 判定（對母體／對加權指數）",
+            "",
+            "| K | N | 第 1 版 v7 | "
+            + " | ".join(f"`{key}`" for key, _, _ in RANKINGS)
+            + " |",
+            "| ---: | ---: | --- | " + " | ".join("---" for _ in RANKINGS) + " |",
+        ]
+        for hold in HOLDS:
+            for n in TOPS:
+                variant = f"K{hold}:{top_key(n)}"
+                cells = [base["variants"][variant]["verdicts"]]
+                cells += [
+                    tables[f"{key}-{universe}"]["variants"][variant]["verdicts"]
+                    for key, _, _ in RANKINGS
+                ]
+                lines.append(
+                    f"| {hold} | {n} | "
+                    + " | ".join(f"{c[POPULATION]}／{c[TAIEX]}" for c in cells)
+                    + " |"
+                )
+        lines += [
+            "",
+            "### 全期年化報酬與超額 t（探索／驗證）",
+            "",
+            "| K | 組合 | 排序 | 年化報酬 | 最大回撤 | 平均投入 | 年化換手 | 對母體 t | 對加權指數 t | 對候選池 t |",
+            "| ---: | --- | --- | ---: | ---: | ---: | ---: | --- | --- | --- |",
+        ]
+        for hold in HOLDS:
+            for n in TOPS:
+                variant = f"K{hold}:{top_key(n)}"
+                rows = [("第 1 版 v7", base["variants"][variant])]
+                rows += [
+                    (f"`{key}`", tables[f"{key}-{universe}"]["variants"][variant])
+                    for key, _, _ in RANKINGS
+                ]
+                for name, block in rows:
+                    curve = block["segments"]["all"]["curve"]
+                    lines.append(
+                        f"| {hold} | 前 {n} 名 | {name} | {_pct(curve.get('annual'))} "
+                        f"| {_pct(curve.get('max_drawdown'))} | {_pct(curve.get('invested'), 1)} "
+                        f"| {lib.num(curve.get('turnover'), 1)} | {_excess_t(block, POPULATION)} "
+                        f"| {_excess_t(block, TAIEX)} | {_excess_t(block, POOL)} |"
+                    )
+            for key in (POOL, POPULATION):
+                block = base["variants"][f"K{hold}:{key}"]
+                if universe == "all" and key == POOL:
+                    continue
+                curve = block["segments"]["all"]["curve"]
+                lines.append(
+                    f"| {hold} | {variant_name(key)} | — | {_pct(curve.get('annual'))} "
+                    f"| {_pct(curve.get('max_drawdown'))} | {_pct(curve.get('invested'), 1)} "
+                    f"| {lib.num(curve.get('turnover'), 1)} | {_excess_t(block, POPULATION)} "
+                    f"| {_excess_t(block, TAIEX)} | — |"
+                )
+        lines.append("")
+    taiex = base["taiex"]["all"]
+    lines += [
+        f"加權指數（價格指數、不扣成本）全期年化 {_pct(taiex.get('annual'))}，"
+        f"最大回撤 {_pct(taiex.get('max_drawdown'))}。",
+        "",
+    ]
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":
