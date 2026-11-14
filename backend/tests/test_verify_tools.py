@@ -819,6 +819,10 @@ def test_screenshot_reports_a_browser_that_exits_before_listening(
     tmp_path: Path,
 ) -> None:
     # node rejects --headless=new and exits at once, like a browser that cannot start.
+    # It leaves no helper behind, so the profile in the temp dir must be gone (Issue 750).
+    temp = tmp_path / "tmp"
+    temp.mkdir()
+    env = {**os.environ, "TMPDIR": str(temp), "TEMP": str(temp), "TMP": str(temp)}
     started = time.monotonic()
     result = _run(
         [
@@ -830,12 +834,14 @@ def test_screenshot_reports_a_browser_that_exits_before_listening(
             str(tmp_path / "shots"),
             "--browser",
             NODE,
-        ]
+        ],
+        env=env,
     )
     assert result.returncode == 1
     assert "browser exited" in result.stderr and "headless" in result.stderr
     assert time.monotonic() - started < 30
     assert list((tmp_path / "shots").iterdir()) == []
+    assert list(temp.iterdir()) == []
 
 
 # A stand-in browser that exits at once and leaves a helper process behind; the helper
@@ -906,6 +912,7 @@ def test_screenshot_keeps_a_late_browser_write_out_of_the_output_dir(
     deadline = time.monotonic() + 30
     while not done.exists() and time.monotonic() < deadline:
         time.sleep(0.05)
+    assert done.exists(), "the late writer did not run within 30 s"
     late = Path(done.read_text(encoding="utf-8"))
     assert (late / "late-write").exists()
     assert list(out.iterdir()) == []
