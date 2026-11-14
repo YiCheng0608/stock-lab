@@ -152,7 +152,7 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 - 輸出：`summary.md`、`tables.json`、`equity.csv`（每日淨值）、`picks.csv`（每日排序）、`trades.csv`（前 N 名與候選池的每筆，母體只列計數）。
 
 **排序**：`candidate_score_v7` 去掉新聞與族群，報告標題與每張表都寫明，不當成當晚實際名單。
-- 候選池照 v7：run 的可行動訊號、`stock`／`ipo`、T 日有非停牌日線、20 日均量 ≥ 1,000 張。
+- 候選池照 v7：run 的可行動訊號、`stock`／`ipo`、T 日有非停牌日線、20 日均量 ≥ 1,000 張。run 的可行動訊號含 ETF，不入池，報告的候選池計數列為 `not_stock_or_ipo`。
 - technical（0.35）與 chips（0.30）照 v7 公式重算（`worker.candidates` 的子項、percentile 母體與方向），權重只在兩者之間重新正規化。
 - news（0.15）與 group（0.20）拿掉：新聞 AI 判讀只有近期才有，歷史族群分數不保證當日可得，重放會偷看未來或大部分日子缺值。
 - technical 沒有值的訊號不入池。同一檔兩策略都入池留總分高者（同分取 breakout），排序鍵與 tie-break 照 v7。

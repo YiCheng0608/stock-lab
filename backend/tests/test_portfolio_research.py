@@ -38,7 +38,7 @@ tool = _tool("portfolio_research")
 
 BUY = 1.0005 * 1.001425  # slippage and fee on the cash paid
 SELL = 0.9995 * (1 - 0.001425 - 0.003)  # slippage, fee and tax off the sale
-A, B, C = 1, 2, 3
+A, B, C, ETF = 1, 2, 3, 4
 
 
 def quotes(table):
@@ -366,6 +366,23 @@ def test_rank_day_orders_by_technical_and_keeps_one_row_per_stock():
     assert counts["low_volume"] == 1 and counts["same_instrument"] == 1
 
 
+def test_rank_day_leaves_etf_signals_out():
+    """A run's actionable signals include ETFs; v7's pool is stock／ipo only."""
+
+    day = DAY0 + timedelta(days=20)
+    a = series(A, [100.0] * 21)
+    m = market([a], kinds={A: "stock", ETF: "etf"})
+    signals = [
+        {"signal_id": 1, "instrument_id": A, "strategy": "breakout_v3"},
+        {"signal_id": 2, "instrument_id": ETF, "strategy": "breakout_v3"},
+    ]
+    ranked, counts = tool.rank_day(
+        m, day, signals, CANDIDATE_SCORE, _percentile, weighted_available_mean
+    )
+    assert [e.signal_id for e in ranked] == [1]
+    assert counts["not_stock_or_ipo"] == 1 and counts["no_bar"] == 0
+
+
 # --- the command on a copy -------------------------------------------------------------
 
 SESSIONS = 70
@@ -391,6 +408,7 @@ def copy_db(tmp_path_factory) -> Path:
             (A, "stock", "S1"),
             (B, "stock", "S2"),
             (9, "index", "TAIEX"),
+            (ETF, "etf", "0050"),
         ):
             db.add(
                 Instrument(
@@ -459,6 +477,8 @@ def test_the_command_writes_reports_and_not_the_database(
         for n, at in enumerate(range(25, 60), 1)
     ]
     rows.append((1, "breakout_v3", A, "S1", days[25].isoformat(), ""))  # a repeated row
+    # An ETF's signal: its symbol is the copy's, so it is not a mismatch.
+    rows.append((99, "breakout_v3", ETF, "0050", days[30].isoformat(), ""))
     signals = write_signals(tmp_path / "trades.csv", rows)
     before = digest(copy_db)
     out = tmp_path / "out"
@@ -477,9 +497,10 @@ def test_the_command_writes_reports_and_not_the_database(
     assert not list(copy_db.parent.glob("stock.db-*"))
     tables = json.loads((out / "tables.json").read_text(encoding="utf-8"))
     assert (
-        tables["signals"]["rows"] == 35
+        tables["signals"]["rows"] == 36
         and tables["signals"]["source"] == "test@sha:trades.csv"
     )
+    assert tables["pool_counts"]["not_stock_or_ipo"] == 1
     assert tables["comparisons"] == 18 and tables["cutoff"] == days[60].isoformat()
     assert tables["first_session"] == days[26].isoformat()
     top = tables["variants"]["K5:top5"]
