@@ -839,7 +839,7 @@ def test_dashboard_overview_with_both_exchanges(api_db):
             "scope": "twse_stocks",
         },
         "source": {
-            "label": "臺灣證券交易所 MI_INDEX",
+            "label": "臺灣證券交易所",
             "collected_at": "2026-10-22T10:30:05+00:00",
             "data_as_of": "2026-10-22",
             "raw_payload_id": 1,

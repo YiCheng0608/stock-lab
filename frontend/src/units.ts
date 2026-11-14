@@ -178,8 +178,3 @@ export function formatShareQuantity(shares: number | null | undefined, exact?: s
   const text = exactVolumeText(shares, exact)
   return text == null ? '庫存數量待核實' : `${formatExactShareLots(text)} 張`
 }
-
-export function formatPositionShares(shares: number | null | undefined, exact?: string | null): string {
-  const text = exactVolumeText(shares, exact)
-  return text == null ? '股數待核實' : `${groupedInteger(text)} 股`
-}

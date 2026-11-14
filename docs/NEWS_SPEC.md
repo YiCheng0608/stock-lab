@@ -130,7 +130,7 @@ LLM 批次的實作（`worker.news_llm`，執行方式見 [現有 worker CLI](op
 
 - `/news` 顯示分類、來源、標題、摘要預覽、來源時間、已核實標的／題材及事實／推論狀態；unknown／conflict 顯示「待核實」。清單兩行與展開區、卡片順序、折疊與連結文案見 [UI 文案 §4](UI_COPY_SPEC.md#4-新聞卡文案與折疊)。
 - **標題與摘要前綴清理**（[#523](https://github.com/YiCheng0608/stock-lab/issues/523)）：只在前端顯示時做（`cleanNewsLead`，`frontend/src/news/newsView.ts`），DB、API 與 `/news/:id` 的來源事實不改；verify 以同一規則比對頁面（`page_checks.display_title`），兩邊共用 `frontend/src/news/newsLead.cases.json` 的案例。先正規化連續空白，再從開頭重複去掉：① 符號 ■□▪▫◆◇◈●○◎◉•・‧∙★☆▲△▶►▸▷※；② 一對括號（`[]［］【】〔〕()（）`，內容 30 字內），內容含「記者」、或以「報導」「電」「新聞」結尾、或含「新聞網」時才去掉（「[FTNN新聞網]」「【時報記者郭鴻慧台北報導】」「（中央社記者潘智義新竹17日電）」「[Newtalk新聞]」）；③ 開頭的「（實習）記者某某／某某報導」（要有／、/ 或 ╱）。欄目標記（《營建股》【盤前】〈熱門股〉）、MOPS 的 [更新]、(影) 不符合 ② 而保留；去完沒有字時用原文。正式 DB 2026-11-05 副本的 7,114 則媒體新聞中，標題開頭是「■」的 1 則，署名前綴（「[FTNN新聞網]記者…／綜合報導」「【時報記者…報導】」「（中央社記者…電）」）都在摘要開頭（Yahoo奇摩股市 682、工商時報 482 則以括號開頭），所以規則同時用在標題與摘要預覽。
-- `/news/:id` 顯示新資訊、來源／引用、影響、反證及可展開內文；時間品質、版本與 raw 稽核預設收合。date-only 不顯示午夜。
+- `/news/:id` 顯示新資訊、來源／引用、影響、反證及可展開內文；時間品質與來源位置預設收合（#732 起不顯示版本與 raw／事件識別碼）。date-only 不顯示午夜。
 - unknown 影響不使用買賣或紅綠暗示。
 - 篩選包含 category、source_kind、q、symbol、theme_id、impact_direction、cursor、limit；實際支援的 query 以 API 為準。
 - **關聯篩選**（[#523](https://github.com/YiCheng0608/stock-lab/issues/523)）：`/api/news` 的布林參數 `verified_only`（有已核實標的：`symbols_json` 不為空，與卡片上的標的 tag 同一份）與 `watchlist_only`（已核實標的裡至少一檔是自選股：`symbols_json` 的 `交易所:代號`，或官方公告的純代號，對到 `instruments.is_watchlisted` 為 true 的列；純代號只比代號，因為上市櫃代號不會重複）。兩個參數在與 `q`、`symbol`、`theme_id` 同一個後端過濾迴圈裡篩，所以 cursor 分頁與 `meta.total` 都是篩選後的結果；同時給兩個等於 `watchlist_only`。自選清單在每次請求讀一次（一個查詢），不逐則查；自選清單為空時 `watchlist_only` 回 0 則。

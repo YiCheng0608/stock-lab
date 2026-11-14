@@ -17,13 +17,13 @@ export const indexRows = (): IndexRow[] => [
     key: 'taiex', group: 'tw', exchange: 'TWSE', symbol: 'TAIEX', name: '加權指數', instrument_type: 'index', status: 'available',
     trading_date: '2026-10-22', expected_date: '2026-10-22', freshness: 'latest', close: 46041.43, change: -846.34, change_pct: -0.0181, change_pct_method: 'official',
     ma60: ma60('2026-10-22', { close: 46041.43, ma60: 44012.5, above: true, position: 'above', close_count: 250 }),
-    source: { label: '臺灣證券交易所', detail: '臺灣證券交易所 MI_INDEX' },
+    source: { label: '臺灣證券交易所', detail: '臺灣證券交易所' },
   },
   {
     key: 'tpex', group: 'tw', exchange: 'TPEx', symbol: 'TPEX', name: '櫃買指數', instrument_type: 'index', status: 'available',
     trading_date: '2026-10-21', expected_date: '2026-10-22', freshness: 'stale', close: 395.42, change: 2.1, change_pct: 0.005339, change_pct_method: 'derived',
     ma60: ma60('2026-10-21', { status: 'insufficient', reason: 'insufficient_closes', close_count: 42 }),
-    source: { label: '證券櫃檯買賣中心', detail: '櫃買中心 tpex_mainborad_highlight' },
+    source: { label: '證券櫃檯買賣中心', detail: '證券櫃檯買賣中心' },
   },
   {
     key: 'tx', group: 'tw', exchange: 'TAIFEX', symbol: 'TX', name: '台指期近月', instrument_type: 'futures', status: 'available',

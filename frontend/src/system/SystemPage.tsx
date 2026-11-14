@@ -19,7 +19,6 @@ export function SystemPage() {
       <section className="page-title">
         <div className="eyebrow">資料與工具</div>
         <h1>系統</h1>
-        <p>每天選股用不到、但想查資料來源或規則細節時會用到的頁面。</p>
       </section>
       <div className="glossary-grid system-links">
         {SYSTEM_LINKS.map((item) => (
