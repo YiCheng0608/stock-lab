@@ -38,7 +38,7 @@
 - **間隔**：`backfill`、`corporate-actions sync`、`trading-halts`、`revenue backfill`、`fundamentals backfill`、`events backfill`、`index-bars backfill`／`futures-history` 這些命令，對每個官方 host 至少間隔 3 秒（`worker.cli.BACKFILL_HOST_INTERVAL_SECONDS`）；daily 與它的 catchup 仍用各 host 自己的間隔。
 - **時段**：台北 21:15～23:30 不送請求（正式 daily 在跑）。日行情用 [`tools/research/history_backfill.py`](../../tools/research/history_backfill.py) 逐月跑：由新到舊，一個月一次 `backfill`（約 10 分鐘）；每個月開始前，台北時間落在 21:00～23:30 時，先等到 23:30。進度與每個月的結束碼記在 `/data/logs/history-backfill.jsonl`，重跑時跳過已完成的月份。其他命令都是幾分鐘到一小時，在 21:00 之前開始。
 - **耗時**：副本實測每個交易日約 15～26 秒（2026-11-14，3 秒間隔；上市 3 個、上櫃 3 個請求，加上每批 1 個 MOPS 清單，2008 年以前每月多 1 個 `MI_5MINS_HIST`）：2012-04-25～05-08 九個交易日 152 秒、2004-02-11～02-20 八個交易日 153 秒、2014-11-24～12-05 十個交易日 258 秒。
-- **舊版面**：實測過的三段（2004-02、2007-04、2012-04～05、2014-11～12）找出三個舊版面，已處理（[各來源最早可得](../DATA_SOURCES.md#各來源最早可得)）：2009 年以前 `MI_INDEX` 沒有指數表、2014-12 以前 T86 的外資欄、TPEx 法人 2014-12 起的 16 欄版面。版面在實測日之間的其他改版沒有逐一確認，例如 TPEx 法人改成 24 欄的那天：parser 認不得的版面，可能讓那天法人欄是空值而沒有 warning（T86），或記核心 warning 讓那天變 `partial`（TPEx），所以每一批讀回時都要查各欄非空的比例（回補執行單的驗收）。
+- **舊版面**：實測過的三段（2004-02、2007-04、2012-04～05、2014-11～12）找出三個舊版面，已處理（[各來源最早可得](../DATA_SOURCES.md#各來源最早可得)）：2009 年以前 `MI_INDEX` 沒有指數表、T86 較舊版面的外資欄（2012-05 實測，改版日未確認）、TPEx 法人 2014-12 起的 16 欄版面。版面在實測日之間的其他改版沒有逐一確認，例如 TPEx 法人改成 24 欄的那天：parser 認不得的版面，可能讓那天法人欄是空值而沒有 warning（T86），或記核心 warning 讓那天變 `partial`（TPEx），所以每一批讀回時都要查各欄非空的比例（回補執行單的驗收）。
 
 ### 建研究 DB
 
@@ -48,8 +48,12 @@
 # 換值：D＝副本目錄；IMG＝含 #692 的 backend image（正式在跑的 tag 或任務 image）
 docker volume create stock-lab-research
 MSYS_NO_PATHCONV=1 docker run --rm --network none -u 0 -v stock-lab-research:/data -v "$D":/src:ro "$IMG" \
-  sh -c 'cp /src/stock.db /data/stock.db && mkdir -p /data/raw /data/locks /data/logs && chown -R 1000:1000 /data'
+  sh -c 'cp /src/stock.db /data/stock.db && mkdir -p /data/raw /data/locks /data/logs \
+    && printf "{\"purpose\": \"research_history\", \"issue\": 692}\n" > /data/research-db.json \
+    && chown -R 1000:1000 /data'
 ```
+
+**研究標記 `research-db.json`**：容器裡研究 volume 與正式 volume 都是 `/data/stock.db`，路徑分不出來，所以建研究 DB 時在 `stock.db` 旁邊寫這個檔（內容的 `purpose` 是 `research_history`）。`history_backfill.py` 要它存在、而且有設 `STOCK_SESSION_BASIS_START` 才起跑，否則印 `refused`、exit 2。正式 volume 永遠不放這個檔。
 
 ### 跑一批
 

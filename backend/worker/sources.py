@@ -657,18 +657,22 @@ _host_last_request: dict[str, float] = {}
 _minimum_host_interval = 0.0
 
 
-def set_minimum_host_interval(seconds: float) -> None:
+def set_minimum_host_interval(seconds: float) -> float:
+    """Set the floor; returns the previous one, for the caller to restore."""
+
     global _minimum_host_interval
+    previous = _minimum_host_interval
     _minimum_host_interval = float(seconds)
+    return previous
 
 
 def _throttle_official_host(url: str) -> None:
     host = urlsplit(url).hostname or ""
-    interval = max(
-        OFFICIAL_HOST_MIN_INTERVAL_SECONDS.get(host) or 0.0, _minimum_host_interval
-    )
+    interval = OFFICIAL_HOST_MIN_INTERVAL_SECONDS.get(host)
     if not interval:
+        # Not an official host: never throttled, with or without the floor.
         return
+    interval = max(interval, _minimum_host_interval)
     previous = _host_last_request.get(host)
     now = time.monotonic()
     if previous is not None and now - previous < interval:
@@ -1638,9 +1642,11 @@ def _number_from_row(
     return None
 
 
-# T86's foreign-investor net: the current layout (2014-12-01 on) and the one
-# before it, which had no 外資自營商 column (the 2012-05-02 answer of the #692
-# probes: 外資買進股數, 外資賣出股數, 外資買賣超股數, 投信…, 自營商…).
+# T86's foreign-investor net: the current layout and an older one without a
+# 外資自營商 column, seen in the 2012-05-02 answer of the #692 probes (外資買進
+# 股數, 外資賣出股數, 外資買賣超股數, 投信…, 自營商…; 2014-11-28 already has
+# the current layout).  The day of the change was not probed; the parser
+# chooses by the column names, not by the date.
 TWSE_T86_CURRENT_FOREIGN_FIELDS = (
     "ForeignBuySellDifferenceExcludingForeignDealer",
     "ForeignInvestorsBuySellDifferenceExcludingDealer",
@@ -1678,8 +1684,8 @@ def parse_twse_institutional_rows(
         if foreign_buy is None and not any(
             key in row for key in TWSE_T86_CURRENT_FOREIGN_FIELDS
         ):
-            # Before 2014-12-01 T86 had no foreign-dealer column: 外資買賣超股數
-            # is the foreign investors' net of that layout (Issue #692).
+            # The older layout (seen 2012-05-02) had no foreign-dealer column:
+            # 外資買賣超股數 is the foreign investors' net of it (Issue #692).
             foreign_buy = parse_number(row.get(TWSE_T86_LEGACY_FOREIGN_FIELD))
         trust_buy = _number_from_row(
             row,
@@ -4659,11 +4665,13 @@ class TpexAdapter:
                     {(bar.symbol, bar.trading_date): bar for bar in bars}.values()
                 ), payloads
         asked = False
+        skipped_first_days = False
         for trading_date in _weekday_dates(start, end):
             if trading_date < TPEX_QUOTES_FIRST_DATE:
                 # dailyQuotes answers an empty table (上櫃家數 0) before its
                 # first day; that is not a closed day (Issue #692).
                 self.not_published.setdefault("quotes", []).append(trading_date)
+                skipped_first_days = True
                 continue
             asked = True
             payload = self._fetch(
@@ -4701,8 +4709,10 @@ class TpexAdapter:
                 bar.trading_date for bar in historical_rows if bar.trading_date < end
             )
             bars.extend(historical_rows)
+        # A range before dailyQuotes' first day has nothing to prove; any other
+        # range (a weekend-only one too) is checked as before Issue #692.
         if (
-            asked
+            (asked or not skipped_first_days)
             and start < end
             and not historical_bar_dates
             and not self.no_data_dates

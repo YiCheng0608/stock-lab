@@ -91,3 +91,52 @@ def test_it_refuses_without_a_research_start(tmp_path, capsys, monkeypatch):
     monkeypatch.setenv("STOCK_DATA_DIR", str(tmp_path))
     assert tool.main(["--from", "2012-04-25", "--to", "2012-05-08"]) == 2
     assert "STOCK_SESSION_BASIS_START" in capsys.readouterr().out
+
+
+def _research_env(monkeypatch, data_dir: Path) -> None:
+    # The settings the runbook gives the container (docs/ops/RESEARCH_DB.md).
+    monkeypatch.setenv("STOCK_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("STOCK_SESSION_BASIS_START", "2004-02-11")
+    monkeypatch.setenv("STOCK_INDEX_HISTORY_START", "2004-02-01")
+    monkeypatch.setenv("STOCK_HISTORY_CREATE_UNMATCHED", "1")
+    monkeypatch.delenv("STOCK_DB_PATH", raising=False)
+    (data_dir / "stock.db").write_bytes(b"")
+
+
+def test_main_with_the_runbook_settings_runs_the_backfill(tmp_path, monkeypatch):
+    """#701 review: STOCK_DATA_DIR=/data with the DB in it must not be refused."""
+
+    _research_env(monkeypatch, tmp_path)
+    (tmp_path / tool.MARKER_NAME).write_text(
+        json.dumps({"purpose": tool.MARKER_PURPOSE}), encoding="utf-8"
+    )
+    ran: list[tuple[date, date]] = []
+    monkeypatch.setattr(tool, "pause_seconds", lambda _now: 0.0)
+
+    def backfill(start, end):
+        ran.append((start, end))
+        return 0, "{}"
+
+    assert (
+        tool.main(["--from", "2012-06-01", "--to", "2012-06-30"], backfill=backfill)
+        == 0
+    )
+    assert ran == [(date(2012, 6, 1), date(2012, 6, 30))]
+
+
+def test_main_refuses_a_volume_without_the_research_marker(
+    tmp_path, monkeypatch, capsys
+):
+    _research_env(monkeypatch, tmp_path)
+    called = []
+    assert (
+        tool.main(
+            ["--from", "2012-06-01", "--to", "2012-06-30"],
+            backfill=lambda *a: called.append(a) or (0, ""),
+        )
+        == 2
+    )
+    assert called == []
+    assert tool.MARKER_NAME in capsys.readouterr().out
+    (tmp_path / tool.MARKER_NAME).write_text('{"purpose": "production"}', "utf-8")
+    assert tool.main(["--from", "2012-06-01", "--to", "2012-06-30"]) == 2

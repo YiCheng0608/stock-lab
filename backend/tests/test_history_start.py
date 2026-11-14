@@ -582,3 +582,70 @@ def test_a_frozen_hypothesis_takes_no_segment(capsys):
         )
     assert exit_info.value.code == 2
     assert "--hypothesis takes no --segment" in capsys.readouterr().err
+
+
+def test_backfill_reports_a_malformed_start_date_as_a_usage_error(monkeypatch, capsys):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "worker.cli",
+            "backfill",
+            "--start-date",
+            "2012/05/02",
+            "--end-date",
+            "2012-05-08",
+        ],
+    )
+    monkeypatch.setattr(cli, "run_command", lambda *_: pytest.fail("ran"))
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main()
+    assert exit_info.value.code == 2
+    assert "YYYY-MM-DD" in capsys.readouterr().err
+
+
+def test_tpex_weekend_only_range_still_fails_closed(tmp_path, monkeypatch):
+    """No weekday in the range: the pre-#692 'no prior-session OHLCV' check holds."""
+
+    monkeypatch.setattr(sources, "RAW_DIR", tmp_path / "raw")
+    adapter = sources.TpexAdapter(lambda url, **kw: pytest.fail("asked"))
+    with pytest.raises(sources.OfficialDataError, match="no prior-session OHLCV"):
+        adapter.fetch_bars(["7001"], date(2026, 11, 14), date(2026, 11, 15))
+
+
+@pytest.mark.parametrize("ending", ["returns", "exits"])
+def test_a_backfill_command_leaves_no_floor_behind(ending, monkeypatch):
+    """#701 review: the 3-second floor must not leak to what runs after it."""
+
+    assert sources._minimum_host_interval == 0.0
+    seen = []
+
+    def body(args, parser):
+        seen.append(sources._minimum_host_interval)
+        if ending == "exits" and args.command == "trading-halts":
+            raise SystemExit(2)
+
+    monkeypatch.setattr(cli, "_run_command", body)
+    args = cli.argparse.Namespace(command="trading-halts")
+    if ending == "exits":
+        with pytest.raises(SystemExit):
+            cli.run_command(args, None)
+    else:
+        cli.run_command(args, None)
+    assert seen == [3.0]
+    assert sources._minimum_host_interval == 0.0
+    cli.run_command(cli.argparse.Namespace(command="collect"), None)
+    assert seen == [3.0, 0.0]
+
+
+def test_the_floor_never_throttles_a_host_that_is_not_official(monkeypatch):
+    slept: list[float] = []
+    monkeypatch.setattr(sources.time, "sleep", slept.append)
+    monkeypatch.setattr(sources, "_host_last_request", {})
+    previous = sources.set_minimum_host_interval(3.0)
+    try:
+        for _ in range(3):
+            sources._throttle_official_host("http://127.0.0.1:8123/ajax_t163sb04")
+    finally:
+        sources.set_minimum_host_interval(previous)
+    assert slept == []

@@ -12,8 +12,8 @@ Before each month it checks the Taipei time: from ``PAUSE_FROM`` (21:00, a
 month's length before the 21:15 no-request rule) to ``PAUSE_UNTIL`` (23:30) it
 sleeps until 23:30, so no request is sent while the production daily runs.
 
-It refuses a database that is the production one (the same check as the
-research tools) and a run without ``STOCK_SESSION_BASIS_START`` set: a
+It refuses a run without ``STOCK_SESSION_BASIS_START`` set, and a database
+without the research marker ``research-db.json`` next to it (``_refusal``): a
 backfill before 2024-09-30 belongs in a research database only.  Progress and
 each month's exit code and summary go to ``<data>/logs/history-backfill.jsonl``.
 """
@@ -35,6 +35,10 @@ TAIPEI = timezone(timedelta(hours=8))
 PAUSE_FROM = time(21, 0)
 PAUSE_UNTIL = time(23, 30)
 PROGRESS_NAME = "history-backfill.jsonl"
+# Written next to stock.db when the research volume is built; never in the
+# production volume (docs/ops/RESEARCH_DB.md, #701 review).
+MARKER_NAME = "research-db.json"
+MARKER_PURPOSE = "research_history"
 
 
 def months_newest_first(first: date, last: date) -> list[tuple[date, date]]:
@@ -80,14 +84,31 @@ def done_months(progress: Path) -> set[tuple[str, str]]:
 
 
 def _refusal(environ: dict[str, str], db: Path) -> str | None:
+    """Why this run may not start; None for a research database.
+
+    Inside the container the research and the production volumes are both
+    ``/data/stock.db``, so a path cannot tell them apart.  The research volume
+    carries ``MARKER_NAME`` next to the database (written when it is built,
+    docs/ops/RESEARCH_DB.md); the production volume never does.
+    """
+
     if not (environ.get("STOCK_SESSION_BASIS_START") or "").strip():
         return (
             "STOCK_SESSION_BASIS_START is not set: this is not a research database run"
         )
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from backtest_research import production_problem
-
-    return production_problem(db, environ)
+    marker = db.parent / MARKER_NAME
+    try:
+        purpose = json.loads(marker.read_text(encoding="utf-8")).get("purpose")
+    except (OSError, ValueError, AttributeError):
+        purpose = None
+    if purpose != MARKER_PURPOSE:
+        return (
+            f"{marker} is missing or not a research marker "
+            f'(expected {{"purpose": "{MARKER_PURPOSE}"}}): not a research database'
+        )
+    if not db.is_file():
+        return f"{db} does not exist"
+    return None
 
 
 def run(
@@ -159,7 +180,13 @@ def _worker_backfill(start: date, end: date) -> tuple[int, str]:
         tail = json.dumps(
             {
                 key: result.get(key)
-                for key in ("status", "partial_dates", "failed_dates", "run_ids")
+                for key in (
+                    "status",
+                    "completed_dates",
+                    "partial_dates",
+                    "failed_dates",
+                    "skipped_non_trading_dates",
+                )
                 if key in result
             },
             ensure_ascii=False,
@@ -169,7 +196,11 @@ def _worker_backfill(start: date, end: date) -> tuple[int, str]:
     return completed.returncode, tail
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    *,
+    backfill: Callable[[date, date], tuple[int, str]] | None = None,
+) -> int:
     parser = argparse.ArgumentParser(prog="history_backfill.py", description=__doc__)
     parser.add_argument("--from", dest="first", type=date.fromisoformat, required=True)
     parser.add_argument("--to", dest="last", type=date.fromisoformat, required=True)
@@ -186,7 +217,7 @@ def main(argv: list[str] | None = None) -> int:
         args.last,
         data_dir=data_dir,
         environ=environ,
-        backfill=_worker_backfill,
+        backfill=backfill or _worker_backfill,
     )
     print(json.dumps(counts))
     return 0 if counts["failed"] == 0 else 1

@@ -593,10 +593,12 @@ def main() -> None:
         "--dry-run", action="store_true", help="只列出會送出的批次，不呼叫、不寫 DB"
     )
     args = parser.parse_args()
-    if (
-        args.command == "backfill"
-        and date.fromisoformat(args.start_date) < TWSE_QUOTES_FIRST_DATE
-    ):
+    if args.command == "backfill":
+        try:
+            backfill_start = date.fromisoformat(args.start_date)
+        except ValueError:
+            parser.error(f"--start-date must be YYYY-MM-DD, got {args.start_date!r}")
+    if args.command == "backfill" and backfill_start < TWSE_QUOTES_FIRST_DATE:
         # MI_INDEX answers nothing before 2004-02-11 (Issue #692).
         parser.error(
             f"--start-date must not be before {TWSE_QUOTES_FIRST_DATE.isoformat()}"
@@ -691,8 +693,24 @@ def backfill_command(args: argparse.Namespace) -> str | None:
 
 
 def run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
-    if backfill_command(args):
-        set_minimum_host_interval(BACKFILL_HOST_INTERVAL_SECONDS)
+    """Run one command; a backfill holds the 3-second floor only while it runs.
+
+    The floor is a process-wide value (sources.set_minimum_host_interval), so
+    it is restored when the command returns or raises (#701 review): nothing
+    after it in the same process (another command, the next test) keeps it.
+    """
+
+    if not backfill_command(args):
+        _run_command(args, parser)
+        return
+    previous = set_minimum_host_interval(BACKFILL_HOST_INTERVAL_SECONDS)
+    try:
+        _run_command(args, parser)
+    finally:
+        set_minimum_host_interval(previous)
+
+
+def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     if args.command == "init-db":
         init_db()
         result = {"status": "success"}

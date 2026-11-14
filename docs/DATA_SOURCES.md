@@ -93,7 +93,7 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 | 資料 | 端點 | 最早可得 | 更早時的回應 | 回補路徑怎麼處理更早的日子 |
 | --- | --- | --- | --- | --- |
 | 上市日行情、TAIEX 收盤 | `MI_INDEX` | 2004-02-11 | `stat`「查詢日期小於93年2月11日」 | `backfill --start-date` 早於這天就拒絕、不發請求（`sources.TWSE_QUOTES_FIRST_DATE`）。2008-12-31 以前的 `MI_INDEX` 只有「大盤統計資訊」與「每日收盤行情」，沒有「價格指數」表（2009-01-05 起才有，`TWSE_MI_INDEX_TAIEX_FIRST_DATE`）：那些日子的 TAIEX 收盤改取 `MI_5MINS_HIST` 月報（每月 1 個請求），寫成同樣的收盤列（`twse_index`），raw 指向月報，交易日基準照[TAIEX 交易日基準](#taiex-交易日基準)核實 |
-| 上市三大法人 | `T86` | 2012-05-02 | `stat`「查詢日期小於101年05月02日」 | 不請求，籌碼列只有融資組；run metadata 的 `feed_sources.TWSE.not_published.institutional` 記日期，不記 warning。2014-12-01 以前的版面沒有外資自營商欄，外資取「外資買賣超股數」（當時的外資口徑，含後來分出的外資自營商）；現行版面不改讀這欄 |
+| 上市三大法人 | `T86` | 2012-05-02 | `stat`「查詢日期小於101年05月02日」 | 不請求，籌碼列只有融資組；run metadata 的 `feed_sources.TWSE.not_published.institutional` 記日期，不記 warning。較舊的版面沒有外資自營商欄（2012-05-02 實測如此，2014-11-28 已是現行版面，改版日沒有實測），外資取「外資買賣超股數」（當時的外資口徑，含後來分出的外資自營商）；parser 依欄名判斷版面，現行版面不改讀這欄 |
 | 上市融資融券 | `MI_MARGN` | 不晚於 2004-02-11 | — | 照常請求 |
 | 上市除權息 | `TWT49U`（含權的列另查 `TWT49UDetail`） | 2003-05-05 | `stat`「查詢開始日期小於92年5月5日」 | `corporate-actions sync` 的起日夾到這天 |
 | 上市減資停止買賣 | `TWTAUU` | 2011-01-01 | `stat`「查詢開始日期小於100年1月1日」 | `trading-halts` 的起日夾到這天，輸出 `not_published_before` |
