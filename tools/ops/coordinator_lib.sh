@@ -392,6 +392,23 @@ cbm_rebuild() {
     || { cbm_error="index_repository 回 status=${status:-無}、project=${project:-無}，不是 indexed／$cbm_project"; return 1; }
 }
 
+# checkout_fast_forward: bring this checkout (repo_root, the management checkout) to
+# origin/master, already fetched, by fast-forward only: it must be on master with no
+# uncommitted change to a tracked file. Fails with the reason in cbm_error, nothing changed.
+# The caller's own script file may be rewritten by it: close_task.sh and dispatch.sh are one
+# brace group each, read whole before they run (#704 review).
+checkout_fast_forward() {
+  local cur dirty
+  cur="$(git -C "$repo_root" symbolic-ref --quiet --short HEAD | tr -d '\r')"
+  [ "$cur" = master ] || { cbm_error="$repo_root 不在 master（${cur:-detached}），未更新、未動索引"; return 1; }
+  dirty="$(git -C "$repo_root" status --porcelain --untracked-files=no)" \
+    || { cbm_error="讀不到 $repo_root 的 git status"; return 1; }
+  [ -z "$(printf '%s' "$dirty" | tr -d '\r')" ] \
+    || { cbm_error="$repo_root 有未 commit 的改動，未更新、未動索引"; return 1; }
+  git -C "$repo_root" merge --ff-only --quiet origin/master \
+    || { cbm_error="$repo_root 無法快轉到 origin/master"; return 1; }
+}
+
 # cbm_merge_paths SHA...: the files each merge commit changed against its first parent,
 # deleted ones left out, once each.
 cbm_merge_paths() {

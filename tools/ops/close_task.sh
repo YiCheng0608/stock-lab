@@ -56,6 +56,10 @@
 # Prints one JSON line. Exit 0 done; 1 a check failed (nothing deleted); 3 a step failed
 # after deleting started (the JSON says which steps ran); 4 only the board update
 # failed; 2/64 bad setup or arguments.
+{
+# The whole script is one brace group: bash reads all of it before running any, so a
+# fast-forward of this checkout that rewrites this file mid-run (#704 review) cannot
+# change what runs next.
 set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
@@ -461,13 +465,7 @@ if [ "$base_branch" != master ]; then
 elif [ "$set_board" = 0 ]; then
   steps+=("index_skipped:no_board")
 else
-  cur="$(git -C "$repo_root" symbolic-ref --quiet --short HEAD | tr -d '\r')"
-  [ "$cur" = master ] || report 3 "管理 checkout 更新：$repo_root 不在 master（${cur:-detached}），未更新、未重建索引"
-  dirty="$(git -C "$repo_root" status --porcelain --untracked-files=no)" \
-    || report 3 "管理 checkout 更新：讀不到 $repo_root 的 git status"
-  [ -z "$(printf '%s' "$dirty" | tr -d '\r')" ] || report 3 "管理 checkout 更新：$repo_root 有未 commit 的改動，未更新、未重建索引"
-  git -C "$repo_root" merge --ff-only --quiet origin/master \
-    || report 3 "管理 checkout 更新：$repo_root 無法快轉到 origin/master"
+  checkout_fast_forward || report 3 "管理 checkout 更新：$cbm_error"
   steps+=("checkout_updated:$(git -C "$repo_root" rev-parse HEAD | tr -d '\r')")
   index_paths="$(cbm_merge_paths "$merge_sha")" || report 3 "索引步驟：讀不到 merge commit ${merge_sha:0:9} 改到的檔案"
   if [ -z "$index_paths" ]; then
@@ -486,3 +484,5 @@ else
   board=skipped
 fi
 report 0
+exit 1 # not reached: report exits
+}

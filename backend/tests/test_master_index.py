@@ -400,7 +400,115 @@ def test_close_task_dry_run_leaves_the_checkout_and_the_index_alone(
     assert not any(c.split()[2:3] == ["merge"] for c in close.calls("git"))
 
 
+# The fast-forward rewrites the running script in place, longer by some 1,500 bytes before
+# the point it has reached (#704 review 1): a merge that changed close_task.sh itself.
+GROW_SCRIPT = r"""
+f="$FAKE_REPO/tools/ops/{script}"
+{{ head -n 1 "$f"
+  for i in $(seq 1 25); do echo "# a line the fast-forward put in, number $i of 25, padding"; done
+  tail -n +2 "$f"; }} >"$f.new"
+cat "$f.new" >"$f"
+rm -f "$f.new"
+"""
+
+
+def test_close_task_runs_to_its_end_when_the_fast_forward_rewrites_it(
+    close: Harness,
+) -> None:
+    script = close.ops / "close_task.sh"
+    before = script.stat().st_size
+    close.write("git_merge.hook", GROW_SCRIPT.format(script="close_task.sh"))
+    result = close.close_task(close.extra)
+    assert script.stat().st_size > before + 1000  # the hook did rewrite it
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    assert "index_fresh:1" in line["steps"] and line["board"] == "完成"
+    assert line["error"] is None
+
+
+def test_close_task_rerun_with_pr_after_a_failed_index_step_finishes(
+    close: Harness,
+) -> None:
+    # #704 review 3: the first run cleans up and fails at the index step; the rerun finds
+    # no worktree or branch left, takes the PR from --pr and finishes the index and board.
+    close.write("cbm_index_fails", "")
+    first = close.close_task(close.extra)
+    assert first.returncode == 3, first.stdout + first.stderr
+    assert _json_line(first)["error"].startswith("索引步驟：")
+    assert not close.wt.exists() and "task/282-dryrun" not in close.branches()
+    assert not _board_set(close)
+
+    (close.fake / "cbm_index_fails").unlink()
+    # What Orca and GitHub answer once the worktree is gone.
+    close.answer("orca_worktree_list", {"ok": True, "result": {"worktrees": []}})
+    close.answer(
+        "gh_pr_view",
+        {
+            "number": 290,
+            "state": "MERGED",
+            "mergeCommit": {"oid": "b" * 40},
+            "headRefName": "task/282-dryrun",
+            "baseRefName": "master",
+        },
+    )
+    again = close.run("close_task.sh", "282", "--pr", "290")
+    assert again.returncode == 0, again.stdout + again.stderr
+    line = _json_line(again)
+    assert [s for s in line["steps"] if s.startswith("index_")] == [
+        "index_rebuilt",
+        "index_fresh:1",
+    ]
+    assert line["board"] == "完成" and _board_set(close)
+
+
 # --- dispatch.sh (AC-2) ----------------------------------------------------------------
+
+
+def test_dispatch_brings_the_checkout_to_origin_master_before_it_checks(
+    dispatch: Harness,
+) -> None:
+    # #704 review 2: origin/master has a merge the checkout (and its index) has not; the
+    # fast-forward brings in backend/app/new_module.py, which the index does not have yet.
+    new = (dispatch.repo / "backend" / "app" / "new_module.py").as_posix()
+    dispatch.write(
+        "git_merge.hook",
+        f'mkdir -p "$(dirname "{new}")"; echo "x = 1" >"{new}"\n'
+        f'echo backend/app/new_module.py >"$FAKE_DIR/git_diff.txt"\n'
+        f'echo backend/app/new_module.py >"$FAKE_DIR/cbm_not_tracked.txt"\n',
+    )
+    result = _dispatch(dispatch)
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    assert line["index"] == "index_stale,index_rebuilt,index_fresh:1"
+    git = dispatch.calls("git")
+    merge = next(
+        i for i, c in enumerate(git) if "merge --ff-only --quiet origin/master" in c
+    )
+    merges = next(i for i, c in enumerate(git) if "rev-list" in c and "--merges" in c)
+    assert merge < merges
+    assert line["sent"] is True and _created(dispatch)
+
+
+def test_dispatch_creates_nothing_when_the_checkout_cannot_be_fast_forwarded(
+    dispatch: Harness,
+) -> None:
+    dispatch.write("git_merge_fails", "")
+    result = _dispatch(dispatch)
+    assert result.returncode == 1, result.stdout + result.stderr
+    line = _json_line(result)
+    assert line["error"].startswith("索引驗證：管理 checkout 更新：")
+    assert line["index"] == "failed"
+    assert not _tools(dispatch) and not _created(dispatch)
+
+
+def test_dispatch_runs_to_its_end_when_the_fast_forward_rewrites_it(
+    dispatch: Harness,
+) -> None:
+    dispatch.write("git_merge.hook", GROW_SCRIPT.format(script="dispatch.sh"))
+    result = _dispatch(dispatch)
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    assert line["sent"] is True and line["error"] is None
 
 
 def _created(h: Harness) -> bool:

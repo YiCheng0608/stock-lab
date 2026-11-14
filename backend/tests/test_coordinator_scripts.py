@@ -207,7 +207,7 @@ esac
 # <fake>/git_unreadable_after_delete, show-ref answers 128 (git could not read the repo)
 # once branch -D has run. The master index (#704): symbolic-ref HEAD answers
 # <fake>/git_head_branch.txt (default master); merge (the management checkout's
-# fast-forward) fails when <fake>/git_merge_fails exists; diff --name-only prints
+# fast-forward) fails when <fake>/git_merge_fails exists, else runs <fake>/git_merge.hook (bash); diff --name-only prints
 # <fake>/git_diff.txt (default tools/ops/close_task.sh); rev-list --merges prints
 # <fake>/git_merges.txt (default MERGE_SHA).
 FAKE_GIT = r"""#!/usr/bin/env bash
@@ -219,7 +219,10 @@ touch "$d/branches.txt"
 case "$1" in
   fetch) exit 0 ;;
   symbolic-ref) if [ -f "$d/git_head_branch.txt" ]; then cat "$d/git_head_branch.txt"; else echo master; fi ;;
-  merge) [ -f "$d/git_merge_fails" ] && { echo "fatal: Not possible to fast-forward" >&2; exit 128; }; exit 0 ;;
+  merge)
+    [ -f "$d/git_merge_fails" ] && { echo "fatal: Not possible to fast-forward" >&2; exit 128; }
+    [ -f "$d/git_merge.hook" ] && bash "$d/git_merge.hook"
+    exit 0 ;;
   diff) if [ -f "$d/git_diff.txt" ]; then cat "$d/git_diff.txt"; else echo tools/ops/close_task.sh; fi ;;
   rev-parse)
     if [ "$2" = HEAD ] && [ -f "$d/worktree_head.txt" ]; then cat "$d/worktree_head.txt"; exit 0; fi
@@ -905,7 +908,11 @@ def test_dispatch_without_base_fetches_and_checks_origin_master(
         "show-ref --verify --quiet refs/heads/task/282-dryrun",
         "fetch --quiet origin master",
         "rev-parse origin/master",
-        # The master index check (#704): the newest merges of the checkout and their files.
+        # The master index check (#704): the checkout's fast-forward to origin/master, then
+        # the newest merges of the checkout and their files.
+        "symbolic-ref --quiet --short HEAD",
+        "status --porcelain --untracked-files=no",
+        "merge --ff-only --quiet origin/master",
         "rev-list --first-parent --merges -n 5 HEAD",
         f"-c core.quotepath=false diff --name-only --diff-filter=d {MERGE_SHA}^1 {MERGE_SHA}",
         "rev-parse HEAD",

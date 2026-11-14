@@ -163,7 +163,8 @@ codebase-memory 只有一份索引：master 管理 checkout 的 project `C-Users
 索引由腳本維持，不靠人記得：
 
 - [`close_task.sh`](../tools/ops/close_task.sh)（PR 進 master、不是 `--no-board`）：清理做完後，把管理 checkout 以 `git merge --ff-only origin/master` 更新（checkout 要在 master、已追蹤的檔沒有未 commit 的改動），重建索引，再驗證這次 merge commit 改到的檔。任一步失敗是 exit 3，`error` 以「管理 checkout 更新：」或「索引步驟：」開頭，已做的清理列在 `steps`，看板不動；修好後加 `--pr <n>` 重跑。
-- [`dispatch.sh`](../tools/ops/dispatch.sh)：建 worktree 之前驗證管理 checkout 最近 5 次合併改到的檔；過期先重建一次，仍過期就 exit 1，什麼都不建、不送。
+- [`dispatch.sh`](../tools/ops/dispatch.sh)：建 worktree 之前，從 `origin/master`（預設）派工時先把管理 checkout 快轉到剛 fetch 的 `origin/master`（條件同上；不符合就 exit 1），再驗證最近 5 次合併改到的檔；過期先重建一次，仍過期就 exit 1，什麼都不建、不送。所以「合併後、`close_task.sh` 之前就派下一張」時，索引也會跟上新 worktree 的起點。`--base` 是長期整合分支時不快轉，索引只對得上 master。
+- 兩支腳本整份包在一個 `{ … }` 區塊裡：bash 先讀完整份檔才執行，快轉改到腳本自己時不會讀到新檔的半截（#704 review）。
 - 一般重建後仍過期、而且原因全是下表的 `mtime` 時，再強制重建一次（`delete_project`＋`index_repository`，master 約 11 秒，這段時間查不到這個 project），之後還過期就失敗。
 - CLI 不存在、逾時（預設 300 秒）、輸出解析不出 JSON、回 `isError`，都算失敗並印出原因，不當成沒過期。CLI 路徑、project 名稱、逾時與「最近幾次合併」在 [`coordinator_lib.sh`](../tools/ops/coordinator_lib.sh) 的 `cbm_*`，可用 `STOCK_CBM_CLI`、`STOCK_CBM_PROJECT`、`STOCK_CBM_TIMEOUT`、`STOCK_CBM_RECENT_MERGES` 覆寫。
 

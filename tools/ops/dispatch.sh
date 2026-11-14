@@ -14,9 +14,12 @@
 # claude starts with --add-dir "<the task file's directory>", so reading it needs no
 # permission prompt whatever the session's permission mode.
 # Sets the board to 開發中. Before the worktree is made, the codebase-memory master index
-# (#704; cbm_ensure in coordinator_lib.sh): the files the newest merges of this checkout's
-# HEAD changed are verified with the same-engine CLI and a stale index rebuilt once; still
-# stale, or the CLI missing or timing out, is exit 1 with nothing created or sent.
+# (#704; cbm_ensure in coordinator_lib.sh): from origin/master this checkout is first
+# fast-forwarded to it (on master, no uncommitted change to a tracked file), then the files
+# the newest merges of its HEAD changed are verified with the same-engine CLI and a stale
+# index rebuilt once; a checkout that cannot be fast-forwarded, an index still stale, or
+# the CLI missing or timing out is exit 1 with nothing created or sent. From another
+# --base the checkout is left as it is and the index matches master only.
 #
 # Usage: dispatch.sh <issue> <slug> --task-file <path> [options]
 #   --model M         default claude-opus-5-5
@@ -34,6 +37,10 @@
 # in the terminal but the turn was not seen starting, or the send itself failed or was
 # not accepted ("sent": null, read the terminal, do not resend); 4 board update failed;
 # 2/64 bad setup or arguments.
+{
+# The whole script is one brace group: bash reads all of it before running any, so a
+# fast-forward of this checkout that rewrites this file mid-run (#704 review) cannot
+# change what runs next.
 set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
@@ -113,8 +120,15 @@ git -C "$repo_root" fetch --quiet origin "$base_branch" || report 1 "git fetch o
 base="$(git -C "$repo_root" rev-parse "$base_ref")" || report 1 "讀不到 $base_ref"
 orca_repo_id
 
-# The master index (#704), before anything is created: a stale index is rebuilt once (and
-# forced once when only the mtime rule is left); still stale, or no answer, stops here.
+# The master index (#704), before anything is created. From origin/master (the default)
+# the management checkout is fast-forwarded to the tip just fetched first, so the index is
+# checked against what the new worktree starts from (#704 review: a merge not yet closed
+# with close_task.sh); from another base it is not, and the index matches only master.
+# A stale index is rebuilt once (and forced once when only the mtime rule is left); still
+# stale, or no answer, stops here.
+if [ "$base_ref" = origin/master ]; then
+  checkout_fast_forward || { index=failed; report 1 "索引驗證：管理 checkout 更新：$cbm_error"; }
+fi
 index_paths="$(cbm_recent_paths)" || report 1 "索引驗證：讀不到最近 $cbm_recent_merges 次合併改到的檔案"
 cbm_ensure check "$index_paths" || { index=failed; report 1 "索引驗證：$cbm_error"; }
 index="$(IFS=,; printf '%s' "${cbm_steps[*]}")"
@@ -167,3 +181,5 @@ else
   board=skipped
 fi
 report 0
+exit 1 # not reached: report exits
+}

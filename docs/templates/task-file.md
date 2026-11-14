@@ -17,7 +17,7 @@
 ## 要做的事
 
 - <逐條寫要改的行為；與 Issue 範圍一致，不加新範圍>
-- 查程式：codebase-memory 用 master 索引（project `C-Users-YiCheng-Desktop-taiwan-stock-research`，dispatch.sh 派工前已驗證是新的）；不要對自己的 worktree 跑 `index_repository`；自己改過的檔以 worktree 內的實際檔案為準（docs/WORKFLOW.md「程式索引」）。
+- 查程式：codebase-memory 用 master 索引（project `C-Users-YiCheng-Desktop-taiwan-stock-research`，從 `origin/master` 派工時 dispatch.sh 已把它更新到你的起點並驗證；`--base` 子單的索引只對得上 master）；不要對自己的 worktree 跑 `index_repository`；自己改過的檔以 worktree 內的實際檔案為準（docs/WORKFLOW.md「程式索引」）。
 - 文件：<同 PR 要更新的文件>
 - UI 任務：更新 `.claude/skills/verify-stock-lab/features/` 對應的檔，或寫明不需更新。
 
