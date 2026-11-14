@@ -90,20 +90,6 @@ const STRATEGY_LABELS: Record<string, string> = {
   pullback: '回踩條件',
 }
 
-const PRODUCT_TIME_ROLE_LABELS: Record<string, string> = {
-  market_date: '資料日期',
-  event_date: '事件日期',
-  event_at: '事件時間',
-  published_at: '發布時間',
-  first_available_at: '首次可得時間',
-  collected_at: '收錄時間',
-  revision_available_at: '修訂可得時間',
-  decision_at: '決策時間',
-  generated_at: '歷史生成時間',
-  earliest_execution_at: '規則最早執行時間',
-  earliest_execution_date: '規則最早執行日',
-}
-
 // Technical backtest tracking rules (docs/spec/tracking.md 口徑版本): the version in the run's request key.
 export function backtestTrackingLabel(version: string | null | undefined): string {
   return `追蹤口徑 ${version || '未記錄'}`
@@ -113,10 +99,6 @@ export function backtestTrackingLabel(version: string | null | undefined): strin
 export function backtestStartedText(run: { status: string; started_at?: string | null }): string | null {
   if (run.status !== 'running') return null
   return `開始於 ${(run.started_at && formatTaipeiMinute(run.started_at)) || '未提供'}`
-}
-
-export function productTimeRoleLabel(role: string): string {
-  return PRODUCT_TIME_ROLE_LABELS[role] ?? '時間'
 }
 
 export function productTimeRoleKnown(role?: ProductTimeRole | { status?: string; precision?: string; value?: string | null } | null): boolean {
@@ -203,11 +185,13 @@ export function levelFieldLabel(
   return label || '價位（語意未確認）'
 }
 
-// The verified label; the stock page writes 價位語意 only when the semantics are not this one (Issue 729).
-export const VERIFIED_LEVEL_SEMANTICS = '規則參考價'
+// Verified rule-reference semantics; the stock page writes 價位語意 only when they are not (Issue 729).
+export function isVerifiedLevelSemantics(semantics?: { version?: string; kind?: string } | null): boolean {
+  return semantics?.version === 'signal-level-semantics/v1' && semantics.kind === 'rule_reference'
+}
 
 export function levelSemanticsLabel(semantics?: { version?: string; kind?: string } | null): string {
-  return semantics?.version === 'signal-level-semantics/v1' && semantics.kind === 'rule_reference' ? VERIFIED_LEVEL_SEMANTICS : '未驗證規則參考價'
+  return isVerifiedLevelSemantics(semantics) ? '規則參考價' : '未驗證規則參考價'
 }
 
 export function levelObservationZoneLabel(semantics?: { version?: string; kind?: string } | null): string {

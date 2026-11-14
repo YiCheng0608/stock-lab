@@ -70,7 +70,7 @@ import { formatDay, formatTaipeiDay, formatTaipeiMinute } from './dates'
 import { noPreviousCloseText } from './marketChange'
 import { formatPortfolioValue, formatPositionValuation, formatLocalPositionValuation, formatPortfolioClose, formatQuoteRecord, portfolioValueFromText } from './portfolioValues'
 import { formatFixed, formatTableNumber, formatTableVolume, formatTableVolumeShares, formatTableChip,formatShareQuantity, formatPositionShares, positionQuantityFromText, isVerifiedShareSource, type ShareUnit } from './units'
-import { backtestStartedText, backtestTrackingLabel, officialEventDisplayTitle, formatProductTimeRole, levelFieldLabel, levelSemanticsLabel, VERIFIED_LEVEL_SEMANTICS, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, gapNotApplicable, incompleteActionLabel, staleCloseDateLabel, stockDirectoryActionLabel, stockGroupLabel, type ProductQualityKind } from './presentation'
+import { backtestStartedText, backtestTrackingLabel, officialEventDisplayTitle, formatProductTimeRole, levelFieldLabel, levelSemanticsLabel, isVerifiedLevelSemantics, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, gapNotApplicable, incompleteActionLabel, staleCloseDateLabel, stockDirectoryActionLabel, stockGroupLabel, type ProductQualityKind } from './presentation'
 import { Shell } from './components/Shell'
 import { Term } from './components/Term'
 import { UnlessPageDate } from './components/pageDate'
@@ -914,7 +914,7 @@ export function ActionDetailPanel({ action, board, gap, children }: { action: Ac
       {action.conflicts.length > 0 && <div className="warning-box">{action.conflicts.join('；')}</div>}
       {/* Issue 729: only another day and unverified level semantics are written; the pointer to 資料來源 left the page. */}
       <UnlessPageDate date={action.data_cutoff}><div className="small-note">資料日：{formatTaiwanDateTime(action.data_cutoff, true)}</div></UnlessPageDate>
-      {levelSemanticsLabel(action.level_semantics) !== VERIFIED_LEVEL_SEMANTICS && <div className="small-note">價位語意：{levelSemanticsLabel(action.level_semantics)}</div>}
+      {!isVerifiedLevelSemantics(action.level_semantics) && <div className="small-note">價位語意：{levelSemanticsLabel(action.level_semantics)}</div>}
     </details>
     {children && <div className="action-detail-plan">{children}</div>}
   </section>

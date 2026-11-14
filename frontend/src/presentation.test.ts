@@ -1,4 +1,4 @@
-import { backtestStartedText, backtestTrackingLabel, groupDisplayName, staleCloseDateLabel, stockGroupLabel, researchRequirementLabel, stockDirectoryActionLabel, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productTimeRoleDateTime, productTimeRoleKnown, productTimeRoleLabel, stopPriceFieldLabel } from './presentation'
+import { backtestStartedText, backtestTrackingLabel, groupDisplayName, staleCloseDateLabel, stockGroupLabel, researchRequirementLabel, stockDirectoryActionLabel, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productTimeRoleDateTime, productTimeRoleKnown, stopPriceFieldLabel } from './presentation'
 import { exchangeLabel } from './presentation'
 import { exchangeLabel as candidateExchangeLabel } from './candidates/candidates'
 import { exchangeLabel as headerExchangeLabel } from './stock/StockHeader'
@@ -34,8 +34,6 @@ expect(levelSemanticsLabel(spoofedUnknown) === '未驗證規則參考價', 'unkn
 expect(stopPriceFieldLabel({ kind: 'user_position_risk_input', origin: 'portfolio_position.stop_price' }) === '持倉設定風險價', 'position stop origin')
 expect(stopPriceFieldLabel({ kind: 'rule_reference', origin: 'signal.invalid_price' }) === '規則失效參考價', 'rule stop origin')
 expect(stopPriceFieldLabel({ kind: 'unknown', origin: 'signal.invalid_price' }) === '風險價位（語意待核實）', 'unknown stop origin')
-expect(productTimeRoleLabel('market_date') === '資料日期', 'market date label')
-expect(productTimeRoleLabel('decision_at') === '決策時間', 'decision time label')
 expect(productTimeRoleKnown({ status: 'known', precision: 'date', value: '2026-09-08' }), 'known product date')
 expect(!productTimeRoleKnown({ status: 'known', precision: 'invalid', value: '2026-09-08' }), 'invalid precision fallback')
 expect(!productTimeRoleKnown({ status: 'unknown', precision: 'date', value: '2026-09-08' }), 'unknown product date')

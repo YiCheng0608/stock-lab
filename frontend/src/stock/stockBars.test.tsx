@@ -532,7 +532,7 @@ check(pair.top.includes('>K 線</h') && !pair.top.includes('indicators/v1') && !
 check(!pair.top.includes('indicator-tab-') && !pair.top.includes('查看圖表資料表') && !pair.top.includes('日線批次計算於'), 'K-line card: no indicator panel, data table or batch time')
 check(pair.top.indexOf('class="chart-stage"') < pair.top.indexOf('class="chart-ma-row"') && pair.top.indexOf('chart-ma-row') < pair.top.indexOf('data-chart-levels') && !pair.top.slice(0, pair.top.indexOf('chart-stage')).includes('ma-toggle'), 'K-line card: the MA toggles are the first line under the chart')
 check(pair.top.includes('bars-range') && pair.top.includes('bars-interval-tab-week'), 'K-line card: keeps 日K／週K and the range buttons')
-check(['MACD', 'RSI', 'KD', '布林'].every((label) => pair.tab.includes(`>${label}</button>`)) && pair.tab.includes('查看圖表資料表（最近 30 根）') && pair.tab.includes('日線批次計算於') && !pair.tab.includes('indicators/v1') && pair.tab.includes('>技術指標</h') && !pair.tab.includes('class="eyebrow"'), 'indicator card: the four panels, the data table and the batch time; no eyebrow or formula version (Issue 729)')
+check(['MACD', 'RSI', 'KD', '布林'].every((label) => pair.tab.includes(`>${label}</button>`)) && pair.tab.includes('查看圖表資料表（最近 30 根）') && pair.tab.includes('日線批次計算於') && !pair.tab.includes('indicators/v1') && pair.tab.includes('>技術指標</h') && !pair.tab.includes('card-eyebrow'), 'indicator card: the four panels, the data table and the batch time; no eyebrow or formula version (Issue 729)')
 check(!pair.tab.includes('bars-range') && !pair.tab.includes('ma-toggle'), 'indicator card: no window controls of its own')
 check(pair.windows.length === 2 && pair.windows[0] === pair.windows[1], `default range: both charts show the same bars: ${pair.windows.join(' / ')}`)
 const pairOneMonth = pagePair(sharedState(longDaily, { range: '1m' }))
@@ -549,4 +549,4 @@ for (const [chart, event] of [['K-line card', { start: 40, end: 80 }], ['indicat
 }
 // Today list and market page: the whole card as before (no split): indicator tabs, data table and MA toggles above.
 const whole = renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => undefined} data={longDaily} loading={false} error={null} />)
-check(whole.includes('indicator-tab-macd') && whole.includes('查看圖表資料表') && whole.includes('>技術指標<') && !whole.includes('indicators/v1') && !whole.includes('chart-ma-row') && whole.indexOf('ma-toggle') < whole.indexOf('chart-stage'), 'without split the card is unchanged')
+check(whole.includes('indicator-tab-macd') && whole.includes('查看圖表資料表') && whole.includes('<div class="card-eyebrow">技術指標</div>') && !whole.includes('indicators/v1') && !whole.includes('chart-ma-row') && whole.indexOf('ma-toggle') < whole.indexOf('chart-stage'), 'without split the card is unchanged')

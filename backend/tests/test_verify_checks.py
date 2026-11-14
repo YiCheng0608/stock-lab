@@ -2908,7 +2908,7 @@ def test_s16_passes_and_keeps_the_formula_version_on_the_source_tab(tmp_path):
     summary = page_checks.s16(
         FakeRun(tmp_path, {}, _stock_pages()), page_checks.Stock("TWSE", "9101")
     )
-    assert "六個分頁" in summary
+    assert "五個分頁" in summary and "#732" in summary
 
 
 def test_s16_fails_on_the_stock_page_before_issue_729(tmp_path):
@@ -2918,7 +2918,7 @@ def test_s16_fails_on_the_stock_page_before_issue_729(tmp_path):
             "stock-chips-1280": "來源稽核原值：外資（股） 120,000\n法人：臺灣證券交易所 三大法人（twse_t86） · 資料截至：2026/10/16\n",
             "stock-research-1280": "決策時間：未記錄 · 規則最早執行日：2026/10/19\n價位語意：規則參考價 · 規則與官方資料詳見「資料來源」分頁。\n",
             "stock-financials-1280": "營收是單月…月營收不納入策略或評分。\n",
-            "stock-news-1280": "最近 130 根日線；缺日不補、停牌不畫 K 線\n技術指標 indicators/v1\n",
+            "stock-390": "最近 130 根日線；缺日不補、停牌不畫 K 線\n技術指標 indicators/v1\n",
         }
     )
     with pytest.raises(page_checks.Fail) as raised:
@@ -2933,8 +2933,67 @@ def test_s16_fails_on_the_stock_page_before_issue_729(tmp_path):
         ("stock-research-1280", "決策時間"),
         ("stock-research-1280", "規則與官方資料詳見"),
         ("stock-financials-1280", "不納入策略或評分"),
-        ("stock-news-1280", "缺日不補"),
-        ("stock-news-1280", "indicators/v1"),
+        ("stock-390", "缺日不補"),
+        ("stock-390", "indicators/v1"),
     ):
         assert shot in message and f"`{phrase}`" in message
     assert "stock-data-1280" not in message
+
+
+def test_s16_skips_the_news_tab_until_issue_732(tmp_path):
+    # The news tab's AI candidate row keeps 模型 … · 提示版本 … until Issue 732.
+    pages = _stock_pages(
+        {"stock-news-1280": "模型 m · 提示版本 news_v4 · 核對規則 r\n"}
+    )
+    summary = page_checks.s16(
+        FakeRun(tmp_path, {}, pages), page_checks.Stock("TWSE", "9101")
+    )
+    assert "新聞與公告分頁等 #732" in summary
+
+
+# ---- A6 (Issue 729 review): the same-day branch checks the panel itself ----
+
+
+def _a6_run(tmp_path, page):
+    payloads = {
+        "dashboard": {"as_of": "2026-10-16T17:30:00+08:00"},
+        "actions/TWSE/9101": {"decision_summary": {"data_cutoff": "2026-10-16"}},
+    }
+    run = FakeRun(tmp_path, payloads, {"action-detail-1280": page})
+    run._stock = page_checks.Stock("TWSE", "9101")
+    return run
+
+
+def test_a6_same_day_passes_with_the_time_line(tmp_path):
+    page = "9101\n研究動作\n規則最早執行日：2026/10/19\n"
+    assert "有 `規則最早執行日：…`" in page_checks.a6(_a6_run(tmp_path, page))
+
+
+def test_a6_same_day_fails_when_the_panel_is_not_drawn(tmp_path):
+    with pytest.raises(page_checks.Fail, match="缺 `規則最早執行日：` 開頭的行"):
+        page_checks.a6(_a6_run(tmp_path, "9101\n研究動作\n"))
+
+
+# ---- S5 (Issue 729 review): 價位語意 only for unverified semantics ----
+
+VERIFIED_SEMANTICS = {"version": "signal-level-semantics/v1", "kind": "rule_reference"}
+
+
+def test_level_semantics_line_follows_the_semantics():
+    def text(page):
+        return page_checks.Text("stock-research-1280.txt", page)
+
+    verified = {"level_semantics": VERIFIED_SEMANTICS}
+    assert "已驗證" in page_checks.level_semantics_line(text("研究動作\n"), verified)
+    unverified = page_checks.level_semantics_line(
+        text("研究動作\n價位語意：未驗證規則參考價\n"), {"level_semantics": None}
+    )
+    assert "未驗證規則參考價" in unverified
+    # Before Issue 729 the verified line was written with its pointer.
+    with pytest.raises(page_checks.Fail, match="不應有 `價位語意：` 行"):
+        page_checks.level_semantics_line(
+            text("價位語意：規則參考價 · 規則與官方資料詳見「資料來源」分頁。\n"),
+            verified,
+        )
+    with pytest.raises(page_checks.Fail, match="預期恰一行"):
+        page_checks.level_semantics_line(text("研究動作\n"), {"level_semantics": None})

@@ -301,6 +301,7 @@ export function StockBarsChart({
       ))}
     </div>
   )
+  const basisLabel = data ? priceBasisLabel(data.indicators.price_basis) : null
   const chartLabel = split
     ? `${unit} K 線與成交量圖${levels ? '，含規則價位線' : ''}；指標與數值見走勢分頁`
     : `${unit} K 線、成交量與 ${INDICATOR_PANELS.find((item) => item.id === panel)?.label} 指標圖${levels ? '，含規則價位線' : ''}；數值見下方資料表`
@@ -371,7 +372,7 @@ export function StockBarsChart({
             {notes.length > 0 && <ul className="chart-note-list">{notes.map((note) => <li key={note}>{note}</li>)}</ul>}
             <div className="chart-meta">
               {sourcesLabel(data.sources) !== pageSource && <span>來源 {sourcesLabel(data.sources)}</span>}
-              {priceBasisLabel(data.indicators.price_basis) && <span>{priceBasisLabel(data.indicators.price_basis)}</span>}
+              {basisLabel && <span>{basisLabel}</span>}
               {!split && <span>{indicatorSourceLabel(data)}</span>}
               <span>最近 {data.count} 根{unit}</span>
             </div>

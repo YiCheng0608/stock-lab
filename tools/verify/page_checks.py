@@ -2982,6 +2982,29 @@ def s4(run: Run, stock: Stock) -> str:
     return "；".join(badges) + "；來源與批次時間"
 
 
+# frontend/src/presentation.ts isVerifiedLevelSemantics and levelSemanticsLabel (Issue 729).
+UNVERIFIED_SEMANTICS_LINE = "價位語意：未驗證規則參考價"
+
+
+def level_semantics_line(text: Text, summary: dict) -> str:
+    """The 研究動作 card writes 價位語意 only when the summary's level semantics are not verified."""
+
+    semantics = summary.get("level_semantics") or {}
+    verified = (
+        semantics.get("version") == "signal-level-semantics/v1"
+        and semantics.get("kind") == "rule_reference"
+    )
+    lines = [line for line in text.lines if line.startswith("價位語意：")]
+    if verified:
+        expect(not lines, f"價位語意已驗證，不應有 `價位語意：` 行：{lines}")
+        return "價位語意已驗證，不寫 `價位語意：`"
+    expect(
+        lines == [UNVERIFIED_SEMANTICS_LINE],
+        f"價位語意未驗證，`價位語意：` 行是 {lines}，預期恰一行 `{UNVERIFIED_SEMANTICS_LINE}`",
+    )
+    return f"`{UNVERIFIED_SEMANTICS_LINE}`"
+
+
 @check("stocks", "S5", per_stock=True)
 def s5(run: Run, stock: Stock) -> str:
     text, i = stock_text(run, stock, "research"), stock_I(run, stock)
@@ -3010,6 +3033,9 @@ def s5(run: Run, stock: Stock) -> str:
                 f"缺 `{prefix}` 開頭的行",
             )
         note = f"`資料日期：{slash(i)}`、`資料日：{slash(i)}`"
+    # Issue 729 review: the 價位語意 line is written only for unverified semantics.
+    if payload.get("decision_summary") is not None:
+        note += "；" + level_semantics_line(text, payload["decision_summary"])
     # The candidate row of the strategy board (#274): only the board's as-of candidate.
     if (payload.get("strategy_board") or {}).get("candidate") is not None:
         expect(text.has("每日候選"), "策略總表有候選，缺整行 `每日候選`")
@@ -3541,17 +3567,23 @@ def s15(run: Run, stock: Stock) -> str:
 @check("stocks", "S16", per_stock=True)
 def s16(run: Run, stock: Stock) -> str:
     """Issue 729: no tab of the stock page shows the removed copy. 資料來源 lists sources and versions, so its
-    indicator formula version stays there."""
+    indicator formula version stays there. The 新聞與公告 tab is left out until Issue 732 (its AI candidate row
+    still writes 模型 … · 提示版本 …, as decided); check it again once 732 is merged."""
 
     problems = []
     for tab, shot in stock_shots(stock).items():
+        if tab == "news":
+            continue
         allowed = ("indicators/v1",) if tab == "data" else ()
         for width in shot.widths:
             found = removed_copy(run.text(shot, width), allowed)
             if found:
                 problems.append(f"{shot.name}-{width}：" + "、".join(found))
     expect(not problems, "出現已拿掉的說明文字：" + "；".join(problems))
-    return f"{stock.label}：六個分頁沒有已拿掉的說明文字（資料來源分頁留指標公式版本）"
+    return (
+        f"{stock.label}：五個分頁沒有已拿掉的說明文字"
+        "（資料來源分頁留指標公式版本；新聞與公告分頁等 #732）"
+    )
 
 
 # ---- actions ----
@@ -3783,14 +3815,19 @@ def a6(run: Run) -> str:
     i = text.find_where(lambda line: line.startswith("資料日："))
     cutoff = (summary.get("data_cutoff") or "")[:10]
     if cutoff and cutoff == page_day(run):
-        # #661 (D-b): the navbar states that day. Issue 729: the 價位語意 line is written only for
-        # unverified semantics, so nothing is left to check but the missing date.
+        # #661 (D-b): the navbar states that day. Issue 729: no 決策時間 and no 價位語意 for verified
+        # semantics; the time line still starts at 規則最早執行日, so the panel itself is checked.
         expect(
             i < 0,
             f"data_cutoff 與頁面同日 {slash(cutoff)}，不應再有 `資料日：`（{text.at(i)}）",
         )
+        expect(
+            text.find_where(lambda line: line.startswith("規則最早執行日：")) >= 0,
+            "缺 `規則最早執行日：` 開頭的行",
+        )
         return (
-            f"{stock.label}：data_cutoff 與頁面同日 {slash(cutoff)}，不另寫 `資料日：`"
+            f"{stock.label}：data_cutoff 與頁面同日 {slash(cutoff)}，不另寫 `資料日：`；"
+            "有 `規則最早執行日：…`"
         )
     expect(i >= 0, "缺 `資料日：` 開頭的行")
     want = slash(summary.get("data_cutoff") or "")
