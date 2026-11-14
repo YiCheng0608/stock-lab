@@ -13,7 +13,6 @@ export const FUNDAMENTALS_EYEBROW = '財務資料'
 export const NOT_PROVIDED = '來源未提供'
 // The first header line of the revenue and EPS columns (#528 decision: the header says the sums are year-to-date).
 export const CUMULATIVE = '年初至季底累計'
-export const FUNDAMENTALS_NOTE = '營收與 EPS 都是年初至季底累計（該年 1 月 1 日到該季最後一天，官方綜合損益表口徑），不是單季；營收單位為億元（官方千元 ÷ 100,000）。可得日是官方季報快照第一次收到的出表日期，或回補季度的法定申報期限（遇休市順延；期限未到時是第一次抓到的日期），研究截止日期以可得日篩選，之前尚未可得的季度不顯示。來源沒有的欄位寫「來源未提供」。財務資料不納入策略或評分。'
 
 const THOUSANDS_PER_HUNDRED_MILLION = 100_000
 
@@ -57,7 +56,6 @@ export function fundamentalsEmptyReason(instrumentType: string, asOf: string | n
 // thousands; 年增率 is the source's 去年同月增減(%), never recomputed here.
 
 export const MONTHLY_TITLE = '月營收'
-export const MONTHLY_NOTE = '營收是單月（該月 1 日到月底），不是累計；單位為億元（官方千元 ÷ 100,000）。年增率是與去年同月相比的增減（%），用來源的數字顯示到小數一位。可得日是官方月營收快照第一次收到的出表日期，或回補月份的法定申報期限次月 10 日（遇休市順延；期限未到時是第一次抓到的日期），研究截止日期以可得日篩選，之前尚未可得的月份不顯示。來源沒有的欄位寫「來源未提供」。月營收不納入策略或評分。'
 
 /** 2026 年 9 月 for 2026-09. */
 export function revenueMonthLabel(month: string): string {

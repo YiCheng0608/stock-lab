@@ -167,7 +167,6 @@ th.num { font-family: var(--font-body); }
 .source-banner.no_data { border-left-color: var(--color-error); }
 .source-banner.no_data strong { color: var(--color-error); }
 .data-gap, .warning-box, .chart-warning { margin: var(--space-3) 0; padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-left: 4px solid var(--color-warning); border-radius: var(--radius-lg); background: var(--color-bg-card); color: var(--color-text); font-size: 14px; line-height: 1.7; }
-.disclaimer { max-width: none; margin: var(--space-8) 0 0; color: var(--color-text-subtle); font-size: 12px; }
 
 .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); margin-bottom: var(--space-12); }
 .three-stats { grid-template-columns: repeat(3, 1fr); }
@@ -427,9 +426,9 @@ a.symbol-link:hover { color: var(--color-primary); }
 .board-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-4); margin-bottom: var(--space-3); }
 .board-meta .strategy-liquidity { margin: 0; }
 .board-help[open] { flex-basis: 100%; }
-.chip-unit-note, .stock-fundamentals-note { margin: 0 0 var(--space-2); }
-.board-help > summary, .chip-unit-note > summary, .stock-fundamentals-note > summary, .stock-group-periods > summary, .strategy-candidate-more > summary { font-size: var(--text-sm); }
-.board-help p, .chip-unit-note p, .stock-fundamentals-note p { margin: 0; font-size: var(--text-xs); }
+.chip-unit-note { margin: 0 0 var(--space-2); }
+.board-help > summary, .chip-unit-note > summary, .stock-group-periods > summary, .strategy-candidate-more > summary { font-size: var(--text-sm); }
+.board-help p, .chip-unit-note p { margin: 0; font-size: var(--text-xs); }
 .stock-fundamentals-source { margin: var(--space-2) 0 0; }
 .stock-fundamentals .th-qualifier { font-size: var(--text-xs); }
 .stock-action-detail .action-detail-summary { padding: var(--space-2) 0; }
@@ -764,11 +763,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .candidates-head h2 { margin: 0; font-size: var(--text-2xl); }
 .candidates-head .badge { padding: 2px 10px; font-size: var(--text-sm); }
 .candidate-notes { flex: 1 1 320px; margin: 0; }
-.candidate-t1 + .candidate-disclaimer::before { content: " "; }
 .candidates-strategy-link { white-space: nowrap; }
-/* 現行規則尚無證據 (Issue 693): its own line under the head, the warning colour; the link keeps the link colour. */
-.candidate-evidence { flex: 1 1 100%; margin: 0; color: var(--color-warning); }
-.strategy-candidate-evidence { color: var(--color-warning); }
 /* 隔夜美股 (Issue 681, DESIGN_SYSTEM §5 候選列表): one line of inline runs under the head (no flex: innerText keeps it one
    line), wrapping between the four indexes; the changes are mono numbers, red up and green down. */
 .overnight-us { margin: calc(-1 * var(--space-1)) 0 var(--space-3); color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1.6; }
@@ -1134,7 +1129,6 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
   .candidates-head .board-dates { flex-wrap: nowrap; gap: var(--space-1); }
   .candidates-head .badge { padding: 2px 8px; font-size: var(--text-xs); }
   .candidate-notes { order: 9; flex: 1 1 100%; line-height: 1.5; }
-  .candidate-evidence { order: 10; line-height: 1.5; }
   .candidates-strategy-link { margin-left: auto; font-size: var(--text-sm); }
   /* A row on phones (#510): the title stays one line (market · group cut first) with the AI entry at its right
      (Issue 608: beside the numbers it covered the total), the sentence takes the whole width; the close, RR and
@@ -1185,21 +1179,17 @@ details.strategy-observation:not([open]) { display: block; padding: var(--space-
 }
 
 /* ---- 策略說明 /strategy (#493, DESIGN_SYSTEM §5 策略說明) --------------------------------------------- */
-.strategy-page .page-title p { max-width: 760px; }
 .strategy-section + .strategy-section { margin-top: var(--space-8); }
 .strategy-section h2 { margin: 0 0 var(--space-3); font-size: 24px; }
 .strategy-section p { max-width: 760px; }
 .strategy-section > .small-note { margin-top: var(--space-3); }
+.strategy-page > .small-note { margin-top: var(--space-6); }
 .strategy-grid { display: grid; gap: var(--space-4); }
-.strategy-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .strategy-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .strategy-grid .card p { margin: var(--space-2) 0 0; }
 .strategy-facts { display: grid; gap: var(--space-3); margin: var(--space-3) 0 0; }
 .strategy-facts dt { color: var(--color-text-muted); font-size: 14px; }
 .strategy-facts dd { margin: var(--space-label) 0 0; }
-.strategy-steps { display: grid; gap: var(--space-2); max-width: 760px; margin: 0; padding-left: var(--space-5); line-height: 1.7; }
 @media (max-width: 860px) {
-  .strategy-grid-3, .strategy-grid-2 { grid-template-columns: 1fr; }
+  .strategy-grid-2 { grid-template-columns: 1fr; }
 }
-/* Issue 693: the 現行規則尚無證據 note in the 策略說明 head reads at body size, like the warning boxes elsewhere. */
-.strategy-page .page-title .strategy-evidence-note { max-width: 760px; margin-top: var(--space-3); font-size: 15px; }

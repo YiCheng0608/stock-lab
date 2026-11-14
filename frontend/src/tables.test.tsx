@@ -150,12 +150,12 @@ const ChipTable = component('ChipTable')
 const chips = render('ChipTable', () => <ChipTable {...{ rows: chipRows }} />)
 checkAligned('個股籌碼', chips, ['外資買賣超（張）', '投信（張）', '自營商（張）', '融資增減（張）'])
 check(bodyText(chips).includes('+58') && bodyText(chips).includes('-8') && !chips.includes('57.797'), '個股籌碼: institutional flow is whole lots')
-check(chips.includes('57,797'), '個股籌碼: the original share count stays in the source details')
+check(!chips.includes('57,797') && !chips.includes('來源稽核原值'), '個股籌碼: no raw audit share count (Issue 729)')
 // #395: each value group names its own file, data date and collection time.
 const plainText = (markup: string) => markup.replace(/<!-- -->/g, '').replace(/<[^>]+>/g, '\n')
 const chipText = plainText(chips)
-check(chipText.includes('法人：臺灣證券交易所 三大法人（twse_t86） · 資料截至：2026/10/20 · 收集：2026/10/20 18:30'), '個股籌碼: the institutional line has its own source and time')
-check(chipText.includes('融資：臺灣證券交易所 融資融券（twse_margin） · 資料截至：2026/10/20 · 收集：2026/10/20 21:30'), '個股籌碼: the margin line has its own source and time')
+check(chipText.includes('法人：臺灣證券交易所 三大法人 · 資料截至：2026/10/20 · 收集：2026/10/20 18:30') && !chipText.includes('（twse_t86）'), '個股籌碼: the institutional line has its own source and time, without the source code (Issue 729)')
+check(chipText.includes('融資：臺灣證券交易所 融資融券 · 資料截至：2026/10/20 · 收集：2026/10/20 21:30') && !chipText.includes('（twse_margin）'), '個股籌碼: the margin line has its own source and time, without the source code')
 // A row without a margin file shows no margin value and says so; one without an institutional file likewise.
 // The row-level source still names both files, so a column reading it instead of its group would show the value.
 const onlyInstitutional = [{ ...chipRows[0], margin: null }, { ...chipRows[1], institutional: null }] as unknown as InstrumentDetail['chips']
