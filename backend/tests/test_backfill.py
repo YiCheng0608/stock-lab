@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta
+from typing import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
@@ -1547,3 +1549,56 @@ def test_targeted_backfill_defaults_to_the_historical_adapter(
     result = backfill.targeted_backfill(day, day)
     assert built == [{"snapshot_feeds": False}]
     assert result["status"] in {"success", "partial"}
+
+
+@contextmanager
+def _whole_database_checks(engine) -> Iterator[list[str]]:
+    """Every ``PRAGMA integrity_check`` the engine sends inside the block."""
+
+    seen: list[str] = []
+
+    def _trace(_conn, _cursor, statement, *_args) -> None:
+        if "integrity_check" in statement.lower():
+            seen.append(statement)
+
+    event.listen(engine, "before_cursor_execute", _trace)
+    try:
+        yield seen
+    finally:
+        event.remove(engine, "before_cursor_execute", _trace)
+
+
+def test_backfill_at_the_code_head_skips_the_whole_database_check(
+    backfill_env, monkeypatch
+):
+    """Issue #722: each month's backfill ran init_db's integrity_check twice.
+
+    ``PRAGMA integrity_check`` walks every page, so on the research database
+    the startup grew with the history (80 to 147 s, then 360 to 470 s at
+    4.8 GB).  At the code head the backfill skips it: what is left of the
+    startup does not read the whole database.  A database behind the head
+    still migrates with the checks.
+    """
+
+    import app.db as db_module
+
+    engine = backfill_env.kw["bind"]
+    migrated: list[str] = []
+
+    def migrate() -> None:
+        migrated.append("init_db")
+        upgrade_database(engine)
+
+    monkeypatch.setattr(pipeline, "init_db", migrate)
+    saturday, sunday = date(2026, 11, 14), date(2026, 11, 15)
+    with _whole_database_checks(engine) as checks:
+        assert backfill.targeted_backfill(saturday, sunday)["status"] == "skipped"
+    assert checks == [] and migrated == []
+
+    # One revision ahead in the code: the database is behind and migrates.
+    monkeypatch.setattr(
+        db_module, "REVISIONS", (*db_module.REVISIONS, "9999_not_applied")
+    )
+    with _whole_database_checks(engine) as checks:
+        backfill.targeted_backfill(saturday, sunday, force=True)
+    assert migrated == ["init_db"] and len(checks) >= 1

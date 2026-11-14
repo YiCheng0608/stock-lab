@@ -63,11 +63,12 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable
 
-from sqlalchemy import desc, inspect, select, text
+from sqlalchemy import desc, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.clock import utcnow
 from app.coverage import DAILY_JOB, collect_states
+from app.db import ensure_schema, schema_is_current, schema_revisions
 from app.migration_revisions import REVISIONS
 from app.models import ScheduleRun, ScheduleRunStep
 from worker import (
@@ -383,26 +384,18 @@ def _no_session_confirmed(run_id: int, target: date) -> bool:
 
 
 def _ensure_schema() -> str:
-    """Migrate only when the DB is not already at the code head.
+    """Migrate only when the DB is not already at the code head (#150).
 
-    ``init_db`` always runs the whole-database migration integrity check,
-    which takes minutes on a multi-year market DB even when no revision is
-    pending, so an up-to-date DB skips it.
+    The rule is ``app.db.ensure_schema``, shared with each backfill (#722).
     """
 
-    if _schema_revisions() == [REVISIONS[-1]]:
-        return "current"
-    pipeline.init_db()
-    return "upgraded"
+    return ensure_schema(
+        session_factory=pipeline.SessionLocal, migrate=pipeline.init_db
+    )
 
 
 def _schema_revisions() -> list[str] | None:
-    with pipeline.SessionLocal() as db:
-        if not inspect(db.get_bind()).has_table("alembic_version"):
-            return None
-        return list(
-            db.execute(text("SELECT version_num FROM alembic_version")).scalars()
-        )
+    return schema_revisions(pipeline.SessionLocal)
 
 
 def _record_step(
@@ -697,7 +690,7 @@ def record_preflight_skip(
     }
     try:
         revisions = _schema_revisions()
-        if revisions != [REVISIONS[-1]]:
+        if not schema_is_current(revisions):
             return {
                 **unwritten,
                 "error": f"skip row not written: database at {revisions}, code head"
