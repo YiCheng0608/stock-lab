@@ -589,3 +589,80 @@ def test_the_command_refuses_production(copy_db, tmp_path, monkeypatch, capsys):
     assert code == 2
     assert "refused" in json.loads(capsys.readouterr().out)
     assert not (tmp_path / "out").exists()
+
+
+# --- the first version's output is unchanged (#689) -----------------------------
+
+VOLATILE = ("elapsed_seconds", "peak_memory_gb", "command")
+VOLATILE_LINES = ("- 副本：", "- 耗時 ", "- 重現：")
+# Digests of the first version's outputs on the scenario below, written by the
+# tool at f280528 (#682, before #689) in the backend image: a change that moves
+# any byte of them fails here.
+V1_DIGESTS = {
+    "tables.json": "b48da88392a75720ec75fb6c69bf9513b50b8ef56d1ce9ce12369887a55e7808",
+    "summary.md": "3be3812f10d8735bcc29b22437631fd7f200716d0a0fdbb69ed091f7e76a4232",
+    "equity.csv": "8b894a37fd0bdfdd860e644acd5a4d1297b9131cafa91bc8b1a31b4d4523969c",
+    "picks.csv": "842b7bb1b03ec7bbec032c7785b1979a73eaf6d01da667a588fa952c9243fb72",
+    "trades.csv": "0a1c5fa9615d7c766bdc8418ae9bbb08ad261b937c393f3eacda8190e5ae46c1",
+}
+
+
+def v1_digests(out: Path) -> dict[str, str]:
+    tables = json.loads((out / "tables.json").read_text(encoding="utf-8"))
+    for key in VOLATILE:
+        tables.pop(key)
+    tables["copy"].pop("mtime")
+    summary = [
+        line
+        for line in (out / "summary.md").read_text(encoding="utf-8").splitlines()
+        if not line.startswith(VOLATILE_LINES)
+    ]
+    texts = {
+        "tables.json": json.dumps(tables, ensure_ascii=False, indent=2, default=str),
+        "summary.md": "\n".join(summary),
+    }
+    digests = {
+        name: hashlib.sha256(text.encode("utf-8")).hexdigest()
+        for name, text in texts.items()
+    }
+    for name in ("equity.csv", "picks.csv", "trades.csv"):
+        digests[name] = digest(out / name)
+    return digests
+
+
+def v1_rows() -> list[tuple]:
+    days = trading_days()
+    rows = [
+        (n, "breakout_v3", A, "S1", days[at].isoformat(), "")
+        for n, at in enumerate(range(25, 60), 1)
+    ]
+    rows += [
+        (100 + n, "pullback_v4", B, "S2", days[at].isoformat(), "")
+        for n, at in enumerate(range(25, 60, 3), 1)
+    ]
+    rows.append((99, "breakout_v3", ETF, "0050", days[30].isoformat(), ""))
+    return rows
+
+
+def run_v1(copy_db: Path, tmp_path: Path, extra: list[str]) -> Path:
+    days = trading_days()
+    out = tmp_path / "out"
+    code = tool.main(
+        [
+            "--db", str(copy_db),
+            "--signals", str(write_signals(tmp_path / "trades.csv", v1_rows())),
+            "--signals-source", "test@sha:trades.csv",
+            "--cutoff", days[60].isoformat(),
+            "--out", str(out),
+            "--min-free-gb", "0",
+            *extra,
+        ]
+    )  # fmt: skip
+    assert code == 0
+    return out
+
+
+def test_the_first_version_is_byte_for_byte_unchanged(copy_db, tmp_path, monkeypatch):
+    research = lib._load("backtest_research")
+    monkeypatch.setattr(research, "daily_window_problem", lambda now: None)
+    assert v1_digests(run_v1(copy_db, tmp_path, [])) == V1_DIGESTS
