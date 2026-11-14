@@ -296,6 +296,31 @@ def test_an_ended_terminal_is_a_failed_wake_not_a_sent_one(h, listener) -> None:
     assert "wake result=send_failed terminal=term_coord" in listener.log()
 
 
+@pytest.mark.parametrize("path", ["wait_timed_out", "send_refused"])
+def test_a_coordinator_at_a_menu_is_prompt_blocked_through_the_listener(
+    h, listener, path
+) -> None:
+    """#720 AC-2: the listener answers prompt_blocked, http_wake.sh exits 4 and the
+    container monitor records it; never send_failed or not_idle."""
+    if path == "wait_timed_out":
+        h.answer("orca_terminal_wait", {"ok": False, "error": {"code": "timeout"}})
+        h.answer(
+            "orca_terminal_show",
+            _ok({"terminal": {"handle": "term_coord", "agentWait": {"source": "title"}}}),
+        )
+    else:
+        h.answer(
+            "orca_terminal_send",
+            {"ok": False, "error": {"code": "agent_prompt_blocked", "message": "x"}},
+        )
+    result = _container_monitor(h, listener)
+    assert "wake=failed(prompt_blocked) terminal=term_coord" in result.stdout
+    assert [(w["ok"], w["detail"]) for w in _records(h, "wake")] == [
+        (False, "prompt_blocked")
+    ]
+    assert "wake result=prompt_blocked terminal=term_coord" in listener.log()
+
+
 @needs_exec_orca
 def test_a_missing_listener_is_a_failed_wake_tried_again_after_ten_minutes(h) -> None:
     # A now event: an urgent one (a comment with no type) is tried every poll (#711).

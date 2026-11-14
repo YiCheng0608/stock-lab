@@ -36,9 +36,13 @@ host directory at /coordination, #338), each with a single writer:
         session's whole last message (500 characters at most), printed by patrol.sh.
     {"type": "wake", "at", "ok", "terminal", "upto", "detail"}
         the coordinator terminal was sent "有 N 個事件…" (ok) or the send failed; a
-        successful wake covers every event up to seq ``upto``.
+        successful wake covers every event up to seq ``upto``. ``detail`` of a failed
+        one: not_idle, prompt_blocked (the terminal at a permission or trust menu,
+        #720), send_failed or no_heartbeat.
     {"type": "stale", "at", "key", "url"}
-        the #1 comment asking the user to open a coordinator; one per ``key``.
+        the #1 comment asking the user to open a coordinator (key ``heartbeat:…``), or
+        to look at the menu the coordinator has been stopped at (``prompt_blocked:…``,
+        #720); one per ``key``.
   events-done.jsonl       patrol.sh --done: {"type": "done", "at", "session_id", "ids"}
   monitor-state.json      monitor.sh: comment cursor, last poll, open PR snapshot, the
                           last line of each job log (patrol.sh prints them)
@@ -60,7 +64,8 @@ starts on a new line, so only the partial line is lost. Times are UTC ISO
 
 Subcommands (LOGS is <data>/logs):
   since LOGS NOW                  the comment cursor to poll with
-  stale LOGS NOW [--record-only]  "KEY<TAB>BODY" when the #1 comment is due, else nothing
+  stale LOGS NOW [--record-only]  "KEY<TAB>BODY" when a #1 comment is due (請開統籌, or
+                                  統籌停在確認框, #720), else nothing
   record LOGS NOW [--prs F] [--comments F] [--worktrees F] [--job-logs DIR]
          [--gh-refused ERROR]     append the new events and print
                                   "new=N pending=P unnotified=U wake=0|1 terminal=H"
@@ -100,6 +105,12 @@ WAKE_RETRY = 600
 # No coordinator heartbeat since an event arrived this long ago: ask the user on #1
 # (the handbook's 60-minute liveness window; the monitor never opens a session).
 STALE_AFTER = 3600
+# A coordinator terminal at a permission or trust menu (the waker's exit 4, #720): its
+# wakes are recorded with this detail. Once they span this long and number this many,
+# the #1 comment asks the user to look at the menu (decided on #720, 6883373444).
+PROMPT_BLOCKED = "prompt_blocked"
+PROMPT_BLOCKED_AFTER = 600
+PROMPT_BLOCKED_WAKES = 2
 SLOTS = 3
 # The turn hook's state files (#595) and how long a turn may end without a comment
 # before the coordinator is woken for it.
@@ -886,6 +897,55 @@ def record(
     )
 
 
+def prompt_blocked_since(q: Queue, handle: str, beat_at: float | None) -> float | None:
+    """When the coordinator terminal HANDLE stopped at a permission or trust menu (#720):
+    the first of the prompt_blocked wakes in a row that end the wake records, all to
+    HANDLE, with no coordinator heartbeat written since the last one. None once the
+    terminal is back (a later wake sent or not_idle, a heartbeat, another terminal)."""
+    first = None
+    for wake in reversed(q.wakes):
+        if wake.get("detail") != PROMPT_BLOCKED or wake.get("terminal") != handle:
+            break
+        first = wake
+    if first is None:
+        return None
+    last = epoch(q.wakes[-1].get("at"))
+    if last is None or (beat_at is not None and beat_at > last):
+        return None
+    return epoch(first.get("at"))
+
+
+def _taipei(at: float) -> str:
+    day = datetime.fromtimestamp(int(at) + TAIPEI_OFFSET, tz=timezone.utc)
+    return day.strftime("%Y-%m-%d %H:%M")
+
+
+def prompt_blocked_comment(
+    q: Queue, logs: Path, handle: str, since: float, pending: int
+) -> tuple[str, str] | None:
+    """(key, body) of the #1 comment for a coordinator at a menu since SINCE (#720),
+    when the prompt_blocked wakes of that stop span PROMPT_BLOCKED_AFTER and number
+    PROMPT_BLOCKED_WAKES; one per stop (its terminal and first prompt_blocked wake)."""
+    last = epoch(q.wakes[-1].get("at")) or since
+    count = 0
+    for wake in reversed(q.wakes):
+        if wake.get("detail") != PROMPT_BLOCKED or wake.get("terminal") != handle:
+            break
+        count += 1
+    if last - since < PROMPT_BLOCKED_AFTER or count < PROMPT_BLOCKED_WAKES:
+        return None
+    key = f"{PROMPT_BLOCKED}:{handle}:{iso(since)}"
+    body = (
+        f"待使用者：統籌停在確認框。統籌 terminal `{handle}` 從 {iso(since)}"
+        f"（台北 {_taipei(since)}）起停在權限或信任的確認框，最近一次喚醒在 {iso(last)}"
+        f"（{int((last - since) // 60)} 分鐘、{count} 次喚醒都被擋），事件佇列有 {pending}"
+        " 個未處理事件在等。請到那個 terminal 看確認框並自行選擇；monitor 不會替統籌選。"
+        f"\n\n（事件 monitor `tools/ops/monitor.sh` 自動留言，同一次停住只留一則；"
+        f"佇列 `{(logs / EVENTS).as_posix()}`。）"
+    )
+    return key, body
+
+
 def stale(logs: Path, now: float, record_only: bool) -> str:
     q = Queue(logs)
     pending = q.pending()
@@ -893,10 +953,20 @@ def stale(logs: Path, now: float, record_only: bool) -> str:
         return ""
     first = min(epoch(e.get("detected_at")) or now for e in pending)
     handle, beat_at, beat_text = _heartbeat(logs)
+    planned = q.state.get("stale_planned") or []
+    since = prompt_blocked_since(q, handle, beat_at) if handle else None
+    if since is not None:
+        # The coordinator is there, at a menu: this comment, never 請開統籌 (#720).
+        found = prompt_blocked_comment(q, logs, handle, since, len(pending))
+        if found is None:
+            return ""
+        key, body = found
+        if key in q.stales or (record_only and key in planned):
+            return ""
+        return f"{key}\t{body}"
     if now - first < STALE_AFTER or (beat_at is not None and beat_at >= first):
         return ""
     key = f"heartbeat:{beat_text or 'none'}"
-    planned = q.state.get("stale_planned") or []
     if key in q.stales or (record_only and key in planned):
         return ""
     beat = (
