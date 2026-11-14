@@ -1020,8 +1020,26 @@ def test_a_restarted_serve_does_not_wake_again_for_the_events_it_queued(
     gh = bin_dir / "gh"
     gh.write_text(FAKE_GH, encoding="utf-8", newline="\n")
     gh.chmod(0o755)
+    # A green CI result wakes at once; a new PR alone waits for the next wake (#711).
+    green = {
+        "name": "required",
+        "workflowName": "CI",
+        "status": "COMPLETED",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/x/actions/runs/1/job/10",
+    }
     (fake / "gh_pr_list.json").write_text(
-        json.dumps([{"number": 7, "title": "t", "url": "u", "headRefOid": "c" * 40}]),
+        json.dumps(
+            [
+                {
+                    "number": 7,
+                    "title": "t",
+                    "url": "u",
+                    "headRefOid": "c" * 40,
+                    "statusCheckRollup": [green],
+                }
+            ]
+        ),
         encoding="utf-8",
     )
     (queue / "coordinator-heartbeat.json").write_text(
@@ -1062,8 +1080,11 @@ def test_a_restarted_serve_does_not_wake_again_for_the_events_it_queued(
         json.loads(line)
         for line in (queue / "events.jsonl").read_text(encoding="utf-8").splitlines()
     ]
-    assert [e["id"] for e in events if e["type"] == "event"] == ["pr:7"]
-    assert [(e["ok"], e["upto"]) for e in events if e["type"] == "wake"] == [(True, 1)]
+    assert [e["id"] for e in events if e["type"] == "event"] == [
+        "pr:7",
+        f"ci:7:{'c' * 12}:1:success",
+    ]
+    assert [(e["ok"], e["upto"]) for e in events if e["type"] == "wake"] == [(True, 2)]
     assert (fake / "woken.log").read_text(encoding="utf-8") == "term_coord\n"
     log = (queue / "monitor.log").read_text(encoding="utf-8").splitlines()
     polls = [line.split()[0] for line in log if " poll " in line]
