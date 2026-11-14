@@ -83,7 +83,15 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from coordinator_json import coordinator_comment, one_line, pr_line, without_mark
+from coordinator_json import (
+    GATE,
+    coordinator_comment,
+    newest_ci_run,
+    one_line,
+    pr_line,
+    run_id,
+    without_mark,
+)
 
 EVENTS = "events.jsonl"
 DONE = "events-done.jsonl"
@@ -112,7 +120,6 @@ MERGE_STATES = ("CLEAN", "DIRTY", "BEHIND", "UNSTABLE")
 QUIET_MERGE_STATES = ("CLEAN", "UNSTABLE")
 JOB_FILES = 2  # newest log files read per job
 END_LINE = re.compile(r"^===== (\S+) end (.*)$")
-RUN_ID = re.compile(r"/actions/runs/(\d+)/")
 # watchdog.sh's line for a gh call GitHub refused (#337): "<UTC> gh_auth_failed exit=…
 # date=<Taipei day> | …"
 GH_AUTH_LINE = re.compile(r"^(\S+) gh_auth_failed .*?\bdate=(\d{4}-\d{2}-\d{2})")
@@ -123,8 +130,6 @@ HANDLE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_-]*")
 # What the coordinator does about it; the token lives in the env file (docs/ops/SETUP.md「容器內的 claude 與 gh 認證（.env）」).
 # The message names that heading word for word; test_event_monitor checks it (#448).
 GH_AUTH_ACTION = "請用本機 gh 在 #1 留言，請使用者換 GH_TOKEN（docs/ops/SETUP.md「容器內的 claude 與 gh 認證（.env）」）"
-# The merge gate: CI's required check (docs/WORKFLOW.md, 欄位與唯一來源).
-GATE = "required"
 
 # Wake tiers (#711; the list decided on #711, comment 6880209185).
 URGENT, NOW, BATCH = "urgent", "now", "batch"
@@ -279,18 +284,13 @@ def ci_result(rollup) -> tuple[str, str] | None:
     Only the newest run of the gate's workflow counts: a run cancelled by a newer one
     leaves a failed required job behind, and the newer run lists its required job only
     once the jobs it needs are done (seen on PR #328, 2026-10-28). So while the newest
-    run has no finished required check there is no result yet."""
-    runs = []
-    for c in rollup or []:
-        m = RUN_ID.search(c.get("detailsUrl") or "")
-        if m:
-            runs.append((int(m.group(1)), c))
-    gates = [(r, c) for r, c in runs if c.get("name") == GATE]
-    if not gates:
+    run has no finished required check there is no result yet. The run comes from
+    newest_ci_run, which patrol's ci= reads as well (#740)."""
+    found = newest_ci_run(rollup)
+    if found is None:
         return None
-    workflow = max(gates, key=lambda g: g[0])[1].get("workflowName")
-    newest = max(r for r, c in runs if c.get("workflowName") == workflow)
-    gate = [c for r, c in gates if r == newest]
+    _, newest = found
+    gate = [c for c in rollup if c.get("name") == GATE and run_id(c) == newest]
     if not gate or (gate[-1].get("status") or "").upper() != "COMPLETED":
         return None
     return str(newest), (gate[-1].get("conclusion") or "unknown").lower()
