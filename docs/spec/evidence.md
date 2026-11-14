@@ -338,7 +338,16 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 
 `tools/research/explore_research.py`（#703，設計在統籌決定 [6874888073](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874888073)）。X1～X8 寫在 `explore_research.HYPOTHESES`，判定是 `explore_research.explore_judge`；沒有改參數、起日或 cutoff 的旗標。只讀（`mode=ro`＋`query_only`），拒絕的情況同[出場規則研究](#出場規則研究)（正式 DB、台北 21:30～23:30、可用記憶體不足）。
 
-**探索**（第 3 步）：`python tools/research/explore_research.py --db <研究 DB 副本> --segment exploration --out <目錄> [--min-free-gb 2]`
+**跑法只有一種**：研究 volume（[研究 DB](../ops/RESEARCH_DB.md#建研究-db)，`stock.db` 旁有研究標記 `research-db.json`）直接掛在 `/research`，**不掛在 `/data`、不設研究用的 `STOCK_DATA_DIR`**。image 預設 `STOCK_DATA_DIR=/data`，DB 在它底下會被當成正式 DB 拒絕；`/research/stock.db` 不在底下，所以不被拒絕。DB 以唯讀開，驗證段的紀錄檔固定寫在研究 volume 的 `/research/explore-ledger.json`。不要把 DB 複製到別處再跑：紀錄檔會跟著副本走，副本一刪就擋不住第二次；驗證段沒有研究標記就拒絕（探索段與 `--coverage-only` 不要求）。
+
+```bash
+# 換值：IMG＝含 #703 的 backend image；O＝主機上的輸出目錄；T、GIT_RO 同 docs/WORKFLOW.md（工具 commit 要讀 .git，沒掛記 unknown）
+R=(--rm --network none -v stock-lab-research:/research -v "$O":/out "${GIT_RO[@]}")
+MSYS_NO_PATHCONV=1 docker run "${R[@]}" "$IMG" \
+  python -B tools/research/explore_research.py --db /research/stock.db --segment exploration --out /out/exploration
+```
+
+**探索**（第 3 步）：`python tools/research/explore_research.py --db /research/stock.db --segment exploration --out <目錄> [--min-free-gb 2]`
 - 本輪 X1～X8 全部跑；讀 DB 時就只讀 2019-12-31（含）以前的列（日線、指數、除權息、籌碼、成交金額、重大訊息；月營收與季報看 `announcement_date`）。
 - 加 `--coverage-only`：只寫 `coverage.md`／`coverage.json`（每個假設用到的每個特徵在母體中依年的缺值比例，X8 是依年符合主旨的公告、日期順延、在母體、選入的則數），不跑任何模擬、不算報酬；回補驗收時可以先跑。
 - 輸出：
@@ -347,10 +356,10 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
   - `<代號>/`：`summary.md`、`tables.json`（判定用的數字；勝率、回撤、換手、平均投入、對加權指數的超額只列出）、`equity.csv`（假設與母體的每日淨值、加權指數收盤）、`picks.csv`（每個訊號日的前 N 名與特徵值）、`trades.csv`（假設的每一筆）。先決條件不符的假設記「無法判定」、只寫 `summary.md` 與 `tables.json`。
 - 判定欄在探索段只有「無法判定」、「沒有通過（探索段）」與「探索通過」（探索通過＝判定表探索列不符合，可以進驗證）。
 
-**驗證**（第 4 步）：`python tools/research/explore_research.py --db <研究 DB 副本> --segment validation --exploration-report <探索的 explore.json> --exploration-sha256 <公開留言裡的雜湊> --exploration-url <公開連結> --out <目錄> [--min-free-gb 2]`
+**驗證**（第 4 步）：`python tools/research/explore_research.py --db /research/stock.db --segment validation --exploration-report <探索的 explore.json> --exploration-sha256 <公開留言裡的雜湊> --exploration-url <公開連結> --out <目錄> [--min-free-gb 2]`
 - 跑之前，統籌先自己打開 `--exploration-url`，核對那裡貼的雜湊就是要給的 `--exploration-sha256`；工具不連網，只檢查連結格式（本 repo 的 Issue 留言 `…/issues/<n>#issuecomment-<id>`，或 `…/blob|tree/pr-assets/…`）。
-- 工具在讀任何資料之前拒絕（exit 2）：三個參數少一個；報告檔的 sha256 不是給的雜湊；連結格式不對；報告不是本工具的探索段報告，或 `definitions_sha256` 和現在的程式不同（工具改過就要重跑探索）；報告裡沒有「探索通過」的假設；要跑的假設已在 `<DB 目錄>/explore-ledger.json` 或 repo 的 `tools/research/explore_ledger.json` 裡。
-- 只跑報告裡「探索通過」的假設。讀驗證段資料之前，先在 `<DB 目錄>/explore-ledger.json` 為每個假設寫一筆「開始」（代號、時間、報告雜湊、連結、工具 commit），跑完補上判定；開始後當掉也算跑過一次。真的因為技術原因當掉、沒有產出任何驗證段數字時，在 Issue 留言說明，由統籌手動處理那一筆，工具不提供重跑旗標。
+- 工具在讀任何資料之前拒絕（exit 2）：三個參數少一個；DB 旁沒有研究標記（`research-db.json`，`purpose` 是 `research_history`）；報告檔的 sha256 不是給的雜湊；連結格式不對；報告不是本工具的探索段報告，或 `definitions_sha256` 和現在的程式不同（工具改過就要重跑探索）；報告裡沒有「探索通過」的假設；要跑的假設已在 `<DB 目錄>/explore-ledger.json` 或 repo 的 `tools/research/explore_ledger.json` 裡。
+- 只跑報告裡「探索通過」的假設。讀驗證段資料之前，先在 `/research/explore-ledger.json`（DB 旁）為每個假設寫一筆「開始」（代號、時間、報告雜湊、連結、工具 commit），跑完補上判定；開始後當掉也算跑過一次。真的因為技術原因當掉、沒有產出任何驗證段數字時，在 Issue 留言說明，由統籌手動處理那一筆，工具不提供重跑旗標。
 - 讀 DB 時只讀 2024-09-27（含）以前的列（往前 730 天的日線只當暖機）。判定是「通過」的假設，再另外讀到 2026-11-13，算已用段（獨立模擬，只列出、不判定），寫在 `<代號>/used/`；沒通過的不算。
 - 輸出：同探索的 `explore.md`／`explore.json`／`<代號>/`，另有 `ledger-entries.json`（本次寫進紀錄檔的幾筆），統籌連同報告 commit 進 `tools/research/explore_ledger.json`，那份是公開紀錄。
 
@@ -362,7 +371,7 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 - **兩段各自獨立模擬**：探索段的訊號日從起日到 2019-12-31 的前一個交易日，淨值到 2019-12-31 收盤；驗證段從 1 重新開始，訊號日從 2020-01-02 的前一個交易日起（第一筆 2020-01-02 開盤買），淨值到 2024-09-27 收盤；已用段同樣從 2024-09-30 起。各段期末還沒賣的部位以最後收盤計（期末未賣）。段長以該段有淨值的交易日數計，在模擬之前算。
 - **已下市公司**：該段有淨值的期間內，至少要有 1 檔 `stock`／`ipo`、`status = 'delisted'`、最後一根日線落在期間內的標的；只讀日期、不讀價格。`transferred`（轉板）不算。
 - **60 日平均成交金額**：往前 60 根日線（停牌的根也算一根）中，任一根的 `turnover_status` 不是 `available` 就缺值（舊資料的 `turnover` 預設是 0，不能當成真的 0）。缺值不進前 50／150 名，同金額以雜湊排序。
-- **X7 的金額與順延**：一個帳戶；每檔＝事件日 T+1 開盤時帳戶現金 ÷ 20，不足 20 檔留現金。T′ 跌停一字鎖、停牌或沒有日線時，順延到下一根可賣的開盤；順延回來的錢留現金，到下一個事件日才用。T′ 在段外的部位以段末收盤計。驗證段第一個事件日是 2020-01-10（淨值從 2020-01-13 起）。「最新已知月份是上個月」＝`announcement_date ≤ T` 的最新 `revenue_month` 是 T 的前一個月。母體用同一個帳戶規則、同一組事件日。
+- **X7 的金額與順延**：一個帳戶；每檔＝事件日 T+1 開盤時帳戶現金 ÷ 20，不足 20 檔留現金。T′ 跌停一字鎖、停牌或沒有日線時，順延到下一根可賣的開盤（同 `simulate`，順延的賣出在那根開盤先成交）：那根就是 T′+1 時，回收的錢算進當天的買進；更晚才賣掉的，錢留現金到下一個事件日才用。T′ 在段外的部位以段末收盤計。驗證段第一個事件日是 2020-01-10（淨值從 2020-01-13 起）。「最新已知月份是上個月」＝`announcement_date ≤ T` 的最新 `revenue_month` 是 T 的前一個月。母體用同一個帳戶規則、同一組事件日。
 - **X8 的順延與「選過」**：清單日期不是交易日（週末、休市日）時，T＝之後第一個交易日。「選過」＝進入當日名單（在母體內、經 20 檔上限後），不論有沒有買到；「前 20 個交易日」＝T 之前的 20 個交易日（不含 T）。先去掉 20 日內選過的，再以雜湊取前 20 名；同一檔同一天多則只算一檔。選股紀錄從假設起日（或讀到的第一個交易日）連續算，不因分段重設。調倉用 `simulate`（K＝20），沒有公告的日子該子帳戶留現金，所以 X8 的平均投入比例遠低於母體。
 - **勝率**（只列出）：該段買進的每一筆，賣出所得 ÷ 成本 − 1 > 0 的比例；期末未賣以最後收盤（不扣賣出成本）計，另列筆數。
 

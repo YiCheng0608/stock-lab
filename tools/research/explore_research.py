@@ -16,7 +16,9 @@ whole population (``evidence_lib.universe``); TAIEX is only listed.
 ``--segment exploration`` reads nothing after 2019-12-31 (``load_market``'s
 ``end``); every hypothesis is run and the report is written to be published.
 ``--segment validation`` runs once, only after the exploration report was
-published: it needs the report, the sha256 quoted in the public comment and
+published, and only on the research DB (#701's marker ``research-db.json``
+beside it; the volume mounted at ``/research``, not under ``STOCK_DATA_DIR``,
+docs 第 2 步的工具): it needs the report, the sha256 quoted in the public comment and
 the comment's link, runs only the hypotheses the report passed, and writes a
 "started" entry in ``<DB directory>/explore-ledger.json`` before it reads any
 validation data; a hypothesis in that ledger or in the repository's
@@ -102,6 +104,9 @@ BUYBACK_NONE = (
 )
 BUYBACK_LOOKBACK = 20  # sessions before T in which a pick is skipped
 LEDGER_NAME = "explore-ledger.json"
+# history_backfill's research marker (#701): the validation needs it beside the DB
+MARKER_NAME = "research-db.json"
+MARKER_PURPOSE = "research_history"
 ROOT = Path(__file__).resolve().parents[2]
 REPO_LEDGER = ROOT / "tools" / "research" / "explore_ledger.json"
 URL_PATTERNS = (
@@ -424,7 +429,9 @@ def simulate_events(
     """One account: buy ``picks[s]`` at the open of ``s`` with the cash there
     (each 1/``top`` of it, ``None`` equal shares of all), sell at the close of
     ``dues[s]`` (the next event day); limits, delays and costs as ``simulate``.
-    A delayed sale's cash waits for the next event day.  Equity starts at 1."""
+    A delayed sale goes first at its open, so its cash is in that session's
+    buys when the session is T′+1, later it waits for the next event day.
+    Equity starts at 1."""
 
     cash = [1.0]
     held: list[pr.Position] = []
@@ -612,8 +619,13 @@ def _rank(
     ctx: Context, spec: dict[str, Any], day: date, members: list[tuple[lib.Series, int]]
 ) -> tuple[list[tuple[int, dict[str, float | None], str]], dict[str, int]]:
     """The day's members in the hypothesis's order (the filters and subset
-    applied) and the count of missing values of each feature used."""
+    applied) and the count of missing values of each feature used.
 
+    The feature cache holds this signal date only: a value is asked for once
+    per member and day, and a run of 3,000 days × 1,500 members × 3 features
+    kept whole would be millions of entries (#706 review)."""
+
+    ctx.cache.clear()
     names = used_features(spec)
     missing = Counter()
     rows = []
@@ -958,6 +970,23 @@ def validation_problems(
             [
                 "--segment validation needs --exploration-report, "
                 "--exploration-sha256 and --exploration-url"
+            ],
+            [],
+            None,
+        )
+    marker = db.resolve().parent / MARKER_NAME
+    try:
+        purpose = json.loads(marker.read_text(encoding="utf-8")).get("purpose")
+    except (OSError, ValueError, AttributeError):
+        purpose = None
+    if purpose != MARKER_PURPOSE:
+        # Only the research DB runs the validation, and its ledger stays in
+        # the research volume: a copy elsewhere would lose it (#706 review).
+        return (
+            [
+                f"{marker} is missing or not a research marker "
+                f'(expected {{"purpose": "{MARKER_PURPOSE}"}}): the validation '
+                "runs on the research DB only"
             ],
             [],
             None,

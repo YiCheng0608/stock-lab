@@ -622,8 +622,13 @@ def compressed(monkeypatch, tmp_path: Path) -> None:
 
 
 def copy_of(db: Path, tmp_path: Path) -> Path:
+    """A research DB: the copy and #701's research marker beside it."""
+
     folder = tmp_path / "copy"
     folder.mkdir()
+    (folder / "research-db.json").write_text(
+        '{"purpose": "research_history", "issue": 692}\n', encoding="utf-8"
+    )
     return Path(shutil.copy(db, folder / "stock.db"))
 
 
@@ -1221,3 +1226,55 @@ def test_a_crash_after_the_start_still_counts_as_the_one_run(
 
 def test_the_repository_ledger_starts_empty():
     assert json.loads(tool.REPO_LEDGER.read_text(encoding="utf-8")) == {"entries": []}
+
+
+def test_the_marker_is_history_backfills():
+    backfill = lib._load("history_backfill")
+    assert (tool.MARKER_NAME, tool.MARKER_PURPOSE) == (
+        backfill.MARKER_NAME,
+        backfill.MARKER_PURPOSE,
+    )
+
+
+@pytest.mark.parametrize("marker", [None, '{"purpose": "something_else"}', "not json"])
+def test_the_validation_needs_the_research_marker(explored, tmp_path, capsys, marker):
+    """A copy of the research DB elsewhere is not it: its ledger would go with it."""
+
+    db, exploration = explored
+    path = db.parent / "research-db.json"
+    if marker is None:
+        path.unlink()
+    else:
+        path.write_text(marker, encoding="utf-8")
+    out = tmp_path / "v"
+    assert validate(db, out, exploration / "explore.json") == 2
+    assert any("research marker" in text for text in refused(capsys))
+    assert_untouched(db, out)
+
+
+def test_the_exploration_needs_no_marker(explore_db, tmp_path, monkeypatch):
+    compressed(monkeypatch, tmp_path)
+    db = copy_of(explore_db, tmp_path)
+    (db.parent / "research-db.json").unlink()
+    assert explore(db, tmp_path / "out") == 0
+    assert explore(db, tmp_path / "coverage", "--coverage-only") == 0
+
+
+@pytest.mark.parametrize("name", ["X1", "X4", "X6", "X7"])
+def test_the_feature_cache_holds_one_signal_date(
+    explore_db, tmp_path, monkeypatch, name
+):
+    """It does not grow with the days: at most one day's members × features."""
+
+    compressed(monkeypatch, tmp_path)
+    ctx = one_process(
+        lambda: tool.load_context(
+            explore_db, tool.LOAD_FROM, trading_days()[199], tmp_path / "raw"
+        )
+    )
+    result = tool.run_one(ctx, explore_db, name, "exploration")
+    assert result["window"]["signal_days"] >= 5  # X7: one a month
+    members = len(ctx.market.panel.series)
+    assert (
+        0 < len(ctx.cache) <= members * len(tool.used_features(tool.HYPOTHESES[name]))
+    )
