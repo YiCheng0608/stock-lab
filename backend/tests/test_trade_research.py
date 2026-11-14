@@ -287,13 +287,26 @@ def test_settle_does_not_check_a_suspended_session_and_gaps_on_the_resume():
     assert not done.suspension_delayed
 
 
-def test_settle_sells_a_delisted_stock_at_its_last_close():
+@pytest.mark.parametrize("status", ["delisted", "transferred"])
+def test_settle_sells_a_delisted_or_transferred_stock_at_its_last_close(status):
     bars = [flat(0), bar(1, 99.0, 100.0, 98.0, 98.5), halted(2), halted(3)]
-    out = tool.settle(bars, filled(), 96.0, 108.0, 19, delisted=1).exit
+    out = tool.settle(bars, filled(), 96.0, 108.0, 19, ended=(1, status)).exit
     assert (out.reason, out.price, out.holding) == (
-        "delisted",
+        status,
         pytest.approx(98.5 * SELL),
         2,
+    )
+
+
+def test_settle_takes_the_stop_when_the_fill_session_touches_both():
+    day = [bar(0, 100.0, 109.0, 95.0, 100.0), *map(flat, range(1, 25))]
+    out = tool.settle(day, filled(), 96.0, 108.0, 19).exit
+    assert (out.reason, out.price, out.holding, out.both_touched, out.gapped) == (
+        "stop",
+        pytest.approx(96.0 * SELL),
+        1,
+        True,
+        False,
     )
 
 
@@ -480,8 +493,16 @@ def test_a_zero_return_is_neither_won_nor_lost():
 SESSIONS = 130
 INDEX_ID = 90
 A, B, C, D, E, F = 1, 2, 3, 4, 5, 6
+# G is transferred (its last bar on its exchange at 92), H is suspended on the
+# fill session 86, J is suspended on 87 (A's exit) and resumes on 88.
+G, H, J = 7, 8, 9
+GOLDEN = (A, B, C, D, E, F, G, H, J)
+PICKED = (A, B, C, D, E, G)  # revenue up; F, H and J are only in the population
 T = 85  # the one session the market filter passes
 DELISTED_LAST = 90
+TRANSFERRED_LAST = 92
+STATUS = {E: "delisted", G: "transferred"}
+HALTED_AT = {H: 86, J: 87}
 
 
 def weekdays(first: date, count: int) -> list[date]:
@@ -507,6 +528,9 @@ PRICES = {
         86: (97.0, 98.0, 96.5, 97.5),
         **{k: (97.5, 98.0, 97.0, 97.5) for k in range(87, DELISTED_LAST + 1)},
     },
+    G: {86: (99.5, 100.0, 99.0, 99.5)},
+    H: {86: (100.0, 100.0, 100.0, 100.0)},
+    J: {87: (100.0, 100.0, 100.0, 100.0), 88: (102.0, 103.0, 101.0, 102.5)},
 }
 
 
@@ -528,9 +552,9 @@ def build_golden(path: Path) -> Path:
                     "symbol": f"S{i}",
                     "name": f"N{i}",
                     "instrument_type": "stock",
-                    "status": "delisted" if i == E else "active",
+                    "status": STATUS.get(i, "active"),
                 }
-                for i in (A, B, C, D, E, F)
+                for i in GOLDEN
             ]
             + [
                 {
@@ -544,10 +568,11 @@ def build_golden(path: Path) -> Path:
             ],
         )
         bars, chips = [], []
-        for i in (A, B, C, D, E, F):
+        for i in GOLDEN:
             for t, day in enumerate(days):
-                if i == E and t > DELISTED_LAST:
+                if (i == E and t > DELISTED_LAST) or (i == G and t > TRANSFERRED_LAST):
                     break
+                halted = HALTED_AT.get(i) == t
                 o, h, low, c = ohlc(i, t)
                 bars.append(
                     {
@@ -558,11 +583,11 @@ def build_golden(path: Path) -> Path:
                         "low": low,
                         "close": c,
                         "adj_close": c,
-                        "volume": 2_000_000,
+                        "volume": 0 if halted else 2_000_000,
                         "turnover": c * 2_000_000,
                         "turnover_status": "available",
                         "source": "test",
-                        "is_suspended": False,
+                        "is_suspended": halted,
                     }
                 )
                 # trust_buy_days at any T: 5, 4, 3, 2, 1 for A..E, 0 for F
@@ -603,14 +628,32 @@ def build_golden(path: Path) -> Path:
                 {
                     "instrument_id": i,
                     "revenue_month": date(2014, 4, 1),
-                    "revenue": 90.0 if i == F else 110.0,
+                    "revenue": 110.0 if i in PICKED else 90.0,
                     "prior_year_revenue": 100.0,
                     "announcement_date": days[60],
                     "source": "test",
                     "raw_payload_id": 1,
                     "data_as_of": "test",
                 }
-                for i in (A, B, C, D, E, F)
+                for i in GOLDEN
+            ],
+        )
+        # margin lists before and after the exploration's end (days[110])
+        db.execute(
+            insert(MarginList),
+            [
+                {
+                    "exchange": "TWSE",
+                    "trading_date": days[k],
+                    "source": "test",
+                    "endpoint": "test",
+                    "data_as_of": days[k].isoformat(),
+                    "collected_at": datetime(2014, 1, 1),
+                    "raw_payload_id": 1,
+                    "member_count": 0,
+                    "members_json": {},
+                }
+                for k in (100, 120)
             ],
         )
         db.commit()
@@ -739,16 +782,28 @@ def read_csv(path: Path) -> list[dict]:
 
 
 def by_hand() -> dict[str, dict]:
-    """S1's trades on the fixture, from the price table above."""
+    """S1's trades on the fixture, from the price table above.
 
-    buy = {i: ohlc(i, 86)[0] for i in (A, B, C, D, E, F)}
+    The population of T is every stock: H cannot be bought on the fill
+    session (suspended) and is left out; J cannot be sold on 87 (suspended)
+    and sells at 88's open; E and G have no bar after 90 and 92 and sell at
+    their last close.
+    """
+
+    members = [i for i in GOLDEN if i != H]
+    buy = {i: ohlc(i, 86)[0] for i in members}
+
+    def sold(i: int, x: int) -> float:
+        if i == E:
+            return ohlc(i, min(x, DELISTED_LAST))[3]
+        if i == G:
+            return ohlc(i, min(x, TRANSFERRED_LAST))[3]
+        if HALTED_AT.get(i) == x:
+            return ohlc(i, x + 1)[0]  # the next session's open
+        return ohlc(i, x)[3]
 
     def population(x: int) -> float:
-        sold = {
-            i: (ohlc(i, min(x, DELISTED_LAST))[3] if i == E else ohlc(i, x)[3])
-            for i in (A, B, C, D, E, F)
-        }
-        return statistics.fmean(net(sold[i], buy[i]) for i in sold)
+        return statistics.fmean(net(sold(i, x), buy[i]) for i in members)
 
     taiex = 10_000.0 / 10_100.0 - 1.0
     rows = {
@@ -756,9 +811,10 @@ def by_hand() -> dict[str, dict]:
         "S2": ("target", 88, net(108.0, 100.0), 3, 100.0, 108.0),
         "S3": ("time", 105, net(101.0, 100.0), 20, 100.0, 101.0),
         "S5": ("delisted", DELISTED_LAST, net(97.5, 97.0), 5, 97.0, 97.5),
+        "S7": ("transferred", TRANSFERRED_LAST, net(100.0, 99.5), 7, 99.5, 100.0),
     }
     out = {}
-    for symbol, (reason, x, value, holding, fill, sold) in rows.items():
+    for symbol, (reason, x, value, holding, fill, price) in rows.items():
         base = population(x)
         out[symbol] = {
             "exit_reason": reason,
@@ -766,22 +822,37 @@ def by_hand() -> dict[str, dict]:
             "net": value,
             "holding": holding,
             "fill_price": fill,
-            "exit_price": sold,
+            "exit_price": price,
             "population": base,
+            "population_members": len(members),
             "excess": value - base,
             "taiex_excess": value - taiex,
         }
     return out
 
 
+FILLED = ("S1", "S2", "S3", "S5", "S7")
+
+
 def test_the_golden_s1_trades_are_the_hand_computed_ones(explored):
     db, out = explored
     days = days_()
     trades = {row["symbol"]: row for row in read_csv(out / "S1" / "trades.csv")}
-    assert set(trades) == {"S1", "S2", "S3", "S4", "S5"}
+    assert set(trades) == {"S1", "S2", "S3", "S4", "S5", "S7"}
     assert {row["signal_date"] for row in trades.values()} == {days[T].isoformat()}
-    assert [trades[f"S{i}"]["rank"] for i in range(1, 6)] == ["1", "2", "3", "4", "5"]
+    assert [trades[s]["rank"] for s in ("S1", "S2", "S3", "S4", "S5", "S7")] == [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+    ]
     expected = by_hand()
+    # the two population rules are not idle: J's sale moved, H left out
+    assert expected["S1"]["population"] != pytest.approx(
+        statistics.fmean(net(ohlc(i, 87)[3], ohlc(i, 86)[0]) for i in GOLDEN if i != H)
+    )
     for symbol, want in expected.items():
         row = trades[symbol]
         assert row["entry_reason"] == "filled"
@@ -789,6 +860,8 @@ def test_the_golden_s1_trades_are_the_hand_computed_ones(explored):
         assert row["exit_date"] == days[want["exit_day"]].isoformat()
         assert row["exit_reason"] == want["exit_reason"]
         assert int(row["holding"]) == want["holding"]
+        assert int(row["population_members"]) == want["population_members"]
+        assert row["population_unbought"] == "1"  # H, suspended on 86
         for key in (
             "fill_price",
             "exit_price",
@@ -809,29 +882,32 @@ def test_the_golden_s1_trades_are_the_hand_computed_ones(explored):
     assert trades["S4"]["net"] == ""
     # the day series and the listed numbers
     tables = read_json(out / "S1" / "tables.json")
-    nets = [expected[s]["net"] for s in ("S1", "S2", "S3", "S5")]
-    excesses = [expected[s]["excess"] for s in ("S1", "S2", "S3", "S5")]
+    nets = [expected[s]["net"] for s in FILLED]
+    excesses = [expected[s]["excess"] for s in FILLED]
     assert tables["absolute"]["mean"] == pytest.approx(statistics.fmean(nets))
     assert tables["excess"]["mean"] == pytest.approx(statistics.fmean(excesses))
     assert tables["excess"]["days"] == 1 and tables["excess"]["t"] is None
-    assert (tables["signals"], tables["trades"], tables["trade_days"]) == (5, 4, 1)
+    assert (tables["signals"], tables["trades"], tables["trade_days"]) == (6, 5, 1)
     won = [value for value in nets if value > 0]
     lost = [value for value in nets if value < 0]
-    assert (len(won), len(lost)) == (2, 2)
-    assert tables["win_rate"] == pytest.approx(0.5)
+    assert (len(won), len(lost)) == (2, 3)
+    assert tables["win_rate"] == pytest.approx(0.4)
     assert tables["won_mean"] == pytest.approx(statistics.fmean(won))
     assert tables["lost_mean"] == pytest.approx(statistics.fmean(lost))
-    assert tables["holding_mean"] == pytest.approx(statistics.fmean([2, 3, 20, 5]))
-    assert tables["abandon_rate"] == pytest.approx(0.2)
+    assert tables["holding_mean"] == pytest.approx(statistics.fmean([2, 3, 20, 5, 7]))
+    assert tables["abandon_rate"] == pytest.approx(1 / 6)
     assert tables["abandon_reasons"] == {"not_triggered": 1}
     assert tables["exit_share"] == {
-        "stop": 0.25,
-        "target": 0.25,
-        "time": 0.25,
+        "stop": 0.2,
+        "target": 0.2,
+        "time": 0.2,
         "segment_end": 0.0,
-        "delisted": 0.25,
+        "delisted": 0.2,
+        "transferred": 0.2,
     }
+    assert tables["exits"]["transferred"] == 1
     assert tables["below_lower"] == 1
+    assert tables["population_unbought"] == 5  # H in each of the five (T, e, x)
     assert (tables["filter_blocked_days"], tables["filter_missing_days"]) == (30, 0)
     assert tables["window"]["days"] == 31
     day = read_csv(out / "S1" / "days.csv")
@@ -873,6 +949,8 @@ def test_the_exploration_reads_nothing_after_its_end(golden_db, tmp_path, monkey
     assert seen == [days_()[110]]
     ctx = original(golden_db, date(2013, 1, 1), days_()[110], tmp_path / "raw")
     assert max(ctx.panel.sessions) == days_()[110]
+    # the margin list of days[120] is after the end: not read
+    assert sorted(day for _exchange, day in ctx.margin_lists) == [days_()[100]]
 
 
 def test_occupied_stocks_are_skipped_and_the_next_one_fills_in(
@@ -1087,7 +1165,8 @@ CHIP_GAP = 43  # one session without the trust figure
 HALTED = 44  # suspended sessions in the windows
 IPO = 45  # 40 bars only
 SPLIT = 46  # a split inside the windows
-EDGES = [NOT_APPLICABLE, ZERO_BASE, CHIP_GAP, HALTED, IPO, SPLIT]
+DIVIDEND = 47  # a cash dividend inside the windows (no reference price: the fallback)
+EDGES = [NOT_APPLICABLE, ZERO_BASE, CHIP_GAP, HALTED, IPO, SPLIT, DIVIDEND]
 RULE_INDEX = 99
 
 
@@ -1158,6 +1237,8 @@ def build_rules(path: Path) -> Path:
                     continue
                 o, h, low, c, volume = series[t]
                 scale = 0.5 if i == SPLIT and t >= 120 else 1.0
+                if i == DIVIDEND and t >= 125:  # ex-dividend: 2.0 off the prices
+                    o, h, low, c = (value - 2.0 for value in (o, h, low, c))
                 halted = i == HALTED and t in (100, 118, 131)
                 bars.append(
                     {
@@ -1217,6 +1298,15 @@ def build_rules(path: Path) -> Path:
                 action_date=days[120],
                 action_type="split",
                 details_json={"price_factor": 0.5},
+                source="test",
+            )
+        )
+        db.add(
+            CorporateAction(
+                instrument_id=DIVIDEND,
+                action_date=days[125],
+                action_type="dividend",
+                cash_dividend=2.0,
                 source="test",
             )
         )
@@ -1393,6 +1483,10 @@ def test_r1_r2_are_the_product_signals_and_levels(rules_db, product_signals, tmp
         and item.scale[at - 20] != item.scale[at]
     )
     assert has(
+        lambda n, item, at, mine, theirs: item.instrument_id == DIVIDEND
+        and item.scale[at - 20] != item.scale[at]
+    )
+    assert has(
         lambda n, item, at, mine, theirs: n == "R2"
         and theirs.status == "invalid_levels"
     )
@@ -1402,3 +1496,104 @@ def test_r1_r2_are_the_product_signals_and_levels(rules_db, product_signals, tmp
     )
     for name in ("R1", "R2"):
         assert has(lambda n, item, at, mine, theirs: n == name and mine.actionable)
+
+
+def test_r1_r2_trade_from_the_signal_to_the_exit(
+    rules_db, product_signals, tmp_path, monkeypatch
+):
+    """The holding limit counts from the signal date, and the levels are the
+    product's on T's basis times ``scale[T]`` (0.5 before the split)."""
+
+    days = rule_days()
+    last = days[-1]
+    monkeypatch.setattr(
+        tool,
+        "SEGMENTS",
+        {"exploration": (None, last), "validation": (last, last), "used": (last, last)},
+    )
+    floors = {"exploration": 20, "validation": 10}
+    monkeypatch.setattr(tool, "MIN_SEGMENT_DAYS", floors)
+    monkeypatch.setattr(ex, "MIN_SEGMENT_DAYS", floors)
+    monkeypatch.setattr(tool, "MIN_DAYS", 1)
+    monkeypatch.setattr(
+        tool,
+        "HYPOTHESES",
+        {
+            name: {**spec, "start": ("session", days[0], EVAL_FROM + 1)}
+            for name, spec in REGISTERED.items()
+        },
+    )
+    monkeypatch.setattr(ex, "REPO_LEDGER", tmp_path / "repo-ledger.json")
+    monkeypatch.setattr(ex, "delisted_count", lambda db, first, last: 1)  # none here
+    research = lib._load("backtest_research")
+    monkeypatch.setattr(research, "daily_window_problem", lambda now: None)
+    out = tmp_path / "rules"
+    assert explore(copy_of(rules_db, tmp_path), out, "R1,R2") == 0
+    index = {day.isoformat(): k for k, day in enumerate(days)}
+    held = 0
+    for name, field in (("R1", "breakout_price"), ("R2", "pullback_low")):
+        rows = read_csv(out / name / "trades.csv")
+        assert min(row["signal_date"] for row in rows) >= days[EVAL_FROM].isoformat()
+        for row in rows:
+            s = index[row["signal_date"]]
+            if row["exit_reason"] == "time":
+                assert row["exit_date"] == days[s + 20].isoformat()
+                held += row["fill_date"] != days[s + 1].isoformat()
+        strategy = tool.strategy_of(name)
+        split = [
+            row
+            for row in rows
+            if row["symbol"] == f"{1000 + SPLIT}" and index[row["signal_date"]] < 120
+        ]
+        assert split or name == "R2", name  # R1 has some; R2 checked when it has
+        for row in split:
+            theirs = product_signals[
+                (strategy.key, SPLIT, days[index[row["signal_date"]]])
+            ]
+            assert float(row[field]) == pytest.approx(getattr(theirs, field) * 0.5)
+            assert float(row["stop"]) == pytest.approx(theirs.invalid_price * 0.5)
+            assert float(row["target"]) == pytest.approx(theirs.target_1 * 0.5)
+    assert held > 0  # filled after T+1 and still out on the 20th session
+
+
+def test_the_bar_count_counts_the_bars_before_the_load(
+    rules_db, product_signals, tmp_path
+):
+    """Q2: an IPO listed before the load's first day keeps its bar count."""
+
+    days = rule_days()
+    ctx = one_process(lambda: tool.load(rules_db, days[120], days[-1], tmp_path))
+    assert ctx.bars_before[IPO] == 10  # its bars start on session 110
+    strategy = tool.strategy_of("R1")
+    item = ctx.panel.series[IPO]
+    for day in days[130:]:
+        mine = tool.strategy_inputs(ctx, item, item.position[day])
+        theirs = product_signals[(strategy.key, IPO, day)]
+        assert mine.bar_count == theirs.rule_evidence_json["inputs"]["bar_count_60d"]
+        assert mine.bar_count < 60
+
+
+def test_too_little_free_memory_is_refused(golden_db, tmp_path, monkeypatch, capsys):
+    compressed(monkeypatch, tmp_path)
+    research = lib._load("backtest_research")
+    monkeypatch.setattr(research, "free_memory_gb", lambda: 0.5)
+    db = copy_of(golden_db, tmp_path)
+    out = tmp_path / "out"
+    code = one_process(
+        lambda: tool.main(
+            [
+                "--db",
+                str(db),
+                "--out",
+                str(out),
+                "--segment",
+                "exploration",
+                "--hypotheses",
+                "S1",
+            ]
+        )  # fmt: skip
+    )
+    assert code == 2
+    assert any("free memory 0.5 GB" in line for line in refused(capsys))
+    assert not out.exists()
+    assert not (db.parent / ex.LEDGER_NAME).exists()

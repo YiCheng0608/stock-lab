@@ -21,7 +21,7 @@ Every signal is one trade of its own (no account, no cap on the positions):
 - the exit (``settle``): the stop, the target, the holding limit; a session
   touching both is the stop; a gap fills at the open; a session locked at
   limit down delays the sale; a suspended session is not checked and delays a
-  due sale; a delisted stock sells at its last close; the segment's last
+  due sale; a delisted or transferred stock sells at its last close; the segment's last
   session settles what is still open.  Without suspensions, delistings and
   the segment's end it is ``exit_research.exit_trade`` (a test locks that).
 - every session is a market session (``Panel.sessions``): a stock without a
@@ -168,13 +168,17 @@ REASONS = {
     **ex.REASONS,
     "too_few_trade_days": f"有成交的訊號日不足 {MIN_DAYS} 日",
 }
-EXIT_REASONS = ("stop", "target", "time", "segment_end", "delisted")
+# "transferred": the PR #738 review decision 6883149381 (轉板比照下市)
+EXIT_REASONS = ("stop", "target", "time", "segment_end", "delisted", "transferred")
+# A stock no longer traded on its exchange: no bar after its last one.
+ENDED = ("delisted", "transferred")
 EXIT_LABELS = {
     "stop": "碰停損",
     "target": "碰目標",
     "time": "持有到期",
     "segment_end": "段末結算",
     "delisted": "下市",
+    "transferred": "轉板",
 }
 ABANDON_LABELS = {
     "not_triggered": "期限內沒有成交",
@@ -237,7 +241,7 @@ class Context:
     end: date
     bars_before: dict[int, int] = field(default_factory=dict)  # Q2: bar_count
     statuses: dict[int, str] = field(default_factory=dict)
-    last_bar: dict[int, date] = field(default_factory=dict)  # of the delisted
+    last_bar: dict[int, date] = field(default_factory=dict)  # of ENDED ones
     margin_lists: dict[tuple[str, date], int] = field(default_factory=dict)
     margin_codes: dict[int, frozenset[str]] = field(default_factory=dict)
     index_days: list[date] = field(default_factory=list)
@@ -281,7 +285,7 @@ class Context:
 
 def load(db: Path, start: date, end: date, raw_dir: Path) -> Context:
     """The panel from ``start`` to ``end``; nothing after ``end`` is read
-    except the date of a delisted stock's last bar (no price)."""
+    except the date of a delisted or transferred stock's last bar (no price)."""
 
     market = pr.load_market(db, start, raw_dir, fundamentals=True, end=end)
     ctx = Context(market, db, end)
@@ -305,7 +309,7 @@ def load(db: Path, start: date, end: date, raw_dir: Path) -> Context:
             for instrument_id, day in con.execute(
                 "select i.id, max(mb.trading_date) from instruments i "
                 "join market_bars mb on mb.instrument_id = i.id "
-                f"where i.instrument_type in ({marks}) and i.status = 'delisted' "
+                f"where i.instrument_type in ({marks}) and i.status in ('delisted', 'transferred') "
                 "group by i.id",
                 types,
             )
@@ -676,18 +680,20 @@ class TradeBars:
                 return k, bar.close
         return None
 
-    def delisted_at(self) -> int | None:
-        """The key of a delisted stock's last bar when it is in the path."""
+    def ended_at(self) -> tuple[int, str] | None:
+        """(key, status) of a delisted or transferred stock's last bar when it
+        is in the path."""
 
         last = self.ctx.last_bar.get(self.item.instrument_id)
-        if last is None or self.ctx.statuses.get(self.item.instrument_id) != "delisted":
+        status = self.ctx.statuses.get(self.item.instrument_id)
+        if last is None or status not in ENDED:
             return None
         sessions = self.ctx.panel.sessions
         s = bisect.bisect_left(sessions, last)
         if s >= len(sessions) or sessions[s] != last:
             return None
         key = s - self.first
-        return key if 0 <= key < self.count else None
+        return (key, status) if 0 <= key < self.count else None
 
 
 def enter_zone(bars, upper: float, lower: float, days: int) -> tuple[er.Entry, bool]:
@@ -738,13 +744,13 @@ def settle(
     stop: float,
     target: float | None,
     last: int,
-    delisted: int | None = None,
+    ended: tuple[int, str] | None = None,
     cost_bps: float = COST_BPS,
 ) -> Settled:
     """The exit of a filled trade (docs 逐筆評估「出場」「停牌與下市」「段的邊界」).
 
-    ``last`` is the key of the holding limit's session, ``delisted`` the key of
-    a delisted stock's last bar; ``bars`` end on the segment's last session.
+    ``last`` is the key of the holding limit's session, ``ended`` the key of
+    a delisted or transferred stock's last bar and its status (the exit reason); ``bars`` end on the segment's last session.
     """
 
     if entry.session is None or entry.price is None:
@@ -813,10 +819,10 @@ def settle(
                     pending, by_lock = "time", True
                 else:
                     return closed(at, bar.close, "time")
-        if delisted is not None and at == delisted:
+        if ended is not None and at == ended[0]:
             found = bars.last_close(at) if hasattr(bars, "last_close") else None
             price = found[1] if found else bar.close
-            return closed(at, price, "delisted")
+            return closed(at, price, ended[1])
     end = len(bars) - 1
     found = bars.last_close(end) if hasattr(bars, "last_close") else None
     price = found[1] if found else bars[end].close
@@ -974,7 +980,7 @@ def _trade_row(
     hold_last = (
         er.WINDOW - 1 if state.spec["kind"] == "rule" else ends + state.spec["hold"] - 1
     )
-    done = settle(bars, entry, stop, target, hold_last, bars.delisted_at())
+    done = settle(bars, entry, stop, target, hold_last, bars.ended_at())
     out = done.exit
     e, x = bars.session(ends), bars.session(out.session - 1)
     state.busy[item.instrument_id] = x - 1
