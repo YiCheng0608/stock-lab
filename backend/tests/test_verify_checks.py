@@ -2818,7 +2818,9 @@ def test_t22_fails_on_a_wrong_or_misplaced_line_or_row(tmp_path):
         # Missing, or after the market and group (where the ellipsis cuts it).
         (US_PAGE.replace("台積電 費半 +2.04% 上市", "台積電 上市"), "開頭不是"),
         (
-            US_PAGE.replace(SOX_ROW, "#1 2330 台積電 上市 · 半導體（產業 #1） · 費半 +2.04%"),
+            US_PAGE.replace(
+                SOX_ROW, "#1 2330 台積電 上市 · 半導體（產業 #1） · 費半 +2.04%"
+            ),
             "開頭不是",
         ),
         (US_PAGE.replace("富邦金 上市", "富邦金 費半 +2.04% 上市"), "卻有美股"),
