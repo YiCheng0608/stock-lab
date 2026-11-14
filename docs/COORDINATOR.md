@@ -69,7 +69,7 @@ orca terminal rename --terminal <handle> --title "統籌" --json
 - **決策落地**：會影響後續判斷的使用者決定，當下寫進 #1 留言並同步更新 #1 本文的決策索引（只列仍有效的決策、待使用者事項與現任統籌，每條附留言連結）。
 - **統籌承諾**：統籌對工程師做出偏離手冊的承諾（例如合併後先不清 worktree），或答應日後在某個時點做某件事（例如隔天的實測、21:30 daily 後的核對）時，同時寫兩處：在該 Issue 留一則 `統籌承諾：` 留言（[留言類型](WORKFLOW.md#留言類型)），再以 `bash tools/ops/commit.sh add --due <時間或 none> --url <那則留言的連結> --text <內容>` 寫進承諾檔 `<資料目錄>/logs/commitments.jsonl`（[`commit.sh`](../tools/ops/commit.sh)；時間寫成 `2026-11-07T09:23+08:00`，沒有固定時點寫 `none`）。兌現後在 Issue 留言並 `commit.sh done <id> --url <留言連結>`。`patrol.sh` 每次列出未兌現的承諾，已到期的標「已到期」；session 內排的一次性定時工作只當提醒，跟著 session 消失，不是唯一記錄。換手後由新統籌兌現（`take_over.sh` 也會列出）。
 - **統籌換手**：觸發條件任一成立就換：同一 session 已自動壓縮兩次以上；最後一次呼叫的 context 超過門檻（預設 450K，#710）；統籌自覺回答對不上 Issue 與文件；使用者要求。偵測與執行步驟見[統籌 session](#統籌-session)的自動換手機制。
-- **前提與限制**：本機與 Orca 保持開機登入（monitor 在容器裡時，喚醒靠統籌 session 啟動的 wake listener，[統籌事件 monitor](ops/MONITOR.md)）；訂閱額度由統籌、工程師與 LLM 批次共用，額度用盡時全部暫停到重置，不視為失敗；合併把關為 CI＋統籌 review＋高風險項獨立 review。
+- **前提與限制**：本機與 Orca 保持開機登入（monitor 在容器裡時，喚醒靠統籌 session 啟動的 wake listener，[統籌事件 monitor](ops/MONITOR.md)）；訂閱額度由統籌、工程師與 LLM 批次共用，額度用盡時全部暫停到重置，不視為失敗；合併把關為 CI＋統籌 review＋高風險項獨立 review。統籌停在權限或信任的確認框時，只有使用者能選，monitor 不替統籌選。monitor 的喚醒會記 `prompt_blocked`，持續 10 分鐘、至少 2 次後在 #1 留言「待使用者：統籌停在確認框」，同一次停住只留一則，這段期間不留「請開統籌」（#720，[統籌事件 monitor](ops/MONITOR.md)）。這只在佇列有事件要喚醒時才偵測得到；沒有事件等著時停住不會被發現，也不會誤事。
 
 ## 記憶
 

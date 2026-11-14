@@ -430,11 +430,15 @@ def test_a_coordinator_at_a_menu_for_ten_minutes_is_reported_once_on_1(
 ) -> None:
     """#720 AC-3: prompt_blocked wakes spanning 10 minutes, at least two: one #1 comment
     for that stop, none again while it lasts, and no 請開統籌 meanwhile."""
-    mon.write("gh_issue_comment.json", "https://github.com/x/issues/1#issuecomment-88\n")
+    mon.write(
+        "gh_issue_comment.json", "https://github.com/x/issues/1#issuecomment-88\n"
+    )
     # The body monitor.sh hands gh (--body-file in its work directory).
     work = (mon.data / "logs" / "monitor.lock").as_posix()
     body_copy = (mon.fake / "gh_issue_comment_body.txt").as_posix()
-    mon.write("gh_issue_comment.hook", f"cat '{work}'/work.*/comment.md >'{body_copy}'\n")
+    mon.write(
+        "gh_issue_comment.hook", f"cat '{work}'/work.*/comment.md >'{body_copy}'\n"
+    )
     _at_menu(mon)
     for minute in range(10):  # an urgent event: a wake each poll, 9 minutes of them
         _monitor(mon, at=NOW + 60 * minute)
@@ -444,7 +448,9 @@ def test_a_coordinator_at_a_menu_for_ten_minutes_is_reported_once_on_1(
     out = _monitor(mon, at=NOW + 660).stdout  # the next poll comments
     assert "stale=commented" in out and len(_issue_comments(mon)) == 1
     stale = _records(mon, "stale")
-    assert [s["key"] for s in stale] == ["prompt_blocked:term_coord:2026-10-25T12:00:00Z"]
+    assert [s["key"] for s in stale] == [
+        "prompt_blocked:term_coord:2026-10-25T12:00:00Z"
+    ]
     body = (mon.fake / "gh_issue_comment_body.txt").read_text(encoding="utf-8")
     assert body.startswith("待使用者：統籌停在確認框。統籌 terminal `term_coord`")
     assert "2026-10-25T12:00:00Z（台北 2026-10-25 20:00）" in body
@@ -458,7 +464,9 @@ def test_a_coordinator_at_a_menu_for_ten_minutes_is_reported_once_on_1(
 
 def test_a_stop_after_the_terminal_came_back_is_reported_again(mon: Harness) -> None:
     """#720 AC-3: back (a sent wake), then at a menu again: one more comment, its own."""
-    mon.write("gh_issue_comment.json", "https://github.com/x/issues/1#issuecomment-88\n")
+    mon.write(
+        "gh_issue_comment.json", "https://github.com/x/issues/1#issuecomment-88\n"
+    )
     _at_menu(mon)
     for at in (NOW, NOW + 600, NOW + 660):
         _monitor(mon, at=at)
@@ -491,7 +499,9 @@ def test_a_stop_under_the_threshold_is_not_reported(mon: Harness, stop: str) -> 
         _monitor(mon, at=NOW + 600)
         _monitor(mon, at=NOW + 660)
     elif stop == "one_wake":
-        mon.answer("gh_comments", [_comment(9, "2026-10-25T11:50:00Z", body="review：可")])
+        mon.answer(
+            "gh_comments", [_comment(9, "2026-10-25T11:50:00Z", body="review：可")]
+        )
         _monitor(mon)
         for minute in range(1, 10):
             _monitor(mon, at=NOW + 60 * minute)

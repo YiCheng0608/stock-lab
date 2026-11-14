@@ -306,7 +306,9 @@ def test_a_coordinator_at_a_menu_is_prompt_blocked_through_the_listener(
         h.answer("orca_terminal_wait", {"ok": False, "error": {"code": "timeout"}})
         h.answer(
             "orca_terminal_show",
-            _ok({"terminal": {"handle": "term_coord", "agentWait": {"source": "title"}}}),
+            _ok(
+                {"terminal": {"handle": "term_coord", "agentWait": {"source": "title"}}}
+            ),
         )
     else:
         h.answer(
