@@ -11,10 +11,12 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
 from typing import Iterable
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
+from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Session
 
 from .clock import utcnow
@@ -564,6 +566,11 @@ def project_news(db: Session) -> int:
     """
 
     changed = sync_news_from_events(db)
+    _record_projection(db)
+    return changed
+
+
+def _record_projection(db: Session) -> None:
     basis = news_projection_basis(db)
     state = db.get(NewsProjectionState, NEWS_PROJECTION_STATE_KEY)
     if state is None:
@@ -573,6 +580,116 @@ def project_news(db: Session) -> int:
     state.basis_json = basis
     state.projected_at = utcnow()
     db.flush()
+
+
+# What the projection of one stored Event reads besides the Event row itself
+# (``sync_news_from_events``, ``_verified_theme_ids_from_rows``,
+# ``_is_verified_theme_for_instrument``): the memberships and groups whole, and
+# of the instruments that existed at the checkpoint only exchange, symbol and
+# industry.  An instrument created later has a new id no stored Event refers
+# to, and a status change is not read by the projection (Issue #715).
+_PROJECTION_INPUT_QUERIES = (
+    "SELECT * FROM group_memberships ORDER BY id",
+    "SELECT * FROM theme_groups ORDER BY id",
+    "SELECT id, exchange, symbol, industry FROM instruments "
+    "WHERE id <= :max_instrument_id ORDER BY id",
+)
+
+
+def _projection_inputs_digest(db: Session, max_instrument_id: int) -> str:
+    hasher = hashlib.sha256()
+    for sql in _PROJECTION_INPUT_QUERIES:
+        hasher.update(b"\x00")
+        for row in db.execute(sql_text(sql), {"max_instrument_id": max_instrument_id}):
+            hasher.update(repr(tuple(row)).encode("utf-8"))
+            hasher.update(b"\x01")
+    return hasher.hexdigest()
+
+
+@dataclass(frozen=True)
+class ProjectionCheckpoint:
+    """The projection state before a writer touches Events (Issue #715)."""
+
+    current: bool
+    inputs_digest: str
+    max_event_id: int
+    max_instrument_id: int
+    taken_at: datetime
+
+
+def projection_checkpoint(db: Session) -> ProjectionCheckpoint:
+    """Record, before any write, whether every stored Event is projected.
+
+    ``full_projection_reason`` then says whether projecting only the Events the
+    writer touched equals a full projection.  Costs the fingerprint's
+    aggregates and the small taxonomy tables; no Event or NewsItem is loaded.
+    """
+
+    taken_at = utcnow()
+    state = db.get(NewsProjectionState, NEWS_PROJECTION_STATE_KEY)
+    current = state is not None and state.fingerprint == digest(
+        news_projection_basis(db)
+    )
+    max_instrument_id = int(
+        db.scalar(sql_text("SELECT coalesce(max(id), 0) FROM instruments")) or 0
+    )
+    return ProjectionCheckpoint(
+        current=current,
+        inputs_digest=_projection_inputs_digest(db, max_instrument_id),
+        max_event_id=int(
+            db.scalar(sql_text("SELECT coalesce(max(id), 0) FROM events")) or 0
+        ),
+        max_instrument_id=max_instrument_id,
+        taken_at=taken_at,
+    )
+
+
+def full_projection_reason(
+    db: Session, checkpoint: ProjectionCheckpoint, touched_ids: Iterable[int]
+) -> str | None:
+    """Why projecting only ``touched_ids`` would differ from ``project_news``.
+
+    None when, since ``checkpoint``: every stored Event was projected (the
+    fingerprint was current), what the projection reads besides the Event did
+    not change, and no Event outside ``touched_ids`` was inserted or written
+    through the ORM (another process, after the checkpoint).  A full projection
+    would then change no other NewsItem (Issue #715).
+    """
+
+    if not checkpoint.current:
+        return "fingerprint_stale"
+    if (
+        _projection_inputs_digest(db, checkpoint.max_instrument_id)
+        != checkpoint.inputs_digest
+    ):
+        return "projection_inputs_changed"
+    db.flush()
+    touched = set(touched_ids)
+    others = db.scalars(
+        select(Event.id).where(
+            or_(
+                Event.id > checkpoint.max_event_id,
+                Event.updated_at >= checkpoint.taken_at,
+            )
+        )
+    ).all()
+    if any(event_id not in touched for event_id in others):
+        return "concurrent_event_write"
+    return None
+
+
+def project_touched_news(db: Session, events: Iterable[Event]) -> int:
+    """Project ``events`` only and record the fingerprint as ``project_news`` does.
+
+    Call it only when ``full_projection_reason`` returned None: the fingerprint
+    then says every stored Event is projected, which it is.  The cost follows
+    ``events``, not the stored history (Issue #715).  Returns the changed
+    NewsItem count.
+    """
+
+    rows = sorted({event.id: event for event in events}.values(), key=lambda e: e.id)
+    changed = sync_news_from_events(db, rows)
+    _record_projection(db)
     return changed
 
 

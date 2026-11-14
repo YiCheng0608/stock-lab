@@ -419,3 +419,168 @@ def test_a_database_without_events_stays_unwritten_by_the_gets(
     models = importlib.import_module("app.models")
     with database() as db:
         assert db.scalars(select(models.NewsProjectionState)).all() == []
+
+
+# --- collect projects only the Events it touched (Issue #715) ---------------
+
+
+@pytest.fixture
+def projected(monkeypatch):
+    """How many Events each projection read: the number given, or all stored."""
+
+    module = news()
+    reads: list[int] = []
+    real = module.sync_news_from_events
+
+    def counted(db, events=None):
+        rows = (
+            list(events)
+            if events is not None
+            else db.scalars(select(Event).order_by(Event.id)).all()
+        )
+        reads.append(len(rows))
+        return real(db, rows)
+
+    monkeypatch.setattr(module, "sync_news_from_events", counted)
+    return reads
+
+
+def _historical_collect(day, subject, *, force=True):
+    mops = ListFetcher({day: [row(day, "09:00:00", "1101", subject)]})
+    return pipeline.collect(
+        day,
+        adapter=_combined(CollectFetcher(mops), snapshot_feeds=False),
+        force=force,
+    )
+
+
+def _collect_metadata(database, result):
+    models = importlib.import_module("app.models")
+    with database() as db:
+        return db.get(models.IngestionRun, result["run_id"]).metadata_json
+
+
+def _stored_history(database, count):
+    """``count`` older Events, projected: the history a backfill has written."""
+
+    with database() as db:
+        for index in range(count):
+            _event(db, title=f"history {index}", day=DAY - timedelta(days=30 + index))
+        news().project_news(db)
+        db.commit()
+
+
+@pytest.mark.parametrize("history", [0, 60])
+def test_a_collect_projection_reads_only_its_own_events(database, projected, history):
+    # The first collect sets the instruments' industries (a projection input)
+    # and projects in full; the history is stored and projected after it.
+    assert _historical_collect(DAY, "first", force=False)["status"] == ("success")
+    _stored_history(database, history)
+    projected.clear()
+
+    result = _historical_collect(DAY, "listed news")
+
+    assert result["status"] == "success", result
+    # One Event written, one Event projected, however long the history is.
+    assert projected == [1]
+    assert result["news_projection"] == {
+        "mode": "incremental",
+        "events": 1,
+        "changed": 1,
+    }
+    assert _collect_metadata(database, result)["news_projection"]["mode"] == (
+        "incremental"
+    )
+    with database() as db:
+        titles = {item.title for item in db.scalars(select(NewsItem))}
+    assert "listed news" in titles and len(titles) == history + 2
+    assert _current(database)
+
+
+def test_a_stale_fingerprint_makes_the_collect_project_in_full(database, projected):
+    assert _historical_collect(DAY, "first", force=False)["status"] == ("success")
+    with database() as db:
+        # Written without a projection: the stored fingerprint is stale.
+        _event(db, title="unprojected", day=DAY - timedelta(days=40))
+        db.commit()
+    projected.clear()
+
+    result = _historical_collect(DAY, "listed news")
+
+    assert result["news_projection"]["mode"] == "full"
+    assert result["news_projection"]["reason"] == "fingerprint_stale"
+    with database() as db:
+        titles = {item.title for item in db.scalars(select(NewsItem))}
+    assert {"unprojected", "listed news"} <= titles
+    assert _current(database)
+
+
+def test_a_membership_change_makes_the_collect_project_in_full(
+    database, projected, monkeypatch
+):
+    assert _historical_collect(DAY, "first", force=False)["status"] == ("success")
+    with database() as db:
+        db.add(ThemeGroup(id="g", name="g", active=True))
+        db.flush()
+        db.add(
+            GroupMembership(
+                group_id="g",
+                instrument_id=db.scalar(
+                    select(Instrument.id).where(Instrument.symbol == "1101")
+                ),
+                valid_from=date(2020, 1, 1),
+                source="official exchange=TWSE",
+            )
+        )
+        news().project_news(db)
+        db.commit()
+    _stored_history(database, 3)
+    projected.clear()
+    real_upsert = pipeline._upsert_event
+
+    def upsert_and_close_the_membership(db, *args, **kwargs):
+        # A membership change inside the collect, after its checkpoint.
+        db.scalar(select(GroupMembership)).valid_to = DAY - timedelta(days=60)
+        db.flush()
+        return real_upsert(db, *args, **kwargs)
+
+    monkeypatch.setattr(pipeline, "_upsert_event", upsert_and_close_the_membership)
+    result = _historical_collect(DAY, "listed news")
+
+    assert result["status"] == "success", result
+    assert result["news_projection"]["mode"] == "full"
+    assert result["news_projection"]["reason"] == "projection_inputs_changed"
+    # Every stored Event was read again, not only the one written.
+    assert projected == [5]
+    assert _current(database)
+
+
+def test_an_event_another_session_writes_meanwhile_makes_it_full(
+    database, projected, monkeypatch
+):
+    assert _historical_collect(DAY, "first", force=False)["status"] == ("success")
+    projected.clear()
+    real_fetch = sources.OfficialMarketDataAdapter.fetch
+
+    def fetch_while_another_writes(self, start, end):
+        # After the collect's checkpoint, before its projection.
+        with database() as other:
+            _event(other, title="written meanwhile", day=DAY - timedelta(days=50))
+            other.commit()
+        return real_fetch(self, start, end)
+
+    monkeypatch.setattr(
+        sources.OfficialMarketDataAdapter, "fetch", fetch_while_another_writes
+    )
+    result = _historical_collect(DAY, "listed news")
+
+    assert result["status"] == "success", result
+    assert result["news_projection"]["mode"] == "full"
+    assert result["news_projection"]["reason"] == "concurrent_event_write"
+    assert _collect_metadata(database, result)["news_projection"]["reason"] == (
+        "concurrent_event_write"
+    )
+    with database() as db:
+        titles = {item.title for item in db.scalars(select(NewsItem))}
+    assert {"written meanwhile", "listed news"} <= titles
+    assert _current(database)
