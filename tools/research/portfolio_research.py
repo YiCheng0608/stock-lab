@@ -716,15 +716,21 @@ def read_signals(path: Path) -> list[dict[str, Any]]:
 
 
 def load_market(
-    db: Path, start: date, raw_dir: Path, fundamentals: bool = False
+    db: Path,
+    start: date,
+    raw_dir: Path,
+    fundamentals: bool = False,
+    end: date | None = None,
 ) -> Market:
+    """The panel from ``start``; with ``end`` nothing after it is read (#703)."""
+
     report = lib.research_report()
     con = lib.connect_read_only(db)
     try:
-        instruments, listed = report.benchmark_universe(con, start)
-        sessions = report.market_sessions(con, start)
-        index_close = report.index_closes(con, start)
-        factor_of = report.load_actions(db, instruments, start, raw_dir)
+        instruments, listed = report.benchmark_universe(con, start, end)
+        sessions = report.market_sessions(con, start, end)
+        index_close = report.index_closes(con, start, end)
+        factor_of = report.load_actions(db, instruments, start, raw_dir, end)
         session_index = {day: index for index, day in enumerate(sessions)}
         series = {
             instrument_id: lib._series(
@@ -741,10 +747,10 @@ def load_market(
                 [bar.close or 0.0 for bar in kept],
                 [bool(bar.is_suspended) for bar in kept],
             )
-        lib._load_chips(con, series, start)
+        lib._load_chips(con, series, start, end)
         if fundamentals:  # the rankings of #689 read revenues and EPS
-            lib._load_revenues(con, series)
-            lib._load_quarters(con, series)
+            lib._load_revenues(con, series, end)
+            lib._load_quarters(con, series, end)
         symbols, kinds, listings = {}, {}, {}
         for instrument_id, exchange, symbol, name, kind in con.execute(
             "select id, exchange, symbol, name, instrument_type from instruments"

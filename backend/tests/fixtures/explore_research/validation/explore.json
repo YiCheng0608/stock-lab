@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "design": "703",
+  "registration_commit": "0ba48e9",
+  "segment": "validation",
+  "round": 1,
+  "round_size": 8,
+  "cumulative": 8,
+  "definitions_sha256": "2e1362b7cb4d231eba289f58e8ac044f32de0efce8de2968be33461b538bba03",
+  "copy": {
+    "latest": "2014-04-07",
+    "alembic": null
+  },
+  "read_until": "2014-01-27",
+  "min_t": 2.0,
+  "exploration": {
+    "url": "https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-1"
+  },
+  "hypotheses": {
+    "X1": {
+      "verdict": "通過",
+      "reason": null,
+      "days": 80,
+      "excess": {
+        "days": 80,
+        "mean": 0.00038994991748319413,
+        "annual": 0.09826737920576492,
+        "t": 10.537451675862437
+      },
+      "absolute_mean": 0.001397927881957059,
+      "prerequisites": {
+        "days": 80,
+        "min_days": 60,
+        "delisted": 1,
+        "ok": true
+      }
+    },
+    "X3": {
+      "verdict": "驗證段反轉",
+      "reason": null,
+      "days": 80,
+      "excess": {
+        "days": 80,
+        "mean": -0.00028754198584547697,
+        "annual": -0.0724605804330602,
+        "t": -3.0356295373458253
+      },
+      "absolute_mean": 0.000846012449720826,
+      "prerequisites": {
+        "days": 80,
+        "min_days": 60,
+        "delisted": 1,
+        "ok": true
+      }
+    },
+    "X6": {
+      "verdict": "驗證段反轉",
+      "reason": null,
+      "days": 80,
+      "excess": {
+        "days": 80,
+        "mean": -0.001267664040730869,
+        "annual": -0.319451338264179,
+        "t": -7.031606771144908
+      },
+      "absolute_mean": -0.000134109605164566,
+      "prerequisites": {
+        "days": 80,
+        "min_days": 60,
+        "delisted": 1,
+        "ok": true
+      }
+    }
+  },
+  "used": {
+    "X1": {
+      "verdict": null,
+      "reason": null,
+      "days": 50,
+      "excess": {
+        "days": 50,
+        "mean": 0.0002564753008491172,
+        "annual": 0.06463177581397754,
+        "t": 7.049314448150522
+      },
+      "absolute_mean": 0.0007642422167120478,
+      "prerequisites": null
+    }
+  }
+}

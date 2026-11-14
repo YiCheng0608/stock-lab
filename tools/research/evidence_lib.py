@@ -195,15 +195,25 @@ def _series(instrument_id: int, instrument, factor_of, session_index) -> Series:
     return out
 
 
+def _until(column: str, end: date | None) -> tuple[str, tuple[str, ...]]:
+    """``research_report._until``: an ``and <column> <= ?`` clause, or nothing."""
+
+    return research_report()._until(column, end)
+
+
 def _load_chips(
-    con: sqlite3.Connection, series: dict[int, Series], start: date
+    con: sqlite3.Connection,
+    series: dict[int, Series],
+    start: date,
+    end: date | None = None,
 ) -> None:
     for item in series.values():
         item.chips = {name: array("d", [NAN]) * len(item.dates) for name in CHIP_FIELDS}
+    until, extra = _until("trading_date", end)
     rows = con.execute(
         f"select instrument_id, trading_date, {', '.join(CHIP_FIELDS)} "
-        "from chip_snapshots where trading_date >= ?",
-        (start.isoformat(),),
+        f"from chip_snapshots where trading_date >= ?{until}",
+        (start.isoformat(), *extra),
     )
     for instrument_id, day, *values in rows:
         item = series.get(instrument_id)
@@ -217,10 +227,15 @@ def _load_chips(
                 item.chips[name][at] = float(value)
 
 
-def _load_revenues(con: sqlite3.Connection, series: dict[int, Series]) -> None:
+def _load_revenues(
+    con: sqlite3.Connection, series: dict[int, Series], end: date | None = None
+) -> None:
+    until, extra = _until("announcement_date", end)
     rows = con.execute(
         "select instrument_id, announcement_date, revenue_month, revenue, "
-        "prior_year_revenue from monthly_revenues order by announcement_date, revenue_month"
+        f"prior_year_revenue from monthly_revenues where 1 = 1{until} "
+        "order by announcement_date, revenue_month",
+        extra,
     )
     for instrument_id, announced, month, revenue, prior in rows:
         item = series.get(instrument_id)
@@ -235,7 +250,9 @@ def _load_revenues(con: sqlite3.Connection, series: dict[int, Series]) -> None:
             )
 
 
-def _load_quarters(con: sqlite3.Connection, series: dict[int, Series]) -> None:
+def _load_quarters(
+    con: sqlite3.Connection, series: dict[int, Series], end: date | None = None
+) -> None:
     """Quarterly statements with a known availability date and an EPS.
 
     ``eps`` is the year's cumulative figure to the quarter's end
@@ -243,10 +260,12 @@ def _load_quarters(con: sqlite3.Connection, series: dict[int, Series]) -> None:
     row counts from (the filing deadline for a backfilled quarter).
     """
 
+    until, extra = _until("announcement_date", end)
     rows = con.execute(
         "select instrument_id, announcement_date, period_end, eps "
         "from fundamental_snapshots where announcement_date is not null "
-        "and eps is not null order by announcement_date, period_end"
+        f"and eps is not null{until} order by announcement_date, period_end",
+        extra,
     )
     for instrument_id, announced, period_end, eps in rows:
         item = series.get(instrument_id)

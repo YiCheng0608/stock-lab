@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "design": "703",
+  "definitions_sha256": "2e1362b7cb4d231eba289f58e8ac044f32de0efce8de2968be33461b538bba03",
+  "label": "`momentum_120`（120 日報酬）大者先",
+  "direction": "持有較久、低換手",
+  "parameters": {
+    "rule": "daily",
+    "subset": null,
+    "filters": [],
+    "keys": [
+      "momentum_120"
+    ],
+    "top": 20,
+    "hold": 60,
+    "start": [
+      "session",
+      "2013-01-01",
+      61
+    ]
+  },
+  "hypothesis": "X1",
+  "segment": "used",
+  "verdict": null,
+  "reason": null,
+  "window": {
+    "first_signal": "2014-01-27",
+    "first_session": "2014-01-28",
+    "last_session": "2014-04-07",
+    "days": 50,
+    "signal_days": 50
+  },
+  "prerequisites": null,
+  "coverage": {
+    "2014": {
+      "days": 50,
+      "members": 1200,
+      "missing": {
+        "momentum_120": 0
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 50,
+      "mean": 0.0002564753008491172,
+      "annual": 0.06463177581397754,
+      "t": 7.049314448150522
+    },
+    "taiex": {
+      "days": 50,
+      "mean": 0.0004275528254135219,
+      "annual": 0.10774331200420752,
+      "t": 4.16990363312451
+    }
+  },
+  "absolute": {
+    "days": 50,
+    "mean": 0.0007642422167120478
+  },
+  "curves": {
+    "X1": {
+      "days": 50,
+      "total": 0.03892310565165347,
+      "annual": 0.2122169760532373,
+      "volatility": 0.011493997091545784,
+      "max_drawdown": -9.418822724838183e-05,
+      "invested": 0.4300035476904054,
+      "turnover": 4.147293172861318
+    },
+    "population": {
+      "days": 50,
+      "total": 0.02569838428591198,
+      "annual": 0.13642072101413127,
+      "volatility": 0.009174489179055459,
+      "max_drawdown": -0.0004359196053693726,
+      "invested": 0.42828524391703715,
+      "turnover": 4.165598156414414
+    },
+    "taiex": {
+      "days": 50,
+      "total": 0.016974086228358942,
+      "annual": 0.0885335747070608,
+      "volatility": 2.6232557788507818e-05,
+      "max_drawdown": 0.0,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 1000,
+    "won": 812,
+    "rate": 0.812,
+    "unsold": 1000
+  },
+  "counts": {
+    "X1": {
+      "bought": 1000,
+      "unsold": 1000
+    },
+    "population": {
+      "bought": 1200,
+      "unsold": 1200
+    }
+  }
+}

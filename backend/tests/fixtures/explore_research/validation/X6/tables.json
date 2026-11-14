@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "design": "703",
+  "definitions_sha256": "2e1362b7cb4d231eba289f58e8ac044f32de0efce8de2968be33461b538bba03",
+  "label": "母體中 60 日平均成交金額前 150 名，依 `institutional_flow_20` 大者先",
+  "direction": "大型股傾向",
+  "parameters": {
+    "rule": "daily",
+    "subset": [
+      "turnover_60",
+      150
+    ],
+    "filters": [],
+    "keys": [
+      "institutional_flow_20"
+    ],
+    "top": 10,
+    "hold": 20,
+    "start": [
+      "session",
+      "2013-01-01",
+      61
+    ]
+  },
+  "hypothesis": "X6",
+  "segment": "validation",
+  "verdict": "驗證段反轉",
+  "reason": null,
+  "window": {
+    "first_signal": "2013-10-07",
+    "first_session": "2013-10-08",
+    "last_session": "2014-01-27",
+    "days": 80,
+    "signal_days": 80
+  },
+  "prerequisites": {
+    "days": 80,
+    "min_days": 60,
+    "delisted": 1,
+    "ok": true
+  },
+  "coverage": {
+    "2013": {
+      "days": 62,
+      "members": 1530,
+      "missing": {
+        "turnover_60": 0,
+        "institutional_flow_20": 0
+      }
+    },
+    "2014": {
+      "days": 18,
+      "members": 432,
+      "missing": {
+        "turnover_60": 0,
+        "institutional_flow_20": 0
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 80,
+      "mean": -0.001267664040730869,
+      "annual": -0.319451338264179,
+      "t": -7.031606771144908
+    },
+    "taiex": {
+      "days": 80,
+      "mean": -0.0004783456863466526,
+      "annual": -0.12054311295935646,
+      "t": -2.573639438900078
+    }
+  },
+  "absolute": {
+    "days": 80,
+    "mean": -0.000134109605164566
+  },
+  "curves": {
+    "X6": {
+      "days": 80,
+      "total": -0.010780312999140174,
+      "annual": -0.03356607800152411,
+      "volatility": 0.026407552716629836,
+      "max_drawdown": -0.04292459712610486,
+      "invested": 0.8439481216354976,
+      "turnover": 12.560023144698443
+    },
+    "population": {
+      "days": 80,
+      "total": 0.09483008057454945,
+      "annual": 0.33027727381693284,
+      "volatility": 0.01470798204237124,
+      "max_drawdown": -0.0007999264542607465,
+      "invested": 0.8439377109065385,
+      "turnover": 12.329727876449812
+    },
+    "taiex": {
+      "days": 80,
+      "total": 0.027916715133185388,
+      "annual": 0.09060497382611943,
+      "volatility": 4.371348199004248e-05,
+      "max_drawdown": 0.0,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 800,
+    "won": 249,
+    "rate": 0.31125,
+    "unsold": 190
+  },
+  "counts": {
+    "X6": {
+      "bought": 800,
+      "unsold": 190
+    },
+    "population": {
+      "bought": 1961,
+      "not_tradable": 1,
+      "sale_held": 19,
+      "unsold": 475
+    }
+  },
+  "min_t": 2.0
+}
