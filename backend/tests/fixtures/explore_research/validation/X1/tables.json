@@ -1,0 +1,123 @@
+{
+  "version": 1,
+  "design": "703",
+  "definitions_sha256": "2e1362b7cb4d231eba289f58e8ac044f32de0efce8de2968be33461b538bba03",
+  "label": "`momentum_120`（120 日報酬）大者先",
+  "direction": "持有較久、低換手",
+  "parameters": {
+    "rule": "daily",
+    "subset": null,
+    "filters": [],
+    "keys": [
+      "momentum_120"
+    ],
+    "top": 20,
+    "hold": 60,
+    "start": [
+      "session",
+      "2013-01-01",
+      61
+    ]
+  },
+  "hypothesis": "X1",
+  "segment": "validation",
+  "verdict": "通過",
+  "reason": null,
+  "window": {
+    "first_signal": "2013-10-07",
+    "first_session": "2013-10-08",
+    "last_session": "2014-01-27",
+    "days": 80,
+    "signal_days": 80
+  },
+  "prerequisites": {
+    "days": 80,
+    "min_days": 60,
+    "delisted": 1,
+    "ok": true
+  },
+  "coverage": {
+    "2013": {
+      "days": 62,
+      "members": 1530,
+      "missing": {
+        "momentum_120": 0
+      }
+    },
+    "2014": {
+      "days": 18,
+      "members": 432,
+      "missing": {
+        "momentum_120": 0
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 80,
+      "mean": 0.00038994991748319413,
+      "annual": 0.09826737920576492,
+      "t": 10.537451675862437
+    },
+    "taiex": {
+      "days": 80,
+      "mean": 0.0010536918007749724,
+      "annual": 0.26553033379529306,
+      "t": 8.750163519625348
+    }
+  },
+  "absolute": {
+    "days": 80,
+    "mean": 0.001397927881957059
+  },
+  "curves": {
+    "X1": {
+      "days": 80,
+      "total": 0.11818921503265845,
+      "annual": 0.4217498540905844,
+      "volatility": 0.01707155808753676,
+      "max_drawdown": 0.0,
+      "invested": 0.6308349638983027,
+      "turnover": 4.117013271670507
+    },
+    "population": {
+      "days": 80,
+      "total": 0.08390092501041524,
+      "annual": 0.288893990523438,
+      "volatility": 0.014108317493551873,
+      "max_drawdown": -0.0003600304624897799,
+      "invested": 0.629565480480717,
+      "turnover": 4.135106830568788
+    },
+    "taiex": {
+      "days": 80,
+      "total": 0.027916715133185388,
+      "annual": 0.09060497382611943,
+      "volatility": 4.371348199004248e-05,
+      "max_drawdown": 0.0,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 1599,
+    "won": 1261,
+    "rate": 0.7886178861788617,
+    "unsold": 1200
+  },
+  "counts": {
+    "X1": {
+      "bought": 1599,
+      "not_tradable": 1,
+      "sale_held": 21,
+      "unsold": 1200
+    },
+    "population": {
+      "bought": 1961,
+      "not_tradable": 1,
+      "sale_held": 21,
+      "unsold": 1457
+    }
+  },
+  "min_t": 2.0
+}

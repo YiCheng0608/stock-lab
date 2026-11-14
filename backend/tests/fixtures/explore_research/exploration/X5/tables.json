@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "design": "703",
+  "definitions_sha256": "2e1362b7cb4d231eba289f58e8ac044f32de0efce8de2968be33461b538bba03",
+  "label": "母體中 60 日平均成交金額前 50 名，全部等權買進、不排序",
+  "direction": "大型股傾向",
+  "parameters": {
+    "rule": "daily",
+    "subset": [
+      "turnover_60",
+      50
+    ],
+    "filters": [],
+    "keys": [],
+    "top": 50,
+    "hold": 60,
+    "start": [
+      "session",
+      "2013-01-01",
+      61
+    ]
+  },
+  "hypothesis": "X5",
+  "segment": "exploration",
+  "verdict": "沒有通過（探索段）",
+  "reason": null,
+  "window": {
+    "first_signal": "2013-03-26",
+    "first_session": "2013-03-27",
+    "last_session": "2013-10-07",
+    "days": 139,
+    "signal_days": 139
+  },
+  "prerequisites": {
+    "days": 139,
+    "min_days": 100,
+    "delisted": 1,
+    "ok": true
+  },
+  "coverage": {
+    "2013": {
+      "days": 139,
+      "members": 3536,
+      "missing": {
+        "turnover_60": 99
+      }
+    }
+  },
+  "excess": {
+    "population": {
+      "days": 139,
+      "mean": -0.0005394501158459276,
+      "annual": -0.13594142919317376,
+      "t": -15.75738990945985
+    },
+    "taiex": {
+      "days": 139,
+      "mean": 0.00027404945247781184,
+      "annual": 0.06906046202440859,
+      "t": 7.511816329141215
+    }
+  },
+  "absolute": {
+    "days": 139,
+    "mean": 0.0006318195981770079
+  },
+  "curves": {
+    "X5": {
+      "days": 139,
+      "total": 0.09175072983305688,
+      "annual": 0.17250841729932964,
+      "volatility": 0.006790880950350853,
+      "max_drawdown": -0.00019769191817076148,
+      "invested": 0.39698388367800114,
+      "turnover": 2.0498009088937734
+    },
+    "population": {
+      "days": 139,
+      "total": 0.17664205263393762,
+      "annual": 0.34299587142379573,
+      "volatility": 0.013055854878459148,
+      "max_drawdown": -0.0005483085198328963,
+      "invested": 0.7799952244335869,
+      "turnover": 4.098778222067962
+    },
+    "taiex": {
+      "days": 139,
+      "total": 0.05097799511002399,
+      "annual": 0.09432961200980494,
+      "volatility": 8.1828981216209e-05,
+      "max_drawdown": 0.0,
+      "invested": 1.0,
+      "turnover": 0.0
+    }
+  },
+  "win": {
+    "bought": 3436,
+    "won": 2442,
+    "rate": 0.710710128055879,
+    "unsold": 1515
+  },
+  "counts": {
+    "X5": {
+      "bought": 3436,
+      "not_tradable": 1,
+      "sale_held": 59,
+      "unsold": 1515
+    },
+    "population": {
+      "bought": 3535,
+      "not_tradable": 1,
+      "sale_held": 59,
+      "unsold": 1534
+    }
+  },
+  "min_t": 2.0
+}
