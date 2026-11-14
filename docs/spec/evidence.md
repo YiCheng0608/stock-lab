@@ -270,7 +270,7 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 
 **每月流程**（統籌）
 1. 每月第一個交易日之後的白天（不在台北 21:30～23:30），以 `copy_db.py` 複製唯讀副本到任務 volume（空閒記憶體 ≥ 5 GB）。
-2. 跑上面的命令（`--window forward`）。
+2. 跑上面的命令（`--window forward`）。剛複製完時，容器看到的可用記憶體會被頁面快取吃掉（2026-11-14 試跑讀到 0.1 GB，被 `--min-free-gb 2` 擋下）。先在主機確認空閒 ≥ 5 GB，再加 `--min-free-gb 0`，與 #689 相同；試跑耗時 3 秒，峰值 0.2 GB。
 3. 原始輸出推 `pr-assets/691` 的 `run-<YYYYMMDD>/`。
 4. 在追蹤 Issue「H1 前瞻驗證月報」留一則，貼 `summary.md` 的判定與 pr-assets 連結；滿 250 日判定時另在 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 回報使用者。
 5. 刪副本並讀回。
