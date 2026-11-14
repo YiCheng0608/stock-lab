@@ -300,9 +300,20 @@ def ex(mean, t):
         ("validation", 250, True, ex(0.001, 2.0), 0.0001, "通過"),
         ("validation", 250, True, ex(-0.0001, -0.5), 0.001, "驗證段反轉"),
         ("validation", 250, True, ex(-0.0001, -3.0), -0.001, "驗證段反轉"),
-        ("validation", 250, True, ex(0.001, 1.5), 0.001, "沒有通過（驗證段）"),
+        # 前瞻觀察 (#721): ahead of the population, t short, absolute > 0
+        ("validation", 250, True, ex(0.001, 1.5), 0.001, "前瞻觀察"),
+        ("validation", 250, True, ex(0.0001, 1.99), 0.0001, "前瞻觀察"),
+        ("validation", 250, True, ex(0.001, 1.5), 0.0, "沒有通過（驗證段）"),
+        ("validation", 250, True, ex(0.001, 1.5), -0.0001, "沒有通過（驗證段）"),
+        ("validation", 250, True, ex(0.001, 1.5), None, "沒有通過（驗證段）"),
+        ("validation", 250, True, ex(0.001, None), 0.001, "沒有通過（驗證段）"),
         ("validation", 250, True, ex(0.001, 3.0), -0.0001, "沒有通過（驗證段）"),
         ("validation", 250, True, ex(0.0, None), 0.001, "沒有通過（驗證段）"),
+        ("validation", 250, True, ex(0.0, 0.0), 0.001, "沒有通過（驗證段）"),
+        ("validation", 249, True, ex(0.001, 1.5), 0.001, "無法判定"),
+        ("validation", 250, False, ex(0.001, 1.5), 0.001, "無法判定"),
+        # the exploration has no intermediate verdict
+        ("exploration", 500, True, ex(0.001, 1.5), 0.001, "沒有通過（探索段）"),
     ],
 )
 def test_explore_judge_follows_the_table(
@@ -313,7 +324,26 @@ def test_explore_judge_follows_the_table(
 
 def test_explore_judge_takes_the_validation_threshold():
     assert tool.explore_judge("validation", 300, True, ex(0.001, 2.5), 0.001, 3.0) == (
+        "前瞻觀察"
+    )
+    assert tool.explore_judge("validation", 300, True, ex(0.001, 3.0), 0.001, 3.0) == (
+        "通過"
+    )
+    assert tool.explore_judge("validation", 300, True, ex(0.001, 2.5), -0.001, 3.0) == (
         "沒有通過（驗證段）"
+    )
+
+
+def test_the_verdicts_are_the_table():
+    assert tool.VERSION == 2
+    assert tool.VERDICTS == (
+        "無法判定",
+        "沒有通過（探索段）",
+        "探索通過",
+        "通過",
+        "前瞻觀察",
+        "驗證段反轉",
+        "沒有通過（驗證段）",
     )
 
 
@@ -649,7 +679,17 @@ def one_process(run):
                 os.environ[key] = value
 
 
-def explore(db: Path, out: Path, *extra: str) -> int:
+ALL = ",".join(REGISTERED)
+
+
+def explore(db: Path, out: Path, *extra: str, hypotheses: str | None = ALL) -> int:
+    """``hypotheses`` None leaves ``--hypotheses`` out (``--coverage-only`` too)."""
+
+    chosen = (
+        []
+        if hypotheses is None or "--coverage-only" in extra
+        else ["--hypotheses", hypotheses]
+    )
     return one_process(
         lambda: tool.main(
             [
@@ -661,10 +701,19 @@ def explore(db: Path, out: Path, *extra: str) -> int:
                 "exploration",
                 "--min-free-gb",
                 "0",
+                *chosen,
                 *extra,
             ]
         )  # fmt: skip
     )
+
+
+def ledger_of(db: Path, segment: str) -> list[dict]:
+    return [
+        entry
+        for entry in tool.read_ledger(db.parent / tool.LEDGER_NAME)
+        if entry.get("segment") == segment
+    ]
 
 
 def validate(db: Path, out: Path, report: Path, sha: str | None = None, url=URL) -> int:
@@ -860,6 +909,7 @@ def test_the_exploration_reads_nothing_after_2019_12_31(
         return ctx
 
     monkeypatch.setattr(tool, "load_context", spy)
+    (clean.parent / tool.LEDGER_NAME).unlink()  # the first run counted it once
     assert explore(clean, tmp_path / "again") == 0
     assert seen == [(trading_days()[199], trading_days()[199])]
 
@@ -1030,7 +1080,7 @@ def refused(capsys) -> list[str]:
 
 
 def assert_untouched(db: Path, out: Path) -> None:
-    assert not (db.parent / tool.LEDGER_NAME).exists()
+    assert ledger_of(db, "validation") == []
     assert not out.exists()
 
 
@@ -1159,8 +1209,9 @@ def test_the_validation_runs_only_the_passed_once_and_lists_the_used_segment(
         and x["window"]["first_session"] == trading_days()[280].isoformat()
     )
     # the ledger beside the DB: started, then finished with the verdict
-    entries = tool.read_ledger(db.parent / tool.LEDGER_NAME)
+    entries = ledger_of(db, "validation")
     assert [entry["hypothesis"] for entry in entries] == passed
+    assert {entry["version"] for entry in entries} == {2}
     assert {entry["status"] for entry in entries} == {"finished"}
     assert {entry["verdict"] for entry in entries} == set(verdicts.values())
     assert all(
@@ -1216,7 +1267,7 @@ def test_a_crash_after_the_start_still_counts_as_the_one_run(
     monkeypatch.setattr(tool, "load_context", crash)
     with pytest.raises(MemoryError):
         validate(db, tmp_path / "v", exploration / "explore.json")
-    entries = tool.read_ledger(db.parent / tool.LEDGER_NAME)
+    entries = ledger_of(db, "validation")
     assert entries and {entry["status"] for entry in entries} == {"started"}
     monkeypatch.undo()
     compressed(monkeypatch, tmp_path)
@@ -1258,6 +1309,187 @@ def test_the_exploration_needs_no_marker(explore_db, tmp_path, monkeypatch):
     (db.parent / "research-db.json").unlink()
     assert explore(db, tmp_path / "out") == 0
     assert explore(db, tmp_path / "coverage", "--coverage-only") == 0
+
+
+# --- #721: by batch, each hypothesis's exploration once ------------------------
+
+
+def test_the_exploration_runs_only_the_given_and_records_them(explored, tmp_path):
+    db, out = explored  # every hypothesis, once
+    entries = ledger_of(db, "exploration")
+    sha = tool.file_sha256(out / "explore.json")
+    assert [entry["hypothesis"] for entry in entries] == list(REGISTERED)
+    assert {entry["status"] for entry in entries} == {"finished"}
+    assert {(entry["version"], entry["report_sha256"]) for entry in entries} == {
+        (2, sha)
+    }
+    report = read_json(out / "explore.json")
+    assert report["selected"] == list(REGISTERED)
+    assert {e["hypothesis"]: e["verdict"] for e in entries} == {
+        name: row["verdict"] for name, row in report["hypotheses"].items()
+    }
+    assert tool.read_ledger(out / "ledger-entries.json") == entries
+
+
+def test_a_batch_runs_its_hypotheses_only(explore_db, tmp_path, monkeypatch):
+    compressed(monkeypatch, tmp_path)
+    db = copy_of(explore_db, tmp_path)
+    out = tmp_path / "batch"
+    assert explore(db, out, hypotheses="X7, X3") == 0
+    report = read_json(out / "explore.json")
+    assert list(report["hypotheses"]) == ["X7", "X3"] == report["selected"]
+    assert sorted(p.name for p in out.glob("X*")) == ["X3", "X7"]
+    assert "- 本次跑的假設：X7、X3" in (out / "explore.md").read_text(encoding="utf-8")
+    assert [e["hypothesis"] for e in ledger_of(db, "exploration")] == ["X7", "X3"]
+    # the next batch is another run, the same hypothesis again is refused
+    assert explore(db, tmp_path / "next", hypotheses="X1") == 0
+    assert [e["hypothesis"] for e in ledger_of(db, "exploration")] == [
+        "X7",
+        "X3",
+        "X1",
+    ]
+
+
+def test_the_second_exploration_is_refused_before_anything_is_read(
+    explored, tmp_path, monkeypatch, capsys
+):
+    db, _out = explored
+    read = []
+    monkeypatch.setattr(tool, "load_context", lambda *a, **k: read.append(a))
+    again = tmp_path / "again"
+    assert explore(db, again, hypotheses="X2") == 2
+    assert any(
+        "X2 already in" in text and "the exploration runs once" in text
+        for text in refused(capsys)
+    )
+    assert read == [] and not again.exists()
+
+
+def test_an_exploration_of_another_version_does_not_count(
+    explore_db, tmp_path, monkeypatch
+):
+    compressed(monkeypatch, tmp_path)
+    db = copy_of(explore_db, tmp_path)
+    old = {"hypothesis": "X1", "segment": "exploration", "version": 1}
+    tool.write_ledger(db.parent / tool.LEDGER_NAME, [old])
+    assert explore(db, tmp_path / "out", hypotheses="X1") == 0
+    assert [e.get("version") for e in ledger_of(db, "exploration")] == [1, 2]
+
+
+def test_the_repository_ledger_refuses_an_exploration_too(
+    explore_db, tmp_path, monkeypatch, capsys
+):
+    compressed(monkeypatch, tmp_path)
+    db = copy_of(explore_db, tmp_path)
+    tool.write_ledger(
+        tool.REPO_LEDGER,
+        [{"hypothesis": "X5", "segment": "exploration", "version": 2}],
+    )
+    out = tmp_path / "out"
+    assert explore(db, out, hypotheses="X4,X5") == 2
+    assert any("X5 already in" in text for text in refused(capsys))
+    assert not out.exists() and ledger_of(db, "exploration") == []
+
+
+def test_an_exploration_record_does_not_block_the_validation(explored, tmp_path):
+    db, exploration = explored
+    assert ledger_of(db, "exploration")
+    assert validate(db, tmp_path / "v", exploration / "explore.json") == 0
+
+
+def test_a_crashed_exploration_leaves_no_record_and_runs_again(
+    explore_db, tmp_path, monkeypatch
+):
+    compressed(monkeypatch, tmp_path)
+    db = copy_of(explore_db, tmp_path)
+    original = tool.write_hypothesis
+
+    def crash(out, result, header):
+        if result["hypothesis"] == "X3":
+            raise MemoryError("killed")
+        original(out, result, header)
+
+    monkeypatch.setattr(tool, "write_hypothesis", crash)
+    with pytest.raises(MemoryError):
+        explore(db, tmp_path / "out", hypotheses="X2,X3")
+    assert not (db.parent / tool.LEDGER_NAME).exists()
+    monkeypatch.setattr(tool, "write_hypothesis", original)
+    assert explore(db, tmp_path / "again", hypotheses="X2,X3") == 0
+    assert [e["hypothesis"] for e in ledger_of(db, "exploration")] == ["X2", "X3"]
+
+
+def test_the_coverage_is_not_recorded(explore_db, tmp_path, monkeypatch):
+    compressed(monkeypatch, tmp_path)
+    db = copy_of(explore_db, tmp_path)
+    assert explore(db, tmp_path / "c1", "--coverage-only") == 0
+    assert explore(db, tmp_path / "c2", "--coverage-only") == 0
+    assert not (db.parent / tool.LEDGER_NAME).exists()
+    assert explore(db, tmp_path / "out", hypotheses="X1") == 0
+
+
+@pytest.mark.parametrize(
+    "given, message",
+    [
+        (None, "needs --hypotheses"),
+        ("", "needs --hypotheses"),
+        (" , ", "needs --hypotheses"),
+        ("X1,X9", "X9 not registered"),
+        ("x1", "x1 not registered"),
+        ("X1,X2,X1", "X1 given more than once"),
+    ],
+)
+def test_the_hypotheses_are_required_and_registered(
+    explore_db, tmp_path, monkeypatch, capsys, given, message
+):
+    compressed(monkeypatch, tmp_path)
+    db = copy_of(explore_db, tmp_path)
+    read = []
+    monkeypatch.setattr(tool, "load_context", lambda *a, **k: read.append(a))
+    out = tmp_path / "out"
+    assert explore(db, out, hypotheses=given) == 2
+    assert any(message in text for text in refused(capsys))
+    assert read == [] and not out.exists()
+    assert not (db.parent / tool.LEDGER_NAME).exists()
+
+
+@pytest.mark.parametrize(
+    "segment, extra",
+    [("exploration", ["--coverage-only"]), ("validation", [])],
+)
+def test_the_hypotheses_go_with_the_exploration_run_only(tmp_path, segment, extra):
+    with pytest.raises(SystemExit) as stopped:
+        tool.main(
+            ["--db", "x", "--out", str(tmp_path), "--segment", segment,
+             "--hypotheses", "X1", *extra]
+        )  # fmt: skip
+    assert stopped.value.code == 2
+
+
+# --- #721: the TAIEX excess first, the verdict on the population ----------------
+
+
+def test_the_reports_list_the_taiex_excess_first(explored):
+    _db, out = explored
+    report = read_json(out / "explore.json")
+    lines = (out / "explore.md").read_text(encoding="utf-8").splitlines()
+    head = next(line for line in lines if line.startswith("| 代號 | 方向"))
+    assert head.split(" | ")[4:7] == ["對加權指數超額日均", "t", "對母體超額日均"]
+    for name in REGISTERED:
+        tables = read_json(out / name / "tables.json")
+        if "excess" not in tables:
+            continue
+        assert report["hypotheses"][name]["taiex_excess"] == tables["excess"]["taiex"]
+        text = (out / name / "summary.md").read_text(encoding="utf-8")
+        rows = [
+            line
+            for line in text.splitlines()
+            if line.startswith("| 超額") or line.startswith("| 絕對")
+        ]
+        assert [row.split(" | ")[0] for row in rows] == [
+            "| 超額（對加權指數，只列出）",
+            "| 超額（對母體，判定）",
+            "| 絕對報酬（扣成本，判定）",
+        ]
 
 
 @pytest.mark.parametrize("name", ["X1", "X4", "X6", "X7"])

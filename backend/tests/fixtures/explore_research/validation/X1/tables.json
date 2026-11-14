@@ -1,7 +1,7 @@
 {
-  "version": 1,
+  "version": 2,
   "design": "703",
-  "definitions_sha256": "2e1362b7cb4d231eba289f58e8ac044f32de0efce8de2968be33461b538bba03",
+  "definitions_sha256": "5c8a4ff0ffaa2d6ba35a795ce4a37af34ead0a9a7d87bba8ff7a5f7b4c3cdcfc",
   "label": "`momentum_120`（120 日報酬）大者先",
   "direction": "持有較久、低換手",
   "parameters": {

@@ -63,6 +63,15 @@ SCRIPTS = (
     "take_over.sh",
     # #710: the context of the coordinator's last call, and the cost report
     "session_cost.py",
+    # #705: the Claude Code memory directory, checked by take_over.sh and close_task.sh
+    "memory_check.py",
+)
+# The sandbox memory directory every run gets (STOCK_MEMORY_DIR, #705): one memory, indexed,
+# no backticked path, so memory_check.py passes without asking git.
+MEMORY_INDEX = "- [Sandbox](sandbox-memory.md) — the one memory of the sandbox\n"
+MEMORY_FILE = (
+    "---\nname: sandbox-memory\ndescription: x\nmetadata:\n  type: project\n---\n\n"
+    "The sandbox memory. Related: [[sandbox-memory]].\n"
 )
 REPO_ID = "repo-1"
 
@@ -431,6 +440,8 @@ class Harness:
         # TEMP and TMP of every script run (#472): close_task.sh deletes Claude Code
         # scratchpads under $TEMP/claude, so no run may see the real Temp.
         self.temp = root / "temp"
+        # The Claude Code memory directory the runs check (#705), never the real one.
+        self.memory = root / "memory"
         # The scripts run from a copy, so repo_root is this sandbox, not the checkout.
         self.repo = root / "repo"
         self.ops = self.repo / "tools" / "ops"
@@ -440,10 +451,13 @@ class Harness:
             self.data / "logs" / "compactions",
             self.home,
             self.temp,
+            self.memory,
             self.ops,
             self.repo / ".git",
         ):
             directory.mkdir(parents=True, exist_ok=True)
+        (self.memory / "MEMORY.md").write_text(MEMORY_INDEX, encoding="utf-8")
+        (self.memory / "sandbox-memory.md").write_text(MEMORY_FILE, encoding="utf-8")
         for name in SCRIPTS:
             shutil.copyfile(OPS / name, self.ops / name)
         for name, body in (
@@ -531,6 +545,7 @@ class Harness:
             TEMP=self.temp.as_posix(),
             TMP=self.temp.as_posix(),
             STOCK_DATA_DIR=self.data.as_posix(),
+            STOCK_MEMORY_DIR=self.memory.as_posix(),
             STOCK_PYTHON=Path(sys.executable).as_posix(),
             PATROL_NOW=str(NOW),
             # A port nothing listens on: patrol.sh reports no wake listener, whatever
@@ -3636,6 +3651,80 @@ def test_session_cost_report_counts_cost_wakes_and_actions(h: Harness) -> None:
         f"沒有對外動作的喚醒：1／2（50.0%）、佔總成本 {100 * quiet / total:.1f}%" in out
     )
     assert "壓縮：1 次；T1 壓縮前 201,010" in out
+
+
+def test_session_cost_report_prints_per_call_per_action_and_after_compaction(
+    h: Harness,
+) -> None:
+    """#711 AC-6: each ACTION match in a command is one outward action (two in one
+    command count two); the average cost and context per call; the context of the
+    first call after each compaction, sidechains not counted."""
+
+    def call(mid: str, ctx: int, command: str | None = None) -> dict:
+        content = (
+            [{"type": "tool_use", "id": mid, "input": {"command": command}}]
+            if command
+            else []
+        )
+        return {
+            "type": "assistant",
+            "message": {
+                "id": mid,
+                "model": "claude-x",
+                "content": content,
+                "usage": {"input_tokens": ctx, "output_tokens": 0},
+            },
+        }
+
+    def compact(at: str) -> dict:
+        return {
+            "type": "system",
+            "subtype": "compact_boundary",
+            "timestamp": at,
+            "compactMetadata": {"preTokens": 1},
+        }
+
+    rows = [
+        {"type": "user", "message": {"content": "你是 stock-lab 的統籌"}},
+        call("m1", 1_000, "gh pr merge 5 --squash && git push origin x"),
+        call("m2", 3_000, "bash tools/ops/comment.sh 5 x; gh issue close 5"),
+        call("m3", 2_000, "bash tools/ops/patrol.sh"),
+        compact("T1"),
+        call("side", 900_000) | {"isSidechain": True},
+        call("m4", 500),
+        call("m5", 700, "bash tools/ops/dispatch.sh 6"),
+        compact("T2"),
+        call("m6", 800),
+    ]
+    path = h.root / "t.jsonl"
+
+    def write(items: list[dict]) -> None:
+        path.write_text("".join(json.dumps(r) + "\n" for r in items), encoding="utf-8")
+
+    def report() -> str:
+        result = h.run_bash(
+            '"$STOCK_PYTHON" -X utf8 "$1" report "$2"',
+            (h.ops / "session_cost.py").as_posix(),
+            path.as_posix(),
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        return result.stdout
+
+    write(rows)
+    out = report()
+    assert "每次呼叫：平均成本 1,333、平均 context 1,333" in out  # 8,000 / 6
+    assert "對外動作：5 個、每個動作成本 1,600" in out
+    assert "壓縮後第 1 次呼叫 context：500、800" in out
+    # A compaction with no call after it yet; no action at all.
+    rows[1:4] = [call("m1", 1_000)]
+    write(rows[:-1])
+    out = report()
+    assert "對外動作：1 個、每個動作成本 2,200" in out
+    assert "壓縮後第 1 次呼叫 context：500、（還沒有呼叫）" in out
+    write([rows[0], call("m1", 9)])
+    out = report()
+    assert "對外動作：0 個、每個動作成本 —" in out
+    assert "壓縮後第 1 次呼叫" not in out
 
 
 def _commit(h: Harness, *args: str, session: str = "sess-old"):
