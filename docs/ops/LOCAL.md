@@ -89,7 +89,7 @@ hooks 與 PreToolUse 守門不屬於這一節，改上面這些鍵時不要動�
 claude --setting-sources user,local --settings "$(node -e 'console.log(JSON.stringify({hooks: require("./.claude/settings.json").hooks}))')"
 ```
 
-- `--setting-sources user,local` 不載入專案設定；`--settings` 只把專案的 hooks 帶回來，所以 `.env` 守門與 turn hook 照常。
+- `--setting-sources user,local` 不載入專案設定；`--settings` 只把專案的 hooks 帶回來，所以 `.env` 守門與 turn hook 照常。目前專案設定裡除了 hooks，只有上表這幾個為了省 context 而關的鍵；之後專案設定多了 hooks 以外、跟安全有關的規則（例如 `permissions.deny` 擋危險命令），這條命令的 `--settings` 要把那些鍵一起帶上。
 - 代價是上表各項全部回到使用者層的狀態，第一次呼叫回到約 54K。這種 session 只拿來用 Artifact 或被關的 skill，不要拿來當統籌或工程師。
 - claude.ai 連接器也會一起回來（實測 Claude Docs 有出現）。這是因為整份專案設定都沒有載入，不是 local 層開得回來。
 
