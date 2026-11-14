@@ -9,6 +9,7 @@ import { completeItem } from './candidates/candidates.fixtures'
 import * as ui from './components/ui'
 import { NavSearch } from './components/NavSearch'
 import { StockBarsChart } from './stock/StockBarsChart'
+import { removedCopyIn } from './removedCopy.fixtures'
 import { barsResponse, tradedBar } from './stock/stockBars.fixtures'
 import { ThemeMemberTable } from './themes/ThemeViews'
 import type { ActionSummary, InstrumentDetail, RawPayload, StockDirectoryRow } from './types'
@@ -222,11 +223,11 @@ const gapCards = gapDirectory.slice(gapDirectory.indexOf('class="card-list stock
 check(plain(gapCards[0] ?? '').slice(-3).join('|') === '暫不行動|缺少 20 日有效行情|上市 · 股票' && plain(gapCards[1] ?? '').slice(-2)[0] === '需人工判讀', `個股清單手機卡: the same action cell, got ${plain(gapCards[0] ?? '').join('|')} / ${plain(gapCards[1] ?? '').join('|')}`)
 const stockDirectoryGap = AppModule.stockDirectoryGap
 check(stockDirectoryGap({ action_state: 'data_insufficient', missing_data_priority: [] }) === null && stockDirectoryGap({ action_state: 'data_insufficient' }) === null, '個股清單: no missing item, no note')
-// #666: the old eyebrow, lead and unit note are one 說明 fold on the title line, closed, with the same sentences.
+// #666: one closed 說明 fold on the title line; Issue 732 (4-11): the unit note only, the directory lead left.
 const StockDirectoryHelp = component('StockDirectoryHelp')
 const directoryHelp = render('StockDirectoryHelp', () => <StockDirectoryHelp />)
 check(directoryHelp.startsWith('<details class="details page-help"><summary>說明</summary>'), `個股清單說明: a closed 說明 fold, got ${directoryHelp.slice(0, 80)}`)
-check(plain(directoryHelp).join('|') === '說明|市場標的目錄：股票、ETF 與新上市標的分開標示；行動與缺資料優先級只來自已驗證官方快照。|單位：價格為各標的報價幣別的元，指數為點。空白表示未提供資料或數值待核實；最近收盤早於最新交易日時，下方括號標出它的日期。', `個股清單說明: the same sentences as before, got ${plain(directoryHelp).join('|')}`)
+check(!removedCopyIn(directoryHelp).length && plain(directoryHelp).join('|') === '說明|單位：價格為各標的報價幣別的元，指數為點。空白表示未提供資料或數值待核實；最近收盤早於最新交易日時，下方括號標出它的日期。', `個股清單說明: the unit sentence only, got ${plain(directoryHelp).join('|')}`)
 const stockDirectoryCountText = (AppModule as unknown as { stockDirectoryCountText?: (meta: Record<string, unknown>) => string }).stockDirectoryCountText
 check(stockDirectoryCountText?.({ total: 1234 }) === '共 1,234 筆' && stockDirectoryCountText?.({}) === '共 0 筆', '個股清單: the filter row ends with 「共 N 筆」')
 

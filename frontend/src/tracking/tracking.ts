@@ -1,5 +1,5 @@
 import type { BadgeTone } from '../components/ui'
-import type { TrackingMeta, TrackingPlan, TrackingPlanSession } from '../types'
+import type { TrackingPlan, TrackingPlanSession } from '../types'
 import { formatDate, formatPrice } from '../candidates/candidates'
 import { formatTaipeiDay } from '../dates'
 
@@ -15,13 +15,6 @@ export const NO_CONDITION_TEXT = '目前沒有成立的研究條件，無法建�
 export const ADD_LABEL = '加入追蹤'
 export const TRACKED_LABEL = '已在追蹤'
 export const PLAN_PAGE_SIZE = 20
-
-const DEFAULT_META: TrackingMeta = { tracking_version: 'plan_tracking_v2', window_sessions: 20, slippage_bps: 5, round_trip_cost_bps: 30, simulated: true }
-
-export function trackingNote(meta: TrackingMeta | undefined): string {
-  const { slippage_bps: slippage, round_trip_cost_bps: cost } = meta ?? DEFAULT_META
-  return `計畫價位來自建立當日的研究條件；成交與結果是依日線規則的模擬（買賣各 ${slippage} bps 滑價、來回 ${cost} bps 成本假設），不是實際成交，也不統計勝率。實際持股請看「我的庫存」。`
-}
 
 export const PLAN_STATUS: Record<string, { label: string; tone: BadgeTone }> = {
   pending: { label: '待觸發', tone: 'primary' },
@@ -116,15 +109,9 @@ export function planResultLine(plan: TrackingPlan): string | null {
   return `模擬報酬：無法比較（${incomparableText(plan)}）`
 }
 
-export function planVersionText(plan: Pick<TrackingPlan, 'versions' | 'source_kind'>): string {
-  const { versions } = plan
-  return [
-    `來源 ${planSourceLabel(plan.source_kind)}`,
-    `策略版本 ${versions.strategy_version_id ?? '未記錄'}`,
-    `公式 ${versions.formula_version ?? '未記錄'}`,
-    versions.score_version ? `評分 ${versions.score_version}` : null,
-    `追蹤規則 ${versions.tracking_version}`,
-  ].filter(Boolean).join(' · ')
+// The plan's source only; the strategy, formula, score and tracking versions stay in the API (Issue 732, 3-7).
+export function planSourceText(plan: Pick<TrackingPlan, 'source_kind'>): string {
+  return `來源 ${planSourceLabel(plan.source_kind)}`
 }
 
 export function planAnchor(planId: number): string {

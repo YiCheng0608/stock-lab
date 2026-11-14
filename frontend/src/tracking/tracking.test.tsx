@@ -14,10 +14,10 @@ import {
   formatSignedReturn,
   planDateLine,
   planResultLine,
-  trackingNote,
 } from './tracking'
-import { ambiguous, cancelled, conflict, detailResponse, expired, invalidated, listResponse, meta, notEntered, plan, suspendedClose, targetHit, triggered } from './tracking.fixtures'
+import { ambiguous, cancelled, conflict, detailResponse, expired, invalidated, listResponse, notEntered, plan, suspendedClose, targetHit, triggered } from './tracking.fixtures'
 import { PageDateContext } from '../components/pageDate'
+import { removedCopyIn } from '../removedCopy.fixtures'
 import { AddPlanButton, PlanCard, PlanHistory, StockPlanPanel, TrackingSection } from './TrackingViews'
 import type { StrategyDecision } from '../types'
 
@@ -41,7 +41,6 @@ check(formatSignedReturn(-0.00001) === '0.00%' && formatSignedReturn(null) === '
 check(planDateLine(plan()) === '計畫資料日 2026/10/16 · 建立 2026/10/16', 'plan date and creation date line')
 check(planDateLine({ ...plan(), created_at: '2026-10-16T16:30:00+00:00' }).endsWith('建立 2026/10/17'), 'created date is the Taipei date')
 check(planDateLine({ ...plan(), created_at: 'nope' }).endsWith('建立 待核實'), 'a bad instant is 待核實')
-check(trackingNote(meta()).includes('買賣各 5 bps 滑價、來回 30 bps 成本假設') && trackingNote(undefined).includes('不是實際成交'), 'note names the assumptions')
 
 // ---- status badges (DESIGN_SYSTEM §7) ----
 const tones: Record<string, [string, string]> = {
@@ -93,8 +92,9 @@ check(filled.includes('模擬成交 2026/10/20 161.58') && filled.includes('第 
 const hit = render(<PlanCard plan={targetHit()} />)
 check(hit.includes('上櫃 · 回踩條件') && hit.includes('13.05～13.35') && hit.includes('模擬出場 2026/10/07 14.49') && hit.includes('模擬報酬 +9.39%'), 'ended card: zone, exit and return')
 check(!hit.includes('取消追蹤'), 'an ended plan cannot be cancelled')
-check(hit.includes('來源 個股研究條件 · 策略版本 3 · 公式 institutional-flow/v1-shares-per-twd-turnover · 追蹤規則 plan_tracking_v1'), 'versions and source in the details')
-check(pending.includes('來源 今日候選') && pending.includes('評分 candidate_score_v1'), 'candidate plans name the score version')
+// Issue 732 (3-7, N-3): the details name the source only; the strategy, formula, score and tracking versions left.
+check(hit.includes('<summary>來源與逐日明細</summary><p class="small-note">來源 個股研究條件</p>') && !removedCopyIn(hit).length, `the source only in the details: ${removedCopyIn(hit).join('、')}`)
+check(pending.includes('<p class="small-note">來源 今日候選</p>') && !pending.includes('candidate_score_v1') && !pending.includes('策略版本'), 'candidate plans name the source, no versions')
 const corrected = render(<PlanCard plan={conflict()} />)
 check(corrected.includes(CONFLICT_TEXT) && corrected.includes('>已觸發</span>'), 'transition conflict keeps the stored status and adds the note')
 check(!render(<PlanCard plan={cancelled()} />).includes('取消追蹤'), 'a cancelled plan has no cancel button')
@@ -123,6 +123,7 @@ const detail = detailResponse()
 const history = render(<PlanHistory plan={detail.plan} initiallyOpen />, [[['tracking-plan', detail.plan.id, detail.plan.updated_at], detail]])
 check(history.includes('<details class="details plan-history" id="plan-3-history" open="">'), 'history opens')
 check(count(history, 'data-session-no=') === 4, 'one row per session')
+check(!removedCopyIn(history).length, `the history table has no price-basis note (Issue 732, 4-9): ${removedCopyIn(history).join('、')}`)
 const row1 = slice(history, 'data-session-no="1"', '</tr>')
 for (const text of ['2026/10/02', '第 1 日', '已模擬成交', '>13.20<', '>13.40<', '>13.10<', '>13.30<', '進場']) check(row1.includes(text), `first row shows ${text}`)
 check(slice(history, 'data-session-no="4"', '</tr>').includes('達標') && slice(history, 'data-session-no="4"', '</tr>').includes('目標'), 'target row')
@@ -138,7 +139,8 @@ const opened = listResponse([triggered(), plan()])
 const closed = listResponse([targetHit(), invalidated(), expired(), cancelled()])
 const section = render(<TrackingSection />, [[['tracking-plans', 'open', 1], opened], [['tracking-plans', 'closed', 1], closed]])
 check(section.indexOf('>追蹤計畫</h2>') >= 0 && section.indexOf('>追蹤計畫</h2>') < section.indexOf('>追蹤回看</h2>'), '追蹤計畫 before 追蹤回看')
-check(section.includes(trackingNote(meta())), 'the simulation note')
+// Issue 732 (4-9): no simulation note under the titles.
+check(!removedCopyIn(section).length, `the sections show none of the removed copy: ${removedCopyIn(section).join('、')}`)
 const openPart = slice(section, 'data-plan-scope="open"', 'data-plan-scope="closed"')
 const closedPart = section.slice(section.indexOf('data-plan-scope="closed"'))
 check(count(openPart, 'class="card plan-card"') === 2 && count(closedPart, 'class="card plan-card"') === 4, 'cards split by scope')

@@ -8,12 +8,13 @@ import { MAIN_NAV } from '../components/Navbar'
 import { PageDateContext } from '../components/pageDate'
 import type { Dashboard, IndexRow, MarketOverview, StockBarRow, StockBarsResponse, TaiexMa60 } from '../types'
 import { overviewBoth, overviewNone, overviewTwseOnly } from '../today/today.fixtures'
+import { removedCopyIn } from '../removedCopy.fixtures'
 import { CLOSE_ONLY_NOTE, STOCK_BARS_LIMIT, axisDigits, buildBarsChartOption, chartLayout, isCloseOnlySeries, priceDigits, readChartTheme } from '../stock/stockBars'
 import { IndexTablePanel, IndexTableView, MarketChartView, MarketOverviewPanel, MarketOverviewView } from './MarketViews'
 import { MarketPage } from './MarketPage'
 import { indexRows, overviewWithIndexes } from './market.fixtures'
 import {
-  INDEX_MA60_NOTE, INDEX_SOURCE_NOTE, INDEX_SPECS, MA60_BACKGROUND_NOTE, MA60_NOTE, TAIEX, TAIFEX_ATTRIBUTION,
+  INDEX_SOURCE_NOTE, INDEX_SPECS, TAIEX, TAIFEX_ATTRIBUTION,
   chartTitle, collectedSinceText, futuresLatestText, indexMa60Cell, indexSearch, indexTableNotes, marketOverviewNotes, selectedIndex,
   summaryItems,
 } from './marketOverview'
@@ -125,10 +126,10 @@ check(order.every((at, i) => at > 0 && (i === 0 || at > order[i - 1])), `DESIGN_
 check(count(page, 'class="card-title"') === 1 && page.includes('>加權指數日線</h3>'), 'one shared chart, 加權指數 by default (Issue 564 replaces the three charts)')
 check(!page.includes('market-us-title') && !page.includes('market-us-chart') && !page.includes('id="market-tpex-chart-title"'), 'no separate US panel or folded US charts, no second chart card')
 check(!/大盤狀態/.test(pageText), 'no placeholder for 大盤狀態 (Issue 546) yet')
-check(pageText.includes('上市、上櫃的收盤概況，以及加權、櫃買、台指期近月三檔指數的總表；點一列看它的日 K。'), 'the page lead names the table')
-// #666: the lead is in a closed 說明 fold beside the title, not a paragraph under it.
+// Issue 732 (4-8, N-4 to N-6): the title is the h1 alone (no 說明 fold), and no lead, row hint or method note is on the page.
 const pageTitle = slice(page, '<section class="page-title news-page-title">', '</section>')
-check(/^<section class="page-title news-page-title"><h1>大盤<\/h1><details class="details page-help"><summary>說明<\/summary><div class="page-help-body"><p>上市、上櫃的收盤概況，以及加權、櫃買、台指期近月三檔指數的總表；點一列看它的日 K。<\/p><\/div><\/details>$/.test(pageTitle), `大盤頁首: h1 then the closed 說明 holding the lead, got ${pageTitle}`)
+check(pageTitle === '<section class="page-title news-page-title"><h1>大盤</h1>', `大盤頁首: the h1 only, got ${pageTitle}`)
+check(!removedCopyIn(page).length, `大盤: removed copy is back: ${removedCopyIn(page).join('、')}`)
 const overviewPanel = slice(page, 'id="market-overview-title"', 'id="market-indexes-title"')
 for (const value of ['大盤概況', '資料 2026/10/22', '加權指數', '46,041.43', '-846.34（-1.81%）', '櫃買指數', '381.69', '-13.73（-3.47%）', '上市 9,334.37 集中市場總計', '上櫃 2,255.45 上櫃股票', '上市 上漲 247 · 下跌 756 · 平盤 74（3／5）', '上櫃 上漲 146 · 下跌 659 · 平盤 63（17／11）']) {
   check(text(overviewPanel).includes(value), `大盤概況: shows 「${value}」`)
@@ -136,9 +137,11 @@ for (const value of ['大盤概況', '資料 2026/10/22', '加權指數', '46,04
 check(count(overviewPanel, 'market-widget-dual') === 2 && !overviewPanel.includes('market-overview-more'), '大盤概況: four widgets, nothing folded on phones (the page is for the market)')
 check(/class="market-widget-change[^"]*tone-down"/.test(overviewPanel), '大盤概況: a falling index change is green')
 const explanation = text(slice(overviewPanel, '<details class="data-explanation"', '</details>'))
-for (const line of ['來源：上市為臺灣證券交易所 MI_INDEX；上櫃為櫃買中心 tpex_mainborad_highlight', '成交金額範圍：上市為集中市場總計（含 ETF、權證等）；上櫃為上櫃股票', '櫃買指數漲跌幅依前一日收市指數計算', '紅色為上漲、綠色為下跌（台股慣例）']) {
+// N-4: the sources without internal codes (the API label since Issue 732); N-6: no note on how the TPEx change is computed.
+for (const line of ['來源：上市為臺灣證券交易所；上櫃為證券櫃檯買賣中心', '成交金額範圍：上市為集中市場總計（含 ETF、權證等）；上櫃為上櫃股票', '紅色為上漲、綠色為下跌（台股慣例）']) {
   check(explanation.includes(line), `大盤概況 資料說明: 「${line}」, got ${explanation}`)
 }
+check(!explanation.includes('MI_INDEX') && !explanation.includes('tpex_mainborad_highlight') && !explanation.includes('收市指數'), `大盤概況 資料說明: no source codes or method, got ${explanation}`)
 
 // ---- 指數總表 (AC-1; Issue 633: three Taiwan rows, no groups), each state of the fixture ----
 const table = slice(page, 'id="market-indexes-title"', 'id="market-chart-title"')
@@ -162,7 +165,7 @@ check(rowIn(tableOn('2026-10-22', noData), 'tx').includes('無資料：最近一
 // S-a: the 來源 sentence once; #666 moved it from under the table into the table's 資料說明 (390 has no 來源 column).
 check(count(text(tableOn('2026-10-22')), INDEX_SOURCE_NOTE) === 1, '指數總表: the 來源 sentence once')
 check(text(slice(table, '<details class="data-explanation"', '</details>')).includes(INDEX_SOURCE_NOTE) && !text(slice(table, '</table>', 'id="market-chart-title"')).includes(INDEX_SOURCE_NOTE) && !/<details class="data-explanation" open/.test(table), '指數總表: the 來源 sentence is in the closed 資料說明, not under the table')
-check(indexTableNotes(overviewBoth())[0] === INDEX_SOURCE_NOTE, '指數總表 資料說明: the 來源 sentence first')
+check(indexTableNotes()[0] === INDEX_SOURCE_NOTE, '指數總表 資料說明: the 來源 sentence first')
 check(/<th class="num">收盤（點）<\/th><th class="num">漲跌<\/th><th class="num">漲跌幅<\/th>/.test(table), '指數總表: close and change columns are numeric (right, mono)')
 const rowOf = (key: string) => slice(table, `data-index="${key}"`, '</tr>')
 const rowText = (key: string) => text(rowOf(key)).trim()
@@ -180,9 +183,11 @@ check(!/market-index-ma60[^>]*>(?:(?!<\/td>)[\s\S])*tone-(up|down)/.test(table),
 check(tableText.includes('來源：加權指數 臺灣證券交易所；櫃買指數 證券櫃檯買賣中心；台指期近月 臺灣期貨交易所') && !tableText.includes('FinMind'), 'the 來源 note under the table (the column is hidden on phones)')
 check(page.indexOf('data-index="taiex"') < page.indexOf('data-index="tpex"') && page.indexOf('data-index="tpex"') < page.indexOf('data-index="tx"') && !page.includes('data-index="spx"'), 'rows in table order')
 const tableNotes = text(slice(table, '<details class="data-explanation"', '</details>'))
-for (const line of [TAIFEX_ATTRIBUTION, '換月日不計漲跌', INDEX_MA60_NOTE, MA60_BACKGROUND_NOTE, '紅色為上漲、綠色為下跌（台股慣例）']) {
+for (const line of [TAIFEX_ATTRIBUTION, '「非最新」：資料日不是台股資料日', '紅色為上漲、綠色為下跌（台股慣例）']) {
   check(tableNotes.includes(line), `指數總表 資料說明: 「${line}」, got ${tableNotes}`)
 }
+// N-5, N-6: no change or MA60 method in the table's 資料說明.
+check(!removedCopyIn(table).length && !tableNotes.includes('漲跌：') && !tableNotes.includes('季線：'), `指數總表 資料說明: no method notes, got ${tableNotes}`)
 
 // ---- selection (AC-2): the selected row, the URL, a click and Enter ----
 check(/data-index="taiex"[^>]*aria-current="true"/.test(page) || /aria-current="true"[^>]*data-index="taiex"/.test(page), 'default: 加權指數 is the selected row')
@@ -243,6 +248,8 @@ check(txChart.includes('台指期近月日線') && txChart.includes('來源 臺�
 check(txChart.includes('成交量（口）') && txChart.includes('143,277') && txChart.includes('開（點）') && txChart.includes('46,110'), '台指期: whole points and volume in 口')
 check(txChart.includes('2026/10/10 合約 2026/10 · 未平倉 125,011 口 · 結算價 46,105'), `台指期: the latest contract month, open interest and settlement: ${txChart.slice(-600)}`)
 check(txChart.includes('自 2026/09/29 起收集，無更早歷史') && txChart.includes(TAIFEX_ATTRIBUTION), '台指期: when the history starts and the open-data attribution')
+// Issue 732 (N-6): the TX footer keeps 只含一般交易時段 (the session scope); the roll rule and its price-gap note left.
+check(txChart.includes('自 2026/09/29 起收集，無更早歷史；只含一般交易時段') && !removedCopyIn(txChart).length, `台指期: the session scope only: ${removedCopyIn(txChart).join('、')}`)
 check(collectedSinceText(fullBars) === '自 2026/09/01 起收集，無更早歷史' && collectedSinceText({ ...fullBars, count: STOCK_BARS_LIMIT }) === null, 'collectedSinceText: only when the series is shorter than the request')
 check(futuresLatestText(fullBars) === null, 'futuresLatestText: nothing for an index')
 check(priceDigits(46041.43, 'index') === 2 && priceDigits(46041.43, 'stock') === 0, 'priceDigits: an index has two decimals, a stock above 500 none')
@@ -294,7 +301,7 @@ check(count(noSession, '無資料：尚無已驗證的資料日') === 3, 'Taiwan
 const otherScope = { ...overviewBoth(), exchanges: overviewBoth().exchanges.map((row) => row.exchange === 'TPEx' ? { ...row, turnover: { value: 1e8, scope: 'tpex_all', scope_label: '上櫃全部證券' } } : row) }
 check(text(render('MarketOverviewView other scope', <MarketOverviewView overview={otherScope} />)).includes('上櫃 1.00 上櫃全部證券'), '大盤概況: an unknown scope shows the API scope_label')
 check(JSON.stringify(marketOverviewNotes(overviewNone())) === JSON.stringify(['紅色為上漲、綠色為下跌（台股慣例）']), `資料說明 without data: only the red/green line, got ${JSON.stringify(marketOverviewNotes(overviewNone()))}`)
-check(!indexTableNotes(overviewBoth()).some((line) => line.startsWith('Copyright')), '資料說明 without US data: no copyright notice')
+check(!indexTableNotes().some((line) => line.startsWith('Copyright')), '資料說明 without US data: no copyright notice')
 
 // ---- 加權指數與季線, Issue 561: above, below or equal, too few closes, and no data ----
 const ma60 = (extra: Partial<TaiexMa60>): TaiexMa60 => ({
@@ -318,7 +325,8 @@ check(text(above.strip).includes('加權指數 46,041.43（2026/10/22） 在季�
 check(text(above.strip).includes('近 250 個交易日在季線之上：2026/09/01–2026/10/22（37 日，持續中）；2026/06/02–2026/07/15（31 日）；2025/10/28（或更早）（1 日）'), `季線: the newest runs first, an open start said: ${text(above.strip)}`)
 check(above.markup.indexOf('class="market-ma60"') > above.markup.indexOf('market-overview-grid'), '季線: under the four widgets, in the 大盤概況 panel')
 check(!/tone-(up|down)/.test(above.strip.slice(0, above.strip.indexOf('</section>'))), '季線: no up/down colors (background, not a signal)')
-check(above.notes.includes(MA60_NOTE) && above.notes.includes(MA60_BACKGROUND_NOTE), `季線 資料說明: the definition and that it is background only: ${JSON.stringify(above.notes)}`)
+// Issue 732 (N-5, 4-8): no MA60 definition or background note in 資料說明, whatever the strip shows.
+check(!above.notes.some((line) => line.startsWith('季線')) && !removedCopyIn(above.markup).length, `季線 資料說明: no method notes: ${JSON.stringify(above.notes)}`)
 const below = ma60Panel(ma60({ close: 43000, ma60: 44012.5, above: false, position: 'below', segments: [{ start: '2026-09-01', end: '2026-10-21', sessions: 36, ongoing: false, starts_before_window: false }] }))
 check(text(below.strip).includes('加權指數 43,000.00（2026/10/22） 在季線之下 （季線 44,012.50）') && !text(below.strip).includes('在季線之上 （'), `季線（之下）: ${text(below.strip).slice(0, 200)}`)
 check(text(below.strip).includes('2026/09/01–2026/10/21（36 日）') && !text(below.strip).includes('持續中'), '季線（之下）: the last run has ended')
@@ -327,7 +335,7 @@ check(text(equal.strip).includes('與季線持平 （季線 44,012.50）') && te
 const short = ma60Panel({ trading_date: '2026-10-22', required_closes: 60, status: 'insufficient', reason: 'insufficient_closes', close_count: 59 })
 check(text(short.strip).includes('季線資料不足：加權指數到 2026/10/22 只有 59 個交易日收盤，季線需要 60 個'), `季線（資料不足）: the reason: ${text(short.strip).slice(0, 200)}`)
 check(!/季線之[上下]|持平/.test(text(short.markup)), `季線（資料不足）: no position anywhere on the panel: ${text(short.markup)}`)
-check(short.notes.includes(MA60_NOTE), '季線（資料不足）: 資料說明 explains the 60 closes')
+check(!short.notes.some((line) => line.startsWith('季線')), '季線（資料不足）: the strip says why; 資料說明 does not explain the 60 closes')
 for (const [item, reason] of [
   [{ trading_date: null, required_closes: 60, status: 'unavailable', reason: 'no_verified_session' }, '季線無資料：尚無已驗證的資料日'],
   [{ trading_date: '2026-10-22', required_closes: 60, status: 'unavailable', reason: 'not_collected' }, '季線無資料：加權指數日線未收集'],
@@ -338,7 +346,7 @@ for (const [item, reason] of [
 ] as const) {
   const panel = ma60Panel(item as TaiexMa60 | undefined)
   check(text(panel.strip).includes(reason) && !/季線之[上下]|持平/.test(text(panel.markup)), `季線（${item?.reason ?? '欄位不存在'}）: 「${reason}」, no position: ${text(panel.strip).slice(0, 160)}`)
-  check(!panel.notes.includes(MA60_NOTE), `季線（${item?.reason ?? '欄位不存在'}）: no MA60 definition in 資料說明`)
+  check(!panel.notes.some((line) => line.startsWith('季線')), `季線（${item?.reason ?? '欄位不存在'}）: no MA60 definition in 資料說明`)
 }
 
 // ---- pure helpers ----

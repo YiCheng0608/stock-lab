@@ -1,4 +1,4 @@
-import { formatCanonicalShareLots, formatCanonicalShares, formatTableNumber, formatTableVolume, formatTableVolumeShares, formatTableChip, formatShareLots, formatShareQuantity, formatPositionShares, positionQuantityFromText, formatSignedShareLots, formatSourceAwareShareLots, formatVolumeLots, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, sharesFromUnit, type ShareUnit } from './units'
+import { formatCanonicalShareLots, formatCanonicalShares, formatTableNumber, formatTableVolume, formatTableVolumeShares, formatTableChip, formatShareLots, formatShareQuantity, positionQuantityFromText, formatSignedShareLots, formatSourceAwareShareLots, formatVolumeLots, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, sharesFromUnit, type ShareUnit } from './units'
 
 if (sharesFromUnit('lot', 1) !== 1000) throw new Error('one lot must equal 1000 shares')
 if (sharesFromUnit('lot', 2) !== 2000) throw new Error('lot conversion must be exact')
@@ -78,16 +78,14 @@ const exactPositionCases = [
 ]
 for (const [exact, mixed] of exactPositionCases) {
   if (formatShareQuantity(Number(exact), exact) !== mixed) throw new Error(`exact mixed position lost digits: ${exact}`)
-  if (formatPositionShares(Number(exact), exact) !== exact.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' 股') throw new Error(`exact original shares lost digits: ${exact}`)
 }
 for (const exact of [null, true, 1, '', '00', '01', '-0', '-1', '+1', ' 1', '1 ', '1\n', '1\r', '1\r\n', '1\t', '1\u2028', '1\u2029', '1.0', '1.5', '1e3', '1,000', '９', '9223372036854775808', '9'.repeat(1000)]) {
-  if (formatShareQuantity(1000, exact as string) !== '庫存數量待核實' || formatPositionShares(1000, exact as string) !== '股數待核實') throw new Error('malformed exact position must not use its safe number')
+  if (formatShareQuantity(1000, exact as string) !== '庫存數量待核實') throw new Error('malformed exact position must not use its safe number')
 }
 for (const value of [null, undefined, true, -1, 1.5, NaN, Infinity, 9007199254740992, Number('9007199254740993'), Number('9223372036854775807')]) {
-  if (formatShareQuantity(value as number) !== '庫存數量待核實' || formatPositionShares(value as number) !== '股數待核實') throw new Error('unsafe legacy position must stay unknown')
+  if (formatShareQuantity(value as number) !== '庫存數量待核實') throw new Error('unsafe legacy position must stay unknown')
 }
 if (formatShareQuantity(9007199254740991) !== '9,007,199,254,740.991 張') throw new Error('safe absent-field position must retain remainder 991')
-if (formatPositionShares(0) !== '0 股') throw new Error('existing zero must remain visible')
 for (const [unit, raw, expected] of [['lot', '9007199254740', '9007199254740'], ['odd_lot', '9007199254740991', '9007199254740991'], ['lot', '0001', '1'], ['odd_lot', '1500', '1500'], ['odd_lot', '9007199254740993', '9007199254740993'], ['odd_lot', '9223372036854775807', '9223372036854775807'], ['lot', '9223372036854775', '9223372036854775']] as const) {
   if (positionQuantityFromText(unit, raw) !== expected) throw new Error('valid raw position input was changed')
 }
