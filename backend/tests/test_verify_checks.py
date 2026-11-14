@@ -684,8 +684,8 @@ ATTRIBUTION = "資料來源：臺灣期貨交易所（政府資料開放平臺�
 # points, then its footer. Each page has the index table before the chart.
 TABLE_HEAD = "大盤概況\n資料 2026/10/22\n指數總表\n資料 2026/10/22\n"
 TAIEX_PAGE = TABLE_HEAD + (
-    "技術指標 indicators/v1\n加權指數日線\n資料 2026/10/22\n日K\n週K\nMA5\n"
-    "來源 臺灣證券交易所\n最近 2 根日線；缺日不補、停牌不畫 K 線\n查看圖表資料表（最近 30 根）\n"
+    "技術指標\n加權指數日線\n資料 2026/10/22\n日K\n週K\nMA5\n"
+    "來源 臺灣證券交易所\n最近 2 根日線\n查看圖表資料表（最近 30 根）\n"
     "日期\t開（點）\t高（點）\t低（點）\t收（點）\t成交量（張）\tMA5（點）\n"
     "2026/10/22\t46,041.43\t46,041.43\t46,041.43\t46,041.43\t\t\n"
     "2026/10/21\t46,887.77\t46,887.77\t46,887.77\t46,887.77\t\t\n"
@@ -694,8 +694,8 @@ TPEX_PAGE = TABLE_HEAD + (
     "技術指標\n櫃買指數日線\n資料日期未提供\n日K\n週K\n無資料\n來源未提供日線\n"
 )
 TX_PAGE = TABLE_HEAD + (
-    "技術指標 indicators/v1\n台指期近月日線\n資料 2026/10/22\n日K\n週K\n"
-    "來源 臺灣期貨交易所\n最近 1 根日線；缺日不補、停牌不畫 K 線\n查看圖表資料表（最近 30 根）\n"
+    "技術指標\n台指期近月日線\n資料 2026/10/22\n日K\n週K\n"
+    "來源 臺灣期貨交易所\n最近 1 根日線\n查看圖表資料表（最近 30 根）\n"
     "日期\t開（點）\t高（點）\t低（點）\t收（點）\t成交量（口）\tMA5（點）\n"
     "2026/10/22\t46,100\t46,330\t45,900\t46,272\t55,226\t\n"
     "2026/10/22 合約 2026/11 · 未平倉 115,258 口 · 結算價 46,234\n"
@@ -751,9 +751,9 @@ def test_t15_fails_on_a_wrong_close_a_missing_chart_or_attribution(tmp_path):
     run = FakeRun(tmp_path, _payloads(), _chart_pages(tx=page))
     with pytest.raises(page_checks.Fail, match="`台指期近月日線`：資料表缺最新一根"):
         page_checks.t15(run)
-    # The old close-line chart (before the decision) has no stock-page meta line.
+    # A meta line with more than the count (the close-line chart, or before Issue 729) is not the whole line.
     old = TAIEX_PAGE.replace(
-        "最近 2 根日線；缺日不補、停牌不畫 K 線", "最近 2 根日線；缺日不補"
+        "最近 2 根日線\n", "最近 2 根日線；缺日不補、停牌不畫 K 線\n"
     )
     run = FakeRun(tmp_path, _payloads(), _chart_pages(taiex=old))
     with pytest.raises(page_checks.Fail, match="缺整行 `最近 2 根日線"):
@@ -1343,9 +1343,9 @@ T20_ROW_1 = (
 )
 T20_ROW_2 = "#2 9101 示範2 上櫃 · 無所屬族群\n回踩型\n收盤（元）\n13.20\nAI 說明 ▸\n"
 T20_CARD = (
-    "技術指標 indicators/v1\n9100 示範1\n日K\n週K\n"
-    "規則價位線：進場 21.10 元（虛線）、停損 20.00 元、目標 23.00 元；條件成立當日的價位，不是成交價。\n"
-    "最近 130 根日線；缺日不補、停牌不畫 K 線\n"
+    "技術指標\n9100 示範1\n日K\n週K\n"
+    "規則價位線：進場 21.10 元（虛線）、停損 20.00 元、目標 23.00 元\n"
+    "最近 130 根日線\n"
 )
 T20_CLOSED = "今日名單\n2 檔\n" + T20_ROW_1 + T20_ROW_2 + "熱門族群\n#1\n半導體\n"
 T20_OPEN = (
@@ -2830,42 +2830,111 @@ def test_t22_fails_on_a_wrong_or_misplaced_line_or_row(tmp_path):
             page_checks.t22(FakeRun(tmp_path, _overnight(), {"today-1280": page}))
 
 
-# ---- T23 (Issue 693): the 現行規則尚無證據 line in the 今日名單 head ----
+# ---- T23 and S16 (Issue 729): the copy that left the pages does not come back ----
 
-EVIDENCE_PAGE = (
+# The 今日名單 head before Issue 729 (Issue 693's line, the T+1 clause and the disclaimer) and after it.
+HEAD_BEFORE_729 = (
     "今日名單\n10 檔\n"
     "2026/11/13 收盤後條件成立，最早下一個交易日（T+1）才可研究進場。評分只用於排序，不代表勝率或預期報酬。\n"
     "順勢籌碼型 · 策略說明 →\n"
-    f"{page_checks.NO_EVIDENCE_LINE}\n"
+    "現行規則尚無證據：照名單價位進出，回測扣成本後沒有贏過同日母體。 研究結論 →\n"
     f"{US_LINE}\n"
     "#1 2330 台積電 上市 · 半導體（產業 #1）\n"
+    "來源：訊號 breakout_v3 · 行情 臺灣證券交易所 · 籌碼 臺灣證券交易所 · 族群 hot_group_v1 · 新聞方向 LLM 判讀 news_v3\n"
     "熱門族群\n"
+    "T 日收盤訊號 · 最早 T+1 執行 · T+5／T+20 追蹤\n"
+)
+HEAD_AFTER_729 = (
+    "今日名單\n10 檔\n2026/11/13 收盤後條件成立\n順勢籌碼型 · 策略說明 →\n"
+    f"{US_LINE}\n"
+    "#1 2330 台積電 上市 · 半導體（產業 #1）\n"
+    "來源：行情 臺灣證券交易所 · 籌碼 臺灣證券交易所 · 新聞方向 AI 判讀\n"
+    "熱門族群\n僅使用官方資料\n"
 )
 
 
-def test_t23_passes_on_one_line_in_the_head(tmp_path):
-    summary = page_checks.t23(FakeRun(tmp_path, {}, {"today-1280": EVIDENCE_PAGE}))
-    assert "恰一行" in summary
+def _today_pages(page):
+    return {"today-1280": page, "today-390": page}
 
 
-def test_t23_fails_without_the_line_as_before_issue_693(tmp_path):
-    before = EVIDENCE_PAGE.replace(f"{page_checks.NO_EVIDENCE_LINE}\n", "")
-    with pytest.raises(page_checks.Fail, match="預期恰一行"):
-        page_checks.t23(FakeRun(tmp_path, {}, {"today-1280": before}))
+def test_removed_copy_is_32_distinct_phrases():
+    assert len(page_checks.REMOVED_COPY) == len(set(page_checks.REMOVED_COPY)) == 32
+    assert page_checks.REMOVED_COPY[:2] == ("現行規則尚無證據", "研究結論")
 
 
-def test_t23_fails_on_other_wording_twice_or_outside_the_head(tmp_path):
-    other = EVIDENCE_PAGE.replace(
-        page_checks.NO_EVIDENCE_LINE, "現行規則尚無證據 研究結論 →"
+def test_t23_passes_without_the_removed_copy(tmp_path):
+    summary = page_checks.t23(FakeRun(tmp_path, {}, _today_pages(HEAD_AFTER_729)))
+    assert "沒有 32 句" in summary
+
+
+def test_t23_fails_on_the_head_before_issue_729(tmp_path):
+    with pytest.raises(page_checks.Fail) as raised:
+        page_checks.t23(FakeRun(tmp_path, {}, _today_pages(HEAD_BEFORE_729)))
+    message = str(raised.value)
+    for phrase in (
+        "現行規則尚無證據",
+        "研究結論",
+        "才可研究進場",
+        "評分只用於排序",
+        "hot_group_v1",
+        "LLM 判讀",
+        "T 日收盤訊號",
+    ):
+        assert f"`{phrase}`" in message
+
+
+def test_t23_fails_on_one_phrase_on_the_phone_only(tmp_path):
+    pages = {
+        "today-1280": HEAD_AFTER_729,
+        "today-390": HEAD_AFTER_729 + "此為研究工具與資料摘要，不構成投資建議。\n",
+    }
+    with pytest.raises(page_checks.Fail, match="today-390：`此為研究工具與資料摘要`"):
+        page_checks.t23(FakeRun(tmp_path, {}, pages))
+
+
+def _stock_pages(extra=None):
+    pages = {
+        "stock-1280": "K 線\n目前判斷\n僅使用官方資料\n",
+        "stock-390": "K 線\n目前判斷\n",
+    }
+    for tab in ("chips", "financials", "research", "news", "data"):
+        pages[f"stock-{tab}-1280"] = f"{tab}\n"
+    pages["stock-data-1280"] = "原始時間、來源與技術指標\n技術指標 indicators/v1\n"
+    pages.update(extra or {})
+    return pages
+
+
+def test_s16_passes_and_keeps_the_formula_version_on_the_source_tab(tmp_path):
+    summary = page_checks.s16(
+        FakeRun(tmp_path, {}, _stock_pages()), page_checks.Stock("TWSE", "9101")
     )
-    twice = EVIDENCE_PAGE.replace(
-        "熱門族群\n", f"{page_checks.NO_EVIDENCE_LINE}\n熱門族群\n"
+    assert "六個分頁" in summary
+
+
+def test_s16_fails_on_the_stock_page_before_issue_729(tmp_path):
+    before = _stock_pages(
+        {
+            "stock-1280": "K 線\n此為研究工具與資料摘要，不構成投資建議、報酬保證或自動下單指令。\n",
+            "stock-chips-1280": "來源稽核原值：外資（股） 120,000\n法人：臺灣證券交易所 三大法人（twse_t86） · 資料截至：2026/10/16\n",
+            "stock-research-1280": "決策時間：未記錄 · 規則最早執行日：2026/10/19\n價位語意：規則參考價 · 規則與官方資料詳見「資料來源」分頁。\n",
+            "stock-financials-1280": "營收是單月…月營收不納入策略或評分。\n",
+            "stock-news-1280": "最近 130 根日線；缺日不補、停牌不畫 K 線\n技術指標 indicators/v1\n",
+        }
     )
-    for page in (other, twice):
-        with pytest.raises(page_checks.Fail, match="預期恰一行"):
-            page_checks.t23(FakeRun(tmp_path, {}, {"today-1280": page}))
-    moved = EVIDENCE_PAGE.replace(f"{page_checks.NO_EVIDENCE_LINE}\n", "").replace(
-        "熱門族群\n", f"熱門族群\n{page_checks.NO_EVIDENCE_LINE}\n"
-    )
-    with pytest.raises(page_checks.Fail, match="不在標題"):
-        page_checks.t23(FakeRun(tmp_path, {}, {"today-1280": moved}))
+    with pytest.raises(page_checks.Fail) as raised:
+        page_checks.s16(
+            FakeRun(tmp_path, {}, before), page_checks.Stock("TWSE", "9101")
+        )
+    message = str(raised.value)
+    for shot, phrase in (
+        ("stock-1280", "此為研究工具與資料摘要"),
+        ("stock-chips-1280", "來源稽核原值"),
+        ("stock-chips-1280", "（twse_t86）"),
+        ("stock-research-1280", "決策時間"),
+        ("stock-research-1280", "規則與官方資料詳見"),
+        ("stock-financials-1280", "不納入策略或評分"),
+        ("stock-news-1280", "缺日不補"),
+        ("stock-news-1280", "indicators/v1"),
+    ):
+        assert shot in message and f"`{phrase}`" in message
+    assert "stock-data-1280" not in message

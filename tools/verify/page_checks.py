@@ -1119,7 +1119,9 @@ def usable_ai(ai: Any) -> bool:
 
 
 # The first line of the Shell footer: the end of the last card of a page.
-FOOTER_FIRST_LINE = "T 日收盤訊號 · 最早 T+1 執行 · T+5／T+20 追蹤"
+FOOTER_FIRST_LINE = (
+    "僅使用官方資料"  # Issue 729: the flow note above it left the footer
+)
 
 
 def candidates(run: Run) -> dict:
@@ -2029,34 +2031,69 @@ def t22(run: Run) -> str:
     return f"`{line}` 在 `{CANDIDATES_TITLE}` 之後；{marked}／{len(items)} 列標費半（overnight_us_links）"
 
 
-# frontend/src/strategy/evidence.ts NO_EVIDENCE_TEXT and NO_EVIDENCE_LINK_LABEL (Issue 693).
-NO_EVIDENCE_LINE = (
-    "現行規則尚無證據：照名單價位進出，回測扣成本後沒有贏過同日母體。 研究結論 →"
+# Issue 729 (decision 6881593041): copy that left the pages because it explains rather than shows (research status,
+# how to read, process notes, words for developers). Mirrors REMOVED_COPY in frontend/src/removedCopy.fixtures.ts;
+# verify does not read frontend files. The full original text is in the Issue's AC-1 list.
+REMOVED_COPY = (
+    "現行規則尚無證據",
+    "研究結論",
+    "strategy-evidence",
+    "前瞻驗證",
+    "才可研究進場",
+    "評分只用於排序",
+    "indicators/v1",
+    "提示版本",
+    "LLM 判讀",
+    "hot_group_v1",
+    "不是成交價",
+    "缺日不補",
+    "原始價為基準",
+    "區間與日K／週K 跟著上方 K 線卡",
+    "每個研究條件各自判定",
+    "價位為參考，成立當天依實際資料重算",
+    "越高越好",
+    "加入後每日依日線規則模擬",
+    "此為研究工具與資料摘要",
+    "不納入策略或評分",
+    "研究截止日期以可得日篩選",
+    "來源稽核原值",
+    "（twse_t86）",
+    "（twse_margin）",
+    "尚未提供整合的券商分點",
+    "券商分點是交易通道",
+    "決策時間",
+    "時間以台灣時間顯示",
+    "規則與官方資料詳見",
+    "策略判斷資料已齊備",
+    "T 日收盤訊號",
+    "詳細來源見",
 )
+
+
+def removed_copy(text: Text, allowed: tuple[str, ...] = ()) -> list[str]:
+    """The REMOVED_COPY phrases on a page, each with the first line that holds it."""
+
+    found = []
+    for phrase in REMOVED_COPY:
+        if phrase in allowed:
+            continue
+        n = text.find_where(lambda line, phrase=phrase: phrase in line)
+        if n >= 0:
+            found.append(f"`{phrase}`（{text.at(n)}）")
+    return found
 
 
 @check("today", "T23")
 def t23(run: Run) -> str:
-    """Issue 693: the 今日名單 head ends with the 現行規則尚無證據 line, in every state."""
+    """Issue 729: the 今日名單 page, desktop and phone, shows none of the removed copy (Issue 693's line among it)."""
 
-    text = run.text(TODAY)
-    found = [
-        n for n, line in enumerate(text.lines) if line.startswith("現行規則尚無證據")
-    ]
-    expect(
-        [text.lines[n] for n in found] == [NO_EVIDENCE_LINE],
-        f"`現行規則尚無證據` 開頭的行是 {[text.lines[n] for n in found]}，"
-        f"預期恰一行 `{NO_EVIDENCE_LINE}`",
-    )
-    title, groups = candidates_title(text), text.find("熱門族群")
-    us = text.find_where(lambda line: line.startswith(OVERNIGHT_US_TITLE), title)
-    end = us if us > title else groups
-    expect(
-        title < found[0] and (end < 0 or found[0] < end),
-        f"`{NO_EVIDENCE_LINE}` 不在標題 `{CANDIDATES_TITLE}` 與"
-        f" `{OVERNIGHT_US_TITLE}`／`熱門族群` 之間（{text.at(found[0])}）",
-    )
-    return f"`{NO_EVIDENCE_LINE}` 恰一行，在 `{CANDIDATES_TITLE}` 標題列"
+    problems = []
+    for width in (1280, 390):
+        found = removed_copy(run.text(TODAY, width))
+        if found:
+            problems.append(f"today-{width}：" + "、".join(found))
+    expect(not problems, "出現已拿掉的說明文字：" + "；".join(problems))
+    return f"today-1280／390 沒有 {len(REMOVED_COPY)} 句已拿掉的說明文字"
 
 
 @check("today", "T14")
@@ -2141,7 +2178,7 @@ def t15(run: Run) -> str:
         expect(bool(bars), f"`{title}`：API 的日線沒有一根可畫的 K 棒")
         as_of = payload.get("data_as_of")
         badge = card_badge(run, text, i, as_of, title)
-        count = f"最近 {payload.get('count')} 根日線；缺日不補、停牌不畫 K 線"
+        count = f"最近 {payload.get('count')} 根日線"
         expect(text.find(count, i) >= 0, f"`{title}`：缺整行 `{count}`")
         # The data table (newest first): date, then 開 高 低 收 in 點, tab separated.
         newest = bars[-1]
@@ -2960,19 +2997,19 @@ def s5(run: Run, stock: Stock) -> str:
                 text.find_where(lambda line: line.startswith(prefix)) < 0,
                 f"與頁面同日 {slash(i)}，不應再有 `{prefix}` 開頭的行",
             )
-        for prefix in ("決策時間：", "價位語意："):
-            expect(
-                text.find_where(lambda line: line.startswith(prefix)) >= 0,
-                f"缺 `{prefix}` 開頭的行",
-            )
-        note = f"與頁面同日 {slash(i)}：`決策時間：…`、`價位語意：…` 不另寫日期"
+        # Issue 729: no 決策時間 or 價位語意 (verified semantics); the time line starts at 規則最早執行日.
+        expect(
+            text.find_where(lambda line: line.startswith("規則最早執行日：")) >= 0,
+            "缺 `規則最早執行日：` 開頭的行",
+        )
+        note = f"與頁面同日 {slash(i)}：`規則最早執行日：…` 不另寫日期"
     else:
-        for prefix in (f"資料日期：{slash(i)}", f"資料日：{slash(i)} · 價位語意："):
+        for prefix in (f"資料日期：{slash(i)}", f"資料日：{slash(i)}"):
             expect(
                 text.find_where(lambda line: line.startswith(prefix)) >= 0,
                 f"缺 `{prefix}` 開頭的行",
             )
-        note = f"`資料日期：{slash(i)}`、`資料日：{slash(i)} · 價位語意：`"
+        note = f"`資料日期：{slash(i)}`、`資料日：{slash(i)}`"
     # The candidate row of the strategy board (#274): only the board's as-of candidate.
     if (payload.get("strategy_board") or {}).get("candidate") is not None:
         expect(text.has("每日候選"), "策略總表有候選，缺整行 `每日候選`")
@@ -3231,8 +3268,11 @@ def s9(run: Run, stock: Stock) -> str:
                 f"最新一列 `{first}`，預期 `{label}：無資料`",
             )
         else:
-            part = f"（{group['source']}） · 資料截至：{slash(group['data_as_of'])} · 收集："
+            # Issue 729: the line names the source, not its code (twse_t86) in brackets.
+            part = f" · 資料截至：{slash(group['data_as_of'])} · 收集："
             expect(part in first, f"最新一列 `{first}` 缺 `{part}`")
+            code = f"（{group['source']}）"
+            expect(code not in first, f"最新一列 `{first}` 仍有來源代碼 `{code}`")
         counts.append(f"{label} {rows}")
     return (
         f"最新一列 {latest.strip()}；來源行 {'、'.join(counts)} = min(30, {len(chips)})"
@@ -3498,6 +3538,22 @@ def s15(run: Run, stock: Stock) -> str:
     return f"評分細節 {len(bars)} 個分項橫條 = stock.json candidate"
 
 
+@check("stocks", "S16", per_stock=True)
+def s16(run: Run, stock: Stock) -> str:
+    """Issue 729: no tab of the stock page shows the removed copy. 資料來源 lists sources and versions, so its
+    indicator formula version stays there."""
+
+    problems = []
+    for tab, shot in stock_shots(stock).items():
+        allowed = ("indicators/v1",) if tab == "data" else ()
+        for width in shot.widths:
+            found = removed_copy(run.text(shot, width), allowed)
+            if found:
+                problems.append(f"{shot.name}-{width}：" + "、".join(found))
+    expect(not problems, "出現已拿掉的說明文字：" + "；".join(problems))
+    return f"{stock.label}：六個分頁沒有已拿掉的說明文字（資料來源分頁留指標公式版本）"
+
+
 # ---- actions ----
 
 # The page is 我的追蹤 at /watch since #493; the old /actions redirects there (A18).
@@ -3727,16 +3783,15 @@ def a6(run: Run) -> str:
     i = text.find_where(lambda line: line.startswith("資料日："))
     cutoff = (summary.get("data_cutoff") or "")[:10]
     if cutoff and cutoff == page_day(run):
-        # #661 (D-b): the navbar states that day; the line starts at 價位語意.
+        # #661 (D-b): the navbar states that day. Issue 729: the 價位語意 line is written only for
+        # unverified semantics, so nothing is left to check but the missing date.
         expect(
             i < 0,
             f"data_cutoff 與頁面同日 {slash(cutoff)}，不應再有 `資料日：`（{text.at(i)}）",
         )
-        expect(
-            text.find_where(lambda line: line.startswith("價位語意：")) >= 0,
-            "缺 `價位語意：` 開頭的行",
+        return (
+            f"{stock.label}：data_cutoff 與頁面同日 {slash(cutoff)}，不另寫 `資料日：`"
         )
-        return f"{stock.label}：data_cutoff 與頁面同日 {slash(cutoff)}，`價位語意：` 行不另寫日期"
     expect(i >= 0, "缺 `資料日：` 開頭的行")
     want = slash(summary.get("data_cutoff") or "")
     got = text.lines[i][len("資料日：") :][:10]
