@@ -74,10 +74,10 @@
     "market-researcher@claude-for-financial-services": false
   },
   "disableClaudeAiConnectors": true,
-  "enableArtifact": false,
   "permissions": {
     "deny": [
-      "SendFeedback"
+      "SendFeedback",
+      "Artifact"
     ]
   },
   "skillOverrides": {
