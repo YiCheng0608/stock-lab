@@ -643,7 +643,7 @@ export function chartLevels(row: StrategyBoardRow | null | undefined): ChartLeve
 // priceDigits stays with the candles and the axis.
 export function levelsNote(levels: ChartLevels): string {
   const price = formatLevelPrice
-  return `規則價位線：${CHART_LEVEL_LABELS.entry} ${price(levels.entry)} 元（虛線）、${CHART_LEVEL_LABELS.stop} ${price(levels.stop)} 元、${CHART_LEVEL_LABELS.target} ${price(levels.target)} 元；條件成立當日的價位，不是成交價。`
+  return `規則價位線：${CHART_LEVEL_LABELS.entry} ${price(levels.entry)} 元（虛線）、${CHART_LEVEL_LABELS.stop} ${price(levels.stop)} 元、${CHART_LEVEL_LABELS.target} ${price(levels.target)} 元`
 }
 
 // A line label sits above its line (insideStartTop): 12px text plus ECharts' gap, rounded up.

@@ -1,10 +1,8 @@
-import { Link } from 'react-router-dom'
 
 import { CandidateNote, ReasonList, ScoreDetails } from '../candidates/CandidateViews'
 import { EntryConditions, EntryPlanCard } from '../candidates/EntryPlanCard'
 import { ENTRY_TYPES } from '../candidates/entryPlan'
 import {
-  CANDIDATE_DISCLAIMER,
   averageVolumeText,
   candidateStrategyLabel,
   formatCandidateScore,
@@ -19,10 +17,8 @@ import { Term } from '../components/Term'
 import { UnlessPageDate } from '../components/pageDate'
 import { Badge, DataTable, DateBadge, EmptyState, type Column } from '../components/ui'
 import { productActionReasonLabel } from '../presentation'
-import { EVIDENCE_PATH, NO_EVIDENCE_SHORT_LABEL } from '../strategy/evidence'
 import type { CandidateItem, GapReason, StrategyActionableLevels, StrategyBoard as Board, StrategyBoardRow } from '../types'
 import {
-  BOARD_NOTE,
   BOARD_TITLE,
   CANDIDATE_MORE_LABEL,
   LEVELS_MISSING_TEXT,
@@ -78,7 +74,7 @@ export function ObservationBlock({ row, folded = false }: { row: StrategyBoardRo
         {observationLines(levels).map((line) => <div key={line.key}><dt>{line.label}</dt><dd className={line.className}>{line.value}</dd></div>)}
       </dl>
       {levels.reachable_next_session === false && <div className="small-note strategy-unreachable">超出下一交易日漲跌停範圍，下一交易日無法達到。</div>}
-      {levels.next_session_date && <div className="small-note">對象：下一交易日 {formatDate(levels.next_session_date)} 收盤；價位為參考，成立當天依實際資料重算。</div>}
+      {levels.next_session_date && <div className="small-note">對象：下一交易日 {formatDate(levels.next_session_date)} 收盤</div>}
     </>
   } else if (levels.availability === 'trend_unreachable') {
     body = <p className="small-note">{trendUnreachableText(row)}</p>
@@ -159,9 +155,6 @@ function CandidateRow({ board, candidate }: { board: Board; candidate: Candidate
       <div className="strategy-candidate-head">
         <Badge tone="primary" className="badge-compact">每日候選</Badge>
         <strong>第 {summary.rank} 名 · <Term id="candidate_score">總分</Term> {formatCandidateScore(summary.total_score)} · {candidateStrategyLabel(summary.strategy)}</strong>
-        <span className="small-note strategy-candidate-disclaimer">{CANDIDATE_DISCLAIMER}</span>
-        {/* Issue 693: the short 現行規則尚無證據 link to the 研究結論 of /strategy. */}
-        <Link className="text-link small-note strategy-candidate-evidence" to={EVIDENCE_PATH}>{NO_EVIDENCE_SHORT_LABEL}</Link>
       </div>
       {/* #491: how to enter, before the reasons. #648: when the board row below carries the same levels, the entry type
           and a pointer to that row replace the sentence, so the tab writes the set once; the signal-day conditions stay. */}
@@ -196,7 +189,7 @@ export function StrategyBoardPanel({ board, candidate, gapReasons }: { board: Bo
         <h2 id="strategy-board-title">{BOARD_TITLE}</h2>
         <div className="board-dates">{board.as_of && <DateBadge date={board.as_of} />}<Badge>{levelsVersionLabel(board.levels_version)}</Badge></div>
       </div>
-      {/* #519: the 20-session lots and the 說明 fold share one line; opened, the note takes the next. */}
+      {/* #519: the 20-session lots on one line (Issue 729: the 說明 fold that sat beside it left the page). */}
       <div className="board-meta">
         {board.liquidity && (
           <p className="small-note strategy-liquidity" data-liquidity={board.liquidity.state ?? undefined}>
@@ -204,7 +197,6 @@ export function StrategyBoardPanel({ board, candidate, gapReasons }: { board: Bo
             {board.liquidity.minimum_lots != null && `（候選門檻 ${formatLots(board.liquidity.minimum_lots)}）`}
           </p>
         )}
-        <details className="details board-help"><summary>說明</summary><p className="small-note">{BOARD_NOTE}</p></details>
       </div>
       {!board.as_of && <EmptyState reason="此股尚無策略判定資料。" />}
       <CandidateRow board={board} candidate={candidate} />

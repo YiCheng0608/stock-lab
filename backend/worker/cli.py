@@ -6,7 +6,7 @@ import os
 import sys
 from datetime import date, datetime, time, timezone
 
-from . import job as scheduled_job, serve as scheduler
+from . import job as scheduled_job, notify as daily_notify, serve as scheduler
 
 # Before app.config is imported: it reads STOCK_DATA_DIR and creates that
 # directory, and a scheduled `job` (or `serve`) has only --data-dir.
@@ -190,6 +190,11 @@ def main() -> None:
         help="scheduler 容器的常駐排程：定時執行 job daily、job news 與看門狗（取代工作排程器）",
     )
     scheduler.add_arguments(serve_parser)
+    notify_parser = subparsers.add_parser(
+        "notify",
+        help="每日 Telegram 通知（#728）：今日名單與隔夜美股；--dry-run 只印出、--send 送出",
+    )
+    daily_notify.add_arguments(notify_parser)
     maintenance_parser = subparsers.add_parser(
         "maintenance",
         help="維護模式（#468）：開啟時排程的 daily 與 news 只記 skipped，看門狗與 monitor 照常",
@@ -620,6 +625,11 @@ def main() -> None:
         if problem:
             parser.error(problem)
         sys.exit(scheduler.run(args))
+    if args.command == "notify":
+        problem = daily_notify.argument_problem(args)
+        if problem:
+            parser.error(problem)
+        sys.exit(daily_notify.run(args))
     if args.command == "maintenance":
         data_dir = scheduled_job.resolve_data_dir(args.data_dir or str(DATA_DIR))
         reason = (args.reason or "").strip()

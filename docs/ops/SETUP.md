@@ -128,3 +128,20 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
   - `gh_auth`：看門狗每次執行先讀一次 repo（`gh api repos/YiCheng0608/stock-lab`，`--dry-run` 不讀）。被拒時看門狗無法用 gh 留言，所以每次記 `gh_auth_failed` 到 `watchdog.log` 與 stdout（`docker logs` 看得到）；當次其他異常記 `anomaly_not_commented`，不算已留言。gh 恢復後的第一次執行在 #1 留一則（每台北日一則），寫明被拒的期間、次數與期間沒能留言的異常；仍存在的異常同一輪照常留言。gh 一直被拒時，只有日誌看得到。
 - **沒有 `.env` 或 token 是空的**：compose 照常啟動（`env_file` 是 `required: false`，[Docker compose](#docker-compose)），程式照常執行，不會崩潰。`claude -p` 回 `Not logged in`，news-llm 與 candidate_notes 該批記 `pending`，run 記 `failed`，daily 與 news 的結果與結束碼不受影響（candidate_notes 見 [日誌與 run 記錄](SCHEDULING.md#日誌與-run-記錄)）；`gh` 以 exit 4 結束，看門狗記 `gh_auth_failed`。CI `compose` job 的 smoke 第 5 步（[`tools/compose/no_env_llm.sh`](../../tools/compose/no_env_llm.sh)）在沒有 env file 的 scheduler 容器裡跑真的 `claude` 與看門狗驗證這幾點。
 - **換 token**：改 `.env` 後重建 scheduler 容器（`docker compose up -d --force-recreate scheduler`），容器才讀到新值。`pending` 的新聞由下一輪 news-llm 重試；`pending` 的候選說明 daily 不會重跑，以 `python -m worker.cli candidate-notes --date YYYY-MM-DD` 補（[日誌與 run 記錄](SCHEDULING.md#日誌與-run-記錄)）。
+
+## 每日 Telegram 通知
+
+每個交易日台北 08:45，scheduler 用使用者自己的 Telegram bot 送一則純文字訊息到使用者與 bot 的 1 對 1 對話（#728，使用者決定 [#1 6881270275](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6881270275)）。內容是前一個交易日的今日名單（代號、名稱、規則進場價或進場區、停損、目標）與隔夜美股四檔（收盤、漲跌幅、資料日與來源），缺資料時寫「無資料（原因）」。排程、不重送與失敗的處理見 [scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)。
+
+設定步驟（使用者做；agent 不讀、不寫認證檔）：
+
+1. 在 Telegram 找 @BotFather，送 `/newbot`，照提示取名，拿到 bot token（`<數字>:<一串英數>`）。
+2. 在 Telegram 開啟新 bot 的對話，先送任意一句話（bot 要先收到你的訊息才能傳給你）。
+3. 取得 chat id：在瀏覽器開 `https://api.telegram.org/bot<token>/getUpdates`，回應裡 `message.chat.id` 的數字就是（1 對 1 對話是正數）。這個網址含 token，不要貼到任何地方。
+4. 在發佈 checkout 根目錄的認證檔（[容器內的 claude 與 gh 認證（.env）](#容器內的-claude-與-gh-認證env)）寫 `TELEGRAM_BOT_TOKEN=<token>` 與 `TELEGRAM_CHAT_ID=<chat id>`，名稱照 [`.env.example`](../../.env.example)。
+5. 重建 scheduler：`docker compose -p stock-lab up -d --force-recreate scheduler`。兩個值經 scheduler 既有的 `env_file` 進容器；compose 的 `environment:` 不另寫這兩個鍵，否則 shell 沒有值時會以空字串蓋掉認證檔的值（`test_worker_serve.py` 檢查）。
+6. 核對：`docker compose -p stock-lab exec scheduler python -m worker.cli notify --dry-run` 印出今天會送的全文、不送；第一行 `configured=yes|no` 只說有沒有設定，不印值。
+
+- 沒設或有一個是空的：job 記 `status=not_configured`、不送，不算失敗，看門狗不留言。
+- `TELEGRAM_CHAT_ID` 必須是正整數（私人對話）；群組、頻道（負數或 `@名稱`）拒送並記 `failed reason=chat_not_private`。美股指數的數字只送使用者自己的對話：對外公開前要取得 S&P DJI 與 Nasdaq 的書面同意（[#1 6717084453](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6717084453)）。
+- token 不會出現在日誌、錯誤訊息與命令輸出：送出的網址只在程式內組，寫出前一律遮成 `<token>`。換 token 後照第 5 步重建 scheduler。

@@ -12,7 +12,7 @@ import type { ActionSummary, CandidateItem, StrategyBoardRow, StrategyDecision }
 import { barsResponse, tradedBar } from './stockBars.fixtures'
 import { StockCutoffControl } from './StockCutoffControl'
 import { StockSummaryCard } from './StockSummaryCard'
-import { BOARD_NOTE, LEVELS_IN_BOARD_TEXT, OBSERVATION_LABEL, boardLevelsRow, candidateLevelsInBoardText } from './strategyBoard'
+import { LEVELS_IN_BOARD_TEXT, OBSERVATION_LABEL, boardLevelsRow, candidateLevelsInBoardText } from './strategyBoard'
 import {
   board,
   conditionalBreakout,
@@ -25,6 +25,7 @@ import {
 } from './strategyBoard.fixtures'
 import { StrategyBoardPanel } from './StrategyBoardPanel'
 import { closestStrategy, stockVerdict } from './stockSummary'
+import { removedCopyIn } from '../removedCopy.fixtures'
 
 // Standalone regression module for the stock page layout of Issue 519 (DESIGN_SYSTEM §4 個股頁頁首與摘要卡, §5 個股摘要卡
 // and 策略總表, UI_COPY_SPEC §8.2 摘要卡): the verdict and its reason, the strategy closest to passing with its levels,
@@ -92,7 +93,7 @@ check(text(emptyCard).includes('此股尚無策略判定資料。') && !emptyCar
 
 // ---- the research tab folds to status rows ----
 const panel = render(<StrategyBoardPanel board={board([conditionalBreakout(), observationPullback()], { ...candidateSummary, strategy: 'breakout_v1' })} candidate={null} />)
-check(/<details class="details board-help"><summary>說明<\/summary><p class="small-note">/.test(panel) && panel.includes(BOARD_NOTE), 'strategy board: the fixed note sits in a 說明 details')
+check(!panel.includes('board-help') && !panel.includes('每個研究條件各自判定'), 'strategy board: no 說明 fold (Issue 729)')
 check(!panel.includes('class="eyebrow"'), 'strategy board: no eyebrow')
 check(count(panel, `<details class="strategy-observation" data-strategy-levels="levels"><summary class="strategy-observation-label">${OBSERVATION_LABEL}</summary>`) === 2, 'strategy board: each observation block folds behind its label (table row and phone card)')
 const missingPanel = render(<StrategyBoardPanel board={board([missingLevelsRow()])} candidate={null} />)
@@ -135,13 +136,36 @@ const stockClient = () => {
   const client = new QueryClient()
   client.setQueryData(['stock', 'TWSE', '2884', ''], {
     instrument: { id: 1, exchange: 'TWSE', symbol: '2884', name: '玉山金', instrument_type: 'stock', etf_category: null },
-    bars: [], groups: [], chips: [], fundamentals: [], monthly_revenues: [], events: [], data_quality: [], coverage: null,
+    // Issue 729 review: one chip, quarterly and monthly row, so the 籌碼 and 財務 tabs draw the rows whose copy left the
+    // page (來源稽核原值, （twse_t86）, 不納入策略或評分) instead of their empty states.
+    bars: [], groups: [], events: [], data_quality: [], coverage: null,
+    chips: [{
+      date: '2026-10-22', foreign_buy: 57797, trust_buy: 0, dealer_buy: -7500, margin_balance: null, margin_change: -196, short_balance: null, borrowed_sell: null, day_trade_ratio: null,
+      source: 'twse_t86+twse_margin', data_as_of: '2026-10-22', collected_at: null,
+      institutional: { source: 'twse_t86', data_as_of: '2026-10-22', collected_at: '2026-10-22T10:30:15Z' },
+      margin: { source: 'twse_margin', data_as_of: '2026-10-22', collected_at: '2026-10-22T13:30:18Z' },
+    }],
+    fundamentals: [{ period_end: '2026-06-30', fiscal_period: 'Q2', announcement_date: '2026-08-14', revenue: 2404483690, eps: 49.33, roe: null, source: 'mops_fundamental', data_as_of: '2026-06-30' }],
+    monthly_revenues: [{
+      revenue_month: '2026-09', revenue: 511857399, prior_year_revenue: 330980920, yoy: 54.6, cumulative_revenue: 3898726974,
+      announcement_date: '2026-10-12', announcement_basis: 'statutory_deadline', source: 'mops_t21sc03', data_as_of: '2026-09-30',
+    }],
     strategy_board: pageBoard(), candidate: breakoutCandidate(), decision_summary: levelsAction(),
   })
   client.setQueryData(['stock-bars', 'TWSE', '2884', 'day'], barsResponse([tradedBar('2026-10-21', 2380, 70), tradedBar('2026-10-22', 2405, 71)]))
   return client
 }
 const STOP = '2,364.00'
+// Issue 729: every tab of the stock page, without the copy that left the pages (research status, how-to-read, notes for
+// developers, the disclaimer and the footer's flow note). The 資料來源 tab is where sources and versions are listed, so
+// its indicator formula version stays there.
+for (const tab of ['chart', 'chips', 'financials', 'news', 'research', 'data']) {
+  const page = renderAt(`/stocks/TWSE/2884?tab=${tab}`, <App />, stockClient())
+  if (tab === 'chips') check(page.includes('法人：') && page.includes('融資：'), 'chips: the rows and their source lines are drawn')
+  if (tab === 'financials') check(page.includes('2026 年第 2 季') && page.includes('2026 年 9 月'), 'financials: the quarterly and monthly rows are drawn')
+  const back = removedCopyIn(page).filter((phrase) => !(tab === 'data' && phrase === 'indicators/v1'))
+  check(page.includes('class="stock-tab-content"') && !back.length, `${tab}: removed copy is back on the stock page: ${back.join('、')}`)
+}
 for (const [tab, location] of [['走勢', '/stocks/TWSE/2884'], ['進出場', '/stocks/TWSE/2884?tab=research']] as const) {
   const page = renderAt(location, <App />, stockClient())
   const at = (needle: string) => page.indexOf(needle)

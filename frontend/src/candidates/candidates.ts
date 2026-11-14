@@ -22,7 +22,6 @@ export const CANDIDATE_COMPONENTS: ReadonlyArray<{ key: CandidateComponentKey; l
   { key: 'group', label: '族群' },
 ]
 
-export const CANDIDATE_DISCLAIMER = '評分只用於排序，不代表勝率或預期報酬'
 export const PARTIAL_NOTE = '部分分項無資料，以有資料的分項計分'
 export const NOT_COMPUTED_TEXT = '此交易日尚未產生候選清單'
 export const ZERO_REASON_TEXT: Record<string, string> = {
@@ -105,10 +104,10 @@ export function candidateChange(market: CandidateMarket | undefined): { text: st
   return { text: `${rounded > 0 ? '+' : ''}${percent.toFixed(2)}%`, tone: rounded > 0 ? 'up' : rounded < 0 ? 'down' : 'flat' }
 }
 
-// The latest run's earliest execution date is always null (it needs the next bar), so the sentence names no date.
+// The data date the conditions held on (Issue 729: the T+1 how-to-read clause and the score disclaimer left the page).
 export function candidateT1Text(tradingDate: string | null | undefined): string | null {
   const day = formatDate(tradingDate)
-  return day ? `${day} 收盤後條件成立，最早下一個交易日（T+1）才可研究進場。` : null
+  return day ? `${day} 收盤後條件成立` : null
 }
 
 // A note (done or pending) is inference to open; without one the entry only explains that none exists yet.
@@ -226,18 +225,15 @@ export function marketSourceLabel(source: string | null | undefined): string {
 
 export { exchangeLabel } from '../presentation'
 
-// Signal and group sources are rule versions; the news source is the LLM prompt version. It is a source, a fact, so
-// it carries no 推論 mark: the news component and its reason say 推論 (#661, DESIGN_SYSTEM §7).
+// The market and chip sources by name, and that the news direction is an AI reading; Issue 729 drops the rule and prompt
+// version ids (breakout_v3, hot_group_v1, news_v3), which are for developers. It is a source, a fact, so it carries no
+// 推論 mark: the news component and its reason say 推論 (#661, DESIGN_SYSTEM §7).
 export function candidateSourceText(item: CandidateItem): string {
-  const promptVersion = item.sources.news.split(':').pop()
-  const parts = [
-    `訊號 ${item.sources.signal.replace(/^analysis:/, '')}`,
+  return [
     `行情 ${marketSourceLabel(item.sources.market_bar)}`,
     `籌碼 ${marketSourceLabel(item.sources.chips)}`,
-    `族群 ${item.sources.groups}`,
-    `新聞方向 LLM 判讀 ${promptVersion || '版本未提供'}`,
-  ]
-  return parts.join(' · ')
+    '新聞方向 AI 判讀',
+  ].join(' · ')
 }
 
 // LLM note (#220): inference shown apart from the rule values above it.
@@ -252,18 +248,13 @@ export const NOTE_PARTS: ReadonlyArray<{ key: 'selection' | 'levels' | 'risks'; 
 ]
 
 export type CandidateNoteView =
-  | { kind: 'done'; parts: Array<{ key: string; label: string; text: string }>; meta: string }
+  | { kind: 'done'; parts: Array<{ key: string; label: string; text: string }>; meta: string | null }
   | { kind: 'empty'; text: string; meta: string | null }
 
-// A pending note was only attempted: no model, and its time is the attempt.
-export function candidateNoteMeta(note: CandidateLlmNote): string {
+// Only the time (Issue 729: the model and prompt version are for developers); a pending note's time is the attempt.
+export function candidateNoteMeta(note: CandidateLlmNote): string | null {
   const time = formatTaipeiInstant(note.generated_at)
-  const done = note.status === 'done'
-  return [
-    ...(done ? [`模型 ${note.model || '未記錄'}`] : []),
-    `提示版本 ${note.prompt_version}`,
-    ...(time ? [`${done ? '產生於' : '嘗試於'} ${time}`] : []),
-  ].join(' · ')
+  return time ? `${note.status === 'done' ? '產生於' : '嘗試於'} ${time}` : null
 }
 
 // A done note with every part shows its text; anything else is one fixed sentence.

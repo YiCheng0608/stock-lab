@@ -5,7 +5,6 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom/server'
 
 import {
-  CANDIDATE_DISCLAIMER,
   NOTE_DISCLAIMER,
   NOTE_MISSING_TEXT,
   NOTE_PENDING_TEXT,
@@ -32,7 +31,7 @@ import {
 import { SOX_GROUP_ID, completeItem, doneNote, listResponse, notComputedResponse, overnightUs, partialItem, zeroResponse } from './candidates.fixtures'
 import { OVERNIGHT_US_CLOSED, OVERNIGHT_US_PENDING, overnightUsView } from './candidates'
 import { PageDateContext } from '../components/pageDate'
-import { EVIDENCE_PATH, NO_EVIDENCE_LINK_LABEL, NO_EVIDENCE_TEXT } from '../strategy/evidence'
+import { removedCopyIn } from '../removedCopy.fixtures'
 import { CandidatesSection, PriceLadder, ScoreDetails, Sparkline, TodayCandidateList } from './CandidateViews'
 import { ROW_CLICK_IGNORED, SPARKLINE_HEIGHT, SPARKLINE_WIDTH, TERMINAL_MIN_WIDTH, candidateChartLevels, chartToggleLabel, ladderLabel, nextChartRank, priceLadder, rowClickToggles, sparkline } from './candidates'
 
@@ -94,7 +93,8 @@ for (const quality of ['insufficient_members', 'insufficient_data', null]) {
   check(!meta.includes('當日未排名'), 'row: partial group is not called unranked')
 }
 // #661 (P-a): the source line is a fact; the news component and its reason carry the one 推論 mark.
-check(candidateSourceText(completeItem()).endsWith('新聞方向 LLM 判讀 news_v1') && !candidateSourceText(completeItem()).includes('推論'), 'news source names the prompt version, without 推論')
+// Issue 729: the source line names the market and chip sources and the AI news reading, without rule or prompt versions.
+check(candidateSourceText(completeItem()) === '行情 臺灣證券交易所 · 籌碼 臺灣證券交易所 · 新聞方向 AI 判讀' && !candidateSourceText(completeItem()).includes('推論'), `news source without versions or 推論, got ${candidateSourceText(completeItem())}`)
 
 // ---- detail content under each today row (the table's levels and total are checked in today/today.test.tsx) ----
 const list = render(<CandidatesSection data={listResponse()} loading={false} error={null} />)
@@ -170,7 +170,7 @@ for (const [part, label, text] of [
   check(slice(note, `data-note-part="${part}"`, '</div>').includes(label) && slice(note, `data-note-part="${part}"`, '</div>').includes(text), `note part ${part}`)
 }
 check(note.includes(NOTE_DISCLAIMER), 'note says it is inference, not advice')
-check(note.includes('模型 claude-sonnet-5-5 · 提示版本 candidate_notes_v1 · 產生於 2026/10/16 19:05'), 'model, prompt version and Taipei time')
+check(note.includes('<p class="small-note ai-meta">產生於 2026/10/16 19:05</p>') && !note.includes('claude-sonnet') && !note.includes('candidate_notes_v1'), 'the note shows its Taipei time, without model or prompt version (Issue 729)')
 // Issue 510: the note opens the detail; the rule levels, the components and reasons, the date and sources come after it.
 check(first.indexOf('candidate-note') > 0 && first.indexOf('candidate-note') < first.indexOf('candidate-detail-levels') && first.indexOf('candidate-detail-levels') < first.indexOf('candidate-reasons') && first.indexOf('candidate-reasons') < first.indexOf('來源：'), 'note first, then the levels, the reasons, the date and sources')
 check(!note.includes('candidate-detail-levels') && !note.includes('level-stop'), 'rule levels stay outside the AI block')
@@ -178,10 +178,10 @@ const missing = slice(second, 'class="ai-inference candidate-note"', '</section>
 check(missing.includes('data-note-state="empty"') && missing.includes(NOTE_MISSING_TEXT) && !missing.includes('data-note-part') && !missing.includes('ai-meta'), 'a row without a note shows the fixed copy')
 const pending = candidateNoteView({ ...doneNote(), status: 'pending', model: null, selection: null, levels: null, risks: null })
 check(pending.kind === 'empty' && pending.text === NOTE_PENDING_TEXT, 'a pending note shows the fixed copy')
-check(pending.meta === '提示版本 candidate_notes_v1 · 嘗試於 2026/10/16 19:05', 'a pending note shows its version and attempt time, no model')
+check(pending.meta === '嘗試於 2026/10/16 19:05', 'a pending note shows its attempt time only')
 check(candidateNoteView({ ...doneNote(), risks: '' }).kind === 'empty', 'a done note missing a part is not shown half-filled')
 check(candidateNoteView(null).kind === 'empty' && candidateNoteView(undefined).kind === 'empty', 'null and missing notes use the fixed copy')
-check(candidateNoteMeta({ ...doneNote(), model: null, generated_at: '2026-10-16T11:05:00' }) === '模型 未記錄 · 提示版本 candidate_notes_v1', 'unknown model and a time without offset')
+check(candidateNoteMeta({ ...doneNote(), model: null, generated_at: '2026-10-16T11:05:00' }) === null, 'a time without offset shows no meta line')
 
 // ---- zero candidates and not computed ----
 for (const reason of ['no_actionable_signals', 'all_excluded'] as const) {
@@ -194,15 +194,15 @@ for (const reason of ['no_actionable_signals', 'all_excluded'] as const) {
 const notComputed = render(<CandidatesSection data={notComputedResponse()} loading={false} error={null} />)
 check(STRATEGY_LINK.exec(notComputed)?.[1] === '順勢籌碼型 · 策略說明 →', `尚無候選清單時頁首仍標出策略名稱, got ${STRATEGY_LINK.exec(notComputed)?.[1]}`)
 check(notComputed.includes(NOT_COMPUTED_TEXT) && notComputed.includes('尚無候選清單') && !notComputed.includes('date-badge'), 'not_computed copy without a date badge')
-check(notComputed.includes(CANDIDATE_DISCLAIMER), 'disclaimer stays on top for every state')
-// Issue 693: the head's last line says the rules have no evidence and links to the 研究結論 of /strategy, in every state.
-const EVIDENCE_LINE = `<p class="small-note candidate-evidence">${NO_EVIDENCE_TEXT} <a class="text-link" href="${EVIDENCE_PATH}">${NO_EVIDENCE_LINK_LABEL}</a></p>`
+// Issue 729: the head holds the title, date, count, the day the conditions held and the strategy link; no disclaimer,
+// how-to-read clause or research status in any state.
 for (const [label, markup] of [['list', list], ['zero', render(<CandidatesSection data={zeroResponse('no_actionable_signals')} loading={false} error={null} />)], ['not computed', notComputed]] as const) {
   const head = slice(markup, 'class="candidates-head"', '</div>')
-  check(count(markup, 'class="small-note candidate-evidence"') === 1 && head.includes(EVIDENCE_LINE), `${label}: one 現行規則尚無證據 line in the head, linked to ${EVIDENCE_PATH}`)
-  check(head.indexOf('candidates-strategy-link') < head.indexOf('candidate-evidence'), `${label}: the evidence line comes after the head's notes and strategy link`)
+  check(!removedCopyIn(markup).length, `${label}: removed copy is back: ${removedCopyIn(markup).join('、')}`)
+  check(!head.includes('candidate-disclaimer') && !head.includes('candidate-evidence'), `${label}: no disclaimer or evidence line in the head`)
 }
-check(EVIDENCE_PATH === '/strategy#strategy-evidence', 'the evidence link lands on the 研究結論 section')
+check(slice(list, 'class="candidates-head"', '</div>').includes('<p class="small-note candidate-notes"><span class="candidate-t1">2026/10/16 收盤後條件成立</span></p>'), 'list: the head says the day the conditions held, nothing more')
+check(!slice(notComputed, 'class="candidates-head"', '</div>').includes('candidate-notes'), 'not computed: no empty notes paragraph')
 
 // ---- loading and error ----
 check(render(<CandidatesSection data={undefined} loading error={null} />).includes('今日名單載入中…'), 'loading skeleton')
