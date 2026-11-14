@@ -14,7 +14,7 @@ import { industryBoard } from './themes/themeBoards.fixtures'
 import { TODAY_BOARD_LIMIT } from './themes/themeBoards'
 import { HoldingAlert } from './today/TodayViews'
 import { overviewBoth, riskActions } from './today/today.fixtures'
-import { EVIDENCE_CLOSING, EVIDENCE_FINDINGS, EVIDENCE_PATH, EVIDENCE_SECTION_ID, NO_EVIDENCE_LINK_LABEL, NO_EVIDENCE_TEXT, issueLabel } from './strategy/evidence'
+import { removedCopyIn } from './removedCopy.fixtures'
 import { planLink } from './tracking/tracking'
 import type { Dashboard } from './types'
 
@@ -55,10 +55,10 @@ check(JSON.stringify(nav) === JSON.stringify(expectedNav), `MAIN_NAV: ${JSON.str
   const footer = shell.slice(shell.indexOf('<footer'))
   const footerLinks = [...footer.matchAll(/<a [^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>/g)].map((match) => `${match[1]} ${match[2]}`)
   check(JSON.stringify(footerLinks) === JSON.stringify(['/system 系統']), `頁尾只有一個連結「系統」: ${JSON.stringify(footerLinks)}`)
-  // Issue 644: the footer names entries a reader can find (UI_COPY_SPEC §16), not the old 各頁資料說明.
+  // Issue 729: the footer keeps the data label 僅使用官方資料 and no flow or how-to-read note (UI_COPY_SPEC §16).
   const footerText = text(footer)
-  check(footerText.includes('僅使用官方資料 · 詳細來源見個股頁「資料來源」分頁、今日名單與大盤頁的「資料說明」'), `頁尾來源句: ${footerText}`)
-  check(!footerText.includes('各頁資料說明'), `頁尾不再寫「各頁資料說明」: ${footerText}`)
+  check(footerText.includes('僅使用官方資料'), `頁尾來源句: ${footerText}`)
+  for (const gone of ['T 日收盤訊號', '最早 T+1 執行', '詳細來源見', '資料說明', '各頁資料說明']) check(!footerText.includes(gone), `頁尾不再寫「${gone}」: ${footerText}`)
   const system = render('/system', <SystemPage />)
   check(system.includes('<h1>系統</h1>'), '/system 的頁面標題是「系統」')
   const listed = [...system.matchAll(/<a [^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>/g)].map((match) => `${match[1]} ${match[2]}`)
@@ -79,24 +79,23 @@ check(text(watch).split(WATCH_PURPOSE).length === 2 && !/<details class="details
 check(!watch.includes('找不到此頁'), '/watch 不是 404')
 const strategy = render('/strategy', <App />)
 check(strategy.includes('<h1>策略說明</h1>'), '/strategy 的頁面標題是「策略說明」')
-for (const heading of ['今日名單怎麼來', '突破型', '回踩型', '研究結論：現行規則尚無證據', '名單上的價位怎麼讀', '我的追蹤在做什麼']) {
-  check(text(strategy).includes(heading), `/strategy 缺「${heading}」`)
-}
-// 策略說明 names the strategy, then writes its thresholds and weights (#577; UI_COPY_SPEC §13; the numbers restate
-// backend/app/strategies/base.py COMMON_CONFIRMATIONS, breakout_v1.py, pullback_v1.py and domain.py CANDIDATE_SCORE_V6).
+// 策略說明 names the strategy, then writes its rules, thresholds and weights (#577; UI_COPY_SPEC §13; the numbers restate
+// backend/app/strategies/base.py COMMON_CONFIRMATIONS, breakout_v1.py, pullback_v1.py and domain.py CANDIDATE_SCORE_V7).
+// Issue 729 (decision 6881593041, plan 甲): the rules only; no how-to-read, research status, process or 不做的事.
 const strategyText = text(strategy)
-const block = strategy.slice(strategy.indexOf('data-strategy="trend_chips"'), strategy.indexOf('aria-labelledby="strategy-follow-title"'))
+const page = strategy.slice(strategy.indexOf('class="page strategy-page"'))
+const block = strategy.slice(strategy.indexOf('data-strategy="trend_chips"'), strategy.indexOf('</section>', strategy.indexOf('data-strategy="trend_chips"')))
 const blockText = text(block)
 check(strategy.includes('data-strategy="trend_chips"') && count(strategy, 'data-strategy=') === 1, '/strategy 有一個以策略名稱為標題的區塊（data-strategy），沒有切換或第二個策略區塊')
 check(strategyText.includes('目前策略：順勢籌碼型'), `/strategy 頁首寫「目前策略：順勢籌碼型」: ${strategyText.slice(0, 200)}`)
-check(/<h2 id="strategy-current-title"><button[^>]*data-term="trend_chips"[^>]*>順勢籌碼型<\/button><\/h2>/.test(block), '/strategy 的策略區塊標題是「順勢籌碼型」詞彙按鈕')
-// text() puts a space where a tag was (a term button, <code>); the paragraph is compared without spaces.
-const flat = (markup: string) => text(markup).replace(/\s+/g, '')
-const firstParagraph = flat(/<\/h2><p>([\s\S]*?)<\/p>/.exec(block)?.[1] ?? '')
-for (const part of ['順勢籌碼型', '只做多頭趨勢', '所屬族群比大盤強', '三大法人沒有明顯賣超', '融資沒有過熱', '大盤好壞目前不影響判斷', '突破型（breakout_v3）', '回踩型（pullback_v4）', '候選總分（candidate_score_v7）']) {
-  check(firstParagraph.includes(part.replace(/\s+/g, '')), `/strategy 策略區塊第一段缺「${part}」: ${firstParagraph}`)
-}
-check(strategyText.indexOf('順勢籌碼型') < strategyText.indexOf('今日名單怎麼來') && strategy.indexOf('data-strategy="trend_chips"') < strategy.indexOf('aria-labelledby="strategy-follow-title"'), '/strategy 先寫策略名稱與區塊，再寫「名單上的價位怎麼讀」')
+check(/<h2 id="strategy-current-title"><button[^>]*data-term="trend_chips"[^>]*>順勢籌碼型<\/button><\/h2><h3>/.test(block), '/strategy 的策略區塊標題是「順勢籌碼型」詞彙按鈕，其下直接是規則（沒有說明段）')
+const pageTitle = page.slice(page.indexOf('<section class="page-title">'), page.indexOf('</section>'))
+check(!pageTitle.includes('<p'), `/strategy 頁首只有眉標與標題，沒有說明句: ${text(pageTitle)}`)
+check(count(page, '<section') === 2, `/strategy 只有頁首與策略區塊兩個 section, got ${count(page, '<section')}`)
+check(JSON.stringify([...block.matchAll(/<h3>([^<]*)<\/h3>/g)].map((match) => match[1])) === JSON.stringify(['兩條成立規則：突破型與回踩型', '三個確認條件：兩條規則都要通過', '依評分排序：四個分項與權重']), `/strategy 策略區塊的三個小標: ${block.match(/<h3>[^<]*<\/h3>/g)?.join('')}`)
+// The two rule cards keep 成立條件 only.
+const facts = [...block.matchAll(/<dt>([^<]*)<\/dt>/g)].map((match) => match[1])
+check(JSON.stringify(facts) === JSON.stringify(['成立條件', '成立條件']), `/strategy 兩型的卡只寫成立條件: ${facts.join('、')}`)
 // The three confirmations, each with its threshold, in a table.
 const tables = [...block.matchAll(/<table[\s\S]*?<\/table>/g)].map((match) => match[0])
 check(tables.length === 2 && tables.every((table) => table.includes('class="action-table"')), `/strategy 策略區塊有兩張表（確認條件、評分權重），got ${tables.length}`)
@@ -114,26 +113,21 @@ check(JSON.stringify(weightRows.map(([name, weight]) => [name, weight])) === JSO
   `/strategy 評分權重表：技術 35%、籌碼 30%、族群 20%、新聞情緒（推論）15%，got ${JSON.stringify(weightRows.map(([name, weight]) => [name, weight]))}`)
 check(weightRows.reduce((sum, [, weight]) => sum + Number.parseInt(weight, 10), 0) === 100 && weightRows.every(([, , looks]) => looks.length > 10), '/strategy 權重合計 100%，每個分項都寫了看什麼')
 check(text(tables[1] ?? '').includes('權重') && text(tables[1] ?? '').includes('看什麼'), '/strategy 評分權重表表頭是「分項、權重、看什麼」')
-// Kept: the liquidity floor, the 20-name cap and the two rules' own numbers.
-for (const part of ['20 日平均成交量至少 1,000 張', '最多列 20 檔', '當天成交量至少是前 20 日均量的 1.2 倍', '約 −3%～+2%', '前 20 日均量的 0.6～1.2 倍', '有資料的分項權重合計要達 65%']) {
+// Kept: the two rules' own numbers and the score's 65% floor.
+for (const part of ['當天成交量至少是前 20 日均量的 1.2 倍', '約 −3%～+2%', '前 20 日均量的 0.6～1.2 倍', '任何一項資料不足就不列入，不會拿 0 補', '沒有資料的分項不以 0 計', '有資料的分項權重合計要達 65%']) {
   check(blockText.includes(part), `/strategy 策略區塊缺「${part}」`)
 }
 // Every term on the page opens a glossary entry; the page has no switch, "other strategies" or "coming soon" block.
 const strategyTerms = [...strategy.matchAll(/data-term="([^"]+)"/g)].map((match) => match[1])
-for (const id of ['trend_chips', 'candidate_score', 'percentile', 'breakout', 'pullback', 't_plus_1', 'entry_zone', 'support', 'target', 'rr']) check(strategyTerms.includes(id), `/strategy 的詞彙按鈕 ${id} 要開得了詞條（found ${strategyTerms.join('、')}）`)
-// Issue 693 (decision 6873621771): the head says the rules have no evidence and links to the 研究結論 section, which comes
-// before the strategy block; 名單上的價位怎麼讀 reads the prices without a promise of a gain.
-const evidenceNote = /<p class="warning-box strategy-evidence-note">([\s\S]*?)<\/p>/.exec(strategy)?.[1] ?? ''
-check(text(evidenceNote).trim() === `${NO_EVIDENCE_TEXT} ${NO_EVIDENCE_LINK_LABEL}` && evidenceNote.includes(`href="${EVIDENCE_PATH}"`), `/strategy 頁首有「現行規則尚無證據」標示並連到 ${EVIDENCE_PATH}: ${evidenceNote}`)
-check(strategy.indexOf('class="warning-box strategy-evidence-note"') < strategy.indexOf('</section>'), '/strategy 的標示在頁首區塊內')
-const evidenceSection = strategy.slice(strategy.indexOf(`id="${EVIDENCE_SECTION_ID}"`), strategy.indexOf('data-strategy="trend_chips"'))
-check(strategy.includes(`<section class="strategy-section" id="${EVIDENCE_SECTION_ID}"`) && strategy.indexOf(`id="${EVIDENCE_SECTION_ID}"`) < strategy.indexOf('data-strategy="trend_chips"'), '/strategy 的「研究結論」區塊有錨點、排在策略區塊之前')
-for (const finding of EVIDENCE_FINDINGS) check(text(evidenceSection).includes(`${finding.text}（${finding.issues.map(issueLabel).join('、')}）`), `/strategy 研究結論缺「${finding.text}」`)
-check(text(evidenceSection).includes(EVIDENCE_CLOSING) && text(evidenceSection).includes('前瞻驗證'), '/strategy 研究結論有結語，並寫新策略研究進行中')
-check(issueLabel(671) === '#'.concat('671'), 'issueLabel writes an Issue number')
-const follow = text(strategy.slice(strategy.indexOf('aria-labelledby="strategy-follow-title"'), strategy.indexOf('aria-labelledby="strategy-watch-title"')))
-check(!/照著做|獲利|可能賺|才進場/.test(follow) && follow.includes('不代表會到達') && follow.includes('比例不是預期報酬'), `/strategy 名單上的價位怎麼讀沒有獲利語氣: ${follow}`)
-check(!strategyText.includes('照著做之前') && strategyText.includes('看名單之前'), '/strategy 頁首說明句寫「看名單之前」')
+for (const id of ['trend_chips', 'candidate_score', 'percentile', 'breakout', 'pullback']) check(strategyTerms.includes(id), `/strategy 的詞彙按鈕 ${id} 要開得了詞條（found ${strategyTerms.join('、')}）`)
+// The removed blocks and sentences, by their words (the full text is in the Issue's AC-1 list).
+for (const gone of ['今日名單怎麼來', '名單上的價位怎麼讀', '我的追蹤在做什麼', '不做的事', '適合', '主要風險', '不是推薦', '看名單之前', 'breakout_v3', 'pullback_v4', 'candidate_score_v7', '勝率']) {
+  check(!strategyText.includes(gone), `/strategy 不再有「${gone}」`)
+}
+check(!removedCopyIn(page).length, `/strategy 出現已拿掉的字: ${removedCopyIn(page).join('、')}`)
+// The navigation line to 策略版本 and 用語表 stays, after the strategy block.
+const navLine = /<p class="small-note">規則版本與設定快照見 <a class="text-link" href="\/research\/strategies">策略版本<\/a>，用語見 <a class="text-link" href="\/glossary">用語表<\/a>。<\/p>/
+check(navLine.test(page) && page.search(navLine) > page.indexOf('data-strategy="trend_chips"'), '/strategy 最後一行連到策略版本與用語表')
 check(!/即將推出|敬請期待|其他策略|切換策略|稍後推出/.test(strategyText), '/strategy 不放切換、「其他策略」或「即將推出」')
 check(!render('/actions', <App />).includes('找不到此頁'), '/actions 不是 404')
 const redirect = (AppModule as Record<string, unknown>).watchRedirectPath as ((search: string, hash: string) => string) | undefined

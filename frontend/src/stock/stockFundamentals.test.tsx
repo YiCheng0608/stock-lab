@@ -3,8 +3,9 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import type { FundamentalSnapshot, MonthlyRevenue } from '../types'
 import { PageDateContext } from '../components/pageDate'
 import { StockFundamentalsPanel } from './StockFundamentalsPanel'
-import { CORRECTED, CORRECTION_HEADER, FUNDAMENTALS_TITLE, MONTHLY_NOTE, MONTHLY_TITLE, NOT_PROVIDED, correctionNote, fundamentalPeriodLabel, fundamentalsEmptyReason, isCorrected, monthlyEmptyReason, revenueMonthLabel, revenueText, yoyText } from './stockFundamentals'
+import { CORRECTED, CORRECTION_HEADER, FUNDAMENTALS_TITLE, MONTHLY_TITLE, NOT_PROVIDED, correctionNote, fundamentalPeriodLabel, fundamentalsEmptyReason, isCorrected, monthlyEmptyReason, revenueMonthLabel, revenueText, yoyText } from './stockFundamentals'
 import { STOCK_TABS, parseStockTab } from './stockTabs'
+import { removedCopyIn } from '../removedCopy.fixtures'
 
 // Standalone regression module for the stock page 「財務」 tab (Issue 528; UI_COPY_SPEC §8.2 財務分頁, DESIGN_SYSTEM §5
 // 個股財務表): the collected quarterly revenue and EPS, ROE 來源未提供 instead of 0, and one reason sentence when there is
@@ -37,9 +38,7 @@ check(filled.indexOf('2026 年第 3 季') < filled.indexOf('2026 年第 2 季'),
 check(!/>0(?:\.00)?</.test(filled), 'a missing ROE is never shown as 0')
 check(filledText.includes('年初至季底累計 營收（億元）') && filledText.includes('年初至季底累計 EPS（元）') && filled.includes('年初至季底累計</span><br/>營收（億元）') && filledText.includes('ROE（%）') && filledText.includes('可得日') && !filledText.includes('出表日 '), 'the headers say 年初至季底累計 and their units')
 check(filledText.includes('來源：公開資訊觀測站 季報'), 'the source line under the table (the source column is wide only)')
-check(filled.includes('<summary>說明</summary>') && filledText.includes('年初至季底累計') && filledText.includes('不是單季'), 'the note folds into 說明 and says the sums are year-to-date')
-// #529: the note names the three bases of 可得日 and says the research cutoff filters by it.
-check(['第一次收到的出表日期', '法定申報期限', '期限未到時是第一次抓到的日期', '研究截止日期以可得日篩選'].every((part) => filledText.includes(part)) && !filledText.includes('每次收集會更新'), `the note explains 可得日; got ${filledText}`)
+check(!filled.includes('<summary>說明</summary>') && !removedCopyIn(filled).length, `the quarterly card has no method note; the headers say 年初至季底累計 and the units (Issue 729): ${removedCopyIn(filled).join('、')}`)
 
 // A missing revenue or EPS (insurance companies report no 營業收入) reads 來源未提供 too.
 const insurer = text(panel([row({ revenue: null, eps: null, roe: 12.345 })]))
@@ -80,7 +79,7 @@ check(bothText.includes('2026 年 8 月 5,148.05 0.0 2026/09/10 公開資訊觀�
 check(both.indexOf('2026 年 9 月') < both.indexOf('2026 年 8 月'), 'months keep the API order, newest first')
 check(both.includes('資料 2026/09/30'), 'the monthly badge is the newest month end')
 check(bothText.includes('來源：公開資訊觀測站 營業收入統計表、公開資訊觀測站 月營收'), `the monthly source line; got ${bothText}`)
-check(['不是累計', '次月 10 日', '研究截止日期以可得日篩選', '月營收不納入策略或評分'].every((part) => MONTHLY_NOTE.includes(part)) && bothText.includes(MONTHLY_NOTE), 'the monthly 說明')
+check(!bothText.includes('說明') && !removedCopyIn(both).length, `the monthly card has no method note (Issue 729): ${removedCopyIn(both).join('、')}`)
 check(yoyText(null) === NOT_PROVIDED && text(tab([], [month({ yoy: null, revenue: null })])).includes(`2026 年 9 月 ${NOT_PROVIDED} ${NOT_PROVIDED}`), 'a blank yoy or revenue reads 來源未提供, never 0')
 check(revenueMonthLabel('2026-01') === '2026 年 1 月' && revenueMonthLabel('bad') === 'bad', 'month labels')
 

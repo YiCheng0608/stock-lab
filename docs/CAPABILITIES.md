@@ -81,8 +81,9 @@
 
 | 能力 | 現況 | 依據 | 規格 |
 |---|---|---|---|
-| scheduler 容器 | `worker.cli serve` 排程 `daily`／`news`／`us` 工作 | — | [排程](ops/SCHEDULING.md#scheduler-容器的排程serve) |
+| scheduler 容器 | `worker.cli serve` 排程 `daily`／`news`／`us`／`notify` 工作 | — | [排程](ops/SCHEDULING.md#scheduler-容器的排程serve) |
 | 看門狗與 run 記錄 | 看門狗與 `schedule_runs` run 記錄 | — | — |
+| 每日 Telegram 通知 | 每個交易日台北 08:45 以使用者自己的 Telegram bot 送一則純文字到 1 對 1 對話：前一個交易日的今日名單（代號、名稱、規則進場價或進場區、停損、目標）與隔夜美股四檔（資料日、來源），缺資料寫「無資料（原因）」；同一天不重送、網路錯誤與 5xx 重試一次、收盤後不補送，失敗或沒跑由看門狗在 #1 留言；沒設 `TELEGRAM_BOT_TOKEN`／`TELEGRAM_CHAT_ID` 時不送；`notify --dry-run` 印出當天內容 | [#728](https://github.com/YiCheng0608/stock-lab/issues/728) | [排程](ops/SCHEDULING.md#scheduler-容器的排程serve)、[設定](ops/SETUP.md#每日-telegram-通知) |
 | 維護模式 | 回補、回測期間的維護模式只停 daily 與 news | [#468](https://github.com/YiCheng0608/stock-lab/issues/468) | [維護模式](ops/SCHEDULING.md#維護模式) |
 
 ## 驗證、CI 與版本

@@ -834,6 +834,8 @@ class EnvExample(unittest.TestCase):
                 "GH_TOKEN",
                 "STOCK_SKIP_NEWS_LLM",
                 "STOCK_WAKE_TOKEN",
+                "TELEGRAM_BOT_TOKEN",
+                "TELEGRAM_CHAT_ID",
             ],
         )
         commented = set(re.findall(r"^# ([A-Z][A-Z0-9_]*)=", text, re.M))
