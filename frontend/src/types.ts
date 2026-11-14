@@ -1089,6 +1089,7 @@ export type NewsAi = {
   // #512: codes neither the master nor the newest emerging roster names; kept for audit, never shown.
   hidden_symbol_candidates?: Array<{ exchange: string; symbol: string; reason: string }>
   candidate_check_version?: string | null
+  // #676: [] since news_v4; news_v3 rows still carry theirs.  No page shows it.
   theme_candidates: Array<{ theme: string; reason: string | null }>
   impact_direction: 'positive' | 'negative' | 'mixed' | 'unknown' | string | null
   impact_scope: 'instrument' | 'theme' | 'market' | string | null

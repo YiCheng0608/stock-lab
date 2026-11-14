@@ -54,7 +54,7 @@
 |---|---|---|---|
 | 新聞收集 | 國內／國際財經新聞每 2 小時收集進 DB，以規則排除彩券與社會等非股市內容 | — | [新聞來源](DATA_SOURCES.md#新聞來源) |
 | 規則關聯 | 以規則關聯個股與 ETF，含簡稱、兩字名稱與去掉產業尾詞的全名（`rule:exact-name-code/v3`，卡片標規則版本）；兩字名稱的誤配以唯讀量測工具判讀 | [#451](https://github.com/YiCheng0608/stock-lab/issues/451)、[#461](https://github.com/YiCheng0608/stock-lab/issues/461) | [NEWS_SPEC §2](NEWS_SPEC.md#規則關聯) |
-| LLM 摘要與題材候選 | 以 LLM 批次（`claude -p`）產生摘要、關聯候選與方向判讀；摘要以提示約束忠於原文、數字不在原文的那則不顯示；題材候選要引用原文片段且以規則核對，沒依據的不保存 | [#413](https://github.com/YiCheng0608/stock-lab/issues/413) | — |
+| LLM 摘要與判讀 | 以 LLM 批次（`claude -p`）產生摘要、關聯候選與方向判讀；摘要以提示約束忠於原文、數字不在原文的那則不顯示；`news_v4` 起不產生題材候選（省輸出額度），`news_v3` 的舊結果照用、不重算，新聞詳情頁不顯示題材候選 | [#413](https://github.com/YiCheng0608/stock-lab/issues/413)、[#676](https://github.com/YiCheng0608/stock-lab/issues/676) | [NEWS_SPEC §5](NEWS_SPEC.md#5-ai-摘要與推論) |
 | 個股候選核實 | 讀取時以規則核對名稱或代號是否出現在原文，畫面分「規則核實：原文提及」與「推論」 | [#465](https://github.com/YiCheng0608/stock-lab/issues/465) | — |
 | 候選標示 | 候選一律寫代號與名稱；興櫃股的名稱取自 TPEx 興櫃名冊、標「（興櫃）」，已下市的標「（已下市）」，兩者都不連到個股頁；主檔與名冊都查不到的代號不顯示，原因留在 API | [#512](https://github.com/YiCheng0608/stock-lab/issues/512) | [興櫃名冊](DATA_SOURCES.md#興櫃名冊) |
 | 處理額度 | 每輪新舊各半額度，3 天窗口內的新聞在當天的各輪間處理完，一批漏回一則時其餘照寫 | [#450](https://github.com/YiCheng0608/stock-lab/issues/450) | — |

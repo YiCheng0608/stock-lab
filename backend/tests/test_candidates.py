@@ -47,7 +47,7 @@ from app.models import (
     ThemeGroup,
 )
 from worker import news_llm, pipeline
-from worker.candidates import _chip_inputs, compute_daily_candidates
+from worker.candidates import _chip_inputs, _news_inputs, compute_daily_candidates
 
 
 def _weekdays(end: date, count: int) -> list[date]:
@@ -250,7 +250,16 @@ def news_run(db, day=T, status="success"):
     db.flush()
 
 
-def news(db, symbols, direction, *, published=None, event_date=None, key=None):
+def news(
+    db,
+    symbols,
+    direction,
+    *,
+    published=None,
+    event_date=None,
+    key=None,
+    prompt_version=NEWS_PROMPT_VERSION,
+):
     published = published or datetime(2026, 9, 4, 2, 0)  # 10:00 Taipei on T
     item = NewsItem(
         canonical_key=key or f"news-{len(db.scalars(select(NewsItem)).all())}",
@@ -272,7 +281,7 @@ def news(db, symbols, direction, *, published=None, event_date=None, key=None):
         db.add(
             NewsLlmResult(
                 news_item_id=item.id,
-                prompt_version=NEWS_PROMPT_VERSION,
+                prompt_version=prompt_version,
                 llm_input_hash="x" * 64,
                 llm_status="done",
                 ai_impact_direction=direction,
@@ -433,12 +442,32 @@ def test_v7_differs_from_v6_only_in_its_name_and_pullback_strategy():
 
 
 def test_score_reads_the_news_prompt_version_the_news_llm_writes():
-    """A news prompt upgrade without a score version would leave news unscored."""
+    """A news prompt upgrade without a score version would leave news unscored.
 
-    assert (
-        CANDIDATE_SCORE["components"]["news_sentiment"]["llm_prompt_version"]
-        == news_llm.PROMPT_VERSION
-    )
+    The config may name an equivalent version: candidate_score_v7 names
+    news_v3 and reads news_v4, which only drops the theme candidates (#676).
+    """
+
+    configured = CANDIDATE_SCORE["components"]["news_sentiment"]["llm_prompt_version"]
+    assert news_llm.PROMPT_VERSION in news_llm.read_versions(configured)
+
+
+def test_news_v4_directions_count_under_the_news_v3_config(db):
+    # #676: after the switch the news LLM writes news_v4 only.
+    assert NEWS_PROMPT_VERSION == "news_v3"
+    instrument = stock(db, "1101")
+    news_run(db)
+    news(db, ["1101"], "positive")
+    news(db, ["1101"], "negative", prompt_version="news_v4")
+    news(db, ["1101"], "positive", prompt_version="news_v2")
+
+    stats, summary = _news_inputs(db, T, [instrument], CANDIDATE_SCORE)
+
+    counts = stats[instrument.id]
+    assert (counts["linked"], counts["positive"], counts["negative"]) == (3, 1, 1)
+    assert counts["unscored"] == 1  # news_v2 is not read
+    assert summary["llm_scored_items"] == 2
+    assert summary["llm_prompt_version"] == "news_v3"
 
 
 def test_weighted_mean_renormalizes_without_filling_zero():
