@@ -61,6 +61,8 @@ SCRIPTS = (
     "commit.sh",
     "comment.sh",
     "take_over.sh",
+    # #710: the context of the coordinator's last call, and the cost report
+    "session_cost.py",
 )
 REPO_ID = "repo-1"
 
@@ -513,7 +515,11 @@ class Harness:
         base = {
             k: v
             for k, v in os.environ.items()
-            if not k.startswith(("STOCK_", "ORCA_", "CLAUDE_CODE_"))
+            # CLAUDE_CONFIG_DIR (#710): patrol.sh finds the transcript under it, and only
+            # a sandbox one may be read.
+            if not k.startswith(
+                ("STOCK_", "ORCA_", "CLAUDE_CODE_", "CLAUDE_CONFIG_DIR")
+            )
         }
         base.update(
             PATH=str(self.bin) + os.pathsep + base.get("PATH", ""),
@@ -2933,7 +2939,47 @@ def patrol(h: Harness) -> Harness:
         "2026-10-25T11:45:00Z schedules_ok | 排程無異常\n", encoding="utf-8"
     )
     h.answer("gh_questions", _threads([]))
+    # #710: a transcript below the context limit, so the run is as before it.
+    _transcript(h, [62_094, 100_000])
     return h
+
+
+def _call_row(context: int, **extra) -> dict:
+    """An assistant row of a Claude Code transcript whose call had this context."""
+    usage = {
+        "input_tokens": 4,
+        "cache_read_input_tokens": context - 4 - 1_000,
+        "cache_creation_input_tokens": 1_000,
+        "output_tokens": 200,
+    }
+    return {
+        "type": "assistant",
+        "isSidechain": False,
+        "message": {"id": f"msg-{context}", "model": "claude-x", "usage": usage},
+        **extra,
+    }
+
+
+def _transcript(
+    h: Harness,
+    contexts: list[int],
+    session: str = "sess-1",
+    under: Path | None = None,
+    tail: str = "",
+    project: str = "C--proj",
+) -> Path:
+    """sess-1's transcript under $HOME/.claude/projects (or UNDER/projects), one call
+    per context, then TAIL as written (a line being written has no newline)."""
+    path = (under or h.home / ".claude") / "projects" / project / f"{session}.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rows = [{"type": "user", "message": {"content": "hi"}}]
+    rows += [_call_row(c) for c in contexts]
+    path.write_text(
+        "".join(json.dumps(r) + "\n" for r in rows) + tail,
+        encoding="utf-8",
+        newline="\n",
+    )
+    return path
 
 
 def _files(root: Path) -> dict[str, bytes]:
@@ -3354,6 +3400,233 @@ def test_patrol_ends_with_the_handoff_condition_and_exit_10(
     assert piped.returncode == (10 if due else 0), piped.stdout + piped.stderr
     assert ("已達換手條件" in piped.stdout) is due
     assert piped.stdout.count("\n") == 1
+
+
+# --- #710: the context limit -------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("context", "limit", "due"),
+    [
+        (100_000, None, False),
+        (450_000, None, False),
+        (450_001, None, True),
+        (793_547, None, True),
+        (300_000, "250000", True),
+        (500_000, "600000", False),
+    ],
+)
+def test_patrol_hands_off_above_the_context_limit(
+    patrol: Harness, context: int, limit: str | None, due: bool
+) -> None:
+    """AC-1: the context of the session's last call above the limit (450K, or
+    STOCK_CONTEXT_LIMIT) is a handoff condition beside 2 compactions: the header says
+    how far it is, the last line says so and the exit code is 10; at or below, as before."""
+    path = _transcript(patrol, [62_094, context - 50_000, context])
+    env = {"STOCK_CONTEXT_LIMIT": limit} if limit else {}
+    result = patrol.run(
+        "patrol.sh", "--session-id", "sess-1", "--terminal", "term_coord", **env
+    )
+    out = result.stdout
+    assert result.returncode == (10 if due else 0), out + result.stderr
+    shown = int(limit or 450_000)
+    header = next(line for line in out.splitlines() if line.startswith("context："))
+    assert header.startswith(
+        f"context：{context}（門檻 {shown}，{round(100 * context / shown)}%）"
+    ), header
+    assert path.as_posix() in header
+    assert ("已達換手條件" in header) is due
+    # Beside the compactions line, in the header.
+    lines = out.splitlines()
+    assert lines[lines.index(header) - 1] == "壓縮 0 次"
+    last = out.strip().splitlines()[-1]
+    assert ("已達換手條件" in last) is due
+    assert (f"context {context} 超過門檻 {shown}" in last) is due
+    assert "未處理事件：3 個（seq 1～3）" in out
+    assert "其餘依手冊" in out
+
+
+def test_patrol_names_both_handoff_conditions(patrol: Harness) -> None:
+    logs = patrol.data / "logs"
+    (logs / "compactions" / "sess-1.count").write_text("2\n", encoding="utf-8")
+    _transcript(patrol, [500_000])
+    result = _patrol(patrol)
+    assert result.returncode == 10, result.stdout + result.stderr
+    last = result.stdout.strip().splitlines()[-1]
+    assert "已壓縮 2 次（門檻 2 次）、context 500000 超過門檻 450000" in last
+    assert "自動換手機制換手" in last
+
+
+def test_patrol_reads_the_last_call_of_the_newest_transcript(patrol: Harness) -> None:
+    """The last assistant row with a usage counts: not a sidechain's, not <synthetic>,
+    not a line still being written; CLAUDE_CONFIG_DIR before $HOME/.claude, and of
+    several files for the id the last modified one."""
+    config = patrol.root / "orca-profile"
+    tail = (
+        json.dumps(_call_row(900_000, isSidechain=True))
+        + "\n"
+        + json.dumps(
+            {
+                "type": "assistant",
+                "message": {"model": "<synthetic>", "usage": {"input_tokens": 0}},
+            }
+        )
+        + "\n"
+        + '{"type":"assistant","message":{"usage":{"input_tokens":99'
+    )
+    newest = _transcript(patrol, [62_094, 400_000], under=config, tail=tail)
+    old = _transcript(patrol, [700_000], under=config, project="C--old")
+    os.utime(old, (1, 1))
+    other = _transcript(patrol, [800_000], session="sess-10", under=config)
+    os.utime(other, (2**31, 2**31))
+    home = _transcript(patrol, [600_000])
+    os.utime(home, (1, 1))
+    result = patrol.run(
+        "patrol.sh",
+        "--session-id",
+        "sess-1",
+        "--terminal",
+        "term_coord",
+        CLAUDE_CONFIG_DIR=config.as_posix(),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (
+        f"context：400000（門檻 450000，89%）（{newest.as_posix()}）" in result.stdout
+    )
+    # --transcript names the file and wins.
+    result = _patrol(patrol, "--transcript", home.as_posix())
+    assert result.returncode == 10, result.stdout + result.stderr
+    assert (
+        f"context：600000（門檻 450000，133%）：已達換手條件（{home.as_posix()}）"
+        in (result.stdout)
+    )
+
+
+@pytest.mark.parametrize("why", ["missing", "no_usage", "not_json"])
+def test_patrol_warns_when_the_transcript_cannot_be_read(
+    patrol: Harness, why: str
+) -> None:
+    """#710 決定 6877357244: a transcript not found or not understood is one warning
+    line; the exit code and the rest are as before. From the 3rd patrol in a row the
+    line before the last says so; a patrol that reads it resets the count."""
+    path = patrol.home / ".claude" / "projects" / "C--proj" / "sess-1.jsonl"
+    if why == "missing":
+        path.unlink()
+        reason = "找不到紀錄檔"
+    else:
+        path.write_text(
+            '{"type":"user"}\n' if why == "no_usage" else "not json\n",
+            encoding="utf-8",
+        )
+        reason = "沒有 usage 列"
+    misses = patrol.data / "logs" / "compactions" / "sess-1.context-misses"
+    for n in (1, 2, 3, 4):
+        result = _patrol(patrol)
+        out = result.stdout
+        assert result.returncode == 0, out + result.stderr
+        warning = next(
+            line for line in out.splitlines() if line.startswith("context：")
+        )
+        assert warning.startswith(f"context：未讀到（{reason}"), warning
+        assert f"連續 {n} 次" in warning
+        assert misses.read_text(encoding="utf-8") == f"{n}\n"
+        assert "未處理事件：3 個（seq 1～3）" in out
+        lines = out.strip().splitlines()
+        assert (f"context 已連續 {n} 次讀不到" in lines[-1]) is (n >= 3)
+    # With 2 compactions the handoff line stays the last and the warning is before it.
+    (patrol.data / "logs" / "compactions" / "sess-1.count").write_text("2\n")
+    lines = _patrol(patrol).stdout.strip().splitlines()
+    assert "context 已連續 5 次讀不到" in lines[-2]
+    assert "已達換手條件" in lines[-1]
+    _transcript(patrol, [100_000])
+    result = _patrol(patrol)
+    assert "context：100000（門檻 450000，22%）" in result.stdout
+    assert not misses.exists()
+
+
+@pytest.mark.parametrize("limit", ["0", "45萬", "450k", "-1"])
+def test_patrol_refuses_a_bad_context_limit(patrol: Harness, limit: str) -> None:
+    result = patrol.run(
+        "patrol.sh",
+        "--session-id",
+        "sess-1",
+        "--terminal",
+        "term_coord",
+        STOCK_CONTEXT_LIMIT=limit,
+    )
+    assert result.returncode == 64, result.stdout + result.stderr
+    assert "STOCK_CONTEXT_LIMIT" in result.stderr
+
+
+def test_session_cost_report_counts_cost_wakes_and_actions(h: Harness) -> None:
+    """AC-3 (#708 AC-7): cost units input 1, cache read 0.1, cache write 2, output 5;
+    a wake with no outward command counts as one with no action; a message written as
+    two rows counts once, with the last row's usage."""
+
+    def call(mid: str, cr: int, out: int = 100, command: str | None = None) -> dict:
+        content = (
+            [{"type": "tool_use", "id": mid, "input": {"command": command}}]
+            if command
+            else []
+        )
+        return {
+            "type": "assistant",
+            "message": {
+                "id": mid,
+                "model": "claude-x",
+                "content": content,
+                "usage": {
+                    "input_tokens": 10,
+                    "cache_read_input_tokens": cr,
+                    "cache_creation_input_tokens": 1_000,
+                    "output_tokens": out,
+                },
+            },
+        }
+
+    def prompt(text: str) -> dict:
+        return {"type": "user", "message": {"content": text}}
+
+    wake = "有 2 個事件，請處理佇列：bash tools/ops/patrol.sh（處理完以 --done 標記）"
+    rows = [
+        prompt("你是 stock-lab 的統籌"),
+        call("m1", 60_000),
+        prompt(wake),
+        call("m2", 100_000, command="bash tools/ops/patrol.sh"),
+        prompt(wake),
+        call("m3", 200_000, out=1, command="bash tools/ops/comment.sh 1 x"),
+        call("m3", 200_000, out=300, command="bash tools/ops/comment.sh 1 x"),
+        {
+            "type": "system",
+            "subtype": "compact_boundary",
+            "timestamp": "T1",
+            "compactMetadata": {"preTokens": 201_010},
+        },
+        call("side", 900_000) | {"isSidechain": True},
+    ]
+    path = h.root / "t.jsonl"
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    result = h.run_bash(
+        '"$STOCK_PYTHON" -X utf8 "$1" report "$2"',
+        (h.ops / "session_cost.py").as_posix(),
+        path.as_posix(),
+    )
+    out = result.stdout
+    assert result.returncode == 0, out + result.stderr
+
+    def units(cr: int, out: int) -> float:
+        return 10 + 0.1 * cr + 2 * 1_000 + 5 * out
+
+    total = units(60_000, 100) + units(100_000, 100) + units(200_000, 300)
+    assert f"總成本單位：{total:,.0f}（呼叫 3 次" in out
+    assert "第 1 次呼叫 61,010、最大 201,010、最後 201,010" in out
+    wakes = units(100_000, 100) + units(200_000, 300)
+    assert f"喚醒：2 次、平均成本 {wakes / 2:,.0f}／次、平均呼叫 1.0 次" in out
+    quiet = units(100_000, 100)
+    assert (
+        f"沒有對外動作的喚醒：1／2（50.0%）、佔總成本 {100 * quiet / total:.1f}%" in out
+    )
+    assert "壓縮：1 次；T1 壓縮前 201,010" in out
 
 
 def _commit(h: Harness, *args: str, session: str = "sess-old"):
