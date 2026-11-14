@@ -61,7 +61,7 @@ V1 以 ROADMAP V1 基線的七個 gate（V1-G1～G7）承接，每個 gate 由�
 3. **實作**：只改任務需要的檔案；共用檔案（如 `frontend/src/App.tsx`、`backend/app/api.py`）改動前先看是否有其他進行中的任務也在改，有就在 Issue 協調。放 token 的 `.env` 由使用者自己建，agent 只看 `.env.example`（key 與說明寫在那裡）；`.env` 不讀、不搜、不複製、不改，要它的值時請使用者執行。這個 hook 防的是 agent 不小心讀到，防不了刻意繞過（例如先寫一支會讀 `.env` 的腳本再執行），真 token 放進 `.env` 前要知道這點。hook 對 Bash／PowerShell 從寬擋：命令字串提到 `.env` 路徑就擋，連 commit 訊息與 heredoc 裡的字也算，要搜這段文字改用 Grep 工具（pattern 不檢查）、commit 訊息改用 `-F <檔案>`。compose 會把 env file 的值展開進容器的環境變數，所以 hook 也擋會印出它們的 docker 命令（`docker compose config`、`docker inspect`、`docker run`／`exec` 等；放行與擋下的旗標只寫在 [GUARDRAILS](GUARDRAILS.md) 不讀 `.env` 那一列，#360）。以變數名印出（`sh -c 'echo $TOKEN'`）的寫法擋不到。任務自己 build 的 image 用 `t<issue>` tag，compose project 名稱用 `t<issue>` 或 `task-<issue>` 開頭，結案時才會被清掉（第 6 步）。工程師與 review session 不跑 `docker image prune`、`docker builder prune`、`docker volume prune`、`docker system prune`：dangling image 與 build cache 是所有任務共用的，只由 `close_task.sh` 清。
 4. **本機檢查**：見下節；全部通過才開 PR。
 5. **PR**：套 [PR 模板](templates/pull-request.md)（`gh pr create --body-file` 不會自動帶入模板，先複製模板再填），`Closes #<issue>`，附驗證結果與截圖（前端）。看板設待整合。
-6. **Review 與合併**：見下節。合併後 master CI 綠 → Issue 自動關閉、看板完成（PR 進[長期整合分支](#長期整合分支)時 GitHub 不自動關，由 `close_task.sh` 關）；遠端 branch 由 GitHub 自動刪（repo 設定 `delete_branch_on_merge`）；統籌在 `master` 管理 checkout 跑 `bash tools/ops/close_task.sh <issue> [--extra-dir <PR 本文寫的 worktree 外暫存目錄>]...`（同一 Issue 有多個 `task/<issue>-*` worktree 時加 `--slug <slug>`），再刷新程式索引。[`close_task.sh`](../tools/ops/close_task.sh) 先確認 PR 已合併、PR 目標分支（`baseRefName`：master 或[長期整合分支](#長期整合分支)）上它的 merge commit CI 綠（該分支最新一次也不是紅）、本地 branch 已在 `origin/<目標分支>` 裡、worktree 沒有未 commit 的改動、terminal 都閒置，才關 terminal、`orca worktree rm --force`＋`git worktree prune`（殘留目錄一併刪）、刪本地 branch、刪暫存目錄（裡面的 junction／symlink 先拆，不跟隨）、並刪該任務各工程師 session 的 Claude Code scratchpad（#472，規則見 `close_task.sh` 開頭與 GUARDRAILS）、清該任務的 Docker 資源、看板設完成並讀回；任一前提不符就不刪任何東西並非 0 結束。repo 與各 worktree、`$HOME`、磁碟根、`stock-lab-data` 與 `STOCK_DATA_DIR` 不能當 `--extra-dir`；路徑中間經過 junction／symlink 或用了 8.3 短檔名也拒絕，請給實際路徑。Issue 有 `統籌承諾：` 留言時依承諾的順序與時點清理。Docker 資源只刪名稱屬於這個任務（`t<issue>`／`task-<issue>`）的，刪除範圍、有容器在跑時、`prune` 與 docker 無回應時的處理見 [GUARDRAILS](GUARDRAILS.md) 的「結案腳本刪任務的 Docker 資源」列與 [`coordinator_lib.sh`](../tools/ops/coordinator_lib.sh) 的 `docker_cleanup`（#360）。
+6. **Review 與合併**：見下節。合併後 master CI 綠 → Issue 自動關閉、看板完成（PR 進[長期整合分支](#長期整合分支)時 GitHub 不自動關，由 `close_task.sh` 關）；遠端 branch 由 GitHub 自動刪（repo 設定 `delete_branch_on_merge`）；統籌在 `master` 管理 checkout 跑 `bash tools/ops/close_task.sh <issue> [--extra-dir <PR 本文寫的 worktree 外暫存目錄>]...`（同一 Issue 有多個 `task/<issue>-*` worktree 時加 `--slug <slug>`）；清理後它把管理 checkout 快轉到新 master 並重建、驗證[程式索引](#程式索引)，不另外手動刷新。[`close_task.sh`](../tools/ops/close_task.sh) 先確認 PR 已合併、PR 目標分支（`baseRefName`：master 或[長期整合分支](#長期整合分支)）上它的 merge commit CI 綠（該分支最新一次也不是紅）、本地 branch 已在 `origin/<目標分支>` 裡、worktree 沒有未 commit 的改動、terminal 都閒置，才關 terminal、`orca worktree rm --force`＋`git worktree prune`（殘留目錄一併刪）、刪本地 branch、刪暫存目錄（裡面的 junction／symlink 先拆，不跟隨）、並刪該任務各工程師 session 的 Claude Code scratchpad（#472，規則見 `close_task.sh` 開頭與 GUARDRAILS）、清該任務的 Docker 資源、看板設完成並讀回；任一前提不符就不刪任何東西並非 0 結束。repo 與各 worktree、`$HOME`、磁碟根、`stock-lab-data` 與 `STOCK_DATA_DIR` 不能當 `--extra-dir`；路徑中間經過 junction／symlink 或用了 8.3 短檔名也拒絕，請給實際路徑。Issue 有 `統籌承諾：` 留言時依承諾的順序與時點清理。Docker 資源只刪名稱屬於這個任務（`t<issue>`／`task-<issue>`）的，刪除範圍、有容器在跑時、`prune` 與 docker 無回應時的處理見 [GUARDRAILS](GUARDRAILS.md) 的「結案腳本刪任務的 Docker 資源」列與 [`coordinator_lib.sh`](../tools/ops/coordinator_lib.sh) 的 `docker_cleanup`（#360）。
    結案時對照本次 review 留言、CI 失敗與使用者糾正，用一次 `gh search issues "<關鍵字>" --repo YiCheng0608/stock-lab --match comments` 查同關鍵字的「第一次」留言（留言格式見 [encode-lesson skill](../.claude/skills/encode-lesson/SKILL.md) 第 1 步），不用 `--paginate` 翻全部留言；有重複就是第二次，另建一張 `[任務]` 把它編成會失敗的檢查（[#228](https://github.com/YiCheng0608/stock-lab/issues/228)），並更新 [GUARDRAILS](GUARDRAILS.md) 對照表。
    每個 gate 收尾、或每合併約 3 個 PR 後，統籌在以最新 `origin/master` 為底的 worktree 跑一次 [verify-stock-lab 真資料模式](../.claude/skills/verify-stock-lab/SKILL.md#真資料模式)（五頁全套，正式 DB 唯讀副本），結果貼在該 gate 的 Issue。verify（CI 或真資料）抓到的 bug，修的同一個 PR 要加一條會先失敗的檢查（測試或 verify 檢查項），不能只修不加。worktree 的 branch 命名 `task/<貼結果的 Issue>-...`（否則 Evidence 不推 `pr-assets`），並在該 worktree 另開 session 執行（skill 拒絕在 `master` 分支跑）。發佈與部署（tag、`deploy.sh`）見 [RELEASE](RELEASE.md)；V1 G7 窗口用過的發佈隔離已結束，見 [RELEASE 的 V1 發佈隔離（歷史）](RELEASE.md#v1-發佈隔離歷史)。
    每個 gate 收尾時，統籌另跑一次 DB 深度審查（[#391](https://github.com/YiCheng0608/stock-lab/issues/391)）：先照 [LOCAL](ops/LOCAL.md#取正式-db-的唯讀副本) 的標準命令（`tools/ops/copy_db.py`）取正式 DB 的唯讀副本，在以最新 `origin/master` 為底的 worktree 跑 `python tools/audit/audit.py --db <副本> --out <目錄>`，把 `<目錄>/summary.md` 貼在該 gate 的 Issue。
@@ -158,4 +158,26 @@ export MSYS_NO_PATHCONV=1   # 否則 Git Bash 會把 -v 的容器路徑改寫成
 
 ## 程式索引
 
-每個 worktree 用 codebase-memory 建索引（project 名稱含 worktree 名）；合併後統籌刷新 master 索引並刪任務索引。MCP 斷線用同引擎 CLI（[LOCAL](ops/LOCAL.md#工具)）`<codebase-memory CLI> cli --json <tool>`。索引只是查找工具，不當驗收證據。
+codebase-memory 只有一份索引：master 管理 checkout 的 project `C-Users-YiCheng-Desktop-taiwan-stock-research`（#704）。工程師查程式用這個 project，不對自己的 worktree 跑 `index_repository`；自己改過的檔以 worktree 內的實際檔案為準。MCP 斷線用同引擎 CLI（[LOCAL](ops/LOCAL.md#工具)）`<codebase-memory CLI> cli --json <tool>`。索引只是查找工具，不當驗收證據。
+
+索引由腳本維持，不靠人記得：
+
+- [`close_task.sh`](../tools/ops/close_task.sh)（PR 進 master、不是 `--no-board`）：清理做完後，把管理 checkout 以 `git merge --ff-only origin/master` 更新（checkout 要在 master、已追蹤的檔沒有未 commit 的改動），重建索引，再驗證這次 merge commit 改到的檔。任一步失敗是 exit 3，`error` 以「管理 checkout 更新：」或「索引步驟：」開頭，已做的清理列在 `steps`，看板不動；修好後加 `--pr <n>` 重跑。
+- [`dispatch.sh`](../tools/ops/dispatch.sh)：建 worktree 之前，從 `origin/master`（預設）派工時先把管理 checkout 快轉到剛 fetch 的 `origin/master`（條件同上；不符合就 exit 1），再驗證最近 5 次合併改到的檔；過期先重建一次，仍過期就 exit 1，什麼都不建、不送。所以「合併後、`close_task.sh` 之前就派下一張」時，索引也會跟上新 worktree 的起點。`--base` 是長期整合分支時不快轉，索引只對得上 master。
+- 兩支腳本整份包在一個 `{ … }` 區塊裡：bash 先讀完整份檔才執行，快轉改到腳本自己時不會讀到新檔的半截（#704 review）。
+- 一般重建後仍過期、而且原因全是下表的 `mtime` 時，再強制重建一次（`delete_project`＋`index_repository`，master 約 11 秒，這段時間查不到這個 project），之後還過期就失敗。
+- CLI 不存在、逾時（預設 300 秒）、輸出解析不出 JSON、回 `isError`，都算失敗並印出原因，不當成沒過期。CLI 路徑、project 名稱、逾時與「最近幾次合併」在 [`coordinator_lib.sh`](../tools/ops/coordinator_lib.sh) 的 `cbm_*`，可用 `STOCK_CBM_CLI`、`STOCK_CBM_PROJECT`、`STOCK_CBM_TIMEOUT`、`STOCK_CBM_RECENT_MERGES` 覆寫。
+
+判定（`coordinator_json.py` 的 `index_verdict`；引擎的回答來自 `check_index_coverage` 與 `query_graph` 的 `MATCH (f:File) RETURN f.file_path`，`indexed_at` 是引擎回的時間，不是腳本自己寫的戳記）：
+
+| 引擎回什麼 | 判定 |
+| --- | --- |
+| 檔案已不在 checkout（這次刪掉的） | 不列入（`deleted`） |
+| `status` 是 `excluded`（`.gitignore`、`.cbmignore`、忽略的副檔名） | 不列入（`excluded`） |
+| 檔案在，`freshness` 卻是 `missing` | 過期（`missing`） |
+| 引擎有收這個檔（在 `File` 清單裡），檔案 mtime 晚於 `indexed_at` | 過期（`mtime`）；不晚於就通過 |
+| 引擎沒收這個檔，但有收同副檔名（沒副檔名就比檔名，如 `Dockerfile`）的其他檔 | 過期（`not_tracked`：新檔沒進索引） |
+| 引擎沒收這個檔，也沒收任何同類型的檔（例如 `.txt`） | 不列入（`unsupported`） |
+| 回答沒有 `indexed_at` 或解析不出時間、`File` 清單是空的或列數對不上、少回某個路徑 | 失敗 |
+
+`freshness` 的 `metadata_changed` 不當判定依據：2026-11-14 實測引擎 0.10.8（Windows）對剛建好、沒改過的檔也回 `metadata_changed`（[#704 提問](https://github.com/YiCheng0608/stock-lab/issues/704#issuecomment-6874992164)）；同版引擎在只有 mtime 變、或只改了它不收的檔時，重建不更新 `indexed_at` 與它記錄的 mtime（[#704 回報](https://github.com/YiCheng0608/stock-lab/issues/704#issuecomment-6875050095)），所以才有強制重建。引擎修好、`metadata_changed` 只在檔案真的變了時才回之後，可以改回直接看 `freshness`。

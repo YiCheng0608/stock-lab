@@ -59,5 +59,6 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none \
 | 名稱 | 路徑 |
 | --- | --- |
 | 容器外的 Python（PATH 上的 python 是 Store stub） | `C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe` |
-| codebase-memory 同引擎 CLI | `C:/Users/YiCheng/.local/bin/codebase-memory-mcp.cmd` |
+| codebase-memory 同引擎 CLI（`close_task.sh`／`dispatch.sh` 預設用它，`STOCK_CBM_CLI` 可覆寫；[程式索引](../WORKFLOW.md#程式索引)） | `C:/Users/YiCheng/.local/bin/codebase-memory-mcp.cmd` |
+| master 索引的 project | `C-Users-YiCheng-Desktop-taiwan-stock-research`（root 是管理 checkout） |
 | worktree 外暫存目錄 | `C:/Users/YiCheng/t<issue>` |
