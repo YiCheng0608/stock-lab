@@ -185,7 +185,8 @@ run_waker() { # run_waker TERMINAL TEXT: the waker's exit code (124 when it hung
   local runner=()
   case "$waker" in *.sh) runner=(bash) ;; esac
   [ "$orca_exe" = none ] || export ORCA_EXE="$orca_exe"
-  # Its orca calls end within the call timeout each: a wait, then a send.
+  # Its orca calls end within the call timeout each, two at most: a wait, then a send
+  # (idle) or a show (not idle, to tell a permission or trust menu, #720).
   WAKE_WAIT_MS="$wake_wait_ms" MONITOR_CALL_TIMEOUT="$call_timeout" STOCK_PYTHON="$python" \
     timeout -k 10 $((2 * call_timeout + 30)) "${runner[@]}" "$waker" "$@" >/dev/null 2>&1
 }

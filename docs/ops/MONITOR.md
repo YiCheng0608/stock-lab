@@ -28,7 +28,7 @@
   - 停住期間不留「請開統籌」。
   - 恢復：下一筆喚醒不是 `prompt_blocked`（`sent`、`not_idle`），或心跳換了 terminal、統籌在最後一筆之後寫了心跳，這次停住就結束。不留恢復通知；之後再停住從新的第一筆起算，所以會再留一則。
   - 只在佇列有待處理事件、monitor 會去喚醒時才偵測得到。沒有事件在等時，停住不會誤事。
-  - 判定在 [`event_queue.py`](../../tools/ops/event_queue.py) 的 `prompt_blocked_since`／`prompt_blocked_comment`。
+  - 判定在 [`event_queue.py`](../../tools/ops/event_queue.py) 的 `prompt_blocked_stop`／`prompt_blocked_comment`。
 - **請開統籌**：佇列有事件已 60 分鐘、期間統籌心跳都沒更新時，在 #1 留言「待使用者：請開統籌」，同一心跳只留一則（`stale` 列）；不開 session。
 - **自身狀態**：每輪寫 `logs/monitor-heartbeat.json`、把 daily／news 最新日誌的 `end` 列與 `watchdog.log` 最後一列記進 `logs/monitor-state.json`（`patrol.sh` 印這份，不自己讀日誌，#338），並在 `logs/monitor.log` 記一列（UTC 時間、`poll`、`gh_calls`、新事件與未處理數、喚醒結果）；心跳另記 gh 連續失敗的輪數、從何時起與最後的錯誤（失敗那次呼叫自己的 stderr 最後一行；逾時記 `timeout`；沒有輸出記 `exit <碼>`；`patrol.sh` 也印出）。看門狗在心跳超過 10 分鐘或 gh 連續失敗 10 輪時留言（[排程看門狗](WATCHDOG.md)）。同時只跑一個（`logs/monitor.lock/`，內容是持有者的 pid、token 與主機名稱；同一主機時 pid 已不在或心跳超過 10 分鐘就視為殘留接手；鎖是別的主機或容器的（另一個 PID namespace，pid 無從判斷）時，心跳超過 3 分鐘才接手，#338）。每輪開頭、在 #1 留言前與寫佇列前都檢查鎖：被接手的舊 monitor 一發現鎖已不是自己的，就記 `lock_lost` 結束，不再呼叫 gh、留言或寫佇列，也不刪新持有者的鎖與工作目錄（各 monitor 的工作目錄是 `monitor.lock/work.<pid>`）。
 

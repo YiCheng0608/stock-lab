@@ -489,8 +489,8 @@ def test_a_stop_after_the_terminal_came_back_is_reported_again(mon: Harness) -> 
 @pytest.mark.parametrize("stop", ["short", "one_wake", "heartbeat"])
 def test_a_stop_under_the_threshold_is_not_reported(mon: Harness, stop: str) -> None:
     """#720 AC-3: under 10 minutes; one prompt_blocked wake however long ago (a now
-    event, tried again only 10 minutes later, then sent); a coordinator heartbeat after
-    the last prompt_blocked wake (it is back): no comment."""
+    event, tried again only 10 minutes later, then sent); a coordinator heartbeat in
+    or after the second of the last prompt_blocked wake (it is back): no comment."""
     _at_menu(mon)
     if stop == "short":
         for minute in range(10):
@@ -509,7 +509,8 @@ def test_a_stop_under_the_threshold_is_not_reported(mon: Harness, stop: str) -> 
     else:
         for minute in range(11):
             _monitor(mon, at=NOW + 60 * minute)
-        _coordinator(mon, "2026-10-25T12:10:30Z")
+        # In the second of the last prompt_blocked wake (times are whole seconds).
+        _coordinator(mon, "2026-10-25T12:10:00Z")
         _monitor(mon, at=NOW + 660)
     assert _issue_comments(mon) == []
     assert _records(mon, "stale") == []
@@ -1990,10 +1991,12 @@ def test_patrol_labels_the_tiers_and_names_the_latest_wake(mon: Harness) -> None
     assert "  急件 [5] comment #316 " in out
 
 
-def test_the_replay_counts_wakes_and_urgent_delays(tmp_path) -> None:
+@pytest.mark.parametrize("failed", ["not_idle", "prompt_blocked"])
+def test_the_replay_counts_wakes_and_urgent_delays(tmp_path, failed: str) -> None:
     """#711 AC-3: wake_replay.py gives each stored event its tier now, replays a poll a
-    minute with wake_due (busy where the real monitor saw not_idle), and lists each
-    urgent event's real and replayed wake."""
+    minute with wake_due (busy where the real monitor saw not_idle, or since #720
+    prompt_blocked: a terminal at a menu is not idle either), and lists each urgent
+    event's real and replayed wake."""
     eq = _eq()
 
     def at(s: int) -> str:
@@ -2019,7 +2022,7 @@ def test_the_replay_counts_wakes_and_urgent_delays(tmp_path) -> None:
             "ok": ok,
             "terminal": "t",
             "upto": upto,
-            "detail": "sent" if ok else "not_idle",
+            "detail": "sent" if ok else failed,
         }
 
     rows = [

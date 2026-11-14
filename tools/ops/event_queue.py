@@ -897,22 +897,25 @@ def record(
     )
 
 
-def prompt_blocked_since(q: Queue, handle: str, beat_at: float | None) -> float | None:
-    """When the coordinator terminal HANDLE stopped at a permission or trust menu (#720):
-    the first of the prompt_blocked wakes in a row that end the wake records, all to
-    HANDLE, with no coordinator heartbeat written since the last one. None once the
-    terminal is back (a later wake sent or not_idle, a heartbeat, another terminal)."""
-    first = None
+def prompt_blocked_stop(
+    q: Queue, handle: str, beat_at: float | None
+) -> tuple[float, float, int] | None:
+    """The coordinator terminal HANDLE at a permission or trust menu (#720): (first,
+    last, count) of the prompt_blocked wakes in a row that end the wake records, all to
+    HANDLE, with no coordinator heartbeat written in or after the second of the last
+    one (times are whole seconds). None once the terminal is back (a later wake sent or
+    not_idle, a heartbeat, another terminal)."""
+    run = []
     for wake in reversed(q.wakes):
         if wake.get("detail") != PROMPT_BLOCKED or wake.get("terminal") != handle:
             break
-        first = wake
-    if first is None:
+        run.append(wake)
+    if not run:
         return None
-    last = epoch(q.wakes[-1].get("at"))
-    if last is None or (beat_at is not None and beat_at > last):
+    first, last = epoch(run[-1].get("at")), epoch(run[0].get("at"))
+    if first is None or last is None or (beat_at is not None and beat_at >= last):
         return None
-    return epoch(first.get("at"))
+    return first, last, len(run)
 
 
 def _taipei(at: float) -> str:
@@ -921,17 +924,12 @@ def _taipei(at: float) -> str:
 
 
 def prompt_blocked_comment(
-    q: Queue, logs: Path, handle: str, since: float, pending: int
+    logs: Path, handle: str, stop: tuple[float, float, int], pending: int
 ) -> tuple[str, str] | None:
-    """(key, body) of the #1 comment for a coordinator at a menu since SINCE (#720),
-    when the prompt_blocked wakes of that stop span PROMPT_BLOCKED_AFTER and number
-    PROMPT_BLOCKED_WAKES; one per stop (its terminal and first prompt_blocked wake)."""
-    last = epoch(q.wakes[-1].get("at")) or since
-    count = 0
-    for wake in reversed(q.wakes):
-        if wake.get("detail") != PROMPT_BLOCKED or wake.get("terminal") != handle:
-            break
-        count += 1
+    """(key, body) of the #1 comment for a coordinator at a menu (#720, STOP from
+    prompt_blocked_stop), when its prompt_blocked wakes span PROMPT_BLOCKED_AFTER and
+    number PROMPT_BLOCKED_WAKES; one per stop (its terminal and first wake)."""
+    since, last, count = stop
     if last - since < PROMPT_BLOCKED_AFTER or count < PROMPT_BLOCKED_WAKES:
         return None
     key = f"{PROMPT_BLOCKED}:{handle}:{iso(since)}"
@@ -954,10 +952,10 @@ def stale(logs: Path, now: float, record_only: bool) -> str:
     first = min(epoch(e.get("detected_at")) or now for e in pending)
     handle, beat_at, beat_text = _heartbeat(logs)
     planned = q.state.get("stale_planned") or []
-    since = prompt_blocked_since(q, handle, beat_at) if handle else None
-    if since is not None:
+    stop = prompt_blocked_stop(q, handle, beat_at) if handle else None
+    if stop is not None:
         # The coordinator is there, at a menu: this comment, never 請開統籌 (#720).
-        found = prompt_blocked_comment(q, logs, handle, since, len(pending))
+        found = prompt_blocked_comment(logs, handle, stop, len(pending))
         if found is None:
             return ""
         key, body = found
