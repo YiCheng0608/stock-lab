@@ -14,15 +14,21 @@ of each month to the next).  The benchmark is the same engine over the day's
 whole population (``evidence_lib.universe``); TAIEX is only listed.
 
 ``--segment exploration`` reads nothing after 2019-12-31 (``load_market``'s
-``end``); every hypothesis is run and the report is written to be published.
+``end``); it runs the hypotheses given by the required ``--hypotheses`` (each
+as its data is accepted, #721), writes the report to be published, and only
+then records each one in ``<DB directory>/explore-ledger.json`` (a crash before
+that leaves no entry); a hypothesis recorded there or in the repository's
+ledger for this ``VERSION`` is refused before anything is read.
 ``--segment validation`` runs once, only after the exploration report was
 published, and only on the research DB (#701's marker ``research-db.json``
 beside it; the volume mounted at ``/research``, not under ``STOCK_DATA_DIR``,
 docs 第 2 步的工具): it needs the report, the sha256 quoted in the public comment and
 the comment's link, runs only the hypotheses the report passed, and writes a
 "started" entry in ``<DB directory>/explore-ledger.json`` before it reads any
-validation data; a hypothesis in that ledger or in the repository's
-``tools/research/explore_ledger.json`` is refused.  The used segment
+validation data; a hypothesis validated in that ledger or in the repository's
+``tools/research/explore_ledger.json`` is refused.  A validation ahead of the
+population but short of the t threshold, with a positive absolute return, is
+``前瞻觀察`` (#721): a record, not a pass.  The used segment
 (2024-09-30～2026-11-13) is listed only for the hypotheses the validation
 passed.  ``--coverage-only`` (exploration) writes the share of missing feature
 values per year and no return at all.
@@ -52,7 +58,7 @@ import evidence_lib as lib  # noqa: E402
 import feature_evidence as features  # noqa: E402
 import portfolio_research as pr  # noqa: E402
 
-VERSION = 1
+VERSION = 2
 DESIGN = "703"
 REGISTRATION_COMMIT = "0ba48e9"
 DECISION = "https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874888073"
@@ -125,6 +131,7 @@ UNDECIDED = "無法判定"
 EXPLORATION_FAILED = "沒有通過（探索段）"
 EXPLORATION_PASSED = "探索通過"
 PASSED = "通過"
+FORWARD_WATCH = "前瞻觀察"
 REVERSED = "驗證段反轉"
 VALIDATION_FAILED = "沒有通過（驗證段）"
 VERDICTS = (
@@ -132,6 +139,7 @@ VERDICTS = (
     EXPLORATION_FAILED,
     EXPLORATION_PASSED,
     PASSED,
+    FORWARD_WATCH,
     REVERSED,
     VALIDATION_FAILED,
 )
@@ -398,18 +406,20 @@ def explore_judge(
     if days < MIN_SEGMENT_DAYS[stage] or not has_delisted:
         return UNDECIDED
     mean, t = excess.get("mean"), excess.get("t")
-    passed = (
+    ahead = (
         mean is not None
         and mean > 0
         and t is not None
-        and t >= min_t
         and absolute is not None
         and absolute > 0
     )
+    passed = ahead and t >= min_t
     if stage == EXPLORATION:
         return EXPLORATION_PASSED if passed else EXPLORATION_FAILED
     if passed:
         return PASSED
+    if ahead:  # t below the threshold (#721): a record, not a pass
+        return FORWARD_WATCH
     if mean is not None and mean < 0:
         return REVERSED
     return VALIDATION_FAILED
@@ -1021,13 +1031,46 @@ def validation_problems(
     if not passed:
         problems.append("no hypothesis passed the exploration: nothing to validate")
     for where in (ledger_path(db), REPO_LEDGER):
-        done = {entry.get("hypothesis") for entry in read_ledger(where)}
+        done = {
+            entry.get("hypothesis")
+            for entry in read_ledger(where)
+            if entry.get("segment", VALIDATION) == VALIDATION
+        }
         again = [name for name in passed if name in done]
         if again:
             problems.append(
                 f"{', '.join(again)} already in {where}: the validation runs once"
             )
     return problems, passed, data
+
+
+def exploration_problems(db: Path, given: str | None) -> tuple[list[str], list[str]]:
+    """(refusals, hypotheses to explore) before anything is read: each
+    registered hypothesis once per tool version, as its data is accepted (#721)."""
+
+    names = [name.strip() for name in (given or "").split(",") if name.strip()]
+    if not names:
+        return ["--segment exploration needs --hypotheses (e.g. X3,X7)"], []
+    problems: list[str] = []
+    unknown = [name for name in names if name not in HYPOTHESES]
+    if unknown:
+        problems.append(f"{', '.join(unknown)} not registered in HYPOTHESES")
+    twice = sorted({name for name in names if names.count(name) > 1})
+    if twice:
+        problems.append(f"{', '.join(twice)} given more than once")
+    for where in (ledger_path(db), REPO_LEDGER):
+        done = {
+            entry.get("hypothesis")
+            for entry in read_ledger(where)
+            if entry.get("segment") == EXPLORATION and entry.get("version") == VERSION
+        }
+        again = [name for name in names if name in done]
+        if again:
+            problems.append(
+                f"{', '.join(again)} already in {where}: the exploration runs once "
+                f"per tool version ({VERSION})"
+            )
+    return problems, names
 
 
 def tool_commit() -> str:
@@ -1146,16 +1189,17 @@ def hypothesis_markdown(result: dict[str, Any], header: dict[str, Any]) -> str:
     if "excess" in result:
         e, a = result["excess"], result["absolute"]
         lines += [
-            "## 判定用的數字",
+            # the TAIEX excess first, the verdict still on the population (#721)
+            "## 數字",
             "",
             "| 量 | 日數 | 日均 | 年化 | t |",
             "| --- | ---: | ---: | ---: | ---: |",
+            f"| 超額（對加權指數，只列出） | {e[TAIEX]['days']} | {_pct(e[TAIEX]['mean'], 3)} "
+            f"| {_pct(e[TAIEX]['annual'])} | {_t(e[TAIEX]['t'])} |",
             f"| 超額（對母體，判定） | {e[POPULATION]['days']} | {_pct(e[POPULATION]['mean'], 3)} "
             f"| {_pct(e[POPULATION]['annual'])} | {_t(e[POPULATION]['t'])} |",
             f"| 絕對報酬（扣成本，判定） | {a['days']} | {_pct(a['mean'], 3)} "
             f"| {_pct(None if a['mean'] is None else a['mean'] * pr.TRADING_DAYS)} | — |",
-            f"| 超額（對加權指數，只列出） | {e[TAIEX]['days']} | {_pct(e[TAIEX]['mean'], 3)} "
-            f"| {_pct(e[TAIEX]['annual'])} | {_t(e[TAIEX]['t'])} |",
             "",
             f"門檻：t ≥ {result.get('min_t', MIN_T):.2f}。",
             "",
@@ -1165,7 +1209,7 @@ def hypothesis_markdown(result: dict[str, Any], header: dict[str, Any]) -> str:
             "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
         labels = {name: name, POPULATION: "母體（基準）", TAIEX: "加權指數（價格指數）"}
-        for key in (name, POPULATION, TAIEX):
+        for key in (TAIEX, name, POPULATION):
             c = result["curves"][key]
             held = (
                 "| — | — |"
@@ -1301,25 +1345,33 @@ def overview_markdown(report: dict[str, Any], sha256: str) -> str:
         f"{lib.num(report.get('peak_memory_gb'), 2)} GB",
         f"- 重現：`{report['command']}`",
     ]
+    if segment == EXPLORATION:
+        lines.append("- 本次跑的假設：" + "、".join(report.get("selected") or []))
     if segment == VALIDATION:
+        lines.append(
+            f"- 前瞻觀察：超額日均 > 0 但 t < {report['min_t']:.2f}，且絕對報酬日均 > 0；"
+            "只當紀錄，不算通過、不進產品"
+        )
         source = report["exploration"]
         lines.append(f"- 探索段報告：{source['url']}（sha256 `{source['sha256']}`）")
     lines += [
         "",
         "## 判定",
         "",
-        "| 代號 | 方向 | N／K | 日數 | 超額日均 | t | 絕對報酬日均 | 判定 |",
-        "| --- | --- | --- | ---: | ---: | ---: | ---: | --- |",
+        "| 代號 | 方向 | N／K | 日數 | 對加權指數超額日均 | t | 對母體超額日均 | t | 絕對報酬日均 | 判定 |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for name, row in report["hypotheses"].items():
         spec = HYPOTHESES[name]
         hold = "事件" if spec["hold"] == "next_event" else spec["hold"]
         e = row.get("excess") or {}
+        x = row.get("taiex_excess") or {}
         verdict = row["verdict"] + (
             f"（{REASONS[row['reason']]}）" if row.get("reason") else ""
         )
         lines.append(
             f"| {name} | {spec['direction']} | {spec['top']}／{hold} | {row['days']} "
+            f"| {_pct(x.get('mean'), 3)} | {_t(x.get('t'))} "
             f"| {_pct(e.get('mean'), 3)} | {_t(e.get('t'))} "
             f"| {_pct(row.get('absolute_mean'), 3)} | {verdict} |"
         )
@@ -1328,13 +1380,15 @@ def overview_markdown(report: dict[str, Any], sha256: str) -> str:
             "",
             "## 已用段（驗證通過的假設，只列出、不判定）",
             "",
-            "| 代號 | 日數 | 超額日均 | t | 絕對報酬日均 |",
-            "| --- | ---: | ---: | ---: | ---: |",
+            "| 代號 | 日數 | 對加權指數超額日均 | t | 對母體超額日均 | t | 絕對報酬日均 |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
         for name, row in report["used"].items():
             e = row.get("excess") or {}
+            x = row.get("taiex_excess") or {}
             lines.append(
-                f"| {name} | {row['days']} | {_pct(e.get('mean'), 3)} | {_t(e.get('t'))} "
+                f"| {name} | {row['days']} | {_pct(x.get('mean'), 3)} | {_t(x.get('t'))} "
+                f"| {_pct(e.get('mean'), 3)} | {_t(e.get('t'))} "
                 f"| {_pct(row.get('absolute_mean'), 3)} |"
             )
     lines += [
@@ -1350,6 +1404,7 @@ def _row(result: dict[str, Any]) -> dict[str, Any]:
         "verdict": result["verdict"],
         "reason": result["reason"],
         "days": (result["window"] or {}).get("days", 0),
+        "taiex_excess": (result.get("excess") or {}).get(TAIEX),
         "excess": (result.get("excess") or {}).get(POPULATION),
         "absolute_mean": (result.get("absolute") or {}).get("mean"),
         "prerequisites": result.get("prerequisites"),
@@ -1394,9 +1449,11 @@ def run_exploration(
     out: Path,
     command: str = "",
     coverage_only: bool = False,
+    names: list[str] | tuple[str, ...] = (),
     progress: Callable[[str], None] = lambda text: None,
 ) -> dict[str, Any]:
-    """Every hypothesis on the exploration segment; nothing after its end read."""
+    """``names`` on the exploration segment (every hypothesis for the coverage);
+    nothing after its end read."""
 
     started = time.monotonic()
     out.mkdir(parents=True, exist_ok=True)
@@ -1421,7 +1478,8 @@ def run_exploration(
         )
         (out / "coverage.md").write_text(coverage_markdown(body), encoding="utf-8")
         return {"out": str(out.resolve()), "coverage_only": True}
-    for name in HYPOTHESES:
+    report["selected"] = list(names)
+    for name in names:
         t0 = time.monotonic()
         result = run_one(ctx, db, name, EXPLORATION)
         write_hypothesis(out / name, result, header)
@@ -1431,6 +1489,27 @@ def run_exploration(
         }
         progress(f"{name}: {result['verdict']} ({time.monotonic() - t0:.1f}s)")
     sha256 = _finish(out, report, started)
+    # Only a finished run with its report written counts as the one run; a
+    # crash before here leaves no entry and can simply run again (#721).
+    commit, finished = tool_commit(), _now()
+    mine = [
+        {
+            "hypothesis": name,
+            "round": ROUND,
+            "segment": EXPLORATION,
+            "version": VERSION,
+            "status": "finished",
+            "finished_at": finished,
+            "report_sha256": sha256,
+            "tool_commit": commit,
+            "definitions_sha256": report["definitions_sha256"],
+            "verdict": report["hypotheses"][name]["verdict"],
+        }
+        for name in names
+    ]
+    ledger = ledger_path(db)
+    write_ledger(ledger, read_ledger(ledger) + mine)
+    write_ledger(out / "ledger-entries.json", mine)
     return {
         "out": str(out.resolve()),
         "segment": EXPLORATION,
@@ -1480,6 +1559,8 @@ def run_validation(
             {
                 "hypothesis": name,
                 "round": ROUND,
+                "segment": VALIDATION,
+                "version": VERSION,
                 "status": "started",
                 "started_at": _now(),
                 "report_sha256": source["sha256"],
@@ -1527,7 +1608,12 @@ def run_validation(
             write_hypothesis(out / name / USED, result, used_header)
             report["used"][name] = _row(result)
     sha256 = _finish(out, report, started)
-    mine = [entry for entry in entries if entry["hypothesis"] in names]
+    mine = [
+        entry
+        for entry in entries
+        if entry["hypothesis"] in names
+        and entry.get("segment", VALIDATION) == VALIDATION
+    ]
     write_ledger(out / "ledger-entries.json", mine)
     return {
         "out": str(out.resolve()),
@@ -1551,6 +1637,12 @@ def _parser() -> argparse.ArgumentParser:
         help="exploration only: the share of missing feature values per year, no return",
     )
     parser.add_argument(
+        "--hypotheses",
+        help="exploration (required, not with --coverage-only): the registered "
+        "hypotheses whose data is accepted, comma separated, e.g. X3,X7; each "
+        "runs once per tool version",
+    )
+    parser.add_argument(
         "--exploration-report", help="validation: the exploration explore.json"
     )
     parser.add_argument(
@@ -1572,8 +1664,18 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--exploration-* go with --segment validation only")
     if args.segment == VALIDATION and args.coverage_only:
         parser.error("--coverage-only goes with --segment exploration only")
+    if args.hypotheses is not None and (
+        args.segment == VALIDATION or args.coverage_only
+    ):
+        parser.error(
+            "--hypotheses goes with --segment exploration only, not --coverage-only"
+        )
     db = Path(args.db)
     problems = lib._load("exit_research").refusals(db, args.min_free_gb)
+    names: list[str] = []
+    if args.segment == EXPLORATION and not args.coverage_only:
+        chosen, names = exploration_problems(db, args.hypotheses)
+        problems = [*problems, *chosen]
     if problems:
         print(json.dumps({"refused": problems}, ensure_ascii=False))
         return 2
@@ -1581,7 +1683,12 @@ def main(argv: list[str] | None = None) -> int:
     progress = lambda text: print(text, file=sys.stderr, flush=True)  # noqa: E731
     if args.segment == EXPLORATION:
         line = run_exploration(
-            db, Path(args.out), command, args.coverage_only, progress=progress
+            db,
+            Path(args.out),
+            command,
+            args.coverage_only,
+            names=names,
+            progress=progress,
         )
     else:
         problems, names, _report = validation_problems(db, *gate)

@@ -16,6 +16,14 @@
 #               must stop answering within TAKE_OVER_LISTENER_WAIT seconds first, else the
 #               step fails; one this run started is kept (skipped with --no-old-terminal)
 #   commitments the commitments not kept yet (commit.sh list)
+#   closed      the Issues and PRs closed in the last 48 hours (#713): every merged PR's
+#               merge commit has green CI (the CI workflow's push run) and no worktree or
+#               local branch is left (an Issue's task/<n>-* too, and a worktree directory
+#               task-<n>-*, detached or not); one line per Issue or PR with something
+#               wrong or not read, one for the rest (closed_check in
+#               coordinator_json.py). One gh call; what could not be read prints as
+#               "未查完", never as fine. It never fails the run: the coordinator acts on
+#               what it prints
 #   memory      memory_check.py on the Claude Code memory directory (read only, #705;
 #               $STOCK_MEMORY_DIR or the one Claude Code keeps for this repo): a failure
 #               names the memory and the check; the coordinator fixes it and goes on
@@ -34,30 +42,36 @@
 #   OLD_HANDLE         the old coordinator terminal, as the heartbeat names it
 #   --no-old-terminal  it no longer exists: the close step is skipped
 #   --from STEP        start at STEP (heartbeat, listener, comment, row, close, relisten,
-#                      commitments, memory)
+#                      commitments, closed, memory)
 #                      after a run stopped there; from row on, --comment-url is needed
 #   --comment-url URL  the #1 comment an earlier run posted (it printed it)
 #   --session-id ID    default $CLAUDE_CODE_SESSION_ID
 #   --terminal H       this session's terminal, default $ORCA_TERMINAL_HANDLE
 #   --data-dir DIR     default $STOCK_DATA_DIR, then $HOME/stock-lab-data
 #   --python EXE       default $STOCK_PYTHON, then this checkout's .venv, then python3
+#   --closed-only      run the closed step alone and nothing else: no handle, no session,
+#                      nothing written; only --python goes with it (exit 0, or 2
+#                      without Python)
 # Exit: 0 every step done; 1 a step failed (see the output); 64 bad arguments, or an
 #   OLD_HANDLE the heartbeat (or the record) does not name (nothing done); 2 no Python.
 # Test hooks: PATROL_NOW (epoch seconds), TAKE_OVER_LISTENER_WAIT (seconds the old
-#   terminal's listener gets to stop after the close, default 10).
+#   terminal's listener gets to stop after the close, default 10), TAKE_OVER_CLOSED_HOURS
+#   (the closed step's window, default 48).
 set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
 
-steps_all=(heartbeat listener comment row close relisten commitments memory)
+steps_all=(heartbeat listener comment row close relisten commitments closed memory)
 session_id="${CLAUDE_CODE_SESSION_ID:-}" handle="${ORCA_TERMINAL_HANDLE:-}" old="" from=heartbeat comment_url=""
-old_given=0
+old_given=0 closed_only=0 take_over_args=0
 while [ $# -gt 0 ]; do
   case "$1" in
     -h | --help) awk 'NR > 1 && !/^#/ { exit } NR > 1' "${BASH_SOURCE[0]}"; exit 0 ;;
+    --closed-only) closed_only=1; shift ;;
     --no-old-terminal) [ "$old_given" = 0 ] || die "舊 handle 只能給一個" 64; old_given=1; old=""; shift ;;
     --from | --comment-url | --session-id | --terminal | --data-dir | --python)
       [ $# -ge 2 ] || die "$1 needs a value" 64
+      [ "$1" = --python ] || take_over_args=1
       case "$1" in
         --from) from="$2" ;;
         --comment-url) comment_url="$2" ;;
@@ -79,6 +93,36 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
+
+# closed_check: the closed step's report (see the header). Prints; always returns 0.
+closed_check() {
+  local hours="${TAKE_OVER_CLOSED_HOURS:-48}" since dir out wt="" br="" rc=0
+  since="$(date -u -d "@$((${PATROL_NOW:-$(date -u +%s)} - hours * 3600))" +%Y-%m-%dT%H:%M:%SZ)"
+  dir="$(mktemp -d)" || { echo "關閉單核對：未查完（建不了暫存目錄）"; return 0; }
+  git -C "$repo_root" worktree list --porcelain >"$dir/worktrees" && wt="$dir/worktrees"
+  git -C "$repo_root" for-each-ref --format='%(refname:short)' refs/heads/ >"$dir/branches" \
+    && br="$dir/branches"
+  if ! out="$(gh api graphql -f q="repo:$GH_REPO is:closed closed:>=$since" -f query="$(cj closed-query)")"; then
+    echo "關閉單核對：未查完（gh api graphql 失敗；gh 呼叫 1 次）"
+  else
+    printf '%s' "$out" | cj closed-check "$since" "$wt" "$br" || rc=$?
+    case "$rc" in
+      0) ;;
+      3) echo "關閉單核對：未查完（GraphQL 的回答沒有 data.search；gh 呼叫 1 次）" ;;
+      # A Python error: its traceback is on stderr.
+      *) echo "關閉單核對：未查完（closed-check 失敗，exit $rc；gh 呼叫 1 次）" ;;
+    esac
+  fi
+  rm -rf -- "$dir"
+  return 0
+}
+if [ "$closed_only" = 1 ]; then
+  [ "$old_given" = 0 ] && [ "$take_over_args" = 0 ] \
+    || die "--closed-only 只能和 --python 一起用（不要舊 handle、--from、--comment-url、--session-id、--terminal、--data-dir）" 64
+  find_python
+  closed_check
+  exit 0
+fi
 [ "$old_given" = 1 ] || die "要給舊統籌的 terminal handle，或 --no-old-terminal" 64
 case "$session_id" in '' | *[!A-Za-z0-9_-]*) die "--session-id（或 CLAUDE_CODE_SESSION_ID）必填，只能有英數、_、-" 64 ;; esac
 case "$handle" in '' | -* | *[!A-Za-z0-9_-]*) die "--terminal（或 ORCA_TERMINAL_HANDLE）必填，只能有英數、_、-，不能以 - 開頭" 64 ;; esac
@@ -253,6 +297,7 @@ for step in "${steps_all[@]:$start}"; do
       "$python" -X utf8 "$script_dir/commitments.py" list "$logs" "$now" \
         || fail commitments "讀不了承諾檔"
       ;;
+    closed) closed_check ;;
     memory)
       if ! memory_check; then
         printf '%s\n' "$memory_out" >&2

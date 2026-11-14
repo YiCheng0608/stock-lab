@@ -397,7 +397,7 @@ def test_close_task_fails_without_the_memory_directory(close: Harness) -> None:
 def test_take_over_checks_the_memory_last(to: Harness) -> None:
     result = _take_over(to, "term_old")
     assert result.returncode == 0, result.stdout + result.stderr
-    assert _last(result)["done"][-2:] == ["commitments", "memory"]
+    assert _last(result)["done"][-2:] == ["closed", "memory"]
     assert "memory_check: 通過（1 則記憶" in result.stdout
 
 
@@ -415,6 +415,7 @@ def test_take_over_stops_at_a_broken_memory_and_goes_on_from_it(to: Harness) -> 
         "close",
         "relisten",
         "commitments",
+        "closed",
     ]
     assert "sandbox-memory.md: link: [[gone]] 沒有這則記憶" in line["reason"]
     again = f"bash tools/ops/take_over.sh term_old --from memory --comment-url {COMMENT_URL}"
