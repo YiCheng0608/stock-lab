@@ -207,7 +207,7 @@ poll() {
 
   # 2. open PRs
   if gh_call "$work/prs.json" pr list --repo "$GH_REPO" --state open --limit 30 \
-    --json number,title,url,isDraft,headRefOid,mergeStateStatus,statusCheckRollup,labels; then
+    --json number,title,url,isDraft,headRefOid,headRefName,mergeStateStatus,statusCheckRollup,labels; then
     args+=(--prs "$work/prs.json")
   else
     notes="$notes prs=failed"
