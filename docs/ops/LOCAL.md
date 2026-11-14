@@ -71,8 +71,8 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none \
 | --- | --- | --- | --- |
 | `enabledPlugins` 四個 `…@claude-for-financial-services: false` | `financial-analysis`、`pitch-agent`、`gl-reconciler`、`market-researcher`：38 個 skill、3 個 agent 類型，以及連不上的 `mtnewswire` MCP | 專案沒有用到；專案層會蓋過使用者層的啟用 | 約 3.6K |
 | `disableClaudeAiConnectors: true` | claude.ai 連接器（Gmail、Google Calendar、Google Drive、Claude Docs） | 專案沒有用到；連上後每一回合約 1.7K。官方文件寫明任一層設 true 就關，**local 層與 `--settings` 都開不回來**；要用連接器時，照下面「單一 session 開回來」的命令開，或到 repo 以外的目錄開 session | 約 0.7K |
-| `enableArtifact: false` | Artifact 工具，以及系統提示裡對應的段落 | 專案用 GitHub 交付，沒有用到。PreToolUse 守門 matcher 裡的 `Artifact` 留著無害 | 約 12.5K（三項合計 16.1K 扣掉另兩項的估計）|
-| `permissions.deny: ["SendFeedback"]` | SendFeedback 工具 | 沒有用到。`AskUserQuestion` 保留，使用者直接對話的 session 會用它；`ReportFindings` 保留，`/code-review` 要用它 | 約 1.8K（估：與保留的 AskUserQuestion 同大小，AskUserQuestion 實測 1,772）|
+| `permissions.deny` 的 `"Artifact"` | Artifact 工具，以及系統提示裡對應的段落 | 專案用 GitHub 交付，沒有用到。PreToolUse 守門 matcher 裡的 `Artifact` 留著無害。不要用 `enableArtifact: false`，它會連 session 的 scratchpad 一起關掉（#712） | 約 12.5K（三項合計 16.1K 扣掉另兩項的估計）|
+| `permissions.deny` 的 `"SendFeedback"` | SendFeedback 工具 | 沒有用到。`AskUserQuestion` 保留，使用者直接對話的 session 會用它；`ReportFindings` 保留，`/code-review` 要用它 | 約 1.8K（估：與保留的 AskUserQuestion 同大小，AskUserQuestion 實測 1,772）|
 | `skillOverrides` 26 個 `"off"` | `dataviz`、`artifact-*`、`claude-in-chrome`、`claude-api`、`anthropic-skills:*` 等專案用不到的 skill | 不用 `disableBundledSkills`，因為它會連 `code-review` 一起關 | 約 4.9K |
 
 hooks 與 PreToolUse 守門不屬於這一節，改上面這些鍵時不要動到它們。
@@ -82,9 +82,10 @@ hooks 與 PreToolUse 守門不屬於這一節，改上面這些鍵時不要動�
 - `STOCK_TURN_HOOK=off` 一定要帶，否則 turn hook 會把這個 session 記成工程師 session。
 - `claude -p` 沒有 Artifact、AskUserQuestion 等互動模式才有的工具，量出來偏低，不能拿來驗門檻。
 - 同時核對工具清單（紀錄檔裡的 `api-request-shape`）沒有 Artifact、SendFeedback；skill 清單裡仍有 `code-review`、`orca-cli`、`encode-lesson`。
-- 2026-11-14 用 Claude Code 2.1.325、`claude-opus-5-5`／`xhigh` 量到 30,634（worktree）與 30,323（管理 checkout，以 `--settings` 模擬）。
+- 第一則訊息的 Environment 區塊（第一筆 assistant 之前的 `api-request-blob`）要有 `Scratchpad directory:` 那一行；沒有就表示有鍵把 scratchpad 關掉了（#712：`enableArtifact: false` 會這樣）。
+- 2026-11-14 用 Claude Code 2.1.325、`claude-opus-5-5`／`xhigh` 量到 30,955／30,951（worktree，有 scratchpad）。
 
-**單一 session 開回來**：`enableArtifact` 與 `skillOverrides` 在 local 層（`.claude/settings.local.json`）或 `--settings` 設回去都沒有效果（#712 實測）。要用時，在 repo 根目錄這樣開：
+**單一 session 開回來**：`skillOverrides`（以及當時用的 `enableArtifact`）在 local 層（`.claude/settings.local.json`）或 `--settings` 設回去都沒有效果（#712 實測）。`permissions.deny` 的 Artifact 也一樣開不回來：deny 會蓋過其他層的 allow。要用時，在 repo 根目錄這樣開：
 
 ```bash
 claude --setting-sources user,local --settings "$(node -e 'console.log(JSON.stringify({hooks: require("./.claude/settings.json").hooks}))')"
