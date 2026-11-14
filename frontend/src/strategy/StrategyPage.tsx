@@ -1,8 +1,10 @@
-import { Link } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 
 import { Term } from '../components/Term'
 import { Card, DataTable } from '../components/ui'
 import type { Column } from '../components/ui'
+import { EVIDENCE_CLOSING, EVIDENCE_FINDINGS, EVIDENCE_PATH, EVIDENCE_SECTION_ID, NO_EVIDENCE_LINK_LABEL, NO_EVIDENCE_TEXT, issueLabel } from './evidence'
 import { STRATEGY_NAME, STRATEGY_TERM_ID } from './strategyName'
 import { COMPOSITION, CONFIRMATIONS, SCORE_COMPONENTS } from './trendChips'
 import type { ConfirmationRow, ScoreRow } from './trendChips'
@@ -49,12 +51,29 @@ const SCORE_COLUMNS: ReadonlyArray<Column<ScoreRow>> = [
 ]
 
 export function StrategyPage() {
+  // 「研究結論 →」 links here with #strategy-evidence; the router does not scroll to a hash by itself.
+  const { hash } = useLocation()
+  useEffect(() => {
+    if (hash) document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView({ block: 'start' })
+  }, [hash])
   return (
     <div className="page strategy-page">
       <section className="page-title">
         <div className="eyebrow">目前策略：{STRATEGY_NAME}</div>
         <h1>策略說明</h1>
-        <p>「今日名單」不是推薦，而是固定規則篩出來、條件已經成立的研究名單；照著做之前，先看懂它怎麼選、什麼時候算失效。</p>
+        <p>「今日名單」不是推薦，而是固定規則篩出來、條件已經成立的研究名單；看名單之前，先看懂它怎麼選、什麼時候算失效。</p>
+        <p className="warning-box strategy-evidence-note">{NO_EVIDENCE_TEXT} <Link className="text-link" to={EVIDENCE_PATH}>{NO_EVIDENCE_LINK_LABEL}</Link></p>
+      </section>
+
+      {/* Issue 693 (decision 6873621771): what the research found, first, so the list is read as research, not a buy list. */}
+      <section className="strategy-section" id={EVIDENCE_SECTION_ID} aria-labelledby="strategy-evidence-title">
+        <h2 id="strategy-evidence-title">研究結論：現行規則尚無證據</h2>
+        <Card as="article">
+          <ul className="strategy-steps">
+            {EVIDENCE_FINDINGS.map((finding) => <li key={finding.issues.join()}>{finding.text}（{finding.issues.map(issueLabel).join('、')}）</li>)}
+          </ul>
+          <p>{EVIDENCE_CLOSING}</p>
+        </Card>
       </section>
 
       <section className="strategy-section" data-strategy={STRATEGY_TERM_ID} aria-labelledby="strategy-current-title">
@@ -90,14 +109,14 @@ export function StrategyPage() {
       </section>
 
       <section className="strategy-section" aria-labelledby="strategy-follow-title">
-        <h2 id="strategy-follow-title">怎麼照著做</h2>
+        <h2 id="strategy-follow-title">名單上的價位怎麼讀</h2>
         <Card as="article">
           <ol className="strategy-steps">
-            <li><b><Term id="t_plus_1">T+1</Term> 才進場</b>：名單是收盤後算出來的，最早下一個交易日才能照著做。</li>
-            <li><b><Term id="entry_zone">進場區</Term></b>：突破型是一個價位（在它附近進場），回踩型是一段區間（在區間內進場）；開盤就跳過目標或跌破停損時，這筆不進場。</li>
-            <li><b><Term id="support">停損</Term></b>：跌破就代表條件失效，出場，不要攤平。</li>
-            <li><b><Term id="target">目標</Term></b>：目標一較近，是主要的獲利出場價；目標二較遠，是延伸參考。</li>
-            <li><b><Term id="rr">RR</Term></b>：可能賺的空間是可能賠的幾倍（目標一減進場價，除以進場價減停損；回踩型的進場價取進場區中點）；規則要求至少 1.5 倍才列入。</li>
+            <li><b><Term id="t_plus_1">T+1</Term> 才可能成交</b>：名單是收盤後算出來的，最早下一個交易日才可能成交。</li>
+            <li><b><Term id="entry_zone">進場區</Term></b>：突破型是一個價位，回踩型是一段區間；追蹤從下一個交易日起觸及才算進場，開盤就跳過目標或跌破停損時，這筆不算進場。</li>
+            <li><b><Term id="support">停損</Term></b>：跌破就代表條件失效，追蹤在這裡出場。</li>
+            <li><b><Term id="target">目標</Term></b>：規則算出的出場價：目標一較近，追蹤以它算達標；目標二是延伸參考。不代表會到達。</li>
+            <li><b><Term id="rr">RR</Term></b>：規則價位的比例（目標一減進場價，除以進場價減停損；回踩型的進場價取進場區中點）；規則要求至少 1.5 倍才列入，比例不是預期報酬。</li>
           </ol>
         </Card>
       </section>

@@ -32,6 +32,7 @@ import {
 import { SOX_GROUP_ID, completeItem, doneNote, listResponse, notComputedResponse, overnightUs, partialItem, zeroResponse } from './candidates.fixtures'
 import { OVERNIGHT_US_CLOSED, OVERNIGHT_US_PENDING, overnightUsView } from './candidates'
 import { PageDateContext } from '../components/pageDate'
+import { EVIDENCE_PATH, NO_EVIDENCE_LINK_LABEL, NO_EVIDENCE_TEXT } from '../strategy/evidence'
 import { CandidatesSection, PriceLadder, ScoreDetails, Sparkline, TodayCandidateList } from './CandidateViews'
 import { ROW_CLICK_IGNORED, SPARKLINE_HEIGHT, SPARKLINE_WIDTH, TERMINAL_MIN_WIDTH, candidateChartLevels, chartToggleLabel, ladderLabel, nextChartRank, priceLadder, rowClickToggles, sparkline } from './candidates'
 
@@ -194,6 +195,14 @@ const notComputed = render(<CandidatesSection data={notComputedResponse()} loadi
 check(STRATEGY_LINK.exec(notComputed)?.[1] === '順勢籌碼型 · 策略說明 →', `尚無候選清單時頁首仍標出策略名稱, got ${STRATEGY_LINK.exec(notComputed)?.[1]}`)
 check(notComputed.includes(NOT_COMPUTED_TEXT) && notComputed.includes('尚無候選清單') && !notComputed.includes('date-badge'), 'not_computed copy without a date badge')
 check(notComputed.includes(CANDIDATE_DISCLAIMER), 'disclaimer stays on top for every state')
+// Issue 693: the head's last line says the rules have no evidence and links to the 研究結論 of /strategy, in every state.
+const EVIDENCE_LINE = `<p class="small-note candidate-evidence">${NO_EVIDENCE_TEXT} <a class="text-link" href="${EVIDENCE_PATH}">${NO_EVIDENCE_LINK_LABEL}</a></p>`
+for (const [label, markup] of [['list', list], ['zero', render(<CandidatesSection data={zeroResponse('no_actionable_signals')} loading={false} error={null} />)], ['not computed', notComputed]] as const) {
+  const head = slice(markup, 'class="candidates-head"', '</div>')
+  check(count(markup, 'class="small-note candidate-evidence"') === 1 && head.includes(EVIDENCE_LINE), `${label}: one 現行規則尚無證據 line in the head, linked to ${EVIDENCE_PATH}`)
+  check(head.indexOf('candidates-strategy-link') < head.indexOf('candidate-evidence'), `${label}: the evidence line comes after the head's notes and strategy link`)
+}
+check(EVIDENCE_PATH === '/strategy#strategy-evidence', 'the evidence link lands on the 研究結論 section')
 
 // ---- loading and error ----
 check(render(<CandidatesSection data={undefined} loading error={null} />).includes('今日名單載入中…'), 'loading skeleton')

@@ -87,7 +87,7 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
   --segment exploration:2019-01-02:2019-12-31 --segment validation:2020-01-02:2020-01-31
 ```
 
-整段歷史要怎麼切成探索與驗證段，由 [#697](https://github.com/YiCheng0608/stock-lab/issues/697) 在看結果前先寫死；回補完成前不要在回補的歷史上跑整段的特徵證據（#692 決定）。
+這裡的 `--segment` 只是讓既有的兩個工具能在研究 DB 上指定日期（例如確認工具讀得到回補的資料）。新策略探索的分段已在 [策略證據「分段」](../spec/evidence.md#分段) 寫死（探索段到 2019-12-31、驗證段 2020-01-02～2024-09-27，[#697](https://github.com/YiCheng0608/stock-lab/issues/697)），探索工具另開單，參數寫死在程式裡；回補完成前不要在回補的歷史上跑整段的特徵證據（#692 決定）。`portfolio_research.py --hypothesis` 的凍結假設不接受 `--segment`。
 
 ## 已知的量
 

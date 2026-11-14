@@ -549,3 +549,36 @@ def test_tpex_institutional_file_of_2014_reads_its_16_column_layout():
             payload, trading_date=date(2014, 12, 1)
         )
     )
+
+
+def test_a_frozen_hypothesis_takes_no_segment(capsys):
+    import importlib.util as util
+
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "tools"
+        / "research"
+        / "portfolio_research.py"
+    )
+    spec = util.spec_from_file_location("portfolio_research_692", path)
+    module = util.module_from_spec(spec)
+    sys.modules["portfolio_research_692"] = module
+    spec.loader.exec_module(module)
+    hypothesis = next(iter(module.HYPOTHESES))
+    with pytest.raises(SystemExit) as exit_info:
+        module.main(
+            [
+                "--db",
+                "x.db",
+                "--out",
+                "out",
+                "--hypothesis",
+                hypothesis,
+                "--segment",
+                "exploration:2004-02-11:2018-12-31",
+                "--segment",
+                "validation:2019-01-01:",
+            ]
+        )
+    assert exit_info.value.code == 2
+    assert "--hypothesis takes no --segment" in capsys.readouterr().err

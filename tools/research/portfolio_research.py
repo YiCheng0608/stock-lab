@@ -44,6 +44,14 @@ version's ranked pool reordered, (b) the whole population; a missing value
 goes last and ties go by ``tie_break``.  The same engine, benchmarks and
 ``judge``; each ranking × universe goes to ``<out>/<ranking>-<universe>/``,
 the comparison with the first version to ``rankings.md``／``rankings.json``.
+
+``--hypothesis H1`` (#691, decision 6872505185) runs only the frozen
+``HYPOTHESES["H1"]`` (#689's ``trust_rev`` over the whole population, top 5,
+K=20), without a signals CSV: ``--window forward`` (the default) on signal
+dates from its ``since``, judged once by ``forward_judge`` on the first
+``min_days`` sessions against the population, the later sessions a record;
+``--window historical`` on the backfilled history to its ``historical_until``,
+judged once on all of it.  Without the flag nothing above changes.
 """
 
 from __future__ import annotations
@@ -124,6 +132,43 @@ UNIVERSES = (
     ("pool", "(a) 候選池內重排序：入池同第 1 版，只換排序"),
     ("all", "(b) 全部可交易母體：當日母體直接依特徵排序"),
 )
+
+
+# The frozen hypotheses (#691, decision 6872505185, fixed before any new data):
+# #689's one lead as a single hypothesis, judged only against the population.
+# Nothing here is a command-line option; a change is a new hypothesis (H2…)
+# and the golden test of H1's output fails on any change of its engine.
+HYPOTHESIS_DESIGN = "691"
+FORWARD = "forward"
+HISTORICAL = "historical"
+WINDOWS = (FORWARD, HISTORICAL)
+FORWARD_VERDICTS = (
+    "樣本不足",
+    "通過",
+    "輸給基準",
+    "方向一致但不顯著",
+    "沒有優勢",
+)
+HYPOTHESES: dict[str, dict[str, Any]] = {
+    "H1": {
+        "label": (
+            "H1：全部可交易母體，投信近 5 日買超天數大者先、同分月營收創 12 個月"
+            "新高先（#689 `trust_rev`-(b)），前 5 名、持有 20 天，只對母體判定"
+        ),
+        "ranking": "trust_rev",
+        "universe": "all",
+        "keys": (PRIMARY, "revenue_high_12"),
+        "top": 5,
+        "hold": 20,
+        # forward: signal dates from here on, judged once on the first 250 sessions
+        "since": date(2026, 11, 14),
+        "min_days": 250,
+        # historical: the backfilled history no one used to choose H1 (#692),
+        # signal dates to here, judged once on all its sessions (at least 60)
+        "historical_until": date(2024, 9, 27),
+    },
+}
+HISTORICAL_FROM = date(1990, 1, 1)  # load everything the copy has before the until
 
 
 def top_key(n: int) -> str:
@@ -1237,6 +1282,7 @@ def write_outputs(
     notes: tuple[str, ...] = (),
     pick_fields: list[str] = PICK_FIELDS,
     no_trades: tuple[str, ...] = (POPULATION,),
+    render: Callable[[dict[str, Any]], str] | None = None,
 ) -> None:
     dates = result["_dates"]
     simulations = result["_simulations"]
@@ -1247,7 +1293,8 @@ def write_outputs(
     (out / "tables.json").write_text(
         json.dumps(result, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
     )
-    (out / "summary.md").write_text(markdown(result, label, notes), encoding="utf-8")
+    text = markdown(result, label, notes) if render is None else render(result)
+    (out / "summary.md").write_text(text, encoding="utf-8")
     keys = sorted(simulations)
     with (out / "equity.csv").open("w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)
@@ -1317,7 +1364,11 @@ def write_outputs(
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="portfolio_research.py", description=__doc__)
     parser.add_argument("--db", required=True, help="a copy_db.py copy of stock.db")
-    parser.add_argument("--signals", required=True, help="exit_research.py trades.csv")
+    parser.add_argument(
+        "--signals",
+        default=None,
+        help="exit_research.py trades.csv (required without --hypothesis)",
+    )
     parser.add_argument(
         "--signals-source",
         default=None,
@@ -1338,6 +1389,20 @@ def _parser() -> argparse.ArgumentParser:
         help="also run #689's rankings of evidence (the first version's output "
         "is unchanged; each ranking × universe goes to <out>/<ranking>-<universe>/)",
     )
+    parser.add_argument(
+        "--hypothesis",
+        choices=list(HYPOTHESES),
+        default=None,
+        help="run only a frozen hypothesis (#691); no signals CSV, no other study",
+    )
+    parser.add_argument(
+        "--window",
+        choices=WINDOWS,
+        default=None,
+        help="with --hypothesis: forward (default; signal dates from the "
+        "hypothesis's since) or historical (the backfilled history before it was "
+        "chosen, to its historical_until)",
+    )
     lib.add_segment_argument(parser)
     return parser
 
@@ -1346,6 +1411,18 @@ def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     parser = _parser()
     args = parser.parse_args(argv)
+    if args.hypothesis is not None:
+        if args.signals or args.signals_source or args.rankings:
+            parser.error(
+                "--hypothesis takes no --signals, --signals-source or --rankings"
+            )
+    elif args.window is not None:
+        parser.error("--window needs --hypothesis")
+    elif args.signals is None:
+        parser.error("the following arguments are required: --signals")
+    if args.hypothesis is not None and args.segment:
+        # A frozen hypothesis keeps its own segments (#691).
+        parser.error("--hypothesis takes no --segment")
     try:
         lib.use_segments(args.segment)
     except ValueError as exc:
@@ -1355,6 +1432,18 @@ def main(argv: list[str] | None = None) -> int:
     if problems:
         print(json.dumps({"refused": problems}))
         return 2
+    if args.hypothesis is not None:
+        line = run_hypothesis(
+            db,
+            args.hypothesis,
+            args.window or FORWARD,
+            Path(args.out),
+            cutoff=args.cutoff,
+            command="python tools/research/portfolio_research.py " + " ".join(argv),
+            progress=lambda text: print(text, file=sys.stderr, flush=True),
+        )
+        print(json.dumps(line, ensure_ascii=False))
+        return 0
     started = time.monotonic()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -1632,6 +1721,369 @@ def rankings_markdown(
         "",
     ]
     return "\n".join(lines)
+
+
+# --- the frozen hypotheses (#691) -------------------------------------------------
+
+
+def forward_judge(excess: dict[str, Any], min_days: int) -> str:
+    """The #691 decision's one-segment table, first matching row from the top."""
+
+    if excess["days"] < min_days:
+        return "樣本不足"
+    mean, t = excess["mean"], excess["t"]
+    if mean > 0 and t is not None and t >= MIN_T:
+        return "通過"
+    if mean < 0 and t is not None and t <= -MIN_T:
+        return "輸給基準"
+    if mean > 0:
+        return "方向一致但不顯著"
+    return "沒有優勢"
+
+
+def historical_start(
+    panel: lib.Panel, until: date, keys: tuple[str, ...]
+) -> date | None:
+    """The first session to ``until`` whose population has members and the
+    primary key known for at least half of them (the backfill may reach
+    further for bars than for chips: before that the ranking is the hash)."""
+
+    for day in panel.sessions:
+        if day > until:
+            return None
+        members = lib.universe(panel, day, lib.DEFAULT_MIN_LOTS)
+        if not members:
+            continue
+        known = sum(
+            1
+            for item, at in members
+            if FEATURE_FUNCTIONS[keys[0]](item, at) is not None
+        )
+        if known * 2 >= len(members):
+            return day
+    return None
+
+
+def study_hypothesis(
+    market: Market,
+    spec: dict[str, Any],
+    start: date | None,
+    cutoff: date,
+    min_days: int,
+    window: str,
+    progress: Callable[[str], None] = lambda text: None,
+) -> dict[str, Any]:
+    """The hypothesis on signal dates ``start``.. before ``cutoff`` (a session).
+
+    The ranking, universe and engine are ``study_rankings``'s for (b): the
+    day's population ranked by ``rank_by_features``, the population itself the
+    benchmark.  Forward: the verdict is on the first ``min_days`` sessions
+    only, the rest is a record; historical: on all of them.
+    """
+
+    panel = market.panel
+    sessions = panel.sessions
+    position = {day: index for index, day in enumerate(sessions)}
+    if cutoff is not None and cutoff not in position:
+        raise SystemExit(f"cutoff {cutoff} is not a market session")
+    hold, top, keys = spec["hold"], spec["top"], tuple(spec["keys"])
+    signal_days = (
+        [day for day in sessions if start <= day < cutoff] if start and cutoff else []
+    )
+    counts: Counter = Counter()
+    picks: dict[int, list[int]] = {}
+    population: dict[int, list[int]] = {}
+    picks_rows: list[dict[str, Any]] = []
+    cache: dict[tuple[date, int], tuple[dict[str, float | None], str]] = {}
+    for number, day in enumerate(signal_days):
+        s = position[day] + 1
+        names = [
+            item.instrument_id
+            for item, _ in lib.universe(panel, day, lib.DEFAULT_MIN_LOTS)
+        ]
+        population[s] = names
+        rows = rank_by_features(panel, day, names, keys, cache)
+        picks[s] = [row[0] for row in rows]
+        counts["days"] += 1
+        counts["members"] += len(rows)
+        for name in FEATURE_KEYS:
+            counts[f"missing_{name}"] += sum(1 for row in rows if row[1][name] is None)
+        counts["primary_at_most"] += sum(
+            1 for row in rows if row[1][PRIMARY] == PRIMARY_MAX
+        )
+        for rank, (instrument_id, values, tie) in enumerate(rows[: max(TOPS)], 1):
+            exchange, symbol, _ = panel.symbols.get(instrument_id, ("", "", ""))
+            picks_rows.append(
+                {
+                    "signal_date": day.isoformat(),
+                    "rank": rank,
+                    "exchange": exchange,
+                    "symbol": symbol,
+                    **values,
+                    "tie": tie[:12],
+                }
+            )
+        if number % 50 == 0:
+            progress(f"ranked {day} ({number + 1}/{len(signal_days)})")
+    key = top_key(top)
+    simulations: dict[tuple[int, str], Simulation] = {}
+    dates: list[date] = []
+    taiex: list[float | None] = []
+    first = position[signal_days[0]] + 1 if signal_days else None
+    if first is not None:
+        last = position[cutoff]
+        dates = sessions[first : last + 1]
+        for s in range(first, last + 1):
+            now, before = (
+                panel.index_close.get(sessions[s]),
+                panel.index_close.get(sessions[s - 1]),
+            )
+            taiex.append(now / before - 1.0 if now and before and before > 0 else None)
+        simulations[(hold, key)] = simulate(picks, market.quote, first, last, hold, top)
+        simulations[(hold, POPULATION)] = simulate(
+            population, market.quote, first, last, hold, None
+        )
+    days = len(dates)
+    judged_days = min(days, min_days) if window == FORWARD else days
+    blocks = {
+        "judged": list(range(judged_days)),
+        "extension": list(range(judged_days, days)),
+        "all": list(range(days)),
+    }
+    returns = {k: daily_returns(sim.equity) for k, sim in simulations.items()}
+    curves: dict[str, dict[str, Any]] = {}
+    excess: dict[str, dict[str, Any]] = {}
+    for block, rows in blocks.items():
+        curves[block] = {}
+        for k, sim in simulations.items():
+            previous = [1.0] + sim.equity[:-1]
+            turnover = [b / p if p > 0 else 0.0 for b, p in zip(sim.bought, previous)]
+            curves[block][k[1]] = curve_metrics(
+                [returns[k][i] for i in rows],
+                [sim.invested[i] for i in rows],
+                [turnover[i] for i in rows],
+            )
+        curves[block][TAIEX] = curve_metrics(
+            [taiex[i] for i in rows if taiex[i] is not None], [1.0], [0.0]
+        )
+        mine = returns.get((hold, key), [])
+        others = {
+            POPULATION: returns.get((hold, POPULATION), []),
+            TAIEX: taiex,
+        }
+        excess[block] = {
+            benchmark: excess_metrics(
+                [mine[i] - other[i] for i in rows if other[i] is not None]
+            )
+            for benchmark, other in others.items()
+        }
+    threshold = min_days if window == FORWARD else MIN_DAYS
+    verdict = forward_judge(excess["judged"][POPULATION], threshold)
+    return {
+        "window": window,
+        "start": start.isoformat() if start else None,
+        "cutoff": cutoff.isoformat() if cutoff else None,
+        "first_session": dates[0].isoformat() if dates else None,
+        "last_session": dates[-1].isoformat() if dates else None,
+        "signal_days": len(signal_days),
+        "days": days,
+        "min_days": threshold,
+        "judged_days": judged_days,
+        "verdict": verdict,
+        "comparisons": 1,
+        "pool_counts": dict(counts),
+        "curves": curves,
+        "excess": excess,
+        "counts": {k[1]: dict(sim.counts) for k, sim in simulations.items()},
+        "_dates": dates,
+        "_simulations": simulations,
+        "_picks": picks_rows,
+        "_first": first,
+    }
+
+
+def run_hypothesis(
+    db: Path,
+    name: str,
+    window: str,
+    out: Path,
+    cutoff: date | None = None,
+    since: date | None = None,
+    command: str = "",
+    progress: Callable[[str], None] = lambda text: None,
+) -> dict[str, Any]:
+    """Load the copy, run hypothesis ``name`` and write ``out``.
+
+    ``since`` replaces the forward start for the tests and the consistency
+    check with #689 only; the command line has no way to set it.
+    """
+
+    started = time.monotonic()
+    spec = HYPOTHESES[name]
+    out.mkdir(parents=True, exist_ok=True)
+    if window == FORWARD:
+        start = since or spec["since"]
+        load_from = start - timedelta(days=HISTORY_DAYS)
+    else:
+        start, load_from = None, HISTORICAL_FROM
+    market = load_market(db, load_from, out / RAW_DIR_NAME, fundamentals=True)
+    sessions = market.panel.sessions
+    limit = spec["historical_until"] if window == HISTORICAL else cutoff
+    if window == HISTORICAL and cutoff is not None:
+        limit = min(limit, cutoff)
+    known = [day for day in sessions if limit is None or day <= limit]
+    if not known and window == HISTORICAL:
+        raise SystemExit("the copy has no market session in the window")
+    last = known[-1] if known else None
+    if window == HISTORICAL:
+        start = historical_start(market.panel, last, tuple(spec["keys"]))
+    result = study_hypothesis(
+        market, spec, start, last, spec["min_days"], window, progress
+    )
+    result = {
+        "version": VERSION,
+        "hypothesis": name,
+        "design": HYPOTHESIS_DESIGN,
+        "label": spec["label"],
+        "parameters": {
+            key: (list(value) if isinstance(value, tuple) else value)
+            for key, value in spec.items()
+            if key != "label"
+        },
+        "command": command,
+        "copy": copy_facts(db),
+        "rule": {
+            "slippage_bps": SLIPPAGE * 10_000,
+            "fee": FEE,
+            "tax": TAX,
+            "min_t": MIN_T,
+        },
+        **result,
+    }
+    result["elapsed_seconds"] = time.monotonic() - started
+    result["peak_memory_gb"] = lib._load("backtest_research").peak_memory_gb()
+    write_outputs(
+        out,
+        result,
+        market,
+        pick_fields=RANKING_PICK_FIELDS,
+        render=hypothesis_markdown,
+    )
+    return {
+        "out": str(out.resolve()),
+        "hypothesis": name,
+        "window": window,
+        "days": result["days"],
+        "min_days": result["min_days"],
+        "verdict": result["verdict"],
+        "elapsed_seconds": round(result["elapsed_seconds"], 1),
+    }
+
+
+WINDOW_NAMES = {FORWARD: "前瞻", HISTORICAL: "歷史樣本外"}
+BLOCK_NAMES = {"judged": "判定窗口", "extension": "延伸紀錄", "all": "至今全部"}
+
+
+def hypothesis_markdown(result: dict[str, Any]) -> str:
+    p = result["parameters"]
+    key = top_key(p["top"])
+    window = WINDOW_NAMES[result["window"]]
+    days, threshold = result["days"], result["min_days"]
+    if result["verdict"] == "樣本不足":
+        headline = (
+            f"**樣本不足（累積 {days}／{threshold} 日）**：下面的數字不是判定，"
+            f"滿 {threshold} 日才判定一次"
+        )
+    elif result["window"] == FORWARD:
+        headline = (
+            f"**{result['verdict']}**（前 {result['judged_days']} 日判定，之後不再變；"
+            f"另 {days - result['judged_days']} 日是延伸紀錄、不判定）"
+        )
+    else:
+        headline = f"**{result['verdict']}**（{days} 日一次判定）"
+    if result["window"] == FORWARD:
+        scope = f"訊號日 {result['start']} 起"
+    else:
+        scope = (
+            f"訊號日 {result['start'] or '—'}～{p['historical_until']}"
+            "（主鍵在母體過半有值的第一天起）"
+        )
+    lines = [
+        f"# {result['hypothesis']} {window}驗證（portfolio_research 第 {result['version']} 版，"
+        f"#{result['design']}）",
+        "",
+        f"- 判定：{headline}",
+        f"- 假設：{result['label']}；研究用排序，不是產品評分；凍結的 commit 見 "
+        "`docs/spec/evidence.md`「前瞻驗證 H1」",
+        f"- 窗口：{scope}，cutoff {result['cutoff'] or '—'}；有淨值的交易日 "
+        f"{result['first_session'] or '—'}～{result['last_session'] or '—'}，共 {days} 日",
+        f"- 副本：最新交易日 {result['copy']['latest']}，alembic `{result['copy']['alembic']}`，"
+        f"檔案時間 {result['copy']['mtime']}",
+        "- 進出：T+1 開盤買（+5 bps 滑價、手續費 0.1425%），成交那根算第 1 根、第 "
+        f"{p['hold']} 根收盤賣（−5 bps、手續費、證交稅 0.3%）；{p['hold']} 份子帳戶輪替；"
+        "漲跌停、停牌與還原價同第 1 版",
+        "- 判定表（由上往下）：樣本不足（< "
+        f"{threshold} 日）→ 通過（超額日均 > 0 且 t ≥ 2）→ 輸給基準（< 0 且 t ≤ −2）"
+        "→ 方向一致但不顯著（> 0）→ 沒有優勢；只對母體、比較組數 1；加權指數只列出",
+        f"- 排序對象計數：{json.dumps(result['pool_counts'], ensure_ascii=False)}",
+        f"- 耗時 {result.get('elapsed_seconds', 0):.0f} 秒，峰值記憶體 "
+        f"{lib.num(result.get('peak_memory_gb'), 2)} GB",
+        f"- 重現：`{result['command']}`",
+        "",
+        "## 超額報酬（每日組合報酬 − 每日基準報酬）",
+        "",
+        "| 區間 | 對 | 日數 | 日均 | 年化 | t |",
+        "| --- | --- | ---: | ---: | ---: | ---: |",
+    ]
+    against = {POPULATION: "母體（判定）", TAIEX: "加權指數（只列出）"}
+    for block, label in BLOCK_NAMES.items():
+        for benchmark in (POPULATION, TAIEX):
+            e = result["excess"][block][benchmark]
+            lines.append(
+                f"| {label} | {against[benchmark]} | {e['days']} | {_pct(e['mean'], 3)} "
+                f"| {_pct(e['annual'])} | {_t(e['t'])} |"
+            )
+    lines += [
+        "",
+        "## 資金曲線",
+        "",
+        "| 區間 | 組合 | 日數 | 年化報酬 | 年化波動 | 最大回撤 | 平均投入 | 年化換手 |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    names = {
+        key: f"{result['hypothesis']} 前 {p['top']} 名",
+        POPULATION: "母體（基準）",
+    }
+    names[TAIEX] = "加權指數（價格指數）"
+    for block, label in BLOCK_NAMES.items():
+        for k in (key, POPULATION, TAIEX):
+            curve = result["curves"][block].get(k, {"days": 0})
+            held = (
+                "| — | — |"
+                if k == TAIEX
+                else f"| {_pct(curve.get('invested'), 1)} "
+                f"| {lib.num(curve.get('turnover'), 1)} |"
+            )
+            lines.append(
+                f"| {label} | {names[k]} | {curve['days']} | {_pct(curve.get('annual'))} "
+                f"| {_pct(curve.get('volatility'))} | {_pct(curve.get('max_drawdown'))} "
+                + held
+            )
+    lines += [
+        "",
+        "## 成交計數（至今）",
+        "",
+        "| 組合 | 買進 | 漲停買不到 | 不可交易 | 跌停順延 | 停牌／缺日線順延 | 期末未賣 |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for k in (key, POPULATION):
+        counts = result["counts"].get(k, {})
+        lines.append(
+            f"| {names[k]} | {counts.get('bought', 0):,} | {counts.get('limit_up', 0):,} "
+            f"| {counts.get('not_tradable', 0):,} | {counts.get('limit_down', 0):,} "
+            f"| {counts.get('sale_held', 0):,} | {counts.get('unsold', 0):,} |"
+        )
+    return "\n".join(lines) + "\n"
 
 
 if __name__ == "__main__":
