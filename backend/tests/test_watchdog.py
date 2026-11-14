@@ -2461,3 +2461,87 @@ def test_one_failed_us_run_after_a_success_is_not_reported(wd):
     _us_log(wd, "20261019", 0, 1, age_days=0.4)
     result = wd.run("--dry-run")
     assert "us_failed" not in result.stdout
+
+
+# notify (#728) ---------------------------------------------------------------------
+
+MORNING = NIGHT - 14 * 3600  # Monday 2026-10-19 09:15 Taipei
+
+
+def _notify_log(wd: Watchdog, day: str, *results: str, end: bool = True) -> Path:
+    path = wd.logs / f"notify-{day}.log"
+    path.write_text(
+        "".join(
+            f"===== {day}T08:45:00+08:00 start job=notify\n--- result {result}\n"
+            + (f"===== {day}T08:45:02+08:00 end exit=0 seconds=2\n" if end else "")
+            for result in results
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_no_notify_log_yet_is_not_judged(wd):
+    _healthy_daily_and_news(wd)
+    result = wd.run("--dry-run", now=MORNING)
+    assert "key=notify_" not in result.stdout
+
+
+def test_a_sent_or_unconfigured_message_is_not_reported(wd):
+    _healthy_daily_and_news(wd)
+    _notify_log(wd, "20261019", "status=sent attempts=1 message_id=9")
+    assert "key=notify_" not in wd.run("--dry-run", now=MORNING).stdout
+    _notify_log(wd, "20261019", "status=not_configured missing=TELEGRAM_BOT_TOKEN")
+    assert "key=notify_" not in wd.run("--dry-run", now=MORNING).stdout
+    # A closed day logs its skip, which ends the day too.
+    _notify_log(wd, "20261019", "status=skipped reason=non_trading_day")
+    assert "key=notify_" not in wd.run("--dry-run", now=MORNING).stdout
+
+
+def test_a_day_without_its_notify_log_is_reported_from_0910(wd):
+    _healthy_daily_and_news(wd)
+    _notify_log(wd, "20261016", "status=sent attempts=1 message_id=8")
+    # 09:05: not yet judged.
+    assert "key=notify_" not in wd.run("--dry-run", now=MORNING - 10 * 60).stdout
+    result = wd.run("--dry-run", now=MORNING)
+    assert "anomaly_planned key=notify_missing " in result.stdout
+    assert "每日 Telegram 通知：今天（2026-10-19）08:45 的通知沒有跑完" in result.stdout
+    assert "worker.cli notify --send --trigger manual" in result.stdout
+    # A run still going (no end line yet) counts as not done.
+    _notify_log(wd, "20261019", "status=sent attempts=1 message_id=9", end=False)
+    assert "key=notify_missing " in wd.run("--dry-run", now=MORNING).stdout
+    # Saturday: no message is due.
+    saturday = MORNING + 5 * 86400
+    assert "key=notify_" not in wd.run("--dry-run", now=saturday).stdout
+
+
+def test_a_failed_message_is_reported_once_a_day(wd):
+    _healthy_daily_and_news(wd)
+    _notify_log(
+        wd,
+        "20261019",
+        "status=failed reason=http_401 attempts=2 detail=http_401 Unauthorized | http_401 Unauthorized",
+        "status=skipped reason=already_running",
+    )
+    result = wd.run("--dry-run", now=MORNING)
+    assert "anomaly_planned key=notify_failed " in result.stdout
+    assert "status=failed reason=http_401" in result.stdout
+    wd.run(now=MORNING)
+    wd.run(now=MORNING + 30 * 60)
+    assert (
+        wd.text("gh_bodies.txt").count(
+            "每日 Telegram 通知：今天（2026-10-19）的通知送失敗"
+        )
+        == 1
+    )
+
+
+def test_a_failure_sent_again_by_hand_is_not_reported(wd):
+    _healthy_daily_and_news(wd)
+    _notify_log(
+        wd,
+        "20261019",
+        "status=failed reason=network:TimeoutError attempts=2",
+        "status=sent attempts=1 message_id=10",
+    )
+    assert "key=notify_" not in wd.run("--dry-run", now=MORNING).stdout

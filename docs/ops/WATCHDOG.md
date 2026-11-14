@@ -32,6 +32,11 @@
   - `us_failed`：所有 `us-*.log` 裡最後 2 個 `end` 列的 exit 都不是 0（`partial` 是 2、`failed` 是 1）。job 被擋下（`skipped`）與 `already_complete` 都是 0，不算失敗。
   - 每台北日各最多一則；還沒有任何 `us-*.log` 時不判定。
   - 處置：查該日誌與 `/api/ingestion-runs?q=us_index_collect&include_metadata=true` 的 `series.<代號>.error`。FinMind 回 402（超過每小時上限）時等下一個時段；修好後用 `docker compose -p <P> exec scheduler python -m worker.cli job us --trigger manual --min-free-memory-gb 2` 補跑。
+- `notify`（每日 Telegram 通知，[#728](https://github.com/YiCheng0608/stock-lab/issues/728)；週一至週五 08:45，見 [scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)）：
+  - `notify_missing`：週一至週五台北 09:10 以後，當天的 `logs/notify-YYYYMMDD.log` 不存在或沒有 `end` 列，也就是 scheduler 沒跑或還卡著。休市日 job 照樣寫 `skipped reason=non_trading_day` 與 `end` 列，所以看門狗不必查行事曆。
+  - `notify_failed`：當天最後一個不是 `skipped` 的 `--- result` 列是 `status=failed`（兩次都送失敗、`chat_not_private` 等），留言附那一列（token 已遮掉）。之後手動補送成功（`status=sent`）就不再判定。
+  - `not_configured`（沒設 `TELEGRAM_BOT_TOKEN`／`TELEGRAM_CHAT_ID`）不算失敗、不留言。每台北日各最多一則；還沒有任何 `notify-*.log` 時不判定。
+  - 處置：查該日誌的 `--- result` 列。token 或 chat id 錯時更正發佈 checkout 的認證檔後重建 scheduler（[每日 Telegram 通知](SETUP.md#每日-telegram-通知)）；網路問題恢復後用 `docker compose -p <P> exec scheduler python -m worker.cli notify --send --trigger manual` 補送，當天已送出的不會重送。
 - `monitor_stale`：事件 monitor 的 `logs/monitor-heartbeat.json`（`--monitor-dir` 給了就讀那個目錄的，scheduler 容器是 `/coordination`，#338）超過 10 分鐘沒有更新，或讀不出輪詢時間（[統籌事件 monitor](MONITOR.md)；monitor 每分鐘寫一次）；檔案不存在（monitor 尚未註冊）時不判定。心跳仍在更新、但記錄 gh 已連續 10 輪失敗（例如登入過期，佇列收不到 PR 與留言）時另以 `monitor_gh_failed` 留言，附第一次失敗的時間與最後的錯誤，請查 `gh auth status` 與 `gh api rate_limit`（帳號共用的 5000 次／小時可能已用完）。
 - `news_llm`：`stock.db` 最近 3 批判讀都是 `pending`；或 24 小時內最近 3 筆 `run_type=news_llm` 都是 `failed`（`running` 超過 90 分鐘也算）；或 news 日誌（今昨兩天的檔）24 小時內最後 3 個 `news_llm_exit=` 都是 `1`／`wrapper_error`（涵蓋表不存在等不寫 run 的失敗）。後兩者合為一則 `news_llm_failed` 留言；限 24 小時是為了 news 停擺後不再每天就舊失敗留言，停擺本身由上一條 `news` 判定。
 - `llm_auth`：24 小時內 news_llm 或 candidate_notes 最近一次 run 有 `claude -p` 認證失敗（`not_logged_in`）的批次，判定與處置見 [容器內的 claude 與 gh 認證（.env）](SETUP.md#容器內的-claude-與-gh-認證env)。

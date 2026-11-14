@@ -22,6 +22,11 @@ commands those tasks ran.
   got D - 2, every 09:30 D - 1); 07:30 and 08:30 are before the 09:00 open, 09:30
   is the insurance. A run after one that stored D - 1 records
   ``already_complete`` and asks nothing.
+- notify: Monday to Friday 08:45 (#728), ``worker.cli notify --send --trigger
+  scheduler``: the Telegram message of the day's list and the overnight US indexes
+  (worker.notify). Not a worker.job job: it takes its own lock and log, skips a day
+  the stored calendar marks closed and a day already sent, and runs in maintenance
+  mode too (it only reads the database).
 - watchdog: at :15 and :45, ``tools/ops/watchdog.sh``.
 - monitor: every minute, one poll of the coordinator's event monitor
   ``tools/ops/monitor.sh --once`` (#338), only with ``--monitor`` (or
@@ -41,7 +46,9 @@ no-session answer is ``non_trading_unconfirmed``, which the 23:00 trigger confir
 21:30 ``success`` nothing is run at start, so a restart past 23:00 skips that night's
 institutional refetch. The us job is caught up the same way (#568): Tuesday to Saturday
 past the first us time (07:30), when the day has no ``us_index_collect`` run that is ``success`` or
-``already_complete``.
+``already_complete``. So is notify (#728): Monday to Friday between 08:45 and 13:30, when
+the day's ``logs/notify-YYYYMMDD.log`` has no ``sent``, ``not_configured`` or
+``non_trading_day`` result; in maintenance mode too.
 
 Maintenance mode (#468, worker.job.MaintenanceHold and ``worker.cli maintenance
 on|off``): while it is on, the daily and news jobs serve starts only log ``skipped
@@ -95,11 +102,14 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import job
+from . import job, notify
 
 ROOT = job.ROOT
 TAIPEI = job.TAIPEI
-JOBS = ("daily", "news", "us", "watchdog", "monitor")
+JOBS = ("daily", "news", "us", "notify", "watchdog", "monitor")
+# notify (#728 decision 6881879639): Taipei Monday to Friday before the open; the job
+# itself skips the days the stored calendar marks closed.
+NOTIFY_DAYS = "mon-fri"
 DAILY_TIMES = "21:30,23:00"
 # us (#568 decision 6729065016, #681 decision 6869771833): Taipei Tuesday to
 # Saturday, after the US close (04:00 Taipei in US summer time, 05:00 in winter).
@@ -347,6 +357,12 @@ def triggers(args: argparse.Namespace) -> dict[str, object]:
             hour=_news_hour(args.news_interval_hours), minute=0, timezone=TAIPEI
         ),
         "us": us[0] if len(us) == 1 else OrTrigger(us),
+        "notify": CronTrigger(
+            day_of_week=NOTIFY_DAYS,
+            hour=notify.SEND_TIME[0],
+            minute=notify.SEND_TIME[1],
+            timezone=TAIPEI,
+        ),
         "watchdog": CronTrigger(minute=args.watchdog_minutes, timezone=TAIPEI),
     }
     if args.monitor != "off":
@@ -446,6 +462,18 @@ class Serve:
             if self.offset:
                 environment["WATCHDOG_NOW"] = str(int(at.timestamp()))
             return argv, environment
+        if name == "notify":
+            # TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID come with os.environ (env_file).
+            argv = [
+                *job.worker_command(["notify", "--send"]),
+                "--trigger",
+                "scheduler",
+                "--log-dir",
+                str(self.log_dir),
+            ]
+            if self.offset:
+                argv += ["--date", at.date().isoformat()]
+            return argv, environment
         argv = [
             *job.worker_command(["job", name]),
             "--trigger",
@@ -502,6 +530,27 @@ class Serve:
         if statuses & set(US_COMPLETE_STATUSES):
             return None
         return "not_complete"
+
+    def missed_notify(self) -> str | None:
+        """Why serve sends the day's message as it starts, or None (#728).
+
+        Monday to Friday between notify.SEND_TIME and notify.CATCH_UP_END, when the
+        day's log has no outcome that ends the day (sent, not_configured,
+        non_trading_day); a failed send is tried again too. The job itself skips a
+        closed day and a day already sent.
+        """
+
+        now = self.now()
+        if now.weekday() >= 5:
+            return None
+        if not notify.SEND_TIME <= (now.hour, now.minute) < notify.CATCH_UP_END:
+            return None
+        if not Path(job.data_environment(self.data_dir)["STOCK_DB_PATH"]).is_file():
+            # An empty volume: the message could only fail on it, as its trigger will.
+            return None
+        if notify.day_done(self.log_dir, now.date()):
+            return None
+        return "not_sent"
 
     def missed_daily(self) -> str | None:
         """Why serve runs the day's daily as it starts, or None (see the module docstring)."""
@@ -561,12 +610,16 @@ class Serve:
         )
 
     def catch_up_missed(self, scheduler) -> None:
-        """At start and at the end of maintenance: the day's missing daily and us."""
+        """At start and at the end of maintenance: the day's missing daily, us and notify."""
 
-        for name, missed in (("daily", self.missed_daily()), ("us", self.missed_us())):
+        for name, missed in (
+            ("daily", self.missed_daily()),
+            ("us", self.missed_us()),
+            ("notify", self.missed_notify()),
+        ):
             if not missed:
                 continue
-            if self._maintenance:
+            if self._maintenance and name != "notify":
                 # The job would only skip: the end of maintenance catches it up.
                 self.say("catchup_deferred", job=name, reason=missed, maintenance="on")
             else:
@@ -606,6 +659,8 @@ class Serve:
             return WATCHDOG_TIME_LIMIT_MINUTES * 60
         if name == "monitor":
             return MONITOR_TIME_LIMIT_MINUTES * 60
+        if name == "notify":
+            return (notify.TIME_LIMIT_MINUTES + BACKSTOP_MINUTES) * 60
         limit = getattr(self.args, f"{name}_time_limit_minutes")
         minutes = limit or job.TIME_LIMIT_MINUTES[name]
         return (minutes + BACKSTOP_MINUTES) * 60

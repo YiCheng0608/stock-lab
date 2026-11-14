@@ -103,7 +103,9 @@ class ServeTree(Tree):
     def __init__(self, root: Path) -> None:
         super().__init__(root)
         worker = self.backend / "worker"
-        shutil.copyfile(ROOT / "backend" / "worker" / "serve.py", worker / "serve.py")
+        # serve reads the notify log through worker.notify (#728; standard library only).
+        for name in ("serve.py", "notify.py"):
+            shutil.copyfile(ROOT / "backend" / "worker" / name, worker / name)
         (worker / "cli.py").write_text(SERVE_CLI, encoding="utf-8")
         ops = self.project / "tools" / "ops"
         ops.mkdir(parents=True)
@@ -278,6 +280,7 @@ def test_every_allowed_news_interval_makes_a_job(tmp_path, hours):
         "daily",
         "news",
         "us",
+        "notify",
         "watchdog",
         # #468: serve's own read of the maintenance marker, not a job it starts.
         "maintenance-watch",
@@ -1832,3 +1835,149 @@ def test_the_end_of_maintenance_runs_the_missed_us_job_once(tmp_path, capsys):
     runner.watch_maintenance()
     assert " serve catchup job=us reason=not_complete" in capsys.readouterr().out
     assert {s.id: s for s in scheduler.get_jobs()}["us-catchup"].args == ("us",)
+
+
+# notify (#728) ---------------------------------------------------------------------
+
+
+def test_notify_fires_monday_to_friday_at_0845():
+    triggers = serve.triggers(serve_args())
+    monday = datetime(2026, 11, 9, tzinfo=TAIPEI)
+    times = fire_times(triggers["notify"], monday, monday + timedelta(days=7))
+    assert [moment.strftime("%a %H:%M") for moment in times] == [
+        f"{day} 08:45" for day in ("Mon", "Tue", "Wed", "Thu", "Fri")
+    ]
+    # Apart from the other jobs' times: none of them waits for it, nor it for them.
+    for name in ("daily", "news", "us"):
+        other = set(fire_times(triggers[name], monday, monday + timedelta(days=7)))
+        assert not other & set(times), name
+
+
+def test_the_notify_command_sends_with_its_own_log_and_no_job_wrapper(tmp_path):
+    data = tmp_path / "data"
+    runner = serve.Serve(serve_args("--data-dir", str(data)))
+    command, environment = runner.command("notify", runner.now())
+    assert command == [
+        sys.executable,
+        "-X",
+        "utf8",
+        "-m",
+        "worker.cli",
+        "notify",
+        "--send",
+        "--trigger",
+        "scheduler",
+        "--log-dir",
+        str(data / "logs"),
+    ]
+    assert environment["STOCK_DATA_DIR"] == str(data)
+    assert environment["STOCK_DB_PATH"] == str(data / "stock.db")
+    injected = serve.Serve(
+        serve_args("--data-dir", str(data), "--now", "2026-11-16T08:44:50")
+    )
+    assert injected.command("notify", injected.now())[0][-2:] == [
+        "--date",
+        "2026-11-16",
+    ]
+    assert runner.backstop("notify") == (5 + 5) * 60
+
+
+def _notify_log(data: Path, day: str, *results: str) -> None:
+    logs = data / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    (logs / f"notify-{day.replace('-', '')}.log").write_text(
+        "".join(
+            f"===== {day}T08:45:00+08:00 start job=notify\n--- result {result}\n"
+            f"===== {day}T08:45:01+08:00 end exit=0 seconds=1\n"
+            for result in results
+        ),
+        encoding="utf-8",
+    )
+
+
+def _notify_catchup(data: Path, now: str):
+    runner = serve.Serve(serve_args("--data-dir", str(data), "--now", now))
+    jobs = {scheduled.id: scheduled for scheduled in runner.scheduler().get_jobs()}
+    return runner.missed_notify(), jobs.get("notify-catchup")
+
+
+@pytest.mark.parametrize(
+    "results, now, reason",
+    [
+        # Restarted after 08:45 with nothing sent: once, at start.
+        ((), f"{MONDAY}T09:10", "not_sent"),
+        (("status=failed reason=http_502",), f"{MONDAY}T10:00", "not_sent"),
+        (("status=skipped reason=already_running",), f"{MONDAY}T08:50", "not_sent"),
+        # The day is done: sent, not configured, or a closed day.
+        (("status=sent attempts=1 message_id=7",), f"{MONDAY}T09:10", None),
+        (
+            ("status=not_configured missing=TELEGRAM_BOT_TOKEN",),
+            f"{MONDAY}T09:10",
+            None,
+        ),
+        (("status=skipped reason=non_trading_day",), f"{MONDAY}T09:10", None),
+        # Before 08:45, after the close's 13:30, or a weekend.
+        ((), f"{MONDAY}T08:44", None),
+        ((), f"{MONDAY}T13:30", None),
+        ((), f"{SATURDAY}T09:10", None),
+    ],
+)
+def test_serve_sends_the_missed_message_of_the_day_once_at_start(
+    tmp_path, results, now, reason
+):
+    data = tmp_path / "data"
+    _runs_db(data)
+    if results:
+        _notify_log(data, MONDAY, *results)
+    missed, catchup = _notify_catchup(data, now)
+    assert missed == reason
+    if reason is None:
+        assert catchup is None
+    else:
+        assert catchup is not None and catchup.args == ("notify",)
+        assert type(catchup.trigger).__name__ == "DateTrigger"
+
+
+def test_a_volume_without_a_database_sends_no_message_at_start(tmp_path):
+    assert _notify_catchup(tmp_path / "data", f"{MONDAY}T09:10") == (None, None)
+
+
+def test_the_missed_message_is_sent_in_maintenance_mode_too(tmp_path, capsys):
+    """notify only reads the database (#728 decision 6881879639): no deferral."""
+
+    data = tmp_path / "data"
+    _runs_db(data)
+    _maintenance_on(data)
+    runner, scheduler, jobs = _deferred(data, f"{MONDAY}T09:10")
+    assert "notify-catchup" in jobs
+    out = capsys.readouterr().out
+    assert " serve catchup job=notify reason=not_sent" in out
+    assert "catchup_deferred job=notify" not in out
+
+
+def test_the_telegram_variables_reach_the_scheduler_through_env_file_only():
+    """#728 decision 6881879639 (5): compose's environment would win over env_file, so a
+    `TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}` there would blank the env file's value
+    whenever the shell or STOCK_ENV_FILE does not carry it."""
+
+    text = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    for line in text.splitlines():
+        if "TELEGRAM_" in line:
+            assert line.lstrip().startswith("#"), line
+    backend = text.split("x-backend: &backend\n", 1)[1].split("\n\n", 1)[0]
+    assert "env_file:\n    - path: ${STOCK_ENV_FILE:-.env}" in backend
+    scheduler = text.split("\n  scheduler:\n", 1)[1].split("\nvolumes:\n", 1)[0]
+    assert "    <<: *backend\n" in scheduler
+    # The scheduler keeps the base's env_file: no env_file or TELEGRAM_ key of its own.
+    assert not any(
+        line.strip().startswith("env_file") for line in scheduler.splitlines()
+    )
+
+
+def test_the_env_example_lists_the_telegram_variables_empty():
+    text = (ROOT / ".env.example").read_text(encoding="utf-8")
+    for name in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"):
+        assert re.search(rf"^{name}=$", text, re.M), name
+    assert "docs/ops/SETUP.md" in text
+    # Nothing that looks like a real token (digits, a colon and 35 characters).
+    assert not re.search(r"\d{6,}:[A-Za-z0-9_-]{20,}", text)

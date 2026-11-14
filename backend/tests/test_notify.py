@@ -1,0 +1,601 @@
+"""The daily Telegram message (backend/worker/notify.py, #728).
+
+No test reaches Telegram: the sends go to a stand-in HTTP server on 127.0.0.1
+(``API_BASE`` points there), and the token is a fake one set with monkeypatch.
+The runs take the job's fcntl lock, so like worker.job they run on Linux (the image).
+"""
+
+from __future__ import annotations
+
+import argparse
+import contextlib
+import json
+import os
+import sys
+import threading
+from datetime import date, datetime, timedelta
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
+
+from app.db import Base, enable_sqlite_foreign_keys
+from app.domain import US_INDEX_EXCHANGE
+from app.models import (
+    Instrument,
+    MarketBar,
+    RawPayload,
+    ScheduleRun,
+    TradingCalendarDay,
+)
+from test_candidates import T, signal, stock
+from worker import job, notify, pipeline
+from worker.candidates import compute_daily_candidates
+
+ON_LINUX = sys.platform.startswith("linux")
+linux_only = pytest.mark.skipif(not ON_LINUX, reason="fcntl lock: Linux only (#333)")
+TOKEN = "123456789:AAFakeTokenForTestsOnly_abcdefghijk"
+CHAT = "987654321"
+# T (Friday 2026-09-04) is the list's day; the message is Monday's.
+MONDAY = date(2026, 9, 7)
+
+
+# --- the message, from the API's shapes ------------------------------------------------
+
+
+def _item(rank, symbol, name, levels):
+    return {
+        "rank": rank,
+        "instrument": {"symbol": symbol, "name": name},
+        "levels": levels,
+    }
+
+
+BREAKOUT = {
+    "entry_type": "breakout",
+    "entry": 61.1,
+    "entry_zone": {"low": 61.1, "high": 61.1},
+    "invalid_price": 58.5,
+    "target_1": 65.27,
+}
+PULLBACK = {
+    "entry_type": "pullback",
+    "entry": 113.1,
+    "entry_zone": {"low": 110.99, "high": 1115.21},
+    "invalid_price": 110.29,
+    "target_1": 1121.24,
+}
+LISTING = {
+    "status": "success",
+    "candidate_count": 2,
+    "items": [_item(1, "2453", "凌群", BREAKOUT), _item(2, "2882", "國泰金", PULLBACK)],
+}
+
+
+def _us(symbol, close, pct, day="2026-09-04", freshness="latest", series=None):
+    series = (
+        series
+        or {"SPX": "^GSPC", "IXIC": "^IXIC", "DJI": "^DJI", "SOX": "^SOX"}[symbol]
+    )
+    return {
+        "symbol": symbol,
+        "name": symbol,
+        "series_id": series,
+        "status": "available",
+        "trading_date": day,
+        "freshness": freshness,
+        "close": close,
+        "change_pct": pct,
+        "source": {"label": f"FinMind USStockPrice {series}"},
+    }
+
+
+def _missing(symbol, reason="not_collected"):
+    return {"symbol": symbol, "name": symbol, "status": "unavailable", "reason": reason}
+
+
+US = [
+    _us("SPX", 7561.67, -0.004),
+    _us("IXIC", 25136.27, -0.0091),
+    _us("DJI", 52347.55, 0.001),
+    _us("SOX", 10146.32, -0.0343),
+]
+
+
+def test_the_message_lists_the_rows_and_the_overnight_us_indexes():
+    text = notify.compose(MONDAY, T, LISTING, US)
+    assert text == "\n".join(
+        [
+            "stock-lab 今日名單 2026/09/07（一）",
+            "",
+            "名單：2026/09/04（五）收盤後產生，2 檔",
+            "1. 2453 凌群",
+            "   規則進場價 61.10／停損 58.50／目標 65.27",
+            "2. 2882 國泰金",
+            "   規則進場區 110.99～1,115.21／停損 110.29／目標 1,121.24",
+            "",
+            "隔夜美股（資料日 2026/09/04（五））",
+            "S&P 500 7,561.67 -0.40%",
+            "NASDAQ 25,136.27 -0.91%",
+            "道瓊 52,347.55 +0.10%",
+            "費半 10,146.32 -3.43%",
+            "來源：FinMind USStockPrice（^GSPC、^IXIC、^DJI、^SOX）",
+        ]
+    )
+    # Facts only: no research status or explanation (decision 6881297699).
+    assert "證據" not in text and "研究" not in text
+
+
+def test_incomplete_levels_are_said_and_never_filled():
+    broken = {**BREAKOUT, "entry": 70.0}  # entry above the target
+    listing = {
+        **LISTING,
+        "candidate_count": 1,
+        "items": [_item(1, "1101", "台泥", broken)],
+    }
+    assert "   價位不完整" in notify.compose(MONDAY, T, listing, US).splitlines()
+
+
+@pytest.mark.parametrize(
+    "status, head",
+    [
+        ("partial", "名單：無資料（2026/09/04（五）的名單沒有產生；daily：partial）"),
+        (None, "名單：無資料（2026/09/04（五）的名單沒有產生；daily 沒有紀錄）"),
+    ],
+)
+def test_a_missing_list_says_no_data_and_still_sends_the_us_indexes(status, head):
+    text = notify.compose(
+        MONDAY, T, {"status": "not_computed", "items": []}, US, status
+    )
+    assert head in text.splitlines()
+    assert "費半 10,146.32 -3.43%" in text
+
+
+def test_an_empty_list_gives_its_reason():
+    listing = {
+        "status": "success",
+        "candidate_count": 0,
+        "zero_reason_text": "當日沒有成立（條件成立）的策略訊號",
+        "items": [],
+    }
+    assert (
+        "名單：2026/09/04（五）收盤後產生，0 檔（當日沒有成立（條件成立）的策略訊號）"
+        in (notify.compose(MONDAY, T, listing, US))
+    )
+
+
+def test_missing_us_indexes_say_no_data():
+    nothing = [_missing(symbol) for symbol in ("SPX", "IXIC", "DJI", "SOX")]
+    text = notify.compose(MONDAY, T, LISTING, nothing)
+    assert text.endswith("\n隔夜美股：無資料（美股尚未更新）")
+    one = [*US[:3], _missing("SOX", "fetch_failed")]
+    lines = notify.compose(MONDAY, T, LISTING, one).splitlines()
+    assert "費半 無資料（抓取失敗）" in lines
+    assert "來源：FinMind USStockPrice（^GSPC、^IXIC、^DJI）" in lines
+
+
+def test_the_us_freshness_follows_the_today_page():
+    # A US holiday on the expected night: 美股休市.
+    closed = [
+        _us(i["symbol"], i["close"], i["change_pct"], "2026-09-03", "us_market_closed")
+        for i in US
+    ]
+    assert notify.compose(MONDAY, T, LISTING, closed).splitlines()[8] == (
+        "隔夜美股 美股休市（資料日 2026/09/03（四））"
+    )
+    # One index behind: its own date and 非最新.
+    behind = [*US[:3], _us("SOX", 10000.0, 0.01, "2026-09-03", "stale")]
+    lines = notify.compose(MONDAY, T, LISTING, behind).splitlines()
+    assert lines[8] == "隔夜美股"
+    assert "費半 10,000.00 +1.00%（2026/09/03（四）） 非最新" in lines
+    # None of the expected night.
+    stale = [
+        _us(i["symbol"], i["close"], i["change_pct"], "2026-09-02", "stale") for i in US
+    ]
+    lines = notify.compose(MONDAY, T, LISTING, stale).splitlines()
+    assert lines[8] == "隔夜美股 美股尚未更新（資料日 2026/09/02（三））"
+    assert not any("非最新" in line for line in lines)
+
+
+def test_a_long_list_is_cut_to_telegrams_limit():
+    items = [_item(rank, f"{rank:04d}", "名" * 200, BREAKOUT) for rank in range(1, 21)]
+    listing = {"status": "success", "candidate_count": 20, "items": items}
+    text = notify.compose(MONDAY, T, listing, US)
+    assert len(text) <= notify.MAX_CHARS
+    lines = text.splitlines()
+    shown = sum(1 for line in lines if line.startswith("   規則進場價"))
+    assert 0 < shown < 20
+    assert f"另 {20 - shown} 檔見今日名單頁" in lines
+    assert lines[-1].startswith("來源：")
+
+
+# --- the message, from the database ---------------------------------------------------
+
+
+@pytest.fixture
+def db():
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    enable_sqlite_foreign_keys(engine)
+    Base.metadata.create_all(engine)
+    with Session(engine, autoflush=False, expire_on_commit=False) as session:
+        session.info["strategies"] = pipeline._ensure_strategies(session)
+        session.commit()
+        yield session
+    engine.dispose()
+
+
+def _us_bars(db, symbol="SOX", closes=((date(2026, 9, 3), 100.0), (T, 103.0))):
+    index = Instrument(
+        exchange=US_INDEX_EXCHANGE,
+        symbol=symbol,
+        name="費城半導體指數",
+        instrument_type="index",
+        status="active",
+    )
+    db.add(index)
+    db.flush()
+    for day, close in closes:
+        db.add(
+            MarketBar(
+                instrument_id=index.id,
+                trading_date=day,
+                open=close,
+                high=close,
+                low=close,
+                close=close,
+                adj_close=close,
+                source="finmind_us_index",
+            )
+        )
+    db.flush()
+
+
+def _closed(db, day: date) -> None:
+    raw = RawPayload(
+        source="twse",
+        endpoint="fixture-holiday-schedule",
+        sha256=f"{day:%Y%m%d}".ljust(64, "0"),
+        data_as_of=day.isoformat(),
+    )
+    db.add(raw)
+    db.flush()
+    db.add(
+        TradingCalendarDay(
+            exchange="TWSE",
+            calendar_date=day,
+            year=day.year,
+            kind="closed",
+            name="放假",
+            description="",
+            source="twse_holiday_schedule",
+            collected_at=datetime(2026, 1, 1),
+            raw_payload_id=raw.id,
+        )
+    )
+    db.flush()
+
+
+def _list_of_t(db):
+    signal(db, stock(db, "1101"))
+    db.commit()
+    compute_daily_candidates(db, T)
+    _us_bars(db)
+    db.commit()
+
+
+def test_the_message_reads_the_list_of_the_session_before_and_todays_us_indexes(db):
+    _list_of_t(db)
+    lines = notify.message(db, MONDAY).splitlines()
+    assert lines[2] == "名單：2026/09/04（五）收盤後產生，1 檔"
+    assert lines[3] == "1. 1101 名1101"
+    assert lines[4] == "   規則進場價 100.00／停損 98.00／目標 103.20"
+    # Only SOX is stored: the others say so; SOX is Friday's, the night before Monday.
+    assert "費半 103.00 +3.00%" in lines
+    assert "S&P 500 無資料（未取得）" in lines
+    assert lines[-1] == "來源：FinMind USStockPrice（^SOX）"
+
+
+def test_no_older_list_stands_in_for_the_missing_one(db):
+    _list_of_t(db)
+    db.add(ScheduleRun(job="daily", target_date=date(2026, 9, 7), status="failed"))
+    db.commit()
+    # Tuesday's message wants Monday's list: Friday's is not shown instead.
+    text = notify.message(db, date(2026, 9, 8))
+    assert "名單：無資料（2026/09/07（一）的名單沒有產生；daily：failed）" in text
+    assert "1101" not in text
+
+
+def test_the_session_before_skips_the_closed_days(db):
+    _list_of_t(db)
+    _closed(db, date(2026, 9, 7))
+    assert notify.is_trading_day(db, date(2026, 9, 7)) is False
+    assert notify.is_trading_day(db, date(2026, 9, 5)) is False  # Saturday
+    assert notify.previous_session(db, date(2026, 9, 8)) == T
+    assert "名單：2026/09/04（五）收盤後產生，1 檔" in notify.message(
+        db, date(2026, 9, 8)
+    )
+
+
+# --- the runs --------------------------------------------------------------------------
+
+
+class Telegram:
+    """The stand-in Bot API: answers each sendMessage with the next scripted reply."""
+
+    def __init__(self, replies):
+        self.replies = list(replies)
+        self.requests: list[dict] = []
+        owner = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                body = self.rfile.read(int(self.headers["Content-Length"]))
+                owner.requests.append({"path": self.path, "body": json.loads(body)})
+                code, payload = owner.replies.pop(0) if owner.replies else (200, None)
+                if payload is None:
+                    payload = {
+                        "ok": True,
+                        "result": {"message_id": len(owner.requests)},
+                    }
+                data = json.dumps(payload).encode("utf-8")
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def log_message(self, *_args):
+                pass
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
+
+    def close(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+
+@pytest.fixture
+def run_env(tmp_path, monkeypatch, db):
+    """A data directory, the fake token, the stand-in server and the session."""
+
+    data = tmp_path / "data"
+    data.mkdir(exist_ok=True)
+    monkeypatch.setenv("STOCK_DATA_DIR", str(data))
+    monkeypatch.setenv(notify.TOKEN_ENV, TOKEN)
+    monkeypatch.setenv(notify.CHAT_ENV, CHAT)
+    monkeypatch.setattr(notify, "RETRY_DELAY_SECONDS", 0.0)
+
+    @contextlib.contextmanager
+    def session():
+        yield db
+
+    monkeypatch.setattr(notify, "_session", session)
+    servers = []
+
+    def telegram(*replies):
+        server = Telegram(replies)
+        servers.append(server)
+        monkeypatch.setattr(notify, "API_BASE", server.base)
+        return server
+
+    _list_of_t(db)
+    yield argparse.Namespace(data=data, logs=data / "logs", telegram=telegram)
+    for server in servers:
+        server.close()
+
+
+def _args(*argv):
+    parser = argparse.ArgumentParser()
+    notify.add_arguments(parser)
+    return parser.parse_args(list(argv))
+
+
+def _send(env, day=MONDAY, trigger="scheduler"):
+    return notify.run(
+        _args(
+            "--send",
+            "--date",
+            day.isoformat(),
+            "--trigger",
+            trigger,
+            "--log-dir",
+            str(env.logs),
+        )
+    )
+
+
+def _log(env, day=MONDAY) -> str:
+    return notify.log_path(env.logs, day).read_text(encoding="utf-8")
+
+
+@linux_only
+def test_a_trading_day_sends_once_and_a_restart_does_not_send_again(run_env, capsys):
+    server = run_env.telegram()
+    assert _send(run_env) == 0
+    assert len(server.requests) == 1
+    request = server.requests[0]
+    assert request["path"] == f"/bot{TOKEN}/sendMessage"
+    assert request["body"]["chat_id"] == int(CHAT)
+    # Plain text: no parse_mode.
+    assert "parse_mode" not in request["body"]
+    assert request["body"]["text"].startswith("stock-lab 今日名單 2026/09/07（一）")
+    assert "--- result status=sent attempts=1 message_id=1" in _log(run_env)
+    # Again the same day (a restarted scheduler's catch-up, a second trigger): no send.
+    assert _send(run_env) == 0
+    assert len(server.requests) == 1
+    assert "--- result status=skipped reason=already_sent" in _log(run_env)
+    assert notify.day_done(run_env.logs, MONDAY)
+    # The log has the start and end lines the watchdog reads.
+    assert _log(run_env).count("end exit=0") == 2
+
+
+@linux_only
+def test_a_closed_day_sends_nothing(run_env, db):
+    server = run_env.telegram()
+    _closed(db, MONDAY)
+    db.commit()
+    assert _send(run_env) == 0
+    assert server.requests == []
+    assert "--- result status=skipped reason=non_trading_day" in _log(run_env)
+    assert notify.day_done(run_env.logs, MONDAY)
+    # A Saturday too (a manual run).
+    assert _send(run_env, date(2026, 9, 5), "manual") == 0
+    assert server.requests == []
+
+
+@linux_only
+def test_a_failed_send_is_tried_once_more_then_recorded_as_failed(run_env, capsys):
+    server = run_env.telegram(
+        (502, {"ok": False, "description": "Bad Gateway"}), (502, None)
+    )
+    assert _send(run_env) == 1
+    assert len(server.requests) == 2
+    log = _log(run_env)
+    assert "--- result status=failed reason=http_502 attempts=2" in log
+    assert "end exit=1" in log
+    assert not notify.day_done(run_env.logs, MONDAY)
+    # The next try (catch-up or by hand) sends.
+    assert _send(run_env, trigger="manual") == 0
+    assert "--- result status=sent" in _log(run_env)
+
+
+@linux_only
+def test_a_first_failure_then_success_is_sent(run_env):
+    server = run_env.telegram((500, {"ok": False, "description": "Internal"}))
+    assert _send(run_env) == 0
+    assert len(server.requests) == 2
+    assert "--- result status=sent attempts=2" in _log(run_env)
+
+
+@linux_only
+def test_the_token_is_in_no_log_output_or_error(run_env, monkeypatch, capsys):
+    # An answer that echoes the token, then the network gone (a closed port).
+    server = run_env.telegram((401, {"ok": False, "description": f"bad bot{TOKEN}"}))
+    original = notify._attempt
+
+    def then_offline(token, chat_id, text):
+        if server.requests:
+            monkeypatch.setattr(notify, "API_BASE", "http://127.0.0.1:9")
+        return original(token, chat_id, text)
+
+    monkeypatch.setattr(notify, "_attempt", then_offline)
+    code = _send(run_env)
+    out = capsys.readouterr()
+    log = _log(run_env)
+    assert code == 1
+    assert "reason=network:" in log and "http_401 bad bot<token>" in log
+    for text in (log, out.out, out.err):
+        assert TOKEN not in text
+        assert TOKEN.split(":")[1] not in text
+    assert notify.mask(f"https://api.telegram.org/bot{TOKEN}/x", None) == (
+        "https://api.telegram.org/bot<token>/x"
+    )
+
+
+@linux_only
+@pytest.mark.parametrize("unset", [notify.TOKEN_ENV, notify.CHAT_ENV])
+def test_without_the_variables_the_run_is_not_configured_and_no_failure(
+    run_env, monkeypatch, unset
+):
+    server = run_env.telegram()
+    monkeypatch.setenv(unset, "")
+    assert _send(run_env) == 0
+    assert server.requests == []
+    assert f"--- result status=not_configured missing={unset}" in _log(run_env)
+    assert notify.day_done(run_env.logs, MONDAY)
+
+
+@linux_only
+@pytest.mark.parametrize("chat", ["-1001234567890", "@channel", "0"])
+def test_a_group_or_channel_chat_is_refused(run_env, monkeypatch, chat):
+    """The US index figures go to the user's own chat only (#1 decision 6717084453)."""
+
+    server = run_env.telegram()
+    monkeypatch.setenv(notify.CHAT_ENV, chat)
+    assert _send(run_env) == 1
+    assert server.requests == []
+    assert "--- result status=failed reason=chat_not_private" in _log(run_env)
+
+
+@linux_only
+def test_a_run_that_finds_the_lock_held_skips(run_env):
+    server = run_env.telegram()
+    lock = job.FileLock(job.lock_path(run_env.data, notify.LOCK))
+    assert lock.acquire()
+    try:
+        assert _send(run_env) == 0
+    finally:
+        lock.release()
+    assert server.requests == []
+    assert "--- result status=skipped reason=already_running" in _log(run_env)
+    assert not notify.day_done(run_env.logs, MONDAY)
+    # The other jobs' locks are not its own.
+    assert notify.LOCK not in job.JOBS
+
+
+def test_the_dry_run_prints_the_message_and_sends_and_writes_nothing(run_env, capsys):
+    server = run_env.telegram()
+    assert notify.run(_args("--dry-run", "--date", MONDAY.isoformat())) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("configured=yes\nstock-lab 今日名單 2026/09/07（一）\n")
+    assert TOKEN not in out and CHAT not in out
+    assert server.requests == []
+    assert not run_env.logs.exists()
+
+
+def test_the_dry_run_says_not_configured_and_a_closed_day(
+    run_env, monkeypatch, db, capsys
+):
+    monkeypatch.delenv(notify.TOKEN_ENV)
+    _closed(db, MONDAY)
+    db.commit()
+    assert notify.run(_args("--dry-run", "--date", MONDAY.isoformat())) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[:2] == ["configured=no", "non_trading_day=2026-09-07（排程這天不送）"]
+
+
+def test_the_command_needs_dry_run_or_send_and_a_real_date():
+    with pytest.raises(SystemExit):
+        _args()
+    with pytest.raises(SystemExit):
+        _args("--dry-run", "--send")
+    assert notify.argument_problem(_args("--dry-run", "--date", "2026-02-30"))
+    assert notify.argument_problem(_args("--dry-run", "--date", "2026-11-16")) is None
+
+
+def test_old_logs_are_removed_after_90_days(run_env, tmp_path):
+    run_env.logs.mkdir(parents=True, exist_ok=True)
+    old = run_env.logs / "notify-20260101.log"
+    old.write_text("x\n", encoding="utf-8")
+    stamp = (datetime.now() - timedelta(days=91)).timestamp()
+
+    os.utime(old, (stamp, stamp))
+    runner = notify._Run(_args("--send", "--log-dir", str(run_env.logs)))
+    runner._remove_old_logs()
+    assert not old.exists()
+
+
+def test_serve_reads_the_day_results_from_the_log(tmp_path):
+    logs = tmp_path
+    path = notify.log_path(logs, MONDAY)
+    path.write_text(
+        "===== start\n--- result status=failed reason=http_502 attempts=2\n"
+        "===== end exit=1 seconds=31\n"
+        "===== start\n--- result status=skipped reason=already_running\n",
+        encoding="utf-8",
+    )
+    assert notify.day_results(logs, MONDAY) == [
+        "failed",
+        "skipped reason=already_running",
+    ]
+    assert not notify.day_done(logs, MONDAY)
+    assert notify.day_results(logs, date(2026, 9, 8)) == []
+    assert Path(path).name == "notify-20260907.log"
