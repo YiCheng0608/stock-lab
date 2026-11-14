@@ -61,8 +61,6 @@ export function viewChipLabel(view: ActionView, summary: ActionTierSummary, sele
 }
 
 export const ETF_LABEL = '含 ETF'
-// What the hidden line leaves out (#649): in the page's 說明 fold, not under the chips.
-export const HIDDEN_NOTE = '自選標的一律顯示；隱藏不刪資料，切換上方篩選即可看到。'
 
 // 預設隱藏：… — each hidden row once, ETFs first (summary.hidden); zero parts are left out.
 export function hiddenSentence(summary: ActionTierSummary): string | null {

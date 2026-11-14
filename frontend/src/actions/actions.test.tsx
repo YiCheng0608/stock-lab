@@ -9,7 +9,8 @@ import { action } from '../today/today.fixtures'
 import { parseStockTab, stockTabSearch } from '../stock/stockTabs'
 import { PageDateContext } from '../components/pageDate'
 import { ActionFilters, ActionTierList, ActionTierSectionView } from './ActionViews'
-import { ACTION_TIER_PREVIEW, actionClose, CONDITIONS_PENDING_TEXT, EMPTY_TEXT, HIDDEN_NOTE, LEVELS_NOTE, NEAR_RESEARCH_LINK, SEARCH_NOTE, hiddenSentence, nearCopy, previewTiers, tierSections } from './actionTiers'
+import { ACTION_TIER_PREVIEW, actionClose, CONDITIONS_PENDING_TEXT, EMPTY_TEXT, LEVELS_NOTE, NEAR_RESEARCH_LINK, SEARCH_NOTE, hiddenSentence, nearCopy, previewTiers, tierSections } from './actionTiers'
+import { removedCopyIn } from '../removedCopy.fixtures'
 
 // Action centre tiers (#278, UI_COPY_SPEC §5, DESIGN_SYSTEM §5 行動列表／篩選膠囊／庫存一行), the tier 3 接近成立 cards
 // and the tier 2／4 lines (#277-B, UI_COPY_SPEC §6, DESIGN_SYSTEM §7), and the today page's holding line reading every
@@ -75,9 +76,9 @@ const allView = render('ActionFilters all', () => <ActionFilters summary={summar
 check(/aria-pressed="true"[^>]*>全部 1,491</.test(allView) && text(allView).includes('重點') && !text(allView).includes('重點 54'), `篩選膠囊: the count follows the selected chip, got ${text(allView)}`)
 check(count(filters, 'aria-pressed="true"') === 1 && /aria-pressed="true"[^>]*>重點 54/.test(filters), '篩選膠囊: only 重點 is selected by default')
 check(filters.includes('filter-chip-selected') && count(filters, 'class="badge filter-chip') === 3, '篩選膠囊: three badge chips, the selected variant on one')
-// Issue 649: the counts stay on the chip row; why rows are hidden (HIDDEN_NOTE) is in the page's 說明 fold.
+// Issue 649: the counts stay on the chip row; Issue 732 (4-9): no note on why rows are hidden, anywhere.
 const sentence = '預設隱藏：ETF 186 檔、其他觀察 1,308 檔、資料不足 129 檔'
-check(filters.includes(`<span class="small-note action-hidden-note">${sentence}</span>`) && !text(filters).includes(HIDDEN_NOTE), `預設隱藏句: the counts from summary.hidden, without the note, got ${text(filters)}`)
+check(filters.includes(`<span class="small-note action-hidden-note">${sentence}</span>`) && !removedCopyIn(filters).length, `預設隱藏句: the counts from summary.hidden, without the note, got ${text(filters)}`)
 check(/^<div class="action-filters"><div class="filter-chips"[^]*<\/div><label class="check-label">[^]*<\/label><span class="small-note action-hidden-note">[^<]*<\/span><\/div>$/.test(filters), `篩選列: chips, 含 ETF and the hidden counts in one row, got ${filters}`)
 check(hiddenSentence(summary({ hidden: { etf: 0, observation: 3, data_insufficient: 0 }, view: 'all' })) === '目前隱藏：其他觀察 3 檔', '隱藏句: a zero part is left out and a non-default filter says 目前隱藏')
 check(hiddenSentence(summary({ hidden: { etf: 0, observation: 0, data_insufficient: 0 }, view: 'all', include_etf: true })) === null, '隱藏句: nothing hidden, no line')
@@ -234,11 +235,15 @@ check(allCards.every((card) => /資料 2026\/10\/22<\/div><details class="action
 // ---- 我的庫存: one line without holdings, the full section with them ----
 const PortfolioSubsection = appComponent('PortfolioSubsection')
 const emptyPortfolio = render('PortfolioSubsection empty', () => <PortfolioSubsection />, [[['portfolio-subsection'], { items: [], pagination: {} }]])
-check(emptyPortfolio.includes('class="card portfolio-line"') && text(emptyPortfolio).includes('尚未建立庫存。') && text(emptyPortfolio).includes('有持倉風險時列在最上方。'), '庫存一行: no holdings, one line')
+check(emptyPortfolio.includes('class="card portfolio-line"') && text(emptyPortfolio).includes('尚未建立庫存。') && !removedCopyIn(emptyPortfolio).length, `庫存一行: no holdings, one line without the ordering note (Issue 732, N-1): ${removedCopyIn(emptyPortfolio).join('、')}`)
 check(!emptyPortfolio.includes('portfolio-subsection') && emptyPortfolio.includes('新增庫存'), '庫存一行: not the full panel, the form still opens')
 const position = { id: 1, instrument: { exchange: 'TWSE', symbol: '2330', name: '台積電' }, shares: 1000, shares_exact: true, average_cost: 900, stop_price: 850, portfolio_value_status: {}, portfolio_quote: null, market_value: null, unrealized_pnl: null, valuation_status: 'unavailable' } as unknown as Position
 const fullPortfolio = render('PortfolioSubsection held', () => <PortfolioSubsection />, [[['portfolio-subsection'], { items: [position], pagination: {} }]])
 check(fullPortfolio.includes('class="panel portfolio-subsection"') && fullPortfolio.includes('position-card') && !fullPortfolio.includes('portfolio-line'), '庫存: holdings show the full section')
+// Issue 732 (3-8, N-1, N-2): the holding keeps its shares, cost, close, value and record date; the audit notes, the
+// .000000 times, the ordering note and the formulas in the labels left.
+check(!removedCopyIn(fullPortfolio).length, `庫存: removed copy is back: ${removedCopyIn(fullPortfolio).join('、')}`)
+check(text(fullPortfolio).includes('本地行情與試算') && text(fullPortfolio).includes('市值本地試算（報價幣別元）') && text(fullPortfolio).includes('未實現損益本地試算（報價幣別元）') && text(fullPortfolio).includes('記錄日期'), `庫存: the local quote fold keeps its values, got ${text(fullPortfolio)}`)
 
 // ---- /actions/:exchange/:symbol is the research tab; the stock page tab follows ?tab= ----
 const redirect = (AppModule as unknown as { actionDetailRedirectPath: (exchange: string, symbol: string) => string }).actionDetailRedirectPath

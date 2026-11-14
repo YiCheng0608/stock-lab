@@ -239,7 +239,7 @@ def test_the_table_is_three_rows_in_order_through_the_dashboard(factory, client)
     assert taiex["change_pct_method"] == "official"
     assert taiex["source"] == {
         "label": "臺灣證券交易所",
-        "detail": "臺灣證券交易所 MI_INDEX",
+        "detail": "臺灣證券交易所",
     }
     # The TAIEX row and the #561 strip are one judgement.
     strip = overview["taiex_ma60"]

@@ -18,9 +18,6 @@ import { removedCopyIn } from './removedCopy.fixtures'
 import { planLink } from './tracking/tracking'
 import type { Dashboard } from './types'
 
-// The 我的追蹤 purpose line for a first-time reader (UI_COPY_SPEC §5, decision 6648288563).
-const WATCH_PURPOSE = '把有興趣的候選加入追蹤，系統每天收盤後依日線模擬它的進場與出場（不是實際成交）；這裡也會提醒你庫存的風險，和快要成立的股票。'
-
 // The frontend ships no Node typings; scripts/ci-test.cjs runs this module under Node, so declare what it uses.
 declare const require: (id: string) => unknown
 declare const __dirname: string
@@ -65,17 +62,16 @@ check(JSON.stringify(nav) === JSON.stringify(expectedNav), `MAIN_NAV: ${JSON.str
   const expectedSystem = ['/news 新聞', '/research/backtest 技術回測', '/research/coverage 資料覆蓋度', '/research/strategies 策略版本', '/system/data-quality 資料品質', '/glossary 用語表']
   check(JSON.stringify(listed) === JSON.stringify(expectedSystem), `/system 列出六個連結: ${JSON.stringify(listed)}`)
   check(SYSTEM_LINKS.every((item) => item.description.length > 5), '/system 每個連結都有一行說明')
+  // Issue 732 (3-16): the lead sentence left; each link keeps its one line.
+  check(!removedCopyIn(system).length, `/system 出現已拿掉的字: ${removedCopyIn(system).join('、')}`)
 }
 
 // ---- routes: /watch and /strategy render their pages; /actions keeps its query and plan anchor ----
 const App = (AppModule as Record<string, unknown>).default as () => ReactElement
 const watch = render('/watch', <App />)
 check(watch.includes('<h1>我的追蹤</h1>'), '/watch 的頁面標題是「我的追蹤」')
-check(text(watch).includes(WATCH_PURPOSE), `/watch 有用途說明: ${text(watch).slice(0, 300)}`)
-// Issue 649: the purpose and why rows are hidden sit in a closed 說明 fold on the title line, not under the title.
-const watchHelp = /<div class="watch-title-row"><h1>我的追蹤<\/h1><details class="details watch-help"><summary>說明<\/summary>([^]*?)<\/details><\/div>/.exec(watch)?.[1] ?? ''
-check(text(watchHelp).includes(WATCH_PURPOSE) && text(watchHelp).includes('自選標的一律顯示；隱藏不刪資料，切換上方篩選即可看到。'), `/watch 的用途說明與隱藏說明收在標題列的「說明」: ${watchHelp.slice(0, 200)}`)
-check(text(watch).split(WATCH_PURPOSE).length === 2 && !/<details class="details watch-help" open/.test(watch), '/watch 的用途說明只出現一次、「說明」預設收合')
+// Issue 732 (4-9, 3-8, N-1): the title has no 說明 fold, and the purpose, hidden-row and portfolio notes are gone.
+check(!watch.includes('watch-help') && !removedCopyIn(watch).length, `/watch 出現已拿掉的字: ${removedCopyIn(watch).join('、')}`)
 check(!watch.includes('找不到此頁'), '/watch 不是 404')
 const strategy = render('/strategy', <App />)
 check(strategy.includes('<h1>策略說明</h1>'), '/strategy 的頁面標題是「策略說明」')

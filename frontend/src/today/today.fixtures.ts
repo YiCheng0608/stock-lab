@@ -9,7 +9,7 @@ function twse(): MarketOverviewExchange {
     index: { name: '加權指數', close: 46041.43, change: -846.34, change_pct: -0.0181, change_pct_method: 'official' },
     turnover: { value: 933437473560, scope: 'twse_all_securities', scope_label: '集中市場總計（含 ETF、權證等）' },
     breadth: { advancers: 247, decliners: 756, unchanged: 74, limit_up: 3, limit_down: 5, unmatched: 7, not_comparable: 0, scope: 'twse_stocks' },
-    source: { label: '臺灣證券交易所 MI_INDEX', collected_at: '2026-10-22T10:30:05+00:00', data_as_of: '2026-10-22', raw_payload_id: 6 },
+    source: { label: '臺灣證券交易所', collected_at: '2026-10-22T10:30:05+00:00', data_as_of: '2026-10-22', raw_payload_id: 6 },
   }
 }
 
@@ -20,7 +20,7 @@ function tpex(): MarketOverviewExchange {
     index: { name: '櫃買指數', close: 381.69, change: -13.73, change_pct: -0.0347, change_pct_method: 'derived' },
     turnover: { value: 225545000000, scope: 'tpex_stocks', scope_label: '上櫃股票' },
     breadth: { advancers: 146, decliners: 659, unchanged: 63, limit_up: 17, limit_down: 11, unmatched: 26, not_comparable: null, scope: 'tpex_stocks' },
-    source: { label: '櫃買中心 tpex_mainborad_highlight', collected_at: '2026-10-22T10:31:00+00:00', data_as_of: '2026-10-22', raw_payload_id: 7 },
+    source: { label: '證券櫃檯買賣中心', collected_at: '2026-10-22T10:31:00+00:00', data_as_of: '2026-10-22', raw_payload_id: 7 },
   }
 }
 

@@ -54,6 +54,7 @@ BACKEND_READ_FILES: frozenset[str] = frozenset(
         # backend/tests/test_verify_checks.py mirrors the strength steps and opacities (PR 658).
         "frontend/src/components/ui/ScoreBar.tsx",
         "frontend/src/styles.css",
+        "frontend/src/removedCopy.fixtures.ts",  # REMOVED_COPY mirror test (#732)
     }
 )
 # Outside backend/ but part of the backend image build (backend/Dockerfile, #333): the docker
