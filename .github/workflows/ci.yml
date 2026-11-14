@@ -174,6 +174,7 @@ jobs:
           import json, os, time
           import xml.etree.ElementTree as ET
           temp = os.environ['RUNNER_TEMP']
+          shard = os.environ['SHARD']
 
           def number(value):
               try:
@@ -213,7 +214,7 @@ jobs:
                   for kind in ids:
                       if case.find(kind) is not None:
                           ids[kind].append(test_id)
-          result = {'shard': os.environ['SHARD'], 'outcome': os.environ['OUTCOME'] or None, 'seconds': seconds,
+          result = {'shard': shard, 'outcome': os.environ['OUTCOME'] or None, 'seconds': seconds,
                     'workers': workers, **counts,
                     'failed': ids['failure'], 'error': ids['error']}
           line = json.dumps(result, ensure_ascii=False)
@@ -222,9 +223,9 @@ jobs:
           # Workflow command escaping of the message: % first, then CR and LF.
           message = json.dumps(short, ensure_ascii=False)
           message = message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-          print(f"::notice title=backend {os.environ['SHARD']}::{message}")
+          print(f'::notice title=backend {shard}::{message}')
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as out:
-              out.write(f"## backend {os.environ['SHARD']} (#442, #746)\n\n| outcome | seconds | workers | tests | failures | errors | skipped |\n')
+              out.write(f'## backend {shard} (#442, #746)\n\n| outcome | seconds | workers | tests | failures | errors | skipped |\n')
               out.write('| --- | --- | --- | --- | --- | --- | --- |\n')
               cells = [result[k] for k in ('outcome', 'seconds', 'workers', *keys)]
               out.write('| ' + ' | '.join('' if c is None else str(c) for c in cells) + ' |\n\n')

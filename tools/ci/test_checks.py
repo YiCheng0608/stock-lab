@@ -1095,6 +1095,53 @@ class BackendTime(unittest.TestCase):
         self.assertEqual(self.pytest.get("id"), "pytest")
 
 
+class WorkflowInlinePython(unittest.TestCase):
+    """Every Python script written inline in a workflow step compiles (#746).
+
+    PR #748's first run had a mismatched quote in the backend Summary step's heredoc: pytest
+    passed in both shards and the step then failed with a SyntaxError, ten minutes in. Here it
+    fails in the repository job instead.
+    """
+
+    HEREDOC = re.compile(
+        r"\bpython3? - <<'(\w+)'\n(.*?)\n\1$", re.DOTALL | re.MULTILINE
+    )
+    DASH_C = re.compile(r'\bpython3? -c "([^"]*)"')
+
+    def scripts(self) -> list[tuple[str, str]]:
+        import yaml
+
+        found = []
+        for path in sorted((ROOT / ".github/workflows").glob("*.yml")):
+            workflow = yaml.load(
+                path.read_text(encoding="utf-8"), Loader=yaml.BaseLoader
+            )
+            for job_name, job in workflow["jobs"].items():
+                for n, step in enumerate(job.get("steps", [])):
+                    run = step.get("run", "")
+                    where = f"{path.name} {job_name} step {n} ({step.get('name', '')})"
+                    found += [(where, m.group(2)) for m in self.HEREDOC.finditer(run)]
+                    found += [(where, m.group(1)) for m in self.DASH_C.finditer(run)]
+        return found
+
+    def test_every_inline_script_compiles(self):
+        scripts = self.scripts()
+        # The backend Summary, required's check and the docker job's import: not vacuous.
+        self.assertGreaterEqual(len(scripts), 3)
+        for where, source in scripts:
+            with self.subTest(where):
+                compile(source, where, "exec")
+
+    def test_a_mismatched_quote_is_caught(self):
+        """The mutation of PR #748's run 43643799589."""
+        source = "import os\nout = f\"## backend {os.environ['SHARD']}\\n')\n"
+        with self.assertRaises(SyntaxError):
+            compile(source, "summary", "exec")
+        run = f"python3 - <<'PY'\n{source}PY\n"
+        (match,) = self.HEREDOC.finditer(run)
+        self.assertEqual(match.group(2) + "\n", source)
+
+
 class BackendParallel(unittest.TestCase):
     """The backend job runs pytest-xdist, and a failing test makes it and required red (#442).
 
