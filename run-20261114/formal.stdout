@@ -1,0 +1,2 @@
+{"out": "/out/formal", "elapsed_seconds": 248.4, "verdicts": {"K5:top5": {"population": "沒有差異", "taiex": "輸給基準"}, "K5:top10": {"population": "沒有差異", "taiex": "輸給基準"}, "K5:top20": {"population": "沒有差異", "taiex": "輸給基準"}, "K10:top5": {"population": "沒有差異", "taiex": "輸給基準"}, "K10:top10": {"population": "沒有差異", "taiex": "輸給基準"}, "K10:top20": {"population": "沒有差異", "taiex": "輸給基準"}, "K20:top5": {"population": "沒有差異", "taiex": "方向一致但不顯著"}, "K20:top10": {"population": "沒有差異", "taiex": "方向一致但不顯著"}, "K20:top20": {"population": "沒有差異", "taiex": "方向一致但不顯著"}}}
+exit=0
