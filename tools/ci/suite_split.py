@@ -321,14 +321,20 @@ def problems(
 
 
 def summary(
-    manifest: dict, backend: list[dict], docker: dict, image: dict
+    manifest: dict,
+    backend: list[dict],
+    docker: dict,
+    image: dict,
+    names: list[str] | None = None,
 ) -> list[str]:
+    """`names` labels the backend shards (the CLI's: report file names without `backend-`)."""
     full = set(image["collected"])
     merged, _ = merge_backend(backend)
     in_backend, in_docker = _executed(merged), _executed(docker)
+    names = names or [str(n) for n in range(1, len(backend) + 1)]
     shards = [
-        f"backend shard {n}: collected {len(r['collected'])}, ran {len(_executed(r))}"
-        for n, r in enumerate(backend, 1)
+        f"backend shard {name}: collected {len(r['collected'])}, ran {len(_executed(r))}"
+        for name, r in zip(names, backend, strict=True)
     ]
     return [
         f"whole suite (collected in the image): {len(full)}",
@@ -396,7 +402,8 @@ def main(argv: list[str] | None = None) -> int:
             print(line, file=sys.stderr)
         print(f"suite split: {len(errors)} problem line(s)", file=sys.stderr)
         return 1
-    for line in summary(manifest, backend, docker, image):
+    names = [Path(path).stem.removeprefix("backend-") for path in options.backend]
+    for line in summary(manifest, backend, docker, image, names):
         print(line)
     print("suite split: every test of the suite ran in at least one job")
     return 0

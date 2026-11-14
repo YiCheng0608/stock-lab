@@ -109,6 +109,37 @@ class Verify(unittest.TestCase):
         merged, _ = suite_split.merge_backend([ops, run({ONE: PASSED})])
         self.assertEqual(merged["outcomes"][ONE], FAILED)
 
+    def test_verify_names_each_shard_by_its_report(self):
+        """The Summary says which shard is which: backend-<shard>.json gives <shard>."""
+        backend, docker, image = reports()
+        ops, rest = self.shards(backend, {ONE, PARAM_X})
+        with tempfile.TemporaryDirectory() as tmp:
+            files = {
+                "manifest.json": MANIFEST,
+                "backend-ops.json": ops,
+                "backend-rest.json": rest,
+                "docker.json": docker,
+                "image.json": image,
+            }
+            for name, data in files.items():
+                Path(tmp, name).write_text(json.dumps(data), encoding="utf-8")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = suite_split.main(
+                    [
+                        "verify",
+                        "--manifest", str(Path(tmp, "manifest.json")),
+                        "--backend", str(Path(tmp, "backend-ops.json")),
+                        "--backend", str(Path(tmp, "backend-rest.json")),
+                        "--docker", str(Path(tmp, "docker.json")),
+                        "--image", str(Path(tmp, "image.json")),
+                    ]
+                )  # fmt: skip
+        self.assertEqual(code, 0)
+        lines = out.getvalue().splitlines()
+        self.assertIn("backend shard ops: collected 2, ran 2", lines)
+        self.assertIn("backend shard rest: collected 3, ran 1", lines)
+
     def test_no_backend_report_fails(self):
         _, docker, image = reports()
         self.assertEqual(problems(MANIFEST, [], docker, image), ["no backend report"])
