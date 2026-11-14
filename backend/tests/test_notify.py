@@ -11,6 +11,7 @@ import argparse
 import contextlib
 import json
 import os
+import re
 import sys
 import threading
 from datetime import date, datetime, timedelta
@@ -54,25 +55,36 @@ def _item(rank, symbol, name, levels):
     }
 
 
-BREAKOUT = {
-    "entry_type": "breakout",
-    "entry": 61.1,
-    "entry_zone": {"low": 61.1, "high": 61.1},
-    "invalid_price": 58.5,
-    "target_1": 65.27,
-}
-PULLBACK = {
-    "entry_type": "pullback",
-    "entry": 113.1,
-    "entry_zone": {"low": 110.99, "high": 1115.21},
-    "invalid_price": 110.29,
-    "target_1": 1121.24,
-}
+def _breakout(entry, stop, target):
+    return {
+        "entry_type": "breakout",
+        "entry": entry,
+        "entry_zone": {"low": entry, "high": entry},
+        "invalid_price": stop,
+        "target_1": target,
+    }
+
+
+def _pullback(low, high, stop, target):
+    return {
+        "entry_type": "pullback",
+        "entry": (low + high) / 2,
+        "entry_zone": {"low": low, "high": high},
+        "invalid_price": stop,
+        "target_1": target,
+    }
+
+
+BREAKOUT = _breakout(61.1, 58.5, 65.27)
+PULLBACK = _pullback(110.99, 115.21, 110.29, 121.24)
 LISTING = {
     "status": "success",
     "candidate_count": 2,
     "items": [_item(1, "2453", "凌群", BREAKOUT), _item(2, "2882", "國泰金", PULLBACK)],
 }
+TITLE = "📋 <b>今日名單｜09/07（一）</b>"
+BREAKOUT_LINE = "　進場 61.10｜停損 58.50｜目標 65.27"
+PULLBACK_LINE = "　進場 110.99～115.21｜停損 110.29｜目標 121.24"
 
 
 def _us(symbol, close, pct, day="2026-09-04", freshness="latest", series=None):
@@ -103,55 +115,137 @@ US = [
     _us("DJI", 52347.55, 0.001),
     _us("SOX", 10146.32, -0.0343),
 ]
+US_ROWS = [
+    "🟢 S&amp;P 500　7,561.67　−0.40%",
+    "🟢 NASDAQ　25,136.27　−0.91%",
+    "🔴 道瓊　52,347.55　+0.10%",
+    "🟢 費半　10,146.32　−3.43%",
+]
 
 
-def test_the_message_lists_the_rows_and_the_overnight_us_indexes():
-    text = notify.compose(MONDAY, T, LISTING, US)
+def _well_formed(text):
+    """Telegram's HTML parser takes it: the only tags are <b> and </b>, paired."""
+
+    assert text.count("<b>") == text.count("</b>")
+    assert "<" not in re.sub(r"</?b>", "", text)
+    assert ">" not in re.sub(r"</?b>", "", text)
+
+
+# AC-1 (#742): both sections with two rows or more, one row without its levels, a type of
+# neither section, more rows than the twenty shown, and a US index up, down, flat and
+# missing.
+CARD_ITEMS = [
+    _item(1, "2453", "凌群", BREAKOUT),
+    _item(2, "2882", "國泰金", PULLBACK),
+    _item(3, "2618", "長榮航", _breakout(47.75, 46.31, 50.05)),
+    _item(4, "2881", "富邦金", _pullback(88.1, 90.0, 87.0, 95.5)),
+    _item(5, "1101", "台泥", {**BREAKOUT, "entry": 70.0}),  # entry above the target
+    _item(6, "0006", "名", BREAKOUT),
+    _item(7, "9999", "別型", {**BREAKOUT, "entry_type": "reversal"}),
+    *(_item(rank, f"{rank:04d}", "名", BREAKOUT) for rank in range(8, 21)),
+]
+CARD_US = [
+    _us("SPX", 7561.67, -0.004),
+    _us("IXIC", 25136.27, 0.0),
+    _us("DJI", 52347.55, 0.001),
+    _missing("SOX", "fetch_failed"),
+]
+
+
+def test_the_card_has_the_sections_the_levels_line_and_the_marked_us_indexes():
+    listing = {"status": "success", "candidate_count": 23, "items": CARD_ITEMS}
+    text = notify.compose(MONDAY, T, listing, CARD_US)
+    generic = [
+        line
+        for rank in range(8, 21)
+        for line in (f"<b>{rank:04d} 名</b>", BREAKOUT_LINE)
+    ]
     assert text == "\n".join(
         [
-            "stock-lab 今日名單 2026/09/07（一）",
+            TITLE,
+            "09/04（五）收盤後產生・23 檔",
             "",
-            "名單：2026/09/04（五）收盤後產生，2 檔",
-            "1. 2453 凌群",
-            "   規則進場價 61.10／停損 58.50／目標 65.27",
-            "2. 2882 國泰金",
-            "   規則進場區 110.99～1,115.21／停損 110.29／目標 1,121.24",
+            "🚀 <b>突破（17 檔）</b>",
+            "<b>2453 凌群</b>",
+            BREAKOUT_LINE,
+            "<b>2618 長榮航</b>",
+            "　進場 47.75｜停損 46.31｜目標 50.05",
+            "<b>1101 台泥</b>",
+            "　價位不完整",
+            "<b>0006 名</b>",
+            BREAKOUT_LINE,
+            *generic,
             "",
-            "隔夜美股（資料日 2026/09/04（五））",
-            "S&P 500 7,561.67 -0.40%",
-            "NASDAQ 25,136.27 -0.91%",
-            "道瓊 52,347.55 +0.10%",
-            "費半 10,146.32 -3.43%",
-            "來源：FinMind USStockPrice（^GSPC、^IXIC、^DJI、^SOX）",
+            "↩️ <b>回踩（2 檔）</b>",
+            "<b>2882 國泰金</b>",
+            PULLBACK_LINE,
+            "<b>2881 富邦金</b>",
+            "　進場 88.10～90.00｜停損 87.00｜目標 95.50",
+            "",
+            "<b>其他（1 檔）</b>",
+            "<b>9999 別型</b>",
+            "　價位不完整",
+            "另 3 檔見今日名單頁",
+            "",
+            "🌎 <b>隔夜美股</b>（09/04 收盤）",
+            "🟢 S&amp;P 500　7,561.67　−0.40%",
+            "⚪ NASDAQ　25,136.27　0.00%",
+            "🔴 道瓊　52,347.55　+0.10%",
+            "費半　無資料（抓取失敗）",
+            "來源 FinMind",
         ]
     )
+    _well_formed(text)
     # Facts only: no research status or explanation (decision 6881297699).
     assert "證據" not in text and "研究" not in text
 
 
-def test_incomplete_levels_are_said_and_never_filled():
-    broken = {**BREAKOUT, "entry": 70.0}  # entry above the target
-    listing = {
-        **LISTING,
-        "candidate_count": 1,
-        "items": [_item(1, "1101", "台泥", broken)],
-    }
-    assert "   價位不完整" in notify.compose(MONDAY, T, listing, US).splitlines()
+def test_the_card_on_a_us_holiday():
+    closed = [
+        _us(i["symbol"], i["close"], i["change_pct"], "2026-09-03", "us_market_closed")
+        for i in US
+    ]
+    assert notify.compose(MONDAY, T, LISTING, closed) == "\n".join(
+        [
+            TITLE,
+            "09/04（五）收盤後產生・2 檔",
+            "",
+            "🚀 <b>突破（1 檔）</b>",
+            "<b>2453 凌群</b>",
+            BREAKOUT_LINE,
+            "",
+            "↩️ <b>回踩（1 檔）</b>",
+            "<b>2882 國泰金</b>",
+            PULLBACK_LINE,
+            "",
+            "🌎 <b>隔夜美股</b> 美股休市（09/03 收盤）",
+            *US_ROWS,
+            "來源 FinMind",
+        ]
+    )
 
 
 @pytest.mark.parametrize(
     "status, head",
     [
-        ("partial", "名單：無資料（2026/09/04（五）的名單沒有產生；daily：partial）"),
-        (None, "名單：無資料（2026/09/04（五）的名單沒有產生；daily 沒有紀錄）"),
+        ("partial", "名單：無資料（09/04（五）的名單沒有產生；daily：partial）"),
+        (None, "名單：無資料（09/04（五）的名單沒有產生；daily 沒有紀錄）"),
     ],
 )
 def test_a_missing_list_says_no_data_and_still_sends_the_us_indexes(status, head):
     text = notify.compose(
         MONDAY, T, {"status": "not_computed", "items": []}, US, status
     )
-    assert head in text.splitlines()
-    assert "費半 10,146.32 -3.43%" in text
+    assert text == "\n".join(
+        [
+            TITLE,
+            head,
+            "",
+            "🌎 <b>隔夜美股</b>（09/04 收盤）",
+            *US_ROWS,
+            "來源 FinMind",
+        ]
+    )
 
 
 def test_an_empty_list_gives_its_reason():
@@ -161,66 +255,112 @@ def test_an_empty_list_gives_its_reason():
         "zero_reason_text": "當日沒有成立（條件成立）的策略訊號",
         "items": [],
     }
-    assert (
-        "名單：2026/09/04（五）收盤後產生，0 檔（當日沒有成立（條件成立）的策略訊號）"
-        in (notify.compose(MONDAY, T, listing, US))
+    lines = notify.compose(MONDAY, T, listing, US).splitlines()
+    assert lines[:3] == [
+        TITLE,
+        "09/04（五）收盤後產生・0 檔（當日沒有成立（條件成立）的策略訊號）",
+        "",
+    ]
+    assert lines[3].startswith("🌎 ")
+
+
+def test_the_data_texts_are_escaped():
+    """AC-2 (#742): a name, a reason or a status with & < > reaches Telegram escaped."""
+
+    listing = {
+        "status": "success",
+        "candidate_count": 1,
+        "items": [_item(1, "1234", "A&B<C>", BREAKOUT)],
+    }
+    text = notify.compose(MONDAY, T, listing, US)
+    assert "<b>1234 A&amp;B&lt;C&gt;</b>" in text.splitlines()
+    _well_formed(text)
+    empty = {
+        "status": "success",
+        "candidate_count": 0,
+        "zero_reason_text": "<沒有> & 訊號",
+        "items": [],
+    }
+    assert "（&lt;沒有&gt; &amp; 訊號）" in notify.compose(MONDAY, T, empty, US)
+    missing = notify.compose(
+        MONDAY, T, {"status": "not_computed", "items": []}, US, "<x>&"
     )
+    assert "daily：&lt;x&gt;&amp;）" in missing
+    _well_formed(missing)
 
 
 def test_missing_us_indexes_say_no_data():
     nothing = [_missing(symbol) for symbol in ("SPX", "IXIC", "DJI", "SOX")]
     text = notify.compose(MONDAY, T, LISTING, nothing)
-    assert text.endswith("\n隔夜美股：無資料（美股尚未更新）")
-    one = [*US[:3], _missing("SOX", "fetch_failed")]
-    lines = notify.compose(MONDAY, T, LISTING, one).splitlines()
-    assert "費半 無資料（抓取失敗）" in lines
-    assert "來源：FinMind USStockPrice（^GSPC、^IXIC、^DJI）" in lines
+    assert text.endswith("\n🌎 <b>隔夜美股</b>：無資料（美股尚未更新）")
 
 
 def test_the_us_freshness_follows_the_today_page():
-    # A US holiday on the expected night: 美股休市.
-    closed = [
-        _us(i["symbol"], i["close"], i["change_pct"], "2026-09-03", "us_market_closed")
-        for i in US
-    ]
-    assert notify.compose(MONDAY, T, LISTING, closed).splitlines()[8] == (
-        "隔夜美股 美股休市（資料日 2026/09/03（四））"
-    )
+    def head(lines):
+        return next(line for line in lines if line.startswith("🌎 "))
+
     # One index behind: its own date and 非最新.
     behind = [*US[:3], _us("SOX", 10000.0, 0.01, "2026-09-03", "stale")]
     lines = notify.compose(MONDAY, T, LISTING, behind).splitlines()
-    assert lines[8] == "隔夜美股"
-    assert "費半 10,000.00 +1.00%（2026/09/03（四）） 非最新" in lines
+    assert head(lines) == "🌎 <b>隔夜美股</b>"
+    assert "🔴 費半　10,000.00　+1.00%（09/03 收盤） 非最新" in lines
+    assert "🟢 S&amp;P 500　7,561.67　−0.40%（09/04 收盤）" in lines
     # None of the expected night.
     stale = [
         _us(i["symbol"], i["close"], i["change_pct"], "2026-09-02", "stale") for i in US
     ]
     lines = notify.compose(MONDAY, T, LISTING, stale).splitlines()
-    assert lines[8] == "隔夜美股 美股尚未更新（資料日 2026/09/02（三））"
+    assert head(lines) == "🌎 <b>隔夜美股</b> 美股尚未更新（09/02 收盤）"
     assert not any("非最新" in line for line in lines)
+
+
+def test_the_us_marks_follow_the_rounded_change_and_two_sources_are_named():
+    tiny = [
+        _us("SPX", 7561.67, -0.00001),
+        _us("IXIC", 25136.27, None),
+        {**_us("DJI", 52347.55, 0.001), "source": {"label": "FRED"}},
+    ]
+    lines = notify.compose(MONDAY, T, LISTING, tiny).splitlines()
+    # -0.001% shows as 0.00%: flat, not down.
+    assert "⚪ S&amp;P 500　7,561.67　0.00%" in lines
+    # An unknown change has no mark.
+    assert "NASDAQ　25,136.27　—" in lines
+    assert lines[-1] == "來源 FinMind；FRED"
 
 
 def test_rows_past_the_twenty_shown_are_counted_in_the_last_line():
     """Review 6882303076 item 7: N is the list's count less the rows shown."""
 
-    items = [_item(rank, f"{rank:04d}", "名", BREAKOUT) for rank in range(1, 21)]
+    items = [_item(rank, f"{rank:04d}", "名", BREAKOUT) for rank in range(1, 22)]
     listing = {"status": "success", "candidate_count": 25, "items": items}
     lines = notify.compose(MONDAY, T, listing, US).splitlines()
-    assert lines[2] == "名單：2026/09/04（五）收盤後產生，25 檔"
-    assert sum(1 for line in lines if line.startswith("   規則進場價")) == 20
+    assert lines[1] == "09/04（五）收盤後產生・25 檔"
+    assert lines[3] == "🚀 <b>突破（20 檔）</b>"
+    assert lines.count(BREAKOUT_LINE) == 20
+    assert "<b>0021 名</b>" not in lines
     assert "另 5 檔見今日名單頁" in lines
 
 
-def test_a_long_list_is_cut_to_telegrams_limit():
-    items = [_item(rank, f"{rank:04d}", "名" * 200, BREAKOUT) for rank in range(1, 21)]
+def test_a_long_list_is_cut_to_telegrams_limit_with_its_tags():
+    """AC-2 (#742): the limit counts the tags, the entities and an emoji as two."""
+
+    assert notify.length("🚀") == 2 and notify.length("<b>&amp;</b>") == 12
+    items = [
+        _item(rank, f"{rank:04d}", "&" * 150, BREAKOUT if rank % 2 else PULLBACK)
+        for rank in range(1, 21)
+    ]
     listing = {"status": "success", "candidate_count": 20, "items": items}
     text = notify.compose(MONDAY, T, listing, US)
-    assert len(text) <= notify.MAX_CHARS
+    assert notify.length(text) <= notify.MAX_CHARS
+    _well_formed(text)
     lines = text.splitlines()
-    shown = sum(1 for line in lines if line.startswith("   規則進場價"))
+    shown = sum(1 for line in lines if line.startswith("　進場"))
     assert 0 < shown < 20
     assert f"另 {20 - shown} 檔見今日名單頁" in lines
-    assert lines[-1].startswith("來源：")
+    # Cut from the end of the list: the lowest ranks go first.
+    assert f"<b>{shown:04d} {'&amp;' * 150}</b>" in lines
+    assert f"<b>{shown + 1:04d} {'&amp;' * 150}</b>" not in lines
+    assert lines[-1] == "來源 FinMind"
 
 
 # --- the message, from the database ---------------------------------------------------
@@ -302,13 +442,17 @@ def _list_of_t(db):
 def test_the_message_reads_the_list_of_the_session_before_and_todays_us_indexes(db):
     _list_of_t(db)
     lines = notify.message(db, MONDAY).splitlines()
-    assert lines[2] == "名單：2026/09/04（五）收盤後產生，1 檔"
-    assert lines[3] == "1. 1101 名1101"
-    assert lines[4] == "   規則進場價 100.00／停損 98.00／目標 103.20"
+    assert lines[1:6] == [
+        "09/04（五）收盤後產生・1 檔",
+        "",
+        "🚀 <b>突破（1 檔）</b>",
+        "<b>1101 名1101</b>",
+        "　進場 100.00｜停損 98.00｜目標 103.20",
+    ]
     # Only SOX is stored: the others say so; SOX is Friday's, the night before Monday.
-    assert "費半 103.00 +3.00%" in lines
-    assert "S&P 500 無資料（未取得）" in lines
-    assert lines[-1] == "來源：FinMind USStockPrice（^SOX）"
+    assert "🔴 費半　103.00　+3.00%" in lines
+    assert "S&amp;P 500　無資料（未取得）" in lines
+    assert lines[-1] == "來源 FinMind"
 
 
 def test_no_older_list_stands_in_for_the_missing_one(db):
@@ -317,7 +461,7 @@ def test_no_older_list_stands_in_for_the_missing_one(db):
     db.commit()
     # Tuesday's message wants Monday's list: Friday's is not shown instead.
     text = notify.message(db, date(2026, 9, 8))
-    assert "名單：無資料（2026/09/07（一）的名單沒有產生；daily：failed）" in text
+    assert "名單：無資料（09/07（一）的名單沒有產生；daily：failed）" in text
     assert "1101" not in text
 
 
@@ -327,9 +471,7 @@ def test_the_session_before_skips_the_closed_days(db):
     assert notify.is_trading_day(db, date(2026, 9, 7)) is False
     assert notify.is_trading_day(db, date(2026, 9, 5)) is False  # Saturday
     assert notify.previous_session(db, date(2026, 9, 8)) == T
-    assert "名單：2026/09/04（五）收盤後產生，1 檔" in notify.message(
-        db, date(2026, 9, 8)
-    )
+    assert "09/04（五）收盤後產生・1 檔" in notify.message(db, date(2026, 9, 8))
 
 
 # --- the runs --------------------------------------------------------------------------
@@ -444,9 +586,9 @@ def test_a_trading_day_sends_once_and_a_restart_does_not_send_again(run_env, cap
     request = server.requests[0]
     assert request["path"] == f"/bot{TOKEN}/sendMessage"
     assert request["body"]["chat_id"] == int(CHAT)
-    # Plain text: no parse_mode.
-    assert "parse_mode" not in request["body"]
-    assert request["body"]["text"].startswith("stock-lab 今日名單 2026/09/07（一）")
+    # Telegram HTML (#742): the bold heads and names.
+    assert request["body"]["parse_mode"] == "HTML"
+    assert request["body"]["text"].startswith(TITLE + "\n")
     assert "--- result status=sent attempts=1 message_id=1" in _log(run_env)
     # Again the same day (a restarted scheduler's catch-up, a second trigger): no send.
     assert _send(run_env) == 0
@@ -505,6 +647,30 @@ def test_a_permanent_error_is_not_retried(run_env, code):
     assert _send(run_env) == 1
     assert len(server.requests) == 1
     assert f"--- result status=failed reason=http_{code} attempts=1" in _log(run_env)
+
+
+@linux_only
+def test_a_text_telegram_cannot_parse_is_a_parse_error_sent_once(run_env):
+    """AC-2 (#742): the same HTML is refused again, so it is not retried."""
+
+    server = run_env.telegram(
+        (
+            400,
+            {
+                "ok": False,
+                "error_code": 400,
+                "description": "Bad Request: can't parse entities: Unsupported start"
+                ' tag "x" at byte offset 12',
+            },
+        )
+    )
+    assert _send(run_env) == 1
+    assert len(server.requests) == 1
+    assert server.requests[0]["body"]["parse_mode"] == "HTML"
+    log = _log(run_env)
+    assert "--- result status=failed reason=parse_error attempts=1" in log
+    assert "detail=parse_error http_400 Bad Request: can't parse entities" in log
+    assert not notify.day_done(run_env.logs, MONDAY)
 
 
 @linux_only
@@ -659,7 +825,8 @@ def test_the_dry_run_prints_the_message_and_sends_and_writes_nothing(run_env, ca
     server = run_env.telegram()
     assert notify.run(_args("--dry-run", "--date", MONDAY.isoformat())) == 0
     out = capsys.readouterr().out
-    assert out.startswith("configured=yes\nstock-lab 今日名單 2026/09/07（一）\n")
+    # The text as it is sent, with its tags (#742).
+    assert out.startswith("configured=yes\n" + TITLE + "\n")
     assert TOKEN not in out and CHAT not in out
     assert server.requests == []
     assert not run_env.logs.exists()
