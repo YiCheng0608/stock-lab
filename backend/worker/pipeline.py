@@ -69,7 +69,12 @@ from app.models import (
     ThemeGroup,
 )
 from app import margin_lists, margin_zero_base
-from app.news import project_news
+from app.news import (
+    full_projection_reason,
+    project_news,
+    project_touched_news,
+    projection_checkpoint,
+)
 from app.signal_versions import BACKTEST_PREFIX
 from app.strategies import (
     REGISTRY,
@@ -3092,14 +3097,36 @@ def _upsert_fundamental(
     row.collected_at = utcnow()
 
 
+# ``db.info`` key: the Events a collect wrote, by id, for its news projection.
+TOUCHED_EVENTS_KEY = "stock_lab_touched_events"
+
+
 def _upsert_event(
     db: Session,
     event: EventRecord,
     instruments: dict[tuple[str, str], Instrument],
     raw_payload_id: int | None,
 ) -> Event | None:
-    """Upsert one official event; returns its row (None outside the universe)."""
+    """Upsert one official event; returns its row (None outside the universe).
 
+    Inside a collect the row is also recorded in ``db.info`` (both the batch's
+    events and ``mops_events.fill_gap_dates``), so the collect projects the
+    Events it touched instead of every stored one (Issue #715).
+    """
+
+    row = _write_event(db, event, instruments, raw_payload_id)
+    touched = db.info.get(TOUCHED_EVENTS_KEY)
+    if row is not None and touched is not None:
+        touched[row.id] = row
+    return row
+
+
+def _write_event(
+    db: Session,
+    event: EventRecord,
+    instruments: dict[tuple[str, str], Instrument],
+    raw_payload_id: int | None,
+) -> Event | None:
     instrument = instruments.get((event.exchange, event.symbol))
     if not instrument:
         return None
@@ -4918,6 +4945,12 @@ def collect(
             run.error = None
             run.started_at = now
             run.finished_at = None
+        # Before any Event is written: whether every stored Event is projected,
+        # so the end projects only what this collect touched (Issue #715).
+        # Read before this commit, so no read transaction stays open while
+        # the adapter fetches.
+        news_checkpoint = projection_checkpoint(db)
+        db.info[TOUCHED_EVENTS_KEY] = {}
         db.commit()
         batch: OfficialBatch | None = None
         active_adapter = adapter or OfficialMarketDataAdapter()
@@ -5542,8 +5575,27 @@ def collect(
             # backfill, the MOPS gap dates) wrote, after the memberships are in
             # place so the NewsItem relation carries the effective theme IDs.
             # The GETs then find the fingerprint current and do not project
-            # (#476).  Idempotent; it keeps Event/raw provenance.
-            project_news(db)
+            # (#476).  Idempotent; it keeps Event/raw provenance.  Only the
+            # Events this collect touched, unless something else changed
+            # since the checkpoint (Issue #715); the mode goes to the metadata.
+            touched_events = db.info.pop(TOUCHED_EVENTS_KEY, {})
+            full_reason = full_projection_reason(db, news_checkpoint, touched_events)
+            if full_reason is None:
+                news_projection = {
+                    "mode": "incremental",
+                    "events": len(touched_events),
+                    "changed": project_touched_news(db, touched_events.values()),
+                }
+            else:
+                news_projection = {
+                    "mode": "full",
+                    "reason": full_reason,
+                    "changed": project_news(db),
+                }
+            run.metadata_json = {
+                **run.metadata_json,
+                "news_projection": news_projection,
+            }
             db.commit()
             futures_gap_fill = fill_collect_futures_gaps(
                 db,
@@ -5576,6 +5628,7 @@ def collect(
                 "index_daily_bars": index_daily_bars,
                 "futures_daily_bars": futures_daily_bars,
                 "event_coverage": event_coverage,
+                "news_projection": news_projection,
                 "event_gap_dates": {
                     day: mops_events.coverage_state(coverage, date.fromisoformat(day))
                     for day, coverage in event_gap["coverage"].items()
