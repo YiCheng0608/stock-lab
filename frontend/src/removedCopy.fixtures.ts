@@ -89,6 +89,8 @@ export const REMOVED_COPY: readonly string[] = [
   '題材表版本',
   '規則核實 · v',
   '· 規則版本',
+  // Issue 747 (N-5 on the today page): how a derived TPEx change is computed, in the header's 資料說明.
+  '依前一日收市指數計算',
 ]
 
 // Phrases of REMOVED_COPY found in a page's markup.

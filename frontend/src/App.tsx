@@ -486,7 +486,6 @@ export function TodayPage() {
         modeLabel={modeLabel}
         badge={data && <QualityBadge kind="market" status={data.data_quality.latest_run} />}
         scopeText={data && `${data.scan_scope_label ?? '官方標的範圍；只有研究資料足夠的項目可進入行動摘要'} · ${data.market.instruments.toLocaleString()} 檔標的 · ${data.market.bars.toLocaleString()} 筆日行情 · ${homeActions.length.toLocaleString()} 筆行動摘要`}
-        overview={data?.market_overview}
       />
     <QueryState loading={query.isLoading} error={query.error}>
       {data && (
