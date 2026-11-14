@@ -115,7 +115,7 @@ Ran 3 tests ... OK   exit 0
 
 檢查落地後，第 1 步查到的記憶就過期了：它教人手動避開的坑，現在由檢查擋。在 PR 本文「欄位」區的「會過期的記憶」寫出每一則的檔名與改法：改成一句「已由 <檢查> 擋」併入哪一則相關主題，或直接刪掉。改名或刪除時，也列出要跟著改 `[[連結]]` 的記憶。沒有對應記憶就寫「無」。
 
-工程師 session 不改記憶目錄：多個 session 同時寫同一份 `MEMORY.md` 會互相覆蓋。統籌結案時照這一欄改記憶、同步 `MEMORY.md`，再跑 `memory_check.py` 確認（[COORDINATOR「記憶」](../../../docs/COORDINATOR.md#記憶)）。
+工程師 session 不改記憶目錄：多個 session 同時寫同一份 `MEMORY.md` 會互相覆蓋；`task/*` branch 的 Edit／Write 會被 `agent_guard.cjs` 擋下。統籌結案時照這一欄改記憶，寫實際位置 `C:/Users/YiCheng/.claude/projects/<slug>/memory/`，不用 `$CLAUDE_CONFIG_DIR` 底下的 symlink 路徑（經 symlink 會跳確認框）。改完同步 `MEMORY.md`，再跑 `memory_check.py` 確認（[COORDINATOR「記憶」](../../../docs/COORDINATOR.md#記憶)）。
 
 產出：PR 本文的一列。
 

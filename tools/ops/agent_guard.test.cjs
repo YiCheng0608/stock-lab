@@ -225,6 +225,114 @@ describe('hook process', () => {
   });
 });
 
+// The memory directory (#705): a sandbox home holds the real one, ~/.claude/projects/<slug>/memory,
+// and a sandbox CLAUDE_CONFIG_DIR links to it the way the Orca profile does (a junction on
+// Windows, a symlink elsewhere). No test touches the real memory directory or profile.
+describe('memory directory rules', () => {
+  let tmp;
+  let task;
+  let master;
+  let real;
+  let linked;
+  let env;
+  const git = (cwd, ...args) => {
+    const result = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  const slugOf = (repo) => {
+    const common = git(repo, 'rev-parse', '--path-format=absolute', '--git-common-dir');
+    return normalizeTarget(path.dirname(common)).replace(/\\/g, '/').replace(/[^A-Za-z0-9]/g, '-');
+  };
+  const write = (file) => ({ tool_name: 'Write', tool_input: { file_path: file, content: 'x' } });
+  const edit = (file) => ({ tool_name: 'Edit', tool_input: { file_path: file, old_string: 'x', new_string: 'y' } });
+  const notebook = (file) => ({ tool_name: 'NotebookEdit', tool_input: { notebook_path: file, new_source: 'x' } });
+  const from = (projectDir) => ({ ...env, CLAUDE_PROJECT_DIR: projectDir });
+
+  before(() => {
+    tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'guard-memory-')));
+    task = path.join(tmp, 'repo');
+    fs.mkdirSync(task);
+    git(task, 'init', '-q', '-b', 'master');
+    git(task, 'commit', '-q', '--allow-empty', '-m', 'x');
+    // The management checkout stays on master; the engineer's worktree is on task/*.
+    master = task;
+    const worktree = path.join(tmp, 'wt');
+    git(task, 'worktree', 'add', '-q', '-b', 'task/705-x', worktree);
+    task = worktree;
+    const slug = slugOf(master);
+    assert.equal(slugOf(task), slug);
+    const home = path.join(tmp, 'home');
+    real = path.join(home, '.claude', 'projects', slug, 'memory');
+    fs.mkdirSync(real, { recursive: true });
+    fs.writeFileSync(path.join(real, 'MEMORY.md'), 'x\n');
+    const config = path.join(tmp, 'profile', 'home');
+    fs.mkdirSync(path.join(config, 'projects', slug), { recursive: true });
+    linked = path.join(config, 'projects', slug, 'memory');
+    fs.symlinkSync(real, linked, process.platform === 'win32' ? 'junction' : 'dir');
+    env = Object.fromEntries(
+      Object.entries(process.env).filter(([k]) => !/^(?:CLAUDE_CONFIG_DIR|CLAUDE_PROJECT_DIR|STOCK_MEMORY_DIR)$/.test(k)),
+    );
+    Object.assign(env, { HOME: home, USERPROFILE: home, CLAUDE_CONFIG_DIR: config });
+  });
+
+  after(() => {
+    fs.rmSync(linked, { recursive: false, force: true });
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  test('an engineer session (task/*) writing the real location is blocked', () => {
+    for (const input of [
+      write(path.join(real, 'MEMORY.md')),
+      edit(path.join(real, 'MEMORY.md')),
+      write(path.join(real, 'new-memory.md')),
+      notebook(path.join(real, 'x.ipynb')),
+    ]) {
+      const result = hook(input, from(task));
+      assert.equal(result.code, 2, JSON.stringify(input));
+      assert.match(result.stderr, /記憶只由統籌與使用者改/);
+      assert.match(result.stderr, /會過期的記憶/);
+    }
+  });
+
+  test('an engineer session writing through the profile link is blocked', () => {
+    for (const input of [write(path.join(linked, 'MEMORY.md')), edit(path.join(linked, 'new.md'))]) {
+      const result = hook(input, from(task));
+      assert.equal(result.code, 2, JSON.stringify(input));
+      assert.match(result.stderr, /記憶只由統籌與使用者改/);
+    }
+  });
+
+  test('STOCK_MEMORY_DIR names a memory directory too', () => {
+    const other = path.join(tmp, 'other-memory');
+    fs.mkdirSync(other, { recursive: true });
+    assert.equal(hook(write(path.join(other, 'a.md')), from(task)).code, 0);
+    assert.equal(hook(write(path.join(other, 'a.md')), { ...from(task), STOCK_MEMORY_DIR: other }).code, 2);
+  });
+
+  test('the management checkout (master) writes the memory directory', () => {
+    for (const input of [write(path.join(real, 'MEMORY.md')), edit(path.join(linked, 'MEMORY.md'))]) {
+      const result = hook(input, from(master));
+      assert.equal(result.code, 0, result.stderr);
+    }
+  });
+
+  test('other paths are not affected', () => {
+    const sibling = path.join(path.dirname(real), 'memory-old', 'a.md');
+    for (const file of [
+      path.join(task, 'a.md'),
+      sibling,
+      path.join(path.dirname(path.dirname(real)), 'C--other-project', 'memory', 'a.md'),
+      path.join(tmp, 'a.md'),
+    ]) {
+      const result = hook(write(file), from(task));
+      assert.equal(result.code, 0, `${file}: ${result.stderr}`);
+    }
+    // Reading memories stays allowed.
+    assert.equal(hook({ tool_name: 'Read', tool_input: { file_path: path.join(real, 'MEMORY.md') } }, from(task)).code, 0);
+  });
+});
+
 // .env files: every fixture is a fake file in a temporary directory; no test opens a real .env.
 describe('.env rules', () => {
   const NAMED = ['.env', 'frontend/.env.local', 'C:/Users/YiCheng/stock-lab-release/.env'];

@@ -66,9 +66,10 @@ orca terminal rename --terminal <handle> --title "統籌" --json
 
 ## 記憶
 
-Claude Code 的 project memory（`MEMORY.md` 與它列的記憶檔，每個統籌與工程師 session 開場都載入）在 repo 外：Orca 開的 session 在 `$CLAUDE_CONFIG_DIR/projects/<slug>/memory/`，`<slug>` 是管理 checkout 的路徑、英數以外的字元換成 `-`（worktree 與管理 checkout 共用同一份）。CI 讀不到它，所以由本機檢查維持（#705）。
+Claude Code 的 project memory（`MEMORY.md` 與它列的記憶檔，每個統籌與工程師 session 開場都載入）在 repo 外，worktree 與管理 checkout 共用同一份。實際位置是 `C:/Users/YiCheng/.claude/projects/<slug>/memory/`，`<slug>` 是管理 checkout 的路徑、英數以外的字元換成 `-`（現在是 `C--Users-YiCheng-Desktop-taiwan-stock-research`）。Orca 開的 session 看到的是 `$CLAUDE_CONFIG_DIR/projects/<slug>/memory/`，那是指向實際位置的 symlink。CI 讀不到它，所以由本機檢查維持（#705）。
 
-- **誰改**：只有統籌與使用者改記憶（含新增）。工程師 session 不寫記憶目錄：多個 session 同時寫同一份 `MEMORY.md` 會互相覆蓋。工程師把任務讓哪幾則記憶過期（檔案刪除、流程改變、角色改名、坑已編成檢查）寫在 PR 本文「欄位」區的「會過期的記憶」（[PR 模板](templates/pull-request.md)；沒有就寫「無」，空著時 CI `pr` 規則 f 會紅）。
+- **用實際位置改**：統籌改記憶的 Edit／Write 一律寫實際位置，不要寫 session 開場提示給的 `$CLAUDE_CONFIG_DIR` 底下的 symlink 路徑。經 symlink 寫入會跳確認框（「outside working directory via a symlink」），加 `--add-dir` 也一樣；確認框有時停 100 秒以上，統籌就卡在那裡，佇列和喚醒都停住。寫實際位置不跳框，啟動與 resume 命令不必改（實測 [6880462190](https://github.com/YiCheng0608/stock-lab/issues/705#issuecomment-6880462190)）。
+- **誰改**：只有統籌與使用者改記憶（含新增）。工程師 session 不寫記憶目錄：多個 session 同時寫同一份 `MEMORY.md` 會互相覆蓋。checkout 在 `task/*` branch 的 session 以 Edit／Write／NotebookEdit 寫記憶目錄時，實際位置或 symlink 路徑都會被 [`agent_guard.cjs`](../tools/ops/agent_guard.cjs) 擋下（Bash 擋不到，見 [GUARDRAILS](GUARDRAILS.md)）。工程師把任務讓哪幾則記憶過期（檔案刪除、流程改變、角色改名、坑已編成檢查）寫在 PR 本文「欄位」區的「會過期的記憶」（[PR 模板](templates/pull-request.md)；沒有就寫「無」，空著時 CI `pr` 規則 f 會紅）。
 - **何時改**：結案時，`close_task.sh` 之後（[任務流程](WORKFLOW.md#任務流程)第 6 步）。照 PR 本文「會過期的記憶」改寫或刪掉那幾則：坑已編成檢查的，改成一句「已由 <檢查> 擋」併入相關主題，或直接刪掉（[encode-lesson](../.claude/skills/encode-lesson/SKILL.md) 第 6 步）。同步 `MEMORY.md`，改名或刪除時一併改掉別則的 `[[舊名稱]]`，再跑一次 `memory_check.py` 確認通過。平時讀到與現況不符的記憶，也當下改或刪。
 - **檢查**：[`memory_check.py`](../tools/ops/memory_check.py) 唯讀，會失敗、不是報告。它檢查四項：`MEMORY.md` 每列連到一個存在的檔；目錄裡沒有不在索引的檔；`[[連結]]` 都指得到存在的記憶；反引號裡看起來是 repo 路徑的字串在管理 checkout 的 `origin/master` 上存在。判定規則見檔頭；已刪或改名的路徑要留作歷史時寫成 `<路徑>@<commit>`。失敗時每項印一列「<檔>: <檢查>: <原因>」；找不到記憶目錄時以 2 結束，不會靜默通過。兩支腳本會跑它：
   - `take_over.sh` 的最後一步 `memory`：失敗時改好記憶，再以 `--from memory` 續跑。
