@@ -528,6 +528,105 @@ TPEX_INDEX_TRADING_ENDPOINT = (
 # (worker.futures_bars, Issue #552).  No date parameter, so no history.
 TAIFEX_DAILY_FUTURES_ENDPOINT = "https://openapi.taifex.com.tw/v1/DailyMarketReportFut"
 
+# The first day each date-scoped website report answers (Issue #692 AC-1
+# probes, 2026-11-14).  Before it the report has nothing to give, so a
+# historical collect does not ask and records the feed as ``not_published``
+# (``not_published_feeds``) instead of a warning: T86 answers 查詢日期小於
+# 101年05月02日 (a core warning, a partial date retried five times), the TPEx
+# reports answer an empty table (上櫃家數 0, which reads as a closed day for
+# quotes and as a core "no rows" warning for the institutional file).
+TWSE_QUOTES_FIRST_DATE = date(2004, 2, 11)  # MI_INDEX: 查詢日期小於93年2月11日
+TWSE_INSTITUTIONAL_FIRST_DATE = date(2012, 5, 2)  # T86
+# MI_INDEX carries the 價格指數 table (the TAIEX close) from 2009-01-05 on;
+# 2008-12-31 and earlier have only 大盤統計資訊 and 每日收盤行情 (#692 probes),
+# so those sessions take the close from MI_5MINS_HIST.
+TWSE_MI_INDEX_TAIEX_FIRST_DATE = date(2009, 1, 5)
+TPEX_QUOTES_FIRST_DATE = date(2007, 4, 23)  # dailyQuotes
+TPEX_INSTITUTIONAL_FIRST_DATE = date(2014, 12, 1)  # insti/dailyTrade
+TWSE_ACTION_HISTORY_FIRST_DATE = date(2003, 5, 5)  # TWT49U: 查詢開始日期小於92年5月5日
+# Capital reduction reports: TWTAUU 查詢開始日期小於100年1月1日; revivt answers an
+# empty table for 2012 and has rows from 2013.
+REDUCTION_FIRST_DATES = {"TWSE": date(2011, 1, 1), "TPEx": date(2013, 1, 1)}
+
+
+def _taiex_month_closes(payload: Any, day: date) -> dict[date, float]:
+    """Date -> 收盤指數 of a ``MI_5MINS_HIST`` month report of ``day``'s month.
+
+    The report must say ``stat`` OK, be of the requested month and have
+    exactly one 日期 and one 收盤指數 column; every row must be a date of that
+    month, once, with a finite positive close.  Anything else raises.
+    """
+
+    if not isinstance(payload, dict) or str(payload.get("stat", "")).upper() != "OK":
+        raise OfficialDataError("TWSE MI_5MINS_HIST did not answer OK")
+    if str(payload.get("date", "")) != f"{day:%Y%m}01":
+        raise OfficialDataError("TWSE MI_5MINS_HIST is of another month")
+    fields = [str(field).strip() for field in payload.get("fields") or []]
+    if fields.count("日期") != 1 or fields.count("收盤指數") != 1:
+        raise OfficialDataError("TWSE MI_5MINS_HIST fields changed")
+    date_at, close_at = fields.index("日期"), fields.index("收盤指數")
+    closes: dict[date, float] = {}
+    for row in payload.get("data") or []:
+        if not isinstance(row, (list, tuple)) or len(row) != len(fields):
+            raise OfficialDataError("TWSE MI_5MINS_HIST row has another width")
+        row_date = parse_roc_date(str(row[date_at]).strip())
+        close = parse_number(row[close_at])
+        if (
+            row_date is None
+            or (row_date.year, row_date.month) != (day.year, day.month)
+            or row_date in closes
+            or close is None
+            or not math.isfinite(close)
+            or close <= 0
+        ):
+            raise OfficialDataError("TWSE MI_5MINS_HIST row is not readable")
+        closes[row_date] = close
+    return closes
+
+
+class _NotPublished(Exception):
+    """A date before the report's first day: skip the request (Issue #692)."""
+
+
+def not_published_feeds(
+    dates: dict[str, list[date]], first_dates: dict[str, date]
+) -> dict[str, Any]:
+    """The run-metadata record of the feeds a historical collect did not ask."""
+
+    return {
+        feed: {
+            "first_date": first_dates[feed].isoformat(),
+            "dates": [day.isoformat() for day in sorted(set(days))],
+        }
+        for feed, days in sorted(dates.items())
+        if days
+    }
+
+
+_FIRST_DATES = {
+    "TWSE": {
+        "quotes": TWSE_QUOTES_FIRST_DATE,
+        "institutional": TWSE_INSTITUTIONAL_FIRST_DATE,
+    },
+    "TPEx": {
+        "quotes": TPEX_QUOTES_FIRST_DATE,
+        "institutional": TPEX_INSTITUTIONAL_FIRST_DATE,
+    },
+}
+
+
+def _not_published_record(
+    exchange: str, dates: dict[str, list[date]]
+) -> dict[str, Any]:
+    """``feed_sources`` of a historical batch: ``{exchange: {not_published}}``.
+
+    Empty when every feed was asked, so a batch after the first days carries
+    the same metadata as before Issue #692.
+    """
+
+    record = not_published_feeds(dates, _FIRST_DATES[exchange])
+    return {exchange: {"not_published": record}} if record else {}
+
 
 # Minimum spacing between requests to one official host.  TWSE's web
 # reports (www.twse.com.tw) temporarily block clients that exceed roughly
@@ -551,11 +650,23 @@ OFFICIAL_HOST_MIN_INTERVAL_SECONDS = {
     "mopsov.twse.com.tw": 3.0,
 }
 _host_last_request: dict[str, float] = {}
+# A floor over every official host for this process, set by the backfill
+# commands only (worker.cli BACKFILL_HOST_INTERVAL_SECONDS, Issue #692: a bulk
+# history backfill must never get the hosts to block the daily); 0 keeps the
+# per-host intervals above, which the daily uses.
+_minimum_host_interval = 0.0
+
+
+def set_minimum_host_interval(seconds: float) -> None:
+    global _minimum_host_interval
+    _minimum_host_interval = float(seconds)
 
 
 def _throttle_official_host(url: str) -> None:
     host = urlsplit(url).hostname or ""
-    interval = OFFICIAL_HOST_MIN_INTERVAL_SECONDS.get(host)
+    interval = max(
+        OFFICIAL_HOST_MIN_INTERVAL_SECONDS.get(host) or 0.0, _minimum_host_interval
+    )
     if not interval:
         return
     previous = _host_last_request.get(host)
@@ -1527,6 +1638,17 @@ def _number_from_row(
     return None
 
 
+# T86's foreign-investor net: the current layout (2014-12-01 on) and the one
+# before it, which had no 外資自營商 column (the 2012-05-02 answer of the #692
+# probes: 外資買進股數, 外資賣出股數, 外資買賣超股數, 投信…, 自營商…).
+TWSE_T86_CURRENT_FOREIGN_FIELDS = (
+    "ForeignBuySellDifferenceExcludingForeignDealer",
+    "ForeignInvestorsBuySellDifferenceExcludingDealer",
+    "外陸資買賣超股數(不含外資自營商)",
+)
+TWSE_T86_LEGACY_FOREIGN_FIELD = "外資買賣超股數"
+
+
 def parse_twse_institutional_rows(
     payload: Any,
     *,
@@ -1553,6 +1675,12 @@ def parse_twse_institutional_rows(
                 ("外陸資", "買賣超", "不含", "外資自營商"),
             ),
         )
+        if foreign_buy is None and not any(
+            key in row for key in TWSE_T86_CURRENT_FOREIGN_FIELDS
+        ):
+            # Before 2014-12-01 T86 had no foreign-dealer column: 外資買賣超股數
+            # is the foreign investors' net of that layout (Issue #692).
+            foreign_buy = parse_number(row.get(TWSE_T86_LEGACY_FOREIGN_FIELD))
         trust_buy = _number_from_row(
             row,
             exact_keys=("InvestmentTrustBuySellDifference", "投信買賣超股數"),
@@ -1685,6 +1813,53 @@ def parse_twse_margin_rows(
     return result
 
 
+# insti/dailyTrade's layout from its first day, 2014-12-01 (the #692 probes of
+# 2014-12-01 and 2015-01-05): 16 columns with one net column per institution
+# and no foreign-dealer columns; the 24-column layout came later.  The net
+# columns: 外資及陸資淨買股數 (4), 投信淨買股數 (7), 自營淨買股數 (8), 三大法人買賣超股數 (15).
+TPEX_INSTITUTIONAL_LEGACY_FIELDS = (
+    "代號",
+    "名稱",
+    "外資及陸資買股數",
+    "外資及陸資賣股數",
+    "外資及陸資淨買股數",
+    "投信買進股數",
+    "投信賣股數",
+    "投信淨買股數",
+    "自營淨買股數",
+    "自營商(自行買賣)買股數",
+    "自營商(自行買賣)賣股數",
+    "自營商(自行買賣)淨買股數",
+    "自營商(避險)買股數",
+    "自營商(避險)賣股數",
+    "自營商(避險)淨買股數",
+    "三大法人買賣超股數",
+)
+TPEX_INSTITUTIONAL_LEGACY_COLUMNS = (4, 7, 8, 15)
+TPEX_INSTITUTIONAL_TABLE_TITLE = "三大法人買賣明細資訊"
+
+
+def _tpex_institutional_table(tables: list[Any]) -> list[Any]:
+    """The detail table: the first one, unless it is empty and a later one is it.
+
+    The 2014～2015 answers put an empty table first and the detail table
+    second (Issue #692); the current ones put the detail table first, so this
+    is the first table for them, as before.
+    """
+
+    first = tables[:1]
+    if first and isinstance(first[0], dict) and first[0].get("data"):
+        return first
+    for table in tables[1:]:
+        if (
+            isinstance(table, dict)
+            and str(table.get("title") or "").strip() == TPEX_INSTITUTIONAL_TABLE_TITLE
+            and table.get("data")
+        ):
+            return [table]
+    return first
+
+
 def parse_tpex_institutional_rows(
     payload: Any,
     *,
@@ -1694,24 +1869,34 @@ def parse_tpex_institutional_rows(
 ) -> list[ChipRecord]:
     table_payload = payload
     if isinstance(payload, dict) and isinstance(payload.get("tables"), list):
-        table_payload = {"tables": payload["tables"][:1]}
+        table_payload = {"tables": _tpex_institutional_table(payload["tables"])}
     table_rows = _table_arrays(table_payload)
     if table_rows:
         result: list[ChipRecord] = []
-        for _fields, values in table_rows:
-            if len(values) < 24:
+        for fields, values in table_rows:
+            if len(values) >= 24:
+                columns = (4, 13, 22, 23)
+            elif (
+                len(values) == len(TPEX_INSTITUTIONAL_LEGACY_FIELDS)
+                and tuple(str(field).strip() for field in fields)
+                == TPEX_INSTITUTIONAL_LEGACY_FIELDS
+            ):
+                # The 16-column layout of 2014-12-01 on (Issue #692).
+                columns = TPEX_INSTITUTIONAL_LEGACY_COLUMNS
+            else:
                 continue
             symbol = str(values[0]).strip() if values[0] is not None else ""
             if not symbol:
                 continue
+            foreign_at, trust_at, dealer_at, total_at = columns
             result.append(
                 ChipRecord(
                     symbol=symbol,
                     trading_date=trading_date,
-                    foreign_buy=parse_number(values[4]),
-                    trust_buy=parse_number(values[13]),
-                    dealer_buy=parse_number(values[22]),
-                    total_buy_sell=parse_number(values[23]),
+                    foreign_buy=parse_number(values[foreign_at]),
+                    trust_buy=parse_number(values[trust_at]),
+                    dealer_buy=parse_number(values[dealer_at]),
+                    total_buy_sell=parse_number(values[total_at]),
                     exchange="TPEx",
                     source="tpex_3insti",
                     data_as_of=data_as_of or trading_date.isoformat(),
@@ -3465,6 +3650,14 @@ class TwseAdapter:
         # every historical date.  The authoritative universe is then fetched
         # once per adapter instance; it is today's list either way.
         self.snapshot_feeds = snapshot_feeds
+        # Feeds a historical collect did not ask: dates before their first
+        # day (not_published_feeds, Issue #692).
+        self.not_published: dict[str, list[date]] = {}
+        # (year, month) -> the MI_5MINS_HIST capture and its closes, for the
+        # days before MI_INDEX carries the price index (Issue #692).
+        self._taiex_month_reports: dict[
+            tuple[int, int], tuple[FetchedPayload | None, dict[date, float]]
+        ] = {}
         self._universe_cache: (
             tuple[list[InstrumentRecord], list[FetchedPayload]] | None
         ) = None
@@ -3619,6 +3812,9 @@ class TwseAdapter:
         for trading_date in _weekday_dates(start, end):
             if trading_date in closed_dates:
                 continue
+            if trading_date < TWSE_QUOTES_FIRST_DATE:
+                self.not_published.setdefault("quotes", []).append(trading_date)
+                continue
             query = urlencode(
                 {
                     "date": trading_date.strftime("%Y%m%d"),
@@ -3670,6 +3866,12 @@ class TwseAdapter:
                 data_as_of=trading_date.isoformat(),
                 payload_sha256=payload.sha256,
             )
+            if not taiex_rows and trading_date < TWSE_MI_INDEX_TAIEX_FIRST_DATE:
+                # MI_INDEX has no price-index table before 2009-01-05: the
+                # close is the monthly report's (Issue #692).
+                taiex_rows, month_capture = self._taiex_from_month_report(trading_date)
+                if month_capture is not None:
+                    payloads.append(month_capture)
             if not taiex_rows:
                 raise OfficialDataError(
                     "TWSE MI_INDEX did not contain one finite positive "
@@ -3682,6 +3884,62 @@ class TwseAdapter:
         # and a month-history row are the same official observation.
         unique = {(bar.exchange, bar.symbol, bar.trading_date): bar for bar in bars}
         return list(unique.values()), payloads
+
+    def _taiex_from_month_report(
+        self, trading_date: date
+    ) -> tuple[list[BarRecord], FetchedPayload | None]:
+        """The session's TAIEX close from ``MI_5MINS_HIST`` (one request a month).
+
+        Only for a day before ``TWSE_MI_INDEX_TAIEX_FIRST_DATE``, when the
+        date-scoped MI_INDEX has no 價格指數 table.  The bar is the same
+        close-only ``twse_index`` row MI_INDEX would give (``index-bars
+        backfill`` upgrades it to the real daily K later); it points at the
+        month report, whose ``data_as_of`` is its last row, which
+        ``app.coverage._raw_is_date_verified`` accepts as a session from
+        ``SESSION_BASIS_START`` on.  A report that cannot be read, or has no
+        row of the day, gives no bar (the caller then fails the day).
+        """
+
+        key = (trading_date.year, trading_date.month)
+        if key not in self._taiex_month_reports:
+            endpoint = f"{TWSE_INDEX_HISTORY_ENDPOINT}?" + urlencode(
+                {"date": f"{trading_date:%Y%m}01", "response": "json"}
+            )
+            try:
+                payload = _call_fetcher(self.fetcher, endpoint)
+                closes = _taiex_month_closes(payload, trading_date)
+            except OfficialDataError:
+                payload, closes = None, {}
+            capture = None
+            if closes:
+                capture = capture_payload(
+                    self.source, endpoint, payload, max(closes).isoformat()
+                )
+                self.captured_payloads.append(capture)
+            self._taiex_month_reports[key] = (capture, closes)
+        capture, closes = self._taiex_month_reports[key]
+        close = closes.get(trading_date)
+        if capture is None or close is None:
+            return [], capture
+        return [
+            BarRecord(
+                symbol="TAIEX",
+                trading_date=trading_date,
+                open=close,
+                high=close,
+                low=close,
+                close=close,
+                adj_close=close,
+                volume=0,
+                turnover=0.0,
+                turnover_status="unavailable",
+                turnover_reason="synthetic_index",
+                exchange="TWSE",
+                source="twse_index",
+                data_as_of=trading_date.isoformat(),
+                payload_sha256=capture.sha256,
+            )
+        ], capture
 
     def _read_market_summary(self, payload: FetchedPayload, trading_date: date) -> None:
         # Display only: a summary that cannot be read is a non-core warning and
@@ -3745,6 +4003,11 @@ class TwseAdapter:
         records: list[ActionRecord] = []
         payloads: list[FetchedPayload] = []
         warnings: list[str] = []
+        # TWT49U refuses a start before 2003-05-05 (Issue #692): the months
+        # before are not asked, the first one starts on that day.
+        start = max(start, TWSE_ACTION_HISTORY_FIRST_DATE)
+        if start > end:
+            return records, payloads, warnings
         for window_start, window_end in _month_windows(start, end):
             query = urlencode(
                 {
@@ -3893,6 +4156,12 @@ class TwseAdapter:
             date_text = trading_date.strftime("%Y%m%d")
             margin_endpoint = f"{TWSE_MARGIN_HISTORY_ENDPOINT}?{urlencode({'date': date_text, 'selectType': 'ALL', 'response': 'json'})}"
             try:
+                if trading_date < TWSE_INSTITUTIONAL_FIRST_DATE:
+                    # T86 starts 2012-05-02: the margin file alone (Issue #692).
+                    self.not_published.setdefault("institutional", []).append(
+                        trading_date
+                    )
+                    raise _NotPublished
                 chip_payload = self.fetch_institutional_file(trading_date)
                 payloads.append(chip_payload)
                 _require_reported_date(
@@ -3911,6 +4180,8 @@ class TwseAdapter:
                     warnings.append(
                         f"TWSE institutional chip feed returned no rows for {trading_date.isoformat()}"
                     )
+            except _NotPublished:
+                pass
             except OfficialDataError as exc:
                 warnings.append(
                     f"TWSE institutional chips unavailable for {trading_date.isoformat()}: {exc}"
@@ -3959,6 +4230,7 @@ class TwseAdapter:
         self.captured_payloads = []
         self.fetch_warnings = []
         self.no_data_dates = []
+        self.not_published = {}
         instruments, universe_payloads = self._universe(end)
         bars, bar_payloads = self.fetch_bars(
             (item.symbol for item in instruments), start, end
@@ -3985,6 +4257,7 @@ class TwseAdapter:
                 ),
                 snapshot_feeds=False,
                 market_summaries=list(self.market_summaries),
+                feed_sources=_not_published_record("TWSE", self.not_published),
             )
         actions, action_payloads = self.fetch_actions(end)
         # TAIEX is parsed from each date-validated MI_INDEX payload in
@@ -4170,6 +4443,8 @@ class TpexAdapter:
         # See TwseAdapter: historical backfill skips current-only feeds and
         # reuses one universe fetch per adapter instance.
         self.snapshot_feeds = snapshot_feeds
+        # As TwseAdapter.not_published (Issue #692).
+        self.not_published: dict[str, list[date]] = {}
         self._universe_cache: (
             tuple[list[InstrumentRecord], list[FetchedPayload]] | None
         ) = None
@@ -4383,7 +4658,14 @@ class TpexAdapter:
                 return list(
                     {(bar.symbol, bar.trading_date): bar for bar in bars}.values()
                 ), payloads
+        asked = False
         for trading_date in _weekday_dates(start, end):
+            if trading_date < TPEX_QUOTES_FIRST_DATE:
+                # dailyQuotes answers an empty table (上櫃家數 0) before its
+                # first day; that is not a closed day (Issue #692).
+                self.not_published.setdefault("quotes", []).append(trading_date)
+                continue
+            asked = True
             payload = self._fetch(
                 TPEX_HISTORY_API,
                 trading_date.isoformat(),
@@ -4419,7 +4701,13 @@ class TpexAdapter:
                 bar.trading_date for bar in historical_rows if bar.trading_date < end
             )
             bars.extend(historical_rows)
-        if start < end and not historical_bar_dates and not self.no_data_dates:
+        if (
+            asked
+            and start < end
+            and not historical_bar_dates
+            and not self.no_data_dates
+            and max(start, TPEX_QUOTES_FIRST_DATE) < end
+        ):
             raise OfficialDataError(
                 "TPEx official historical quote endpoint returned no prior-session OHLCV "
                 f"for requested range {start.isoformat()}..{end.isoformat()}"
@@ -4501,6 +4789,12 @@ class TpexAdapter:
         warnings: list[str] = []
         for trading_date in sorted(set(trading_dates)):
             try:
+                if trading_date < TPEX_INSTITUTIONAL_FIRST_DATE:
+                    # insti/dailyTrade starts 2014-12-01 (Issue #692).
+                    self.not_published.setdefault("institutional", []).append(
+                        trading_date
+                    )
+                    raise _NotPublished
                 chip_payload = self._chip_file(
                     "institutional", trading_date, current_session, payloads
                 )
@@ -4517,6 +4811,8 @@ class TpexAdapter:
                     warnings.append(
                         f"TPEx institutional chip feed returned no rows for {trading_date.isoformat()}"
                     )
+            except _NotPublished:
+                pass
             except OfficialDataError as exc:
                 warnings.append(
                     f"TPEx institutional chips unavailable for {trading_date.isoformat()}: {exc}"
@@ -4588,6 +4884,7 @@ class TpexAdapter:
     def fetch(self, start: date, end: date) -> OfficialBatch:
         self.captured_payloads = []
         self.no_data_dates = []
+        self.not_published = {}
         self.feed_sources = {}
         self.current_warnings = []
         self._current_quote_payload = None
@@ -4804,17 +5101,21 @@ class TpexAdapter:
         """``{"TPEx": ...}``: which endpoint each core feed read and why (#579)."""
 
         if session is None:
-            return {
-                "TPEx": {
-                    "session": None,
-                    "reason": "not_current_session",
-                    "range": [start.isoformat(), end.isoformat()],
-                    **{
-                        feed: {"source": "website", "endpoint": website}
-                        for feed, (_openapi, website) in TPEX_CURRENT_FEEDS.items()
-                    },
-                }
+            record = {
+                "session": None,
+                "reason": "not_current_session",
+                "range": [start.isoformat(), end.isoformat()],
+                **{
+                    feed: {"source": "website", "endpoint": website}
+                    for feed, (_openapi, website) in TPEX_CURRENT_FEEDS.items()
+                },
             }
+            # Dates before a report's first day were not asked (Issue #692);
+            # the key is absent otherwise.
+            record.update(
+                _not_published_record("TPEx", self.not_published).get("TPEx", {})
+            )
+            return {"TPEx": record}
         # A feed that was not requested (a verified no-data day has no chips)
         # is absent.
         return {"TPEx": {"session": session.isoformat(), **self.feed_sources}}

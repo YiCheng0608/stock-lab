@@ -122,7 +122,7 @@ period_backfill 步驟呼叫 [`worker.period_backfill.run_period_backfill(目標
   - **#387 以前的初值**：以 [`chips revise`](CLI.md#現有-worker-cli) 依已存的 raw 套用三大法人規則更正。
   - **0021 以前的籌碼列**：以 [`chips provenance`](CLI.md#現有-worker-cli) 依已存的 raw 與 `value_fill_groups` 補寫兩組來源。
 - **回補**：`python -m worker.cli backfill --start-date <起> --end-date <迄> --scope market`。中斷後以相同起訖重跑即從各段 manifest 續做；輸出列出每段 run id、`partial_dates`／`failed_dates`（缺日，不補值）與 `skipped_non_trading_dates`（官方無交易）。每段的 `target_met` 看「已驗證交易日 ≥ `min(65, 平日數 − 確定休市日)`」（[回補目標與確定休市日](../DATA_SOURCES.md#回補目標與確定休市日)）；規則改版前寫下的 run，以相同起訖重跑一次就會更新：已完成與已確認休市的日期都會重用、不發請求（#479）。回補或更正舊日線後跑 `python -m worker.cli indicators --rebuild` 重算指標。
-- **限流**：`fetch_json` 對同一官方主機保持最小間隔（`www.twse.com.tw` 2.5 秒，其餘官方主機 1 秒），另有 429／5xx／暫時性 307 的有界重試。
+- **限流**：`fetch_json` 對同一官方主機保持最小間隔（`sources.OFFICIAL_HOST_MIN_INTERVAL_SECONDS`：`www.twse.com.tw` 2.5 秒、MOPS 與期交所網站 3 秒，其餘官方主機 1 秒），另有 429／5xx／暫時性 307 的有界重試。手動的回補命令對每個 host 至少 3 秒（[CLI](CLI.md#現有-worker-cli)「回補命令的請求間隔」，#692）；daily 與 catchup 照上面的間隔。
 - **不要並行回補**：回補與 daily 都長時間寫 DB，analyze 也依 collect run 決定分析日；回補、回測期間停用 daily：scheduler 容器不必停：`backfill`、`backtest` 起跑時自己開[維護模式](#維護模式)（daily 與 news 不跑，看門狗與 monitor 照常），結束時自己關，作業死掉由 serve 在心跳逾時後解除（工作排程器的做法見 [daily／news 工作的註冊與管理](platform/windows.md#dailynews-工作的註冊與管理)）。
 
 ### 技術回測

@@ -803,7 +803,13 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="feature_evidence.py", description=__doc__)
     parser.add_argument("--db", required=True, help="a tools/ops/copy_db.py copy")
     parser.add_argument("--out", required=True)
-    parser.add_argument("--start", type=date.fromisoformat, default=DEFAULT_START)
+    parser.add_argument(
+        "--start",
+        type=date.fromisoformat,
+        default=None,
+        help=f"預設是探索段的第一天（未指定 --segment 時 {DEFAULT_START}）",
+    )
+    lib.add_segment_argument(parser)
     parser.add_argument("--end", type=date.fromisoformat, default=None)
     parser.add_argument("--min-lots", type=float, default=lib.DEFAULT_MIN_LOTS)
     parser.add_argument("--min-names", type=int, default=30)
@@ -812,7 +818,14 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
-    args = _parser().parse_args(argv)
+    parser = _parser()
+    args = parser.parse_args(argv)
+    try:
+        lib.use_segments(args.segment)
+    except ValueError as exc:
+        parser.error(str(exc))
+    if args.start is None:
+        args.start = lib.SEGMENTS[0][2]
     db = Path(args.db)
     problem = lib.production_problem(db, dict(os.environ))
     if problem or not db.is_file():

@@ -710,3 +710,28 @@ def test_scorecard_without_candidates(tmp_path):
     result = scorecard.build(path, None, None, 1000.0, 58.5, tmp_path / "raw")
     assert result["candidates"] == 0 and result["horizons"] == {}
     assert "0 檔次" in scorecard.markdown(result, "x")
+
+
+# ---- --segment (Issue #692) ----
+
+
+def test_segments_can_be_given_and_default_to_the_fixed_ones():
+    seg_lib = lib
+    default = seg_lib.SEGMENTS
+    parsed = seg_lib.parse_segments(
+        ["validation:2019-01-01:", "exploration:2004-02-11:2018-12-31"]
+    )
+    assert parsed == (
+        ("exploration", "探索段", date(2004, 2, 11), date(2018, 12, 31)),
+        ("validation", "驗證段", date(2019, 1, 1), None),
+    )
+    for bad in (
+        ["exploration:2004-02-11:2018-12-31"],
+        ["exploration:2004-02-11:", "validation:2019-01-01:"],
+        ["exploration:2004-02-11:2019-06-30", "validation:2019-01-01:"],
+        ["regime:2004-02-11:2018-12-31", "validation:2019-01-01:"],
+    ):
+        with pytest.raises(ValueError):
+            seg_lib.parse_segments(bad)
+    seg_lib.use_segments([])
+    assert seg_lib.SEGMENTS is default

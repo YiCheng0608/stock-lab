@@ -1338,12 +1338,18 @@ def _parser() -> argparse.ArgumentParser:
         help="also run #689's rankings of evidence (the first version's output "
         "is unchanged; each ranking × universe goes to <out>/<ranking>-<universe>/)",
     )
+    lib.add_segment_argument(parser)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
-    args = _parser().parse_args(argv)
+    parser = _parser()
+    args = parser.parse_args(argv)
+    try:
+        lib.use_segments(args.segment)
+    except ValueError as exc:
+        parser.error(str(exc))
     db = Path(args.db)
     problems = lib._load("exit_research").refusals(db, args.min_free_gb)
     if problems:

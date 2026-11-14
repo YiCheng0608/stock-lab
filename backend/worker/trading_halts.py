@@ -39,6 +39,7 @@ from app.clock import utcnow
 from app.models import IngestionRun, Instrument, MarketBar, RawPayload, TradingHalt
 from worker import pipeline
 from worker.sources import (
+    REDUCTION_FIRST_DATES,
     TRADING_HALT_DAYS_AFTER,
     FetchedPayload,
     TradingHaltRecord,
@@ -326,10 +327,25 @@ def run_trading_halts(
         records: list[TradingHaltRecord] = []
         windows: list[TradingHaltWindow] = []
         failed: dict[str, str] = {}
+        # Each report starts later than a long history (Issue #692): TWTAUU
+        # refuses a start before 2011-01-01, revivt is empty before 2013.  The
+        # range is cut to the first day; a range that ends before it is not
+        # asked.  Either is recorded, not a warning.
+        not_published: dict[str, str] = {}
         for exchange in EXCHANGES:
+            first = REDUCTION_FIRST_DATES[exchange]
+            exchange_start = max(start, first)
+            if start < first:
+                not_published[exchange] = first.isoformat()
+            if exchange_start > end:
+                continue
             try:
                 found, window, _captured = fetch_reduction_window(
-                    fetch(exchange), exchange, start, end, data_as_of=day.isoformat()
+                    fetch(exchange),
+                    exchange,
+                    exchange_start,
+                    end,
+                    data_as_of=day.isoformat(),
                 )
             except Exception as exc:
                 warnings.append(trading_halt_warning(exchange, exc))
@@ -370,8 +386,10 @@ def run_trading_halts(
             "exchanges": result,
             "warnings": warnings,
         }
+        if not_published:
+            run.metadata_json["not_published_before"] = not_published
         db.commit()
-        return {
+        outcome = {
             "status": status,
             "run_id": run.id,
             "range": [start.isoformat(), end.isoformat()],
@@ -379,3 +397,6 @@ def run_trading_halts(
             "warnings": warnings,
             "records": written,
         }
+        if not_published:
+            outcome["not_published_before"] = not_published
+        return outcome

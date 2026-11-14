@@ -324,6 +324,68 @@ def index_return(panel: Panel, day: date, horizon: int) -> float | None:
     return end / start - 1.0
 
 
+SEGMENT_LABELS = {key: label for key, label, _first, _last in SEGMENTS}
+
+
+def parse_segments(
+    specs: Sequence[str],
+) -> tuple[tuple[str, str, date, date | None], ...]:
+    """``--segment exploration:2004-02-11:2018-12-31 --segment validation:2019-01-01:``.
+
+    A research history (Issue #692) is cut into the same two segments at other
+    days, chosen before any result is read (#697).  Both keys are required,
+    once each; a segment's last day may be empty (open-ended) only for the
+    later one; the exploration ends before the validation starts.
+    """
+
+    parsed: dict[str, tuple[date, date | None]] = {}
+    for spec in specs:
+        key, sep, rest = spec.partition(":")
+        first_text, sep2, last_text = rest.partition(":")
+        if not sep or not sep2 or key not in SEGMENT_LABELS:
+            raise ValueError(
+                f"--segment {spec!r}: expected <exploration|validation>:YYYY-MM-DD:[YYYY-MM-DD]"
+            )
+        if key in parsed:
+            raise ValueError(f"--segment {key} given twice")
+        first = date.fromisoformat(first_text)
+        last = date.fromisoformat(last_text) if last_text else None
+        if last is not None and last < first:
+            raise ValueError(f"--segment {spec!r}: the last day is before the first")
+        parsed[key] = (first, last)
+    if set(parsed) != set(SEGMENT_LABELS):
+        raise ValueError("--segment needs exploration and validation, once each")
+    exploration_first, exploration_last = parsed["exploration"]
+    validation_first, _validation_last = parsed["validation"]
+    if exploration_last is None or exploration_last >= validation_first:
+        raise ValueError(
+            "--segment: the exploration must end before the validation starts"
+        )
+    return tuple(
+        (key, SEGMENT_LABELS[key], *parsed[key])
+        for key in ("exploration", "validation")
+    )
+
+
+def use_segments(specs: Sequence[str]) -> None:
+    """Replace ``SEGMENTS`` for this process (``--segment``); none given keeps them."""
+
+    global SEGMENTS
+    if specs:
+        SEGMENTS = parse_segments(specs)
+
+
+def add_segment_argument(parser: Any) -> None:
+    parser.add_argument(
+        "--segment",
+        action="append",
+        default=[],
+        metavar="KEY:FIRST:[LAST]",
+        help="exploration／validation 的起訖（兩個都要給）；未指定時用 SEGMENTS"
+        "（探索 2024-09-30～2025-12-31、驗證 2026-01-01 起）",
+    )
+
+
 def segment_of(day: date) -> str | None:
     for key, _label, first, last in SEGMENTS:
         if day >= first and (last is None or day <= last):

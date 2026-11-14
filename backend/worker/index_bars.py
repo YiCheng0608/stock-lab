@@ -39,6 +39,7 @@ from sqlalchemy.orm import Session
 
 from app.clock import utcnow
 from app.coverage import SESSION_BASIS_START
+from app.history_settings import index_history_start
 from app.indicators import SYNTHETIC_BAR_SOURCES
 from app.models import Instrument, MarketBar
 
@@ -876,9 +877,10 @@ RUN_TYPE = "index_bar_backfill"
 # The index history starts about a year before the stock history (2024-09-30,
 # app.coverage.SESSION_BASIS_START), so the index's 240-session average exists
 # on the stocks' first day (#1 6723720803, Issue #563).  Earlier sessions of
-# the first month are read but not written.
-HISTORY_START = date(2023, 9, 1)
-DEFAULT_FIRST_MONTH = "2023-09"
+# the first month are read but not written.  A research database starts it
+# earlier (STOCK_INDEX_HISTORY_START, Issue #692); unset, this is 2023-09-01.
+HISTORY_START = index_history_start()
+DEFAULT_FIRST_MONTH = f"{HISTORY_START:%Y-%m}"
 # 2023-09 to the current month (39 months in 2026-11) fits in one default run.
 MAX_MONTHS = 48
 EXCHANGES = ("TWSE", "TPEx")
