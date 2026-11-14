@@ -4270,6 +4270,32 @@ def _check(name: str, started: str, **state: str) -> dict:
     return {"name": name, "startedAt": f"2026-10-25T20:{started}Z", **state}
 
 
+def _run_check(name: str, run: int, started: str, **state: str) -> dict:
+    """A check of CI workflow run `run` (detailsUrl carries the run id, #740)."""
+    return {
+        **_check(name, started, **state),
+        "workflowName": "CI",
+        "detailsUrl": f"https://github.com/YiCheng0608/stock-lab/actions/runs/{run}/job/{run + len(name)}",
+    }
+
+
+# #740, PR #735 on 2026-11-15: run 100 was cancelled by run 200 of the same head, which
+# lists suite and required only once they are queued.
+_CANCELLED_RUN = [
+    _run_check("changes", 100, "04:00", conclusion="SUCCESS"),
+    _run_check("backend", 100, "04:01", conclusion="SUCCESS"),
+    _run_check("suite", 100, "04:02", conclusion="CANCELLED"),
+    _run_check("required", 100, "04:03", conclusion="CANCELLED"),
+    _run_check("changes", 200, "05:00", conclusion="SUCCESS"),
+    _run_check("backend", 200, "05:01", status="IN_PROGRESS"),
+]
+_NEW_RUN_DONE = [
+    _run_check("backend", 200, "05:01", conclusion="SUCCESS"),
+    _run_check("suite", 200, "05:10", conclusion="SUCCESS"),
+    _run_check("required", 200, "05:20", conclusion="SUCCESS"),
+]
+
+
 @pytest.mark.parametrize(
     ("rollup", "expected"),
     [
@@ -4322,6 +4348,25 @@ def _check(name: str, started: str, **state: str) -> dict:
             ],
             "failure",
         ),
+        (_CANCELLED_RUN, "pending"),
+        (_CANCELLED_RUN[:5] + _NEW_RUN_DONE, "success"),
+        (
+            _CANCELLED_RUN[:5]
+            + _NEW_RUN_DONE[:1]
+            + [_run_check("suite", 200, "05:10", conclusion="FAILURE")],
+            "failure",
+        ),
+        (
+            _CANCELLED_RUN[:5]
+            + _NEW_RUN_DONE
+            + [
+                {
+                    **_run_check("lint", 50, "03:00", conclusion="FAILURE"),
+                    "workflowName": "Docs",
+                }
+            ],
+            "failure",
+        ),
     ],
     ids=[
         "superseded-failure",
@@ -4329,12 +4374,17 @@ def _check(name: str, started: str, **state: str) -> dict:
         "latest-running",
         "queued-zero-time",
         "same-name-other-workflow",
+        "cancelled-run-newer-run-partial",
+        "cancelled-run-newer-run-green",
+        "cancelled-run-newer-run-red",
+        "other-workflow-kept",
     ],
 )
 def test_patrol_reads_only_the_latest_run_of_each_check(
     patrol: Harness, rollup: list[dict], expected: str
 ) -> None:
-    """#286: a run replaced by a newer one of the same check no longer decides ci=.
+    """#286: a run replaced by a newer one of the same check no longer decides ci=;
+    #740: of the CI workflow only its newest run (newest_ci_run) counts.
     Since #316 the PR line comes from the monitor's last poll."""
     patrol.answer(
         "gh_pr_list",
