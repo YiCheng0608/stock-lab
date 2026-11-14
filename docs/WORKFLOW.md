@@ -130,7 +130,25 @@ export MSYS_NO_PATHCONV=1   # 否則 Git Bash 會把 -v 的容器路徑改寫成
   - e. commit 訊息不得有 closing keyword（`Fix #N`、`Closes #N`、`Resolves #N` 等）：commit 一進 master 就會關 Issue，早於結案步驟。
   - f. 改到第 1、2 類路徑，本文「欄位」區要有一行 `- 會過期的記憶：<內容>`，內容不得為空（沒有就寫「無」）；只查有沒有內容，寫得對不對由統籌結案時判斷（#705，[COORDINATOR「記憶」](COORDINATOR.md#記憶)）。
 - 後端測試在 CI 分兩個 job，不重跑全套（#378）：`backend` 在 runner 上以 pytest-xdist 平行跑 `backend/tests` 全套（#442；本機只跑相關測試檔，#595）；`docker` 在 image 內建置、import `app`／`worker` 全部模組、截圖，並只跑 [`docker_suite.json`](../tools/ci/docker_suite.json) 的 `docker` 列出的測試——結果會隨 image 的執行環境（tini 當 PID 1、非 root、image 內的 node 與 chromium）改變的那些。`suite` job 以 [`suite_split.py`](../tools/ci/suite_split.py) 比對兩個 job 的報告：全套每個測試都要在其中一個 job **實際執行**（不是 skipped），否則 CI 紅並列出 test id；比的是執行而不是收集，因為 `backend` 收集全套，只比收集永遠成立。`docker` 列出的測試在 image 內被 skip 也紅（它們在 runner 上也會通過，不另外檢查就會漏掉 image 退化）。新增只在 runner 上跳過的測試（缺 image 才有的工具、`skipif`）時，把它或它的檔案加進 `docker`；Windows 專屬、CI 哪裡都不會跑的測試寫進同一檔的 `skipped_everywhere` 並附原因，已能執行的項目留在裡面也會紅。本機檢查在容器內只跑相關測試檔（[本機檢查](#本機檢查)）。
-- 統籌 review 重點：AC 是否逐條有驗證、文件是否同步、是否遵守 DESIGN_SYSTEM、有沒有寫死色碼／路徑／金鑰、測試是否覆蓋邊界。AC 證據必須是命令與輸出、查詢結果或截圖連結，只寫「通過」不算。
+- 統籌 review 重點：AC 是否逐條有驗證、文件是否同步、是否遵守 DESIGN_SYSTEM、有沒有寫死色碼／路徑／金鑰、測試是否覆蓋邊界，以及 [GUARDRAILS](GUARDRAILS.md) 的統籌 review 清單（強制手段以「無（統籌 review」開頭的列，逐條核對）。AC 證據必須是命令與輸出、查詢結果或截圖連結，只寫「通過」不算。
+- **大 PR 交子代理 review**（#714，#708 AC-6）：計數行數 ≥ 1,500，或估計 token ≥ 30,000，任一成立就由子代理 review，統籌不讀整份 diff；其餘 PR 統籌行內 review。過去約 1/3 的 PR 落在門檻以上（量測見 [#714 提問](https://github.com/YiCheng0608/stock-lab/issues/714#issuecomment-6882847893)），比例或統籌 context 不如預期再調。
+  - **誰取代誰**：子代理取代統籌的行內 review；改到 `HIGH_RISK_PATHS` 的獨立 review（下一點）不被取代，另開、不與子代理共用（不是同一個代理，互不給對方結果）。沒過門檻的高風險 PR 照舊是統籌行內 review 加獨立 review；兩者都要跑時，統籌兩份都核對、只寫一則 `review：`。
+  - **怎麼算**：第一次 review 時在管理 checkout 對 PR head 與 `origin/master` 的 merge-base 量。行數是新增＋刪除，不算 lock 檔（`frontend/pnpm-lock.yaml`、`*.lock.txt`）、擷取的官方原始資料與凍結金樣（`backend/tests/fixtures/`、`tools/verify/fixture_candidates.json`）、純搬移、整檔刪除與二進位檔；手寫的 fixture 程式、測試碼與文件都算。token 是同一範圍的 diff 位元組數 ÷ 3.5（粗估：中文 3 位元組約 1 token、程式約 4 字元 1 token），加 PR 本文的截圖張數 × 1,600。照抄（Git Bash；`<pr>`、`<截圖張數>` 換掉，`H` 要等於 PR 的 head）：
+
+    ```bash
+    git fetch -q origin master && git fetch -q origin pull/<pr>/head && H=$(git rev-parse FETCH_HEAD) && echo "$H"
+    P=(-- . ':(exclude)frontend/pnpm-lock.yaml' ':(exclude)*.lock.txt' ':(exclude)backend/tests/fixtures/' ':(exclude)tools/verify/fixture_candidates.json')
+    git diff --numstat -M --diff-filter=d "origin/master...$H" "${P[@]}" | awk '$1 != "-" {n += $1 + $2} END {print n+0, "行"}'
+    git diff -M --diff-filter=d "origin/master...$H" "${P[@]}" | wc -c | awk -v shots=<截圖張數> '{print int($1/3.5) + 1600*shots, "token"}'
+    ```
+
+  - **複核**：修完後只看上次 review 之後的增量，也就是 `<上次 head>..<新 head>` 的 first-parent 非 merge commit（update-branch 帶進來的 master 不算）。增量的行數把上面第三行換成 `git log --numstat --format= --no-merges --first-parent "<上次 head>..$H" "${P[@]}" | awk '$1 != "-" {n += $1 + $2} END {print n+0, "行"}'`，token 把第四行的 `git diff …` 換成 `git log -p --format= --no-merges --first-parent "<上次 head>..$H" "${P[@]}"`。增量沒過門檻就統籌行內複核；過門檻就再派一次，任務文的範圍只給增量。
+  - **怎麼派**：照 [review 任務文模板](templates/review-task.md)填好當 prompt，用 Agent 工具開，參數照抄：`subagent_type: "general-purpose"`、`model: "opus"`（即 `claude-opus-5-5`）、`effort: "xhigh"`（使用者 2026-11-14 決定 [6875651278](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6875651278)）、`description: "PR #<pr> review"`；背景執行（Agent 工具預設，結果以通知回來）。不用 `fork`：fork 帶著統籌的整個 context，就失去分出去的意義。模板寫明子代理只讀、何時才跑測試、回報格式（必修／不擋合併／AC 逐條／GUARDRAILS 清單／看了哪些檔／哪些沒看）。
+  - **核對**：統籌收到結果後逐項讀程式核對，才寫 `review：` 留言。
+    1. 每個必修：只讀它引用的那段（`git show <head>:<path>`），確認問題存在、失敗情境成立；不成立的刪掉或降成建議，留言寫一句為什麼。
+    2. 不擋合併：讀過，挑值得的寫進「建議」。
+    3. 沒看的檔與沒跑的測試：統籌判斷要自己看，或以 `SendMessage` 對同一子代理續問（不重開）；都不看的寫進 review 留言。
+  - **review 留言第一行**（#727 決定 [6882324819](https://github.com/YiCheng0608/stock-lab/issues/727#issuecomment-6882324819) 第 2 點）：通過時寫 ``review：可合併，必修 0 項（head `<sha>`，大 PR 交子代理 review：<行數> 行／約 <token> token，統籌逐項核對過）。CI 綠後由統籌合併，你不要自己合併。``；有必修時寫 ``review：必修 <N> 項，建議 <M> 項（head `<sha>`，大 PR 交子代理 review：…，統籌逐項核對過）。``
 - 改到 [`HIGH_RISK_PATHS`](../tools/ci/checks.py) 的 PR 加一次獨立 review（`/code-review` 或另開 session）並加 `independent-review` label。獨立 review 要寫出「這個變更安全是因為哪一個事實」，以及證明它的方式（命令與輸出、查詢或測試名稱）。另開的 review session 在本機 build 或起 compose 時，image tag 與 compose project 用 `t<pr>-review` 開頭（結案腳本只清 `t<issue>`，PR 的資源不會被它刪），結束前自己 `docker compose -p t<pr>-review down --volumes --rmi all`；與工程師一樣不跑任何 `prune`（[任務流程](#任務流程)第 3 步；PR #349 第一次 review 曾刪掉別人的 image）。派 review session 的任務文要寫進這兩點。
 - 合併用 merge commit，不 squash／rebase；衝突由 PR 作者在自己 branch 解決。主線規則要求 PR 分支跟上 master：master 前進後統籌以 `gh api -X PUT repos/YiCheng0608/stock-lab/pulls/<n>/update-branch -f expected_head_sha=<head>` 把 master 併入（merge commit），CI 重跑綠再合併。
 - master CI 紅：先修 master（fix-forward PR），修好前不合併其他 PR。
