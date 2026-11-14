@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta
+from typing import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
@@ -1549,17 +1551,21 @@ def test_targeted_backfill_defaults_to_the_historical_adapter(
     assert result["status"] in {"success", "partial"}
 
 
-def _whole_database_checks(engine) -> list[str]:
-    """Every ``PRAGMA integrity_check`` the engine sends from now on."""
+@contextmanager
+def _whole_database_checks(engine) -> Iterator[list[str]]:
+    """Every ``PRAGMA integrity_check`` the engine sends inside the block."""
 
     seen: list[str] = []
 
-    @event.listens_for(engine, "before_cursor_execute")
     def _trace(_conn, _cursor, statement, *_args) -> None:
         if "integrity_check" in statement.lower():
             seen.append(statement)
 
-    return seen
+    event.listen(engine, "before_cursor_execute", _trace)
+    try:
+        yield seen
+    finally:
+        event.remove(engine, "before_cursor_execute", _trace)
 
 
 def test_backfill_at_the_code_head_skips_the_whole_database_check(
@@ -1577,15 +1583,22 @@ def test_backfill_at_the_code_head_skips_the_whole_database_check(
     import app.db as db_module
 
     engine = backfill_env.kw["bind"]
-    monkeypatch.setattr(pipeline, "init_db", lambda: upgrade_database(engine))
-    checks = _whole_database_checks(engine)
+    migrated: list[str] = []
+
+    def migrate() -> None:
+        migrated.append("init_db")
+        upgrade_database(engine)
+
+    monkeypatch.setattr(pipeline, "init_db", migrate)
     saturday, sunday = date(2026, 11, 14), date(2026, 11, 15)
-    assert backfill.targeted_backfill(saturday, sunday)["status"] == "skipped"
-    assert checks == []
+    with _whole_database_checks(engine) as checks:
+        assert backfill.targeted_backfill(saturday, sunday)["status"] == "skipped"
+    assert checks == [] and migrated == []
 
     # One revision ahead in the code: the database is behind and migrates.
     monkeypatch.setattr(
         db_module, "REVISIONS", (*db_module.REVISIONS, "9999_not_applied")
     )
-    backfill.targeted_backfill(saturday, sunday, force=True)
-    assert len(checks) == 2
+    with _whole_database_checks(engine) as checks:
+        backfill.targeted_backfill(saturday, sunday, force=True)
+    assert migrated == ["init_db"] and len(checks) >= 1

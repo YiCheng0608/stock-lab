@@ -140,3 +140,77 @@ def test_main_refuses_a_volume_without_the_research_marker(
     assert tool.MARKER_NAME in capsys.readouterr().out
     (tmp_path / tool.MARKER_NAME).write_text('{"purpose": "production"}', "utf-8")
     assert tool.main(["--from", "2012-06-01", "--to", "2012-06-30"]) == 2
+
+
+def _progress_lines(data_dir: Path) -> list[dict]:
+    path = data_dir / "logs" / tool.PROGRESS_NAME
+    return [json.loads(line) for line in path.read_text("utf-8").splitlines()]
+
+
+def test_the_batch_ends_with_one_whole_database_check(tmp_path, monkeypatch):
+    """#722 review: the monthly backfills skip it at the head, the batch does not.
+
+    It runs after the last month, also when a month failed, and a result other
+    than ok exits 3.
+    """
+
+    _research_env(monkeypatch, tmp_path)
+    (tmp_path / tool.MARKER_NAME).write_text(
+        json.dumps({"purpose": tool.MARKER_PURPOSE}), encoding="utf-8"
+    )
+    monkeypatch.setattr(tool, "pause_seconds", lambda _now: 0.0)
+    checked: list[Path] = []
+
+    def check(db: Path) -> dict:
+        checked.append(db)
+        return {"ok": True, "integrity_check": ["ok"], "foreign_key_violations": []}
+
+    argv = ["--from", "2012-05-01", "--to", "2012-06-30"]
+    assert tool.main(argv, backfill=lambda *_: (0, "{}"), integrity=check) == 0
+    assert checked == [tmp_path / "stock.db"]
+    events = [line["event"] for line in _progress_lines(tmp_path)]
+    assert events[-3:] == ["month", "integrity", "end"]
+    assert _progress_lines(tmp_path)[-1]["integrity_ok"] == 1
+
+    def broken(_db: Path) -> dict:
+        return {"ok": False, "integrity_check": ["*** in database main ***"]}
+
+    # A failed month still ends with the check; the damaged database wins: 3.
+    (tmp_path / "logs" / tool.PROGRESS_NAME).unlink()
+    assert (
+        tool.main(
+            argv, backfill=lambda start, _end: (start.month - 5, ""), integrity=broken
+        )
+        == tool.INTEGRITY_FAILED_EXIT
+    )
+    lines = _progress_lines(tmp_path)
+    assert [line["event"] for line in lines][-2:] == ["integrity", "end"]
+    assert lines[-2]["ok"] is False and lines[-1]["failed"] == 1
+
+
+def test_check_database_fails_on_a_foreign_key_row_and_an_unreadable_file(tmp_path):
+    import sqlite3
+
+    db = tmp_path / "stock.db"
+    with sqlite3.connect(db) as connection:
+        connection.execute("CREATE TABLE parent (id INTEGER PRIMARY KEY)")
+        connection.execute(
+            "CREATE TABLE child (id INTEGER PRIMARY KEY, "
+            "parent_id INTEGER REFERENCES parent(id))"
+        )
+        connection.execute("INSERT INTO parent VALUES (1)")
+        connection.execute("INSERT INTO child VALUES (1, 1)")
+    connection.close()
+    good = tool.check_database(db)
+    assert good["ok"] is True and good["integrity_check"] == ["ok"]
+
+    with sqlite3.connect(db) as connection:
+        connection.execute("INSERT INTO child VALUES (2, 9)")  # FK enforcement off
+    connection.close()
+    bad = tool.check_database(db)
+    assert bad["ok"] is False and bad["foreign_key_violations"]
+
+    not_a_db = tmp_path / "garbage.db"
+    not_a_db.write_bytes(b"not a database" * 100)
+    assert tool.check_database(not_a_db)["ok"] is False
+    assert tool.check_database(tmp_path / "missing.db")["ok"] is False

@@ -18,7 +18,6 @@ from sqlalchemy.orm import Session
 from app.clock import utcnow
 from app.config import MAX_GROUP_CANDIDATES, OFFICIAL_MAX_BACKFILL_DAYS
 from app.domain import NON_SECURITY_TYPES, TAIWAN_MARKET
-from app.db import ensure_schema
 from app.coverage import (
     INDEX_HISTORY_SOURCE,
     SESSION_BASIS_START,
@@ -27,6 +26,7 @@ from app.coverage import (
     official_snapshot_status,
     verified_taiex_sessions,
 )
+from app.db import ensure_schema
 from app.models import (
     ChipSnapshot,
     CorporateAction,

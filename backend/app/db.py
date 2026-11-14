@@ -83,6 +83,12 @@ def schema_revisions(
         )
 
 
+def schema_is_current(revisions: list[str] | None) -> bool:
+    """Whether ``schema_revisions()`` says the database is at the code head."""
+
+    return revisions == [REVISIONS[-1]]
+
+
 def ensure_schema(
     *,
     session_factory: Callable[[], Session] | None = None,
@@ -99,7 +105,7 @@ def ensure_schema(
     ones they look up at call time (``worker.pipeline``'s) are used.
     """
 
-    if schema_revisions(session_factory) == [REVISIONS[-1]]:
+    if schema_is_current(schema_revisions(session_factory)):
         return "current"
     (migrate or init_db)()
     return "upgraded"

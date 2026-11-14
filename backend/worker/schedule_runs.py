@@ -68,7 +68,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.clock import utcnow
 from app.coverage import DAILY_JOB, collect_states
-from app.db import ensure_schema, schema_revisions
+from app.db import ensure_schema, schema_is_current, schema_revisions
 from app.migration_revisions import REVISIONS
 from app.models import ScheduleRun, ScheduleRunStep
 from worker import (
@@ -690,7 +690,7 @@ def record_preflight_skip(
     }
     try:
         revisions = _schema_revisions()
-        if revisions != [REVISIONS[-1]]:
+        if not schema_is_current(revisions):
             return {
                 **unwritten,
                 "error": f"skip row not written: database at {revisions}, code head"
