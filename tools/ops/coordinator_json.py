@@ -46,6 +46,16 @@ value is missing or the condition is false, so a script can test the exit code.
                       or 8.3 short name on the way (no stdin)
   guard PATH [--residual] [--home H] [--data D]... [--root R]...
                       why close_task.sh must not delete PATH, or nothing (no stdin)
+  cbm-result          the answer of one codebase-memory CLI call (stdin: its whole output,
+                      log lines and all) as JSON: structuredContent, else the text; exit 1
+                      with the reason on stderr when there is no JSON or isError (#704)
+  cbm-chunks PROJECT  check_index_coverage arguments, 128 paths a line (stdin: paths)
+  cbm-verdict ROOT PROJECT
+                      the index verdict of each path (index_verdict) under ROOT, one
+                      "verdict<TAB>reason<TAB>freshness<TAB>path" line each; stdin is
+                      NUL-terminated parts: the paths, query_graph's File list, then each
+                      check_index_coverage answer (cbm-result output). Exit 0 none stale,
+                      1 some stale, 2 an answer could not be read (reason on stderr)
 
 Paths given to within and guard are native (on Windows, `cygpath -m` of what bash has).
 Each is compared in two forms: as written (absolute, normalised) and as the file system
@@ -473,6 +483,166 @@ def _options(field) -> str:
     )
 
 
+# --- codebase-memory master index (#704; coordinator_lib.sh cbm_*) -------------------
+# The same-engine CLI prints the daemon's log lines (level=..., hint: ...) and then one
+# JSON envelope {"content": [{"type": "text", "text": ...}], "structuredContent": ...,
+# "isError": ...}; query_graph has no structuredContent, its text is a table.
+CBM_CHUNK = 128  # check_index_coverage takes at most 128 paths a call
+
+
+def cbm_envelope(raw: str) -> dict:
+    """The CLI's JSON envelope in RAW; ValueError with the reason when there is none."""
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue  # level=..., hint: ..., launcher messages
+        try:
+            doc = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(doc, dict) and "content" in doc:
+            return doc
+    tail = " ".join(
+        x for x in raw.splitlines()[-3:] if x.strip() and not x.startswith("level=")
+    )
+    raise ValueError(f"輸出裡沒有 JSON：{tail[:300]}")
+
+
+def cbm_result(raw: str):
+    """One CLI call's answer: structuredContent, else the text (JSON when it parses)."""
+    doc = cbm_envelope(raw)
+    texts = [
+        c.get("text", "")
+        for c in doc.get("content") or []
+        if isinstance(c, dict) and c.get("type") == "text"
+    ]
+    if doc.get("isError") is True:
+        raise ValueError(f"isError：{' '.join(texts)[:500]}")
+    if isinstance(doc.get("structuredContent"), dict):
+        return doc["structuredContent"]
+    if not texts:
+        raise ValueError("回答沒有內容")
+    try:
+        return json.loads(texts[0])
+    except ValueError:
+        return texts[0]
+
+
+def cbm_table(text) -> list[str]:
+    """The one column of a query_graph table ("rows: N  (cols: c)", "  value" lines,
+    "total: N"); ValueError when the counts disagree or the table is empty."""
+    if not isinstance(text, str):
+        raise ValueError("query_graph 的回答不是表格文字")
+    lines = text.splitlines()
+    head = re.match(r"rows: (\d+)\b", lines[0]) if lines else None
+    total = re.fullmatch(r"total: (\d+)", lines[-1].strip()) if lines else None
+    if not head or not total:
+        raise ValueError(f"query_graph 的表格讀不懂：{text[:200]}")
+    values = [x[2:] if x.startswith("  ") else x for x in lines[1:-1] if x.strip()]
+    values = [json.loads(v) if v.startswith('"') else v for v in values]
+    if not values or not (len(values) == int(head.group(1)) == int(total.group(1))):
+        raise ValueError(
+            f"query_graph 的列數不一致或是空的：rows {head.group(1)}、"
+            f"total {total.group(1)}、讀到 {len(values)}"
+        )
+    return values
+
+
+def _suffix_key(path: str) -> str:
+    """A file type as the engine takes it: the extension, or the whole name of a file
+    without one (Dockerfile, .gitignore)."""
+    name = PurePosixPath(path).name
+    suffix = PurePosixPath(name).suffix
+    return suffix.lower() if suffix else name
+
+
+def _utc_epoch(stamp) -> int:
+    if not isinstance(stamp, str) or not stamp:
+        raise ValueError("回答沒有 indexed_at")
+    try:
+        moment = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except ValueError:
+        raise ValueError(f"indexed_at 解析不出時間：{stamp}") from None
+    if moment.tzinfo is None:
+        raise ValueError(f"indexed_at 沒有時區：{stamp}")
+    return int(moment.timestamp())
+
+
+def index_verdict(
+    path: str,
+    entry: dict | None,
+    tracked: set[str],
+    tracked_types: set[str],
+    indexed_at: int,
+    root: str,
+) -> tuple[str, str]:
+    """(verdict, reason) of one path: stale, ok, or skip (left out). The rules (#704,
+    decisions 6875002208, 6875031116; docs/WORKFLOW.md 程式索引):
+
+    1. not a file in the checkout (deleted) -> skip deleted
+    2. status "excluded" (.gitignore, .cbmignore, an ignored suffix) -> skip excluded
+    3. freshness "missing" for a file that is there -> stale missing
+    4. a file the engine records (a File node): mtime later than indexed_at -> stale
+       mtime, else ok
+    5. not recorded, and the engine records another file of its type -> stale not_tracked
+    6. not recorded, and the engine records no file of its type -> skip unsupported
+
+    freshness "metadata_changed" decides nothing: engine 0.10.8 on Windows answers it for
+    unchanged files too. A path the answer leaves out is a ValueError, never "ok".
+    """
+    full = os.path.join(root, path)
+    if not os.path.isfile(full):
+        return "skip", "deleted"
+    if not isinstance(entry, dict):
+        raise ValueError(f"check_index_coverage 沒有回 {path}")
+    if entry.get("status") == "excluded":
+        return "skip", "excluded"
+    if entry.get("freshness") == "missing":
+        return "stale", "missing"
+    if path in tracked:
+        if int(os.stat(full).st_mtime) > indexed_at:
+            return "stale", "mtime"
+        return "ok", "tracked"
+    if _suffix_key(path) in tracked_types:
+        return "stale", "not_tracked"
+    return "skip", "unsupported"
+
+
+def cbm_verdict(parts: list[str], root: str, project: str) -> tuple[list[str], bool]:
+    """PARTS: the paths (one per line), query_graph's File list, then each
+    check_index_coverage answer (all cbm_result JSON but the first). The report lines
+    ("verdict<TAB>reason<TAB>freshness<TAB>path") and whether a path is stale;
+    ValueError when an answer cannot be read."""
+    if len(parts) < 3:
+        raise ValueError(
+            "cbm-verdict 要路徑、File 清單與至少一個 check_index_coverage 回答"
+        )
+    paths = [p for p in parts[0].splitlines() if p]
+    tracked = set(cbm_table(json.loads(parts[1])))
+    tracked_types = {_suffix_key(p) for p in tracked}
+    entries: dict[str, dict] = {}
+    stamps = []
+    for text in parts[2:]:
+        answer = json.loads(text)
+        if not isinstance(answer, dict) or answer.get("project") != project:
+            raise ValueError(f"check_index_coverage 回的 project 不是 {project}")
+        stamps.append(_utc_epoch(answer.get("indexed_at")))
+        for entry in answer.get("paths") or []:
+            if isinstance(entry, dict) and isinstance(entry.get("requested_path"), str):
+                entries[entry["requested_path"]] = entry
+    indexed_at = min(stamps)
+    lines, stale = [], False
+    for path in paths:
+        entry = entries.get(path)
+        verdict, reason = index_verdict(
+            path, entry, tracked, tracked_types, indexed_at, root
+        )
+        stale = stale or verdict == "stale"
+        freshness = (entry or {}).get("freshness") or "-"
+        lines.append(f"{verdict}\t{reason}\t{freshness}\t{path}")
+    return lines, stale
+
+
 def main(argv: list[str]) -> int:
     # Bash reads the output with $(...): no CRLF from a Windows Python.
     sys.stdout.reconfigure(newline="\n")
@@ -516,6 +686,28 @@ def main(argv: list[str]) -> int:
         for sid in start_sessions(comments):
             print(sid)
         return 0
+    if command == "cbm-result":
+        try:
+            print(json.dumps(cbm_result(sys.stdin.read()), ensure_ascii=False))
+        except ValueError as error:
+            print(error, file=sys.stderr)
+            return 1
+        return 0
+    if command == "cbm-chunks":
+        paths = [p for p in sys.stdin.read().splitlines() if p]
+        for i in range(0, len(paths), CBM_CHUNK):
+            chunk = {"project": args[0], "paths": paths[i : i + CBM_CHUNK]}
+            print(json.dumps(chunk))
+        return 0
+    if command == "cbm-verdict":
+        try:
+            lines, stale = cbm_verdict(sys.stdin.read().split("\0")[:-1], *args[:2])
+        except (ValueError, OSError) as error:
+            print(error, file=sys.stderr)
+            return 2
+        for line in lines:
+            print(line)
+        return 1 if stale else 0
     if command == "questions-query":
         print(QUESTIONS_QUERY)
         return 0

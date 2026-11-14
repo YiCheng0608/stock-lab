@@ -12,7 +12,7 @@
 - **GitHub Issues** 是任務來源：目標、範圍、驗收條件（AC）、決策與結果都記在 Issue。Project 看板只顯示狀態，不另建表。
 - **Repo** 保存程式、文件、可重建測試。一次性命令、實測紀錄、待辦留 Issue。
 - **Orca** 管 worktree 與 terminal；每個任務在自己的 worktree 工作，不在管理 checkout（`master`）改檔。排程只從獨立的發佈 checkout 執行，正式資料目錄在 repo 外（[排程](docs/ops/SCHEDULING.md)）；agent 不得在任何 checkout 跑 `git clean -x`，不得刪資料目錄。
-- **codebase-memory** 先查索引再讀原檔；MCP 斷線改用同引擎 CLI，不重建整份索引。
+- **codebase-memory** 先查索引再讀原檔。只有一份 master 索引（project `C-Users-YiCheng-Desktop-taiwan-stock-research`），由 `close_task.sh` 合併後重建並驗證、`dispatch.sh` 派工前再驗；不對自己的 worktree 跑 `index_repository`，自己改過的檔以 worktree 內實際檔案為準。MCP 斷線改用同引擎 CLI，不重建整份索引（[程式索引](docs/WORKFLOW.md#程式索引)）。
 - 回覆使用者一律繁體中文、台灣用語；程式、指令、路徑維持原樣。
 
 ## 角色

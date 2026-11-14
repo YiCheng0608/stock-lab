@@ -205,14 +205,22 @@ esac
 # <fake>/git_branch_gone_at_delete exists it fails with the branch already gone: orca
 # worktree rm deleted it after close_task's show-ref had seen it (#290). With
 # <fake>/git_unreadable_after_delete, show-ref answers 128 (git could not read the repo)
-# once branch -D has run.
+# once branch -D has run. The master index (#704): symbolic-ref HEAD answers
+# <fake>/git_head_branch.txt (default master); merge (the management checkout's
+# fast-forward) fails when <fake>/git_merge_fails exists; diff --name-only prints
+# <fake>/git_diff.txt (default tools/ops/close_task.sh); rev-list --merges prints
+# <fake>/git_merges.txt (default MERGE_SHA).
 FAKE_GIT = r"""#!/usr/bin/env bash
 d="$FAKE_DIR"
 printf '%s\n' "$*" >>"$d/git_calls.log"
 [ "$1" = -C ] && shift 2
+[ "$1" = -c ] && shift 2
 touch "$d/branches.txt"
 case "$1" in
   fetch) exit 0 ;;
+  symbolic-ref) if [ -f "$d/git_head_branch.txt" ]; then cat "$d/git_head_branch.txt"; else echo master; fi ;;
+  merge) [ -f "$d/git_merge_fails" ] && { echo "fatal: Not possible to fast-forward" >&2; exit 128; }; exit 0 ;;
+  diff) if [ -f "$d/git_diff.txt" ]; then cat "$d/git_diff.txt"; else echo tools/ops/close_task.sh; fi ;;
   rev-parse)
     if [ "$2" = HEAD ] && [ -f "$d/worktree_head.txt" ]; then cat "$d/worktree_head.txt"; exit 0; fi
     sha="$(awk -v r="$2" '$1 == r { print $2 }' "$d/refs.txt" 2>/dev/null)"
@@ -239,7 +247,12 @@ case "$1" in
   merge-base)
     [ -f "$d/git_ancestor_exit_$3" ] && exit "$(cat "$d/git_ancestor_exit_$3")"
     exit "$(cat "$d/git_ancestor_exit" 2>/dev/null || echo 0)" ;;
-  rev-list) cat "$d/git_rev_list.txt" 2>/dev/null; exit 0 ;;
+  rev-list)
+    case " $* " in
+      *" --merges "*) if [ -f "$d/git_merges.txt" ]; then cat "$d/git_merges.txt"; else echo "$FAKE_MERGE_SHA"; fi ;;
+      *) cat "$d/git_rev_list.txt" 2>/dev/null ;;
+    esac
+    exit 0 ;;
   status) cat "$d/git_status.txt" 2>/dev/null ;;
   worktree)
     [ "$2" = list ] && cat "$d/git_worktrees.txt" 2>/dev/null
@@ -283,6 +296,122 @@ exit 0
 """
 
 
+# The codebase-memory same-engine CLI (#704), `cbm cli --json TOOL` with the arguments on
+# stdin, as coordinator_lib.sh's cbm_call runs it: every run of dispatch.sh and close_task.sh
+# gets this fake (STOCK_CBM_CLI), never the real engine or its cache. It logs each call as
+# a JSON line in <fake>/cbm_calls.log, prints the daemon's level=/hint: lines and then the
+# envelope, as the real one does. State and answers, all in <fake>:
+#   cbm_indexed_at.txt     the index's indexed_at (default 2099-01-01T00:00:00Z)
+#   cbm_not_tracked.txt    repo paths the index has no record of (index_repository records
+#                          them, unless cbm_not_tracked_stays exists)
+#   cbm_unsupported.txt    suffixes the engine never records (.txt and the like)
+#   cbm_excluded.txt       paths answered with status "excluded"
+#   cbm_index_no_bump      index_repository leaves indexed_at as it was (only mtimes
+#                          changed), unless delete_project ran first
+#   cbm_index_fails        index_repository answers isError
+#   cbm_root.txt           index_status's root_path (default the sandbox repo)
+#   cbm_no_project         index_status answers "project not found"
+#   cbm_<tool>.raw / .rc   the whole output and exit code of that tool, as written
+#   cbm_<tool>.sleep       seconds that tool hangs first
+# A path that is not a file in the sandbox repo answers freshness "missing"; one the index
+# records answers "metadata_changed", as engine 0.10.8 does for unchanged files.
+FAKE_CBM_PY = r"""
+import json, os, sys, time
+d = os.environ["FAKE_DIR"]
+repo = os.environ["FAKE_REPO"]
+tool = sys.argv[3] if len(sys.argv) > 3 else ""
+args = json.loads(sys.stdin.read() or "{}")
+with open(os.path.join(d, "cbm_calls.log"), "a", encoding="utf-8") as log:
+    log.write(json.dumps({"tool": tool, "args": args}) + "\n")
+def at(name):
+    return os.path.join(d, name)
+def lines(name):
+    try:
+        with open(at(name), encoding="utf-8") as f:
+            return [x.strip() for x in f if x.strip()]
+    except FileNotFoundError:
+        return []
+def text(name, default):
+    v = lines(name)
+    return v[0] if v else default
+if os.path.exists(at(f"cbm_{tool}.sleep")):
+    time.sleep(float(text(f"cbm_{tool}.sleep", "0")))
+sys.stderr.write("level=info msg=mem.init budget_mb=1\nhint: fake daemon\n")
+if os.path.exists(at(f"cbm_{tool}.raw")):
+    with open(at(f"cbm_{tool}.raw"), encoding="utf-8") as f:
+        sys.stdout.write(f.read())
+    sys.exit(int(text(f"cbm_{tool}.rc", "0")))
+def answer(obj=None, error=None, table=None):
+    if error:
+        body = {"error": error}
+        out = {"content": [{"type": "text", "text": json.dumps(body)}],
+               "structuredContent": body, "isError": True}
+    elif table is not None:
+        t = f"rows: {len(table)}  (cols: f.file_path)\n" + "".join(f"  {v}\n" for v in table) + f"total: {len(table)}\n"
+        out = {"content": [{"type": "text", "text": t}], "isError": False}
+    else:
+        out = {"content": [{"type": "text", "text": json.dumps(obj)}],
+               "structuredContent": obj, "isError": False}
+    print(json.dumps(out))
+    sys.exit(0)
+def unsupported(p):
+    name = p.rsplit("/", 1)[-1]
+    suffix = "." + name.rsplit(".", 1)[1] if "." in name.lstrip(".") else name
+    return suffix in lines("cbm_unsupported.txt")
+def tracked():
+    out = []
+    missing = set(lines("cbm_not_tracked.txt"))
+    for top, dirs, files in os.walk(repo):
+        dirs[:] = [x for x in dirs if x != ".git"]
+        for f in files:
+            p = os.path.relpath(os.path.join(top, f), repo).replace(os.sep, "/")
+            if p not in missing and not unsupported(p):
+                out.append(p)
+    return sorted(out)
+project = "C-Users-YiCheng-Desktop-taiwan-stock-research"
+if tool == "index_status":
+    if os.path.exists(at("cbm_no_project")):
+        answer(error="project not found or not indexed")
+    answer({"project": project, "status": "ready", "root_path": text("cbm_root.txt", repo)})
+if tool == "delete_project":
+    open(at("cbm_deleted"), "w").close()
+    answer({"project": project, "status": "deleted"})
+if tool == "index_repository":
+    if os.path.exists(at("cbm_index_fails")):
+        answer(error="index failed: disk full")
+    if os.path.exists(at("cbm_deleted")) or not os.path.exists(at("cbm_index_no_bump")):
+        with open(at("cbm_indexed_at.txt"), "w", encoding="utf-8") as f:
+            f.write(text("cbm_indexed_at_new.txt", "2099-01-01T00:00:00Z"))
+    if os.path.exists(at("cbm_deleted")):
+        os.remove(at("cbm_deleted"))
+    if not os.path.exists(at("cbm_not_tracked_stays")) and os.path.exists(at("cbm_not_tracked.txt")):
+        os.remove(at("cbm_not_tracked.txt"))
+    answer({"project": args.get("name"), "status": "indexed", "nodes": 1})
+if tool == "query_graph":
+    answer(table=tracked())
+if tool == "check_index_coverage":
+    known = set(tracked())
+    excluded = set(lines("cbm_excluded.txt"))
+    paths = []
+    for p in args.get("paths") or []:
+        if p in excluded:
+            status, fresh = "excluded", "not_tracked"
+        elif not os.path.isfile(os.path.join(repo, p)):
+            status, fresh = "no_recorded_issue", "missing"
+        elif p in known:
+            status, fresh = "no_recorded_issue", "metadata_changed"
+        else:
+            status, fresh = "no_recorded_issue", "not_tracked"
+        paths.append({"requested_path": p, "path": p, "status": status, "freshness": fresh})
+    answer({"project": args.get("project"), "signal": "best_effort",
+            "indexed_at": text("cbm_indexed_at.txt", "2099-01-01T00:00:00Z"), "paths": paths})
+answer(error=f"unknown tool {tool}")
+"""
+FAKE_CBM = r"""#!/usr/bin/env bash
+exec "$STOCK_PYTHON" -X utf8 "$FAKE_DIR/fake_cbm.py" "$@"
+"""
+
+
 def _ok(result: dict) -> dict:
     return {"ok": True, "result": result}
 
@@ -317,6 +446,7 @@ class Harness:
             ("gh", FAKE_GH),
             ("git", FAKE_GIT),
             ("docker", FAKE_DOCKER),
+            ("cbm", FAKE_CBM),
         ):
             path = self.bin / name
             path.write_text(body, encoding="utf-8", newline="\n")
@@ -337,6 +467,9 @@ class Harness:
             ),
         )
         self.answer("gh_board", _board(item="ITEM-1"))
+        (self.fake / "fake_cbm.py").write_text(
+            FAKE_CBM_PY, encoding="utf-8", newline="\n"
+        )
 
     def integration_branches(self, *names: str) -> None:
         """Set integration_branches in the sandbox copy of close_task.sh (#428)."""
@@ -397,6 +530,10 @@ class Harness:
             # A listener started here talks to the fake orca, never to a real one.
             STOCK_WAKE_TEST="1",
             WAKE_LISTENER_ORCA=(self.bin / "orca").as_posix(),
+            # The codebase-memory CLI (#704): the fake, over the sandbox repository.
+            STOCK_CBM_CLI=(self.bin / "cbm").as_posix(),
+            FAKE_REPO=self.repo.as_posix(),
+            FAKE_MERGE_SHA=MERGE_SHA,
         )
         base.update(env)
         # Git for Windows' bin/bash.exe puts /mingw64/bin (the real git) in front of PATH,
@@ -768,6 +905,9 @@ def test_dispatch_without_base_fetches_and_checks_origin_master(
         "show-ref --verify --quiet refs/heads/task/282-dryrun",
         "fetch --quiet origin master",
         "rev-parse origin/master",
+        # The master index check (#704): the newest merges of the checkout and their files.
+        "rev-list --first-parent --merges -n 5 HEAD",
+        f"-c core.quotepath=false diff --name-only --diff-filter=d {MERGE_SHA}^1 {MERGE_SHA}",
         "rev-parse HEAD",
         "branch -m YiCheng0608/task-282-dryrun task/282-dryrun",
     ]

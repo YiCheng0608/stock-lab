@@ -37,7 +37,13 @@
 # containers, volumes and networks named t<issue>/task-<issue>; none while one of them runs;
 # then dangling images and build cache once no other Docker task is in progress; no docker or
 # no answer in time only adds a docker_skipped step), set the board to 完成, and read back
-# that all of it is gone.
+# that all of it is gone. Then, for a PR into master and not a dry run (--no-board), the
+# master index (#704): fast-forward this checkout (it must be on master with no uncommitted
+# change to tracked files) to origin/master, rebuild its codebase-memory index with the
+# same-engine CLI and verify the files the merge commit changed (cbm_ensure in
+# coordinator_lib.sh: one forced rebuild when only the mtime rule is left); a missing CLI,
+# a time-out, an answer that cannot be read or an index still stale is exit 3 (rerun with
+# --pr <n>), and the board stays as it was.
 #
 # Usage: close_task.sh <issue> [--extra-dir <path>]... [options]
 #   --slug S          the task is task/<issue>-S (needed when an issue has several)
@@ -445,6 +451,34 @@ branch_gone || report 3 "讀回：branch $branch 仍在或讀不到"
 for dir in "${extra_live[@]+"${extra_live[@]}"}"; do
   [ ! -e "$dir" ] && [ ! -L "$dir" ] || report 3 "讀回：$dir 仍在"
 done
+
+# --- the master index (#704; cbm_* in coordinator_lib.sh) ---------------------------
+# The management checkout (repo_root) goes to the new origin/master by fast-forward, then
+# its codebase-memory index is rebuilt and the files this merge changed are verified. A
+# failure is exit 3 with the cleanup steps above in "steps"; rerun with --pr <n>.
+if [ "$base_branch" != master ]; then
+  steps+=("index_skipped:base_$base_branch")
+elif [ "$set_board" = 0 ]; then
+  steps+=("index_skipped:no_board")
+else
+  cur="$(git -C "$repo_root" symbolic-ref --quiet --short HEAD | tr -d '\r')"
+  [ "$cur" = master ] || report 3 "管理 checkout 更新：$repo_root 不在 master（${cur:-detached}），未更新、未重建索引"
+  dirty="$(git -C "$repo_root" status --porcelain --untracked-files=no)" \
+    || report 3 "管理 checkout 更新：讀不到 $repo_root 的 git status"
+  [ -z "$(printf '%s' "$dirty" | tr -d '\r')" ] || report 3 "管理 checkout 更新：$repo_root 有未 commit 的改動，未更新、未重建索引"
+  git -C "$repo_root" merge --ff-only --quiet origin/master \
+    || report 3 "管理 checkout 更新：$repo_root 無法快轉到 origin/master"
+  steps+=("checkout_updated:$(git -C "$repo_root" rev-parse HEAD | tr -d '\r')")
+  index_paths="$(cbm_merge_paths "$merge_sha")" || report 3 "索引步驟：讀不到 merge commit ${merge_sha:0:9} 改到的檔案"
+  if [ -z "$index_paths" ]; then
+    # A merge that only deleted files: the rebuild still runs, there is nothing to verify.
+    cbm_rebuild || report 3 "索引步驟：$cbm_error"
+    steps+=("index_rebuilt" "index_fresh:0")
+  else
+    cbm_ensure rebuilt "$index_paths" || { steps+=("${cbm_steps[@]+"${cbm_steps[@]}"}"); report 3 "索引步驟：$cbm_error"; }
+    steps+=("${cbm_steps[@]}")
+  fi
+fi
 
 if [ "$set_board" = 1 ]; then
   board="$(board_set "$issue" 完成)" || { board=failed; report 4 "看板未設成完成，請手動設定"; }
