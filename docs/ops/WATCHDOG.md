@@ -62,6 +62,6 @@ scheduler 容器的命令（在發佈 checkout 執行；`<P>` 是正式 compose 
 | 日誌 | `docker compose -p <P> exec scheduler tail -n 50 /data/logs/watchdog.log`；serve 的輸出是 `docker compose -p <P> logs scheduler` |
 | 停用／啟用 | 看門狗由 serve 排程：`docker compose -p <P> stop scheduler`／`start scheduler`（daily、news、monitor 一起停）；回補、回測起跑時自己開[維護模式](SCHEDULING.md#維護模式)，看門狗照常跑，不必停 |
 
-工作排程器（切換前）的註冊與管理命令見 [Windows 工作排程器的看門狗](platform/windows.md#看門狗stock-labwatchdog)。
+工作排程器（切換前）的 `\stock-lab\watchdog` 與註冊腳本已移除（#683），見 [Windows 工作排程器的看門狗與事件 monitor](platform/windows.md#看門狗與事件-monitor-的工作)。
 
 看門狗一輪超過 10 分鐘時，serve 結束它（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)）。日誌 `<資料目錄>/logs/watchdog.log`，每列為 UTC 時間、事件、`key=value` 與說明，沒有異常時記 `schedules_ok`；異常留言（每日一則）的頻率限制以此日誌判斷。同一時間只跑一個：Python 以 job 的同一套檔案鎖（`python -m worker.job lock`）持有 `<資料目錄>/locks/watchdog.lock` 並把腳本當子程序再跑一次，鎖由作業系統在 Python 結束時釋放（被強制終止也一樣，子程序一起結束），下一輪不必等；另一輪仍在跑時記 `locked` 並略過。找不到 Python 時不取鎖：serve 的兩輪相隔 30 分鐘、一輪超過 10 分鐘就被結束，所以不會重疊。持鎖的那一輪另清掉被強制終止的看門狗留在 `logs/` 的 `.watchdog.XXXXXX` 工作目錄（記 `stale_work_removed`；`--dry-run` 只記 `stale_work_planned`）；「持鎖」看的是上層程序確實是持有 `watchdog.lock` 的 `worker.job lock`（讀 `/proc`，#448），不看環境變數：手動帶 `WATCHDOG_LOCK_HELD=1` 不取鎖、記 `lock_unverified`、也不清理。舊版的 `logs/watchdog.lock/` 目錄不再使用；DB 檢查因缺 Python 或讀 DB 失敗而沒跑時記 `python_missing`／`daily_check_failed`／`news_llm_check_failed`／`llm_auth_check_failed`／`invariants_check_failed`／`data_check_failed`，不記 `schedules_ok`；gh 被拒時記 `gh_auth_failed`、沒能留的異常記 `anomaly_not_commented`，讀 repo 因其他原因失敗記 `gh_probe_failed`（照常嘗試留言）。舊版（含開統籌）的日誌 `logs/ensure_coordinator.log` 不再寫入。

@@ -12,7 +12,7 @@
 - **請開統籌**：佇列有事件已 60 分鐘、期間統籌心跳都沒更新時，在 #1 留言「待使用者：請開統籌」，同一心跳只留一則（`stale` 列）；不開 session。
 - **自身狀態**：每輪寫 `logs/monitor-heartbeat.json`、把 daily／news 最新日誌的 `end` 列與 `watchdog.log` 最後一列記進 `logs/monitor-state.json`（`patrol.sh` 印這份，不自己讀日誌，#338），並在 `logs/monitor.log` 記一列（UTC 時間、`poll`、`gh_calls`、新事件與未處理數、喚醒結果）；心跳另記 gh 連續失敗的輪數、從何時起與最後的錯誤（失敗那次呼叫自己的 stderr 最後一行；逾時記 `timeout`；沒有輸出記 `exit <碼>`；`patrol.sh` 也印出）。看門狗在心跳超過 10 分鐘或 gh 連續失敗 10 輪時留言（[排程看門狗](WATCHDOG.md)）。同時只跑一個（`logs/monitor.lock/`，內容是持有者的 pid、token 與主機名稱；同一主機時 pid 已不在或心跳超過 10 分鐘就視為殘留接手；鎖是別的主機或容器的（另一個 PID namespace，pid 無從判斷）時，心跳超過 3 分鐘才接手，#338）。每輪開頭、在 #1 留言前與寫佇列前都檢查鎖：被接手的舊 monitor 一發現鎖已不是自己的，就記 `lock_lost` 結束，不再呼叫 gh、留言或寫佇列，也不刪新持有者的鎖與工作目錄（各 monitor 的工作目錄是 `monitor.lock/work.<pid>`）。
 
-`--record-only` 只記事件，不喚醒也不留言（gh 照樣讀）；scheduler 容器以 `STOCK_MONITOR=record-only` 使用它（見下）。工作排程器（切換前）的註冊、停止與上線步驟見 [Windows 工作排程器的事件 monitor](platform/windows.md#事件-monitorstock-labmonitor)。
+`--record-only` 只記事件，不喚醒也不留言（gh 照樣讀）；scheduler 容器以 `STOCK_MONITOR=record-only` 使用它（見下）。工作排程器（切換前）的 `\stock-lab\monitor` 與註冊腳本已移除（#683），見 [Windows 工作排程器的看門狗與事件 monitor](platform/windows.md#看門狗與事件-monitor-的工作)。
 
 **scheduler 容器裡的 monitor**（#338）：`worker.cli serve` 在 `STOCK_MONITOR` 為 `on`（或 `record-only`）時每分鐘跑一次 `monitor.sh --once`（[scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)），每一輪都是新啟動的 monitor，所以「重啟後不重複喚醒」就是每一輪的常態；兩輪間隔由觸發保證（每分鐘一次）。檔案分兩處：
 
