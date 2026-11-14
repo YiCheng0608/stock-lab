@@ -325,6 +325,8 @@ def test_no_heartbeat_for_an_hour_asks_the_user_once_on_1(mon: Harness) -> None:
 
 
 def test_a_failed_wake_is_retried_after_ten_minutes(mon: Harness) -> None:
+    """A now event (#711): the failed wake is tried again after ten minutes."""
+    mon.answer("gh_comments", [_comment(9, "2026-10-25T11:50:00Z", body="review：可")])
     mon.answer("orca_terminal_send", {"ok": False, "error": "terminal busy"})
     _monitor(mon)
     _monitor(mon, at=NOW + 60)
@@ -598,7 +600,7 @@ def test_the_queue_format(mon: Harness) -> None:
     }
     rows = _records(mon)
     for row in rows:
-        assert set(row) == fields[row["type"]], row
+        assert set(row) == fields[row["type"]] | _tier_field(row), row
     events = _records(mon, "event")
     assert [e["seq"] for e in events] == list(range(1, len(events) + 1))
     assert len({e["id"] for e in events}) == len(events)
@@ -692,6 +694,13 @@ def test_a_stop_file_ends_the_loop_after_its_poll(mon: Harness) -> None:
     assert not stop.exists() and not (logs / "monitor.lock").exists()
 
 
+def _tier_field(row: dict) -> set[str]:
+    """An event that wakes has a tier (#711), a quiet one a quiet reason instead."""
+    if row.get("type") != "event":
+        return set()
+    return {"quiet"} if "quiet" in row else {"tier"}
+
+
 # The scheduler container's layout (#338) ---------------------------------------------
 
 # The fields of each queue record and of the heartbeat, as #316's monitor writes them.
@@ -764,7 +773,7 @@ def test_the_container_monitor_writes_the_316_queue_where_patrol_reads_it(
     rows = _rows(queue / "events.jsonl")
     assert {r["type"] for r in rows} == {"event", "wake"}
     for row in rows:
-        assert set(row) == FIELDS[row["type"]], row
+        assert set(row) == FIELDS[row["type"]] | _tier_field(row), row
     assert [r["id"] for r in rows if r["type"] == "event"][-1] == (
         "job:daily-20261025.log:2026-10-25T19:45:00+08:00"
     )
@@ -1073,7 +1082,7 @@ def test_coordinator_comments_and_gone_prs_are_queued_without_a_wake(
     assert events["comment:10"]["quiet"] == "coordinator_comment"
     assert events["comment:10"]["summary"] == "決定：照做。"
     for e in events.values():
-        assert set(e) == FIELDS["event"] | ({"quiet"} if "quiet" in e else set()), e
+        assert set(e) == FIELDS["event"] | ({"quiet"} if "quiet" in e else {"tier"}), e
     assert "new=2 pending=0 unnotified=0 wake=0" in result.stdout
     assert len(_sends(mon)) == 1 and len(_records(mon, "wake")) == 1
     out = _patrol_here(mon)
@@ -1083,12 +1092,13 @@ def test_coordinator_comments_and_gone_prs_are_queued_without_a_wake(
     # --done covers them as well; then they are not listed any more.
     _done(mon, "5")
     assert "不喚醒的事件" not in _patrol_here(mon, NOW + 180)
-    # Comments without the mark as their last line wake as before (engineers, the user).
+    # Comments without the mark as their last line wake as before (engineers, the user);
+    # a 回報 with the next wake (#711), here the 決定 without the mark.
     mon.answer(
         "gh_comments",
         [
             _comment(11, "2026-10-25T12:03:00Z", body="回報：PR 已開"),
-            _comment(12, "2026-10-25T12:03:10Z", body=f"回報：引用 {MARK} 之後還有字"),
+            _comment(12, "2026-10-25T12:03:10Z", body=f"決定：引用 {MARK} 之後還有字"),
         ],
     )
     _monitor(mon, at=NOW + 240)
@@ -1141,6 +1151,7 @@ def test_quiet_events_do_not_ask_the_user_for_a_coordinator(mon: Harness) -> Non
 
 def test_a_quiet_event_does_not_bring_a_failed_wake_forward(mon: Harness) -> None:
     """A failed wake is retried after ten minutes; a quiet event does not retry it now."""
+    mon.answer("gh_comments", [_comment(9, "2026-10-25T11:50:00Z", body="review：可")])
     mon.answer("orca_terminal_send", {"ok": False, "error": "terminal busy"})
     _monitor(mon)
     mon.answer("gh_pr_list", [])
@@ -1359,8 +1370,9 @@ def test_a_turn_stopped_without_a_comment_for_31_minutes_wakes_the_coordinator(
     mon: Harness,
 ) -> None:
     """AC-3 evidence 2 (#595): stopped, no comment: 29 minutes later no event; 31 minutes
-    later one engineer_waiting event that wakes the coordinator; the same ended_at polled
-    again is not recorded twice; working after it: nothing new."""
+    later one engineer_waiting event, batch since #711: it wakes the coordinator once it
+    has waited 15 minutes; the same ended_at polled again is not recorded twice; working
+    after it: nothing new."""
     _monitor(mon)  # the PR and comment events of the fixture, handled first
     _done(mon, str(len(_records(mon, "event"))))
     sends = len(_sends(mon))
@@ -1377,9 +1389,11 @@ def test_a_turn_stopped_without_a_comment_for_31_minutes_wakes_the_coordinator(
     head = event["summary"].split("留言：", 1)[1]
     assert head.startswith("照規則我不會自己重開") and len(head) <= 120
     assert event["detail"] == doc["last_message"]
-    assert "wake=sent" in out and len(_sends(mon)) == sends + 1
+    assert event["tier"] == "batch" and "wake=0" in out and len(_sends(mon)) == sends
     _monitor(mon, at=NOW + 180)
     assert len(_engineer_events(mon)) == 1
+    assert "wake=sent" in _monitor(mon, at=NOW + 120 + 900).stdout
+    assert len(_sends(mon)) == sends + 1
     # patrol.sh lists it with the whole message.
     listing = _patrol_here(mon, at=NOW + 240)
     assert "engineer_waiting #316" in listing
@@ -1424,7 +1438,7 @@ def test_a_session_ended_while_its_worktree_is_there_is_an_event(mon: Harness) -
     assert event["id"] == f"engineer_ended:{ENG}:{doc['ended_at']}"
     assert event["kind"] == "engineer_ended" and event["ref"] == "#316"
     assert "已結束（other），worktree 還在" in event["summary"]
-    assert "wake=sent" in out
+    assert event["tier"] == "batch"
     _monitor(mon, at=NOW + 180)
     assert len(_engineer_events(mon)) == 1
 
@@ -1519,3 +1533,368 @@ def test_a_bad_state_file_is_logged_once_until_it_changes(mon: Harness) -> None:
     bad.unlink()
     _monitor(mon, at=NOW + 240)
     assert count() == 2
+
+
+# Wake tiers (#711; decided on #711, comment 6880209185) ---------------------------------
+
+
+def _eq():
+    """event_queue.py itself, for the tier of each source."""
+    sys.path.insert(0, str(OPS))
+    try:
+        import event_queue
+    finally:
+        sys.path.remove(str(OPS))
+    return event_queue
+
+
+def _tier(event: dict) -> str:
+    return f"quiet:{event['quiet']}" if event.get("quiet") else event["tier"]
+
+
+@pytest.mark.parametrize(
+    ("conclusion", "merge", "expected"),
+    [
+        ("SUCCESS", "BLOCKED", {"pr_opened": "batch", "ci": "now"}),
+        ("FAILURE", "BLOCKED", {"pr_opened": "batch", "ci": "urgent"}),
+        ("SUCCESS", "DIRTY", {"ci": "now", "merge_state": "urgent"}),
+        ("SUCCESS", "BEHIND", {"ci": "now", "merge_state": "now"}),
+        ("SUCCESS", "CLEAN", {"ci": "now", "merge_state": "now"}),
+    ],
+)
+def test_pr_events_tiers(conclusion: str, merge: str, expected: dict) -> None:
+    """A new PR rides on the next wake (its first CI result comes ~14 minutes later); CI
+    green and BEHIND wake now; CI red and DIRTY are urgent."""
+    events = _eq().pr_events([_pr(conclusion=conclusion, merge=merge)], [])
+    tiers = {e["kind"]: e["tier"] for e in events}
+    assert {k: tiers[k] for k in expected} == expected
+
+
+@pytest.mark.parametrize(
+    ("number", "body", "expected"),
+    [
+        ("316", "提問：A 還是 B？", "urgent"),
+        ("316", "\n  提問：前面的空行與空白可以", "urgent"),
+        ("316", "請看一下這個", "urgent"),  # no type
+        ("316", "**提問：**加粗不算類型", "urgent"),
+        ("1", "回報：#1 上的留言一律是急件", "urgent"),
+        ("316", "回報：PR #900 已開，CI 跑中", "batch"),
+        ("316", "回報：必修已修，head abc", "batch"),
+        ("316", "回報：開工\n\n- session：x", "quiet:echo"),
+        ("316", "回報：收到決定，照做", "quiet:echo"),
+        ("316", "決定：採 A", "now"),
+        ("316", "review：可合併", "now"),
+        ("316", "統籌承諾：合併後清", "now"),
+        (
+            "316",
+            "決定：照做。\r\n\r\n<!-- stock-lab:coordinator -->",
+            "quiet:coordinator_comment",
+        ),
+        (
+            "1",
+            "待使用者：請開統籌。…\n\n（事件 monitor `tools/ops/monitor.sh` 自動留言，同一心跳只留一則）",
+            "quiet:monitor_comment",
+        ),
+    ],
+)
+def test_comment_tiers(number: str, body: str, expected: str) -> None:
+    comment = {
+        **_comment(5, "2026-10-25T12:00:00Z", body=body),
+        "issue_url": f"https://api.github.com/repos/YiCheng0608/stock-lab/issues/{number}",
+    }
+    (event,) = _eq().comment_events([comment], 0)
+    assert _tier(event) == expected
+
+
+def test_the_monitors_own_1_comment_is_known_by_its_url(mon: Harness) -> None:
+    """The stale line's URL marks the monitor's own comment quiet, whatever its text."""
+    eq = _eq()
+    url = "https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-77"
+    comment = {
+        **_comment(77, "2026-10-25T12:00:00Z", body="待使用者：請開統籌"),
+        "issue_url": "https://api.github.com/repos/YiCheng0608/stock-lab/issues/1",
+        "html_url": url,
+    }
+    (event,) = eq.comment_events([comment], 0, {url})
+    assert event["quiet"] == "monitor_comment"
+    logs = mon.data / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    eq.note_stale(logs, NOW, "heartbeat:none", url)
+    assert eq.Queue(logs).stale_urls == {url}
+
+
+def test_job_end_tiers(tmp_path) -> None:
+    """daily: a success rides on the next wake, a failure is urgent. news: a failure after
+    a success (or the first end line read) wakes now; the same failure again rides on the
+    next wake (#711 決定 6880209185)."""
+    (tmp_path / "daily-20261025.log").write_text(
+        "===== 2026-10-25T10:00:00Z end exit=0\n===== 2026-10-25T11:00:00Z end exit=1\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "news-20261024.log").write_text(
+        "===== 2026-10-24T22:00:00Z end exit=0 news_llm_exit=1\n", encoding="utf-8"
+    )
+    (tmp_path / "news-20261025.log").write_text(
+        "===== 2026-10-25T00:00:00Z end exit=0 news_llm_exit=1\n"
+        "===== 2026-10-25T02:00:00Z end exit=0 news_llm_exit=0\n"
+        "===== 2026-10-25T04:00:00Z end exit=0 news_llm_exit=wrapper_error\n"
+        "===== 2026-10-25T06:00:00Z end exit=1 news_llm_exit=1\n",
+        encoding="utf-8",
+    )
+    origin = datetime(2026, 10, 24, 23, tzinfo=timezone.utc).timestamp()
+    tiers = {e["at"]: e["tier"] for e in _eq().job_events(tmp_path, origin)}
+    assert tiers == {
+        "2026-10-25T10:00:00Z": "batch",
+        "2026-10-25T11:00:00Z": "urgent",
+        # The failure at 22:00 is before the origin, yet it makes 00:00 a repeat.
+        "2026-10-25T00:00:00Z": "batch",
+        "2026-10-25T04:00:00Z": "now",
+        "2026-10-25T06:00:00Z": "batch",
+    }
+
+
+def test_gh_auth_is_urgent_and_slots_ride_on_the_next_wake(tmp_path) -> None:
+    eq = _eq()
+    (event,) = eq.gh_auth_events(tmp_path, 0, NOW, "HTTP 401")
+    assert event["tier"] == "urgent"
+    (slots,) = eq.slot_events(_worktrees("task/316-a"))
+    assert slots["tier"] == "batch"
+
+
+@pytest.mark.parametrize(
+    ("doc", "gone", "expected"),
+    [
+        ({"state": "failed", "error": "rate_limit"}, None, "batch"),
+        ({"state": "failed", "error": "overloaded"}, None, "urgent"),
+        (
+            {"state": "stopped", "commented": False},
+            {"task/316-a"},
+            "quiet:task_pr_gone",
+        ),
+        ({"state": "stopped", "commented": False}, {"task/999-z"}, "batch"),
+        ({"state": "stopped", "commented": False}, None, "batch"),  # gone unknown
+        ({"state": "ended"}, {"task/316-a"}, "quiet:task_pr_gone"),
+        ({"state": "ended"}, set(), "batch"),
+    ],
+)
+def test_engineer_session_tiers(doc: dict, gone, expected: str) -> None:
+    """A usage limit rides on the next wake (the coordinator shares the account); other
+    API errors are urgent; a waiting or ended session is quiet once its task's PR left
+    the open list, batch otherwise and when that is not known."""
+    doc = {
+        "session_id": "s1",
+        "issue": 316,
+        "branch": "task/316-a",
+        "ended_at": "2026-10-25T11:00:00Z",
+        **doc,
+    }
+    event = _eq()._session_event(doc, NOW, {"task/316-a"}, gone)
+    assert _tier(event) == expected
+
+
+def test_gone_branches_are_kept_seven_days(mon: Harness) -> None:
+    """A PR that leaves the open list leaves its head branch in the state for 7 days; a
+    branch with an open PR again is taken out; a state without the map gives None, so a
+    waiting session stays batch (#711 決定 6880209185 第 3 點)."""
+    eq = _eq()
+    pr = {"number": 900, "headRefName": "task/316-a"}
+    opened, gone, known = eq.gone_branches({}, [pr], NOW)
+    assert opened == {"900": "task/316-a"} and gone == {} and known is None
+    state = {"pr_branches": opened, "gone_branches": gone}
+    opened, gone, known = eq.gone_branches(state, [], NOW + 60)
+    assert opened == {} and gone == {"task/316-a": "2026-10-25T12:01:00Z"}
+    assert known == {"task/316-a"}
+    state = {"pr_branches": opened, "gone_branches": gone}
+    # A failed PR poll keeps the map; seven days later the branch is dropped.
+    assert eq.gone_branches(state, None, NOW + 86400)[2] == {"task/316-a"}
+    assert eq.gone_branches(state, [], NOW + 60 + 7 * 86400)[1] == {}
+    # The same branch opens a PR again: not gone.
+    assert eq.gone_branches(state, [{**pr, "number": 901}], NOW + 120)[2] == set()
+    # The monitor keeps it across polls: gh pr list asks for headRefName.
+    mon.answer("gh_pr_list", [{**_pr(), "headRefName": "task/316-a"}])
+    _monitor(mon)
+    mon.answer("gh_pr_list", [])
+    _monitor(mon, at=NOW + 60)
+    state = json.loads((mon.data / "logs" / "monitor-state.json").read_text("utf-8"))
+    assert state["gone_branches"] == {"task/316-a": "2026-10-25T12:01:00Z"}
+    assert "headRefName" in next(c for c in mon.calls("gh") if c.startswith("pr list"))
+    # Its engineer's turn stopped without a comment: queued, no wake.
+    _done(mon, str(len(_records(mon, "event"))))
+    _session_state(mon, 31)
+    out = _monitor(mon, at=NOW + 120).stdout
+    (event,) = _engineer_events(mon)
+    assert event["quiet"] == "task_pr_gone" and "unnotified=0 wake=0" in out
+
+
+def _batch_comment(
+    mon: Harness, id_: int, at: str, body: str = "回報：PR 已開"
+) -> None:
+    mon.answer("gh_comments", [_comment(id_, at, body=body)])
+
+
+def test_a_batch_event_waits_for_the_next_wake_up_to_15_minutes(mon: Harness) -> None:
+    """A 回報 alone does not wake; it goes with a now event that comes within 15 minutes,
+    or wakes by itself once it has waited 15 minutes (BATCH_CAP)."""
+    _monitor(mon)
+    _done(mon, "3")
+    sends = len(_sends(mon))
+    _batch_comment(mon, 20, "2026-10-25T12:00:30Z")
+    out = _monitor(mon, at=NOW + 60).stdout
+    assert "pending=1 unnotified=1 wake=0" in out
+    _monitor(mon, at=NOW + 60 + 840)  # 14 minutes: not yet
+    assert len(_sends(mon)) == sends
+    out = _monitor(mon, at=NOW + 60 + 900).stdout
+    assert "wake=sent" in out and len(_sends(mon)) == sends + 1
+    _monitor(mon, at=NOW + 60 + 960)
+    assert len(_sends(mon)) == sends + 1
+    # A now event takes the waiting batch along at once.
+    _batch_comment(mon, 21, "2026-10-25T12:20:00Z")
+    _monitor(mon, at=NOW + 1260)
+    assert len(_sends(mon)) == sends + 1
+    mon.answer("gh_comments", [_comment(22, "2026-10-25T12:22:00Z", body="review：可")])
+    out = _monitor(mon, at=NOW + 1380).stdout
+    assert "wake=sent" in out and _sent(mon).startswith("有 3 個事件")
+
+
+def test_a_batch_event_at_its_cap_waits_for_a_failed_wake_to_be_due(
+    mon: Harness,
+) -> None:
+    """At the cap a batch event wakes as a now one: a failed wake is tried again after
+    ten minutes, not on every poll."""
+    _monitor(mon)
+    _done(mon, "3")
+    _batch_comment(mon, 20, "2026-10-25T12:00:30Z")
+    _monitor(mon, at=NOW + 60)
+    mon.answer("orca_terminal_wait", _ok({"wait": {"satisfied": False}}))
+    _monitor(mon, at=NOW + 960)
+    assert [w["detail"] for w in _records(mon, "wake")][-1] == "not_idle"
+    waits = len([c for c in mon.calls("orca") if c.startswith("terminal wait")])
+    _monitor(mon, at=NOW + 1020)
+    assert len([c for c in mon.calls("orca") if c.startswith("terminal wait")]) == waits
+    mon.answer("orca_terminal_wait", _ok({"wait": {"satisfied": True}}))
+    assert "wake=sent" in _monitor(mon, at=NOW + 960 + 600).stdout
+
+
+def test_an_urgent_event_is_tried_again_on_every_poll(mon: Harness) -> None:
+    """提問 while the coordinator terminal is not idle: tried again on the next poll,
+    not ten minutes later, until it is sent."""
+    _monitor(mon)
+    _done(mon, "3")
+    mon.answer("orca_terminal_wait", _ok({"wait": {"satisfied": False}}))
+    mon.answer("gh_comments", [_comment(30, "2026-10-25T12:00:30Z", body="提問：A？")])
+    for minute in (1, 2, 3):
+        _monitor(mon, at=NOW + 60 * minute)
+    assert [w["detail"] for w in _records(mon, "wake")][-3:] == ["not_idle"] * 3
+    mon.answer("orca_terminal_wait", _ok({"wait": {"satisfied": True}}))
+    out = _monitor(mon, at=NOW + 240).stdout
+    assert "wake=sent" in out and _sent(mon).startswith("有 1 個事件")
+    # Sent: not again.
+    _monitor(mon, at=NOW + 300)
+    assert len([w for w in _records(mon, "wake") if w["ok"]]) == 2
+
+
+@pytest.mark.parametrize(
+    ("body", "wakes"),
+    [
+        ("回報：開工\n\n- session：x", False),
+        ("回報：收到決定", False),
+        ("部署：tag `v1` 的 image 已啟動\n\n<!-- stock-lab:coordinator -->", False),
+        ("決定：採 A", True),
+    ],
+)
+def test_echoes_and_deploy_comments_wake_nobody(mon: Harness, body, wakes) -> None:
+    _monitor(mon)
+    _done(mon, "3")
+    sends = len(_sends(mon))
+    mon.answer("gh_comments", [_comment(40, "2026-10-25T12:00:30Z", body=body)])
+    _monitor(mon, at=NOW + 60)
+    _monitor(mon, at=NOW + 60 + 900)
+    assert (len(_sends(mon)) > sends) is wakes
+
+
+def test_patrol_labels_the_tiers_and_names_the_latest_wake(mon: Harness) -> None:
+    """patrol.sh: each pending event with its tier; the header says how many ride on the
+    next wake and, for those no wake covered yet, by when they wake (UTC)."""
+    _monitor(mon)
+    _done(mon, "3")
+    _batch_comment(mon, 20, "2026-10-25T12:00:30Z")
+    _monitor(mon, at=NOW + 60)
+    out = _patrol_here(mon, at=NOW + 120)
+    assert (
+        "未處理事件：1 個（seq 4～4）；搭下一次 1 個，最晚 2026-10-25T12:16:00Z 喚醒"
+        in out
+    )
+    assert "  搭下一次 [4] comment #316 " in out
+    mon.answer("gh_comments", [_comment(22, "2026-10-25T12:02:30Z", body="提問：A？")])
+    _monitor(mon, at=NOW + 180)
+    out = _patrol_here(mon, at=NOW + 240)
+    # Woken: the batch event is no longer waiting for its cap.
+    assert "未處理事件：2 個（seq 4～5）；搭下一次 1 個\n" in out
+    assert "  急件 [5] comment #316 " in out
+
+
+def test_the_replay_counts_wakes_and_urgent_delays(tmp_path) -> None:
+    """#711 AC-3: wake_replay.py gives each stored event its tier now, replays a poll a
+    minute with wake_due (busy where the real monitor saw not_idle), and lists each
+    urgent event's real and replayed wake."""
+    eq = _eq()
+
+    def at(s: int) -> str:
+        return eq.iso(NOW + s)
+
+    def event(seq: int, s: int, kind: str, summary: str, id_: str) -> dict:
+        return {
+            "type": "event",
+            "seq": seq,
+            "detected_at": at(s),
+            "id": id_,
+            "kind": kind,
+            "ref": "#316" if kind == "comment" else "PR #324",
+            "summary": summary,
+            "url": "",
+            "at": None,
+        }
+
+    def wake(s: int, ok: bool, upto: int) -> dict:
+        return {
+            "type": "wake",
+            "at": at(s),
+            "ok": ok,
+            "terminal": "t",
+            "upto": upto,
+            "detail": "sent" if ok else "not_idle",
+        }
+
+    rows = [
+        event(1, 0, "comment", "回報：PR 已開", "comment:1"),
+        wake(0, True, 1),
+        event(2, 60, "comment", "回報：開工", "comment:2"),
+        wake(60, True, 2),
+        event(3, 120, "ci", "CI success", f"ci:324:{'c' * 12}:1:success"),
+        wake(120, True, 3),
+        event(4, 3600, "comment", "提問：A？", "comment:4"),
+        wake(3600, False, 3),
+        wake(4200, True, 4),
+    ]
+    queue = tmp_path / "events.jsonl"
+    queue.write_text(
+        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows),
+        encoding="utf-8",
+    )
+    out = tmp_path / "replay.md"
+    result = subprocess.run(
+        [sys.executable, str(OPS / "wake_replay.py"), str(queue), "--out", str(out)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    assert result.returncode == 0, result.stderr
+    text = out.read_text(encoding="utf-8")
+    # Real 4; the old rule replayed 4; the new one 2: the 回報 rides on the CI wake,
+    # the echo wakes nobody, the 提問 is tried again on the next poll.
+    assert f"| {at(0)} 起 | 4 | 4 | 4 | 2 | 50.0% | 50.0% | 1 | 0 |" in text
+    assert (
+        f"| 4 | comment | #316 | {at(3600)} | {at(4200)} | {at(3660)} | -540 |" in text
+    )
+    assert "- quiet:echo：1" in text and "- batch：1" in text
+    assert "| 4 | 4 | 4 | 2 |" in result.stdout
