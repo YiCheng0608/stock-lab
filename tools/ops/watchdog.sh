@@ -69,6 +69,9 @@ US_FAILED_RUNS=2
 # notify (#728): Monday to Friday 08:45; judged from 09:10, so the :15 run reports it before
 # the 09:00 open is long past.
 NOTIFY_AFTER_HM=910
+# preopen (#760): Monday to Friday 08:20, at most 15 minutes plus serve's 5-minute
+# backstop; judged from 09:00, so the 09:15 run reports it.
+PREOPEN_AFTER_HM=900
 # The day's daily is judged from 23:10 Taipei (#466): its log, its result and the
 # data check. By then the 23:00 trigger (the retry of a 21:30 that failed or did
 # not run, or the institutional refetch after a 21:30 success) has written its
@@ -530,6 +533,37 @@ if compgen -G "$logs/notify-*.log" >/dev/null && [ "$taipei_dow" -le 5 ] \
           "$notify_log" | tail -n 1)"
         if [ -n "$notify_late" ]; then
           anomaly notify_missed "每日 Telegram 通知：今天（$taipei_iso）08:45～13:30 scheduler 沒有送出（\`too_late at=$notify_late\`：排程到 $notify_late 才跑，主機可能睡眠或 scheduler 停過），收盤後不補送；請查主機與 \`docker logs\` 的 scheduler 是否在 08:45 前後運作。"
+        fi
+        ;;
+    esac
+  fi
+fi
+
+# preopen (#760 decision 6889924853): Monday to Friday from 09:00 (08:20 plus its 15
+# minutes and serve's 5-minute backstop), the day's preopen log has no end line, its last
+# outcome that is not a skip is failed, or it has only skips and one is too_late. The
+# other skips (non_trading_day, already_checked, no_list, already_running, maintenance)
+# are no anomaly. Only once preopen logs exist.
+preopen_log="$logs/preopen-$taipei_date.log"
+if compgen -G "$logs/preopen-*.log" >/dev/null && [ "$taipei_dow" -le 5 ] \
+  && [ $((10#$taipei_hm)) -ge "$PREOPEN_AFTER_HM" ]; then
+  preopen_rerun="\`docker compose -p <P> exec scheduler python -m worker.cli preopen --trigger manual\`"
+  if [ ! -f "$preopen_log" ]; then
+    anomaly preopen_missing "開盤前檢查：今天（$taipei_iso）沒有 08:20 開盤前檢查的日誌（\`logs/preopen-$taipei_date.log\` 不存在），scheduler 可能沒在跑，今日名單頁會一直寫「尚未檢查」；確認 scheduler 後在 13:30 前以 $preopen_rerun 補跑。"
+  elif ! grep -qE '^===== [^ ]+ end exit=' "$preopen_log"; then
+    anomaly preopen_missing "開盤前檢查：今天（$taipei_iso）的檢查開始了但沒有跑完（\`logs/preopen-$taipei_date.log\` 有 start、沒有 end 列），可能卡住或被 serve 的保險時間結束；查 \`docker logs\` 的 \`serve killed job=preopen\` 與該日誌，修好後在 13:30 前以 $preopen_rerun 補跑。"
+  else
+    preopen_last="$(sed -nE 's/^--- result (status=[a-z_]+.*)$/\1/p' "$preopen_log" \
+      | grep -v '^status=skipped' | tail -n 1)"
+    case "$preopen_last" in
+      status=failed*)
+        anomaly preopen_failed "開盤前檢查：今天（$taipei_iso）的檢查失敗（\`${preopen_last:0:300}\`），今日名單頁會寫「尚未檢查」；請查 \`logs/preopen-$taipei_date.log\`，修好後在 13:30 前以 $preopen_rerun 補跑。"
+        ;;
+      "")
+        preopen_late="$(sed -nE 's/^--- result status=skipped reason=too_late at=([0-9:]+).*/\1/p' \
+          "$preopen_log" | tail -n 1)"
+        if [ -n "$preopen_late" ]; then
+          anomaly preopen_missed "開盤前檢查：今天（$taipei_iso）08:20～13:30 scheduler 沒有跑到（\`too_late at=$preopen_late\`：排程到 $preopen_late 才跑，主機可能睡眠或 scheduler 停過），今日名單頁會寫「尚未檢查」；請查主機與 \`docker logs\` 的 scheduler 是否在 08:20 前後運作，要補可用 $preopen_rerun 手動跑（\`--trigger manual\` 不受時段限制）。"
         fi
         ;;
     esac
