@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react'
-import type { CandidateItem, CandidateLiquidity, PreopenNews } from '../types'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { CandidateItem, CandidateLiquidity, MainstreamItem, MainstreamResponse, PreopenNews } from '../types'
+import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom/server'
 
@@ -34,6 +34,9 @@ import { OVERNIGHT_US_CLOSED, OVERNIGHT_US_PENDING, overnightUsView } from './ca
 import { PageDateContext } from '../components/pageDate'
 import { removedCopyIn } from '../removedCopy.fixtures'
 import { CandidatesSection, PriceLadder, ScoreDetails, Sparkline, TodayCandidateList } from './CandidateViews'
+import { MainstreamList, MainstreamSection, TodayListsSection, mainstreamQueryOptions } from './MainstreamViews'
+import { TODAY_LISTS, mainstreamGroupsText, mainstreamReturnText, mainstreamState, signedPercent, todayListKind, todayListPickPath, todayListSearch } from './mainstream'
+import { mainstreamItem, mainstreamResponse, missingMainstream, zeroMainstream } from './mainstream.fixtures'
 import { ROW_CLICK_IGNORED, SPARKLINE_HEIGHT, SPARKLINE_WIDTH, TERMINAL_MIN_WIDTH, candidateChartLevels, chartToggleLabel, ladderLabel, nextChartRank, priceLadder, rowClickToggles, sparkline } from './candidates'
 
 // Standalone regression module (no browser, no server, no network) for the daily candidate list (#215):
@@ -453,3 +456,111 @@ check(!render(<CandidatesSection data={{ ...zeroResponse('all_excluded'), preope
 check(!plainList.includes('preopen'), 'a response without preopen_check shows nothing of it')
 check(preopenRowMark({ ...preopenNews(), negative: 0 })?.negative === null && preopenRowMark(noPreopenNews()) === null && preopenRowMark(null) === null, 'no brackets without a negative one; no mark without news')
 check(preopenCheckLine(undefined) === null, 'no line without preopen_check')
+
+// ---- 主流族群前 20 (#769; UI_COPY_SPEC §10, DESIGN_SYSTEM §5 候選列表): the switch, the second list's rows and states ----
+{
+  const renderAt = (location: string, element: ReactElement, client = new QueryClient()) =>
+    renderToStaticMarkup(<QueryClientProvider client={client}><StaticRouter location={location}>{element}</StaticRouter></QueryClientProvider>)
+  const withMainstream = (data: MainstreamResponse) => {
+    const client = new QueryClient()
+    client.setQueryData(['mainstream', 'latest'], data)
+    return client
+  }
+  const plain = (markup: string) => markup.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&')
+  const inner = (markup: string, start: string, end: string) => plain(slice(markup, start, end).replace(/^[^>]*>/, ''))
+  const today = { data: listResponse(), loading: false, error: null }
+  const tabOf = (markup: string, label: string) => markup.match(new RegExp(`<button[^>]*role="tab"[^>]*>${label}</button>`))?.[0] ?? ''
+
+  // The switch and the address: ?list=mainstream opens the second list (a reload stays on it); anything else is 今日名單.
+  check(todayListKind(new URLSearchParams('')) === 'today' && todayListKind(new URLSearchParams('list=mainstream')) === 'mainstream' && todayListKind(new URLSearchParams('list=other')) === 'today', 'only ?list=mainstream opens the second list')
+  check(todayListSearch(new URLSearchParams('list=mainstream&pick=2330&x=1'), 'today').toString() === 'x=1' && todayListSearch(new URLSearchParams('x=1'), 'mainstream').toString() === 'x=1&list=mainstream', 'the tabs write the list to the address and drop a pick')
+  check(JSON.stringify(TODAY_LISTS.map((list) => list.label)) === JSON.stringify(['今日名單', '主流族群前 20']), 'two tabs, 今日名單 first')
+  const atToday = renderAt('/', <TodayListsSection today={today} />)
+  check(tabOf(atToday, '今日名單').includes('aria-selected="true"') && tabOf(atToday, '主流族群前 20').includes('aria-selected="false"'), 'without ?list the page is on 今日名單')
+  check(atToday.includes('id="candidates-title"') && !atToday.includes('mainstream-title') && atToday.indexOf('role="tablist"') < atToday.indexOf('id="candidates-title"'), 'the switch above the today list; the second list not rendered')
+  check(atToday.includes('id="today-list-panel-today"') && atToday.includes('aria-labelledby="today-list-tab-today"'), 'the panel is labelled by its tab')
+  // The today list itself does not change: the same page text as before the switch, after the two tab labels.
+  check(plain(atToday) === '今日名單主流族群前 20' + plain(render(<CandidatesSection data={listResponse()} loading={false} error={null} />)), 'the today list keeps its page text (page_checks T5–T8, T13)')
+  const atMainstream = renderAt('/?list=mainstream', <TodayListsSection today={today} />, withMainstream(mainstreamResponse()))
+  check(tabOf(atMainstream, '主流族群前 20').includes('aria-selected="true"') && tabOf(atMainstream, '今日名單').includes('aria-selected="false"'), '?list=mainstream selects the second tab')
+  check(atMainstream.includes('id="mainstream-title"') && !atMainstream.includes('candidates-title') && atMainstream.includes('id="today-list-panel-mainstream"'), '?list=mainstream shows the second list instead of the today list')
+  check(renderAt('/?list=mainstream', <TodayListsSection today={today} />).includes('主流族群前 20 載入中…'), 'the second list loads on its own')
+  // /api/mainstream only on ?list=mainstream (decision 6893166683): a query observer with the page's options, the way
+  // useQuery subscribes in the browser, calls the request only for the second list.
+  const requests: string[] = []
+  for (const kind of ['today', 'mainstream'] as const) {
+    const observer = new QueryObserver(new QueryClient(), mainstreamQueryOptions(kind, () => { requests.push(kind); return Promise.resolve(mainstreamResponse()) }))
+    observer.subscribe(() => undefined)()
+  }
+  check(JSON.stringify(requests) === JSON.stringify(['mainstream']), `the today list requests no /api/mainstream: ${requests.join(',')}`)
+
+  // computed: the head, the definition (W, G and the group names by rank, from the API) and the rows.
+  const computed = render(<MainstreamSection data={mainstreamResponse()} loading={false} error={null} />)
+  check(computed.includes('<h2 id="mainstream-title">主流族群前 20</h2>') && plain(computed).includes('2026/11/13') && plain(computed).includes('2 檔'), `the head: title, data date and count: ${plain(computed).slice(0, 60)}`)
+  const definition = inner(computed, 'mainstream-definition', '</p>')
+  check(definition === '近 240 個交易日相對加權指數最強的 3 個族群：半導體、AI 伺服器、電腦及週邊設備；族群內個股依 240 日漲幅取前 20', `the definition: ${definition}`)
+  const fewer = plain(render(<MainstreamSection data={mainstreamResponse({ window: 120, group_count: 5 })} loading={false} error={null} />))
+  check(fewer.includes('近 120 個交易日相對加權指數最強的 3 個族群（上限 5 個）') && fewer.includes('依 120 日漲幅') && fewer.includes('近 120 日 +45.67%'), `W and G come from the API, not 240/5: ${fewer.slice(0, 120)}`)
+  const mRow = (markup: string, rank: number) => slice(markup, `data-mainstream-rank="${rank}"`, '</li>')
+  const first = mRow(computed, 1)
+  const second = mRow(computed, 2)
+  const title = inner(first, '<p class="candidate-row-title"', '</p>')
+  check(title === '#1 2330 台積電 上市 · 半導體、AI 伺服器', `the first line: rank, name, market and every chosen group by 頓號: ${title}`)
+  const strength = inner(first, '<p class="mainstream-return"', '</p>')
+  check(strength === '近 240 日 +45.67%（較加權 +12.34%）', `the strength line: ${strength}`)
+  check(first.includes('mainstream-return-value tone-up') && plain(second).includes('（較加權 -1.23%）'), 'the return red up; a negative excess keeps its sign')
+  check(plain(first).includes('收盤（元）1,085.00+1.40%') && first.includes('candidate-change tone-up') && second.includes('candidate-change tone-down') && plain(second).includes('230.50-0.86%'), `close and change, red up and green down: ${plain(second)}`)
+  check(first.includes('class="sparkline sparkline-up"') && second.includes('class="sparkline sparkline-down"'), 'the today list\'s sparkline on recent_closes')
+  check(signedPercent(-0.00004).text === '0.00%' && signedPercent(-0.00004).tone === 'flat' && signedPercent(null).text === '—', 'a flat or missing percent')
+
+  // 「今日名單 #n」: only on a stock also on the day's today list; it opens the today list on that stock.
+  check(todayListPickPath(mainstreamResponse().items[0]!) === '/?pick=2330', 'the mark links to the today list with the stock picked')
+  check(first.includes('<a class="badge badge-compact mainstream-today-mark" data-today-rank="2" href="/?pick=2330">今日名單 #2</a>'), `the mark on a today-list stock: ${slice(first, 'mainstream-today-mark', '</a>')}`)
+  check(!second.includes('mainstream-today-mark') && !plain(second).includes('今日名單'), 'no mark on a stock off the today list')
+  // Where the click lands: the today list with the pick, its chart beside the list or its own card below 1280px.
+  const long = { ...listResponse(), candidate_count: 12, items: Array.from({ length: 12 }, (_, index) => ({ ...completeItem(), rank: index + 1, instrument: { ...completeItem().instrument, id: 9000 + index, symbol: String(5001 + index) } })) }
+  const picked: string[] = []
+  const pickChart = (item: CandidateItem) => { picked.push(item.instrument.symbol); return <div data-test-chart={item.instrument.symbol} /> }
+  const longToday = { ...today, data: long }
+  const widePick = renderAt('/?pick=5003', <TodayListsSection today={longToday} renderChart={pickChart} wide />)
+  check(widePick.includes('data-chart-rank="3"') && widePick.includes('data-test-chart="5003"') && (widePick.match(/aria-pressed="true"/g) ?? []).length === 1 && rowOf(widePick, 3).includes('aria-pressed="true"'), 'from 1280px the picked stock is the chart beside the list')
+  picked.length = 0
+  const narrowPick = renderAt('/?pick=5011', <TodayListsSection today={longToday} renderChart={pickChart} />)
+  check(picked.join(',') === '5011' && rowOf(narrowPick, 11).includes('aria-expanded="true"') && narrowPick.includes('<details class="candidate-more" open=""'), `below 1280px the picked row's card is open, and past the first 10 the rest is shown: ${picked.join(',')}`)
+  check(renderAt('/?pick=9999', <TodayListsSection today={longToday} renderChart={pickChart} wide />).includes('data-chart-rank="1"'), 'a pick not on the list leaves the default first row')
+
+  // No price levels anywhere on the second list (decision 6891614350): no entry sentence, ladder, RR, total or 「可買」.
+  const LEVEL_CLASSES = ['price-ladder', 'candidate-entry', 'entry-plan', 'candidate-row-levels', 'candidate-row-rr', 'candidate-rr', 'level-entry', 'level-stop', 'level-target', 'candidate-ai-toggle', 'candidate-detail', 'score-bar']
+  const LEVEL_WORDS = ['進場', '停損', '目標', 'RR', '總分', '可買', '買進', '加入追蹤', '評分']
+  for (const [label, markup] of [['computed', computed], ['switch', atMainstream]] as const) {
+    const section = slice(markup, 'mainstream-title', '</section>')
+    const classes = LEVEL_CLASSES.filter((name) => markup.includes(name))
+    const words = LEVEL_WORDS.filter((word) => plain(section).includes(word))
+    check(section !== '' && classes.length === 0 && words.length === 0, `${label}: no price-level element or word: ${classes.join(',')} ${words.join(',')}`)
+  }
+
+  // The chart: beside the list from 1280px (the first row's), a row's own card below, none mounted at first.
+  const mCharts: string[] = []
+  const mSpy = (item: MainstreamItem) => { mCharts.push(item.instrument.symbol); return <div data-test-chart={item.instrument.symbol} /> }
+  const mWide = render(<MainstreamSection data={mainstreamResponse()} loading={false} error={null} renderChart={mSpy} wide />)
+  check(mWide.includes('class="candidates-terminal"') && mWide.includes('data-chart-rank="1"') && mCharts.join(',') === '2330' && mRow(mWide, 1).includes('aria-pressed="true"'), `from 1280px the first stock's chart is beside the list: ${mCharts.join(',')}`)
+  mCharts.length = 0
+  const mNarrow = render(<MainstreamSection data={mainstreamResponse()} loading={false} error={null} renderChart={mSpy} />)
+  check(mCharts.length === 0 && !mNarrow.includes('candidates-terminal') && mNarrow.includes('<div class="candidate-chart" id="mainstream-chart-1" hidden="">') && mRow(mNarrow, 1).includes('aria-expanded="false"'), 'below 1280px no chart mounts until a row opens its card')
+  check(render(<MainstreamList items={mainstreamResponse().items} days={240} renderChart={mSpy} initialChartRank={2} />).includes('data-test-chart="6274"') && mCharts.join(',') === '6274', 'an open row mounts its own card')
+  check(plain(mWide) === plain(computed) && plain(mNarrow) === plain(computed), 'the chart slot changes no page text')
+
+  // missing and zero, written as the today list writes its empty states; missing has no universe_count or ranked_group_count.
+  const missing = missingMainstream()
+  check(!('universe_count' in missing) && !('ranked_group_count' in missing), 'the missing fixture is the API\'s _empty shape')
+  const missingText = plain(render(<MainstreamSection data={missing} loading={false} error={null} />))
+  check(mainstreamState(missing).kind === 'missing' && missingText.endsWith('尚無主流族群名單2026/11/13 尚未產生主流族群名單') && !missingText.includes(' 檔') && !missingText.includes('最強'), `missing: no definition, rows or count: ${missingText}`)
+  check(plain(render(<MainstreamSection data={missingMainstream(null)} loading={false} error={null} />)) === '主流族群前 20尚無主流族群名單尚未產生主流族群名單', 'missing with no list at all: no date')
+  const zeroText = plain(render(<MainstreamSection data={zeroMainstream()} loading={false} error={null} />))
+  check(mainstreamState(zeroMainstream()).kind === 'zero' && zeroText.includes('2026/11/13') && zeroText.endsWith('當日沒有主流族群沒有族群有足夠的成員進入母體（母體 1,234 檔），當日不產生名單'), `zero: ${zeroText}`)
+  const { universe_count: _universe, ...zeroWithout } = zeroMainstream()
+  check(!JSON.stringify(mainstreamState(zeroWithout)).includes('undefined'), 'zero without universe_count still reads')
+  check(mainstreamState({ ...mainstreamResponse(), items: [] }).kind === 'zero', 'computed with no rows reads as zero, not an empty list')
+  check(plain(render(<MainstreamSection data={undefined} loading={false} error={new Error('API 500: boom')} />)).includes('API 500: boom'), 'a failed load gives its reason')
+  check(mainstreamReturnText(mainstreamItem(1), 60) === '近 60 日 +49.00%（較加權 +29.00%）' && mainstreamGroupsText({ groups: [] }) === '無所屬主流族群', 'the text helpers')
+}

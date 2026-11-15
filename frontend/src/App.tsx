@@ -90,7 +90,7 @@ import { StrategyBoardPanel } from './stock/StrategyBoardPanel'
 import { StrategyVersionList, backtestGroupKey } from './components/StrategyVersionCard'
 import { CoverageSummaryMetrics, backfillSessionsLabel, coverageReasonLabels } from './coverage/CoverageSummary'
 import { HotGroupsSection, ThemeDetailView, ThemesBoardView } from './themes/ThemeViews'
-import { CandidatesSection } from './candidates/CandidateViews'
+import { MainstreamChart, TodayListsSection } from './candidates/MainstreamViews'
 import { StockPlanPanel, TrackingClientProvider, TrackingSection, type TrackingClient } from './tracking/TrackingViews'
 import { DEFAULT_MEMBER_SORT, THEME_BOARD_LIMIT, THEME_NEWS_LIMIT, TODAY_BOARD_LIMIT, memberQuery, parseBoard } from './themes/themeBoards'
 import { NewsDetailView, NewsListView, StockNewsTimeline } from './news/NewsViews'
@@ -492,7 +492,7 @@ export function TodayPage() {
         <>
           <MarketSummaryLine overview={data.market_overview} />
           <HoldingAlert actions={data.holding_actions ?? data.actions ?? []} />
-          <CandidatesSection data={candidates.data} loading={candidates.isLoading} error={candidates.error} renderChart={(item) => <CandidateChart item={item} />} wide={wide} />
+          <TodayListsSection today={{ data: candidates.data, loading: candidates.isLoading, error: candidates.error }} renderChart={(item) => <CandidateChart item={item} />} renderMainstreamChart={(item) => <MainstreamChart item={item} />} wide={wide} />
           <HotGroupsSection className="home-panel" title={<Term id="hot_group">熱門族群</Term>} board={board} onBoardChange={setBoard} data={hotGroups.data} loading={hotGroups.isLoading} error={hotGroups.error} />
           {data.data_quality.error && <div className="warning-box">官方擷取警告：{data.data_quality.error}</div>}
         </>

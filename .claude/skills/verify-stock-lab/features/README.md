@@ -119,7 +119,6 @@ CI `verify` job 先跑 [`tools/verify/verify_plan.py`](../../../../tools/verify/
 | `GET /backfill-runs/{run_id}` | 回補覆蓋頁，不在主導航 |
 | `GET /coverage` | 回補覆蓋頁，不在主導航 |
 | `GET /strategies` | 系統資料與策略頁，不在主導航 |
-| `GET /mainstream` | 主流族群前 20（#768）：畫面在 #769，屆時移到該頁的驗證範圍；計算與回應由 `backend/tests/test_mainstream.py` 涵蓋 |
 
 ## 結果表
 

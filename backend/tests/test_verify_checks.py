@@ -610,6 +610,8 @@ def test_today_shots_include_the_market_page():
     # The shared chart of another row is selected through ?index= (Issue 564), at 1280 only.
     assert [(shot.name, shot.path, shot.widths) for shot in shots] == [
         ("today", "/", (1280, 390)),
+        # The page's second list (Issue 769), selected through ?list=.
+        ("today-mainstream", "/?list=mainstream", (1280, 390)),
         ("market", "/market", (1280, 390)),
         ("market-tpex", "/market?index=tpex", (1280,)),
         ("market-tx", "/market?index=tx", (1280,)),
@@ -3428,3 +3430,180 @@ def test_level_semantics_line_follows_the_semantics():
         )
     with pytest.raises(page_checks.Fail, match="預期恰一行"):
         page_checks.level_semantics_line(text("研究動作\n"), {"level_semantics": None})
+
+
+# ---- T26: 主流族群前 20, the today page's second list (Issue 769) ----
+
+
+def _mainstream(status="computed", items=None):
+    groups = [
+        {"id": "g2", "name": "示範 AI 伺服器", "rank": 2},
+        {"id": "g1", "name": "半導體業", "rank": 1},
+    ]
+    if items is None:
+        items = [
+            {
+                "rank": 1,
+                "instrument": {
+                    "exchange": "TWSE",
+                    "symbol": "9101",
+                    "name": "示範晶圓",
+                },
+                "groups": [{"name": "半導體業"}, {"name": "示範 AI 伺服器"}],
+                "return_w": 0.31321,
+                "excess_w": 0.23077,
+                "today_list": {"rank": 1},
+            },
+            {
+                "rank": 2,
+                "instrument": {
+                    "exchange": "TPEx",
+                    "symbol": "9202",
+                    "name": "示範板卡",
+                },
+                "groups": [{"name": "示範 AI 伺服器"}],
+                "return_w": 0.1347,
+                "excess_w": -0.0001,
+                "today_list": None,
+            },
+        ]
+    return {
+        "status": status,
+        "trading_date": "2026-10-16",
+        "window": 240,
+        "group_count": 5,
+        "groups": groups if status == "computed" else [],
+        "items": items if status == "computed" else [],
+    }
+
+
+T26_DEFINITION = (
+    "近 240 個交易日相對加權指數最強的 2 個族群（上限 5 個）：半導體業、示範 AI 伺服器；"
+    "族群內個股依 240 日漲幅取前 20"
+)
+T26_ROWS = (
+    "#1 9101 示範晶圓 上市 · 半導體業、示範 AI 伺服器\n近 240 日 +31.32%（較加權 +23.08%）\n"
+    "今日名單 #1\n收盤（元）\n360.00\n+1.20%\n"
+    "#2 9202 示範板卡 上櫃 · 示範 AI 伺服器\n近 240 日 +13.47%（較加權 -0.01%）\n"
+    "收盤（元）\n50.00\n-0.40%\n"
+)
+T26_CARD = "9101 示範晶圓\n日K\n週K\n最近 130 根日線\n"
+T26_PAGE = (
+    "今日名單\n資料 2026/10/16\n今日名單\n主流族群前 20\n"
+    "主流族群前 20\n2 檔\n"
+    + T26_DEFINITION
+    + "\n"
+    + T26_ROWS
+    + T26_CARD
+    + "熱門族群\n#1\n"
+)
+T26_ROW_METRICS = [
+    {
+        "rank": None,
+        "numsScrollWidth": 80,
+        "numsClientWidth": 80,
+        "covered": [],
+        "clipped": [],
+    }
+] * 2
+
+
+def _t26_run(
+    tmp_path, page=T26_PAGE, payload=None, rows=None, day="2026-10-16T17:30:00+08:00"
+):
+    metas = {
+        "today-mainstream": {
+            1280: {"width": 1280, "ready": True},
+            390: {
+                "width": 390,
+                "ready": True,
+                "candidateRows": T26_ROW_METRICS if rows is None else rows,
+            },
+        }
+    }
+    payloads = {
+        "mainstream": _mainstream() if payload is None else payload,
+        "dashboard": {"as_of": day},
+    }
+    return FakeRun(tmp_path, payloads, {"today-mainstream-1280": page}, metas=metas)
+
+
+def test_t26_passes_on_the_lines_mainstream_json_gives(tmp_path):
+    assert page_checks.t26(_t26_run(tmp_path)).startswith(
+        "`主流族群前 20` 與頁面同日 2026/10/16，不另標、`2 檔`、定義行；2 列"
+    )
+
+
+def test_t26_signed_percent_mirrors_the_frontend():
+    assert [
+        page_checks.signed_percent(v) for v in (0.45671, -0.0086, -0.00004, 0, None)
+    ] == [
+        "+45.67%",
+        "-0.86%",
+        "0.00%",
+        "0.00%",
+        "—",
+    ]
+
+
+def test_t26_a_list_of_another_day_shows_its_date(tmp_path):
+    page = T26_PAGE.replace(
+        "主流族群前 20\n2 檔\n", "主流族群前 20\n資料 2026/10/16\n2 檔\n"
+    )
+    assert "資料 2026/10/16" in page_checks.t26(
+        _t26_run(tmp_path, page, day="2026-10-19T17:30:00+08:00")
+    )
+
+
+@pytest.mark.parametrize(
+    ("page", "message"),
+    [
+        # The today list's rows on the second list: an entry sentence, RR and the total.
+        (
+            T26_PAGE.replace(
+                "收盤（元）\n360.00",
+                "突破型\n收盤（元）\n360.00\nRR\n1.60 倍\n總分（0–100）\n72",
+            ),
+            "點位用詞",
+        ),
+        (T26_PAGE.replace("最近 130 根日線", "規則價位線：三條虛線"), "規則價位線"),
+        (T26_PAGE.replace("今日名單 #1\n", ""), "第 1 列是"),
+        (T26_PAGE.replace("（較加權 -0.01%）", "（較加權 -0.00%）"), "第 2 列是"),
+        (
+            T26_PAGE.replace(
+                "半導體業、示範 AI 伺服器；", "示範 AI 伺服器、半導體業；"
+            ),
+            "定義行是",
+        ),
+        (T26_PAGE.replace("近 240 日 +31.32%", "近 120 日 +31.32%"), "第 1 列是"),
+        (T26_PAGE.replace("2 檔\n", "20 檔\n"), "預期 `2 檔`"),
+        (
+            T26_PAGE.replace("主流族群前 20\n主流族群前 20\n", "主流族群前 20\n"),
+            "缺標題",
+        ),
+    ],
+)
+def test_t26_fails(tmp_path, page, message):
+    with pytest.raises(page_checks.Fail, match=message):
+        page_checks.t26(_t26_run(tmp_path, page))
+
+
+def test_t26_fails_on_a_clipped_phone_row(tmp_path):
+    rows = [dict(T26_ROW_METRICS[0]), {**T26_ROW_METRICS[0], "clipped": ["dd 50.00"]}]
+    with pytest.raises(page_checks.Fail, match="#2 超出列邊被切：dd 50.00"):
+        page_checks.t26(_t26_run(tmp_path, rows=rows))
+    with pytest.raises(page_checks.Fail, match="390 量到 1 列"):
+        page_checks.t26(_t26_run(tmp_path, rows=T26_ROW_METRICS[:1]))
+
+
+@pytest.mark.parametrize(
+    ("status", "line"), [("missing", "尚無主流族群名單"), ("zero", "當日沒有主流族群")]
+)
+def test_t26_empty_states(tmp_path, status, line):
+    page = "今日名單\n主流族群前 20\n主流族群前 20\n" + line + "\n熱門族群\n"
+    run = _t26_run(tmp_path, page, payload=_mainstream(status))
+    assert page_checks.t26(run) == f"{status}：顯示 `{line}`，沒有名次列"
+    with pytest.raises(page_checks.Fail, match=f"缺 `{line}`"):
+        page_checks.t26(
+            _t26_run(tmp_path, page.replace(line, "x"), payload=_mainstream(status))
+        )
