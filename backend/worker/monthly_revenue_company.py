@@ -37,6 +37,7 @@ from __future__ import annotations
 import json
 import re
 import time
+import unicodedata
 from dataclasses import dataclass
 from datetime import date, datetime, time as clock_time, timedelta, timezone
 from html.parser import HTMLParser
@@ -46,6 +47,7 @@ from typing import Any, Callable
 import httpx
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.clock import utcnow
 from app.models import IngestionRun, Instrument, MarketBar, MonthlyRevenue, RawPayload
@@ -59,6 +61,7 @@ from worker.sources import (
     capture_payload,
     month_end,
     parse_number,
+    raw_file_state,
 )
 
 ENDPOINT = "https://mopsov.twse.com.tw/mops/web/ajax_t05st10_ifrs"
@@ -71,11 +74,13 @@ RUN_BACKFILL = "revenue_company_backfill"
 # The MOPS monthly revenue history starts here (t21sc03; t05st10 answers
 # 102/01 too, #781 request 18).
 FIRST_MONTH = Month(2013, 1)
-# Months before the first bar: the longest look-back of the tools/research
-# features on monthly revenue, ``feature_evidence.revenue_high_12`` (the
-# latest month against the 11 before it).  A listed company has those months
-# (#782 decision 2), so a delisted one gets them too.
-LOOKBACK_MONTHS = 12
+# Months before the first bar: the 12 months of the longest look-back of the
+# tools/research features on monthly revenue, ``feature_evidence.revenue_high_12``
+# (the latest month against the 11 before it), plus 1 for the announcement
+# delay: on a first bar before month M−1's deadline (the 10th of M) the known
+# months are M−13～M−2 (review 6895006123 2).  A listed company has those
+# months (#782 decision 2), so a delisted one gets them too.
+LOOKBACK_MONTHS = 13
 # #702 and #781 ask MOPS too (task file of #782).
 INTERVAL_SECONDS = 5.0
 # Taipei: the production daily and the morning collect (decision 6894566253 4).
@@ -106,6 +111,8 @@ ROWS = (
 )
 TABLE_HEADER = ("項目", "營業收入淨額")
 NOTE_LABEL = "備註 / 營收變化原因說明"
+# NT$ thousands, as t21sc03 (whitespace removed).
+UNIT = "單位：新台幣仟元"
 _PROVIDER = re.compile(r"本資料由(?:\((?P<kind>[^)]*)\))?(?P<name>.+?)公司提供")
 
 
@@ -145,18 +152,31 @@ def _taipei(value: datetime) -> datetime:
     return aware.astimezone(TAIPEI)
 
 
-def revenue_months(first_bar: date, last_bar: date, today: date) -> list[Month]:
+def last_askable_month(db: Session, today: date) -> Month:
+    """The latest month whose deadline (rolled to a session) is before ``today``.
+
+    Asked earlier, a month may answer 「查無資料」 only because the company
+    has not filed yet, and that answer would be kept (review 6895006123 1).
+    """
+
+    month = _month(today).previous()
+    while roll_to_session(db, nominal_deadline(month))[0] >= today:
+        month = month.previous()
+    return month
+
+
+def revenue_months(first_bar: date, last_bar: date, last: Month) -> list[Month]:
     """The months to fill for bars from ``first_bar`` to ``last_bar``, oldest first.
 
     ``LOOKBACK_MONTHS`` before the first bar's month through the last bar's,
-    from ``FIRST_MONTH`` on and only months that have ended by ``today``.
+    from ``FIRST_MONTH`` on and no later than ``last`` (``last_askable_month``).
     """
 
     start = _month(first_bar)
     for _ in range(LOOKBACK_MONTHS):
         start = start.previous()
     start = max(start, FIRST_MONTH)
-    end = min(_month(last_bar), _month(today).previous())
+    end = min(_month(last_bar), last)
     months: list[Month] = []
     month = start
     while month <= end:
@@ -183,13 +203,18 @@ def _stored_months(db: Session, instrument: Instrument) -> dict[date, MonthlyRev
     }
 
 
+def normalized_name(name: str) -> str:
+    """NFKC, no whitespace, without a trailing ``*`` or ``-KY`` and a leading ``F-``."""
+
+    text = "".join(unicodedata.normalize("NFKC", name or "").split()).rstrip("*")
+    text = text.removesuffix("-KY")
+    return text.removeprefix("F-")
+
+
 def same_company(one: str, other: str) -> bool:
-    """Whether two names are one company's: either contains the other.
+    """Whether two names are one company's: either contains the other (normalized)."""
 
-    A trailing ``*`` (TWSE's mark on a name) does not count.
-    """
-
-    first, second = one.strip().rstrip("*").strip(), other.strip().rstrip("*").strip()
+    first, second = normalized_name(one), normalized_name(other)
     return bool(first and second) and (first in second or second in first)
 
 
@@ -236,16 +261,33 @@ def transfer_revenues(db: Session, *, apply: bool = False) -> dict[str, Any]:
 
     Without ``apply`` nothing is written: the plan per code.  With it, one
     ``RUN_TRANSFER`` run; a month the old instrument has from another source
-    is kept (``kept``), a copy whose source row changed is updated.
+    is kept (``kept``), a copy whose source row changed is updated.  An error
+    writes nothing and marks the run ``failed``.
     """
 
-    today = _taipei(utcnow()).date()
+    run = None
+    if apply:
+        run = _new_run(db, RUN_TRANSFER, {"apply": apply})
+        db.commit()
+    try:
+        return _transfer(db, apply, run)
+    except Exception as exc:
+        if run is not None:
+            db.rollback()
+            run.status = "failed"
+            run.error = f"error: {exc}"
+            run.finished_at = utcnow()
+            db.commit()
+        raise
+
+
+def _transfer(db: Session, apply: bool, run: IngestionRun | None) -> dict[str, Any]:
+    last = last_askable_month(db, _taipei(utcnow()).date())
     moved = db.scalars(
         select(Instrument)
         .where(Instrument.status == "transferred")
         .order_by(Instrument.symbol, Instrument.exchange)
     ).all()
-    run = _new_run(db, RUN_TRANSFER, {"apply": apply}) if apply else None
     companies: list[dict[str, Any]] = []
     totals = dict.fromkeys(
         ("inserted", "updated", "unchanged", "kept", "no_source_row"), 0
@@ -267,11 +309,13 @@ def transfer_revenues(db: Session, *, apply: bool = False) -> dict[str, Any]:
         if twin is None:
             item["skipped"] = "no instrument on the other exchange"
             continue
-        item.update(twin_id=twin.id, twin_exchange=twin.exchange, twin_name=twin.name)
-        if (
-            old.name.strip().rstrip("*").strip()
-            != twin.name.strip().rstrip("*").strip()
-        ):
+        item.update(
+            twin_id=twin.id,
+            twin_exchange=twin.exchange,
+            twin_name=twin.name,
+            twin_status=twin.status,
+        )
+        if normalized_name(old.name) != normalized_name(twin.name):
             item["skipped"] = "the names differ"
             continue
         span, twin_span = _bar_span(db, old), _bar_span(db, twin)
@@ -284,7 +328,7 @@ def transfer_revenues(db: Session, *, apply: bool = False) -> dict[str, Any]:
         if not 0 < gap <= ADJACENT_DAYS:
             item["skipped"] = f"the bars do not meet ({gap} days apart)"
             continue
-        months = revenue_months(span[0], span[1], today)
+        months = revenue_months(span[0], span[1], last)
         sources_rows = _stored_months(db, twin)
         stored = _stored_months(db, old)
         counts = dict.fromkeys(totals, 0)
@@ -329,6 +373,7 @@ def transfer_revenues(db: Session, *, apply: bool = False) -> dict[str, Any]:
         run.records = totals["inserted"] + totals["updated"]
         run.finished_at = utcnow()
         run.metadata_json = {**run.metadata_json, "companies": companies, **totals}
+        flag_modified(run, "metadata_json")
         db.commit()
     else:
         db.rollback()
@@ -338,6 +383,13 @@ def transfer_revenues(db: Session, *, apply: bool = False) -> dict[str, Any]:
         "run_id": run.id if run is not None else None,
         **totals,
         "skipped": [item for item in companies if "skipped" in item],
+        # Transferred, then delisted: the old listing's months come from the
+        # twin's company-backfill, so these need this command again after it.
+        "twin_delisted": [
+            f"{item['exchange']}:{item['symbol']}"
+            for item in companies
+            if item.get("twin_status") == "delisted"
+        ],
         "companies": companies,
     }
 
@@ -453,6 +505,8 @@ def parse_company_page(html: str, code: str, month: Month) -> CompanyPage:
     printed = f"民國{month.year - 1911}年{month.month:02d}月"
     if printed not in text:
         raise OfficialDataError(f"{label} does not print {printed}")
+    if UNIT not in text:
+        raise OfficialDataError(f"{label} is not in {UNIT}")
     provider = _PROVIDER.search(text)
     if provider is None:
         raise OfficialDataError(f"{label} does not name the company")
@@ -527,8 +581,11 @@ def _stored_answer(
         .order_by(RawPayload.id.desc())
     ).all()
     for row in rows:
+        path = payload_file(row.payload_path)
+        if not row.sha256 or raw_file_state(path, row.sha256) is not None:
+            continue  # missing, empty or not the capture the row names
         try:
-            payload = json.loads(payload_file(row.payload_path).read_text("utf-8"))
+            payload = json.loads(path.read_text("utf-8"))
             html = payload["html"]
             parse_company_page(html, code, month)
         except (OSError, ValueError, KeyError, TypeError, OfficialDataError):
@@ -558,7 +615,10 @@ class _Requests:
     def stop_before(self, key: str) -> bool:
         if self.max_requests is not None and self.sent >= self.max_requests:
             self.aborted = f"--max-requests {self.max_requests} reached before {key}"
-        elif quiet_hour(utcnow()):
+        elif quiet_hour(
+            # When the request would go out: after the interval (review 6895006123).
+            utcnow() + timedelta(seconds=self.interval_seconds if self.sent else 0)
+        ):
             self.aborted = f"quiet hours (Taipei) before {key}"
         return self.aborted is not None
 
@@ -687,14 +747,14 @@ class _Company:
     instrument: Instrument
     first_bar: date
     last_bar: date
-
-    @property
-    def last_month(self) -> Month:
-        return _month(self.last_bar)
+    # The classifying month: the last bar's, or ``last_askable_month`` when later.
+    ask_month: Month
 
 
-def delisted_companies(db: Session) -> tuple[list[_Company], dict[str, int]]:
-    """The delisted stocks and IPOs whose last bar is from ``FIRST_MONTH`` on."""
+def delisted_companies(
+    db: Session, last: Month
+) -> tuple[list[_Company], dict[str, int]]:
+    """The delisted stocks and IPOs whose classifying month is from ``FIRST_MONTH`` on."""
 
     skipped = {"no_bars": 0, "before_first_month": 0}
     companies: list[_Company] = []
@@ -709,10 +769,12 @@ def delisted_companies(db: Session) -> tuple[list[_Company], dict[str, int]]:
         span = _bar_span(db, instrument)
         if span is None:
             skipped["no_bars"] += 1
-        elif _month(span[1]) < FIRST_MONTH:
+        elif min(_month(span[1]), last) < FIRST_MONTH:
             skipped["before_first_month"] += 1
         else:
-            companies.append(_Company(instrument, *span))
+            companies.append(
+                _Company(instrument, *span, ask_month=min(_month(span[1]), last))
+            )
     return companies, skipped
 
 
@@ -735,15 +797,44 @@ def _finish(
     run.error = requests.aborted
     run.records = totals.get("inserted", 0)
     run.finished_at = utcnow()
-    run.metadata_json = {
-        **run.metadata_json,
-        "manifest": manifest,
-        "totals": dict(totals),
-        "requests": requests.sent,
-        "aborted": requests.aborted,
-    }
+    _save_manifest(
+        run,
+        manifest,
+        totals=dict(totals),
+        requests=requests.sent,
+        aborted=requests.aborted,
+    )
     db.commit()
     return status
+
+
+def _save_manifest(run: IngestionRun, manifest: dict[str, Any], **extra: Any) -> None:
+    """Put a copy of the manifest in the run's metadata so that it is written.
+
+    The JSON column does not track in-place changes, and with
+    expire_on_commit=False its committed value holds the same mutated dict, so
+    even a new equal dict would not be written (pipeline's score run, #783).
+    """
+
+    run.metadata_json = {**run.metadata_json, "manifest": dict(manifest), **extra}
+    flag_modified(run, "metadata_json")
+
+
+def _fail(
+    db: Session,
+    run: IngestionRun,
+    requests: _Requests,
+    manifest: dict[str, Any],
+    exc: Exception,
+) -> None:
+    """Mark the run ``failed`` with what it finished (as ``revenue backfill`` does)."""
+
+    db.rollback()
+    run.status = "failed"
+    run.error = f"error after {len(manifest)} entries: {exc}"
+    run.finished_at = utcnow()
+    _save_manifest(run, manifest, requests=requests.sent, aborted=run.error)
+    db.commit()
 
 
 def _entry(answer: dict[str, Any], **extra: Any) -> dict[str, Any]:
@@ -773,12 +864,13 @@ def classify_companies(
     ``plan`` sends nothing: the companies and how many have no kept answer.
     """
 
-    companies, skipped = delisted_companies(db)
+    last = last_askable_month(db, _taipei(utcnow()).date())
+    companies, skipped = delisted_companies(db, last)
     if plan:
         pending = [
             company
             for company in companies
-            if _stored_answer(db, company.instrument.symbol, company.last_month) is None
+            if _stored_answer(db, company.instrument.symbol, company.ask_month) is None
         ]
         db.rollback()
         return {
@@ -796,41 +888,45 @@ def classify_companies(
     totals: dict[str, int] = {}
     classes: dict[str, list[str]] = {}
     failed = 0
-    for company in companies:
-        instrument, month = company.instrument, company.last_month
-        key = f"{instrument.exchange}:{instrument.symbol}:{month.label}"
-        if _stored_answer(
-            db, instrument.symbol, month
-        ) is None and requests.stop_before(key):
-            break
-        answer = _answer(db, run, requests, instrument.symbol, month)
-        if answer["status"] == "failed":
-            failed += 1
-            manifest[key] = _entry(answer)
-        else:
-            page = answer["page"]
-            kind = _classification(page, instrument)
-            extra: dict[str, Any] = {"class": kind, "page_name": page.name}
-            if kind == FOUND:
-                outcome = _write_month(
-                    db,
-                    instrument,
-                    month,
-                    page,
-                    answer["raw_payload_id"],
-                    answer["fetched_on"],
-                    instrument.symbol,
+    try:
+        for company in companies:
+            instrument, month = company.instrument, company.ask_month
+            key = f"{instrument.exchange}:{instrument.symbol}:{month.label}"
+            if _stored_answer(
+                db, instrument.symbol, month
+            ) is None and requests.stop_before(key):
+                break
+            answer = _answer(db, run, requests, instrument.symbol, month)
+            if answer["status"] == "failed":
+                failed += 1
+                manifest[key] = _entry(answer)
+            else:
+                page = answer["page"]
+                kind = _classification(page, instrument)
+                extra: dict[str, Any] = {"class": kind, "page_name": page.name}
+                if kind == FOUND:
+                    outcome = _write_month(
+                        db,
+                        instrument,
+                        month,
+                        page,
+                        answer["raw_payload_id"],
+                        answer["fetched_on"],
+                        instrument.symbol,
+                    )
+                    extra["write"] = outcome
+                    totals[outcome] = totals.get(outcome, 0) + 1
+                classes.setdefault(kind, []).append(
+                    f"{instrument.exchange}:{instrument.symbol}"
                 )
-                extra["write"] = outcome
-                totals[outcome] = totals.get(outcome, 0) + 1
-            classes.setdefault(kind, []).append(
-                f"{instrument.exchange}:{instrument.symbol}"
-            )
-            manifest[key] = _entry(answer, **extra)
-        run.metadata_json = {**run.metadata_json, "manifest": manifest}
-        db.commit()
-        if requests.aborted:
-            break
+                manifest[key] = _entry(answer, **extra)
+            _save_manifest(run, manifest)
+            db.commit()
+            if requests.aborted:
+                break
+    except Exception as exc:
+        _fail(db, run, requests, manifest, exc)
+        raise
     status = _finish(db, run, requests, manifest, totals, failed)
     return {
         "status": status,
@@ -870,18 +966,18 @@ def backfill_companies(
     not asked; a page naming another company is skipped (``name_mismatch``).
     """
 
-    today = _taipei(utcnow()).date()
-    companies, _skipped = delisted_companies(db)
+    last = last_askable_month(db, _taipei(utcnow()).date())
+    companies, _skipped = delisted_companies(db, last)
     work: list[tuple[_Company, list[Month]]] = []
     classes: dict[str, int] = {}
     for company in companies:
         instrument = company.instrument
-        stored = _stored_answer(db, instrument.symbol, company.last_month)
+        stored = _stored_answer(db, instrument.symbol, company.ask_month)
         kind = (
             "unclassified"
             if stored is None
             else _classification(
-                parse_company_page(stored[1], instrument.symbol, company.last_month),
+                parse_company_page(stored[1], instrument.symbol, company.ask_month),
                 instrument,
             )
         )
@@ -891,7 +987,7 @@ def backfill_companies(
         have = _stored_months(db, instrument)
         months = [
             month
-            for month in revenue_months(company.first_bar, company.last_bar, today)
+            for month in revenue_months(company.first_bar, company.last_bar, last)
             if month.first_day not in have
         ]
         work.append((company, months))
@@ -917,41 +1013,45 @@ def backfill_companies(
     manifest: dict[str, Any] = {}
     totals: dict[str, int] = {}
     failed = 0
-    for company, months in work:
-        instrument = company.instrument
-        for month in months:
-            key = f"{instrument.exchange}:{instrument.symbol}:{month.label}"
-            if _stored_answer(
-                db, instrument.symbol, month
-            ) is None and requests.stop_before(key):
-                break
-            answer = _answer(db, run, requests, instrument.symbol, month)
-            if answer["status"] == "failed":
-                failed += 1
-                manifest[key] = _entry(answer)
-            else:
-                page = answer["page"]
-                kind = _classification(page, instrument)
-                if kind == FOUND:
-                    outcome = _write_month(
-                        db,
-                        instrument,
-                        month,
-                        page,
-                        answer["raw_payload_id"],
-                        answer["fetched_on"],
-                        instrument.symbol,
-                    )
+    try:
+        for company, months in work:
+            instrument = company.instrument
+            for month in months:
+                key = f"{instrument.exchange}:{instrument.symbol}:{month.label}"
+                if _stored_answer(
+                    db, instrument.symbol, month
+                ) is None and requests.stop_before(key):
+                    break
+                answer = _answer(db, run, requests, instrument.symbol, month)
+                if answer["status"] == "failed":
+                    failed += 1
+                    manifest[key] = _entry(answer)
                 else:
-                    outcome = kind
-                totals[outcome] = totals.get(outcome, 0) + 1
-                manifest[key] = _entry(answer, write=outcome, page_name=page.name)
-            run.metadata_json = {**run.metadata_json, "manifest": manifest}
-            db.commit()
+                    page = answer["page"]
+                    kind = _classification(page, instrument)
+                    if kind == FOUND:
+                        outcome = _write_month(
+                            db,
+                            instrument,
+                            month,
+                            page,
+                            answer["raw_payload_id"],
+                            answer["fetched_on"],
+                            instrument.symbol,
+                        )
+                    else:
+                        outcome = kind
+                    totals[outcome] = totals.get(outcome, 0) + 1
+                    manifest[key] = _entry(answer, write=outcome, page_name=page.name)
+                _save_manifest(run, manifest)
+                db.commit()
+                if requests.aborted:
+                    break
             if requests.aborted:
                 break
-        if requests.aborted:
-            break
+    except Exception as exc:
+        _fail(db, run, requests, manifest, exc)
+        raise
     status = _finish(db, run, requests, manifest, totals, failed)
     return {
         "status": status,

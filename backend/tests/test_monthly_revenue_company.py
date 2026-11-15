@@ -153,22 +153,44 @@ def months_of(db, item) -> dict[str, MonthlyRevenue]:
 # --- months -------------------------------------------------------------------
 
 
-def test_the_months_run_from_a_year_before_the_first_bar_to_the_last():
-    months = mc.revenue_months(date(2017, 5, 2), date(2019, 3, 14), date(2026, 11, 6))
-    assert months[0] == Month(2016, 5)  # LOOKBACK_MONTHS before 2017-05
+SEPTEMBER_2026 = Month(2026, 9)
+
+
+def test_the_months_run_from_13_months_before_the_first_bar_to_the_last():
+    months = mc.revenue_months(date(2017, 5, 2), date(2019, 3, 14), SEPTEMBER_2026)
+    # revenue_high_12's 12 months known on 2017-05-02, before 04's deadline:
+    # 2016-04～2017-03.
+    assert mc.LOOKBACK_MONTHS == 13
+    assert months[0] == Month(2016, 4)
     assert months[-1] == Month(2019, 3)  # the last bar's month
-    assert len(months) == 12 + 23
+    assert len(months) == 13 + 23
 
 
 def test_the_months_start_no_earlier_than_2013_01():
-    months = mc.revenue_months(date(2013, 6, 3), date(2014, 1, 6), date(2026, 11, 6))
+    months = mc.revenue_months(date(2013, 6, 3), date(2014, 1, 6), SEPTEMBER_2026)
     assert months[0] == mc.FIRST_MONTH == Month(2013, 1)
     assert months[-1] == Month(2014, 1)
 
 
-def test_the_months_stop_at_the_last_month_that_has_ended():
-    months = mc.revenue_months(date(2026, 1, 5), date(2026, 11, 5), date(2026, 11, 6))
-    assert months[-1] == Month(2026, 10)
+def test_the_months_stop_at_the_last_askable_month():
+    months = mc.revenue_months(date(2026, 1, 5), date(2026, 11, 5), SEPTEMBER_2026)
+    assert months[-1] == SEPTEMBER_2026
+
+
+@pytest.mark.parametrize(
+    "today, last",
+    [
+        # 10/10 is a Saturday, 10/12 the deadline; 11/10 is October's.
+        (date(2026, 11, 6), Month(2026, 9)),
+        (date(2026, 11, 10), Month(2026, 9)),  # on the deadline: not yet
+        (date(2026, 11, 11), Month(2026, 10)),
+        (date(2026, 10, 12), Month(2026, 8)),
+        (date(2026, 10, 13), Month(2026, 9)),
+    ],
+)
+def test_the_last_askable_month_is_past_its_deadline(factory, today, last):
+    with factory() as db:
+        assert mc.last_askable_month(db, today) == last
 
 
 # --- the single-company page --------------------------------------------------
@@ -228,6 +250,7 @@ def test_a_page_with_no_filing_is_no_data():
             "columns changed",
         ),
         (FOUND_HTML.replace("公司提供", ""), "2384", JUNE_2014, "does not name"),
+        (FOUND_HTML.replace("新台幣仟元", "新台幣元"), "2384", JUNE_2014, "is not in"),
         ("<html>查詢過於頻繁</html>", "2384", JUNE_2014, "refused"),
         ("<html><body>系統忙碌</body></html>", "2384", JUNE_2014, "no revenue table"),
     ],
@@ -244,6 +267,10 @@ def test_a_page_that_cannot_be_trusted_is_rejected(html, code, month, message):
         ("台境*", "台境", True),
         ("華映", "勝華科技", False),
         ("", "勝華科技", False),
+        # NFKC, whitespace, -KY and F- (review 6895006123 suggestion 3).
+        ("ＡＢＣ電子", "ABC 電子", True),
+        ("F-美食", "美食-KY", True),
+        ("勝　華", "勝華科技", True),
     ],
 )
 def test_same_company(one, other, same):
@@ -315,17 +342,17 @@ def test_transfers_copy_the_old_listings_months_and_keep_the_new_ones(factory):
     old_id, new_id = transfer_db(factory)
     with factory() as db:
         planned = mc.transfer_revenues(db)
-        assert planned["inserted"] == 12 + 20  # 2016-05～2018-12
+        assert planned["inserted"] == 13 + 20  # 2016-04～2018-12
         assert not db.scalars(
             select(MonthlyRevenue).where(MonthlyRevenue.instrument_id == old_id)
         ).all()
         assert db.scalar(select(IngestionRun.id)) is None
     with factory() as db:
         result = mc.transfer_revenues(db, apply=True)
-        assert result["inserted"] == 32 and not result["skipped"]
+        assert result["inserted"] == 33 and not result["skipped"]
         old, new = db.get(Instrument, old_id), db.get(Instrument, new_id)
         copied, kept = months_of(db, old), months_of(db, new)
-        assert min(copied) == "2016-05" and max(copied) == "2018-12"
+        assert min(copied) == "2016-04" and max(copied) == "2018-12"
         assert len(kept) == 142  # the TWSE rows stay
         row, origin = copied["2017-03"], kept["2017-03"]
         assert row.source == mc.SOURCE_TRANSFER
@@ -343,10 +370,10 @@ def test_transfers_copy_the_old_listings_months_and_keep_the_new_ones(factory):
         run = db.scalar(
             select(IngestionRun).where(IngestionRun.run_type == mc.RUN_TRANSFER)
         )
-        assert run.status == "success" and run.records == 32
+        assert run.status == "success" and run.records == 33
     with factory() as db:
         again = mc.transfer_revenues(db, apply=True)
-        assert (again["inserted"], again["updated"], again["unchanged"]) == (0, 0, 32)
+        assert (again["inserted"], again["updated"], again["unchanged"]) == (0, 0, 33)
         # A later correction of the TWSE month reaches the copy on the next run.
         months_of(db, db.get(Instrument, new_id))["2017-03"].revenue = 123.0
         db.commit()
@@ -465,17 +492,17 @@ def test_backfill_asks_the_rest_of_the_found_companys_months(factory):
     classify(factory, Fetcher(ANSWERS))
     with factory() as db:
         planned = mc.backfill_companies(db, plan=True)
-    # 2016-05～2018-02 is 22 months; 2018-02 came with the classification.
+    # 2016-04～2018-02 is 23 months; 2018-02 came with the classification.
     assert planned["classes"] == {"found": 1, "name_mismatch": 1, "not_public": 1}
-    assert (planned["companies"], planned["months"], planned["requests"]) == (1, 21, 21)
+    assert (planned["companies"], planned["months"], planned["requests"]) == (1, 22, 22)
     fetcher = Fetcher(ANSWERS)
     result = backfill(factory, fetcher)
-    assert result["status"] == "success" and result["inserted"] == 21
+    assert result["status"] == "success" and result["inserted"] == 22
     assert {code for code, _month in fetcher.asked} == {"2384"}
     assert ("2384", "107/02") not in fetcher.asked  # not asked a second time
     with factory() as db:
         found = months_of(db, db.get(Instrument, ids["2384"]))
-        assert min(found) == "2016-05" and max(found) == "2018-02" and len(found) == 22
+        assert min(found) == "2016-04" and max(found) == "2018-02" and len(found) == 23
     again = Fetcher(ANSWERS)
     assert backfill(factory, again)["requests"] == 0 and again.forms == []
 
@@ -502,7 +529,7 @@ def test_a_page_naming_another_company_in_backfill_is_skipped(factory):
             )
 
     result = backfill(factory, Renamed(ANSWERS))
-    assert result["name_mismatch"] == 21 and "inserted" not in result
+    assert result["name_mismatch"] == 22 and "inserted" not in result
     with factory() as db:
         assert list(months_of(db, db.get(Instrument, ids["2384"]))) == ["2018-02"]
 
@@ -555,6 +582,97 @@ def test_quiet_hours_stop_before_any_request(factory, isolated):
     result = classify(factory, fetcher)
     assert result["status"] == "partial" and fetcher.forms == []
     assert result["aborted"].startswith("quiet hours")
+
+
+def test_quiet_hours_count_the_interval_before_the_request(factory, isolated):
+    delisted_db(factory)
+    isolated.at = datetime(2026, 11, 6, 12, 29, 57)  # 20:29:57 Taipei
+    fetcher = Fetcher(ANSWERS)
+    result = classify(factory, fetcher)
+    # The first goes now; the second would go at 20:30:02.
+    assert len(fetcher.forms) == 1 and result["aborted"].startswith("quiet hours")
+
+
+@pytest.mark.parametrize(
+    "last_bar",
+    [
+        date(2026, 11, 5),  # in this month
+        date(2026, 10, 20),  # October: its deadline (11/10) is ahead on 11/06
+    ],
+)
+def test_classify_never_asks_a_month_before_its_deadline(factory, last_bar):
+    with factory() as db:
+        instrument(db, "TWSE", "2384", "勝華", "delisted", date(2025, 1, 6), last_bar)
+        db.commit()
+    fetcher = Fetcher(ANSWERS)
+    assert classify(factory, fetcher)["classes"] == {"found": 1}
+    assert fetcher.asked == [("2384", "115/09")]
+    with factory() as db:
+        planned = mc.backfill_companies(db, plan=True)
+    assert planned["classes"] == {"found": 1}  # read back with the same month
+    # 2023-12～2026-09, less 2026-09 from the classification.
+    assert planned["months"] == 33
+
+
+def test_a_damaged_kept_answer_is_asked_again(factory):
+    ids = delisted_db(factory)
+    classify(factory, Fetcher(ANSWERS))
+    with factory() as db:
+        row = months_of(db, db.get(Instrument, ids["2384"]))["2018-02"]
+        path = payload_file(db.get(RawPayload, row.raw_payload_id).payload_path)
+    path.write_text(path.read_text("utf-8").replace("勝華科技", "勝華科枝"), "utf-8")
+    with factory() as db:
+        assert mc.classify_companies(db, plan=True)["requests"] == 1
+
+
+def test_the_manifest_is_in_the_database_while_the_run_goes_on(factory):
+    delisted_db(factory)
+    seen: list[dict] = []
+
+    class Peeking(Fetcher):
+        def __call__(self, form):
+            with factory() as other:
+                run = other.scalar(
+                    select(IngestionRun).where(IngestionRun.run_type == mc.RUN_CLASSIFY)
+                )
+                seen.append(dict((run.metadata_json or {}).get("manifest") or {}))
+            return super().__call__(form)
+
+    classify(factory, Peeking(ANSWERS))
+    assert [len(manifest) for manifest in seen] == [0, 1, 2]
+
+
+def test_an_error_midway_marks_the_run_failed(factory, monkeypatch):
+    delisted_db(factory)
+    calls = []
+    real = mc._classification
+
+    def broken(page, item):
+        calls.append(item.symbol)
+        if len(calls) == 2:
+            raise RuntimeError("boom")
+        return real(page, item)
+
+    monkeypatch.setattr(mc, "_classification", broken)
+    with pytest.raises(RuntimeError, match="boom"):
+        classify(factory, Fetcher(ANSWERS))
+    with factory() as db:
+        run = db.scalar(
+            select(IngestionRun).where(IngestionRun.run_type == mc.RUN_CLASSIFY)
+        )
+        assert run.status == "failed" and "boom" in run.error
+        assert run.finished_at is not None
+        assert len(run.metadata_json["manifest"]) == 1
+
+
+def test_a_transfer_twin_that_was_delisted_is_listed(factory):
+    transfer_db(factory)
+    with factory() as db:
+        db.scalar(
+            select(Instrument).where(Instrument.exchange == "TWSE")
+        ).status = "delisted"
+        db.commit()
+        assert mc.transfer_revenues(db)["twin_delisted"] == ["TPEx:1597"]
 
 
 def test_the_commands_refuse_a_database_without_the_research_marker(tmp_path):

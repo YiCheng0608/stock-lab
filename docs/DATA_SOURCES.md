@@ -555,19 +555,21 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
 
 `t21sc03` 頁與快照都只列今天的公司，下市股沒有任何一個月（[#781 AC-1](https://github.com/YiCheng0608/stock-lab/issues/781#issuecomment-6894356247)）。研究 DB 用下面兩種方式補一部分（[#782](https://github.com/YiCheng0608/stock-lab/issues/782)，實作在 [`worker/monthly_revenue_company.py`](../backend/worker/monthly_revenue_company.py)）。三個命令都只在研究 DB 跑：DB 旁沒有 `research-db.json`（`purpose` 是 `research_history`）就印 `refused`、exit 2。
 
-- **月份範圍**：標的第一根日線那個月往前 12 個月，到最後一根日線那個月，從 2013-01 起，只取已結束的月份。12 是 `tools/research` 用月營收的特徵裡回看最長的那個（`revenue_high_12`）。現存的股票本來就有上市前的月營收，所以下市股也補到上市前一年，兩邊口徑一致（[決定 6894566253](https://github.com/YiCheng0608/stock-lab/issues/782#issuecomment-6894566253)）。
-- **轉板**（`revenue transfers`，0 個請求）：轉板公司是兩個標的，今天的上市頁把它上櫃那幾年的月份列在上市標的上。對每個 `transferred` 標的，找另一交易所同代號的標的，兩個條件都成立才算同一家公司：名稱相同（去掉結尾的 `*`），以及新標的第一根日線在舊標的最後一根之後 7 天內。不成立就略過並列出。舊標的範圍內的月份從新標的**複製**一列：數值、可得日、`raw_payload_id` 照原列，`source=mops_t21sc03_transfer`，`data_json.copied_from` 記原標的的 id、交易所與 `source`。新標的的列不動，轉上市後的頭 12 個月才有完整的回看。重跑時，原列更正過的月份會同步過來；舊標的那個月已有其他來源的列就不動（`kept`）。不加 `--apply` 只印對應與月數。
-- **下市股分類**（`revenue company-classify`）：對象是 `delisted` 的 `stock`／`ipo`，要有日線，最後一根在 2013-01 以後。每檔問 1 次單一公司頁（用最後一個有日線的月份）：
+- **月份範圍**：標的第一根日線那個月往前 13 個月，到最後一根日線那個月，從 2013-01 起。13 是 `tools/research` 用月營收的特徵裡回看最長的 `revenue_high_12` 要的 12 個月，加上公告延遲的 1 個月：第一根日線在 M 月、早於 M−1 月的期限時，已公告的是 M−13～M−2（[review 6895006123](https://github.com/YiCheng0608/stock-lab/pull/784#issuecomment-6895006123)）。現存的股票本來就有上市前的月營收，所以下市股也補到上市前，兩邊口徑一致（[決定 6894566253](https://github.com/YiCheng0608/stock-lab/issues/782#issuecomment-6894566253)）。
+- **可以問的最後一個月**：期限（次月 10 日，遇休市順延）在今天（台北）之前的最新月份。月份結束了、期限還沒到時，公司可能還沒申報，MOPS 回「查無資料」，那個答覆又會被存下來沿用，所以不問。範圍的上限與分類用的月份都不晚於它。
+- **同一家公司的名稱比對**：兩邊都做 NFKC、去掉所有空白，再去掉結尾的 `*`、`-KY` 與開頭的 `F-`。
+- **轉板**（`revenue transfers`，0 個請求）：轉板公司是兩個標的，今天的上市頁把它上櫃那幾年的月份列在上市標的上。對每個 `transferred` 標的，找另一交易所同代號的標的，兩個條件都成立才算同一家公司：正規化後名稱相同，以及新標的第一根日線在舊標的最後一根之後 7 天內。不成立就略過並列出。舊標的範圍內的月份從新標的**複製**一列：數值、可得日、`raw_payload_id` 照原列，`source=mops_t21sc03_transfer`，`data_json.copied_from` 記原標的的 id、交易所與 `source`。新標的的列不動，轉上市後的頭 12 個月才有完整的回看。重跑時，原列更正過的月份會同步過來；舊標的那個月已有其他來源的列就不動（`kept`）。不加 `--apply` 只印對應與月數。新標的是 `delisted`（轉板後又下市）的列在 `twin_delisted`：它的月份要等 `company-backfill` 補完，再跑一次 `transfers` 才複製得到。
+- **下市股分類**（`revenue company-classify`）：對象是 `delisted` 的 `stock`／`ipo`，要有日線，分類月在 2013-01 以後。每檔問 1 次單一公司頁，用最後一個有日線的月份，晚於「可以問的最後一個月」時改用它：
   - 頁上是「該 <代號> 公開發行公司不繼續公開發行！」：`not_public`。破產（2475 華映）、合併消滅（2888 新光金）是這樣，這些公司的月營收補不到。
   - 有營收表、通過檢查：`found`。這個月同時寫入。
   - 頁上是「查無資料」：`no_data`，列出來，等統籌決定。
-  - 頁首的公司名稱和標的名稱互不包含：`name_mismatch`，不寫入、列出來。代號被後來的公司重用時，`co_id` 可能查到現在那家。
+  - 頁首的公司名稱和標的名稱（正規化後）互不包含：`name_mismatch`，不寫入、列出來。代號被後來的公司重用時，`co_id` 可能查到現在那家。
 - **補「查得到」的**（`revenue company-backfill`）：分類為 `found` 的標的，範圍內還沒有列的月份每月 1 個請求。每一頁都重新核對公司名稱。
-- **頁面檢查**：隱藏欄位 `Q1V`、`Q2V` 要是請求的代號與民國年月，頁面印的「民國YYY年MM月」也要相同；表頭是「項目／營業收入淨額」，接著 8 列依序是本月、去年同期、增減金額、增減百分比、本年累計、去年累計、增減金額、增減百分比，再來是備註。不合就記失敗、不寫入。本月 → `revenue`、去年同期 → `prior_year_revenue`、第一個增減百分比 → `yoy`、本年累計 → `cumulative_revenue`（千元）；8 列的文字、備註、`co_id`、頁首名稱與公司類別（例如「公開發行公司」）存 `data_json`。
+- **頁面檢查**：隱藏欄位 `Q1V`、`Q2V` 要是請求的代號與民國年月，頁面印的「民國YYY年MM月」也要相同，單位要是「新台幣仟元」；表頭是「項目／營業收入淨額」，接著 8 列依序是本月、去年同期、增減金額、增減百分比、本年累計、去年累計、增減金額、增減百分比，再來是備註。不合就記失敗、不寫入。本月 → `revenue`、去年同期 → `prior_year_revenue`、第一個增減百分比 → `yoy`、本年累計 → `cumulative_revenue`（千元）；8 列的文字、備註、`co_id`、頁首名稱與公司類別（例如「公開發行公司」）存 `data_json`。
 - **可得日**：同 `t21sc03`，法定期限次月 10 日，遇休市順延（`announcement_basis=statutory_deadline`）。
-- **raw 與續跑**：每個回應存一列 `raw_payloads`（`source=mops`），`endpoint` 是 `…/ajax_t05st10_ifrs?co_id=<代號>&year=<民國年>&month=<月>`，內容是表單與 HTML。發請求前先找同一個鍵、讀得回而且通過檢查的已存回應，有就重讀、不重抓；分類結果也是從已存的回應重讀，所以沒有另外的表。中斷後重跑就接著做，失敗的那一個下次再問。
-- **請求規則**：同一 host 每個請求間隔至少 5 秒；台北 20:30～23:30 與 08:00～09:00 不發，下一個請求會落在這兩段時就停，run 標 `partial`，之後重跑接續；不重試；封鎖頁（`查詢過於頻繁` 等）、非 200、空回應或傳輸錯誤連續 3 次就停。`--max-requests N` 限制這次最多發幾個（已存的不算）；`--plan` 只印對象與請求數，不發請求、不寫入。
-- **run**：`run_type` 是 `revenue_transfer_copy`／`revenue_company_classify`／`revenue_company_backfill`，metadata 有每家（每月）的結果、raw id 與中止原因。
+- **raw 與續跑**：每個回應存一列 `raw_payloads`（`source=mops`），`endpoint` 是 `…/ajax_t05st10_ifrs?co_id=<代號>&year=<民國年>&month=<月>`，內容是表單與 HTML。發請求前先找同一個鍵的已存回應：檔案的 sha256 要和 `raw_payloads` 那列相同、內容要通過檢查，有就重讀、不重抓；分類結果也是從已存的回應重讀，所以沒有另外的表。中斷後重跑就接著做，失敗的那一個下次再問。
+- **請求規則**：同一 host 每個請求間隔至少 5 秒；台北 20:30～23:30 與 08:00～09:00 不發，下一個請求（等完間隔之後）會落在這兩段時就停，run 標 `partial`，之後重跑接續；不重試；封鎖頁（`查詢過於頻繁` 等）、非 200、空回應或傳輸錯誤連續 3 次就停。`--max-requests N` 限制這次最多發幾個（已存的不算）；`--plan` 只印對象與請求數，不發請求、不寫入。
+- **run**：`run_type` 是 `revenue_transfer_copy`／`revenue_company_classify`／`revenue_company_backfill`，metadata 有每家（每月）的結果、raw id 與中止原因；每個請求之後 commit，跑到一半也讀得到。例外時 run 記 `failed` 與已完成的部分，再把例外拋出。
 
 ## FinMind 補缺口規則
 

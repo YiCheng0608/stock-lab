@@ -133,33 +133,88 @@ GUARDED = {
         ["instruments", "repair", "--apply"],
         "run_instrument_repair",
     ),
+    # Research database only (#782): run_held writes the research marker.
+    "revenue transfers --apply": (
+        ["revenue", "transfers", "--apply"],
+        "run_revenue_transfers",
+    ),
+    "revenue company-classify": (
+        ["revenue", "company-classify"],
+        "run_revenue_company_classify",
+    ),
+    "revenue company-backfill": (
+        ["revenue", "company-backfill", "--max-requests", "10"],
+        "run_revenue_company_backfill",
+    ),
+}
+RESEARCH_ONLY = {
+    "revenue transfers --apply",
+    "revenue company-classify",
+    "revenue company-backfill",
 }
 
 
-def run_held(monkeypatch, capsys, data: Path, command: str, work=None) -> dict:
+def research_marker(data: Path, purpose: str | None = "research_history") -> None:
+    data.mkdir(parents=True, exist_ok=True)
+    if purpose is not None:
+        (data / "research-db.json").write_text(json.dumps({"purpose": purpose}))
+
+
+def run_held(
+    monkeypatch, capsys, data: Path, command: str, work=None, argv=None, research=True
+) -> dict:
     """worker.cli.main for COMMAND with its work faked; returns what the work saw."""
 
     import worker.cli as cli_module
 
-    argv, name = GUARDED[command]
+    held_argv, name = GUARDED[command]
     seen: dict = {}
 
     def fake(*args, **kwargs):
         seen["marker"] = marker(data)
         seen["status"] = job.maintenance_status(data)
+        seen["ran"] = True
         if work:
             work(seen)
         return {"status": "success"}
 
+    if command in RESEARCH_ONLY:
+        monkeypatch.setattr(cli_module, "DB_PATH", data / "stock.db")
+        research_marker(data, "research_history" if research else None)
     monkeypatch.setattr(cli_module, name, fake)
     monkeypatch.setattr(cli_module, "DATA_DIR", data)
-    monkeypatch.setattr(sys, "argv", ["worker.cli", *argv])
+    monkeypatch.setattr(sys, "argv", ["worker.cli", *(argv or held_argv)])
     try:
         cli_module.main()
     except SystemExit as exc:
         seen["exit"] = exc.code
     seen["stderr"] = capsys.readouterr().err
     return seen
+
+
+@pytest.mark.parametrize("command", sorted(RESEARCH_ONLY))
+def test_a_research_only_command_refuses_before_any_maintenance_hold(
+    data, monkeypatch, capsys, command
+):
+    """#782 review 6895006123 3: no production maintenance marker or log."""
+
+    seen = run_held(monkeypatch, capsys, data, command, research=False)
+    assert seen["exit"] == 2 and "ran" not in seen
+    assert marker(data) is None and log(data) == []
+
+
+@pytest.mark.parametrize(
+    "command, argv",
+    [
+        ("revenue company-classify", ["revenue", "company-classify", "--plan"]),
+        ("revenue company-backfill", ["revenue", "company-backfill", "--plan"]),
+        ("revenue transfers --apply", ["revenue", "transfers"]),
+    ],
+)
+def test_a_research_plan_holds_no_maintenance(data, monkeypatch, capsys, command, argv):
+    seen = run_held(monkeypatch, capsys, data, command, argv=argv)
+    assert seen["ran"] and seen["marker"] is None
+    assert log(data) == []
 
 
 # AC-5: held by the command, released however it ends ----------------------------------

@@ -39,6 +39,7 @@ from .instrument_repair import run_instrument_repair, run_unmatched_backfill
 from .market_summary import backfill_market_summaries
 from .monthly_revenue import DEFAULT_MONTHS as REVENUE_DEFAULT_MONTHS
 from .monthly_revenue import run_revenue_backfill
+from .monthly_revenue_company import refusal as monthly_revenue_refusal
 from .monthly_revenue_company import (
     run_revenue_company_backfill,
     run_revenue_company_classify,
@@ -699,6 +700,16 @@ def main() -> None:
             result = scheduled_job.maintenance_status(data_dir)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
+    refused = research_refusal(args)
+    if refused is not None:
+        # Before any maintenance hold: on the production volume it would write
+        # the production marker and log (review 6895006123 3).
+        print(
+            json.dumps(
+                {"status": "refused", "error": refused}, ensure_ascii=False, indent=2
+            )
+        )
+        sys.exit(2)
     guarded = maintenance_guarded(args)
     if guarded in DAILY_WINDOW_REFUSED and in_daily_window():
         print(
@@ -723,6 +734,17 @@ def main() -> None:
     except scheduled_job.MaintenanceLost as exc:
         print(f"{guarded}: stopped, maintenance mode was lost: {exc}", file=sys.stderr)
         sys.exit(scheduled_job.MAINTENANCE_LOST_EXIT)
+
+
+RESEARCH_REVENUE_COMMANDS = {"transfers", "company-classify", "company-backfill"}
+
+
+def research_refusal(args: argparse.Namespace) -> str | None:
+    """Why a research-database-only command may not run here (Issue #782); else None."""
+
+    if args.command == "revenue" and args.revenue_command in RESEARCH_REVENUE_COMMANDS:
+        return monthly_revenue_refusal(DB_PATH)
+    return None
 
 
 def backfill_command(args: argparse.Namespace) -> str | None:
