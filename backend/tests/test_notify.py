@@ -15,6 +15,7 @@ import re
 import sys
 import threading
 from datetime import date, datetime, timedelta
+from email.parser import BytesParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -33,7 +34,7 @@ from app.models import (
     TradingCalendarDay,
 )
 from test_candidates import T, signal, stock
-from worker import job, notify, pipeline
+from worker import job, notify, notify_card, pipeline
 from worker.candidates import compute_daily_candidates
 
 ON_LINUX = sys.platform.startswith("linux")
@@ -480,8 +481,38 @@ def test_the_session_before_skips_the_closed_days(db):
 INCOMPLETE = {"ok": True}
 
 
+FAKE_PNG = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + bytes(range(256)) * 4
+# Telegram's answer to a photo: the sizes it keeps (#754).
+PHOTO_SIZES = [
+    {"file_id": "a", "width": 90, "height": 196},
+    {"file_id": "b", "width": 1080, "height": 2356},
+    {"file_id": "c", "width": 587, "height": 1280},
+]
+
+
+def _form(content_type: str, body: bytes) -> dict:
+    """A multipart/form-data body as {name: text, or (filename, type, bytes)}."""
+
+    message = BytesParser().parsebytes(
+        f"Content-Type: {content_type}\r\n\r\n".encode() + body
+    )
+    assert message.is_multipart()
+    form = {}
+    for part in message.get_payload():
+        name = part.get_param("name", header="content-disposition")
+        data = part.get_payload(decode=True)
+        filename = part.get_filename()
+        form[name] = (
+            (filename, part.get_content_type(), data)
+            if filename
+            else data.decode("utf-8")
+        )
+    return form
+
+
 class Telegram:
-    """The stand-in Bot API: answers each sendMessage with the next scripted reply."""
+    """The stand-in Bot API: answers each sendMessage or sendPhoto with the next scripted
+    reply."""
 
     def __init__(self, replies):
         self.replies = list(replies)
@@ -491,13 +522,22 @@ class Telegram:
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
                 body = self.rfile.read(int(self.headers["Content-Length"]))
-                owner.requests.append({"path": self.path, "body": json.loads(body)})
+                kind = self.headers["Content-Type"]
+                photo = self.path.endswith("/sendPhoto")
+                owner.requests.append(
+                    {
+                        "path": self.path,
+                        "method": self.path.rsplit("/", 1)[-1],
+                        "content_type": kind,
+                        "body": _form(kind, body) if photo else json.loads(body),
+                    }
+                )
                 code, payload = owner.replies.pop(0) if owner.replies else (200, None)
                 if payload is None:
-                    payload = {
-                        "ok": True,
-                        "result": {"message_id": len(owner.requests)},
-                    }
+                    result = {"message_id": len(owner.requests)}
+                    if photo:
+                        result["photo"] = PHOTO_SIZES
+                    payload = {"ok": True, "result": result}
                 data = json.dumps(payload).encode("utf-8")
                 # INCOMPLETE: the connection ends before the body (IncompleteRead).
                 length = len(data) + 100 if payload is INCOMPLETE else len(data)
@@ -538,6 +578,16 @@ def run_env(tmp_path, monkeypatch, db):
         yield db
 
     monkeypatch.setattr(notify, "_session", session)
+    # The card is drawn by a stand-in (the real drawing: test_notify_card.py); RENDERS
+    # holds what it was given, DRAWN what it returns.
+    renders = []
+    drawn = {"value": notify_card.Rendered(FAKE_PNG, None, 0.1, 1080, 2356)}
+
+    def render(card):
+        renders.append(card)
+        return drawn["value"]
+
+    monkeypatch.setattr(notify_card, "render", render)
     servers = []
 
     def telegram(*replies):
@@ -547,7 +597,17 @@ def run_env(tmp_path, monkeypatch, db):
         return server
 
     _list_of_t(db)
-    yield argparse.Namespace(data=data, logs=data / "logs", telegram=telegram)
+
+    def fail_render(reason):
+        drawn["value"] = notify_card.Rendered(None, reason, 30.0)
+
+    yield argparse.Namespace(
+        data=data,
+        logs=data / "logs",
+        telegram=telegram,
+        renders=renders,
+        fail_render=fail_render,
+    )
     for server in servers:
         server.close()
 
@@ -584,12 +644,26 @@ def test_a_trading_day_sends_once_and_a_restart_does_not_send_again(run_env, cap
     assert _send(run_env) == 0
     assert len(server.requests) == 1
     request = server.requests[0]
-    assert request["path"] == f"/bot{TOKEN}/sendMessage"
-    assert request["body"]["chat_id"] == int(CHAT)
-    # Telegram HTML (#742): the bold heads and names.
-    assert request["body"]["parse_mode"] == "HTML"
-    assert request["body"]["text"].startswith(TITLE + "\n")
-    assert "--- result status=sent attempts=1 message_id=1" in _log(run_env)
+    # The card (#754 AC-2): sendPhoto, multipart, with the one-line caption.
+    assert request["path"] == f"/bot{TOKEN}/sendPhoto"
+    assert request["content_type"].startswith("multipart/form-data; boundary=")
+    assert request["body"] == {
+        "chat_id": CHAT,
+        "caption": "<b>今日名單 09/07（一）</b>・突破 1",
+        "parse_mode": "HTML",
+        "photo": ("card.png", "image/png", FAKE_PNG),
+    }
+    # The card was drawn from the message's one read.
+    assert [card.rows[0].name for card in run_env.renders] == ["1101 名1101"]
+    log = _log(run_env)
+    assert (
+        "--- result status=sent mode=photo attempts=1 message_id=1 photo=1080x2356"
+        in log
+    )
+    # The text is logged as before, with the caption and the card's size.
+    assert f"\n{TITLE}\n" in log
+    assert "--- caption <b>今日名單 09/07（一）</b>・突破 1" in log
+    assert f"--- card width=1080 height=2356 bytes={len(FAKE_PNG)} seconds=0.1" in log
     # Again the same day (a restarted scheduler's catch-up, a second trigger): no send.
     assert _send(run_env) == 0
     assert len(server.requests) == 1
@@ -613,16 +687,113 @@ def test_a_closed_day_sends_nothing(run_env, db):
     assert server.requests == []
 
 
+def _methods(server):
+    return [request["method"] for request in server.requests]
+
+
 @linux_only
-def test_a_failed_send_is_tried_once_more_then_recorded_as_failed(run_env, capsys):
+@pytest.mark.parametrize("reason", ["timeout", "no_browser", "exit_1", "empty_png"])
+def test_a_card_that_cannot_be_drawn_sends_the_text(run_env, reason):
+    """AC-2 (#754): the text goes instead, and the log says which and why."""
+
+    server = run_env.telegram()
+    run_env.fail_render(reason)
+    assert _send(run_env) == 0
+    assert _methods(server) == ["sendMessage"]
+    assert server.requests[0]["body"]["text"].startswith(TITLE + "\n")
+    assert server.requests[0]["body"]["parse_mode"] == "HTML"
+    assert (
+        f"--- result status=sent mode=text reason=render_failed:{reason}"
+        " attempts=1 message_id=1"
+    ) in _log(run_env)
+    # One message a day, whichever it was.
+    assert _send(run_env) == 0
+    assert len(server.requests) == 1
+    assert "--- result status=skipped reason=already_sent" in _log(run_env)
+
+
+@linux_only
+@pytest.mark.parametrize("broken", ["render", "import"])
+def test_an_error_while_drawing_sends_the_text(run_env, monkeypatch, broken):
+    """Review 6888784128 必修 1: an exception from the drawing, or a notify_card that
+    cannot be imported, is render_failed and the text goes, not a failed day."""
+
+    server = run_env.telegram()
+    if broken == "render":
+
+        def render(_card):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(notify_card, "render", render)
+        reason = "error:RuntimeError"
+    else:
+        monkeypatch.setitem(sys.modules, "worker.notify_card", None)
+        # None in sys.modules: ModuleNotFoundError, an ImportError.
+        reason = "error:ModuleNotFoundError"
+    assert _send(run_env) == 0
+    assert _methods(server) == ["sendMessage"]
+    assert (
+        f"--- result status=sent mode=text reason=render_failed:{reason}"
+        " attempts=1 message_id=1"
+    ) in _log(run_env)
+
+
+@linux_only
+def test_a_sent_photo_with_an_odd_answer_is_still_sent(run_env):
+    """Review 6888784128 建議 3: only the size is unknown then."""
+
+    server = run_env.telegram(
+        (200, {"ok": True, "result": {"message_id": 7, "photo": 5}})
+    )
+    assert _send(run_env) == 0
+    assert _methods(server) == ["sendPhoto"]
+    log = _log(run_env)
+    assert "--- result status=sent mode=photo attempts=1 message_id=7\n" in log
+
+
+@linux_only
+def test_a_photo_refused_with_a_400_sends_the_text_at_once(run_env):
+    server = run_env.telegram(
+        (400, {"ok": False, "description": "Bad Request: PHOTO_INVALID_DIMENSIONS"})
+    )
+    assert _send(run_env) == 0
+    assert _methods(server) == ["sendPhoto", "sendMessage"]
+    log = _log(run_env)
+    assert (
+        "--- result status=sent mode=text reason=photo_failed:http_400"
+        " attempts=1 message_id=2"
+    ) in log
+    assert "--- photo failed http_400 Bad Request: PHOTO_INVALID_DIMENSIONS" in log
+
+
+@linux_only
+def test_a_photo_failing_twice_sends_the_text(run_env):
     server = run_env.telegram(
         (502, {"ok": False, "description": "Bad Gateway"}), (502, None)
     )
+    assert _send(run_env) == 0
+    assert _methods(server) == ["sendPhoto", "sendPhoto", "sendMessage"]
+    assert (
+        "--- result status=sent mode=text reason=photo_failed:http_502,http_502"
+        " attempts=1 message_id=3"
+    ) in _log(run_env)
+
+
+@linux_only
+def test_a_failed_send_is_tried_once_more_then_recorded_as_failed(run_env, capsys):
+    server = run_env.telegram(
+        (400, {"ok": False, "description": "Bad Request"}),
+        (502, {"ok": False, "description": "Bad Gateway"}),
+        (502, None),
+    )
     assert _send(run_env) == 1
-    assert len(server.requests) == 2
+    assert _methods(server) == ["sendPhoto", "sendMessage", "sendMessage"]
     log = _log(run_env)
-    # Both attempts' reasons, in order (review 6882303076 item 4).
-    assert "--- result status=failed reason=http_502,http_502 attempts=2" in log
+    # Both attempts' reasons, in order (review 6882303076 item 4), then the photo's.
+    assert (
+        "--- result status=failed reason=http_502,http_502 attempts=2"
+        " photo=photo_failed:http_400 detail="
+    ) in log
     assert "end exit=1" in log
     assert not notify.day_done(run_env.logs, MONDAY)
     # The next try (catch-up or by hand) sends.
@@ -635,7 +806,7 @@ def test_a_first_failure_then_success_is_sent(run_env):
     server = run_env.telegram((500, {"ok": False, "description": "Internal"}))
     assert _send(run_env) == 0
     assert len(server.requests) == 2
-    assert "--- result status=sent attempts=2" in _log(run_env)
+    assert "--- result status=sent mode=photo attempts=2" in _log(run_env)
 
 
 @linux_only
@@ -643,32 +814,40 @@ def test_a_first_failure_then_success_is_sent(run_env):
 def test_a_permanent_error_is_not_retried(run_env, code):
     """A wrong token or chat id stays wrong (review 6882303076 item 3)."""
 
-    server = run_env.telegram((code, {"ok": False, "description": "Unauthorized"}))
+    refused = (code, {"ok": False, "description": "Unauthorized"})
+    server = run_env.telegram(refused, refused)
     assert _send(run_env) == 1
-    assert len(server.requests) == 1
-    assert f"--- result status=failed reason=http_{code} attempts=1" in _log(run_env)
+    # Once as a photo, once as the text (#754).
+    assert _methods(server) == ["sendPhoto", "sendMessage"]
+    assert (
+        f"--- result status=failed reason=http_{code} attempts=1"
+        f" photo=photo_failed:http_{code}"
+    ) in _log(run_env)
 
 
 @linux_only
 def test_a_text_telegram_cannot_parse_is_a_parse_error_sent_once(run_env):
     """AC-2 (#742): the same HTML is refused again, so it is not retried."""
 
-    server = run_env.telegram(
-        (
-            400,
-            {
-                "ok": False,
-                "error_code": 400,
-                "description": "Bad Request: can't parse entities: Unsupported start"
-                ' tag "x" at byte offset 12',
-            },
-        )
+    refused = (
+        400,
+        {
+            "ok": False,
+            "error_code": 400,
+            "description": "Bad Request: can't parse entities: Unsupported start"
+            ' tag "x" at byte offset 12',
+        },
     )
+    server = run_env.telegram(refused, refused)
     assert _send(run_env) == 1
-    assert len(server.requests) == 1
+    assert _methods(server) == ["sendPhoto", "sendMessage"]
     assert server.requests[0]["body"]["parse_mode"] == "HTML"
+    assert server.requests[1]["body"]["parse_mode"] == "HTML"
     log = _log(run_env)
-    assert "--- result status=failed reason=parse_error attempts=1" in log
+    assert (
+        "--- result status=failed reason=parse_error attempts=1"
+        " photo=photo_failed:parse_error"
+    ) in log
     assert "detail=parse_error http_400 Bad Request: can't parse entities" in log
     assert not notify.day_done(run_env.logs, MONDAY)
 
@@ -688,21 +867,21 @@ def test_a_429_waits_its_retry_after_when_it_is_short(run_env, monkeypatch):
 def test_a_429_with_a_long_retry_after_fails_without_waiting(run_env, monkeypatch):
     waits = []
     monkeypatch.setattr(notify.time, "sleep", waits.append)
-    server = run_env.telegram(
-        (
-            429,
-            {
-                "ok": False,
-                "description": "Too Many",
-                "parameters": {"retry_after": 3600},
-            },
-        ),
+    too_many = (
+        429,
+        {
+            "ok": False,
+            "description": "Too Many",
+            "parameters": {"retry_after": 3600},
+        },
     )
+    server = run_env.telegram(too_many, too_many)
     assert _send(run_env) == 1
-    assert len(server.requests) == 1 and waits == []
-    assert "reason=http_429 attempts=1 detail=http_429 Too Many retry_after=3600" in (
-        _log(run_env)
-    )
+    assert _methods(server) == ["sendPhoto", "sendMessage"] and waits == []
+    assert (
+        "reason=http_429 attempts=1 photo=photo_failed:http_429"
+        " detail=http_429 Too Many retry_after=3600"
+    ) in _log(run_env)
 
 
 @linux_only
@@ -712,7 +891,7 @@ def test_a_cut_answer_is_retried(run_env):
     server = run_env.telegram((200, INCOMPLETE))
     assert _send(run_env) == 0
     assert len(server.requests) == 2
-    assert "--- result status=sent attempts=2" in _log(run_env)
+    assert "--- result status=sent mode=photo attempts=2" in _log(run_env)
 
 
 @linux_only
@@ -755,21 +934,26 @@ def test_a_closed_day_after_the_close_is_a_non_trading_day_not_too_late(run_env,
 
 @linux_only
 def test_the_token_is_in_no_log_output_or_error(run_env, monkeypatch, capsys):
-    # An answer that echoes the token, then the network gone (a closed port).
-    server = run_env.telegram((500, {"ok": False, "description": f"bad bot{TOKEN}"}))
-    original = notify._attempt
+    # Answers that echo the token, then the network gone (a closed port): the photo's
+    # two attempts and the text's (#754 AC-2).
+    echo = (500, {"ok": False, "description": f"bad bot{TOKEN}"})
+    server = run_env.telegram(echo, echo, echo)
+    original = notify._post
 
-    def then_offline(token, chat_id, text):
-        if server.requests:
+    def then_offline(token, *args):
+        if len(server.requests) == 3:
             monkeypatch.setattr(notify, "API_BASE", "http://127.0.0.1:9")
-        return original(token, chat_id, text)
+        return original(token, *args)
 
-    monkeypatch.setattr(notify, "_attempt", then_offline)
+    monkeypatch.setattr(notify, "_post", then_offline)
     code = _send(run_env)
     out = capsys.readouterr()
     log = _log(run_env)
     assert code == 1
+    assert _methods(server) == ["sendPhoto", "sendPhoto", "sendMessage"]
     assert "reason=http_500,network:" in log and "http_500 bad bot<token>" in log
+    assert "photo=photo_failed:http_500,http_500" in log
+    assert "--- photo failed http_500 bad bot<token> | http_500 bad bot<token>" in log
     for text in (log, out.out, out.err):
         assert TOKEN not in text
         assert TOKEN.split(":")[1] not in text
@@ -825,11 +1009,36 @@ def test_the_dry_run_prints_the_message_and_sends_and_writes_nothing(run_env, ca
     server = run_env.telegram()
     assert notify.run(_args("--dry-run", "--date", MONDAY.isoformat())) == 0
     out = capsys.readouterr().out
-    # The text as it is sent, with its tags (#742).
-    assert out.startswith("configured=yes\n" + TITLE + "\n")
+    # The caption, then the text as it is sent, with its tags (#742, #754).
+    assert out.startswith(
+        "configured=yes\ncaption=<b>今日名單 09/07（一）</b>・突破 1\n" + TITLE + "\n"
+    )
     assert TOKEN not in out and CHAT not in out
     assert server.requests == []
     assert not run_env.logs.exists()
+    # No card unless asked for.
+    assert run_env.renders == []
+
+
+def test_the_dry_run_draws_the_card_with_image_out(run_env, tmp_path, capsys):
+    server = run_env.telegram()
+    target = tmp_path / "card.png"
+    argv = ("--dry-run", "--date", MONDAY.isoformat(), "--image-out", str(target))
+    assert notify.run(_args(*argv)) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[1] == (
+        f"image={target} width=1080 height=2356 bytes={len(FAKE_PNG)} seconds=0.1"
+    )
+    assert lines[2].startswith("caption=") and lines[3] == TITLE
+    assert target.read_bytes() == FAKE_PNG
+    assert server.requests == [] and not run_env.logs.exists()
+    # A card that cannot be drawn: exit 1, the text still printed.
+    run_env.fail_render("timeout")
+    assert notify.run(_args(*argv)) == 1
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[1] == "image=failed reason=timeout" and lines[3] == TITLE
+    # Only with --dry-run.
+    assert notify.argument_problem(_args("--send", "--image-out", str(target)))
 
 
 def test_the_dry_run_says_not_configured_and_a_closed_day(

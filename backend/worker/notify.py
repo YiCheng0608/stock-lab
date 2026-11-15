@@ -1,22 +1,31 @@
 """The daily Telegram message: ``python -m worker.cli notify`` (#728).
 
 Each trading day at 08:45 Taipei, serve runs ``notify --send``. It sends one message to the
-user's own chat with the Telegram Bot API ``sendMessage``, laid out as a card (#742, the
-user's choice): ``parse_mode=HTML`` for the bold title, section heads and row names; every
-text from the data (names, reasons, sources) is ``html.escape``d first, and the 4096
-characters are counted with the tags:
+user's own chat: a picture card (#754, the user's choice) with the Bot API ``sendPhoto``,
+and the text card of #742 with ``sendMessage`` when the picture cannot be drawn or sent.
+Both come from one read of the database (``read`` gives a ``Content``), so the picture and
+the text have the same rows, sections, levels and US lines, word for word:
 
 - 今日名單: the list of the session before today (D - 1: the weekday before, skipping the
   days ``trading_calendar_days`` marks closed), as ``/api/candidates?date=D-1`` gives it
   (``app.candidate_view.candidate_list``): its date and count, then the rows in the
-  sections 🚀 突破 and ↩️ 回踩 (``entry_type``; any other type under 其他), each in the
-  page's rank order: the code and name, and one line 「進場 X｜停損 Y｜目標 Z」 (a pullback's
-  entry 「X～Y」) by the today page's rules. No other list stands in for a missing one: it
-  reads 「無資料（…）」 with the day's daily status.
+  sections 突破 and 回踩 (``entry_type``; any other type under 其他), each in the page's
+  rank order: the code and name, the entry, the stop and the target (a pullback's entry
+  「X～Y」) by the today page's rules, or 「價位不完整」. No other list stands in for a
+  missing one: it reads 「無資料（…）」 with the day's daily status.
 - 隔夜美股: ``app.market_overview.foreign_indices`` for today, the four indexes of the today
-  page's line (``overnight_us``, #681), each marked 🔴 up, 🟢 down or ⚪ flat (the Taiwan
-  colours), with its freshness (美股休市, 非最新, 美股尚未更新), the close date and the
-  source's name.
+  page's line (``overnight_us``, #681), each up, down or flat in the Taiwan colours, with
+  its freshness (美股休市, 非最新, 美股尚未更新), the close date and the source's name.
+
+The picture (``worker.notify_card``): an HTML page in the dark terminal layout of
+docs/DESIGN_SYSTEM.md, a table per section and the US block (red up, green down), drawn to
+a PNG by the image's Chromium in a temporary directory that is removed afterwards, killed
+past its time limit. Its caption is one line, 「今日名單 11/13（五）・突破 8、回踩 9」.
+
+The text: ``parse_mode=HTML`` for the bold title, section heads and row names, marked 🚀
+突破 and ↩️ 回踩, the US indexes 🔴 up, 🟢 down or ⚪ flat. The 4096 characters are counted
+with the tags; rows are cut from the end with 「另 N 檔見今日名單頁」. The caption and the
+picture's page escape the data's text too (``html.escape``: names, reasons, sources).
 
 The token and the chat id come from ``TELEGRAM_BOT_TOKEN`` and ``TELEGRAM_CHAT_ID``, which
 reach the scheduler container through compose's ``env_file`` (docs/ops/SETUP.md). Without
@@ -27,22 +36,29 @@ a log line, an error or the output: the URL that holds it is built here and neve
 and every line is masked first.
 
 The record is the day's log ``<logs>/notify-YYYYMMDD.log`` (the target day; no table): a
-``===== start`` line, one ``--- result status=…`` line (sent, not_configured, failed or
-skipped with a reason) and a ``===== end exit=N`` line. A run that finds ``status=sent`` in
-the day's log skips (``already_sent``), so a restarted scheduler never sends twice; the lock
-``<data>/locks/notify.lock`` keeps two runs apart and is no other job's. A scheduled run
-(``--trigger scheduler``) sends only between 08:45 and 13:30 Taipei and records
-``skipped reason=too_late`` otherwise, whatever APScheduler does with a missed trigger. A
-network failure, a timeout, a 5xx or a 429 is tried once more (``_attempt``); another 4xx is
-not (a 400 ``can't parse entities`` is ``parse_error``). A failure is ``failed`` with every attempt's reason and exit 1, which the watchdog
-reports (``notify_failed``; ``notify_missing`` when the day has no end line;
-``notify_missed`` when a trading day has only ``too_late``).
+``===== start`` line, the text, the caption and the picture's size, one ``--- result
+status=…`` line and a ``===== end exit=N`` line. The result is ``sent mode=photo`` (with
+Telegram's largest kept size, ``photo=<w>x<h>``), ``sent mode=text reason=<why>`` (the
+picture's ``render_failed:<reason>``, or ``photo_failed:<each attempt's reason>`` for a
+sendPhoto refused with a 4xx or failing after its retry), ``not_configured``, ``failed``
+(the text failed too: its reasons, then ``photo=<why>``) or ``skipped`` with a reason. A
+run that finds ``status=sent`` of either mode in the day's log skips (``already_sent``), so
+a restarted scheduler never sends twice; the lock ``<data>/locks/notify.lock`` keeps two
+runs apart and is no other job's. A scheduled run (``--trigger scheduler``) sends only
+between 08:45 and 13:30 Taipei and records ``skipped reason=too_late`` otherwise, whatever
+APScheduler does with a missed trigger. A network failure, a timeout, a 5xx or a 429 is
+tried once more (``_post``), for the photo and the text alike; another 4xx is not (a 400
+``can't parse entities`` is ``parse_error``). A failure is ``failed`` with exit 1, which the
+watchdog reports (``notify_failed``; ``notify_missing`` when the day has no end line;
+``notify_missed`` when a trading day has only ``too_late``). ``--dry-run`` prints the
+caption and the text and sends nothing; ``--image-out <path>`` draws the picture there too.
 
 Not through ``worker.job`` (#728 decision 6881879639): the run only reads the database and
-sends one request, so it needs neither the memory threshold nor the git check, and it runs
+sends one message, so it needs neither the memory threshold nor the git check, and it runs
 in maintenance mode too.
 
-Only the standard library at the top: serve imports the log reading here.
+Only the standard library at the top: serve imports the log reading here
+(``worker.notify_card`` is imported when the card is drawn).
 """
 
 from __future__ import annotations
@@ -57,9 +73,11 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import uuid
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 from . import job
 
@@ -73,11 +91,15 @@ LOG_PREFIX = "notify"
 SEND_TIME = (8, 45)
 CATCH_UP_END = (13, 30)
 TIMEOUT_SECONDS = 20.0
+# The PNG is a few hundred KB (#754 AC-1): more room for the upload.
+PHOTO_TIMEOUT_SECONDS = 30.0
 RETRY_DELAY_SECONDS = 30.0
 ATTEMPTS = 2
 # A 429 asking to wait longer is not waited for (the run records failed).
 RETRY_AFTER_MAX_SECONDS = 60.0
-# serve's backstop adds its own 5 minutes; two attempts and the pause take about 70 seconds.
+# serve's backstop adds its own 5 minutes. The worst run (#754): drawing 30 s
+# (RENDER_TIMEOUT_SECONDS), two photo attempts of 30 s with a pause of up to 60 s (a 429's
+# retry_after), then two text attempts of 20 s with the same pause: 250 s, inside 5 minutes.
 TIME_LIMIT_MINUTES = 5.0
 # Telegram's limit for one message's text.
 MAX_CHARS = 4096
@@ -106,7 +128,8 @@ SECTIONS = (("breakout", "🚀 ", "突破"), ("pullback", "↩️ ", "回踩"))
 OTHER_SECTION = (None, "", "其他")
 INDENT = "　"
 MINUS = "−"
-US_UP, US_DOWN, US_FLAT = "🔴", "🟢", "⚪"
+US_MARKS = {"up": "🔴", "down": "🟢", "flat": "⚪"}
+INCOMPLETE = "價位不完整"
 PARSE_MODE = "HTML"
 # Telegram's 400 for a text its HTML parser refuses.
 PARSE_ERROR_TEXT = "can't parse entities"
@@ -183,84 +206,162 @@ def _is_price(value: Any) -> bool:
     )
 
 
-def level_text(levels: dict[str, Any]) -> str:
-    """The rule's entry, stop and target on one line (the today page's rules, frontend
-    entryPlan.ts): 「進場 X｜停損 Y｜目標 Z」, a pullback's entry 「X～Y」."""
+def level_parts(levels: dict[str, Any]) -> tuple[str, str, str] | None:
+    """The rule's entry, stop and target (the today page's rules, frontend entryPlan.ts),
+    a pullback's entry 「X～Y」; None when they are incomplete."""
 
     stop, target = levels.get("invalid_price"), levels.get("target_1")
     if _is_price(stop) and _is_price(target):
-        tail = f"｜停損 {price(stop)}｜目標 {price(target)}"
         if levels.get("entry_type") == "breakout":
             entry = levels.get("entry")
             if entry is None:
                 entry = (levels.get("entry_zone") or {}).get("low")
             if _is_price(entry) and stop < entry < target:
-                return f"進場 {price(entry)}{tail}"
+                return price(entry), price(stop), price(target)
         elif levels.get("entry_type") == "pullback":
             zone = levels.get("entry_zone") or {}
             low, high = zone.get("low"), zone.get("high")
             if _is_price(low) and _is_price(high) and low <= high and stop < target:
-                return f"進場 {price(low)}～{price(high)}{tail}"
-    return "價位不完整"
+                return f"{price(low)}～{price(high)}", price(stop), price(target)
+    return None
 
 
-def list_lines(
-    list_date: date, listing: dict[str, Any], daily_status: str | None
-) -> tuple[str, list[tuple[str, list[str]]]]:
-    """The list's head line and its rows in rank order: (entry type, the row's lines)."""
+@dataclass(frozen=True)
+class Row:
+    """One row of the list, as the text and the card show it (raw text: each escapes)."""
 
-    if listing.get("status") == "not_computed":
-        why = f"daily：{esc(daily_status)}" if daily_status else "daily 沒有紀錄"
-        return f"名單：無資料（{day_label(list_date)}的名單沒有產生；{why}）", []
-    count = listing.get("candidate_count") or 0
-    head = f"{day_label(list_date)}收盤後產生・{count} 檔"
-    if not count and listing.get("zero_reason_text"):
-        head += f"（{esc(listing['zero_reason_text'])}）"
+    kind: str | None
+    name: str
+    entry: str | None = None
+    stop: str | None = None
+    target: str | None = None
+
+    @property
+    def levels(self) -> str:
+        if self.entry is None:
+            return INCOMPLETE
+        return f"進場 {self.entry}｜停損 {self.stop}｜目標 {self.target}"
+
+
+@dataclass(frozen=True)
+class UsRow:
+    """One US index: its close, change and tone, or no close and the reason in NOTE."""
+
+    label: str
+    close: str | None
+    change: str = ""
+    tone: str | None = None  # up, down, flat; None when the change is unknown
+    note: str = (
+        ""  # 「（09/03 收盤） 非最新」, or 「無資料（抓取失敗）」 without a close
+    )
+
+
+@dataclass(frozen=True)
+class UsView:
+    missing: str | None  # 「無資料（美股尚未更新）」 when no index has a close
+    status: str = ""  # 美股休市, 美股尚未更新
+    closed: str = ""  # 「（09/04 收盤）」 when the indexes share one close date
+    rows: tuple[UsRow, ...] = ()
+    source: str | None = None
+
+
+@dataclass(frozen=True)
+class Content:
+    """The day's message, read once (#754): the text and the card are drawn from it."""
+
+    today: date
+    list_date: date
+    computed: bool
+    count: int
+    zero_reason: str | None
+    daily_status: str | None
+    rows: tuple[Row, ...]
+    total: (
+        int  # what the list has (past MAX_ITEMS too); 「另 N 檔」 is total less shown
+    )
+    us: UsView
+
+    @property
+    def head(self) -> str:
+        """The list's head line (raw)."""
+
+        if not self.computed:
+            return f"名單：無資料（{self.missing_reason}）"
+        head = f"{day_label(self.list_date)}收盤後產生・{self.count} 檔"
+        return f"{head}（{self.zero_reason}）" if self.zero_reason else head
+
+    @property
+    def missing_reason(self) -> str:
+        why = f"daily：{self.daily_status}" if self.daily_status else "daily 沒有紀錄"
+        return f"{day_label(self.list_date)}的名單沒有產生；{why}"
+
+    @property
+    def sub(self) -> str:
+        """The card's line under its title."""
+
+        if not self.computed:
+            return "名單無資料"
+        return f"{day_label(self.list_date)}收盤後產生"
+
+    @property
+    def note(self) -> str | None:
+        """The card's reason line: no list, or an empty one."""
+
+        return self.missing_reason if not self.computed else self.zero_reason
+
+
+def list_rows(listing: dict[str, Any]) -> tuple[Row, ...]:
+    """The list's rows in rank order (at most MAX_ITEMS)."""
+
     rows = []
     for item in (listing.get("items") or [])[:MAX_ITEMS]:
         instrument = item.get("instrument") or {}
         levels = item.get("levels") or {}
         name = f"{instrument.get('symbol', '')} {instrument.get('name', '')}".strip()
-        rows.append(
-            (
-                levels.get("entry_type"),
-                [bold(esc(name)), f"{INDENT}{level_text(levels)}"],
-            )
-        )
-    return head, rows
+        rows.append(Row(levels.get("entry_type"), name, *(level_parts(levels) or ())))
+    return tuple(rows)
 
 
-def section_lines(rows: list[tuple[str, list[str]]]) -> list[str]:
-    """The rows by section (突破, 回踩, then 其他), each in rank order; an empty one is left
-    out."""
+def sections(rows: Iterable[Row]) -> list[tuple[str, str, list[Row]]]:
+    """The rows by section (突破, 回踩, then 其他), each in rank order, as (mark, head,
+    rows); an empty one is left out."""
 
-    lines = []
+    rows = list(rows)
     known = [kind for kind, _, _ in SECTIONS]
+    out = []
     for kind, mark, title in (*SECTIONS, OTHER_SECTION):
         members = [
-            row
-            for entry_type, row in rows
-            if (entry_type == kind if kind else entry_type not in known)
+            row for row in rows if (row.kind == kind if kind else row.kind not in known)
         ]
         if members:
-            lines += ["", f"{mark}{bold(f'{title}（{len(members)} 檔）')}"]
-            lines += [line for row in members for line in row]
+            out.append((mark, title, members))
+    return out
+
+
+def section_lines(rows: Iterable[Row]) -> list[str]:
+    """The text's sections: a bold head with the count, then each row's two lines."""
+
+    lines = []
+    for mark, title, members in sections(rows):
+        lines += ["", f"{mark}{bold(f'{title}（{len(members)} 檔）')}"]
+        for row in members:
+            lines += [bold(esc(row.name)), f"{INDENT}{row.levels}"]
     return lines
 
 
-def _change(index: dict[str, Any]) -> tuple[str, str]:
-    """The change and its mark: 🔴 up, 🟢 down, ⚪ flat (the Taiwan colours); none when it
-    is unknown."""
+def _change(index: dict[str, Any]) -> tuple[str, str | None]:
+    """The change and its tone: up, down, flat (the Taiwan colours); none when it is
+    unknown."""
 
     value = index.get("change_pct")
     if not isinstance(value, (int, float)) or value != value:
-        return "—", ""
+        return "—", None
     pct = round(value * 100, 2)
     if pct > 0:
-        return f"+{pct:.2f}%", US_UP
+        return f"+{pct:.2f}%", "up"
     if pct < 0:
-        return f"{MINUS}{-pct:.2f}%", US_DOWN
-    return "0.00%", US_FLAT
+        return f"{MINUS}{-pct:.2f}%", "down"
+    return "0.00%", "flat"
 
 
 def _close_label(day: date | str) -> str:
@@ -278,10 +379,10 @@ def _source(indexes: list[dict[str, Any]]) -> str | None:
         name = label.split()[0] if label else ""
         if name and name not in names:
             names.append(name)
-    return "；".join(esc(name) for name in names) or None
+    return "；".join(names) or None
 
 
-def us_lines(indexes: list[dict[str, Any]]) -> list[str]:
+def us_view(indexes: list[dict[str, Any]]) -> UsView:
     """The 隔夜美股 block, by the today page's rules (frontend overnightUsView)."""
 
     available = [
@@ -290,36 +391,53 @@ def us_lines(indexes: list[dict[str, Any]]) -> list[str]:
         if index.get("status") == "available" and _is_price(index.get("close"))
     ]
     fresh = [index for index in available if index.get("freshness") in US_FRESH]
-    title = f"🌎 {bold('隔夜美股')}"
     if not available:
-        return [f"{title}：無資料（美股尚未更新）"]
+        return UsView(missing="無資料（美股尚未更新）")
     days = sorted({index["trading_date"] for index in available})
-    head = title
+    status = ""
     if not fresh:
-        head += " 美股尚未更新"
+        status = "美股尚未更新"
     elif all(index.get("freshness") == "us_market_closed" for index in fresh):
-        head += " 美股休市"
-    if len(days) == 1:
-        head += _close_label(days[0])
-    lines = [head]
+        status = "美股休市"
+    rows = []
     for index in indexes:
-        label = esc(US_LABELS.get(index.get("symbol"), index.get("name") or ""))
+        label = US_LABELS.get(index.get("symbol"), index.get("name") or "")
         if index not in available:
             reason = US_REASONS.get(index.get("reason"), "未取得")
-            lines.append(f"{label}{INDENT}無資料（{reason}）")
+            rows.append(UsRow(label, None, note=f"無資料（{reason}）"))
             continue
-        change, mark = _change(index)
-        line = f"{label}{INDENT}{price(index['close'])}{INDENT}{change}"
-        if mark:
-            line = f"{mark} {line}"
-        if len(days) > 1:
-            line += _close_label(index["trading_date"])
+        change, tone = _change(index)
+        note = _close_label(index["trading_date"]) if len(days) > 1 else ""
         if fresh and index.get("freshness") == "stale":
-            line += " 非最新"
-        lines.append(line)
-    source = _source(available)
-    if source:
-        lines.append(f"來源 {source}")
+            note += " 非最新"
+        rows.append(UsRow(label, price(index["close"]), change, tone, note))
+    return UsView(
+        missing=None,
+        status=status,
+        closed=_close_label(days[0]) if len(days) == 1 else "",
+        rows=tuple(rows),
+        source=_source(available),
+    )
+
+
+def us_lines(view: UsView) -> list[str]:
+    """The text's 隔夜美股 block."""
+
+    title = f"🌎 {bold('隔夜美股')}"
+    if view.missing:
+        return [f"{title}：{view.missing}"]
+    head = title + (f" {view.status}" if view.status else "") + view.closed
+    lines = [head]
+    for row in view.rows:
+        label = esc(row.label)
+        if row.close is None:
+            lines.append(f"{label}{INDENT}{row.note}")
+            continue
+        line = f"{label}{INDENT}{row.close}{INDENT}{row.change}{esc(row.note)}"
+        mark = US_MARKS.get(row.tone or "")
+        lines.append(f"{mark} {line}" if mark else line)
+    if view.source:
+        lines.append(f"來源 {esc(view.source)}")
     return lines
 
 
@@ -330,6 +448,63 @@ def length(text: str) -> int:
     return len(text.encode("utf-16-le")) // 2
 
 
+def content(
+    today: date,
+    list_date: date,
+    listing: dict[str, Any],
+    indexes: list[dict[str, Any]],
+    daily_status: str | None = None,
+) -> Content:
+    """The day's message from the API's shapes (``candidate_list``, ``foreign_indices``)."""
+
+    computed = listing.get("status") != "not_computed"
+    rows = list_rows(listing) if computed else ()
+    count = (listing.get("candidate_count") or 0) if computed else 0
+    zero = listing.get("zero_reason_text") if computed and not count else None
+    return Content(
+        today=today,
+        list_date=list_date,
+        computed=computed,
+        count=count,
+        zero_reason=zero or None,
+        daily_status=None if computed else daily_status,
+        rows=rows,
+        total=max(len(rows), count),
+        us=us_view(indexes),
+    )
+
+
+def text(card: Content) -> str:
+    """The text message (Telegram HTML), at most MAX_CHARS with its tags: rows are cut
+    from the end of the list (the lowest ranks) with 「另 N 檔」."""
+
+    top = [f"📋 {bold(f'今日名單｜{day_label(card.today)}')}", esc(card.head)]
+    bottom = ["", *us_lines(card.us)]
+    shown = len(card.rows)
+    while True:
+        lines = [*top, *section_lines(card.rows[:shown])]
+        if shown < card.total:
+            lines.append(f"另 {card.total - shown} 檔見今日名單頁")
+        message_text = "\n".join([*lines, *bottom])
+        if length(message_text) <= MAX_CHARS or shown == 0:
+            return message_text[:MAX_CHARS]
+        shown -= 1
+
+
+def caption(card: Content) -> str:
+    """The photo's one line (Telegram HTML): 「今日名單 11/13（五）・突破 8、回踩 9」."""
+
+    title = bold(f"今日名單 {day_label(card.today)}")
+    if not card.computed:
+        return f"{title}・名單無資料"
+    if not card.rows:
+        return f"{title}・{card.count} 檔"
+    counts = "、".join(
+        f"{esc(head)} {len(members)}" for _mark, head, members in sections(card.rows)
+    )
+    return f"{title}・{counts}"
+
+
 def compose(
     today: date,
     list_date: date,
@@ -337,23 +512,9 @@ def compose(
     indexes: list[dict[str, Any]],
     daily_status: str | None = None,
 ) -> str:
-    """The message (Telegram HTML), at most MAX_CHARS with its tags: rows are cut from the
-    end of the list (the lowest ranks) with 「另 N 檔」."""
+    """The text message of the API's shapes (``content`` then ``text``)."""
 
-    head, rows = list_lines(list_date, listing, daily_status)
-    top = [f"📋 {bold(f'今日名單｜{day_label(today)}')}", head]
-    bottom = ["", *us_lines(indexes)]
-    # Past MAX_ITEMS or cut for the length: N is what the list has and the message omits.
-    total = max(len(rows), listing.get("candidate_count") or 0)
-    shown = len(rows)
-    while True:
-        lines = [*top, *section_lines(rows[:shown])]
-        if shown < total:
-            lines.append(f"另 {total - shown} 檔見今日名單頁")
-        text = "\n".join([*lines, *bottom])
-        if length(text) <= MAX_CHARS or shown == 0:
-            return text[:MAX_CHARS]
-        shown -= 1
+    return text(content(today, list_date, listing, indexes, daily_status))
 
 
 # --- the database reads --------------------------------------------------------------
@@ -404,8 +565,9 @@ def daily_status(db, day: date) -> str | None:
     )
 
 
-def message(db, today: date) -> str:
-    """Today's message from the database (the list of D - 1 and the overnight US indexes)."""
+def read(db, today: date) -> Content:
+    """Today's message from the database (the list of D - 1 and the overnight US
+    indexes), read once for the card and the text."""
 
     from app.candidate_view import candidate_list
     from app.market_overview import foreign_indices
@@ -415,9 +577,15 @@ def message(db, today: date) -> str:
     status = (
         daily_status(db, list_date) if listing["status"] == "not_computed" else None
     )
-    return compose(
+    return content(
         today, list_date, listing, foreign_indices(db, today.isoformat()), status
     )
+
+
+def message(db, today: date) -> str:
+    """Today's text message from the database."""
+
+    return text(read(db, today))
 
 
 # --- sending -------------------------------------------------------------------------
@@ -437,7 +605,81 @@ def private_chat_id(value: str) -> int | None:
 
 
 def _attempt(token: str, chat_id: int, text: str) -> tuple[bool, str, float | None]:
-    """One sendMessage: (ok, message id or reason, seconds before a retry or None).
+    """One sendMessage (``_post``)."""
+
+    body = json.dumps(
+        {
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": PARSE_MODE,
+            "disable_web_page_preview": True,
+        }
+    ).encode("utf-8")
+    return _post(token, "sendMessage", body, "application/json", TIMEOUT_SECONDS)
+
+
+def multipart(
+    fields: dict[str, str], files: dict[str, tuple[str, str, bytes]]
+) -> tuple[bytes, str]:
+    """A multipart/form-data body and its Content-Type: FIELDS as text, FILES as
+    (file name, content type, bytes)."""
+
+    boundary = f"stock-lab-{uuid.uuid4().hex}"
+    parts = []
+    for name, value in fields.items():
+        parts.append(
+            f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n'.encode()
+            + value.encode("utf-8")
+            + b"\r\n"
+        )
+    for name, (filename, kind, data) in files.items():
+        parts.append(
+            (
+                f'--{boundary}\r\nContent-Disposition: form-data; name="{name}";'
+                f' filename="{filename}"\r\nContent-Type: {kind}\r\n\r\n'
+            ).encode()
+            + data
+            + b"\r\n"
+        )
+    parts.append(f"--{boundary}--\r\n".encode())
+    return b"".join(parts), f"multipart/form-data; boundary={boundary}"
+
+
+def _attempt_photo(
+    token: str, chat_id: int, photo: bytes, caption_text: str
+) -> tuple[bool, str, float | None]:
+    """One sendPhoto (``_post``): the PNG as ``photo`` with its one-line caption."""
+
+    body, kind = multipart(
+        {"chat_id": str(chat_id), "caption": caption_text, "parse_mode": PARSE_MODE},
+        {"photo": ("card.png", "image/png", photo)},
+    )
+    return _post(token, "sendPhoto", body, kind, PHOTO_TIMEOUT_SECONDS)
+
+
+def _photo_size(result: dict[str, Any]) -> str:
+    """「1280x2370」: the largest size Telegram keeps of a sent photo (#754)."""
+
+    photo = result.get("photo")
+    # Any other shape: the photo was sent all the same, only its size is unknown.
+    sizes = [
+        size
+        for size in (photo if isinstance(photo, list) else [])
+        if isinstance(size, dict)
+        and isinstance(size.get("width"), int)
+        and isinstance(size.get("height"), int)
+    ]
+    if not sizes:
+        return ""
+    largest = max(sizes, key=lambda size: size["width"] * size["height"])
+    return f"{largest['width']}x{largest['height']}"
+
+
+def _post(
+    token: str, method: str, data: bytes, kind: str, timeout: float
+) -> tuple[bool, str, float | None]:
+    """One Bot API request: (ok, message id or reason, seconds before a retry or None).
+    A sent photo's id is followed by ``photo=<width>x<height>``, the largest size kept.
 
     Retried (#728 review 6882303076): a connection or read failure, a timeout, a 5xx, and
     a 429 within RETRY_AFTER_MAX_SECONDS of its ``retry_after``. A timeout or a cut
@@ -449,20 +691,13 @@ def _attempt(token: str, chat_id: int, text: str) -> tuple[bool, str, float | No
     """
 
     request = urllib.request.Request(
-        f"{API_BASE}/bot{token}/sendMessage",
-        data=json.dumps(
-            {
-                "chat_id": chat_id,
-                "text": text,
-                "parse_mode": PARSE_MODE,
-                "disable_web_page_preview": True,
-            }
-        ).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        f"{API_BASE}/bot{token}/{method}",
+        data=data,
+        headers={"Content-Type": kind},
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             body = json.loads(response.read().decode("utf-8") or "{}")
     except urllib.error.HTTPError as exc:
         answer: dict[str, Any] = {}
@@ -499,8 +734,11 @@ def _attempt(token: str, chat_id: int, text: str) -> tuple[bool, str, float | No
         description = body.get("description") if isinstance(body, dict) else None
         return False, f"not_ok {description or ''}".strip(), None
     result = body.get("result") or {}
-    message_id = result.get("message_id", "") if isinstance(result, dict) else ""
-    return True, str(message_id), None
+    if not isinstance(result, dict):
+        return True, "", None
+    detail = str(result.get("message_id", ""))
+    size = _photo_size(result)
+    return True, f"{detail} photo={size}" if size else detail, None
 
 
 def send(
@@ -512,9 +750,32 @@ def send(
 ) -> dict[str, Any]:
     """Send TEXT; a retryable failure (``_attempt``) is tried once more."""
 
+    return _retried(lambda: _attempt(token, chat_id, text), token, sleep)
+
+
+def send_photo(
+    token: str,
+    chat_id: int,
+    photo: bytes,
+    caption_text: str,
+    *,
+    sleep: Callable[[float], None] | None = None,
+) -> dict[str, Any]:
+    """Send the PNG with its caption; retried as ``send`` is."""
+
+    return _retried(
+        lambda: _attempt_photo(token, chat_id, photo, caption_text), token, sleep
+    )
+
+
+def _retried(
+    call: Callable[[], tuple[bool, str, float | None]],
+    token: str,
+    sleep: Callable[[float], None] | None,
+) -> dict[str, Any]:
     reasons = []
     for attempt in range(1, ATTEMPTS + 1):
-        ok, detail, wait = _attempt(token, chat_id, text)
+        ok, detail, wait = call()
         if ok:
             return {"status": SENT, "attempts": attempt, "message_id": detail}
         reasons.append(mask(detail, token))
@@ -550,9 +811,15 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument("--log-dir", help="日誌目錄；預設 <資料目錄>/logs")
+    parser.add_argument(
+        "--image-out",
+        help="只配 --dry-run：把圖片卡片畫成 PNG 寫到這個路徑（不送）",
+    )
 
 
 def argument_problem(args: argparse.Namespace) -> str | None:
+    if getattr(args, "image_out", None) and not args.dry_run:
+        return "--image-out goes with --dry-run only"
     if args.date:
         try:
             date.fromisoformat(args.date)
@@ -593,17 +860,57 @@ def _session():
     return SessionLocal()
 
 
+def _codes(outcome: dict[str, Any]) -> str:
+    """Every attempt's reason, in order (#728 review 6882303076): http_401,network:… ."""
+
+    return ",".join(item.split(" ", 1)[0] for item in outcome["reasons"]) or "unknown"
+
+
+def draw(card: Content) -> tuple[Any | None, str | None]:
+    """The card drawn (``notify_card.Rendered`` with its PNG) and None, or None and the
+    reason. Never raises (#754 review 6888784128): an import or any other error here is
+    ``error:<type>``, and the text goes instead."""
+
+    try:
+        from .notify_card import render
+
+        drawn = render(card)
+    except Exception as exc:
+        return None, f"error:{type(exc).__name__}"
+    if drawn.png is None:
+        return None, drawn.reason
+    return drawn, None
+
+
 def dry_run(args: argparse.Namespace, out=None) -> int:
+    """Print the caption and the text; with --image-out, draw the card there too. Exit 1
+    when the card was asked for and could not be drawn."""
+
     out = out or sys.stdout
     today = _today(args)
     with _session() as db:
         trading = is_trading_day(db, today)
-        text = message(db, today)
+        card = read(db, today)
     print(f"configured={'yes' if configured() else 'no'}", file=out)
     if not trading:
         print(f"non_trading_day={today.isoformat()}（排程這天不送）", file=out)
-    print(text, file=out, flush=True)
-    return 0
+    code = 0
+    if getattr(args, "image_out", None):
+        drawn, why = draw(card)
+        if drawn is None:
+            print(f"image=failed reason={why}", file=out)
+            code = 1
+        else:
+            target = Path(args.image_out)
+            target.write_bytes(drawn.png)
+            print(
+                f"image={target} width={drawn.width} height={drawn.height}"
+                f" bytes={len(drawn.png)} seconds={drawn.seconds}",
+                file=out,
+            )
+    print(f"caption={caption(card)}", file=out)
+    print(text(card), file=out, flush=True)
+    return code
 
 
 class _Run:
@@ -678,21 +985,40 @@ class _Run:
             chat_id = private_chat_id(os.environ[CHAT_ENV])
             if chat_id is None:
                 return 1, f"status={FAILED} reason=chat_not_private"
-            text = message(db, self.today)
-        self.log(f"--- message chars={len(text)}\n{text}\n--- message end")
-        outcome = send(self.token, chat_id, text)
+            card = read(db, self.today)
+        body, line = text(card), caption(card)
+        self.log(
+            f"--- message chars={len(body)}\n{body}\n--- message end\n"
+            f"--- caption {line}"
+        )
+        # The card first (#754); the text when it cannot be drawn or sent.
+        drawn, why = draw(card)
+        if drawn is None:
+            fallback = f"render_failed:{why}"
+        else:
+            self.log(
+                f"--- card width={drawn.width} height={drawn.height}"
+                f" bytes={len(drawn.png)} seconds={drawn.seconds}"
+            )
+            photo = send_photo(self.token, chat_id, drawn.png, line)
+            if photo["status"] == SENT:
+                return 0, (
+                    f"status={SENT} mode=photo attempts={photo['attempts']}"
+                    f" message_id={photo['message_id']}"
+                )
+            fallback = f"photo_failed:{_codes(photo)}"
+            self.log(f"--- photo failed {' | '.join(photo['reasons'])}")
+        outcome = send(self.token, chat_id, body)
         if outcome["status"] == SENT:
             return 0, (
-                f"status={SENT} attempts={outcome['attempts']}"
-                f" message_id={outcome['message_id']}"
+                f"status={SENT} mode=text reason={fallback}"
+                f" attempts={outcome['attempts']} message_id={outcome['message_id']}"
             )
-        # Every attempt's reason, in order (#728 review 6882303076): http_401,network:… .
-        reason = ",".join(item.split(" ", 1)[0] for item in outcome["reasons"])
         detail = " | ".join(outcome["reasons"])
         return (
             1,
-            f"status={FAILED} reason={reason or 'unknown'}"
-            f" attempts={outcome['attempts']} detail={detail}",
+            f"status={FAILED} reason={_codes(outcome)}"
+            f" attempts={outcome['attempts']} photo={fallback} detail={detail}",
         )
 
     def _remove_old_logs(self) -> None:
