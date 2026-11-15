@@ -13,6 +13,14 @@ the text have the same rows, sections, levels and US lines, word for word:
   rank order: the code and name, the entry, the stop and the target (a pullback's entry
   「X～Y」) by the today page's rules, or 「價位不完整」. No other list stands in for a
   missing one: it reads 「無資料（…）」 with the day's daily status.
+- 開盤前檢查 (#759): the 08:20 check of that very list (#755), as the same
+  ``candidate_list`` gives it (``preopen_check`` and each item's ``preopen_news``, judged by
+  ``app.preopen_news.list_view``: only a check of the list's own ``candidate_run_id`` is
+  ``checked``). Checked: each row with overnight news is marked as the today page's row is
+  (frontend ``preopenRowMark``), 「隔夜新聞 2（可能負向 1）」, the brackets only with a
+  可能負向 one, nothing without news. Not checked (the check not done by 08:45, failed, or
+  the list recomputed after it): one line 「開盤前檢查：尚未完成」, never an older day's
+  result. notify neither waits for the check nor takes its lock.
 - 隔夜美股: ``app.market_overview.foreign_indices`` for today, the four indexes of the today
   page's line (``overnight_us``, #681), each up, down or flat in the Taiwan colours, with
   its freshness (美股休市, 非最新, 美股尚未更新), the close date and the source's name.
@@ -130,6 +138,12 @@ INDENT = "　"
 MINUS = "−"
 US_MARKS = {"up": "🔴", "down": "🟢", "flat": "⚪"}
 INCOMPLETE = "價位不完整"
+# The today page's words (UI_COPY_SPEC §10, frontend candidates.ts PREOPEN_NEWS_TITLE and
+# directionView('negative')); the line when the list has no check of its own (#759).
+PREOPEN_NEWS = "隔夜新聞"
+PREOPEN_NEGATIVE = "可能負向"
+PREOPEN_PENDING = "開盤前檢查：尚未完成"
+PREOPEN_CHECKED = "checked"
 PARSE_MODE = "HTML"
 # Telegram's 400 for a text its HTML parser refuses.
 PARSE_ERROR_TEXT = "can't parse entities"
@@ -235,12 +249,35 @@ class Row:
     entry: str | None = None
     stop: str | None = None
     target: str | None = None
+    # The pre-open check's overnight news (#759): 0 when none or not checked.
+    news: int = 0
+    negative: int = 0
 
     @property
     def levels(self) -> str:
         if self.entry is None:
             return INCOMPLETE
         return f"進場 {self.entry}｜停損 {self.stop}｜目標 {self.target}"
+
+    @property
+    def preopen(self) -> tuple[str, str | None] | None:
+        """The row's mark as the today page has it (frontend preopenRowMark): 「隔夜新聞 2」
+        and 「可能負向 1」 (None without a negative one); None without overnight news."""
+
+        if self.news <= 0:
+            return None
+        negative = f"{PREOPEN_NEGATIVE} {self.negative}" if self.negative > 0 else None
+        return f"{PREOPEN_NEWS} {self.news}", negative
+
+    @property
+    def preopen_text(self) -> str | None:
+        """「隔夜新聞 2（可能負向 1）」, 「隔夜新聞 2」; None without overnight news."""
+
+        mark = self.preopen
+        if mark is None:
+            return None
+        news, negative = mark
+        return f"{news}（{negative}）" if negative else news
 
 
 @dataclass(frozen=True)
@@ -280,6 +317,12 @@ class Content:
         int  # what the list has (past MAX_ITEMS too); 「另 N 檔」 is total less shown
     )
     us: UsView
+    # The list has rows and no check of its own (#759): 「開盤前檢查：尚未完成」.
+    preopen_pending: bool = False
+
+    @property
+    def preopen_line(self) -> str | None:
+        return PREOPEN_PENDING if self.preopen_pending else None
 
     @property
     def head(self) -> str:
@@ -310,15 +353,37 @@ class Content:
         return self.missing_reason if not self.computed else self.zero_reason
 
 
-def list_rows(listing: dict[str, Any]) -> tuple[Row, ...]:
-    """The list's rows in rank order (at most MAX_ITEMS)."""
+def preopen_checked(listing: dict[str, Any]) -> bool:
+    """Whether the list's own run was checked before the open (``preopen_check``, judged
+    by ``app.preopen_news.list_view`` as /api/candidates is)."""
 
+    return (listing.get("preopen_check") or {}).get("status") == PREOPEN_CHECKED
+
+
+def _count(value: Any) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def list_rows(listing: dict[str, Any]) -> tuple[Row, ...]:
+    """The list's rows in rank order (at most MAX_ITEMS), with the pre-open check's
+    counts when the list was checked."""
+
+    checked = preopen_checked(listing)
     rows = []
     for item in (listing.get("items") or [])[:MAX_ITEMS]:
         instrument = item.get("instrument") or {}
         levels = item.get("levels") or {}
         name = f"{instrument.get('symbol', '')} {instrument.get('name', '')}".strip()
-        rows.append(Row(levels.get("entry_type"), name, *(level_parts(levels) or ())))
+        news = (item.get("preopen_news") or {}) if checked else {}
+        rows.append(
+            Row(
+                levels.get("entry_type"),
+                name,
+                *(level_parts(levels) or ()),
+                news=_count(news.get("count")),
+                negative=_count(news.get("negative")),
+            )
+        )
     return tuple(rows)
 
 
@@ -345,7 +410,9 @@ def section_lines(rows: Iterable[Row]) -> list[str]:
     for mark, title, members in sections(rows):
         lines += ["", f"{mark}{bold(f'{title}（{len(members)} 檔）')}"]
         for row in members:
-            lines += [bold(esc(row.name)), f"{INDENT}{row.levels}"]
+            mark = row.preopen_text
+            name = bold(esc(row.name)) + (f"{INDENT}{mark}" if mark else "")
+            lines += [name, f"{INDENT}{row.levels}"]
     return lines
 
 
@@ -471,6 +538,7 @@ def content(
         rows=rows,
         total=max(len(rows), count),
         us=us_view(indexes),
+        preopen_pending=bool(rows) and not preopen_checked(listing),
     )
 
 
@@ -479,6 +547,8 @@ def text(card: Content) -> str:
     from the end of the list (the lowest ranks) with 「另 N 檔」."""
 
     top = [f"📋 {bold(f'今日名單｜{day_label(card.today)}')}", esc(card.head)]
+    if card.preopen_line:
+        top.append(card.preopen_line)
     bottom = ["", *us_lines(card.us)]
     shown = len(card.rows)
     while True:

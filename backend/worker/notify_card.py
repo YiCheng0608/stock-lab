@@ -14,6 +14,10 @@ The page:
 - ``html.escape``s every text from the data (names, reasons, labels, sources).
 - shows the rows ``notify.Content`` gives, in the text's sections and order, at most
   ``MAX_ROWS`` of them, the rest counted in 「另 N 檔見今日名單頁」 as the text does.
+- the pre-open check as the text has it (#759): a row with overnight news has a second
+  line 「隔夜新聞 2（可能負向 1）」 under its name and levels (the today page's place, its
+  可能負向 count in the falling colour ``--color-down``); a list without a check of its own
+  has the line 「開盤前檢查：尚未完成」 under the head's date line.
 
 The drawing (``render``) runs in a new temporary directory under the system's (not beside
 any output, #750): the page, the browser profile and the PNG live there, and the directory
@@ -79,6 +83,10 @@ GAP = 16
 SECTION_H = 36
 TABLE_HEAD_H = 26
 ROW_H = 40
+# A row with the pre-open mark: the name and levels on a line of ROW_H - 6, the mark on
+# one of PREOPEN_MARK_H, inside ROW_H + PREOPEN_EXTRA_H with the border (#759).
+PREOPEN_MARK_H = 18
+PREOPEN_EXTRA_H = 14
 MORE_H = 32
 US_TITLE_H = 36
 US_ROW_H = 36
@@ -126,6 +134,12 @@ section h2 .n {{ color: var(--color-text-muted); font-weight: 600; margin-left: 
 .row .long {{ font-size: 14px; letter-spacing: -0.3px; }}
 .row .sym {{ font-family: var(--font-mono); }}
 .row .incomplete {{ grid-column: 2 / 5; text-align: right; font-size: 15px; }}
+.row.marked {{ height: {ROW_H + PREOPEN_EXTRA_H}px;
+  grid-template-rows: {ROW_H - 6}px {PREOPEN_MARK_H}px; }}
+.row .preopen {{ grid-column: 1 / 5; grid-row: 2; font-size: 13px;
+  line-height: {PREOPEN_MARK_H}px; align-self: start; }}
+header .preopen-pending {{ height: {HEAD_LINE_H}px; line-height: {HEAD_LINE_H}px;
+  font-size: 15px; color: var(--color-warning); }}
 .more {{ margin-top: {GAP}px; height: {MORE_H}px; line-height: {MORE_H}px; font-size: 15px;
   padding: 0 2px; }}
 .us h2 {{ height: {US_TITLE_H}px; line-height: {US_TITLE_H}px; }}
@@ -172,10 +186,13 @@ def card_height(content: Content) -> int:
     from .notify import sections
 
     height = 2 * PAD + HEAD_TITLE_H + HEAD_LINE_H
+    if content.preopen_line:
+        height += HEAD_LINE_H
     if content.note:
         height += HEAD_NOTE_H
     for _mark, _title, members in sections(shown_rows(content)):
         height += GAP + 2 + SECTION_H + TABLE_HEAD_H + len(members) * ROW_H
+        height += sum(PREOPEN_EXTRA_H for row in members if row.preopen)
     if more_count(content):
         height += GAP + MORE_H
     us = content.us
@@ -202,7 +219,13 @@ def _row_html(row: Row) -> str:
         ):
             kind = "num long" if len(value or "") > longest else "num"
             cells.append(f'<span class="{kind}">{esc(value)}</span>')
-    return f'<div class="row grid">{"".join(cells)}</div>'
+    mark = row.preopen
+    if mark is None:
+        return f'<div class="row grid">{"".join(cells)}</div>'
+    news, negative = mark
+    extra = f'（<span class="down">{esc(negative)}</span>）' if negative else ""
+    cells.append(f'<span class="preopen muted line">{esc(news)}{extra}</span>')
+    return f'<div class="row grid marked">{"".join(cells)}</div>'
 
 
 def _us_html(content: Content) -> str:
@@ -249,6 +272,10 @@ def card_html(content: Content) -> str:
     if content.computed:
         head.append(f'<span class="count">{esc(content.count)} 檔</span>')
     head.append(f'</div><div class="sub muted line">{esc(content.sub)}</div>')
+    if content.preopen_line:
+        head.append(
+            f'<div class="preopen-pending line">{esc(content.preopen_line)}</div>'
+        )
     if content.note:
         head.append(f'<div class="note muted">{esc(content.note)}</div>')
     head.append("</header>")

@@ -21,6 +21,7 @@ import pytest
 from test_notify import (
     CARD_ITEMS,
     CARD_US,
+    CHECK,
     LISTING,
     MONDAY,
     US,
@@ -93,35 +94,75 @@ def _card(listing=LISTING, indexes=US, status=None):
 
 
 def _text_rows(card):
-    """The text's list rows as (name, levels), in its order (sections, then rank)."""
+    """The text's list rows as (name, levels, pre-open mark or None), in its order
+    (sections, then rank)."""
 
     lines = notify.text(card).splitlines()
     rows = []
     for at, line in enumerate(lines):
         if line.startswith("<b>") and lines[at + 1].startswith(notify.INDENT):
-            rows.append((line[3:-4], lines[at + 1][1:]))
+            name, _, mark = line[3:].partition("</b>")
+            mark = mark.removeprefix(notify.INDENT) or None
+            rows.append((name, lines[at + 1][1:], mark))
     return rows
 
 
 def _card_rows(page, count):
-    """The card's first COUNT rows as (name, levels), the text's way of writing them."""
+    """The card's first COUNT rows as (name, levels, mark), the text's way of writing
+    them."""
 
     rows = []
     for cells in page.rows[:count]:
+        cells = list(cells)
+        mark = cells.pop() if cells[-1].startswith(notify.PREOPEN_NEWS) else None
         name = cells[0]
         if len(cells) == 4:
             levels = f"進場 {cells[1]}｜停損 {cells[2]}｜目標 {cells[3]}"
         else:
             levels = cells[1]
-        rows.append((notify.esc(name), levels))
+        rows.append((notify.esc(name), levels, mark))
     return rows
+
+
+def _with_news(items, counts):
+    """ITEMS with the pre-open check's counts (news, negative) by position, a checked
+    list's shape (``preopen_news``)."""
+
+    out = []
+    for item, (news, negative) in zip(items, counts):
+        out.append({**item, "preopen_news": {"count": news, "negative": negative}})
+    return out + list(items[len(out) :])
+
+
+# The rows with overnight news (#759): with and without a 可能負向 one, an incomplete row
+# and one of 其他 marked too, rows without news.
+MARKED_ITEMS = _with_news(
+    CARD_ITEMS, [(2, 1), (0, 0), (1, 0), (3, 0), (12, 3), (0, 0), (1, 1)]
+)
 
 
 @pytest.mark.parametrize(
     "listing, indexes",
     [
-        ({"status": "success", "candidate_count": 23, "items": CARD_ITEMS}, CARD_US),
+        (
+            {
+                "status": "success",
+                "preopen_check": CHECK,
+                "candidate_count": 23,
+                "items": CARD_ITEMS,
+            },
+            CARD_US,
+        ),
         (LISTING, US),
+        (
+            {
+                "status": "success",
+                "preopen_check": CHECK,
+                "candidate_count": 23,
+                "items": MARKED_ITEMS,
+            },
+            CARD_US,
+        ),
         # One index behind: its own close date and 非最新 on the row.
         (LISTING, [*US[:3], _us("SOX", 10000.0, 0.01, "2026-09-03", "stale")]),
     ],
@@ -151,7 +192,7 @@ def test_the_card_shows_the_texts_rows_item_by_item(listing, indexes):
             mark = notify.US_MARKS.get(row.tone or "")
             assert (f"{mark} {line}" if mark else line) in lines
     page_text = "".join(page.text)
-    for word in ("另 3 檔見今日名單頁", "來源 FinMind"):
+    for word in ("另 3 檔見今日名單頁", "來源 FinMind", notify.PREOPEN_PENDING):
         assert (word in page_text) == (word in notify.text(card))
     # Each section's head and count as the text has it.
     for _mark, title, members in notify.sections(card.rows):
@@ -177,6 +218,7 @@ def test_the_data_texts_are_escaped_on_the_card():
     evil = "<script>alert(1)</script>&<b>"
     listing = {
         "status": "success",
+        "preopen_check": CHECK,
         "candidate_count": 1,
         "items": [_item(1, "1234", evil, _breakout(61.1, 58.5, 65.27))],
     }
@@ -213,7 +255,14 @@ def test_the_data_texts_are_escaped_on_the_card():
 
 
 def test_the_caption_says_the_sections_or_why_there_are_none():
-    card = _card({"status": "success", "candidate_count": 23, "items": CARD_ITEMS})
+    card = _card(
+        {
+            "status": "success",
+            "preopen_check": CHECK,
+            "candidate_count": 23,
+            "items": CARD_ITEMS,
+        }
+    )
     assert (
         notify.caption(card) == "<b>今日名單 09/07（一）</b>・突破 17、回踩 2、其他 1"
     )
@@ -222,9 +271,21 @@ def test_the_caption_says_the_sections_or_why_there_are_none():
     # No count on a list that was not made (not 「0 檔」).
     assert 'class="count"' not in notify_card.card_html(missing)
     assert '<span class="count">0 檔</span>' in notify_card.card_html(
-        _card({"status": "success", "candidate_count": 0, "items": []})
+        _card(
+            {
+                "status": "success",
+                "preopen_check": CHECK,
+                "candidate_count": 0,
+                "items": [],
+            }
+        )
     )
-    empty = {"status": "success", "candidate_count": 0, "items": []}
+    empty = {
+        "status": "success",
+        "preopen_check": CHECK,
+        "candidate_count": 0,
+        "items": [],
+    }
     assert notify.caption(_card(empty)) == "<b>今日名單 09/07（一）</b>・0 檔"
 
 
@@ -233,7 +294,14 @@ def test_the_card_counts_the_rows_it_leaves_out_and_its_height_follows_its_block
         _item(rank, f"{rank:04d}", "名", _breakout(61.1, 58.5, 65.27))
         for rank in range(1, 21)
     ]
-    card = _card({"status": "success", "candidate_count": 25, "items": many})
+    card = _card(
+        {
+            "status": "success",
+            "preopen_check": CHECK,
+            "candidate_count": 25,
+            "items": many,
+        }
+    )
     page = Page(notify_card.card_html(card))
     assert len(page.rows) == 20 + len(US)
     assert "另 5 檔見今日名單頁" in "".join(page.text)
@@ -262,6 +330,47 @@ def test_the_card_counts_the_rows_it_leaves_out_and_its_height_follows_its_block
         + p.GAP
         + p.MORE_H
     )
+
+
+def test_the_pre_open_marks_and_line_follow_the_today_page_and_count_in_the_height():
+    """#759: the marks of the text on the card's rows, the 可能負向 count in the falling
+    colour; the 「尚未完成」 line when the list has no check of its own."""
+
+    listing = {
+        "status": "success",
+        "preopen_check": CHECK,
+        "candidate_count": 23,
+        "items": MARKED_ITEMS,
+    }
+    card = _card(listing, CARD_US)
+    by_name = {row.name: row.preopen_text for row in card.rows}
+    assert by_name["2453 凌群"] == "隔夜新聞 2（可能負向 1）"
+    assert by_name["2882 國泰金"] is None  # 0 news: no mark
+    assert by_name["2618 長榮航"] == "隔夜新聞 1"
+    assert by_name["1101 台泥"] == "隔夜新聞 12（可能負向 3）"  # levels incomplete
+    assert by_name["9999 別型"] == "隔夜新聞 1（可能負向 1）"  # 其他
+    html = notify_card.card_html(card)
+    assert '（<span class="down">可能負向 3</span>）' in html
+    # The falling colour is the token, not a colour code (DESIGN_SYSTEM).
+    assert ".down { color: var(--color-down); }" in notify_card.STYLE
+    assert html.count('class="row grid marked"') == 5
+    plain = _card(
+        {**listing, "items": CARD_ITEMS},
+        CARD_US,
+    )
+    p = notify_card
+    assert p.card_height(card) == p.card_height(plain) + 5 * p.PREOPEN_EXTRA_H
+    # Not checked: the counts are not read, the line is there, one head line taller.
+    pending = _card({**listing, "preopen_check": {"status": "not_checked"}}, CARD_US)
+    assert not any(row.preopen for row in pending.rows)
+    assert p.card_height(pending) == p.card_height(plain) + p.HEAD_LINE_H
+    assert notify.PREOPEN_PENDING in "".join(Page(p.card_html(pending)).text)
+    # No list, or an empty one: no check to wait for, no line.
+    for listing in (
+        {"status": "not_computed", "items": []},
+        {"status": "success", "candidate_count": 0, "items": []},
+    ):
+        assert _card(listing).preopen_line is None
 
 
 # --- drawing ---------------------------------------------------------------------------
@@ -457,16 +566,23 @@ BROWSER = notify_card.find_browser()
 @pytest.mark.skipif(
     BROWSER is None, reason="no Chromium (the image has it: docker job)"
 )
-@pytest.mark.parametrize("more", [False, True])
-def test_the_images_chromium_draws_the_card(private_temp, monkeypatch, more):
+@pytest.mark.parametrize("case", ["four", "more", "marked", "pending"])
+def test_the_images_chromium_draws_the_card(private_temp, monkeypatch, case):
     """AC-2 (#754): the real drawing, in the backend image. The window is drawn EXTRA px
     taller than card_height: below card_height there is only the page's background, and
     the last section's bottom edge sits PAD above it (the heights are neither short nor
     long, review 6888784128 建議 4)."""
 
-    items = CARD_ITEMS if more else CARD_ITEMS[:4]
+    more = case != "four"
+    items = {"four": CARD_ITEMS[:4], "marked": MARKED_ITEMS}.get(case, CARD_ITEMS)
+    check = {"status": "not_checked"} if case == "pending" else CHECK
     card = _card(
-        {"status": "success", "candidate_count": 23 if more else 4, "items": items},
+        {
+            "status": "success",
+            "preopen_check": check,
+            "candidate_count": 23 if more else 4,
+            "items": items,
+        },
         CARD_US,
     )
     height = notify_card.card_height(card)
