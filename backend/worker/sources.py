@@ -2677,10 +2677,12 @@ def parse_twse_taiex_from_all_daily_payload(
     # official table and labels instead of relying on table order or a value
     # position.  Returning no row is deliberately fail-closed; callers treat
     # this as an unverified session and must not persist a guessed benchmark.
+    # The row label is one of the fixed ``TWSE_INDEX_NAMES``, compared whole:
+    # 2019-04-29 reads \u52a0\u6b0a\u80a1\u50f9\u6307\u6578 and the return table has \u52a0\u6b0a\u80a1\u50f9\u5831\u916c\u6307\u6578.
+    # A table with both names is two rows, not a choice (Issue #764).
     price_table_title = (
         "\u50f9\u683c\u6307\u6578(\u81fa\u7063\u8b49\u5238\u4ea4\u6613\u6240)"
     )
-    index_label = "\u767c\u884c\u91cf\u52a0\u6b0a\u80a1\u50f9\u6307\u6578"
     close_label = "\u6536\u76e4\u6307\u6578"
     candidates: list[float] = []
     tables = payload.get("tables")
@@ -2708,7 +2710,7 @@ def parse_twse_taiex_from_all_daily_payload(
                 continue
             if max(name_index, close_index) >= len(values):
                 continue
-            if str(values[name_index]).strip() != index_label:
+            if str(values[name_index]).strip() not in TWSE_INDEX_NAMES:
                 continue
             close = parse_number(values[close_index])
             if close is None or not math.isfinite(close) or close <= 0:
@@ -2856,6 +2858,9 @@ def parse_twse_index_history_payload(
 TWSE_MARKET_SUMMARY_SOURCE = "twse_mi_index"
 TPEX_MARKET_SUMMARY_SOURCE = "tpex_mainborad_highlight"
 TWSE_INDEX_NAME = "發行量加權股價指數"
+# Row labels of TWSE_INDEX_NAME in the MI_INDEX price-index table, compared
+# whole by both TWSE parsers.  2019-04-29 reads 加權股價指數 (Issue #764).
+TWSE_INDEX_NAMES = (TWSE_INDEX_NAME, "加權股價指數")
 TPEX_INDEX_NAME = "櫃買指數"
 _ROC_TITLE_PREFIX = re.compile(r"^\d{3,4}年\d{1,2}月\d{1,2}日")
 _HTML_TAG = re.compile(r"<[^>]*>")
@@ -2954,13 +2959,18 @@ def _report_table(
 
 
 def _report_row(
-    table: tuple[list[str], list[Any]] | None, key_field: str, key: str
+    table: tuple[list[str], list[Any]] | None,
+    key_field: str,
+    key: str | tuple[str, ...],
 ) -> dict[str, Any] | None:
     """The one row whose ``key_field`` is ``key``, by field name; None otherwise.
 
-    A field the table repeats is dropped, so it reads as missing.
+    A tuple ``key`` lists whole labels of one row: rows matching any of them
+    count together, so two of them in one table is ambiguous.  A field the
+    table repeats is dropped, so it reads as missing.
     """
 
+    keys = (key,) if isinstance(key, str) else key
     if table is None:
         return None
     fields, data = table
@@ -2972,7 +2982,7 @@ def _report_row(
         for values in data
         if isinstance(values, (list, tuple))
         and len(values) == len(fields)
-        and str(values[position]).strip() == key
+        and str(values[position]).strip() in keys
     ]
     if len(rows) != 1:
         return None
@@ -2990,8 +3000,9 @@ def parse_twse_market_summary(
 ) -> MarketSummaryRecord:
     """Read the TWSE market summary from the date-scoped MI_INDEX report.
 
-    - 價格指數(臺灣證券交易所), row 發行量加權股價指數: close, signed change
-      points and the official percentage.
+    - 價格指數(臺灣證券交易所), row 發行量加權股價指數 or 加權股價指數
+      (``TWSE_INDEX_NAMES``): close, signed change points and the official
+      percentage.
     - 大盤統計資訊, row 總計(1~15): turnover of all securities in yuan.
     - 漲跌證券數合計, column 股票: advancers/decliners with their limit counts
       (``247(3)``), unchanged, unmatched and 無比價.
@@ -3016,7 +3027,7 @@ def parse_twse_market_summary(
         else []
     )
     index_row = _report_row(
-        _report_table(tables, "價格指數(臺灣證券交易所)"), "指數", TWSE_INDEX_NAME
+        _report_table(tables, "價格指數(臺灣證券交易所)"), "指數", TWSE_INDEX_NAMES
     )
     total_row = _report_row(
         _report_table(tables, "大盤統計資訊"), "成交統計", "總計(1~15)"

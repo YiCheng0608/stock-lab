@@ -239,6 +239,73 @@ def test_twse_report_without_any_summary_table_is_rejected():
         sources.parse_twse_market_summary(payload, requested_date=OCT22)
 
 
+# ---- Issue #764: the 2019-04-29 report names the row 加權股價指數 ----
+
+APR29 = date(2019, 4, 29)
+
+
+def _twse_0429() -> dict:
+    """raw_payloads 28605 of the research volume, shortened like the 10/22 one."""
+
+    return json.loads(
+        (FIXTURES / "twse_mi_index_20190429.json").read_text(encoding="utf-8")
+    )
+
+
+def test_twse_summary_reads_the_0429_report_with_the_old_index_name():
+    record = sources.parse_twse_market_summary(
+        _twse_0429(), requested_date=APR29, payload_sha256="raw28605"
+    )
+
+    assert record == sources.MarketSummaryRecord(
+        exchange="TWSE",
+        trading_date=APR29,
+        # The stored name stays the current one; only the row label differs.
+        index_name="發行量加權股價指數",
+        index_close=10939.06,
+        index_change=-13.41,
+        index_change_pct=-0.0012,
+        change_pct_method="official",
+        turnover=121164845431,
+        turnover_scope="twse_all_securities",
+        advancers=238,
+        decliners=589,
+        unchanged=95,
+        limit_up=2,
+        limit_down=4,
+        unmatched=5,
+        not_comparable=4,
+        breadth_scope="twse_stocks",
+        source="twse_mi_index",
+        data_as_of="2019-04-29",
+        payload_sha256="raw28605",
+    )
+
+
+def test_twse_summary_index_needs_exactly_one_of_the_two_names():
+    payload = _twse_0429()
+    price = _table(payload, "價格指數(臺灣證券交易所)")
+    old = next(r for r in price["data"] if r[0] == "加權股價指數")
+    price["data"].append(["發行量加權股價指數", *old[1:]])
+    record = sources.parse_twse_market_summary(payload, requested_date=APR29)
+    assert (record.index_close, record.index_change) == (None, None)
+    assert record.turnover == 121164845431
+
+    # The return-index row 加權股價報酬指數 is not read for the price index.
+    payload = _twse_0429()
+    price = _table(payload, "價格指數(臺灣證券交易所)")
+    price["data"] = [r for r in price["data"] if r[0] != "加權股價指數"]
+    price["data"].append(
+        next(
+            r
+            for r in _table(payload, "報酬指數(臺灣證券交易所)")["data"]
+            if r[0] == "加權股價報酬指數"
+        )
+    )
+    record = sources.parse_twse_market_summary(payload, requested_date=APR29)
+    assert record.index_close is None
+
+
 # ---- AC-A1: TPEx highlight ----
 
 
@@ -368,6 +435,32 @@ def test_twse_summary_comes_from_the_taiex_capture_without_another_request(
     ]
     assert len(reports) == 1
     assert sources.TPEX_HIGHLIGHT_ENDPOINT not in fetcher.calls
+
+
+def test_historical_batch_reads_taiex_and_summary_under_the_old_index_name(
+    tmp_path, monkeypatch
+):
+    """The research backfill path: TwseAdapter.fetch with snapshot feeds off
+    reads the TAIEX row and then ``_read_market_summary`` from one report."""
+
+    def old_name_report(base):
+        report = _twse_0429()
+        report["date"] = "20260904"
+        report["tables"] = [
+            t for t in report["tables"] if "每日收盤行情" not in str(t.get("title"))
+        ] + [base["tables"][1]]
+        return report
+
+    monkeypatch.setattr(sources, "RAW_DIR", tmp_path / "raw")
+    fetcher = _summary_fetcher(mi_index=old_name_report)
+
+    batch = sources.TwseAdapter(fetcher, snapshot_feeds=False).fetch(DAY, DAY)
+
+    (taiex,) = [bar for bar in batch.bars if bar.symbol == "TAIEX"]
+    (summary,) = batch.market_summaries
+    assert taiex.close == summary.index_close == 10939.06
+    assert summary.index_name == "發行量加權股價指數"
+    assert not [w for w in batch.warnings if "market summary" in w]
 
 
 def test_historical_batches_read_twse_summaries_and_never_the_highlight(
