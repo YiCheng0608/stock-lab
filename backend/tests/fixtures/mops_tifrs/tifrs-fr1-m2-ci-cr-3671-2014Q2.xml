@@ -1,0 +1,1250 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xbrl xmlns="http://www.xbrl.org/2003/instance" xmlns:ifrs="http://xbrl.iasb.org/taxonomy/2010-04-30/ifrs" xmlns:iso4217="http://www.xbrl.org/2003/iso4217" xmlns:link="http://www.xbrl.org/2003/linkbase" xmlns:tifrs-SCF="http://www.xbrl.org/tifrs/scf/2014-03-31" xmlns:tifrs-SCF-ci="http://www.xbrl.org/tifrs/scf/ci/2014-03-31" xmlns:tifrs-ar="http://www.xbrl.org/tifrs/ar/2014-03-31" xmlns:tifrs-bsci-ci="http://www.xbrl.org/tifrs/bsci/ci/2014-03-31" xmlns:tifrs-ci-cr="http://www.xbrl.org/tifrs/ci/cr/2014-03-31" xmlns:tifrs-es="http://www.xbrl.org/tifrs/es/2014-03-31" xmlns:tifrs-es-cr="http://www.xbrl.org/tifrs/es/cr/2014-03-31" xmlns:tifrs-notes="http://www.xbrl.org/tifrs/notes/2014-03-31" xmlns:tifrs-notes-ci="http://www.xbrl.org/tifrs/notes/ci/2014-03-31" xmlns:xbrldi="http://xbrl.org/2006/xbrldi" xmlns:xbrldt="http://xbrl.org/2005/xbrldt" xmlns:xbrli="http://www.xbrl.org/2003/instance" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<link:schemaRef xlink:arcrole="http://www.w3.org/1999/xlink/properties/linkbase" xlink:href="tifrs-ci-cr-2014-03-31.xsd" xlink:type="simple"/>	<context id="From20130101To20130630_Total3">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<startDate>2013-01-01</startDate>
+			<endDate>2013-06-30</endDate>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="tifrs-notes:MovementOnAllowanceForDoubtfulAccountsAbstractMemberDimensionMember">tifrs-notes:Total3</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="From20140101To20140630_Total3">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<startDate>2014-01-01</startDate>
+			<endDate>2014-06-30</endDate>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="tifrs-notes:MovementOnAllowanceForDoubtfulAccountsAbstractMemberDimensionMember">tifrs-notes:Total3</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="From20130101To20130630_CollectiveAssessmentOfImpairmentLoss">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<startDate>2013-01-01</startDate>
+			<endDate>2013-06-30</endDate>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="tifrs-notes:MovementOnAllowanceForDoubtfulAccountsAbstractMemberDimensionMember">tifrs-notes:CollectiveAssessmentOfImpairmentLoss</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="From20140101To20140630_CollectiveAssessmentOfImpairmentLoss">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<startDate>2014-01-01</startDate>
+			<endDate>2014-06-30</endDate>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="tifrs-notes:MovementOnAllowanceForDoubtfulAccountsAbstractMemberDimensionMember">tifrs-notes:CollectiveAssessmentOfImpairmentLoss</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="From20130101To20130630_IndividualAssessmentOfImpairmentLoss">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<startDate>2013-01-01</startDate>
+			<endDate>2013-06-30</endDate>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="tifrs-notes:MovementOnAllowanceForDoubtfulAccountsAbstractMemberDimensionMember">tifrs-notes:IndividualAssessmentOfImpairmentLoss</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="From20140101To20140630_IndividualAssessmentOfImpairmentLoss">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<startDate>2014-01-01</startDate>
+			<endDate>2014-06-30</endDate>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="tifrs-notes:MovementOnAllowanceForDoubtfulAccountsAbstractMemberDimensionMember">tifrs-notes:IndividualAssessmentOfImpairmentLoss</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20130630_Total3">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2013-06-30</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="tifrs-notes:MovementOnAllowanceForDoubtfulAccountsAbstractMemberDimensionMember">tifrs-notes:Total3</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20140630_Total3">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2014-06-30</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="tifrs-notes:MovementOnAllowanceForDoubtfulAccountsAbstractMemberDimensionMember">tifrs-notes:Total3</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20130630_CollectiveAssessmentOfImpairmentLoss">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2013-06-30</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="tifrs-notes:MovementOnAllowanceForDoubtfulAccountsAbstractMemberDimensionMember">tifrs-notes:CollectiveAssessmentOfImpairmentLoss</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20140630_CollectiveAssessmentOfImpairmentLoss">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2014-06-30</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="tifrs-notes:MovementOnAllowanceForDoubtfulAccountsAbstractMemberDimensionMember">tifrs-notes:CollectiveAssessmentOfImpairmentLoss</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20130630_IndividualAssessmentOfImpairmentLoss">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2013-06-30</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="tifrs-notes:MovementOnAllowanceForDoubtfulAccountsAbstractMemberDimensionMember">tifrs-notes:IndividualAssessmentOfImpairmentLoss</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20140630_IndividualAssessmentOfImpairmentLoss">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2014-06-30</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="tifrs-notes:MovementOnAllowanceForDoubtfulAccountsAbstractMemberDimensionMember">tifrs-notes:IndividualAssessmentOfImpairmentLoss</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20140804">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2014-08-04</instant>
+		</period>
+	</context>
+	<context id="AsOf20130630_TotalEquityMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2013-06-30</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalEquityMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20130630_TotalEquityAttributableToOwnersOfParentMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2013-06-30</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalEquityAttributableToOwnersOfParentMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20130630_TotalOtherEquityInterestMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2013-06-30</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalOtherEquityInterestMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20130630_ExchangeDifferencesOnTranslationOfForeignFinancialStatementsMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2013-06-30</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:ExchangeDifferencesOnTranslationOfForeignFinancialStatementsMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20130630_TotalRetainedEarningsMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2013-06-30</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalRetainedEarningsMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20130630_UnappropriatedRetainedEarningsAccumulatedDeficitMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2013-06-30</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:UnappropriatedRetainedEarningsAccumulatedDeficitMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20130630_TotalShareCapitalMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2013-06-30</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalShareCapitalMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20130630_OrdinaryShareMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2013-06-30</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:OrdinaryShareMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="From20130101To20130630_TotalOtherEquityInterestMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<startDate>2013-01-01</startDate>
+			<endDate>2013-06-30</endDate>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalOtherEquityInterestMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="From20130101To20130630_ExchangeDifferencesOnTranslationOfForeignFinancialStatementsMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<startDate>2013-01-01</startDate>
+			<endDate>2013-06-30</endDate>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:ExchangeDifferencesOnTranslationOfForeignFinancialStatementsMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="From20130101To20130630_TotalEquityMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<startDate>2013-01-01</startDate>
+			<endDate>2013-06-30</endDate>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalEquityMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="From20130101To20130630_TotalEquityAttributableToOwnersOfParentMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<startDate>2013-01-01</startDate>
+			<endDate>2013-06-30</endDate>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalEquityAttributableToOwnersOfParentMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="From20130101To20130630_TotalRetainedEarningsMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<startDate>2013-01-01</startDate>
+			<endDate>2013-06-30</endDate>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalRetainedEarningsMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="From20130101To20130630_UnappropriatedRetainedEarningsAccumulatedDeficitMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<startDate>2013-01-01</startDate>
+			<endDate>2013-06-30</endDate>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:UnappropriatedRetainedEarningsAccumulatedDeficitMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20130101_TotalEquityMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2013-01-01</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalEquityMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20130101_TotalEquityAttributableToOwnersOfParentMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2013-01-01</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalEquityAttributableToOwnersOfParentMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20130101_TotalOtherEquityInterestMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2013-01-01</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalOtherEquityInterestMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20130101_ExchangeDifferencesOnTranslationOfForeignFinancialStatementsMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2013-01-01</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:ExchangeDifferencesOnTranslationOfForeignFinancialStatementsMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20130101_TotalRetainedEarningsMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2013-01-01</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalRetainedEarningsMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20130101_UnappropriatedRetainedEarningsAccumulatedDeficitMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2013-01-01</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:UnappropriatedRetainedEarningsAccumulatedDeficitMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20130101_TotalShareCapitalMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2013-01-01</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalShareCapitalMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20130101_OrdinaryShareMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2013-01-01</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:OrdinaryShareMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20140630_TotalEquityMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2014-06-30</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalEquityMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20140630_TotalEquityAttributableToOwnersOfParentMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2014-06-30</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalEquityAttributableToOwnersOfParentMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20140630_TotalOtherEquityInterestMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2014-06-30</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalOtherEquityInterestMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20140630_ExchangeDifferencesOnTranslationOfForeignFinancialStatementsMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2014-06-30</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:ExchangeDifferencesOnTranslationOfForeignFinancialStatementsMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20140630_TotalRetainedEarningsMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2014-06-30</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalRetainedEarningsMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20140630_UnappropriatedRetainedEarningsAccumulatedDeficitMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2014-06-30</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:UnappropriatedRetainedEarningsAccumulatedDeficitMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20140630_TotalShareCapitalMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2014-06-30</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalShareCapitalMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20140630_OrdinaryShareMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2014-06-30</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:OrdinaryShareMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="From20140101To20140630_TotalShareCapitalMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<startDate>2014-01-01</startDate>
+			<endDate>2014-06-30</endDate>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalShareCapitalMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="From20140101To20140630_OrdinaryShareMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<startDate>2014-01-01</startDate>
+			<endDate>2014-06-30</endDate>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:OrdinaryShareMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="From20140101To20140630_TotalOtherEquityInterestMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<startDate>2014-01-01</startDate>
+			<endDate>2014-06-30</endDate>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalOtherEquityInterestMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="From20140101To20140630_ExchangeDifferencesOnTranslationOfForeignFinancialStatementsMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<startDate>2014-01-01</startDate>
+			<endDate>2014-06-30</endDate>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:ExchangeDifferencesOnTranslationOfForeignFinancialStatementsMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="From20140101To20140630_TotalEquityMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<startDate>2014-01-01</startDate>
+			<endDate>2014-06-30</endDate>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalEquityMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="From20140101To20140630_TotalEquityAttributableToOwnersOfParentMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<startDate>2014-01-01</startDate>
+			<endDate>2014-06-30</endDate>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalEquityAttributableToOwnersOfParentMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="From20140101To20140630_TotalRetainedEarningsMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<startDate>2014-01-01</startDate>
+			<endDate>2014-06-30</endDate>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalRetainedEarningsMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="From20140101To20140630_UnappropriatedRetainedEarningsAccumulatedDeficitMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<startDate>2014-01-01</startDate>
+			<endDate>2014-06-30</endDate>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:UnappropriatedRetainedEarningsAccumulatedDeficitMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20140101_TotalEquityMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2014-01-01</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalEquityMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20140101_TotalEquityAttributableToOwnersOfParentMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2014-01-01</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalEquityAttributableToOwnersOfParentMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20140101_TotalOtherEquityInterestMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2014-01-01</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalOtherEquityInterestMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20140101_ExchangeDifferencesOnTranslationOfForeignFinancialStatementsMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2014-01-01</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:ExchangeDifferencesOnTranslationOfForeignFinancialStatementsMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20140101_TotalRetainedEarningsMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2014-01-01</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalRetainedEarningsMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20140101_UnappropriatedRetainedEarningsAccumulatedDeficitMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2014-01-01</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:UnappropriatedRetainedEarningsAccumulatedDeficitMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20140101_TotalShareCapitalMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2014-01-01</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:TotalShareCapitalMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20140101_OrdinaryShareMember">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2014-01-01</instant>
+		</period>
+		<scenario>
+			<xbrldi:explicitMember dimension="ifrs:ComponentsOfEquityAxis">tifrs-es:OrdinaryShareMember</xbrldi:explicitMember>
+		</scenario>
+	</context>
+	<context id="AsOf20131231">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2013-12-31</instant>
+		</period>
+	</context>
+	<context id="From20130101To20130630">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<startDate>2013-01-01</startDate>
+			<endDate>2013-06-30</endDate>
+		</period>
+	</context>
+	<context id="AsOf20130630">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2013-06-30</instant>
+		</period>
+	</context>
+	<context id="From20140101To20140630">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<startDate>2014-01-01</startDate>
+			<endDate>2014-06-30</endDate>
+		</period>
+	</context>
+	<context id="AsOf20140630">
+		<entity>
+			<identifier scheme="http://www.twse.com.tw">3671</identifier>
+		</entity>
+		<period>
+			<instant>2014-06-30</instant>
+		</period>
+	</context>
+	<unit id="TWD">
+		<measure>iso4217:TWD</measure>
+	</unit>
+	<unit id="Shares">
+		<measure>xbrli:shares</measure>
+	</unit>
+	<unit id="EarningsPerShare">
+		<divide>
+			<unitNumerator>
+				<measure>iso4217:TWD</measure>
+			</unitNumerator>
+			<unitDenominator>
+				<measure>xbrli:shares</measure>
+			</unitDenominator>
+		</divide>
+	</unit>
+	<unit id="Pure">
+		<measure>xbrli:pure</measure>
+	</unit>
+	<tifrs-notes:Year contextRef="From20140101To20140630">2014</tifrs-notes:Year>
+	<tifrs-notes:Quarter contextRef="From20140101To20140630">2</tifrs-notes:Quarter>
+	<tifrs-notes:ReportType contextRef="From20140101To20140630">Financial report (general)</tifrs-notes:ReportType>
+	<tifrs-notes:ReportCategory contextRef="From20140101To20140630">Consolidated report</tifrs-notes:ReportCategory>
+	<tifrs-notes:Market contextRef="From20140101To20140630">Emerging stock market</tifrs-notes:Market>
+	<tifrs-notes:IndustrySector contextRef="From20140101To20140630">Commercial and industrial</tifrs-notes:IndustrySector>
+	<ifrs:CashAndCashEquivalents contextRef="AsOf20140630" decimals="-3" unitRef="TWD">16168000</ifrs:CashAndCashEquivalents>
+	<ifrs:CashAndCashEquivalents contextRef="AsOf20131231" decimals="-3" unitRef="TWD">12073000</ifrs:CashAndCashEquivalents>
+	<ifrs:CashAndCashEquivalents contextRef="AsOf20130630" decimals="-3" unitRef="TWD">7337000</ifrs:CashAndCashEquivalents>
+	<tifrs-bsci-ci:AccountsReceivableNet contextRef="AsOf20140630" decimals="-3" unitRef="TWD">0</tifrs-bsci-ci:AccountsReceivableNet>
+	<tifrs-bsci-ci:AccountsReceivableNet contextRef="AsOf20131231" decimals="-3" unitRef="TWD">1000</tifrs-bsci-ci:AccountsReceivableNet>
+	<tifrs-bsci-ci:AccountsReceivableNet contextRef="AsOf20130630" decimals="-3" unitRef="TWD">8000</tifrs-bsci-ci:AccountsReceivableNet>
+	<ifrs:CurrentTaxAssets contextRef="AsOf20140630" decimals="-3" unitRef="TWD">4000</ifrs:CurrentTaxAssets>
+	<ifrs:CurrentTaxAssets contextRef="AsOf20131231" decimals="-3" unitRef="TWD">7000</ifrs:CurrentTaxAssets>
+	<ifrs:CurrentTaxAssets contextRef="AsOf20130630" decimals="-3" unitRef="TWD">6000</ifrs:CurrentTaxAssets>
+	<tifrs-bsci-ci:OtherCurrentAssets contextRef="AsOf20140630" decimals="-3" unitRef="TWD">287000</tifrs-bsci-ci:OtherCurrentAssets>
+	<tifrs-bsci-ci:OtherCurrentAssets contextRef="AsOf20131231" decimals="-3" unitRef="TWD">326000</tifrs-bsci-ci:OtherCurrentAssets>
+	<tifrs-bsci-ci:OtherCurrentAssets contextRef="AsOf20130630" decimals="-3" unitRef="TWD">294000</tifrs-bsci-ci:OtherCurrentAssets>
+	<ifrs:CurrentAssets contextRef="AsOf20140630" decimals="-3" unitRef="TWD">16459000</ifrs:CurrentAssets>
+	<ifrs:CurrentAssets contextRef="AsOf20131231" decimals="-3" unitRef="TWD">12407000</ifrs:CurrentAssets>
+	<ifrs:CurrentAssets contextRef="AsOf20130630" decimals="-3" unitRef="TWD">7645000</ifrs:CurrentAssets>
+	<ifrs:PropertyPlantAndEquipment contextRef="AsOf20140630" decimals="-3" unitRef="TWD">378000</ifrs:PropertyPlantAndEquipment>
+	<ifrs:PropertyPlantAndEquipment contextRef="AsOf20131231" decimals="-3" unitRef="TWD">461000</ifrs:PropertyPlantAndEquipment>
+	<ifrs:PropertyPlantAndEquipment contextRef="AsOf20130630" decimals="-3" unitRef="TWD">556000</ifrs:PropertyPlantAndEquipment>
+	<tifrs-bsci-ci:OtherIntangibleAssets contextRef="AsOf20140630" decimals="-3" unitRef="TWD">37667000</tifrs-bsci-ci:OtherIntangibleAssets>
+	<tifrs-bsci-ci:OtherIntangibleAssets contextRef="AsOf20131231" decimals="-3" unitRef="TWD">37460000</tifrs-bsci-ci:OtherIntangibleAssets>
+	<tifrs-bsci-ci:OtherIntangibleAssets contextRef="AsOf20130630" decimals="-3" unitRef="TWD">52340000</tifrs-bsci-ci:OtherIntangibleAssets>
+	<tifrs-bsci-ci:AccumulatedImpairmentOtherIntangibleAssets contextRef="AsOf20140630" decimals="-3" unitRef="TWD">37460000</tifrs-bsci-ci:AccumulatedImpairmentOtherIntangibleAssets>
+	<tifrs-bsci-ci:AccumulatedImpairmentOtherIntangibleAssets contextRef="AsOf20131231" decimals="-3" unitRef="TWD">30233000</tifrs-bsci-ci:AccumulatedImpairmentOtherIntangibleAssets>
+	<tifrs-bsci-ci:AccumulatedImpairmentOtherIntangibleAssets contextRef="AsOf20130630" decimals="-3" unitRef="TWD">35009000</tifrs-bsci-ci:AccumulatedImpairmentOtherIntangibleAssets>
+	<ifrs:OtherIntangibleAssets contextRef="AsOf20140630" decimals="-3" unitRef="TWD">207000</ifrs:OtherIntangibleAssets>
+	<ifrs:OtherIntangibleAssets contextRef="AsOf20131231" decimals="-3" unitRef="TWD">7227000</ifrs:OtherIntangibleAssets>
+	<ifrs:OtherIntangibleAssets contextRef="AsOf20130630" decimals="-3" unitRef="TWD">17331000</ifrs:OtherIntangibleAssets>
+	<tifrs-bsci-ci:IntangibleAssets contextRef="AsOf20140630" decimals="-3" unitRef="TWD">207000</tifrs-bsci-ci:IntangibleAssets>
+	<tifrs-bsci-ci:IntangibleAssets contextRef="AsOf20131231" decimals="-3" unitRef="TWD">7227000</tifrs-bsci-ci:IntangibleAssets>
+	<tifrs-bsci-ci:IntangibleAssets contextRef="AsOf20130630" decimals="-3" unitRef="TWD">17331000</tifrs-bsci-ci:IntangibleAssets>
+	<ifrs:DeferredTaxAssets contextRef="AsOf20140630" decimals="-3" unitRef="TWD">5946000</ifrs:DeferredTaxAssets>
+	<ifrs:DeferredTaxAssets contextRef="AsOf20131231" decimals="-3" unitRef="TWD">4137000</ifrs:DeferredTaxAssets>
+	<ifrs:DeferredTaxAssets contextRef="AsOf20130630" decimals="-3" unitRef="TWD">4083000</ifrs:DeferredTaxAssets>
+	<tifrs-bsci-ci:OtherNoncurrentAssetsOthers contextRef="AsOf20140630" decimals="-3" unitRef="TWD">280000</tifrs-bsci-ci:OtherNoncurrentAssetsOthers>
+	<tifrs-bsci-ci:OtherNoncurrentAssetsOthers contextRef="AsOf20131231" decimals="-3" unitRef="TWD">280000</tifrs-bsci-ci:OtherNoncurrentAssetsOthers>
+	<tifrs-bsci-ci:OtherNoncurrentAssetsOthers contextRef="AsOf20130630" decimals="-3" unitRef="TWD">280000</tifrs-bsci-ci:OtherNoncurrentAssetsOthers>
+	<tifrs-bsci-ci:OtherNoncurrentAssets contextRef="AsOf20140630" decimals="-3" unitRef="TWD">280000</tifrs-bsci-ci:OtherNoncurrentAssets>
+	<tifrs-bsci-ci:OtherNoncurrentAssets contextRef="AsOf20131231" decimals="-3" unitRef="TWD">280000</tifrs-bsci-ci:OtherNoncurrentAssets>
+	<tifrs-bsci-ci:OtherNoncurrentAssets contextRef="AsOf20130630" decimals="-3" unitRef="TWD">280000</tifrs-bsci-ci:OtherNoncurrentAssets>
+	<ifrs:NoncurrentAssets contextRef="AsOf20140630" decimals="-3" unitRef="TWD">6811000</ifrs:NoncurrentAssets>
+	<ifrs:NoncurrentAssets contextRef="AsOf20131231" decimals="-3" unitRef="TWD">12105000</ifrs:NoncurrentAssets>
+	<ifrs:NoncurrentAssets contextRef="AsOf20130630" decimals="-3" unitRef="TWD">22250000</ifrs:NoncurrentAssets>
+	<ifrs:Assets contextRef="AsOf20140630" decimals="-3" unitRef="TWD">23270000</ifrs:Assets>
+	<ifrs:Assets contextRef="AsOf20131231" decimals="-3" unitRef="TWD">24512000</ifrs:Assets>
+	<ifrs:Assets contextRef="AsOf20130630" decimals="-3" unitRef="TWD">29895000</ifrs:Assets>
+	<tifrs-bsci-ci:OtherPayablesOthers contextRef="AsOf20140630" decimals="-3" unitRef="TWD">130000</tifrs-bsci-ci:OtherPayablesOthers>
+	<tifrs-bsci-ci:OtherPayablesOthers contextRef="AsOf20131231" decimals="-3" unitRef="TWD">424000</tifrs-bsci-ci:OtherPayablesOthers>
+	<tifrs-bsci-ci:OtherPayablesOthers contextRef="AsOf20130630" decimals="-3" unitRef="TWD">1000</tifrs-bsci-ci:OtherPayablesOthers>
+	<tifrs-bsci-ci:OtherPayables contextRef="AsOf20140630" decimals="-3" unitRef="TWD">130000</tifrs-bsci-ci:OtherPayables>
+	<tifrs-bsci-ci:OtherPayables contextRef="AsOf20131231" decimals="-3" unitRef="TWD">424000</tifrs-bsci-ci:OtherPayables>
+	<tifrs-bsci-ci:OtherPayables contextRef="AsOf20130630" decimals="-3" unitRef="TWD">1000</tifrs-bsci-ci:OtherPayables>
+	<tifrs-bsci-ci:OtherCurrentLiabilitiesOthers contextRef="AsOf20140630" decimals="-3" unitRef="TWD">0</tifrs-bsci-ci:OtherCurrentLiabilitiesOthers>
+	<tifrs-bsci-ci:OtherCurrentLiabilitiesOthers contextRef="AsOf20131231" decimals="-3" unitRef="TWD">11000</tifrs-bsci-ci:OtherCurrentLiabilitiesOthers>
+	<tifrs-bsci-ci:OtherCurrentLiabilitiesOthers contextRef="AsOf20130630" decimals="-3" unitRef="TWD">11000</tifrs-bsci-ci:OtherCurrentLiabilitiesOthers>
+	<tifrs-bsci-ci:OtherCurrentLiabilities contextRef="AsOf20140630" decimals="-3" unitRef="TWD">0</tifrs-bsci-ci:OtherCurrentLiabilities>
+	<tifrs-bsci-ci:OtherCurrentLiabilities contextRef="AsOf20131231" decimals="-3" unitRef="TWD">11000</tifrs-bsci-ci:OtherCurrentLiabilities>
+	<tifrs-bsci-ci:OtherCurrentLiabilities contextRef="AsOf20130630" decimals="-3" unitRef="TWD">11000</tifrs-bsci-ci:OtherCurrentLiabilities>
+	<ifrs:CurrentLiabilities contextRef="AsOf20140630" decimals="-3" unitRef="TWD">130000</ifrs:CurrentLiabilities>
+	<ifrs:CurrentLiabilities contextRef="AsOf20131231" decimals="-3" unitRef="TWD">435000</ifrs:CurrentLiabilities>
+	<ifrs:CurrentLiabilities contextRef="AsOf20130630" decimals="-3" unitRef="TWD">12000</ifrs:CurrentLiabilities>
+	<ifrs:Liabilities contextRef="AsOf20140630" decimals="-3" unitRef="TWD">130000</ifrs:Liabilities>
+	<ifrs:Liabilities contextRef="AsOf20131231" decimals="-3" unitRef="TWD">435000</ifrs:Liabilities>
+	<ifrs:Liabilities contextRef="AsOf20130630" decimals="-3" unitRef="TWD">12000</ifrs:Liabilities>
+	<tifrs-bsci-ci:OrdinaryShare contextRef="AsOf20140630" decimals="-3" unitRef="TWD">135000000</tifrs-bsci-ci:OrdinaryShare>
+	<tifrs-bsci-ci:OrdinaryShare contextRef="AsOf20131231" decimals="-3" unitRef="TWD">115000000</tifrs-bsci-ci:OrdinaryShare>
+	<tifrs-bsci-ci:OrdinaryShare contextRef="AsOf20130630" decimals="-3" unitRef="TWD">95000000</tifrs-bsci-ci:OrdinaryShare>
+	<tifrs-bsci-ci:CapitalStock contextRef="AsOf20140630" decimals="-3" unitRef="TWD">135000000</tifrs-bsci-ci:CapitalStock>
+	<tifrs-bsci-ci:CapitalStock contextRef="AsOf20131231" decimals="-3" unitRef="TWD">115000000</tifrs-bsci-ci:CapitalStock>
+	<tifrs-bsci-ci:CapitalStock contextRef="AsOf20130630" decimals="-3" unitRef="TWD">95000000</tifrs-bsci-ci:CapitalStock>
+	<tifrs-bsci-ci:AccumulatedProfitAndLoss contextRef="AsOf20140630" decimals="-3" unitRef="TWD">-111572000</tifrs-bsci-ci:AccumulatedProfitAndLoss>
+	<tifrs-bsci-ci:AccumulatedProfitAndLoss contextRef="AsOf20131231" decimals="-3" unitRef="TWD">-90560000</tifrs-bsci-ci:AccumulatedProfitAndLoss>
+	<tifrs-bsci-ci:AccumulatedProfitAndLoss contextRef="AsOf20130630" decimals="-3" unitRef="TWD">-64870000</tifrs-bsci-ci:AccumulatedProfitAndLoss>
+	<tifrs-bsci-ci:UnappropriatedRetainedEarningsAaccumulatedDeficit contextRef="AsOf20140630" decimals="-3" unitRef="TWD">-111572000</tifrs-bsci-ci:UnappropriatedRetainedEarningsAaccumulatedDeficit>
+	<tifrs-bsci-ci:UnappropriatedRetainedEarningsAaccumulatedDeficit contextRef="AsOf20131231" decimals="-3" unitRef="TWD">-90560000</tifrs-bsci-ci:UnappropriatedRetainedEarningsAaccumulatedDeficit>
+	<tifrs-bsci-ci:UnappropriatedRetainedEarningsAaccumulatedDeficit contextRef="AsOf20130630" decimals="-3" unitRef="TWD">-64870000</tifrs-bsci-ci:UnappropriatedRetainedEarningsAaccumulatedDeficit>
+	<ifrs:RetainedEarnings contextRef="AsOf20140630" decimals="-3" unitRef="TWD">-111572000</ifrs:RetainedEarnings>
+	<ifrs:RetainedEarnings contextRef="AsOf20131231" decimals="-3" unitRef="TWD">-90560000</ifrs:RetainedEarnings>
+	<ifrs:RetainedEarnings contextRef="AsOf20130630" decimals="-3" unitRef="TWD">-64870000</ifrs:RetainedEarnings>
+	<ifrs:OtherEquityInterest contextRef="AsOf20140630" decimals="-3" unitRef="TWD">-288000</ifrs:OtherEquityInterest>
+	<ifrs:OtherEquityInterest contextRef="AsOf20131231" decimals="-3" unitRef="TWD">-363000</ifrs:OtherEquityInterest>
+	<ifrs:OtherEquityInterest contextRef="AsOf20130630" decimals="-3" unitRef="TWD">-247000</ifrs:OtherEquityInterest>
+	<ifrs:EquityAttributableToOwnersOfParent contextRef="AsOf20140630" decimals="-3" unitRef="TWD">23140000</ifrs:EquityAttributableToOwnersOfParent>
+	<ifrs:EquityAttributableToOwnersOfParent contextRef="AsOf20131231" decimals="-3" unitRef="TWD">24077000</ifrs:EquityAttributableToOwnersOfParent>
+	<ifrs:EquityAttributableToOwnersOfParent contextRef="AsOf20130630" decimals="-3" unitRef="TWD">29883000</ifrs:EquityAttributableToOwnersOfParent>
+	<ifrs:Equity contextRef="AsOf20140630" decimals="-3" unitRef="TWD">23140000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20131231" decimals="-3" unitRef="TWD">24077000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20130630" decimals="-3" unitRef="TWD">29883000</ifrs:Equity>
+	<tifrs-bsci-ci:NumberOfShareCapitalAwaitingRetirement contextRef="AsOf20140630" decimals="0" unitRef="Shares">0</tifrs-bsci-ci:NumberOfShareCapitalAwaitingRetirement>
+	<tifrs-bsci-ci:NumberOfShareCapitalAwaitingRetirement contextRef="AsOf20131231" decimals="0" unitRef="Shares">0</tifrs-bsci-ci:NumberOfShareCapitalAwaitingRetirement>
+	<tifrs-bsci-ci:NumberOfShareCapitalAwaitingRetirement contextRef="AsOf20130630" decimals="0" unitRef="Shares">0</tifrs-bsci-ci:NumberOfShareCapitalAwaitingRetirement>
+	<tifrs-bsci-ci:EquivalentIssueSharesOfAdvanceReceiptsForOrdinaryShare contextRef="AsOf20140630" decimals="0" unitRef="Shares">0</tifrs-bsci-ci:EquivalentIssueSharesOfAdvanceReceiptsForOrdinaryShare>
+	<tifrs-bsci-ci:EquivalentIssueSharesOfAdvanceReceiptsForOrdinaryShare contextRef="AsOf20131231" decimals="0" unitRef="Shares">0</tifrs-bsci-ci:EquivalentIssueSharesOfAdvanceReceiptsForOrdinaryShare>
+	<tifrs-bsci-ci:EquivalentIssueSharesOfAdvanceReceiptsForOrdinaryShare contextRef="AsOf20130630" decimals="0" unitRef="Shares">0</tifrs-bsci-ci:EquivalentIssueSharesOfAdvanceReceiptsForOrdinaryShare>
+	<tifrs-bsci-ci:NumberOfSharesInEntityHeldByEntityAndByItsSubsidiaries contextRef="AsOf20140630" decimals="0" unitRef="Shares">0</tifrs-bsci-ci:NumberOfSharesInEntityHeldByEntityAndByItsSubsidiaries>
+	<tifrs-bsci-ci:NumberOfSharesInEntityHeldByEntityAndByItsSubsidiaries contextRef="AsOf20131231" decimals="0" unitRef="Shares">0</tifrs-bsci-ci:NumberOfSharesInEntityHeldByEntityAndByItsSubsidiaries>
+	<tifrs-bsci-ci:NumberOfSharesInEntityHeldByEntityAndByItsSubsidiaries contextRef="AsOf20130630" decimals="0" unitRef="Shares">0</tifrs-bsci-ci:NumberOfSharesInEntityHeldByEntityAndByItsSubsidiaries>
+	<ifrs:RevenueFromSaleOfGoods contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">2000</ifrs:RevenueFromSaleOfGoods>
+	<ifrs:RevenueFromSaleOfGoods contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">33000</ifrs:RevenueFromSaleOfGoods>
+	<tifrs-bsci-ci:OperatingRevenue contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">2000</tifrs-bsci-ci:OperatingRevenue>
+	<tifrs-bsci-ci:OperatingRevenue contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">33000</tifrs-bsci-ci:OperatingRevenue>
+	<ifrs:CostOfSales contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">1434000</ifrs:CostOfSales>
+	<ifrs:CostOfSales contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">1509000</ifrs:CostOfSales>
+	<tifrs-bsci-ci:OperatingCosts contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">1434000</tifrs-bsci-ci:OperatingCosts>
+	<tifrs-bsci-ci:OperatingCosts contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">1509000</tifrs-bsci-ci:OperatingCosts>
+	<tifrs-bsci-ci:GrossProfitLossFromOperations contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-1432000</tifrs-bsci-ci:GrossProfitLossFromOperations>
+	<tifrs-bsci-ci:GrossProfitLossFromOperations contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-1476000</tifrs-bsci-ci:GrossProfitLossFromOperations>
+	<tifrs-bsci-ci:GrossProfitLossFromOperationsNet contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-1432000</tifrs-bsci-ci:GrossProfitLossFromOperationsNet>
+	<tifrs-bsci-ci:GrossProfitLossFromOperationsNet contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-1476000</tifrs-bsci-ci:GrossProfitLossFromOperationsNet>
+	<ifrs:AdministrativeExpense contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">2403000</ifrs:AdministrativeExpense>
+	<ifrs:AdministrativeExpense contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">2320000</ifrs:AdministrativeExpense>
+	<tifrs-bsci-ci:ResearchAndDevelopmentExpenses contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">668000</tifrs-bsci-ci:ResearchAndDevelopmentExpenses>
+	<tifrs-bsci-ci:ResearchAndDevelopmentExpenses contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">691000</tifrs-bsci-ci:ResearchAndDevelopmentExpenses>
+	<tifrs-bsci-ci:OperatingExpenses contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">3071000</tifrs-bsci-ci:OperatingExpenses>
+	<tifrs-bsci-ci:OperatingExpenses contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">3011000</tifrs-bsci-ci:OperatingExpenses>
+	<tifrs-bsci-ci:NetOtherIncomeExpenses contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-5886000</tifrs-bsci-ci:NetOtherIncomeExpenses>
+	<tifrs-bsci-ci:NetOtherIncomeExpenses contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-2522000</tifrs-bsci-ci:NetOtherIncomeExpenses>
+	<tifrs-bsci-ci:NetOperatingIncomeLoss contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-10389000</tifrs-bsci-ci:NetOperatingIncomeLoss>
+	<tifrs-bsci-ci:NetOperatingIncomeLoss contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-7009000</tifrs-bsci-ci:NetOperatingIncomeLoss>
+	<tifrs-bsci-ci:OtherIncomeOthers contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">14000</tifrs-bsci-ci:OtherIncomeOthers>
+	<tifrs-bsci-ci:OtherIncomeOthers contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">12000</tifrs-bsci-ci:OtherIncomeOthers>
+	<ifrs:OtherRevenue contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">14000</ifrs:OtherRevenue>
+	<ifrs:OtherRevenue contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">12000</ifrs:OtherRevenue>
+	<tifrs-bsci-ci:ForeignExchangeGains contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">2000</tifrs-bsci-ci:ForeignExchangeGains>
+	<tifrs-bsci-ci:ForeignExchangeGains contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">0</tifrs-bsci-ci:ForeignExchangeGains>
+	<ifrs:OtherGainsLosses contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">2000</ifrs:OtherGainsLosses>
+	<ifrs:OtherGainsLosses contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">0</ifrs:OtherGainsLosses>
+	<tifrs-bsci-ci:NonoperatingIncomeAndExpenses contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">16000</tifrs-bsci-ci:NonoperatingIncomeAndExpenses>
+	<tifrs-bsci-ci:NonoperatingIncomeAndExpenses contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">12000</tifrs-bsci-ci:NonoperatingIncomeAndExpenses>
+	<ifrs:ProfitLossBeforeTax contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-10373000</ifrs:ProfitLossBeforeTax>
+	<ifrs:ProfitLossBeforeTax contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-6997000</ifrs:ProfitLossBeforeTax>
+	<ifrs:IncomeTaxExpenseContinuingOperations contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-1801000</ifrs:IncomeTaxExpenseContinuingOperations>
+	<ifrs:IncomeTaxExpenseContinuingOperations contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-667000</ifrs:IncomeTaxExpenseContinuingOperations>
+	<ifrs:ProfitLossFromContinuingOperations contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-8572000</ifrs:ProfitLossFromContinuingOperations>
+	<ifrs:ProfitLossFromContinuingOperations contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-6330000</ifrs:ProfitLossFromContinuingOperations>
+	<ifrs:ProfitLoss contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-8572000</ifrs:ProfitLoss>
+	<ifrs:ProfitLoss contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-6330000</ifrs:ProfitLoss>
+	<ifrs:OtherComprehensiveIncomeBeforeTaxExchangeDifferencesOnTranslation contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">91000</ifrs:OtherComprehensiveIncomeBeforeTaxExchangeDifferencesOnTranslation>
+	<ifrs:OtherComprehensiveIncomeBeforeTaxExchangeDifferencesOnTranslation contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">606000</ifrs:OtherComprehensiveIncomeBeforeTaxExchangeDifferencesOnTranslation>
+	<ifrs:IncomeTaxRelatingToComponentsOfOtherComprehensiveIncome contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">16000</ifrs:IncomeTaxRelatingToComponentsOfOtherComprehensiveIncome>
+	<ifrs:IncomeTaxRelatingToComponentsOfOtherComprehensiveIncome contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">103000</ifrs:IncomeTaxRelatingToComponentsOfOtherComprehensiveIncome>
+	<ifrs:OtherComprehensiveIncome contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">75000</ifrs:OtherComprehensiveIncome>
+	<ifrs:OtherComprehensiveIncome contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">503000</ifrs:OtherComprehensiveIncome>
+	<ifrs:ComprehensiveIncome contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-8497000</ifrs:ComprehensiveIncome>
+	<ifrs:ComprehensiveIncome contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-5827000</ifrs:ComprehensiveIncome>
+	<ifrs:ProfitLossAttributableToOwnersOfParent contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-8572000</ifrs:ProfitLossAttributableToOwnersOfParent>
+	<ifrs:ProfitLossAttributableToOwnersOfParent contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-6330000</ifrs:ProfitLossAttributableToOwnersOfParent>
+	<ifrs:ProfitLossAttributableToNoncontrollingInterests contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">0</ifrs:ProfitLossAttributableToNoncontrollingInterests>
+	<ifrs:ProfitLossAttributableToNoncontrollingInterests contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">0</ifrs:ProfitLossAttributableToNoncontrollingInterests>
+	<ifrs:ComprehensiveIncomeAttributableToOwnersOfParent contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-8497000</ifrs:ComprehensiveIncomeAttributableToOwnersOfParent>
+	<ifrs:ComprehensiveIncomeAttributableToOwnersOfParent contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-5827000</ifrs:ComprehensiveIncomeAttributableToOwnersOfParent>
+	<ifrs:ComprehensiveIncomeAttributableToNoncontrollingInterests contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">0</ifrs:ComprehensiveIncomeAttributableToNoncontrollingInterests>
+	<ifrs:ComprehensiveIncomeAttributableToNoncontrollingInterests contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">0</ifrs:ComprehensiveIncomeAttributableToNoncontrollingInterests>
+	<ifrs:BasicEarningsLossPerShare contextRef="From20140101To20140630" decimals="2" unitRef="TWD">-0.68</ifrs:BasicEarningsLossPerShare>
+	<ifrs:BasicEarningsLossPerShare contextRef="From20130101To20130630" decimals="2" unitRef="TWD">-0.67</ifrs:BasicEarningsLossPerShare>
+	<ifrs:ProfitLossBeforeTax contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-10373000</ifrs:ProfitLossBeforeTax>
+	<ifrs:ProfitLossBeforeTax contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-6997000</ifrs:ProfitLossBeforeTax>
+	<tifrs-SCF:ProfitLossBeforeTax contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-10373000</tifrs-SCF:ProfitLossBeforeTax>
+	<tifrs-SCF:ProfitLossBeforeTax contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-6997000</tifrs-SCF:ProfitLossBeforeTax>
+	<tifrs-SCF:DepreciationExpense contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">83000</tifrs-SCF:DepreciationExpense>
+	<tifrs-SCF:DepreciationExpense contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">96000</tifrs-SCF:DepreciationExpense>
+	<tifrs-SCF:AmortizationExpense contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">1341000</tifrs-SCF:AmortizationExpense>
+	<tifrs-SCF:AmortizationExpense contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">1509000</tifrs-SCF:AmortizationExpense>
+	<tifrs-SCF:InterestIncome contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-15000</tifrs-SCF:InterestIncome>
+	<tifrs-SCF:InterestIncome contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-12000</tifrs-SCF:InterestIncome>
+	<tifrs-SCF:ImpairmentLossOnNonfinancialAssets contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">5886000</tifrs-SCF:ImpairmentLossOnNonfinancialAssets>
+	<tifrs-SCF:ImpairmentLossOnNonfinancialAssets contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">2522000</tifrs-SCF:ImpairmentLossOnNonfinancialAssets>
+	<tifrs-SCF:AdjustmentsToReconcileProfitLoss contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">7295000</tifrs-SCF:AdjustmentsToReconcileProfitLoss>
+	<tifrs-SCF:AdjustmentsToReconcileProfitLoss contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">4115000</tifrs-SCF:AdjustmentsToReconcileProfitLoss>
+	<tifrs-SCF:DecreaseIncreaseInAccountsReceivable contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">1000</tifrs-SCF:DecreaseIncreaseInAccountsReceivable>
+	<tifrs-SCF:DecreaseIncreaseInAccountsReceivable contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-5000</tifrs-SCF:DecreaseIncreaseInAccountsReceivable>
+	<tifrs-SCF:DecreaseIncreaseInOtherCurrentAssets contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">39000</tifrs-SCF:DecreaseIncreaseInOtherCurrentAssets>
+	<tifrs-SCF:DecreaseIncreaseInOtherCurrentAssets contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">3000</tifrs-SCF:DecreaseIncreaseInOtherCurrentAssets>
+	<tifrs-SCF:ChangesInOperatingAssets contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">40000</tifrs-SCF:ChangesInOperatingAssets>
+	<tifrs-SCF:ChangesInOperatingAssets contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-2000</tifrs-SCF:ChangesInOperatingAssets>
+	<tifrs-SCF:IncreaseDecreaseInOtherPayables contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-294000</tifrs-SCF:IncreaseDecreaseInOtherPayables>
+	<tifrs-SCF:IncreaseDecreaseInOtherPayables contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-28000</tifrs-SCF:IncreaseDecreaseInOtherPayables>
+	<tifrs-SCF:IncreaseDecreaseInOtherCurrentLiabilities contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-11000</tifrs-SCF:IncreaseDecreaseInOtherCurrentLiabilities>
+	<tifrs-SCF:IncreaseDecreaseInOtherCurrentLiabilities contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-1000</tifrs-SCF:IncreaseDecreaseInOtherCurrentLiabilities>
+	<tifrs-SCF:ChangesInOperatingLiabilities contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-305000</tifrs-SCF:ChangesInOperatingLiabilities>
+	<tifrs-SCF:ChangesInOperatingLiabilities contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-29000</tifrs-SCF:ChangesInOperatingLiabilities>
+	<tifrs-SCF:ChangesInOperatingAssetsAndLiabilities contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-265000</tifrs-SCF:ChangesInOperatingAssetsAndLiabilities>
+	<tifrs-SCF:ChangesInOperatingAssetsAndLiabilities contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-31000</tifrs-SCF:ChangesInOperatingAssetsAndLiabilities>
+	<tifrs-SCF:Adjustments contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">7030000</tifrs-SCF:Adjustments>
+	<tifrs-SCF:Adjustments contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">4084000</tifrs-SCF:Adjustments>
+	<tifrs-SCF:CashInflowOutflowGeneratedFromOperations contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-3343000</tifrs-SCF:CashInflowOutflowGeneratedFromOperations>
+	<tifrs-SCF:CashInflowOutflowGeneratedFromOperations contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-2913000</tifrs-SCF:CashInflowOutflowGeneratedFromOperations>
+	<ifrs:IncomeTaxesPaidRefundClassifiedAsOperatingActivities contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-21000</ifrs:IncomeTaxesPaidRefundClassifiedAsOperatingActivities>
+	<ifrs:IncomeTaxesPaidRefundClassifiedAsOperatingActivities contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-18000</ifrs:IncomeTaxesPaidRefundClassifiedAsOperatingActivities>
+	<ifrs:CashFlowsFromUsedInOperatingActivities contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-3364000</ifrs:CashFlowsFromUsedInOperatingActivities>
+	<ifrs:CashFlowsFromUsedInOperatingActivities contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-2931000</ifrs:CashFlowsFromUsedInOperatingActivities>
+	<tifrs-SCF:AcquisitionOfIntangibleAssets contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-207000</tifrs-SCF:AcquisitionOfIntangibleAssets>
+	<tifrs-SCF:AcquisitionOfIntangibleAssets contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">0</tifrs-SCF:AcquisitionOfIntangibleAssets>
+	<ifrs:InterestReceivedClassifiedAsInvestingActivities contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">15000</ifrs:InterestReceivedClassifiedAsInvestingActivities>
+	<ifrs:InterestReceivedClassifiedAsInvestingActivities contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">12000</ifrs:InterestReceivedClassifiedAsInvestingActivities>
+	<tifrs-SCF:NetCashFlowsFromUsedInInvestingActivities contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-192000</tifrs-SCF:NetCashFlowsFromUsedInInvestingActivities>
+	<tifrs-SCF:NetCashFlowsFromUsedInInvestingActivities contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">12000</tifrs-SCF:NetCashFlowsFromUsedInInvestingActivities>
+	<ifrs:ProceedsFromIssuingShares contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">7560000</ifrs:ProceedsFromIssuingShares>
+	<ifrs:ProceedsFromIssuingShares contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">0</ifrs:ProceedsFromIssuingShares>
+	<tifrs-SCF:CashFlowsFromUsedInFinancingActivities contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">7560000</tifrs-SCF:CashFlowsFromUsedInFinancingActivities>
+	<tifrs-SCF:CashFlowsFromUsedInFinancingActivities contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">0</tifrs-SCF:CashFlowsFromUsedInFinancingActivities>
+	<ifrs:EffectOfExchangeRateChangesOnCashAndCashEquivalents contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">91000</ifrs:EffectOfExchangeRateChangesOnCashAndCashEquivalents>
+	<ifrs:EffectOfExchangeRateChangesOnCashAndCashEquivalents contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">11000</ifrs:EffectOfExchangeRateChangesOnCashAndCashEquivalents>
+	<ifrs:IncreaseDecreaseInCashAndCashEquivalents contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">4095000</ifrs:IncreaseDecreaseInCashAndCashEquivalents>
+	<ifrs:IncreaseDecreaseInCashAndCashEquivalents contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">-2908000</ifrs:IncreaseDecreaseInCashAndCashEquivalents>
+	<tifrs-SCF:CashAndCashEquivalentsAtBeginningOfPeriod contextRef="AsOf20140630" decimals="-3" unitRef="TWD">12073000</tifrs-SCF:CashAndCashEquivalentsAtBeginningOfPeriod>
+	<tifrs-SCF:CashAndCashEquivalentsAtBeginningOfPeriod contextRef="AsOf20130630" decimals="-3" unitRef="TWD">10245000</tifrs-SCF:CashAndCashEquivalentsAtBeginningOfPeriod>
+	<tifrs-SCF:CashAndCashEquivalentsAtEndOfPeriod contextRef="AsOf20140630" decimals="-3" unitRef="TWD">16168000</tifrs-SCF:CashAndCashEquivalentsAtEndOfPeriod>
+	<tifrs-SCF:CashAndCashEquivalentsAtEndOfPeriod contextRef="AsOf20130630" decimals="-3" unitRef="TWD">7337000</tifrs-SCF:CashAndCashEquivalentsAtEndOfPeriod>
+	<ifrs:Equity contextRef="AsOf20140101_OrdinaryShareMember" decimals="-3" unitRef="TWD">115000000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20140101_TotalShareCapitalMember" decimals="-3" unitRef="TWD">115000000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20140101_UnappropriatedRetainedEarningsAccumulatedDeficitMember" decimals="-3" unitRef="TWD">-90560000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20140101_TotalRetainedEarningsMember" decimals="-3" unitRef="TWD">-90560000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20140101_ExchangeDifferencesOnTranslationOfForeignFinancialStatementsMember" decimals="-3" unitRef="TWD">-363000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20140101_TotalOtherEquityInterestMember" decimals="-3" unitRef="TWD">-363000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20140101_TotalEquityAttributableToOwnersOfParentMember" decimals="-3" unitRef="TWD">24077000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20140101_TotalEquityMember" decimals="-3" unitRef="TWD">24077000</ifrs:Equity>
+	<ifrs:ProfitLoss contextRef="From20140101To20140630_UnappropriatedRetainedEarningsAccumulatedDeficitMember" decimals="-3" unitRef="TWD">-8572000</ifrs:ProfitLoss>
+	<ifrs:ProfitLoss contextRef="From20140101To20140630_TotalRetainedEarningsMember" decimals="-3" unitRef="TWD">-8572000</ifrs:ProfitLoss>
+	<ifrs:ProfitLoss contextRef="From20140101To20140630_TotalEquityAttributableToOwnersOfParentMember" decimals="-3" unitRef="TWD">-8572000</ifrs:ProfitLoss>
+	<ifrs:ProfitLoss contextRef="From20140101To20140630_TotalEquityMember" decimals="-3" unitRef="TWD">-8572000</ifrs:ProfitLoss>
+	<ifrs:OtherComprehensiveIncome contextRef="From20140101To20140630_ExchangeDifferencesOnTranslationOfForeignFinancialStatementsMember" decimals="-3" unitRef="TWD">75000</ifrs:OtherComprehensiveIncome>
+	<ifrs:OtherComprehensiveIncome contextRef="From20140101To20140630_TotalOtherEquityInterestMember" decimals="-3" unitRef="TWD">75000</ifrs:OtherComprehensiveIncome>
+	<ifrs:OtherComprehensiveIncome contextRef="From20140101To20140630_TotalEquityAttributableToOwnersOfParentMember" decimals="-3" unitRef="TWD">75000</ifrs:OtherComprehensiveIncome>
+	<ifrs:OtherComprehensiveIncome contextRef="From20140101To20140630_TotalEquityMember" decimals="-3" unitRef="TWD">75000</ifrs:OtherComprehensiveIncome>
+	<ifrs:ComprehensiveIncome contextRef="From20140101To20140630_UnappropriatedRetainedEarningsAccumulatedDeficitMember" decimals="-3" unitRef="TWD">-8572000</ifrs:ComprehensiveIncome>
+	<ifrs:ComprehensiveIncome contextRef="From20140101To20140630_TotalRetainedEarningsMember" decimals="-3" unitRef="TWD">-8572000</ifrs:ComprehensiveIncome>
+	<ifrs:ComprehensiveIncome contextRef="From20140101To20140630_ExchangeDifferencesOnTranslationOfForeignFinancialStatementsMember" decimals="-3" unitRef="TWD">75000</ifrs:ComprehensiveIncome>
+	<ifrs:ComprehensiveIncome contextRef="From20140101To20140630_TotalOtherEquityInterestMember" decimals="-3" unitRef="TWD">75000</ifrs:ComprehensiveIncome>
+	<ifrs:ComprehensiveIncome contextRef="From20140101To20140630_TotalEquityAttributableToOwnersOfParentMember" decimals="-3" unitRef="TWD">-8497000</ifrs:ComprehensiveIncome>
+	<ifrs:ComprehensiveIncome contextRef="From20140101To20140630_TotalEquityMember" decimals="-3" unitRef="TWD">-8497000</ifrs:ComprehensiveIncome>
+	<tifrs-es:IssueOfShares contextRef="From20140101To20140630_OrdinaryShareMember" decimals="-3" unitRef="TWD">20000000</tifrs-es:IssueOfShares>
+	<tifrs-es:IssueOfShares contextRef="From20140101To20140630_TotalShareCapitalMember" decimals="-3" unitRef="TWD">20000000</tifrs-es:IssueOfShares>
+	<tifrs-es:IssueOfShares contextRef="From20140101To20140630_UnappropriatedRetainedEarningsAccumulatedDeficitMember" decimals="-3" unitRef="TWD">-12440000</tifrs-es:IssueOfShares>
+	<tifrs-es:IssueOfShares contextRef="From20140101To20140630_TotalRetainedEarningsMember" decimals="-3" unitRef="TWD">-12440000</tifrs-es:IssueOfShares>
+	<tifrs-es:IssueOfShares contextRef="From20140101To20140630_TotalEquityAttributableToOwnersOfParentMember" decimals="-3" unitRef="TWD">7560000</tifrs-es:IssueOfShares>
+	<tifrs-es:IssueOfShares contextRef="From20140101To20140630_TotalEquityMember" decimals="-3" unitRef="TWD">7560000</tifrs-es:IssueOfShares>
+	<tifrs-es:TotalIncreaseDecreaseInEquity contextRef="From20140101To20140630_OrdinaryShareMember" decimals="-3" unitRef="TWD">20000000</tifrs-es:TotalIncreaseDecreaseInEquity>
+	<tifrs-es:TotalIncreaseDecreaseInEquity contextRef="From20140101To20140630_TotalShareCapitalMember" decimals="-3" unitRef="TWD">20000000</tifrs-es:TotalIncreaseDecreaseInEquity>
+	<tifrs-es:TotalIncreaseDecreaseInEquity contextRef="From20140101To20140630_UnappropriatedRetainedEarningsAccumulatedDeficitMember" decimals="-3" unitRef="TWD">-21012000</tifrs-es:TotalIncreaseDecreaseInEquity>
+	<tifrs-es:TotalIncreaseDecreaseInEquity contextRef="From20140101To20140630_TotalRetainedEarningsMember" decimals="-3" unitRef="TWD">-21012000</tifrs-es:TotalIncreaseDecreaseInEquity>
+	<tifrs-es:TotalIncreaseDecreaseInEquity contextRef="From20140101To20140630_ExchangeDifferencesOnTranslationOfForeignFinancialStatementsMember" decimals="-3" unitRef="TWD">75000</tifrs-es:TotalIncreaseDecreaseInEquity>
+	<tifrs-es:TotalIncreaseDecreaseInEquity contextRef="From20140101To20140630_TotalOtherEquityInterestMember" decimals="-3" unitRef="TWD">75000</tifrs-es:TotalIncreaseDecreaseInEquity>
+	<tifrs-es:TotalIncreaseDecreaseInEquity contextRef="From20140101To20140630_TotalEquityAttributableToOwnersOfParentMember" decimals="-3" unitRef="TWD">-937000</tifrs-es:TotalIncreaseDecreaseInEquity>
+	<tifrs-es:TotalIncreaseDecreaseInEquity contextRef="From20140101To20140630_TotalEquityMember" decimals="-3" unitRef="TWD">-937000</tifrs-es:TotalIncreaseDecreaseInEquity>
+	<ifrs:Equity contextRef="AsOf20140630_OrdinaryShareMember" decimals="-3" unitRef="TWD">135000000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20140630_TotalShareCapitalMember" decimals="-3" unitRef="TWD">135000000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20140630_UnappropriatedRetainedEarningsAccumulatedDeficitMember" decimals="-3" unitRef="TWD">-111572000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20140630_TotalRetainedEarningsMember" decimals="-3" unitRef="TWD">-111572000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20140630_ExchangeDifferencesOnTranslationOfForeignFinancialStatementsMember" decimals="-3" unitRef="TWD">-288000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20140630_TotalOtherEquityInterestMember" decimals="-3" unitRef="TWD">-288000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20140630_TotalEquityAttributableToOwnersOfParentMember" decimals="-3" unitRef="TWD">23140000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20140630_TotalEquityMember" decimals="-3" unitRef="TWD">23140000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20130101_OrdinaryShareMember" decimals="-3" unitRef="TWD">95000000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20130101_TotalShareCapitalMember" decimals="-3" unitRef="TWD">95000000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20130101_UnappropriatedRetainedEarningsAccumulatedDeficitMember" decimals="-3" unitRef="TWD">-58540000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20130101_TotalRetainedEarningsMember" decimals="-3" unitRef="TWD">-58540000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20130101_ExchangeDifferencesOnTranslationOfForeignFinancialStatementsMember" decimals="-3" unitRef="TWD">-750000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20130101_TotalOtherEquityInterestMember" decimals="-3" unitRef="TWD">-750000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20130101_TotalEquityAttributableToOwnersOfParentMember" decimals="-3" unitRef="TWD">35710000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20130101_TotalEquityMember" decimals="-3" unitRef="TWD">35710000</ifrs:Equity>
+	<ifrs:ProfitLoss contextRef="From20130101To20130630_UnappropriatedRetainedEarningsAccumulatedDeficitMember" decimals="-3" unitRef="TWD">-6330000</ifrs:ProfitLoss>
+	<ifrs:ProfitLoss contextRef="From20130101To20130630_TotalRetainedEarningsMember" decimals="-3" unitRef="TWD">-6330000</ifrs:ProfitLoss>
+	<ifrs:ProfitLoss contextRef="From20130101To20130630_TotalEquityAttributableToOwnersOfParentMember" decimals="-3" unitRef="TWD">-6330000</ifrs:ProfitLoss>
+	<ifrs:ProfitLoss contextRef="From20130101To20130630_TotalEquityMember" decimals="-3" unitRef="TWD">-6330000</ifrs:ProfitLoss>
+	<ifrs:OtherComprehensiveIncome contextRef="From20130101To20130630_ExchangeDifferencesOnTranslationOfForeignFinancialStatementsMember" decimals="-3" unitRef="TWD">503000</ifrs:OtherComprehensiveIncome>
+	<ifrs:OtherComprehensiveIncome contextRef="From20130101To20130630_TotalOtherEquityInterestMember" decimals="-3" unitRef="TWD">503000</ifrs:OtherComprehensiveIncome>
+	<ifrs:OtherComprehensiveIncome contextRef="From20130101To20130630_TotalEquityAttributableToOwnersOfParentMember" decimals="-3" unitRef="TWD">503000</ifrs:OtherComprehensiveIncome>
+	<ifrs:OtherComprehensiveIncome contextRef="From20130101To20130630_TotalEquityMember" decimals="-3" unitRef="TWD">503000</ifrs:OtherComprehensiveIncome>
+	<ifrs:ComprehensiveIncome contextRef="From20130101To20130630_UnappropriatedRetainedEarningsAccumulatedDeficitMember" decimals="-3" unitRef="TWD">-6330000</ifrs:ComprehensiveIncome>
+	<ifrs:ComprehensiveIncome contextRef="From20130101To20130630_TotalRetainedEarningsMember" decimals="-3" unitRef="TWD">-6330000</ifrs:ComprehensiveIncome>
+	<ifrs:ComprehensiveIncome contextRef="From20130101To20130630_ExchangeDifferencesOnTranslationOfForeignFinancialStatementsMember" decimals="-3" unitRef="TWD">503000</ifrs:ComprehensiveIncome>
+	<ifrs:ComprehensiveIncome contextRef="From20130101To20130630_TotalOtherEquityInterestMember" decimals="-3" unitRef="TWD">503000</ifrs:ComprehensiveIncome>
+	<ifrs:ComprehensiveIncome contextRef="From20130101To20130630_TotalEquityAttributableToOwnersOfParentMember" decimals="-3" unitRef="TWD">-5827000</ifrs:ComprehensiveIncome>
+	<ifrs:ComprehensiveIncome contextRef="From20130101To20130630_TotalEquityMember" decimals="-3" unitRef="TWD">-5827000</ifrs:ComprehensiveIncome>
+	<tifrs-es:TotalIncreaseDecreaseInEquity contextRef="From20130101To20130630_UnappropriatedRetainedEarningsAccumulatedDeficitMember" decimals="-3" unitRef="TWD">-6330000</tifrs-es:TotalIncreaseDecreaseInEquity>
+	<tifrs-es:TotalIncreaseDecreaseInEquity contextRef="From20130101To20130630_TotalRetainedEarningsMember" decimals="-3" unitRef="TWD">-6330000</tifrs-es:TotalIncreaseDecreaseInEquity>
+	<tifrs-es:TotalIncreaseDecreaseInEquity contextRef="From20130101To20130630_ExchangeDifferencesOnTranslationOfForeignFinancialStatementsMember" decimals="-3" unitRef="TWD">503000</tifrs-es:TotalIncreaseDecreaseInEquity>
+	<tifrs-es:TotalIncreaseDecreaseInEquity contextRef="From20130101To20130630_TotalOtherEquityInterestMember" decimals="-3" unitRef="TWD">503000</tifrs-es:TotalIncreaseDecreaseInEquity>
+	<tifrs-es:TotalIncreaseDecreaseInEquity contextRef="From20130101To20130630_TotalEquityAttributableToOwnersOfParentMember" decimals="-3" unitRef="TWD">-5827000</tifrs-es:TotalIncreaseDecreaseInEquity>
+	<tifrs-es:TotalIncreaseDecreaseInEquity contextRef="From20130101To20130630_TotalEquityMember" decimals="-3" unitRef="TWD">-5827000</tifrs-es:TotalIncreaseDecreaseInEquity>
+	<ifrs:Equity contextRef="AsOf20130630_OrdinaryShareMember" decimals="-3" unitRef="TWD">95000000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20130630_TotalShareCapitalMember" decimals="-3" unitRef="TWD">95000000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20130630_UnappropriatedRetainedEarningsAccumulatedDeficitMember" decimals="-3" unitRef="TWD">-64870000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20130630_TotalRetainedEarningsMember" decimals="-3" unitRef="TWD">-64870000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20130630_ExchangeDifferencesOnTranslationOfForeignFinancialStatementsMember" decimals="-3" unitRef="TWD">-247000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20130630_TotalOtherEquityInterestMember" decimals="-3" unitRef="TWD">-247000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20130630_TotalEquityAttributableToOwnersOfParentMember" decimals="-3" unitRef="TWD">29883000</ifrs:Equity>
+	<ifrs:Equity contextRef="AsOf20130630_TotalEquityMember" decimals="-3" unitRef="TWD">29883000</ifrs:Equity>
+	<tifrs-ar:ReviewAuditDate contextRef="AsOf20140804">2014-08-04</tifrs-ar:ReviewAuditDate>
+	<tifrs-ar:ReviewReport contextRef="AsOf20140804">Y</tifrs-ar:ReviewReport>
+	<tifrs-ar:UnqualifiedOpinionAbstract contextRef="AsOf20140804">Y</tifrs-ar:UnqualifiedOpinionAbstract>
+	<tifrs-ar:AccountantName contextRef="AsOf20140804" lang="zh"><![CDATA[勤業眾信聯合會計師事務所]]></tifrs-ar:AccountantName>
+	<tifrs-ar:AssuranceAccountantName1 contextRef="AsOf20140804" lang="zh"><![CDATA[李麗凰]]></tifrs-ar:AssuranceAccountantName1>
+	<tifrs-ar:AssuranceAccountantName2 contextRef="AsOf20140804" lang="zh"><![CDATA[陳慧銘]]></tifrs-ar:AssuranceAccountantName2>
+	<tifrs-ar:DescriptionEmphasizeItemBody contextRef="AsOf20140804" lang="zh"><![CDATA[]]></tifrs-ar:DescriptionEmphasizeItemBody>
+	<tifrs-ar:DescriptionOtherItemBody contextRef="AsOf20140804" lang="zh"><![CDATA[]]></tifrs-ar:DescriptionOtherItemBody>
+	<tifrs-ar:AccountantsReportBody contextRef="AsOf20140804" lang="zh"><![CDATA[會計師核閱報告
+
+
+摩幻潛艇數位股份有限公司　公鑒：
+
+　　摩幻潛艇數位股份有限公司及子公司民國103年及102年6月30日之合併資產負債表，暨民國103年及102年1月1日至6月30日之合併綜合損益表、合併權益變動表及合併現金流量表，業經本會計師核閱竣事。上開合併財務報表之編製係管理階層之責任，本會計師之責任則為根據核閱結果出具報告。
+　　本會計師係依照審計準則公報第三十六號「財務報表之核閱」規劃並執行核閱工作。由於本會計師僅實施分析、比較與查詢，並未依照一般公認審計準則查核，因是無法對上開合併財務報告整體表示查核意見。
+　　依本會計師核閱結果，並未發現第一段所述合併財務報告在所有重大方面有違反證券發行人財務報告編製準則及經金融監督管理委員會認可之國際會計準則第34號「期中財務報導」而須作修正之情事。
+
+勤業眾信聯合會計師事務所
+會 計 師李麗凰
+會 計 師陳慧銘
+
+
+
+
+
+財政部證券暨期貨管理委員會核准文號
+　台財證六字第0930128050號		財政部證券暨期貨管理委員會核准文號
+　台財證六字第0920123784號
+
+中　　華　　民　　國　　103　　年　　8　　月　　4　　日
+
+]]></tifrs-ar:AccountantsReportBody>
+	<tifrs-ar:EndingBalanceOfAssetsOfSubsidiariesWhoseFinancialStatementsWereAuditedOrReviewedByOtherIndependentAccountants contextRef="AsOf20140630" decimals="-3" unitRef="TWD">0</tifrs-ar:EndingBalanceOfAssetsOfSubsidiariesWhoseFinancialStatementsWereAuditedOrReviewedByOtherIndependentAccountants>
+	<tifrs-ar:TotalYearToDateRevenuesOfSubsidiariesWhoseFinancialStatementsWereAuditedOrReviewedByOtherIndependentAccountants contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">0</tifrs-ar:TotalYearToDateRevenuesOfSubsidiariesWhoseFinancialStatementsWereAuditedOrReviewedByOtherIndependentAccountants>
+	<tifrs-ar:EndingBalanceOfInvestmentsAccountedForUsingEquityMethodWhoseFinancialStatementsWereAuditedOrReviewedByOtherIndependentAccountants contextRef="AsOf20140630" decimals="-3" unitRef="TWD">0</tifrs-ar:EndingBalanceOfInvestmentsAccountedForUsingEquityMethodWhoseFinancialStatementsWereAuditedOrReviewedByOtherIndependentAccountants>
+	<tifrs-ar:ShareOfProfitLossForTheQuarterOfAssociatesAndJointVenturesAccountedForUsingEquityMethodWhoseFinancialStatementsWereAuditedOrReviewedByOtherIndependentAccountants contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">0</tifrs-ar:ShareOfProfitLossForTheQuarterOfAssociatesAndJointVenturesAccountedForUsingEquityMethodWhoseFinancialStatementsWereAuditedOrReviewedByOtherIndependentAccountants>
+	<tifrs-ar:EndingBalanceOfAssetsOfSubsidiariesWhoseFinancialStatementsWereOnUnauditedOrUnreviewed contextRef="AsOf20140630" decimals="-3" unitRef="TWD">0</tifrs-ar:EndingBalanceOfAssetsOfSubsidiariesWhoseFinancialStatementsWereOnUnauditedOrUnreviewed>
+	<tifrs-ar:YearToDateComprehensiveIncomeOfSubsidiariesWhoseFinancialStatementsWereUnauditedOrUnreviewed contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">0</tifrs-ar:YearToDateComprehensiveIncomeOfSubsidiariesWhoseFinancialStatementsWereUnauditedOrUnreviewed>
+	<tifrs-ar:EndingBalanceOfInvestmentsAccountedForUsingEquityMethodWhoseFinancialStatementsWereUnauditedOrUnreviewed contextRef="AsOf20140630" decimals="-3" unitRef="TWD">0</tifrs-ar:EndingBalanceOfInvestmentsAccountedForUsingEquityMethodWhoseFinancialStatementsWereUnauditedOrUnreviewed>
+	<tifrs-ar:ShareOfYearToDateProfitLossOfAssociatesAndJointVenturesAccountedForUsingEquityMethodWhoseFinancialStatementsWereUnauditedOrUnreviewed contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">0</tifrs-ar:ShareOfYearToDateProfitLossOfAssociatesAndJointVenturesAccountedForUsingEquityMethodWhoseFinancialStatementsWereUnauditedOrUnreviewed>
+	<tifrs-notes:FinancialStatementNotes contextRef="From20140101To20140630"><![CDATA[http://doc.twse.com.tw/server-java/t57sb01?step=1&colorchg=1&co_id=3671&year=103&seamon=2&mtype=A&]]></tifrs-notes:FinancialStatementNotes>
+	<tifrs-notes:HistoryAndOrganization contextRef="From20140101To20140630"><![CDATA[　摩幻潛艇數位股份有限公司（以下稱「本公司」）係於96年10月設立於台北市之股份有限公司，並於同年10月開始營業，所營業務主要為3D動漫晝、3D數位內容、授權其他相關數位內容網站及電影製片與發行等。
+　　本公司股票自99年8月起經財團法人中華民國證券櫃檯買賣中心核准，於該中心之興櫃股票櫃檯買賣。
+　　本合併財務報告係以本公司之功能性貨幣新台幣表達。
+]]></tifrs-notes:HistoryAndOrganization>
+	<tifrs-notes:DateAndProceduresOfAuthorisationForIssueOfFinancialStatements contextRef="From20140101To20140630"><![CDATA[本合併財務報告於103年8月4日經董事會通過發布。]]></tifrs-notes:DateAndProceduresOfAuthorisationForIssueOfFinancialStatements>
+	<tifrs-notes:ApplicationOfNewlyIssuedOrAmendedStandardsAndInterpretations contextRef="From20140101To20140630"><![CDATA[　(一)	已發布但尚未生效之2013年版國際財務報導準則（IFRS）、國際會計準則（IAS）、解釋（IFRIC）及解釋公告（SIC）
+　　依據金融監督管理委員會（以下稱「金管會」）於103年4月3日發布之金管證審字第1030010325號函，合併公司應自104年起開始適用業經國際會計準則理事會（IASB）發布且經金管會認可之2013年版IFRS、IAS、IFRIC及SIC（以下稱「IFRSs」）。
+新發布／修正／修訂準則及解釋		IASB發布之生效日（註）
+IFRSs之修正「IFRSs之改善－對IAS 39之修正（2009年）」		2009年1月1日或2010年1月1日
+IAS 39之修正「嵌入式衍生工具」		於2009年6月30日以後結束之年度期間生效
+「IFRSs之改善（2010年）」		2010年7月1日或2011年1月1日
+
+
+新發布／修正／修訂準則及解釋		IASB發布之生效日（註）
+「2009 -2011週期之年度改善」		2013年1月1日
+IFRS 1之修正「IFRS 7之比較揭露對首次採用者之有限度豁免」		2010年7月1日
+IFRS 1之修正「嚴重高度通貨膨脹及首次採用者固定日期之移除」		2011年7月1日
+IFRS 1之修正「政府貸款」		2013年1月1日
+IFRS 7之修正「揭露－金融資產及金融負債之互抵」		2013年1月1日
+IFRS 7之修正「揭露－金融資產之移轉」		2011年7月1日
+IFRS 10「合併財務報表」		2013年1月1日
+IFRS 11「聯合協議」		2013年1月1日
+IFRS 12「對其他個體之權益之揭露」		2013年1月1日
+IFRS 10、IFRS 11及IFRS 12之修正「合併財務報表、聯合協議及對其他個體之權益之揭露：過渡指引」		2013年1月1日
+IFRS 10、IFRS 12及IAS 27之修正「投資個體」		2014年1月1日
+IFRS 13「公允價值衡量」		2013年1月1日
+IAS 1之修正「其他綜合損益項目之表達」		2012年7月1日
+IAS 12之修正「遞延所得稅：標的資產之回收」		2012年1月1日
+IAS 19之修訂「員工福利」		2013年1月1日
+IAS 27之修訂「單獨財務報表」		2013年1月1日
+IAS 28之修訂「投資關聯企業及合資」		2013年1月1日
+IAS 32之修正「金融資產及金融負債之互抵」		2014年1月1日
+IFRIC 20「露天礦場於生產階段之剝除成本」		2013年1月1日
+
+註：	除另註明外，上述新發布／修正／修訂準則或解釋係於各該日期以後開始之年度期間生效。
+　　除下列說明外，適用上述2013年版IFRSs將不致造成合併公司會計政策之重大變動：
+ 1.	IAS 1「其他綜合損益項目之表達」之修正
+　　依修正之準則規定，其他綜合損益項目須按性質分類且分組為(1)不重分類至損益之項目及(2)後續可能重分類至損益之項目。相關所得稅亦應按相同基礎分組。適用該修正規定前，並無上述分組之強制規定。
+　　合併公司將於104年適用上述修正編製合併綜合損益表，後續可能重分類至損益之項目預計將包含國外營運機構財務報表換算之兌換差額。
+　　綜上所述，適用2013年版IFRSs預期受影響之綜合損益項目彙總如下：
+項目		2010年版
+IFRSs金額		版本升級
+影響金額		2013年版
+IFRSs金額		說明
+103年1月1日至6月30日
+其他綜合損益
+　　國外營運機構財務報表換算之兌換差額				$	91			(	$	91	)				$	-		1.
+　　與其他綜合損益組成部分相關之所得稅（費用）利益			(		16	)					16					-
+後續可能重分類至損益之項目：
+　　國外營運機構財務報表換算之兌換差額					-					91					91		1.
+　　與其他綜合損益組成部分相關之所得稅（費用）利益					-			(		16	)			(		16	)
+
+　　除上述影響外，截至本合併財務報告通過發布日止，合併公司仍持續評估2013年版IFRSs對各期間財務狀況與財務績效之影響，相關影響待評估完成時予以揭露。
+　(二)	IASB已發布但尚未經金管會認可之IFRSs
+　　合併公司未適用下列業經IASB發布但未經金管會認可之IFRSs。截至本合併財務報告通過發布日止，金管會尚未發布生效日。
+新發布／修正／修訂準則及解釋		IASB發布之生效日（註1）
+「2010-2012週期之年度改善」		2014年7月1日（註2）
+「2011-2013週期之年度改善」		2014年7月1日
+IFRS 9「金融工具」		註3
+IFRS 9及IFRS 7之修正「強制生效日及過渡揭露」		註3
+IFRS 11之修正「聯合營運權益之取得」		2016年1月1日
+IFRS 14「管制遞延帳戶」		2016年1月1日
+IFRS 15「來自客戶合約之收入」		2017年1月1日
+新發布／修正／修訂準則及解釋		IASB發布之生效日（註1）
+IAS 16及IAS 38之修正「可接受之折舊及攤銷方法之闡釋」		2016年1月1日
+IAS 16及IAS 41之修正「農業：生產性植物」		2016年1月1日
+IAS 19之修正「確定福利計畫：員工提撥金」		2014年7月1日
+IAS 36之修正「非金融資產可回收金額之揭露」		2014年1月1日
+IAS 39之修正「衍生工具之合約更替及避險會計之繼續」		2014年1月1日
+IFRIC 21「公課」		2014年1月1日
+
+註1：	除另註明外，上述新發布／修正／修訂準則或解釋係於各該日期以後開始之年度期間生效。
+註2：	給與日於2014年7月1日以後之股份基礎給付交易開始適用IFRS 2之修正；收購日於2014年7月1日以後之企業合併開始適用IFRS 3之修正；IFRS 13於修正時即生效。其餘修正係適用於2014年7月1日以後開始之年度期間。
+註3：	IASB將IFRS 9生效日暫定為2018年1月1日以後開始之年度期間。
+　　除下列說明外，適用上述新發布／修正／修訂準則或解釋將不致造成合併公司會計政策之重大變動：
+ 1.	IFRS 9「金融工具」
+金融資產之認列及衡量
+　　就金融資產方面，所有原屬於IAS 39「金融工具：認列與衡量」範圍內之金融資產後續衡量係以攤銷後成本衡量或以公允價值衡量。若合併公司係以收取合約現金流量為目的之經營模式而持有該金融資產，且其合約現金流量完全為支付本金及流通在外本金金額之利息，則該金融資產係以攤銷後成本衡量。未符合前述條件之其他金融資產係以公允價值衡量。惟合併公司得選擇於原始認列時，將非持有供交易之權益投資指定為透過其他綜合損益按公允價值衡量，除股利收益認列於損益外，其他相關利益及損失係認列於其他綜合損益。
+ 2.	IAS 36之修正「非金融資產可回收金額之揭露」
+　　IASB於發布IFRS 13「公允價值衡量」時，同時修正IAS 36「資產減損」之揭露規定，導致合併公司須於每一報導期間增加揭露資產或現金產生單位之可回收金額。本次IAS 36之修正係釐清合併公司僅須於認列或迴轉減損損失當期揭露該等可回收金額。此外，若可回收金額係以現值法計算之公允價值減處分成本衡量，合併公司須增加揭露所採用之折現率。
+　　除上述影響外，截至本合併財務報告通過發布日止，合併公司仍持續評估其他準則、解釋之修正對財務狀況與財務績效之影響，相關影響待評估完成時予以揭露。
+]]></tifrs-notes:ApplicationOfNewlyIssuedOrAmendedStandardsAndInterpretations>
+	<tifrs-notes:StatementOfIFRSAndRelatedRegulationsCompliance contextRef="From20140101To20140630"><![CDATA[本合併財務報告係依照證券發行人財務報告編製準則及經金管會認可之IAS 34期中財務報導編製。本合併財務報告未包含整份年度財務報告所規定之所有IFRSs揭露資訊。]]></tifrs-notes:StatementOfIFRSAndRelatedRegulationsCompliance>
+	<tifrs-notes:PrinciplesOfConsolidation contextRef="From20140101To20140630"><![CDATA[1.	合併報告編製原則
+　　本合併財務報告係包含本公司及由本公司所控制個體（子公司）之財務報告。
+　　子公司之財務報告已予調整，以使其會計政策與合併公司之會計政策一致。
+　　於編製合併財務報告時，各個體間之交易、帳戶餘額、收益及費損已全數予以銷除。
+]]></tifrs-notes:PrinciplesOfConsolidation>
+	<tifrs-notes:IncomeTax contextRef="From20140101To20140630"><![CDATA[所得稅費用係當期所得稅及遞延所得稅之總和。期中期間之所得稅係以年度為基礎進行評估，以預期年度總盈餘所適用之稅率，就期中稅前利益予以計算。]]></tifrs-notes:IncomeTax>
+	<tifrs-notes:SourcesOfUncertaintyFromSignificantAccountingJudgmentsAssumptionsAndEstimations contextRef="From20140101To20140630"><![CDATA[本合併財務報告所採用之重大會計判斷、估計及假設不確定性主要來源與102年度合併財務報告相同。]]></tifrs-notes:SourcesOfUncertaintyFromSignificantAccountingJudgmentsAssumptionsAndEstimations>
+	<tifrs-notes:Others/>
+	<tifrs-notes:TheConsolidatedEntities>
+		<tifrs-notes:CompanyNameOfTheInvestor contextRef="From20140101To20140630"><![CDATA[摩幻潛艇數位公司                                                                                    ]]></tifrs-notes:CompanyNameOfTheInvestor>
+		<tifrs-notes:NameOfInvestee contextRef="From20140101To20140630"><![CDATA[Dynamic Digital Holdings Limited                                                                    ]]></tifrs-notes:NameOfInvestee>
+		<tifrs-notes:MainBusinesses contextRef="From20140101To20140630"><![CDATA[3D動畫元件及數位內容開發、授權                                                                                                                                                                          ]]></tifrs-notes:MainBusinesses>
+		<tifrs-notes:PercentageOfOwnership4 contextRef="AsOf20140630" decimals="4" unitRef="Pure">1.0000</tifrs-notes:PercentageOfOwnership4>
+		<tifrs-notes:PercentageOfOwnership4 contextRef="AsOf20131231" decimals="4" unitRef="Pure">1.0000</tifrs-notes:PercentageOfOwnership4>
+		<tifrs-notes:PercentageOfOwnership4 contextRef="AsOf20130630" decimals="4" unitRef="Pure">1.0000</tifrs-notes:PercentageOfOwnership4>
+		<tifrs-notes:Description contextRef="From20140101To20140630"><![CDATA[]]></tifrs-notes:Description>
+	</tifrs-notes:TheConsolidatedEntities>
+
+	<tifrs-notes:TheConsolidatedEntities>
+		<tifrs-notes:CompanyNameOfTheInvestor contextRef="From20140101To20140630"><![CDATA[摩幻潛艇數位公司                                                                                    ]]></tifrs-notes:CompanyNameOfTheInvestor>
+		<tifrs-notes:NameOfInvestee contextRef="From20140101To20140630"><![CDATA[DDH LLC.,                                                                                           ]]></tifrs-notes:NameOfInvestee>
+		<tifrs-notes:MainBusinesses contextRef="From20140101To20140630"><![CDATA[代理銷售3D數位內容產品並負責美國版權專利                                                                                                                                                                ]]></tifrs-notes:MainBusinesses>
+		<tifrs-notes:PercentageOfOwnership4 contextRef="AsOf20140630" decimals="4" unitRef="Pure">0.0000</tifrs-notes:PercentageOfOwnership4>
+		<tifrs-notes:PercentageOfOwnership4 contextRef="AsOf20131231" decimals="4" unitRef="Pure">1.0000</tifrs-notes:PercentageOfOwnership4>
+		<tifrs-notes:PercentageOfOwnership4 contextRef="AsOf20130630" decimals="4" unitRef="Pure">1.0000</tifrs-notes:PercentageOfOwnership4>
+		<tifrs-notes:Description contextRef="From20140101To20140630"><![CDATA[103年5月28日清算完成。]]></tifrs-notes:Description>
+	</tifrs-notes:TheConsolidatedEntities>
+
+	<tifrs-notes:FinancialStatementAccountAndAmount>
+		<tifrs-notes:FinancialStatementAccount2 contextRef="AsOf20140630"><![CDATA[應收帳款]]></tifrs-notes:FinancialStatementAccount2>
+		<tifrs-notes:Amount2 contextRef="AsOf20140630" decimals="-3" unitRef="TWD">0</tifrs-notes:Amount2>
+		<tifrs-notes:Amount2 contextRef="AsOf20131231" decimals="-3" unitRef="TWD">1000</tifrs-notes:Amount2>
+		<tifrs-notes:Amount2 contextRef="AsOf20130630" decimals="-3" unitRef="TWD">8000</tifrs-notes:Amount2>
+	</tifrs-notes:FinancialStatementAccountAndAmount>
+
+	<tifrs-notes:FinancialStatementAccountAndAmount>
+		<tifrs-notes:FinancialStatementAccount2 contextRef="AsOf20140630"><![CDATA[減：備抵呆帳]]></tifrs-notes:FinancialStatementAccount2>
+		<tifrs-notes:Amount2 contextRef="AsOf20140630" decimals="-3" unitRef="TWD">0</tifrs-notes:Amount2>
+		<tifrs-notes:Amount2 contextRef="AsOf20131231" decimals="-3" unitRef="TWD">0</tifrs-notes:Amount2>
+		<tifrs-notes:Amount2 contextRef="AsOf20130630" decimals="-3" unitRef="TWD">0</tifrs-notes:Amount2>
+	</tifrs-notes:FinancialStatementAccountAndAmount>
+
+	<tifrs-notes:ScheduleOfTradeAndOtherReceivables contextRef="AsOf20140630" decimals="-3"><![CDATA[　　合併公司從事經營3D動漫畫、3D數位內容、授權及電影製片與發行等，合併公司將其所製作之3D動畫及電子書等，委由其他網路平台銷售，再向網路平台商收取權利金收入。
+　　截至103年6月30日暨102年12月31日及6月30日止合併公司並無逾期未收回之應收帳款。
+]]></tifrs-notes:ScheduleOfTradeAndOtherReceivables>
+	<tifrs-notes:TotalTradeAndOtherReceivables contextRef="AsOf20140630" decimals="-3" unitRef="TWD">0</tifrs-notes:TotalTradeAndOtherReceivables>
+	<tifrs-notes:TotalTradeAndOtherReceivables contextRef="AsOf20131231" decimals="-3" unitRef="TWD">1000</tifrs-notes:TotalTradeAndOtherReceivables>
+	<tifrs-notes:TotalTradeAndOtherReceivables contextRef="AsOf20130630" decimals="-3" unitRef="TWD">8000</tifrs-notes:TotalTradeAndOtherReceivables>
+	<tifrs-notes:ShortTermEmployeeBenefits contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">0</tifrs-notes:ShortTermEmployeeBenefits>
+	<tifrs-notes:ShortTermEmployeeBenefits contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">0</tifrs-notes:ShortTermEmployeeBenefits>
+	<tifrs-notes:PostEmploymentBenefits contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">0</tifrs-notes:PostEmploymentBenefits>
+	<tifrs-notes:PostEmploymentBenefits contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">0</tifrs-notes:PostEmploymentBenefits>
+	<tifrs-notes:OtherLongTermBenefits contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">852000</tifrs-notes:OtherLongTermBenefits>
+	<tifrs-notes:OtherLongTermBenefits contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">852000</tifrs-notes:OtherLongTermBenefits>
+	<tifrs-notes:TerminationBenefits contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">0</tifrs-notes:TerminationBenefits>
+	<tifrs-notes:TerminationBenefits contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">0</tifrs-notes:TerminationBenefits>
+	<tifrs-notes:ShareBasedPayment2 contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">0</tifrs-notes:ShareBasedPayment2>
+	<tifrs-notes:ShareBasedPayment2 contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">0</tifrs-notes:ShareBasedPayment2>
+	<tifrs-notes:TotalKeyManagementPersonnelCompensation contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">852000</tifrs-notes:TotalKeyManagementPersonnelCompensation>
+	<tifrs-notes:TotalKeyManagementPersonnelCompensation contextRef="From20130101To20130630" decimals="-3" unitRef="TWD">852000</tifrs-notes:TotalKeyManagementPersonnelCompensation>
+	<tifrs-notes:NamesLocationsAndRelatedInformationOfInvesteesOverWhichTheCompanyExercisesSignificantInfluence>
+		<tifrs-notes:CompanyNameOfTheInvestor contextRef="From20140101To20140630"><![CDATA[摩幻潛艇數位股份有限公司                                                        ]]></tifrs-notes:CompanyNameOfTheInvestor>
+		<tifrs-notes:CompanyNameOfTheInvestee contextRef="From20140101To20140630"><![CDATA[Dynamic Digital Holdings Limited                                                ]]></tifrs-notes:CompanyNameOfTheInvestee>
+		<tifrs-notes:LocationCode contextRef="From20140101To20140630"><![CDATA[226       ]]></tifrs-notes:LocationCode>
+		<tifrs-notes:Location contextRef="From20140101To20140630"><![CDATA[英屬維京群島        ]]></tifrs-notes:Location>
+		<tifrs-notes:MainBusinessesAndProducts contextRef="From20140101To20140630"><![CDATA[3D動畫元件及數位內容開發、授權]]></tifrs-notes:MainBusinessesAndProducts>
+		<tifrs-notes:OriginalInvestmentAmount>
+			<tifrs-notes:EndingBalance3 contextRef="AsOf20140630" decimals="-3" unitRef="TWD">33000000</tifrs-notes:EndingBalance3>
+			<tifrs-notes:BeginningBalance contextRef="AsOf20140630" decimals="-3" unitRef="TWD">33000000</tifrs-notes:BeginningBalance>
+		</tifrs-notes:OriginalInvestmentAmount>
+		<tifrs-notes:InvestmentsAtTheEndOfThePeriod>
+			<tifrs-notes:NumberOfShares1 contextRef="AsOf20140630" decimals="0" unitRef="Shares">1140000</tifrs-notes:NumberOfShares1>
+			<tifrs-notes:PercentageOfOwnership1 contextRef="AsOf20140630" decimals="4" unitRef="Pure">1.0000</tifrs-notes:PercentageOfOwnership1>
+			<tifrs-notes:BookValue1 contextRef="AsOf20140630" decimals="-3" unitRef="TWD">188000</tifrs-notes:BookValue1>
+		</tifrs-notes:InvestmentsAtTheEndOfThePeriod>
+		<tifrs-notes:NetIncomeLossesOfTheInvestee contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-7320000</tifrs-notes:NetIncomeLossesOfTheInvestee>
+		<tifrs-notes:InvestmentIncomeLossesRecognized1 contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-7320000</tifrs-notes:InvestmentIncomeLossesRecognized1>
+		<tifrs-notes:Note contextRef="From20140101To20140630"><![CDATA[子公司]]></tifrs-notes:Note>
+	</tifrs-notes:NamesLocationsAndRelatedInformationOfInvesteesOverWhichTheCompanyExercisesSignificantInfluence>
+
+	<tifrs-notes:NamesLocationsAndRelatedInformationOfInvesteesOverWhichTheCompanyExercisesSignificantInfluence>
+		<tifrs-notes:CompanyNameOfTheInvestor contextRef="From20140101To20140630"><![CDATA[摩幻潛艇數位股份有限公司                                                        ]]></tifrs-notes:CompanyNameOfTheInvestor>
+		<tifrs-notes:CompanyNameOfTheInvestee contextRef="From20140101To20140630"><![CDATA[DDH LLC.,                                                                       ]]></tifrs-notes:CompanyNameOfTheInvestee>
+		<tifrs-notes:LocationCode contextRef="From20140101To20140630"><![CDATA[211       ]]></tifrs-notes:LocationCode>
+		<tifrs-notes:Location contextRef="From20140101To20140630"><![CDATA[美國                ]]></tifrs-notes:Location>
+		<tifrs-notes:MainBusinessesAndProducts contextRef="From20140101To20140630"><![CDATA[代理銷售3D數位內容產品並負責申請美國版權專利]]></tifrs-notes:MainBusinessesAndProducts>
+		<tifrs-notes:OriginalInvestmentAmount>
+			<tifrs-notes:EndingBalance3 contextRef="AsOf20140630" decimals="-3" unitRef="TWD">0</tifrs-notes:EndingBalance3>
+			<tifrs-notes:BeginningBalance contextRef="AsOf20140630" decimals="-3" unitRef="TWD">0</tifrs-notes:BeginningBalance>
+		</tifrs-notes:OriginalInvestmentAmount>
+		<tifrs-notes:InvestmentsAtTheEndOfThePeriod>
+			<tifrs-notes:NumberOfShares1 contextRef="AsOf20140630" decimals="0" unitRef="Shares">0</tifrs-notes:NumberOfShares1>
+			<tifrs-notes:PercentageOfOwnership1 contextRef="AsOf20140630" decimals="4" unitRef="Pure">0.0000</tifrs-notes:PercentageOfOwnership1>
+			<tifrs-notes:BookValue1 contextRef="AsOf20140630" decimals="-3" unitRef="TWD">0</tifrs-notes:BookValue1>
+		</tifrs-notes:InvestmentsAtTheEndOfThePeriod>
+		<tifrs-notes:NetIncomeLossesOfTheInvestee contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-99000</tifrs-notes:NetIncomeLossesOfTheInvestee>
+		<tifrs-notes:InvestmentIncomeLossesRecognized1 contextRef="From20140101To20140630" decimals="-3" unitRef="TWD">-99000</tifrs-notes:InvestmentIncomeLossesRecognized1>
+		<tifrs-notes:Note contextRef="From20140101To20140630"><![CDATA[子公司，於103年5月28日清算完畢]]></tifrs-notes:Note>
+	</tifrs-notes:NamesLocationsAndRelatedInformationOfInvesteesOverWhichTheCompanyExercisesSignificantInfluence>
+
+</xbrl>
+
+<!--This instance document is created by SIIAP V1.2.18-->

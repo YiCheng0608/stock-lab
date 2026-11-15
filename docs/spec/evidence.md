@@ -265,7 +265,7 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 | 歷史樣本外 | `historical` | 主鍵在當日母體過半有值的第一天起，到 2024-09-27 | 這段全部交易日，M＝60 |
 
 - **前瞻**：只當紀錄，不是 H1 成立的條件（使用者決定 [6880114734](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6880114734) 第 3 項）。引擎是因果的，判定只用前 250 日，之後重跑同一份資料得到同一個判定。滿 250 日之前每月只輸出「樣本不足（累積 X／250 日）」與目前的數字，標明不是判定，不因中途 t 碰巧過 2 就宣告通過。M 取 250：以 #689 的效果量估（每日 t ÷ √日數，驗證段約 0.21、探索段約 0.14），120 日的預期 t 只有約 1.6～2.3，判出「方向一致但不顯著」的機會高。`forward_judge`、M 與金樣都不改，只改對結果的解讀。
-- **歷史樣本外**：2024-09-30 以前的資料從沒被用來挑 H1。等 [#692](https://github.com/YiCheng0608/stock-lab/issues/692) 把 H1 需要的資料（日線、投信、月營收）回補並驗收後，用同一個凍結的 H1 跑一次，只跑一次。起日取主鍵有值的日子，因為各來源補到的年份可能不同；之前排序只剩雜湊。命令會載入副本從頭到現在的日線，跑之前先看記憶體。結果由統籌在 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 回報使用者。
+- **歷史樣本外**：2024-09-30 以前的資料從沒被用來挑 H1。等 [#692](https://github.com/YiCheng0608/stock-lab/issues/692) 把 H1 需要的資料（日線、投信、月營收）回補並驗收後，用同一個凍結的 H1 跑一次，只跑一次。加註（2026-11-15，[#781](https://github.com/YiCheng0608/stock-lab/issues/781)）：研究 DB 的月營收在下市、轉板標的上是 0 列，H1 的次鍵 `revenue_high_12` 對它們缺值、排在最後；月營收由 [#782](https://github.com/YiCheng0608/stock-lab/issues/782) 補齊並由統籌看過剩下的缺口以前，不跑這一次。起日取主鍵有值的日子，因為各來源補到的年份可能不同；之前排序只剩雜湊。命令會載入副本從頭到現在的日線，跑之前先看記憶體。結果由統籌在 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 回報使用者。
 - **H1 成立**：歷史樣本外那一次判「通過」才算成立，其餘判定都是不成立，之後前瞻的數字再好也不改。成立之後要不要進產品，提案由使用者決定；進產品後照[新策略探索](#新策略探索)的「前瞻監測與下架」監測。
 
 **每月流程**（統籌）
@@ -598,6 +598,8 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 | 已下市公司的標的與日線 | 全部 | 等回補（#692 決定要含） |
 | 市值（歷史發行股數） | X5、X6 的真正定義 | 現有 DB 與回補計畫都沒有；第一輪用 60 日平均成交金額代理 |
 
+- **加註（2026-11-15，[#781](https://github.com/YiCheng0608/stock-lab/issues/781)，登記內容不變）**：MOPS 的月營收頁（`t21sc03`）與季報頁（`t163sb04`）是用今天的上市櫃名單產生的，研究 DB 的月營收與季報 EPS 在下市、轉板標的上都是 0 列；條件缺值視為不符合，X3、X4、X7 選股時會自動排除之後下市的公司，母體卻含它們，偏差方向對假設有利。季報 EPS 由 [#781](https://github.com/YiCheng0608/stock-lab/issues/781) 從 MOPS 季度 XBRL 整包補，月營收由 [#782](https://github.com/YiCheng0608/stock-lab/issues/782) 補；補齊並由統籌看過剩下的缺口以前，X3、X4、X7 不跑探索段。
+
 ### 第二輪：S1～S3、R1～R2
 
 登記日 2026-11-15；登記 commit 是加入本段的 PR（[#725](https://github.com/YiCheng0608/stock-lab/issues/725)）合併進 master 的 merge commit，要在任何人對回補資料跑研究工具（包括 X1～X8）之前合併。本輪 5 個、累計 13 個（X1～X8 為 8 個；另有前瞻 H1），未到 20，門檻維持 t ≥ 2（[多重比較](#多重比較)）。狀態都是「登記」。依據：使用者 [6880591509](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6880591509)、[6880977475](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6880977475)，統籌的表 [6880616250](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6880616250)（「組合」一列不用，改成逐筆），定案 [6880927520](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6880927520)、[6880988953](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6880988953)，細節 [#725 6882161634](https://github.com/YiCheng0608/stock-lab/issues/725#issuecomment-6882161634)。
@@ -667,6 +669,8 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 | 三大法人（含投信） | 全部 | 等回補（上市 2012-05-02、上櫃 2014-12-01 起） |
 | 月營收（含去年同月） | S1～S3 | 等回補（2013-01 起） |
 | 融資餘額與融資名單（`margin_lists`） | R1、R2 | 等回補（MI_MARGN／上櫃融資融券，行情起點就有）；回補要含**融資名單**，沒有的日子照 v3 記 `data_incomplete`，不是訊號 |
+
+- **加註（2026-11-15，[#781](https://github.com/YiCheng0608/stock-lab/issues/781)，登記內容不變）**：研究 DB 的月營收在下市、轉板標的上是 0 列（來源頁只列現存公司），S1～S3 的 `revenue_yoy > 0` 會排除之後下市的公司，偏差方向對假設有利。月營收由 [#782](https://github.com/YiCheng0608/stock-lab/issues/782) 補；補齊並由統籌看過剩下的缺口以前，S1～S3 不跑探索段。
 
 #### 第二輪實作釋義
 

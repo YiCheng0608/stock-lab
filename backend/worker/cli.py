@@ -13,7 +13,7 @@ from . import preopen as preopen_check
 # directory, and a scheduled `job` (or `serve`) has only --data-dir.
 os.environ.update(scheduled_job.cli_environment(sys.argv[1:]))
 
-from app.config import DATA_DIR
+from app.config import DATA_DIR, DB_PATH
 from app.db import init_db
 
 from .action_tiers import run_action_tiers
@@ -47,6 +47,7 @@ from .pipeline import analyze, backtest, collect, evaluate, run_daily
 from .plan_tracking import run_plan_tracking
 from .quarterly_fundamentals import DEFAULT_QUARTERS as FUNDAMENTAL_DEFAULT_QUARTERS
 from .quarterly_fundamentals import run_fundamental_backfill
+from .quarterly_xbrl import research_refusal, run_xbrl_apply, run_xbrl_fetch
 from .schedule_runs import (
     LOCK_SKIP_REASON,
     PREFLIGHT_SKIP_REASONS,
@@ -118,6 +119,13 @@ def maintenance_guarded(args: argparse.Namespace) -> str | None:
         return "events backfill"
     if args.command == "fundamentals" and args.fundamentals_command == "backfill":
         return "fundamentals backfill"
+    if (
+        args.command == "fundamentals"
+        and args.fundamentals_command == "xbrl-apply"
+        and not args.dry_run
+    ):
+        # Writes the research DB; a research batch holding maintenance mode refuses it.
+        return "fundamentals xbrl-apply"
     if args.command == "revenue" and args.revenue_command == "backfill":
         return "revenue backfill"
     if args.command == "index-bars" and args.index_bars_command in {
@@ -438,6 +446,26 @@ def main() -> None:
     fundamentals_backfill_parser.add_argument(
         "--end-quarter", help="YYYYQn；預設是最近一個已結束的季度"
     )
+    xbrl_fetch_parser = fundamentals_subparsers.add_parser(
+        "xbrl-fetch",
+        help="下載 MOPS 季度 XBRL 整包到目錄（一季 1 個請求、間隔 5 秒、不碰 DB；已有的不重抓，#781）",
+    )
+    xbrl_apply_parser = fundamentals_subparsers.add_parser(
+        "xbrl-apply",
+        help="把目錄裡的季度 XBRL 整包寫進下市、轉板標的缺的季報 EPS（先和 t163sb04 核對，不同就停；重跑冪等，#781）",
+    )
+    for xbrl_parser in (xbrl_fetch_parser, xbrl_apply_parser):
+        xbrl_parser.add_argument("--start", required=True, help="YYYYQn，最早 2013Q1")
+        xbrl_parser.add_argument("--end", required=True, help="YYYYQn")
+        xbrl_parser.add_argument(
+            "--dir", required=True, help="整包與 manifest.json 的目錄"
+        )
+    xbrl_apply_parser.add_argument(
+        "--dry-run", action="store_true", help="不寫入，只印每季的計數"
+    )
+    xbrl_apply_parser.add_argument(
+        "--exclude-file", help="JSON 陣列：不寫入的 instrument id（代號重用的舊公司）"
+    )
     revenue_parser = subparsers.add_parser(
         "revenue", help="月營收：MOPS t21sc03 營業收入統計表（#530）"
     )
@@ -661,6 +689,14 @@ def main() -> None:
             result = scheduled_job.maintenance_status(data_dir)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
+    if args.command == "fundamentals" and args.fundamentals_command == "xbrl-apply":
+        # Before maintenance mode and before any session: only the research DB (#781).
+        problem = research_refusal(DB_PATH)
+        if problem:
+            print(
+                json.dumps({"status": "refused", "error": problem}, ensure_ascii=False)
+            )
+            sys.exit(2)
     guarded = maintenance_guarded(args)
     if guarded in DAILY_WINDOW_REFUSED and in_daily_window():
         print(
@@ -698,6 +734,8 @@ def backfill_command(args: argparse.Namespace) -> str | None:
         return args.command
     if args.command == "corporate-actions" and args.actions_command == "sync":
         return "corporate-actions sync"
+    if args.command == "fundamentals" and args.fundamentals_command == "xbrl-fetch":
+        return "fundamentals xbrl-fetch"
     for command, sub in (
         ("events", "events_command"),
         ("fundamentals", "fundamentals_command"),
@@ -811,6 +849,16 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
         )
     elif args.command == "fundamentals" and args.fundamentals_command == "backfill":
         result = run_fundamental_backfill(args.quarters, args.end_quarter)
+    elif args.command == "fundamentals" and args.fundamentals_command == "xbrl-fetch":
+        result = run_xbrl_fetch(args.dir, args.start, args.end)
+    elif args.command == "fundamentals" and args.fundamentals_command == "xbrl-apply":
+        result = run_xbrl_apply(
+            args.dir,
+            args.start,
+            args.end,
+            dry_run=args.dry_run,
+            exclude_file=args.exclude_file,
+        )
     elif args.command == "revenue" and args.revenue_command == "backfill":
         result = run_revenue_backfill(args.months, args.end_month)
     elif args.command == "index-bars" and args.index_bars_command == "backfill":

@@ -129,6 +129,19 @@ GUARDED = {
         ["revenue", "backfill", "--months", "24"],
         "run_revenue_backfill",
     ),
+    "fundamentals xbrl-apply": (
+        [
+            "fundamentals",
+            "xbrl-apply",
+            "--start",
+            "2013Q1",
+            "--end",
+            "2024Q3",
+            "--dir",
+            "/xbrl",
+        ],
+        "run_xbrl_apply",
+    ),
     "instruments repair --apply": (
         ["instruments", "repair", "--apply"],
         "run_instrument_repair",
@@ -153,6 +166,11 @@ def run_held(monkeypatch, capsys, data: Path, command: str, work=None) -> dict:
 
     monkeypatch.setattr(cli_module, name, fake)
     monkeypatch.setattr(cli_module, "DATA_DIR", data)
+    # xbrl-apply runs only next to the research marker (#781); the others ignore it.
+    data.mkdir(parents=True, exist_ok=True)
+    (data / "stock.db").write_bytes(b"")
+    (data / "research-db.json").write_text('{"purpose": "research_history"}\n')
+    monkeypatch.setattr(cli_module, "DB_PATH", data / "stock.db")
     monkeypatch.setattr(sys, "argv", ["worker.cli", *argv])
     try:
         cli_module.main()
