@@ -16,6 +16,10 @@ four US indexes' latest closes for the page's 隔夜美股 line, and each item i
 ``overnight_us_links`` (``app.domain.US_INDEX_GROUP_LINKS``: ``SOX`` for the
 semiconductor groups).  Display only: no score, rank or list condition reads
 them.
+The list also carries ``preopen_check`` and each item its ``preopen_news``
+(#755, ``app.preopen_news``): the 08:20 pre-open check's overnight news of the
+list, ``not_checked`` (items ``None``) until it ran for this very run.  Display
+only as well.
 """
 
 from __future__ import annotations
@@ -36,6 +40,8 @@ from .domain import (
 from .entry_plan import entry_plan
 from .market_change import adjacent_change, traded_close
 from .market_overview import overnight_us
+from .preopen_news import DEFINITION as PREOPEN_DEFINITION
+from .preopen_news import list_view as preopen_list_view
 from .models import (
     CandidateLlmNote,
     CandidateRun,
@@ -388,6 +394,13 @@ def candidate_list(
             "zero_reason_text": None,
             "methodology": _methodology(None),
             "overnight_us": us,
+            "preopen_check": {
+                "status": "not_checked",
+                "definition": PREOPEN_DEFINITION,
+                "checked_at": None,
+                "window_start": None,
+                "instruments_with_news": 0,
+            },
             "items": [],
         }
     rows = db.scalars(
@@ -403,6 +416,7 @@ def candidate_list(
     # adjacent_change's TAIEX lookup (the last two sessions to the date), from
     # the same read; every row of a run has the run's trading date.
     sessions: dict[date, list[date]] = {run.trading_date: days[-2:]}
+    preopen, preopen_news = preopen_list_view(db, run)
     return {
         "status": run.status,
         "trading_date": run.trading_date.isoformat(),
@@ -423,12 +437,14 @@ def candidate_list(
         "news_coverage": (run.summary_json or {}).get("news"),
         "methodology": _methodology(run),
         "overnight_us": us,
+        "preopen_check": preopen,
         # One TAIEX session lookup for the whole list.
         "items": [
             {
                 **candidate_item(db, row, run, sessions),
                 "recent_closes": closes[row.instrument_id],
                 "overnight_us_links": overnight_us_links(row.groups_json),
+                "preopen_news": preopen_news.get(row.instrument_id),
             }
             for row in rows
         ],

@@ -30,6 +30,7 @@ from pathlib import Path
 import pytest
 
 import worker.job as job
+import worker.notify as notify
 import worker.serve as serve
 from test_coordinator_scripts import FAKE_GH
 from test_worker_job import (
@@ -103,8 +104,9 @@ class ServeTree(Tree):
     def __init__(self, root: Path) -> None:
         super().__init__(root)
         worker = self.backend / "worker"
-        # serve reads the notify log through worker.notify (#728; standard library only).
-        for name in ("serve.py", "notify.py"):
+        # serve reads the notify and preopen logs through worker.notify (#728) and
+        # worker.preopen (#755); both standard library only at the top.
+        for name in ("serve.py", "notify.py", "preopen.py"):
             shutil.copyfile(ROOT / "backend" / "worker" / name, worker / name)
         (worker / "cli.py").write_text(SERVE_CLI, encoding="utf-8")
         ops = self.project / "tools" / "ops"
@@ -280,6 +282,7 @@ def test_every_allowed_news_interval_makes_a_job(tmp_path, hours):
         "daily",
         "news",
         "us",
+        "preopen",
         "notify",
         "watchdog",
         # #468: serve's own read of the maintenance marker, not a job it starts.
@@ -1954,6 +1957,122 @@ def test_the_missed_message_is_sent_in_maintenance_mode_too(tmp_path, capsys):
     out = capsys.readouterr().out
     assert " serve catchup job=notify reason=not_sent" in out
     assert "catchup_deferred job=notify" not in out
+
+
+# preopen (#755) --------------------------------------------------------------------
+
+
+def test_preopen_fires_monday_to_friday_at_0820_apart_from_the_other_jobs():
+    triggers = serve.triggers(serve_args())
+    monday = datetime(2026, 11, 16, tzinfo=TAIPEI)
+    week = monday + timedelta(days=7)
+    times = fire_times(triggers["preopen"], monday, week)
+    assert [moment.strftime("%a %H:%M") for moment in times] == [
+        f"{day} 08:20" for day in ("Mon", "Tue", "Wed", "Thu", "Fri")
+    ]
+    for name in ("daily", "news", "us", "notify", "watchdog"):
+        other = set(fire_times(triggers[name], monday, week))
+        assert not other & set(times), name
+    # After the 08:00 news run (2 to 4 minutes, #755 AC-1) and before us and notify.
+    for moment in times:
+        news = [
+            when
+            for when in fire_times(triggers["news"], monday, week)
+            if when.date() == moment.date() and when < moment
+        ]
+        assert moment - max(news) == timedelta(minutes=20)
+        assert (moment.hour, moment.minute) < notify.SEND_TIME
+
+
+def test_the_preopen_command_has_its_own_log_and_no_job_wrapper(tmp_path):
+    data = tmp_path / "data"
+    runner = serve.Serve(serve_args("--data-dir", str(data)))
+    command, environment = runner.command("preopen", runner.now())
+    assert command == [
+        sys.executable,
+        "-X",
+        "utf8",
+        "-m",
+        "worker.cli",
+        "preopen",
+        "--trigger",
+        "scheduler",
+        "--log-dir",
+        str(data / "logs"),
+    ]
+    assert environment["STOCK_DB_PATH"] == str(data / "stock.db")
+    injected = serve.Serve(
+        serve_args("--data-dir", str(data), "--now", "2026-11-16T08:19:50")
+    )
+    argv = injected.command("preopen", injected.now())[0]
+    assert argv[-2] == "--now" and argv[-1].startswith("2026-11-16T08:19:5")
+    # The 10-minute wait for news and the check, then serve's 5 minutes.
+    assert runner.backstop("preopen") == (15 + 5) * 60
+
+
+def _preopen_log(data: Path, day: str, *results: str) -> None:
+    logs = data / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    (logs / f"preopen-{day.replace('-', '')}.log").write_text(
+        "".join(
+            f"===== {day}T08:20:00+08:00 start job=preopen\n--- result {result}\n"
+            f"===== {day}T08:20:01+08:00 end exit=0 seconds=1\n"
+            for result in results
+        ),
+        encoding="utf-8",
+    )
+
+
+@pytest.mark.parametrize(
+    "results, now, reason",
+    [
+        ((), f"{MONDAY}T09:10", "not_checked"),
+        (
+            ("status=failed reason=error:OperationalError",),
+            f"{MONDAY}T10:00",
+            "not_checked",
+        ),
+        (("status=skipped reason=already_running",), f"{MONDAY}T08:25", "not_checked"),
+        (("status=checked list_date=2026-10-30",), f"{MONDAY}T09:10", None),
+        (("status=skipped reason=already_checked",), f"{MONDAY}T09:10", None),
+        (("status=skipped reason=non_trading_day",), f"{MONDAY}T09:10", None),
+        (
+            ("status=skipped reason=no_list list_date=2026-10-30",),
+            f"{MONDAY}T09:10",
+            None,
+        ),
+        ((), f"{MONDAY}T08:19", None),
+        ((), f"{MONDAY}T13:30", None),
+        ((), f"{SATURDAY}T09:10", None),
+    ],
+)
+def test_serve_runs_the_missed_preopen_check_once_at_start(
+    tmp_path, results, now, reason
+):
+    data = tmp_path / "data"
+    _runs_db(data)
+    if results:
+        _preopen_log(data, MONDAY, *results)
+    runner = serve.Serve(serve_args("--data-dir", str(data), "--now", now))
+    jobs = {scheduled.id: scheduled for scheduled in runner.scheduler().get_jobs()}
+    assert runner.missed_preopen() == reason
+    if reason is None:
+        assert "preopen-catchup" not in jobs
+    else:
+        assert jobs["preopen-catchup"].args == ("preopen",)
+
+
+def test_the_missed_preopen_check_waits_for_the_end_of_maintenance(tmp_path, capsys):
+    """It writes the database: like daily and us, deferred in maintenance mode."""
+
+    data = tmp_path / "data"
+    _runs_db(data)
+    _maintenance_on(data)
+    runner, scheduler, jobs = _deferred(data, f"{MONDAY}T09:10")
+    assert "preopen-catchup" not in jobs
+    assert " serve catchup_deferred job=preopen reason=not_checked maintenance=on" in (
+        capsys.readouterr().out
+    )
 
 
 def test_the_telegram_variables_reach_the_scheduler_through_env_file_only():

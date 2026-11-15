@@ -22,6 +22,12 @@ commands those tasks ran.
   got D - 2, every 09:30 D - 1); 07:30 and 08:30 are before the 09:00 open, 09:30
   is the insurance. A run after one that stored D - 1 records
   ``already_complete`` and asks nothing.
+- preopen: Monday to Friday 08:20 (#755), ``worker.cli preopen --trigger scheduler``:
+  the pre-open check of the today list's overnight news (worker.preopen). Not a
+  worker.job job: its own lock and log; it waits for a news run still holding
+  ``news.lock`` (only probing it), skips a closed day and a list already checked, and
+  skips in maintenance mode (it writes the database). Caught up at start between 08:20
+  and 13:30 when the day's ``logs/preopen-YYYYMMDD.log`` has no result that ends it.
 - notify: Monday to Friday 08:45 (#728), ``worker.cli notify --send --trigger
   scheduler``: the Telegram message of the day's list and the overnight US indexes
   (worker.notify). Not a worker.job job: it takes its own lock and log, skips a day
@@ -104,14 +110,17 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import job, notify
+from . import job, notify, preopen
 
 ROOT = job.ROOT
 TAIPEI = job.TAIPEI
-JOBS = ("daily", "news", "us", "notify", "watchdog", "monitor")
+JOBS = ("daily", "news", "us", "preopen", "notify", "watchdog", "monitor")
 # notify (#728 decision 6881879639): Taipei Monday to Friday before the open; the job
 # itself skips the days the stored calendar marks closed.
 NOTIFY_DAYS = "mon-fri"
+# preopen (#755 decision 6888598143): Monday to Friday 08:20, after the 08:00 news run;
+# the job itself skips the days the stored calendar marks closed.
+PREOPEN_DAYS = "mon-fri"
 DAILY_TIMES = "21:30,23:00"
 # us (#568 decision 6729065016, #681 decision 6869771833): Taipei Tuesday to
 # Saturday, after the US close (04:00 Taipei in US summer time, 05:00 in winter).
@@ -359,6 +368,12 @@ def triggers(args: argparse.Namespace) -> dict[str, object]:
             hour=_news_hour(args.news_interval_hours), minute=0, timezone=TAIPEI
         ),
         "us": us[0] if len(us) == 1 else OrTrigger(us),
+        "preopen": CronTrigger(
+            day_of_week=PREOPEN_DAYS,
+            hour=preopen.RUN_TIME[0],
+            minute=preopen.RUN_TIME[1],
+            timezone=TAIPEI,
+        ),
         "notify": CronTrigger(
             day_of_week=NOTIFY_DAYS,
             hour=notify.SEND_TIME[0],
@@ -464,6 +479,18 @@ class Serve:
             if self.offset:
                 environment["WATCHDOG_NOW"] = str(int(at.timestamp()))
             return argv, environment
+        if name == "preopen":
+            argv = [
+                *job.worker_command(["preopen"]),
+                "--trigger",
+                "scheduler",
+                "--log-dir",
+                str(self.log_dir),
+            ]
+            if self.offset:
+                # The injected time, not only its day: the job checks 08:20 to 13:30.
+                argv += ["--now", at.isoformat()]
+            return argv, environment
         if name == "notify":
             # TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID come with os.environ (env_file).
             argv = [
@@ -555,6 +582,26 @@ class Serve:
             return None
         return "not_sent"
 
+    def missed_preopen(self) -> str | None:
+        """Why serve runs the day's pre-open check as it starts, or None (#755).
+
+        Monday to Friday between preopen.RUN_TIME and preopen.CATCH_UP_END, when the
+        day's log has no result that ends the day (checked, already_checked,
+        non_trading_day, no_list). The job itself skips a closed day, a list already
+        checked and a time outside the window.
+        """
+
+        now = self.now()
+        if now.weekday() >= 5:
+            return None
+        if not preopen.in_run_window(now):
+            return None
+        if not Path(job.data_environment(self.data_dir)["STOCK_DB_PATH"]).is_file():
+            return None
+        if preopen.day_done(self.log_dir, now.date()):
+            return None
+        return "not_checked"
+
     def missed_daily(self) -> str | None:
         """Why serve runs the day's daily as it starts, or None (see the module docstring)."""
 
@@ -618,6 +665,7 @@ class Serve:
         for name, missed in (
             ("daily", self.missed_daily()),
             ("us", self.missed_us()),
+            ("preopen", self.missed_preopen()),
             ("notify", self.missed_notify()),
         ):
             if not missed:
@@ -664,6 +712,8 @@ class Serve:
             return MONITOR_TIME_LIMIT_MINUTES * 60
         if name == "notify":
             return (notify.TIME_LIMIT_MINUTES + BACKSTOP_MINUTES) * 60
+        if name == "preopen":
+            return (preopen.TIME_LIMIT_MINUTES + BACKSTOP_MINUTES) * 60
         limit = getattr(self.args, f"{name}_time_limit_minutes")
         minutes = limit or job.TIME_LIMIT_MINUTES[name]
         return (minutes + BACKSTOP_MINUTES) * 60

@@ -82,6 +82,9 @@ from typing import BinaryIO, Sequence
 ROOT = Path(__file__).resolve().parents[2]
 TAIPEI = timezone(timedelta(hours=8))
 JOBS = ("daily", "news", "us")
+# The locks of the scheduled runs that write stock.db (``running_jobs``): the jobs here and
+# worker.preopen's (#755), which is not a worker.job job.
+WRITER_LOCKS = (*JOBS, "preopen")
 TRIGGERS = ("scheduler", "manual", "simulation")
 # daily: the abandoned-run limit in worker.schedule_runs; a manual run's limit, as
 # serve passes its scheduled runs 80 minutes, which end before the 23:00 trigger
@@ -207,10 +210,16 @@ class FileLock:
 def lock_held(path: Path) -> bool:
     """Whether another process holds the lock on PATH (a missing file is not held).
 
-    It takes the lock for a moment: a job starting in that moment would find it busy.
-    The maintenance checks call it only for serve's lock, and for the job locks only
-    with maintenance on, when such a job skips for maintenance before it looks at its
-    lock (``_Job._skip_reason``).
+    It takes the lock for a moment: a job starting in that moment would find it busy
+    and record ``already_running``.  Callers:
+
+    - the maintenance checks: serve's lock, and the job locks (``running_jobs``, with
+      preopen's, #755); daily, news and us skip for maintenance before they look at
+      their lock (``_Job._skip_reason``), preopen only after it took its own;
+    - ``worker.preopen.wait_for_news`` (#755): ``news.lock`` every 10 seconds while a
+      news run holds it, up to 10 minutes from 08:20.  A news job starting in the very
+      moment of a probe records ``already_running`` and that run is lost; news runs on
+      the even hours, so only a news run started late (a host waking up) can meet it.
     """
 
     if not path.is_file():
@@ -321,7 +330,7 @@ def _maintenance_log(data_dir: Path, record: dict) -> None:
 def running_jobs(data_dir: Path) -> list[str]:
     if not sys.platform.startswith("linux"):
         return []  # no fcntl; serve and its jobs run on Linux only (#333)
-    return [name for name in JOBS if lock_held(lock_path(data_dir, name))]
+    return [name for name in WRITER_LOCKS if lock_held(lock_path(data_dir, name))]
 
 
 def maintenance_status(data_dir: Path) -> dict:
