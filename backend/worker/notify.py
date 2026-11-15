@@ -97,7 +97,9 @@ RETRY_DELAY_SECONDS = 30.0
 ATTEMPTS = 2
 # A 429 asking to wait longer is not waited for (the run records failed).
 RETRY_AFTER_MAX_SECONDS = 60.0
-# serve's backstop adds its own 5 minutes; two attempts and the pause take about 70 seconds.
+# serve's backstop adds its own 5 minutes. The worst run (#754): drawing 30 s
+# (RENDER_TIMEOUT_SECONDS), two photo attempts of 30 s with a pause of up to 60 s (a 429's
+# retry_after), then two text attempts of 20 s with the same pause: 250 s, inside 5 minutes.
 TIME_LIMIT_MINUTES = 5.0
 # Telegram's limit for one message's text.
 MAX_CHARS = 4096
@@ -658,9 +660,11 @@ def _attempt_photo(
 def _photo_size(result: dict[str, Any]) -> str:
     """「1280x2370」: the largest size Telegram keeps of a sent photo (#754)."""
 
+    photo = result.get("photo")
+    # Any other shape: the photo was sent all the same, only its size is unknown.
     sizes = [
         size
-        for size in result.get("photo") or []
+        for size in (photo if isinstance(photo, list) else [])
         if isinstance(size, dict)
         and isinstance(size.get("width"), int)
         and isinstance(size.get("height"), int)
@@ -862,6 +866,22 @@ def _codes(outcome: dict[str, Any]) -> str:
     return ",".join(item.split(" ", 1)[0] for item in outcome["reasons"]) or "unknown"
 
 
+def draw(card: Content) -> tuple[Any | None, str | None]:
+    """The card drawn (``notify_card.Rendered`` with its PNG) and None, or None and the
+    reason. Never raises (#754 review 6888784128): an import or any other error here is
+    ``error:<type>``, and the text goes instead."""
+
+    try:
+        from .notify_card import render
+
+        drawn = render(card)
+    except Exception as exc:
+        return None, f"error:{type(exc).__name__}"
+    if drawn.png is None:
+        return None, drawn.reason
+    return drawn, None
+
+
 def dry_run(args: argparse.Namespace, out=None) -> int:
     """Print the caption and the text; with --image-out, draw the card there too. Exit 1
     when the card was asked for and could not be drawn."""
@@ -876,11 +896,9 @@ def dry_run(args: argparse.Namespace, out=None) -> int:
         print(f"non_trading_day={today.isoformat()}（排程這天不送）", file=out)
     code = 0
     if getattr(args, "image_out", None):
-        from .notify_card import render
-
-        drawn = render(card)
-        if drawn.png is None:
-            print(f"image=failed reason={drawn.reason}", file=out)
+        drawn, why = draw(card)
+        if drawn is None:
+            print(f"image=failed reason={why}", file=out)
             code = 1
         else:
             target = Path(args.image_out)
@@ -974,11 +992,9 @@ class _Run:
             f"--- caption {line}"
         )
         # The card first (#754); the text when it cannot be drawn or sent.
-        from .notify_card import render
-
-        drawn = render(card)
-        if drawn.png is None:
-            fallback = f"render_failed:{drawn.reason}"
+        drawn, why = draw(card)
+        if drawn is None:
+            fallback = f"render_failed:{why}"
         else:
             self.log(
                 f"--- card width={drawn.width} height={drawn.height}"

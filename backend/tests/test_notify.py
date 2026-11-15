@@ -713,6 +713,45 @@ def test_a_card_that_cannot_be_drawn_sends_the_text(run_env, reason):
 
 
 @linux_only
+@pytest.mark.parametrize("broken", ["render", "import"])
+def test_an_error_while_drawing_sends_the_text(run_env, monkeypatch, broken):
+    """Review 6888784128 必修 1: an exception from the drawing, or a notify_card that
+    cannot be imported, is render_failed and the text goes, not a failed day."""
+
+    server = run_env.telegram()
+    if broken == "render":
+
+        def render(_card):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(notify_card, "render", render)
+        reason = "error:RuntimeError"
+    else:
+        monkeypatch.setitem(sys.modules, "worker.notify_card", None)
+        # None in sys.modules: ModuleNotFoundError, an ImportError.
+        reason = "error:ModuleNotFoundError"
+    assert _send(run_env) == 0
+    assert _methods(server) == ["sendMessage"]
+    assert (
+        f"--- result status=sent mode=text reason=render_failed:{reason}"
+        " attempts=1 message_id=1"
+    ) in _log(run_env)
+
+
+@linux_only
+def test_a_sent_photo_with_an_odd_answer_is_still_sent(run_env):
+    """Review 6888784128 建議 3: only the size is unknown then."""
+
+    server = run_env.telegram(
+        (200, {"ok": True, "result": {"message_id": 7, "photo": 5}})
+    )
+    assert _send(run_env) == 0
+    assert _methods(server) == ["sendPhoto"]
+    log = _log(run_env)
+    assert "--- result status=sent mode=photo attempts=1 message_id=7\n" in log
+
+
+@linux_only
 def test_a_photo_refused_with_a_400_sends_the_text_at_once(run_env):
     server = run_env.telegram(
         (400, {"ok": False, "description": "Bad Request: PHOTO_INVALID_DIMENSIONS"})

@@ -223,11 +223,11 @@ period_backfill 步驟呼叫 [`worker.period_backfill.run_period_backfill(目標
     - 送出用 Bot API `sendPhoto`（每次逾時 30 秒）、退回時 `sendMessage`（每次逾時 20 秒），兩者各最多兩次，重試規則相同。
       - **重試**：網路錯誤（連不上、連線中斷、`IncompleteRead`）、逾時與 5xx 等 30 秒重試；429 照回應的 `retry_after` 等，超過 60 秒就不等、直接記失敗。
       - **不重試**：其他 4xx（400／401／403 等：token 或 chat id 錯了，再送也一樣；400 `can't parse entities` 是 Telegram 解析不了 HTML，記 `parse_error`），以及 200 但回應不是 ok 的。
-      - **可能重複送一則**：逾時或連線在送出之後才中斷時，Telegram 可能已經收下，重試會讓使用者收到兩則。統籌的取捨是重複一則比漏送好，所以仍重試。
+      - **可能重複送**：逾時或連線在送出之後才中斷時，Telegram 可能已經收下，重試會讓使用者收到兩則。照片與文字版各自如此，而照片重試後仍判失敗就改送文字版，所以最壞是 2 張圖加 2 則文字。照片回 200 但內容不是 ok 時不重試、直接改送文字版，最多 1 張圖加 1 則文字。統籌的取捨是重複比漏送好，所以仍重試。
     - 送出記 `sent mode=photo attempts=<次數> message_id=<id> photo=<寬>x<高>`（Telegram 保留的最大尺寸），退回文字版送出記 `sent mode=text reason=<render_failed:<原因>|photo_failed:<每次的原因>> …`。兩種都失敗才記 `failed reason=<文字版每次的原因，逗號分隔，例如 http_500,network:TimeoutError> attempts=<次數> photo=<圖的原因> detail=…`，exit 1。
 
   - **日誌與不重送**：每次在 `logs/notify-YYYYMMDD.log`（目標台北日）追加 `===== <時間> start job=notify …`、文字版全文（`--- message` 到 `--- message end`）、圖片說明（`--- caption`）與圖的尺寸（`--- card`）、`--- result status=<sent|not_configured|failed|skipped> …` 與 `===== <時間> end exit=<碼> seconds=<秒>`。拿到鎖後先讀當天日誌，已有 `status=sent` 就記 `skipped reason=already_sent`，所以重啟 scheduler 或手動再跑都不會重送；拿不到鎖記 `skipped reason=already_running`。token 在寫出前遮成 `<token>`，不出現在日誌、錯誤與輸出。保留 90 天。不加新表。
-  - **鎖與其他工作**：`notify.lock` 與 daily／news／us 的鎖分開，08:45 也不和它們的時間重疊（`test_worker_serve.py` 檢查），互不卡住。只讀 DB、送一個請求，所以不檢查記憶體與 git，維護模式中照送。
+  - **鎖與其他工作**：`notify.lock` 與 daily／news／us 的鎖分開，08:45 也不和它們的時間重疊（`test_worker_serve.py` 檢查），互不卡住。只讀 DB、最多送 4 個請求（照片兩次、文字兩次），再起一個 Chromium 畫圖（約 0.5～0.8 秒）。#754 在 scheduler 的 image 量到的整個 notify 峰值約 312 MiB（只畫圖約 247 MiB），scheduler 上限 2g，08:45 又不和 daily 重疊，所以不檢查記憶體與 git，維護模式中照送。最壞耗時（畫圖逾時 30 秒、照片兩次各 30 秒、文字兩次各 20 秒、兩次 429 各等 60 秒）約 250 秒，在 5 分鐘上限內。
   - **失敗怎麼被發現**：看門狗從 09:10 起判定（09:15 那一輪），`notify_missing`（當天沒有日誌，或有 `start` 沒有 `end` 列，兩種留言文字不同）、`notify_failed`（當天最後一個非 skipped 的結果是 `failed`）與 `notify_missed`（當天只有 `too_late`：排程在 08:45～13:30 之外才跑，收盤後不補送），每台北日各最多一則，在 #1 留「待使用者」（[排程看門狗](WATCHDOG.md)）。
   - **手動**：`worker.cli notify --dry-run [--date YYYY-MM-DD]` 只印出那天會送的圖片說明（`caption=`）與文字版全文（第一行 `configured=yes|no`，不印值），不送、不寫日誌；加 `--image-out <路徑>` 另把圖片卡片畫到該路徑（畫不出來時印 `image=failed reason=…`、exit 1）；`worker.cli notify --send --trigger manual` 照排程的流程送一次（鎖、不重送、日誌相同）。
 - **分工**：鎖、起跑前檢查、單次上限、日誌與 exit code 都由 job 負責，與 [daily／news 工作的註冊與管理](platform/windows.md#dailynews-工作的註冊與管理)、[日誌與 run 記錄](#日誌與-run-記錄)相同；serve 自己不加鎖，重疊的觸發照樣啟動 job，由 job 記 `already_running`（同一工作同時最多 3 個，再多的由 APScheduler 擋下並在 stderr 記警告）。不帶 `--git-pull`：程式由 image 決定（部署見 [RELEASE](../RELEASE.md#部署)）。

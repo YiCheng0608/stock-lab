@@ -18,9 +18,11 @@ The page:
 The drawing (``render``) runs in a new temporary directory under the system's (not beside
 any output, #750): the page, the browser profile and the PNG live there, and the directory
 is removed when the drawing ends, whatever its outcome. The browser runs in its own process
-group with ``HOME`` in that directory, is killed with the group after
-``RENDER_TIMEOUT_SECONDS``, and any outcome but a PNG is a reason (``no_browser``,
-``exit_<code>``, ``timeout``, ``empty_png``, ``error:<type>``), never an exception.
+group with ``HOME`` in that directory and only the environment it needs
+(``browser_environment``: no token, no credential), dies with the run (``PR_SET_PDEATHSIG``),
+is killed with its group after ``RENDER_TIMEOUT_SECONDS``, and any outcome but a PNG is a
+reason (``no_browser``, ``exit_<code>``, ``timeout``, ``empty_png``, ``error:<type>``),
+never an exception (``_Run`` also treats an exception here as ``error:<type>``).
 
 Only the standard library: serve imports worker.notify, which imports this module when it
 draws.
@@ -33,6 +35,7 @@ import os
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import dataclass
@@ -56,6 +59,16 @@ MAX_ROWS = 20
 # 「1,234.50～1,300.00」, 「1,234.50」) get a smaller font, so they stay in their columns.
 LONG_NUMBER = (13, 7, 7)
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+TEMP_PREFIX = "stock-notify-card-"
+# The only variables the browser gets from the run's environment.
+BROWSER_ENV_KEEP = (
+    "PATH",
+    "LANG",
+    "LC_ALL",
+    "TZ",
+    "FONTCONFIG_PATH",
+    "FONTCONFIG_FILE",
+)
 
 # Fixed heights (CSS px), the same in STYLE: card_height adds them up.
 PAD = 24
@@ -113,7 +126,8 @@ section h2 .n {{ color: var(--color-text-muted); font-weight: 600; margin-left: 
 .row .long {{ font-size: 14px; letter-spacing: -0.3px; }}
 .row .sym {{ font-family: var(--font-mono); }}
 .row .incomplete {{ grid-column: 2 / 5; text-align: right; font-size: 15px; }}
-.more {{ height: {MORE_H}px; line-height: {MORE_H}px; font-size: 15px; padding: 0 2px; }}
+.more {{ margin-top: {GAP}px; height: {MORE_H}px; line-height: {MORE_H}px; font-size: 15px;
+  padding: 0 2px; }}
 .us h2 {{ height: {US_TITLE_H}px; line-height: {US_TITLE_H}px; }}
 .us h2 .status {{ color: var(--color-warning); font-weight: 600; margin-left: 8px; }}
 .us h2 .closed {{ color: var(--color-text-muted); font-weight: 400; font-size: 15px;
@@ -127,6 +141,7 @@ section h2 .n {{ color: var(--color-text-muted); font-weight: 600; margin-left: 
 .us .nodata {{ grid-column: 2 / 5; text-align: right; font-size: 15px; }}
 .up {{ color: var(--color-up); }} .down {{ color: var(--color-down); }}
 .flat {{ color: var(--color-flat); }}
+.up, .down, .flat {{ font-weight: 600; }}
 .source {{ height: {SOURCE_H}px; line-height: {SOURCE_H}px; font-size: 13px;
   padding: 0 14px; border-top: 1px solid var(--color-border); }}
 """
@@ -306,6 +321,20 @@ def browser_command(browser: str, work: Path, height: int) -> list[str]:
     ]
 
 
+def browser_environment(work: Path, environ=os.environ) -> dict[str, str]:
+    """The browser's environment: what it needs to run and draw, nothing else (no token,
+    no credential of the env file, #754 review 6888784128)."""
+
+    kept = {name: environ[name] for name in BROWSER_ENV_KEEP if name in environ}
+    return {
+        **kept,
+        "HOME": str(work),
+        "XDG_CONFIG_HOME": str(work / "config"),
+        "XDG_CACHE_HOME": str(work / "cache"),
+        "TMPDIR": str(work),
+    }
+
+
 def _kill_group(process: subprocess.Popen) -> None:
     try:
         os.killpg(process.pid, signal.SIGKILL)
@@ -336,24 +365,26 @@ def render(
     browser = browser or find_browser()
     if not browser:
         return done(None, "no_browser")
-    work = Path(tempfile.mkdtemp(prefix="stock-notify-card-"))
+    work: Path | None = None
     try:
+        work = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX))
         (work / "card.html").write_text(card_html(content), encoding="utf-8")
-        environment = {
-            **os.environ,
-            "HOME": str(work),
-            "XDG_CONFIG_HOME": str(work / "config"),
-            "XDG_CACHE_HOME": str(work / "cache"),
-            "TMPDIR": str(work),
-        }
+        extra = {}
+        if sys.platform.startswith("linux"):
+            # Killed with notify (serve's backstop, the OOM killer): its own session
+            # keeps it out of notify's group, so the group kill would not reach it.
+            from .job import _die_with_parent
+
+            extra["preexec_fn"] = _die_with_parent(os.getpid())
         process = subprocess.Popen(
             browser_command(browser, work, card_height(content)),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             cwd=work,
-            env=environment,
+            env=browser_environment(work),
             start_new_session=True,
+            **extra,
         )
         try:
             code = process.wait(
@@ -376,4 +407,5 @@ def render(
     except Exception as exc:  # the text goes instead (notify._Run)
         return done(None, f"error:{type(exc).__name__}")
     finally:
-        shutil.rmtree(work, ignore_errors=True)
+        if work is not None:
+            shutil.rmtree(work, ignore_errors=True)
