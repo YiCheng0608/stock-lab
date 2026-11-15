@@ -83,6 +83,8 @@ PAGE_ENCODING = "cp950"
 # cells; more, or one anywhere else, fails the page.
 MAX_UNDECODABLE = 8
 REPLACEABLE = ("公司名稱", "備註")
+# What an undecodable character is read as.
+REPLACEMENT = chr(0xFFFD)
 # The second byte of a Big5 character.
 _TRAIL_BYTES = (range(0x40, 0x7F), range(0xA1, 0xFF))
 # Waits before the second, third and fourth try of one page (review of PR #533).
@@ -585,13 +587,13 @@ def parse_page(html: str, market: str, month: Month, page: int) -> list[PageRow]
                 cells=row,
             )
         )
-    replaced = html.count("�")
+    replaced = html.count(REPLACEMENT)
     if replaced:
         # Every undecodable character must sit in a company's name or 備註:
         # one in an amount, a code, a header or a total would be read wrong
         # or not at all (#774).
         allowed = sum(
-            row.cells[name].count("�") for row in result for name in REPLACEABLE
+            row.cells[name].count(REPLACEMENT) for row in result for name in REPLACEABLE
         )
         if allowed != replaced:
             raise OfficialDataError(
@@ -605,10 +607,10 @@ def replaced_cells(rows: list[PageRow]) -> list[str]:
     """``<code> <column> ×<n>`` for each cell holding U+FFFD."""
 
     return [
-        f"{row.symbol} {name} ×{row.cells[name].count(chr(0xFFFD))}"
+        f"{row.symbol} {name} ×{row.cells[name].count(REPLACEMENT)}"
         for row in rows
         for name in REPLACEABLE
-        if "�" in row.cells[name]
+        if REPLACEMENT in row.cells[name]
     ]
 
 
@@ -619,7 +621,7 @@ def decode_page(content: bytes) -> tuple[str | None, list[dict[str, Any]]]:
     a lead byte followed by a trail byte is one two-byte character, so both
     bytes go.  ``errors="replace"`` drops only the lead byte and pairs the
     trail byte with the next one, garbling the characters after it (#774:
-    ``c8 ba`` 璀 read as ``�瑤``).  More than ``MAX_UNDECODABLE`` gives no
+    ``c8 ba`` 璀 read as U+FFFD then 瑤).  More than ``MAX_UNDECODABLE`` gives no
     text (``None``) and the first ``MAX_UNDECODABLE + 1`` of them.
     """
 
@@ -645,7 +647,7 @@ def decode_page(content: bytes) -> tuple[str | None, list[dict[str, Any]]]:
             )
             if len(undecodable) > MAX_UNDECODABLE:
                 return None, undecodable
-            parts.append("�")
+            parts.append(REPLACEMENT)
             position = start + width
 
 
