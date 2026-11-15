@@ -30,6 +30,12 @@
 
 - **代號重用**：一個代號下市多年後分配給別家公司時，兩家的日線會接在同一個標的上，這裡分不出來。回補完成後要依名稱變化稽核一次（回補執行單處理）。
 - **產業與族群成員**：新建的標的沒有產業成員列，族群相關的研究不含它們。2026-09-08 以前有效的 `group_memberships`（`official_industry`）舊列不能當歷史分類：`valid_from` 是上市日（現行分類往回填），2026-09-07 整批換 id 前的族群標籤是錯的（[#773 決定](https://github.com/YiCheng0608/stock-lab/issues/773#issuecomment-6894054847)）。
+- **月營收**：MOPS 的 `t21sc03` 頁只列今天的公司，回補不到下市股的任何一個月。轉板公司上櫃那幾年的月份則接在上市標的上（[#781 AC-1](https://github.com/YiCheng0608/stock-lab/issues/781#issuecomment-6894356247)）。[#782](https://github.com/YiCheng0608/stock-lab/issues/782) 補其中補得到的部分，規則見 [DATA_SOURCES 的下市與轉板公司的月營收](../DATA_SOURCES.md#下市與轉板公司的月營收)：
+  - **轉板**：`revenue transfers --apply` 把上櫃標的範圍內的月份從上市標的複製過來（0 個請求）。2026-11-15 在研究 DB 副本上實測（日線從 2017-03 起）：21 檔都通過同一家公司的核對，寫 1,360 列，重跑全部 `unchanged`，和上市標的逐列比對沒有不同。批 3～5 把日線往前補之後要再跑一次，補上新增的月份。
+  - **下市股**：`revenue company-classify`，接著 `revenue company-backfill`，用 MOPS 單一公司查詢，只有仍公開發行的公司查得到。破產、合併消滅等「不繼續公開發行」的公司補不到，這部分的缺口會留下來，偏差方向仍對假設有利。等 #702 批 4 建完標的再發請求，請求數先貼在執行單，經統籌核准才補。
+  - **怎麼跑**：三個命令都要 `research-db.json`，沒有就 exit 2；請求間隔、不發的時段、中止條件都寫在 DATA_SOURCES。研究 DB 同時只有一個 writer，由回補執行單（#702）的工程師在批次之間代跑，用 `--max-requests` 切成小段；被時段或失敗中止時 exit 2（`partial`），重跑接續。
+  - **轉板後又下市**：上櫃 `transferred`、上市 `delisted` 的公司，`transfers` 的輸出列在 `twin_delisted`。上市那段由 `company-backfill` 補，補完再跑一次 `transfers`，上櫃那段才複製得到。
+  - **剩下的缺口**：補完後，由執行單（統籌在 #782 合併後開）貼分年、分市場「有日線、沒有月營收」的比例，並寫進這一段。
 
 ## 月營收與季報的下市股缺口（#781）
 
@@ -51,7 +57,7 @@
 
 長工作一律用 `docker run -d` 的獨立容器跑，日誌寫在研究 volume 的 `/data/logs/`，不靠 session 的背景 shell：統籌或工程師換手、背景 shell 被收掉，都不會中斷它。每一段都可以中斷後重跑：`backfill` 從各段的 manifest 接續，已完成的日期不再請求；其他命令重跑冪等。
 
-- **間隔**：`backfill`、`corporate-actions sync`、`trading-halts`、`revenue backfill`、`fundamentals backfill`、`events backfill`、`index-bars backfill`／`futures-history` 這些命令，對每個官方 host 至少間隔 3 秒（`worker.cli.BACKFILL_HOST_INTERVAL_SECONDS`）；daily 與它的 catchup 仍用各 host 自己的間隔。
+- **間隔**：`backfill`、`corporate-actions sync`、`trading-halts`、`revenue backfill`、`fundamentals backfill`、`events backfill`、`index-bars backfill`／`futures-history` 這些命令，對每個官方 host 至少間隔 3 秒（`worker.cli.BACKFILL_HOST_INTERVAL_SECONDS`）；daily 與它的 catchup 仍用各 host 自己的間隔。`revenue company-classify`／`company-backfill` 用自己的 5 秒（`monthly_revenue_company.INTERVAL_SECONDS`，#782）。
 - **時段**：台北 21:15～23:30 不送請求（正式 daily 在跑）。日行情用 [`tools/research/history_backfill.py`](../../tools/research/history_backfill.py) 逐月跑：由新到舊，一個月一次 `backfill`（約 10 分鐘）；每個月開始前，台北時間落在 21:00～23:30 時，先等到 23:30。進度與每個月的結束碼記在 `/data/logs/history-backfill.jsonl`，重跑時跳過已完成的月份。其他命令都是幾分鐘到一小時，在 21:00 之前開始。
 - **耗時**：副本實測每個交易日約 15～26 秒（2026-11-14，3 秒間隔；上市 3 個、上櫃 3 個請求，加上每批 1 個 MOPS 清單，2008 年以前每月多 1 個 `MI_5MINS_HIST`）：2012-04-25～05-08 九個交易日 152 秒、2004-02-11～02-20 八個交易日 153 秒、2014-11-24～12-05 十個交易日 258 秒。這些是短副本上的數字。[#715](https://github.com/YiCheng0608/stock-lab/issues/715) 之前，每個 collect 收尾都把 DB 裡全部的 Event 重新投影成新聞（每筆約 0.23 ms），所以每天會再多一段隨回補長度變長的時間：批 1 從 2024-09 的每天約 28 秒長到 2023-12 的 47 秒。修正後 collect 只投影自己寫入的 Event，收尾約 1 秒，不再隨歷史變長（同一天的重放，Event 2.3 萬／8.7 萬／17.5 萬筆時：改前 6.5／17.2／34.8 秒，改後 0.7／0.4／0.9 秒）。所以每個交易日約等於 collect 本身的 16～18 秒，加上約 1 秒的簿記。批 3～5 約 3,900 個平日，估計約 20 小時的請求時間，再加上每晚 21:00～23:30 的暫停。回補容器要用含 #715 修正的 image 才會變快。
 - **每月的啟動段**：從程序開始到這個月的 backfill run 建立。[#722](https://github.com/YiCheng0608/stock-lab/issues/722) 之前，每個月的 `backfill` 都跑一次 `init_db`，即使 DB 已經在 head，也會對整個 DB 跑兩次 `PRAGMA integrity_check`。這段跟著 DB 大小變長：批 1 從 2024-09 的 80 秒長到 2023-07 的 147 秒；DB 到 4.8 GB 時，容器在 `--memory 3g` 下快取裝不下整個 DB，變成 360～470 秒。修正後，DB 已經在 head 就跳過 `init_db`（`app.db.ensure_schema`，daily 從 #150 起也是同一條規則），啟動段約 1～2 秒，不隨歷史變長。在 4.8 GB 的副本上重放同一天兩次：改前 320、398 秒，改後 1.3、1.5 秒。所以每個月只剩各交易日的時間。DB 落後 head 時，第一個月照舊跑完整的 migration 與整庫檢查。回補不再每月檢查整庫，改由 `history_backfill.py` 在每批結束時自動跑一次 `PRAGMA integrity_check` 與 `foreign_key_check`；最後一個月失敗了也照跑。結果寫成 `history-backfill.jsonl` 的一列 `integrity`（各自的結果與秒數），不是 `ok` 或有外鍵違反就以 exit 3 結束。4.8 GB 的 DB 在 `--memory 3g` 下約 6～7 分鐘。#702 的驗收表引用這一列。
