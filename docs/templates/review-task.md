@@ -8,6 +8,7 @@
 - Issue：https://github.com/YiCheng0608/stock-lab/issues/<issue>（AC 以 Issue 本文為準，共 <n> 條）
 - 白名單：<任務檔的白名單，原文>
 - 規模：<行數> 行（[WORKFLOW「Review 與合併」](../WORKFLOW.md#review-與合併)的算法）、約 <token> token；複核時範圍是 `<上次 head>..<sha>` 的 first-parent 非 merge commit，其餘不看
+- 高風險：<PR 改到的 `HIGH_RISK_PATHS` 檔，或「無」>（有的話，你同時是這個 PR 的獨立 review，見下面第 5 點；不另開第二個代理）
 
 ## 要看的
 
@@ -15,6 +16,7 @@
 2. [WORKFLOW「統籌 review 重點」](../WORKFLOW.md#review-與合併)：文件同步、DESIGN_SYSTEM、寫死的色碼／路徑／金鑰、測試有沒有涵蓋邊界。
 3. GUARDRAILS 的統籌 review 清單：`git show <sha>:docs/GUARDRAILS.md`，強制手段以「無（統籌 review」開頭的每一列逐條判定（[GUARDRAILS](../GUARDRAILS.md) 表格上方的說明）。
 4. 正確性：改動有沒有在某個輸入或狀態下壞掉。
+5. 高風險（上面「高風險」不是「無」才做）：對每個改到的高風險檔，寫出「這個變更安全是因為哪一個事實」，並附證明。證明可以是命令與輸出、查詢，或測試名稱。證明不了的列進必修。
 
 ## 不做的
 
@@ -46,6 +48,10 @@
 ### GUARDRAILS 清單
 
 - <規則>：符合／不適用／違反（違反的已列在必修）
+
+### 高風險（獨立 review）
+
+- <檔案>：安全是因為 <事實>；證明：<命令與輸出、查詢或測試名稱>
 
 ### 看了哪些檔
 
