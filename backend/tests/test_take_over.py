@@ -189,7 +189,7 @@ def test_take_over_runs_every_step_in_order_and_reads_each_back(to: Harness) -> 
     )
     assert to.calls("gh")[-1].startswith(
         "api graphql -f q=repo:YiCheng0608/stock-lab is:closed "
-        "closed:>=2026-10-23T12:00:00Z -f query="
+        "closed:>=2026-10-23T12:00:00Z sort:created-asc -f query="
     )
     gets = to.calls("gh")[1:-1]
     assert len(gets) == 3
@@ -859,6 +859,18 @@ def _graphql_calls(h: Harness) -> list[str]:
     return [c for c in h.calls("gh") if c.startswith("api graphql ")]
 
 
+# Every page asks the same search, sorted by creation time (PR #788 review): best match
+# leaves ties in any order from one call to the next.
+SORTED_SEARCH = (
+    "api graphql -f q=repo:YiCheng0608/stock-lab is:closed "
+    "closed:>=2026-10-23T12:00:00Z sort:created-asc -f query="
+)
+
+
+def _searches(calls: list[str]) -> list[str]:
+    return [c.split(" -f query=", 1)[0] + " -f query=" for c in calls]
+
+
 def test_closed_step_reads_the_next_page_by_its_cursor(to: Harness) -> None:
     """#787 AC-1: two pages read are one report, counted over both; an Issue the second
     page repeats (one closed in between moves the others along) is counted once. Red
@@ -873,6 +885,7 @@ def test_closed_step_reads_the_next_page_by_its_cursor(to: Harness) -> None:
     assert _report(result) == ALL_FINE_REPORT
     calls = _graphql_calls(to)
     assert len(calls) == 2
+    assert _searches(calls) == [SORTED_SEARCH] * 2
     assert " -f after=" not in calls[0]
     assert calls[1].endswith(" -f after=c2")
     assert list(to.temp.iterdir()) == []
@@ -894,7 +907,7 @@ def test_closed_step_stops_after_three_pages(to: Harness) -> None:
     ]
     calls = _graphql_calls(to)
     assert [c.rsplit(" -f after=", 1)[-1] for c in calls[1:]] == ["c2", "c3"]
-    assert len(calls) == 3
+    assert _searches(calls) == [SORTED_SEARCH] * 3
 
 
 @pytest.mark.parametrize(
@@ -921,8 +934,7 @@ def test_closed_step_stops_after_three_pages(to: Harness) -> None:
                     }
                 },
             ),
-            "關閉單核對：未查完（第 2 頁讀不到下一頁的游標，closed-next exit 1；"
-            "gh 呼叫 2 次）",
+            "關閉單核對：未查完（第 2 頁 說有下一頁卻沒有游標；gh 呼叫 2 次）",
         ),
     ],
     ids=["gh-fails", "no-data", "no-cursor"],

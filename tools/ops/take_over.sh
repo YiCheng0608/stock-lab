@@ -98,7 +98,7 @@ done
 # closed_check: the closed step's report (see the header). Prints; always returns 0.
 closed_check() {
   local hours="${TAKE_OVER_CLOSED_HOURS:-48}" since dir query wt="" br="" rc=0
-  local page=0 cursor="" where="" failed=""
+  local page=0 cursor="" where="" failed="" n search
   local -a after=()
   since="$(date -u -d "@$((${PATROL_NOW:-$(date -u +%s)} - hours * 3600))" +%Y-%m-%dT%H:%M:%SZ)"
   dir="$(mktemp -d)" || { echo "關閉單核對：未查完（建不了暫存目錄）"; return 0; }
@@ -106,6 +106,11 @@ closed_check() {
   git -C "$repo_root" for-each-ref --format='%(refname:short)' refs/heads/ >"$dir/branches" \
     && br="$dir/branches"
   query="$(cj closed-query)"
+  # Sorted by creation time, which never changes: without a sort the search is by best
+  # match, ties fall in any order from one call to the next and a page repeats one the
+  # page before had (PR #788 review). One closed while the pages are read still moves
+  # the others along: closed-check's count then says 未查完.
+  search="repo:$GH_REPO is:closed closed:>=$since sort:created-asc"
   # Page after page by the search cursor (#787): closed-next prints none after the last
   # page there is or the last one read (CLOSED_PAGES), and closed-check says 未查完 when
   # the search goes on. A page that cannot be read leaves the whole report unread: the
@@ -113,19 +118,21 @@ closed_check() {
   while :; do
     page=$((page + 1))
     # The first page keeps its words of before paging; later ones name the page.
-    [ "$page" -gt 1 ] && where="第 $page 頁"
-    if ! gh api graphql -f q="repo:$GH_REPO is:closed closed:>=$since" -f query="$query" \
-      "${after[@]}" >"$dir/page.$page"; then
-      failed="${where:+$where }gh api graphql 失敗"
+    [ "$page" -gt 1 ] && where="第 $page 頁 "
+    # ${after[@]+...}: an empty array is unbound under set -u before bash 4.4.
+    if ! gh api graphql -f q="$search" -f query="$query" ${after[@]+"${after[@]}"} \
+      >"$dir/page.$page"; then
+      failed="${where}gh api graphql 失敗"
       break
     fi
     rc=0
     cursor="$(cj closed-next "$page" <"$dir/page.$page")" || rc=$?
     case "$rc" in
       0) ;;
-      3) failed="${where:+$where }GraphQL 的回答沒有 data.search"; break ;;
-      # A next page without a cursor, or a Python error (its traceback is on stderr).
-      *) failed="${where}讀不到下一頁的游標，closed-next exit $rc"; break ;;
+      3) failed="${where}GraphQL 的回答沒有 data.search"; break ;;
+      4) failed="${where}說有下一頁卻沒有游標"; break ;;
+      # A Python error: its traceback is on stderr.
+      *) failed="${where}closed-next 失敗，exit $rc"; break ;;
     esac
     [ -n "$cursor" ] || break
     after=(-f after="$cursor")
@@ -134,7 +141,9 @@ closed_check() {
     echo "關閉單核對：未查完（${failed}；gh 呼叫 $page 次）"
   else
     rc=0
-    cat "$dir"/page.* | cj closed-check "$since" "$wt" "$br" || rc=$?
+    # Page by page in order, not by file name (page.10 sorts before page.2).
+    for ((n = 1; n <= page; n++)); do cat "$dir/page.$n"; done \
+      | cj closed-check "$since" "$wt" "$br" || rc=$?
     case "$rc" in
       0) ;;
       3) echo "關閉單核對：未查完（GraphQL 的回答沒有 data.search；gh 呼叫 $page 次）" ;;

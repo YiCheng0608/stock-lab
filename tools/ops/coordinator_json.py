@@ -30,7 +30,7 @@ value is missing or the condition is false, so a script can test the exit code.
   closed-next PAGE    the cursor to read the page after page PAGE of the closed-query
                       answer on stdin with; nothing when there is no next page or PAGE
                       is the last one read (CLOSED_PAGES, #787); exit 3 when the answer
-                      has no data.search, 1 when it has a next page but no cursor
+                      has no data.search, 4 when it has a next page but no cursor
   closed-check SINCE WORKTREES BRANCHES
                       the take_over.sh report on the Issues and PRs closed since SINCE
                       (closed_check, #713); stdin is the closed-query answers of the
@@ -1117,7 +1117,7 @@ def main(argv: list[str]) -> int:
             return 3
         cursor = closed_next(doc, int(args[0]))
         if cursor is None:
-            return 1
+            return 4
         print(cursor)
         return 0
     if command == "questions":
