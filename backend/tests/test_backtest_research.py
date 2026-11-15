@@ -22,6 +22,32 @@ research = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(research)
 
 
+MEMINFO = "MemTotal:        8132484 kB\nMemFree:          618808 kB\n"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Linux /proc/meminfo")
+def test_free_memory_is_mem_available_not_mem_free(tmp_path, monkeypatch):
+    """#752: right after a large file the page cache leaves MemFree near zero;
+    MemAvailable counts it as reclaimable."""
+
+    monkeypatch.setattr(
+        research.os, "sysconf", lambda name: 1024 if "PAGE" in name else 0
+    )
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text(MEMINFO + "MemAvailable:    6888980 kB\n", encoding="ascii")
+    assert research.free_memory_gb(meminfo) == pytest.approx(6888980 / 2**20)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Linux /proc/meminfo")
+def test_free_memory_falls_back_without_mem_available(tmp_path, monkeypatch):
+    pages = {"SC_AVPHYS_PAGES": 2**18, "SC_PAGE_SIZE": 4096}  # 1 GiB
+    monkeypatch.setattr(research.os, "sysconf", lambda name: pages[name])
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text(MEMINFO, encoding="ascii")  # an old kernel: no MemAvailable
+    assert research.free_memory_gb(meminfo) == 1.0
+    assert research.free_memory_gb(tmp_path / "missing") == 1.0
+
+
 def test_the_production_database_is_refused(tmp_path):
     production = tmp_path / "Stock-Lab-Data" / "stock.db"
     data_dir = tmp_path / "data"

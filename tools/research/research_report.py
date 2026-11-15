@@ -415,15 +415,7 @@ def benchmark_universe(
 
     instruments: dict[int, Instrument] = defaultdict(Instrument)
     listed: dict[date, list[int]] = defaultdict(list)
-    until, extra = _until("mb.trading_date", end)
-    for row in con.execute(
-        "select mb.instrument_id, mb.trading_date, mb.open, mb.high, mb.low, "
-        "mb.close, mb.volume, mb.is_suspended from market_bars mb "
-        "join instruments i on i.id = mb.instrument_id "
-        f"where i.instrument_type in ({','.join('?' * len(BENCHMARK_TYPES))}) "
-        f"and mb.trading_date >= ?{until} order by mb.instrument_id, mb.trading_date",
-        (*BENCHMARK_TYPES, start.isoformat(), *extra),
-    ):
+    for row in con.execute(*_benchmark_bars(start, end)):
         instrument_id, day, *prices, volume, suspended = row
         day = date.fromisoformat(day)
         instruments[instrument_id].bars.append(
@@ -431,6 +423,56 @@ def benchmark_universe(
         )
         listed[day].append(instrument_id)
     return instruments, listed
+
+
+def _benchmark_bars(start: date, end: date | None) -> tuple[str, tuple]:
+    """The one query of the stock／ipo bars, by instrument then date: shared by
+    ``benchmark_universe`` and ``benchmark_bars`` so both read the same rows."""
+
+    until, extra = _until("mb.trading_date", end)
+    return (
+        "select mb.instrument_id, mb.trading_date, mb.open, mb.high, mb.low, "
+        "mb.close, mb.volume, mb.is_suspended from market_bars mb "
+        "join instruments i on i.id = mb.instrument_id "
+        f"where i.instrument_type in ({','.join('?' * len(BENCHMARK_TYPES))}) "
+        f"and mb.trading_date >= ?{until} order by mb.instrument_id, mb.trading_date",
+        (*BENCHMARK_TYPES, start.isoformat(), *extra),
+    )
+
+
+def benchmark_bars(
+    con: sqlite3.Connection,
+    start: date,
+    end: date | None = None,
+    days: dict[str, date] | None = None,
+) -> Iterable[tuple[int, list[Bar]]]:
+    """``benchmark_universe``'s rows one instrument at a time (#752): the same
+    query, its adjacent rows of one id grouped, so only one instrument's
+    ``Bar`` objects are alive at a time.
+
+    ``days`` maps an ISO date to the ``date`` object to use (the sessions'), so
+    every bar of a day shares one object; other days are parsed.
+    """
+
+    days = {} if days is None else days
+    current, bars = None, []
+    for row in con.execute(*_benchmark_bars(start, end)):
+        instrument_id, day, *prices, volume, suspended = row
+        if instrument_id != current:
+            if bars:
+                yield current, bars
+            current, bars = instrument_id, []
+        when = days.get(day)
+        bars.append(
+            Bar(
+                date.fromisoformat(day) if when is None else when,
+                *prices,
+                volume or 0,
+                bool(suspended),
+            )
+        )
+    if bars:
+        yield current, bars
 
 
 def load_actions(
