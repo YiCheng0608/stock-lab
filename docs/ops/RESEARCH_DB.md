@@ -94,6 +94,59 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 
 這裡的 `--segment` 只是讓既有的兩個工具能在研究 DB 上指定日期（例如確認工具讀得到回補的資料）。新策略探索的分段已在 [策略證據「分段」](../spec/evidence.md#分段) 寫死（探索段到 2019-12-31、驗證段 2020-01-02～2024-09-27，[#697](https://github.com/YiCheng0608/stock-lab/issues/697)），探索工具另開單，參數寫死在程式裡；回補完成前不要在回補的歷史上跑整段的特徵證據（#692 決定）。`portfolio_research.py --hypothesis` 的凍結假設不接受 `--segment`。
 
+## 研究工具的耗時與記憶體
+
+`explore_research` 與 `trade_research` 的探索段要讀到 2019-12-31 以前的全部歷史，每個假設、每個工具版本只能跑一次，所以耗時與記憶體不能在研究 DB 上試。[#752](https://github.com/YiCheng0608/stock-lab/issues/752) 用一份**合成的長歷史 DB** 量（量測方式是統籌決定 [6885225362](https://github.com/YiCheng0608/stock-lab/issues/752#issuecomment-6885225362)）。
+
+### 合成 DB
+
+[`tools/research/synthetic_history.py`](../../tools/research/synthetic_history.py) 只讀正式 DB 的唯讀副本（[取正式 DB 的唯讀副本](LOCAL.md#取正式-db-的唯讀副本)），寫一份新的 `stock.db`：
+
+- **日曆**：`--start`（預設 2004-02-11）～2024-09-27 的每個平日都當成交易日，不讀任何真實的歷史交易日。一年約 261 天，比真實的約 245 天多。2024-09-30 以後是副本原樣。
+- **平移**：副本 2024-09-30 起的個股交易日當一塊，從 2024-09-27 往回一塊接一塊鋪。日線（所有類型）、籌碼、融資名單、除權息照同一張日期對照表；月營收以整塊的月數平移，季報以整年平移，MOPS 重大訊息以它的日曆天為一塊。接縫的價格會跳，報酬沒有意義，只能拿來量耗時與記憶體。
+- **下市股**：`--delisted`（預設 1,000）檔現有股票的複本，代號 `X0001`…，每 33 檔一檔 `transferred`、其他 `delisted`；各自截來源的合成列 2～8 年，在 2024-09-27 以前結束。
+- 研究工具不讀的表（`synthetic_history.EMPTY`）建成空表。
+- `stock.db` 旁寫 `synthetic-db.json`（`purpose` 是 `synthetic_scale`），**不寫**研究標記 `research-db.json`，所以研究工具的驗證段 CLI 會拒絕它。
+- 拒絕（exit 2，什麼都不寫）：來源是正式 DB（路徑在 `stock-lab-data` 或 `STOCK_DATA_DIR` 底下，或是正式檔的 hard link）、輸出目錄已有 `research-db.json` 或 `stock.db`、輸出在正式資料目錄底下。
+
+```bash
+# 換值：D＝正式副本目錄；IMG＝任務 image。大 SQLite 放 volume（bind mount 讀寫慢約 7 倍），新 volume 先 chown 1000
+docker volume create task-<issue>_src; docker volume create task-<issue>_synth
+MSYS_NO_PATHCONV=1 docker run --rm --network none -u 0 -v task-<issue>_src:/src -v "$D":/in:ro "$IMG" \
+  sh -c 'cp /in/stock.db /src/stock.db && chown -R 1000:1000 /src'
+MSYS_NO_PATHCONV=1 docker run --rm --network none -u 0 -v task-<issue>_synth:/synth "$IMG" chown -R 1000:1000 /synth
+MSYS_NO_PATHCONV=1 docker run -d --name t<issue>-gen --network none --memory 1g --memory-swap 1g --oom-score-adj 1000 \
+  -v task-<issue>_src:/src:ro -v task-<issue>_synth:/synth "$IMG" \
+  sh -c 'python -B tools/research/synthetic_history.py --src /src/stock.db --out /synth/full > /synth/gen.json 2> /synth/gen.err'
+```
+
+2026-11-13 的副本（3.7 GB）產生 2004-02-11 起的全量：12.7 GB，9.4 分鐘（`--memory 1g`）；個股日線 1,434 萬列、籌碼 1,411 萬列、重大訊息 170 萬則，每天約 2,116 檔 `stock`／`ipo`（真實的檔數較少，所以下面的數字是上界）。
+
+### 實測
+
+2026-11-15 在合成全量 DB 上量，每次都和 #702 的回補容器（`--memory 3g`）同時跑，回補一直沒有被 OOM 殺掉。容器是 `--memory 4g --memory-swap 4g --oom-score-adj 1000`，每個工具、每一段都跑全部登記的假設；驗證段由量測 harness 直接呼叫 `run_validation`，讓全部假設都當成通過，連已用段一起跑（最壞情況）。表中的「峰值」是工具的 `peak_memory_gb`，也就是程序的峰值 RSS。cgroup 的 `memory.peak` 含 SQLite 讀檔的 page cache，可以回收，每次都頂到 4 GiB，不拿來判斷。
+
+| 工具 | 段 | 讀的 bar 數 | 改前（#752 之前） | 改後 |
+| --- | --- | --- | --- | --- |
+| `explore_research` | 探索段（1990～2019-12-31） | 894 萬 | 載入 86 秒時 OOM（推估約 5.3 GB） | 1,221 秒，3.27 GB |
+| `explore_research` | `--coverage-only` | 894 萬 | 沒有量（同一個載入，會 OOM） | 497 秒，2.57 GB |
+| `explore_research` | 驗證段＋已用段 | 370 萬＋201 萬 | 992 秒，2.99 GB | 864 秒，1.87 GB |
+| `trade_research` | 探索段（2012-12-01～2019-12-31） | 407 萬 | 436 秒，2.61 GB | 399 秒，1.34 GB |
+| `trade_research` | 驗證段＋已用段 | 370 萬＋201 萬 | 659 秒，3.15 GB | 588 秒，1.95 GB |
+
+改前的規模縮放（`explore_research` 探索段）：5 年（310 萬根）609 秒、1.86 GB；10 年（590 萬根）1,149 秒、3.51 GB。
+
+**改了什麼**（[#752](https://github.com/YiCheng0608/stock-lab/issues/752) 決定 [6886660983](https://github.com/YiCheng0608/stock-lab/issues/752#issuecomment-6886660983)）：`portfolio_research.load_market` 不再先把全部日線建成 `Bar` 物件。它用 `research_report.benchmark_bars` 逐檔讀，這和 `benchmark_universe` 是同一條 SQL，只是在游標上依 id 分組；每檔建好 `Series` 與 `raw` 就丟掉那一檔的 `Bar`。`raw` 改成 `array`（停牌是 0／1），同一天的 bar 共用一個 `date` 物件。輸出逐位元組相同（`backend/tests/test_research_load_identical.py`），`VERSION` 與 `definitions_sha256` 不變。
+
+**推估回補後的真實規模**：上市櫃每天約 1,150 檔（2004）到 1,700 檔（2019），`explore_research` 探索段約 550～600 萬根。照上表依 bar 數換算，約 2.1 GB、約 15 分鐘。其他各段都比它小。
+
+**建議的跑法**：
+
+- `--memory 4g --memory-swap 4g --oom-score-adj 1000`。合成上界最大是 3.27 GB，真實規模約 2.1 GB。
+- **可以和回補同時跑**：起跑前在容器裡看 `grep MemAvailable /proc/meminfo` ≥ 5 GiB（看實際用量，不用各容器上限加總）。`--oom-score-adj 1000` 讓 VM 真的不夠時，核心先殺研究工具，不殺回補或正式容器。研究工具中途被殺不留紀錄檔（探索段），可以直接重跑；驗證段開始後被殺仍算跑過一次（[第 2 步的工具](../spec/evidence.md#第-2-步的工具)），所以驗證段更要先確認記憶體。
+- 單次都不到 25 分鐘，不碰台北 21:00～23:30。工具本身在 21:30～23:30 拒絕起跑，但不會中途停，所以 21:00 以後不要開始。
+- **可用記憶體的檢查**：`backtest_research.free_memory_gb`（研究工具、`exit_research`、`audit.py` 共用）在 Linux 讀 `/proc/meminfo` 的 `MemAvailable`。#752 之前讀的是 `MemFree`，剛寫完大檔時 page cache 占滿，`MemFree` 只剩 0.6 GB（`MemAvailable` 6.9 GB），工具會誤拒。
+
 ## 已知的量
 
 - **`instrument` 資料品質列**：每個 collect 對每個標的寫一列（現有規則，不是研究模式才有），一個交易日約 2,400 列；補到 2004 年約 1,200 萬列（約 3 GB）。研究工具不讀這張表。

@@ -434,7 +434,8 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 
 ```bash
 # 換值：IMG＝含 #703 的 backend image；O＝主機上的輸出目錄；T、GIT_RO 同 docs/WORKFLOW.md（工具 commit 要讀 .git，沒掛記 unknown）
-R=(--rm --network none -v stock-lab-research:/research -v "$O":/out "${GIT_RO[@]}")
+# 記憶體（#752 實測，可和回補同時跑；起跑前容器裡 MemAvailable ≥ 5 GiB）：docs/ops/RESEARCH_DB.md「研究工具的耗時與記憶體」
+R=(--rm --network none --memory 4g --memory-swap 4g --oom-score-adj 1000 -v stock-lab-research:/research -v "$O":/out "${GIT_RO[@]}")
 MSYS_NO_PATHCONV=1 docker run "${R[@]}" "$IMG" \
   python -B tools/research/explore_research.py --db /research/stock.db --segment exploration --hypotheses X3,X7 --out /out/exploration
 ```
