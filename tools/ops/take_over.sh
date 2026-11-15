@@ -274,11 +274,11 @@ for step in "${steps_all[@]:$start}"; do
         printf -- '- %s\n' "$(printf '%s\n' "$list" | head -n 1)"
         printf '%s\n' "$list" | tail -n +2
       } >"$work/comment.md" || fail comment "寫不了留言本文"
-      out="$(bash "$script_dir/comment.sh" 1 --body-file "$work/comment.md" --python "$python")" \
+      posted="$(bash "$script_dir/comment.sh" 1 --body-file "$work/comment.md" --python "$python")" \
         || fail comment "comment.sh 失敗：#1 可能已有留言，續跑前先到 GitHub 確認"
-      out="$(printf '%s' "$out" | tr -d '\r' | tail -n 1)"
-      [[ "$out" =~ $url_re ]] || fail comment "comment.sh 沒有回 #1 的留言連結：$out"
-      comment_url="$out"
+      posted="$(printf '%s' "$posted" | tr -d '\r' | tail -n 1)"
+      [[ "$posted" =~ $url_re ]] || fail comment "comment.sh 沒有回 #1 的留言連結：$posted"
+      comment_url="$posted"
       echo "#1 留言：$comment_url"
       ;;
     row)
