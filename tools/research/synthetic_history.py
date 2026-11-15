@@ -30,7 +30,8 @@ Next to ``stock.db`` it writes ``synthetic-db.json`` (``purpose`` is
 validation gate of the research tools refuses it.  It refuses a source that is
 the production database (``evidence_lib.production_problem``: inside
 ``stock-lab-data`` or ``STOCK_DATA_DIR``, or the same file as production), an
-output directory that already holds ``research-db.json`` or a ``stock.db``,
+output directory that (or any directory above it) holds ``research-db.json``,
+one that already holds a ``stock.db``,
 or one inside the production data directory.
 
 Usage (docs/ops/RESEARCH_DB.md 研究工具的耗時與記憶體)::
@@ -113,8 +114,11 @@ def refusals(src: Path, out: Path, environ: dict[str, str]) -> list[str]:
         problems.append(f"source: {problem}")
     elif not src.is_file():
         problems.append(f"{src} does not exist")
-    if (out / RESEARCH_MARKER).exists():
-        problems.append(f"{out} holds {RESEARCH_MARKER}: a research database")
+    # The directory or any above it: /research/synth would write into the research volume.
+    for folder in (out, *out.resolve().parents):
+        if (folder / RESEARCH_MARKER).exists():
+            problems.append(f"{folder} holds {RESEARCH_MARKER}: a research database")
+            break
     if (out / DB_NAME).exists():
         problems.append(f"{out / DB_NAME} already exists")
     problem = lib.production_problem(out / DB_NAME, environ)

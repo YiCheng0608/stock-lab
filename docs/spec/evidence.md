@@ -435,8 +435,10 @@ IC 為負也可以是證據（例如某個值越低、之後越好），用的�
 ```bash
 # 換值：IMG＝含 #703 的 backend image；O＝主機上的輸出目錄；T、GIT_RO 同 docs/WORKFLOW.md（工具 commit 要讀 .git，沒掛記 unknown）
 # 記憶體（#752 實測，可和回補同時跑；起跑前容器裡 MemAvailable ≥ 5 GiB）：docs/ops/RESEARCH_DB.md「研究工具的耗時與記憶體」
-R=(--rm --network none --memory 4g --memory-swap 4g --oom-score-adj 1000 -v stock-lab-research:/research -v "$O":/out "${GIT_RO[@]}")
-MSYS_NO_PATHCONV=1 docker run "${R[@]}" "$IMG" \
+R=(--rm --network none --memory 4g --memory-swap 4g -v stock-lab-research:/research -v "$O":/out "${GIT_RO[@]}")
+# 探索段與 --coverage-only 可以重跑，VM 不夠時讓核心先殺它；驗證段不加（只跑一次，開始後被殺不能重跑）
+RERUN=(--oom-score-adj 1000)
+MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
   python -B tools/research/explore_research.py --db /research/stock.db --segment exploration --hypotheses X3,X7 --out /out/exploration
 ```
 
@@ -469,8 +471,8 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "$IMG" \
 **逐筆的假設**（第二輪起，[逐筆評估](#逐筆評估)）：`tools/research/trade_research.py`（#726，設計在統籌決定 [6882515208](https://github.com/YiCheng0608/stock-lab/issues/726#issuecomment-6882515208)）。S1～S3、R1～R2 寫在 `trade_research.HYPOTHESES`，命令列一樣沒有改參數、起日或 cutoff 的旗標。跑法、拒絕的情況（正式 DB、台北 21:30～23:30、可用記憶體不足）、分段、公開檢查與紀錄檔都和上面的 `explore_research` 相同，只把工具換掉：
 
 ```bash
-# 換值同上
-MSYS_NO_PATHCONV=1 docker run "${R[@]}" "$IMG" \
+# 換值同上（探索段加 RERUN；驗證段只用 R）
+MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
   python -B tools/research/trade_research.py --db /research/stock.db --segment exploration --hypotheses S1,S2,S3 --out /out/exploration
 ```
 

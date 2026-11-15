@@ -161,6 +161,20 @@ def test_it_refuses_a_directory_holding_the_research_marker(tmp_path, source, ca
     assert not (out / "stock.db.partial").exists()
 
 
+def test_it_refuses_a_directory_under_a_research_database(tmp_path, source, capsys):
+    """``--out /research/synth`` would write 12 GB into the research volume."""
+
+    research = tmp_path / "research"
+    research.mkdir()
+    (research / "research-db.json").write_text('{"purpose": "research_history"}\n')
+    out = research / "synth" / "full"
+    code = tool.main(["--src", str(source), "--out", str(out), "--start", "2024-06-03"])
+    assert code == 2
+    refused = json.loads(capsys.readouterr().out)["refused"]
+    assert any(str(research) in p and "research-db.json" in p for p in refused)
+    assert not out.exists()
+
+
 def test_it_refuses_a_production_source(tmp_path, source, monkeypatch, capsys):
     data = tmp_path / "prod"
     data.mkdir()
