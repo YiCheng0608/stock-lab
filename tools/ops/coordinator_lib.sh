@@ -333,6 +333,11 @@ cbm_project="${STOCK_CBM_PROJECT:-C-Users-YiCheng-Desktop-taiwan-stock-research}
 cbm_timeout="${STOCK_CBM_TIMEOUT:-300}"
 # dispatch.sh checks the files the newest N merges of the checkout's HEAD changed.
 cbm_recent_merges="${STOCK_CBM_RECENT_MERGES:-5}"
+# When index_repository answers that another index operation of the project is active (the
+# watcher's own refresh right after checkout_fast_forward, #766): seconds to wait at most,
+# polling index_status every STOCK_CBM_BUSY_POLL seconds, before the one retry.
+cbm_busy_wait="${STOCK_CBM_BUSY_WAIT:-300}"
+cbm_busy_poll="${STOCK_CBM_BUSY_POLL:-10}"
 cbm_out="" cbm_error="" cbm_report="" cbm_steps=()
 
 # cbm_call TOOL ARGS_JSON: run `<cli> cli --json TOOL` with ARGS_JSON on stdin; cbm_out is the
@@ -375,17 +380,57 @@ cbm_root_check() {
     || { cbm_error="project $cbm_project 的 root 是 $root，不是這個 checkout（$want）；請從 master 管理 checkout 執行"; return 1; }
 }
 
+# cbm_wait_idle: after index_repository was refused for another index operation of the
+# project, poll index_status every cbm_busy_poll seconds until the project's status is
+# ready (or the engine no longer has it), at most cbm_busy_wait seconds. cbm_waited is the
+# seconds waited, cbm_state the last status seen; past the limit it fails with both in
+# cbm_error. Nothing of the other operation is touched.
+cbm_waited=0 cbm_state=""
+cbm_wait_idle() {
+  local start=$SECONDS left
+  cbm_waited=0 cbm_state=""
+  while :; do
+    left=$((cbm_busy_wait - (SECONDS - start)))
+    [ "$left" -gt 0 ] || break
+    sleep "$((left < cbm_busy_poll ? left : cbm_busy_poll))"
+    if cbm_call index_status "{\"project\":$(json_str "$cbm_project")}"; then
+      cbm_state="$(printf '%s' "$cbm_out" | cj get status)" || cbm_state="無 status"
+    else
+      case "$cbm_error" in *"project not found"*) cbm_state="project not found" ;; *) cbm_state="index_status 失敗（$cbm_error）" ;; esac
+    fi
+    cbm_waited=$((SECONDS - start))
+    case "$cbm_state" in ready | "project not found") cbm_error=""; return 0 ;; esac
+  done
+  cbm_waited=$((SECONDS - start))
+  cbm_error="等了 $cbm_waited 秒仍未結束（上限 $cbm_busy_wait 秒，STOCK_CBM_BUSY_WAIT），最後狀態 ${cbm_state:-未查到}"
+  return 1
+}
+
 # cbm_rebuild [force]: index_repository of this checkout under the project's name; force
 # deletes the project first (delete_project), the one way to make the engine record a file
 # whose mtime alone changed (engine 0.10.8 keeps the old mtime and indexed_at otherwise).
+# Refused because another index operation of the project is active, it waits for that one
+# (cbm_wait_idle) and tries once more; it appends index_waited:<seconds> to cbm_steps when
+# it waited, whether the retry then ran or not. Any other failure is not retried.
 cbm_rebuild() {
-  local status project
+  local status project args first
   cbm_root_check || return 1
   if [ "${1:-}" = force ]; then
     cbm_call delete_project "{\"project\":$(json_str "$cbm_project")}" || return 1
   fi
-  cbm_call index_repository "{\"repo_path\":$(json_str "$(native "$repo_root")"),\"name\":$(json_str "$cbm_project")}" \
-    || return 1
+  args="{\"repo_path\":$(json_str "$(native "$repo_root")"),\"name\":$(json_str "$cbm_project")}"
+  if ! cbm_call index_repository "$args"; then
+    case "$cbm_error" in *"another index operation for this project is active"*) ;; *) return 1 ;; esac
+    first="$cbm_error"
+    if ! cbm_wait_idle; then
+      cbm_steps+=("index_waited:$cbm_waited")
+      cbm_error="$first；$cbm_error"
+      return 1
+    fi
+    cbm_steps+=("index_waited:$cbm_waited")
+    cbm_call index_repository "$args" \
+      || { cbm_error="等了 $cbm_waited 秒、最後狀態 $cbm_state，重試仍失敗：$cbm_error"; return 1; }
+  fi
   status="$(printf '%s' "$cbm_out" | cj get status)"
   project="$(printf '%s' "$cbm_out" | cj get project)"
   [ "$status" = indexed ] && [ "$project" = "$cbm_project" ] \
@@ -466,7 +511,8 @@ cbm_only_mtime() {
 # cbm_ensure WHEN PATHS: WHEN is "rebuilt" (close_task.sh: rebuild first) or "check"
 # (dispatch.sh: verify, rebuild once when stale). After a rebuild that leaves only the mtime
 # rule stale, one forced rebuild (cbm_rebuild force) and a last verify. cbm_steps lists what
-# ran (index_rebuilt, index_forced, index_fresh:<n> paths); fails with cbm_error.
+# ran (index_waited:<seconds> from cbm_rebuild, index_rebuilt, index_forced, index_fresh:<n>
+# paths), also when it fails with cbm_error.
 cbm_ensure() {
   local when="$1" paths="$2" rc n
   cbm_steps=()
