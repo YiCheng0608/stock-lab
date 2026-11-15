@@ -23,7 +23,8 @@ Two commands, so the download never touches a database:
   first compared with ``t163sb04`` on the companies both have; one different EPS or
   report format stops the command before that quarter is written.  It is rerun after
   every research backfill batch that creates older instruments: rows already written
-  are ``unchanged``.
+  are ``unchanged``.  The command runs only on the research DB (``research_refusal``)
+  and holds maintenance mode (``worker.cli.maintenance_guarded``).
 
 The zip is an outside file: it is read in memory member by member (never extracted
 to a path), with limits on the members, each member's size and the total, and a
@@ -39,6 +40,7 @@ import os
 import re
 import time
 import zipfile
+import zlib
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from datetime import time as clock_time
@@ -50,7 +52,9 @@ from xml.etree import ElementTree
 import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
+from app import config
 from app.clock import utcnow
 from app.db import SessionLocal
 from app.models import (
@@ -121,6 +125,16 @@ INDUSTRY_FORMATS = {
 # (2014Q2: the 7 companies with ``cr`` and ``er`` have the same EPS in both).
 REPORT_KINDS = ("cr", "ir", "er")
 EPS_CONCEPT = "BasicEarningsLossPerShare"
+# The check against t163sb04 stops a quarter when more than this share of the companies
+# t163sb04 has cannot be compared (no member, no EPS, unreadable): 2014Q2 had 1 of
+# 1,518 (6026, not in the archive; #781 6894525486).  A new layout no member can be
+# read in then fails instead of passing with nothing compared (review of PR #783).
+CHECK_MISSING_LIMIT = 0.01
+
+# The research volume carries this marker next to stock.db; the production one never
+# does (tools/research/history_backfill.py, docs/ops/RESEARCH_DB.md).
+MARKER_NAME = "research-db.json"
+MARKER_PURPOSE = "research_history"
 
 # --- which instruments get a quarter --------------------------------------------------
 TARGET_STATUSES = ("delisted", "transferred")
@@ -279,22 +293,37 @@ class ReadBudget:
     def read(self, archive: zipfile.ZipFile, member: Member) -> bytes:
         parts: list[bytes] = []
         size = 0
-        with archive.open(member.info) as handle:
-            while True:
-                chunk = handle.read(READ_CHUNK)
-                if not chunk:
-                    break
-                size += len(chunk)
-                self.used += len(chunk)
-                if size > MAX_MEMBER_BYTES:
-                    raise ArchiveError(
-                        f"{member.name} is over {MAX_MEMBER_BYTES} bytes uncompressed"
-                    )
-                if self.used > self.limit:
-                    raise ArchiveError(
-                        f"the archive is over {self.limit} bytes uncompressed"
-                    )
-                parts.append(chunk)
+        try:
+            with archive.open(member.info) as handle:
+                while True:
+                    chunk = handle.read(READ_CHUNK)
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    self.used += len(chunk)
+                    if size > MAX_MEMBER_BYTES:
+                        raise ArchiveError(
+                            f"{member.name} is over {MAX_MEMBER_BYTES} bytes uncompressed"
+                        )
+                    if self.used > self.limit:
+                        raise ArchiveError(
+                            f"the archive is over {self.limit} bytes uncompressed"
+                        )
+                    parts.append(chunk)
+        except ArchiveError:
+            raise
+        # A bad CRC (BadZipFile), an unsupported method (NotImplementedError), an
+        # encrypted member (RuntimeError) or a broken stream: the archive is not whole.
+        except (
+            zipfile.BadZipFile,
+            NotImplementedError,
+            RuntimeError,
+            zlib.error,
+            EOFError,
+            OSError,
+            ValueError,
+        ) as exc:
+            raise ArchiveError(f"{member.name} cannot be read: {exc!r}") from exc
         return b"".join(parts)
 
 
@@ -302,15 +331,18 @@ def best_members(members: Iterable[Member]) -> dict[str, Member]:
     """One member per company: the first kind of ``REPORT_KINDS`` it has."""
 
     result: dict[str, Member] = {}
+    seen: dict[tuple[str, str], str] = {}
     for member in members:
         if member.kind not in REPORT_KINDS:
             continue
-        held = result.get(member.symbol)
-        if held is not None and held.kind == member.kind:
+        key = (member.symbol, member.kind)
+        if key in seen:
             raise ArchiveError(
                 f"two {member.kind} instances of {member.symbol}: "
-                f"{held.name}, {member.name}"
+                f"{seen[key]}, {member.name}"
             )
+        seen[key] = member.name
+        held = result.get(member.symbol)
         if held is None or REPORT_KINDS.index(member.kind) < REPORT_KINDS.index(
             held.kind
         ):
@@ -360,7 +392,10 @@ def _inline_value(element: ElementTree.Element) -> Decimal | None:
         raise MemberError(f"unknown inline XBRL format {element.get('format')!r}")
     scale = element.get("scale")
     if scale:
-        value = value.scaleb(int(scale))
+        try:
+            value = value.scaleb(int(scale))
+        except ValueError as exc:
+            raise MemberError(f"scale {scale!r} is not an integer") from exc
     if element.get("sign") == "-":
         value = -value
     return value
@@ -386,8 +421,10 @@ def parse_eps(data: bytes, quarter: Quarter) -> tuple[float | None, str | None]:
     and a note; a first quarter's three-month context too) must agree.
     """
 
-    head = data[:4096].upper() if len(data) > 4096 else data.upper()
-    if b"<!DOCTYPE" in head or b"<!ENTITY" in data.upper():
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")) or b"\x00" in data:
+        raise MemberError("instance is UTF-16 or holds a NUL byte")
+    upper = data.upper()
+    if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
         raise MemberError("instance declares a DOCTYPE or an entity")
     try:
         root = ElementTree.fromstring(data)
@@ -427,8 +464,13 @@ def parse_eps(data: bytes, quarter: Quarter) -> tuple[float | None, str | None]:
 
 
 def download(url: str, target: Path, max_bytes: int) -> int:
-    """GET URL into TARGET (at most MAX_BYTES, else ArchiveError); the status code."""
+    """GET URL into TARGET (at most MAX_BYTES, else ArchiveError); the status code.
 
+    Through ``sources._throttle_official_host`` as every official request; the
+    command's own interval (``REQUEST_INTERVAL_SECONDS``) is the longer one.
+    """
+
+    sources._throttle_official_host(url)
     with httpx.stream(
         "GET", url, headers={"User-Agent": USER_AGENT}, timeout=300
     ) as response:
@@ -547,6 +589,8 @@ class QuarterCounts:
     not_target: int = 0
     outside_window: int = 0
     excluded: int = 0
+    # Excluded now but written by an earlier run (docs/ops/RESEARCH_DB.md: how to delete).
+    excluded_already_written: int = 0
     unknown_format: int = 0
     unreadable: int = 0
     no_eps: int = 0
@@ -713,7 +757,13 @@ def apply_quarter(
             stored_format = (details or {}).get("report_format")
             if stored_format and INDUSTRY_FORMATS.get(member.industry) != stored_format:
                 counts.check_format_mismatch += 1
-        if counts.check_different or counts.check_format_mismatch:
+        compared = len(checked)
+        if (
+            counts.check_different
+            or counts.check_format_mismatch
+            or (compared and counts.check_same == 0)
+            or counts.check_missing > compared * CHECK_MISSING_LIMIT
+        ):
             raise MismatchError(quarter, counts)
 
         # 2. The targets: delisted and transferred instruments the archive has.
@@ -755,6 +805,8 @@ def apply_quarter(
             for instrument in sorted(targets, key=lambda item: item.id):
                 if instrument.id in excluded:
                     counts.excluded += 1
+                    if instrument.id in own_ids:
+                        counts.excluded_already_written += 1
                     continue
                 if instrument.id in stored_ids and instrument.id not in own_ids:
                     counts.existing_other_source += 1
@@ -878,6 +930,59 @@ def apply_archives(
         db.add(run)
         db.commit()
     coverage: dict[str, Any] = {}
+    try:
+        aborted = _apply_each(db, run, directory, targets, manifest, coverage, excluded)
+    except Exception as exc:
+        # Anything unexpected still ends the run as failed (as monthly_revenue does).
+        db.rollback()
+        if run is not None:
+            run.status = "failed"
+            run.error = f"error: {exc!r}"
+            run.finished_at = utcnow()
+            run.metadata_json = {
+                **run.metadata_json,
+                "coverage_manifest": dict(coverage),
+            }
+            flag_modified(run, "metadata_json")
+            db.commit()
+        raise
+    status = "failed" if aborted else "success"
+    if run is not None:
+        run.status = status
+        run.error = aborted
+        run.finished_at = utcnow()
+        db.commit()
+    totals: dict[str, int] = {}
+    for item in coverage.values():
+        for name, value in item.items():
+            if isinstance(value, int) and not isinstance(value, bool):
+                totals[name] = totals.get(name, 0) + value
+    return {
+        "status": status,
+        "dry_run": dry_run,
+        "run_id": run.id if run is not None else None,
+        "start_quarter": targets[0].label,
+        "end_quarter": targets[-1].label,
+        "aborted": aborted,
+        "totals": totals,
+        "quarters": {
+            label: {k: v for k, v in item.items() if k != "used_members"}
+            for label, item in coverage.items()
+        },
+    }
+
+
+def _apply_each(
+    db: Session,
+    run: IngestionRun | None,
+    directory: Path,
+    targets: list[Quarter],
+    manifest: dict[str, Any],
+    coverage: dict[str, Any],
+    excluded: frozenset[int],
+) -> str | None:
+    """Apply the quarters oldest first; the reason of the first that stopped, or None."""
+
     aborted: str | None = None
     for quarter in targets:
         entry = manifest["quarters"][quarter.label]
@@ -913,7 +1018,14 @@ def apply_archives(
                 **_summary(counts),
             }
         if run is not None:
-            run.metadata_json = {**run.metadata_json, "coverage_manifest": coverage}
+            # A JSON column does not see the dict change in place, and with
+            # expire_on_commit=False an equal new dict is not written either
+            # (pipeline.py does the same; review of PR #783).
+            run.metadata_json = {
+                **run.metadata_json,
+                "coverage_manifest": dict(coverage),
+            }
+            flag_modified(run, "metadata_json")
             run.records = sum(
                 item.get("inserted", 0) + item.get("updated", 0) + item.get("dated", 0)
                 for item in coverage.values()
@@ -921,33 +1033,33 @@ def apply_archives(
             db.commit()
         if aborted:
             break
-    status = "failed" if aborted else "success"
-    if run is not None:
-        run.status = status
-        run.error = aborted
-        run.finished_at = utcnow()
-        db.commit()
-    totals: dict[str, int] = {}
-    for item in coverage.values():
-        for name, value in item.items():
-            if isinstance(value, int) and not isinstance(value, bool):
-                totals[name] = totals.get(name, 0) + value
-    return {
-        "status": status,
-        "dry_run": dry_run,
-        "run_id": run.id if run is not None else None,
-        "start_quarter": targets[0].label,
-        "end_quarter": targets[-1].label,
-        "aborted": aborted,
-        "totals": totals,
-        "quarters": {
-            label: {k: v for k, v in item.items() if k != "used_members"}
-            for label, item in coverage.items()
-        },
-    }
+    return aborted
 
 
 # --- commands -------------------------------------------------------------------------
+
+
+def research_refusal(db_path: Path | None = None) -> str | None:
+    """Why ``xbrl-apply`` may not run on this database; None for the research one.
+
+    Inside the container both volumes are ``/data/stock.db``; only the research
+    volume has ``MARKER_NAME`` next to it (as tools/research/history_backfill.py).
+    """
+
+    db = Path(db_path or config.DB_PATH)
+    marker = db.parent / MARKER_NAME
+    try:
+        purpose = json.loads(marker.read_text(encoding="utf-8")).get("purpose")
+    except (OSError, ValueError, AttributeError):
+        purpose = None
+    if purpose != MARKER_PURPOSE:
+        return (
+            f"{marker} is missing or not a research marker "
+            f'(expected {{"purpose": "{MARKER_PURPOSE}"}}): not a research database'
+        )
+    if not db.is_file():
+        return f"{db} does not exist"
+    return None
 
 
 def run_xbrl_fetch(directory: str, start: str, end: str) -> dict[str, Any]:

@@ -794,6 +794,9 @@ def test_the_cli_parses_both_commands(monkeypatch, tmp_path):
 
     import worker.cli as cli_module
 
+    (tmp_path / "stock.db").write_bytes(b"")
+    (tmp_path / "research-db.json").write_text('{"purpose": "research_history"}')
+    monkeypatch.setattr(cli_module, "DB_PATH", tmp_path / "stock.db")
     seen = {}
     monkeypatch.setattr(
         cli_module,
@@ -836,3 +839,266 @@ def test_the_cli_parses_both_commands(monkeypatch, tmp_path):
         ("/x", "2013Q1", "2024Q3"),
         {"dry_run": True, "exclude_file": None},
     )
+
+
+# --- review of PR #783 ----------------------------------------------------------------
+
+
+def test_every_quarter_of_a_run_is_in_its_coverage_manifest(factory, tmp_path):
+    with factory() as db:
+        add_instrument(db, "2475")
+        db.commit()
+    directory = tmp_path / "xbrl"
+    earlier = Quarter(2014, 1)
+    store(
+        directory, earlier, archive(dict([eps_member("2475", "0.10", quarter=earlier)]))
+    )
+    store(directory, Q, archive(dict([eps_member("2475", "0.20")])))
+    result = apply(factory, directory, start=earlier, end=Q)
+    assert result["status"] == "success"
+    with factory() as db:  # a new session reads what was committed
+        run = db.get(IngestionRun, result["run_id"])
+        manifest = run.metadata_json["coverage_manifest"]
+        assert sorted(manifest) == ["2014Q1", "2014Q2"]
+        assert list(manifest["2014Q1"]["used_members"]) == [
+            member_name("2475", quarter=earlier)
+        ]
+        assert list(manifest["2014Q2"]["used_members"]) == [member_name("2475")]
+        assert run.records == 2
+
+
+def test_a_check_that_compared_nothing_stops(factory, tmp_path):
+    with factory() as db:
+        seed(db)
+    directory = tmp_path / "xbrl"
+    unreadable = {name: b"<xbrl/>" for name in SEED_ARCHIVE}  # no EPS anywhere
+    store(directory, Q, archive(unreadable))
+    result = apply(factory, directory)
+    assert result["status"] == "failed" and "same 0" in result["aborted"]
+    with factory() as db:
+        assert written(db) == {}
+
+
+def test_more_than_one_percent_missing_in_the_check_stops(factory, tmp_path):
+    with factory() as db:
+        seed(db)
+    directory = tmp_path / "xbrl"
+    members = {k: v for k, v in SEED_ARCHIVE.items() if "-1597-" not in k}
+    store(directory, Q, archive(members))
+    result = apply(factory, directory)
+    assert result["status"] == "failed" and "missing 1" in result["aborted"]
+    assert qx.CHECK_MISSING_LIMIT == 0.01
+
+
+def _bad_crc(data: bytes, name: str) -> bytes:
+    """DATA with one byte of NAME's stored content changed (its CRC no longer matches)."""
+
+    with zipfile.ZipFile(io.BytesIO(data)) as handle:
+        info = handle.getinfo(name)
+    start = info.header_offset + 30 + len(info.filename.encode()) + len(info.extra)
+    mutable = bytearray(data)
+    mutable[start + info.compress_size // 2] ^= 0xFF
+    return bytes(mutable)
+
+
+def test_a_member_with_a_bad_crc_fails_the_quarter_and_the_run(factory, tmp_path):
+    with factory() as db:
+        add_instrument(db, "2475")
+        db.commit()
+    name, content = eps_member("2475", "0.20")
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as handle:
+        handle.writestr(name, content)
+    directory = tmp_path / "xbrl"
+    store(directory, Q, _bad_crc(buffer.getvalue(), name))
+    result = apply(factory, directory)
+    assert result["status"] == "failed" and "cannot be read" in result["aborted"]
+    with factory() as db:
+        run = db.get(IngestionRun, result["run_id"])
+        assert run.status == "failed" and written(db) == {}
+
+
+def test_an_unexpected_error_marks_the_run_failed(factory, tmp_path, monkeypatch):
+    with factory() as db:
+        add_instrument(db, "2475")
+        db.commit()
+    directory = tmp_path / "xbrl"
+    store(directory, Q, archive(dict([eps_member("2475", "0.20")])))
+
+    def broken(*args, **kwargs):
+        raise KeyError("fixture bug")
+
+    monkeypatch.setattr(qx, "apply_quarter", broken)
+    with pytest.raises(KeyError):
+        apply(factory, directory)
+    with factory() as db:
+        run = db.scalar(
+            select(IngestionRun).where(IngestionRun.run_type == qx.RUN_TYPE)
+        )
+        assert run.status == "failed" and "fixture bug" in run.error
+        assert run.finished_at is not None
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        "<xbrl/>".encode("utf-16"),
+        b"<xbrl>\x00</xbrl>",
+        b"<xbrl>" + b" " * 5000 + b"<!DOCTYPE x></xbrl>",
+    ],
+)
+def test_utf16_nul_and_a_late_doctype_are_refused(data):
+    with pytest.raises(qx.MemberError):
+        qx.parse_eps(data, Q)
+
+
+def test_a_scale_that_is_not_an_integer_is_a_member_error():
+    with pytest.raises(qx.MemberError, match="scale"):
+        qx.parse_eps(inline('format="ixt:numdotdecimal" scale="x"', "1.25"), Q)
+
+
+def test_two_instances_of_a_lower_kind_also_fail_the_archive():
+    data = archive(
+        {
+            member_name("1101", kind="cr"): b"x",
+            member_name("1101", kind="ir"): b"x",
+            member_name("1101", industry="basi", kind="ir"): b"x",
+        }
+    )
+    with zipfile.ZipFile(io.BytesIO(data)) as handle:
+        with pytest.raises(qx.ArchiveError, match="two ir instances of 1101"):
+            qx.best_members(qx.archive_members(handle, Q))
+
+
+def test_an_excluded_instrument_already_written_is_counted(factory, tmp_path):
+    with factory() as db:
+        item = add_instrument(db, "2475")
+        db.commit()
+        item_id = item.id
+    directory = tmp_path / "xbrl"
+    store(directory, Q, archive(dict([eps_member("2475", "0.20")])))
+    assert apply(factory, directory)["quarters"]["2014Q2"]["inserted"] == 1
+    counts = apply(factory, directory, excluded=frozenset({item_id}))["quarters"][
+        "2014Q2"
+    ]
+    assert (counts["excluded"], counts["excluded_already_written"]) == (1, 1)
+
+
+def test_the_inline_fixture_applies_end_to_end(factory, tmp_path):
+    quarter = Quarter(2024, 3)
+    with factory() as db:
+        item = add_instrument(db, "4205", bars=())
+        db.add(
+            MarketBar(
+                instrument_id=item.id,
+                trading_date=quarter.period_end + timedelta(days=5),
+                close=10,
+                adj_close=10,
+            )
+        )
+        db.commit()
+    directory = tmp_path / "xbrl"
+    store(
+        directory,
+        quarter,
+        archive({HTML_MEMBER: (FIXTURES / HTML_MEMBER).read_bytes()}),
+    )
+    result = apply(factory, directory, start=quarter, end=quarter)
+    assert result["quarters"]["2024Q3"]["inserted"] == 1
+    with factory() as db:
+        row = written(db)[("TWSE", "4205")]
+        assert row.data_json["report_kind"] == "ir"
+        assert row.data_json["context"] == "From20240101To20240930"
+        assert row.announcement_date == date(2024, 11, 14)
+
+
+def test_the_staleness_matches_the_research_tools():
+    source = (
+        Path(__file__).resolve().parents[2] / "tools" / "research" / "evidence_lib.py"
+    ).read_text(encoding="utf-8")
+    stated = re.search(r"^QUARTER_STALE_DAYS = (\d+)$", source, re.M)
+    assert stated and int(stated.group(1)) == qx.QUARTER_STALE_DAYS
+
+
+class FakeResponse:
+    def __init__(self, status, chunks):
+        self.status_code = status
+        self.chunks = chunks
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def iter_bytes(self):
+        yield from self.chunks
+
+
+def test_download_stops_over_its_limit_and_is_throttled(tmp_path, monkeypatch):
+    throttled = []
+    monkeypatch.setattr(sources, "_throttle_official_host", throttled.append)
+    monkeypatch.setattr(
+        qx.httpx, "stream", lambda *a, **k: FakeResponse(200, [b"a" * 600, b"b" * 600])
+    )
+    with pytest.raises(qx.ArchiveError, match="over 1000 bytes"):
+        qx.download("https://mopsov.twse.com.tw/x", tmp_path / "x.part", 1000)
+    assert throttled == ["https://mopsov.twse.com.tw/x"]
+    monkeypatch.setattr(qx.httpx, "stream", lambda *a, **k: FakeResponse(503, []))
+    assert qx.download("https://mopsov.twse.com.tw/x", tmp_path / "y.part", 1000) == 503
+
+
+def _cli(monkeypatch, argv):
+    import sys
+
+    import worker.cli as cli_module
+
+    monkeypatch.setattr(sys, "argv", ["worker.cli", *argv])
+    try:
+        cli_module.main()
+    except SystemExit as exc:
+        return exc.code
+    return 0
+
+
+APPLY_ARGV = ["fundamentals", "xbrl-apply", "--start", "2014Q2", "--end", "2014Q2"]
+
+
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_apply_refuses_without_the_research_marker(
+    monkeypatch, tmp_path, capsys, dry_run
+):
+    import worker.cli as cli_module
+
+    (tmp_path / "stock.db").write_bytes(b"")
+    monkeypatch.setattr(cli_module, "DB_PATH", tmp_path / "stock.db")
+
+    def never(*args, **kwargs):
+        raise AssertionError("no session without the research marker")
+
+    monkeypatch.setattr(cli_module, "run_xbrl_apply", never)
+    argv = APPLY_ARGV + ["--dir", str(tmp_path)] + (["--dry-run"] if dry_run else [])
+    assert _cli(monkeypatch, argv) == 2
+    out = json.loads(capsys.readouterr().out)
+    assert out["status"] == "refused" and "research-db.json" in out["error"]
+
+
+def test_a_failed_apply_exits_1_and_a_dry_run_holds_no_maintenance(
+    monkeypatch, tmp_path
+):
+    import worker.cli as cli_module
+
+    (tmp_path / "stock.db").write_bytes(b"")
+    (tmp_path / "research-db.json").write_text('{"purpose": "research_history"}')
+    monkeypatch.setattr(cli_module, "DB_PATH", tmp_path / "stock.db")
+    monkeypatch.setattr(
+        cli_module, "run_xbrl_apply", lambda *a, **k: {"status": "failed"}
+    )
+
+    class NoHold:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("a dry run holds no maintenance mode")
+
+    monkeypatch.setattr(cli_module.scheduled_job, "MaintenanceHold", NoHold)
+    argv = APPLY_ARGV + ["--dir", str(tmp_path), "--dry-run"]
+    assert _cli(monkeypatch, argv) == 1

@@ -13,7 +13,7 @@ from . import preopen as preopen_check
 # directory, and a scheduled `job` (or `serve`) has only --data-dir.
 os.environ.update(scheduled_job.cli_environment(sys.argv[1:]))
 
-from app.config import DATA_DIR
+from app.config import DATA_DIR, DB_PATH
 from app.db import init_db
 
 from .action_tiers import run_action_tiers
@@ -47,7 +47,7 @@ from .pipeline import analyze, backtest, collect, evaluate, run_daily
 from .plan_tracking import run_plan_tracking
 from .quarterly_fundamentals import DEFAULT_QUARTERS as FUNDAMENTAL_DEFAULT_QUARTERS
 from .quarterly_fundamentals import run_fundamental_backfill
-from .quarterly_xbrl import run_xbrl_apply, run_xbrl_fetch
+from .quarterly_xbrl import research_refusal, run_xbrl_apply, run_xbrl_fetch
 from .schedule_runs import (
     LOCK_SKIP_REASON,
     PREFLIGHT_SKIP_REASONS,
@@ -119,6 +119,13 @@ def maintenance_guarded(args: argparse.Namespace) -> str | None:
         return "events backfill"
     if args.command == "fundamentals" and args.fundamentals_command == "backfill":
         return "fundamentals backfill"
+    if (
+        args.command == "fundamentals"
+        and args.fundamentals_command == "xbrl-apply"
+        and not args.dry_run
+    ):
+        # Writes the research DB; a research batch holding maintenance mode refuses it.
+        return "fundamentals xbrl-apply"
     if args.command == "revenue" and args.revenue_command == "backfill":
         return "revenue backfill"
     if args.command == "index-bars" and args.index_bars_command in {
@@ -682,6 +689,14 @@ def main() -> None:
             result = scheduled_job.maintenance_status(data_dir)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
+    if args.command == "fundamentals" and args.fundamentals_command == "xbrl-apply":
+        # Before maintenance mode and before any session: only the research DB (#781).
+        problem = research_refusal(DB_PATH)
+        if problem:
+            print(
+                json.dumps({"status": "refused", "error": problem}, ensure_ascii=False)
+            )
+            sys.exit(2)
     guarded = maintenance_guarded(args)
     if guarded in DAILY_WINDOW_REFUSED and in_daily_window():
         print(

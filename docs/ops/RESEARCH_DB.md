@@ -44,7 +44,7 @@
 - **季報**：
   - 只補 `delisted`／`transferred` 標的；它們要在季底到季底後 670 天內有日線（`quarterly_xbrl.EVIDENCE_WINDOW_DAYS`）。
   - 整包是 2025 年重新打包的，數字是現在的版本：事後更正過的季度，存的是更正後的值（和 `t163sb04` 相同）。
-  - #702 的代號重用清單出來以前，同一代號的舊公司分不出來，見上一節。
+  - #702 的代號重用清單出來以前，同一代號的舊公司分不出來，見上一節。清單出來後以 `--exclude-file`（instrument id 的 JSON 陣列）重跑：它只擋之後的寫入，輸出的 `excluded_already_written` 是之前已寫進這些標的的列數；不是 0 時，先停下批次，再刪 `fundamental_snapshots` 中 `source = 'mops_tifrs_zip'` 而且 `instrument_id` 在清單裡的列（刪之前先貼列數到 Issue），`raw_payloads` 不動。
 - **月營收**：單一公司查詢只查得到下市後仍公開發行的公司。破產或合併消滅、不繼續公開發行的公司（例如 2475 華映、2888 新光金）查不到，這類公司會一直缺值。剩下多少由 #782 量。
 
 ## 回補怎麼跑
@@ -97,7 +97,7 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none -v stock-lab-research:/data "$
 | 指數日 K | `index-bars backfill --from-month 2004-02 --to-month 2007-12`，之後每 48 個月一段 | 一次最多 48 個月（`MAX_MONTHS`） |
 | 月營收 | `revenue backfill --months 60 --end-month 2018-08`、`--end-month 2023-08`，再 `--months 8 --end-month 2013-08` | 從 2013-01 起（#692 D4） |
 | 季報 | `fundamentals backfill --quarters 20 --end-quarter 2017Q4`，再 `--quarters 20 --end-quarter 2022Q4` | 從 2013Q1 起 |
-| 季報（下市、轉板股） | `fundamentals xbrl-apply --start 2013Q1 --end 2024Q3 --dir /xbrl`（整包目錄唯讀掛到 `/xbrl`，由 `fundamentals xbrl-fetch` 在 09:00～20:30 下載） | **每一批建了新的下市標的之後都跑一次**：已寫的列 `unchanged`，只寫新標的；先和 `t163sb04` 核對，不同就停（#781） |
+| 季報（下市、轉板股） | `fundamentals xbrl-apply --start 2013Q1 --end 2024Q3 --dir /xbrl`（整包目錄唯讀掛到 `/xbrl`，由 `fundamentals xbrl-fetch` 在 09:00～20:30 下載；Git Bash 要 `MSYS_NO_PATHCONV=1`，否則 `/xbrl` 被改寫成 Windows 路徑） | **每一批建了新的下市標的之後都跑一次**：已寫的列 `unchanged`，只寫新標的；先和 `t163sb04` 核對，不同就停（#781）。約 1 小時，照上面以 `docker run -d` 跑、日誌寫 `/data/logs/`；沒有 `research-db.json` 時拒絕，批次持有維護模式時 exit 75 |
 | 減資停止買賣 | `trading-halts --start 2011-01-01 --end 2024-09-30` | 起日夾到各來源的起始日（TWSE 2011、TPEx 2013），輸出 `not_published_before` |
 | 休市表 | `trading-calendar --year 2021 --year 2022` | 2020 年以前沒有內容 |
 
