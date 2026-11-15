@@ -25,14 +25,20 @@ value is missing or the condition is false, so a script can test the exit code.
                       not read (more than a page of threads or comments); exit 1 when
                       the answer has no data.repository (a GraphQL error)
   questions-query     the GraphQL query whose answer questions reads (no stdin)
-  closed-query        the GraphQL query whose answer closed-check reads (no stdin)
+  closed-query        the GraphQL query whose answer closed-check reads (no stdin); its
+                      $after is the cursor closed-next printed (none for page 1)
+  closed-next PAGE    the cursor to read the page after page PAGE of the closed-query
+                      answer on stdin with; nothing when there is no next page or PAGE
+                      is the last one read (CLOSED_PAGES, #787); exit 3 when the answer
+                      has no data.search, 4 when it has a next page but no cursor
   closed-check SINCE WORKTREES BRANCHES
                       the take_over.sh report on the Issues and PRs closed since SINCE
-                      (closed_check, #713); WORKTREES is a file with `git worktree list
-                      --porcelain`, BRANCHES one with the local branch names, "" for
-                      either when git could not list it; exit 3 when the answer has no
-                      data.search (a GraphQL error), so a Python error (exit 1) is
-                      told apart
+                      (closed_check, #713); stdin is the closed-query answers of the
+                      pages read, one JSON document after another (#787); WORKTREES is
+                      a file with `git worktree list --porcelain`, BRANCHES one with
+                      the local branch names, "" for either when git could not list
+                      it; exit 3 when an answer has no data.search (a GraphQL error),
+                      so a Python error (exit 1) is told apart
   utf8 FILE           exit 0 when FILE is non-empty valid UTF-8 (no stdin)
   comment-body FILE   {"body": FILE's text with COORDINATOR_MARK as its last line}, the
                       request comment.sh posts (#440; no stdin); exit 1 when the text is
@@ -474,9 +480,11 @@ def unanswered_questions(doc, now: int) -> list[str]:
 
 # --- closed Issues and merged PRs of the last 48 hours (take_over.sh closed, #713) -----
 # One search reads both (a merged PR is closed too); an Issue's PRs come with it, so a PR
-# merged before the window is checked as well. Nested lists are read one page deep: a
-# longer one is reported as not read, never taken as complete.
+# merged before the window is checked as well. The search is read CLOSED_PAGES pages
+# deep, page after page by its cursor (#787); nested lists one page deep. A longer one is
+# reported as not read, never taken as complete.
 CLOSED_PAGE = 100
+CLOSED_PAGES = 3
 _CLOSED_LINKS = 10
 _PR_FIELDS = (
     "number state merged headRefName baseRefName mergeCommit{oid "
@@ -484,8 +492,9 @@ _PR_FIELDS = (
     "workflowRun{databaseId event workflow{name}}}}}"
 )
 CLOSED_QUERY = (
-    "query ClosedRecently($q:String!){"
-    f"search(query:$q,type:ISSUE,first:{CLOSED_PAGE}){{issueCount nodes{{__typename "
+    "query ClosedRecently($q:String!,$after:String){"
+    f"search(query:$q,type:ISSUE,first:{CLOSED_PAGE},after:$after){{issueCount "
+    "pageInfo{hasNextPage endCursor} nodes{__typename "
     "... on Issue{number stateReason "
     f"closedByPullRequestsReferences(first:{_CLOSED_LINKS},includeClosedPrs:true)"
     f"{{totalCount nodes{{{_PR_FIELDS}}}}}}}"
@@ -517,6 +526,34 @@ def merge_ci(pr: dict) -> str:
     if not runs and (suites.get("totalCount") or 0) > len(nodes):
         return "unread"
     return _run_state(max(runs, key=lambda r: r["databaseId"], default=None))
+
+
+def closed_next(doc, page: int) -> str | None:
+    """The cursor take_over.sh reads page PAGE + 1 with: "" when there is no next page or
+    PAGE is the last one read (CLOSED_PAGES), None when there is one without a cursor."""
+    info = get(doc, "data.search.pageInfo") or {}
+    if not info.get("hasNextPage") or page >= CLOSED_PAGES:
+        return ""
+    return info.get("endCursor") or None
+
+
+def closed_pages(docs: list) -> dict:
+    """The closed-query answers of the pages read as one answer: their nodes in order,
+    each Issue or PR once (one closed while the pages were read moves the others along),
+    the largest issueCount, and the last page's pageInfo."""
+    nodes, seen, total, info = [], set(), 0, {}
+    for doc in docs:
+        search = get(doc, "data.search") or {}
+        total = max(total, search.get("issueCount") or 0)
+        info = search.get("pageInfo") or {}
+        for node in search.get("nodes") or []:
+            if isinstance(node, dict):
+                key = (node.get("__typename"), node.get("number"))
+                if key in seen:
+                    continue
+                seen.add(key)
+            nodes.append(node)
+    return {"data": {"search": {"issueCount": total, "pageInfo": info, "nodes": nodes}}}
 
 
 def _worktrees(text: str) -> list[tuple[str, str | None, str]]:
@@ -560,7 +597,12 @@ def closed_check(
     nodes = [n for n in search.get("nodes") or [] if isinstance(n, dict)]
     notes = []
     total = search.get("issueCount") or 0
-    if total > len(nodes):
+    if get(search, "pageInfo.hasNextPage"):
+        notes.append(
+            f"未查完（超過 {CLOSED_PAGE * CLOSED_PAGES} 張）：關閉的 Issue／PR 共 "
+            f"{total} 張，只讀了 {len(nodes)} 張"
+        )
+    elif total > len(nodes):
         notes.append(f"未查完：關閉的 Issue／PR 共 {total} 張，只讀了 {len(nodes)} 張")
     trees = _worktrees(worktrees) if worktrees is not None else None
     local = set(branches.split()) if branches is not None else None
@@ -683,21 +725,27 @@ _SESSION_LINE = re.compile(
 )
 
 
-def _pages(text: str) -> list | None:
-    """The comments of `gh api --paginate`: one JSON array per page, back to back."""
-    decoder, comments, at = json.JSONDecoder(), [], 0
+def _documents(text: str) -> list | None:
+    """The JSON documents in TEXT, back to back; None when one is not JSON."""
+    decoder, docs, at = json.JSONDecoder(), [], 0
     while True:
         while at < len(text) and text[at].isspace():
             at += 1
         if at == len(text):
-            return comments
+            return docs
         try:
-            page, at = decoder.raw_decode(text, at)
+            doc, at = decoder.raw_decode(text, at)
         except ValueError:
             return None
-        if not isinstance(page, list):
-            return None
-        comments += page
+        docs.append(doc)
+
+
+def _pages(text: str) -> list | None:
+    """The comments of `gh api --paginate`: one JSON array per page, back to back."""
+    pages = _documents(text)
+    if pages is None or not all(isinstance(page, list) for page in pages):
+        return None
+    return [comment for page in pages for comment in page]
 
 
 # The repo is public: anyone can post a 回報：開工 naming another task's live session (the
@@ -960,6 +1008,22 @@ def main(argv: list[str]) -> int:
     if command == "closed-query":
         print(CLOSED_QUERY)
         return 0
+    if command == "closed-check":
+        docs = _documents(sys.stdin.read())
+        if not docs:
+            return 1
+        if any(get(doc, "data.search") is None for doc in docs):
+            return 3
+        local = []
+        for path in args[1:3]:
+            if not path:
+                local.append(None)
+                continue
+            with open(path, encoding="utf-8") as handle:
+                local.append(handle.read())
+        for line in closed_check(closed_pages(docs), *local, args[0]):
+            print(line)
+        return 0
     doc = _load()
     if doc is None:
         return 1
@@ -1048,18 +1112,13 @@ def main(argv: list[str]) -> int:
             issue.get("id", ""),
         )
         return 0
-    if command == "closed-check":
+    if command == "closed-next":
         if get(doc, "data.search") is None:
             return 3
-        local = []
-        for path in args[1:3]:
-            if not path:
-                local.append(None)
-                continue
-            with open(path, encoding="utf-8") as handle:
-                local.append(handle.read())
-        for line in closed_check(doc, *local, args[0]):
-            print(line)
+        cursor = closed_next(doc, int(args[0]))
+        if cursor is None:
+            return 4
+        print(cursor)
         return 0
     if command == "questions":
         if get(doc, "data.repository") is None:
