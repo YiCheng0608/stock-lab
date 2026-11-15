@@ -805,6 +805,14 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0032_preopen_news_checks', CURRENT_TIMESTAMP)"
         )
     )
+    # 0033 only adds mainstream_runs / mainstream_items (#768), made by
+    # create_all with their indexes.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0033_mainstream_lists', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:

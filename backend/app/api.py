@@ -49,6 +49,7 @@ from .domain import (
     signal_confidence_semantics,
 )
 from .latest_rows import ranked_ids
+from .mainstream import mainstream_list
 from .level_semantics import build_level_semantics, canonical_evidence
 from .models import (
     ChipSnapshot,
@@ -2794,6 +2795,15 @@ def candidates(
 ) -> dict[str, Any]:
     """Stored daily candidates (candidate_score_v1); default is the latest list."""
     return candidate_list(db, date_, limit)
+
+
+@router.get("/mainstream")
+def mainstream(
+    date_: date | None = Query(default=None, alias="date"),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Stored 主流族群前 20 (mainstream_v1, #768); default is the latest list."""
+    return mainstream_list(db, date_)
 
 
 def _news_symbol_filter(instrument: Instrument):
