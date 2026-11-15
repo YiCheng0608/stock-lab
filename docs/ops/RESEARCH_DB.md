@@ -138,9 +138,10 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 
   ```bash
   docker run --rm --network none -v task-779_members:/out -v stock-lab-research:/research:ro \
+    -e STOCK_DATA_DIR=/research -e STOCK_RAW_DIR=/research/raw \
     -v "$PWD:/w:ro" -w /w --entrypoint python stock-lab-backend:<tag> \
     tools/research/industry_members.py build --start 2013-01 --end 2024-09 --out /out \
-    --research-db /research/stock.db --raw-root /research/raw
+    --research-db /research/stock.db
   ```
 
 - 重新抓：

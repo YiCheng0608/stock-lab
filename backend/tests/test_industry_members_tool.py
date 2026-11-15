@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from app import taxonomy
+from app import config, taxonomy
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "industry_members"
@@ -508,10 +508,12 @@ def _research_db(path: Path, entries: list[tuple[str, str, str, bytes]]) -> None
     connection.close()
 
 
-def test_completeness_lists_common_stocks_in_no_industry(tmp_path):
+def test_completeness_lists_common_stocks_in_no_industry(tmp_path, monkeypatch):
     out = tmp_path / "out"
     _fetch(out, FakeSource(answers()))
     root = tmp_path / "raw"
+    # The TPEx row keeps its old Windows path: payload_file maps it here.
+    monkeypatch.setattr(config, "RAW_DIR", root)
     twse_all = json.dumps(
         {
             "tables": [
@@ -553,7 +555,7 @@ def test_completeness_lists_common_stocks_in_no_industry(tmp_path):
             (
                 tool.TWSE_ALL_URL.format(yyyymmdd="20150129"),
                 "2015-01-29",
-                "/data/raw/twse/2026/11/15/a.json",
+                str(root / "twse" / "2026" / "11" / "15" / "a.json"),
                 twse_all,
             ),
             (
@@ -564,9 +566,7 @@ def test_completeness_lists_common_stocks_in_no_industry(tmp_path):
             ),
         ],
     )
-    result = tool.build(
-        out, "2014-12", "2015-01", ["build"], research_db=db, raw_roots=[root]
-    )
+    result = tool.build(out, "2014-12", "2015-01", ["build"], research_db=db)
     assert result["completeness"] == {
         "checked": 2,
         "unchecked": 2,
@@ -592,10 +592,8 @@ def test_completeness_lists_common_stocks_in_no_industry(tmp_path):
 
 
 def test_a_raw_file_with_another_sha256_is_not_used(tmp_path):
-    path = tmp_path / "raw" / "a.json"
-    path.parent.mkdir()
+    path = tmp_path / "a.json"
     path.write_bytes(b"{}")
-    assert tool._raw_file("/data/raw/a.json", "0" * 64, [tmp_path / "raw"]) is None
-    sha = hashlib.sha256(b"{}").hexdigest()
-    assert tool._raw_file("/data/raw/a.json", sha, [tmp_path / "raw"]) == path
-    assert tool._raw_file("/data/raw/../a.json", sha, [tmp_path / "raw"]) is None
+    assert tool._raw_file(str(path), "0" * 64) is None
+    assert tool._raw_file(str(path), hashlib.sha256(b"{}").hexdigest()) == path
+    assert tool._raw_file(str(tmp_path / "missing.json"), "0" * 64) is None

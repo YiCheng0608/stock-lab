@@ -866,26 +866,26 @@ TWSE_ALL_URL = (
     "?date={yyyymmdd}&type=ALLBUT0999&response=json"
 )
 TPEX_ALL_URL = "https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes"
-LEGACY_RAW_PREFIX = "c:/users/yicheng/stock-lab-data/raw/"
-CONTAINER_RAW_PREFIX = "/data/raw/"
 # TWSE depositary receipts are 91xx(xx); they are in no industry table.
 COMMON_STOCK = re.compile(r"[1-9][0-9]{3}")
+BACKEND = Path(__file__).resolve().parents[2] / "backend"
 
 
-def _raw_file(payload_path: str, sha256: str, roots: list[Path]) -> Path | None:
-    """The stored file of a research DB raw row, checked against its sha256."""
+def _raw_file(payload_path: str, sha256: str) -> Path | None:
+    """The stored file of a research DB raw row, checked against its sha256.
 
-    text = payload_path.replace("\\", "/")
-    relative = None
-    for prefix in (LEGACY_RAW_PREFIX, CONTAINER_RAW_PREFIX):
-        if text.casefold().startswith(prefix):
-            relative = text[len(prefix) :]
-    candidates = [Path(payload_path)]
-    if relative and ".." not in relative.split("/"):
-        candidates += [root / relative for root in roots]
-    for path in candidates:
-        if path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() == sha256:
-            return path
+    Through ``app.raw_paths.payload_file`` like every reader of a stored
+    capture (backend/tests/test_raw_paths.py): the research volume's old
+    Windows paths map under ``STOCK_RAW_DIR``.
+    """
+
+    if str(BACKEND) not in sys.path:
+        sys.path.insert(0, str(BACKEND))
+    from app.raw_paths import payload_file
+
+    path = payload_file(payload_path)
+    if path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() == sha256:
+        return path
     return None
 
 
@@ -908,9 +908,7 @@ def common_stocks(exchange: str, payload: dict) -> set[str]:
     return codes
 
 
-def completeness(
-    rows: list[list[str]], research_db: Path | None, roots: list[Path]
-) -> dict:
+def completeness(rows: list[list[str]], research_db: Path | None) -> dict:
     """Common stocks of the day's full-market quotes that are in no industry.
 
     The research DB's stored ``ALLBUT0999`` (TWSE) and ``dailyQuotes`` (TPEx)
@@ -941,7 +939,7 @@ def completeness(
                     f"{query[0]} order by id desc limit 1",
                     query[1],
                 ).fetchone()
-            path = _raw_file(found[0], found[1], roots) if found else None
+            path = _raw_file(found[0], found[1]) if found else None
             if path is None:
                 entry["reason"] = "no stored answer" if not found else "raw missing"
                 result["unchecked"] += 1
@@ -971,12 +969,11 @@ def build(
     command: list[str],
     *,
     research_db: Path | None = None,
-    raw_roots: list[Path] | None = None,
 ) -> dict:
     rows, provenance = build_rows(out, first, last)
     content = table_bytes(rows, first, last)
     (out / TABLE_NAME).write_bytes(content)
-    check = completeness(rows, research_db, list(raw_roots or []))
+    check = completeness(rows, research_db)
     manifest = {
         "table": TABLE_NAME,
         "sha256": hashlib.sha256(content).hexdigest(),
@@ -1014,7 +1011,6 @@ def main(argv: list[str] | None = None) -> int:
             step.add_argument("--max-requests", type=int, default=None)
         else:
             step.add_argument("--research-db", type=Path, default=None)
-            step.add_argument("--raw-root", type=Path, action="append", default=[])
     step = sub.add_parser("sweep", help="every known code on each month's day")
     step.add_argument("--months", required=True, help="YYYY-MM,YYYY-MM,...")
     step.add_argument("--out", required=True, type=Path)
@@ -1052,7 +1048,6 @@ def main(argv: list[str] | None = None) -> int:
             args.end,
             ["build", *(argv if argv is not None else sys.argv[1:])[1:]],
             research_db=args.research_db,
-            raw_roots=args.raw_root,
         )
     except (BuildError, AnswerError, ValueError) as exc:
         print(f"build failed: {exc}", file=sys.stderr)
