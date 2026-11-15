@@ -1,0 +1,18 @@
+# #754 AC-3: scheduler service (task-754 image, mem_limit 2g), DB copy task-754_db, HEAD c542ea77+worktree
+$ sh /proto/measure.sh
+memory.max=2147483648 peak_before=5734400
+tmp_before=node-compile-cache 
+dry_run_exit=0 seconds=2.391558885574341
+peak_after_dry_run=311431168
+tmp_after=node-compile-cache 
+no chromium process left
+
+$ render only, 5 fixture cards
+before=5390336
+zero	1080x764	79613	0.62	<b>今日名單 11/13（五）</b>・0 檔
+no-list	1080x764	75259	0.52	<b>今日名單 11/13（五）</b>・名單無資料
+us-closed	1080x1396	157643	0.52	<b>今日名單 11/13（五）</b>・突破 3、回踩 2
+us-stale	1080x1588	169042	0.57	<b>今日名單 11/13（五）</b>・突破 3、回踩 2
+us-missing	1080x1052	120043	0.47	<b>今日名單 11/13（五）</b>・突破 3、回踩 2
+after_5_cards=243507200
+tmp=node-compile-cache

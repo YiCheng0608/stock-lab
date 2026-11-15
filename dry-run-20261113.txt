@@ -1,5 +1,5 @@
 configured=no
-image=/proto/card-20261113.png width=1080 height=2356 bytes=293070 seconds=0.77
+image=/proto/card-20261113.png width=1080 height=2356 bytes=292650 seconds=0.57
 caption=<b>今日名單 11/13（五）</b>・突破 8、回踩 9
 📋 <b>今日名單｜11/13（五）</b>
 11/12（四）收盤後產生・17 檔
