@@ -169,7 +169,9 @@ def test_full_target_extends_before_range_for_two_no_data_weekdays(backfill_env)
     adapter = HolidayAdapter()
     result = backfill.targeted_backfill(start, end, adapter=adapter)
     metadata = result["metadata"]
-    assert result["status"] == "partial"
+    # Two confirmed closures and nothing missing: the run is complete (#772).
+    assert result["status"] == "success"
+    assert metadata["coverage_manifest_summary"]["status"] == "success"
     assert len(metadata["requested_calendar_dates"]) == 65
     assert len(metadata["verified_trading_sessions"]) == 65
     assert metadata["target_met"] is True
@@ -648,7 +650,8 @@ def test_backfill_explicit_no_data_is_skipped_and_not_retried(backfill_env):
 
     adapter = NoDataAdapter()
     initial = backfill.targeted_backfill(trading_date, trading_date, adapter=adapter)
-    assert initial["status"] == "partial"
+    assert initial["status"] == "success"
+    assert initial["error"] is None
     assert initial["metadata"]["skipped_dates"] == [trading_date.isoformat()]
     assert initial["metadata"]["coverage"]["skipped_non_trading_dates"] == [
         trading_date.isoformat()
@@ -675,7 +678,79 @@ def test_backfill_explicit_no_data_is_skipped_and_not_retried(backfill_env):
         trading_date, trading_date, adapter=MustNotRetry()
     )
     assert resumed["id"] == initial["id"]
-    assert resumed["metadata"]["reused_dates"] == [trading_date.isoformat()]
+    # A closure alone is a success since #772, and a successful run that met its
+    # target is returned as it is.
+    assert resumed["status"] == "success"
+    assert resumed["metadata"]["skipped_dates"] == [trading_date.isoformat()]
+
+
+def _holiday_week_adapter(holiday: date, *, failing=None, security_only=None):
+    """2026-09-07..11 with HOLIDAY closed; FAILING raises, SECURITY_ONLY lacks TAIEX."""
+
+    class Adapter:
+        def fetch(self, start: date, end: date) -> sources.OfficialBatch:
+            if start == holiday:
+                return _no_data_batch_for(start)
+            if start == failing:
+                raise sources.OfficialDataError("fixture source down")
+            batch = _batch_for(start)
+            if start == security_only:
+                return sources.OfficialBatch(
+                    instruments=batch.instruments,
+                    bars=[bar for bar in batch.bars if bar.symbol != "TAIEX"],
+                    payloads=batch.payloads,
+                    data_as_of=batch.data_as_of,
+                )
+            return batch
+
+    return Adapter()
+
+
+def _stored_run_status(run_id: int) -> str:
+    from app.models import IngestionRun
+
+    with backfill.pipeline.SessionLocal() as db:
+        return db.get(IngestionRun, run_id).status
+
+
+def test_confirmed_closure_alone_leaves_the_run_success(backfill_env):
+    # #772: a month whose only gap is a confirmed closure is complete; the CLI
+    # summary (chunked_backfill, what history-backfill.jsonl logs), the run and
+    # its manifest summary say the same.
+    start, end, holiday = date(2026, 9, 7), date(2026, 9, 11), date(2026, 9, 9)
+    result = backfill.chunked_backfill(
+        start, end, adapter=_holiday_week_adapter(holiday)
+    )
+    assert result["status"] == "success"
+    assert result["skipped_non_trading_dates"] == [holiday.isoformat()]
+    (window,) = result["windows"]
+    assert window["status"] == "success"
+    assert _stored_run_status(window["run_id"]) == "success"
+    run = backfill.targeted_backfill(start, end, adapter=_holiday_week_adapter(holiday))
+    assert run["metadata"]["coverage_manifest_summary"]["status"] == "success"
+    assert (
+        run["metadata"]["coverage_manifest_summary"]["skipped_non_trading_dates"] == 1
+    )
+
+
+@pytest.mark.parametrize("kind", ["failed", "partial"])
+def test_a_missing_date_next_to_a_closure_keeps_the_run_partial(backfill_env, kind):
+    start, end, holiday = date(2026, 9, 7), date(2026, 9, 11), date(2026, 9, 9)
+    missing = date(2026, 9, 10)
+    adapter = _holiday_week_adapter(
+        holiday,
+        failing=missing if kind == "failed" else None,
+        security_only=missing if kind == "partial" else None,
+    )
+    result = backfill.chunked_backfill(start, end, adapter=adapter)
+    (window,) = result["windows"]
+    assert result["status"] == "partial"
+    assert window["status"] == "partial"
+    assert _stored_run_status(window["run_id"]) == "partial"
+    assert window[f"{kind}_dates"] == [missing.isoformat()]
+    run = backfill.targeted_backfill(start, end, adapter=adapter)
+    assert run["status"] == "partial"
+    assert run["metadata"]["coverage_manifest_summary"]["status"] == "partial"
 
 
 def test_backfill_retry_budget_is_three_immediate_plus_two_targeted(backfill_env):

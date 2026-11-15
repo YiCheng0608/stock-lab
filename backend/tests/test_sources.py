@@ -1,4 +1,5 @@
 import json
+import stat
 from datetime import date
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -1535,3 +1536,119 @@ def test_a_capture_without_a_time_is_stamped_with_the_clock(frozen_utcnow):
     )
     assert captured.collected_at == frozen_utcnow.at
     assert captured.payload_path.parent == day_dir
+
+
+# Raw files survive a power loss (#772): written through a synced temporary file, an
+# empty or damaged file is rewritten with the same content, a whole one is kept.
+
+_RAW_PAYLOAD = {"date": "2026-11-13", "rows": [[1, "台積電"]]}
+
+
+def _raw_target() -> tuple[Path, bytes]:
+    encoded = sources._encode_payload(_RAW_PAYLOAD)
+    digest = sources.hashlib.sha256(encoded).hexdigest()
+    return sources.RAW_DIR / "twse" / "2026" / "11" / "13" / f"{digest}.json", encoded
+
+
+def _persist_raw():
+    return sources.persist_raw_payload(
+        "twse",
+        "https://example.test/raw",
+        _RAW_PAYLOAD,
+        "2026-11-13",
+        collected_at=sources.datetime(2026, 11, 13, 9, 30),
+    )
+
+
+def test_raw_files_are_synced_before_they_are_renamed_into_place(monkeypatch):
+    events: list[tuple[str, str]] = []
+    real_fsync, real_replace = sources.os.fsync, sources.os.replace
+
+    def fsync(descriptor):
+        is_dir = stat.S_ISDIR(sources.os.fstat(descriptor).st_mode)
+        events.append(("fsync", "dir" if is_dir else "file"))
+        return real_fsync(descriptor)
+
+    def replace(source, target):
+        events.append(("replace", Path(target).name))
+        assert Path(source).parent == Path(target).parent
+        assert Path(source).name.startswith(f".{Path(target).name}.tmp-")
+        return real_replace(source, target)
+
+    monkeypatch.setattr(sources.os, "fsync", fsync)
+    monkeypatch.setattr(sources.os, "replace", replace)
+    stored = _persist_raw()
+    target, encoded = _raw_target()
+    assert stored == target
+    assert target.read_bytes() == encoded
+    meta = target.with_suffix(".meta.json")
+    assert json.loads(meta.read_text(encoding="utf-8"))["sha256"] == target.stem
+    assert events == [
+        ("fsync", "file"),
+        ("replace", target.name),
+        ("fsync", "dir"),
+        ("fsync", "file"),
+        ("replace", meta.name),
+        ("fsync", "dir"),
+    ]
+    assert sorted(path.name for path in target.parent.iterdir()) == sorted(
+        [target.name, meta.name]
+    )
+
+
+@pytest.mark.parametrize("damage", ["empty", "same_size_other_bytes", "missing_meta"])
+def test_a_damaged_raw_file_is_rewritten_with_the_same_content(damage, capsys):
+    target, encoded = _raw_target()
+    meta = target.with_suffix(".meta.json")
+    _persist_raw()
+    if damage == "empty":
+        target.write_bytes(b"")
+        meta.write_bytes(b"")
+    elif damage == "same_size_other_bytes":
+        target.write_bytes(b"x" * len(encoded))
+    else:
+        meta.unlink()
+    capsys.readouterr()
+    assert _persist_raw() == target
+    assert target.read_bytes() == encoded
+    assert json.loads(meta.read_text(encoding="utf-8"))["sha256"] == target.stem
+    warned = capsys.readouterr()
+    assert warned.out == ""
+    damaged = {"empty": 2, "same_size_other_bytes": 1, "missing_meta": 0}[damage]
+    assert warned.err.count("is damaged") == damaged
+
+
+def test_a_whole_raw_file_is_not_rewritten(monkeypatch):
+    target, _encoded = _raw_target()
+    _persist_raw()
+    meta = target.with_suffix(".meta.json")
+    before = (target.stat().st_mtime_ns, meta.stat().st_mtime_ns)
+
+    def no_write(*_args, **_kwargs):
+        raise AssertionError("a whole raw file must not be written again")
+
+    monkeypatch.setattr(sources.os, "replace", no_write)
+    monkeypatch.setattr(sources.tempfile, "mkstemp", no_write)
+    assert _persist_raw() == target
+    assert (target.stat().st_mtime_ns, meta.stat().st_mtime_ns) == before
+
+
+def test_content_whose_sha_is_not_the_file_name_is_not_written():
+    target, encoded = _raw_target()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(b"")
+    with pytest.raises(sources.OfficialDataError, match="does not match"):
+        sources.write_raw_file(target, encoded + b" ")
+    assert target.read_bytes() == b""
+    assert [path.name for path in target.parent.iterdir()] == [target.name]
+
+
+def test_a_failed_raw_write_raises_and_leaves_no_file(monkeypatch):
+    def fsync(_descriptor):
+        raise OSError(5, "fixture I/O error")
+
+    monkeypatch.setattr(sources.os, "fsync", fsync)
+    target, _encoded = _raw_target()
+    with pytest.raises(OSError, match="fixture I/O error"):
+        _persist_raw()
+    assert not target.parent.exists() or list(target.parent.iterdir()) == []

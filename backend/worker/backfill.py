@@ -1977,7 +1977,9 @@ def targeted_backfill(
         "target_sessions": effective_target,
         "confirmed_non_trading_dates": closures,
         "target_met": met,
-        "status": "success" if not (failed or partial or skipped) else "partial",
+        # Confirmed closures are no missing data (#772): only failed or partial dates
+        # make the summary, and the run, partial.
+        "status": "success" if not (failed or partial) else "partial",
         "data_as_of": report["summary"].get("data_cutoff"),
     }
     retryable = {
@@ -1998,7 +2000,7 @@ def targeted_backfill(
     if failed:
         final_status = "partial" if (completed or partial or skipped) else "failed"
         final_error = "official backfill failed dates: " + ", ".join(sorted(failed))
-    elif partial or skipped:
+    elif partial:
         final_status = "partial"
         final_error = None
     else:
@@ -2095,9 +2097,9 @@ def chunked_backfill(
     failed -= completed
 
     def window_complete(run: dict[str, Any]) -> bool:
-        # targeted_backfill reports "partial" when a window merely contains
-        # verified non-trading dates; that window is still complete.  Any
-        # other status, an error or a missing date is not.
+        # Verified non-trading dates leave a window complete (targeted_backfill
+        # reports it "success" since #772; "partial" with no missing date is
+        # still accepted).  Any other status, an error or a missing date is not.
         return (
             run["status"] in {"success", "partial"}
             and not run["error"]
