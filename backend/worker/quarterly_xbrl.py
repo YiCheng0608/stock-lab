@@ -60,6 +60,7 @@ from app.models import (
     MarketBar,
     RawPayload,
 )
+from app.raw_paths import payload_file
 from worker import sources
 from worker.quarterly_fundamentals import (
     Quarter,
@@ -599,7 +600,7 @@ def _raw_row(
         .limit(1)
     )
     if row is not None and row.payload_path:
-        target = Path(row.payload_path)
+        target = payload_file(row.payload_path)
     state = sources.ensure_raw_file(
         target,
         data,
