@@ -300,17 +300,21 @@ def test_close_task_fails_when_the_rebuild_fails(close: Harness) -> None:
 
 # --- another index operation of the project is active (#766) -------------------------
 # The engine refuses index_repository while its watcher refreshes the project (right
-# after the fast-forward); cbm_rebuild polls index_status until it is not busy, then
-# tries once more. STOCK_CBM_BUSY_POLL=1 keeps the tests short.
+# after the fast-forward). cbm_rebuild tries index_repository itself again every
+# STOCK_CBM_BUSY_POLL seconds while that is the answer, never index_status: the fake says
+# ready all along, as the real one did at #759/#764. STOCK_CBM_BUSY_POLL=1 keeps the
+# tests short.
 BUSY = {"STOCK_CBM_BUSY_POLL": "1"}
 
 
-def test_close_task_waits_for_another_index_operation_and_retries_once(
+def _waited(steps: list[str]) -> list[int]:
+    return [int(s.split(":", 1)[1]) for s in steps if s.startswith("index_waited:")]
+
+
+def test_close_task_retries_while_another_index_operation_is_active(
     close: Harness,
 ) -> None:
-    close.write("cbm_index_busy.txt", "1\n")
-    # The root check, then busy twice, then ready.
-    close.write("cbm_status.txt", "ready\nindexing\nindexing\nready\n")
+    close.write("cbm_index_busy.txt", "3\n")
     result = close.close_task(close.extra, **BUSY)
     assert result.returncode == 0, result.stdout + result.stderr
     line = _json_line(result)
@@ -319,16 +323,15 @@ def test_close_task_waits_for_another_index_operation_and_retries_once(
     assert _board_set(close)
     index_steps = [s for s in line["steps"] if s.startswith("index_")]
     assert len(index_steps) == 3, index_steps
-    waited, rebuilt, fresh = index_steps
-    assert waited.startswith("index_waited:")
-    assert int(waited.split(":", 1)[1]) >= 2
-    assert (rebuilt, fresh) == ("index_rebuilt", "index_fresh:1")
+    assert index_steps[1:] == ["index_rebuilt", "index_fresh:1"]
+    # Three waits of a second each (bash's SECONDS counts whole seconds).
+    assert _waited(index_steps) and _waited(index_steps)[0] >= 2
+    # The first try and three more; index_status only for the root check.
     assert _tools(close) == [
         "index_status",
         "index_repository",
-        "index_status",
-        "index_status",
-        "index_status",
+        "index_repository",
+        "index_repository",
         "index_repository",
         "query_graph",
         "check_index_coverage",
@@ -336,44 +339,69 @@ def test_close_task_waits_for_another_index_operation_and_retries_once(
 
 
 def test_close_task_gives_up_after_the_busy_wait_limit(close: Harness) -> None:
-    close.write("cbm_index_busy.txt", "1\n")
-    close.write("cbm_status.txt", "indexing\n")
+    close.write("cbm_index_busy.txt", "99\n")
     result = close.close_task(close.extra, STOCK_CBM_BUSY_WAIT="2", **BUSY)
     line = _assert_index_failure(close, result, "索引步驟：")
     assert "another index operation" in line["error"]
     assert "STOCK_CBM_BUSY_WAIT" in line["error"]
-    assert "最後狀態 indexing" in line["error"]
-    waited = [s for s in line["steps"] if s.startswith("index_waited:")]
-    assert len(waited) == 1, line["steps"]
-    assert f"等了 {waited[0].split(':', 1)[1]} 秒" in line["error"]
-    assert int(waited[0].split(":", 1)[1]) >= 2
+    waited = _waited(line["steps"])
+    assert len(waited) == 1 and waited[0] >= 2, line["steps"]
+    assert f"等了 {waited[0]} 秒" in line["error"]
+    tries = _tools(close).count("index_repository")
+    assert f"試了 {tries} 次" in line["error"]
+    assert 2 <= tries <= 4
     assert "index_rebuilt" not in line["steps"]
-    # No second index_repository once the limit is past.
-    assert _tools(close).count("index_repository") == 1
+    assert _tools(close).count("index_status") == 1
 
 
-def test_close_task_fails_when_the_retry_after_the_wait_fails(close: Harness) -> None:
+def test_a_forced_rebuild_waits_too_and_leaves_the_project_built(
+    close: Harness,
+) -> None:
+    # After delete_project the engine has no project (index_status: not found); the wait
+    # does not ask it, so the project is built again once the other operation is done.
+    close.write("cbm_indexed_at.txt", "2000-01-01T00:00:00Z")
+    close.write("cbm_index_no_bump", "")
+    close.write("cbm_busy_after_delete", "")
     close.write("cbm_index_busy.txt", "2\n")
     result = close.close_task(close.extra, **BUSY)
-    line = _assert_index_failure(close, result, "索引步驟：")
-    assert "重試仍失敗" in line["error"] and "最後狀態 ready" in line["error"]
-    assert "another index operation" in line["error"]
-    assert [s for s in line["steps"] if s.startswith("index_waited:")]
-    # One retry, not more.
-    assert _tools(close).count("index_repository") == 2
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    index_steps = [s for s in line["steps"] if s.startswith("index_")]
+    assert index_steps[0] == "index_rebuilt"
+    assert index_steps[1].startswith("index_waited:")
+    assert index_steps[2:] == ["index_forced", "index_fresh:1"]
+    tools = _tools(close)
+    assert tools[tools.index("delete_project") :].count("index_repository") == 3
+    assert not (close.fake / "cbm_deleted").exists()
+    assert line["board"] == "完成"
+
+
+@pytest.mark.parametrize("name", ["STOCK_CBM_BUSY_POLL", "STOCK_CBM_BUSY_WAIT"])
+@pytest.mark.parametrize("value", ["0", "x", "-1"])
+def test_close_task_refuses_a_busy_setting_that_is_not_a_positive_integer(
+    close: Harness, name: str, value: str
+) -> None:
+    line = _assert_index_failure(
+        close, close.close_task(close.extra, **{name: value}), "索引步驟："
+    )
+    assert f"{name} 要是正整數" in line["error"]
+    assert "index_repository" not in _tools(close)
+
+
+def _dispatch_busy(h: Harness, **env: str):
+    _repo_file(h, "backend/app/new_module.py")
+    h.write("git_diff.txt", "backend/app/new_module.py\n")
+    h.write("cbm_not_tracked.txt", "backend/app/new_module.py\n")
+    return h.run(
+        "dispatch.sh", "282", "dryrun", "--task-file", h.task.as_posix(), **BUSY, **env
+    )
 
 
 def test_dispatch_waits_for_another_index_operation_and_goes_on(
     dispatch: Harness,
 ) -> None:
-    _repo_file(dispatch, "backend/app/new_module.py")
-    dispatch.write("git_diff.txt", "backend/app/new_module.py\n")
-    dispatch.write("cbm_not_tracked.txt", "backend/app/new_module.py\n")
     dispatch.write("cbm_index_busy.txt", "1\n")
-    dispatch.write("cbm_status.txt", "ready\nindexing\nready\n")
-    result = dispatch.run(
-        "dispatch.sh", "282", "dryrun", "--task-file", dispatch.task.as_posix(), **BUSY
-    )
+    result = _dispatch_busy(dispatch)
     assert result.returncode == 0, result.stdout + result.stderr
     line = _json_line(result)
     steps = line["index"].split(",")
@@ -381,6 +409,18 @@ def test_dispatch_waits_for_another_index_operation_and_goes_on(
     assert steps[2:] == ["index_rebuilt", "index_fresh:1"]
     assert line["sent"] is True and _created(dispatch)
     assert _tools(dispatch).count("index_repository") == 2
+
+
+def test_dispatch_failure_after_a_wait_still_shows_the_wait(dispatch: Harness) -> None:
+    dispatch.write("cbm_index_busy.txt", "99\n")
+    result = _dispatch_busy(dispatch, STOCK_CBM_BUSY_WAIT="2")
+    assert result.returncode == 1, result.stdout + result.stderr
+    line = _json_line(result)
+    first, *rest = line["index"].split(",")
+    assert first == "failed" and len(rest) == 1, line["index"]
+    assert rest[0].startswith("index_waited:")
+    assert f"等了 {rest[0].split(':', 1)[1]} 秒" in line["error"]
+    assert line["sent"] is False and not _created(dispatch)
 
 
 def test_close_task_fails_when_the_index_is_still_stale_after_the_rebuild(

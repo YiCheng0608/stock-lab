@@ -329,11 +329,12 @@ exit 0
 #                          changed), unless delete_project ran first
 #   cbm_index_fails        index_repository answers isError
 #   cbm_index_busy.txt     the next N index_repository calls answer the engine's "another
-#                          index operation ... active" isError (N counts down; #766)
-#   cbm_status.txt         index_status's status, one line a call, the last line kept
-#                          (default ready)
+#                          index operation ... active" isError (N counts down; #766);
+#                          index_status says ready all the while
+#   cbm_busy_after_delete  cbm_index_busy.txt counts only once delete_project ran
 #   cbm_root.txt           index_status's root_path (default the sandbox repo)
-#   cbm_no_project         index_status answers "project not found"
+#   cbm_no_project         index_status answers "project not found" (also after
+#                          delete_project, until index_repository builds it again)
 #   cbm_<tool>.raw / .rc   the whole output and exit code of that tool, as written
 #   cbm_<tool>.sleep       seconds that tool hangs first
 # A path that is not a file in the sandbox repo answers freshness "missing"; one the index
@@ -393,14 +394,9 @@ def tracked():
     return sorted(out)
 project = "C-Users-YiCheng-Desktop-taiwan-stock-research"
 if tool == "index_status":
-    if os.path.exists(at("cbm_no_project")):
+    if os.path.exists(at("cbm_no_project")) or os.path.exists(at("cbm_deleted")):
         answer(error="project not found or not indexed")
-    states = lines("cbm_status.txt")
-    if len(states) > 1:
-        with open(at("cbm_status.txt"), "w", encoding="utf-8") as f:
-            f.write("".join(x + "\n" for x in states[1:]))
-    answer({"project": project, "status": states[0] if states else "ready",
-            "root_path": text("cbm_root.txt", repo)})
+    answer({"project": project, "status": "ready", "root_path": text("cbm_root.txt", repo)})
 if tool == "delete_project":
     open(at("cbm_deleted"), "w").close()
     answer({"project": project, "status": "deleted"})
@@ -408,7 +404,7 @@ if tool == "index_repository":
     if os.path.exists(at("cbm_index_fails")):
         answer(error="index failed: disk full")
     busy = int(text("cbm_index_busy.txt", "0"))
-    if busy > 0:
+    if busy > 0 and (os.path.exists(at("cbm_deleted")) or not os.path.exists(at("cbm_busy_after_delete"))):
         with open(at("cbm_index_busy.txt"), "w", encoding="utf-8") as f:
             f.write(f"{busy - 1}\n")
         answer(error="another index operation for this project is active with different options")

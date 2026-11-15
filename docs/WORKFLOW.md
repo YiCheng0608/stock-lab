@@ -188,7 +188,12 @@ codebase-memory 只有一份索引：master 管理 checkout 的 project `C-Users
 - [`close_task.sh`](../tools/ops/close_task.sh)（PR 進 master、不是 `--no-board`）：清理做完後，把管理 checkout 以 `git merge --ff-only origin/master` 更新（checkout 要在 master、已追蹤的檔沒有未 commit 的改動），重建索引，再驗證這次 merge commit 改到的檔。任一步失敗是 exit 3，`error` 以「管理 checkout 更新：」或「索引步驟：」開頭，已做的清理列在 `steps`，看板不動；修好後加 `--pr <n>` 重跑。
 - [`dispatch.sh`](../tools/ops/dispatch.sh)：建 worktree 之前，從 `origin/master`（預設）派工時先把管理 checkout 快轉到剛 fetch 的 `origin/master`（條件同上；不符合就 exit 1），再驗證最近 5 次合併改到的檔；過期先重建一次，仍過期就 exit 1，什麼都不建、不送。所以「合併後、`close_task.sh` 之前就派下一張」時，索引也會跟上新 worktree 的起點。`--base` 是長期整合分支時不快轉，索引只對得上 master。
 - 兩支腳本整份包在一個 `{ … }` 區塊裡：bash 先讀完整份檔才執行，快轉改到腳本自己時不會讀到新檔的半截（#704 review）。
-- 重建（兩支腳本都經 `cbm_rebuild`）時引擎回「another index operation for this project is active」（多半是快轉後引擎自己的背景刷新，#766）：每 10 秒（`STOCK_CBM_BUSY_POLL`）查一次 `index_status`，等到 `ready` 再重建一次，最多等 300 秒（`STOCK_CBM_BUSY_WAIT`）；等過就在 `steps`（`dispatch.sh` 是 `index`）記 `index_waited:<秒>`。超過上限或重試仍失敗照上面算失敗，`error` 寫等了幾秒與最後狀態；其他錯誤不等、不重試。不碰另一個索引作業。
+- 重建（兩支腳本都經 `cbm_rebuild`，強制重建也是）時，引擎可能回「another index operation for this project is active」。多半是快轉後引擎自己的背景刷新（#766）。
+  - 這時每 10 秒（`STOCK_CBM_BUSY_POLL`）直接再試一次 `index_repository`，只要回的還是這句就繼續等。不看 `index_status`：刷新時它可能仍是 `ready`，`delete_project` 之後則是 not found。
+  - 上限 300 秒（`STOCK_CBM_BUSY_WAIT`），在兩次嘗試之間判斷。每次嘗試本身還有 CLI 逾時，所以最壞會多一個逾時。兩個值都要是正整數，否則失敗。
+  - 等過就記 `index_waited:<秒>`：`close_task.sh` 記在 `steps`；`dispatch.sh` 記在 `index`，失敗時是 `failed,index_waited:<秒>`。
+  - 超過上限照上面算失敗，`error` 寫等了幾秒、試了幾次與引擎最後的回答。
+  - 其他錯誤不等、不重試。不碰另一個索引作業。
 - 一般重建後仍過期、而且原因全是下表的 `mtime` 時，再強制重建一次（`delete_project`＋`index_repository`，master 約 11 秒，這段時間查不到這個 project），之後還過期就失敗。
 - CLI 不存在、逾時（預設 300 秒）、輸出解析不出 JSON、回 `isError`，都算失敗並印出原因，不當成沒過期。CLI 路徑、project 名稱、逾時與「最近幾次合併」在 [`coordinator_lib.sh`](../tools/ops/coordinator_lib.sh) 的 `cbm_*`，可用 `STOCK_CBM_CLI`、`STOCK_CBM_PROJECT`、`STOCK_CBM_TIMEOUT`、`STOCK_CBM_RECENT_MERGES` 覆寫。
 
