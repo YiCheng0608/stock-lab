@@ -461,9 +461,13 @@ function CandidateRow({ item, hidden, open, onOpen, selected, onSelect, chart, l
 
 // wide: the viewport is at least TERMINAL_MIN_WIDTH (the page measures it); initialChartRank: the row whose card is open
 // at first below that width (none on the page; the tests render an open row with it, as they cannot click).
-export function TodayCandidateList({ items, renderChart, wide = false, initialChartRank = null, overnight = null, preopen = null }: { items: CandidateItem[]; renderChart?: (item: CandidateItem) => ReactNode; wide?: boolean; initialChartRank?: number | null; overnight?: OvernightUsView | null; preopen?: PreopenCheck | null }) {
+// pick: the symbol of the row to open on (?pick=, from 「今日名單 #n」 on 主流族群前 20, #769): from 1280px its chart
+// beside the list, below that its own card; the page scrolls to it and shows the rest when it is past the first 10.
+export function TodayCandidateList({ items, renderChart, wide = false, initialChartRank = null, overnight = null, preopen = null, pick = null }: { items: CandidateItem[]; renderChart?: (item: CandidateItem) => ReactNode; wide?: boolean; initialChartRank?: number | null; overnight?: OvernightUsView | null; preopen?: PreopenCheck | null; pick?: string | null }) {
   const [open, setOpen] = useState<ReadonlySet<number>>(() => new Set())
-  const [showAll, setShowAll] = useState(false)
+  const pickIndex = pick ? items.findIndex((item) => item.instrument.symbol === pick) : -1
+  const pickRank = pickIndex >= 0 ? items[pickIndex].rank : null
+  const [showAll, setShowAll] = useState(pickIndex >= TODAY_VISIBLE)
   const setRank = (rank: number, value: boolean) => setOpen((current) => {
     if (current.has(rank) === value) return current
     const next = new Set(current)
@@ -473,9 +477,16 @@ export function TodayCandidateList({ items, renderChart, wide = false, initialCh
   })
   const rest = Math.max(0, items.length - TODAY_VISIBLE)
   // The chart beside the list shows one candidate: the first until another row's rank is pressed.
-  const [picked, setPicked] = useState<number | null>(null)
+  const [picked, setPicked] = useState<number | null>(pickRank)
   // Below 1280px: the one row whose card is open (#665), none at first, so no chart mounts and no /bars is fetched.
-  const [chartRank, setChartRank] = useState<number | null>(initialChartRank)
+  const [chartRank, setChartRank] = useState<number | null>(initialChartRank ?? (renderChart && !wide ? pickRank : null))
+  // The pick is where the page opens, not a selection to follow: scroll to it once.
+  const pickedOnLoad = useRef(pickRank)
+  useEffect(() => {
+    const rank = pickedOnLoad.current
+    if (rank == null) return
+    document.querySelector(`.candidate-row[data-candidate-rank="${rank}"]`)?.scrollIntoView({ block: 'center' })
+  }, [])
   // Crossing 1280px starts each layout from its default: the first row beside the list, no card below (decision 6841170465).
   const lastWide = useRef(wide)
   useEffect(() => {
@@ -514,7 +525,7 @@ export function TodayCandidateList({ items, renderChart, wide = false, initialCh
   )
 }
 
-export function CandidatesSection({ data, loading, error, renderChart, wide = false }: { data: CandidatesResponse | undefined; loading: boolean; error: unknown; renderChart?: (item: CandidateItem) => ReactNode; wide?: boolean }) {
+export function CandidatesSection({ data, loading, error, renderChart, wide = false, pick = null }: { data: CandidatesResponse | undefined; loading: boolean; error: unknown; renderChart?: (item: CandidateItem) => ReactNode; wide?: boolean; pick?: string | null }) {
   const state = data ? candidatesState(data) : null
   const t1 = state?.kind === 'list' ? candidateT1Text(data?.trading_date) : null
   const overnight = overnightUsView(data?.overnight_us)
@@ -541,7 +552,7 @@ export function CandidatesSection({ data, loading, error, renderChart, wide = fa
           : !state
             ? null
             : state.kind === 'list'
-              ? <TodayCandidateList items={state.items} renderChart={renderChart} wide={wide} overnight={overnight} preopen={data?.preopen_check ?? null} />
+              ? <TodayCandidateList items={state.items} renderChart={renderChart} wide={wide} overnight={overnight} preopen={data?.preopen_check ?? null} pick={pick} />
               : <Card><EmptyState title={state.kind === 'zero' ? '當日零候選' : '尚無候選清單'} reason={state.text} /></Card>}
     </section>
   )

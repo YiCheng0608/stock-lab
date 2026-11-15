@@ -4,6 +4,7 @@ import type {
   CandidatesResponse,
   CoverageReport,
   Dashboard,
+  MainstreamResponse,
   DataDate,
   ActionSummary,
   ActionsResponse,
@@ -107,6 +108,8 @@ export const getDashboard = () => get<Dashboard>('/dashboard')
 export const getDataDate = () => get<DataDate>('/data-date')
 // Without a date the API returns the latest candidate run; limit is 1–20 (default 20).
 export const getCandidates = (date?: string, limit?: number) => get<CandidatesResponse>(candidatesPath(date, limit))
+// 主流族群前 20 (#768): the latest stored list without a date.
+export const getMainstream = (date?: string) => get<MainstreamResponse>(`/mainstream${queryString({ date })}`)
 export const getGroups = (params: PageParams = {}) =>
   get<Paginated<GroupRow>>(`/groups${queryString(params)}`)
 export const getGroup = (id: string) => get<GroupDetail>(`/groups/${encodeURIComponent(id)}`)

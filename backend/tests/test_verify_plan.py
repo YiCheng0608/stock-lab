@@ -49,6 +49,8 @@ TREE = {
         "import { TodayHeader } from './today/TodayViews'\n"
         "import { CandidateChart } from './today/CandidateChart'\n"
         "import { MarketPage } from './market/MarketPage'\n"
+        "import { MainstreamChart } from './candidates/MainstreamChart'\n"
+        "import { TodayListsSection } from './candidates/MainstreamViews'\n"
     ),
     "styles.css": "body {}\n",
     "components/ui/index.ts": (
@@ -80,6 +82,15 @@ TREE = {
     "candidates/CandidateViews.tsx": (
         "import { AiBadge } from '../news/NewsViews'\n"
         "import { AddPlanButton } from '../tracking/TrackingViews'\n"
+    ),
+    # Issue 769: the today page's list switch and its second list (主流族群前 20), and that list's chart.
+    "candidates/MainstreamViews.tsx": (
+        "import { CandidatesSection } from './CandidateViews'\n"
+        "import { mainstreamState } from './mainstream'\n"
+    ),
+    "candidates/mainstream.ts": "export const mainstreamState = 1\n",
+    "candidates/MainstreamChart.tsx": (
+        "import { StockBarsChart } from '../stock/StockBarsChart'\n"
     ),
     "tracking/TrackingViews.tsx": "import { planStatus } from './tracking'\n",
     "tracking/tracking.ts": "export const planStatus = 1\n",
@@ -135,6 +146,12 @@ def route_lines(route: str, source: str = API_SOURCE) -> set[int]:
 def test_single_frontend_page_verifies_only_that_page(importers):
     result = plan(FE + "today/TodayViews.tsx", importers=importers)
     assert result.pages == ["today"]
+
+
+def test_the_second_today_list_verifies_the_today_page(importers):
+    # Issue 769: the switch is imported by App.tsx, so without its row it would verify every page.
+    for name in ("MainstreamViews.tsx", "mainstream.ts", "MainstreamChart.tsx"):
+        assert plan(FE + "candidates/" + name, importers=importers).pages == ["today"]
 
 
 def test_frontend_file_shared_by_some_pages_verifies_those_pages(importers):
