@@ -143,7 +143,6 @@ INCOMPLETE = "價位不完整"
 PREOPEN_NEWS = "隔夜新聞"
 PREOPEN_NEGATIVE = "可能負向"
 PREOPEN_PENDING = "開盤前檢查：尚未完成"
-PREOPEN_CHECKED = "checked"
 PARSE_MODE = "HTML"
 # Telegram's 400 for a text its HTML parser refuses.
 PARSE_ERROR_TEXT = "can't parse entities"
@@ -269,15 +268,24 @@ class Row:
         negative = f"{PREOPEN_NEGATIVE} {self.negative}" if self.negative > 0 else None
         return f"{PREOPEN_NEWS} {self.news}", negative
 
-    @property
-    def preopen_text(self) -> str | None:
-        """「隔夜新聞 2（可能負向 1）」, 「隔夜新聞 2」; None without overnight news."""
+    def preopen_mark(
+        self,
+        plain: Callable[[str], str] = str,
+        negative: Callable[[str], str] = str,
+    ) -> str | None:
+        """The mark's one wording for the text and the card: 「隔夜新聞 2（可能負向 1）」,
+        「隔夜新聞 2」; None without overnight news. PLAIN and NEGATIVE write each part
+        (the card escapes them and puts the negative one in the falling colour)."""
 
         mark = self.preopen
         if mark is None:
             return None
-        news, negative = mark
-        return f"{news}（{negative}）" if negative else news
+        news, bad = mark
+        return plain(news) + (f"（{negative(bad)}）" if bad else "")
+
+    @property
+    def preopen_text(self) -> str | None:
+        return self.preopen_mark()
 
 
 @dataclass(frozen=True)
@@ -355,9 +363,11 @@ class Content:
 
 def preopen_checked(listing: dict[str, Any]) -> bool:
     """Whether the list's own run was checked before the open (``preopen_check``, judged
-    by ``app.preopen_news.list_view`` as /api/candidates is)."""
+    by ``app.preopen_news.list_view`` as /api/candidates is; its status word)."""
 
-    return (listing.get("preopen_check") or {}).get("status") == PREOPEN_CHECKED
+    from app.preopen_news import CHECKED
+
+    return (listing.get("preopen_check") or {}).get("status") == CHECKED
 
 
 def _count(value: Any) -> int:

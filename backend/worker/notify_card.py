@@ -219,12 +219,10 @@ def _row_html(row: Row) -> str:
         ):
             kind = "num long" if len(value or "") > longest else "num"
             cells.append(f'<span class="{kind}">{esc(value)}</span>')
-    mark = row.preopen
+    mark = row.preopen_mark(esc, lambda part: f'<span class="down">{esc(part)}</span>')
     if mark is None:
         return f'<div class="row grid">{"".join(cells)}</div>'
-    news, negative = mark
-    extra = f'（<span class="down">{esc(negative)}</span>）' if negative else ""
-    cells.append(f'<span class="preopen muted line">{esc(news)}{extra}</span>')
+    cells.append(f'<span class="preopen muted line">{mark}</span>')
     return f'<div class="row grid marked">{"".join(cells)}</div>'
 
 
