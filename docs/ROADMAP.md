@@ -74,7 +74,7 @@
 - **主流族群前 20**（[#768](https://github.com/YiCheng0608/stock-lab/issues/768) 計算與 API → [#769](https://github.com/YiCheng0608/stock-lab/issues/769) 畫面）：使用者 2026-11-15 決定在今日名單之外並列第二份名單，兩份都看一陣子，再決定留哪一份（[#1 6891572797](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6891572797)、統籌的預設 [6891614350](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6891614350)）。起因是主流族群（例如 AI、半導體）短期回檔時，`hot_group_v1` 只看 1、5、20 日，會判它們不熱門；今日名單又只收當天觸發兩條規則的股票。
   - **選法**（`mainstream_v1`，#768 定案 [6892019991](https://github.com/YiCheng0608/stock-lab/issues/768#issuecomment-6892019991)）：官方產業與題材一起排，看族群內成員 240 個交易日報酬的前 ⌈n/3⌉ 檔（至少 3 檔）平均減加權指數，依序取 5 個族群，成員有 80% 以上已在前面選上的族群裡時跳過。再把這 5 個族群的成員全部比 240 日報酬，取前 20，不設族群上限。
   - **不附點位**：這份是篩選，不附進場區、停損、目標，因為點位要是通過驗證的假設的一部分（上面「現況與方向」第 4 項）。當天也在今日名單的，標「今日名單 #n」。
-  - **研究**：同一個選法另外登記成第三輪假設，只用官方產業，因為題材沒有歷史成員；判定以前只顯示。
+  - **研究**：同一個選法另外登記成第三輪假設 M1（持有 20 日）、M2（持有 60 日）（[#773](https://github.com/YiCheng0608/stock-lab/issues/773)，[策略證據「第三輪：M1、M2」](spec/evidence.md#第三輪m1m2)）。研究只用官方產業，成員取 MOPS 月營收頁的產業分表（[#779](https://github.com/YiCheng0608/stock-lab/issues/779)）；產品的第二份名單含題材，研究的 M1、M2 不含，因為題材沒有歷史成員。判定以前只顯示。
   - **08:45 Telegram**：先不帶這份名單。
 
 使用者 2026-11-15 決定不做（[#1 6888509471](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6888509471)）：08:45 通知加「我的追蹤觸發」（要的是上面的盤中即時版）、「資料或排程異常」通知、實際交易紀錄。
