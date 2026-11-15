@@ -359,8 +359,9 @@ function PreopenRowMarkView({ item }: { item: CandidateItem }) {
 }
 
 // The chosen candidate's overnight news (Issue 755): beside the list under its chart from 1280px, in the row's detail
-// below. Each line: time, the title linked to the source, the source, and the AI direction at the check marked AI 推論
-// (「尚未判讀」 when not judged yet). The note states what 隔夜新聞 is (decision 6888598143).
+// below. Each line: time, the title linked to the source, the source, and the AI direction at the check marked
+// 「（AI 推論）」 in the line's text (not the badge: an inline-flex badge is a line of its own in the page text, which T8
+// counts per AI note), 「尚未判讀」 when not judged yet. The note states what 隔夜新聞 is (decision 6888598143).
 export function PreopenNewsPanel({ item, check }: { item: CandidateItem; check: PreopenCheck }) {
   const news = item.preopen_news
   return (
@@ -379,7 +380,7 @@ export function PreopenNewsPanel({ item, check }: { item: CandidateItem; check: 
                   : <span className="preopen-news-link">{entry.title}</span>}{' '}
                 <span className="preopen-news-source">{entry.source_name}</span>{' '}
                 {direction
-                  ? <span className="preopen-news-direction">{direction.tone && <i className={`direction-dot tone-${direction.tone}`} aria-hidden="true" />}{direction.label} <AiBadge /></span>
+                  ? <span className="preopen-news-direction">{direction.tone && <i className={`direction-dot tone-${direction.tone}`} aria-hidden="true" />}{direction.label}<span className="preopen-news-ai">（AI 推論）</span></span>
                   : <span className="preopen-news-direction preopen-news-unscored">{PREOPEN_UNSCORED}</span>}
               </li>
             )
