@@ -104,7 +104,7 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none -v stock-lab-research:/data "$
 | 月營收 | `revenue backfill --months 60 --end-month 2018-08`、`--end-month 2023-08`，再 `--months 8 --end-month 2013-08` | 從 2013-01 起（#692 D4） |
 | 季報 | `fundamentals backfill --quarters 20 --end-quarter 2017Q4`，再 `--quarters 20 --end-quarter 2022Q4` | 從 2013Q1 起 |
 | 季報（下市、轉板股） | `fundamentals xbrl-apply --start 2013Q1 --end 2024Q3 --dir /xbrl`（整包目錄唯讀掛到 `/xbrl`，由 `fundamentals xbrl-fetch` 在 09:00～20:30 下載；Git Bash 要 `MSYS_NO_PATHCONV=1`，否則 `/xbrl` 被改寫成 Windows 路徑） | **每一批建了新的下市標的之後都跑一次**：已寫的列 `unchanged`，只寫新標的；先和 `t163sb04` 核對，不同就停（#781）。約 1 小時，照上面以 `docker run -d` 跑、日誌寫 `/data/logs/`；沒有 `research-db.json` 時拒絕，批次持有維護模式時 exit 75 |
-| 減資停止買賣 | `trading-halts --start 2011-01-01 --end 2024-09-30` | 起日夾到各來源的起始日（TWSE 2011、TPEx 2013），輸出 `not_published_before` |
+| 減資停止買賣 | `trading-halts --start 2011-01-01 --end 2024-09-30` | 起日夾到各來源的起始日（TWSE 2011、TPEx 2013），輸出 `not_published_before`。恢復日在 2015-04-16 以前的 89 列 TWSE 資料，最後交易日要用已存的日線推（[DATA_SOURCES](../DATA_SOURCES.md#減資停止買賣)，#776）：日線還沒補到的月份會拒絕（`no bar before the resumption`），所以要等那段日線補完再跑：批 4 後跑一次（2012-05～2015-04，含批 3 的 2015 年），批 5 後再跑一次（2011-01～2012-04）。重跑只改這些列，其他列 `unchanged`。推不出的列每列記 warning，run 是 `partial` |
 | 休市表 | `trading-calendar --year 2021 --year 2022` | 2020 年以前沒有內容 |
 
 回補日線或除權息之後，對研究 DB 跑 `indicators --rebuild`（研究工具自己算報酬，不讀指標；要用 API 或回測時才需要）。

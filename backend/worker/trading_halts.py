@@ -17,7 +17,10 @@ no rows at all removes nothing while rows are stored for its range (a
 warning): it cannot be told from a wrong empty answer.  A row whose own
 dates disagree (sources' parsers) is left out with a warning; so is one whose
 security has a stored bar inside the stop, except a TWSE row whose stated
-last trading day is a session early (``_check_bars``).  A stop TWSE lists in
+last trading day is a session early (``_check_bars``).  A TWSE row whose
+詳細資料 date is not before its resumption (2011～2015-04) takes its last
+trading day from the bars, or is left out with the reason
+(``_infer_from_bars``, #776).  A stop TWSE lists in
 several rows that agree is written once if the bars leave its rows one stop,
 and left out otherwise (``_choose``, #774); a stop left out because its rows
 disagree keeps its stored row (review of PR #778).  A code without a stored
@@ -143,13 +146,93 @@ def _check_bars(
     )
 
 
+# The longest a stop inferred from the bars may be: from the last bar to the
+# resumption, in calendar days (#776 決定 B: 2017～2024's stops are 8～21
+# days; 2011～2014 has no TAIEX bars to count sessions by).
+INFER_MAX_DAYS = 30
+INFERRED_BASIS = "inferred_from_bars"
+
+
+def _infer_from_bars(
+    db: Session, instrument_id: int, record: TradingHaltRecord
+) -> tuple[TradingHaltRecord | None, str | None]:
+    """The stop of a TWSE row whose 詳細資料 names no last trading day
+    (``infer_last_trade``), or None and why not (#776).
+
+    The last trading day is the security's last stored bar before the
+    resumption, L.  It is taken only when the row gives a 停止買賣前收盤價格
+    (the only evidence here, so a price not yet given rejects the row), L is
+    at most ``INFER_MAX_DAYS`` before the resumption, L closed at that price,
+    and another TWSE security has a bar after L and before the resumption:
+    the market traded on the days this security has none, so they are not a
+    collection gap.
+    """
+
+    head = f"{record.symbol} resuming {record.resume_date}"
+    last = db.execute(
+        select(MarketBar.trading_date, MarketBar.close)
+        .where(
+            MarketBar.instrument_id == instrument_id,
+            MarketBar.trading_date < record.resume_date,
+        )
+        .order_by(MarketBar.trading_date.desc())
+        .limit(1)
+    ).first()
+    if last is None:
+        return None, f"{head}: no bar before the resumption"
+    last_day, last_close = last
+    price = record.details.get("停止買賣前收盤價格")
+    stated = parse_number(price)
+    if stated is None:
+        return None, f"{head}: 停止買賣前收盤價格 {price!r} is not given"
+    days = (record.resume_date - last_day).days
+    if days > INFER_MAX_DAYS:
+        return None, (
+            f"{head}: last bar {last_day} is {days} days before the resumption, "
+            f"over {INFER_MAX_DAYS}"
+        )
+    if last_close is None or abs(float(last_close) - stated) >= 1e-6:
+        return None, (
+            f"{head}: last bar {last_day} closes {last_close}, not "
+            f"停止買賣前收盤價格 {price}"
+        )
+    start = last_day + timedelta(days=1)
+    market = db.scalar(
+        select(MarketBar.id)
+        .join(Instrument, Instrument.id == MarketBar.instrument_id)
+        .where(
+            Instrument.exchange == record.exchange,
+            Instrument.instrument_type != "index",
+            MarketBar.instrument_id != instrument_id,
+            MarketBar.trading_date >= start,
+            MarketBar.trading_date < record.resume_date,
+        )
+        .limit(1)
+    )
+    if market is None:
+        return None, (
+            f"{head}: no {record.exchange} bars between {start} and the resumption"
+        )
+    return (
+        replace(
+            record,
+            last_trade_date=last_day,
+            halt_start=start,
+            details={**record.details, "last_trade_date_basis": INFERRED_BASIS},
+        ),
+        None,
+    )
+
+
 def _choose(
     db: Session, instrument_id: int, group: list[TradingHaltRecord]
 ) -> tuple[TradingHaltRecord | None, bool, str | None]:
     """The one stop the rows of a resumption allow, whether it was moved past
     bars, and the warning to record (None when there is nothing to say).
 
-    Each row is checked against the stored bars (``_check_bars``) on its own.
+    Each row is checked against the stored bars (``_check_bars``) on its own;
+    a row naming no last trading day gets its stop from them
+    (``_infer_from_bars``, #776) and counts as moved.
     The rows must end up with one stop (``halt_start`` and last trading day):
     none, or two different ones, leave the security out (#774: 3536 resuming
     2015-03-20 is listed with 2015-01-07 and 2015-01-13).  Of the rows giving
@@ -160,7 +243,8 @@ def _choose(
     checked: list[tuple[TradingHaltRecord, TradingHaltRecord]] = []
     reasons: list[str] = []
     for record in group:
-        result, conflict = _check_bars(db, instrument_id, record)
+        check = _infer_from_bars if record.infer_last_trade else _check_bars
+        result, conflict = check(db, instrument_id, record)
         if result is None:
             reasons.append(str(conflict))
         else:
@@ -285,7 +369,9 @@ def _apply_window(
             continue
         if message:
             notes.append(message)
-        if moved:
+        if chosen.details.get("last_trade_date_basis") == INFERRED_BASIS:
+            outcome["inferred_from_bars"] = outcome.get("inferred_from_bars", 0) + 1
+        elif moved:
             outcome["moved_past_bars"] = outcome.get("moved_past_bars", 0) + 1
         incoming[key] = chosen
     kept: list[str] = []
