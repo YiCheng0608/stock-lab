@@ -30,12 +30,34 @@
 
 - **代號重用**：一個代號下市多年後分配給別家公司時，兩家的日線會接在同一個標的上，這裡分不出來。回補完成後要依名稱變化稽核一次（回補執行單處理）。
 - **產業與族群成員**：新建的標的沒有產業成員列，族群相關的研究不含它們。2026-09-08 以前有效的 `group_memberships`（`official_industry`）舊列不能當歷史分類：`valid_from` 是上市日（現行分類往回填），2026-09-07 整批換 id 前的族群標籤是錯的（[#773 決定](https://github.com/YiCheng0608/stock-lab/issues/773#issuecomment-6894054847)）。研究用的當時分類見[官方產業的逐月成員表](#官方產業的逐月成員表)。
+- **月營收**：MOPS 的 `t21sc03` 頁只列今天的公司，回補不到下市股的任何一個月。轉板公司上櫃那幾年的月份則接在上市標的上（[#781 AC-1](https://github.com/YiCheng0608/stock-lab/issues/781#issuecomment-6894356247)）。[#782](https://github.com/YiCheng0608/stock-lab/issues/782) 補其中補得到的部分，規則見 [DATA_SOURCES 的下市與轉板公司的月營收](../DATA_SOURCES.md#下市與轉板公司的月營收)：
+  - **轉板**：`revenue transfers --apply` 把上櫃標的範圍內的月份從上市標的複製過來（0 個請求）。2026-11-15 在研究 DB 副本上實測（日線從 2017-03 起）：21 檔都通過同一家公司的核對，寫 1,360 列，重跑全部 `unchanged`，和上市標的逐列比對沒有不同。批 3～5 把日線往前補之後要再跑一次，補上新增的月份。
+  - **下市股**：`revenue company-classify`，接著 `revenue company-backfill`，用 MOPS 單一公司查詢，只有仍公開發行的公司查得到。破產、合併消滅等「不繼續公開發行」的公司補不到，這部分的缺口會留下來，偏差方向仍對假設有利。等 #702 批 4 建完標的再發請求，請求數先貼在執行單，經統籌核准才補。
+  - **怎麼跑**：三個命令都要 `research-db.json`，沒有就 exit 2；請求間隔、不發的時段、中止條件都寫在 DATA_SOURCES。研究 DB 同時只有一個 writer，由回補執行單（#702）的工程師在批次之間代跑，用 `--max-requests` 切成小段；被時段或失敗中止時 exit 2（`partial`），重跑接續。
+  - **轉板後又下市**：上櫃 `transferred`、上市 `delisted` 的公司，`transfers` 的輸出列在 `twin_delisted`。上市那段由 `company-backfill` 補，補完再跑一次 `transfers`，上櫃那段才複製得到。
+  - **剩下的缺口**：補完後，由執行單（統籌在 #782 合併後開）貼分年、分市場「有日線、沒有月營收」的比例，並寫進這一段。
+
+## 月營收與季報的下市股缺口（#781）
+
+**缺口**：MOPS 的月營收頁（`t21sc03`）與季報頁（`t163sb04`）每次都用**今天**的上市、上櫃名單重新產生（頁上印的出表日期是查詢當天，舊月份也列著當時還沒上市的公司）。所以兩張表回補到的都只有現存公司：研究 DB 的 `monthly_revenues` 與 `fundamental_snapshots`（`mops_t163sb04`）在 `delisted`、`transferred` 標的上是 **0 列**。2026-11-15 量的時候，日線從 2017-08 起，有日線卻沒有月營收與季報的公司，上市約占 4～6%、上櫃約占 8～11%（2017～2019），2024 年降到 1～2%（[AC-1](https://github.com/YiCheng0608/stock-lab/issues/781#issuecomment-6894356247)）。轉板公司上櫃那段的月營收掛在同一家公司的**上市**標的上，那時上市標的沒有日線，研究工具用不到。條件缺值視為不符合，用到這兩張表的假設選股時會排除之後下市的公司，偏差方向對假設有利（[策略證據](../spec/evidence.md#第一輪x1x8)的加註）。
+
+**目前狀態**
+- **季報 EPS**：[#781](https://github.com/YiCheng0608/stock-lab/issues/781) 從 MOPS 的季度 XBRL 整包補（`fundamentals xbrl-fetch`／`xbrl-apply`，[資料來源](../DATA_SOURCES.md#下市股的季度-epsxbrl-整包)）。整包收的是當季全部申報公司，含之後下市的。
+- **月營收**：[#782](https://github.com/YiCheng0608/stock-lab/issues/782) 處理：轉板的舊月份改接到上櫃標的；下市股用 MOPS 單一公司查詢補。
+- 補齊並由統籌看過剩下的缺口以前，用到月營收或季報的已登記假設（S1～S3、X3、X4、X7、H1 歷史樣本外）不跑探索段。
+
+**補完後剩下的限制**
+- **季報**：
+  - 只補 `delisted`／`transferred` 標的；它們要在季底到季底後 670 天內有日線（`quarterly_xbrl.EVIDENCE_WINDOW_DAYS`）。
+  - 整包是 2025 年重新打包的，數字是現在的版本：事後更正過的季度，存的是更正後的值（和 `t163sb04` 相同）。
+  - #702 的代號重用清單出來以前，同一代號的舊公司分不出來，見上一節。清單出來後以 `--exclude-file`（instrument id 的 JSON 陣列）重跑：它只擋之後的寫入，輸出的 `excluded_already_written` 是之前已寫進這些標的的列數；不是 0 時，先停下批次，再刪 `fundamental_snapshots` 中 `source = 'mops_tifrs_zip'` 而且 `instrument_id` 在清單裡的列（刪之前先貼列數到 Issue），`raw_payloads` 不動。
+- **月營收**：單一公司查詢只查得到下市後仍公開發行的公司。破產或合併消滅、不繼續公開發行的公司（例如 2475 華映、2888 新光金）查不到，這類公司會一直缺值。剩下多少由 #782 量。
 
 ## 回補怎麼跑
 
 長工作一律用 `docker run -d` 的獨立容器跑，日誌寫在研究 volume 的 `/data/logs/`，不靠 session 的背景 shell：統籌或工程師換手、背景 shell 被收掉，都不會中斷它。每一段都可以中斷後重跑：`backfill` 從各段的 manifest 接續，已完成的日期不再請求；其他命令重跑冪等。
 
-- **間隔**：`backfill`、`corporate-actions sync`、`trading-halts`、`revenue backfill`、`fundamentals backfill`、`events backfill`、`index-bars backfill`／`futures-history` 這些命令，對每個官方 host 至少間隔 3 秒（`worker.cli.BACKFILL_HOST_INTERVAL_SECONDS`）；daily 與它的 catchup 仍用各 host 自己的間隔。
+- **間隔**：`backfill`、`corporate-actions sync`、`trading-halts`、`revenue backfill`、`fundamentals backfill`、`events backfill`、`index-bars backfill`／`futures-history` 這些命令，對每個官方 host 至少間隔 3 秒（`worker.cli.BACKFILL_HOST_INTERVAL_SECONDS`）；daily 與它的 catchup 仍用各 host 自己的間隔。`revenue company-classify`／`company-backfill` 用自己的 5 秒（`monthly_revenue_company.INTERVAL_SECONDS`，#782）。
 - **時段**：台北 21:15～23:30 不送請求（正式 daily 在跑）。日行情用 [`tools/research/history_backfill.py`](../../tools/research/history_backfill.py) 逐月跑：由新到舊，一個月一次 `backfill`（約 10 分鐘）；每個月開始前，台北時間落在 21:00～23:30 時，先等到 23:30。進度與每個月的結束碼記在 `/data/logs/history-backfill.jsonl`，重跑時跳過已完成的月份。其他命令都是幾分鐘到一小時，在 21:00 之前開始。
 - **耗時**：副本實測每個交易日約 15～26 秒（2026-11-14，3 秒間隔；上市 3 個、上櫃 3 個請求，加上每批 1 個 MOPS 清單，2008 年以前每月多 1 個 `MI_5MINS_HIST`）：2012-04-25～05-08 九個交易日 152 秒、2004-02-11～02-20 八個交易日 153 秒、2014-11-24～12-05 十個交易日 258 秒。這些是短副本上的數字。[#715](https://github.com/YiCheng0608/stock-lab/issues/715) 之前，每個 collect 收尾都把 DB 裡全部的 Event 重新投影成新聞（每筆約 0.23 ms），所以每天會再多一段隨回補長度變長的時間：批 1 從 2024-09 的每天約 28 秒長到 2023-12 的 47 秒。修正後 collect 只投影自己寫入的 Event，收尾約 1 秒，不再隨歷史變長（同一天的重放，Event 2.3 萬／8.7 萬／17.5 萬筆時：改前 6.5／17.2／34.8 秒，改後 0.7／0.4／0.9 秒）。所以每個交易日約等於 collect 本身的 16～18 秒，加上約 1 秒的簿記。批 3～5 約 3,900 個平日，估計約 20 小時的請求時間，再加上每晚 21:00～23:30 的暫停。回補容器要用含 #715 修正的 image 才會變快。
 - **每月的啟動段**：從程序開始到這個月的 backfill run 建立。[#722](https://github.com/YiCheng0608/stock-lab/issues/722) 之前，每個月的 `backfill` 都跑一次 `init_db`，即使 DB 已經在 head，也會對整個 DB 跑兩次 `PRAGMA integrity_check`。這段跟著 DB 大小變長：批 1 從 2024-09 的 80 秒長到 2023-07 的 147 秒；DB 到 4.8 GB 時，容器在 `--memory 3g` 下快取裝不下整個 DB，變成 360～470 秒。修正後，DB 已經在 head 就跳過 `init_db`（`app.db.ensure_schema`，daily 從 #150 起也是同一條規則），啟動段約 1～2 秒，不隨歷史變長。在 4.8 GB 的副本上重放同一天兩次：改前 320、398 秒，改後 1.3、1.5 秒。所以每個月只剩各交易日的時間。DB 落後 head 時，第一個月照舊跑完整的 migration 與整庫檢查。回補不再每月檢查整庫，改由 `history_backfill.py` 在每批結束時自動跑一次 `PRAGMA integrity_check` 與 `foreign_key_check`；最後一個月失敗了也照跑。結果寫成 `history-backfill.jsonl` 的一列 `integrity`（各自的結果與秒數），不是 `ok` 或有外鍵違反就以 exit 3 結束。4.8 GB 的 DB 在 `--memory 3g` 下約 6～7 分鐘。#702 的驗收表引用這一列。
@@ -81,6 +103,7 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none -v stock-lab-research:/data "$
 | 指數日 K | `index-bars backfill --from-month 2004-02 --to-month 2007-12`，之後每 48 個月一段 | 一次最多 48 個月（`MAX_MONTHS`） |
 | 月營收 | `revenue backfill --months 60 --end-month 2018-08`、`--end-month 2023-08`，再 `--months 8 --end-month 2013-08` | 從 2013-01 起（#692 D4） |
 | 季報 | `fundamentals backfill --quarters 20 --end-quarter 2017Q4`，再 `--quarters 20 --end-quarter 2022Q4` | 從 2013Q1 起 |
+| 季報（下市、轉板股） | `fundamentals xbrl-apply --start 2013Q1 --end 2024Q3 --dir /xbrl`（整包目錄唯讀掛到 `/xbrl`，由 `fundamentals xbrl-fetch` 在 09:00～20:30 下載；Git Bash 要 `MSYS_NO_PATHCONV=1`，否則 `/xbrl` 被改寫成 Windows 路徑） | **每一批建了新的下市標的之後都跑一次**：已寫的列 `unchanged`，只寫新標的；先和 `t163sb04` 核對，不同就停（#781）。約 1 小時，照上面以 `docker run -d` 跑、日誌寫 `/data/logs/`；沒有 `research-db.json` 時拒絕，批次持有維護模式時 exit 75 |
 | 減資停止買賣 | `trading-halts --start 2011-01-01 --end 2024-09-30` | 起日夾到各來源的起始日（TWSE 2011、TPEx 2013），輸出 `not_published_before` |
 | 休市表 | `trading-calendar --year 2021 --year 2022` | 2020 年以前沒有內容 |
 

@@ -13,7 +13,7 @@ from . import preopen as preopen_check
 # directory, and a scheduled `job` (or `serve`) has only --data-dir.
 os.environ.update(scheduled_job.cli_environment(sys.argv[1:]))
 
-from app.config import DATA_DIR
+from app.config import DATA_DIR, DB_PATH
 from app.db import init_db
 
 from .action_tiers import run_action_tiers
@@ -39,6 +39,12 @@ from .instrument_repair import run_instrument_repair, run_unmatched_backfill
 from .market_summary import backfill_market_summaries
 from .monthly_revenue import DEFAULT_MONTHS as REVENUE_DEFAULT_MONTHS
 from .monthly_revenue import run_revenue_backfill
+from .monthly_revenue_company import refusal as monthly_revenue_refusal
+from .monthly_revenue_company import (
+    run_revenue_company_backfill,
+    run_revenue_company_classify,
+    run_revenue_transfers,
+)
 from .mops_events import run_event_backfill
 from .news_batch import run_news_batch
 from .news_llm import DEFAULT_LIMIT as NEWS_LLM_DEFAULT_LIMIT, run_news_llm_batch
@@ -47,6 +53,8 @@ from .pipeline import analyze, backtest, collect, evaluate, run_daily
 from .plan_tracking import run_plan_tracking
 from .quarterly_fundamentals import DEFAULT_QUARTERS as FUNDAMENTAL_DEFAULT_QUARTERS
 from .quarterly_fundamentals import run_fundamental_backfill
+from .quarterly_xbrl import research_refusal as xbrl_research_refusal
+from .quarterly_xbrl import run_xbrl_apply, run_xbrl_fetch
 from .schedule_runs import (
     LOCK_SKIP_REASON,
     PREFLIGHT_SKIP_REASONS,
@@ -118,8 +126,23 @@ def maintenance_guarded(args: argparse.Namespace) -> str | None:
         return "events backfill"
     if args.command == "fundamentals" and args.fundamentals_command == "backfill":
         return "fundamentals backfill"
+    if (
+        args.command == "fundamentals"
+        and args.fundamentals_command == "xbrl-apply"
+        and not args.dry_run
+    ):
+        # Writes the research DB; a research batch holding maintenance mode refuses it.
+        return "fundamentals xbrl-apply"
     if args.command == "revenue" and args.revenue_command == "backfill":
         return "revenue backfill"
+    if args.command == "revenue" and args.revenue_command == "transfers" and args.apply:
+        return "revenue transfers --apply"
+    if (
+        args.command == "revenue"
+        and args.revenue_command in {"company-classify", "company-backfill"}
+        and not args.plan
+    ):
+        return f"revenue {args.revenue_command}"
     if args.command == "index-bars" and args.index_bars_command in {
         "backfill",
         "futures-history",
@@ -438,6 +461,26 @@ def main() -> None:
     fundamentals_backfill_parser.add_argument(
         "--end-quarter", help="YYYYQn；預設是最近一個已結束的季度"
     )
+    xbrl_fetch_parser = fundamentals_subparsers.add_parser(
+        "xbrl-fetch",
+        help="下載 MOPS 季度 XBRL 整包到目錄（一季 1 個請求、間隔 5 秒、不碰 DB；已有的不重抓，#781）",
+    )
+    xbrl_apply_parser = fundamentals_subparsers.add_parser(
+        "xbrl-apply",
+        help="把目錄裡的季度 XBRL 整包寫進下市、轉板標的缺的季報 EPS（先和 t163sb04 核對，不同就停；重跑冪等，#781）",
+    )
+    for xbrl_parser in (xbrl_fetch_parser, xbrl_apply_parser):
+        xbrl_parser.add_argument("--start", required=True, help="YYYYQn，最早 2013Q1")
+        xbrl_parser.add_argument("--end", required=True, help="YYYYQn")
+        xbrl_parser.add_argument(
+            "--dir", required=True, help="整包與 manifest.json 的目錄"
+        )
+    xbrl_apply_parser.add_argument(
+        "--dry-run", action="store_true", help="不寫入，只印每季的計數"
+    )
+    xbrl_apply_parser.add_argument(
+        "--exclude-file", help="JSON 陣列：不寫入的 instrument id（代號重用的舊公司）"
+    )
     revenue_parser = subparsers.add_parser(
         "revenue", help="月營收：MOPS t21sc03 營業收入統計表（#530）"
     )
@@ -454,6 +497,31 @@ def main() -> None:
     revenue_backfill_parser.add_argument(
         "--end-month", help="YYYY-MM；預設是上個月（最近一個已結束的月份）"
     )
+    revenue_transfers_parser = revenue_subparsers.add_parser(
+        "transfers",
+        help="研究 DB：轉板公司舊標的的月營收，從另一交易所的同一家公司複製（0 個請求，#782）",
+    )
+    revenue_transfers_parser.add_argument(
+        "--apply", action="store_true", help="寫入；不加只印對應與月數"
+    )
+    for name, text in (
+        (
+            "company-classify",
+            "研究 DB：每檔下市股問 1 次 MOPS 單一公司月營收（最後一個有日線的月），"
+            "分成查得到與不繼續公開發行（間隔 5 秒，#782）",
+        ),
+        (
+            "company-backfill",
+            "研究 DB：查得到的下市股，每家每月 1 個請求補月營收（間隔 5 秒，#782）",
+        ),
+    ):
+        company_parser = revenue_subparsers.add_parser(name, help=text)
+        company_parser.add_argument(
+            "--plan", action="store_true", help="只印對象與請求數，不發請求、不寫入"
+        )
+        company_parser.add_argument(
+            "--max-requests", type=int, help="這次最多發幾個請求（已存的回應不算）"
+        )
     index_bars_parser = subparsers.add_parser(
         "index-bars",
         help="加權、櫃買指數的日 K（#552）與指數、台指期、美股的歷史回補（#563）",
@@ -661,6 +729,17 @@ def main() -> None:
             result = scheduled_job.maintenance_status(data_dir)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
+    refused = research_command_refusal(args)
+    if refused is not None:
+        # Before maintenance mode and before any session: on the production
+        # volume a hold would write the production marker and log (#781;
+        # #782 review 6895006123 3).
+        print(
+            json.dumps(
+                {"status": "refused", "error": refused}, ensure_ascii=False, indent=2
+            )
+        )
+        sys.exit(2)
     guarded = maintenance_guarded(args)
     if guarded in DAILY_WINDOW_REFUSED and in_daily_window():
         print(
@@ -687,6 +766,22 @@ def main() -> None:
         sys.exit(scheduled_job.MAINTENANCE_LOST_EXIT)
 
 
+RESEARCH_REVENUE_COMMANDS = {"transfers", "company-classify", "company-backfill"}
+
+
+def research_command_refusal(args: argparse.Namespace) -> str | None:
+    """Why a research-database-only command may not run here; None otherwise.
+
+    ``fundamentals xbrl-apply`` (#781) and the revenue commands of #782.
+    """
+
+    if args.command == "fundamentals" and args.fundamentals_command == "xbrl-apply":
+        return xbrl_research_refusal(DB_PATH)
+    if args.command == "revenue" and args.revenue_command in RESEARCH_REVENUE_COMMANDS:
+        return monthly_revenue_refusal(DB_PATH)
+    return None
+
+
 def backfill_command(args: argparse.Namespace) -> str | None:
     """The name of a command that asks the official hosts for history (Issue #692).
 
@@ -698,6 +793,8 @@ def backfill_command(args: argparse.Namespace) -> str | None:
         return args.command
     if args.command == "corporate-actions" and args.actions_command == "sync":
         return "corporate-actions sync"
+    if args.command == "fundamentals" and args.fundamentals_command == "xbrl-fetch":
+        return "fundamentals xbrl-fetch"
     for command, sub in (
         ("events", "events_command"),
         ("fundamentals", "fundamentals_command"),
@@ -811,8 +908,24 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
         )
     elif args.command == "fundamentals" and args.fundamentals_command == "backfill":
         result = run_fundamental_backfill(args.quarters, args.end_quarter)
+    elif args.command == "fundamentals" and args.fundamentals_command == "xbrl-fetch":
+        result = run_xbrl_fetch(args.dir, args.start, args.end)
+    elif args.command == "fundamentals" and args.fundamentals_command == "xbrl-apply":
+        result = run_xbrl_apply(
+            args.dir,
+            args.start,
+            args.end,
+            dry_run=args.dry_run,
+            exclude_file=args.exclude_file,
+        )
     elif args.command == "revenue" and args.revenue_command == "backfill":
         result = run_revenue_backfill(args.months, args.end_month)
+    elif args.command == "revenue" and args.revenue_command == "transfers":
+        result = run_revenue_transfers(args.apply, DB_PATH)
+    elif args.command == "revenue" and args.revenue_command == "company-classify":
+        result = run_revenue_company_classify(args.plan, args.max_requests, DB_PATH)
+    elif args.command == "revenue" and args.revenue_command == "company-backfill":
+        result = run_revenue_company_backfill(args.plan, args.max_requests, DB_PATH)
     elif args.command == "index-bars" and args.index_bars_command == "backfill":
         result = run_index_bar_backfill(
             args.from_month, args.to_month, force=args.force
@@ -918,6 +1031,8 @@ def _run_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> N
         raise SystemExit(2 if result.get("status") == "partial" else 1)
     if args.command == "index-bars" and args.index_bars_command == "us-collect":
         sys.exit(US_COLLECT_EXIT_CODES.get(str(result.get("status")), 1))
+    if args.command == "revenue" and result.get("status") == "refused":
+        raise SystemExit(2)
     if (
         args.command in {"fundamentals", "revenue", "index-bars"}
         and result.get("status") != "success"

@@ -1644,6 +1644,58 @@ def test_content_whose_sha_is_not_the_file_name_is_not_written():
     assert [path.name for path in target.parent.iterdir()] == [target.name]
 
 
+def _zip_target(data: bytes, suffix: str = ".zip") -> Path:
+    digest = sources.hashlib.sha256(data).hexdigest()
+    return sources.RAW_DIR / "mops_tifrs" / "2026" / "11" / "16" / f"{digest}{suffix}"
+
+
+ZIP_BYTES = b"PK\x03\x04 an archive's bytes (#781)"
+
+
+def test_a_zip_named_by_its_sha_is_written():
+    target = _zip_target(ZIP_BYTES)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    sources.write_raw_file(target, ZIP_BYTES)
+    assert target.read_bytes() == ZIP_BYTES
+
+
+@pytest.mark.parametrize("suffix", [".bin", ".zip.json", "", ".ZIP"])
+def test_a_raw_file_with_another_suffix_is_refused(suffix):
+    target = _zip_target(ZIP_BYTES, suffix)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with pytest.raises(sources.OfficialDataError, match="does not match"):
+        sources.write_raw_file(target, ZIP_BYTES)
+    assert not target.exists()
+
+
+def test_a_zip_whose_sha_is_not_the_file_name_is_refused():
+    target = _zip_target(ZIP_BYTES)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with pytest.raises(sources.OfficialDataError, match="does not match"):
+        sources.write_raw_file(target, ZIP_BYTES + b" ")
+    assert not target.exists()
+
+
+def test_ensure_raw_file_keeps_a_whole_zip_and_writes_its_metadata(monkeypatch):
+    target = _zip_target(ZIP_BYTES)
+    digest = target.stem
+    metadata = {"source": "mops_tifrs", "sha256": digest}
+    assert sources.ensure_raw_file(target, ZIP_BYTES, metadata) == sources.RAW_MISSING
+    meta = target.with_name(f"{digest}.meta.json")
+    assert json.loads(meta.read_text("utf-8")) == metadata
+
+    writes: list[Path] = []
+    real = sources._write_durably
+    monkeypatch.setattr(
+        sources,
+        "_write_durably",
+        lambda path, data: (writes.append(path), real(path, data)),
+    )
+    assert sources.ensure_raw_file(target, ZIP_BYTES, metadata) is None
+    assert writes == []
+    assert target.read_bytes() == ZIP_BYTES
+
+
 def test_a_failed_raw_write_raises_and_leaves_no_file(monkeypatch):
     def fsync(_descriptor):
         raise OSError(5, "fixture I/O error")
