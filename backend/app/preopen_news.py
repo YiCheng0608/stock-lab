@@ -42,6 +42,9 @@ from .models import (
 
 DIRECTIONS = ("positive", "negative", "mixed", "unknown")
 TAIPEI_OFFSET = timedelta(hours=8)
+# preopen_check's status: the list's own run checked, or not (notify reads it too, #759).
+CHECKED = "checked"
+NOT_CHECKED = "not_checked"
 # The page's definition of 隔夜新聞 (UI_COPY_SPEC §10).
 DEFINITION = "名單產生之後才收到的新聞"
 
@@ -238,7 +241,7 @@ def list_view(
     ]
     if not rows:
         return {
-            "status": "not_checked",
+            "status": NOT_CHECKED,
             "definition": DEFINITION,
             "checked_at": None,
             "window_start": None,
@@ -291,7 +294,7 @@ def list_view(
         }
     first = rows[0]
     return {
-        "status": "checked",
+        "status": CHECKED,
         "definition": DEFINITION,
         "checked_at": _utc(first.checked_at),
         "window_start": _utc(first.window_start),
