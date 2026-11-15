@@ -2310,11 +2310,21 @@ def parse_twse_reduction_payload(
     """Read TWSE ``TWTAUU`` (股票減資恢復買賣參考價格) for ``start``..``end``.
 
     ``stat`` 很抱歉，沒有符合條件的資料 is an empty range.  Each row's 詳細資料
-    is ``<code>  ,<YYYYMMDD>``, the last trading day of the old shares; the
-    stop begins the calendar day after it.  A row whose 詳細資料 names another
-    code or no date, or whose last trading day is not before the resumption,
-    is left out and named in the second list.  A table with other columns,
-    another range or a resumption outside the range is rejected whole.
+    is ``<code>  ,<YYYYMMDD>``: the date of the announcement the row is, from
+    2015 on mostly the last trading day of the old shares (#774 AC-1), so it
+    is taken as that and the stop begins the calendar day after it.  A row
+    whose 詳細資料 names another code or no date, or whose date is not before
+    the resumption, is left out and named in the second list.  A table with
+    other columns, another range or a resumption outside the range is
+    rejected whole.
+
+    One stop can be listed more than once, one row per announcement (3536
+    resuming 2015-03-20 three times, #774).  Rows of one code and resumption
+    that give two values for a column other than 名稱 and 詳細資料 (``-``／``--``
+    agree with any value) leave that code out, named in the second list.
+    Rows that agree are all returned, each with ``same_resumption_rows`` (the
+    group's 詳細資料) in ``details``: the stored bars decide which stop is
+    right (``trading_halts``).
     """
 
     if not isinstance(payload, dict):
@@ -2334,7 +2344,7 @@ def parse_twse_reduction_payload(
     rows = payload.get("data")
     if not isinstance(rows, list):
         raise OfficialDataError("TWSE capital reduction table has no data list")
-    records: dict[tuple[str, date], TradingHaltRecord] = {}
+    groups: dict[tuple[str, date], list[TradingHaltRecord]] = {}
     rejected: list[str] = []
     for raw in rows:
         row = _reduction_row(raw, columns, "TWSE")
@@ -2370,13 +2380,50 @@ def parse_twse_reduction_payload(
             details=dict(zip(fields, row)),
             payload_sha256=payload_sha256,
         )
-        previous = records.get((symbol, resume))
-        if previous is not None and previous.halt_start != record.halt_start:
-            raise OfficialDataError(
-                f"TWSE capital reduction lists {symbol} resuming {resume} twice"
+        groups.setdefault((symbol, resume), []).append(record)
+    records: list[TradingHaltRecord] = []
+    for (symbol, resume), group in groups.items():
+        if len(group) == 1:
+            records.extend(group)
+            continue
+        disagreement = _reduction_disagreement(group)
+        if disagreement:
+            rejected.append(
+                f"{symbol} resuming {resume}: {len(group)} rows disagree on "
+                f"{disagreement}"
             )
-        records[(symbol, resume)] = record
-    return list(records.values()), rejected
+            continue
+        listed = [str(item.details.get("詳細資料") or "").strip() for item in group]
+        records.extend(
+            replace(item, details={**item.details, "same_resumption_rows": listed})
+            for item in group
+        )
+    return records, rejected
+
+
+# Values of a TWTAUU price column not yet given (1808 潤隆's ``-``, 3536's
+# ``--`` before its 除權參考價 was published, #774).
+_REDUCTION_NO_VALUE = ("", "-", "--")
+# Columns two rows of one stop may differ in: a rename (2408 南亞科／南科) and
+# the announcement each row is (#774).
+_REDUCTION_FREE_COLUMNS = ("名稱", "詳細資料")
+
+
+def _reduction_disagreement(group: list[TradingHaltRecord]) -> str | None:
+    """The first column the rows give two values for, as text; None if none.
+
+    A value not yet given (``_REDUCTION_NO_VALUE``) agrees with any value.
+    """
+
+    for name in group[0].details:
+        if name in _REDUCTION_FREE_COLUMNS:
+            continue
+        values = {str(item.details.get(name) or "").strip() for item in group} - set(
+            _REDUCTION_NO_VALUE
+        )
+        if len(values) > 1:
+            return f"{name} {sorted(values)!r}"
+    return None
 
 
 def parse_tpex_reduction_payload(
@@ -2392,7 +2439,8 @@ def parse_tpex_reduction_payload(
     The 詳細資料 HTML names the code, 停止買賣日期 and 恢復買賣日期: the first
     and the resumption must be readable, the code and the resumption must
     match the row, and the stop must begin before the resumption, or the row
-    is left out and named in the second list.  ``totalCount`` above the rows
+    is left out and named in the second list, as is a code listed twice for
+    one resumption with two stops (#774).  ``totalCount`` above the rows
     (a truncated answer), another range, other columns or a resumption
     outside the range reject the table whole.
     """
@@ -2412,6 +2460,7 @@ def parse_tpex_reduction_payload(
     rows = table.get("data")
     if not isinstance(rows, list):
         raise OfficialDataError("TPEx capital reduction table has no data list")
+    clashing: dict[tuple[str, date], None] = {}
     total = table.get("totalCount")
     if total is not None and int(total) != len(rows):
         raise OfficialDataError(
@@ -2462,12 +2511,18 @@ def parse_tpex_reduction_payload(
             details=dict(zip(fields, row)),
             payload_sha256=payload_sha256,
         )
-        previous = records.get((symbol, resume))
-        if previous is not None and previous.halt_start != record.halt_start:
-            raise OfficialDataError(
-                f"TPEx capital reduction lists {symbol} resuming {resume} twice"
-            )
-        records[(symbol, resume)] = record
+        key = (symbol, resume)
+        previous = records.get(key)
+        if key in clashing or (
+            previous is not None and previous.halt_start != record.halt_start
+        ):
+            # Only this code is left out, not the table (#774).
+            records.pop(key, None)
+            clashing[key] = None
+            continue
+        records[key] = record
+    for symbol, resume in clashing:
+        rejected.append(f"{symbol} resuming {resume}: listed twice with other stops")
     return list(records.values()), rejected
 
 

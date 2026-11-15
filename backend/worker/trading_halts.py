@@ -17,8 +17,10 @@ no rows at all removes nothing while rows are stored for its range (a
 warning): it cannot be told from a wrong empty answer.  A row whose own
 dates disagree (sources' parsers) is left out with a warning; so is one whose
 security has a stored bar inside the stop, except a TWSE row whose stated
-last trading day is a session early (``_check_bars``).  A code without a
-stored instrument is counted, not written.
+last trading day is a session early (``_check_bars``).  A stop TWSE lists in
+several rows that agree is written once if the bars leave its rows one stop,
+and left out otherwise (``_choose``, #774).  A code without a stored
+instrument is counted, not written.
 
 collect asks for the resumptions from ten days before to sixty days after the
 collect day (one request per exchange, non-core: a failure is a warning and
@@ -140,6 +142,54 @@ def _check_bars(
     )
 
 
+def _choose(
+    db: Session, instrument_id: int, group: list[TradingHaltRecord]
+) -> tuple[TradingHaltRecord | None, bool, str | None]:
+    """The one stop the rows of a resumption allow, whether it was moved past
+    bars, or None and why not.
+
+    Each row is checked against the stored bars (``_check_bars``) on its own.
+    The rows must end up with one stop (``halt_start`` and last trading day):
+    none, or two different ones, leave the security out (#774: 3536 resuming
+    2015-03-20 is listed with 2015-01-07 and 2015-01-13).  Of the rows giving
+    that stop, the first one the bars did not move is kept.
+    """
+
+    checked: list[tuple[TradingHaltRecord, TradingHaltRecord]] = []
+    reasons: list[str] = []
+    for record in group:
+        result, conflict = _check_bars(db, instrument_id, record)
+        if result is None:
+            reasons.append(str(conflict))
+        else:
+            checked.append((record, result))
+    if len(group) == 1:
+        if not checked:
+            return None, False, reasons[0]
+        record, result = checked[0]
+        return result, result is not record, None
+    first = group[0]
+    stops = {(result.halt_start, result.last_trade_date) for _, result in checked}
+    if len(stops) != 1:
+        found = "; ".join(
+            f"{result.halt_start}..{result.resume_date} "
+            f"(詳細資料 {record.details.get('詳細資料')!r})"
+            for record, result in checked
+        )
+        return (
+            None,
+            False,
+            f"{first.symbol} resuming {first.resume_date}: {len(group)} rows "
+            f"give {len(stops)} stops the bars allow"
+            + (f": {found}" if found else "")
+            + (f"; {'; '.join(reasons)}" if reasons else ""),
+        )
+    for record, result in checked:
+        if result is record:
+            return result, False, None
+    return checked[0][1], True, None
+
+
 def _apply_window(
     db: Session,
     window: TradingHaltWindow,
@@ -186,6 +236,9 @@ def _apply_window(
         return outcome
     incoming: dict[tuple[int, date], TradingHaltRecord] = {}
     conflicts: list[str] = []
+    # A stop the answer lists more than once arrives as one record per row
+    # (sources' parsers): its rows are checked together.
+    groups: dict[tuple[int, date], list[TradingHaltRecord]] = {}
     for record in records:
         # A stored security outside the collect universe (delisted since) keeps
         # its row: the answer still lists it.
@@ -198,13 +251,15 @@ def _apply_window(
         if instrument is None:
             outcome["outside_universe"] += 1
             continue
-        checked, conflict = _check_bars(db, instrument.id, record)
-        if checked is None:
+        groups.setdefault((instrument.id, record.resume_date), []).append(record)
+    for key, group in groups.items():
+        chosen, moved, conflict = _choose(db, key[0], group)
+        if chosen is None:
             conflicts.append(str(conflict))
             continue
-        if checked is not record:
+        if moved:
             outcome["moved_past_bars"] = outcome.get("moved_past_bars", 0) + 1
-        incoming[(instrument.id, record.resume_date)] = checked
+        incoming[key] = chosen
     for key, row in stored.items():
         if key not in incoming:
             db.delete(row)

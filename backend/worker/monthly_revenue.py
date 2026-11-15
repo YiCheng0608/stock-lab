@@ -31,6 +31,7 @@ writes the values back; the next backfill reads the page again and decides.
 
 from __future__ import annotations
 
+import base64
 import re
 import time
 from dataclasses import dataclass
@@ -76,6 +77,14 @@ DEADLINE_DAY = 10
 ABORT_AFTER_FAILURES = 3
 TAIPEI = timezone(timedelta(hours=8))
 PAGE_ENCODING = "cp950"
+# A few pages carry Big5 user-defined characters cp950 has no mapping for:
+# 2013-02 sii ``_0`` has two (``c8 ba``, ``c8 bb``) in 2539 櫻花建's 備註 (#774).
+# Up to this many per page are read as U+FFFD, and only in ``REPLACEABLE``
+# cells; more, or one anywhere else, fails the page.
+MAX_UNDECODABLE = 8
+REPLACEABLE = ("公司名稱", "備註")
+# The second byte of a Big5 character.
+_TRAIL_BYTES = (range(0x40, 0x7F), range(0xA1, 0xFF))
 # Waits before the second, third and fourth try of one page (review of PR #533).
 RETRY_DELAYS_SECONDS = (5.0, 10.0, 20.0)
 BLOCK_MARKERS = ("FOR SECURITY REASONS", "查詢過於頻繁", "THE PAGE CANNOT BE ACCESSED")
@@ -576,7 +585,68 @@ def parse_page(html: str, market: str, month: Month, page: int) -> list[PageRow]
                 cells=row,
             )
         )
+    replaced = html.count("�")
+    if replaced:
+        # Every undecodable character must sit in a company's name or 備註:
+        # one in an amount, a code, a header or a total would be read wrong
+        # or not at all (#774).
+        allowed = sum(
+            row.cells[name].count("�") for row in result for name in REPLACEABLE
+        )
+        if allowed != replaced:
+            raise OfficialDataError(
+                f"{label} has {replaced - allowed} undecodable characters "
+                f"outside {'／'.join(REPLACEABLE)}"
+            )
     return result
+
+
+def replaced_cells(rows: list[PageRow]) -> list[str]:
+    """``<code> <column> ×<n>`` for each cell holding U+FFFD."""
+
+    return [
+        f"{row.symbol} {name} ×{row.cells[name].count(chr(0xFFFD))}"
+        for row in rows
+        for name in REPLACEABLE
+        if "�" in row.cells[name]
+    ]
+
+
+def decode_page(content: bytes) -> tuple[str | None, list[dict[str, Any]]]:
+    """The page text and its undecodable characters (``offset``, ``bytes``).
+
+    Strict cp950, except that a character it cannot map becomes one U+FFFD:
+    a lead byte followed by a trail byte is one two-byte character, so both
+    bytes go.  ``errors="replace"`` drops only the lead byte and pairs the
+    trail byte with the next one, garbling the characters after it (#774:
+    ``c8 ba`` 璀 read as ``�瑤``).  More than ``MAX_UNDECODABLE`` gives no
+    text (``None``) and the first ``MAX_UNDECODABLE + 1`` of them.
+    """
+
+    parts: list[str] = []
+    undecodable: list[dict[str, Any]] = []
+    position = 0
+    while True:
+        try:
+            parts.append(content[position:].decode(PAGE_ENCODING))
+            return "".join(parts), undecodable
+        except UnicodeDecodeError as exc:
+            start = position + exc.start
+            parts.append(content[position:start].decode(PAGE_ENCODING))
+            width = 1
+            if (
+                0x81 <= content[start] <= 0xFE
+                and start + 1 < len(content)
+                and any(content[start + 1] in span for span in _TRAIL_BYTES)
+            ):
+                width = 2
+            undecodable.append(
+                {"offset": start, "bytes": content[start : start + width].hex()}
+            )
+            if len(undecodable) > MAX_UNDECODABLE:
+                return None, undecodable
+            parts.append("�")
+            position = start + width
 
 
 # --- fetch --------------------------------------------------------------------
@@ -588,8 +658,11 @@ def fetch_page(
     timeout_seconds: float = 60.0,
     attempt_seconds: float | None = None,
     deadline: float | None = None,
-) -> str:
-    """GET one page and decode it from Big5 (cp950); transient failures retry.
+) -> bytes:
+    """GET one page's bytes; transient failures retry.
+
+    The bytes, not text: ``_fetch_and_store`` keeps them in the raw when they
+    are not all cp950, and decodes them (``decode_page``, #774).
 
     MOPS answers an occasional 502 ``Unreachable Server`` (seen while probing,
     #530); a try 10 seconds later succeeded.  A transport error, 429 or 5xx is
@@ -638,10 +711,7 @@ def fetch_page(
             raise OfficialDataError(
                 f"official endpoint rejected request ({response.status_code}): {url}"
             )
-        try:
-            return response.content.decode(PAGE_ENCODING)
-        except UnicodeDecodeError as exc:
-            raise OfficialDataError(f"{url} is not {PAGE_ENCODING}: {exc}") from exc
+        return response.content
     raise OfficialDataError(f"official endpoint retry budget exhausted: {url}")
 
 
@@ -692,7 +762,7 @@ def backfill_monthly_revenues(
     *,
     months: int = DEFAULT_MONTHS,
     end: Month | None = None,
-    fetcher: Callable[[str], str] = fetch_page,
+    fetcher: Callable[[str], str | bytes] = fetch_page,
     sleep: Callable[[float], None] = time.sleep,
     interval_seconds: float = 3.0,
     budget_seconds: float | None = None,
@@ -794,6 +864,16 @@ def backfill_monthly_revenues(
                         failures_in_a_row += 1
                     else:
                         failures_in_a_row = 0
+                        if item.get("undecodable"):
+                            offsets = ", ".join(
+                                str(entry["offset"]) for entry in item["undecodable"]
+                            )
+                            warnings.append(
+                                f"{key}: {len(item['undecodable'])} undecodable "
+                                f"{PAGE_ENCODING} characters replaced with U+FFFD "
+                                f"at bytes {offsets}: "
+                                + ", ".join(item.get("replaced_cells", []))
+                            )
                         if item["duplicate"]:
                             codes = ", ".join(item["duplicate_codes"])
                             warnings.append(
@@ -852,7 +932,7 @@ def _fetch_and_store(
     page: int,
     month: Month,
     deadline_and_calendar: tuple[date, str],
-    fetcher: Callable[[str], str],
+    fetcher: Callable[[str], str | bytes],
     instruments: dict[tuple[str, str], Instrument],
     seen: dict[str, int],
 ) -> dict[str, Any]:
@@ -866,20 +946,40 @@ def _fetch_and_store(
 
     url = page_url(market, month, page)
     try:
-        html = fetcher(url)
+        answer = fetcher(url)
     except OfficialDataError as exc:
         return {"status": "failed", "error": str(exc)}
     except Exception as exc:  # a fetcher failure is the source's, never a crash
         return {"status": "failed", "error": f"official endpoint failed: {exc}"}
-    captured = capture_payload(
-        RAW_SOURCE,
-        url,
-        {"endpoint": url, "method": "GET", "encoding": PAGE_ENCODING, "html": html},
-        month.last_day.isoformat(),
-    )
+    payload: dict[str, Any] = {
+        "endpoint": url,
+        "method": "GET",
+        "encoding": PAGE_ENCODING,
+    }
+    undecodable: list[dict[str, Any]] = []
+    html: str | None = answer if isinstance(answer, str) else None
+    if isinstance(answer, bytes):
+        html, undecodable = decode_page(answer)
+    if html is not None:
+        payload["html"] = html
+    if isinstance(answer, bytes) and undecodable:
+        # Not all cp950: the raw keeps the bytes as they came (#774).
+        payload["undecodable"] = undecodable
+        payload["content_base64"] = base64.b64encode(answer).decode("ascii")
+    captured = capture_payload(RAW_SOURCE, url, payload, month.last_day.isoformat())
     raw = pipeline._upsert_raw_payload(db, run, captured)
     db.flush()
     item: dict[str, Any] = {"raw_sha256": captured.sha256, "raw_payload_id": raw.id}
+    if html is None:
+        return {
+            **item,
+            "status": "failed",
+            "error": f"{url} is not {PAGE_ENCODING}: more than {MAX_UNDECODABLE} "
+            f"undecodable characters, the first at byte {undecodable[0]['offset']}",
+            "undecodable": undecodable,
+        }
+    if undecodable:
+        item["undecodable"] = undecodable
     deadline, calendar = deadline_and_calendar
     fetched_on = _taipei_day(captured.collected_at)
     try:
@@ -903,6 +1003,8 @@ def _fetch_and_store(
         }
     except OfficialDataError as exc:
         return {**item, "status": "failed", "error": str(exc)}
+    if undecodable:
+        item["replaced_cells"] = replaced_cells(rows)
     available, basis = availability(deadline, fetched_on)
     counts = dict.fromkeys((*OUTCOMES, "outside_universe", "duplicate"), 0)
     duplicate_codes: list[str] = []

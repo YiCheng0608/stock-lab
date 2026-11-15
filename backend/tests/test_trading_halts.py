@@ -991,3 +991,174 @@ def test_the_cli_cuts_a_long_range_to_each_reports_first_day(env):
         "TPEx": "2013-01-01",
     }
     assert result["warnings"] == []
+
+
+# ---- one stop listed more than once (#774) ----
+
+# TWTAUU 2011-01-01..2024-09-30 (研究 DB raw 31040) lists 3536 誠創 resuming
+# 2015-03-20 three times, one row per announcement: the first before its
+# 除權參考價 was published, the last after the resumption.
+TWSE_3536 = [
+    ["104/03/20", "3536", "誠創", "6.58", "13.33", "14.25", "12.15", "13.35", "--"]
+    + ["彌補虧損", "3536  ,20150107"],
+    ["104/03/20", "3536", "誠創", "6.58", "13.33", "14.25", "12.15", "13.35", "13.06"]
+    + ["彌補虧損", "3536  ,20150113"],
+    ["104/03/20", "3536", "誠創", "6.58", "13.33", "14.25", "12.15", "13.35", "13.06"]
+    + ["彌補虧損", "3536  ,20150331"],
+]
+# The same answer: 5906 renamed between its two rows.
+TWSE_5906 = [
+    ["105/07/14", "5906", "F-台南", "1.77", "5.68", "6.24", "5.12", "5.68", "--"]
+    + ["彌補虧損", "5906  ,20160624"],
+    ["105/07/14", "5906", "台南-KY", "1.77", "5.68", "6.24", "5.12", "5.68", "--"]
+    + ["彌補虧損", "5906  ,20160629"],
+]
+# Another stop of the range, listed once.
+TWSE_2348 = ["104/02/16", "2348", "力廣", "2.49", "6.99", "7.47", "6.51", "6.99"]
+TWSE_2348 += ["--", "彌補虧損", "2348  ,20150203"]
+LONG_START, LONG_END = date(2015, 1, 1), date(2016, 12, 31)
+
+
+def test_rows_of_one_stop_that_agree_are_all_kept_for_the_bars_to_decide():
+    records, rejected = sources.parse_twse_reduction_payload(
+        twse_payload(LONG_START, LONG_END, *TWSE_3536, *TWSE_5906, TWSE_2348),
+        start=LONG_START,
+        end=LONG_END,
+    )
+
+    assert [
+        (item.symbol, item.halt_start, item.last_trade_date) for item in records
+    ] == [
+        ("3536", date(2015, 1, 8), date(2015, 1, 7)),
+        ("3536", date(2015, 1, 14), date(2015, 1, 13)),
+        ("5906", date(2016, 6, 25), date(2016, 6, 24)),
+        ("5906", date(2016, 6, 30), date(2016, 6, 29)),
+        ("2348", date(2015, 2, 4), date(2015, 2, 3)),
+    ]
+    # Each row is kept as published, and names the rows it was listed with.
+    assert records[0].details["除權參考價"] == "--"
+    assert records[1].details["除權參考價"] == "13.06"
+    assert records[0].details["same_resumption_rows"] == [
+        "3536  ,20150107",
+        "3536  ,20150113",
+    ]
+    assert "same_resumption_rows" not in records[4].details
+    # The row announced after the resumption is left out as before.
+    assert rejected == [
+        "3536 resuming 2015-03-20: 詳細資料 '3536  ,20150331' names no earlier "
+        "last trading day"
+    ]
+
+
+def test_rows_of_one_stop_with_two_prices_leave_out_only_that_code():
+    other_price = [*TWSE_3536[1][:4], "13.40", *TWSE_3536[1][5:]]
+
+    records, rejected = sources.parse_twse_reduction_payload(
+        twse_payload(LONG_START, LONG_END, TWSE_3536[0], other_price, TWSE_2348),
+        start=LONG_START,
+        end=LONG_END,
+    )
+
+    assert [item.symbol for item in records] == ["2348"]
+    assert rejected == [
+        "3536 resuming 2015-03-20: 2 rows disagree on 恢復買賣參考價 ['13.33', '13.40']"
+    ]
+
+
+def test_a_tpex_code_listed_twice_with_two_stops_leaves_out_only_that_code():
+    start, end = date(2026, 11, 1), date(2026, 11, 30)
+    again = [*TPEX_4534[:-1], _tpex_detail("4534", "慶騰", "115/11/06", "115/11/16")]
+
+    records, rejected = sources.parse_tpex_reduction_payload(
+        tpex_payload(start, end, TPEX_4534, TPEX_OTHER, again),
+        start=start,
+        end=end,
+    )
+
+    assert [item.symbol for item in records] == ["9958"]
+    assert rejected == ["4534 resuming 2026-11-16: listed twice with other stops"]
+
+
+def _long_range_cli(env, bars):
+    """``trading-halts`` over ``LONG_START``..``LONG_END`` with ``bars``
+    (symbol → [(day, close)]) stored; the TWSE answer is 3536's three rows
+    and 2348's one."""
+
+    def fetcher(url, **_kwargs):
+        if url.startswith(sources.TWSE_REDUCTION_ENDPOINT):
+            return twse_payload(LONG_START, LONG_END, *TWSE_3536, TWSE_2348)
+        return tpex_payload(LONG_START, LONG_END)
+
+    with env() as db:
+        for symbol in ("3536", "2348"):
+            instrument = Instrument(
+                market="TW",
+                exchange="TWSE",
+                symbol=symbol,
+                name=symbol,
+                instrument_type="stock",
+                status="active",
+            )
+            db.add(instrument)
+            db.flush()
+            for day, close in bars.get(symbol, []):
+                db.add(
+                    MarketBar(
+                        instrument_id=instrument.id,
+                        trading_date=day,
+                        open=close,
+                        high=close,
+                        low=close,
+                        close=close,
+                        adj_close=close,
+                        volume=1000,
+                        turnover=1000 * close,
+                        source="official-fixture",
+                    )
+                )
+        db.commit()
+    result = trading_halts.run_trading_halts(LONG_START, LONG_END, fetcher=fetcher)
+    with env() as db:
+        return result, _halts(db)
+
+
+def test_the_bars_pick_the_one_stop_of_a_stop_listed_three_times(env):
+    # 3536 traded 01/08～01/13 and last closed at the stated 6.58: the
+    # 01/07 row moves past those bars to the 01/13 row's stop, so both rows
+    # give one stop and it is written once, from the row the bars did not move.
+    traded = [(day, 6.58) for day in _weekdays(date(2015, 1, 5), 7)]  # 01/05…01/13
+
+    result, halts = _long_range_cli(env, {"3536": traded})
+
+    assert set(halts) == {("TWSE", "3536"), ("TWSE", "2348")}
+    halt = halts[("TWSE", "3536")]
+    assert (halt.halt_start, halt.last_trade_date, halt.resume_date) == (
+        date(2015, 1, 14),
+        date(2015, 1, 13),
+        date(2015, 3, 20),
+    )
+    assert halt.details_json["詳細資料"] == "3536  ,20150113"
+    assert halt.details_json["same_resumption_rows"] == [
+        "3536  ,20150107",
+        "3536  ,20150113",
+    ]
+    assert "stated_last_trade_date" not in halt.details_json
+    twse = result["exchanges"]["TWSE"]
+    assert (twse["inserted"], twse["rejected"], twse["conflicts"]) == (2, 1, 0)
+    assert "moved_past_bars" not in twse
+
+
+def test_a_stop_whose_rows_the_bars_leave_two_stops_leaves_out_only_that_code(env):
+    # No bar of 3536 in the range: either row's stop fits, so neither is
+    # written; 2348 is.
+    result, halts = _long_range_cli(env, {})
+
+    assert set(halts) == {("TWSE", "2348")}
+    twse = result["exchanges"]["TWSE"]
+    assert (twse["inserted"], twse["conflicts"]) == (1, 1)
+    assert result["status"] == "partial"
+    assert (
+        "TWSE trading halts rejected: 3536 resuming 2015-03-20: 2 rows give 2 stops "
+        "the bars allow: 2015-01-08..2015-03-20 (詳細資料 '3536  ,20150107'); "
+        "2015-01-14..2015-03-20 (詳細資料 '3536  ,20150113')"
+    ) in result["warnings"]
