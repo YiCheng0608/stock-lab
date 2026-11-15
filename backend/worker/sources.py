@@ -919,11 +919,16 @@ def _write_durably(target: Path, data: bytes) -> None:
     _fsync_directory(target.parent)
 
 
+# A raw file is ``<sha256><suffix>``: JSON captures, and the MOPS XBRL archives kept as
+# the zip itself (worker.quarterly_xbrl, #781 decision 6894583382).
+RAW_FILE_SUFFIXES = (".json", ".zip")
+
+
 def write_raw_file(target: Path, data: bytes) -> None:
     """Write a raw capture whose file name is its sha256; refuse any other content."""
 
     digest = hashlib.sha256(data).hexdigest()
-    if target.name != f"{digest}.json":
+    if target.name not in {f"{digest}{suffix}" for suffix in RAW_FILE_SUFFIXES}:
         raise OfficialDataError(
             f"raw payload sha256 {digest} does not match its file name: {target}"
         )
