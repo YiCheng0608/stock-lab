@@ -19,7 +19,8 @@ dates disagree (sources' parsers) is left out with a warning; so is one whose
 security has a stored bar inside the stop, except a TWSE row whose stated
 last trading day is a session early (``_check_bars``).  A stop TWSE lists in
 several rows that agree is written once if the bars leave its rows one stop,
-and left out otherwise (``_choose``, #774).  A code without a stored
+and left out otherwise (``_choose``, #774); a stop left out because its rows
+disagree keeps its stored row (review of PR #778).  A code without a stored
 instrument is counted, not written.
 
 collect asks for the resumptions from ten days before to sixty days after the
@@ -146,13 +147,14 @@ def _choose(
     db: Session, instrument_id: int, group: list[TradingHaltRecord]
 ) -> tuple[TradingHaltRecord | None, bool, str | None]:
     """The one stop the rows of a resumption allow, whether it was moved past
-    bars, or None and why not.
+    bars, and the warning to record (None when there is nothing to say).
 
     Each row is checked against the stored bars (``_check_bars``) on its own.
     The rows must end up with one stop (``halt_start`` and last trading day):
     none, or two different ones, leave the security out (#774: 3536 resuming
     2015-03-20 is listed with 2015-01-07 and 2015-01-13).  Of the rows giving
-    that stop, the first one the bars did not move is kept.
+    that stop, the first one the bars did not move is kept; the other rows
+    the bars rejected are named in the warning (review of PR #778).
     """
 
     checked: list[tuple[TradingHaltRecord, TradingHaltRecord]] = []
@@ -163,14 +165,11 @@ def _choose(
             reasons.append(str(conflict))
         else:
             checked.append((record, result))
-    if len(group) == 1:
-        if not checked:
-            return None, False, reasons[0]
-        record, result = checked[0]
-        return result, result is not record, None
     first = group[0]
     stops = {(result.halt_start, result.last_trade_date) for _, result in checked}
     if len(stops) != 1:
+        if len(group) == 1:
+            return None, False, reasons[0]
         found = "; ".join(
             f"{result.halt_start}..{result.resume_date} "
             f"(詳細資料 {record.details.get('詳細資料')!r})"
@@ -184,10 +183,18 @@ def _choose(
             + (f": {found}" if found else "")
             + (f"; {'; '.join(reasons)}" if reasons else ""),
         )
-    for record, result in checked:
-        if result is record:
-            return result, False, None
-    return checked[0][1], True, None
+    record, result = next(
+        ((record, result) for record, result in checked if result is record),
+        checked[0],
+    )
+    note = None
+    if reasons:
+        note = (
+            f"{first.symbol} resuming {first.resume_date}: kept "
+            f"{record.details.get('詳細資料')!r}, rows the bars reject: "
+            + "; ".join(reasons)
+        )
+    return result, result is not record, note
 
 
 def _apply_window(
@@ -239,31 +246,57 @@ def _apply_window(
     # A stop the answer lists more than once arrives as one record per row
     # (sources' parsers): its rows are checked together.
     groups: dict[tuple[int, date], list[TradingHaltRecord]] = {}
-    for record in records:
+    outside: set[tuple[str, date]] = set()
+
+    def instrument_of(symbol: str) -> Instrument | None:
         # A stored security outside the collect universe (delisted since) keeps
         # its row: the answer still lists it.
-        instrument = instruments.get((record.exchange, record.symbol)) or db.scalar(
+        return instruments.get((window.exchange, symbol)) or db.scalar(
             select(Instrument).where(
-                Instrument.exchange == record.exchange,
-                Instrument.symbol == record.symbol,
+                Instrument.exchange == window.exchange,
+                Instrument.symbol == symbol,
             )
         )
+
+    for record in records:
+        instrument = instrument_of(record.symbol)
         if instrument is None:
-            outcome["outside_universe"] += 1
+            # Once per stop, however many rows list it.
+            outside.add((record.symbol, record.resume_date))
             continue
         groups.setdefault((instrument.id, record.resume_date), []).append(record)
+    outcome["outside_universe"] = len(outside)
+    # Stops whose rows disagree with each other keep what is stored: the
+    # answer cannot say which row is right, so it removes nothing (review of
+    # PR #778).  A stop of one row whose own dates are wrong is removed as
+    # before.
+    held: dict[tuple[int, date], str] = {}
+    for symbol, resume in window.clashing:
+        instrument = instrument_of(symbol)
+        if instrument is not None:
+            held[(instrument.id, resume)] = symbol
+    notes: list[str] = []
     for key, group in groups.items():
-        chosen, moved, conflict = _choose(db, key[0], group)
+        chosen, moved, message = _choose(db, key[0], group)
         if chosen is None:
-            conflicts.append(str(conflict))
+            conflicts.append(str(message))
+            if len(group) > 1:
+                held[key] = group[0].symbol
             continue
+        if message:
+            notes.append(message)
         if moved:
             outcome["moved_past_bars"] = outcome.get("moved_past_bars", 0) + 1
         incoming[key] = chosen
+    kept: list[str] = []
     for key, row in stored.items():
-        if key not in incoming:
-            db.delete(row)
-            outcome["removed"] += 1
+        if key in incoming:
+            continue
+        if key in held:
+            kept.append(f"{held[key]} resuming {key[1]}")
+            continue
+        db.delete(row)
+        outcome["removed"] += 1
     for key, record in incoming.items():
         row = stored.get(key)
         if row is not None and _stored_content(row) == _content(record):
@@ -290,9 +323,16 @@ def _apply_window(
         row.raw_payload_id = raw.id
         row.details_json = dict(record.details)
     db.flush()
-    for text in conflicts:
+    for text in conflicts + notes:
         warnings.append(f"{window.exchange} trading halts rejected: {text}")
+    for text in kept:
+        warnings.append(
+            f"{window.exchange} trading halts kept the stored stop of {text}: "
+            "the answer's rows for it disagree"
+        )
     outcome["conflicts"] = len(conflicts)
+    if kept:
+        outcome["kept_on_conflict"] = len(kept)
     outcome["raw_payload_id"] = raw.id
     return outcome
 

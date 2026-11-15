@@ -156,7 +156,7 @@ def tpex_payload(start, end, *rows, total=None):
 
 
 def test_twse_rows_give_the_stop_from_the_day_after_the_last_trade():
-    records, rejected = sources.parse_twse_reduction_payload(
+    records, rejected, clashing = sources.parse_twse_reduction_payload(
         twse_payload(START, END, TWSE_3714, TWSE_1808), start=START, end=END
     )
 
@@ -180,7 +180,7 @@ def test_twse_rows_give_the_stop_from_the_day_after_the_last_trade():
 
 
 def test_tpex_rows_give_the_stated_first_stopped_day():
-    records, rejected = sources.parse_tpex_reduction_payload(
+    records, rejected, clashing = sources.parse_tpex_reduction_payload(
         tpex_payload(START, END, TPEX_4534), start=START, end=END
     )
 
@@ -198,10 +198,10 @@ def test_tpex_rows_give_the_stated_first_stopped_day():
 def test_empty_answers_are_an_empty_range():
     assert sources.parse_twse_reduction_payload(
         twse_payload(START, END), start=START, end=END
-    ) == ([], [])
+    ) == ([], [], [])
     assert sources.parse_tpex_reduction_payload(
         tpex_payload(START, END), start=START, end=END
-    ) == ([], [])
+    ) == ([], [], [])
 
 
 @pytest.mark.parametrize(
@@ -235,10 +235,10 @@ def test_a_row_whose_own_dates_disagree_is_left_out_and_named():
     ]
     tpex_no_start = [*TPEX_4534[:-1], _tpex_detail("4534", "慶騰", "", "115/11/16")]
 
-    twse, twse_rejected = sources.parse_twse_reduction_payload(
+    twse, twse_rejected, _ = sources.parse_twse_reduction_payload(
         twse_payload(START, END, twse_wrong_code, twse_late), start=START, end=END
     )
-    tpex, tpex_rejected = sources.parse_tpex_reduction_payload(
+    tpex, tpex_rejected, _ = sources.parse_tpex_reduction_payload(
         tpex_payload(START, END, tpex_wrong_resume, tpex_no_start),
         start=START,
         end=END,
@@ -268,7 +268,7 @@ def _halt_capture(exchange, payload, day=DAY):
         day.isoformat(),
         collected_at=datetime(day.year, day.month, day.day, 13, 30),
     )
-    records, rejected = sources.parse_reduction_payload(
+    records, rejected, clashing = sources.parse_reduction_payload(
         exchange,
         captured.payload,
         start=start,
@@ -284,6 +284,7 @@ def _halt_capture(exchange, payload, day=DAY):
         end=end,
         payload_sha256=captured.sha256,
         rejected=tuple(rejected),
+        clashing=tuple(clashing),
     )
     return captured, records, window
 
@@ -1020,7 +1021,7 @@ LONG_START, LONG_END = date(2015, 1, 1), date(2016, 12, 31)
 
 
 def test_rows_of_one_stop_that_agree_are_all_kept_for_the_bars_to_decide():
-    records, rejected = sources.parse_twse_reduction_payload(
+    records, rejected, clashing = sources.parse_twse_reduction_payload(
         twse_payload(LONG_START, LONG_END, *TWSE_3536, *TWSE_5906, TWSE_2348),
         start=LONG_START,
         end=LONG_END,
@@ -1053,7 +1054,7 @@ def test_rows_of_one_stop_that_agree_are_all_kept_for_the_bars_to_decide():
 def test_rows_of_one_stop_with_two_prices_leave_out_only_that_code():
     other_price = [*TWSE_3536[1][:4], "13.40", *TWSE_3536[1][5:]]
 
-    records, rejected = sources.parse_twse_reduction_payload(
+    records, rejected, clashing = sources.parse_twse_reduction_payload(
         twse_payload(LONG_START, LONG_END, TWSE_3536[0], other_price, TWSE_2348),
         start=LONG_START,
         end=LONG_END,
@@ -1063,13 +1064,15 @@ def test_rows_of_one_stop_with_two_prices_leave_out_only_that_code():
     assert rejected == [
         "3536 resuming 2015-03-20: 2 rows disagree on 恢復買賣參考價 ['13.33', '13.40']"
     ]
+    # Named apart too: the store keeps what it has for this stop.
+    assert clashing == [("3536", date(2015, 3, 20))]
 
 
 def test_a_tpex_code_listed_twice_with_two_stops_leaves_out_only_that_code():
     start, end = date(2026, 11, 1), date(2026, 11, 30)
     again = [*TPEX_4534[:-1], _tpex_detail("4534", "慶騰", "115/11/06", "115/11/16")]
 
-    records, rejected = sources.parse_tpex_reduction_payload(
+    records, rejected, clashing = sources.parse_tpex_reduction_payload(
         tpex_payload(start, end, TPEX_4534, TPEX_OTHER, again),
         start=start,
         end=end,
@@ -1077,21 +1080,29 @@ def test_a_tpex_code_listed_twice_with_two_stops_leaves_out_only_that_code():
 
     assert [item.symbol for item in records] == ["9958"]
     assert rejected == ["4534 resuming 2026-11-16: listed twice with other stops"]
+    assert clashing == [("4534", date(2026, 11, 16))]
 
 
-def _long_range_cli(env, bars):
+def _long_range_cli(env, bars, rows=(*TWSE_3536, TWSE_2348)):
     """``trading-halts`` over ``LONG_START``..``LONG_END`` with ``bars``
-    (symbol → [(day, close)]) stored; the TWSE answer is 3536's three rows
-    and 2348's one."""
+    (symbol → [(day, close)]) stored; the TWSE answer is ``rows``, by default
+    3536's three rows and 2348's one.  3536 and 2348 are stored the first
+    time."""
 
     def fetcher(url, **_kwargs):
         if url.startswith(sources.TWSE_REDUCTION_ENDPOINT):
-            return twse_payload(LONG_START, LONG_END, *TWSE_3536, TWSE_2348)
+            return twse_payload(LONG_START, LONG_END, *rows)
         return tpex_payload(LONG_START, LONG_END)
 
     with env() as db:
+        stored = {
+            item.symbol: item
+            for item in db.scalars(
+                select(Instrument).where(Instrument.exchange == "TWSE")
+            )
+        }
         for symbol in ("3536", "2348"):
-            instrument = Instrument(
+            instrument = stored.get(symbol) or Instrument(
                 market="TW",
                 exchange="TWSE",
                 symbol=symbol,
@@ -1162,3 +1173,62 @@ def test_a_stop_whose_rows_the_bars_leave_two_stops_leaves_out_only_that_code(en
         "the bars allow: 2015-01-08..2015-03-20 (詳細資料 '3536  ,20150107'); "
         "2015-01-14..2015-03-20 (詳細資料 '3536  ,20150113')"
     ) in result["warnings"]
+
+
+def test_a_row_the_bars_reject_beside_the_kept_one_is_named(env):
+    # Review of PR #778: two rows of one stop agree (10.00 against a price
+    # not yet given), 3536 traded until 01/13 at 12.00.  The 01/07 row's stop
+    # has those bars and its 停止買賣前收盤 is not their close, so the bars
+    # reject it; the 01/13 row's stop is written and the rejected row is named.
+    early = [*TWSE_3536[0][:3], "10.00", *TWSE_3536[0][4:]]
+    late = [*TWSE_3536[1][:3], "-", *TWSE_3536[1][4:]]
+    traded = [(day, 12.0) for day in _weekdays(date(2015, 1, 5), 7)]  # 01/05…01/13
+
+    result, halts = _long_range_cli(env, {"3536": traded}, rows=(early, late))
+
+    halt = halts[("TWSE", "3536")]
+    assert (halt.halt_start, halt.last_trade_date) == (
+        date(2015, 1, 14),
+        date(2015, 1, 13),
+    )
+    assert (
+        "TWSE trading halts rejected: 3536 resuming 2015-03-20: kept "
+        "'3536  ,20150113', rows the bars reject: 3536 has a bar on 2015-01-08 "
+        "inside its stop 2015-01-08..2015-03-20"
+    ) in result["warnings"]
+    assert result["status"] == "partial"
+
+
+@pytest.mark.parametrize(
+    "second",
+    [
+        pytest.param(
+            (TWSE_3536[0], [*TWSE_3536[1][:4], "13.40", *TWSE_3536[1][5:]], TWSE_2348),
+            id="prices-disagree",
+        ),
+        # No bar of 3536: its rows give two stops.
+        pytest.param((*TWSE_3536, TWSE_2348), id="two-stops"),
+    ],
+)
+def test_a_stop_whose_rows_disagree_keeps_the_stored_row(env, second):
+    # Review of PR #778: collect asks the same range again every day; an
+    # answer that adds a disagreeing row for a stored stop must not remove it.
+    first, halts = _long_range_cli(env, {}, rows=(TWSE_3536[1], TWSE_2348))
+    before = halts[("TWSE", "3536")]
+    assert before.halt_start == date(2015, 1, 14)
+
+    result, halts = _long_range_cli(env, {}, rows=second)
+
+    after = halts[("TWSE", "3536")]
+    assert (after.halt_start, after.raw_payload_id, after.details_json) == (
+        before.halt_start,
+        before.raw_payload_id,
+        before.details_json,
+    )
+    twse = result["exchanges"]["TWSE"]
+    assert (twse["removed"], twse["kept_on_conflict"]) == (0, 1)
+    assert (
+        "TWSE trading halts kept the stored stop of 3536 resuming 2015-03-20: "
+        "the answer's rows for it disagree"
+    ) in result["warnings"]
+    assert ("TWSE", "2348") in halts

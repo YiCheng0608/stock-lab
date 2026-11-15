@@ -281,6 +281,9 @@ class TradingHaltWindow:
     end: date
     payload_sha256: str | None
     rejected: tuple[str, ...] = ()
+    # (code, resumption) the answer lists with rows that disagree (#774): the
+    # stored stop is kept, as the rows cannot say which one is right.
+    clashing: tuple[tuple[str, date], ...] = ()
 
 
 @dataclass
@@ -2251,6 +2254,11 @@ _TWSE_REDUCTION_DETAIL = re.compile(r"\s*([0-9A-Z]+)\s*,\s*(\d{8})\s*")
 _TPEX_DETAIL_DATE = r"\s*:?\s*(\d{2,3}/\d{1,2}/\d{1,2})"
 
 
+# A reduction table's stops, the rows left out (as text) and the (code,
+# resumption) left out because its rows disagree with each other (#774).
+ReductionAnswer = tuple[list[TradingHaltRecord], list[str], list[tuple[str, date]]]
+
+
 def trading_halt_warning(exchange: str, exc: Exception) -> str:
     """The non-core warning for a table that could not be fetched, read or stored."""
 
@@ -2306,7 +2314,7 @@ def parse_twse_reduction_payload(
     end: date,
     endpoint: str = TWSE_REDUCTION_ENDPOINT,
     payload_sha256: str | None = None,
-) -> tuple[list[TradingHaltRecord], list[str]]:
+) -> ReductionAnswer:
     """Read TWSE ``TWTAUU`` (股票減資恢復買賣參考價格) for ``start``..``end``.
 
     ``stat`` 很抱歉，沒有符合條件的資料 is an empty range.  Each row's 詳細資料
@@ -2321,7 +2329,8 @@ def parse_twse_reduction_payload(
     One stop can be listed more than once, one row per announcement (3536
     resuming 2015-03-20 three times, #774).  Rows of one code and resumption
     that give two values for a column other than 名稱 and 詳細資料 (``-``／``--``
-    agree with any value) leave that code out, named in the second list.
+    agree with any value) leave that code out, named in the second list and, as (code,
+    resumption), in the third.
     Rows that agree are all returned, each with ``same_resumption_rows`` (the
     group's 詳細資料) in ``details``: the stored bars decide which stop is
     right (``trading_halts``).
@@ -2332,7 +2341,7 @@ def parse_twse_reduction_payload(
     stat = str(payload.get("stat") or "").strip()
     if stat != "OK":
         if "沒有符合條件" in stat:
-            return [], []
+            return [], [], []
         raise OfficialDataError(f"TWSE capital reduction stat {stat!r}")
     reported = (str(payload.get("strDate") or ""), str(payload.get("endDate") or ""))
     if reported != (start.strftime("%Y%m%d"), end.strftime("%Y%m%d")):
@@ -2382,6 +2391,7 @@ def parse_twse_reduction_payload(
         )
         groups.setdefault((symbol, resume), []).append(record)
     records: list[TradingHaltRecord] = []
+    clashing: list[tuple[str, date]] = []
     for (symbol, resume), group in groups.items():
         if len(group) == 1:
             records.extend(group)
@@ -2392,13 +2402,14 @@ def parse_twse_reduction_payload(
                 f"{symbol} resuming {resume}: {len(group)} rows disagree on "
                 f"{disagreement}"
             )
+            clashing.append((symbol, resume))
             continue
         listed = [str(item.details.get("詳細資料") or "").strip() for item in group]
         records.extend(
             replace(item, details={**item.details, "same_resumption_rows": listed})
             for item in group
         )
-    return records, rejected
+    return records, rejected, clashing
 
 
 # Values of a TWTAUU price column not yet given (1808 潤隆's ``-``, 3536's
@@ -2433,16 +2444,16 @@ def parse_tpex_reduction_payload(
     end: date,
     endpoint: str = TPEX_REDUCTION_ENDPOINT,
     payload_sha256: str | None = None,
-) -> tuple[list[TradingHaltRecord], list[str]]:
+) -> ReductionAnswer:
     """Read TPEx ``revivt`` (減資恢復買賣) for ``start``..``end``.
 
     The 詳細資料 HTML names the code, 停止買賣日期 and 恢復買賣日期: the first
     and the resumption must be readable, the code and the resumption must
     match the row, and the stop must begin before the resumption, or the row
     is left out and named in the second list, as is a code listed twice for
-    one resumption with two stops (#774).  ``totalCount`` above the rows
-    (a truncated answer), another range, other columns or a resumption
-    outside the range reject the table whole.
+    one resumption with two stops (#774), also in the third list.  ``totalCount``
+    above the rows (a truncated answer), another range, other columns or a
+    resumption outside the range reject the table whole.
     """
 
     if not isinstance(payload, dict) or not isinstance(payload.get("tables"), list):
@@ -2523,7 +2534,7 @@ def parse_tpex_reduction_payload(
         records[key] = record
     for symbol, resume in clashing:
         rejected.append(f"{symbol} resuming {resume}: listed twice with other stops")
-    return list(records.values()), rejected
+    return list(records.values()), rejected, list(clashing)
 
 
 def parse_reduction_payload(
@@ -2534,7 +2545,7 @@ def parse_reduction_payload(
     end: date,
     endpoint: str,
     payload_sha256: str | None = None,
-) -> tuple[list[TradingHaltRecord], list[str]]:
+) -> ReductionAnswer:
     parse = (
         parse_twse_reduction_payload
         if exchange == "TWSE"
@@ -2561,7 +2572,7 @@ def fetch_reduction_window(
 
     endpoint = reduction_query(exchange, start, end)
     captured = fetch(endpoint, data_as_of)
-    records, rejected = parse_reduction_payload(
+    records, rejected, clashing = parse_reduction_payload(
         exchange,
         captured.payload,
         start=start,
@@ -2577,6 +2588,7 @@ def fetch_reduction_window(
         end=end,
         payload_sha256=captured.sha256,
         rejected=tuple(rejected),
+        clashing=tuple(clashing),
     )
     return records, window, captured
 

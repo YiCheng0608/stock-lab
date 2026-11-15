@@ -85,6 +85,8 @@ MAX_UNDECODABLE = 8
 REPLACEABLE = ("公司名稱", "備註")
 # What an undecodable character is read as.
 REPLACEMENT = chr(0xFFFD)
+# Where a no-data page's U+FFFD are: it has no company row.
+NO_COMPANY_ROW = "no company row"
 # The second byte of a Big5 character.
 _TRAIL_BYTES = (range(0x40, 0x7F), range(0xA1, 0xFF))
 # Waits before the second, third and fourth try of one page (review of PR #533).
@@ -603,6 +605,19 @@ def parse_page(html: str, market: str, month: Month, page: int) -> list[PageRow]
     return result
 
 
+def _replacement_warning(key: str, item: dict[str, Any]) -> str:
+    """The run warning of a page read with U+FFFD in it."""
+
+    cells = ", ".join(item["replaced_cells"])
+    if item.get("undecodable"):
+        offsets = ", ".join(str(entry["offset"]) for entry in item["undecodable"])
+        return (
+            f"{key}: {len(item['undecodable'])} undecodable {PAGE_ENCODING} "
+            f"characters replaced with U+FFFD at bytes {offsets}: {cells}"
+        )
+    return f"{key}: {item.get('replaced', 0)} U+FFFD in the page text: {cells}"
+
+
 def replaced_cells(rows: list[PageRow]) -> list[str]:
     """``<code> <column> ×<n>`` for each cell holding U+FFFD."""
 
@@ -866,16 +881,8 @@ def backfill_monthly_revenues(
                         failures_in_a_row += 1
                     else:
                         failures_in_a_row = 0
-                        if item.get("undecodable"):
-                            offsets = ", ".join(
-                                str(entry["offset"]) for entry in item["undecodable"]
-                            )
-                            warnings.append(
-                                f"{key}: {len(item['undecodable'])} undecodable "
-                                f"{PAGE_ENCODING} characters replaced with U+FFFD "
-                                f"at bytes {offsets}: "
-                                + ", ".join(item.get("replaced_cells", []))
-                            )
+                        if "replaced_cells" in item:
+                            warnings.append(_replacement_warning(key, item))
                         if item["duplicate"]:
                             codes = ", ".join(item["duplicate_codes"])
                             warnings.append(
@@ -987,6 +994,8 @@ def _fetch_and_store(
     try:
         rows = parse_page(html, market, month, page)
     except NoDataPage as exc:
+        if REPLACEMENT in html:
+            item["replaced_cells"] = [NO_COMPANY_ROW]
         if fetched_on <= deadline:
             # Nobody has filed yet: the first days of the month's window (#539).
             return {
@@ -1005,8 +1014,11 @@ def _fetch_and_store(
         }
     except OfficialDataError as exc:
         return {**item, "status": "failed", "error": str(exc)}
-    if undecodable:
+    if REPLACEMENT in html:
+        # A text answer (a test's or a replay's fetcher) has no bytes to point
+        # at, but its U+FFFD are reported all the same (review of PR #778).
         item["replaced_cells"] = replaced_cells(rows)
+        item["replaced"] = html.count(REPLACEMENT)
     available, basis = availability(deadline, fetched_on)
     counts = dict.fromkeys((*OUTCOMES, "outside_universe", "duplicate"), 0)
     duplicate_codes: list[str] = []

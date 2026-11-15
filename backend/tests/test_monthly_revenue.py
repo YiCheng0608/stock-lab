@@ -1325,3 +1325,46 @@ def test_a_page_that_is_all_cp950_keeps_its_raw_as_before(factory):
         raw = db.scalars(select(RawPayload).where(RawPayload.endpoint == url)).one()
         assert stored_payload(db, url) == before
     assert raw.sha256 == hashlib.sha256(sources._encode_payload(before)).hexdigest()
+
+
+def test_a_text_answer_with_replacements_is_reported_too(factory):
+    # Review of PR #778: a fetcher answering text (a test's, a replay of a
+    # stored ``html``) has no bytes to point at; its U+FFFD still give a
+    # warning, so the run is not ``success``.
+    text, _found = mr.decode_page(page_with_2539()[0])
+
+    class TextFetcher(PageFetcher):
+        def __call__(self, url):
+            if url == mr.page_url("sii", SEPTEMBER, 0):
+                self.urls.append(url)
+                return text
+            return super().__call__(url)
+
+    result = backfill(factory, TextFetcher(), months=1, end=SEPTEMBER)
+
+    assert result["status"] == "partial", result
+    assert result["warnings"] == [
+        "2026-09:sii:0: 2 U+FFFD in the page text: 2539 備註 ×2"
+    ]
+
+
+def test_a_no_data_page_with_an_undecodable_character_says_where_it_is(factory):
+    october = mr.Month(2026, 10)
+    page = no_data_html("sii", october).encode("cp950")
+    at = page.index("查無資料".encode("cp950"))
+    page = page[:at] + b"\xc8\xba" + page[at:]
+
+    class Fetcher(NoDataFetcher):
+        def __call__(self, url):
+            if url == mr.page_url("sii", october, 0):
+                self.urls.append(url)
+                return page
+            return super().__call__(url)
+
+    result = backfill(factory, Fetcher({october}), months=1, end=october)
+
+    assert result["pages"]["2026-10:sii:0"]["status"] == "empty"
+    assert result["warnings"] == [
+        f"2026-10:sii:0: 1 undecodable cp950 characters replaced with U+FFFD "
+        f"at bytes {at}: no company row"
+    ]
