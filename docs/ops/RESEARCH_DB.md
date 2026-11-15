@@ -57,6 +57,8 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none -u 0 -v stock-lab-research:/da
 
 **研究標記 `research-db.json`**：容器裡研究 volume 與正式 volume 都是 `/data/stock.db`，路徑分不出來，所以建研究 DB 時在 `stock.db` 旁邊寫這個檔（內容的 `purpose` 是 `research_history`）。`history_backfill.py` 要它存在、而且有設 `STOCK_SESSION_BASIS_START` 才起跑，否則印 `refused`、exit 2。正式 volume 永遠不放這個檔。
 
+**種子列的 raw 檔在正式 volume**：上面只複製 `stock.db`、`raw/` 是空的，所以研究 DB 從正式 DB 帶來的 `raw_payloads` 列（`collected_at` 早於建立研究 DB 的時間），檔案只在正式 volume `stock-lab_stock-data`，研究 volume 沒有副本。2026-11-15 有 11,780 列，檔案在正式 volume 都完整（[#772 回報](https://github.com/YiCheng0608/stock-lab/issues/772#issuecomment-6892968517)），統籌決定不補複製（[6893166947](https://github.com/YiCheng0608/stock-lab/issues/772#issuecomment-6893166947)）。稽核研究 DB 的 raw 時，這些列要對正式 volume 判讀：[`tools/audit/raw_files.py`](../../tools/audit/raw_files.py) 加上 `--fallback-raw-dir`，例如 `-v stock-lab-research:/data:ro -v stock-lab_stock-data:/prod:ro … --db /data/stock.db --fallback-raw-dir /prod/raw`，在正式 volume 完整的列記在 `whole_in_fallback`，不列為壞檔。
+
 ### 跑一批
 
 ```bash
