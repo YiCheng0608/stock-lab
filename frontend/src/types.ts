@@ -1625,6 +1625,43 @@ export type CandidateItem = {
   overnight_us_links?: string[]
   // The closes the row's sparkline draws (#653): only on /api/candidates items, missing on responses from before #653.
   recent_closes?: CandidateRecentCloses
+  // The 08:20 pre-open check's overnight news of the row (Issue 755): null until the list is checked; only on
+  // /api/candidates items, missing on responses from before Issue 755.
+  preopen_news?: PreopenNews | null
+}
+
+// One candidate's overnight news (Issue 755): the news collected after the list was computed, published from the list
+// date's 00:00 to the check, linked by the stock page's rule relation. direction is the AI's at the check (inference),
+// null when not judged yet; unknown when judged without a direction.
+export type PreopenNewsItem = {
+  id: string
+  title: string
+  display_time: string | null
+  event_date: string | null
+  time_precision: string
+  source_name: string
+  source_url: string | null
+  direction: 'positive' | 'negative' | 'mixed' | 'unknown' | null | string
+}
+
+export type PreopenNews = {
+  count: number
+  positive: number
+  negative: number
+  mixed: number
+  unknown: number
+  unscored: number
+  items: PreopenNewsItem[]
+}
+
+// /api/candidates' preopen_check (Issue 755): checked only for this very run of the list; not_checked before 08:20
+// and when the list was recomputed after the check.
+export type PreopenCheck = {
+  status: 'checked' | 'not_checked' | string
+  definition: string
+  checked_at: string | null
+  window_start: string | null
+  instruments_with_news: number
 }
 
 // The last 30 verified sessions to the list's date, old to new, and the stock's close on each: the stored daily bar's
@@ -1672,6 +1709,8 @@ export type CandidatesResponse = {
   }
   // The 隔夜美股 line (Issue 681); missing on responses from before it.
   overnight_us?: OvernightUs
+  // The pre-open check (Issue 755); missing on responses from before it.
+  preopen_check?: PreopenCheck
   items: CandidateItem[]
 }
 

@@ -2827,6 +2827,101 @@ def test_t22_fails_on_a_wrong_or_misplaced_line_or_row(tmp_path):
             page_checks.t22(FakeRun(tmp_path, _overnight(), {"today-1280": page}))
 
 
+# ---- T25 (Issue 755): the 開盤前檢查 line, the rows' 隔夜新聞 mark and the chosen row's news ----
+
+
+def _preopen(status="checked", news=(2, 0)):
+    payload = _overnight()
+    payload["candidates"]["preopen_check"] = {
+        "status": status,
+        "definition": "名單產生之後才收到的新聞",
+        "checked_at": "2026-11-16T00:20:04+00:00" if status == "checked" else None,
+        "window_start": "2026-11-13T14:03:53+00:00" if status == "checked" else None,
+        "instruments_with_news": sum(1 for count in news if count),
+    }
+    for item, count in zip(payload["candidates"]["items"], news):
+        item["preopen_news"] = (
+            {"count": count, "negative": 1 if count else 0}
+            if status == "checked"
+            else None
+        )
+    return payload
+
+
+PREOPEN_LINE = "開盤前檢查 2026/11/16 08:20 · 隔夜新聞 1 檔"
+PREOPEN_PAGE = (
+    "今日名單\n10 檔\n"
+    f"{US_LINE}\n"
+    f"{PREOPEN_LINE}\n"
+    "#1 2330 台積電 費半 +2.04% 上市 · 半導體（產業 #1）\n"
+    "隔夜新聞 2（可能負向 1）\n"
+    "隔夜新聞（開盤前檢查 2026/11/16 08:20）\n"
+    "名單產生之後才收到的新聞\n"
+    "#2 2881 富邦金 上市 · 金融（產業，未排名）\n"
+    "熱門族群\n"
+)
+PREOPEN_MARK = "隔夜新聞 2（可能負向 1）\n"
+
+
+def test_t25_passes_on_news_none_and_not_checked(tmp_path):
+    summary = page_checks.t25(
+        FakeRun(tmp_path, _preopen(), {"today-1280": PREOPEN_PAGE})
+    )
+    assert f"`{PREOPEN_LINE}`" in summary and "1／2 列標隔夜新聞" in summary
+    none = (
+        PREOPEN_PAGE.replace("隔夜新聞 1 檔", "隔夜新聞 0 檔")
+        .replace(PREOPEN_MARK, "")
+        .replace("隔夜新聞（開盤前檢查", "隔夜新聞 無（開盤前檢查")
+    )
+    assert "0／2 列" in page_checks.t25(
+        FakeRun(tmp_path, _preopen(news=(0, 0)), {"today-1280": none})
+    )
+    pending = (
+        PREOPEN_PAGE.replace(PREOPEN_LINE, "開盤前檢查 尚未檢查（每個交易日 08:20）")
+        .replace(PREOPEN_MARK, "")
+        .replace("隔夜新聞（開盤前檢查 2026/11/16 08:20）", "隔夜新聞 尚未檢查")
+    )
+    assert "尚未檢查" in page_checks.t25(
+        FakeRun(tmp_path, _preopen("not_checked"), {"today-1280": pending})
+    )
+
+
+def test_t25_fails_without_preopen_check_as_before_issue_755(tmp_path):
+    with pytest.raises(page_checks.Fail, match="沒有 preopen_check"):
+        page_checks.t25(FakeRun(tmp_path, _overnight(), {"today-1280": US_PAGE}))
+
+
+def test_t25_fails_on_a_wrong_line_mark_or_panel(tmp_path):
+    cases = [
+        (PREOPEN_PAGE.replace("08:20 · ", "08:21 · "), "預期恰一行"),
+        (
+            PREOPEN_PAGE.replace(f"{PREOPEN_LINE}\n", "").replace(
+                f"{US_LINE}\n", f"{PREOPEN_LINE}\n{US_LINE}\n"
+            ),
+            "不在 `隔夜美股`",
+        ),
+        (PREOPEN_PAGE.replace("（可能負向 1）", ""), "預期 `隔夜新聞 2（可能負向 1）`"),
+        (
+            PREOPEN_PAGE.replace("未排名）\n", "未排名）\n隔夜新聞 1\n"),
+            "卻有標記",
+        ),
+        # Review 6889365957: on the title line the ellipsis cut it off on a phone.
+        (
+            PREOPEN_PAGE.replace("+2.04% 上市", "+2.04% 隔夜新聞 2 上市"),
+            "要在下一行",
+        ),
+        (PREOPEN_PAGE.replace(f"{US_LINE}\n", ""), "不在 `隔夜美股`"),
+        (PREOPEN_PAGE.replace("名單產生之後才收到的新聞\n", ""), "不是定義"),
+        (
+            PREOPEN_PAGE.replace("隔夜新聞（開盤前檢查", "隔夜新聞 無（開盤前檢查"),
+            "缺選中個股",
+        ),
+    ]
+    for page, message in cases:
+        with pytest.raises(page_checks.Fail, match=message):
+            page_checks.t25(FakeRun(tmp_path, _preopen(), {"today-1280": page}))
+
+
 # ---- T23 and S16 (Issue 729): the copy that left the pages does not come back ----
 
 # The 今日名單 head before Issue 729 (Issue 693's line, the T+1 clause and the disclaimer) and after it.

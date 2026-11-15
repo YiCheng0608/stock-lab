@@ -98,6 +98,9 @@ def _sha(text: str) -> str:
 
 T = TRADING_DATE
 COLLECTED_AT = _at(T, 9, 30)  # 17:30 Taipei, after the official files
+# News 1 only: after the candidate run's computed_at (_at(T, 10), 18:00 Taipei), so the
+# pre-open check (#755) counts it.
+PREOPEN_NEWS_COLLECTED_AT = _at(T, 12, 0)  # 20:00 Taipei
 CREATED_AT = _at(date(2026, 1, 2), 0)
 
 # ---- instruments ----
@@ -1107,6 +1110,7 @@ def _news(
     symbols: list[str],
     raw_payload_id: int,
     language: str = "zh-Hant",
+    collected_at: datetime = COLLECTED_AT,
 ) -> dict[str, Any]:
     key = f"news:fixture:{item_id}"
     if published_at is not None:
@@ -1140,7 +1144,7 @@ def _news(
         "language": language,
         **temporal,
         "time_consistency": "verified",
-        "collected_at": COLLECTED_AT,
+        "collected_at": collected_at,
         "symbols_json": symbols,
         "theme_ids_json": [],
         "impact_scope": "instrument" if symbols else "market",
@@ -1166,6 +1170,9 @@ def _news_rows() -> list[dict[str, Any]]:
             published_at=_at(T, 1, 30),
             symbols=["TWSE:9101"],
             raw_payload_id=3,
+            # Collected by the 20:00 news run, after the list was computed (18:00 Taipei):
+            # the overnight news of the 08:20 pre-open check (#755 review 6889365957).
+            collected_at=PREOPEN_NEWS_COLLECTED_AT,
         ),
         _news(
             2,
@@ -1384,6 +1391,47 @@ def _daily_candidate_rows() -> list[dict[str, Any]]:
         }
         for index, row in enumerate(_FROZEN_CANDIDATES["rows"], start=1)
     ]
+
+
+PREOPEN_CHECKED_AT = _at(NEXT_SESSION, 0, 20)  # Monday 08:20 Taipei
+
+
+def _preopen_rows() -> list[dict[str, Any]]:
+    """The 08:20 pre-open check of T's list (Issue #755), as worker.preopen writes it
+    (test_verify_fixture checks it against app.preopen_news.check_rows): 9101 has news 1,
+    linked by symbols_json, collected after the list (PREOPEN_NEWS_COLLECTED_AT) and
+    judged positive; the other two have none."""
+
+    news = {INSTRUMENT_IDS["9101"]: [(1, "positive")]}
+    rows = []
+    for index, row in enumerate(_FROZEN_CANDIDATES["rows"], start=1):
+        entries = news.get(row["instrument_id"], [])
+        directions = [direction for _, direction in entries]
+        rows.append(
+            {
+                "id": index,
+                "list_date": T,
+                "candidate_run_id": 1,
+                "instrument_id": row["instrument_id"],
+                "rank": row["rank"],
+                "window_start": _at(T, 10),
+                "checked_at": PREOPEN_CHECKED_AT,
+                "news_count": len(entries),
+                "positive": directions.count("positive"),
+                "negative": directions.count("negative"),
+                "mixed": directions.count("mixed"),
+                "unknown": directions.count("unknown"),
+                "unscored": directions.count(None),
+                "news_json": [
+                    {"news_id": news_id, "direction": direction}
+                    for news_id, direction in entries
+                ],
+                # worker.news_llm.PROMPT_VERSION, the version the check reads (not the
+                # score config's news_v3); test_verify_fixture compares with check_rows.
+                "prompt_version": NEWS_LLM_VERSION,
+            }
+        )
+    return rows
 
 
 _NOTES = {
@@ -1889,6 +1937,7 @@ TABLES: dict[str, list[dict[str, Any]]] = {
     "news_llm_results": _llm_rows(),
     "candidate_runs": _candidate_run_rows(),
     "daily_candidates": _daily_candidate_rows(),
+    "preopen_news_checks": _preopen_rows(),
     "candidate_llm_notes": _candidate_note_rows(),
     "tracking_plans": _tracking_plan_rows(),
     "tracking_plan_sessions": _tracking_plan_session_rows(),
@@ -2073,6 +2122,13 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         ("candidates", "items[].instrument.symbol", ["9101", "9103", "9201"]),
         ("candidates", "items[].llm_note.status", ["done", "done", "done"]),
         ("candidates", "items[].open_plan_id", [1, None, None]),  # plan 1
+        # The 08:20 pre-open check of T's list (Issue #755): 9101 has one overnight
+        # news (news 1, collected after the list), the other two none.
+        ("candidates", "preopen_check.status", "checked"),
+        ("candidates", "preopen_check.checked_at", "2026-10-19T00:20:00+00:00"),
+        ("candidates", "preopen_check.instruments_with_news", 1),
+        ("candidates", "items[].preopen_news.count", [1, 0, 0]),
+        ("candidates", "items.0.preopen_news.items[].direction", ["positive"]),
         # The rows' sparklines (Issue 653): the last 30 TAIEX sessions to D, old
         # to new, and each stock's stored close on them (no fixture gap).
         (

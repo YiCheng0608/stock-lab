@@ -1,4 +1,4 @@
-import type { CandidateComponent, CandidateEntryPlan, CandidateItem, CandidateLlmNote, CandidatesResponse, CandidateSubItem, ForeignIndex, OvernightUs, StrategyCondition } from '../types'
+import type { CandidateComponent, CandidateEntryPlan, CandidateItem, CandidateLlmNote, CandidatesResponse, CandidateSubItem, ForeignIndex, OvernightUs, PreopenCheck, PreopenNews, StrategyCondition } from '../types'
 
 // Shapes copied from GET /api/candidates on a read-only copy of the production DB (2026-10-16 run, #215),
 // trimmed to two rows: a complete row and a partial row whose group and news components are null.
@@ -277,3 +277,34 @@ export const overnightUs = (indexes?: ForeignIndex[]): OvernightUs => ({
   ],
   group_links: { SOX: [SOX_GROUP_ID, 'theme-cowos', 'theme-memory', 'theme-semiconductor-equipment'] },
 })
+
+// /api/candidates' preopen_check and an item's preopen_news (Issue 755): the list of 2026-11-13 checked on Monday
+// 2026-11-16 at 08:20 Taipei; the window starts at the list's computed_at, 22:03 Taipei.
+export const preopenChecked = (instrumentsWithNews = 1): PreopenCheck => ({
+  status: 'checked',
+  definition: '名單產生之後才收到的新聞',
+  checked_at: '2026-11-16T00:20:04+00:00',
+  window_start: '2026-11-13T14:03:53+00:00',
+  instruments_with_news: instrumentsWithNews,
+})
+export const preopenNotChecked = (): PreopenCheck => ({
+  status: 'not_checked',
+  definition: '名單產生之後才收到的新聞',
+  checked_at: null,
+  window_start: null,
+  instruments_with_news: 0,
+})
+export const preopenNews = (): PreopenNews => ({
+  count: 3,
+  positive: 1,
+  negative: 1,
+  mixed: 0,
+  unknown: 0,
+  unscored: 1,
+  items: [
+    { id: '30701', title: '微星下修全年出貨目標', display_time: '2026-11-15T14:40:00+00:00', event_date: null, time_precision: 'datetime', source_name: '鉅亨', source_url: 'https://news.cnyes.com/news/id/30701', direction: 'negative' },
+    { id: '30722', title: '微星 AI 伺服器接單', display_time: '2026-11-15T23:10:00+00:00', event_date: null, time_precision: 'datetime', source_name: '中央社', source_url: 'https://www.cna.com.tw/news/30722', direction: 'positive' },
+    { id: '30730', title: '微星董事會決議', display_time: null, event_date: '2026-11-16', time_precision: 'date', source_name: '公開資訊觀測站', source_url: null, direction: null },
+  ],
+})
+export const noPreopenNews = (): PreopenNews => ({ count: 0, positive: 0, negative: 0, mixed: 0, unknown: 0, unscored: 0, items: [] })

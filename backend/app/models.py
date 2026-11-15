@@ -1123,6 +1123,45 @@ class DailyCandidate(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class PreopenNewsCheck(Base):
+    """The pre-open check of one candidate of a list (Issue #755, ``worker.preopen``).
+
+    Each trading day at 08:20 Taipei the job looks again at the list of the session
+    before (``list_date``): the news ``daily`` had not seen, those collected after
+    the list's ``candidate_runs.computed_at`` (``window_start``) and published from
+    the list date's 00:00 Taipei to ``checked_at``, linked to the candidate by the
+    stock page's rule relation (``news_items.symbols_json``).  One row per candidate,
+    also with no news, so a checked list tells 0 news from not checked.  The counts
+    and ``news_json`` (``[{news_id, direction}]``) keep the AI direction as it was at
+    the check (``None``: not judged yet).  Display only: no score, rank or list
+    condition reads it.
+    """
+
+    __tablename__ = "preopen_news_checks"
+    __table_args__ = (
+        UniqueConstraint("list_date", "instrument_id", name="uq_preopen_news_check"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    list_date: Mapped[date] = mapped_column(Date, index=True)
+    candidate_run_id: Mapped[int] = mapped_column(
+        ForeignKey("candidate_runs.id"), index=True
+    )
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), index=True)
+    rank: Mapped[int] = mapped_column(Integer)
+    # UTC-naive like candidate_runs.computed_at, which it copies.
+    window_start: Mapped[datetime] = mapped_column(DateTime)
+    checked_at: Mapped[datetime] = mapped_column(DateTime)
+    news_count: Mapped[int] = mapped_column(Integer, default=0)
+    positive: Mapped[int] = mapped_column(Integer, default=0)
+    negative: Mapped[int] = mapped_column(Integer, default=0)
+    mixed: Mapped[int] = mapped_column(Integer, default=0)
+    unknown: Mapped[int] = mapped_column(Integer, default=0)
+    unscored: Mapped[int] = mapped_column(Integer, default=0)
+    news_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    prompt_version: Mapped[str] = mapped_column(String(40))
+
+
 class CandidateLlmNote(Base):
     """LLM explanation of one daily candidate under one prompt version (worker.candidate_notes).
 

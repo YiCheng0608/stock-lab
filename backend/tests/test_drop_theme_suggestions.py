@@ -20,6 +20,13 @@ from worker import schedule_runs
 HEAD = "0031_drop_theme_suggestions"
 TABLES = ("theme_suggestions", "theme_suggestion_news")
 PREVIOUS = "0030_trading_halts"
+# What the revisions after 0031 add: an upgrade from 0030 to the head makes them too.
+LATER_TABLES = {"preopen_news_checks"}
+LATER_INDEXES = {
+    "ix_preopen_news_checks_list_date",
+    "ix_preopen_news_checks_candidate_run_id",
+    "ix_preopen_news_checks_instrument_id",
+}
 INDEXES = (
     "ix_theme_suggestions_last_news_date",
     "ix_theme_suggestion_news_suggestion_id",
@@ -135,7 +142,9 @@ def _tables(connection):
 
 def _marker(connection, entry):
     if entry == "alembic":
-        return connection.execute("SELECT version_num FROM alembic_version").fetchall()
+        # Alembic records the head only; 0031 is passed on the way (0032 and later).
+        rows = connection.execute("SELECT version_num FROM alembic_version").fetchall()
+        return [(HEAD,)] if rows == [(migration_revisions.REVISIONS[-1],)] else rows
     return connection.execute(
         "SELECT version FROM schema_migrations WHERE version = ?", (HEAD,)
     ).fetchall()
@@ -157,7 +166,8 @@ def test_an_older_database_loses_only_the_two_tables(tmp_path, monkeypatch, entr
     if entry == "alembic":
         pytest.importorskip("alembic")
     path = tmp_path / f"{entry}.db"
-    assert migration_revisions.REVISIONS[-2:] == (PREVIOUS, HEAD)
+    position = migration_revisions.REVISIONS.index(HEAD)
+    assert migration_revisions.REVISIONS[position - 1] == PREVIOUS
     if entry == "alembic":
         # The database as it stood before this change: revision 0014 itself made the tables.
         _alembic_upgrade(path, PREVIOUS)
@@ -181,8 +191,10 @@ def test_an_older_database_loses_only_the_two_tables(tmp_path, monkeypatch, entr
     _upgrade(path, entry, tmp_path, monkeypatch)
 
     with closing(sqlite3.connect(path)) as connection:
-        assert _tables(connection) == before - set(TABLES)
-        assert _indexes(connection) == indexes_before - set(INDEXES)
+        assert _tables(connection) - LATER_TABLES == before - set(TABLES) - LATER_TABLES
+        assert _indexes(connection) - LATER_INDEXES == (
+            indexes_before - set(INDEXES) - LATER_INDEXES
+        )
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
         assert connection.execute("PRAGMA integrity_check").fetchall() == [("ok",)]
         assert _marker(connection, entry) == [(HEAD,)]

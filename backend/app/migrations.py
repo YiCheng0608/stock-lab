@@ -798,6 +798,13 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0031_drop_theme_suggestions', CURRENT_TIMESTAMP)"
         )
     )
+    # 0032 only adds preopen_news_checks (#755), made by create_all with its indexes.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0032_preopen_news_checks', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:
