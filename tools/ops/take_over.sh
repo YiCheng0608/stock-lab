@@ -21,9 +21,10 @@
 #               local branch is left (an Issue's task/<n>-* too, and a worktree directory
 #               task-<n>-*, detached or not); one line per Issue or PR with something
 #               wrong or not read, one for the rest (closed_check in
-#               coordinator_json.py). One gh call; what could not be read prints as
-#               "未查完", never as fine. It never fails the run: the coordinator acts on
-#               what it prints
+#               coordinator_json.py). One gh call per page of 100, at most 3 (#787):
+#               one report for all; more than 300, a page that cannot be read, or
+#               anything else not read prints as "未查完", never as fine. It never
+#               fails the run: the coordinator acts on what it prints
 #   memory      memory_check.py on the Claude Code memory directory (read only, #705;
 #               $STOCK_MEMORY_DIR or the one Claude Code keeps for this repo): a failure
 #               names the memory and the check; the coordinator fixes it and goes on
@@ -96,21 +97,49 @@ done
 
 # closed_check: the closed step's report (see the header). Prints; always returns 0.
 closed_check() {
-  local hours="${TAKE_OVER_CLOSED_HOURS:-48}" since dir out wt="" br="" rc=0
+  local hours="${TAKE_OVER_CLOSED_HOURS:-48}" since dir query wt="" br="" rc=0
+  local page=0 cursor="" where="" failed=""
+  local -a after=()
   since="$(date -u -d "@$((${PATROL_NOW:-$(date -u +%s)} - hours * 3600))" +%Y-%m-%dT%H:%M:%SZ)"
   dir="$(mktemp -d)" || { echo "關閉單核對：未查完（建不了暫存目錄）"; return 0; }
   git -C "$repo_root" worktree list --porcelain >"$dir/worktrees" && wt="$dir/worktrees"
   git -C "$repo_root" for-each-ref --format='%(refname:short)' refs/heads/ >"$dir/branches" \
     && br="$dir/branches"
-  if ! out="$(gh api graphql -f q="repo:$GH_REPO is:closed closed:>=$since" -f query="$(cj closed-query)")"; then
-    echo "關閉單核對：未查完（gh api graphql 失敗；gh 呼叫 1 次）"
-  else
-    printf '%s' "$out" | cj closed-check "$since" "$wt" "$br" || rc=$?
+  query="$(cj closed-query)"
+  # Page after page by the search cursor (#787): closed-next prints none after the last
+  # page there is or the last one read (CLOSED_PAGES), and closed-check says 未查完 when
+  # the search goes on. A page that cannot be read leaves the whole report unread: the
+  # pages before it are not taken as complete.
+  while :; do
+    page=$((page + 1))
+    # The first page keeps its words of before paging; later ones name the page.
+    [ "$page" -gt 1 ] && where="第 $page 頁"
+    if ! gh api graphql -f q="repo:$GH_REPO is:closed closed:>=$since" -f query="$query" \
+      "${after[@]}" >"$dir/page.$page"; then
+      failed="${where:+$where }gh api graphql 失敗"
+      break
+    fi
+    rc=0
+    cursor="$(cj closed-next "$page" <"$dir/page.$page")" || rc=$?
     case "$rc" in
       0) ;;
-      3) echo "關閉單核對：未查完（GraphQL 的回答沒有 data.search；gh 呼叫 1 次）" ;;
+      3) failed="${where:+$where }GraphQL 的回答沒有 data.search"; break ;;
+      # A next page without a cursor, or a Python error (its traceback is on stderr).
+      *) failed="${where}讀不到下一頁的游標，closed-next exit $rc"; break ;;
+    esac
+    [ -n "$cursor" ] || break
+    after=(-f after="$cursor")
+  done
+  if [ -n "$failed" ]; then
+    echo "關閉單核對：未查完（${failed}；gh 呼叫 $page 次）"
+  else
+    rc=0
+    cat "$dir"/page.* | cj closed-check "$since" "$wt" "$br" || rc=$?
+    case "$rc" in
+      0) ;;
+      3) echo "關閉單核對：未查完（GraphQL 的回答沒有 data.search；gh 呼叫 $page 次）" ;;
       # A Python error: its traceback is on stderr.
-      *) echo "關閉單核對：未查完（closed-check 失敗，exit $rc；gh 呼叫 1 次）" ;;
+      *) echo "關閉單核對：未查完（closed-check 失敗，exit $rc；gh 呼叫 $page 次）" ;;
     esac
   fi
   rm -rf -- "$dir"
