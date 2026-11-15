@@ -767,6 +767,21 @@ a.symbol-link:hover { color: var(--color-primary); }
 .overnight-us-item { white-space: nowrap; }
 .overnight-us-change { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .candidate-row-us { margin-left: var(--space-2); color: var(--color-text-muted); font-size: var(--text-sm); white-space: nowrap; }
+/* 開盤前檢查 (Issue 755, DESIGN_SYSTEM §5 候選列表): one muted line right under 隔夜美股 (no gap between the two), the row's
+   mark after the name like 費半, and the chosen candidate's overnight news under its chart (in the detail below 1280px). */
+.preopen-line { margin: calc(-1 * var(--space-1)) 0 var(--space-3); color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1.6; }
+.overnight-us + .preopen-line { margin-top: calc(-1 * var(--space-3)); }
+.candidate-row-preopen { margin-left: var(--space-2); color: var(--color-text-muted); font-size: var(--text-sm); white-space: nowrap; }
+.preopen-news { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--color-border); }
+.candidate-detail-body > .preopen-news { margin-top: 0; padding-top: 0; border-top: 0; }
+.preopen-news-title { margin: 0; font-size: var(--text-base); font-weight: 600; }
+.preopen-news-definition { margin: var(--space-1) 0 0; }
+.preopen-news-list { margin: var(--space-2) 0 0; padding: 0; list-style: none; font-size: var(--text-sm); line-height: 1.6; }
+.preopen-news-item + .preopen-news-item { margin-top: var(--space-1); }
+.preopen-news-time { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--color-text-muted); white-space: nowrap; }
+.preopen-news-source { color: var(--color-text-muted); }
+.preopen-news-direction { white-space: nowrap; }
+.preopen-news-unscored { color: var(--color-text-muted); }
 .candidate-list { margin: 0; padding: 0; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-bg-card); list-style: none; }
 .candidate-row + .candidate-row { border-top: 1px solid var(--color-border); }
 /* 盤後終端 (DESIGN_SYSTEM §5 候選列表): from 1280px up the list sits beside the picked candidate's chart; below that the

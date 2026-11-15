@@ -1084,9 +1084,16 @@ def test_candidate_market_keeps_every_existing_field(db, client):
     # The list's items also carry the sparkline's closes (#653); without
     # verified sessions there are none.
     # And the US indexes linked to its groups (#681), none here.
-    assert set(item) == ITEM_KEYS | {"market", "recent_closes", "overnight_us_links"}
+    assert set(item) == ITEM_KEYS | {
+        "market",
+        "recent_closes",
+        "overnight_us_links",
+        "preopen_news",
+    }
     assert item["recent_closes"] == {"dates": [], "closes": []}
     assert item["overnight_us_links"] == []
+    # Not checked yet (#755): no pre-open result stands in.
+    assert item["preopen_news"] is None
     assert item["market"]["close"] == CLOSE
     assert item["market"]["change_status"] == "unverified"
     detail = client.get("/api/stocks/TWSE/1101").json()["candidate"]

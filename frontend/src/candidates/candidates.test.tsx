@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react'
-import type { CandidateItem, CandidateLiquidity } from '../types'
+import type { CandidateItem, CandidateLiquidity, PreopenNews } from '../types'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom/server'
@@ -28,7 +28,8 @@ import {
   formatSubItemValue,
   marketSourceLabel,
 } from './candidates'
-import { SOX_GROUP_ID, completeItem, doneNote, listResponse, notComputedResponse, overnightUs, partialItem, zeroResponse } from './candidates.fixtures'
+import { SOX_GROUP_ID, completeItem, doneNote, listResponse, noPreopenNews, notComputedResponse, overnightUs, partialItem, preopenChecked, preopenNews, preopenNotChecked, zeroResponse } from './candidates.fixtures'
+import { PREOPEN_NOT_CHECKED, preopenCheckLine, preopenRowMark } from './candidates'
 import { OVERNIGHT_US_CLOSED, OVERNIGHT_US_PENDING, overnightUsView } from './candidates'
 import { PageDateContext } from '../components/pageDate'
 import { removedCopyIn } from '../removedCopy.fixtures'
@@ -405,3 +406,45 @@ check(lineOf(render(<CandidatesSection data={withUs(overnightUs(split))} loading
 // Every state of the list has the line; loading, a failure, or a response from before Issue 681 has none.
 check(lineOf(render(<CandidatesSection data={{ ...notComputedResponse(), overnight_us: overnightUs() }} loading={false} error={null} />)).startsWith('隔夜美股 資料 2026/11/13'), 'a day without a list still has the line')
 check(!render(<CandidatesSection data={listResponse()} loading={false} error={null} />).includes('overnight-us') && !render(<CandidatesSection data={withUs()} loading error={null} />).includes('overnight-us'), 'no line without overnight_us or while loading')
+
+// ---- Issue 755: 開盤前檢查, the overnight news of the list (three states: news, none, not checked) ----
+const preopenLineOf = (markup: string) => plain(slice(markup, '<p class="preopen-line"', '</p>'))
+const titleOf = (markup: string, rank: number) => plain(slice(rowOf(markup, rank), '<p class="candidate-row-title">', '</p>'))
+const panelOf = (markup: string) => plain(slice(markup, '<section class="preopen-news"', '</section>'))
+const withPreopen = (check = preopenChecked(), news: Array<PreopenNews | null> = [preopenNews(), noPreopenNews()]) => ({
+  ...listResponse(),
+  preopen_check: check,
+  items: listResponse().items.map((item, index) => ({ ...item, preopen_news: news[index] ?? null })),
+})
+// With news: the line, the row's mark, the detail's list.
+const newsPage = render(<CandidatesSection data={withPreopen()} loading={false} error={null} />)
+check(preopenLineOf(newsPage) === '開盤前檢查 2026/11/16 08:20 · 隔夜新聞 1 檔', `the line states the check's time and the stocks with news: ${preopenLineOf(newsPage)}`)
+check(newsPage.indexOf('class="preopen-line"') < newsPage.indexOf('class="candidate-list"'), 'the line sits above the list')
+check(titleOf(newsPage, 1).includes('2377 微星 隔夜新聞 3（可能負向 1） 上市'), `the row's mark after the name, only 可能負向 in the brackets: ${titleOf(newsPage, 1)}`)
+check(rowOf(newsPage, 1).includes('<span class="tone-down">可能負向 1</span>'), 'the negative count in the falling colour')
+check(!rowOf(newsPage, 2).includes('candidate-row-preopen'), 'a row without overnight news has no mark')
+const newsPanel = panelOf(detailOf(rowOf(newsPage, 1)))
+check(newsPanel.startsWith('隔夜新聞（開盤前檢查 2026/11/16 08:20）名單產生之後才收到的新聞'), `the detail's heading and the definition (decision 6888598143): ${newsPanel}`)
+check(newsPanel.includes('2026/11/15 22:40 微星下修全年出貨目標 鉅亨 可能負向 AI 推論'), `a line: time, title, source, the AI direction marked AI 推論: ${newsPanel}`)
+check(newsPanel.includes('2026/11/16 07:10 微星 AI 伺服器接單 中央社 可能正向 AI 推論'), 'the positive one')
+check(newsPanel.includes('2026/11/16 微星董事會決議 公開資訊觀測站 尚未判讀'), `a date-only item and one not judged yet: ${newsPanel}`)
+check(rowOf(newsPage, 1).includes('href="https://news.cnyes.com/news/id/30701"'), 'the title links to the source')
+check(panelOf(detailOf(rowOf(newsPage, 2))).startsWith('隔夜新聞 無（開盤前檢查 2026/11/16 08:20）'), 'a checked row without news says 無 with the check time')
+// From 1280px: the chosen row's news under its chart, not in the details.
+const wideNews = render(<TodayCandidateList items={withPreopen().items} wide renderChart={() => <div className="fake-chart" />} preopen={preopenChecked()} />)
+const aside = slice(wideNews, '<aside', '</aside>')
+check(aside.indexOf('fake-chart') >= 0 && aside.indexOf('fake-chart') < aside.indexOf('class="preopen-news"') && panelOf(aside).includes('微星下修全年出貨目標'), 'beside the list: the chosen candidate\'s news under its chart')
+check(count(wideNews, 'class="preopen-news"') === 1, 'from 1280px the details have no panel of their own')
+// None at all: the line says 0, no mark, every detail 無.
+const nonePreopen = render(<CandidatesSection data={withPreopen(preopenChecked(0), [noPreopenNews(), noPreopenNews()])} loading={false} error={null} />)
+check(preopenLineOf(nonePreopen) === '開盤前檢查 2026/11/16 08:20 · 隔夜新聞 0 檔' && !nonePreopen.includes('candidate-row-preopen'), `checked, no news: ${preopenLineOf(nonePreopen)}`)
+check(panelOf(detailOf(rowOf(nonePreopen, 1))).startsWith('隔夜新聞 無（開盤前檢查 2026/11/16 08:20）'), 'checked, no news: the detail says 無')
+// Not checked yet (before 08:20, or the list recomputed after the check): no older result stands in.
+const pendingPreopen = render(<CandidatesSection data={withPreopen(preopenNotChecked(), [null, null])} loading={false} error={null} />)
+check(preopenLineOf(pendingPreopen) === `開盤前檢查 ${PREOPEN_NOT_CHECKED}（每個交易日 08:20）`, `not checked: ${preopenLineOf(pendingPreopen)}`)
+check(!pendingPreopen.includes('candidate-row-preopen') && panelOf(detailOf(rowOf(pendingPreopen, 1))).startsWith('隔夜新聞 尚未檢查名單產生之後才收到的新聞'), 'not checked: no mark, the detail says 尚未檢查')
+// No line without a list, nor on a response from before Issue 755.
+check(!render(<CandidatesSection data={{ ...zeroResponse('all_excluded'), preopen_check: preopenNotChecked() }} loading={false} error={null} />).includes('preopen-line'), 'a zero list has no line')
+check(!plainList.includes('preopen'), 'a response without preopen_check shows nothing of it')
+check(preopenRowMark({ ...preopenNews(), negative: 0 })?.negative === null && preopenRowMark(noPreopenNews()) === null && preopenRowMark(null) === null, 'no brackets without a negative one; no mark without news')
+check(preopenCheckLine(undefined) === null, 'no line without preopen_check')

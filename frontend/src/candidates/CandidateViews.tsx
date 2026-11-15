@@ -8,7 +8,7 @@ import { Badge, Card, DataTable, DateBadge, EmptyState, ScoreBar, Skeleton, cx, 
 import { AiBadge } from '../news/NewsViews'
 import { STRATEGY_LINK_LABEL } from '../strategy/strategyName'
 import { AddPlanButton } from '../tracking/TrackingViews'
-import type { CandidateComponent, CandidateComponentKey, CandidateItem, CandidateSubItem, CandidatesResponse } from '../types'
+import type { CandidateComponent, CandidateComponentKey, CandidateItem, CandidateSubItem, CandidatesResponse, PreopenCheck } from '../types'
 import {
   CANDIDATE_COMPONENTS,
   GROUP_EVENT_PENDING,
@@ -30,6 +30,14 @@ import {
   chartToggleLabel,
   nextChartRank,
   OVERNIGHT_US_TITLE,
+  PREOPEN_DEFINITION,
+  PREOPEN_TITLE,
+  PREOPEN_UNSCORED,
+  preopenCheckLine,
+  preopenDirection,
+  preopenNewsTime,
+  preopenPanelTitle,
+  preopenRowMark,
   candidateOvernightLinks,
   overnightUsView,
   type OvernightUsItem,
@@ -227,7 +235,7 @@ function LevelCells({ item, className, rr = false }: { item: CandidateItem; clas
 
 // The expanded detail (#510): the AI note first, its 為何入選 the lead; the rule levels, 加入追蹤 and the stock-page link
 // beside it; the conditions, every component and reason, and the data date and sources folded underneath.
-function CandidateDetail({ item }: { item: CandidateItem }) {
+function CandidateDetail({ item, preopen }: { item: CandidateItem; preopen?: PreopenCheck | null }) {
   return (
     <div className="candidate-detail-body">
       <CandidateNote item={item} />
@@ -238,6 +246,7 @@ function CandidateDetail({ item }: { item: CandidateItem }) {
           <Link className="text-link" to={stockPath(item)}>評分細節 → 個股頁</Link>
         </div>
       </div>
+      {preopen && <PreopenNewsPanel item={item} check={preopen} />}
       <div className="candidate-detail-folds">
         <EntryConditions item={item} />
         <details className="details candidate-detail-scores">
@@ -329,6 +338,58 @@ export function OvernightUsLine({ view }: { view: OvernightUsView | null }) {
   )
 }
 
+// The 開盤前檢查 line under 隔夜美股 (Issue 755; UI_COPY_SPEC §10): when the list was checked and how many candidates have
+// overnight news, or 「尚未檢查」 until the check of this very list. One <p> of page text, like the 隔夜美股 line.
+export function PreopenLine({ check }: { check: PreopenCheck | null | undefined }) {
+  const text = preopenCheckLine(check)
+  if (!text) return null
+  return <p className="preopen-line" aria-label={PREOPEN_TITLE} data-preopen-status={check?.status}>{text}</p>
+}
+
+// The row's mark after the name (Issue 755): 「隔夜新聞 2（可能負向 1）」, the negative count in the falling colour; nothing
+// without overnight news.
+function PreopenRowMarkView({ item }: { item: CandidateItem }) {
+  const mark = preopenRowMark(item.preopen_news)
+  if (!mark) return null
+  return (
+    <span className="candidate-row-preopen" data-preopen-count={item.preopen_news?.count}>
+      {mark.text}{mark.negative && <>（<span className="tone-down">{mark.negative}</span>）</>}
+    </span>
+  )
+}
+
+// The chosen candidate's overnight news (Issue 755): beside the list under its chart from 1280px, in the row's detail
+// below. Each line: time, the title linked to the source, the source, and the AI direction at the check marked AI 推論
+// (「尚未判讀」 when not judged yet). The note states what 隔夜新聞 is (decision 6888598143).
+export function PreopenNewsPanel({ item, check }: { item: CandidateItem; check: PreopenCheck }) {
+  const news = item.preopen_news
+  return (
+    <section className="preopen-news" aria-label={`${item.instrument.symbol} ${item.instrument.name} 隔夜新聞`}>
+      <h3 className="preopen-news-title">{preopenPanelTitle(check, news)}</h3>
+      <p className="small-note preopen-news-definition">{PREOPEN_DEFINITION}</p>
+      {news && news.items.length > 0 && (
+        <ul className="preopen-news-list">
+          {news.items.map((entry) => {
+            const direction = preopenDirection(entry)
+            return (
+              <li key={entry.id} className="preopen-news-item" data-news-id={entry.id}>
+                <span className="preopen-news-time">{preopenNewsTime(entry)}</span>{' '}
+                {entry.source_url
+                  ? <a className="text-link preopen-news-link" href={entry.source_url} target="_blank" rel="noreferrer noopener">{entry.title}</a>
+                  : <span className="preopen-news-link">{entry.title}</span>}{' '}
+                <span className="preopen-news-source">{entry.source_name}</span>{' '}
+                {direction
+                  ? <span className="preopen-news-direction">{direction.tone && <i className={`direction-dot tone-${direction.tone}`} aria-hidden="true" />}{direction.label} <AiBadge /></span>
+                  : <span className="preopen-news-direction preopen-news-unscored">{PREOPEN_UNSCORED}</span>}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 // Below 1280px a row opens its own K-line card (#665): the card's content and whether it is open.
 type RowChart = { open: boolean; onToggle: () => void; content: ReactNode }
 
@@ -337,7 +398,7 @@ type RowChart = { open: boolean; onToggle: () => void; content: ReactNode }
 // detail stays in the DOM and the screenshot tool can open them all (DESIGN_SYSTEM §5 候選列表). Below 1280px the
 // row's K-line card sits between the row and the detail; it is not a <details>, so opening every <details> mounts no
 // chart, and a closed row renders an empty slot only (#665).
-function CandidateRow({ item, hidden, open, onOpen, selected, onSelect, chart, links = [] }: { item: CandidateItem; hidden: boolean; open: boolean; onOpen: (open: boolean) => void; selected: boolean; onSelect?: () => void; chart?: RowChart; links?: OvernightUsItem[] }) {
+function CandidateRow({ item, hidden, open, onOpen, selected, onSelect, chart, links = [], preopen = null }: { item: CandidateItem; hidden: boolean; open: boolean; onOpen: (open: boolean) => void; selected: boolean; onSelect?: () => void; chart?: RowChart; links?: OvernightUsItem[]; preopen?: PreopenCheck | null }) {
   const { instrument } = item
   const levelsInSentence = entryPlanView(item).kind === 'levels'
   const detailId = `candidate-detail-${item.rank}`
@@ -366,6 +427,7 @@ function CandidateRow({ item, hidden, open, onOpen, selected, onSelect, chart, l
             {/* Issue 681: the semiconductor groups' 費半 change right after the name, so the line's ellipsis cuts the
                 market and group, not it (the title is one line at every width). */}
             {links.map((entry) => <span key={entry.symbol} className="candidate-row-us"><OvernightChange entry={{ ...entry, date: null }} stale={!entry.current} />{' '}</span>)}
+            <PreopenRowMarkView item={item} />{item.preopen_news?.count ? ' ' : null}
             <span className="candidate-row-meta" title={item.groups[0] ? candidateGroupText(item.groups[0]) : undefined}>{exchangeLabel(instrument.exchange)} · {groupShortText(item)}</span>
           </p>
           <EntryPlanCard item={item} className="candidate-entry" conditions={false} />
@@ -389,7 +451,7 @@ function CandidateRow({ item, hidden, open, onOpen, selected, onSelect, chart, l
       )}
       <details className="candidate-detail" id={detailId} open={open} onToggle={(event) => onOpen(event.currentTarget.open)}>
         <summary>{instrument.symbol} {instrument.name}</summary>
-        <CandidateDetail item={item} />
+        <CandidateDetail item={item} preopen={preopen} />
       </details>
     </li>
   )
@@ -397,7 +459,7 @@ function CandidateRow({ item, hidden, open, onOpen, selected, onSelect, chart, l
 
 // wide: the viewport is at least TERMINAL_MIN_WIDTH (the page measures it); initialChartRank: the row whose card is open
 // at first below that width (none on the page; the tests render an open row with it, as they cannot click).
-export function TodayCandidateList({ items, renderChart, wide = false, initialChartRank = null, overnight = null }: { items: CandidateItem[]; renderChart?: (item: CandidateItem) => ReactNode; wide?: boolean; initialChartRank?: number | null; overnight?: OvernightUsView | null }) {
+export function TodayCandidateList({ items, renderChart, wide = false, initialChartRank = null, overnight = null, preopen = null }: { items: CandidateItem[]; renderChart?: (item: CandidateItem) => ReactNode; wide?: boolean; initialChartRank?: number | null; overnight?: OvernightUsView | null; preopen?: PreopenCheck | null }) {
   const [open, setOpen] = useState<ReadonlySet<number>>(() => new Set())
   const [showAll, setShowAll] = useState(false)
   const setRank = (rank: number, value: boolean) => setOpen((current) => {
@@ -428,6 +490,7 @@ export function TodayCandidateList({ items, renderChart, wide = false, initialCh
         {items.map((item, index) => (
           <CandidateRow key={item.instrument.exchange + item.instrument.symbol} item={item} hidden={!showAll && index >= TODAY_VISIBLE} open={open.has(item.rank)} onOpen={(value) => setRank(item.rank, value)}
             selected={terminal && item === selected} onSelect={terminal ? () => setPicked(item.rank) : undefined} links={candidateOvernightLinks(item, overnight)}
+            preopen={terminal ? null : preopen}
             chart={renderChart && !wide ? { open: chartRank === item.rank, onToggle: () => setChartRank((current) => nextChartRank(current, item.rank)), content: chartRank === item.rank ? renderChart(item) : null } : undefined} />
         ))}
       </ol>
@@ -444,7 +507,7 @@ export function TodayCandidateList({ items, renderChart, wide = false, initialCh
   return (
     <div className="candidates-terminal">
       <div className="candidates-terminal-list">{list}</div>
-      <aside className="candidates-terminal-chart" aria-label={`${selected.instrument.symbol} ${selected.instrument.name} 走勢圖`} data-chart-rank={selected.rank}>{renderChart(selected)}</aside>
+      <aside className="candidates-terminal-chart" aria-label={`${selected.instrument.symbol} ${selected.instrument.name} 走勢圖`} data-chart-rank={selected.rank}>{renderChart(selected)}{preopen && <PreopenNewsPanel item={selected} check={preopen} />}</aside>
     </div>
   )
 }
@@ -467,6 +530,8 @@ export function CandidatesSection({ data, loading, error, renderChart, wide = fa
       </div>
       {/* Issue 681: under the head in every state (list, zero, not computed), not while loading or failed. */}
       {!loading && !error && <OvernightUsLine view={overnight} />}
+      {/* Issue 755: with a list only (a zero or missing list has nothing to check). */}
+      {!loading && !error && state?.kind === 'list' && <PreopenLine check={data?.preopen_check} />}
       {loading
         ? <Skeleton lines={4} label="今日名單載入中…" />
         : error
@@ -474,7 +539,7 @@ export function CandidatesSection({ data, loading, error, renderChart, wide = fa
           : !state
             ? null
             : state.kind === 'list'
-              ? <TodayCandidateList items={state.items} renderChart={renderChart} wide={wide} overnight={overnight} />
+              ? <TodayCandidateList items={state.items} renderChart={renderChart} wide={wide} overnight={overnight} preopen={data?.preopen_check ?? null} />
               : <Card><EmptyState title={state.kind === 'zero' ? '當日零候選' : '尚無候選清單'} reason={state.text} /></Card>}
     </section>
   )

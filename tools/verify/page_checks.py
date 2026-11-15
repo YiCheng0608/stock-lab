@@ -2031,6 +2031,94 @@ def t22(run: Run) -> str:
     return f"`{line}` 在 `{CANDIDATES_TITLE}` 之後；{marked}／{len(items)} 列標費半（overnight_us_links）"
 
 
+# Issue 755: the 開盤前檢查 line under 隔夜美股, each row's 隔夜新聞 mark and the chosen row's news under its chart
+# (preopenCheckLine, preopenRowMark and preopenPanelTitle in frontend/src/candidates/candidates.ts mirrored here).
+PREOPEN_TITLE = "開盤前檢查"
+PREOPEN_NEWS_TITLE = "隔夜新聞"
+PREOPEN_DEFINITION = "名單產生之後才收到的新聞"
+
+
+@check("today", "T25")
+def t25(run: Run) -> str:
+    """Issue 755: the 開盤前檢查 line = candidates.json preopen_check; each row's 隔夜新聞 mark = its preopen_news."""
+
+    text, payload = run.text(TODAY), candidates(run)
+    items = (
+        [] if payload.get("status") == "not_computed" else payload.get("items") or []
+    )
+    found = [n for n, shown in enumerate(text.lines) if shown.startswith(PREOPEN_TITLE)]
+    if not items:
+        expect(
+            not found,
+            f"沒有名單卻有 `{PREOPEN_TITLE}` 行：{text.at(found[0]) if found else ''}",
+        )
+        return f"沒有候選列，沒有 `{PREOPEN_TITLE}` 行"
+    check_ = payload.get("preopen_check")
+    expect(
+        isinstance(check_, dict) and check_.get("definition") == PREOPEN_DEFINITION,
+        "candidates.json 沒有 preopen_check（#755：開盤前檢查）",
+    )
+    at = (
+        taipei_minute(check_.get("checked_at"))
+        if check_.get("status") == "checked"
+        else None
+    )
+    line = (
+        f"{PREOPEN_TITLE} {at} · {PREOPEN_NEWS_TITLE} {check_.get('instruments_with_news')} 檔"
+        if at
+        else f"{PREOPEN_TITLE} 尚未檢查（每個交易日 08:20）"
+    )
+    expect(
+        [text.lines[n] for n in found] == [line],
+        f"`{PREOPEN_TITLE}` 開頭的行是 {[text.lines[n] for n in found]}，預期恰一行 `{line}`",
+    )
+    us = text.find_where(lambda shown: shown.startswith(OVERNIGHT_US_TITLE))
+    expect(
+        us < found[0],
+        f"`{line}` 不在 `{OVERNIGHT_US_TITLE}` 那一行之後（{text.at(found[0])}）",
+    )
+    title = candidates_title(text)
+    problems, marked = [], 0
+    for item in items:
+        prefix = f"#{item['rank']} {item['instrument']['symbol']} "
+        row_at = text.find_where(lambda shown, p=prefix: shown.startswith(p), title)
+        if row_at < 0:
+            problems.append(f"缺以 `{prefix}` 開頭的名次列")
+            continue
+        news = item.get("preopen_news")
+        if at and not isinstance(news, dict):
+            problems.append(f"{prefix.strip()} 已檢查卻沒有 preopen_news")
+            continue
+        row = text.lines[row_at]
+        count = news.get("count", 0) if isinstance(news, dict) else 0
+        if count:
+            negative = news.get("negative") or 0
+            want = f"{PREOPEN_NEWS_TITLE} {count}" + (
+                f"（可能負向 {negative}）" if negative else ""
+            )
+            if f" {want} " not in f"{row} ":
+                problems.append(f"{prefix.strip()} 名次列 {row!r} 沒有 `{want}`")
+            marked += 1
+        elif f" {PREOPEN_NEWS_TITLE} " in row:
+            problems.append(f"{prefix.strip()} 沒有隔夜新聞，名次列卻有標記：{row!r}")
+    expect(not problems, "；".join(problems))
+    # From 1280px the first row's news sits under its chart: its heading and the definition.
+    first = items[0].get("preopen_news")
+    if not at:
+        heading = f"{PREOPEN_NEWS_TITLE} 尚未檢查"
+    elif first and first.get("count"):
+        heading = f"{PREOPEN_NEWS_TITLE}（{PREOPEN_TITLE} {at}）"
+    else:
+        heading = f"{PREOPEN_NEWS_TITLE} 無（{PREOPEN_TITLE} {at}）"
+    panel = text.find(heading)
+    expect(panel >= 0, f"缺選中個股的隔夜新聞標題 `{heading}`")
+    expect(
+        text.find(PREOPEN_DEFINITION, panel) == panel + 1,
+        f"`{heading}` 下一行不是定義 `{PREOPEN_DEFINITION}`（{text.at(panel)}）",
+    )
+    return f"`{line}`；{marked}／{len(items)} 列標隔夜新聞；選中個股 `{heading}`"
+
+
 # Issue 729 (decision 6881593041): copy that left the pages because it explains rather than shows (research status,
 # how to read, process notes, words for developers). Mirrors REMOVED_COPY in frontend/src/removedCopy.fixtures.ts;
 # verify does not read frontend files. The full original text is in the Issue's AC-1 list.

@@ -1386,6 +1386,43 @@ def _daily_candidate_rows() -> list[dict[str, Any]]:
     ]
 
 
+PREOPEN_CHECKED_AT = _at(NEXT_SESSION, 0, 20)  # Monday 08:20 Taipei
+
+
+def _preopen_rows() -> list[dict[str, Any]]:
+    """The 08:20 pre-open check of T's list (Issue #755): 9101 has two overnight news,
+    news 1 judged positive and news 6 not judged yet; the other two have none."""
+
+    news = {INSTRUMENT_IDS["9101"]: [(1, "positive"), (6, None)]}
+    rows = []
+    for index, row in enumerate(_FROZEN_CANDIDATES["rows"], start=1):
+        entries = news.get(row["instrument_id"], [])
+        directions = [direction for _, direction in entries]
+        rows.append(
+            {
+                "id": index,
+                "list_date": T,
+                "candidate_run_id": 1,
+                "instrument_id": row["instrument_id"],
+                "rank": row["rank"],
+                "window_start": _at(T, 10),
+                "checked_at": PREOPEN_CHECKED_AT,
+                "news_count": len(entries),
+                "positive": directions.count("positive"),
+                "negative": directions.count("negative"),
+                "mixed": directions.count("mixed"),
+                "unknown": directions.count("unknown"),
+                "unscored": directions.count(None),
+                "news_json": [
+                    {"news_id": news_id, "direction": direction}
+                    for news_id, direction in entries
+                ],
+                "prompt_version": NEWS_PROMPT_VERSION,
+            }
+        )
+    return rows
+
+
 _NOTES = {
     "9101": (
         "突破 20 日高點且量比 1.6，所屬半導體產業熱度第 1。",
@@ -1889,6 +1926,7 @@ TABLES: dict[str, list[dict[str, Any]]] = {
     "news_llm_results": _llm_rows(),
     "candidate_runs": _candidate_run_rows(),
     "daily_candidates": _daily_candidate_rows(),
+    "preopen_news_checks": _preopen_rows(),
     "candidate_llm_notes": _candidate_note_rows(),
     "tracking_plans": _tracking_plan_rows(),
     "tracking_plan_sessions": _tracking_plan_session_rows(),
@@ -2073,6 +2111,13 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         ("candidates", "items[].instrument.symbol", ["9101", "9103", "9201"]),
         ("candidates", "items[].llm_note.status", ["done", "done", "done"]),
         ("candidates", "items[].open_plan_id", [1, None, None]),  # plan 1
+        # The 08:20 pre-open check of T's list (Issue #755): 9101 has two overnight
+        # news (one not judged yet), the other two none.
+        ("candidates", "preopen_check.status", "checked"),
+        ("candidates", "preopen_check.checked_at", "2026-10-19T00:20:00+00:00"),
+        ("candidates", "preopen_check.instruments_with_news", 1),
+        ("candidates", "items[].preopen_news.count", [2, 0, 0]),
+        ("candidates", "items.0.preopen_news.items[].direction", ["positive", None]),
         # The rows' sparklines (Issue 653): the last 30 TAIEX sessions to D, old
         # to new, and each stock's stored close on them (no fixture gap).
         (

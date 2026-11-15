@@ -1,6 +1,6 @@
 import { noPreviousCloseText } from '../marketChange'
-import { formatTaipeiInstant } from '../news/newsView'
-import type { CandidateComponentKey, CandidateGroup, CandidateItem, CandidateLevels, CandidateLlmNote, CandidateMarket, CandidateRecentCloses, CandidatesResponse, ForeignIndex, OvernightUs, RiskRewardBasis } from '../types'
+import { directionView, formatTaipeiInstant, type DirectionView } from '../news/newsView'
+import type { CandidateComponentKey, CandidateGroup, CandidateItem, CandidateLevels, CandidateLlmNote, CandidateMarket, CandidateRecentCloses, CandidatesResponse, ForeignIndex, OvernightUs, PreopenCheck, PreopenNews, PreopenNewsItem, RiskRewardBasis } from '../types'
 
 // Pure helpers for the daily candidate list (candidate_score_v1, #215); copy follows UI_COPY_SPEC §10.
 
@@ -449,4 +449,53 @@ export function candidateOvernightLinks(item: Pick<CandidateItem, 'overnight_us_
   if (!view) return []
   const links = item.overnight_us_links ?? []
   return view.items.filter((entry) => links.includes(entry.symbol) && entry.text !== '未取得')
+}
+
+// ---- 開盤前檢查 (Issue 755; UI_COPY_SPEC §10): the overnight news of the list, display only ----
+
+export const PREOPEN_TITLE = '開盤前檢查'
+export const PREOPEN_NEWS_TITLE = '隔夜新聞'
+export const PREOPEN_NOT_CHECKED = '尚未檢查'
+export const PREOPEN_SCHEDULE = '每個交易日 08:20'
+// The API's definition, the same words (app.preopen_news.DEFINITION).
+export const PREOPEN_DEFINITION = '名單產生之後才收到的新聞'
+export const PREOPEN_UNSCORED = '尚未判讀'
+
+// The line under 隔夜美股: 「開盤前檢查 2026/11/16 08:20 · 隔夜新聞 7 檔」, or 「開盤前檢查 尚未檢查（每個交易日 08:20）」 before
+// the check of this very list (a recomputed list too). null on a response from before Issue 755.
+export function preopenCheckLine(check: PreopenCheck | null | undefined): string | null {
+  if (!check) return null
+  const at = check.status === 'checked' ? formatTaipeiInstant(check.checked_at) : null
+  if (!at) return `${PREOPEN_TITLE} ${PREOPEN_NOT_CHECKED}（${PREOPEN_SCHEDULE}）`
+  return `${PREOPEN_TITLE} ${at} · ${PREOPEN_NEWS_TITLE} ${check.instruments_with_news} 檔`
+}
+
+// The row's mark: 「隔夜新聞 2（可能負向 1）」; only the 可能負向 count goes in the brackets, none without one. null without
+// overnight news (none, or not checked).
+export type PreopenRowMark = { text: string; negative: string | null }
+export function preopenRowMark(news: PreopenNews | null | undefined): PreopenRowMark | null {
+  if (!news || news.count <= 0) return null
+  return {
+    text: `${PREOPEN_NEWS_TITLE} ${news.count}`,
+    negative: news.negative > 0 ? `${directionView('negative').label} ${news.negative}` : null,
+  }
+}
+
+// One news line's time: 「2026/11/15 22:40」, a date-only item 「2026/11/16」.
+export function preopenNewsTime(item: PreopenNewsItem): string {
+  if (item.time_precision === 'date') return formatDate(item.event_date) ?? '時間未提供'
+  return formatTaipeiInstant(item.display_time) ?? '時間未提供'
+}
+
+// The AI direction at the check (inference): the news cards' words, 「尚未判讀」 when not judged yet.
+export function preopenDirection(item: PreopenNewsItem): DirectionView | null {
+  return item.direction ? directionView(item.direction) : null
+}
+
+// The panel's heading: 「隔夜新聞（開盤前檢查 2026/11/16 08:20）」, without news 「隔夜新聞 無（開盤前檢查 …）」, before the
+// check of this list 「隔夜新聞 尚未檢查」.
+export function preopenPanelTitle(check: PreopenCheck | null | undefined, news: PreopenNews | null | undefined): string {
+  const at = check?.status === 'checked' ? formatTaipeiInstant(check.checked_at) : null
+  if (!at) return `${PREOPEN_NEWS_TITLE} ${PREOPEN_NOT_CHECKED}`
+  return news && news.count > 0 ? `${PREOPEN_NEWS_TITLE}（${PREOPEN_TITLE} ${at}）` : `${PREOPEN_NEWS_TITLE} 無（${PREOPEN_TITLE} ${at}）`
 }
