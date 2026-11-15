@@ -29,7 +29,7 @@
 已知限制：
 
 - **代號重用**：一個代號下市多年後分配給別家公司時，兩家的日線會接在同一個標的上，這裡分不出來。回補完成後要依名稱變化稽核一次（回補執行單處理）。
-- **產業與族群成員**：新建的標的沒有產業成員列，族群相關的研究不含它們。2026-09-08 以前有效的 `group_memberships`（`official_industry`）舊列不能當歷史分類：`valid_from` 是上市日（現行分類往回填），2026-09-07 整批換 id 前的族群標籤是錯的（[#773 決定](https://github.com/YiCheng0608/stock-lab/issues/773#issuecomment-6894054847)）。
+- **產業與族群成員**：新建的標的沒有產業成員列，族群相關的研究不含它們。2026-09-08 以前有效的 `group_memberships`（`official_industry`）舊列不能當歷史分類：`valid_from` 是上市日（現行分類往回填），2026-09-07 整批換 id 前的族群標籤是錯的（[#773 決定](https://github.com/YiCheng0608/stock-lab/issues/773#issuecomment-6894054847)）。研究用的當時分類見[官方產業的逐月成員表](#官方產業的逐月成員表)。
 
 ## 回補怎麼跑
 
@@ -96,6 +96,60 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 ```
 
 這裡的 `--segment` 只是讓既有的兩個工具能在研究 DB 上指定日期（例如確認工具讀得到回補的資料）。新策略探索的分段已在 [策略證據「分段」](../spec/evidence.md#分段) 寫死（探索段到 2019-12-31、驗證段 2020-01-02～2024-09-27，[#697](https://github.com/YiCheng0608/stock-lab/issues/697)），探索工具另開單，參數寫死在程式裡；回補完成前不要在回補的歷史上跑整段的特徵證據（#692 決定）。`portfolio_research.py --hypothesis` 的凍結假設不接受 `--segment`。
+
+## 官方產業的逐月成員表
+
+研究用的「T 日屬於哪個官方產業」，給第三輪 M1、M2（[策略證據「官方產業的成員」](../spec/evidence.md#第三輪m1m2)）。由 [`tools/research/industry_members.py`](../../tools/research/industry_members.py) 從官方的分產業收盤行情產生，不寫進研究 DB（[#779](https://github.com/YiCheng0608/stock-lab/issues/779)）。
+
+**來源**：每月最後一個交易日 D，兩個市場各取每個產業代號那一天的收盤行情。
+- 上市：TWSE `MI_INDEX?date=<D>&type=<代號>`。
+- 上櫃：TPEx 舊版 `stk_wn1430_result.php?d=<民國 D>&se=<代號>`。新版 `dailyQuotes` 不分產業，帶 `type` 也回全部。
+- 表裡是當天掛牌的全部股票，含停牌、沒成交、之後下市的公司，產業是**當時**的分類。
+- D 由 TWSE `type=01`（水泥）決定：從月底往前，第一個有列的平日。
+
+**為什麼不用別的**：
+- **`group_memberships`**：現行分類往回填（[下市與轉板的標的](#下市與轉板的標的)）。
+- **MOPS 月營收頁（`t21sc03`）**：用今天的公司名單重新產生，舊頁沒有任何下市公司，產業也是現在的。2013-01～2024-09 的 563 頁裡，研究 DB 的 150 檔下市、19 檔轉板標的一檔都沒有（#779 [6894170671](https://github.com/YiCheng0608/stock-lab/issues/779#issuecomment-6894170671)）。
+- **MOPS 公司基本資料（`t05st03`）**：下市公司只回舊大類或沒有資料。
+- 2015-01-05 實測，TPEx 其他電子類 39 檔中，有 8 檔現在被分到別的產業，6 檔不在 MOPS 頁上（[6894326371](https://github.com/YiCheng0608/stock-lab/issues/779#issuecomment-6894326371)）。
+
+**一列**：`snapshot_date`、`exchange`（`TWSE`／`TPEx`）、`industry_code`、`category`（回應的類別名稱原文）、`group_label`、`group_id`、`symbol`、`name`。
+- `group_label` 是產品 `app.taxonomy` 的英文標籤，`group_id` 是 `canonical_group_id("industry", group_label)`。兩個市場同標籤的產業是同一個族群。
+- 對照表寫死在工具的 `GROUP_LABELS`／`CATEGORY_NAMES`／`CODE_PERIODS`，三者都進 `definitions_sha256`。工具不 import 產品，`backend/tests/test_industry_members_tool.py` 會和產品的表比對。
+- 上櫃 18 貿易百貨併入上市的 `Wholesale and Retail`。
+- 上櫃 34 電子商務只在 2023-07-03 以前出現，產品沒有對應標籤，記成獨立族群 `E-commerce`。
+- 存託憑證（上市 `type=9299`）、管理股票（上櫃 `se=80`）不是產業，不抓。
+
+**T 日用哪一份**：`snapshot_date ≤ T` 的最新一份（`industry_members.members_on`）。D 的收盤行情在 D 收盤後就公開，所以 T＝D 可以用。研究工具的 T 都是交易日的收盤後。
+
+**限制**：
+- 一個月一份：月中改分類、新上市的股票，要到月底那一份才反映。新上市的股票在第一份快照前沒有族群，不能被選，但照樣在母體裡。
+- 代號重用：表只存代號，不存 `instrument_id`。研究工具在 T 日對到「代號相同、T 日有日線」的標的；#702 AC-5 的清單拆出的舊公司，依日期分開。
+- 普通股是否都落在某個產業：產生時以研究 DB 已存的全市場行情（TWSE `ALLBUT0999`、TPEx `dailyQuotes`）核對。研究 DB 沒有那一天的全市場行情時，manifest 的 `completeness` 記「未核對」與天數。
+
+**檔案**：在 `task-779_members` volume 的 `/out/`，統籌核對 sha256 後複製到研究 volume 的 `/data/research/`。
+- `industry_members_v1.json`：主檔。內容排好序，同一份 raw 重跑位元組相同。
+- `industry_members_v1.manifest.json`：命令、commit、定義與其雜湊、每個回應的路徑與 sha256、每年列數、完整性檢查。
+- `raw/<exchange>/<YYYYMMDD>/<代號>.json`：原始回應的位元組。
+- `requests.jsonl`：每個請求的網址、狀態碼、sha256 與時間。
+
+**怎麼重建**：
+- 只從 raw 重建，不發請求：
+
+  ```bash
+  docker run --rm --network none -v task-779_members:/out -v stock-lab-research:/research:ro \
+    -v "$PWD:/w:ro" -w /w --entrypoint python stock-lab-backend:<tag> \
+    tools/research/industry_members.py build --start 2013-01 --end 2024-09 --out /out \
+    --research-db /research/stock.db --raw-root /research/raw
+  ```
+
+- 重新抓：
+  - 用 `fetch --start 2013-01 --end 2024-09 --out /out`，在 `docker run -d` 的容器裡跑。
+  - 每個 host 間隔 ≥ 5 秒，兩個 host 並行。
+  - 台北 20:30～23:30、08:00～09:00 不發。
+  - 同一個 host 連續 3 次失敗（非 200、空回應、不是 JSON、被擋）就停下，exit 2，不自己重試。
+  - 已存的 raw 不重抓，重跑就是續跑。
+  - 各時期的代號清單是先用 `sweep`（指定月份全掃）與 `bisect`（找出代號開始或結束的月份）確認的。
 
 ## 研究工具的耗時與記憶體
 
