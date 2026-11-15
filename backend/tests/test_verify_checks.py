@@ -3509,7 +3509,12 @@ T26_ROW_METRICS = [
 
 
 def _t26_run(
-    tmp_path, page=T26_PAGE, payload=None, rows=None, day="2026-10-16T17:30:00+08:00"
+    tmp_path,
+    page=T26_PAGE,
+    payload=None,
+    rows=None,
+    day="2026-10-16T17:30:00+08:00",
+    today_day="2026-10-16",
 ):
     metas = {
         "today-mainstream": {
@@ -3524,6 +3529,7 @@ def _t26_run(
     payloads = {
         "mainstream": _mainstream() if payload is None else payload,
         "dashboard": {"as_of": day},
+        "candidates": {"trading_date": today_day},
     }
     return FakeRun(tmp_path, payloads, {"today-mainstream-1280": page}, metas=metas)
 
@@ -3607,3 +3613,16 @@ def test_t26_empty_states(tmp_path, status, line):
         page_checks.t26(
             _t26_run(tmp_path, page.replace(line, "x"), payload=_mainstream(status))
         )
+
+
+def test_t26_marks_of_another_days_today_list_carry_the_date(tmp_path):
+    # Review 6893655832: the page's today list is of 2026-10-19, the mainstream list of
+    # 2026-10-16, so 「今日名單 #1」 is plain text with the mainstream date.
+    dated = T26_PAGE.replace("今日名單 #1\n", "2026/10/16 今日名單 #1\n")
+    assert page_checks.t26(_t26_run(tmp_path, dated, today_day="2026-10-19")).endswith(
+        "`今日名單 #n` 1 行 = mainstream.json；沒有點位用詞與規則價位線；390 收盤欄不被切"
+    )
+    with pytest.raises(page_checks.Fail, match="第 1 列是"):
+        page_checks.t26(_t26_run(tmp_path, today_day="2026-10-19"))
+    with pytest.raises(page_checks.Fail, match="第 1 列是"):
+        page_checks.t26(_t26_run(tmp_path, dated))

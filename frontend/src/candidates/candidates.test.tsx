@@ -35,9 +35,12 @@ import { PageDateContext } from '../components/pageDate'
 import { removedCopyIn } from '../removedCopy.fixtures'
 import { CandidatesSection, PriceLadder, ScoreDetails, Sparkline, TodayCandidateList } from './CandidateViews'
 import { MainstreamList, MainstreamSection, TodayListsSection, mainstreamQueryOptions } from './MainstreamViews'
-import { TODAY_LISTS, mainstreamGroupsText, mainstreamReturnText, mainstreamState, signedPercent, todayListKind, todayListPickPath, todayListSearch } from './mainstream'
+import { TODAY_LISTS, mainstreamGroupsText, mainstreamReturnText, mainstreamState, signedPercent, todayListKind, todayListMark, todayListPickPath, todayListSearch } from './mainstream'
 import { mainstreamItem, mainstreamResponse, missingMainstream, zeroMainstream } from './mainstream.fixtures'
 import { ROW_CLICK_IGNORED, SPARKLINE_HEIGHT, SPARKLINE_WIDTH, TERMINAL_MIN_WIDTH, candidateChartLevels, chartToggleLabel, ladderLabel, nextChartRank, priceLadder, rowClickToggles, sparkline } from './candidates'
+// scripts/ci-test.cjs runs this module under Node (the frontend ships no Node typings): the stylesheet check reads a file.
+declare const require: (id: string) => unknown
+declare const __dirname: string
 
 // Standalone regression module (no browser, no server, no network) for the daily candidate list (#215):
 // the detail content under each today row (components, reasons, AI note), partial components, the score details
@@ -493,9 +496,16 @@ check(preopenCheckLine(undefined) === null, 'no line without preopen_check')
     observer.subscribe(() => undefined)()
   }
   check(JSON.stringify(requests) === JSON.stringify(['mainstream']), `the today list requests no /api/mainstream: ${requests.join(',')}`)
+  // And the page wires them (review 6893655832 suggestion 2): the query the section builds is disabled on 今日名單.
+  const enabledAt = (location: string) => {
+    const client = new QueryClient()
+    renderAt(location, <TodayListsSection today={today} />, client)
+    return (client.getQueryCache().find({ queryKey: ['mainstream', 'latest'] })?.options as { enabled?: unknown } | undefined)?.enabled
+  }
+  check(enabledAt('/') === false && enabledAt('/?list=mainstream') === true, `the section's /api/mainstream query: ${enabledAt('/')} at /, ${enabledAt('/?list=mainstream')} at ?list=mainstream`)
 
   // computed: the head, the definition (W, G and the group names by rank, from the API) and the rows.
-  const computed = render(<MainstreamSection data={mainstreamResponse()} loading={false} error={null} />)
+  const computed = render(<MainstreamSection data={mainstreamResponse()} loading={false} error={null} todayDate="2026-11-13" />)
   check(computed.includes('<h2 id="mainstream-title">主流族群前 20</h2>') && plain(computed).includes('2026/11/13') && plain(computed).includes('2 檔'), `the head: title, data date and count: ${plain(computed).slice(0, 60)}`)
   const definition = inner(computed, 'mainstream-definition', '</p>')
   check(definition === '近 240 個交易日相對加權指數最強的 3 個族群：半導體、AI 伺服器、電腦及週邊設備；族群內個股依 240 日漲幅取前 20', `the definition: ${definition}`)
@@ -517,6 +527,15 @@ check(preopenCheckLine(undefined) === null, 'no line without preopen_check')
   check(todayListPickPath(mainstreamResponse().items[0]!) === '/?pick=2330', 'the mark links to the today list with the stock picked')
   check(first.includes('<a class="badge badge-compact mainstream-today-mark" data-today-rank="2" href="/?pick=2330">今日名單 #2</a>'), `the mark on a today-list stock: ${slice(first, 'mainstream-today-mark', '</a>')}`)
   check(!second.includes('mainstream-today-mark') && !plain(second).includes('今日名單'), 'no mark on a stock off the today list')
+  // The two lists of different dates (review 6893655832): today_list is of the mainstream list's date, the page's today
+  // list is the latest, so the mark is plain text with its date and never opens another day's row.
+  const otherDay = mRow(render(<MainstreamSection data={mainstreamResponse()} loading={false} error={null} todayDate="2026-11-16" />), 1)
+  check(!otherDay.includes('<a class="badge badge-compact mainstream-today-mark') && otherDay.includes('<span class="badge badge-compact mainstream-today-mark mainstream-today-mark-other" data-today-rank="2">2026/11/13 今日名單 #2</span>') && !otherDay.includes('pick='), `another day's today list: the mark is not a link: ${slice(otherDay, 'mainstream-today-mark', '</span>')}`)
+  check(!mRow(render(<MainstreamSection data={mainstreamResponse()} loading={false} error={null} />), 1).includes('href="/?pick='), 'no link while the today list\'s date is unknown')
+  check(todayListMark(mainstreamResponse().items[0]!, '2026-11-13', '2026-11-13T09:30:00+00:00')?.link === '/?pick=2330' && todayListMark(mainstreamResponse().items[1]!, '2026-11-13', '2026-11-13') === null, 'the same date links; no today_list, no mark')
+  // The page passes the today list's date: the switch links only when the two responses are of the same day.
+  const sameDayPage = renderAt('/?list=mainstream', <TodayListsSection today={{ ...today, data: { ...listResponse(), trading_date: '2026-11-13' } }} />, withMainstream(mainstreamResponse()))
+  check(sameDayPage.includes('href="/?pick=2330">今日名單 #2</a>') && !atMainstream.includes('href="/?pick=') && plain(atMainstream).includes('2026/11/13 今日名單 #2'), 'the switch links the mark only when both lists are of the same date')
   // Where the click lands: the today list with the pick, its chart beside the list or its own card below 1280px.
   const long = { ...listResponse(), candidate_count: 12, items: Array.from({ length: 12 }, (_, index) => ({ ...completeItem(), rank: index + 1, instrument: { ...completeItem().instrument, id: 9000 + index, symbol: String(5001 + index) } })) }
   const picked: string[] = []
@@ -542,10 +561,10 @@ check(preopenCheckLine(undefined) === null, 'no line without preopen_check')
   // The chart: beside the list from 1280px (the first row's), a row's own card below, none mounted at first.
   const mCharts: string[] = []
   const mSpy = (item: MainstreamItem) => { mCharts.push(item.instrument.symbol); return <div data-test-chart={item.instrument.symbol} /> }
-  const mWide = render(<MainstreamSection data={mainstreamResponse()} loading={false} error={null} renderChart={mSpy} wide />)
+  const mWide = render(<MainstreamSection data={mainstreamResponse()} loading={false} error={null} renderChart={mSpy} wide todayDate="2026-11-13" />)
   check(mWide.includes('class="candidates-terminal"') && mWide.includes('data-chart-rank="1"') && mCharts.join(',') === '2330' && mRow(mWide, 1).includes('aria-pressed="true"'), `from 1280px the first stock's chart is beside the list: ${mCharts.join(',')}`)
   mCharts.length = 0
-  const mNarrow = render(<MainstreamSection data={mainstreamResponse()} loading={false} error={null} renderChart={mSpy} />)
+  const mNarrow = render(<MainstreamSection data={mainstreamResponse()} loading={false} error={null} renderChart={mSpy} todayDate="2026-11-13" />)
   check(mCharts.length === 0 && !mNarrow.includes('candidates-terminal') && mNarrow.includes('<div class="candidate-chart" id="mainstream-chart-1" hidden="">') && mRow(mNarrow, 1).includes('aria-expanded="false"'), 'below 1280px no chart mounts until a row opens its card')
   check(render(<MainstreamList items={mainstreamResponse().items} days={240} renderChart={mSpy} initialChartRank={2} />).includes('data-test-chart="6274"') && mCharts.join(',') === '6274', 'an open row mounts its own card')
   check(plain(mWide) === plain(computed) && plain(mNarrow) === plain(computed), 'the chart slot changes no page text')
@@ -563,4 +582,18 @@ check(preopenCheckLine(undefined) === null, 'no line without preopen_check')
   check(mainstreamState({ ...mainstreamResponse(), items: [] }).kind === 'zero', 'computed with no rows reads as zero, not an empty list')
   check(plain(render(<MainstreamSection data={undefined} loading={false} error={new Error('API 500: boom')} />)).includes('API 500: boom'), 'a failed load gives its reason')
   check(mainstreamReturnText(mainstreamItem(1), 60) === '近 60 日 +49.00%（較加權 +29.00%）' && mainstreamGroupsText({ groups: [] }) === '無所屬主流族群', 'the text helpers')
+
+  // The two layout fixes measured in the browser (PR 775, review 6893655832 suggestion 3), locked on the stylesheet: no
+  // DOM here, and page_checks T26 measures only the close column. The groups wrap (no ellipsis cuts them) with a hanging
+  // indent; below 640px the title spans the row and the sparkline and the close share the last line.
+  const css = (require('node:fs') as { readFileSync(file: string, encoding: 'utf8'): string }).readFileSync(`${__dirname}/../styles/mainstream.css`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+  const rule = (block: string, selector: string) => {
+    const at = block.indexOf(`${selector} {`)
+    return at < 0 ? '' : block.slice(at, block.indexOf('}', at))
+  }
+  const phone = css.slice(css.indexOf('@media (max-width: 640px)'))
+  const wrapTitle = rule(css, '.candidate-row.mainstream-row .candidate-row-title')
+  check(/white-space: normal/.test(wrapTitle) && /overflow: visible/.test(wrapTitle) && /text-overflow: clip/.test(wrapTitle) && /text-indent: -52px/.test(wrapTitle), `the title wraps instead of an ellipsis, hanging under the name: ${wrapTitle}`)
+  check(/grid-column: 1 \/ -1/.test(rule(phone, '.candidate-row.mainstream-row .candidate-row-title')) && /text-indent: -42px/.test(rule(phone, '.candidate-row.mainstream-row .candidate-row-title')), 'below 640px the title spans the row')
+  check(/grid-column: 1;/.test(rule(phone, '.candidate-row.mainstream-row .mainstream-row-figures')) && /grid-column: 2;/.test(rule(phone, '.candidate-row.mainstream-row .candidate-row-nums')), 'below 640px the sparkline and the close share one line')
 }

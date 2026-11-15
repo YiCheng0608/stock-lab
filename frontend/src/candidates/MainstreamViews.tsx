@@ -28,9 +28,9 @@ import {
   mainstreamState,
   todayListKind,
   todayListMark,
-  todayListPickPath,
   todayListSearch,
   type TodayListKind,
+  type TodayListMarkView,
 } from './mainstream'
 
 // The today page's two lists (#769; DESIGN_SYSTEM §5 候選列表, UI_COPY_SPEC §10 主流族群前 20): a two-tab switch
@@ -69,7 +69,7 @@ export function TodayListsSection({ today, renderChart, renderMainstreamChart, w
       <div id={tabPanelId(LISTS_ID, kind)} role="tabpanel" aria-labelledby={tabId(LISTS_ID, kind)}>
         {kind === 'today'
           ? <CandidatesSection data={today.data} loading={today.loading} error={today.error} renderChart={renderChart} wide={wide} pick={search.get(PICK_PARAM)} />
-          : <MainstreamSection data={mainstream.data} loading={mainstream.isLoading} error={mainstream.error} renderChart={renderMainstreamChart} wide={wide} />}
+          : <MainstreamSection data={mainstream.data} loading={mainstream.isLoading} error={mainstream.error} renderChart={renderMainstreamChart} wide={wide} todayDate={today.data?.trading_date ?? null} />}
       </div>
     </div>
   )
@@ -91,10 +91,9 @@ type RowChart = { open: boolean; onToggle: () => void; content: ReactNode }
 // One stock (#769): who (rank, name, market · groups) on the first line, its W-session strength and 「今日名單 #n」 on the
 // second, the sparkline under it, the close and change on the right. No entry sentence, price ladder, RR or total
 // score: the list has no price levels. Below 1280px the rank button opens the row's K-line card, as on the today list.
-function MainstreamRow({ item, days, selected, onSelect, chart }: { item: MainstreamItem; days: number; selected: boolean; onSelect?: () => void; chart?: RowChart }) {
+function MainstreamRow({ item, days, mark, selected, onSelect, chart }: { item: MainstreamItem; days: number; mark: TodayListMarkView | null; selected: boolean; onSelect?: () => void; chart?: RowChart }) {
   const { instrument } = item
   const change = candidateChange(item.market)
-  const mark = todayListMark(item)
   const groups = mainstreamGroupsText(item)
   const chartId = `mainstream-chart-${item.rank}`
   const onRowClick = chart
@@ -119,7 +118,8 @@ function MainstreamRow({ item, days, selected, onSelect, chart }: { item: Mainst
           </p>
           <div className="mainstream-row-line">
             <ReturnLine item={item} days={days} />
-            {mark && <Link className="badge badge-compact mainstream-today-mark" to={todayListPickPath(item)} data-today-rank={item.today_list?.rank}>{mark}</Link>}
+            {mark?.link && <Link className="badge badge-compact mainstream-today-mark" to={mark.link} data-today-rank={item.today_list?.rank}>{mark.text}</Link>}
+            {mark && !mark.link && <span className="badge badge-compact mainstream-today-mark mainstream-today-mark-other" data-today-rank={item.today_list?.rank}>{mark.text}</span>}
           </div>
           <div className="candidate-row-figures mainstream-row-figures"><Sparkline item={item} /></div>
         </div>
@@ -142,7 +142,7 @@ function MainstreamRow({ item, days, selected, onSelect, chart }: { item: Mainst
 
 // The rows, and from 1280px the picked stock's K-line card on the right (盤後終端, the today list's layout): the first
 // until another rank is pressed. Below that a row opens its own card, none at first (#665: no chart mounts, no /bars).
-export function MainstreamList({ items, days, renderChart, wide = false, initialChartRank = null }: { items: MainstreamItem[]; days: number; renderChart?: (item: MainstreamItem) => ReactNode; wide?: boolean; initialChartRank?: number | null }) {
+export function MainstreamList({ items, days, listDate = null, todayDate = null, renderChart, wide = false, initialChartRank = null }: { items: MainstreamItem[]; days: number; listDate?: string | null; todayDate?: string | null; renderChart?: (item: MainstreamItem) => ReactNode; wide?: boolean; initialChartRank?: number | null }) {
   const [picked, setPicked] = useState<number | null>(null)
   const [chartRank, setChartRank] = useState<number | null>(initialChartRank)
   const lastWide = useRef(wide)
@@ -157,7 +157,7 @@ export function MainstreamList({ items, days, renderChart, wide = false, initial
   const list = (
     <ol className="candidate-list mainstream-list">
       {items.map((item) => (
-        <MainstreamRow key={item.instrument.exchange + item.instrument.symbol} item={item} days={days}
+        <MainstreamRow key={item.instrument.exchange + item.instrument.symbol} item={item} days={days} mark={todayListMark(item, listDate, todayDate)}
           selected={terminal && item === selected} onSelect={terminal ? () => setPicked(item.rank) : undefined}
           chart={renderChart && !wide ? { open: chartRank === item.rank, onToggle: () => setChartRank((current) => nextChartRank(current, item.rank)), content: chartRank === item.rank ? renderChart(item) : null } : undefined} />
       ))}
@@ -172,7 +172,8 @@ export function MainstreamList({ items, days, renderChart, wide = false, initial
   )
 }
 
-export function MainstreamSection({ data, loading, error, renderChart, wide = false }: { data: MainstreamResponse | undefined; loading: boolean; error: unknown; renderChart?: (item: MainstreamItem) => ReactNode; wide?: boolean }) {
+// todayDate: the date of the today list the page shows (the latest); 「今日名單 #n」 links to it only on the same date.
+export function MainstreamSection({ data, loading, error, renderChart, wide = false, todayDate = null }: { data: MainstreamResponse | undefined; loading: boolean; error: unknown; renderChart?: (item: MainstreamItem) => ReactNode; wide?: boolean; todayDate?: string | null }) {
   const state = data ? mainstreamState(data) : null
   return (
     <section className="candidates-section mainstream-section" aria-labelledby="mainstream-title">
@@ -191,7 +192,7 @@ export function MainstreamSection({ data, loading, error, renderChart, wide = fa
           : !state || !data
             ? null
             : state.kind === 'list'
-              ? <MainstreamList items={state.items} days={data.window} renderChart={renderChart} wide={wide} />
+              ? <MainstreamList items={state.items} days={data.window} listDate={data.trading_date} todayDate={todayDate} renderChart={renderChart} wide={wide} />
               : <Card><EmptyState title={state.title} reason={state.text} /></Card>}
     </section>
   )

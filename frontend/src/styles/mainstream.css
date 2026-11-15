@@ -19,7 +19,9 @@
 .mainstream-return-value { font: 600 var(--text-md) var(--font-mono); font-variant-numeric: tabular-nums; }
 .mainstream-return-excess { margin-left: var(--space-1); color: var(--color-text-muted); font-size: var(--text-sm); white-space: nowrap; }
 .mainstream-today-mark { white-space: nowrap; text-decoration: none; }
-.mainstream-today-mark:hover { border-color: var(--color-primary); color: var(--color-text); }
+a.mainstream-today-mark:hover { border-color: var(--color-primary); color: var(--color-text); }
+/* Of another day than the today list shown (review 6893655832): plain text, not a link. */
+.mainstream-today-mark-other { color: var(--color-text-muted); }
 .candidate-row.mainstream-row .mainstream-row-figures { max-width: none; }
 
 @media (min-width: 1280px) {

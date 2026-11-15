@@ -39,8 +39,22 @@ export function todayListPickPath(item: Pick<MainstreamItem, 'instrument'>): str
   return `/?${PICK_PARAM}=${encodeURIComponent(item.instrument.symbol)}`
 }
 
-export function todayListMark(item: Pick<MainstreamItem, 'today_list'>): string | null {
-  return item.today_list ? `${TODAY_LIST_TITLE} #${item.today_list.rank}` : null
+// The API reads today_list on the mainstream list's own date, while the page's today list is the latest. They differ
+// while the daily has written the today list but not yet this one, or when this step failed and the previous list
+// stays (review 6893655832). The mark links to the today list only when both are of the same date; otherwise it is
+// plain text with the mainstream list's date, 「2026/11/13 今日名單 #9」, so it never opens another day's row.
+export type TodayListMarkView = { text: string; link: string | null }
+
+export function todayListMark(
+  item: Pick<MainstreamItem, 'today_list' | 'instrument'>,
+  mainstreamDate: string | null | undefined,
+  todayDate: string | null | undefined,
+): TodayListMarkView | null {
+  if (!item.today_list) return null
+  const text = `${TODAY_LIST_TITLE} #${item.today_list.rank}`
+  if (mainstreamDate && todayDate && mainstreamDate.slice(0, 10) === todayDate.slice(0, 10)) return { text, link: todayListPickPath(item) }
+  const day = formatDate(mainstreamDate)
+  return { text: day ? `${day} ${text}` : text, link: null }
 }
 
 // A ratio as a signed percent, two decimals: 「+12.34%」, 「-0.50%」, 「0.00%」 (flat is not coloured).

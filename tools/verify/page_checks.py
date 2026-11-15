@@ -2277,6 +2277,8 @@ MAINSTREAM_EMPTY = {"missing": "尚無主流族群名單", "zero": "當日沒有
 EXCHANGE_LABELS = {"TWSE": "上市", "TPEx": "上櫃"}  # presentation.ts exchangeLabel
 # The list has no price levels (decision #1 6891614350): none of these on it, nor the chart's rule level line.
 MAINSTREAM_LEVEL_WORDS = ("進場", "停損", "目標", "RR", "總分", "可買")
+# 「今日名單 #n」, or 「YYYY/MM/DD 今日名單 #n」 when the today list shown is of another date.
+MAINSTREAM_MARK = re.compile(r"^(?:\d{4}/\d{2}/\d{2} )?今日名單 #\d+$")
 
 
 def mainstream(run: Run) -> dict:
@@ -2308,8 +2310,13 @@ def mainstream_definition(payload: dict) -> str:
     )
 
 
-def mainstream_row_lines(item: dict, window: int) -> list[str]:
-    """A row's first lines: the title, the strength, then 「今日名單 #n」 when it is on the today list."""
+def mainstream_row_lines(
+    item: dict, window: int, other_day: str | None = None
+) -> list[str]:
+    """A row's first lines: the title, the strength, then 「今日名單 #n」 when it is on the today list.
+
+    ``other_day``: the mainstream date when the page's today list is of another date; the mark is then
+    plain text that starts with it (mainstream.ts todayListMark, review 6893655832)."""
 
     instrument = item["instrument"]
     groups = (
@@ -2323,7 +2330,8 @@ def mainstream_row_lines(item: dict, window: int) -> list[str]:
         f"（較加權 {signed_percent(item.get('excess_w'))}）",
     ]
     if item.get("today_list"):
-        lines.append(f"今日名單 #{item['today_list']['rank']}")
+        mark = f"今日名單 #{item['today_list']['rank']}"
+        lines.append(f"{slash(other_day)} {mark}" if other_day else mark)
     return lines
 
 
@@ -2371,13 +2379,16 @@ def t26(run: Run) -> str:
         if n > i and CANDIDATE_ROW.match(line) is not None
     ]
     expect(len(rows) == len(items), f"名次列 {len(rows)}，items {len(items)}")
+    # The marks link to the today list only when it is of the same date (review 6893655832).
+    today_day = candidates(run).get("trading_date")
+    other_day = None if today_day and day and today_day[:10] == day[:10] else day
     for row, item in zip(rows, items):
-        want = mainstream_row_lines(item, payload["window"])
+        want = mainstream_row_lines(item, payload["window"], other_day)
         got = text.lines[row : row + len(want)]
         expect(
             got == want, f"第 {item['rank']} 列是 {got}，預期 {want}（{text.at(row)}）"
         )
-    marks = text.count(lambda line: line.startswith("今日名單 #"))
+    marks = text.count(lambda line: MAINSTREAM_MARK.match(line) is not None)
     listed = sum(1 for item in items if item.get("today_list"))
     expect(marks == listed, f"`今日名單 #n` {marks} 行，today_list 非 null {listed} 筆")
     # The list and the chart beside it, up to the hot groups under them.
