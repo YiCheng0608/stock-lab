@@ -1995,6 +1995,12 @@ OMITTED_TABLES: dict[str, str] = {
         "有 events 時，GET 發現投影指紋不符就改寫 news_items（#476）"
     ),
     "group_daily_score_archive": "只在 hot_group 版本升級時封存舊分數；假資料只有現行版本",
+    "mainstream_items": (
+        "主流族群前 20（#768）的每檔；五個主導航還不讀（畫面在 #769），"
+        "算法、daily 步驟與 /api/mainstream 由 backend/tests/test_mainstream.py 驗；"
+        "假資料的日線不到 241 根，mainstream_v1 也算不出名單"
+    ),
+    "mainstream_runs": "同 mainstream_items：主流族群前 20 的每日一列（#768）",
     "margin_lists": (
         "融資標的清單只給 analyze 判定融資條件是否適用（#392）；API 不讀，"
         "假資料的訊號直接寫好判定結果"
