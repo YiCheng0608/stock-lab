@@ -15,7 +15,11 @@ the data volume mounted read-only.  Where a file is follows ``app.raw_paths``:
 ``--fallback-raw-dir`` is a second raw directory: a missing file that is whole there,
 under the same path relative to its raw directory, is counted in
 ``whole_in_fallback`` and not listed (the research DB's rows copied from production
-have their files only in the production volume, #772 decision 6893166947).
+have their files only in the production volume, #772 decision 6893166947).  The
+relative path is taken from an old Windows path, or from a path under
+``app.raw_paths.raw_dir()`` (``STOCK_RAW_DIR``, ``/data/raw`` in the image); a file
+anywhere else is never looked for there, so run it where ``STOCK_RAW_DIR`` is the raw
+directory the database's ``/data/raw/...`` paths name.
 
 Refuses (exit 2) between 21:30 and 23:30 Taipei time: hashing every file competes
 with the daily job for the disk.  Prints one JSON object; exit 0 when nothing is
@@ -198,7 +202,8 @@ def _parser() -> argparse.ArgumentParser:
         "--fallback-raw-dir",
         help="another raw directory (read-only) where a missing file is looked for "
         "under the same relative path, e.g. the production volume's for the "
-        "research DB's rows copied from production",
+        "research DB's rows copied from production; only paths under STOCK_RAW_DIR "
+        "or old Windows paths are mapped",
     )
     return parser
 

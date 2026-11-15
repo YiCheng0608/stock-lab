@@ -1964,6 +1964,20 @@ def targeted_backfill(
         )
     metadata["coverage"] = report["summary"]
     effective_target, closures, verified_count, met = target_state()
+    # One status for the run and its manifest summary (#772).  Skipped dates are
+    # the ones the official source answered explicitly with no data (no_data_dates,
+    # e.g. TWSE MI_INDEX "沒有符合條件的資料"), not a calendar lookup; a failed
+    # request is never skipped.  They are no missing data, so they neither make a
+    # window partial nor save an otherwise failed one from failed.
+    if failed:
+        final_status = "partial" if (completed or partial) else "failed"
+        final_error = "official backfill failed dates: " + ", ".join(sorted(failed))
+    elif partial:
+        final_status = "partial"
+        final_error = None
+    else:
+        final_status = "success"
+        final_error = None
     metadata["coverage_manifest_summary"] = {
         "requested_dates": len(candidate_dates),
         "requested_calendar_dates": len(
@@ -1977,9 +1991,7 @@ def targeted_backfill(
         "target_sessions": effective_target,
         "confirmed_non_trading_dates": closures,
         "target_met": met,
-        # Confirmed closures are no missing data (#772): only failed or partial dates
-        # make the summary, and the run, partial.
-        "status": "success" if not (failed or partial) else "partial",
+        "status": final_status,
         "data_as_of": report["summary"].get("data_cutoff"),
     }
     retryable = {
@@ -1997,15 +2009,6 @@ def targeted_backfill(
         if retryable
         else None
     )
-    if failed:
-        final_status = "partial" if (completed or partial or skipped) else "failed"
-        final_error = "official backfill failed dates: " + ", ".join(sorted(failed))
-    elif partial:
-        final_status = "partial"
-        final_error = None
-    else:
-        final_status = "success"
-        final_error = None
     _persist_progress(
         run_id, metadata, status=final_status, error=final_error, finished=True
     )

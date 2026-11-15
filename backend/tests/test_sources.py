@@ -1,4 +1,5 @@
 import json
+import os
 import stat
 from datetime import date
 from pathlib import Path
@@ -1652,3 +1653,15 @@ def test_a_failed_raw_write_raises_and_leaves_no_file(monkeypatch):
     with pytest.raises(OSError, match="fixture I/O error"):
         _persist_raw()
     assert not target.parent.exists() or list(target.parent.iterdir()) == []
+
+
+def test_raw_files_keep_the_umask_mode_not_mkstemps_0600():
+    # #772 review 6893593170: mkstemp creates 0600 and os.replace keeps it; the files
+    # are written as write_bytes did, 0666 less the umask (0644 in the image).
+    current = os.umask(0o022)
+    os.umask(current)
+    expected = 0o666 & ~current
+    target, _encoded = _raw_target()
+    _persist_raw()
+    for path in (target, target.with_suffix(".meta.json")):
+        assert stat.S_IMODE(path.stat().st_mode) == expected

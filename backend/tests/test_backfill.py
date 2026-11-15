@@ -812,6 +812,25 @@ def test_a_missing_date_next_to_a_closure_keeps_the_run_partial(backfill_env, ki
     assert run["metadata"]["coverage_manifest_summary"]["status"] == "partial"
 
 
+@pytest.mark.parametrize("with_closure", [False, True])
+def test_a_window_with_nothing_received_is_failed_in_run_and_summary(
+    backfill_env, with_closure
+):
+    # #772 review 6893593170: a closure does not save a window whose every
+    # trading day failed, and the manifest summary says what the run says.
+    holiday, missing = date(2026, 9, 9), date(2026, 9, 10)
+    start = holiday if with_closure else missing
+    adapter = _holiday_week_adapter(holiday, failing=missing)
+    run = backfill.targeted_backfill(start, missing, adapter=adapter)
+    assert run["status"] == "failed"
+    assert run["metadata"]["coverage_manifest_summary"]["status"] == "failed"
+    assert _stored_run_status(run["id"]) == "failed"
+    assert run["metadata"]["failed_dates"] == [missing.isoformat()]
+    assert run["metadata"]["skipped_dates"] == (
+        [holiday.isoformat()] if with_closure else []
+    )
+
+
 def test_backfill_retry_budget_is_three_immediate_plus_two_targeted(backfill_env):
     trading_date = date(2026, 9, 4)
 

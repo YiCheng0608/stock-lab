@@ -5,7 +5,6 @@ import copy
 import json
 import math
 import re
-import sys
 from collections import defaultdict
 from dataclasses import asdict, dataclass, replace as replace_record
 from datetime import date, datetime, timedelta, timezone
@@ -141,6 +140,7 @@ from worker.sources import (
     _rows,
     ensure_raw_file,
     raw_file_state,
+    warn_raw,
     _text,
 )
 
@@ -2438,14 +2438,22 @@ def _restore_cited_raw_file(row: RawPayload, payload: FetchedPayload) -> None:
     lands in today's directory while ROW, and every row citing it, keeps the old path.
     A missing, empty or damaged old file gets this capture's bytes (the same sha256);
     the database is not changed.  A failed write raises, so the run is not a success.
+    Only the row found here, of the same run, is restored (decision 6893166947): an
+    empty file a row of another run cites stays as it is.
     """
 
     if not row.payload_path or not row.sha256:
         return
     target = payload_file(row.payload_path)
     fetched = payload_file(str(payload.payload_path))
-    if target == fetched or raw_file_state(target, row.sha256) is None:
-        return  # whole; persist_raw_payload has just written the same path
+    if target == fetched:
+        return  # persist_raw_payload has just made this file whole
+    try:
+        size = fetched.stat().st_size
+    except OSError:
+        size = None
+    if raw_file_state(target, row.sha256, size) is None:
+        return
     collected = row.collected_at
     state = ensure_raw_file(
         target,
@@ -2459,11 +2467,8 @@ def _restore_cited_raw_file(row: RawPayload, payload: FetchedPayload) -> None:
         },
     )
     if state is not None:
-        print(
-            f"warning: raw payload {row.id} file {target} was {state}; "
-            f"restored it from {fetched}",
-            file=sys.stderr,
-            flush=True,
+        warn_raw(
+            f"raw payload {row.id} file {target} was {state}; restored it from {fetched}"
         )
 
 

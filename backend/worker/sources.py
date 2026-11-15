@@ -844,11 +844,21 @@ def persist_raw_payload(
         },
     )
     if state not in (None, RAW_MISSING):
-        _warn(f"raw payload {target} was {state}; rewrote it")
+        warn_raw(f"raw payload {target} was {state}; rewrote it")
     return target
 
 
 RAW_MISSING, RAW_EMPTY, RAW_DAMAGED = "missing", "empty", "damaged"
+
+
+def _umask() -> int:
+    # os.umask can only be read by setting it; done once, at import.
+    current = os.umask(0o022)
+    os.umask(current)
+    return current
+
+
+RAW_FILE_MODE = 0o666 & ~_umask()
 
 
 def ensure_raw_file(target: Path, data: bytes, metadata: dict[str, Any]) -> str | None:
@@ -892,6 +902,9 @@ def _write_durably(target: Path, data: bytes) -> None:
         dir=target.parent, prefix=f".{target.name}.tmp-{os.getpid()}-"
     )
     try:
+        # mkstemp creates 0600 and os.replace keeps it; a raw file gets the mode
+        # write_bytes gave it before #772 (0666 less the umask, 0644 in the image).
+        os.fchmod(descriptor, RAW_FILE_MODE)
         with os.fdopen(descriptor, "wb") as handle:
             handle.write(data)
             handle.flush()
@@ -940,11 +953,13 @@ def _raw_metadata_is_whole(metadata: Path, digest: str) -> bool:
         stored = None
     if isinstance(stored, dict) and stored.get("sha256") == digest:
         return True
-    _warn(f"raw metadata {metadata} is damaged; rewriting it")
+    warn_raw(f"raw metadata {metadata} is damaged; rewriting it")
     return False
 
 
-def _warn(message: str) -> None:
+def warn_raw(message: str) -> None:
+    """One warning line about a raw file (also pipeline._restore_cited_raw_file)."""
+
     # stderr, not logging: backend/alembic/env.py's fileConfig disables the loggers
     # that exist when a command migrates, and stdout is the command's JSON result.
     print(f"warning: {message}", file=sys.stderr, flush=True)
