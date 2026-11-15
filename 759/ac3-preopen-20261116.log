@@ -1,0 +1,10 @@
+===== 2026-11-15T13:55:49.818555+08:00 start job=preopen trigger=manual date=2026-11-16 force=False dry_run=False
+--- news_lock waited=0s running=no
+--- candidate rank=2 TWSE:2618 news=1 positive=1 negative=0 mixed=0 unknown=0 unscored=0 ids=31531
+--- candidate rank=4 TWSE:2882 news=2 positive=0 negative=0 mixed=1 unknown=1 unscored=0 ids=31639,31698
+--- candidate rank=8 TWSE:2891 news=1 positive=0 negative=0 mixed=1 unknown=0 unscored=0 ids=31698
+--- candidate rank=9 TPEx:3374 news=2 positive=2 negative=0 mixed=0 unknown=0 unscored=0 ids=31516,31745
+--- candidate rank=10 TPEx:8099 news=2 positive=1 negative=0 mixed=0 unknown=1 unscored=0 ids=31733,31737
+--- candidate rank=11 TWSE:3035 news=2 positive=2 negative=0 mixed=0 unknown=0 unscored=0 ids=31574,31655
+--- result status=checked list_date=2026-11-13 run_id=19 window_start=2026-11-13T22:03:53.942131+08:00 checked_at=2026-11-15T13:54:32+08:00 candidates=13 with_news=6 news=10 unscored=0
+===== 2026-11-15T13:55:49.886945+08:00 end exit=0 seconds=0
