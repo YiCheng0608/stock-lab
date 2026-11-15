@@ -64,6 +64,7 @@ import math
 import statistics
 import sys
 import time
+from array import array
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
@@ -408,7 +409,8 @@ class Market:
     """The panel plus what the limits and the chips inputs need."""
 
     panel: lib.Panel
-    raw: dict[int, tuple[list[float], list[float], list[float], list[bool]]]
+    # (raw low, high, close, suspended 0／1) of the bars on a session (#752: arrays)
+    raw: dict[int, tuple[array, array, array, array]]
     kinds: dict[int, str]  # instrument_type of every instrument (ETFs included)
     levels: Any  # app.strategies.levels (tick_floor, tick_ceil)
     # symbol of every instrument, for the check of the signals' symbols
@@ -722,31 +724,57 @@ def load_market(
     fundamentals: bool = False,
     end: date | None = None,
 ) -> Market:
-    """The panel from ``start``; with ``end`` nothing after it is read (#703)."""
+    """The panel from ``start``; with ``end`` nothing after it is read (#703).
+
+    The bars are read one instrument at a time (``research_report.benchmark_bars``,
+    #752): each instrument's ``Series`` and ``raw`` are built and its ``Bar``
+    objects dropped before the next, every bar of a day shares the session's
+    ``date`` object and every listing of an instrument one id object, and
+    ``raw`` is held in arrays (the suspension flags as 0／1).  The values,
+    their order and the order of ``listed`` are those of reading the whole
+    ``benchmark_universe`` first.
+    """
 
     report = lib.research_report()
     con = lib.connect_read_only(db)
     try:
-        instruments, listed = report.benchmark_universe(con, start, end)
         sessions = report.market_sessions(con, start, end)
         index_close = report.index_closes(con, start, end)
-        factor_of = report.load_actions(db, instruments, start, raw_dir, end)
+        types = report.BENCHMARK_TYPES
+        # Every stock／ipo instrument takes its actions; one without a bar in
+        # the window is never built, so its actions are never used.
+        holders = {
+            instrument_id: report.Instrument()
+            for (instrument_id,) in con.execute(
+                f"select id from instruments where instrument_type in "
+                f"({','.join('?' * len(types))})",
+                types,
+            )
+        }
+        factor_of = report.load_actions(db, holders, start, raw_dir, end)
         session_index = {day: index for index, day in enumerate(sessions)}
-        series = {
-            instrument_id: lib._series(
+        days = {day.isoformat(): day for day in sessions}
+        series: dict[int, lib.Series] = {}
+        raw = {}
+        listed: dict[date, list[int]] = defaultdict(list)
+        for instrument_id, bars in report.benchmark_bars(con, start, end, days):
+            holder = holders.get(instrument_id)
+            instrument = report.Instrument(
+                bars, [] if holder is None else holder.actions
+            )
+            series[instrument_id] = lib._series(
                 instrument_id, instrument, factor_of, session_index
             )
-            for instrument_id, instrument in instruments.items()
-        }
-        raw = {}
-        for instrument_id, instrument in instruments.items():
-            kept = [bar for bar in instrument.bars if bar.trading_date in session_index]
+            kept = [bar for bar in bars if bar.trading_date in session_index]
             raw[instrument_id] = (
-                [bar.low or 0.0 for bar in kept],
-                [bar.high or 0.0 for bar in kept],
-                [bar.close or 0.0 for bar in kept],
-                [bool(bar.is_suspended) for bar in kept],
+                array("d", [bar.low or 0.0 for bar in kept]),
+                array("d", [bar.high or 0.0 for bar in kept]),
+                array("d", [bar.close or 0.0 for bar in kept]),
+                array("b", [1 if bar.is_suspended else 0 for bar in kept]),
             )
+            for bar in bars:
+                listed[bar.trading_date].append(instrument_id)
+            del bars, instrument, kept
         lib._load_chips(con, series, start, end)
         if fundamentals:  # the rankings of #689 read revenues and EPS
             lib._load_revenues(con, series, end)

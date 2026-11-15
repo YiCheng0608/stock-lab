@@ -51,7 +51,7 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none \
     "$IMG" python -B tools/audit/audit.py --db /db/stock.db --out /out
   ```
 
-  容器內 `audit.py` 以 `SC_AVPHYS_PAGES`（等於 `MemFree`，不含 page cache）量可用記憶體，剛讀過大檔就會報 `free memory 0.08 GB is under 5.0 GB` 而 exit 2（2026-11-05 取完副本後實測，當時 `MemAvailable` 約 6 GB）。先看容器裡 `grep MemAvailable /proc/meminfo`，確定夠 audit 用，再把 `--min-free-gb` 調低。
+  容器內 `audit.py`（與研究工具，共用 `backtest_research.free_memory_gb`）以 `/proc/meminfo` 的 `MemAvailable` 量可用記憶體，可回收的 page cache 算在可用裡；讀不到這一行才退回 `SC_AVPHYS_PAGES`（等於 `MemFree`）。[#752](https://github.com/YiCheng0608/stock-lab/issues/752) 之前用的是 `MemFree`，剛讀過大檔就會報 `free memory 0.08 GB is under 5.0 GB` 而 exit 2（2026-11-05 取完副本後實測，當時 `MemAvailable` 約 6 GB），所以不必再為這個把 `--min-free-gb` 調低。
 - **把 `STOCK_RAW_DIR` 指到一份 raw**（`audit.py` 用 `--raw-dir`）：只有舊 Windows 路徑會換成這個目錄底下的同一相對路徑；切換後的 `/data/raw/...` 不換，在容器外仍讀不到。raw 約 2.2 GB（2026-11-05），副本放 worktree 外暫存目錄，不放 `stock-lab-data/`。
 
 ## 工具

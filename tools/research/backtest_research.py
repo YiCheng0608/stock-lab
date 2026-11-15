@@ -19,7 +19,8 @@ index condition whose series has no rows in the database.
 Refuses before importing the app when ``--db`` is the production database
 (inside ``stock-lab-data`` or ``STOCK_DATA_DIR``, or the same file as its
 ``stock.db``, a hard link included), when Taipei time is between 21:30 and
-23:30 (the daily job and its 23:00 retry, #466), or when free physical memory is under
+23:30 (the daily job and its 23:00 retry, #466), or when available memory (Linux
+``MemAvailable``, which counts the reclaimable page cache, #752) is under
 ``--min-free-gb``.  A replay that reaches 21:30 stops after the score date or
 tracking batch it was committing and exits 3 with ``rerun``, the command that
 completes it (a rerun ends with the rows of one uninterrupted run).
@@ -134,7 +135,7 @@ def daily_window_problem(now: datetime) -> str | None:
     return None
 
 
-def free_memory_gb() -> float | None:
+def free_memory_gb(meminfo: Path = Path("/proc/meminfo")) -> float | None:
     if sys.platform == "win32":
 
         class Status(ctypes.Structure):
@@ -155,6 +156,15 @@ def free_memory_gb() -> float | None:
         if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
             return None
         return status.ullAvailPhys / 2**30
+    # MemAvailable counts the reclaimable page cache; SC_AVPHYS_PAGES is
+    # MemFree, near zero right after a large file was read or written (#752).
+    try:
+        for line in meminfo.read_text(encoding="ascii").splitlines():
+            name, _, value = line.partition(":")
+            if name == "MemAvailable":
+                return int(value.split()[0]) / 2**20  # kB
+    except (OSError, ValueError, IndexError):
+        pass
     try:
         return os.sysconf("SC_AVPHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / 2**30
     except (ValueError, OSError, AttributeError):
