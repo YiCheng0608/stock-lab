@@ -5,7 +5,7 @@ import { formatDay, formatTaipeiDay } from '../dates'
 import type { ActionSummary, MarketOverview } from '../types'
 import { DateBadge, cx } from '../components/ui'
 import { useSameAsPage } from '../components/pageDate'
-import { DERIVED_NOTE, MARKET_PATH, UP_DOWN_NOTE, isDerived, summaryItems } from '../market/marketOverview'
+import { MARKET_PATH, UP_DOWN_NOTE, summaryItems } from '../market/marketOverview'
 
 // Today page header line, the one-line market summary and the holding-risk alert (#276; Issue 549 moved the
 // overview to /market). Order and layout follow DESIGN_SYSTEM §4/§5; copy and units follow UI_COPY_SPEC §11.
@@ -26,20 +26,14 @@ export function MarketSummaryLine({ overview }: { overview: MarketOverview | und
   )
 }
 
-// 資料說明 lines about the summary: how a derived TPEx change is computed (the turnover scopes are on /market).
-export function marketSummaryNotes(overview: MarketOverview | undefined): string[] {
-  return isDerived(overview) ? [DERIVED_NOTE] : []
-}
-
 // One line instead of the old hero: data date · source · snapshot mode, then the quality badge and 資料說明.
-export function TodayHeader({ loading = false, asOf, sourceLabel, modeLabel, badge, scopeText, overview }: {
+export function TodayHeader({ loading = false, asOf, sourceLabel, modeLabel, badge, scopeText }: {
   loading?: boolean
   asOf: string | null | undefined
   sourceLabel: string
   modeLabel: string
   badge?: ReactNode
   scopeText?: string
-  overview: MarketOverview | undefined
 }) {
   // A plain trading date is a calendar day; an instant is read in Taipei time (as the navbar badge).
   const day = !asOf ? null : /^\d{4}-\d{2}-\d{2}$/.test(asOf) ? formatDay(asOf) : formatTaipeiDay(asOf) ?? formatDay(asOf)
@@ -57,7 +51,6 @@ export function TodayHeader({ loading = false, asOf, sourceLabel, modeLabel, bad
       <details className="data-explanation">
         <summary>資料說明</summary>
         {scopeText && <div>{scopeText}</div>}
-        {marketSummaryNotes(overview).map((line) => <div key={line}>{line}</div>)}
         <div>{UP_DOWN_NOTE}</div>
       </details>
     </section>

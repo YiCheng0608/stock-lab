@@ -21,10 +21,11 @@ characters.
 
 The wake itself is tools/ops/orca_wake.sh, the waker monitor.sh runs on the host: it
 sends only once ``orca terminal wait --for tui-idle`` answers satisfied:true; a terminal
-that ended answers that too, and then its send fails (send_failed). Answers of /wake
-(JSON {"result": ...}): sent, not_idle, send_failed, no_heartbeat (none, or a handle
-that is not event_queue's HANDLE: never one starting with "-", which orca would read as
-an option), nothing_pending. One request of each kind at a time, and none within
+that ended answers that too, and then its send fails (send_failed); a coordinator at a
+permission or trust menu is prompt_blocked (#720). Answers of /wake (JSON
+{"result": ...}): sent, not_idle, prompt_blocked, send_failed, no_heartbeat (none, or a
+handle that is not event_queue's HANDLE: never one starting with "-", which orca would
+read as an option), nothing_pending. One request of each kind at a time, and none within
 THROTTLE seconds of the last one answered (429 throttled). Requests refused for the
 token are answered 401 and logged up to REFUSED_PER_MINUTE in the last 60 seconds, then
 429, counted in the next 401's line (held_back=N); a Content-Length that is not a number
@@ -73,7 +74,7 @@ THROTTLE = 30
 WAKE_TIMEOUT = 300
 ORCA_TIMEOUT = 120
 TEXT = "有 {n} 個事件，請處理佇列：bash tools/ops/patrol.sh（處理完以 --done 標記）"
-RESULTS = {0: "sent", 3: "not_idle"}
+RESULTS = {0: "sent", 3: "not_idle", 4: "prompt_blocked"}
 KINDS = {"/wake": "wake", "/worktrees": "worktrees"}
 # Refused requests (no token, a wrong one) answered 401 and logged in any 60 seconds;
 # past this, 429, counted in the next 401's line.

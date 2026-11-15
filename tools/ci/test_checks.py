@@ -1058,6 +1058,12 @@ class BackendTime(unittest.TestCase):
     41764869855), past that week's slowest. The pytest step has 20 minutes, about 1.7
     times the slowest seen (706); the job 10 more for the checkout (5 minutes at its slowest, CheckoutTime), setup
     and pip, so a hung pytest stops at its step and the Summary step still runs.
+
+    By 2026-11-14 the whole suite took 803 to about 1220 seconds on one runner, and PR #741's
+    run 43638579583 passed the 20 minutes (#746). It now runs as two shards side by side
+    (suite_split.py BACKEND_SHARDS), each about half the test time (1364 and 1395 seconds in
+    run 43641113253): the 20 minutes stay, with each shard expected at no more than 0.6 of
+    them (12 minutes) on the slowest runner seen.
     """
 
     PYTEST_MINIMUM = 20
@@ -1089,6 +1095,64 @@ class BackendTime(unittest.TestCase):
         self.assertEqual(self.pytest.get("id"), "pytest")
 
 
+class WorkflowInlinePython(unittest.TestCase):
+    """Every Python script written inline in a workflow step compiles (#746).
+
+    PR #748's first run had a mismatched quote in the backend Summary step's heredoc: pytest
+    passed in both shards and the step then failed with a SyntaxError, ten minutes in. Here it
+    fails in the repository job instead.
+    """
+
+    # Interpreter flags before `-` or `-c` (python3 -B - <<'PY') are matched too.
+    HEREDOC = re.compile(
+        r"\bpython3?(?: -[A-Za-z]+)* - <<'(?P<end>\w+)'\n(?P<source>.*?)\n(?P=end)$",
+        re.DOTALL | re.MULTILINE,
+    )
+    DASH_C = re.compile(r'\bpython3?(?: -[A-Za-z]+)* -c "(?P<source>[^"]*)"')
+
+    def scripts(self) -> list[tuple[tuple[str, str, str], str]]:
+        """((workflow file, job, step name), source) of every inline script."""
+        import yaml
+
+        found = []
+        for path in sorted((ROOT / ".github/workflows").glob("*.yml")):
+            workflow = yaml.load(
+                path.read_text(encoding="utf-8"), Loader=yaml.BaseLoader
+            )
+            for job_name, job in workflow["jobs"].items():
+                for step in job.get("steps", []):
+                    run = step.get("run", "")
+                    where = (path.name, job_name, step.get("name", ""))
+                    for pattern in (self.HEREDOC, self.DASH_C):
+                        found += [(where, m["source"]) for m in pattern.finditer(run)]
+        return found
+
+    def test_every_inline_script_compiles(self):
+        scripts = self.scripts()
+        # Not vacuous: the two steps whose scripts are the longest are found.
+        where = {w for w, _ in scripts}
+        self.assertIn(("ci.yml", "backend", "Summary"), where)
+        self.assertIn(
+            ("ci.yml", "required", "Require every applicable check to succeed"), where
+        )
+        for place, source in scripts:
+            with self.subTest(place):
+                compile(source, " ".join(place), "exec")
+
+    def test_a_mismatched_quote_is_caught(self):
+        """The mutation of PR #748's run 43643799589."""
+        source = "import os\nout = f\"## backend {os.environ['SHARD']}\n')\n"
+        with self.assertRaises(SyntaxError):
+            compile(source, "summary", "exec")
+        for command in ("python3 -", "python3 -B -", "python -I -B -"):
+            with self.subTest(command):
+                run = f"{command} <<'PY'\n{source}PY\n"
+                (match,) = self.HEREDOC.finditer(run)
+                self.assertEqual(match["source"] + "\n", source)
+        (match,) = self.DASH_C.finditer('python -B -c "import app" && echo ok')
+        self.assertEqual(match["source"], "import app")
+
+
 class BackendParallel(unittest.TestCase):
     """The backend job runs pytest-xdist, and a failing test makes it and required red (#442).
 
@@ -1110,7 +1174,8 @@ class BackendParallel(unittest.TestCase):
         self.assertIn('-n "$(nproc)"', step["run"])
         self.assertIn("--dist loadgroup", step["run"])
         self.assertIn("-p suite_split", step["run"])
-        self.assertRegex(step["run"], r"\btests\s*$")
+        # Each shard's files (suite_split.py BACKEND_SHARDS, #746; test_suite_split.Shards).
+        self.assertRegex(step["run"], r'"\$\{selection\[@\]\}"\s*$')
         (install,) = [s for s in self.job["steps"] if "pip install" in s.get("run", "")]
         self.assertIn("pytest-xdist==", install["run"])
         self.assertIn("execnet==", install["run"])

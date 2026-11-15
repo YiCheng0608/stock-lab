@@ -2106,6 +2106,7 @@ REMOVED_COPY = (
     "題材表版本",
     "規則核實 · v",
     "· 規則版本",
+    "依前一日收市指數計算",
 )
 # Issue 732 review 6884044663: a page that shows third-party news (titles, summaries, AI summaries) is matched
 # against the news UI's own removed copy only. The full list holds plain Chinese ("越高越好", "每月第三個週三",

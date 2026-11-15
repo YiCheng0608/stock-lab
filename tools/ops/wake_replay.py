@@ -23,7 +23,8 @@ monitor gives it now (event_queue.py), from what the line holds:
 Then a poll a minute from the first event to the last one plus BATCH_CAP decides with
 event_queue.wake_due(), and also, on the events as stored, with the rule before #711 (a
 new event that is not quiet, or a failed wake due again), for calibration. The coordinator terminal is taken as
-busy in a minute where the real monitor recorded not_idle and idle otherwise. A --done
+busy in a minute where the real monitor recorded not_idle or prompt_blocked (at a
+permission or trust menu, #720) and idle otherwise. A --done
 of the coordinator is left out: an event stays until a wake covers it, so the replay
 counts no fewer wakes than the rule would give.
 
@@ -197,7 +198,7 @@ def report(path: Path, sinces: list[str]) -> list[str]:
     busy = {
         int((eq.epoch(w.get("at")) or 0) // 60)
         for w in wakes
-        if not w.get("ok") and w.get("detail") == "not_idle"
+        if not w.get("ok") and w.get("detail") in ("not_idle", eq.PROMPT_BLOCKED)
     }
     real = real_wake_times(events, wakes)
     lines = [
