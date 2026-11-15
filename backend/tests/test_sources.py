@@ -1615,7 +1615,7 @@ def test_a_damaged_raw_file_is_rewritten_with_the_same_content(damage, capsys):
     warned = capsys.readouterr()
     assert warned.out == ""
     damaged = {"empty": 2, "same_size_other_bytes": 1, "missing_meta": 0}[damage]
-    assert warned.err.count("is damaged") == damaged
+    assert warned.err.count("warning:") == damaged
 
 
 def test_a_whole_raw_file_is_not_rewritten(monkeypatch):

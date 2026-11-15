@@ -91,6 +91,40 @@ def test_the_scan_lists_missing_empty_and_mismatched_files_with_their_citations(
     assert quick["by_state"] == {"empty": 1, "missing": 1}
 
 
+def test_a_file_whole_under_the_fallback_raw_dir_is_not_damaged(tmp_path):
+    from app.raw_paths import raw_dir
+
+    db = _database(tmp_path)
+    fallback = tmp_path / "production-raw"
+    whole = hashlib.sha256(b"whole").hexdigest()
+    con = sqlite3.connect(db)
+    # Rows copied from production: their files are only in the fallback directory.
+    _raw(con, 1, raw_dir() / "twse" / "2026" / "11" / "03" / "a.json", None)
+    legacy = "C:\\Users\\YiCheng\\stock-lab-data\\raw\\tpex\\2026\\10\\17\\b.json"
+    con.execute(
+        "INSERT INTO raw_payloads (id, source, endpoint, payload_path, sha256, "
+        "collected_at) VALUES (2, 'tpex', 'e', ?, ?, '2026-10-17 09:00:00')",
+        (legacy, whole),
+    )
+    # Not in the fallback either; and one there with other bytes.
+    _raw(con, 3, raw_dir() / "twse" / "2026" / "11" / "03" / "c.json", None)
+    _raw(con, 4, raw_dir() / "twse" / "2026" / "11" / "03" / "d.json", None)
+    con.commit()
+    con.close()
+    for relative, content in (
+        ("twse/2026/11/03/a.json", b"whole"),
+        ("tpex/2026/10/17/b.json", b"whole"),
+        ("twse/2026/11/03/d.json", b"other"),
+    ):
+        (fallback / relative).parent.mkdir(parents=True, exist_ok=True)
+        (fallback / relative).write_bytes(content)
+
+    result = raw_files.scan(db, None, quick=False, fallback_raw_dir=fallback)
+    assert result["whole_in_fallback"] == 2
+    assert sorted(item["raw_id"] for item in result["files"]) == [3, 4]
+    assert raw_files.scan(db, None, quick=False)["damaged"] == 4
+
+
 def test_every_foreign_key_to_raw_payloads_is_counted(tmp_path):
     con = sqlite3.connect(_database(tmp_path))
     columns = raw_files.referencing_columns(con)

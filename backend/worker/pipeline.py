@@ -5,6 +5,7 @@ import copy
 import json
 import math
 import re
+import sys
 from collections import defaultdict
 from dataclasses import asdict, dataclass, replace as replace_record
 from datetime import date, datetime, timedelta, timezone
@@ -138,6 +139,8 @@ from worker.sources import (
     _require_reported_date,
     parse_number,
     _rows,
+    ensure_raw_file,
+    raw_file_state,
     _text,
 )
 
@@ -2408,6 +2411,7 @@ def _upsert_raw_payload(
         )
     )
     if row:
+        _restore_cited_raw_file(row, payload)
         return row
     row = RawPayload(
         ingestion_run_id=run.id,
@@ -2425,6 +2429,42 @@ def _upsert_raw_payload(
     db.add(row)
     db.flush()
     return row
+
+
+def _restore_cited_raw_file(row: RawPayload, payload: FetchedPayload) -> None:
+    """Write the capture back to the file ROW cites when that file is not whole (#772).
+
+    Raw files sit under the day they were captured, so a refetch of the same content
+    lands in today's directory while ROW, and every row citing it, keeps the old path.
+    A missing, empty or damaged old file gets this capture's bytes (the same sha256);
+    the database is not changed.  A failed write raises, so the run is not a success.
+    """
+
+    if not row.payload_path or not row.sha256:
+        return
+    target = payload_file(row.payload_path)
+    fetched = payload_file(str(payload.payload_path))
+    if target == fetched or raw_file_state(target, row.sha256) is None:
+        return  # whole; persist_raw_payload has just written the same path
+    collected = row.collected_at
+    state = ensure_raw_file(
+        target,
+        fetched.read_bytes(),
+        {
+            "source": row.source,
+            "endpoint": row.endpoint,
+            "sha256": row.sha256,
+            "data_as_of": row.data_as_of,
+            "collected_at": collected.isoformat() if collected else None,
+        },
+    )
+    if state is not None:
+        print(
+            f"warning: raw payload {row.id} file {target} was {state}; "
+            f"restored it from {fetched}",
+            file=sys.stderr,
+            flush=True,
+        )
 
 
 def _upsert_official_instrument(db: Session, record: InstrumentRecord) -> Instrument:

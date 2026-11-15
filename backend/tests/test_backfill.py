@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Iterator
 
 import pytest
@@ -682,6 +685,62 @@ def test_backfill_explicit_no_data_is_skipped_and_not_retried(backfill_env):
     # target is returned as it is.
     assert resumed["status"] == "success"
     assert resumed["metadata"]["skipped_dates"] == [trading_date.isoformat()]
+
+
+def test_a_forced_refetch_restores_the_empty_file_an_existing_row_cites(
+    backfill_env, monkeypatch, capsys
+):
+    # #772 decision A: the first capture is stored under 2026-11-14, the host stops
+    # and leaves it 0 bytes; a forced refetch on 2026-11-15 gets the same content.
+    day = date(2026, 9, 8)
+
+    class Adapter:
+        def fetch(self, start: date, end: date) -> sources.OfficialBatch:
+            return _batch_for(start)
+
+    monkeypatch.setattr(sources, "utcnow", lambda: datetime(2026, 11, 14, 11, 20))
+    first = backfill.targeted_backfill(day, day, adapter=Adapter())
+    assert first["status"] == "success"
+    with backfill_env() as db:
+        rows = db.execute(
+            select(RawPayload.id, RawPayload.payload_path, RawPayload.sha256)
+        ).all()
+        cited = db.execute(
+            select(MarketBar.id, MarketBar.raw_payload_id).order_by(MarketBar.id)
+        ).all()
+    assert rows and cited
+    old_files = {}
+    for raw_id, path, sha in rows:
+        stored = Path(path)
+        assert "2026/11/14" in stored.as_posix()
+        old_files[raw_id] = (stored, stored.read_bytes(), sha)
+        stored.write_bytes(b"")
+        stored.with_suffix(".meta.json").write_bytes(b"")
+
+    monkeypatch.setattr(sources, "utcnow", lambda: datetime(2026, 11, 15, 10, 0))
+    capsys.readouterr()
+    again = backfill.targeted_backfill(day, day, adapter=Adapter(), force=True)
+    assert again["status"] == "success"
+    warned = capsys.readouterr().err
+    for raw_id, (stored, content, sha) in old_files.items():
+        assert stored.read_bytes() == content
+        assert hashlib.sha256(stored.read_bytes()).hexdigest() == sha
+        meta = json.loads(stored.with_suffix(".meta.json").read_text("utf-8"))
+        assert meta["sha256"] == sha
+        assert f"raw payload {raw_id} file {stored} was empty" in warned
+    with backfill_env() as db:
+        assert (
+            db.execute(
+                select(RawPayload.id, RawPayload.payload_path, RawPayload.sha256)
+            ).all()
+            == rows
+        )
+        assert (
+            db.execute(
+                select(MarketBar.id, MarketBar.raw_payload_id).order_by(MarketBar.id)
+            ).all()
+            == cited
+        )
 
 
 def _holiday_week_adapter(holiday: date, *, failing=None, security_only=None):

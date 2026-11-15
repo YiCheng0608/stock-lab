@@ -12,6 +12,10 @@ the files with ``open(path, "rb")``; only the columns it needs are selected.  Us
 copy of the production database (tools/ops/copy_db.py); the raw directory may be
 the data volume mounted read-only.  Where a file is follows ``app.raw_paths``:
 ``--raw-dir`` is where an old Windows path is looked for, as in audit.py.
+``--fallback-raw-dir`` is a second raw directory: a missing file that is whole there,
+under the same path relative to its raw directory, is counted in
+``whole_in_fallback`` and not listed (the research DB's rows copied from production
+have their files only in the production volume, #772 decision 6893166947).
 
 Refuses (exit 2) between 21:30 and 23:30 Taipei time: hashing every file competes
 with the daily job for the disk.  Prints one JSON object; exit 0 when nothing is
@@ -29,7 +33,7 @@ import sqlite3
 import sys
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 HERE = Path(__file__).resolve().parent
@@ -38,6 +42,9 @@ sys.path.insert(0, str(HERE.parents[1] / "tools" / "research"))
 
 from audit_lib import RawFiles, connect, tables  # noqa: E402
 from backtest_research import daily_window_problem  # noqa: E402
+
+from app.raw_paths import legacy_relative  # noqa: E402
+from app.raw_paths import raw_dir as stored_raw_dir  # noqa: E402
 
 MISSING, EMPTY, SHA_MISMATCH, UNREADABLE = (
     "missing",
@@ -106,12 +113,27 @@ def references(
     return cited
 
 
-def scan(db: Path, raw_dir: Path | None, quick: bool) -> dict[str, Any]:
+def relative_to_raw(payload_path: str, path: Path) -> PurePosixPath | None:
+    """PATH (the file read for PAYLOAD_PATH) relative to its raw directory."""
+
+    legacy = legacy_relative(payload_path)
+    if legacy is not None:
+        return legacy
+    try:
+        return PurePosixPath(path.relative_to(stored_raw_dir()).as_posix())
+    except ValueError:
+        return None
+
+
+def scan(
+    db: Path, raw_dir: Path | None, quick: bool, fallback_raw_dir: Path | None = None
+) -> dict[str, Any]:
     con = connect(db)
     files = RawFiles(raw_dir)
     damaged: list[dict[str, Any]] = []
     states: Counter[str] = Counter()
     checked = 0
+    in_fallback = 0
     rows = con.execute(
         "SELECT id, endpoint, payload_path, sha256, collected_at "
         "FROM raw_payloads ORDER BY id"
@@ -120,6 +142,14 @@ def scan(db: Path, raw_dir: Path | None, quick: bool) -> dict[str, Any]:
         checked += 1
         path = files.path(payload_path) if payload_path else None
         state = MISSING if path is None else file_state(path, sha256, quick)
+        if state == MISSING and path is not None and fallback_raw_dir is not None:
+            relative = relative_to_raw(payload_path, path)
+            if relative is not None and (
+                file_state(fallback_raw_dir.joinpath(*relative.parts), sha256, quick)
+                is None
+            ):
+                in_fallback += 1
+                continue
         if state is None:
             continue
         states[state] += 1
@@ -142,6 +172,8 @@ def scan(db: Path, raw_dir: Path | None, quick: bool) -> dict[str, Any]:
         "db": str(db),
         "quick": quick,
         "raw_payloads": checked,
+        "fallback_raw_dir": None if fallback_raw_dir is None else str(fallback_raw_dir),
+        "whole_in_fallback": in_fallback,
         "damaged": len(damaged),
         "by_state": dict(sorted(states.items())),
         "referenced_damaged": sum(1 for item in damaged if item["referenced_by"]),
@@ -162,6 +194,12 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="only missing and 0-byte files; no sha256 is computed",
     )
+    parser.add_argument(
+        "--fallback-raw-dir",
+        help="another raw directory (read-only) where a missing file is looked for "
+        "under the same relative path, e.g. the production volume's for the "
+        "research DB's rows copied from production",
+    )
     return parser
 
 
@@ -175,7 +213,12 @@ def main(argv: list[str] | None = None) -> int:
     if not db.is_file():
         print(json.dumps({"refused": [f"{db} is not a file"]}, ensure_ascii=False))
         return 2
-    result = scan(db, Path(args.raw_dir) if args.raw_dir else None, args.quick)
+    result = scan(
+        db,
+        Path(args.raw_dir) if args.raw_dir else None,
+        args.quick,
+        Path(args.fallback_raw_dir) if args.fallback_raw_dir else None,
+    )
     print(json.dumps(result, ensure_ascii=False, indent=1))
     return 1 if result["damaged"] else 0
 
