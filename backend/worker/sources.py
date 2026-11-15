@@ -5,7 +5,10 @@ import html
 import inspect
 import json
 import math
+import os
 import re
+import sys
+import tempfile
 import time
 from calendar import monthrange
 from collections import defaultdict
@@ -817,31 +820,152 @@ def persist_raw_payload(
     *,
     collected_at: datetime | None = None,
 ) -> Path:
+    """Store PAYLOAD as ``<RAW_DIR>/<source>/<Y/m/d>/<sha256>.json`` and its ``.meta.json``.
+
+    Both files are on disk before this returns (Issue #772): the caller records the
+    path in ``raw_payloads`` right after, so a capture the database cites must not be
+    lost when the host stops.  A file already there is kept when it is whole (the
+    payload: same size and sha256; the metadata: JSON naming the same sha256) and
+    rewritten otherwise, which is how an empty file left by a power loss comes back
+    the next time the same content is fetched.  A write that fails raises.
+    """
+
     collected = collected_at or utcnow()
     encoded = _encode_payload(payload)
     digest = hashlib.sha256(encoded).hexdigest()
     target_dir = RAW_DIR / source / collected.strftime("%Y/%m/%d")
-    target_dir.mkdir(parents=True, exist_ok=True)
     target = target_dir / f"{digest}.json"
-    if not target.exists():
-        target.write_bytes(encoded)
-    metadata = target.with_suffix(".meta.json")
-    if not metadata.exists():
-        metadata.write_text(
-            json.dumps(
-                {
-                    "source": source,
-                    "endpoint": endpoint,
-                    "sha256": digest,
-                    "data_as_of": data_as_of,
-                    "collected_at": collected.isoformat(),
-                },
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
+    state = ensure_raw_file(
+        target,
+        encoded,
+        {
+            "source": source,
+            "endpoint": endpoint,
+            "sha256": digest,
+            "data_as_of": data_as_of,
+            "collected_at": collected.isoformat(),
+        },
+    )
+    if state not in (None, RAW_MISSING):
+        warn_raw(f"raw payload {target} was {state}; rewrote it")
     return target
+
+
+RAW_MISSING, RAW_EMPTY, RAW_DAMAGED = "missing", "empty", "damaged"
+
+
+def _umask() -> int:
+    # os.umask can only be read by setting it; done once, at import.
+    current = os.umask(0o022)
+    os.umask(current)
+    return current
+
+
+RAW_FILE_MODE = 0o666 & ~_umask()
+
+
+def ensure_raw_file(target: Path, data: bytes, metadata: dict[str, Any]) -> str | None:
+    """Make TARGET hold DATA and its ``.meta.json`` hold METADATA, durably.
+
+    A whole file (same size and sha256; metadata naming the same sha256) is left as
+    it is.  Returns the payload file's state before: None when it was whole, else
+    ``RAW_MISSING``, ``RAW_EMPTY`` or ``RAW_DAMAGED``.  Raises when DATA's sha256 is
+    not TARGET's name or a write fails.  ``pipeline._upsert_raw_payload`` also calls
+    it for the file an existing ``raw_payloads`` row cites (Issue #772 decision A).
+    """
+
+    digest = hashlib.sha256(data).hexdigest()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    state = raw_file_state(target, digest, len(data))
+    if state is not None:
+        write_raw_file(target, data)
+    meta = target.with_suffix(".meta.json")
+    if not _raw_metadata_is_whole(meta, digest):
+        _write_durably(
+            meta,
+            json.dumps(metadata, ensure_ascii=False, indent=2).encode("utf-8"),
+        )
+    return state
+
+
+def _fsync_directory(directory: Path) -> None:
+    # A rename is durable once its directory is synced (POSIX; the collectors
+    # run in the Linux containers, #331, #772).
+    descriptor = os.open(directory, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _write_durably(target: Path, data: bytes) -> None:
+    """Write DATA to TARGET through a synced temporary file in the same directory."""
+
+    descriptor, temporary = tempfile.mkstemp(
+        dir=target.parent, prefix=f".{target.name}.tmp-{os.getpid()}-"
+    )
+    try:
+        # mkstemp creates 0600 and os.replace keeps it; a raw file gets the mode
+        # write_bytes gave it before #772 (0666 less the umask, 0644 in the image).
+        os.fchmod(descriptor, RAW_FILE_MODE)
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, target)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
+    _fsync_directory(target.parent)
+
+
+def write_raw_file(target: Path, data: bytes) -> None:
+    """Write a raw capture whose file name is its sha256; refuse any other content."""
+
+    digest = hashlib.sha256(data).hexdigest()
+    if target.name != f"{digest}.json":
+        raise OfficialDataError(
+            f"raw payload sha256 {digest} does not match its file name: {target}"
+        )
+    _write_durably(target, data)
+
+
+def raw_file_state(target: Path, digest: str, size: int | None = None) -> str | None:
+    """None when TARGET is whole (SIZE bytes when given, sha256 DIGEST), else why not."""
+
+    try:
+        stored_size = target.stat().st_size
+    except FileNotFoundError:
+        return RAW_MISSING
+    if stored_size == 0:
+        return RAW_EMPTY
+    if (
+        size in (None, stored_size)
+        and hashlib.sha256(target.read_bytes()).hexdigest() == digest
+    ):
+        return None
+    return RAW_DAMAGED
+
+
+def _raw_metadata_is_whole(metadata: Path, digest: str) -> bool:
+    try:
+        stored = json.loads(metadata.read_bytes().decode("utf-8"))
+    except FileNotFoundError:
+        return False
+    except (OSError, ValueError):
+        stored = None
+    if isinstance(stored, dict) and stored.get("sha256") == digest:
+        return True
+    warn_raw(f"raw metadata {metadata} is damaged; rewriting it")
+    return False
+
+
+def warn_raw(message: str) -> None:
+    """One warning line about a raw file (also pipeline._restore_cited_raw_file)."""
+
+    # stderr, not logging: backend/alembic/env.py's fileConfig disables the loggers
+    # that exist when a command migrates, and stdout is the command's JSON result.
+    print(f"warning: {message}", file=sys.stderr, flush=True)
 
 
 def capture_payload(
