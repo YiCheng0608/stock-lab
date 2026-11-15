@@ -41,6 +41,7 @@
 | 能力 | 現況 | 依據 | 規格 |
 |---|---|---|---|
 | 明日候選排序 | `daily` 在 analyze 之後以 candidate_score_v7（技術＋籌碼＋族群＋新聞情緒，各分項可見、只用於排序）對當日 conditional 普通股排序，保存明日候選至多 20 檔與規則式理由、所屬族群，由 `/api/candidates` 與個股 API 的 `candidate` 提供 | — | [`candidate_score_v7`](spec/candidate_score.md#candidate_score_v7) |
+| 主流族群前 20 | `daily` 在今日名單之後另算一份（`mainstream_v1`）：官方產業與題材依成員 240 日報酬的前 ⌈n/3⌉ 檔平均減加權指數排名，去重後取 5 個族群；這 5 個族群的成員取 240 日報酬前 20 檔，不設族群上限。存進 `mainstream_runs`／`mainstream_items`，由 `/api/mainstream` 提供（主流族群、每檔的 240 日報酬與超額、收盤與漲跌、近 30 日收盤；當天也在今日名單時帶出名次與型態）。不附點位，不改今日名單；算失敗只記在 daily 的步驟列，不影響 run 狀態。畫面在 #769 | [#768](https://github.com/YiCheng0608/stock-lab/issues/768) | [排程：主流族群前 20](ops/SCHEDULING.md#主流族群前-20) |
 | 流動性門檻 | 20 日均量未達 1,000 張的股票不列候選，個股頁與我的追蹤在成立旁註明 | [#490](https://github.com/YiCheng0608/stock-lab/issues/490) | — |
 | 候選 AI 進出點說明 | `daily` 以 `claude -p` 產生、標「AI 推論」的進出點說明 | — | [候選 AI 進出點說明](spec/candidate_score.md#候選-ai-進出點說明) |
 | 進場方式 | 每檔候選的第一行以白話寫進場方式：突破型或回踩型、規則進場價或進場區（T+1 起）、停損與目標（訊號的成立價位；失效只看停損；陳述規則價位，不寫成下單指示，[#693](https://github.com/YiCheng0608/stock-lab/issues/693)），收合的完整條件列資料日的判定，缺價位時寫原因 | [#491](https://github.com/YiCheng0608/stock-lab/issues/491) | [UI_COPY_SPEC §10.2](UI_COPY_SPEC.md#102-進場方式) |
