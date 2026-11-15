@@ -79,6 +79,7 @@ class Steps:
             },
             "candidates": {"status": "success", "records": 2},
             "indicators": {"status": "not_configured", "reason": "fixture"},
+            "mainstream": {"status": "success", "records": 4},
             "plan_tracking": {"status": "success", "records": 0},
             "strategy_levels": {"status": "success", "records": 6},
             "action_tiers": {"status": "success", "records": 5},
@@ -118,6 +119,7 @@ class Steps:
         monkeypatch.setattr(pipeline, "evaluate", make("evaluate"))
         monkeypatch.setattr(schedule_runs, "_candidate_step", make("candidates"))
         monkeypatch.setattr(schedule_runs, "_indicator_step", make("indicators"))
+        monkeypatch.setattr(schedule_runs, "_mainstream_step", make("mainstream"))
         monkeypatch.setattr(schedule_runs, "_plan_tracking_step", make("plan_tracking"))
         monkeypatch.setattr(
             schedule_runs, "_strategy_levels_step", make("strategy_levels")
@@ -172,6 +174,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "evaluate",
         "candidates",
         "indicators",
+        "mainstream",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
@@ -191,6 +194,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "evaluate": ("success", 5),
         "candidates": ("success", 2),
         "indicators": ("not_configured", None),
+        "mainstream": ("success", 4),
         "plan_tracking": ("success", 0),
         "strategy_levels": ("success", 6),
         "action_tiers": ("success", 5),
@@ -211,6 +215,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "evaluate",
         "candidates",
         "indicators",
+        "mainstream",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
@@ -252,6 +257,7 @@ def test_partial_collect_stops_later_steps_and_keeps_the_warning(database, monke
         "evaluate": "skipped",
         "candidates": "skipped",
         "indicators": "skipped",
+        "mainstream": "skipped",
         "plan_tracking": "skipped",
         "strategy_levels": "skipped",
         "action_tiers": "skipped",
@@ -269,6 +275,7 @@ def test_partial_collect_stops_later_steps_and_keeps_the_warning(database, monke
         "evaluate",
         "candidates",
         "indicators",
+        "mainstream",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
@@ -304,6 +311,7 @@ def test_step_exception_is_recorded_and_dependent_steps_are_skipped(
         "trading_calendar",
         "analyze",
         "indicators",
+        "mainstream",
         "plan_tracking",
         "period_backfill",
     ]
@@ -347,6 +355,7 @@ def test_failed_evaluate_still_runs_candidates_and_indicators(database, monkeypa
         "evaluate",
         "candidates",
         "indicators",
+        "mainstream",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
@@ -371,6 +380,7 @@ def test_failed_candidates_fail_the_run_without_blocking_indicators(
         "evaluate",
         "candidates",
         "indicators",
+        "mainstream",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
@@ -839,6 +849,7 @@ def test_list_schedule_runs_reports_steps(database, monkeypatch):
         "evaluate",
         "candidates",
         "indicators",
+        "mainstream",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
@@ -1338,6 +1349,7 @@ def test_running_row_whose_process_is_gone_is_abandoned_at_once(database, monkey
         "evaluate",
         "candidates",
         "indicators",
+        "mainstream",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
@@ -1731,6 +1743,7 @@ def test_daily_collects_missed_sessions_oldest_first_then_the_target(
         "evaluate",
         "candidates",
         "indicators",
+        "mainstream",
         "plan_tracking",
         "strategy_levels",
         "action_tiers",
@@ -2196,7 +2209,7 @@ def test_a_daily_run_and_its_steps_are_stamped_with_the_clock(
     rows, by_run = runs(database)
     assert (rows[0].started_at, rows[0].finished_at) == (first, first)
     logged = by_run[rows[0].id]
-    assert len(logged) == len(schedule_runs.DAILY_STEPS) == 12
+    assert len(logged) == len(schedule_runs.DAILY_STEPS) == 13
     assert {(step.started_at, step.finished_at) for step in logged.values()} == {
         (first, first)
     }

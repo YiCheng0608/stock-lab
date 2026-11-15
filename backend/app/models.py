@@ -1361,3 +1361,64 @@ class ActionTierSnapshot(Base):
     rows_json: Mapped[list[list[Any]]] = mapped_column(JSON, default=list)
     row_count: Mapped[int] = mapped_column(Integer, default=0)
     computed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class MainstreamRun(Base):
+    """One trading day's 主流族群前 20 list of a definition version (Issue #768).
+
+    Written by the daily's ``mainstream`` step (``app.mainstream``), after the
+    today list; a rerun of the same date and version replaces the run and its
+    items.  ``status`` is ``computed`` or ``zero`` (no group had enough members
+    with a value); ``groups_json`` keeps the chosen groups in rank order
+    (``group_id``, ``group_type``, ``strength``, ``rank``, ``member_count``,
+    ``top_count``).  No price levels: the list is not a signal.
+    """
+
+    __tablename__ = "mainstream_runs"
+    __table_args__ = (
+        UniqueConstraint(
+            "trading_date", "version", name="uq_mainstream_run_day_version"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    version: Mapped[str] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(20))
+    window: Mapped[int] = mapped_column(Integer)
+    group_count: Mapped[int] = mapped_column(Integer)
+    universe_count: Mapped[int] = mapped_column(Integer, default=0)
+    ranked_group_count: Mapped[int] = mapped_column(Integer, default=0)
+    item_count: Mapped[int] = mapped_column(Integer, default=0)
+    index_return: Mapped[float] = mapped_column(Float)
+    groups_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    config_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    computed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class MainstreamItem(Base):
+    """A ranked stock of one mainstream run (Issue #768)."""
+
+    __tablename__ = "mainstream_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "trading_date",
+            "instrument_id",
+            "version",
+            name="uq_mainstream_item_day_version",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mainstream_run_id: Mapped[int] = mapped_column(
+        ForeignKey("mainstream_runs.id"), index=True
+    )
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), index=True)
+    version: Mapped[str] = mapped_column(String(40))
+    rank: Mapped[int] = mapped_column(Integer)
+    # The W-session return on the adjusted close, and it minus TAIEX's.
+    return_w: Mapped[float] = mapped_column(Float)
+    excess_w: Mapped[float] = mapped_column(Float)
+    # The chosen groups the stock is a member of, in group rank order.
+    group_ids_json: Mapped[list[str]] = mapped_column(JSON, default=list)
