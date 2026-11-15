@@ -131,7 +131,12 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 
 ## 每日 Telegram 通知
 
-每個交易日台北 08:45，scheduler 用使用者自己的 Telegram bot 送一則卡片式訊息到使用者與 bot 的 1 對 1 對話（#728，使用者決定 [#1 6881270275](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6881270275)；版面 #742）。內容是前一個交易日的今日名單與隔夜美股四檔：名單分「🚀 突破」「↩️ 回踩」兩區（其他進場型態放最後的「其他」），每檔一行粗體代號名稱、一行「進場 X｜停損 Y｜目標 Z」（回踩的進場是區間）；美股每檔是 🔴 漲／🟢 跌／⚪ 平盤、收盤、漲跌幅，附收盤日與來源名稱。缺資料時寫「無資料（原因）」。訊息用 Telegram 的 `parse_mode=HTML`（粗體），資料裡的文字先跳脫；Telegram 回 400 `can't parse entities` 時記 `failed reason=parse_error`、不重試。排程、不重送與失敗的處理見 [scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)。
+每個交易日台北 08:45，scheduler 用使用者自己的 Telegram bot 送一則訊息到使用者與 bot 的 1 對 1 對話（#728，使用者決定 [#1 6881270275](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6881270275)）。內容是前一個交易日的今日名單與隔夜美股四檔：名單分「突破」「回踩」兩區（其他進場型態放最後的「其他」），每檔是代號名稱、進場、停損、目標（回踩的進場是區間，缺價位寫「價位不完整」）；美股每檔是收盤、漲跌幅（紅漲綠跌），附收盤日、新鮮度與來源名稱。缺資料時寫「無資料（原因）」。
+
+- **圖片卡片**（#754，使用者選定）：照 [DESIGN_SYSTEM](../DESIGN_SYSTEM.md) 盤後終端深色版面畫成一張 PNG（每區一張表，數字靠右、等寬），用 `sendPhoto` 送出，圖下一行文字「今日名單 11/13（五）・突破 8、回踩 9」。scheduler 容器用 image 內的 Chromium 與 `fonts-noto-cjk` 畫（`backend/worker/notify_card.py`），暫存檔放系統暫存目錄、畫完即刪，逾時就殺掉。
+- **退回文字版**（#742 的卡片式文字）：畫圖失敗（沒有瀏覽器、非 0 結束、逾時、PNG 是空的）、`sendPhoto` 回不重試的 4xx、或重試後仍失敗，就改送文字版（`sendMessage`，每檔一行粗體代號名稱、一行「進場 X｜停損 Y｜目標 Z」，美股 🔴／🟢／⚪）。兩種內容出自同一次讀取，名單、價位與美股的文字逐項相同。
+- 日誌 `logs/notify-YYYYMMDD.log` 的 result 行記送了哪一種：`status=sent mode=photo … photo=<寬>x<高>`（Telegram 保留的最大尺寸），或 `status=sent mode=text reason=render_failed:<原因>`／`reason=photo_failed:<每次的原因>`；兩種都失敗才是 `status=failed`（文字版的原因，加 `photo=<圖的原因>`）。一天只送一則，不論是哪一種。
+- 圖片說明與文字版都用 Telegram 的 `parse_mode=HTML`（粗體），資料裡的文字先跳脫；Telegram 回 400 `can't parse entities` 時記 `parse_error`、不重試。排程、不重送與失敗的處理見 [scheduler 容器的排程（serve）](SCHEDULING.md#scheduler-容器的排程serve)。
 
 設定步驟（使用者做；agent 不讀、不寫認證檔）：
 
@@ -140,7 +145,7 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 3. 取得 chat id：在瀏覽器開 `https://api.telegram.org/bot<token>/getUpdates`，回應裡 `message.chat.id` 的數字就是（1 對 1 對話是正數）。這個網址含 token，不要貼到任何地方。
 4. 在發佈 checkout 根目錄的認證檔（[容器內的 claude 與 gh 認證（.env）](#容器內的-claude-與-gh-認證env)）寫 `TELEGRAM_BOT_TOKEN=<token>` 與 `TELEGRAM_CHAT_ID=<chat id>`，名稱照 [`.env.example`](../../.env.example)。
 5. 重建 scheduler：在發佈 checkout 執行 `STOCK_RELEASE_TAG=<部署的 tag> docker compose -p stock-lab up -d --no-build --force-recreate scheduler`。tag 用 `git -C <發佈 checkout> describe --tags --exact-match` 讀；不帶 tag 會把 scheduler 換成 `latest` image，看門狗報 `invariant_deploy_image`（[Docker compose](#docker-compose) 的 `STOCK_RELEASE_TAG`）。兩個值經 scheduler 既有的 `env_file` 進容器；compose 的 `environment:` 不另寫這兩個鍵，否則 shell 沒有值時會以空字串蓋掉認證檔的值（`test_worker_serve.py` 檢查）。
-6. 核對：`docker compose -p stock-lab exec scheduler python -m worker.cli notify --dry-run` 印出今天會送的全文、不送；第一行 `configured=yes|no` 只說有沒有設定，不印值。
+6. 核對：`docker compose -p stock-lab exec scheduler python -m worker.cli notify --dry-run` 印出今天會送的圖片說明（`caption=`）與文字版全文、不送；第一行 `configured=yes|no` 只說有沒有設定，不印值。加 `--image-out /tmp/card.png` 會把圖片卡片畫到該路徑（印出尺寸與大小；畫不出來時印 `image=failed reason=…`、以 1 結束）。
 
 - 沒設或有一個是空的：job 記 `status=not_configured`、不送，不算失敗，看門狗不留言。
 - `TELEGRAM_CHAT_ID` 必須是正整數（私人對話）；群組、頻道（負數或 `@名稱`）拒送並記 `failed reason=chat_not_private`。美股指數的數字只送使用者自己的對話：對外公開前要取得 S&P DJI 與 Nasdaq 的書面同意（[#1 6717084453](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6717084453)）。

@@ -39,6 +39,10 @@
     {
       "select": "tests/test_verify_tools.py::test_screenshot_waits_for_data_and_reports_overflow",
       "reason": "screenshot.cjs drives the image's /usr/bin/chromium (SCREENSHOT_BROWSER); the backend job drives the runner's Chrome"
+    },
+    {
+      "select": "tests/test_notify_card.py::test_the_images_chromium_draws_the_card",
+      "reason": "the daily Telegram card is drawn by the image's /usr/bin/chromium and fonts-noto-cjk (#754); the runner has neither at that path"
     }
   ],
   "skipped_everywhere": [
