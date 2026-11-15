@@ -473,8 +473,10 @@ else
   index_paths="$(cbm_merge_paths "$merge_sha")" || report 3 "索引步驟：讀不到 merge commit ${merge_sha:0:9} 改到的檔案"
   if [ -z "$index_paths" ]; then
     # A merge that only deleted files: the rebuild still runs, there is nothing to verify.
-    cbm_rebuild || report 3 "索引步驟：$cbm_error"
-    steps+=("index_rebuilt" "index_fresh:0")
+    # cbm_rebuild lists index_waited:<seconds> in cbm_steps when it waited (#766).
+    cbm_steps=()
+    cbm_rebuild || { steps+=("${cbm_steps[@]+"${cbm_steps[@]}"}"); report 3 "索引步驟：$cbm_error"; }
+    steps+=("${cbm_steps[@]+"${cbm_steps[@]}"}" "index_rebuilt" "index_fresh:0")
   else
     cbm_ensure rebuilt "$index_paths" || { steps+=("${cbm_steps[@]+"${cbm_steps[@]}"}"); report 3 "索引步驟：$cbm_error"; }
     steps+=("${cbm_steps[@]}")
