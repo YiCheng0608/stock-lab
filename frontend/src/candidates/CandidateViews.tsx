@@ -346,15 +346,16 @@ export function PreopenLine({ check }: { check: PreopenCheck | null | undefined 
   return <p className="preopen-line" aria-label={PREOPEN_TITLE} data-preopen-status={check?.status}>{text}</p>
 }
 
-// The row's mark after the name (Issue 755): 「隔夜新聞 2（可能負向 1）」, the negative count in the falling colour; nothing
-// without overnight news.
+// The row's mark (Issue 755): 「隔夜新聞 2（可能負向 1）」, the negative count in the falling colour; nothing without
+// overnight news. A line of its own under the title, before the entry sentence: on the title line the ellipsis cut it
+// off on a phone (review 6889365957), and the 可能負向 count is the part that matters.
 function PreopenRowMarkView({ item }: { item: CandidateItem }) {
   const mark = preopenRowMark(item.preopen_news)
   if (!mark) return null
   return (
-    <span className="candidate-row-preopen" data-preopen-count={item.preopen_news?.count}>
+    <p className="candidate-row-preopen" data-preopen-count={item.preopen_news?.count}>
       {mark.text}{mark.negative && <>（<span className="tone-down">{mark.negative}</span>）</>}
-    </span>
+    </p>
   )
 }
 
@@ -428,9 +429,9 @@ function CandidateRow({ item, hidden, open, onOpen, selected, onSelect, chart, l
             {/* Issue 681: the semiconductor groups' 費半 change right after the name, so the line's ellipsis cuts the
                 market and group, not it (the title is one line at every width). */}
             {links.map((entry) => <span key={entry.symbol} className="candidate-row-us"><OvernightChange entry={{ ...entry, date: null }} stale={!entry.current} />{' '}</span>)}
-            <PreopenRowMarkView item={item} />{item.preopen_news?.count ? ' ' : null}
             <span className="candidate-row-meta" title={item.groups[0] ? candidateGroupText(item.groups[0]) : undefined}>{exchangeLabel(instrument.exchange)} · {groupShortText(item)}</span>
           </p>
+          <PreopenRowMarkView item={item} />
           <EntryPlanCard item={item} className="candidate-entry" conditions={false} />
           {!levelsInSentence && <LevelCells item={item} className="candidate-row-levels" />}
           <RowFigures item={item} />

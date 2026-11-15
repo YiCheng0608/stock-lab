@@ -2074,7 +2074,7 @@ def t25(run: Run) -> str:
     )
     us = text.find_where(lambda shown: shown.startswith(OVERNIGHT_US_TITLE))
     expect(
-        us < found[0],
+        0 <= us < found[0],
         f"`{line}` 不在 `{OVERNIGHT_US_TITLE}` 那一行之後（{text.at(found[0])}）",
     )
     title = candidates_title(text)
@@ -2089,18 +2089,29 @@ def t25(run: Run) -> str:
         if at and not isinstance(news, dict):
             problems.append(f"{prefix.strip()} 已檢查卻沒有 preopen_news")
             continue
+        # The mark is the line right after the title line (review 6889365957: on the
+        # title line the ellipsis cut it off on a phone, which innerText cannot see).
         row = text.lines[row_at]
+        after = text.lines[row_at + 1] if row_at + 1 < len(text.lines) else ""
         count = news.get("count", 0) if isinstance(news, dict) else 0
+        if f" {PREOPEN_NEWS_TITLE} " in f" {row} ":
+            problems.append(
+                f"{prefix.strip()} 名次列 {row!r} 帶隔夜新聞標記（要在下一行）"
+            )
         if count:
             negative = news.get("negative") or 0
             want = f"{PREOPEN_NEWS_TITLE} {count}" + (
                 f"（可能負向 {negative}）" if negative else ""
             )
-            if f" {want} " not in f"{row} ":
-                problems.append(f"{prefix.strip()} 名次列 {row!r} 沒有 `{want}`")
+            if after != want:
+                problems.append(
+                    f"{prefix.strip()} 名次列下一行是 {after!r}，預期 `{want}`"
+                )
             marked += 1
-        elif f" {PREOPEN_NEWS_TITLE} " in row:
-            problems.append(f"{prefix.strip()} 沒有隔夜新聞，名次列卻有標記：{row!r}")
+        elif re.match(rf"{PREOPEN_NEWS_TITLE} [0-9]", after):
+            problems.append(
+                f"{prefix.strip()} 沒有隔夜新聞，名次列下一行卻有標記：{after!r}"
+            )
     expect(not problems, "；".join(problems))
     # From 1280px the first row's news sits under its chart: its heading and the definition.
     first = items[0].get("preopen_news")

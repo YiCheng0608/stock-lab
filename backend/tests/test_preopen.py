@@ -125,6 +125,9 @@ def _news(
     title="標題",
     ai_symbols=None,
     unsupported=None,
+    status="active",
+    precision=None,
+    cluster=None,
 ):
     item = NewsItem(
         canonical_key=f"news-{len(db.scalars(select(NewsItem)).all())}",
@@ -137,10 +140,12 @@ def _news(
         if event_date
         else published,
         time_basis="event_date" if event_date else "published",
-        time_precision="date" if event_date else "datetime",
+        time_precision=precision or ("date" if event_date else "datetime"),
         time_consistency=consistency,
         collected_at=collected,
         symbols_json=list(symbols),
+        status=status,
+        dedupe_cluster_id=cluster,
     )
     db.add(item)
     db.flush()
@@ -240,6 +245,21 @@ def test_the_window_starts_at_the_lists_computed_at_and_ends_at_the_check(db):
             collected=late,
             consistency="conflict",
         ),
+        # Not active (superseded), or with no verified time: not on the stock page either.
+        "superseded": _news(
+            db,
+            ["1101"],
+            published=_taipei(2026, 9, 4, 23, 0),
+            collected=late,
+            status="superseded",
+        ),
+        "no_time": _news(
+            db,
+            ["1101"],
+            published=_taipei(2026, 9, 4, 23, 0),
+            collected=late,
+            precision="none",
+        ),
     }
     db.commit()
     found = _ids(overnight_news(db, run, CHECKED), cement)
@@ -290,6 +310,24 @@ def test_the_relation_is_the_stock_pages_rule_relation_only(db):
             )
         )
         assert set(_ids(found, instrument)) == page
+
+
+def test_a_story_several_feeds_carry_counts_once_per_stock(db):
+    run, (cement, chips) = _list(db)
+    late = _taipei(2026, 9, 4, 23, 0)
+    first = _news(db, ["1101"], published=late, collected=late, cluster="title:x")
+    _news(
+        db,
+        ["1101", "2330"],
+        published=late + timedelta(minutes=5),
+        collected=late,
+        cluster="title:x",
+    )
+    db.commit()
+    found = overnight_news(db, run, CHECKED)
+    assert _ids(found, cement) == [first.id]
+    # The copy still counts for a stock the first one did not name.
+    assert len(found[chips.id]) == 1
 
 
 # --- the rows ----------------------------------------------------------------------
@@ -567,6 +605,38 @@ def test_news_still_running_after_the_wait_is_checked_anyway(run_env):
 
 
 @linux_only
+def test_maintenance_started_during_the_wait_for_news_writes_nothing(run_env):
+    """Review 6889365957: a backfill or a deploy may turn maintenance on meanwhile."""
+
+    def wait(_path):
+        marker = job.maintenance_path(run_env.data)
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(json.dumps({"since_epoch": time.time(), "reason": "x"}))
+        return False, 120.0
+
+    assert _check(run_env, wait=wait) == 0
+    assert _rows(run_env.db) == []
+    assert "--- result status=skipped reason=maintenance after_wait=yes" in _log(
+        run_env
+    )
+    # Not a result that ends the day: serve catches it up after maintenance.
+    assert not preopen.day_done(run_env.logs, MONDAY)
+
+
+@linux_only
+def test_a_running_check_is_among_the_running_jobs(tmp_path):
+    """Maintenance (MaintenanceHold, status, a deploy) sees a check in progress."""
+
+    lock = job.FileLock(job.lock_path(tmp_path, preopen.LOCK))
+    assert lock.acquire()
+    try:
+        assert job.running_jobs(tmp_path) == ["preopen"]
+    finally:
+        lock.release()
+    assert job.running_jobs(tmp_path) == []
+
+
+@linux_only
 def test_the_wait_only_probes_the_news_lock_until_it_is_released(tmp_path):
     path = tmp_path / "locks" / "news.lock"
     news = job.FileLock(path)
@@ -616,7 +686,8 @@ def test_a_free_news_lock_is_no_wait(tmp_path):
 
 @linux_only
 def test_the_dry_run_writes_nothing(run_env, capsys):
-    assert _check(run_env, "--dry-run", trigger="manual") == 0
+    # It only prints: no wait for the news run either (review 6889365957).
+    assert _check(run_env, "--dry-run", trigger="manual", wait=pytest.fail) == 0
     assert _rows(run_env.db) == []
     assert not preopen.log_path(run_env.logs, MONDAY).exists()
     assert "--- result status=checked" in capsys.readouterr().out

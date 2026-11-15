@@ -2853,12 +2853,14 @@ PREOPEN_PAGE = (
     "今日名單\n10 檔\n"
     f"{US_LINE}\n"
     f"{PREOPEN_LINE}\n"
-    "#1 2330 台積電 費半 +2.04% 隔夜新聞 2（可能負向 1） 上市 · 半導體（產業 #1）\n"
+    "#1 2330 台積電 費半 +2.04% 上市 · 半導體（產業 #1）\n"
+    "隔夜新聞 2（可能負向 1）\n"
     "隔夜新聞（開盤前檢查 2026/11/16 08:20）\n"
     "名單產生之後才收到的新聞\n"
     "#2 2881 富邦金 上市 · 金融（產業，未排名）\n"
     "熱門族群\n"
 )
+PREOPEN_MARK = "隔夜新聞 2（可能負向 1）\n"
 
 
 def test_t25_passes_on_news_none_and_not_checked(tmp_path):
@@ -2868,7 +2870,7 @@ def test_t25_passes_on_news_none_and_not_checked(tmp_path):
     assert f"`{PREOPEN_LINE}`" in summary and "1／2 列標隔夜新聞" in summary
     none = (
         PREOPEN_PAGE.replace("隔夜新聞 1 檔", "隔夜新聞 0 檔")
-        .replace(" 隔夜新聞 2（可能負向 1）", "")
+        .replace(PREOPEN_MARK, "")
         .replace("隔夜新聞（開盤前檢查", "隔夜新聞 無（開盤前檢查")
     )
     assert "0／2 列" in page_checks.t25(
@@ -2876,7 +2878,7 @@ def test_t25_passes_on_news_none_and_not_checked(tmp_path):
     )
     pending = (
         PREOPEN_PAGE.replace(PREOPEN_LINE, "開盤前檢查 尚未檢查（每個交易日 08:20）")
-        .replace(" 隔夜新聞 2（可能負向 1）", "")
+        .replace(PREOPEN_MARK, "")
         .replace("隔夜新聞（開盤前檢查 2026/11/16 08:20）", "隔夜新聞 尚未檢查")
     )
     assert "尚未檢查" in page_checks.t25(
@@ -2898,8 +2900,17 @@ def test_t25_fails_on_a_wrong_line_mark_or_panel(tmp_path):
             ),
             "不在 `隔夜美股`",
         ),
-        (PREOPEN_PAGE.replace("（可能負向 1）", ""), "沒有 `隔夜新聞 2（可能負向 1）`"),
-        (PREOPEN_PAGE.replace("富邦金 上市", "富邦金 隔夜新聞 1 上市"), "卻有標記"),
+        (PREOPEN_PAGE.replace("（可能負向 1）", ""), "預期 `隔夜新聞 2（可能負向 1）`"),
+        (
+            PREOPEN_PAGE.replace("未排名）\n", "未排名）\n隔夜新聞 1\n"),
+            "卻有標記",
+        ),
+        # Review 6889365957: on the title line the ellipsis cut it off on a phone.
+        (
+            PREOPEN_PAGE.replace("+2.04% 上市", "+2.04% 隔夜新聞 2 上市"),
+            "要在下一行",
+        ),
+        (PREOPEN_PAGE.replace(f"{US_LINE}\n", ""), "不在 `隔夜美股`"),
         (PREOPEN_PAGE.replace("名單產生之後才收到的新聞\n", ""), "不是定義"),
         (
             PREOPEN_PAGE.replace("隔夜新聞（開盤前檢查", "隔夜新聞 無（開盤前檢查"),

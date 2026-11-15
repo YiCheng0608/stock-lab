@@ -420,7 +420,12 @@ const withPreopen = (check = preopenChecked(), news: Array<PreopenNews | null> =
 const newsPage = render(<CandidatesSection data={withPreopen()} loading={false} error={null} />)
 check(preopenLineOf(newsPage) === '開盤前檢查 2026/11/16 08:20 · 隔夜新聞 1 檔', `the line states the check's time and the stocks with news: ${preopenLineOf(newsPage)}`)
 check(newsPage.indexOf('class="preopen-line"') < newsPage.indexOf('class="candidate-list"'), 'the line sits above the list')
-check(titleOf(newsPage, 1).includes('2377 微星 隔夜新聞 3（可能負向 1） 上市'), `the row's mark after the name, only 可能負向 in the brackets: ${titleOf(newsPage, 1)}`)
+const markOf = (markup: string, rank: number) => plain(slice(rowOf(markup, rank), '<p class="candidate-row-preopen"', '</p>'))
+check(markOf(newsPage, 1) === '隔夜新聞 3（可能負向 1）', `the row's mark, only 可能負向 in the brackets: ${markOf(newsPage, 1)}`)
+// Review 6889365957: on the title line the ellipsis cut the mark off on a phone; it is a line of its own between the
+// title and the entry sentence.
+const newsRow = rowOf(newsPage, 1)
+check(!titleOf(newsPage, 1).includes('隔夜新聞') && newsRow.indexOf('class="candidate-row-title"') < newsRow.indexOf('class="candidate-row-preopen"') && newsRow.indexOf('class="candidate-row-preopen"') < newsRow.indexOf('candidate-entry'), 'the mark is not on the title line: under it, above the entry sentence')
 check(rowOf(newsPage, 1).includes('<span class="tone-down">可能負向 1</span>'), 'the negative count in the falling colour')
 check(!rowOf(newsPage, 2).includes('candidate-row-preopen'), 'a row without overnight news has no mark')
 const newsPanel = panelOf(detailOf(rowOf(newsPage, 1)))

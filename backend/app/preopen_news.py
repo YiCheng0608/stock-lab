@@ -15,6 +15,8 @@ and stores per candidate the news its ``daily`` had not seen
 - **Relation**: the stock page's news list rule (``api._news_symbol_filter``): the
   bare code or ``exchange:code`` in ``news_items.symbols_json``. AI symbol
   candidates do not link an item (they do not on the stock page either).
+  A story several feeds carry (the same canonical key, dedupe cluster or content hash)
+  counts once per stock, as /api/news lists it.
 - **AI direction**: the done result of the current prompt (``news_llm.done_results``,
   as the news cards read it), unsupported reads ``unknown``; without one the item is
   listed as not judged yet (``None``). Kept as it was at the check.
@@ -27,7 +29,7 @@ from __future__ import annotations
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, literal_column, or_, select
 from sqlalchemy.orm import Session
 
 from .models import (
@@ -110,7 +112,9 @@ def overnight_news(
     items = db.scalars(
         select(NewsItem)
         .where(
-            NewsItem.status == "active",
+            # A unary + keeps SQLite off ix_news_items_status, which matches nearly every
+            # row, so that it reads ix_news_items_collected_at (review 6889365957).
+            literal_column("+news_items.status") == "active",
             or_(
                 NewsItem.time_consistency.is_(None),
                 NewsItem.time_consistency != "conflict",
@@ -132,9 +136,21 @@ def overnight_news(
             linked.append((item, ids))
     version, done_results = _prompt()
     results = done_results(db, [item.id for item, _ in linked], version)
+    # One story copied by several feeds counts once for a stock, as /api/news lists it:
+    # the same canonical key, dedupe cluster or content hash as an earlier item of the
+    # stock is skipped (review 6889365957).
+    seen: dict[int, set[str]] = {instrument_id: set() for instrument_id in out}
     for item, ids in linked:
         direction = direction_of(results.get(item.id))
+        keys = {
+            value
+            for value in (item.canonical_key, item.dedupe_cluster_id, item.content_hash)
+            if value
+        }
         for instrument_id in ids:
+            if keys & seen[instrument_id]:
+                continue
+            seen[instrument_id] |= keys
             out[instrument_id].append((item, direction))
     return out
 

@@ -340,6 +340,37 @@ def test_the_daily_plan_tracking_step_changes_nothing_in_the_fixture(built, tmp_
     assert fixture_db.summarize(copy_path) == summary
 
 
+def test_the_preopen_rows_are_what_the_check_writes_on_the_fixture(built):
+    """#755 review 6889365957: preopen_news_checks is app.preopen_news.check_rows of the
+    fixture's list at the fixture's check time, so the screenshots show a real result."""
+
+    from app.models import CandidateRun
+    from app.preopen_news import check_rows
+
+    path, _ = built
+    engine = create_engine(f"sqlite:///{path.as_posix()}")  # read only: no commit
+    try:
+        with Session(engine) as db:
+            run = db.get(CandidateRun, 1)
+            computed = check_rows(db, run, fixture_data.PREOPEN_CHECKED_AT)
+            rows = [
+                {
+                    column: getattr(row, column)
+                    for column in fixture_data.TABLES["preopen_news_checks"][0]
+                    if column != "id"
+                }
+                for row in computed
+            ]
+    finally:
+        engine.dispose()
+    stored = [
+        {column: value for column, value in row.items() if column != "id"}
+        for row in fixture_data.TABLES["preopen_news_checks"]
+    ]
+    assert rows == stored
+    assert sum(row["news_count"] for row in stored) == 1
+
+
 def _feature_endpoints(page_file: str) -> list[str]:
     text = (FEATURES / page_file).read_text(encoding="utf-8")
     section = text.split("## API", 1)[1].split("\n## ", 1)[0]

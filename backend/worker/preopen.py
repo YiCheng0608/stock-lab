@@ -20,7 +20,8 @@ candidate, the news its daily had not seen, with the AI direction of each as sto
   ``--force`` replaces them, and so does a run that finds the rows of another run of
   the date (the list recomputed); the log keeps the replaced ``checked_at``.
 - **Skips**: a weekend or a closed day ``non_trading_day`` (no rows); maintenance mode
-  ``maintenance`` (the check writes the database); no list for the date ``no_list``;
+  ``maintenance`` (the check writes the database; read at the start and again right
+  before writing, as it may start during the wait for news); no list for the date ``no_list``;
   the lock busy ``already_running``.
 
 The record is the day's log ``<logs>/preopen-YYYYMMDD.log`` (the Taipei day of the
@@ -317,7 +318,12 @@ class _Run:
         skip, list_date, run_id, previous = self._decide()
         if skip:
             return 0, skip
-        news_running, waited = self.wait(job.lock_path(self.data_dir, NEWS_LOCK))
+        # A dry run only prints: it does not wait for the news run (review 6889365957).
+        news_running, waited = (
+            (False, 0.0)
+            if self.args.dry_run
+            else self.wait(job.lock_path(self.data_dir, NEWS_LOCK))
+        )
         self.log(
             f"--- news_lock waited={round(waited)}s"
             f" running={'yes' if news_running else 'no'}"
@@ -342,6 +348,10 @@ class _Run:
             for line in lines:
                 self.log(line)
             if not self.args.dry_run:
+                # Maintenance may have started during the wait for news (a backfill, a
+                # deploy): read the marker again right before writing (review 6889365957).
+                if job.maintenance_state(self.data_dir):
+                    return 0, f"status={SKIPPED} reason=maintenance after_wait=yes"
                 replace_check(db, run, rows)
                 db.commit()
         result = (
