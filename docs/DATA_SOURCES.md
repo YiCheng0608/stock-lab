@@ -39,6 +39,7 @@
 | 季度財報（回補） | MOPS 彙總報表－綜合損益表 [`t163sb04`](https://mops.twse.com.tw/mops/#/web/t163sb04)（舊站 `POST https://mopsov.twse.com.tw/mops/web/ajax_t163sb04`，HTML） | 手動的 `fundamentals backfill` 回補近 8 季的累計營收與基本 EPS，寫入 `fundamental_snapshots`（`source=mops_t163sb04`）；daily 在申報期限前後的窗口自動補最近 2 季。上市、上櫃每季各 1 個請求。 | 沒有實際公告日，可得日用法定申報期限；不屬於 collect。規則見[季度財報回補](#季度財報回補)。 |
 | 月營收（快照） | TWSE [`t187ap05_L`](https://openapi.twse.com.tw/v1/opendata/t187ap05_L)、TPEx [`mopsfin_t187ap05_O`](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O)（每月營業收入彙總表） | 當日 collect 各 1 個請求，寫入 `monthly_revenues`（`source=mops_t187ap05`）：當月營收、去年當月營收、去年同月增減(%)、當月累計營收（千元），可得日用出表日期（[月營收](#月營收)，#530）。 | 非核心；只有最新一個月，整份共用一個出表日期，不是各公司的申報日。 |
 | 月營收（回補） | MOPS 營業收入統計表 `t21sc03` 靜態頁（`GET https://mopsov.twse.com.tw/nas/t21/<sii\|otc>/t21sc03_<民國年>_<月>_<0\|1>.html`，Big5 HTML） | 手動的 `revenue backfill` 回補近 24 個月，寫入 `monthly_revenues`（`source=mops_t21sc03`）；daily 在每月 1～20 日自動補最近 2 個月。每個市場月 2 頁：`_0` 國內公司、`_1` 國外公司（`-KY`、`-DR`）。 | 沒有實際申報日，可得日用法定期限次月 10 日；不屬於 collect。規則見[月營收](#月營收)。 |
+| 月營收（下市公司，只在研究 DB） | MOPS 單一公司月營收 `ajax_t05st10_ifrs`（`POST https://mopsov.twse.com.tw/mops/web/ajax_t05st10_ifrs`，表單 `co_id`、民國 `year`、兩位數 `month`、`TYPEK=all`，UTF-8 HTML） | 手動的 `revenue company-classify`／`revenue company-backfill`，每家每月 1 個請求，寫入 `monthly_revenues`（`source=mops_t05st10`）；轉板公司另由 `revenue transfers` 從同一家公司的另一個標的複製（`source=mops_t21sc03_transfer`，0 個請求）。 | 只有仍公開發行的公司查得到；可得日同 `t21sc03`。規則見[下市與轉板公司的月營收](#下市與轉板公司的月營收)。 |
 
 每筆 raw 保存 endpoint、SHA-256、擷取時間與 data-as-of；正規化資料可回指 raw payload。raw 檔（`raw/<來源>/<擷取日>/<SHA-256>.json` 與旁邊的 `.meta.json`）先寫同目錄的暫存檔、`fsync` 後換名再同步目錄，DB 才記它的路徑；目標已存在但大小或 SHA-256 不符（例如斷電留下的 0 bytes 檔）時，下一次寫同一個路徑會以同 SHA-256 的內容重寫，內容的 SHA-256 與檔名不同就不寫、拋錯。目錄是擷取日，所以隔天重抓（例如回補 `--force`）會寫進當天的目錄；同一個 run 已有同 endpoint、同 SHA-256 的 `raw_payloads` 列時沿用那一列，它引用的檔不存在、0 bytes 或 SHA-256 不符就以這次的內容寫回原路徑（含 `.meta.json`），DB 不改，寫回失敗則 run 失敗（[#772](https://github.com/YiCheng0608/stock-lab/issues/772) 決定 [6893166947](https://github.com/YiCheng0608/stock-lab/issues/772#issuecomment-6893166947)）。列出 DB 引用、但不存在、0 bytes 或 SHA-256 不符的 raw 檔，用 [`tools/audit/raw_files.py`](../tools/audit/raw_files.py)（[讀 raw 的工具](ops/LOCAL.md#讀-raw-的工具)）。重抓時日線與籌碼列指向哪一次 capture、哪些值會改，見 [重跑與回補的冪等](ops/SCHEDULING.md#重跑與回補)。News／Event 有官方事件投影、來源連結、raw 稽核與時間欄位，但欄位存在不代表每筆來源時間可信，詳見 [NEWS_SPEC](NEWS_SPEC.md)。`ChipSnapshot` 雖定義當沖與借券欄位，現有寫入路徑不收集這些值；融券餘額 2026-11 起收集（[籌碼來源](#籌碼來源)，[#662](https://github.com/YiCheng0608/stock-lab/issues/662)）。券商分點列後版，collector 不接入。
 
@@ -549,6 +550,24 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
   - **更正之後的快照**：快照再發布同一個舊值（只換出表日期）不改回；快照帶來與 MOPS 不同的新值（公司再次更正）也不寫入數值，`superseded_snapshot` 保留第一次被取代的值，以下一次回補讀到的 MOPS 頁為準；快照改成和 MOPS 相同時仍是已更正。之後的 MOPS 頁若回到原快照值，回補寫回該值並拿掉 `superseded_snapshot`。
 - **冪等**：數值、來源、可得日與它的依據都沒變的列不寫（`data_json`、`raw_payload_id`、`collected_at` 也不動），重跑 `changed` 是 0；快照換了出表日期但數字相同時也不寫。
 - **daily 自動回補**（[#536](https://github.com/YiCheng0608/stock-lab/issues/536)）：月快照出表後到下個月換表前不再更新，例如 9 月表 10-17 出表、到 11 月 10 月表出來前都是那一份。2026-11-06 比對時，10-20～10-30 上市的 7 檔新股（2249、6825、6898、6938、6467、7710、7867）的 9 月營收只在 MOPS 頁上有；期限前已申報的下個月（11-06 時 10 月有 289 檔）也要等換表才進快照。daily 的 period_backfill 步驟在每月 1～20 日每天補上個月與上上個月，窗口、上限與記錄見 [SCHEDULING](ops/SCHEDULING.md#日誌與-run-記錄)。出表後更正的數字依「兩個來源同一個月」以 MOPS 頁為準，自動回補會把快照寫的舊值改成 MOPS 頁的值，之後每天的 collect 不會改回。
+
+#### 下市與轉板公司的月營收
+
+`t21sc03` 頁與快照都只列今天的公司，下市股沒有任何一個月（[#781 AC-1](https://github.com/YiCheng0608/stock-lab/issues/781#issuecomment-6894356247)）。研究 DB 用下面兩種方式補一部分（[#782](https://github.com/YiCheng0608/stock-lab/issues/782)，實作在 [`worker/monthly_revenue_company.py`](../backend/worker/monthly_revenue_company.py)）。三個命令都只在研究 DB 跑：DB 旁沒有 `research-db.json`（`purpose` 是 `research_history`）就印 `refused`、exit 2。
+
+- **月份範圍**：標的第一根日線那個月往前 12 個月，到最後一根日線那個月，從 2013-01 起，只取已結束的月份。12 是 `tools/research` 用月營收的特徵裡回看最長的那個（`revenue_high_12`）。現存的股票本來就有上市前的月營收，所以下市股也補到上市前一年，兩邊口徑一致（[決定 6894566253](https://github.com/YiCheng0608/stock-lab/issues/782#issuecomment-6894566253)）。
+- **轉板**（`revenue transfers`，0 個請求）：轉板公司是兩個標的，今天的上市頁把它上櫃那幾年的月份列在上市標的上。對每個 `transferred` 標的，找另一交易所同代號的標的，兩個條件都成立才算同一家公司：名稱相同（去掉結尾的 `*`），以及新標的第一根日線在舊標的最後一根之後 7 天內。不成立就略過並列出。舊標的範圍內的月份從新標的**複製**一列：數值、可得日、`raw_payload_id` 照原列，`source=mops_t21sc03_transfer`，`data_json.copied_from` 記原標的的 id、交易所與 `source`。新標的的列不動，轉上市後的頭 12 個月才有完整的回看。重跑時，原列更正過的月份會同步過來；舊標的那個月已有其他來源的列就不動（`kept`）。不加 `--apply` 只印對應與月數。
+- **下市股分類**（`revenue company-classify`）：對象是 `delisted` 的 `stock`／`ipo`，要有日線，最後一根在 2013-01 以後。每檔問 1 次單一公司頁（用最後一個有日線的月份）：
+  - 頁上是「該 <代號> 公開發行公司不繼續公開發行！」：`not_public`。破產（2475 華映）、合併消滅（2888 新光金）是這樣，這些公司的月營收補不到。
+  - 有營收表、通過檢查：`found`。這個月同時寫入。
+  - 頁上是「查無資料」：`no_data`，列出來，等統籌決定。
+  - 頁首的公司名稱和標的名稱互不包含：`name_mismatch`，不寫入、列出來。代號被後來的公司重用時，`co_id` 可能查到現在那家。
+- **補「查得到」的**（`revenue company-backfill`）：分類為 `found` 的標的，範圍內還沒有列的月份每月 1 個請求。每一頁都重新核對公司名稱。
+- **頁面檢查**：隱藏欄位 `Q1V`、`Q2V` 要是請求的代號與民國年月，頁面印的「民國YYY年MM月」也要相同；表頭是「項目／營業收入淨額」，接著 8 列依序是本月、去年同期、增減金額、增減百分比、本年累計、去年累計、增減金額、增減百分比，再來是備註。不合就記失敗、不寫入。本月 → `revenue`、去年同期 → `prior_year_revenue`、第一個增減百分比 → `yoy`、本年累計 → `cumulative_revenue`（千元）；8 列的文字、備註、`co_id`、頁首名稱與公司類別（例如「公開發行公司」）存 `data_json`。
+- **可得日**：同 `t21sc03`，法定期限次月 10 日，遇休市順延（`announcement_basis=statutory_deadline`）。
+- **raw 與續跑**：每個回應存一列 `raw_payloads`（`source=mops`），`endpoint` 是 `…/ajax_t05st10_ifrs?co_id=<代號>&year=<民國年>&month=<月>`，內容是表單與 HTML。發請求前先找同一個鍵、讀得回而且通過檢查的已存回應，有就重讀、不重抓；分類結果也是從已存的回應重讀，所以沒有另外的表。中斷後重跑就接著做，失敗的那一個下次再問。
+- **請求規則**：同一 host 每個請求間隔至少 5 秒；台北 20:30～23:30 與 08:00～09:00 不發，下一個請求會落在這兩段時就停，run 標 `partial`，之後重跑接續；不重試；封鎖頁（`查詢過於頻繁` 等）、非 200、空回應或傳輸錯誤連續 3 次就停。`--max-requests N` 限制這次最多發幾個（已存的不算）；`--plan` 只印對象與請求數，不發請求、不寫入。
+- **run**：`run_type` 是 `revenue_transfer_copy`／`revenue_company_classify`／`revenue_company_backfill`，metadata 有每家（每月）的結果、raw id 與中止原因。
 
 ## FinMind 補缺口規則
 
