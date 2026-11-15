@@ -328,8 +328,13 @@ exit 0
 #   cbm_index_no_bump      index_repository leaves indexed_at as it was (only mtimes
 #                          changed), unless delete_project ran first
 #   cbm_index_fails        index_repository answers isError
+#   cbm_index_busy.txt     the next N index_repository calls answer the engine's "another
+#                          index operation ... active" isError (N counts down; #766);
+#                          index_status says ready all the while
+#   cbm_busy_after_delete  cbm_index_busy.txt counts only once delete_project ran
 #   cbm_root.txt           index_status's root_path (default the sandbox repo)
-#   cbm_no_project         index_status answers "project not found"
+#   cbm_no_project         index_status answers "project not found" (also after
+#                          delete_project, until index_repository builds it again)
 #   cbm_<tool>.raw / .rc   the whole output and exit code of that tool, as written
 #   cbm_<tool>.sleep       seconds that tool hangs first
 # A path that is not a file in the sandbox repo answers freshness "missing"; one the index
@@ -389,7 +394,7 @@ def tracked():
     return sorted(out)
 project = "C-Users-YiCheng-Desktop-taiwan-stock-research"
 if tool == "index_status":
-    if os.path.exists(at("cbm_no_project")):
+    if os.path.exists(at("cbm_no_project")) or os.path.exists(at("cbm_deleted")):
         answer(error="project not found or not indexed")
     answer({"project": project, "status": "ready", "root_path": text("cbm_root.txt", repo)})
 if tool == "delete_project":
@@ -398,6 +403,11 @@ if tool == "delete_project":
 if tool == "index_repository":
     if os.path.exists(at("cbm_index_fails")):
         answer(error="index failed: disk full")
+    busy = int(text("cbm_index_busy.txt", "0"))
+    if busy > 0 and (os.path.exists(at("cbm_deleted")) or not os.path.exists(at("cbm_busy_after_delete"))):
+        with open(at("cbm_index_busy.txt"), "w", encoding="utf-8") as f:
+            f.write(f"{busy - 1}\n")
+        answer(error="another index operation for this project is active with different options")
     if os.path.exists(at("cbm_deleted")) or not os.path.exists(at("cbm_index_no_bump")):
         with open(at("cbm_indexed_at.txt"), "w", encoding="utf-8") as f:
             f.write(text("cbm_indexed_at_new.txt", "2099-01-01T00:00:00Z"))

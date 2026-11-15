@@ -130,7 +130,14 @@ if [ "$base_ref" = origin/master ]; then
   checkout_fast_forward || { index=failed; report 1 "索引驗證：管理 checkout 更新：$cbm_error"; }
 fi
 index_paths="$(cbm_recent_paths)" || report 1 "索引驗證：讀不到最近 $cbm_recent_merges 次合併改到的檔案"
-cbm_ensure check "$index_paths" || { index=failed; report 1 "索引驗證：$cbm_error"; }
+# A failure is "failed", then any index_waited:<seconds> (#766), so the receipt shows a wait.
+cbm_ensure check "$index_paths" || {
+  index=failed
+  for step in "${cbm_steps[@]+"${cbm_steps[@]}"}"; do
+    case "$step" in index_waited:*) index+=",$step" ;; esac
+  done
+  report 1 "索引驗證：$cbm_error"
+}
 index="$(IFS=,; printf '%s' "${cbm_steps[*]}")"
 
 # Without --base orca uses the repo's default base, as before #332; the HEAD check below
