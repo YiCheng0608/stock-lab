@@ -92,7 +92,7 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 
 | 資料 | 端點 | 最早可得 | 更早時的回應 | 回補路徑怎麼處理更早的日子 |
 | --- | --- | --- | --- | --- |
-| 上市日行情、TAIEX 收盤 | `MI_INDEX` | 2004-02-11 | `stat`「查詢日期小於93年2月11日」 | `backfill --start-date` 早於這天就拒絕、不發請求（`sources.TWSE_QUOTES_FIRST_DATE`）。2008-12-31 以前的 `MI_INDEX` 只有「大盤統計資訊」與「每日收盤行情」，沒有「價格指數」表（2009-01-05 起才有，`TWSE_MI_INDEX_TAIEX_FIRST_DATE`）：那些日子的 TAIEX 收盤改取 `MI_5MINS_HIST` 月報（每月 1 個請求），寫成同樣的收盤列（`twse_index`），raw 指向月報，交易日基準照[TAIEX 交易日基準](#taiex-交易日基準)核實 |
+| 上市日行情、TAIEX 收盤 | `MI_INDEX` | 2004-02-11 | `stat`「查詢日期小於93年2月11日」 | `backfill --start-date` 早於這天就拒絕、不發請求（`sources.TWSE_QUOTES_FIRST_DATE`）。2008-12-31 以前的 `MI_INDEX` 只有「大盤統計資訊」與「每日收盤行情」，沒有「價格指數」表（2009-01-05 起才有，`TWSE_MI_INDEX_TAIEX_FIRST_DATE`）：那些日子的 TAIEX 收盤改取 `MI_5MINS_HIST` 月報（每月 1 個請求），寫成同樣的收盤列（`twse_index`），raw 指向月報，交易日基準照[TAIEX 交易日基準](#taiex-交易日基準)核實。價格指數表的加權指數列名以「發行量加權股價指數」為主，2019-04-29 是「加權股價指數」；兩個名稱都接受，完全比對（`sources.TWSE_INDEX_NAMES`，#764） |
 | 上市三大法人 | `T86` | 2012-05-02 | `stat`「查詢日期小於101年05月02日」 | 不請求，籌碼列只有融資組；run metadata 的 `feed_sources.TWSE.not_published.institutional` 記日期，不記 warning。較舊的版面沒有外資自營商欄（2012-05-02 實測如此，2014-11-28 已是現行版面，改版日沒有實測），外資取「外資買賣超股數」（當時的外資口徑，含後來分出的外資自營商）；parser 依欄名判斷版面，現行版面不改讀這欄 |
 | 上市融資融券 | `MI_MARGN` | 不晚於 2004-02-11 | — | 照常請求 |
 | 上市除權息 | `TWT49U`（含權的列另查 `TWT49UDetail`） | 2003-05-05 | `stat`「查詢開始日期小於92年5月5日」 | `corporate-actions sync` 的起日夾到這天 |
@@ -266,7 +266,7 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
 
 | 欄位 | 上市（TWSE `MI_INDEX`） | 上櫃（TPEx `tpex_mainborad_highlight`） |
 | --- | --- | --- |
-| 指數 | 「價格指數(臺灣證券交易所)」的「發行量加權股價指數」列：`收盤指數`；漲跌點數是未帶正負號的 `漲跌點數` 加上 `漲跌(+/-)` 欄的 HTML 標記（`<p style ='color:green'>-</p>`）；漲跌幅是官方 `漲跌百分比(%)`，`change_pct_method=official`。標記為空且點數為 0 是平盤，`X` 或其他標記為 null；標記與百分比正負相反時兩者都存 null | `CloseIndex`、`IndexChange`（帶正負號）；官方沒有漲跌幅，以 `IndexChange ÷ (CloseIndex − IndexChange)`（前一日收市指數）計算，`change_pct_method=derived` |
+| 指數 | 「價格指數(臺灣證券交易所)」的「發行量加權股價指數」列（2019-04-29 是「加權股價指數」，`sources.TWSE_INDEX_NAMES`，恰好一列）：`收盤指數`；漲跌點數是未帶正負號的 `漲跌點數` 加上 `漲跌(+/-)` 欄的 HTML 標記（`<p style ='color:green'>-</p>`）；漲跌幅是官方 `漲跌百分比(%)`，`change_pct_method=official`。標記為空且點數為 0 是平盤，`X` 或其他標記為 null；標記與百分比正負相反時兩者都存 null | `CloseIndex`、`IndexChange`（帶正負號）；官方沒有漲跌幅，以 `IndexChange ÷ (CloseIndex − IndexChange)`（前一日收市指數）計算，`change_pct_method=derived` |
 | 成交金額（元，整數） | 「大盤統計資訊」的「總計(1~15)」，含 ETF、權證等全部證券，`turnover_scope=twse_all_securities`；即一般網站的大盤成交值，等於 OpenAPI `FMTQIK` 的 `TradeValue`（只算股票的「證券合計(1+6+14+15)」不用） | `DailyTradingValue` × 1,000,000，只算上櫃股票，`turnover_scope=tpex_stocks`（10/22 為 225,545 百萬元，等於已收 `dailyQuotes` 四碼普通股成交金額合計） |
 | 漲跌家數 | 「漲跌證券數合計」的「股票」欄（不是「整體市場」）：`247(3)` 拆成上漲 247、漲停 3，跌停同理；持平、未成交、無比價（`not_comparable`）；`breadth_scope=twse_stocks` | 上漲、下跌、平盤、漲停、跌停、未成交（含暫停交易）；沒有無比價；`breadth_scope=tpex_stocks` |
 

@@ -1,5 +1,6 @@
 import json
 from datetime import date
+from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -839,6 +840,134 @@ def test_twse_mi_index_selects_price_table_not_return_table():
     )
     assert len(rows) == 1
     assert rows[0].close == 47105.78
+
+
+# Issue #764: raw_payloads 28605 (2019-04-29) and 28609 (2019-04-30) of the
+# research volume, shortened to four price-index rows, two return-index rows
+# and two security rows.  2019-04-29 names the TAIEX row 加權股價指數.
+MI_INDEX_FIXTURES = Path(__file__).parent / "fixtures" / "market_summary"
+
+
+def mi_index_fixture(day: str) -> dict:
+    """A shortened MI_INDEX report of ``fixtures/market_summary`` (YYYYMMDD)."""
+
+    return json.loads(
+        (MI_INDEX_FIXTURES / f"twse_mi_index_{day}.json").read_text(encoding="utf-8")
+    )
+
+
+def _price_table(payload: dict) -> dict:
+    """The table the parsers read: the whole title once the ROC date is cut."""
+
+    (table,) = [
+        table
+        for table in payload["tables"]
+        if sources._ROC_TITLE_PREFIX.sub("", "".join(str(table.get("title")).split()))
+        == "價格指數(臺灣證券交易所)"
+    ]
+    return table
+
+
+@pytest.mark.parametrize(
+    ("day", "requested", "close"),
+    [
+        # raw 28605: the row reads 加權股價指數.
+        ("20190429", date(2019, 4, 29), 10939.06),
+        # raw 28609: the row reads 發行量加權股價指數.
+        ("20190430", date(2019, 4, 30), 10967.73),
+    ],
+)
+def test_twse_mi_index_taiex_accepts_both_official_names(day, requested, close):
+    rows = sources.parse_twse_taiex_from_all_daily_payload(
+        mi_index_fixture(day), requested_date=requested, payload_sha256="raw"
+    )
+
+    assert [(row.symbol, row.trading_date, row.close) for row in rows] == [
+        ("TAIEX", requested, close)
+    ]
+    assert rows[0].source == "twse_index"
+    assert rows[0].payload_sha256 == "raw"
+
+
+def test_twse_mi_index_taiex_names_are_exact():
+    assert sources.TWSE_INDEX_NAMES == (
+        "發行量加權股價指數",
+        "加權股價指數",
+    )
+    payload = mi_index_fixture("20190429")
+    price = _price_table(payload)
+    taiex = next(r for r in price["data"] if r[0] in sources.TWSE_INDEX_NAMES)
+    # The return-index row 加權股價報酬指數 of the same report is not TAIEX:
+    # moved into the price table it must not be read in place of the row.
+    return_row = next(
+        r
+        for table in payload["tables"]
+        if table.get("title") == "報酬指數(臺灣證券交易所)"
+        for r in table["data"]
+        if r[0] == "加權股價報酬指數"
+    )
+    price["data"] = [r for r in price["data"] if r is not taiex] + [return_row]
+    assert (
+        sources.parse_twse_taiex_from_all_daily_payload(
+            payload, requested_date=date(2019, 4, 29)
+        )
+        == []
+    )
+
+    # Only the return table carries the name: still no TAIEX.
+    payload = mi_index_fixture("20190429")
+    price = _price_table(payload)
+    price["data"] = [r for r in price["data"] if r[0] not in sources.TWSE_INDEX_NAMES]
+    assert (
+        sources.parse_twse_taiex_from_all_daily_payload(
+            payload, requested_date=date(2019, 4, 29)
+        )
+        == []
+    )
+
+    # A row that only contains the name, with padding or a suffix, is not one.
+    for label in ("加權股價指數(日)", "臺灣加權股價指數"):
+        payload = mi_index_fixture("20190429")
+        price = _price_table(payload)
+        for r in price["data"]:
+            if r[0] in sources.TWSE_INDEX_NAMES:
+                r[0] = label
+        assert (
+            sources.parse_twse_taiex_from_all_daily_payload(
+                payload, requested_date=date(2019, 4, 29)
+            )
+            == []
+        )
+
+
+def test_twse_mi_index_taiex_rejects_both_names_in_one_table():
+    payload = mi_index_fixture("20190429")
+    price = _price_table(payload)
+    old = next(r for r in price["data"] if r[0] == sources.TWSE_INDEX_NAMES[1])
+    new = list(old)
+    new[0] = sources.TWSE_INDEX_NAMES[0]
+    price["data"].append(new)
+
+    assert (
+        sources.parse_twse_taiex_from_all_daily_payload(
+            payload, requested_date=date(2019, 4, 29)
+        )
+        == []
+    )
+
+
+def test_twse_mi_index_taiex_old_name_still_needs_a_positive_close():
+    for close in ("0.00", "-1", "--", "nan"):
+        payload = mi_index_fixture("20190429")
+        for r in _price_table(payload)["data"]:
+            if r[0] == sources.TWSE_INDEX_NAMES[1]:
+                r[1] = close
+        assert (
+            sources.parse_twse_taiex_from_all_daily_payload(
+                payload, requested_date=date(2019, 4, 29)
+            )
+            == []
+        ), close
 
 
 def test_twse_openapi_adjacent_dates_select_exact_price_row():
