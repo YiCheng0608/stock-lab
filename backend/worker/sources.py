@@ -541,6 +541,10 @@ TWSE_INSTITUTIONAL_FIRST_DATE = date(2012, 5, 2)  # T86
 # 2008-12-31 and earlier have only 大盤統計資訊 and 每日收盤行情 (#692 probes),
 # so those sessions take the close from MI_5MINS_HIST.
 TWSE_MI_INDEX_TAIEX_FIRST_DATE = date(2009, 1, 5)
+# The TAIEX row of that table, by its label compared whole (also the stored
+# market summary name).  2019-04-29 reads 加權股價指數 (Issue #764).
+TWSE_INDEX_NAME = "發行量加權股價指數"
+TWSE_INDEX_NAMES = (TWSE_INDEX_NAME, "加權股價指數")
 TPEX_QUOTES_FIRST_DATE = date(2007, 4, 23)  # dailyQuotes
 TPEX_INSTITUTIONAL_FIRST_DATE = date(2014, 12, 1)  # insti/dailyTrade
 TWSE_ACTION_HISTORY_FIRST_DATE = date(2003, 5, 5)  # TWT49U: 查詢開始日期小於92年5月5日
@@ -2678,7 +2682,7 @@ def parse_twse_taiex_from_all_daily_payload(
     # position.  Returning no row is deliberately fail-closed; callers treat
     # this as an unverified session and must not persist a guessed benchmark.
     # The row label is one of the fixed ``TWSE_INDEX_NAMES``, compared whole:
-    # 2019-04-29 reads \u52a0\u6b0a\u80a1\u50f9\u6307\u6578 and the return table has \u52a0\u6b0a\u80a1\u50f9\u5831\u916c\u6307\u6578.
+    # 2019-04-29 reads 加權股價指數 and the return table has 加權股價報酬指數.
     # A table with both names is two rows, not a choice (Issue #764).
     price_table_title = (
         "\u50f9\u683c\u6307\u6578(\u81fa\u7063\u8b49\u5238\u4ea4\u6613\u6240)"
@@ -2857,10 +2861,6 @@ def parse_twse_index_history_payload(
 
 TWSE_MARKET_SUMMARY_SOURCE = "twse_mi_index"
 TPEX_MARKET_SUMMARY_SOURCE = "tpex_mainborad_highlight"
-TWSE_INDEX_NAME = "發行量加權股價指數"
-# Row labels of TWSE_INDEX_NAME in the MI_INDEX price-index table, compared
-# whole by both TWSE parsers.  2019-04-29 reads 加權股價指數 (Issue #764).
-TWSE_INDEX_NAMES = (TWSE_INDEX_NAME, "加權股價指數")
 TPEX_INDEX_NAME = "櫃買指數"
 _ROC_TITLE_PREFIX = re.compile(r"^\d{3,4}年\d{1,2}月\d{1,2}日")
 _HTML_TAG = re.compile(r"<[^>]*>")

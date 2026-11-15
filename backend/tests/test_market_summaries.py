@@ -40,7 +40,7 @@ from app.models import (
     MarketSummary,
     RawPayload,
 )
-from test_sources import FixtureFetcher
+from test_sources import FixtureFetcher, mi_index_fixture
 
 FIXTURES = Path(__file__).parent / "fixtures" / "market_summary"
 OCT22 = date(2026, 10, 22)
@@ -48,9 +48,7 @@ DAY = date(2026, 9, 4)  # FixtureFetcher's session
 
 
 def _twse_1022() -> dict:
-    return json.loads(
-        (FIXTURES / "twse_mi_index_20261022.json").read_text(encoding="utf-8")
-    )
+    return mi_index_fixture("20261022")
 
 
 def _tpex_1022() -> list:
@@ -247,9 +245,7 @@ APR29 = date(2019, 4, 29)
 def _twse_0429() -> dict:
     """raw_payloads 28605 of the research volume, shortened like the 10/22 one."""
 
-    return json.loads(
-        (FIXTURES / "twse_mi_index_20190429.json").read_text(encoding="utf-8")
-    )
+    return mi_index_fixture("20190429")
 
 
 def test_twse_summary_reads_the_0429_report_with_the_old_index_name():
@@ -372,15 +368,18 @@ def test_tpex_missing_or_unreadable_fields_are_null_not_zero():
 # ---- AC-A2: adapters ----
 
 
-def _summary_fetcher(*, highlight=None, mi_index=None):
-    """FixtureFetcher whose 09/04 MI_INDEX carries the 10/22 summary tables."""
+def _summary_fetcher(*, highlight=None, mi_index=None, report=_twse_1022):
+    """FixtureFetcher whose 09/04 MI_INDEX carries the summary tables of
+    ``report()`` (the 10/22 one by default)."""
+
+    report_source = report
 
     def default_mi_index(base):
-        report = _twse_1022()
+        report = report_source()
         report["date"] = "20260904"
         # Keep FixtureFetcher's security table (codes 1101 etc.).
         report["tables"] = [
-            t for t in report["tables"] if "每日收盤行情" not in str(t["title"])
+            t for t in report["tables"] if "每日收盤行情" not in str(t.get("title"))
         ] + [base["tables"][1]]
         return report
 
@@ -443,16 +442,8 @@ def test_historical_batch_reads_taiex_and_summary_under_the_old_index_name(
     """The research backfill path: TwseAdapter.fetch with snapshot feeds off
     reads the TAIEX row and then ``_read_market_summary`` from one report."""
 
-    def old_name_report(base):
-        report = _twse_0429()
-        report["date"] = "20260904"
-        report["tables"] = [
-            t for t in report["tables"] if "每日收盤行情" not in str(t.get("title"))
-        ] + [base["tables"][1]]
-        return report
-
     monkeypatch.setattr(sources, "RAW_DIR", tmp_path / "raw")
-    fetcher = _summary_fetcher(mi_index=old_name_report)
+    fetcher = _summary_fetcher(report=_twse_0429)
 
     batch = sources.TwseAdapter(fetcher, snapshot_feeds=False).fetch(DAY, DAY)
 

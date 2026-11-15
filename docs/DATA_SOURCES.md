@@ -266,7 +266,7 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
 
 | 欄位 | 上市（TWSE `MI_INDEX`） | 上櫃（TPEx `tpex_mainborad_highlight`） |
 | --- | --- | --- |
-| 指數 | 「價格指數(臺灣證券交易所)」的「發行量加權股價指數」列：`收盤指數`；漲跌點數是未帶正負號的 `漲跌點數` 加上 `漲跌(+/-)` 欄的 HTML 標記（`<p style ='color:green'>-</p>`）；漲跌幅是官方 `漲跌百分比(%)`，`change_pct_method=official`。標記為空且點數為 0 是平盤，`X` 或其他標記為 null；標記與百分比正負相反時兩者都存 null | `CloseIndex`、`IndexChange`（帶正負號）；官方沒有漲跌幅，以 `IndexChange ÷ (CloseIndex − IndexChange)`（前一日收市指數）計算，`change_pct_method=derived` |
+| 指數 | 「價格指數(臺灣證券交易所)」的「發行量加權股價指數」列（2019-04-29 是「加權股價指數」，`sources.TWSE_INDEX_NAMES`，恰好一列）：`收盤指數`；漲跌點數是未帶正負號的 `漲跌點數` 加上 `漲跌(+/-)` 欄的 HTML 標記（`<p style ='color:green'>-</p>`）；漲跌幅是官方 `漲跌百分比(%)`，`change_pct_method=official`。標記為空且點數為 0 是平盤，`X` 或其他標記為 null；標記與百分比正負相反時兩者都存 null | `CloseIndex`、`IndexChange`（帶正負號）；官方沒有漲跌幅，以 `IndexChange ÷ (CloseIndex − IndexChange)`（前一日收市指數）計算，`change_pct_method=derived` |
 | 成交金額（元，整數） | 「大盤統計資訊」的「總計(1~15)」，含 ETF、權證等全部證券，`turnover_scope=twse_all_securities`；即一般網站的大盤成交值，等於 OpenAPI `FMTQIK` 的 `TradeValue`（只算股票的「證券合計(1+6+14+15)」不用） | `DailyTradingValue` × 1,000,000，只算上櫃股票，`turnover_scope=tpex_stocks`（10/22 為 225,545 百萬元，等於已收 `dailyQuotes` 四碼普通股成交金額合計） |
 | 漲跌家數 | 「漲跌證券數合計」的「股票」欄（不是「整體市場」）：`247(3)` 拆成上漲 247、漲停 3，跌停同理；持平、未成交、無比價（`not_comparable`）；`breadth_scope=twse_stocks` | 上漲、下跌、平盤、漲停、跌停、未成交（含暫停交易）；沒有無比價；`breadth_scope=tpex_stocks` |
 

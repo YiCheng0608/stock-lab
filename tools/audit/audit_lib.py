@@ -344,12 +344,14 @@ def quote_rows(payload: Any, exchange: str) -> dict[str, dict[str, float | None]
     return rows
 
 
-TAIEX_ROW = "發行量加權股價指數"
+# worker.sources.TWSE_INDEX_NAMES, compared whole; 2019-04-29 reads 加權股價指數
+# (Issue #764, backend/tests/test_audit.py pins them).
+TAIEX_ROWS = ("發行量加權股價指數", "加權股價指數")
 
 
 def taiex_close(payload: Any) -> float | None:
     for fields, row in table_rows(payload, ("指數", "收盤指數")):
-        if str(row[fields.index("指數")]).strip() == TAIEX_ROW:
+        if str(row[fields.index("指數")]).strip() in TAIEX_ROWS:
             return num(row[fields.index("收盤指數")])
     return None
 
