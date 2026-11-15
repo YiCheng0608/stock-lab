@@ -9,6 +9,8 @@ industries and companies, with the source's runs of padding spaces collapsed.
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import socket
 from datetime import date, datetime
@@ -493,7 +495,7 @@ def test_a_page_that_cannot_be_trusted_is_rejected(html, market, month, page, me
         mr.parse_page(html, market, month, page)
 
 
-def test_fetch_page_decodes_big5_and_retries_a_502(monkeypatch):
+def test_fetch_page_returns_the_big5_bytes_and_retries_a_502(monkeypatch):
     body = page_html("sii", 1).encode("cp950")
     answers = [
         httpx.Response(502, content=b"Unreachable Server"),
@@ -504,8 +506,12 @@ def test_fetch_page_decodes_big5_and_retries_a_502(monkeypatch):
     monkeypatch.setattr(mr, "_throttle_official_host", lambda url: None)
     monkeypatch.setattr(mr.time, "sleep", slept.append)
 
-    html = mr.fetch_page(mr.page_url("sii", SEPTEMBER, 1))
+    content = mr.fetch_page(mr.page_url("sii", SEPTEMBER, 1))
 
+    # The bytes as they came: the raw keeps them when they are not all cp950.
+    assert content == body
+    html, undecodable = mr.decode_page(content)
+    assert undecodable == []
     assert answers == []
     # Seconds, not a fraction: the probe's 502 cleared 10 s later (review of PR #533).
     assert slept == [5.0]
@@ -1145,3 +1151,220 @@ def test_the_stock_page_shows_a_corrected_month_and_its_snapshot_value(factory):
             )
     finally:
         app.dependency_overrides.pop(api_module.get_db, None)
+
+
+# --- pages that are not all cp950 (#774) --------------------------------------
+
+# 2539 櫻花建's row of the 2013-02 sii ``_0`` page as fetched (#702 probe,
+# t21sc03_102_2_0_sii.html bytes 293810..294325): its 備註 has two Big5
+# user-defined characters cp950 has no mapping for, ``c8 ba`` before 璀璨 and
+# ``c8 bb`` before 未達, at bytes 446 and 456 of the row.
+ROW_2539 = (PAGES / "sii_102_2_0_row_2539.bin").read_bytes()
+ROW_OFFSETS = (446, 456)
+
+
+def page_with_2539(row: bytes = ROW_2539) -> tuple[bytes, int]:
+    """The 115/09 sii ``_0`` page as bytes with 2539's row after 1102's; where."""
+
+    page = page_html("sii", 0).encode("cp950")
+    at = page.index(b"</tr>", page.index(b">1102<")) + len(b"</tr>")
+    return page[:at] + row + page[at:], at
+
+
+class BytesFetcher(PageFetcher):
+    """Answers bytes, as ``fetch_page``; ``sii`` ``_0`` is ``page``."""
+
+    def __init__(self, page: bytes):
+        super().__init__()
+        self.page = page
+
+    def __call__(self, url):
+        if url == mr.page_url("sii", SEPTEMBER, 0):
+            self.urls.append(url)
+            return self.page
+        return super().__call__(url).encode("cp950")
+
+
+def stored_payload(db, url) -> dict:
+    raw = db.scalars(select(RawPayload).where(RawPayload.endpoint == url)).one()
+    return json.loads(Path(raw.payload_path).read_text("utf-8"))
+
+
+def test_an_undecodable_character_is_one_replacement_not_a_garbled_neighbour():
+    # c8 ba, then 璀 (bd 41): errors="replace" drops only c8 and reads ba bd as
+    # 瑤, so 璀 is lost without a trace; both bytes of c8 ba are one character.
+    sample = b"\xc8\xba\xbd\x41\xc0\xf6"
+    assert sample.decode("cp950", errors="replace") == "\ufffd瑤A璨"
+
+    assert mr.decode_page(sample) == ("\ufffd璀璨", [{"offset": 0, "bytes": "c8ba"}])
+    # A lead byte before a byte that cannot follow it: only the lead byte goes.
+    assert mr.decode_page(b"\xc8<td>") == ("\ufffd<td>", [{"offset": 0, "bytes": "c8"}])
+    text, found = mr.decode_page(ROW_2539)
+    assert "新個案\ufffd璀璨工學\ufffd未達產權過戶階段" in text
+    assert found == [
+        {"offset": ROW_OFFSETS[0], "bytes": "c8ba"},
+        {"offset": ROW_OFFSETS[1], "bytes": "c8bb"},
+    ]
+
+
+def test_up_to_eight_undecodable_characters_are_read():
+    assert mr.decode_page(b"\xc8\xba" * 8)[0] == "\ufffd" * 8
+    text, found = mr.decode_page(b"\xc8\xba" * 20)
+    assert text is None and len(found) == mr.MAX_UNDECODABLE + 1
+
+
+def test_a_page_with_undecodable_characters_in_a_remark_is_written(factory):
+    page, at = page_with_2539()
+    with factory() as db:
+        db.add(
+            Instrument(
+                market="TW",
+                exchange="TWSE",
+                symbol="2539",
+                name="櫻花建",
+                instrument_type="stock",
+                status="active",
+            )
+        )
+        db.commit()
+
+    result = backfill(factory, BytesFetcher(page), months=1, end=SEPTEMBER)
+
+    first, second = (at + offset for offset in ROW_OFFSETS)
+    assert result["status"] == "partial", result
+    assert result["warnings"] == [
+        f"2026-09:sii:0: 2 undecodable cp950 characters replaced with U+FFFD "
+        f"at bytes {first}, {second}: 2539 備註 ×2"
+    ]
+    assert result["pages"]["2026-09:sii:0"]["undecodable"] == [
+        {"offset": first, "bytes": "c8ba"},
+        {"offset": second, "bytes": "c8bb"},
+    ]
+    with factory() as db:
+        row = rows(db)[("2539", "2026-09")]
+        assert (row.revenue, row.prior_year_revenue, row.yoy) == (
+            270.0,
+            11965.0,
+            -97.74,
+        )
+        assert "新個案\ufffd璀璨工學\ufffd未達" in row.data_json["備註"]
+        stored = stored_payload(db, mr.page_url("sii", SEPTEMBER, 0))
+        # The bytes as they came, beside the text read from them.
+        assert base64.b64decode(stored["content_base64"]) == page
+        assert stored["undecodable"] == result["pages"]["2026-09:sii:0"]["undecodable"]
+        assert "櫻花建" in stored["html"]
+        assert rows(db)[("2330", "2026-09")].revenue == 511857399.0
+
+
+@pytest.mark.parametrize(
+    "row, where",
+    [
+        # In 當月營收: 2,70 would be read as a number.
+        pytest.param(ROW_2539.replace(b" 270<", b" 2\xc8\xba70<", 1), 1, id="amount"),
+        # In the code: the row would not be a company row and be lost, its
+        # remark with it.
+        pytest.param(ROW_2539.replace(b">2539<", b">25\xc8\xba39<", 1), 3, id="code"),
+    ],
+)
+def test_an_undecodable_character_outside_a_name_or_remark_fails_the_page(
+    factory, row, where
+):
+    page, _at = page_with_2539(row)
+
+    result = backfill(factory, BytesFetcher(page), months=1, end=SEPTEMBER)
+
+    item = result["pages"]["2026-09:sii:0"]
+    assert item["status"] == "failed"
+    assert item["error"] == (
+        f"MOPS t21sc03 sii 2026-09 _0 has {where} undecodable characters "
+        "outside 公司名稱／備註"
+    )
+    with factory() as db:
+        assert ("1101", "2026-09") not in rows(db)
+        # The raw is kept all the same.
+        stored = stored_payload(db, mr.page_url("sii", SEPTEMBER, 0))
+        assert base64.b64decode(stored["content_base64"]) == page
+
+
+def test_more_than_eight_undecodable_characters_fail_the_page_and_keep_the_raw(
+    factory,
+):
+    page, at = page_with_2539(ROW_2539.replace(b"\xc8\xba", b"\xc8\xba" * 8, 1))
+
+    result = backfill(factory, BytesFetcher(page), months=1, end=SEPTEMBER)
+
+    item = result["pages"]["2026-09:sii:0"]
+    url = mr.page_url("sii", SEPTEMBER, 0)
+    assert item["status"] == "failed"
+    assert item["error"] == (
+        f"{url} is not cp950: more than 8 undecodable characters, "
+        f"the first at byte {at + ROW_OFFSETS[0]}"
+    )
+    assert result["warnings"][0] == f"2026-09:sii:0: {item['error']}"
+    with factory() as db:
+        stored = stored_payload(db, url)
+        assert "html" not in stored
+        assert base64.b64decode(stored["content_base64"]) == page
+        assert len(stored["undecodable"]) == mr.MAX_UNDECODABLE + 1
+        assert ("1101", "2026-09") not in rows(db)
+
+
+def test_a_page_that_is_all_cp950_keeps_its_raw_as_before(factory):
+    result = backfill(
+        factory,
+        BytesFetcher(page_html("sii", 0).encode("cp950")),
+        months=1,
+        end=SEPTEMBER,
+    )
+
+    assert result["status"] == "success", result
+    url = mr.page_url("sii", SEPTEMBER, 0)
+    before = {"endpoint": url, "method": "GET", "encoding": "cp950"}
+    before["html"] = page_html("sii", 0)
+    with factory() as db:
+        raw = db.scalars(select(RawPayload).where(RawPayload.endpoint == url)).one()
+        assert stored_payload(db, url) == before
+    assert raw.sha256 == hashlib.sha256(sources._encode_payload(before)).hexdigest()
+
+
+def test_a_text_answer_with_replacements_is_reported_too(factory):
+    # Review of PR #778: a fetcher answering text (a test's, a replay of a
+    # stored ``html``) has no bytes to point at; its U+FFFD still give a
+    # warning, so the run is not ``success``.
+    text, _found = mr.decode_page(page_with_2539()[0])
+
+    class TextFetcher(PageFetcher):
+        def __call__(self, url):
+            if url == mr.page_url("sii", SEPTEMBER, 0):
+                self.urls.append(url)
+                return text
+            return super().__call__(url)
+
+    result = backfill(factory, TextFetcher(), months=1, end=SEPTEMBER)
+
+    assert result["status"] == "partial", result
+    assert result["warnings"] == [
+        "2026-09:sii:0: 2 U+FFFD in the page text: 2539 備註 ×2"
+    ]
+
+
+def test_a_no_data_page_with_an_undecodable_character_says_where_it_is(factory):
+    october = mr.Month(2026, 10)
+    page = no_data_html("sii", october).encode("cp950")
+    at = page.index("查無資料".encode("cp950"))
+    page = page[:at] + b"\xc8\xba" + page[at:]
+
+    class Fetcher(NoDataFetcher):
+        def __call__(self, url):
+            if url == mr.page_url("sii", october, 0):
+                self.urls.append(url)
+                return page
+            return super().__call__(url)
+
+    result = backfill(factory, Fetcher({october}), months=1, end=october)
+
+    assert result["pages"]["2026-10:sii:0"]["status"] == "empty"
+    assert result["warnings"] == [
+        f"2026-10:sii:0: 1 undecodable cp950 characters replaced with U+FFFD "
+        f"at bytes {at}: no company row"
+    ]
