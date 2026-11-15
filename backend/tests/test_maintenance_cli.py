@@ -129,6 +129,19 @@ GUARDED = {
         ["revenue", "backfill", "--months", "24"],
         "run_revenue_backfill",
     ),
+    "fundamentals xbrl-apply": (
+        [
+            "fundamentals",
+            "xbrl-apply",
+            "--start",
+            "2013Q1",
+            "--end",
+            "2024Q3",
+            "--dir",
+            "/xbrl",
+        ],
+        "run_xbrl_apply",
+    ),
     "instruments repair --apply": (
         ["instruments", "repair", "--apply"],
         "run_instrument_repair",
@@ -178,11 +191,15 @@ def run_held(
             work(seen)
         return {"status": "success"}
 
-    if command in RESEARCH_ONLY:
-        monkeypatch.setattr(cli_module, "DB_PATH", data / "stock.db")
-        research_marker(data, "research_history" if research else None)
     monkeypatch.setattr(cli_module, name, fake)
     monkeypatch.setattr(cli_module, "DATA_DIR", data)
+    # xbrl-apply (#781) and the RESEARCH_ONLY revenue commands (#782) run only
+    # next to the research marker; the others ignore it.  ``research=False``
+    # leaves the marker out.
+    data.mkdir(parents=True, exist_ok=True)
+    (data / "stock.db").write_bytes(b"")
+    research_marker(data, "research_history" if research else None)
+    monkeypatch.setattr(cli_module, "DB_PATH", data / "stock.db")
     monkeypatch.setattr(sys, "argv", ["worker.cli", *(argv or held_argv)])
     try:
         cli_module.main()

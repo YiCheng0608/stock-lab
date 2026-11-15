@@ -110,6 +110,7 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 | 重大訊息清單 | MOPS `t05st02` | 不晚於 2004-02-11 | — | 研究 DB 先不補（#692 決定） |
 | 月營收 | MOPS `t21sc03` | 2013-01（民國 102）起與現行格式相同 | 2012 年以前的頁面標題沒有市場別、沒有國內／國外合計，`monthly_revenue` 整頁拒收；口徑是個別營收，2013 年起是 IFRS 合併營收 | 不補 2012 年以前（#692 決定） |
 | 季度財報 | MOPS `t163sb04` | 2013Q1（IFRS） | 2012Q4 回沒有表格的頁面 | 不補 2012 年以前（#692 決定） |
+| 季度 EPS（下市股） | MOPS 季度 XBRL 整包 `tifrs-<年>Q<季>.zip` | 2013Q1 | 2024Q3 也有（新格式 inline `.html`） | 只補下市、轉板標的（[#781](https://github.com/YiCheng0608/stock-lab/issues/781)） |
 
 ## 新聞來源
 
@@ -534,6 +535,27 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
 - **冪等**：數值、可得日與 `data_json` 都沒變的列不寫（`raw_payload_id`、`collected_at` 也不動，列指向它的數值來自的那次 capture），重跑時 `changed` 是 0。HTML 含當次產生的 CSV 檔名，每次抓的 SHA-256 都不同，raw 每次都存。
 - **實測**（2026-11-06，正式 DB 副本，alembic `0027_emerging_issuers`）：16 個請求約 66 秒；2024Q4～2026Q2 每季 1,930～1,986 檔，2026Q3 當時 283 檔；重跑 `changed 0`。
 - **daily 自動回補**（[#536](https://github.com/YiCheng0608/stock-lab/issues/536)）：日快照換季後（2026Q2 在 11-02 換成 Q3）不再更新上一季，所以換季後才上市的公司（2026Q2 的 7867 特力屋，10-30 上市）、晚申報與更正都收不到。daily 的 period_backfill 步驟在每季最早期限前 14 天到最晚期限後 14 天之間（Q3 是 10/31～12/13）每天補該季與前一季，窗口、上限與記錄見 [SCHEDULING](ops/SCHEDULING.md#日誌與-run-記錄)。快照落後的期別不算漏：2026Q3 回補在 11-06 早上比 11-05 的快照多 85 檔，11-06 的上市快照就全部列入了。
+
+### 下市股的季度 EPS（XBRL 整包）
+
+`t163sb04` 是用今天的上市櫃名單產生的，下市、轉板公司的季度一列都沒有（[#781](https://github.com/YiCheng0608/stock-lab/issues/781)）。MOPS 另外每季提供一包 XBRL 檔，收的是當季每家申報公司的 instance，含之後下市的公司。研究 DB 用它補下市、轉板標的的 EPS，實作在 [`worker/quarterly_xbrl.py`](../backend/worker/quarterly_xbrl.py)。
+
+- **請求**：
+  - 網址：`GET https://mopsov.twse.com.tw/server-java/FileDownLoad?step=9&fileName=tifrs-<年>Q<季>.zip&filePath=/home/html/nas/ifrs/<年>/`，一季一個請求。2014Q2 一包 50.7 MB、2,037 個成員、2,004 家；伺服器忽略 `Range`。
+  - 範圍：2013Q1～2024Q3 都有。2013 年的成員是 `.xml`，2024 年的是 inline XBRL `.html`。
+- **下載**：`fundamentals xbrl-fetch --start --end --dir` 只寫目錄，不碰 DB。
+  - 目錄裡有整包與 `manifest.json`（網址、狀態碼、位元組數、sha256、成員數、抓取時間）；已有而且 sha256 相符的季不重抓。
+  - 每個請求間隔 ≥ 5 秒，台北 20:30～23:30 與 08:00～09:00 不發。
+  - 不重試。非 200、空回應、不是完整的 zip、成員名稱或季別不符，都算該季失敗；連續 3 季失敗就停。
+- **寫入**：`fundamentals xbrl-apply --start --end --dir [--dry-run] [--exclude-file]`，`run_type=fundamental_xbrl_backfill`，一季一個 commit。只在 DB 旁有 `research-db.json`（`purpose=research_history`）的研究 DB 跑，否則拒絕；起跑時持有維護模式（`--dry-run` 除外）。
+  - **raw**：`raw_payloads` 一季一列，`source=mops_tifrs`，`payload_path` 直接指向整包 zip，`sha256` 是整包的 sha256。檔案放在 `<RAW_DIR>/mops_tifrs/<抓取日>/<sha256>.zip`，經 `sources.ensure_raw_file` 寫入（`write_raw_file` 收 `.json` 與 `.zip`）。
+  - **成員**：一家取一份，順序是 `cr`（合併）、`ir`（個體）、`er`。產業碼對到 `t163sb04` 的格式：`ci` 一般、`basi` 銀行、`bd` 證券、`fh` 金控、`ins` 舊格式保險、`mim` 其他。2014Q2 的 1,517 家一對一，產業碼不在表上的公司略過並計數。
+  - **EPS**：取 `BasicEarningsLossPerShare`，比對 local name，所以 `ifrs:` 與 `ifrs-full:` 都認得。context 是當年 1/1 到季底、沒有維度的 YTD 累計，和 `t163sb04` 同口徑。inline XBRL 要處理 `format`、`scale`、`sign`、`xsi:nil`；同一 context 的多個 fact 要相同。
+  - **可得日**：照上一節，各格式的法定申報期限。
+  - **寫給誰**：只寫 `stock`／`ipo` 的 `delisted`、`transferred` 標的，而且要在季底到季底後 670 天內有日線。670 天是研究工具讀到這一季的最晚日子：5 季 × 92 天＋`QUARTER_STALE_DAYS` 200 天＋10 天餘裕。已有的列（任何來源）不動。active 標的一律不寫：它們在 `t163sb04` 上，同一代號的舊公司也不會寫到現在的公司上。
+  - **口徑核對**：每季先比兩邊都有的公司。EPS 或格式有一家不同、`t163sb04` 有列卻一家都沒比到，或比不到的（沒有成員、沒有 EPS、讀不了）超過核對家數的 1%（`CHECK_MISSING_LIMIT`；2014Q2 是 1／1,518），那一季就不寫，命令也停下。`source=mops_tifrs_zip`，`data_json` 記成員名稱、成員 sha256、產業碼、格式、context 與可得日的依據。
+- **外部檔案的防護**：成員只在記憶體內讀，不解壓到路徑。上限：成員數 5,000、單一成員 32 MB、一季解壓總量 8 GB、下載 1 GB，讀取時邊讀邊算。含 `<!DOCTYPE` 或 `<!ENTITY`、NUL 或 UTF-16 BOM 的成員不解析。CRC 錯、不支援的壓縮法、加密或資料流壞掉的成員讓整季失敗；同一家同一種報表（`cr`／`ir`／`er`）有兩份也是。
+- **實測**（2026-11-15，研究 DB 唯讀、2014Q2 探測檔、`--dry-run` 等價）：核對相同 1,517、不同 0、缺值 1（6026 不在整包）。下市股都在窗口外，因為當時研究 DB 的日線從 2017-08 起。
 
 ### 月營收
 
