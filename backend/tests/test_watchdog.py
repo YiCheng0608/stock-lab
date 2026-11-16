@@ -2468,17 +2468,34 @@ def test_one_failed_us_run_after_a_success_is_not_reported(wd):
 MORNING = NIGHT - 14 * 3600  # Monday 2026-10-19 09:15 Taipei
 
 
-def _notify_log(wd: Watchdog, day: str, *results: str, end: bool = True) -> Path:
-    path = wd.logs / f"notify-{day}.log"
+STUCK = None  # a run that started and wrote nothing more (stuck or killed)
+
+
+def _job_log(
+    wd: Watchdog, job: str, at: str, day: str, *runs: str | None, end: bool = True
+) -> Path:
+    """The day's log of JOB with one run per item of RUNS, in order: a result line and,
+    when END, an end line; STUCK writes a start line only (#760 review 6890045056)."""
+
+    path = wd.logs / f"{job}-{day}.log"
     path.write_text(
         "".join(
-            f"===== {day}T08:45:00+08:00 start job=notify\n--- result {result}\n"
-            + (f"===== {day}T08:45:02+08:00 end exit=0 seconds=2\n" if end else "")
-            for result in results
+            f"===== {day}T{at}:00+08:00 start job={job} trigger=scheduler\n"
+            + (
+                ""
+                if result is STUCK
+                else f"--- result {result}\n"
+                + (f"===== {day}T{at}:02+08:00 end exit=0 seconds=2\n" if end else "")
+            )
+            for result in runs
         ),
         encoding="utf-8",
     )
     return path
+
+
+def _notify_log(wd: Watchdog, day: str, *runs: str | None, end: bool = True) -> Path:
+    return _job_log(wd, "notify", "08:45", day, *runs, end=end)
 
 
 def test_no_notify_log_yet_is_not_judged(wd):
@@ -2579,3 +2596,186 @@ def test_a_missed_day_sent_by_hand_later_is_not_reported(wd):
         "status=sent attempts=1 message_id=11",
     )
     assert "key=notify_" not in wd.run("--dry-run", now=MORNING + 11 * 3600).stdout
+
+
+@pytest.mark.parametrize(
+    "runs",
+    [
+        # A run that ended, then one that got stuck.
+        ("status=skipped reason=already_running", STUCK),
+        # The stuck one first, a run that found its lock and ended after it.
+        (STUCK, "status=skipped reason=already_running"),
+    ],
+)
+def test_a_stuck_notify_after_or_beside_an_ended_run_is_reported(wd, runs):
+    """An earlier run's end line does not hide a stuck one (#760 review 6890045056)."""
+
+    _healthy_daily_and_news(wd)
+    _notify_log(wd, "20261019", *runs)
+    result = wd.run("--dry-run", now=MORNING)
+    assert "anomaly_planned key=notify_missing " in result.stdout
+    assert "通知開始了但沒有跑完" in result.stdout
+
+
+# preopen (#760 decision 6889924853) ------------------------------------------------
+
+PREOPEN_RERUN = "worker.cli preopen --trigger manual"
+
+
+def _preopen_log(wd: Watchdog, day: str, *runs: str | None, end: bool = True) -> Path:
+    return _job_log(wd, "preopen", "08:20", day, *runs, end=end)
+
+
+CHECKED_RESULT = (
+    "status=checked list_date=2026-10-16 run_id=7 window_start=2026-10-16T21:40:00+08:00"
+    " checked_at=2026-10-19T08:20:02+08:00 candidates=5 with_news=1 news=2 unscored=0"
+)
+
+
+def test_no_preopen_log_yet_is_not_judged(wd):
+    _healthy_daily_and_news(wd)
+    assert "key=preopen_" not in wd.run("--dry-run", now=MORNING).stdout
+
+
+def test_a_day_without_its_preopen_log_is_reported_from_0900(wd):
+    _healthy_daily_and_news(wd)
+    _preopen_log(wd, "20261016", CHECKED_RESULT)
+    # 08:55: not yet judged.
+    assert "key=preopen_" not in wd.run("--dry-run", now=MORNING - 20 * 60).stdout
+    result = wd.run("--dry-run", now=MORNING)
+    assert "anomaly_planned key=preopen_missing " in result.stdout
+    assert "今天（2026-10-19）沒有 08:20 開盤前檢查的日誌" in result.stdout
+    assert "scheduler 可能沒在跑" in result.stdout
+    assert PREOPEN_RERUN in result.stdout
+    # Saturday: no check is due.
+    saturday = MORNING + 5 * 86400
+    assert "key=preopen_" not in wd.run("--dry-run", now=saturday).stdout
+
+
+def test_a_preopen_started_and_never_ended_is_reported(wd):
+    _healthy_daily_and_news(wd)
+    _preopen_log(wd, "20261019", CHECKED_RESULT, end=False)
+    result = wd.run("--dry-run", now=MORNING)
+    assert "anomaly_planned key=preopen_missing " in result.stdout
+    assert "檢查開始了但沒有跑完" in result.stdout
+    assert "serve killed job=preopen" in result.stdout
+    assert "scheduler 可能沒在跑" not in result.stdout
+    assert PREOPEN_RERUN in result.stdout
+
+
+def test_a_failed_preopen_is_reported_once_a_day(wd):
+    _healthy_daily_and_news(wd)
+    # A maintenance skip after the failure is no outcome: still failed.
+    _preopen_log(
+        wd,
+        "20261019",
+        "status=failed reason=error:OperationalError detail=database is locked",
+        "status=skipped reason=maintenance",
+    )
+    result = wd.run("--dry-run", now=MORNING)
+    assert "anomaly_planned key=preopen_failed " in result.stdout
+    assert "status=failed reason=error:OperationalError" in result.stdout
+    assert "logs/preopen-20261019.log" in result.stdout
+    # A manual run is not held to 08:20-13:30 (review 6890045056 suggestion 2).
+    assert "`--trigger manual` 不受時段限制" in result.stdout
+    assert "13:30 前" not in result.stdout
+    assert PREOPEN_RERUN in result.stdout
+    wd.run(now=MORNING)
+    wd.run(now=MORNING + 30 * 60)
+    assert (
+        wd.text("gh_bodies.txt").count("開盤前檢查：今天（2026-10-19）的檢查失敗") == 1
+    )
+
+
+def test_a_failed_preopen_checked_by_hand_is_not_reported(wd):
+    _healthy_daily_and_news(wd)
+    _preopen_log(
+        wd,
+        "20261019",
+        "status=failed reason=error:OperationalError detail=database is locked",
+        CHECKED_RESULT,
+    )
+    assert "key=preopen_" not in wd.run("--dry-run", now=MORNING).stdout
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        CHECKED_RESULT,
+        "status=skipped reason=non_trading_day",
+        "status=skipped reason=already_checked list_date=2026-10-16 run_id=7"
+        " checked_at=2026-10-19T08:20:02+08:00",
+        "status=skipped reason=no_list list_date=2026-10-16",
+        "status=skipped reason=already_running",
+        "status=skipped reason=maintenance",
+        "status=skipped reason=maintenance after_wait=yes",
+    ],
+)
+def test_a_checked_or_skipped_preopen_is_not_reported(wd, result):
+    _healthy_daily_and_news(wd)
+    _preopen_log(wd, "20261019", result)
+    assert "key=preopen_" not in wd.run("--dry-run", now=MORNING).stdout
+
+
+def test_a_trading_day_the_preopen_schedule_missed_is_reported_once(wd):
+    """The host asleep 08:20-13:30, the missed trigger run at 20:00: too_late only."""
+
+    _healthy_daily_and_news(wd)
+    _preopen_log(wd, "20261019", "status=skipped reason=too_late at=20:00")
+    evening = MORNING + 11 * 3600  # 20:15
+    result = wd.run("--dry-run", now=evening)
+    assert "anomaly_planned key=preopen_missed " in result.stdout
+    assert "08:20～13:30 scheduler 沒有跑到（`too_late at=20:00`" in result.stdout
+    assert PREOPEN_RERUN in result.stdout
+    wd.run(now=evening)
+    wd.run(now=evening + 30 * 60)
+    assert wd.text("gh_bodies.txt").count("scheduler 沒有跑到") == 1
+    # Checked by hand later: no longer reported.
+    _preopen_log(
+        wd, "20261019", "status=skipped reason=too_late at=20:00", CHECKED_RESULT
+    )
+    assert "key=preopen_" not in wd.run("--dry-run", now=evening + 3600).stdout
+
+
+@pytest.mark.parametrize(
+    "runs",
+    [
+        # 08:20 in maintenance mode; serve's catch-up after it ends gets stuck.
+        ("status=skipped reason=maintenance", STUCK),
+        # 08:20 holds the lock and gets stuck; a manual run finds it and ends.
+        (STUCK, "status=skipped reason=already_running"),
+    ],
+)
+def test_a_stuck_preopen_after_or_beside_an_ended_run_is_reported(wd, runs):
+    """An earlier run's end line does not hide a stuck one (#760 review 6890045056)."""
+
+    _healthy_daily_and_news(wd)
+    _preopen_log(wd, "20261019", *runs)
+    result = wd.run("--dry-run", now=MORNING)
+    assert "anomaly_planned key=preopen_missing " in result.stdout
+    assert "檢查開始了但沒有跑完" in result.stdout
+
+
+def test_several_ended_preopen_runs_are_not_reported(wd):
+    _healthy_daily_and_news(wd)
+    _preopen_log(
+        wd,
+        "20261019",
+        "status=skipped reason=maintenance",
+        "status=skipped reason=already_running",
+        CHECKED_RESULT,
+    )
+    assert "key=preopen_" not in wd.run("--dry-run", now=MORNING).stdout
+
+
+def test_a_forced_rerun_failing_after_a_check_is_not_reported(wd):
+    """--force failing rolls back: the day's check stays (review 6890045056 suggestion 4)."""
+
+    _healthy_daily_and_news(wd)
+    _preopen_log(
+        wd,
+        "20261019",
+        CHECKED_RESULT,
+        "status=failed reason=error:OperationalError detail=database is locked",
+    )
+    assert "key=preopen_" not in wd.run("--dry-run", now=MORNING).stdout
