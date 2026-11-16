@@ -127,7 +127,8 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 **來源**：每月最後一個交易日 D，兩個市場各取每個產業代號那一天的收盤行情。
 - 上市：TWSE `MI_INDEX?date=<D>&type=<代號>`。
 - 上櫃：TPEx 舊版 `stk_wn1430_result.php?d=<民國 D>&se=<代號>`。新版 `dailyQuotes` 不分產業，帶 `type` 也回全部。
-- 表裡是當天掛牌的全部股票，含停牌、沒成交、之後下市的公司，產業是**當時**的分類。
+- 表裡是當天掛牌的全部股票，含停牌、沒成交、之後下市的公司。
+- 產業：上櫃是**當時**的分類；上市是**現在（或下市前最後）的分類回填**，見下面的限制。
 - D 由 TWSE `type=01`（水泥）決定：從月底往前，第一個有列的平日。
 
 **為什麼不用別的**：
@@ -136,7 +137,8 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 - **MOPS 公司基本資料（`t05st03`）**：下市公司只回舊大類或沒有資料。
 - 2015-01-05 實測，TPEx 其他電子類 39 檔中，有 8 檔現在被分到別的產業，6 檔不在 MOPS 頁上（[6894326371](https://github.com/YiCheng0608/stock-lab/issues/779#issuecomment-6894326371)）。
 
-**一列**：`snapshot_date`、`exchange`（`TWSE`／`TPEx`）、`industry_code`、`category`（回應的類別名稱原文）、`group_label`、`group_id`、`symbol`、`name`。
+**一列**：`snapshot_date`、`exchange`（`TWSE`／`TPEx`）、`industry_code`、`category`（回應的類別名稱原文）、`group_label`、`group_id`、`symbol`、`name`、`retroactive_category`。
+- `retroactive_category` 是 `true` 的列：上市 35 綠能環保、36 數位雲端、37 運動休閒、38 居家生活，`snapshot_date` 在 2023-07-03 以前。這四類是那天才新增的，舊日子的成員是事後分類。manifest 的 `retroactive_rows` 是這種列的數量。
 - `group_label` 是產品 `app.taxonomy` 的英文標籤，`group_id` 是 `canonical_group_id("industry", group_label)`。兩個市場同標籤的產業是同一個族群。
 - 對照表寫死在工具的 `GROUP_LABELS`／`CATEGORY_NAMES`／`CODE_PERIODS`，三者都進 `definitions_sha256`。工具不 import 產品，`backend/tests/test_industry_members_tool.py` 會和產品的表比對。
 - 上櫃 18 貿易百貨併入上市的 `Wholesale and Retail`。
@@ -146,6 +148,11 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 **T 日用哪一份**：`snapshot_date ≤ T` 的最新一份（`industry_members.members_on`）。D 的收盤行情在 D 收盤後就公開，所以 T＝D 可以用。研究工具的 T 都是交易日的收盤後。
 
 **限制**：
+- **上市的分類是回溯的**（#779 [6904648128](https://github.com/YiCheng0608/stock-lab/issues/779#issuecomment-6904648128)、決定 [6904679034](https://github.com/YiCheng0608/stock-lab/issues/779#issuecomment-6904679034)）：
+  - `MI_INDEX?type=` 在舊日子也用每檔股票現在（或下市前最後）的分類。2013-01-31 與 2023-06-30 都有的上市股票 736 檔，分類不同的 0 檔；2013-01-31 的 35～38 已有 18 檔，例如 9904 寶成、9921 巨大在 37 運動休閒，當時它們是「其他」。
+  - 只有 35～38 標了 `retroactive_category`。其他改過分類的上市股，這份資料看不出來：同樣比，上櫃 547 檔裡有 65 檔改過，上市實際上應該也有。
+  - 名單本身是當時的（含之後下市的，例如 2475 華映），只有類別是回溯的。
+  - 上市當時分類的來源不在 #779 找，由 M1、M2 的研究工具單決定只用上櫃、接受回溯，還是先補對照。
 - 一個月一份：月中改分類、新上市的股票，要到月底那一份才反映。新上市的股票在第一份快照前沒有族群，不能被選，但照樣在母體裡。
 - 代號重用：表只存代號，不存 `instrument_id`。研究工具在 T 日對到「代號相同、T 日有日線」的標的；#702 AC-5 的清單拆出的舊公司，依日期分開。
 - 普通股是否都落在某個產業：產生時以研究 DB 已存的全市場行情（TWSE `ALLBUT0999`、TPEx `dailyQuotes`）核對。研究 DB 沒有那一天的全市場行情時，manifest 的 `completeness` 記「未核對」與天數。
@@ -154,7 +161,8 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 - `industry_members_v1.json`：主檔。內容排好序，同一份 raw 重跑位元組相同。
 - `industry_members_v1.manifest.json`：命令、commit、定義與其雜湊、每個回應的路徑與 sha256、每年列數、完整性檢查。
 - `raw/<exchange>/<YYYYMMDD>/<代號>.json`：原始回應的位元組。
-- `requests.jsonl`：每個請求的網址、狀態碼、sha256 與時間。
+- `failed/<exchange>/<YYYYMMDD>/<代號>.<n>.body`：失敗回應的本文（有本文才存，第 n 次失敗），只用來判讀，`build` 不讀。
+- `requests.jsonl`：每個請求的網址、狀態碼、sha256 與時間；失敗的列另有 `error` 與 `body`。
 
 **怎麼重建**：
 - 只從 raw 重建，不發請求：
