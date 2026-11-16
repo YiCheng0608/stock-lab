@@ -59,9 +59,13 @@
 #   --done X          mark events handled before listing the rest: X is an event id, or
 #                     a seq for every event not done up to it (pending or quiet, #440);
 #                     repeatable
-#   --max-gh N        at most N gh calls, default 1 (the questions and slots); 0 prints the
-#                     questions as not read (未查完)
-#   --take-over       overwrite another session's heartbeat younger than an hour (a new
+#   --max-gh N        at most N gh calls, default 1 (the questions and slots), 2 with
+#                     --overview; 0 prints the questions as not read (未查完)
+#   --overview        also print the overview page (overview.py, #804) before the last
+#                     lines: built from the same GraphQL answer, plus one more call only
+#                     when a thread has more comments than it read (the oldest ones,
+#                     decision 6913246451); what is still not read is printed as 未查完
+#   --take-over      overwrite another session's heartbeat younger than an hour (a new
 #                     coordinator taking over without the old one's handoff marker)
 #   --heartbeat-only  write the heartbeat and stop (take_over.sh's first step)
 #   --transcript PATH this session's transcript, default $STOCK_TRANSCRIPT, then found
@@ -77,12 +81,13 @@ set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
 
-session_id="${CLAUDE_CODE_SESSION_ID:-}" handle="${ORCA_TERMINAL_HANDLE:-}" max_gh=1 take_over=0 done_args=()
-heartbeat_only=0 transcript="${STOCK_TRANSCRIPT:-}"
+session_id="${CLAUDE_CODE_SESSION_ID:-}" handle="${ORCA_TERMINAL_HANDLE:-}" max_gh=default take_over=0 done_args=()
+heartbeat_only=0 transcript="${STOCK_TRANSCRIPT:-}" overview=0
 while [ $# -gt 0 ]; do
   case "$1" in
     -h | --help) awk 'NR > 1 && !/^#/ { exit } NR > 1' "${BASH_SOURCE[0]}"; exit 0 ;;
     --take-over) take_over=1; shift; continue ;;
+    --overview) overview=1; shift; continue ;;
     --heartbeat-only) heartbeat_only=1; shift; continue ;;
     --session-id | --terminal | --done | --max-gh | --data-dir | --python | --transcript)
       [ $# -ge 2 ] || die "$1 needs a value" 64
@@ -101,6 +106,7 @@ while [ $# -gt 0 ]; do
     *) die "unknown argument: $1" 64 ;;
   esac
 done
+[ "$max_gh" != default ] || max_gh=$((1 + overview))
 case "$max_gh" in '' | *[!0-9]*) die "--max-gh must be a number" 64 ;; esac
 context_limit="${STOCK_CONTEXT_LIMIT:-450000}"
 case "$context_limit" in '' | *[!0-9]* | 0*) die "STOCK_CONTEXT_LIMIT 要是正整數（token 數）：$context_limit" 64 ;; esac
@@ -236,6 +242,31 @@ if [ "$gh_calls" -lt "$max_gh" ]; then
 else
   echo "未回覆的提問：未查完（gh 呼叫已達上限 $max_gh）"
 fi
+# The overview's backfill (#804 decision 6913246451): one more call, only when a thread has
+# more comments than the answer above holds; for the overview only (the questions and
+# the slots read the answer above). Not made or failed: the page says 未查完.
+overview_dir="" backfill_file="" backfill_note=""
+if [ "$overview" = 1 ]; then
+  overview_dir="$(mktemp -d 2>/dev/null)" || overview_dir=""
+  trap '[ -n "$overview_dir" ] && rm -f -- "$overview_dir"/* && rmdir -- "$overview_dir"' EXIT
+  backfill_query=""
+  [ -n "$out" ] && backfill_query="$(printf '%s' "$out" | "$python" -X utf8 "$script_dir/overview.py" backfill-query)"
+  if [ -n "$backfill_query" ]; then
+    if [ -z "$overview_dir" ]; then
+      backfill_note="建不了暫存目錄"
+    elif [ "$gh_calls" -ge "$max_gh" ]; then
+      backfill_note="gh 呼叫已達上限 $max_gh，沒有補查"
+    else
+      gh_calls=$((gh_calls + 1))
+      backfill_file="$overview_dir/backfill.json"
+      if ! gh api graphql -f owner="${GH_REPO%%/*}" -f name="${GH_REPO#*/}" -f query="$backfill_query" >"$backfill_file"; then
+        backfill_note="補查的 gh api graphql 失敗"
+        printf '%s' "$(cat "$backfill_file" 2>/dev/null)" | cj get data.repository >/dev/null 2>&1 \
+          && backfill_note="補查的 gh api graphql 回部分錯誤"
+      fi
+    fi
+  fi
+fi
 echo "gh 呼叫：$gh_calls／上限 $max_gh"
 # #1's body against its comments (#807), from the same answer: the header says the body's
 # size above the limit (a hint only) and how many comments are missing from it; those are
@@ -282,6 +313,11 @@ else
   fi
   slot_lines="$(printf '%s' "$out" | "$python" -X utf8 "$script_dir/slots.py" report "$now" "$wt" "$slot_dir/status")"
   slot_rc=$?
+  if [ -n "$overview_dir" ]; then
+    # The overview reads the same listing (#804); the EXIT trap removes it.
+    [ -n "$wt" ] && mv -f "$wt" "$overview_dir/worktrees" && wt="$overview_dir/worktrees"
+    mv -f "$slot_dir/status" "$overview_dir/status" 2>/dev/null
+  fi
   rm -f "$slot_dir/worktrees" "$slot_dir/status"; rmdir "$slot_dir" 2>/dev/null
   case "$slot_rc" in
     0 | 11)
@@ -299,6 +335,16 @@ eq pending "$logs"
 # Commitments kept across sessions (#534): what the coordinators promised and did not do yet.
 "$python" -X utf8 "$script_dir/commitments.py" list "$logs" "$now" \
   || echo "未兌現的承諾：讀不了承諾檔（$logs/commitments.jsonl）"
+# The overview page (#804), before the last lines so `| tail -1` still sees them.
+if [ "$overview" = 1 ]; then
+  ov_wt="" ov_status=""
+  if [ "$slots_query" = 1 ] && [ -n "$overview_dir" ] && [ -f "$overview_dir/worktrees" ]; then
+    ov_wt="$overview_dir/worktrees" ov_status="$overview_dir/status"
+  fi
+  printf '%s' "$out" | "$python" -X utf8 "$script_dir/overview.py" page "$now" "$ov_wt" "$ov_status" \
+    "$logs" "$backfill_file" "$backfill_note" \
+    || echo "現況頁：印不出來（overview.py 失敗，見上一行）"
+fi
 echo "其餘依手冊：處理上面的未處理事件（PR 的 CI 與合併、未回覆的提問、名額空缺就派工）與到期的承諾，處理完以 --done <seq>、commit.sh done <id> 標記；monitor 停擺時看 logs/monitor.log"
 if [ "$misses" -ge 3 ]; then
   echo "context 已連續 $misses 次讀不到：換手只剩壓縮次數一個條件，請查紀錄檔位置（見上方 context 行）"
