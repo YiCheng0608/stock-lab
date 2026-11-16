@@ -2779,3 +2779,117 @@ def test_a_forced_rerun_failing_after_a_check_is_not_reported(wd):
         "status=failed reason=error:OperationalError detail=database is locked",
     )
     assert "key=preopen_" not in wd.run("--dry-run", now=MORNING).stdout
+
+
+# intraday (#801 decision 6906133359) -----------------------------------------------
+
+AFTERNOON = MORNING + 4 * 3600 + 30 * 60  # Monday 2026-10-19 13:45 Taipei
+INTRADAY_FINISHED = "status=finished polls={n} ok_polls={n} events=2 symbols=13"
+
+
+def _intraday_log(wd: Watchdog, day: str, ok_polls: int, *results: str) -> Path:
+    """The day's intraday log: OK_POLLS answered rounds (ok>0), the rest of a full day's
+    271 rounds without an answer, then RESULTS."""
+
+    lines = [f"===== {day}T08:59:00+08:00 start job=intraday trigger=scheduler"]
+    start = datetime(2026, 10, 19, 9, 0)
+    for minute in range(271):
+        at = (start + timedelta(minutes=minute)).strftime("%H:%M:%S")
+        ok = 13 if minute < ok_polls else 0
+        codes = "200:13" if ok else "timeout:13"
+        lines.append(
+            f"--- poll at={at} symbols=13 ok={ok} codes={codes} ms_median=300"
+            " ms_max=900 lag_median=4 lag_max=9"
+        )
+    lines += [f"--- result {result}" for result in results]
+    lines.append(f"===== {day}T13:30:01+08:00 end exit=0 seconds=16261")
+    path = wd.logs / f"intraday-{day}.log"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def _closed_day_db(wd: Watchdog, day: str) -> None:
+    with sqlite3.connect(wd.data / "stock.db") as conn:
+        conn.execute(
+            "CREATE TABLE trading_calendar_days (exchange TEXT, calendar_date DATE, kind TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO trading_calendar_days VALUES ('TWSE', ?, 'closed')", (day,)
+        )
+    conn.close()
+
+
+def test_no_intraday_log_yet_is_not_judged(wd):
+    _healthy_daily_and_news(wd)
+    assert "key=intraday_" not in wd.run("--dry-run", now=AFTERNOON).stdout
+
+
+def test_a_day_without_its_intraday_log_is_reported_from_1345(wd):
+    _healthy_daily_and_news(wd)
+    _intraday_log(wd, "20261016", 271, INTRADAY_FINISHED.format(n=271))
+    # 13:40: the session's last round is barely past; not yet.
+    assert "key=intraday_" not in wd.run("--dry-run", now=AFTERNOON - 5 * 60).stdout
+    result = wd.run("--dry-run", now=AFTERNOON)
+    assert "anomaly_planned key=intraday_result_20261019 " in result.stdout
+    assert "今天（2026-10-19）沒有盤中通知的日誌" in result.stdout
+    # Saturday: no session.
+    assert "key=intraday_" not in wd.run("--dry-run", now=AFTERNOON + 5 * 86400).stdout
+
+
+def test_a_closed_day_is_not_judged(wd):
+    _healthy_daily_and_news(wd)
+    _intraday_log(wd, "20261016", 271, INTRADAY_FINISHED.format(n=271))
+    _closed_day_db(wd, "2026-10-19")
+    assert "key=intraday_" not in wd.run("--dry-run", now=AFTERNOON).stdout
+
+
+@pytest.mark.parametrize(
+    "ok_polls, reported", [(216, True), (217, False), (271, False), (0, True)]
+)
+def test_fewer_than_80_percent_of_the_rounds_answered_is_reported_once(
+    wd, ok_polls, reported
+):
+    _healthy_daily_and_news(wd)
+    _intraday_log(wd, "20261019", ok_polls, INTRADAY_FINISHED.format(n=ok_polls))
+    result = wd.run("--dry-run", now=AFTERNOON)
+    assert (
+        "anomaly_planned key=intraday_result_20261019 " in result.stdout
+    ) is reported
+    if reported:
+        assert f"成功的輪詢 {ok_polls} 次，少於整天 271 次的 80%" in result.stdout
+        assert "status=finished" in result.stdout
+        wd.run(now=AFTERNOON)
+        wd.run(now=AFTERNOON + 30 * 60)
+        assert wd.text("gh_bodies.txt").count("盤中即時通知：今天（2026-10-19）") == 1
+
+
+def test_a_day_stopped_for_its_key_is_reported(wd):
+    _healthy_daily_and_news(wd)
+    _intraday_log(
+        wd,
+        "20261019",
+        30,
+        "status=stopped reason=key_invalid code=401 polls=31 ok_polls=30",
+    )
+    result = wd.run("--dry-run", now=AFTERNOON)
+    assert "anomaly_planned key=intraday_result_20261019 " in result.stdout
+    assert "status=stopped reason=key_invalid code=401" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        "status=not_configured missing=FUGLE_API_KEY",
+        "status=skipped reason=non_trading_day",
+        "status=skipped reason=no_targets",
+    ],
+)
+def test_a_day_without_a_key_or_stocks_is_not_judged(wd, result):
+    _healthy_daily_and_news(wd)
+    path = wd.logs / "intraday-20261019.log"
+    path.write_text(
+        "===== 2026-10-19T08:59:00+08:00 start job=intraday trigger=scheduler\n"
+        f"--- result {result}\n===== 2026-10-19T08:59:01+08:00 end exit=0 seconds=1\n",
+        encoding="utf-8",
+    )
+    assert "key=intraday_" not in wd.run("--dry-run", now=AFTERNOON).stdout

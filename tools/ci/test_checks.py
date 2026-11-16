@@ -831,6 +831,7 @@ class EnvExample(unittest.TestCase):
             sorted(active),
             [
                 "CLAUDE_CODE_OAUTH_TOKEN",
+                "FUGLE_API_KEY",
                 "GH_TOKEN",
                 "STOCK_SKIP_NEWS_LLM",
                 "STOCK_WAKE_TOKEN",
