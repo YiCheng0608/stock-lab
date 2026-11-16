@@ -31,15 +31,27 @@
 # (so still one gh call) and the local `git worktree list` with `git status` of each task
 # worktree. With a slot free and a 待辦 task to dispatch, the last line is
 # 名額空缺 M 個，請派工：#n and the exit 11; in the daily window (台北 21:30～23:30) or
-# with this session's handoff marker it is printed only (exit 0), and when the handoff
-# condition holds it goes before the handoff line (exit 10). GitHub not read (gh failed,
+# with this session's handoff marker it is printed only (in the daily window the exit is
+# then 0, or 12 when a #1 comment is missing, below), and when the handoff condition holds
+# it goes before the handoff line (exit 10). GitHub not read (gh failed,
 # --max-gh 0): every task is counted as 判定不了 and no vacancy is claimed.
+#
+# #1's body (#807, docs/COORDINATOR.md 決策落地), from the same answer (its body is the
+# one extra field, its latest 100 comments are already there): above
+# STOCK_GOVERNANCE_BODY_LIMIT bytes the header says "#1 本文 N 位元組（K KB），超過上限 M"
+# (a hint only). The 決定 and 統籌承諾 comments and the ones without the coordinator mark
+# whose id is neither in the body nor up to its archive line (歸檔：) and that no covered
+# comment names (本文：不同步, PR #810 review 6912088904) are listed before the last lines
+# (coordinator_json.governance_check), with the header line "#1 漏同步：N 則", and the last
+# line says so with exit 12, after the handoff's 10 and the slots' 11 (the lines of each
+# printed all the same); with this session's handoff marker printed only (exit 0).
+# GitHub not read: "#1 漏同步：未查完", never 0.
 #
 # Exit: 0; 10 the handoff condition holds (whether or not every part of the listing could
 #   be read, such as the questions 未查完); 2 a file could not be written or read back, a
 #   --done failed; 3 another session's heartbeat was kept; 11 a slot is free and a 待辦
-#   task can be dispatched (not in the daily window, no handoff marker);
-#   64 bad arguments.
+#   task can be dispatched (not in the daily window, no handoff marker); 12 a comment of
+#   #1 is missing from its body (no handoff marker); 64 bad arguments.
 #
 # Usage: patrol.sh [options]
 #   --session-id ID   default $CLAUDE_CODE_SESSION_ID
@@ -57,7 +69,9 @@
 #   --data-dir DIR    default $STOCK_DATA_DIR, then $HOME/stock-lab-data
 #   --python EXE      default $STOCK_PYTHON, then this checkout's .venv, then python3
 # Environment: STOCK_CONTEXT_LIMIT, the context in tokens above which the handoff
-#   condition holds, default 450000 (docs/COORDINATOR.md 自動換手機制).
+#   condition holds, default 450000 (docs/COORDINATOR.md 自動換手機制);
+#   STOCK_GOVERNANCE_BODY_LIMIT, #1's body in UTF-8 bytes above which the header says so,
+#   default 14336 (14 KB).
 # Test hook: PATROL_NOW (epoch seconds).
 set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -90,6 +104,8 @@ done
 case "$max_gh" in '' | *[!0-9]*) die "--max-gh must be a number" 64 ;; esac
 context_limit="${STOCK_CONTEXT_LIMIT:-450000}"
 case "$context_limit" in '' | *[!0-9]* | 0*) die "STOCK_CONTEXT_LIMIT 要是正整數（token 數）：$context_limit" 64 ;; esac
+gov_limit="${STOCK_GOVERNANCE_BODY_LIMIT:-14336}"
+case "$gov_limit" in '' | *[!0-9]* | 0*) die "STOCK_GOVERNANCE_BODY_LIMIT 要是正整數（位元組數）：$gov_limit" 64 ;; esac
 case "$session_id" in '' | *[!A-Za-z0-9_-]*) die "--session-id（或 CLAUDE_CODE_SESSION_ID）必填，只能有英數、_、-" 64 ;; esac
 case "$handle" in '' | -* | *[!A-Za-z0-9_-]*) die "--terminal（或 ORCA_TERMINAL_HANDLE）必填，只能有英數、_、-，不能以 - 開頭" 64 ;; esac
 iso_re='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
@@ -221,6 +237,22 @@ else
   echo "未回覆的提問：未查完（gh 呼叫已達上限 $max_gh）"
 fi
 echo "gh 呼叫：$gh_calls／上限 $max_gh"
+# #1's body against its comments (#807), from the same answer: the header says the body's
+# size above the limit (a hint only) and how many comments are missing from it; those are
+# held for the end, with exit 12 after the handoff's 10 and the slots' 11.
+gov_missing=""
+if [ -n "$out" ]; then
+  gov_lines="$(printf '%s' "$out" | cj governance "$gov_limit")"
+  gov_rc=$?
+  case "$gov_rc" in
+    0 | 12)
+      printf '%s\n' "$gov_lines" | grep -v '^  '
+      gov_missing="$(printf '%s\n' "$gov_lines" | grep '^  ')" ;;
+    *) echo "#1 漏同步：未查完（coordinator_json.py governance exit $gov_rc）" ;;
+  esac
+else
+  echo "#1 漏同步：未查完（GitHub 沒讀到）"
+fi
 # The slots (#727): the local task worktrees and whether each is clean, with the answer
 # above (none when gh was not called or failed: every task is 判定不了 and counted). The
 # vacancy line is held for the end, so `| tail -1` sees it (exit 11, after the handoff's 10).
@@ -271,6 +303,13 @@ echo "其餘依手冊：處理上面的未處理事件（PR 的 CI 與合併、�
 if [ "$misses" -ge 3 ]; then
   echo "context 已連續 $misses 次讀不到：換手只剩壓縮次數一個條件，請查紀錄檔位置（見上方 context 行）"
 fi
+# The comments missing from #1's body (#807): before the last lines, whichever ends it.
+gov_n=0
+if [ -n "$gov_missing" ]; then
+  gov_n="$(printf '%s\n' "$gov_missing" | grep -c .)"
+  echo "#1 本文沒有的留言 $gov_n 則（時間、id、第一行）："
+  printf '%s\n' "$gov_missing"
+fi
 # Last, so no filter of the lines above hides it (#534).
 if [ "$handoff_due" = 1 ] || [ "$context_due" = 1 ]; then
   [ -n "$vacancy" ] && echo "$vacancy（換手條件成立，不派工，交給新統籌）"
@@ -296,4 +335,14 @@ if [ -n "$vacancy" ]; then
     exit 11
   fi
   echo "$vacancy"
+fi
+# A decision not in #1's body (#807): after the handoff and the slots; a handoff marker
+# prints it only (a coordinator handing off does not edit #1).
+if [ "$gov_n" -gt 0 ]; then
+  if [ -f "$marker" ]; then
+    echo "#1 漏同步 $gov_n 則（換手中，只印出）"
+    exit 0
+  fi
+  echo "#1 漏同步 $gov_n 則：照 docs/COORDINATOR.md「決策落地」補進 #1 本文的決策索引（patrol exit 12）"
+  exit 12
 fi
