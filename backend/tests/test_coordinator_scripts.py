@@ -3012,6 +3012,32 @@ def _transcript(
     return path
 
 
+def _boundary(**extra) -> dict:
+    """A compact_boundary row as Claude Code writes it (#811)."""
+    return {
+        "type": "system",
+        "subtype": "compact_boundary",
+        "isSidechain": False,
+        "sessionId": "sess-1",
+        "timestamp": "2026-10-25T11:00:00Z",
+        "compactMetadata": {"trigger": "auto", "preTokens": 368_373},
+        **extra,
+    }
+
+
+def _compacted(h: Harness, main: int, hook: int | None = None) -> None:
+    """sess-1 compacted MAIN times in its main conversation (compact_boundary rows
+    appended to its transcript, when there is one) and HOOK times as the PreCompact
+    hook counted (MAIN by default; more when its subagents compacted too)."""
+    (h.data / "logs" / "compactions" / "sess-1.count").write_text(
+        f"{main if hook is None else hook}\n", encoding="utf-8"
+    )
+    path = h.home / ".claude" / "projects" / "C--proj" / "sess-1.jsonl"
+    if path.exists():
+        with open(path, "a", encoding="utf-8", newline="\n") as f:
+            f.write("".join(json.dumps(_boundary()) + "\n" for _ in range(main)))
+
+
 def _files(root: Path) -> dict[str, bytes]:
     return {
         p.relative_to(root).as_posix(): p.read_bytes()
@@ -3403,7 +3429,7 @@ def test_patrol_says_when_the_monitor_has_stopped(patrol: Harness) -> None:
 
 def test_patrol_reads_compactions_and_handoff(patrol: Harness) -> None:
     logs = patrol.data / "logs"
-    (logs / "compactions" / "sess-1.count").write_text("2\n", encoding="utf-8")
+    _compacted(patrol, 2)
     (logs / "handoff-sess-1.json").write_text("{}", encoding="utf-8")
     (logs / "coordinator-heartbeat.json").write_text(
         '{"session_id":"sess-1","terminal_handle":"term_coord",'
@@ -3418,6 +3444,95 @@ def test_patrol_reads_compactions_and_handoff(patrol: Harness) -> None:
     assert "換手中" in result.stdout.strip().splitlines()[-1]
 
 
+def _subagent_compacted(h: Harness, n: int = 1) -> Path:
+    """A subagent's transcript under <session id>/subagents/ with N compactions: its
+    rows are sidechains with the parent's sessionId (#811 已查證)."""
+    folder = h.home / ".claude" / "projects" / "C--proj" / "sess-1" / "subagents"
+    path = folder / "agent-a861ccda67049a526.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rows = [_call_row(300_000, isSidechain=True, sessionId="sess-1")]
+    rows += [_boundary(isSidechain=True) for _ in range(n)]
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    return path
+
+
+@pytest.mark.parametrize(
+    ("main", "hook", "header", "due"),
+    [
+        (1, 2, "壓縮 1 次（hook 記 2 次，含子代理）", False),
+        (2, 2, "壓縮 2 次：已達換手條件", True),
+        (2, 3, "壓縮 2 次（hook 記 3 次，含子代理）：已達換手條件", True),
+        (0, 1, "壓縮 0 次（hook 記 1 次，含子代理）", False),
+        (1, 0, "壓縮 1 次（hook 記 0 次）", False),
+    ],
+)
+def test_patrol_counts_only_the_main_conversations_compactions(
+    patrol: Harness, main: int, hook: int, header: str, due: bool
+) -> None:
+    """#811 AC-1: the count is the compact_boundary rows of the main transcript that
+    are not a sidechain; a subagent's (in <session id>/subagents/, and the hook counted
+    it under the parent's id) is not one. The hook's number is shown when it differs."""
+    _subagent_compacted(patrol, hook - main if hook > main else 1)
+    # A sidechain row in the main transcript is not the main conversation's either.
+    path = patrol.home / ".claude" / "projects" / "C--proj" / "sess-1.jsonl"
+    with open(path, "a", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps(_boundary(isSidechain=True)) + "\n")
+    _compacted(patrol, main, hook)
+    result = _patrol(patrol)
+    out = result.stdout
+    assert result.returncode == (10 if due else 0), out + result.stderr
+    line = next(ln for ln in out.splitlines() if ln.startswith("壓縮 "))
+    suffix = "（手冊「統籌 session」自動換手機制）" if due else ""
+    assert line == header + suffix, line
+    last = out.strip().splitlines()[-1]
+    assert ("已達換手條件" in last) is due
+    assert (f"已壓縮 {main} 次（門檻 2 次）" in last) is due
+
+
+@pytest.mark.parametrize("why", ["missing", "not_json"])
+@pytest.mark.parametrize("hook", [1, 2])
+def test_patrol_falls_back_to_the_hook_count_without_a_transcript(
+    patrol: Harness, why: str, hook: int
+) -> None:
+    """#811 AC-2: a transcript not found or not understood is not 0 compactions: the
+    hook's count is used and the line says so; at 2 the handoff holds (exit 10)."""
+    path = patrol.home / ".claude" / "projects" / "C--proj" / "sess-1.jsonl"
+    if why == "missing":
+        path.unlink()
+    else:
+        path.write_text("not json\n", encoding="utf-8")
+    _subagent_compacted(patrol)
+    _compacted(patrol, 0, hook)
+    result = _patrol(patrol)
+    out = result.stdout
+    due = hook >= 2
+    assert result.returncode == (10 if due else 0), out + result.stderr
+    line = next(ln for ln in out.splitlines() if ln.startswith("壓縮 "))
+    reason = "找不到紀錄檔" if why == "missing" else "沒有 JSON 列"
+    assert line.startswith(
+        f"壓縮 {hook} 次（hook 計數，可能含子代理；紀錄檔未讀到：{reason}"
+    ), line
+    assert line.endswith("：已達換手條件（手冊「統籌 session」自動換手機制）") is due
+    last = out.strip().splitlines()[-1]
+    assert (f"已壓縮 {hook} 次（門檻 2 次）" in last) is due
+
+
+def test_patrol_counts_compactions_in_the_named_transcript(patrol: Harness) -> None:
+    """--transcript names the file for the count as for the context (#811)."""
+    named = _transcript(patrol, [100_000], session="other-session")
+    with open(named, "a", encoding="utf-8", newline="\n") as f:
+        f.write("".join(json.dumps(_boundary()) + "\n" for _ in range(2)))
+    _compacted(patrol, 0, 2)
+    result = _patrol(patrol)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "壓縮 0 次（hook 記 2 次，含子代理）" in result.stdout.splitlines()
+    result = _patrol(patrol, "--transcript", named.as_posix())
+    assert result.returncode == 10, result.stdout + result.stderr
+    assert "壓縮 2 次：已達換手條件（手冊「統籌 session」自動換手機制）" in (
+        result.stdout.splitlines()
+    )
+
+
 # --- #534: handoff condition as the last line, commitments ----------------------------
 
 
@@ -3428,9 +3543,7 @@ def test_patrol_ends_with_the_handoff_condition_and_exit_10(
     """AC-2: at 2 compactions or more the last line says so and the exit code is 10;
     below that neither. The rest of the listing is printed as before."""
     if count != "0":
-        (patrol.data / "logs" / "compactions" / "sess-1.count").write_text(
-            count + "\n", encoding="utf-8"
-        )
+        _compacted(patrol, int(count))
     result = _patrol(patrol)
     last = result.stdout.strip().splitlines()[-1]
     due = int(count) >= 2
@@ -3496,9 +3609,8 @@ def test_patrol_hands_off_above_the_context_limit(
 
 
 def test_patrol_names_both_handoff_conditions(patrol: Harness) -> None:
-    logs = patrol.data / "logs"
-    (logs / "compactions" / "sess-1.count").write_text("2\n", encoding="utf-8")
     _transcript(patrol, [500_000])
+    _compacted(patrol, 2)
     result = _patrol(patrol)
     assert result.returncode == 10, result.stdout + result.stderr
     last = result.stdout.strip().splitlines()[-1]
@@ -3583,7 +3695,7 @@ def test_patrol_warns_when_the_transcript_cannot_be_read(
         lines = out.strip().splitlines()
         assert (f"context 已連續 {n} 次讀不到" in lines[-1]) is (n >= 3)
     # With 2 compactions the handoff line stays the last and the warning is before it.
-    (patrol.data / "logs" / "compactions" / "sess-1.count").write_text("2\n")
+    _compacted(patrol, 2)
     lines = _patrol(patrol).stdout.strip().splitlines()
     assert "context 已連續 5 次讀不到" in lines[-2]
     assert "已達換手條件" in lines[-1]
@@ -4773,9 +4885,7 @@ def test_patrol_ends_with_the_vacancy_and_exit_11(slotted: Harness) -> None:
 
 
 def test_patrol_puts_the_handoff_after_the_vacancy(slotted: Harness) -> None:
-    (slotted.data / "logs" / "compactions" / "sess-1.count").write_text(
-        "2\n", encoding="utf-8"
-    )
+    _compacted(slotted, 2)
     result = _patrol(slotted)
     assert result.returncode == 10, result.stdout + result.stderr
     lines = result.stdout.strip().splitlines()
@@ -5072,9 +5182,7 @@ def test_patrol_names_the_time_id_and_first_line_of_a_missing_comment(
 
 def test_patrol_puts_the_handoff_after_a_missing_decision(patrol: Harness) -> None:
     """#807 AC-1: the handoff condition as well: exit 10, both printed."""
-    (patrol.data / "logs" / "compactions" / "sess-1.count").write_text(
-        "2\n", encoding="utf-8"
-    )
+    _compacted(patrol, 2)
     patrol.answer("gh_questions", _governance(DECISION_1))
     result = _patrol(patrol)
     assert result.returncode == 10, result.stdout + result.stderr
