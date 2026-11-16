@@ -822,9 +822,15 @@ def _log(env) -> str:
     return intraday.log_path(env.logs, MONDAY).read_text(encoding="utf-8")
 
 
-def _jsonl(env) -> list[dict]:
+def _lines(env) -> list[dict]:
     path = intraday.events_path(env.logs, MONDAY)
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+
+def _jsonl(env) -> list[dict]:
+    """The jsonl's events (the ``levels`` lines of #808 AC-3 left out)."""
+
+    return [record for record in _lines(env) if intraday.LEVELS not in record]
 
 
 @linux_only
@@ -899,6 +905,112 @@ def test_a_run_killed_midway_goes_on_without_resending(env):
     assert again.sent[0].startswith("3374 精材 跌破停損 480.18")
     assert again.sent[1].startswith("3162 精確 觸及停損 70.86")
     assert len(_jsonl(env)) == 5
+    # The cut jsonl had no levels line: the tracks still watched are logged.
+    assert "--- levels_restored restored=0 missing=" in _log(env)
+
+
+def _pullback_after_its_high(clock):
+    """3162 (zone 72.89～76.94, stop 70.86, target one 81.37): it opens at 79, reaches 82
+    (over target one) by 13:25 before any entry, then from 13:26 falls into the zone (the
+    entry); its high since the open stays 82, no new high."""
+
+    def fetch(symbol):
+        before = clock.now < _at("2026-11-16T13:26:00+08:00")
+        low, last = (78.0, 78.5) if before else (75.0, 76.0)
+        body = dict(
+            DAY["polls"][2]["quotes"][symbol],
+            openPrice=79.0,
+            highPrice=82.0,
+            lowPrice=low,
+            lastPrice=last,
+            lastTrade={"price": last, "size": 1, "time": 1794806700000000},
+        )
+        quote, reason = fugle.parse(symbol, body)
+        return fugle.Fetched(symbol, "200", 10, quote=quote, reason=reason)
+
+    return fetch
+
+
+@linux_only
+def test_a_restarted_run_goes_on_from_the_last_rounds_high_and_low(env):
+    """#808 AC-3: a pullback entered after its high of the day over target one. Restarted,
+    its first round compares with the last round's high (82, over target one already),
+    not the open's (none): no 觸及目標一."""
+
+    _listed(env.db, symbols=("3162",))
+    first = _run(env, start="13:25:00", fetch=_pullback_after_its_high)
+    assert [r["event"] for r in _jsonl(env)] == [intraday.ENTRY]
+    assert len(first.sent) == 1
+    key = _jsonl(env)[0]["key"]
+    levels = [r for r in _lines(env) if intraday.LEVELS in r]
+    assert len(levels) == 6  # 13:25 to 13:30, one line a round
+    assert levels[-1][intraday.LEVELS] == {
+        key: {"high": 82.0, "low": 75.0, "last": 76.0}
+    }
+    assert intraday.day_levels(intraday.events_path(env.logs, MONDAY)) == {
+        key: (82.0, 75.0, 76.0)
+    }
+    # The levels lines are no event (sent_events) and no result (day_results).
+    assert intraday.sent_events(intraday.events_path(env.logs, MONDAY)) == {
+        key: [intraday.ENTRY]
+    }
+    assert intraday.day_results(env.logs, MONDAY) == [intraday.FINISHED]
+
+    again = _run(env, start="13:28:10", fetch=_pullback_after_its_high)
+    assert again.sent == []
+    assert [r["event"] for r in _jsonl(env)] == [intraday.ENTRY]
+    assert "--- levels_restored restored=1 missing=-" in _log(env)
+
+
+@linux_only
+def test_without_the_last_rounds_levels_the_first_round_takes_the_open(env):
+    """A jsonl of the events only (a run of before #808): the restarted run goes on as it
+    did, from the high and low since the open, and says which tracks had no levels."""
+
+    _listed(env.db, symbols=("3162",))
+    _run(env, start="13:25:00", fetch=_pullback_after_its_high)
+    path = intraday.events_path(env.logs, MONDAY)
+    events = _jsonl(env)
+    path.write_text(
+        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in events),
+        encoding="utf-8",
+    )
+    again = _run(env, start="13:28:10", fetch=_pullback_after_its_high)
+    assert [text.split("（")[0] for text in again.sent] == [
+        "3162 精確 觸及目標一 81.37"
+    ]
+    assert f"--- levels_restored restored=0 missing={events[0]['key']}" in _log(env)
+
+
+def test_the_levels_read_back_are_the_last_rounds(tmp_path):
+    path = tmp_path / "intraday.jsonl"
+    path.write_text(
+        "\n".join(
+            [
+                '{"at": "09:00", "levels": {"plan:1": {"high": 10, "low": 9, "last": 9.5}}}',
+                '{"at": "09:00", "key": "plan:1", "symbol": "9999", "event": "entry"}',
+                "not json",
+                '{"at": "09:01", "levels": {"plan:1": {"high": 11, "low": 9, "last": null},'
+                ' "plan:2": {"high": null, "low": 5, "last": 5}}}',
+                '{"at": "09:02", "levels": "broken"}',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert intraday.day_levels(path) == {"plan:1": (11, 9, None)}
+    assert intraday.sent_events(path) == {"plan:1": [intraday.ENTRY]}
+    assert intraday.day_levels(tmp_path / "missing.jsonl") == {}
+    watched = _watched()
+    state = intraday.resumed(watched, [intraday.ENTRY], (111.0, 99.0, 100.0))
+    assert (state.entered, state.high, state.low, state.last) == (
+        True,
+        111.0,
+        99.0,
+        100.0,
+    )
+    # Over target one already on the last round: no 觸及目標一 again.
+    assert intraday.judge(watched, state, _custom(112.0, 99.0))[0] == []
 
 
 @linux_only

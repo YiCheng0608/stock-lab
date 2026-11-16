@@ -24,7 +24,10 @@ once a minute (``worker.fugle``) and sends a Telegram message to the user's own 
   one ``--- poll`` line a round with the time, the stocks, the successes, the HTTP codes,
   the milliseconds and the lag of ``lastUpdated``, each event, one ``--- result`` line and
   ``===== end``), and the day's events ``<logs>/intraday-YYYYMMDD.jsonl``, one JSON line
-  each, which a restarted run reads first so that it never sends one twice. The lock
+  each, which a restarted run reads first so that it never sends one twice, and one
+  ``levels`` line a round (each track's high, low and last trade, no key, no event),
+  which it reads as its first round's ``before`` (#808 AC-3); a track without one takes
+  the high and low since the open and is logged in ``--- levels_restored``. The lock
   ``<data>/locks/intraday.lock`` is no other job's. Logs are kept 90 days. No database
   writes, no migration; maintenance mode does not stop it.
 - **Failures** (Fugle): ``worker.fugle``'s outcomes. Five failed rounds in a row (no answer
@@ -118,6 +121,9 @@ PAUSED = "paused"
 RESUMED = "resumed"
 STOPPED_DAY = "stopped"
 CAPPED = "capped"
+# The jsonl's line of a round's high, low and last trade by track (#808 AC-3): no key and
+# no event, so ``sent_events`` never reads it as one.
+LEVELS = "levels"
 
 # Every message's words (#801 scope 5): only the rule's levels, never an order
 # (「買進」「賣出」「出場」; ROADMAP 價位陳述規則價位、不寫成下單指示). The test scans them all.
@@ -364,10 +370,15 @@ def judge(track: Track, state: State, quote: fugle.Quote) -> tuple[list[str], St
     return events, after
 
 
-def resumed(track: Track, sent: Iterable[str]) -> State:
-    """The state of TRACK after the events SENT today (a restarted run)."""
+def resumed(track: Track, sent: Iterable[str], levels: tuple | None = None) -> State:
+    """The state of TRACK after the events SENT today (a restarted run). LEVELS, the
+    (high, low, last) of its last round recorded (``day_levels``), are the ``before`` of
+    the first round after the restart; without them that round takes the high and low
+    since the open, as a first round does (#808 AC-3)."""
 
     state = State(entered=track.entered)
+    if levels is not None:
+        state.high, state.low, state.last = levels
     for event in sent:
         if event == ENTRY:
             state.entered = True
@@ -582,21 +593,55 @@ def day_done(log_dir: Path, day: date) -> bool:
     return any(result in DONE_RESULTS for result in day_results(log_dir, day))
 
 
-def sent_events(path: Path) -> dict[str, list[str]]:
-    """The events of the day's jsonl by key (unreadable lines are skipped)."""
+def _records(path: Path) -> list[dict]:
+    """The JSON objects of the day's jsonl (unreadable lines are skipped)."""
 
-    out: dict[str, list[str]] = {}
     try:
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
-        return out
+        return []
+    out = []
     for line in lines:
         try:
             record = json.loads(line)
         except ValueError:
             continue
-        if isinstance(record, dict) and record.get("key") and record.get("event"):
+        if isinstance(record, dict):
+            out.append(record)
+    return out
+
+
+def sent_events(path: Path) -> dict[str, list[str]]:
+    """The events of the day's jsonl by key: the lines with a key and an event (the
+    ``levels`` lines have neither)."""
+
+    out: dict[str, list[str]] = {}
+    for record in _records(path):
+        if record.get("key") and record.get("event"):
             out.setdefault(str(record["key"]), []).append(str(record["event"]))
+    return out
+
+
+def _number(value: Any) -> float | None:
+    return value if _price(value) else None
+
+
+def day_levels(path: Path) -> dict[str, tuple]:
+    """Each track's (high, low, last) of its last round in the day's jsonl: the latest
+    ``levels`` line that has it (#808 AC-3). A track without a high or a low is left
+    out."""
+
+    out: dict[str, tuple] = {}
+    for record in _records(path):
+        levels = record.get(LEVELS)
+        if not isinstance(levels, dict):
+            continue
+        for key, values in levels.items():
+            if not isinstance(values, dict):
+                continue
+            high, low = _number(values.get("high")), _number(values.get("low"))
+            if high is not None and low is not None:
+                out[str(key)] = (high, low, _number(values.get("last")))
     return out
 
 
@@ -879,11 +924,26 @@ class Run:
             )
         if not tracks:
             return 0, f"status={SKIPPED} reason=no_targets"
+        levels: dict[str, tuple] = {}
         if not self.args.dry_run:
             self.sent = sent_events(self.events)
+            levels = day_levels(self.events)
         states = {
-            item.key: resumed(item, self.sent.get(item.key, [])) for item in tracks
+            item.key: resumed(item, self.sent.get(item.key, []), levels.get(item.key))
+            for item in tracks
         }
+        if not self.args.dry_run and self.events.exists():
+            # A restarted run: the tracks without a last round recorded take the high and
+            # low since the open on their first round (#808 AC-3).
+            missing = [
+                item.key
+                for item in tracks
+                if item.key not in levels and not states[item.key].done
+            ]
+            self.log(
+                f"--- levels_restored restored={sum(1 for item in tracks if item.key in levels)}"
+                f" missing={','.join(missing) or '-'}"
+            )
         symbols, skipped = fugle.cap(symbols_of(tracks))
         if skipped:
             self.log(f"--- capped kept={len(symbols)} skipped={','.join(skipped)}")
@@ -931,6 +991,7 @@ class Run:
                 (item for item in current.fetched if item.outcome == fugle.STOP_DAY),
                 None,
             )
+            judged: list[str] = []
             for item in current.fetched:
                 if item.outcome == fugle.DROP:
                     reason = item.reason or f"http_{item.code}"
@@ -950,6 +1011,8 @@ class Run:
                         continue
                     for watched in by_symbol.get(item.symbol, []):
                         self._judge(watched, states, item.quote, current.polled)
+                        judged.append(watched.key)
+            self._record_levels(judged, states)
             if stop is not None:
                 why = stop.reason or f"http_{stop.code}"
                 self.log(
@@ -1034,6 +1097,25 @@ class Run:
                 event,
                 message(watched, event, quote, polled),
             )
+
+    def _record_levels(self, keys: list[str], states: dict[str, State]) -> None:
+        """One jsonl line of the round: the high, low and last trade of each track of
+        KEYS judged on it and still watched, which a restarted run reads back
+        (``day_levels``, #808 AC-3). Not in a dry run (it writes no file)."""
+
+        levels = {
+            key: {"high": state.high, "low": state.low, "last": state.last}
+            for key in keys
+            if (state := states[key]).high is not None and not state.done
+        }
+        if self.args.dry_run or not levels:
+            return
+        line = json.dumps(
+            {"at": self.clock().isoformat(timespec="seconds"), LEVELS: levels},
+            ensure_ascii=False,
+        )
+        with open(self.events, "a", encoding="utf-8", newline="") as handle:
+            handle.write(line + "\n")
 
     def _sleep_until(self, due: datetime) -> None:
         while True:
