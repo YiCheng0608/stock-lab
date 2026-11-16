@@ -67,6 +67,8 @@ SCRIPTS = (
     "memory_check.py",
     # #727: the slots patrol.sh prints
     "slots.py",
+    # #804: the overview page of patrol.sh --overview
+    "overview.py",
 )
 # The sandbox memory directory every run gets (STOCK_MEMORY_DIR, #705): one memory, indexed,
 # no backticked path, so memory_check.py passes without asking git.
@@ -190,6 +192,9 @@ case "$1 $2" in
       # patrol.sh's open Issues and PRs with their comments (#401); with
       # gh_questions_partial the answer is printed and the exit is 1, as gh does for a
       # partial answer (data and errors, #727)
+      # patrol.sh --overview's backfill of the threads over a page (#804)
+      *OverviewBackfill*) [ -f "$d/gh_backfill_fails" ] && exit 1
+        cat "$d/gh_backfill.json" 2>/dev/null || echo '{}' ;;
       *OpenQuestions*) [ -f "$d/gh_questions_fails" ] && exit 1
         cat "$d/gh_questions.json" 2>/dev/null || echo '{}'
         if [ -f "$d/gh_questions_partial" ]; then exit 1; fi ;;
@@ -5387,3 +5392,105 @@ def test_patrol_checks_the_governance_issue_within_one_gh_call(
     assert (
         "issues(states:OPEN,first:100){totalCount nodes{number state comments" in call
     )
+
+
+# --- #804: patrol.sh --overview ----------------------------------------------------------
+# overview.py's page has its own tests (test_overview.py); these run patrol.sh: the page
+# comes from the same GraphQL answer, the backfill is one more call only when a thread has
+# more comments than it read (decision 6913246451), and the last lines stay last.
+
+
+def _long_thread(number: int = 702, read: int = 100, total: int = 150) -> dict:
+    comments = [
+        _comment(
+            n, f"回報：第 {n} 則", number, f"2026-10-25T09:{n // 60:02d}:{n % 60:02d}Z"
+        )
+        for n in range(total - read + 1, total + 1)
+    ]
+    thread = _thread(number, *comments)
+    thread["comments"]["totalCount"] = total
+    return thread
+
+
+def test_patrol_without_overview_prints_no_page(slotted: Harness) -> None:
+    result = _patrol(slotted)
+    assert "=== 現況頁" not in result.stdout
+    assert "gh 呼叫：1／上限 1" in result.stdout
+
+
+def test_patrol_overview_reads_the_page_from_the_one_call(slotted: Harness) -> None:
+    """#804 AC-1: no thread over a page: the page from the one call (gh calls 1 of 2),
+    before the last lines, and the exit as without it."""
+    result = _patrol(slotted, "--overview")
+    assert result.returncode == 11, result.stdout + result.stderr
+    out = result.stdout
+    assert "gh 呼叫：1／上限 2" in out
+    assert len(slotted.calls("gh")) == 1
+    assert "=== 現況頁：索引（" in out and "=== 現況頁結束：" in out
+    assert "## #10 " in out and "  名額：算：開發中（沒有 PR）" in out
+    lines = out.strip().splitlines()
+    assert lines[-1] == "名額空缺 2 個，請派工：#33（patrol exit 11）"
+    assert out.index("=== 現況頁結束：") < out.index("其餘依手冊")
+
+
+def test_patrol_overview_backfills_a_thread_over_a_page(slotted: Harness) -> None:
+    """Decision 6913246451: one more call for the oldest totalCount-100, merged by url
+    (the comment both answers hold is listed once)."""
+    answer = _slot_answer()
+    answer["data"]["repository"]["issues"]["nodes"].append(_long_thread())
+    slotted.answer("gh_questions", answer)
+    old = [
+        _comment(
+            n, f"回報：第 {n} 則", 702, f"2026-10-25T08:{n // 60:02d}:{n % 60:02d}Z"
+        )
+        for n in range(1, 52)
+    ]
+    slotted.answer(
+        "gh_backfill", {"data": {"repository": {"t702": {"comments": {"nodes": old}}}}}
+    )
+    # The full section of #702 (decision 6914347432): every comment on a line; the
+    # numbers after --overview are not taken for another option.
+    result = _patrol(slotted, "--overview", "#702", "10", "--max-gh", "2")
+    assert result.returncode == 11, result.stdout + result.stderr
+    out = result.stdout
+    assert "=== 現況頁：#702 #10 的完整段落" in out
+    assert "gh 呼叫：2／上限 2" in out
+    calls = slotted.calls("gh")
+    assert len(calls) == 2 and "OverviewBackfill" in calls[1]
+    assert "t702:issueOrPullRequest(number:702)" in calls[1] and "first:50" in calls[1]
+    assert sum(" 51 回報：第 51 則" in ln for ln in out.splitlines()) == 1
+    assert sum("回報：第 " in ln for ln in out.splitlines()) == 150
+    assert "未查完：共 150 則" not in out
+
+
+@pytest.mark.parametrize("how", ["max-gh-1", "fails"])
+def test_patrol_overview_without_the_backfill_says_not_read(
+    slotted: Harness, how: str
+) -> None:
+    """Decision 6913246451: at the --max-gh limit (or the call failing) the page says
+    未查完 with the range missing, never taken as complete."""
+    answer = _slot_answer()
+    answer["data"]["repository"]["issues"]["nodes"].append(_long_thread())
+    slotted.answer("gh_questions", answer)
+    if how == "fails":
+        slotted.write("gh_backfill_fails", "")
+        result = _patrol(slotted, "--overview")
+        assert (
+            "  未查完：共 150 則，缺第 1～50 則（補查的 gh api graphql 失敗）"
+            in result.stdout
+        )
+    else:
+        result = _patrol(slotted, "--overview", "--max-gh", "1")
+        assert len(slotted.calls("gh")) == 1
+        assert (
+            "  未查完：共 150 則，缺第 1～50 則（gh 呼叫已達上限 1，沒有補查）"
+            in result.stdout
+        )
+    assert result.returncode == 11, result.stdout + result.stderr
+
+
+def test_patrol_overview_without_github_prints_the_local_part(slotted: Harness) -> None:
+    result = _patrol(slotted, "--overview", "--max-gh", "0")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "現況頁：未查完（GitHub 沒讀到），只印本機的部分" in result.stdout
+    assert slotted.calls("gh") == []
