@@ -50,12 +50,16 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 from coordinator_json import (
+    GATE,
     GOVERNANCE_FIELDS,
     PAGE,
     THREAD_FIELDS,
     coordinator_comment,
     get,
+    latest_checks,
+    newest_ci_run,
     one_line,
+    run_id,
 )
 from event_queue import SLOTS
 
@@ -84,10 +88,12 @@ QUERY = (
     "headRefName headRefOid "
     f"commits(last:{COMMITS}){{totalCount nodes{{commit{{oid committer{{name email}} "
     "parents{totalCount}}}}"
-    # The head's check runs, read once (not for every commit): CI 紅 is its newest
-    # `required` run (ci_red).
+    # The head's check runs, read once (not for every commit): CI 紅 is the `required`
+    # run of the newest workflow run (ci_red); detailsUrl and the workflow name are what
+    # newest_ci_run reads to tell the runs apart (#817).
     f"tip:commits(last:1){{nodes{{commit{{statusCheckRollup{{state contexts(first:{CONTEXTS})"
-    "{totalCount nodes{__typename ... on CheckRun{name conclusion startedAt}}}}}}}}}"
+    "{totalCount nodes{__typename ... on CheckRun{name conclusion startedAt detailsUrl "
+    "checkSuite{workflowRun{workflow{name}}}}}}}}}}}}"
     f"merged:pullRequests(states:MERGED,first:{MERGED_PAGE},"
     "orderBy:{field:UPDATED_AT,direction:DESC}){nodes{number url headRefName}}}"
     # status:待辦 as GraphQL escapes: the query stays ASCII on any console code page.
@@ -176,20 +182,43 @@ _RED = frozenset(
 )
 
 
+def _check(node: dict) -> dict:
+    """A CheckRun of QUERY in the shape of gh --json statusCheckRollup, which
+    newest_ci_run reads."""
+    return {
+        "name": node.get("name"),
+        "conclusion": node.get("conclusion"),
+        "startedAt": node.get("startedAt"),
+        "detailsUrl": node.get("detailsUrl"),
+        "workflowName": get(node, "checkSuite.workflowRun.workflow.name"),
+    }
+
+
 def ci_red(pr: dict) -> bool:
-    """The newest `required` check run of the PR's head failed. The rollup's own state is
-    not used: a run cancelled by a newer one of the same head (concurrency) makes it
-    FAILURE while `required` decides (docs/GUARDRAILS.md, PR #432). With no `required`
-    run yet the CI is not red; with none among the runs read and more left, the rollup
-    state decides."""
+    """The `required` check run of the newest CI run of the PR's head failed. The
+    rollup's own state is not used: a run cancelled by a newer one of the same head
+    (concurrency) makes it FAILURE while `required` decides (docs/GUARDRAILS.md, PR
+    #432). The newest run is newest_ci_run's, the run patrol's ci= (check_state) reads:
+    while it has no `required` yet, or its `required` is still going, the CI is going,
+    not red, even if the cancelled run's `required` failed (PR #816, 2026-11-16, #817).
+    Of that run's `required` checks the newest is latest_checks's, as for ci= (a queued
+    re-run with no time yet is the newest). Checks with no run id (no detailsUrl) are
+    all taken. With no `required` among the runs read and more left, the rollup state
+    decides (判定不了 is counted, PR #829 review 6926278317); with all read, not red."""
     tip = get(pr, "tip.nodes") or []
     rollup = (get(tip[0], "commit.statusCheckRollup") or {}) if tip else {}
     contexts = rollup.get("contexts") or {}
     nodes = contexts.get("nodes") or []
-    runs = [n for n in nodes if n.get("name") == "required"]
+    checks = [_check(n) for n in nodes if n.get("name")]
+    runs = [c for c in checks if c["name"] == GATE]
+    newest = newest_ci_run(checks)
+    if newest is not None:
+        # A run id is unique in the repository (event_queue.ci_result compares it alone).
+        runs = [c for c in runs if run_id(c) == newest[1]]
     if runs:
-        newest = max(runs, key=lambda n: n.get("startedAt") or "")
-        return (newest.get("conclusion") or "").upper() in _RED
+        return any(
+            (c.get("conclusion") or "").upper() in _RED for c in latest_checks(runs)
+        )
     if (contexts.get("totalCount") or 0) > len(nodes):
         return (rollup.get("state") or "").upper() in ("FAILURE", "ERROR")
     return False

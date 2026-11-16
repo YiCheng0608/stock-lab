@@ -11,6 +11,7 @@ gh call, the last line, exit 11 after the handoff's 10) is in test_coordinator_s
 
 from __future__ import annotations
 
+import json
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -58,14 +59,34 @@ def _commit(oid: str, merge: bool = False) -> dict:
 
 
 def _pr(
-    number, branch, commits, comments=(), ci="SUCCESS", total=None, runs=None
+    number,
+    branch,
+    commits,
+    comments=(),
+    ci="SUCCESS",
+    total=None,
+    runs=None,
+    nodes=None,
 ) -> dict:
     # The head's check runs, as QUERY reads them: by default one `required` run with
-    # the conclusion ci (None while it runs).
+    # the conclusion ci (None while it runs); nodes gives QUERY's CheckRun nodes as they
+    # are (with detailsUrl and the workflow, #817).
     if runs is None:
         runs = [("required", ci, "2026-11-15T01:00:00Z")]
+    if nodes is None:
+        nodes = [
+            {
+                "__typename": "CheckRun",
+                "name": name,
+                "conclusion": conclusion,
+                "startedAt": at,
+            }
+            for name, conclusion, at in runs
+        ]
     state = (
-        "FAILURE" if any(c not in (None, "SUCCESS") for _, c, _ in runs) else "SUCCESS"
+        "FAILURE"
+        if any(n["conclusion"] not in (None, "SUCCESS") for n in nodes)
+        else "SUCCESS"
     )
     return {
         "number": number,
@@ -85,16 +106,8 @@ def _pr(
                         "statusCheckRollup": {
                             "state": state,
                             "contexts": {
-                                "totalCount": len(runs),
-                                "nodes": [
-                                    {
-                                        "__typename": "CheckRun",
-                                        "name": name,
-                                        "conclusion": conclusion,
-                                        "startedAt": at,
-                                    }
-                                    for name, conclusion, at in runs
-                                ],
+                                "totalCount": len(nodes),
+                                "nodes": nodes,
                             },
                         }
                     }
@@ -246,6 +259,165 @@ def test_a_merged_pr_waits_for_close_task() -> None:
 
 
 EXTERNAL = "回報：等外部（head `aaaaaaa`）：批 1 回補，預計 2026-11-16 08:00（台北）"
+
+
+# PR #816's head 72038485 (#817): two CI runs, the first cancelled by the second. The
+# first's `required` failed at 10:30:29Z; the second's started only at 10:39:16Z.
+PR816 = json.loads(
+    (Path(__file__).parent / "fixtures" / "ci_runs" / "pr816_72038485.json").read_text(
+        encoding="utf-8"
+    )
+)
+NEW_RUN = 43849450051
+
+
+def _seen_at(at: str, runs=None, gate=None) -> list[dict]:
+    """PR #816's check runs as GitHub showed them at the time at: a run not started yet
+    is not listed, one not completed has no conclusion. gate replaces the conclusion of
+    the newer run's `required`; runs keeps only those workflow runs."""
+    seen = []
+    for c in PR816["check_runs"]:
+        if c["startedAt"] > at or (runs and c["run"] not in runs):
+            continue
+        conclusion = c["conclusion"] if c["completedAt"] <= at else None
+        if gate and c["name"] == "required" and c["run"] == NEW_RUN:
+            conclusion = gate
+        seen.append({**c, "conclusion": conclusion})
+    return seen
+
+
+def _query_nodes(checks: list[dict]) -> list[dict]:
+    """The checks as slots.QUERY reads them."""
+    return [
+        {
+            "__typename": "CheckRun",
+            "name": c["name"],
+            "conclusion": c["conclusion"],
+            "startedAt": c["startedAt"],
+            "detailsUrl": f"{REPO}/actions/runs/{c['run']}/job/1",
+            "checkSuite": {"workflowRun": {"workflow": {"name": PR816["workflow"]}}},
+        }
+        for c in checks
+    ]
+
+
+def _gh_rollup(checks: list[dict]) -> list[dict]:
+    """The checks as gh pr list --json statusCheckRollup gives them to check_state (the
+    monitor's poll that patrol's ci= prints)."""
+    return [
+        {
+            "__typename": "CheckRun",
+            "name": c["name"],
+            "workflowName": PR816["workflow"],
+            "status": "COMPLETED" if c["conclusion"] else "IN_PROGRESS",
+            "conclusion": c["conclusion"] or "",
+            "startedAt": c["startedAt"],
+            "completedAt": c["completedAt"] if c["conclusion"] else None,
+            "detailsUrl": f"{REPO}/actions/runs/{c['run']}/job/1",
+        }
+        for c in checks
+    ]
+
+
+# AC-1's four cases (#817), from PR #816's runs: (checks, CI 紅, patrol's ci=).
+PR816_CASES = {
+    # 10:35Z: the first run's `required` failed, the second has no `required` yet.
+    "cancelled-failure-newer-run-going": (
+        _seen_at("2026-11-16T10:35:00Z"),
+        False,
+        "pending",
+    ),
+    # 10:40Z: the second run's `required` passed.
+    "newer-required-success": (_seen_at("2026-11-16T10:40:00Z"), False, "success"),
+    # As 10:40Z, had the second run's `required` failed.
+    "newer-required-failure": (
+        _seen_at("2026-11-16T10:40:00Z", gate="FAILURE"),
+        True,
+        "failure",
+    ),
+    # One run only, its `required` failed.
+    "one-run-required-failure": (
+        _seen_at("2026-11-16T10:40:00Z", runs={NEW_RUN}, gate="FAILURE"),
+        True,
+        "failure",
+    ),
+}
+
+
+@pytest.mark.parametrize("case", list(PR816_CASES))
+def test_a_failed_required_of_a_cancelled_run_waits_for_the_newer_run(case) -> None:
+    """#817 AC-1: from 10:30:29Z to 10:39:16Z on 2026-11-16 patrol printed CI 紅 for
+    PR #816 (#811): the newest `required` by startedAt was the cancelled run's failure.
+    Only the newest CI run's `required` decides; without one yet the CI is going."""
+    checks, red, _ = PR816_CASES[case]
+    assert any(c["name"] == "required" for c in checks)
+    pr = _pr(20, "task/10-x", [_commit(SHA_A)], nodes=_query_nodes(checks))
+    assert slots.ci_red(pr) is red
+    v = _one(_answer([_issue(10)], [pr]), _tasks((10, "x", SHA_A, "clean")))
+    assert (v.counted, v.reason == "CI 紅（PR #20）") == (True, red)
+
+
+@pytest.mark.parametrize("case", list(PR816_CASES))
+def test_patrols_ci_and_the_slots_agree_on_the_cancelled_run(case) -> None:
+    """#817 AC-2: the PR line's ci= (check_state of the monitor's poll) and the slots'
+    CI 紅 (ci_red of patrol's query) read the same runs the same way."""
+    import coordinator_json
+
+    checks, red, ci = PR816_CASES[case]
+    pr = _pr(20, "task/10-x", [_commit(SHA_A)], nodes=_query_nodes(checks))
+    assert coordinator_json.check_state(_gh_rollup(checks)) == ci
+    assert slots.ci_red(pr) is red is (ci == "failure")
+
+
+def test_a_newer_runs_required_not_read_falls_back_to_the_rollup() -> None:
+    """PR #829 review 6926278317 必修 1: more check runs than CONTEXTS. The newest run's
+    `required` is not among those read, so the rollup state decides (判定不了 is
+    counted); with every run read and no `required` of that run, it is going."""
+    checks = _seen_at("2026-11-16T10:40:00Z")
+    # The cancelled run's `required` failure is read, the newer run's `required` is not.
+    read = [c for c in checks if c["name"] != "required" or c["run"] != NEW_RUN]
+    assert any(c["name"] == "required" for c in read)
+    nodes = _query_nodes(read)
+    pr = _pr(20, "task/10-x", [_commit(SHA_A)], nodes=nodes)
+    rollup = pr["tip"]["nodes"][0]["commit"]["statusCheckRollup"]
+    assert not slots.ci_red(pr)
+    rollup["contexts"]["totalCount"] = len(nodes) + 1
+    rollup["state"] = "FAILURE"
+    assert slots.ci_red(pr)
+    rollup["state"] = "PENDING"
+    assert not slots.ci_red(pr)
+
+
+def test_a_queued_rerun_of_required_is_newer_than_its_failure() -> None:
+    """PR #829 review 6926278317 必修 2: gh run rerun --failed queues a new `required` in
+    the same run, with no startedAt yet. Like check_state (latest_checks), the queued
+    one is the newest: neither says red."""
+    import coordinator_json
+
+    checks = _seen_at("2026-11-16T10:40:00Z", gate="FAILURE")
+    gate = next(c for c in checks if c["name"] == "required" and c["run"] == NEW_RUN)
+    checks.append({**gate, "conclusion": None, "startedAt": None, "completedAt": None})
+    pr = _pr(20, "task/10-x", [_commit(SHA_A)], nodes=_query_nodes(checks))
+    assert not slots.ci_red(pr)
+    assert coordinator_json.check_state(_gh_rollup(checks)) == "pending"
+
+
+def test_a_check_without_its_workflow_run_is_kept_by_its_run_id() -> None:
+    """PR #829 review 6926278317 建議 1: the `required` of the newest run is known by its
+    run id alone; a node whose checkSuite.workflowRun is null still decides."""
+    checks = _seen_at("2026-11-16T10:40:00Z", gate="FAILURE")
+    nodes = _query_nodes(checks)
+    for n in nodes:
+        if n["name"] == "required" and f"/runs/{NEW_RUN}/" in n["detailsUrl"]:
+            n["checkSuite"] = {"workflowRun": None}
+    pr = _pr(20, "task/10-x", [_commit(SHA_A)], nodes=nodes)
+    assert slots.ci_red(pr)
+
+
+def test_the_query_reads_the_workflow_run_of_each_check() -> None:
+    """ci_red tells the runs apart by what newest_ci_run reads (#817), in patrol's one
+    gh call."""
+    assert "detailsUrl checkSuite{workflowRun{workflow{name}}}" in slots.QUERY
 
 
 def test_waiting_external_is_not_counted_and_names_the_declaration() -> None:
