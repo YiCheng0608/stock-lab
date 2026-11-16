@@ -224,6 +224,32 @@ def test_fetch_then_build_gives_members_merged_across_markets(tmp_path):
     assert len(manifest["answers"]) == 8
 
 
+def test_twse_35_to_38_before_2023_07_03_are_flagged_retroactive():
+    assert tool.retroactive(tool.TWSE, "37", "2013-01-31")
+    assert tool.retroactive(tool.TWSE, "35", "2023-06-30")
+    assert not tool.retroactive(tool.TWSE, "35", "2023-07-31")
+    assert not tool.retroactive(tool.TWSE, "20", "2013-01-31")
+    assert not tool.retroactive(tool.TPEX, "35", "2013-01-31")
+
+
+def test_the_table_flags_retroactive_rows(tmp_path, monkeypatch):
+    # The fixture's TWSE 26 stands in for 35-38; the flag ends before January.
+    monkeypatch.setattr(tool, "RETROACTIVE_CODES", {tool.TWSE: frozenset({"26"})})
+    monkeypatch.setattr(tool, "RETROACTIVE_BEFORE", "2015-01-01")
+    _fetch(tmp_path, FakeSource(answers()))
+    result = tool.build(tmp_path, "2014-12", "2015-01", ["build"])
+    document = json.loads((tmp_path / tool.TABLE_NAME).read_text(encoding="utf-8"))
+    assert document["fields"][-1] == "retroactive_category"
+    flagged = [row for row in document["rows"] if row[8]]
+    assert [(row[0], row[1], row[2], row[6]) for row in flagged] == [
+        ("2014-12-31", tool.TWSE, "26", "2475")
+    ]
+    assert result["retroactive_rows"] == 1
+    manifest = json.loads((tmp_path / tool.MANIFEST_NAME).read_text(encoding="utf-8"))
+    assert manifest["retroactive_rows"] == 1
+    assert manifest["definitions"]["retroactive_codes"] == {tool.TWSE: ["26"]}
+
+
 def test_a_snapshot_is_used_from_its_own_day():
     rows = [
         ["2014-12-31", "TWSE", "26", "光電業", "Optoelectronics", "x", "2475", "華映"],

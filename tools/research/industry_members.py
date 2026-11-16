@@ -28,7 +28,9 @@ Two steps, both run in a detached container:
   build.
 
 A member row is (snapshot date, exchange, industry code, category name as
-published, group label, group id, symbol, name).  The research tools take the
+published, group label, group id, symbol, name, retroactive_category).  TWSE
+answers today's category on past days too; ``retroactive_category`` marks the
+TWSE 35-38 rows before 2023-07-03, codes the exchange did not have then.  The research tools take the
 latest snapshot with ``snapshot_date <= T``: the close quotes of D are public
 on D's evening (docs/ops/RESEARCH_DB.md).  The group label is the product's
 English label (``app.taxonomy``) and the id ``canonical_group_id("industry",
@@ -170,6 +172,16 @@ CATEGORY_NAMES: dict[str, dict[str, frozenset[str]]] = {
     TPEX: {"31": frozenset({"其他電子類"})},
 }
 
+# TWSE MI_INDEX answers each stock under its current (or last) category on
+# every past day too (#779 6904648128: 0 of 736 stocks changed between
+# 2013-01-31 and 2023-06-30, and these four codes, new on 2023-07-03, already
+# have members on 2013-01-31).  Their rows before that day are flagged
+# ``retroactive_category`` (decision 6904679034).
+RETROACTIVE_CODES: dict[str, frozenset[str]] = {
+    TWSE: frozenset({"35", "36", "37", "38"}),
+}
+RETROACTIVE_BEFORE = "2023-07-03"
+
 # (first month, last month, exchange, codes): the codes each month asks for.
 # Filled from the per-year category lists confirmed before the full fetch.
 CODE_PERIODS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = ()
@@ -198,7 +210,13 @@ def definitions() -> dict:
             "snapshot: last TWSE trading day of the month (type 01 answers rows)",
             "members: every row of the code's table on the snapshot day",
             "available: snapshot_date <= T",
+            "retroactive_category: a RETROACTIVE_CODES row before RETROACTIVE_BEFORE",
         ],
+        "retroactive_codes": {
+            exchange: sorted(codes)
+            for exchange, codes in sorted(RETROACTIVE_CODES.items())
+        },
+        "retroactive_before": RETROACTIVE_BEFORE,
     }
 
 
@@ -745,10 +763,16 @@ class BuildError(ValueError):
     """The raw cannot give a complete, trusted table."""
 
 
-def build_rows(out: Path, first: str, last: str) -> tuple[list[list[str]], dict]:
+def retroactive(exchange: str, code: str, day: str) -> bool:
+    """A category the exchange did not have on ``day``, filled in afterwards."""
+
+    return code in RETROACTIVE_CODES.get(exchange, ()) and day < RETROACTIVE_BEFORE
+
+
+def build_rows(out: Path, first: str, last: str) -> tuple[list[list], dict]:
     """Every member row from the raw, sorted; and per-answer provenance."""
 
-    rows: list[list[str]] = []
+    rows: list[list] = []
     sources: list[dict] = []
     filled: dict[tuple[str, str], list[str]] = {}
     for month in months(first, last):
@@ -808,6 +832,7 @@ def build_rows(out: Path, first: str, last: str) -> tuple[list[list[str]], dict]
                             group_id(label),
                             symbol,
                             name,
+                            retroactive(exchange, code, day.isoformat()),
                         ]
                     )
     all_months = months(first, last)
@@ -831,10 +856,11 @@ ROW_FIELDS = (
     "group_id",
     "symbol",
     "name",
+    "retroactive_category",
 )
 
 
-def table_bytes(rows: list[list[str]], first: str, last: str) -> bytes:
+def table_bytes(rows: list[list], first: str, last: str) -> bytes:
     document = {
         "format_version": FORMAT_VERSION,
         "definitions_sha256": definitions_sha256(),
@@ -846,7 +872,7 @@ def table_bytes(rows: list[list[str]], first: str, last: str) -> bytes:
     return (text + "\n").encode("utf-8")
 
 
-def members_on(rows: list[list[str]], day: date) -> list[list[str]]:
+def members_on(rows: list[list], day: date) -> list[list]:
     """The rows of the latest snapshot on or before ``day`` (none before the first).
 
     A snapshot is the close quotes of its day, public that evening, so a
@@ -859,7 +885,7 @@ def members_on(rows: list[list[str]], day: date) -> list[list[str]]:
     return [row for row in rows if row[0] == latest]
 
 
-def yearly(rows: list[list[str]]) -> dict[str, dict[str, int]]:
+def yearly(rows: list[list]) -> dict[str, dict[str, int]]:
     """Per snapshot year: rows, distinct (exchange, symbol), distinct groups."""
 
     result: dict[str, dict[str, set | int]] = {}
@@ -930,7 +956,7 @@ def common_stocks(exchange: str, payload: dict) -> set[str]:
     return codes
 
 
-def completeness(rows: list[list[str]], research_db: Path | None) -> dict:
+def completeness(rows: list[list], research_db: Path | None) -> dict:
     """Common stocks of the day's full-market quotes that are in no industry.
 
     The research DB's stored ``ALLBUT0999`` (TWSE) and ``dailyQuotes`` (TPEx)
@@ -1006,12 +1032,15 @@ def build(
         "definitions": definitions(),
         "months": [first, last],
         "yearly": yearly(rows),
+        "retroactive_rows": sum(bool(row[8]) for row in rows),
         "completeness": check,
         **provenance,
     }
     text = json.dumps(manifest, ensure_ascii=False, indent=1, sort_keys=True)
     (out / MANIFEST_NAME).write_text(text + "\n", encoding="utf-8")
-    summary = {key: manifest[key] for key in ("sha256", "bytes", "yearly")}
+    summary = {
+        key: manifest[key] for key in ("sha256", "bytes", "yearly", "retroactive_rows")
+    }
     summary["completeness"] = {
         key: check[key] for key in ("checked", "unchecked", "days_with_missing")
     }
