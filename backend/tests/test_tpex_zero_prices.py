@@ -99,8 +99,9 @@ def _with_row(payload: dict, row: list[str]) -> dict:
 
 def test_a_row_with_only_some_prices_zero_is_read_as_before():
     """Only all four zero is a no-trade row.  A row with some of them ``0.00``
-    is parsed as it always was: a bar carrying the zero it reads (no such row
-    is in the stored 2007-04..2011-11 raw; the replay of #819 AC-2 counts 0)."""
+    is parsed as it always was: a bar carrying the zero it reads.  In the stored
+    2007-04..2011-11 raw no share or ETF row is like this; the replay of #819
+    AC-2 found 24,288 such rows, all of them warrant codes."""
 
     traded = next(r for r in _payload()["tables"][0]["data"] if r[0] == "1333")
     row = list(traded)
@@ -121,3 +122,21 @@ def test_zero_mixed_with_blank_prices_is_neither_a_bar_nor_a_no_trade_row():
 
     assert "9998" not in bars
     assert "9998" not in no_trade
+
+
+def test_twse_does_not_read_zero_prices_as_no_trade():
+    """MI_INDEX never wrote ``0.00`` for no trade (no TWSE bar with all four
+    zero in the research or the production DB, #819 AC-2/AC-3), so only TPEx
+    reads it that way."""
+
+    row = {
+        "證券代號": "1101",
+        "開盤價": "0.00",
+        "最高價": "0.00",
+        "最低價": "0.00",
+        "收盤價": "0.00",
+        "成交股數": "0",
+        "成交金額": "0",
+        "Date": DAY.isoformat(),
+    }
+    assert sources.parse_twse_no_trade_rows([row]) == []
