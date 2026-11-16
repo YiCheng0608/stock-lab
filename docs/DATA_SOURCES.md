@@ -139,7 +139,7 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 
 ## 盤中報價
 
-這一節記盤中即時通知用的報價來源。通知是今日名單與我的追蹤的股票觸及規則價位時傳 Telegram。查證與實測在 2026-11-15～16 做（[#756](https://github.com/YiCheng0608/stock-lab/issues/756)）。使用者 2026-11-16 選富果行情 API 的免費方案（[#1 6909629060](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6909629060)、[#756 決定 6909643332](https://github.com/YiCheng0608/stock-lab/issues/756#issuecomment-6909643332)）。實作另開單；在那之前，collector 與排程都不讀盤中報價。
+這一節記盤中即時通知用的報價來源。通知是今日名單與我的追蹤的股票觸及規則價位時傳 Telegram。查證與實測在 2026-11-15～16 做（[#756](https://github.com/YiCheng0608/stock-lab/issues/756)）。使用者 2026-11-16 選富果行情 API 的免費方案（[#1 6909629060](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6909629060)、[#756 決定 6909643332](https://github.com/YiCheng0608/stock-lab/issues/756#issuecomment-6909643332)）。實作是 [#801](https://github.com/YiCheng0608/stock-lab/issues/801)：scheduler 的 `intraday` 工作（[`backend/worker/intraday.py`](../backend/worker/intraday.py)、adapter [`backend/worker/fugle.py`](../backend/worker/fugle.py)，排程與規則見 [SCHEDULING](ops/SCHEDULING.md#scheduler-容器的排程serve) 的 intraday 一節）；只有它讀盤中報價，collector 與 daily 都不讀，也不寫 DB。
 
 ### 採用：富果行情 API 基本用戶
 
@@ -161,8 +161,8 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
   - `isTrial`：試撮階段不判斷。
   - `isLimitUpPrice` 等漲跌停旗標。
   - `lastUpdated`：記延遲。
-- **錯誤碼**：401（key 無效）、403（方案不支援）、404（代號）、429（限流）。
-- **延遲**：還沒實測，因為評估時沒有 key。實作單會在使用者放好 key 後的交易日量一次，和下面 MIS 的數字並列。
+- **錯誤碼與處理**（#801）：401（key 無效）、403（方案不支援）、429（限流）當天停止讀取並通知；逾時（10 秒）、連線失敗與 5xx 這一分鐘這檔跳過、不重試；404（代號）與缺 `highPrice`／`lowPrice`／`lastTrade` 的回應只停那一檔；整輪連續 5 次沒有回應改成每 5 分鐘一輪（[SCHEDULING](ops/SCHEDULING.md#scheduler-容器的排程serve) 的 intraday 一節）。
+- **延遲**：還沒實測，因為使用者還沒放好 key。#801 AC-6 會在放好 key 後的交易日盤中跑 `worker.cli intraday --dry-run` 30～60 分鐘，量每檔回應時間、`lastUpdated` 與實際時間的差、失敗率，和下面 MIS 的數字並列在這裡。
 
 ### 沒採用的來源
 
