@@ -1494,3 +1494,91 @@ def test_only_an_ex_right_can_be_written_without_its_detail():
             detail_sha256=None,
             detail_unpublished=True,
         )
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        {"stat": "查詢日期大於可查詢最大日期，請重新查詢!"},
+        {"stat": "ok", "fields": DETAIL_FIELDS, "data": []},
+        {"stat": "ok", "fields": DETAIL_FIELDS, "data": [DETAIL_3706]},
+        {"stat": "無相關資料", "data": [DETAIL_3706]},
+    ],
+    ids=["another_stat", "empty_table", "another_code", "stat_with_data"],
+)
+def test_only_the_no_data_answer_before_the_detail_day_is_written(
+    early_factory, answer
+):
+    routes_ = early_routes()
+    routes_[0] = (sources.TWSE_ACTION_DETAIL_ENDPOINT, answer)
+    result = _sync_early(
+        early_factory,
+        Fetcher(routes_),
+        start=date(2004, 2, 1),
+        end=date(2004, 2, 29),
+    )
+    assert result["status"] == "partial"
+    assert result["warnings"] == ["TWSE TWT49UDetail has no row for 2849 2004-02-11"]
+    assert result["reference_factor_rows"] == 0
+    with early_factory() as db:
+        assert stored(db, "2849") is None
+
+
+@pytest.mark.parametrize(
+    "blank", ["除權息前收盤價", "除權息參考價"], ids=["close_before", "quote"]
+)
+def test_a_row_without_both_official_prices_is_not_written(early_factory, blank):
+    history = _action_fixture("twt49u_20040201_20040229.json")
+    history["data"][0][history["fields"].index(blank)] = ""
+    routes_ = early_routes()
+    routes_[1] = (
+        sources.TWSE_ACTION_HISTORY_ENDPOINT,
+        lambda url: history if "startDate=20040201" in url else NO_DATA,
+    )
+    result = _sync_early(
+        early_factory,
+        Fetcher(routes_),
+        start=date(2004, 2, 1),
+        end=date(2004, 2, 29),
+    )
+    assert result["status"] == "partial"
+    assert result["warnings"] == ["TWSE TWT49UDetail has no row for 2849 2004-02-11"]
+    with early_factory() as db:
+        assert stored(db, "2849") is None
+
+
+def test_the_check_does_not_call_a_reference_row_a_mismatch(early_factory):
+    _sync_early(
+        early_factory,
+        Fetcher(early_routes()),
+        start=date(2005, 1, 1),
+        end=date(2005, 1, 31),
+    )
+    with early_factory() as db:
+        checked = sync.check_corporate_actions(db)
+    # 6280, 2023, 2888 are reference rows; 2825 has its detail and passes.
+    # 6280's empty fields imply 33.00 against 減除股利參考價 27.48.
+    assert checked["mismatches"] == []
+    assert checked["reference_factor_rows"] == 3
+    assert checked["rows_checked"] == 1
+
+
+def test_a_second_sync_of_reference_rows_changes_nothing(early_factory):
+    window = {"start": date(2004, 2, 1), "end": date(2005, 1, 31)}
+    first = _sync_early(early_factory, Fetcher(early_routes()), **window)
+    with early_factory() as db:
+        before = [
+            (row.instrument_id, row.action_date, row.cash_dividend, row.details_json)
+            for row in db.scalars(select(CorporateAction).order_by(CorporateAction.id))
+        ]
+    second = _sync_early(early_factory, Fetcher(early_routes()), **window)
+    assert first["new_rows"] == 8 and second["new_rows"] == 0
+    assert second["changed_rows"] == 0 and second["unchanged_rows"] == 8
+    assert second["affected"] == {}
+    with early_factory() as db:
+        after = [
+            (row.instrument_id, row.action_date, row.cash_dividend, row.details_json)
+            for row in db.scalars(select(CorporateAction).order_by(CorporateAction.id))
+        ]
+        assert after == before
+        assert db.scalar(select(func.count(DataQuality.id))) == 0

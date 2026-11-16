@@ -563,9 +563,11 @@ TWSE_ACTION_HISTORY_FIRST_DATE = date(2003, 5, 5)  # TWT49U: 查詢開始日期�
 # TWT49UDetail answers {"stat": "無相關資料"} for every ex-right before this day
 # (2005-01-24 2888 none, 2005-01-25 2825 has its row; Issue #821).  Such an
 # event is written without its breakdown, its factor the published
-# 除權息參考價 / 除權息前收盤價 (``TWSE_REFERENCE_FACTOR_SOURCE``); a detail
-# missing on or after this day is still left out with a warning.
+# 除權息參考價 / 除權息前收盤價 (``TWSE_REFERENCE_FACTOR_SOURCE``); any other
+# answer, a row without both prices, or a detail missing on or after this
+# day is still left out with a warning (``_twse_detail_unpublished``).
 TWSE_ACTION_DETAIL_FIRST_DATE = date(2005, 1, 25)
+TWSE_ACTION_DETAIL_NONE_STAT = "無相關資料"
 TWSE_REFERENCE_FACTOR_SOURCE = "twt49u_reference"
 # Capital reduction reports: TWTAUU 查詢開始日期小於100年1月1日; revivt answers an
 # empty table for 2012 and has rows from 2013.
@@ -4273,9 +4275,9 @@ class TwseAdapter:
         event; a row that is an ex-right (權 or 權息) also needs its
         TWT49UDetail breakdown.  An event whose detail cannot be read is
         left out with a warning instead of being written half known, except
-        a detail answered without its row before
-        ``TWSE_ACTION_DETAIL_FIRST_DATE``, which TWSE never published: that
-        event is written without the breakdown (#821).
+        one TWSE never published (``_twse_detail_unpublished``: before
+        ``TWSE_ACTION_DETAIL_FIRST_DATE``, answered 無相關資料, both official
+        prices present), which is written without the breakdown (#821).
         """
         records: list[ActionRecord] = []
         payloads: list[FetchedPayload] = []
@@ -4326,9 +4328,8 @@ class TwseAdapter:
                     detail = parse_twse_action_detail(
                         detail_payload.payload, row["symbol"]
                     )
-                    if (
-                        detail is None
-                        and row["action_date"] < TWSE_ACTION_DETAIL_FIRST_DATE
+                    if detail is None and _twse_detail_unpublished(
+                        row, detail_payload.payload
                     ):
                         # TWSE never published these breakdowns (#821).
                         records.append(
@@ -5870,6 +5871,30 @@ def parse_twse_action_detail(payload: Any, symbol: str) -> dict[str, Any] | None
         if _text(row, "股票代號") == symbol:
             return row
     return None
+
+
+def _twse_detail_unpublished(row: dict[str, Any], detail_payload: Any) -> bool:
+    """Whether a TWT49U ex-right is one TWSE published without its detail (#821).
+
+    All three hold: it is dated before TWSE_ACTION_DETAIL_FIRST_DATE, the
+    detail answered exactly ``{"stat": "無相關資料"}`` without data, and the
+    row publishes a positive 除權息前收盤價 and 除權息參考價, the ratio its
+    factor is taken from.  Any other answer (another stat, an empty table, a
+    table without this code) or a row without both prices is left out with
+    a warning like a missing detail after that day.
+    """
+    if row["action_date"] >= TWSE_ACTION_DETAIL_FIRST_DATE:
+        return False
+    if not isinstance(detail_payload, dict) or detail_payload.get("data"):
+        return False
+    if str(detail_payload.get("stat", "")).strip() != TWSE_ACTION_DETAIL_NONE_STAT:
+        return False
+    published = row["row"]
+    prices = (
+        parse_number(published.get("除權息前收盤價")),
+        parse_number(published.get("除權息參考價")),
+    )
+    return all(price is not None and price > 0 for price in prices)
 
 
 # TWT49UDetail prints free shares per thousand to one decimal (2442

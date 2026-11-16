@@ -68,7 +68,12 @@ def table_summary(db: Session) -> dict[str, Any]:
 def check_corporate_actions(
     db: Session, *, start: date | None = None, end: date | None = None
 ) -> dict[str, Any]:
-    """Every stored row whose fields disagree with the official price ratio."""
+    """Every stored row whose fields disagree with the official price ratio.
+
+    A row TWSE published without its breakdown (#821, fields empty on
+    purpose) is not compared, like on write; it is counted in
+    ``reference_factor_rows``.
+    """
     query = select(CorporateAction, Instrument).join(
         Instrument, Instrument.id == CorporateAction.instrument_id
     )
@@ -76,11 +81,14 @@ def check_corporate_actions(
         query = query.where(CorporateAction.action_date >= start)
     if end is not None:
         query = query.where(CorporateAction.action_date <= end)
-    checked = unchecked = 0
+    checked = unchecked = reference = 0
     mismatches: list[dict[str, Any]] = []
     for action, instrument in db.execute(
         query.order_by(CorporateAction.action_date, CorporateAction.id)
     ).all():
+        if pipeline.reference_factor_only(action):
+            reference += 1
+            continue
         check = pipeline.action_factor_check(action)
         if check is None:
             unchecked += 1
@@ -102,6 +110,7 @@ def check_corporate_actions(
         "version": SYNC_VERSION,
         "rows_checked": checked,
         "rows_without_official_prices": unchecked,
+        "reference_factor_rows": reference,
         "mismatches": mismatches,
     }
 
