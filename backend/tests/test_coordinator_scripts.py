@@ -3745,6 +3745,277 @@ def test_session_cost_report_prints_per_call_per_action_and_after_compaction(
     assert "壓縮後第 1 次呼叫" not in out
 
 
+TAKE_OVER_FAILED = 'take_over：失敗：close\n{"ok":false,"done":["heartbeat"]}\n'
+TAKE_OVER_OK = 'take_over：全部完成\n{"ok":true,"done":["close","memory"]}\n'
+SAVED_PREVIEW = (
+    "<persisted-output>\nOutput too large (20KB). Full output saved to: "
+    "C:\\cfg\\projects\\p\\s\\tool-results\\b1.txt\n\nPreview\n</persisted-output>"
+)
+
+
+def _takeover_rows(case: str = "ok") -> list[dict]:
+    """A coordinator's take over: AGENTS.md read, #1's body saved by Claude Code and
+    read back, take_over.sh named by sed (not a run), run, failed and continued with
+    --from, then the open Issues and patrol.sh in one call. Every call outputs 100."""
+
+    def call(mid: str, ctx: int, *uses: tuple[str, str, dict]) -> dict:
+        return {
+            "type": "assistant",
+            "cwd": "C:\\repo",
+            "message": {
+                "id": mid,
+                "model": "claude-x",
+                "content": [
+                    {"type": "tool_use", "id": t, "name": name, "input": i}
+                    for t, name, i in uses
+                ],
+                "usage": {
+                    "input_tokens": 1,
+                    "cache_read_input_tokens": ctx - 1_001,
+                    "cache_creation_input_tokens": 1_000,
+                    "output_tokens": 100,
+                },
+            },
+        }
+
+    def bash(t: str, command: str) -> tuple[str, str, dict]:
+        return (t, "Bash", {"command": command})
+
+    def result(t: str, text: str) -> dict:
+        return {
+            "type": "user",
+            "message": {
+                "content": [{"type": "tool_result", "tool_use_id": t, "content": text}]
+            },
+        }
+
+    run1, run2 = "bash tools/ops/take_over.sh term_old", "echo x"
+    second = TAKE_OVER_OK
+    patrol = "bash tools/ops/wake_listener_start.sh; bash tools/ops/patrol.sh 2>&1"
+    if case == "no_take_over":
+        run1 = "echo x"
+    elif case == "never_ok":
+        run2, second = (
+            "cd C:/repo && tools/ops/take_over.sh term_old --from close",
+            (TAKE_OVER_FAILED),
+        )
+    elif case == "no_patrol":
+        patrol = "bash tools/ops/wake_listener_start.sh"
+    if case != "no_take_over" and run2 == "echo x":
+        run2 = "bash tools/ops/take_over.sh term_old --from close"
+    return [
+        {"type": "user", "message": {"content": "你是 stock-lab 的統籌"}},
+        call("m1", 30_000, ("t1", "Read", {"file_path": "C:\\repo\\AGENTS.md"})),
+        result("t1", "a" * 7_000),
+        call("m2", 33_100, bash("t2", "gh issue view 1 --json body -q .body")),
+        result("t2", SAVED_PREVIEW),
+        # One message written as two rows; a sidechain's call is not the session's.
+        call("m3", 35_100),
+        call(
+            "m3",
+            35_100,
+            ("t3", "Read", {"file_path": "C:/cfg/projects/p/s/tool-results/b1.txt"}),
+        ),
+        call("side", 900_000, bash("ts", "bash tools/ops/patrol.sh"))
+        | {"isSidechain": True},
+        result("t3", "b" * 20_000),
+        call("m4", 45_100, bash("t4", "sed -n 1,80p tools/ops/take_over.sh")),
+        result("t4", "c" * 1_000),
+        call("m5", 45_600, bash("t5", run1)),
+        result("t5", TAKE_OVER_FAILED),
+        call("m6", 46_100, bash("t6", run2)),
+        result("t6", second),
+        call(
+            "m7",
+            46_600,
+            bash("t7", "gh issue list --state open"),
+            bash("t8", patrol),
+        ),
+        result("t7", "d" * 2_000),
+        result("t8", "e" * 4_000),
+        call("m8", 49_100),
+    ]
+
+
+def _takeover(h: Harness, rows: list[dict]) -> subprocess.CompletedProcess:
+    path = h.root / "t.jsonl"
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    return h.run_bash(
+        '"$STOCK_PYTHON" -X utf8 "$1" takeover "$2"',
+        (h.ops / "session_cost.py").as_posix(),
+        path.as_posix(),
+    )
+
+
+def test_session_cost_takeover_prints_the_three_points_and_groups(h: Harness) -> None:
+    """#803 AC-1: the 2nd point is the take_over.sh run that printed "ok":true (here the
+    2nd, continued with --from; sed naming the file is not a run), the 3rd the first
+    patrol.sh after it; what each call adds past its own output is shared by the tool
+    results before the next call by bytes; a saved long output read back counts as the
+    command's."""
+    result = _takeover(h, _takeover_rows())
+    out = result.stdout
+    assert result.returncode == 0, out + result.stderr
+    assert (
+        "context：第 1 次呼叫 30,000、take_over.sh 之後 46,600"
+        '（第 2 次執行、印出 "ok":true；共執行 2 次）、patrol.sh 之後 49,100' in out
+    )
+    assert (
+        "增量：第 1 次呼叫 → take_over.sh 16,600、take_over.sh → patrol.sh 2,500、"
+        "合計 19,100" in out
+    )
+    preview = len(SAVED_PREVIEW.encode())
+    groups = {
+        "讀檔：AGENTS.md": (7_000, 3_000),
+        "讀 #1": (preview + 20_000, 1_900 + 9_900),
+        "讀檔：tools/ops/take_over.sh": (1_000, 400),
+        "take_over.sh 輸出": (
+            len(TAKE_OVER_FAILED.encode()) + len(TAKE_OVER_OK.encode()),
+            800,
+        ),
+        "讀其他 Issue／PR": (2_000, 800),
+        "patrol.sh 輸出": (4_000, 1_600),
+    }
+    for group, (size, tokens) in groups.items():
+        assert f"  {group}：{size:,} B、{tokens:,}、{size / tokens:.2f}" in out, group
+    assert "  統籌自己的輸出：" in out and "B、700、" in out
+    assert "其他（提示、附件）" not in out
+    size = sum(s for s, _ in groups.values())
+    tokens = sum(t for _, t in groups.values())
+    assert (
+        f"位元組／token：工具結果 {size:,} B ÷ {tokens:,} = {size / tokens:.2f}" in out
+    )
+    assert "其中讀 repo 檔案 2.35" in out  # 8,000 B ÷ 3,400
+
+
+@pytest.mark.parametrize(
+    "case,missing",
+    [
+        ("no_take_over", "找不到 take_over.sh 的工具結果"),
+        ("never_ok", 'take_over.sh 執行 2 次，沒有一次印出 "ok":true'),
+        ("no_patrol", "找不到 take_over.sh 之後的 patrol.sh 工具結果"),
+    ],
+)
+def test_session_cost_takeover_names_a_missing_point(
+    h: Harness, case: str, missing: str
+) -> None:
+    """#803 AC-1: a point not found is one line saying which, no numbers, exit 5."""
+    result = _takeover(h, _takeover_rows(case))
+    out = result.stdout
+    assert result.returncode == 5, out + result.stderr
+    assert out.splitlines()[1:] == [missing]
+    assert "context：" not in out and "30,000" not in out
+
+
+def _tool(t: str, command: str) -> dict:
+    return {"type": "tool_use", "id": t, "name": "Bash", "input": {"command": command}}
+
+
+def _result(t: str, text: str) -> dict:
+    return {
+        "type": "user",
+        "message": {
+            "content": [{"type": "tool_result", "tool_use_id": t, "content": text}]
+        },
+    }
+
+
+def _patrol_later(rows: list[dict]) -> None:
+    """m8 runs patrol.sh too, and m9 (50,000) is the call after it."""
+    m8 = rows[-1]
+    m8["message"]["content"].append(_tool("t9", "bash tools/ops/patrol.sh"))
+    m9 = json.loads(json.dumps(m8))
+    m9["message"]["id"] = "m9"
+    m9["message"]["content"] = []
+    m9["message"]["usage"]["cache_read_input_tokens"] = 50_000 - 1_001
+    rows += [_result("t9", "f" * 10), m9]
+
+
+def _row(rows: list[dict], mid: str) -> dict:
+    return next(
+        r
+        for r in rows
+        if r.get("type") == "assistant"
+        and r["message"]["id"] == mid
+        and r["message"]["content"]
+    )
+
+
+@pytest.mark.parametrize(
+    "case,points",
+    [
+        # One sed or grep reading both scripts is not a run of either (review
+        # 6912162312 must-fix 1: "patrol.sh tools/ops/take_over.sh" is not "sh ...").
+        ("multi_file_reads", (46_600, 2, 50_000)),
+        # A --closed-only run printing "ok":true is not the 2nd point.
+        ("closed_only", (46_600, 2, 49_100)),
+        # patrol.sh --heartbeat-only is not the 3rd point.
+        ("heartbeat_only", (46_600, 2, 50_000)),
+        # patrol.sh in the same command as the ok run: the 3rd point is the 2nd.
+        ("same_command", (46_600, 2, 46_600)),
+    ],
+)
+def test_session_cost_takeover_counts_only_runs_of_the_scripts(
+    h: Harness, case: str, points: tuple[int, int, int]
+) -> None:
+    """#803 AC-1 and the definitions in docs/COORDINATOR.md: which tool results are the
+    2nd and 3rd points."""
+    rows = _takeover_rows()
+    m4, m6, m7 = (_row(rows, m) for m in ("m4", "m6", "m7"))
+    at = rows.index(m4) + 1
+    if case == "multi_file_reads":
+        m4["message"]["content"].append(
+            _tool("t4b", "sed -n 1,40p tools/ops/patrol.sh tools/ops/take_over.sh")
+        )
+        rows.insert(at, _result("t4b", "g" * 10))
+        m7["message"]["content"][1] = _tool(
+            "t8", "grep -n x tools/ops/take_over.sh tools/ops/patrol.sh"
+        )
+        _patrol_later(rows)
+    elif case == "closed_only":
+        m4["message"]["content"].append(
+            _tool("t4b", "bash tools/ops/take_over.sh --closed-only")
+        )
+        rows.insert(at, _result("t4b", TAKE_OVER_OK))
+    elif case == "heartbeat_only":
+        m7["message"]["content"][1] = _tool(
+            "t8", "bash tools/ops/patrol.sh --heartbeat-only --take-over"
+        )
+        _patrol_later(rows)
+    else:
+        m6["message"]["content"][0]["input"]["command"] += (
+            " && bash tools/ops/patrol.sh"
+        )
+        m7["message"]["content"][1] = _tool("t8", "echo x")
+    second, nth, third = points
+    result = _takeover(h, rows)
+    out = result.stdout
+    assert result.returncode == 0, out + result.stderr
+    assert (
+        f"context：第 1 次呼叫 30,000、take_over.sh 之後 {second:,}"
+        f'（第 {nth} 次執行、印出 "ok":true；共執行 2 次）、patrol.sh 之後 {third:,}'
+        in out
+    ), out
+
+
+def test_session_cost_reads_a_transcript_cut_inside_a_character(h: Harness) -> None:
+    """Review 6912162312 must-fix 4: a transcript still being written may end inside a
+    multi-byte character; takeover and report skip that line, and the next session
+    is still printed."""
+    path = h.root / "t.jsonl"
+    rows = "".join(json.dumps(r) + "\n" for r in _takeover_rows())
+    path.write_bytes(rows.encode() + '{"type":"user","message":"統'.encode()[:-1])
+    for command in ("takeover", "report"):
+        result = h.run_bash(
+            f'"$STOCK_PYTHON" -X utf8 "$1" {command} "$2" "$2"',
+            (h.ops / "session_cost.py").as_posix(),
+            path.as_posix(),
+        )
+        out = result.stdout
+        assert result.returncode == 0, out + result.stderr
+        assert out.count("== t") == 2, out
+
+
 def _commit(h: Harness, *args: str, session: str = "sess-old"):
     return h.run("commit.sh", *args, CLAUDE_CODE_SESSION_ID=session)
 
