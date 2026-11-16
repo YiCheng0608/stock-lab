@@ -7,7 +7,7 @@ import sys
 from datetime import date, datetime, time, timezone
 
 from . import job as scheduled_job, notify as daily_notify, serve as scheduler
-from . import preopen as preopen_check
+from . import intraday as intraday_alerts, preopen as preopen_check
 
 # Before app.config is imported: it reads STOCK_DATA_DIR and creates that
 # directory, and a scheduled `job` (or `serve`) has only --data-dir.
@@ -224,6 +224,11 @@ def main() -> None:
         help="開盤前檢查（#755）：今日名單每檔在名單產生之後才收到的新聞與 AI 判讀，存進 preopen_news_checks",
     )
     preopen_check.add_arguments(preopen_parser)
+    intraday_parser = subparsers.add_parser(
+        "intraday",
+        help="盤中即時通知（#801）：今日名單與我的追蹤觸及規則價位時傳 Telegram（富果行情）；--dry-run 不送、--send 送出",
+    )
+    intraday_alerts.add_arguments(intraday_parser)
     maintenance_parser = subparsers.add_parser(
         "maintenance",
         help="維護模式（#468）：開啟時排程的 daily 與 news 只記 skipped，看門狗與 monitor 照常",
@@ -709,6 +714,11 @@ def main() -> None:
         if problem:
             parser.error(problem)
         sys.exit(preopen_check.run(args))
+    if args.command == "intraday":
+        problem = intraday_alerts.argument_problem(args)
+        if problem:
+            parser.error(problem)
+        sys.exit(intraday_alerts.run(args))
     if args.command == "maintenance":
         data_dir = scheduled_job.resolve_data_dir(args.data_dir or str(DATA_DIR))
         reason = (args.reason or "").strip()

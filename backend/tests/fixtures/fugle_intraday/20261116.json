@@ -1,0 +1,38 @@
+{
+  "note": "Four stocks of the 2026-11-16 today list (#756 AC-2, comment 6906081956), rewritten in the shape of Fugle's intraday quote (GET /marketdata/v1.0/stock/intraday/quote/{symbol}). Levels: #756 levels_20261113.json. Opens, highs, lows, bids and asks: the MIS snapshots of 10:02:51 (run1-mis), the same through 10:22. The 09:00 round is a trial; the 09:01 round is the open only (high and low at the open); lastTrade prices and times are rewritten from the nearest MIS trade. Times are microseconds since the epoch (2026-11-16 09:00:00 Taipei is 1794790800 s).",
+  "levels": {
+    "2618": {"name": "長榮航", "entry_type": "breakout", "breakout_price": 47.75, "pullback_low": null, "pullback_high": null, "invalid_price": 46.31, "target_1": 50.05, "target_2": 52.06},
+    "3374": {"name": "精材", "entry_type": "breakout", "breakout_price": 519.0, "pullback_low": null, "pullback_high": null, "invalid_price": 480.18, "target_1": 581.11, "target_2": 635.46},
+    "8099": {"name": "大世科", "entry_type": "breakout", "breakout_price": 182.0, "pullback_low": null, "pullback_high": null, "invalid_price": 171.61, "target_1": 198.63, "target_2": 213.18},
+    "3162": {"name": "精確", "entry_type": "pullback", "breakout_price": null, "pullback_low": 72.89, "pullback_high": 76.94, "invalid_price": 70.86, "target_1": 81.37, "target_2": 87.03}
+  },
+  "polls": [
+    {
+      "at": "2026-11-16T09:00:00+08:00",
+      "quotes": {
+        "2618": {"date": "2026-11-16", "type": "EQUITY", "exchange": "TWSE", "market": "TSE", "symbol": "2618", "name": "長榮航", "referencePrice": 47.75, "isTrial": true, "lastTrial": {"price": 47.8, "size": 120, "time": 1794790795000000}, "lastUpdated": 1794790795000000},
+        "3374": {"date": "2026-11-16", "type": "EQUITY", "exchange": "TPEx", "market": "OTC", "symbol": "3374", "name": "精材", "referencePrice": 518.0, "isTrial": true, "lastTrial": {"price": 493.5, "size": 40, "time": 1794790795000000}, "lastUpdated": 1794790795000000},
+        "8099": {"date": "2026-11-16", "type": "EQUITY", "exchange": "TPEx", "market": "OTC", "symbol": "8099", "name": "大世科", "referencePrice": 182.0, "isTrial": true, "highPrice": 200.0, "lowPrice": 200.0, "lastTrial": {"price": 200.0, "size": 300, "time": 1794790795000000}, "lastUpdated": 1794790795000000},
+        "3162": {"date": "2026-11-16", "type": "EQUITY", "exchange": "TPEx", "market": "OTC", "symbol": "3162", "name": "精確", "referencePrice": 74.8, "isTrial": true, "lastTrial": {"price": 74.1, "size": 15, "time": 1794790795000000}, "lastUpdated": 1794790795000000}
+      }
+    },
+    {
+      "at": "2026-11-16T09:01:00+08:00",
+      "quotes": {
+        "2618": {"date": "2026-11-16", "type": "EQUITY", "exchange": "TWSE", "market": "TSE", "symbol": "2618", "name": "長榮航", "referencePrice": 47.75, "openPrice": 47.8, "highPrice": 47.8, "lowPrice": 47.8, "lastPrice": 47.8, "bids": [{"price": 47.75, "size": 210}], "asks": [{"price": 47.8, "size": 95}], "total": {"tradeVolume": 1520}, "lastTrade": {"bid": 47.75, "ask": 47.8, "price": 47.8, "size": 1520, "time": 1794790830000000}, "isTrial": false, "isLimitUpPrice": false, "isLimitDownPrice": false, "isLimitUpBid": false, "isLimitDownAsk": false, "lastUpdated": 1794790855000000},
+        "3374": {"date": "2026-11-16", "type": "EQUITY", "exchange": "TPEx", "market": "OTC", "symbol": "3374", "name": "精材", "referencePrice": 518.0, "openPrice": 493.5, "highPrice": 493.5, "lowPrice": 493.5, "lastPrice": 493.5, "bids": [{"price": 493.0, "size": 8}], "asks": [{"price": 493.5, "size": 4}], "total": {"tradeVolume": 64}, "lastTrade": {"bid": 493.0, "ask": 493.5, "price": 493.5, "size": 64, "time": 1794790830000000}, "isTrial": false, "isLimitUpPrice": false, "isLimitDownPrice": false, "isLimitUpBid": false, "isLimitDownAsk": false, "lastUpdated": 1794790855000000},
+        "8099": {"date": "2026-11-16", "type": "EQUITY", "exchange": "TPEx", "market": "OTC", "symbol": "8099", "name": "大世科", "referencePrice": 182.0, "openPrice": 200.0, "highPrice": 200.0, "lowPrice": 200.0, "lastPrice": 200.0, "bids": [{"price": 200.0, "size": 2}], "asks": [], "total": {"tradeVolume": 412}, "lastTrade": {"bid": 200.0, "price": 200.0, "size": 412, "time": 1794790830000000}, "isTrial": false, "isLimitUpPrice": true, "isLimitDownPrice": false, "isLimitUpBid": true, "isLimitDownAsk": false, "lastUpdated": 1794790855000000},
+        "3162": {"date": "2026-11-16", "type": "EQUITY", "exchange": "TPEx", "market": "OTC", "symbol": "3162", "name": "精確", "referencePrice": 74.8, "openPrice": 74.1, "highPrice": 74.1, "lowPrice": 74.1, "lastPrice": 74.1, "bids": [{"price": 74.0, "size": 5}], "asks": [{"price": 74.1, "size": 3}], "total": {"tradeVolume": 37}, "lastTrade": {"bid": 74.0, "ask": 74.1, "price": 74.1, "size": 37, "time": 1794790830000000}, "isTrial": false, "isLimitUpPrice": false, "isLimitDownPrice": false, "isLimitUpBid": false, "isLimitDownAsk": false, "lastUpdated": 1794790855000000}
+      }
+    },
+    {
+      "at": "2026-11-16T10:03:00+08:00",
+      "quotes": {
+        "2618": {"date": "2026-11-16", "type": "EQUITY", "exchange": "TWSE", "market": "TSE", "symbol": "2618", "name": "長榮航", "referencePrice": 47.75, "openPrice": 47.8, "highPrice": 48.95, "lowPrice": 47.7, "lastPrice": 48.4, "bids": [{"price": 48.35, "size": 180}], "asks": [{"price": 48.4, "size": 77}], "total": {"tradeVolume": 21877}, "lastTrade": {"bid": 48.35, "ask": 48.4, "price": 48.4, "size": 3, "time": 1794794520000000}, "isTrial": false, "isLimitUpPrice": false, "isLimitDownPrice": false, "isLimitUpBid": false, "isLimitDownAsk": false, "lastUpdated": 1794794575000000},
+        "3374": {"date": "2026-11-16", "type": "EQUITY", "exchange": "TPEx", "market": "OTC", "symbol": "3374", "name": "精材", "referencePrice": 518.0, "openPrice": 493.5, "highPrice": 493.5, "lowPrice": 467.5, "lastPrice": 467.5, "bids": [], "asks": [{"price": 467.5, "size": 4}], "total": {"tradeVolume": 2311}, "lastTrade": {"ask": 467.5, "price": 467.5, "size": 1, "time": 1794794575000000}, "isTrial": false, "isLimitUpPrice": false, "isLimitDownPrice": true, "isLimitUpBid": false, "isLimitDownAsk": true, "lastUpdated": 1794794575000000},
+        "8099": {"date": "2026-11-16", "type": "EQUITY", "exchange": "TPEx", "market": "OTC", "symbol": "8099", "name": "大世科", "referencePrice": 182.0, "openPrice": 200.0, "highPrice": 200.0, "lowPrice": 200.0, "lastPrice": 200.0, "bids": [{"price": 200.0, "size": 2}], "asks": [], "total": {"tradeVolume": 905}, "lastTrade": {"bid": 200.0, "price": 200.0, "size": 1, "time": 1794794511000000}, "isTrial": false, "isLimitUpPrice": true, "isLimitDownPrice": false, "isLimitUpBid": true, "isLimitDownAsk": false, "lastUpdated": 1794794575000000},
+        "3162": {"date": "2026-11-16", "type": "EQUITY", "exchange": "TPEx", "market": "OTC", "symbol": "3162", "name": "精確", "referencePrice": 74.8, "openPrice": 74.1, "highPrice": 74.2, "lowPrice": 67.5, "lastPrice": 67.6, "bids": [{"price": 67.5, "size": 12}], "asks": [{"price": 67.8, "size": 6}], "total": {"tradeVolume": 1840}, "lastTrade": {"bid": 67.5, "ask": 67.8, "price": 67.6, "size": 2, "time": 1794794574000000}, "isTrial": false, "isLimitUpPrice": false, "isLimitDownPrice": false, "isLimitUpBid": false, "isLimitDownAsk": false, "lastUpdated": 1794794575000000}
+      }
+    }
+  ]
+}

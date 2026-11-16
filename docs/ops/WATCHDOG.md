@@ -47,6 +47,11 @@
   - 已知限制（notify 也一樣）：同一天同一個 key 只留一則，所以 09:15 報了「沒有日誌」之後手動補跑又卡住，不會再報第二則；09:15 那一輪剛好碰上 serve 補跑中的 preopen（最多會等 news 10 分鐘）時，會報一則 `preopen_missing`。
   - 每台北日各最多一則；還沒有任何 `preopen-*.log` 時不判定（#755 部署前的日子）。
   - 處置：查該日誌的 `--- result` 列與 `docker logs`，修好後用 `docker compose -p <P> exec scheduler python -m worker.cli preopen --trigger manual` 補跑（`--trigger manual` 不受 08:20～13:30 的時段限制）；同一份名單已檢查過時會記 `already_checked`，不會重寫。
+- `intraday_result_<日期>`（盤中即時通知，[#801](https://github.com/YiCheng0608/stock-lab/issues/801)；週一至週五 08:59～13:31，見 [scheduler 容器的排程](SCHEDULING.md#scheduler-容器的排程serve) 的 intraday 一節）：
+  - 週一至週五台北 13:45 以後（13:45 那一輪起），當天的 `logs/intraday-YYYYMMDD.log` 不存在（08:59 的 intraday 沒有跑，留言寫 scheduler 可能沒在跑），或當天成功的輪詢（`--- poll` 列 `ok` 大於 0）少於整天 271 輪（09:00～13:30 每分鐘一輪）的 80%：216 輪以下留言，留言附最後一個 `--- result` 列。少於 80% 的例子：富果連續失敗、改成每 5 分鐘一輪；401／403／429 當天停止讀取（`status=stopped`）；scheduler 中途停過、補跑晚了。
+  - 不判定：行事曆（`trading_calendar_days`，以 `watchdog_helper.py closed-day` 唯讀查）標 `closed` 的日子；日誌的結果有 `non_trading_day`、`not_configured`（還沒放 `FUGLE_API_KEY` 或 Telegram 的設定）或 `no_targets`（當天沒有對象）。還沒有任何 `intraday-*.log` 時也不判定（#801 部署前的日子）。
+  - 每台北日最多一則（key 帶日期）。
+  - 處置：查該日誌的 `--- poll` 列（`codes=` 的碼分佈）、`--- stopped`／`--- paused` 列與 `docker logs` 的 `serve start job=intraday`／`serve end job=intraday`。401 是 key 無效：更新 `.env` 的 `FUGLE_API_KEY` 後重建 scheduler（`docker compose up -d --force-recreate scheduler`），13:30 前重建時 serve 會補跑當天剩下的時段；429 是超過每分鐘上限，查是否有手動的 `intraday --dry-run` 同時在跑。盤中通知錯過的時段不補發。
 - `monitor_stale`：事件 monitor 的 `logs/monitor-heartbeat.json`（`--monitor-dir` 給了就讀那個目錄的，scheduler 容器是 `/coordination`，#338）超過 10 分鐘沒有更新，或讀不出輪詢時間（[統籌事件 monitor](MONITOR.md)；monitor 每分鐘寫一次）；檔案不存在（monitor 尚未註冊）時不判定。心跳仍在更新、但記錄 gh 已連續 10 輪失敗（例如登入過期，佇列收不到 PR 與留言）時另以 `monitor_gh_failed` 留言，附第一次失敗的時間與最後的錯誤，請查 `gh auth status` 與 `gh api rate_limit`（帳號共用的 5000 次／小時可能已用完）。
 - `news_llm`：`stock.db` 最近 3 批判讀都是 `pending`；或 24 小時內最近 3 筆 `run_type=news_llm` 都是 `failed`（`running` 超過 90 分鐘也算）；或 news 日誌（今昨兩天的檔）24 小時內最後 3 個 `news_llm_exit=` 都是 `1`／`wrapper_error`（涵蓋表不存在等不寫 run 的失敗）。後兩者合為一則 `news_llm_failed` 留言；限 24 小時是為了 news 停擺後不再每天就舊失敗留言，停擺本身由上一條 `news` 判定。
 - `llm_auth`：24 小時內 news_llm 或 candidate_notes 最近一次 run 有 `claude -p` 認證失敗（`not_logged_in`）的批次，判定與處置見 [容器內的 claude 與 gh 認證（.env）](SETUP.md#容器內的-claude-與-gh-認證env)。
