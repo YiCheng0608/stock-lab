@@ -429,9 +429,24 @@ TWSE 的年度市場開休市日期，上市與上櫃共用（同 [TAIEX 交易�
 - **判定**：停止買賣期間是 `halt_start` 起、到 `resume_date` 前一天為止的交易日（交易日以 TAIEX 為準）。
   - TWSE：「詳細資料」是 `<代號>  ,<YYYYMMDD>`，是那一列公告的日期（[#774 AC-1](https://github.com/YiCheng0608/stock-lab/issues/774)），2015 年以後多數是最後交易日，`halt_start` 取它的下一個日曆日，`last_trade_date` 存這一天。少數列的日期早一個交易日（2025-09 2101 南港、2026-10 4155 訊映：「停止買賣前收盤價格」是下一個交易日的收盤）。所以推出的區間內已存 bar、而且最後一根 bar 的收盤等於「停止買賣前收盤價格」（或該列還沒有價格）時，最後交易日改用那根 bar 的日期，原日期留在 `details_json.stated_last_trade_date`（`last_trade_date_basis = last_bar_before_resumption`；run metadata 記 `moved_past_bars`）。
   - TWSE 同一次停止買賣可能列好幾次，每次公告一列（3536 誠創 2015-03-20 恢復列了 3 次、5906 列了 2 次，#774）。同一 (代號, 恢復日) 的列，除「名稱」「詳細資料」以外的欄有兩種值時（`-`、`--`、空白算還沒給值，跟任何值相容），只略過這一檔。值相容時每列各自照上一點對已存 bar 推區間：推出同一個區間就寫一列（取沒被 bar 移動的那列原列，`details_json.same_resumption_rows` 列出同組各列的「詳細資料」），推不出或推出兩種以上就只略過這一檔，warning 附各列的區間；選出一個區間、但同組有列被 bar 推翻時照寫，被推翻的列另記 warning（`… kept <詳細資料>, rows the bars reject: …`）。因同組列不一致（價格不同或推出 0／≥2 種區間）而略過的那一檔，已存的列不刪不改，記 warning `<交易所> trading halts kept the stored stop of …`，run metadata 記 `kept_on_conflict`（[PR #778 review](https://github.com/YiCheng0608/stock-lab/pull/778#issuecomment-6893689730)）。
-  - 2011～2014 年多數列的「詳細資料」日期晚於恢復日，照下面「列被略過」那點全被略過，那幾年的上市減資停止買賣大多仍缺（[#776](https://github.com/YiCheng0608/stock-lab/issues/776)）。
+  - TWSE「詳細資料」日期**不早於**恢復日的列（[#776](https://github.com/YiCheng0608/stock-lab/issues/776)）：那是公告或更新的日期，不是停止買賣日（2412 中華電 2011-01-25 恢復，詳細資料寫 20110128）。這種列只出現在恢復日 2015-04-16 以前：2011～2014 年 85 列、2015 年 4 列，共 89 列；2015-04-16 以後沒有，正式 DB 目前也沒有。最後交易日改用日線推（`trading_halts._infer_from_bars`）：
+    - 取該股恢復日前的最後一根日線 L。L 要符合下面全部條件，才以 L 當 `last_trade_date`，`halt_start` 取 L 的下一個日曆日，到恢復日（不含）為止。`details_json` 保留官方原列（含原「詳細資料」），另記 `last_trade_date_basis = inferred_from_bars`；run metadata 記 `inferred_from_bars`。
+    - 不符合就略過這一列，warning `TWSE trading halts rejected: <代號> resuming <恢復日>: …` 寫明原因：
+      - 恢復日前沒有任何日線：`no bar before the resumption`。
+      - 「停止買賣前收盤價格」是 `-`／`--`／空白：`停止買賣前收盤價格 '--' is not given`。這裡收盤價是唯一的證據，所以跟上一點不同，沒有價格不收。
+      - 恢復日 − L 超過 30 個日曆日（`INFER_MAX_DAYS`）：`last bar … is N days before the resumption, over 30`。2017～2024 年 215 列的正常值是 8～21 天；2011～2014 年還沒有 TAIEX 交易日基準，所以用日曆日。
+      - L 的收盤不等於「停止買賣前收盤價格」：`last bar … closes X, not 停止買賣前收盤價格 Y`。
+      - L 的隔天到恢復日（不含）之間，TWSE 沒有任何其他股票的日線：`no TWSE bars between … and the resumption`。這條擋的是收集缺口：該股沒有日線的那幾天，市場本身要有交易。
+    - 校準：不看「詳細資料」，套在 2015-01～2024-09 的 272 列上。267 列跟現行規則推出同一個最後交易日。其餘 5 列：
+      - 3149（2016-10-11 恢復）：推出 2016-09-26。「詳細資料」的 09-28 是颱風休市日，停止買賣的交易日相同。
+      - 3 列超過上限：3536 的兩列停了 63 天，3312 停了 61 天。
+      - 3557：收盤 6.63，不等於價格欄 6.65。
+    - 同一 (代號, 恢復日) 也列了日期早於恢復日的列時（2408、2438、3536），推定列當成同組的一列，照上面「同一次停止買賣可能列好幾次」那點選區間。推定列算被 bar 移動過，所以推出同一個區間時：
+      - 早列沒被移動，寫早列的原列。
+      - 早列也被移動（2408：詳細資料 08-20，日線到 08-25），寫同組第一列，`last_trade_date_basis` 跟著那一列。
+    - 正式 collect：恢復日在收集日前 10 天到後 60 天的列，停止買賣開始前推不出來，會記上面的 warning（非核心，collect 仍是 `success`）。開始停止買賣之後，L 就是最後交易日，下一次 collect 就寫得進去。
   - TPEx：「詳細資料」的 HTML 寫明停止買賣日期與恢復買賣日期，`halt_start` 取停止買賣日期；TPEx 沒有最後交易日，`last_trade_date` 留空。同一 (代號, 恢復日) 列了兩種停止買賣日期時只略過這一檔，已存的列同樣保留。
-  - 列被略過、記 warning `<交易所> trading halts rejected: …` 的情形：「詳細資料」的代號或恢復日跟該列不一致、讀不到日期，或停止買賣不早於恢復日。該股在區間內已存 bar、又不是上一點的 TWSE 情形時也一樣（TPEx 明寫停止買賣日期，區間內有 bar 一律略過；官方行情表有價格，以 bar 為準）。
+  - 列被略過、記 warning `<交易所> trading halts rejected: …` 的情形：「詳細資料」的代號或恢復日跟該列不一致、讀不到日期，或 TPEx 的停止買賣日期不早於恢復日。TWSE 日期不早於恢復日的列不在此列，改用日線推（上面）。該股在區間內已存 bar、又不是上一點的 TWSE 情形時也一樣（TPEx 明寫停止買賣日期，區間內有 bar 一律略過；官方行情表有價格，以 bar 為準）。
   - 整份不採用的情形：回應的區間跟請求的不同、欄名改變、TPEx `totalCount` 多於列數（回應被截斷），或有列的恢復日在區間外。
 - **保存**：`trading_halts` 每個標的、每個來源、每個恢復日一列，記 `exchange`、`halt_start`、`resume_date`、`last_trade_date`、`reason`（`capital_reduction`）、`reason_detail`（減資原因，如「退還股款」「彌補虧損」）、`source`（`twse_twtauu`／`tpex_revivt`）、`endpoint`（含查詢區間）、`data_as_of`（查詢那天：collect 的收集日或 CLI 的執行日）、`collected_at`、`raw_payload_id` 與官方原列 `details_json`。
 - **重建**：每份可讀的回應對它的區間是完整的。同一來源、恢復日落在該區間的已存列都用它重建：
@@ -439,7 +454,7 @@ TWSE 的年度市場開休市日期，上市與上櫃共用（同 [TAIEX 交易�
   - 回應一列都沒有（TWSE「沒有符合條件」、TPEx 空表）而該來源在這個區間已有存列時，不刪任何列，記非核心 warning `<交易所> trading halts empty answer kept N stored rows resuming …`，run metadata 記 `kept_on_empty`：TWSE 的空回應沒有區間與總數可核對，官方誤回一次空表就會刪光區間內的列，若剛好在恢復日後第 10 天就再也查不回來。區間內沒有存列時空回應照常、不記 warning。恢復日不在區間內的已存列不受這次重建影響。
   - 內容改變的列改指向新的 capture；沒變的列保留原 capture。
   - 代號在 `instruments` 找不到的只計入 `outside_universe`，不寫；已下市但主檔還有的標的照寫。
-  - run metadata 的 `trading_halts` 依交易所記 `inserted`／`updated`／`unchanged`／`removed`／`outside_universe`／`rejected`／`conflicts`。
+  - run metadata 的 `trading_halts` 依交易所記 `inserted`／`updated`／`unchanged`／`removed`／`outside_universe`／`rejected`／`conflicts`；有用到時另記 `moved_past_bars`、`inferred_from_bars`、`kept_on_conflict`、`kept_on_empty`。被已存 bar 推翻或用日線推不出的列（warning 字首仍是 `… trading halts rejected:`）：整檔沒寫入時算 `conflicts`；同組有別列寫入時只記 warning（`… kept <詳細資料>, rows the bars reject: …`），不算進任何計數（例如 3536 2015-03-20 的晚列）。`rejected` 只數解析時就略過的列。
 - **請求**：當日 collect 各 1 個（恢復日在收集日前 10 天到後 60 天）；取得、解析或寫入失敗記非核心 warning（`TWSE trading halts unavailable: …`），collect 仍為 `success`。歷史由 [`worker.cli trading-halts`](ops/CLI.md#現有-worker-cli) 回補，每個交易所 1 個請求，經同一個官方主機限流。
 - **誰讀它**：
   - coverage（`/api/coverage`、回補報表）把期間內沒有 bar 的交易日算進涵蓋，原因是 `capital_reduction_halt`，不列為 `missing_bar_dates`；摘要另計 `halted_to_20`／`halted_to_60`。

@@ -244,9 +244,14 @@ def test_a_row_whose_own_dates_disagree_is_left_out_and_named():
         end=END,
     )
 
-    assert twse == [] and tpex == []
-    assert [item.split(" ")[0] for item in twse_rejected] == ["3714", "1808"]
+    assert tpex == []
+    assert [item.split(" ")[0] for item in twse_rejected] == ["3714"]
     assert len(tpex_rejected) == 2 and all("4534" in item for item in tpex_rejected)
+    # A TWSE date not before the resumption names no last trading day: the
+    # row is kept for the stored bars to give its stop (#776).
+    (late,) = twse
+    assert (late.symbol, late.infer_last_trade) == ("1808", True)
+    assert (late.halt_start, late.last_trade_date) == (date(2026, 11, 23), None)
 
 
 # ---- collect stores the stops with their raw ----
@@ -1028,13 +1033,16 @@ def test_rows_of_one_stop_that_agree_are_all_kept_for_the_bars_to_decide():
     )
 
     assert [
-        (item.symbol, item.halt_start, item.last_trade_date) for item in records
+        (item.symbol, item.halt_start, item.last_trade_date, item.infer_last_trade)
+        for item in records
     ] == [
-        ("3536", date(2015, 1, 8), date(2015, 1, 7)),
-        ("3536", date(2015, 1, 14), date(2015, 1, 13)),
-        ("5906", date(2016, 6, 25), date(2016, 6, 24)),
-        ("5906", date(2016, 6, 30), date(2016, 6, 29)),
-        ("2348", date(2015, 2, 4), date(2015, 2, 3)),
+        ("3536", date(2015, 1, 8), date(2015, 1, 7), False),
+        ("3536", date(2015, 1, 14), date(2015, 1, 13), False),
+        # Announced after the resumption: the bars give its stop (#776).
+        ("3536", date(2015, 3, 20), None, True),
+        ("5906", date(2016, 6, 25), date(2016, 6, 24), False),
+        ("5906", date(2016, 6, 30), date(2016, 6, 29), False),
+        ("2348", date(2015, 2, 4), date(2015, 2, 3), False),
     ]
     # Each row is kept as published, and names the rows it was listed with.
     assert records[0].details["除權參考價"] == "--"
@@ -1042,13 +1050,10 @@ def test_rows_of_one_stop_that_agree_are_all_kept_for_the_bars_to_decide():
     assert records[0].details["same_resumption_rows"] == [
         "3536  ,20150107",
         "3536  ,20150113",
+        "3536  ,20150331",
     ]
-    assert "same_resumption_rows" not in records[4].details
-    # The row announced after the resumption is left out as before.
-    assert rejected == [
-        "3536 resuming 2015-03-20: 詳細資料 '3536  ,20150331' names no earlier "
-        "last trading day"
-    ]
+    assert "same_resumption_rows" not in records[5].details
+    assert rejected == []
 
 
 def test_rows_of_one_stop_with_two_prices_leave_out_only_that_code():
@@ -1083,16 +1088,18 @@ def test_a_tpex_code_listed_twice_with_two_stops_leaves_out_only_that_code():
     assert clashing == [("4534", date(2026, 11, 16))]
 
 
-def _long_range_cli(env, bars, rows=(*TWSE_3536, TWSE_2348)):
-    """``trading-halts`` over ``LONG_START``..``LONG_END`` with ``bars``
-    (symbol → [(day, close)]) stored; the TWSE answer is ``rows``, by default
-    3536's three rows and 2348's one.  3536 and 2348 are stored the first
-    time."""
+def _long_range_cli(
+    env, bars, rows=(*TWSE_3536, TWSE_2348), start=LONG_START, end=LONG_END
+):
+    """``trading-halts`` over ``start``..``end`` (by default ``LONG_START``..
+    ``LONG_END``) with ``bars`` (symbol → [(day, close)]) stored; the TWSE
+    answer is ``rows``, by default 3536's three rows and 2348's one.  3536,
+    2348 and the symbols of ``bars`` are stored the first time."""
 
     def fetcher(url, **_kwargs):
         if url.startswith(sources.TWSE_REDUCTION_ENDPOINT):
-            return twse_payload(LONG_START, LONG_END, *rows)
-        return tpex_payload(LONG_START, LONG_END)
+            return twse_payload(max(start, date(2011, 1, 1)), end, *rows)
+        return tpex_payload(max(start, date(2013, 1, 1)), end)
 
     with env() as db:
         stored = {
@@ -1101,7 +1108,7 @@ def _long_range_cli(env, bars, rows=(*TWSE_3536, TWSE_2348)):
                 select(Instrument).where(Instrument.exchange == "TWSE")
             )
         }
-        for symbol in ("3536", "2348"):
+        for symbol in dict.fromkeys(("3536", "2348", *bars)):
             instrument = stored.get(symbol) or Instrument(
                 market="TW",
                 exchange="TWSE",
@@ -1128,7 +1135,7 @@ def _long_range_cli(env, bars, rows=(*TWSE_3536, TWSE_2348)):
                     )
                 )
         db.commit()
-    result = trading_halts.run_trading_halts(LONG_START, LONG_END, fetcher=fetcher)
+    result = trading_halts.run_trading_halts(start, end, fetcher=fetcher)
     with env() as db:
         return result, _halts(db)
 
@@ -1152,11 +1159,19 @@ def test_the_bars_pick_the_one_stop_of_a_stop_listed_three_times(env):
     assert halt.details_json["same_resumption_rows"] == [
         "3536  ,20150107",
         "3536  ,20150113",
+        "3536  ,20150331",
     ]
     assert "stated_last_trade_date" not in halt.details_json
     twse = result["exchanges"]["TWSE"]
-    assert (twse["inserted"], twse["rejected"], twse["conflicts"]) == (2, 1, 0)
+    assert (twse["inserted"], twse["rejected"], twse["conflicts"]) == (2, 0, 0)
     assert "moved_past_bars" not in twse
+    # The row announced after the resumption gets no stop from the bars: its
+    # last bar is 66 days before (#776); the one stop the others give is kept.
+    assert (
+        "TWSE trading halts rejected: 3536 resuming 2015-03-20: kept "
+        "'3536  ,20150113', rows the bars reject: 3536 resuming 2015-03-20: "
+        "last bar 2015-01-13 is 66 days before the resumption, over 30"
+    ) in result["warnings"]
 
 
 def test_a_stop_whose_rows_the_bars_leave_two_stops_leaves_out_only_that_code(env):
@@ -1169,9 +1184,10 @@ def test_a_stop_whose_rows_the_bars_leave_two_stops_leaves_out_only_that_code(en
     assert (twse["inserted"], twse["conflicts"]) == (1, 1)
     assert result["status"] == "partial"
     assert (
-        "TWSE trading halts rejected: 3536 resuming 2015-03-20: 2 rows give 2 stops "
+        "TWSE trading halts rejected: 3536 resuming 2015-03-20: 3 rows give 2 stops "
         "the bars allow: 2015-01-08..2015-03-20 (詳細資料 '3536  ,20150107'); "
-        "2015-01-14..2015-03-20 (詳細資料 '3536  ,20150113')"
+        "2015-01-14..2015-03-20 (詳細資料 '3536  ,20150113'); "
+        "3536 resuming 2015-03-20: no bar before the resumption"
     ) in result["warnings"]
 
 
@@ -1232,3 +1248,151 @@ def test_a_stop_whose_rows_disagree_keeps_the_stored_row(env, second):
         "the answer's rows for it disagree"
     ) in result["warnings"]
     assert ("TWSE", "2348") in halts
+
+
+# ---- a 詳細資料 date after the resumption: the bars give the stop (#776) ----
+
+# TWTAUU 2011-01-01..2024-09-30 (研究 DB raw 31040): 2412 中華電 resumed
+# 2011-01-25, its 詳細資料 is 2011-01-28, after the resumption.
+TWSE_2412 = ["100/01/25", "2412", "中華電", "73.10", "88.87", "95.00", "82.70"]
+TWSE_2412 += ["88.90", "--", "退還股款", "2412  ,20110128"]
+# The same answer: 2408 resuming 2014-09-09 is listed after the resumption
+# (南亞科, 09/22) and before it (南科, 08/20).
+TWSE_2408 = [
+    ["103/09/09", "2408", "南亞科", "8.10", "80.93", "86.50", "75.30", "80.90", "--"]
+    + ["彌補虧損", "2408  ,20140922"],
+    ["103/09/09", "2408", "南科", "8.10", "80.93", "86.50", "75.30", "80.90", "--"]
+    + ["彌補虧損", "2408  ,20140820"],
+]
+# 2412 last traded 01/14 at 73.10; 2330 traded every weekday to 01/24.
+CHT_TRADED = [(day, 73.10) for day in _weekdays(date(2011, 1, 3), 10)]
+MARKET_2011 = [(day, 600.0) for day in _weekdays(date(2011, 1, 3), 16)]
+
+
+def _cli_2011(env, bars, row=TWSE_2412):
+    return _long_range_cli(
+        env, bars, rows=(row,), start=date(2011, 1, 1), end=date(2011, 1, 31)
+    )
+
+
+def test_a_row_announced_after_its_resumption_takes_the_last_bar(env):
+    result, halts = _cli_2011(env, {"2412": CHT_TRADED, "2330": MARKET_2011})
+
+    halt = halts[("TWSE", "2412")]
+    assert (halt.last_trade_date, halt.halt_start, halt.resume_date) == (
+        date(2011, 1, 14),
+        date(2011, 1, 15),
+        date(2011, 1, 25),
+    )
+    assert halt.details_json["last_trade_date_basis"] == "inferred_from_bars"
+    # The official row stays as published.
+    assert halt.details_json["詳細資料"] == "2412  ,20110128"
+    twse = result["exchanges"]["TWSE"]
+    assert (twse["inserted"], twse["rejected"], twse["conflicts"]) == (1, 0, 0)
+    assert twse["inferred_from_bars"] == 1 and "moved_past_bars" not in twse
+    assert result["status"] == "success", result
+    assert result["warnings"] == []
+
+
+@pytest.mark.parametrize(
+    "bars, row, reason",
+    [
+        pytest.param(
+            {"2412": [(day, 73.0) for day, _ in CHT_TRADED], "2330": MARKET_2011},
+            TWSE_2412,
+            "last bar 2011-01-14 closes 73.0, not 停止買賣前收盤價格 73.10",
+            id="close-mismatch",
+        ),
+        pytest.param(
+            {"2412": [], "2330": MARKET_2011},
+            TWSE_2412,
+            "no bar before the resumption",
+            id="no-bar",
+        ),
+        pytest.param(
+            # Last bar 2010-12-24, 32 days before the resumption.
+            {
+                "2412": [(day, 73.10) for day in _weekdays(date(2010, 12, 20), 5)],
+                "2330": MARKET_2011,
+            },
+            TWSE_2412,
+            "last bar 2010-12-24 is 32 days before the resumption, over 30",
+            id="over-the-limit",
+        ),
+        pytest.param(
+            {"2412": CHT_TRADED, "2330": MARKET_2011},
+            [*TWSE_2412[:3], "--", *TWSE_2412[4:]],
+            "停止買賣前收盤價格 '--' is not given",
+            id="no-price",
+        ),
+        pytest.param(
+            # No TWSE security has a bar after 01/14: the days may be a
+            # collection gap, not a stop.
+            {"2412": CHT_TRADED},
+            TWSE_2412,
+            "no TWSE bars between 2011-01-15 and the resumption",
+            id="no-market-bars",
+        ),
+    ],
+)
+def test_a_row_announced_after_its_resumption_the_bars_cannot_place_is_named(
+    env, bars, row, reason
+):
+    result, halts = _cli_2011(env, bars, row)
+
+    assert ("TWSE", "2412") not in halts
+    twse = result["exchanges"]["TWSE"]
+    assert (twse["inserted"], twse["conflicts"]) == (0, 1)
+    assert "inferred_from_bars" not in twse
+    assert result["status"] == "partial"
+    assert result["warnings"] == [
+        f"TWSE trading halts rejected: 2412 resuming 2011-01-25: {reason}"
+    ]
+
+
+def _cli_2014(env, bars):
+    return _long_range_cli(
+        env, bars, rows=TWSE_2408, start=date(2014, 9, 1), end=date(2014, 9, 30)
+    )
+
+
+def test_a_stop_listed_before_and_after_its_resumption_keeps_the_stated_row(env):
+    # 2408 last traded 08/20 at 8.10: the bars give the 09/22 row the stop
+    # the 08/20 row states, so it is written once, from the 08/20 row.
+    traded = [(day, 8.10) for day in _weekdays(date(2014, 8, 11), 8)]  # …08/20
+    market = [(day, 9.0) for day in _weekdays(date(2014, 8, 11), 21)]  # …09/08
+
+    result, halts = _cli_2014(env, {"2408": traded, "2330": market})
+
+    halt = halts[("TWSE", "2408")]
+    assert (halt.last_trade_date, halt.halt_start, halt.resume_date) == (
+        date(2014, 8, 20),
+        date(2014, 8, 21),
+        date(2014, 9, 9),
+    )
+    assert halt.details_json["詳細資料"] == "2408  ,20140820"
+    assert "last_trade_date_basis" not in halt.details_json
+    assert halt.details_json["same_resumption_rows"] == [
+        "2408  ,20140922",
+        "2408  ,20140820",
+    ]
+    twse = result["exchanges"]["TWSE"]
+    assert "inferred_from_bars" not in twse and "moved_past_bars" not in twse
+    assert result["status"] == "success", result
+
+
+def test_a_stop_listed_before_and_after_whose_bars_give_two_stops_is_left_out(env):
+    # 2408's last bar is 08/15: the 08/20 row states 08/21, the bars give
+    # the 09/22 row 08/16.  Two stops: neither is written (#774's rule).
+    traded = [(day, 8.10) for day in _weekdays(date(2014, 8, 11), 5)]  # …08/15
+    market = [(day, 9.0) for day in _weekdays(date(2014, 8, 11), 21)]
+
+    result, halts = _cli_2014(env, {"2408": traded, "2330": market})
+
+    assert ("TWSE", "2408") not in halts
+    assert result["exchanges"]["TWSE"]["conflicts"] == 1
+    assert result["warnings"] == [
+        "TWSE trading halts rejected: 2408 resuming 2014-09-09: 2 rows give 2 "
+        "stops the bars allow: 2014-08-16..2014-09-09 (詳細資料 '2408  ,20140922'); "
+        "2014-08-21..2014-09-09 (詳細資料 '2408  ,20140820')"
+    ]
