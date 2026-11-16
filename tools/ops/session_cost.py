@@ -1,6 +1,6 @@
 """Context and token cost of a Claude Code session, read from its transcript (#710, #708).
 
-Three subcommands, all read-only:
+Four subcommands, all read-only:
 
   context (--session-id ID | --transcript PATH)
       The context of the session's last model call (input + cache read + cache write
@@ -9,6 +9,14 @@ Three subcommands, all read-only:
       Prints one line "<tokens> <path>" and exits 0; when the context cannot be read,
       one line with the reason and exits 3 (no transcript found) or 4 (no usable row,
       or the file cannot be read).
+
+  compactions (--session-id ID | --transcript PATH)
+      The compactions of the session's main conversation (#811): the compact_boundary
+      rows of its transcript that are not a sidechain. A subagent's compactions are in
+      <session id>/subagents/, not read (the PreCompact hook gets the parent's session
+      id for them, so its count has them too). Prints "<count> <path>" and exits 0;
+      exits 3 (no transcript found) or 4 (the file cannot be read, or no line of it is
+      a JSON object) with one line saying why, as context does.
 
   report ID_OR_PATH...
       For each session (a session id, an id prefix of 8 or more characters, or a
@@ -40,7 +48,7 @@ replaced (a line cut inside a character is then not JSON and skipped).
 
 A transcript is found under $CLAUDE_CONFIG_DIR/projects/*/<id>.jsonl first, then
 $HOME/.claude/projects/*/<id>.jsonl; several files for one id: the last modified one.
-STOCK_TRANSCRIPT, like --transcript, names the file directly (context only).
+STOCK_TRANSCRIPT, like --transcript, names the file directly (context and compactions).
 """
 
 from __future__ import annotations
@@ -133,7 +141,9 @@ def last_context(path: Path) -> int | None:
             size *= 4
 
 
-def cmd_context(args: list[str]) -> int:
+def transcript_of(args: list[str]) -> tuple[Path | None, int]:
+    """The transcript --session-id or --transcript (or STOCK_TRANSCRIPT) names, for
+    context and compactions; None and the exit code after printing why."""
     session = path = None
     while args:
         if args[0] in ("--session-id", "--transcript") and len(args) >= 2:
@@ -144,23 +154,29 @@ def cmd_context(args: list[str]) -> int:
             args = args[2:]
         else:
             print(f"未知參數：{args[0]}")
-            return 64
+            return None, 64
     path = path or os.environ.get("STOCK_TRANSCRIPT") or None
     if path:
         transcript = Path(path)
         if not transcript.is_file():
             print(f"找不到紀錄檔（{transcript.as_posix()}）")
-            return 3
-    elif session:
+            return None, 3
+        return transcript, 0
+    if session:
         found, looked = find(session)
         if found is None:
             where = "、".join(f"{r.as_posix()}/*/{session}.jsonl" for r in looked)
             print(f"找不到紀錄檔（找過 {where}）")
-            return 3
-        transcript = found
-    else:
-        print("要給 --session-id 或 --transcript")
-        return 64
+            return None, 3
+        return found, 0
+    print("要給 --session-id 或 --transcript")
+    return None, 64
+
+
+def cmd_context(args: list[str]) -> int:
+    transcript, code = transcript_of(args)
+    if transcript is None:
+        return code
     try:
         n = last_context(transcript)
     except OSError as e:
@@ -168,6 +184,46 @@ def cmd_context(args: list[str]) -> int:
         return 4
     if n is None:
         print(f"沒有 usage 列（{transcript.as_posix()}）")
+        return 4
+    print(n, transcript.as_posix())
+    return 0
+
+
+def main_compactions(path: Path) -> int | None:
+    """The compact_boundary rows not a sidechain; None when no line is a JSON object
+    (not a transcript). Only the lines naming compact_boundary are parsed."""
+    count = 0
+    understood = False
+    with open(path, "rb") as f:
+        for raw in f:
+            if not understood or b"compact_boundary" in raw:
+                try:
+                    row = json.loads(raw)
+                except ValueError:
+                    continue
+                if not isinstance(row, dict):
+                    continue
+                understood = True
+                if (
+                    row.get("type") == "system"
+                    and row.get("subtype") == "compact_boundary"
+                    and not row.get("isSidechain")
+                ):
+                    count += 1
+    return count if understood else None
+
+
+def cmd_compactions(args: list[str]) -> int:
+    transcript, code = transcript_of(args)
+    if transcript is None:
+        return code
+    try:
+        n = main_compactions(transcript)
+    except OSError as e:
+        print(f"讀檔失敗（{transcript.as_posix()}：{e.strerror or e}）")
+        return 4
+    if n is None:
+        print(f"沒有 JSON 列（{transcript.as_posix()}）")
         return 4
     print(n, transcript.as_posix())
     return 0
@@ -621,7 +677,12 @@ def cmd_takeover(args: list[str]) -> int:
 
 
 def main(argv: list[str]) -> int:
-    commands = {"context": cmd_context, "report": cmd_report, "takeover": cmd_takeover}
+    commands = {
+        "context": cmd_context,
+        "compactions": cmd_compactions,
+        "report": cmd_report,
+        "takeover": cmd_takeover,
+    }
     if not argv or argv[0] not in commands:
         print(__doc__.strip())
         return 64
