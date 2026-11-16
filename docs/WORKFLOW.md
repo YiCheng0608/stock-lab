@@ -86,7 +86,7 @@ V1 以 ROADMAP V1 基線的七個 gate（V1-G1～G7）承接，每個 gate 由�
 - 提問只寫在 Issue／PR 留言，不寫在 terminal，也不在 terminal 等口頭回覆。背景工作被系統停掉、或任何要等統籌才能繼續的情況也一樣，以 `提問：` 留在 Issue。工程師 session 的回合結束時，[turn hook](COORDINATOR.md#無人值守運作)會檢查這一回合有沒有在 Issue／PR 留言，沒有就擋一次並提醒（#595）。統籌只看 Issue／PR 留言，terminal 的通知只用來喚醒（[任務流程](#任務流程)第 2 步）。
 - 統籌的留言經 [`comment.sh`](../tools/ops/comment.sh) 發，本文最後一行會帶不顯示的統籌標記，事件 monitor 不為它喚醒統籌（[統籌留言](COORDINATOR.md#無人值守運作)）。只有統籌用它：工程師與獨立 review 用了，留言就不會喚醒統籌。
 - 一則留言只放一種類型；一次問好幾件事就分成好幾則 `提問：`，各自等 `決定：`。
-- `決定：` 要附它回覆的提問留言連結（`…#issuecomment-<id>`，只寫 ID 不算）。`決定：` 寫在提問所在的 Issue／PR；PR 可能先關時（改開新 PR、Docker 子單），寫在 Issue：`patrol.sh` 只讀 open Issue 與 open PR，寫在已關的 PR 上的決定讀不到，提問會變回未回覆。
+- `決定：` 要附它回覆的提問留言連結（`…#issuecomment-<id>`，只寫 ID 不算）。`決定：` 寫在提問所在的 Issue／PR；PR 可能先關時（改開新 PR、Docker 子單），寫在 Issue：`patrol.sh` 只讀 open Issue 與 open PR，寫在已關的 PR 上的決定讀不到，提問會變回未回覆。#1 上的一次性 `決定：`（同意某個 PR 合併、確認某天的通知有收到）不進 #1 本文，另起一行寫 `本文：不同步（<原因>）`，`patrol.sh` 的漏同步檢查就不列它（[決策落地](COORDINATOR.md#無人值守運作)，#807）。
 - 第一行前面的空行與空白可以；第一行不要加粗或引用（`**提問：**`、`> 提問：` 都不算類型）。
 - [`patrol.sh`](../tools/ops/patrol.sh) 讀 open Issue 與 open PR 的留言，把還沒有 `決定：` 連到它的 `提問：` 逐筆列為「未回覆的提問」（Issue 號、留言連結、經過時間）；判斷只看第一行開頭與連結，寫在 [`coordinator_json.py`](../tools/ops/coordinator_json.py) 的 `unanswered_questions`。只讀對話留言，PR review 與行內留言不算。
 - 治理 Issue #1 的留言照[無人值守運作](COORDINATOR.md#無人值守運作)的寫法（「待使用者」與決策紀錄），不套本表，`patrol.sh` 也不讀它：#1 是使用者決策的治理單，工程師不在那裡提問；它的留言又超過一頁，讀了只會每次都印「未查完」。

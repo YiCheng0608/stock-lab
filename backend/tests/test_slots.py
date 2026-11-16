@@ -553,6 +553,10 @@ def test_the_query_holds_every_field_the_questions_read() -> None:
     fields = coordinator_json.THREAD_FIELDS.format(n=coordinator_json.PAGE)
     assert coordinator_json.QUESTIONS_QUERY.count(fields) == 2
     assert slots.QUERY.count(fields) == 2
+    # #1's body (#807), in either query patrol.sh may send.
+    governance = coordinator_json.GOVERNANCE_FIELDS
+    assert coordinator_json.QUESTIONS_QUERY.count(governance) == 1
+    assert slots.QUERY.count(governance) == 1
 
 
 def test_a_cancelled_duplicate_run_is_not_a_red_ci() -> None:
