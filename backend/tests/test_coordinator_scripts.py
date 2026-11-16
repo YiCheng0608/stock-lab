@@ -3907,6 +3907,115 @@ def test_session_cost_takeover_names_a_missing_point(
     assert "context：" not in out and "30,000" not in out
 
 
+def _tool(t: str, command: str) -> dict:
+    return {"type": "tool_use", "id": t, "name": "Bash", "input": {"command": command}}
+
+
+def _result(t: str, text: str) -> dict:
+    return {
+        "type": "user",
+        "message": {
+            "content": [{"type": "tool_result", "tool_use_id": t, "content": text}]
+        },
+    }
+
+
+def _patrol_later(rows: list[dict]) -> None:
+    """m8 runs patrol.sh too, and m9 (50,000) is the call after it."""
+    m8 = rows[-1]
+    m8["message"]["content"].append(_tool("t9", "bash tools/ops/patrol.sh"))
+    m9 = json.loads(json.dumps(m8))
+    m9["message"]["id"] = "m9"
+    m9["message"]["content"] = []
+    m9["message"]["usage"]["cache_read_input_tokens"] = 50_000 - 1_001
+    rows += [_result("t9", "f" * 10), m9]
+
+
+def _row(rows: list[dict], mid: str) -> dict:
+    return next(
+        r
+        for r in rows
+        if r.get("type") == "assistant"
+        and r["message"]["id"] == mid
+        and r["message"]["content"]
+    )
+
+
+@pytest.mark.parametrize(
+    "case,points",
+    [
+        # One sed or grep reading both scripts is not a run of either (review
+        # 6912162312 must-fix 1: "patrol.sh tools/ops/take_over.sh" is not "sh ...").
+        ("multi_file_reads", (46_600, 2, 50_000)),
+        # A --closed-only run printing "ok":true is not the 2nd point.
+        ("closed_only", (46_600, 2, 49_100)),
+        # patrol.sh --heartbeat-only is not the 3rd point.
+        ("heartbeat_only", (46_600, 2, 50_000)),
+        # patrol.sh in the same command as the ok run: the 3rd point is the 2nd.
+        ("same_command", (46_600, 2, 46_600)),
+    ],
+)
+def test_session_cost_takeover_counts_only_runs_of_the_scripts(
+    h: Harness, case: str, points: tuple[int, int, int]
+) -> None:
+    """#803 AC-1 and the definitions in docs/COORDINATOR.md: which tool results are the
+    2nd and 3rd points."""
+    rows = _takeover_rows()
+    m4, m6, m7 = (_row(rows, m) for m in ("m4", "m6", "m7"))
+    at = rows.index(m4) + 1
+    if case == "multi_file_reads":
+        m4["message"]["content"].append(
+            _tool("t4b", "sed -n 1,40p tools/ops/patrol.sh tools/ops/take_over.sh")
+        )
+        rows.insert(at, _result("t4b", "g" * 10))
+        m7["message"]["content"][1] = _tool(
+            "t8", "grep -n x tools/ops/take_over.sh tools/ops/patrol.sh"
+        )
+        _patrol_later(rows)
+    elif case == "closed_only":
+        m4["message"]["content"].append(
+            _tool("t4b", "bash tools/ops/take_over.sh --closed-only")
+        )
+        rows.insert(at, _result("t4b", TAKE_OVER_OK))
+    elif case == "heartbeat_only":
+        m7["message"]["content"][1] = _tool(
+            "t8", "bash tools/ops/patrol.sh --heartbeat-only --take-over"
+        )
+        _patrol_later(rows)
+    else:
+        m6["message"]["content"][0]["input"]["command"] += (
+            " && bash tools/ops/patrol.sh"
+        )
+        m7["message"]["content"][1] = _tool("t8", "echo x")
+    second, nth, third = points
+    result = _takeover(h, rows)
+    out = result.stdout
+    assert result.returncode == 0, out + result.stderr
+    assert (
+        f"context：第 1 次呼叫 30,000、take_over.sh 之後 {second:,}"
+        f'（第 {nth} 次執行、印出 "ok":true；共執行 2 次）、patrol.sh 之後 {third:,}'
+        in out
+    ), out
+
+
+def test_session_cost_reads_a_transcript_cut_inside_a_character(h: Harness) -> None:
+    """Review 6912162312 must-fix 4: a transcript still being written may end inside a
+    multi-byte character; takeover and report skip that line, and the next session
+    is still printed."""
+    path = h.root / "t.jsonl"
+    rows = "".join(json.dumps(r) + "\n" for r in _takeover_rows())
+    path.write_bytes(rows.encode() + '{"type":"user","message":"統'.encode()[:-1])
+    for command in ("takeover", "report"):
+        result = h.run_bash(
+            f'"$STOCK_PYTHON" -X utf8 "$1" {command} "$2" "$2"',
+            (h.ops / "session_cost.py").as_posix(),
+            path.as_posix(),
+        )
+        out = result.stdout
+        assert result.returncode == 0, out + result.stderr
+        assert out.count("== t") == 2, out
+
+
 def _commit(h: Harness, *args: str, session: str = "sess-old"):
     return h.run("commit.sh", *args, CLAUDE_CODE_SESSION_ID=session)
 

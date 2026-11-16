@@ -1,6 +1,6 @@
 """Context and token cost of a Claude Code session, read from its transcript (#710, #708).
 
-Two subcommands, both read-only:
+Three subcommands, all read-only:
 
   context (--session-id ID | --transcript PATH)
       The context of the session's last model call (input + cache read + cache write
@@ -24,14 +24,19 @@ Two subcommands, both read-only:
       For each coordinator session (#803): the context of the first call, of the call
       after the take_over.sh result that printed "ok":true (a failed run continued with
       --from is the 2nd or a later run; --closed-only runs are not counted), and of the
-      call after the first patrol.sh result after that. From the first call to the 3rd
-      point, the tool results by group (each repo file read, #1, other Issues and PRs,
-      take_over.sh, patrol.sh, other commands; a file a command wrote or Claude Code
+      call after the first patrol.sh result after that (not --heartbeat-only; one in the
+      same command or batch of results as that run makes the 3rd point the 2nd).
+      From the first call to the 3rd point, the tool results by group (each repo file
+      read, #1, other Issues and PRs, take_over.sh, patrol.sh, other commands; a file
+      a command wrote or Claude Code
       saved a long output to counts as that command's) with their bytes and the context
       they added, the coordinator's own output, and bytes per token. What a call adds is
       the next call's context minus its own: its output tokens (at most that) are its
       own output, the rest is shared by the tool results in between in proportion to
       their bytes. A point not found: one line saying which, no numbers, exit 5.
+
+report and takeover read a transcript still being written with undecodable bytes
+replaced (a line cut inside a character is then not JSON and skipped).
 
 A transcript is found under $CLAUDE_CONFIG_DIR/projects/*/<id>.jsonl first, then
 $HOME/.claude/projects/*/<id>.jsonl; several files for one id: the last modified one.
@@ -187,7 +192,7 @@ def turns_of(path: Path) -> tuple[list[dict], list[dict]]:
     by_id: dict[str, dict] = {}
     cur = None
     n_calls = 0
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8", errors="replace") as f:
         for line in f:
             try:
                 row = json.loads(line)
@@ -340,7 +345,10 @@ def cmd_report(args: list[str]) -> int:
 
 # takeover (#803). A run of an ops script: "bash <path>/take_over.sh", or the path at
 # the start of a command; not a grep or sed that names the file.
-RUNS = r"(?:(?:^|[;&|(])\s*|\b(?:bash|sh)\s+)(?:[\w.:/-]*/)?{}(?=\s|$|[;&|)])"
+RUNS = (
+    r"(?:(?:^|[;&|(\n])\s*|(?<![^\s;&|(])(?:bash|sh)\s+)"
+    r"(?:[\w.:/-]*/)?{}(?=\s|$|[;&|)])"
+)
 TAKE_OVER = re.compile(RUNS.format(r"take_over\.sh"))
 PATROL = re.compile(RUNS.format(r"patrol\.sh"))
 TAKE_OVER_OK = re.compile(r'\{"ok":\s*true\b')
@@ -424,7 +432,7 @@ def takeover(path: Path) -> tuple[list[str], bool]:
     point2 = point3 = None  # index of the call right after that tool result
     pending: list[tuple[str, int]] = []  # tool results since the last call
     waiting2 = waiting3 = False
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8", errors="replace") as f:
         for line in f:
             try:
                 row = json.loads(line)
@@ -497,8 +505,10 @@ def takeover(path: Path) -> tuple[list[str], bool]:
                         if "--closed-only" not in command:
                             runs.append({"ok": bool(TAKE_OVER_OK.search(text))})
                             waiting2 = runs[-1]["ok"]
-                    elif (
-                        point2 is not None
+                    # A patrol.sh in the same command as the ok run, or in the same
+                    # batch of results before the next call: the 3rd point is the 2nd.
+                    if (
+                        (point2 is not None or waiting2)
                         and point3 is None
                         and not waiting3
                         and PATROL.search(command)
