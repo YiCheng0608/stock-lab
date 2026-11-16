@@ -17,9 +17,11 @@ Two steps, both run in a detached container:
   and one line to ``<out>/requests.jsonl``; a rerun skips what is stored.
   Requests to one host are ``MIN_INTERVAL_SECONDS`` apart; the two hosts run
   in parallel.  None is sent from 20:30 to 23:30 or 08:00 to 09:00 Taipei
-  (``BLACKOUTS``: the production daily's collect and the morning jobs).  Three
-  failed answers in a row on one host (not 200, empty, not JSON, a refusal)
-  stop the run with exit 2; nothing is retried by itself.
+  (``BLACKOUTS``: the production daily's collect and the morning jobs).  The
+  first refusal (a block page, HTTP 403/429, a refused connection) or three
+  failed answers in a row on one host (not 200, empty, not JSON, a maintenance
+  page) stop the run with exit 2; nothing is retried by itself.  A failed
+  answer's body goes to ``<out>/failed/``.
 * ``build``: reads only the raw, and writes ``industry_members_v1.json`` (byte
   for byte the same from the same raw) and its manifest.  Every answer is
   checked: the date it reports, the code's category name (``CATEGORY_NAMES``),
@@ -85,7 +87,18 @@ BLACKOUTS = ((time(20, 30), time(23, 30)), (time(8, 0), time(9, 0)))
 # The TWSE code that answers the day's rows on every trading day: it decides D.
 DAY_PROBE_CODE = "01"
 DAY_PROBE_CATEGORY = "水泥工業"
-BLOCK_MARKERS = ("FOR SECURITY REASONS", "查詢過於頻繁", "THE PAGE CANNOT BE ACCESSED")
+# Pages that are not an answer.  The source refusing us (``BLOCKED_MARKERS``,
+# HTTP ``BLOCKED_STATUSES``, a refused connection) stops the run at once (#779
+# decision 6905102853: #702 and #790 ask the same hosts); a maintenance page
+# (TWSE 2016-12-30, #779 6905069704) is one failed answer like the others.
+BLOCKED_MARKERS = (
+    "FOR SECURITY REASONS",
+    "查詢過於頻繁",
+    "THE PAGE CANNOT BE ACCESSED",
+)
+MAINTENANCE_MARKERS = ("網站維護中",)
+BLOCK_MARKERS = BLOCKED_MARKERS + MAINTENANCE_MARKERS
+BLOCKED_STATUSES = (403, 429)
 TWSE_NO_DATA = "沒有符合條件的資料"
 STOP_EXIT = 2
 FAILED_EXIT = 1
@@ -254,7 +267,40 @@ RETROACTIVE_BEFORE = "2023-07-03"
 
 # (first month, last month, exchange, codes): the codes each month asks for.
 # Filled from the per-year category lists confirmed before the full fetch.
-CODE_PERIODS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = ()
+#
+# From the sweep of 2013-01-31, 2023-06-30, 2024-09-30, the bisections and the
+# yearly check (#779 6904909658, 6904942765, 6905069704; confirmed 6905102853).
+# A bisection assumes a code, once it has rows, keeps them until it ends for
+# good.  TPEx 18 and 34 ending and 35-38 starting are put at 2023-07-03, the
+# day TPEx changed its codes; the build fails if 2023-06 or 2023-07 disagrees.
+# Not asked: TWSE 19 and TPEx 08 (no row on any day checked).
+_TWSE_CODES = tuple(
+    f"{number:02d}"
+    for number in (*range(1, 7), *range(8, 13), *range(14, 19), *range(20, 32))
+) + ("35", "36", "37", "38")
+_TPEX_2013 = tuple(
+    f"{number:02d}" for number in (*range(2, 7), 10, 11, *range(14, 19), *range(20, 32))
+)
+
+
+def _tpex(*, add: tuple[str, ...] = (), drop: tuple[str, ...] = ()) -> tuple[str, ...]:
+    return tuple(sorted((set(_TPEX_2013) | set(add)) - set(drop)))
+
+
+CODE_PERIODS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
+    ("2013-01", "2024-09", TWSE, _TWSE_CODES),
+    ("2013-01", "2013-12", TPEX, _tpex()),
+    ("2014-01", "2016-08", TPEX, _tpex(add=("32",))),
+    ("2016-09", "2018-02", TPEX, _tpex(add=("32", "33"))),
+    ("2018-03", "2022-06", TPEX, _tpex(add=("32", "33", "34"))),
+    ("2022-07", "2023-06", TPEX, _tpex(add=("32", "33", "34"), drop=("11",))),
+    (
+        "2023-07",
+        "2024-09",
+        TPEX,
+        _tpex(add=("32", "33", "35", "36", "37", "38"), drop=("11", "18")),
+    ),
+)
 
 
 # --- definitions --------------------------------------------------------------
@@ -378,6 +424,10 @@ class AnswerError(ValueError):
     """An answer that cannot be read as the page asked for."""
 
 
+class Blocked(AnswerError):
+    """The source refused the request: the run stops at the first one."""
+
+
 @dataclass(frozen=True)
 class Answer:
     """One code's table on one day.  ``no_data``: the day has no quotes."""
@@ -392,8 +442,10 @@ def _json(content: bytes, label: str) -> dict:
         raise AnswerError(f"{label} is empty")
     text = content.decode("utf-8", errors="replace")
     upper = text.upper()
-    if any(marker.upper() in upper for marker in BLOCK_MARKERS):
-        raise AnswerError(f"{label} was refused by the source")
+    if any(marker.upper() in upper for marker in BLOCKED_MARKERS):
+        raise Blocked(f"{label} was refused by the source")
+    if any(marker.upper() in upper for marker in MAINTENANCE_MARKERS):
+        raise AnswerError(f"{label} is a maintenance page")
     try:
         payload = json.loads(text)
     except ValueError as exc:
@@ -511,9 +563,12 @@ class Fetched:
 def http_get(url: str) -> Fetched:  # pragma: no cover - network
     import httpx
 
-    response = httpx.get(
-        url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT_SECONDS
-    )
+    try:
+        response = httpx.get(
+            url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT_SECONDS
+        )
+    except httpx.ConnectError as exc:
+        raise Blocked(f"{url}: connection refused ({exc})") from exc
     return Fetched(response.status_code, response.content)
 
 
@@ -583,6 +638,8 @@ class Host:
         try:
             fetched = self.get(url)
             entry.update(status=fetched.status, bytes=len(fetched.content))
+            if fetched.status in BLOCKED_STATUSES:
+                raise Blocked(f"{url} answered {fetched.status}")
             if fetched.status != 200:
                 raise AnswerError(f"{url} answered {fetched.status}")
             result = parse(fetched.content, day, code)
@@ -599,6 +656,9 @@ class Host:
                     sha256=hashlib.sha256(fetched.content).hexdigest(),
                 )
             self.log(entry)
+            if isinstance(exc, Blocked):
+                self.stopped.set()
+                raise Stop(f"{self.exchange}: blocked: {exc}") from exc
             if self.failures >= FAILURES_TO_STOP:
                 self.stopped.set()
                 raise Stop(

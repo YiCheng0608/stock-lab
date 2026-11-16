@@ -29,6 +29,7 @@ def _tool():
 tool = _tool()
 # The tool's own names, before the fixture below swaps in the test's.
 CONFIRMED_NAMES = tool.CATEGORY_NAMES
+CONFIRMED_PERIODS = tool.CODE_PERIODS
 
 PERIODS = (
     ("2014-12", "2015-01", tool.TWSE, ("01", "26")),
@@ -216,6 +217,81 @@ def test_a_refusal_or_an_empty_body_is_an_error():
     for content in (b"", b"<html>THE PAGE CANNOT BE ACCESSED</html>", b"not json"):
         with pytest.raises(tool.AnswerError):
             tool.parse_twse(content, day, "26")
+
+
+MAINTENANCE = (
+    '<!DOCTYPE html><html lang="zh-Hant-tw"><head><meta charset="utf-8">'
+    "<title>網站維護中 - 臺灣證券交易所</title></head><body></body></html>"
+).encode()
+
+
+def test_a_maintenance_page_is_one_failure_not_a_block():
+    with pytest.raises(tool.AnswerError, match="maintenance") as caught:
+        tool.parse_twse(MAINTENANCE, date(2016, 12, 30), "01")
+    assert not isinstance(caught.value, tool.Blocked)
+    with pytest.raises(tool.Blocked):
+        tool.parse_twse("<p>查詢過於頻繁</p>".encode(), date(2016, 12, 30), "01")
+
+
+@pytest.mark.parametrize("answer", ["status", "page"])
+def test_the_first_refusal_stops_the_run(tmp_path, answer):
+    table = answers()
+    url = tool.url_for(tool.TPEX, DEC, "26")
+    table[url] = "<html>查詢過於頻繁</html>".encode()
+
+    class Refusing(FakeSource):
+        def __call__(self, asked):
+            if answer == "status" and asked == url:
+                self.urls.append(asked)
+                return tool.Fetched(429, b"")
+            return super().__call__(asked)
+
+    source = Refusing(table)
+    summary = _fetch(tmp_path, source)
+    assert summary["stopped"] and "TPEx: blocked" in summary["stopped"]
+    assert summary["failed"] == 1
+    # TPEx asks 26 first: nothing after the refusal.
+    assert [asked for asked in source.urls if "tpex" in asked] == [url]
+
+
+def test_a_maintenance_page_does_not_stop_the_run(tmp_path):
+    table = answers()
+    table[tool.url_for(tool.TPEX, DEC, "26")] = MAINTENANCE
+    summary = _fetch(tmp_path, FakeSource(table))
+    assert summary["stopped"] is None and summary["failed"] == 1
+    assert summary["sent"][tool.TPEX] == 4
+
+
+def test_the_confirmed_code_periods_cover_every_month():
+    periods = CONFIRMED_PERIODS
+    for exchange in tool.EXCHANGES:
+        covered = [
+            month
+            for first, last, market, _ in periods
+            if market == exchange
+            for month in tool.months(first, last)
+        ]
+        assert covered == tool.months("2013-01", "2024-09")
+    by_month = {
+        (month, market): set(codes)
+        for first, last, market, codes in periods
+        for month in tool.months(first, last)
+    }
+    assert "19" not in by_month[("2013-01", tool.TWSE)]
+    assert len(by_month[("2013-01", tool.TWSE)]) == 32
+    assert "08" not in by_month[("2013-01", tool.TPEX)]
+
+    def added(month, before):
+        return by_month[(month, tool.TPEX)] - by_month[(before, tool.TPEX)]
+
+    assert added("2014-01", "2013-12") == {"32"}
+    assert added("2016-09", "2016-08") == {"33"}
+    assert added("2018-03", "2018-02") == {"34"}
+    assert added("2022-06", "2022-07") == {"11"}
+    assert added("2023-06", "2023-07") == {"18", "34"}
+    assert added("2023-07", "2023-06") == {"35", "36", "37", "38"}
+    for (month, market), codes in by_month.items():
+        assert codes <= set(CONFIRMED_NAMES[market]), (month, market)
 
 
 def test_labels_and_ids_are_the_products():
