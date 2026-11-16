@@ -61,11 +61,14 @@
 #                     repeatable
 #   --max-gh N        at most N gh calls, default 1 (the questions and slots), 2 with
 #                     --overview; 0 prints the questions as not read (未查完)
-#   --overview        also print the overview page (overview.py, #804) before the last
-#                     lines: built from the same GraphQL answer, plus one more call only
-#                     when a thread has more comments than it read (the oldest ones,
-#                     decision 6913246451); what is still not read is printed as 未查完
-#   --take-over      overwrite another session's heartbeat younger than an hour (a new
+#   --overview [N...] also print the overview page (overview.py, #804) before the last
+#                     lines: the index (what a new coordinator reads), or with Issue or
+#                     PR numbers after it the full sections of those (read before acting
+#                     on one; decision 6914347432). Built from the same GraphQL answer,
+#                     plus one more call only when a thread has more comments than it
+#                     read (the oldest ones, decision 6913246451); what is still not
+#                     read is printed as 未查完
+#   --take-over       overwrite another session's heartbeat younger than an hour (a new
 #                     coordinator taking over without the old one's handoff marker)
 #   --heartbeat-only  write the heartbeat and stop (take_over.sh's first step)
 #   --transcript PATH this session's transcript, default $STOCK_TRANSCRIPT, then found
@@ -82,12 +85,16 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
 
 session_id="${CLAUDE_CODE_SESSION_ID:-}" handle="${ORCA_TERMINAL_HANDLE:-}" max_gh=default take_over=0 done_args=()
-heartbeat_only=0 transcript="${STOCK_TRANSCRIPT:-}" overview=0
+heartbeat_only=0 transcript="${STOCK_TRANSCRIPT:-}" overview=0 overview_numbers=()
 while [ $# -gt 0 ]; do
   case "$1" in
     -h | --help) awk 'NR > 1 && !/^#/ { exit } NR > 1' "${BASH_SOURCE[0]}"; exit 0 ;;
     --take-over) take_over=1; shift; continue ;;
-    --overview) overview=1; shift; continue ;;
+    --overview)
+      overview=1
+      shift
+      while [ $# -gt 0 ] && [[ "$1" =~ ^#?[0-9]+$ ]]; do overview_numbers+=("${1#\#}"); shift; done
+      continue ;;
     --heartbeat-only) heartbeat_only=1; shift; continue ;;
     --session-id | --terminal | --done | --max-gh | --data-dir | --python | --transcript)
       [ $# -ge 2 ] || die "$1 needs a value" 64
@@ -342,7 +349,7 @@ if [ "$overview" = 1 ]; then
     ov_wt="$overview_dir/worktrees" ov_status="$overview_dir/status"
   fi
   printf '%s' "$out" | "$python" -X utf8 "$script_dir/overview.py" page "$now" "$ov_wt" "$ov_status" \
-    "$logs" "$backfill_file" "$backfill_note" \
+    "$logs" "$backfill_file" "$backfill_note" ${overview_numbers[@]+"${overview_numbers[@]}"} \
     || echo "現況頁：印不出來（overview.py 失敗，見上一行）"
 fi
 echo "其餘依手冊：處理上面的未處理事件（PR 的 CI 與合併、未回覆的提問、名額空缺就派工）與到期的承諾，處理完以 --done <seq>、commit.sh done <id> 標記；monitor 停擺時看 logs/monitor.log"

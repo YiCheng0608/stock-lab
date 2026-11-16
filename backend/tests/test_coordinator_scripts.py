@@ -5318,7 +5318,7 @@ def test_patrol_overview_reads_the_page_from_the_one_call(slotted: Harness) -> N
     out = result.stdout
     assert "gh 呼叫：1／上限 2" in out
     assert len(slotted.calls("gh")) == 1
-    assert "=== 現況頁（" in out and "=== 現況頁結束：" in out
+    assert "=== 現況頁：索引（" in out and "=== 現況頁結束：" in out
     assert "## #10 " in out and "  名額：算：開發中（沒有 PR）" in out
     lines = out.strip().splitlines()
     assert lines[-1] == "名額空缺 2 個，請派工：#33（patrol exit 11）"
@@ -5340,8 +5340,12 @@ def test_patrol_overview_backfills_a_thread_over_a_page(slotted: Harness) -> Non
     slotted.answer(
         "gh_backfill", {"data": {"repository": {"t702": {"comments": {"nodes": old}}}}}
     )
-    result = _patrol(slotted, "--overview")
+    # The full section of #702 (decision 6914347432): every comment on a line; the
+    # numbers after --overview are not taken for another option.
+    result = _patrol(slotted, "--overview", "#702", "10", "--max-gh", "2")
+    assert result.returncode == 11, result.stdout + result.stderr
     out = result.stdout
+    assert "=== 現況頁：#702 #10 的完整段落" in out
     assert "gh 呼叫：2／上限 2" in out
     calls = slotted.calls("gh")
     assert len(calls) == 2 and "OverviewBackfill" in calls[1]

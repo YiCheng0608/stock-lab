@@ -84,8 +84,13 @@ def logs(tmp_path: Path) -> Path:
     return d
 
 
-def _page(doc, logs: Path, tasks=None, backfill=None, note="") -> list[str]:
-    return overview.page(doc, tasks or {}, NOW, str(logs), backfill, note)
+def _page(
+    doc, logs: Path, tasks=None, backfill=None, note="", numbers=None
+) -> list[str]:
+    """The index, or with NUMBERS the full sections (patrol.sh --overview <n>)."""
+    return overview.page(
+        doc, tasks or {}, NOW, str(logs), backfill, note, numbers=numbers
+    )
 
 
 def _text(lines: list[str]) -> str:
@@ -122,7 +127,7 @@ def test_an_ordinary_thread(logs: Path) -> None:
         ),
     ]
     doc = _answer([_issue(804, comments, body=BODY), _issue(803)])
-    text = _text(_page(doc, logs, _tasks(804)))
+    text = _text(_page(doc, logs, _tasks(804), numbers=[804, 803]))
     assert "## #804 [任務] 一張單（Issue；流程與基礎建設；留言 4 則）" in text
     assert "  依賴：#803（量測）合併後派；#794 可並行。［在等 #803］" in text
     assert "  名額：算：開發中（沒有 PR）" in text
@@ -150,7 +155,7 @@ def test_full_text_of_an_unanswered_question_and_a_comment_of_no_type(
         _c(804, 21, "提問：沒人回的\n\n細節第二行"),
         _c(804, 22, "**提問：** 加粗不算類型\n\n內文"),
     ]
-    text = _text(_page(_answer([_issue(804, comments)]), logs))
+    text = _text(_page(_answer([_issue(804, comments)]), logs, numbers=[804]))
     assert "工 21 提問：沒人回的 ［全文見下：未回覆的提問］" in text
     assert (
         "  全文［未回覆的提問］21：\n      > 提問：沒人回的\n      >\n      > 細節第二行"
@@ -182,7 +187,7 @@ def test_a_promise_not_in_the_commitments_file_is_printed_in_full(logs: Path) ->
         _c(804, 31, "統籌承諾：在承諾檔", coordinator=True),
         _c(804, 32, "統籌承諾：不在承諾檔\n\n合併後統籌會另開單。", coordinator=True),
     ]
-    text = _text(_page(_answer([_issue(804, comments)]), logs))
+    text = _text(_page(_answer([_issue(804, comments)]), logs, numbers=[804]))
     assert "統 31 統籌承諾：在承諾檔" in text
     assert "統 31 統籌承諾：在承諾檔 ［" not in text
     assert "統 32 統籌承諾：不在承諾檔 ［全文見下：不在承諾檔的統籌承諾］" in text
@@ -197,7 +202,9 @@ def _external(sha: str, due: str) -> str:
 
 def test_a_declaration_that_holds_is_printed_in_full(logs: Path) -> None:
     comments = [_c(702, 41, _external(SHA[:8], "2026-11-17 01:00"))]
-    text = _text(_page(_answer([_issue(702, comments)]), logs, _tasks(702)))
+    text = _text(
+        _page(_answer([_issue(702, comments)]), logs, _tasks(702), numbers=[702])
+    )
     assert "  名額：不算：等外部（預計 2026-11-17 01:00） 41" in text
     assert "［全文見下：等外部宣告（仍有效，等外部（預計 2026-11-17 01:00））］" in text
     assert "      > 細節" in text
@@ -206,7 +213,9 @@ def test_a_declaration_that_holds_is_printed_in_full(logs: Path) -> None:
 def test_a_declaration_that_no_longer_holds_says_why(logs: Path) -> None:
     """Past its time: the first line and why, not the full text."""
     comments = [_c(702, 42, _external(SHA[:8], "2026-11-16 12:00"))]
-    text = _text(_page(_answer([_issue(702, comments)]), logs, _tasks(702)))
+    text = _text(
+        _page(_answer([_issue(702, comments)]), logs, _tasks(702), numbers=[702])
+    )
     assert "（等外部宣告已失效：等外部已過預計時點 2026-11-16 12:00（42））" in text
     assert "全文［" not in text
     assert "      > 細節" not in text
@@ -236,21 +245,84 @@ def test_a_pr_goes_under_the_issue_it_closes(logs: Path) -> None:
     ]
 
 
-def test_limits_skip_tables_quotes_and_questions(logs: Path) -> None:
+def test_what_the_coordinator_is_to_do(logs: Path) -> None:
+    """決定 6914347432: the sentences of the coordinator's 決定, 統籌承諾 and review that
+    say it is to do something are in the index; a limit (不要, 不可) and tables, quotes
+    and code are not, nor the coordinator's 回報 (drafts pasted on #794)."""
     body = (
         "決定：照 B\n\n"
         "- 不要自己重跑。\n"
         "| 1 | 由統籌合併 | 表格不算 |\n"
         "> 引用裡由統籌的不算\n"
-        "```\n不要 這是程式碼\n```\n"
-        "要不要另開單之後再說。\n"
-        "合併由統籌做；這句沒有。"
+        "```\n由統籌 這是程式碼\n```\n"
+        "合併由統籌做；這句沒有。\n"
+        "- 我會在批 5 跑完時再看。統籌在本單排代跑。"
     )
-    text = _text(
-        _page(_answer([_issue(804, [_c(804, 71, body, coordinator=True)])]), logs)
+    report = "回報：草稿\n\n- 新決策由統籌在 #1 留言寫下後同步。"
+    doc = _answer(
+        [
+            _issue(
+                804,
+                [
+                    _c(804, 71, body, coordinator=True),
+                    _c(804, 72, report, coordinator=True),
+                ],
+            )
+        ]
     )
-    limits = [ln for ln in text.splitlines() if ln.startswith("    71：")]
-    assert limits == ["    71：- 不要自己重跑。", "    71：合併由統籌做；"]
+    for numbers in (None, [804]):
+        text = _text(_page(doc, logs, numbers=numbers))
+        todo = [ln for ln in text.splitlines() if ln.startswith("    7")]
+        assert todo == [
+            "    71：合併由統籌做；",
+            "    71：- 我會在批 5 跑完時再看。",
+            "    71：統籌在本單排代跑。",
+        ], numbers
+
+
+# --- the index (決定 6914347432) -------------------------------------------------------
+
+
+def test_the_index_holds_one_line_per_thread_and_what_needs_the_coordinator(
+    logs: Path,
+) -> None:
+    """The index: title with the count of open ACs, 名額, the last comment, the open
+    question in full, a holding declaration on one line, the comments of no type by id;
+    every comment and the AC texts only with --overview <n>."""
+    comments = [
+        _c(702, 1, "回報：第一則", at="2026-11-16T00:00:00Z"),
+        _c(702, 2, "提問：沒人回的\n\n細節", at="2026-11-16T00:10:00Z"),
+        _c(702, 3, "沒有類型\n\n內文", at="2026-11-16T00:20:00Z"),
+        _c(702, 4, _external(SHA[:8], "2026-11-17 01:00"), at="2026-11-16T00:30:00Z"),
+    ]
+    doc = _answer([_issue(702, comments, body=BODY)])
+    index = _page(doc, logs, _tasks(702))
+    text = _text(index)
+    assert (
+        "## #702 [任務] 一張單（Issue；流程與基礎建設；留言 4 則；未勾 AC 2／3）"
+        in text
+    )
+    assert "    AC-2" not in text and "  留言：" not in text
+    assert " 工 1 回報：第一則" not in text
+    assert "  全文［未回覆的提問］2：" in text
+    assert "  沒有類型的留言 1 則：3（全文：patrol.sh --overview 702）" in text
+    assert "      > 內文" not in text
+    assert any(
+        ln.startswith("  等外部宣告（仍有效）：11-16 08:30 工 4 回報：等外部")
+        for ln in index
+    )
+    assert "      > 細節" in text  # the question's, not the declaration's
+    assert text.count("      > 細節") == 1
+    detail = _text(_page(doc, logs, _tasks(702), numbers=[702]))
+    assert "  留言：" in detail and " 工 1 回報：第一則" in detail
+    assert "  全文［沒有類型的留言］3：" in detail
+    assert "    AC-2：" in detail
+    assert "## 最近 24 小時兌現的承諾" not in detail
+
+
+def test_overview_of_a_thread_not_open(logs: Path) -> None:
+    lines = _page(_answer([_issue(804)]), logs, numbers=[999])
+    assert "## #999：不是 open 的 Issue／PR（或這次沒讀到）" in lines
 
 
 # --- more than 100 comments (decision 6913246451) -----------------------------------
@@ -290,7 +362,9 @@ def test_the_backfill_is_merged_by_url(logs: Path) -> None:
     main = _many(702, 51, 150)
     old = _many(702, 1, 51)  # 51 overlaps with the main answer
     backfill = {"data": {"repository": {"t702": {"comments": {"nodes": old}}}}}
-    lines = _page(_answer([_issue(702, main, total=150)]), logs, backfill=backfill)
+    lines = _page(
+        _answer([_issue(702, main, total=150)]), logs, backfill=backfill, numbers=[702]
+    )
     rows = [ln for ln in lines if " 工 " in ln and "回報：第" in ln]
     assert len(rows) == 150
     assert sum(" 工 51 " in ln for ln in rows) == 1
@@ -320,8 +394,9 @@ def test_no_backfill_is_not_taken_as_complete(logs: Path) -> None:
 
 
 def test_the_governance_comments(logs: Path) -> None:
-    """The latest 10: 決定, 統籌承諾, 待使用者 and no mark in full; 部署 and the session
-    change counted; the rest by the first line."""
+    """The latest 10 (決定 6914347432 A-2): 待使用者 and no mark in full unless #1's body
+    names them (read at takeover); 決定 and 統籌承諾 by the first line (exit 12 keeps
+    them in the body); 部署 and the session change counted."""
     older = [_c(1, n, f"回報：舊的 {n}", coordinator=True) for n in range(1, 6)]
     recent = [
         _c(1, 101, "決定：A\n\n限定條件", coordinator=True),
@@ -335,15 +410,24 @@ def test_the_governance_comments(logs: Path) -> None:
         _c(1, 109, "回報：進度", coordinator=True),
         _c(1, 110, "部署：v1.2.64"),
     ]
-    issue = _issue(1, older + recent, title="治理")
-    text = _text(_page(_answer([issue]), logs))
+    recent.append(_c(1, 6912550851, "待使用者：本文已列\n\n已在本文的全文", True))
+    issue = _issue(1, older + recent[1:], title="治理")
+    doc = _answer([issue])
+    doc["data"]["repository"]["governance"] = {"body": "- 待使用者 [6912550851](x)\n"}
+    text = _text(_page(doc, logs))
     assert "## #1 [任務]" not in text
     section = text.split("## #1 最近 10 則留言", 1)[1]
     assert "回報：舊的" not in section
-    for full in ("限定條件", "承諾內文", "要你做的事", "第二行"):
+    for full in ("要你做的事", "第二行"):
         assert f"      > {full}" in section
-    assert "統 105 回報：一般回報" in section
-    assert "不印的內文" not in section
+    for line in (
+        "統 102 統籌承諾：B",
+        "統 105 回報：一般回報",
+        "統 6912550851 待使用者：本文已列",
+    ):
+        assert line in section
+    for hidden in ("承諾內文", "不印的內文", "已在本文的全文"):
+        assert hidden not in section
     assert "  只計數：session 更換 2 則、部署 2 則" in section
 
 
@@ -454,7 +538,11 @@ def test_a_correction_in_the_body_is_marked(logs: Path) -> None:
         "- 舊的做法取代掉了，不再列 id。"
     )
     text = _text(
-        _page(_answer([_issue(702, [_c(702, 92, body, coordinator=True)])]), logs)
+        _page(
+            _answer([_issue(702, [_c(702, 92, body, coordinator=True)])]),
+            logs,
+            numbers=[702],
+        )
     )
     line = next(ln for ln in text.splitlines() if " 統 92 " in ln)
     assert line.endswith("［內文更正或取代：6893948126、?］")

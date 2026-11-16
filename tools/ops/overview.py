@@ -7,20 +7,24 @@ commitments file and the engineer sessions' state files. It is an index, not the
 before acting on a thread the coordinator reads that thread's body and the comments the
 action touches (the 接手文 says which).
 
-Per open Issue and PR (#1 is its own section, last):
+Two layers (#804 決定 6914347432):
 
-- title, milestone, the 依賴的任務／資料 line with the open #n it waits for
-  (slots.waited_refs), the ACs not checked (60 characters of each);
-- the slot verdict of slots.decide for an Issue with a task worktree, else 追蹤／待辦;
-- the newest engineer session of the Issue (<data>/logs/sessions/*.json, turn_hook.cjs);
-- every comment on one line: Taipei time, 統 (the coordinator mark) or 工 (no mark: an
-  engineer, the user, an independent review), the comment id and the first line, its
-  links cut to ids (the rule is printed once in the header); 回報：開工／收到 are counted;
-- in full: the 提問 no 決定 links to (any open thread's), the comments of no type, the
-  latest 等外部 declaration while it holds (one that no longer holds: its line says
-  why), and the 統籌承諾 whose comment id is not in the commitments file;
-- the sentences of the coordinator's comments (past the first line) that look like a
-  promise or a limit (由統籌, 統籌會, 我會, 不可, 不要), one line each.
+- **the index** (`--overview`, read at takeover), per open Issue and PR: title,
+  milestone, the count of open ACs, the 依賴的任務／資料 line with the open #n it waits
+  for (slots.waited_refs), the slot verdict of slots.decide for an Issue with a task
+  worktree (else 追蹤／待辦), the newest engineer session (<data>/logs/sessions/*.json,
+  turn_hook.cjs) and the last comment on one line; in full the 提問 no 決定 links to
+  (any open thread's) and the 統籌承諾 whose comment id is not in the commitments file;
+  on one line the latest 等外部 declaration while it holds; the ids of the comments of no
+  type; the sentences of the coordinator's 決定, 統籌承諾 and review (past the first line)
+  that say it is to do something (由統籌, 統籌會, 統籌在, 我會). Then #1 and the
+  commitments kept in the last 24 hours.
+- **the full section** of the threads named (`--overview <n>...`, read before acting on
+  one): every comment on one line (Taipei time, 統 for the coordinator mark or 工 for
+  none, the comment id, the first line with its links cut to ids, the question a 決定
+  answers, a correction or replacement in its body), the open ACs (60 characters of
+  each), and in full as well the comments of no type and the 等外部 declaration that
+  holds (one that no longer holds: its line says why). 回報：開工／收到 are counted.
 
 A thread with more comments than the main query read (comments(last:100)) is read back
 by one more query (backfill-query, #804 決定 6913246451): the oldest totalCount-100 (100
@@ -29,21 +33,21 @@ missing (more than 200, or the call not made or failed) is printed as 未查完 
 range of comments not read; it is never taken as complete. The comments read back are
 for this page only: the questions and the slots are judged on the main answer.
 
-#1 (range 2): of its latest 10 comments, the ones whose first line is 決定 or 統籌承諾,
-says 待使用者, or has no coordinator mark are printed in full, the rest by the first line;
-部署： and 回報：統籌 session 更換 are counted only. Last, the commitments kept in the
-last 24 hours with the comments that kept them.
+#1 (range 2): its latest 10 comments by the first line; in full the ones that say
+待使用者 on it or have no coordinator mark, unless #1's body (read at takeover) names
+them. 部署： and 回報：統籌 session 更換 are counted only.
 
   backfill-query       stdin is the main answer; prints the query for the threads with
                        comments not read, or nothing when there is none. Exit 0.
-  page NOW WORKTREES STATUS LOGS BACKFILL NOTE
+  page NOW WORKTREES STATUS LOGS BACKFILL NOTE [N...]
                        stdin is the main answer, or nothing when GitHub was not read.
                        NOW is epoch seconds; WORKTREES and STATUS are the files slots.py
                        report reads ("" when git could not list); LOGS is <data>/logs;
                        BACKFILL the backfill answer's file ("" when no call was made);
                        NOTE why it was not made or failed ("" when it was not needed or
-                       read). Prints the page, its last line its size in bytes. Exit 0;
-                       64 bad arguments.
+                       read); N the Issue or PR numbers whose full sections to print
+                       instead of the index. Prints the page, its last line its size in
+                       bytes. Exit 0; 64 bad arguments.
 """
 
 from __future__ import annotations
@@ -83,8 +87,10 @@ _REPORT = re.compile(r"\s*回報[：:]")
 _CORRECTS = re.compile(r"更正|取代|撤回")
 _BARE_ID = re.compile(r"(?<![\d/-])(\d{10})(?!\d)")
 _GOV_COUNTED = re.compile(r"\s*(?:部署[：:]|回報[：:]\s*統籌 ?session 更換)")
-_GOV_FULL = re.compile(r"\s*(?:決定[：:（(]|統籌承諾[：:])")
-_KEYWORDS = ("由統籌", "統籌會", "我會", "不可", "不要")
+# What the coordinator is to do (#804 決定 6914347432): a limit (不可, 不要) is read
+# before acting on the thread instead.
+_KEYWORDS = ("由統籌", "統籌會", "統籌在", "我會")
+_TODO_TYPES = re.compile(r"\s*(?:決定|統籌承諾|review)[：:（(]", re.IGNORECASE)
 _SENTENCE = re.compile(r"(?<=[。；;])")
 _COMMENT_ID = re.compile(r"issuecomment-(\d+)")
 _CLOSES = re.compile(r"(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)")
@@ -94,8 +100,6 @@ _AC = re.compile(
 # Lines of a comment that hold no sentence of the coordinator's own: tables, headings,
 # quotes, code fences, HTML comments.
 _NOT_PROSE = re.compile(r"\s*(?:\||#|>|```|<!--)")
-# Words that hold a keyword but no limit.
-_NOT_LIMITS = ("要不要", "不可能", "不要緊")
 _MD_LINK = re.compile(r"\[([^\]\n]*)\]\((https?://[^)\s]+)\)")
 # A bare url ends at a space, a bracket or full-width punctuation (（42）、 ends a url
 # in a Chinese sentence).
@@ -244,8 +248,8 @@ def _full(body: str, number) -> list[str]:
     return ["      > " + ln if ln.strip() else "      >" for ln in text.splitlines()]
 
 
-def _limits(body: str, number) -> list[str]:
-    """The sentences past the first line that look like a promise or a limit."""
+def _todo(body: str, number) -> list[str]:
+    """The sentences past the first line that say the coordinator is to do something."""
     lines = without_mark(body).lstrip(BOM).strip().splitlines()[1:]
     out, fenced = [], False
     for line in lines:
@@ -255,10 +259,7 @@ def _limits(body: str, number) -> list[str]:
         if fenced or _NOT_PROSE.match(line):
             continue
         for sentence in _SENTENCE.split(line):
-            plain = sentence
-            for word in _NOT_LIMITS:
-                plain = plain.replace(word, "")
-            if any(k in plain for k in _KEYWORDS):
+            if any(k in sentence for k in _KEYWORDS):
                 out.append(one_line(short_links(sentence, number), LINE_WIDTH))
     return out
 
@@ -369,9 +370,14 @@ def _linked_issue(pr: dict) -> int | None:
 
 
 class Page:
-    def __init__(self, doc, tasks, now: int, logs: str, backfill, note: str):
+    """The index (numbers None: what a new coordinator reads) or the full sections of the
+    threads NUMBERS (read before acting on one; #804 決定 6914347432)."""
+
+    def __init__(
+        self, doc, tasks, now: int, logs: str, backfill, note: str, numbers=None
+    ):
         self.doc, self.tasks, self.now, self.logs = doc, tasks, now, logs
-        self.backfill, self.note = backfill, note
+        self.backfill, self.note, self.numbers = backfill, note, numbers
         self.repo = get(doc, "data.repository") if doc is not None else None
         records, _ = commitments.read(logs)
         self.records = records
@@ -402,11 +408,22 @@ class Page:
     def build(self) -> list[str]:
         out = self.lines
         stamp = datetime.fromtimestamp(self.now, TAIPEI).strftime("%Y-%m-%d %H:%M")
-        out.append(f"=== 現況頁（{stamp} 台北；patrol.sh --overview，#804）===")
-        out.append(
-            "本頁是索引，不是依據：對某張單動作前，先讀那張單的本文與這次動作相關的留言全文"
-            "（docs/COORDINATOR.md 接手文）。"
-        )
+        if self.numbers is None:
+            out.append(
+                f"=== 現況頁：索引（{stamp} 台北；patrol.sh --overview，#804）==="
+            )
+            out.append(
+                "本頁是索引，不是依據：對某張單動作前，先跑 patrol.sh --overview <單號> 看那張單的"
+                "完整段落（每則留言一行、未勾 AC、內文更正），再照接手文讀原文"
+                "（docs/COORDINATOR.md）。"
+            )
+        else:
+            shown = " ".join(f"#{n}" for n in self.numbers)
+            out.append(f"=== 現況頁：{shown} 的完整段落（{stamp} 台北；#804）===")
+            out.append(
+                "動作前照接手文讀那張單的本文與每一則 決定／統籌承諾／review 全文；"
+                "本段只是索引。"
+            )
         out.append(
             f"網址規則：留言 id <id> 是 {REPO_URL}/issues/<這張單>#issuecomment-<id>，"
             "「#n <id>」是 #n 的留言；#n 是 Issue 或 PR（/issues/<n> 兩者都開得到）；"
@@ -426,9 +443,20 @@ class Page:
                     out.append(
                         f"未查完：open {label} {conn['totalCount']} 個，只讀了 {len(nodes)} 個"
                     )
-            self._threads_section()
-            self._governance()
-        self._kept()
+            if self.numbers is None:
+                self._threads_section()
+                self._governance()
+            else:
+                open_numbers = self._open_numbers()
+                for n in self.numbers:
+                    if n == GOVERNANCE_ISSUE and n in self.threads:
+                        self._governance()
+                    elif n in self.threads:
+                        self._thread(n, open_numbers, detail=True)
+                    else:
+                        out += ["", f"## #{n}：不是 open 的 Issue／PR（或這次沒讀到）"]
+        if self.numbers is None:
+            self._kept()
         return out
 
     def _open_numbers(self) -> set[int] | None:
@@ -464,7 +492,7 @@ class Page:
         for p in loose:
             self._thread(p, open_numbers)
 
-    def _thread(self, number: int, open_numbers) -> None:
+    def _thread(self, number: int, open_numbers, detail: bool = False) -> None:
         kind, thread, comments, unread = self.threads[number]
         out = self.lines
         is_pr = kind == "pullRequests"
@@ -474,13 +502,16 @@ class Page:
         if is_pr:
             linked = _linked_issue(thread)
             extra = f"；Closes #{linked}" if linked else "；沒連到 Issue"
+        body = thread.get("body") or ""
+        acs, ac_total = _acs(body) if not is_pr else ([], 0)
+        if ac_total and not detail:
+            extra += f"；未勾 AC {len(acs)}／{ac_total}"
         total = (thread.get("comments") or {}).get("totalCount") or len(comments)
         out.append("")
         out.append(
             f"## #{number} {one_line(thread.get('title') or '（沒讀到標題）', 70)}"
             f"（{label}；{milestone}；留言 {total} 則{extra}）"
         )
-        body = thread.get("body") or ""
         if not is_pr:
             out.extend(_depends(body, number, open_numbers))
             verdict = self.verdicts.get(number)
@@ -493,15 +524,14 @@ class Page:
                 )
             if number in self.sessions:
                 out.append("  " + _session_line(self.sessions[number]))
-            acs, ac_total = _acs(body)
-            if ac_total:
+            if ac_total and detail:
                 out.append(f"  未勾 AC {len(acs)}／{ac_total}：")
                 out.extend(f"    {a}" for a in acs)
         if unread:
             out.append(f"  {unread}")
-        self._comments(number, thread, comments)
+        self._comments(number, comments, detail)
 
-    def _external(self, number: int, thread: dict, comments: list[dict]):
+    def _external(self, number: int, comments: list[dict]):
         """(index of the latest 等外部 declaration or None, Verdict or why it fails)."""
         at = None
         for i, c in enumerate(comments):
@@ -515,10 +545,10 @@ class Page:
         )
         return at, verdict
 
-    def _comments(self, number: int, thread: dict, comments: list[dict]) -> None:
+    def _comments(self, number: int, comments: list[dict], detail: bool) -> None:
         out = self.lines
-        ext_at, ext = self._external(number, thread, comments)
-        full, limits = [], []
+        ext_at, ext = self._external(number, comments)
+        full, todo, untyped, external = [], [], [], ""
         counted, counted_last = 0, ""
         lines = []
         for i, c in enumerate(comments):
@@ -549,32 +579,55 @@ class Page:
                 why = "未回覆的提問"
             elif not _TYPE.match(body):
                 why = "沒有類型的留言"
+                untyped.append(cid)
             elif _PROMISE.match(body) and cid not in self.promised:
                 why = "不在承諾檔的統籌承諾"
             if i == ext_at:
                 if isinstance(ext, slots.Verdict):
-                    why = why or f"等外部宣告（仍有效，{ext.reason}）"
+                    if detail:
+                        why = why or f"等外部宣告（仍有效，{ext.reason}）"
+                    else:
+                        # The index: the declaration on one line (its first line names
+                        # the event and the time); in full with --overview <n>.
+                        external = f"  等外部宣告（仍有效）：{line.strip()}"
                 else:
                     line += f"（等外部宣告已失效：{short_links(str(ext), number)}）"
-            if why:
+            if why and (detail or why != "沒有類型的留言"):
                 line += f" ［全文見下：{why}］"
                 full.append((why, cid, body))
             lines.append(line)
-            if coordinator_comment(body):
-                limits += [f"    {cid}：{s}" for s in _limits(body, number)]
+            # A 回報 of the coordinator often pastes drafts and answers (#794): only the
+            # decisions, promises and reviews say what the coordinator is to do.
+            if coordinator_comment(body) and _TODO_TYPES.match(body):
+                todo += [f"    {cid}：{s}" for s in _todo(body, number)]
         if counted:
             out.append(f"  回報：開工／收到 {counted} 則（最後 {counted_last}）")
-        if lines:
-            out.append("  留言：")
-            out.extend(lines)
+        if detail:
+            if lines:
+                out.append("  留言：")
+                out.extend(lines)
+        elif lines:
+            if external and external.endswith(lines[-1].strip()):
+                out.append(external)
+            else:
+                out.append("  最後一則：" + lines[-1].strip())
+                if external:
+                    out.append(external)
+            if untyped:
+                out.append(
+                    f"  沒有類型的留言 {len(untyped)} 則：{'、'.join(untyped)}"
+                    f"（全文：patrol.sh --overview {number}）"
+                )
         for why, cid, body in full:
             out.append(f"  全文［{why}］{cid}：")
             out.extend(_full(body, number))
-        if limits:
-            out.append("  統籌留言裡的承諾與限制（逐句，供核對）：")
-            out.extend(limits)
+        if todo:
+            out.append("  統籌要做的事（統籌留言內文，逐句，對照承諾檔）：")
+            out.extend(todo)
 
     def _governance(self) -> None:
+        """#1's latest 10 by the first line; in full the 待使用者 ones and those without
+        the mark. Its 決定 are kept in the body (patrol exit 12), read at takeover."""
         out = self.lines
         out.append("")
         entry = self.threads.get(GOVERNANCE_ISSUE)
@@ -583,7 +636,14 @@ class Page:
             return
         _, _, comments, _ = entry
         recent = comments[-GOVERNANCE_RECENT:]
-        out.append(f"## #1 最近 {len(recent)} 則留言")
+        out.append(
+            f"## #1 最近 {len(recent)} 則留言（id 已在 #1 本文的只印第一行：接手時讀本文）"
+        )
+        # #1's body, read at takeover (the handover text): a comment it already names is
+        # not printed again in full.
+        in_body = set(
+            _BARE_ID.findall((self.repo.get("governance") or {}).get("body") or "")
+        )
         skipped: dict[str, int] = {}
         for c in recent:
             body = (c.get("body") or "").lstrip(BOM)
@@ -594,10 +654,8 @@ class Page:
                 skipped[key] = skipped.get(key, 0) + 1
                 continue
             head = f"    {_when(c.get('createdAt'))} {_who(body)} {cid}"
-            if (
-                _GOV_FULL.match(body)
-                or "待使用者" in first
-                or not coordinator_comment(body)
+            if cid not in in_body and (
+                "待使用者" in first or not coordinator_comment(body)
             ):
                 # The full text holds the first line.
                 out.append(f"{head}（全文）：")
@@ -642,9 +700,16 @@ class Page:
 
 
 def page(
-    doc, tasks, now: int, logs: str, backfill, note: str, listed: bool = True
+    doc,
+    tasks,
+    now: int,
+    logs: str,
+    backfill,
+    note: str,
+    listed: bool = True,
+    numbers=None,
 ) -> list[str]:
-    lines = Page(doc, tasks, now, logs, backfill, note).build()
+    lines = Page(doc, tasks, now, logs, backfill, note, numbers).build()
     if not listed:
         lines.insert(
             1, "名額：判定不了（git worktree list 失敗，讀不到 task worktree）"
@@ -672,7 +737,13 @@ def main(argv: list[str]) -> int:
         if query:
             print(query)
         return 0
-    if len(argv) != 7 or argv[0] != "page" or not argv[1].isdigit():
+    numbers = [a.lstrip("#") for a in argv[7:]]
+    if (
+        len(argv) < 7
+        or argv[0] != "page"
+        or not argv[1].isdigit()
+        or not all(n.isdigit() for n in numbers)
+    ):
         print(__doc__, file=sys.stderr)
         return 64
     now, wt_path, status_path, logs, backfill_path, note = (
@@ -697,7 +768,16 @@ def main(argv: list[str]) -> int:
             backfill = None
         if backfill is None and not note:
             note = "補查的回應讀不懂"
-    lines = page(doc, tasks, now, logs, backfill, note, porcelain is not None)
+    lines = page(
+        doc,
+        tasks,
+        now,
+        logs,
+        backfill,
+        note,
+        porcelain is not None,
+        [int(n) for n in dict.fromkeys(numbers)] or None,
+    )
     for line in lines:
         print(line)
     return 0
