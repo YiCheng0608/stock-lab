@@ -214,3 +214,100 @@ def test_check_database_fails_on_a_foreign_key_row_and_an_unreadable_file(tmp_pa
     not_a_db.write_bytes(b"not a database" * 100)
     assert tool.check_database(not_a_db)["ok"] is False
     assert tool.check_database(tmp_path / "missing.db")["ok"] is False
+
+
+# --weekend-sessions (Issue #790): one single-day backfill per listed weekend.
+SESSIONS = [date(2012, 12, 22), date(2013, 2, 23), date(2013, 9, 14)]
+
+
+def test_weekend_mode_runs_one_day_per_listed_session_in_the_range(tmp_path):
+    ran: list[tuple[date, date]] = []
+    slept: list[float] = []
+    clock = iter([_utc("2026-11-16T20:00:00")] * 3 + [_utc("2026-11-16T21:10:00")] * 10)
+
+    def backfill(start, end):
+        ran.append((start, end))
+        return 0, "{}"
+
+    counts = tool.run(
+        date(2012, 12, 1),
+        date(2013, 3, 31),
+        data_dir=tmp_path,
+        environ={},
+        backfill=backfill,
+        now=lambda: next(clock),
+        sleep=slept.append,
+        weekend_sessions=SESSIONS,
+    )
+    assert counts == {"done_before": 0, "ok": 2, "failed": 0}
+    assert ran == [
+        (date(2013, 2, 23), date(2013, 2, 23)),
+        (date(2012, 12, 22), date(2012, 12, 22)),
+    ]
+    assert slept == [140 * 60]  # the second day starts at 21:10
+    lines = _progress_lines(tmp_path)
+    assert lines[0]["mode"] == "weekend_sessions"
+    assert [line["event"] for line in lines if "exit" in line] == ["weekend"] * 2
+
+
+def test_weekend_and_month_progress_lines_do_not_mark_each_other_done(tmp_path):
+    ran: list[tuple[date, date]] = []
+
+    def backfill(start, end):
+        ran.append((start, end))
+        return 0, "{}"
+
+    def go(first, last, sessions=None):
+        ran.clear()
+        return tool.run(
+            first,
+            last,
+            data_dir=tmp_path,
+            environ={},
+            backfill=backfill,
+            now=lambda: _utc("2026-11-17T10:00:00"),
+            sleep=lambda _s: None,
+            weekend_sessions=sessions,
+        )
+
+    # A finished month does not hide its weekend session from weekend mode.
+    go(date(2012, 12, 1), date(2012, 12, 31))
+    assert ran == [(date(2012, 12, 1), date(2012, 12, 31))]
+    assert go(date(2012, 12, 1), date(2012, 12, 31), SESSIONS)["done_before"] == 0
+    assert ran == [(date(2012, 12, 22), date(2012, 12, 22))]
+    # A finished weekend day does not count as a finished one-day month.
+    assert go(date(2012, 12, 22), date(2012, 12, 22))["done_before"] == 0
+    assert ran == [(date(2012, 12, 22), date(2012, 12, 22))]
+    # Each mode skips its own finished pieces on a rerun.
+    assert go(date(2012, 12, 1), date(2012, 12, 31), SESSIONS)["done_before"] == 1
+    assert go(date(2012, 12, 1), date(2012, 12, 31))["done_before"] == 1
+    assert ran == []
+
+
+def test_main_weekend_mode_uses_the_official_list(tmp_path, monkeypatch):
+    import worker.sources as sources
+
+    _research_env(monkeypatch, tmp_path)
+    (tmp_path / tool.MARKER_NAME).write_text(
+        json.dumps({"purpose": tool.MARKER_PURPOSE}), encoding="utf-8"
+    )
+    monkeypatch.setattr(tool, "pause_seconds", lambda _now: 0.0)
+    ran: list[tuple[date, date]] = []
+
+    def backfill(start, end):
+        ran.append((start, end))
+        return 0, "{}"
+
+    argv = ["--from", "2012-12-01", "--to", "2018-12-31", "--weekend-sessions"]
+    assert tool.main(argv, backfill=backfill, integrity=lambda _db: {"ok": True}) == 0
+    expected = sorted(
+        (
+            day
+            for day in sources.OFFICIAL_WEEKEND_SESSIONS
+            if date(2012, 12, 1) <= day <= date(2018, 12, 31)
+        ),
+        reverse=True,
+    )
+    assert ran == [(day, day) for day in expected]
+    assert len(ran) == 12
+    assert all(start.weekday() >= 5 for start, _ in ran)
