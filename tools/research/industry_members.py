@@ -58,6 +58,8 @@ TABLE_NAME = "industry_members_v1.json"
 MANIFEST_NAME = "industry_members_v1.manifest.json"
 REQUESTS_NAME = "requests.jsonl"
 RAW_DIR = "raw"
+# Bodies of failed answers, kept to read why (never parsed as raw).
+FAILED_DIR = "failed"
 FORMAT_VERSION = 1
 TWSE = "TWSE"
 TPEX = "TPEx"
@@ -271,6 +273,16 @@ def raw_path(out: Path, exchange: str, day: date, code: str) -> Path:
     return out / RAW_DIR / exchange / day.strftime("%Y%m%d") / f"{code}.json"
 
 
+def failed_path(out: Path, exchange: str, day: date, code: str) -> Path:
+    """A new file for one failed answer's body; earlier ones are kept."""
+
+    folder = out / FAILED_DIR / exchange / day.strftime("%Y%m%d")
+    number = 1
+    while (folder / f"{code}.{number}.body").exists():
+        number += 1
+    return folder / f"{code}.{number}.body"
+
+
 # --- answers ------------------------------------------------------------------
 
 
@@ -439,6 +451,7 @@ class Host:
         self.log = log
         self.stopped = stopped
         self.failures = 0
+        self.failed = 0
         self.sent = 0
         # The last request's ``time.monotonic`` per exchange, shared by the runs
         # of one process (``bisect`` makes several), so none starts early.
@@ -478,6 +491,7 @@ class Host:
         }
         self.pace[self.exchange] = time_module.monotonic()
         self.sent += 1
+        fetched = None
         try:
             fetched = self.get(url)
             entry.update(status=fetched.status, bytes=len(fetched.content))
@@ -486,7 +500,16 @@ class Host:
             result = parse(fetched.content, day, code)
         except Exception as exc:  # any failure counts; nothing is retried here
             self.failures += 1
+            self.failed += 1
             entry.update(outcome="failed", error=str(exc)[:300])
+            if fetched is not None and fetched.content:
+                body = failed_path(self.out, self.exchange, day, code)
+                body.parent.mkdir(parents=True, exist_ok=True)
+                body.write_bytes(fetched.content)
+                entry.update(
+                    body=body.relative_to(self.out).as_posix(),
+                    sha256=hashlib.sha256(fetched.content).hexdigest(),
+                )
             self.log(entry)
             if self.failures >= FAILURES_TO_STOP:
                 self.stopped.set()
@@ -570,7 +593,6 @@ def run_plan(
         for month in month_list:
             day = snapshot_day(hosts[TWSE], month)
             if day is None:
-                summary["failed"] += 1
                 continue
             days[month] = day
     except Stop as exc:
@@ -584,9 +606,7 @@ def run_plan(
                 for code in codes_of(month, exchange):
                     if max_requests is not None and host.sent >= max_requests:
                         return
-                    if host.answer(day, code) is None:
-                        with lock:
-                            summary["failed"] += 1
+                    host.answer(day, code)
         except Stop as exc:
             with lock:
                 summary["stopped"] = summary["stopped"] or str(exc)
@@ -605,6 +625,8 @@ def run_plan(
             thread.join()
     summary["errors"] = errors
     summary["sent"] = {exchange: hosts[exchange].sent for exchange in EXCHANGES}
+    # Every failed request, including the one that stopped a host.
+    summary["failed"] = sum(hosts[exchange].failed for exchange in EXCHANGES)
     summary["snapshot_days"] = len(days)
     summary["days"] = {month: day.isoformat() for month, day in days.items()}
     log({"event": "summary", **summary})

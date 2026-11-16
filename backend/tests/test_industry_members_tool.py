@@ -273,12 +273,42 @@ def test_three_failures_in_a_row_stop_the_run(tmp_path):
     assert not (tmp_path / tool.RAW_DIR / tool.TPEX).exists()
     log = (tmp_path / tool.REQUESTS_NAME).read_text(encoding="utf-8").splitlines()
     assert sum(json.loads(line).get("outcome") == "failed" for line in log) == 3
+    assert summary["failed"] == 3
     assert (
         tool.main(
             ["build", "--start", "2014-12", "--end", "2015-01", "--out", str(tmp_path)]
         )
         == 1
     )
+
+
+def test_a_failed_answer_keeps_its_body_and_is_counted(tmp_path):
+    # TPEx 2023-06-30 se=33/34 answered 200 with rows but no category.
+    table = answers()
+    nameless = json.loads(table[tool.url_for(tool.TPEX, DEC, "31")])
+    nameless["tables"][0]["category"] = ""
+    body = json.dumps(nameless, ensure_ascii=False).encode()
+    table[tool.url_for(tool.TPEX, DEC, "31")] = body
+    summary = _fetch(tmp_path, FakeSource(table))
+    assert summary["stopped"] is None and summary["failed"] == 1
+    assert not tool.raw_path(tmp_path, tool.TPEX, DEC, "31").exists()
+    kept = tmp_path / tool.FAILED_DIR / tool.TPEX / "20141231" / "31.1.body"
+    assert kept.read_bytes() == body
+    log = [
+        json.loads(line)
+        for line in (tmp_path / tool.REQUESTS_NAME)
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    failed = [entry for entry in log if entry.get("outcome") == "failed"]
+    assert len(failed) == 1 and "has no category" in failed[0]["error"]
+    assert failed[0]["body"] == "failed/TPEx/20141231/31.1.body"
+    assert failed[0]["sha256"] == hashlib.sha256(body).hexdigest()
+    assert log[-1]["event"] == "summary" and log[-1]["failed"] == 1
+    # A second failure of the same answer keeps the first body.
+    _fetch(tmp_path, FakeSource(table))
+    assert kept.read_bytes() == body
+    assert (kept.parent / "31.2.body").read_bytes() == body
 
 
 @pytest.mark.parametrize(
