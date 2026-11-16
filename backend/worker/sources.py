@@ -2507,7 +2507,7 @@ def parse_twse_reduction_payload(
         if detail is None or detail.group(1) != symbol or stated is None:
             rejected.append(
                 f"{symbol} resuming {resume}: 詳細資料 "
-                f"{row[columns['詳細資料']]!r} names no earlier last trading day"
+                f"{row[columns['詳細資料']]!r} names another code or no date"
             )
             continue
         # A date not before the resumption is when the row was announced or

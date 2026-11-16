@@ -102,6 +102,12 @@ def _bars_inside(
     ]
 
 
+def _closes_at(close: float | None, price: float) -> bool:
+    """Whether a bar's close is the row's 停止買賣前收盤價格."""
+
+    return close is not None and abs(float(close) - price) < 1e-6
+
+
 def _check_bars(
     db: Session, instrument_id: int, record: TradingHaltRecord
 ) -> tuple[TradingHaltRecord | None, str | None]:
@@ -121,10 +127,7 @@ def _check_bars(
         return record, None
     last_day, last_close = inside[-1]
     stated = parse_number(record.details.get("停止買賣前收盤價格"))
-    if record.exchange == "TWSE" and (
-        stated is None
-        or (last_close is not None and abs(float(last_close) - stated) < 1e-6)
-    ):
+    if record.exchange == "TWSE" and (stated is None or _closes_at(last_close, stated)):
         return (
             replace(
                 record,
@@ -191,7 +194,7 @@ def _infer_from_bars(
             f"{head}: last bar {last_day} is {days} days before the resumption, "
             f"over {INFER_MAX_DAYS}"
         )
-    if last_close is None or abs(float(last_close) - stated) >= 1e-6:
+    if not _closes_at(last_close, stated):
         return None, (
             f"{head}: last bar {last_day} closes {last_close}, not "
             f"停止買賣前收盤價格 {price}"

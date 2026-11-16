@@ -454,7 +454,7 @@ TWSE 的年度市場開休市日期，上市與上櫃共用（同 [TAIEX 交易�
   - 回應一列都沒有（TWSE「沒有符合條件」、TPEx 空表）而該來源在這個區間已有存列時，不刪任何列，記非核心 warning `<交易所> trading halts empty answer kept N stored rows resuming …`，run metadata 記 `kept_on_empty`：TWSE 的空回應沒有區間與總數可核對，官方誤回一次空表就會刪光區間內的列，若剛好在恢復日後第 10 天就再也查不回來。區間內沒有存列時空回應照常、不記 warning。恢復日不在區間內的已存列不受這次重建影響。
   - 內容改變的列改指向新的 capture；沒變的列保留原 capture。
   - 代號在 `instruments` 找不到的只計入 `outside_universe`，不寫；已下市但主檔還有的標的照寫。
-  - run metadata 的 `trading_halts` 依交易所記 `inserted`／`updated`／`unchanged`／`removed`／`outside_universe`／`rejected`／`conflicts`；有用到時另記 `moved_past_bars`、`inferred_from_bars`、`kept_on_conflict`、`kept_on_empty`。
+  - run metadata 的 `trading_halts` 依交易所記 `inserted`／`updated`／`unchanged`／`removed`／`outside_universe`／`rejected`／`conflicts`；有用到時另記 `moved_past_bars`、`inferred_from_bars`、`kept_on_conflict`、`kept_on_empty`。被已存 bar 推翻或用日線推不出的列（warning 字首仍是 `… trading halts rejected:`）：整檔沒寫入時算 `conflicts`；同組有別列寫入時只記 warning（`… kept <詳細資料>, rows the bars reject: …`），不算進任何計數（例如 3536 2015-03-20 的晚列）。`rejected` 只數解析時就略過的列。
 - **請求**：當日 collect 各 1 個（恢復日在收集日前 10 天到後 60 天）；取得、解析或寫入失敗記非核心 warning（`TWSE trading halts unavailable: …`），collect 仍為 `success`。歷史由 [`worker.cli trading-halts`](ops/CLI.md#現有-worker-cli) 回補，每個交易所 1 個請求，經同一個官方主機限流。
 - **誰讀它**：
   - coverage（`/api/coverage`、回補報表）把期間內沒有 bar 的交易日算進涵蓋，原因是 `capital_reduction_halt`，不列為 `missing_bar_dates`；摘要另計 `halted_to_20`／`halted_to_60`。
