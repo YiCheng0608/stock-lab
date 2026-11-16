@@ -8,7 +8,7 @@
   "round": 3,
   "round_size": 2,
   "cumulative": 15,
-  "definitions_sha256": "422fde1bd64632035816e281a3d3f11e02059d476402a6a267cc186d83bd88aa",
+  "definitions_sha256": "d2f87b1a3cd9fc9133a63352c9a1040844a070dfbb0f0577ac9b2e902f715a7d",
   "copy": {
     "latest": "2014-04-07",
     "alembic": null
@@ -26,10 +26,11 @@
     "2013": {
       "days": 11,
       "universe": 385,
-      "grouped": 330,
-      "selectable": 330,
+      "grouped": 385,
+      "selectable": 385,
       "ranked_groups": 44,
-      "retroactive": 55,
+      "retroactive": 44,
+      "remapped": 11,
       "taiex_missing": 1,
       "no_group": 0,
       "short_groups": 10
@@ -37,10 +38,11 @@
     "2014": {
       "days": 38,
       "universe": 1312,
-      "grouped": 1122,
-      "selectable": 1122,
+      "grouped": 1312,
+      "selectable": 1312,
       "ranked_groups": 152,
-      "retroactive": 190,
+      "retroactive": 152,
+      "remapped": 38,
       "taiex_missing": 0,
       "no_group": 0,
       "short_groups": 38

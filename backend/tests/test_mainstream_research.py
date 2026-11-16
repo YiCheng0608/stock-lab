@@ -237,6 +237,12 @@ def closes(i: int) -> list[float]:
     return out
 
 
+def symbol(i: int) -> str:
+    """25 is 9921 巨大 (TWSE 37, 其他 before 2023-07-03 on TWSE's list)."""
+
+    return "9921" if i == 25 else f"{1000 + i}"
+
+
 def build(path: Path) -> Path:
     engine = create_engine(f"sqlite:///{path}")
     Base.metadata.create_all(engine)
@@ -249,7 +255,7 @@ def build(path: Path) -> Path:
                 {
                     "id": i,
                     "exchange": "TWSE" if i % 2 else "TPEx",
-                    "symbol": f"{1000 + i}",
+                    "symbol": symbol(i),
                     "name": f"N{i}",
                     "instrument_type": "stock",
                     "status": "delisted" if i in DELISTED else "active",
@@ -380,7 +386,7 @@ def member_rows() -> list[list]:
                         "",
                         label,
                         im.group_id(label),
-                        f"{1000 + i}",
+                        symbol(i),
                         f"N{i}",
                         im.retroactive(exchange, code, day.isoformat()),
                     ]
@@ -472,12 +478,12 @@ def test_the_split_and_the_dividend_are_on_the_holders_basis(context):
 
 
 def _groups(context, t, **policy):
-    members, retro = tool.group_members(context, trading_days()[t], **policy)
+    members, retro, remapped = tool.group_members(context, trading_days()[t], **policy)
     by_label = {
         label: members.get(im.group_id(label), set())
         for label in ("Semiconductor", "Other", "Biotechnology", "Sports and Leisure")
     }
-    return by_label, retro
+    return by_label, retro | {-i for i in remapped}
 
 
 def test_t_takes_the_latest_snapshot_on_or_before_it(context):
@@ -500,20 +506,38 @@ def test_both_markets_make_one_group_of_a_label(context):
 
 
 def test_the_retroactive_rows_follow_the_ac1_decision(context):
-    sports = {25, 27, 29, 31, 33}
+    sports = {25, 27, 29, 31, 33}  # 25 is 9921 巨大, on TWSE's 2023 list
     kept, retro = _groups(context, 299, retroactive="keep")
     dropped, retro_dropped = _groups(context, 299, retroactive="exclude")
     assert kept["Sports and Leisure"] == sports and retro == sports
     assert dropped["Sports and Leisure"] == set() and retro_dropped == sports
     tpex, _ = _groups(context, 299, exchanges=("TPEx",))
     assert tpex["Semiconductor"] == {2, 4, 6} and tpex["Sports and Leisure"] == set()
-    # the module's decision
-    default, _ = _groups(context, 299)
-    assert default["Sports and Leisure"] == (
-        sports
-        if tool.RETROACTIVE == "keep" and "TWSE" in tool.SOURCE_EXCHANGES
-        else set()
-    )
+    # the decision (6913227984): both markets, the 2023 list put back; a row
+    # put back is not retroactive any more (the remapped ids come negative)
+    assert (tool.SOURCE_EXCHANGES, tool.RETROACTIVE) == (("TWSE", "TPEx"), "remap_2023")
+    default, marks = _groups(context, 299)
+    assert default["Sports and Leisure"] == {27, 29, 31, 33}
+    assert default["Other"] == {25, 30, 34}
+    assert marks == {27, 29, 31, 33, -25}
+
+
+def test_the_2023_list_source_is_recorded_and_hashed(monkeypatch):
+    assert tool.REMAP_SOURCE == {
+        "announcement": "臺灣證券交易所公告 1121802250 附件「112年上市公司產業類別調整名單」",
+        "url": "https://wwwc.twse.com.tw/staticFiles/announcement/announcement/1121802250-1.pdf",
+        "created": "2023-05-19",
+        "effective": "2023-07-03",
+        "sha256": "da00070185c9b927bc78d5d7bd2f74304b84c06171901bf62db5b8226e289d8f",
+        "downloaded": "2026-11-16",
+    }
+    assert tool.REMAP_BEFORE == "2023-07-03" == im.RETROACTIVE_BEFORE
+    before = tool.definitions_sha256()
+    monkeypatch.setitem(tool.REMAP_SOURCE, "sha256", "0" * 64)
+    assert tool.definitions_sha256() != before
+    monkeypatch.undo()
+    monkeypatch.setitem(tool.REMAP_2023, "9921", ("37", "16"))
+    assert tool.definitions_sha256() != before
 
 
 def test_a_retroactive_row_from_2023_07_03_is_not_retroactive():

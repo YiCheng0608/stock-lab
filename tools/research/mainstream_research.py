@@ -17,8 +17,9 @@ Each signal date T (after its close, only T's data and before):
   account keeps its cash, the population still buys).
 - the groups are T's official industry members: the latest snapshot of
   ``industry_members_v1.json`` (#779) with ``snapshot_date <= T``, each row's
-  symbol matched to the instrument with a bar on T.  Which rows count is the
-  AC-1 decision (``SOURCE_EXCHANGES``, ``RETROACTIVE``).
+  symbol matched to the instrument with a bar on T.  Both markets count; the
+  47 TWSE companies of the 2023 list go back to their code before 2023-07-03
+  (AC-1 decision 6913227984, ``REMAP_2023``).
 - the groups are ranked and the stocks taken as ``app.mainstream``'s
   ``mainstream_v1`` does (``rank_groups``, ``rank_items``), copied here and
   not imported; backend/tests/test_mainstream_research.py compares both on
@@ -94,18 +95,30 @@ MOMENTUM = features._momentum(WINDOW)
 MEMBERS_NAME = im.TABLE_NAME
 MEMBERS_SHA256 = "2a7e0bf4b36425896ba77cd253b936a430669d1e5754e71f50a72661ae651827"
 MEMBERS_DIR = ("research", "industry_members")  # beside the DB, docs RESEARCH_DB
-# AC-1 (#813): which rows of the table are T's groups.
+# Its last snapshot: every T after it (the used segment) takes this one.
+MEMBERS_LAST = "2024-09-30"
+# AC-1 (#813 decision 6913227984): which rows of the table are T's groups.
+# Both markets; TWSE rows before 2023-07-03 of the 47 companies of TWSE's 2023
+# list go back to their code before that day ("remap_2023"; the other two
+# policies were measured for AC-1 and are kept for the record only).  TWSE's
+# other yearly reclassifications stay retroactive (docs 官方產業的成員 限制).
 SOURCE_EXCHANGES: tuple[str, ...] = (im.TWSE, im.TPEX)
-# TWSE rows before 2023-07-03: "exclude" the 35-38 ones, "keep" them, or
-# "remap_2023": put the 47 companies of TWSE's 2023 list back in their code
-# before that day (REMAP_2023).
-RETROACTIVE = "exclude"
+RETROACTIVE = "remap_2023"
 RETROACTIVE_POLICIES = ("exclude", "keep", "remap_2023")
-# TWSE 112年上市公司產業類別調整名單 (announcement 1121802250, effective
-# 2023-07-03): symbol -> (code from 2023-07-03, code before).  42 went into
-# 35-38 (the table's 42 retroactive symbols, 12/4/15/11), 5 moved between old
-# codes.  A row is put back only while it still carries the new code.
-REMAP_BEFORE = im.RETROACTIVE_BEFORE
+# TWSE 112年上市公司產業類別調整名單: symbol -> (code from 2023-07-03, code
+# before).  42 went into 35-38 (the table's 42 retroactive symbols,
+# 12/4/15/11), 5 moved between old codes.  A row is put back only while its
+# snapshot is before 2023-07-03 and it still carries the new code; a row put
+# back is not retroactive any more.
+REMAP_SOURCE = {
+    "announcement": "臺灣證券交易所公告 1121802250 附件「112年上市公司產業類別調整名單」",
+    "url": "https://wwwc.twse.com.tw/staticFiles/announcement/announcement/1121802250-1.pdf",
+    "created": "2023-05-19",  # the PDF's creation date
+    "effective": "2023-07-03",
+    "sha256": "da00070185c9b927bc78d5d7bd2f74304b84c06171901bf62db5b8226e289d8f",
+    "downloaded": "2026-11-16",
+}
+REMAP_BEFORE = REMAP_SOURCE["effective"]
 REMAP_2023: dict[str, tuple[str, str]] = {
     # 35 綠能環保 (12)
     "3708": ("35", "21"),
@@ -183,7 +196,7 @@ def definitions() -> dict[str, Any]:
             "table_definitions": im.definitions(),
             "source_exchanges": list(SOURCE_EXCHANGES),
             "retroactive": RETROACTIVE,
-            "remap_2023": [REMAP_BEFORE, REMAP_2023],
+            "remap_2023": {"source": REMAP_SOURCE, "companies": REMAP_2023},
             "available": "snapshot_date <= T",
             "match": "symbol, the instrument with a bar on T",
         },
@@ -448,25 +461,29 @@ def group_members(
     day: date,
     exchanges: tuple[str, ...] | None = None,
     retroactive: str | None = None,
-) -> tuple[dict[str, set[int]], set[int]]:
-    """T's groups (group id -> instruments) under the AC-1 decision, and the
-    instruments of the excluded retroactive rows (listed only)."""
+) -> tuple[dict[str, set[int]], set[int], set[int]]:
+    """T's groups (group id -> instruments) under the AC-1 decision; the
+    instruments of the rows still retroactive (35-38 before 2023-07-03, not
+    put back) and of the rows put back by REMAP_2023 (both listed only)."""
 
     snapshot = snapshot_on(ctx, day)
     members: dict[str, set[int]] = defaultdict(set)
     retro: set[int] = set()
+    remapped: set[int] = set()
     if snapshot is None:
-        return {}, retro
+        return {}, retro, remapped
     for member in ctx.snapshots[snapshot]:
         instrument_id = instrument_on(ctx, member, day)
         if instrument_id is None:
             continue
-        if member.retroactive:
-            retro.add(instrument_id)
         group_id = group_of(member, snapshot, exchanges, retroactive)
+        if group_id is not None and group_id != member.group_id:
+            remapped.add(instrument_id)
+        elif member.retroactive:
+            retro.add(instrument_id)
         if group_id is not None:
             members[group_id].add(instrument_id)
-    return dict(members), retro
+    return dict(members), retro, remapped
 
 
 def taiex_return(ctx: Context, day: date) -> float | None:
@@ -503,7 +520,8 @@ class Day:
     ranked: int
     grouped: int  # universe members in some group
     selectable: int  # ... with a 240-session return
-    retro: int  # universe members of a retroactive row
+    retro: int  # universe members of a row still retroactive
+    remapped: int  # universe members put back by REMAP_2023
     taiex: bool
 
 
@@ -518,7 +536,7 @@ def signal_day(
     universe = lib.universe(panel, day, MIN_LOTS)
     ids = [item.instrument_id for item, _ in universe]
     returns = window_returns(universe)
-    members, retro = group_members(ctx, day, exchanges, retroactive)
+    members, retro, remapped = group_members(ctx, day, exchanges, retroactive)
     grouped = set().union(*members.values()) & set(ids) if members else set()
     index_return = taiex_return(ctx, day)
     # The order of the groups does not depend on TAIEX (one shift for all):
@@ -538,6 +556,7 @@ def signal_day(
         grouped=len(grouped),
         selectable=sum(1 for i in grouped if i in returns),
         retro=len(retro & set(ids)),
+        remapped=len(remapped & set(ids)),
         taiex=index_return is not None,
     )
 
@@ -580,6 +599,7 @@ COVERAGE_KEYS = (
     "selectable",
     "ranked_groups",
     "retroactive",
+    "remapped",
     "taiex_missing",
     "no_group",
     "short_groups",
@@ -594,6 +614,7 @@ def _coverage_add(coverage: dict[str, dict[str, int]], day: date, d: Day) -> Non
     year["selectable"] += d.selectable
     year["ranked_groups"] += d.ranked
     year["retroactive"] += d.retro
+    year["remapped"] += d.remapped
     if not d.taiex:
         year["taiex_missing"] += 1
     elif not d.groups:
@@ -775,9 +796,10 @@ public = ex.public
 def coverage_lines(coverage: dict[str, dict[str, int]]) -> list[str]:
     lines = [
         "| 年 | 訊號日 | 母體檔次（日均） | 有族群（占母體） | 有族群且有 240 日報酬（日均） "
-        "| 可排名的族群（日均） | 35～38 回溯成員在母體（日均） | TAIEX 不足不選 "
+        "| 可排名的族群（日均） | 依 2023 名單放回原產業（日均） | 仍標回溯（日均） "
+        "| TAIEX 不足不選 "
         "| 沒有可排名的族群 | 湊不滿 5 個族群 |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for year, row in sorted(coverage.items()):
         n = row["days"] or 1
@@ -785,7 +807,8 @@ def coverage_lines(coverage: dict[str, dict[str, int]]) -> list[str]:
         lines.append(
             f"| {year} | {row['days']:,} | {row['universe'] / n:,.0f} | {share} "
             f"| {row['selectable'] / n:,.0f} | {row['ranked_groups'] / n:,.1f} "
-            f"| {row['retroactive'] / n:,.1f} | {row['taiex_missing']:,} "
+            f"| {row['remapped'] / n:,.1f} | {row['retroactive'] / n:,.1f} "
+            f"| {row['taiex_missing']:,} "
             f"| {row['no_group']:,} | {row['short_groups']:,} |"
         )
     return lines
@@ -796,11 +819,14 @@ def _members_line() -> str:
     retro = {
         "exclude": "上市 35～38 在 2023-07-03 以前的回溯列排除",
         "keep": "上市 35～38 在 2023-07-03 以前的回溯列保留",
-        "remap_2023": "上市 2023-07-03 改分類的 47 家，在那天以前依證交所調整名單放回原產業",
+        "remap_2023": "上市 2023-07-03 改分類的 47 家，在那天以前依證交所調整名單"
+        f"（公告 1121802250，sha256 `{REMAP_SOURCE['sha256'][:16]}…`）放回原產業；"
+        "其他年度的調整仍是回溯的",
     }[RETROACTIVE]
     return (
         f"- 族群來源：{exchanges}的官方產業逐月成員表（sha256 `{MEMBERS_SHA256[:16]}…`）；"
         + retro
+        + f"。成員表到 {MEMBERS_LAST}，之後的 T 都用那一份"
     )
 
 
