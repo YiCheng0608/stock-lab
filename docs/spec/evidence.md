@@ -499,6 +499,40 @@ MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
 | --- | --- | --- |
 | 1 | #726 | 第一版；沒有人用它對回補資料跑過 |
 
+**主流族群的假設**（第三輪，[第三輪：M1、M2](#第三輪m1m2)）：`tools/research/mainstream_research.py`（[#813](https://github.com/YiCheng0608/stock-lab/issues/813)）。M1、M2 寫在 `mainstream_research.HYPOTHESES`，不在 `explore_research.HYPOTHESES` 裡；命令列一樣沒有改參數、起日或 cutoff 的旗標。跑法、拒絕的情況（正式 DB、台北 21:30～23:30、可用記憶體不足）、分段、段長、公開檢查與紀錄檔都和上面的 `explore_research` 相同，只把工具換掉，另多讀一份成員表：
+
+```bash
+# 換值同上（探索段與 --coverage-only 加 RERUN；驗證段只用 R）。成員表預設讀 DB 旁的
+# research/industry_members/industry_members_v1.json，也就是研究 volume 的 /research/research/industry_members/
+MSYS_NO_PATHCONV=1 docker run "${R[@]}" "${RERUN[@]}" "$IMG" \
+  python -B tools/research/mainstream_research.py --db /research/stock.db --segment exploration --hypotheses M1,M2 --out /out/exploration
+```
+
+- **成員表**：[#779](https://github.com/YiCheng0608/stock-lab/issues/779) 的 `industry_members_v1.json`（[研究 DB 的官方產業的逐月成員表](../ops/RESEARCH_DB.md#官方產業的逐月成員表)）。sha256 寫死在 `mainstream_research.MEMBERS_SHA256`，檔案的 sha256 不同或不存在就在讀任何資料之前拒絕（exit 2）；`--members <路徑>` 只換位置，不換內容。主檔的 sha256 與成員表工具的對照表（`industry_members.definitions()`：產業代號 → 標籤、`E-commerce`、貿易百貨併入、存託憑證與管理股票不抓、回溯的代號與日期）都算進 `definitions_sha256`。
+- **探索**：`python tools/research/mainstream_research.py --db /research/stock.db --segment exploration --hypotheses <M1,M2 或其一> --out <目錄> [--min-free-gb 2]`。讀 DB 時只讀 2019-12-31（含）以前的列，成員表也只讀 `snapshot_date` 在那天以前的快照；DB 從頭讀（同 `explore_research`，240 日報酬數的是每檔自己的日線）。M1、M2 用同一份名單，只是持有 20 或 60 日。
+- **驗證**：`python tools/research/mainstream_research.py --db /research/stock.db --segment validation --exploration-report <探索的 explore.json> --exploration-sha256 <公開留言裡的雜湊> --exploration-url <公開連結> --out <目錄> [--min-free-gb 2]`。拒絕條件同 `explore_research` 的驗證；報告要是本工具的探索段報告（`design` 是 `813`），`definitions_sha256` 和現在的程式相同。讀到 2024-09-27（往前 730 天當暖機），判「通過」的另跑已用段，寫在 `<代號>/used/`。成員表只到 2024-09，已用段的 T 都用 2024-09-30 那一份。
+- **`--coverage-only`**（探索段，不接受 `--hypotheses`）：只寫 `coverage.md`／`coverage.json`，不跑模擬、不算報酬與強弱、不記紀錄檔，跑幾次都可以。依年列：訊號日數、母體檔次（日均）、母體中 T 日有族群的比例（成員覆蓋率）、有族群且有 240 日報酬的檔次、可排名的族群數（日均）、上市 35～38 回溯成員在母體的檔次、TAIEX 不足而不選的天數、沒有可排名的族群的天數、湊不滿 5 個族群的天數。
+- **紀錄檔**：和 `explore_research`、`trade_research` 共用 DB 旁的 `explore-ledger.json` 與 repo 的 `tools/research/explore_ledger.json`，每一筆另有 `"tool": "mainstream_research"`。代號不重疊，三支工具互不擋；同一代號、同一工具版本的探索段只跑一次，驗證段只跑一次。
+- **算法**：照[第三輪：M1、M2](#第三輪m1m2)的條件與排序。
+  - 240 日報酬是 `feature_evidence._momentum(240)`；和產品 `app.mainstream.universe_returns` 除了第 1 點的三個邊角都相同（測試鎖住）。
+  - 族群強弱與個股排名是 `mainstream_research.rank_groups`／`rank_items`，從產品的 `app.mainstream` 複製，不 import；`backend/tests/test_mainstream_research.py` 在同一份 fixture 上和產品比，產品改了 `mainstream_v1` 的參數或邏輯就紅。
+  - T 日的成員：`snapshot_date ≤ T` 的最新一份；每一列的代號對到 T 日有日線的標的（兩檔都有時取同一市場的）。哪些列算數照「官方產業的成員」的第三次更正（`mainstream_research.SOURCE_EXCHANGES`、`RETROACTIVE`）。
+  - TAIEX 不足的日子當天不選（該子帳戶留現金，母體照買）；可排名的族群不足 5 個時有幾個取幾個。
+  - 引擎是 `portfolio_research.simulate`（20 檔、每檔子帳戶現金的 1／20），基準是同一引擎的母體，判定是 `explore_research.explore_judge`。
+- **輸出**（檔名、雜湊與公開方式同 `explore_research`）：
+  - `explore.md`：第一行是「explore.json 的 sha256：`<雜湊>`」；接著是本輪 2 個、累計 15 個與其他比較次數、族群來源，以及每個假設的日數、對加權指數的超額日均與 t（第一個列）、對母體的超額日均與 t、絕對報酬日均與判定。
+  - `explore.json`：同上的總表，另有 `tool`、`design`（`813`）、`definitions_sha256`、`members_sha256`、工具 commit、副本資訊與先決條件。
+  - `<代號>/summary.md`、`tables.json`：同 `explore_research`，另有依年的成員覆蓋。
+  - `<代號>/equity.csv`、`trades.csv`：同 `explore_research`。
+  - `<代號>/picks.csv`：每個訊號日的前 20 名（240 日報酬、所屬的選上族群、同分雜湊）；`<代號>/groups.csv`：每個訊號日選上的族群（名次、強弱、有值成員數、取平均的檔數）。
+  - `ledger-entries.json`：本次寫進紀錄檔的幾筆。
+
+**`mainstream_research` 的版本**：`mainstream_research.VERSION` 寫在報告標題、`explore.json`／`tables.json` 與紀錄檔，也算進 `definitions_sha256`；規則一樣，判定或報告格式一改就加一。
+
+| 版本 | 任務 | 改了什麼 |
+| --- | --- | --- |
+| 1 | #813 | 第一版；沒有人用它對回補資料跑過 |
+
 #### 實作釋義
 
 文件沒寫、由統籌決定 [6874888073](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874888073)（2026-11-14，回覆設計提問 [6874879471](https://github.com/YiCheng0608/stock-lab/issues/703#issuecomment-6874879471)）補上的釋義；在任何人對回補資料跑工具之前決定。登記表與定義細節的原文不動。

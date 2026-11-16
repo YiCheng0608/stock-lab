@@ -1,0 +1,72 @@
+{
+  "tool": "mainstream_research",
+  "version": 1,
+  "design": "813",
+  "registration_commit": "31a09e9e",
+  "correction_commit": "b417f716",
+  "segment": "exploration",
+  "round": 3,
+  "round_size": 2,
+  "cumulative": 15,
+  "definitions_sha256": "422fde1bd64632035816e281a3d3f11e02059d476402a6a267cc186d83bd88aa",
+  "copy": {
+    "latest": "2014-04-07",
+    "alembic": null
+  },
+  "read_until": "2014-02-24",
+  "min_t": 2.0,
+  "selected": [
+    "M1",
+    "M2"
+  ],
+  "hypotheses": {
+    "M1": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 49,
+      "taiex_excess": {
+        "days": 47,
+        "mean": 0.0003769845813756803,
+        "annual": 0.09500011450667144,
+        "t": 2.6959491281651853
+      },
+      "excess": {
+        "days": 49,
+        "mean": -4.786318703215e-05,
+        "annual": -0.0120615231321018,
+        "t": -0.4734680843094198
+      },
+      "absolute_mean": 0.0006865559440039739,
+      "prerequisites": {
+        "days": 49,
+        "min_days": 40,
+        "delisted": 1,
+        "ok": true
+      }
+    },
+    "M2": {
+      "verdict": "沒有通過（探索段）",
+      "reason": null,
+      "days": 49,
+      "taiex_excess": {
+        "days": 47,
+        "mean": 0.0001076604299580136,
+        "annual": 0.02713042834941943,
+        "t": 1.3279021278352532
+      },
+      "excess": {
+        "days": 49,
+        "mean": -4.616775862938439e-05,
+        "annual": -0.011634275174604867,
+        "t": -0.7988273651902686
+      },
+      "absolute_mean": 0.00042899668129251113,
+      "prerequisites": {
+        "days": 49,
+        "min_days": 40,
+        "delisted": 1,
+        "ok": true
+      }
+    }
+  }
+}
