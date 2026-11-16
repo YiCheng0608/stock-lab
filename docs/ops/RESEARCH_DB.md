@@ -107,8 +107,128 @@ MSYS_NO_PATHCONV=1 docker run --rm --network none -v stock-lab-research:/data "$
 | 減資停止買賣 | `trading-halts --start 2011-01-01 --end 2024-09-30` | 起日夾到各來源的起始日（TWSE 2011、TPEx 2013），輸出 `not_published_before`。恢復日在 2015-04-16 以前的 89 列 TWSE 資料，最後交易日要用已存的日線推（[DATA_SOURCES](../DATA_SOURCES.md#減資停止買賣)，#776）：日線還沒補到的月份會拒絕（`no bar before the resumption`），所以要等那段日線補完再跑：批 4 後跑一次（2012-05～2015-04，含批 3 的 2015 年），批 5 後再跑一次（2011-01～2012-04）。推不出的列記在 `conflicts`（不是 `rejected`），每列記 warning `TWSE trading halts rejected: …`，run 是 `partial`。批 4 之後應看到 TWSE `inferred_from_bars` 65、`updated` 3（2408、2438、3536：日期不變，只有 `details_json` 多了晚列的 `same_resumption_rows`，2408 的 `last_trade_date_basis` 改成 `inferred_from_bars`）、`conflicts` 22（恢復日 2011-01～2012-01，`no bar before the resumption`）、`rejected` 0、`removed` 0，其他列 `unchanged`（2026-11-16 在批 4 後的副本實測，PR #789）。批 5 之後，那 22 列由 `conflicts` 轉成寫入 |
 | 休市表 | `trading-calendar --year 2021 --year 2022` | 2020 年以前沒有內容 |
 | 週末交易日（#790） | 三步，照順序跑：<br>1. `python -B tools/research/history_backfill.py --from 2004-02-11 --to 2018-12-31 --weekend-sessions`（用 `history_backfill.py` 的那行 `docker run -d`，不是 `worker.cli`）<br>2. 含週末交易日的每個月，各跑一次 `index-bars backfill --from-month <月> --to-month <月>`<br>3. `indicators --rebuild` | 補月份模式沒送的星期六、星期日（`OFFICIAL_WEEKEND_SESSIONS`，[DATA_SOURCES](../DATA_SOURCES.md#交易日的判定與週末交易日)）。<br>**為什麼要另跑**：已完成的月份，request key 是 success，不會再送；所以每個週末交易日各跑一個單日 backfill。progress 檔記 `weekend` 行，和 `month` 行分開，暫停與最後的整庫檢查和月份模式相同。<br>**第 2 步**：單日 backfill 從 `MI_INDEX` 寫 TAIEX 收盤；重跑 `index-bars` 後，那天的 `no_close_row` 會變成 `upgraded`。`index-bars` 不讀已存 raw，每月重發 4 個請求。<br>**請求數**：單日 backfill 每天約 11 個：上市 6（含 3 個名冊 OpenAPI）、上櫃 4、MOPS 1，是 2026-11-16 在副本上補 2012-12-22 的實測數；2012-05 以前沒有 T86，2009 年以前多 1 個 `MI_5MINS_HIST`。`index-bars` 每月 4 個。總數約為「天數 × 11 ＋ 月數 × 4」，清單的 23 天分在 22 個月，約 253 ＋ 88 ＝ 341 個請求。<br>**耗時**：副本上每天約 3.5 分鐘（這次為了不和批 5 疊加，請求間隔拉到 30 秒；照預設 3 秒會更短），加上最後一次整庫檢查約 14 分鐘（13.5 GB 的副本） |
+| 上櫃舊版 `0.00` 價格的修正（#819） | 兩步：SQL 刪除＋`no-trade-days --start 2007-04-23 --end 2011-11-11`，命令全文見下節[上櫃舊版 0.00 價格的修正](#上櫃舊版-000-價格的修正819) | 只跑一次，跑完後才跑 `indicators --rebuild` |
 
 回補日線或除權息之後，對研究 DB 跑 `indicators --rebuild`（研究工具自己算報酬，不讀指標；要用 API 或回測時才需要）。
+
+### 上櫃舊版 0.00 價格的修正（#819）
+
+2007-04-23～2011-11-11 的上櫃 `dailyQuotes` 在沒有一般交易時，四個價格都填 `0.00`（[DATA_SOURCES](../DATA_SOURCES.md#官方無成交日)）。#819 之前的 parser 把這種列寫成收盤價 0 的日線，研究 DB 有 14,121 根：234 檔，全部是 `source='tpex'`，各年 2007 年 1,351、2008 年 4,980、2009 年 3,158、2010 年 1,973、2011 年 2,659。正式 DB 從 2023-09 起，沒有這種列。
+
+用含 #819 的 image 重跑 `backfill --force` 修不好，原因有兩個：
+
+- collect 只 upsert 本次解析出的列，不刪已存的列。在副本上實測 2011-11-01，以 `overwrite=True` 寫入後，16 根照樣留著。
+- `no-trade-days` 不替已有 bar 的那天寫無成交日。
+
+所以先刪列，再從已存 raw 重建（統籌決定 [6915873985](https://github.com/YiCheng0608/stock-lab/issues/819#issuecomment-6915873985)）。不發請求。
+
+1. **前提**：
+   - 用含 #819 的 image（`IMG`）。修正之後研究 DB 的各批回補，包括 #790 的週末交易日，也都要用含 #819 的 image。區間內還有 6 個週末交易日沒補：2007-06-23、2007-09-29、2009-01-10、2009-01-17、2009-06-06、2010-02-06。用舊 image 補，0 價日線會悄悄回來；在修正之前補，第 2 步的數目會對不上。
+   - 研究 DB 當下沒有寫入者：`docker ps` 沒有 `research-*`、`task-702-*` 的寫入容器，`maintenance status` 是 `off`。`/data/locks/` 裡的 `.lock` 是 flock 檔，持有者結束後檔案還在，不能拿來判斷。
+   - 開維護模式。手動的 `on` 沒有心跳，`off` 之前 backfill 與 backtest 都拒絕起跑，`no-trade-days` 不受影響：
+
+   ```bash
+   MSYS_NO_PATHCONV=1 docker run --rm --network none -v stock-lab-research:/data "$IMG" python -B -m worker.cli maintenance status --data-dir /data
+   MSYS_NO_PATHCONV=1 docker run --rm --network none -v stock-lab-research:/data "$IMG" python -B -m worker.cli maintenance on --reason "#819 0.00 price repair" --data-dir /data
+   ```
+
+2. **刪除**：在一個 transaction 裡做，條件寫死。DELETE 之前先在同一個 transaction 裡記下修正前的資料：
+   - 這段日期兩個交易所的 `no_trade_days`（印出 `no_trade_before`）。
+   - 要刪的（`instrument_id`、`trading_date`）。
+
+   要刪的數目、刪除數或刪除後的數目不是 14,121／14,121／0 時，rollback 並以 exit 1 停下，印出各年的數目。數目都對時，才把修正前的資料寫進 `/data/logs/no-trade-819-before.json`，然後 commit。對不上時不要改常數重跑：把印出的 `no_trade_before`、`before` 與 `by_year` 貼在 Issue 問統籌。
+
+   ```bash
+   MSYS_NO_PATHCONV=1 docker run --rm -i --network none -v stock-lab-research:/data "$IMG" python -B - <<'PY'
+   import json, sqlite3, sys
+   SAVED = "/data/logs/no-trade-819-before.json"
+   WHERE = """FROM market_bars WHERE source = 'tpex'
+     AND open = 0 AND high = 0 AND low = 0 AND close = 0
+     AND trading_date BETWEEN '2007-04-23' AND '2011-11-11'
+     AND instrument_id IN (SELECT id FROM instruments WHERE exchange = 'TPEx')"""
+   NO_TRADE = """SELECT i.exchange, n.instrument_id, n.trading_date
+     FROM no_trade_days n JOIN instruments i ON i.id = n.instrument_id
+     WHERE n.trading_date BETWEEN '2007-04-23' AND '2011-11-11'"""
+   conn = sqlite3.connect("/data/stock.db", isolation_level=None)
+   conn.execute("BEGIN IMMEDIATE")
+   no_trade = conn.execute(NO_TRADE).fetchall()
+   no_trade_before = {ex: sum(r[0] == ex for r in no_trade) for ex in ("TPEx", "TWSE")}
+   keys = conn.execute("SELECT instrument_id, trading_date " + WHERE).fetchall()
+   by_year = {}
+   for _, day in keys:
+       by_year[day[:4]] = by_year.get(day[:4], 0) + 1
+   deleted = conn.execute("DELETE " + WHERE).rowcount
+   after = conn.execute("SELECT count(*) " + WHERE).fetchone()[0]
+   result = {"no_trade_before": no_trade_before, "before": len(keys),
+             "by_year": by_year, "deleted": deleted, "after": after}
+   if (len(keys), deleted, after) != (14121, 14121, 0):
+       conn.execute("ROLLBACK")
+       print(json.dumps({**result, "status": "rolled_back"}))
+       sys.exit(1)
+   with open(SAVED, "w") as out:
+       json.dump({**result, "no_trade_keys": no_trade, "deleted_keys": keys}, out)
+   conn.execute("COMMIT")
+   print(json.dumps({**result, "status": "committed", "saved": SAVED}))
+   PY
+   ```
+
+3. **重建**：照[跑一批](#跑一批)的 `docker run -d … "${R[@]}" "$IMG"` 跑 `python -B -m worker.cli no-trade-days --start 2007-04-23 --end 2011-11-11`，輸出寫 `/data/logs/no-trade-819.json`。
+   - 預期 `status: success`、`missing: 0`、`unmatched: 0`。
+   - 輸出的 `rows` 是這段日期兩個交易所現有的列數總和，不是新增數。新增數看第 4 步。
+4. **讀回**：以唯讀連線（`mode=ro`）比對第 2 步存的修正前資料。volume 不加 `:ro`：`no-trade-days` 結束後 DB 是 WAL 模式、旁邊沒有 `-shm`，唯讀掛載時 `mode=ro` 開不了（[#486](https://github.com/YiCheng0608/stock-lab/issues/486)，副本演練實際遇到）。預期：
+   - `no_trade_days` 新增 TPEx 14,121、TWSE 17，移除 0。
+   - TPEx 新增的（標的、日期）和刪掉的完全相同。
+   - 上櫃四價皆 0 的日線 0 根、部分價格為 0 的 0 根（不限日期）。
+
+   TWSE 的 17 列是 2479 和立（2007-05-02～05-04）與 2494 廣業科（2008-10-01～10-21）。這兩檔的 instrument 是回補後段才建立的，當初那幾天的 collect 寫無成交日時還沒有。這和 #819 無關，統籌接受。不符預期時 exit 1。
+
+   ```bash
+   MSYS_NO_PATHCONV=1 docker run --rm -i --network none -v stock-lab-research:/data "$IMG" python -B - <<'PY'
+   import json, sqlite3, sys
+   saved = json.load(open("/data/logs/no-trade-819-before.json"))
+   NO_TRADE = """SELECT i.exchange, n.instrument_id, n.trading_date
+     FROM no_trade_days n JOIN instruments i ON i.id = n.instrument_id
+     WHERE n.trading_date BETWEEN '2007-04-23' AND '2011-11-11'"""
+   BARS = """SELECT count(*) FROM market_bars b JOIN instruments i ON i.id = b.instrument_id
+     WHERE i.exchange = 'TPEx' AND """
+   conn = sqlite3.connect("file:/data/stock.db?mode=ro", uri=True)
+   before = {tuple(r) for r in saved["no_trade_keys"]}
+   after = set(conn.execute(NO_TRADE).fetchall())
+   added, removed = after - before, before - after
+   added_by = {ex: sum(r[0] == ex for r in added) for ex in ("TPEx", "TWSE")}
+   tpex_added = {(r[1], r[2]) for r in added if r[0] == "TPEx"}
+   deleted = {tuple(r) for r in saved["deleted_keys"]}
+   zero = conn.execute(BARS + "b.open = 0 AND b.high = 0 AND b.low = 0 AND b.close = 0").fetchone()[0]
+   some = conn.execute(BARS + "(b.open = 0 OR b.high = 0 OR b.low = 0 OR b.close = 0)").fetchone()[0]
+   result = {
+       "no_trade_before": saved["no_trade_before"],
+       "no_trade_after": {ex: sum(r[0] == ex for r in after) for ex in ("TPEx", "TWSE")},
+       "added": added_by, "removed": len(removed),
+       "tpex_added_equals_deleted": tpex_added == deleted,
+       "tpex_zero_bars": zero, "tpex_some_zero_bars": some,
+   }
+   ok = (added_by == {"TPEx": 14121, "TWSE": 17} and not removed
+         and tpex_added == deleted and zero == 0 and some == 0)
+   print(json.dumps({**result, "status": "ok" if ok else "unexpected"}))
+   sys.exit(0 if ok else 1)
+   PY
+   ```
+
+   - 接著跑 `PRAGMA integrity_check`，結果要是 `ok`。17 GB 的副本在 `--memory 3g` 下約 22 分鐘，要在 21:00 之前開始。
+   - 讀回的輸出與 integrity_check 的結果貼在 #702 的 AC-8。
+   - 最後關維護模式：`… "$IMG" python -B -m worker.cli maintenance off --reason "#819 0.00 price repair done" --data-dir /data`（前綴同第 1 步；`off` 也要 `--reason`）。
+5. 之後才跑 `indicators --rebuild`（[跑一批](#跑一批)表下的說明）。它也要等 [#821](https://github.com/YiCheng0608/stock-lab/issues/821) 的除權息。
+
+**副本上的演練**（branch 上的新程式，只讀已存 raw）：
+
+- **照本節命令逐字演練**（2026-11-16 20:43 取的研究副本，volume `task-819_rehearsal`；raw 以 `--mount …,volume-subpath=raw,readonly` 掛研究 volume 的 `raw/`）：
+  - 第 1 步：`status` 是 `off`，`on` 之後是 `owner: manual`。
+  - 第 2 步：`no_trade_before` 是 TPEx 0、TWSE 5,898，刪除 14,121，committed。
+  - 第 3 步：`success`、`missing 0`、`unmatched 0`，約 3 分鐘。
+  - 第 4 步讀回：TPEx +14,121、TWSE +17、移除 0，新增的鍵和刪掉的相同，0 價日線 0 根，`status: ok`；`integrity_check` ok（22 分鐘）；`maintenance off`。
+  - 同一個副本再跑一次第 2 步：`before 0`，rolled_back，exit 1。
+- **另一份副本的逐日比對**（19:44 取的研究副本，用 `replay819.py repair` 刪除並重建，不是本節的腳本）：用新程式重放這段 1,146 天已存的 TPEx `dailyQuotes` raw，比對剩下的 615,959 根 TPEx 日線：列數、開高低收、成交股數、成交金額與 `turnover_status` 逐列相同。沒有標的因此變成沒有日線。
+- 腳本與輸出：`C:/Users/YiCheng/stock-lab-data/evidence/819/`（`SHA256SUMS`）。
 
 ### 研究工具的分段
 
