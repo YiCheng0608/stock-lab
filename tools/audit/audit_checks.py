@@ -43,6 +43,10 @@ from audit_lib import (
 )
 from audit_series import FIELDS, Series, evidence_lookup, indicators, load_series
 
+# The weekend sessions the official tables list (Issue #790); the audit reads the
+# collector's own list (audit_lib puts backend/ on sys.path), not a copy (Issue #798).
+from worker.sources import OFFICIAL_WEEKEND_SESSIONS, is_request_date
+
 # The current TPEx session's three files are the OpenAPI tables, the website
 # reports are the fallback and every other date's source (Issue #579).
 TPEX_OPENAPI = "https://www.tpex.org.tw/openapi/v1/"
@@ -223,7 +227,11 @@ BAR_RULES = {
     "price_not_positive": "open <= 0 or high <= 0 or low <= 0 or close <= 0",
     "volume_negative": "volume < 0 or turnover < 0",
     "suspended_with_volume": "is_suspended = 1 and volume > 0",
-    "weekend_date": "strftime('%w', trading_date) in ('0', '6')",
+    # A weekend is a violation unless it is a listed weekend session (Issue #798).
+    "weekend_date": "strftime('%w', trading_date) in ('0', '6')"
+    " and trading_date not in ({})".format(
+        ", ".join(f"'{day.isoformat()}'" for day in sorted(OFFICIAL_WEEKEND_SESSIONS))
+    ),
 }
 
 
@@ -316,14 +324,15 @@ def bars_coverage(ctx: Context) -> Check:
         present = set(days)
         while day <= end:
             iso = day.isoformat()
-            if day.weekday() < 5 and iso not in present:
+            # Weekdays and the listed weekend sessions must have bars (Issue #798).
+            if is_request_date(day) and iso not in present:
                 kind = holidays.get(iso, "not_in_holiday_table")
                 gaps[kind] += 1
                 if kind == "not_in_holiday_table":
                     gap_days.append(iso)
             day += timedelta(days=1)
     check.notes.append(
-        f"休市表 {len(holidays)} 列；沒有日線的週間日：{dict(gaps)}；不在休市表的：{', '.join(gap_days) or '無'}（颱風等臨時休市不在休市表，只列出、不判定）"
+        f"休市表 {len(holidays)} 列；沒有日線的週間日與清單上的週末交易日：{dict(gaps)}；不在休市表的：{', '.join(gap_days) or '無'}（颱風等臨時休市不在休市表，只列出、不判定）"
     )
     return check
 

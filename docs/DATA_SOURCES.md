@@ -273,6 +273,9 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
   - backfill 的候選日與延伸補抓日：`calendar_weekday_dates`、`_extension_candidate_dates`。
   - sources 的逐日請求：上市 `MI_INDEX`、上櫃 `dailyQuotes`、`fetch_index_history`。
   - `pipeline.collect`：收到清單裡的週末時，用原日；其他週末照舊推回星期五。
+  - 資料稽核 `tools/audit/audit_checks.py`（[#798](https://github.com/YiCheng0608/stock-lab/issues/798)）：從 `worker.sources` 匯入同一份清單，不另抄。
+    - `bars_integrity` 的 `weekend_date`：清單上的日子有日線不算違規，其他週末照舊算。
+    - `bars_coverage` 的缺口：用 `is_request_date`，清單上的日子沒有日線也列進缺口（2020 年以前休市表是空的，所以記成 `not_in_holiday_table`）；星期日與清單外的星期六照舊不檢查。
 - **平日不受影響**：範圍裡、以及迄日前 93 日內都沒有清單日期時，送出的日子、延伸補抓的候選日和 request key，都和 #790 之前一樣。
   - 延伸補抓看的是迄日前 93 日。所以清單日期在範圍外、但在這個窗口內時，會多一個延伸補抓候選日。例如 2016-06-06～08-31 會多出 2016-06-04。
   - 這一天只有要延伸補抓時才會送；範圍內送出的日子不變。
