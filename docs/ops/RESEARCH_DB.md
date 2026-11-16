@@ -339,7 +339,7 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
   - 用 `fetch --start 2013-01 --end 2024-09 --out /out`，在 `docker run -d` 的容器裡跑；`/out` 同樣是新的暫存 volume，不要掛研究 volume 寫入。
   - 每個 host 間隔 ≥ 5 秒，兩個 host 並行。
   - 台北 20:30～23:30、08:00～09:00 不發。
-  - 第一次被擋（封鎖頁、`查詢過於頻繁`、HTTP 403／429、連線被拒）就停下；同一個 host 連續 3 次失敗（其他非 200、空回應、不是 JSON、「網站維護中」）也停下。都是 exit 2，不自己重試。
+  - 第一次被擋（封鎖頁、`查詢過於頻繁`、HTTP 403／429、連線被拒）就停下；同一個 host 連續 3 次失敗（其他非 200、空回應、不是 JSON、「網站維護中」）也停下。都是 exit 2，不自己重試。摘要的 `stopped` 是停下原因那個 host 的訊息（例如 `TPEx: blocked: …`），另一個 host 因此跟著停時，它的 `TWSE: stopped` 列在 `followed`。
   - `fetch` 對期間列出的代號回 0 列或沒有資料，也算失敗（`sweep`、`bisect` 不算）。
   - 失敗的回應本文存在 `failed/`，`requests.jsonl` 那一列記本文路徑。
   - 已存的 raw 不重抓，重跑就是續跑。

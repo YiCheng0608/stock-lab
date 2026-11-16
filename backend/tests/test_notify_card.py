@@ -561,6 +561,12 @@ def _blank(row: bytes, channels: int) -> bool:
 
 
 BROWSER = notify_card.find_browser()
+# The runner has /usr/bin/chromium too, so this test runs in the backend job beside the
+# docker job's image. There it shares 4 cores with the other xdist workers: 91 green runs
+# took about 15 s at the median, 25 at p95 and up to 33 per case, and three runs on
+# 2026-11-16 were cut at 30 s (#824). The test checks the drawing, not the speed; notify
+# still uses RENDER_TIMEOUT_SECONDS (1.53 s at 08:45 on 2026-11-16).
+RUNNER_RENDER_TIMEOUT_SECONDS = 120.0
 
 
 @pytest.mark.skipif(
@@ -588,7 +594,7 @@ def test_the_images_chromium_draws_the_card(private_temp, monkeypatch, case):
     height = notify_card.card_height(card)
     extra = 40
     monkeypatch.setattr(notify_card, "card_height", lambda _card: height + extra)
-    drawn = notify_card.render(card)
+    drawn = notify_card.render(card, timeout=RUNNER_RENDER_TIMEOUT_SECONDS)
     assert drawn.reason is None, drawn.reason
     scale = notify_card.SCALE
     assert (drawn.width, drawn.height) == (
