@@ -563,6 +563,37 @@ TWSE_ACTION_HISTORY_FIRST_DATE = date(2003, 5, 5)  # TWT49U: 查詢開始日期�
 # Capital reduction reports: TWTAUU 查詢開始日期小於100年1月1日; revivt answers an
 # empty table for 2012 and has rows from 2013.
 REDUCTION_FIRST_DATES = {"TWSE": date(2011, 1, 1), "TPEx": date(2013, 1, 1)}
+# Weekend sessions (補行交易日) the TWSE FMTQIK month tables list, 2004-02 to
+# 2018-12 (Issue #790; how the list is made is in docs/DATA_SOURCES.md 交易日).
+# A weekend is requested only when it is here; there was none from 2019 on, so
+# a new one must be added by hand.  A weekday range never reads this list.
+OFFICIAL_WEEKEND_SESSIONS = frozenset(
+    {
+        date(2006, 10, 14),
+        date(2007, 3, 3),
+        date(2007, 4, 14),
+        date(2007, 6, 23),
+        date(2007, 9, 29),
+        date(2009, 1, 10),
+        date(2009, 1, 17),
+        date(2009, 6, 6),
+        date(2010, 2, 6),
+        date(2012, 2, 4),
+        date(2012, 3, 3),
+        date(2012, 12, 22),
+        date(2013, 2, 23),
+        date(2013, 9, 14),
+        date(2014, 12, 27),
+        date(2016, 1, 30),
+        date(2016, 6, 4),
+        date(2016, 9, 10),
+        date(2017, 2, 18),
+        date(2017, 6, 3),
+        date(2017, 9, 30),
+        date(2018, 3, 31),
+        date(2018, 12, 22),
+    }
+)
 
 
 def _taiex_month_closes(payload: Any, day: date) -> dict[date, float]:
@@ -1486,10 +1517,16 @@ def _month_starts(start: date, end: date) -> list[date]:
     return result
 
 
+def is_request_date(day: date) -> bool:
+    """A weekday, or a weekend the official tables list as a session (#790)."""
+
+    return day.weekday() < 5 or day in OFFICIAL_WEEKEND_SESSIONS
+
+
 def _weekday_dates(start: date, end: date) -> Iterable[date]:
     cursor = start
     while cursor <= end:
-        if cursor.weekday() < 5:
+        if is_request_date(cursor):
             yield cursor
         cursor += timedelta(days=1)
 
