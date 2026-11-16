@@ -248,8 +248,9 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
 
 回補 run 的 `target_met` 有三處：metadata 頂層、`coverage_manifest_summary`、`coverage`。這三處和 `/api/coverage` 的 `summary.target_met` 都用同一條規則（[#479](https://github.com/YiCheng0608/stock-lab/issues/479)）：
 
-- **目標**：`min(65, 窗口平日數 − 確定休市日)`，已驗證交易日（[TAIEX 交易日基準](#taiex-交易日基準)）達到目標就算達成。
-  - 回補 run 的窗口平日數含延伸補抓日；短範圍的上限是範圍內的平日數。
+- **目標**：`min(65, 窗口請求日數 − 確定休市日)`，已驗證交易日（[TAIEX 交易日基準](#taiex-交易日基準)）達到目標就算達成。
+  - 窗口請求日數是平日，加上清單裡的週末交易日（[交易日的判定與週末交易日](#交易日的判定與週末交易日)，#790）。
+  - 回補 run 的窗口請求日數含延伸補抓日；短範圍的上限是範圍內的請求日數。
   - run metadata 記 `target_sessions` 與 `confirmed_non_trading_dates`。
   - `/api/coverage` 的 summary 記 `target_ohlcv_taiex_sessions`（扣除後）、`target_ohlcv_taiex_cap`（扣除前）與 `confirmed_non_trading_dates`。
   - `coverage_targets.ohlcv_taiex_sessions` 仍是上限 65；要不要延伸補抓照舊看它，窗口還有空間就往前補。
@@ -272,7 +273,9 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
   - backfill 的候選日與延伸補抓日：`calendar_weekday_dates`、`_extension_candidate_dates`。
   - sources 的逐日請求：上市 `MI_INDEX`、上櫃 `dailyQuotes`、`fetch_index_history`。
   - `pipeline.collect`：收到清單裡的週末時，用原日；其他週末照舊推回星期五。
-- **平日不受影響**：範圍裡沒有清單日期時，送出的日子和 request key 都和 #790 之前一樣。
+- **平日不受影響**：範圍裡、以及迄日前 93 日內都沒有清單日期時，送出的日子、延伸補抓的候選日和 request key，都和 #790 之前一樣。
+  - 延伸補抓看的是迄日前 93 日。所以清單日期在範圍外、但在這個窗口內時，會多一個延伸補抓候選日。例如 2016-06-06～08-31 會多出 2016-06-04。
+  - 這一天只有要延伸補抓時才會送；範圍內送出的日子不變。
   - 正式 daily 只在週一到週五跑。
   - 清單只到 2018-12，正式 DB 從 2024-09-30 開始，所以正式環境不會用到這份清單。
 - **清單從哪裡來**：TWSE `FMTQIK`（每日市場成交資訊）月表，`https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK?date=<YYYYMM01>&response=json`。
@@ -280,6 +283,9 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
   - 2004-02～2018-12 共 179 個月，2026-11-16 產生。2012-05～2018-12 用研究 DB 已存的 raw，2004-02～2012-04 另發請求；每天出自哪個 raw，列在 #790 的 PR。
   - 休市表（[交易日曆](#交易日曆)）不能用：2020 年以前回 `total 0`。
 - **只涵蓋到 2018-12**：2019 年起官方沒有週末交易日。以後若再有，要手動加進清單。
+  - **依據**：研究 DB 已存的官方月表。2019-01～2026-11 的 `index-bars backfill`（TWSE `MI_5MINS_HIST`、TPEx `indexInfo/inx` 月表）都沒有週末列：TPEx 指數 2019 年以後的 1,909 列沒有一天是週末，TWSE 也沒有任何週末的 `no_close_row`。
+  - 2026-11-16 在 #790 的研究 DB 副本上查，沒有另發請求。
+  - 2019 年以後的 FMTQIK 沒有逐月再核對。
 - **重產清單**：
   1. 對要涵蓋的每個月抓一次 FMTQIK（研究 DB 有已存 raw 的月份讀 raw）。
   2. 取 `data` 裡日期是週末的列。
