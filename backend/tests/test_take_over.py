@@ -84,9 +84,12 @@ exit 0
 # orca terminal close, for the tests where one ran before the take-over.
 CLOSE_ENDS_LISTENER = 'rm -f "$FAKE_DIR/listener_up"\n'
 # The old coordinator terminal sat at its prompt before the take-over (#806): tui-idle is
-# satisfied only by the turn the close step's send ends, never before it. With
-# <fake>/wait_never the wait is not satisfied whatever was sent.
+# satisfied only by the turn of a text sent while the wait runs: a text sent before the
+# wait started ended its turn unseen (PR #831 review 1), so the wait forgets it and
+# watches up to 10 seconds for one. With <fake>/wait_never it is never satisfied.
 IDLE_AFTER_SEND = r"""d="$FAKE_DIR"
+rm -f "$d/sent_text.txt"
+for _ in $(seq 50); do [ -f "$d/sent_text.txt" ] && break; sleep 0.2; done
 if [ -f "$d/sent_text.txt" ] && [ ! -f "$d/wait_never" ]; then
   echo '{"ok": true, "result": {"wait": {"condition": "tui-idle", "satisfied": true}}}'
 else
@@ -97,7 +100,8 @@ SCREEN = ["● 已回報 #1。", "", "❯ "]
 CLOSE_TEXT = "新統籌 term_new 已接手，要關閉這個 terminal。只回覆收到，不要呼叫工具。"
 READ = "terminal read --terminal term_old --screen --limit 20 --json"
 SEND = f"terminal send --terminal term_old --text {CLOSE_TEXT} --enter --json"
-WAIT = "terminal wait --terminal term_old --for tui-idle --timeout-ms 60000 --json"
+# TAKE_OVER_CLOSE_WAIT is 5 in these runs (default 600, review 2).
+WAIT = "terminal wait --terminal term_old --for tui-idle --timeout-ms 5000 --json"
 CLOSE = "terminal close --terminal term_old --json"
 
 
@@ -156,6 +160,8 @@ def _take_over(h: Harness, *args: str) -> subprocess.CompletedProcess:
         ORCA_TERMINAL_HANDLE="term_new",
         TMPDIR=h.temp.as_posix(),
         TAKE_OVER_LISTENER_WAIT="0",
+        TAKE_OVER_CLOSE_WAIT="5",
+        TAKE_OVER_CLOSE_SETTLE="1",
     )
 
 
@@ -244,7 +250,7 @@ def test_take_over_runs_every_step_in_order_and_reads_each_back(to: Harness) -> 
     assert new.encode("utf-8").replace(row.encode(), OLD_ROW.encode()) == BODY.encode()
     # The old terminal: read, one short text sent, idle after it, then closed (#806); the
     # listener started before the comment and again after the close.
-    assert _orca(to) == [READ, SEND, WAIT, CLOSE]
+    assert _orca(to) == [READ, WAIT, SEND, CLOSE]
     assert (to.fake / "sent_text.txt").read_text(encoding="utf-8") == CLOSE_TEXT
     assert "  | ● 已回報 #1。" in _out(result)
     assert "舊 terminal term_old 的 draft：（空）" in _out(result)
@@ -528,13 +534,31 @@ def test_take_over_going_on_checks_the_handle_against_its_record(to: Harness) ->
 def test_close_sends_one_text_so_an_idle_terminal_closes(to: Harness) -> None:
     """AC-1: the old terminal sat at its prompt before the take-over, so no idle comes
     until something ends a turn (2026-11-14, 2026-11-16). The close step sends one short
-    text first; the wait then sees the idle and the terminal is closed, with no step by
-    hand. Red on the script before #806: it waited without sending and failed close."""
+    text while a wait already runs (PR #831 review 1: the fake's wait does not see a
+    turn that ended before it started); the wait sees the idle and the terminal is
+    closed, with no step by hand. Red on the script before #806 (it waited without
+    sending) and on one that sends first and waits after it."""
     result = _take_over(to, "term_old")
     assert result.returncode == 0, result.stdout + result.stderr
     assert "close" in _last(result)["done"]
-    assert _orca(to) == [READ, SEND, WAIT, CLOSE]
+    assert _orca(to) == [READ, WAIT, SEND, CLOSE]
     assert "已關舊 terminal：term_old" in _out(result)
+
+
+@pytest.mark.parametrize("env", [("TAKE_OVER_CLOSE_WAIT", "0"), ("TAKE_OVER_CLOSE_WAIT", "1m"), ("TAKE_OVER_CLOSE_SETTLE", "")])
+def test_take_over_refuses_a_close_wait_that_is_no_seconds(
+    to: Harness, env: tuple
+) -> None:
+    result = to.run(
+        "take_over.sh",
+        "term_old",
+        CLAUDE_CODE_SESSION_ID="sess-new",
+        ORCA_TERMINAL_HANDLE="term_new",
+        TMPDIR=to.temp.as_posix(),
+        **{env[0]: env[1]},
+    )
+    assert result.returncode == 64, result.stdout + result.stderr
+    assert to.calls("gh") == [] and _orca(to) == [] and _listener(to) == []
 
 
 @pytest.mark.parametrize(
@@ -547,18 +571,19 @@ def test_close_sends_one_text_so_an_idle_terminal_closes(to: Harness) -> None:
                 for sub in ("read", "send", "wait")
             ],
             [READ],
-            "讀不了舊 terminal term_old",
+            # The command for a terminal that is gone (review suggestion 1).
+            "--no-old-terminal --from close --comment-url " + COMMENT_URL,
         ),
         (
             lambda h: h.answer("orca_terminal_send", {"ok": False, "error": "x"}),
-            [READ, SEND],
+            [READ, WAIT, SEND],
             "送短訊失敗",
         ),
         (
             lambda h: h.answer(
                 "orca_terminal_send", _ok({"send": {"accepted": False}})
             ),
-            [READ, SEND],
+            [READ, WAIT, SEND],
             "送短訊失敗",
         ),
     ],

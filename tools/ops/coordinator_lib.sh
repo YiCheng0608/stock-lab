@@ -47,7 +47,7 @@ find_python() {
 need_python() {
   [ -n "$python" ] && return 0
   printf '%s: coordinator_lib.sh 的 $python 是空的：source 之後先跑 find_python（或 source 前設 STOCK_PYTHON），再呼叫 cj、json_str、board_set 等函式（#806）\n' \
-    "$(basename "$0")" >&2
+    "${0##*/}" >&2
   return 2
 }
 
@@ -77,9 +77,11 @@ orca_repo_id() {
 
 # board_set ISSUE STATUS: set the issue's Status on project 1, adding the issue first when
 # it is not on the board. The item id comes from the issue's own projectItems, never
-# from a board listing. Prints the status that was set; returns 1 on failure.
+# from a board listing. Prints the status that was set; returns 1 on failure, 2 without
+# $python (before any gh call, #806).
 board_set() {
   local issue="$1" status="$2" out item project field options node option entry entries
+  need_python || return
   out="$(gh api graphql -F n="$issue" -f query='query($n:Int!){
     repository(owner:"YiCheng0608",name:"stock-lab"){issue(number:$n){id
       projectItems(first:10){nodes{id project{id number
@@ -560,6 +562,7 @@ cbm_ensure() {
 memory_out="" memory_failures=""
 memory_check() {
   local rc=0
+  memory_out="" memory_failures=""
   need_python || return
   memory_out="$("$python" -X utf8 "$script_dir/memory_check.py" --repo "$repo_root" 2>&1)" || rc=$?
   memory_out="$(printf '%s' "$memory_out" | tr -d '\r')"

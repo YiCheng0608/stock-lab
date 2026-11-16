@@ -1743,9 +1743,11 @@ def test_lib_functions_without_find_python_say_what_is_missing(
     find_python the same call works. Red on the lib before #806."""
     code = 'script_dir="$1"; shift; . "$script_dir/coordinator_lib.sh"; '
     result = h.run_bash(code + call, h.ops.as_posix(), STOCK_PYTHON="")
-    assert result.returncode != 0, result.stdout + result.stderr
+    assert result.returncode == 2, result.stdout + result.stderr
     assert "command not found" not in result.stderr
     assert "find_python" in result.stderr and "STOCK_PYTHON" in result.stderr
+    # board_set stops before its first gh call (PR #831 review 3: the shared quota).
+    assert h.calls("gh") == []
     if call.startswith(("printf", "json_str")):
         found = h.run_bash(
             code + f"find_python; {call}", h.ops.as_posix(), STOCK_PYTHON=""
