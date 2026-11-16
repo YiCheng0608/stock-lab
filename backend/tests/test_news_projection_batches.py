@@ -11,6 +11,7 @@ must write what the single query wrote.
 
 from __future__ import annotations
 
+import gc
 import sqlite3
 from datetime import date, datetime, timedelta
 
@@ -47,7 +48,7 @@ def _factory(path, variable_limit=None):
     return engine, sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
-def _seed(db):
+def _seed(db, duplicate_key=False):
     """Instruments in a verified industry, their Events, part already projected.
 
     Every company Event has its own instrument, so the instrument and
@@ -55,7 +56,9 @@ def _seed(db):
     projected before the full projection; of those, every tenth then gets a
     new description and every fiftieth item was marked duplicate by an
     operator, so the full projection inserts, updates, keeps and does not
-    reactivate.
+    reactivate.  ``duplicate_key`` adds two market Events, far apart in id,
+    that share a canonical key (a NULL instrument_id is not unique), so one
+    NewsItem is written by two segments.
     """
 
     db.add_all(
@@ -134,6 +137,17 @@ def _seed(db):
         )
         for index in range(MARKET_EVENTS)
     ]
+    if duplicate_key:
+        shared = dict(
+            instrument_id=None,
+            event_date=DAY,
+            event_type="suspension",
+            title="shared",
+            source="twse_suspension",
+            collected_at=COLLECTED,
+        )
+        events.insert(310, Event(description="first", **shared))
+        events.append(Event(description="last", **shared))
     db.add_all(events)
     db.flush()
     news.sync_news_from_events(db, events[:300])
@@ -163,6 +177,35 @@ def _full_projection(factory):
     return changed
 
 
+def _as_before_791(patch):
+    """One query per IN list and every Event at once, as before #791.
+
+    raising=False: the code before #791 has neither size to patch.
+    """
+
+    patch.setattr(news, "_IN_BATCH_SIZE", 10**9, raising=False)
+    patch.setattr(news, "_EVENT_SEGMENT_SIZE", 10**9, raising=False)
+
+
+def _small_segments(patch):
+    """Batch and segment edges anywhere: 7 divides none of the counts."""
+
+    patch.setattr(news, "_IN_BATCH_SIZE", 7, raising=False)
+    patch.setattr(news, "_EVENT_SEGMENT_SIZE", 7, raising=False)
+
+
+def _projected(path, monkeypatch, sizes, duplicate_key=False):
+    engine, factory = _factory(path)
+    with factory() as db:
+        _seed(db, duplicate_key)
+    with monkeypatch.context() as patch:
+        sizes(patch)
+        changed = _full_projection(factory)
+    items = _items(factory)
+    engine.dispose()
+    return changed, items
+
+
 @pytest.fixture
 def limited(tmp_path):
     engine, factory = _factory(tmp_path / "limited.db", variable_limit=999)
@@ -176,15 +219,7 @@ def limited(tmp_path):
 def single_query(tmp_path, monkeypatch):
     """The same database projected as before #791: one query per IN list."""
 
-    engine, factory = _factory(tmp_path / "single.db")
-    with factory() as db:
-        _seed(db)
-    with monkeypatch.context() as patch:
-        # raising=False: the code before #791 has no batch size to patch.
-        patch.setattr(news, "_IN_BATCH_SIZE", 10**9, raising=False)
-        changed = _full_projection(factory)
-    yield changed, _items(factory)
-    engine.dispose()
+    return _projected(tmp_path / "single.db", monkeypatch, _as_before_791)
 
 
 def test_the_fixture_exceeds_the_lowered_variable_limit(limited):
@@ -223,17 +258,57 @@ def test_a_second_full_projection_over_the_limit_changes_nothing(limited):
     assert _items(limited) == before
 
 
-def test_small_batches_project_what_one_query_projected(
+def test_small_batches_and_segments_project_what_one_query_projected(
     tmp_path, monkeypatch, single_query
 ):
-    """Batch edges anywhere (7 does not divide the counts) change nothing."""
+    assert (
+        _projected(tmp_path / "small.db", monkeypatch, _small_segments) == single_query
+    )
 
-    expected_changed, expected_items = single_query
-    engine, factory = _factory(tmp_path / "small.db")
+
+def test_a_canonical_key_shared_across_segments_projects_as_one_pass(
+    tmp_path, monkeypatch
+):
+    expected = _projected(
+        tmp_path / "single.db", monkeypatch, _as_before_791, duplicate_key=True
+    )
+
+    segmented = _projected(
+        tmp_path / "small.db", monkeypatch, _small_segments, duplicate_key=True
+    )
+
+    assert segmented == expected
+    changed, items = segmented
+    # The second Event of the shared key rewrites the item the first inserted.
+    assert changed == INSTRUMENTS + MARKET_EVENTS + 2 - 300 + 30
+    assert len(items) == INSTRUMENTS + MARKET_EVENTS + 1
+
+
+def test_a_full_projection_holds_one_segment_of_events_at_a_time(tmp_path, monkeypatch):
+    """The memory bound: earlier segments are released, not kept loaded.
+
+    The session's identity map holds clean rows weakly, so what it still has
+    when a segment starts is what the projection keeps referencing.
+    """
+
+    engine, factory = _factory(tmp_path / "held.db")
     with factory() as db:
         _seed(db)
-    monkeypatch.setattr(news, "_IN_BATCH_SIZE", 7, raising=False)
+    monkeypatch.setattr(news, "_EVENT_SEGMENT_SIZE", 100)
+    held: list[tuple[int, int]] = []
+    real = news._project_events
 
-    assert _full_projection(factory) == expected_changed
-    assert _items(factory) == expected_items
+    def counted(db, events):
+        gc.collect()
+        kinds = [type(obj) for obj in db.identity_map.values()]
+        held.append((kinds.count(Event), kinds.count(NewsItem)))
+        return real(db, events)
+
+    monkeypatch.setattr(news, "_project_events", counted)
+    with factory() as db:
+        news.project_news(db)
     engine.dispose()
+
+    assert len(held) == 12  # 1160 Events in segments of 100
+    assert max(events for events, _ in held) <= 100
+    assert max(items for _, items in held) == 0

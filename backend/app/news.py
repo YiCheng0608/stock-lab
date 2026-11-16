@@ -376,6 +376,13 @@ def _batches(values: list[_T]) -> Iterator[list[_T]]:
         yield values[start : start + _IN_BATCH_SIZE]
 
 
+# Events read per segment of a full projection.  Loading every Event and
+# NewsItem at once took more than 2 GB on the research database (about
+# 690,000 of each); a segment is flushed before the next is read, so its rows
+# can be freed (Issue #791).
+_EVENT_SEGMENT_SIZE = 5000
+
+
 def sync_news_from_events(db: Session, events: Iterable[Event] | None = None) -> int:
     """Upsert NewsItem rows for official Events and return changed row count.
 
@@ -383,14 +390,33 @@ def sync_news_from_events(db: Session, events: Iterable[Event] | None = None) ->
     useful as a one-time projection for an existing official database.  It
     does not delete historical NewsItem rows, including rows later marked
     duplicate/retracted by an operator.
+
+    Without ``events`` every stored Event is projected, read in id order in
+    segments of ``_EVENT_SEGMENT_SIZE``.
     """
 
-    event_rows = (
-        list(events)
-        if events is not None
-        else db.scalars(select(Event).order_by(Event.id)).all()
-    )
-    event_rows = [event for event in event_rows if _is_official_event(event)]
+    if events is not None:
+        return _project_events(db, list(events))
+    changed = 0
+    last_id = 0
+    while True:
+        segment = db.scalars(
+            select(Event)
+            .where(Event.id > last_id)
+            .order_by(Event.id)
+            .limit(_EVENT_SEGMENT_SIZE)
+        ).all()
+        if not segment:
+            return changed
+        last_id = segment[-1].id
+        changed += _project_events(db, segment)
+        # Flushed and no longer referenced here: the session holds clean rows
+        # weakly, so the segment's Events and NewsItems can be freed.
+        del segment
+
+
+def _project_events(db: Session, events: list[Event]) -> int:
+    event_rows = [event for event in events if _is_official_event(event)]
     # Projection is called by the dashboard and news feed.  Batch-load the
     # small relational context once so a market-sized event set cannot turn
     # into an N+1 query storm.
