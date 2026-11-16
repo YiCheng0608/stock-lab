@@ -174,7 +174,7 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 - 一個月一份：月中改分類、新上市的股票，要到月底那一份才反映。新上市的股票在第一份快照前沒有族群，不能被選，但照樣在母體裡。
 - 2023-07 以後上櫃 18、34 不抓，看不出它們之後還有沒有列，只在 2024-09-30 全掃確認過是 0 列。19、08 同理，只有檢查過的日子確定是 0 列。
 - 代號重用：表只存代號，不存 `instrument_id`。研究工具在 T 日對到「代號相同、T 日有日線」的標的；#702 AC-5 的清單拆出的舊公司，依日期分開。
-- 普通股是否都落在某個產業：產生時以研究 DB 已存的全市場行情（TWSE `ALLBUT0999`、TPEx `dailyQuotes`）核對。研究 DB 沒有那一天的全市場行情時，manifest 的 `completeness` 記「未核對」與天數。
+- 普通股是否都落在某個產業：產生時以研究 DB 已存的全市場行情（TWSE `ALLBUT0999`、TPEx `dailyQuotes`）核對。manifest 的 `completeness` 逐日記原因並分開計數：`checked`（核對過，`missing` 是不在任何產業的普通股）、`no_stored_answer`（研究 DB 沒有那一天的全市場行情）、`raw_missing`（有列但檔案找不到或 sha256 不符）。這也是唯一能看出「代號期間外其實有列」的檢查。
 
 **檔案**：在 `task-779_members` volume 的 `/out/`，統籌核對 sha256 後複製到研究 volume 的 `/data/research/`。
 - `industry_members_v1.json`：主檔。內容排好序，同一份 raw 重跑位元組相同。
@@ -187,18 +187,24 @@ python -B tools/research/feature_evidence.py --db /data/stock.db --out /data/out
 - 只從 raw 重建，不發請求：
 
   ```bash
-  docker run --rm --network none -v task-779_members:/out -v stock-lab-research:/research:ro \
-    -e STOCK_DATA_DIR=/research -e STOCK_RAW_DIR=/research/raw \
+  docker run --rm --network none -v task-779_members:/out \
+    -v stock-lab-research:/data:ro -e STOCK_DATA_DIR=/data \
+    -v stock-lab_stock-data:/prod:ro -e STOCK_STORED_RAW_DIR=/prod/raw \
     -v "$PWD:/w:ro" -w /w --entrypoint python stock-lab-backend:<tag> \
     tools/research/industry_members.py build --start 2013-01 --end 2024-09 --out /out \
-    --research-db /research/stock.db
+    --research-db /data/stock.db
   ```
+
+  - 研究 volume 要掛在 `/data`：研究 DB 的 `raw_payloads.payload_path` 是容器內寫的 `/data/raw/...`，掛在別處就一個檔案都找不到（PR #785 review [6905527404](https://github.com/YiCheng0608/stock-lab/pull/785#issuecomment-6905527404)），和 `tools/audit/raw_files.py` 的慣例一樣。
+  - 種子列（id 很小的那些）是 Windows 舊路徑，`app.raw_paths.payload_file` 對到 `STOCK_STORED_RAW_DIR`；它們的檔案在正式 volume，所以唯讀另掛 `/prod`。不核對它們就拿掉這一行，那些日子會記成 `raw_missing`。
+  - 有 `raw_missing` 的日子時，`build` 不寫任何檔案、以 1 結束；確定要寫才加 `--allow-raw-missing`。
 
 - 重新抓：
   - 用 `fetch --start 2013-01 --end 2024-09 --out /out`，在 `docker run -d` 的容器裡跑。
   - 每個 host 間隔 ≥ 5 秒，兩個 host 並行。
   - 台北 20:30～23:30、08:00～09:00 不發。
   - 第一次被擋（封鎖頁、`查詢過於頻繁`、HTTP 403／429、連線被拒）就停下；同一個 host 連續 3 次失敗（其他非 200、空回應、不是 JSON、「網站維護中」）也停下。都是 exit 2，不自己重試。
+  - `fetch` 對期間列出的代號回 0 列或沒有資料，也算失敗（`sweep`、`bisect` 不算）。
   - 失敗的回應本文存在 `failed/`，`requests.jsonl` 那一列記本文路徑。
   - 已存的 raw 不重抓，重跑就是續跑。
   - 各時期的代號清單是先用 `sweep`（指定月份全掃）與 `bisect`（找出代號開始或結束的月份）確認的。

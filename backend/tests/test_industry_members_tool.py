@@ -520,9 +520,11 @@ def test_a_category_name_not_confirmed_fails_the_build(tmp_path, monkeypatch):
 
 
 def test_a_listed_code_without_rows_fails_the_build(tmp_path):
-    table = answers()
-    table[tool.url_for(tool.TPEX, JAN, "31")] = tpex(JAN, "其他電子類", [])
-    _fetch(tmp_path, FakeSource(table))
+    # fetch no longer stores it, but a raw stored by a sweep or an older fetch
+    # still has to fail the build.
+    _fetch(tmp_path, FakeSource(answers()))
+    path = tool.raw_path(tmp_path, tool.TPEX, JAN, "31")
+    path.write_bytes(tpex(JAN, "其他電子類", []))
     _build_error(tmp_path, "answered no rows")
 
 
@@ -760,6 +762,8 @@ def test_completeness_lists_common_stocks_in_no_industry(tmp_path, monkeypatch):
     result = tool.build(out, "2014-12", "2015-01", ["build"], research_db=db)
     assert result["completeness"] == {
         "checked": 2,
+        "no_stored_answer": 2,
+        "raw_missing": 0,
         "unchecked": 2,
         "days_with_missing": 1,
     }
@@ -772,7 +776,7 @@ def test_completeness_lists_common_stocks_in_no_industry(tmp_path, monkeypatch):
         "exchange": tool.TWSE,
         "date": "2014-12-31",
         "checked": False,
-        "reason": "no stored answer",
+        "reason": "no_stored_answer",
     }
     # The table itself does not depend on the check.
     plain = tmp_path / "plain"
@@ -780,6 +784,97 @@ def test_completeness_lists_common_stocks_in_no_industry(tmp_path, monkeypatch):
     assert (
         tool.build(plain, "2014-12", "2015-01", ["build"])["sha256"] == result["sha256"]
     )
+
+
+def test_a_stored_answer_whose_file_is_not_found_fails_the_build(tmp_path):
+    # The research DB's paths are /data/raw/...: mounted elsewhere, no file is
+    # found, and every day used to count as unchecked with nothing missing.
+    out = tmp_path / "out"
+    _fetch(out, FakeSource(answers()))
+    content = b"{}"
+    db = tmp_path / "stock.db"
+    _research_db(
+        db,
+        [
+            (
+                tool.TWSE_ALL_URL.format(yyyymmdd="20150129"),
+                "2015-01-29",
+                "/data/raw/twse/2026/11/16/not-here.json",
+                content,
+            )
+        ],
+    )
+    with pytest.raises(tool.BuildError, match="1 days have a stored answer"):
+        tool.build(out, "2014-12", "2015-01", ["build"], research_db=db)
+    assert not (out / tool.TABLE_NAME).exists()
+    assert not (out / tool.MANIFEST_NAME).exists()
+    args = ["build", "--start", "2014-12", "--end", "2015-01", "--out", str(out)]
+    assert tool.main([*args, "--research-db", str(db)]) == 1
+    result = tool.build(
+        out, "2014-12", "2015-01", ["build"], research_db=db, allow_raw_missing=True
+    )
+    assert result["completeness"]["raw_missing"] == 1
+    assert result["completeness"]["no_stored_answer"] == 3
+    assert result["completeness"]["checked"] == 0
+    manifest = json.loads((out / tool.MANIFEST_NAME).read_text(encoding="utf-8"))
+    day = next(
+        d for d in manifest["completeness"]["days"] if d.get("reason") == "raw_missing"
+    )
+    assert day["payload_path"] == "/data/raw/twse/2026/11/16/not-here.json"
+
+
+def test_a_research_db_that_is_not_there_writes_nothing(tmp_path):
+    out = tmp_path / "out"
+    _fetch(out, FakeSource(answers()))
+    with pytest.raises(tool.BuildError, match="is not a file"):
+        tool.build(
+            out, "2014-12", "2015-01", ["build"], research_db=tmp_path / "none.db"
+        )
+    assert not (out / tool.TABLE_NAME).exists()
+
+
+def test_an_empty_category_is_an_empty_string_in_the_table(tmp_path, monkeypatch):
+    names = {**NAMES, tool.TPEX: {**NAMES[tool.TPEX], "31": frozenset({""})}}
+    monkeypatch.setattr(tool, "CATEGORY_NAMES", names)
+    table = answers()
+    for day in (DEC, JAN):
+        url = tool.url_for(tool.TPEX, day, "31")
+        table[url] = tpex(day, "", [("8183", "精星"), ("3093", "港建")])
+    _fetch(tmp_path, FakeSource(table))
+    tool.build(tmp_path, "2014-12", "2015-01", ["build"])
+    document = json.loads((tmp_path / tool.TABLE_NAME).read_text(encoding="utf-8"))
+    categories = {row[3] for row in document["rows"] if row[2] == "31"}
+    assert categories == {""}
+    assert all(isinstance(row[3], str) for row in document["rows"])
+
+
+def test_fetch_fails_a_listed_code_that_answers_no_rows(tmp_path):
+    table = answers()
+    url = tool.url_for(tool.TWSE, DEC, "26")
+    table[url] = twse(DEC, "光電業", [])
+    summary = _fetch(tmp_path, FakeSource(table))
+    assert summary["failed"] == 1 and summary["stopped"] is None
+    assert not tool.raw_path(tmp_path, tool.TWSE, DEC, "26").exists()
+    kept = tmp_path / tool.FAILED_DIR / tool.TWSE / "20141231" / "26.1.body"
+    assert kept.read_bytes() == table[url]
+    # sweep and bisect still store an answer without rows.
+    other = tmp_path / "sweep"
+    tool.sweep(
+        ["2014-12"],
+        other,
+        only=[(tool.TWSE, "26")],
+        get=FakeSource(table),
+        now=_daytime,
+        sleep=lambda seconds: None,
+    )
+    assert tool.raw_path(other, tool.TWSE, DEC, "26").is_file()
+
+
+def test_twse_no_data_for_a_listed_code_fails_the_build(tmp_path):
+    _fetch(tmp_path, FakeSource(answers()))
+    tool.raw_path(tmp_path, tool.TWSE, DEC, "26").write_bytes(twse_closed())
+    with pytest.raises(tool.BuildError, match="answered no rows"):
+        tool.build(tmp_path, "2014-12", "2015-01", ["build"])
 
 
 def test_a_raw_file_with_another_sha256_is_not_used(tmp_path):

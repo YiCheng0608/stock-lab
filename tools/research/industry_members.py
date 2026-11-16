@@ -272,7 +272,9 @@ RETROACTIVE_BEFORE = "2023-07-03"
 # yearly check (#779 6904909658, 6904942765, 6905069704; confirmed 6905102853).
 # A bisection assumes a code, once it has rows, keeps them until it ends for
 # good.  TPEx 18 and 34 ending and 35-38 starting are put at 2023-07-03, the
-# day TPEx changed its codes; the build fails if 2023-06 or 2023-07 disagrees.
+# day TPEx changed its codes.  The build fails when a listed code has no rows
+# (18 or 34 in 2023-06, 35-38 in 2023-07); a code not listed that still has
+# rows is not asked, and only completeness ``missing`` can show its stocks.
 # Not asked: TWSE 19 and TPEx 08 (no row on any day checked).
 _TWSE_CODES = tuple(
     f"{number:02d}"
@@ -613,8 +615,15 @@ class Host:
             if elapsed < MIN_INTERVAL_SECONDS:
                 self.sleep(MIN_INTERVAL_SECONDS - elapsed)
 
-    def answer(self, day: date, code: str) -> Answer | None:
-        """The stored or fetched answer; None when this request failed."""
+    def answer(
+        self, day: date, code: str, *, require_rows: bool = False
+    ) -> Answer | None:
+        """The stored or fetched answer; None when this request failed.
+
+        ``require_rows``: an answer without rows is a failed one (``fetch``
+        asks only codes the period lists; ``sweep`` and ``bisect`` need the
+        empty answers).
+        """
 
         path = raw_path(self.out, self.exchange, day, code)
         parse = PARSERS[self.exchange]
@@ -643,6 +652,11 @@ class Host:
             if fetched.status != 200:
                 raise AnswerError(f"{url} answered {fetched.status}")
             result = parse(fetched.content, day, code)
+            if require_rows and not result.rows:
+                raise AnswerError(
+                    f"{self.exchange} {day.isoformat()} {code} is listed but "
+                    "answered no rows"
+                )
         except Exception as exc:  # any failure counts; nothing is retried here
             self.failures += 1
             self.failed += 1
@@ -719,6 +733,7 @@ def run_plan(
     sleep: Callable[[float], None] = time_module.sleep,
     max_requests: int | None = None,
     pace: dict[str, float] | None = None,
+    require_rows: bool = False,
 ) -> dict:
     """Each month's snapshot day, then ``codes_of(month, exchange)`` on it.
 
@@ -764,7 +779,7 @@ def run_plan(
                 for code in codes_of(month, exchange):
                     if max_requests is not None and host.sent >= max_requests:
                         return
-                    host.answer(day, code)
+                    host.answer(day, code, require_rows=require_rows)
         except Stop as exc:
             with lock:
                 summary["stopped"] = summary["stopped"] or str(exc)
@@ -794,7 +809,9 @@ def run_plan(
 def fetch(first: str, last: str, out: Path, **options) -> dict:
     """Every month's codes (``CODE_PERIODS``) from ``first`` to ``last``."""
 
-    return run_plan(months(first, last), codes_for, out, **options)
+    return run_plan(
+        months(first, last), codes_for, out, **{"require_rows": True, **options}
+    )
 
 
 def all_codes(month: str, exchange: str) -> tuple[str, ...]:
@@ -986,7 +1003,7 @@ def build_rows(out: Path, first: str, last: str) -> tuple[list[list], dict]:
                             day.isoformat(),
                             exchange,
                             code,
-                            answer.category,
+                            answer.category or "",
                             label,
                             group_id(label),
                             symbol,
@@ -1119,16 +1136,21 @@ def completeness(rows: list[list], research_db: Path | None) -> dict:
     """Common stocks of the day's full-market quotes that are in no industry.
 
     The research DB's stored ``ALLBUT0999`` (TWSE) and ``dailyQuotes`` (TPEx)
-    answers of each snapshot day, when it has them; a day without is counted
-    ``unchecked``.  Read only (``mode=ro``, ``query_only``).
+    answers of each snapshot day, when it has them.  Each day is counted by
+    reason: ``checked``, ``no_stored_answer`` (the DB has no such answer) or
+    ``raw_missing`` (it has one, but its file is not found or its sha256
+    differs: a wrong mount, PR #785 review 6905527404).  Read only
+    (``mode=ro``, ``query_only``).
     """
 
     members: dict[tuple[str, str], set[str]] = {}
     for row in rows:
         members.setdefault((row[1], row[0]), set()).add(row[6])
-    result: dict = {"checked": 0, "unchecked": 0, "days": []}
+    result: dict = {"checked": 0, "no_stored_answer": 0, "raw_missing": 0, "days": []}
     connection = None
     if research_db is not None:
+        if not Path(research_db).is_file():
+            raise BuildError(f"research DB {research_db} is not a file")
         connection = sqlite3.connect(f"file:{research_db}?mode=ro", uri=True)
         connection.execute("PRAGMA query_only=1")
     try:
@@ -1148,8 +1170,11 @@ def completeness(rows: list[list], research_db: Path | None) -> dict:
                 ).fetchone()
             path = _raw_file(found[0], found[1]) if found else None
             if path is None:
-                entry["reason"] = "no stored answer" if not found else "raw missing"
-                result["unchecked"] += 1
+                reason = "no_stored_answer" if not found else "raw_missing"
+                entry["reason"] = reason
+                if found:
+                    entry["payload_path"] = found[0]
+                result[reason] += 1
             else:
                 payload = json.loads(path.read_text(encoding="utf-8"))
                 stocks = common_stocks(exchange, payload)
@@ -1163,6 +1188,7 @@ def completeness(rows: list[list], research_db: Path | None) -> dict:
     finally:
         if connection is not None:
             connection.close()
+    result["unchecked"] = result["no_stored_answer"] + result["raw_missing"]
     result["days_with_missing"] = sum(
         bool(day.get("missing")) for day in result["days"]
     )
@@ -1176,11 +1202,23 @@ def build(
     command: list[str],
     *,
     research_db: Path | None = None,
+    allow_raw_missing: bool = False,
 ) -> dict:
+    """The table and its manifest, written only after every check passed."""
+
     rows, provenance = build_rows(out, first, last)
     content = table_bytes(rows, first, last)
-    (out / TABLE_NAME).write_bytes(content)
     check = completeness(rows, research_db)
+    if check["raw_missing"] and not allow_raw_missing:
+        example = next(
+            day for day in check["days"] if day.get("reason") == "raw_missing"
+        )
+        raise BuildError(
+            f"{check['raw_missing']} days have a stored answer whose file is not "
+            f"found (e.g. {example['exchange']} {example['date']} "
+            f"{example['payload_path']}): check the mounts, or pass "
+            "--allow-raw-missing"
+        )
     manifest = {
         "table": TABLE_NAME,
         "sha256": hashlib.sha256(content).hexdigest(),
@@ -1196,12 +1234,20 @@ def build(
         **provenance,
     }
     text = json.dumps(manifest, ensure_ascii=False, indent=1, sort_keys=True)
+    (out / TABLE_NAME).write_bytes(content)
     (out / MANIFEST_NAME).write_text(text + "\n", encoding="utf-8")
     summary = {
         key: manifest[key] for key in ("sha256", "bytes", "yearly", "retroactive_rows")
     }
     summary["completeness"] = {
-        key: check[key] for key in ("checked", "unchecked", "days_with_missing")
+        key: check[key]
+        for key in (
+            "checked",
+            "no_stored_answer",
+            "raw_missing",
+            "unchecked",
+            "days_with_missing",
+        )
     }
     return summary
 
@@ -1221,6 +1267,12 @@ def main(argv: list[str] | None = None) -> int:
             step.add_argument("--max-requests", type=int, default=None)
         else:
             step.add_argument("--research-db", type=Path, default=None)
+            step.add_argument(
+                "--allow-raw-missing",
+                action="store_true",
+                help="write the table even when a stored full-market answer's "
+                "file is not found",
+            )
     step = sub.add_parser("sweep", help="every known code on each month's day")
     step.add_argument("--months", required=True, help="YYYY-MM,YYYY-MM,...")
     step.add_argument("--out", required=True, type=Path)
@@ -1262,8 +1314,9 @@ def main(argv: list[str] | None = None) -> int:
             args.end,
             ["build", *(argv if argv is not None else sys.argv[1:])[1:]],
             research_db=args.research_db,
+            allow_raw_missing=args.allow_raw_missing,
         )
-    except (BuildError, AnswerError, ValueError) as exc:
+    except (BuildError, AnswerError, ValueError, sqlite3.Error) as exc:
         print(f"build failed: {exc}", file=sys.stderr)
         return FAILED_EXIT
     print(json.dumps(result, ensure_ascii=False, indent=1))
