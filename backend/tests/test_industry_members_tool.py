@@ -6,6 +6,8 @@ import hashlib
 import importlib.util
 import json
 import sys
+import threading
+import types
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -252,6 +254,65 @@ def test_the_first_refusal_stops_the_run(tmp_path, answer):
     assert summary["failed"] == 1
     # TPEx asks 26 first: nothing after the refusal.
     assert [asked for asked in source.urls if "tpex" in asked] == [url]
+
+
+class FollowerFirst(threading.Event):
+    """``set`` lets every other worker that checked the event finish first.
+
+    So the host that only follows the stop records it before the host whose
+    refusal or failures stopped the run: the order CI met by chance (#825).
+    """
+
+    made: list[FollowerFirst] = []
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.checked: set[threading.Thread] = set()
+        self.made.append(self)
+
+    def is_set(self) -> bool:
+        self.checked.add(threading.current_thread())
+        return super().is_set()
+
+    def set(self) -> None:
+        super().set()
+        current = threading.current_thread()
+        for thread in list(self.checked):
+            if thread not in (current, threading.main_thread()):
+                thread.join(5)
+                assert not thread.is_alive()
+
+
+@pytest.mark.parametrize("cause", ["blocked", "failures"])
+def test_the_summary_names_the_host_that_stopped_the_run(tmp_path, monkeypatch, cause):
+    monkeypatch.setattr(
+        tool,
+        "threading",
+        types.SimpleNamespace(
+            Event=FollowerFirst, Lock=threading.Lock, Thread=threading.Thread
+        ),
+    )
+    table = answers()
+    held = tool.url_for(tool.TWSE, DEC, "26")
+
+    class Source(FakeSource):
+        def __call__(self, asked):
+            if asked == held:
+                # TWSE asks again only after TPEx has stopped the run.
+                assert FollowerFirst.made[-1].wait(5)
+            elif "tpex" in asked:
+                self.urls.append(asked)
+                return tool.Fetched(429 if cause == "blocked" else 500, b"")
+            return super().__call__(asked)
+
+    source = Source(table)
+    summary = _fetch(tmp_path, source)
+    expected = "TPEx: blocked" if cause == "blocked" else "TPEx: 3 failed answers"
+    assert summary["stopped"].startswith(expected), summary["stopped"]
+    assert summary["followed"] == ["TWSE: stopped"]
+    assert summary["errors"] == []
+    tpex = [asked for asked in source.urls if "tpex" in asked]
+    assert len(tpex) == (1 if cause == "blocked" else tool.FAILURES_TO_STOP)
 
 
 def test_a_maintenance_page_does_not_stop_the_run(tmp_path):
