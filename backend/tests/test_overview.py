@@ -441,3 +441,20 @@ def test_the_main_query_reads_title_body_and_milestone() -> None:
     for field in ("title", "body", "milestone{title}"):
         assert field in coordinator_json.THREAD_FIELDS.format(n=1)
     assert slots.QUERY.count("milestone{title}") >= 2
+
+
+def test_a_correction_in_the_body_is_marked(logs: Path) -> None:
+    """#804 AC-3 round 1: #702 6900881313 corrected 6893948126 in its body only; the
+    new-flow reader did not open it. Its line now says so."""
+    body = (
+        "決定：照 A，AC-2 現在就勾（回覆 [91](" + _url(702, 91) + ")）\n\n"
+        "- 我在 [6893948126]("
+        + _url(702, 6893948126)
+        + ") 寫的「0 個壞檔」更正成同一句。\n"
+        "- 舊的做法取代掉了，不再列 id。"
+    )
+    text = _text(
+        _page(_answer([_issue(702, [_c(702, 92, body, coordinator=True)])]), logs)
+    )
+    line = next(ln for ln in text.splitlines() if " 統 92 " in ln)
+    assert line.endswith("［內文更正或取代：6893948126、?］")

@@ -68,7 +68,8 @@ from coordinator_json import (
 TAIPEI = timezone(timedelta(hours=8))
 REPO_URL = "https://github.com/YiCheng0608/stock-lab"
 AC_WIDTH = 60
-LINE_WIDTH = 160
+LINE_WIDTH = 140
+REPORT_WIDTH = 90
 GOVERNANCE_RECENT = 10
 DAY = 24 * 3600
 BOM = chr(0xFEFF)
@@ -78,6 +79,9 @@ _QUESTION = re.compile(r"\s*提問[：:]")
 _DECISION = re.compile(r"\s*決定[：:（(]")
 _PROMISE = re.compile(r"\s*統籌承諾[：:]")
 _COUNTED = re.compile(r"\s*回報[：:]\s*(?:開工|收到)")
+_REPORT = re.compile(r"\s*回報[：:]")
+_CORRECTS = re.compile(r"更正|取代|撤回")
+_BARE_ID = re.compile(r"(?<![\d/-])(\d{10})(?!\d)")
 _GOV_COUNTED = re.compile(r"\s*(?:部署[：:]|回報[：:]\s*統籌 ?session 更換)")
 _GOV_FULL = re.compile(r"\s*(?:決定[：:（(]|統籌承諾[：:])")
 _KEYWORDS = ("由統籌", "統籌會", "我會", "不可", "不要")
@@ -257,6 +261,21 @@ def _limits(body: str, number) -> list[str]:
             if any(k in plain for k in _KEYWORDS):
                 out.append(one_line(short_links(sentence, number), LINE_WIDTH))
     return out
+
+
+def _corrections(body: str, cid: str) -> list[str]:
+    """The comment ids a line past the first one corrects or replaces (#804 AC-3: #702
+    6900881313 corrected 6893948126 in its body only), or ["?"] when such a line names
+    none. The first line's own 更正 <id> is read there already."""
+    out = []
+    for line in without_mark(body).lstrip(BOM).strip().splitlines()[1:]:
+        if not _CORRECTS.search(line):
+            continue
+        ids = [
+            x for x in _COMMENT_ID.findall(line) + _BARE_ID.findall(line) if x != cid
+        ]
+        out += ids or ["?"]
+    return list(dict.fromkeys(out))
 
 
 # --- the page -------------------------------------------------------------------------
@@ -510,9 +529,11 @@ class Page:
                 counted += 1
                 counted_last = f"{_when(c.get('createdAt'))} {cid}"
                 continue
+            # A 回報 (progress, done, PR opened) needs no action: a shorter line.
+            width = REPORT_WIDTH if _REPORT.match(body) else LINE_WIDTH
             line = (
                 f"    {_when(c.get('createdAt'))} {_who(body)} {cid} "
-                f"{one_line(short_links(first, number), LINE_WIDTH)}"
+                f"{one_line(short_links(first, number), width)}"
             )
             if _DECISION.match(body):
                 answers = [
@@ -520,6 +541,9 @@ class Page:
                 ][:3]
                 if answers:
                     line += " ↩ " + "、".join(answers)
+            corrected = _corrections(body, cid)
+            if corrected:
+                line += f" ［內文更正或取代：{'、'.join(corrected)}］"
             why = ""
             if _QUESTION.match(body) and cid not in self.answered:
                 why = "未回覆的提問"
@@ -612,7 +636,7 @@ class Page:
             kept = short_links(r.get("url") or "", None) or "沒有留言"
             issue = f"#{a['issue']}" if a.get("issue") else "#?"
             out.append(
-                f"    [{r['id']}] {_when(at)} {issue} {one_line(a.get('text') or '（承諾檔沒有這筆 add）', 100)}"
+                f"    [{r['id']}] {_when(at)} {issue} {one_line(a.get('text') or '（承諾檔沒有這筆 add）', 60)}"
                 f"（承諾 {promise}；兌現 {kept}）"
             )
 
