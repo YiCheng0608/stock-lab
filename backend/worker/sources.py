@@ -94,7 +94,9 @@ class NoTradeRecord:
     TWSE ``MI_INDEX`` and TPEx ``dailyQuotes`` list a security on a day it had
     no regular-session trade, with every price field blank (``--``/``---``).
     That row is evidence of an official no-trade day, not a price: it is kept
-    apart from ``BarRecord`` and never becomes a bar (Issue #454).
+    apart from ``BarRecord`` and never becomes a bar (Issue #454).  The older
+    ``dailyQuotes`` layout (2007-04-23..2011-11-11) wrote ``0.00`` in all four
+    instead; that row is the same no-trade row (Issue #819).
     """
 
     symbol: str
@@ -1695,6 +1697,7 @@ def parse_tpex_daily_rows(
             not symbol
             or not trading_date
             or None in {open_price, high, low, close, volume}
+            or _all_zero_prices(row, _TPEX_PRICE_KEYS)
         ):
             continue
         result.append(
@@ -1743,6 +1746,25 @@ def _blank_price(row: dict[str, Any], keys: tuple[str, ...]) -> bool:
     return not raw or set(raw) == {"-"}
 
 
+def _all_zero_prices(
+    row: dict[str, Any], price_keys: tuple[tuple[str, ...], ...]
+) -> bool:
+    """True when every price field is present and exactly zero (``0.00``).
+
+    The older TPEx ``dailyQuotes`` layout (2007-04-23..2011-11-11) wrote
+    ``0.00`` in open, high, low and close for a security with no regular-session
+    trade, where the current layout writes ``---`` (Issue #819).  Only a row
+    with all four zero counts; one with some prices zero is read as before.
+    """
+
+    for keys in price_keys:
+        if not any(key in row for key in keys):
+            return False
+        if not re.fullmatch(r"\+?0+(?:\.0+)?", _text(row, *keys)):
+            return False
+    return True
+
+
 def _no_trade_rows(
     rows: Iterable[dict[str, Any]],
     *,
@@ -1753,6 +1775,7 @@ def _no_trade_rows(
     date_of: Any,
     data_as_of: str | None,
     payload_sha256: str | None,
+    zero_is_no_trade: bool = False,
 ) -> list[NoTradeRecord]:
     result: list[NoTradeRecord] = []
     for row in rows:
@@ -1760,9 +1783,12 @@ def _no_trade_rows(
         trading_date = date_of(row)
         if not symbol or not trading_date:
             continue
-        # All four prices blank; a row with only some of them blank is
-        # malformed and stays a gap rather than becoming no-trade evidence.
-        if not all(_blank_price(row, keys) for keys in price_keys):
+        # All four prices blank (or, where the layout wrote it, all four
+        # zero); a row with only some of them blank is malformed and stays a
+        # gap rather than becoming no-trade evidence.
+        if not all(_blank_price(row, keys) for keys in price_keys) and not (
+            zero_is_no_trade and _all_zero_prices(row, price_keys)
+        ):
             continue
         result.append(
             NoTradeRecord(
@@ -1797,7 +1823,8 @@ def parse_twse_no_trade_rows(
 def parse_tpex_no_trade_rows(
     payload: Any, *, data_as_of: str | None = None, payload_sha256: str | None = None
 ) -> list[NoTradeRecord]:
-    """The rows ``parse_tpex_daily_rows`` drops because every price is blank."""
+    """The rows ``parse_tpex_daily_rows`` drops because every price is blank
+    (or, in the older layout, every price is ``0.00``)."""
 
     default_date = parse_roc_date(data_as_of)
     return _no_trade_rows(
@@ -1811,6 +1838,7 @@ def parse_tpex_no_trade_rows(
         ),
         data_as_of=data_as_of,
         payload_sha256=payload_sha256,
+        zero_is_no_trade=True,
     )
 
 

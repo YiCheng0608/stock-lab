@@ -99,7 +99,7 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
 | 上市除權息 | `TWT49U`（含權的列另查 `TWT49UDetail`） | 2003-05-05；`TWT49UDetail` 2005-01-25 起 | `stat`「查詢開始日期小於92年5月5日」；明細 `stat`「無相關資料」 | `corporate-actions sync` 的起日夾到這天。早於 2005-01-25 的含權列沒有明細，照樣寫入，欄位留空、以參考價還原（`sources.TWSE_ACTION_DETAIL_FIRST_DATE`，見[除權息回補](#除權息回補)，#821） |
 | 上市減資停止買賣 | `TWTAUU` | 2011-01-01 | `stat`「查詢開始日期小於100年1月1日」 | `trading-halts` 的起日夾到這天，輸出 `not_published_before` |
 | 加權指數日 K | `MI_5MINS_HIST`＋`FMTQIK` | 不晚於 2004-02 | — | `index-bars backfill`，研究 DB 以 `STOCK_INDEX_HISTORY_START` 放寬下限 |
-| 上櫃日行情 | `dailyQuotes` | 2007-04-23 | `stat ok` 但「上櫃家數: 0家」的空表（2006-12-29、2007-01-02） | 不請求，也不記成休市（空表在這天以前不是 no-data 證據）；`feed_sources.TPEx.not_published.quotes` |
+| 上櫃日行情 | `dailyQuotes` | 2007-04-23 | `stat ok` 但「上櫃家數: 0家」的空表（2006-12-29、2007-01-02） | 不請求，也不記成休市（空表在這天以前不是 no-data 證據）；`feed_sources.TPEx.not_published.quotes`。2007-04-23～2011-11-11 的舊版面在沒有一般交易時，開、收、高、低四個價格欄填 `0.00`，不是 `---`；這種列算[官方無成交日](#官方無成交日)，不是收盤價 0 的日線（#819） |
 | 上櫃三大法人 | `insti/dailyTrade` | 2014-12-01 | 空表（2014-11-28、07-01，2010～2014 各年 1 月） | 不請求，籌碼列只有融資組；`feed_sources.TPEx.not_published.institutional`。起始時的版面是 16 欄（外資及陸資淨買、投信淨買、自營淨買、三大法人買賣超，沒有外資自營商欄），而且 2014～2015 的回應第一張表是空的、明細在第二張「三大法人買賣明細資訊」；parser 依欄名認這個版面（`TPEX_INSTITUTIONAL_LEGACY_FIELDS`），欄名不同就不讀 |
 | 上櫃融資融券 | `margin/balance` | 不晚於 2007-01-02 | — | 照常請求 |
 | 上櫃除權息 | `exDailyQ` | 2007-12（2004-02～04、2006-04、2007-04、07、10、11 實測都是空表，#821） | 空表 | 照常逐月請求；空月份不寫。上櫃日線 2007-04-23～2007-11-30 因此沒有除權息事件（研究 DB 的限制） |
@@ -250,10 +250,10 @@ TPEx 的日行情、法人、融資三份核心資料，當日 collect 先讀開
 
 ### 官方無成交日
 
-冷門股與債券 ETF 當天沒有一般交易時段成交時，官方每日行情表仍列出這一檔，但開、高、低、收全部空白：上市 `MI_INDEX`（`type=ALLBUT0999`）的「每日收盤行情」表是 `--`，上櫃 `dailyQuotes` 的「上櫃股票行情」表與當日 OpenAPI `tpex_mainboard_daily_close_quotes` 都是 `---`（11/09 兩邊同為 8,549 列）。成交股數可能是 0，也可能只有零股或盤後的股數（[#454](https://github.com/YiCheng0608/stock-lab/issues/454) AC-1：2026-10 的 201 檔未滿 20 日中，556 個缺日是這種列）。日行情 parser 不收這種列，所以它不是 bar；它是「這天官方確認沒有價格」的證據，不是缺資料，也不補價、不補零。
+冷門股與債券 ETF 當天沒有一般交易時段成交時，官方每日行情表仍列出這一檔，但開、高、低、收全部空白：上市 `MI_INDEX`（`type=ALLBUT0999`）的「每日收盤行情」表是 `--`，上櫃 `dailyQuotes` 的「上櫃股票行情」表與當日 OpenAPI `tpex_mainboard_daily_close_quotes` 都是 `---`（11/09 兩邊同為 8,549 列）。`dailyQuotes` 2007-04-23～2011-11-11 的舊版面在同樣的列上四個價格都填 `0.00`（同一份回應的附註仍寫「--- : 個股當日無交易時，以此符號表示開市價、最高價、最低價、收盤價、漲跌價」）。例如 2011-11-01 的 5011 久陽：收盤、開盤、最高、最低都是 `0.00`，只有 36 股零股成交、均價 31.89（[#819](https://github.com/YiCheng0608/stock-lab/issues/819)）。成交股數可能是 0，也可能只有零股或盤後的股數（[#454](https://github.com/YiCheng0608/stock-lab/issues/454) AC-1：2026-10 的 201 檔未滿 20 日中，556 個缺日是這種列）。日行情 parser 不收這種列，所以它不是 bar；它是「這天官方確認沒有價格」的證據，不是缺資料，也不補價、不補零。
 
 - **保存**：`no_trade_days` 每個標的每日一列，記 `source`（`twse`／`tpex`）、`endpoint`、`data_as_of`、`raw_payload_id`、`collected_at`。collect 寫入它剛存的行情表（`worker.no_trade_days`，失敗只記在 run 的 `no_trade_days`、不影響 collect）；歷史由 [`no-trade-days`](ops/CLI.md#現有-worker-cli) 從已存 raw 回補。
-- **判定**：四個價格欄都存在且都空白（空字串或只有 `-`）才算；只缺部分價格的列是格式異常，仍算缺資料。上市取 `parse_twse_all_daily_payload` 用來產生 bar 的同一張表。
+- **判定**：四個價格欄都存在且都空白（空字串或只有 `-`）才算。上櫃另外也認四個價格欄都存在、而且都正好是 0（`0.00`）的列：舊版面就是這樣表示的（#819）。只缺部分價格的列是格式異常，仍算缺資料；空白和 `0.00` 混在一列的也一樣。只有部分價格是 `0.00` 的列照舊讀成 bar，研究 DB 已存的 2007-04～2011-11 raw 裡，這種列只出現在權證代號。上市 `MI_INDEX` 沒有 `0.00` 的寫法：研究 DB 與正式 DB 的上市四價皆 0 日線都是 0 根，所以上市不認 0。上市取 `parse_twse_all_daily_payload` 用來產生 bar 的同一張表。
 - **選哪份 capture**：該交易所該日最新一份「回報日期相符、而且有證券行情表」的 capture（有列但沒有行情表的 capture 跳過，不拿來清掉該日的列），並以它重建該日該交易所的所有列：之後的 capture 改成有價格，舊列就刪掉。休市日官方回「沒有符合條件的資料」或空表時記 `no_data`（不算缺）；沒有任何可用 capture 時記 `missing`。兩者都保留原有的列，coverage 照樣只看已存的列。raw 檔讀不到、不是 JSON 或 SHA-256 不符時，停在該日，回 `failed` 與 `failed_date`。
 - **與 bar 的關係**：同一標的同一天已有 bar（例如當日快照有價格）時不寫，coverage 也以 bar 為準。代號在 `instruments` 找不到的股票或 ETF 列只計入 `unmatched`，不寫；同表的權證、債券等代號不計。
 - **表上沒有這一列**：不算無成交，仍是缺資料。AC-1 的 88 個這種缺日集中在少數標的、連續數天，多是減資換股期間的停止買賣：落在[減資停止買賣](#減資停止買賣)區間內的，coverage 算涵蓋、原因是 `capital_reduction_halt`（#582）；其餘沒有可對應的來源，不推定。個股頁把其餘的寫成「官方行情表未列此股」（`quote_not_listed`）：那天同交易所已有其他股票的 bar，所以不是收集缺口；整個交易所都沒有 bar 的日子才寫「行情尚未收錄」（`missing_bar_dates`，可回補）。2026-11-04 的副本上 32 檔有前者、0 檔有後者，前者多是減資換股期間連續 5～7 天（[#511](https://github.com/YiCheng0608/stock-lab/issues/511)）。
