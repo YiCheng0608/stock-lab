@@ -553,7 +553,14 @@ def blackout_seconds(now: datetime) -> float:
 
 
 class Stop(RuntimeError):
-    """``FAILURES_TO_STOP`` failed answers in a row: the source may be blocking."""
+    """A host was blocked or failed ``FAILURES_TO_STOP`` answers in a row.
+
+    ``followed``: this host stopped only because the other one did.
+    """
+
+    def __init__(self, message: str, *, followed: bool = False) -> None:
+        super().__init__(message)
+        self.followed = followed
 
 
 @dataclass
@@ -630,7 +637,7 @@ class Host:
         if path.is_file():
             return parse(path.read_bytes(), day, code)
         if self.stopped.is_set():
-            raise Stop(f"{self.exchange}: stopped")
+            raise Stop(f"{self.exchange}: stopped", followed=True)
         self._wait()
         url = url_for(self.exchange, day, code)
         entry: dict = {
@@ -760,7 +767,14 @@ def run_plan(
     for month in month_list:
         for exchange in EXCHANGES:
             codes_of(month, exchange)  # refuse an uncovered month before any request
-    summary: dict = {"months": len(month_list), "failed": 0, "stopped": None}
+    # ``stopped``: why the run stopped; ``followed``: the hosts that stopped
+    # only because of it, whichever thread got the lock first.
+    summary: dict = {
+        "months": len(month_list),
+        "failed": 0,
+        "stopped": None,
+        "followed": [],
+    }
     days: dict[str, date] = {}
     try:
         for month in month_list:
@@ -782,7 +796,10 @@ def run_plan(
                     host.answer(day, code, require_rows=require_rows)
         except Stop as exc:
             with lock:
-                summary["stopped"] = summary["stopped"] or str(exc)
+                if exc.followed:
+                    summary["followed"].append(str(exc))
+                else:
+                    summary["stopped"] = summary["stopped"] or str(exc)
         except Exception as exc:
             with lock:
                 errors.append(f"{exchange}: {exc}")
@@ -796,6 +813,9 @@ def run_plan(
             thread.start()
         for thread in threads:
             thread.join()
+    if summary["stopped"] is None and summary["followed"]:
+        # The other host raised an error, not a ``Stop``: still a stopped run.
+        summary["stopped"] = summary["followed"][0]
     summary["errors"] = errors
     summary["sent"] = {exchange: hosts[exchange].sent for exchange in EXCHANGES}
     # Every failed request, including the one that stopped a host.

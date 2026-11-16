@@ -10,7 +10,7 @@
 **還原因子**（`worker.pipeline._corporate_action_factor`，每個事件一個因子，累乘；指標、`technical_features`、訊號與計畫追蹤、觀察價位共用）：
 
 1. 事件 `details_json` 有 `price_factor` 時用它。
-2. 事件有官方除權息價格（TPEx `ClosePriceBeforeExRightsDiviend`／`ExRightsDiviendQuote`，TWSE `TWT49U` 的 `除權息前收盤價`／`除權息參考價`）時，因子是 `除權息參考價 ／ 除權息前收盤價`，涵蓋配股、配息、現金增資與認股（3691 2026-10-27：106.15 ／ 109.00 ＝ 0.9739）。例外：欄位算出的參考價（欄位因子 × 除權息前收盤價）與 `除權息參考價` 差在 0.02 元內（含剛好 0.02；`ACTION_REFERENCE_TOLERANCE`，官方以 0.01 元捨去公布，差距先四捨五入到小數 6 位再比）時，欄位因子就是未捨去的官方比，照用欄位因子。所以只有現增、認股，以及欄位被[寫入防呆](../DATA_SOURCES.md#寫入防呆)留空的列會改用官方比。
+2. 事件有官方除權息價格（TPEx `ClosePriceBeforeExRightsDiviend`／`ExRightsDiviendQuote`，TWSE `TWT49U` 的 `除權息前收盤價`／`除權息參考價`）時，因子是 `除權息參考價 ／ 除權息前收盤價`，涵蓋配股、配息、現金增資與認股（3691 2026-10-27：106.15 ／ 109.00 ＝ 0.9739）。例外：欄位算出的參考價（欄位因子 × 除權息前收盤價）與 `除權息參考價` 差在 0.02 元內（含剛好 0.02；`ACTION_REFERENCE_TOLERANCE`，官方以 0.01 元捨去公布，差距先四捨五入到小數 6 位再比）時，欄位因子就是未捨去的官方比，照用欄位因子。所以只有現增、認股、欄位被[寫入防呆](../DATA_SOURCES.md#寫入防呆)留空的列，以及早於 2005-01-25 沒有明細、欄位刻意留空的上市含權列（`factor_source: "twt49u_reference"`，[#821](https://github.com/YiCheng0608/stock-lab/issues/821)）會改用官方比。
 3. 沒有官方價格（daily 的 `TWT48U_ALL`）時用欄位（現行公式）：分割比、`1 ／ (1 + 配股率)`、`(參考價 − 現金股利) ／ 參考價`；參考價是事件的 `reference_price`，沒有時用事件前最後一根收盤。現增、認股在這裡不還原。
 
 `as_of_date_raw_basis`（v1，#394 以前）只有第 1、3 步。

@@ -1,9 +1,12 @@
 """Official ex-right history backfill and the factor check on write (#386)."""
 
+import json
 import socket
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import date, timedelta
+from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from sqlalchemy import create_engine, event, func, select
@@ -1285,3 +1288,297 @@ def test_an_explicit_price_factor_comes_before_the_official_ratio():
     )
     assert pipeline.official_reference_factor(action) is None
     assert pipeline._corporate_action_factor([action]) == (0.5, True)
+
+
+# TWT49U and TWT49UDetail as TWSE answered them on 2026-11-16 (#821).  Before
+# 2005-01-25 the detail of an ex-right is {"stat": "無相關資料"}: 2005-01
+# has three such rows (6280, 2023, 2888) and 2825 on 01-25 with its detail.
+ACTION_FIXTURES = Path(__file__).parent / "fixtures" / "twt49u"
+EARLY_SYMBOLS = ["6280", "2023", "2888", "2825", "2849", "1734", "9105", "9104"]
+
+
+def _action_fixture(name):
+    return json.loads((ACTION_FIXTURES / name).read_text(encoding="utf-8"))
+
+
+def early_routes(detail_2825=None):
+    """Official answers for 2004-02..2005-01; every TPEx month is empty."""
+    months = {
+        "startDate=20040201": "twt49u_20040201_20040229.json",
+        "startDate=20040301": "twt49u_20040301_20040331.json",
+        "startDate=20050101": "twt49u_20050101_20050131.json",
+    }
+    no_row = _action_fixture("twt49udetail_2888_20050124.json")
+
+    def detail(url):
+        if "STK_NO=2825&" in url:
+            return detail_2825 or _action_fixture("twt49udetail_2825_20050125.json")
+        return no_row
+
+    def history(url):
+        for key, name in months.items():
+            if key in url:
+                return _action_fixture(name)
+        return NO_DATA
+
+    def tpex(url):
+        query = parse_qs(urlsplit(url).query)
+        start, end = (
+            date(*map(int, query[key][0].split("/")))
+            for key in ("startDate", "endDate")
+        )
+        return exdailyq(start, end)
+
+    return [
+        (sources.TWSE_ACTION_DETAIL_ENDPOINT, detail),
+        (sources.TWSE_ACTION_HISTORY_ENDPOINT, history),
+        (sources.TPEX_ACTION_HISTORY_ENDPOINT, tpex),
+    ]
+
+
+@pytest.fixture
+def early_factory(factory):
+    with factory() as db:
+        for symbol in EARLY_SYMBOLS:
+            db.add(
+                Instrument(
+                    exchange="TWSE",
+                    symbol=symbol,
+                    name=symbol,
+                    instrument_type="stock",
+                    status="active",
+                )
+            )
+        db.commit()
+    return factory
+
+
+def _sync_early(factory, fetcher, *, start, end):
+    with factory() as db:
+        result = sync.sync_corporate_actions(
+            db, start=start, end=end, apply=True, fetcher=fetcher
+        )
+        db.commit()
+    return result
+
+
+def test_an_ex_right_before_its_detail_was_published_is_written(early_factory):
+    result = _sync_early(
+        early_factory,
+        Fetcher(early_routes()),
+        start=date(2004, 2, 1),
+        end=date(2005, 1, 31),
+    )
+    assert result["status"] == "success" and result["warnings"] == []
+    # 2849 (2004-02), 1734 (2004-03), 6280, 2023, 2888 (2005-01).
+    assert result["reference_factor_rows"] == 5
+    assert result["factor_mismatches"] == []
+    with early_factory() as db:
+        row = stored(db, "2888")
+        assert (row.cash_dividend, row.stock_dividend_ratio, row.split_ratio) == (
+            None,
+            None,
+            None,
+        )
+        assert row.details_json["factor_source"] == "twt49u_reference"
+        assert row.details_json["detail"] is None
+        empty = sources.capture_payload(
+            "twse", "x", _action_fixture("twt49udetail_2888_20050124.json")
+        )
+        assert row.details_json["detail_sha256"] == empty.sha256
+        assert row.details_json["除權息參考價"] == "30.54"
+        assert row.reference_price == 31.00
+        # The price factor is the published reference ratio.
+        factor, applied = pipeline._corporate_action_factor([row])
+        assert applied and factor == pytest.approx(30.54 / 31.00, abs=1e-12)
+        factor_2849, _ = pipeline._corporate_action_factor([stored(db, "2849")])
+        assert factor_2849 == pytest.approx(11.03 / 11.25, abs=1e-12)
+        # Not a factor mismatch: no data_quality row.
+        assert db.scalar(select(func.count(DataQuality.id))) == 0
+        run = db.get(IngestionRun, result["run_id"])
+        assert run.status == "success"
+        assert run.metadata_json["reference_factor_rows"] == 5
+
+
+def test_an_ex_right_whose_detail_is_published_is_unchanged(early_factory):
+    _sync_early(
+        early_factory,
+        Fetcher(early_routes()),
+        start=date(2005, 1, 1),
+        end=date(2005, 1, 31),
+    )
+    [published] = [
+        row
+        for row in sources.parse_twse_action_history(
+            _action_fixture("twt49u_20050101_20050131.json"),
+            start=date(2005, 1, 1),
+            end=date(2005, 1, 31),
+        )
+        if row["symbol"] == "2825"
+    ]
+    detail = sources.parse_twse_action_detail(
+        _action_fixture("twt49udetail_2825_20050125.json"), "2825"
+    )
+    expected = sources.twse_action_history_record(
+        published, detail, payload_sha256=None, detail_sha256=None
+    )
+    with early_factory() as db:
+        row = stored(db, "2825")
+        assert row.cash_dividend == expected.cash_dividend == 0.0
+        assert row.stock_dividend_ratio == expected.stock_dividend_ratio
+        assert row.stock_dividend_ratio == pytest.approx(0.06, abs=1e-4)
+        assert "factor_source" not in row.details_json
+        assert row.details_json["detail"]["股票代號"] == "2825"
+        assert pipeline.action_factor_check(row)["passed"]
+
+
+def test_a_dividend_before_the_detail_day_is_written_as_before(early_factory):
+    fetcher = Fetcher(early_routes())
+    _sync_early(early_factory, fetcher, start=date(2004, 3, 1), end=date(2004, 3, 31))
+    # Only the 權 row asks for a detail; 9105 and 9104 are 息.
+    assert [url for url in fetcher.calls if "TWT49UDetail" in url] == [
+        f"{sources.TWSE_ACTION_DETAIL_ENDPOINT}?STK_NO=1734&T1=20040312&response=json"
+    ]
+    with early_factory() as db:
+        for symbol, cash in [("9105", 1.27), ("9104", 1.2)]:
+            row = stored(db, symbol)
+            assert row.cash_dividend == cash and row.stock_dividend_ratio is None
+            assert "factor_source" not in row.details_json
+            assert pipeline.action_factor_check(row)["passed"]
+
+
+def test_a_missing_detail_from_the_detail_day_on_is_still_left_out(early_factory):
+    result = _sync_early(
+        early_factory,
+        Fetcher(early_routes(detail_2825={"stat": "無相關資料"})),
+        start=date(2005, 1, 1),
+        end=date(2005, 1, 31),
+    )
+    assert result["status"] == "partial"
+    assert result["warnings"] == ["TWSE TWT49UDetail has no row for 2825 2005-01-25"]
+    assert result["reference_factor_rows"] == 3
+    with early_factory() as db:
+        assert stored(db, "2825") is None
+        assert stored(db, "2888").details_json["factor_source"] == "twt49u_reference"
+
+
+def test_an_unreachable_detail_before_the_detail_day_is_still_left_out(
+    early_factory,
+):
+    routes_ = early_routes()
+    routes_[0] = (
+        sources.TWSE_ACTION_DETAIL_ENDPOINT,
+        sources.OfficialDataError("timeout"),
+    )
+    result = _sync_early(
+        early_factory,
+        Fetcher(routes_),
+        start=date(2004, 2, 1),
+        end=date(2004, 2, 29),
+    )
+    assert result["status"] == "partial"
+    assert result["reference_factor_rows"] == 0
+    with early_factory() as db:
+        assert stored(db, "2849") is None
+
+
+def test_only_an_ex_right_can_be_written_without_its_detail():
+    [row] = sources.parse_twse_action_history(
+        twt49u(TWT49U_3059), start=date(2026, 9, 1), end=date(2026, 9, 30)
+    )
+    with pytest.raises(ValueError):
+        sources.twse_action_history_record(
+            row,
+            None,
+            payload_sha256=None,
+            detail_sha256=None,
+            detail_unpublished=True,
+        )
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        {"stat": "查詢日期大於可查詢最大日期，請重新查詢!"},
+        {"stat": "ok", "fields": DETAIL_FIELDS, "data": []},
+        {"stat": "ok", "fields": DETAIL_FIELDS, "data": [DETAIL_3706]},
+        {"stat": "無相關資料", "data": [DETAIL_3706]},
+    ],
+    ids=["another_stat", "empty_table", "another_code", "stat_with_data"],
+)
+def test_only_the_no_data_answer_before_the_detail_day_is_written(
+    early_factory, answer
+):
+    routes_ = early_routes()
+    routes_[0] = (sources.TWSE_ACTION_DETAIL_ENDPOINT, answer)
+    result = _sync_early(
+        early_factory,
+        Fetcher(routes_),
+        start=date(2004, 2, 1),
+        end=date(2004, 2, 29),
+    )
+    assert result["status"] == "partial"
+    assert result["warnings"] == ["TWSE TWT49UDetail has no row for 2849 2004-02-11"]
+    assert result["reference_factor_rows"] == 0
+    with early_factory() as db:
+        assert stored(db, "2849") is None
+
+
+@pytest.mark.parametrize(
+    "blank", ["除權息前收盤價", "除權息參考價"], ids=["close_before", "quote"]
+)
+def test_a_row_without_both_official_prices_is_not_written(early_factory, blank):
+    history = _action_fixture("twt49u_20040201_20040229.json")
+    history["data"][0][history["fields"].index(blank)] = ""
+    routes_ = early_routes()
+    routes_[1] = (
+        sources.TWSE_ACTION_HISTORY_ENDPOINT,
+        lambda url: history if "startDate=20040201" in url else NO_DATA,
+    )
+    result = _sync_early(
+        early_factory,
+        Fetcher(routes_),
+        start=date(2004, 2, 1),
+        end=date(2004, 2, 29),
+    )
+    assert result["status"] == "partial"
+    assert result["warnings"] == ["TWSE TWT49UDetail has no row for 2849 2004-02-11"]
+    with early_factory() as db:
+        assert stored(db, "2849") is None
+
+
+def test_the_check_does_not_call_a_reference_row_a_mismatch(early_factory):
+    _sync_early(
+        early_factory,
+        Fetcher(early_routes()),
+        start=date(2005, 1, 1),
+        end=date(2005, 1, 31),
+    )
+    with early_factory() as db:
+        checked = sync.check_corporate_actions(db)
+    # 6280, 2023, 2888 are reference rows; 2825 has its detail and passes.
+    # 6280's empty fields imply 33.00 against 減除股利參考價 27.48.
+    assert checked["mismatches"] == []
+    assert checked["reference_factor_rows"] == 3
+    assert checked["rows_checked"] == 1
+
+
+def test_a_second_sync_of_reference_rows_changes_nothing(early_factory):
+    window = {"start": date(2004, 2, 1), "end": date(2005, 1, 31)}
+    first = _sync_early(early_factory, Fetcher(early_routes()), **window)
+    with early_factory() as db:
+        before = [
+            (row.instrument_id, row.action_date, row.cash_dividend, row.details_json)
+            for row in db.scalars(select(CorporateAction).order_by(CorporateAction.id))
+        ]
+    second = _sync_early(early_factory, Fetcher(early_routes()), **window)
+    assert first["new_rows"] == 8 and second["new_rows"] == 0
+    assert second["changed_rows"] == 0 and second["unchanged_rows"] == 8
+    assert second["affected"] == {}
+    with early_factory() as db:
+        after = [
+            (row.instrument_id, row.action_date, row.cash_dividend, row.details_json)
+            for row in db.scalars(select(CorporateAction).order_by(CorporateAction.id))
+        ]
+        assert after == before
+        assert db.scalar(select(func.count(DataQuality.id))) == 0
