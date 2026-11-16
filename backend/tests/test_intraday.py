@@ -887,6 +887,9 @@ def test_a_restarted_run_reads_the_days_events_and_sends_nothing_twice(env):
     assert again.sent == []
     assert intraday.day_results(env.logs, MONDAY) == [intraday.FINISHED] * 2
     assert len(_jsonl(env)) == 5
+    # Of the tracks still watched (2618; 3374, 8099 and 3162 ended), all go on from
+    # their last round: restored + missing is the tracks asked and not done.
+    assert "--- levels_restored restored=1 missing=-" in _log(env)
 
 
 @linux_only
@@ -944,11 +947,12 @@ def test_a_restarted_run_goes_on_from_the_last_rounds_high_and_low(env):
     key = _jsonl(env)[0]["key"]
     levels = [r for r in _lines(env) if intraday.LEVELS in r]
     assert len(levels) == 6  # 13:25 to 13:30, one line a round
+    rules = ["pullback", None, 72.89, 76.94, 70.86, 81.37, 87.03]
     assert levels[-1][intraday.LEVELS] == {
-        key: {"high": 82.0, "low": 75.0, "last": 76.0}
+        key: {"high": 82.0, "low": 75.0, "last": 76.0, "levels": rules}
     }
     assert intraday.day_levels(intraday.events_path(env.logs, MONDAY)) == {
-        key: (82.0, 75.0, 76.0)
+        key: intraday.Saved(82.0, 75.0, 76.0, tuple(rules))
     }
     # The levels lines are no event (sent_events) and no result (day_results).
     assert intraday.sent_events(intraday.events_path(env.logs, MONDAY)) == {
@@ -982,27 +986,64 @@ def test_without_the_last_rounds_levels_the_first_round_takes_the_open(env):
     assert f"--- levels_restored restored=0 missing={events[0]['key']}" in _log(env)
 
 
+@linux_only
+def test_a_plan_whose_levels_changed_takes_the_open_after_a_restart(env):
+    """#808 review 6912722520 item 1: the user lowers a plan's target one from 85 to 81
+    after its last round (high 82). The restarted run does not compare with the 82 of
+    the old levels (that would never tell 觸及目標一): its first round takes the high
+    since the open, 82 ≥ 81."""
+
+    signal = _listed(env.db, symbols=("3162",), execution=FRIDAY)["3162"]
+    plan = _plan(env.db, signal, target_1=85.0)
+    _run(env, start="13:25:00", fetch=_pullback_after_its_high)
+    assert [r["event"] for r in _jsonl(env)] == [intraday.ENTRY]
+    assert _jsonl(env)[0]["key"] == f"plan:{plan.id}"
+    plan.target_1 = 81.0
+    env.db.commit()
+    again = _run(env, start="13:28:10", fetch=_pullback_after_its_high)
+    assert [text.split("（")[0] for text in again.sent] == [
+        "3162 精確 觸及目標一 81.00"
+    ]
+    assert f"--- levels_restored restored=0 missing=plan:{plan.id}" in _log(env)
+
+
 def test_the_levels_read_back_are_the_last_rounds(tmp_path):
+    rules = '"levels": ["breakout", 100.0, null, null, 95.0, 110.0, 120.0]'
     path = tmp_path / "intraday.jsonl"
     path.write_text(
         "\n".join(
             [
-                '{"at": "09:00", "levels": {"plan:1": {"high": 10, "low": 9, "last": 9.5}}}',
+                '{"at": "09:00", "levels": {"plan:1": {"high": 10, "low": 9, "last": 9.5, '
+                + rules
+                + "}}}",
                 '{"at": "09:00", "key": "plan:1", "symbol": "9999", "event": "entry"}',
                 "not json",
-                '{"at": "09:01", "levels": {"plan:1": {"high": 11, "low": 9, "last": null},'
-                ' "plan:2": {"high": null, "low": 5, "last": 5}}}',
+                '{"at": "09:01", "levels": {"plan:1": {"high": 11, "low": 9, "last": null, '
+                + rules
+                + '}, "plan:2": {"high": null, "low": 5, "last": 5, '
+                + rules
+                + '}, "plan:3": {"high": 6, "low": 5, "last": 5}}}',
                 '{"at": "09:02", "levels": "broken"}',
+                # plan:1 not judged on 09:03 (a timeout): its 09:01 line stands.
+                '{"at": "09:03", "levels": {"plan:4": {"high": 7, "low": 6, "last": 6, '
+                + rules
+                + "}}}",
             ]
         )
         + "\n",
         encoding="utf-8",
     )
-    assert intraday.day_levels(path) == {"plan:1": (11, 9, None)}
+    breakout = ("breakout", 100.0, None, None, 95.0, 110.0, 120.0)
+    assert intraday.day_levels(path) == {
+        "plan:1": intraday.Saved(11, 9, None, breakout),
+        "plan:4": intraday.Saved(7, 6, 6, breakout),
+    }
     assert intraday.sent_events(path) == {"plan:1": [intraday.ENTRY]}
     assert intraday.day_levels(tmp_path / "missing.jsonl") == {}
     watched = _watched()
-    state = intraday.resumed(watched, [intraday.ENTRY], (111.0, 99.0, 100.0))
+    assert intraday.rule_levels(watched) == breakout
+    saved = intraday.Saved(111.0, 99.0, 100.0, breakout)
+    state = intraday.resumed(watched, [intraday.ENTRY], saved)
     assert (state.entered, state.high, state.low, state.last) == (
         True,
         111.0,
@@ -1011,6 +1052,27 @@ def test_the_levels_read_back_are_the_last_rounds(tmp_path):
     )
     # Over target one already on the last round: no 觸及目標一 again.
     assert intraday.judge(watched, state, _custom(112.0, 99.0))[0] == []
+    # Recorded by other levels: as without them.
+    other = intraday.Saved(111.0, 99.0, 100.0, (*breakout[:5], 115.0, 120.0))
+    assert intraday.resumed(watched, [intraday.ENTRY], other).high is None
+
+
+def test_a_line_cut_off_is_ended_before_the_next_is_added(tmp_path):
+    path = tmp_path / "intraday.jsonl"
+    path.write_text('{"at": "09:00", "key": "plan:1", "event": "entry"}\n{"at": "09:0')
+    intraday._append(path, '{"at": "09:01", "key": "plan:1", "event": "target_1"}')
+    intraday._append(path, '{"at": "09:02", "key": "plan:1", "event": "target_2"}')
+    assert path.read_text().splitlines()[1:] == [
+        '{"at": "09:0',
+        '{"at": "09:01", "key": "plan:1", "event": "target_1"}',
+        '{"at": "09:02", "key": "plan:1", "event": "target_2"}',
+    ]
+    assert intraday.sent_events(path) == {
+        "plan:1": [intraday.ENTRY, intraday.TARGET_1, intraday.TARGET_2]
+    }
+    fresh = tmp_path / "fresh.jsonl"
+    intraday._append(fresh, "{}")
+    assert fresh.read_bytes() == b"{}\n"
 
 
 @linux_only
@@ -1210,6 +1272,8 @@ def test_over_fifty_stocks_keep_the_first_fifty_and_tell_once(env):
     log = _log(env)
     assert f"--- capped kept=50 skipped={','.join(symbols[50:])}" in log
     assert "--- poll at=13:29:00 symbols=50 ok=50" in log
+    # The restarted run counts the 50 asked, not the 5 never asked (#808 AC-3).
+    assert "--- levels_restored restored=50 missing=-" in log
 
 
 def test_a_dry_run_sends_nothing_and_writes_no_file(env, monkeypatch):
