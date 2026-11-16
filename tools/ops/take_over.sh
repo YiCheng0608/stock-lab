@@ -9,8 +9,11 @@
 #               with the commitments not kept yet
 #   row         the one list line under "## 現任統籌" of #1's body replaced (every other
 #               byte as it was), then the body read back and compared
-#   close       the old coordinator terminal: orca terminal wait --for tui-idle, then
-#               orca terminal close (skipped with --no-old-terminal)
+#   close       the old coordinator terminal: orca terminal read prints its last screen and
+#               draft (a line more when the draft has text), one short fixed text is
+#               sent so a turn ends (#806), then orca terminal wait --for tui-idle and
+#               orca terminal close; a read, send or wait that fails closes nothing
+#               (skipped with --no-old-terminal)
 #   relisten    wake_listener_start.sh again, then --status: a listener that ran before the
 #               take-over (the old terminal's, which ends with it, docs/ops/MONITOR.md)
 #               must stop answering within TAKE_OVER_LISTENER_WAIT seconds first, else the
@@ -310,9 +313,35 @@ for step in "${steps_all[@]:$start}"; do
         done_steps+=("close:skipped")
         continue
       fi
+      # What the user may have left in the old terminal goes to this one's screen first
+      # (docs/COORDINATOR.md 自動換手機制 4): its last screen and the draft, the unsent text
+      # in Orca's input box, which the send below takes away (#806).
+      orca terminal read --terminal "$old" --screen --limit 20 --json >"$work/old.json" 2>/dev/null \
+        && cj ok <"$work/old.json" >/dev/null 2>&1 \
+        || fail close "讀不了舊 terminal $old（orca terminal read 失敗，可能已不存在），未送短訊、未關"
+      echo "舊 terminal $old 的最後畫面："
+      cj get result.terminal.tail <"$work/old.json" 2>/dev/null | "$python" -X utf8 -c '
+import json, sys
+sys.stdout.reconfigure(newline="\n")
+for line in json.load(sys.stdin): print("  |", line)' 2>/dev/null || echo "  （讀不到畫面）"
+      draft="$(cj get result.terminal.draft <"$work/old.json" 2>/dev/null | tr -d '\r')" || draft=""
+      if [ -z "$draft" ]; then
+        echo "舊 terminal $old 的 draft：（空）"
+      else
+        echo "舊 terminal $old 的 draft："
+        printf '%s\n' "$draft" | sed 's/^/  | /'
+        echo "提示：舊 terminal 的輸入框有還沒送出的字（上面的 draft），可能是使用者留給舊統籌的話；關掉後讀不到，照 docs/COORDINATOR.md「自動換手機制」第 4 點處理"
+      fi
+      # A terminal already at its prompt before the take-over turns idle no more, and the
+      # wait below timed out (2026-11-14, 2026-11-16): one short turn ends in the idle
+      # the wait sees (#806). The old handle is the one the heartbeat named, never this
+      # session's terminal (checked before any step).
+      out="$(orca terminal send --terminal "$old" --text "新統籌 $handle 已接手，要關閉這個 terminal。只回覆收到，不要呼叫工具。" \
+        --enter --json 2>/dev/null)" && [ "$(printf '%s' "$out" | cj get result.send.accepted 2>/dev/null)" = true ] \
+        || fail close "對舊 terminal $old 送短訊失敗（orca terminal send 沒有 accepted:true），未關"
       orca terminal wait --terminal "$old" --for tui-idle --timeout-ms 60000 --json 2>/dev/null \
         | cj satisfied >/dev/null 2>&1 \
-        || fail close "舊 terminal $old 未閒置或不存在（orca terminal wait 沒有 satisfied:true），未關"
+        || fail close "送短訊後舊 terminal $old 未回到閒置（orca terminal wait 沒有 satisfied:true），未關"
       orca terminal close --terminal "$old" --json 2>/dev/null | cj ok >/dev/null 2>&1 \
         || fail close "orca terminal close $old 失敗"
       echo "已關舊 terminal：$old"

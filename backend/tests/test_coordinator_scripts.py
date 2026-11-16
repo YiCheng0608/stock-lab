@@ -1724,6 +1724,36 @@ def test_close_task_refuses_an_extra_dir_it_must_not_delete(
     _assert_nothing_deleted(close)
 
 
+@pytest.mark.parametrize(
+    "call",
+    [
+        "printf '{\"a\": 1}' | cj get a",
+        "json_str x",
+        "board_set 806 開發中",
+        "memory_check",
+    ],
+    ids=["cj", "json_str", "board_set", "memory_check"],
+)
+def test_lib_functions_without_find_python_say_what_is_missing(
+    h: Harness, call: str
+) -> None:
+    """#806 AC-3: a shell that sourced coordinator_lib.sh and went on without find_python
+    has an empty $python; cj ran a command named "" (": command not found", no reason:
+    #350 and twice more). Now it names find_python and STOCK_PYTHON and fails; after
+    find_python the same call works. Red on the lib before #806."""
+    code = 'script_dir="$1"; shift; . "$script_dir/coordinator_lib.sh"; '
+    result = h.run_bash(code + call, h.ops.as_posix(), STOCK_PYTHON="")
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert "command not found" not in result.stderr
+    assert "find_python" in result.stderr and "STOCK_PYTHON" in result.stderr
+    if call.startswith(("printf", "json_str")):
+        found = h.run_bash(
+            code + f"find_python; {call}", h.ops.as_posix(), STOCK_PYTHON=""
+        )
+        assert found.returncode == 0, found.stderr
+        assert found.stdout.strip() in ("1", '"x"')
+
+
 def _guard(h: Harness, path: str, *mode: str) -> str:
     """guard_dir from the sandbox's coordinator_lib.sh: it only prints, never deletes."""
     result = h.run_bash(
