@@ -33,9 +33,10 @@ orca terminal rename --terminal <handle> --title "統籌" --json
 **自動換手機制**（統籌 session 自己執行，不需要人在場）：
 
 1. 偵測：壓縮次數由 repo 的 PreCompact hook（`.claude/settings.json` → `tools/ops/compact_hook.sh`）自動寫進 `<資料目錄>/logs/compactions/<session id>.count`，每次壓縮的時間另記一列在同目錄的 `<session id>.log`，不靠模型記得；工程師 session 也寫，統籌的是心跳檔記的 session id 那份。`patrol.sh` 第一步寫心跳檔（`session_id`、`terminal_handle`、`written_at`），第二步讀自己的計數檔；達 2 次時表頭印「已達換手條件」，最後一行再印一次，並以 exit 10 結束（`| tail -1` 或只看結束碼也看得到）。同一步也讀自己最後一次呼叫的 context（#710）：[`session_cost.py`](../tools/ops/session_cost.py) `context` 從紀錄檔尾往回找最後一筆非 sidechain、非 `<synthetic>`、有 `usage` 的 assistant 列，context＝input＋cache 讀＋cache 寫；紀錄檔依序找 `$CLAUDE_CONFIG_DIR/projects/*/<session id>.jsonl`、`$HOME/.claude/projects/*/<session id>.jsonl`，同一個 id 有多個檔取最後修改的，`--transcript`／`STOCK_TRANSCRIPT` 可直接指定。表頭在「壓縮 N 次」下一行印 `context：<數字>（門檻 <門檻>，<百分比>）（<紀錄檔路徑>）`；超過門檻（預設 450,000，環境變數 `STOCK_CONTEXT_LIMIT` 可改）與壓縮 2 次並列為換手條件，同樣最後一行印出、exit 10。紀錄檔讀不到或讀不懂時只印 `context：未讀到（原因；連續 N 次）`，不擋巡邏、exit code 不變；連續次數記在同目錄的 `<session id>.context-misses`，讀到就刪，連續 3 次以上在最後一行前加印「context 已連續 N 次讀不到」（#710 決定 6877357244）。任一條件成立、或自覺對不上 Issue 與文件，就換手。
-2. 執行：先寫換手標記 `<資料目錄>/logs/handoff-<session id>.json`（舊 handle、時間），之後不再合併、派工、留言；手上的定時承諾都要已在承諾檔（`commit.sh list` 核對，缺的先補）；再照上面四行開新 session 並送接手文（`<舊 handle>` 換成自己的 handle）。
+2. 執行：先寫換手標記 `<資料目錄>/logs/handoff-<session id>.json`（舊 handle、時間），之後不再合併、派工、留言（例外只有下面的換手空窗）；手上的定時承諾都要已在承諾檔（`commit.sh list` 核對，缺的先補）；再照上面四行開新 session 並送接手文（`<舊 handle>` 換成自己的 handle）。
+   - **換手空窗**（#1 [6911025182](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6911025182)）：寫了標記到舊 terminal 被關之前，使用者在舊 terminal 講話時，舊統籌先回覆新統籌的 handle，請使用者改到新 terminal 講。講的是決定或交代（不只是問進度）時，仍以 `comment.sh` 在 #1 留一則第一行是「決定：換手空窗：…」的留言（#1 本文由新統籌同步，舊統籌不改），再對新統籌 terminal 送一句附留言連結的短訊：統籌標記的留言不會喚醒新統籌，它也可能已經讀過 #1 最近 10 則。
 3. 接回：新 session 15 分鐘內未在 #1 留言，舊統籌刪標記檔、照常處理事件佇列，在 #1 記「換手失敗：<新 handle>」，下次處理佇列時再試。
-4. 收尾：由新統籌的 [`take_over.sh`](../tools/ops/take_over.sh) 做（步驟見上面接手文之後的說明）。
+4. 收尾：由新統籌的 [`take_over.sh`](../tools/ops/take_over.sh) 做（步驟見上面接手文之後的說明）。`close` 步驟關舊 terminal 之前（含 `close` 失敗、要續跑時），新統籌先 `orca terminal read` 舊 terminal，看畫面上最後一個回合與 `draft` 欄（輸入框裡還沒送出的字）：有使用者交代、而舊統籌沒照第 2 點留到 #1 的事，由新統籌在 #1 補一則 `決定：` 並照常處理；只是問進度就在回覆使用者時一併回答。
 5. 換手不通知工程師：工程師的回報與提問一律在 Issue／PR 留言，不送到統籌 terminal；新統籌啟動時讀所有 open Issue 與 PR 並處理事件佇列（換手前後的留言都在佇列裡），之後 monitor 喚醒的是新心跳記的 terminal。新統籌之後給工程師的留言仍照[開工](WORKFLOW.md#任務流程)的反方向規則通知 terminal。
 
 ## 無人值守運作

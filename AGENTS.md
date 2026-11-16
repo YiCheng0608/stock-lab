@@ -66,4 +66,4 @@
 
 ## 流程變更
 
-改本文、[WORKFLOW](docs/WORKFLOW.md) 或 [COORDINATOR](docs/COORDINATOR.md) 由統籌開 PR，使用者同意後合併；不占任務名額。
+改本文、[WORKFLOW](docs/WORKFLOW.md)、[COORDINATOR](docs/COORDINATOR.md) 或[模板](docs/templates/README.md)由統籌開 PR，CI 綠、統籌 review 可合併就由統籌合併，不等使用者同意（使用者 2026-11-16 決定，#1 [6911025182](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6911025182)）；不占任務名額。
