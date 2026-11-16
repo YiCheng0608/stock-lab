@@ -498,6 +498,33 @@ def test_bars_coverage_flags_a_drop_in_common_stock_rows(fx):
     assert check.result == "fail" and list(check.failures) == ["row_count_drop"]
 
 
+def test_a_listed_weekend_session_is_not_a_weekend_date(fx):
+    # 2012-12-22 is in worker.sources.OFFICIAL_WEEKEND_SESSIONS, 12-29 is not (#798).
+    assert date(2012, 12, 22) in product_sources.OFFICIAL_WEEKEND_SESSIONS
+    assert date(2012, 12, 29) not in product_sources.OFFICIAL_WEEKEND_SESSIONS
+    stock = fx.instrument("TWSE", "1101")
+    for day in (date(2012, 12, 21), date(2012, 12, 22), date(2012, 12, 29)):
+        fx.bar(stock, day, 10)
+    fx.commit()
+    check = audit_checks.bars_integrity(fx.context())
+    assert list(check.failures) == ["weekend_date"]
+    assert check.failures["weekend_date"] == 1
+    assert [row[2] for row in check.examples["weekend_date"]] == ["2012-12-29"]
+
+
+def test_a_listed_weekend_session_without_bars_is_a_gap(fx):
+    # Friday and Monday have bars; the listed Saturday 2012-12-22 is a gap, the
+    # Sunday 12-23 is not looked at (#798).
+    stock = fx.instrument("TWSE", "1101")
+    for day in (date(2012, 12, 21), date(2012, 12, 24)):
+        fx.bar(stock, day, 10)
+    fx.commit()
+    note = audit_checks.bars_coverage(fx.context()).notes[0]
+    assert "{'not_in_holiday_table': 1}" in note
+    assert "不在休市表的：2012-12-22（" in note
+    assert "2012-12-23" not in note
+
+
 def quotes(*rows):
     return {"tables": [{"fields": QUOTE_FIELDS, "data": [list(row) for row in rows]}]}
 
