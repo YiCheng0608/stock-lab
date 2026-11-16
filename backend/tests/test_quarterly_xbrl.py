@@ -17,6 +17,7 @@ import zipfile
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+import httpx
 import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
@@ -835,7 +836,76 @@ def test_a_quarter_failing_all_its_attempts_counts_once_toward_the_stop(tmp_path
     assert len(getter.urls) == 3 * qx.ATTEMPTS_PER_QUARTER
 
 
-def test_a_retry_waits_out_the_quiet_hours(tmp_path):
+class SlowGetter(Getter):
+    """A Getter whose every request takes SECONDS on the fake clock."""
+
+    def __init__(self, answers, state, seconds):
+        super().__init__(answers)
+        self.state = state
+        self.seconds = seconds
+
+    def __call__(self, url, target, max_bytes):
+        self.state["now"] += self.seconds
+        return super().__call__(url, target, max_bytes)
+
+
+def test_a_retry_waits_the_interval_after_the_cut_answer_ends(tmp_path):
+    data = archive(SEED_ARCHIVE)
+    state, clock, sleep = fake_clock()
+    getter = SlowGetter({qx.archive_url(Q): [data[:50], data]}, state, 600.0)
+    result = qx.fetch_archives(
+        tmp_path, Q, Q, getter=getter, sleep=sleep, clock=clock, now=lambda: DAYTIME
+    )
+    assert result["status"] == "success" and len(getter.urls) == 2
+    assert state["sleeps"] == [qx.REQUEST_INTERVAL_SECONDS]
+    assert result["attempts"]["2014Q2"][0]["seconds"] == 600.0
+
+
+def test_a_read_timeout_is_not_asked_again(tmp_path):
+    data = archive(SEED_ARCHIVE)
+
+    def getter(url, target, max_bytes):
+        getter.urls.append(url)
+        target.write_bytes(data[:50])
+        raise httpx.ReadTimeout("read timed out")
+
+    getter.urls = []
+    result, _ = fetch(tmp_path, getter)
+    assert result["status"] == "partial" and len(getter.urls) == 1
+    (failed,) = result["attempts"]["2014Q2"]
+    assert not failed["truncated"] and failed["bytes"] == 50
+    assert "read timed out" in result["failed"]["2014Q2"]
+
+
+def test_an_attempt_over_its_time_is_asked_again(tmp_path):
+    data = archive(SEED_ARCHIVE)
+
+    def getter(url, target, max_bytes):
+        getter.urls.append(url)
+        if len(getter.urls) == 1:
+            target.write_bytes(data[:50])
+            raise qx.TruncatedArchive(f"{url} took over 1800 s (50 bytes)", status=200)
+        target.write_bytes(data)
+        return 200
+
+    getter.urls = []
+    result, _ = fetch(tmp_path, getter)
+    assert result["status"] == "success" and len(getter.urls) == 2
+    (failed,) = result["attempts"]["2014Q2"]
+    assert failed["truncated"] and failed["status"] == 200
+
+
+def test_a_part_left_by_a_stopped_run_is_set_aside(tmp_path):
+    (tmp_path / "tifrs-2014Q2.zip.part").write_bytes(b"old bytes")
+    getter = Getter({qx.archive_url(Q): 503})
+    result, _ = fetch(tmp_path, getter)
+    (failed,) = result["attempts"]["2014Q2"]
+    assert failed["bytes"] == 0 and failed["head"] == "" and failed["status"] == 503
+    (stale,) = (tmp_path / qx.FAILED_DIR).glob("*-stale.part")
+    assert stale.read_bytes() == b"old bytes"
+
+
+def test_a_retry_in_the_quiet_hours_stops(tmp_path):
     data = archive(SEED_ARCHIVE)
     moments = iter(
         [DAYTIME, datetime(2026, 11, 16, 12, 30, tzinfo=timezone.utc)]  # 20:30 Taipei

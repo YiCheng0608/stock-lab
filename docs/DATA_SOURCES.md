@@ -556,12 +556,12 @@ MOPS `t05st02`（[#464](https://github.com/YiCheng0608/stock-lab/issues/464)）�
 `t163sb04` 是用今天的上市櫃名單產生的，下市、轉板公司的季度一列都沒有（[#781](https://github.com/YiCheng0608/stock-lab/issues/781)）。MOPS 另外每季提供一包 XBRL 檔，收的是當季每家申報公司的 instance，含之後下市的公司。研究 DB 用它補下市、轉板標的的 EPS，實作在 [`worker/quarterly_xbrl.py`](../backend/worker/quarterly_xbrl.py)。
 
 - **請求**：
-  - 網址：`GET https://mopsov.twse.com.tw/server-java/FileDownLoad?step=9&fileName=tifrs-<年>Q<季>.zip&filePath=/home/html/nas/ifrs/<年>/`，一季一個請求。2014Q2 一包 50.7 MB、2,037 個成員、2,004 家；伺服器忽略 `Range`。
+  - 網址：`GET https://mopsov.twse.com.tw/server-java/FileDownLoad?step=9&fileName=tifrs-<年>Q<季>.zip&filePath=/home/html/nas/ifrs/<年>/`，一季最多 3 個請求（截斷才重抓）。2014Q2 一包 50.7 MB、2,037 個成員、2,004 家；伺服器忽略 `Range`。
   - 範圍：2013Q1～2024Q3 都有。2013 年的成員是 `.xml`，2024 年的是 inline XBRL `.html`。
 - **下載**：`fundamentals xbrl-fetch --start --end --dir` 只寫目錄，不碰 DB。
   - 目錄裡有整包與 `manifest.json`（網址、狀態碼、位元組數、sha256、成員數、抓取時間）；已有而且 sha256 相符的季不重抓。
   - 每個請求間隔 ≥ 5 秒，台北 20:30～23:30 與 08:00～09:00 不發。
-  - 伺服器回 HTTP/1.0、沒有 `Content-Length`，偶爾會在中途關掉連線（2026-11-16 十包裡有四包；完整一包約 10 分鐘，[#786](https://github.com/YiCheng0608/stock-lab/issues/786#issuecomment-6906415391)）。所以只有一種情況重抓：回應 200、檔案開頭是 zip 但不是完整的 zip，或單次超過 30 分鐘（`ATTEMPT_SECONDS`）。等完間隔後整包重抓，每季最多 3 個請求（`ATTEMPTS_PER_QUARTER`），不續傳。
+  - 伺服器回 HTTP/1.0、沒有 `Content-Length`，偶爾會在中途關掉連線（2026-11-16 十包裡有四包；完整一包約 10 分鐘，[#786](https://github.com/YiCheng0608/stock-lab/issues/786#issuecomment-6906415391)）。所以只有兩種情況重抓：回應 200、檔案開頭是 zip 但不是完整的 zip；或單次超過 30 分鐘（`ATTEMPT_SECONDS`）。從失敗的那次結束起等完間隔，再整包重抓，每季最多 3 個請求（`ATTEMPTS_PER_QUARTER`），不續傳。
   - 其他都不重試：非 200、空回應、不是 zip 的內容（HTML、封鎖頁）、讀取逾時、成員名稱或季別不符，都算該季失敗。重抓 3 次仍失敗也算 1 季失敗；連續 3 季失敗就停。
   - 每次失敗都寫進輸出的 `attempts`（狀態碼、收到的位元組數、秒數、開頭 16 bytes），失敗的檔案搬到目錄下的 `failed/` 保留，不刪；輸出的 `requests` 是總請求數，`manifest.json` 每季記它用了幾個請求。
 - **寫入**：`fundamentals xbrl-apply --start --end --dir [--dry-run] [--exclude-file]`，`run_type=fundamental_xbrl_backfill`，一季一個 commit。只在 DB 旁有 `research-db.json`（`purpose=research_history`）的研究 DB 跑，否則拒絕；起跑時持有維護模式（`--dry-run` 除外）。

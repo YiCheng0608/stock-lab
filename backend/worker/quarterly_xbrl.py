@@ -180,6 +180,10 @@ class ArchiveError(OfficialDataError):
 class TruncatedArchive(ArchiveError):
     """The download ended before the archive did (or took too long); asked again."""
 
+    def __init__(self, message: str, *, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
+
 
 class MemberError(ValueError):
     """One company's instance cannot be read; that company is skipped and counted."""
@@ -520,7 +524,8 @@ def download(
                 handle.write(chunk)
                 if clock() - started > max_seconds:
                     raise TruncatedArchive(
-                        f"{url} took over {max_seconds:.0f} s ({size} bytes)"
+                        f"{url} took over {max_seconds:.0f} s ({size} bytes)",
+                        status=200,
                     )
             handle.flush()
             os.fsync(handle.fileno())
@@ -561,6 +566,7 @@ def fetch_archives(
         partial = final.with_name(final.name + ".part")
         failed_attempts: list[dict[str, Any]] = []
         error: str | None = None
+        _set_aside_stale(directory, partial, quarter)
         for attempt in range(1, ATTEMPTS_PER_QUARTER + 1):
             if last_request is not None:
                 wait = REQUEST_INTERVAL_SECONDS - (clock() - last_request)
@@ -585,6 +591,7 @@ def fetch_archives(
                 members = check_archive(partial, quarter)
             except (ArchiveError, httpx.HTTPError, OSError) as exc:
                 error = str(exc)
+                status = getattr(exc, "status", None) or status
                 failed_attempts.append(
                     _failed_attempt(
                         directory,
@@ -598,6 +605,9 @@ def fetch_archives(
                     )
                 )
                 if isinstance(exc, TruncatedArchive):
+                    # The interval before asking again counts from the end of the
+                    # cut answer, not from its start (review of PR #797).
+                    last_request = clock()
                     continue
                 break
             error = None
@@ -643,6 +653,17 @@ def fetch_archives(
         "stopped": stopped,
         **result,
     }
+
+
+def _set_aside_stale(directory: Path, partial: Path, quarter: Quarter) -> None:
+    """A ``.part`` left by a stopped run moves to ``FAILED_DIR``: never read as this run's."""
+
+    if not partial.exists():
+        return
+    kept_dir = directory / FAILED_DIR
+    kept_dir.mkdir(exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    os.replace(partial, kept_dir / f"{archive_name(quarter)}.{stamp}-stale.part")
 
 
 def _failed_attempt(
