@@ -75,6 +75,10 @@ The result goes to stdout without a trailing newline.
                                    removed a marker whose command stopped beating):
                                    "<at> <owner> <pid> <minutes_without_beat>
                                    <reason>", or nothing
+  closed-day <db> <date>           "closed" when the stored trading calendar
+                                   (trading_calendar_days, TWSE) marks <date>
+                                   (YYYY-MM-DD) closed, else "open"; "skip"
+                                   without the table (#801)
   data-check <db> <date> [--offline] [--all] [--scratch DIR]
                                    the daily data check of trading date
                                    <date> (tools/ops/data_check.py, #390):
@@ -94,6 +98,7 @@ import json
 import os
 import sqlite3
 import sys
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -576,6 +581,20 @@ MONITOR_STALE_SECONDS = 600
 MONITOR_GH_FAILED_POLLS = 10
 
 
+def closed_day(db: str, day: str) -> str:
+    """Whether the stored calendar marks DAY closed (worker.notify.is_trading_day's rule)."""
+
+    with closing(_connect(db)) as conn:
+        if not _has_table(conn, "trading_calendar_days"):
+            return "skip"
+        row = conn.execute(
+            "SELECT kind FROM trading_calendar_days WHERE exchange = 'TWSE'"
+            " AND calendar_date = ?",
+            (day,),
+        ).fetchone()
+    return "closed" if row and row[0] == "closed" else "open"
+
+
 def monitor_beat(path: str, now: str) -> str:
     try:
         with open(path, encoding="utf-8") as handle:
@@ -692,6 +711,8 @@ def main(argv: list[str]) -> int:
         out = maintenance(args[0], args[1])
     elif command == "maintenance-expired":
         out = maintenance_expired(args[0], args[1])
+    elif command == "closed-day":
+        out = closed_day(args[0], args[1])
     elif command == "data-check":
         # Imported here: it loads the backend; the other checks stay stdlib only.
         from data_check import data_check
